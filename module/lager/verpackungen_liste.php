@@ -5,6 +5,7 @@ require_once BX_ROOT . '/core/schema.php';
 
 seed_verpackung_if_empty();
 seed_behaelter_kapazitaet();   // Standard-Behälter (PET/Glas) + Kapsel-Fassung (Herstellerwerte, einmalig)
+seed_etikett_preise();         // Etiketten-EK je Gebinde (Labelisten, Stand Juni 2026), einmalig
 
 $VART = ['dose'=>'Dose','flasche'=>'Flasche','blister'=>'Blister','beutel'=>'Beutel/Doypack','stick'=>'Stick','karton'=>'Karton','etikett'=>'Etikett'];
 $q    = trim($_GET['q'] ?? '');

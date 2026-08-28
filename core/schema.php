@@ -721,6 +721,17 @@ function init_schema(): void {
         KEY idx_item (item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // etikett_preis: Etiketten-EK je Gebinde als Mengenstaffel (Labelisten, Stand Juni 2026).
+    // Pro Behälter (item_id = Verpackung) ein Preis je Bestellmenge: Gesamtpreis der Auflage + Preis je Etikett.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS etikett_preis (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        item_id INT NOT NULL,                             -- Gebinde (Verpackung), zu dem das Etikett gehört
+        menge_ab INT NOT NULL DEFAULT 0,                  -- ab dieser Bestellmenge (Stück Etiketten)
+        ek_gesamt DECIMAL(12,2) NOT NULL DEFAULT 0,       -- Gesamtpreis der Auflage in dieser Staffel
+        ek_stueck DECIMAL(12,4) NOT NULL DEFAULT 0,       -- EK je Etikett (Gesamt / Menge, sub-Cent-genau)
+        KEY idx_item (item_id, menge_ab)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // produkt_preis: generierte Preismatrix je Produkt (Stück je Packung × Verpackung × Bestellmenge -> EK/VK). Intern.
     $pdo->exec("CREATE TABLE IF NOT EXISTS produkt_preis (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -862,6 +873,46 @@ function seed_behaelter_kapazitaet(): void {
         }
     }
     meta_set('seed_behaelter_kap', '1');
+}
+
+// Etiketten-EK je Gebinde (Labelisten, Stand Juni 2026) als Mengenstaffel. Läuft genau einmal (Marker),
+// überschreibt keine Handeingaben (pro Gebinde nur, wenn noch keine Etikettenpreise vorhanden).
+function seed_etikett_preise(): void {
+    if (meta_get('seed_etikett_preise', '') === '1') return;
+    // Gebinde-Name => [Bestellmenge => Gesamtpreis der Auflage in € ]. EK je Stück = Gesamt / Menge.
+    $data = [
+        '100 ml Weithalsglas' => [100=>65.98, 500=>88.80, 1000=>118.84, 2000=>174.29, 3000=>227.23, 4000=>277.38, 5000=>323.97],
+        '150 ml Weithalsglas' => [100=>67.35, 500=>94.44, 1000=>129.25, 2000=>194.24, 3000=>254.82, 4000=>310.14, 5000=>362.02],
+        '200 ml Weithalsglas' => [100=>71.89, 500=>109.50,1000=>153.82, 2000=>237.24, 3000=>313.37, 4000=>381.14, 5000=>441.11],
+        '250 ml Weithalsglas' => [100=>68.48, 500=>111.79,1000=>159.51, 2000=>247.77, 3000=>326.68, 4000=>397.24, 5000=>458.51],
+        '100 ml PET Packer'   => [100=>64.89, 500=>87.99, 1000=>116.85, 2000=>172.22, 3000=>224.51, 4000=>273.73, 5000=>319.86],
+        '150 ml PET Packer'   => [100=>70.20, 500=>100.54,1000=>138.53, 2000=>210.56, 3000=>277.02, 4000=>337.93, 5000=>394.07],
+        '200 ml PET Packer'   => [100=>71.90, 500=>107.82,1000=>152.28, 2000=>234.43, 3000=>309.59, 4000=>377.39, 5000=>436.84],
+        '250 ml PET Packer'   => [100=>72.02, 500=>108.24,1000=>153.63, 2000=>237.77, 3000=>314.01, 4000=>381.81, 5000=>441.54],
+    ];
+    foreach ($data as $name => $staffel) {
+        $iid = (int) scalar("SELECT id FROM item WHERE name=? AND kategorie='verpackung'", [$name]);
+        if (!$iid) continue;
+        if ((int) scalar("SELECT COUNT(*) FROM etikett_preis WHERE item_id=?", [$iid]) > 0) continue;
+        foreach ($staffel as $menge => $gesamt) {
+            $stueck = round(((float)$gesamt) / (int)$menge, 4);
+            q("INSERT INTO etikett_preis (item_id,menge_ab,ek_gesamt,ek_stueck) VALUES (?,?,?,?)",
+              [$iid, (int)$menge, (float)$gesamt, $stueck]);
+        }
+    }
+    meta_set('seed_etikett_preise', '1');
+}
+
+// Etiketten-Staffel eines Gebindes als Liste [menge_ab, ek_gesamt, ek_stueck].
+function etikett_staffel(int $item_id): array {
+    return all("SELECT menge_ab, ek_gesamt, ek_stueck FROM etikett_preis WHERE item_id=? ORDER BY menge_ab", [$item_id]);
+}
+
+// EK je Etikett für eine Bestellmenge: passende Staffelstufe (höchste menge_ab <= Menge), sonst kleinste Stufe. null = keine Preise.
+function etikett_ek_stueck(int $item_id, int $menge): ?float {
+    $v = scalar("SELECT ek_stueck FROM etikett_preis WHERE item_id=? AND menge_ab<=? ORDER BY menge_ab DESC LIMIT 1", [$item_id, $menge]);
+    if ($v === null || $v === false) $v = scalar("SELECT ek_stueck FROM etikett_preis WHERE item_id=? ORDER BY menge_ab ASC LIMIT 1", [$item_id]);
+    return ($v === null || $v === false) ? null : (float)$v;
 }
 
 // Kapsel-Fassung einer Verpackung als [kapselgroesse_id => stueck].

@@ -45,6 +45,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vksta
     }
     header('Location: ?p=verpackung&id=' . $id . '&tab=verkauf&gespeichert=1'); exit;
 }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_save' && is_numeric($id)) {
+    // Etiketten-Mengenstaffel speichern. EK je Etikett = Gesamtpreis / Menge (sub-Cent-genau).
+    q("DELETE FROM etikett_preis WHERE item_id=?", [(int)$id]);
+    $mab = $_POST['et_menge_ab'] ?? []; $ges = $_POST['et_gesamt'] ?? [];
+    foreach ($mab as $i => $mv) {
+        $menge = (int)$mv; $gesamt = (float)str_replace(',', '.', $ges[$i] ?? '0');
+        if ($menge > 0 && $gesamt > 0) {
+            $stueck = round($gesamt / $menge, 4);
+            q("INSERT INTO etikett_preis (item_id,menge_ab,ek_gesamt,ek_stueck) VALUES (?,?,?,?)", [(int)$id, $menge, $gesamt, $stueck]);
+        }
+    }
+    header('Location: ?p=verpackung&id=' . $id . '&tab=etipreis&gespeichert=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_upload' && is_numeric($id)) {
     $kat = in_array($_POST['dok_kategorie'] ?? '', ['ppwr','doc','spez','etikett','sonstiges'], true) ? $_POST['dok_kategorie'] : 'ppwr';
     if (!empty($_FILES['dok']['name']) && ($_FILES['dok']['error'] ?? 1) === UPLOAD_ERR_OK) {
@@ -108,8 +121,10 @@ $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 $ROLLEN = verpackung_rollen();
 $rolle  = ($it['verpackung_rolle'] ?? '') ?: 'primaer';
 seed_kapselgroesse_if_empty();
+seed_etikett_preise();   // Etiketten-EK je Gebinde (Labelisten, Stand Juni 2026), einmalig
 $KAPSELN = all("SELECT id, name, fuellmenge_mg FROM kapselgroesse ORDER BY fuellmenge_mg ASC");
 $kapmap  = (!$neu) ? pack_kapazitaet_fuer((int)$id) : [];
+$etikettstaffel = (!$neu) ? etikett_staffel((int)$id) : [];
 $ekstaffel = (!$neu) ? all("SELECT s.*, l.firma AS lieferant_firma FROM pack_ek_staffel s LEFT JOIN lieferanten l ON l.id=s.lieferant_id WHERE s.item_id=? ORDER BY s.menge_ab", [(int)$id]) : [];
 $vkstaffel = (!$neu) ? all("SELECT * FROM pack_vk_staffel WHERE item_id=? ORDER BY menge_ab", [(int)$id]) : [];
 $dokumente = (!$neu) ? all("SELECT * FROM verpackung_dokument WHERE item_id=? ORDER BY kategorie, id DESC", [(int)$id]) : [];
@@ -146,6 +161,7 @@ if (!$neu) {
     <?php if (darf_verkauf()): ?><a href="#" data-tab="verkauf">Verkauf</a><?php endif; ?>
     <?php if (!$neu): ?>
     <a href="#" data-tab="fuell" data-only="primaer">Füllmengen</a>
+    <a href="#" data-tab="etipreis" data-only="primaer">Etikettenpreise</a>
     <a href="#" data-tab="dok">Dokumente (PPWR)</a>
     <a href="#" data-tab="verw">Verwendung</a>
     <a href="#" data-tab="verlauf">Verlauf</a>
@@ -279,6 +295,32 @@ if (!$neu) {
     </div>
   </form>
 </section>
+<section data-panel="etipreis" hidden>
+  <form method="post">
+    <input type="hidden" name="aktion" value="etikett_save">
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Etikettenpreise (Mengenstaffel)</h2>
+      <p class="muted" style="margin-top:0">Einkaufspreis der Etiketten für dieses Gebinde je Auflage (Labelisten, Stand Juni 2026). Gib den <strong>Gesamtpreis</strong> je Bestellmenge ein – der Preis je Etikett wird automatisch berechnet (Gesamt ÷ Menge).</p>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th class="bx-num">ab Menge (Etiketten)</th><th class="bx-num">Gesamtpreis (€)</th><th class="bx-num">EK je Etikett</th></tr></thead>
+        <tbody id="etrows">
+          <?php $etrows = $etikettstaffel ?: [['menge_ab'=>'','ek_gesamt'=>'','ek_stueck'=>null]]; foreach ($etrows as $et):
+              $stk = ($et['ek_stueck']!==null && $et['ek_stueck']!=='') ? number_format((float)$et['ek_stueck'],4,',','.').' &euro;' : '&ndash;'; ?>
+          <tr>
+            <td class="bx-num"><input type="number" min="0" step="1" name="et_menge_ab[]" value="<?= h((string)$et['menge_ab']) ?>" style="max-width:160px;text-align:right"></td>
+            <td class="bx-num"><input type="number" min="0" step="0.01" name="et_gesamt[]" value="<?= ($et['ek_gesamt']!=='' && $et['ek_gesamt']!==null) ? (float)$et['ek_gesamt'] : '' ?>" style="max-width:140px;text-align:right"></td>
+            <td class="bx-num muted et-stueck"><?= $stk ?></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <div class="bx-row" style="margin-top:var(--sp-4)">
+        <button type="button" class="btn btn-ghost btn-sm" id="etAdd">+ Staffel</button>
+        <button class="btn btn-primary" type="submit">Etikettenpreise speichern</button>
+      </div>
+    </div>
+  </form>
+</section>
 <section data-panel="ek" hidden>
   <form method="post">
     <input type="hidden" name="aktion" value="ekstaffel_save">
@@ -380,6 +422,23 @@ if (!$neu) {
       + '<td class="bx-num"><input type="number" min="0" step="0.0001" name="vk_preis[]" style="max-width:140px;text-align:right"></td>';
     document.getElementById('vkrows').appendChild(tr);
   });
+  var etAdd = document.getElementById('etAdd');
+  if (etAdd) etAdd.addEventListener('click', function(){
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td class="bx-num"><input type="number" min="0" step="1" name="et_menge_ab[]" style="max-width:160px;text-align:right"></td>'
+      + '<td class="bx-num"><input type="number" min="0" step="0.01" name="et_gesamt[]" style="max-width:140px;text-align:right"></td>'
+      + '<td class="bx-num muted et-stueck">&ndash;</td>';
+    document.getElementById('etrows').appendChild(tr);
+  });
+  // EK je Etikett live aus Gesamt / Menge berechnen (Anzeige)
+  var etBody = document.getElementById('etrows');
+  if (etBody) etBody.addEventListener('input', function(e){
+    var tr = e.target.closest('tr'); if (!tr) return;
+    var m = parseFloat((tr.querySelector('[name="et_menge_ab[]"]')||{}).value);
+    var g = parseFloat((tr.querySelector('[name="et_gesamt[]"]')||{}).value);
+    var cell = tr.querySelector('.et-stueck'); if (!cell) return;
+    cell.textContent = (m > 0 && g > 0) ? (g/m).toFixed(4).replace('.', ',') + ' €' : '–';
+  });
   var tabs = document.querySelectorAll('#vtabs a');
   var haupt = document.getElementById('hauptaktion');
   tabs.forEach(function(t){
@@ -392,7 +451,7 @@ if (!$neu) {
         p.hidden = (p.getAttribute('data-panel') !== tab);
       });
       // Haupt-Speichern nur auf Formular-Reitern zeigen, nicht bei Reitern mit eigenem Speichern-Button
-      if (haupt) haupt.style.display = (tab === 'fuell' || tab === 'dok') ? 'none' : '';
+      if (haupt) haupt.style.display = (tab === 'fuell' || tab === 'dok' || tab === 'etipreis') ? 'none' : '';
     });
   });
   // Reiter aus der URL öffnen (?tab=…), z. B. nach Dokument-Upload
