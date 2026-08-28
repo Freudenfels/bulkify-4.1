@@ -267,3 +267,7 @@ hr.bx{border:none;border-top:1px solid var(--line);margin:var(--sp-5) 0}
 @media(max-width:760px){.pt-acc .body{grid-template-columns:1fr}}
 .pt-acc .col h3{font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 8px;font-weight:400}
 .pt-acc .ab{color:var(--gruen);font-weight:600;white-space:nowrap}
+
+/* Marken-Logo in der Sidebar (heller Chip auf dunkler Leiste) */
+.bx-brand{display:flex;align-items:center;gap:8px}
+.bx-brand .bx-logo{height:22px;width:auto;background:#fff;border-radius:6px;padding:5px 8px;display:block}
