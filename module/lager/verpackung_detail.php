@@ -408,10 +408,12 @@ if (!$neu) {
 
 <script>
 (function(){
+  var ekLiefCell = <?= json_encode('<td><select name="ek_lieferant[]"><option value="">– keiner –</option>' . implode('', array_map(fn($lf) => '<option value="' . (int)$lf['id'] . '">' . h($lf['firma']) . '</option>', $lieferanten)) . '</select></td>') ?>;
   var ekAdd = document.getElementById('ekAdd');
   if (ekAdd) ekAdd.addEventListener('click', function(){
     var tr = document.createElement('tr');
-    tr.innerHTML = '<td class="bx-num"><input type="number" min="0" step="1" name="ek_menge_ab[]" style="max-width:160px;text-align:right"></td>'
+    tr.innerHTML = ekLiefCell
+      + '<td class="bx-num"><input type="number" min="0" step="1" name="ek_menge_ab[]" style="max-width:160px;text-align:right"></td>'
       + '<td class="bx-num"><input type="number" min="0" step="0.0001" name="ek_preis[]" style="max-width:140px;text-align:right"></td>';
     document.getElementById('ekrows').appendChild(tr);
   });
