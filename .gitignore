@@ -1,7 +1,7 @@
 # Lokale Daten & Uploads (nicht ins Repo)
 /data/
 # Live-Zugangsdaten / Secrets
-secrets.php
+secrets*.php
 config/config.php
 # Logs
 *.log
