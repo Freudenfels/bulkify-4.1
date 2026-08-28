@@ -39,6 +39,24 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     }
     header('Location: ?p=portal_anfrage&id=' . $id); exit;
 }
+// Im Angebots-Editor bauen: verknüpftes Angebot anlegen (oder vorhandenes öffnen) und in den Editor springen.
+// Funktioniert AUCH ohne berechnete Preismatrix (Positionen dort manuell möglich).
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_bauen') {
+    $pa = one("SELECT * FROM portal_anfrage WHERE id=?", [$id]);
+    if ($pa && $pa['typ'] === 'produkt' && $pa['produkt_id'] && $pa['kunde_id']) {
+        $vorhanden = (int) scalar("SELECT id FROM angebot WHERE anfrage_id=? ORDER BY id DESC LIMIT 1", [$id]);
+        if ($vorhanden) { header('Location: ?p=angebot&id=' . $vorhanden); exit; }   // nicht doppelt anlegen
+        if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [(int)$pa['produkt_id']]) === 0)
+            produkt_matrix_generieren((int)$pa['produkt_id']);   // Matrix versuchen (leer ist ok – Positionen manuell)
+        q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,anfrage_id) VALUES (?,?,?,?,?,?)",
+          [naechste_nummer('AN'), (int)$pa['kunde_id'], (int)$pa['produkt_id'], 'offen', 'Aus Anfrage ' . $pa['nummer'], $id]);
+        $angid = insert_id();
+        q("UPDATE portal_anfrage SET status='in_bearbeitung' WHERE id=?", [$id]);
+        log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [$angid]) . ' aus Anfrage ' . $pa['nummer'] . ' im Editor angelegt.', 'angebot', 'angebot', $angid);
+        header('Location: ?p=angebot&id=' . $angid); exit;
+    }
+    header('Location: ?p=portal_anfrage&id=' . $id); exit;
+}
 
 $pa = $id ? one("SELECT pa.*, k.firma, p.name AS produkt_name, r.darreichungsform,
                         ri.name AS rohstoff_name, ri.preis_bezug AS rohstoff_bezug
@@ -225,7 +243,8 @@ if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding
 
       <div class="bx-row" style="gap:10px">
         <button class="btn btn-ghost" type="submit" name="aktion" value="angebot_vorschau">Vorschau aktualisieren</button>
-        <button class="btn btn-primary" type="submit" name="aktion" value="angebot_abgeben"<?= $hatPreise ? '' : ' disabled title="Keine berechenbaren Preise – siehe Hinweis oben"' ?>>Angebot senden</button>
+        <button class="btn btn-primary" type="submit" name="aktion" value="angebot_abgeben"<?= $hatPreise ? '' : ' disabled title="Keine berechenbaren Preise – nutze „Im Angebots-Editor bauen“"' ?>>Angebot senden</button>
+        <button class="btn <?= $hatPreise ? 'btn-ghost' : 'btn-primary' ?>" type="submit" name="aktion" value="angebot_bauen">Im Angebots-Editor bauen</button>
       </div>
     </form>
   <?php endif; ?>
