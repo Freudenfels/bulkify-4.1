@@ -1,0 +1,108 @@
+name: Deploy to Server (SFTP)
+
+# Auto-Deploy fuer bulkify-4.1.
+# - Push auf main: nur die geaenderten Dateien werden per SFTP hochgeladen (inkrementell).
+# - Vollupload-Fallback: erster Lauf / leerer Vorgaenger / manueller Start / Force-Push.
+# Sicherheit: es wird NICHTS auf dem Server geloescht. Ausgeschlossen: secrets.php (Live-DB-Zugang),
+# der GESAMTE data/-Ordner (Uploads/Logs), Git-/CI-Interna, *.sql/*.bak/*.log.
+# WICHTIG: SERVER_PATH muss ein EIGENER Ordner sein (nicht die v3-Live-Seite). core/config.php laedt
+# auf dem Server secrets.php (dort die echten DB-Zugangsdaten hinterlegen).
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aenderungsumfang bestimmen (Diff oder Vollupload)
+        id: prep
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          MODE=incremental
+          if [ "$EVENT_NAME" != "push" ]; then MODE=full; fi
+          if [ -z "${BEFORE_SHA:-}" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then MODE=full; fi
+          if [ "$MODE" = "incremental" ] && ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then MODE=full; fi
+          if [ "$MODE" = "incremental" ]; then
+            if ! git diff --name-only --diff-filter=ACMR "$BEFORE_SHA" "$AFTER_SHA" > changed_all.txt; then
+              MODE=full
+            fi
+          fi
+          if [ "$MODE" = "incremental" ]; then
+            grep -vE '^secrets\.php$|^\.git(hub)?/|^data/|\.sql$|\.bak$|\.log$' changed_all.txt > changed_filtered.txt || true
+            COUNT=$(grep -c . changed_filtered.txt || true)
+            echo "Modus: inkrementell. Zu uebertragende Dateien: ${COUNT:-0}"
+            echo "----- Dateiliste -----"; cat changed_filtered.txt || true; echo "----------------------"
+          else
+            echo "Modus: Vollupload (Fallback)."
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Inkrementeller Upload (nur geaenderte Dateien, lftp/SFTP)
+        if: steps.prep.outputs.mode == 'incremental'
+        env:
+          SFTP_HOST: ${{ secrets.SERVER_HOST }}
+          SFTP_PORT: ${{ secrets.SERVER_PORT }}
+          SFTP_USER: ${{ secrets.SERVER_USERNAME }}
+          SFTP_PASS: ${{ secrets.SERVER_PASSWORD }}
+          SFTP_PATH: ${{ secrets.SERVER_PATH }}
+        run: |
+          set -euo pipefail
+          if [ ! -s changed_filtered.txt ]; then
+            echo "Keine relevanten Aenderungen - nichts hochzuladen."
+            exit 0
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp
+          REMOTE="${SFTP_PATH%/}"
+          esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+          : > lftp_puts.txt
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if [ ! -f "$f" ]; then echo "uebersprungen (lokal nicht vorhanden): $f"; continue; fi
+            d=$(dirname "$f")
+            if [ "$d" = "." ]; then TARGET="$REMOTE"; else TARGET="$REMOTE/$d"; fi
+            printf 'mkdir -pf "%s"\n' "$(esc "$TARGET")" >> lftp_puts.txt
+            printf 'put -O "%s" "%s"\n' "$(esc "$TARGET")" "$(esc "$f")" >> lftp_puts.txt
+          done < changed_filtered.txt
+          if [ ! -s lftp_puts.txt ]; then
+            echo "Keine tatsaechlich vorhandenen Dateien zu uebertragen."
+            exit 0
+          fi
+          {
+            printf 'set sftp:auto-confirm yes\n'
+            printf 'set net:timeout 20\n'
+            printf 'set net:max-retries 2\n'
+            printf 'set cmd:fail-exit yes\n'
+            printf 'open sftp://%s:%s\n' "$SFTP_HOST" "$SFTP_PORT"
+            printf 'user "%s" "%s"\n' "$(esc "$SFTP_USER")" "$(esc "$SFTP_PASS")"
+            cat lftp_puts.txt
+            printf 'bye\n'
+          } | lftp
+          echo "Inkrementeller Upload abgeschlossen."
+
+      - name: Vollupload (Fallback, nichts loeschen)
+        if: steps.prep.outputs.mode == 'full'
+        uses: sand4rt/ftp-deployer@v1.10
+        with:
+          sftp: true
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          remote_folder: ${{ secrets.SERVER_PATH }}
+          local_folder: '.'
+          cleanup: false
+          include: '["*", "**/*"]'
+          exclude: '["secrets.php",".git/**",".github/**","data/**","**/*.sql","**/*.bak","**/*.log"]'
