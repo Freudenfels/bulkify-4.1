@@ -2938,7 +2938,7 @@ function demo_testset_einspielen(): array {
         $pid = insert_id(); $log[] = "Produkt $name"; $neu++;
         return $pid;
     };
-    $vid = fn(string $vname): ?int => (($x = scalar("SELECT id FROM item WHERE name=? AND kategorie='verpackung' LIMIT 1", [$vname])) ? (int)$x : null);
+    $vid = fn(?string $vname): ?int => ($vname && ($x = scalar("SELECT id FROM item WHERE name=? AND kategorie='verpackung' LIMIT 1", [$vname])) ? (int)$x : null);
 
     // Definition der Demo-Produkte: [Produktname, Kunde, Rezeptname, Form, Zutaten, Verpackung, Stk/Pkg, Einnahme/Tag, Staffeln[[menge,vk]], Ziel-Auftragsstatus]
     $set = [
@@ -2954,6 +2954,29 @@ function demo_testset_einspielen(): array {
         ['Vitamin D3 + K2 · 90 Kapseln', 'Alpenkraft GmbH', 'Vitamin D3 + K2', 'kapsel',
             [['Vitamin D3 100.000 IE/g (Öl)',5],['Mikrokristalline Cellulose',150]],
             '100 ml Weithalsglas', 90, 1, [[500,2.9000],[1000,2.5000],[2500,2.2000]], 'angebot_offen'],
+        // Weitere OFFENE Aufträge (können produziert werden) – verschiedene Darreichungsformen
+        ['Omega-3 · 90 Softgel', 'Alpenkraft GmbH', 'Omega-3 Fischöl', 'softgel',
+            [['Fischöl (EPA/DHA)',1000],['Vitamin E',15]],
+            '250 ml Weithalsglas', 90, 2, [[500,5.4000],[1000,4.7000],[2500,4.1000]], 'offen'],
+        ['Protein Vanille · 900 g', 'NordVital UG', 'Protein Vanille', 'pulver',
+            [['Whey Protein Konzentrat',25000],['Aroma Vanille',300]],
+            'Doypack-Beutel 250 g', 30, 1, [[250,12.9000],[500,11.5000],[1000,9.9000]], 'offen'],
+        ['Magnesium Sticks · 20 Sticks', 'GreenPeak Nutrition', 'Magnesium Direkt', 'stick',
+            [['Magnesiumcitrat',300]],
+            null, 20, 1, [[500,6.9000],[1000,5.9000],[2500,4.9000]], 'offen'],
+        ['Vitamin C Depot · 100 Tabletten', 'PureLife Cosmetics', 'Vitamin C Depot', 'tablette',
+            [['Vitamin C (Ascorbinsäure)',1000]],
+            null, 100, 1, [[500,3.9000],[1000,3.3000],[2500,2.8000]], 'offen'],
+        ['Vitamin D3 Tropfen · 50 ml', 'BioSana AG', 'Vitamin D3 Tropfen', 'fluessig',
+            [['Vitamin D3+K2 Tropfen',50]],
+            'Braunglas 60 ml', 1, 1, [[500,4.5000],[1000,3.9000],[2500,3.4000]], 'offen'],
+        // ZUKAUF: fertige Kapseln vom Lieferanten (verkürzter Weg – ohne Mischen/Verkapseln)
+        ['Kurkuma Kapseln · 90 (Zukauf)', 'Alpenkraft GmbH', 'Kurkuma Kapseln', 'kapsel',
+            [['Kurkuma-Extrakt',400]],
+            '150 ml PET Packer', 90, 2, [[500,3.9000],[1000,3.3000],[2500,2.9000]], 'zukauf'],
+        ['Zink Kapseln · 120 (Zukauf)', 'NordVital UG', 'Zink Kapseln', 'kapsel',
+            [['Zink-Bisglycinat',25]],
+            '100 ml Weithalsglas', 120, 1, [[500,3.4000],[1000,2.9000],[2500,2.5000]], 'zukauf'],
     ];
 
     foreach ($set as $d) {
@@ -2995,6 +3018,23 @@ function demo_testset_einspielen(): array {
                 q("UPDATE produktionsauftrag SET status='erledigt' WHERE id=?", [$paid]);
                 q("UPDATE produktion_schritt SET erledigt=1 WHERE pa_id=?", [$paid]);
             }
+        } elseif ($ziel === 'zukauf') {
+            // Fertige Bulkware (Kapseln vom Lieferanten) als 'fertig'-Item + freie Charge am Auftrag -> verkürzter Weg
+            $fname = 'Fertigkapseln: ' . $rname . ' (Zukauf)';
+            $fid = (int) scalar("SELECT id FROM item WHERE name=? AND kategorie='fertig'", [$fname]);
+            if (!$fid) {
+                q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug) VALUES (?,?,?,?,?)",
+                  [naechste_nummer('FP'), $fname, 'fertig', 'Stück', 'Stück']);
+                $fid = insert_id();
+            }
+            $lief = (int) scalar("SELECT id FROM lieferanten ORDER BY id LIMIT 1");
+            $amenge = (int) scalar("SELECT menge FROM auftrag WHERE id=?", [$aid]);
+            if (!scalar("SELECT id FROM charge WHERE auftrag_id=? AND item_id=?", [$aid, $fid])) {
+                $chid = wareneingang_buchen($fid, (float)$amenge, 'ZK-' . $aid, null, $lief ?: null, 'Zugekaufte Fertigkapseln (Demo)', $aid);
+                if ($chid) q("UPDATE charge SET status='frei' WHERE id=?", [$chid]);   // QC-Freigabe simulieren
+            }
+            if ($paid) produktion_schritte_regenerieren($paid, true);   // verkürzter Zukauf-Weg (ohne Mischen/Verkapseln)
+            // Auftrag bleibt 'offen' – kann jetzt auf dem verkürzten Weg produziert werden
         }
     }
     return ['ok'=>true, 'neu'=>$neu, 'log'=>$log];
