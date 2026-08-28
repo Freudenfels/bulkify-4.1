@@ -14,6 +14,7 @@ $TABS = [
     'produktion' => 'Produktion & Rezeptur',
     'nummern'    => 'Nummernkreise',
     'fulfillment'=> 'Fulfillment-Schnittstelle',
+    'werkzeuge'  => 'Werkzeuge',
 ];
 $DFORM_M = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 $tab = $_GET['tab'] ?? 'firma';
@@ -27,6 +28,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'firma_save') {
               'bank_de_name','bank_de_iban','bank_de_bic','bank_int_name','bank_int_iban','bank_int_bic'] as $k)
         meta_set($k, trim($_POST[$k] ?? ''));
     header('Location: ?p=einstellungen&tab=firma&ok=1'); exit;
+}
+// --- Demo-Testdaten einspielen (nicht löschend, idempotent) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'demo_seed') {
+    $r = demo_testset_einspielen();
+    header('Location: ?p=einstellungen&tab=werkzeuge&demo=' . (int)($r['neu'] ?? 0)); exit;
 }
 // --- Steuer & Finanzen speichern ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'steuer_save') {
@@ -305,6 +311,25 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Speichern</button></div>
   </form>
   <p class="muted" style="font-size:12px;margin-top:8px">Abgerufen und verknüpft wird dann direkt im <a href="?p=lager2">Fremdlager</a> („Fulfillment-Artikel abrufen").</p>
+</div>
+<?php endif; ?>
+
+<?php if ($tab === 'werkzeuge'): ?>
+<div class="bx-panel">
+  <h2>Demo-Testdaten einspielen</h2>
+  <?php if (isset($_GET['demo'])): $n = (int)$_GET['demo']; ?>
+    <div class="bx-panel badge-ok" style="padding:12px 16px"><?= $n > 0 ? ($n . ' neue Demo-Einträge angelegt.') : 'Demodaten sind bereits vorhanden – nichts Neues angelegt.' ?></div>
+  <?php endif; ?>
+  <p class="muted" style="margin-top:0">Legt einen zusammenhängenden Test-Datensatz an: Beispiel-Kunden, Rezepturen, Produkte, Angebote und Aufträge in den Zuständen <strong>offen</strong>, <strong>in Produktion</strong> und <strong>erledigt</strong> – zum Durchklicken aller Bereiche (Verkauf, Produktion, Rechnungen, Lager).</p>
+  <ul class="muted" style="margin-top:0;font-size:13px;line-height:1.7">
+    <li>Es wird <strong>nichts gelöscht</strong> – vorhandene Daten bleiben unangetastet.</li>
+    <li>Mehrfaches Klicken erzeugt <strong>keine Dubletten</strong> (idempotent).</li>
+    <li>Demo-Angebote sind an der Notiz <code>DEMO-TESTSET</code> erkennbar.</li>
+  </ul>
+  <form method="post" style="margin-top:8px">
+    <input type="hidden" name="aktion" value="demo_seed">
+    <button class="btn btn-primary" type="submit">Demo-Testdaten einspielen</button>
+  </form>
 </div>
 <?php endif; ?>
 <?php render_footer(); ?>

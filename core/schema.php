@@ -2897,6 +2897,109 @@ function seed_kunden_if_empty(): void {
     }
 }
 
+// Zusammenhängendes Demo-Testset: Kunden + Rezepturen + Produkte + Angebote + Aufträge (offen/in Produktion/erledigt).
+// NICHT-LÖSCHEND und idempotent: legt je Produkt genau ein Demo-Angebot (notiz 'DEMO-TESTSET') samt Auftrag an;
+// erneuter Aufruf erzeugt keine Dubletten. Gibt eine Zusammenfassung zurück.
+function demo_testset_einspielen(): array {
+    $log = []; $neu = 0;
+    // 1) Kunden sicherstellen
+    seed_kunden_if_empty();
+    $kunde = function(string $firma) use (&$log, &$neu): int {
+        $kid = (int) scalar("SELECT id FROM kunden WHERE firma=?", [$firma]);
+        if (!$kid) {
+            q("INSERT INTO kunden (kundennummer,firma,ort,land,zahlungsart) VALUES (?,?,?,?,?)",
+              [naechste_nummer('K'), $firma, 'Musterstadt', 'DE', 'rechnung']);
+            $kid = insert_id(); $log[] = "Kunde $firma"; $neu++;
+        }
+        return $kid;
+    };
+    // 2) Rezeptur (mit Zutaten) idempotent per Name
+    $rezeptur = function(string $name, string $form, array $zutaten) use (&$log, &$neu): int {
+        $rid = (int) scalar("SELECT id FROM rezeptur WHERE name=?", [$name]);
+        if ($rid) return $rid;
+        q("INSERT INTO rezeptur (nummer,name,darreichungsform,status,notiz) VALUES (?,?,?,?,?)",
+          [naechste_nummer('RZ'), $name, $form, 'freigegeben', 'Demo-Rezeptur']);
+        $rid = insert_id();
+        foreach ($zutaten as $i => $z) {
+            $iid = scalar("SELECT id FROM item WHERE name=?", [$z[0]]);
+            q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
+              [$rid, $iid ?: null, $z[0], $z[1], $i]);
+        }
+        $log[] = "Rezeptur $name"; $neu++;
+        return $rid;
+    };
+    // 3) Produkt idempotent per Name
+    $produkt = function(string $name, int $kid, int $rid, ?int $vid, int $einh, int $tag) use (&$log, &$neu): int {
+        $pid = (int) scalar("SELECT id FROM produkt WHERE name=?", [$name]);
+        if ($pid) return $pid;
+        q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,einheiten_pro_packung,einnahme_pro_tag,status)
+           VALUES (?,?,?,?,?,?,?,?)",
+          [naechste_nummer('P'), $name, $kid, $rid, $vid, $einh, $tag, 'aktiv']);
+        $pid = insert_id(); $log[] = "Produkt $name"; $neu++;
+        return $pid;
+    };
+    $vid = fn(string $vname): ?int => (($x = scalar("SELECT id FROM item WHERE name=? AND kategorie='verpackung' LIMIT 1", [$vname])) ? (int)$x : null);
+
+    // Definition der Demo-Produkte: [Produktname, Kunde, Rezeptname, Form, Zutaten, Verpackung, Stk/Pkg, Einnahme/Tag, Staffeln[[menge,vk]], Ziel-Auftragsstatus]
+    $set = [
+        ['Magnesium Komplex · 120 Kapseln', 'Alpenkraft GmbH', 'Magnesium Komplex', 'kapsel',
+            [['Magnesiumcitrat',400],['Magnesiumbisglycinat',400],['Vitamin C (Ascorbinsäure)',80]],
+            '250 ml Weithalsglas', 120, 2, [[500,4.9000],[1000,4.2000],[2500,3.7000]], 'offen'],
+        ['Immun Booster · 90 Kapseln', 'NordVital UG', 'Immun Booster', 'kapsel',
+            [['Vitamin C (Ascorbinsäure)',500],['Zink-Bisglycinat',15],['Kurkuma-Extrakt',200]],
+            '150 ml PET Packer', 90, 3, [[500,3.9000],[1000,3.3000],[2500,2.9000]], 'in_produktion'],
+        ['Ashwagandha Ruhe · 60 Kapseln', 'BioSana AG', 'Ashwagandha Ruhe', 'kapsel',
+            [['Ashwagandha-Extrakt',300],['Magnesiumbisglycinat',100]],
+            '100 ml Weithalsglas', 60, 2, [[500,3.4000],[1000,2.9000],[2500,2.5000]], 'erledigt'],
+        ['Vitamin D3 + K2 · 90 Kapseln', 'Alpenkraft GmbH', 'Vitamin D3 + K2', 'kapsel',
+            [['Vitamin D3 100.000 IE/g (Öl)',5],['Mikrokristalline Cellulose',150]],
+            '100 ml Weithalsglas', 90, 1, [[500,2.9000],[1000,2.5000],[2500,2.2000]], 'angebot_offen'],
+    ];
+
+    foreach ($set as $d) {
+        [$pname,$firma,$rname,$form,$zutaten,$vname,$einh,$tag,$staffeln,$ziel] = $d;
+        $kid = $kunde($firma);
+        $rid = $rezeptur($rname, $form, $zutaten);
+        $pid = $produkt($pname, $kid, $rid, $vid($vname), $einh, $tag);
+        // schon ein Demo-Angebot für dieses Produkt? -> dann nichts weiter (idempotent)
+        if (scalar("SELECT id FROM angebot WHERE produkt_id=? AND notiz='DEMO-TESTSET' LIMIT 1", [$pid])) continue;
+        // Angebot + Staffeln
+        q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz) VALUES (?,?,?,?,?)",
+          [naechste_nummer('AN'), $kid, $pid, ($ziel==='angebot_offen'?'offen':'bestaetigt'), 'DEMO-TESTSET']);
+        $anid = insert_id(); $log[] = "Angebot $pname"; $neu++;
+        foreach ($staffeln as $i => $s) {
+            // mittlere Staffel als bestätigt markieren (für die Auftragserzeugung)
+            $best = ($i === 1 && $ziel !== 'angebot_offen') ? 1 : 0;
+            q("INSERT INTO angebot_staffel (angebot_id,menge,vk_stueck,bestaetigt,sort) VALUES (?,?,?,?,?)",
+              [$anid, $s[0], $s[1], $best, $i]);
+        }
+        if ($ziel === 'angebot_offen') continue;   // bleibt offenes Angebot, kein Auftrag
+
+        // Auftrag + Rechnung + Produktionsauftrag über die reguläre Auto-Kette
+        $aid = auftrag_aus_angebot($anid);
+        if (!$aid) continue;
+        $log[] = "Auftrag zu $pname"; $neu++;
+        $paid = (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=?", [$aid]);
+        if ($ziel === 'in_produktion') {
+            q("UPDATE auftrag SET status='in_produktion' WHERE id=?", [$aid]);
+            if ($paid) {
+                q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$paid]);
+                // erste Hälfte der Schritte erledigen
+                $steps = all("SELECT id FROM produktion_schritt WHERE pa_id=? ORDER BY sort", [$paid]);
+                $bis = (int) floor(count($steps) / 2);
+                for ($k = 0; $k < $bis; $k++) q("UPDATE produktion_schritt SET erledigt=1 WHERE id=?", [(int)$steps[$k]['id']]);
+            }
+        } elseif ($ziel === 'erledigt') {
+            q("UPDATE auftrag SET status='erledigt' WHERE id=?", [$aid]);
+            if ($paid) {
+                q("UPDATE produktionsauftrag SET status='erledigt' WHERE id=?", [$paid]);
+                q("UPDATE produktion_schritt SET erledigt=1 WHERE pa_id=?", [$paid]);
+            }
+        }
+    }
+    return ['ok'=>true, 'neu'=>$neu, 'log'=>$log];
+}
+
 function meta_get(string $k, $default = null) {
     $v = scalar("SELECT v FROM app_meta WHERE k = ?", [$k]);
     return $v === false ? $default : $v;
