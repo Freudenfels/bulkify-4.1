@@ -183,7 +183,7 @@ if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding
     $vPz      = $vorschau && trim($_POST['produktionszeit'] ?? '') !== '' ? (float) str_replace(',', '.', $_POST['produktionszeit']) : $defPz;
     $vNotiz   = $vorschau ? trim($_POST['notiz'] ?? '') : '';
     $rabatt   = (float) scalar("SELECT rabatt_marge FROM kunden WHERE id=?", [(int)$pa['kunde_id']]);
-    $stueckA  = std_stueckzahlen(); $mengenA = std_bestellmengen();
+    $stueckA  = std_groessen_fuer($form); $mengenA = std_bestellmengen();
     // Vorschau-Zellen aus produkt_preis (EK) mit gewählter Marge + Kundenrabatt
     $prev = [];
     foreach (all("SELECT stueck,bestellmenge,ek_preis FROM produkt_preis WHERE produkt_id=? ORDER BY ek_preis ASC", [$pid]) as $r) {

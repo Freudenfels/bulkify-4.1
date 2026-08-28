@@ -63,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'preise_save') {
     foreach ($DFORM_M as $key => $lbl) meta_set('marge_typ_' . $key, (string)(float)str_replace(',', '.', $_POST['marge_typ'][$key] ?? ''));
     $clean = fn($s) => implode(',', array_filter(array_map('intval', array_map('trim', explode(',', (string)$s)))));
     meta_set('std_stueck', $clean($_POST['std_stueck'] ?? '') ?: '30,60,90,120,180');
+    meta_set('std_fuellgewicht_g', $clean($_POST['std_fuellgewicht_g'] ?? '') ?: '150,300,500,1000');
     meta_set('std_bestellmenge', $clean($_POST['std_bestellmenge'] ?? '') ?: '1000,2500,5000,10000');
     meta_set('aufschlag_rohstoff', (string)(float)str_replace(',', '.', $_POST['aufschlag_rohstoff'] ?? '30'));
     meta_set('aufschlag_verpackung', (string)(float)str_replace(',', '.', $_POST['aufschlag_verpackung'] ?? '30'));
@@ -189,7 +190,8 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     </div>
     <div style="font-weight:600;margin:14px 0 6px">Standard-Raster für die Preismatrix</div>
     <div class="bx-grid">
-      <div class="bx-field"><label>Stückzahlen je Packung <?= bx_hint('kommagetrennt, z. B. 30,60,90,120,180') ?></label><input type="text" name="std_stueck" value="<?= $m('std_stueck','30,60,90,120,180') ?>"></div>
+      <div class="bx-field"><label>Stückzahlen je Packung <?= bx_hint('für Kapseln/Tabletten/Softgel/Sticks; kommagetrennt, z. B. 30,60,90,120,180') ?></label><input type="text" name="std_stueck" value="<?= $m('std_stueck','30,60,90,120,180') ?>"></div>
+      <div class="bx-field"><label>Pulver-Füllgewichte (g) <?= bx_hint('für Pulver/Granulat wird nach Gewicht angeboten (z. B. 300 g), kommagetrennt') ?></label><input type="text" name="std_fuellgewicht_g" value="<?= $m('std_fuellgewicht_g','150,300,500,1000') ?>"></div>
       <div class="bx-field"><label>Bestellmengen-Staffeln <?= bx_hint('kommagetrennt, z. B. 1000,2500,5000,10000') ?></label><input type="text" name="std_bestellmenge" value="<?= $m('std_bestellmenge','1000,2500,5000,10000') ?>"></div>
     </div>
     <div style="font-weight:600;margin:14px 0 6px">Rohstoff- & Verpackungs-Weiterverkauf</div>

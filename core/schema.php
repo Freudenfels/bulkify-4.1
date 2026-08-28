@@ -1387,6 +1387,15 @@ function std_bestellmengen(): array {
     $r = array_map('intval', array_filter(array_map('trim', explode(',', (string) meta_get('std_bestellmenge', '1000,2500,5000,10000')))));
     return $r ?: [1000, 2500, 5000, 10000];
 }
+// Standard-Füllgewichte für Pulver/Granulat (in Gramm) – Pulver wird nach Gewicht angeboten (z. B. 300 g), nicht nach Stückzahl.
+function std_fuellgewichte(): array {
+    $r = array_map('intval', array_filter(array_map('trim', explode(',', (string) meta_get('std_fuellgewicht_g', '150,300,500,1000')))));
+    return $r ?: [150, 300, 500, 1000];
+}
+// Form-abhängiges Größenraster: Pulver/Granulat nach Füllgewicht (g), sonst Stückzahlen.
+function std_groessen_fuer(string $form): array {
+    return in_array($form, ['pulver', 'granulat'], true) ? std_fuellgewichte() : std_stueckzahlen();
+}
 
 // Behälter-EK bei einer Bestellmenge: passende Staffel, sonst flacher item.ek_preis.
 function pack_ek_bei_menge(int $verp_id, int $menge): float {
@@ -1402,7 +1411,14 @@ function produkt_kapsel_ek(int $produkt_id): float {
 // Herstellungs-EK je Packung (nur Rezeptur-Füllung + Leerkapseln). Der BEHÄLTER kommt separat
 // als eigene Angebotsposition (Dose/Deckel/Etikett kommen extra – EK-Staffel × Verpackungs-Aufschlag).
 function produkt_variante_ek(int $produkt_id, int $stueck, int $verp_id = 0, int $bestellmenge = 0): float {
-    $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$produkt_id]);
+    $rid  = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$produkt_id]);
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
+    if (in_array($form, ['pulver', 'granulat'], true)) {
+        // $stueck = Füllgewicht in Gramm; Kosten je Gramm = Portionskosten / Portionsgewicht.
+        $portionG = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rid]) / 1000;
+        $servings = $portionG > 0 ? ((float)$stueck / $portionG) : 0.0;
+        return rezeptur_kosten_pro_einheit($rid ?: null) * $servings;   // Füllung; Behälter kommt separat
+    }
     $fuell = rezeptur_kosten_pro_einheit($rid ?: null) * $stueck;
     $kaps  = produkt_kapsel_ek($produkt_id) * $stueck;
     return $fuell + $kaps;
@@ -1823,7 +1839,16 @@ function passende_behaelter_fuer(int $rezeptur_id, string $form, int $stueck): a
         $cands = all("SELECT pk.item_id, i.material FROM pack_kapazitaet pk JOIN item i ON i.id=pk.item_id
                       WHERE pk.kapselgroesse_id=? AND pk.stueck>=? AND i.gesperrt=0
                       ORDER BY (i.material IS NULL), i.material, pk.stueck ASC", [(int)$kg['id'], $stueck]);
-    } elseif (in_array($form, ['pulver', 'granulat', 'stick'], true)) {
+    } elseif (in_array($form, ['pulver', 'granulat'], true)) {
+        // Pulver/Granulat: $stueck ist das gewünschte Füllgewicht in Gramm.
+        $fillG = (float) $stueck;
+        if ($fillG <= 0) return [];
+        $cands = all("SELECT id AS item_id, material FROM item
+                      WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0
+                        AND max_fuellgewicht_g IS NOT NULL AND max_fuellgewicht_g >= ?
+                      ORDER BY (material IS NULL), material, max_fuellgewicht_g ASC", [$fillG]);
+    } elseif ($form === 'stick') {
+        // Stick: $stueck = Anzahl Sticks; Füllgewicht = Portion je Stick × Anzahl.
         $portionG = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rezeptur_id]) / 1000;
         if ($portionG <= 0) return [];
         $fillG = $portionG * $stueck;
@@ -1846,7 +1871,7 @@ function produkt_matrix_generieren(int $produkt_id): int {
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
     q("DELETE FROM produkt_preis WHERE produkt_id=?", [$produkt_id]);
     $anz = 0;
-    foreach (std_stueckzahlen() as $stueck) {
+    foreach (std_groessen_fuer($form) as $stueck) {   // Pulver/Granulat: Füllgewicht (g); sonst Stückzahl
         foreach (passende_behaelter_fuer($rid, $form, $stueck) as $vid) {
             foreach (std_bestellmengen() as $bm) {
                 $ek = produkt_variante_ek($produkt_id, $stueck, $vid, $bm);

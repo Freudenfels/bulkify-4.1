@@ -465,7 +465,7 @@ if (($_GET['v'] ?? '') === 'angebot_pdf') {
     // Angefragte Konfiguration (aus der Anfrage) bestimmen
     $anf = $a['anfrage_id'] ? one("SELECT nummer, stueck, fuellmenge_g, verpackung_typ, menge FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']]) : null;
     $featStk = $istPulver ? (float)($anf['fuellmenge_g'] ?? 0) : (int)($anf['stueck'] ?? 0);
-    if (!$featStk || !isset($inf['matrix'][$featStk])) { foreach ($std_stueck_ang as $s2) { if (isset($inf['matrix'][$s2])) { $featStk = $s2; break; } } }
+    if (!$featStk || !isset($inf['matrix'][$featStk])) { foreach (std_groessen_fuer($inf['form']) as $s2) { if (isset($inf['matrix'][$s2])) { $featStk = $s2; break; } } }
     $featMenge = (int)($anf['menge'] ?? 0);
     if (!$featMenge || !isset($inf['matrix'][$featStk][$featMenge])) {
         $featMenge = 0; foreach ($std_menge_ang as $bm2) { if (isset($inf['matrix'][$featStk][$bm2])) { $featMenge = $bm2; break; } }
@@ -1226,10 +1226,11 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
       <thead><tr><th>Menge / Verpackung</th><th class="bx-num">Anzahl Verpackungen</th><th>Preis</th><th></th></tr></thead>
       <tbody>
-      <?php foreach ($std_menge_ang as $bm): foreach ($std_stueck_ang as $stk):
+      <?php $istGramm = in_array($inf['form'], ['pulver','granulat'], true);
+            foreach ($std_menge_ang as $bm): foreach (std_groessen_fuer($inf['form']) as $stk):
           $cell = $inf['matrix'][$stk][$bm] ?? null;
-          $lbl = $stk . ' ' . ($formPl[$inf['form']] ?? 'Stück');
-          $gp = ($inf['istPulver'] && $inf['portionG'] > 0) ? $mg($stk * $inf['portionG']) . ' g pro Packung' : ''; ?>
+          $lbl = $istGramm ? ($stk . ' g') : ($stk . ' ' . ($formPl[$inf['form']] ?? 'Stück'));
+          $gp = ($inf['form'] === 'stick' && $inf['portionG'] > 0) ? $mg($stk * $inf['portionG']) . ' g pro Packung' : ''; ?>
         <tr>
           <td><?= h($lbl) ?><?= $gp ? '<div class="muted" style="font-size:12px">' . h($gp) . '</div>' : '' ?></td>
           <td class="bx-num"><?= number_format($bm, 0, ',', '.') ?></td>
