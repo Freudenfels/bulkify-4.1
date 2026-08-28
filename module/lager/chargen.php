@@ -32,9 +32,11 @@ if ($chId) {
                       LEFT JOIN kunden k ON k.id=pa.kunde_id
                       WHERE v.charge_id=? ORDER BY v.id", [$chId]);
 
-    // Woraus besteht diese (Fertigwaren-)Charge? charge_nr = PR-Nummer des Produktionsauftrags
+    // Woraus besteht diese (Fertigwaren-)Charge? Über pa_id; Fallback für alte Chargen: charge_nr = PR-Nummer.
     $bestandteile = [];
-    $pa = one("SELECT id, nummer FROM produktionsauftrag WHERE nummer=?", [$c['charge_nr']]);
+    $pa = null;
+    if (!empty($c['pa_id'])) $pa = one("SELECT id, nummer FROM produktionsauftrag WHERE id=?", [(int)$c['pa_id']]);
+    if (!$pa) $pa = one("SELECT id, nummer FROM produktionsauftrag WHERE nummer=?", [$c['charge_nr']]);
     if ($pa) {
         $bestandteile = all("SELECT v.menge, v.einheit, i.name AS item_name, c2.id AS charge_id, c2.charge_nr, c2.mhd
                              FROM produktion_verbrauch v

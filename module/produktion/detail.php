@@ -89,7 +89,9 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
 }
 // Produktionsweg umstellen (verkürzt bei Zukauf / voll)
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['weg_zukauf', 'weg_voll'], true)) {
-    $ok = produktion_schritte_regenerieren($id, ($_POST['aktion'] === 'weg_zukauf'));
+    $fremd = ($_POST['aktion'] === 'weg_zukauf');
+    $ok = produktion_schritte_regenerieren($id, $fremd);
+    if ($ok) q("UPDATE produktionsauftrag SET produktionsart=? WHERE id=?", [$fremd ? 'fremd' : 'eigen', $id]);
     header('Location: ?p=produktionsauftrag&id=' . $id . ($ok ? '&weg=1' : '&wegfehler=1')); exit;
 }
 
@@ -127,7 +129,12 @@ $verbrauch = all("SELECT v.*, c.charge_nr, i.name AS item_name FROM produktion_v
                   WHERE v.pa_id=? ORDER BY v.id", [$id]);
 $mng = fn($x,$e) => rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',') . ' ' . h($e ?: '');
 $fertigware = one("SELECT c.charge_nr, c.menge_verfuegbar, c.item_id, i.artikelnummer, i.name
-                   FROM charge c JOIN item i ON i.id=c.item_id WHERE c.charge_nr=? LIMIT 1", [$pa['nummer']]);
+                   FROM charge c JOIN item i ON i.id=c.item_id WHERE c.pa_id=? ORDER BY c.id LIMIT 1", [$id]);
+// Standard-Chargennummer (PR-Nr + .A/.B/.C) und MHD (18 Monate) – für die Geräte-Eingabe, schon vor der Buchung sichtbar.
+$fCharge   = one("SELECT charge_nr, mhd FROM charge WHERE pa_id=? ORDER BY id LIMIT 1", [$id]);
+$chargeGeb = (bool)$fCharge;
+$chargeNr  = $fCharge ? $fCharge['charge_nr'] : charge_naechste_nr($id);
+$chargeMhd = ($fCharge && $fCharge['mhd']) ? $fCharge['mhd'] : mhd_standard();
 
 $statusBadge = match ($pa['status']) {
     'offen'    => bx_badge('offen','info'),
@@ -159,8 +166,12 @@ echo '<div class="bx-card"><div class="k">Geplant am</div><div class="v">' . $ge
 echo '<div class="bx-card"><div class="k">Bereitschaft</div><div class="v">' . bereitschaft_badge($ber['status']) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Fortschritt</div><div class="v">' . $done . ' / ' . $total . '</div></div>';
 echo '<div class="bx-card"><div class="k">Menge</div><div class="v">' . (int)$pa['menge'] . '</div></div>';
+echo '<div class="bx-card"><div class="k">Charge' . ($chargeGeb ? '' : ' (geplant)') . '</div><div class="v">' . h($chargeNr) . '</div></div>';
+echo '<div class="bx-card"><div class="k">MHD' . ($chargeGeb ? '' : ' (+18 Mon.)') . '</div><div class="v">' . h(date('d.m.Y', strtotime($chargeMhd))) . '</div></div>';
+echo '<div class="bx-card"><div class="k">Art</div><div class="v">' . (($pa['produktionsart'] ?? 'eigen') === 'fremd' ? bx_badge('Fremdproduktion','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Produkt</div><div class="v" style="font-size:15px">' . h($pa['produkt_name'] ?: '–') . '</div></div>';
 echo '</div>';
+if (!$chargeGeb) echo '<div class="bx-panel" style="padding:10px 14px;font-size:13px;color:var(--muted)">Chargennummer <strong>' . h($chargeNr) . '</strong> und MHD <strong>' . h(date('d.m.Y', strtotime($chargeMhd))) . '</strong> in die Produktionsgeräte eintragen. Teilproduktionen an weiteren Tagen erhalten dieselbe Basis mit <strong>.B</strong>, <strong>.C</strong> …</div>';
 
 if ($ber['status'] === 'wartet' && $ber['fehlend']):
     $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');

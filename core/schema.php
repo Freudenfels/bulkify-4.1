@@ -467,7 +467,7 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('produktionsauftrag', 'prio', "TINYINT NOT NULL DEFAULT 2");   // 1=Hoch, 2=Normal, 3=Niedrig
     ensure_column('produktionsauftrag', 'geplant_am', "DATE NULL");               // Baustein 2: geplantes Produktionsdatum
-    ensure_column('produktionsauftrag', 'produktionsart', "VARCHAR(10) NOT NULL DEFAULT 'eigen'");   // eigen|fremd (Make-or-Buy)
+    ensure_column('produktionsauftrag', 'produktionsart', "VARCHAR(10) NOT NULL DEFAULT 'fremd'");   // eigen|fremd (Make-or-Buy); Standard = fremd (90% der Kapseln extern gefüllt)
     ensure_column('produktionsauftrag', 'bedarf_gemeldet', "DATETIME NULL");      // wann der Bedarf ans Einkauf gemeldet wurde
 
     // produktion_schritt: die Stationen/Gates eines Produktionsauftrags, der Reihe nach abzuarbeiten.
@@ -551,6 +551,7 @@ function init_schema(): void {
     ensure_column('bestellung_position', 'auftrag_id', "INT NULL");
     ensure_column('charge', 'auftrag_id', "INT NULL");
     ensure_column('charge', 'bestellung_position_id', "INT NULL");
+    ensure_column('charge', 'pa_id', "INT NULL");   // Produktionsauftrag der Fertigware-Charge (Rückverfolgung Zusammensetzung)
     ensure_column('bestellung', 'bestelldatum', "DATE NULL");   // „gemeinsam bestellt am"
     ensure_column('bestellung_position', 'bezeichnung', "VARCHAR(200) NULL");   // Freitext (z. B. Bulk-Zukauf ohne Lagerartikel)
 
@@ -1016,19 +1017,43 @@ function produkt_lageritem(int $produkt_id): ?int {
     return insert_id();
 }
 
-// Fertigware eines abgeschlossenen Produktionsauftrags als Charge einbuchen. Idempotent (charge_nr = PR-Nummer).
+// Basis-Chargennummer eines Produktionsauftrags = PR-Nummer ohne "PR-" Präfix (z. B. PR-2696 -> 2696).
+function charge_basis_pa(int $pa_id): string {
+    $nummer = (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $basis  = trim(preg_replace('/^PR[-\s]*/i', '', $nummer));
+    return $basis !== '' ? $basis : ('PR' . $pa_id);
+}
+// Nächste (Teil-)Chargennummer für einen Produktionsauftrag: Basis + Tagesbuchstabe .A/.B/.C … (je Teilproduktion eine).
+function charge_naechste_nr(int $pa_id): string {
+    $basis = charge_basis_pa($pa_id);
+    $n = (int) scalar("SELECT COUNT(*) FROM charge WHERE pa_id=?", [$pa_id]);   // bereits gebuchte Teilchargen
+    $buchstabe = ($n >= 0 && $n < 26) ? chr(ord('A') + $n) : ('X' . ($n + 1));   // 0->A, 1->B, …
+    return $basis . '.' . $buchstabe;
+}
+// Standard-MHD: Basisdatum (Standard heute) + konfigurierte Monate (Standard 18). Rückgabe Y-m-d.
+function mhd_standard(?string $ab = null): string {
+    $monate = (int) meta_get('mhd_monate_standard', 18);
+    if ($monate <= 0) $monate = 18;
+    $basis = $ab ?: date('Y-m-d');
+    return date('Y-m-d', strtotime($basis . ' +' . $monate . ' months'));
+}
+
+// Fertigware eines abgeschlossenen Produktionsauftrags als Charge einbuchen.
+// Standard: Chargennummer = PR-Nummer + Tagesbuchstabe (.A), MHD = Produktionsdatum + 18 Monate. Idempotent je PR (bucht die volle Menge einmal).
 function produktion_fertigware_einbuchen(int $pa_id): ?int {
     $pa = one("SELECT nummer, produkt_id, menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa || !$pa['produkt_id']) return null;
-    if ((int) scalar("SELECT COUNT(*) FROM charge WHERE charge_nr=?", [$pa['nummer']]) > 0) return null;  // schon eingebucht
+    if ((int) scalar("SELECT COUNT(*) FROM charge WHERE pa_id=?", [$pa_id]) > 0) return null;  // schon (voll) eingebucht
     $item_id = produkt_lageritem((int)$pa['produkt_id']);
     if (!$item_id) return null;
     // Fulfillment-Kunde? → Fertigware gehört ins Lager 2, BSKU (Brücke) sicherstellen.
     $kunde = one("SELECT k.nutzt_fulfillment FROM produkt p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [(int)$pa['produkt_id']]);
     if ($kunde && (int)$kunde['nutzt_fulfillment'] === 1) bsku_ensure($item_id);
-    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,wareneingang,status,notiz,angelegt)
-       VALUES (?,?,?,?, 'Stück', CURDATE(), 'frei', ?, ?)",
-      [$pa['nummer'], $item_id, (int)$pa['menge'], (int)$pa['menge'], 'Aus Produktion ' . $pa['nummer'], gmdate('Y-m-d H:i:s')]);
+    $charge_nr = charge_naechste_nr($pa_id);
+    $mhd = mhd_standard();
+    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
+       VALUES (?,?,?,?, 'Stück', ?, CURDATE(), 'frei', ?, ?, ?)",
+      [$charge_nr, $item_id, (int)$pa['menge'], (int)$pa['menge'], $mhd, 'Aus Produktion ' . $pa['nummer'], $pa_id, gmdate('Y-m-d H:i:s')]);
     return insert_id();
 }
 
@@ -2486,10 +2511,11 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
       [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen']);
     // Produktionsauftrag (PR) + Stationen automatisch anlegen
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$a['produkt_id']]) ?: 'kapsel';
-    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,status) VALUES (?,?,?,?,?,?)",
-      [naechste_nummer('PR'), $aid, $a['kunde_id'], $a['produkt_id'], $menge, 'offen']);
+    // Standard = Fremdproduktion (verkürzter Weg); auf Eigenproduktion umstellbar im Produktions-Detail.
+    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,produktionsart,status) VALUES (?,?,?,?,?,?,?)",
+      [naechste_nummer('PR'), $aid, $a['kunde_id'], $a['produkt_id'], $menge, 'fremd', 'offen']);
     $paid = insert_id();
-    foreach (produktionsschritte_fuer($form) as $i => $station) {
+    foreach (produktionsschritte_fuer($form, true) as $i => $station) {
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
     }
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftragsbestätigung, Rechnung & Produktionsauftrag automatisch erzeugt.', 'auftrag', 'auftrag', $aid);
@@ -2519,10 +2545,11 @@ function auftrag_aus_zelle(int $angebot_id, int $stueck, int $verp_id, int $best
        VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
       [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen']);
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$a['produkt_id']]) ?: 'kapsel';
-    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,status) VALUES (?,?,?,?,?,?,?,?)",
-      [naechste_nummer('PR'), $aid, $a['kunde_id'], $a['produkt_id'], $menge, $stueck, $verp_id, 'offen']);
+    // Standard = Fremdproduktion (verkürzter Weg); auf Eigenproduktion umstellbar im Produktions-Detail.
+    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('PR'), $aid, $a['kunde_id'], $a['produkt_id'], $menge, $stueck, $verp_id, 'fremd', 'offen']);
     $paid = insert_id();
-    foreach (produktionsschritte_fuer($form) as $i => $station) q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
+    foreach (produktionsschritte_fuer($form, true) as $i => $station) q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Angebot bestätigt (' . $stueck . ' Stück/Pkg × ' . $menge . '), Auftrag + Rechnung + Produktion erzeugt.', 'auftrag', 'auftrag', $aid);
     return $aid;
 }

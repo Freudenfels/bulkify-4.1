@@ -29,6 +29,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'firma_save') {
         meta_set($k, trim($_POST[$k] ?? ''));
     header('Location: ?p=einstellungen&tab=firma&ok=1'); exit;
 }
+// --- Chargen/MHD-Standard speichern ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'charge_std_save') {
+    meta_set('mhd_monate_standard', (string)max(1, (int)($_POST['mhd_monate_standard'] ?? 18)));
+    header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
+}
 // --- Demo-Testdaten einspielen (nicht löschend, idempotent) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'demo_seed') {
     $r = demo_testset_einspielen();
@@ -198,6 +203,16 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
 
 <?php elseif ($tab === 'produktion'):
     $kapseln = all("SELECT * FROM kapselgroesse ORDER BY sort, fuellmenge_mg"); ?>
+<div class="bx-panel">
+  <h2>Chargennummer &amp; MHD (Standard)</h2>
+  <p class="muted" style="margin-top:0">Beim Abschluss einer Produktion wird automatisch eine Chargennummer vergeben – Basis = Produktionsauftrags-Nummer, Teilproduktionen am selben/weiteren Tag als <strong>.A / .B / .C</strong> – und ein MHD gesetzt. Hier legst du die Standard-Haltbarkeit fest.</p>
+  <form method="post">
+    <input type="hidden" name="aktion" value="charge_std_save">
+    <div class="bx-field" style="max-width:300px"><label>MHD-Standard (Monate ab Produktion)</label><input type="number" min="1" name="mhd_monate_standard" value="<?= h($m('mhd_monate_standard','18')) ?>"></div>
+    <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Speichern</button></div>
+  </form>
+</div>
+
 <div class="bx-panel">
   <h2>Kapselgrößen &amp; Füllmengen <?= bx_hint('nominelle Füllmenge je Kapselgröße – Basis für die Kapsel-Auswahl in Rezeptur und Produkt (welche Größe passt, welche Leerkapsel)') ?></h2>
   <form method="post">
