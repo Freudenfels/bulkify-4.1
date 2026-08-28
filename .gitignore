@@ -1,0 +1,16 @@
+# Lokale Daten & Uploads (nicht ins Repo)
+/data/
+# Live-Zugangsdaten / Secrets
+secrets.php
+config/config.php
+# Logs
+*.log
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+# Backups
+*.bak
+*.sql

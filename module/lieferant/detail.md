@@ -1,0 +1,26 @@
+# lieferant/detail.php – Lieferantenkonto (Cockpit) & Bearbeiten
+
+**Zweck:** Die 360°-Lieferantenseite – gleiches Muster wie das Kundenkonto, aber mit einkaufs-typischen Feldern.
+
+**Was passiert hier:**
+- **Speichern (POST):** prüft Pflichtfeld Firma, schreibt alle Felder in `lieferanten` (neu = INSERT + Verlaufseintrag „Lieferant angelegt", sonst UPDATE).
+  - **Liefer-Kategorien** kommen aus Häkchen (`kat[...]`) und werden als CSV gespeichert (z. B. `rohstoff,verpackung`).
+  - Sperr-Schalter und Kategorien werden gesondert in die Werte gesetzt.
+- **Anzeige (GET):** lädt den Lieferanten und seinen Verlauf (`verlauf_fuer('lieferant', id)`).
+
+**Die Reiter:**
+- **Übersicht** – Kontakt, Liefer-Kategorien, letzte Preise/Bestellungen (Platzhalter bis Module stehen).
+- **Preise / Angebote · Bestellungen · Dokumente** – Gerüst (`bx_bald()`), docken an, sobald die Module stehen.
+- **Rechnungen** – Einkaufs-/Zahlungssicht: je Auftrag Betrag, Rechnung und Ampel-Status **bezahlt / offen / überfällig / keine Rechnung** (Auftrag ohne Rechnung). Aktuell beschriftete Vorschau mit Beispieldaten; echte Werte kommen aus Bestellungen + Buchhaltung.
+- **Verlauf** – Chat (`bx_chat`): links wir, rechts Lieferant, Einträge klickbar.
+- **Stammdaten** – Lief.-Nr., Firma, Ansprechpartner, E-Mail, Telefon, Sprache (DE/EN/ZH), Webseite, Sperr-Schalter, Liefer-Kategorien (Häkchen), Notiz.
+  - **Liefer-Kategorien:** Rohstoff, Verpackung, Verbrauch, Maschine, Labor, **Fertige Produkte**. „Fertige Produkte" = fertig gefüllte Ware (Kapseln/Softgels/Sticks) – da kaufen wir das Endprodukt, keinen Rohstoff.
+  - Ist „Fertige Produkte" angehakt, klappt eine **Formen-Auswahl** auf (Kapsel/Tablette/Softgel/Stick/Pulver/Flüssig) → so lassen sich spezialisierte Hersteller abbilden (z. B. reiner Softgel-Hersteller). Gespeichert in `fertig_formen` (CSV); wird geleert, wenn „Fertige Produkte" nicht gewählt ist.
+- **Adresse** – strukturiert (Straße, Hausnummer, PLZ, Ort, Land, USt-ID).
+- **Konditionen** – Währung (EUR/USD/CNY), Zahlungsart, Zahlungsziel, Standard-Lieferzeit, Mindestbestellwert.
+
+**Kennzahlen-Kacheln:** Status, Bestellungen (folgt), Währung, Ø Lieferzeit.
+
+**Technik-Hinweis:** Alle Reiter in einem Formular; ein kleines JavaScript blendet den aktiven Reiter ein.
+
+**Muster:** wie `kunde/detail.php`. Der Verlauf teilt sich die zentrale Tabelle `aktivitaet` (über `objekt_typ='lieferant'`).

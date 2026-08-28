@@ -1,0 +1,17 @@
+# ui.php – Wiederverwendbare Bausteine
+
+**Zweck:** Fertige Funktionen für immer gleiche UI-Teile (Listen, Reiter, Buttons, Chat). Eine neue Seite baut damit ihr Aussehen zusammen, statt HTML von Hand – so bleibt alles einheitlich.
+
+**Was drin ist:**
+- `bx_head($titel, $sub, $aktionen)` – Seitenkopf mit Titel und optionalen Buttons rechts.
+- `bx_btn($label, $href, $variante)` – ein Button (primary / accent / ghost / danger).
+- `bx_badge($text, $art)` – ein Status-Etikett (ok / warn / err / info).
+- `bx_hint($text)` – das kleine **ⓘ**-Symbol mit Tooltip für Hinweise.
+- `bx_tabs($tabs, $aktiv, $baseUrl)` – Reiter, die per Link umschalten.
+- `bx_table($cols, $rows, $opts)` – **die Listen-Tabelle**: definiert Spalten (Label, sortierbar, eigene Darstellung), macht Kopfzeilen anklickbar zum Sortieren, Zeilen anklickbar zum Öffnen.
+- `bx_sort_rows($rows, $key, $dir)` – sortiert Daten für die Tabelle.
+- `bx_chat($eintraege, $gegenName)` – der **Aktivitäts-Chat** (links = wir, rechts = Gegenstelle: Kunde **oder** Lieferant). Verknüpfte Einträge werden über `aktivitaet_link()` anklickbar.
+- `aktivitaet_link($ref_typ, $ref_id)` – wandelt einen Bezug (z. B. `angebot` 1001) in eine Ziel-URL um. Sobald das Modul existiert, springt der Link automatisch dorthin.
+
+**Wichtig / Regel:**
+- Neue Listen und Formulare **immer über diese Bausteine** bauen, nie eigenes HTML pro Seite. Änderungen am Aussehen passieren zentral hier bzw. in `assets/app.css`.

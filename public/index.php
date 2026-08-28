@@ -1,0 +1,110 @@
+<?php
+// Einziger Web-Einstieg bulkify 4.1 (Front Controller)
+session_start();
+require_once __DIR__ . '/../core/schema.php';
+require_once __DIR__ . '/../core/auth.php';
+require_once __DIR__ . '/../core/layout.php';
+
+// Schema beim Start sicherstellen (idempotent) + ersten Admin anlegen
+init_schema();
+seed_benutzer_if_empty();
+
+// Router: Whitelist Seite -> Modul-Datei. Kein direkter Dateizugriff moeglich.
+$routes = [
+    'login'       => 'auth/login.php',
+    'dashboard' => 'intern/dashboard.php',
+    'kunden'      => 'kunde/liste.php',
+    'kunde'       => 'kunde/detail.php',
+    'lieferanten'    => 'lieferant/liste.php',
+    'lieferant'      => 'lieferant/detail.php',
+    'partner'        => 'partner/liste.php',
+    'partner_detail' => 'partner/detail.php',
+    'rohstoffe'      => 'lager/rohstoffe_liste.php',
+    'rohstoff'       => 'lager/rohstoff_detail.php',
+    'spec_pdf'       => 'lager/spec_download.php',
+    'dokument'       => 'lager/dokument_download.php',
+    'naehrstoffe'    => 'lager/naehrstoffe_liste.php',
+    'naehrstoff'     => 'lager/naehrstoff_detail.php',
+    'verpackungen'   => 'lager/verpackungen_liste.php',
+    'verpackung'     => 'lager/verpackung_detail.php',
+    'verpackung_dok' => 'lager/verpackung_dok_download.php',
+    'rezeptur'        => 'rezeptur/liste.php',
+    'rezeptur_detail' => 'rezeptur/detail.php',
+    'produkte'        => 'produkt/liste.php',
+    'produkt'         => 'produkt/detail.php',
+    'angebote'        => 'angebot/liste.php',
+    'angebot'         => 'angebot/detail.php',
+    'auftraege'       => 'auftrag/liste.php',
+    'auftrag'         => 'auftrag/detail.php',
+    'rechnungen'      => 'beleg/rechnungen_liste.php',
+    'rechnung'        => 'beleg/detail.php',
+    'portal'          => 'portal/kunde.php',
+    'werk'               => 'intern/werk_cockpit.php',
+    'aufgaben'           => 'intern/aufgaben.php',
+    'produktion'         => 'produktion/liste.php',
+    'produktionsauftrag' => 'produktion/detail.php',
+    'kalender'           => 'produktion/kalender.php',
+    'lager'              => 'lager/bestand_liste.php',
+    'lager2'             => 'lager/lager2.php',
+    'betriebsmittel'     => 'lager/betriebsmittel_detail.php',
+    'wareneingang'       => 'lager/wareneingang.php',
+    'chargen'            => 'lager/chargen.php',
+    'versand'            => 'versand/liste.php',
+    'einstellungen'      => 'system/einstellungen.php',
+    'anfragen'           => 'anfrage/liste.php',
+    'anfrage'            => 'anfrage/detail.php',
+    'portal_anfragen'    => 'intern/portal_anfragen.php',
+    'portal_anfrage'     => 'intern/portal_anfrage_detail.php',
+    'einkauf'            => 'einkauf/liste.php',
+    'bestellung'         => 'einkauf/detail.php',
+    'bedarf'             => 'einkauf/bedarf.php',
+    'einkaufsliste'      => 'einkauf/einkaufsliste.php',
+    'benutzer'           => 'system/benutzer_liste.php',
+    'benutzer_detail'    => 'system/benutzer_detail.php',
+];
+
+$p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', $_GET['p']) : 'dashboard';
+
+// Logout
+if ($p === 'logout') { auth_logout(); header('Location: ?p=login'); exit; }
+
+// Autologin per Token (nur localhost) – bequemer Direktlink zum Testen
+if ($p === 'autologin') {
+    if (auth_login_by_token($_GET['token'] ?? '')) {
+        $ziel = (function_exists('ist_produktionsbereich') && ist_produktionsbereich()) ? 'werk' : 'dashboard';
+        header('Location: ?p=' . $ziel); exit;
+    }
+    header('Location: ?p=login'); exit;
+}
+
+// Öffentliche Routen (ohne internen Login): Login-Seite + Kundenportal (Token-basiert)
+$PUBLIC = ['login', 'portal'];
+
+// Nicht angemeldet -> zur Login-Seite (außer öffentliche Routen)
+if (!in_array($p, $PUBLIC, true) && !is_logged_in()) { header('Location: ?p=login'); exit; }
+
+// Produktionsmitarbeiter haben einen eigenen Bereich (Werk) statt des Verkaufs-Dashboards
+$istWerk = is_logged_in() && function_exists('ist_produktionsbereich') && ist_produktionsbereich();
+
+// Bereits angemeldet und ruft Login auf -> ins passende Dashboard
+if ($p === 'login' && is_logged_in()) { header('Location: ?p=' . ($istWerk ? 'werk' : 'dashboard')); exit; }
+
+if (!isset($routes[$p])) $p = is_logged_in() ? ($istWerk ? 'werk' : 'dashboard') : 'login';
+
+// Werk-Mitarbeiter: Verkaufs-Dashboard -> Werk-Cockpit
+if ($istWerk && $p === 'dashboard') { header('Location: ?p=werk'); exit; }
+
+// Rechteprüfung (öffentliche Routen ausgenommen)
+if (!in_array($p, $PUBLIC, true) && !route_erlaubt($p)) {
+    render_header('', 'Kein Zugriff');
+    echo '<div class="bx-panel" style="border-color:#e6c4c0"><h2 style="margin-top:0">Kein Zugriff</h2>'
+       . '<p class="muted">Für diesen Bereich fehlt deiner Rolle die Berechtigung. Wende dich an einen Admin, wenn du Zugriff brauchst.</p>'
+       . '<a class="btn btn-ghost" href="?p=dashboard">Zum Dashboard</a></div>';
+    render_footer();
+    exit;
+}
+
+$file = BX_ROOT . '/module/' . $routes[$p];
+if (!is_file($file)) { http_response_code(404); echo 'Seite nicht gefunden'; exit; }
+
+require $file;

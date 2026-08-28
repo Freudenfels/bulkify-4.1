@@ -1,0 +1,18 @@
+# layout.php – Seitenrahmen & Navigation
+
+**Zweck:** Der gemeinsame Rahmen jeder Seite: Kopf, linke Navigation, Fuß. Damit sehen alle Seiten gleich aus.
+
+**Was passiert hier:**
+- `h($text)` – macht Text sicher für die Ausgabe (schützt vor kaputtem HTML / Angriffen). Wird überall genutzt.
+- `fmt_zeit($utc)` – rechnet eine gespeicherte UTC-Zeit in **Berliner Zeit** um für die Anzeige.
+- `bx_nav()` – die **zentrale Navigations-Definition** (Gruppen wie Vertrieb, **Anfragen**, Produktion, Lager … mit ihren Seiten). Nur hier wird das Menü gepflegt. Ein Eintrag ist entweder `slug => Label` (Link `?p=slug`) **oder** ein Array `['label','route','href','typ']` für Punkte mit Query-Parameter (z. B. die Gruppe **Anfragen**: Rezepturanfragen + Produkt-/Rohstoff-/Dienstleistungsanfragen, die alle auf `portal_anfragen` mit unterschiedlichem `typ` zeigen; aktiver Punkt wird über route + `typ` erkannt).
+- `bx_nav_werk()` – **eigenes, schlankes Menü für den Werk-Bereich** (Produktionsmitarbeiter): Cockpit · Produktion · Warenwirtschaft (Bestand/Wareneingang/Chargen/Rohstoffe/Verpackungen/Nährstoffe/Versand) · Entwicklung (Rezepturen/Rezepturanfragen). Kein Verkauf/Kunden/Rechnungen. `render_header()` wählt dieses Menü automatisch, wenn `ist_produktionsbereich()` (core/auth.php) wahr ist (Produktionsrolle ohne admin/sales/finance) – dann steht in der Marke „bulkify **Werk**". Login + index.php leiten solche Benutzer auf `?p=werk` (Cockpit) statt aufs Verkaufs-Dashboard.
+- `render_header($aktiv, $titel)` – gibt Kopf, Sidebar-Menü (aktiver Punkt markiert) und den Anfang des Hauptbereichs aus. **Filtert die Navigation nach Rolle** über `route_erlaubt()` (aus `core/auth.php`): eine Seite erscheint nur, wenn die Rolle sie sehen darf; leere Gruppen werden ausgeblendet. Unten die **Benutzer-Box** (Name · Rollen · Abmelden).
+- `bx_anfrage_counts()` – zählt **offene Anfragen je Nav-Punkt** (offen = Status NOT IN `beantwortet`/`abgelehnt`): `anfragen` = `rezeptur_anfrage`, `paf_produkt`/`paf_rohstoff`/`paf_dienstleistung` = `portal_anfrage` je `typ`. `render_header()` hängt bei jedem dieser Punkte ein **Badge** (`.bx-navbadge`, wie ungelesene Mails) mit der Zahl an, solange > 0. Fehlertolerant (try/catch, Guard `function_exists('scalar')`), damit das Layout auch ohne die Tabellen lädt.
+- `render_footer()` – schließt die Seite ab (inkl. `bx_theme_script()` für den Dark-Mode-Umschalter).
+- **Dark Mode:** umschaltbar für alle (intern + Portal). Ein Init-Script im `<head>` setzt das gespeicherte Theme (`localStorage['bx-theme']`) auf `<html data-theme="dark|light">` **vor** dem Rendern (kein Flash). Der Button `.bx-themebtn` (in der Sidebar) schaltet um und merkt sich die Wahl. Farben kommen aus den Tokens unter `:root[data-theme="dark"]` in `app.css` – da fast alles CSS-Variablen nutzt, greift es überall. Login-Seite und Portal (`portal_head`/`portal_foot`) binden dasselbe Init-/Wiring-Script ein.
+
+**Wichtig / Regel:**
+- Menüpunkte werden **nur in `bx_nav()`** geändert – nicht in einzelnen Seiten.
+- Wer welche Seite sehen darf, steht **nicht** hier, sondern in `route_rollen_map()` in [core/auth.php](auth.php).
+- Jede Modul-Seite ruft am Anfang `render_header(...)` und am Ende `render_footer()` auf.

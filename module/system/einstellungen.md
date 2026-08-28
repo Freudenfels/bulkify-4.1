@@ -1,0 +1,16 @@
+# system/einstellungen.php – Einstellungen (nach Kategorien)
+
+**Zweck:** Zentrale Einstellungen, mit Reitern (`.settabs`) **nach Kategorien** gegliedert. Datenquellen: `app_meta` (Schlüssel/Wert via `meta_get`/`meta_set`), `kapselgroesse`, `nummernkreis`.
+
+**Reiter:**
+- **Firma** – Firmendaten für Dokumente (Name, Geschäftsführer, Adresse mit Hausnummer, USt-IdNr., **Eori-Nr.**, E-Mail, Telefon, Webseite). In `app_meta` unter `firma_*`. Erscheinen auf Angebot/AB/Rechnung (Briefkopf + Fußzeile via `core/pdf_beleg.php`). Zusätzlich **Bankverbindungen** (zwei Konten: Deutschland + International) unter `bank_de_*` / `bank_int_*` – erscheinen als „Kontoverbindungen" auf dem Beleg (nur wenn eine IBAN gesetzt ist).
+- **Steuer & Finanzen** – **USt-Satz Inland (%)** (`ust_inland`, Standard 19), **Zahlungsziel (Tage)** (`zahlungsziel_tage`, Standard 14), **Kleinunternehmer §19** (`kleinunternehmer` 0/1). Der USt-Satz wird in `auftrag_aus_angebot()` gelesen: Kleinunternehmer oder EU-Ausland → 0 %, sonst `ust_inland`.
+- **Preise & Margen** – **Mindestmarge**, **VK-Marge je Darreichungsform** und die **Standard-Raster** (Stückzahlen, Bestellmengen) für die automatische Produkt-Preismatrix (alles app_meta; genutzt von der Preis-Engine in `core/schema.php`).
+- **Produktion & Rezeptur** – zwei Panels:
+  - **Kapselgrößen & Füllmengen**: Liste der Kapselgrößen mit nomineller **Füllmenge (mg)** – Basis für die Kapsel-Auswahl. Name + Füllmenge je Zeile, Leerzeile zum Hinzufügen, Name leeren = löschen. Richtwerte für Pulver mittlerer Dichte (`seed_kapselgroesse_if_empty`).
+  - **Behälter-Fassung** (Matrix): Zeilen = alle Primärverpackungen, Spalten = jede Kapselgröße (#000…#5, absteigend) **+ Spalte Pulver (g)**. Trägt je Behälter ein, wie viele Kapseln je Größe bzw. wie viel Pulver (max. Füllgewicht) reinpassen. Speichert nach `pack_kapazitaet` (Kapseln) + `item.max_fuellgewicht_g` (Pulver). Genau die Werte, die im Produkt die automatische Verpackungs-Zuordnung „passt/zu klein" steuern. Standard-Behälter + Kapselwerte kommen aus `seed_behaelter_kapazitaet()`.
+- **Nummernkreise** – laufende Zähler je Präfix aus `nummernkreis` (Präfix · Bereich-Label · nächste Nummer · Stellen · Beispiel). Editierbar; Warnung: nie unter bereits vergebene Nummern setzen. Neue Präfixe entstehen automatisch beim ersten Datensatz je Typ.
+
+Der Reiter **Preise & Margen** enthält zusätzlich unter „Rohstoff- & Verpackungs-Weiterverkauf" zwei globale Aufschläge: **Aufschlag auf Rohstoffe (%)** (`aufschlag_rohstoff`, Default 30) und **Aufschlag auf Verpackung (%)** (`aufschlag_verpackung`, Default 30). VK = günstigste EK-Staffel × (1 + Aufschlag). Je Artikel überschreibbar (`item.vk_aufschlag_prozent`, gilt für Rohstoff wie Verpackung). Rohstoff genutzt in `intern/portal_anfrage_detail.php`; Verpackung: Dose/Deckel/Etikett kommen im Produkt-Angebot als eigene Positionen (`core/pdf_beleg.php`), der Produktpreis selbst enthält nur die Herstellung (Füllung + Leerkapsel).
+
+**Speichern:** je Reiter ein eigenes `aktion`-Feld (firma_save / steuer_save / kapsel_save / nummern_save), danach Redirect auf denselben Reiter mit `ok=1`.
