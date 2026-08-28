@@ -21,7 +21,7 @@
 Frühere Sessions (bereits live): Login neu gestaltet + bulkify-Logo, Etikettenpreise (Labelisten) je Gebinde, Demo-Testset (Kunden/Produkte/Angebote/Aufträge inkl. Zukauf).
 
 ## Offene Punkte / als Nächstes
-- **Behälter-EK-Staffeln** sind noch leer (nur Etikettenpreise sind hinterlegt). EK je Gebinde (PET/Glas) je Menge eintragen – Nico liefert Zahlen; dann wie bei den Etiketten einpflegen.
+- **Behälter-EK-Staffeln:** Standbodenbeutel (10 Größen XS–XXL) sind jetzt mit EK-Staffeln (500/1.000/2.500/5.000) angelegt (Seed `seed_standbodenbeutel`, Füllgewicht ~0,55 g/ml als Startwert – je Beutel anpassbar). **Noch offen:** EK-Staffeln für PET-Dosen und Gläser eintragen.
 - **Demo-Rezepturen ohne Rohstoffpreise** → Preis-Matrix zeigt 0 €. Für echte Kalkulation Rohstoff-EK an den Zutaten hinterlegen.
 - **Tablette/Flüssig:** noch keine automatische Preisberechnung (nur „auf Anfrage" bzw. Angebots-Editor manuell).
 - **Admin-Passwort auf beta** ändern (steht noch auf admin/admin – öffentliche URL).

@@ -6,6 +6,7 @@ require_once BX_ROOT . '/core/schema.php';
 seed_kapselgroesse_if_empty();
 seed_behaelter_kapazitaet();   // Standard-Behälter + Kapsel-Fassung (Herstellerwerte, einmalig)
 seed_etikett_preise();         // Etiketten-EK je Gebinde (Labelisten, Stand Juni 2026), einmalig
+seed_standbodenbeutel();   // Standbodenbeutel (Labelisten) + EK-Staffeln, einmalig
 
 $TABS = [
     'firma'      => 'Firma',

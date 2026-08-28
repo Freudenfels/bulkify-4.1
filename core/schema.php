@@ -916,6 +916,45 @@ function etikett_ek_stueck(int $item_id, int $menge): ?float {
     return ($v === null || $v === false) ? null : (float)$v;
 }
 
+// Standbodenbeutel (Labelisten, Stand 28.08.2026) als Verpackungs-Artikel + EK-Mengenstaffel. Läuft einmal (Marker),
+// überschreibt keine Handeingaben (je Beutel nur, wenn Name noch nicht existiert). Preise netto €/Stück inkl. Zipper.
+function seed_standbodenbeutel(): void {
+    if (meta_get('seed_sbb_beutel', '') === '1') return;
+    // [Größe, B, H, T (mm), Volumen ml, €/500, €/1000, €/2500, €/5000]
+    $data = [
+        ['XS',      90,  100,  60,   50, 0.9928,  0.67505, 0.4799,   0.40735],
+        ['S',       90,  160,  60,  100, 0.9928,  0.67505, 0.4799,   0.40735],
+        ['S2',     100,  135,  50,  100, 0.68568, 0.5223,  0.419776, 0.3781],
+        ['Mshort', 130,  160,  70,  200, 0.74474, 0.58105, 0.477588, 0.43435],
+        ['M',      130,  200,  70,  250, 0.74474, 0.58105, 0.477588, 0.43435],
+        ['L',      160,  225,  80,  500, 0.85106, 0.6868,  0.581652, 0.5356],
+        ['XLshort',180,  250,  90,  750, 0.92192, 0.7573,  0.651024, 0.6031],
+        ['XL',     180,  290,  90, 1000, 0.92192, 0.7573,  0.651024, 0.6031],
+        ['XXLslim',230,  300, 110, 1250, 1.01642, 0.8513,  0.743524, 0.6931],
+        ['XXL',    260,  300, 110, 1500, 1.04006, 0.8748,  0.766648, 0.7156],
+    ];
+    $tiers = [500, 1000, 2500, 5000];
+    foreach ($data as $d) {
+        [$g, $b, $h, $t, $vol, $p500, $p1000, $p2500, $p5000] = $d;
+        $name = 'Standbodenbeutel ' . $g . ' (' . $vol . ' ml)';
+        $iid = (int) scalar("SELECT id FROM item WHERE name=? AND kategorie='verpackung'", [$name]);
+        if (!$iid) {
+            $maxG = round($vol * 0.55);   // Startwert Füllgewicht (typ. Pulverdichte ~0,55 g/ml), je Beutel anpassbar
+            q("INSERT INTO item (artikelnummer,name,kategorie,verpackung_rolle,verpackungsart,material,volumen_ml,max_fuellgewicht_g,breite_mm,hoehe_mm,tiefe_mm,einheit,preis_bezug,ek_preis)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('VP'), $name, 'verpackung', 'primaer', 'beutel', 'PP-Folie metallic matt',
+               $vol, $maxG, $b, $h, $t, 'Stück', 'Stück', $p500]);
+            $iid = insert_id();
+        }
+        if ((int) scalar("SELECT COUNT(*) FROM pack_ek_staffel WHERE item_id=?", [$iid]) === 0) {
+            $preise = [$p500, $p1000, $p2500, $p5000];
+            foreach ($tiers as $k => $mab)
+                q("INSERT INTO pack_ek_staffel (item_id,menge_ab,ek_preis) VALUES (?,?,?)", [$iid, $mab, $preise[$k]]);
+        }
+    }
+    meta_set('seed_sbb_beutel', '1');
+}
+
 // Kapsel-Fassung einer Verpackung als [kapselgroesse_id => stueck].
 function pack_kapazitaet_fuer(int $item_id): array {
     $out = [];
