@@ -68,6 +68,8 @@ $leerkapseln = all("SELECT id, name, kapselgroesse_id FROM item WHERE kategorie=
 // Auto-Bestimmung nur bei bestehendem Kapselprodukt (für den Hinweis unter der Auswahl)
 $kapKandidaten = $neu ? [] : produkt_leerkapsel_kandidaten((int)$id);
 $kapEffektiv   = $neu ? null : produkt_leerkapsel_id((int)$id);
+// Darreichungsform des Produkts – bestimmt, ob die Matrixgröße Stück, Gramm oder Milliliter meint
+$pForm = $neu ? 'kapsel' : ((string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$id]) ?: 'kapsel');
 // Preis-Matrix laden + nach (Stück, Verpackung) gruppieren, Bestellmengen als Spalten
 $matrix = $neu ? [] : all("SELECT pp.*, i.name AS verp FROM produkt_preis pp JOIN item i ON i.id=pp.verpackung_id WHERE pp.produkt_id=? ORDER BY pp.stueck, i.name, pp.bestellmenge", [(int)$id]);
 $matrixMengen = array_values(array_unique(array_map(fn($r) => (int)$r['bestellmenge'], $matrix)));
@@ -216,19 +218,19 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
 <?php if (!$neu): ?>
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
-    <h2 style="margin:0">Preis-Matrix <?= bx_hint('automatische VK-Kalkulation: Stückzahl × passende Verpackung × Bestellmenge. VK = EK (Rezeptur+Kapsel+Behälter) × Marge je Typ, ohne Kundenrabatt. Interne Sale-Auskunft.') ?></h2>
+    <h2 style="margin:0">Preis-Matrix <?= bx_hint('automatische VK-Kalkulation: Packungsgröße (Stück, Gramm bei Pulver, Milliliter bei Flüssig) × passende Verpackung × Bestellmenge. VK = EK (Rezeptur + Kapsel/Presshilfsstoffe/Trägerflüssigkeit) × Marge je Typ, ohne Kundenrabatt. Interne Sale-Auskunft.') ?></h2>
     <form method="post" style="margin:0"><input type="hidden" name="aktion" value="matrix"><button class="btn btn-primary btn-sm" type="submit">Matrix neu berechnen</button></form>
   </div>
   <?php if (isset($_GET['matrix'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-top:10px"><?= (int)$_GET['matrix'] ?> Preiszeilen berechnet.</div><?php endif; ?>
   <?php if (!$matrix): ?>
-    <p class="muted">Noch keine Matrix. „Matrix neu berechnen" erzeugt alle Kombinationen (nur Kapselprodukte mit Rezeptur + hinterlegter Behälter-Fassung).</p>
+    <p class="muted">Noch keine Matrix. „Matrix neu berechnen" erzeugt alle Kombinationen (Produkt mit Rezeptur + hinterlegter Behälter-Fassung: Kapseln je Größe, Füllgewicht in g bzw. Fassungsvermögen in ml).</p>
   <?php else: ?>
     <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
-      <thead><tr><th>Stück</th><th>Verpackung</th><?php foreach ($matrixMengen as $mn): ?><th class="bx-num"><?= number_format($mn,0,',','.') ?> Stk</th><?php endforeach; ?></tr></thead>
+      <thead><tr><th>Größe</th><th>Verpackung</th><?php foreach ($matrixMengen as $mn): ?><th class="bx-num"><?= number_format($mn,0,',','.') ?> Stk</th><?php endforeach; ?></tr></thead>
       <tbody>
       <?php foreach ($matrixGrid as $row): ?>
         <tr>
-          <td><?= (int)$row['stueck'] ?></td>
+          <td><?= h(form_groessen_label($pForm, (float)$row['stueck'])) ?></td>
           <td><?= h($row['verp']) ?></td>
           <?php foreach ($matrixMengen as $mn): $c = $row['cells'][$mn] ?? null; ?>
             <td class="bx-num"><?php if ($c): ?><strong><?= number_format($c['vk'],2,',','.') ?> €</strong><div class="muted" style="font-size:11px">EK <?= number_format($c['ek'],2,',','.') ?></div><?php else: ?><span class="muted">–</span><?php endif; ?></td>
@@ -247,6 +249,7 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
 var REZEPTE = <?= json_encode($REZEPTE, JSON_UNESCAPED_UNICODE) ?>;
 var VERP = <?= json_encode($VERP, JSON_UNESCAPED_UNICODE) ?>;
 var KAPSELN = <?= json_encode($KAPSELN, JSON_UNESCAPED_UNICODE) ?>;
+var TAB_HILFSSTOFF = <?= json_encode(tablette_hilfsstoff_prozent()) ?>;   // Presshilfsstoffe % oben auf das Wirkstoffgewicht (Tablette)
 var SLOTS = ['verpackung_id','verschluss_id','etikett_id','karton_id','beipack_id'];
 function nf(x,d){ return x.toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function getVerp(id){ var el=document.getElementById(id); return (el&&el.value)?VERP[el.value]:null; }
@@ -279,6 +282,17 @@ function verpCheck(rz, vp, einh, kV, vh){
     if (g<=vp.max_g){ set('passt','var(--gruen)',nf(g,1)+' g von max. '+nf(vp.max_g,0)+' g.'); return; }
     var pb=[]; for (var kk in VERP){ var b=VERP[kk]; if (b.rolle==='primaer'&&b.max_g!==null&&b.max_g!==undefined&&b.max_g>=g) pb.push(b.name+' ('+nf(b.max_g,0)+' g)'); }
     set('zu klein','var(--err)','Füllgewicht '+nf(g,1)+' g übersteigt max. '+nf(vp.max_g,0)+' g. '+(pb.length?'Passend: '+pb.join(', '):'Keine passende Verpackung hinterlegt.'));
+    return;
+  }
+  if (form==='tablette'){
+    // Tablettengewicht = Wirkstoffe + Presshilfsstoffe; geprüft wird wie bei Pulver gegen das max. Füllgewicht.
+    if (!rz.weight){ set('–','',''); return; }
+    var tg = rz.weight*(1+TAB_HILFSSTOFF/100)*einh/1000;
+    if (!vp){ set('– keine –','','Füllgewicht je Packung: '+nf(tg,1)+' g ('+einh+' Tabletten). Bitte Verpackung wählen.'); return; }
+    if (vp.max_g===null||vp.max_g===undefined){ set('kein Füllgewicht','var(--warn)','Verpackung hat kein max. Füllgewicht hinterlegt (benötigt: '+nf(tg,1)+' g).'); return; }
+    if (tg<=vp.max_g){ set('passt','var(--gruen)',nf(tg,1)+' g von max. '+nf(vp.max_g,0)+' g ('+einh+' Tabletten inkl. Presshilfsstoffe).'); return; }
+    var pt=[]; for (var mm in VERP){ var t=VERP[mm]; if (t.rolle==='primaer'&&t.max_g!==null&&t.max_g!==undefined&&t.max_g>=tg) pt.push(t.name+' ('+nf(t.max_g,0)+' g)'); }
+    set('zu klein','var(--err)','Füllgewicht '+nf(tg,1)+' g übersteigt max. '+nf(vp.max_g,0)+' g. '+(pt.length?'Passend: '+pt.join(', '):'Keine passende Verpackung hinterlegt.'));
     return;
   }
   if (form==='fluessig'){

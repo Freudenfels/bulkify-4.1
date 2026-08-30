@@ -238,7 +238,8 @@ foreach ($angebote as $a) {
         'deckel'  => $itemName($a['verschluss_id']),
         'etikett' => $itemName($a['etikett_id']),
         'form'    => $a['darreichungsform'] ?? '',
-        'istPulver' => in_array($a['darreichungsform'] ?? '', ['pulver','stick','granulat'], true),
+        'istPulver' => in_array($a['darreichungsform'] ?? '', ['pulver','stick','granulat'], true),   // Rezeptur beschreibt eine Portion (g je Packung anzeigen)
+        'istFuell'  => form_ist_fuellmenge($a['darreichungsform'] ?? ''),                              // Packungsgröße ist eine Füllmenge (g/ml) statt einer Stückzahl
         'portionG' => $rid ? (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rid]) / 1000 : 0,
         'zutaten' => $rid ? all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [],
         'nutr'    => $rid ? pt_naehr($rid) : [],
@@ -414,7 +415,8 @@ $prodPreise = [];
 if ($prodDetail) foreach (all("SELECT stueck, MIN(vk_preis) AS mn FROM produkt_preis WHERE produkt_id=? GROUP BY stueck ORDER BY stueck", [(int)$prodDetail['id']]) as $r)
     $prodPreise[] = ['stueck'=>(int)$r['stueck'], 'ab'=>vk_fuer_kunde((float)$r['mn'], $kid)];
 $prodForm = $prodDetail['darreichungsform'] ?? '';
-$prodIstPulver = in_array($prodForm, ['pulver','granulat','stick'], true);   // Pulver: Anfrage nach Füllmenge (g), nicht Stück
+$prodIstFuell  = form_ist_fuellmenge($prodForm);   // Anfrage nach Füllmenge (Pulver g / Flüssig ml) statt Stückzahl
+$prodFuellEinheit = form_groessen_einheit($prodForm) ?: 'g';
 $prodPortionG = ($prodDetail && $prodDetail['rezeptur_id']) ? (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [(int)$prodDetail['rezeptur_id']]) / 1000 : 0;
 // Rohstoff-Detail (kundenfreundlich: Kennwerte + Deklaration, keine internen Daten)
 $iid = (int)($_GET['iid'] ?? 0);
@@ -459,19 +461,18 @@ if (($_GET['v'] ?? '') === 'angebot_pdf') {
     if (!$a) { http_response_code(404); echo 'Angebot nicht gefunden.'; exit; }
     require_once BX_ROOT . '/core/pdf_beleg.php';
     $inf = $angInfo[$a['id']];
-    $istPulver = $inf['istPulver'];
-    $formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'g','granulat'=>'g','fluessig'=>'ml'][$inf['form']] ?? 'Stück';
+    $istFuell = $inf['istFuell'];
 
     // Angefragte Konfiguration (aus der Anfrage) bestimmen
     $anf = $a['anfrage_id'] ? one("SELECT nummer, stueck, fuellmenge_g, verpackung_typ, menge FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']]) : null;
-    $featStk = $istPulver ? (float)($anf['fuellmenge_g'] ?? 0) : (int)($anf['stueck'] ?? 0);
+    $featStk = $istFuell ? (float)($anf['fuellmenge_g'] ?? 0) : (int)($anf['stueck'] ?? 0);
     if (!$featStk || !isset($inf['matrix'][$featStk])) { foreach (std_groessen_fuer($inf['form']) as $s2) { if (isset($inf['matrix'][$s2])) { $featStk = $s2; break; } } }
     $featMenge = (int)($anf['menge'] ?? 0);
     if (!$featMenge || !isset($inf['matrix'][$featStk][$featMenge])) {
         $featMenge = 0; foreach ($std_menge_ang as $bm2) { if (isset($inf['matrix'][$featStk][$bm2])) { $featMenge = $bm2; break; } }
     }
     $preisPkg = ($featStk && $featMenge && isset($inf['matrix'][$featStk][$featMenge])) ? vk_fuer_kunde($inf['matrix'][$featStk][$featMenge]['vk'], $kid) : 0.0;
-    $stkLabel = $istPulver ? (rtrim(rtrim(number_format($featStk,1,',','.'),'0'),',') . ' g') : ((int)$featStk . ' ' . $formPl);
+    $stkLabel = form_groessen_label($inf['form'], (float)$featStk);
     $verpText = $inf['verp'] ?: ($anf && $anf['verpackung_typ'] ? ['glas'=>'Glas','pet'=>'PET-Dose','pla'=>'PLA-Becher','beutel'=>'Standbodenbeutel','stick'=>'Stick','blister'=>'Blister'][$anf['verpackung_typ']] ?? $anf['verpackung_typ'] : '');
 
     // USt: Inland -> Satz aus Einstellungen, sonst 0 % (EU-/Export-Lieferung)
@@ -982,9 +983,9 @@ portal_head('Kundenportal · ' . $k['firma']);
         <thead><tr><th>Größe</th><th class="bx-num">Preis je Packung</th></tr></thead>
         <tbody>
         <?php foreach ($prodPreise as $pp): ?>
-          <tr><td><?= $prodIstPulver && $prodPortionG > 0
+          <tr><td><?= $prodForm === 'stick' && $prodPortionG > 0
                       ? rtrim(rtrim(number_format($pp['stueck'] * $prodPortionG, 1, ',', '.'), '0'), ',') . ' g je Packung'
-                      : (int)$pp['stueck'] . ' Stück je Packung' ?></td>
+                      : h(form_groessen_label($prodForm, (float)$pp['stueck'])) . ' je Packung' ?></td>
               <td class="bx-num">ab <?= $eur($pp['ab']) ?> *</td></tr>
         <?php endforeach; ?>
         </tbody>
@@ -997,8 +998,8 @@ portal_head('Kundenportal · ' . $k['firma']);
         <input type="hidden" name="aktion" value="produkt_anfrage">
         <input type="hidden" name="produkt_id" value="<?= (int)$prodDetail['id'] ?>">
         <div class="bx-grid">
-          <?php if ($prodIstPulver): ?>
-          <div class="bx-field"><label>Füllmenge je Packung (g) <?= bx_hint('wie viel Pulver pro Dose/Beutel – wir wählen die passende Verpackung dazu') ?></label><input type="number" name="fuellmenge_g" min="1" step="1" placeholder="z. B. 200"></div>
+          <?php if ($prodIstFuell): ?>
+          <div class="bx-field"><label>Füllmenge je Packung (<?= h($prodFuellEinheit) ?>) <?= bx_hint('wie viel pro Dose/Flasche/Beutel – wir wählen die passende Verpackung dazu') ?></label><input type="number" name="fuellmenge_g" min="1" step="1" placeholder="<?= $prodFuellEinheit === 'ml' ? 'z. B. 250' : 'z. B. 200' ?>"></div>
           <?php else: ?>
           <div class="bx-field"><label>Stück je Packung</label><select name="stueck"><?php foreach ($stdStueck as $s): ?><option value="<?= $s ?>"><?= $s ?></option><?php endforeach; ?></select></div>
           <?php endif; ?>
@@ -1028,7 +1029,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           </select>
         </div>
         <div class="bx-field" id="pa_stueck_wrap"><label>Stück je Packung</label><select name="stueck"><?php foreach ($stdStueck as $s): ?><option value="<?= $s ?>"><?= $s ?></option><?php endforeach; ?></select></div>
-        <div class="bx-field" id="pa_fuell_wrap" style="display:none"><label>Füllmenge je Packung (g) <?= bx_hint('wie viel Pulver pro Dose/Beutel – wir wählen die passende Verpackung dazu') ?></label><input type="number" name="fuellmenge_g" min="1" step="1" placeholder="z. B. 200"></div>
+        <div class="bx-field" id="pa_fuell_wrap" style="display:none"><label>Füllmenge je Packung <span id="pa_fuell_einheit">(g)</span> <?= bx_hint('wie viel pro Dose/Flasche/Beutel – wir wählen die passende Verpackung dazu') ?></label><input type="number" name="fuellmenge_g" min="1" step="1" placeholder="z. B. 200"></div>
         <div class="bx-field"><label>Verpackungstyp <?= bx_hint('Sie wählen nur die Art – wir bestimmen das perfekt passende Gebinde in der richtigen Größe.') ?></label>
           <select name="verpackung_typ"><option value="">– egal / bitte empfehlen –</option><?php foreach ($VTYPEN as $tk=>$tl): ?><option value="<?= $tk ?>"><?= h($tl) ?></option><?php endforeach; ?></select>
         </div>
@@ -1041,9 +1042,11 @@ portal_head('Kundenportal · ' . $k['firma']);
       var sel=document.getElementById('pa_produkt'); if(!sel) return;
       function upd(){
         var o=sel.options[sel.selectedIndex], f=o?o.getAttribute('data-form'):'';
-        var pulver=(f==='pulver'||f==='granulat'||f==='stick');
-        document.getElementById('pa_stueck_wrap').style.display=pulver?'none':'';
-        document.getElementById('pa_fuell_wrap').style.display=pulver?'':'none';
+        // Pulver/Granulat werden nach Gramm angefragt, Flüssiges nach Milliliter, alles andere nach Stückzahl
+        var fuell=(f==='pulver'||f==='granulat'||f==='fluessig');
+        document.getElementById('pa_stueck_wrap').style.display=fuell?'none':'';
+        document.getElementById('pa_fuell_wrap').style.display=fuell?'':'none';
+        document.getElementById('pa_fuell_einheit').textContent=(f==='fluessig')?'(ml)':'(g)';
       }
       sel.addEventListener('change',upd); upd();
     })();</script>
@@ -1226,10 +1229,9 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
       <thead><tr><th>Menge / Verpackung</th><th class="bx-num">Anzahl Verpackungen</th><th>Preis</th><th></th></tr></thead>
       <tbody>
-      <?php $istGramm = in_array($inf['form'], ['pulver','granulat'], true);
-            foreach ($std_menge_ang as $bm): foreach (std_groessen_fuer($inf['form']) as $stk):
+      <?php foreach ($std_menge_ang as $bm): foreach (std_groessen_fuer($inf['form']) as $stk):
           $cell = $inf['matrix'][$stk][$bm] ?? null;
-          $lbl = $istGramm ? ($stk . ' g') : ($stk . ' ' . ($formPl[$inf['form']] ?? 'Stück'));
+          $lbl = form_groessen_label($inf['form'], (float)$stk);
           $gp = ($inf['form'] === 'stick' && $inf['portionG'] > 0) ? $mg($stk * $inf['portionG']) . ' g pro Packung' : ''; ?>
         <tr>
           <td><?= h($lbl) ?><?= $gp ? '<div class="muted" style="font-size:12px">' . h($gp) . '</div>' : '' ?></td>

@@ -65,14 +65,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'preise_save') {
     $clean = fn($s) => implode(',', array_filter(array_map('intval', array_map('trim', explode(',', (string)$s)))));
     meta_set('std_stueck', $clean($_POST['std_stueck'] ?? '') ?: '30,60,90,120,180');
     meta_set('std_fuellgewicht_g', $clean($_POST['std_fuellgewicht_g'] ?? '') ?: '150,300,500,1000');
+    meta_set('std_fuellvolumen_ml', $clean($_POST['std_fuellvolumen_ml'] ?? '') ?: '50,100,250,500');
     meta_set('std_bestellmenge', $clean($_POST['std_bestellmenge'] ?? '') ?: '1000,2500,5000,10000');
     meta_set('aufschlag_rohstoff', (string)(float)str_replace(',', '.', $_POST['aufschlag_rohstoff'] ?? '30'));
     meta_set('aufschlag_verpackung', (string)(float)str_replace(',', '.', $_POST['aufschlag_verpackung'] ?? '30'));
+    meta_set('tablette_hilfsstoff_prozent', (string)(float)str_replace(',', '.', $_POST['tablette_hilfsstoff_prozent'] ?? '20'));
+    meta_set('tablette_hilfsstoff_ek_kg', (string)(float)str_replace(',', '.', $_POST['tablette_hilfsstoff_ek_kg'] ?? '8'));
+    meta_set('fluessig_portion_ml', (string)(float)str_replace(',', '.', $_POST['fluessig_portion_ml'] ?? '10'));
+    meta_set('fluessig_basis_ek_l', (string)(float)str_replace(',', '.', $_POST['fluessig_basis_ek_l'] ?? '3'));
     header('Location: ?p=einstellungen&tab=preise&ok=1'); exit;
 }
-// --- Behälter-Fassung speichern (Matrix: Kapseln je Größe + Pulver-Gramm) ---
+// --- Behälter-Fassung speichern (Matrix: Kapseln je Größe + Pulver-Gramm + Flüssig-ml) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'behaelter_save') {
-    $kap = $_POST['kap'] ?? []; $gram = $_POST['gram'] ?? [];
+    $kap = $_POST['kap'] ?? []; $gram = $_POST['gram'] ?? []; $vol = $_POST['vol'] ?? [];
     foreach (($_POST['bh_id'] ?? []) as $iid) {
         $iid = (int)$iid; if (!$iid) continue;
         q("DELETE FROM pack_kapazitaet WHERE item_id=?", [$iid]);
@@ -80,8 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'behaelter_save') {
             $stk = (int)$stk;
             if ($stk > 0) q("INSERT INTO pack_kapazitaet (item_id,kapselgroesse_id,stueck) VALUES (?,?,?)", [$iid, (int)$kgid, $stk]);
         }
-        $g = trim($gram[$iid] ?? '');
-        q("UPDATE item SET max_fuellgewicht_g=? WHERE id=?", [$g === '' ? null : (float)str_replace(',', '.', $g), $iid]);
+        $g = trim($gram[$iid] ?? ''); $v = trim($vol[$iid] ?? '');
+        q("UPDATE item SET max_fuellgewicht_g=?, volumen_ml=? WHERE id=?",
+          [$g === '' ? null : (float)str_replace(',', '.', $g), $v === '' ? null : (float)str_replace(',', '.', $v), $iid]);
     }
     header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
 }
@@ -193,7 +199,15 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <div class="bx-grid">
       <div class="bx-field"><label>Stückzahlen je Packung <?= bx_hint('für Kapseln/Tabletten/Softgel/Sticks; kommagetrennt, z. B. 30,60,90,120,180') ?></label><input type="text" name="std_stueck" value="<?= $m('std_stueck','30,60,90,120,180') ?>"></div>
       <div class="bx-field"><label>Pulver-Füllgewichte (g) <?= bx_hint('für Pulver/Granulat wird nach Gewicht angeboten (z. B. 300 g), kommagetrennt') ?></label><input type="text" name="std_fuellgewicht_g" value="<?= $m('std_fuellgewicht_g','150,300,500,1000') ?>"></div>
+      <div class="bx-field"><label>Flüssig-Füllvolumen (ml) <?= bx_hint('für Flüssiges wird nach Volumen angeboten (z. B. 250 ml), kommagetrennt') ?></label><input type="text" name="std_fuellvolumen_ml" value="<?= $m('std_fuellvolumen_ml','50,100,250,500') ?>"></div>
       <div class="bx-field"><label>Bestellmengen-Staffeln <?= bx_hint('kommagetrennt, z. B. 1000,2500,5000,10000') ?></label><input type="text" name="std_bestellmenge" value="<?= $m('std_bestellmenge','1000,2500,5000,10000') ?>"></div>
+    </div>
+    <div style="font-weight:600;margin:14px 0 6px">Tablette &amp; Flüssig – Kalkulationsgrundlagen</div>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Presshilfsstoffe Tablette (%) <?= bx_hint('Füllstoff, Trennmittel und Überzug kommen zum Wirkstoffgewicht der Rezeptur dazu – bestimmt Tablettengewicht und Behälter-Auswahl') ?></label><input type="number" step="0.1" name="tablette_hilfsstoff_prozent" value="<?= $m('tablette_hilfsstoff_prozent','20') ?>"></div>
+      <div class="bx-field"><label>EK Presshilfsstoffe (EUR/kg) <?= bx_hint('Einkaufspreis der Presshilfsstoffe – geht in den EK je Tablette ein') ?></label><input type="number" step="0.01" name="tablette_hilfsstoff_ek_kg" value="<?= $m('tablette_hilfsstoff_ek_kg','8') ?>"></div>
+      <div class="bx-field"><label>Portionsvolumen Flüssig (ml) <?= bx_hint('wie viel ml eine Portion laut Rezeptur ist – daraus ergibt sich, wie viele Portionen in eine Flasche gehen') ?></label><input type="number" step="0.1" name="fluessig_portion_ml" value="<?= $m('fluessig_portion_ml','10') ?>"></div>
+      <div class="bx-field"><label>EK Trägerflüssigkeit (EUR/L) <?= bx_hint('Wasser, Öl oder Glycerin als Basis – kommt je ml Füllvolumen zum EK dazu') ?></label><input type="number" step="0.01" name="fluessig_basis_ek_l" value="<?= $m('fluessig_basis_ek_l','3') ?>"></div>
     </div>
     <div style="font-weight:600;margin:14px 0 6px">Rohstoff- & Verpackungs-Weiterverkauf</div>
     <div class="bx-grid">
@@ -248,7 +262,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     $kurz = fn($n) => str_replace('Größe ', '#', $n);
 ?>
 <div class="bx-panel">
-  <h2>Behälter-Fassung <?= bx_hint('wie viele Kapseln je Größe bzw. wie viel Pulver (g) in jeden Behälter passen – Basis für die automatische Verpackungs-Zuordnung im Produkt') ?></h2>
+  <h2>Behälter-Fassung <?= bx_hint('wie viele Kapseln je Größe, wie viel Pulver (g) und wie viel Flüssiges (ml) in jeden Behälter passen – Basis für die automatische Verpackungs-Zuordnung im Produkt') ?></h2>
   <form method="post">
     <input type="hidden" name="aktion" value="behaelter_save">
     <div class="bx-tablewrap"><table class="bx-table">
@@ -256,21 +270,23 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
         <th>Behälter</th>
         <?php foreach ($kapsizes as $ks): ?><th class="bx-num"><?= h($kurz($ks['name'])) ?></th><?php endforeach; ?>
         <th class="bx-num">Pulver (g)</th>
+        <th class="bx-num">Flüssig (ml)</th>
       </tr></thead>
       <tbody>
-        <?php if (!$behaelter): ?><tr><td colspan="<?= count($kapsizes)+2 ?>" class="muted">Keine Primärverpackungen angelegt.</td></tr><?php endif; ?>
+        <?php if (!$behaelter): ?><tr><td colspan="<?= count($kapsizes)+3 ?>" class="muted">Keine Primärverpackungen angelegt.</td></tr><?php endif; ?>
         <?php foreach ($behaelter as $b): ?>
         <tr>
-          <td><input type="hidden" name="bh_id[]" value="<?= (int)$b['id'] ?>"><?= h($b['name']) ?><?= $b['volumen_ml']!==null ? ' <span class="muted">('.rtrim(rtrim(number_format((float)$b['volumen_ml'],1,',','.'),'0'),',').' ml)</span>' : '' ?></td>
+          <td><input type="hidden" name="bh_id[]" value="<?= (int)$b['id'] ?>"><?= h($b['name']) ?></td>
           <?php foreach ($kapsizes as $ks): $val = $capmap[(int)$b['id']][(int)$ks['id']] ?? ''; ?>
             <td class="bx-num"><input type="number" min="0" step="1" name="kap[<?= (int)$b['id'] ?>][<?= (int)$ks['id'] ?>]" value="<?= $val !== '' ? (int)$val : '' ?>" placeholder="–" style="max-width:64px;text-align:right"></td>
           <?php endforeach; ?>
           <td class="bx-num"><input type="number" min="0" step="0.1" name="gram[<?= (int)$b['id'] ?>]" value="<?= $b['max_fuellgewicht_g']!==null ? (float)$b['max_fuellgewicht_g'] : '' ?>" placeholder="–" style="max-width:74px;text-align:right"></td>
+          <td class="bx-num"><input type="number" min="0" step="1" name="vol[<?= (int)$b['id'] ?>]" value="<?= $b['volumen_ml']!==null ? (float)$b['volumen_ml'] : '' ?>" placeholder="–" style="max-width:74px;text-align:right"></td>
         </tr>
         <?php endforeach; ?>
       </tbody>
     </table></div>
-    <div class="muted" style="margin:8px 0">Leer = passt nicht / unbekannt. #00 = größte Kapsel. Die Pulver-Spalte ist das max. Füllgewicht je Behälter (für Pulverprodukte).</div>
+    <div class="muted" style="margin:8px 0">Leer = passt nicht / unbekannt. #00 = größte Kapsel. Die Pulver-Spalte ist das max. Füllgewicht je Behälter (Pulver, Granulat, Sticks, Tabletten), die Flüssig-Spalte das Fassungsvermögen für Flüssigprodukte.</div>
     <button class="btn btn-primary" type="submit">Speichern</button>
   </form>
 </div>

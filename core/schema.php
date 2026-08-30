@@ -1431,9 +1431,34 @@ function std_fuellgewichte(): array {
     $r = array_map('intval', array_filter(array_map('trim', explode(',', (string) meta_get('std_fuellgewicht_g', '150,300,500,1000')))));
     return $r ?: [150, 300, 500, 1000];
 }
-// Form-abhängiges Größenraster: Pulver/Granulat nach Füllgewicht (g), sonst Stückzahlen.
+// Standard-Füllvolumen für Flüssig (in ml) – Flüssiges wird nach Volumen angeboten (z. B. 250 ml je Flasche).
+function std_fuellvolumen_ml(): array {
+    $r = array_map('intval', array_filter(array_map('trim', explode(',', (string) meta_get('std_fuellvolumen_ml', '50,100,250,500')))));
+    return $r ?: [50, 100, 250, 500];
+}
+// Form-abhängiges Größenraster: Pulver/Granulat nach Füllgewicht (g), Flüssig nach Füllvolumen (ml), sonst Stückzahlen.
 function std_groessen_fuer(string $form): array {
-    return in_array($form, ['pulver', 'granulat'], true) ? std_fuellgewichte() : std_stueckzahlen();
+    if (in_array($form, ['pulver', 'granulat'], true)) return std_fuellgewichte();
+    if ($form === 'fluessig') return std_fuellvolumen_ml();
+    return std_stueckzahlen();
+}
+// Einheit der Packungsgröße je Darreichungsform: 'g' (Pulver/Granulat), 'ml' (Flüssig), '' = Stückzahl.
+function form_groessen_einheit(string $form): string {
+    if (in_array($form, ['pulver', 'granulat'], true)) return 'g';
+    if ($form === 'fluessig') return 'ml';
+    return '';
+}
+// Wird die Packungsgröße als Füllmenge (g/ml) angefragt statt als Stückzahl?
+function form_ist_fuellmenge(string $form): bool { return form_groessen_einheit($form) !== ''; }
+// Plural der Stück-Einheit (nur für Formen, die nach Stückzahl verkauft werden).
+function form_plural(string $form): string {
+    return ['kapsel'=>'Kapseln', 'tablette'=>'Tabletten', 'softgel'=>'Softgels', 'stick'=>'Sticks'][$form] ?? 'Stück';
+}
+// Beschriftung einer Packungsgröße: „300 g", „250 ml", „120 Kapseln".
+function form_groessen_label(string $form, float $wert): string {
+    $e = form_groessen_einheit($form);
+    if ($e !== '') return rtrim(rtrim(number_format($wert, 1, ',', '.'), '0'), ',') . ' ' . $e;
+    return (int) $wert . ' ' . form_plural($form);
 }
 
 // Behälter-EK bei einer Bestellmenge: passende Staffel, sonst flacher item.ek_preis.
@@ -1447,18 +1472,49 @@ function produkt_kapsel_ek(int $produkt_id): float {
     $kid = produkt_leerkapsel_id($produkt_id);
     return $kid ? (float) scalar("SELECT ek_preis FROM item WHERE id=?", [$kid]) : 0.0;
 }
-// Herstellungs-EK je Packung (nur Rezeptur-Füllung + Leerkapseln). Der BEHÄLTER kommt separat
-// als eigene Angebotsposition (Dose/Deckel/Etikett kommen extra – EK-Staffel × Verpackungs-Aufschlag).
+// ---- Tablette: Presshilfsstoffe ----
+// Eine Tablette besteht nicht nur aus den Wirkstoffen der Rezeptur: Füllstoff, Trennmittel und Überzug
+// kommen dazu. Beides ist global pflegbar (Einstellungen -> Preise & Margen), weil es je Rezeptur kaum abweicht.
+function tablette_hilfsstoff_prozent(): float { return max(0.0, (float) meta_get('tablette_hilfsstoff_prozent', 20)); }
+function tablette_hilfsstoff_ek_kg(): float   { return max(0.0, (float) meta_get('tablette_hilfsstoff_ek_kg', 8)); }
+// Wirkstoffgewicht einer Einheit (mg) laut Rezeptur.
+function rezeptur_gewicht_mg(int $rezeptur_id): float {
+    return (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rezeptur_id]);
+}
+// Gewicht einer fertigen Tablette (mg) = Wirkstoffe + Presshilfsstoffe. Basis für die Behälter-Auswahl.
+function tablette_gewicht_mg(int $rezeptur_id): float {
+    return rezeptur_gewicht_mg($rezeptur_id) * (1 + tablette_hilfsstoff_prozent() / 100);
+}
+// EK der Presshilfsstoffe je Tablette (EUR).
+function tablette_hilfsstoff_ek_stueck(int $rezeptur_id): float {
+    $mg = rezeptur_gewicht_mg($rezeptur_id) * tablette_hilfsstoff_prozent() / 100;
+    return $mg / 1e6 * tablette_hilfsstoff_ek_kg();   // mg -> kg
+}
+// ---- Flüssig ----
+// Die Rezeptur beschreibt eine PORTION (z. B. 10 ml). Wie viel eine Portion ist und was die
+// Trägerflüssigkeit (Wasser/Öl/Glycerin) kostet, steht global in den Einstellungen.
+function fluessig_portion_ml(): float { return max(0.1, (float) meta_get('fluessig_portion_ml', 10)); }
+function fluessig_basis_ek_l(): float { return max(0.0, (float) meta_get('fluessig_basis_ek_l', 3)); }
+
+// Herstellungs-EK je Packung (nur Rezeptur-Füllung + Leerkapseln bzw. Presshilfsstoffe/Trägerflüssigkeit).
+// Der BEHÄLTER kommt separat als eigene Angebotsposition (Dose/Deckel/Etikett kommen extra – EK-Staffel × Verpackungs-Aufschlag).
 function produkt_variante_ek(int $produkt_id, int $stueck, int $verp_id = 0, int $bestellmenge = 0): float {
     $rid  = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$produkt_id]);
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
     if (in_array($form, ['pulver', 'granulat'], true)) {
         // $stueck = Füllgewicht in Gramm; Kosten je Gramm = Portionskosten / Portionsgewicht.
-        $portionG = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rid]) / 1000;
+        $portionG = rezeptur_gewicht_mg($rid) / 1000;
         $servings = $portionG > 0 ? ((float)$stueck / $portionG) : 0.0;
         return rezeptur_kosten_pro_einheit($rid ?: null) * $servings;   // Füllung; Behälter kommt separat
     }
+    if ($form === 'fluessig') {
+        // $stueck = Füllvolumen in ml; Portionen = Volumen / Portionsvolumen, dazu die Trägerflüssigkeit je ml.
+        $servings = (float)$stueck / fluessig_portion_ml();
+        return rezeptur_kosten_pro_einheit($rid ?: null) * $servings + ((float)$stueck / 1000) * fluessig_basis_ek_l();
+    }
     $fuell = rezeptur_kosten_pro_einheit($rid ?: null) * $stueck;
+    // Tablette: statt der Leerkapsel kommen die Presshilfsstoffe dazu.
+    if ($form === 'tablette') return $fuell + tablette_hilfsstoff_ek_stueck($rid) * $stueck;
     $kaps  = produkt_kapsel_ek($produkt_id) * $stueck;
     return $fuell + $kaps;
 }
@@ -1587,10 +1643,11 @@ function angebot_config_gruppen(array $a): array {
     foreach ($groups as &$g) sort($g['mengen']);
     return array_values($groups);
 }
-// Für eine Gruppe: primäre Stückzahl + Bestellmenge aus der Matrix bestimmen (mit Fallback aufs Standardraster).
-function _angebot_feat(array $matrix, bool $istPulver, array $g): array {
-    $featStk = $istPulver ? (float)($g['fuellmenge_g'] ?? 0) : (int)($g['stueck'] ?? 0);
-    if (!$featStk || !isset($matrix[$featStk])) { foreach (std_stueckzahlen() as $s2) if (isset($matrix[$s2])) { $featStk = $s2; break; } }
+// Für eine Gruppe: primäre Packungsgröße + Bestellmenge aus der Matrix bestimmen (mit Fallback aufs Standardraster).
+// Bei Füllmengen-Formen (Pulver/Granulat g, Flüssig ml) steckt die Größe in fuellmenge_g, sonst in stueck.
+function _angebot_feat(array $matrix, string $form, array $g): array {
+    $featStk = form_ist_fuellmenge($form) ? (float)($g['fuellmenge_g'] ?? 0) : (int)($g['stueck'] ?? 0);
+    if (!$featStk || !isset($matrix[$featStk])) { foreach (std_groessen_fuer($form) as $s2) if (isset($matrix[$s2])) { $featStk = $s2; break; } }
     $primaer = $g['mengen'] ? min($g['mengen']) : 0;
     if (!$primaer || !isset($matrix[$featStk][$primaer])) { $primaer = 0; foreach (std_bestellmengen() as $bm2) if (isset($matrix[$featStk][$bm2])) { $primaer = $bm2; break; } }
     return [$featStk, $primaer];
@@ -1603,11 +1660,11 @@ function angebot_gruppe_positionen(array $g, ?float $mo, ?int $kid, ?string $let
     $matrix = angebot_matrix($pid, $mo);
     $ust = angebot_ust_satz($kid);
     $form = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
-    $istPulver = in_array($form, ['pulver','granulat','stick'], true);
-    $formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'g','granulat'=>'g','fluessig'=>'ml'][$form] ?? 'Stück';
-    [$featStk, $featMenge] = _angebot_feat($matrix, $istPulver, $g);
+    // Portionsweise Formen: Pulver/Granulat (g), Flüssig (ml) und Sticks beschreiben die Rezeptur je Portion.
+    $jePortion = form_ist_fuellmenge($form) || $form === 'stick';
+    [$featStk, $featMenge] = _angebot_feat($matrix, $form, $g);
     $pname = (string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [$pid]) ?: 'Produkt';
-    $stkLabel = $istPulver ? (rtrim(rtrim(number_format((float)$featStk,1,',','.'),'0'),',') . ' g') : ((int)$featStk . ' ' . $formPl);
+    $stkLabel = form_groessen_label($form, (float)$featStk);
     $cell = ($featStk && $featMenge && isset($matrix[$featStk][$featMenge])) ? $matrix[$featStk][$featMenge] : ['vk'=>0.0,'ek'=>0.0];
     $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$pid]);
     $rezLines = []; $totalMg = 0.0;
@@ -1616,10 +1673,10 @@ function angebot_gruppe_positionen(array $g, ?float $mo, ?int $kid, ?string $let
         $rezLines[] = $z['bezeichnung'] . ' ' . rtrim(rtrim(number_format($mg, 2, ',', ''), '0'), ',') . 'mg';
     }
     $sumMg = (int) round($totalMg / 10) * 10;
-    if ($istPulver) $summary = '~' . $sumMg . 'mg je Portion, ' . $stkLabel . ' je Packung';
+    if ($jePortion) $summary = '~' . $sumMg . 'mg je Portion, ' . $stkLabel . ' je Packung';
     else {
-        $summary = '~' . $sumMg . 'mg, ' . (int)$featStk . ' ' . $formPl;
-        $kg = rezeptur_kapselgroesse($rid ?: 0);
+        $summary = '~' . $sumMg . 'mg, ' . $stkLabel;
+        $kg = in_array($form, ['kapsel','softgel'], true) ? rezeptur_kapselgroesse($rid ?: 0) : null;   // Kapselgröße nur bei Kapseln
         if ($kg && !empty($kg['name'])) $summary .= ', #' . trim(str_ireplace(['Größe', 'Gr.', 'Gr'], '', $kg['name']));
     }
     $besch = $rezLines ? (implode("\n", $rezLines) . "\n" . $summary) : $summary;
@@ -1676,21 +1733,19 @@ function angebot_staffel_gruppen(array $a): array {
         $pid = (int)$g['produkt_id'];
         $matrix = angebot_matrix($pid, $mo);
         $form = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
-        $istPulver = in_array($form, ['pulver','granulat','stick'], true);
-        [$featStk, $primaer] = _angebot_feat($matrix, $istPulver, $g);
+        $istFuell = form_ist_fuellmenge($form);   // Größe ist eine Füllmenge (g/ml) -> kein Stückpreis
+        [$featStk, $primaer] = _angebot_feat($matrix, $form, $g);
         $mengen = $g['mengen'] ?: ($primaer ? [$primaer] : []);
         $rows = [];
         foreach ($mengen as $bm) {
             if (!isset($matrix[$featStk][$bm])) continue;
             $allinCent = (int) round(vk_fuer_kunde($matrix[$featStk][$bm]['vk'], $kid) * 100) + verpackung_cent_je_pack($pid, (int)$bm, $kid);
-            $rows[] = ['ab'=>(int)$bm, 'stueck_cent'=>(!$istPulver && $featStk) ? (int) round($allinCent / $featStk) : null, 'pack_cent'=>$allinCent];
+            $rows[] = ['ab'=>(int)$bm, 'stueck_cent'=>(!$istFuell && $featStk) ? (int) round($allinCent / $featStk) : null, 'pack_cent'=>$allinCent];
         }
         if ($rows) {
             $pname = (string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [$pid]) ?: 'Produkt';
             $letter = $mehrere ? chr(65 + $idx) . ') ' : '';
-            $formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'g','granulat'=>'g','fluessig'=>'ml'][$form] ?? 'Stück';
-            $stkLabel = $istPulver ? (rtrim(rtrim(number_format((float)$featStk,1,',','.'),'0'),',') . ' g') : ((int)$featStk . ' ' . $formPl);
-            $out[] = ['name'=>$letter . $pname . ' · ' . $stkLabel, 'mpp'=>$istPulver ? 0 : $featStk, 'rows'=>$rows];
+            $out[] = ['name'=>$letter . $pname . ' · ' . form_groessen_label($form, (float)$featStk), 'mpp'=>$istFuell ? 0 : $featStk, 'rows'=>$rows];
         }
         $idx++;
     }
@@ -1752,12 +1807,21 @@ function angebot_gruppe_anhaengen(int $aid, array $rows): void {
 function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $menge, ?float $mo, ?int $kid): array {
     $r = one("SELECT name, darreichungsform FROM rezeptur WHERE id=?", [$rid]); if (!$r) return [];
     $form = $r['darreichungsform'] ?: 'kapsel';
-    $istPulver = in_array($form, ['pulver','granulat','stick'], true);
+    $jePortion = form_ist_fuellmenge($form) || $form === 'stick';
     $istKapsel = in_array($form, ['kapsel','softgel'], true);
-    $formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'g','granulat'=>'g','fluessig'=>'ml'][$form] ?? 'Stück';
     $ust = angebot_ust_satz($kid);
     $menge = max(1, $menge);
-    $ekH = rezeptur_kosten_pro_einheit($rid) * $stueck + ($istKapsel ? leerkapsel_ek_fuer_rezeptur($rid) * $stueck : 0);
+    // EK je Packung – je Form: Pulver/Granulat nach Gramm, Flüssig nach ml, sonst je Einheit (+ Kapsel/Presshilfsstoffe).
+    if (in_array($form, ['pulver','granulat'], true)) {
+        $portionG = rezeptur_gewicht_mg($rid) / 1000;
+        $ekH = rezeptur_kosten_pro_einheit($rid) * ($portionG > 0 ? $stueck / $portionG : 0);
+    } elseif ($form === 'fluessig') {
+        $ekH = rezeptur_kosten_pro_einheit($rid) * ($stueck / fluessig_portion_ml()) + ($stueck / 1000) * fluessig_basis_ek_l();
+    } else {
+        $ekH = rezeptur_kosten_pro_einheit($rid) * $stueck
+             + ($istKapsel ? leerkapsel_ek_fuer_rezeptur($rid) * $stueck : 0)
+             + ($form === 'tablette' ? tablette_hilfsstoff_ek_stueck($rid) * $stueck : 0);
+    }
     $marge = $mo !== null ? $mo : max(marge_typ_prozent($form), marge_min_prozent());
     $vkH = vk_fuer_kunde($ekH * (1 + $marge/100), $kid);
     // Rezeptur-Beschreibung (je Zutat eine Zeile + Zusammenfassung)
@@ -1767,11 +1831,11 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
         $rezLines[] = $z['bezeichnung'] . ' ' . rtrim(rtrim(number_format($mg, 2, ',', ''), '0'), ',') . 'mg';
     }
     $sumMg = (int) round($totalMg / 10) * 10;
-    $stkLabel = $istPulver ? ((int)$stueck . ' g') : ((int)$stueck . ' ' . $formPl);
-    if ($istPulver) $summary = '~' . $sumMg . 'mg je Portion, ' . $stkLabel . ' je Packung';
+    $stkLabel = form_groessen_label($form, (float)$stueck);
+    if ($jePortion) $summary = '~' . $sumMg . 'mg je Portion, ' . $stkLabel . ' je Packung';
     else {
-        $summary = '~' . $sumMg . 'mg, ' . (int)$stueck . ' ' . $formPl;
-        $kg = rezeptur_kapselgroesse($rid);
+        $summary = '~' . $sumMg . 'mg, ' . $stkLabel;
+        $kg = $istKapsel ? rezeptur_kapselgroesse($rid) : null;   // Kapselgröße nur bei Kapseln
         if ($kg && !empty($kg['name'])) $summary .= ', #' . trim(str_ireplace(['Größe', 'Gr.', 'Gr'], '', $kg['name']));
     }
     $besch = $rezLines ? (implode("\n", $rezLines) . "\n" . $summary) : $summary;
@@ -1869,7 +1933,8 @@ function rohstoff_vk_bei_menge(int $item_id, float $menge): ?float {
 }
 
 // Passende Behälter je Stückzahl bestimmen – je Darreichungsform über die richtige Kennzahl.
-// Kapsel: fasst >= Stück Kapseln (pack_kapazitaet). Pulver/Granulat/Stick: max. Füllgewicht (g) >= Portionen × Portionsgewicht.
+// Kapsel: fasst >= Stück Kapseln (pack_kapazitaet). Pulver/Granulat/Stick/Tablette: max. Füllgewicht (g).
+// Flüssig: Fassungsvermögen (volumen_ml) >= Füllvolumen.
 // Rückgabe: je Material der kleinste passende Behälter [item_id, ...].
 function passende_behaelter_fuer(int $rezeptur_id, string $form, int $stueck): array {
     if (in_array($form, ['kapsel', 'softgel'], true)) {
@@ -1888,15 +1953,31 @@ function passende_behaelter_fuer(int $rezeptur_id, string $form, int $stueck): a
                       ORDER BY (material IS NULL), material, max_fuellgewicht_g ASC", [$fillG]);
     } elseif ($form === 'stick') {
         // Stick: $stueck = Anzahl Sticks; Füllgewicht = Portion je Stick × Anzahl.
-        $portionG = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rezeptur_id]) / 1000;
+        $portionG = rezeptur_gewicht_mg($rezeptur_id) / 1000;
         if ($portionG <= 0) return [];
         $fillG = $portionG * $stueck;
         $cands = all("SELECT id AS item_id, material FROM item
                       WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0
                         AND max_fuellgewicht_g IS NOT NULL AND max_fuellgewicht_g >= ?
                       ORDER BY (material IS NULL), material, max_fuellgewicht_g ASC", [$fillG]);
+    } elseif ($form === 'tablette') {
+        // Tablette: $stueck = Anzahl Tabletten; Füllgewicht = Tablettengewicht (inkl. Presshilfsstoffe) × Anzahl.
+        $fillG = tablette_gewicht_mg($rezeptur_id) / 1000 * $stueck;
+        if ($fillG <= 0) return [];
+        $cands = all("SELECT id AS item_id, material FROM item
+                      WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0
+                        AND max_fuellgewicht_g IS NOT NULL AND max_fuellgewicht_g >= ?
+                      ORDER BY (material IS NULL), material, max_fuellgewicht_g ASC", [$fillG]);
+    } elseif ($form === 'fluessig') {
+        // Flüssig: $stueck = Füllvolumen in ml; Behälter über das Fassungsvermögen (volumen_ml).
+        $fillMl = (float) $stueck;
+        if ($fillMl <= 0) return [];
+        $cands = all("SELECT id AS item_id, material FROM item
+                      WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0
+                        AND volumen_ml IS NOT NULL AND volumen_ml >= ?
+                      ORDER BY (material IS NULL), material, volumen_ml ASC", [$fillMl]);
     } else {
-        return [];   // fluessig u. a. später (nach Volumen)
+        return [];   // unbekannte Form
     }
     $best = [];
     foreach ($cands as $c) { $mat = $c['material'] ?: '?'; if (!isset($best[$mat])) $best[$mat] = (int)$c['item_id']; }

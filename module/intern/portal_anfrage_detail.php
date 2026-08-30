@@ -90,7 +90,8 @@ if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding
   <div class="bx-tablewrap"><table class="bx-table"><tbody>
     <?php if ($pa['typ'] === 'produkt'): ?>
       <tr><td style="width:220px">Produkt</td><td><?php if ($pa['produkt_id']): ?><a href="?p=produkt&id=<?= (int)$pa['produkt_id'] ?>"><?= h($pa['produkt_name'] ?: '–') ?></a><?php else: ?><?= h($pa['produkt_name'] ?: '–') ?><?php endif; ?></td></tr>
-      <tr><td>Größe je Packung</td><td><?= $pa['fuellmenge_g'] ? $mg($pa['fuellmenge_g']) . ' g' : ($pa['stueck'] ? (int)$pa['stueck'] . ' Stück' : '–') ?></td></tr>
+      <?php $fEinheit = form_groessen_einheit($pa['darreichungsform'] ?: 'kapsel') ?: 'g';   // Füllmenge: g bei Pulver, ml bei Flüssig ?>
+      <tr><td>Größe je Packung</td><td><?= $pa['fuellmenge_g'] ? $mg($pa['fuellmenge_g']) . ' ' . h($fEinheit) : ($pa['stueck'] ? (int)$pa['stueck'] . ' Stück' : '–') ?></td></tr>
       <tr><td>Verpackungstyp</td><td><?= h($pa['verpackung_typ'] ? ($VTYPEN[$pa['verpackung_typ']] ?? $pa['verpackung_typ']) : '– (bitte empfehlen)') ?></td></tr>
       <tr><td>Anzahl Packungen</td><td><?= $pa['menge'] ? number_format((int)$pa['menge'], 0, ',', '.') : '–' ?></td></tr>
     <?php else: ?>
@@ -175,7 +176,6 @@ if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding
     $pid = (int)$pa['produkt_id'];
     if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$pid]) === 0) produkt_matrix_generieren($pid);
     $form     = $pa['darreichungsform'] ?: 'kapsel';
-    $istPulver= in_array($form, ['pulver','granulat','stick'], true);
     $defMarge = max(marge_typ_prozent($form), marge_min_prozent());
     $defPz    = (float) meta_get('produktionszeit_wochen', 7);
     $vorschau = ($_POST['aktion'] ?? '') === 'angebot_vorschau';
@@ -190,17 +190,13 @@ if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding
         $s=(int)$r['stueck']; $bm=(int)$r['bestellmenge'];
         if (!isset($prev[$s][$bm])) $prev[$s][$bm] = vk_fuer_kunde((float)$r['ek_preis'] * (1 + $vMarge/100), (int)$pa['kunde_id']);
     }
-    $formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'g','granulat'=>'g','fluessig'=>'ml'][$form] ?? 'Stück';
     $formLbl = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig'][$form] ?? $form;
     $eur = fn($x)=>number_format((float)$x,2,',','.').' €';
-    // Rechnet die Preis-Engine diese Darreichungsform? (Kapsel/Softgel/Pulver/Granulat/Stick ja; Tablette/Flüssig noch nicht)
-    $engineForm = in_array($form, ['kapsel','softgel','pulver','granulat','stick'], true);
     $hatPreise = false; foreach ($prev as $zr) { foreach ($zr as $vv) if ($vv !== null) { $hatPreise = true; break 2; } }
-    // Info-Text, wenn (noch) keine automatische Preisberechnung möglich ist.
-    $preisInfo = $hatPreise ? '' : (!$engineForm
-        ? 'Für die Darreichungsform <strong>' . h($formLbl) . '</strong> gibt es noch keine automatische Preisberechnung. Bitte das Angebot manuell kalkulieren bzw. den Preis auf Anfrage angeben.'
-        : 'Für <strong>' . h($formLbl) . '</strong> wurde keine passende Verpackung/Füllmenge gefunden. '
-          . '<a href="?p=einstellungen&tab=produktion">Behälter-Fassung / Füllgewichte einstellen</a>'
+    // Info-Text, wenn keine Preise herauskommen – jede Form wird gerechnet, es fehlt dann die Behälter-Fassung.
+    $preisInfo = $hatPreise ? '' :
+        ('Für <strong>' . h($formLbl) . '</strong> wurde keine passende Verpackung/Füllmenge gefunden. '
+          . '<a href="?p=einstellungen&tab=produktion">Behälter-Fassung einstellen</a> (Kapseln je Größe, Füllgewicht in g, Fassungsvermögen in ml)'
           . ' oder je Behälter im <a href="?p=verpackungen">Verpackungen</a>-Reiter „Füllmengen".');
 ?>
 <div class="bx-panel">
@@ -227,7 +223,7 @@ if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding
         </div>
       <?php else: ?>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Bestellmenge</th><?php foreach ($stueckA as $s): ?><th class="bx-num"><?= (int)$s ?> <?= h($formPl) ?></th><?php endforeach; ?></tr></thead>
+        <thead><tr><th>Bestellmenge</th><?php foreach ($stueckA as $s): ?><th class="bx-num"><?= h(form_groessen_label($form, (float)$s)) ?></th><?php endforeach; ?></tr></thead>
         <tbody>
           <?php foreach ($mengenA as $bm): ?>
             <tr><td><?= number_format((int)$bm,0,',','.') ?> Pkg.</td>

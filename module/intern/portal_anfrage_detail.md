@@ -11,14 +11,18 @@ Route: `?p=portal_anfrage&id=<ID>`  (Rollen: sales, production, einkauf, admin)
 ## Was man hier sieht
 - **Kunde / Typ / Status / Eingegangen** als Kärtchen oben.
 - **Wunsch des Kunden**: bei einer Produktanfrage Produkt, Größe je Packung
-  (Stück *oder* Füllmenge in Gramm bei Pulver), Verpackungstyp, Anzahl Packungen.
+  (Stück, *oder* Füllmenge in Gramm bei Pulver/Granulat bzw. in Milliliter bei Flüssig),
+  Verpackungstyp, Anzahl Packungen.
   Bei Rohstoff/Dienstleistung Betreff und gewünschte Menge + Einheit.
 - **Angebot abgeben** (nur bei Produktanfragen mit hinterlegtem Produkt).
 - **Bearbeitungsstatus** zum manuellen Setzen.
 
 ## Angebot abgeben (der Kern)
 Man gibt **keine Einzelpreise** ein – das System rechnet die ganze Preismatrix
-(Stückzahl × Bestellmenge). Steuerbar sind vor dem Senden:
+(Packungsgröße × Bestellmenge; Größe = Stück, Gramm bei Pulver, Milliliter bei Flüssig).
+Jede Darreichungsform wird gerechnet – kommen keine Preise heraus, fehlt die
+**Behälter-Fassung** (Einstellungen → Produktion & Rezeptur), nicht die Engine.
+Steuerbar sind vor dem Senden:
 
 - **Marge (%)** – VK = EK × (1 + Marge); Standard = Marge je Form (`marge_typ_<form>`,
   Boden `marge_min`). Wird als `angebot.marge_override` gespeichert.

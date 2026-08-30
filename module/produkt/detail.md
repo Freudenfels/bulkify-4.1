@@ -15,12 +15,13 @@
 - **Verpackung (passt/zu klein):** prüft die **Primärverpackung** je Darreichungsform über die richtige Kennzahl:
   - **Kapsel/Softgel** → bestimmt aus dem Gewicht je Einheit die kleinste passende Kapselgröße, liest die Kapsel-Fassung der Dose und vergleicht mit der gewünschten Kapselzahl. „passt" / „zu klein" (+ Vorschlag anderer Dosen) / „keine Fassung hinterlegt" / „aufteilen" (Rezeptur passt in keine Kapsel).
   - **Pulver/Granulat/Stick** → Füllgewicht (g) gegen max. Füllgewicht der Verpackung.
+  - **Tablette** → Tablettengewicht (Wirkstoffe + Presshilfsstoffe, % aus den Einstellungen) × Stückzahl gegen max. Füllgewicht.
   - **Flüssig** → Füllvolumen (ml, = Einheiten) gegen Volumen der Flasche.
 - **Nährwerte pro Tagesdosis:** je Nährstoff die Menge × Verzehr/Tag und **% NRV** (z. B. bei 2 Kapseln/Tag: Magnesium 240 mg = 64 %).
 
 **Katalog / Exklusiv:** Ein Produkt liegt standardmäßig im **gemeinsamen Katalog** (Häkchen `exklusiv` aus). Exklusiv = nur für den gewählten Kunden sichtbar. Der Kunde ist also nur bei Exklusiv-Produkten relevant.
 
-**Preis-Matrix (Panel unten):** „Matrix neu berechnen" erzeugt über `produkt_matrix_generieren()` die VK-Tabelle **Stückzahl × passende Verpackung × Bestellmenge** (Zeilen = Stück+Verpackung, Spalten = Bestellmengen; je Zelle VK + kleiner EK). Basis-VK ohne Kundenrabatt – schnelle interne Sale-Auskunft. Nur für Kapselprodukte mit Rezeptur + hinterlegter Behälter-Fassung.
+**Preis-Matrix (Panel unten):** „Matrix neu berechnen" erzeugt über `produkt_matrix_generieren()` die VK-Tabelle **Packungsgröße × passende Verpackung × Bestellmenge** (Zeilen = Größe+Verpackung, Spalten = Bestellmengen; je Zelle VK + kleiner EK). Die Spalte **Größe** meint je Darreichungsform etwas anderes: Stückzahl bei Kapsel/Tablette/Softgel/Stick, **Gramm** bei Pulver/Granulat, **Milliliter** bei Flüssig (Beschriftung über `form_groessen_label()`). EK je Packung = Rezeptur + Leerkapsel (Kapsel), + Presshilfsstoffe (Tablette) bzw. + Trägerflüssigkeit (Flüssig); der Behälter kommt separat als eigene Angebotsposition. Basis-VK ohne Kundenrabatt – schnelle interne Sale-Auskunft. Voraussetzung: Rezeptur + hinterlegte Behälter-Fassung (Kapseln je Größe, Füllgewicht in g bzw. Fassungsvermögen in ml).
 
 **Dokumente (CoA & Spezifikation):** Panel unter der Preis-Matrix (nur bei bestehendem Produkt) – gemeinsame Komponente `core/dokument_ui.php` (Tabelle `dokument`, objekt_typ=produkt): CoA/Spec/Analyse hochladen, je Dokument optional mit **Lieferant**; Download über Route `dokument`, Löschen inline.
 
