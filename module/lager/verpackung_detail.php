@@ -123,6 +123,7 @@ $rolle  = ($it['verpackung_rolle'] ?? '') ?: 'primaer';
 seed_kapselgroesse_if_empty();
 seed_etikett_preise();   // Etiketten-EK je Gebinde (Labelisten, Stand Juni 2026), einmalig
 seed_standbodenbeutel();   // Standbodenbeutel (Labelisten) + EK-Staffeln, einmalig
+seed_packari_behaelter();  // Packari-EK fuer PET-Dosen/Weithalsglaeser + Deckel mit Pressure Seal, einmalig
 $KAPSELN = all("SELECT id, name, fuellmenge_mg FROM kapselgroesse ORDER BY fuellmenge_mg ASC");
 $kapmap  = (!$neu) ? pack_kapazitaet_fuer((int)$id) : [];
 $etikettstaffel = (!$neu) ? etikett_staffel((int)$id) : [];

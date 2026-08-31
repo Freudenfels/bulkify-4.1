@@ -12,6 +12,7 @@
 
 ## Was am 30.08. gebaut wurde
 - **Tablette & Flüssig werden automatisch bepreist** (vorher „auf Anfrage"). Tablette: Behälter über das Tablettengewicht (Wirkstoffe + Presshilfsstoffe), EK = Rezeptur + Presshilfsstoffe statt Leerkapsel. Flüssig: Größe = **Füllvolumen in ml**, Behälter über `item.volumen_ml`, EK = Portionen × Rezeptur + Trägerflüssigkeit. Neue Stellschrauben in Einstellungen → Preise & Margen (Presshilfsstoffe % + EK/kg, Portionsvolumen ml, EK Trägerflüssigkeit/L, Flüssig-Füllvolumen-Raster). Die Behälter-Fassung hat jetzt eine **Spalte „Flüssig (ml)"** zum Pflegen.
+- **Packari-EK für PET-Dosen und Weithalsgläser (100–250 ml)** eingetragen (Seed `seed_packari_behaelter`: Preise ohne Verschluss + Mengenstaffel) und die vier **Deckel mit Pressure-Seal-Einlage** (38/400 und 45/400, je weiß und schwarz) als eigene Verschluss-Artikel angelegt. Die acht Gebinde haben zusätzlich ein Start-Füllgewicht (~0,55 g/ml) bekommen, damit Pulver und Tabletten darin rechenbar sind.
 - Packungsgrößen werden überall einheitlich beschriftet (`form_groessen_label()`): Stück / g / ml. Nebenbei behoben: Sticks wurden im Angebot als „30 g" statt „30 Sticks" ausgewiesen, und die Stick-Anfrage im Portal fragte Gramm, obwohl die Matrix nach Stückzahl rechnet.
 
 ## Was am 29.08. gebaut wurde (alles gepusht, läuft nach Push auf beta)
@@ -25,9 +26,9 @@
 Frühere Sessions (bereits live): Login neu gestaltet + bulkify-Logo, Etikettenpreise (Labelisten) je Gebinde, Demo-Testset (Kunden/Produkte/Angebote/Aufträge inkl. Zukauf).
 
 ## Offene Punkte / als Nächstes
-- **Behälter-EK-Staffeln:** Standbodenbeutel (10 Größen XS–XXL) sind jetzt mit EK-Staffeln (500/1.000/2.500/5.000) angelegt (Seed `seed_standbodenbeutel`, Füllgewicht ~0,55 g/ml als Startwert – je Beutel anpassbar). **Noch offen:** EK-Staffeln für PET-Dosen und Gläser eintragen.
+- **Behälter-EK-Staffeln:** Standbodenbeutel (XS–XXL) und jetzt auch PET-Dosen + Weithalsgläser (100–250 ml) haben EK-Staffeln (Seeds `seed_standbodenbeutel` / `seed_packari_behaelter`). **Offen:** echte Deckel-Preisliste bei Packari erfragen – Packari verkauft Dose und Deckel nur im Set, deshalb ist der EK der vier Pressure-Seal-Deckel als Differenz „Set minus Dose ohne Verschluss" gerechnet (je nach Bezugsdose 0,26–0,35 €).
 - **Demo-Rezepturen ohne Rohstoffpreise** → Preis-Matrix zeigt 0 €. Für echte Kalkulation Rohstoff-EK an den Zutaten hinterlegen.
-- **Flaschen/Tuben für Flüssig anlegen** und in der Behälter-Fassung die Spalte „Flüssig (ml)" füllen – ohne Fassungsvermögen bleibt die Flüssig-Matrix leer. Gleiches gilt für Tabletten: die Pulver-Spalte (max. Füllgewicht) muss am Behälter stehen.
+- **Flaschen/Tuben für Flüssig anlegen** – PET-Dosen und Weithalsgläser haben jetzt Volumen und Füllgewicht, für echte Flüssig-Gebinde (Tropfflasche, Pumpspender) fehlen die Artikel aber noch.
 - **Kalkulationsgrundlagen prüfen:** Presshilfsstoffe 20 % / 8 EUR pro kg und Trägerflüssigkeit 3 EUR pro Liter sind gesetzte Startwerte – bitte gegen echte Zahlen tauschen (Einstellungen → Preise & Margen).
 - **Admin-Passwort auf beta** ändern (steht noch auf admin/admin – öffentliche URL).
 - **Teilproduktion .B/.C:** Chargen-Basis + Nächster-Buchstabe-Logik sind da; ein UI-Weg „Teilmenge einbuchen" könnte später ergänzt werden (heute bucht der Abschluss die volle Menge als `.A`).

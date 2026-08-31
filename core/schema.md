@@ -49,6 +49,7 @@
 - **Einstellungen:** `meta_get` / `meta_set` – lesen/schreiben in `app_meta`.
 - **Protokoll:** `log_aktivitaet(objekt_typ, objekt_id, akteur, text, typ, ref_typ, ref_id)` – schreibt einen Verlaufseintrag (Zeit als UTC). **Jedes künftige Modul ruft das auf**, dann erscheint der Eintrag automatisch im Verlauf des Objekts (Kunde/Lieferant/…). `verlauf_fuer(objekt_typ, id)` liest ihn zurück.
 - **Testdaten:** `seed_kunden_if_empty` / `seed_lieferanten_if_empty` / `seed_aktivitaet_if_empty` – füllen lokal Demo-Daten, wenn leer.
+- **Behälter-Stammdaten (Seeds, je einmalig über einen Marker in `app_meta`):** `seed_behaelter_kapazitaet()` legt die Standard-Gebinde an (PET Packer + Weithalsglas 100/150/200/250 ml, PLA, Flip Packer) inkl. Kapsel-Fassung; `seed_etikett_preise()` die Etiketten-Staffeln je Gebinde; `seed_standbodenbeutel()` die Beutel XS–XXL; `seed_packari_behaelter()` die **EK-Preise + Mengenstaffeln von Packari** für PET-Dosen und Weithalsgläser (100–250 ml) und die vier **Deckel mit Pressure-Seal-Einlage** (38/400 + 45/400, je weiß und schwarz) als eigene Artikel mit `verpackung_rolle='verschluss'`. Der Gebinde-EK ist der Preis **ohne Verschluss**; der Deckel-EK ist die Differenz „Set minus Dose ohne Verschluss" (Bezugsdose steht in der Notiz des Deckels). Alle Seeds sind nicht-überschreibend: sie füllen nur, was leer ist.
 
 **Wichtig / Regel:**
 - Reihenfolge in `init_schema`: erst `CREATE` (frisch installierbar), dann `ensure_column`-Migrationen. Nie eine Spalte löschen.

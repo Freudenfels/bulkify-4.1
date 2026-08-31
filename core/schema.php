@@ -955,6 +955,67 @@ function seed_standbodenbeutel(): void {
     meta_set('seed_sbb_beutel', '1');
 }
 
+// Behälter-EK von Packari (Angebotsliste Packari.com GmbH, Stand 31.08.2026): setzt bei den vorhandenen
+// PET-Dosen und Weithalsgläsern (100–250 ml) EK + Mengenstaffel und legt die vier Deckel mit
+// Pressure-Seal-Einlage als eigene Verschluss-Artikel an. Läuft genau einmal (Marker) und überschreibt
+// keine Handeingaben: EK nur, wenn noch 0; Staffel nur, wenn noch keine hinterlegt ist.
+function seed_packari_behaelter(): void {
+    if (meta_get('seed_packari_behaelter', '') === '1') return;
+    seed_behaelter_kapazitaet();   // die Gebinde müssen existieren, bevor ihr EK gesetzt wird
+    $lief = (int) scalar("SELECT id FROM lieferanten WHERE firma LIKE 'Packari%' ORDER BY id LIMIT 1");
+
+    // Gebinde, Preise „ohne Verschluss" (netto €/Stück): Name => [Gewinde, Farbe, EK, [menge_ab => EK]]
+    $gebinde = [
+        '100 ml PET Packer'   => ['38/400', 'braun oder weiß', 0.39, [287=>0.25, 8036=>0.16]],
+        '150 ml PET Packer'   => ['38/400', 'braun oder weiß', 0.41, [254=>0.26, 6096=>0.17]],
+        '200 ml PET Packer'   => ['45/400', 'braun oder weiß', 0.53, [364=>0.33, 4004=>0.22]],
+        '250 ml PET Packer'   => ['45/400', 'braun oder weiß', 0.55, [310=>0.34, 3410=>0.22]],
+        '100 ml Weithalsglas' => ['38/400', 'braun',           0.41, [168=>0.25, 5376=>0.18]],
+        '150 ml Weithalsglas' => ['45/400', 'braun',           0.43, [156=>0.27, 3900=>0.19]],
+        '200 ml Weithalsglas' => ['45/400', 'braun',           0.55, [108=>0.30, 3240=>0.21]],
+        '250 ml Weithalsglas' => ['45/400', 'braun',           0.55, [ 70=>0.34, 2520=>0.23]],
+    ];
+    foreach ($gebinde as $name => [$gewinde, $farbe, $ek, $staffel]) {
+        $it = one("SELECT id, ek_preis, volumen_ml, max_fuellgewicht_g, farbe, notiz FROM item WHERE name=? AND kategorie='verpackung'", [$name]);
+        if (!$it) continue;
+        $iid = (int)$it['id'];
+        if ((float)$it['ek_preis'] <= 0)          q("UPDATE item SET ek_preis=? WHERE id=?", [$ek, $iid]);
+        if (trim((string)$it['farbe']) === '')    q("UPDATE item SET farbe=? WHERE id=?", [$farbe, $iid]);
+        if (trim((string)$it['notiz']) === '')    q("UPDATE item SET notiz=? WHERE id=?",
+            ['Packari, Gewinde ' . $gewinde . '. EK ohne Verschluss – der Deckel ist ein eigener Artikel.', $iid]);
+        if ($lief) q("UPDATE item SET haupt_lieferant_id=? WHERE id=? AND haupt_lieferant_id IS NULL", [$lief, $iid]);
+        // Startwert Füllgewicht (typ. Pulverdichte ~0,55 g/ml) – je Gebinde anpassbar, macht Pulver/Tablette rechenbar
+        if ($it['max_fuellgewicht_g'] === null && (float)$it['volumen_ml'] > 0)
+            q("UPDATE item SET max_fuellgewicht_g=? WHERE id=?", [round((float)$it['volumen_ml'] * 0.55), $iid]);
+        if ((int) scalar("SELECT COUNT(*) FROM pack_ek_staffel WHERE item_id=?", [$iid]) === 0)
+            foreach ($staffel as $mab => $p)
+                q("INSERT INTO pack_ek_staffel (item_id,menge_ab,ek_preis) VALUES (?,?,?)", [$iid, (int)$mab, $p]);
+    }
+
+    // Deckel mit Pressure-Seal-Einlage. Packari verkauft Dose und Deckel nur im Set – der Deckel-EK ist
+    // deshalb die Differenz „Set minus Dose ohne Verschluss" der in der Notiz genannten Dose.
+    $deckel = [
+        ['Schraubverschluss 38/400 weiß, Pressure Seal',    '38/400', 'weiß',    0.22, [287=>0.15, 8036=>0.09], '100 ml PET Packer'],
+        ['Schraubverschluss 38/400 schwarz, Pressure Seal', '38/400', 'schwarz', 0.27, [254=>0.16, 6096=>0.11], '150 ml PET Packer'],
+        ['Schraubverschluss 45/400 weiß, Pressure Seal',    '45/400', 'weiß',    0.26, [310=>0.13, 3410=>0.13], '250 ml PET Packer'],
+        ['Schraubverschluss 45/400 schwarz, Pressure Seal', '45/400', 'schwarz', 0.28, [364=>0.14, 4004=>0.13], '200 ml PET Packer'],
+    ];
+    foreach ($deckel as [$name, $gewinde, $farbe, $ek, $staffel, $quelle]) {
+        $iid = (int) scalar("SELECT id FROM item WHERE name=? AND kategorie='verpackung'", [$name]);
+        if (!$iid) {
+            q("INSERT INTO item (artikelnummer,name,kategorie,verpackung_rolle,material,farbe,einheit,preis_bezug,ek_preis,haupt_lieferant_id,notiz)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('VP'), $name, 'verpackung', 'verschluss', 'PP', $farbe, 'Stück', 'Stück', $ek, $lief ?: null,
+               'Packari, Gewinde ' . $gewinde . ', druckempfindliche Dichteinlage (Pressure Seal). EK abgeleitet: Set-Preis minus ' . $quelle . ' ohne Verschluss.']);
+            $iid = insert_id();
+        }
+        if ((int) scalar("SELECT COUNT(*) FROM pack_ek_staffel WHERE item_id=?", [$iid]) === 0)
+            foreach ($staffel as $mab => $p)
+                q("INSERT INTO pack_ek_staffel (item_id,menge_ab,ek_preis) VALUES (?,?,?)", [$iid, (int)$mab, $p]);
+    }
+    meta_set('seed_packari_behaelter', '1');
+}
+
 // Kapsel-Fassung einer Verpackung als [kapselgroesse_id => stueck].
 function pack_kapazitaet_fuer(int $item_id): array {
     $out = [];
