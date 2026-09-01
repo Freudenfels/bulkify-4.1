@@ -61,6 +61,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($st !== 'offen')  { header('Location: ?p=angebot&id=' . $id . '&sendfehler=status'); exit; }
         if ($anz === 0)       { header('Location: ?p=angebot&id=' . $id . '&sendfehler=leer'); exit; }
         q("UPDATE angebot SET status='gesendet' WHERE id=?", [(int)$id]);
+        // Gültigkeit zählt ab dem Tag, an dem das Angebot beim Kunden landet – ein alter Entwurf
+        // wäre sonst schon abgelaufen. Ein selbst gesetztes Datum in der Zukunft bleibt stehen.
+        q("UPDATE angebot SET gueltig_bis=? WHERE id=? AND (gueltig_bis IS NULL OR gueltig_bis < CURDATE())",
+          [angebot_gueltig_bis_default(), (int)$id]);
         // Jetzt – und erst jetzt – gelten die angebotenen Konfigurationen als eigene Produkte
         // (Rezeptur x Menge + Verpackung), und der Kunde darf deren Preise im Portal sehen.
         angebot_produkte_sichern((int)$id);
@@ -107,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 angebot_gruppe_anhaengen((int)$id, [['artikelnr'=>'', 'bezeichnung'=>$bez, 'beschreibung'=>trim($_POST['add_besch'] ?? ''), 'menge'=>$mng, 'einheit'=>trim($_POST['add_einheit'] ?? ''), 'preis_cent'=>(int)round($preis*100), 'ek_cent'=>0, 'mwst_satz'=>$mwst, 'quelle'=>'manuell']]);
             }
         }
-        header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
+        header('Location: ?p=angebot&id=' . $id . '&gespeichert=1#positionen'); exit;
     }
 }
 
@@ -156,7 +160,7 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
 ?>
 <form method="post" class="bx-form">
   <input type="hidden" name="aktion" value="kopf_save">
-  <div class="bx-panel"><div class="bx-grid">
+  <details class="bx-panel" <?= $neu ? 'open' : '' ?>><summary style="cursor:pointer">Kopfdaten<span class="muted" style="font-size:13px"> · Kunde, Gültigkeit, Marge, Produktionszeit, Notiz</span></summary><div class="bx-grid" style="margin-top:12px">
     <div class="bx-field"><label>Kunde</label>
       <select name="kunde_id"><option value="">– keiner –</option>
         <?php foreach ($kunden as $k): ?><option value="<?= $k['id'] ?>" <?= $kid===(int)$k['id']?'selected':'' ?>><?= h($k['firma']) ?></option><?php endforeach; ?>
@@ -184,13 +188,13 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
             } ?>
       </div>
     </div>
-    <div class="bx-field"><label>Gültig bis</label><input type="date" name="gueltig_bis" value="<?= $v('gueltig_bis') ?>"></div>
+    <div class="bx-field"><label>Gültig bis</label><input type="date" name="gueltig_bis" value="<?= h($v('gueltig_bis') !== '' ? $v('gueltig_bis') : angebot_gueltig_bis_default()) ?>"></div>
     <div class="bx-field"><label>Marge (%) <?= bx_hint('wirkt auf die automatischen Positionen. Leer = Marge je Form ('.rtrim(rtrim(number_format($defMarge,2,',','.'),'0'),',').' %).') ?></label><input type="number" step="0.1" name="marge" value="<?= ($a['marge_override'] ?? '') !== '' && $a['marge_override'] !== null ? h(rtrim(rtrim(number_format((float)$a['marge_override'],2,'.',''),'0'),'.')) : '' ?>" placeholder="<?= h(rtrim(rtrim(number_format($defMarge,2,',','.'),'0'),',')) ?> (Standard)"></div>
     <div class="bx-field"><label>Produktionszeit (Wochen)</label><input type="number" step="0.5" name="produktionszeit" value="<?= ($a['produktionszeit_wochen'] ?? '') !== '' && $a['produktionszeit_wochen'] !== null ? h(rtrim(rtrim(number_format((float)$a['produktionszeit_wochen'],1,'.',''),'0'),'.')) : '' ?>" placeholder="<?= h(rtrim(rtrim(number_format($defPz,1,',','.'),'0'),',')) ?> (Standard)"></div>
   </div>
   <div class="bx-field"><label>Notiz</label><textarea name="notiz"><?= $v('notiz') ?></textarea></div>
   <div class="bx-row"><button class="btn btn-primary" type="submit"><?= $neu ? 'Angebot anlegen' : 'Kopfdaten speichern' ?></button><a class="btn btn-ghost" href="?p=angebote">Abbrechen</a></div>
-  </div>
+  </details>
 </form>
 
 <?php
@@ -225,7 +229,7 @@ if (!$neu):
     }
 ?>
 <div class="bx-panel">
-  <h2 style="margin-top:0">Position hinzufügen</h2>
+  <h2 id="positionen" style="margin-top:0;scroll-margin-top:16px">Position hinzufügen</h2>
   <p class="muted" style="margin-top:0">Erst den Typ wählen – dann kommt der passende Katalog. Jede Position wird als eigene Gruppe (A, B, C …) angehängt.</p>
   <?php if ($wunsch['rezeptur_id'] || $wunsch['stueck'] || $wunsch['menge']): ?>
     <div class="bx-panel" style="padding:10px 14px;margin-bottom:12px;background:var(--panel-2)">

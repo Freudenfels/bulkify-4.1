@@ -2179,6 +2179,11 @@ function rohstoff_vk_bei_menge(int $item_id, float $menge): ?float {
 }
 
 
+// Angebote gelten standardmäßig 14 Tage (Einstellungen: angebot_gueltig_tage) – ab heute gerechnet.
+function angebot_gueltig_bis_default(): string {
+    return date('Y-m-d', strtotime('+' . max(1, (int) meta_get('angebot_gueltig_tage', 14)) . ' days'));
+}
+
 // Etikettenmaß „56 x 143" (auch „56x143 mm") in [Breite, Höhe] zerlegen.
 function etikett_masse(?string $s): ?array {
     if (!$s || !preg_match('/(\d+(?:[.,]\d+)?)\s*[x×*]\s*(\d+(?:[.,]\d+)?)/iu', $s, $m)) return null;

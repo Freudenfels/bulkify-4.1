@@ -11,6 +11,9 @@ Unter der Positionstabelle steht eine reine Anzeige: je Gruppe eine Zeile mit **
 ## Etikett zur Verpackung
 Die Etiketten-Auswahl zeigt nur, was auf die gewählte Verpackung passt (`etikett_zuordnung()`, Vergleich mit `item.etikett_final` am Behälter). Unter dem Feld steht, warum nichts zur Auswahl steht: **keine Etiketten im Katalog**, **noch keine Verpackung gewählt** oder **kein passendes Etikett / Endformat am Behälter fehlt**. Gepflegt wird das Endformat am Behälter unter Lager → Verpackungen („Etikett – Endformat (B×H mm)"), das Etikett selbst wird dort als Artikel mit Rolle „Etikett" und Breite/Höhe angelegt.
 
+## Kopfdaten eingeklappt · kein Sprung an den Seitenanfang
+Die **Kopfdaten** sind ein zugeklapptes `<details>` – sie werden selten gebraucht; bei einem neuen Angebot stehen sie offen. Nach **„+ Rezeptur/Rohstoff/Dienstleistung hinzufügen"** landet man wieder bei den Positionen (`#positionen`) statt am Seitenanfang. **Gültig bis** ist mit heute + 14 Tagen vorbelegt (`angebot_gueltig_tage`); beim Senden wird ein leeres oder abgelaufenes Datum aufgefrischt.
+
 ## Kopfdaten (Formular `aktion=kopf_save`)
 
 **Kein Produkt in den Kopfdaten:** Das Produkt ergibt sich aus den **Positionen** (Rezeptur × Menge + Verpackung) und ist deshalb kein Eingabefeld mehr. Entsteht das Angebot aus einer Produktanfrage, ist `angebot.produkt_id` automatisch gesetzt – dann steht es als Text im Kopf und reist beim Speichern unsichtbar mit (Hidden-Feld), damit die Preismatrix im Portal erhalten bleibt.

@@ -91,8 +91,8 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
         if ($vorhanden) { header('Location: ?p=angebot&id=' . $vorhanden); exit; }   // nicht doppelt anlegen
         if ($pa['produkt_id'] && (int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [(int)$pa['produkt_id']]) === 0)
             produkt_matrix_generieren((int)$pa['produkt_id']);   // Matrix versuchen (leer ist ok – Positionen manuell)
-        q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,anfrage_id) VALUES (?,?,?,?,?,?)",
-          [naechste_nummer('AN'), (int)$pa['kunde_id'], $pa['produkt_id'] ? (int)$pa['produkt_id'] : null, 'offen', 'Aus Anfrage ' . $pa['nummer'], $id]);
+        q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,anfrage_id,gueltig_bis) VALUES (?,?,?,?,?,?,?)",
+          [naechste_nummer('AN'), (int)$pa['kunde_id'], $pa['produkt_id'] ? (int)$pa['produkt_id'] : null, 'offen', 'Aus Anfrage ' . $pa['nummer'], $id, angebot_gueltig_bis_default()]);
         $angid = insert_id();
         q("UPDATE portal_anfrage SET status='in_bearbeitung' WHERE id=?", [$id]);
         log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [$angid]) . ' aus Anfrage ' . $pa['nummer'] . ' im Editor angelegt.', 'angebot', 'angebot', $angid);
