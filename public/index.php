@@ -61,6 +61,7 @@ $routes = [
     'portal_anfrage'     => 'intern/portal_anfrage_detail.php',
     'einkauf'            => 'einkauf/liste.php',
     'bestellung'         => 'einkauf/detail.php',
+    'bestellung_pdf'     => 'einkauf/pdf.php',
     'bedarf'             => 'einkauf/bedarf.php',
     'einkaufsliste'      => 'einkauf/einkaufsliste.php',
     'benutzer'           => 'system/benutzer_liste.php',

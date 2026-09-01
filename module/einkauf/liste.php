@@ -37,7 +37,18 @@ $cols = [
     'bestelldatum'     => ['label'=>'Bestellt am', 'sort'=>true, 'render'=>fn($r)=> !empty($r['bestelldatum']) ? h(date('d.m.Y', strtotime($r['bestelldatum']))) : '<span class="muted">–</span>'],
     'pos_anzahl'       => ['label'=>'Positionen', 'sort'=>true, 'num'=>true],
     'summe'            => ['label'=>'Summe', 'sort'=>true, 'num'=>true, 'render'=>fn($r)=> $eur($r['summe'])],
+    'eta_geplant'      => ['label'=>'Zugesagt', 'sort'=>true, 'render'=>fn($r)=> !empty($r['eta_geplant'])
+        ? h(date('d.m.Y', strtotime($r['eta_geplant']))) . ((int)($r['bestaetigt'] ?? 0) === 1 ? '' : '')
+        : '<span class="muted" title="Vom Lieferanten noch nicht bestätigt">–</span>'],
+    'station'          => ['label'=>'Fortschritt', 'render'=>function($r) {
+        $s = (string)($r['station'] ?? ''); if ($s === '') return '<span class="muted">–</span>';
+        $alle = bestellung_stationen();
+        return h($alle[$s] ?? $s) . '<div class="muted" style="font-size:12px">' . (bestellung_station_index($s)+1) . ' / ' . count($alle) . '</div>';
+    }],
     'status'           => ['label'=>'Status', 'sort'=>true, 'render'=>$statusBadge],
+    'pdf'              => ['label'=>'', 'render'=>fn($r) => $r['lieferant_id']
+        ? '<a href="?p=bestellung_pdf&id=' . (int)$r['id'] . '" target="_blank" title="Bestellung als PDF" onclick="event.stopPropagation()" style="font-size:17px;line-height:1">&#8681;</a>'
+        : '<span class="muted" title="Kein Lieferant hinterlegt">–</span>'],
 ];
 
 render_header('einkauf', $archiv ? 'Bestellarchiv' : 'Bestellungen');

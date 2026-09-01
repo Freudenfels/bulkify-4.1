@@ -34,10 +34,34 @@ function beleg_num(float $n): string { $s = number_format($n, 2, ',', '.'); retu
  * @param array $positionen  je Position: artikelnr, bezeichnung, beschreibung, menge, einheit, preis_cent, gesamt_cent, mwst_satz
  * @param array $produktStaffel  optional: [ ['name'=>, 'mpp'=>Stück/Pkg, 'rows'=>[['ab'=>,'stueck_cent'=>,'pack_cent'=>], ...]], ... ]
  */
+// Beschriftungen des Belegs. Deutsch ist der Normalfall; Einkaufsbelege an auslaendische
+// Lieferanten laufen auf Englisch ($b['sprache'] = 'en'). Alles, was nicht uebersetzt ist,
+// bleibt deutsch stehen – lieber ein deutsches Wort als ein leeres Feld.
+function beleg_labels(string $sprache): array {
+    $de = [
+        'datum'=>'Datum', 'nummer_kunde'=>'Kunden-Nr.', 'nummer_lieferant'=>'Lieferanten-Nr.',
+        'version'=>'Version', 'gueltig'=>'Gültig bis', 'faellig'=>'Fällig bis', 'bezug'=>'Bezug',
+        'bearbeiter'=>'Bearbeiter', 'email'=>'E-Mail', 'ustid'=>'USt-Id Kunde',
+        'pos'=>'Pos.', 'artnr'=>'Art.-Nr.', 'bezeichnung'=>'Bezeichnung', 'menge'=>'Menge',
+        'einheit'=>'Einh.', 'preis'=>'Preis €', 'gesamt'=>'Gesamt €',
+        'zwischensumme'=>'Zwischensumme', 'endsumme'=>'Endsumme', 'zahlungsart'=>'Zahlungsart',
+    ];
+    if (strtolower(trim($sprache)) !== 'en') return $de;
+    return array_merge($de, [
+        'datum'=>'Date', 'nummer_kunde'=>'Customer no.', 'nummer_lieferant'=>'Supplier no.',
+        'version'=>'Version', 'gueltig'=>'Valid until', 'faellig'=>'Due', 'bezug'=>'Reference',
+        'bearbeiter'=>'Contact', 'email'=>'E-mail', 'ustid'=>'VAT ID',
+        'pos'=>'Item', 'artnr'=>'Part no.', 'bezeichnung'=>'Description', 'menge'=>'Qty',
+        'einheit'=>'Unit', 'preis'=>'Price €', 'gesamt'=>'Total €',
+        'zwischensumme'=>'Subtotal', 'endsumme'=>'Total', 'zahlungsart'=>'Payment terms',
+    ]);
+}
 function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []): string
 {
     $fa    = beleg_firma();
     $klein = (int) ($b['kleinunternehmer'] ?? 0) === 1;
+    $T = beleg_labels((string)($b['sprache'] ?? 'de'));   // Beschriftungen (de/en)
+    $istEinkauf = in_array((string)($b['belegart_label'] ?? ''), ['Bestellung','Purchase Order'], true);
 
     // Logo (JPEG) laden, falls vorhanden
     $logoImg = null;
@@ -102,19 +126,19 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     // ---- Meta-Grid ----
     $my = $ty + 22;
     $fmtD = function ($d) { $d = trim((string) $d); if ($d === '') return '-'; $t = strtotime($d); return $t ? date('d.m.Y', $t) : $d; };
-    $left  = [['Datum', $fmtD($b['datum'] ?? '')], ['Kunden-Nr.', (string) ($b['kundennummer'] ?? '') ?: '-']];
+    $left  = [[$T['datum'], $fmtD($b['datum'] ?? '')], [$istEinkauf ? $T['nummer_lieferant'] : $T['nummer_kunde'], (string) ($b['kundennummer'] ?? '') ?: '-']];
     $right = [];
     $istAngebot = ((string) ($b['belegart_label'] ?? 'Angebot')) === 'Angebot';
     if ($istAngebot) {
-        $left[]  = ['Version', (string) ((int) ($b['version'] ?? 1))];
-        $right[] = ['Gültig bis', $fmtD($b['gueltig_bis'] ?? '')];
+        $left[]  = [$T['version'], (string) ((int) ($b['version'] ?? 1))];
+        $right[] = [$T['gueltig'], $fmtD($b['gueltig_bis'] ?? '')];
     } elseif (!empty($b['faellig_bis'])) {
-        $right[] = ['Fällig bis', $fmtD($b['faellig_bis'])];
+        $right[] = [$T['faellig'], $fmtD($b['faellig_bis'])];
     }
-    if (!empty($b['bezug'])) $left[] = ['Bezug', (string) $b['bezug']];
-    $right[] = ['Bearbeiter', (string) ($b['bearbeiter'] ?? '') ?: '-'];
-    $right[] = ['E-Mail', (string) ($b['bearbeiter_email'] ?? '') ?: '-'];
-    if (!empty($b['ust_id'])) $right[] = ['USt-Id Kunde', (string) $b['ust_id']];
+    if (!empty($b['bezug'])) $left[] = [$T['bezug'], (string) $b['bezug']];
+    $right[] = [$T['bearbeiter'], (string) ($b['bearbeiter'] ?? '') ?: '-'];
+    $right[] = [$T['email'], (string) ($b['bearbeiter_email'] ?? '') ?: '-'];
+    if (!empty($b['ust_id'])) $right[] = [$T['ustid'], (string) $b['ust_id']];
     $n = max(count($left), count($right));
     for ($i = 0; $i < $n; $i++) {
         if (isset($left[$i]))  { $p->text($L, $my, $left[$i][0] . ':', 9, false, $GRAY); $p->text($L + 90, $my, $p->fit($left[$i][1], 170, 9, true), 9, true, $INK); }
@@ -136,13 +160,13 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     // ---- Positionstabelle ----
     $cPos = $L + 2; $cArt = $L + 24; $cBez = $L + 92; $cMengeR = 438; $cEinh = 444; $cPreisR = 502; $cGesR = $R;
     $hy = $my + 10; $hb = $hy + 8;
-    $p->text($cPos, $hb, 'Pos.', 8, true, $INK);
-    $p->text($cArt, $hb, 'Art.-Nr.', 8, true, $INK);
-    $p->text($cBez, $hb, 'Bezeichnung', 8, true, $INK);
-    $p->textRight($cMengeR, $hb, 'Menge', 8, true, $INK);
-    $p->text($cEinh, $hb, 'Einh.', 8, true, $INK);
-    $p->textRight($cPreisR, $hb, 'Preis €', 8, true, $INK);
-    $p->textRight($cGesR, $hb, 'Gesamt €', 8, true, $INK);
+    $p->text($cPos, $hb, $T['pos'], 8, true, $INK);
+    $p->text($cArt, $hb, $T['artnr'], 8, true, $INK);
+    $p->text($cBez, $hb, $T['bezeichnung'], 8, true, $INK);
+    $p->textRight($cMengeR, $hb, $T['menge'], 8, true, $INK);
+    $p->text($cEinh, $hb, $T['einheit'], 8, true, $INK);
+    $p->textRight($cPreisR, $hb, $T['preis'], 8, true, $INK);
+    $p->textRight($cGesR, $hb, $T['gesamt'], 8, true, $INK);
     $p->line($L, $hy + 13, $R, $hy + 13, 0.8, $INK);
 
     $y = $hy + 17; $bezMax = $cMengeR - 30 - $cBez; $i = 1;
@@ -188,7 +212,7 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         }
     }
     $p->line($sumX, $y - 2, $R, $y - 2, 0.5, $LINE);
-    $p->text($sumX, $y + 10, 'Endsumme', 10, true, $INK);
+    $p->text($sumX, $y + 10, $T['endsumme'], 10, true, $INK);
     $p->textRight($valR, $y + 10, beleg_eur($bruttoSum), 11, true, $INK); $y += 26;
 
     // ---- Preis je fertiges Produkt (Staffel) ----
@@ -223,7 +247,7 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     $zb = (string) ($b['zahlungsbedingung'] ?? '') ?: (string) meta_get('bh_zahlungsbedingung', 'Sofort zahlbar ohne Abzug');
     $za = (string) ($b['zahlungsart_label'] ?? 'Vorkasse');
     $p->text($L, $y, 'Zahlungsbedingung: ' . $zb, 9, false, $INK); $y += 13;
-    $p->text($L, $y, 'Zahlungsart: ' . $za, 9, false, $INK); $y += 18;
+    $p->text($L, $y, $T['zahlungsart'] . ': ' . $za, 9, false, $INK); $y += 18;
 
     // ---- Hinweis zur Herstellung ----
     $hinweis = (string) ($b['hinweis'] ?? '') ?: (string) meta_get('bh_hinweis_herstellung', '');

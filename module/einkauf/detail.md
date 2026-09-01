@@ -1,5 +1,8 @@
 # einkauf/detail.php – Bestellung anlegen & bearbeiten
 
+## Ablauf beim Lieferanten
+Unter dem Status steht das Panel **Ablauf** (`core/bestellung_ui.php`) – dasselbe, das der Lieferant in seinem Portal sieht: bestätigen mit geplantem Liefertermin, danach die Stationen (angenommen · Produktion · Qualität · versandbereit · versendet) und die Versanddaten (Anbieter, Versandart, Sendungsnummer). **„versendet" geht erst mit vollständigen Versanddaten.** In der Kopfzeile liegt **⇩ PDF** – der Beleg für den Lieferanten (`core/pdf_bestellung.md`).
+
 **Zweck:** Eine Einkaufsbestellung (BE-) beim Lieferanten mit Positionen; beim Liefern werden daraus Lager-Chargen.
 
 **Was passiert hier:**

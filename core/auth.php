@@ -63,6 +63,7 @@ function route_rollen_map(): array {
         'lieferant'          => ['einkauf', 'finance'],
         'einkauf'            => ['einkauf'],
         'bestellung'         => ['einkauf'],
+        'bestellung_pdf'     => ['einkauf'],
         'rechnungen'         => ['finance'],
         'rechnung'           => ['finance'],
         'buchhaltung'        => ['finance'],

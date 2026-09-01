@@ -10,6 +10,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
     $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
     if ($aktion === 'liefern' && !$neu) { bestellung_wareneingang((int)$id); header('Location: ?p=bestellung&id=' . $id . '&geliefert=1'); exit; }
+    // Ablauf beim Lieferanten – dieselben Aktionen nutzt spaeter das Lieferantenportal.
+    if ($aktion === 'lief_bestaetigen' && !$neu) {
+        $f = bestellung_bestaetigen((int)$id, (string)($_POST['eta_geplant'] ?? ''), trim((string)($_POST['wer'] ?? 'Team')));
+        header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f))); exit;
+    }
+    if ($aktion === 'lief_station' && !$neu) {
+        $f = bestellung_station_setzen((int)$id, (string)($_POST['station'] ?? ''), null);
+        header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f))); exit;
+    }
+    if ($aktion === 'lief_versand' && !$neu) {
+        q("UPDATE bestellung SET produktion_geplant=?, versandanbieter=?, versandart=?, tracking=? WHERE id=?", [
+            trim((string)($_POST['produktion_geplant'] ?? '')) ?: null,
+            mb_substr(trim((string)($_POST['versandanbieter'] ?? '')), 0, 60) ?: null,
+            array_key_exists((string)($_POST['versandart'] ?? ''), versandarten()) ? $_POST['versandart'] : null,
+            mb_substr(trim((string)($_POST['tracking'] ?? '')), 0, 120) ?: null, (int)$id]);
+        header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit;
+    }
     if ($aktion === 'bestellt' && !$neu) { q("UPDATE bestellung SET status='bestellt' WHERE id=?", [(int)$id]); header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit; }
     // Entwurf zurück in den Einkaufsbedarf: Entwurf löschen -> Bedarf erscheint wieder (kein Netting mehr)
     if ($aktion === 'zurueck_bedarf' && !$neu) {
@@ -73,9 +90,12 @@ function auftrag_options(array $auftraege, $sel): string {
 }
 
 render_header('einkauf', $neu ? 'Neue Bestellung' : ($b['nummer'] ?? 'Bestellung'));
-bx_head($neu ? 'Neue Bestellung' : $v('nummer'), $neu ? 'Beim Lieferanten bestellen' : 'Bestellung bearbeiten', bx_btn('Zurück zur Liste', '?p=einkauf', 'ghost'));
+bx_head($neu ? 'Neue Bestellung' : $v('nummer'), $neu ? 'Beim Lieferanten bestellen' : 'Bestellung bearbeiten',
+        ($neu ? '' : '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Bestellung als PDF – das schickst du dem Lieferanten" href="?p=bestellung_pdf&id=' . (int)$id . '">&#8681; PDF</a>')
+        . bx_btn('Zurück zur Liste', '?p=einkauf', 'ghost'));
 if (isset($_GET['ok']))        echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['geliefert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Als geliefert verbucht – Chargen im Wareneingang (Quarantäne) angelegt.</div>';
+if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 
 if (!$neu) {
     echo '<div class="bx-panel"><div class="bx-row" style="justify-content:space-between;align-items:center">';
@@ -84,6 +104,10 @@ if (!$neu) {
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form>';
     if ($b['status'] === 'bestellt') echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="liefern"><button class="btn btn-primary btn-sm" type="submit">Wareneingang buchen</button></form>';
     echo '</div></div></div>';
+
+    // Ablauf beim Lieferanten – dasselbe Panel sieht der Lieferant in seinem Portal.
+    require_once BX_ROOT . '/core/bestellung_ui.php';
+    echo bestellung_ablauf_panel($b, 'team', false);
 
     // Kontext: für welche(n) Auftrag/Produkt/Kunde wird bestellt? Damit die Dringlichkeit einschätzbar ist.
     $kontext = all("SELECT DISTINCT a.id, a.nummer, a.menge, a.stueck,

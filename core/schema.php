@@ -537,6 +537,18 @@ function init_schema(): void {
         KEY idx_bestellung (bestellung_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // Bestellung: Ablauf beim Lieferanten. Er bestaetigt mit geplantem Termin und pflegt danach
+    // die Stationen; "versendet" verlangt Versandanbieter, Versandart und Sendungsnummer.
+    ensure_column('bestellung', 'bestaetigt', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('bestellung', 'bestaetigt_am', "DATETIME NULL");
+    ensure_column('bestellung', 'bestaetigt_von', "VARCHAR(190) NULL");
+    ensure_column('bestellung', 'eta_geplant', "DATE NULL");            // vom Lieferanten zugesagter Termin
+    ensure_column('bestellung', 'produktion_geplant', "DATE NULL");
+    ensure_column('bestellung', 'station', "VARCHAR(20) NOT NULL DEFAULT ''");   // '' | angenommen | produktion | qualitaet | versand | versendet
+    ensure_column('bestellung', 'versandanbieter', "VARCHAR(60) NULL");
+    ensure_column('bestellung', 'versandart', "VARCHAR(40) NULL");      // luft | see | kurier | spedition | post
+    ensure_column('bestellung', 'tracking', "VARCHAR(120) NULL");
+    ensure_column('bestellung', 'angekommen_am', "DATE NULL");          // tatsaechlicher Wareneingang (Team)
     // charge: Bestand je Item als Chargen. Kategorie steuert die Strenge (Rohstoff -> Quarantäne, sonst frei).
     $pdo->exec("CREATE TABLE IF NOT EXISTS charge (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -2196,6 +2208,56 @@ function rohstoff_vk_bei_menge(int $item_id, float $menge): ?float {
 }
 
 
+// Stationen einer Bestellung beim Lieferanten – in dieser Reihenfolge, kumulativ.
+function bestellung_stationen(): array {
+    return ['angenommen' => 'Auftrag angenommen', 'produktion' => 'in Produktion',
+            'qualitaet'  => 'Qualitätsprüfung',   'versand'    => 'versandbereit',
+            'versendet'  => 'versendet'];
+}
+function bestellung_stationen_en(): array {
+    return ['angenommen' => 'Order accepted', 'produktion' => 'In production',
+            'qualitaet'  => 'Quality check',  'versand'    => 'Ready to ship',
+            'versendet'  => 'Shipped'];
+}
+// Wie weit ist die Bestellung? -1 = noch keine Station gesetzt.
+function bestellung_station_index(?string $station): int {
+    $keys = array_keys(bestellung_stationen());
+    $i = array_search((string)$station, $keys, true);
+    return $i === false ? -1 : (int)$i;
+}
+// Versandarten (der Lieferant waehlt eine davon).
+function versandarten(): array {
+    return ['luft' => 'Luftfracht', 'see' => 'Seefracht', 'kurier' => 'Kurier (DHL/UPS/FedEx)',
+            'spedition' => 'Spedition', 'post' => 'Post'];
+}
+// Station setzen – kumulativ bis zum Ziel. "versendet" nur mit vollstaendigen Versanddaten.
+// Rueckgabe: '' = gesetzt, sonst der Grund, warum nicht.
+function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $wer = null): string {
+    $b = one("SELECT * FROM bestellung WHERE id=?", [$bestellung_id]);
+    if (!$b) return 'Bestellung nicht gefunden.';
+    if ((int)$b['bestaetigt'] !== 1) return 'Bitte zuerst die Bestellung mit einem geplanten Termin bestätigen.';
+    if (!array_key_exists($ziel, bestellung_stationen())) return 'Unbekannte Station.';
+    if ($ziel === 'versendet' && (trim((string)$b['versandanbieter']) === '' || trim((string)$b['versandart']) === '' || trim((string)$b['tracking']) === ''))
+        return 'Für „versendet" fehlen Versandanbieter, Versandart oder Sendungsnummer.';
+    q("UPDATE bestellung SET station=? WHERE id=?", [$ziel, $bestellung_id]);
+    // Der interne Status laeuft mit: sobald der Lieferant produziert, ist die Bestellung "bestellt".
+    if ((string)$b['status'] === 'offen') q("UPDATE bestellung SET status='bestellt' WHERE id=?", [$bestellung_id]);
+    if ($b['lieferant_id']) log_aktivitaet('lieferant', (int)$b['lieferant_id'], $wer ? 'lieferant' : 'team',
+        'Bestellung ' . $b['nummer'] . ': ' . bestellung_stationen()[$ziel] . ($wer ? ' (' . $wer . ')' : '') . '.', 'bestellung', 'bestellung', $bestellung_id);
+    return '';
+}
+// Bestellung durch den Lieferanten bestaetigen (mit zugesagtem Termin).
+function bestellung_bestaetigen(int $bestellung_id, string $eta, string $wer): string {
+    $b = one("SELECT id, nummer, bestaetigt, lieferant_id FROM bestellung WHERE id=?", [$bestellung_id]);
+    if (!$b) return 'Bestellung nicht gefunden.';
+    if ((int)$b['bestaetigt'] === 1) return '';                     // schon bestaetigt: nichts tun
+    if (trim($eta) === '' || !strtotime($eta)) return 'Bitte einen geplanten Liefertermin angeben.';
+    q("UPDATE bestellung SET bestaetigt=1, bestaetigt_am=UTC_TIMESTAMP(), bestaetigt_von=?, eta_geplant=?, station=?, status=IF(status='offen','bestellt',status) WHERE id=?",
+      [mb_substr(trim($wer), 0, 190), date('Y-m-d', strtotime($eta)), 'angenommen', $bestellung_id]);
+    if ($b['lieferant_id']) log_aktivitaet('lieferant', (int)$b['lieferant_id'], 'lieferant',
+        'Bestellung ' . $b['nummer'] . ' bestätigt für ' . date('d.m.Y', strtotime($eta)) . ' durch ' . trim($wer) . '.', 'bestellung', 'bestellung', $bestellung_id);
+    return '';
+}
 // Angebote gelten standardmäßig 14 Tage (Einstellungen: angebot_gueltig_tage) – ab heute gerechnet.
 function angebot_gueltig_bis_default(): string {
     return date('Y-m-d', strtotime('+' . max(1, (int) meta_get('angebot_gueltig_tage', 14)) . ' days'));

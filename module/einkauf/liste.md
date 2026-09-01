@@ -8,3 +8,4 @@
 - Tabelle: **Nummer · Lieferant · Positionen · Summe · Status** (offen / bestellt / geliefert).
 - Klick öffnet die Bestellung (`?p=bestellung&id=...`).
 - Button „Neue Bestellung".
+- Spalten **Zugesagt** (vom Lieferanten bestätigter Termin) und **Fortschritt** (Station x von 5) sowie ein **⇩** je Zeile für das Bestell-PDF.
