@@ -256,10 +256,39 @@ if (!$neu):
       <div class="bx-field"><label>Anzahl Packungen</label><input type="number" name="add_menge" placeholder="z. B. 1000" value="<?= $wunsch['menge'] !== '' ? (int)$wunsch['menge'] : '' ?>" required></div>
       <div class="bx-field"><label>Verpackung (Primär)</label><select name="add_verp_id"><option value="">– keine –</option><?php foreach ($verpPrim as $vp): ?><option value="<?= (int)$vp['id'] ?>" <?= $wunsch['verp_id'] === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field"><label>Deckel (optional)</label><select name="add_deckel_id"><option value="">– keiner –</option><?php foreach ($verpDeckel as $vp): ?><option value="<?= (int)$vp['id'] ?>"><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
-      <div class="bx-field"><label>Etikett (optional)</label><select name="add_etikett_id"><option value="">– keins –</option><?php foreach ($verpEtik as $vp): ?><option value="<?= (int)$vp['id'] ?>"><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
+      <div class="bx-field"><label>Etikett (optional)</label>
+        <select name="add_etikett_id" id="add_etikett_id"><option value="">– keins –</option><?php foreach ($verpEtik as $vp): ?><option value="<?= (int)$vp['id'] ?>"><?= h($vp['name']) ?></option><?php endforeach; ?></select>
+        <div class="muted" style="font-size:12px;margin-top:4px" id="etikHinweis"></div>
+      </div>
     </div>
     <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">+ Rezeptur hinzufügen</button></div>
   </form>
+  <?php // Etiketten haengen am Behaelter: gezeigt wird nur, was auf das am Behaelter hinterlegte
+        // Endformat (item.etikett_final) passt. Fehlt das Format oder gibt es kein passendes
+        // Etikett, sagt der Hinweis genau das - statt still eine leere Auswahl anzubieten. ?>
+  <script>(function(){
+    var map = <?= json_encode(etikett_zuordnung()) ?>;
+    var hatEtiketten = <?= $verpEtik ? 'true' : 'false' ?>;
+    var verp = document.querySelector('select[name="add_verp_id"]');
+    var etik = document.getElementById('add_etikett_id');
+    var hint = document.getElementById('etikHinweis');
+    if (!verp || !etik) return;
+    function upd(){
+      var vid = verp.value, erlaubt = vid ? (map[vid] || []) : null;
+      var sichtbar = 0;
+      Array.prototype.forEach.call(etik.options, function(o){
+        if (!o.value) return;
+        var ok = !erlaubt || erlaubt.indexOf(parseInt(o.value,10)) >= 0;
+        o.hidden = !ok; o.disabled = !ok; if (ok) sichtbar++;
+      });
+      if (etik.selectedOptions[0] && etik.selectedOptions[0].disabled) etik.value = '';
+      if (!hatEtiketten) hint.textContent = 'Es sind noch keine Etiketten im Katalog angelegt (Lager > Verpackungen, Rolle "Etikett").';
+      else if (!vid) hint.textContent = 'Erst die Verpackung wählen – dann stehen nur die dazu passenden Etiketten zur Auswahl.';
+      else if (sichtbar === 0) hint.textContent = 'Für diese Verpackung ist kein passendes Etikett hinterlegt. Am Behälter fehlt das Etiketten-Endformat (B x H) oder es gibt noch kein Etikett in dieser Groesse.';
+      else hint.textContent = sichtbar + (sichtbar === 1 ? ' passendes Etikett' : ' passende Etiketten') + ' zu dieser Verpackung.';
+    }
+    verp.addEventListener('change', upd); upd();
+  })();</script>
 
   <form method="post" data-add="rohstoff" style="display:none">
     <input type="hidden" name="aktion" value="add_rohstoff">

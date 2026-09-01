@@ -8,6 +8,9 @@ erzeugt, sind aber **überschreibbar**. Dazu die interne Marge (VK vs. EK, nur i
 ## Preis je Packung – so sieht es der Kunde
 Unter der Positionstabelle steht eine reine Anzeige: je Gruppe eine Zeile mit **Variante** (Größe + Verpackung), **Packungen**, **Preis je Packung**, **Preis je Stück** und **Gesamt netto**. In den Positionen stehen Herstellung und Verpackung getrennt – hier zusammengerechnet, also genau die Zahlen, die der Kunde im Portal sieht. Sie kommen aus `angebot_optionen()` und zeigen den Stand **nach dem letzten Speichern**. Positionen ohne Gruppe (Zuschläge) stehen darunter.
 
+## Etikett zur Verpackung
+Die Etiketten-Auswahl zeigt nur, was auf die gewählte Verpackung passt (`etikett_zuordnung()`, Vergleich mit `item.etikett_final` am Behälter). Unter dem Feld steht, warum nichts zur Auswahl steht: **keine Etiketten im Katalog**, **noch keine Verpackung gewählt** oder **kein passendes Etikett / Endformat am Behälter fehlt**. Gepflegt wird das Endformat am Behälter unter Lager → Verpackungen („Etikett – Endformat (B×H mm)"), das Etikett selbst wird dort als Artikel mit Rolle „Etikett" und Breite/Höhe angelegt.
+
 ## Kopfdaten (Formular `aktion=kopf_save`)
 
 **Kein Produkt in den Kopfdaten:** Das Produkt ergibt sich aus den **Positionen** (Rezeptur × Menge + Verpackung) und ist deshalb kein Eingabefeld mehr. Entsteht das Angebot aus einer Produktanfrage, ist `angebot.produkt_id` automatisch gesetzt – dann steht es als Text im Kopf und reist beim Speichern unsichtbar mit (Hidden-Feld), damit die Preismatrix im Portal erhalten bleibt.

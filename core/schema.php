@@ -2178,6 +2178,39 @@ function rohstoff_vk_bei_menge(int $item_id, float $menge): ?float {
     return $ek * (1 + rohstoff_aufschlag_prozent($item_id) / 100);
 }
 
+
+// Etikettenmaß „56 x 143" (auch „56x143 mm") in [Breite, Höhe] zerlegen.
+function etikett_masse(?string $s): ?array {
+    if (!$s || !preg_match('/(\d+(?:[.,]\d+)?)\s*[x×*]\s*(\d+(?:[.,]\d+)?)/iu', $s, $m)) return null;
+    return [(float) str_replace(',', '.', $m[1]), (float) str_replace(',', '.', $m[2])];
+}
+
+// Welche Etiketten passen auf diesen Behälter? Maßgeblich ist das am BEHÄLTER hinterlegte
+// Endformat (`item.etikett_final`, B x H) – ein Etikett passt, wenn seine Breite und Höhe
+// (aus breite_mm/hoehe_mm, sonst aus etikett_format) bis auf 2 mm dazu stimmen.
+// Ohne Endformat am Behälter lässt sich nichts zuordnen: dann kommt eine leere Liste zurück,
+// und die Oberfläche sagt, was fehlt – statt wahllos alle Etiketten anzubieten.
+function passende_etiketten_fuer(?int $verpackung_id): array {
+    $alle = all("SELECT id, name, breite_mm, hoehe_mm, etikett_format FROM item
+                 WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0 ORDER BY name");
+    if (!$verpackung_id) return $alle;
+    $ziel = etikett_masse((string) scalar("SELECT etikett_final FROM item WHERE id=?", [$verpackung_id]));
+    if (!$ziel) return [];
+    $out = [];
+    foreach ($alle as $e) {
+        $m = ($e['breite_mm'] && $e['hoehe_mm']) ? [(float)$e['breite_mm'], (float)$e['hoehe_mm']] : etikett_masse($e['etikett_format']);
+        if ($m && abs($m[0] - $ziel[0]) <= 2.0 && abs($m[1] - $ziel[1]) <= 2.0) $out[] = $e;
+    }
+    return $out;
+}
+
+// Behälter -> passende Etiketten-IDs, für die Auswahl im Angebots-Editor (ohne Nachladen).
+function etikett_zuordnung(): array {
+    $map = [];
+    foreach (all("SELECT id FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0") as $v)
+        $map[(int)$v['id']] = array_map(fn($e) => (int)$e['id'], passende_etiketten_fuer((int)$v['id']));
+    return $map;
+}
 // Passende Behälter je Stückzahl bestimmen – je Darreichungsform über die richtige Kennzahl.
 // Kapsel: fasst >= Stück Kapseln (pack_kapazitaet). Pulver/Granulat/Stick/Tablette: max. Füllgewicht (g).
 // Flüssig: Fassungsvermögen (volumen_ml) >= Füllvolumen.
