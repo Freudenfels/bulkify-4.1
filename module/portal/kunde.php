@@ -314,10 +314,13 @@ $primVerp  = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COA
 $stdStueck = std_stueckzahlen();
 // Kundenseitige Verpackungstypen – wir wählen intern den perfekt passenden Behälter
 $VTYPEN = ['glas'=>'Glas', 'pet'=>'PET-Dose', 'pla'=>'PLA-Becher', 'beutel'=>'Standbodenbeutel', 'stick'=>'Stick', 'blister'=>'Blister'];
-// „ab"-Preise je Produkt (günstigste VK aus der Preismatrix, mit Kundenrabatt)
+// „ab"-Preise je Produkt (günstigste VK aus der Preismatrix, mit Kundenrabatt).
+// Preise sind KUNDENSPEZIFISCH: sichtbar nur, wenn diesem Kunden das Produkt schon angeboten wurde.
+// Alle anderen sehen „auf Anfrage" – sonst wandert die Kalkulation eines Kunden zum nächsten.
+$preisFrei = kunde_produkt_preise($kid);
 $abMap = [];
 foreach (all("SELECT produkt_id, MIN(vk_preis) AS mn FROM produkt_preis GROUP BY produkt_id") as $r) $abMap[(int)$r['produkt_id']] = (float)$r['mn'];
-$abPreis = fn($pid) => isset($abMap[(int)$pid]) ? vk_fuer_kunde($abMap[(int)$pid], $kid) : null;
+$abPreis = fn($pid) => (isset($abMap[(int)$pid]) && isset($preisFrei[(int)$pid])) ? vk_fuer_kunde($abMap[(int)$pid], $kid) : null;
 // Nährwerte je Einheit aus einer Rezeptur (aggregiert über die Wirkstoffe der Rohstoffe)
 if (!function_exists('pt_naehr')) {
     function pt_naehr(int $rid): array {
@@ -410,10 +413,12 @@ $aggFlag = function ($flags) { $known = array_filter($flags, fn($x) => $x !== nu
 $prodVegan = $prodDetail ? $aggFlag($veganFlags) : null;
 $prodGvo   = $prodDetail ? $aggFlag($gvoFlags) : null;
 $prodAllergene = array_values(array_unique($prodAllergene));
-// Größen & Preise des Produkts (je Stückzahl der günstigste VK, mit Kundenrabatt)
+// Größen & Preise des Produkts (je Stückzahl der günstigste VK, mit Kundenrabatt).
+// Nur für Produkte, die diesem Kunden angeboten wurden – sonst bleibt die Tabelle leer und es steht „auf Anfrage".
 $prodPreise = [];
-if ($prodDetail) foreach (all("SELECT stueck, MIN(vk_preis) AS mn FROM produkt_preis WHERE produkt_id=? GROUP BY stueck ORDER BY stueck", [(int)$prodDetail['id']]) as $r)
-    $prodPreise[] = ['stueck'=>(int)$r['stueck'], 'ab'=>vk_fuer_kunde((float)$r['mn'], $kid)];
+if ($prodDetail && isset($preisFrei[(int)$prodDetail['id']]))
+    foreach (all("SELECT stueck, MIN(vk_preis) AS mn FROM produkt_preis WHERE produkt_id=? GROUP BY stueck ORDER BY stueck", [(int)$prodDetail['id']]) as $r)
+        $prodPreise[] = ['stueck'=>(int)$r['stueck'], 'ab'=>vk_fuer_kunde((float)$r['mn'], $kid)];
 $prodForm = $prodDetail['darreichungsform'] ?? '';
 $prodIstFuell  = form_ist_fuellmenge($prodForm);   // Anfrage nach Füllmenge (Pulver g / Flüssig ml) statt Stückzahl
 $prodFuellEinheit = form_groessen_einheit($prodForm) ?: 'g';
@@ -992,6 +997,10 @@ portal_head('Kundenportal · ' . $k['firma']);
       </table></div>
       <div class="muted" style="font-size:12px;margin-top:8px">* zzgl. Verpackung und Etikett</div>
     </div>
+    <?php else: ?>
+    <div class="bx-panel"><h2>Preis</h2>
+      <p class="muted" style="margin-top:0">Für dieses Produkt liegt Ihnen noch kein Preis vor. Stellen Sie unten eine Anfrage – wir kalkulieren Ihre Mengen und melden uns mit einem Angebot.</p>
+    </div>
     <?php endif; ?>
     <div class="bx-panel"><h2>Anfrage stellen</h2>
       <form method="post">
@@ -1238,7 +1247,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <td class="bx-num"><?= number_format($bm, 0, ',', '.') ?></td>
           <?php if ($cell):
               $hCent = (int) round(vk_fuer_kunde($cell['vk'], $kid) * 100);
-              $pCent = verpackung_cent_je_pack((int)$a['produkt_id'], $bm, $kid);
+              $pCent = verpackung_cent_je_pack((int)$a['produkt_id'], $bm, $kid, (int)$cell['verp']);   // Behälter DIESER Zelle bepreisen
               $vk = ($hCent + $pCent) / 100; $netto = ($hCent + $pCent) * $bm / 100; $brutto = $netto * (1 + $ustP/100); ?>
             <td><strong><?= $eur($vk) ?> / Pkg.</strong><div class="muted" style="font-size:12px"><?= $pCent > 0 ? 'Herstellung ' . $eur($hCent/100) . ' + Verpackung ' . $eur($pCent/100) . ' · ' : '' ?>Gesamt <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto (inkl. ' . $mg($ustP) . ' % MwSt)' : '' ?></div></td>
             <td class="bx-num"><form method="post" style="margin:0"><input type="hidden" name="aktion" value="zelle_annehmen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="stueck" value="<?= $stk ?>"><input type="hidden" name="verpackung_id" value="<?= (int)$cell['verp'] ?>"><input type="hidden" name="bestellmenge" value="<?= $bm ?>"><button class="btn btn-primary btn-sm" type="submit">Diese Menge annehmen</button></form></td>

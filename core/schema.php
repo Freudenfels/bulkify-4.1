@@ -722,6 +722,21 @@ function init_schema(): void {
         KEY idx_item (item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // angebot_produkt: welche konkreten PRODUKTE ein Angebot bepreist hat (Rezeptur x Menge + Verpackung = Produkt).
+    // Eine Anfrage über 90/120/180 Stück erzeugt drei Produkte – alle bleiben erhalten, auch wenn der Kunde nur eines nimmt.
+    // Steuert zusätzlich, wer im Portal einen Preis sieht: nur Kunden, denen dieses Produkt angeboten wurde.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS angebot_produkt (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        angebot_id INT NOT NULL,
+        produkt_id INT NOT NULL,
+        stueck INT NOT NULL DEFAULT 0,                    -- Packungsgröße (Stück, bei Pulver/Flüssig g/ml)
+        verpackung_id INT NULL,                           -- der konkrete Behälter dieses Artikels
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_ang_prod (angebot_id, produkt_id),
+        KEY idx_angebot (angebot_id),
+        KEY idx_produkt (produkt_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // etikett_preis: Etiketten-EK je Gebinde als Mengenstaffel (Labelisten, Stand Juni 2026).
     // Pro Behälter (item_id = Verpackung) ein Preis je Bestellmenge: Gesamtpreis der Auflage + Preis je Etikett.
     $pdo->exec("CREATE TABLE IF NOT EXISTS etikett_preis (
@@ -1580,6 +1595,98 @@ function produkt_variante_ek(int $produkt_id, int $stueck, int $verp_id = 0, int
     return $fuell + $kaps;
 }
 
+// ---- Produkt = Rezeptur x Menge + Verpackung ----
+// Passt ein Verpackungsartikel zum Wunsch-Typ aus der Portal-Anfrage (glas/pet/pla/beutel/stick/blister)?
+function verpackung_passt_zu_typ(int $item_id, ?string $typ): bool {
+    if (!$typ) return true;   // kein Wunsch geäußert -> alles passt
+    $it = one("SELECT material, verpackungsart FROM item WHERE id=?", [$item_id]);
+    if (!$it) return false;
+    $mat = mb_strtolower((string)$it['material']); $art = mb_strtolower((string)$it['verpackungsart']);
+    return match ($typ) {
+        'glas'    => str_contains($mat, 'glas'),
+        'pet'     => str_contains($mat, 'pet'),
+        'pla'     => str_contains($mat, 'pla'),
+        'beutel'  => $art === 'beutel',
+        'stick'   => $art === 'stick',
+        'blister' => $art === 'blister',
+        default   => true,
+    };
+}
+// Den konkreten Behälter für eine Packungsgröße wählen: bevorzugt den Wunsch-Typ des Kunden,
+// sonst den Behälter des Vorlage-Produkts, sonst den ersten machbaren. Null = nicht machbar.
+// WICHTIG: Hat der Kunde einen Typ gewünscht (z. B. Glas) und es passt keiner, wird NICHT still auf ein
+// anderes Material ausgewichen – die Konfiguration gilt dann als nicht machbar.
+function behaelter_fuer_groesse(int $vorlage_produkt_id, int $stueck, ?string $typ = null): ?int {
+    $rows = all("SELECT DISTINCT verpackung_id FROM produkt_preis WHERE produkt_id=? AND stueck=? ORDER BY verpackung_id", [$vorlage_produkt_id, $stueck]);
+    if (!$rows) return null;
+    $ids = array_map(fn($r) => (int)$r['verpackung_id'], $rows);
+    foreach ($ids as $vid) if (verpackung_passt_zu_typ($vid, $typ)) return $vid;   // Wunsch-Typ zuerst
+    if ($typ) return null;                                                          // Wunsch nicht erfüllbar -> nicht machbar
+    $eigen = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$vorlage_produkt_id]);
+    if ($eigen && in_array($eigen, $ids, true)) return $eigen;
+    return $ids[0];
+}
+// Das Produkt zu (Rezeptur des Vorlage-Produkts x Packungsgröße + Behälter) finden – oder anlegen.
+// Katalogprodukt (nicht exklusiv, ohne Kunde): der Preis ist kundenspezifisch, das Produkt nicht.
+// Deckel/Etikett/Karton/Beipack und Verzehrempfehlung kommen aus dem Vorlage-Produkt.
+function produkt_variante_id(int $vorlage_produkt_id, int $stueck, ?int $verp_id): ?int {
+    $v = one("SELECT * FROM produkt WHERE id=?", [$vorlage_produkt_id]);
+    if (!$v || !$v['rezeptur_id'] || $stueck <= 0) return null;
+    $rid = (int)$v['rezeptur_id'];
+    // Vorhandenes Produkt mit genau dieser Kombination wiederverwenden (Katalog oder dasselbe Vorlage-Produkt)
+    $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=?
+                    AND (verpackung_id <=> ?) AND (exklusiv=0 OR id=?) ORDER BY id LIMIT 1",
+                   [$rid, $stueck, $verp_id, $vorlage_produkt_id]);
+    if ($treffer) return (int)$treffer['id'];
+    // Sonst neu anlegen
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
+    $rez  = (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$rid]) ?: 'Produkt';
+    // Der Behälter gehört in den Namen – sonst unterscheiden sich „120 Kapseln im Glas" und
+    // „120 Kapseln in der PET-Dose" nur durch ein nichtssagendes v2.
+    $behName = $verp_id ? (string) scalar("SELECT name FROM item WHERE id=?", [$verp_id]) : '';
+    $name = produkt_name_versioniert($rez . ' · ' . form_groessen_label($form, (float)$stueck) . ($behName !== '' ? ' · ' . $behName : ''));
+    q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,notiz)
+       VALUES (?,?,NULL,?,?,?,?,?,?,?,0,?,?,?,?)",
+      [naechste_nummer('P'), $name, $rid, $verp_id,
+       $v['verschluss_id'], $v['etikett_id'], $v['karton_id'], $v['beipack_id'], $v['leerkapsel_id'],
+       $stueck, $v['einnahme_pro_tag'], 'aktiv',
+       'Automatisch aus der Angebotskalkulation entstanden (Rezeptur x Menge + Verpackung).']);
+    $neu = insert_id();
+    produkt_matrix_generieren($neu);   // eigene Preismatrix, damit das Produkt eigenständig kalkulierbar ist
+    return $neu;
+}
+// Alle Konfigurationen eines Angebots als Produkte sichern (idempotent). Gibt die produkt_ids zurück.
+// Wird beim Senden des Angebots aufgerufen: ab da kennt das System die Größe/Verpackung als eigenes Produkt.
+function angebot_produkte_sichern(int $angebot_id): array {
+    $a = one("SELECT * FROM angebot WHERE id=?", [$angebot_id]);
+    if (!$a || empty($a['produkt_id'])) return [];
+    $out = [];
+    foreach (angebot_config_gruppen($a) as $g) {
+        $pidV = (int)$g['produkt_id'];
+        if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$pidV]) === 0) produkt_matrix_generieren($pidV);
+        $matrix = angebot_matrix($pidV, null);
+        $form = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pidV]) ?: 'kapsel';
+        [$featStk, ] = _angebot_feat($matrix, $form, $g);
+        if (!$featStk) continue;
+        $verp = behaelter_fuer_groesse($pidV, (int)$featStk, $g['verpackung_typ'] ?? null);
+        if (!$verp) continue;   // kein passender Behälter (z. B. Glas gewünscht, keins fasst die Menge) -> kein Produkt
+        $neu  = produkt_variante_id($pidV, (int)$featStk, $verp);
+        if (!$neu) continue;
+        q("INSERT IGNORE INTO angebot_produkt (angebot_id,produkt_id,stueck,verpackung_id) VALUES (?,?,?,?)",
+          [$angebot_id, $neu, (int)$featStk, $verp]);
+        $out[] = $neu;
+    }
+    return $out;
+}
+// Darf dieser Kunde den Preis dieses Produkts sehen? Nur, wenn es ihm angeboten wurde.
+// Andere Kunden sehen „auf Anfrage" – Preise sind kundenspezifisch und wandern nicht zwischen Kunden.
+function kunde_produkt_preise(int $kunde_id): array {
+    $ids = [];
+    foreach (all("SELECT DISTINCT produkt_id FROM angebot WHERE kunde_id=? AND produkt_id IS NOT NULL", [$kunde_id]) as $r) $ids[(int)$r['produkt_id']] = true;
+    foreach (all("SELECT DISTINCT ap.produkt_id FROM angebot_produkt ap JOIN angebot a ON a.id=ap.angebot_id WHERE a.kunde_id=?", [$kunde_id]) as $r) $ids[(int)$r['produkt_id']] = true;
+    return $ids;
+}
+
 // ---- Verpackung als eigene Position (Dose/Deckel/Etikett kommen extra) ----
 // Aufschlag % für einen Verpackungsartikel: eigener Wert am Artikel, sonst globaler aufschlag_verpackung.
 function verpackung_aufschlag_prozent(int $item_id): float {
@@ -1613,9 +1720,11 @@ function produkt_name_versioniert(string $name, int $exclude_id = 0): string {
 }
 
 // Verknüpfte Verpackungsartikel eines Produkts (Dose/Deckel/Etikett), die gesetzt sind.
-function produkt_verpackung_items(int $produkt_id): array {
+// $verp_override: Behälter einer konkreten Matrixzelle – dann wird DER bepreist statt der am Produkt hinterlegte.
+function produkt_verpackung_items(int $produkt_id, ?int $verp_override = null): array {
     $p = one("SELECT verpackung_id, verschluss_id, etikett_id FROM produkt WHERE id=?", [$produkt_id]);
     if (!$p) return [];
+    if ($verp_override) $p['verpackung_id'] = $verp_override;
     $out = [];
     foreach (['verpackung_id'=>'Verpackung', 'verschluss_id'=>'Deckel', 'etikett_id'=>'Etikett'] as $f => $rolle) {
         if (!empty($p[$f])) {
@@ -1632,17 +1741,20 @@ function produkt_verpackung_vk_je_pack(int $produkt_id, int $menge, ?int $kunde_
     return vk_fuer_kunde($s, $kunde_id);
 }
 // Verpackungs-Summe je Packung in CENT (jede Position einzeln auf Cent gerundet – wie auf dem Beleg).
-function verpackung_cent_je_pack(int $produkt_id, int $bestellmenge, ?int $kunde_id): int {
+// $verp_override: Behälter der gewählten Matrixzelle – dann wird DER bepreist (sonst der am Produkt hinterlegte).
+function verpackung_cent_je_pack(int $produkt_id, int $bestellmenge, ?int $kunde_id, ?int $verp_override = null): int {
     $c = 0;
-    foreach (produkt_verpackung_items($produkt_id) as $vp) $c += (int) round(vk_fuer_kunde(verpackung_vk_bei_menge($vp['id'], $bestellmenge), $kunde_id) * 100);
+    foreach (produkt_verpackung_items($produkt_id, $verp_override) as $vp) $c += (int) round(vk_fuer_kunde(verpackung_vk_bei_menge($vp['id'], $bestellmenge), $kunde_id) * 100);
     return $c;
 }
 // Netto (Cent) für eine Angebotszelle: (Herstellung + Verpackung) je Packung, je Position auf Cent gerundet, × Bestellmenge.
-function angebot_zelle_netto_cent(int $produkt_id, int $stueck, int $bestellmenge, ?int $kunde_id): int {
+// $verp_override sorgt dafür, dass der Behälter DER ZELLE bepreist wird – sonst weicht der berechnete
+// Betrag vom angezeigten ab, sobald der Kunde einen anderen Behälter wählt als am Produkt hinterlegt.
+function angebot_zelle_netto_cent(int $produkt_id, int $stueck, int $bestellmenge, ?int $kunde_id, ?int $verp_override = null): int {
     $vkH = scalar("SELECT vk_preis FROM produkt_preis WHERE produkt_id=? AND stueck=? AND bestellmenge=? ORDER BY vk_preis ASC LIMIT 1", [$produkt_id, $stueck, $bestellmenge]);
     if ($vkH === null || $vkH === false) return 0;
     $hCent = (int) round(vk_fuer_kunde((float)$vkH, $kunde_id) * 100);
-    return ($hCent + verpackung_cent_je_pack($produkt_id, $bestellmenge, $kunde_id)) * $bestellmenge;
+    return ($hCent + verpackung_cent_je_pack($produkt_id, $bestellmenge, $kunde_id, $verp_override)) * $bestellmenge;
 }
 
 // ---- Angebots-Positionen (Hybrid: automatisch erzeugt, überschreibbar) ----
@@ -2739,21 +2851,27 @@ function auftrag_aus_zelle(int $angebot_id, int $stueck, int $verp_id, int $best
     if ($vkBasis === false || $vkBasis === null) return null;   // Zelle nicht machbar
     $vk = round(vk_fuer_kunde((float)$vkBasis, (int)$a['kunde_id']), 4);   // Herstellung je Packung (für vk_stueck)
     $menge = $bestellmenge;
-    $netto = angebot_zelle_netto_cent((int)$a['produkt_id'], $stueck, $bestellmenge, (int)$a['kunde_id']) / 100;   // Herstellung + Verpackung, belegkonform gerundet
+    // Rezeptur x gewählte Menge + gewählter Behälter = das Produkt, das hier bestellt wird.
+    // Ohne diesen Schritt zeigt der Auftrag auf das Vorlage-Produkt, und Produktion/Einkauf rechnen
+    // mit dessen Packungsgröße und Verpackung statt mit der bestellten.
+    $bestellt = produkt_variante_id((int)$a['produkt_id'], $stueck, $verp_id) ?: (int)$a['produkt_id'];
+    $netto = angebot_zelle_netto_cent((int)$a['produkt_id'], $stueck, $bestellmenge, (int)$a['kunde_id'], $verp_id) / 100;   // Herstellung + Verpackung der Zelle, belegkonform gerundet
     q("INSERT INTO auftrag (nummer,angebot_id,kunde_id,produkt_id,menge,stueck,verpackung_id,vk_stueck,gesamt_netto,status)
        VALUES (?,?,?,?,?,?,?,?,?,?)",
-      [naechste_nummer('AB'), $angebot_id, $a['kunde_id'], $a['produkt_id'], $menge, $stueck, $verp_id, $vk, $netto, 'offen']);
+      [naechste_nummer('AB'), $angebot_id, $a['kunde_id'], $bestellt, $menge, $stueck, $verp_id, $vk, $netto, 'offen']);
     $aid = insert_id();
+    q("INSERT IGNORE INTO angebot_produkt (angebot_id,produkt_id,stueck,verpackung_id) VALUES (?,?,?,?)",
+      [$angebot_id, $bestellt, $stueck, $verp_id]);   // Preis dieses Produkts ist für diesen Kunden freigegeben
     $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
     $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
     q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum)
        VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
       [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen']);
-    $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$a['produkt_id']]) ?: 'kapsel';
+    $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$bestellt]) ?: 'kapsel';
     // Standard = Fremdproduktion (verkürzter Weg); auf Eigenproduktion umstellbar im Produktions-Detail.
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
-      [naechste_nummer('PR'), $aid, $a['kunde_id'], $a['produkt_id'], $menge, $stueck, $verp_id, 'fremd', 'offen']);
+      [naechste_nummer('PR'), $aid, $a['kunde_id'], $bestellt, $menge, $stueck, $verp_id, 'fremd', 'offen']);
     $paid = insert_id();
     foreach (produktionsschritte_fuer($form, true) as $i => $station) q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Angebot bestätigt (' . $stueck . ' Stück/Pkg × ' . $menge . '), Auftrag + Rechnung + Produktion erzeugt.', 'auftrag', 'auftrag', $aid);

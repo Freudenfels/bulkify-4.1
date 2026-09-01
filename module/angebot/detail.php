@@ -31,6 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 q("UPDATE angebot SET kunde_id=?,produkt_id=?,status=?,gueltig_bis=?,notiz=?,marge_override=?,produktionszeit_wochen=? WHERE id=?",
                   [$kunde_id, $produkt_id, $status, $gueltig, $f('notiz'), $marge, $pz, (int)$id]);
             }
+            // Sobald das Angebot beim Kunden ist, gelten die angebotenen Konfigurationen als eigene Produkte
+            // (Rezeptur x Menge + Verpackung) – und der Kunde darf deren Preise im Portal sehen.
+            if (in_array($status, ['gesendet', 'bestaetigt'], true)) angebot_produkte_sichern((int)$id);
             header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
         }
     } elseif ($aktion === 'pos_save' && !$neu) {

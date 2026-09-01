@@ -33,6 +33,9 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
         q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,marge_override,produktionszeit_wochen,anfrage_id) VALUES (?,?,?,?,?,?,?,?)",
           [naechste_nummer('AN'), (int)$pa['kunde_id'], (int)$pa['produkt_id'], 'gesendet', $notizFull, $marge, $pz, $id]);
         $angid = insert_id();
+        // Jede angebotene Konfiguration (Rezeptur x Menge + Verpackung) als eigenes Produkt sichern –
+        // auch die, die der Kunde nicht nimmt. Damit kennt das System die Preise beim nächsten Mal.
+        angebot_produkte_sichern($angid);
         q("UPDATE portal_anfrage SET status='beantwortet' WHERE id=?", [$id]);
         log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [$angid]) . ' zur Anfrage ' . $pa['nummer'] . ' abgegeben.', 'angebot', 'angebot', $angid);
         header('Location: ?p=portal_anfrage&id=' . $id . '&angebot=' . $angid); exit;
