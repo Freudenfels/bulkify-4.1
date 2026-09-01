@@ -55,6 +55,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                (float)str_replace(',', '.', $mwst[$i] ?? '0'), in_array($quelle[$i] ?? '', ['herstellung','verpackung','manuell'], true) ? $quelle[$i] : 'manuell', $gv]);
         }
         header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
+    } elseif ($aktion === 'zurueckziehen' && !$neu) {
+        // Nur solange der Kunde nicht zugesagt hat – ein bestätigtes Angebot hängt bereits an einem Auftrag.
+        $st = (string) scalar("SELECT status FROM angebot WHERE id=?", [(int)$id]);
+        if (in_array($st, ['offen', 'gesendet'], true)) {
+            q("UPDATE angebot SET status='zurueckgezogen' WHERE id=?", [(int)$id]);
+            $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [(int)$id]);
+            if ($kd) log_aktivitaet('kunde', $kd, 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [(int)$id]) . ' zurückgezogen.', 'angebot', 'angebot', (int)$id);
+            header('Location: ?p=angebot&id=' . $id . '&zurueckgezogen=1'); exit;
+        }
+        header('Location: ?p=angebot&id=' . $id . '&zzfehler=1'); exit;
     } elseif ($aktion === 'pos_reset' && !$neu) {
         q("DELETE FROM angebot_position WHERE angebot_id=?", [(int)$id]);
         header('Location: ?p=angebot&id=' . $id . '&zurueckgesetzt=1'); exit;
@@ -105,10 +115,18 @@ $defMarge = max(marge_typ_prozent($form ?: 'kapsel'), marge_min_prozent());
 $defPz    = (float) meta_get('produktionszeit_wochen', 7);
 
 render_header('angebote', $neu ? 'Neues Angebot' : ($a['nummer'] ?? 'Angebot'));
+// Zurückziehen nur anbieten, solange der Kunde noch nicht zugesagt hat.
+$kannZurueck = !$neu && in_array($a['status'] ?? '', ['offen', 'gesendet'], true);
+$kopfBtn = bx_btn('Zurück zur Liste', '?p=angebote', 'ghost');
+if ($kannZurueck) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot zurückziehen? Der Kunde kann es dann nicht mehr annehmen.\');">'
+    . '<input type="hidden" name="aktion" value="zurueckziehen">'
+    . '<button class="btn btn-danger" type="submit">Angebot zurückziehen</button></form>' . $kopfBtn;
 bx_head($neu ? 'Neues Angebot' : $v('nummer'),
-        $neu ? 'Produkt + Positionen' : 'Angebot bearbeiten',
-        bx_btn('Zurück zur Liste', '?p=angebote', 'ghost'));
+        $neu ? 'Positionen' : 'Angebot bearbeiten',
+        $kopfBtn);
 if (isset($_GET['gespeichert']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['zurueckgezogen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot zurückgezogen – der Kunde kann es nicht mehr annehmen.</div>';
+if (isset($_GET['zzfehler']))      echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Zurückziehen nicht mehr möglich – das Angebot ist bereits bestätigt oder abgelehnt.</div>';
 if (isset($_GET['zurueckgesetzt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Positionen auf die automatische Berechnung zurückgesetzt.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 ?>
@@ -120,15 +138,18 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
         <?php foreach ($kunden as $k): ?><option value="<?= $k['id'] ?>" <?= $kid===(int)$k['id']?'selected':'' ?>><?= h($k['firma']) ?></option><?php endforeach; ?>
       </select>
     </div>
-    <div class="bx-field"><label>Produkt (optional) <?= bx_hint('Nur nötig, wenn der Kunde im Portal aus der Preismatrix eine Menge wählen soll. Sonst leer lassen und unten Positionen hinzufügen – bei einer Rezeptur entsteht das Produkt ohnehin erst beim Senden des Angebots.') ?></label>
-      <select name="produkt_id"><option value="">– keins (Positionen unten) –</option>
-        <?php foreach ($produkte as $pr): ?><option value="<?= $pr['id'] ?>" <?= $pid===(int)$pr['id']?'selected':'' ?>><?= h($pr['name']) ?></option><?php endforeach; ?>
-      </select>
-      <?php if (!$produkte): ?><div class="muted" style="font-size:12px;margin-top:4px">Noch keine Produkte angelegt – bau das Angebot aus Positionen.</div><?php endif; ?>
+    <?php // Das Produkt gehört nicht in die Kopfdaten – es ergibt sich aus den Positionen (Rezeptur × Menge +
+          // Verpackung). Gesetzt wird es nur automatisch, wenn das Angebot aus einer Produktanfrage entsteht;
+          // damit dieser Bezug beim Speichern nicht verlorengeht, reisen wir ihn unsichtbar mit. ?>
+    <input type="hidden" name="produkt_id" value="<?= $pid ?: '' ?>">
+    <?php if ($pid): ?>
+    <div class="bx-field"><label>Produkt <?= bx_hint('kommt aus der Produktanfrage – der Kunde wählt im Portal aus der Preismatrix dieses Produkts.') ?></label>
+      <div style="padding:8px 0"><?= h((string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [$pid]) ?: '–') ?></div>
     </div>
+    <?php endif; ?>
     <div class="bx-field"><label>Status</label>
       <select name="status">
-        <?php foreach (['offen'=>'offen','gesendet'=>'gesendet','bestaetigt'=>'bestätigt','abgelehnt'=>'abgelehnt'] as $key=>$lbl): ?>
+        <?php foreach (['offen'=>'offen','gesendet'=>'gesendet','bestaetigt'=>'bestätigt','abgelehnt'=>'abgelehnt','zurueckgezogen'=>'zurückgezogen'] as $key=>$lbl): ?>
           <option value="<?= $key ?>" <?= ($a['status']??'')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
       </select>
     </div>
@@ -153,10 +174,37 @@ if (!$neu):
     foreach ($pos as $pp) { $sumVk += $pp['menge'] * $pp['preis_cent']; $sumEk += $pp['menge'] * $pp['ek_cent']; }
     $marge = $sumVk - $sumEk; $margePct = $sumVk > 0 ? $marge / $sumVk * 100 : 0;
     $ktok = ''; foreach ($kunden as $k) if ((int)$k['id'] === $kid) { $ktok = $k['portal_token']; break; }
+    // Wunsch aus der verknüpften Portal-Anfrage übernehmen: Rezeptur, Menge je Packung, Anzahl Packungen
+    // und – aus dem Wunsch-Verpackungstyp – ein passender Behälter. Sonst müsste das Team alles abtippen.
+    $wunsch = ['rezeptur_id'=>0, 'stueck'=>'', 'menge'=>'', 'verp_id'=>0, 'typ_label'=>''];
+    if (!empty($a['anfrage_id'])) {
+        $wa = one("SELECT rezeptur_id, produkt_id, stueck, fuellmenge_g, verpackung_typ, menge FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']]);
+        if ($wa) {
+            $wunsch['rezeptur_id'] = (int)($wa['rezeptur_id'] ?: scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$wa['produkt_id']]));
+            $wunsch['stueck'] = (float)$wa['fuellmenge_g'] > 0 ? (int) round((float)$wa['fuellmenge_g']) : (int)$wa['stueck'];
+            $wunsch['menge']  = (int)$wa['menge'];
+            $wunsch['typ_label'] = (string)($wa['verpackung_typ'] ?? '');
+            // Behälter zum Wunschtyp vorschlagen, der die Menge auch fasst
+            if ($wunsch['rezeptur_id'] && $wunsch['stueck'] > 0) {
+                $wform = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$wunsch['rezeptur_id']]) ?: 'kapsel';
+                foreach (passende_behaelter_fuer($wunsch['rezeptur_id'], $wform, (int)$wunsch['stueck']) as $cand)
+                    if (verpackung_passt_zu_typ((int)$cand, $wunsch['typ_label'] ?: null)) { $wunsch['verp_id'] = (int)$cand; break; }
+            }
+        }
+    }
 ?>
 <div class="bx-panel">
   <h2 style="margin-top:0">Position hinzufügen</h2>
   <p class="muted" style="margin-top:0">Erst den Typ wählen – dann kommt der passende Katalog. Jede Position wird als eigene Gruppe (A, B, C …) angehängt.</p>
+  <?php if ($wunsch['rezeptur_id'] || $wunsch['stueck'] || $wunsch['menge']): ?>
+    <div class="bx-panel" style="padding:10px 14px;margin-bottom:12px;background:var(--panel-2)">
+      <strong>Aus der Anfrage übernommen:</strong>
+      <?= $wunsch['stueck'] ? h($wunsch['stueck']) . ' je Packung · ' : '' ?>
+      <?= $wunsch['menge'] ? number_format((int)$wunsch['menge'], 0, ',', '.') . ' Packungen' : '' ?>
+      <?= $wunsch['typ_label'] ? ' · Wunsch: ' . h(['glas'=>'Glas','pet'=>'PET-Dose','pla'=>'PLA-Becher','beutel'=>'Standbodenbeutel','stick'=>'Stick','blister'=>'Blister'][$wunsch['typ_label']] ?? $wunsch['typ_label']) : '' ?>
+      <div class="muted" style="font-size:12px">Die Felder unten sind vorbelegt – Werte prüfen und bei Bedarf ändern.</div>
+    </div>
+  <?php endif; ?>
   <div class="bx-field" style="max-width:280px"><label>Typ</label>
     <select id="addTyp">
       <option value="rezeptur">Rezeptur (Lohnherstellung)</option>
@@ -170,12 +218,12 @@ if (!$neu):
     <div class="bx-grid">
       <div class="bx-field"><label>Rezeptur</label>
         <select name="add_rezeptur_id" required><option value="">– wählen –</option>
-          <?php foreach ($rezepturKatalog as $rz): ?><option value="<?= (int)$rz['id'] ?>"><?= h($rz['name']) ?><?= $rz['darreichungsform'] ? ' · '.h($rz['darreichungsform']) : '' ?></option><?php endforeach; ?>
+          <?php foreach ($rezepturKatalog as $rz): ?><option value="<?= (int)$rz['id'] ?>" <?= $wunsch['rezeptur_id'] === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?><?= $rz['darreichungsform'] ? ' · '.h($rz['darreichungsform']) : '' ?></option><?php endforeach; ?>
         </select>
       </div>
-      <div class="bx-field"><label>Stückzahl / Füllmenge je Packung</label><input type="number" name="add_stueck" placeholder="z. B. 30" required></div>
-      <div class="bx-field"><label>Anzahl Packungen</label><input type="number" name="add_menge" placeholder="z. B. 1000" required></div>
-      <div class="bx-field"><label>Verpackung (Primär)</label><select name="add_verp_id"><option value="">– keine –</option><?php foreach ($verpPrim as $vp): ?><option value="<?= (int)$vp['id'] ?>"><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
+      <div class="bx-field"><label>Stückzahl / Füllmenge je Packung</label><input type="number" name="add_stueck" placeholder="z. B. 30" value="<?= $wunsch['stueck'] !== '' ? (int)$wunsch['stueck'] : '' ?>" required></div>
+      <div class="bx-field"><label>Anzahl Packungen</label><input type="number" name="add_menge" placeholder="z. B. 1000" value="<?= $wunsch['menge'] !== '' ? (int)$wunsch['menge'] : '' ?>" required></div>
+      <div class="bx-field"><label>Verpackung (Primär)</label><select name="add_verp_id"><option value="">– keine –</option><?php foreach ($verpPrim as $vp): ?><option value="<?= (int)$vp['id'] ?>" <?= $wunsch['verp_id'] === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field"><label>Deckel (optional)</label><select name="add_deckel_id"><option value="">– keiner –</option><?php foreach ($verpDeckel as $vp): ?><option value="<?= (int)$vp['id'] ?>"><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field"><label>Etikett (optional)</label><select name="add_etikett_id"><option value="">– keins –</option><?php foreach ($verpEtik as $vp): ?><option value="<?= (int)$vp['id'] ?>"><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
     </div>

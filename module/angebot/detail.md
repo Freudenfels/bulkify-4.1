@@ -6,7 +6,13 @@ aber schlanker): die Positionen werden **automatisch** aus Produkt + Preismatrix
 erzeugt, sind aber **überschreibbar**. Dazu die interne Marge (VK vs. EK, nur intern).
 
 ## Kopfdaten (Formular `aktion=kopf_save`)
-Kunde, Produkt, Status, Gültig bis, **Marge (%)** (`angebot.marge_override`),
+
+**Kein Produkt in den Kopfdaten:** Das Produkt ergibt sich aus den **Positionen** (Rezeptur × Menge + Verpackung) und ist deshalb kein Eingabefeld mehr. Entsteht das Angebot aus einer Produktanfrage, ist `angebot.produkt_id` automatisch gesetzt – dann steht es als Text im Kopf und reist beim Speichern unsichtbar mit (Hidden-Feld), damit die Preismatrix im Portal erhalten bleibt.
+
+**Wunsch aus der Anfrage vorbelegt:** Hängt am Angebot eine `anfrage_id`, füllt „Position hinzufügen" die Felder vor: Rezeptur, Menge je Packung (Stück bzw. Füllmenge), Anzahl Packungen und ein zum Wunsch-Verpackungstyp passender Behälter (über `passende_behaelter_fuer()` + `verpackung_passt_zu_typ()`). Darüber steht, was übernommen wurde. Vorher musste das Team alles aus der Anfrage abtippen.
+
+**Angebot zurückziehen:** Knopf oben rechts, nur solange der Status `offen` oder `gesendet` ist – ein bestätigtes Angebot hängt bereits an einem Auftrag. Setzt den Status auf `zurueckgezogen` und schreibt einen Verlaufseintrag am Kunden. Im Portal fällt das Angebot damit automatisch aus der Annehmen-Logik (die prüft `status IN ('offen','gesendet')`) und wird als „zurückgezogen" angezeigt.
+Kunde, Status, Gültig bis, **Marge (%)** (`angebot.marge_override`),
 **Produktionszeit (Wochen)** (`angebot.produktionszeit_wochen`), Notiz. Beim Speichern wird
 für das Produkt bei Bedarf die Preismatrix erzeugt. Marge/Produktionszeit wirken auf die
 **automatischen** Positionen (bei Overrides bleibt die gespeicherte Position stehen).

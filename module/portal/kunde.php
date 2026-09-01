@@ -1309,7 +1309,9 @@ portal_head('Kundenportal · ' . $k['firma']);
     <summary>
       <span style="font-size:var(--fs-md)"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($a['produkt_name'] ?: '–') ?></strong></span>
       <span class="bx-row" style="gap:10px;align-items:center">
-        <?= $offen ? bx_badge('Angebot liegt vor – bitte wählen','info') : ($a['status']==='bestaetigt' ? bx_badge('bestätigt','ok') : bx_badge('abgelehnt','err')) ?>
+        <?= $offen ? bx_badge('Angebot liegt vor – bitte wählen','info')
+             : ($a['status']==='bestaetigt' ? bx_badge('bestätigt','ok')
+             : ($a['status']==='zurueckgezogen' ? bx_badge('zurückgezogen') : bx_badge('abgelehnt','err'))) ?>
         <a href="<?= $portalLink('angebot_pdf') ?>&aid=<?= (int)$a['id'] ?>" target="_blank" title="Angebot als PDF herunterladen" onclick="event.stopPropagation()" style="font-size:18px;line-height:1">&#8681;</a>
       </span>
     </summary>
