@@ -40,7 +40,7 @@ $marke = BX_MARKE; $ver = BX_VERSION;
 </head><body>
 <div class="lg-wrap">
   <div class="lg-card">
-    <img src="assets/bulkify-logo.jpg" alt="<?= h($marke) ?>" class="lg-logo">
+    <img src="assets/bulkify-logo-dark.png" alt="<?= h($marke) ?>" class="lg-logo">
     <p class="lg-sub">Anmeldung für Mitarbeiter</p>
     <?php if ($fehler): ?><div class="lg-err"><?= h($fehler) ?></div><?php endif; ?>
     <form method="post" autocomplete="on">

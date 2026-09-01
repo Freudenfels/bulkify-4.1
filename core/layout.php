@@ -75,7 +75,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     $verLabel = $istWerk ? 'Werk' : $ver;
     $navdef   = $istWerk ? bx_nav_werk() : bx_nav();
     // Sidebar
-    echo "<aside class=\"bx-side\"><div class=\"bx-brand\"><img src=\"assets/bulkify-logo.jpg\" alt=\"$marke\" class=\"bx-logo\"><span class=\"bx-ver\">" . h($verLabel) . "</span></div><nav>";
+    echo "<aside class=\"bx-side\"><div class=\"bx-brand\"><img src=\"assets/bulkify-logo-white.png\" alt=\"$marke\" class=\"bx-logo\"><span class=\"bx-ver\">" . h($verLabel) . "</span></div><nav>";
     $darf = function_exists('route_erlaubt');   // Auth aktiv?
     $curTyp = $_GET['typ'] ?? null;
     $anfCount = bx_anfrage_counts();
