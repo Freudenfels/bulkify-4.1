@@ -21,6 +21,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis
     q("DELETE FROM lieferant_preis WHERE id=? AND item_id=?", [(int)($_POST['preis_id'] ?? 0), (int)$id]);
     header('Location: ?p=rohstoff&id=' . $id . '&preisok=1'); exit;
 }
+// Analysewerte einer Charge erfassen – daraus entsteht UNSER Analysenzertifikat (CoA).
+// Die Unterlagen des Vorlieferanten sind die Quelle; weitergegeben wird das bulkify-Dokument.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'analyse_save' && !$neu) {
+    $cid = (int)($_POST['charge_id'] ?? 0);
+    if ($cid && scalar("SELECT id FROM charge WHERE id=? AND item_id=?", [$cid, (int)$id])) {
+        q("DELETE FROM charge_analyse WHERE charge_id=?", [$cid]);
+        $sort = 0;
+        foreach (($_POST['a_par'] ?? []) as $i2 => $par) {
+            $par = trim((string)$par); if ($par === '') continue;
+            q("INSERT INTO charge_analyse (charge_id,parameter,spezifikation,ergebnis,methode,sort) VALUES (?,?,?,?,?,?)",
+              [$cid, mb_substr($par, 0, 120),
+               mb_substr(trim((string)($_POST['a_spec'][$i2] ?? '')), 0, 120) ?: null,
+               mb_substr(trim((string)($_POST['a_erg'][$i2] ?? '')), 0, 120) ?: null,
+               mb_substr(trim((string)($_POST['a_met'][$i2] ?? '')), 0, 120) ?: null, $sort++]);
+        }
+    }
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=chargen&analyse=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_upload' && !$neu) {
     dokument_upload('item', (int)$id);
     header('Location: ?p=rohstoff&id=' . $id . '&tab=dok&gespeichert=1'); exit;
@@ -325,9 +343,9 @@ if (!$neu) {
     <div class="bx-panel">
       <h2>Chargen <?= bx_hint('Wareneingang bucht neue Chargen; Rohstoffe starten in Quarantäne') ?></h2>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Charge</th><th class="bx-num">Verfügbar</th><th>MHD</th><th>Lieferant</th><th>Wareneingang</th><th>Status</th></tr></thead>
+        <thead><tr><th>Charge</th><th class="bx-num">Verfügbar</th><th>MHD</th><th>Lieferant</th><th>Wareneingang</th><th>Status</th><th></th></tr></thead>
         <tbody>
-        <?php if (!$charges): ?><tr><td colspan="6" class="muted">Noch keine Chargen. Über „Wareneingang" buchen.</td></tr><?php endif; ?>
+        <?php if (!$charges): ?><tr><td colspan="7" class="muted">Noch keine Chargen. Über „Wareneingang" buchen.</td></tr><?php endif; ?>
         <?php foreach ($charges as $c): ?>
           <tr>
             <td><?= h($c['charge_nr'] ?: '–') ?></td>
@@ -336,12 +354,64 @@ if (!$neu) {
             <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
             <td><?= $c['wareneingang'] ? h(date('d.m.Y',strtotime($c['wareneingang']))) : '' ?></td>
             <td><?= match($c['status']){'frei'=>bx_badge('frei','ok'),'quarantaene'=>bx_badge('Quarantäne','warn'),'gesperrt'=>bx_badge('gesperrt','err'),default=>bx_badge(status_text($c['status']))} ?></td>
+            <td class="bx-num">
+              <a class="btn btn-ghost btn-sm" target="_blank" href="?p=coa_bulkify&id=<?= (int)$c['id'] ?>" title="Analysenzertifikat im bulkify-Layout – das geht an den Kunden">&#8681; CoA</a>
+            </td>
           </tr>
         <?php endforeach; ?>
         </tbody>
       </table></div>
       <div style="margin-top:12px"><?= bx_btn('Wareneingang buchen', '?p=wareneingang', 'primary') ?></div>
     </div>
+      <?php // Analysewerte je Charge – die Grundlage für unser CoA. Der Lieferant schickt sein
+            // Zertifikat; die Werte tragen wir hier ein und geben sie im bulkify-Layout weiter. ?>
+      <?php if ($charges): ?>
+      <div class="bx-panel">
+        <h2 style="margin-top:0">Analysenwerte je Charge <?= bx_hint('Aus dem CoA des Lieferanten übertragen. Daraus entsteht unser Analysenzertifikat im bulkify-Layout – das Original des Lieferanten geht nicht an den Kunden.') ?></h2>
+        <?php if (isset($_GET['analyse'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Analysenwerte gespeichert.</div><?php endif; ?>
+        <div class="bx-field" style="max-width:320px"><label>Charge</label>
+          <select id="an_charge" onchange="anZeige()">
+            <?php foreach ($charges as $c): ?><option value="<?= (int)$c['id'] ?>"><?= h($c['charge_nr'] ?: ('Charge ' . (int)$c['id'])) ?></option><?php endforeach; ?>
+          </select></div>
+        <?php foreach ($charges as $c):
+            $werte = all("SELECT * FROM charge_analyse WHERE charge_id=? ORDER BY sort, id", [(int)$c['id']]);
+            // Vorschlagszeilen, damit man nicht vor einem leeren Blatt sitzt.
+            if (!$werte) $werte = [
+                ['parameter'=>'Aussehen', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'visuell'],
+                ['parameter'=>'Identität', 'spezifikation'=>'entspricht', 'ergebnis'=>'', 'methode'=>'FT-IR'],
+                ['parameter'=>'Gehalt', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'HPLC'],
+                ['parameter'=>'Schwermetalle', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'ICP-MS'],
+                ['parameter'=>'Gesamtkeimzahl', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'Ph. Eur.'],
+            ];
+            while (count($werte) < count($werte) + 2) { $werte[] = ['parameter'=>'', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'']; if (count($werte) > 12) break; }
+        ?>
+        <form method="post" class="an_form" data-charge="<?= (int)$c['id'] ?>" style="display:none">
+          <input type="hidden" name="aktion" value="analyse_save">
+          <input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
+          <div class="bx-tablewrap"><table class="bx-table">
+            <thead><tr><th>Parameter</th><th>Spezifikation</th><th>Ergebnis</th><th>Methode</th></tr></thead>
+            <tbody><?php foreach ($werte as $w): ?>
+              <tr><td><input type="text" name="a_par[]" value="<?= h($w['parameter']) ?>" style="width:100%"></td>
+                  <td><input type="text" name="a_spec[]" value="<?= h($w['spezifikation'] ?? '') ?>" style="width:100%"></td>
+                  <td><input type="text" name="a_erg[]" value="<?= h($w['ergebnis'] ?? '') ?>" style="width:100%"></td>
+                  <td><input type="text" name="a_met[]" value="<?= h($w['methode'] ?? '') ?>" style="width:100%"></td></tr>
+            <?php endforeach; ?></tbody>
+          </table></div>
+          <div class="bx-row" style="gap:10px;margin-top:10px">
+            <button class="btn btn-primary" type="submit">Analysenwerte speichern</button>
+            <a class="btn btn-ghost" target="_blank" href="?p=coa_bulkify&id=<?= (int)$c['id'] ?>">&#8681; CoA ansehen</a>
+          </div>
+        </form>
+        <?php endforeach; ?>
+        <script>
+        function anZeige(){
+          var v = document.getElementById('an_charge').value;
+          document.querySelectorAll('.an_form').forEach(function(f){ f.style.display = (f.getAttribute('data-charge') === v) ? '' : 'none'; });
+        }
+        anZeige();
+        </script>
+      </div>
+      <?php endif; ?>
   </section>
   <section data-panel="verw" hidden><div class="bx-panel"><h2>Verwendung in Rezepturen</h2><?php bx_bald('Rezepturen'); ?></div></section>
   <section data-panel="verlauf" hidden>

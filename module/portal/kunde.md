@@ -38,6 +38,8 @@ Der Aufbau des PDFs liegt in `core/pdf_angebot.php` – dieselbe Funktion nutzt 
 
 **Absage sichtbar:** Eine abgesagte Anfrage zeigt in „Meine Anfragen" das Kennzeichen **nicht machbar** und darunter die Begründung aus `portal_anfrage.absage_grund` – ein reines „abgelehnt" ließe den Kunden ratlos zurück.
 
+**Spezifikation am Rohstoff:** Panel mit **⇩ Spezifikation (PDF)** (`v=spec_pdf&rid=…`) – **unser** Dokument im bulkify-Layout, unabhängig von der Dokumentenfreigabe. Freigegebene Lieferantenunterlagen erscheinen weiterhin darunter, sind aber die Ausnahme: sie tragen den Briefkopf des Vorlieferanten.
+
 **Verbindlich annehmen – Dialog mit Unterschrift:** Rezeptur *und* Angebot werden nur über einen Bestätigungs-Dialog angenommen (`bxBestaetigen()`, ein Dialog für alle Fälle). Er zeigt, **was** angenommen wird (Rezeptur-Nummer bzw. Größe, Verpackung, Packungszahl, Preis je Packung und Gesamt), dazu die Folgen im Klartext – bei der Rezeptur „wird eingefroren und kann nicht mehr geändert werden", beim Angebot „Stornierung nach der Rohstoffbestellung nicht mehr möglich". Pflicht sind ein **Haken** und der **Name**; beides wird serverseitig geprüft (`$freigabeName()`) und mit Zeitpunkt gespeichert. Ohne beides passiert nichts – auch nicht ohne JavaScript.
 
 **AGB:** Im Dialog steht ein zweiter Pflicht-Haken „Ich akzeptiere die AGB (Fassung X)" mit Link auf `v=agb` (neuer Tab). Die Seite zeigt die gültige Fassung, `&fassung=<id>` eine ältere. Beim Annehmen wird die Versionsbezeichnung am Vorgang gespeichert. Gepflegt wird der Text unter Einstellungen → AGB; solange keine Fassung hinterlegt ist, entfällt der Haken. In der Seitenleiste steht unten ein dezenter AGB-Link – kein Menüpunkt.

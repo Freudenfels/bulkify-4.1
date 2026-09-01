@@ -611,6 +611,21 @@ if ($k['portal_dienstleistung']) $anfTabs['dienstleistung']='Dienstleistung';
 $atab = $_GET['atab'] ?? 'alle'; if (!isset($anfTabs[$atab])) $atab = 'alle';
 
 // --- Angebot als PDF (bulkify-Belegvorlage, positionsbasiert) ---
+// Spezifikation eines Rohstoffs im bulkify-Layout. Bewusst UNSER Dokument: die Unterlagen der
+// Vorlieferanten kommen auf deren Briefpapier und gehen nicht an den Kunden.
+if (($_GET['v'] ?? '') === 'spec_pdf') {
+    $rid = (int)($_GET['rid'] ?? 0);
+    // Nur Rohstoffe, die der Kunde im Katalog ohnehin sieht.
+    $ok = $rid && $k['portal_rohstoffe'] && scalar("SELECT id FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$rid]);
+    if (!$ok) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    require_once BX_ROOT . '/core/pdf_spec.php';
+    $pdf = build_spec_pdf($rid);
+    if ($pdf === null) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="Spezifikation_' . $rid . '.pdf"');
+    header('Content-Length: ' . strlen($pdf));
+    echo $pdf; exit;
+}
 if (($_GET['v'] ?? '') === 'angebot_pdf') {
     $aid = (int)($_GET['aid'] ?? 0);
     // Nur eigene Angebote – die Liste ist bereits auf den Kunden gefiltert.
@@ -1253,6 +1268,11 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <p class="bx-sub"><?= h($FORMLBL_P[$rohDetail['form']] ?? $rohDetail['form']) ?><?= $rohDetail['name_lat'] ? ' · '.h($rohDetail['name_lat']) : '' ?><?= $rohDetail['cas'] ? ' · CAS '.h($rohDetail['cas']) : '' ?></p>
 
+    <div class="bx-panel">
+      <h2>Spezifikation</h2>
+      <p class="muted" style="margin-top:0">Unsere Spezifikation zu diesem Rohstoff – Kennzahlen, Gehalt, Erklärungen und Lagerung.</p>
+      <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('spec_pdf') ?>&rid=<?= (int)$rohDetail['id'] ?>">&#8681; Spezifikation (PDF)</a>
+    </div>
     <?php $rohDoks = dokumente_fuer_kunde('item', (int)$rohDetail['id']); if ($rohDoks): ?>
     <div class="bx-panel"><h2>Dokumente</h2>
       <p class="muted" style="margin-top:0">Analysenzertifikat und Spezifikation zu diesem Rohstoff.</p>

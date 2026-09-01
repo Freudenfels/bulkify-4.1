@@ -555,6 +555,18 @@ function init_schema(): void {
     // Zugang mit Passwort. Eingeladen wird per Token-Link; das Passwort setzt der Lieferant selbst.
     ensure_column('benutzer', 'lieferant_id', "INT NULL");   // gesetzt = Lieferanten-Login, kein Teamkonto
     // Preisanfrage an einen Lieferanten. Entweder zu einem Lagerartikel (Rohstoff/Verpackung)
+    // Analysewerte je Charge – die Grundlage fuer UNSER Analysenzertifikat (CoA) im bulkify-Layout.
+    // Die Unterlagen der Vorlieferanten bleiben intern; weitergegeben wird unser eigenes Dokument.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS charge_analyse (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        charge_id INT NOT NULL,
+        parameter VARCHAR(120) NOT NULL,
+        spezifikation VARCHAR(120) NULL,                    -- Sollwert laut Spezifikation
+        ergebnis VARCHAR(120) NULL,                         -- gemessener Wert der Charge
+        methode VARCHAR(120) NULL,
+        sort INT NOT NULL DEFAULT 0,
+        KEY idx_charge (charge_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     // oder als Freitext. Der Lieferant antwortet mit einem Angebot (siehe unten).
     $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_anfrage (
         id INT AUTO_INCREMENT PRIMARY KEY,

@@ -24,7 +24,9 @@ function dokument_upload(string $objekt_typ, int $objekt_id): void {
     }
 }
 
-// Freigabe fürs Kundenportal umschalten. Ohne Freigabe sieht der Kunde ein Dokument nie –
+// Freigabe fürs Kundenportal umschalten. ACHTUNG: freigegeben wird das ORIGINAL des Lieferanten
+// (auf dessen Briefpapier). Fuer den Kunden gibt es die eigene Spezifikation und das eigene CoA
+// im bulkify-Layout (core/pdf_spec.php) – die Freigabe hier ist nur fuer Ausnahmefaelle gedacht.
 // am Rohstoff hängen auch Lieferanten-Unterlagen, die nicht weitergegeben werden dürfen.
 function dokument_freigabe_toggle(string $objekt_typ, int $objekt_id, int $dok_id): void {
     q("UPDATE dokument SET kunde_sichtbar = 1 - kunde_sichtbar WHERE id=? AND objekt_typ=? AND objekt_id=?",
