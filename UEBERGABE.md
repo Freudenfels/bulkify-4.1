@@ -1,7 +1,7 @@
 # Übergabe – bulkify Dashboard 4.1
 
 > Kurzer Stand zum Weiterarbeiten am nächsten PC (Laptop). Ergänzt `CLAUDE.md` (dort stehen die Dauer-Regeln).
-> **Stand: 2026-08-30.**
+> **Stand: 2026-09-01.**
 
 ## Zuerst am Laptop tun
 1. **Git holen:** `git pull` (Branch `main`). Nur an EINEM PC gleichzeitig arbeiten.
@@ -9,6 +9,22 @@
    - **Achtung:** Die **Daten** wandern NICHT über Git (nur Code). Der Laptop hat eine eigene, leere/andere DB. Demodaten bei Bedarf neu einspielen: **Einstellungen → Werkzeuge → „Demo-Testdaten einspielen"** (nicht-löschend, idempotent).
 3. **Starten:** `php -S 127.0.0.1:8741 -t public` → http://127.0.0.1:8741
 4. **Login:** admin@bulkify.local / admin (lokal). Live-Beta: siehe unten.
+
+## Was am 01.09. gebaut wurde
+
+**Kundenweg fertiggestellt**
+- **Angebot als Auswahl:** Der Kunde sieht je Variante (Gruppe A, B, C im Editor) eine Zeile mit Größe, Verpackung, Anzahl Packungen und **Preis je Packung** – wie in v3 – und nimmt genau eine an. Beim Annehmen entsteht **erst dann** das Produkt (Rezeptur × Menge + Verpackung), danach Auftrag, Rechnung und Produktionsauftrag.
+- **Verbindliche Annahme mit Unterschrift:** Rezeptur und Angebot nur über einen Bestätigungs-Dialog mit Pflicht-Haken, **AGB-Haken** und Namen. Name und Zeitpunkt werden gespeichert (`freigabe_name`, `freigabe_am`, `agb_version`); serverseitig geprüft, nicht nur im Dialog.
+- **AGB versioniert** (`core/agb.php`, Einstellungen → AGB, Portalseite `v=agb`). Der mitgelieferte Text ist ein **Entwurf und muss anwaltlich geprüft werden**.
+- **Anfrage absagen** („Nicht machbar") mit Pflicht-Begründung; ein noch nicht gesendeter Angebots-Entwurf wird verworfen und die Angebotsnummer freigegeben.
+- **Angebots-PDF** über einen Knopf in der Kopfzeile und ein Download-Icon in Liste und Anfrage-Seite (`core/pdf_angebot.php`, Route `?p=angebot_pdf&id=`).
+- Editor-Ärgernisse behoben: gelöschte Positionen bleiben gelöscht, die Konfiguration überlebt das Speichern, Kopfdaten eingeklappt, kein Sprung an den Seitenanfang, Gültigkeit = heute + 14 Tage.
+
+**Lieferantenweg neu** (v3-Vorbild, siehe `module/lieferant/*.md`)
+- **Bestell-PDF** deutsch/englisch je nach `lieferanten.sprache` (`core/pdf_bestellung.php`).
+- **Ablauf an der Bestellung:** bestätigen mit Termin, Stationen (angenommen · Produktion · Qualität · versandbereit · versendet), Versanddaten. „versendet" nur mit Anbieter, Versandart und Sendungsnummer.
+- **Lieferantenportal** mit eigenem Login: Einladung per einmaligem Token, Passwort setzt der Lieferant selbst. Er sieht Bestellungen, bestätigt Termine, pflegt den Fortschritt, trägt Tracking ein, beantwortet **Preisanfragen** mit Staffeln und lädt **CoA/Spec** direkt zum Artikel hoch. Alles zweisprachig.
+- **Intern:** auf der Lieferantenseite Einladungslink erzeugen, Preisanfragen stellen und Angebote mit einem Klick als **EK-Staffeln** übernehmen.
 
 ## Was am 30.08. gebaut wurde
 - **Tablette & Flüssig werden automatisch bepreist** (vorher „auf Anfrage"). Tablette: Behälter über das Tablettengewicht (Wirkstoffe + Presshilfsstoffe), EK = Rezeptur + Presshilfsstoffe statt Leerkapsel. Flüssig: Größe = **Füllvolumen in ml**, Behälter über `item.volumen_ml`, EK = Portionen × Rezeptur + Trägerflüssigkeit. Neue Stellschrauben in Einstellungen → Preise & Margen (Presshilfsstoffe % + EK/kg, Portionsvolumen ml, EK Trägerflüssigkeit/L, Flüssig-Füllvolumen-Raster). Die Behälter-Fassung hat jetzt eine **Spalte „Flüssig (ml)"** zum Pflegen.
@@ -26,6 +42,11 @@
 Frühere Sessions (bereits live): Login neu gestaltet + bulkify-Logo, Etikettenpreise (Labelisten) je Gebinde, Demo-Testset (Kunden/Produkte/Angebote/Aufträge inkl. Zukauf).
 
 ## Offene Punkte / als Nächstes
+- **AGB anwaltlich prüfen lassen** und die geprüfte Fassung unter Einstellungen → AGB als neue Version eintragen.
+- **Etiketten:** Es gibt noch keine Etiketten-Artikel. Das Angebot bietet nur Etiketten an, die zum **Endformat am Behälter** (`item.etikett_final`, B×H) passen – dafür fehlen die Behältermaße bzw. Etikettenformate und die Etikettenpreise.
+- **Mengenrabatt bei Rezeptur-Angeboten:** Alle Bestellmengen kosten aktuell gleich viel je Packung; die Mengendegression der alten Preismatrix greift dort nicht.
+- **Lieferantenportal:** Rückfragen/Chat und eine eigene Dateiablage gibt es (anders als in v3) noch nicht; Chinesisch fehlt (bisher Deutsch/Englisch).
+- **Beta-Admin-Passwort ändern.**
 - **Behälter-EK-Staffeln:** Standbodenbeutel (XS–XXL) und jetzt auch PET-Dosen + Weithalsgläser (100–250 ml) haben EK-Staffeln (Seeds `seed_standbodenbeutel` / `seed_packari_behaelter`). **Offen:** echte Deckel-Preisliste bei Packari erfragen – Packari verkauft Dose und Deckel nur im Set, deshalb ist der EK der vier Pressure-Seal-Deckel als Differenz „Set minus Dose ohne Verschluss" gerechnet (je nach Bezugsdose 0,26–0,35 €).
 - **Demo-Rezepturen ohne Rohstoffpreise** → Preis-Matrix zeigt 0 €. Für echte Kalkulation Rohstoff-EK an den Zutaten hinterlegen.
 - **Flaschen/Tuben für Flüssig anlegen** – PET-Dosen und Weithalsgläser haben jetzt Volumen und Füllgewicht, für echte Flüssig-Gebinde (Tropfflasche, Pumpspender) fehlen die Artikel aber noch.
