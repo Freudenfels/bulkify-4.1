@@ -1424,7 +1424,7 @@ portal_head('Kundenportal · ' . $k['firma']);
               $pCent = verpackung_cent_je_pack((int)$a['produkt_id'], $bm, $kid, (int)$cell['verp']);   // Behälter DIESER Zelle bepreisen
               $vk = ($hCent + $pCent) / 100; $netto = ($hCent + $pCent) * $bm / 100; $brutto = $netto * (1 + $ustP/100); ?>
             <td><strong><?= $eur($vk) ?> / Pkg.</strong><div class="muted" style="font-size:12px"><?= $pCent > 0 ? 'Herstellung ' . $eur($hCent/100) . ' + Verpackung ' . $eur($pCent/100) . ' · ' : '' ?>Gesamt <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto (inkl. ' . $mg($ustP) . ' % MwSt)' : '' ?></div></td>
-            <td class="bx-num"><form method="post" style="margin:0"><input type="hidden" name="aktion" value="zelle_annehmen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="stueck" value="<?= $stk ?>"><input type="hidden" name="verpackung_id" value="<?= (int)$cell['verp'] ?>"><input type="hidden" name="bestellmenge" value="<?= $bm ?>"><button class="btn btn-primary btn-sm" type="submit">Diese Menge annehmen</button></form></td>
+            <td class="bx-num"><form method="post" style="margin:0"><input type="hidden" name="aktion" value="zelle_annehmen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="stueck" value="<?= $stk ?>"><input type="hidden" name="verpackung_id" value="<?= (int)$cell['verp'] ?>"><input type="hidden" name="bestellmenge" value="<?= $bm ?>"><button class="btn btn-primary btn-sm" style="white-space:nowrap" type="submit">Diese Menge annehmen</button></form></td>
           <?php else: ?>
             <td><?= bx_badge('Nicht machbar','err') ?><div class="muted" style="font-size:12px">Diese Menge ist so nicht produzierbar</div></td>
             <td></td>
@@ -1457,15 +1457,15 @@ portal_head('Kundenportal · ' . $k['firma']);
             <?php if ($o['verpackung'] !== ''): ?><div class="muted" style="font-size:12px"><?= h($o['verpackung']) ?></div><?php endif; ?>
           </td>
           <td><?= number_format($o['pakete'], 0, ',', '.') ?></td>
-          <td><strong><?= $eur($o['pro_pkg']) ?> / Pkg.</strong>
-            <div class="muted" style="font-size:12px">Gesamt: <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto (inkl. ' . $mg($ustP) . ' % MwSt)' : '' ?></div>
+          <td style="max-width:260px"><strong><?= $eur($o['pro_pkg']) ?> / Pkg.</strong>
+            <div class="muted" style="font-size:12px;white-space:normal">Gesamt: <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto (inkl. ' . $mg($ustP) . ' % MwSt)' : '' ?></div>
           </td>
           <td class="bx-num">
             <?php if ($o['waehlbar']): ?>
             <form method="post" style="margin:0" onsubmit="return confirm('Diese Menge verbindlich annehmen?');">
               <input type="hidden" name="aktion" value="angebot_annehmen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>">
               <input type="hidden" name="gruppe" value="<?= h($o['gruppe']) ?>">
-              <button class="btn btn-primary btn-sm" type="submit">Diese Menge annehmen</button>
+              <button class="btn btn-primary btn-sm" style="white-space:nowrap" type="submit">Diese Menge annehmen</button>
             </form>
             <?php else: ?><span class="muted" style="font-size:12px">Bitte kurz melden</span><?php endif; ?>
           </td>
@@ -1511,7 +1511,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php foreach ($st as $s): $vk = vk_fuer_kunde((float)$s['vk_stueck'], $kid); $netto = $vk * (int)$s['menge']; $brutto = $netto * (1 + $ustP/100); ?>
         <tr><td><?= number_format((int)$s['menge'],0,',','.') ?> × <?= h($mengeLbl) ?></td>
           <td><strong><?= $eur($vk) ?></strong><div class="muted" style="font-size:12px">Gesamt <?= $eur($netto) ?> netto<?= $ustP>0?' · '.$eur($brutto).' brutto':'' ?></div></td>
-          <td class="bx-num"><form method="post" style="margin:0"><input type="hidden" name="aktion" value="bestaetigen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="staffel" value="<?= (int)$s['id'] ?>"><button class="btn btn-primary btn-sm" type="submit">Diese Menge annehmen</button></form></td></tr>
+          <td class="bx-num"><form method="post" style="margin:0"><input type="hidden" name="aktion" value="bestaetigen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="staffel" value="<?= (int)$s['id'] ?>"><button class="btn btn-primary btn-sm" style="white-space:nowrap" type="submit">Diese Menge annehmen</button></form></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
