@@ -32,6 +32,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
         $iid = fn($k) => ($_POST[$k] ?? '') !== '' ? (int)$_POST[$k] : null;
         $verp_id  = $iid('verpackung_id');
         $exkl = isset($_POST['exklusiv']) ? 1 : 0;
+        // Der Kunde ist nur bei einem exklusiven Produkt der Besitzer. Ein Katalogprodukt gehört niemandem –
+        // sonst steht in der Produktliste ein Kundenname bei einem Produkt, das jeder Kunde bestellen kann.
+        if (!$exkl) $kunde_id = null;
         $einh = $f('einheiten_pro_packung') === '' ? 0 : (int)$f('einheiten_pro_packung');
         $tag  = $f('einnahme_pro_tag') === '' ? 1 : $f('einnahme_pro_tag');
         $kdname = $f('kundenname') ?: null;   // Name für den Kunden (leer = interner Name)
@@ -135,7 +138,7 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Produktname (intern) <?= bx_hint('unser Arbeitsname, z. B. „Zink". Gleiche Namen werden automatisch mit v2, v3 … fortlaufend nummeriert.') ?></label><input type="text" name="name" value="<?= $v('name') ?>" required placeholder="z. B. Zink"></div>
     <div class="bx-field"><label>Name für den Kunden <?= bx_hint('so heißt es beim Kunden im Portal / auf Belegen, z. B. „Super Zink". Leer = interner Name.') ?></label><input type="text" name="kundenname" value="<?= $v('kundenname') ?>" placeholder="z. B. Super Zink"></div>
-    <div class="bx-field"><label>Kunde <?= bx_hint('leer = Katalogprodukt') ?></label>
+    <div class="bx-field"><label>Kunde <?= bx_hint('nur bei exklusiven Produkten der Besitzer. Ohne Häkchen „exklusiv" bleibt das Produkt ein Katalogprodukt und der Kunde wird beim Speichern entfernt.') ?></label>
       <select name="kunde_id">
         <option value="">– Katalogprodukt –</option>
         <?php foreach ($kunden as $k): ?><option value="<?= $k['id'] ?>" <?= (int)($p['kunde_id']??0)===(int)$k['id']?'selected':'' ?>><?= h($k['firma']) ?></option><?php endforeach; ?>

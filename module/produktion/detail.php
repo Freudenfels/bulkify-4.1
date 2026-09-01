@@ -364,7 +364,11 @@ if ($auftBestellungen):
 </div>
 <?php endif; ?>
 
-<?php if ($bedarf || $kapNeed): ?>
+<?php
+// Rohstoffbedarf nur auf dem VOLLEN Weg zeigen. Bei Fremdproduktion (zugekaufte Bulkware) werden die
+// Rezeptur-Rohstoffe nie angefasst – sie hier als „fehlt" auszuweisen führt zu unnötigen Bestellungen.
+// Bereits entnommene Chargen bleiben immer sichtbar (Rückverfolgung), auch wenn der Weg später umgestellt wurde.
+if ($verbrauch || ($istVollerWeg && ($bedarf || $kapNeed))): ?>
 <div class="bx-panel">
   <?php if ($verbrauch): ?>
     <h2>Entnommene Materialien (FEFO)</h2>

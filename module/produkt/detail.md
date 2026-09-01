@@ -1,6 +1,6 @@
 # produkt/detail.php – Produkt anlegen & bearbeiten (mit Kalkulation)
 
-**Zweck:** Führt die Stammdaten zum verkaufbaren **Produkt (SKU)** zusammen: Rezeptur + Verpackung + Kunde. Rechnet Kosten pro Packung, Reichweite und die Tages-Deklaration – die Vorstufe zum Angebot.
+**Zweck:** Führt die Stammdaten zum verkaufbaren **Produkt** zusammen: **Rezeptur × Einheiten je Packung + Verpackung**. Kundenneutral – ein Kunde steht nur bei exklusiven Produkten dran. Rechnet Kosten pro Packung, Reichweite und die Tages-Deklaration – die Vorstufe zum Angebot.
 
 **Was passiert hier:**
 - **Speichern (POST):** schreibt das Produkt in `produkt` inkl. der **kompletten Verpackungs-Stückliste** (Primär `verpackung_id`, `verschluss_id`, `etikett_id`, `karton_id`, `beipack_id`); neu = INSERT + P-Nummer. Beim Anlegen ein Verlaufseintrag am Kunden (klickbar zum Produkt).
@@ -19,7 +19,7 @@
   - **Flüssig** → Füllvolumen (ml, = Einheiten) gegen Volumen der Flasche.
 - **Nährwerte pro Tagesdosis:** je Nährstoff die Menge × Verzehr/Tag und **% NRV** (z. B. bei 2 Kapseln/Tag: Magnesium 240 mg = 64 %).
 
-**Katalog / Exklusiv:** Ein Produkt liegt standardmäßig im **gemeinsamen Katalog** (Häkchen `exklusiv` aus). Exklusiv = nur für den gewählten Kunden sichtbar. Der Kunde ist also nur bei Exklusiv-Produkten relevant.
+**Katalog / Exklusiv:** Ein Produkt liegt standardmäßig im **gemeinsamen Katalog** (Häkchen `exklusiv` aus) und gehört niemandem. Exklusiv = nur für den gewählten Kunden sichtbar. Das Feld „Kunde" gilt **nur bei exklusiv** als Besitzer – ohne Häkchen wird `kunde_id` beim Speichern auf NULL gesetzt, sonst stünde in der Produktliste ein Kundenname bei einem Produkt, das jeder Kunde bestellen kann. Kundenspezifisch ist der **Preis** (Angebot + `kunden.rabatt_marge`), nicht das Produkt.
 
 **Preis-Matrix (Panel unten):** „Matrix neu berechnen" erzeugt über `produkt_matrix_generieren()` die VK-Tabelle **Packungsgröße × passende Verpackung × Bestellmenge** (Zeilen = Größe+Verpackung, Spalten = Bestellmengen; je Zelle VK + kleiner EK). Die Spalte **Größe** meint je Darreichungsform etwas anderes: Stückzahl bei Kapsel/Tablette/Softgel/Stick, **Gramm** bei Pulver/Granulat, **Milliliter** bei Flüssig (Beschriftung über `form_groessen_label()`). EK je Packung = Rezeptur + Leerkapsel (Kapsel), + Presshilfsstoffe (Tablette) bzw. + Trägerflüssigkeit (Flüssig); der Behälter kommt separat als eigene Angebotsposition. Basis-VK ohne Kundenrabatt – schnelle interne Sale-Auskunft. Voraussetzung: Rezeptur + hinterlegte Behälter-Fassung (Kapseln je Größe, Füllgewicht in g bzw. Fassungsvermögen in ml).
 
