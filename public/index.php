@@ -19,6 +19,14 @@ $routes = [
     'kunde'       => 'kunde/detail.php',
     'lieferanten'    => 'lieferant/liste.php',
     'lieferant'      => 'lieferant/detail.php',
+    // Lieferantenportal (eigener Zugang, kein interner Bereich)
+    'lieferant_login'        => 'lieferant/login.php',
+    'lieferant_einladung'    => 'lieferant/einladung.php',
+    'lieferant_portal'       => 'lieferant/portal.php',
+    'lieferant_bestellung'   => 'lieferant/bestellung.php',
+    'lieferant_bestellung_pdf'=> 'lieferant/bestellung_pdf.php',
+    'lieferant_anfrage'      => 'lieferant/anfrage.php',
+    'lieferant_profil'       => 'lieferant/profil.php',
     'partner'        => 'partner/liste.php',
     'partner_detail' => 'partner/detail.php',
     'rohstoffe'      => 'lager/rohstoffe_liste.php',
@@ -83,7 +91,7 @@ if ($p === 'autologin') {
 }
 
 // Öffentliche Routen (ohne internen Login): Login-Seite + Kundenportal (Token-basiert)
-$PUBLIC = ['login', 'portal', 'portal_dok'];   // portal_dok prüft Token + Freigabe selbst
+$PUBLIC = ['login', 'portal', 'portal_dok', 'lieferant_login', 'lieferant_einladung'];   // portal_dok prüft Token + Freigabe selbst
 
 // Nicht angemeldet -> zur Login-Seite (außer öffentliche Routen)
 if (!in_array($p, $PUBLIC, true) && !is_logged_in()) { header('Location: ?p=login'); exit; }
@@ -91,10 +99,17 @@ if (!in_array($p, $PUBLIC, true) && !is_logged_in()) { header('Location: ?p=logi
 // Produktionsmitarbeiter haben einen eigenen Bereich (Werk) statt des Verkaufs-Dashboards
 $istWerk = is_logged_in() && function_exists('ist_produktionsbereich') && ist_produktionsbereich();
 
-// Bereits angemeldet und ruft Login auf -> ins passende Dashboard
-if ($p === 'login' && is_logged_in()) { header('Location: ?p=' . ($istWerk ? 'werk' : 'dashboard')); exit; }
+// Lieferanten haben ein eigenes Portal und duerfen NICHT in den internen Bereich.
+$istLieferant = is_logged_in() && function_exists('ist_lieferant') && ist_lieferant();
+$LIEF_ROUTEN  = ['lieferant_portal', 'lieferant_bestellung', 'lieferant_bestellung_pdf', 'lieferant_anfrage', 'lieferant_profil', 'logout'];
+if ($istLieferant && !in_array($p, $LIEF_ROUTEN, true) && !in_array($p, ['lieferant_login','lieferant_einladung'], true)) {
+    header('Location: ?p=lieferant_portal'); exit;
+}
 
-if (!isset($routes[$p])) $p = is_logged_in() ? ($istWerk ? 'werk' : 'dashboard') : 'login';
+// Bereits angemeldet und ruft Login auf -> ins passende Dashboard
+if ($p === 'login' && is_logged_in()) { header('Location: ?p=' . ($istLieferant ? 'lieferant_portal' : ($istWerk ? 'werk' : 'dashboard'))); exit; }
+
+if (!isset($routes[$p])) $p = is_logged_in() ? ($istLieferant ? 'lieferant_portal' : ($istWerk ? 'werk' : 'dashboard')) : 'login';
 
 // Werk-Mitarbeiter: Verkaufs-Dashboard -> Werk-Cockpit
 if ($istWerk && $p === 'dashboard') { header('Location: ?p=werk'); exit; }

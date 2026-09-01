@@ -64,6 +64,12 @@ function route_rollen_map(): array {
         'einkauf'            => ['einkauf'],
         'bestellung'         => ['einkauf'],
         'bestellung_pdf'     => ['einkauf'],
+        // Lieferantenportal: die Seiten pruefen selbst, dass ein Lieferant angemeldet ist.
+        'lieferant_portal'        => ['*'],
+        'lieferant_bestellung'    => ['*'],
+        'lieferant_bestellung_pdf'=> ['*'],
+        'lieferant_anfrage'       => ['*'],
+        'lieferant_profil'        => ['*'],
         'rechnungen'         => ['finance'],
         'rechnung'           => ['finance'],
         'buchhaltung'        => ['finance'],
@@ -96,6 +102,25 @@ function has_role(string $r): bool {
 
 // Reiner Produktions-/Warenwirtschafts-Mitarbeiter: sieht den eigenen „Werk"-Bereich (Cockpit + Produktion + Lager + Entwicklung),
 // KEINE Verkaufs-/Finanzsicht. Wahr, wenn Produktionsrolle vorhanden und KEINE Admin-/Sales-/Finance-Rolle.
+// Lieferanten-Login: der Benutzer haengt an einem Lieferanten und sieht NUR dessen Portal.
+// Bewusst getrennt von den Team-Rollen – ein Lieferant darf nie im internen Bereich landen.
+function ist_lieferant(): bool {
+    $u = current_user();
+    return $u !== null && !empty($u['lieferant_id']);
+}
+function aktueller_lieferant_id(): int {
+    $u = current_user();
+    return (int)($u['lieferant_id'] ?? 0);
+}
+function aktueller_lieferant(): ?array {
+    $id = aktueller_lieferant_id();
+    return $id ? one("SELECT * FROM lieferanten WHERE id=?", [$id]) : null;
+}
+// Sprache des angemeldeten Lieferanten (de|en). Alles ausser 'de' laeuft auf Englisch.
+function lieferant_sprache(): string {
+    $l = aktueller_lieferant();
+    return strtolower((string)($l['sprache'] ?? 'de')) === 'de' ? 'de' : 'en';
+}
 function ist_produktionsbereich(): bool {
     $r = user_rollen();
     if (array_intersect($r, ['admin', 'sales', 'finance'])) return false;

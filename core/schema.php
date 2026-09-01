@@ -549,6 +549,64 @@ function init_schema(): void {
     ensure_column('bestellung', 'versandart', "VARCHAR(40) NULL");      // luft | see | kurier | spedition | post
     ensure_column('bestellung', 'tracking', "VARCHAR(120) NULL");
     ensure_column('bestellung', 'angekommen_am', "DATE NULL");          // tatsaechlicher Wareneingang (Team)
+
+    // --- Lieferantenzugang ---
+    // Kein Magic-Link wie beim Kunden: Lieferanten arbeiten laufend im Tool, deshalb ein echter
+    // Zugang mit Passwort. Eingeladen wird per Token-Link; das Passwort setzt der Lieferant selbst.
+    ensure_column('benutzer', 'lieferant_id', "INT NULL");   // gesetzt = Lieferanten-Login, kein Teamkonto
+    // Preisanfrage an einen Lieferanten. Entweder zu einem Lagerartikel (Rohstoff/Verpackung)
+    // oder als Freitext. Der Lieferant antwortet mit einem Angebot (siehe unten).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_anfrage (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nummer VARCHAR(20) NULL,
+        lieferant_id INT NOT NULL,
+        item_id INT NULL,                                   -- angefragter Artikel (optional)
+        betreff VARCHAR(190) NULL,                          -- Freitext, wenn kein Artikel
+        menge DECIMAL(14,3) NULL,                           -- angefragte Menge
+        einheit VARCHAR(20) NULL,
+        notiz TEXT NULL,
+        coa_gewuenscht TINYINT(1) NOT NULL DEFAULT 1,       -- CoA/Spec mitliefern
+        status VARCHAR(20) NOT NULL DEFAULT 'offen',        -- offen|beantwortet|geschlossen
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_lieferant (lieferant_id), KEY idx_item (item_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // Antwort des Lieferanten: Preis je Einheit, optional Mindestmenge und Lieferzeit.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_angebot (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        anfrage_id INT NOT NULL,
+        lieferant_id INT NOT NULL,
+        preis DECIMAL(12,4) NOT NULL DEFAULT 0,
+        einheit VARCHAR(20) NULL,
+        waehrung VARCHAR(5) NOT NULL DEFAULT 'EUR',
+        mindestmenge DECIMAL(14,3) NULL,
+        lieferzeit_tage INT NULL,
+        notiz TEXT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'offen',        -- offen|angenommen|abgelehnt
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_anfrage (anfrage_id),
+        KEY idx_lieferant (lieferant_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // Mengenstaffeln zum Angebot – daraus werden beim Annehmen die EK-Staffeln (lieferant_preis).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_angebot_staffel (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        angebot_id INT NOT NULL,
+        menge_ab DECIMAL(14,3) NOT NULL DEFAULT 0,
+        preis DECIMAL(12,4) NOT NULL DEFAULT 0,
+        KEY idx_angebot (angebot_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('lieferanten', 'sprache', "VARCHAR(5) NOT NULL DEFAULT 'de'");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_einladung (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        lieferant_id INT NOT NULL,
+        token VARCHAR(64) NOT NULL,
+        email VARCHAR(190) NULL,
+        eingeloest TINYINT(1) NOT NULL DEFAULT 0,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_token (token),
+        KEY idx_lieferant (lieferant_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     // charge: Bestand je Item als Chargen. Kategorie steuert die Strenge (Rohstoff -> Quarantäne, sonst frei).
     $pdo->exec("CREATE TABLE IF NOT EXISTS charge (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -2208,6 +2266,95 @@ function rohstoff_vk_bei_menge(int $item_id, float $menge): ?float {
 }
 
 
+// Preisanfrage an einen Lieferanten stellen.
+function lieferant_anfrage_stellen(int $lieferant_id, ?int $item_id, string $betreff, ?float $menge, string $einheit, string $notiz, bool $coa = true): int {
+    q("INSERT INTO lieferant_anfrage (nummer,lieferant_id,item_id,betreff,menge,einheit,notiz,coa_gewuenscht,status)
+       VALUES (?,?,?,?,?,?,?,?,'offen')",
+      [naechste_nummer('LA'), $lieferant_id, $item_id ?: null, mb_substr(trim($betreff), 0, 190) ?: null,
+       $menge && $menge > 0 ? $menge : null, mb_substr(trim($einheit), 0, 20) ?: null, trim($notiz) ?: null, $coa ? 1 : 0]);
+    $id = insert_id();
+    log_aktivitaet('lieferant', $lieferant_id, 'team', 'Preisanfrage ' . scalar("SELECT nummer FROM lieferant_anfrage WHERE id=?", [$id]) . ' gestellt.', 'anfrage', 'lieferant_anfrage', $id);
+    return $id;
+}
+
+// Angebot des Lieferanten speichern (einmal je Anfrage – erneutes Senden ueberschreibt).
+// $staffeln: Liste [menge_ab, preis]; leere Zeilen werden ignoriert.
+function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $preis, string $einheit,
+                                     ?float $mindestmenge, ?int $lieferzeit, string $notiz, array $staffeln): string {
+    $a = one("SELECT * FROM lieferant_anfrage WHERE id=? AND lieferant_id=?", [$anfrage_id, $lieferant_id]);
+    if (!$a) return 'Anfrage nicht gefunden.';
+    if ($preis <= 0) return 'Bitte einen Preis eintragen.';
+    $vorhanden = one("SELECT id FROM lieferant_angebot WHERE anfrage_id=?", [$anfrage_id]);
+    if ($vorhanden) {
+        q("UPDATE lieferant_angebot SET preis=?, einheit=?, mindestmenge=?, lieferzeit_tage=?, notiz=?, status='offen', angelegt=UTC_TIMESTAMP() WHERE id=?",
+          [$preis, $einheit ?: null, $mindestmenge, $lieferzeit, trim($notiz) ?: null, (int)$vorhanden['id']]);
+        $aid = (int)$vorhanden['id'];
+        q("DELETE FROM lieferant_angebot_staffel WHERE angebot_id=?", [$aid]);
+    } else {
+        q("INSERT INTO lieferant_angebot (anfrage_id,lieferant_id,preis,einheit,mindestmenge,lieferzeit_tage,notiz) VALUES (?,?,?,?,?,?,?)",
+          [$anfrage_id, $lieferant_id, $preis, $einheit ?: null, $mindestmenge, $lieferzeit, trim($notiz) ?: null]);
+        $aid = insert_id();
+    }
+    foreach ($staffeln as $s) {
+        $m = (float)($s[0] ?? 0); $pr = (float)($s[1] ?? 0);
+        if ($m <= 0 || $pr <= 0) continue;
+        q("INSERT INTO lieferant_angebot_staffel (angebot_id,menge_ab,preis) VALUES (?,?,?)", [$aid, $m, $pr]);
+    }
+    q("UPDATE lieferant_anfrage SET status='beantwortet' WHERE id=?", [$anfrage_id]);
+    log_aktivitaet('lieferant', $lieferant_id, 'lieferant', 'Angebot zu ' . $a['nummer'] . ' abgegeben: ' . number_format($preis, 4, ',', '.') . ' je ' . ($einheit ?: 'Einheit') . '.', 'angebot', 'lieferant_anfrage', $anfrage_id);
+    return '';
+}
+
+// Angebot annehmen: die Preise landen als EK-Staffeln am Artikel (lieferant_preis) – genau dort
+// rechnet die Kalkulation damit. Ohne Artikel an der Anfrage gibt es nichts zu uebernehmen.
+function lieferant_angebot_annehmen(int $angebot_id): string {
+    $an = one("SELECT ag.*, af.item_id, af.nummer AS anfr_nummer FROM lieferant_angebot ag
+               JOIN lieferant_anfrage af ON af.id=ag.anfrage_id WHERE ag.id=?", [$angebot_id]);
+    if (!$an) return 'Angebot nicht gefunden.';
+    if (!$an['item_id']) return 'Diese Anfrage hängt an keinem Artikel – die Preise lassen sich nicht automatisch übernehmen.';
+    $item = (int)$an['item_id']; $lief = (int)$an['lieferant_id'];
+    // Alte Staffeln dieses Lieferanten fuer diesen Artikel ersetzen – sonst mischen sich Staende.
+    q("DELETE FROM lieferant_preis WHERE item_id=? AND lieferant_id=?", [$item, $lief]);
+    $zeilen = all("SELECT menge_ab, preis FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [$angebot_id]);
+    if (!$zeilen) $zeilen = [['menge_ab' => (float)($an['mindestmenge'] ?: 0), 'preis' => (float)$an['preis']]];
+    foreach ($zeilen as $z)
+        q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand) VALUES (?,?,?,?,?,CURDATE())",
+          [$item, $lief, (float)$z['menge_ab'], (float)$z['preis'], (string)($an['waehrung'] ?: 'EUR')]);
+    q("UPDATE lieferant_angebot SET status='angenommen' WHERE id=?", [$angebot_id]);
+    q("UPDATE lieferant_anfrage SET status='geschlossen' WHERE id=?", [(int)$an['anfrage_id']]);
+    log_aktivitaet('lieferant', $lief, 'team', 'Angebot zu ' . $an['anfr_nummer'] . ' angenommen – ' . count($zeilen) . ' EK-Staffel(n) übernommen.', 'angebot', 'item', $item);
+    return '';
+}
+// Einladung fuer einen Lieferanten erzeugen (oder die offene wiederverwenden) und den Link liefern.
+function lieferant_einladung(int $lieferant_id, string $basis_url = ''): array {
+    $offen = one("SELECT * FROM lieferant_einladung WHERE lieferant_id=? AND eingeloest=0 ORDER BY id DESC LIMIT 1", [$lieferant_id]);
+    if (!$offen) {
+        $token = bin2hex(random_bytes(24));
+        $mail  = (string) scalar("SELECT email FROM lieferanten WHERE id=?", [$lieferant_id]);
+        q("INSERT INTO lieferant_einladung (lieferant_id, token, email) VALUES (?,?,?)", [$lieferant_id, $token, $mail ?: null]);
+        $offen = one("SELECT * FROM lieferant_einladung WHERE token=?", [$token]);
+    }
+    $offen['link'] = rtrim($basis_url, '/') . '/?p=lieferant_einladung&token=' . $offen['token'];
+    return $offen;
+}
+// Hat der Lieferant schon einen Zugang?
+function lieferant_hat_zugang(int $lieferant_id): bool {
+    return (int) scalar("SELECT COUNT(*) FROM benutzer WHERE lieferant_id=? AND aktiv=1", [$lieferant_id]) > 0;
+}
+// Zugang aus einer Einladung anlegen. Rueckgabe: '' = angelegt, sonst der Grund.
+function lieferant_zugang_anlegen(string $token, string $name, string $email, string $pass): string {
+    $inv = one("SELECT * FROM lieferant_einladung WHERE token=? AND eingeloest=0", [$token]);
+    if (!$inv) return 'Diese Einladung ist nicht mehr gültig.';
+    $email = trim(mb_strtolower($email));
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return 'Bitte eine gültige E-Mail-Adresse angeben.';
+    if (mb_strlen($pass) < 8) return 'Das Passwort muss mindestens 8 Zeichen haben.';
+    if (scalar("SELECT id FROM benutzer WHERE email=?", [$email])) return 'Für diese E-Mail gibt es bereits einen Zugang.';
+    q("INSERT INTO benutzer (name,email,pass_hash,rollen,aktiv,lieferant_id) VALUES (?,?,?,?,1,?)",
+      [mb_substr(trim($name), 0, 190) ?: 'Lieferant', $email, password_hash($pass, PASSWORD_DEFAULT), 'lieferant', (int)$inv['lieferant_id']]);
+    q("UPDATE lieferant_einladung SET eingeloest=1 WHERE id=?", [(int)$inv['id']]);
+    log_aktivitaet('lieferant', (int)$inv['lieferant_id'], 'lieferant', 'Zugang zum Lieferantenportal angelegt (' . $email . ').', 'lieferant');
+    return '';
+}
 // Stationen einer Bestellung beim Lieferanten – in dieser Reihenfolge, kumulativ.
 function bestellung_stationen(): array {
     return ['angenommen' => 'Auftrag angenommen', 'produktion' => 'in Produktion',
@@ -2232,13 +2379,13 @@ function versandarten(): array {
 }
 // Station setzen – kumulativ bis zum Ziel. "versendet" nur mit vollstaendigen Versanddaten.
 // Rueckgabe: '' = gesetzt, sonst der Grund, warum nicht.
-function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $wer = null): string {
+function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $wer = null, bool $en = false): string {
     $b = one("SELECT * FROM bestellung WHERE id=?", [$bestellung_id]);
-    if (!$b) return 'Bestellung nicht gefunden.';
-    if ((int)$b['bestaetigt'] !== 1) return 'Bitte zuerst die Bestellung mit einem geplanten Termin bestätigen.';
-    if (!array_key_exists($ziel, bestellung_stationen())) return 'Unbekannte Station.';
+    if (!$b) return $en ? 'Order not found.' : 'Bestellung nicht gefunden.';
+    if ((int)$b['bestaetigt'] !== 1) return $en ? 'Please confirm the order with a planned date first.' : 'Bitte zuerst die Bestellung mit einem geplanten Termin bestätigen.';
+    if (!array_key_exists($ziel, bestellung_stationen())) return $en ? 'Unknown step.' : 'Unbekannte Station.';
     if ($ziel === 'versendet' && (trim((string)$b['versandanbieter']) === '' || trim((string)$b['versandart']) === '' || trim((string)$b['tracking']) === ''))
-        return 'Für „versendet" fehlen Versandanbieter, Versandart oder Sendungsnummer.';
+        return $en ? 'For "shipped" the carrier, shipping method or tracking number is missing.' : 'Für „versendet" fehlen Versandanbieter, Versandart oder Sendungsnummer.';
     q("UPDATE bestellung SET station=? WHERE id=?", [$ziel, $bestellung_id]);
     // Der interne Status laeuft mit: sobald der Lieferant produziert, ist die Bestellung "bestellt".
     if ((string)$b['status'] === 'offen') q("UPDATE bestellung SET status='bestellt' WHERE id=?", [$bestellung_id]);
@@ -2247,11 +2394,11 @@ function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $we
     return '';
 }
 // Bestellung durch den Lieferanten bestaetigen (mit zugesagtem Termin).
-function bestellung_bestaetigen(int $bestellung_id, string $eta, string $wer): string {
+function bestellung_bestaetigen(int $bestellung_id, string $eta, string $wer, bool $en = false): string {
     $b = one("SELECT id, nummer, bestaetigt, lieferant_id FROM bestellung WHERE id=?", [$bestellung_id]);
-    if (!$b) return 'Bestellung nicht gefunden.';
+    if (!$b) return $en ? 'Order not found.' : 'Bestellung nicht gefunden.';
     if ((int)$b['bestaetigt'] === 1) return '';                     // schon bestaetigt: nichts tun
-    if (trim($eta) === '' || !strtotime($eta)) return 'Bitte einen geplanten Liefertermin angeben.';
+    if (trim($eta) === '' || !strtotime($eta)) return $en ? 'Please state a planned delivery date.' : 'Bitte einen geplanten Liefertermin angeben.';
     q("UPDATE bestellung SET bestaetigt=1, bestaetigt_am=UTC_TIMESTAMP(), bestaetigt_von=?, eta_geplant=?, station=?, status=IF(status='offen','bestellt',status) WHERE id=?",
       [mb_substr(trim($wer), 0, 190), date('Y-m-d', strtotime($eta)), 'angenommen', $bestellung_id]);
     if ($b['lieferant_id']) log_aktivitaet('lieferant', (int)$b['lieferant_id'], 'lieferant',

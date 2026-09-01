@@ -10,6 +10,23 @@ $KATS = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrau
 $FORMEN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 
 $fehler = '';
+// Zugang und Preisanfragen – die eigenen POST-Wege, damit das Stammdaten-Formular unberuehrt bleibt.
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einladen') {
+    lieferant_einladung((int)$id);
+    header('Location: ?p=lieferant&id=' . (int)$id . '&eingeladen=1'); exit;
+}
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage') {
+    lieferant_anfrage_stellen((int)$id,
+        ($_POST['item_id'] ?? '') !== '' ? (int)$_POST['item_id'] : null,
+        (string)($_POST['betreff'] ?? ''),
+        ($_POST['menge'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$_POST['menge']) : null,
+        (string)($_POST['einheit'] ?? ''), (string)($_POST['notiz'] ?? ''), isset($_POST['coa']));
+    header('Location: ?p=lieferant&id=' . (int)$id . '&angefragt=1'); exit;
+}
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_annehmen') {
+    $f = lieferant_angebot_annehmen((int)($_POST['angebot_id'] ?? 0));
+    header('Location: ?p=lieferant&id=' . (int)$id . ($f === '' ? '&uebernommen=1' : '&fehler=' . urlencode($f))); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $f = fn($k) => trim($_POST[$k] ?? '');
     if ($f('firma') === '') {
@@ -285,5 +302,87 @@ if (!$neu) {
   }
 })();
 </script>
+<?php if (!$neu):
+  // --- Zugang zum Lieferantenportal ---
+  $hatZugang  = lieferant_hat_zugang((int)$id);
+  $offeneEinl = one("SELECT * FROM lieferant_einladung WHERE lieferant_id=? AND eingeloest=0 ORDER BY id DESC LIMIT 1", [(int)$id]);
+  $basis = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Zugang zum Lieferantenportal</h2>
+  <?php if (isset($_GET['eingeladen'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Einladungslink erzeugt – bitte an den Lieferanten schicken.</div><?php endif; ?>
+  <?php if ($hatZugang): ?>
+    <p class="muted" style="margin-top:0">Dieser Lieferant hat einen Zugang und kann Bestellungen selbst bestätigen, den Fortschritt pflegen und Angebote abgeben.</p>
+    <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Benutzer</th><th>E-Mail</th><th>Letzter Login</th></tr></thead><tbody>
+      <?php foreach (all("SELECT name,email,letzter_login FROM benutzer WHERE lieferant_id=? AND aktiv=1", [(int)$id]) as $bu): ?>
+        <tr><td><?= h($bu['name']) ?></td><td><?= h($bu['email']) ?></td>
+            <td><?= $bu['letzter_login'] ? h(fmt_zeit($bu['letzter_login'])) . ' Uhr' : '<span class="muted">noch nie</span>' ?></td></tr>
+      <?php endforeach; ?>
+    </tbody></table></div>
+  <?php else: ?>
+    <p class="muted" style="margin-top:0">Noch kein Zugang. Erzeuge einen Einladungslink und schicke ihn an <strong><?= h($l['email'] ?: 'die hinterlegte E-Mail') ?></strong>. Der Lieferant setzt sein Passwort selbst; der Link gilt einmal.</p>
+    <?php if ($offeneEinl): ?>
+      <div class="bx-field"><label>Einladungslink (offen)</label>
+        <input type="text" readonly onclick="this.select()" value="<?= h($basis . '/?p=lieferant_einladung&token=' . $offeneEinl['token']) ?>" style="width:100%"></div>
+    <?php endif; ?>
+    <form method="post" style="margin:0"><input type="hidden" name="aktion" value="einladen">
+      <button class="btn btn-primary" type="submit"><?= $offeneEinl ? 'Neuen Link erzeugen' : 'Einladungslink erzeugen' ?></button></form>
+  <?php endif; ?>
+</div>
+
+<div class="bx-panel">
+  <h2 style="margin-top:0">Preisanfragen</h2>
+  <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Anfrage gestellt – der Lieferant sieht sie in seinem Portal.</div><?php endif; ?>
+  <?php if (isset($_GET['uebernommen'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Angebot angenommen – die Preise stehen jetzt als EK-Staffeln am Artikel.</div><?php endif; ?>
+  <?php if (isset($_GET['fehler'])): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h((string)$_GET['fehler']) ?></div><?php endif; ?>
+  <form method="post" class="bx-grid" style="margin-bottom:14px">
+    <input type="hidden" name="aktion" value="anfrage">
+    <div class="bx-field"><label>Artikel <?= bx_hint('Mit Artikel landen die Preise beim Annehmen automatisch als EK-Staffeln dort. Ohne Artikel ist es eine Freitext-Anfrage.') ?></label>
+      <select name="item_id"><option value="">– Freitext –</option>
+        <?php foreach (all("SELECT id,name,einheit FROM item WHERE kategorie IN ('rohstoff','verpackung','verbrauch') AND gesperrt=0 ORDER BY name") as $it): ?>
+          <option value="<?= (int)$it['id'] ?>"><?= h($it['name']) ?> (<?= h($it['einheit']) ?>)</option>
+        <?php endforeach; ?></select></div>
+    <div class="bx-field"><label>Betreff (bei Freitext)</label><input type="text" name="betreff" maxlength="190"></div>
+    <div class="bx-field"><label>Menge</label><input type="text" name="menge" placeholder="z. B. 500"></div>
+    <div class="bx-field"><label>Einheit</label><input type="text" name="einheit" placeholder="kg"></div>
+    <div class="bx-field" style="grid-column:1/-1"><label>Notiz an den Lieferanten</label><input type="text" name="notiz" maxlength="500"></div>
+    <div class="bx-field"><label>CoA / Spezifikation</label>
+      <div class="bx-check" style="padding-top:8px"><input type="checkbox" name="coa" id="anf_coa" value="1" checked><label for="anf_coa" style="margin:0">mit anfragen</label></div></div>
+    <div class="bx-field" style="align-self:end"><button class="btn btn-primary" type="submit">Anfrage stellen</button></div>
+  </form>
+
+  <?php $anfr = all("SELECT af.*, i.name AS item_name, ag.id AS ang_id, ag.preis, ag.einheit AS ang_einheit,
+                            ag.mindestmenge, ag.lieferzeit_tage, ag.status AS ang_status
+                     FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
+                     LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=af.id
+                     WHERE af.lieferant_id=? ORDER BY af.angelegt DESC", [(int)$id]);
+  $zahl = fn($x, $n2) => $x === null || $x === '' ? '–' : rtrim(rtrim(number_format((float)$x, $n2, ',', '.'), '0'), ',');
+  if (!$anfr): ?><div class="muted">Noch keine Anfragen an diesen Lieferanten.</div>
+  <?php else: ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Nummer</th><th>Artikel / Betreff</th><th class="bx-num">Angefragt</th><th>Antwort</th><th>Status</th><th></th></tr></thead>
+    <tbody><?php foreach ($anfr as $r): ?>
+      <tr><td><?= h($r['nummer']) ?></td>
+          <td><?= h(($r['item_name'] ?? '') !== '' ? $r['item_name'] : ($r['betreff'] ?? '–')) ?></td>
+          <td class="bx-num"><?= $r['menge'] ? $zahl($r['menge'], 3) . ' ' . h($r['einheit'] ?? '') : '–' ?></td>
+          <td><?php if ($r['ang_id']): ?><strong><?= $zahl($r['preis'], 4) ?> €</strong> / <?= h($r['ang_einheit'] ?: '–') ?>
+                <div class="muted" style="font-size:12px">
+                  <?= $r['mindestmenge'] ? 'MOQ ' . $zahl($r['mindestmenge'], 3) . ' · ' : '' ?>
+                  <?= $r['lieferzeit_tage'] ? (int)$r['lieferzeit_tage'] . ' Tage' : '' ?>
+                  <?php $stf = all("SELECT menge_ab,preis FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$r['ang_id']]);
+                        if ($stf) { $tx = []; foreach ($stf as $s) $tx[] = $zahl($s['menge_ab'], 0) . '+: ' . $zahl($s['preis'], 4) . ' €'; echo '<br>' . h(implode(' · ', $tx)); } ?>
+                </div>
+              <?php else: ?><span class="muted">–</span><?php endif; ?></td>
+          <td><?= $r['status'] === 'offen' ? bx_badge('offen', 'info') : ($r['status'] === 'beantwortet' ? bx_badge('beantwortet', 'warn') : bx_badge('übernommen', 'ok')) ?></td>
+          <td class="bx-num"><?php if ($r['ang_id'] && $r['ang_status'] !== 'angenommen' && $r['item_id']): ?>
+                <form method="post" style="margin:0" onsubmit="return confirm('Angebot annehmen? Die Preise ersetzen die bisherigen EK-Staffeln dieses Lieferanten für den Artikel.');">
+                  <input type="hidden" name="aktion" value="angebot_annehmen"><input type="hidden" name="angebot_id" value="<?= (int)$r['ang_id'] ?>">
+                  <button class="btn btn-primary btn-sm" type="submit">Preise übernehmen</button></form>
+              <?php endif; ?></td></tr>
+    <?php endforeach; ?></tbody>
+  </table></div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 <?php
 render_footer();
