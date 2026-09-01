@@ -34,6 +34,8 @@ Anfrage-Formulare (Gruppe „Anfragen"): **Rezeptur anfragen** (mit Live-Kapsel-
 
 **Angebots-PDF bei mehreren Varianten:** Jede Gruppe ist eine **Wahl**, keine Bestellzeile. Das PDF listet deshalb als Positionen nur die erste Variante (plus gruppenlose Zuschläge) und stellt alle Varianten in „Preis je fertiges Produkt" gegenüber – sonst stünde unter dem Angebot eine Summe über Varianten, die niemand zusammen bestellt.
 
+Der Aufbau des PDFs liegt in `core/pdf_angebot.php` – dieselbe Funktion nutzt der interne Bereich (`?p=angebot_pdf&id=…`). Das Portal prüft nur, dass das Angebot dem Kunden gehört.
+
 **Absage sichtbar:** Eine abgesagte Anfrage zeigt in „Meine Anfragen" das Kennzeichen **nicht machbar** und darunter die Begründung aus `portal_anfrage.absage_grund` – ein reines „abgelehnt" ließe den Kunden ratlos zurück.
 
 **Verbindlich annehmen – Dialog mit Unterschrift:** Rezeptur *und* Angebot werden nur über einen Bestätigungs-Dialog angenommen (`bxBestaetigen()`, ein Dialog für alle Fälle). Er zeigt, **was** angenommen wird (Rezeptur-Nummer bzw. Größe, Verpackung, Packungszahl, Preis je Packung und Gesamt), dazu die Folgen im Klartext – bei der Rezeptur „wird eingefroren und kann nicht mehr geändert werden", beim Angebot „Stornierung nach der Rohstoffbestellung nicht mehr möglich". Pflicht sind ein **Haken** und der **Name**; beides wird serverseitig geprüft (`$freigabeName()`) und mit Zeitpunkt gespeichert. Ohne beides passiert nichts – auch nicht ohne JavaScript.

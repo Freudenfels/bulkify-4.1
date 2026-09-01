@@ -150,6 +150,7 @@ $st          = (string)($a['status'] ?? 'offen');
 $kannSenden  = !$neu && $st === 'offen';
 $kannZurueck = !$neu && $st === 'gesendet';
 $kopfBtn = bx_btn('Zurück zur Liste', '?p=angebote', 'ghost');
+if (!$neu) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Angebot als PDF ansehen – genau das, was der Kunde bekommt" href="?p=angebot_pdf&id=' . (int)$id . '">&#8681; PDF</a>' . $kopfBtn;
 if ($kannZurueck) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot zurückziehen? Es verschwindet beim Kunden und ist hier wieder bearbeitbar.\');">'
     . '<input type="hidden" name="aktion" value="zurueckziehen">'
     . '<button class="btn btn-ghost" type="submit">Zurückziehen</button></form>' . $kopfBtn;
@@ -338,7 +339,7 @@ if (!$neu):
   <div class="bx-row" style="justify-content:space-between;align-items:center">
     <h2 style="margin:0">Positionen <span class="muted" style="font-weight:400;font-size:13px"><?= $ueberschrieben ? 'manuell überschrieben' : 'automatisch berechnet' ?></span></h2>
     <div class="bx-row" style="gap:8px">
-      <?php if ($ktok): ?><a class="btn btn-ghost btn-sm" target="_blank" href="?p=portal&token=<?= h($ktok) ?>&v=angebot_pdf&aid=<?= (int)$id ?>">PDF ansehen</a><?php endif; ?>
+      <a class="btn btn-ghost btn-sm" target="_blank" href="?p=angebot_pdf&id=<?= (int)$id ?>">&#8681; PDF ansehen</a>
       <?php if ($ueberschrieben): ?>
         <form method="post" style="margin:0" onsubmit="return confirm('Positionen auf die automatische Berechnung zurücksetzen? Manuelle Änderungen gehen verloren.');"><input type="hidden" name="aktion" value="pos_reset"><button class="btn btn-ghost btn-sm" type="submit">Automatik wiederherstellen</button></form>
       <?php endif; ?>

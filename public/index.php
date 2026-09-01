@@ -36,6 +36,7 @@ $routes = [
     'produkt'         => 'produkt/detail.php',
     'angebote'        => 'angebot/liste.php',
     'angebot'         => 'angebot/detail.php',
+    'angebot_pdf'     => 'angebot/pdf.php',
     'auftraege'       => 'auftrag/liste.php',
     'auftrag'         => 'auftrag/detail.php',
     'rechnungen'      => 'beleg/rechnungen_liste.php',

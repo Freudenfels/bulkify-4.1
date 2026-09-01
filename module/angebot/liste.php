@@ -40,6 +40,9 @@ $cols = [
     'produkt_name'   => ['label' => 'Produkt', 'sort' => true, 'render' => fn($r)=> $dash($r['produkt_name'])],
     'staffel_anzahl' => ['label' => 'Staffeln', 'sort' => true, 'num' => true],
     'status'         => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
+    'pdf'            => ['label' => '', 'render' => fn($r) => $r['kunde_id']
+        ? '<a href="?p=angebot_pdf&id=' . (int)$r['id'] . '" target="_blank" title="Angebot als PDF" onclick="event.stopPropagation()" style="font-size:17px;line-height:1">&#8681;</a>'
+        : '<span class="muted" title="Kein Kunde hinterlegt">–</span>'],
 ];
 
 render_header('angebote', 'Angebote');

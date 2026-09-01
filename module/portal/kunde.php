@@ -613,82 +613,12 @@ $atab = $_GET['atab'] ?? 'alle'; if (!isset($anfTabs[$atab])) $atab = 'alle';
 // --- Angebot als PDF (bulkify-Belegvorlage, positionsbasiert) ---
 if (($_GET['v'] ?? '') === 'angebot_pdf') {
     $aid = (int)($_GET['aid'] ?? 0);
+    // Nur eigene Angebote – die Liste ist bereits auf den Kunden gefiltert.
     $a = null; foreach ($angebote as $x) if ((int)$x['id'] === $aid) { $a = $x; break; }
     if (!$a) { http_response_code(404); echo 'Angebot nicht gefunden.'; exit; }
-    require_once BX_ROOT . '/core/pdf_beleg.php';
-    $inf = $angInfo[$a['id']];
-    $istFuell = $inf['istFuell'];
-
-    // Angefragte Konfiguration (aus der Anfrage) bestimmen
-    $anf = $a['anfrage_id'] ? one("SELECT nummer, stueck, fuellmenge_g, verpackung_typ, menge FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']]) : null;
-    $featStk = $istFuell ? (float)($anf['fuellmenge_g'] ?? 0) : (int)($anf['stueck'] ?? 0);
-    if (!$featStk || !isset($inf['matrix'][$featStk])) { foreach (std_groessen_fuer($inf['form']) as $s2) { if (isset($inf['matrix'][$s2])) { $featStk = $s2; break; } } }
-    $featMenge = (int)($anf['menge'] ?? 0);
-    if (!$featMenge || !isset($inf['matrix'][$featStk][$featMenge])) {
-        $featMenge = 0; foreach ($std_menge_ang as $bm2) { if (isset($inf['matrix'][$featStk][$bm2])) { $featMenge = $bm2; break; } }
-    }
-    $preisPkg = ($featStk && $featMenge && isset($inf['matrix'][$featStk][$featMenge])) ? vk_fuer_kunde($inf['matrix'][$featStk][$featMenge]['vk'], $kid) : 0.0;
-    $stkLabel = form_groessen_label($inf['form'], (float)$featStk);
-    $verpText = $inf['verp'] ?: ($anf && $anf['verpackung_typ'] ? ['glas'=>'Glas','pet'=>'PET-Dose','pla'=>'PLA-Becher','beutel'=>'Standbodenbeutel','stick'=>'Stick','blister'=>'Blister'][$anf['verpackung_typ']] ?? $anf['verpackung_typ'] : '');
-
-    // USt: Inland -> Satz aus Einstellungen, sonst 0 % (EU-/Export-Lieferung)
-    $land = strtoupper(trim((string)($k['land'] ?? '')));
-    $istInland = ($land === '' || in_array($land, ['DE','D','DEUTSCHLAND','GERMANY'], true));
-    $ustSatz = $istInland ? (float) meta_get('ust_inland', 19) : 0.0;
-
-    // Positionen (Hybrid): gespeicherte Overrides haben Vorrang, sonst automatisch (Herstellung + Verpackung extra)
-    $positionen = angebot_positionen($aid);
-
-    // Staffel „Preis je fertiges Produkt" nur bei automatischer (nicht manuell zusammengestellter) Kalkulation
-    $produktStaffel = angebot_hat_positionen($aid) ? [] : angebot_staffel_gruppen($a);
-    // Angebot aus Optionen (aus einer Rezeptur gebaut): jede Gruppe ist eine WAHL, keine Bestellzeile.
-    // Ohne diese Trennung stünde unter dem PDF eine Summe über alle Varianten zusammen – die
-    // bestellt der Kunde nie. Die Positionen zeigen deshalb die erste Variante, die Staffel alle.
-    $optPdf = angebot_optionen($aid);
-    if ($optPdf['optionen']) {
-        $produktStaffel = angebot_staffel_aus_optionen($optPdf['optionen']);
-        if (count($optPdf['optionen']) > 1) {
-            $ersteG = $optPdf['optionen'][0]['gruppe'];
-            $positionen = array_values(array_filter($positionen,
-                fn($pp) => trim((string)($pp['gruppe'] ?? '')) === $ersteG || trim((string)($pp['gruppe'] ?? '')) === ''));
-        }
-    }
-
-    // Begleittext
-    $teamNote = '';
-    if (preg_match('/—\s*(.+)$/u', (string)$a['notiz'], $mm)) $teamNote = trim($mm[1]);
-    $pz = rtrim(rtrim(number_format((float)$inf['prodzeit'],1,',','.'),'0'),',');
-    $kopf = 'Vielen Dank für Ihre Anfrage. Gerne bieten wir Ihnen an:'
-          . ($teamNote !== '' ? "\n" . $teamNote : '')
-          . "\nProduktionszeit: ca. " . $pz . ' Wochen (unverbindlich).';
-
-    $adr = trim(($k['strasse'] ?? '') . ' ' . ($k['hausnummer'] ?? '')) . "\n" . trim(($k['plz'] ?? '') . ' ' . ($k['ort'] ?? ''));
-    if (!$istInland && !empty($k['land'])) $adr .= "\n" . $k['land'];
-    $zaMap = ['vorkasse'=>'Vorkasse','rechnung'=>'Rechnung','lastschrift'=>'Lastschrift','paypal'=>'PayPal'];
-
-    $pdf = build_beleg_pdf([
-        'belegart_label'   => 'Angebot',
-        'nummer'           => $a['nummer'],
-        'empfaenger'       => $k['firma'],
-        'adresse'          => $adr,
-        'datum'            => $a['angelegt'],
-        'gueltig_bis'      => $a['gueltig_bis'] ?: date('Y-m-d', strtotime($a['angelegt'] . ' +' . ((int)meta_get('angebot_gueltig_tage',14)) . ' days')),
-        'kundennummer'     => $k['kundennummer'] ?? '',
-        'version'          => 1,
-        'bezug'            => $anf ? ('Anfrage ' . $anf['nummer']) : '',
-        'bearbeiter'       => '',
-        'bearbeiter_email' => '',
-        'ust_id'           => $k['ust_id'] ?? '',
-        'kopf_text'        => $kopf,
-        'zahlungsart_label'=> $zaMap[$k['zahlungsart'] ?? 'vorkasse'] ?? ucfirst((string)($k['zahlungsart'] ?? 'Vorkasse')),
-        'hinweis'          => '',
-    ], $positionen, $produktStaffel);
-
-    header('Content-Type: application/pdf');
-    header('Content-Disposition: inline; filename="Angebot_' . preg_replace('/[^A-Za-z0-9_-]/', '', (string)$a['nummer']) . '.pdf"');
-    header('Content-Length: ' . strlen($pdf));
-    header('Cache-Control: private, max-age=0, must-revalidate');
-    echo $pdf; exit;
+    require_once BX_ROOT . '/core/pdf_angebot.php';
+    if (!angebot_pdf_ausliefern($aid, (string)$a['nummer'])) { http_response_code(404); echo 'Angebot nicht gefunden.'; }
+    exit;
 }
 
 // --- Verpackungs-Konformität (PPWR) je Bestellung als PDF ---

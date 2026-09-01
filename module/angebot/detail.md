@@ -14,6 +14,9 @@ Die Etiketten-Auswahl zeigt nur, was auf die gewählte Verpackung passt (`etiket
 ## Kopfdaten eingeklappt · kein Sprung an den Seitenanfang
 Die **Kopfdaten** sind ein zugeklapptes `<details>` – sie werden selten gebraucht; bei einem neuen Angebot stehen sie offen. Nach **„+ Rezeptur/Rohstoff/Dienstleistung hinzufügen"** landet man wieder bei den Positionen (`#positionen`) statt am Seitenanfang. **Gültig bis** ist mit heute + 14 Tagen vorbelegt (`angebot_gueltig_tage`); beim Senden wird ein leeres oder abgelaufenes Datum aufgefrischt.
 
+## PDF ansehen
+In der Kopfzeile steht **⇩ PDF** (`?p=angebot_pdf&id=…`, neuer Tab) – dasselbe PDF, das der Kunde bekommt. Es wird **nicht gespeichert**, sondern bei jedem Aufruf aus dem aktuellen Stand gebaut; nach einer Änderung an den Positionen einfach neu öffnen. Ohne Kunde in den Kopfdaten gibt es keinen Empfänger und damit kein PDF – dann kommt ein Hinweis statt eines leeren Belegs. In der **Angebotsliste** steht dasselbe als Download-Icon in der letzten Spalte. Siehe `core/pdf_angebot.md`.
+
 ## Positionen: löschen heißt löschen
 Das **×** an einer Zeile entfernt sie und **speichert sofort**. Vorher verschwand die Zeile nur auf dem Bildschirm – wer danach eine Position hinzufügte, bekam die vermeintlich gelöschte aus der Datenbank zurück. Beim Speichern reisen `p_rez[]`, `p_stk[]`, `p_vid[]` als versteckte Felder mit, damit die Konfiguration (Rezeptur, Größe je Packung, Behälter) erhalten bleibt; ohne sie war ein einmal gespeichertes Angebot für den Kunden nicht mehr annehmbar. Das Speichern läuft in einer **Transaktion** – bricht eine Zeile ab, bleibt das Angebot vollständig statt halb leer.
 
