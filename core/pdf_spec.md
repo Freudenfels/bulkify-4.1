@@ -14,6 +14,9 @@ Die Unterlagen der Vorlieferanten kommen auf **deren** Briefpapier. Die geben wi
 - Intern: `?p=spec_bulkify&id=<item_id>` und `?p=coa_bulkify&id=<charge_id>` (Rollen production, einkauf, labor, admin). Der CoA-Knopf steht in der Chargen-Tabelle des Rohstoffs.
 - Kundenportal: `?p=portal&token=…&v=spec_pdf&rid=<item_id>` – Panel **Spezifikation** am Rohstoff. Steht immer zur Verfügung, unabhängig von der Dokumentenfreigabe.
 
+## Werte aus dem Lieferanten-PDF
+Im Panel **Analysenwerte je Charge** gibt es **Werte vorschlagen**: Das hochgeladene Lieferanten-PDF wird gelesen und die gefundenen Parameter ins Formular geschrieben (`core/coa_lesen.md`). Gespeichert wird erst nach Prüfung. Bei einem **Scan** kommt kein Text heraus – dann sagt die Oberfläche das und man trägt von Hand ein.
+
 ## Verwandt
 - `core/dokument_ui.php` – die Ablage der **Lieferantenunterlagen** (intern; die Freigabe fürs Portal gibt das Original weiter und ist nur für Ausnahmen gedacht).
 - `module/lager/spec_bulkify.md` – die interne Route.

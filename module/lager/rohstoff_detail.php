@@ -23,6 +23,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis
 }
 // Analysewerte einer Charge erfassen – daraus entsteht UNSER Analysenzertifikat (CoA).
 // Die Unterlagen des Vorlieferanten sind die Quelle; weitergegeben wird das bulkify-Dokument.
+// Werte aus einem hochgeladenen Lieferanten-PDF VORSCHLAGEN (nicht speichern).
+// Der Vorschlag landet im Formular und muss geprueft werden – ein falscher Wert auf einem
+// Analysenzertifikat, das an den Kunden geht, waere schlimmer als ein leeres Feld.
+$anVorschlag = null; $anVorschlagFehler = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'analyse_lesen' && !$neu) {
+    require_once BX_ROOT . '/core/coa_lesen.php';
+    $cid = (int)($_POST['charge_id'] ?? 0);
+    $did = (int)($_POST['dok_id'] ?? 0);
+    $d = $did ? one("SELECT datei FROM dokument WHERE id=? AND objekt_typ='item' AND objekt_id=?", [$did, (int)$id]) : null;
+    if (!$d) {
+        $anVorschlagFehler = 'Dokument nicht gefunden.';
+    } else {
+        $r = coa_werte_lesen(BX_UPLOADS . '/' . basename((string)$d['datei']));
+        if (!$r['lesbar']) {
+            $anVorschlagFehler = 'Aus diesem PDF laesst sich kein Text lesen – vermutlich ein Scan. Bitte die Werte von Hand eintragen.';
+        } elseif (!$r['zeilen']) {
+            $anVorschlagFehler = 'Text gelesen, aber keine bekannten Parameter gefunden. Bitte von Hand eintragen.';
+        } else {
+            $anVorschlag = ['charge_id' => $cid, 'zeilen' => $r['zeilen'], 'kopf' => $r['kopf']];
+        }
+    }
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'analyse_save' && !$neu) {
     $cid = (int)($_POST['charge_id'] ?? 0);
     if ($cid && scalar("SELECT id FROM charge WHERE id=? AND item_id=?", [$cid, (int)$id])) {
@@ -369,6 +391,19 @@ if (!$neu) {
       <div class="bx-panel">
         <h2 style="margin-top:0">Analysenwerte je Charge <?= bx_hint('Aus dem CoA des Lieferanten übertragen. Daraus entsteht unser Analysenzertifikat im bulkify-Layout – das Original des Lieferanten geht nicht an den Kunden.') ?></h2>
         <?php if (isset($_GET['analyse'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Analysenwerte gespeichert.</div><?php endif; ?>
+        <?php if ($anVorschlagFehler): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h($anVorschlagFehler) ?></div><?php endif; ?>
+        <?php if ($anVorschlag): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Vorschlag aus dem PDF eingetragen – bitte prüfen und dann speichern.<?= !empty($anVorschlag['kopf']) ? ' Gelesen: ' . h(implode(' · ', array_map(fn($kk, $vv) => $kk . ' ' . $vv, array_keys($anVorschlag['kopf']), $anVorschlag['kopf']))) : '' ?></div><?php endif; ?>
+        <?php $liefDoks = all("SELECT id, typ, datei_orig FROM dokument WHERE objekt_typ='item' AND objekt_id=? ORDER BY id DESC", [(int)$id]);
+              if ($liefDoks): ?>
+        <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+          <input type="hidden" name="aktion" value="analyse_lesen">
+          <input type="hidden" name="charge_id" id="an_charge_lesen" value="<?= (int)($charges[0]['id'] ?? 0) ?>">
+          <div class="bx-field" style="margin:0;min-width:280px"><label>Werte aus Lieferanten-PDF vorschlagen
+            <?= bx_hint('Liest das hochgeladene CoA/Spec aus und trägt gefundene Werte ins Formular ein. Nur bei PDFs mit echtem Text – ein Scan lässt sich nicht lesen. Geprüft wird immer von Hand.') ?></label>
+            <select name="dok_id"><?php foreach ($liefDoks as $d): ?><option value="<?= (int)$d['id'] ?>"><?= h(strtoupper($d['typ'])) ?> · <?= h($d['datei_orig']) ?></option><?php endforeach; ?></select></div>
+          <button class="btn btn-ghost" type="submit">Werte vorschlagen</button>
+        </form>
+        <?php endif; ?>
         <div class="bx-field" style="max-width:320px"><label>Charge</label>
           <select id="an_charge" onchange="anZeige()">
             <?php foreach ($charges as $c): ?><option value="<?= (int)$c['id'] ?>"><?= h($c['charge_nr'] ?: ('Charge ' . (int)$c['id'])) ?></option><?php endforeach; ?>
@@ -376,7 +411,10 @@ if (!$neu) {
         <?php foreach ($charges as $c):
             $werte = all("SELECT * FROM charge_analyse WHERE charge_id=? ORDER BY sort, id", [(int)$c['id']]);
             // Vorschlagszeilen, damit man nicht vor einem leeren Blatt sitzt.
-            if (!$werte) $werte = [
+            // Ein Vorschlag aus dem Lieferanten-PDF ersetzt die Standardzeilen.
+            if ($anVorschlag && (int)$anVorschlag['charge_id'] === (int)$c['id']) {
+                $werte = array_map(fn($v) => ['parameter'=>$v[0], 'spezifikation'=>$v[1], 'ergebnis'=>$v[2], 'methode'=>$v[3]], $anVorschlag['zeilen']);
+            } elseif (!$werte) $werte = [
                 ['parameter'=>'Aussehen', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'visuell'],
                 ['parameter'=>'Identität', 'spezifikation'=>'entspricht', 'ergebnis'=>'', 'methode'=>'FT-IR'],
                 ['parameter'=>'Gehalt', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'HPLC'],
@@ -405,7 +443,8 @@ if (!$neu) {
         <?php endforeach; ?>
         <script>
         function anZeige(){
-          var v = document.getElementById('an_charge').value;
+          var s = document.getElementById('an_charge'), v = s.value;
+          var hid = document.getElementById('an_charge_lesen'); if (hid) hid.value = v;
           document.querySelectorAll('.an_form').forEach(function(f){ f.style.display = (f.getAttribute('data-charge') === v) ? '' : 'none'; });
         }
         anZeige();
