@@ -1220,7 +1220,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <thead><tr><th>Nr.</th><th>Produkt</th><th class="bx-num">Größe je Packung</th><th>Verpackungstyp</th><th class="bx-num">Anzahl</th><th>Status</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($meineProd as $a): ?>
-        <tr><td><?= h($a['nummer']) ?></td><td><?= h($a['produkt_name'] ?: '–') ?></td>
+        <tr><td><?= h($a['nummer']) ?></td><td><?= h($a['produkt_name'] ?: ($inf['pos'] ? $inf['pos'][0]['bezeichnung'] : '–')) ?></td>
           <td class="bx-num"><?= $a['fuellmenge_g'] ? rtrim(rtrim(number_format((float)$a['fuellmenge_g'],1,',','.'),'0'),',').' g' : ($a['stueck'] ? (int)$a['stueck'].' Stk' : '–') ?></td>
           <td><?= h($a['verpackung_typ'] ? ($VTYPEN[$a['verpackung_typ']] ?? $a['verpackung_typ']) : '–') ?></td><td class="bx-num"><?= $a['menge'] ? (int)$a['menge'] : '–' ?></td><td><?= $pafBadge($a['status']) ?></td>
           <td style="text-align:right"><?php if (!empty($a['angebot_id'])): ?><a class="btn btn-primary btn-sm" href="<?= $portalLink('angebote') ?>#a<?= (int)$a['angebot_id'] ?>">Zum Angebot</a><?php endif; ?></td></tr>
@@ -1376,7 +1376,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   ?>
   <details class="bx-panel pt-ang" id="a<?= (int)$a['id'] ?>" style="scroll-margin-top:16px">
     <summary>
-      <span style="font-size:var(--fs-md)"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($a['produkt_name'] ?: '–') ?></strong></span>
+      <span style="font-size:var(--fs-md)"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($a['produkt_name'] ?: ($inf['pos'] ? $inf['pos'][0]['bezeichnung'] : '–')) ?></strong></span>
       <span class="bx-row" style="gap:10px;align-items:center">
         <?= $offen ? bx_badge('Angebot liegt vor – bitte wählen','info')
              : ($a['status']==='bestaetigt' ? bx_badge('bestätigt','ok') : bx_badge('abgelehnt','err')) ?>
@@ -1499,7 +1499,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php foreach ($auftraege as $a): $cur = $aufStep($a['status']); $complete = $a['status'] === 'versendet'; ?>
   <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($a['produkt_name'] ?: '–') ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span></div>
+      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($a['produkt_name'] ?: ($inf['pos'] ? $inf['pos'][0]['bezeichnung'] : '–')) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span></div>
       <div class="bx-row" style="gap:10px;align-items:center"><?= $aufBadge($a['status']) ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
     <ul class="bx-steps" style="margin-top:12px">
@@ -1545,7 +1545,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <h1 style="margin:0"><?= h($a['nummer']) ?></h1>
     <a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellungen') ?>">&#8592; Alle Bestellungen</a>
   </div>
-  <p class="muted" style="margin:0 0 16px"><?= h($a['produkt_name'] ?: '–') ?></p>
+  <p class="muted" style="margin:0 0 16px"><?= h($a['produkt_name'] ?: ($inf['pos'] ? $inf['pos'][0]['bezeichnung'] : '–')) ?></p>
 
   <!-- Status-Kacheln -->
   <div class="bx-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
@@ -1595,7 +1595,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <h2 style="margin:0 0 14px;font-size:16px">Bestelldetails</h2>
     <div class="bx-tablewrap"><table class="bx-table">
       <tbody>
-        <tr><td class="muted" style="width:150px">Produkt</td><td><?= h($a['produkt_name'] ?: '–') ?></td></tr>
+        <tr><td class="muted" style="width:150px">Produkt</td><td><?= h($a['produkt_name'] ?: ($inf['pos'] ? $inf['pos'][0]['bezeichnung'] : '–')) ?></td></tr>
         <?php if ((int)$a['stueck']): ?><tr><td class="muted">Stück je Packung</td><td><?= (int)$a['stueck'] ?></td></tr><?php endif; ?>
         <tr><td class="muted">Anzahl Packungen</td><td><?= (int)$a['menge'] ?></td></tr>
         <?php if ($vName): ?><tr><td class="muted">Verpackung</td><td><?= h($vName) ?></td></tr><?php endif; ?>
