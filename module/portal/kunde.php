@@ -306,10 +306,20 @@ $view = $_GET['v'] ?? 'start';
 if (!isset($L[$view]) && !isset($detailParent[$view])) $view = 'start';
 $activeItem = $detailParent[$view] ?? $view;
 
+// Suchbegriff für die Katalog-Listen (Produkte, Rezepturen, Rohstoffe).
+// Gesucht wird über den Namen UND über die enthaltenen Rohstoffe – ein Kunde sucht eher
+// nach „Magnesium" als nach unserem Produktnamen.
+$q = trim((string)($_GET['q'] ?? ''));
+$qLike = '%' . $q . '%';
+
 // Katalog-Produkte (nicht exklusiv oder exklusiv für diesen Kunden), aktiv
 $katalog = $k['portal_produkte'] ? all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, p.nummer, p.rezeptur_id, r.darreichungsform
     FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
-    WHERE p.status='aktiv' AND (p.exklusiv=0 OR p.kunde_id=?) ORDER BY name", [$kid]) : [];
+    WHERE p.status='aktiv' AND (p.exklusiv=0 OR p.kunde_id=?)
+      AND (? = '' OR COALESCE(NULLIF(p.kundenname,''), p.name) LIKE ? OR r.name LIKE ?
+           OR EXISTS (SELECT 1 FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
+                      WHERE z.rezeptur_id=r.id AND (z.bezeichnung LIKE ? OR i.name LIKE ?)))
+    ORDER BY name", [$kid, $q, $qLike, $qLike, $qLike, $qLike]) : [];
 $primVerp  = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name");
 $stdStueck = std_stueckzahlen();
 // Kundenseitige Verpackungstypen – wir wählen intern den perfekt passenden Behälter
@@ -373,9 +383,12 @@ $pafBadge = fn($s) => match ($s) { 'neu'=>bx_badge('eingegangen','info'),'in_bea
 // „Meine Rezepturen" = nur ANGENOMMENE eigene (eingefroren) + freigegebene Katalog-Rezepturen.
 // Vorschläge sind noch keine Rezeptur → erscheinen über die Übersicht („Vorschlag erhalten"), nicht hier.
 $meineRezepturen = $k['portal_rezeptur'] ? all("SELECT * FROM rezeptur
-    WHERE (kunde_id=? AND status='eingefroren')
-       OR (kunde_id IS NULL AND status='freigegeben')
-    ORDER BY (kunde_id IS NULL), name", [$kid]) : [];
+    WHERE ((kunde_id=? AND status='eingefroren')
+       OR (kunde_id IS NULL AND status='freigegeben'))
+      AND (? = '' OR name LIKE ?
+           OR EXISTS (SELECT 1 FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
+                      WHERE z.rezeptur_id=rezeptur.id AND (z.bezeichnung LIKE ? OR i.name LIKE ?)))
+    ORDER BY (kunde_id IS NULL), name", [$kid, $q, $qLike, $qLike, $qLike]) : [];
 $rezBadge = fn($s) => match ($s) { 'vorschlag'=>bx_badge('Vorschlag','info'),'eingefroren'=>bx_badge('angenommen','ok'),'freigegeben'=>bx_badge('freigegeben','ok'),'abgelehnt'=>bx_badge('abgelehnt','err'),default=>bx_badge($s) };
 $rid = (int)($_GET['rid'] ?? 0);
 $rezDetail = ($rid && $k['portal_rezeptur']) ? one("SELECT * FROM rezeptur WHERE id=?
@@ -384,7 +397,9 @@ $rezZutaten = $rezDetail ? all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat
 
 // Rohstoff-Katalog (Preis auf Anfrage) – ohne Leerkapseln
 $rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, form, cas FROM item
-    WHERE kategorie='rohstoff' AND gesperrt=0 AND (form<>'kapselhuelle' OR form IS NULL) ORDER BY name") : [];
+    WHERE kategorie='rohstoff' AND gesperrt=0 AND (form<>'kapselhuelle' OR form IS NULL)
+      AND (? = '' OR name LIKE ? OR name_lat LIKE ? OR synonym LIKE ? OR cas LIKE ?)
+    ORDER BY name", [$q, $qLike, $qLike, $qLike, $qLike]) : [];
 // Produkt-Detail (aus dem Katalog)
 $pid = (int)($_GET['pid'] ?? 0);
 $prodDetail = ($pid && $k['portal_produkte']) ? one("SELECT p.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS anzeige_name, r.darreichungsform, r.name AS rez_name
@@ -436,6 +451,17 @@ $offenRechnungen = array_values(array_filter($rechnungen, fn($r) => ($r['status'
 $offenBetrag = array_sum(array_map(fn($r) => (float)$r['brutto'], $offenRechnungen));
 $inArbeit = count(array_filter($auftraege, fn($a) => $a['status'] !== 'versendet'));
 $portalLink = fn($v) => '?p=portal&token=' . $token . '&v=' . $v;
+// Suchfeld für die Katalog-Listen. Behält Token und Ansicht bei, damit die Suche im Portal bleibt.
+$sucheForm = function (string $v, string $platzhalter) use ($token, $q) { ?>
+  <form method="get" class="bx-row" style="gap:8px;margin-bottom:14px;align-items:center">
+    <input type="hidden" name="p" value="portal">
+    <input type="hidden" name="token" value="<?= h($token) ?>">
+    <input type="hidden" name="v" value="<?= h($v) ?>">
+    <input type="search" name="q" value="<?= h($q) ?>" placeholder="<?= h($platzhalter) ?>" style="max-width:360px">
+    <button class="btn btn-primary" type="submit">Suchen</button>
+    <?php if ($q !== ''): ?><a class="btn btn-ghost" href="?p=portal&token=<?= h($token) ?>&v=<?= h($v) ?>">Zurücksetzen</a><?php endif; ?>
+  </form>
+<?php };
 // Einheitliche Liste „Meine Anfragen" über ALLE Typen (Reiter nach Typ + Alle). Nach $portalLink, da dieser genutzt wird.
 $typLabelP = ['rezeptur'=>'Rezeptur','produkt'=>'Produkt','rohstoff'=>'Rohstoff','dienstleistung'=>'Dienstleistung'];
 $meineAnfRows = [];
@@ -835,9 +861,16 @@ portal_head('Kundenportal · ' . $k['firma']);
   <p class="bx-sub">Ihre eigenen Rezepturen und unsere freigegebenen Katalog-Rezepturen. Wählen Sie eine für Details – oder stellen Sie eine neue Rezepturanfrage.</p>
 
   <div class="bx-panel">
+    <?php $sucheForm('rezepturen', 'Rezeptur oder Rohstoff suchen, z. B. Zink'); ?>
+    <?php if ($q !== '' && !$eigeneRez && !$katalogRez): ?>
+      <div class="muted">Keine Rezeptur gefunden zu „<?= h($q) ?>". Sie können uns Ihre Wunsch-Rezeptur auch direkt anfragen.</div>
+    <?php endif; ?>
+  </div>
+
+  <div class="bx-panel">
     <h2 style="margin-top:0">Eigene Rezepturen</h2>
     <?php if ($eigeneRez) { $rezTabelle($eigeneRez); } else { ?>
-      <div class="muted">Noch keine eigenen Rezepturen. Stellen Sie eine Rezepturanfrage – nach unserer Prüfung erscheint hier Ihr Vorschlag.</div>
+      <div class="muted"><?= $q !== '' ? 'Keine eigene Rezeptur passt zu „' . h($q) . '".' : 'Noch keine eigenen Rezepturen. Stellen Sie eine Rezepturanfrage – nach unserer Prüfung erscheint hier Ihr Vorschlag.' ?></div>
     <?php } ?>
   </div>
 
@@ -909,7 +942,8 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px">Produkte</h1>
   <p class="bx-sub">Unser Produktkatalog. Wählen Sie ein Produkt für Details und eine Anfrage.</p>
   <div class="bx-panel">
-    <?php if (!$katalog): ?><div class="muted">Aktuell sind keine Produkte im Katalog verfügbar.</div>
+    <?php $sucheForm('produkte', 'Produkt oder Rohstoff suchen, z. B. Magnesium'); ?>
+    <?php if (!$katalog): ?><div class="muted"><?= $q !== '' ? 'Kein Produkt gefunden zu „' . h($q) . '". Sie können es auch direkt anfragen.' : 'Aktuell sind keine Produkte im Katalog verfügbar.' ?></div>
     <?php else: ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Produkt</th><th>Form</th><th class="bx-num">Preis</th><th></th></tr></thead>
@@ -1083,7 +1117,8 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px">Rohstoffe</h1>
   <p class="bx-sub">Unser Rohstoff-Katalog. Preise auf Anfrage.</p>
   <div class="bx-panel">
-    <?php if (!$rohkatalog): ?><div class="muted">Aktuell keine Rohstoffe verfügbar.</div>
+    <?php $sucheForm('rohstoffe', 'Rohstoff suchen – Name, lateinisch oder CAS'); ?>
+    <?php if (!$rohkatalog): ?><div class="muted"><?= $q !== '' ? 'Kein Rohstoff gefunden zu „' . h($q) . '".' : 'Aktuell keine Rohstoffe verfügbar.' ?></div>
     <?php else: ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Name</th><th>Form</th><th>CAS</th><th></th></tr></thead>
