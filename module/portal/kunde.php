@@ -165,7 +165,8 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         }
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Produktanfrage im Portal gestellt' . (count($mengen) > 1 ? ' (' . count($mengen) . ' Staffeln)' : '') . '.', 'anfrage');
     }
-    header('Location: ?p=portal&token=' . $token . '&v=produkte&gesendet=1'); exit;
+    // Auf der Anfragenliste landen statt zurück im Katalog – dort sieht der Kunde seine Anfrage sofort stehen.
+    header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
 }
 // Rohstoff- / Dienstleistungsanfrage (Freitext)
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['aktion'] ?? '', ['rohstoff_anfrage','dienstleistung_anfrage'], true)) {
@@ -181,7 +182,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['aktion'] ?? 
           [naechste_nummer('PAF'), (int)$k['id'], $typ, trim($_POST['betreff'] ?? ''), trim($_POST['notiz'] ?? ''), $wm > 0 ? $wm : null, $wm > 0 ? $we : null, $rid]);
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', ($typ === 'rohstoff' ? 'Rohstoffanfrage' : 'Dienstleistungsanfrage') . ' im Portal gestellt.', 'anfrage');
     }
-    header('Location: ?p=portal&token=' . $token . '&v=' . ($typ === 'rohstoff' ? 'rohstoffe' : 'dienstleistung') . '&gesendet=1'); exit;
+    header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
 }
 
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
@@ -297,7 +298,11 @@ $aufStep  = fn($s) => ['offen'=>0, 'in_produktion'=>1, 'erledigt'=>2, 'versendet
 
 // Menüpunkte (nur freigeschaltete) + Gruppierung
 $L = ['start' => 'Übersicht'];
-if ($k['portal_rezeptur'])     { $L['rezepturen'] = 'Rezepturen';  $L['meine_anfragen'] = 'Meine Anfragen'; $L['anfrage'] = 'Rezeptur anfragen'; }
+// „Meine Anfragen" listet ALLE Anfragetypen – der Punkt gehört deshalb ins Menü, sobald irgendein
+// Anfragebereich frei ist, nicht nur bei Rezepturen. Sonst läuft die Weiterleitung nach dem Absenden ins Leere.
+if ($k['portal_rezeptur'] || $k['portal_produkte'] || $k['portal_rohstoffe'] || $k['portal_dienstleistung'])
+    $L['meine_anfragen'] = 'Meine Anfragen';
+if ($k['portal_rezeptur'])     { $L['rezepturen'] = 'Rezepturen';  $L['anfrage'] = 'Rezeptur anfragen'; }
 if ($k['portal_produkte'])     { $L['produkte']   = 'Produkte';    $L['prodanfrage'] = 'Produkt anfragen'; }
 if ($k['portal_rohstoffe'])    { $L['rohstoffe']  = 'Rohstoffe';   $L['rohanfrage'] = 'Rohstoff anfragen'; }
 if ($k['portal_dienstleistung']) $L['dienstleistung'] = 'Dienstleistung anfragen';
@@ -385,10 +390,11 @@ $kapselAnzeige = function(array $rezRow, float $totalMg) use ($portalKapseln, $k
     if ($gid > 0) foreach ($portalKapseln as $kg) if ((int)$kg['id'] === $gid) return $kg;
     return $kapselFuer($totalMg);
 };
-$portalAnfragen = all("SELECT pa.*, p.name AS produkt_name, i.name AS verp_name,
+$portalAnfragen = all("SELECT pa.*, p.name AS produkt_name, i.name AS verp_name, rz.name AS rezeptur_name,
     (SELECT a.id FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id AND a.kunde_ausgeblendet=0 ORDER BY a.id DESC LIMIT 1) AS angebot_id
     FROM portal_anfrage pa
     LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN item i ON i.id=pa.verpackung_id
+    LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
     WHERE pa.kunde_id=? ORDER BY pa.angelegt DESC", [$kid]);
 $pafBadge = fn($s) => match ($s) { 'neu'=>bx_badge('eingegangen','info'),'in_bearbeitung'=>bx_badge('in Bearbeitung','warn'),'beantwortet'=>bx_badge('Angebot abgegeben','ok'),'abgelehnt'=>bx_badge('abgelehnt','err'),default=>bx_badge($s) };
 // Rezeptur-Katalog: eigene Rezepturen (ab Vorschlag) + freigegebene Hausrezepturen (allen Kunden verfügbar)
@@ -492,7 +498,10 @@ foreach ($anfragen as $a) {
     $meineAnfRows[] = ['typ'=>'rezeptur','nummer'=>$a['nummer'],'bez'=>($a['produktname'] ?: '(Rezeptur)'),'datum'=>$a['angelegt'],'status'=>$anfStatus($a),'aktion'=>$akt];
 }
 foreach ($portalAnfragen as $p) {
-    $bez = $p['typ']==='produkt' ? ($p['produkt_name'] ?: 'Produkt') : ($p['betreff'] ?: ($typLabelP[$p['typ']] ?? 'Anfrage'));
+    // Bei einer Rezeptur-Anfrage gibt es noch kein Produkt – dann den Rezepturnamen zeigen statt „Produkt".
+    $bez = $p['typ']==='produkt'
+        ? ($p['produkt_name'] ?: ($p['rezeptur_name'] ? $p['rezeptur_name'] . ' (aus Rezeptur)' : 'Produkt'))
+        : ($p['betreff'] ?: ($typLabelP[$p['typ']] ?? 'Anfrage'));
     $st  = ($p['status']==='beantwortet') ? bx_badge('Angebot erhalten','ok') : (($p['status']==='abgelehnt') ? bx_badge('abgelehnt','err') : bx_badge('in Prüfung','warn'));
     $akt = !empty($p['angebot_id']) ? ['label'=>'Zum Angebot','href'=>$portalLink('angebote').'#a'.(int)$p['angebot_id'],'primary'=>true] : null;
     $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt];
@@ -803,7 +812,7 @@ portal_head('Kundenportal · ' . $k['firma']);
 
 <?php elseif ($view === 'meine_anfragen'): ?>
   <h1 style="margin-bottom:4px">Meine Anfragen</h1>
-  <p class="bx-sub">Ihre Rezepturanfragen und deren Stand. Oben steht, was auf Ihre Freigabe wartet.</p>
+  <p class="bx-sub">Alle Ihre Anfragen und deren Stand. Oben steht, was auf Ihre Freigabe wartet.</p>
 
   <?php if ($anfPruef): ?>
   <div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2)">
