@@ -17,10 +17,23 @@ function dokument_upload(string $objekt_typ, int $objekt_id): void {
         $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($orig, PATHINFO_EXTENSION)));
         $fn   = $objekt_typ . '_' . $objekt_id . '_' . bin2hex(random_bytes(6)) . ($ext ? '.' . $ext : '');
         if (move_uploaded_file($_FILES['dok']['tmp_name'], BX_UPLOADS . '/' . $fn)) {
-            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig) VALUES (?,?,?,?,?,?,?)",
-              [$objekt_typ, $objekt_id, $typ, $lid, trim($_POST['dok_titel'] ?? '') ?: null, $fn, $orig]);
+            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,kunde_sichtbar) VALUES (?,?,?,?,?,?,?,?)",
+              [$objekt_typ, $objekt_id, $typ, $lid, trim($_POST['dok_titel'] ?? '') ?: null, $fn, $orig,
+               isset($_POST['dok_kunde']) ? 1 : 0]);
         }
     }
+}
+
+// Freigabe fürs Kundenportal umschalten. Ohne Freigabe sieht der Kunde ein Dokument nie –
+// am Rohstoff hängen auch Lieferanten-Unterlagen, die nicht weitergegeben werden dürfen.
+function dokument_freigabe_toggle(string $objekt_typ, int $objekt_id, int $dok_id): void {
+    q("UPDATE dokument SET kunde_sichtbar = 1 - kunde_sichtbar WHERE id=? AND objekt_typ=? AND objekt_id=?",
+      [$dok_id, $objekt_typ, $objekt_id]);
+}
+// Für Kunden freigegebene Dokumente eines Objekts (Portal).
+function dokumente_fuer_kunde(string $objekt_typ, int $objekt_id): array {
+    return all("SELECT id, typ, titel, datei_orig FROM dokument
+                WHERE objekt_typ=? AND objekt_id=? AND kunde_sichtbar=1 ORDER BY typ, id DESC", [$objekt_typ, $objekt_id]);
 }
 
 function dokument_delete(string $objekt_typ, int $objekt_id, int $dok_id): void {
@@ -43,13 +56,21 @@ function dokument_panel(string $objekt_typ, int $objekt_id, array $lieferanten):
       <p class="muted" style="margin-top:0">Analysenzertifikate (CoA), Spezifikationen und Laboranalysen – je Dokument optional mit Lieferant verknüpft. Werden sicher außerhalb des Web-Ordners gespeichert.</p>
       <?php if ($docs): ?>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Typ</th><th>Titel / Datei</th><th>Lieferant</th><th>Hochgeladen</th><th></th></tr></thead>
+        <thead><tr><th>Typ</th><th>Titel / Datei</th><th>Lieferant</th><th>Im Kundenportal</th><th>Hochgeladen</th><th></th></tr></thead>
         <tbody>
           <?php foreach ($docs as $d): ?>
           <tr>
             <td><?= h($TYP[$d['typ']] ?? $d['typ']) ?></td>
             <td><a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument')) ?></a><?php if ($d['titel'] && $d['datei_orig']): ?><div class="muted" style="font-size:12px"><?= h($d['datei_orig']) ?></div><?php endif; ?></td>
             <td><?= $d['lieferant_firma'] ? h($d['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
+            <td>
+              <form method="post" style="margin:0">
+                <input type="hidden" name="aktion" value="dok_frei"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>">
+                <button class="btn btn-ghost btn-sm" type="submit" title="Sichtbarkeit im Kundenportal umschalten">
+                  <?= (int)($d['kunde_sichtbar'] ?? 0) === 1 ? bx_badge('freigegeben','ok') : bx_badge('intern') ?>
+                </button>
+              </form>
+            </td>
             <td class="muted"><?= h(fmt_zeit($d['angelegt'], 'd.m.Y')) ?></td>
             <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Dokument löschen?');"><input type="hidden" name="aktion" value="dok_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Löschen</button></form></td>
           </tr>
@@ -68,6 +89,10 @@ function dokument_panel(string $objekt_typ, int $objekt_id, array $lieferanten):
           </div>
           <div class="bx-field"><label>Titel (optional)</label><input type="text" name="dok_titel" placeholder="z. B. CoA Charge 2026-04"></div>
           <div class="bx-field"><label>Datei</label><input type="file" name="dok" required accept="application/pdf,image/*"></div>
+        </div>
+        <div class="bx-row" style="gap:8px;align-items:center;margin-top:var(--sp-3)">
+          <input type="checkbox" name="dok_kunde" id="dok_kunde" value="1">
+          <label for="dok_kunde" style="margin:0">im Kundenportal sichtbar <?= bx_hint('Standard ist intern. Nur anhaken, was der Kunde sehen darf – Lieferanten-Spezifikationen in der Regel nicht.') ?></label>
         </div>
         <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Dokument hochladen</button></div>
       </form>

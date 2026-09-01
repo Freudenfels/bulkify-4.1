@@ -18,6 +18,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_u
     dokument_upload('produkt', (int)$id);
     header('Location: ?p=produkt&id=' . $id . '&gespeichert=1#dok'); exit;
 }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && is_numeric($id)) {
+    dokument_freigabe_toggle('produkt', (int)$id, (int)($_POST['dok_id'] ?? 0));
+    header('Location: ?p=produkt&id=' . $id . '#dok'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_del' && is_numeric($id)) {
     dokument_delete('produkt', (int)$id, (int)($_POST['dok_id'] ?? 0));
     header('Location: ?p=produkt&id=' . $id . '#dok'); exit;

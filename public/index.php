@@ -39,6 +39,7 @@ $routes = [
     'rechnungen'      => 'beleg/rechnungen_liste.php',
     'rechnung'        => 'beleg/detail.php',
     'portal'          => 'portal/kunde.php',
+    'portal_dok'     => 'portal/dokument_download.php',
     'werk'               => 'intern/werk_cockpit.php',
     'aufgaben'           => 'intern/aufgaben.php',
     'produktion'         => 'produktion/liste.php',
@@ -78,7 +79,7 @@ if ($p === 'autologin') {
 }
 
 // Öffentliche Routen (ohne internen Login): Login-Seite + Kundenportal (Token-basiert)
-$PUBLIC = ['login', 'portal'];
+$PUBLIC = ['login', 'portal', 'portal_dok'];   // portal_dok prüft Token + Freigabe selbst
 
 // Nicht angemeldet -> zur Login-Seite (außer öffentliche Routen)
 if (!in_array($p, $PUBLIC, true) && !is_logged_in()) { header('Location: ?p=login'); exit; }

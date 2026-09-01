@@ -595,6 +595,9 @@ function init_schema(): void {
     // --- additive Migrationen ab hier (Beispielmuster) ---
     ensure_column('kunden', 'portal_token', "VARCHAR(64) NULL");   // Magic-Link-Zugang zum Kundenportal
     ensure_column('item', 'produkt_id', "INT NULL");               // Verkaufsfertig-Item <-> Produkt (Fertigware-Bestand)
+    // Dokumente: erst nach ausdrücklicher Freigabe im Kundenportal sichtbar. Standard 0 – ein Lieferanten-Spec
+    // darf nicht versehentlich beim Kunden landen, nur weil es am Rohstoff hängt.
+    ensure_column('dokument', 'kunde_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('item', 'cas', "VARCHAR(30) NULL");              // CAS-Nummer (z. B. Ascorbinsäure 50-81-7)
     ensure_column('item', 'max_fuellgewicht_g', "DECIMAL(10,2) NULL"); // Verpackung: max. Füllgewicht (g) – für Pulver-Match (Glas/Dose)
     // Verpackungs-Stückliste: Rolle je Verpackungs-Item + Produkt-Slots für die komplette Stückliste

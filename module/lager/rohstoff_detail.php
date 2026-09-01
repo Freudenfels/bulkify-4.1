@@ -25,6 +25,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_u
     dokument_upload('item', (int)$id);
     header('Location: ?p=rohstoff&id=' . $id . '&tab=dok&gespeichert=1'); exit;
 }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && !$neu) {
+    dokument_freigabe_toggle('item', (int)$id, (int)($_POST['dok_id'] ?? 0));
+    header('Location: ?p=rohstoff&id=' . $id . '&tab=dok'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_del' && !$neu) {
     dokument_delete('item', (int)$id, (int)($_POST['dok_id'] ?? 0));
     header('Location: ?p=rohstoff&id=' . $id . '&tab=dok'); exit;

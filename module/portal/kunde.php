@@ -2,6 +2,7 @@
 // Kundenportal – eigene, kundenfreundliche Ansicht per Magic-Link (Token). Keine internen Zahlen (EK/Marge).
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/dokument_ui.php';
 
 $token = preg_replace('/[^a-f0-9]/', '', $_GET['token'] ?? '');
 $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
@@ -391,9 +392,17 @@ $meineRezepturen = $k['portal_rezeptur'] ? all("SELECT * FROM rezeptur
     ORDER BY (kunde_id IS NULL), name", [$kid, $q, $qLike, $qLike, $qLike]) : [];
 $rezBadge = fn($s) => match ($s) { 'vorschlag'=>bx_badge('Vorschlag','info'),'eingefroren'=>bx_badge('angenommen','ok'),'freigegeben'=>bx_badge('freigegeben','ok'),'abgelehnt'=>bx_badge('abgelehnt','err'),default=>bx_badge($s) };
 $rid = (int)($_GET['rid'] ?? 0);
+$DOKTYP = dokument_typen();   // CoA / Spezifikation / Laboranalyse – Beschriftung der Download-Links
 $rezDetail = ($rid && $k['portal_rezeptur']) ? one("SELECT * FROM rezeptur WHERE id=?
     AND ((kunde_id=? AND status IN ('vorschlag','eingefroren','freigegeben','abgelehnt')) OR (kunde_id IS NULL AND status='freigegeben'))", [$rid, $kid]) : null;
-$rezZutaten = $rezDetail ? all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
+// Zutaten inklusive item_id – damit je Rohstoff die freigegebenen Dokumente (CoA/Spec) verlinkt werden können
+$rezZutaten = $rezDetail ? all("SELECT item_id, bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
+// Freigegebene Dokumente je Zutat-Rohstoff (nur, was intern ausdrücklich freigegeben wurde)
+$rezDoks = [];
+foreach ($rezZutaten as $z) if (!empty($z['item_id'])) {
+    $dk = dokumente_fuer_kunde('item', (int)$z['item_id']);
+    if ($dk) $rezDoks[(int)$z['item_id']] = $dk;
+}
 
 // Rohstoff-Katalog (Preis auf Anfrage) – ohne Leerkapseln
 $rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, form, cas FROM item
@@ -895,12 +904,16 @@ portal_head('Kundenportal · ' . $k['firma']);
       <h2>Zutaten je <?= $dfP ?></h2>
       <?php if (!$rezZutaten): ?><div class="muted">Noch keine Zutaten hinterlegt.</div>
       <?php else: ?>
-      <table class="bx-table"><thead><tr><th>Zutat</th><th class="bx-num">Menge je <?= $dfP ?></th></tr></thead><tbody>
-        <?php $sum = 0; foreach ($rezZutaten as $z): $sum += (float)$z['menge_mg']; ?>
-          <tr><td><?= h($z['bezeichnung']) ?></td><td class="bx-num"><?= rtrim(rtrim(number_format((float)$z['menge_mg'],2,',','.'),'0'),',') ?> mg</td></tr>
+      <table class="bx-table"><thead><tr><th>Zutat</th><th class="bx-num">Menge je <?= $dfP ?></th><th>Dokumente</th></tr></thead><tbody>
+        <?php $sum = 0; foreach ($rezZutaten as $z): $sum += (float)$z['menge_mg']; $dk = $rezDoks[(int)($z['item_id'] ?? 0)] ?? []; ?>
+          <tr><td><?= h($z['bezeichnung']) ?></td><td class="bx-num"><?= rtrim(rtrim(number_format((float)$z['menge_mg'],2,',','.'),'0'),',') ?> mg</td>
+            <td><?php if ($dk): foreach ($dk as $d): ?>
+                  <a href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener" style="margin-right:10px"><?= h($DOKTYP[$d['typ']] ?? $d['typ']) ?></a>
+                <?php endforeach; else: ?><span class="muted">–</span><?php endif; ?></td></tr>
         <?php endforeach; ?>
-        <tr style="font-weight:600"><td>Gesamt je <?= $dfP ?></td><td class="bx-num"><?= rtrim(rtrim(number_format($sum,2,',','.'),'0'),',') ?> mg</td></tr>
+        <tr style="font-weight:600"><td>Gesamt je <?= $dfP ?></td><td class="bx-num"><?= rtrim(rtrim(number_format($sum,2,',','.'),'0'),',') ?> mg</td><td></td></tr>
       </tbody></table>
+      <div class="muted" style="font-size:12px;margin-top:8px">Analysenzertifikate und Spezifikationen zu den eingesetzten Rohstoffen, soweit wir sie freigegeben haben.</div>
       <?php if ($rezDetail['darreichungsform'] === 'kapsel'): $kg = $kapselAnzeige($rezDetail, $sum); $fix = !empty($rezDetail['kapselgroesse_id']); ?>
         <div style="margin-top:10px;font-size:14px"><strong>Kapselgröße:</strong>
           <?= $kg ? h($kg['name']) . ' <span class="muted">(fasst bis ' . (int)$kg['fuellmenge_mg'] . ' mg)</span>' : '<span class="muted">Füllgewicht zu groß für eine Standardkapsel – wir schlagen eine andere Form oder Aufteilung vor.</span>' ?>
@@ -1142,6 +1155,22 @@ portal_head('Kundenportal · ' . $k['firma']);
       <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rohstoffe') ?>">Zurück zum Katalog</a>
     </div>
     <p class="bx-sub"><?= h($FORMLBL_P[$rohDetail['form']] ?? $rohDetail['form']) ?><?= $rohDetail['name_lat'] ? ' · '.h($rohDetail['name_lat']) : '' ?><?= $rohDetail['cas'] ? ' · CAS '.h($rohDetail['cas']) : '' ?></p>
+
+    <?php $rohDoks = dokumente_fuer_kunde('item', (int)$rohDetail['id']); if ($rohDoks): ?>
+    <div class="bx-panel"><h2>Dokumente</h2>
+      <p class="muted" style="margin-top:0">Analysenzertifikat und Spezifikation zu diesem Rohstoff.</p>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Typ</th><th>Dokument</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($rohDoks as $d): ?>
+          <tr><td><?= h($DOKTYP[$d['typ']] ?? $d['typ']) ?></td>
+              <td><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument')) ?></td>
+              <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener">öffnen</a></td></tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    </div>
+    <?php endif; ?>
 
     <?php if ($rohKennwerte): ?>
     <div class="bx-panel"><h2>Kennwerte</h2>
