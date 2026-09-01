@@ -2124,6 +2124,7 @@ function angebot_positionen(int $angebot_id): array {
         'artikelnr'=>$r['artikelnr'], 'bezeichnung'=>$r['bezeichnung'], 'beschreibung'=>$r['beschreibung'],
         'menge'=>(float)$r['menge'], 'einheit'=>$r['einheit'], 'preis_cent'=>(int)$r['preis_cent'],
         'ek_cent'=>(int)$r['ek_cent'], 'mwst_satz'=>(float)$r['mwst_satz'], 'quelle'=>$r['quelle'], 'gruppe'=>$r['gruppe'] ?? null,
+        'rezeptur_id'=>$r['rezeptur_id'] ?? null, 'stueck'=>$r['stueck'] ?? null, 'verpackung_id'=>$r['verpackung_id'] ?? null,
     ], $rows);
     $a = one("SELECT * FROM angebot WHERE id=?", [$angebot_id]);
     return $a ? angebot_positionen_auto($a) : [];
@@ -3043,8 +3044,13 @@ function angebot_optionen(int $angebot_id): array {
             $opt[$g]['stueck']       = (int)$p['stueck'];
             $opt[$g]['verpackung_id']= $p['verpackung_id'] ? (int)$p['verpackung_id'] : null;
         }
-        if ($p['quelle'] === 'verpackung' && $opt[$g]['verpackung'] === '')
-            $opt[$g]['verpackung'] = trim(preg_replace('/^([A-Z]\)\s*)?(Verpackung:)?\s*/', '', (string)$p['bezeichnung']));
+        // Alle Verpackungsteile nennen (Behälter, Deckel, Etikett) – sie stecken im Preis,
+        // also soll auch dranstehen, was der Kunde dafür bekommt. Rollen-Präfix weg, nur der Name.
+        if ($p['quelle'] === 'verpackung') {
+            $teil = trim(preg_replace('/^([A-Z]\)\s*)?(Verpackung|Deckel|Etikett|Karton|Beipack):?\s*/u', '', (string)$p['bezeichnung']));
+            if ($teil !== '' && strpos($opt[$g]['verpackung'], $teil) === false)
+                $opt[$g]['verpackung'] = $opt[$g]['verpackung'] === '' ? $teil : $opt[$g]['verpackung'] . ' · ' . $teil;
+        }
     }
     foreach ($opt as $g => $o) {
         $form = $o['rezeptur_id'] ? (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$o['rezeptur_id']]) : '';

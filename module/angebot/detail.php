@@ -38,22 +38,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
         }
     } elseif ($aktion === 'pos_save' && !$neu) {
+        // Alles oder nichts: Speichern loescht erst alle Positionen und schreibt sie neu.
+        // Bricht eine Zeile ab, stuende das Angebot sonst halb leer da.
+        db()->beginTransaction();
+        try {
         q("DELETE FROM angebot_position WHERE angebot_id=?", [(int)$id]);
         $bez = $_POST['p_bez'] ?? []; $art = $_POST['p_art'] ?? []; $mng = $_POST['p_menge'] ?? [];
         $einh = $_POST['p_einheit'] ?? []; $preis = $_POST['p_preis'] ?? []; $mwst = $_POST['p_mwst'] ?? [];
         $ek = $_POST['p_ek'] ?? []; $besch = $_POST['p_besch'] ?? []; $quelle = $_POST['p_quelle'] ?? []; $grp = $_POST['p_gruppe'] ?? [];
+        $prez = $_POST['p_rez'] ?? []; $pstk = $_POST['p_stk'] ?? []; $pvid = $_POST['p_vid'] ?? [];
         $sort = 0;
         foreach ($bez as $i => $b) {
             $b = trim($b); if ($b === '') continue;
             $gv = strtoupper(trim($grp[$i] ?? '')); $gv = ($gv !== '' && ctype_alpha($gv)) ? substr($gv, 0, 2) : null;
-            q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
               [(int)$id, $sort++, trim($art[$i] ?? ''), $b, trim($besch[$i] ?? ''),
                (float)str_replace(',', '.', $mng[$i] ?? '0'), trim($einh[$i] ?? ''),
                (int) round((float)str_replace(',', '.', $preis[$i] ?? '0') * 100),
                (int) round((float)str_replace(',', '.', $ek[$i] ?? '0') * 100),
-               (float)str_replace(',', '.', $mwst[$i] ?? '0'), in_array($quelle[$i] ?? '', ['herstellung','verpackung','manuell'], true) ? $quelle[$i] : 'manuell', $gv]);
+               (float)str_replace(',', '.', $mwst[$i] ?? '0'), in_array($quelle[$i] ?? '', ['herstellung','verpackung','manuell'], true) ? $quelle[$i] : 'manuell', $gv,
+               (int)($prez[$i] ?? 0) ?: null, (int)($pstk[$i] ?? 0) ?: null, (int)($pvid[$i] ?? 0) ?: null]);
         }
-        header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
+        } catch (Throwable $e) { db()->rollBack(); throw $e; }
+        db()->commit();
+        header('Location: ?p=angebot&id=' . $id . '&gespeichert=1#positionen'); exit;
     } elseif ($aktion === 'senden' && !$neu) {
         // Der einzige Weg, ein Angebot beim Kunden sichtbar zu machen. Leere Angebote gehen nicht raus.
         $st  = (string) scalar("SELECT status FROM angebot WHERE id=?", [(int)$id]);
@@ -98,6 +106,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $menge = (int)($_POST['add_menge'] ?? 0);
             $verps = array_values(array_filter([(int)($_POST['add_verp_id'] ?? 0), (int)($_POST['add_deckel_id'] ?? 0), (int)($_POST['add_etikett_id'] ?? 0)]));
             if ($rid) angebot_gruppe_anhaengen((int)$id, angebot_rezeptur_zeilen($rid, $stk, $verps, $menge, $mo, $kid));
+            $_SESSION['ang_add'][(int)$id] = ['rezeptur_id'=>$rid, 'stueck'=>$stk, 'menge'=>$menge,
+                'verp_id'=>(int)($_POST['add_verp_id'] ?? 0), 'deckel_id'=>(int)($_POST['add_deckel_id'] ?? 0), 'etikett_id'=>(int)($_POST['add_etikett_id'] ?? 0)];
         } elseif ($aktion === 'add_rohstoff') {
             $iid = (int)($_POST['add_rohstoff_id'] ?? 0);
             $mng = (float)str_replace(',', '.', $_POST['add_menge'] ?? '0');
@@ -212,6 +222,7 @@ if (!$neu):
     // Wunsch aus der verknüpften Portal-Anfrage übernehmen: Rezeptur, Menge je Packung, Anzahl Packungen
     // und – aus dem Wunsch-Verpackungstyp – ein passender Behälter. Sonst müsste das Team alles abtippen.
     $wunsch = ['rezeptur_id'=>0, 'stueck'=>'', 'menge'=>'', 'verp_id'=>0, 'typ_label'=>''];
+    $letzte = $_SESSION['ang_add'][(int)$id] ?? null;   // was zuletzt angehaengt wurde
     if (!empty($a['anfrage_id'])) {
         $wa = one("SELECT rezeptur_id, produkt_id, stueck, fuellmenge_g, verpackung_typ, menge FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']]);
         if ($wa) {
@@ -256,16 +267,16 @@ if (!$neu):
           <?php foreach ($rezepturKatalog as $rz): ?><option value="<?= (int)$rz['id'] ?>" <?= $wunsch['rezeptur_id'] === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?><?= $rz['darreichungsform'] ? ' · '.h($rz['darreichungsform']) : '' ?></option><?php endforeach; ?>
         </select>
       </div>
-      <div class="bx-field"><label>Stückzahl / Füllmenge je Packung</label><input type="number" name="add_stueck" placeholder="z. B. 30" value="<?= $wunsch['stueck'] !== '' ? (int)$wunsch['stueck'] : '' ?>" required></div>
-      <div class="bx-field"><label>Anzahl Packungen</label><input type="number" name="add_menge" placeholder="z. B. 1000" value="<?= $wunsch['menge'] !== '' ? (int)$wunsch['menge'] : '' ?>" required></div>
-      <div class="bx-field"><label>Verpackung (Primär)</label><select name="add_verp_id"><option value="">– keine –</option><?php foreach ($verpPrim as $vp): ?><option value="<?= (int)$vp['id'] ?>" <?= $wunsch['verp_id'] === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
-      <div class="bx-field"><label>Deckel (optional)</label><select name="add_deckel_id"><option value="">– keiner –</option><?php foreach ($verpDeckel as $vp): ?><option value="<?= (int)$vp['id'] ?>"><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
+      <div class="bx-field"><label>Stückzahl / Füllmenge je Packung</label><input type="number" name="add_stueck" placeholder="z. B. 30" value="<?= $letzte['stueck'] ?? ($wunsch['stueck'] !== '' ? (int)$wunsch['stueck'] : '') ?>" required></div>
+      <div class="bx-field"><label>Anzahl Packungen</label><input type="number" name="add_menge" placeholder="z. B. 1000" value="<?= $letzte['menge'] ?? ($wunsch['menge'] !== '' ? (int)$wunsch['menge'] : '') ?>" required></div>
+      <div class="bx-field"><label>Verpackung (Primär)</label><select name="add_verp_id"><option value="">– keine –</option><?php foreach ($verpPrim as $vp): ?><option value="<?= (int)$vp['id'] ?>" <?= ((int)($letzte['verp_id'] ?? $wunsch['verp_id']) === (int)$vp['id']) ? 'selected' : '' ?>><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
+      <div class="bx-field"><label>Deckel (optional)</label><select name="add_deckel_id"><option value="">– keiner –</option><?php foreach ($verpDeckel as $vp): ?><option value="<?= (int)$vp['id'] ?>" <?= ((int)($letzte['deckel_id'] ?? 0) === (int)$vp['id']) ? 'selected' : '' ?>><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field"><label>Etikett (optional)</label>
         <select name="add_etikett_id" id="add_etikett_id"><option value="">– keins –</option><?php foreach ($verpEtik as $vp): ?><option value="<?= (int)$vp['id'] ?>"><?= h($vp['name']) ?></option><?php endforeach; ?></select>
         <div class="muted" style="font-size:12px;margin-top:4px" id="etikHinweis"></div>
       </div>
     </div>
-    <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">+ Rezeptur hinzufügen</button></div>
+    <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Hinzufügen</button></div>
   </form>
   <?php // Etiketten haengen am Behaelter: gezeigt wird nur, was auf das am Behaelter hinterlegte
         // Endformat (item.etikett_final) passt. Fehlt das Format oder gibt es kein passendes
@@ -305,7 +316,7 @@ if (!$neu):
       <div class="bx-field"><label>Menge</label><input type="number" step="0.001" name="add_menge" placeholder="z. B. 25" required></div>
       <div class="bx-field"><label>Einheit</label><select name="add_einheit"><?php foreach (['kg','g','Stück','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
     </div>
-    <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">+ Rohstoff hinzufügen</button></div>
+    <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Hinzufügen</button></div>
   </form>
 
   <form method="post" data-add="dienstleistung" style="display:none">
@@ -316,7 +327,7 @@ if (!$neu):
       <div class="bx-field"><label>Einheit</label><input type="text" name="add_einheit" placeholder="Stück / Pauschal"></div>
       <div class="bx-field"><label>Preis je Einheit (€)</label><input type="number" step="0.01" name="add_preis" placeholder="0,00"></div>
     </div>
-    <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">+ Dienstleistung hinzufügen</button></div>
+    <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Hinzufügen</button></div>
   </form>
 </div>
 
@@ -360,6 +371,9 @@ if (!$neu):
             <input type="hidden" name="p_art[]" value="<?= h($pp['artikelnr'] ?? '') ?>">
             <input type="hidden" name="p_quelle[]" value="<?= h($pp['quelle'] ?? 'manuell') ?>">
             <input type="hidden" name="p_gruppe[]" value="<?= h($pp['gruppe'] ?? '') ?>">
+            <input type="hidden" name="p_rez[]" value="<?= (int)($pp['rezeptur_id'] ?? 0) ?: '' ?>">
+            <input type="hidden" name="p_stk[]" value="<?= (int)($pp['stueck'] ?? 0) ?: '' ?>">
+            <input type="hidden" name="p_vid[]" value="<?= (int)($pp['verpackung_id'] ?? 0) ?: '' ?>">
             <input type="hidden" name="p_ek[]" class="p_ek" value="<?= h(number_format($pp['ek_cent']/100,4,'.','')) ?>">
           </td>
           <td><input type="number" step="0.001" name="p_menge[]" class="p_menge" value="<?= h(rtrim(rtrim(number_format($pp['menge'],3,'.',''),'0'),'.')) ?>" style="width:100%"></td>
@@ -367,7 +381,7 @@ if (!$neu):
           <td><input type="number" step="0.0001" name="p_preis[]" class="p_preis" value="<?= h(rtrim(rtrim(number_format($pp['preis_cent']/100,4,'.',''),'0'),'.')) ?>" style="width:100%"></td>
           <td><input type="number" step="0.1" name="p_mwst[]" value="<?= h(rtrim(rtrim(number_format($pp['mwst_satz'],2,'.',''),'0'),'.')) ?>" style="width:100%"></td>
           <td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>
-          <td><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.posrow').remove();posRecalc()">×</button></td>
+          <td><button type="button" class="btn btn-ghost btn-sm" title="Position löschen" onclick="var f=this.closest('form');this.closest('.posrow').remove();posRecalc();f.submit()">×</button></td>
           <td></td>
         </tr>
         <?php endforeach; ?>
@@ -443,7 +457,8 @@ function posRecalc(){
     var tr=document.createElement('tr'); tr.className='posrow';
     tr.innerHTML='<td><input type="text" name="p_bez[]">'
       +'<textarea name="p_besch[]" class="p_besch" rows="2" placeholder="Beschreibung / Rezeptur (optional)"></textarea>'
-      +'<input type="hidden" name="p_art[]" value=""><input type="hidden" name="p_quelle[]" value="manuell"><input type="hidden" name="p_gruppe[]" value=""><input type="hidden" name="p_ek[]" class="p_ek" value="0"></td>'
+      +'<input type="hidden" name="p_art[]" value=""><input type="hidden" name="p_quelle[]" value="manuell"><input type="hidden" name="p_gruppe[]" value=""><input type="hidden" name="p_ek[]" class="p_ek" value="0">'
+      +'<input type="hidden" name="p_rez[]" value=""><input type="hidden" name="p_stk[]" value=""><input type="hidden" name="p_vid[]" value=""></td>'
       +'<td><input type="number" step="0.001" name="p_menge[]" class="p_menge"></td>'
       +'<td><input type="text" name="p_einheit[]" value="Stück"></td>'
       +'<td><input type="number" step="0.0001" name="p_preis[]" class="p_preis"></td>'

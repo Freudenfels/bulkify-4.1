@@ -14,6 +14,11 @@ Die Etiketten-Auswahl zeigt nur, was auf die gewählte Verpackung passt (`etiket
 ## Kopfdaten eingeklappt · kein Sprung an den Seitenanfang
 Die **Kopfdaten** sind ein zugeklapptes `<details>` – sie werden selten gebraucht; bei einem neuen Angebot stehen sie offen. Nach **„+ Rezeptur/Rohstoff/Dienstleistung hinzufügen"** landet man wieder bei den Positionen (`#positionen`) statt am Seitenanfang. **Gültig bis** ist mit heute + 14 Tagen vorbelegt (`angebot_gueltig_tage`); beim Senden wird ein leeres oder abgelaufenes Datum aufgefrischt.
 
+## Positionen: löschen heißt löschen
+Das **×** an einer Zeile entfernt sie und **speichert sofort**. Vorher verschwand die Zeile nur auf dem Bildschirm – wer danach eine Position hinzufügte, bekam die vermeintlich gelöschte aus der Datenbank zurück. Beim Speichern reisen `p_rez[]`, `p_stk[]`, `p_vid[]` als versteckte Felder mit, damit die Konfiguration (Rezeptur, Größe je Packung, Behälter) erhalten bleibt; ohne sie war ein einmal gespeichertes Angebot für den Kunden nicht mehr annehmbar. Das Speichern läuft in einer **Transaktion** – bricht eine Zeile ab, bleibt das Angebot vollständig statt halb leer.
+
+Die Hinzufügen-Maske merkt sich die zuletzt benutzten Werte (Rezeptur, Größe, Packungszahl, Verpackung, Deckel, Etikett), damit 90/120/180 hintereinander nur die Größe kosten. Der Knopf heißt schlicht **Hinzufügen** – welcher Typ, steht im Auswahlfeld darüber.
+
 ## Kopfdaten (Formular `aktion=kopf_save`)
 
 **Kein Produkt in den Kopfdaten:** Das Produkt ergibt sich aus den **Positionen** (Rezeptur × Menge + Verpackung) und ist deshalb kein Eingabefeld mehr. Entsteht das Angebot aus einer Produktanfrage, ist `angebot.produkt_id` automatisch gesetzt – dann steht es als Text im Kopf und reist beim Speichern unsichtbar mit (Hidden-Feld), damit die Preismatrix im Portal erhalten bleibt.
