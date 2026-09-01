@@ -15,13 +15,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'kopf_save') {
         $kunde_id   = ($_POST['kunde_id'] ?? '') !== '' ? (int)$_POST['kunde_id'] : null;
         $produkt_id = ($_POST['produkt_id'] ?? '') !== '' ? (int)$_POST['produkt_id'] : null;
-        if (!$produkt_id) { $fehler = 'Bitte ein Produkt wählen.'; }
-        else {
+        // Ein Produkt im Kopf ist OPTIONAL: Es dient nur der Preismatrix, aus der der Kunde im Portal eine
+        // Zelle wählt. Ein Angebot kann genauso aus Positionen bestehen (Rezeptur, Rohstoff, Dienstleistung) –
+        // gerade bei einer Rezeptur-Anfrage gibt es noch gar kein Produkt, es entsteht erst aus dem Angebot.
+        {
             $status  = $f('status') ?: 'offen';
             $gueltig = $f('gueltig_bis') !== '' ? $f('gueltig_bis') : null;
             $marge   = $f('marge') !== '' ? (float)str_replace(',', '.', $f('marge')) : null;
             $pz      = $f('produktionszeit') !== '' ? (float)str_replace(',', '.', $f('produktionszeit')) : null;
-            if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$produkt_id]) === 0) produkt_matrix_generieren($produkt_id);
+            if ($produkt_id && (int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$produkt_id]) === 0) produkt_matrix_generieren($produkt_id);
             if ($neu) {
                 q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,gueltig_bis,notiz,marge_override,produktionszeit_wochen) VALUES (?,?,?,?,?,?,?,?)",
                   [naechste_nummer('AN'), $kunde_id, $produkt_id, $status, $gueltig, $f('notiz'), $marge, $pz]);
@@ -118,10 +120,11 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
         <?php foreach ($kunden as $k): ?><option value="<?= $k['id'] ?>" <?= $kid===(int)$k['id']?'selected':'' ?>><?= h($k['firma']) ?></option><?php endforeach; ?>
       </select>
     </div>
-    <div class="bx-field"><label>Produkt</label>
-      <select name="produkt_id"><option value="">– wählen –</option>
+    <div class="bx-field"><label>Produkt (optional) <?= bx_hint('Nur nötig, wenn der Kunde im Portal aus der Preismatrix eine Menge wählen soll. Sonst leer lassen und unten Positionen hinzufügen – bei einer Rezeptur entsteht das Produkt ohnehin erst beim Senden des Angebots.') ?></label>
+      <select name="produkt_id"><option value="">– keins (Positionen unten) –</option>
         <?php foreach ($produkte as $pr): ?><option value="<?= $pr['id'] ?>" <?= $pid===(int)$pr['id']?'selected':'' ?>><?= h($pr['name']) ?></option><?php endforeach; ?>
       </select>
+      <?php if (!$produkte): ?><div class="muted" style="font-size:12px;margin-top:4px">Noch keine Produkte angelegt – bau das Angebot aus Positionen.</div><?php endif; ?>
     </div>
     <div class="bx-field"><label>Status</label>
       <select name="status">
