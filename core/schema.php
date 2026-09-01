@@ -640,6 +640,8 @@ function init_schema(): void {
     ensure_column('rezeptur', 'freigabe_am', "DATETIME NULL");
     ensure_column('angebot', 'freigabe_name', "VARCHAR(190) NULL");
     ensure_column('angebot', 'freigabe_am', "DATETIME NULL");
+    ensure_column('rezeptur', 'agb_version', "VARCHAR(40) NULL");   // welche AGB-Fassung bei der Freigabe galt
+    ensure_column('angebot', 'agb_version', "VARCHAR(40) NULL");
     ensure_column('portal_anfrage_pos', 'rezeptur_id', "INT NULL");
     ensure_column('rezeptur_anfrage', 'produktname', "VARCHAR(190) NULL");    // Wunsch-Produktname des Kunden bei der Rezepturanfrage
     ensure_column('produkt', 'kundenname', "VARCHAR(190) NULL");              // vom Kunden gewünschter Produktname (intern = name)
@@ -787,6 +789,15 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     // portal_anfrage: Kundenanfragen aus dem Portal für Produkt / Rohstoff / Dienstleistung (Rezeptur läuft separat über rezeptur_anfrage).
+    // AGB, versioniert: eine Fassung ist aktiv, alte bleiben als Beleg stehen. Beim verbindlichen
+    // Annehmen wird die Versionsbezeichnung am Vorgang gespeichert.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS agb (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        version VARCHAR(40) NOT NULL,
+        inhalt MEDIUMTEXT NULL,
+        aktiv TINYINT(1) NOT NULL DEFAULT 0,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $pdo->exec("CREATE TABLE IF NOT EXISTS portal_anfrage (
         id INT AUTO_INCREMENT PRIMARY KEY,
         nummer VARCHAR(20) NULL,

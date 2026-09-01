@@ -5,6 +5,7 @@ require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
 
 $token = preg_replace('/[^a-f0-9]/', '', $_GET['token'] ?? '');
+agb_seed_wenn_leer();   // AGB-Entwurf anlegen, solange keine Fassung existiert
 $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
 
 // Angebot bestätigen (Kundenaktion) -> löst Auftrag + Rechnung aus
@@ -13,6 +14,7 @@ $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
 // Unterschrift und wird mit Zeitpunkt gespeichert – so ist belegt, wer wann freigegeben hat.
 $freigabeName = function(): ?string {
     if (($_POST['bestaetigt'] ?? '') !== '1') return null;
+    if (agb_aktuell() && ($_POST['agb'] ?? '') !== '1') return null;   // AGB muessen akzeptiert sein
     $n = trim((string)($_POST['freigabe_name'] ?? ''));
     return $n === '' ? null : mb_substr($n, 0, 190);
 };
@@ -22,7 +24,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $name = $freigabeName();
     if ($ang && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=angebote&freigabefehlt=1'); exit; }
     if ($ang) {
-        q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP() WHERE id=?", [$name, $aid]);
+        q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $aid]);
         auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
     }
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&bestaetigt=1'); exit;
@@ -33,7 +35,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $name = $freigabeName();
     if ($ang && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=angebote&freigabefehlt=1'); exit; }
     if ($ang && $ang['status'] === 'gesendet' && $sid > 0) {
-        q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP() WHERE id=?", [$name, $aid]);
+        q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $aid]);
         q("UPDATE angebot_staffel SET bestaetigt=0 WHERE angebot_id=?", [$aid]);
         q("UPDATE angebot_staffel SET bestaetigt=1 WHERE id=? AND angebot_id=?", [$sid, $aid]);
         q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
@@ -80,7 +82,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $name = $freigabeName();
     if ($ang && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=angebote&freigabefehlt=1'); exit; }
     if ($ang && $ang['status'] === 'gesendet') {
-        q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP() WHERE id=?", [$name, $aid]);
+        q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $aid]);
         $auf = auftrag_aus_zelle($aid, (int)($_POST['stueck'] ?? 0), (int)($_POST['verpackung_id'] ?? 0), (int)($_POST['bestellmenge'] ?? 0));
         if ($auf) {
             q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
@@ -170,7 +172,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $name = $freigabeName();
     if ($rez && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=rezeptur&rid=' . $rid . '&freigabefehlt=1'); exit; }
     if ($rez) {
-        q("UPDATE rezeptur SET status='eingefroren', freigabe_name=?, freigabe_am=UTC_TIMESTAMP() WHERE id=?", [$name, $rid]);
+        q("UPDATE rezeptur SET status='eingefroren', freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $rid]);
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Rezeptur ' . $rez['nummer'] . ' verbindlich angenommen durch ' . $name . '.', 'rezeptur', 'rezeptur', $rid);
     }
     header('Location: ?p=portal&token=' . $token . '&v=prodanfrage&rid=' . $rid . '&freigegeben=1'); exit;
@@ -396,6 +398,7 @@ if ($k['portal_rezeptur']) $detailParent['rezeptur'] = 'rezepturen';
 if ($k['portal_produkte']) $detailParent['produkt']  = 'produkte';
 if ($k['portal_rohstoffe']) $detailParent['rohstoff'] = 'rohstoffe';
 $detailParent['bestellung'] = 'bestellungen';   // Bestell-Detail (eigene Bestellung)
+$detailParent['agb'] = 'start';   // AGB: kein Menuepunkt, aber eine echte Seite (Fussleiste + Bestaetigungsdialog)
 $view = $_GET['v'] ?? 'start';
 if (!isset($L[$view]) && !isset($detailParent[$view])) $view = 'start';
 $activeItem = $detailParent[$view] ?? $view;
@@ -811,6 +814,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <?php endforeach;
       endforeach; ?>
       <div class="bx-userbox"><button type="button" class="bx-themebtn">Dunkler Modus</button></div>
+      <?php if (agb_aktuell()): ?><div class="bx-userbox" style="padding-top:0"><a class="muted" style="font-size:12px" href="<?= $portalLink('agb') ?>">AGB</a></div><?php endif; ?>
     </nav>
   </aside>
   <main class="bx-main">
@@ -1735,6 +1739,17 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <?php endif; ?>
 
+<?php elseif ($view === 'agb'):
+  // Aktuelle Fassung, oder eine bestimmte über ?fassung=<id> – so lässt sich nachlesen, was bei
+  // einer früheren Bestätigung galt. Der Inhalt ist bewusst HTML (vom Team gepflegt).
+  $agbAnzeige = !empty($_GET['fassung']) ? agb_fassung((int)$_GET['fassung']) : agb_aktuell(); ?>
+  <h1 style="margin-bottom:4px">Allgemeine Geschäftsbedingungen</h1>
+  <?php if ($agbAnzeige): ?>
+  <p class="bx-sub">Fassung <strong><?= h($agbAnzeige['version']) ?></strong><?= !empty($agbAnzeige['angelegt']) ? ' · Stand ' . h(date('d.m.Y', strtotime((string)$agbAnzeige['angelegt']))) : '' ?><?= (int)($agbAnzeige['aktiv'] ?? 0) === 1 ? '' : ' · frühere Fassung' ?></p>
+  <div class="bx-panel" style="line-height:1.65;max-width:820px"><?= $agbAnzeige['inhalt'] ?></div>
+  <?php else: ?>
+  <div class="bx-panel"><div class="muted">Zurzeit sind keine AGB hinterlegt.</div></div>
+  <?php endif; ?>
 <?php elseif ($view === 'rechnungen'): ?>
   <h1 style="margin-bottom:4px">Ihre Rechnungen</h1>
   <div class="bx-panel">
@@ -1829,6 +1844,12 @@ portal_head('Kundenportal · ' . $k['firma']);
         <input type="checkbox" name="bestaetigt" value="1" required style="margin-top:3px;flex:none">
         <span id="bxBestHaken">Ich habe alles geprüft und nehme verbindlich an.</span>
       </label>
+      <?php $agbAkt = agb_aktuell(); if ($agbAkt): ?>
+      <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.45;margin-bottom:12px">
+        <input type="checkbox" name="agb" value="1" required style="margin-top:3px;flex:none">
+        <span>Ich akzeptiere die <a href="<?= $portalLink('agb') ?>" target="_blank">AGB (Fassung <?= h($agbAkt['version']) ?>)</a>.</span>
+      </label>
+      <?php endif; ?>
       <div class="bx-field"><label>Ihr Name <span class="muted">(gilt als verbindliche Bestätigung)</span></label>
         <input type="text" name="freigabe_name" required autocomplete="name" placeholder="Vor- und Nachname" style="width:100%;box-sizing:border-box"></div>
       <div class="bx-row" style="justify-content:flex-end;gap:10px;margin-top:16px">

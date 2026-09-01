@@ -2,6 +2,8 @@
 // Einziger Web-Einstieg bulkify 4.1 (Front Controller)
 session_start();
 require_once __DIR__ . '/../core/schema.php';
+require_once __DIR__ . '/../core/pdf_beleg.php';   // beleg_firma() – auch fuer den AGB-Entwurfstext
+require_once __DIR__ . '/../core/agb.php';
 require_once __DIR__ . '/../core/auth.php';
 require_once __DIR__ . '/../core/layout.php';
 

@@ -56,6 +56,7 @@
   - **Gültigkeit:** `angebot_gueltig_bis_default()` = heute + `angebot_gueltig_tage` (Standard 14). Wird beim Anlegen gesetzt und beim **Senden** aufgefrischt, falls das Datum leer oder schon abgelaufen ist – ein wochenalter Entwurf ginge sonst bereits abgelaufen raus. Ein selbst gesetztes Datum in der Zukunft bleibt unangetastet.
   - `angebot_positionen()` gibt **`rezeptur_id`, `stueck` und `verpackung_id` mit heraus** – ohne sie verlor der Editor beim Speichern, *was* hergestellt werden soll, und der Kunde konnte nicht mehr annehmen. In der Optionszeile stehen alle Verpackungsteile (Behälter, Deckel, Etikett), weil sie im Preis stecken.
   - **Verbindliche Freigabe:** `rezeptur.freigabe_name` / `freigabe_am` und `angebot.freigabe_name` / `freigabe_am` halten fest, **wer wann** angenommen hat. Der Name gilt als Unterschrift; ohne gesetzten Haken und Namen wird im Portal nichts angenommen (serverseitig geprüft, nicht nur im Dialog).
+  - **AGB versioniert:** Tabelle `agb` (eine Fassung aktiv, ältere bleiben als Beleg) plus `rezeptur.agb_version` / `angebot.agb_version` – die beim Annehmen geltende Fassung wird am Vorgang festgehalten. Funktionen in `core/agb.php`.
  
 - **Migrations-Werkzeug:** `table_exists`, `column_exists`, `ensure_column` – so kommen später neue Felder **additiv** dazu (nur hinzufügen, nie löschen). Alte Daten bleiben unberührt.
 - **Einstellungen:** `meta_get` / `meta_set` – lesen/schreiben in `app_meta`.

@@ -1,4 +1,5 @@
 <?php
+agb_seed_wenn_leer();   // AGB-Entwurf anlegen, solange keine Fassung existiert
 // Einstellungen – nach Kategorien gegliedert (Reiter). Datenquellen: app_meta (k/v), kapselgroesse, nummernkreis.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
@@ -16,6 +17,7 @@ $TABS = [
     'produktion' => 'Produktion & Rezeptur',
     'nummern'    => 'Nummernkreise',
     'fulfillment'=> 'Fulfillment-Schnittstelle',
+    'agb'        => 'AGB',
     'werkzeuge'  => 'Werkzeuge',
 ];
 $DFORM_M = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
@@ -35,6 +37,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'firma_save') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'charge_std_save') {
     meta_set('mhd_monate_standard', (string)max(1, (int)($_POST['mhd_monate_standard'] ?? 18)));
     header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
+}
+// --- AGB: neue Fassung speichern (die bisherige bleibt als Beleg erhalten) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'agb_save') {
+    $inhalt = (string)($_POST['agb_inhalt'] ?? '');
+    if (trim(strip_tags($inhalt)) !== '') agb_speichern((string)($_POST['agb_version'] ?? ''), $inhalt);
+    header('Location: ?p=einstellungen&tab=agb&ok=1'); exit;
 }
 // --- Betriebsmodus: System live schalten (schützt die löschenden Werkzeuge) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'live_save') {
@@ -479,5 +487,32 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <button class="btn btn-danger" type="submit">Daten zurücksetzen</button>
   </form>
 </div>
+<?php endif; ?>
+<?php if ($tab === 'agb'): $agbAkt = agb_aktuell(); $agbAlle = all("SELECT id,version,aktiv,angelegt FROM agb ORDER BY id DESC"); ?>
+<div class="bx-panel">
+  <h2>AGB</h2>
+  <p class="muted" style="margin-top:0">Die Fassung, die hier aktiv ist, sieht der Kunde im Portal und muss sie beim verbindlichen Annehmen von Rezeptur oder Angebot bestätigen. Die dabei geltende Versionsbezeichnung wird am Vorgang gespeichert. Speichern legt eine <strong>neue Fassung</strong> an – die alte bleibt als Beleg erhalten.</p>
+  <p class="muted" style="font-size:13px">Der mitgelieferte Text ist ein <strong>Entwurf</strong> und muss anwaltlich geprüft werden. HTML ist erlaubt (z. B. &lt;h3&gt; und &lt;p&gt;).</p>
+  <form method="post">
+    <input type="hidden" name="aktion" value="agb_save">
+    <div class="bx-field" style="max-width:280px"><label>Versionsbezeichnung</label>
+      <input type="text" name="agb_version" maxlength="40" placeholder="<?= h(date('Y-m-d')) ?>" value=""></div>
+    <div class="bx-field"><label>Inhalt</label>
+      <textarea name="agb_inhalt" rows="22" style="width:100%;font-family:ui-monospace,Consolas,monospace;font-size:13px"><?= h($agbAkt['inhalt'] ?? agb_entwurf_text()) ?></textarea></div>
+    <button class="btn btn-primary" type="submit">Als neue Fassung speichern</button>
+  </form>
+</div>
+<?php if (count($agbAlle) > 1): ?>
+<div class="bx-panel">
+  <h2>Fassungen</h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Fassung</th><th>Angelegt</th><th>Status</th></tr></thead>
+    <tbody><?php foreach ($agbAlle as $a): ?>
+      <tr><td><?= h($a['version']) ?></td><td><?= h(fmt_zeit($a['angelegt'])) ?> Uhr</td>
+          <td><?= (int)$a['aktiv'] === 1 ? bx_badge('aktiv','ok') : '<span class="muted">frühere Fassung</span>' ?></td></tr>
+    <?php endforeach; ?></tbody>
+  </table></div>
+</div>
+<?php endif; ?>
 <?php endif; ?>
 <?php render_footer(); ?>
