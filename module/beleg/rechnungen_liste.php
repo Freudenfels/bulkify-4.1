@@ -31,7 +31,7 @@ $statusBadge = fn($r) => match ($r['status']) {
     'teilbezahlt' => bx_badge('teilbezahlt','info'),
     'offen'       => bx_badge('offen','warn'),
     'storniert'   => bx_badge('storniert','err'),
-    default       => bx_badge($r['status']),
+    default       => bx_badge(status_text($r['status'])),
 };
 
 $cols = [

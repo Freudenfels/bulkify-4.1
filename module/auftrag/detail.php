@@ -25,7 +25,7 @@ $statusBadge = match ($a['status']) {
     'in_produktion' => bx_badge('in Produktion','warn'),
     'erledigt'      => bx_badge('versandbereit','info'),
     'versendet'     => bx_badge('versendet','ok'),
-    default         => bx_badge($a['status']),
+    default         => bx_badge(status_text($a['status'])),
 };
 
 render_header('auftraege', $a['nummer']);

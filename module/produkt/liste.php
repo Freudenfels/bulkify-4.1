@@ -30,7 +30,7 @@ $statusBadge = function($r) {
         'aktiv'   => bx_badge('aktiv','ok'),
         'inaktiv' => bx_badge('inaktiv','warn'),
         'entwurf' => bx_badge('Entwurf'),
-        default   => bx_badge($r['status']),
+        default   => bx_badge(status_text($r['status'])),
     };
 };
 $dash = fn($x) => $x ? h($x) : '<span class="muted">–</span>';

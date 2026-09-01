@@ -140,7 +140,7 @@ $statusBadge = match ($pa['status']) {
     'offen'    => bx_badge('offen','info'),
     'laufend'  => bx_badge('läuft','warn'),
     'erledigt' => bx_badge('fertig','ok'),
-    default    => bx_badge($pa['status']),
+    default    => bx_badge(status_text($pa['status'])),
 };
 
 render_header('produktion', $pa['nummer']);
@@ -218,7 +218,7 @@ if ($zugeChargen):
           <td><?= h($katLbl[$c['kategorie']] ?? $c['kategorie']) ?><?= $c['form'] ? ' · ' . h($c['form']) : '' ?></td>
           <td class="bx-num"><?= $mng($c['menge_verfuegbar'], $c['einheit']) ?></td>
           <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '–' ?></td>
-          <td><?= match($c['status']){'frei'=>bx_badge('frei','ok'),'quarantaene'=>bx_badge('Quarantäne','warn'),'leer'=>bx_badge('leer'),default=>bx_badge($c['status'])} ?></td>
+          <td><?= match($c['status']){'frei'=>bx_badge('frei','ok'),'quarantaene'=>bx_badge('Quarantäne','warn'),'leer'=>bx_badge('leer'),default=>bx_badge(status_text($c['status']))} ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>

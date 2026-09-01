@@ -16,6 +16,42 @@ function bx_btn(string $label, string $href, string $variant = 'ghost'): string 
     return '<a class="btn btn-' . h($variant) . '" href="' . h($href) . '">' . h($label) . '</a>';
 }
 
+// Statuswert aus der Datenbank in lesbares Deutsch – MIT Umlauten. In der DB stehen die Werte
+// bewusst ohne (bestaetigt, zurueckgezogen …); auf dem Bildschirm gehören sie richtig geschrieben.
+// Unbekanntes wird nur aufgehübscht (Unterstrich raus, erster Buchstabe groß), nie verschluckt.
+function status_text(string $s): string {
+    $map = [
+        'neu'            => 'neu',
+        'offen'          => 'offen',
+        'in_bearbeitung' => 'in Bearbeitung',
+        'beantwortet'    => 'beantwortet',
+        'gesendet'       => 'gesendet',
+        'bestaetigt'     => 'bestätigt',
+        'abgelehnt'      => 'abgelehnt',
+        'zurueckgezogen' => 'zurückgezogen',
+        'ueberarbeiten'  => 'überarbeiten',
+        'vorschlag'      => 'Vorschlag',
+        'eingefroren'    => 'eingefroren',
+        'freigegeben'    => 'freigegeben',
+        'erledigt'       => 'erledigt',
+        'storniert'      => 'storniert',
+        'bestellt'       => 'bestellt',
+        'geliefert'      => 'geliefert',
+        'teilgeliefert'  => 'teilgeliefert',
+        'versendet'      => 'versendet',
+        'bezahlt'        => 'bezahlt',
+        'ueberfaellig'   => 'überfällig',
+        'quarantaene'    => 'Quarantäne',
+        'gesperrt'       => 'gesperrt',
+        'aktiv'          => 'aktiv',
+        'inaktiv'        => 'inaktiv',
+        'entwurf'        => 'Entwurf',
+        'in_produktion'  => 'in Produktion',
+        'produziert'     => 'produziert',
+    ];
+    $s = trim($s);
+    return $map[$s] ?? ucfirst(str_replace('_', ' ', $s));
+}
 function bx_badge(string $text, string $kind = ''): string {
     $c = $kind ? ' badge-' . h($kind) : '';
     return '<span class="badge' . $c . '">' . h($text) . '</span>';

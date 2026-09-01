@@ -34,7 +34,7 @@ $statusBadge = function($r) {
         'freigegeben' => bx_badge('freigegeben','ok'),
         'eingefroren' => bx_badge('eingefroren','warn'),
         'abgelehnt'   => bx_badge('abgelehnt','err'),
-        default       => bx_badge($r['status']),
+        default       => bx_badge(status_text($r['status'])),
     };
 };
 

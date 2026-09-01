@@ -31,7 +31,7 @@ $statusBadge = fn($r) => match ($r['status']) {
     'beantwortet'    => bx_badge('beantwortet','ok'),
     'ueberarbeiten'  => bx_badge('Vorschlag abgelehnt – überarbeiten','err'),
     'abgelehnt'      => bx_badge('abgelehnt','err'),
-    default          => bx_badge($r['status']),
+    default          => bx_badge(status_text($r['status'])),
 };
 
 $cols = [

@@ -29,7 +29,7 @@ $statusBadge = function($r) {
         'gesendet'   => bx_badge('gesendet'),
         'bestaetigt' => bx_badge('bestätigt','ok'),
         'abgelehnt'  => bx_badge('abgelehnt','err'),
-        default      => bx_badge($r['status']),
+        default      => bx_badge(status_text($r['status'])),
     };
 };
 $dash = fn($x) => $x ? h($x) : '<span class="muted">–</span>';

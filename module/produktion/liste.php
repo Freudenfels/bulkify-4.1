@@ -48,7 +48,7 @@ $statusBadge = function ($r) {
         'offen'    => bx_badge('offen', 'info'),
         'laufend'  => bx_badge('läuft', 'warn'),
         'erledigt' => bx_badge('fertig', 'ok'),
-        default    => bx_badge($r['status']),
+        default    => bx_badge(status_text($r['status'])),
     };
 };
 

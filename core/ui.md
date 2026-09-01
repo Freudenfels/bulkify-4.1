@@ -1,5 +1,8 @@
 # ui.php – Wiederverwendbare Bausteine
 
+## status_text()
+Wandelt einen Statuswert aus der Datenbank in lesbares Deutsch **mit Umlauten**: in der DB stehen die Werte bewusst ohne (`bestaetigt`, `zurueckgezogen`, `quarantaene`), auf dem Bildschirm gehören sie richtig geschrieben. Wird überall dort genutzt, wo ein Status ohne eigene Übersetzung ausgegeben wird (die `default`-Zweige der Status-Badges). Unbekannte Werte werden nur aufgehübscht (Unterstrich raus, erster Buchstabe groß) statt verschluckt.
+
 **Zweck:** Fertige Funktionen für immer gleiche UI-Teile (Listen, Reiter, Buttons, Chat). Eine neue Seite baut damit ihr Aussehen zusammen, statt HTML von Hand – so bleibt alles einheitlich.
 
 **Was drin ist:**

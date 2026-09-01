@@ -27,7 +27,7 @@ $statusBadge = function($r) {
         'in_produktion' => bx_badge('in Produktion','warn'),
         'erledigt'      => bx_badge('versandbereit','info'),
         'versendet'     => bx_badge('versendet','ok'),
-        default         => bx_badge($r['status']),
+        default         => bx_badge(status_text($r['status'])),
     };
 };
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';

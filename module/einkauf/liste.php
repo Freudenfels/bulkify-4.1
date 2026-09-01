@@ -28,7 +28,7 @@ $statusBadge = fn($r) => match ($r['status']) {
     'offen'     => bx_badge('Entwurf','info'),
     'bestellt'  => bx_badge('bestellt','warn'),
     'geliefert' => bx_badge('geliefert','ok'),
-    default     => bx_badge($r['status']),
+    default     => bx_badge(status_text($r['status'])),
 };
 
 $cols = [

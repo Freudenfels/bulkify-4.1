@@ -79,7 +79,7 @@ if (isset($_GET['geliefert'])) echo '<div class="bx-panel badge-ok" style="paddi
 
 if (!$neu) {
     echo '<div class="bx-panel"><div class="bx-row" style="justify-content:space-between;align-items:center">';
-    echo '<div>Status: ' . (match($b['status']){'offen'=>bx_badge('offen','info'),'bestellt'=>bx_badge('bestellt','warn'),'geliefert'=>bx_badge('geliefert','ok'),default=>bx_badge($b['status'])}) . '</div><div class="bx-row">';
+    echo '<div>Status: ' . (match($b['status']){'offen'=>bx_badge('offen','info'),'bestellt'=>bx_badge('bestellt','warn'),'geliefert'=>bx_badge('geliefert','ok'),default=>bx_badge(status_text($b['status']))}) . '</div><div class="bx-row">';
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" title="Diesen Entwurf verwerfen – der Bedarf erscheint wieder im Einkaufsbedarf">Zurück in den Einkaufsbedarf</button></form> ';
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form>';
     if ($b['status'] === 'bestellt') echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="liefern"><button class="btn btn-primary btn-sm" type="submit">Wareneingang buchen</button></form>';
