@@ -43,6 +43,11 @@ Der Kunde sieht dann im Portal die Preismatrix **mit genau dieser Marge und Prod
 (auch im Angebots-PDF) und wählt eine Zelle. Bereits abgegebene Angebote werden hier verlinkt
 aufgelistet (mit der gesetzten Marge), statt den Button erneut anzubieten – kein Doppel-Angebot.
 
+
+## Angebot zurückziehen
+Solange der Kunde nicht zugesagt hat (`offen` oder `gesendet`), lässt sich ein Angebot **hier auf der Anfrage** zurückziehen – nicht nur im Editor. Der Knopf steht neben jedem Angebot in der Liste. Wirkung: `angebot.status='zurueckgezogen'`, die **Anfrage geht zurück auf „in Bearbeitung"**, und „Im Angebots-Editor bauen" erscheint wieder – zurückgezogene Angebote zählen nicht als „schon abgegeben". Im Portal fällt das Angebot damit aus der Annehmen-Logik und wird beim Kunden als „zurückgezogen" angezeigt. Ein bestätigtes Angebot lässt sich nicht zurückziehen, es hängt bereits an einem Auftrag.
+
+Die Angebote zur Anfrage werden über `angebot.anfrage_id` gefunden (zusätzlich noch über die alte Notiz-Konvention „Aus Anfrage <Nr>", damit ältere Datensätze nicht verlorengehen).
 ## Rohstoff-Preis berechnen (bei Rohstoffanfragen)
 Bei `typ = rohstoff` erscheint ein Panel **„Rohstoff-Preis berechnen"** mit derselben
 Margen-Logik wie bei Produkt-Angeboten:

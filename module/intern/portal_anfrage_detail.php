@@ -42,6 +42,19 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     }
     header('Location: ?p=portal_anfrage&id=' . $id); exit;
 }
+// Angebot zur Anfrage zurückziehen – solange der Kunde nicht zugesagt hat. Die Anfrage geht dabei zurück
+// auf „in Bearbeitung", damit ein neues Angebot gebaut werden kann.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_zurueck') {
+    $aid = (int)($_POST['angebot_id'] ?? 0);
+    $ang = $aid ? one("SELECT id, nummer, status, kunde_id FROM angebot WHERE id=?", [$aid]) : null;
+    if ($ang && in_array($ang['status'], ['offen', 'gesendet'], true)) {
+        q("UPDATE angebot SET status='zurueckgezogen' WHERE id=?", [$aid]);
+        q("UPDATE portal_anfrage SET status='in_bearbeitung' WHERE id=?", [$id]);
+        if ($ang['kunde_id']) log_aktivitaet('kunde', (int)$ang['kunde_id'], 'team', 'Angebot ' . $ang['nummer'] . ' zurückgezogen – Anfrage wieder offen.', 'angebot', 'angebot', $aid);
+        header('Location: ?p=portal_anfrage&id=' . $id . '&zurueckgezogen=1'); exit;
+    }
+    header('Location: ?p=portal_anfrage&id=' . $id . '&zzfehler=1'); exit;
+}
 // Im Angebots-Editor bauen: verknüpftes Angebot anlegen (oder vorhandenes öffnen) und in den Editor springen.
 // Funktioniert AUCH ohne berechnete Preismatrix (Positionen dort manuell möglich).
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_bauen') {
@@ -49,7 +62,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     // Auch ohne Produkt möglich: Der Kunde kann eine REZEPTUR anfragen, für die es noch kein Produkt gibt.
     // Im Editor wird die Rezeptur dann als Position gebaut (Typ „Rezeptur"), daraus entsteht das Produkt.
     if ($pa && $pa['typ'] === 'produkt' && ($pa['produkt_id'] || $pa['rezeptur_id']) && $pa['kunde_id']) {
-        $vorhanden = (int) scalar("SELECT id FROM angebot WHERE anfrage_id=? ORDER BY id DESC LIMIT 1", [$id]);
+        $vorhanden = (int) scalar("SELECT id FROM angebot WHERE anfrage_id=? AND status<>'zurueckgezogen' ORDER BY id DESC LIMIT 1", [$id]);
         if ($vorhanden) { header('Location: ?p=angebot&id=' . $vorhanden); exit; }   // nicht doppelt anlegen
         if ($pa['produkt_id'] && (int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [(int)$pa['produkt_id']]) === 0)
             produkt_matrix_generieren((int)$pa['produkt_id']);   // Matrix versuchen (leer ist ok – Positionen manuell)
@@ -76,12 +89,18 @@ if (!$pa) { render_header('portal_anfragen','Anfrage'); bx_head('Anfrage nicht g
 $mg = fn($x) => rtrim(rtrim(number_format((float)$x, 2, ',', '.'), '0'), ',');
 $stBadge = fn($s) => match ($s) { 'neu'=>bx_badge('neu','info'),'in_bearbeitung'=>bx_badge('in Bearbeitung','warn'),'beantwortet'=>bx_badge('Angebot abgegeben','ok'),'abgelehnt'=>bx_badge('abgelehnt','err'),default=>bx_badge($s) };
 // Bereits abgegebene Angebote zu dieser Anfrage (Verknüpfung über Notiz-Präfix "Aus Anfrage <Nr>")
-$angebote = $pa['typ'] === 'produkt' ? all("SELECT id, nummer, status, marge_override FROM angebot WHERE notiz LIKE ? ORDER BY id DESC", ['Aus Anfrage ' . $pa['nummer'] . '%']) : [];
+// Angebote zur Anfrage: bevorzugt über anfrage_id (sauber), zusätzlich über die alte Notiz-Konvention.
+$angebote = $pa['typ'] === 'produkt' ? all("SELECT id, nummer, status, marge_override FROM angebot
+    WHERE anfrage_id=? OR notiz LIKE ? ORDER BY id DESC", [$id, 'Aus Anfrage ' . $pa['nummer'] . '%']) : [];
+// Zurückgezogene zählen nicht als „schon abgegeben" – danach darf ein neues Angebot gebaut werden.
+$angeboteAktiv = array_values(array_filter($angebote, fn($x) => $x['status'] !== 'zurueckgezogen'));
 
 render_header('portal_anfragen', $pa['nummer']);
 bx_head($pa['nummer'], $TYP[$pa['typ']] ?? $pa['typ'], bx_btn('Zurück zur Liste', '?p=portal_anfragen', 'ghost'));
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot abgegeben – der Kunde sieht jetzt die Preise im Portal.</div>';
+if (isset($_GET['zurueckgezogen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot zurückgezogen – der Kunde kann es nicht mehr annehmen. Die Anfrage steht wieder auf „in Bearbeitung", du kannst ein neues Angebot bauen.</div>';
+if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Zurückziehen nicht möglich – das Angebot ist bereits bestätigt oder abgelehnt.</div>';
 ?>
 <div class="bx-cards">
   <div class="bx-card"><div class="k">Kunde</div><div class="v" style="font-size:16px"><?php if ($pa['kunde_id']): ?><a href="?p=kunde&id=<?= (int)$pa['kunde_id'] ?>"><?= h($pa['firma'] ?: '–') ?></a><?php else: ?>–<?php endif; ?></div></div>
@@ -214,12 +233,22 @@ if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding
 <div class="bx-panel">
   <h2>Angebot abgeben</h2>
   <?php if ($angebote): ?>
-    <p class="muted" style="margin-top:0">Bereits abgegeben:</p>
+    <p class="muted" style="margin-top:0">Angebote zu dieser Anfrage:</p>
     <?php foreach ($angebote as $ag): ?>
-      <div class="bx-row" style="gap:10px;align-items:center;margin-bottom:6px"><a href="?p=angebot&id=<?= (int)$ag['id'] ?>"><?= h($ag['nummer']) ?></a> <?= bx_badge($ag['status']) ?><?php if (($ag['marge_override'] ?? '')!=='' && $ag['marge_override']!==null): ?> <span class="muted">Marge <?= rtrim(rtrim(number_format((float)$ag['marge_override'],2,',','.'),'0'),',') ?> %</span><?php endif; ?></div>
+      <div class="bx-row" style="gap:10px;align-items:center;margin-bottom:6px">
+        <a href="?p=angebot&id=<?= (int)$ag['id'] ?>"><?= h($ag['nummer']) ?></a> <?= bx_badge($ag['status']) ?>
+        <?php if (($ag['marge_override'] ?? '')!=='' && $ag['marge_override']!==null): ?> <span class="muted">Marge <?= rtrim(rtrim(number_format((float)$ag['marge_override'],2,',','.'),'0'),',') ?> %</span><?php endif; ?>
+        <?php if (in_array($ag['status'], ['offen','gesendet'], true)): ?>
+          <form method="post" style="margin:0" onsubmit="return confirm('Angebot <?= h($ag['nummer']) ?> zurückziehen? Der Kunde kann es dann nicht mehr annehmen, und die Anfrage ist wieder offen.');">
+            <input type="hidden" name="aktion" value="angebot_zurueck"><input type="hidden" name="angebot_id" value="<?= (int)$ag['id'] ?>">
+            <button class="btn btn-ghost btn-sm" type="submit">zurückziehen</button>
+          </form>
+        <?php endif; ?>
+      </div>
     <?php endforeach; ?>
     <div class="muted" style="margin-top:8px">Der Kunde sieht die Preismatrix im Portal und wählt eine Menge.</div>
-  <?php else: ?>
+  <?php endif; ?>
+  <?php if (!$angeboteAktiv): ?>
     <p class="muted" style="margin-top:0">Du gibst keine Einzelpreise ein – das System rechnet die ganze Matrix (Stückzahl × Bestellmenge). Stell hier <strong>Marge, Produktionszeit und einen Hinweis</strong> ein, sieh die Preise in der Vorschau und sende dann.</p>
     <form method="post">
       <div class="bx-grid">
@@ -262,11 +291,20 @@ if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding
   <h2>Angebot abgeben</h2>
   <p class="muted" style="margin-top:0">Der Kunde hat eine <strong>Rezeptur</strong> angefragt, für die es noch kein Produkt gibt – es gibt deshalb noch keine Preismatrix. Im Angebots-Editor fügst du die Rezeptur als Position hinzu (Typ „Rezeptur (Lohnherstellung)"), wählst Menge je Packung und Verpackung, und beim Senden entsteht daraus automatisch das Produkt.</p>
   <?php if ($angebote): ?>
-    <p class="muted">Bereits angelegt:</p>
+    <p class="muted">Angebote zu dieser Anfrage:</p>
     <?php foreach ($angebote as $ag): ?>
-      <div class="bx-row" style="gap:10px;align-items:center;margin-bottom:6px"><a href="?p=angebot&id=<?= (int)$ag['id'] ?>"><?= h($ag['nummer']) ?></a> <?= bx_badge($ag['status']) ?></div>
+      <div class="bx-row" style="gap:10px;align-items:center;margin-bottom:6px">
+        <a href="?p=angebot&id=<?= (int)$ag['id'] ?>"><?= h($ag['nummer']) ?></a> <?= bx_badge($ag['status']) ?>
+        <?php if (in_array($ag['status'], ['offen','gesendet'], true)): ?>
+          <form method="post" style="margin:0" onsubmit="return confirm('Angebot <?= h($ag['nummer']) ?> zurückziehen? Der Kunde kann es dann nicht mehr annehmen, und die Anfrage ist wieder offen.');">
+            <input type="hidden" name="aktion" value="angebot_zurueck"><input type="hidden" name="angebot_id" value="<?= (int)$ag['id'] ?>">
+            <button class="btn btn-ghost btn-sm" type="submit">zurückziehen</button>
+          </form>
+        <?php endif; ?>
+      </div>
     <?php endforeach; ?>
-  <?php else: ?>
+  <?php endif; ?>
+  <?php if (!$angeboteAktiv): ?>
     <form method="post" style="margin-top:8px">
       <button class="btn btn-primary" type="submit" name="aktion" value="angebot_bauen">Im Angebots-Editor bauen</button>
     </form>
