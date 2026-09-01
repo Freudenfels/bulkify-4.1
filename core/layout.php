@@ -68,6 +68,11 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     echo "<title>" . h($titel ? "$titel – $marke $ver" : "$marke $ver") . "</title>";
     echo "<link rel=\"stylesheet\" href=\"assets/app.css\">";
     echo "<script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>";
+    // Menübreite + Einklapp-Zustand VOR dem Rendern setzen, sonst springt die Leiste beim Laden kurz.
+    echo "<script>(function(){try{var r=document.documentElement;"
+       . "var w=parseInt(localStorage.getItem('bx-side-w'),10);"
+       . "if(w>=180&&w<=420)r.style.setProperty('--side-w',w+'px');"
+       . "if(localStorage.getItem('bx-side-zu')==='1')r.setAttribute('data-side','zu');}catch(e){}})();</script>";
     echo "</head><body>";
     echo "<div class=\"bx-shell\">";
     // Werk-Bereich (Produktionsmitarbeiter): eigenes Menü + eigene Marke.
@@ -127,11 +132,17 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
            . "<div class=\"bx-username\">" . h($u['name']) . "</div>"
            . "<div class=\"bx-userroles\">" . h(implode(' · ', $meine) ?: 'keine Rolle') . "</div>"
            . "<a class=\"bx-logout\" href=\"?p=logout\">Abmelden</a>"
-           . "<button type=\"button\" class=\"bx-themebtn\">Dunkler Modus</button></div>";
+           . "<button type=\"button\" class=\"bx-themebtn\">Dunkler Modus</button>"
+           . "<button type=\"button\" class=\"bx-sidebtn\">Menü einklappen</button></div>";
     } else {
-        echo "<div class=\"bx-userbox\"><button type=\"button\" class=\"bx-themebtn\">Dunkler Modus</button></div>";
+        echo "<div class=\"bx-userbox\"><button type=\"button\" class=\"bx-themebtn\">Dunkler Modus</button>"
+           . "<button type=\"button\" class=\"bx-sidebtn\">Menü einklappen</button></div>";
     }
     echo "</nav></aside>";
+    // Ziehgriff an der Kante (Breite) + Knopf zum Wiederaufklappen (nur sichtbar, wenn die Leiste zu ist).
+    echo "<div class=\"bx-sidegriff\" tabindex=\"0\" role=\"separator\" aria-orientation=\"vertical\""
+       . " title=\"Breite ziehen · Doppelklick setzt zurück · Pfeiltasten verstellen\"></div>";
+    echo "<button type=\"button\" class=\"bx-sideauf\" title=\"Menü aufklappen\">Menü</button>";
     // Hauptbereich
     echo "<main class=\"bx-main\">";
 }
@@ -140,6 +151,7 @@ function render_footer(): void {
     echo "</main></div>";
     echo bx_theme_script();
     echo bx_side_scroll_script();
+    echo bx_side_script();
     echo "</body></html>";
 }
 
@@ -149,6 +161,32 @@ function bx_side_scroll_script(): string {
         . "try{var y=sessionStorage.getItem('bx-side-scroll');if(y!==null)el.scrollTop=parseInt(y,10)||0;}catch(e){}"
         . "var t;el.addEventListener('scroll',function(){try{clearTimeout(t);t=setTimeout(function(){sessionStorage.setItem('bx-side-scroll',el.scrollTop);},80);}catch(e){}});"
         . "el.querySelectorAll('a[href]').forEach(function(a){a.addEventListener('click',function(){try{sessionStorage.setItem('bx-side-scroll',el.scrollTop);}catch(e){}});});"
+        . "})();</script>";
+}
+
+// Wiring für die Menüleiste: Breite ziehen (.bx-sidegriff) + Ein-/Ausklappen (.bx-sidebtn / .bx-sideauf).
+// Gemerkt wird beides in localStorage (bx-side-w / bx-side-zu), gesetzt wird es schon im <head>.
+function bx_side_script(): string {
+    return "<script>(function(){var r=document.documentElement,g=document.querySelector('.bx-sidegriff');"
+        . "var MIN=180,MAX=420,STD=224;"
+        . "function breite(w){w=Math.max(MIN,Math.min(MAX,Math.round(w)));r.style.setProperty('--side-w',w+'px');"
+        . "try{localStorage.setItem('bx-side-w',w);}catch(e){}return w;}"
+        . "function jetzt(){return parseInt(getComputedStyle(r).getPropertyValue('--side-w'),10)||STD;}"
+        . "function zu(v){if(v){r.setAttribute('data-side','zu');}else{r.removeAttribute('data-side');}"
+        . "try{localStorage.setItem('bx-side-zu',v?'1':'0');}catch(e){}}"
+        . "if(g){g.addEventListener('mousedown',function(e){e.preventDefault();g.classList.add('aktiv');"
+        . "document.body.classList.add('bx-zieht');"
+        . "function mv(ev){breite(ev.clientX);}"
+        . "function up(){g.classList.remove('aktiv');document.body.classList.remove('bx-zieht');"
+        . "document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);}"
+        . "document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);});"
+        . "g.addEventListener('dblclick',function(){breite(STD);});"
+        . "g.addEventListener('keydown',function(e){var s=e.shiftKey?40:10;"
+        . "if(e.key==='ArrowLeft'){e.preventDefault();breite(jetzt()-s);}"
+        . "else if(e.key==='ArrowRight'){e.preventDefault();breite(jetzt()+s);}"
+        . "else if(e.key==='Home'){e.preventDefault();breite(STD);}});}"
+        . "document.querySelectorAll('.bx-sidebtn').forEach(function(b){b.addEventListener('click',function(e){e.preventDefault();zu(true);});});"
+        . "document.querySelectorAll('.bx-sideauf').forEach(function(b){b.addEventListener('click',function(e){e.preventDefault();zu(false);});});"
         . "})();</script>";
 }
 

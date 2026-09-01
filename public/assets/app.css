@@ -35,6 +35,9 @@
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:28px;
   --r:9px; --r-sm:6px;
   --shadow:0 1px 2px rgba(16,33,15,.04), 0 2px 8px rgba(16,33,15,.05);
+
+  /* Sidebar-Breite - per Ziehgriff verstellbar, in localStorage gemerkt */
+  --side-w:224px;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -44,7 +47,7 @@ a:hover{text-decoration:underline}
 
 /* ---------- Grundgerüst ---------- */
 .bx-shell{display:flex;min-height:100vh}
-.bx-side{width:224px;flex:0 0 224px;background:var(--dunkelgruen);color:#dfe7dc;padding:var(--sp-4) 0;position:sticky;top:0;height:100vh;overflow:auto}
+.bx-side{width:var(--side-w);flex:0 0 var(--side-w);background:var(--dunkelgruen);color:#dfe7dc;padding:var(--sp-4) 0;position:sticky;top:0;height:100vh;overflow:auto}
 .bx-brand{font-size:var(--fs-lg);padding:var(--sp-1) var(--sp-5) var(--sp-4);color:#fff}
 .bx-brand .bx-ver{color:var(--lime)}
 .bx-navgroup{font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;color:#8fa389;padding:var(--sp-3) var(--sp-5) var(--sp-1)}
@@ -271,3 +274,25 @@ hr.bx{border:none;border-top:1px solid var(--line);margin:var(--sp-5) 0}
 /* Marken-Logo in der Sidebar (heller Chip auf dunkler Leiste) */
 .bx-brand{display:flex;align-items:center;gap:8px}
 .bx-brand .bx-logo{height:26px;width:auto;display:block}
+
+/* ---------- Sidebar: Breite ziehen + einklappen ---------- */
+/* Ziehgriff sitzt fix auf der Kante der Leiste (die Leiste selbst scrollt, der Griff nicht mit). */
+.bx-sidegriff{position:fixed;top:0;bottom:0;left:calc(var(--side-w) - 3px);width:6px;z-index:40;
+  cursor:col-resize;background:transparent;transition:background .12s}
+.bx-sidegriff:hover,.bx-sidegriff.aktiv{background:rgba(192,242,78,.45)}
+/* Beim Ziehen: Cursor global halten und Textmarkierung unterdruecken. */
+body.bx-zieht{cursor:col-resize;user-select:none}
+/* Knopf im Sidebar-Fuss (einklappen) - gleiche Optik wie der Theme-Knopf. */
+.bx-sidebtn{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--lime);
+  cursor:pointer;padding:6px 0;font:inherit}
+.bx-sidebtn:hover{text-decoration:underline}
+/* Knopf zum Wiederaufklappen - nur sichtbar, wenn die Leiste zu ist. */
+.bx-sideauf{display:none;position:fixed;top:var(--sp-4);left:var(--sp-3);z-index:41;
+  background:var(--dunkelgruen);color:var(--lime);border:none;border-radius:var(--r-sm);
+  padding:7px var(--sp-3);font:inherit;cursor:pointer;box-shadow:var(--shadow)}
+.bx-sideauf:hover{background:var(--gruen);color:#fff}
+:root[data-side="zu"] .bx-side{display:none}
+:root[data-side="zu"] .bx-sidegriff{display:none}
+:root[data-side="zu"] .bx-sideauf{display:block}
+/* Platz fuer den Aufklappen-Knopf, damit er die Seitenueberschrift nicht ueberdeckt. */
+:root[data-side="zu"] .bx-main{padding-left:calc(var(--sp-6) + 58px)}
