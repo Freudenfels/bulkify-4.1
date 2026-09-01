@@ -42,6 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'daten_reset') {
     $r = daten_zuruecksetzen(($_POST['mit_rezepturen'] ?? '') === '1', ($_POST['mit_kunden'] ?? '') === '1');
     header('Location: ?p=einstellungen&tab=werkzeuge&reset=' . array_sum($r)); exit;
 }
+// --- Demo-Testdaten gezielt entfernen (löscht nur, was als DEMO-TESTSET markiert ist) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'demo_weg') {
+    $r = demo_testset_entfernen();
+    $_SESSION['demo_weg_behalten'] = $r['behalten'];
+    header('Location: ?p=einstellungen&tab=werkzeuge&demoweg=' . ((int)$r['angebote'] + (int)$r['auftraege'] + (int)$r['produkte'] + (int)$r['rezepturen'] + (int)$r['kunden'])); exit;
+}
 // --- Startset anlegen: Rezepturen + Produkte nach dem Modell (nicht löschend, idempotent) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'startset') {
     $r = seed_startset();
@@ -372,10 +378,23 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <li>Mehrfaches Klicken erzeugt <strong>keine Dubletten</strong> (idempotent).</li>
     <li>Demo-Angebote sind an der Notiz <code>DEMO-TESTSET</code> erkennbar.</li>
   </ul>
-  <form method="post" style="margin-top:8px">
-    <input type="hidden" name="aktion" value="demo_seed">
-    <button class="btn btn-primary" type="submit">Demo-Testdaten einspielen</button>
-  </form>
+  <?php if (isset($_GET['demoweg'])): ?>
+    <div class="bx-panel badge-ok" style="padding:12px 16px"><?= (int)$_GET['demoweg'] ?> Demo-Datensätze entfernt.
+      <?php $beh = $_SESSION['demo_weg_behalten'] ?? []; unset($_SESSION['demo_weg_behalten']); ?>
+      <?php if ($beh): ?><div style="margin-top:6px;font-size:13px">Behalten, weil noch in Verwendung: <?= h(implode(' · ', $beh)) ?></div><?php endif; ?>
+    </div>
+  <?php endif; ?>
+  <div class="bx-row" style="gap:10px;margin-top:8px">
+    <form method="post" style="margin:0">
+      <input type="hidden" name="aktion" value="demo_seed">
+      <button class="btn btn-primary" type="submit">Demo-Testdaten einspielen</button>
+    </form>
+    <form method="post" style="margin:0" onsubmit="return confirm('Alle als DEMO-TESTSET markierten Daten entfernen?');">
+      <input type="hidden" name="aktion" value="demo_weg">
+      <button class="btn btn-ghost" type="submit">Demo-Testdaten entfernen</button>
+    </form>
+  </div>
+  <p class="muted" style="margin-top:10px;font-size:13px">„Entfernen" löscht <strong>nur</strong> die Demo-Kette (Notiz <code>DEMO-TESTSET</code>): Angebote samt Aufträgen, Rechnungen, Produktion und Chargen, dazu die Demo-Produkte, -Rezepturen und -Kunden. Echte Daten bleiben unangetastet – und ein Demo-Produkt, das inzwischen in einem echten Angebot steckt, bleibt ebenfalls stehen.</p>
 </div>
 
 <div class="bx-panel">

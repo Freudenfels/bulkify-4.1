@@ -3291,6 +3291,92 @@ function daten_zuruecksetzen(bool $mitRezepturen = false, bool $mitKunden = fals
     return $report;
 }
 
+// ---- Demo-Testdaten gezielt wieder entfernen ----
+// Löscht NUR, was `demo_testset_einspielen()` angelegt hat – erkennbar an der Notiz 'DEMO-TESTSET'
+// (ältere Demo-Rezepturen zusätzlich an 'Demo-Rezeptur'). Echte Daten bleiben unangetastet.
+// Produkte, Rezepturen und Kunden werden nur gelöscht, wenn NICHTS Echtes mehr daran hängt –
+// ein Demo-Produkt, das inzwischen in einem echten Angebot steckt, bleibt also stehen.
+function demo_testset_entfernen(): array {
+    $r = ['angebote'=>0, 'auftraege'=>0, 'belege'=>0, 'produktionen'=>0, 'chargen'=>0,
+          'produkte'=>0, 'rezepturen'=>0, 'kunden'=>0, 'behalten'=>[]];
+
+    // 1) Vorgangskette je Demo-Angebot: Auftrag -> Produktion/Chargen/Belege
+    foreach (all("SELECT id FROM angebot WHERE notiz='DEMO-TESTSET'") as $a) {
+        $angId = (int)$a['id'];
+        foreach (all("SELECT id FROM auftrag WHERE angebot_id=?", [$angId]) as $auf) {
+            $aufId = (int)$auf['id'];
+            foreach (all("SELECT id FROM produktionsauftrag WHERE auftrag_id=?", [$aufId]) as $pa) {
+                $paId = (int)$pa['id'];
+                q("DELETE FROM produktion_verbrauch WHERE pa_id=?", [$paId]);
+                $r['chargen'] += (int) scalar("SELECT COUNT(*) FROM charge WHERE pa_id=?", [$paId]);
+                q("DELETE FROM charge WHERE pa_id=?", [$paId]);
+                q("DELETE FROM produktion_schritt WHERE pa_id=?", [$paId]);
+                q("DELETE FROM produktionsauftrag WHERE id=?", [$paId]);
+                $r['produktionen']++;
+            }
+            $r['chargen'] += (int) scalar("SELECT COUNT(*) FROM charge WHERE auftrag_id=?", [$aufId]);
+            q("DELETE FROM charge WHERE auftrag_id=?", [$aufId]);
+            q("DELETE FROM reservierung WHERE auftrag_id=?", [$aufId]);
+            if (table_exists('zahlung'))          q("DELETE FROM zahlung WHERE beleg_id IN (SELECT id FROM beleg WHERE auftrag_id=?)", [$aufId]);
+            if (table_exists('beleg_status_log')) q("DELETE FROM beleg_status_log WHERE beleg_id IN (SELECT id FROM beleg WHERE auftrag_id=?)", [$aufId]);
+            $r['belege'] += (int) scalar("SELECT COUNT(*) FROM beleg WHERE auftrag_id=?", [$aufId]);
+            q("DELETE FROM beleg WHERE auftrag_id=?", [$aufId]);
+            q("DELETE FROM auftrag WHERE id=?", [$aufId]);
+            $r['auftraege']++;
+        }
+        q("DELETE FROM angebot_position WHERE angebot_id=?", [$angId]);
+        q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$angId]);
+        q("DELETE FROM angebot_produkt WHERE angebot_id=?", [$angId]);
+        q("DELETE FROM angebot WHERE id=?", [$angId]);
+        $r['angebote']++;
+    }
+
+    // 2) Demo-Produkte – nur, wenn kein echter Vorgang mehr daran hängt
+    foreach (all("SELECT id, name FROM produkt WHERE notiz='DEMO-TESTSET'") as $p) {
+        $pid = (int)$p['id'];
+        $haengt = (int) scalar("SELECT COUNT(*) FROM angebot WHERE produkt_id=?", [$pid])
+                + (int) scalar("SELECT COUNT(*) FROM auftrag WHERE produkt_id=?", [$pid])
+                + (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE produkt_id=?", [$pid]);
+        if ($haengt > 0) { $r['behalten'][] = 'Produkt ' . $p['name'] . ' (noch in Verwendung)'; continue; }
+        q("DELETE FROM produkt_preis WHERE produkt_id=?", [$pid]);
+        q("UPDATE item SET produkt_id=NULL WHERE produkt_id=?", [$pid]);
+        q("DELETE FROM produkt WHERE id=?", [$pid]);
+        $r['produkte']++;
+    }
+
+    // 3) Demo-Rezepturen – nur, wenn kein Produkt mehr darauf zeigt
+    foreach (all("SELECT id, name FROM rezeptur WHERE notiz IN ('DEMO-TESTSET','Demo-Rezeptur')") as $rz) {
+        $rid = (int)$rz['id'];
+        if ((int) scalar("SELECT COUNT(*) FROM produkt WHERE rezeptur_id=?", [$rid]) > 0) {
+            $r['behalten'][] = 'Rezeptur ' . $rz['name'] . ' (noch von einem Produkt genutzt)'; continue;
+        }
+        q("UPDATE rezeptur_anfrage SET rezeptur_id=NULL WHERE rezeptur_id=?", [$rid]);
+        q("DELETE FROM rezeptur_zutat WHERE rezeptur_id=?", [$rid]);
+        q("DELETE FROM rezeptur WHERE id=?", [$rid]);
+        $r['rezepturen']++;
+    }
+
+    // 4) Demo-Kunden – nur, wenn nichts mehr auf sie verweist
+    foreach (all("SELECT id, firma FROM kunden WHERE notiz='DEMO-TESTSET'") as $k) {
+        $kid = (int)$k['id'];
+        $haengt = (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=?", [$kid])
+                + (int) scalar("SELECT COUNT(*) FROM auftrag WHERE kunde_id=?", [$kid])
+                + (int) scalar("SELECT COUNT(*) FROM beleg WHERE kunde_id=?", [$kid])
+                + (int) scalar("SELECT COUNT(*) FROM produkt WHERE kunde_id=?", [$kid])
+                + (int) scalar("SELECT COUNT(*) FROM portal_anfrage WHERE kunde_id=?", [$kid])
+                + (int) scalar("SELECT COUNT(*) FROM rezeptur_anfrage WHERE kunde_id=?", [$kid]);
+        if ($haengt > 0) { $r['behalten'][] = 'Kunde ' . $k['firma'] . ' (noch in Verwendung)'; continue; }
+        q("DELETE FROM kunde_marke WHERE kunde_id=?", [$kid]);
+        q("DELETE FROM kunden WHERE id=?", [$kid]);
+        $r['kunden']++;
+    }
+
+    log_aktivitaet('system', 0, 'team', 'Demo-Testdaten entfernt: ' . $r['angebote'] . ' Angebote, '
+        . $r['auftraege'] . ' Aufträge, ' . $r['produkte'] . ' Produkte, ' . $r['rezepturen'] . ' Rezepturen, '
+        . $r['kunden'] . ' Kunden.');
+    return $r;
+}
+
 // ---- Startset: saubere Rezepturen + Produkte nach dem Modell ----
 // Rezeptur = Rohstoff x Menge + Form. Produkt = Rezeptur x Menge + Verpackung.
 // Legt je Rezeptur ein Basisprodukt an und leitet weitere Packungsgrößen über produkt_variante_id() ab –
@@ -3360,8 +3446,8 @@ function demo_testset_einspielen(): array {
     $kunde = function(string $firma) use (&$log, &$neu): int {
         $kid = (int) scalar("SELECT id FROM kunden WHERE firma=?", [$firma]);
         if (!$kid) {
-            q("INSERT INTO kunden (kundennummer,firma,ort,land,zahlungsart) VALUES (?,?,?,?,?)",
-              [naechste_nummer('K'), $firma, 'Musterstadt', 'DE', 'rechnung']);
+            q("INSERT INTO kunden (kundennummer,firma,ort,land,zahlungsart,notiz) VALUES (?,?,?,?,?,?)",
+              [naechste_nummer('K'), $firma, 'Musterstadt', 'DE', 'rechnung', 'DEMO-TESTSET']);
             $kid = insert_id(); $log[] = "Kunde $firma"; $neu++;
         }
         return $kid;
@@ -3371,7 +3457,7 @@ function demo_testset_einspielen(): array {
         $rid = (int) scalar("SELECT id FROM rezeptur WHERE name=?", [$name]);
         if ($rid) return $rid;
         q("INSERT INTO rezeptur (nummer,name,darreichungsform,status,notiz) VALUES (?,?,?,?,?)",
-          [naechste_nummer('RZ'), $name, $form, 'freigegeben', 'Demo-Rezeptur']);
+          [naechste_nummer('RZ'), $name, $form, 'freigegeben', 'DEMO-TESTSET']);
         $rid = insert_id();
         foreach ($zutaten as $i => $z) {
             $iid = scalar("SELECT id FROM item WHERE name=?", [$z[0]]);
@@ -3385,9 +3471,11 @@ function demo_testset_einspielen(): array {
     $produkt = function(string $name, int $kid, int $rid, ?int $vid, int $einh, int $tag) use (&$log, &$neu): int {
         $pid = (int) scalar("SELECT id FROM produkt WHERE name=?", [$name]);
         if ($pid) return $pid;
-        q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,einheiten_pro_packung,einnahme_pro_tag,status)
-           VALUES (?,?,?,?,?,?,?,?)",
-          [naechste_nummer('P'), $name, $kid, $rid, $vid, $einh, $tag, 'aktiv']);
+        // kunde_id bleibt LEER: ein Produkt ist kundenneutral, solange es nicht exklusiv ist.
+        // (Der Kunde hängt am Angebot, nicht am Produkt.) $kid wird nur noch für das Demo-Angebot gebraucht.
+        q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,einheiten_pro_packung,einnahme_pro_tag,status,notiz)
+           VALUES (?,?,NULL,?,?,?,?,?,?)",
+          [naechste_nummer('P'), $name, $rid, $vid, $einh, $tag, 'aktiv', 'DEMO-TESTSET']);
         $pid = insert_id(); $log[] = "Produkt $name"; $neu++;
         return $pid;
     };
