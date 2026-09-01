@@ -8,6 +8,13 @@ $token = preg_replace('/[^a-f0-9]/', '', $_GET['token'] ?? '');
 $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
 
 // Angebot bestätigen (Kundenaktion) -> löst Auftrag + Rechnung aus
+// Angebot aus POSITIONEN annehmen (kein Produkt/keine Matrix) – hier entsteht das Produkt.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_annehmen') {
+    $aid = (int)($_POST['angebot_id'] ?? 0);
+    $ang = $aid ? one("SELECT id FROM angebot WHERE id=? AND kunde_id=? AND status='gesendet'", [$aid, (int)$k['id']]) : null;
+    if ($ang) auftrag_aus_positionen($aid);
+    header('Location: ?p=portal&token=' . $token . '&v=bestellungen&bestaetigt=1'); exit;
+}
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bestaetigen') {
     $aid = (int)($_POST['angebot_id'] ?? 0); $sid = (int)($_POST['staffel'] ?? 0);
     $ang = $aid ? one("SELECT * FROM angebot WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
@@ -89,22 +96,28 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 }
 
 // Rezepturanfrage bearbeiten – nur solange noch nicht in Bearbeitung (status='neu') und Eigentum des Kunden.
-// Anfrage löschen (Kundenaktion) – nur die eigene und nur solange wir sie noch nicht angefasst haben.
-// Sobald ein Angebot dranhängt oder wir in Bearbeitung sind, bleibt sie stehen: dann steckt Arbeit drin.
+// Anfrage löschen (Kundenaktion) – nur die eigene, und nur solange ihm noch KEIN Angebot vorliegt.
+// „in Bearbeitung" reicht nicht als Sperre: Diesen Status setzt schon das Öffnen des Angebots-Editors,
+// der Kunde merkt davon nichts. Erst ein gesendetes (oder bestätigtes) Angebot bindet ihn.
+// Ein interner Entwurf wird beim Löschen nur von der Anfrage gelöst, nicht weggeworfen.
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage_loeschen') {
     $typ = ($_POST['anf_typ'] ?? '') === 'rezeptur' ? 'rezeptur' : 'portal';
     $aid = (int)($_POST['anf_id'] ?? 0);
     $weg = false;
     if ($typ === 'rezeptur') {
-        $r = $aid ? one("SELECT id, rezeptur_id FROM rezeptur_anfrage WHERE id=? AND kunde_id=? AND status='neu'", [$aid, (int)$k['id']]) : null;
+        // Solange wir keinen Vorschlag geschickt haben (= noch keine Rezeptur erzeugt)
+        $r = $aid ? one("SELECT id, rezeptur_id FROM rezeptur_anfrage WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
         if ($r && empty($r['rezeptur_id'])) {
             q("DELETE FROM rezeptur_anfrage_wunsch WHERE anfrage_id=?", [$aid]);
             q("DELETE FROM rezeptur_anfrage WHERE id=?", [$aid]);
             $weg = true;
         }
     } else {
-        $p = $aid ? one("SELECT id FROM portal_anfrage WHERE id=? AND kunde_id=? AND status='neu'", [$aid, (int)$k['id']]) : null;
-        if ($p && (int) scalar("SELECT COUNT(*) FROM angebot WHERE anfrage_id=?", [$aid]) === 0) {
+        $p = $aid ? one("SELECT id, nummer FROM portal_anfrage WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
+        // Gesperrt erst, wenn dem Kunden ein Angebot vorliegt – Entwürfe zählen nicht.
+        $raus = $p ? (int) scalar("SELECT COUNT(*) FROM angebot WHERE anfrage_id=? AND status<>'offen'", [$aid]) : 1;
+        if ($p && $raus === 0) {
+            q("UPDATE angebot SET anfrage_id=NULL, notiz=CONCAT(COALESCE(notiz,''), ' (Anfrage ', ?, ' vom Kunden gelöscht)') WHERE anfrage_id=?", [$p['nummer'], $aid]);
             q("DELETE FROM portal_anfrage_pos WHERE anfrage_id=?", [$aid]);
             q("DELETE FROM portal_anfrage WHERE id=?", [$aid]);
             $weg = true;
@@ -286,6 +299,12 @@ foreach ($angebote as $a) {
         'zutaten' => $rid ? all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [],
         'nutr'    => $rid ? pt_naehr($rid) : [],
         'matrix'  => $matrix,
+        // Positionen des Angebots (Rezeptur/Rohstoff/Dienstleistung). Nötig, wenn es keine Preismatrix gibt –
+        // sonst sähe der Kunde bei einem Angebot aus Positionen nur eine leere Tabelle.
+        'pos'     => array_map(fn($p) => ['bezeichnung'=>$p['bezeichnung'], 'beschreibung'=>$p['beschreibung'],
+                                          'menge'=>(float)$p['menge'], 'einheit'=>$p['einheit'],
+                                          'preis_cent'=>(int)$p['preis_cent'], 'mwst'=>(float)$p['mwst_satz']],
+                                $a['status'] === 'offen' ? [] : angebot_positionen((int)$a['id'])),
         'prodzeit'=> ($a['produktionszeit_wochen'] ?? '') !== '' && $a['produktionszeit_wochen'] !== null ? (float)$a['produktionszeit_wochen'] : $produktionszeit,
     ];
 }
@@ -420,7 +439,7 @@ $kapselAnzeige = function(array $rezRow, float $totalMg) use ($portalKapseln, $k
     return $kapselFuer($totalMg);
 };
 $portalAnfragen = all("SELECT pa.*, p.name AS produkt_name, i.name AS verp_name, rz.name AS rezeptur_name,
-    (SELECT a.id FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id AND a.kunde_ausgeblendet=0 ORDER BY a.id DESC LIMIT 1) AS angebot_id
+    (SELECT a.id FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id AND a.kunde_ausgeblendet=0 AND a.status<>'offen' ORDER BY a.id DESC LIMIT 1) AS angebot_id
     FROM portal_anfrage pa
     LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN item i ON i.id=pa.verpackung_id
     LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
@@ -524,7 +543,7 @@ foreach ($anfragen as $a) {
     $akt = null;
     if (($a['rezeptur_status'] ?? '') === 'vorschlag' && $a['rezeptur_id']) $akt = ['label'=>'Prüfen & entscheiden','href'=>$portalLink('rezeptur').'&rid='.(int)$a['rezeptur_id'],'primary'=>true];
     elseif (($a['status'] ?? '') === 'neu') $akt = ['label'=>'Bearbeiten','href'=>$portalLink('anfrage').'&edit='.(int)$a['id'],'primary'=>false];
-    $meineAnfRows[] = ['typ'=>'rezeptur','nummer'=>$a['nummer'],'bez'=>($a['produktname'] ?: '(Rezeptur)'),'datum'=>$a['angelegt'],'status'=>$anfStatus($a),'aktion'=>$akt, 'loeschbar'=>($a['status'] ?? '') === 'neu' && empty($a['rezeptur_id']), 'del_typ'=>'rezeptur', 'del_id'=>(int)$a['id']];
+    $meineAnfRows[] = ['typ'=>'rezeptur','nummer'=>$a['nummer'],'bez'=>($a['produktname'] ?: '(Rezeptur)'),'datum'=>$a['angelegt'],'status'=>$anfStatus($a),'aktion'=>$akt, 'loeschbar'=>empty($a['rezeptur_id']), 'del_typ'=>'rezeptur', 'del_id'=>(int)$a['id']];
 }
 foreach ($portalAnfragen as $p) {
     // Bei einer Rezeptur-Anfrage gibt es noch kein Produkt – dann den Rezepturnamen zeigen statt „Produkt".
@@ -533,7 +552,7 @@ foreach ($portalAnfragen as $p) {
         : ($p['betreff'] ?: ($typLabelP[$p['typ']] ?? 'Anfrage'));
     $st  = ($p['status']==='beantwortet') ? bx_badge('Angebot erhalten','ok') : (($p['status']==='abgelehnt') ? bx_badge('abgelehnt','err') : bx_badge('in Prüfung','warn'));
     $akt = !empty($p['angebot_id']) ? ['label'=>'Zum Angebot','href'=>$portalLink('angebote').'#a'.(int)$p['angebot_id'],'primary'=>true] : null;
-    $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt, 'loeschbar'=>($p['status'] ?? '') === 'neu' && empty($p['angebot_id']), 'del_typ'=>'portal', 'del_id'=>(int)$p['id']];
+    $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt, 'loeschbar'=>empty($p['angebot_id']), 'del_typ'=>'portal', 'del_id'=>(int)$p['id']];
 }
 usort($meineAnfRows, fn($x,$y) => strcmp((string)$y['datum'], (string)$x['datum']));
 $anfTabs = ['alle'=>'Alle'];
@@ -1405,6 +1424,31 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php endforeach; endforeach; ?>
       </tbody>
     </table></div>
+    <?php elseif ($offen && !$st && $inf['pos']): ?>
+    <?php // Angebot aus Positionen (z. B. aus einer Rezeptur gebaut) – hier gibt es keine Preismatrix.
+          // Ohne diesen Zweig sähe der Kunde nur eine leere Tabelle.
+          $sumNetto = 0; foreach ($inf['pos'] as $p) $sumNetto += $p['menge'] * $p['preis_cent'] / 100; ?>
+    <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
+      <thead><tr><th>Position</th><th class="bx-num">Menge</th><th class="bx-num">Preis / Einheit</th><th class="bx-num">Gesamt</th></tr></thead>
+      <tbody>
+      <?php foreach ($inf['pos'] as $p): ?>
+        <tr>
+          <td><?= h($p['bezeichnung']) ?><?= $p['beschreibung'] ? '<div class="muted" style="font-size:12px;white-space:pre-line">' . h($p['beschreibung']) . '</div>' : '' ?></td>
+          <td class="bx-num"><?= rtrim(rtrim(number_format($p['menge'],2,',','.'),'0'),',') ?> <?= h($p['einheit']) ?></td>
+          <td class="bx-num"><?= $eur($p['preis_cent']/100) ?></td>
+          <td class="bx-num"><?= $eur($p['menge'] * $p['preis_cent']/100) ?></td>
+        </tr>
+      <?php endforeach; ?>
+        <tr style="font-weight:600"><td colspan="3">Gesamt netto</td><td class="bx-num"><?= $eur($sumNetto) ?></td></tr>
+        <?php if ($ustP > 0): ?><tr><td colspan="3" class="muted">inkl. <?= $mg($ustP) ?> % MwSt</td><td class="bx-num muted"><?= $eur($sumNetto * (1 + $ustP/100)) ?> brutto</td></tr><?php endif; ?>
+      </tbody>
+    </table></div>
+    <div class="bx-row" style="justify-content:flex-end;margin-top:10px">
+      <form method="post" style="margin:0" onsubmit="return confirm('Angebot verbindlich annehmen?');">
+        <input type="hidden" name="aktion" value="angebot_annehmen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>">
+        <button class="btn btn-primary" type="submit">Angebot annehmen</button>
+      </form>
+    </div>
     <?php elseif ($offen): ?>
     <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
       <thead><tr><th>Menge</th><th class="bx-num">Preis / Pkg.</th><th></th></tr></thead>

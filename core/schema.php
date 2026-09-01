@@ -363,6 +363,12 @@ function init_schema(): void {
     $bl = one("SELECT CHARACTER_MAXIMUM_LENGTH len FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='angebot_position' AND COLUMN_NAME='beschreibung'");
     if ($bl && (int)$bl['len'] < 1000) $pdo->exec("ALTER TABLE angebot_position MODIFY beschreibung VARCHAR(1000) NULL");
     ensure_column('angebot_position', 'gruppe', "VARCHAR(2) NULL");
+    // Bei einer Herstellungsposition festhalten, WAS angeboten wurde: Rezeptur x Menge je Packung + Behälter.
+    // Nimmt der Kunde das Angebot an, entsteht daraus das Produkt – ohne diese drei Werte wäre nach dem
+    // Absenden nicht mehr rekonstruierbar, welche Konfiguration gemeint war.
+    ensure_column('angebot_position', 'rezeptur_id', "INT NULL");
+    ensure_column('angebot_position', 'stueck', "INT NULL");
+    ensure_column('angebot_position', 'verpackung_id', "INT NULL");
 
     // auftrag: Auftragsbestätigung (AB-) – entsteht automatisch aus der bestätigten Angebots-Staffel.
     $pdo->exec("CREATE TABLE IF NOT EXISTS auftrag (
@@ -1639,6 +1645,30 @@ function behaelter_fuer_groesse(int $vorlage_produkt_id, int $stueck, ?string $t
     if ($eigen && in_array($eigen, $ids, true)) return $eigen;
     return $ids[0];
 }
+// Das Produkt zu (Rezeptur x Packungsgröße + Behälter) finden – oder anlegen. Ohne Vorlage-Produkt:
+// genau der Fall „Kunde hat eine Rezeptur, daraus soll ein Produkt werden". Katalogprodukt (nicht exklusiv).
+// $vorlage_produkt_id (optional) liefert Deckel/Etikett/Karton/Beipack und die Verzehrempfehlung.
+function produkt_aus_rezeptur(int $rezeptur_id, int $stueck, ?int $verp_id, ?int $vorlage_produkt_id = null): ?int {
+    if ($rezeptur_id <= 0 || $stueck <= 0) return null;
+    $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=0 ORDER BY id LIMIT 1",
+                   [$rezeptur_id, $stueck, $verp_id]);
+    if ($treffer) return (int)$treffer['id'];
+    $v = $vorlage_produkt_id ? one("SELECT * FROM produkt WHERE id=?", [$vorlage_produkt_id]) : null;
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]) ?: 'kapsel';
+    $rez  = (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$rezeptur_id]) ?: 'Produkt';
+    $behName = $verp_id ? (string) scalar("SELECT name FROM item WHERE id=?", [$verp_id]) : '';
+    $name = produkt_name_versioniert($rez . ' · ' . form_groessen_label($form, (float)$stueck) . ($behName !== '' ? ' · ' . $behName : ''));
+    q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,notiz)
+       VALUES (?,?,NULL,?,?,?,?,?,?,?,0,?,?,?,?)",
+      [naechste_nummer('P'), $name, $rezeptur_id, $verp_id,
+       $v['verschluss_id'] ?? null, $v['etikett_id'] ?? null, $v['karton_id'] ?? null, $v['beipack_id'] ?? null, $v['leerkapsel_id'] ?? null,
+       $stueck, $v['einnahme_pro_tag'] ?? 1, 'aktiv',
+       'Aus einer Kundenanfrage entstanden (Rezeptur x Menge + Verpackung).']);
+    $neu = insert_id();
+    produkt_matrix_generieren($neu);
+    return $neu;
+}
+
 // Das Produkt zu (Rezeptur des Vorlage-Produkts x Packungsgröße + Behälter) finden – oder anlegen.
 // Katalogprodukt (nicht exklusiv, ohne Kunde): der Preis ist kundenspezifisch, das Produkt nicht.
 // Deckel/Etikett/Karton/Beipack und Verzehrempfehlung kommen aus dem Vorlage-Produkt.
@@ -1981,8 +2011,9 @@ function angebot_gruppe_anhaengen(int $aid, array $rows): void {
     $letter = chr(65 + $anzGrp);   // erste Gruppe A, dann B, C …
     $sort = (int) scalar("SELECT COALESCE(MAX(sort),-1)+1 FROM angebot_position WHERE angebot_id=?", [$aid]);
     foreach ($rows as $p) {
-        q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-          [$aid, $sort++, $p['artikelnr'] ?? '', $p['bezeichnung'], $p['beschreibung'] ?? '', (float)$p['menge'], $p['einheit'] ?? '', (int)$p['preis_cent'], (int)($p['ek_cent'] ?? 0), (float)($p['mwst_satz'] ?? 0), $p['quelle'] ?? 'manuell', $letter]);
+        q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          [$aid, $sort++, $p['artikelnr'] ?? '', $p['bezeichnung'], $p['beschreibung'] ?? '', (float)$p['menge'], $p['einheit'] ?? '', (int)$p['preis_cent'], (int)($p['ek_cent'] ?? 0), (float)($p['mwst_satz'] ?? 0), $p['quelle'] ?? 'manuell', $letter,
+           $p['rezeptur_id'] ?? null, $p['stueck'] ?? null, $p['verpackung_id'] ?? null]);
     }
     $all = all("SELECT id,bezeichnung,gruppe FROM angebot_position WHERE angebot_id=? ORDER BY sort,id", [$aid]);
     foreach (angebot_positionen_prefix($all) as $p) q("UPDATE angebot_position SET bezeichnung=? WHERE id=?", [$p['bezeichnung'], (int)$p['id']]);
@@ -2023,10 +2054,17 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
         if ($kg && !empty($kg['name'])) $summary .= ', #' . trim(str_ireplace(['Größe', 'Gr.', 'Gr'], '', $kg['name']));
     }
     $besch = $rezLines ? (implode("\n", $rezLines) . "\n" . $summary) : $summary;
+    // Die angebotene Konfiguration mitspeichern – daraus entsteht beim Annehmen das Produkt.
+    $primaer = null;
+    foreach ($verp_ids as $vid) {
+        if (!$vid) continue;
+        if ((string) scalar("SELECT COALESCE(verpackung_rolle,'primaer') FROM item WHERE id=?", [(int)$vid]) === 'primaer') { $primaer = (int)$vid; break; }
+    }
     $rows = [[
         'artikelnr'=>'', 'bezeichnung'=>$r['name'], 'beschreibung'=>$besch,
         'menge'=>(float)$menge, 'einheit'=>'Pkg.', 'preis_cent'=>(int) round($vkH * 100),
         'ek_cent'=>(int) round($ekH * 100), 'mwst_satz'=>$ust, 'quelle'=>'herstellung',
+        'rezeptur_id'=>$rid, 'stueck'=>$stueck, 'verpackung_id'=>$primaer,
     ]];
     foreach ($verp_ids as $vid) {
         $vid = (int)$vid; if (!$vid) continue;
@@ -2872,6 +2910,59 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
     }
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftragsbestätigung, Rechnung & Produktionsauftrag automatisch erzeugt.', 'auftrag', 'auftrag', $aid);
+    return $aid;
+}
+
+// Auftrag aus einem Angebot, das aus POSITIONEN besteht (kein Produkt im Kopf, keine Preismatrix) –
+// der Weg für „Kunde hat eine Rezeptur, daraus soll ein Produkt werden".
+// ERST HIER entsteht das Produkt: Rezeptur x Menge je Packung + Verpackung, genau wie angeboten.
+// Die Konfiguration steht an der Herstellungsposition (rezeptur_id/stueck/verpackung_id).
+function auftrag_aus_positionen(int $angebot_id): ?int {
+    $a = one("SELECT * FROM angebot WHERE id=? AND status='gesendet'", [$angebot_id]);
+    if (!$a) return null;
+    if (($v = scalar("SELECT id FROM auftrag WHERE angebot_id=?", [$angebot_id]))) return (int)$v;   // idempotent
+    $pos = all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]);
+    if (!$pos) return null;
+    $herst = null;
+    foreach ($pos as $p) if (!empty($p['rezeptur_id']) && (int)$p['stueck'] > 0) { $herst = $p; break; }
+    if (!$herst) return null;   // ohne bekannte Konfiguration kein Produkt und kein Auftrag
+
+    $pid = produkt_aus_rezeptur((int)$herst['rezeptur_id'], (int)$herst['stueck'],
+                                $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null,
+                                $a['produkt_id'] ? (int)$a['produkt_id'] : null);
+    if (!$pid) return null;
+
+    $menge = (int) round((float)$herst['menge']);                       // Anzahl Packungen
+    $netto = 0.0; foreach ($pos as $p) $netto += (float)$p['menge'] * (int)$p['preis_cent'] / 100;
+    $vkStk = round((int)$herst['preis_cent'] / 100, 4);                 // Herstellung je Packung
+
+    q("INSERT INTO auftrag (nummer,angebot_id,kunde_id,produkt_id,menge,stueck,verpackung_id,vk_stueck,gesamt_netto,status)
+       VALUES (?,?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('AB'), $angebot_id, $a['kunde_id'], $pid, $menge, (int)$herst['stueck'],
+       $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null, $vkStk, round($netto, 2), 'offen']);
+    $aid = insert_id();
+    q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$angebot_id]);
+    q("INSERT IGNORE INTO angebot_produkt (angebot_id,produkt_id,stueck,verpackung_id) VALUES (?,?,?,?)",
+      [$angebot_id, $pid, (int)$herst['stueck'], $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null]);
+
+    $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
+    $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
+    $ust = round($netto * $ustP / 100, 2);
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum)
+       VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
+      [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], round($netto, 2), $ustP, $ust, round($netto + $ust, 2), 'offen']);
+
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$herst['rezeptur_id']]) ?: 'kapsel';
+    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('PR'), $aid, $a['kunde_id'], $pid, $menge, (int)$herst['stueck'],
+       $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null, 'fremd', 'offen']);
+    $paid = insert_id();
+    foreach (produktionsschritte_fuer($form, true) as $i => $station)
+        q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
+
+    if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'kunde',
+        'Angebot ' . $a['nummer'] . ' angenommen – Produkt ' . scalar("SELECT nummer FROM produkt WHERE id=?", [$pid])
+        . ' angelegt, Auftrag + Rechnung + Produktion erzeugt.', 'auftrag', 'auftrag', $aid);
     return $aid;
 }
 
