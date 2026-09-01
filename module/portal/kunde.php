@@ -602,6 +602,18 @@ if (($_GET['v'] ?? '') === 'angebot_pdf') {
 
     // Staffel „Preis je fertiges Produkt" nur bei automatischer (nicht manuell zusammengestellter) Kalkulation
     $produktStaffel = angebot_hat_positionen($aid) ? [] : angebot_staffel_gruppen($a);
+    // Angebot aus Optionen (aus einer Rezeptur gebaut): jede Gruppe ist eine WAHL, keine Bestellzeile.
+    // Ohne diese Trennung stünde unter dem PDF eine Summe über alle Varianten zusammen – die
+    // bestellt der Kunde nie. Die Positionen zeigen deshalb die erste Variante, die Staffel alle.
+    $optPdf = angebot_optionen($aid);
+    if ($optPdf['optionen']) {
+        $produktStaffel = angebot_staffel_aus_optionen($optPdf['optionen']);
+        if (count($optPdf['optionen']) > 1) {
+            $ersteG = $optPdf['optionen'][0]['gruppe'];
+            $positionen = array_values(array_filter($positionen,
+                fn($pp) => trim((string)($pp['gruppe'] ?? '')) === $ersteG || trim((string)($pp['gruppe'] ?? '')) === ''));
+        }
+    }
 
     // Begleittext
     $teamNote = '';

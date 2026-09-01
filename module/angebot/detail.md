@@ -5,6 +5,9 @@ Interner Editor für ein Angebot. **Hybrid-Modell** (wie in v3 `buchhaltung_bele
 aber schlanker): die Positionen werden **automatisch** aus Produkt + Preismatrix + Verpackung
 erzeugt, sind aber **überschreibbar**. Dazu die interne Marge (VK vs. EK, nur intern).
 
+## Preis je Packung – so sieht es der Kunde
+Unter der Positionstabelle steht eine reine Anzeige: je Gruppe eine Zeile mit **Variante** (Größe + Verpackung), **Packungen**, **Preis je Packung**, **Preis je Stück** und **Gesamt netto**. In den Positionen stehen Herstellung und Verpackung getrennt – hier zusammengerechnet, also genau die Zahlen, die der Kunde im Portal sieht. Sie kommen aus `angebot_optionen()` und zeigen den Stand **nach dem letzten Speichern**. Positionen ohne Gruppe (Zuschläge) stehen darunter.
+
 ## Kopfdaten (Formular `aktion=kopf_save`)
 
 **Kein Produkt in den Kopfdaten:** Das Produkt ergibt sich aus den **Positionen** (Rezeptur × Menge + Verpackung) und ist deshalb kein Eingabefeld mehr. Entsteht das Angebot aus einer Produktanfrage, ist `angebot.produkt_id` automatisch gesetzt – dann steht es als Text im Kopf und reist beim Speichern unsichtbar mit (Hidden-Feld), damit die Preismatrix im Portal erhalten bleibt.

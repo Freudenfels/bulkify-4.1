@@ -2938,6 +2938,26 @@ function angebot_positionen_konfig_nachtragen(int $angebot_id): void {
       [(int)$an['rezeptur_id'], $stueck, $verp, (int)$erste['id']]);
 }
 
+// Aus den wählbaren Optionen die Staffel „Preis je fertiges Produkt" bauen – dieselbe Struktur,
+// die das Angebots-PDF bei Matrix-Angeboten zeigt: Name, Stück je Packung, Zeilen je Bestellmenge.
+// Gleiche Konfiguration mit verschiedenen Bestellmengen wird zu einem Block zusammengefasst.
+function angebot_staffel_aus_optionen(array $optionen): array {
+    $bloecke = [];
+    foreach ($optionen as $o) {
+        $istFuell = !empty($o['ist_fuell']);
+        $name = trim($o['titel'] . ($o['groesse'] !== '' ? ' · ' . $o['groesse'] : '') . ($o['verpackung'] !== '' ? ' · ' . $o['verpackung'] : ''));
+        $packCent = (int) round($o['pro_pkg'] * 100);
+        if (!isset($bloecke[$name]))
+            $bloecke[$name] = ['name' => $name, 'mpp' => ($istFuell || $o['stueck'] <= 0) ? 0 : (int)$o['stueck'], 'rows' => []];
+        $bloecke[$name]['rows'][] = [
+            'ab'          => (int) round($o['pakete']),
+            'stueck_cent' => (!$istFuell && $o['stueck'] > 0) ? (int) round($packCent / $o['stueck']) : null,
+            'pack_cent'   => $packCent,
+        ];
+    }
+    foreach ($bloecke as $n => $b) usort($bloecke[$n]['rows'], fn($x, $y) => $x['ab'] <=> $y['ab']);
+    return array_values($bloecke);
+}
 // Ein Positions-Angebot in WÄHLBARE OPTIONEN zerlegen: je Gruppe (A, B, C …) eine Konfiguration
 // (Rezeptur x Menge je Packung + Verpackung) mit Anzahl Packungen und Preis je Packung.
 // Das ist die Ansicht, aus der der Kunde auswählt – eine Zeile je Größe, wie bei der Preismatrix.
@@ -2968,6 +2988,8 @@ function angebot_optionen(int $angebot_id): array {
         $form = $o['rezeptur_id'] ? (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$o['rezeptur_id']]) : '';
         $opt[$g]['groesse'] = ($o['stueck'] > 0 && $form !== '') ? form_groessen_label($form, (float)$o['stueck']) : '';
         $opt[$g]['pro_pkg'] = $o['pakete'] > 0 ? $o['netto'] / $o['pakete'] : 0.0;
+        $opt[$g]['form']      = $form;
+        $opt[$g]['ist_fuell'] = $form !== '' && form_ist_fuellmenge($form);   // Größe ist eine Füllmenge (g/ml) -> kein Stückpreis
         $opt[$g]['waehlbar'] = $o['rezeptur_id'] && $o['stueck'] > 0;   // ohne Konfiguration kein Knopf
     }
     return ['optionen' => array_values($opt), 'extra' => $extra];

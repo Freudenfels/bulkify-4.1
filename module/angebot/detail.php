@@ -350,6 +350,34 @@ if (!$neu):
     </div>
     <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Positionen speichern</button></div>
   </form>
+
+  <?php // Preis je Packung – genau die Zeilen, aus denen der Kunde im Portal auswaehlt.
+        // In den Positionen stehen Herstellung und Verpackung getrennt; hier zusammengerechnet.
+        $optE = angebot_optionen($id); ?>
+  <?php if ($optE['optionen']): ?>
+  <div class="bx-panel" style="margin-top:16px">
+    <div style="margin-bottom:4px">Preis je Packung – so sieht es der Kunde</div>
+    <div class="muted" style="font-size:12px;margin-bottom:10px">Stand nach dem letzten Speichern. Jede Gruppe ist im Kundenportal eine Zeile mit eigenem Knopf.</div>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Variante</th><th class="bx-num">Packungen</th><th class="bx-num">Preis / Packung</th><th class="bx-num">Preis / Stück</th><th class="bx-num">Gesamt netto</th></tr></thead>
+      <tbody>
+      <?php foreach ($optE['optionen'] as $o): ?>
+        <tr>
+          <td><?= h(trim(($o['groesse'] !== '' ? $o['groesse'] : $o['titel']) . ($o['verpackung'] !== '' ? ' · ' . $o['verpackung'] : ''))) ?></td>
+          <td class="bx-num"><?= number_format($o['pakete'], 0, ',', '.') ?></td>
+          <td class="bx-num"><strong><?= $eur($o['pro_pkg'] * 100) ?></strong></td>
+          <td class="bx-num"><?= (!$o['ist_fuell'] && $o['stueck'] > 0) ? (fn($v) => number_format($v, $v < 0.1 ? 4 : 2, ',', '.') . ' €')($o['pro_pkg'] / $o['stueck']) : '–' ?></td>
+          <td class="bx-num"><?= $eur($o['netto'] * 100) ?></td>
+        </tr>
+      <?php endforeach; ?>
+      <?php foreach ($optE['extra'] as $x): ?>
+        <tr><td colspan="4"><?= h($x['bezeichnung']) ?><span class="muted" style="font-size:12px"> · wird zusätzlich berechnet</span></td>
+            <td class="bx-num"><?= $eur((float)$x['menge'] * (int)$x['preis_cent']) ?></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; ?>
 </div>
 
 <script>
