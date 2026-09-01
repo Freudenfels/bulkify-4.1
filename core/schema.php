@@ -634,6 +634,7 @@ function init_schema(): void {
     // Produktanfrage direkt aus einer REZEPTUR: der Kunde hat seine Rezeptur angenommen, ein Produkt
     // (Rezeptur x Menge + Verpackung) gibt es dafür noch nicht. Genau daraus entsteht es im Angebot.
     ensure_column('portal_anfrage', 'rezeptur_id', "INT NULL");
+    ensure_column('portal_anfrage', 'absage_grund', "VARCHAR(500) NULL");   // wenn wir NICHT anbieten koennen: Begruendung fuer den Kunden
     ensure_column('portal_anfrage_pos', 'rezeptur_id', "INT NULL");
     ensure_column('rezeptur_anfrage', 'produktname', "VARCHAR(190) NULL");    // Wunsch-Produktname des Kunden bei der Rezepturanfrage
     ensure_column('produkt', 'kundenname', "VARCHAR(190) NULL");              // vom Kunden gewünschter Produktname (intern = name)
@@ -1353,6 +1354,29 @@ function naechste_nummer(string $prefix): string {
     q("UPDATE nummernkreis SET naechste = naechste + 1 WHERE prefix = ?", [$prefix]);
     $r = one("SELECT naechste - 1 AS nr, stellen FROM nummernkreis WHERE prefix = ?", [$prefix]);
     return $prefix . '-' . str_pad((string)$r['nr'], (int)$r['stellen'], '0', STR_PAD_LEFT);
+}
+
+// Eine gerade vergebene Nummer zurückgeben – nur wenn sie die zuletzt ausgegebene ist.
+// Verhindert Lücken, wenn ein Angebot direkt nach dem Anlegen wieder verworfen wird.
+function nummer_zurueckgeben(string $nummer): void {
+    if (!preg_match('/^([A-Z]+)-(\d+)$/', strtoupper(trim($nummer)), $m)) return;
+    q("UPDATE nummernkreis SET naechste = naechste - 1 WHERE prefix = ? AND naechste = ?", [$m[1], (int)$m[2] + 1]);
+}
+
+// Einen Angebots-ENTWURF spurlos verwerfen: nur Status „offen" (also nie beim Kunden gewesen),
+// nie mit Auftrag. Positionen mit weg, Nummer zurück, Anfrage wieder frei für einen neuen Anlauf.
+function angebot_entwurf_verwerfen(int $angebot_id): bool {
+    $a = one("SELECT id, nummer, status, anfrage_id, kunde_id FROM angebot WHERE id=?", [$angebot_id]);
+    if (!$a || $a['status'] !== 'offen') return false;
+    if (scalar("SELECT id FROM auftrag WHERE angebot_id=?", [$angebot_id])) return false;
+    q("DELETE FROM angebot_position WHERE angebot_id=?", [$angebot_id]);
+    q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$angebot_id]);
+    q("DELETE FROM angebot_produkt WHERE angebot_id=?", [$angebot_id]);
+    q("DELETE FROM angebot WHERE id=?", [$angebot_id]);
+    nummer_zurueckgeben((string)$a['nummer']);
+    if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team',
+        'Angebots-Entwurf ' . $a['nummer'] . ' verworfen (war nie beim Kunden).', 'angebot');
+    return true;
 }
 
 // Präfix für Warenlager-Items je Kategorie (Rohstoff=R, Verpackung=VP, Fertigware=FP ...).

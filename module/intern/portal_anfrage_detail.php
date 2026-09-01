@@ -44,6 +44,31 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
 }
 // Angebot zurückziehen = zurück in den ENTWURF (Status 'offen'). Kein eigener Endzustand: Das Angebot
 // verschwindet beim Kunden (der sieht nur 'gesendet') und bleibt hier bearbeitbar.
+// „Geht nicht": Anfrage absagen. Grund ist Pflicht – der Kunde sieht ihn im Portal.
+// Ein noch nicht gesendeter Angebots-Entwurf wird dabei verworfen (Nummer zurück),
+// damit keine Karteileiche mit Angebotsnummer stehen bleibt.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage_absagen') {
+    $grund = trim((string)($_POST['grund'] ?? ''));
+    if ($grund === '') { header('Location: ?p=portal_anfrage&id=' . $id . '&grundfehlt=1'); exit; }
+    $pa0 = one("SELECT nummer, kunde_id FROM portal_anfrage WHERE id=?", [$id]);
+    foreach (all("SELECT id FROM angebot WHERE anfrage_id=? AND status='offen'", [$id]) as $e)
+        angebot_entwurf_verwerfen((int)$e['id']);
+    q("UPDATE portal_anfrage SET status='abgelehnt', absage_grund=? WHERE id=?", [mb_substr($grund, 0, 500), $id]);
+    if ($pa0 && $pa0['kunde_id']) log_aktivitaet('kunde', (int)$pa0['kunde_id'], 'team',
+        'Anfrage ' . $pa0['nummer'] . ' abgesagt: ' . $grund, 'anfrage', 'portal_anfrage', $id);
+    header('Location: ?p=portal_anfrage&id=' . $id . '&abgesagt=1'); exit;
+}
+// Absage zurücknehmen – falls sich doch ein Weg findet.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage_aufnehmen') {
+    q("UPDATE portal_anfrage SET status='in_bearbeitung', absage_grund=NULL WHERE id=? AND status='abgelehnt'", [$id]);
+    header('Location: ?p=portal_anfrage&id=' . $id); exit;
+}
+// Angebots-Entwurf verwerfen (z. B. versehentlich angelegt) – nur solange er nie beim Kunden war.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_verwerfen') {
+    if (angebot_entwurf_verwerfen((int)($_POST['angebot_id'] ?? 0)))
+        q("UPDATE portal_anfrage SET status='neu' WHERE id=? AND status='in_bearbeitung'", [$id]);
+    header('Location: ?p=portal_anfrage&id=' . $id . '&verworfen=1'); exit;
+}
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_zurueck') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT id, nummer, status, kunde_id FROM angebot WHERE id=?", [$aid]) : null;
@@ -118,6 +143,15 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
           <a href="?p=rezeptur_detail&id=<?= (int)$pa['rezeptur_id'] ?>"><?= h(($rzA['nummer'] ?? '') . ' · ' . ($rzA['name'] ?? '–')) ?></a>
           <div class="muted" style="font-size:12px">Für diese Rezeptur gibt es noch kein Produkt – es entsteht aus dem Angebot (Rezeptur × Menge + Verpackung).</div>
         </td></tr>
+        <?php $rzD = one("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$pa['rezeptur_id']]);
+              $rzZ = all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [(int)$pa['rezeptur_id']]); ?>
+        <tr><td>Darreichungsform</td><td><?= h(ucfirst((string)($rzD['darreichungsform'] ?? '–'))) ?></td></tr>
+        <?php if ($rzZ): $sumMg = 0; foreach ($rzZ as $z) $sumMg += (float)$z['menge_mg']; ?>
+        <tr><td>Zusammensetzung</td><td>
+          <?php foreach ($rzZ as $z): ?><div><?= h($z['bezeichnung']) ?> · <?= $mg($z['menge_mg']) ?> mg</div><?php endforeach; ?>
+          <div class="muted" style="font-size:12px;margin-top:4px">zusammen <?= $mg($sumMg) ?> mg je Einheit</div>
+        </td></tr>
+        <?php endif; ?>
       <?php else: ?>
       <tr><td style="width:220px">Produkt</td><td><?php if ($pa['produkt_id']): ?><a href="?p=produkt&id=<?= (int)$pa['produkt_id'] ?>"><?= h($pa['produkt_name'] ?: '–') ?></a><?php else: ?><?= h($pa['produkt_name'] ?: '–') ?><?php endif; ?></td></tr>
       <?php endif; ?>
@@ -132,6 +166,32 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
     <?php if ($pa['notiz']): ?><tr><td>Notiz</td><td><?= h($pa['notiz']) ?></td></tr><?php endif; ?>
   </tbody></table></div>
 </div>
+
+<?php // „Geht nicht" – z. B. eine Darreichungsform, die wir für diese Rezeptur nicht herstellen können.
+      // Bewusst hier, direkt unter dem Wunsch: entscheiden, BEVOR eine Angebotsnummer vergeben wird. ?>
+<?php if ($pa['status'] === 'abgelehnt'): ?>
+<div class="bx-panel">
+  <h2>Abgesagt</h2>
+  <p style="margin-top:0"><?= h($pa['absage_grund'] ?: 'Ohne Begründung abgesagt.') ?></p>
+  <div class="muted" style="font-size:13px;margin-bottom:10px">Der Kunde sieht diesen Text im Portal.</div>
+  <form method="post" style="margin:0">
+    <input type="hidden" name="aktion" value="anfrage_aufnehmen">
+    <button class="btn btn-ghost btn-sm" type="submit">Absage zurücknehmen</button>
+  </form>
+</div>
+<?php elseif ($pa['status'] !== 'beantwortet'): ?>
+<div class="bx-panel">
+  <h2>Nicht machbar</h2>
+  <p class="muted" style="margin-top:0">Wenn wir das so nicht herstellen können – etwa die gewünschte Darreichungsform für diese Rezeptur – sagen wir hier ab, statt ein leeres Angebot anzulegen. Ein noch nicht gesendeter Entwurf wird dabei verworfen und die Angebotsnummer freigegeben.</p>
+  <?php if (isset($_GET['grundfehlt'])): ?><div class="badge-err" style="padding:8px 12px;margin-bottom:10px">Bitte einen Grund angeben – der Kunde bekommt ihn zu lesen.</div><?php endif; ?>
+  <form method="post" onsubmit="return confirm('Anfrage absagen? Der Kunde sieht die Begründung im Portal.');">
+    <input type="hidden" name="aktion" value="anfrage_absagen">
+    <div class="bx-field"><label>Begründung für den Kunden</label>
+      <input type="text" name="grund" maxlength="500" placeholder="z. B. D3/K2 flüssig im Stick ist nicht stabil – wir bieten es als Kapsel oder Tropfen an"></div>
+    <button class="btn btn-ghost" type="submit">Anfrage absagen</button>
+  </form>
+</div>
+<?php endif; ?>
 
 <?php if ($pa['typ'] === 'rohstoff'):
     $rid   = (int)($pa['rohstoff_id'] ?? 0);
@@ -203,7 +263,7 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
 </div>
 <?php endif; ?>
 
-<?php if ($pa['typ'] === 'produkt' && $pa['produkt_id']):
+<?php if ($pa['status'] !== 'abgelehnt' && $pa['typ'] === 'produkt' && $pa['produkt_id']):
     $pid = (int)$pa['produkt_id'];
     if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$pid]) === 0) produkt_matrix_generieren($pid);
     $form     = $pa['darreichungsform'] ?: 'kapsel';
@@ -242,6 +302,12 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
           <form method="post" style="margin:0" onsubmit="return confirm('Angebot <?= h($ag['nummer']) ?> zurückziehen? Der Kunde kann es dann nicht mehr annehmen, und die Anfrage ist wieder offen.');">
             <input type="hidden" name="aktion" value="angebot_zurueck"><input type="hidden" name="angebot_id" value="<?= (int)$ag['id'] ?>">
             <button class="btn btn-ghost btn-sm" type="submit">zurückziehen</button>
+          </form>
+        <?php endif; ?>
+        <?php if ($ag['status'] === 'offen'): ?>
+          <form method="post" style="margin:0" onsubmit="return confirm('Entwurf <?= h($ag['nummer']) ?> verwerfen? Er war nie beim Kunden – die Angebotsnummer wird wieder frei.');">
+            <input type="hidden" name="aktion" value="angebot_verwerfen"><input type="hidden" name="angebot_id" value="<?= (int)$ag['id'] ?>">
+            <button class="btn btn-ghost btn-sm" type="submit">verwerfen</button>
           </form>
         <?php endif; ?>
       </div>
@@ -286,7 +352,7 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
     </form>
   <?php endif; ?>
 </div>
-<?php elseif ($pa['typ'] === 'produkt' && !empty($pa['rezeptur_id'])): ?>
+<?php elseif ($pa['status'] !== 'abgelehnt' && $pa['typ'] === 'produkt' && !empty($pa['rezeptur_id'])): ?>
 <div class="bx-panel">
   <h2>Angebot abgeben</h2>
   <p class="muted" style="margin-top:0">Der Kunde hat eine <strong>Rezeptur</strong> angefragt, für die es noch kein Produkt gibt – es gibt deshalb noch keine Preismatrix. Im Angebots-Editor fügst du die Rezeptur als Position hinzu (Typ „Rezeptur (Lohnherstellung)"), wählst Menge je Packung und Verpackung, und beim Senden entsteht daraus automatisch das Produkt.</p>
@@ -299,6 +365,12 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
           <form method="post" style="margin:0" onsubmit="return confirm('Angebot <?= h($ag['nummer']) ?> zurückziehen? Der Kunde kann es dann nicht mehr annehmen, und die Anfrage ist wieder offen.');">
             <input type="hidden" name="aktion" value="angebot_zurueck"><input type="hidden" name="angebot_id" value="<?= (int)$ag['id'] ?>">
             <button class="btn btn-ghost btn-sm" type="submit">zurückziehen</button>
+          </form>
+        <?php endif; ?>
+        <?php if ($ag['status'] === 'offen'): ?>
+          <form method="post" style="margin:0" onsubmit="return confirm('Entwurf <?= h($ag['nummer']) ?> verwerfen? Er war nie beim Kunden – die Angebotsnummer wird wieder frei.');">
+            <input type="hidden" name="aktion" value="angebot_verwerfen"><input type="hidden" name="angebot_id" value="<?= (int)$ag['id'] ?>">
+            <button class="btn btn-ghost btn-sm" type="submit">verwerfen</button>
           </form>
         <?php endif; ?>
       </div>

@@ -51,6 +51,7 @@
   - `portal_anfrage` – Kundenanfragen aus dem Portal (typ produkt/rohstoff/dienstleistung, Nr. PAF-); Produktanfrage mit produkt_id/stueck/verpackung_id/menge, sonst betreff/notiz. Portal-Freischaltungen je Kunde: `kunden.portal_rezeptur/produkte/rohstoffe/dienstleistung`.
 - **Feste Nummern:** `naechste_nummer('K')` → z. B. „K-0006" (atomar hochgezählt). `item_prefix($kategorie)` wählt für Warenlager-Items das Präfix (Rohstoff=R, Verpackung=VP, Fertigware=FP …). Beim Anlegen vergeben die Detailseiten die Nummer automatisch, wenn das Feld leer ist.
   - `aktivitaet` – das zentrale Ereignis-Protokoll für den Verlauf, für **jedes** Objekt (über `objekt_typ` + `objekt_id`).
+  - **„Geht nicht" – Anfrage absagen:** `portal_anfrage.absage_grund` hält die Begründung, die der Kunde im Portal liest; der Status wird `abgelehnt`. Ein noch nicht gesendeter Angebots-Entwurf wird dabei mit `angebot_entwurf_verwerfen()` gelöscht (Positionen, Staffeln, `angebot_produkt` mit) – nur bei Status `offen` und ohne Auftrag. `nummer_zurueckgeben()` setzt den Nummernkreis zurück, wenn es die zuletzt vergebene Nummer war: kein Loch in der Angebotsnummerierung, wenn ein Entwurf sofort wieder verworfen wird.
  
 - **Migrations-Werkzeug:** `table_exists`, `column_exists`, `ensure_column` – so kommen später neue Felder **additiv** dazu (nur hinzufügen, nie löschen). Alte Daten bleiben unberührt.
 - **Einstellungen:** `meta_get` / `meta_set` – lesen/schreiben in `app_meta`.

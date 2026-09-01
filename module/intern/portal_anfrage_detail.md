@@ -17,6 +17,9 @@ Route: `?p=portal_anfrage&id=<ID>`  (Rollen: sales, production, einkauf, admin)
 - **Angebot abgeben** (bei Produktanfragen – mit hinterlegtem Produkt über die Preismatrix, bei einer Rezeptur-Anfrage über den Angebots-Editor).
 - **Anfrage aus einer Rezeptur:** Hat der Kunde eine Rezeptur angenommen, für die es noch kein Produkt gibt, kommt die Anfrage mit `portal_anfrage.rezeptur_id` (und ohne `produkt_id`) herein. Statt der Preismatrix erscheint dann ein Hinweis plus **„Im Angebots-Editor bauen"** – dort wird die Rezeptur als Position gebaut (`angebot_rezeptur_zeilen()`), und beim Senden entsteht daraus das Produkt (`angebot_produkte_sichern()`).
 - **Bearbeitungsstatus** zum manuellen Setzen.
+- **Rezeptur im Klartext:** Bei einer Rezeptur-Anfrage stehen Darreichungsform und die komplette Zusammensetzung (Zutat + mg, Summe je Einheit) direkt hier – man muss kein Angebot anlegen, um zu sehen, worum es geht.
+- **Nicht machbar:** Panel unter dem Wunsch. Mit Pflicht-Begründung absagen (`aktion=anfrage_absagen`) – Status `abgelehnt`, Grund in `portal_anfrage.absage_grund`, der Kunde liest ihn im Portal. Ein noch nicht gesendeter Entwurf wird verworfen und die Angebotsnummer wieder freigegeben. Solange abgesagt ist, verschwindet „Angebot abgeben" (kein Widerspruch auf dem Bildschirm); **Absage zurücknehmen** holt die Anfrage zurück in Bearbeitung.
+- **Entwurf verwerfen:** neben jedem Angebot im Status `offen` – löscht es samt Positionen und gibt die Nummer zurück. Gesendete oder bestätigte Angebote sind davon ausgenommen.
 
 ## Angebot abgeben (der Kern)
 Man gibt **keine Einzelpreise** ein – das System rechnet die ganze Preismatrix

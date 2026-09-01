@@ -453,7 +453,23 @@ $portalAnfragen = all("SELECT pa.*, p.name AS produkt_name, i.name AS verp_name,
     LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN item i ON i.id=pa.verpackung_id
     LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
     WHERE pa.kunde_id=? ORDER BY pa.angelegt DESC", [$kid]);
-$pafBadge = fn($s) => match ($s) { 'neu'=>bx_badge('eingegangen','info'),'in_bearbeitung'=>bx_badge('in Bearbeitung','warn'),'beantwortet'=>bx_badge('Angebot abgegeben','ok'),'abgelehnt'=>bx_badge('abgelehnt','err'),default=>bx_badge($s) };
+// Anzeigename einer Zeile (Angebot, Bestellung, Anfrage): Produktname, sonst die Rezeptur,
+// sonst die erste Angebotsposition. Ohne Produkt stand hier sonst nur ein nichtssagendes „–".
+$titelFuer = function(array $r): string {
+    if (!empty($r['produkt_name'])) return (string)$r['produkt_name'];
+    if (!empty($r['rezeptur_id'])) {
+        $n = (string) scalar("SELECT name FROM rezeptur WHERE id=?", [(int)$r['rezeptur_id']]);
+        if ($n !== '') return $n;
+    }
+    $ang = (int)($r['angebot_id'] ?? 0);
+    if (!$ang && strpos((string)($r['nummer'] ?? ''), 'AN-') === 0) $ang = (int)($r['id'] ?? 0);
+    if ($ang) {
+        $b = (string) scalar("SELECT bezeichnung FROM angebot_position WHERE angebot_id=? ORDER BY sort, id LIMIT 1", [$ang]);
+        if ($b !== '') return preg_replace('/^[A-Z]\)\s*/', '', $b);
+    }
+    return '–';
+};
+$pafBadge = fn($s) => match ($s) { 'neu'=>bx_badge('eingegangen','info'),'in_bearbeitung'=>bx_badge('in Bearbeitung','warn'),'beantwortet'=>bx_badge('Angebot abgegeben','ok'),'abgelehnt'=>bx_badge('nicht machbar','err'),default=>bx_badge($s) };
 // Rezeptur-Katalog: eigene Rezepturen (ab Vorschlag) + freigegebene Hausrezepturen (allen Kunden verfügbar)
 // „Meine Rezepturen" = nur ANGENOMMENE eigene (eingefroren) + freigegebene Katalog-Rezepturen.
 // Vorschläge sind noch keine Rezeptur → erscheinen über die Übersicht („Vorschlag erhalten"), nicht hier.
@@ -559,7 +575,7 @@ foreach ($portalAnfragen as $p) {
     $bez = $p['typ']==='produkt'
         ? ($p['produkt_name'] ?: ($p['rezeptur_name'] ? $p['rezeptur_name'] . ' (aus Rezeptur)' : 'Produkt'))
         : ($p['betreff'] ?: ($typLabelP[$p['typ']] ?? 'Anfrage'));
-    $st  = ($p['status']==='beantwortet') ? bx_badge('Angebot erhalten','ok') : (($p['status']==='abgelehnt') ? bx_badge('abgelehnt','err') : bx_badge('in Prüfung','warn'));
+    $st  = ($p['status']==='beantwortet') ? bx_badge('Angebot erhalten','ok') : (($p['status']==='abgelehnt') ? (bx_badge('nicht machbar','err') . (!empty($p['absage_grund']) ? '<div class="muted" style="font-size:12px;white-space:normal;margin-top:4px">' . h($p['absage_grund']) . '</div>' : '')) : bx_badge('in Prüfung','warn'));
     $akt = !empty($p['angebot_id']) ? ['label'=>'Zum Angebot','href'=>$portalLink('angebote').'#a'.(int)$p['angebot_id'],'primary'=>true] : null;
     $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt, 'loeschbar'=>empty($p['angebot_id']), 'del_typ'=>'portal', 'del_id'=>(int)$p['id']];
 }
@@ -1235,9 +1251,9 @@ portal_head('Kundenportal · ' . $k['firma']);
       <thead><tr><th>Nr.</th><th>Produkt</th><th class="bx-num">Größe je Packung</th><th>Verpackungstyp</th><th class="bx-num">Anzahl</th><th>Status</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($meineProd as $a): ?>
-        <tr><td><?= h($a['nummer']) ?></td><td><?= h($a['produkt_name'] ?: ($inf['opt']['optionen'] ? $inf['opt']['optionen'][0]['titel'] : ($inf['pos'] ? preg_replace('/^[A-Z]\)\s*/', '', $inf['pos'][0]['bezeichnung']) : '–'))) ?></td>
+        <tr><td><?= h($a['nummer']) ?></td><td><?= h($titelFuer($a)) ?></td>
           <td class="bx-num"><?= $a['fuellmenge_g'] ? rtrim(rtrim(number_format((float)$a['fuellmenge_g'],1,',','.'),'0'),',').' g' : ($a['stueck'] ? (int)$a['stueck'].' Stk' : '–') ?></td>
-          <td><?= h($a['verpackung_typ'] ? ($VTYPEN[$a['verpackung_typ']] ?? $a['verpackung_typ']) : '–') ?></td><td class="bx-num"><?= $a['menge'] ? (int)$a['menge'] : '–' ?></td><td><?= $pafBadge($a['status']) ?></td>
+          <td><?= h($a['verpackung_typ'] ? ($VTYPEN[$a['verpackung_typ']] ?? $a['verpackung_typ']) : '–') ?></td><td class="bx-num"><?= $a['menge'] ? (int)$a['menge'] : '–' ?></td><td><?= $pafBadge($a['status']) ?><?php if ($a['status']==='abgelehnt' && !empty($a['absage_grund'])): ?><div class="muted" style="font-size:12px;white-space:normal"><?= h($a['absage_grund']) ?></div><?php endif; ?></td>
           <td style="text-align:right"><?php if (!empty($a['angebot_id'])): ?><a class="btn btn-primary btn-sm" href="<?= $portalLink('angebote') ?>#a<?= (int)$a['angebot_id'] ?>">Zum Angebot</a><?php endif; ?></td></tr>
       <?php endforeach; ?>
       </tbody>
@@ -1368,7 +1384,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php foreach ($meine as $a): ?>
         <tr><td><?= h($a['nummer']) ?></td><td><?= h($a['betreff'] ?: '–') ?></td>
           <?php if ($istRoh): ?><td class="bx-num"><?= $a['wunsch_menge'] ? rtrim(rtrim(number_format((float)$a['wunsch_menge'],3,',','.'),'0'),',').' '.h($a['wunsch_einheit'] ?: '') : '–' ?></td><?php endif; ?>
-          <td><?= $pafBadge($a['status']) ?></td></tr>
+          <td><?= $pafBadge($a['status']) ?><?php if ($a['status']==='abgelehnt' && !empty($a['absage_grund'])): ?><div class="muted" style="font-size:12px;white-space:normal"><?= h($a['absage_grund']) ?></div><?php endif; ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
@@ -1391,7 +1407,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   ?>
   <details class="bx-panel pt-ang" id="a<?= (int)$a['id'] ?>" style="scroll-margin-top:16px">
     <summary>
-      <span style="font-size:var(--fs-md)"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($a['produkt_name'] ?: ($inf['opt']['optionen'] ? $inf['opt']['optionen'][0]['titel'] : ($inf['pos'] ? preg_replace('/^[A-Z]\)\s*/', '', $inf['pos'][0]['bezeichnung']) : '–'))) ?></strong></span>
+      <span style="font-size:var(--fs-md)"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($titelFuer($a)) ?></strong></span>
       <span class="bx-row" style="gap:10px;align-items:center">
         <?= $offen ? bx_badge('Angebot liegt vor – bitte wählen','info')
              : ($a['status']==='bestaetigt' ? bx_badge('bestätigt','ok') : bx_badge('abgelehnt','err')) ?>
@@ -1558,7 +1574,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php foreach ($auftraege as $a): $cur = $aufStep($a['status']); $complete = $a['status'] === 'versendet'; ?>
   <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($a['produkt_name'] ?: ($inf['opt']['optionen'] ? $inf['opt']['optionen'][0]['titel'] : ($inf['pos'] ? preg_replace('/^[A-Z]\)\s*/', '', $inf['pos'][0]['bezeichnung']) : '–'))) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span></div>
+      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span></div>
       <div class="bx-row" style="gap:10px;align-items:center"><?= $aufBadge($a['status']) ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
     <ul class="bx-steps" style="margin-top:12px">
@@ -1604,7 +1620,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <h1 style="margin:0"><?= h($a['nummer']) ?></h1>
     <a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellungen') ?>">&#8592; Alle Bestellungen</a>
   </div>
-  <p class="muted" style="margin:0 0 16px"><?= h($a['produkt_name'] ?: ($inf['opt']['optionen'] ? $inf['opt']['optionen'][0]['titel'] : ($inf['pos'] ? preg_replace('/^[A-Z]\)\s*/', '', $inf['pos'][0]['bezeichnung']) : '–'))) ?></p>
+  <p class="muted" style="margin:0 0 16px"><?= h($titelFuer($a)) ?></p>
 
   <!-- Status-Kacheln -->
   <div class="bx-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
@@ -1654,7 +1670,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <h2 style="margin:0 0 14px;font-size:16px">Bestelldetails</h2>
     <div class="bx-tablewrap"><table class="bx-table">
       <tbody>
-        <tr><td class="muted" style="width:150px">Produkt</td><td><?= h($a['produkt_name'] ?: ($inf['opt']['optionen'] ? $inf['opt']['optionen'][0]['titel'] : ($inf['pos'] ? preg_replace('/^[A-Z]\)\s*/', '', $inf['pos'][0]['bezeichnung']) : '–'))) ?></td></tr>
+        <tr><td class="muted" style="width:150px">Produkt</td><td><?= h($titelFuer($a)) ?></td></tr>
         <?php if ((int)$a['stueck']): ?><tr><td class="muted">Stück je Packung</td><td><?= (int)$a['stueck'] ?></td></tr><?php endif; ?>
         <tr><td class="muted">Anzahl Packungen</td><td><?= (int)$a['menge'] ?></td></tr>
         <?php if ($vName): ?><tr><td class="muted">Verpackung</td><td><?= h($vName) ?></td></tr><?php endif; ?>
