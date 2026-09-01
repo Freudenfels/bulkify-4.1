@@ -19,7 +19,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Zelle wählt. Ein Angebot kann genauso aus Positionen bestehen (Rezeptur, Rohstoff, Dienstleistung) –
         // gerade bei einer Rezeptur-Anfrage gibt es noch gar kein Produkt, es entsteht erst aus dem Angebot.
         {
-            $status  = $f('status') ?: 'offen';
+            // Der Status wird NICHT über die Kopfdaten gesetzt – dafür gibt es die Knöpfe „An Kunden senden"
+            // und „Zurückziehen". Speichern darf niemals versehentlich etwas beim Kunden sichtbar machen.
+            $status  = $neu ? 'offen' : (string) (scalar("SELECT status FROM angebot WHERE id=?", [(int)$id]) ?: 'offen');
             $gueltig = $f('gueltig_bis') !== '' ? $f('gueltig_bis') : null;
             $marge   = $f('marge') !== '' ? (float)str_replace(',', '.', $f('marge')) : null;
             $pz      = $f('produktionszeit') !== '' ? (float)str_replace(',', '.', $f('produktionszeit')) : null;
@@ -33,9 +35,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 q("UPDATE angebot SET kunde_id=?,produkt_id=?,status=?,gueltig_bis=?,notiz=?,marge_override=?,produktionszeit_wochen=? WHERE id=?",
                   [$kunde_id, $produkt_id, $status, $gueltig, $f('notiz'), $marge, $pz, (int)$id]);
             }
-            // Sobald das Angebot beim Kunden ist, gelten die angebotenen Konfigurationen als eigene Produkte
-            // (Rezeptur x Menge + Verpackung) – und der Kunde darf deren Preise im Portal sehen.
-            if (in_array($status, ['gesendet', 'bestaetigt'], true)) angebot_produkte_sichern((int)$id);
             header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
         }
     } elseif ($aktion === 'pos_save' && !$neu) {
@@ -55,6 +54,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                (float)str_replace(',', '.', $mwst[$i] ?? '0'), in_array($quelle[$i] ?? '', ['herstellung','verpackung','manuell'], true) ? $quelle[$i] : 'manuell', $gv]);
         }
         header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
+    } elseif ($aktion === 'senden' && !$neu) {
+        // Der einzige Weg, ein Angebot beim Kunden sichtbar zu machen. Leere Angebote gehen nicht raus.
+        $st  = (string) scalar("SELECT status FROM angebot WHERE id=?", [(int)$id]);
+        $anz = (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=?", [(int)$id]);
+        if ($st !== 'offen')  { header('Location: ?p=angebot&id=' . $id . '&sendfehler=status'); exit; }
+        if ($anz === 0)       { header('Location: ?p=angebot&id=' . $id . '&sendfehler=leer'); exit; }
+        q("UPDATE angebot SET status='gesendet' WHERE id=?", [(int)$id]);
+        // Jetzt – und erst jetzt – gelten die angebotenen Konfigurationen als eigene Produkte
+        // (Rezeptur x Menge + Verpackung), und der Kunde darf deren Preise im Portal sehen.
+        angebot_produkte_sichern((int)$id);
+        $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [(int)$id]);
+        if ($kd) {
+            q("UPDATE portal_anfrage SET status='beantwortet' WHERE id=(SELECT anfrage_id FROM angebot WHERE id=?) AND status<>'beantwortet'", [(int)$id]);
+            log_aktivitaet('kunde', $kd, 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [(int)$id]) . ' an den Kunden gesendet.', 'angebot', 'angebot', (int)$id);
+        }
+        header('Location: ?p=angebot&id=' . $id . '&gesendet=1'); exit;
     } elseif ($aktion === 'zurueckziehen' && !$neu) {
         // Zurückziehen = zurück in den ENTWURF ('offen'). Beim Kunden verschwindet es damit sofort
         // (das Portal zeigt nur 'gesendet'), hier bleibt dasselbe Angebot bearbeitbar.
@@ -116,18 +131,26 @@ $defMarge = max(marge_typ_prozent($form ?: 'kapsel'), marge_min_prozent());
 $defPz    = (float) meta_get('produktionszeit_wochen', 7);
 
 render_header('angebote', $neu ? 'Neues Angebot' : ($a['nummer'] ?? 'Angebot'));
-// Zurückziehen nur anbieten, solange der Kunde noch nicht zugesagt hat.
-$kannZurueck = !$neu && ($a['status'] ?? '') === 'gesendet';
+// Senden und Zurückziehen sind die einzigen Wege, die Sichtbarkeit beim Kunden zu ändern.
+$st          = (string)($a['status'] ?? 'offen');
+$kannSenden  = !$neu && $st === 'offen';
+$kannZurueck = !$neu && $st === 'gesendet';
 $kopfBtn = bx_btn('Zurück zur Liste', '?p=angebote', 'ghost');
-if ($kannZurueck) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot zurückziehen? Der Kunde kann es dann nicht mehr annehmen.\');">'
+if ($kannZurueck) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot zurückziehen? Es verschwindet beim Kunden und ist hier wieder bearbeitbar.\');">'
     . '<input type="hidden" name="aktion" value="zurueckziehen">'
-    . '<button class="btn btn-danger" type="submit">Angebot zurückziehen</button></form>' . $kopfBtn;
+    . '<button class="btn btn-ghost" type="submit">Zurückziehen</button></form>' . $kopfBtn;
+if ($kannSenden) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot jetzt an den Kunden senden?\');">'
+    . '<input type="hidden" name="aktion" value="senden">'
+    . '<button class="btn btn-primary" type="submit">An Kunden senden</button></form>' . $kopfBtn;
 bx_head($neu ? 'Neues Angebot' : $v('nummer'),
         $neu ? 'Positionen' : 'Angebot bearbeiten',
         $kopfBtn);
 if (isset($_GET['gespeichert']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
-if (isset($_GET['zurueckgezogen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot zurückgezogen – der Kunde kann es nicht mehr annehmen.</div>';
+if (isset($_GET['gesendet']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot an den Kunden gesendet – er sieht es jetzt im Portal.</div>';
+if (isset($_GET['zurueckgezogen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot zurückgezogen – beim Kunden verschwunden, hier wieder als Entwurf bearbeitbar.</div>';
 if (isset($_GET['zzfehler']))      echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Zurückziehen nicht mehr möglich – das Angebot ist bereits bestätigt oder abgelehnt.</div>';
+if (($_GET['sendfehler'] ?? '') === 'leer')   echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Noch keine Positionen – ein leeres Angebot wird nicht gesendet. Füge unten mindestens eine Position hinzu.</div>';
+if (($_GET['sendfehler'] ?? '') === 'status') echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Das Angebot ist nicht mehr im Entwurf – es wurde bereits gesendet oder beantwortet.</div>';
 if (isset($_GET['zurueckgesetzt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Positionen auf die automatische Berechnung zurückgesetzt.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 ?>
@@ -148,11 +171,18 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       <div style="padding:8px 0"><?= h((string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [$pid]) ?: '–') ?></div>
     </div>
     <?php endif; ?>
-    <div class="bx-field"><label>Status</label>
-      <select name="status"><!-- offen = Entwurf, nur intern · gesendet = beim Kunden -->
-        <?php foreach (['offen'=>'offen (Entwurf, nur intern)','gesendet'=>'gesendet (beim Kunden)','bestaetigt'=>'bestätigt','abgelehnt'=>'abgelehnt'] as $key=>$lbl): ?>
-          <option value="<?= $key ?>" <?= ($a['status']??'')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
-      </select>
+    <?php // Status ist eine ANZEIGE – geändert wird er nur über „An Kunden senden" / „Zurückziehen"
+          // bzw. durch den Kunden selbst (bestätigt/abgelehnt im Portal). ?>
+    <div class="bx-field"><label>Status <?= bx_hint('Entwurf sieht nur das Team. Erst „An Kunden senden" macht das Angebot im Portal sichtbar.') ?></label>
+      <div style="padding:8px 0">
+        <?= match ($st) {
+              'offen'      => bx_badge('Entwurf – noch nicht beim Kunden', 'info'),
+              'gesendet'   => bx_badge('beim Kunden', 'ok'),
+              'bestaetigt' => bx_badge('vom Kunden bestätigt', 'ok'),
+              'abgelehnt'  => bx_badge('vom Kunden abgelehnt', 'err'),
+              default      => bx_badge($st),
+            } ?>
+      </div>
     </div>
     <div class="bx-field"><label>Gültig bis</label><input type="date" name="gueltig_bis" value="<?= $v('gueltig_bis') ?>"></div>
     <div class="bx-field"><label>Marge (%) <?= bx_hint('wirkt auf die automatischen Positionen. Leer = Marge je Form ('.rtrim(rtrim(number_format($defMarge,2,',','.'),'0'),',').' %).') ?></label><input type="number" step="0.1" name="marge" value="<?= ($a['marge_override'] ?? '') !== '' && $a['marge_override'] !== null ? h(rtrim(rtrim(number_format((float)$a['marge_override'],2,'.',''),'0'),'.')) : '' ?>" placeholder="<?= h(rtrim(rtrim(number_format($defMarge,2,',','.'),'0'),',')) ?> (Standard)"></div>

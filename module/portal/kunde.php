@@ -89,6 +89,30 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 }
 
 // Rezepturanfrage bearbeiten – nur solange noch nicht in Bearbeitung (status='neu') und Eigentum des Kunden.
+// Anfrage löschen (Kundenaktion) – nur die eigene und nur solange wir sie noch nicht angefasst haben.
+// Sobald ein Angebot dranhängt oder wir in Bearbeitung sind, bleibt sie stehen: dann steckt Arbeit drin.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage_loeschen') {
+    $typ = ($_POST['anf_typ'] ?? '') === 'rezeptur' ? 'rezeptur' : 'portal';
+    $aid = (int)($_POST['anf_id'] ?? 0);
+    $weg = false;
+    if ($typ === 'rezeptur') {
+        $r = $aid ? one("SELECT id, rezeptur_id FROM rezeptur_anfrage WHERE id=? AND kunde_id=? AND status='neu'", [$aid, (int)$k['id']]) : null;
+        if ($r && empty($r['rezeptur_id'])) {
+            q("DELETE FROM rezeptur_anfrage_wunsch WHERE anfrage_id=?", [$aid]);
+            q("DELETE FROM rezeptur_anfrage WHERE id=?", [$aid]);
+            $weg = true;
+        }
+    } else {
+        $p = $aid ? one("SELECT id FROM portal_anfrage WHERE id=? AND kunde_id=? AND status='neu'", [$aid, (int)$k['id']]) : null;
+        if ($p && (int) scalar("SELECT COUNT(*) FROM angebot WHERE anfrage_id=?", [$aid]) === 0) {
+            q("DELETE FROM portal_anfrage_pos WHERE anfrage_id=?", [$aid]);
+            q("DELETE FROM portal_anfrage WHERE id=?", [$aid]);
+            $weg = true;
+        }
+    }
+    if ($weg) log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Anfrage im Portal gelöscht.', 'anfrage');
+    header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&' . ($weg ? 'geloescht=1' : 'loeschfehler=1')); exit;
+}
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage_bearbeiten') {
     $aid = (int)($_POST['anfrage_id'] ?? 0);
     $an  = $aid ? one("SELECT * FROM rezeptur_anfrage WHERE id=? AND kunde_id=? AND status='neu'", [$aid, (int)$k['id']]) : null;
@@ -500,7 +524,7 @@ foreach ($anfragen as $a) {
     $akt = null;
     if (($a['rezeptur_status'] ?? '') === 'vorschlag' && $a['rezeptur_id']) $akt = ['label'=>'Prüfen & entscheiden','href'=>$portalLink('rezeptur').'&rid='.(int)$a['rezeptur_id'],'primary'=>true];
     elseif (($a['status'] ?? '') === 'neu') $akt = ['label'=>'Bearbeiten','href'=>$portalLink('anfrage').'&edit='.(int)$a['id'],'primary'=>false];
-    $meineAnfRows[] = ['typ'=>'rezeptur','nummer'=>$a['nummer'],'bez'=>($a['produktname'] ?: '(Rezeptur)'),'datum'=>$a['angelegt'],'status'=>$anfStatus($a),'aktion'=>$akt];
+    $meineAnfRows[] = ['typ'=>'rezeptur','nummer'=>$a['nummer'],'bez'=>($a['produktname'] ?: '(Rezeptur)'),'datum'=>$a['angelegt'],'status'=>$anfStatus($a),'aktion'=>$akt, 'loeschbar'=>($a['status'] ?? '') === 'neu' && empty($a['rezeptur_id']), 'del_typ'=>'rezeptur', 'del_id'=>(int)$a['id']];
 }
 foreach ($portalAnfragen as $p) {
     // Bei einer Rezeptur-Anfrage gibt es noch kein Produkt – dann den Rezepturnamen zeigen statt „Produkt".
@@ -509,7 +533,7 @@ foreach ($portalAnfragen as $p) {
         : ($p['betreff'] ?: ($typLabelP[$p['typ']] ?? 'Anfrage'));
     $st  = ($p['status']==='beantwortet') ? bx_badge('Angebot erhalten','ok') : (($p['status']==='abgelehnt') ? bx_badge('abgelehnt','err') : bx_badge('in Prüfung','warn'));
     $akt = !empty($p['angebot_id']) ? ['label'=>'Zum Angebot','href'=>$portalLink('angebote').'#a'.(int)$p['angebot_id'],'primary'=>true] : null;
-    $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt];
+    $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt, 'loeschbar'=>($p['status'] ?? '') === 'neu' && empty($p['angebot_id']), 'del_typ'=>'portal', 'del_id'=>(int)$p['id']];
 }
 usort($meineAnfRows, fn($x,$y) => strcmp((string)$y['datum'], (string)$x['datum']));
 $anfTabs = ['alle'=>'Alle'];
@@ -718,6 +742,8 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (isset($_GET['anfrage'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rezepturanfrage ist eingegangen – wir prüfen sie und melden uns.</div><?php endif; ?>
   <?php if (isset($_GET['angenommen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – die Rezeptur ist angenommen. Sie ist jetzt verbindlich festgelegt.</div><?php endif; ?>
   <?php if (isset($_GET['gesendet'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Anfrage ist eingegangen – wir prüfen sie und melden uns mit einem Angebot.</div><?php endif; ?>
+  <?php if (isset($_GET['geloescht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Anfrage gelöscht.</div><?php endif; ?>
+  <?php if (isset($_GET['loeschfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Diese Anfrage lässt sich nicht mehr löschen – wir sind bereits dabei oder haben Ihnen schon ein Angebot gemacht. Melden Sie sich bei uns, dann klären wir das.</div><?php endif; ?>
 
 <?php if ($view === 'start'): ?>
   <h1 style="margin-bottom:4px">Willkommen, <?= h($k['ansprechpartner'] ?: $k['firma']) ?></h1>
@@ -857,7 +883,20 @@ portal_head('Kundenportal · ' . $k['firma']);
           <?php if ($atab === 'alle'): ?><td><?= h($typLabelP[$r['typ']] ?? $r['typ']) ?></td><?php endif; ?>
           <td><?= $r['bez'] ? h($r['bez']) : '<span class="muted">–</span>' ?></td>
           <td><?= $r['status'] ?></td>
-          <td style="text-align:right"><?php if ($r['aktion']): ?><a class="btn <?= $r['aktion']['primary'] ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="<?= h($r['aktion']['href']) ?>"><?= h($r['aktion']['label']) ?></a><?php endif; ?></td>
+          <td style="text-align:right">
+            <div class="bx-row" style="gap:8px;justify-content:flex-end">
+              <?php if ($r['aktion']): ?><a class="btn <?= $r['aktion']['primary'] ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="<?= h($r['aktion']['href']) ?>"><?= h($r['aktion']['label']) ?></a><?php endif; ?>
+              <?php // Löschen nur, solange wir die Anfrage noch nicht bearbeitet haben ?>
+              <?php if (!empty($r['loeschbar'])): ?>
+                <form method="post" style="margin:0" onsubmit="return confirm('Anfrage <?= h($r['nummer']) ?> wirklich löschen?');">
+                  <input type="hidden" name="aktion" value="anfrage_loeschen">
+                  <input type="hidden" name="anf_typ" value="<?= h($r['del_typ']) ?>">
+                  <input type="hidden" name="anf_id" value="<?= (int)$r['del_id'] ?>">
+                  <button class="btn btn-ghost btn-sm" type="submit">Löschen</button>
+                </form>
+              <?php endif; ?>
+            </div>
+          </td>
         </tr>
       <?php endforeach; ?>
       </tbody>
