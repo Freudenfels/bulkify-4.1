@@ -2913,6 +2913,31 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     return $aid;
 }
 
+// Ältere Angebote wurden gebaut, bevor die Positionen ihre Konfiguration mitspeicherten.
+// Damit auch sie annehmbar sind, tragen wir sie aus der zugehörigen Anfrage nach:
+// Rezeptur + Menge je Packung (+ Behälter, falls die Anfrage einen nennt) an die erste Position.
+function angebot_positionen_konfig_nachtragen(int $angebot_id): void {
+    if (scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=? AND rezeptur_id IS NOT NULL", [$angebot_id])) return;
+    $a = one("SELECT anfrage_id FROM angebot WHERE id=?", [$angebot_id]);
+    if (!$a || !$a['anfrage_id']) return;
+    $an = one("SELECT rezeptur_id, stueck, fuellmenge_g, verpackung_id FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']]);
+    if (!$an || !$an['rezeptur_id']) return;
+    $stueck = (int) round((float)($an['stueck'] ?: $an['fuellmenge_g']));
+    if ($stueck <= 0) return;
+    $erste = one("SELECT id, gruppe FROM angebot_position WHERE angebot_id=? AND quelle='herstellung' ORDER BY sort, id LIMIT 1", [$angebot_id])
+          ?: one("SELECT id, gruppe FROM angebot_position WHERE angebot_id=? ORDER BY sort, id LIMIT 1", [$angebot_id]);
+    if (!$erste) return;
+    // Behälter: was die Anfrage nennt – sonst der Artikel aus der Verpackungsposition derselben Gruppe.
+    $verp = $an['verpackung_id'] ? (int)$an['verpackung_id'] : null;
+    if (!$verp) {
+        $vp = one("SELECT artikelnr FROM angebot_position WHERE angebot_id=? AND quelle='verpackung'
+                   AND (gruppe <=> ?) AND artikelnr <> '' ORDER BY sort, id LIMIT 1", [$angebot_id, $erste['gruppe']]);
+        if ($vp) $verp = (int) scalar("SELECT id FROM item WHERE artikelnummer=? AND COALESCE(verpackung_rolle,'primaer')='primaer' LIMIT 1", [$vp['artikelnr']]) ?: null;
+    }
+    q("UPDATE angebot_position SET rezeptur_id=?, stueck=?, verpackung_id=? WHERE id=?",
+      [(int)$an['rezeptur_id'], $stueck, $verp, (int)$erste['id']]);
+}
+
 // Auftrag aus einem Angebot, das aus POSITIONEN besteht (kein Produkt im Kopf, keine Preismatrix) –
 // der Weg für „Kunde hat eine Rezeptur, daraus soll ein Produkt werden".
 // ERST HIER entsteht das Produkt: Rezeptur x Menge je Packung + Verpackung, genau wie angeboten.
@@ -2923,6 +2948,8 @@ function auftrag_aus_positionen(int $angebot_id): ?int {
     if (($v = scalar("SELECT id FROM auftrag WHERE angebot_id=?", [$angebot_id]))) return (int)$v;   // idempotent
     $pos = all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]);
     if (!$pos) return null;
+    angebot_positionen_konfig_nachtragen($angebot_id);
+    $pos = all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]);
     $herst = null;
     foreach ($pos as $p) if (!empty($p['rezeptur_id']) && (int)$p['stueck'] > 0) { $herst = $p; break; }
     if (!$herst) return null;   // ohne bekannte Konfiguration kein Produkt und kein Auftrag

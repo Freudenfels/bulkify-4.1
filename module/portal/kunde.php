@@ -305,6 +305,12 @@ foreach ($angebote as $a) {
                                           'menge'=>(float)$p['menge'], 'einheit'=>$p['einheit'],
                                           'preis_cent'=>(int)$p['preis_cent'], 'mwst'=>(float)$p['mwst_satz']],
                                 $a['status'] === 'offen' ? [] : angebot_positionen((int)$a['id'])),
+        // Annehmbar ist ein Positions-Angebot nur, wenn die Konfiguration bekannt ist – aus der
+        // Position selbst oder aus der zugehoerigen Anfrage. Sonst waere der Knopf ein Blindgaenger.
+        'annehmbar' => $a['status'] === 'gesendet' && (
+              (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=? AND rezeptur_id IS NOT NULL AND stueck > 0", [(int)$a['id']]) > 0
+           || (int) scalar("SELECT COUNT(*) FROM portal_anfrage WHERE id=? AND rezeptur_id IS NOT NULL AND COALESCE(stueck, fuellmenge_g, 0) > 0", [(int)($a['anfrage_id'] ?? 0)]) > 0
+        ),
         'prodzeit'=> ($a['produktionszeit_wochen'] ?? '') !== '' && $a['produktionszeit_wochen'] !== null ? (float)$a['produktionszeit_wochen'] : $produktionszeit,
     ];
 }
@@ -1444,10 +1450,12 @@ portal_head('Kundenportal · ' . $k['firma']);
       </tbody>
     </table></div>
     <div class="bx-row" style="justify-content:flex-end;margin-top:10px">
+      <?php if ($inf['annehmbar']): ?>
       <form method="post" style="margin:0" onsubmit="return confirm('Angebot verbindlich annehmen?');">
         <input type="hidden" name="aktion" value="angebot_annehmen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>">
         <button class="btn btn-primary" type="submit">Angebot annehmen</button>
       </form>
+      <?php else: ?><div class="muted">Zum Annehmen bitte kurz bei uns melden.</div><?php endif; ?>
     </div>
     <?php elseif ($offen): ?>
     <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">

@@ -62,7 +62,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     // Auch ohne Produkt möglich: Der Kunde kann eine REZEPTUR anfragen, für die es noch kein Produkt gibt.
     // Im Editor wird die Rezeptur dann als Position gebaut (Typ „Rezeptur"), daraus entsteht das Produkt.
     if ($pa && $pa['typ'] === 'produkt' && ($pa['produkt_id'] || $pa['rezeptur_id']) && $pa['kunde_id']) {
-        $vorhanden = (int) scalar("SELECT id FROM angebot WHERE anfrage_id=? AND status<>'zurueckgezogen' ORDER BY id DESC LIMIT 1", [$id]);
+        $vorhanden = (int) scalar("SELECT id FROM angebot WHERE anfrage_id=? AND status IN ('offen','gesendet') ORDER BY id DESC LIMIT 1", [$id]);
         if ($vorhanden) { header('Location: ?p=angebot&id=' . $vorhanden); exit; }   // nicht doppelt anlegen
         if ($pa['produkt_id'] && (int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [(int)$pa['produkt_id']]) === 0)
             produkt_matrix_generieren((int)$pa['produkt_id']);   // Matrix versuchen (leer ist ok – Positionen manuell)
