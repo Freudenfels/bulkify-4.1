@@ -11,7 +11,7 @@ $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bestaetigen') {
     $aid = (int)($_POST['angebot_id'] ?? 0); $sid = (int)($_POST['staffel'] ?? 0);
     $ang = $aid ? one("SELECT * FROM angebot WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
-    if ($ang && in_array($ang['status'], ['offen','gesendet'], true) && $sid > 0) {
+    if ($ang && $ang['status'] === 'gesendet' && $sid > 0) {
         q("UPDATE angebot_staffel SET bestaetigt=0 WHERE angebot_id=?", [$aid]);
         q("UPDATE angebot_staffel SET bestaetigt=1 WHERE id=? AND angebot_id=?", [$sid, $aid]);
         q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
@@ -44,7 +44,7 @@ if ($k && ($_GET['v'] ?? '') === 'etikett_datei') {
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_ablehnen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT * FROM angebot WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
-    if ($ang && in_array($ang['status'], ['offen','gesendet'], true)) {
+    if ($ang && $ang['status'] === 'gesendet') {
         q("UPDATE angebot SET status='abgelehnt', ablehnung_grund=? WHERE id=?", [trim($_POST['grund'] ?? ''), $aid]);
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal abgelehnt' . (trim($_POST['grund'] ?? '') !== '' ? ': ' . trim($_POST['grund']) : '.'), 'angebot', 'angebot', $aid);
     }
@@ -55,7 +55,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zelle_annehmen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT * FROM angebot WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
-    if ($ang && in_array($ang['status'], ['offen','gesendet'], true)) {
+    if ($ang && $ang['status'] === 'gesendet') {
         $auf = auftrag_aus_zelle($aid, (int)($_POST['stueck'] ?? 0), (int)($_POST['verpackung_id'] ?? 0), (int)($_POST['bestellmenge'] ?? 0));
         if ($auf) {
             q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
@@ -229,7 +229,12 @@ if (!function_exists('pt_naehr')) {
 $angebote = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name, p.rezeptur_id, p.einheiten_pro_packung,
                         p.verpackung_id, p.verschluss_id, p.etikett_id, r.darreichungsform
                  FROM angebot a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
-                 WHERE a.kunde_id=? AND a.kunde_ausgeblendet=0 ORDER BY a.angelegt DESC", [$kid]);
+                 WHERE a.kunde_id=? AND a.kunde_ausgeblendet=0
+                   AND a.status <> 'offen'
+                 ORDER BY a.angelegt DESC", [$kid]);
+// WICHTIG: Status 'offen' ist der interne ENTWURF – der Kunde darf ihn nicht sehen.
+// Sonst erscheint ein Angebot beim Kunden, sobald es im Editor angelegt wird, also bevor
+// überhaupt eine Position darin steht. Sichtbar wird es erst mit 'gesendet'.
 $staffelMap = [];
 $angInfo = [];
 $produktionszeit = (float) meta_get('produktionszeit_wochen', 7);   // globaler Standard
@@ -472,7 +477,7 @@ $rohDetail = ($iid && $k['portal_rohstoffe']) ? one("SELECT id, name, name_lat, 
 $rohKennwerte = $rohDetail ? all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$iid]) : [];
 $jaNein = fn($v) => $v === null || $v === '' ? null : ((int)$v === 1);
 $FORMLBL_P = ['pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle'];
-$offenAngebote = count(array_filter($angebote, fn($a) => in_array($a['status'], ['offen','gesendet'], true)));
+$offenAngebote = count(array_filter($angebote, fn($a) => $a['status'] === 'gesendet'));
 $offenRechnungen = array_values(array_filter($rechnungen, fn($r) => ($r['status'] ?? '') === 'offen'));
 $offenBetrag = array_sum(array_map(fn($r) => (float)$r['brutto'], $offenRechnungen));
 $inArbeit = count(array_filter($auftraege, fn($a) => $a['status'] !== 'versendet'));
@@ -1299,7 +1304,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (!$angebote): ?><div class="bx-panel"><div class="muted">Aktuell liegen keine Angebote vor.</div></div><?php endif; ?>
   <?php foreach ($angebote as $a):
       $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']];
-      $offen = in_array($a['status'], ['offen','gesendet'], true);
+      $offen = $a['status'] === 'gesendet';
       $einh = (int)$a['einheiten_pro_packung'];
       $formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'Portionen','granulat'=>'Portionen','fluessig'=>'ml'];
       $mengeLbl = $einh . ' ' . ($formPl[$inf['form']] ?? 'Stück');
@@ -1310,8 +1315,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <span style="font-size:var(--fs-md)"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($a['produkt_name'] ?: '–') ?></strong></span>
       <span class="bx-row" style="gap:10px;align-items:center">
         <?= $offen ? bx_badge('Angebot liegt vor – bitte wählen','info')
-             : ($a['status']==='bestaetigt' ? bx_badge('bestätigt','ok')
-             : ($a['status']==='zurueckgezogen' ? bx_badge('zurückgezogen') : bx_badge('abgelehnt','err'))) ?>
+             : ($a['status']==='bestaetigt' ? bx_badge('bestätigt','ok') : bx_badge('abgelehnt','err')) ?>
         <a href="<?= $portalLink('angebot_pdf') ?>&aid=<?= (int)$a['id'] ?>" target="_blank" title="Angebot als PDF herunterladen" onclick="event.stopPropagation()" style="font-size:18px;line-height:1">&#8681;</a>
       </span>
     </summary>

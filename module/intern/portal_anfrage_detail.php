@@ -42,16 +42,16 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     }
     header('Location: ?p=portal_anfrage&id=' . $id); exit;
 }
-// Angebot zur Anfrage zurückziehen – solange der Kunde nicht zugesagt hat. Die Anfrage geht dabei zurück
-// auf „in Bearbeitung", damit ein neues Angebot gebaut werden kann.
+// Angebot zurückziehen = zurück in den ENTWURF (Status 'offen'). Kein eigener Endzustand: Das Angebot
+// verschwindet beim Kunden (der sieht nur 'gesendet') und bleibt hier bearbeitbar.
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_zurueck') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT id, nummer, status, kunde_id FROM angebot WHERE id=?", [$aid]) : null;
-    if ($ang && in_array($ang['status'], ['offen', 'gesendet'], true)) {
-        q("UPDATE angebot SET status='zurueckgezogen' WHERE id=?", [$aid]);
+    if ($ang && $ang['status'] === 'gesendet') {
+        q("UPDATE angebot SET status='offen' WHERE id=?", [$aid]);
         q("UPDATE portal_anfrage SET status='in_bearbeitung' WHERE id=?", [$id]);
-        if ($ang['kunde_id']) log_aktivitaet('kunde', (int)$ang['kunde_id'], 'team', 'Angebot ' . $ang['nummer'] . ' zurückgezogen – Anfrage wieder offen.', 'angebot', 'angebot', $aid);
-        header('Location: ?p=portal_anfrage&id=' . $id . '&zurueckgezogen=1'); exit;
+        if ($ang['kunde_id']) log_aktivitaet('kunde', (int)$ang['kunde_id'], 'team', 'Angebot ' . $ang['nummer'] . ' zurückgezogen – wieder in Bearbeitung.', 'angebot', 'angebot', $aid);
+        header('Location: ?p=angebot&id=' . $aid . '&zurueckgezogen=1'); exit;   // direkt in den Editor
     }
     header('Location: ?p=portal_anfrage&id=' . $id . '&zzfehler=1'); exit;
 }

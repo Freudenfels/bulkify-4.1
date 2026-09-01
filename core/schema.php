@@ -640,6 +640,12 @@ function init_schema(): void {
     ensure_column('angebot', 'marge_override', "DECIMAL(6,2) NULL");          // je Angebot gesetzte Marge % (überschreibt Marge-je-Typ; VK = EK×(1+Marge))
     ensure_column('angebot', 'produktionszeit_wochen', "DECIMAL(5,1) NULL");  // je Angebot gesetzte Produktionszeit (Wochen); leer = globaler Wert
     ensure_column('angebot', 'anfrage_id', "INT NULL");                       // Herkunft: portal_anfrage (angefragte Konfiguration fürs Angebots-PDF)
+    // Einmalige Bereinigung: Der Zwischenstand „zurueckgezogen" ist entfallen – Zurückziehen heißt jetzt
+    // schlicht zurück in den Entwurf. Bestehende Datensätze einmalig auf 'offen' ziehen.
+    if (meta_get('fix_angebot_zurueck', '') !== '1') {
+        q("UPDATE angebot SET status='offen' WHERE status='zurueckgezogen'");
+        meta_set('fix_angebot_zurueck', '1');
+    }
     // Rohstoff-Spezifikation (nur das Unterscheidende; Reinheits-Grenzwerte bleiben im PDF)
     ensure_column('item', 'synonym', "VARCHAR(60) NULL");            // z. B. RM940
     ensure_column('item', 'ec_nr', "VARCHAR(30) NULL");

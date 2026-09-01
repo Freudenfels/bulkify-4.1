@@ -45,7 +45,7 @@ aufgelistet (mit der gesetzten Marge), statt den Button erneut anzubieten – ke
 
 
 ## Angebot zurückziehen
-Solange der Kunde nicht zugesagt hat (`offen` oder `gesendet`), lässt sich ein Angebot **hier auf der Anfrage** zurückziehen – nicht nur im Editor. Der Knopf steht neben jedem Angebot in der Liste. Wirkung: `angebot.status='zurueckgezogen'`, die **Anfrage geht zurück auf „in Bearbeitung"**, und „Im Angebots-Editor bauen" erscheint wieder – zurückgezogene Angebote zählen nicht als „schon abgegeben". Im Portal fällt das Angebot damit aus der Annehmen-Logik und wird beim Kunden als „zurückgezogen" angezeigt. Ein bestätigtes Angebot lässt sich nicht zurückziehen, es hängt bereits an einem Auftrag.
+Ein GESENDETES Angebot lässt sich **hier auf der Anfrage** zurückziehen – nicht nur im Editor. Der Knopf steht neben jedem Angebot in der Liste. Wirkung: Das Angebot geht zurück in den **Entwurf** (`status='offen'`), die **Anfrage auf „in Bearbeitung"**, und „Im Angebots-Editor bauen" erscheint wieder – zurückgezogene Angebote zählen nicht als „schon abgegeben". Im Portal fällt das Angebot damit aus der Annehmen-Logik und wird beim Kunden als „zurückgezogen" angezeigt. Ein bestätigtes Angebot lässt sich nicht zurückziehen, es hängt bereits an einem Auftrag.
 
 Die Angebote zur Anfrage werden über `angebot.anfrage_id` gefunden (zusätzlich noch über die alte Notiz-Konvention „Aus Anfrage <Nr>", damit ältere Datensätze nicht verlorengehen).
 ## Rohstoff-Preis berechnen (bei Rohstoffanfragen)

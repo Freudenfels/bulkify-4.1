@@ -56,10 +56,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
     } elseif ($aktion === 'zurueckziehen' && !$neu) {
-        // Nur solange der Kunde nicht zugesagt hat – ein bestätigtes Angebot hängt bereits an einem Auftrag.
+        // Zurückziehen = zurück in den ENTWURF ('offen'). Beim Kunden verschwindet es damit sofort
+        // (das Portal zeigt nur 'gesendet'), hier bleibt dasselbe Angebot bearbeitbar.
         $st = (string) scalar("SELECT status FROM angebot WHERE id=?", [(int)$id]);
-        if (in_array($st, ['offen', 'gesendet'], true)) {
-            q("UPDATE angebot SET status='zurueckgezogen' WHERE id=?", [(int)$id]);
+        if ($st === 'gesendet') {
+            q("UPDATE angebot SET status='offen' WHERE id=?", [(int)$id]);
             $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [(int)$id]);
             if ($kd) log_aktivitaet('kunde', $kd, 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [(int)$id]) . ' zurückgezogen.', 'angebot', 'angebot', (int)$id);
             header('Location: ?p=angebot&id=' . $id . '&zurueckgezogen=1'); exit;
@@ -116,7 +117,7 @@ $defPz    = (float) meta_get('produktionszeit_wochen', 7);
 
 render_header('angebote', $neu ? 'Neues Angebot' : ($a['nummer'] ?? 'Angebot'));
 // Zurückziehen nur anbieten, solange der Kunde noch nicht zugesagt hat.
-$kannZurueck = !$neu && in_array($a['status'] ?? '', ['offen', 'gesendet'], true);
+$kannZurueck = !$neu && ($a['status'] ?? '') === 'gesendet';
 $kopfBtn = bx_btn('Zurück zur Liste', '?p=angebote', 'ghost');
 if ($kannZurueck) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot zurückziehen? Der Kunde kann es dann nicht mehr annehmen.\');">'
     . '<input type="hidden" name="aktion" value="zurueckziehen">'
@@ -148,8 +149,8 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     </div>
     <?php endif; ?>
     <div class="bx-field"><label>Status</label>
-      <select name="status">
-        <?php foreach (['offen'=>'offen','gesendet'=>'gesendet','bestaetigt'=>'bestätigt','abgelehnt'=>'abgelehnt','zurueckgezogen'=>'zurückgezogen'] as $key=>$lbl): ?>
+      <select name="status"><!-- offen = Entwurf, nur intern · gesendet = beim Kunden -->
+        <?php foreach (['offen'=>'offen (Entwurf, nur intern)','gesendet'=>'gesendet (beim Kunden)','bestaetigt'=>'bestätigt','abgelehnt'=>'abgelehnt'] as $key=>$lbl): ?>
           <option value="<?= $key ?>" <?= ($a['status']??'')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
       </select>
     </div>
