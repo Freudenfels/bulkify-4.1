@@ -1007,11 +1007,13 @@ portal_head('Kundenportal · ' . $k['firma']);
         <input type="hidden" name="aktion" value="produkt_anfrage">
         <input type="hidden" name="produkt_id" value="<?= (int)$prodDetail['id'] ?>">
         <div class="bx-grid">
-          <?php if ($prodIstFuell): ?>
-          <div class="bx-field"><label>Füllmenge je Packung (<?= h($prodFuellEinheit) ?>) <?= bx_hint('wie viel pro Dose/Flasche/Beutel – wir wählen die passende Verpackung dazu') ?></label><input type="number" name="fuellmenge_g" min="1" step="1" placeholder="<?= $prodFuellEinheit === 'ml' ? 'z. B. 250' : 'z. B. 200' ?>"></div>
-          <?php else: ?>
-          <div class="bx-field"><label>Stück je Packung</label><select name="stueck"><?php foreach ($stdStueck as $s): ?><option value="<?= $s ?>"><?= $s ?></option><?php endforeach; ?></select></div>
-          <?php endif; ?>
+          <?php // Menge frei eintippen – bei jeder Form. Das System rechnet auch Größen außerhalb des Standardrasters. ?>
+          <div class="bx-field">
+            <label><?= $prodIstFuell ? 'Füllmenge je Packung (' . h($prodFuellEinheit) . ')' : 'Stück je Packung' ?>
+              <?= bx_hint('Tragen Sie Ihre Wunschmenge ein – wir kalkulieren genau diese Größe und wählen die passende Verpackung dazu.') ?></label>
+            <input type="number" name="<?= $prodIstFuell ? 'fuellmenge_g' : 'stueck' ?>" min="1" step="1"
+                   placeholder="<?= $prodIstFuell ? ($prodFuellEinheit === 'ml' ? 'z. B. 250' : 'z. B. 200') : 'z. B. 120' ?>">
+          </div>
           <div class="bx-field"><label>Verpackungstyp <?= bx_hint('Sie wählen nur die Art – wir bestimmen das perfekt passende Gebinde in der richtigen Größe.') ?></label>
             <select name="verpackung_typ"><option value="">– egal / bitte empfehlen –</option><?php foreach ($VTYPEN as $tk=>$tl): ?><option value="<?= $tk ?>"><?= h($tl) ?></option><?php endforeach; ?></select>
           </div>
@@ -1037,8 +1039,8 @@ portal_head('Kundenportal · ' . $k['firma']);
             <?php foreach ($katalog as $pk): ?><option value="<?= (int)$pk['id'] ?>" data-form="<?= h($pk['darreichungsform']) ?>"><?= h($pk['name']) ?><?= $pk['darreichungsform'] ? ' · '.h($DFORM_P[$pk['darreichungsform']] ?? $pk['darreichungsform']) : '' ?></option><?php endforeach; ?>
           </select>
         </div>
-        <div class="bx-field" id="pa_stueck_wrap"><label>Stück je Packung</label><select name="stueck"><?php foreach ($stdStueck as $s): ?><option value="<?= $s ?>"><?= $s ?></option><?php endforeach; ?></select></div>
-        <div class="bx-field" id="pa_fuell_wrap" style="display:none"><label>Füllmenge je Packung <span id="pa_fuell_einheit">(g)</span> <?= bx_hint('wie viel pro Dose/Flasche/Beutel – wir wählen die passende Verpackung dazu') ?></label><input type="number" name="fuellmenge_g" min="1" step="1" placeholder="z. B. 200"></div>
+        <div class="bx-field" id="pa_stueck_wrap"><label>Stück je Packung <?= bx_hint('Ihre Wunschmenge – wir kalkulieren genau diese Größe.') ?></label><input type="number" name="stueck" min="1" step="1" placeholder="z. B. 120"></div>
+        <div class="bx-field" id="pa_fuell_wrap" style="display:none"><label>Füllmenge je Packung <span id="pa_fuell_einheit">(g)</span> <?= bx_hint('Ihre Wunschmenge – wir kalkulieren genau diese Größe und wählen die passende Verpackung dazu.') ?></label><input type="number" name="fuellmenge_g" min="1" step="1" placeholder="z. B. 200"></div>
         <div class="bx-field"><label>Verpackungstyp <?= bx_hint('Sie wählen nur die Art – wir bestimmen das perfekt passende Gebinde in der richtigen Größe.') ?></label>
           <select name="verpackung_typ"><option value="">– egal / bitte empfehlen –</option><?php foreach ($VTYPEN as $tk=>$tl): ?><option value="<?= $tk ?>"><?= h($tl) ?></option><?php endforeach; ?></select>
         </div>

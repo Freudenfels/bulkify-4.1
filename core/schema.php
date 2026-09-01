@@ -1663,9 +1663,8 @@ function angebot_produkte_sichern(int $angebot_id): array {
     $out = [];
     foreach (angebot_config_gruppen($a) as $g) {
         $pidV = (int)$g['produkt_id'];
-        if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$pidV]) === 0) produkt_matrix_generieren($pidV);
-        $matrix = angebot_matrix($pidV, null);
         $form = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pidV]) ?: 'kapsel';
+        $matrix = angebot_matrix_fuer_gruppe($pidV, $g, $form, null);   // deckt auch frei eingetippte Größen ab
         [$featStk, ] = _angebot_feat($matrix, $form, $g);
         if (!$featStk) continue;
         $verp = behaelter_fuer_groesse($pidV, (int)$featStk, $g['verpackung_typ'] ?? null);
@@ -1829,10 +1828,9 @@ function _angebot_feat(array $matrix, string $form, array $g): array {
 // Ohne Präfix in der Bezeichnung – die A)/B)-Kennzeichnung macht angebot_positionen_prefix() bzw. der PDF-/Editor-Renderer.
 function angebot_gruppe_positionen(array $g, ?float $mo, ?int $kid, ?string $letter = null): array {
     $pid = (int)$g['produkt_id'];
-    if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$pid]) === 0) produkt_matrix_generieren($pid);
-    $matrix = angebot_matrix($pid, $mo);
     $ust = angebot_ust_satz($kid);
     $form = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
+    $matrix = angebot_matrix_fuer_gruppe($pid, $g, $form, $mo);   // deckt auch frei eingetippte Größen ab
     // Portionsweise Formen: Pulver/Granulat (g), Flüssig (ml) und Sticks beschreiben die Rezeptur je Portion.
     $jePortion = form_ist_fuellmenge($form) || $form === 'stick';
     [$featStk, $featMenge] = _angebot_feat($matrix, $form, $g);
@@ -1904,8 +1902,8 @@ function angebot_staffel_gruppen(array $a): array {
     $out = []; $idx = 0;
     foreach ($groups as $g) {
         $pid = (int)$g['produkt_id'];
-        $matrix = angebot_matrix($pid, $mo);
         $form = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
+        $matrix = angebot_matrix_fuer_gruppe($pid, $g, $form, $mo);   // deckt auch frei eingetippte Größen ab
         $istFuell = form_ist_fuellmenge($form);   // Größe ist eine Füllmenge (g/ml) -> kein Stückpreis
         [$featStk, $primaer] = _angebot_feat($matrix, $form, $g);
         $mengen = $g['mengen'] ?: ($primaer ? [$primaer] : []);
@@ -2164,19 +2162,43 @@ function produkt_matrix_generieren(int $produkt_id): int {
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
     q("DELETE FROM produkt_preis WHERE produkt_id=?", [$produkt_id]);
     $anz = 0;
-    foreach (std_groessen_fuer($form) as $stueck) {   // Pulver/Granulat: Füllgewicht (g); sonst Stückzahl
-        foreach (passende_behaelter_fuer($rid, $form, $stueck) as $vid) {
-            foreach (std_bestellmengen() as $bm) {
-                $ek = produkt_variante_ek($produkt_id, $stueck, $vid, $bm);
-                $vk = produkt_variante_vk($produkt_id, $ek);
-                q("INSERT INTO produkt_preis (produkt_id,stueck,verpackung_id,bestellmenge,ek_preis,vk_preis,stand)
-                   VALUES (?,?,?,?,?,?,?)",
-                  [$produkt_id, $stueck, $vid, $bm, round($ek, 4), round($vk, 4), gmdate('Y-m-d H:i:s')]);
-                $anz++;
-            }
+    foreach (std_groessen_fuer($form) as $stueck)   // Pulver/Granulat: Füllgewicht (g); sonst Stückzahl
+        $anz += produkt_preis_fuer_groesse($produkt_id, (int)$stueck);
+    return $anz;
+}
+
+// Preiszeilen für EINE Packungsgröße nachrechnen – auch für Größen außerhalb des Standardrasters.
+// Der Kunde darf seine Menge frei eintippen (250 g, 100 Kapseln …); dann muss auch dafür ein Preis
+// entstehen, statt still auf die nächstbeste Rastergröße auszuweichen.
+// Idempotent: sind für die Größe schon Zeilen da, passiert nichts. 0 = nicht machbar (kein Behälter passt).
+function produkt_preis_fuer_groesse(int $produkt_id, int $stueck): int {
+    if ($stueck <= 0) return 0;
+    $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$produkt_id]);
+    if (!$rid) return 0;
+    if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=? AND stueck=?", [$produkt_id, $stueck]) > 0) return 0;
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
+    $anz = 0;
+    foreach (passende_behaelter_fuer($rid, $form, $stueck) as $vid) {
+        foreach (std_bestellmengen() as $bm) {
+            $ek = produkt_variante_ek($produkt_id, $stueck, $vid, $bm);
+            $vk = produkt_variante_vk($produkt_id, $ek);
+            q("INSERT INTO produkt_preis (produkt_id,stueck,verpackung_id,bestellmenge,ek_preis,vk_preis,stand)
+               VALUES (?,?,?,?,?,?,?)",
+              [$produkt_id, $stueck, $vid, $bm, round($ek, 4), round($vk, 4), gmdate('Y-m-d H:i:s')]);
+            $anz++;
         }
     }
     return $anz;
+}
+
+// Matrix eines Produkts für EINE Anfrage-Konfiguration – stellt sicher, dass die vom Kunden
+// gewünschte Größe darin vorkommt (auch außerhalb des Rasters), bevor die Matrix gelesen wird.
+function angebot_matrix_fuer_gruppe(int $produkt_id, array $g, string $form, ?float $marge_override): array {
+    if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$produkt_id]) === 0)
+        produkt_matrix_generieren($produkt_id);
+    $wunsch = form_ist_fuellmenge($form) ? (int) round((float)($g['fuellmenge_g'] ?? 0)) : (int)($g['stueck'] ?? 0);
+    if ($wunsch > 0) produkt_preis_fuer_groesse($produkt_id, $wunsch);
+    return angebot_matrix($produkt_id, $marge_override);
 }
 
 // Stationen/Gates einer Produktion je Darreichungsform.
