@@ -3248,6 +3248,108 @@ function seed_kunden_if_empty(): void {
     }
 }
 
+// ---- Daten zurücksetzen (Werkzeug in den Einstellungen) ----
+// Räumt die VORGÄNGE ab und lässt die Stammdaten stehen. Der Umfang ist bewusst gestuft, damit
+// niemand versehentlich die gepflegten Behälter-/Preisdaten mitreißt:
+//   $mitRezepturen = zusätzlich Rezepturen, Produkte und deren Preismatrix
+//   $mitKunden     = zusätzlich Kunden, Marken und Partner-Subkunden
+// NIE angefasst: item (Rohstoffe/Verpackungen mit EK-Staffeln, Kapsel-Fassung, Etikettenpreise),
+// naehrstoff, kapselgroesse, benutzer, nummernkreis, app_meta.
+// Gibt je Tabelle die Anzahl gelöschter Zeilen zurück.
+function daten_zuruecksetzen(bool $mitRezepturen = false, bool $mitKunden = false): array {
+    // Reihenfolge = von den abhängigen zu den führenden Tabellen (keine verwaisten Verweise)
+    $vorgaenge = [
+        'produktion_verbrauch', 'produktion_schritt', 'produktionsauftrag',
+        'reservierung', 'lager2_bewegung', 'charge',
+        'zahlung', 'beleg_status_log', 'beleg', 'auftrag',
+        'angebot_position', 'angebot_staffel', 'angebot_produkt', 'angebot',
+        'bestellung_position', 'bestellung', 'freibedarf',
+        'portal_anfrage_pos', 'portal_anfrage',
+        'rezeptur_anfrage_wunsch', 'rezeptur_anfrage',
+        'aufgabe', 'aktivitaet',
+    ];
+    $rezepturen = ['produkt_preis', 'produkt', 'rezeptur_zutat', 'rezeptur'];
+    $kunden     = ['kunde_marke', 'partner_subkunde', 'kunden'];
+
+    $tabellen = $vorgaenge;
+    if ($mitRezepturen) $tabellen = array_merge($tabellen, $rezepturen);
+    if ($mitKunden)     $tabellen = array_merge($tabellen, $kunden);
+
+    $report = [];
+    foreach ($tabellen as $t) {
+        if (!table_exists($t)) continue;
+        $vorher = (int) scalar("SELECT COUNT(*) FROM `$t`");
+        if ($vorher > 0) q("DELETE FROM `$t`");
+        $report[$t] = $vorher;
+    }
+    // Dokumente/Chargen verweisen auf gelöschte Objekte -> Verweise am Produkt lösen, damit nichts ins Leere zeigt
+    if ($mitRezepturen && table_exists('item')) q("UPDATE item SET produkt_id=NULL WHERE produkt_id IS NOT NULL");
+    // Demo-Seeding aus bleibt aus: sonst legen die Seeds beim nächsten Seitenaufruf alles wieder an
+    meta_set('seed_demo_off', '1');
+    log_aktivitaet('system', 0, 'team', 'Daten zurückgesetzt (' . array_sum($report) . ' Zeilen gelöscht'
+        . ($mitRezepturen ? ', inkl. Rezepturen/Produkte' : '') . ($mitKunden ? ', inkl. Kunden' : '') . ').');
+    return $report;
+}
+
+// ---- Startset: saubere Rezepturen + Produkte nach dem Modell ----
+// Rezeptur = Rohstoff x Menge + Form. Produkt = Rezeptur x Menge + Verpackung.
+// Legt je Rezeptur ein Basisprodukt an und leitet weitere Packungsgrößen über produkt_variante_id() ab –
+// also über genau den Weg, den auch ein echtes Angebot geht. Nicht-löschend und idempotent:
+// eine Rezeptur, die es namentlich schon gibt, wird übersprungen.
+function seed_startset(): array {
+    // Passenden Pressure-Seal-Deckel zum Gewinde des Behälters finden (Gewinde steht in der Notiz des Behälters).
+    $deckelFuer = function (?int $verp_id): ?int {
+        if (!$verp_id) return null;
+        $notiz = (string) scalar("SELECT notiz FROM item WHERE id=?", [$verp_id]);
+        if (!preg_match('~(\d{2}/400)~', $notiz, $m)) return null;
+        $d = scalar("SELECT id FROM item WHERE kategorie='verpackung' AND verpackung_rolle='verschluss'
+                     AND name LIKE ? ORDER BY id LIMIT 1", ['%' . $m[1] . ' weiß%']);
+        return $d ? (int)$d : null;
+    };
+    // [Rezepturname, Form, [[Rohstoff-Artikelnr, mg je Einheit/Portion], ...], [Größe1, Größe2]]
+    $data = [
+        ['Magnesiumbisglycinat 500 mg', 'kapsel',   [['R-2692', 500]],                    [60, 120]],
+        ['Vitamin C 500 mg',            'kapsel',   [['R-2690', 500]],                    [60, 120]],
+        ['Zink-Bisglycinat 25 mg',      'tablette', [['R-2694', 25], ['R-2697', 200]],    [90, 180]],
+        ['Magnesiumcitrat Pulver',      'pulver',   [['R-2691', 2000]],                   [150, 300]],
+        ['Vitamin D3+K2 Tropfen',       'fluessig', [['R-2698', 25]],                     [50, 100]],
+    ];
+    $log = []; $rez = 0; $prod = 0;
+    foreach ($data as [$name, $form, $zutaten, $groessen]) {
+        if (scalar("SELECT id FROM rezeptur WHERE name=?", [$name])) { $log[] = "$name – schon vorhanden"; continue; }
+        q("INSERT INTO rezeptur (nummer,name,darreichungsform,status,notiz) VALUES (?,?,?,?,?)",
+          [naechste_nummer('RZ'), $name, $form, 'freigegeben', 'Startset – Rezeptur = Rohstoff x Menge + Form.']);
+        $rid = insert_id(); $rez++;
+        $sort = 0;
+        foreach ($zutaten as [$artnr, $mg]) {
+            $iid = (int) scalar("SELECT id FROM item WHERE artikelnummer=? AND kategorie='rohstoff'", [$artnr]);
+            if (!$iid) continue;
+            q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
+              [$rid, $iid, scalar("SELECT name FROM item WHERE id=?", [$iid]), $mg, $sort++]);
+        }
+        // Basisprodukt: erste Größe + der vom System bestimmte passende Behälter
+        $g1   = (int)$groessen[0];
+        $beh  = passende_behaelter_fuer($rid, $form, $g1);
+        $verp = $beh ? (int)$beh[0] : null;
+        if (!$verp) { $log[] = "$name – kein passender Behälter, kein Produkt angelegt"; continue; }
+        q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,verschluss_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,notiz)
+           VALUES (?,?,NULL,?,?,?,0,?,?,?,?)",
+          [naechste_nummer('P'), $name . ' · ' . form_groessen_label($form, (float)$g1) . ' · ' . scalar("SELECT name FROM item WHERE id=?", [$verp]),
+           $rid, $verp, $deckelFuer($verp), $g1, 1, 'aktiv', 'Startset – Produkt = Rezeptur x Menge + Verpackung.']);
+        $pid = insert_id(); $prod++;
+        produkt_matrix_generieren($pid);
+        // Weitere Größen über denselben Weg wie im Angebot ableiten
+        foreach (array_slice($groessen, 1) as $g2) {
+            $v2 = behaelter_fuer_groesse($pid, (int)$g2);
+            if (!$v2) continue;
+            $neu = produkt_variante_id($pid, (int)$g2, $v2);
+            if ($neu && $neu !== $pid) { q("UPDATE produkt SET verschluss_id=? WHERE id=? AND verschluss_id IS NULL", [$deckelFuer($v2), $neu]); $prod++; }
+        }
+        $log[] = "$name ($form) angelegt";
+    }
+    return ['rezepturen' => $rez, 'produkte' => $prod, 'log' => $log];
+}
+
 // Zusammenhängendes Demo-Testset: Kunden + Rezepturen + Produkte + Angebote + Aufträge (offen/in Produktion/erledigt).
 // NICHT-LÖSCHEND und idempotent: legt je Produkt genau ein Demo-Angebot (notiz 'DEMO-TESTSET') samt Auftrag an;
 // erneuter Aufruf erzeugt keine Dubletten. Gibt eine Zusammenfassung zurück.

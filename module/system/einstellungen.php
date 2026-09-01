@@ -36,6 +36,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'charge_std_save') {
     meta_set('mhd_monate_standard', (string)max(1, (int)($_POST['mhd_monate_standard'] ?? 18)));
     header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
 }
+// --- Daten zurücksetzen (löschend!) – nur mit ausdrücklicher Bestätigung ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'daten_reset') {
+    if (($_POST['sicher'] ?? '') !== '1') { header('Location: ?p=einstellungen&tab=werkzeuge&resetfehler=1'); exit; }
+    $r = daten_zuruecksetzen(($_POST['mit_rezepturen'] ?? '') === '1', ($_POST['mit_kunden'] ?? '') === '1');
+    header('Location: ?p=einstellungen&tab=werkzeuge&reset=' . array_sum($r)); exit;
+}
+// --- Startset anlegen: Rezepturen + Produkte nach dem Modell (nicht löschend, idempotent) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'startset') {
+    $r = seed_startset();
+    header('Location: ?p=einstellungen&tab=werkzeuge&start=' . (int)$r['rezepturen'] . '&startp=' . (int)$r['produkte']); exit;
+}
 // --- Demo-Testdaten einspielen (nicht löschend, idempotent) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'demo_seed') {
     $r = demo_testset_einspielen();
@@ -364,6 +375,57 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   <form method="post" style="margin-top:8px">
     <input type="hidden" name="aktion" value="demo_seed">
     <button class="btn btn-primary" type="submit">Demo-Testdaten einspielen</button>
+  </form>
+</div>
+
+<div class="bx-panel">
+  <h2>Startset anlegen <?= bx_hint('saubere Rezepturen und Produkte nach dem Modell – zum Weiterarbeiten nach einem Reset') ?></h2>
+  <?php if (isset($_GET['start'])): ?>
+    <div class="bx-panel badge-ok" style="padding:12px 16px"><?= (int)$_GET['start'] ?> Rezepturen und <?= (int)($_GET['startp'] ?? 0) ?> Produkte angelegt.</div>
+  <?php endif; ?>
+  <p class="muted" style="margin-top:0">Legt fünf Rezepturen über alle Darreichungsformen an (Kapsel, Tablette, Pulver, Flüssig) und dazu je zwei Produkte in unterschiedlichen Packungsgrößen – nach der Regel <strong>Rezeptur = Rohstoff × Menge + Form</strong> und <strong>Produkt = Rezeptur × Menge + Verpackung</strong>.</p>
+  <ul class="muted" style="margin-top:0;font-size:13px;line-height:1.7">
+    <li>Behälter und Deckel bestimmt das System selbst – über Kapsel-Fassung, Füllgewicht bzw. Fassungsvermögen.</li>
+    <li>Die zweite Packungsgröße entsteht über denselben Weg wie im Angebot (<code>produkt_variante_id</code>).</li>
+    <li>Es wird <strong>nichts gelöscht</strong>; eine Rezeptur, die es schon gibt, wird übersprungen.</li>
+  </ul>
+  <form method="post" style="margin-top:8px">
+    <input type="hidden" name="aktion" value="startset">
+    <button class="btn btn-primary" type="submit">Startset anlegen</button>
+  </form>
+</div>
+
+<div class="bx-panel">
+  <h2>Daten zurücksetzen <?= bx_hint('räumt die Vorgänge ab, damit man mit einem sauberen Stand weiterarbeiten kann. Stammdaten wie Verpackungen, Rohstoffe und Preise bleiben erhalten.') ?></h2>
+  <?php if (isset($_GET['reset'])): ?>
+    <div class="bx-panel badge-ok" style="padding:12px 16px"><?= (int)$_GET['reset'] ?> Zeilen gelöscht.</div>
+  <?php endif; ?>
+  <?php if (isset($_GET['resetfehler'])): ?>
+    <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht ausgeführt – die Sicherheitsabfrage war nicht bestätigt.</div>
+  <?php endif; ?>
+  <p class="muted" style="margin-top:0">Löscht <strong>Vorgänge</strong>: Angebote, Aufträge, Rechnungen und Belege, Produktionsaufträge, Chargen und Bestand, Bestellungen, Anfragen, Aufgaben und den Verlauf.</p>
+  <ul class="muted" style="margin-top:0;font-size:13px;line-height:1.7">
+    <li><strong>Nie</strong> gelöscht werden: Rohstoffe und Verpackungen samt EK-Staffeln, Kapsel-Fassung und Etikettenpreisen, Nährstoffe, Kapselgrößen, Benutzer und Nummernkreise.</li>
+    <li>Das Demo-Seeding wird danach dauerhaft abgeschaltet, damit sich die Daten nicht beim nächsten Seitenaufruf neu anlegen.</li>
+    <li><strong>Lässt sich nicht rückgängig machen.</strong> Vorher eine Sicherung der Datenbank ziehen.</li>
+  </ul>
+  <form method="post" style="margin-top:8px" onsubmit="return confirm('Wirklich löschen? Das lässt sich nicht rückgängig machen.');">
+    <input type="hidden" name="aktion" value="daten_reset">
+    <div style="margin-bottom:10px">
+      <div class="bx-row" style="gap:8px;align-items:center;margin-bottom:6px">
+        <input type="checkbox" name="mit_rezepturen" id="r_rez" value="1">
+        <label for="r_rez" style="margin:0">zusätzlich Rezepturen, Produkte und deren Preismatrix löschen</label>
+      </div>
+      <div class="bx-row" style="gap:8px;align-items:center">
+        <input type="checkbox" name="mit_kunden" id="r_kd" value="1">
+        <label for="r_kd" style="margin:0">zusätzlich Kunden, Marken und Partner-Subkunden löschen</label>
+      </div>
+    </div>
+    <div class="bx-row" style="gap:8px;align-items:center;margin-bottom:10px">
+      <input type="checkbox" name="sicher" id="r_ok" value="1" required>
+      <label for="r_ok" style="margin:0">Ja, ich habe eine Sicherung und will die Daten löschen</label>
+    </div>
+    <button class="btn btn-danger" type="submit">Daten zurücksetzen</button>
   </form>
 </div>
 <?php endif; ?>
