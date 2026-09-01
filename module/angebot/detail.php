@@ -142,7 +142,9 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
 </form>
 
 <?php
-if (!$neu && $pid):
+// Positionen, Summen und PDF gibt es für JEDES gespeicherte Angebot – auch ohne Produkt im Kopf.
+// (Vorher hing der ganze Bereich an $pid: Bei einer Rezeptur-Anfrage ohne Produkt blieb nur der Kopf stehen.)
+if (!$neu):
     $pos = angebot_positionen((int)$id);
     $ueberschrieben = angebot_hat_positionen((int)$id);
     $eur = fn($c) => number_format($c/100, 2, ',', '.') . ' €';
