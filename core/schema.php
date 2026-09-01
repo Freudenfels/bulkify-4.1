@@ -2938,11 +2938,45 @@ function angebot_positionen_konfig_nachtragen(int $angebot_id): void {
       [(int)$an['rezeptur_id'], $stueck, $verp, (int)$erste['id']]);
 }
 
+// Ein Positions-Angebot in WÄHLBARE OPTIONEN zerlegen: je Gruppe (A, B, C …) eine Konfiguration
+// (Rezeptur x Menge je Packung + Verpackung) mit Anzahl Packungen und Preis je Packung.
+// Das ist die Ansicht, aus der der Kunde auswählt – eine Zeile je Größe, wie bei der Preismatrix.
+// Positionen ohne Gruppe sind Zuschläge und gelten unabhängig von der Wahl.
+function angebot_optionen(int $angebot_id): array {
+    angebot_positionen_konfig_nachtragen($angebot_id);   // ältere Angebote nachrüsten, sonst fehlt die Größe
+    $opt = []; $extra = [];
+    foreach (all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]) as $p) {
+        $g = trim((string)($p['gruppe'] ?? ''));
+        if ($g === '') { $extra[] = $p; continue; }
+        if (!isset($opt[$g])) $opt[$g] = ['gruppe'=>$g, 'titel'=>'', 'beschreibung'=>'', 'groesse'=>'', 'verpackung'=>'',
+                                          'pakete'=>0.0, 'netto'=>0.0, 'pro_pkg'=>0.0, 'einheit'=>'',
+                                          'rezeptur_id'=>null, 'stueck'=>0, 'verpackung_id'=>null];
+        $opt[$g]['netto'] += (float)$p['menge'] * (int)$p['preis_cent'] / 100;
+        if ($p['quelle'] === 'herstellung' || ($opt[$g]['titel'] === '' && $p['quelle'] !== 'verpackung')) {
+            $opt[$g]['titel']        = preg_replace('/^[A-Z]\)\s*/', '', (string)$p['bezeichnung']);
+            $opt[$g]['beschreibung'] = (string)$p['beschreibung'];
+            $opt[$g]['pakete']       = (float)$p['menge'];
+            $opt[$g]['einheit']      = (string)$p['einheit'];
+            $opt[$g]['rezeptur_id']  = $p['rezeptur_id'] ? (int)$p['rezeptur_id'] : null;
+            $opt[$g]['stueck']       = (int)$p['stueck'];
+            $opt[$g]['verpackung_id']= $p['verpackung_id'] ? (int)$p['verpackung_id'] : null;
+        }
+        if ($p['quelle'] === 'verpackung' && $opt[$g]['verpackung'] === '')
+            $opt[$g]['verpackung'] = trim(preg_replace('/^([A-Z]\)\s*)?(Verpackung:)?\s*/', '', (string)$p['bezeichnung']));
+    }
+    foreach ($opt as $g => $o) {
+        $form = $o['rezeptur_id'] ? (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$o['rezeptur_id']]) : '';
+        $opt[$g]['groesse'] = ($o['stueck'] > 0 && $form !== '') ? form_groessen_label($form, (float)$o['stueck']) : '';
+        $opt[$g]['pro_pkg'] = $o['pakete'] > 0 ? $o['netto'] / $o['pakete'] : 0.0;
+        $opt[$g]['waehlbar'] = $o['rezeptur_id'] && $o['stueck'] > 0;   // ohne Konfiguration kein Knopf
+    }
+    return ['optionen' => array_values($opt), 'extra' => $extra];
+}
 // Auftrag aus einem Angebot, das aus POSITIONEN besteht (kein Produkt im Kopf, keine Preismatrix) –
 // der Weg für „Kunde hat eine Rezeptur, daraus soll ein Produkt werden".
 // ERST HIER entsteht das Produkt: Rezeptur x Menge je Packung + Verpackung, genau wie angeboten.
 // Die Konfiguration steht an der Herstellungsposition (rezeptur_id/stueck/verpackung_id).
-function auftrag_aus_positionen(int $angebot_id): ?int {
+function auftrag_aus_positionen(int $angebot_id, ?string $gruppe = null): ?int {
     $a = one("SELECT * FROM angebot WHERE id=? AND status='gesendet'", [$angebot_id]);
     if (!$a) return null;
     if (($v = scalar("SELECT id FROM auftrag WHERE angebot_id=?", [$angebot_id]))) return (int)$v;   // idempotent
@@ -2950,6 +2984,10 @@ function auftrag_aus_positionen(int $angebot_id): ?int {
     if (!$pos) return null;
     angebot_positionen_konfig_nachtragen($angebot_id);
     $pos = all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]);
+    // Der Kunde hat EINE Option gewählt: nur deren Gruppe plus die gruppenlosen Zuschläge zählen.
+    if ($gruppe !== null && $gruppe !== '')
+        $pos = array_values(array_filter($pos, fn($p) => trim((string)$p['gruppe']) === $gruppe || trim((string)$p['gruppe']) === ''));
+    if (!$pos) return null;
     $herst = null;
     foreach ($pos as $p) if (!empty($p['rezeptur_id']) && (int)$p['stueck'] > 0) { $herst = $p; break; }
     if (!$herst) return null;   // ohne bekannte Konfiguration kein Produkt und kein Auftrag

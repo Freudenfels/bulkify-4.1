@@ -12,7 +12,7 @@ $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_annehmen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT id FROM angebot WHERE id=? AND kunde_id=? AND status='gesendet'", [$aid, (int)$k['id']]) : null;
-    if ($ang) auftrag_aus_positionen($aid);
+    if ($ang) auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&bestaetigt=1'); exit;
 }
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bestaetigen') {
@@ -305,6 +305,9 @@ foreach ($angebote as $a) {
                                           'menge'=>(float)$p['menge'], 'einheit'=>$p['einheit'],
                                           'preis_cent'=>(int)$p['preis_cent'], 'mwst'=>(float)$p['mwst_satz']],
                                 $a['status'] === 'offen' ? [] : angebot_positionen((int)$a['id'])),
+        // Wählbare Optionen: je Gruppe (A, B, C …) eine Konfiguration mit Anzahl Packungen und
+        // Preis je Packung – daraus wird die Auswahltabelle wie bei der Preismatrix.
+        'opt'     => $a['status'] === 'offen' ? ['optionen'=>[], 'extra'=>[]] : angebot_optionen((int)$a['id']),
         // Annehmbar ist ein Positions-Angebot nur, wenn die Konfiguration bekannt ist – aus der
         // Position selbst oder aus der zugehoerigen Anfrage. Sonst waere der Knopf ein Blindgaenger.
         'annehmbar' => $a['status'] === 'gesendet' && (
@@ -1220,7 +1223,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <thead><tr><th>Nr.</th><th>Produkt</th><th class="bx-num">Größe je Packung</th><th>Verpackungstyp</th><th class="bx-num">Anzahl</th><th>Status</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($meineProd as $a): ?>
-        <tr><td><?= h($a['nummer']) ?></td><td><?= h($a['produkt_name'] ?: ($inf['pos'] ? $inf['pos'][0]['bezeichnung'] : '–')) ?></td>
+        <tr><td><?= h($a['nummer']) ?></td><td><?= h($a['produkt_name'] ?: ($inf['opt']['optionen'] ? $inf['opt']['optionen'][0]['titel'] : ($inf['pos'] ? preg_replace('/^[A-Z]\)\s*/', '', $inf['pos'][0]['bezeichnung']) : '–'))) ?></td>
           <td class="bx-num"><?= $a['fuellmenge_g'] ? rtrim(rtrim(number_format((float)$a['fuellmenge_g'],1,',','.'),'0'),',').' g' : ($a['stueck'] ? (int)$a['stueck'].' Stk' : '–') ?></td>
           <td><?= h($a['verpackung_typ'] ? ($VTYPEN[$a['verpackung_typ']] ?? $a['verpackung_typ']) : '–') ?></td><td class="bx-num"><?= $a['menge'] ? (int)$a['menge'] : '–' ?></td><td><?= $pafBadge($a['status']) ?></td>
           <td style="text-align:right"><?php if (!empty($a['angebot_id'])): ?><a class="btn btn-primary btn-sm" href="<?= $portalLink('angebote') ?>#a<?= (int)$a['angebot_id'] ?>">Zum Angebot</a><?php endif; ?></td></tr>
@@ -1376,7 +1379,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   ?>
   <details class="bx-panel pt-ang" id="a<?= (int)$a['id'] ?>" style="scroll-margin-top:16px">
     <summary>
-      <span style="font-size:var(--fs-md)"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($a['produkt_name'] ?: ($inf['pos'] ? $inf['pos'][0]['bezeichnung'] : '–')) ?></strong></span>
+      <span style="font-size:var(--fs-md)"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($a['produkt_name'] ?: ($inf['opt']['optionen'] ? $inf['opt']['optionen'][0]['titel'] : ($inf['pos'] ? preg_replace('/^[A-Z]\)\s*/', '', $inf['pos'][0]['bezeichnung']) : '–'))) ?></strong></span>
       <span class="bx-row" style="gap:10px;align-items:center">
         <?= $offen ? bx_badge('Angebot liegt vor – bitte wählen','info')
              : ($a['status']==='bestaetigt' ? bx_badge('bestätigt','ok') : bx_badge('abgelehnt','err')) ?>
@@ -1428,6 +1431,50 @@ portal_head('Kundenportal · ' . $k['firma']);
           <?php endif; ?>
         </tr>
       <?php endforeach; endforeach; ?>
+      </tbody>
+    </table></div>
+    <?php elseif ($offen && !$st && $inf['opt']['optionen']): ?>
+    <?php // Angebot aus einer Rezeptur: je Gruppe (A, B, C …) eine wählbare Größe – eine Zeile
+          // je Konfiguration mit Preis je Packung und eigenem Knopf, wie bei der Preismatrix.
+          $optn = $inf['opt']['optionen']; $extra = $inf['opt']['extra'];
+          $besch = (string)($optn[0]['beschreibung'] ?? '');
+          if (count($optn) > 1 && strpos($besch, "
+") !== false) $besch = substr($besch, 0, strrpos($besch, "
+")); ?>
+    <?php if ($besch !== '' && !$inf['zutaten']): ?>
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;color:var(--gruen)">Rezeptur ansehen</summary>
+      <div class="muted" style="margin-top:8px;white-space:pre-line;font-size:13px"><?= h($besch) ?></div>
+    </details>
+    <?php endif; ?>
+    <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
+      <thead><tr><th>Menge / Verpackung</th><th>Anzahl Verpackungen</th><th>Preis</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($optn as $o):
+              $netto = $o['netto']; $brutto = $netto * (1 + $ustP/100); ?>
+        <tr>
+          <td><?= h($o['groesse'] !== '' ? $o['groesse'] : $o['titel']) ?>
+            <?php if ($o['verpackung'] !== ''): ?><div class="muted" style="font-size:12px"><?= h($o['verpackung']) ?></div><?php endif; ?>
+          </td>
+          <td><?= number_format($o['pakete'], 0, ',', '.') ?></td>
+          <td><strong><?= $eur($o['pro_pkg']) ?> / Pkg.</strong>
+            <div class="muted" style="font-size:12px">Gesamt: <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto (inkl. ' . $mg($ustP) . ' % MwSt)' : '' ?></div>
+          </td>
+          <td class="bx-num">
+            <?php if ($o['waehlbar']): ?>
+            <form method="post" style="margin:0" onsubmit="return confirm('Diese Menge verbindlich annehmen?');">
+              <input type="hidden" name="aktion" value="angebot_annehmen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>">
+              <input type="hidden" name="gruppe" value="<?= h($o['gruppe']) ?>">
+              <button class="btn btn-primary btn-sm" type="submit">Diese Menge annehmen</button>
+            </form>
+            <?php else: ?><span class="muted" style="font-size:12px">Bitte kurz melden</span><?php endif; ?>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      <?php foreach ($extra as $x): ?>
+        <tr><td colspan="2"><?= h($x['bezeichnung']) ?><div class="muted" style="font-size:12px">wird zusätzlich berechnet</div></td>
+            <td colspan="2" class="bx-num"><?= $eur((float)$x['menge'] * (int)$x['preis_cent'] / 100) ?></td></tr>
+      <?php endforeach; ?>
       </tbody>
     </table></div>
     <?php elseif ($offen && !$st && $inf['pos']): ?>
@@ -1499,7 +1546,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php foreach ($auftraege as $a): $cur = $aufStep($a['status']); $complete = $a['status'] === 'versendet'; ?>
   <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($a['produkt_name'] ?: ($inf['pos'] ? $inf['pos'][0]['bezeichnung'] : '–')) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span></div>
+      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($a['produkt_name'] ?: ($inf['opt']['optionen'] ? $inf['opt']['optionen'][0]['titel'] : ($inf['pos'] ? preg_replace('/^[A-Z]\)\s*/', '', $inf['pos'][0]['bezeichnung']) : '–'))) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span></div>
       <div class="bx-row" style="gap:10px;align-items:center"><?= $aufBadge($a['status']) ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
     <ul class="bx-steps" style="margin-top:12px">
@@ -1545,7 +1592,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <h1 style="margin:0"><?= h($a['nummer']) ?></h1>
     <a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellungen') ?>">&#8592; Alle Bestellungen</a>
   </div>
-  <p class="muted" style="margin:0 0 16px"><?= h($a['produkt_name'] ?: ($inf['pos'] ? $inf['pos'][0]['bezeichnung'] : '–')) ?></p>
+  <p class="muted" style="margin:0 0 16px"><?= h($a['produkt_name'] ?: ($inf['opt']['optionen'] ? $inf['opt']['optionen'][0]['titel'] : ($inf['pos'] ? preg_replace('/^[A-Z]\)\s*/', '', $inf['pos'][0]['bezeichnung']) : '–'))) ?></p>
 
   <!-- Status-Kacheln -->
   <div class="bx-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
@@ -1595,7 +1642,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <h2 style="margin:0 0 14px;font-size:16px">Bestelldetails</h2>
     <div class="bx-tablewrap"><table class="bx-table">
       <tbody>
-        <tr><td class="muted" style="width:150px">Produkt</td><td><?= h($a['produkt_name'] ?: ($inf['pos'] ? $inf['pos'][0]['bezeichnung'] : '–')) ?></td></tr>
+        <tr><td class="muted" style="width:150px">Produkt</td><td><?= h($a['produkt_name'] ?: ($inf['opt']['optionen'] ? $inf['opt']['optionen'][0]['titel'] : ($inf['pos'] ? preg_replace('/^[A-Z]\)\s*/', '', $inf['pos'][0]['bezeichnung']) : '–'))) ?></td></tr>
         <?php if ((int)$a['stueck']): ?><tr><td class="muted">Stück je Packung</td><td><?= (int)$a['stueck'] ?></td></tr><?php endif; ?>
         <tr><td class="muted">Anzahl Packungen</td><td><?= (int)$a['menge'] ?></td></tr>
         <?php if ($vName): ?><tr><td class="muted">Verpackung</td><td><?= h($vName) ?></td></tr><?php endif; ?>
