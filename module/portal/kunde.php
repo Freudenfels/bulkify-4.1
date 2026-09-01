@@ -9,20 +9,35 @@ $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
 
 // Angebot bestätigen (Kundenaktion) -> löst Auftrag + Rechnung aus
 // Angebot aus POSITIONEN annehmen (kein Produkt/keine Matrix) – hier entsteht das Produkt.
+// Verbindliche Annahme: ohne gesetzten Haken und ohne Namen passiert nichts. Der Name gilt als
+// Unterschrift und wird mit Zeitpunkt gespeichert – so ist belegt, wer wann freigegeben hat.
+$freigabeName = function(): ?string {
+    if (($_POST['bestaetigt'] ?? '') !== '1') return null;
+    $n = trim((string)($_POST['freigabe_name'] ?? ''));
+    return $n === '' ? null : mb_substr($n, 0, 190);
+};
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_annehmen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT id FROM angebot WHERE id=? AND kunde_id=? AND status='gesendet'", [$aid, (int)$k['id']]) : null;
-    if ($ang) auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
+    $name = $freigabeName();
+    if ($ang && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=angebote&freigabefehlt=1'); exit; }
+    if ($ang) {
+        q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP() WHERE id=?", [$name, $aid]);
+        auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
+    }
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&bestaetigt=1'); exit;
 }
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bestaetigen') {
     $aid = (int)($_POST['angebot_id'] ?? 0); $sid = (int)($_POST['staffel'] ?? 0);
     $ang = $aid ? one("SELECT * FROM angebot WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
+    $name = $freigabeName();
+    if ($ang && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=angebote&freigabefehlt=1'); exit; }
     if ($ang && $ang['status'] === 'gesendet' && $sid > 0) {
+        q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP() WHERE id=?", [$name, $aid]);
         q("UPDATE angebot_staffel SET bestaetigt=0 WHERE angebot_id=?", [$aid]);
         q("UPDATE angebot_staffel SET bestaetigt=1 WHERE id=? AND angebot_id=?", [$sid, $aid]);
         q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
-        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal bestätigt.', 'angebot', 'angebot', $aid);
+        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal verbindlich bestätigt durch ' . $name . '.', 'angebot', 'angebot', $aid);
         auftrag_aus_angebot($aid);
     }
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&ok=1'); exit;
@@ -62,11 +77,14 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zelle_annehmen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT * FROM angebot WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
+    $name = $freigabeName();
+    if ($ang && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=angebote&freigabefehlt=1'); exit; }
     if ($ang && $ang['status'] === 'gesendet') {
+        q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP() WHERE id=?", [$name, $aid]);
         $auf = auftrag_aus_zelle($aid, (int)($_POST['stueck'] ?? 0), (int)($_POST['verpackung_id'] ?? 0), (int)($_POST['bestellmenge'] ?? 0));
         if ($auf) {
             q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
-            log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal bestätigt.', 'angebot', 'angebot', $aid);
+            log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal verbindlich bestätigt durch ' . $name . '.', 'angebot', 'angebot', $aid);
             header('Location: ?p=portal&token=' . $token . '&v=bestellungen&ok=1'); exit;
         }
     }
@@ -149,11 +167,13 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rezeptur_annehmen') {
     $rid = (int)($_POST['rezeptur_id'] ?? 0);
     $rez = $rid ? one("SELECT * FROM rezeptur WHERE id=? AND kunde_id=? AND status='vorschlag'", [$rid, (int)$k['id']]) : null;
+    $name = $freigabeName();
+    if ($rez && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=rezeptur&rid=' . $rid . '&freigabefehlt=1'); exit; }
     if ($rez) {
-        q("UPDATE rezeptur SET status='eingefroren' WHERE id=?", [$rid]);
-        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Rezeptur ' . $rez['nummer'] . ' angenommen (verbindlich).', 'rezeptur', 'rezeptur', $rid);
+        q("UPDATE rezeptur SET status='eingefroren', freigabe_name=?, freigabe_am=UTC_TIMESTAMP() WHERE id=?", [$name, $rid]);
+        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Rezeptur ' . $rez['nummer'] . ' verbindlich angenommen durch ' . $name . '.', 'rezeptur', 'rezeptur', $rid);
     }
-    header('Location: ?p=portal&token=' . $token . '&v=start&angenommen=1'); exit;
+    header('Location: ?p=portal&token=' . $token . '&v=prodanfrage&rid=' . $rid . '&freigegeben=1'); exit;
 }
 
 // Rezeptur-Vorschlag ablehnen (Pflicht-Grund) -> Status abgelehnt, Team überarbeitet
@@ -834,7 +854,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php if ($vs['darreichungsform'] === 'kapsel'): $vkg = $kapselAnzeige($vs, $vsum); ?>
           <div class="muted" style="margin:-4px 0 10px;font-size:13px">Kapselgröße: <strong><?= $vkg ? h($vkg['name']) : 'individuell (Füllgewicht > Standardkapsel)' ?></strong></div>
         <?php endif; ?>
-        <form method="post" style="display:inline"><input type="hidden" name="aktion" value="rezeptur_annehmen"><input type="hidden" name="rezeptur_id" value="<?= (int)$vs['id'] ?>"><button class="btn btn-primary" type="submit">Rezeptur verbindlich annehmen</button></form>
+        <span style="display:inline"><button class="btn btn-primary" type="button" onclick="bxBestaetigen('Rezeptur verbindlich annehmen', '<div class=\'bx-panel\' style=\'margin:0 0 12px;padding:12px 14px\'><strong><?= h(($vs['nummer'] ?? '') . ' ' . ($vs['name'] ?? '')) ?></strong></div>Mit der Annahme wird die Rezeptur <strong>eingefroren</strong>: Zusammensetzung und Mengen sind damit festgelegt und k&ouml;nnen nicht mehr ge&auml;ndert werden. &Auml;nderungen brauchen danach eine neue Rezeptur.', 'Ich habe die Rezeptur gepr&uuml;ft und nehme sie verbindlich an. Mir ist bewusst, dass sie danach nicht mehr ge&auml;ndert werden kann.', {aktion:'rezeptur_annehmen', rezeptur_id:'<?= (int)$vs['id'] ?>'})">Rezeptur verbindlich annehmen</button></span>
       </div>
     <?php endforeach; ?>
   </div>
@@ -1051,7 +1071,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php if (isset($_GET['ablehngrund'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-top:12px">Bitte geben Sie einen Grund an, dann können wir den Vorschlag gezielt überarbeiten.</div><?php endif; ?>
         <div class="muted" style="margin-top:14px;font-size:13px">Das ist unser <strong>Vorschlag</strong> zu Ihrer Anfrage. Sind Sie einverstanden, nehmen Sie ihn hier verbindlich an – danach erstellen wir Angebot &amp; Produktion. Passt etwas nicht, lehnen Sie ihn mit einem kurzen Grund ab – dann überarbeiten wir ihn.</div>
         <div class="bx-row" style="margin-top:10px;gap:8px">
-          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="rezeptur_annehmen"><input type="hidden" name="rezeptur_id" value="<?= (int)$rezDetail['id'] ?>"><button class="btn btn-primary" type="submit">Rezeptur verbindlich annehmen</button></form>
+          <span style="margin:0"><button class="btn btn-primary" type="button" onclick="bxBestaetigen('Rezeptur verbindlich annehmen', '<div class=\'bx-panel\' style=\'margin:0 0 12px;padding:12px 14px\'><strong><?= h(($rezDetail['nummer'] ?? '') . ' ' . ($rezDetail['name'] ?? '')) ?></strong></div>Mit der Annahme wird die Rezeptur <strong>eingefroren</strong>: Zusammensetzung und Mengen sind damit festgelegt und k&ouml;nnen nicht mehr ge&auml;ndert werden. &Auml;nderungen brauchen danach eine neue Rezeptur.', 'Ich habe die Rezeptur gepr&uuml;ft und nehme sie verbindlich an. Mir ist bewusst, dass sie danach nicht mehr ge&auml;ndert werden kann.', {aktion:'rezeptur_annehmen', rezeptur_id:'<?= (int)$rezDetail['id'] ?>'})">Rezeptur verbindlich annehmen</button></span>
           <button type="button" class="btn btn-ghost" onclick="document.getElementById('rezRejModal').style.display='flex'">Ablehnen</button>
         </div>
         <div id="rezRejModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:1000;padding:16px">
@@ -1200,6 +1220,14 @@ portal_head('Kundenportal · ' . $k['firma']);
 
 <?php elseif ($view === 'prodanfrage'): ?>
   <h1 style="margin-bottom:4px">Produkt anfragen</h1>
+  <?php if (isset($_GET['freigegeben'])):
+        $frRez = $rid ? one("SELECT nummer, name, freigabe_name FROM rezeptur WHERE id=? AND kunde_id=?", [$rid, (int)$k['id']]) : null; ?>
+  <div class="bx-panel badge-ok" style="padding:14px 18px">
+    <strong>Rezeptur freigegeben<?= $frRez ? ' – ' . h($frRez['nummer'] . ' ' . $frRez['name']) : '' ?>.</strong>
+    <?= $frRez && $frRez['freigabe_name'] ? '<div class="muted" style="font-size:13px;margin-top:4px">Bestätigt durch ' . h($frRez['freigabe_name']) . '.</div>' : '' ?>
+    <div style="margin-top:6px">Nächster Schritt: Menge je Packung, Verpackung und Bestellmenge angeben – wir rechnen Ihnen den Preis dazu. Die Rezeptur ist unten schon ausgewählt.</div>
+  </div>
+  <?php endif; ?>
   <div class="bx-panel">
     <p class="muted" style="margin-top:0">Wählen Sie eine <strong>Ihrer Rezepturen</strong> oder ein Produkt aus dem Katalog, dazu Menge je Packung, Verpackung und Bestellmenge – wir melden uns mit einem Preis.</p>
     <?php if (!$katalog && !$meineRezepturen): ?><div class="muted">Es steht noch nichts zur Auswahl. Stellen Sie zuerst eine Rezepturanfrage – sobald Sie unseren Vorschlag angenommen haben, können Sie ihn hier als Produkt anfragen.</div>
@@ -1394,6 +1422,7 @@ portal_head('Kundenportal · ' . $k['firma']);
 <?php elseif ($view === 'angebote'):
     $mg = fn($x) => rtrim(rtrim(number_format((float)$x, 2, ',', '.'), '0'), ','); ?>
   <h1 style="margin-bottom:4px">Ihre Angebote</h1>
+  <?php if (isset($_GET['freigabefehlt'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Für die verbindliche Annahme fehlen die Bestätigung und Ihr Name.</div><?php endif; ?>
   <?php if (isset($_GET['abgelehnt'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rückmeldung ist eingegangen – wir überarbeiten das Angebot.</div><?php endif; ?>
   <?php if (isset($_GET['geloescht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Angebot aus Ihrer Liste entfernt.</div><?php endif; ?>
   <?php if (!$angebote): ?><div class="bx-panel"><div class="muted">Aktuell liegen keine Angebote vor.</div></div><?php endif; ?>
@@ -1452,7 +1481,7 @@ portal_head('Kundenportal · ' . $k['firma']);
               $pCent = verpackung_cent_je_pack((int)$a['produkt_id'], $bm, $kid, (int)$cell['verp']);   // Behälter DIESER Zelle bepreisen
               $vk = ($hCent + $pCent) / 100; $netto = ($hCent + $pCent) * $bm / 100; $brutto = $netto * (1 + $ustP/100); ?>
             <td><strong><?= $eur($vk) ?> / Pkg.</strong><div class="muted" style="font-size:12px"><?= $pCent > 0 ? 'Herstellung ' . $eur($hCent/100) . ' + Verpackung ' . $eur($pCent/100) . ' · ' : '' ?>Gesamt <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto (inkl. ' . $mg($ustP) . ' % MwSt)' : '' ?></div></td>
-            <td class="bx-num"><form method="post" style="margin:0"><input type="hidden" name="aktion" value="zelle_annehmen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="stueck" value="<?= $stk ?>"><input type="hidden" name="verpackung_id" value="<?= (int)$cell['verp'] ?>"><input type="hidden" name="bestellmenge" value="<?= $bm ?>"><button class="btn btn-primary btn-sm" style="white-space:nowrap" type="submit">Diese Menge annehmen</button></form></td>
+            <td class="bx-num"><button class="btn btn-primary btn-sm" style="white-space:nowrap" type="button" onclick="bxBestaetigen('Menge verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich. Die Produktionszeit ist ein unverbindlicher Sch&auml;tzwert.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'zelle_annehmen', angebot_id:'<?= (int)$a['id'] ?>', stueck:'<?= $stk ?>', verpackung_id:'<?= (int)$cell['verp'] ?>', bestellmenge:'<?= $bm ?>'})">Diese Menge annehmen</button></td>
           <?php else: ?>
             <td><?= bx_badge('Nicht machbar','err') ?><div class="muted" style="font-size:12px">Diese Menge ist so nicht produzierbar</div></td>
             <td></td>
@@ -1490,11 +1519,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           </td>
           <td class="bx-num">
             <?php if ($o['waehlbar']): ?>
-            <form method="post" style="margin:0" onsubmit="return confirm('Diese Menge verbindlich annehmen?');">
-              <input type="hidden" name="aktion" value="angebot_annehmen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>">
-              <input type="hidden" name="gruppe" value="<?= h($o['gruppe']) ?>">
-              <button class="btn btn-primary btn-sm" style="white-space:nowrap" type="submit">Diese Menge annehmen</button>
-            </form>
+            <button class="btn btn-primary btn-sm" style="white-space:nowrap" type="button" onclick="bxBestaetigen('Menge verbindlich annehmen', '<div class=\'bx-panel\' style=\'margin:0 0 12px;padding:12px 14px\'><strong><?= h(trim(($o['groesse'] !== '' ? $o['groesse'] : $o['titel']) . ($o['verpackung'] !== '' ? ' · ' . $o['verpackung'] : ''))) ?></strong><br><?= number_format($o['pakete'], 0, ',', '.') ?> Packungen · <?= $eur($o['pro_pkg']) ?> je Packung<br>Gesamt <?= $eur($o['netto']) ?> netto<?= $ustP > 0 ? ' · ' . $eur($o['netto'] * (1 + $ustP/100)) . ' brutto' : '' ?></div>Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich. Die Produktionszeit ist ein unverbindlicher Sch&auml;tzwert.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'angebot_annehmen', angebot_id:'<?= (int)$a['id'] ?>', gruppe:'<?= h($o['gruppe']) ?>'})">Diese Menge annehmen</button>
             <?php else: ?><span class="muted" style="font-size:12px">Bitte kurz melden</span><?php endif; ?>
           </td>
         </tr>
@@ -1526,10 +1551,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     </table></div>
     <div class="bx-row" style="justify-content:flex-end;margin-top:10px">
       <?php if ($inf['annehmbar']): ?>
-      <form method="post" style="margin:0" onsubmit="return confirm('Angebot verbindlich annehmen?');">
-        <input type="hidden" name="aktion" value="angebot_annehmen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>">
-        <button class="btn btn-primary" type="submit">Angebot annehmen</button>
-      </form>
+      <button class="btn btn-primary" type="button" onclick="bxBestaetigen('Angebot verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich. Die Produktionszeit ist ein unverbindlicher Sch&auml;tzwert.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'angebot_annehmen', angebot_id:'<?= (int)$a['id'] ?>'})">Angebot annehmen</button>
       <?php else: ?><div class="muted">Zum Annehmen bitte kurz bei uns melden.</div><?php endif; ?>
     </div>
     <?php elseif ($offen): ?>
@@ -1539,7 +1561,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php foreach ($st as $s): $vk = vk_fuer_kunde((float)$s['vk_stueck'], $kid); $netto = $vk * (int)$s['menge']; $brutto = $netto * (1 + $ustP/100); ?>
         <tr><td><?= number_format((int)$s['menge'],0,',','.') ?> × <?= h($mengeLbl) ?></td>
           <td><strong><?= $eur($vk) ?></strong><div class="muted" style="font-size:12px">Gesamt <?= $eur($netto) ?> netto<?= $ustP>0?' · '.$eur($brutto).' brutto':'' ?></div></td>
-          <td class="bx-num"><form method="post" style="margin:0"><input type="hidden" name="aktion" value="bestaetigen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="staffel" value="<?= (int)$s['id'] ?>"><button class="btn btn-primary btn-sm" style="white-space:nowrap" type="submit">Diese Menge annehmen</button></form></td></tr>
+          <td class="bx-num"><button class="btn btn-primary btn-sm" style="white-space:nowrap" type="button" onclick="bxBestaetigen('Menge verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich. Die Produktionszeit ist ein unverbindlicher Sch&auml;tzwert.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'bestaetigen', angebot_id:'<?= (int)$a['id'] ?>', staffel:'<?= (int)$s['id'] ?>'})">Diese Menge annehmen</button></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
@@ -1793,5 +1815,45 @@ portal_head('Kundenportal · ' . $k['firma']);
   document.addEventListener('change',function(e){ if(e.target && e.target.name==='w_einheit[]') kapUpdate(); });
   kapUpdate();
 })();
+</script>
+<?php // Verbindliche Bestätigung: Nichts wird angenommen, ohne dass der Kunde bewusst zustimmt und
+      // seinen Namen einträgt – der Name gilt als Unterschrift und wird mit Zeitpunkt gespeichert.
+      // Ein Dialog für alles: die Knöpfe füllen ihn über bxBestaetigen(...) mit Titel, Text und Feldern. ?>
+<div id="bxBestOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;padding:16px">
+  <div role="dialog" aria-modal="true" class="bx-panel" style="max-width:560px;width:100%;max-height:92vh;overflow:auto;margin:0">
+    <h2 id="bxBestTitel" style="margin-top:0">Verbindlich annehmen</h2>
+    <div id="bxBestText" class="muted" style="font-size:14px;line-height:1.5;margin-bottom:14px"></div>
+    <form method="post" id="bxBestForm">
+      <div id="bxBestFelder"></div>
+      <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.45;margin-bottom:12px">
+        <input type="checkbox" name="bestaetigt" value="1" required style="margin-top:3px;flex:none">
+        <span id="bxBestHaken">Ich habe alles geprüft und nehme verbindlich an.</span>
+      </label>
+      <div class="bx-field"><label>Ihr Name <span class="muted">(gilt als verbindliche Bestätigung)</span></label>
+        <input type="text" name="freigabe_name" required autocomplete="name" placeholder="Vor- und Nachname" style="width:100%;box-sizing:border-box"></div>
+      <div class="bx-row" style="justify-content:flex-end;gap:10px;margin-top:16px">
+        <button type="button" class="btn btn-ghost" onclick="bxBestZu()">Abbrechen</button>
+        <button type="submit" class="btn btn-primary">Verbindlich annehmen</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function bxBestZu(){ document.getElementById('bxBestOverlay').style.display='none'; }
+// titel/text: was bestätigt wird · haken: Text neben der Checkbox · felder: {name: wert} für das POST
+function bxBestaetigen(titel, text, haken, felder){
+  document.getElementById('bxBestTitel').textContent = titel;
+  document.getElementById('bxBestText').innerHTML = text;
+  if (haken) document.getElementById('bxBestHaken').textContent = haken;
+  var box = document.getElementById('bxBestFelder'); box.innerHTML = '';
+  for (var n in felder) {
+    var el = document.createElement('input'); el.type='hidden'; el.name=n; el.value=felder[n]; box.appendChild(el);
+  }
+  var ov = document.getElementById('bxBestOverlay');
+  ov.style.display='flex';
+  var eingabe = ov.querySelector('input[name="freigabe_name"]'); if (eingabe) setTimeout(function(){ eingabe.focus(); }, 50);
+}
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') bxBestZu(); });
+document.getElementById('bxBestOverlay').addEventListener('click', function(e){ if (e.target === this) bxBestZu(); });
 </script>
 <?php portal_foot();

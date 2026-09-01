@@ -197,6 +197,9 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
               default      => bx_badge($st),
             } ?>
       </div>
+      <?php if (!empty($a['freigabe_name'])): ?>
+      <div class="muted" style="font-size:12px">Verbindlich bestätigt durch <strong><?= h($a['freigabe_name']) ?></strong><?= $a['freigabe_am'] ? ' am ' . h(fmt_zeit($a['freigabe_am'])) . ' Uhr' : '' ?></div>
+      <?php endif; ?>
     </div>
     <div class="bx-field"><label>Gültig bis</label><input type="date" name="gueltig_bis" value="<?= h($v('gueltig_bis') !== '' ? $v('gueltig_bis') : angebot_gueltig_bis_default()) ?>"></div>
     <div class="bx-field"><label>Marge (%) <?= bx_hint('wirkt auf die automatischen Positionen. Leer = Marge je Form ('.rtrim(rtrim(number_format($defMarge,2,',','.'),'0'),',').' %).') ?></label><input type="number" step="0.1" name="marge" value="<?= ($a['marge_override'] ?? '') !== '' && $a['marge_override'] !== null ? h(rtrim(rtrim(number_format((float)$a['marge_override'],2,'.',''),'0'),'.')) : '' ?>" placeholder="<?= h(rtrim(rtrim(number_format($defMarge,2,',','.'),'0'),',')) ?> (Standard)"></div>

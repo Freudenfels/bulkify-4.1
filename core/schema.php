@@ -635,6 +635,11 @@ function init_schema(): void {
     // (Rezeptur x Menge + Verpackung) gibt es dafür noch nicht. Genau daraus entsteht es im Angebot.
     ensure_column('portal_anfrage', 'rezeptur_id', "INT NULL");
     ensure_column('portal_anfrage', 'absage_grund', "VARCHAR(500) NULL");   // wenn wir NICHT anbieten koennen: Begruendung fuer den Kunden
+    // Verbindliche Freigabe durch den Kunden: Name gilt als Unterschrift, Zeitpunkt daneben.
+    ensure_column('rezeptur', 'freigabe_name', "VARCHAR(190) NULL");
+    ensure_column('rezeptur', 'freigabe_am', "DATETIME NULL");
+    ensure_column('angebot', 'freigabe_name', "VARCHAR(190) NULL");
+    ensure_column('angebot', 'freigabe_am', "DATETIME NULL");
     ensure_column('portal_anfrage_pos', 'rezeptur_id', "INT NULL");
     ensure_column('rezeptur_anfrage', 'produktname', "VARCHAR(190) NULL");    // Wunsch-Produktname des Kunden bei der Rezepturanfrage
     ensure_column('produkt', 'kundenname', "VARCHAR(190) NULL");              // vom Kunden gewünschter Produktname (intern = name)
