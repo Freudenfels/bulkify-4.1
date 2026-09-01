@@ -136,21 +136,32 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 
 // Produktanfrage (aus dem Katalog): Stück/Verpackung/Menge
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'produkt_anfrage') {
-    $pid = (int)($_POST['produkt_id'] ?? 0);
-    if ($pid && $k['portal_produkte']) {
+    // Der Kunde wählt entweder ein fertiges Produkt („p<id>") ODER eine eigene Rezeptur („r<id>"),
+    // für die es noch kein Produkt gibt. Aus der Rezeptur entsteht das Produkt erst mit dem Angebot.
+    $wahl = trim((string)($_POST['produkt_id'] ?? ''));
+    $pid = 0; $rezWahl = 0;
+    if (preg_match('/^r(\d+)$/', $wahl, $m)) {
+        $rezWahl = (int)$m[1];
+        // nur eigene angenommene oder freigegebene Katalog-Rezepturen
+        if (!scalar("SELECT id FROM rezeptur WHERE id=? AND ((kunde_id=? AND status='eingefroren') OR (kunde_id IS NULL AND status='freigegeben'))",
+                    [$rezWahl, (int)$k['id']])) $rezWahl = 0;
+    } else {
+        $pid = (int) preg_replace('/\D/', '', $wahl);
+    }
+    if (($pid || $rezWahl) && $k['portal_produkte']) {
         $fg = (float) str_replace(',', '.', $_POST['fuellmenge_g'] ?? '0');
         $stueck = (int)($_POST['stueck'] ?? 0) ?: null;
         $vtyp = trim($_POST['verpackung_typ'] ?? '') ?: null;
         // mehrere Mengen (Staffeln) kommagetrennt möglich, z. B. „1000, 2500, 5000"
         $mengen = array_values(array_filter(array_map('intval', preg_split('/[,;\s]+/', (string)($_POST['menge'] ?? ''))), fn($m) => $m > 0));
         $first = $mengen[0] ?? null;
-        q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,produkt_id,stueck,fuellmenge_g,verpackung_typ,menge,notiz,status) VALUES (?,?,?,?,?,?,?,?,?,'neu')",
-          [naechste_nummer('PAF'), (int)$k['id'], 'produkt', $pid, $stueck, $fg > 0 ? $fg : null, $vtyp, $first, trim($_POST['notiz'] ?? '')]);
+        q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,produkt_id,rezeptur_id,stueck,fuellmenge_g,verpackung_typ,menge,notiz,status) VALUES (?,?,?,?,?,?,?,?,?,?,'neu')",
+          [naechste_nummer('PAF'), (int)$k['id'], 'produkt', $pid ?: null, $rezWahl ?: null, $stueck, $fg > 0 ? $fg : null, $vtyp, $first, trim($_POST['notiz'] ?? '')]);
         $paf = insert_id();
         $sort = 0;
         foreach (($mengen ?: [0]) as $m) {
-            q("INSERT INTO portal_anfrage_pos (anfrage_id,produkt_id,stueck,fuellmenge_g,verpackung_typ,menge,sort) VALUES (?,?,?,?,?,?,?)",
-              [$paf, $pid, $stueck, $fg > 0 ? $fg : null, $vtyp, $m ?: null, $sort++]);
+            q("INSERT INTO portal_anfrage_pos (anfrage_id,produkt_id,rezeptur_id,stueck,fuellmenge_g,verpackung_typ,menge,sort) VALUES (?,?,?,?,?,?,?,?)",
+              [$paf, $pid ?: null, $rezWahl ?: null, $stueck, $fg > 0 ? $fg : null, $vtyp, $m ?: null, $sort++]);
         }
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Produktanfrage im Portal gestellt' . (count($mengen) > 1 ? ' (' . count($mengen) . ' Staffeln)' : '') . '.', 'anfrage');
     }
@@ -897,7 +908,13 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php else: $dfP = in_array($rezDetail['darreichungsform'], ['pulver','stick','granulat'], true) ? 'Portion' : 'Einheit'; ?>
     <div class="bx-row" style="justify-content:space-between;align-items:center">
       <h1 style="margin:0"><?= h($rezDetail['name']) ?></h1>
-      <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezepturen') ?>">Zurück zur Liste</a>
+      <div class="bx-row" style="gap:8px">
+        <?php // Angenommene eigene und freigegebene Katalog-Rezepturen kann der Kunde direkt als Produkt anfragen.
+              if (!empty($k['portal_produkte']) && in_array($rezDetail['status'], ['eingefroren','freigegeben'], true)): ?>
+          <a class="btn btn-primary btn-sm" href="<?= $portalLink('prodanfrage') ?>&rid=<?= (int)$rezDetail['id'] ?>">Als Produkt anfragen</a>
+        <?php endif; ?>
+        <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezepturen') ?>">Zurück zur Liste</a>
+      </div>
     </div>
     <p class="bx-sub"><?= h($rezDetail['nummer']) ?> · <?= h($DFORM_P[$rezDetail['darreichungsform']] ?? $rezDetail['darreichungsform']) ?> · <?= $rezBadge($rezDetail['status']) ?></p>
     <div class="bx-panel">
@@ -1075,15 +1092,24 @@ portal_head('Kundenportal · ' . $k['firma']);
 <?php elseif ($view === 'prodanfrage'): ?>
   <h1 style="margin-bottom:4px">Produkt anfragen</h1>
   <div class="bx-panel">
-    <p class="muted" style="margin-top:0">Wählen Sie ein Produkt aus dem Katalog + gewünschte Stückzahl, Verpackung und Bestellmenge – wir melden uns mit einem Preis.</p>
-    <?php if (!$katalog): ?><div class="muted">Aktuell sind keine Produkte im Katalog verfügbar.</div>
+    <p class="muted" style="margin-top:0">Wählen Sie eine <strong>Ihrer Rezepturen</strong> oder ein Produkt aus dem Katalog, dazu Menge je Packung, Verpackung und Bestellmenge – wir melden uns mit einem Preis.</p>
+    <?php if (!$katalog && !$meineRezepturen): ?><div class="muted">Es steht noch nichts zur Auswahl. Stellen Sie zuerst eine Rezepturanfrage – sobald Sie unseren Vorschlag angenommen haben, können Sie ihn hier als Produkt anfragen.</div>
     <?php else: ?>
     <form method="post">
       <input type="hidden" name="aktion" value="produkt_anfrage">
       <div class="bx-grid">
         <div class="bx-field"><label>Produkt</label>
           <select name="produkt_id" id="pa_produkt" required><option value="">– wählen –</option>
-            <?php foreach ($katalog as $pk): ?><option value="<?= (int)$pk['id'] ?>" data-form="<?= h($pk['darreichungsform']) ?>"><?= h($pk['name']) ?><?= $pk['darreichungsform'] ? ' · '.h($DFORM_P[$pk['darreichungsform']] ?? $pk['darreichungsform']) : '' ?></option><?php endforeach; ?>
+            <?php if ($meineRezepturen): ?>
+            <optgroup label="Meine Rezepturen (noch kein fertiges Produkt)">
+              <?php foreach ($meineRezepturen as $rz): ?><option value="r<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>" <?= $rid === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?> · <?= h($DFORM_P[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
+            </optgroup>
+            <?php endif; ?>
+            <?php if ($katalog): ?>
+            <optgroup label="Produkte aus dem Katalog">
+              <?php foreach ($katalog as $pk): ?><option value="p<?= (int)$pk['id'] ?>" data-form="<?= h($pk['darreichungsform']) ?>"><?= h($pk['name']) ?><?= $pk['darreichungsform'] ? ' · '.h($DFORM_P[$pk['darreichungsform']] ?? $pk['darreichungsform']) : '' ?></option><?php endforeach; ?>
+            </optgroup>
+            <?php endif; ?>
           </select>
         </div>
         <div class="bx-field" id="pa_stueck_wrap"><label>Stück je Packung <?= bx_hint('Ihre Wunschmenge – wir kalkulieren genau diese Größe.') ?></label><input type="number" name="stueck" min="1" step="1" placeholder="z. B. 120"></div>

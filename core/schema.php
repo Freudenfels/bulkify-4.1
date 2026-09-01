@@ -625,6 +625,10 @@ function init_schema(): void {
     ensure_column('portal_anfrage', 'wunsch_menge', "DECIMAL(12,3) NULL");   // Rohstoff-Anfrage: gewünschte Menge
     ensure_column('portal_anfrage', 'wunsch_einheit', "VARCHAR(10) NULL");   // Einheit dazu (kg/g/t/Stück/L)
     ensure_column('portal_anfrage', 'rohstoff_id', "INT NULL");              // Rohstoff-Anfrage: konkreter Rohstoff (item) für die Preisberechnung
+    // Produktanfrage direkt aus einer REZEPTUR: der Kunde hat seine Rezeptur angenommen, ein Produkt
+    // (Rezeptur x Menge + Verpackung) gibt es dafür noch nicht. Genau daraus entsteht es im Angebot.
+    ensure_column('portal_anfrage', 'rezeptur_id', "INT NULL");
+    ensure_column('portal_anfrage_pos', 'rezeptur_id', "INT NULL");
     ensure_column('rezeptur_anfrage', 'produktname', "VARCHAR(190) NULL");    // Wunsch-Produktname des Kunden bei der Rezepturanfrage
     ensure_column('produkt', 'kundenname', "VARCHAR(190) NULL");              // vom Kunden gewünschter Produktname (intern = name)
     // Angebot als Preismatrix (Kunde wählt Zelle: Stückzahl × Bestellmenge) -> gewählte Werte fließen in Auftrag + Produktion

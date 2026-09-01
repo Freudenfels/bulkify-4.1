@@ -46,13 +46,15 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
 // Funktioniert AUCH ohne berechnete Preismatrix (Positionen dort manuell möglich).
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_bauen') {
     $pa = one("SELECT * FROM portal_anfrage WHERE id=?", [$id]);
-    if ($pa && $pa['typ'] === 'produkt' && $pa['produkt_id'] && $pa['kunde_id']) {
+    // Auch ohne Produkt möglich: Der Kunde kann eine REZEPTUR anfragen, für die es noch kein Produkt gibt.
+    // Im Editor wird die Rezeptur dann als Position gebaut (Typ „Rezeptur"), daraus entsteht das Produkt.
+    if ($pa && $pa['typ'] === 'produkt' && ($pa['produkt_id'] || $pa['rezeptur_id']) && $pa['kunde_id']) {
         $vorhanden = (int) scalar("SELECT id FROM angebot WHERE anfrage_id=? ORDER BY id DESC LIMIT 1", [$id]);
         if ($vorhanden) { header('Location: ?p=angebot&id=' . $vorhanden); exit; }   // nicht doppelt anlegen
-        if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [(int)$pa['produkt_id']]) === 0)
+        if ($pa['produkt_id'] && (int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [(int)$pa['produkt_id']]) === 0)
             produkt_matrix_generieren((int)$pa['produkt_id']);   // Matrix versuchen (leer ist ok – Positionen manuell)
         q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,anfrage_id) VALUES (?,?,?,?,?,?)",
-          [naechste_nummer('AN'), (int)$pa['kunde_id'], (int)$pa['produkt_id'], 'offen', 'Aus Anfrage ' . $pa['nummer'], $id]);
+          [naechste_nummer('AN'), (int)$pa['kunde_id'], $pa['produkt_id'] ? (int)$pa['produkt_id'] : null, 'offen', 'Aus Anfrage ' . $pa['nummer'], $id]);
         $angid = insert_id();
         q("UPDATE portal_anfrage SET status='in_bearbeitung' WHERE id=?", [$id]);
         log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [$angid]) . ' aus Anfrage ' . $pa['nummer'] . ' im Editor angelegt.', 'angebot', 'angebot', $angid);
@@ -92,7 +94,14 @@ if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding
   <h2>Wunsch des Kunden</h2>
   <div class="bx-tablewrap"><table class="bx-table"><tbody>
     <?php if ($pa['typ'] === 'produkt'): ?>
+      <?php if (!empty($pa['rezeptur_id'])): $rzA = one("SELECT nummer,name FROM rezeptur WHERE id=?", [(int)$pa['rezeptur_id']]); ?>
+        <tr><td style="width:220px">Rezeptur</td><td>
+          <a href="?p=rezeptur_detail&id=<?= (int)$pa['rezeptur_id'] ?>"><?= h(($rzA['nummer'] ?? '') . ' · ' . ($rzA['name'] ?? '–')) ?></a>
+          <div class="muted" style="font-size:12px">Für diese Rezeptur gibt es noch kein Produkt – es entsteht aus dem Angebot (Rezeptur × Menge + Verpackung).</div>
+        </td></tr>
+      <?php else: ?>
       <tr><td style="width:220px">Produkt</td><td><?php if ($pa['produkt_id']): ?><a href="?p=produkt&id=<?= (int)$pa['produkt_id'] ?>"><?= h($pa['produkt_name'] ?: '–') ?></a><?php else: ?><?= h($pa['produkt_name'] ?: '–') ?><?php endif; ?></td></tr>
+      <?php endif; ?>
       <?php $fEinheit = form_groessen_einheit($pa['darreichungsform'] ?: 'kapsel') ?: 'g';   // Füllmenge: g bei Pulver, ml bei Flüssig ?>
       <tr><td>Größe je Packung</td><td><?= $pa['fuellmenge_g'] ? $mg($pa['fuellmenge_g']) . ' ' . h($fEinheit) : ($pa['stueck'] ? (int)$pa['stueck'] . ' Stück' : '–') ?></td></tr>
       <tr><td>Verpackungstyp</td><td><?= h($pa['verpackung_typ'] ? ($VTYPEN[$pa['verpackung_typ']] ?? $pa['verpackung_typ']) : '– (bitte empfehlen)') ?></td></tr>
@@ -245,6 +254,21 @@ if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding
         <button class="btn btn-primary" type="submit" name="aktion" value="angebot_abgeben"<?= $hatPreise ? '' : ' disabled title="Keine berechenbaren Preise – nutze „Im Angebots-Editor bauen“"' ?>>Angebot senden</button>
         <button class="btn <?= $hatPreise ? 'btn-ghost' : 'btn-primary' ?>" type="submit" name="aktion" value="angebot_bauen">Im Angebots-Editor bauen</button>
       </div>
+    </form>
+  <?php endif; ?>
+</div>
+<?php elseif ($pa['typ'] === 'produkt' && !empty($pa['rezeptur_id'])): ?>
+<div class="bx-panel">
+  <h2>Angebot abgeben</h2>
+  <p class="muted" style="margin-top:0">Der Kunde hat eine <strong>Rezeptur</strong> angefragt, für die es noch kein Produkt gibt – es gibt deshalb noch keine Preismatrix. Im Angebots-Editor fügst du die Rezeptur als Position hinzu (Typ „Rezeptur (Lohnherstellung)"), wählst Menge je Packung und Verpackung, und beim Senden entsteht daraus automatisch das Produkt.</p>
+  <?php if ($angebote): ?>
+    <p class="muted">Bereits angelegt:</p>
+    <?php foreach ($angebote as $ag): ?>
+      <div class="bx-row" style="gap:10px;align-items:center;margin-bottom:6px"><a href="?p=angebot&id=<?= (int)$ag['id'] ?>"><?= h($ag['nummer']) ?></a> <?= bx_badge($ag['status']) ?></div>
+    <?php endforeach; ?>
+  <?php else: ?>
+    <form method="post" style="margin-top:8px">
+      <button class="btn btn-primary" type="submit" name="aktion" value="angebot_bauen">Im Angebots-Editor bauen</button>
     </form>
   <?php endif; ?>
 </div>
