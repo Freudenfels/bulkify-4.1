@@ -3034,6 +3034,7 @@ function seed_aktivitaet_if_empty(): void {
 
 // Demo-Lieferanten
 function seed_lieferanten_if_empty(): void {
+    if (meta_get('seed_demo_off','') === '1') return;   // Demo-Seeding nach Reset aus: geloeschte Datensaetze bleiben geloescht
     if ((int) scalar("SELECT COUNT(*) FROM lieferanten") > 0) return;
     // [lief.-nr, firma, ap, email, tel, gesperrt, sprache, kategorien, fertig_formen, ort, land, waehrung]
     $demo = [
@@ -3052,6 +3053,7 @@ function seed_lieferanten_if_empty(): void {
 
 // Demo-Partner (Hybrid) inkl. SubKunden
 function seed_partner_if_empty(): void {
+    if (meta_get('seed_demo_off','') === '1') return;   // Demo-Seeding nach Reset aus: geloeschte Datensaetze bleiben geloescht
     if ((int) scalar("SELECT COUNT(*) FROM partner") > 0) return;
     $demo = [
         ['P-3001','LohnPartner Nord GmbH','Katrin Vogel','k.vogel@lohnpartner-nord.de','0431 556677',0,'de','fertigprodukt','kapsel,tablette','Kiel','DE',
@@ -3233,6 +3235,7 @@ function seed_angebot_if_empty(): void {
 
 // Testdaten einspielen, wenn eine Tabelle leer ist (nur lokal zum Ansehen)
 function seed_kunden_if_empty(): void {
+    if (meta_get('seed_demo_off','') === '1') return;   // Demo-Seeding nach Reset aus: geloeschte Datensaetze bleiben geloescht
     if ((int) scalar("SELECT COUNT(*) FROM kunden") > 0) return;
     $demo = [
         ['K-1001','Alpenkraft GmbH','Lena Berger','lena@alpenkraft.de','089 1234567',0,'München','DE','vorkasse'],
@@ -3289,6 +3292,19 @@ function daten_zuruecksetzen(bool $mitRezepturen = false, bool $mitKunden = fals
     log_aktivitaet('system', 0, 'team', 'Daten zurückgesetzt (' . array_sum($report) . ' Zeilen gelöscht'
         . ($mitRezepturen ? ', inkl. Rezepturen/Produkte' : '') . ($mitKunden ? ', inkl. Kunden' : '') . ').');
     return $report;
+}
+
+// ---- Live-Schutz ----
+// Solange das System noch nicht online ist, darf frei aufgeräumt werden. Sobald „System ist live"
+// gesetzt ist (Einstellungen -> Werkzeuge), verlangen ALLE löschenden Werkzeuge zusätzlich, dass das
+// Wort LÖSCHEN eingetippt wird. Reines Anhaken reicht dann nicht mehr.
+function system_ist_live(): bool { return (string) meta_get('system_live', '0') === '1'; }
+// Darf eine löschende Aktion laufen? $wort = was der Benutzer eingetippt hat.
+// „LOESCHEN" gilt genauso wie „LÖSCHEN" – an fremden Tastaturen ist der Umlaut sonst eine Hürde.
+function loeschen_erlaubt(?string $wort): bool {
+    if (!system_ist_live()) return true;
+    if (!is_string($wort)) return false;
+    return in_array(mb_strtoupper(trim($wort)), ['LÖSCHEN', 'LOESCHEN'], true);
 }
 
 // ---- Demo-Testdaten gezielt wieder entfernen ----

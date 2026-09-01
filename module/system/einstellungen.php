@@ -36,14 +36,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'charge_std_save') {
     meta_set('mhd_monate_standard', (string)max(1, (int)($_POST['mhd_monate_standard'] ?? 18)));
     header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
 }
+// --- Betriebsmodus: System live schalten (schützt die löschenden Werkzeuge) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'live_save') {
+    meta_set('system_live', isset($_POST['system_live']) ? '1' : '0');
+    header('Location: ?p=einstellungen&tab=werkzeuge&ok=1'); exit;
+}
 // --- Daten zurücksetzen (löschend!) – nur mit ausdrücklicher Bestätigung ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'daten_reset') {
     if (($_POST['sicher'] ?? '') !== '1') { header('Location: ?p=einstellungen&tab=werkzeuge&resetfehler=1'); exit; }
+    if (!loeschen_erlaubt($_POST['loeschwort'] ?? null)) { header('Location: ?p=einstellungen&tab=werkzeuge&livesperre=1'); exit; }
     $r = daten_zuruecksetzen(($_POST['mit_rezepturen'] ?? '') === '1', ($_POST['mit_kunden'] ?? '') === '1');
     header('Location: ?p=einstellungen&tab=werkzeuge&reset=' . array_sum($r)); exit;
 }
 // --- Demo-Testdaten gezielt entfernen (löscht nur, was als DEMO-TESTSET markiert ist) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'demo_weg') {
+    if (!loeschen_erlaubt($_POST['loeschwort'] ?? null)) { header('Location: ?p=einstellungen&tab=werkzeuge&livesperre=1'); exit; }
     $r = demo_testset_entfernen();
     $_SESSION['demo_weg_behalten'] = $r['behalten'];
     header('Location: ?p=einstellungen&tab=werkzeuge&demoweg=' . ((int)$r['angebote'] + (int)$r['auftraege'] + (int)$r['produkte'] + (int)$r['rezepturen'] + (int)$r['kunden'])); exit;
@@ -366,7 +373,25 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
 </div>
 <?php endif; ?>
 
-<?php if ($tab === 'werkzeuge'): ?>
+<?php if ($tab === 'werkzeuge'): $live = system_ist_live(); ?>
+<div class="bx-panel">
+  <h2>Betriebsmodus <?= bx_hint('Solange das System nicht live ist, darf frei aufgeräumt werden. Im Live-Betrieb verlangen alle löschenden Werkzeuge zusätzlich das eingetippte Wort LÖSCHEN.') ?></h2>
+  <?php if (isset($_GET['livesperre'])): ?>
+    <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht ausgeführt – das System ist live. Zum Löschen muss zusätzlich <strong>LÖSCHEN</strong> eingetippt werden.</div>
+  <?php endif; ?>
+  <p class="muted" style="margin-top:0">
+    Aktuell: <?= $live ? bx_badge('live – Löschen nur mit Bestätigung','warn') : bx_badge('noch nicht live – Löschen frei möglich','info') ?>
+  </p>
+  <form method="post">
+    <input type="hidden" name="aktion" value="live_save">
+    <div class="bx-row" style="gap:8px;align-items:center;margin-bottom:10px">
+      <input type="checkbox" name="system_live" id="f_live" value="1" <?= $live ? 'checked' : '' ?>>
+      <label for="f_live" style="margin:0">System ist live – Daten sind echt, Löschen nur nach Bestätigung</label>
+    </div>
+    <button class="btn btn-primary" type="submit">Speichern</button>
+  </form>
+</div>
+
 <div class="bx-panel">
   <h2>Demo-Testdaten einspielen</h2>
   <?php if (isset($_GET['demo'])): $n = (int)$_GET['demo']; ?>
@@ -391,6 +416,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     </form>
     <form method="post" style="margin:0" onsubmit="return confirm('Alle als DEMO-TESTSET markierten Daten entfernen?');">
       <input type="hidden" name="aktion" value="demo_weg">
+      <?php if ($live): ?><input type="text" name="loeschwort" placeholder="LÖSCHEN eintippen" required style="max-width:170px;margin-right:8px"><?php endif; ?>
       <button class="btn btn-ghost" type="submit">Demo-Testdaten entfernen</button>
     </form>
   </div>
@@ -444,6 +470,12 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       <input type="checkbox" name="sicher" id="r_ok" value="1" required>
       <label for="r_ok" style="margin:0">Ja, ich habe eine Sicherung und will die Daten löschen</label>
     </div>
+    <?php if ($live): ?>
+    <div class="bx-field" style="max-width:260px">
+      <label>Zur Bestätigung <strong>LÖSCHEN</strong> eintippen <?= bx_hint('Das System ist live – deshalb reicht das Häkchen allein nicht.') ?></label>
+      <input type="text" name="loeschwort" required autocomplete="off">
+    </div>
+    <?php endif; ?>
     <button class="btn btn-danger" type="submit">Daten zurücksetzen</button>
   </form>
 </div>
