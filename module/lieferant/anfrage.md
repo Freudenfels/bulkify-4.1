@@ -21,6 +21,6 @@ Weil Kapseln üblicherweise je 1.000 gehandelt werden, wählt der Lieferant, ob 
 Alle Texte laufen über `lp_t()`; Zahlen über `lp_num()` (Deutsch 1.234,5 – English und Chinesisch 1,234.5) und Einheiten über `lp_einheit()` (Stück/Kapsel/Tablette … werden übersetzt, kg und L nicht).
 
 ## Angebot abgeben
-Ein Preis, eine Basis (je Einheit oder je 1.000), Mindestmenge und Lieferzeit – mehr braucht der Normalfall nicht. Am Preisfeld steht, für welche Menge er gilt.
+Die erste Zeile ist **Preis und Menge**: der Preis, den der Lieferant nennt, und die Menge, für die er gilt – vorbelegt mit der angefragten Menge (`menge_haupt`). **„+ Staffel"** hängt darunter beliebig viele weitere Zeilen im selben Zuschnitt an (`s_preis[]` / `s_menge[]`), so steht alles untereinander.
 
-Gilt für **andere** Mengen ein anderer Preis, hängt der Knopf **„+ Staffel"** unter dem Preisfeld je Klick eine Zeile mit Preis und Menge an (beliebig viele). Gespeicherte Staffeln erscheinen beim nächsten Aufruf als Zeilen. Leere Zeilen werden ignoriert, ein Entfernen-Knopf erübrigt sich deshalb. Ohne Staffel gilt der Preis oben; beim Übernehmen entsteht daraus eine Staffel ab der Mindestmenge.
+Beim Speichern wird die erste Zeile als **erste Staffel** übernommen, danach die angehängten. Der Preis der ersten Zeile ist zugleich der Kopfpreis des Angebots (`lieferant_angebot.preis`), die Basis daneben sagt, ob er je Einheit oder je 1.000 gilt. Leere Zeilen werden ignoriert, ein Entfernen-Knopf erübrigt sich. Beim Wiederaufruf steht die erste gespeicherte Staffel in der Kopfzeile, der Rest darunter.

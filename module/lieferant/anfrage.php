@@ -14,7 +14,12 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
     $fehler = '';
     if ($aktion === 'angebot') {
+        // Die erste Zeile ist der Hauptpreis mit der Menge, für die er gilt – sie zählt als
+        // erste Staffel. Danach kommen die Zeilen, die der Lieferant selbst angehängt hat.
         $staffeln = [];
+        $hauptMenge = (float)str_replace(',', '.', (string)($_POST['menge_haupt'] ?? '0'));
+        $hauptPreis = (float)str_replace(',', '.', (string)($_POST['preis'] ?? '0'));
+        if ($hauptMenge > 0 && $hauptPreis > 0) $staffeln[] = [$hauptMenge, $hauptPreis];
         foreach (($_POST['s_menge'] ?? []) as $i2 => $m)
             $staffeln[] = [(float)str_replace(',', '.', (string)$m), (float)str_replace(',', '.', (string)($_POST['s_preis'][$i2] ?? '0'))];
         $fehler = lieferant_angebot_speichern($id, $lid,
@@ -65,7 +70,10 @@ if (!$a):
 <?php else:
     $ang = one("SELECT * FROM lieferant_angebot WHERE anfrage_id=?", [$id]);
     $staffeln = $ang ? all("SELECT * FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$ang['id']]) : [];
-    // Keine leeren Zeilen auf Vorrat: eine Staffel kommt über „+ Staffel" dazu.
+    // Die erste gespeicherte Staffel gehört zur Kopfzeile (Hauptpreis), der Rest steht darunter.
+    // Ohne Angebot steht in der Kopfzeile die angefragte Menge.
+    $hauptMenge = $staffeln ? (float)$staffeln[0]['menge_ab'] : (float)($a['menge'] ?? 0);
+    if ($staffeln) array_shift($staffeln);
     // Die Einheit steht schon in der Anfrage (dort wird sie automatisch gesetzt) – der Lieferant
     // muss sie nicht raten. Ein bereits abgegebenes Angebot behält seine eigene Einheit.
     $einheit = trim((string)($ang['einheit'] ?? '')) ?: (trim((string)($a['einheit'] ?? '')) ?: trim((string)($a['item_einheit'] ?? '')));
@@ -97,13 +105,17 @@ if (!$a):
     <?php if ($ang): ?><div class="muted" style="margin-bottom:10px"><?= h(lp_t('abgegeben_am')) ?> <?= h(date('d.m.Y', strtotime((string)$ang['angelegt']))) ?><?= $ang['status'] === 'angenommen' ? ' · ' . h(lp_t('angenommen')) : '' ?></div><?php endif; ?>
     <form method="post">
       <input type="hidden" name="aktion" value="angebot">
+      <?php // Erste Zeile: Preis und die Menge, für die er gilt. Weitere Staffeln stehen genau
+            // darunter und sehen gleich aus – so ist auf einen Blick klar, was zusammengehört. ?>
+      <div class="bx-field" style="max-width:520px">
+        <label><?= h(lp_t('ihr_preis')) ?></label>
+        <div class="bx-row" style="gap:10px">
+          <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
+          <input type="text" name="menge_haupt" value="<?= h($hauptMenge > 0 ? $zahl($hauptMenge, 3) : '') ?>" placeholder="<?= h(lp_t('ab_menge')) ?>" style="flex:1">
+        </div>
+        <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>">
+      </div>
       <div class="bx-grid">
-        <div class="bx-field"><label><?= h(lp_t('ihr_preis')) ?><?= (float)($a['menge'] ?? 0) > 0 ? ' <span class="muted" style="font-weight:normal">(' . h(lp_t('fuer_menge')) . ' ' . h(lp_num($a['menge'])) . ' ' . h(lp_einheit($einheit, (float)$a['menge'])) . ')</span>' : '' ?></label>
-          <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="12.50">
-          <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>">
-          <?php // Gilt für andere Mengen ein anderer Preis, kommt hier je Klick eine Zeile dazu. ?>
-          <button type="button" class="btn btn-ghost btn-sm" id="staffelPlus" style="margin-top:6px"
-                  data-preis="<?= h(lp_t('preis')) ?>" data-menge="<?= h(lp_t('ab_menge')) ?>">+ <?= h(lp_t('staffel')) ?></button></div>
         <div class="bx-field"><label><?= h(lp_t('preis_basis')) ?></label>
           <?php $pb = (int)($ang['preis_basis'] ?? 1); ?>
           <select name="preis_basis">
@@ -113,10 +125,10 @@ if (!$a):
         <div class="bx-field"><label><?= h(lp_t('moq')) ?></label>
           <input type="text" name="mindestmenge" value="<?= h($ang ? $zahl($ang['mindestmenge'], 3) : '') ?>"></div>
         <div class="bx-field"><label><?= h(lp_t('lieferzeit')) ?></label>
-          <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>"></div>
+          <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>" style="max-width:120px"></div>
       </div>
-      <?php // Staffelzeilen: je Zeile ein Preis und die Menge, ab der er gilt. Leere Zeilen ignoriert
-            // das Speichern, deshalb braucht es keinen Entfernen-Knopf – Felder leeren genügt. ?>
+      <?php // Weitere Staffeln: je Zeile ein Preis und die Menge, ab der er gilt. Leere Zeilen
+            // ignoriert das Speichern, deshalb braucht es keinen Entfernen-Knopf. ?>
       <div id="staffelRaster" style="max-width:520px">
         <?php foreach ($staffeln as $s): ?>
           <div class="bx-row" style="gap:10px;margin-bottom:8px">
@@ -125,6 +137,8 @@ if (!$a):
           </div>
         <?php endforeach; ?>
       </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="staffelPlus" style="margin-bottom:var(--sp-4)"
+              data-preis="<?= h(lp_t('preis')) ?>" data-menge="<?= h(lp_t('ab_menge')) ?>">+ <?= h(lp_t('staffel')) ?></button>
       <script>
       (function(){
         var raster = document.getElementById('staffelRaster'), knopf = document.getElementById('staffelPlus');
