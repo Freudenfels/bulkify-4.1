@@ -1058,6 +1058,62 @@ function seed_etikett_preise(): void {
     meta_set('seed_etikett_preise', '1');
 }
 
+
+// Etikettenformate je Gebinde (Herstellerblatt „Kapselgrößen / Etikettengrößen", Stand 09/2026): Druckdatei-Maß und
+// Endformat (B x H mm) am Behälter, dazu je Endformat EIN Etiketten-Artikel (verpackung_rolle='etikett') mit
+// EK-Staffel aus den Etikettenpreisen des Gebindes (etikett_preis, Labelisten). Damit findet der Angebots-Editor
+// zu jedem Behälter das passende Etikett (passende_etiketten_fuer) und rechnet es mit Preis.
+// Läuft genau einmal (Marker), füllt nur leere Felder und legt nur an, was fehlt.
+function seed_etikett_formate(): void {
+    if (meta_get('seed_etikett_formate', '') === '1') return;
+    seed_behaelter_kapazitaet();   // die Gebinde müssen existieren
+    seed_etikett_preise();         // … und ihre Etikettenpreise, daraus wird die Staffel des Etiketts
+    // Gebinde => [Druckdatei B x H, Endformat B x H] in mm. Braunglas: Etikett innen links voraus.
+    $data = [
+        '100 ml PET Packer'   => ['62 x 149', '56 x 143'],
+        '150 ml PET Packer'   => ['76 x 161', '72 x 155'],
+        '200 ml PET Packer'   => ['81 x 185', '75 x 179'],
+        '250 ml PET Packer'   => ['78 x 191', '72 x 185'],
+        '100 ml Weithalsglas' => ['56 x 159', '50 x 153'],
+        '150 ml Weithalsglas' => ['66 x 178', '60 x 172'],
+        '200 ml Weithalsglas' => ['73 x 194', '67 x 188'],
+        '250 ml Weithalsglas' => ['73 x 206', '67 x 200'],
+        '10 ml Braunglas'     => ['78 x 36',  '72 x 30'],
+        '30 ml Braunglas'     => ['103 x 51', '97 x 45'],
+    ];
+    // Die beiden Braungläser (Flüssig) fehlen als Artikel – anlegen, EK bleibt offen (Preis unbekannt).
+    $neu = ['10 ml Braunglas' => 10, '30 ml Braunglas' => 30];
+    foreach ($data as $name => [$druck, $final]) {
+        $iid = (int) scalar("SELECT id FROM item WHERE name=? AND kategorie='verpackung'", [$name]);
+        if (!$iid && isset($neu[$name])) {
+            q("INSERT INTO item (artikelnummer,name,kategorie,verpackung_rolle,verpackungsart,material,volumen_ml,farbe,einheit,preis_bezug)
+               VALUES (?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('VP'), $name, 'verpackung', 'primaer', 'flasche', 'Braunglas', $neu[$name], 'braun', 'Stück', 'Stück']);
+            $iid = (int) insert_id();
+        }
+        if (!$iid) continue;
+        q("UPDATE item SET etikett_druck=COALESCE(NULLIF(etikett_druck,''),?), etikett_final=COALESCE(NULLIF(etikett_final,''),?) WHERE id=?",
+          [$druck, $final, $iid]);
+        // Etiketten-Artikel zum Endformat (einer je Maß; passende_etiketten_fuer vergleicht Breite/Höhe auf 2 mm)
+        $m = etikett_masse($final);
+        if (!$m) continue;
+        $eid = (int) scalar("SELECT id FROM item WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND breite_mm=? AND hoehe_mm=? LIMIT 1", [$m[0], $m[1]]);
+        if (!$eid) {
+            q("INSERT INTO item (artikelnummer,name,kategorie,verpackung_rolle,verpackungsart,material,etikett_format,breite_mm,hoehe_mm,einheit,preis_bezug)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('VP'), 'Etikett ' . $final . ' mm (' . $name . ')', 'verpackung', 'etikett', 'etikett', 'Papier/Folie', $final . ' mm', $m[0], $m[1], 'Stück', 'Stück']);
+            $eid = (int) insert_id();
+        }
+        // EK-Staffel des Etiketts aus den Etikettenpreisen des Gebindes – nur, wenn der Artikel noch keine hat.
+        if ((int) scalar("SELECT COUNT(*) FROM pack_ek_staffel WHERE item_id=?", [$eid]) === 0) {
+            $st = etikett_staffel($iid);
+            foreach ($st as $s) q("INSERT INTO pack_ek_staffel (item_id,menge_ab,ek_preis) VALUES (?,?,?)", [$eid, (int)$s['menge_ab'], (float)$s['ek_stueck']]);
+            if ($st) q("UPDATE item SET ek_preis=? WHERE id=? AND COALESCE(ek_preis,0)=0", [(float)$st[0]['ek_stueck'], $eid]);   // unter der kleinsten Staffel gilt deren Preis
+        }
+    }
+    meta_set('seed_etikett_formate', '1');
+}
+
 // Etiketten-Staffel eines Gebindes als Liste [menge_ab, ek_gesamt, ek_stueck].
 function etikett_staffel(int $item_id): array {
     return all("SELECT menge_ab, ek_gesamt, ek_stueck FROM etikett_preis WHERE item_id=? ORDER BY menge_ab", [$item_id]);

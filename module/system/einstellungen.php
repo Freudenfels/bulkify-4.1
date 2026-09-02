@@ -8,6 +8,7 @@ seed_kapselgroesse_if_empty();
 seed_behaelter_kapazitaet();   // Standard-Behälter + Kapsel-Fassung (Herstellerwerte, einmalig)
 seed_etikett_preise();         // Etiketten-EK je Gebinde (Labelisten, Stand Juni 2026), einmalig
 seed_standbodenbeutel();   // Standbodenbeutel (Labelisten) + EK-Staffeln, einmalig
+seed_etikett_formate();    // Etikettenformate je Gebinde + Etiketten-Artikel mit EK-Staffel (Herstellerblatt 09/2026), einmalig
 seed_packari_behaelter();  // Packari-EK fuer PET-Dosen/Weithalsglaeser + Deckel mit Pressure Seal, einmalig
 
 $TABS = [

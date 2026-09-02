@@ -48,14 +48,14 @@
 ## Offene Punkte / als Nächstes
 1. **SMTP-Zugangsdaten eintragen** (Einstellungen → E-Mail) und Testmail schicken. Die Ereignisse sind angebunden (Tabelle unter Einstellungen → E-Mail, Details in `core/mail.md`): Bestellung raus, Angebot gesendet/angenommen, Anfrage abgesagt, Lieferanten-Aktionen ans Team.
 2. **AGB anwaltlich prüfen** und die geprüfte Fassung als neue Version eintragen.
-3. **Etiketten:** Es gibt noch keine Etiketten-Artikel. Das Angebot bietet nur Etiketten an, die zum **Endformat am Behälter** (`item.etikett_final`, B×H) passen – dafür fehlen Behältermaße/Etikettenformate und die Etikettenpreise.
+3. ~~Etiketten~~ – **erledigt** (2026-09-02, aus dem Herstellerblatt „Kapselgrößen/Etikettengrößen"): `seed_etikett_formate()` trägt Druckdatei- und Endmaß an PET Packer, Weithalsglas (100–250 ml) und Braunglas 10/30 ml ein und legt je Endformat einen Etiketten-Artikel mit EK-Staffel aus den Labelisten-Preisen an. Läuft beim ersten Aufruf von Verpackungen/Einstellungen einmal (Marker). **Offen:** Etikettenpreise für die Braungläser 10/30 ml und die Standbodenbeutel; Formate für die Beutel.
 4. ~~Mengenrabatt bei Rezeptur-Angeboten~~ – **erledigt** (2026-09-02): Rohstoffe werden mit der Lieferanten-Staffel zur Gesamtmenge gerechnet (Matrix und Rezeptur-Angebot); im Editor mehrere Mengen mit Komma. Wirkt nur, wenn am Rohstoff Staffeln (`lieferant_preis`) gepflegt sind – ein Rüstkosten-/Fixkostenmodell je Charge gibt es weiterhin nicht.
 5. **Rohstoff-Stammdaten füllen** (Herkunft, Haltbarkeit, Lagerung, Allergene, vegan/GVO/bestrahlt/TSE, Zertifikate, Spec-Nr.) – ohne sie steht in der Spezifikation überall „–".
 6. **Chinesische Übersetzungen:** am 2026-09-02 einmal komplett gegengelesen (Portal-Wörterbuch, Ablauf-Panel, Stationen, Fehlermeldungen) – fachlich stimmig, „Artikel" auf „物料" korrigiert. Eine Endkontrolle durch einen Muttersprachler bleibt sinnvoll.
 7. ~~Lieferantenportal: Rückfragen/Chat und Dateiablage~~ – **erledigt** (2026-09-02): Menüpunkte „Rückfragen" und „Dateien" im Portal, dazu Rückfragen an jeder Bestellung/Preisanfrage; intern Reiter „Dokumente" und „Rückfragen" im Lieferantenkonto und Rückfragen an der Bestellung (`core/nachricht.php`, `core/lieferant_dateien.php`).
 8. ~~Beta-Admin-Passwort ändern~~ – **erledigt** (2026-09-02).
 9. **Demo-Rezepturen ohne Rohstoffpreise** → Preis-Matrix zeigt 0 €.
-10. **Flaschen/Tuben für Flüssig anlegen** (Tropfflasche, Pumpspender fehlen als Artikel).
+10. **Flaschen/Tuben für Flüssig anlegen:** Braunglas 10 ml und 30 ml gibt es jetzt als Artikel (über `seed_etikett_formate()`, ohne EK – Preis nachtragen). Tropfflasche/Pipette, Pumpspender und Tuben fehlen weiterhin.
 11. **Kalkulationsgrundlagen prüfen:** Presshilfsstoffe 20 % / 8 €/kg, Trägerflüssigkeit 3 €/L sind gesetzte Startwerte.
 12. **Deckel-Preisliste bei Packari erfragen** – der EK der vier Pressure-Seal-Deckel ist als Differenz „Set minus Dose" gerechnet (0,26–0,35 €).
 13. ~~Teilproduktion .B/.C~~ – **erledigt** (2026-09-02): Panel „Teilmenge einbuchen" am Produktionsauftrag, der Abschluss bucht nur noch den Rest. Teilversand gibt es weiterhin nicht (`auftrag_versenden()` liefert ganz oder gar nicht).
