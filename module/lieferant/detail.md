@@ -1,6 +1,7 @@
 # lieferant/detail.php – Lieferantenkonto (Cockpit) & Bearbeiten
 
 ## Zugang zum Lieferantenportal
+Über den Knöpfen steht, **in welcher Sprache** Einladung und Portal laufen (aus `lieferanten.sprache`) – damit ein chinesischer Lieferant nicht versehentlich eine englische Einladung bekommt. Ändern lässt sich das im Reiter Stammdaten.
 Panel unten auf der Seite: **Einladungslink erzeugen** (`lieferant_einladung`, gilt einmal) und an den Lieferanten schicken – er legt Zugang und Passwort selbst an. Besteht schon ein Zugang, stehen dort Benutzer, E-Mail und letzter Login.
 
 ## Preisanfragen

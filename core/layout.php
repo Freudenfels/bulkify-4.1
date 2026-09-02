@@ -193,6 +193,7 @@ function bx_side_script(): string {
 // Wiring für den Dark-Mode-Umschalter (Button .bx-themebtn). Gemeinsam für intern + Portal.
 function bx_theme_script(): string {
     return "<script>(function(){var r=document.documentElement;"
-        . "function lbl(){var d=r.getAttribute('data-theme')==='dark';document.querySelectorAll('.bx-themebtn').forEach(function(b){b.textContent=d?'Heller Modus':'Dunkler Modus';});}"
+        // Die Beschriftung darf je Seite anders heissen (das Lieferantenportal spricht drei Sprachen).
+        . "function lbl(){var d=r.getAttribute('data-theme')==='dark';document.querySelectorAll('.bx-themebtn').forEach(function(b){b.textContent=d?(b.dataset.hell||'Heller Modus'):(b.dataset.dunkel||'Dunkler Modus');});}"
         . "document.querySelectorAll('.bx-themebtn').forEach(function(b){b.addEventListener('click',function(e){e.preventDefault();var d=r.getAttribute('data-theme')==='dark';var t=d?'light':'dark';r.setAttribute('data-theme',t);try{localStorage.setItem('bx-theme',t);}catch(err){}lbl();});});lbl();})();</script>";
 }

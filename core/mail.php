@@ -115,22 +115,36 @@ function smtp_senden(string $to, string $betreff, string $text, array $c): strin
 
 // --- Vorlagen ---------------------------------------------------------------
 
-// Einladung an einen Lieferanten. Sprache richtet sich nach dem Lieferanten.
+// Welche Sprache spricht dieser Lieferant? Genau die drei, die auch das Portal kann.
+function mail_lief_sprache(?string $s): string {
+    $s = strtolower(trim((string)$s));
+    return in_array($s, ['de', 'en', 'zh'], true) ? $s : 'en';
+}
+
+// Einladung an einen Lieferanten. Sprache richtet sich nach dem Lieferanten – wer auf Chinesisch
+// gepflegt ist, wird von der ersten Mail an chinesisch angeschrieben.
 function mail_lieferant_einladung(int $lieferant_id, string $link): string {
     $lf = one("SELECT firma, ansprechpartner, email, sprache FROM lieferanten WHERE id=?", [$lieferant_id]);
     if (!$lf) return 'Lieferant nicht gefunden.';
     if (trim((string)$lf['email']) === '') return 'Für diesen Lieferanten ist keine E-Mail-Adresse hinterlegt.';
     $fa = beleg_firma();
-    $de = strtolower((string)$lf['sprache']) === 'de';
+    $sp = mail_lief_sprache($lf['sprache']);
     $anrede = trim((string)$lf['ansprechpartner']) !== '' ? (string)$lf['ansprechpartner'] : (string)$lf['firma'];
 
-    if ($de) {
+    if ($sp === 'de') {
         $betreff = 'Ihr Zugang zum Lieferantenportal von ' . $fa['name'];
         $text = "Guten Tag $anrede,\n\n"
               . "wir arbeiten ab sofort mit einem Lieferantenportal. Dort sehen Sie unsere Bestellungen,\n"
               . "bestätigen Liefertermine, pflegen den Fortschritt und beantworten Preisanfragen.\n\n"
               . "Bitte richten Sie hier Ihren Zugang ein (der Link gilt einmal):\n$link\n\n"
               . "Bei Fragen antworten Sie einfach auf diese E-Mail.\n\nViele Grüße\n" . $fa['name'];
+    } elseif ($sp === 'zh') {
+        $betreff = $fa['name'] . ' 供应商门户开通链接';
+        $text = "$anrede 您好，\n\n"
+              . "我们现在使用供应商门户。您可以在门户中查看我方订单、确认交货日期、\n"
+              . "更新生产进度并回复询价。\n\n"
+              . "请通过以下链接设置您的账号（链接仅可使用一次）：\n$link\n\n"
+              . "如有疑问，直接回复本邮件即可。\n\n此致\n" . $fa['name'];
     } else {
         $betreff = 'Your access to the supplier portal of ' . $fa['name'];
         $text = "Dear $anrede,\n\n"
@@ -149,15 +163,20 @@ function mail_lieferant_bestellung(int $bestellung_id): string {
     if (!$b) return 'Bestellung oder Lieferant nicht gefunden.';
     if (trim((string)$b['email']) === '') return 'Für diesen Lieferanten ist keine E-Mail-Adresse hinterlegt.';
     $fa = beleg_firma();
-    $de = strtolower((string)$b['sprache']) === 'de';
+    $sp = mail_lief_sprache($b['sprache']);
     $anrede = trim((string)$b['ansprechpartner']) !== '' ? (string)$b['ansprechpartner'] : (string)$b['firma'];
     $link = mail_basis_url() . '/?p=lieferant_login';
 
-    if ($de) {
+    if ($sp === 'de') {
         $betreff = 'Neue Bestellung ' . $b['nummer'];
         $text = "Guten Tag $anrede,\n\nwir haben Ihnen die Bestellung " . $b['nummer'] . " erteilt.\n\n"
               . "Bitte bestätigen Sie im Portal die Bestellung und den geplanten Liefertermin:\n$link\n\n"
               . "Viele Grüße\n" . $fa['name'];
+    } elseif ($sp === 'zh') {
+        $betreff = '新订单 ' . $b['nummer'];
+        $text = "$anrede 您好，\n\n我方已向贵司下达订单 " . $b['nummer'] . "。\n\n"
+              . "请在门户中确认订单及计划交货日期：\n$link\n\n"
+              . "此致\n" . $fa['name'];
     } else {
         $betreff = 'New purchase order ' . $b['nummer'];
         $text = "Dear $anrede,\n\nwe have placed purchase order " . $b['nummer'] . " with you.\n\n"
@@ -302,14 +321,18 @@ function mail_nachricht(int $lieferant_id, string $akteur, string $text, ?string
     }
     if (trim((string)$lf['email']) === '') return;
     $fa = beleg_firma();
-    $de = strtolower((string)$lf['sprache']) === 'de';
+    $sp = mail_lief_sprache($lf['sprache']);
     $anrede = trim((string)$lf['ansprechpartner']) !== '' ? (string)$lf['ansprechpartner'] : (string)$lf['firma'];
-    $bezug  = function_exists('nachricht_bezug_label') ? nachricht_bezug_label($bezug_typ, $bezug_id, $de ? 'de' : 'en') : '';
+    $bezug  = function_exists('nachricht_bezug_label') ? nachricht_bezug_label($bezug_typ, $bezug_id, $sp) : '';
     $link   = mail_basis_url() . '/?p=lieferant_nachrichten';
-    if ($de) {
+    if ($sp === 'de') {
         $betreff = 'Neue Nachricht von ' . $fa['name'] . ($bezug !== '' ? ' zu ' . $bezug : '');
         $body = "Guten Tag $anrede,\n\nwir haben Ihnen im Lieferantenportal geschrieben" . ($bezug !== '' ? " (zu $bezug)" : '') . ":\n\n" . $auszug . "\n\n"
               . "Antworten können Sie direkt im Portal:\n$link\n\nViele Grüße\n" . $fa['name'];
+    } elseif ($sp === 'zh') {
+        $betreff = $fa['name'] . ' 的新留言' . ($bezug !== '' ? '（' . $bezug . '）' : '');
+        $body = "$anrede 您好，\n\n我方在供应商门户中给您留言" . ($bezug !== '' ? "（{$bezug}）" : '') . "：\n\n" . $auszug . "\n\n"
+              . "您可以直接在门户中回复：\n$link\n\n此致\n" . $fa['name'];
     } else {
         $betreff = 'New message from ' . $fa['name'] . ($bezug !== '' ? ' regarding ' . $bezug : '');
         $body = "Dear $anrede,\n\nwe have written to you in the supplier portal" . ($bezug !== '' ? " (regarding $bezug)" : '') . ":\n\n" . $auszug . "\n\n"

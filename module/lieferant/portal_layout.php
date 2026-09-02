@@ -88,6 +88,8 @@ function lp_t(string $key, string $sprache = ''): string {
                               'en'=>'PNG or JPG, max. 2 MB. Shown internally at our end only.',
                               'zh'=>'PNG 或 JPG，最大 2 MB。仅在我们内部显示。'],
         'kontakt'         => ['de'=>'Kontakt',                 'en'=>'Contact', 'zh'=>'联系方式'],
+        'dunkel'          => ['de'=>'Dunkler Modus',           'en'=>'Dark mode', 'zh'=>'深色模式'],
+        'hell'            => ['de'=>'Heller Modus',           'en'=>'Light mode', 'zh'=>'浅色模式'],
         'ansehen'         => ['de'=>'Ansehen',                 'en'=>'View', 'zh'=>'查看'],
         'artikelnummer'   => ['de'=>'Artikelnummer',           'en'=>'Part no.', 'zh'=>'物料编号'],
         'coa_mitschicken' => ['de'=>'bitte mitschicken',       'en'=>'please attach', 'zh'=>'请一并提供'],
@@ -172,9 +174,13 @@ function lp_sprachwahl(): string {
     $ziel = strtok((string)($_SERVER['REQUEST_URI'] ?? '?p=lieferant_login'), '#');
     $ziel = preg_replace('/([?&])lang=[^&]*(&|$)/', '$1', $ziel);
     $trenner = strpos($ziel, '?') === false ? '?' : '&';
-    $out = '<span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13px;align-items:center">';
-    foreach (['de' => 'Deutsch', 'en' => 'English', 'zh' => '中文'] as $code => $label) {
-        $stil = 'text-decoration:none;color:inherit;' . ($code === $cur ? 'font-weight:600;text-decoration:underline' : 'opacity:.6');
+    $out = '<span style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;align-items:center" title="Sprache / Language / 语言">';
+    // Kurz als Sprachkuerzel – so passt die Wahl in eine Zeile der schmalen Seitenleiste.
+    foreach (['de' => 'DE', 'en' => 'EN', 'zh' => '中文'] as $code => $label) {
+        // display/padding zuruecksetzen: die Menue-Regel .bx-side nav a wuerde die Links sonst
+        // breit machen und den Umschalter umbrechen lassen.
+        $stil = 'display:inline;padding:0;text-decoration:none;color:inherit;'
+              . ($code === $cur ? 'font-weight:600;text-decoration:underline' : 'opacity:.5');
         $out .= '<a style="' . $stil . '" href="' . h($ziel . $trenner . 'lang=' . $code) . '">' . h($label) . '</a>';
     }
     return $out . '</span>';
@@ -211,9 +217,10 @@ function lp_shell_start(string $aktiv): void {
     foreach ($menu as $route => $label) {
         echo '<a href="?p=' . h($route) . '"' . ($aktiv === $route ? ' class="on"' : '') . '>' . h($label) . '</a>';
     }
-    echo '<div class="bx-userbox" style="padding-bottom:0">' . lp_sprachwahl() . '</div>'
-       . '<div class="bx-userbox"><a href="?p=logout">' . h(lp_t('abmelden')) . '</a></div>'
-       . '<div class="bx-userbox"><button type="button" class="bx-themebtn">Dunkler Modus</button></div>'
+    // Die Sprache stellt man einmal ein, deshalb steht der Umschalter klein ganz unten.
+    echo '<div class="bx-userbox"><a href="?p=logout">' . h(lp_t('abmelden')) . '</a></div>'
+       . '<div class="bx-userbox" style="margin-top:0"><button type="button" class="bx-themebtn" data-dunkel="' . h(lp_t('dunkel')) . '" data-hell="' . h(lp_t('hell')) . '">' . h(lp_t('dunkel')) . '</button></div>'
+       . '<div class="bx-userbox" style="margin-top:0;padding-top:8px">' . lp_sprachwahl() . '</div>'
        . '</nav></aside><main class="bx-main">';
 }
 function lp_shell_ende(): void { echo '</main></div>'; }

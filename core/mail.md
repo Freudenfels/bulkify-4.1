@@ -20,8 +20,8 @@ Alle nur, wenn der Versand eingerichtet und eingeschaltet ist (`mail_bereit()`).
 
 | Ereignis | Wer bekommt die Mail | Vorlage |
 |---|---|---|
-| Lieferant einladen | Lieferant | `mail_lieferant_einladung()` |
-| Bestellung erteilt („als bestellt markieren" oder Einkaufsliste mit Bestelldatum) | Lieferant (de/en) | `mail_lieferant_bestellung()` |
+| Lieferant einladen | Lieferant (de/en/zh) | `mail_lieferant_einladung()` |
+| Bestellung erteilt („als bestellt markieren" oder Einkaufsliste mit Bestelldatum) | Lieferant (de/en/zh) | `mail_lieferant_bestellung()` |
 | Angebot an den Kunden gesendet | Kunde, mit Portal-Link | `mail_kunde_angebot()` |
 | Kunde nimmt Angebot an | Kunde (Auftragsbestätigung) + alle Admins | `mail_angebot_angenommen()` |
 | Anfrage abgesagt („nicht machbar") | Kunde, mit Begründung | `mail_kunde_absage()` |
@@ -32,4 +32,4 @@ Alle nur, wenn der Versand eingerichtet und eingeschaltet ist (`mail_bereit()`).
 „Alle Admins" = aktive Benutzer mit Rolle `admin` ohne Lieferantenbindung (`mail_team()`).
 
 ## Links in Mails
-`mail_basis_url()` nimmt die Einstellung `portal_url`, sonst den aktuellen Host. `mail_link_kundenportal($kunde_id, $ansicht)` baut den passwortlosen Portal-Link. Kunden werden auf Deutsch angeschrieben, Lieferanten nach `lieferanten.sprache` (Deutsch, sonst Englisch).
+`mail_basis_url()` nimmt die Einstellung `portal_url`, sonst den aktuellen Host. `mail_link_kundenportal($kunde_id, $ansicht)` baut den passwortlosen Portal-Link. Kunden werden auf Deutsch angeschrieben. Lieferanten nach `lieferanten.sprache` – **Deutsch, Englisch oder Chinesisch** (`mail_lief_sprache()`), also in derselben Sprache wie ihr Portal. Betreff und Text gehen UTF-8-kodiert raus, chinesische Zeichen kommen also sauber an. **PDFs bleiben de/en**, dafür fehlt eine eingebettete CJK-Schrift.

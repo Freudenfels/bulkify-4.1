@@ -372,6 +372,9 @@ if (!$neu) {
     </tbody></table></div>
   <?php else: ?>
     <p class="muted" style="margin-top:0">Noch kein Zugang. Erzeuge einen Einladungslink und schicke ihn an <strong><?= h($l['email'] ?: 'die hinterlegte E-Mail') ?></strong>. Der Lieferant setzt sein Passwort selbst; der Link gilt einmal.</p>
+    <?php // In welcher Sprache schreiben wir? Das steht in den Stammdaten und gilt fuer Einladung, Portal und alle weiteren Mails.
+          $sprLbl = ['de'=>'Deutsch', 'en'=>'English', 'zh'=>'中文 (Chinesisch)'][strtolower((string)($l['sprache'] ?? 'de'))] ?? 'English'; ?>
+    <p class="muted" style="margin-top:-6px">Einladung und Portal laufen auf <strong><?= h($sprLbl) ?></strong>. Passt das nicht, unter <a href="#" onclick="document.querySelector('#lieftabs a[data-tab=stamm]').click();return false;">Stammdaten</a> die Sprache ändern, bevor du einlädst.</p>
     <?php if ($offeneEinl): ?>
       <div class="bx-field"><label>Einladungslink (offen)</label>
         <input type="text" readonly onclick="this.select()" value="<?= h($basis . '/?p=lieferant_einladung&token=' . $offeneEinl['token']) ?>" style="width:100%"></div>
