@@ -115,18 +115,6 @@ if (!$a):
         </div>
         <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>">
       </div>
-      <div class="bx-grid">
-        <div class="bx-field"><label><?= h(lp_t('preis_basis')) ?></label>
-          <?php $pb = (int)($ang['preis_basis'] ?? 1); ?>
-          <select name="preis_basis">
-            <option value="1"<?= $pb === 1 ? ' selected' : '' ?>><?= h(lp_t('preis_je')) ?> <?= h(lp_einheit($einheit, 1)) ?></option>
-            <option value="1000"<?= $pb === 1000 ? ' selected' : '' ?>><?= h(lp_t('je_1000')) ?> <?= h(lp_einheit($einheit, 1000)) ?></option>
-          </select></div>
-        <div class="bx-field"><label><?= h(lp_t('moq')) ?></label>
-          <input type="text" name="mindestmenge" value="<?= h($ang ? $zahl($ang['mindestmenge'], 3) : '') ?>"></div>
-        <div class="bx-field"><label><?= h(lp_t('lieferzeit')) ?></label>
-          <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>" style="max-width:120px"></div>
-      </div>
       <?php // Weitere Staffeln: je Zeile ein Preis und die Menge, ab der er gilt. Leere Zeilen
             // ignoriert das Speichern, deshalb braucht es keinen Entfernen-Knopf. ?>
       <div id="staffelRaster" style="max-width:520px">
@@ -139,6 +127,18 @@ if (!$a):
       </div>
       <button type="button" class="btn btn-ghost btn-sm" id="staffelPlus" style="margin-bottom:var(--sp-4)"
               data-preis="<?= h(lp_t('preis')) ?>" data-menge="<?= h(lp_t('ab_menge')) ?>">+ <?= h(lp_t('staffel')) ?></button>
+      <div class="bx-grid">
+        <div class="bx-field"><label><?= h(lp_t('preis_basis')) ?></label>
+          <?php $pb = (int)($ang['preis_basis'] ?? 1); ?>
+          <select name="preis_basis">
+            <option value="1"<?= $pb === 1 ? ' selected' : '' ?>><?= h(lp_t('preis_je')) ?> <?= h(lp_einheit($einheit, 1)) ?></option>
+            <option value="1000"<?= $pb === 1000 ? ' selected' : '' ?>><?= h(lp_t('je_1000')) ?> <?= h(lp_einheit($einheit, 1000)) ?></option>
+          </select></div>
+        <div class="bx-field"><label><?= h(lp_t('moq')) ?></label>
+          <input type="text" name="mindestmenge" value="<?= h($ang ? $zahl($ang['mindestmenge'], 3) : '') ?>"></div>
+        <div class="bx-field"><label><?= h(lp_t('lieferzeit')) ?></label>
+          <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>" style="max-width:120px"></div>
+      </div>
       <script>
       (function(){
         var raster = document.getElementById('staffelRaster'), knopf = document.getElementById('staffelPlus');
