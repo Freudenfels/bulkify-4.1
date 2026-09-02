@@ -4,6 +4,8 @@
 // alles außer 'de' läuft auf Englisch, weil die meisten Lieferanten im Ausland sitzen.
 
 // Übersetzung. Fehlt ein Schlüssel, kommt der Schlüssel selbst zurück – dann fällt es auf.
+require_once BX_ROOT . '/core/nachricht.php';   // fuer die Zahl ungelesener Nachrichten im Menue
+
 function lp_t(string $key, string $sprache = ''): string {
     static $texte = null;
     if ($texte === null) $texte = [
@@ -84,6 +86,16 @@ function lp_t(string $key, string $sprache = ''): string {
                               'en'=>'PNG or JPG, max. 2 MB. Shown internally at our end only.',
                               'zh'=>'PNG 或 JPG，最大 2 MB。仅在我们内部显示。'],
         'kontakt'         => ['de'=>'Kontakt',                 'en'=>'Contact', 'zh'=>'联系方式'],
+        'rueckfragen'     => ['de'=>'Rückfragen',              'en'=>'Questions and answers', 'zh'=>'留言与答复'],
+        'rueckfragen_sub' => ['de'=>'Fragen und Antworten zwischen Ihnen und bulkify. Zu einer Bestellung oder Preisanfrage schreiben Sie am besten direkt dort.',
+                              'en'=>'Questions and answers between you and bulkify. For a specific order or price request, please write directly there.',
+                              'zh'=>'您与 bulkify 之间的问题与答复。关于某个订单或询价，请直接在该页面留言。'],
+        'gesendet'        => ['de'=>'Nachricht gesendet.',      'en'=>'Message sent.', 'zh'=>'留言已发送。'],
+        'neu'             => ['de'=>'neu',                     'en'=>'new', 'zh'=>'新'],
+        'dateien_menu'    => ['de'=>'Dateien',                 'en'=>'Files', 'zh'=>'文件'],
+        'dateien_sub'     => ['de'=>'Zertifikate, Spezifikationen, CoA und andere Unterlagen – gemeinsam mit bulkify an einem Ort.',
+                              'en'=>'Certificates, specifications, CoA and other documents – shared with bulkify in one place.',
+                              'zh'=>'证书、规格书、CoA 及其他文件——与 bulkify 共享于同一处。'],
         'firmendaten'     => ['de'=>'Firmendaten',             'en'=>'Company details', 'zh'=>'公司信息'],
         'nur_wir'         => ['de'=>'Konditionen und Preise pflegen wir – ändern Sie hier Ihre Kontakt- und Firmendaten.',
                               'en'=>'Terms and prices are maintained by us – please keep your contact and company details up to date here.',
@@ -138,8 +150,12 @@ function lp_shell_start(string $aktiv): void {
         'lieferant_portal'      => lp_t('uebersicht'),
         'lieferant_bestellung'  => lp_t('bestellungen'),
         'lieferant_anfrage'     => lp_t('anfragen'),
+        'lieferant_nachrichten' => lp_t('rueckfragen'),
+        'lieferant_dateien'     => lp_t('dateien_menu'),
         'lieferant_profil'      => lp_t('profil'),
     ];
+    $neu = $lf ? nachrichten_ungelesen((int)$lf['id'], 'lieferant') : 0;
+    if ($neu > 0) $menu['lieferant_nachrichten'] .= ' (' . $neu . ' ' . lp_t('neu') . ')';
     echo '<div class="bx-shell"><aside class="bx-side">'
        . '<div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo"><span class="bx-ver">' . h(lp_t('portal')) . '</span></div>'
        . '<nav><div class="bx-navgroup">' . h((string)($lf['firma'] ?? '')) . '</div>';

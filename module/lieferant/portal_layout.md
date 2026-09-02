@@ -14,3 +14,6 @@ Kopf, Menü, Fuß und die **Übersetzung** für alle Portalseiten. Zwei Sprachen
 
 ## Verwandt
 `core/auth.php` (`ist_lieferant()`, `aktueller_lieferant()`, `lieferant_sprache()`).
+
+## Menü: Rückfragen und Dateien
+Das Menü hat zwei weitere Punkte: **Rückfragen** (`lieferant_nachrichten`, mit Zahl ungelesener Nachrichten von bulkify) und **Dateien** (`lieferant_dateien`). Dafür lädt das Layout `core/nachricht.php`.

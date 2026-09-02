@@ -9,6 +9,7 @@ $lf  = aktueller_lieferant();
 $offen = all("SELECT * FROM bestellung WHERE lieferant_id=? AND status <> 'geliefert' ORDER BY angelegt DESC", [$lid]);
 $unbestaetigt = array_values(array_filter($offen, fn($b) => (int)$b['bestaetigt'] !== 1));
 $anfragenOffen = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE lieferant_id=? AND status='offen'", [$lid]);
+$nachrNeu      = nachrichten_ungelesen($lid, 'lieferant');
 
 lp_head('bulkify – ' . lp_t('portal'));
 lp_shell_start('lieferant_portal');
@@ -23,6 +24,8 @@ lp_shell_start('lieferant_portal');
     <div style="font-size:22px;font-weight:600;margin-top:4px"><?= count($unbestaetigt) ?></div></div>
   <div class="bx-panel" style="margin:0"><div class="muted" style="font-size:12px"><?= h(lp_t('offene_anfragen')) ?></div>
     <div style="font-size:22px;font-weight:600;margin-top:4px"><?= $anfragenOffen ?></div></div>
+  <a class="bx-panel" href="?p=lieferant_nachrichten" style="margin:0;display:block;text-decoration:none;color:inherit"><div class="muted" style="font-size:12px"><?= h(lp_t('rueckfragen')) ?> (<?= h(lp_t('neu')) ?>)</div>
+    <div style="font-size:22px;font-weight:600;margin-top:4px"><?= $nachrNeu ?></div></a>
 </div>
 
 <?php // Was jetzt dran ist: unbestätigte Bestellungen zuerst – dafür ist der Lieferant hier. ?>

@@ -588,6 +588,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       <tr><td>Anfrage abgesagt (nicht machbar)</td><td>Kunde, mit Begründung</td></tr>
       <tr><td>Lieferant bestätigt eine Bestellung oder setzt eine Station</td><td>Alle Admins</td></tr>
       <tr><td>Lieferant beantwortet eine Preisanfrage</td><td>Alle Admins</td></tr>
+      <tr><td>Neue Rückfrage oder Antwort (Lieferantenportal)</td><td>Die andere Seite: Lieferant oder alle Admins</td></tr>
     </tbody>
   </table>
 </div>

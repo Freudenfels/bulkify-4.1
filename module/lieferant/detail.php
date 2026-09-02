@@ -6,10 +6,22 @@ require_once BX_ROOT . '/core/schema.php';
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
 
+require_once BX_ROOT . '/core/nachricht.php';
+require_once BX_ROOT . '/core/lieferant_dateien.php';
+
 $KATS = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','maschine'=>'Maschine','labor'=>'Labor','fertigprodukt'=>'Fertige Produkte'];
 $FORMEN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 
 $fehler = '';
+// Rückfragen und Dateiablage – eigene POST-Wege (die Panels haben eigene Formulare).
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachricht') {
+    $f = nachricht_post_verarbeiten((int)$id, 'team', (string)(current_user()['name'] ?? 'Team'));
+    header('Location: ?p=lieferant&id=' . (int)$id . ($f === '' ? '&nachricht=1' : '&fehler=' . urlencode($f)) . '#rueckfragen'); exit;
+}
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['dok_upload', 'dok_del'], true)) {
+    $f = $_POST['aktion'] === 'dok_upload' ? lieferant_datei_upload((int)$id, 'team') : lieferant_datei_loeschen((int)$id, (int)($_POST['dok_id'] ?? 0), 'team');
+    header('Location: ?p=lieferant&id=' . (int)$id . ($f === '' ? '&dok=1' : '&fehler=' . urlencode($f)) . '#dok'); exit;
+}
 // Zugang und Preisanfragen – die eigenen POST-Wege, damit das Stammdaten-Formular unberuehrt bleibt.
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einladung_mailen') {
     $einl = lieferant_einladung((int)$id, mail_basis_url());
@@ -75,6 +87,7 @@ $aktKats = array_filter(explode(',', (string)($l['kategorien'] ?? '')));
 $aktFormen = array_filter(explode(',', (string)($l['fertig_formen'] ?? '')));
 $hatFertig = in_array('fertigprodukt', $aktKats, true);
 if (!$neu) { seed_aktivitaet_if_empty(); $verlauf = verlauf_fuer('lieferant', (int)$id); } else { $verlauf = []; }
+$ungelesen = $neu ? 0 : nachrichten_ungelesen((int)$id, 'team');
 // Echte Bestellungen dieses Lieferanten
 $l_bestellungen = $neu ? [] : all("SELECT b.*, (SELECT COALESCE(SUM(menge*ek_preis),0) FROM bestellung_position p WHERE p.bestellung_id=b.id) AS summe,
                                     (SELECT COUNT(*) FROM bestellung_position p WHERE p.bestellung_id=b.id) AS pos
@@ -121,6 +134,7 @@ if (!$neu) {
     <a href="#" data-tab="bestell">Bestellungen</a>
     <a href="#" data-tab="rechnungen">Rechnungen</a>
     <a href="#" data-tab="dok">Dokumente</a>
+    <a href="#" data-tab="rueckfragen">Rückfragen<?= $ungelesen > 0 ? ' (' . $ungelesen . ' neu)' : '' ?></a>
     <a href="#" data-tab="verlauf">Verlauf</a>
     <a href="#" data-tab="stamm">Stammdaten</a>
     <?php else: ?>
@@ -186,7 +200,6 @@ if (!$neu) {
     </div>
   </section>
 
-  <section data-panel="dok" hidden><div class="bx-panel"><h2>Dokumente (CoA / Spec / Zertifikate)</h2><?php bx_bald('Dokumente'); ?></div></section>
   <section data-panel="verlauf" hidden>
     <div class="bx-panel">
       <h2>Aktivitätsverlauf <?= bx_hint('links = wir (bulkify), rechts = Lieferant. Jede Aktion wird automatisch protokolliert') ?></h2>
@@ -299,6 +312,9 @@ if (!$neu) {
       });
     });
   });
+  // Ein Reiter aus dem Link (#dok, #rueckfragen) wird direkt geöffnet – z. B. nach dem Speichern dort.
+  var hashTab = (location.hash || '').replace('#', '');
+  if (hashTab) tabs.forEach(function(t){ if (t.getAttribute('data-tab') === hashTab) t.click(); });
   // „Fertige Produkte" -> Formen-Auswahl ein/ausblenden
   var katFertig = document.getElementById('kat_fertig');
   var formenBlock = document.getElementById('formenBlock');
@@ -307,6 +323,19 @@ if (!$neu) {
   }
 })();
 </script>
+<?php if (!$neu): ?>
+<?php // Dokumente und Rückfragen liegen außerhalb des Stammdaten-Formulars (eigene Formulare), die Reiter-Logik greift trotzdem. ?>
+<section data-panel="dok" hidden>
+  <?php if (isset($_GET['dok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div><?php endif; ?>
+  <?php if (isset($_GET['fehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['fehler']) ?></div><?php endif; ?>
+  <?= lieferant_dateien_panel((int)$id, 'team', 'de') ?>
+</section>
+<section data-panel="rueckfragen" hidden>
+  <?php if (isset($_GET['nachricht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Nachricht gesendet.</div><?php endif; ?>
+  <?php if (isset($_GET['fehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['fehler']) ?></div><?php endif; ?>
+  <?= nachricht_panel((int)$id, 'team', 'de', null, null, true) ?>
+</section>
+<?php endif; ?>
 <?php if (!$neu):
   // --- Zugang zum Lieferantenportal ---
   $hatZugang  = lieferant_hat_zugang((int)$id);

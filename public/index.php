@@ -29,6 +29,9 @@ $routes = [
     'lieferant_anfrage'      => 'lieferant/anfrage.php',
     'lieferant_profil'       => 'lieferant/profil.php',
     'lieferant_logo'         => 'lieferant/logo.php',
+    'lieferant_nachrichten'  => 'lieferant/nachrichten.php',
+    'lieferant_dateien'      => 'lieferant/dateien.php',
+    'lieferant_dokument'     => 'lieferant/dokument.php',
     'partner'        => 'partner/liste.php',
     'partner_detail' => 'partner/detail.php',
     'rohstoffe'      => 'lager/rohstoffe_liste.php',
@@ -106,7 +109,8 @@ $istWerk = is_logged_in() && function_exists('ist_produktionsbereich') && ist_pr
 
 // Lieferanten haben ein eigenes Portal und duerfen NICHT in den internen Bereich.
 $istLieferant = is_logged_in() && function_exists('ist_lieferant') && ist_lieferant();
-$LIEF_ROUTEN  = ['lieferant_portal', 'lieferant_bestellung', 'lieferant_bestellung_pdf', 'lieferant_anfrage', 'lieferant_profil', 'lieferant_logo', 'logout'];
+$LIEF_ROUTEN  = ['lieferant_portal', 'lieferant_bestellung', 'lieferant_bestellung_pdf', 'lieferant_anfrage', 'lieferant_profil', 'lieferant_logo',
+                 'lieferant_nachrichten', 'lieferant_dateien', 'lieferant_dokument', 'logout'];
 if ($istLieferant && !in_array($p, $LIEF_ROUTEN, true) && !in_array($p, ['lieferant_login','lieferant_einladung'], true)) {
     header('Location: ?p=lieferant_portal'); exit;
 }

@@ -7,3 +7,5 @@ Ohne `id` die Liste, mit `id` die einzelne Bestellung: das **Ablauf-Panel** (`co
 **Zugriff:** Jede Abfrage filtert auf `lieferant_id` des angemeldeten Benutzers – die Prüfung hängt an der Abfrage, nicht an der Oberfläche. Eine fremde ID zeigt einfach die eigene Liste.
 ## E-Mail ans Team
 Bestätigt der Lieferant die Bestellung oder setzt er eine Station, bekommen alle Admins eine Mail (`mail_team_bestellung()`), sofern der Versand eingerichtet ist.
+## Rückfragen
+Unter dem Ablauf-Panel steht **Rückfragen** (`nachricht_panel()` mit Bezug `bestellung`, POST `aktion=nachricht`) – dieselben Nachrichten sieht das Team an der Bestellung (`module/einkauf/detail.php`) und im Lieferantenkonto.

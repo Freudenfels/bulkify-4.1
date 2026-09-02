@@ -4,7 +4,7 @@
 require_once __DIR__ . '/schema.php';
 
 function dokument_typen(): array {
-    return ['coa'=>'CoA (Analysenzertifikat)', 'spec'=>'Spezifikation', 'analyse'=>'Laboranalyse', 'sonstiges'=>'Sonstiges'];
+    return ['coa'=>'CoA (Analysenzertifikat)', 'spec'=>'Spezifikation', 'analyse'=>'Laboranalyse', 'zertifikat'=>'Zertifikat (ISO, HACCP, Bio …)', 'sonstiges'=>'Sonstiges'];
 }
 
 // Upload verarbeiten (erwartet Datei-Feld „dok", dok_typ, dok_lieferant, dok_titel).

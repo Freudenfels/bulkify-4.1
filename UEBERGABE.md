@@ -33,7 +33,7 @@
 ## Lieferantenweg (neu, komplett)
 - **Bestell-PDF** `?p=bestellung_pdf&id=` – deutsch oder englisch je `lieferanten.sprache`.
 - **Ablauf an der Bestellung** (`core/bestellung_ui.php`, dasselbe Panel intern und im Portal): bestätigen mit Termin → Stationen (angenommen · Produktion · Qualität · versandbereit · versendet) → Versanddaten. **„versendet" nur mit Anbieter, Versandart und Sendungsnummer** – erzwingt die Funktion, nicht die Oberfläche.
-- **Portal** (`?p=lieferant_*`): Übersicht, Bestellungen, Preisanfragen mit Staffeln + CoA-Upload, „Meine Daten" (Firmendaten, WeChat, WhatsApp, Logo, Sprache).
+- **Portal** (`?p=lieferant_*`): Übersicht, Bestellungen, Preisanfragen mit Staffeln + CoA-Upload, **Rückfragen** (Chat mit bulkify, auch je Bestellung/Preisanfrage), **Dateien** (gemeinsame Ablage), „Meine Daten" (Firmendaten, WeChat, WhatsApp, Logo, Sprache).
 - **Preisanfrage → Angebot → „Preise übernehmen"** schreibt die Staffeln als EK-Staffeln nach `lieferant_preis` – dort rechnet die Kalkulation.
 - **Drei Sprachen:** Deutsch, English, 中文 (Umschalter im Portal, auch vor dem Login). **PDFs bleiben de/en** – für CJK müsste erst eine Schrift eingebettet werden.
 
@@ -52,7 +52,7 @@
 4. ~~Mengenrabatt bei Rezeptur-Angeboten~~ – **erledigt** (2026-09-02): Rohstoffe werden mit der Lieferanten-Staffel zur Gesamtmenge gerechnet (Matrix und Rezeptur-Angebot); im Editor mehrere Mengen mit Komma. Wirkt nur, wenn am Rohstoff Staffeln (`lieferant_preis`) gepflegt sind – ein Rüstkosten-/Fixkostenmodell je Charge gibt es weiterhin nicht.
 5. **Rohstoff-Stammdaten füllen** (Herkunft, Haltbarkeit, Lagerung, Allergene, vegan/GVO/bestrahlt/TSE, Zertifikate, Spec-Nr.) – ohne sie steht in der Spezifikation überall „–".
 6. **Chinesische Übersetzungen gegenlesen lassen** (die aus v3 sind erprobt, die neuen nicht).
-7. **Lieferantenportal:** Rückfragen/Chat und eigene Dateiablage gibt es (anders als v3) noch nicht.
+7. ~~Lieferantenportal: Rückfragen/Chat und Dateiablage~~ – **erledigt** (2026-09-02): Menüpunkte „Rückfragen" und „Dateien" im Portal, dazu Rückfragen an jeder Bestellung/Preisanfrage; intern Reiter „Dokumente" und „Rückfragen" im Lieferantenkonto und Rückfragen an der Bestellung (`core/nachricht.php`, `core/lieferant_dateien.php`).
 8. ~~Beta-Admin-Passwort ändern~~ – **erledigt** (2026-09-02).
 9. **Demo-Rezepturen ohne Rohstoffpreise** → Preis-Matrix zeigt 0 €.
 10. **Flaschen/Tuben für Flüssig anlegen** (Tropfflasche, Pumpspender fehlen als Artikel).

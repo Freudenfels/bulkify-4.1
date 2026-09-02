@@ -27,6 +27,12 @@ Anfrage an diesen Lieferanten stellen: **Artikel** (dann landen die Preise beim 
 
 **Kennzahlen-Kacheln:** Status, Bestellungen (folgt), Währung, Ø Lieferzeit.
 
-**Technik-Hinweis:** Alle Reiter in einem Formular; ein kleines JavaScript blendet den aktiven Reiter ein.
+**Technik-Hinweis:** Die Stammdaten-Reiter liegen in einem Formular; ein kleines JavaScript blendet den aktiven Reiter ein. Die Reiter **Dokumente** und **Rückfragen** liegen außerhalb dieses Formulars (sie haben eigene Formulare), werden aber von derselben Reiter-Logik geschaltet; ein Link mit `#dok` oder `#rueckfragen` öffnet den Reiter direkt.
 
 **Muster:** wie `kunde/detail.php`. Der Verlauf teilt sich die zentrale Tabelle `aktivitaet` (über `objekt_typ='lieferant'`).
+
+## Dokumente (Dateiablage)
+Der Reiter **Dokumente** ist die gemeinsame Ablage mit dem Lieferanten (`lieferant_dateien_panel()` aus `core/lieferant_dateien.php`): Zertifikate, Spezifikationen, CoA, Sonstiges – von uns oder vom Lieferanten hochgeladen, dazu seine CoA/Spezifikationen aus Preisanfragen. POST `aktion=dok_upload` / `dok_del`.
+
+## Rückfragen
+Der Reiter **Rückfragen** (mit Zahl ungelesener Nachrichten) zeigt das ganze Gespräch mit dem Lieferanten (`nachricht_panel()` aus `core/nachricht.php`), jede Nachricht mit Bezug-Link zur Bestellung oder Preisanfrage. POST `aktion=nachricht` (ohne Bezug); zu einer Bestellung schreibt man besser direkt an der Bestellung.

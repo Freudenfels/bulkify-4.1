@@ -25,6 +25,8 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
             ($_POST['lieferzeit'] ?? '') !== '' ? (int)$_POST['lieferzeit'] : null,
             (string)($_POST['notiz'] ?? ''), $staffeln);
         if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);
+    } elseif ($aktion === 'nachricht') {
+        $fehler = nachricht_post_verarbeiten($lid, 'lieferant', (string)(current_user()['name'] ?? 'Lieferant'), 'lieferant_anfrage', $id, lp_sprache());
     } elseif ($aktion === 'dokument' && $a['item_id']) {
         // CoA/Spezifikation direkt am Artikel ablegen – dort sucht das Team sie.
         $_POST['dok_lieferant'] = (string)$lid;
@@ -110,6 +112,8 @@ if (!$a):
     </form>
   </div>
 
+  <?= nachricht_panel($lid, 'lieferant', lp_sprache(), 'lieferant_anfrage', $id) ?>
+
   <?php if ($a['item_id']): ?>
   <div class="bx-panel">
     <h2 style="margin-top:0"><?= h(lp_t('dateien')) ?></h2>
@@ -120,10 +124,10 @@ if (!$a):
       <div class="bx-field" style="margin:0"><label><?= h($t('Datei', 'File')) ?></label><input type="file" name="dok" required></div>
       <button class="btn btn-ghost" type="submit"><?= h(lp_t('hochladen')) ?></button>
     </form>
-    <?php $docs = all("SELECT typ, titel, datei_orig, angelegt FROM dokument WHERE objekt_typ='item' AND objekt_id=? AND lieferant_id=? ORDER BY id DESC", [(int)$a['item_id'], $lid]);
+    <?php $docs = all("SELECT id, typ, titel, datei_orig, angelegt FROM dokument WHERE objekt_typ='item' AND objekt_id=? AND lieferant_id=? ORDER BY id DESC", [(int)$a['item_id'], $lid]);
     if ($docs): ?>
     <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table"><tbody>
-      <?php foreach ($docs as $d): ?><tr><td><?= h(strtoupper($d['typ'])) ?></td><td><?= h($d['datei_orig']) ?></td><td class="bx-num muted"><?= h(date('d.m.Y', strtotime((string)$d['angelegt']))) ?></td></tr><?php endforeach; ?>
+      <?php foreach ($docs as $d): ?><tr><td><?= h(strtoupper($d['typ'])) ?></td><td><a href="?p=lieferant_dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['datei_orig']) ?></a></td><td class="bx-num muted"><?= h(date('d.m.Y', strtotime((string)$d['angelegt']))) ?></td></tr><?php endforeach; ?>
     </tbody></table></div>
     <?php endif; ?>
   </div>

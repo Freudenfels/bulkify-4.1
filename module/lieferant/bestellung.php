@@ -21,6 +21,8 @@ if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($aktion === 'lief_station') {
         $fehler = bestellung_station_setzen($id, (string)($_POST['station'] ?? ''), $wer, lp_sprache());
         if ($fehler === '' && mail_bereit()) mail_team_bestellung($id, bestellung_stationen()[(string)$_POST['station']] ?? (string)$_POST['station']);
+    } elseif ($aktion === 'nachricht') {
+        $fehler = nachricht_post_verarbeiten($lid, 'lieferant', $wer, 'bestellung', $id, lp_sprache());
     } elseif ($aktion === 'lief_versand') {
         q("UPDATE bestellung SET produktion_geplant=?, versandanbieter=?, versandart=?, tracking=? WHERE id=? AND lieferant_id=?", [
             trim((string)($_POST['produktion_geplant'] ?? '')) ?: null,
@@ -68,6 +70,7 @@ if (!$b):
   <p class="bx-sub"><a href="?p=lieferant_bestellung">&larr; <?= h(lp_t('bestellungen')) ?></a></p>
 
   <?= bestellung_ablauf_panel($b, 'lieferant', lp_sprache()) ?>
+  <?= nachricht_panel($lid, 'lieferant', lp_sprache(), 'bestellung', $id) ?>
 
   <div class="bx-panel">
     <div class="bx-row" style="justify-content:space-between;align-items:center">

@@ -9,3 +9,5 @@ Hängt die Anfrage an einem Artikel, kann der Lieferant hier auch **CoA und Spez
 Nimmt das Team das Angebot an, werden die Staffeln zu EK-Staffeln am Artikel (siehe `core/schema.md`, `lieferant_angebot_annehmen()`).
 ## E-Mail ans Team
 Speichert der Lieferant sein Angebot zur Preisanfrage, bekommen alle Admins eine Mail mit Preis, Mindestmenge und Lieferzeit (`mail_team_preisanfrage()`), sofern der Versand eingerichtet ist.
+## Rückfragen und Downloads
+Unter dem Angebotsformular steht das Panel **Rückfragen** (`nachricht_panel()` mit Bezug `lieferant_anfrage`): Fragen und Antworten zu genau dieser Preisanfrage, POST `aktion=nachricht`. Die eigenen CoA/Spezifikationen sind jetzt verlinkt (`?p=lieferant_dokument&id=`).

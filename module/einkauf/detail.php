@@ -33,6 +33,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $f = mail_bereit() ? mail_lieferant_bestellung((int)$id) : '';
         header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode('Bestellung gespeichert, aber E-Mail nicht verschickt: ' . $f))); exit;
     }
+    // Rückfrage an den Lieferanten – hängt an dieser Bestellung, der Lieferant sieht sie im Portal.
+    if ($aktion === 'nachricht' && !$neu) {
+        require_once BX_ROOT . '/core/nachricht.php';
+        $lidB = (int) scalar("SELECT lieferant_id FROM bestellung WHERE id=?", [(int)$id]);
+        $f = $lidB ? nachricht_post_verarbeiten($lidB, 'team', (string)(current_user()['name'] ?? 'Team'), 'bestellung', (int)$id) : 'Die Bestellung hat noch keinen Lieferanten.';
+        header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f))); exit;
+    }
     // Entwurf zurück in den Einkaufsbedarf: Entwurf löschen -> Bedarf erscheint wieder (kein Netting mehr)
     if ($aktion === 'zurueck_bedarf' && !$neu) {
         $st = scalar("SELECT status FROM bestellung WHERE id=?", [(int)$id]);
@@ -113,6 +120,8 @@ if (!$neu) {
     // Ablauf beim Lieferanten – dasselbe Panel sieht der Lieferant in seinem Portal.
     require_once BX_ROOT . '/core/bestellung_ui.php';
     echo bestellung_ablauf_panel($b, 'team', 'de');
+    // Rückfragen zu dieser Bestellung – dasselbe Gespräch sieht der Lieferant im Portal.
+    if ($b['lieferant_id']) { require_once BX_ROOT . '/core/nachricht.php'; echo nachricht_panel((int)$b['lieferant_id'], 'team', 'de', 'bestellung', (int)$id); }
 
     // Kontext: für welche(n) Auftrag/Produkt/Kunde wird bestellt? Damit die Dringlichkeit einschätzbar ist.
     $kontext = all("SELECT DISTINCT a.id, a.nummer, a.menge, a.stueck,

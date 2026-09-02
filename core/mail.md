@@ -27,6 +27,7 @@ Alle nur, wenn der Versand eingerichtet und eingeschaltet ist (`mail_bereit()`).
 | Anfrage abgesagt („nicht machbar") | Kunde, mit Begründung | `mail_kunde_absage()` |
 | Lieferant bestätigt Bestellung oder setzt Station | alle Admins | `mail_team_bestellung()` |
 | Lieferant beantwortet Preisanfrage | alle Admins | `mail_team_preisanfrage()` |
+| Neue Rückfrage/Antwort (`core/nachricht.php`) | die andere Seite: Lieferant (de/en) oder alle Admins | `mail_nachricht()` |
 
 „Alle Admins" = aktive Benutzer mit Rolle `admin` ohne Lieferantenbindung (`mail_team()`).
 

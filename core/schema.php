@@ -110,6 +110,22 @@ function init_schema(): void {
         KEY idx_objekt (objekt_typ, objekt_id, erstellt)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // nachricht: Rückfragen zwischen Team und Lieferant (core/nachricht.php). Hängt am Lieferanten,
+    // optional zusätzlich an einer Bestellung oder Preisanfrage. Gelesen-Flags je Seite.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS nachricht (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        lieferant_id INT NOT NULL,
+        bezug_typ VARCHAR(20) NULL,                        -- bestellung | lieferant_anfrage
+        bezug_id INT NULL,
+        akteur VARCHAR(10) NOT NULL DEFAULT 'team',       -- team | lieferant
+        autor VARCHAR(190) NULL,
+        text TEXT NOT NULL,
+        gelesen_team TINYINT(1) NOT NULL DEFAULT 0,
+        gelesen_lieferant TINYINT(1) NOT NULL DEFAULT 0,
+        erstellt DATETIME NOT NULL,
+        KEY idx_lieferant (lieferant_id, id), KEY idx_bezug (bezug_typ, bezug_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // lieferanten: eigener Stamm (getrennt von Kunden). Adresse strukturiert; Sprache/Währung/Kategorien einkaufsrelevant.
     $pdo->exec("CREATE TABLE IF NOT EXISTS lieferanten (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -690,6 +706,7 @@ function init_schema(): void {
     // Dokumente: erst nach ausdrücklicher Freigabe im Kundenportal sichtbar. Standard 0 – ein Lieferanten-Spec
     // darf nicht versehentlich beim Kunden landen, nur weil es am Rohstoff hängt.
     ensure_column('dokument', 'kunde_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('dokument', 'hochgeladen_von', "VARCHAR(10) NOT NULL DEFAULT 'team'");   // team | lieferant (Ablage je Lieferant)
     ensure_column('item', 'cas', "VARCHAR(30) NULL");              // CAS-Nummer (z. B. Ascorbinsäure 50-81-7)
     ensure_column('item', 'max_fuellgewicht_g', "DECIMAL(10,2) NULL"); // Verpackung: max. Füllgewicht (g) – für Pulver-Match (Glas/Dose)
     // Verpackungs-Stückliste: Rolle je Verpackungs-Item + Produkt-Slots für die komplette Stückliste

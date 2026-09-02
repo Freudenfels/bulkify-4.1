@@ -1,6 +1,6 @@
 # dokument_ui.php – Dokumente (CoA, Spezifikation, Analyse)
 
-**Zweck:** Gemeinsame Komponente für Dokumente an **Rohstoffen** (`objekt_typ='item'`) und **Produkten** (`objekt_typ='produkt'`). Wird von `lager/rohstoff_detail.php`, `lager/verpackung_detail.php` und `produkt/detail.php` eingebunden.
+**Zweck:** Gemeinsame Komponente für Dokumente an **Rohstoffen** (`objekt_typ='item'`) und **Produkten** (`objekt_typ='produkt'`). Die Ablage je **Lieferant** (`objekt_typ='lieferant'`, Spalte `hochgeladen_von`) nutzt dieselbe Tabelle, hat aber ihr eigenes Panel in `core/lieferant_dateien.php`. Typen: coa, spec, analyse, **zertifikat**, sonstiges. Wird von `lager/rohstoff_detail.php`, `lager/verpackung_detail.php` und `produkt/detail.php` eingebunden.
 
 **Funktionen:**
 - `dokument_typen()` – die vier Typen: CoA (Analysenzertifikat), Spezifikation, Laboranalyse, Sonstiges.

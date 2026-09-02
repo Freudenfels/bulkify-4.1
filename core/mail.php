@@ -287,3 +287,33 @@ function mail_team_preisanfrage(int $anfrage_id): int {
         "Der Lieferant " . $a['firma'] . " hat die Preisanfrage " . $a['nummer'] . ($was !== '' ? " ($was)" : '') . " beantwortet.\n"
         . $details . "\n" . mail_basis_url() . '/?p=lieferant&id=' . (int)$a['lieferant_id'] . "\n");
 }
+
+// Neue Rückfrage/Antwort: die andere Seite bekommt den Text und einen Link zum Antworten.
+function mail_nachricht(int $lieferant_id, string $akteur, string $text, ?string $bezug_typ = null, ?int $bezug_id = null): void {
+    $lf = one("SELECT firma, ansprechpartner, email, sprache FROM lieferanten WHERE id=?", [$lieferant_id]);
+    if (!$lf) return;
+    $auszug = mb_substr(trim($text), 0, 600);
+    if ($akteur === 'lieferant') {
+        $bezug = function_exists('nachricht_bezug_label') ? nachricht_bezug_label($bezug_typ, $bezug_id, 'de') : '';
+        mail_team('Rückfrage von ' . $lf['firma'] . ($bezug !== '' ? ' zu ' . $bezug : ''),
+            "Der Lieferant " . $lf['firma'] . " hat im Portal geschrieben" . ($bezug !== '' ? " (zu $bezug)" : '') . ":\n\n" . $auszug . "\n\n"
+            . "Antworten: " . mail_basis_url() . '/?p=lieferant&id=' . $lieferant_id . "#rueckfragen\n");
+        return;
+    }
+    if (trim((string)$lf['email']) === '') return;
+    $fa = beleg_firma();
+    $de = strtolower((string)$lf['sprache']) === 'de';
+    $anrede = trim((string)$lf['ansprechpartner']) !== '' ? (string)$lf['ansprechpartner'] : (string)$lf['firma'];
+    $bezug  = function_exists('nachricht_bezug_label') ? nachricht_bezug_label($bezug_typ, $bezug_id, $de ? 'de' : 'en') : '';
+    $link   = mail_basis_url() . '/?p=lieferant_nachrichten';
+    if ($de) {
+        $betreff = 'Neue Nachricht von ' . $fa['name'] . ($bezug !== '' ? ' zu ' . $bezug : '');
+        $body = "Guten Tag $anrede,\n\nwir haben Ihnen im Lieferantenportal geschrieben" . ($bezug !== '' ? " (zu $bezug)" : '') . ":\n\n" . $auszug . "\n\n"
+              . "Antworten können Sie direkt im Portal:\n$link\n\nViele Grüße\n" . $fa['name'];
+    } else {
+        $betreff = 'New message from ' . $fa['name'] . ($bezug !== '' ? ' regarding ' . $bezug : '');
+        $body = "Dear $anrede,\n\nwe have written to you in the supplier portal" . ($bezug !== '' ? " (regarding $bezug)" : '') . ":\n\n" . $auszug . "\n\n"
+              . "You can reply directly in the portal:\n$link\n\nBest regards\n" . $fa['name'];
+    }
+    mail_senden((string)$lf['email'], $betreff, $body);
+}
