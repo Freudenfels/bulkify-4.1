@@ -1369,7 +1369,7 @@ function produktion_rest(int $pa_id): float {
 // heute + 18 Monate. Es kann nie mehr gebucht werden, als vom Auftrag noch offen ist.
 // Rückgabe ['ok'=>bool, 'msg'=>string, 'charge_id'=>?int, 'charge_nr'=>string].
 function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd = null, string $notiz = ''): array {
-    $pa = one("SELECT nummer, produkt_id, menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = one("SELECT nummer, produkt_id, menge, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return ['ok'=>false, 'msg'=>'Produktionsauftrag nicht gefunden.'];
     if (!$pa['produkt_id']) return ['ok'=>false, 'msg'=>'Dem Produktionsauftrag fehlt das Produkt – ohne Produkt gibt es keinen Lagerartikel.'];
     $menge = round($menge);
@@ -1378,9 +1378,11 @@ function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd =
     if ($menge > $rest + 1e-6) return ['ok'=>false, 'msg'=>'Es sind nur noch ' . number_format($rest, 0, ',', '.') . ' Stück offen – mehr kann nicht gebucht werden.'];
     $item_id = produkt_lageritem((int)$pa['produkt_id']);
     if (!$item_id) return ['ok'=>false, 'msg'=>'Lagerartikel zum Produkt konnte nicht angelegt werden.'];
-    // Fulfillment-Kunde? → Fertigware gehört ins Lager 2, BSKU (Brücke) sicherstellen.
-    $kunde = one("SELECT k.nutzt_fulfillment FROM produkt p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [(int)$pa['produkt_id']]);
-    if ($kunde && (int)$kunde['nutzt_fulfillment'] === 1) bsku_ensure($item_id);
+    // Fulfillment-Kunde? → Fertigware gehört ins Lager 2, BSKU (Brücke) sicherstellen. Wer der Kunde
+    // ist, sagt der Auftrag – das Produkt selbst ist kundenneutral (nur exklusive tragen einen Kunden).
+    if (auftrag_ist_fulfillment((int)$pa['auftrag_id'])
+        || (bool) scalar("SELECT k.nutzt_fulfillment FROM produkt p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [(int)$pa['produkt_id']]))
+        bsku_ensure($item_id);
     $charge_nr = charge_naechste_nr($pa_id);
     $mhd = ($mhd && strtotime($mhd)) ? date('Y-m-d', strtotime($mhd)) : mhd_standard();
     $notiz = trim($notiz);
@@ -1428,13 +1430,18 @@ function lager2_bestand(int $item_id): float {
 }
 // Alle Lager-2-Produkte (Verkaufsfertig-Items von Fulfillment-Kunden) mit Bestand + Brücken-Feldern.
 function lager2_produkte(?int $kunde_id = null): array {
+    // Wem gehört die Fertigware? Steht am Produkt ein Kunde (exklusives Produkt), gilt der.
+    // Produkte aus dem Weg Rezeptur -> Angebot -> Auftrag sind aber kundenneutral; dort sagt der
+    // AUFTRAG, für wen produziert wurde. Ohne diesen zweiten Weg bliebe das Fremdlager leer.
     $sql = "SELECT i.id AS item_id, i.artikelnummer, i.name, i.bsku, i.shopify_inventory_item_id,
                    p.id AS produkt_id, p.nummer AS produkt_nr, COALESCE(NULLIF(p.kundenname,''),p.name) AS anzeigename,
                    k.id AS kunde_id, k.firma AS kunde
             FROM item i
             JOIN produkt p ON p.id=i.produkt_id
-            JOIN kunden k ON k.id=p.kunde_id
-            WHERE i.kategorie='verkaufsfertig' AND k.nutzt_fulfillment=1";
+            JOIN kunden k ON k.nutzt_fulfillment=1
+                 AND (k.id = p.kunde_id
+                      OR (p.kunde_id IS NULL AND EXISTS (SELECT 1 FROM auftrag a WHERE a.produkt_id=p.id AND a.kunde_id=k.id)))
+            WHERE i.kategorie='verkaufsfertig'";
     $params = [];
     if ($kunde_id) { $sql .= " AND k.id=?"; $params[] = $kunde_id; }
     $sql .= " ORDER BY k.firma, p.nummer";
@@ -3457,7 +3464,27 @@ function produktion_verpackung_entnehmen(int $pa_id): array {
 }
 
 // Auftrag versenden: Fertigware (FEFO) ausbuchen + Lieferschein (LS) + Status 'versendet'.
+// Fulfillment-Kunde: Der Auftrag geht nicht raus, die Fertigware wandert ins Fremdlager (Lager 2)
+// und bleibt dort, bis der Endkunde bestellt – dann bucht die Fulfillment-Kopplung sie ab
+// (lager2_verbrauch). Deshalb wird hier NICHTS ausgebucht und kein Lieferschein geschrieben.
+function auftrag_ins_fremdlager(int $auftrag_id): array {
+    $a = one("SELECT * FROM auftrag WHERE id=? AND status='erledigt'", [$auftrag_id]);
+    if (!$a) return ['ok'=>false, 'msg'=>'Auftrag ist nicht fertig produziert.'];
+    $vfitem = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$a['produkt_id']]) ?: 0);
+    if (!$vfitem) return ['ok'=>false, 'msg'=>'Zu diesem Produkt gibt es keinen Fertigwaren-Artikel.'];
+    $verf = item_bestand($vfitem, true);
+    if ($verf + 0.0001 < (float)$a['menge']) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$a['menge'] . ').'];
+    $bsku = bsku_ensure($vfitem);   // Brücke zum Shop – ohne sie findet die Kopplung den Artikel nicht
+    q("UPDATE auftrag SET status='versendet' WHERE id=?", [$auftrag_id]);
+    if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team',
+        'Auftrag ' . $a['nummer'] . ' ins Fremdlager übernommen (BSKU ' . $bsku . '). Der Bestand bleibt dort, bis der Endkunde bestellt.',
+        'auftrag', 'auftrag', $auftrag_id);
+    return ['ok'=>true, 'msg'=>'Ins Fremdlager übernommen – der Bestand steht jetzt in Lager 2.', 'fremdlager'=>true];
+}
+
 function auftrag_versenden(int $auftrag_id): array {
+    // Kunden mit Fulfillment bekommen nichts geschickt – ihre Ware bleibt bei uns im Fremdlager.
+    if (auftrag_ist_fulfillment($auftrag_id)) return auftrag_ins_fremdlager($auftrag_id);
     $a = one("SELECT * FROM auftrag WHERE id=? AND status='erledigt'", [$auftrag_id]);
     if (!$a) return ['ok'=>false, 'msg'=>'Auftrag ist nicht versandbereit (Produktion muss abgeschlossen sein).'];
     $vfitem = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$a['produkt_id']]) ?: 0);

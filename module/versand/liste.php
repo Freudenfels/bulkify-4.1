@@ -13,7 +13,8 @@ $q    = trim($_GET['q'] ?? '');
 $rows = all("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name,
              (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM item i JOIN charge c ON c.item_id=i.id
               WHERE i.produkt_id=a.produkt_id AND i.kategorie='verkaufsfertig' AND c.status='frei') AS fertig_frei,
-             (SELECT nummer FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='lieferschein' LIMIT 1) AS lieferschein_nr
+             (SELECT nummer FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='lieferschein' LIMIT 1) AS lieferschein_nr,
+             COALESCE(k.nutzt_fulfillment,0) AS fulfillment
              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
              WHERE a.status IN ('erledigt','versendet')
              ORDER BY a.status='versendet', a.angelegt DESC");
@@ -42,6 +43,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
   <?php foreach ($rows as $r):
       $versendet = $r['status'] === 'versendet';
       $genug = (float)$r['fertig_frei'] + 0.0001 >= (float)$r['menge'];
+      $ff = (int)$r['fulfillment'] === 1;   // Fulfillment: die Ware bleibt bei uns im Fremdlager
   ?>
     <tr>
       <td><?= h($r['nummer']) ?></td>
@@ -50,11 +52,11 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
       <td class="bx-num"><?= (int)$r['menge'] ?></td>
       <td class="bx-num"><?= (int)$r['fertig_frei'] ?></td>
       <td><?= $r['lieferschein_nr'] ? h($r['lieferschein_nr']) : '<span class="muted">–</span>' ?></td>
-      <td><?= $versendet ? bx_badge('versendet','ok') : bx_badge('versandbereit','info') ?></td>
+      <td><?= $versendet ? bx_badge($ff ? 'im Fremdlager' : 'versendet','ok') : bx_badge($ff ? 'für das Fremdlager' : 'versandbereit','info') ?></td>
       <td style="text-align:right">
         <?php if (!$versendet): ?>
           <?php if ($genug): ?>
-            <form method="post" style="display:inline"><input type="hidden" name="aktion" value="versenden"><input type="hidden" name="auftrag_id" value="<?= (int)$r['id'] ?>"><button class="btn btn-primary btn-sm" type="submit">Versenden</button></form>
+            <form method="post" style="display:inline"><input type="hidden" name="aktion" value="versenden"><input type="hidden" name="auftrag_id" value="<?= (int)$r['id'] ?>"><button class="btn btn-primary btn-sm" type="submit"><?= $ff ? 'Ins Fremdlager' : 'Versenden' ?></button></form>
           <?php else: ?>
             <span class="badge badge-warn">zu wenig Fertigware</span>
           <?php endif; ?>
