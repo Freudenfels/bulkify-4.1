@@ -19,6 +19,7 @@ $TABS = [
     'nummern'    => 'Nummernkreise',
     'fulfillment'=> 'Fulfillment-Schnittstelle',
     'mail'       => 'E-Mail',
+    'ki'         => 'KI (Claude)',
     'agb'        => 'AGB',
     'werkzeuge'  => 'Werkzeuge',
 ];
@@ -93,6 +94,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'demo_seed') {
     $r = demo_testset_einspielen();
     header('Location: ?p=einstellungen&tab=werkzeuge&demo=' . (int)($r['neu'] ?? 0)); exit;
 }
+// --- KI: kurze Testanfrage an Claude ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'ki_test') {
+    require_once BX_ROOT . '/core/ki.php';
+    $r = ki_frage('Antworte mit genau einem Wort: bereit', ['max_tokens' => 20, 'aufwand' => 'low', 'zweck' => 'test']);
+    header('Location: ?p=einstellungen&tab=ki&' . ($r['ok'] ? 'kiok=' . urlencode(mb_substr(trim($r['text']), 0, 60)) : 'kifehler=' . urlencode($r['fehler']))); exit;
+}
+
 // --- Steuer & Finanzen speichern ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'steuer_save') {
     meta_set('ust_inland', (string)(float)str_replace(',', '.', $_POST['ust_inland'] ?? '19'));
@@ -508,6 +516,30 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   </form>
 </div>
 <?php endif; ?>
+<?php if ($tab === 'ki'): require_once BX_ROOT . '/core/ki.php'; $ks = ki_status(); ?>
+<div class="bx-panel">
+  <h2>Anthropic-Schlüssel</h2>
+  <p class="muted" style="margin-top:0">Die KI-Funktionen sprechen direkt mit der Anthropic-API (Claude) – ohne Zusatzsoftware. Der Schlüssel gehört in <code>secrets.php</code> im Projektstamm und wird weder committet noch angezeigt.</p>
+  <?php if (isset($_GET['kiok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Verbindung steht. Antwort: <?= h((string)$_GET['kiok']) ?></div><?php endif; ?>
+  <?php if (isset($_GET['kifehler'])): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h((string)$_GET['kifehler']) ?></div><?php endif; ?>
+  <table class="bx-table" style="max-width:640px">
+    <tbody>
+      <tr><td style="width:220px">Status</td><td><?= $ks['bereit'] ? bx_badge('einsatzbereit','ok') : bx_badge('kein Schlüssel hinterlegt','warn') ?></td></tr>
+      <tr><td>Schlüssel</td><td><?= $ks['bereit'] ? h($ks['quelle']) . ', endet auf <strong>' . h($ks['endet']) . '</strong>' : '<span class="muted">–</span>' ?></td></tr>
+      <tr><td>Modell</td><td><?= h($ks['modell']) ?></td></tr>
+      <tr><td>curl vorhanden</td><td><?= $ks['curl'] ? 'ja' : 'nein – ohne curl geht es nicht' ?></td></tr>
+      <tr><td>Mitschrift</td><td><code>data/ki.log</code> (Zweck, Modell, Dauer, Tokens, gekürzte Antwort)</td></tr>
+    </tbody>
+  </table>
+  <?php if (!$ks['bereit']): ?>
+    <p class="muted" style="font-size:13px">In <code>secrets.php</code> eintragen:<br><code>define('ANTHROPIC_API_KEY', 'sk-ant-…');</code></p>
+  <?php else: ?>
+    <form method="post" style="margin-top:12px"><input type="hidden" name="aktion" value="ki_test">
+      <button class="btn btn-primary" type="submit">Verbindung testen</button></form>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php if ($tab === 'agb'): $agbAkt = agb_aktuell(); $agbAlle = all("SELECT id,version,aktiv,angelegt FROM agb ORDER BY id DESC"); ?>
 <div class="bx-panel">
   <h2>AGB</h2>
