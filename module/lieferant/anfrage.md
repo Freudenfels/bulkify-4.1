@@ -19,3 +19,6 @@ Weil Kapseln üblicherweise je 1.000 gehandelt werden, wählt der Lieferant, ob 
 
 ## Sprachen
 Alle Texte laufen über `lp_t()`; Zahlen über `lp_num()` (Deutsch 1.234,5 – English und Chinesisch 1,234.5) und Einheiten über `lp_einheit()` (Stück/Kapsel/Tablette … werden übersetzt, kg und L nicht).
+
+## Angebot abgeben
+Über dem Preisfeld steht, **für welche Menge** der Preis gilt (die angefragte Menge). Die erste Staffelzeile ist mit genau dieser Menge vorbelegt – der Lieferant trägt nur den Preis daneben ein. Weitere Zeilen sind **freiwillig** und nur dann sinnvoll, wenn andere Mengen günstiger werden. Ein Angebot ganz ohne Staffel ist gültig; dann zählt der Preis oben, und beim Übernehmen entsteht daraus eine Staffel ab der Mindestmenge.

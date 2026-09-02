@@ -65,6 +65,9 @@ if (!$a):
 <?php else:
     $ang = one("SELECT * FROM lieferant_angebot WHERE anfrage_id=?", [$id]);
     $staffeln = $ang ? all("SELECT * FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$ang['id']]) : [];
+    // Noch kein Angebot? Dann steht in der ersten Zeile die Menge, die wir angefragt haben – der
+    // Lieferant trägt nur den Preis daneben. Weitere Zeilen sind freiwillig.
+    if (!$staffeln && (float)($a['menge'] ?? 0) > 0) $staffeln[] = ['menge_ab' => (float)$a['menge'], 'preis' => ''];
     while (count($staffeln) < 3) $staffeln[] = ['menge_ab' => '', 'preis' => ''];
     // Die Einheit steht schon in der Anfrage (dort wird sie automatisch gesetzt) – der Lieferant
     // muss sie nicht raten. Ein bereits abgegebenes Angebot behält seine eigene Einheit.
@@ -99,6 +102,7 @@ if (!$a):
       <input type="hidden" name="aktion" value="angebot">
       <div class="bx-grid">
         <div class="bx-field"><label><?= h(lp_t('ihr_preis')) ?><?= $einheit !== '' ? ' – ' . h(lp_t('preis_je')) . ' ' . h(lp_einheit($einheit)) : '' ?></label>
+          <?php if ((float)($a['menge'] ?? 0) > 0): ?><div class="muted" style="font-size:12px;margin-bottom:4px"><?= h(lp_t('fuer_menge')) ?> <?= h(lp_num($a['menge'])) ?> <?= h(lp_einheit($einheit, (float)$a['menge'])) ?></div><?php endif; ?>
           <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="12.50"></div>
         <div class="bx-field"><label><?= h(lp_t('einheit')) ?></label>
           <input type="text" name="einheit" value="<?= h(lp_einheit($einheit)) ?>" readonly style="background:var(--panel-2)">
@@ -114,7 +118,7 @@ if (!$a):
         <div class="bx-field"><label><?= h(lp_t('lieferzeit')) ?></label>
           <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>"></div>
       </div>
-      <div style="margin-top:6px"><strong><?= h(lp_t('mengenstaffeln')) ?></strong>
+      <div style="margin-top:6px"><strong><?= h(lp_t('mengenstaffeln')) ?></strong> <span class="muted" style="font-weight:normal">(<?= h(lp_t('optional')) ?>)</span>
         <div class="muted" style="font-size:12px;margin-bottom:8px"><?= h(lp_t('staffel_hinweis')) ?></div>
         <div class="bx-tablewrap"><table class="bx-table">
           <thead><tr><th><?= h(lp_t('ab_menge')) ?></th><th><?= h(lp_t('preis')) ?></th></tr></thead>
