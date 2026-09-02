@@ -82,7 +82,9 @@ if (!$a):
       <?php if ($a['artikelnummer']): ?><tr><td style="width:220px"><?= h(lp_t('artikelnummer')) ?></td><td><?= h($a['artikelnummer']) ?></td></tr><?php endif; ?>
       <tr><td style="width:220px"><?= h(lp_t('gewuenscht')) ?></td><td><?= $a['menge'] ? h(lp_num($a['menge'])) . ' ' . h(lp_einheit($einheit)) : '–' ?></td></tr>
       <?php if ($a['stueck_je_packung']): ?><tr><td><?= h(lp_t('je_packung')) ?></td><td><?= (int)$a['stueck_je_packung'] ?></td></tr><?php endif; ?>
-      <?php if ($a['kapselgroesse_id']): $kgN = (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$a['kapselgroesse_id']]); ?>
+      <?php if ($a['kapselgroesse_id']): $kgN = (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$a['kapselgroesse_id']]);
+              // Die Größe steht deutsch in den Stammdaten („Größe 0"); international ist „#0" verständlich.
+              $kgN = $kgN !== '' ? '#' . trim(str_ireplace(['Größe', 'Gr.', 'Gr'], '', $kgN)) : ''; ?>
         <?php if ($kgN !== ''): ?><tr><td><?= h(lp_t('kapselgroesse')) ?></td><td><?= h($kgN) ?></td></tr><?php endif; ?>
       <?php endif; ?>
       <?php if ($a['notiz']): ?><tr><td><?= h(lp_t('notiz')) ?></td><td style="white-space:pre-line"><?= h($a['notiz']) ?></td></tr><?php endif; ?>
