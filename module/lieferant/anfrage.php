@@ -102,8 +102,7 @@ if (!$a):
           <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="12.50"></div>
         <div class="bx-field"><label><?= h(lp_t('einheit')) ?></label>
           <input type="text" name="einheit" value="<?= h(lp_einheit($einheit)) ?>" readonly style="background:var(--panel-2)">
-          <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>">
-          <div class="muted" style="font-size:12px"><?= h(lp_t('einheit_fest')) ?></div></div>
+          <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>"></div>
         <div class="bx-field"><label><?= h(lp_t('preis_basis')) ?></label>
           <?php $pb = (int)($ang['preis_basis'] ?? 1); ?>
           <select name="preis_basis">
