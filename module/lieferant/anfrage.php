@@ -17,15 +17,18 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
         // Die erste Zeile ist der Hauptpreis mit der Menge, für die er gilt – sie zählt als
         // erste Staffel. Danach kommen die Zeilen, die der Lieferant selbst angehängt hat.
         $staffeln = [];
-        $hauptMenge = (float)str_replace(',', '.', (string)($_POST['menge_haupt'] ?? '0'));
-        $hauptPreis = (float)str_replace(',', '.', (string)($_POST['preis'] ?? '0'));
+        // Die Schreibweise richtet sich nach der Sprache des Lieferanten: deutsch 250.000,
+        // englisch und chinesisch 250,000.
+        $spr = lp_sprache();
+        $hauptMenge = zahl_lesen((string)($_POST['menge_haupt'] ?? ''), true, $spr);
+        $hauptPreis = zahl_lesen((string)($_POST['preis'] ?? ''), false, $spr);
         if ($hauptMenge > 0 && $hauptPreis > 0) $staffeln[] = [$hauptMenge, $hauptPreis];
         foreach (($_POST['s_menge'] ?? []) as $i2 => $m)
-            $staffeln[] = [(float)str_replace(',', '.', (string)$m), (float)str_replace(',', '.', (string)($_POST['s_preis'][$i2] ?? '0'))];
+            $staffeln[] = [zahl_lesen((string)$m, true, $spr), zahl_lesen((string)($_POST['s_preis'][$i2] ?? ''), false, $spr)];
         $fehler = lieferant_angebot_speichern($id, $lid,
-            (float)str_replace(',', '.', (string)($_POST['preis'] ?? '0')),
+            $hauptPreis,
             trim((string)($_POST['einheit_roh'] ?? $_POST['einheit'] ?? '')),
-            ($_POST['mindestmenge'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$_POST['mindestmenge']) : null,
+            ($_POST['mindestmenge'] ?? '') !== '' ? zahl_lesen((string)$_POST['mindestmenge'], true, $spr) : null,
             ($_POST['lieferzeit'] ?? '') !== '' ? (int)$_POST['lieferzeit'] : null,
             (string)($_POST['notiz'] ?? ''), $staffeln, (int)($_POST['preis_basis'] ?? 1));
         if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);

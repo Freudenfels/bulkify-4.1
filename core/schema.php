@@ -2467,6 +2467,32 @@ function anfrage_art_fuer_item(?int $item_id): string {
     $k = (string) scalar("SELECT kategorie FROM item WHERE id=?", [$item_id]);
     return ['rohstoff'=>'rohstoff', 'verpackung'=>'verpackung', 'verbrauch'=>'verbrauch', 'fertig'=>'fertigprodukt'][$k] ?? '';
 }
+// Eine eingetippte Zahl einlesen – egal in welcher Schreibweise. „12,50" und „12.50" sind beides
+// 12,5. Stehen Punkt und Komma zusammen, trennt das HINTERE die Nachkommastellen (1.250,5 = 1250,5;
+// 1,250.5 = 1250,5). Bei Mengenfeldern gilt zusätzlich: „250.000" ist die deutsche Schreibweise für
+// 250000 – ein Punkt vor genau drei Ziffern trennt dort Tausender, keine Nachkommastellen.
+// Bei Preisen bleibt „0.045" bewusst 0,045.
+function zahl_lesen(string $roh, bool $mengenfeld = false, string $sprache = 'de'): float {
+    $s = trim(str_replace(["\xc2\xa0", ' ', "'", '_'], '', $roh));
+    if ($s === '') return 0.0;
+    $punkt = strpos($s, '.') !== false;
+    $komma = strpos($s, ',') !== false;
+    // Welches Zeichen trennt in dieser Sprache die Tausender? Deutsch der Punkt, sonst das Komma.
+    $tausender = $sprache === 'de' ? '.' : ',';
+    // Eine Tausendergruppe beginnt nie mit einer Null: „0.045" ist ein Wert, keine 45.
+    $muster = '/^-?[1-9]\d{0,2}(' . preg_quote($tausender, '/') . '\d{3})+$/';
+    if ($punkt && $komma) {
+        $dez = strrpos($s, ',') > strrpos($s, '.') ? ',' : '.';
+        $s = str_replace($dez === ',' ? '.' : ',', '', $s);
+        $s = str_replace($dez, '.', $s);
+    } elseif ($mengenfeld && preg_match($muster, $s)) {
+        $s = str_replace($tausender, '', $s);
+    } elseif ($komma) {
+        $s = str_replace(',', '.', $s);
+    }
+    return (float) $s;
+}
+
 // Einheit als Wort – in der Ein- oder Mehrzahl, je nach Menge, und in der Sprache des Lesers.
 // „250.000 Kapseln", aber „Preis je Kapsel". Chinesisch kennt keine Mehrzahl.
 // kg, g, L und ml bleiben immer, wie sie sind.

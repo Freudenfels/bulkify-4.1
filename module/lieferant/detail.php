@@ -36,7 +36,7 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
     lieferant_anfrage_stellen((int)$id,
         ($_POST['item_id'] ?? '') !== '' ? (int)$_POST['item_id'] : null,
         (string)($_POST['betreff'] ?? ''),
-        ($_POST['menge'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$_POST['menge']) : null,
+        ($_POST['menge'] ?? '') !== '' ? zahl_lesen((string)$_POST['menge'], true) : null,
         (string)($_POST['einheit'] ?? ''), (string)($_POST['notiz'] ?? ''), isset($_POST['coa']),
         ['art' => (string)($_POST['art'] ?? ''), 'form' => (string)($_POST['form'] ?? ''),
          'stueck_je_packung' => (int)($_POST['stueck_je_packung'] ?? 0),
