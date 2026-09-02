@@ -403,6 +403,9 @@ if (!$neu) {
   }
   $formEinheit = [];
   foreach (array_keys(anfrage_formen()) as $fk) $formEinheit[$fk] = anfrage_einheit_fuer_form($fk);
+  $formenJeArt = ['fertigprodukt' => array_keys(anfrage_formen_fuer_art('fertigprodukt')), 'rohstoff' => array_keys(anfrage_formen_fuer_art('rohstoff'))];
+  $itemForm = [];
+  foreach ($anfItems as $it) $itemForm[(int)$it['id']] = anfrage_form_fuer_item((int)$it['id']);
   ?>
   <form method="post" class="bx-grid" style="margin-bottom:14px" id="anfrageForm">
     <input type="hidden" name="aktion" value="anfrage">
@@ -410,7 +413,7 @@ if (!$neu) {
       <select name="art" id="anf_art">
         <?php foreach (anfrage_arten() as $k => $lbl): ?><option value="<?= h($k) ?>"<?= $k === 'rohstoff' ? ' selected' : '' ?>><?= h($lbl) ?></option><?php endforeach; ?>
       </select></div>
-    <div class="bx-field" id="anf_form_feld" hidden><label>Darreichungsform</label>
+    <div class="bx-field" id="anf_form_feld" hidden><label id="anf_form_label">Form</label>
       <select name="form" id="anf_form">
         <?php foreach (anfrage_formen() as $k => $lbl): ?><option value="<?= h($k) ?>"><?= h($lbl) ?></option><?php endforeach; ?>
       </select></div>
@@ -449,24 +452,46 @@ if (!$neu) {
     if (!art) return;
     var itemEinheit = <?= json_encode($itemEinheit, JSON_UNESCAPED_UNICODE) ?>;
     var formEinheit = <?= json_encode($formEinheit, JSON_UNESCAPED_UNICODE) ?>;
+    var formenJeArt = <?= json_encode($formenJeArt, JSON_UNESCAPED_UNICODE) ?>;
+    var itemForm    = <?= json_encode($itemForm, JSON_UNESCAPED_UNICODE) ?>;
+    var formLabel   = document.getElementById('anf_form_label');
+    var alleFormen  = Array.prototype.slice.call(form.options).map(function(o){ return {v: o.value, t: o.text}; });
+    function formenSetzen(art){
+      // Rohstoff und Fertigprodukt haben unterschiedliche Formen – die Auswahl zeigt nur die passenden.
+      var erlaubt = formenJeArt[art] || [], alt = form.value;
+      form.innerHTML = '';
+      alleFormen.forEach(function(o){
+        if (erlaubt.indexOf(o.v) === -1) return;
+        var el = document.createElement('option'); el.value = o.v; el.text = o.t;
+        if (o.v === alt) el.selected = true;
+        form.appendChild(el);
+      });
+      formLabel.textContent = art === 'rohstoff' ? 'Lieferform' : 'Darreichungsform';
+    }
     var handEingabe = false;
     einheit.addEventListener('input', function(){ handEingabe = einheit.value.trim() !== ''; });
     function aktualisieren(){
-      var istFertig = art.value === 'fertigprodukt';
-      formFeld.hidden = !istFertig;
+      var istFertig = art.value === 'fertigprodukt', hatForm = !!(formenJeArt[art.value] || []).length;
+      formFeld.hidden = !hatForm;
       stkFeld.hidden  = !istFertig;
       rezFeld.hidden  = !istFertig;
       kgFeld.hidden   = !(istFertig && (form.value === 'kapsel' || form.value === 'softgel'));
       var iid = parseInt(item.value || '0', 10);
-      var e = itemEinheit[iid] || (istFertig ? (formEinheit[form.value] || '') : (art.value === 'rohstoff' ? 'kg' : (art.value === 'sonstiges' ? '' : 'Stück')));
+      // Stückware wird in ihrer Form bepreist, Schüttgut nach der Bezugsgröße des Artikels.
+      var stueckForm = ['kapsel','tablette','softgel','stick'].indexOf(form.value) !== -1;
+      var e = (hatForm && stueckForm) ? (formEinheit[form.value] || '')
+            : (itemEinheit[iid] || (hatForm ? (formEinheit[form.value] || '') : (art.value === 'sonstiges' ? '' : 'Stück')));
       if (!handEingabe) einheit.value = e;
       hint.textContent = e ? '(in ' + e + ')' : '';
     }
-    art.addEventListener('change', aktualisieren);
+    art.addEventListener('change', function(){ formenSetzen(art.value); aktualisieren(); });
     form.addEventListener('change', aktualisieren);
     item.addEventListener('change', function(){
       var opt = item.options[item.selectedIndex], a = opt && opt.getAttribute('data-art');
       if (a) { art.value = a; }        // der Artikel sagt selbst, was er ist
+      formenSetzen(art.value);
+      var iid = parseInt(item.value || '0', 10);
+      if (itemForm[iid] && (formenJeArt[art.value] || []).indexOf(itemForm[iid]) !== -1) form.value = itemForm[iid];
       handEingabe = false;
       aktualisieren();
     });
@@ -475,6 +500,7 @@ if (!$neu) {
       var opt = rez.options[rez.selectedIndex], f = opt && opt.getAttribute('data-form');
       if (f && formEinheit[f] !== undefined) { form.value = f; handEingabe = false; aktualisieren(); }
     });
+    formenSetzen(art.value);
     aktualisieren();
   })();
   </script>
@@ -484,7 +510,10 @@ if (!$neu) {
                      FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
                      LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=af.id
                      WHERE af.lieferant_id=? ORDER BY af.angelegt DESC", [(int)$id]);
-  $zahl = fn($x, $n2) => $x === null || $x === '' ? '–' : rtrim(rtrim(number_format((float)$x, $n2, ',', '.'), '0'), ',');
+  // Nachkommanullen weg – aber nur, wenn es ueberhaupt Nachkommastellen gibt. Sonst wuerde
+  // aus 1.000 die Zahl '1.', weil der Tausenderpunkt mit abgeschnitten wird.
+  $zahl = fn($x, $n2) => $x === null || $x === '' ? '–'
+      : ($n2 > 0 ? rtrim(rtrim(number_format((float)$x, $n2, ',', '.'), '0'), ',') : number_format((float)$x, 0, ',', '.'));
   if (!$anfr): ?><div class="muted">Noch keine Anfragen an diesen Lieferanten.</div>
   <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
@@ -492,10 +521,10 @@ if (!$neu) {
     <tbody><?php foreach ($anfr as $r): ?>
       <tr><td><?= h($r['nummer']) ?></td>
           <td><?= h(($r['item_name'] ?? '') !== '' ? $r['item_name'] : ($r['betreff'] ?? '–')) ?>
-              <?php if ($r['stueck_je_packung']): ?><div class="muted" style="font-size:12px"><?= (int)$r['stueck_je_packung'] ?> je Packung<?= $r['kapselgroesse_id'] ? ' · ' . h((string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$r['kapselgroesse_id']])) : '' ?></div><?php endif; ?></td>
+              <?php if ($r['stueck_je_packung']): ?><div class="muted" style="font-size:12px"><?= (int)$r['stueck_je_packung'] ?> <?= h(einheit_wort($r['einheit'] ?? '', (float)$r['stueck_je_packung'])) ?> je Packung<?= $r['kapselgroesse_id'] ? ' · ' . h((string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$r['kapselgroesse_id']])) : '' ?></div><?php endif; ?></td>
           <td><?php $lbl = anfrage_art_label((string)($r['art'] ?? ''), (string)($r['form'] ?? '')); echo $lbl !== '' ? h($lbl) : '<span class="muted">–</span>'; ?></td>
-          <td class="bx-num"><?= $r['menge'] ? $zahl($r['menge'], 3) . ' ' . h($r['einheit'] ?? '') : '–' ?></td>
-          <td><?php if ($r['ang_id']): ?><strong><?= $zahl($r['preis'], 4) ?> €</strong> / <?= (int)($r['ang_basis'] ?? 1) === 1000 ? '1.000 ' : '' ?><?= h($r['ang_einheit'] ?: '–') ?>
+          <td class="bx-num"><?= $r['menge'] ? $zahl($r['menge'], 3) . ' ' . h(einheit_wort($r['einheit'] ?? '', (float)$r['menge'])) : '–' ?></td>
+          <td><?php if ($r['ang_id']): $basis = (int)($r['ang_basis'] ?? 1) === 1000 ? 1000 : 1; ?><strong><?= $zahl($r['preis'], 4) ?> €</strong> / <?= $basis === 1000 ? '1.000 ' : '' ?><?= h($r['ang_einheit'] ? einheit_wort($r['ang_einheit'], $basis) : '–') ?>
                 <div class="muted" style="font-size:12px">
                   <?= $r['mindestmenge'] ? 'MOQ ' . $zahl($r['mindestmenge'], 3) . ' · ' : '' ?>
                   <?= $r['lieferzeit_tage'] ? (int)$r['lieferzeit_tage'] . ' Tage' : '' ?>

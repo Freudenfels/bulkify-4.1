@@ -134,27 +134,12 @@ function lp_t(string $key, string $sprache = ''): string {
     return $texte[$key][$s] ?? $key;
 }
 
-// Einheiten sind Stammdaten und stehen auf Deutsch in der Datenbank. Für den Lieferanten
-// werden die bekannten Stück-Einheiten übersetzt; kg, g, L und ml gelten international.
-function lp_einheit(?string $e, string $sprache = ''): string {
-    $e = trim((string)$e);
-    if ($e === '') return '';
-    $s = $sprache !== '' ? $sprache : lp_sprache();
-    $map = [
-        'stück' => ['de'=>'Stück', 'en'=>'pcs', 'zh'=>'个'],
-        'stueck'=> ['de'=>'Stück', 'en'=>'pcs', 'zh'=>'个'],
-        'kapsel' => ['de'=>'Kapsel', 'en'=>'capsule', 'zh'=>'粒'],
-        'tablette'=> ['de'=>'Tablette', 'en'=>'tablet', 'zh'=>'片'],
-        'softgel'=> ['de'=>'Softgel', 'en'=>'softgel', 'zh'=>'软胶囊'],
-        'stick'  => ['de'=>'Stick', 'en'=>'stick', 'zh'=>'条'],
-        'l'      => ['de'=>'Liter', 'en'=>'litre', 'zh'=>'升'],
-        'kapseln'=> ['de'=>'Kapseln', 'en'=>'capsules', 'zh'=>'粒'],
-        'packung'=> ['de'=>'Packung', 'en'=>'pack', 'zh'=>'包装'],
-        'liter'  => ['de'=>'Liter', 'en'=>'litre', 'zh'=>'升'],
-    ];
-    $k = mb_strtolower($e);
-    if (!isset($map[$k])) return $e;
-    return $map[$k][in_array($s, ['de','en','zh'], true) ? $s : 'en'] ?? $e;
+// Einheiten stehen als deutsches Stammdatum in der Datenbank. Für den Lieferanten werden sie
+// übersetzt und in die richtige Zahlform gebracht – „250.000 Kapseln", aber „Preis je Kapsel".
+// Die Zuordnung steht zentral in einheit_wort() (core/schema.php), damit intern und im Portal
+// dasselbe Wort steht. kg, g, L und ml bleiben unverändert.
+function lp_einheit(?string $e, float $menge = 1, string $sprache = ''): string {
+    return einheit_wort($e, $menge, $sprache !== '' ? $sprache : lp_sprache());
 }
 // Zahl in der Schreibweise des Lesers: Deutsch 1.234,5 – English und Chinesisch 1,234.5.
 function lp_num($x, int $dez = 3): string {

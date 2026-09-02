@@ -2412,24 +2412,42 @@ function rohstoff_vk_bei_menge(int $item_id, float $menge): ?float {
 function anfrage_arten(): array {
     return ['rohstoff'=>'Rohstoff', 'fertigprodukt'=>'Fertigprodukt (Bulk)', 'verpackung'=>'Verpackung', 'verbrauch'=>'Verbrauchsmaterial', 'sonstiges'=>'Sonstiges (Freitext)'];
 }
-// Darreichungsformen, die man als Fertigprodukt anfragen kann (dieselben wie in der Rezeptur).
+// Formen, die eine Anfrage haben kann: beim Fertigprodukt die Darreichungsform (wie in der
+// Rezeptur), beim Rohstoff die Lieferform. So heißt es überall gleich – „Rohstoff · Pulver"
+// steht neben „Fertigprodukt · Kapseln".
 function anfrage_formen(): array {
-    return ['kapsel'=>'Kapsel', 'tablette'=>'Tablette', 'softgel'=>'Softgel', 'stick'=>'Stick', 'pulver'=>'Pulver', 'granulat'=>'Granulat', 'fluessig'=>'Flüssig'];
+    return ['kapsel'=>'Kapsel', 'tablette'=>'Tablette', 'softgel'=>'Softgel', 'stick'=>'Stick',
+            'pulver'=>'Pulver', 'granulat'=>'Granulat', 'fluessig'=>'Flüssig', 'oel'=>'Öl', 'extrakt'=>'Extrakt'];
+}
+// Welche Formen zu welcher Art passen. Verpackung und Verbrauch haben keine.
+function anfrage_formen_fuer_art(string $art): array {
+    $alle = anfrage_formen();
+    if ($art === 'fertigprodukt') return array_intersect_key($alle, array_flip(['kapsel','tablette','softgel','stick','pulver','granulat','fluessig']));
+    if ($art === 'rohstoff')      return array_intersect_key($alle, array_flip(['pulver','granulat','fluessig','oel','extrakt']));
+    return [];
+}
+// Form eines Artikels (Rohstoffe tragen sie in item.form).
+function anfrage_form_fuer_item(?int $item_id): string {
+    if (!$item_id) return '';
+    $f = (string) scalar("SELECT form FROM item WHERE id=?", [$item_id]);
+    return array_key_exists($f, anfrage_formen()) ? $f : '';
 }
 // Einheit, in der ein Fertigprodukt dieser Form eingekauft wird. Stückware wird in der Form
 // selbst bepreist (je Kapsel, je Tablette …) – so heißt der Preis beim Lieferanten auch so.
 // Pulver/Granulat gehen nach Kilogramm, Flüssiges nach Liter.
 function anfrage_einheit_fuer_form(string $form): string {
     return ['kapsel'=>'Kapsel', 'tablette'=>'Tablette', 'softgel'=>'Softgel', 'stick'=>'Stick',
-            'pulver'=>'kg', 'granulat'=>'kg', 'fluessig'=>'L'][$form] ?? 'Stück';
+            'pulver'=>'kg', 'granulat'=>'kg', 'extrakt'=>'kg', 'fluessig'=>'L', 'oel'=>'L'][$form] ?? 'Stück';
 }
 // Die Einheit einer Anfrage – ohne dass jemand sie eintippen muss.
 // Reihenfolge: was am Artikel steht (Bezugsgröße vor Lagereinheit), sonst die Form des
 // Fertigprodukts, sonst die Art (Verpackung/Verbrauch = Stück). Leer nur bei reinem Freitext.
 function anfrage_einheit(?int $item_id, string $art = '', string $form = ''): string {
-    // Steht die Darreichungsform fest, gilt sie: „je Kapsel" ist genauer als das allgemeine
-    // „Stück", das am Artikel steht.
-    if ($form !== '' && array_key_exists($form, anfrage_formen())) return anfrage_einheit_fuer_form($form);
+    // Bei Stückware (Kapsel, Tablette …) gilt die Form: „je Kapsel" ist genauer als das
+    // allgemeine „Stück" am Artikel. Bei Schüttgut hat die Bezugsgröße des Artikels Vorrang,
+    // denn dort kann kg oder L abweichend gepflegt sein.
+    $formStueck = $form !== '' && in_array($form, ['kapsel', 'tablette', 'softgel', 'stick'], true);
+    if ($formStueck) return anfrage_einheit_fuer_form($form);
     if ($item_id) {
         $it = one("SELECT einheit, preis_bezug, kategorie, form FROM item WHERE id=?", [$item_id]);
         if ($it) {
@@ -2437,6 +2455,7 @@ function anfrage_einheit(?int $item_id, string $art = '', string $form = ''): st
             if ($e !== '') return mb_substr($e, 0, 20);
         }
     }
+    if ($form !== '' && array_key_exists($form, anfrage_formen())) return anfrage_einheit_fuer_form($form);
     if (in_array($art, ['verpackung', 'verbrauch'], true)) return 'Stück';
     if ($art === 'fertigprodukt') return 'Stück';
     if ($art === 'rohstoff') return 'kg';
@@ -2448,6 +2467,34 @@ function anfrage_art_fuer_item(?int $item_id): string {
     $k = (string) scalar("SELECT kategorie FROM item WHERE id=?", [$item_id]);
     return ['rohstoff'=>'rohstoff', 'verpackung'=>'verpackung', 'verbrauch'=>'verbrauch', 'fertig'=>'fertigprodukt'][$k] ?? '';
 }
+// Einheit als Wort – in der Ein- oder Mehrzahl, je nach Menge, und in der Sprache des Lesers.
+// „250.000 Kapseln", aber „Preis je Kapsel". Chinesisch kennt keine Mehrzahl.
+// kg, g, L und ml bleiben immer, wie sie sind.
+function einheit_wort(?string $e, float $menge = 1, string $sprache = 'de'): string {
+    $e = trim((string)$e);
+    if ($e === '') return '';
+    $s = in_array($sprache, ['de', 'en', 'zh'], true) ? $sprache : 'en';
+    $mehr = abs($menge) != 1;
+    // [de-Einzahl, de-Mehrzahl, en-Einzahl, en-Mehrzahl, zh]
+    $map = [
+        'stück'    => ['Stück', 'Stück', 'piece', 'pieces', '个'],
+        'stueck'   => ['Stück', 'Stück', 'piece', 'pieces', '个'],
+        'kapsel'   => ['Kapsel', 'Kapseln', 'capsule', 'capsules', '粒'],
+        'kapseln'  => ['Kapsel', 'Kapseln', 'capsule', 'capsules', '粒'],
+        'tablette' => ['Tablette', 'Tabletten', 'tablet', 'tablets', '片'],
+        'softgel'  => ['Softgel', 'Softgels', 'softgel', 'softgels', '软胶囊'],
+        'stick'    => ['Stick', 'Sticks', 'stick', 'sticks', '条'],
+        'packung'  => ['Packung', 'Packungen', 'pack', 'packs', '包装'],
+        'beutel'   => ['Beutel', 'Beutel', 'bag', 'bags', '袋'],
+        'liter'    => ['Liter', 'Liter', 'litre', 'litres', '升'],
+    ];
+    $k = mb_strtolower($e);
+    if (!isset($map[$k])) return $e;                     // kg, g, L, ml … bleiben stehen
+    $w = $map[$k];
+    if ($s === 'zh') return $w[4];
+    return $s === 'de' ? ($mehr ? $w[1] : $w[0]) : ($mehr ? $w[3] : $w[2]);
+}
+
 // Klartext für die Zeile „Produkttyp" – deutsch, englisch, chinesisch.
 function anfrage_art_label(string $art, string $form = '', string $sprache = 'de'): string {
     $arten = [
@@ -2465,6 +2512,8 @@ function anfrage_art_label(string $art, string $form = '', string $sprache = 'de
         'pulver'   => ['de'=>'Pulver', 'en'=>'Powder', 'zh'=>'粉剂'],
         'granulat' => ['de'=>'Granulat', 'en'=>'Granulate', 'zh'=>'颗粒'],
         'fluessig' => ['de'=>'Flüssig', 'en'=>'Liquid', 'zh'=>'液体'],
+        'oel'      => ['de'=>'Öl', 'en'=>'Oil', 'zh'=>'油'],
+        'extrakt'  => ['de'=>'Extrakt', 'en'=>'Extract', 'zh'=>'提取物'],
     ];
     $s = in_array($sprache, ['de', 'en', 'zh'], true) ? $sprache : 'en';
     $a = $arten[$art][$s] ?? '';
@@ -2480,8 +2529,12 @@ function lieferant_anfrage_stellen(int $lieferant_id, ?int $item_id, string $bet
     $art  = (string)($opt['art'] ?? '');
     if ($art === '' || !array_key_exists($art, anfrage_arten())) $art = anfrage_art_fuer_item($item_id) ?: 'sonstiges';
     $form = (string)($opt['form'] ?? '');
-    if (!array_key_exists($form, anfrage_formen())) $form = '';
-    if ($art !== 'fertigprodukt') $form = '';
+    if (!array_key_exists($form, anfrage_formen_fuer_art($art))) $form = '';
+    // Nichts gewählt? Dann sagt der Artikel selbst, was er ist (Rohstoffe tragen ihre Form).
+    if ($form === '' && $item_id) {
+        $fi = anfrage_form_fuer_item($item_id);
+        if (array_key_exists($fi, anfrage_formen_fuer_art($art))) $form = $fi;
+    }
     $einheit = trim($einheit) !== '' ? trim($einheit) : anfrage_einheit($item_id, $art, $form);
     $stk  = (int)($opt['stueck_je_packung'] ?? 0);
     $kg   = (int)($opt['kapselgroesse_id'] ?? 0);

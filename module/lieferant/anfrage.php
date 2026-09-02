@@ -55,7 +55,7 @@ if (!$a):
             <td><?= h(($r['item_name'] ?? '') !== '' ? $r['item_name'] : ($r['betreff'] ?? '–')) ?>
                 <?php $typL = anfrage_art_label((string)($r['art'] ?? ''), (string)($r['form'] ?? ''), lp_sprache()); ?>
                 <?php if ($typL !== ''): ?><div class="muted" style="font-size:12px"><?= h($typL) ?></div><?php endif; ?></td>
-            <td class="bx-num"><?= $r['menge'] ? h(lp_num($r['menge'])) . ' ' . h(lp_einheit($r['einheit'] ?: ($r['item_einheit'] ?? ''))) : '–' ?></td>
+            <td class="bx-num"><?= $r['menge'] ? h(lp_num($r['menge'])) . ' ' . h(lp_einheit($r['einheit'] ?: ($r['item_einheit'] ?? ''), (float)$r['menge'])) : '–' ?></td>
             <td><?= $r['status'] === 'offen' ? h(lp_t('anfrage_offen')) : h(lp_t('anfrage_beant')) ?></td>
             <td class="bx-num"><a class="btn <?= $r['status'] === 'offen' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="?p=lieferant_anfrage&id=<?= (int)$r['id'] ?>"><?= h($r['status'] === 'offen' ? lp_t('angebot_abgeben') : lp_t('ansehen')) ?></a></td></tr>
       <?php endforeach; ?></tbody>
@@ -80,8 +80,8 @@ if (!$a):
       <?php $typ = anfrage_art_label((string)($a['art'] ?? ''), (string)($a['form'] ?? ''), lp_sprache()); ?>
       <?php if ($typ !== ''): ?><tr><td style="width:220px"><?= h(lp_t('produkttyp')) ?></td><td><?= h($typ) ?></td></tr><?php endif; ?>
       <?php if ($a['artikelnummer']): ?><tr><td style="width:220px"><?= h(lp_t('artikelnummer')) ?></td><td><?= h($a['artikelnummer']) ?></td></tr><?php endif; ?>
-      <tr><td style="width:220px"><?= h(lp_t('gewuenscht')) ?></td><td><?= $a['menge'] ? h(lp_num($a['menge'])) . ' ' . h(lp_einheit($einheit)) : '–' ?></td></tr>
-      <?php if ($a['stueck_je_packung']): ?><tr><td><?= h(lp_t('je_packung')) ?></td><td><?= (int)$a['stueck_je_packung'] ?></td></tr><?php endif; ?>
+      <tr><td style="width:220px"><?= h(lp_t('gewuenscht')) ?></td><td><?= $a['menge'] ? h(lp_num($a['menge'])) . ' ' . h(lp_einheit($einheit, (float)$a['menge'])) : '–' ?></td></tr>
+      <?php if ($a['stueck_je_packung']): ?><tr><td><?= h(lp_t('je_packung')) ?></td><td><?= h(lp_num($a['stueck_je_packung'], 0)) ?> <?= h(lp_einheit($einheit, (float)$a['stueck_je_packung'])) ?></td></tr><?php endif; ?>
       <?php if ($a['kapselgroesse_id']): $kgN = (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$a['kapselgroesse_id']]);
               // Die Größe steht deutsch in den Stammdaten („Größe 0"); international ist „#0" verständlich.
               $kgN = $kgN !== '' ? '#' . trim(str_ireplace(['Größe', 'Gr.', 'Gr'], '', $kgN)) : ''; ?>
@@ -107,8 +107,8 @@ if (!$a):
         <div class="bx-field"><label><?= h(lp_t('preis_basis')) ?></label>
           <?php $pb = (int)($ang['preis_basis'] ?? 1); ?>
           <select name="preis_basis">
-            <option value="1"<?= $pb === 1 ? ' selected' : '' ?><?= '' ?>><?= h(lp_t('je_1')) ?> <?= h(lp_einheit($einheit)) ?></option>
-            <option value="1000"<?= $pb === 1000 ? ' selected' : '' ?>><?= h(lp_t('je_1000')) ?> <?= h(lp_einheit($einheit)) ?></option>
+            <option value="1"<?= $pb === 1 ? ' selected' : '' ?>><?= h(lp_t('je_1')) ?> <?= h(lp_einheit($einheit, 1)) ?></option>
+            <option value="1000"<?= $pb === 1000 ? ' selected' : '' ?>><?= h(lp_t('je_1000')) ?> <?= h(lp_einheit($einheit, 1000)) ?></option>
           </select></div>
         <div class="bx-field"><label><?= h(lp_t('moq')) ?></label>
           <input type="text" name="mindestmenge" value="<?= h($ang ? $zahl($ang['mindestmenge'], 3) : '') ?>"></div>
