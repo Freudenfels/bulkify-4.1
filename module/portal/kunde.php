@@ -114,6 +114,13 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
           [$aid, $b, trim($wm[$i] ?? ''), trim($we[$i] ?? 'mg'), $i]);
     }
     log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Neue Rezepturanfrage im Portal eingereicht.', 'anfrage', 'anfrage', $aid);
+    // Gleich einen Rezepturentwurf entwickeln lassen – das Team findet ihn beim Öffnen der Anfrage
+    // vor und muss nicht bei null anfangen. Der Kunde sieht davon nichts; es ist ein interner Entwurf.
+    require_once BX_ROOT . '/core/rezeptur_ki.php';
+    if (ki_bereit()) {
+        $kiR = rezeptur_ki_entwickeln((int)$aid);
+        if ($kiR['ok']) rezeptur_ki_merken((int)$aid, $kiR);
+    }
     header('Location: ?p=portal&token=' . $token . '&v=anfrage&anfrage=1'); exit;
 }
 

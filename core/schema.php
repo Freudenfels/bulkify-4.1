@@ -735,6 +735,9 @@ function init_schema(): void {
     ensure_column('dokument', 'kunde_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('dokument', 'hochgeladen_von', "VARCHAR(10) NOT NULL DEFAULT 'team'");   // team | lieferant (Ablage je Lieferant)
     // Was die KI aus dieser Unterlage gelesen hat – ein VORSCHLAG, bis ihn jemand geprüft hat.
+    // Rezepturvorschlag der KI zu einer Kundenanfrage (core/rezeptur_ki.php) – Entwurf, kein Beschluss.
+    ensure_column('rezeptur_anfrage', 'ki_daten', "MEDIUMTEXT NULL");
+    ensure_column('rezeptur_anfrage', 'ki_stand', "DATETIME NULL");
     ensure_column('dokument', 'ki_daten', "MEDIUMTEXT NULL");
     ensure_column('dokument', 'ki_stand', "DATETIME NULL");
     // Preisanfrage: was genau angefragt wird. Daraus ergibt sich die Einheit, in der der Lieferant seinen Preis nennt.

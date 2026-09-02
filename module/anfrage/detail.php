@@ -22,6 +22,22 @@ function wunsch_rows_from_post(): array {
     return $out;
 }
 
+// Rezepturvorschlag der KI: entwickeln und – nach Prüfung – als Wunschzeilen übernehmen.
+// Beides läuft VOR dem allgemeinen Speichern, damit es die Zeilen nicht doppelt schreibt.
+$kiFehler = '';
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_entwickeln') {
+    require_once BX_ROOT . '/core/rezeptur_ki.php';
+    $r = rezeptur_ki_entwickeln((int)$id);
+    if ($r['ok']) { rezeptur_ki_merken((int)$id, $r); header('Location: ?p=anfrage&id=' . (int)$id . '&kiok=1'); exit; }
+    header('Location: ?p=anfrage&id=' . (int)$id . '&kifehler=' . urlencode($r['fehler'])); exit;
+}
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_zeilen') {
+    require_once BX_ROOT . '/core/rezeptur_ki.php';
+    $vor = rezeptur_ki_vorschlag((int)$id);
+    $n = $vor ? rezeptur_ki_zeilen_uebernehmen((int)$id, (array)($vor['zutaten'] ?? [])) : 0;
+    header('Location: ?p=anfrage&id=' . (int)$id . '&kizeilen=' . $n); exit;
+}
+
 $fehler = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $f = fn($k) => trim($_POST[$k] ?? '');
@@ -106,6 +122,90 @@ if (!$neu && ($a['status'] ?? '') === 'ueberarbeiten') {
        . '</div>';
 }
 ?>
+<?php // Rezepturvorschlag der KI. Steht VOR dem Formular, weil er es füttert.
+if (!$neu):
+  require_once BX_ROOT . '/core/rezeptur_ki.php';
+  $kiVor = rezeptur_ki_vorschlag((int)$id);
+  $badge = fn($w) => in_array($w, ['unproblematisch', 'im Rahmen', 'gut'], true) ? 'ok'
+                    : (in_array($w, ['novel_food', 'zu hoch', 'nicht machbar'], true) ? 'warn' : 'info');
+?>
+<?php if (isset($_GET['kiok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vorschlag entwickelt – bitte unten prüfen.</div><?php endif; ?>
+<?php if (isset($_GET['kizeilen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px"><?= (int)$_GET['kizeilen'] ?> Zutat(en) in die Wunschzeilen übernommen. Jetzt prüfen und speichern.</div><?php endif; ?>
+<?php if (isset($_GET['kifehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['kifehler']) ?></div><?php endif; ?>
+<div class="bx-panel" style="border-color:var(--gruen)">
+  <div class="bx-row" style="justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Rezeptur entwickeln (KI)</h2>
+    <?php if (ki_bereit()): ?>
+      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="ki_entwickeln">
+        <button class="btn <?= $kiVor ? 'btn-ghost' : 'btn-primary' ?> btn-sm" type="submit"><?= $kiVor ? 'Neu entwickeln' : 'Vorschlag entwickeln' ?></button></form>
+    <?php endif; ?>
+  </div>
+  <?php // Ein vorhandener Vorschlag wird IMMER gezeigt – auch wenn gerade kein Schluessel da ist.
+        if (!$kiVor && !ki_bereit()): ?>
+    <div class="muted">Die KI ist nicht eingerichtet (Einstellungen &rarr; KI).</div>
+  <?php elseif (!$kiVor): ?>
+    <p class="muted" style="margin:8px 0 0">Aus der Idee des Kunden (Feld Notiz) entsteht ein Vorschlag mit Zutaten und Mengen, dazu eine Novel-Food-Einschätzung, ein Blick auf die Höchstmengen und die Machbarkeit. <strong>Ein Entwurf für dich – keine rechtliche Freigabe.</strong></p>
+  <?php else: ?>
+    <p class="muted" style="margin:8px 0 12px">Entwickelt am <?= h(date('d.m.Y H:i', strtotime((string)$kiVor['stand']))) ?> · <?= h($kiVor['modell'] ?? '') ?>. <strong>Entwurf – die rechtliche Bewertung prüfst du.</strong></p>
+    <?php if ($kiVor['name']): ?><div><strong>Vorschlag:</strong> <?= h($kiVor['name']) ?><?= $kiVor['tagesdosis'] ? ' · ' . h($kiVor['tagesdosis']) : '' ?></div><?php endif; ?>
+
+    <?php if ($kiVor['zutaten']): ?>
+    <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
+      <thead><tr><th>Zutat</th><th class="bx-num">mg je Einheit</th><th>Funktion</th><th>Rohstoff bei uns</th></tr></thead>
+      <tbody><?php foreach ($kiVor['zutaten'] as $z): ?>
+        <tr><td><?= h($z['bezeichnung']) ?><?php if ($z['begruendung']): ?><div class="muted" style="font-size:12px"><?= h($z['begruendung']) ?></div><?php endif; ?></td>
+            <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$z['menge_mg'], 3, ',', '.'), '0'), ',')) ?></td>
+            <td><?= h($z['funktion']) ?></td>
+            <td><?= $z['item_id'] ? h($z['item_name']) : '<span class="muted">nicht im Katalog</span>' ?></td></tr>
+      <?php endforeach; ?></tbody>
+    </table></div>
+    <?php endif; ?>
+
+    <?php if (!empty($kiVor['kapsel'])): $k = $kiVor['kapsel']; ?>
+      <div style="margin-top:10px"><strong>Füllgewicht:</strong> <?= h(number_format($k['fuellgewicht_mg'], 1, ',', '.')) ?> mg je Kapsel –
+        <?= $k['passt'] ? 'passt in ' . h((string)$k['groesse']) : 'passt in KEINE unserer Kapseln (größte: ' . h((string)$k['groesste']) . ' mit ' . h(number_format((float)$k['groesste_mg'], 0, ',', '.')) . ' mg)' ?>
+        <span class="muted" style="font-size:12px">– selbst nachgerechnet, nicht von der KI</span>
+      </div>
+    <?php endif; ?>
+
+    <?php foreach ([['novel_food', 'Novel Food', ['stoff','bewertung','begruendung']],
+                    ['hoechstmengen', 'Höchstmengen', ['stoff','menge_mg','bewertung','begruendung']],
+                    ['health_claims', 'Health Claims', ['stoff','claim','zulaessig']]] as [$key, $titel, $sp]):
+            $rows = (array)($kiVor[$key] ?? []); if (!$rows) continue; ?>
+      <div style="margin-top:14px"><strong><?= h($titel) ?></strong></div>
+      <div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table"><tbody>
+        <?php foreach ($rows as $z): ?>
+          <tr><td style="width:220px"><?= h((string)$z[$sp[0]]) ?></td>
+              <td><?php if ($key === 'health_claims'): ?>
+                    <?= h((string)$z['claim']) ?> <?= !empty($z['zulaessig']) ? bx_badge('zulässig', 'ok') : bx_badge('nicht bestätigt', 'warn') ?>
+                  <?php else: ?>
+                    <?= isset($z['menge_mg']) && $z['menge_mg'] !== '' ? h($z['menge_mg']) . ' mg · ' : '' ?>
+                    <?= bx_badge((string)$z['bewertung'], $badge((string)$z['bewertung'])) ?>
+                    <?php if (!empty($z['begruendung'])): ?><div class="muted" style="font-size:12px"><?= h((string)$z['begruendung']) ?></div><?php endif; ?>
+                  <?php endif; ?></td></tr>
+        <?php endforeach; ?>
+      </tbody></table></div>
+    <?php endforeach; ?>
+
+    <?php if (!empty($kiVor['machbarkeit']['bewertung'])): ?>
+      <div style="margin-top:14px"><strong>Machbarkeit:</strong> <?= bx_badge((string)$kiVor['machbarkeit']['bewertung'], $badge((string)$kiVor['machbarkeit']['bewertung'])) ?></div>
+      <ul class="muted" style="margin:6px 0 0;font-size:13px"><?php foreach ((array)$kiVor['machbarkeit']['gruende'] as $g): ?><li><?= h($g) ?></li><?php endforeach; ?></ul>
+    <?php endif; ?>
+    <?php if (!empty($kiVor['hinweise'])): ?>
+      <ul class="muted" style="margin:10px 0 0;font-size:13px"><?php foreach ((array)$kiVor['hinweise'] as $g): ?><li><?= h($g) ?></li><?php endforeach; ?></ul>
+    <?php endif; ?>
+
+    <?php if ($kiVor['zutaten']): ?>
+    <form method="post" style="margin-top:14px" onsubmit="return confirm('Die bisherigen Wunschzeilen werden durch die Zutaten des Vorschlags ersetzt.');">
+      <input type="hidden" name="aktion" value="ki_zeilen">
+      <button class="btn btn-primary" type="submit">Zutaten in die Wunschzeilen übernehmen</button>
+      <span class="muted" style="font-size:12px;margin-left:8px">danach unten prüfen, speichern und den Vorschlag senden</span>
+    </form>
+    <?php endif; ?>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <form method="post" class="bx-form">
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Kunde</label>

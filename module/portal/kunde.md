@@ -77,3 +77,5 @@ AB/RE bauen **eine Sammelposition** aus der bestellten Konfiguration (Netto exak
 **Sicherheit/Ausblick:** aktuell passwortloser Token-Link (Vorschau). Später echtes Login/Rollen; Lieferanten-/Partner-Portal nach demselben Muster.
 ## E-Mail bei Annahme
 Nimmt der Kunde ein Angebot an (`angebot_annehmen` oder `bestaetigen`), geht eine Auftragsbestätigung an ihn und ein Hinweis an alle Admins (`mail_angebot_angenommen()` in `core/mail.php`) – nur wenn der Versand eingerichtet ist. Der Kunde sieht Mailfehler nicht; sie stehen in `data/mail.log`.
+## Rezepturanfrage löst einen Entwurf aus
+Schickt der Kunde eine Rezepturanfrage, entwickelt die KI sofort einen internen Entwurf (`rezeptur_ki_entwickeln()`), sofern sie eingerichtet ist. Der Kunde sieht davon nichts; das Team findet ihn beim Öffnen der Anfrage.
