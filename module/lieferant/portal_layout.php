@@ -1,6 +1,6 @@
 <?php
 // Rahmen des Lieferantenportals: Kopf, Menü, Fuß – und die Übersetzung.
-// Zwei Sprachen: Deutsch und Englisch. Welche gilt, steht am Lieferanten (`lieferanten.sprache`);
+// Drei Sprachen: Deutsch, Englisch und Chinesisch. Welche gilt, steht am Lieferanten (`lieferanten.sprache`);
 // alles außer 'de' läuft auf Englisch, weil die meisten Lieferanten im Ausland sitzen.
 
 // Übersetzung. Fehlt ein Schlüssel, kommt der Schlüssel selbst zurück – dann fällt es auf.
@@ -151,21 +151,28 @@ function lp_num($x, int $dez = 3): string {
 // Welche Sprache gilt gerade? Reihenfolge: eigene Wahl (Session) vor Stammdaten des Lieferanten.
 // Wichtig fuer Login und Einladung – dort ist noch niemand angemeldet, es gibt also keine Stammdaten.
 function lp_sprache(): string {
-    if (!empty($_SESSION['lp_lang']) && in_array($_SESSION['lp_lang'], ['de', 'en', 'zh'], true)) return $_SESSION['lp_lang'];
-    return function_exists('lieferant_sprache') && function_exists('ist_lieferant') && ist_lieferant() ? lieferant_sprache() : 'de';
+    $angemeldet = function_exists('ist_lieferant') && ist_lieferant();
+    $uid = (int)($_SESSION['uid'] ?? 0);
+    $wahl = $_SESSION['lp_lang'] ?? '';
+    // Eine Wahl gilt, solange derselbe Besucher sie getroffen hat. Wer sich anmeldet, bekommt
+    // zunächst seine hinterlegte Sprache – sonst bliebe das Portal in der Sprache haengen,
+    // die jemand vor dem Login auf der Anmeldeseite angeklickt hat.
+    if (in_array($wahl, ['de', 'en', 'zh'], true) && (int)($_SESSION['lp_lang_uid'] ?? 0) === $uid) return $wahl;
+    return $angemeldet ? lieferant_sprache() : (in_array($wahl, ['de', 'en', 'zh'], true) ? $wahl : 'de');
 }
 // Sprachwahl aus ?lang= uebernehmen (auf jeder Portalseite erlaubt).
 function lp_sprache_setzen(): void {
     $l = strtolower(trim((string)($_GET['lang'] ?? '')));
-    if (in_array($l, ['de', 'en', 'zh'], true)) $_SESSION['lp_lang'] = $l;
+    if (in_array($l, ['de', 'en', 'zh'], true)) { $_SESSION['lp_lang'] = $l; $_SESSION['lp_lang_uid'] = (int)($_SESSION['uid'] ?? 0); }
 }
-// Umschalter „Deutsch | English" – die aktuelle Sprache ist hervorgehoben.
+// Umschalter „Deutsch | English | 中文" – die aktuelle Sprache ist hervorgehoben. Er darf umbrechen,
+// sonst wird die dritte Sprache in der schmalen Seitenleiste abgeschnitten.
 function lp_sprachwahl(): string {
     $cur = lp_sprache();
     $ziel = strtok((string)($_SERVER['REQUEST_URI'] ?? '?p=lieferant_login'), '#');
     $ziel = preg_replace('/([?&])lang=[^&]*(&|$)/', '$1', $ziel);
     $trenner = strpos($ziel, '?') === false ? '?' : '&';
-    $out = '<span style="display:inline-flex;gap:12px;font-size:13px;align-items:center">';
+    $out = '<span style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13px;align-items:center">';
     foreach (['de' => 'Deutsch', 'en' => 'English', 'zh' => '中文'] as $code => $label) {
         $stil = 'text-decoration:none;color:inherit;' . ($code === $cur ? 'font-weight:600;text-decoration:underline' : 'opacity:.6');
         $out .= '<a style="' . $stil . '" href="' . h($ziel . $trenner . 'lang=' . $code) . '">' . h($label) . '</a>';

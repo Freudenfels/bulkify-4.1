@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           [$firma, $t('ansprechpartner', 190), $t('email', 190), $t('telefon', 60), $t('wechat', 80), $t('whatsapp', 40),
            $t('strasse', 190), $t('hausnummer', 20), $t('plz', 20), $t('ort', 120), mb_strtoupper($t('land', 5)),
            $t('webseite', 190), $t('ust_id', 40), $spr, $lid]);
-        $_SESSION['lp_lang'] = $spr;
+        $_SESSION['lp_lang'] = $spr; $_SESSION['lp_lang_uid'] = (int)($_SESSION['uid'] ?? 0);
 
         // Logo: nur Bilder, höchstens 2 MB. Das alte wird ersetzt, nicht angesammelt.
         if (!empty($_FILES['logo']['name']) && ($_FILES['logo']['error'] ?? 1) === UPLOAD_ERR_OK) {
