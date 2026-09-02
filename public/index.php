@@ -86,7 +86,8 @@ if ($p === 'logout') { auth_logout(); header('Location: ?p=login'); exit; }
 // Autologin per Token (nur localhost) – bequemer Direktlink zum Testen
 if ($p === 'autologin') {
     if (auth_login_by_token($_GET['token'] ?? '')) {
-        $ziel = (function_exists('ist_produktionsbereich') && ist_produktionsbereich()) ? 'werk' : 'dashboard';
+        $ziel = (function_exists('ist_lieferant') && ist_lieferant()) ? 'lieferant_portal'
+              : ((function_exists('ist_produktionsbereich') && ist_produktionsbereich()) ? 'werk' : 'dashboard');
         header('Location: ?p=' . $ziel); exit;
     }
     header('Location: ?p=login'); exit;
