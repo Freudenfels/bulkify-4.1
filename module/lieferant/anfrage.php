@@ -105,30 +105,29 @@ if (!$a):
     <?php if ($ang): ?><div class="muted" style="margin-bottom:10px"><?= h(lp_t('abgegeben_am')) ?> <?= h(date('d.m.Y', strtotime((string)$ang['angelegt']))) ?><?= $ang['status'] === 'angenommen' ? ' · ' . h(lp_t('angenommen')) : '' ?></div><?php endif; ?>
     <form method="post">
       <input type="hidden" name="aktion" value="angebot">
-      <?php // Erste Zeile: Preis und die Menge, für die er gilt. Weitere Staffeln stehen genau
-            // darunter und sehen gleich aus – so ist auf einen Blick klar, was zusammengehört. ?>
-      <div class="bx-field" style="max-width:520px">
-        <label><?= h(lp_t('ihr_preis')) ?></label>
-        <div class="bx-row" style="gap:10px">
-          <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
-          <input type="text" name="menge_haupt" value="<?= h($hauptMenge > 0 ? $zahl($hauptMenge, 3) : '') ?>" placeholder="<?= h(lp_t('ab_menge')) ?>" style="flex:1">
-        </div>
-        <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>">
-      </div>
-      <?php // Weitere Staffeln: je Zeile ein Preis und die Menge, ab der er gilt. Leere Zeilen
-            // ignoriert das Speichern, deshalb braucht es keinen Entfernen-Knopf. ?>
-      <div id="staffelRaster" style="max-width:520px">
-        <?php foreach ($staffeln as $s): ?>
-          <div class="bx-row" style="gap:10px;margin-bottom:8px">
-            <input type="text" name="s_preis[]" value="<?= h($zahl($s['preis'], 4)) ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
-            <input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>" placeholder="<?= h(lp_t('ab_menge')) ?>" style="flex:1">
+      <?php // Eine Zeile: links die Preisspalte, rechts daneben Basis, Mindestmenge und Lieferzeit.
+            // Die Staffelzeilen stehen IN der Preisspalte, damit sie exakt gleich breit sind. ?>
+      <div class="bx-row" style="gap:var(--sp-4);align-items:flex-start;margin-bottom:8px">
+        <div class="bx-field" style="margin:0;flex:1 1 340px;max-width:520px">
+          <label><?= h(lp_t('ihr_preis')) ?></label>
+          <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:8px">
+            <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
+            <input type="text" name="menge_haupt" value="<?= h($hauptMenge > 0 ? $zahl($hauptMenge, 3) : '') ?>" placeholder="<?= h(lp_t('ab_menge')) ?>" style="flex:1">
           </div>
-        <?php endforeach; ?>
-      </div>
-      <button type="button" class="btn btn-ghost btn-sm" id="staffelPlus" style="margin-bottom:var(--sp-4)"
-              data-preis="<?= h(lp_t('preis')) ?>" data-menge="<?= h(lp_t('ab_menge')) ?>">+ <?= h(lp_t('staffel')) ?></button>
-      <?php // Drei kurze Angaben – nebeneinander statt je Feld eine Rasterspalte von 240px. ?>
-      <div class="bx-row" style="gap:var(--sp-4);align-items:flex-end;margin-bottom:var(--sp-4)">
+          <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>">
+          <?php // Weitere Staffeln: je Zeile ein Preis und die Menge, ab der er gilt. Leere Zeilen
+                // ignoriert das Speichern, deshalb braucht es keinen Entfernen-Knopf. ?>
+          <div id="staffelRaster">
+            <?php foreach ($staffeln as $s): ?>
+              <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:8px">
+                <input type="text" name="s_preis[]" value="<?= h($zahl($s['preis'], 4)) ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
+                <input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>" placeholder="<?= h(lp_t('ab_menge')) ?>" style="flex:1">
+              </div>
+            <?php endforeach; ?>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="staffelPlus"
+                  data-preis="<?= h(lp_t('preis')) ?>" data-menge="<?= h(lp_t('ab_menge')) ?>">+ <?= h(lp_t('staffel')) ?></button>
+        </div>
         <div class="bx-field" style="margin:0;max-width:190px"><label><?= h(lp_t('preis_basis')) ?></label>
           <?php $pb = (int)($ang['preis_basis'] ?? 1); ?>
           <select name="preis_basis">
@@ -148,7 +147,7 @@ if (!$a):
           // Beschriftungen kommen als data-Attribute vom Knopf – kein PHP in der JS-Zeichenkette.
           var zeile = document.createElement('div');
           zeile.className = 'bx-row';
-          zeile.style.cssText = 'gap:10px;margin-bottom:8px';
+          zeile.style.cssText = 'gap:10px;flex-wrap:nowrap;margin-bottom:8px';
           [['s_preis[]', knopf.dataset.preis], ['s_menge[]', knopf.dataset.menge]].forEach(function(p){
             var f = document.createElement('input');
             f.type = 'text'; f.name = p[0]; f.placeholder = p[1] || ''; f.style.flex = '1';
