@@ -38,3 +38,10 @@ Im Reiter **Spezifikation** liest die KI eine hinterlegte Lieferantenunterlage (
 Ein frisch hochgeladenes Dokument (Reiter **Dokumente**) wird gleich ausgelesen; der Vorschlag wartet dann im Reiter Spezifikation. Dasselbe passiert, wenn der **Lieferant** die Datei in seinem Portal hochlädt.
 
 Daneben steht der Knopf **bulkify-Spezifikation ansehen** (`?p=spec_bulkify&id=`) – unser eigenes Papier aus genau diesen Feldern.
+
+## Rohstoff aus einer Spezifikation anlegen
+Auf der Anlegeseite (`?p=rohstoff&id=neu`) steht oben **Rohstoff aus einer Spezifikation anlegen**: Datei hochladen (PDF oder Bild, auch Scan), die KI liest sie aus und **füllt das Formular darunter**. Nichts wird dabei gespeichert – du prüfst die Felder und drückst wie sonst auf Speichern.
+
+Ablauf im Code: `aktion=spec_neu` legt die Datei in `data/uploads` und merkt Vorschlag plus Dateiname in der Session; beim Rendern wird der Vorschlag über die Vorgabewerte gelegt (`$neuDefault`); beim Speichern entsteht der Rohstoff wie immer, danach wird die Datei als Dokument an ihn gehängt und der Vorschlag daran gemerkt. `aktion=spec_neu_weg` verwirft alles wieder und löscht die Datei.
+
+So hat jeder Rohstoff vom ersten Tag an seine Unterlage am Datensatz – und über **bulkify-Spezifikation ansehen** sofort ein eigenes Papier.

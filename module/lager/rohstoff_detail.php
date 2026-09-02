@@ -45,6 +45,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'analy
         }
     }
 }
+// Einen NEUEN Rohstoff aus einer Spezifikation anlegen: Datei hochladen, auslesen, das
+// Anlegeformular damit vorbelegen. Gespeichert wird erst, wenn der Mensch auf Speichern drückt –
+// die Datei liegt so lange nur in data/uploads und wird beim Speichern am Rohstoff abgelegt.
+$neuKiFehler = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_neu') {
+    require_once BX_ROOT . '/core/spec_ki.php';
+    if (!ki_bereit()) {
+        $neuKiFehler = 'Die KI ist nicht eingerichtet (Einstellungen → KI).';
+    } elseif (empty($_FILES['neu_spec']['name']) || ($_FILES['neu_spec']['error'] ?? 1) !== UPLOAD_ERR_OK) {
+        $neuKiFehler = 'Bitte eine Datei auswählen.';
+    } else {
+        if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+        $orig = (string)$_FILES['neu_spec']['name'];
+        $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($orig, PATHINFO_EXTENSION)));
+        $fn   = 'neu_' . bin2hex(random_bytes(6)) . ($ext ? '.' . $ext : '');
+        if (!move_uploaded_file($_FILES['neu_spec']['tmp_name'], BX_UPLOADS . '/' . $fn)) {
+            $neuKiFehler = 'Die Datei konnte nicht gespeichert werden.';
+        } else {
+            $r = spec_ki_lesen(BX_UPLOADS . '/' . $fn);
+            if (!$r['ok']) { @unlink(BX_UPLOADS . '/' . $fn); $neuKiFehler = $r['fehler']; }
+            else {
+                $_SESSION['rohstoff_ki'] = ['datei' => $fn, 'orig' => $orig, 'ergebnis' => $r];
+                header('Location: ?p=rohstoff&id=neu&ausspec=1'); exit;
+            }
+        }
+    }
+}
+// Den vorbereiteten Vorschlag wieder verwerfen.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_neu_weg') {
+    if (!empty($_SESSION['rohstoff_ki']['datei'])) @unlink(BX_UPLOADS . '/' . basename($_SESSION['rohstoff_ki']['datei']));
+    unset($_SESSION['rohstoff_ki']);
+    header('Location: ?p=rohstoff&id=neu'); exit;
+}
+
 // Eine Lieferantenunterlage mit der KI auslesen. Das Ergebnis ist ein VORSCHLAG: es steht in
 // $kiVorschlag und wird beim Rendern angezeigt, gespeichert wird erst auf Knopfdruck.
 $kiVorschlag = null; $kiFehler = ''; $kiDok = 0;
@@ -144,6 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             $vals[array_search('vk_aufschlag_prozent', $felder)] = null;
         }
         foreach (['ek_preis','overage_prozent'] as $nf) { $ix = array_search($nf, $felder); if (trim((string)$vals[$ix]) === '') $vals[$ix] = 0; }
+        $war_neu = $neu;
         if ($neu) {
             if (trim($vals[array_search('artikelnummer', $felder)]) === '') $vals[array_search('artikelnummer', $felder)] = naechste_nummer(item_prefix($vals[array_search('kategorie', $felder)]));
             $ph = implode(',', array_fill(0, count($felder), '?'));
@@ -175,6 +210,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             if (move_uploaded_file($_FILES['spec_pdf']['tmp_name'], BX_UPLOADS . '/' . $fn))
                 q("UPDATE item SET spec_pdf=? WHERE id=?", [$fn, (int)$id]);
         }
+        // Kam der Rohstoff aus einer hochgeladenen Spezifikation? Dann gehört die Datei jetzt an ihn.
+        if ($war_neu && !empty($_SESSION['rohstoff_ki']['datei'])) {
+            require_once BX_ROOT . '/core/spec_ki.php';
+            $ki = $_SESSION['rohstoff_ki'];
+            $typ = (($ki['ergebnis']['typ'] ?? '') === 'coa') ? 'coa' : 'spec';
+            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar) VALUES ('item',?,?,?,?,?,0)",
+              [(int)$id, $typ, 'Aus dem Anlegen: ' . mb_substr((string)$ki['orig'], 0, 150), $ki['datei'], $ki['orig']]);
+            spec_ki_merken((int)insert_id(), (array)$ki['ergebnis']);
+            unset($_SESSION['rohstoff_ki']);
+        }
         header('Location: ?p=rohstoff&id=' . $id . '&gespeichert=1'); exit;
     }
 }
@@ -183,6 +228,10 @@ $neuForm = ($_GET['form'] ?? '') === 'kapselhuelle' ? 'kapselhuelle' : 'pulver';
 $neuDefault = $neuForm === 'kapselhuelle'
     ? ['kategorie'=>'rohstoff','form'=>'kapselhuelle','einheit'=>'Stück','preis_bezug'=>'Stück','gesperrt'=>0]
     : ['kategorie'=>'rohstoff','form'=>'pulver','einheit'=>'kg','preis_bezug'=>'kg','gesperrt'=>0];
+// Liegt ein ausgelesener Vorschlag bereit, füllt er das Anlegeformular – Feld für Feld sichtbar,
+// änderbar, und gespeichert wird erst beim Klick auf Speichern.
+$neuKi = $neu ? ($_SESSION['rohstoff_ki']['ergebnis'] ?? null) : null;
+if ($neuKi && !empty($neuKi['stamm'])) $neuDefault = array_merge($neuDefault, (array)$neuKi['stamm']);
 $it = $neu ? $neuDefault : one("SELECT * FROM item WHERE id=?", [(int)$id]);
 if (!$it) { $neu = true; $it = $neuDefault; }
 $v = fn($key) => h((string)($it[$key] ?? ''));
@@ -363,6 +412,40 @@ if (!$neu) {
       <div class="bx-field" style="max-width:280px"><label>Haltbarkeit</label><input type="text" name="haltbarkeit" value="<?= $v('haltbarkeit') ?>" placeholder="z. B. 24 Monate"></div>
       <div class="bx-field"><label>Lagerbedingungen</label><textarea name="lagerbedingungen" placeholder="kühl & trocken, 18–22 °C, 50–60 % rF"><?= $v('lagerbedingungen') ?></textarea></div>
     </div>
+
+    <?php // Beim Anlegen: aus einer Spezifikation heraus starten. Spart das Abtippen und ist der
+          // Weg, über den jeder Rohstoff von Anfang an Papiere hat.
+          if ($neu): require_once BX_ROOT . '/core/spec_ki.php'; ?>
+    <div class="bx-panel" style="border-color:var(--gruen)"><h2 style="margin-top:0">Rohstoff aus einer Spezifikation anlegen</h2>
+      <?php if ($neuKiFehler !== ''): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h($neuKiFehler) ?></div><?php endif; ?>
+      <?php if ($neuKi): $anz = count((array)($neuKi['stamm'] ?? [])); ?>
+        <div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">
+          <strong><?= h((string)($_SESSION['rohstoff_ki']['orig'] ?? '')) ?></strong> ausgelesen –
+          <?= (int)$anz ?> Feld(er) unten eingetragen<?= ($neuKi['werte'] ?? []) ? ', dazu ' . count($neuKi['werte']) . ' Analysenwerte' : '' ?>.
+          Bitte prüfen und dann speichern.
+        </div>
+        <div class="bx-row" style="gap:10px;align-items:center">
+          <?= bx_badge('erkannt als ' . ['spec'=>'Spezifikation','coa'=>'Analysenzertifikat','beides'=>'Spezifikation + CoA','unklar'=>'unklar'][$neuKi['typ']], $neuKi['typ'] === 'unklar' ? 'warn' : 'info') ?>
+          <?= bx_badge('Sicherheit ' . $neuKi['sicherheit'], $neuKi['sicherheit'] === 'hoch' ? 'ok' : ($neuKi['sicherheit'] === 'niedrig' ? 'warn' : 'info')) ?>
+          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="spec_neu_weg">
+            <button class="btn btn-ghost btn-sm" type="submit">Vorschlag verwerfen</button></form>
+        </div>
+        <?php foreach ((array)($neuKi['hinweise'] ?? []) as $hw): ?><div class="muted" style="font-size:12px;margin-top:6px">Hinweis: <?= h($hw) ?></div><?php endforeach; ?>
+        <p class="muted" style="font-size:12px;margin:10px 0 0">Die Datei wird beim Speichern am Rohstoff abgelegt. Erkannte Analysenwerte kannst du danach im Reiter Spezifikation an eine Charge übernehmen.</p>
+      <?php elseif (!ki_bereit()): ?>
+        <div class="muted">Die KI ist nicht eingerichtet (Einstellungen &rarr; KI). Lege den Rohstoff von Hand an.</div>
+      <?php else: ?>
+        <p class="muted" style="margin-top:0">Lade die Spezifikation oder das CoA des Lieferanten hoch – auch als Scan. Die Felder unten werden daraus vorbelegt, du prüfst sie und speicherst.</p>
+        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <input type="hidden" name="aktion" value="spec_neu">
+          <div class="bx-field" style="margin:0"><label>Unterlage</label>
+            <input type="file" name="neu_spec" required accept="application/pdf,image/*"></div>
+          <button class="btn btn-primary" type="submit">Auslesen und Felder füllen</button>
+          <span class="muted" style="font-size:12px;align-self:center">dauert 10–60 Sekunden</span>
+        </form>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
 
     <?php // Unterlagen des Lieferanten mit der KI auslesen. Nichts wird ungefragt gespeichert:
           // jedes Feld hat einen Haken, und übernommen wird nur, was angehakt ist.
