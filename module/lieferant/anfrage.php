@@ -5,7 +5,6 @@ require_once BX_ROOT . '/core/dokument_ui.php';
 if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 
 $lid = aktueller_lieferant_id();
-$en  = lp_sprache() !== 'de';
 $id  = (int)($_GET['id'] ?? 0);
 $a   = $id ? one("SELECT af.*, i.name AS item_name, i.artikelnummer, i.einheit AS item_einheit
                   FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
@@ -20,10 +19,10 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $staffeln[] = [(float)str_replace(',', '.', (string)$m), (float)str_replace(',', '.', (string)($_POST['s_preis'][$i2] ?? '0'))];
         $fehler = lieferant_angebot_speichern($id, $lid,
             (float)str_replace(',', '.', (string)($_POST['preis'] ?? '0')),
-            trim((string)($_POST['einheit'] ?? '')),
+            trim((string)($_POST['einheit_roh'] ?? $_POST['einheit'] ?? '')),
             ($_POST['mindestmenge'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$_POST['mindestmenge']) : null,
             ($_POST['lieferzeit'] ?? '') !== '' ? (int)$_POST['lieferzeit'] : null,
-            (string)($_POST['notiz'] ?? ''), $staffeln);
+            (string)($_POST['notiz'] ?? ''), $staffeln, (int)($_POST['preis_basis'] ?? 1));
         if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);
     } elseif ($aktion === 'nachricht') {
         $fehler = nachricht_post_verarbeiten($lid, 'lieferant', (string)(current_user()['name'] ?? 'Lieferant'), 'lieferant_anfrage', $id, lp_sprache());
@@ -39,10 +38,9 @@ lp_head('bulkify – ' . lp_t('anfragen'));
 lp_shell_start('lieferant_anfrage');
 if (isset($_GET['ok']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('gespeichert')) . '</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
-$t = fn(string $de, string $enT) => $en ? $enT : $de;
 
 if (!$a):
-    $liste = all("SELECT af.*, i.name AS item_name, ag.preis, ag.einheit AS ang_einheit
+    $liste = all("SELECT af.*, i.name AS item_name, i.einheit AS item_einheit, ag.preis, ag.einheit AS ang_einheit
                   FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
                   LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=af.id
                   WHERE af.lieferant_id=? ORDER BY (af.status<>'offen'), af.angelegt DESC", [$lid]);
@@ -54,10 +52,12 @@ if (!$a):
       <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('artikel')) ?></th><th class="bx-num"><?= h(lp_t('gewuenscht')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
       <tbody><?php foreach ($liste as $r): ?>
         <tr><td><?= h($r['nummer']) ?></td>
-            <td><?= h(($r['item_name'] ?? '') !== '' ? $r['item_name'] : ($r['betreff'] ?? '–')) ?></td>
-            <td class="bx-num"><?= $r['menge'] ? rtrim(rtrim(number_format((float)$r['menge'], 3, ',', '.'), '0'), ',') . ' ' . h($r['einheit'] ?? '') : '–' ?></td>
+            <td><?= h(($r['item_name'] ?? '') !== '' ? $r['item_name'] : ($r['betreff'] ?? '–')) ?>
+                <?php $typL = anfrage_art_label((string)($r['art'] ?? ''), (string)($r['form'] ?? ''), lp_sprache()); ?>
+                <?php if ($typL !== ''): ?><div class="muted" style="font-size:12px"><?= h($typL) ?></div><?php endif; ?></td>
+            <td class="bx-num"><?= $r['menge'] ? h(lp_num($r['menge'])) . ' ' . h(lp_einheit($r['einheit'] ?: ($r['item_einheit'] ?? ''))) : '–' ?></td>
             <td><?= $r['status'] === 'offen' ? h(lp_t('anfrage_offen')) : h(lp_t('anfrage_beant')) ?></td>
-            <td class="bx-num"><a class="btn <?= $r['status'] === 'offen' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="?p=lieferant_anfrage&id=<?= (int)$r['id'] ?>"><?= h($r['status'] === 'offen' ? lp_t('angebot_abgeben') : $t('ansehen', 'View')) ?></a></td></tr>
+            <td class="bx-num"><a class="btn <?= $r['status'] === 'offen' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="?p=lieferant_anfrage&id=<?= (int)$r['id'] ?>"><?= h($r['status'] === 'offen' ? lp_t('angebot_abgeben') : lp_t('ansehen')) ?></a></td></tr>
       <?php endforeach; ?></tbody>
     </table></div>
     <?php endif; ?>
@@ -66,7 +66,9 @@ if (!$a):
     $ang = one("SELECT * FROM lieferant_angebot WHERE anfrage_id=?", [$id]);
     $staffeln = $ang ? all("SELECT * FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$ang['id']]) : [];
     while (count($staffeln) < 3) $staffeln[] = ['menge_ab' => '', 'preis' => ''];
-    $einheit = $ang['einheit'] ?? ($a['item_einheit'] ?? $a['einheit'] ?? '');
+    // Die Einheit steht schon in der Anfrage (dort wird sie automatisch gesetzt) – der Lieferant
+    // muss sie nicht raten. Ein bereits abgegebenes Angebot behält seine eigene Einheit.
+    $einheit = trim((string)($ang['einheit'] ?? '')) ?: (trim((string)($a['einheit'] ?? '')) ?: trim((string)($a['item_einheit'] ?? '')));
     $zahl = fn($x, $n) => $x === '' || $x === null ? '' : rtrim(rtrim(number_format((float)$x, $n, '.', ''), '0'), '.');
 ?>
   <h1 style="margin-bottom:4px"><?= h($a['nummer']) ?></h1>
@@ -75,29 +77,43 @@ if (!$a):
   <div class="bx-panel">
     <h2 style="margin-top:0"><?= h(($a['item_name'] ?? '') !== '' ? $a['item_name'] : ($a['betreff'] ?? '–')) ?></h2>
     <div class="bx-tablewrap"><table class="bx-table"><tbody>
-      <?php if ($a['artikelnummer']): ?><tr><td style="width:220px"><?= h($t('Artikelnummer', 'Part no.')) ?></td><td><?= h($a['artikelnummer']) ?></td></tr><?php endif; ?>
-      <tr><td style="width:220px"><?= h(lp_t('gewuenscht')) ?></td><td><?= $a['menge'] ? h($zahl($a['menge'], 3)) . ' ' . h($a['einheit'] ?? '') : '–' ?></td></tr>
+      <?php $typ = anfrage_art_label((string)($a['art'] ?? ''), (string)($a['form'] ?? ''), lp_sprache()); ?>
+      <?php if ($typ !== ''): ?><tr><td style="width:220px"><?= h(lp_t('produkttyp')) ?></td><td><?= h($typ) ?></td></tr><?php endif; ?>
+      <?php if ($a['artikelnummer']): ?><tr><td style="width:220px"><?= h(lp_t('artikelnummer')) ?></td><td><?= h($a['artikelnummer']) ?></td></tr><?php endif; ?>
+      <tr><td style="width:220px"><?= h(lp_t('gewuenscht')) ?></td><td><?= $a['menge'] ? h(lp_num($a['menge'])) . ' ' . h(lp_einheit($einheit)) : '–' ?></td></tr>
+      <?php if ($a['stueck_je_packung']): ?><tr><td><?= h(lp_t('je_packung')) ?></td><td><?= (int)$a['stueck_je_packung'] ?></td></tr><?php endif; ?>
+      <?php if ($a['kapselgroesse_id']): $kgN = (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$a['kapselgroesse_id']]); ?>
+        <?php if ($kgN !== ''): ?><tr><td><?= h(lp_t('kapselgroesse')) ?></td><td><?= h($kgN) ?></td></tr><?php endif; ?>
+      <?php endif; ?>
       <?php if ($a['notiz']): ?><tr><td><?= h(lp_t('notiz')) ?></td><td style="white-space:pre-line"><?= h($a['notiz']) ?></td></tr><?php endif; ?>
-      <?php if ((int)$a['coa_gewuenscht'] === 1): ?><tr><td>CoA / Spec</td><td><?= h($t('bitte mitschicken', 'please attach')) ?></td></tr><?php endif; ?>
+      <?php if ((int)$a['coa_gewuenscht'] === 1): ?><tr><td>CoA / Spec</td><td><?= h(lp_t('coa_mitschicken')) ?></td></tr><?php endif; ?>
     </tbody></table></div>
   </div>
 
   <div class="bx-panel">
     <h2 style="margin-top:0"><?= h(lp_t('angebot_abgeben')) ?></h2>
-    <?php if ($ang): ?><div class="muted" style="margin-bottom:10px"><?= h(lp_t('abgegeben_am')) ?> <?= h(date('d.m.Y', strtotime((string)$ang['angelegt']))) ?><?= $ang['status'] === 'angenommen' ? ' · ' . h($t('angenommen', 'accepted')) : '' ?></div><?php endif; ?>
+    <?php if ($ang): ?><div class="muted" style="margin-bottom:10px"><?= h(lp_t('abgegeben_am')) ?> <?= h(date('d.m.Y', strtotime((string)$ang['angelegt']))) ?><?= $ang['status'] === 'angenommen' ? ' · ' . h(lp_t('angenommen')) : '' ?></div><?php endif; ?>
     <form method="post">
       <input type="hidden" name="aktion" value="angebot">
       <div class="bx-grid">
-        <div class="bx-field"><label><?= h(lp_t('ihr_preis')) ?></label>
+        <div class="bx-field"><label><?= h(lp_t('ihr_preis')) ?><?= $einheit !== '' ? ' – ' . h(lp_t('preis_je')) . ' ' . h(lp_einheit($einheit)) : '' ?></label>
           <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="12.50"></div>
         <div class="bx-field"><label><?= h(lp_t('einheit')) ?></label>
-          <input type="text" name="einheit" value="<?= h($einheit) ?>" placeholder="kg"></div>
-        <div class="bx-field"><label><?= h($t('Mindestmenge (MOQ)', 'Minimum order quantity')) ?></label>
+          <input type="text" name="einheit" value="<?= h(lp_einheit($einheit)) ?>" readonly style="background:var(--panel-2)">
+          <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>">
+          <div class="muted" style="font-size:12px"><?= h(lp_t('einheit_fest')) ?></div></div>
+        <div class="bx-field"><label><?= h(lp_t('preis_basis')) ?></label>
+          <?php $pb = (int)($ang['preis_basis'] ?? 1); ?>
+          <select name="preis_basis">
+            <option value="1"<?= $pb === 1 ? ' selected' : '' ?><?= '' ?>><?= h(lp_t('je_1')) ?> <?= h(lp_einheit($einheit)) ?></option>
+            <option value="1000"<?= $pb === 1000 ? ' selected' : '' ?>><?= h(lp_t('je_1000')) ?> <?= h(lp_einheit($einheit)) ?></option>
+          </select></div>
+        <div class="bx-field"><label><?= h(lp_t('moq')) ?></label>
           <input type="text" name="mindestmenge" value="<?= h($ang ? $zahl($ang['mindestmenge'], 3) : '') ?>"></div>
-        <div class="bx-field"><label><?= h($t('Lieferzeit (Tage)', 'Lead time (days)')) ?></label>
+        <div class="bx-field"><label><?= h(lp_t('lieferzeit')) ?></label>
           <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>"></div>
       </div>
-      <div style="margin-top:6px"><strong><?= h($t('Mengenstaffeln', 'Volume tiers')) ?></strong>
+      <div style="margin-top:6px"><strong><?= h(lp_t('mengenstaffeln')) ?></strong>
         <div class="muted" style="font-size:12px;margin-bottom:8px"><?= h(lp_t('staffel_hinweis')) ?></div>
         <div class="bx-tablewrap"><table class="bx-table">
           <thead><tr><th><?= h(lp_t('ab_menge')) ?></th><th><?= h(lp_t('preis')) ?></th></tr></thead>
@@ -119,9 +135,9 @@ if (!$a):
     <h2 style="margin-top:0"><?= h(lp_t('dateien')) ?></h2>
     <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
       <input type="hidden" name="aktion" value="dokument">
-      <div class="bx-field" style="margin:0"><label><?= h($t('Art', 'Type')) ?></label>
-        <select name="dok_typ"><option value="coa">CoA</option><option value="spec"><?= h($t('Spezifikation', 'Specification')) ?></option><option value="sonstiges"><?= h($t('Sonstiges', 'Other')) ?></option></select></div>
-      <div class="bx-field" style="margin:0"><label><?= h($t('Datei', 'File')) ?></label><input type="file" name="dok" required></div>
+      <div class="bx-field" style="margin:0"><label><?= h(lp_t('art')) ?></label>
+        <select name="dok_typ"><option value="coa">CoA</option><option value="spec"><?= h(lp_t('spezifikation')) ?></option><option value="sonstiges"><?= h(lp_t('sonstiges')) ?></option></select></div>
+      <div class="bx-field" style="margin:0"><label><?= h(lp_t('datei')) ?></label><input type="file" name="dok" required></div>
       <button class="btn btn-ghost" type="submit"><?= h(lp_t('hochladen')) ?></button>
     </form>
     <?php $docs = all("SELECT id, typ, titel, datei_orig, angelegt FROM dokument WHERE objekt_typ='item' AND objekt_id=? AND lieferant_id=? ORDER BY id DESC", [(int)$a['item_id'], $lid]);

@@ -4,6 +4,8 @@
 Panel unten auf der Seite: **Einladungslink erzeugen** (`lieferant_einladung`, gilt einmal) und an den Lieferanten schicken – er legt Zugang und Passwort selbst an. Besteht schon ein Zugang, stehen dort Benutzer, E-Mail und letzter Login.
 
 ## Preisanfragen
+Das Formular fragt zuerst, **was** angefragt wird (Rohstoff, Fertigprodukt, Verpackung, Verbrauch, Sonstiges). Bei einem Fertigprodukt kommen Darreichungsform, Einheiten je Packung, Kapselgröße und optional eine Rezeptur als Vorlage dazu. Die **Einheit füllt sich selbst** – aus dem gewählten Artikel oder der Darreichungsform (`anfrage_einheit()`); sie lässt sich überschreiben. Die Artikel-Auswahl enthält auch **Fertigprodukte** (`kategorie=fertig`), nicht nur Rohstoffe und Verpackungen.
+
 Anfrage an diesen Lieferanten stellen: **Artikel** (dann landen die Preise beim Annehmen automatisch als EK-Staffeln dort) oder Freitext, dazu Menge, Einheit, Notiz und ob CoA/Spezifikation mitkommen sollen. Darunter die Liste aller Anfragen mit der Antwort des Lieferanten (Preis, MOQ, Lieferzeit, Staffeln) und dem Knopf **Preise übernehmen** – der ersetzt die bisherigen EK-Staffeln dieses Lieferanten für den Artikel.
 
 **Zweck:** Die 360°-Lieferantenseite – gleiches Muster wie das Kundenkonto, aber mit einkaufs-typischen Feldern.

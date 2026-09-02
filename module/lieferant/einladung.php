@@ -10,7 +10,7 @@ $inv   = $token !== '' ? one("SELECT e.*, l.firma, l.ansprechpartner, l.sprache
 
 // Sprache: die Wahl des Besuchers zaehlt, sonst die am Lieferanten hinterlegte.
 if ($inv && empty($_SESSION['lp_lang']) && ($_GET['lang'] ?? '') === '')
-    $_SESSION['lp_lang'] = strtolower((string)$inv['sprache']) === 'de' ? 'de' : 'en';
+    $_SESSION['lp_lang'] = in_array(strtolower((string)$inv['sprache']), ['de', 'zh'], true) ? strtolower((string)$inv['sprache']) : 'en';
 
 $fehler = '';
 if ($inv && $_SERVER['REQUEST_METHOD'] === 'POST') {

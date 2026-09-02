@@ -6,7 +6,6 @@ require_once BX_ROOT . '/core/bestellung_ui.php';
 if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 
 $lid = aktueller_lieferant_id();
-$en  = lp_sprache() !== 'de';
 $id  = (int)($_GET['id'] ?? 0);
 // Nur eigene Bestellungen – die Pruefung haengt an jeder Abfrage, nicht an der Oberflaeche.
 $b   = $id ? one("SELECT * FROM bestellung WHERE id=? AND lieferant_id=?", [$id, $lid]) : null;

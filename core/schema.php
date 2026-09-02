@@ -707,6 +707,13 @@ function init_schema(): void {
     // darf nicht versehentlich beim Kunden landen, nur weil es am Rohstoff hängt.
     ensure_column('dokument', 'kunde_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('dokument', 'hochgeladen_von', "VARCHAR(10) NOT NULL DEFAULT 'team'");   // team | lieferant (Ablage je Lieferant)
+    // Preisanfrage: was genau angefragt wird. Daraus ergibt sich die Einheit, in der der Lieferant seinen Preis nennt.
+    ensure_column('lieferant_anfrage', 'art', "VARCHAR(20) NULL");               // rohstoff|fertigprodukt|verpackung|verbrauch|sonstiges
+    ensure_column('lieferant_anfrage', 'form', "VARCHAR(20) NULL");              // bei Fertigprodukt: kapsel|tablette|softgel|stick|pulver|granulat|fluessig
+    ensure_column('lieferant_anfrage', 'stueck_je_packung', "INT NULL");         // bei Fertigprodukt: Einheiten je Packung (z. B. 90 Kapseln)
+    ensure_column('lieferant_anfrage', 'kapselgroesse_id', "INT NULL");          // bei Kapsel/Softgel: gewünschte Kapselgröße
+    ensure_column('lieferant_anfrage', 'rezeptur_id', "INT NULL");               // optional: unsere Rezeptur als Vorlage
+    ensure_column('lieferant_angebot', 'preis_basis', "INT NOT NULL DEFAULT 1");  // Preis gilt je 1 oder je 1000 Einheiten
     ensure_column('item', 'cas', "VARCHAR(30) NULL");              // CAS-Nummer (z. B. Ascorbinsäure 50-81-7)
     ensure_column('item', 'max_fuellgewicht_g', "DECIMAL(10,2) NULL"); // Verpackung: max. Füllgewicht (g) – für Pulver-Match (Glas/Dose)
     // Verpackungs-Stückliste: Rolle je Verpackungs-Item + Produkt-Slots für die komplette Stückliste
@@ -2398,12 +2405,92 @@ function rohstoff_vk_bei_menge(int $item_id, float $menge): ?float {
 }
 
 
-// Preisanfrage an einen Lieferanten stellen.
-function lieferant_anfrage_stellen(int $lieferant_id, ?int $item_id, string $betreff, ?float $menge, string $einheit, string $notiz, bool $coa = true): int {
-    q("INSERT INTO lieferant_anfrage (nummer,lieferant_id,item_id,betreff,menge,einheit,notiz,coa_gewuenscht,status)
-       VALUES (?,?,?,?,?,?,?,?,'offen')",
+
+// ---- Preisanfrage: Art, Form und Einheit -----------------------------------
+// Was fragen wir an? Davon hängt ab, welche Felder sinnvoll sind und in welcher Einheit
+// der Lieferant seinen Preis nennt.
+function anfrage_arten(): array {
+    return ['rohstoff'=>'Rohstoff', 'fertigprodukt'=>'Fertigprodukt (Bulk)', 'verpackung'=>'Verpackung', 'verbrauch'=>'Verbrauchsmaterial', 'sonstiges'=>'Sonstiges (Freitext)'];
+}
+// Darreichungsformen, die man als Fertigprodukt anfragen kann (dieselben wie in der Rezeptur).
+function anfrage_formen(): array {
+    return ['kapsel'=>'Kapsel', 'tablette'=>'Tablette', 'softgel'=>'Softgel', 'stick'=>'Stick', 'pulver'=>'Pulver', 'granulat'=>'Granulat', 'fluessig'=>'Flüssig'];
+}
+// Einheit, in der ein Fertigprodukt dieser Form eingekauft wird. Stückware wird in der Form
+// selbst bepreist (je Kapsel, je Tablette …) – so heißt der Preis beim Lieferanten auch so.
+// Pulver/Granulat gehen nach Kilogramm, Flüssiges nach Liter.
+function anfrage_einheit_fuer_form(string $form): string {
+    return ['kapsel'=>'Kapsel', 'tablette'=>'Tablette', 'softgel'=>'Softgel', 'stick'=>'Stick',
+            'pulver'=>'kg', 'granulat'=>'kg', 'fluessig'=>'L'][$form] ?? 'Stück';
+}
+// Die Einheit einer Anfrage – ohne dass jemand sie eintippen muss.
+// Reihenfolge: was am Artikel steht (Bezugsgröße vor Lagereinheit), sonst die Form des
+// Fertigprodukts, sonst die Art (Verpackung/Verbrauch = Stück). Leer nur bei reinem Freitext.
+function anfrage_einheit(?int $item_id, string $art = '', string $form = ''): string {
+    // Steht die Darreichungsform fest, gilt sie: „je Kapsel" ist genauer als das allgemeine
+    // „Stück", das am Artikel steht.
+    if ($form !== '' && array_key_exists($form, anfrage_formen())) return anfrage_einheit_fuer_form($form);
+    if ($item_id) {
+        $it = one("SELECT einheit, preis_bezug, kategorie, form FROM item WHERE id=?", [$item_id]);
+        if ($it) {
+            $e = trim((string)($it['preis_bezug'] ?? '')) ?: trim((string)($it['einheit'] ?? ''));
+            if ($e !== '') return mb_substr($e, 0, 20);
+        }
+    }
+    if (in_array($art, ['verpackung', 'verbrauch'], true)) return 'Stück';
+    if ($art === 'fertigprodukt') return 'Stück';
+    if ($art === 'rohstoff') return 'kg';
+    return '';
+}
+// Art einer Anfrage aus dem gewählten Artikel ableiten (wenn keine gesetzt ist).
+function anfrage_art_fuer_item(?int $item_id): string {
+    if (!$item_id) return '';
+    $k = (string) scalar("SELECT kategorie FROM item WHERE id=?", [$item_id]);
+    return ['rohstoff'=>'rohstoff', 'verpackung'=>'verpackung', 'verbrauch'=>'verbrauch', 'fertig'=>'fertigprodukt'][$k] ?? '';
+}
+// Klartext für die Zeile „Produkttyp" – deutsch, englisch, chinesisch.
+function anfrage_art_label(string $art, string $form = '', string $sprache = 'de'): string {
+    $arten = [
+        'rohstoff'      => ['de'=>'Rohstoff', 'en'=>'Raw material', 'zh'=>'原料'],
+        'fertigprodukt' => ['de'=>'Fertigprodukt', 'en'=>'Finished product', 'zh'=>'成品'],
+        'verpackung'    => ['de'=>'Verpackung', 'en'=>'Packaging', 'zh'=>'包装'],
+        'verbrauch'     => ['de'=>'Verbrauchsmaterial', 'en'=>'Consumables', 'zh'=>'耗材'],
+        'sonstiges'     => ['de'=>'Sonstiges', 'en'=>'Other', 'zh'=>'其他'],
+    ];
+    $formen = [
+        'kapsel'   => ['de'=>'Kapseln', 'en'=>'Capsules', 'zh'=>'胶囊'],
+        'tablette' => ['de'=>'Tabletten', 'en'=>'Tablets', 'zh'=>'片剂'],
+        'softgel'  => ['de'=>'Softgels', 'en'=>'Softgels', 'zh'=>'软胶囊'],
+        'stick'    => ['de'=>'Sticks', 'en'=>'Sticks', 'zh'=>'条包'],
+        'pulver'   => ['de'=>'Pulver', 'en'=>'Powder', 'zh'=>'粉剂'],
+        'granulat' => ['de'=>'Granulat', 'en'=>'Granulate', 'zh'=>'颗粒'],
+        'fluessig' => ['de'=>'Flüssig', 'en'=>'Liquid', 'zh'=>'液体'],
+    ];
+    $s = in_array($sprache, ['de', 'en', 'zh'], true) ? $sprache : 'en';
+    $a = $arten[$art][$s] ?? '';
+    $f = $form !== '' ? ($formen[$form][$s] ?? '') : '';
+    if ($a === '' && $f === '') return '';
+    if ($f === '') return $a;
+    return $a !== '' ? $a . ' · ' . $f : $f;
+}
+
+// Preisanfrage an einen Lieferanten stellen. Art/Form beschreiben, WAS angefragt wird; die Einheit
+// ergibt sich daraus automatisch (anfrage_einheit), wenn sie nicht ausdrücklich mitgegeben wird.
+function lieferant_anfrage_stellen(int $lieferant_id, ?int $item_id, string $betreff, ?float $menge, string $einheit, string $notiz, bool $coa = true, array $opt = []): int {
+    $art  = (string)($opt['art'] ?? '');
+    if ($art === '' || !array_key_exists($art, anfrage_arten())) $art = anfrage_art_fuer_item($item_id) ?: 'sonstiges';
+    $form = (string)($opt['form'] ?? '');
+    if (!array_key_exists($form, anfrage_formen())) $form = '';
+    if ($art !== 'fertigprodukt') $form = '';
+    $einheit = trim($einheit) !== '' ? trim($einheit) : anfrage_einheit($item_id, $art, $form);
+    $stk  = (int)($opt['stueck_je_packung'] ?? 0);
+    $kg   = (int)($opt['kapselgroesse_id'] ?? 0);
+    $rez  = (int)($opt['rezeptur_id'] ?? 0);
+    q("INSERT INTO lieferant_anfrage (nummer,lieferant_id,item_id,betreff,menge,einheit,notiz,coa_gewuenscht,status,art,form,stueck_je_packung,kapselgroesse_id,rezeptur_id)
+       VALUES (?,?,?,?,?,?,?,?,'offen',?,?,?,?,?)",
       [naechste_nummer('LA'), $lieferant_id, $item_id ?: null, mb_substr(trim($betreff), 0, 190) ?: null,
-       $menge && $menge > 0 ? $menge : null, mb_substr(trim($einheit), 0, 20) ?: null, trim($notiz) ?: null, $coa ? 1 : 0]);
+       $menge && $menge > 0 ? $menge : null, mb_substr($einheit, 0, 20) ?: null, trim($notiz) ?: null, $coa ? 1 : 0,
+       $art, $form ?: null, $stk > 0 ? $stk : null, $kg > 0 ? $kg : null, $rez > 0 ? $rez : null]);
     $id = insert_id();
     log_aktivitaet('lieferant', $lieferant_id, 'team', 'Preisanfrage ' . scalar("SELECT nummer FROM lieferant_anfrage WHERE id=?", [$id]) . ' gestellt.', 'anfrage', 'lieferant_anfrage', $id);
     return $id;
@@ -2412,19 +2499,20 @@ function lieferant_anfrage_stellen(int $lieferant_id, ?int $item_id, string $bet
 // Angebot des Lieferanten speichern (einmal je Anfrage – erneutes Senden ueberschreibt).
 // $staffeln: Liste [menge_ab, preis]; leere Zeilen werden ignoriert.
 function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $preis, string $einheit,
-                                     ?float $mindestmenge, ?int $lieferzeit, string $notiz, array $staffeln): string {
+                                     ?float $mindestmenge, ?int $lieferzeit, string $notiz, array $staffeln, int $preis_basis = 1): string {
+    $preis_basis = $preis_basis === 1000 ? 1000 : 1;
     $a = one("SELECT * FROM lieferant_anfrage WHERE id=? AND lieferant_id=?", [$anfrage_id, $lieferant_id]);
     if (!$a) return 'Anfrage nicht gefunden.';
     if ($preis <= 0) return 'Bitte einen Preis eintragen.';
     $vorhanden = one("SELECT id FROM lieferant_angebot WHERE anfrage_id=?", [$anfrage_id]);
     if ($vorhanden) {
-        q("UPDATE lieferant_angebot SET preis=?, einheit=?, mindestmenge=?, lieferzeit_tage=?, notiz=?, status='offen', angelegt=UTC_TIMESTAMP() WHERE id=?",
-          [$preis, $einheit ?: null, $mindestmenge, $lieferzeit, trim($notiz) ?: null, (int)$vorhanden['id']]);
+        q("UPDATE lieferant_angebot SET preis=?, einheit=?, preis_basis=?, mindestmenge=?, lieferzeit_tage=?, notiz=?, status='offen', angelegt=UTC_TIMESTAMP() WHERE id=?",
+          [$preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null, (int)$vorhanden['id']]);
         $aid = (int)$vorhanden['id'];
         q("DELETE FROM lieferant_angebot_staffel WHERE angebot_id=?", [$aid]);
     } else {
-        q("INSERT INTO lieferant_angebot (anfrage_id,lieferant_id,preis,einheit,mindestmenge,lieferzeit_tage,notiz) VALUES (?,?,?,?,?,?,?)",
-          [$anfrage_id, $lieferant_id, $preis, $einheit ?: null, $mindestmenge, $lieferzeit, trim($notiz) ?: null]);
+        q("INSERT INTO lieferant_angebot (anfrage_id,lieferant_id,preis,einheit,preis_basis,mindestmenge,lieferzeit_tage,notiz) VALUES (?,?,?,?,?,?,?,?)",
+          [$anfrage_id, $lieferant_id, $preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null]);
         $aid = insert_id();
     }
     foreach ($staffeln as $s) {
@@ -2449,9 +2537,12 @@ function lieferant_angebot_annehmen(int $angebot_id): string {
     q("DELETE FROM lieferant_preis WHERE item_id=? AND lieferant_id=?", [$item, $lief]);
     $zeilen = all("SELECT menge_ab, preis FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [$angebot_id]);
     if (!$zeilen) $zeilen = [['menge_ab' => (float)($an['mindestmenge'] ?: 0), 'preis' => (float)$an['preis']]];
+    // Der Lieferant darf je 1 oder je 1000 anbieten (bei Kapseln üblich). Am Artikel steht immer
+    // der Preis je EINER Einheit – sonst rechnet die Kalkulation mit dem Tausendfachen.
+    $basis = ((int)($an['preis_basis'] ?? 1)) === 1000 ? 1000 : 1;
     foreach ($zeilen as $z)
         q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand) VALUES (?,?,?,?,?,CURDATE())",
-          [$item, $lief, (float)$z['menge_ab'], (float)$z['preis'], (string)($an['waehrung'] ?: 'EUR')]);
+          [$item, $lief, (float)$z['menge_ab'], (float)$z['preis'] / $basis, (string)($an['waehrung'] ?: 'EUR')]);
     q("UPDATE lieferant_angebot SET status='angenommen' WHERE id=?", [$angebot_id]);
     q("UPDATE lieferant_anfrage SET status='geschlossen' WHERE id=?", [(int)$an['anfrage_id']]);
     log_aktivitaet('lieferant', $lief, 'team', 'Angebot zu ' . $an['anfr_nummer'] . ' angenommen – ' . count($zeilen) . ' EK-Staffel(n) übernommen.', 'angebot', 'item', $item);

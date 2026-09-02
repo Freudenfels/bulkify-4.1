@@ -11,3 +11,11 @@ Nimmt das Team das Angebot an, werden die Staffeln zu EK-Staffeln am Artikel (si
 Speichert der Lieferant sein Angebot zur Preisanfrage, bekommen alle Admins eine Mail mit Preis, Mindestmenge und Lieferzeit (`mail_team_preisanfrage()`), sofern der Versand eingerichtet ist.
 ## Rückfragen und Downloads
 Unter dem Angebotsformular steht das Panel **Rückfragen** (`nachricht_panel()` mit Bezug `lieferant_anfrage`): Fragen und Antworten zu genau dieser Preisanfrage, POST `aktion=nachricht`. Die eigenen CoA/Spezifikationen sind jetzt verlinkt (`?p=lieferant_dokument&id=`).
+## Produkttyp und Einheit
+Die Anfrage sagt, **was** angefragt wird (`art`: Rohstoff, Fertigprodukt, Verpackung, Verbrauch, Sonstiges; bei Fertigprodukt dazu die `form`: Kapsel, Tablette, Softgel, Stick, Pulver, Granulat, Flüssig). Daraus ergibt sich die **Einheit automatisch** (`anfrage_einheit()` in `core/schema.php`): Kapsel/Tablette/Softgel/Stick werden je Einheit bepreist, Pulver und Granulat je kg, Flüssiges je Liter; sonst zählt die Bezugsgröße am Artikel. Der Lieferant kann die Einheit nicht ändern – sie steht fest, damit Angebote vergleichbar bleiben.
+
+## Preisbasis
+Weil Kapseln üblicherweise je 1.000 gehandelt werden, wählt der Lieferant, ob sein Preis **je 1** oder **je 1.000** Einheiten gilt (`lieferant_angebot.preis_basis`). Beim Übernehmen der Preise teilt `lieferant_angebot_annehmen()` durch die Basis – am Artikel steht immer der Preis je einer Einheit.
+
+## Sprachen
+Alle Texte laufen über `lp_t()`; Zahlen über `lp_num()` (Deutsch 1.234,5 – English und Chinesisch 1,234.5) und Einheiten über `lp_einheit()` (Stück/Kapsel/Tablette … werden übersetzt, kg und L nicht).

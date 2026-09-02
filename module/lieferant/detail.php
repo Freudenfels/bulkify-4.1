@@ -37,7 +37,11 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
         ($_POST['item_id'] ?? '') !== '' ? (int)$_POST['item_id'] : null,
         (string)($_POST['betreff'] ?? ''),
         ($_POST['menge'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$_POST['menge']) : null,
-        (string)($_POST['einheit'] ?? ''), (string)($_POST['notiz'] ?? ''), isset($_POST['coa']));
+        (string)($_POST['einheit'] ?? ''), (string)($_POST['notiz'] ?? ''), isset($_POST['coa']),
+        ['art' => (string)($_POST['art'] ?? ''), 'form' => (string)($_POST['form'] ?? ''),
+         'stueck_je_packung' => (int)($_POST['stueck_je_packung'] ?? 0),
+         'kapselgroesse_id'  => (int)($_POST['kapselgroesse_id'] ?? 0),
+         'rezeptur_id'       => (int)($_POST['rezeptur_id'] ?? 0)]);
     header('Location: ?p=lieferant&id=' . (int)$id . '&angefragt=1'); exit;
 }
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_annehmen') {
@@ -388,24 +392,95 @@ if (!$neu) {
   <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Anfrage gestellt – der Lieferant sieht sie in seinem Portal.</div><?php endif; ?>
   <?php if (isset($_GET['uebernommen'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Angebot angenommen – die Preise stehen jetzt als EK-Staffeln am Artikel.</div><?php endif; ?>
   <?php if (isset($_GET['fehler'])): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h((string)$_GET['fehler']) ?></div><?php endif; ?>
-  <form method="post" class="bx-grid" style="margin-bottom:14px">
+  <?php
+  // Artikel mit ihrer Bezugsgröße – daraus füllt das Formular die Einheit selbst.
+  $anfItems = all("SELECT id, name, kategorie, einheit, preis_bezug FROM item WHERE kategorie IN ('rohstoff','fertig','verpackung','verbrauch') AND gesperrt=0 ORDER BY kategorie, name");
+  $itemEinheit = []; $itemArt = [];
+  $katLbl = ['rohstoff'=>'Rohstoff', 'fertig'=>'Fertigprodukt', 'verpackung'=>'Verpackung', 'verbrauch'=>'Verbrauch'];
+  foreach ($anfItems as $it) {
+      $itemEinheit[(int)$it['id']] = trim((string)($it['preis_bezug'] ?: $it['einheit']));
+      $itemArt[(int)$it['id']] = anfrage_art_fuer_item((int)$it['id']);
+  }
+  $formEinheit = [];
+  foreach (array_keys(anfrage_formen()) as $fk) $formEinheit[$fk] = anfrage_einheit_fuer_form($fk);
+  ?>
+  <form method="post" class="bx-grid" style="margin-bottom:14px" id="anfrageForm">
     <input type="hidden" name="aktion" value="anfrage">
+    <div class="bx-field"><label>Was fragen wir an? <?= bx_hint('Bestimmt die Felder darunter und die Einheit, in der der Lieferant seinen Preis nennt.') ?></label>
+      <select name="art" id="anf_art">
+        <?php foreach (anfrage_arten() as $k => $lbl): ?><option value="<?= h($k) ?>"<?= $k === 'rohstoff' ? ' selected' : '' ?>><?= h($lbl) ?></option><?php endforeach; ?>
+      </select></div>
+    <div class="bx-field" id="anf_form_feld" hidden><label>Darreichungsform</label>
+      <select name="form" id="anf_form">
+        <?php foreach (anfrage_formen() as $k => $lbl): ?><option value="<?= h($k) ?>"><?= h($lbl) ?></option><?php endforeach; ?>
+      </select></div>
     <div class="bx-field"><label>Artikel <?= bx_hint('Mit Artikel landen die Preise beim Annehmen automatisch als EK-Staffeln dort. Ohne Artikel ist es eine Freitext-Anfrage.') ?></label>
-      <select name="item_id"><option value="">– Freitext –</option>
-        <?php foreach (all("SELECT id,name,einheit FROM item WHERE kategorie IN ('rohstoff','verpackung','verbrauch') AND gesperrt=0 ORDER BY name") as $it): ?>
-          <option value="<?= (int)$it['id'] ?>"><?= h($it['name']) ?> (<?= h($it['einheit']) ?>)</option>
+      <select name="item_id" id="anf_item"><option value="">– Freitext –</option>
+        <?php foreach ($anfItems as $it): ?>
+          <option value="<?= (int)$it['id'] ?>" data-art="<?= h($itemArt[(int)$it['id']]) ?>"><?= h($katLbl[$it['kategorie']] ?? $it['kategorie']) ?>: <?= h($it['name']) ?> (<?= h($itemEinheit[(int)$it['id']] ?: '–') ?>)</option>
         <?php endforeach; ?></select></div>
-    <div class="bx-field"><label>Betreff (bei Freitext)</label><input type="text" name="betreff" maxlength="190"></div>
-    <div class="bx-field"><label>Menge</label><input type="text" name="menge" placeholder="z. B. 500"></div>
-    <div class="bx-field"><label>Einheit</label><input type="text" name="einheit" placeholder="kg"></div>
+    <div class="bx-field"><label>Betreff (bei Freitext)</label><input type="text" name="betreff" maxlength="190" id="anf_betreff"></div>
+    <div class="bx-field" id="anf_stk_feld" hidden><label>Einheiten je Packung <?= bx_hint('z. B. 90 Kapseln je Dose – nur zur Information für den Lieferanten') ?></label>
+      <input type="number" name="stueck_je_packung" min="1" placeholder="z. B. 90"></div>
+    <div class="bx-field" id="anf_kg_feld" hidden><label>Kapselgröße</label>
+      <select name="kapselgroesse_id"><option value="">– offen –</option>
+        <?php foreach (all("SELECT id, name FROM kapselgroesse ORDER BY sort") as $kg): ?><option value="<?= (int)$kg['id'] ?>"><?= h($kg['name']) ?></option><?php endforeach; ?>
+      </select></div>
+    <div class="bx-field" id="anf_rez_feld" hidden><label>Rezeptur als Vorlage <?= bx_hint('optional – dann weiß der Lieferant, was hineinsoll') ?></label>
+      <select name="rezeptur_id"><option value="">– keine –</option>
+        <?php foreach (all("SELECT id, name, darreichungsform FROM rezeptur ORDER BY name") as $rz): ?><option value="<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>"><?= h($rz['name']) ?></option><?php endforeach; ?>
+      </select></div>
+    <div class="bx-field"><label>Menge <span id="anf_menge_hint" class="muted" style="font-weight:normal"></span></label><input type="text" name="menge" placeholder="z. B. 500"></div>
+    <div class="bx-field"><label>Einheit <?= bx_hint('kommt automatisch aus Artikel bzw. Darreichungsform – nur überschreiben, wenn es abweicht') ?></label>
+      <input type="text" name="einheit" id="anf_einheit" placeholder="kg"></div>
     <div class="bx-field" style="grid-column:1/-1"><label>Notiz an den Lieferanten</label><input type="text" name="notiz" maxlength="500"></div>
     <div class="bx-field"><label>CoA / Spezifikation</label>
       <div class="bx-check" style="padding-top:8px"><input type="checkbox" name="coa" id="anf_coa" value="1" checked><label for="anf_coa" style="margin:0">mit anfragen</label></div></div>
     <div class="bx-field" style="align-self:end"><button class="btn btn-primary" type="submit">Anfrage stellen</button></div>
   </form>
+  <script>
+  (function(){
+    // Die Einheit tippt niemand ab: sie kommt aus dem Artikel, sonst aus der Darreichungsform.
+    var art = document.getElementById('anf_art'), form = document.getElementById('anf_form'),
+        item = document.getElementById('anf_item'), einheit = document.getElementById('anf_einheit'),
+        formFeld = document.getElementById('anf_form_feld'), stkFeld = document.getElementById('anf_stk_feld'),
+        kgFeld = document.getElementById('anf_kg_feld'), rezFeld = document.getElementById('anf_rez_feld'),
+        hint = document.getElementById('anf_menge_hint');
+    if (!art) return;
+    var itemEinheit = <?= json_encode($itemEinheit, JSON_UNESCAPED_UNICODE) ?>;
+    var formEinheit = <?= json_encode($formEinheit, JSON_UNESCAPED_UNICODE) ?>;
+    var handEingabe = false;
+    einheit.addEventListener('input', function(){ handEingabe = einheit.value.trim() !== ''; });
+    function aktualisieren(){
+      var istFertig = art.value === 'fertigprodukt';
+      formFeld.hidden = !istFertig;
+      stkFeld.hidden  = !istFertig;
+      rezFeld.hidden  = !istFertig;
+      kgFeld.hidden   = !(istFertig && (form.value === 'kapsel' || form.value === 'softgel'));
+      var iid = parseInt(item.value || '0', 10);
+      var e = itemEinheit[iid] || (istFertig ? (formEinheit[form.value] || '') : (art.value === 'rohstoff' ? 'kg' : (art.value === 'sonstiges' ? '' : 'Stück')));
+      if (!handEingabe) einheit.value = e;
+      hint.textContent = e ? '(in ' + e + ')' : '';
+    }
+    art.addEventListener('change', aktualisieren);
+    form.addEventListener('change', aktualisieren);
+    item.addEventListener('change', function(){
+      var opt = item.options[item.selectedIndex], a = opt && opt.getAttribute('data-art');
+      if (a) { art.value = a; }        // der Artikel sagt selbst, was er ist
+      handEingabe = false;
+      aktualisieren();
+    });
+    var rez = rezFeld.querySelector('select');
+    rez.addEventListener('change', function(){
+      var opt = rez.options[rez.selectedIndex], f = opt && opt.getAttribute('data-form');
+      if (f && formEinheit[f] !== undefined) { form.value = f; handEingabe = false; aktualisieren(); }
+    });
+    aktualisieren();
+  })();
+  </script>
 
   <?php $anfr = all("SELECT af.*, i.name AS item_name, ag.id AS ang_id, ag.preis, ag.einheit AS ang_einheit,
-                            ag.mindestmenge, ag.lieferzeit_tage, ag.status AS ang_status
+                            ag.mindestmenge, ag.lieferzeit_tage, ag.status AS ang_status, ag.preis_basis AS ang_basis
                      FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
                      LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=af.id
                      WHERE af.lieferant_id=? ORDER BY af.angelegt DESC", [(int)$id]);
@@ -413,12 +488,14 @@ if (!$neu) {
   if (!$anfr): ?><div class="muted">Noch keine Anfragen an diesen Lieferanten.</div>
   <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Nummer</th><th>Artikel / Betreff</th><th class="bx-num">Angefragt</th><th>Antwort</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Nummer</th><th>Artikel / Betreff</th><th>Produkttyp</th><th class="bx-num">Angefragt</th><th>Antwort</th><th>Status</th><th></th></tr></thead>
     <tbody><?php foreach ($anfr as $r): ?>
       <tr><td><?= h($r['nummer']) ?></td>
-          <td><?= h(($r['item_name'] ?? '') !== '' ? $r['item_name'] : ($r['betreff'] ?? '–')) ?></td>
+          <td><?= h(($r['item_name'] ?? '') !== '' ? $r['item_name'] : ($r['betreff'] ?? '–')) ?>
+              <?php if ($r['stueck_je_packung']): ?><div class="muted" style="font-size:12px"><?= (int)$r['stueck_je_packung'] ?> je Packung<?= $r['kapselgroesse_id'] ? ' · ' . h((string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$r['kapselgroesse_id']])) : '' ?></div><?php endif; ?></td>
+          <td><?php $lbl = anfrage_art_label((string)($r['art'] ?? ''), (string)($r['form'] ?? '')); echo $lbl !== '' ? h($lbl) : '<span class="muted">–</span>'; ?></td>
           <td class="bx-num"><?= $r['menge'] ? $zahl($r['menge'], 3) . ' ' . h($r['einheit'] ?? '') : '–' ?></td>
-          <td><?php if ($r['ang_id']): ?><strong><?= $zahl($r['preis'], 4) ?> €</strong> / <?= h($r['ang_einheit'] ?: '–') ?>
+          <td><?php if ($r['ang_id']): ?><strong><?= $zahl($r['preis'], 4) ?> €</strong> / <?= (int)($r['ang_basis'] ?? 1) === 1000 ? '1.000 ' : '' ?><?= h($r['ang_einheit'] ?: '–') ?>
                 <div class="muted" style="font-size:12px">
                   <?= $r['mindestmenge'] ? 'MOQ ' . $zahl($r['mindestmenge'], 3) . ' · ' : '' ?>
                   <?= $r['lieferzeit_tage'] ? (int)$r['lieferzeit_tage'] . ' Tage' : '' ?>

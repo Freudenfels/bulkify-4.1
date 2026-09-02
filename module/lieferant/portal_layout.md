@@ -17,3 +17,5 @@ Kopf, Menü, Fuß und die **Übersetzung** für alle Portalseiten. Zwei Sprachen
 
 ## Menü: Rückfragen und Dateien
 Das Menü hat zwei weitere Punkte: **Rückfragen** (`lieferant_nachrichten`, mit Zahl ungelesener Nachrichten von bulkify) und **Dateien** (`lieferant_dateien`). Dafür lädt das Layout `core/nachricht.php`.
+## Zahlen und Einheiten
+`lp_num($wert, $dez)` schreibt Zahlen in der Schreibweise des Lesers (Deutsch 1.234,5 – English und Chinesisch 1,234.5). `lp_einheit($e)` übersetzt die Einheiten, die als deutsches Stammdatum in der Datenbank stehen (Stück, Kapsel, Tablette, Softgel, Stick, Packung, Liter); kg, g, L und ml bleiben, wie sie sind.

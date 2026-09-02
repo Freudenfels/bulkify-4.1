@@ -86,6 +86,34 @@ function lp_t(string $key, string $sprache = ''): string {
                               'en'=>'PNG or JPG, max. 2 MB. Shown internally at our end only.',
                               'zh'=>'PNG 或 JPG，最大 2 MB。仅在我们内部显示。'],
         'kontakt'         => ['de'=>'Kontakt',                 'en'=>'Contact', 'zh'=>'联系方式'],
+        'ansehen'         => ['de'=>'Ansehen',                 'en'=>'View', 'zh'=>'查看'],
+        'artikelnummer'   => ['de'=>'Artikelnummer',           'en'=>'Part no.', 'zh'=>'物料编号'],
+        'coa_mitschicken' => ['de'=>'bitte mitschicken',       'en'=>'please attach', 'zh'=>'请一并提供'],
+        'angenommen'      => ['de'=>'angenommen',              'en'=>'accepted', 'zh'=>'已接受'],
+        'moq'             => ['de'=>'Mindestmenge (MOQ)',      'en'=>'Minimum order quantity', 'zh'=>'最小起订量'],
+        'lieferzeit'      => ['de'=>'Lieferzeit (Tage)',       'en'=>'Lead time (days)', 'zh'=>'交货周期（天）'],
+        'mengenstaffeln'  => ['de'=>'Mengenstaffeln',          'en'=>'Volume tiers', 'zh'=>'阶梯数量'],
+        'art'             => ['de'=>'Art',                     'en'=>'Type', 'zh'=>'类型'],
+        'spezifikation'   => ['de'=>'Spezifikation',           'en'=>'Specification', 'zh'=>'规格书'],
+        'sonstiges'       => ['de'=>'Sonstiges',               'en'=>'Other', 'zh'=>'其他'],
+        'datei'           => ['de'=>'Datei',                   'en'=>'File', 'zh'=>'文件'],
+        'pflichtfeld'     => ['de'=>'Pflichtfeld.',            'en'=>'required.', 'zh'=>'为必填项。'],
+        'nur_bilder'      => ['de'=>'Nur PNG, JPG oder WebP.', 'en'=>'Only PNG, JPG or WebP.', 'zh'=>'仅支持 PNG、JPG 或 WebP。'],
+        'datei_zu_gross'  => ['de'=>'Die Datei ist größer als 2 MB.', 'en'=>'The file is larger than 2 MB.', 'zh'=>'文件超过 2 MB。'],
+        'produkttyp'      => ['de'=>'Produkttyp',              'en'=>'Product type', 'zh'=>'产品类型'],
+        'preis_basis'     => ['de'=>'Preis gilt', 'en'=>'Price applies', 'zh'=>'报价基准'],
+        'je_1'            => ['de'=>'je 1', 'en'=>'per 1', 'zh'=>'每 1'],
+        'je_1000'         => ['de'=>'je 1.000', 'en'=>'per 1,000', 'zh'=>'每 1,000'],
+        'einheit_fest'    => ['de'=>'Von uns vorgegeben – bitte den Preis in dieser Einheit nennen.',
+                              'en'=>'Set by us – please quote your price in this unit.',
+                              'zh'=>'由我方指定——请按此单位报价。'],
+        'gesamtmenge'     => ['de'=>'Gesamtmenge',             'en'=>'Total quantity', 'zh'=>'总数量'],
+        'je_packung'      => ['de'=>'je Packung',              'en'=>'per pack', 'zh'=>'每包装'],
+        'packungen'       => ['de'=>'Packungen',               'en'=>'packs', 'zh'=>'包装数'],
+        'kapselgroesse'   => ['de'=>'Kapselgröße',             'en'=>'Capsule size', 'zh'=>'胶囊规格'],
+        'rezeptur'        => ['de'=>'Rezeptur je Einheit',     'en'=>'Formulation per unit', 'zh'=>'每单位配方'],
+        'verpackung_lbl'  => ['de'=>'Verpackung',              'en'=>'Packaging', 'zh'=>'包装'],
+        'preis_je'        => ['de'=>'Preis je',                'en'=>'per', 'zh'=>'每'],
         'rueckfragen'     => ['de'=>'Rückfragen',              'en'=>'Questions and answers', 'zh'=>'留言与答复'],
         'rueckfragen_sub' => ['de'=>'Fragen und Antworten zwischen Ihnen und bulkify. Zu einer Bestellung oder Preisanfrage schreiben Sie am besten direkt dort.',
                               'en'=>'Questions and answers between you and bulkify. For a specific order or price request, please write directly there.',
@@ -104,6 +132,37 @@ function lp_t(string $key, string $sprache = ''): string {
     $s = $sprache !== '' ? $sprache : lp_sprache();
     $s = in_array(strtolower($s), ['de', 'en', 'zh'], true) ? strtolower($s) : 'en';
     return $texte[$key][$s] ?? $key;
+}
+
+// Einheiten sind Stammdaten und stehen auf Deutsch in der Datenbank. Für den Lieferanten
+// werden die bekannten Stück-Einheiten übersetzt; kg, g, L und ml gelten international.
+function lp_einheit(?string $e, string $sprache = ''): string {
+    $e = trim((string)$e);
+    if ($e === '') return '';
+    $s = $sprache !== '' ? $sprache : lp_sprache();
+    $map = [
+        'stück' => ['de'=>'Stück', 'en'=>'pcs', 'zh'=>'个'],
+        'stueck'=> ['de'=>'Stück', 'en'=>'pcs', 'zh'=>'个'],
+        'kapsel' => ['de'=>'Kapsel', 'en'=>'capsule', 'zh'=>'粒'],
+        'tablette'=> ['de'=>'Tablette', 'en'=>'tablet', 'zh'=>'片'],
+        'softgel'=> ['de'=>'Softgel', 'en'=>'softgel', 'zh'=>'软胶囊'],
+        'stick'  => ['de'=>'Stick', 'en'=>'stick', 'zh'=>'条'],
+        'l'      => ['de'=>'Liter', 'en'=>'litre', 'zh'=>'升'],
+        'kapseln'=> ['de'=>'Kapseln', 'en'=>'capsules', 'zh'=>'粒'],
+        'packung'=> ['de'=>'Packung', 'en'=>'pack', 'zh'=>'包装'],
+        'liter'  => ['de'=>'Liter', 'en'=>'litre', 'zh'=>'升'],
+    ];
+    $k = mb_strtolower($e);
+    if (!isset($map[$k])) return $e;
+    return $map[$k][in_array($s, ['de','en','zh'], true) ? $s : 'en'] ?? $e;
+}
+// Zahl in der Schreibweise des Lesers: Deutsch 1.234,5 – English und Chinesisch 1,234.5.
+function lp_num($x, int $dez = 3): string {
+    if ($x === null || $x === '') return '';
+    $de = lp_sprache() === 'de';
+    $s = number_format((float)$x, $dez, $de ? ',' : '.', $de ? '.' : ',');
+    if ($dez > 0) $s = rtrim(rtrim($s, '0'), $de ? ',' : '.');
+    return $s;
 }
 
 // Welche Sprache gilt gerade? Reihenfolge: eigene Wahl (Session) vor Stammdaten des Lieferanten.

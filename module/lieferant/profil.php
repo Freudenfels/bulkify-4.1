@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $spr = in_array((string)($_POST['sprache'] ?? ''), ['de', 'en', 'zh'], true) ? $_POST['sprache'] : 'de';
     $firma = $t('firma', 190);
     if ($firma === '') {
-        $fehler = lp_t('firma') . ' – ' . (lp_sprache() === 'de' ? 'Pflichtfeld.' : 'required.');
+        $fehler = lp_t('firma') . ' – ' . lp_t('pflichtfeld');
     } else {
         q("UPDATE lieferanten SET firma=?, ansprechpartner=?, email=?, telefon=?, wechat=?, whatsapp=?,
                   strasse=?, hausnummer=?, plz=?, ort=?, land=?, webseite=?, ust_id=?, sprache=? WHERE id=?",
@@ -28,9 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $info = @getimagesize($_FILES['logo']['tmp_name']);
             $erlaubt = [IMAGETYPE_PNG => 'png', IMAGETYPE_JPEG => 'jpg', IMAGETYPE_WEBP => 'webp'];
             if (!$info || !isset($erlaubt[$info[2]])) {
-                $fehler = lp_sprache() === 'de' ? 'Nur PNG, JPG oder WebP.' : 'Only PNG, JPG or WebP.';
+                $fehler = lp_t('nur_bilder');
             } elseif ($groesse > 2 * 1024 * 1024) {
-                $fehler = lp_sprache() === 'de' ? 'Die Datei ist größer als 2 MB.' : 'The file is larger than 2 MB.';
+                $fehler = lp_t('datei_zu_gross');
             } else {
                 if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
                 $alt = (string) scalar("SELECT logo FROM lieferanten WHERE id=?", [$lid]);
