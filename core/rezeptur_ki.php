@@ -164,9 +164,23 @@ function rezeptur_ki_liste($roh, array $felder): array {
 function rezeptur_ki_item_finden(string $bez): ?int {
     $bez = trim($bez);
     if ($bez === '') return null;
-    $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name=? LIMIT 1", [$bez]);
-    if ($id) return (int)$id;
-    $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name LIKE ? LIMIT 1", ['%' . $bez . '%']);
+    // Die KI haengt gern eine Erklaerung an ("Magnesiumbisglycinat (ca. 14 % Mg)"). Ohne die Klammer
+    // trifft der Name unseren Stammdatensatz meistens genau.
+    $ohne = trim(preg_replace('/\s*\([^)]*\)/u', '', $bez));
+    foreach (array_unique([$bez, $ohne]) as $v) {
+        if ($v === '') continue;
+        $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name=? LIMIT 1", [$v]);
+        if ($id) return (int)$id;
+    }
+    foreach (array_unique([$bez, $ohne]) as $v) {
+        if ($v === '') continue;
+        $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name LIKE ? LIMIT 1", ['%' . $v . '%']);
+        if ($id) return (int)$id;
+    }
+    // Andersherum: unser Name steckt in der Bezeichnung der KI. Kurze Namen bleiben aussen vor,
+    // sonst passt "Zink" auf alles; der laengste Treffer gewinnt, das ist der genaueste.
+    $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND CHAR_LENGTH(name) >= 6
+                  AND ? LIKE CONCAT('%', name, '%') ORDER BY CHAR_LENGTH(name) DESC LIMIT 1", [$bez]);
     return $id ? (int)$id : null;
 }
 
