@@ -63,7 +63,7 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
     <input type="hidden" name="dok_typ" value="sonstiges">
     <input type="hidden" name="dok_titel" value="Katalog">
     <div class="bx-field" style="margin:0"><label><?= h(lp_t('datei')) ?></label>
-      <input type="file" name="dok" required accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.txt"></div>
+      <input type="file" name="dok" required accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.tsv,.txt,.xlsx,.xlsm"></div>
     <button class="btn btn-primary" type="submit"><?= h(lp_t('katalog_lesen')) ?></button>
     <span class="muted" style="font-size:12px;align-self:center"><?= h(lp_t('dauert')) ?></span>
   </form>

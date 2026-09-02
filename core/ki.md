@@ -45,7 +45,7 @@ if ($r['ok']) { /* $r['daten'] verwenden */ } else { /* $r['fehler'] anzeigen */
 ```
 
 ## Dateien
-`ki_datei_block($pfad)` macht aus einem PDF oder Bild einen Inhaltsblock (PDF als Dokument, Bild als Bild, bis 25 MB). `ki_datei_frage($pfad, $anweisung, $opt)` schickt Datei plus Anweisung; mit `'json' => true` kommt die Antwort geparst zurück. **PDFs gehen als Dokument an die API – damit werden auch Scans gelesen**, an denen `core/pdf_text.php` scheitert.
+`ki_datei_block($pfad)` macht aus einem PDF oder Bild einen Inhaltsblock (PDF als Dokument, Bild als Bild, bis 25 MB). **Tabellen** (CSV, TXT, Excel .xlsx/.xlsm) kann die API nicht als Datei entgegennehmen; `ki_datei_frage()` liest sie deshalb über `core/tabelle_lesen.php` aus und schickt sie als Text mit. Altes `.xls` geht nicht. `ki_datei_frage($pfad, $anweisung, $opt)` schickt Datei plus Anweisung; mit `'json' => true` kommt die Antwort geparst zurück. **PDFs gehen als Dokument an die API – damit werden auch Scans gelesen**, an denen `core/pdf_text.php` scheitert.
 
 ## Was hier NICHT hingehört
 Fachlogik. `ki.php` kennt nur die API. Was gefragt wird, steht in der jeweiligen Funktion (z. B. `core/coa_lesen.php`).

@@ -124,9 +124,21 @@ function ki_datei_block(string $pfad): ?array {
 
 // Eine Datei plus Anweisung an Claude schicken. Das Dokument steht VOR dem Text – so empfiehlt es
 // die API, und die Antworten werden nachweislich besser.
+//
+// Tabellen (CSV, TXT, Excel) kann die API nicht als Datei entgegennehmen. Sie werden deshalb
+// hier ausgelesen und als Text mitgeschickt – für die KI ist das sogar die klarere Form.
 function ki_datei_frage(string $pfad, string $anweisung, array $opt = []): array {
+    require_once __DIR__ . '/tabelle_lesen.php';
+    if (ist_tabelle($pfad)) {
+        $txt = tabelle_text($pfad);
+        if ($txt === null || trim($txt) === '')
+            return ["ok" => false, "fehler" => "Die Tabelle ist leer oder lässt sich nicht lesen. Bei .xls bitte als .xlsx oder .csv speichern."];
+        $inhalt = [["type" => "text", "text" => "Inhalt der Datei \"" . basename($pfad) . "\" (Spalten mit Tabulator getrennt):\n\n" . $txt],
+                   ["type" => "text", "text" => $anweisung]];
+        return empty($opt["json"]) ? ki_frage($inhalt, $opt) : ki_json($inhalt, $opt);
+    }
     $block = ki_datei_block($pfad);
-    if (!$block) return ["ok" => false, "fehler" => "Die Datei lässt sich nicht lesen (nur PDF, PNG, JPG, GIF, WebP bis 25 MB)."];
+    if (!$block) return ["ok" => false, "fehler" => "Die Datei lässt sich nicht lesen (PDF, Bild, CSV oder Excel; .xls bitte vorher als .xlsx speichern)."];
     $inhalt = [$block, ["type" => "text", "text" => $anweisung]];
     return empty($opt["json"]) ? ki_frage($inhalt, $opt) : ki_json($inhalt, $opt);
 }

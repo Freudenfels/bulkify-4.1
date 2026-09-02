@@ -22,4 +22,4 @@ Ein Fertigprodukt landet in der Kategorie `fertig`, alles andere als `rohstoff`;
 - Intern: `module/lieferant/detail.php`, Reiter **Katalog** mit der Zahl offener Zeilen. Je Zeile „Anlegen" bzw. „Preis dorthin" (wenn es den Artikel schon gibt) oder „ablehnen", dazu „Alle übernehmen" für lange Kataloge.
 
 ## Grenzen
-Die KI liest, was in der Liste steht – sie prüft nicht, ob der Lieferant den Artikel wirklich liefern kann. Deshalb entscheidet immer ein Mensch. Bei sehr langen Katalogen kann das Auslesen an der Antwortgrenze enden; dann kommen die ersten Zeilen an, der Rest fehlt. In dem Fall die Liste geteilt hochladen.
+Die KI liest, was in der Liste steht – sie prüft nicht, ob der Lieferant den Artikel wirklich liefern kann. Deshalb entscheidet immer ein Mensch. Bei sehr langen Katalogen kann das Auslesen an der Antwortgrenze enden; dann kommen die ersten Zeilen an, der Rest fehlt. In dem Fall die Liste geteilt hochladen. Formate: PDF, Bild (auch Scan), CSV und Excel `.xlsx`/`.xlsm`; altes `.xls` bitte vorher umspeichern (siehe `core/tabelle_lesen.md`).

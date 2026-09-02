@@ -7,7 +7,7 @@ require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/dokument_ui.php';
 
 function lieferant_datei_endungen(): array {
-    return ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'zip'];
+    return ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'doc', 'docx', 'xls', 'xlsx', 'xlsm', 'csv', 'tsv', 'txt', 'zip'];
 }
 function lieferant_datei_max_mb(): int { return 15; }
 
