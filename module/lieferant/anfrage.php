@@ -115,19 +115,25 @@ if (!$a):
         <div class="bx-field"><label><?= h(lp_t('lieferzeit')) ?></label>
           <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>"></div>
       </div>
-      <div style="margin-top:6px"><strong><?= h(lp_t('mengenstaffeln')) ?></strong> <span class="muted" style="font-weight:normal">(<?= h(lp_t('optional')) ?>)</span>
-        <div class="muted" style="font-size:12px;margin-bottom:8px"><?= h(lp_t('staffel_hinweis')) ?></div>
+      <?php // Die Staffel ist die Ausnahme, nicht die Regel – deshalb zugeklappt. Wer schon eine
+            // abgegeben hat, sieht sie sofort. <details> braucht kein JavaScript.
+            $staffelOffen = false;
+            foreach ($staffeln as $s) if ((float)($s['preis'] ?? 0) > 0) $staffelOffen = true; ?>
+      <details style="margin:6px 0 var(--sp-4)"<?= $staffelOffen ? ' open' : '' ?>>
+        <summary style="cursor:pointer"><strong><?= h(lp_t('mengenstaffeln')) ?></strong> <span class="muted" style="font-weight:normal">(<?= h(lp_t('optional')) ?>)</span></summary>
+        <div class="muted" style="font-size:12px;margin:8px 0"><?= h(lp_t('staffel_hinweis')) ?></div>
         <?php // Schlichtes Raster statt Tabelle: die Eingabefelder bringen ihren eigenen Rahmen mit,
-              // ein Tabellenrahmen darum sähe aus wie Kasten im Kasten. ?>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;max-width:520px;margin-bottom:var(--sp-4)">
-          <div class="muted" style="font-size:12px"><?= h(lp_t('ab_menge')) ?></div>
+              // ein Tabellenrahmen darum sähe aus wie Kasten im Kasten.
+              // Reihenfolge wie im Formular darüber: erst der Preis, dann die Menge, ab der er gilt. ?>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;max-width:520px">
           <div class="muted" style="font-size:12px"><?= h(lp_t('preis')) ?></div>
+          <div class="muted" style="font-size:12px"><?= h(lp_t('ab_menge')) ?></div>
           <?php foreach ($staffeln as $s): ?>
-            <input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>">
             <input type="text" name="s_preis[]" value="<?= h($zahl($s['preis'], 4)) ?>">
+            <input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>">
           <?php endforeach; ?>
         </div>
-      </div>
+      </details>
       <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><textarea name="notiz" rows="3"><?= h($ang['notiz'] ?? '') ?></textarea></div>
       <button class="btn btn-primary" type="submit"><?= h(lp_t('angebot_abgeben')) ?></button>
     </form>
