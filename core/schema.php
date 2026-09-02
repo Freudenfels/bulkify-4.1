@@ -1275,23 +1275,49 @@ function mhd_standard(?string $ab = null): string {
     return date('Y-m-d', strtotime($basis . ' +' . $monate . ' months'));
 }
 
-// Fertigware eines abgeschlossenen Produktionsauftrags als Charge einbuchen.
-// Standard: Chargennummer = PR-Nummer + Tagesbuchstabe (.A), MHD = Produktionsdatum + 18 Monate. Idempotent je PR (bucht die volle Menge einmal).
-function produktion_fertigware_einbuchen(int $pa_id): ?int {
+// Wie viel Fertigware zu einem Produktionsauftrag schon als Charge(n) gebucht ist (Summe über .A, .B, .C …).
+function produktion_gebucht(int $pa_id): float {
+    return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
+}
+// Was von der Produktionsmenge noch nicht gebucht ist.
+function produktion_rest(int $pa_id): float {
+    $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    return max(0.0, $menge - produktion_gebucht($pa_id));
+}
+// Eine Menge Fertigware zu einem Produktionsauftrag als eigene Charge einbuchen (Teilproduktion).
+// Die Chargennummer ist die PR-Basis mit dem nächsten Buchstaben (.A, .B, .C …), das MHD standardmäßig
+// heute + 18 Monate. Es kann nie mehr gebucht werden, als vom Auftrag noch offen ist.
+// Rückgabe ['ok'=>bool, 'msg'=>string, 'charge_id'=>?int, 'charge_nr'=>string].
+function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd = null, string $notiz = ''): array {
     $pa = one("SELECT nummer, produkt_id, menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
-    if (!$pa || !$pa['produkt_id']) return null;
-    if ((int) scalar("SELECT COUNT(*) FROM charge WHERE pa_id=?", [$pa_id]) > 0) return null;  // schon (voll) eingebucht
+    if (!$pa) return ['ok'=>false, 'msg'=>'Produktionsauftrag nicht gefunden.'];
+    if (!$pa['produkt_id']) return ['ok'=>false, 'msg'=>'Dem Produktionsauftrag fehlt das Produkt – ohne Produkt gibt es keinen Lagerartikel.'];
+    $menge = round($menge);
+    $rest  = produktion_rest($pa_id);
+    if ($menge <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Menge größer 0 angeben.'];
+    if ($menge > $rest + 1e-6) return ['ok'=>false, 'msg'=>'Es sind nur noch ' . number_format($rest, 0, ',', '.') . ' Stück offen – mehr kann nicht gebucht werden.'];
     $item_id = produkt_lageritem((int)$pa['produkt_id']);
-    if (!$item_id) return null;
+    if (!$item_id) return ['ok'=>false, 'msg'=>'Lagerartikel zum Produkt konnte nicht angelegt werden.'];
     // Fulfillment-Kunde? → Fertigware gehört ins Lager 2, BSKU (Brücke) sicherstellen.
     $kunde = one("SELECT k.nutzt_fulfillment FROM produkt p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [(int)$pa['produkt_id']]);
     if ($kunde && (int)$kunde['nutzt_fulfillment'] === 1) bsku_ensure($item_id);
     $charge_nr = charge_naechste_nr($pa_id);
-    $mhd = mhd_standard();
+    $mhd = ($mhd && strtotime($mhd)) ? date('Y-m-d', strtotime($mhd)) : mhd_standard();
+    $notiz = trim($notiz);
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
        VALUES (?,?,?,?, 'Stück', ?, CURDATE(), 'frei', ?, ?, ?)",
-      [$charge_nr, $item_id, (int)$pa['menge'], (int)$pa['menge'], $mhd, 'Aus Produktion ' . $pa['nummer'], $pa_id, gmdate('Y-m-d H:i:s')]);
-    return insert_id();
+      [$charge_nr, $item_id, $menge, $menge, $mhd, 'Aus Produktion ' . $pa['nummer'] . ($notiz !== '' ? ' – ' . mb_substr($notiz, 0, 200) : ''), $pa_id, gmdate('Y-m-d H:i:s')]);
+    return ['ok'=>true, 'msg'=>'', 'charge_id'=>insert_id(), 'charge_nr'=>$charge_nr];
+}
+// Fertigware eines abgeschlossenen Produktionsauftrags als Charge einbuchen.
+// Bucht den noch OFFENEN Rest der Produktionsmenge (Teilchargen, die vorher über
+// produktion_teilmenge_einbuchen() gebucht wurden, sind abgezogen). Ist nichts mehr offen, passiert nichts.
+// Chargennummer = PR-Basis + nächster Buchstabe (.A, .B …), MHD = heute + 18 Monate.
+function produktion_fertigware_einbuchen(int $pa_id): ?int {
+    $rest = produktion_rest($pa_id);
+    if ($rest <= 0) return null;   // schon voll eingebucht
+    $r = produktion_teilmenge_einbuchen($pa_id, $rest);
+    return $r['ok'] ? (int)$r['charge_id'] : null;
 }
 
 // ===== Lager 2 (Fremdlager) – nur für Fulfillment-Kunden (kunden.nutzt_fulfillment=1) =====

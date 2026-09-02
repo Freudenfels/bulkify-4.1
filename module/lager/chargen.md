@@ -7,7 +7,7 @@
 **Detail (`&id=`):**
 - Kacheln: Status, verfügbare/Ursprungs-Menge, MHD.
 - **Herkunft:** Artikel, Lieferant, Wareneingangsdatum, Notiz.
-- **Zusammensetzung (eingesetzte Chargen):** nur bei Fertigwaren-Chargen – findet den Produktionsauftrag über `produktionsauftrag.nummer = charge.charge_nr` (Fertigware wird mit der PR-Nummer als Charge eingebucht) und listet aus `produktion_verbrauch` alle eingesetzten Rohstoff-Chargen (mit Link).
+- **Zusammensetzung (eingesetzte Chargen):** nur bei Fertigwaren-Chargen – findet den Produktionsauftrag über `charge.pa_id` (Fertigware wird als `PR-Basis.A/.B/.C` eingebucht, je Teilproduktion eine Charge; der Vergleich `produktionsauftrag.nummer = charge.charge_nr` bleibt nur als Fallback für Altchargen) und listet aus `produktion_verbrauch` alle eingesetzten Rohstoff-Chargen (mit Link).
 - **Verwendet in Produktionen:** aus `produktion_verbrauch` (charge_id) – in welchen Produktionsaufträgen diese Charge verbraucht wurde (Produkt, Kunde, Menge), Link zum Produktionsauftrag.
 
 **Datenbasis:** Verknüpfung über `produktion_verbrauch (pa_id, item_id, charge_id, menge, einheit)` – wird bei der Station „Rohstoffe bereitstellen"/„Verkapselung" beim FEFO-Abbuchen geschrieben.

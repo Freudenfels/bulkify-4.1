@@ -58,7 +58,7 @@
 10. **Flaschen/Tuben für Flüssig anlegen** (Tropfflasche, Pumpspender fehlen als Artikel).
 11. **Kalkulationsgrundlagen prüfen:** Presshilfsstoffe 20 % / 8 €/kg, Trägerflüssigkeit 3 €/L sind gesetzte Startwerte.
 12. **Deckel-Preisliste bei Packari erfragen** – der EK der vier Pressure-Seal-Deckel ist als Differenz „Set minus Dose" gerechnet (0,26–0,35 €).
-13. **Teilproduktion .B/.C:** Chargenlogik ist da, ein UI-Weg „Teilmenge einbuchen" fehlt.
+13. ~~Teilproduktion .B/.C~~ – **erledigt** (2026-09-02): Panel „Teilmenge einbuchen" am Produktionsauftrag, der Abschluss bucht nur noch den Rest. Teilversand gibt es weiterhin nicht (`auftrag_versenden()` liefert ganz oder gar nicht).
 
 ## Deploy / GitHub
 - Repo **github.com/Freudenfels/bulkify-4.1** (privat), Branch `main`.

@@ -17,7 +17,7 @@
 - Beim erfolgreichen Abschluss werden die Rohstoffe **nach FEFO** (älteste MHD zuerst) aus den freien Chargen entnommen (`produktion_rohstoffe_entnehmen`), der Bestand sinkt, leere Chargen werden „leer". Jede Entnahme ist chargengenau in `produktion_verbrauch` protokolliert und erscheint als **„Entnommene Materialien"**.
 - Die Station **„Verkapselung"** (nur Hartkapsel-Produkte) bucht die **Leerkapseln** ab (Menge × Einheiten je Packung = Gesamt-Kapseln, `produktion_kapseln_entnehmen`, FEFO, Gate bei zu wenig Bestand). Welche Leerkapsel: `produkt_leerkapsel_id()` – manuelle Wahl am Produkt hat Vorrang, sonst automatisch die eindeutige Kapsel der passenden Größe. Der Bedarf erscheint im Materialbedarf als Extra-Zeile mit Badge „Kapselhülle" (separat berechnet, damit nicht doppelt bei „Rohstoffe bereitstellen" abgebucht wird).
 - Die Station **„Verpacken"** bucht analog die **Verpackung** ab (1 Gebinde je Packung, `produktion_verpackung_entnehmen`, FEFO, ebenfalls Gate bei zu wenig Bestand).
-- Ist der Auftrag **fertig** (Versand-Freigabe erledigt), wird die **Fertigware als Bestand eingebucht** (`produktion_fertigware_einbuchen`): ein Lager-Artikel der Kategorie „Verkaufsfertig" zum Produkt (`produkt_lageritem`) bekommt eine Charge (Charge-Nr. = PR-Nummer, Menge = Produktionsmenge). Panel „Fertigware eingebucht" mit Link zum Lager. Der Auftrag geht auf „erledigt".
+- Ist der Auftrag **fertig** (Versand-Freigabe erledigt), wird die **Fertigware als Bestand eingebucht** (`produktion_fertigware_einbuchen`): ein Lager-Artikel der Kategorie „Verkaufsfertig" zum Produkt (`produkt_lageritem`) bekommt eine Charge (Charge-Nr. = PR-Basis + Buchstabe, z. B. `2696.A`; Menge = der noch **offene Rest** der Produktionsmenge). Panel „Fertigware eingebucht" mit allen Chargen und Link zum Lager. Der Auftrag geht auf „erledigt".
 
 ## Adaptiver Produktionsweg (Baustein 5)
 
@@ -40,3 +40,9 @@ Station „Fertigware bereitstellen" bucht die zugekaufte fertige Bulkware FEFO 
 ## Geplantes Datum (Baustein 2)
 
 Kachel „Geplant am" (`aktion=geplant`) setzt `produktionsauftrag.geplant_am`; siehe [kalender.md](kalender.md).
+
+## Teilproduktion (.A / .B / .C)
+
+Wird an mehreren Tagen produziert, bucht das Panel **„Teilmenge einbuchen"** (`aktion=teilmenge`, Menge, MHD, Notiz) jede fertige Teilmenge sofort als eigene Charge ins Fertigwarenlager – `produktion_teilmenge_einbuchen()` in `core/schema.php`. Die Chargennummer ist die PR-Basis mit dem nächsten Buchstaben (`charge_naechste_nr()`), das MHD standardmäßig heute + Standardmonate. Es kann nie mehr gebucht werden, als noch offen ist (`produktion_rest()` = Produktionsmenge minus Summe der Chargen).
+
+Das Panel erscheint, solange noch etwas offen ist. Beim Abschluss des Auftrags (letzte Station) bucht `produktion_fertigware_einbuchen()` nur noch den Rest; ist schon alles gebucht, passiert nichts. Das Panel „Fertigware eingebucht" zeigt alle Chargen mit gebuchter Menge, Lagerbestand, MHD und Datum, die Kachel „Chargen" die erste Nummer plus die Anzahl weiterer.

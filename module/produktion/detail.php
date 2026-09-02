@@ -54,6 +54,18 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=produktionsauftrag&id=' . $id . '&ok=1'); exit;
 }
 
+// Teilmenge Fertigware einbuchen (Teilproduktion .A/.B/.C) – der Abschluss bucht später nur noch den Rest
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'teilmenge') {
+    $r = produktion_teilmenge_einbuchen($id, (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0')),
+        trim((string)($_POST['mhd'] ?? '')) ?: null, (string)($_POST['notiz'] ?? ''));
+    if ($r['ok']) {
+        $paT = one("SELECT nummer, kunde_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$id]);
+        if ($paT && $paT['kunde_id']) log_aktivitaet('kunde', (int)$paT['kunde_id'], 'team', 'Produktion ' . $paT['nummer'] . ': Teilmenge ' . number_format((float)$_POST['menge'], 0, ',', '.') . ' Stück als Charge ' . $r['charge_nr'] . ' eingebucht.', 'auftrag', 'auftrag', (int)$paT['auftrag_id']);
+        header('Location: ?p=produktionsauftrag&id=' . $id . '&teil=' . urlencode($r['charge_nr'])); exit;
+    }
+    header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode($r['msg'])); exit;
+}
+
 // Priorität setzen
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'prio') {
     q("UPDATE produktionsauftrag SET prio=? WHERE id=?", [max(1, min(3, (int)($_POST['prio'] ?? 2))), $id]);
@@ -128,8 +140,12 @@ $verbrauch = all("SELECT v.*, c.charge_nr, i.name AS item_name FROM produktion_v
                   LEFT JOIN charge c ON c.id=v.charge_id LEFT JOIN item i ON i.id=v.item_id
                   WHERE v.pa_id=? ORDER BY v.id", [$id]);
 $mng = fn($x,$e) => rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',') . ' ' . h($e ?: '');
-$fertigware = one("SELECT c.charge_nr, c.menge_verfuegbar, c.item_id, i.artikelnummer, i.name
-                   FROM charge c JOIN item i ON i.id=c.item_id WHERE c.pa_id=? ORDER BY c.id LIMIT 1", [$id]);
+// Alle Fertigwaren-Chargen zu diesem Auftrag (.A, .B, .C …) – bei Teilproduktion mehrere.
+$fwChargen = all("SELECT c.id, c.charge_nr, c.menge, c.menge_verfuegbar, c.mhd, c.status, c.wareneingang, c.item_id, i.artikelnummer, i.name
+                   FROM charge c JOIN item i ON i.id=c.item_id WHERE c.pa_id=? ORDER BY c.id", [$id]);
+$fertigware = $fwChargen[0] ?? null;
+$fwGebucht  = produktion_gebucht($id);
+$fwRest     = max(0.0, (float)$pa['menge'] - $fwGebucht);
 // Standard-Chargennummer (PR-Nr + .A/.B/.C) und MHD (18 Monate) – für die Geräte-Eingabe, schon vor der Buchung sichtbar.
 $fCharge   = one("SELECT charge_nr, mhd FROM charge WHERE pa_id=? ORDER BY id LIMIT 1", [$id]);
 $chargeGeb = (bool)$fCharge;
@@ -154,6 +170,8 @@ if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="paddin
 if (isset($_GET['etikett'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Etikett-Design aktualisiert.</div>';
 if (isset($_GET['reserviert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['reserviert'] > 0 ? 'Bestand für ' . (int)$_GET['reserviert'] . ' Komponente(n) reserviert.' : 'Nichts zu reservieren (kein freier Bestand verfügbar).') . '</div>';
 if (isset($_GET['resfrei'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Reservierungen freigegeben.</div>';
+if (isset($_GET['teil'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Teilmenge als Charge ' . h((string)$_GET['teil']) . ' eingebucht.</div>';
+if (isset($_GET['teilfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Teilmenge nicht gebucht: ' . h((string)$_GET['teilfehler']) . '</div>';
 
 echo '<div class="bx-cards">';
 echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $statusBadge . '</div></div>';
@@ -166,7 +184,7 @@ echo '<div class="bx-card"><div class="k">Geplant am</div><div class="v">' . $ge
 echo '<div class="bx-card"><div class="k">Bereitschaft</div><div class="v">' . bereitschaft_badge($ber['status']) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Fortschritt</div><div class="v">' . $done . ' / ' . $total . '</div></div>';
 echo '<div class="bx-card"><div class="k">Menge</div><div class="v">' . (int)$pa['menge'] . '</div></div>';
-echo '<div class="bx-card"><div class="k">Charge' . ($chargeGeb ? '' : ' (geplant)') . '</div><div class="v">' . h($chargeNr) . '</div></div>';
+echo '<div class="bx-card"><div class="k">Charge' . ($chargeGeb ? (count($fwChargen) > 1 ? 'n' : '') : ' (geplant)') . '</div><div class="v">' . h($chargeNr) . (count($fwChargen) > 1 ? ' <span class="muted" style="font-size:13px">+' . (count($fwChargen) - 1) . '</span>' : '') . '</div></div>';
 echo '<div class="bx-card"><div class="k">MHD' . ($chargeGeb ? '' : ' (+18 Mon.)') . '</div><div class="v">' . h(date('d.m.Y', strtotime($chargeMhd))) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Art</div><div class="v">' . (($pa['produktionsart'] ?? 'eigen') === 'fremd' ? bx_badge('Fremdproduktion','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Produkt</div><div class="v" style="font-size:15px">' . h($pa['produkt_name'] ?: '–') . '</div></div>';
@@ -445,10 +463,44 @@ if ($verbrauch || ($istVollerWeg && ($bedarf || $kapNeed))): ?>
 <?php if ($fertigware): ?>
 <div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2)">
   <h2>Fertigware eingebucht</h2>
-  <div class="bx-row" style="justify-content:space-between">
-    <div><strong><?= h($fertigware['name']) ?></strong> · <?= h($fertigware['artikelnummer']) ?> · Charge <?= h($fertigware['charge_nr']) ?></div>
-    <div><?= bx_badge(number_format((float)$fertigware['menge_verfuegbar'],0,',','.') . ' Stück im Lager', 'ok') ?> <a class="btn btn-ghost btn-sm" href="?p=lager&kat=verkaufsfertig">zum Lager</a></div>
+  <div class="bx-row" style="justify-content:space-between;margin-bottom:10px">
+    <div><strong><?= h($fertigware['name']) ?></strong> · <?= h($fertigware['artikelnummer']) ?></div>
+    <div><?= bx_badge(number_format($fwGebucht,0,',','.') . ' von ' . number_format((float)$pa['menge'],0,',','.') . ' Stück gebucht', $fwRest > 0 ? 'warn' : 'ok') ?> <a class="btn btn-ghost btn-sm" href="?p=lager&kat=verkaufsfertig">zum Lager</a></div>
   </div>
+  <div style="overflow-x:auto"><table class="bx-table">
+    <thead><tr><th>Charge</th><th>Gebucht</th><th>Im Lager</th><th>MHD</th><th>Eingebucht am</th><th>Status</th></tr></thead>
+    <tbody>
+    <?php foreach ($fwChargen as $c): ?>
+      <tr>
+        <td><a href="?p=chargen&id=<?= (int)$c['id'] ?>"><?= h($c['charge_nr']) ?></a></td>
+        <td><?= number_format((float)$c['menge'],0,',','.') ?></td>
+        <td><?= number_format((float)$c['menge_verfuegbar'],0,',','.') ?></td>
+        <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '–' ?></td>
+        <td><?= $c['wareneingang'] ? h(date('d.m.Y', strtotime($c['wareneingang']))) : '–' ?></td>
+        <td><?= h(status_text($c['status'])) ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
+
+<?php if ($pa['produkt_id'] && $fwRest > 0): ?>
+<div class="bx-panel">
+  <h2>Teilmenge einbuchen</h2>
+  <p class="muted" style="margin-top:0">Wird an mehreren Tagen produziert, kann jede fertige Teilmenge sofort als eigene Charge ins Lager
+    (<?= h(charge_naechste_nr($id)) ?> ist die nächste Nummer). Beim Abschluss des Auftrags wird nur noch der Rest gebucht.
+    Noch offen: <strong><?= number_format($fwRest,0,',','.') ?> Stück</strong>.</p>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="teilmenge">
+    <div class="bx-field" style="margin:0;max-width:160px"><label>Menge (Stück)</label>
+      <input type="number" name="menge" min="1" max="<?= (int)$fwRest ?>" step="1" required></div>
+    <div class="bx-field" style="margin:0;max-width:180px"><label>MHD <?= bx_hint('Leer = heute + Standardmonate aus den Einstellungen.') ?></label>
+      <input type="date" name="mhd" value="<?= h(mhd_standard()) ?>"></div>
+    <div class="bx-field" style="margin:0;flex:1;min-width:200px"><label>Notiz (optional)</label>
+      <input type="text" name="notiz" maxlength="200" placeholder="z. B. Tag 1 von 3"></div>
+    <button class="btn btn-primary" type="submit">Teilmenge einbuchen</button>
+  </form>
 </div>
 <?php endif; ?>
 
