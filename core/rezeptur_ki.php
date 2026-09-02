@@ -37,7 +37,7 @@ Gib NUR dieses JSON zurück:
     { "bezeichnung": "", "katalog": "", "menge_mg": 0, "funktion": "", "begruendung": "" }
   ],
   "tagesdosis": "z. B. 2 Kapseln täglich",
-  "novel_food": [ { "stoff": "", "bewertung": "unproblematisch|pruefen|novel_food", "begruendung": "" } ],
+  "novel_food": [ { "stoff": "", "bewertung": "unproblematisch|prüfen|novel_food", "begruendung": "" } ],
   "hoechstmengen": [ { "stoff": "", "menge_mg": 0, "bewertung": "im Rahmen|nahe der Obergrenze|zu hoch", "begruendung": "" } ],
   "health_claims": [ { "stoff": "", "claim": "", "zulaessig": true } ],
   "machbarkeit": { "bewertung": "gut|kritisch|nicht machbar", "gruende": [ "" ] },
@@ -47,10 +47,12 @@ Gib NUR dieses JSON zurück:
 Regeln:
 - "menge_mg" ist die Menge JE EINHEIT (je Kapsel, je Tablette, je Portion) in Milligramm, als Zahl.
 - "katalog": der exakte Name aus der Liste oben, wenn der Rohstoff dort steht. Sonst leer lassen.
-- "novel_food": Beurteile nach EU-Verordnung 2015/2283, ob der Stoff in der EU als Lebensmittel etabliert ist. Im Zweifel "pruefen" und den Grund nennen – nicht raten.
+- "novel_food": Beurteile nach EU-Verordnung 2015/2283, ob der Stoff in der EU als Lebensmittel etabliert ist. Im Zweifel "prüfen" und den Grund nennen – nicht raten.
 - "hoechstmengen": Orientiere dich an den BfR-Höchstmengenempfehlungen und den NRV. Nenne die Zahl, die du zugrunde legst.
 - "health_claims": nur Angaben aus der EU-Liste zugelassener Claims (VO 432/2012). Nichts erfinden; im Zweifel "zulaessig": false.
-- "machbarkeit": Denk an das Füllgewicht (passt es in eine Kapsel?), an Fließfähigkeit, Geschmack, Feuchtigkeit und daran, ob Extrakte in dieser Menge sinnvoll sind.
+- "machbarkeit": Denk an Fließfähigkeit, Schüttdichte, Geschmack, Feuchtigkeit und daran, ob Extrakte in dieser Menge sinnvoll sind.
+  Die passende Kapselgröße rechnen wir selbst aus unseren Größen aus - nenne in der Machbarkeit KEINE Kapselgröße, sonst widersprechen sich die beiden Angaben.
+  Wenn die Schüttdichte kritisch ist, schreib das als Hinweis (etwa "Füllgewicht in der Praxis prüfen"), ohne eine Größe zu nennen.
 - Schreib knapp und auf Deutsch. Keine Werbesprache.
 - Wenn die Idee des Kunden fachlich oder rechtlich nicht umsetzbar ist, sag das in "machbarkeit" deutlich und schlage die nächstbeste umsetzbare Variante vor.
 TXT;

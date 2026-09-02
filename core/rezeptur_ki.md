@@ -21,6 +21,7 @@ Der Kunde schreibt im Portal nur, was er will („etwas für besseren Schlaf, ve
 
 ## Was die KI NICHT entscheidet
 Das **Füllgewicht** rechnen wir selbst nach und vergleichen es mit unseren Kapselgrößen (`kapselgroesse`) – das ist eine Tatsache, keine Meinung. Steht im Vorschlag „passt in Größe 2", kommt diese Zeile aus unserer eigenen Rechnung.
+Damit sich nichts widerspricht, ist der KI ausdrücklich verboten, in der Machbarkeit selbst eine Kapselgröße zu nennen; Hinweise zur Schüttdichte darf sie geben.
 
 ## Grenzen
 Novel-Food- und Höchstmengen-Bewertung sind eine **Einschätzung**. Sie ersetzt keine rechtliche Prüfung und keine Rücksprache mit der Behörde. Deshalb steht an jeder Stelle im Panel, dass es ein Entwurf ist.
