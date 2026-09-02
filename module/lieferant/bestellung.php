@@ -6,7 +6,7 @@ require_once BX_ROOT . '/core/bestellung_ui.php';
 if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 
 $lid = aktueller_lieferant_id();
-$en  = lieferant_sprache() !== 'de';
+$en  = lp_sprache() !== 'de';
 $id  = (int)($_GET['id'] ?? 0);
 // Nur eigene Bestellungen – die Pruefung haengt an jeder Abfrage, nicht an der Oberflaeche.
 $b   = $id ? one("SELECT * FROM bestellung WHERE id=? AND lieferant_id=?", [$id, $lid]) : null;
@@ -16,9 +16,9 @@ if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $wer    = (string)(current_user()['name'] ?? 'Lieferant');
     $fehler = '';
     if ($aktion === 'lief_bestaetigen') {
-        $fehler = bestellung_bestaetigen($id, (string)($_POST['eta_geplant'] ?? ''), trim((string)($_POST['wer'] ?? '')) ?: $wer, $en);
+        $fehler = bestellung_bestaetigen($id, (string)($_POST['eta_geplant'] ?? ''), trim((string)($_POST['wer'] ?? '')) ?: $wer, lp_sprache());
     } elseif ($aktion === 'lief_station') {
-        $fehler = bestellung_station_setzen($id, (string)($_POST['station'] ?? ''), $wer, $en);
+        $fehler = bestellung_station_setzen($id, (string)($_POST['station'] ?? ''), $wer, lp_sprache());
     } elseif ($aktion === 'lief_versand') {
         q("UPDATE bestellung SET produktion_geplant=?, versandanbieter=?, versandart=?, tracking=? WHERE id=? AND lieferant_id=?", [
             trim((string)($_POST['produktion_geplant'] ?? '')) ?: null,
@@ -45,7 +45,7 @@ if (!$b):
       <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('datum')) ?></th><th><?= h(lp_t('termin')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
       <tbody><?php foreach ($liste as $r):
           $st = (string)$r['station'];
-          $lbl = $st === '' ? '–' : ($en ? bestellung_stationen_en()[$st] : bestellung_stationen()[$st]); ?>
+          $lbl = $st === '' ? '–' : bestellung_stationen_fuer(lp_sprache())[$st]; ?>
         <tr><td><?= h($r['nummer']) ?></td>
             <td><?= h(date('d.m.Y', strtotime((string)$r['angelegt']))) ?></td>
             <td><?= $r['eta_geplant'] ? h(date('d.m.Y', strtotime((string)$r['eta_geplant']))) : '<span class="muted">–</span>' ?></td>
@@ -65,7 +65,7 @@ if (!$b):
   <h1 style="margin-bottom:4px"><?= h($b['nummer']) ?></h1>
   <p class="bx-sub"><a href="?p=lieferant_bestellung">&larr; <?= h(lp_t('bestellungen')) ?></a></p>
 
-  <?= bestellung_ablauf_panel($b, 'lieferant', $en) ?>
+  <?= bestellung_ablauf_panel($b, 'lieferant', lp_sprache()) ?>
 
   <div class="bx-panel">
     <div class="bx-row" style="justify-content:space-between;align-items:center">

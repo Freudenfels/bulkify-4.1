@@ -17,6 +17,7 @@ $TABS = [
     'produktion' => 'Produktion & Rezeptur',
     'nummern'    => 'Nummernkreise',
     'fulfillment'=> 'Fulfillment-Schnittstelle',
+    'mail'       => 'E-Mail',
     'agb'        => 'AGB',
     'werkzeuge'  => 'Werkzeuge',
 ];
@@ -37,6 +38,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'firma_save') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'charge_std_save') {
     meta_set('mhd_monate_standard', (string)max(1, (int)($_POST['mhd_monate_standard'] ?? 18)));
     header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
+}
+// --- E-Mail: Zugangsdaten speichern. Das Passwort bleibt stehen, wenn das Feld leer bleibt. ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mail_save') {
+    meta_set('mail_aktiv', isset($_POST['mail_aktiv']) ? '1' : '0');
+    foreach (['smtp_host', 'smtp_user', 'smtp_helo', 'mail_from', 'mail_from_name', 'portal_url'] as $f)
+        meta_set($f, trim((string)($_POST[$f] ?? '')));
+    meta_set('smtp_port', (string) max(1, (int)($_POST['smtp_port'] ?? 587)));
+    meta_set('smtp_secure', in_array($_POST['smtp_secure'] ?? '', ['tls', 'ssl', ''], true) ? (string)$_POST['smtp_secure'] : 'tls');
+    if (trim((string)($_POST['smtp_pass'] ?? '')) !== '') meta_set('smtp_pass', (string)$_POST['smtp_pass']);
+    header('Location: ?p=einstellungen&tab=mail&ok=1'); exit;
+}
+// --- E-Mail: Testversand ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mail_test') {
+    $fa = beleg_firma();
+    $f = mail_senden(trim((string)($_POST['test_an'] ?? '')), 'Testmail aus bulkify',
+        "Diese Testmail kommt aus dem bulkify-Dashboard.\n\nWenn sie ankommt, ist der Versand richtig eingerichtet:\n"
+        . "Lieferanten-Einladungen und Benachrichtigungen gehen dann denselben Weg.\n\n" . $fa['name']);
+    header('Location: ?p=einstellungen&tab=mail&' . ($f === '' ? 'mailok=1' : 'mailfehler=' . urlencode($f))); exit;
 }
 // --- AGB: neue Fassung speichern (die bisherige bleibt als Beleg erhalten) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'agb_save') {
@@ -514,5 +533,57 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   </table></div>
 </div>
 <?php endif; ?>
+<?php endif; ?>
+<?php if ($tab === 'mail'): $mc = mail_config(); ?>
+<div class="bx-panel">
+  <h2>E-Mail-Versand</h2>
+  <p class="muted" style="margin-top:0">Zugangsdaten des Postfachs eintragen, aus dem bulkify verschickt (z. B. United Domains). Verschickt wird über SMTP – ohne Zusatzsoftware. Jede Mail wird zusätzlich in <code>data/mail.log</code> mitgeschrieben, damit nachvollziehbar bleibt, was rausging.</p>
+  <?php if (isset($_GET['mailok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Testmail verschickt – bitte im Posteingang nachsehen.</div><?php endif; ?>
+  <?php if (isset($_GET['mailfehler'])): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px">Testmail nicht verschickt: <?= h((string)$_GET['mailfehler']) ?></div><?php endif; ?>
+  <form method="post">
+    <input type="hidden" name="aktion" value="mail_save">
+    <div class="bx-field">
+      <div class="bx-check"><input type="checkbox" name="mail_aktiv" id="mail_aktiv" value="1" <?= $mc['aktiv'] ? 'checked' : '' ?>>
+        <label for="mail_aktiv" style="margin:0">E-Mail-Versand eingeschaltet</label></div>
+      <div class="muted" style="font-size:12px">Ausgeschaltet wird nichts verschickt – Vorgänge laufen trotzdem normal weiter.</div>
+    </div>
+    <div class="bx-grid">
+      <div class="bx-field"><label>SMTP-Server <?= bx_hint('Bei United Domains meist smtp.udag.de') ?></label>
+        <input type="text" name="smtp_host" value="<?= h($mc['host']) ?>" placeholder="smtp.udag.de"></div>
+      <div class="bx-field"><label>Port <?= bx_hint('587 mit STARTTLS oder 465 mit SSL') ?></label>
+        <input type="number" name="smtp_port" value="<?= (int)$mc['port'] ?>"></div>
+      <div class="bx-field"><label>Verschlüsselung</label>
+        <select name="smtp_secure">
+          <option value="tls"<?= $mc['secure'] === 'tls' ? ' selected' : '' ?>>STARTTLS (Port 587)</option>
+          <option value="ssl"<?= $mc['secure'] === 'ssl' ? ' selected' : '' ?>>SSL/TLS (Port 465)</option>
+          <option value=""<?= $mc['secure'] === '' ? ' selected' : '' ?>>ohne (nicht empfohlen)</option>
+        </select></div>
+      <div class="bx-field"><label>Benutzername</label>
+        <input type="text" name="smtp_user" value="<?= h($mc['user']) ?>" autocomplete="off"></div>
+      <div class="bx-field"><label>Passwort <?= bx_hint('Wird gespeichert. Leer lassen, um das vorhandene Passwort zu behalten.') ?></label>
+        <input type="password" name="smtp_pass" value="" autocomplete="new-password" placeholder="<?= $mc['pass'] !== '' ? '•••••••• (gespeichert)' : '' ?>"></div>
+      <div class="bx-field"><label>HELO-Name <?= bx_hint('Optional. Leer = Domain der Absenderadresse.') ?></label>
+        <input type="text" name="smtp_helo" value="<?= h($mc['helo']) ?>"></div>
+      <div class="bx-field"><label>Absenderadresse</label>
+        <input type="email" name="mail_from" value="<?= h($mc['from']) ?>" placeholder="info@bulkify.pro"></div>
+      <div class="bx-field"><label>Absendername</label>
+        <input type="text" name="mail_from_name" value="<?= h($mc['from_name']) ?>" placeholder="bulkify"></div>
+      <div class="bx-field" style="grid-column:1/-1"><label>Portal-Adresse <?= bx_hint('Kommt in die Mails an Lieferanten und Kunden, z. B. https://beta.bulkify.pro') ?></label>
+        <input type="text" name="portal_url" value="<?= h((string) meta_get('portal_url', '')) ?>" placeholder="https://beta.bulkify.pro"></div>
+    </div>
+    <button class="btn btn-primary" type="submit">Speichern</button>
+  </form>
+</div>
+
+<div class="bx-panel">
+  <h2>Testmail</h2>
+  <p class="muted" style="margin-top:0">Verschickt eine kurze Nachricht mit den oben gespeicherten Daten. Klappt das, funktioniert auch die Lieferanten-Einladung.</p>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="mail_test">
+    <div class="bx-field" style="margin:0;min-width:280px"><label>An</label>
+      <input type="email" name="test_an" required value="<?= h((string)(current_user()['email'] ?? '')) ?>"></div>
+    <button class="btn btn-ghost" type="submit">Testmail senden</button>
+  </form>
+</div>
 <?php endif; ?>
 <?php render_footer(); ?>

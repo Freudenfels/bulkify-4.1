@@ -48,7 +48,7 @@ lp_shell_start('lieferant_portal');
     <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('datum')) ?></th><th><?= h(lp_t('termin')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
     <tbody><?php foreach ($offen as $b):
         $st = (string)$b['station'];
-        $lbl = $st === '' ? '–' : (lieferant_sprache() === 'de' ? bestellung_stationen()[$st] : bestellung_stationen_en()[$st]); ?>
+        $lbl = $st === '' ? '–' : bestellung_stationen_fuer(lp_sprache())[$st]; ?>
       <tr><td><?= h($b['nummer']) ?></td>
           <td><?= h(date('d.m.Y', strtotime((string)$b['angelegt']))) ?></td>
           <td><?= $b['eta_geplant'] ? h(date('d.m.Y', strtotime((string)$b['eta_geplant']))) : '<span class="muted">–</span>' ?></td>

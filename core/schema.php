@@ -2382,6 +2382,16 @@ function bestellung_stationen_en(): array {
             'qualitaet'  => 'Quality check',  'versand'    => 'Ready to ship',
             'versendet'  => 'Shipped'];
 }
+function bestellung_stationen_zh(): array {
+    return ['angenommen' => '已接受订单', 'produktion' => '生产中',
+            'qualitaet'  => '质量检验',   'versand'    => '待发货',
+            'versendet'  => '已发货'];
+}
+
+// Stationsnamen in der Sprache des Lieferanten (de|en|zh).
+function bestellung_stationen_fuer(string $sprache): array {
+    return $sprache === 'de' ? bestellung_stationen() : ($sprache === 'zh' ? bestellung_stationen_zh() : bestellung_stationen_en());
+}
 // Wie weit ist die Bestellung? -1 = noch keine Station gesetzt.
 function bestellung_station_index(?string $station): int {
     $keys = array_keys(bestellung_stationen());
@@ -2395,13 +2405,14 @@ function versandarten(): array {
 }
 // Station setzen – kumulativ bis zum Ziel. "versendet" nur mit vollstaendigen Versanddaten.
 // Rueckgabe: '' = gesetzt, sonst der Grund, warum nicht.
-function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $wer = null, bool $en = false): string {
+function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $wer = null, string $sprache = 'de'): string {
+    $m = fn(string $de, string $en, string $zh) => $sprache === 'de' ? $de : ($sprache === 'zh' ? $zh : $en);
     $b = one("SELECT * FROM bestellung WHERE id=?", [$bestellung_id]);
-    if (!$b) return $en ? 'Order not found.' : 'Bestellung nicht gefunden.';
-    if ((int)$b['bestaetigt'] !== 1) return $en ? 'Please confirm the order with a planned date first.' : 'Bitte zuerst die Bestellung mit einem geplanten Termin bestätigen.';
-    if (!array_key_exists($ziel, bestellung_stationen())) return $en ? 'Unknown step.' : 'Unbekannte Station.';
+    if (!$b) return $m('Bestellung nicht gefunden.', 'Order not found.', '未找到订单。');
+    if ((int)$b['bestaetigt'] !== 1) return $m('Bitte zuerst die Bestellung mit einem geplanten Termin bestätigen.', 'Please confirm the order with a planned date first.', '请先确认订单并填写计划交货日期。');
+    if (!array_key_exists($ziel, bestellung_stationen())) return $m('Unbekannte Station.', 'Unknown step.', '未知步骤。');
     if ($ziel === 'versendet' && (trim((string)$b['versandanbieter']) === '' || trim((string)$b['versandart']) === '' || trim((string)$b['tracking']) === ''))
-        return $en ? 'For "shipped" the carrier, shipping method or tracking number is missing.' : 'Für „versendet" fehlen Versandanbieter, Versandart oder Sendungsnummer.';
+        return $m('Für „versendet" fehlen Versandanbieter, Versandart oder Sendungsnummer.', 'For "shipped" the carrier, shipping method or tracking number is missing.', '缺少承运商、运输方式或物流单号，无法设置为“已发货”。');
     q("UPDATE bestellung SET station=? WHERE id=?", [$ziel, $bestellung_id]);
     // Der interne Status laeuft mit: sobald der Lieferant produziert, ist die Bestellung "bestellt".
     if ((string)$b['status'] === 'offen') q("UPDATE bestellung SET status='bestellt' WHERE id=?", [$bestellung_id]);
@@ -2410,11 +2421,12 @@ function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $we
     return '';
 }
 // Bestellung durch den Lieferanten bestaetigen (mit zugesagtem Termin).
-function bestellung_bestaetigen(int $bestellung_id, string $eta, string $wer, bool $en = false): string {
+function bestellung_bestaetigen(int $bestellung_id, string $eta, string $wer, string $sprache = 'de'): string {
+    $m = fn(string $de, string $en, string $zh) => $sprache === 'de' ? $de : ($sprache === 'zh' ? $zh : $en);
     $b = one("SELECT id, nummer, bestaetigt, lieferant_id FROM bestellung WHERE id=?", [$bestellung_id]);
-    if (!$b) return $en ? 'Order not found.' : 'Bestellung nicht gefunden.';
+    if (!$b) return $m('Bestellung nicht gefunden.', 'Order not found.', '未找到订单。');
     if ((int)$b['bestaetigt'] === 1) return '';                     // schon bestaetigt: nichts tun
-    if (trim($eta) === '' || !strtotime($eta)) return $en ? 'Please state a planned delivery date.' : 'Bitte einen geplanten Liefertermin angeben.';
+    if (trim($eta) === '' || !strtotime($eta)) return $m('Bitte einen geplanten Liefertermin angeben.', 'Please state a planned delivery date.', '请填写计划交货日期。');
     q("UPDATE bestellung SET bestaetigt=1, bestaetigt_am=UTC_TIMESTAMP(), bestaetigt_von=?, eta_geplant=?, station=?, status=IF(status='offen','bestellt',status) WHERE id=?",
       [mb_substr(trim($wer), 0, 190), date('Y-m-d', strtotime($eta)), 'angenommen', $bestellung_id]);
     if ($b['lieferant_id']) log_aktivitaet('lieferant', (int)$b['lieferant_id'], 'lieferant',

@@ -11,6 +11,13 @@ $FORMEN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick
 
 $fehler = '';
 // Zugang und Preisanfragen – die eigenen POST-Wege, damit das Stammdaten-Formular unberuehrt bleibt.
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einladung_mailen') {
+    $basis = rtrim((string) meta_get('portal_url', ''), '/');
+    if ($basis === '') $basis = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    $einl = lieferant_einladung((int)$id, $basis);
+    $f = mail_lieferant_einladung((int)$id, (string)$einl['link']);
+    header('Location: ?p=lieferant&id=' . (int)$id . ($f === '' ? '&gemailt=1' : '&mailfehler=' . urlencode($f))); exit;
+}
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einladen') {
     lieferant_einladung((int)$id);
     header('Location: ?p=lieferant&id=' . (int)$id . '&eingeladen=1'); exit;
@@ -322,6 +329,8 @@ if (!$neu) {
 <div class="bx-panel">
   <h2 style="margin-top:0">Zugang zum Lieferantenportal</h2>
   <?php if (isset($_GET['eingeladen'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Einladungslink erzeugt – bitte an den Lieferanten schicken.</div><?php endif; ?>
+  <?php if (isset($_GET['gemailt'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Einladung per E-Mail verschickt.</div><?php endif; ?>
+  <?php if (isset($_GET['mailfehler'])): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px">E-Mail nicht verschickt: <?= h((string)$_GET['mailfehler']) ?></div><?php endif; ?>
   <?php if ($hatZugang): ?>
     <p class="muted" style="margin-top:0">Dieser Lieferant hat einen Zugang und kann Bestellungen selbst bestätigen, den Fortschritt pflegen und Angebote abgeben.</p>
     <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Benutzer</th><th>E-Mail</th><th>Letzter Login</th></tr></thead><tbody>
@@ -336,8 +345,14 @@ if (!$neu) {
       <div class="bx-field"><label>Einladungslink (offen)</label>
         <input type="text" readonly onclick="this.select()" value="<?= h($basis . '/?p=lieferant_einladung&token=' . $offeneEinl['token']) ?>" style="width:100%"></div>
     <?php endif; ?>
-    <form method="post" style="margin:0"><input type="hidden" name="aktion" value="einladen">
+    <div class="bx-row" style="gap:10px;flex-wrap:wrap">
+      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="einladen">
       <button class="btn btn-primary" type="submit"><?= $offeneEinl ? 'Neuen Link erzeugen' : 'Einladungslink erzeugen' ?></button></form>
+      <?php if (mail_bereit() && trim((string)$l['email']) !== ''): ?>
+      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="einladung_mailen">
+        <button class="btn btn-ghost" type="submit">Einladung per E-Mail senden</button></form>
+      <?php elseif (!mail_bereit()): ?><span class="muted" style="font-size:12px;align-self:center">E-Mail-Versand ist noch nicht eingerichtet (Einstellungen &rarr; E-Mail).</span><?php endif; ?>
+    </div>
   <?php endif; ?>
 </div>
 

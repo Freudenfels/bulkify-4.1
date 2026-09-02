@@ -4,6 +4,7 @@ session_start();
 require_once __DIR__ . '/../core/schema.php';
 require_once __DIR__ . '/../core/pdf_beleg.php';   // beleg_firma() – auch fuer den AGB-Entwurfstext
 require_once __DIR__ . '/../core/agb.php';
+require_once __DIR__ . '/../core/mail.php';
 require_once __DIR__ . '/../core/auth.php';
 require_once __DIR__ . '/../core/layout.php';
 

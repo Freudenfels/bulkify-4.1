@@ -119,10 +119,11 @@ function aktueller_lieferant(): ?array {
     $id = aktueller_lieferant_id();
     return $id ? one("SELECT * FROM lieferanten WHERE id=?", [$id]) : null;
 }
-// Sprache des angemeldeten Lieferanten (de|en). Alles ausser 'de' laeuft auf Englisch.
+// Sprache des angemeldeten Lieferanten: de | en | zh. Unbekanntes faellt auf Englisch zurueck.
 function lieferant_sprache(): string {
     $l = aktueller_lieferant();
-    return strtolower((string)($l['sprache'] ?? 'de')) === 'de' ? 'de' : 'en';
+    $s = strtolower(trim((string)($l['sprache'] ?? 'de')));
+    return in_array($s, ['de', 'en', 'zh'], true) ? $s : 'en';
 }
 function ist_produktionsbereich(): bool {
     $r = user_rollen();

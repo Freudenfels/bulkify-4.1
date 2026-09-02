@@ -10,7 +10,7 @@ $fehler = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $t = fn(string $k, int $max) => mb_substr(trim((string)($_POST[$k] ?? '')), 0, $max);
-    $spr = in_array((string)($_POST['sprache'] ?? ''), ['de', 'en'], true) ? $_POST['sprache'] : 'de';
+    $spr = in_array((string)($_POST['sprache'] ?? ''), ['de', 'en', 'zh'], true) ? $_POST['sprache'] : 'de';
     $firma = $t('firma', 190);
     if ($firma === '') {
         $fehler = lp_t('firma') . ' – ' . (lp_sprache() === 'de' ? 'Pflichtfeld.' : 'required.');
@@ -94,8 +94,10 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
         <input type="text" name="whatsapp" value="<?= $v('whatsapp') ?>" placeholder="+86 …"></div>
       <div class="bx-field"><label><?= h(lp_t('sprache')) ?></label>
         <select name="sprache">
-          <option value="de"<?= strtolower((string)$lf['sprache']) === 'de' ? ' selected' : '' ?>>Deutsch</option>
-          <option value="en"<?= strtolower((string)$lf['sprache']) !== 'de' ? ' selected' : '' ?>>English</option>
+          <?php $sp = strtolower((string)$lf['sprache']); ?>
+          <option value="de"<?= $sp === 'de' ? ' selected' : '' ?>>Deutsch</option>
+          <option value="en"<?= $sp === 'en' ? ' selected' : '' ?>>English</option>
+          <option value="zh"<?= $sp === 'zh' ? ' selected' : '' ?>>中文</option>
         </select></div>
     </div>
   </div>

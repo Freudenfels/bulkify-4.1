@@ -5,7 +5,7 @@ require_once BX_ROOT . '/core/dokument_ui.php';
 if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 
 $lid = aktueller_lieferant_id();
-$en  = lieferant_sprache() !== 'de';
+$en  = lp_sprache() !== 'de';
 $id  = (int)($_GET['id'] ?? 0);
 $a   = $id ? one("SELECT af.*, i.name AS item_name, i.artikelnummer, i.einheit AS item_einheit
                   FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id

@@ -107,7 +107,7 @@ if (!$neu) {
 
     // Ablauf beim Lieferanten – dasselbe Panel sieht der Lieferant in seinem Portal.
     require_once BX_ROOT . '/core/bestellung_ui.php';
-    echo bestellung_ablauf_panel($b, 'team', false);
+    echo bestellung_ablauf_panel($b, 'team', 'de');
 
     // Kontext: für welche(n) Auftrag/Produkt/Kunde wird bestellt? Damit die Dringlichkeit einschätzbar ist.
     $kontext = all("SELECT DISTINCT a.id, a.nummer, a.menge, a.stueck,
