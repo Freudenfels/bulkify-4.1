@@ -65,10 +65,7 @@ if (!$a):
 <?php else:
     $ang = one("SELECT * FROM lieferant_angebot WHERE anfrage_id=?", [$id]);
     $staffeln = $ang ? all("SELECT * FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$ang['id']]) : [];
-    // Die angefragte Menge steht schon am Preisfeld darueber – hier geht es nur um ANDERE Mengen.
-    // Deshalb keine Vorbelegung; sonst tippt der Lieferant denselben Preis zweimal.
-    $staffeln[] = ['menge_ab' => '', 'preis' => ''];                       // immer eine freie Zeile am Ende
-    while (count($staffeln) < 3) $staffeln[] = ['menge_ab' => '', 'preis' => ''];
+    // Keine leeren Zeilen auf Vorrat: eine Staffel kommt über „+ Staffel" dazu.
     // Die Einheit steht schon in der Anfrage (dort wird sie automatisch gesetzt) – der Lieferant
     // muss sie nicht raten. Ein bereits abgegebenes Angebot behält seine eigene Einheit.
     $einheit = trim((string)($ang['einheit'] ?? '')) ?: (trim((string)($a['einheit'] ?? '')) ?: trim((string)($a['item_einheit'] ?? '')));
@@ -103,7 +100,10 @@ if (!$a):
       <div class="bx-grid">
         <div class="bx-field"><label><?= h(lp_t('ihr_preis')) ?><?= (float)($a['menge'] ?? 0) > 0 ? ' <span class="muted" style="font-weight:normal">(' . h(lp_t('fuer_menge')) . ' ' . h(lp_num($a['menge'])) . ' ' . h(lp_einheit($einheit, (float)$a['menge'])) . ')</span>' : '' ?></label>
           <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="12.50">
-          <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>"></div>
+          <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>">
+          <?php // Gilt für andere Mengen ein anderer Preis, kommt hier je Klick eine Zeile dazu. ?>
+          <button type="button" class="btn btn-ghost btn-sm" id="staffelPlus" style="margin-top:6px"
+                  data-preis="<?= h(lp_t('preis')) ?>" data-menge="<?= h(lp_t('ab_menge')) ?>">+ <?= h(lp_t('staffel')) ?></button></div>
         <div class="bx-field"><label><?= h(lp_t('preis_basis')) ?></label>
           <?php $pb = (int)($ang['preis_basis'] ?? 1); ?>
           <select name="preis_basis">
@@ -115,39 +115,35 @@ if (!$a):
         <div class="bx-field"><label><?= h(lp_t('lieferzeit')) ?></label>
           <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>"></div>
       </div>
-      <?php // Die Staffel ist die Ausnahme, nicht die Regel – deshalb zugeklappt. Wer schon eine
-            // abgegeben hat, sieht sie sofort. <details> braucht kein JavaScript.
-            $staffelOffen = false;
-            foreach ($staffeln as $s) if ((float)($s['preis'] ?? 0) > 0) $staffelOffen = true; ?>
-      <details style="margin:6px 0 var(--sp-4)"<?= $staffelOffen ? ' open' : '' ?>>
-        <summary style="cursor:pointer"><strong><?= h(lp_t('mengenstaffeln')) ?></strong> <span class="muted" style="font-weight:normal">(<?= h(lp_t('optional')) ?>)</span></summary>
-        <div class="muted" style="font-size:12px;margin:8px 0"><?= h(lp_t('staffel_hinweis')) ?></div>
-        <?php // Schlichtes Raster statt Tabelle: die Eingabefelder bringen ihren eigenen Rahmen mit,
-              // ein Tabellenrahmen darum sähe aus wie Kasten im Kasten.
-              // Reihenfolge wie im Formular darüber: erst der Preis, dann die Menge, ab der er gilt. ?>
-        <div id="staffelRaster" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;max-width:520px">
-          <div class="muted" style="font-size:12px"><?= h(lp_t('preis')) ?></div>
-          <div class="muted" style="font-size:12px"><?= h(lp_t('ab_menge')) ?></div>
-          <?php foreach ($staffeln as $s): ?>
-            <input type="text" name="s_preis[]" value="<?= h($zahl($s['preis'], 4)) ?>">
-            <input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>">
-          <?php endforeach; ?>
-        </div>
-        <button type="button" class="btn btn-ghost btn-sm" id="staffelPlus" style="margin-top:10px">+ <?= h(lp_t('zeile_mehr')) ?></button>
-        <script>
-        (function(){
-          // So viele Staffeln, wie der Lieferant braucht – drei sind nur der Anfang.
-          var raster = document.getElementById('staffelRaster'), knopf = document.getElementById('staffelPlus');
-          if (!raster || !knopf) return;
-          knopf.addEventListener('click', function(){
-            ['s_preis[]', 's_menge[]'].forEach(function(name){
-              var f = document.createElement('input'); f.type = 'text'; f.name = name; raster.appendChild(f);
-            });
-            raster.lastElementChild.previousElementSibling.focus();
+      <?php // Staffelzeilen: je Zeile ein Preis und die Menge, ab der er gilt. Leere Zeilen ignoriert
+            // das Speichern, deshalb braucht es keinen Entfernen-Knopf – Felder leeren genügt. ?>
+      <div id="staffelRaster" style="max-width:520px">
+        <?php foreach ($staffeln as $s): ?>
+          <div class="bx-row" style="gap:10px;margin-bottom:8px">
+            <input type="text" name="s_preis[]" value="<?= h($zahl($s['preis'], 4)) ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
+            <input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>" placeholder="<?= h(lp_t('ab_menge')) ?>" style="flex:1">
+          </div>
+        <?php endforeach; ?>
+      </div>
+      <script>
+      (function(){
+        var raster = document.getElementById('staffelRaster'), knopf = document.getElementById('staffelPlus');
+        if (!raster || !knopf) return;
+        knopf.addEventListener('click', function(){
+          // Beschriftungen kommen als data-Attribute vom Knopf – kein PHP in der JS-Zeichenkette.
+          var zeile = document.createElement('div');
+          zeile.className = 'bx-row';
+          zeile.style.cssText = 'gap:10px;margin-bottom:8px';
+          [['s_preis[]', knopf.dataset.preis], ['s_menge[]', knopf.dataset.menge]].forEach(function(p){
+            var f = document.createElement('input');
+            f.type = 'text'; f.name = p[0]; f.placeholder = p[1] || ''; f.style.flex = '1';
+            zeile.appendChild(f);
           });
-        })();
-        </script>
-      </details>
+          raster.appendChild(zeile);
+          zeile.firstElementChild.focus();
+        });
+      })();
+      </script>
       <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><textarea name="notiz" rows="3"><?= h($ang['notiz'] ?? '') ?></textarea></div>
       <button class="btn btn-primary" type="submit"><?= h(lp_t('angebot_abgeben')) ?></button>
     </form>
