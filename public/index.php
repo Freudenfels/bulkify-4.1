@@ -82,6 +82,8 @@ $routes = [
     'einkaufsliste'      => 'einkauf/einkaufsliste.php',
     'benutzer'           => 'system/benutzer_liste.php',
     'benutzer_detail'    => 'system/benutzer_detail.php',
+    // Hintergrundarbeit der KI (kein Login, dafuer Schluessel) - siehe core/ki_job.php
+    'ki_job'              => 'system/ki_job.php',
 ];
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', $_GET['p']) : 'dashboard';
@@ -100,7 +102,7 @@ if ($p === 'autologin') {
 }
 
 // Öffentliche Routen (ohne internen Login): Login-Seite + Kundenportal (Token-basiert)
-$PUBLIC = ['login', 'portal', 'portal_dok', 'lieferant_login', 'lieferant_einladung'];   // portal_dok prüft Token + Freigabe selbst
+$PUBLIC = ['login', 'portal', 'portal_dok', 'lieferant_login', 'lieferant_einladung', 'ki_job'];   // portal_dok prüft Token + Freigabe selbst
 
 // Nicht angemeldet -> zur Login-Seite (außer öffentliche Routen)
 if (!in_array($p, $PUBLIC, true) && !is_logged_in()) { header('Location: ?p=login'); exit; }
