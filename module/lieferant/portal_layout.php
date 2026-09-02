@@ -49,14 +49,71 @@ function lp_t(string $key, string $sprache = ''): string {
         'notiz'           => ['de'=>'Notiz',                  'en'=>'Note'],
         'gewuenscht'      => ['de'=>'Angefragte Menge',       'en'=>'Requested quantity'],
         'abgegeben_am'    => ['de'=>'abgegeben am',           'en'=>'submitted on'],
+        'anmelden'        => ['de'=>'Anmelden',                'en'=>'Sign in'],
+        'login_sub'       => ['de'=>'Zugang für Lieferanten',  'en'=>'Supplier access'],
+        'passwort'        => ['de'=>'Passwort',                'en'=>'Password'],
+        'login_fehler'    => ['de'=>'Anmeldung fehlgeschlagen.', 'en'=>'Sign-in failed.'],
+        'kein_zugang'     => ['de'=>'Noch keinen Zugang? Bitte den Einladungslink nutzen, den wir Ihnen geschickt haben.',
+                              'en'=>'No access yet? Please use the invitation link we sent you.'],
+        'einl_titel'      => ['de'=>'Zugang einrichten',       'en'=>'Set up your access'],
+        'einl_fuer'       => ['de'=>'für',                     'en'=>'for'],
+        'einl_text'       => ['de'=>'Legen Sie hier Ihren Zugang an. Danach sehen Sie Ihre Bestellungen und Anfragen und können Termine, Fortschritt und Versanddaten selbst eintragen.',
+                              'en'=>'Create your access here. Afterwards you can see your orders and requests, and enter dates, progress and shipping details yourself.'],
+        'ihr_name'        => ['de'=>'Ihr Name',                'en'=>'Your name'],
+        'pw_regel'        => ['de'=>'Passwort (mindestens 8 Zeichen)', 'en'=>'Password (at least 8 characters)'],
+        'zugang_anlegen'  => ['de'=>'Zugang anlegen',          'en'=>'Create access'],
+        'einl_ungueltig'  => ['de'=>'Einladung ungültig',      'en'=>'Invitation not valid'],
+        'einl_abgelaufen' => ['de'=>'Dieser Einladungslink ist abgelaufen oder wurde bereits verwendet. Bitte melden Sie sich bei uns.',
+                              'en'=>'This invitation link has expired or was already used. Please get in touch with us.'],
+        'zum_login'       => ['de'=>'Zum Login',               'en'=>'To sign-in'],
+        'firma'           => ['de'=>'Firma',                   'en'=>'Company'],
+        'strasse'         => ['de'=>'Straße und Hausnummer',   'en'=>'Street and number'],
+        'plz'             => ['de'=>'PLZ',                     'en'=>'Postal code'],
+        'ort'             => ['de'=>'Ort',                     'en'=>'City'],
+        'land'            => ['de'=>'Land',                    'en'=>'Country'],
+        'webseite'        => ['de'=>'Webseite',                'en'=>'Website'],
+        'wechat'          => ['de'=>'WeChat-ID',               'en'=>'WeChat ID'],
+        'whatsapp'        => ['de'=>'WhatsApp',                'en'=>'WhatsApp'],
+        'ustid'           => ['de'=>'USt-IdNr. / Steuernummer','en'=>'VAT / tax number'],
+        'logo'            => ['de'=>'Firmenlogo',              'en'=>'Company logo'],
+        'logo_hinweis'    => ['de'=>'PNG oder JPG, max. 2 MB. Wird nur intern bei uns angezeigt.',
+                              'en'=>'PNG or JPG, max. 2 MB. Shown internally at our end only.'],
+        'kontakt'         => ['de'=>'Kontakt',                 'en'=>'Contact'],
+        'firmendaten'     => ['de'=>'Firmendaten',             'en'=>'Company details'],
+        'nur_wir'         => ['de'=>'Konditionen und Preise pflegen wir – ändern Sie hier Ihre Kontakt- und Firmendaten.',
+                              'en'=>'Terms and prices are maintained by us – please keep your contact and company details up to date here.'],
     ];
-    $s = $sprache !== '' ? $sprache : (function_exists('lieferant_sprache') ? lieferant_sprache() : 'de');
+    $s = $sprache !== '' ? $sprache : lp_sprache();
     $s = strtolower($s) === 'de' ? 'de' : 'en';
     return $texte[$key][$s] ?? $key;
 }
 
+// Welche Sprache gilt gerade? Reihenfolge: eigene Wahl (Session) vor Stammdaten des Lieferanten.
+// Wichtig fuer Login und Einladung – dort ist noch niemand angemeldet, es gibt also keine Stammdaten.
+function lp_sprache(): string {
+    if (!empty($_SESSION['lp_lang']) && in_array($_SESSION['lp_lang'], ['de', 'en'], true)) return $_SESSION['lp_lang'];
+    return function_exists('lieferant_sprache') && function_exists('ist_lieferant') && ist_lieferant() ? lieferant_sprache() : 'de';
+}
+// Sprachwahl aus ?lang= uebernehmen (auf jeder Portalseite erlaubt).
+function lp_sprache_setzen(): void {
+    $l = strtolower(trim((string)($_GET['lang'] ?? '')));
+    if (in_array($l, ['de', 'en'], true)) $_SESSION['lp_lang'] = $l;
+}
+// Umschalter „Deutsch | English" – die aktuelle Sprache ist hervorgehoben.
+function lp_sprachwahl(): string {
+    $cur = lp_sprache();
+    $ziel = strtok((string)($_SERVER['REQUEST_URI'] ?? '?p=lieferant_login'), '#');
+    $ziel = preg_replace('/([?&])lang=[^&]*(&|$)/', '$1', $ziel);
+    $trenner = strpos($ziel, '?') === false ? '?' : '&';
+    $out = '<span style="display:inline-flex;gap:12px;font-size:13px;align-items:center">';
+    foreach (['de' => 'Deutsch', 'en' => 'English'] as $code => $label) {
+        $stil = 'text-decoration:none;color:inherit;' . ($code === $cur ? 'font-weight:600;text-decoration:underline' : 'opacity:.6');
+        $out .= '<a style="' . $stil . '" href="' . h($ziel . $trenner . 'lang=' . $code) . '">' . h($label) . '</a>';
+    }
+    return $out . '</span>';
+}
 function lp_head(string $titel): void {
-    $lang = (function_exists('lieferant_sprache') ? lieferant_sprache() : 'de');
+    $lang = lp_sprache();
     echo '<!doctype html><html lang="' . h($lang) . '"><head><meta charset="utf-8">'
        . '<meta name="viewport" content="width=device-width, initial-scale=1">'
        . '<title>' . h($titel) . '</title><link rel="stylesheet" href="assets/app.css">'
@@ -78,13 +135,17 @@ function lp_shell_start(string $aktiv): void {
         'lieferant_profil'      => lp_t('profil'),
     ];
     echo '<div class="bx-shell"><aside class="bx-side">'
-       . '<div class="bx-brand">bulkify <span class="bx-ver">' . h(lp_t('portal')) . '</span></div>'
+       . '<div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo"><span class="bx-ver">' . h(lp_t('portal')) . '</span></div>'
        . '<nav><div class="bx-navgroup">' . h((string)($lf['firma'] ?? '')) . '</div>';
     foreach ($menu as $route => $label) {
         echo '<a href="?p=' . h($route) . '"' . ($aktiv === $route ? ' class="on"' : '') . '>' . h($label) . '</a>';
     }
-    echo '<div class="bx-userbox"><a href="?p=logout">' . h(lp_t('abmelden')) . '</a></div>'
+    echo '<div class="bx-userbox" style="padding-bottom:0">' . lp_sprachwahl() . '</div>'
+       . '<div class="bx-userbox"><a href="?p=logout">' . h(lp_t('abmelden')) . '</a></div>'
        . '<div class="bx-userbox"><button type="button" class="bx-themebtn">Dunkler Modus</button></div>'
        . '</nav></aside><main class="bx-main">';
 }
 function lp_shell_ende(): void { echo '</main></div>'; }
+
+// Die Wahl aus ?lang= gilt ab sofort – auch fuer Texte, die vor lp_head() gebaut werden.
+lp_sprache_setzen();

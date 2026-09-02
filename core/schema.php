@@ -609,6 +609,10 @@ function init_schema(): void {
         KEY idx_angebot (angebot_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('lieferanten', 'sprache', "VARCHAR(5) NOT NULL DEFAULT 'de'");
+    // Kontaktwege, die im Asiengeschaeft zaehlen – und das Logo des Lieferanten (nur intern).
+    ensure_column('lieferanten', 'wechat', "VARCHAR(80) NULL");
+    ensure_column('lieferanten', 'whatsapp', "VARCHAR(40) NULL");
+    ensure_column('lieferanten', 'logo', "VARCHAR(255) NULL");   // Dateiname in data/uploads
     $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_einladung (
         id INT AUTO_INCREMENT PRIMARY KEY,
         lieferant_id INT NOT NULL,

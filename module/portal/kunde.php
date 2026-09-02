@@ -263,7 +263,7 @@ function portal_foot(): void { echo (function_exists('bx_theme_script') ? bx_the
 
 if (!$k) {
     portal_head('Kundenportal');
-    echo '<div class="bx-shell"><aside class="bx-side"><div class="bx-brand">bulkify <span class="bx-ver">Portal</span></div></aside>'
+    echo '<div class="bx-shell"><aside class="bx-side"><div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo"><span class="bx-ver">Portal</span></div></aside>'
        . '<main class="bx-main"><div class="bx-panel"><h2 style="margin-top:0">Zugang ungültig</h2><p class="muted">Dieser Portal-Link ist nicht gültig. Bitte wenden Sie sich an bulkify.</p></div></main></div>';
     portal_foot(); exit;
 }
@@ -745,7 +745,7 @@ portal_head('Kundenportal · ' . $k['firma']);
 ?>
 <div class="bx-shell">
   <aside class="bx-side">
-    <div class="bx-brand">bulkify <span class="bx-ver">Portal</span></div>
+    <div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo"><span class="bx-ver">Portal</span></div>
     <nav>
       <div class="bx-navgroup"><?= h($k['firma']) ?></div>
       <?php foreach ($NAVGROUPS as $gruppe => $keys):

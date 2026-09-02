@@ -308,6 +308,17 @@ if (!$neu) {
   $offeneEinl = one("SELECT * FROM lieferant_einladung WHERE lieferant_id=? AND eingeloest=0 ORDER BY id DESC LIMIT 1", [(int)$id]);
   $basis = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 ?>
+<?php // Was der Lieferant selbst gepflegt hat – Logo und die Kontaktwege, die im Asiengeschaeft zaehlen. ?>
+<?php if (!empty($l['logo']) || !empty($l['wechat']) || !empty($l['whatsapp'])): ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Vom Lieferanten gepflegt</h2>
+  <div class="bx-row" style="gap:24px;align-items:center;flex-wrap:wrap">
+    <?php if (!empty($l['logo'])): ?><img src="?p=lieferant_logo&id=<?= (int)$id ?>" alt="" style="max-height:60px;max-width:200px"><?php endif; ?>
+    <?php if (!empty($l['wechat'])): ?><div><div class="muted" style="font-size:12px">WeChat</div><div><?= h($l['wechat']) ?></div></div><?php endif; ?>
+    <?php if (!empty($l['whatsapp'])): ?><div><div class="muted" style="font-size:12px">WhatsApp</div><div><?= h($l['whatsapp']) ?></div></div><?php endif; ?>
+  </div>
+</div>
+<?php endif; ?>
 <div class="bx-panel">
   <h2 style="margin-top:0">Zugang zum Lieferantenportal</h2>
   <?php if (isset($_GET['eingeladen'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Einladungslink erzeugt – bitte an den Lieferanten schicken.</div><?php endif; ?>

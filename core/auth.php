@@ -72,6 +72,7 @@ function route_rollen_map(): array {
         'lieferant_bestellung_pdf'=> ['*'],
         'lieferant_anfrage'       => ['*'],
         'lieferant_profil'        => ['*'],
+        'lieferant_logo'          => ['*'],
         'rechnungen'         => ['finance'],
         'rechnung'           => ['finance'],
         'buchhaltung'        => ['finance'],
