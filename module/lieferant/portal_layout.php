@@ -44,6 +44,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'ab_menge'        => ['de'=>'ab Menge',               'en'=>'from quantity', 'zh'=>'起订数量'],
         'fuer_menge'      => ['de'=>'für',                    'en'=>'for', 'zh'=>'针对'],
         'optional'        => ['de'=>'optional',               'en'=>'optional', 'zh'=>'可选'],
+        'zeile_mehr'      => ['de'=>'Weitere Zeile',          'en'=>'Add row', 'zh'=>'添加一行'],
         'staffel_hinweis' => ['de'=>'In der ersten Zeile steht die von uns angefragte Menge – bitte den Preis daneben eintragen. Weitere Zeilen nur, wenn Sie andere Mengen günstiger anbieten. Leere Zeilen werden ignoriert.',
                               'en'=>'The first row holds the quantity we asked for – please enter your price next to it. Add further rows only if other quantities come cheaper. Empty rows are ignored.',
                               'zh'=>'第一行是我方询价的数量——请在旁边填写价格。仅当其他数量有更优价格时才增加行。空行将被忽略。'],

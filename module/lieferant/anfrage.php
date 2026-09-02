@@ -68,6 +68,7 @@ if (!$a):
     // Noch kein Angebot? Dann steht in der ersten Zeile die Menge, die wir angefragt haben – der
     // Lieferant trägt nur den Preis daneben. Weitere Zeilen sind freiwillig.
     if (!$staffeln && (float)($a['menge'] ?? 0) > 0) $staffeln[] = ['menge_ab' => (float)$a['menge'], 'preis' => ''];
+    $staffeln[] = ['menge_ab' => '', 'preis' => ''];                       // immer eine freie Zeile am Ende
     while (count($staffeln) < 3) $staffeln[] = ['menge_ab' => '', 'preis' => ''];
     // Die Einheit steht schon in der Anfrage (dort wird sie automatisch gesetzt) – der Lieferant
     // muss sie nicht raten. Ein bereits abgegebenes Angebot behält seine eigene Einheit.
@@ -125,7 +126,7 @@ if (!$a):
         <?php // Schlichtes Raster statt Tabelle: die Eingabefelder bringen ihren eigenen Rahmen mit,
               // ein Tabellenrahmen darum sähe aus wie Kasten im Kasten.
               // Reihenfolge wie im Formular darüber: erst der Preis, dann die Menge, ab der er gilt. ?>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;max-width:520px">
+        <div id="staffelRaster" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;max-width:520px">
           <div class="muted" style="font-size:12px"><?= h(lp_t('preis')) ?></div>
           <div class="muted" style="font-size:12px"><?= h(lp_t('ab_menge')) ?></div>
           <?php foreach ($staffeln as $s): ?>
@@ -133,6 +134,20 @@ if (!$a):
             <input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>">
           <?php endforeach; ?>
         </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="staffelPlus" style="margin-top:10px">+ <?= h(lp_t('zeile_mehr')) ?></button>
+        <script>
+        (function(){
+          // So viele Staffeln, wie der Lieferant braucht – drei sind nur der Anfang.
+          var raster = document.getElementById('staffelRaster'), knopf = document.getElementById('staffelPlus');
+          if (!raster || !knopf) return;
+          knopf.addEventListener('click', function(){
+            ['s_preis[]', 's_menge[]'].forEach(function(name){
+              var f = document.createElement('input'); f.type = 'text'; f.name = name; raster.appendChild(f);
+            });
+            raster.lastElementChild.previousElementSibling.focus();
+          });
+        })();
+        </script>
       </details>
       <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><textarea name="notiz" rows="3"><?= h($ang['notiz'] ?? '') ?></textarea></div>
       <button class="btn btn-primary" type="submit"><?= h(lp_t('angebot_abgeben')) ?></button>
