@@ -14,10 +14,22 @@ $FORMEN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick
 
 $fehler = '';
 // Katalog des Lieferanten: je Zeile entscheiden, ob daraus ein Artikel wird.
-if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['kat_uebernehmen', 'kat_ablehnen', 'kat_alle'], true)) {
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['kat_uebernehmen', 'kat_ablehnen', 'kat_alle', 'kat_upload'], true)) {
     require_once BX_ROOT . '/core/lieferant_katalog.php';
     $akt = (string)$_POST['aktion'];
     $n = 0; $fehler = '';
+    if ($akt === 'kat_upload') {
+        // Preisliste, die uns der Lieferant gemailt hat: erst in die Dateiablage, dann liest die KI sie.
+        // Gleicher Weg wie im Portal - nur laedt hier das Team hoch statt der Lieferant.
+        require_once BX_ROOT . '/core/lieferant_dateien.php';
+        $f = lieferant_datei_upload((int)$id, 'team');
+        if ($f !== '') { header('Location: ?p=lieferant&id=' . (int)$id . '&fehler=' . urlencode($f) . '#katalog'); exit; }
+        $d = one("SELECT id, datei FROM dokument WHERE objekt_typ='lieferant' AND objekt_id=? ORDER BY id DESC LIMIT 1", [(int)$id]);
+        $r = $d ? katalog_einlesen((int)$id, BX_UPLOADS . '/' . basename((string)$d['datei']), (int)$d['id'])
+                : ['ok' => false, 'fehler' => 'Datei nicht gefunden.'];
+        header('Location: ?p=lieferant&id=' . (int)$id
+             . ($r['ok'] ? '&katgelesen=' . (int)$r['anzahl'] : '&fehler=' . urlencode($r['fehler'])) . '#katalog'); exit;
+    }
     if ($akt === 'kat_ablehnen') {
         katalog_ablehnen((int)($_POST['zeile_id'] ?? 0)); $n = 1;
     } elseif ($akt === 'kat_uebernehmen') {
@@ -355,6 +367,8 @@ if (!$neu) {
   <?= lieferant_dateien_panel((int)$id, 'team', 'de') ?>
 </section>
 <section data-panel="katalog" hidden id="katalog">
+  <?php if (isset($_GET['katgelesen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Liste gelesen &ndash; <?= (int)$_GET['katgelesen'] ?> Zeile(n) stehen unten zur Pr&uuml;fung.</div><?php endif; ?>
+  <?php if (isset($_GET['fehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['fehler']) ?></div><?php endif; ?>
   <?php if (isset($_GET['kat'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px"><?= (int)$_GET['kat'] ?> Zeile(n) übernommen – die Artikel stehen jetzt im Lager.</div><?php endif; ?>
   <div class="bx-panel">
     <div class="bx-row" style="justify-content:space-between;align-items:center">
@@ -368,6 +382,14 @@ if (!$neu) {
           <button class="btn btn-ghost btn-sm" type="submit">Alle <?= count($katNeu) ?> übernehmen</button></form>
       <?php endif; ?>
     </div>
+    <?php if (ki_bereit()): ?>
+    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:10px 0 0">
+      <input type="hidden" name="aktion" value="kat_upload">
+      <input type="file" name="dok" required accept=".pdf,.csv,.txt,.xlsx,.xls,image/*">
+      <button class="btn btn-ghost btn-sm" type="submit">Preisliste einlesen</button>
+      <span class="muted" style="font-size:12px">PDF, Excel oder CSV &ndash; die KI macht daraus Zeilen, angelegt wird nichts.</span>
+    </form>
+    <?php endif; ?>
     <p class="muted" style="margin-top:6px">Was der Lieferant in seinem Portal hinterlegt oder als Liste hochgeladen hat. <strong>Erst mit „Anlegen" entsteht daraus ein Artikel</strong> samt EK-Preis – vorher steht davon nichts im Lager.</p>
     <?php if (!$katZeilen): ?>
       <div class="muted">Noch nichts hinterlegt. Der Lieferant pflegt seinen Katalog unter <strong>Mein Katalog</strong> im Portal.</div>
