@@ -1,67 +1,80 @@
 # Übergabe – bulkify Dashboard 4.1
 
-> Kurzer Stand zum Weiterarbeiten am nächsten PC (Laptop). Ergänzt `CLAUDE.md` (dort stehen die Dauer-Regeln).
-> **Stand: 2026-09-01.**
+> Stand zum Weiterarbeiten in einer neuen Session (auch mit einem anderen Modell).
+> Ergänzt `CLAUDE.md` (dort stehen die Dauer-Regeln). **Stand: 2026-09-01, alles gepusht und auf beta.**
+>
+> **Für eine neue Session:** Diese Datei plus `CLAUDE.md` lesen, dann `git pull`. Wer tiefer einsteigt,
+> findet zu **jeder** `.php` eine `.md` daneben – die ist die eigentliche Doku.
 
-## Zuerst am Laptop tun
+## Zuerst tun
 1. **Git holen:** `git pull` (Branch `main`). Nur an EINEM PC gleichzeitig arbeiten.
-2. **Lokale DB:** MariaDB/MySQL, DB `bulkify41`, User/Pass `bulkify`/`bulkify` (siehe `core/config.php`). Das Schema baut sich per `init_schema()` beim ersten Seitenaufruf selbst auf.
-   - **Achtung:** Die **Daten** wandern NICHT über Git (nur Code). Der Laptop hat eine eigene, leere/andere DB. Demodaten bei Bedarf neu einspielen: **Einstellungen → Werkzeuge → „Demo-Testdaten einspielen"** (nicht-löschend, idempotent).
+2. **Lokale DB:** MariaDB/MySQL, DB `bulkify41`, User/Pass `bulkify`/`bulkify` (siehe `core/config.php`). Das Schema baut sich per `init_schema()` beim ersten Seitenaufruf selbst auf (CREATE IF NOT EXISTS + additive `ensure_column`).
 3. **Starten:** `php -S 127.0.0.1:8741 -t public` → http://127.0.0.1:8741
-4. **Login:** admin@bulkify.local / admin (lokal). Live-Beta: siehe unten.
+4. **Login:** admin@bulkify.local / admin (lokal). Beta: siehe unten.
+5. **Daten wandern NICHT über Git** (nur Code). Demodaten bei Bedarf: Einstellungen → Werkzeuge.
 
-## Was am 01.09. gebaut wurde
+## Die drei Wege im System
+| Weg | Wer | Einstieg |
+|---|---|---|
+| **Intern** | Team | `?p=dashboard` – Angebote, Aufträge, Produktion, Lager, Einkauf, Einstellungen |
+| **Kundenportal** | Kunde, Magic-Link ohne Passwort | `?p=portal&token=<kunden.portal_token>` |
+| **Lieferantenportal** | Lieferant, **eigener Login mit Passwort** | `?p=lieferant_login`, Einladung per `?p=lieferant_einladung&token=…` |
 
-**Kundenweg fertiggestellt**
-- **Angebot als Auswahl:** Der Kunde sieht je Variante (Gruppe A, B, C im Editor) eine Zeile mit Größe, Verpackung, Anzahl Packungen und **Preis je Packung** – wie in v3 – und nimmt genau eine an. Beim Annehmen entsteht **erst dann** das Produkt (Rezeptur × Menge + Verpackung), danach Auftrag, Rechnung und Produktionsauftrag.
-- **Verbindliche Annahme mit Unterschrift:** Rezeptur und Angebot nur über einen Bestätigungs-Dialog mit Pflicht-Haken, **AGB-Haken** und Namen. Name und Zeitpunkt werden gespeichert (`freigabe_name`, `freigabe_am`, `agb_version`); serverseitig geprüft, nicht nur im Dialog.
-- **AGB versioniert** (`core/agb.php`, Einstellungen → AGB, Portalseite `v=agb`). Der mitgelieferte Text ist ein **Entwurf und muss anwaltlich geprüft werden**.
-- **Anfrage absagen** („Nicht machbar") mit Pflicht-Begründung; ein noch nicht gesendeter Angebots-Entwurf wird verworfen und die Angebotsnummer freigegeben.
-- **Angebots-PDF** über einen Knopf in der Kopfzeile und ein Download-Icon in Liste und Anfrage-Seite (`core/pdf_angebot.php`, Route `?p=angebot_pdf&id=`).
-- Editor-Ärgernisse behoben: gelöschte Positionen bleiben gelöscht, die Konfiguration überlebt das Speichern, Kopfdaten eingeklappt, kein Sprung an den Seitenanfang, Gültigkeit = heute + 14 Tage.
+**Datenmodell in einem Satz:** Rezeptur = Rohstoff × Menge + Form. **Produkt = Rezeptur × Menge je Packung + Verpackung.** Das Produkt ist kundenneutral, nur der Preis ist kundenspezifisch. Ein Produkt entsteht **erst mit dem Auftrag**, nicht beim Angebot.
 
-**Lieferantenweg neu** (v3-Vorbild, siehe `module/lieferant/*.md`)
-- **Bestell-PDF** deutsch/englisch je nach `lieferanten.sprache` (`core/pdf_bestellung.php`).
-- **Ablauf an der Bestellung:** bestätigen mit Termin, Stationen (angenommen · Produktion · Qualität · versandbereit · versendet), Versanddaten. „versendet" nur mit Anbieter, Versandart und Sendungsnummer.
-- **Lieferantenportal** mit eigenem Login: Einladung per einmaligem Token, Passwort setzt der Lieferant selbst. Er sieht Bestellungen, bestätigt Termine, pflegt den Fortschritt, trägt Tracking ein, beantwortet **Preisanfragen** mit Staffeln und lädt **CoA/Spec** direkt zum Artikel hoch. Alles zweisprachig.
-- **Intern:** auf der Lieferantenseite Einladungslink erzeugen, Preisanfragen stellen und Angebote mit einem Klick als **EK-Staffeln** übernehmen.
+## Kundenweg (fertig)
+- **Anfrage → Angebot → Annahme → Auftrag + Rechnung + Produktion.**
+- Im Angebots-Editor wird je Rezeptur eine **Gruppe (A, B, C …)** angehängt; jede Gruppe ist im Portal **eine wählbare Zeile** mit Größe, Verpackung, Anzahl Packungen und Preis je Packung (v3-Optik). Der Kunde nimmt genau eine an → `auftrag_aus_positionen($angebot_id, $gruppe)`.
+- **Verbindliche Annahme** (Rezeptur und Angebot) nur über einen Dialog mit Pflicht-Haken, **AGB-Haken** und Namen. Gespeichert werden `freigabe_name`, `freigabe_am`, `agb_version` – serverseitig geprüft, nicht nur im Dialog.
+- **AGB versioniert** (`core/agb.php`, Einstellungen → AGB, Portalseite `v=agb`). Der Text ist ein **Entwurf und muss anwaltlich geprüft werden.**
+- **Anfrage absagen** („Nicht machbar") mit Pflicht-Begründung; ein nicht gesendeter Angebots-Entwurf wird dabei verworfen und die Nummer freigegeben.
+- **Angebots-PDF** über `?p=angebot_pdf&id=` (Knopf in der Kopfzeile, Icon in Liste und Anfrage-Seite). Bei mehreren Varianten zeigen die Positionen die erste Variante, die Staffel „Preis je fertiges Produkt" alle – sonst stünde dort eine Summe über Varianten, die niemand zusammen bestellt.
 
-## Was am 30.08. gebaut wurde
-- **Tablette & Flüssig werden automatisch bepreist** (vorher „auf Anfrage"). Tablette: Behälter über das Tablettengewicht (Wirkstoffe + Presshilfsstoffe), EK = Rezeptur + Presshilfsstoffe statt Leerkapsel. Flüssig: Größe = **Füllvolumen in ml**, Behälter über `item.volumen_ml`, EK = Portionen × Rezeptur + Trägerflüssigkeit. Neue Stellschrauben in Einstellungen → Preise & Margen (Presshilfsstoffe % + EK/kg, Portionsvolumen ml, EK Trägerflüssigkeit/L, Flüssig-Füllvolumen-Raster). Die Behälter-Fassung hat jetzt eine **Spalte „Flüssig (ml)"** zum Pflegen.
-- **Packari-EK für PET-Dosen und Weithalsgläser (100–250 ml)** eingetragen (Seed `seed_packari_behaelter`: Preise ohne Verschluss + Mengenstaffel) und die vier **Deckel mit Pressure-Seal-Einlage** (38/400 und 45/400, je weiß und schwarz) als eigene Verschluss-Artikel angelegt. Die acht Gebinde haben zusätzlich ein Start-Füllgewicht (~0,55 g/ml) bekommen, damit Pulver und Tabletten darin rechenbar sind.
-- Packungsgrößen werden überall einheitlich beschriftet (`form_groessen_label()`): Stück / g / ml. Nebenbei behoben: Sticks wurden im Angebot als „30 g" statt „30 Sticks" ausgewiesen, und die Stick-Anfrage im Portal fragte Gramm, obwohl die Matrix nach Stückzahl rechnet.
+## Lieferantenweg (neu, komplett)
+- **Bestell-PDF** `?p=bestellung_pdf&id=` – deutsch oder englisch je `lieferanten.sprache`.
+- **Ablauf an der Bestellung** (`core/bestellung_ui.php`, dasselbe Panel intern und im Portal): bestätigen mit Termin → Stationen (angenommen · Produktion · Qualität · versandbereit · versendet) → Versanddaten. **„versendet" nur mit Anbieter, Versandart und Sendungsnummer** – erzwingt die Funktion, nicht die Oberfläche.
+- **Portal** (`?p=lieferant_*`): Übersicht, Bestellungen, Preisanfragen mit Staffeln + CoA-Upload, „Meine Daten" (Firmendaten, WeChat, WhatsApp, Logo, Sprache).
+- **Preisanfrage → Angebot → „Preise übernehmen"** schreibt die Staffeln als EK-Staffeln nach `lieferant_preis` – dort rechnet die Kalkulation.
+- **Drei Sprachen:** Deutsch, English, 中文 (Umschalter im Portal, auch vor dem Login). **PDFs bleiben de/en** – für CJK müsste erst eine Schrift eingebettet werden.
 
-## Was am 29.08. gebaut wurde (alles gepusht, läuft nach Push auf beta)
-- **Chargennummer + MHD (Standard):** Fertigware bekommt automatisch `PR-Nummer + Tagesbuchstabe` (z. B. `2696.A`, Teilproduktionen `.B/.C`) und **MHD = Produktionsdatum + 18 Monate** (Einstellungen → Produktion änderbar). Steht schon vor der Buchung im Produktions-Detail (für die Geräte-Eingabe). Rückverfolgung über neue Spalte `charge.pa_id`.
-- **Fremdproduktion = Standard:** neue Aufträge laufen auf dem verkürzten Weg (bereitstellen → verpacken → etikettieren → Prüfung/Freigaben). Im Produktions-Detail auf Eigenproduktion umstellbar.
-- **Produktions-Liste in Reitern:** „Produktionsbereit" (Standard), „Wartet auf Material" (eigener Reiter), „Abgeschlossen".
-- **Fix EK-Mengenstaffel:** „+ Staffel" fügte die Lieferant-Spalte nicht ein (Zeile verrutschte) → behoben.
-- **Portal-Anfrage → „Im Angebots-Editor bauen":** Button legt ein verknüpftes Angebot an und springt in den Editor – funktioniert auch ohne berechenbare Preismatrix (Positionen manuell).
-- **Pulver/Granulat nach Füllgewicht:** werden nach Gramm angeboten (Standard 150/300/500/1000 g, in Einstellungen → Preise & Margen), nicht mehr nach Kapsel-Stückzahl. Behob die leere Pulver-Matrix.
+## Dokumente
+- **Eigene Spezifikation und eigenes CoA** im bulkify-Layout (`core/pdf_spec.php`, Routen `?p=spec_bulkify&id=<item>` und `?p=coa_bulkify&id=<charge>`). Die Unterlagen der Vorlieferanten gehen **nicht** an den Kunden; sie bleiben intern die Quelle.
+- Analysenwerte je Charge am Rohstoff erfassen (`charge_analyse`). **„Werte vorschlagen"** liest ein hochgeladenes Lieferanten-PDF aus (`core/pdf_text.php` + `core/coa_lesen.php`) und füllt das Formular – gespeichert wird erst nach Prüfung. **Scans enthalten keinen Text**, dafür fehlt OCR.
 
-Frühere Sessions (bereits live): Login neu gestaltet + bulkify-Logo, Etikettenpreise (Labelisten) je Gebinde, Demo-Testset (Kunden/Produkte/Angebote/Aufträge inkl. Zukauf).
+## E-Mail
+`core/mail.php` – SMTP über Socket, kein Composer. Eingerichtet unter **Einstellungen → E-Mail** (United-Domains-Daten) mit Testversand; jede Mail zusätzlich in `data/mail.log`.
+**Automatisch verschickt wird bisher nur die Lieferanten-Einladung.** Vorlagen für „neue Bestellung" und Team-Benachrichtigung liegen bereit, sind aber noch nirgends angehängt.
 
 ## Offene Punkte / als Nächstes
-- **AGB anwaltlich prüfen lassen** und die geprüfte Fassung unter Einstellungen → AGB als neue Version eintragen.
-- **Etiketten:** Es gibt noch keine Etiketten-Artikel. Das Angebot bietet nur Etiketten an, die zum **Endformat am Behälter** (`item.etikett_final`, B×H) passen – dafür fehlen die Behältermaße bzw. Etikettenformate und die Etikettenpreise.
-- **Mengenrabatt bei Rezeptur-Angeboten:** Alle Bestellmengen kosten aktuell gleich viel je Packung; die Mengendegression der alten Preismatrix greift dort nicht.
-- **Lieferantenportal:** Rückfragen/Chat und eine eigene Dateiablage gibt es (anders als in v3) noch nicht; Chinesisch fehlt (bisher Deutsch/Englisch).
-- **Beta-Admin-Passwort ändern.**
-- **Behälter-EK-Staffeln:** Standbodenbeutel (XS–XXL) und jetzt auch PET-Dosen + Weithalsgläser (100–250 ml) haben EK-Staffeln (Seeds `seed_standbodenbeutel` / `seed_packari_behaelter`). **Offen:** echte Deckel-Preisliste bei Packari erfragen – Packari verkauft Dose und Deckel nur im Set, deshalb ist der EK der vier Pressure-Seal-Deckel als Differenz „Set minus Dose ohne Verschluss" gerechnet (je nach Bezugsdose 0,26–0,35 €).
-- **Demo-Rezepturen ohne Rohstoffpreise** → Preis-Matrix zeigt 0 €. Für echte Kalkulation Rohstoff-EK an den Zutaten hinterlegen.
-- **Flaschen/Tuben für Flüssig anlegen** – PET-Dosen und Weithalsgläser haben jetzt Volumen und Füllgewicht, für echte Flüssig-Gebinde (Tropfflasche, Pumpspender) fehlen die Artikel aber noch.
-- **Kalkulationsgrundlagen prüfen:** Presshilfsstoffe 20 % / 8 EUR pro kg und Trägerflüssigkeit 3 EUR pro Liter sind gesetzte Startwerte – bitte gegen echte Zahlen tauschen (Einstellungen → Preise & Margen).
-- **Admin-Passwort auf beta** ändern (steht noch auf admin/admin – öffentliche URL).
-- **Teilproduktion .B/.C:** Chargen-Basis + Nächster-Buchstabe-Logik sind da; ein UI-Weg „Teilmenge einbuchen" könnte später ergänzt werden (heute bucht der Abschluss die volle Menge als `.A`).
+1. **SMTP-Zugangsdaten eintragen** (Einstellungen → E-Mail) und Testmail schicken. Danach entscheiden, welche Ereignisse eine Mail auslösen sollen (Bestellung raus, Angebot angenommen, Anfrage beantwortet).
+2. **AGB anwaltlich prüfen** und die geprüfte Fassung als neue Version eintragen.
+3. **Etiketten:** Es gibt noch keine Etiketten-Artikel. Das Angebot bietet nur Etiketten an, die zum **Endformat am Behälter** (`item.etikett_final`, B×H) passen – dafür fehlen Behältermaße/Etikettenformate und die Etikettenpreise.
+4. **Mengenrabatt bei Rezeptur-Angeboten:** Alle Bestellmengen kosten gleich viel je Packung; die Mengendegression der Preismatrix greift dort nicht.
+5. **Rohstoff-Stammdaten füllen** (Herkunft, Haltbarkeit, Lagerung, Allergene, vegan/GVO/bestrahlt/TSE, Zertifikate, Spec-Nr.) – ohne sie steht in der Spezifikation überall „–".
+6. **Chinesische Übersetzungen gegenlesen lassen** (die aus v3 sind erprobt, die neuen nicht).
+7. **Lieferantenportal:** Rückfragen/Chat und eigene Dateiablage gibt es (anders als v3) noch nicht.
+8. **Beta-Admin-Passwort ändern** (steht noch auf admin/admin bei öffentlicher URL).
+9. **Demo-Rezepturen ohne Rohstoffpreise** → Preis-Matrix zeigt 0 €.
+10. **Flaschen/Tuben für Flüssig anlegen** (Tropfflasche, Pumpspender fehlen als Artikel).
+11. **Kalkulationsgrundlagen prüfen:** Presshilfsstoffe 20 % / 8 €/kg, Trägerflüssigkeit 3 €/L sind gesetzte Startwerte.
+12. **Deckel-Preisliste bei Packari erfragen** – der EK der vier Pressure-Seal-Deckel ist als Differenz „Set minus Dose" gerechnet (0,26–0,35 €).
+13. **Teilproduktion .B/.C:** Chargenlogik ist da, ein UI-Weg „Teilmenge einbuchen" fehlt.
 
 ## Deploy / GitHub
-- Repo: **github.com/Freudenfels/bulkify-4.1** (privat), Branch `main`.
-- **Push löst Auto-Deploy aus** (GitHub Actions, SFTP) → **beta.bulkify.pro** (Ordner `/bulkify4.1`, eigene UD-DB via `secrets.php` auf dem Server). v3 = app.bulkify.pro (unberührt).
+- Repo **github.com/Freudenfels/bulkify-4.1** (privat), Branch `main`.
+- **Push löst Auto-Deploy aus** (GitHub Actions → SFTP) → **beta.bulkify.pro** (Ordner `/bulkify4.1`, eigene UD-DB via `secrets.php` auf dem Server). v3 = app.bulkify.pro (unberührt).
+- Deploy dauert ~2–4 Minuten. Status: `https://api.github.com/repos/Freudenfels/bulkify-4.1/actions/runs?per_page=1`.
 - `secrets.php` und `data/` sind vom Git/Deploy ausgeschlossen und bleiben es.
 
 ## Regeln (Kurzfassung, Details in CLAUDE.md)
 - Zu jeder `.php` eine co-located `.md` pflegen. **Keine Emojis** in der UI, Feld-/Spaltenüberschriften nie fett, großzügige Abstände.
-- Zeit **UTC** speichern, Anzeige via `fmt_zeit()`.
-- **Nie pauschale DELETEs** in der DB (Parallelarbeit) – Testschreiben per Transaktion+Rollback oder exakt per erfasster ID.
-- Verifizieren mit `php -l` + kurzem curl-Test (Admin-Autologin nur localhost).
-- Nach fertigem Schritt committen + pushen (außer der Nutzer sagt ausdrücklich „lokal lassen").
+- Zeit **UTC** speichern, Anzeige via `fmt_zeit()` → Europe/Berlin.
+- **Nie pauschale DELETEs** in der DB (es wird parallel gearbeitet) – nur exakt per erfasster ID.
+- Verifizieren mit `php -l` **und** einem curl-Test gegen den laufenden Server (Admin-Autologin nur localhost).
+- Nach jedem fertigen Schritt committen + pushen.
+- Ansprechpartner: **Nico** (thomalla@freudenfels.de). Stil: direkt, knapp, umsetzungsorientiert.
+
+## Lokale Testdaten (nur auf diesem PC)
+- Kundenportal: `?p=portal&token=219ea5238e95c9ef9ce1dad22ffaf6f6` (Testkunde Portal).
+- Lieferant „Shandong Health Ingredients" (id 6), Login `wei@example.com` / `geheim12345`; Direktlink lokal über `?p=autologin&token=<benutzer.login_token>`.
+- Offene Preisanfrage **LA-DEMO**, Bestellung **BE-TEST** zum Durchspielen.
