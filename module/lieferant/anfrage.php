@@ -127,17 +127,18 @@ if (!$a):
       </div>
       <button type="button" class="btn btn-ghost btn-sm" id="staffelPlus" style="margin-bottom:var(--sp-4)"
               data-preis="<?= h(lp_t('preis')) ?>" data-menge="<?= h(lp_t('ab_menge')) ?>">+ <?= h(lp_t('staffel')) ?></button>
-      <div class="bx-grid">
-        <div class="bx-field"><label><?= h(lp_t('preis_basis')) ?></label>
+      <?php // Drei kurze Angaben – nebeneinander statt je Feld eine Rasterspalte von 240px. ?>
+      <div class="bx-row" style="gap:var(--sp-4);align-items:flex-end;margin-bottom:var(--sp-4)">
+        <div class="bx-field" style="margin:0;max-width:190px"><label><?= h(lp_t('preis_basis')) ?></label>
           <?php $pb = (int)($ang['preis_basis'] ?? 1); ?>
           <select name="preis_basis">
             <option value="1"<?= $pb === 1 ? ' selected' : '' ?>><?= h(lp_t('preis_je')) ?> <?= h(lp_einheit($einheit, 1)) ?></option>
             <option value="1000"<?= $pb === 1000 ? ' selected' : '' ?>><?= h(lp_t('je_1000')) ?> <?= h(lp_einheit($einheit, 1000)) ?></option>
           </select></div>
-        <div class="bx-field"><label><?= h(lp_t('moq')) ?></label>
+        <div class="bx-field" style="margin:0;max-width:150px"><label><?= h(lp_t('moq')) ?></label>
           <input type="text" name="mindestmenge" value="<?= h($ang ? $zahl($ang['mindestmenge'], 3) : '') ?>"></div>
-        <div class="bx-field"><label><?= h(lp_t('lieferzeit')) ?></label>
-          <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>" style="max-width:120px"></div>
+        <div class="bx-field" style="margin:0;max-width:110px"><label><?= h(lp_t('lieferzeit')) ?></label>
+          <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>"></div>
       </div>
       <script>
       (function(){
