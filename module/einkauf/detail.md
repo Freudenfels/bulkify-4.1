@@ -15,3 +15,5 @@ Unter dem Status steht das Panel **Ablauf** (`core/bestellung_ui.php`) – dasse
 **Zusammenhang:** schließt die Beschaffungsseite – Bestellung → Lieferung → Bestand im Warenlager. Die Bestellungen erscheinen auch im **Lieferanten-Cockpit** (Einkauf gesamt + Reiter Bestellungen).
 
 **Auftragsbezug (Baustein 4):** Je Bestellposition kann ein **offener Kundenauftrag** gewählt werden („Für Auftrag", sonst „Lager / allgemein"). Gespeichert in `bestellung_position.auftrag_id`. Beim Wareneingang (`bestellung_wareneingang()`) erbt die erzeugte **Charge** diesen Auftragsbezug (`charge.auftrag_id` + `charge.bestellung_position_id`). So weiß das System, wofür welche Ware gekommen ist – Grundlage für „Wareneingänge für diesen Auftrag" (Produktion/Cockpit) und später die automatische Produktionsweg-Ableitung.
+## E-Mail an den Lieferanten
+„Als bestellt markieren" (`aktion=bestellt`) schickt dem Lieferanten die Bestell-Mail (`mail_lieferant_bestellung()`), sofern der Versand eingerichtet ist. Ein Mailfehler stoppt nichts, er wird oben auf der Seite gezeigt.

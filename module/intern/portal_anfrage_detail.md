@@ -83,3 +83,5 @@ setzen, während es Rohstoffpreise beim Lieferanten einholt.
 ## Verwandt
 - `portal_anfragen.php` – die Eingangsliste (Zeilen sind anklickbar → diese Seite).
 - `module/portal/kunde.php` – Kundensicht (Anfrage stellen + Angebot annehmen).
+## E-Mail bei Absage
+Beim Absagen (`aktion=anfrage_absagen`) bekommt der Kunde die Begründung per Mail (`mail_kunde_absage()`), sofern der Versand eingerichtet ist. Ein Mailfehler wird oben auf der Seite gezeigt (`mailfehler`).

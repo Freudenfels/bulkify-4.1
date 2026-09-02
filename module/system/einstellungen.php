@@ -576,6 +576,23 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
 </div>
 
 <div class="bx-panel">
+  <h2>Was automatisch verschickt wird</h2>
+  <p class="muted" style="margin-top:0">Nur bei eingeschaltetem Versand. Ein Mailfehler bricht keinen Vorgang ab – die Seite zeigt ihn an, und er steht in <code>data/mail.log</code>.</p>
+  <table class="bx-table" style="max-width:820px">
+    <thead><tr><th>Ereignis</th><th>Empfänger</th></tr></thead>
+    <tbody>
+      <tr><td>Lieferant einladen</td><td>Lieferant</td></tr>
+      <tr><td>Bestellung erteilt (als bestellt markiert oder aus der Einkaufsliste mit Bestelldatum)</td><td>Lieferant, in seiner Sprache</td></tr>
+      <tr><td>Angebot an den Kunden gesendet</td><td>Kunde, mit Link ins Portal</td></tr>
+      <tr><td>Kunde nimmt ein Angebot an</td><td>Kunde (Auftragsbestätigung) und alle Admins</td></tr>
+      <tr><td>Anfrage abgesagt (nicht machbar)</td><td>Kunde, mit Begründung</td></tr>
+      <tr><td>Lieferant bestätigt eine Bestellung oder setzt eine Station</td><td>Alle Admins</td></tr>
+      <tr><td>Lieferant beantwortet eine Preisanfrage</td><td>Alle Admins</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="bx-panel">
   <h2>Testmail</h2>
   <p class="muted" style="margin-top:0">Verschickt eine kurze Nachricht mit den oben gespeicherten Daten. Klappt das, funktioniert auch die Lieferanten-Einladung.</p>
   <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">

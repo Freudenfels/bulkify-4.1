@@ -81,7 +81,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q("UPDATE portal_anfrage SET status='beantwortet' WHERE id=(SELECT anfrage_id FROM angebot WHERE id=?) AND status<>'beantwortet'", [(int)$id]);
             log_aktivitaet('kunde', $kd, 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [(int)$id]) . ' an den Kunden gesendet.', 'angebot', 'angebot', (int)$id);
         }
-        header('Location: ?p=angebot&id=' . $id . '&gesendet=1'); exit;
+        // Der Kunde bekommt den Portal-Link per Mail – wenn der Versand eingerichtet ist.
+        $f = ($kd && mail_bereit()) ? mail_kunde_angebot((int)$id) : '';
+        header('Location: ?p=angebot&id=' . $id . '&gesendet=1' . ($f !== '' ? '&mailfehler=' . urlencode($f) : '')); exit;
     } elseif ($aktion === 'zurueckziehen' && !$neu) {
         // Zurückziehen = zurück in den ENTWURF ('offen'). Beim Kunden verschwindet es damit sofort
         // (das Portal zeigt nur 'gesendet'), hier bleibt dasselbe Angebot bearbeitbar.
@@ -162,6 +164,7 @@ bx_head($neu ? 'Neues Angebot' : $v('nummer'),
         $kopfBtn);
 if (isset($_GET['gespeichert']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['gesendet']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot an den Kunden gesendet – er sieht es jetzt im Portal.</div>';
+if (isset($_GET['mailfehler']))    echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">E-Mail an den Kunden nicht verschickt: ' . h((string)$_GET['mailfehler']) . '</div>';
 if (isset($_GET['zurueckgezogen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot zurückgezogen – beim Kunden verschwunden, hier wieder als Entwurf bearbeitbar.</div>';
 if (isset($_GET['zzfehler']))      echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Zurückziehen nicht mehr möglich – das Angebot ist bereits bestätigt oder abgelehnt.</div>';
 if (($_GET['sendfehler'] ?? '') === 'leer')   echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Noch keine Positionen – ein leeres Angebot wird nicht gesendet. Füge unten mindestens eine Position hinzu.</div>';

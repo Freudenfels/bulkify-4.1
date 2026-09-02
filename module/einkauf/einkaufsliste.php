@@ -49,7 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         $groups[$sup]['pos'][] = ['item_id'=>(int)$a['item_id'], 'menge'=>(float)$a['zu_bestellen'], 'auftrag_id'=>(int)($a['auftrag_id'] ?? 0)];
     }
     $n = 0;
-    foreach ($groups as $sup => $g) if (bestellung_erstellen($g['pos'] ?? [], $g['bulk'] ?? [], $sup ?: null, $datum, $g['frei'] ?? [])) $n++;
+    foreach ($groups as $sup => $g) {
+        $bid = bestellung_erstellen($g['pos'] ?? [], $g['bulk'] ?? [], $sup ?: null, $datum, $g['frei'] ?? []);
+        if (!$bid) continue;
+        $n++;
+        // Mit Bestelldatum ist die Bestellung sofort erteilt – der Lieferant bekommt die Mail (falls eingerichtet).
+        if ($datum && $sup && mail_bereit()) mail_lieferant_bestellung($bid);
+    }
     header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n); exit;
 }
 

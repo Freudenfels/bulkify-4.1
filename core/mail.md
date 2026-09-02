@@ -15,5 +15,20 @@ Jede Mail wird zusätzlich nach `data/mail.log` geschrieben. Damit ist nachvollz
 ## Sprache
 Die Vorlagen an Lieferanten richten sich nach `lieferanten.sprache` (Deutsch, sonst Englisch).
 
-## Was noch fehlt
-Benachrichtigungen laufen bisher nur für die **Einladung**. Bestellung, Angebotsannahme und Anfrage-Antwort verschicken noch nichts automatisch – die Vorlagen dafür stehen bereit.
+## Welche Ereignisse eine Mail auslösen
+Alle nur, wenn der Versand eingerichtet und eingeschaltet ist (`mail_bereit()`). Ein Mailfehler bricht nie den Vorgang ab; wo möglich zeigt die Seite den Grund.
+
+| Ereignis | Wer bekommt die Mail | Vorlage |
+|---|---|---|
+| Lieferant einladen | Lieferant | `mail_lieferant_einladung()` |
+| Bestellung erteilt („als bestellt markieren" oder Einkaufsliste mit Bestelldatum) | Lieferant (de/en) | `mail_lieferant_bestellung()` |
+| Angebot an den Kunden gesendet | Kunde, mit Portal-Link | `mail_kunde_angebot()` |
+| Kunde nimmt Angebot an | Kunde (Auftragsbestätigung) + alle Admins | `mail_angebot_angenommen()` |
+| Anfrage abgesagt („nicht machbar") | Kunde, mit Begründung | `mail_kunde_absage()` |
+| Lieferant bestätigt Bestellung oder setzt Station | alle Admins | `mail_team_bestellung()` |
+| Lieferant beantwortet Preisanfrage | alle Admins | `mail_team_preisanfrage()` |
+
+„Alle Admins" = aktive Benutzer mit Rolle `admin` ohne Lieferantenbindung (`mail_team()`).
+
+## Links in Mails
+`mail_basis_url()` nimmt die Einstellung `portal_url`, sonst den aktuellen Host. `mail_link_kundenportal($kunde_id, $ansicht)` baut den passwortlosen Portal-Link. Kunden werden auf Deutsch angeschrieben, Lieferanten nach `lieferanten.sprache` (Deutsch, sonst Englisch).

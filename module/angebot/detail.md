@@ -94,3 +94,5 @@ Die Kunden-Portalansicht (Matrix mit „Zelle annehmen") ist weiterhin die explo
 das Angebots-PDF ist das verbindliche Dokument und respektiert die Overrides. „PDF ansehen"
 verlinkt auf die Portal-PDF-Route mit dem Kunden-Token.
 Das alte Staffelpreis-Modell (`angebot_staffel`) wird hier nicht mehr bearbeitet.
+## E-Mail beim Senden
+Beim Senden (`aktion=senden`) bekommt der Kunde eine Mail mit dem Portal-Link (`mail_kunde_angebot()` in `core/mail.php`) – nur wenn der Versand unter Einstellungen → E-Mail eingerichtet ist. Klappt die Mail nicht, bleibt das Angebot trotzdem gesendet; die Seite zeigt den Grund (`mailfehler`).

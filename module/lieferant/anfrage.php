@@ -24,6 +24,7 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
             ($_POST['mindestmenge'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$_POST['mindestmenge']) : null,
             ($_POST['lieferzeit'] ?? '') !== '' ? (int)$_POST['lieferzeit'] : null,
             (string)($_POST['notiz'] ?? ''), $staffeln);
+        if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);
     } elseif ($aktion === 'dokument' && $a['item_id']) {
         // CoA/Spezifikation direkt am Artikel ablegen – dort sucht das Team sie.
         $_POST['dok_lieferant'] = (string)$lid;

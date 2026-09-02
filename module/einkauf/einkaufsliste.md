@@ -9,3 +9,5 @@ Die ans Einkauf **gemeldeten** Bedarfe (`produktionsauftrag.bedarf_gemeldet`), g
 **Fremdproduktion = Reiter „Fertige Produkte":** der Bulk-Zukauf je Fremd-Auftrag (`bedarf_bulk()`) erscheint IM Reiter „Fertige Produkte" (keine eigene Sektion), auswählbar + bestellbar über `bestellung_bulk_anlegen()` (Freitext-Position item_id NULL + `bezeichnung`, auftrag_id gesetzt, Vermerk im Auftrag). Verpackung/Etiketten der Fremd-Aufträge laufen in den normalen Reitern. Melden zeigt eine Bestätigung.
 
 **Ablauf:** Einkaufsbedarf (melden, eigen/fremd) → **Einkaufsliste** (hier bestellen) → Bestellungen (`?p=einkauf`, nur Historie).
+## E-Mail an den Lieferanten
+Wird mit Bestelldatum bestellt, entsteht die Bestellung direkt als „bestellt" – dann geht je Lieferant die Bestell-Mail raus (`mail_lieferant_bestellung()`), falls der Versand eingerichtet ist.

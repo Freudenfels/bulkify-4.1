@@ -12,9 +12,7 @@ $FORMEN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick
 $fehler = '';
 // Zugang und Preisanfragen – die eigenen POST-Wege, damit das Stammdaten-Formular unberuehrt bleibt.
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einladung_mailen') {
-    $basis = rtrim((string) meta_get('portal_url', ''), '/');
-    if ($basis === '') $basis = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
-    $einl = lieferant_einladung((int)$id, $basis);
+    $einl = lieferant_einladung((int)$id, mail_basis_url());
     $f = mail_lieferant_einladung((int)$id, (string)$einl['link']);
     header('Location: ?p=lieferant&id=' . (int)$id . ($f === '' ? '&gemailt=1' : '&mailfehler=' . urlencode($f))); exit;
 }

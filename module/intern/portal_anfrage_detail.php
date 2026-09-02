@@ -56,7 +56,8 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     q("UPDATE portal_anfrage SET status='abgelehnt', absage_grund=? WHERE id=?", [mb_substr($grund, 0, 500), $id]);
     if ($pa0 && $pa0['kunde_id']) log_aktivitaet('kunde', (int)$pa0['kunde_id'], 'team',
         'Anfrage ' . $pa0['nummer'] . ' abgesagt: ' . $grund, 'anfrage', 'portal_anfrage', $id);
-    header('Location: ?p=portal_anfrage&id=' . $id . '&abgesagt=1'); exit;
+    $f = ($pa0 && $pa0['kunde_id'] && mail_bereit()) ? mail_kunde_absage($id) : '';
+    header('Location: ?p=portal_anfrage&id=' . $id . '&abgesagt=1' . ($f !== '' ? '&mailfehler=' . urlencode($f) : '')); exit;
 }
 // Absage zurücknehmen – falls sich doch ein Weg findet.
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage_aufnehmen') {
@@ -123,6 +124,7 @@ $angeboteAktiv = array_values(array_filter($angebote, fn($x) => $x['status'] !==
 render_header('portal_anfragen', $pa['nummer']);
 bx_head($pa['nummer'], $TYP[$pa['typ']] ?? $pa['typ'], bx_btn('Zurück zur Liste', '?p=portal_anfragen', 'ghost'));
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['mailfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">E-Mail an den Kunden nicht verschickt: ' . h((string)$_GET['mailfehler']) . '</div>';
 if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot abgegeben – der Kunde sieht jetzt die Preise im Portal.</div>';
 if (isset($_GET['zurueckgezogen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot zurückgezogen – der Kunde kann es nicht mehr annehmen. Die Anfrage steht wieder auf „in Bearbeitung", du kannst ein neues Angebot bauen.</div>';
 if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Zurückziehen nicht möglich – das Angebot ist bereits bestätigt oder abgelehnt.</div>';

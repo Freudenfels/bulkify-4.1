@@ -27,7 +27,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mb_substr(trim((string)($_POST['tracking'] ?? '')), 0, 120) ?: null, (int)$id]);
         header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit;
     }
-    if ($aktion === 'bestellt' && !$neu) { q("UPDATE bestellung SET status='bestellt' WHERE id=?", [(int)$id]); header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit; }
+    if ($aktion === 'bestellt' && !$neu) {
+        q("UPDATE bestellung SET status='bestellt' WHERE id=?", [(int)$id]);
+        // Der Lieferant erfährt es per Mail – wenn der Versand eingerichtet ist. Ein Fehler stoppt nichts.
+        $f = mail_bereit() ? mail_lieferant_bestellung((int)$id) : '';
+        header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode('Bestellung gespeichert, aber E-Mail nicht verschickt: ' . $f))); exit;
+    }
     // Entwurf zurück in den Einkaufsbedarf: Entwurf löschen -> Bedarf erscheint wieder (kein Netting mehr)
     if ($aktion === 'zurueck_bedarf' && !$neu) {
         $st = scalar("SELECT status FROM bestellung WHERE id=?", [(int)$id]);

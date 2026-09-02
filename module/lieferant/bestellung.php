@@ -17,8 +17,10 @@ if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $fehler = '';
     if ($aktion === 'lief_bestaetigen') {
         $fehler = bestellung_bestaetigen($id, (string)($_POST['eta_geplant'] ?? ''), trim((string)($_POST['wer'] ?? '')) ?: $wer, lp_sprache());
+        if ($fehler === '' && (int)$b['bestaetigt'] !== 1 && mail_bereit()) mail_team_bestellung($id, 'bestätigt');
     } elseif ($aktion === 'lief_station') {
         $fehler = bestellung_station_setzen($id, (string)($_POST['station'] ?? ''), $wer, lp_sprache());
+        if ($fehler === '' && mail_bereit()) mail_team_bestellung($id, bestellung_stationen()[(string)$_POST['station']] ?? (string)$_POST['station']);
     } elseif ($aktion === 'lief_versand') {
         q("UPDATE bestellung SET produktion_geplant=?, versandanbieter=?, versandart=?, tracking=? WHERE id=? AND lieferant_id=?", [
             trim((string)($_POST['produktion_geplant'] ?? '')) ?: null,

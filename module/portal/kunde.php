@@ -25,7 +25,8 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     if ($ang && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=angebote&freigabefehlt=1'); exit; }
     if ($ang) {
         q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $aid]);
-        auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
+        $neuAuftrag = auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
+        if (mail_bereit()) mail_angebot_angenommen($aid, $neuAuftrag);
     }
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&bestaetigt=1'); exit;
 }
@@ -40,7 +41,8 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         q("UPDATE angebot_staffel SET bestaetigt=1 WHERE id=? AND angebot_id=?", [$sid, $aid]);
         q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal verbindlich bestätigt durch ' . $name . '.', 'angebot', 'angebot', $aid);
-        auftrag_aus_angebot($aid);
+        $neuAuftrag = auftrag_aus_angebot($aid);
+        if (mail_bereit()) mail_angebot_angenommen($aid, $neuAuftrag);
     }
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&ok=1'); exit;
 }

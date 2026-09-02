@@ -151,7 +151,7 @@ function mail_lieferant_bestellung(int $bestellung_id): string {
     $fa = beleg_firma();
     $de = strtolower((string)$b['sprache']) === 'de';
     $anrede = trim((string)$b['ansprechpartner']) !== '' ? (string)$b['ansprechpartner'] : (string)$b['firma'];
-    $link = rtrim((string) meta_get('portal_url', ''), '/') . '/?p=lieferant_login';
+    $link = mail_basis_url() . '/?p=lieferant_login';
 
     if ($de) {
         $betreff = 'Neue Bestellung ' . $b['nummer'];
@@ -175,4 +175,115 @@ function mail_team(string $betreff, string $text): int {
         if (mail_senden((string)$u['email'], $betreff, $text) === '') $n++;
     }
     return $n;
+}
+
+// --- Links ------------------------------------------------------------------
+
+// Basis-URL für Links in Mails: die Einstellung portal_url, sonst der aktuelle Aufruf.
+function mail_basis_url(): string {
+    $b = rtrim((string) meta_get('portal_url', ''), '/');
+    if ($b === '') $b = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    return $b;
+}
+// Passwortloser Link ins Kundenportal, optional direkt auf eine Ansicht (angebote, bestellungen …).
+function mail_link_kundenportal(int $kunde_id, string $ansicht = ''): string {
+    return mail_basis_url() . '/?p=portal&token=' . kunde_portal_token($kunde_id) . ($ansicht !== '' ? '&v=' . $ansicht : '');
+}
+// Anrede für einen Kunden: Ansprechpartner, sonst die Firma.
+function mail_kunde_anrede(array $k): string {
+    $a = trim((string)($k['ansprechpartner'] ?? ''));
+    return $a !== '' ? $a : (string)($k['firma'] ?? '');
+}
+
+// --- Vorlagen Kunde (Kunden werden auf Deutsch angeschrieben) ----------------
+
+// Ein Angebot wurde an den Kunden gesendet: er bekommt den Link ins Portal.
+function mail_kunde_angebot(int $angebot_id): string {
+    $a = one("SELECT a.nummer, a.gueltig_bis, a.kunde_id, k.firma, k.ansprechpartner, k.email
+              FROM angebot a JOIN kunden k ON k.id=a.kunde_id WHERE a.id=?", [$angebot_id]);
+    if (!$a) return 'Angebot oder Kunde nicht gefunden.';
+    if (trim((string)$a['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
+    $fa   = beleg_firma();
+    $link = mail_link_kundenportal((int)$a['kunde_id'], 'angebote');
+    $bis  = $a['gueltig_bis'] ? date('d.m.Y', strtotime((string)$a['gueltig_bis'])) : '';
+    $betreff = 'Ihr Angebot ' . $a['nummer'] . ' von ' . $fa['name'];
+    $text = "Guten Tag " . mail_kunde_anrede($a) . ",\n\n"
+          . "Ihr Angebot " . $a['nummer'] . " liegt im Kundenportal bereit" . ($bis !== '' ? " und gilt bis $bis" : '') . ".\n"
+          . "Dort sehen Sie alle Varianten und können die passende verbindlich annehmen:\n$link\n\n"
+          . "Bei Fragen antworten Sie einfach auf diese E-Mail.\n\nViele Grüße\n" . $fa['name'];
+    return mail_senden((string)$a['email'], $betreff, $text);
+}
+
+// Der Kunde hat ein Angebot angenommen: Bestätigung an den Kunden, Hinweis ans Team.
+// Rückgabe = Ergebnis der Kundenmail ('' = verschickt).
+function mail_angebot_angenommen(int $angebot_id, ?int $auftrag_id = null): string {
+    $a = one("SELECT a.nummer, a.kunde_id, a.freigabe_name, k.firma, k.ansprechpartner, k.email
+              FROM angebot a JOIN kunden k ON k.id=a.kunde_id WHERE a.id=?", [$angebot_id]);
+    if (!$a) return 'Angebot oder Kunde nicht gefunden.';
+    $fa    = beleg_firma();
+    $aufNr = $auftrag_id ? (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id]) : '';
+
+    mail_team('Angebot ' . $a['nummer'] . ' angenommen: ' . $a['firma'],
+        "Der Kunde " . $a['firma'] . " hat das Angebot " . $a['nummer'] . " im Portal verbindlich angenommen"
+        . ($a['freigabe_name'] ? ' (' . $a['freigabe_name'] . ')' : '') . ".\n"
+        . ($aufNr !== '' ? "Auftrag $aufNr ist angelegt, Rechnung und Produktionsauftrag ebenfalls.\n" : '')
+        . "\n" . mail_basis_url() . '/?p=angebot&id=' . $angebot_id . "\n");
+
+    if (trim((string)$a['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
+    $link = mail_link_kundenportal((int)$a['kunde_id'], 'bestellungen');
+    $betreff = 'Auftragsbestätigung' . ($aufNr !== '' ? ' ' . $aufNr : '') . ' von ' . $fa['name'];
+    $text = "Guten Tag " . mail_kunde_anrede($a) . ",\n\n"
+          . "vielen Dank, Sie haben das Angebot " . $a['nummer'] . " verbindlich angenommen.\n"
+          . ($aufNr !== '' ? "Wir führen den Auftrag unter der Nummer $aufNr.\n" : '')
+          . "Den Stand des Auftrags und die Rechnung finden Sie im Kundenportal:\n$link\n\n"
+          . "Viele Grüße\n" . $fa['name'];
+    return mail_senden((string)$a['email'], $betreff, $text);
+}
+
+// Eine Anfrage wurde abgesagt („nicht machbar"): der Kunde erfährt den Grund.
+function mail_kunde_absage(int $anfrage_id): string {
+    $p = one("SELECT p.nummer, p.betreff, p.absage_grund, p.kunde_id, k.firma, k.ansprechpartner, k.email
+              FROM portal_anfrage p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [$anfrage_id]);
+    if (!$p) return 'Anfrage oder Kunde nicht gefunden.';
+    if (trim((string)$p['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
+    $fa   = beleg_firma();
+    $link = mail_link_kundenportal((int)$p['kunde_id'], 'meine_anfragen');
+    $betreff = 'Ihre Anfrage ' . $p['nummer'] . ': leider nicht machbar';
+    $text = "Guten Tag " . mail_kunde_anrede($p) . ",\n\n"
+          . "wir haben Ihre Anfrage " . $p['nummer'] . ($p['betreff'] ? ' („' . $p['betreff'] . '")' : '') . " geprüft und können sie leider nicht umsetzen.\n\n"
+          . "Grund:\n" . trim((string)$p['absage_grund']) . "\n\n"
+          . "Wenn Sie eine angepasste Variante anfragen möchten, geht das jederzeit über das Kundenportal:\n$link\n\n"
+          . "Viele Grüße\n" . $fa['name'];
+    return mail_senden((string)$p['email'], $betreff, $text);
+}
+
+// --- Vorlagen Team (Lieferant hat im Portal etwas getan) ---------------------
+
+// Der Lieferant hat eine Bestellung bestätigt oder eine Station gesetzt.
+function mail_team_bestellung(int $bestellung_id, string $was): int {
+    $b = one("SELECT b.nummer, b.eta_geplant, l.firma FROM bestellung b JOIN lieferanten l ON l.id=b.lieferant_id WHERE b.id=?", [$bestellung_id]);
+    if (!$b) return 0;
+    return mail_team('Bestellung ' . $b['nummer'] . ': ' . $was . ' (' . $b['firma'] . ')',
+        "Der Lieferant " . $b['firma'] . " hat die Bestellung " . $b['nummer'] . " im Portal aktualisiert: $was.\n"
+        . ($b['eta_geplant'] ? 'Geplanter Liefertermin: ' . date('d.m.Y', strtotime((string)$b['eta_geplant'])) . "\n" : '')
+        . "\n" . mail_basis_url() . '/?p=bestellung&id=' . $bestellung_id . "\n");
+}
+
+// Der Lieferant hat eine Preisanfrage beantwortet.
+function mail_team_preisanfrage(int $anfrage_id): int {
+    $a = one("SELECT af.nummer, af.betreff, af.lieferant_id, l.firma, i.name AS item_name
+              FROM lieferant_anfrage af JOIN lieferanten l ON l.id=af.lieferant_id LEFT JOIN item i ON i.id=af.item_id WHERE af.id=?", [$anfrage_id]);
+    if (!$a) return 0;
+    $ang = one("SELECT preis, einheit, mindestmenge, lieferzeit_tage FROM lieferant_angebot WHERE anfrage_id=?", [$anfrage_id]);
+    $was = (string)($a['item_name'] ?: $a['betreff']);
+    $details = '';
+    if ($ang) {
+        $details = 'Preis: ' . number_format((float)$ang['preis'], 2, ',', '.') . ' € je ' . $ang['einheit'];
+        if ($ang['mindestmenge'])    $details .= ', Mindestmenge ' . rtrim(rtrim(number_format((float)$ang['mindestmenge'], 3, ',', '.'), '0'), ',');
+        if ($ang['lieferzeit_tage']) $details .= ', Lieferzeit ' . (int)$ang['lieferzeit_tage'] . ' Tage';
+        $details .= "\n";
+    }
+    return mail_team('Preisanfrage ' . $a['nummer'] . ' beantwortet (' . $a['firma'] . ')',
+        "Der Lieferant " . $a['firma'] . " hat die Preisanfrage " . $a['nummer'] . ($was !== '' ? " ($was)" : '') . " beantwortet.\n"
+        . $details . "\n" . mail_basis_url() . '/?p=lieferant&id=' . (int)$a['lieferant_id'] . "\n");
 }

@@ -75,3 +75,5 @@ AB/RE bauen **eine Sammelposition** aus der bestellten Konfiguration (Netto exak
 **Meine Produktanfragen (View prodanfrage):** Tabelle mit Status; sobald ein Angebot vorliegt (`angebot.anfrage_id = portal_anfrage.id`), erscheint je Zeile ein Button **„Zum Angebot"** → `v=angebote#a<angebot_id>` (springt per Anker `id="a<ID>"` direkt zur Angebotskarte). Die Verknüpfung wird per Subquery ermittelt; Altangebote wurden per Backfill aus der Notiz „Aus Anfrage PAF-…" auf `anfrage_id` gesetzt.
 
 **Sicherheit/Ausblick:** aktuell passwortloser Token-Link (Vorschau). Später echtes Login/Rollen; Lieferanten-/Partner-Portal nach demselben Muster.
+## E-Mail bei Annahme
+Nimmt der Kunde ein Angebot an (`angebot_annehmen` oder `bestaetigen`), geht eine Auftragsbestätigung an ihn und ein Hinweis an alle Admins (`mail_angebot_angenommen()` in `core/mail.php`) – nur wenn der Versand eingerichtet ist. Der Kunde sieht Mailfehler nicht; sie stehen in `data/mail.log`.
