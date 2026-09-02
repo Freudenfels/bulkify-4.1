@@ -45,3 +45,12 @@ Auf der Anlegeseite (`?p=rohstoff&id=neu`) steht oben **Rohstoff aus einer Spezi
 Ablauf im Code: `aktion=spec_neu` legt die Datei in `data/uploads` und merkt Vorschlag plus Dateiname in der Session; beim Rendern wird der Vorschlag über die Vorgabewerte gelegt (`$neuDefault`); beim Speichern entsteht der Rohstoff wie immer, danach wird die Datei als Dokument an ihn gehängt und der Vorschlag daran gemerkt. `aktion=spec_neu_weg` verwirft alles wieder und löscht die Datei.
 
 So hat jeder Rohstoff vom ersten Tag an seine Unterlage am Datensatz – und über **bulkify-Spezifikation ansehen** sofort ein eigenes Papier.
+
+## Warum manche Abschnitte außerhalb des Formulars stehen
+Die Stammdaten liegen in einem großen `<form>`. Abschnitte mit **eigenen** Formularen dürfen nicht darin stehen – verschachtelte `<form>`-Tags verwirft jeder Browser, und die Knöpfe würden dann das Stammdaten-Formular abschicken (bei Pflichtfeldern passiert schlicht nichts). Deshalb stehen außerhalb:
+
+- **Rohstoff aus einer Spezifikation anlegen** – vor dem Formular, damit es beim Anlegen sofort sichtbar ist.
+- **Unterlage auslesen (KI)** – dahinter, als eigener `<section data-panel="spec">`.
+- **Lager / Analysenwerte je Charge** – dahinter, als eigener `<section data-panel="lager">`.
+
+Die Reiter-Logik blendet jedes `[data-panel]` im Dokument, nicht nur die innerhalb des Formulars – die Abschnitte erscheinen also weiterhin im richtigen Reiter.

@@ -277,6 +277,42 @@ if (!$neu) {
     echo '</div>';
 }
 ?>
+<?php // Beim Anlegen sofort sichtbar – und ausserhalb des Formulars, weil es ein eigenes hat. ?>
+  <?php // Beim Anlegen: aus einer Spezifikation heraus starten. Spart das Abtippen und ist der
+        // Weg, über den jeder Rohstoff von Anfang an Papiere hat.
+        if ($neu): require_once BX_ROOT . '/core/spec_ki.php'; ?>
+  <div class="bx-panel" style="border-color:var(--gruen)"><h2 style="margin-top:0">Rohstoff aus einer Spezifikation anlegen</h2>
+    <?php if ($neuKiFehler !== ''): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h($neuKiFehler) ?></div><?php endif; ?>
+    <?php if ($neuKi): $anz = count((array)($neuKi['stamm'] ?? [])); ?>
+      <div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">
+        <strong><?= h((string)($_SESSION['rohstoff_ki']['orig'] ?? '')) ?></strong> ausgelesen –
+        <?= (int)$anz ?> Feld(er) unten eingetragen<?= ($neuKi['werte'] ?? []) ? ', dazu ' . count($neuKi['werte']) . ' Analysenwerte' : '' ?>.
+        Bitte prüfen und dann speichern.
+      </div>
+      <div class="bx-row" style="gap:10px;align-items:center">
+        <?= bx_badge('erkannt als ' . ['spec'=>'Spezifikation','coa'=>'Analysenzertifikat','beides'=>'Spezifikation + CoA','unklar'=>'unklar'][$neuKi['typ']], $neuKi['typ'] === 'unklar' ? 'warn' : 'info') ?>
+        <?= bx_badge('Sicherheit ' . $neuKi['sicherheit'], $neuKi['sicherheit'] === 'hoch' ? 'ok' : ($neuKi['sicherheit'] === 'niedrig' ? 'warn' : 'info')) ?>
+        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="spec_neu_weg">
+          <button class="btn btn-ghost btn-sm" type="submit">Vorschlag verwerfen</button></form>
+      </div>
+      <?php foreach ((array)($neuKi['hinweise'] ?? []) as $hw): ?><div class="muted" style="font-size:12px;margin-top:6px">Hinweis: <?= h($hw) ?></div><?php endforeach; ?>
+      <p class="muted" style="font-size:12px;margin:10px 0 0">Die Datei wird beim Speichern am Rohstoff abgelegt. Erkannte Analysenwerte kannst du danach im Reiter Spezifikation an eine Charge übernehmen.</p>
+    <?php elseif (!ki_bereit()): ?>
+      <div class="muted">Die KI ist nicht eingerichtet (Einstellungen &rarr; KI). Lege den Rohstoff von Hand an.</div>
+    <?php else: ?>
+      <p class="muted" style="margin-top:0">Lade die Spezifikation oder das CoA des Lieferanten hoch – auch als Scan. Die Felder unten werden daraus vorbelegt, du prüfst sie und speicherst.</p>
+      <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <input type="hidden" name="aktion" value="spec_neu">
+        <div class="bx-field" style="margin:0"><label>Unterlage</label>
+          <input type="file" name="neu_spec" required accept="application/pdf,image/*"></div>
+        <button class="btn btn-primary" type="submit">Auslesen und Felder füllen</button>
+        <span class="muted" style="font-size:12px;align-self:center">dauert 10–60 Sekunden</span>
+      </form>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
+
+
 <form method="post" class="bx-form" enctype="multipart/form-data">
   <div class="settabs" id="itabs">
     <a href="#" class="on" data-tab="stamm">Stammdaten</a>
@@ -413,131 +449,6 @@ if (!$neu) {
       <div class="bx-field"><label>Lagerbedingungen</label><textarea name="lagerbedingungen" placeholder="kühl & trocken, 18–22 °C, 50–60 % rF"><?= $v('lagerbedingungen') ?></textarea></div>
     </div>
 
-    <?php // Beim Anlegen: aus einer Spezifikation heraus starten. Spart das Abtippen und ist der
-          // Weg, über den jeder Rohstoff von Anfang an Papiere hat.
-          if ($neu): require_once BX_ROOT . '/core/spec_ki.php'; ?>
-    <div class="bx-panel" style="border-color:var(--gruen)"><h2 style="margin-top:0">Rohstoff aus einer Spezifikation anlegen</h2>
-      <?php if ($neuKiFehler !== ''): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h($neuKiFehler) ?></div><?php endif; ?>
-      <?php if ($neuKi): $anz = count((array)($neuKi['stamm'] ?? [])); ?>
-        <div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">
-          <strong><?= h((string)($_SESSION['rohstoff_ki']['orig'] ?? '')) ?></strong> ausgelesen –
-          <?= (int)$anz ?> Feld(er) unten eingetragen<?= ($neuKi['werte'] ?? []) ? ', dazu ' . count($neuKi['werte']) . ' Analysenwerte' : '' ?>.
-          Bitte prüfen und dann speichern.
-        </div>
-        <div class="bx-row" style="gap:10px;align-items:center">
-          <?= bx_badge('erkannt als ' . ['spec'=>'Spezifikation','coa'=>'Analysenzertifikat','beides'=>'Spezifikation + CoA','unklar'=>'unklar'][$neuKi['typ']], $neuKi['typ'] === 'unklar' ? 'warn' : 'info') ?>
-          <?= bx_badge('Sicherheit ' . $neuKi['sicherheit'], $neuKi['sicherheit'] === 'hoch' ? 'ok' : ($neuKi['sicherheit'] === 'niedrig' ? 'warn' : 'info')) ?>
-          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="spec_neu_weg">
-            <button class="btn btn-ghost btn-sm" type="submit">Vorschlag verwerfen</button></form>
-        </div>
-        <?php foreach ((array)($neuKi['hinweise'] ?? []) as $hw): ?><div class="muted" style="font-size:12px;margin-top:6px">Hinweis: <?= h($hw) ?></div><?php endforeach; ?>
-        <p class="muted" style="font-size:12px;margin:10px 0 0">Die Datei wird beim Speichern am Rohstoff abgelegt. Erkannte Analysenwerte kannst du danach im Reiter Spezifikation an eine Charge übernehmen.</p>
-      <?php elseif (!ki_bereit()): ?>
-        <div class="muted">Die KI ist nicht eingerichtet (Einstellungen &rarr; KI). Lege den Rohstoff von Hand an.</div>
-      <?php else: ?>
-        <p class="muted" style="margin-top:0">Lade die Spezifikation oder das CoA des Lieferanten hoch – auch als Scan. Die Felder unten werden daraus vorbelegt, du prüfst sie und speicherst.</p>
-        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
-          <input type="hidden" name="aktion" value="spec_neu">
-          <div class="bx-field" style="margin:0"><label>Unterlage</label>
-            <input type="file" name="neu_spec" required accept="application/pdf,image/*"></div>
-          <button class="btn btn-primary" type="submit">Auslesen und Felder füllen</button>
-          <span class="muted" style="font-size:12px;align-self:center">dauert 10–60 Sekunden</span>
-        </form>
-      <?php endif; ?>
-    </div>
-    <?php endif; ?>
-
-    <?php // Unterlagen des Lieferanten mit der KI auslesen. Nichts wird ungefragt gespeichert:
-          // jedes Feld hat einen Haken, und übernommen wird nur, was angehakt ist.
-          if (!$neu):
-            require_once BX_ROOT . '/core/spec_ki.php';
-            $kiDocs = all("SELECT id, typ, titel, datei_orig, ki_stand FROM dokument WHERE objekt_typ='item' AND objekt_id=? ORDER BY id DESC", [(int)$id]);
-            $kiFelder = spec_ki_felder();
-    ?>
-    <div class="bx-panel" id="kispec"><h2>Unterlage auslesen (KI)</h2>
-      <p class="muted" style="margin-top:0">Liest eine Spezifikation oder ein Analysenzertifikat des Lieferanten – auch eingescannte – und schlägt die Felder vor. <strong>Gespeichert wird nur, was du anhakst.</strong></p>
-      <?php if (isset($_GET['kiueb'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px"><?= (int)$_GET['kiueb'] ?> Feld(er) übernommen.</div><?php endif; ?>
-      <?php if ($kiFehler !== ''): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h($kiFehler) ?></div><?php endif; ?>
-      <?php if (!$kiDocs): ?>
-        <div class="muted">Noch keine Unterlagen hinterlegt. Lade im Reiter <strong>Dokumente</strong> eine Spezifikation oder ein CoA hoch – oder der Lieferant tut es in seinem Portal.</div>
-      <?php elseif (!ki_bereit()): ?>
-        <div class="muted">Die KI ist nicht eingerichtet (Einstellungen &rarr; KI).</div>
-      <?php else: ?>
-        <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
-          <input type="hidden" name="aktion" value="ki_lesen">
-          <div class="bx-field" style="margin:0;min-width:320px"><label>Unterlage</label>
-            <select name="dok_id">
-              <?php foreach ($kiDocs as $d): ?>
-                <option value="<?= (int)$d['id'] ?>"><?= h(strtoupper((string)$d['typ'])) ?> · <?= h($d['titel'] ?: $d['datei_orig']) ?><?= $d['ki_stand'] ? ' (schon gelesen)' : '' ?></option>
-              <?php endforeach; ?>
-            </select></div>
-          <button class="btn btn-primary" type="submit">Auslesen</button>
-          <span class="muted" style="font-size:12px;align-self:center">dauert je nach Umfang 10–60 Sekunden</span>
-        </form>
-      <?php endif; ?>
-
-      <?php if ($kiVorschlag && !empty($kiVorschlag['ok'])): $st = (array)($kiVorschlag['stamm'] ?? []); ?>
-        <div style="margin-top:16px">
-          <div class="bx-row" style="gap:10px;align-items:center;margin-bottom:8px">
-            <strong>Vorschlag</strong>
-            <?= bx_badge('erkannt als ' . ['spec'=>'Spezifikation','coa'=>'Analysenzertifikat','beides'=>'Spezifikation + CoA','unklar'=>'unklar'][$kiVorschlag['typ']], $kiVorschlag['typ'] === 'unklar' ? 'warn' : 'info') ?>
-            <?= bx_badge('Sicherheit ' . $kiVorschlag['sicherheit'], $kiVorschlag['sicherheit'] === 'hoch' ? 'ok' : ($kiVorschlag['sicherheit'] === 'niedrig' ? 'warn' : 'info')) ?>
-          </div>
-          <?php foreach ((array)($kiVorschlag['hinweise'] ?? []) as $hw): ?>
-            <div class="muted" style="font-size:12px">Hinweis: <?= h($hw) ?></div>
-          <?php endforeach; ?>
-          <?php if (!$st): ?>
-            <div class="muted" style="margin-top:8px">Keine Stammdatenfelder gefunden.</div>
-          <?php else: ?>
-          <form method="post" style="margin-top:10px">
-            <input type="hidden" name="aktion" value="ki_uebernehmen">
-            <input type="hidden" name="dok_id" value="<?= (int)$kiDok ?>">
-            <div class="bx-tablewrap"><table class="bx-table">
-              <thead><tr><th style="width:34px"></th><th>Feld</th><th>Bisher</th><th>Vorschlag</th></tr></thead>
-              <tbody>
-              <?php foreach ($st as $k => $wert):
-                      $alt = trim((string)($it[$k] ?? ''));
-                      $jn  = $kiFelder[$k][1] === 'janein';
-                      $zeig = fn($w) => $w === '' || $w === null ? '–' : ($jn ? ((int)$w === 1 ? 'ja' : 'nein') : (string)$w);
-                      $gleich = (string)$wert === $alt; ?>
-                <tr>
-                  <td><input type="checkbox" name="feld[]" value="<?= h($k) ?>"<?= $gleich ? '' : ' checked' ?><?= $gleich ? ' disabled' : '' ?>></td>
-                  <td><?= h($kiFelder[$k][0]) ?></td>
-                  <td class="muted"><?= h($zeig($alt)) ?></td>
-                  <td><strong><?= h($zeig($wert)) ?></strong><?= $gleich ? ' <span class="muted">(unverändert)</span>' : '' ?></td>
-                </tr>
-              <?php endforeach; ?>
-              </tbody>
-            </table></div>
-            <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Angehakte Felder übernehmen</button></div>
-          </form>
-          <?php endif; ?>
-
-          <?php $kw = (array)($kiVorschlag['werte'] ?? []); if ($kw): $chg = all("SELECT id, charge_nr FROM charge WHERE item_id=? ORDER BY id DESC", [(int)$id]); ?>
-            <div style="margin-top:18px"><strong>Analysenwerte</strong> <span class="muted">(<?= count($kw) ?> Zeilen)</span>
-              <?php if (($kiVorschlag['charge']['charge_nr'] ?? '') !== ''): ?><span class="muted"> · Charge laut Dokument: <?= h($kiVorschlag['charge']['charge_nr']) ?></span><?php endif; ?>
-            </div>
-            <div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table">
-              <thead><tr><th>Parameter</th><th>Spezifikation</th><th>Ergebnis</th><th>Methode</th></tr></thead>
-              <tbody><?php foreach ($kw as $z): ?>
-                <tr><td><?= h($z['parameter']) ?></td><td><?= h($z['spezifikation']) ?></td><td><?= h($z['ergebnis']) ?></td><td><?= h($z['methode']) ?></td></tr>
-              <?php endforeach; ?></tbody>
-            </table></div>
-            <?php if ($chg): ?>
-            <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin-top:10px">
-              <input type="hidden" name="aktion" value="ki_werte">
-              <input type="hidden" name="dok_id" value="<?= (int)$kiDok ?>">
-              <div class="bx-field" style="margin:0;max-width:260px"><label>An welche Charge?</label>
-                <select name="charge_id"><?php foreach ($chg as $c): ?><option value="<?= (int)$c['id'] ?>"<?= ($kiVorschlag['charge']['charge_nr'] ?? '') === $c['charge_nr'] ? ' selected' : '' ?>><?= h($c['charge_nr']) ?></option><?php endforeach; ?></select></div>
-              <button class="btn btn-ghost" type="submit" onclick="return confirm('Die bisherigen Analysenwerte dieser Charge werden ersetzt.');">Werte an die Charge speichern</button>
-            </form>
-            <?php else: ?><div class="muted" style="margin-top:8px">Für diesen Rohstoff gibt es noch keine Charge, an die die Werte gehören könnten.</div><?php endif; ?>
-          <?php endif; ?>
-        </div>
-      <?php endif; ?>
-    </div>
-    <?php endif; ?>
-
     <div class="bx-panel"><h2>Spec-Dokument</h2><div class="bx-grid">
       <div class="bx-field"><label>Spez-Nr</label><input type="text" name="spec_nr" value="<?= $v('spec_nr') ?>"></div>
       <div class="bx-field"><label>Version</label><input type="text" name="spec_version" value="<?= $v('spec_version') ?>"></div>
@@ -577,102 +488,6 @@ if (!$neu) {
   </section>
 
   <?php if (!$neu): ?>
-  <section data-panel="lager" hidden>
-    <div class="bx-cards">
-      <div class="bx-card"><div class="k">Bestand (frei)</div><div class="v"><?= $bestand_frei>0 ? h(rtrim(rtrim(number_format($bestand_frei,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
-      <div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="<?= $bestand_qua>0?'color:var(--warn)':'' ?>"><?= $bestand_qua>0 ? h(rtrim(rtrim(number_format($bestand_qua,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
-      <div class="bx-card"><div class="k">Chargen</div><div class="v"><?= count($charges) ?></div></div>
-    </div>
-    <div class="bx-panel">
-      <h2>Chargen <?= bx_hint('Wareneingang bucht neue Chargen; Rohstoffe starten in Quarantäne') ?></h2>
-      <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Charge</th><th class="bx-num">Verfügbar</th><th>MHD</th><th>Lieferant</th><th>Wareneingang</th><th>Status</th><th></th></tr></thead>
-        <tbody>
-        <?php if (!$charges): ?><tr><td colspan="7" class="muted">Noch keine Chargen. Über „Wareneingang" buchen.</td></tr><?php endif; ?>
-        <?php foreach ($charges as $c): ?>
-          <tr>
-            <td><?= h($c['charge_nr'] ?: '–') ?></td>
-            <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$c['menge_verfuegbar'],3,',','.'),'0'),',')).' '.h($c['einheit']) ?></td>
-            <td><?= $c['mhd'] ? h(date('d.m.Y',strtotime($c['mhd']))) : '<span class="muted">–</span>' ?></td>
-            <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
-            <td><?= $c['wareneingang'] ? h(date('d.m.Y',strtotime($c['wareneingang']))) : '' ?></td>
-            <td><?= match($c['status']){'frei'=>bx_badge('frei','ok'),'quarantaene'=>bx_badge('Quarantäne','warn'),'gesperrt'=>bx_badge('gesperrt','err'),default=>bx_badge(status_text($c['status']))} ?></td>
-            <td class="bx-num">
-              <a class="btn btn-ghost btn-sm" target="_blank" href="?p=coa_bulkify&id=<?= (int)$c['id'] ?>" title="Analysenzertifikat im bulkify-Layout – das geht an den Kunden">&#8681; CoA</a>
-            </td>
-          </tr>
-        <?php endforeach; ?>
-        </tbody>
-      </table></div>
-      <div style="margin-top:12px"><?= bx_btn('Wareneingang buchen', '?p=wareneingang', 'primary') ?></div>
-    </div>
-      <?php // Analysewerte je Charge – die Grundlage für unser CoA. Der Lieferant schickt sein
-            // Zertifikat; die Werte tragen wir hier ein und geben sie im bulkify-Layout weiter. ?>
-      <?php if ($charges): ?>
-      <div class="bx-panel">
-        <h2 style="margin-top:0">Analysenwerte je Charge <?= bx_hint('Aus dem CoA des Lieferanten übertragen. Daraus entsteht unser Analysenzertifikat im bulkify-Layout – das Original des Lieferanten geht nicht an den Kunden.') ?></h2>
-        <?php if (isset($_GET['analyse'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Analysenwerte gespeichert.</div><?php endif; ?>
-        <?php if ($anVorschlagFehler): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h($anVorschlagFehler) ?></div><?php endif; ?>
-        <?php if ($anVorschlag): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Vorschlag aus dem PDF eingetragen – bitte prüfen und dann speichern.<?= !empty($anVorschlag['kopf']) ? ' Gelesen: ' . h(implode(' · ', array_map(fn($kk, $vv) => $kk . ' ' . $vv, array_keys($anVorschlag['kopf']), $anVorschlag['kopf']))) : '' ?></div><?php endif; ?>
-        <?php $liefDoks = all("SELECT id, typ, datei_orig FROM dokument WHERE objekt_typ='item' AND objekt_id=? ORDER BY id DESC", [(int)$id]);
-              if ($liefDoks): ?>
-        <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
-          <input type="hidden" name="aktion" value="analyse_lesen">
-          <input type="hidden" name="charge_id" id="an_charge_lesen" value="<?= (int)($charges[0]['id'] ?? 0) ?>">
-          <div class="bx-field" style="margin:0;min-width:280px"><label>Werte aus Lieferanten-PDF vorschlagen
-            <?= bx_hint('Liest das hochgeladene CoA/Spec aus und trägt gefundene Werte ins Formular ein. Nur bei PDFs mit echtem Text – ein Scan lässt sich nicht lesen. Geprüft wird immer von Hand.') ?></label>
-            <select name="dok_id"><?php foreach ($liefDoks as $d): ?><option value="<?= (int)$d['id'] ?>"><?= h(strtoupper($d['typ'])) ?> · <?= h($d['datei_orig']) ?></option><?php endforeach; ?></select></div>
-          <button class="btn btn-ghost" type="submit">Werte vorschlagen</button>
-        </form>
-        <?php endif; ?>
-        <div class="bx-field" style="max-width:320px"><label>Charge</label>
-          <select id="an_charge" onchange="anZeige()">
-            <?php foreach ($charges as $c): ?><option value="<?= (int)$c['id'] ?>"><?= h($c['charge_nr'] ?: ('Charge ' . (int)$c['id'])) ?></option><?php endforeach; ?>
-          </select></div>
-        <?php foreach ($charges as $c):
-            $werte = all("SELECT * FROM charge_analyse WHERE charge_id=? ORDER BY sort, id", [(int)$c['id']]);
-            // Vorschlagszeilen, damit man nicht vor einem leeren Blatt sitzt.
-            // Ein Vorschlag aus dem Lieferanten-PDF ersetzt die Standardzeilen.
-            if ($anVorschlag && (int)$anVorschlag['charge_id'] === (int)$c['id']) {
-                $werte = array_map(fn($v) => ['parameter'=>$v[0], 'spezifikation'=>$v[1], 'ergebnis'=>$v[2], 'methode'=>$v[3]], $anVorschlag['zeilen']);
-            } elseif (!$werte) $werte = [
-                ['parameter'=>'Aussehen', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'visuell'],
-                ['parameter'=>'Identität', 'spezifikation'=>'entspricht', 'ergebnis'=>'', 'methode'=>'FT-IR'],
-                ['parameter'=>'Gehalt', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'HPLC'],
-                ['parameter'=>'Schwermetalle', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'ICP-MS'],
-                ['parameter'=>'Gesamtkeimzahl', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'Ph. Eur.'],
-            ];
-            while (count($werte) < count($werte) + 2) { $werte[] = ['parameter'=>'', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'']; if (count($werte) > 12) break; }
-        ?>
-        <form method="post" class="an_form" data-charge="<?= (int)$c['id'] ?>" style="display:none">
-          <input type="hidden" name="aktion" value="analyse_save">
-          <input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
-          <div class="bx-tablewrap"><table class="bx-table">
-            <thead><tr><th>Parameter</th><th>Spezifikation</th><th>Ergebnis</th><th>Methode</th></tr></thead>
-            <tbody><?php foreach ($werte as $w): ?>
-              <tr><td><input type="text" name="a_par[]" value="<?= h($w['parameter']) ?>" style="width:100%"></td>
-                  <td><input type="text" name="a_spec[]" value="<?= h($w['spezifikation'] ?? '') ?>" style="width:100%"></td>
-                  <td><input type="text" name="a_erg[]" value="<?= h($w['ergebnis'] ?? '') ?>" style="width:100%"></td>
-                  <td><input type="text" name="a_met[]" value="<?= h($w['methode'] ?? '') ?>" style="width:100%"></td></tr>
-            <?php endforeach; ?></tbody>
-          </table></div>
-          <div class="bx-row" style="gap:10px;margin-top:10px">
-            <button class="btn btn-primary" type="submit">Analysenwerte speichern</button>
-            <a class="btn btn-ghost" target="_blank" href="?p=coa_bulkify&id=<?= (int)$c['id'] ?>">&#8681; CoA ansehen</a>
-          </div>
-        </form>
-        <?php endforeach; ?>
-        <script>
-        function anZeige(){
-          var s = document.getElementById('an_charge'), v = s.value;
-          var hid = document.getElementById('an_charge_lesen'); if (hid) hid.value = v;
-          document.querySelectorAll('.an_form').forEach(function(f){ f.style.display = (f.getAttribute('data-charge') === v) ? '' : 'none'; });
-        }
-        anZeige();
-        </script>
-      </div>
-      <?php endif; ?>
-  </section>
   <section data-panel="verw" hidden><div class="bx-panel"><h2>Verwendung in Rezepturen</h2><?php bx_bald('Rezepturen'); ?></div></section>
   <section data-panel="verlauf" hidden>
     <div class="bx-panel"><h2>Verlauf</h2><?php bx_chat($verlauf, $v('name')); ?></div>
@@ -684,6 +499,200 @@ if (!$neu) {
     <a class="btn btn-ghost" href="?p=rohstoffe">Abbrechen</a>
   </div>
 </form>
+
+<?php // Diese beiden Abschnitte haben eigene Formulare und stehen deshalb ausserhalb
+      // des Stammdaten-Formulars. Die Reiter-Logik blendet sie trotzdem korrekt ein. ?>
+<section data-panel="spec" hidden>
+  <?php // Unterlagen des Lieferanten mit der KI auslesen. Nichts wird ungefragt gespeichert:
+        // jedes Feld hat einen Haken, und übernommen wird nur, was angehakt ist.
+        if (!$neu):
+          require_once BX_ROOT . '/core/spec_ki.php';
+          $kiDocs = all("SELECT id, typ, titel, datei_orig, ki_stand FROM dokument WHERE objekt_typ='item' AND objekt_id=? ORDER BY id DESC", [(int)$id]);
+          $kiFelder = spec_ki_felder();
+  ?>
+  <div class="bx-panel" id="kispec"><h2>Unterlage auslesen (KI)</h2>
+    <p class="muted" style="margin-top:0">Liest eine Spezifikation oder ein Analysenzertifikat des Lieferanten – auch eingescannte – und schlägt die Felder vor. <strong>Gespeichert wird nur, was du anhakst.</strong></p>
+    <?php if (isset($_GET['kiueb'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px"><?= (int)$_GET['kiueb'] ?> Feld(er) übernommen.</div><?php endif; ?>
+    <?php if ($kiFehler !== ''): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h($kiFehler) ?></div><?php endif; ?>
+    <?php if (!$kiDocs): ?>
+      <div class="muted">Noch keine Unterlagen hinterlegt. Lade im Reiter <strong>Dokumente</strong> eine Spezifikation oder ein CoA hoch – oder der Lieferant tut es in seinem Portal.</div>
+    <?php elseif (!ki_bereit()): ?>
+      <div class="muted">Die KI ist nicht eingerichtet (Einstellungen &rarr; KI).</div>
+    <?php else: ?>
+      <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <input type="hidden" name="aktion" value="ki_lesen">
+        <div class="bx-field" style="margin:0;min-width:320px"><label>Unterlage</label>
+          <select name="dok_id">
+            <?php foreach ($kiDocs as $d): ?>
+              <option value="<?= (int)$d['id'] ?>"><?= h(strtoupper((string)$d['typ'])) ?> · <?= h($d['titel'] ?: $d['datei_orig']) ?><?= $d['ki_stand'] ? ' (schon gelesen)' : '' ?></option>
+            <?php endforeach; ?>
+          </select></div>
+        <button class="btn btn-primary" type="submit">Auslesen</button>
+        <span class="muted" style="font-size:12px;align-self:center">dauert je nach Umfang 10–60 Sekunden</span>
+      </form>
+    <?php endif; ?>
+
+    <?php if ($kiVorschlag && !empty($kiVorschlag['ok'])): $st = (array)($kiVorschlag['stamm'] ?? []); ?>
+      <div style="margin-top:16px">
+        <div class="bx-row" style="gap:10px;align-items:center;margin-bottom:8px">
+          <strong>Vorschlag</strong>
+          <?= bx_badge('erkannt als ' . ['spec'=>'Spezifikation','coa'=>'Analysenzertifikat','beides'=>'Spezifikation + CoA','unklar'=>'unklar'][$kiVorschlag['typ']], $kiVorschlag['typ'] === 'unklar' ? 'warn' : 'info') ?>
+          <?= bx_badge('Sicherheit ' . $kiVorschlag['sicherheit'], $kiVorschlag['sicherheit'] === 'hoch' ? 'ok' : ($kiVorschlag['sicherheit'] === 'niedrig' ? 'warn' : 'info')) ?>
+        </div>
+        <?php foreach ((array)($kiVorschlag['hinweise'] ?? []) as $hw): ?>
+          <div class="muted" style="font-size:12px">Hinweis: <?= h($hw) ?></div>
+        <?php endforeach; ?>
+        <?php if (!$st): ?>
+          <div class="muted" style="margin-top:8px">Keine Stammdatenfelder gefunden.</div>
+        <?php else: ?>
+        <form method="post" style="margin-top:10px">
+          <input type="hidden" name="aktion" value="ki_uebernehmen">
+          <input type="hidden" name="dok_id" value="<?= (int)$kiDok ?>">
+          <div class="bx-tablewrap"><table class="bx-table">
+            <thead><tr><th style="width:34px"></th><th>Feld</th><th>Bisher</th><th>Vorschlag</th></tr></thead>
+            <tbody>
+            <?php foreach ($st as $k => $wert):
+                    $alt = trim((string)($it[$k] ?? ''));
+                    $jn  = $kiFelder[$k][1] === 'janein';
+                    $zeig = fn($w) => $w === '' || $w === null ? '–' : ($jn ? ((int)$w === 1 ? 'ja' : 'nein') : (string)$w);
+                    $gleich = (string)$wert === $alt; ?>
+              <tr>
+                <td><input type="checkbox" name="feld[]" value="<?= h($k) ?>"<?= $gleich ? '' : ' checked' ?><?= $gleich ? ' disabled' : '' ?>></td>
+                <td><?= h($kiFelder[$k][0]) ?></td>
+                <td class="muted"><?= h($zeig($alt)) ?></td>
+                <td><strong><?= h($zeig($wert)) ?></strong><?= $gleich ? ' <span class="muted">(unverändert)</span>' : '' ?></td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table></div>
+          <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Angehakte Felder übernehmen</button></div>
+        </form>
+        <?php endif; ?>
+
+        <?php $kw = (array)($kiVorschlag['werte'] ?? []); if ($kw): $chg = all("SELECT id, charge_nr FROM charge WHERE item_id=? ORDER BY id DESC", [(int)$id]); ?>
+          <div style="margin-top:18px"><strong>Analysenwerte</strong> <span class="muted">(<?= count($kw) ?> Zeilen)</span>
+            <?php if (($kiVorschlag['charge']['charge_nr'] ?? '') !== ''): ?><span class="muted"> · Charge laut Dokument: <?= h($kiVorschlag['charge']['charge_nr']) ?></span><?php endif; ?>
+          </div>
+          <div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table">
+            <thead><tr><th>Parameter</th><th>Spezifikation</th><th>Ergebnis</th><th>Methode</th></tr></thead>
+            <tbody><?php foreach ($kw as $z): ?>
+              <tr><td><?= h($z['parameter']) ?></td><td><?= h($z['spezifikation']) ?></td><td><?= h($z['ergebnis']) ?></td><td><?= h($z['methode']) ?></td></tr>
+            <?php endforeach; ?></tbody>
+          </table></div>
+          <?php if ($chg): ?>
+          <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin-top:10px">
+            <input type="hidden" name="aktion" value="ki_werte">
+            <input type="hidden" name="dok_id" value="<?= (int)$kiDok ?>">
+            <div class="bx-field" style="margin:0;max-width:260px"><label>An welche Charge?</label>
+              <select name="charge_id"><?php foreach ($chg as $c): ?><option value="<?= (int)$c['id'] ?>"<?= ($kiVorschlag['charge']['charge_nr'] ?? '') === $c['charge_nr'] ? ' selected' : '' ?>><?= h($c['charge_nr']) ?></option><?php endforeach; ?></select></div>
+            <button class="btn btn-ghost" type="submit" onclick="return confirm('Die bisherigen Analysenwerte dieser Charge werden ersetzt.');">Werte an die Charge speichern</button>
+          </form>
+          <?php else: ?><div class="muted" style="margin-top:8px">Für diesen Rohstoff gibt es noch keine Charge, an die die Werte gehören könnten.</div><?php endif; ?>
+        <?php endif; ?>
+      </div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
+
+</section>
+
+<section data-panel="lager" hidden>
+  <div class="bx-cards">
+    <div class="bx-card"><div class="k">Bestand (frei)</div><div class="v"><?= $bestand_frei>0 ? h(rtrim(rtrim(number_format($bestand_frei,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
+    <div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="<?= $bestand_qua>0?'color:var(--warn)':'' ?>"><?= $bestand_qua>0 ? h(rtrim(rtrim(number_format($bestand_qua,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
+    <div class="bx-card"><div class="k">Chargen</div><div class="v"><?= count($charges) ?></div></div>
+  </div>
+  <div class="bx-panel">
+    <h2>Chargen <?= bx_hint('Wareneingang bucht neue Chargen; Rohstoffe starten in Quarantäne') ?></h2>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Charge</th><th class="bx-num">Verfügbar</th><th>MHD</th><th>Lieferant</th><th>Wareneingang</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      <?php if (!$charges): ?><tr><td colspan="7" class="muted">Noch keine Chargen. Über „Wareneingang" buchen.</td></tr><?php endif; ?>
+      <?php foreach ($charges as $c): ?>
+        <tr>
+          <td><?= h($c['charge_nr'] ?: '–') ?></td>
+          <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$c['menge_verfuegbar'],3,',','.'),'0'),',')).' '.h($c['einheit']) ?></td>
+          <td><?= $c['mhd'] ? h(date('d.m.Y',strtotime($c['mhd']))) : '<span class="muted">–</span>' ?></td>
+          <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
+          <td><?= $c['wareneingang'] ? h(date('d.m.Y',strtotime($c['wareneingang']))) : '' ?></td>
+          <td><?= match($c['status']){'frei'=>bx_badge('frei','ok'),'quarantaene'=>bx_badge('Quarantäne','warn'),'gesperrt'=>bx_badge('gesperrt','err'),default=>bx_badge(status_text($c['status']))} ?></td>
+          <td class="bx-num">
+            <a class="btn btn-ghost btn-sm" target="_blank" href="?p=coa_bulkify&id=<?= (int)$c['id'] ?>" title="Analysenzertifikat im bulkify-Layout – das geht an den Kunden">&#8681; CoA</a>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <div style="margin-top:12px"><?= bx_btn('Wareneingang buchen', '?p=wareneingang', 'primary') ?></div>
+  </div>
+    <?php // Analysewerte je Charge – die Grundlage für unser CoA. Der Lieferant schickt sein
+          // Zertifikat; die Werte tragen wir hier ein und geben sie im bulkify-Layout weiter. ?>
+    <?php if ($charges): ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Analysenwerte je Charge <?= bx_hint('Aus dem CoA des Lieferanten übertragen. Daraus entsteht unser Analysenzertifikat im bulkify-Layout – das Original des Lieferanten geht nicht an den Kunden.') ?></h2>
+      <?php if (isset($_GET['analyse'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Analysenwerte gespeichert.</div><?php endif; ?>
+      <?php if ($anVorschlagFehler): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h($anVorschlagFehler) ?></div><?php endif; ?>
+      <?php if ($anVorschlag): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Vorschlag aus dem PDF eingetragen – bitte prüfen und dann speichern.<?= !empty($anVorschlag['kopf']) ? ' Gelesen: ' . h(implode(' · ', array_map(fn($kk, $vv) => $kk . ' ' . $vv, array_keys($anVorschlag['kopf']), $anVorschlag['kopf']))) : '' ?></div><?php endif; ?>
+      <?php $liefDoks = all("SELECT id, typ, datei_orig FROM dokument WHERE objekt_typ='item' AND objekt_id=? ORDER BY id DESC", [(int)$id]);
+            if ($liefDoks): ?>
+      <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+        <input type="hidden" name="aktion" value="analyse_lesen">
+        <input type="hidden" name="charge_id" id="an_charge_lesen" value="<?= (int)($charges[0]['id'] ?? 0) ?>">
+        <div class="bx-field" style="margin:0;min-width:280px"><label>Werte aus Lieferanten-PDF vorschlagen
+          <?= bx_hint('Liest das hochgeladene CoA/Spec aus und trägt gefundene Werte ins Formular ein. Nur bei PDFs mit echtem Text – ein Scan lässt sich nicht lesen. Geprüft wird immer von Hand.') ?></label>
+          <select name="dok_id"><?php foreach ($liefDoks as $d): ?><option value="<?= (int)$d['id'] ?>"><?= h(strtoupper($d['typ'])) ?> · <?= h($d['datei_orig']) ?></option><?php endforeach; ?></select></div>
+        <button class="btn btn-ghost" type="submit">Werte vorschlagen</button>
+      </form>
+      <?php endif; ?>
+      <div class="bx-field" style="max-width:320px"><label>Charge</label>
+        <select id="an_charge" onchange="anZeige()">
+          <?php foreach ($charges as $c): ?><option value="<?= (int)$c['id'] ?>"><?= h($c['charge_nr'] ?: ('Charge ' . (int)$c['id'])) ?></option><?php endforeach; ?>
+        </select></div>
+      <?php foreach ($charges as $c):
+          $werte = all("SELECT * FROM charge_analyse WHERE charge_id=? ORDER BY sort, id", [(int)$c['id']]);
+          // Vorschlagszeilen, damit man nicht vor einem leeren Blatt sitzt.
+          // Ein Vorschlag aus dem Lieferanten-PDF ersetzt die Standardzeilen.
+          if ($anVorschlag && (int)$anVorschlag['charge_id'] === (int)$c['id']) {
+              $werte = array_map(fn($v) => ['parameter'=>$v[0], 'spezifikation'=>$v[1], 'ergebnis'=>$v[2], 'methode'=>$v[3]], $anVorschlag['zeilen']);
+          } elseif (!$werte) $werte = [
+              ['parameter'=>'Aussehen', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'visuell'],
+              ['parameter'=>'Identität', 'spezifikation'=>'entspricht', 'ergebnis'=>'', 'methode'=>'FT-IR'],
+              ['parameter'=>'Gehalt', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'HPLC'],
+              ['parameter'=>'Schwermetalle', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'ICP-MS'],
+              ['parameter'=>'Gesamtkeimzahl', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'Ph. Eur.'],
+          ];
+          while (count($werte) < count($werte) + 2) { $werte[] = ['parameter'=>'', 'spezifikation'=>'', 'ergebnis'=>'', 'methode'=>'']; if (count($werte) > 12) break; }
+      ?>
+      <form method="post" class="an_form" data-charge="<?= (int)$c['id'] ?>" style="display:none">
+        <input type="hidden" name="aktion" value="analyse_save">
+        <input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
+        <div class="bx-tablewrap"><table class="bx-table">
+          <thead><tr><th>Parameter</th><th>Spezifikation</th><th>Ergebnis</th><th>Methode</th></tr></thead>
+          <tbody><?php foreach ($werte as $w): ?>
+            <tr><td><input type="text" name="a_par[]" value="<?= h($w['parameter']) ?>" style="width:100%"></td>
+                <td><input type="text" name="a_spec[]" value="<?= h($w['spezifikation'] ?? '') ?>" style="width:100%"></td>
+                <td><input type="text" name="a_erg[]" value="<?= h($w['ergebnis'] ?? '') ?>" style="width:100%"></td>
+                <td><input type="text" name="a_met[]" value="<?= h($w['methode'] ?? '') ?>" style="width:100%"></td></tr>
+          <?php endforeach; ?></tbody>
+        </table></div>
+        <div class="bx-row" style="gap:10px;margin-top:10px">
+          <button class="btn btn-primary" type="submit">Analysenwerte speichern</button>
+          <a class="btn btn-ghost" target="_blank" href="?p=coa_bulkify&id=<?= (int)$c['id'] ?>">&#8681; CoA ansehen</a>
+        </div>
+      </form>
+      <?php endforeach; ?>
+      <script>
+      function anZeige(){
+        var s = document.getElementById('an_charge'), v = s.value;
+        var hid = document.getElementById('an_charge_lesen'); if (hid) hid.value = v;
+        document.querySelectorAll('.an_form').forEach(function(f){ f.style.display = (f.getAttribute('data-charge') === v) ? '' : 'none'; });
+      }
+      anZeige();
+      </script>
+    </div>
+    <?php endif; ?>
+</section>
+
 
 <?php if (!$neu): ?>
 <?php if (isset($_GET['preisok'])) echo '<div class="bx-panel badge-ok" data-panel="ek" hidden style="padding:12px 16px">Preis gespeichert.</div>'; ?>
