@@ -839,7 +839,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px"><?= $editAnf ? 'Anfrage bearbeiten' : 'Rezeptur anfragen' ?></h1>
   <div class="bx-panel">
     <?php if (isset($_GET['geaendert'])): ?><div class="bx-panel badge-ok" style="padding:10px 14px;margin-bottom:12px">Ihre Anfrage wurde aktualisiert.</div><?php endif; ?>
-    <p class="muted" style="margin-top:0"><?= $editAnf ? 'Sie können Ihre Anfrage <strong>' . h($editAnf['nummer']) . '</strong> ändern, solange wir sie noch nicht bearbeiten.' : 'Sagen Sie uns, was rein soll – wir prüfen die Machbarkeit und melden uns mit einem Vorschlag.' ?></p>
+    <p class="muted" style="margin-top:0"><?= $editAnf ? 'Sie können Ihre Anfrage <strong>' . h($editAnf['nummer']) . '</strong> ändern, solange wir sie noch nicht bearbeiten.' : 'Beschreiben Sie einfach Ihre Idee – konkrete Zutaten sind nicht nötig. Wir prüfen die Machbarkeit und melden uns mit einem Vorschlag.' ?></p>
     <form method="post">
       <input type="hidden" name="aktion" value="<?= $editAnf ? 'anfrage_bearbeiten' : 'anfrage_senden' ?>">
       <?php if ($editAnf): ?><input type="hidden" name="anfrage_id" value="<?= (int)$editAnf['id'] ?>"><?php endif; ?>
@@ -849,6 +849,10 @@ portal_head('Kundenportal · ' . $k['firma']);
           <select name="form" id="pf_form"><?php foreach ($DFORM_P as $key=>$lbl): ?><option value="<?= $key ?>" <?= ($editAnf['darreichungsform'] ?? '')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?></select>
         </div>
       </div>
+      <div class="bx-field" style="margin-bottom:16px"><label>Ihre Idee</label>
+        <textarea name="notiz" rows="4" placeholder="z. B. veganes Produkt für besseren Schlaf, 2 Kapseln abends, gerne pflanzlich und ohne Melatonin"><?= $ea('notiz') ?></textarea>
+        <div class="muted" style="font-size:13px;margin-top:4px">Zielgruppe, Wirkung, Wünsche – alles, was Ihnen wichtig ist.</div></div>
+      <div class="muted" style="font-size:13px;margin-bottom:6px">Sie haben schon konkrete Zutaten? Dann tragen Sie sie hier ein – sonst lassen Sie die Tabelle einfach leer.</div>
       <table class="bx-table" style="margin-bottom:10px">
         <thead><tr><th>Wirkstoff / Zutat</th><th style="width:120px">Menge je Kapsel</th><th style="width:90px">Einheit</th><th></th></tr></thead>
         <tbody id="pwrows">
@@ -866,7 +870,6 @@ portal_head('Kundenportal · ' . $k['firma']);
       </table>
       <button type="button" class="btn btn-ghost btn-sm" id="paddW">+ Zutat</button>
       <div id="pf_kapselcheck" style="display:none;margin-top:14px;border-radius:var(--r);padding:12px 14px;font-size:14px"></div>
-      <div class="bx-field" style="margin-top:12px"><label>Notiz (optional)</label><textarea name="notiz" placeholder="z. B. Zielgruppe, Wünsche, gut verträglich …"><?= $ea('notiz') ?></textarea></div>
       <button class="btn btn-primary" type="submit"><?= $editAnf ? 'Änderungen speichern' : 'Anfrage senden' ?></button>
       <?php if ($editAnf): ?><a class="btn btn-ghost" href="<?= $portalLink('anfrage') ?>&anfrage=1">Abbrechen</a><?php endif; ?>
     </form>
