@@ -51,7 +51,7 @@
 3. **Etiketten:** Es gibt noch keine Etiketten-Artikel. Das Angebot bietet nur Etiketten an, die zum **Endformat am Behälter** (`item.etikett_final`, B×H) passen – dafür fehlen Behältermaße/Etikettenformate und die Etikettenpreise.
 4. ~~Mengenrabatt bei Rezeptur-Angeboten~~ – **erledigt** (2026-09-02): Rohstoffe werden mit der Lieferanten-Staffel zur Gesamtmenge gerechnet (Matrix und Rezeptur-Angebot); im Editor mehrere Mengen mit Komma. Wirkt nur, wenn am Rohstoff Staffeln (`lieferant_preis`) gepflegt sind – ein Rüstkosten-/Fixkostenmodell je Charge gibt es weiterhin nicht.
 5. **Rohstoff-Stammdaten füllen** (Herkunft, Haltbarkeit, Lagerung, Allergene, vegan/GVO/bestrahlt/TSE, Zertifikate, Spec-Nr.) – ohne sie steht in der Spezifikation überall „–".
-6. **Chinesische Übersetzungen gegenlesen lassen** (die aus v3 sind erprobt, die neuen nicht).
+6. **Chinesische Übersetzungen:** am 2026-09-02 einmal komplett gegengelesen (Portal-Wörterbuch, Ablauf-Panel, Stationen, Fehlermeldungen) – fachlich stimmig, „Artikel" auf „物料" korrigiert. Eine Endkontrolle durch einen Muttersprachler bleibt sinnvoll.
 7. ~~Lieferantenportal: Rückfragen/Chat und Dateiablage~~ – **erledigt** (2026-09-02): Menüpunkte „Rückfragen" und „Dateien" im Portal, dazu Rückfragen an jeder Bestellung/Preisanfrage; intern Reiter „Dokumente" und „Rückfragen" im Lieferantenkonto und Rückfragen an der Bestellung (`core/nachricht.php`, `core/lieferant_dateien.php`).
 8. ~~Beta-Admin-Passwort ändern~~ – **erledigt** (2026-09-02).
 9. **Demo-Rezepturen ohne Rohstoffpreise** → Preis-Matrix zeigt 0 €.
