@@ -65,9 +65,8 @@ if (!$a):
 <?php else:
     $ang = one("SELECT * FROM lieferant_angebot WHERE anfrage_id=?", [$id]);
     $staffeln = $ang ? all("SELECT * FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$ang['id']]) : [];
-    // Noch kein Angebot? Dann steht in der ersten Zeile die Menge, die wir angefragt haben – der
-    // Lieferant trägt nur den Preis daneben. Weitere Zeilen sind freiwillig.
-    if (!$staffeln && (float)($a['menge'] ?? 0) > 0) $staffeln[] = ['menge_ab' => (float)$a['menge'], 'preis' => ''];
+    // Die angefragte Menge steht schon am Preisfeld darueber – hier geht es nur um ANDERE Mengen.
+    // Deshalb keine Vorbelegung; sonst tippt der Lieferant denselben Preis zweimal.
     $staffeln[] = ['menge_ab' => '', 'preis' => ''];                       // immer eine freie Zeile am Ende
     while (count($staffeln) < 3) $staffeln[] = ['menge_ab' => '', 'preis' => ''];
     // Die Einheit steht schon in der Anfrage (dort wird sie automatisch gesetzt) – der Lieferant
