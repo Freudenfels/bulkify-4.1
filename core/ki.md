@@ -49,3 +49,11 @@ if ($r['ok']) { /* $r['daten'] verwenden */ } else { /* $r['fehler'] anzeigen */
 
 ## Was hier NICHT hingehört
 Fachlogik. `ki.php` kennt nur die API. Was gefragt wird, steht in der jeweiligen Funktion (z. B. `core/coa_lesen.php`).
+
+## Warten – und wer es merkt
+Eine KI-Anfrage dauert leicht eine Minute. Zwei Vorkehrungen sorgen dafür, dass das niemanden trifft:
+
+- `ki_frage()` setzt selbst `set_time_limit(...)` hoch. Sonst wuerde PHP das Skript mitten im Warten abbrechen (`max_execution_time`) und die Arbeit waere verloren.
+- `ki_antwort_abschliessen()` schickt die fertige Seite **vorher** an den Browser und rechnet danach weiter. So benutzt es das Kundenportal: Der Kunde bekommt seine Bestaetigung sofort, der Rezepturentwurf entsteht in den Sekunden danach. Vor dem Aufruf muss alles gesendet sein, was der Browser braucht – auch der `Location`-Header.
+
+Wo der Benutzer das Ergebnis sehen will (Spec auslesen, Vorschlag entwickeln), wird bewusst gewartet.

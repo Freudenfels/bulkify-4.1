@@ -116,12 +116,16 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Neue Rezepturanfrage im Portal eingereicht.', 'anfrage', 'anfrage', $aid);
     // Gleich einen Rezepturentwurf entwickeln lassen – das Team findet ihn beim Öffnen der Anfrage
     // vor und muss nicht bei null anfangen. Der Kunde sieht davon nichts; es ist ein interner Entwurf.
+    // Wichtig: erst die Seite an den Kunden schicken, dann rechnen – die KI braucht bis zu einer
+    // Minute, so lange darf niemand auf einem leeren Bildschirm sitzen.
     require_once BX_ROOT . '/core/rezeptur_ki.php';
+    header('Location: ?p=portal&token=' . $token . '&v=anfrage&anfrage=1');
     if (ki_bereit()) {
+        ki_antwort_abschliessen();
         $kiR = rezeptur_ki_entwickeln((int)$aid);
         if ($kiR['ok']) rezeptur_ki_merken((int)$aid, $kiR);
     }
-    header('Location: ?p=portal&token=' . $token . '&v=anfrage&anfrage=1'); exit;
+    exit;
 }
 
 // Rezepturanfrage bearbeiten – nur solange noch nicht in Bearbeitung (status='neu') und Eigentum des Kunden.

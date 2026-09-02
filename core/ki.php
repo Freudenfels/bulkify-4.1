@@ -64,6 +64,9 @@ function ki_frage(string|array $inhalt, array $opt = []): array {
 
     $versuche = max(1, (int)($opt['versuche'] ?? 3));
     $timeout  = max(10, (int)($opt['timeout'] ?? 180));
+    // Eine KI-Anfrage dauert laenger als ein normaler Seitenaufruf. Ohne das hier wuerde PHP das
+    // Skript mitten im Warten abbrechen (max_execution_time) und die Arbeit waere verloren.
+    @set_time_limit($timeout * $versuche + 30);
     $letzter  = '';
     for ($n = 1; $n <= $versuche; $n++) {
         $ch = curl_init('https://api.anthropic.com/v1/messages');
@@ -166,4 +169,19 @@ function ki_log(string $zweck, string $modell, int $ms, ?array $usage, string $t
            . ($usage ? '  ein=' . $usage['ein'] . ' aus=' . $usage['aus'] : '')
            . "\n" . mb_substr(trim($text), 0, 2000) . "\n----\n";
     @file_put_contents(BX_DATA . '/ki.log', $zeile, FILE_APPEND);
+}
+
+// Antwort an den Browser abschliessen und danach weiterrechnen. Eine KI-Anfrage dauert schnell
+// eine Minute – so lange darf ein Kunde nicht auf seine Bestaetigung warten (und der Server
+// bricht nach max_execution_time ab). Der Kunde bekommt also sofort seine Seite, der Entwurf
+// entsteht danach im Hintergrund. Vorher ALLES senden, was der Browser braucht (auch Location).
+function ki_antwort_abschliessen(): void {
+    ignore_user_abort(true);
+    @set_time_limit(300);
+    if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); return; }
+    // Kein FPM (z. B. eingebauter Server): Verbindung selbst schliessen.
+    $len = ob_get_level() > 0 ? (int)ob_get_length() : 0;
+    if (!headers_sent()) { header('Content-Length: ' . $len); header('Connection: close'); }
+    while (ob_get_level() > 0) ob_end_flush();
+    flush();
 }
