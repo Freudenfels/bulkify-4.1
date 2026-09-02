@@ -39,3 +39,6 @@ Der Reiter **Dokumente** ist die gemeinsame Ablage mit dem Lieferanten (`liefera
 
 ## Rückfragen
 Der Reiter **Rückfragen** (mit Zahl ungelesener Nachrichten) zeigt das ganze Gespräch mit dem Lieferanten (`nachricht_panel()` aus `core/nachricht.php`), jede Nachricht mit Bezug-Link zur Bestellung oder Preisanfrage. POST `aktion=nachricht` (ohne Bezug); zu einer Bestellung schreibt man besser direkt an der Bestellung.
+
+## Katalog
+Der Reiter **Katalog** zeigt, was der Lieferant in seinem Portal hinterlegt oder als Preisliste hochgeladen hat (`core/lieferant_katalog.md`). Je Zeile steht **Anlegen** (neuer Artikel samt EK-Preis) oder – wenn es den Artikel über CAS-Nummer oder Namen schon gibt – **Preis dorthin**, dazu **ablehnen**. Für lange Kataloge gibt es „Alle übernehmen". Die Zahl am Reiter sind die noch offenen Zeilen.

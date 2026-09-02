@@ -110,6 +110,33 @@ function init_schema(): void {
         KEY idx_objekt (objekt_typ, objekt_id, erstellt)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // lieferant_katalog: was ein Lieferant anbietet – als VORSCHLAG, bevor daraus ein Artikel wird.
+    // Der Lieferant pflegt seine Liste selbst (oder lädt sie hoch, die KI liest sie); das Team
+    // entscheidet je Zeile, ob daraus ein Artikel entsteht. Siehe core/lieferant_katalog.php.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_katalog (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        lieferant_id INT NOT NULL,
+        dokument_id INT NULL,                              -- aus welcher hochgeladenen Liste
+        name VARCHAR(190) NOT NULL,
+        name_en VARCHAR(190) NULL,
+        name_lat VARCHAR(190) NULL,
+        art VARCHAR(20) NOT NULL DEFAULT 'rohstoff',       -- rohstoff | fertigprodukt
+        form VARCHAR(20) NULL,                             -- pulver|granulat|fluessig|oel|extrakt|kapsel|tablette|softgel|stick
+        cas VARCHAR(30) NULL,
+        spezifikation VARCHAR(190) NULL,                   -- z. B. 95 % Curcumin
+        herkunft VARCHAR(120) NULL,
+        preis DECIMAL(12,4) NULL,
+        waehrung VARCHAR(3) NOT NULL DEFAULT 'EUR',
+        einheit VARCHAR(20) NULL,
+        menge_ab DECIMAL(14,3) NULL,                       -- ab dieser Menge gilt der Preis (MOQ)
+        notiz VARCHAR(500) NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'neu',         -- neu | uebernommen | abgelehnt
+        item_id INT NULL,                                  -- gesetzt, sobald daraus ein Artikel wurde
+        angelegt DATETIME NOT NULL,
+        entschieden DATETIME NULL,
+        KEY idx_lieferant (lieferant_id, status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // nachricht: Rückfragen zwischen Team und Lieferant (core/nachricht.php). Hängt am Lieferanten,
     // optional zusätzlich an einer Bestellung oder Preisanfrage. Gelesen-Flags je Seite.
     $pdo->exec("CREATE TABLE IF NOT EXISTS nachricht (

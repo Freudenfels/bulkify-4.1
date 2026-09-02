@@ -75,6 +75,7 @@ function route_rollen_map(): array {
         'lieferant_logo'          => ['*'],
         'lieferant_nachrichten'   => ['*'],
         'lieferant_dateien'       => ['*'],
+        'lieferant_katalog'       => ['*'],
         'lieferant_dokument'      => ['*'],
         'rechnungen'         => ['finance'],
         'rechnung'           => ['finance'],

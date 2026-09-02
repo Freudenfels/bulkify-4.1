@@ -13,6 +13,23 @@ $KATS = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrau
 $FORMEN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 
 $fehler = '';
+// Katalog des Lieferanten: je Zeile entscheiden, ob daraus ein Artikel wird.
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['kat_uebernehmen', 'kat_ablehnen', 'kat_alle'], true)) {
+    require_once BX_ROOT . '/core/lieferant_katalog.php';
+    $akt = (string)$_POST['aktion'];
+    $n = 0; $fehler = '';
+    if ($akt === 'kat_ablehnen') {
+        katalog_ablehnen((int)($_POST['zeile_id'] ?? 0)); $n = 1;
+    } elseif ($akt === 'kat_uebernehmen') {
+        $r = katalog_uebernehmen((int)($_POST['zeile_id'] ?? 0), (int)($_POST['item_id'] ?? 0) ?: null, !empty($_POST['preis_mit']));
+        if ($r['ok']) $n = 1; else $fehler = $r['msg'];
+    } else {
+        // Alle offenen Zeilen auf einmal – für lange Kataloge, bei denen jede Zeile stimmt.
+        foreach (katalog_zeilen((int)$id, 'neu') as $z) { $r = katalog_uebernehmen((int)$z['id'], null, true); if ($r['ok']) $n++; }
+    }
+    header('Location: ?p=lieferant&id=' . (int)$id . ($fehler !== '' ? '&fehler=' . urlencode($fehler) : '&kat=' . $n) . '#katalog'); exit;
+}
+
 // Rückfragen und Dateiablage – eigene POST-Wege (die Panels haben eigene Formulare).
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachricht') {
     $f = nachricht_post_verarbeiten((int)$id, 'team', (string)(current_user()['name'] ?? 'Team'));
@@ -92,6 +109,8 @@ $aktFormen = array_filter(explode(',', (string)($l['fertig_formen'] ?? '')));
 $hatFertig = in_array('fertigprodukt', $aktKats, true);
 if (!$neu) { seed_aktivitaet_if_empty(); $verlauf = verlauf_fuer('lieferant', (int)$id); } else { $verlauf = []; }
 $ungelesen = $neu ? 0 : nachrichten_ungelesen((int)$id, 'team');
+require_once BX_ROOT . '/core/lieferant_katalog.php';
+$katOffen = $neu ? 0 : katalog_offen((int)$id);
 // Echte Bestellungen dieses Lieferanten
 $l_bestellungen = $neu ? [] : all("SELECT b.*, (SELECT COALESCE(SUM(menge*ek_preis),0) FROM bestellung_position p WHERE p.bestellung_id=b.id) AS summe,
                                     (SELECT COUNT(*) FROM bestellung_position p WHERE p.bestellung_id=b.id) AS pos
@@ -138,6 +157,7 @@ if (!$neu) {
     <a href="#" data-tab="bestell">Bestellungen</a>
     <a href="#" data-tab="rechnungen">Rechnungen</a>
     <a href="#" data-tab="dok">Dokumente</a>
+    <a href="#" data-tab="katalog">Katalog<?= $katOffen > 0 ? ' (' . $katOffen . ')' : '' ?></a>
     <a href="#" data-tab="rueckfragen">Rückfragen<?= $ungelesen > 0 ? ' (' . $ungelesen . ' neu)' : '' ?></a>
     <a href="#" data-tab="verlauf">Verlauf</a>
     <a href="#" data-tab="stamm">Stammdaten</a>
@@ -334,6 +354,62 @@ if (!$neu) {
   <?php if (isset($_GET['fehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['fehler']) ?></div><?php endif; ?>
   <?= lieferant_dateien_panel((int)$id, 'team', 'de') ?>
 </section>
+<section data-panel="katalog" hidden id="katalog">
+  <?php if (isset($_GET['kat'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px"><?= (int)$_GET['kat'] ?> Zeile(n) übernommen – die Artikel stehen jetzt im Lager.</div><?php endif; ?>
+  <div class="bx-panel">
+    <div class="bx-row" style="justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Katalog des Lieferanten</h2>
+      <?php $katZeilen = katalog_zeilen((int)$id); $katNeu = array_values(array_filter($katZeilen, fn($z) => $z['status'] === 'neu'));
+            // eigene Zahlformatierung: die des Preis-Panels weiter unten gibt es hier noch nicht
+            $katZahl = fn($x, $n2) => $x === null || $x === '' ? '–' : rtrim(rtrim(number_format((float)$x, $n2, ',', '.'), '0'), ','); ?>
+      <?php if ($katNeu): ?>
+        <form method="post" style="margin:0" onsubmit="return confirm('Alle <?= count($katNeu) ?> offenen Zeilen als Artikel anlegen?');">
+          <input type="hidden" name="aktion" value="kat_alle">
+          <button class="btn btn-ghost btn-sm" type="submit">Alle <?= count($katNeu) ?> übernehmen</button></form>
+      <?php endif; ?>
+    </div>
+    <p class="muted" style="margin-top:6px">Was der Lieferant in seinem Portal hinterlegt oder als Liste hochgeladen hat. <strong>Erst mit „Anlegen" entsteht daraus ein Artikel</strong> samt EK-Preis – vorher steht davon nichts im Lager.</p>
+    <?php if (!$katZeilen): ?>
+      <div class="muted">Noch nichts hinterlegt. Der Lieferant pflegt seinen Katalog unter <strong>Mein Katalog</strong> im Portal.</div>
+    <?php else: ?>
+    <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
+      <thead><tr><th>Artikel</th><th>Typ</th><th>Spezifikation</th><th class="bx-num">Preis</th><th class="bx-num">ab Menge</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($katZeilen as $z):
+              $offen = $z['status'] === 'neu';
+              $treffer = $offen ? katalog_treffer($z) : null; ?>
+        <tr>
+          <td><?= h($z['name']) ?>
+            <?php if ($z['herkunft'] || $z['notiz']): ?><div class="muted" style="font-size:12px"><?= h(trim((string)$z['herkunft'] . ' ' . (string)$z['notiz'])) ?></div><?php endif; ?>
+            <?php if ($treffer): ?><div style="font-size:12px;color:#8a6d1f">gibt es vielleicht schon: <?= h($treffer['artikelnummer'] . ' ' . $treffer['name']) ?></div><?php endif; ?>
+          </td>
+          <td><?= h(anfrage_art_label($z['art'] === 'fertigprodukt' ? 'fertigprodukt' : 'rohstoff', (string)$z['form'])) ?></td>
+          <td><?= h((string)$z['spezifikation']) ?></td>
+          <td class="bx-num"><?= $z['preis'] !== null ? $katZahl($z['preis'], 4) . ' ' . h($z['waehrung']) . ($z['einheit'] ? ' / ' . h($z['einheit']) : '') : '–' ?></td>
+          <td class="bx-num"><?= $z['menge_ab'] !== null ? $katZahl($z['menge_ab'], 3) : '–' ?></td>
+          <td><?= $offen ? bx_badge('offen', 'info') : ($z['status'] === 'uebernommen' ? bx_badge('übernommen', 'ok') : bx_badge('abgelehnt')) ?>
+            <?php if ($z['item_id']): ?><div style="font-size:12px"><a href="?p=rohstoff&id=<?= (int)$z['item_id'] ?>"><?= h((string)$z['artikelnummer']) ?></a></div><?php endif; ?>
+          </td>
+          <td class="bx-num"><?php if ($offen): ?>
+            <form method="post" style="display:inline">
+              <input type="hidden" name="aktion" value="kat_uebernehmen">
+              <input type="hidden" name="zeile_id" value="<?= (int)$z['id'] ?>">
+              <input type="hidden" name="preis_mit" value="1">
+              <?php if ($treffer): ?><input type="hidden" name="item_id" value="<?= (int)$treffer['id'] ?>"><?php endif; ?>
+              <button class="btn btn-primary btn-sm" type="submit"><?= $treffer ? 'Preis dorthin' : 'Anlegen' ?></button></form>
+            <form method="post" style="display:inline">
+              <input type="hidden" name="aktion" value="kat_ablehnen">
+              <input type="hidden" name="zeile_id" value="<?= (int)$z['id'] ?>">
+              <button class="btn btn-ghost btn-sm" type="submit">ablehnen</button></form>
+          <?php endif; ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <?php endif; ?>
+  </div>
+</section>
+
 <section data-panel="rueckfragen" hidden>
   <?php if (isset($_GET['nachricht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Nachricht gesendet.</div><?php endif; ?>
   <?php if (isset($_GET['fehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['fehler']) ?></div><?php endif; ?>
