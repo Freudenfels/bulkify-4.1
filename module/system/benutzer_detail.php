@@ -14,6 +14,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim(mb_strtolower($_POST['email'] ?? ''));
     $aktiv = isset($_POST['aktiv']) ? 1 : 0;
     $rollenArr = array_values(array_intersect(array_keys($ROLLEN), $_POST['rollen'] ?? []));
+    // Rollen, die es hier gar nicht zum Ankreuzen gibt (z. B. 'lieferant' fuer einen Portalzugang),
+    // bleiben erhalten. Sonst wuerde ein Speichern hier den Portalzugang stillschweigend kaputtmachen.
+    if (!$neu) {
+        $alt = array_filter(array_map('trim', explode(',', (string) scalar("SELECT rollen FROM benutzer WHERE id=?", [(int)$id]))));
+        $fremd = array_diff($alt, array_keys($ROLLEN));
+        $rollenArr = array_values(array_unique(array_merge($rollenArr, $fremd)));
+    }
     $rollenCsv = implode(',', $rollenArr);
     $pass  = (string)($_POST['pass'] ?? '');
     $editId = $neu ? 0 : (int)$id;
