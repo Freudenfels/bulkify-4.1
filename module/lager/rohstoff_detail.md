@@ -29,3 +29,12 @@ Die **Lieferanten-Staffelpreise** (Reiter Einkauf, `lieferant_preis`: je Liefera
 **VK-Aufschlag (%)** (Reiter EK-Preise): nur für den **Weiterverkauf des Rohstoffs an Kunden** (Rohstoffanfragen). Leer = globaler Aufschlag aus Einstellungen → Preise (`aufschlag_rohstoff`). Gefüllt = überschreibt global für genau diesen Rohstoff (`item.vk_aufschlag_prozent`). VK = günstigster gestaffelter Lieferanten-EK × (1 + Aufschlag); Berechnung siehe `intern/portal_anfrage_detail.php`.
 
 **Verkauf-Sicht (Rollen):** Das Feld **VK-Aufschlag (%)** im Reiter Einkauf ist nur sichtbar, wenn `darf_verkauf()` (core/auth.php) wahr ist – Produktionsmitarbeiter sehen es NICHT. Beim Speichern durch eine Produktionsrolle bleibt der vorhandene VK-Aufschlag erhalten (wird nicht genullt).
+
+## Unterlage auslesen (KI)
+Im Reiter **Spezifikation** liest die KI eine hinterlegte Lieferantenunterlage (Spezifikation oder CoA, auch eingescannt) und schlägt die Felder vor – `core/spec_ki.php`, Aktionen `ki_lesen`, `ki_zeigen`, `ki_uebernehmen`, `ki_werte`.
+
+**Nichts wird ungefragt gespeichert.** Die Tabelle stellt „bisher" und „Vorschlag" nebeneinander; abweichende Felder sind vorangehakt, gleiche Werte sind ausgegraut. Übernommen wird nur, was angehakt ist. Erkennt die KI Analysenwerte, lassen sie sich zusätzlich an eine Charge speichern (die bisherigen Werte dieser Charge werden dabei ersetzt).
+
+Ein frisch hochgeladenes Dokument (Reiter **Dokumente**) wird gleich ausgelesen; der Vorschlag wartet dann im Reiter Spezifikation. Dasselbe passiert, wenn der **Lieferant** die Datei in seinem Portal hochlädt.
+
+Daneben steht der Knopf **bulkify-Spezifikation ansehen** (`?p=spec_bulkify&id=`) – unser eigenes Papier aus genau diesen Feldern.

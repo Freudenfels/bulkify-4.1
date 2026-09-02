@@ -8,7 +8,9 @@ function dokument_typen(): array {
 }
 
 // Upload verarbeiten (erwartet Datei-Feld „dok", dok_typ, dok_lieferant, dok_titel).
-function dokument_upload(string $objekt_typ, int $objekt_id): void {
+// Rückgabe: die id der neuen Zeile in `dokument`, sonst 0. Wer die Datei gleich weiterverarbeiten
+// will (z. B. mit der KI auslesen), braucht sie – die bisherigen Aufrufer ignorieren sie einfach.
+function dokument_upload(string $objekt_typ, int $objekt_id): int {
     $typ = array_key_exists($_POST['dok_typ'] ?? '', dokument_typen()) ? $_POST['dok_typ'] : 'coa';
     $lid = ($_POST['dok_lieferant'] ?? '') !== '' ? (int) $_POST['dok_lieferant'] : null;
     if (!empty($_FILES['dok']['name']) && ($_FILES['dok']['error'] ?? 1) === UPLOAD_ERR_OK) {
@@ -20,8 +22,10 @@ function dokument_upload(string $objekt_typ, int $objekt_id): void {
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,kunde_sichtbar) VALUES (?,?,?,?,?,?,?,?)",
               [$objekt_typ, $objekt_id, $typ, $lid, trim($_POST['dok_titel'] ?? '') ?: null, $fn, $orig,
                isset($_POST['dok_kunde']) ? 1 : 0]);
+            return (int) insert_id();
         }
     }
+    return 0;
 }
 
 // Freigabe fürs Kundenportal umschalten. ACHTUNG: freigegeben wird das ORIGINAL des Lieferanten

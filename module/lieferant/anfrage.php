@@ -37,14 +37,17 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($aktion === 'dokument' && $a['item_id']) {
         // CoA/Spezifikation direkt am Artikel ablegen – dort sucht das Team sie.
         $_POST['dok_lieferant'] = (string)$lid;
-        dokument_upload('item', (int)$a['item_id']);
+        $dokId = dokument_upload('item', (int)$a['item_id']);
+        // Gleich auslesen lassen: das Team findet den Vorschlag am Rohstoff und prueft ihn.
+        // Der Lieferant schreibt damit KEINE Stammdaten – er liefert nur die Unterlage.
+        if ($dokId) { require_once BX_ROOT . '/core/spec_ki.php'; $gelesen = spec_ki_nach_upload($dokId); }
     }
-    header('Location: ?p=lieferant_anfrage&id=' . $id . ($fehler === '' ? '&ok=1' : '&fehler=' . urlencode($fehler))); exit;
+    header('Location: ?p=lieferant_anfrage&id=' . $id . ($fehler === '' ? '&ok=1' . (!empty($gelesen) ? '&gelesen=1' : '') : '&fehler=' . urlencode($fehler))); exit;
 }
 
 lp_head('bulkify – ' . lp_t('anfragen'));
 lp_shell_start('lieferant_anfrage');
-if (isset($_GET['ok']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('gespeichert')) . '</div>';
+if (isset($_GET['ok']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('gespeichert')) . (isset($_GET['gelesen']) ? ' ' . h(lp_t('datei_gelesen')) : '') . '</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 
 if (!$a):

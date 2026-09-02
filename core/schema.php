@@ -707,6 +707,9 @@ function init_schema(): void {
     // darf nicht versehentlich beim Kunden landen, nur weil es am Rohstoff hängt.
     ensure_column('dokument', 'kunde_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('dokument', 'hochgeladen_von', "VARCHAR(10) NOT NULL DEFAULT 'team'");   // team | lieferant (Ablage je Lieferant)
+    // Was die KI aus dieser Unterlage gelesen hat – ein VORSCHLAG, bis ihn jemand geprüft hat.
+    ensure_column('dokument', 'ki_daten', "MEDIUMTEXT NULL");
+    ensure_column('dokument', 'ki_stand', "DATETIME NULL");
     // Preisanfrage: was genau angefragt wird. Daraus ergibt sich die Einheit, in der der Lieferant seinen Preis nennt.
     ensure_column('lieferant_anfrage', 'art', "VARCHAR(20) NULL");               // rohstoff|fertigprodukt|verpackung|verbrauch|sonstiges
     ensure_column('lieferant_anfrage', 'form', "VARCHAR(20) NULL");              // bei Fertigprodukt: kapsel|tablette|softgel|stick|pulver|granulat|fluessig

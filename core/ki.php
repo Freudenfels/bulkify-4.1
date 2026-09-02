@@ -107,6 +107,30 @@ function ki_frage(string|array $inhalt, array $opt = []): array {
     return ['ok'=>false, 'fehler'=>$letzter ?: 'Unbekannter Fehler.'];
 }
 
+// Eine Datei als Inhaltsblock für ki_frage/ki_json aufbereiten. PDFs gehen als Dokument an die API –
+// damit liest Claude auch eingescannte Unterlagen, an denen die reine Textsuche scheitert.
+// Bilder gehen als Bild. Rückgabe: Block-Array oder null (nicht lesbar / zu groß).
+function ki_datei_block(string $pfad): ?array {
+    if (!is_file($pfad) || filesize($pfad) > 25 * 1024 * 1024) return null;   // 25 MB Grenze der API
+    $ext = strtolower(pathinfo($pfad, PATHINFO_EXTENSION));
+    $bild = ["png" => "image/png", "jpg" => "image/jpeg", "jpeg" => "image/jpeg", "gif" => "image/gif", "webp" => "image/webp"];
+    $roh = @file_get_contents($pfad);
+    if ($roh === false || $roh === "") return null;
+    $daten = base64_encode($roh);
+    if ($ext === "pdf")            return ["type" => "document", "source" => ["type" => "base64", "media_type" => "application/pdf", "data" => $daten]];
+    if (isset($bild[$ext]))        return ["type" => "image",    "source" => ["type" => "base64", "media_type" => $bild[$ext], "data" => $daten]];
+    return null;
+}
+
+// Eine Datei plus Anweisung an Claude schicken. Das Dokument steht VOR dem Text – so empfiehlt es
+// die API, und die Antworten werden nachweislich besser.
+function ki_datei_frage(string $pfad, string $anweisung, array $opt = []): array {
+    $block = ki_datei_block($pfad);
+    if (!$block) return ["ok" => false, "fehler" => "Die Datei lässt sich nicht lesen (nur PDF, PNG, JPG, GIF, WebP bis 25 MB)."];
+    $inhalt = [$block, ["type" => "text", "text" => $anweisung]];
+    return empty($opt["json"]) ? ki_frage($inhalt, $opt) : ki_json($inhalt, $opt);
+}
+
 // Antwort als JSON erwarten. Claude schreibt gern noch einen Satz drumherum, deshalb wird der
 // erste vollständige JSON-Block herausgeschnitten. Rückgabe wie ki_frage, zusätzlich 'daten'.
 function ki_json(string|array $inhalt, array $opt = []): array {

@@ -18,3 +18,6 @@
 - Beim Hochladen setzt das Häkchen **„im Kundenportal sichtbar"** die Freigabe direkt; in der Liste zeigt die Spalte **„Im Kundenportal"** den Zustand als Badge (`freigegeben` / `intern`) und schaltet auf Klick um.
 
 **Auslieferung:** intern über `?p=dokument&id=…` (nur mit Mitarbeiter-Login), im Portal über `?p=portal_dok&token=…&id=…` (`module/portal/dokument_download.php`). Die Portal-Route ist öffentlich und prüft deshalb selbst: gültiges Portal-Token, `kunde_sichtbar=1` **und** die passende Bereichs-Freischaltung des Kunden. Ohne alle drei kommt 403 bzw. 404.
+
+## Rückgabe von `dokument_upload()`
+Die Funktion gibt seit der KI-Anbindung die **id der neuen Zeile** zurück (0 bei Fehlschlag). Wer die Datei gleich weiterverarbeiten will – etwa `spec_ki_nach_upload()` –, braucht sie. Bestehende Aufrufer ignorieren den Rückgabewert.
