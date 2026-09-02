@@ -54,6 +54,9 @@ Die automatische Herstellungsposition enthält in der **Beschreibung** die Rezep
 Das Beschreibungsfeld ist eine **mehrzeilige Textarea** (editierbar). Im PDF werden die Zeilen
 umgebrochen. Spalte „Bezeichnung" 400 px breit; `angebot_position.beschreibung` = VARCHAR(1000).
 
+## Mehrere Bestellmengen auf einmal
+Im Feld „Anzahl Packungen" können mehrere Mengen mit Komma stehen (`1000, 2500, 5000`). Je Menge entsteht eine eigene Gruppe (A, B, C …) mit eigenem Preis je Packung – die Rohstoffe werden mit der Lieferanten-Staffel zur Gesamtmenge gerechnet (siehe `core/schema.md`, Mengenrabatt). Der Kunde sieht im Portal und im PDF dann eine Staffel und wählt eine Zeile.
+
 ## Position hinzufügen (Typ zuerst)
 Panel über den Positionen: erst **Typ** wählen (`#addTyp`), dann kommt der passende Katalog. Ein festes
 Produkt wählt man NICHT mehr (das ergab keinen Sinn – man will die Stückzahl frei bestimmen). Jede

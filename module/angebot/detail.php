@@ -105,10 +105,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($aktion === 'add_rezeptur') {
             $rid = (int)($_POST['add_rezeptur_id'] ?? 0);
             $stk = (int)($_POST['add_stueck'] ?? 0) ?: 1;
-            $menge = (int)($_POST['add_menge'] ?? 0);
+            // Mehrere Bestellmengen auf einmal („1000, 2500, 5000"): je Menge eine eigene Gruppe. So sieht der
+            // Kunde eine Staffel, und der Preis je Packung sinkt mit der Menge (Rohstoff-Staffeln greifen).
+            $mengen = array_values(array_unique(array_filter(array_map('intval', preg_split('/[\s,;]+/', (string)($_POST['add_menge'] ?? ''))), fn($m) => $m > 0)));
+            sort($mengen);
+            if (!$mengen) $mengen = [1];
             $verps = array_values(array_filter([(int)($_POST['add_verp_id'] ?? 0), (int)($_POST['add_deckel_id'] ?? 0), (int)($_POST['add_etikett_id'] ?? 0)]));
-            if ($rid) angebot_gruppe_anhaengen((int)$id, angebot_rezeptur_zeilen($rid, $stk, $verps, $menge, $mo, $kid));
-            $_SESSION['ang_add'][(int)$id] = ['rezeptur_id'=>$rid, 'stueck'=>$stk, 'menge'=>$menge,
+            if ($rid) foreach ($mengen as $menge) angebot_gruppe_anhaengen((int)$id, angebot_rezeptur_zeilen($rid, $stk, $verps, $menge, $mo, $kid));
+            $_SESSION['ang_add'][(int)$id] = ['rezeptur_id'=>$rid, 'stueck'=>$stk, 'menge'=>implode(', ', $mengen),
                 'verp_id'=>(int)($_POST['add_verp_id'] ?? 0), 'deckel_id'=>(int)($_POST['add_deckel_id'] ?? 0), 'etikett_id'=>(int)($_POST['add_etikett_id'] ?? 0)];
         } elseif ($aktion === 'add_rohstoff') {
             $iid = (int)($_POST['add_rohstoff_id'] ?? 0);
@@ -275,7 +279,7 @@ if (!$neu):
         </select>
       </div>
       <div class="bx-field"><label>Stückzahl / Füllmenge je Packung</label><input type="number" name="add_stueck" placeholder="z. B. 30" value="<?= $letzte['stueck'] ?? ($wunsch['stueck'] !== '' ? (int)$wunsch['stueck'] : '') ?>" required></div>
-      <div class="bx-field"><label>Anzahl Packungen</label><input type="number" name="add_menge" placeholder="z. B. 1000" value="<?= $letzte['menge'] ?? ($wunsch['menge'] !== '' ? (int)$wunsch['menge'] : '') ?>" required></div>
+      <div class="bx-field"><label>Anzahl Packungen <?= bx_hint('Mehrere Mengen mit Komma, z. B. 1000, 2500, 5000 – je Menge entsteht eine wählbare Option mit eigenem Preis je Packung.') ?></label><input type="text" inputmode="numeric" name="add_menge" placeholder="z. B. 1000, 2500, 5000" value="<?= h((string)($letzte['menge'] ?? ($wunsch['menge'] !== '' ? (int)$wunsch['menge'] : ''))) ?>" required></div>
       <div class="bx-field"><label>Verpackung (Primär)</label><select name="add_verp_id"><option value="">– keine –</option><?php foreach ($verpPrim as $vp): ?><option value="<?= (int)$vp['id'] ?>" <?= ((int)($letzte['verp_id'] ?? $wunsch['verp_id']) === (int)$vp['id']) ? 'selected' : '' ?>><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field"><label>Deckel (optional)</label><select name="add_deckel_id"><option value="">– keiner –</option><?php foreach ($verpDeckel as $vp): ?><option value="<?= (int)$vp['id'] ?>" <?= ((int)($letzte['deckel_id'] ?? 0) === (int)$vp['id']) ? 'selected' : '' ?>><?= h($vp['name']) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field"><label>Etikett (optional)</label>

@@ -1613,12 +1613,22 @@ function seed_lieferant_preis_if_empty(): void {
 }
 
 // EK-Kosten einer Rezeptur je Einheit (Summe Zutat-mg × EK/mg).
-function rezeptur_kosten_pro_einheit(?int $rid): float {
+// $einheiten = wie viele Einheiten (Kapseln, Portionen …) insgesamt produziert werden. Ist das
+// bekannt, zählt je Zutat die Lieferanten-Staffel (`lieferant_preis`), die zur Gesamtmenge passt –
+// so wird eine große Bestellung je Einheit günstiger (Mengenrabatt). Ohne Angabe: flacher item.ek_preis.
+function rezeptur_kosten_pro_einheit(?int $rid, float $einheiten = 0): float {
     if (!$rid) return 0.0;
     $c = 0.0;
-    foreach (all("SELECT z.menge_mg, i.ek_preis, i.preis_bezug, i.dichte
+    foreach (all("SELECT z.item_id, z.menge_mg, i.ek_preis, i.preis_bezug, i.dichte
                   FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]) as $z) {
         $mg = (float)$z['menge_mg']; $pb = $z['preis_bezug']; $ek = (float)$z['ek_preis'];
+        if ($einheiten > 0) {
+            // Gesamtbedarf der Zutat in ihrer Bezugseinheit (kg, g oder L) – damit die passende Staffel gilt.
+            $bedarf = $pb === 'kg' ? $mg * $einheiten / 1e6
+                    : ($pb === 'g' ? $mg * $einheiten / 1e3
+                    : ($pb === 'L' && $z['dichte'] ? $mg * $einheiten / 1e6 / (float)$z['dichte'] : 0));
+            if ($bedarf > 0) $ek = rohstoff_ek_bei_menge((int)$z['item_id'], $bedarf) ?? $ek;
+        }
         $perMg = $pb === 'kg' ? $ek/1e6 : ($pb === 'g' ? $ek/1e3 : ($pb === 'L' && $z['dichte'] ? ($ek/(1000*(float)$z['dichte']))/1e3 : 0));
         $c += $mg * $perMg;
     }
@@ -1719,21 +1729,24 @@ function fluessig_basis_ek_l(): float { return max(0.0, (float) meta_get('fluess
 
 // Herstellungs-EK je Packung (nur Rezeptur-Füllung + Leerkapseln bzw. Presshilfsstoffe/Trägerflüssigkeit).
 // Der BEHÄLTER kommt separat als eigene Angebotsposition (Dose/Deckel/Etikett kommen extra – EK-Staffel × Verpackungs-Aufschlag).
+// $bestellmenge (Packungen) macht die Mengendegression: die Rohstoffe werden mit der Staffel zur
+// Gesamtmenge gerechnet – so unterscheiden sich die Zeilen der Preismatrix je Bestellmenge.
 function produkt_variante_ek(int $produkt_id, int $stueck, int $verp_id = 0, int $bestellmenge = 0): float {
     $rid  = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$produkt_id]);
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
+    $bm   = max(0, $bestellmenge);
     if (in_array($form, ['pulver', 'granulat'], true)) {
         // $stueck = Füllgewicht in Gramm; Kosten je Gramm = Portionskosten / Portionsgewicht.
         $portionG = rezeptur_gewicht_mg($rid) / 1000;
         $servings = $portionG > 0 ? ((float)$stueck / $portionG) : 0.0;
-        return rezeptur_kosten_pro_einheit($rid ?: null) * $servings;   // Füllung; Behälter kommt separat
+        return rezeptur_kosten_pro_einheit($rid ?: null, $servings * $bm) * $servings;   // Füllung; Behälter kommt separat
     }
     if ($form === 'fluessig') {
         // $stueck = Füllvolumen in ml; Portionen = Volumen / Portionsvolumen, dazu die Trägerflüssigkeit je ml.
         $servings = (float)$stueck / fluessig_portion_ml();
-        return rezeptur_kosten_pro_einheit($rid ?: null) * $servings + ((float)$stueck / 1000) * fluessig_basis_ek_l();
+        return rezeptur_kosten_pro_einheit($rid ?: null, $servings * $bm) * $servings + ((float)$stueck / 1000) * fluessig_basis_ek_l();
     }
-    $fuell = rezeptur_kosten_pro_einheit($rid ?: null) * $stueck;
+    $fuell = rezeptur_kosten_pro_einheit($rid ?: null, $stueck * $bm) * $stueck;
     // Tablette: statt der Leerkapsel kommen die Presshilfsstoffe dazu.
     if ($form === 'tablette') return $fuell + tablette_hilfsstoff_ek_stueck($rid) * $stueck;
     $kaps  = produkt_kapsel_ek($produkt_id) * $stueck;
@@ -2153,13 +2166,17 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
     $ust = angebot_ust_satz($kid);
     $menge = max(1, $menge);
     // EK je Packung – je Form: Pulver/Granulat nach Gramm, Flüssig nach ml, sonst je Einheit (+ Kapsel/Presshilfsstoffe).
+    // Die Rohstoffe werden mit der Staffel zur GESAMTMENGE (Einheiten je Packung × Packungen) gerechnet –
+    // darum ist dieselbe Konfiguration bei mehr Packungen je Packung günstiger.
     if (in_array($form, ['pulver','granulat'], true)) {
         $portionG = rezeptur_gewicht_mg($rid) / 1000;
-        $ekH = rezeptur_kosten_pro_einheit($rid) * ($portionG > 0 ? $stueck / $portionG : 0);
+        $servings = $portionG > 0 ? $stueck / $portionG : 0;
+        $ekH = rezeptur_kosten_pro_einheit($rid, $servings * $menge) * $servings;
     } elseif ($form === 'fluessig') {
-        $ekH = rezeptur_kosten_pro_einheit($rid) * ($stueck / fluessig_portion_ml()) + ($stueck / 1000) * fluessig_basis_ek_l();
+        $servings = $stueck / fluessig_portion_ml();
+        $ekH = rezeptur_kosten_pro_einheit($rid, $servings * $menge) * $servings + ($stueck / 1000) * fluessig_basis_ek_l();
     } else {
-        $ekH = rezeptur_kosten_pro_einheit($rid) * $stueck
+        $ekH = rezeptur_kosten_pro_einheit($rid, $stueck * $menge) * $stueck
              + ($istKapsel ? leerkapsel_ek_fuer_rezeptur($rid) * $stueck : 0)
              + ($form === 'tablette' ? tablette_hilfsstoff_ek_stueck($rid) * $stueck : 0);
     }

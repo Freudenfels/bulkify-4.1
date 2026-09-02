@@ -46,10 +46,10 @@
 **Automatisch verschickt wird bisher nur die Lieferanten-Einladung.** Vorlagen für „neue Bestellung" und Team-Benachrichtigung liegen bereit, sind aber noch nirgends angehängt.
 
 ## Offene Punkte / als Nächstes
-1. **SMTP-Zugangsdaten eintragen** (Einstellungen → E-Mail) und Testmail schicken. Danach entscheiden, welche Ereignisse eine Mail auslösen sollen (Bestellung raus, Angebot angenommen, Anfrage beantwortet).
+1. **SMTP-Zugangsdaten eintragen** (Einstellungen → E-Mail) und Testmail schicken. Die Ereignisse sind angebunden (Tabelle unter Einstellungen → E-Mail, Details in `core/mail.md`): Bestellung raus, Angebot gesendet/angenommen, Anfrage abgesagt, Lieferanten-Aktionen ans Team.
 2. **AGB anwaltlich prüfen** und die geprüfte Fassung als neue Version eintragen.
 3. **Etiketten:** Es gibt noch keine Etiketten-Artikel. Das Angebot bietet nur Etiketten an, die zum **Endformat am Behälter** (`item.etikett_final`, B×H) passen – dafür fehlen Behältermaße/Etikettenformate und die Etikettenpreise.
-4. **Mengenrabatt bei Rezeptur-Angeboten:** Alle Bestellmengen kosten gleich viel je Packung; die Mengendegression der Preismatrix greift dort nicht.
+4. ~~Mengenrabatt bei Rezeptur-Angeboten~~ – **erledigt** (2026-09-02): Rohstoffe werden mit der Lieferanten-Staffel zur Gesamtmenge gerechnet (Matrix und Rezeptur-Angebot); im Editor mehrere Mengen mit Komma. Wirkt nur, wenn am Rohstoff Staffeln (`lieferant_preis`) gepflegt sind – ein Rüstkosten-/Fixkostenmodell je Charge gibt es weiterhin nicht.
 5. **Rohstoff-Stammdaten füllen** (Herkunft, Haltbarkeit, Lagerung, Allergene, vegan/GVO/bestrahlt/TSE, Zertifikate, Spec-Nr.) – ohne sie steht in der Spezifikation überall „–".
 6. **Chinesische Übersetzungen gegenlesen lassen** (die aus v3 sind erprobt, die neuen nicht).
 7. **Lieferantenportal:** Rückfragen/Chat und eigene Dateiablage gibt es (anders als v3) noch nicht.
