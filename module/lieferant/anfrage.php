@@ -117,13 +117,16 @@ if (!$a):
       </div>
       <div style="margin-top:6px"><strong><?= h(lp_t('mengenstaffeln')) ?></strong> <span class="muted" style="font-weight:normal">(<?= h(lp_t('optional')) ?>)</span>
         <div class="muted" style="font-size:12px;margin-bottom:8px"><?= h(lp_t('staffel_hinweis')) ?></div>
-        <div class="bx-tablewrap"><table class="bx-table">
-          <thead><tr><th><?= h(lp_t('ab_menge')) ?></th><th><?= h(lp_t('preis')) ?></th></tr></thead>
-          <tbody><?php foreach ($staffeln as $s): ?>
-            <tr><td><input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>" style="width:100%"></td>
-                <td><input type="text" name="s_preis[]" value="<?= h($zahl($s['preis'], 4)) ?>" style="width:100%"></td></tr>
-          <?php endforeach; ?></tbody>
-        </table></div>
+        <?php // Schlichtes Raster statt Tabelle: die Eingabefelder bringen ihren eigenen Rahmen mit,
+              // ein Tabellenrahmen darum sähe aus wie Kasten im Kasten. ?>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;max-width:520px;margin-bottom:var(--sp-4)">
+          <div class="muted" style="font-size:12px"><?= h(lp_t('ab_menge')) ?></div>
+          <div class="muted" style="font-size:12px"><?= h(lp_t('preis')) ?></div>
+          <?php foreach ($staffeln as $s): ?>
+            <input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>">
+            <input type="text" name="s_preis[]" value="<?= h($zahl($s['preis'], 4)) ?>">
+          <?php endforeach; ?>
+        </div>
       </div>
       <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><textarea name="notiz" rows="3"><?= h($ang['notiz'] ?? '') ?></textarea></div>
       <button class="btn btn-primary" type="submit"><?= h(lp_t('angebot_abgeben')) ?></button>
