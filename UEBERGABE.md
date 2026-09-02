@@ -1,7 +1,7 @@
 # Übergabe – bulkify Dashboard 4.1
 
 > Stand zum Weiterarbeiten in einer neuen Session (auch mit einem anderen Modell).
-> Ergänzt `CLAUDE.md` (dort stehen die Dauer-Regeln). **Stand: 2026-09-01, alles gepusht und auf beta.**
+> Ergänzt `CLAUDE.md` (dort stehen die Dauer-Regeln). **Stand: 2026-09-02, alles gepusht und auf beta.**
 >
 > **Für eine neue Session:** Diese Datei plus `CLAUDE.md` lesen, dann `git pull`. Wer tiefer einsteigt,
 > findet zu **jeder** `.php` eine `.md` daneben – die ist die eigentliche Doku.
@@ -53,7 +53,7 @@
 5. **Rohstoff-Stammdaten füllen** (Herkunft, Haltbarkeit, Lagerung, Allergene, vegan/GVO/bestrahlt/TSE, Zertifikate, Spec-Nr.) – ohne sie steht in der Spezifikation überall „–".
 6. **Chinesische Übersetzungen gegenlesen lassen** (die aus v3 sind erprobt, die neuen nicht).
 7. **Lieferantenportal:** Rückfragen/Chat und eigene Dateiablage gibt es (anders als v3) noch nicht.
-8. **Beta-Admin-Passwort ändern** (steht noch auf admin/admin bei öffentlicher URL).
+8. ~~Beta-Admin-Passwort ändern~~ – **erledigt** (2026-09-02).
 9. **Demo-Rezepturen ohne Rohstoffpreise** → Preis-Matrix zeigt 0 €.
 10. **Flaschen/Tuben für Flüssig anlegen** (Tropfflasche, Pumpspender fehlen als Artikel).
 11. **Kalkulationsgrundlagen prüfen:** Presshilfsstoffe 20 % / 8 €/kg, Trägerflüssigkeit 3 €/L sind gesetzte Startwerte.
