@@ -770,7 +770,8 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php if (agb_aktuell()): ?><div class="bx-userbox" style="padding-top:0"><a class="muted" style="font-size:12px" href="<?= $portalLink('agb') ?>">AGB</a></div><?php endif; ?>
     </nav>
   </aside>
-  <main class="bx-main">
+  <?= bx_menue_scrim() ?>
+  <main class="bx-main"><?= bx_mobilbar() ?>
   <?php if (isset($_GET['ok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – Ihre Bestätigung ist eingegangen. Wir starten die Bearbeitung.</div><?php endif; ?>
   <?php if (isset($_GET['anfrage'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rezepturanfrage ist eingegangen – wir prüfen sie und melden uns.</div><?php endif; ?>
   <?php if (isset($_GET['angenommen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – die Rezeptur ist angenommen. Sie ist jetzt verbindlich festgelegt.</div><?php endif; ?>
@@ -780,7 +781,7 @@ portal_head('Kundenportal · ' . $k['firma']);
 
 <?php if ($view === 'start'): ?>
   <h1 style="margin-bottom:4px">Willkommen, <?= h($k['ansprechpartner'] ?: $k['firma']) ?></h1>
-  <p class="bx-sub">Ihr Überblick – wählen Sie links einen Bereich für Details.</p>
+  <p class="bx-sub">Ihr Überblick – wählen Sie im Menü einen Bereich für Details.</p>
 
   <?php if ($vorschlaege): $nV = count($vorschlaege); ?>
   <a href="#vorschlaege" class="bx-panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:inherit;border-color:var(--gruen);background:var(--panel-2)">

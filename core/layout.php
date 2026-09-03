@@ -146,7 +146,37 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
        . " title=\"Breite ziehen · Doppelklick setzt zurück · Pfeiltasten verstellen\"></div>";
     echo "<button type=\"button\" class=\"bx-sideauf\" title=\"Menü aufklappen\">Menü</button>";
     // Hauptbereich
-    echo "<main class=\"bx-main\">";
+    echo bx_menue_scrim();
+    echo "<main class=\"bx-main\">" . bx_mobilbar();
+}
+
+// ---------- Menue auf schmalen Bildschirmen ----------
+// Auf dem Handy passt die Menueleiste nicht neben den Inhalt. Sie liegt dort als Schublade
+// darueber; diese drei Bausteine gehoeren dazu und stecken in allen Oberflaechen
+// (intern, Lieferantenportal, Kundenportal). Am Rechner blendet das CSS sie aus.
+
+// Kopfleiste mit Burger - gehoert als ERSTES in <main class="bx-main">.
+function bx_mobilbar(): string {
+    return '<div class="bx-mobilbar">'
+         . '<button type="button" class="bx-burger" id="bx-burger" aria-label="Menü" aria-expanded="false">'
+         . '<span></span><span></span><span></span></button>'
+         . '<img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo">'
+         . '</div>';
+}
+
+// Dunkle Flaeche hinter der offenen Schublade - Tippen schliesst sie.
+function bx_menue_scrim(): string { return '<div class="bx-menuescrim" id="bx-menuescrim"></div>'; }
+
+function bx_menue_script(): string {
+    return "<script>(function(){var r=document.documentElement,"
+         . "b=document.getElementById('bx-burger'),s=document.getElementById('bx-menuescrim');"
+         . "function zu(){r.removeAttribute('data-menue');if(b)b.setAttribute('aria-expanded','false');}"
+         . "function auf(){r.setAttribute('data-menue','auf');if(b)b.setAttribute('aria-expanded','true');}"
+         . "if(b)b.addEventListener('click',function(){r.getAttribute('data-menue')==='auf'?zu():auf();});"
+         . "if(s)s.addEventListener('click',zu);"
+         . "document.addEventListener('keydown',function(e){if(e.key==='Escape')zu();});"
+         . "document.querySelectorAll('.bx-side nav a').forEach(function(a){a.addEventListener('click',zu);});"
+         . "addEventListener('resize',function(){if(innerWidth>860)zu();});})();</script>";
 }
 
 function render_footer(): void {
@@ -154,6 +184,7 @@ function render_footer(): void {
     echo bx_theme_script();
     echo bx_side_scroll_script();
     echo bx_side_script();
+    echo bx_menue_script();
     echo pwa_script();
     echo "</body></html>";
 }

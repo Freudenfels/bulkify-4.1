@@ -225,7 +225,7 @@ function lp_head(string $titel): void {
 }
 
 function lp_foot(): void {
-    echo (function_exists('bx_theme_script') ? bx_theme_script() : '') . pwa_script() . '</body></html>';
+    echo (function_exists('bx_theme_script') ? bx_theme_script() : '') . bx_menue_script() . pwa_script() . '</body></html>';
 }
 
 // Menü + Rahmen. $aktiv = Routenname der aktuellen Seite.
@@ -253,7 +253,7 @@ function lp_shell_start(string $aktiv): void {
     echo '<div class="bx-userbox"><a href="?p=logout">' . h(lp_t('abmelden')) . '</a></div>'
        . '<div class="bx-userbox" style="margin-top:0"><button type="button" class="bx-themebtn" data-dunkel="' . h(lp_t('dunkel')) . '" data-hell="' . h(lp_t('hell')) . '">' . h(lp_t('dunkel')) . '</button></div>'
        . '<div class="bx-userbox" style="margin-top:0;padding-top:8px">' . lp_sprachwahl() . '</div>'
-       . '</nav></aside><main class="bx-main">';
+       . '</nav></aside>' . bx_menue_scrim() . '<main class="bx-main">' . bx_mobilbar();
 }
 function lp_shell_ende(): void { echo '</main></div>'; }
 

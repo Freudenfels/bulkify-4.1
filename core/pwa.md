@@ -28,3 +28,15 @@ Bewusst **ohne** Manifest. Der Kunde kommt ueber einen persoenlichen Token-Link;
 
 ## Icons
 `public/assets/app-icon-*.png` – weisses bulkify-Logo auf `#10210F`. Erzeugt aus `bulkify-logo-white.png`; das maskable Icon hat mehr Rand, weil Android bis zu 20 % wegschneidet.
+
+## Handy-Layout (Burger-Menü)
+Bis **860 px** Fensterbreite liegt die Menüleiste nicht mehr neben dem Inhalt, sondern als **Schublade** darüber:
+
+- Oben klebt eine schmale Kopfleiste mit **Burger** und Logo (`bx_mobilbar()`, in `core/layout.php`).
+- Der Burger schiebt die Leiste ein; dahinter liegt eine dunkle Fläche (`bx_menue_scrim()`), Tippen darauf schließt sie. Genauso: Escape, ein Klick auf einen Menüpunkt, oder wenn das Fenster wieder breit wird.
+- Geschaltet wird über `data-menue="auf"` am `<html>`-Element (`bx_menue_script()`), das CSS macht den Rest.
+- Das Einklappen vom Rechner (`data-side="zu"`) gilt auf dem Handy **nicht** – dort entscheidet allein der Burger.
+
+Dazu im selben Media-Query: Tabellen scrollen seitlich (`.bx-tablewrap{overflow-x:auto}`) statt abgeschnitten zu werden, Formularspalten stehen untereinander, Überschriften sind kleiner, Knöpfe fingerbreit.
+
+Alle drei Oberflächen nutzen dieselben drei Bausteine: internes Dashboard, Lieferantenportal, Kundenportal. Login- und Einladungsseite haben kein Menü und bleiben außen vor.
