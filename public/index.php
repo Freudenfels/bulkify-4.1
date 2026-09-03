@@ -79,6 +79,7 @@ $routes = [
     'einkauf'            => 'einkauf/liste.php',
     'bestellung'         => 'einkauf/detail.php',
     'bestellung_pdf'     => 'einkauf/pdf.php',
+    'preis_anfragen'     => 'einkauf/preis_anfragen.php',
     'bedarf'             => 'einkauf/bedarf.php',
     'einkaufsliste'      => 'einkauf/einkaufsliste.php',
     'benutzer'           => 'system/benutzer_liste.php',

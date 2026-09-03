@@ -3,6 +3,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
+require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status-Badge
 
 $KAT  = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','fertig'=>'Fertigware','verkaufsfertig'=>'Verkaufsfertig','maschine'=>'Maschine'];
 $FORM = ['pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle (leer)'];
@@ -698,7 +699,14 @@ if (!$neu) {
 <?php if (isset($_GET['preisok'])) echo '<div class="bx-panel badge-ok" data-panel="ek" hidden style="padding:12px 16px">Preis gespeichert.</div>'; ?>
 <section data-panel="ek" hidden>
   <div class="bx-panel">
-    <h2>Lieferantenpreise (Staffel) <?= bx_hint('Angebote der Lieferanten je Menge – günstigster ist markiert. Basis für den Einkauf.') ?></h2>
+    <div class="bx-row" style="justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Lieferantenpreise (Staffel) <?= bx_hint('Angebote der Lieferanten je Menge – günstigster ist markiert. Basis für den Einkauf.') ?></h2>
+      <div class="bx-row" style="gap:10px;align-items:center">
+        <?= anfrage_badge((int)$id) ?>
+        <button type="button" class="btn btn-primary btn-sm" data-name="<?= $v('name') ?>" onclick="bxAnfrageOeffnen(<?= (int)$id ?>,this)">Preis anfragen</button>
+      </div>
+    </div>
+    <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin:10px 0"><?= (int)$_GET['angefragt'] ?> Preisanfrage(n) verschickt<?= isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '' ?>.</div><?php endif; ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Lieferant</th><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Stand</th><th></th></tr></thead>
       <tbody>
@@ -728,6 +736,7 @@ if (!$neu) {
   </div>
 </section>
 <section data-panel="dok" hidden><?php dokument_panel('item', (int)$id, $lieferanten); ?></section>
+<?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 ORDER BY firma"), '?p=rohstoff&id=' . (int)$id . '&tab=ek'); ?>
 <?php endif; ?>
 
 <script>

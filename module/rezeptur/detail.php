@@ -2,6 +2,7 @@
 // Rezeptur anlegen & bearbeiten – Kopf + Zutaten + Live-Deklaration (mg, % NRV) + Kosten
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status je Zutat
 
 $DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 $FORMLBL = ['pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin'];
@@ -229,6 +230,35 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     <a class="btn btn-ghost" href="?p=rezeptur">Zurück</a>
   </div>
 </form>
+
+<?php // Rohstoffpreise je Zutat – damit man schon an der Rezeptur sieht, was der Einkauf kostet
+      // und wo noch ein Preis fehlt. Anfrage per Popup (Lieferanten auswählen). Nur für gespeicherte
+      // Rezepturen mit Zutaten, die einen Lagerartikel haben. ?>
+<?php $rzZutaten = $neu ? [] : all("SELECT DISTINCT z.item_id, i.name, i.preis_bezug, i.einheit
+        FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? AND z.item_id IS NOT NULL ORDER BY i.name", [(int)$id]);
+   if ($rzZutaten): $mitPreis = 0; foreach ($rzZutaten as $rz) if (anfrage_status((int)$rz['item_id']) === 'preise') $mitPreis++; ?>
+<div class="bx-panel">
+  <div class="bx-row" style="justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Rohstoffpreise</h2>
+    <?php if ($mitPreis > 0): ?><span><?= bx_badge('Preise liegen vor', 'ok') ?> <span class="muted" style="font-size:12px"><?= $mitPreis ?>/<?= count($rzZutaten) ?> Rohstoffe</span></span><?php endif; ?>
+  </div>
+  <p class="muted" style="margin-top:4px">Was kostet uns die Rezeptur beim Lieferanten? Wo kein Preis steht, per „Preis anfragen" bei den Lieferanten einholen.</p>
+  <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px"><?= (int)$_GET['angefragt'] ?> Preisanfrage(n) verschickt<?= isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '' ?>.</div><?php endif; ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Rohstoff</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($rzZutaten as $rz): ?>
+      <tr>
+        <td><a href="?p=rohstoff&id=<?= (int)$rz['item_id'] ?>"><?= h($rz['name']) ?></a></td>
+        <td><?= anfrage_badge((int)$rz['item_id']) ?></td>
+        <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" data-name="<?= h($rz['name']) ?>" onclick="bxAnfrageOeffnen(<?= (int)$rz['item_id'] ?>,this)">Preis anfragen</button></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 ORDER BY firma"), '?p=rezeptur_detail&id=' . (int)$id); ?>
+<?php endif; ?>
 
 <script>
 var ITEMS = <?= json_encode($ITEMS, JSON_UNESCAPED_UNICODE) ?>;

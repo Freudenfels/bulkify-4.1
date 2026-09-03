@@ -186,6 +186,37 @@ function mail_lieferant_bestellung(int $bestellung_id): string {
     return mail_senden((string)$b['email'], $betreff, $text);
 }
 
+// Preisanfrage an einen Lieferanten melden (Sprache je Lieferant). $anfrage_id = lieferant_anfrage.id
+function mail_lieferant_anfrage(int $anfrage_id): string {
+    $a = one("SELECT af.nummer, af.menge, af.einheit, i.name AS item_name, af.betreff,
+                     l.firma, l.ansprechpartner, l.email, l.sprache
+              FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
+              JOIN lieferanten l ON l.id=af.lieferant_id WHERE af.id=?", [$anfrage_id]);
+    if (!$a) return 'Anfrage oder Lieferant nicht gefunden.';
+    if (trim((string)$a['email']) === '') return 'Für diesen Lieferanten ist keine E-Mail-Adresse hinterlegt.';
+    $fa = beleg_firma();
+    $sp = mail_lief_sprache($a['sprache']);
+    $anrede = trim((string)$a['ansprechpartner']) !== '' ? (string)$a['ansprechpartner'] : (string)$a['firma'];
+    $was = trim((string)($a['item_name'] ?: $a['betreff']));
+    $mng = $a['menge'] ? rtrim(rtrim(number_format((float)$a['menge'], 3, ',', '.'), '0'), ',') . ' ' . (string)$a['einheit'] : '';
+    $link = mail_basis_url() . '/?p=lieferant_login';
+
+    if ($sp === 'de') {
+        $betreff = 'Preisanfrage ' . $a['nummer'] . ' – ' . $was;
+        $text = "Guten Tag $anrede,\n\nwir bitten um ein Preisangebot für: $was" . ($mng ? " (Menge: $mng)" : '') . ".\n\n"
+              . "Bitte geben Sie Ihr Angebot im Portal ab (Preis, Mindestmenge, Staffeln, CoA/Spec):\n$link\n\nViele Grüße\n" . $fa['name'];
+    } elseif ($sp === 'zh') {
+        $betreff = '询价 ' . $a['nummer'] . ' – ' . $was;
+        $text = "$anrede 您好，\n\n我方就以下产品请求报价：$was" . ($mng ? "（数量：$mng）" : '') . "。\n\n"
+              . "请在门户中提交您的报价（价格、最小起订量、阶梯价、COA/Spec）：\n$link\n\n此致\n" . $fa['name'];
+    } else {
+        $betreff = 'Price request ' . $a['nummer'] . ' – ' . $was;
+        $text = "Dear $anrede,\n\nwe kindly ask for a quotation for: $was" . ($mng ? " (quantity: $mng)" : '') . ".\n\n"
+              . "Please submit your offer in the portal (price, MOQ, tiers, CoA/Spec):\n$link\n\nBest regards\n" . $fa['name'];
+    }
+    return mail_senden((string)$a['email'], $betreff, $text);
+}
+
 // Interne Benachrichtigung an alle aktiven Admins (z. B. „Lieferant hat bestätigt").
 function mail_team(string $betreff, string $text): int {
     if (!mail_bereit()) return 0;

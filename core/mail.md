@@ -33,3 +33,6 @@ Alle nur, wenn der Versand eingerichtet und eingeschaltet ist (`mail_bereit()`).
 
 ## Links in Mails
 `mail_basis_url()` nimmt die Einstellung `portal_url`, sonst den aktuellen Host. `mail_link_kundenportal($kunde_id, $ansicht)` baut den passwortlosen Portal-Link. Kunden werden auf Deutsch angeschrieben. Lieferanten nach `lieferanten.sprache` – **Deutsch, Englisch oder Chinesisch** (`mail_lief_sprache()`), also in derselben Sprache wie ihr Portal. Betreff und Text gehen UTF-8-kodiert raus, chinesische Zeichen kommen also sauber an. **PDFs bleiben de/en**, dafür fehlt eine eingebettete CJK-Schrift.
+
+## Vorlage Preisanfrage
+`mail_lieferant_anfrage($anfrage_id)` schickt eine Preisanfrage an den Lieferanten (Sprache je `lieferanten.sprache`, mit Link ins Portal). Wird von der zentralen Route `?p=preis_anfragen` genutzt, sobald der Versand eingerichtet ist.

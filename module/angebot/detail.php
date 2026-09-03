@@ -3,6 +3,7 @@
 // + Positionen automatisch erzeugt & überschreibbar, mit interner Marge (nur intern).
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status-Badges
 
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
@@ -166,6 +167,7 @@ if ($kannSenden) $kopfBtn = '<form method="post" style="display:inline;margin-ri
 bx_head($neu ? 'Neues Angebot' : $v('nummer'),
         $neu ? 'Positionen' : 'Angebot bearbeiten',
         $kopfBtn);
+if (isset($_GET['angefragt']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['angefragt'] . ' Preisanfrage(n) verschickt' . (isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '') . '. Sobald ein Lieferant antwortet, steht der Preis hier.</div>';
 if (isset($_GET['gespeichert']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['gesendet']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot an den Kunden gesendet – er sieht es jetzt im Portal.</div>';
 if (isset($_GET['mailfehler']))    echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">E-Mail an den Kunden nicht verschickt: ' . h((string)$_GET['mailfehler']) . '</div>';
@@ -445,24 +447,27 @@ if (!$neu):
     <div style="margin-bottom:4px">Rohstoffkosten je Lieferant <span class="muted" style="font-size:12px">&ndash; Grundlage f&uuml;r deinen Preis</span></div>
     <div class="muted" style="font-size:12px;margin-bottom:10px">G&uuml;nstigster Lieferant bei der gr&ouml;&szlig;ten angebotenen Menge. Wo kein Preis steht, erst beim Lieferanten anfragen.</div>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Rohstoff</th><th class="bx-num">Ben&ouml;tigt</th><th class="bx-num">EK / Einheit</th><th>Lieferant</th><th class="bx-num">Kosten</th></tr></thead>
+      <thead><tr><th>Rohstoff</th><th class="bx-num">Ben&ouml;tigt</th><th class="bx-num">EK / Einheit</th><th>Lieferant</th><th class="bx-num">Kosten</th><th>Status</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($rk['zeilen'] as $z): ?>
         <tr>
           <td><a href="?p=rohstoff&id=<?= (int)$z['item_id'] ?>"><?= h($z['name']) ?></a></td>
           <td class="bx-num"><?= h($nfrk($z['bedarf'], $z['bedarf'] < 1 ? 3 : 1)) ?> <?= h($z['bezug']) ?></td>
           <td class="bx-num"><?= $z['ek'] !== null ? h($nfrk($z['ek'], 4)) . ' &euro;' : '<span style="color:#8f231b">&ndash;</span>' ?></td>
-          <td><?= $z['lieferant'] !== '' ? h($z['lieferant']) : '<span style="color:#8f231b">Preis anfragen</span>' ?></td>
+          <td><?= $z['lieferant'] !== '' ? h($z['lieferant']) : '<span class="muted">&ndash;</span>' ?></td>
           <td class="bx-num"><?= $z['kosten'] !== null ? h($nfrk($z['kosten'])) . ' &euro;' : '<span class="muted">?</span>' ?></td>
+          <td><?= anfrage_badge((int)$z['item_id']) ?></td>
+          <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" data-name="<?= h($z['name']) ?>" onclick="bxAnfrageOeffnen(<?= (int)$z['item_id'] ?>,this)">Preis anfragen</button></td>
         </tr>
       <?php endforeach; ?>
-        <tr style="font-weight:600"><td colspan="4">Rohstoffkosten gesamt (gr&ouml;&szlig;te Menge)</td><td class="bx-num"><?= h($nfrk($rk['summe'])) ?> &euro;</td></tr>
+        <tr style="font-weight:600"><td colspan="4">Rohstoffkosten gesamt (gr&ouml;&szlig;te Menge)</td><td class="bx-num"><?= h($nfrk($rk['summe'])) ?> &euro;</td><td colspan="2"></td></tr>
       </tbody>
     </table></div>
     <?php if ($rk['ohne_preis'] > 0): ?>
-      <div style="margin-top:10px;color:#8f231b;font-size:13px"><?= (int)$rk['ohne_preis'] ?> Rohstoff(e) ohne Lieferantenpreis &ndash; bitte zuerst anfragen (Lieferant &rarr; Preisanfragen), sonst ist die Kalkulation unvollst&auml;ndig.</div>
+      <div style="margin-top:10px;color:#8f231b;font-size:13px"><?= (int)$rk['ohne_preis'] ?> Rohstoff(e) ohne Lieferantenpreis &ndash; bitte zuerst anfragen, sonst ist die Kalkulation unvollst&auml;ndig.</div>
     <?php endif; ?>
   </div>
+  <?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 ORDER BY firma"), '?p=angebot&id=' . (int)$id); ?>
   <?php endif; ?>
 </div>
 

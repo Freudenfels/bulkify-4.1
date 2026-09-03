@@ -67,6 +67,7 @@ function route_rollen_map(): array {
         'einkauf'            => ['einkauf'],
         'bestellung'         => ['einkauf'],
         'bestellung_pdf'     => ['einkauf'],
+        'preis_anfragen'     => ['einkauf', 'sales'],
         // Lieferantenportal: die Seiten pruefen selbst, dass ein Lieferant angemeldet ist.
         'lieferant_portal'        => ['*'],
         'lieferant_bestellung'    => ['*'],
