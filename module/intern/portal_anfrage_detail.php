@@ -2,17 +2,14 @@
 // Portal-Anfrage – Detail & Bearbeitung. Kernaktion: aus einer Produktanfrage ein Angebot abgeben (Preise zurück).
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/anfrage_ui.php';   // Rohstoffpreise + Preisanfrage-Popup
 
 $id = (int)($_GET['id'] ?? 0);
 $TYP = ['produkt'=>'Produktanfrage', 'rohstoff'=>'Rohstoffanfrage', 'dienstleistung'=>'Dienstleistungsanfrage'];
 $VTYPEN = ['glas'=>'Glas', 'pet'=>'PET-Dose', 'pla'=>'PLA-Becher', 'beutel'=>'Standbodenbeutel', 'stick'=>'Stick', 'blister'=>'Blister'];
 
-// Status setzen
-if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'status') {
-    $st = in_array($_POST['status'] ?? '', ['neu','in_bearbeitung','beantwortet','abgelehnt'], true) ? $_POST['status'] : 'neu';
-    q("UPDATE portal_anfrage SET status=? WHERE id=?", [$st, $id]);
-    header('Location: ?p=portal_anfrage&id=' . $id . '&ok=1'); exit;
-}
+// Hinweis: Der Status wird automatisch gesetzt (Angebot bauen -> in Bearbeitung, senden ->
+// beantwortet, absagen -> abgelehnt). Ein manuelles Status-Formular gibt es daher nicht mehr.
 // Rohstoff einer Rohstoffanfrage zuordnen (für die Preisberechnung)
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rohstoff_zuordnen') {
     $rid = ($_POST['rohstoff_id'] ?? '') !== '' ? (int)$_POST['rohstoff_id'] : null;
@@ -388,18 +385,41 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
 </div>
 <?php endif; ?>
 
+<?php
+// Rohstoffpreise zur angefragten Rezeptur: schon hier – VOR dem Angebot – sichtbar machen, was der
+// Einkauf kostet, und je Rohstoff bei den Lieferanten anfragen können. Rezeptur direkt (Rezepturanfrage)
+// oder über das angefragte Produkt.
+$anfRid = (int)($pa['rezeptur_id'] ?? 0);
+if (!$anfRid && !empty($pa['produkt_id'])) $anfRid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+$anfZutaten = $anfRid ? all("SELECT DISTINCT z.item_id, i.name FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id
+                             WHERE z.rezeptur_id=? AND z.item_id IS NOT NULL ORDER BY i.name", [$anfRid]) : [];
+if ($anfZutaten):
+    $mitPreis = 0; foreach ($anfZutaten as $rz) if (anfrage_status((int)$rz['item_id']) === 'preise') $mitPreis++;
+?>
 <div class="bx-panel">
-  <h2>Bearbeitungsstatus <?= bx_hint('interner Fortschritt; der Kunde sieht: neu = eingegangen, in Bearbeitung, Angebot abgegeben') ?></h2>
-  <form method="post" class="bx-row" style="align-items:flex-end;gap:10px">
-    <input type="hidden" name="aktion" value="status">
-    <div class="bx-field" style="margin:0"><label>Status</label>
-      <select name="status">
-        <?php foreach (['neu'=>'neu','in_bearbeitung'=>'in Bearbeitung','beantwortet'=>'Angebot abgegeben','abgelehnt'=>'abgelehnt'] as $sk=>$sl): ?>
-          <option value="<?= $sk ?>" <?= $pa['status']===$sk?'selected':'' ?>><?= $sl ?></option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-    <button class="btn btn-ghost btn-sm" type="submit">Status speichern</button>
-  </form>
+  <div class="bx-row" style="justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Rohstoffpreise</h2>
+    <?php if ($mitPreis > 0): ?><span><?= bx_badge('Preise liegen vor', 'ok') ?> <span class="muted" style="font-size:12px"><?= $mitPreis ?>/<?= count($anfZutaten) ?></span></span><?php endif; ?>
+  </div>
+  <p class="muted" style="margin-top:4px">Was kostet uns die Rezeptur beim Lieferanten? Wo kein Preis steht, hier direkt anfragen – dann kannst du das Angebot sauber kalkulieren.</p>
+  <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px"><?= (int)$_GET['angefragt'] ?> Preisanfrage(n) verschickt<?= isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '' ?>.</div><?php endif; ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Rohstoff</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($anfZutaten as $rz): ?>
+      <tr>
+        <td><a href="?p=rohstoff&id=<?= (int)$rz['item_id'] ?>"><?= h($rz['name']) ?></a></td>
+        <td><?= anfrage_badge((int)$rz['item_id']) ?></td>
+        <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" data-name="<?= h($rz['name']) ?>" onclick="bxAnfrageOeffnen(<?= (int)$rz['item_id'] ?>,this)">Preis anfragen</button></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
 </div>
+<?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 ORDER BY firma"), '?p=portal_anfrage&id=' . (int)$id); ?>
+<?php endif; ?>
+
+<?php // Status nur zur Info – gesetzt wird er automatisch (Angebot bauen/senden/absagen).
+$statusLbl = ['neu'=>'eingegangen', 'in_bearbeitung'=>'in Bearbeitung', 'beantwortet'=>'Angebot abgegeben', 'abgelehnt'=>'abgesagt']; ?>
+<div class="muted" style="margin-top:12px;font-size:13px">Status: <strong><?= h($statusLbl[$pa['status']] ?? $pa['status']) ?></strong> · wird automatisch gesetzt.</div>
 <?php render_footer(); ?>
