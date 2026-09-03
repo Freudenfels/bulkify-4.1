@@ -13,8 +13,8 @@ require_once __DIR__ . '/coa_lesen.php';
 // Schlüssel = Spalte in `item`, Wert = [Klartext für die KI, Art].
 function spec_ki_felder(): array {
     return [
-        'name'             => ['Handelsname/Bezeichnung des Rohstoffs', 'text'],
-        'name_en'          => ['Englische Bezeichnung', 'text'],
+        'name'             => ['Deutsche Bezeichnung des Rohstoffs (fremdsprachigen Produktnamen sinngemäß eindeutschen)', 'text'],
+        'name_en'          => ['Englische Bezeichnung des Rohstoffs', 'text'],
         'name_lat'         => ['Lateinische/botanische Bezeichnung (z. B. Curcuma longa L.)', 'text'],
         'synonym'          => ['Synonym oder Kurzname', 'text'],
         'bot_quelle'       => ['Botanische Quelle mit Pflanzenteil (z. B. Curcuma longa, Wurzelstock)', 'text'],
@@ -71,7 +71,7 @@ Regeln, an die du dich halten musst:
 - Übernimm NUR, was tatsächlich im Dokument steht. Nichts ergänzen, nichts aus Fachwissen ableiten, nichts raten. (Einzige Ausnahme: "cas_vorschlag", siehe unten.)
 - Ein Feld, das nicht im Dokument steht, lässt du WEG (nicht null, nicht leerer Text).
 - [datum] im Format JJJJ-MM-TT. [janein] als true oder false. [zahl] als Zahl ohne Einheit, Punkt als Dezimaltrennzeichen.
-- [text] wörtlich aus dem Dokument, höchstens gekürzt. Nicht übersetzen.
+- [text] wörtlich aus dem Dokument, höchstens gekürzt. Nicht übersetzen – AUSSER den beiden Namensfeldern: "name" ist IMMER Deutsch, "name_en" ist IMMER Englisch. Liegt der Produktname nur in einer Sprache vor, übersetze ihn für das jeweils andere Feld sinngemäß. Beim Eindeutschen den botanischen/lateinischen Namen sowie Zahlen und Prozentangaben unverändert lassen (Beispiel: "Murraya koenigii leaf 3.0% Ferrous (Iron) powder extract" -> name "Murraya koenigii Blattextrakt 3,0% Eisen", name_en wörtlich das Original). Steht ein Name schon in der Zielsprache, unverändert übernehmen.
 - "wirkstoffe": die standardisierten Wirk-/Leitsubstanzen mit ihrem Gehalt. Der Assay bzw. die Standardisierung gehört hierher (z. B. "Assay [Content of Iron] NLT 3.0% NMT 5.0%", "Standardisation: Iron content" -> name "Iron", gehalt_prozent 3.0). Bei einer Spanne den unteren Wert (NLT/min) als gehalt_prozent nehmen. name wörtlich aus dem Dokument. Keine Verunreinigungen/Trägerstoffe, keine Excipients. Steht kein Gehalt, gehalt_prozent null. Nichts gefunden -> leere Liste.
 - "kennwerte": charakteristische, unterscheidende Kennwerte als Parameter+Wert-Paare: Assay-Spanne, Extraktverhältnis/DEV (z. B. "10:1"), pH, Schüttdichte, Partikelgröße/Mesh, Wassergehalt/Loss on Drying, Löslichkeit. NICHT die reinen Sicherheits-Grenzwerte (Schwermetalle, Mikrobiologie, Mykotoxine, Pestizide, Lösungsmittelreste) – die bleiben im PDF. "wert" wörtlich aus dem Dokument (z. B. "NLT 3.0% / NMT 5.0%", "10:1").
 - "cas_vorschlag": NUR füllen, wenn im Dokument KEINE CAS-Nummer steht (oder dort "TBA"/"n/a") UND der Rohstoff ein eindeutiger Reinstoff mit allgemein bekannter CAS ist (z. B. Vitamine, definierte Salze/Verbindungen). Dann die bekannte CAS als Vorschlag. Bei Pflanzenextrakten, Mischungen oder Unsicherheit: null. Wenn gesetzt, in "hinweise" vermerken, dass die CAS aus Fachwissen kommt und geprüft werden muss.
