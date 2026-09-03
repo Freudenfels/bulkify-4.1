@@ -2,7 +2,7 @@
   "id": "/",
   "name": "bulkify Dashboard",
   "short_name": "bulkify",
-  "description": "bulkify – Anfragen, Angebote, Auftraege, Produktion und Lager. Fuer Team, Lieferanten und Kunden.",
+  "description": "bulkify - Anfragen, Angebote, Auftraege, Produktion und Lager. Fuer Team, Lieferanten und Kunden.",
   "lang": "de",
   "start_url": "/",
   "scope": "/",
