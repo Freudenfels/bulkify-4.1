@@ -21,6 +21,7 @@ $TABS = [
     'mail'       => 'E-Mail',
     'ki'         => 'KI (Claude)',
     'agb'        => 'AGB',
+    'testlogin'  => 'Testlogin',
     'werkzeuge'  => 'Werkzeuge',
 ];
 $DFORM_M = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
@@ -64,6 +65,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'agb_save') {
     $inhalt = (string)($_POST['agb_inhalt'] ?? '');
     if (trim(strip_tags($inhalt)) !== '') agb_speichern((string)($_POST['agb_version'] ?? ''), $inhalt);
     header('Location: ?p=einstellungen&tab=agb&ok=1'); exit;
+}
+// --- Testlogin: passwortloser Direktlogin auf dem Server ein/aus ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'testlogin_save') {
+    meta_set('testlogin', isset($_POST['testlogin']) ? '1' : '0');
+    header('Location: ?p=einstellungen&tab=testlogin&ok=1'); exit;
+}
+// --- Testlogin: fehlende Tokens erzeugen, damit jeder Direktlink funktioniert (nicht löschend) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'testlogin_tokens') {
+    foreach (all("SELECT id FROM benutzer WHERE aktiv=1 AND (login_token IS NULL OR login_token='')") as $u)
+        q("UPDATE benutzer SET login_token=? WHERE id=?", [bin2hex(random_bytes(16)), (int)$u['id']]);
+    foreach (all("SELECT id FROM kunden WHERE portal_token IS NULL OR portal_token=''") as $k)
+        q("UPDATE kunden SET portal_token=? WHERE id=?", [bin2hex(random_bytes(16)), (int)$k['id']]);
+    header('Location: ?p=einstellungen&tab=testlogin&ok=1'); exit;
 }
 // --- Betriebsmodus: System live schalten (schützt die löschenden Werkzeuge) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'live_save') {
@@ -636,5 +650,75 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <button class="btn btn-ghost" type="submit">Testmail senden</button>
   </form>
 </div>
+<?php endif; ?>
+<?php if ($tab === 'testlogin'):
+    $tlAn   = (string) meta_get('testlogin', '') === '1';
+    $lokal  = function_exists('ist_lokal') && ist_lokal();
+    $base   = ($_SERVER['REQUEST_SCHEME'] ?? 'https') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    $alogin = fn(string $tok) => $base . '/?p=autologin&token=' . $tok;
+    $kportal= fn(string $tok) => $base . '/?p=portal&token=' . $tok;
+    $team   = all("SELECT name, email, login_token FROM benutzer WHERE aktiv=1 AND (lieferant_id IS NULL OR lieferant_id=0) ORDER BY name");
+    $liefU  = all("SELECT b.name, b.email, b.login_token, lf.firma FROM benutzer b JOIN lieferanten lf ON lf.id=b.lieferant_id WHERE b.aktiv=1 ORDER BY lf.firma, b.name");
+    $kunden = all("SELECT firma, portal_token FROM kunden ORDER BY firma");
+    $fehlt  = (int) scalar("SELECT COUNT(*) FROM benutzer WHERE aktiv=1 AND (login_token IS NULL OR login_token='')")
+            + (int) scalar("SELECT COUNT(*) FROM kunden WHERE portal_token IS NULL OR portal_token=''");
+?>
+<div class="bx-panel">
+  <h2>Testlogin <?= bx_hint('Passwortloser Direktlogin per Link – zum schnellen Testen. Lokal immer möglich; auf dem Server nur mit diesem Schalter.') ?></h2>
+  <p class="muted" style="margin-top:0">
+    Aktuell: <?= $lokal ? bx_badge('lokal – immer aktiv','info') : ($tlAn ? bx_badge('auf diesem Server AKTIV','warn') : bx_badge('auf diesem Server aus','info')) ?>
+  </p>
+  <?php if (!$lokal && $tlAn): ?>
+    <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px">Achtung: Solange der Schalter an ist, kommt <strong>jeder mit einem dieser Links ohne Passwort</strong> ins System. Nur für die Testumgebung – danach wieder ausschalten.</div>
+  <?php endif; ?>
+  <form method="post" style="margin-top:10px">
+    <input type="hidden" name="aktion" value="testlogin_save">
+    <div class="bx-row" style="gap:8px;align-items:center;margin-bottom:10px">
+      <input type="checkbox" name="testlogin" id="f_tl" value="1" <?= $tlAn ? 'checked' : '' ?>>
+      <label for="f_tl" style="margin:0">Testlogin auf diesem Server erlauben (Direktlinks ohne Passwort)</label>
+    </div>
+    <button class="btn btn-primary" type="submit">Speichern</button>
+  </form>
+  <?php if ($fehlt > 0): ?>
+  <form method="post" style="margin-top:12px">
+    <input type="hidden" name="aktion" value="testlogin_tokens">
+    <p class="muted" style="margin:0 0 6px"><?= (int)$fehlt ?> Benutzer/Kunden haben noch keinen Token – ohne Token kein Direktlink.</p>
+    <button class="btn btn-ghost btn-sm" type="submit">Fehlende Tokens erzeugen</button>
+  </form>
+  <?php endif; ?>
+</div>
+
+<?php if ($lokal || $tlAn): ?>
+<div class="bx-panel">
+  <h2>Direktlinks</h2>
+  <p class="muted" style="margin-top:0">Anklicken loggt sofort in der jeweiligen Rolle ein. Kunden gehen über ihren Portal-Link (Magic-Link).</p>
+
+  <div style="font-weight:600;margin:6px 0">Admin / Team</div>
+  <div class="bx-tablewrap"><table class="bx-table"><tbody>
+    <?php foreach ($team as $u): ?>
+      <tr><td style="width:240px"><?= h($u['name'] ?: $u['email']) ?></td>
+          <td><?php if ($u['login_token']): ?><a href="<?= h($alogin($u['login_token'])) ?>" target="_blank"><?= h($alogin($u['login_token'])) ?></a><?php else: ?><span class="muted">kein Token</span><?php endif; ?></td></tr>
+    <?php endforeach; ?>
+  </tbody></table></div>
+
+  <div style="font-weight:600;margin:14px 0 6px">Lieferant</div>
+  <div class="bx-tablewrap"><table class="bx-table"><tbody>
+    <?php if (!$liefU): ?><tr><td class="muted">Keine Lieferanten-Benutzer angelegt.</td></tr><?php endif; ?>
+    <?php foreach ($liefU as $u): ?>
+      <tr><td style="width:240px"><?= h($u['firma']) ?><div class="muted" style="font-size:12px"><?= h($u['name'] ?: $u['email']) ?></div></td>
+          <td><?php if ($u['login_token']): ?><a href="<?= h($alogin($u['login_token'])) ?>" target="_blank"><?= h($alogin($u['login_token'])) ?></a><?php else: ?><span class="muted">kein Token</span><?php endif; ?></td></tr>
+    <?php endforeach; ?>
+  </tbody></table></div>
+
+  <div style="font-weight:600;margin:14px 0 6px">Kunde</div>
+  <div class="bx-tablewrap"><table class="bx-table"><tbody>
+    <?php if (!$kunden): ?><tr><td class="muted">Keine Kunden angelegt.</td></tr><?php endif; ?>
+    <?php foreach ($kunden as $k): ?>
+      <tr><td style="width:240px"><?= h($k['firma']) ?></td>
+          <td><?php if ($k['portal_token']): ?><a href="<?= h($kportal($k['portal_token'])) ?>" target="_blank"><?= h($kportal($k['portal_token'])) ?></a><?php else: ?><span class="muted">kein Token</span><?php endif; ?></td></tr>
+    <?php endforeach; ?>
+  </tbody></table></div>
+</div>
+<?php endif; ?>
 <?php endif; ?>
 <?php render_footer(); ?>

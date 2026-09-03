@@ -17,6 +17,12 @@
 
 **Phase 1 Grenzen:** Rechte gelten pro **Seite/Modul**, noch nicht pro Einzel-Aktion (Gate). Aktionsschutz (nur Labor darf freigeben, nur Fulfillment versenden, nur Einkauf bestellen) kommt in Phase 2.
 
-## Autologin (lokal)
+## Autologin / Testlogin
 
-Für bequemes Testen gibt es einen **Direktlink ohne Passwort**: `?p=autologin&token=<login_token>`. Jeder Benutzer hat ein `benutzer.login_token` (in init_schema automatisch gefüllt, `bin2hex(random_bytes)`). `auth_login_by_token()` loggt darüber ein – **nur von localhost** (`ist_lokal()`, Prüfung REMOTE_ADDR 127.0.0.1/::1), damit der Link kein Backdoor im Livebetrieb ist. Nach Erfolg Weiterleitung ins passende Dashboard (Werk-Bereich bzw. Verkaufs-Dashboard).
+Für bequemes Testen gibt es einen **Direktlink ohne Passwort**: `?p=autologin&token=<login_token>`. Jeder Benutzer hat ein `benutzer.login_token` (in init_schema automatisch gefüllt, `bin2hex(random_bytes)`). `auth_login_by_token()` loggt darüber ein. Nach Erfolg Weiterleitung ins passende Dashboard (Werk-Bereich bzw. Verkaufs-Dashboard).
+
+Ob der Direktlink greift, entscheidet `testlogin_erlaubt()`:
+- **Lokal** (`ist_lokal()`, REMOTE_ADDR 127.0.0.1/::1) immer.
+- **Auf einem Server** nur, wenn der Testlogin bewusst freigeschaltet ist (`app_meta testlogin=1`). Standard = aus, damit der Link kein Backdoor im Livebetrieb ist. Umschalten unter Einstellungen → Testlogin (dort stehen auch die fertigen Direktlinks für Admin/Team, Lieferant und Kunde). Nach dem Testen wieder ausschalten.
+
+Der Kunden-Direktlink läuft nicht über Autologin, sondern über den Portal-Magic-Link `?p=portal&token=<kunden.portal_token>` – der funktioniert unabhängig vom Testlogin-Schalter überall.

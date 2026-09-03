@@ -172,9 +172,16 @@ function ist_lokal(): bool {
     $ip = $_SERVER['REMOTE_ADDR'] ?? '';
     return in_array($ip, ['127.0.0.1', '::1', '', 'localhost'], true);
 }
-// Autologin per Benutzer-Token (nur localhost). Für bequemes lokales Testen ohne Passwort.
+// Darf per Token ohne Passwort eingeloggt werden? Lokal immer (bequemes Testen).
+// Auf einem Server nur, wenn der Testlogin bewusst freigeschaltet ist
+// (app_meta testlogin=1) – gedacht für die Beta-/Testumgebung, jederzeit abschaltbar.
+function testlogin_erlaubt(): bool {
+    if (ist_lokal()) return true;
+    return function_exists('meta_get') && (string) meta_get('testlogin', '') === '1';
+}
+// Autologin per Benutzer-Token. Für bequemes Testen ohne Passwort.
 function auth_login_by_token(string $token): bool {
-    if (!ist_lokal()) return false;
+    if (!testlogin_erlaubt()) return false;
     $token = trim($token);
     if ($token === '') return false;
     $u = one("SELECT * FROM benutzer WHERE login_token=? AND aktiv=1", [$token]);
