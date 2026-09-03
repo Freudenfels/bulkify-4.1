@@ -5,6 +5,8 @@ Liest eine **Spezifikation** oder ein **Analysenzertifikat (CoA)** eines Liefera
 
 > **Grundsatz:** Diese Funktionen **schlagen nur vor**. Gespeichert wird erst, wenn ein Mensch geprüft und freigegeben hat – ein falscher Wert auf einem Dokument, das an den Kunden geht, wäre schlimmer als ein leeres Feld.
 
+> **Sprache:** Zielsprache aller Textfelder ist **Deutsch** – fremdsprachige Unterlagen (auch Chinesisch) werden übersetzt, in keinem Feld bleibt fremde Schrift stehen. Unverändert bleiben nur der lateinische/botanische Name, Codes (CAS/EC/Spec-Nr.) sowie Zahlen/Einheiten/Grenzzeichen. `name_en` ist immer Englisch. Wirkstoff- und Kennwert-Namen werden ebenfalls eingedeutscht; Wirkstoffe treffen dabei exakt die offiziellen NRV-Nährstoffnamen, damit die NRV-Berechnung greift.
+
 ## Ablauf
 1. **`spec_ki_lesen($pfad)`** schickt das PDF mit `spec_ki_anweisung()` an die KI (`ki_datei_frage()`, JSON-Modus, mit „Denken", bis 8000 Tokens). Die Anweisung ist bewusst streng: nur übernehmen, was dasteht, nichts ableiten, nichts raten; fehlende Felder werden weggelassen. Rückgabe: `typ` (spec/coa/beides/unklar), `sicherheit`, `stamm`, **`wirkstoffe`**, **`kennwerte`**, **`cas_vorschlag`**, `charge`, `werte`, `hinweise`, plus `usage`/`modell`.
    - **`wirkstoffe`** = die standardisierten Wirk-/Leitsubstanzen mit Gehalt (der **Assay/Standardisierung**, z. B. „Content of Iron NLT 3.0%" → `{name:"Iron", gehalt_prozent:3.0}`). Beim Neuanlegen aus einer Spec füllen sie die Wirkstoff-Zeilen (`item_wirkstoff`); unbekannte Namen legt `naehrstoff_id_by_name()` an, der Prüfer kann per Datalist auf den deutschen Namen wechseln.
