@@ -13,6 +13,7 @@ $marke = BX_MARKE; $ver = BX_VERSION;
 ?><!doctype html><html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= h("Login – $marke $ver") ?></title>
+<?= pwa_head() ?>
 <style>
   :root{ --lime:#C0F24E; --gruen:#1D9E75; --dunkel:#10210f; }
   *{ box-sizing:border-box; }
@@ -38,6 +39,7 @@ $marke = BX_MARKE; $ver = BX_VERSION;
   .lg-foot{ text-align:center; color:#9aa1ab; font-size:12px; margin-top:20px; }
 </style>
 </head><body>
+<?= pwa_script() ?>
 <div class="lg-wrap">
   <div class="lg-card">
     <img src="assets/bulkify-logo-dark.png" alt="<?= h($marke) ?>" class="lg-logo">

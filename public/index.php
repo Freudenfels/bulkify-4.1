@@ -32,6 +32,7 @@ $routes = [
     'lieferant_nachrichten'  => 'lieferant/nachrichten.php',
     'lieferant_dateien'      => 'lieferant/dateien.php',
     'lieferant_katalog'      => 'lieferant/katalog.php',
+    'lieferant_hilfe'        => 'lieferant/hilfe.php',
     'lieferant_dokument'     => 'lieferant/dokument.php',
     'partner'        => 'partner/liste.php',
     'partner_detail' => 'partner/detail.php',
@@ -84,6 +85,7 @@ $routes = [
     'benutzer_detail'    => 'system/benutzer_detail.php',
     // Hintergrundarbeit der KI (kein Login, dafuer Schluessel) - siehe core/ki_job.php
     'ki_job'              => 'system/ki_job.php',
+    'app'                => 'system/app.php',        // bulkify aufs Handy legen
 ];
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', $_GET['p']) : 'dashboard';
@@ -113,7 +115,7 @@ $istWerk = is_logged_in() && function_exists('ist_produktionsbereich') && ist_pr
 // Lieferanten haben ein eigenes Portal und duerfen NICHT in den internen Bereich.
 $istLieferant = is_logged_in() && function_exists('ist_lieferant') && ist_lieferant();
 $LIEF_ROUTEN  = ['lieferant_portal', 'lieferant_bestellung', 'lieferant_bestellung_pdf', 'lieferant_anfrage', 'lieferant_profil', 'lieferant_logo',
-                 'lieferant_nachrichten', 'lieferant_dateien', 'lieferant_dokument', 'lieferant_katalog', 'logout'];
+                 'lieferant_nachrichten', 'lieferant_dateien', 'lieferant_dokument', 'lieferant_katalog', 'lieferant_hilfe', 'logout'];
 if ($istLieferant && !in_array($p, $LIEF_ROUTEN, true) && !in_array($p, ['lieferant_login','lieferant_einladung'], true)) {
     header('Location: ?p=lieferant_portal'); exit;
 }

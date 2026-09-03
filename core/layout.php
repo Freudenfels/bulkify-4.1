@@ -1,6 +1,7 @@
 <?php
 // Wiederverwendbares Layout bulkify 4.1
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/pwa.php';   // Handy-App: manifest + Service Worker
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
@@ -30,7 +31,7 @@ function bx_nav(): array {
         'Lager'        => ['lager' => 'Warenlager', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'rohstoffe' => 'Rohstoffe', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
         'Einkauf'      => ['bedarf' => 'Einkaufsbedarf', 'einkaufsliste' => 'Einkaufsliste', 'einkauf' => 'Bestellungen', 'lieferanten' => 'Lieferanten'],
         'Buchhaltung'  => ['rechnungen' => 'Rechnungen', 'buchhaltung' => 'Belege'],
-        'System'       => ['einstellungen' => 'Einstellungen', 'benutzer' => 'Benutzer'],
+        'System'       => ['einstellungen' => 'Einstellungen', 'benutzer' => 'Benutzer', 'app' => 'App aufs Handy'],
     ];
 }
 
@@ -67,6 +68,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
     echo "<title>" . h($titel ? "$titel – $marke $ver" : "$marke $ver") . "</title>";
     echo "<link rel=\"stylesheet\" href=\"assets/app.css\">";
+    echo pwa_head();
     echo "<script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>";
     // Menübreite + Einklapp-Zustand VOR dem Rendern setzen, sonst springt die Leiste beim Laden kurz.
     echo "<script>(function(){try{var r=document.documentElement;"
@@ -152,6 +154,7 @@ function render_footer(): void {
     echo bx_theme_script();
     echo bx_side_scroll_script();
     echo bx_side_script();
+    echo pwa_script();
     echo "</body></html>";
 }
 

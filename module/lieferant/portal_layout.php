@@ -126,6 +126,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'neu'             => ['de'=>'neu',                     'en'=>'new', 'zh'=>'新'],
         'dateien_menu'    => ['de'=>'Dateien',                 'en'=>'Files', 'zh'=>'文件'],
         'katalog'         => ['de'=>'Mein Katalog',            'en'=>'My catalogue', 'zh'=>'我的产品目录'],
+        'anleitung'       => ['de'=>'Anleitung',               'en'=>'Guide', 'zh'=>'使用说明'],
         'katalog_sub'     => ['de'=>'Was Sie anbieten. Wir legen daraus unsere Artikel an – nach Prüfung.',
                               'en'=>'What you offer. We create our items from it – after review.',
                               'zh'=>'您所提供的产品。我方审核后据此建立物料。'],
@@ -218,13 +219,13 @@ function lp_head(string $titel): void {
     $lang = lp_sprache();
     echo '<!doctype html><html lang="' . h($lang) . '"><head><meta charset="utf-8">'
        . '<meta name="viewport" content="width=device-width, initial-scale=1">'
-       . '<title>' . h($titel) . '</title><link rel="stylesheet" href="assets/app.css">'
+       . '<title>' . h($titel) . '</title><link rel="stylesheet" href="assets/app.css">' . pwa_head()
        . '<script>(function(){try{var t=localStorage.getItem(\'bx-theme\');if(t===\'dark\'||t===\'light\')document.documentElement.setAttribute(\'data-theme\',t);}catch(e){}})();</script>'
        . '</head><body>';
 }
 
 function lp_foot(): void {
-    echo (function_exists('bx_theme_script') ? bx_theme_script() : '') . '</body></html>';
+    echo (function_exists('bx_theme_script') ? bx_theme_script() : '') . pwa_script() . '</body></html>';
 }
 
 // Menü + Rahmen. $aktiv = Routenname der aktuellen Seite.
@@ -238,6 +239,7 @@ function lp_shell_start(string $aktiv): void {
         'lieferant_katalog'     => lp_t('katalog'),
         'lieferant_dateien'     => lp_t('dateien_menu'),
         'lieferant_profil'      => lp_t('profil'),
+        'lieferant_hilfe'       => lp_t('anleitung'),
     ];
     $neu = $lf ? nachrichten_ungelesen((int)$lf['id'], 'lieferant') : 0;
     if ($neu > 0) $menu['lieferant_nachrichten'] .= ' (' . $neu . ' ' . lp_t('neu') . ')';

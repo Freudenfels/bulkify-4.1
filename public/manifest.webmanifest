@@ -1,0 +1,18 @@
+{
+  "id": "/",
+  "name": "bulkify Dashboard",
+  "short_name": "bulkify",
+  "description": "bulkify – Anfragen, Angebote, Auftraege, Produktion und Lager. Fuer Team, Lieferanten und Kunden.",
+  "lang": "de",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#10210F",
+  "theme_color": "#10210F",
+  "icons": [
+    { "src": "/assets/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/app-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

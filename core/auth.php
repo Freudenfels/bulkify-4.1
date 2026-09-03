@@ -20,6 +20,7 @@ function rollen_liste(): array {
 function route_rollen_map(): array {
     return [
         'dashboard'          => ['*'],
+        'app'                => ['*'],   // Anleitung: bulkify aufs Handy legen - fuer jeden
         'werk'               => ['production', 'labor', 'fulfillment'],
         'aufgaben'           => ['production', 'labor', 'fulfillment'],
         'kalender'           => ['production', 'labor', 'fulfillment'],
@@ -76,6 +77,7 @@ function route_rollen_map(): array {
         'lieferant_nachrichten'   => ['*'],
         'lieferant_dateien'       => ['*'],
         'lieferant_katalog'       => ['*'],
+        'lieferant_hilfe'         => ['*'],
         'lieferant_dokument'      => ['*'],
         'rechnungen'         => ['finance'],
         'rechnung'           => ['finance'],
