@@ -1622,8 +1622,10 @@ portal_head('Kundenportal · ' . $k['firma']);
       $versendet = ($a['status'] === 'versendet');
       $sichtbar = array_values(array_filter($schritte, fn($s) => stripos((string)$s['station'], 'Freigabe') === false));
       // Kundensicht: Wird der Bulk zugekauft (Fremdproduktion), heißt der erste Schritt intern
-      // „Fertigware bereitstellen". Das verrät den Zukauf – dem Kunden zeigen wir neutral „In Herstellung".
-      $kundenSchritt = fn(string $st) => stripos($st, 'Fertigware') !== false ? 'In Herstellung' : $st;
+      // „Fertigware bereitstellen". Das verrät den Zukauf – dem Kunden zeigen wir GENAU dasselbe wie
+      // bei Eigenproduktion („Rohstoffe bereitstellen"), damit es KEINEN Unterschied zwischen einer
+      // Rohstoff- und einer Fertigprodukt-Bestellung gibt.
+      $kundenSchritt = fn(string $st) => stripos($st, 'Fertigware') !== false ? 'Rohstoffe bereitstellen' : $st;
       $track = [['label'=>'Bestätigt', 'done'=>true, 'current'=>false, 'date'=>$a['angelegt']]];
       $curSet = false;
       foreach ($sichtbar as $s) {
