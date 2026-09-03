@@ -13,6 +13,21 @@ $KATS = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrau
 $FORMEN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 
 $fehler = '';
+// Sammelanfrage: einem (neuen) Lieferanten auf einen Schlag alles anfragen, was in unseren
+// Rezepturen steckt - entweder die Rohstoffe daraus oder die Rezepturen als Fertigprodukt.
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'sammelanfrage') {
+    require_once BX_ROOT . '/core/sammelanfrage.php';
+    $menge = trim((string)($_POST['sammel_menge'] ?? ''));
+    [$anz, $hinweis] = sammel_anfragen_stellen(
+        (int)$id,
+        (string)($_POST['was'] ?? ''),
+        (string)($_POST['sammel_notiz'] ?? ''),
+        $menge !== '' ? zahl_lesen($menge, true) : null
+    );
+    header('Location: ?p=lieferant&id=' . (int)$id
+         . ($anz > 0 ? '&sammel=' . $anz : '&fehler=' . urlencode($hinweis)) . '#preise'); exit;
+}
+
 // Katalog des Lieferanten: je Zeile entscheiden, ob daraus ein Artikel wird.
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['kat_uebernehmen', 'kat_ablehnen', 'kat_alle', 'kat_upload'], true)) {
     require_once BX_ROOT . '/core/lieferant_katalog.php';
@@ -366,7 +381,64 @@ if (!$neu) {
   <?php if (isset($_GET['fehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['fehler']) ?></div><?php endif; ?>
   <?= lieferant_dateien_panel((int)$id, 'team', 'de') ?>
 </section>
+<?php // Sammelanfrage - steht bewusst beim Katalog, weil beides dieselbe Frage beantwortet:
+      // was kann dieser Lieferant fuer uns, und was kostet es?
+require_once BX_ROOT . '/core/sammelanfrage.php';
+$sammelRoh = $neu ? [] : sammel_rohstoffe((int)$id);
+$sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
+?>
 <section data-panel="katalog" hidden id="katalog">
+  <?php if (isset($_GET['sammel'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px"><?= (int)$_GET['sammel'] ?> Preisanfrage(n) gestellt – der Lieferant sieht sie sofort in seinem Portal.</div><?php endif; ?>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Alles auf einmal anfragen</h2>
+    <p class="muted" style="margin:6px 0 12px">Neuer Lieferant? Dann frag ihn gleich alles an, was in unseren
+      Rezepturen steckt – statt jede Position einzeln zu tippen. <strong>Schon angefragte Positionen werden übersprungen</strong>,
+      es entstehen also keine Dubletten.</p>
+
+    <div class="bx-grid" style="margin-bottom:12px">
+      <div class="bx-field"><label>Bezugsmenge (optional)</label>
+        <input type="text" name="sammel_menge" id="sammel_menge" placeholder="z. B. 100000">
+        <div class="muted" style="font-size:12px;margin-top:4px">Leer lassen heißt: der Lieferant nennt Preis, Mindestmenge und Staffel selbst.</div></div>
+      <div class="bx-field"><label>Notiz an den Lieferanten (optional)</label>
+        <input type="text" name="sammel_notiz" id="sammel_notiz" placeholder="z. B. Erstanfrage – bitte Staffelpreise nennen"></div>
+    </div>
+
+    <div class="bx-row" style="gap:10px;flex-wrap:wrap">
+      <form method="post" style="margin:0" onsubmit="return sammelAb(this, <?= count($sammelRoh) ?>, 'Rohstoffe');">
+        <input type="hidden" name="aktion" value="sammelanfrage"><input type="hidden" name="was" value="rohstoffe">
+        <input type="hidden" name="sammel_menge" value=""><input type="hidden" name="sammel_notiz" value="">
+        <button class="btn btn-primary" type="submit" <?= $sammelRoh ? '' : 'disabled' ?>>
+          <?= count($sammelRoh) ?> Rohstoffe aus unseren Rezepturen anfragen</button>
+      </form>
+      <form method="post" style="margin:0" onsubmit="return sammelAb(this, <?= count($sammelRez) ?>, 'Rezepturen');">
+        <input type="hidden" name="aktion" value="sammelanfrage"><input type="hidden" name="was" value="rezepturen">
+        <input type="hidden" name="sammel_menge" value=""><input type="hidden" name="sammel_notiz" value="">
+        <button class="btn btn-ghost" type="submit" <?= $sammelRez ? '' : 'disabled' ?>>
+          <?= count($sammelRez) ?> Rezepturen als Fertigprodukt anfragen</button>
+      </form>
+    </div>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">
+      <strong>Rohstoffe</strong> für Händler: je Rohstoff eine Anfrage in seiner Einheit (kg, L …).
+      <strong>Rezepturen</strong> für Lohnhersteller: je Rezeptur eine Anfrage als Fertigprodukt in der Darreichungsform.</p>
+    <?php if ($sammelRoh || $sammelRez): ?>
+      <details style="margin-top:10px"><summary class="muted" style="cursor:pointer">Was genau angefragt würde</summary>
+        <div class="muted" style="font-size:13px;margin-top:8px">
+          <?php if ($sammelRoh): ?><div><strong>Rohstoffe:</strong> <?= h(implode(', ', array_column($sammelRoh, 'name'))) ?></div><?php endif; ?>
+          <?php if ($sammelRez): ?><div style="margin-top:6px"><strong>Rezepturen:</strong> <?= h(implode(', ', array_column($sammelRez, 'name'))) ?></div><?php endif; ?>
+        </div></details>
+    <?php endif; ?>
+  </div>
+  <script>
+  // Menge und Notiz stehen einmal oben, gelten aber fuer beide Knoepfe - deshalb vor dem
+  // Absenden in das jeweilige Formular kopieren.
+  function sammelAb(form, anzahl, was) {
+    if (!anzahl) return false;
+    var m = document.getElementById('sammel_menge').value, n = document.getElementById('sammel_notiz').value;
+    form.querySelector('[name=sammel_menge]').value = m;
+    form.querySelector('[name=sammel_notiz]').value = n;
+    return confirm(anzahl + ' Preisanfrage(n) fuer ' + was + ' an diesen Lieferanten stellen?');
+  }
+  </script>
   <?php if (isset($_GET['katgelesen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Liste gelesen &ndash; <?= (int)$_GET['katgelesen'] ?> Zeile(n) stehen unten zur Pr&uuml;fung.</div><?php endif; ?>
   <?php if (isset($_GET['fehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['fehler']) ?></div><?php endif; ?>
   <?php if (isset($_GET['kat'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px"><?= (int)$_GET['kat'] ?> Zeile(n) übernommen – die Artikel stehen jetzt im Lager.</div><?php endif; ?>

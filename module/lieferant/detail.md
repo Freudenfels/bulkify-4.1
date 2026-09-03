@@ -40,5 +40,8 @@ Der Reiter **Dokumente** ist die gemeinsame Ablage mit dem Lieferanten (`liefera
 ## Rückfragen
 Der Reiter **Rückfragen** (mit Zahl ungelesener Nachrichten) zeigt das ganze Gespräch mit dem Lieferanten (`nachricht_panel()` aus `core/nachricht.php`), jede Nachricht mit Bezug-Link zur Bestellung oder Preisanfrage. POST `aktion=nachricht` (ohne Bezug); zu einer Bestellung schreibt man besser direkt an der Bestellung.
 
+## Alles auf einmal anfragen
+Im Reiter **Katalog** steht oben der Kasten **Alles auf einmal anfragen**: Ist ein Lieferant neu, bekommt er mit einem Klick alle Rohstoffe aus unseren Rezepturen (fuer Haendler) oder alle Rezepturen als Fertigprodukt (fuer Lohnhersteller) als Preisanfrage. Schon Angefragtes wird uebersprungen, es entstehen keine Dubletten. Details: `core/sammelanfrage.md`.
+
 ## Katalog
 Der Reiter **Katalog** zeigt, was der Lieferant in seinem Portal hinterlegt oder als Preisliste hochgeladen hat (`core/lieferant_katalog.md`). **Preisliste einlesen** (nur bei eingerichteter KI) macht dasselbe von unserer Seite: Wer uns eine Liste per Mail schickt, muss sie nicht selbst hochladen - die Datei landet in der Ablage, die KI macht Zeilen daraus. Angelegt wird auch hier nichts von allein. Je Zeile steht **Anlegen** (neuer Artikel samt EK-Preis) oder – wenn es den Artikel über CAS-Nummer oder Namen schon gibt – **Preis dorthin**, dazu **ablehnen**. Für lange Kataloge gibt es „Alle übernehmen". Die Zahl am Reiter sind die noch offenen Zeilen.
