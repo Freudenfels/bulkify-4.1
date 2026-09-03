@@ -380,8 +380,41 @@ foreach ($vorschlaege as $vs) $vorschlagZutaten[$vs['id']] = all("SELECT bezeich
 
 $aufBadge = fn($s) => match ($s) { 'offen'=>bx_badge('in Bearbeitung','info'),'in_produktion'=>bx_badge('in Produktion','warn'),'erledigt'=>bx_badge('versandbereit','info'),'versendet'=>bx_badge('versendet','ok'),default=>bx_badge($s) };
 $reBadge  = fn($s) => match ($s) { 'bezahlt'=>bx_badge('bezahlt','ok'),'teilbezahlt'=>bx_badge('teilbezahlt','info'),'offen'=>bx_badge('offen','warn'),'storniert'=>bx_badge('storniert','err'),default=>bx_badge($s) };
-$AUFSTEPS = ['Bestätigt', 'In Produktion', 'Versandbereit', 'Versendet'];
-$aufStep  = fn($s) => ['offen'=>0, 'in_produktion'=>1, 'erledigt'=>2, 'versendet'=>3][$s] ?? 0;
+// Feste Kunden-Phasen (wie v3) – der Kunde sieht KEINE internen Produktionsschritte, immer dieselben
+// Phasen, egal ob eigene Rohstoff-Produktion oder zugekauftes Fertigprodukt (kein Zukauf-Verräter).
+$AUFSTEPS = ['Bestätigt', 'Rohstoff bestellt', 'In Produktion', 'Qualitätsprüfung', 'Versandbereit', 'Versendet'];
+// Aktuelle Phase (0..5) + Datum je Phase aus den vorhandenen Signalen ableiten.
+if (!function_exists('kunde_auftrag_phase')) {
+    function kunde_auftrag_phase(array $a): array {
+        $aid = (int)$a['id']; $st = (string)$a['status'];
+        $dates = array_fill(0, 6, null);
+        $dates[0] = $a['angelegt'] ?? null;                                  // Bestätigt
+        // Rohstoff bestellt: erste Bestellung, die auf diesen Auftrag zeigt (Rohstoffe ODER zugekaufter Bulk).
+        $best = one("SELECT COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d FROM bestellung b
+                     JOIN bestellung_position bp ON bp.bestellung_id=b.id WHERE bp.auftrag_id=?", [$aid]);
+        $bestellt = $best && !empty($best['d']);
+        if ($bestellt) $dates[1] = $best['d'];
+        // Produktion + Qualitätsprüfung aus den echten Schritten (nur intern; hier nur zur Phasenableitung).
+        $pa = one("SELECT id, angelegt FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$aid]);
+        $qcDate = null;
+        if ($pa) {
+            $dates[2] = $pa['angelegt'];
+            foreach (all("SELECT station, erledigt, erledigt_at FROM produktion_schritt WHERE pa_id=? ORDER BY sort,id", [(int)$pa['id']]) as $s) {
+                if ((int)$s['erledigt'] === 1 && stripos((string)$s['station'], 'Qualität') !== false) $qcDate = $s['erledigt_at'];
+            }
+        }
+        $qcDone = $qcDate !== null;
+        $dates[3] = $qcDate;
+        if ($st === 'erledigt')  $dates[4] = $a['aktualisiert'] ?? null;
+        if ($st === 'versendet') { $dates[5] = $a['aktualisiert'] ?? null; $dates[4] = $dates[4] ?? ($a['aktualisiert'] ?? null); }
+        // Index der aktuellen Phase.
+        if ($st === 'versendet')          $idx = 5;
+        elseif ($st === 'erledigt')       $idx = 4;
+        elseif ($st === 'in_produktion')  $idx = $qcDone ? 3 : 2;
+        else                              $idx = $bestellt ? 1 : 0;   // offen = bestätigt / rohstoff bestellt
+        return ['idx' => $idx, 'dates' => $dates];
+    }
+}
 
 // Menüpunkte (nur freigeschaltete) + Gruppierung
 $L = ['start' => 'Übersicht'];
@@ -1587,7 +1620,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px">Ihre Bestellungen</h1>
   <p class="muted" style="margin:0 0 16px">Klicken Sie auf eine Bestellung, um alle Schritte, Rechnung und Details zu sehen.</p>
   <?php if (!$auftraege): ?><div class="bx-panel"><div class="muted">Noch keine Bestellungen.</div></div><?php endif; ?>
-  <?php foreach ($auftraege as $a): $cur = $aufStep($a['status']); $complete = $a['status'] === 'versendet'; ?>
+  <?php foreach ($auftraege as $a): $cur = kunde_auftrag_phase($a)['idx']; $complete = $a['status'] === 'versendet'; ?>
   <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span></div>
@@ -1612,30 +1645,18 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div class="bx-panel"><div class="muted">Bestellung nicht gefunden.</div>
         <div style="margin-top:12px"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellungen') ?>">Zurück zu den Bestellungen</a></div></div>
     <?php else:
-      $cur = $aufStep($a['status']); $complete = $a['status'] === 'versendet';
+      $complete = $a['status'] === 'versendet';
       $re  = one("SELECT * FROM beleg WHERE auftrag_id=? AND typ='rechnung' ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
-      $pa  = one("SELECT * FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
-      $schritte = $pa ? all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort,id", [(int)$pa['id']]) : [];
       $vName = $a['verpackung_id'] ? scalar("SELECT name FROM item WHERE id=?", [(int)$a['verpackung_id']]) : '';
-      // EINE Zeitleiste = unsere echten Produktionsschritte (interne Freigabe-Gates ausgeblendet),
-      // eingerahmt von Bestätigt (Anfang) und Versendet (Ende). Datum aus echten Zeitstempeln.
-      $versendet = ($a['status'] === 'versendet');
-      $sichtbar = array_values(array_filter($schritte, fn($s) => stripos((string)$s['station'], 'Freigabe') === false));
-      // Kundensicht: Wird der Bulk zugekauft (Fremdproduktion), heißt der erste Schritt intern
-      // „Fertigware bereitstellen". Das verrät den Zukauf – dem Kunden zeigen wir GENAU dasselbe wie
-      // bei Eigenproduktion („Rohstoffe bereitstellen"), damit es KEINEN Unterschied zwischen einer
-      // Rohstoff- und einer Fertigprodukt-Bestellung gibt.
-      $kundenSchritt = fn(string $st) => stripos($st, 'Fertigware') !== false ? 'Rohstoffe bereitstellen' : $st;
-      $track = [['label'=>'Bestätigt', 'done'=>true, 'current'=>false, 'date'=>$a['angelegt']]];
-      $curSet = false;
-      foreach ($sichtbar as $s) {
-          $done  = ((int)$s['erledigt'] === 1);
-          $isCur = (!$done && !$curSet && !$versendet);
-          if ($isCur) $curSet = true;
-          $track[] = ['label'=>$kundenSchritt((string)$s['station']), 'done'=>$done, 'current'=>$isCur,
-                      'date'=>($done && !empty($s['erledigt_at'])) ? $s['erledigt_at'] : null];
+      // Feste Kunden-Phasen (wie v3) – KEINE internen Produktionsschritte. Identisch für Rohstoff-
+      // und Fertigprodukt-Bestellung, verrät also nie einen Zukauf.
+      $ph = kunde_auftrag_phase($a); $cur = $ph['idx'];
+      $track = [];
+      foreach ($AUFSTEPS as $i => $lbl) {
+          $done  = $complete || $i < $cur;
+          $isCur = !$complete && $i === $cur;
+          $track[] = ['label'=>$lbl, 'done'=>$done, 'current'=>$isCur, 'date'=>$ph['dates'][$i] ?? null];
       }
-      $track[] = ['label'=>'Versendet', 'done'=>$versendet, 'current'=>(!$versendet && !$curSet), 'date'=>$versendet ? $a['aktualisiert'] : null];
     ?>
   <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:4px">
     <h1 style="margin:0"><?= h($a['nummer']) ?></h1>
