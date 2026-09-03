@@ -831,6 +831,9 @@ function init_schema(): void {
     ensure_column('item', 'spec_version', "VARCHAR(20) NULL");
     ensure_column('item', 'spec_gueltig_ab', "DATE NULL");
     ensure_column('item', 'spec_pdf', "VARCHAR(255) NULL");          // Dateiname des Spec-PDF (in data/uploads)
+    ensure_column('item', 'spec_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");   // bulkify-Spezifikation fuer den Kunden freigegeben?
+    ensure_column('item', 'spec_freigabe_am', "DATETIME NULL");
+    ensure_column('item', 'spec_freigabe_von', "VARCHAR(190) NULL");
     ensure_column('item', 'vk_aufschlag_prozent', "DECIMAL(6,2) NULL"); // Rohstoff-Verkauf: eigener Aufschlag % (leer = globaler aufschlag_rohstoff)
     ensure_column('pack_ek_staffel', 'lieferant_id', "INT NULL");        // Verpackung: welcher Lieferant je EK-Staffelstufe
     // Verpackungs-Maße (mm) + Leergewicht (g) – u. a. für PPWR-Meldung / Etikettenmaße

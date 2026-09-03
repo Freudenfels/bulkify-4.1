@@ -150,6 +150,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_u
     }
     header('Location: ?p=rohstoff&id=' . $id . '&tab=dok&gespeichert=1' . ($coaChargeNeu ? '&coacharge=' . $coaChargeNeu : '')); exit;
 }
+// bulkify-Spezifikation für den Kunden freigeben bzw. Freigabe zurückziehen (separater Schritt).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_freigabe' && !$neu) {
+    $an = isset($_POST['freigeben']) && $_POST['freigeben'] === '1';
+    if ($an) {
+        $wer = trim((string)(current_user()['name'] ?? 'Team'));
+        q("UPDATE item SET spec_freigegeben=1, spec_freigabe_am=?, spec_freigabe_von=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $wer, (int)$id]);
+        log_aktivitaet('item', (int)$id, 'team', 'bulkify-Spezifikation für den Kunden freigegeben.', 'notiz');
+    } else {
+        q("UPDATE item SET spec_freigegeben=0 WHERE id=?", [(int)$id]);
+        log_aktivitaet('item', (int)$id, 'team', 'Kundenfreigabe der bulkify-Spezifikation zurückgezogen.', 'notiz');
+    }
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=spec&specfrei=' . ($an ? '1' : '0')); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && !$neu) {
     dokument_freigabe_toggle('item', (int)$id, (int)($_POST['dok_id'] ?? 0));
     header('Location: ?p=rohstoff&id=' . $id . '&tab=dok'); exit;
@@ -574,6 +587,30 @@ if (!$neu) {
 <?php // Diese beiden Abschnitte haben eigene Formulare und stehen deshalb ausserhalb
       // des Stammdaten-Formulars. Die Reiter-Logik blendet sie trotzdem korrekt ein. ?>
 <section data-panel="spec" hidden>
+  <?php // bulkify-Spezifikation, die der Kunde sieht – als Vorschau prüfen und SEPARAT freigeben.
+        // Der Kunde bekommt sie erst nach Freigabe (Gate im Kundenportal).
+        if (!$neu): $specFrei = (int)($it['spec_freigegeben'] ?? 0) === 1; ?>
+  <div class="bx-panel">
+    <div class="bx-row" style="justify-content:space-between;align-items:center">
+      <h2 style="margin:0">bulkify-Spezifikation &ndash; Kundenfreigabe</h2>
+      <?= $specFrei ? bx_badge('für Kunden freigegeben','ok') : bx_badge('nicht freigegeben','warn') ?>
+    </div>
+    <p class="muted" style="margin-top:4px">Das ist das Dokument, das der Kunde sieht &ndash; automatisch aus den Rohstoffdaten erzeugt. Bitte vor der Freigabe prüfen. Der Kunde bekommt es <strong>erst nach Freigabe</strong>.</p>
+    <?php if (isset($_GET['specfrei'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px"><?= $_GET['specfrei'] === '1' ? 'Spezifikation für den Kunden freigegeben.' : 'Freigabe zurückgezogen.' ?></div><?php endif; ?>
+    <?php if ($specFrei && !empty($it['spec_freigabe_am'])): ?><div class="muted" style="font-size:12px;margin-bottom:8px">Freigegeben am <?= h(fmt_zeit($it['spec_freigabe_am'])) ?> Uhr<?= !empty($it['spec_freigabe_von']) ? ' von ' . h($it['spec_freigabe_von']) : '' ?>.</div><?php endif; ?>
+    <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:12px">
+      <iframe src="?p=spec_bulkify&id=<?= (int)$id ?>" style="width:100%;height:520px;border:0;display:block" title="bulkify-Spezifikation Vorschau"></iframe>
+    </div>
+    <div class="bx-row" style="gap:10px;align-items:center">
+      <a class="btn btn-ghost" target="_blank" href="?p=spec_bulkify&id=<?= (int)$id ?>">In neuem Tab öffnen</a>
+      <form method="post" style="margin:0">
+        <input type="hidden" name="aktion" value="spec_freigabe">
+        <input type="hidden" name="freigeben" value="<?= $specFrei ? '0' : '1' ?>">
+        <button class="btn <?= $specFrei ? 'btn-ghost' : 'btn-primary' ?>" type="submit"><?= $specFrei ? 'Freigabe zurückziehen' : 'Für den Kunden freigeben' ?></button>
+      </form>
+    </div>
+  </div>
+  <?php endif; ?>
   <?php // Unterlagen des Lieferanten mit der KI auslesen. Nichts wird ungefragt gespeichert:
         // jedes Feld hat einen Haken, und übernommen wird nur, was angehakt ist.
         if (!$neu):

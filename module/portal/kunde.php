@@ -571,7 +571,7 @@ $prodPortionG = ($prodDetail && $prodDetail['rezeptur_id']) ? (float) scalar("SE
 // Rohstoff-Detail (kundenfreundlich: Kennwerte + Deklaration, keine internen Daten)
 $iid = (int)($_GET['iid'] ?? 0);
 $rohDetail = ($iid && $k['portal_rohstoffe']) ? one("SELECT id, name, name_lat, form, cas, herkunft, synonym, bot_quelle, herkunftsland,
-    haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate
+    haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben
     FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
 $rohKennwerte = $rohDetail ? all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$iid]) : [];
 $jaNein = fn($v) => $v === null || $v === '' ? null : ((int)$v === 1);
@@ -623,8 +623,8 @@ $atab = $_GET['atab'] ?? 'alle'; if (!isset($anfTabs[$atab])) $atab = 'alle';
 // Vorlieferanten kommen auf deren Briefpapier und gehen nicht an den Kunden.
 if (($_GET['v'] ?? '') === 'spec_pdf') {
     $rid = (int)($_GET['rid'] ?? 0);
-    // Nur Rohstoffe, die der Kunde im Katalog ohnehin sieht.
-    $ok = $rid && $k['portal_rohstoffe'] && scalar("SELECT id FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$rid]);
+    // Nur Rohstoffe, die der Kunde im Katalog ohnehin sieht – UND deren Spezifikation freigegeben ist.
+    $ok = $rid && $k['portal_rohstoffe'] && scalar("SELECT id FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0 AND spec_freigegeben=1", [$rid]);
     if (!$ok) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
     require_once BX_ROOT . '/core/pdf_spec.php';
     $pdf = build_spec_pdf($rid);
@@ -1280,11 +1280,13 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <p class="bx-sub"><?= h($FORMLBL_P[$rohDetail['form']] ?? $rohDetail['form']) ?><?= $rohDetail['name_lat'] ? ' · '.h($rohDetail['name_lat']) : '' ?><?= $rohDetail['cas'] ? ' · CAS '.h($rohDetail['cas']) : '' ?></p>
 
+    <?php if ((int)($rohDetail['spec_freigegeben'] ?? 0) === 1): ?>
     <div class="bx-panel">
       <h2>Spezifikation</h2>
       <p class="muted" style="margin-top:0">Unsere Spezifikation zu diesem Rohstoff – Kennzahlen, Gehalt, Erklärungen und Lagerung.</p>
       <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('spec_pdf') ?>&rid=<?= (int)$rohDetail['id'] ?>">&#8681; Spezifikation (PDF)</a>
     </div>
+    <?php endif; ?>
     <?php $rohDoks = dokumente_fuer_kunde('item', (int)$rohDetail['id']); if ($rohDoks): ?>
     <div class="bx-panel"><h2>Dokumente</h2>
       <p class="muted" style="margin-top:0">Analysenzertifikat und Spezifikation zu diesem Rohstoff.</p>
