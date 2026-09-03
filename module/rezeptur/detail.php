@@ -244,6 +244,17 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   </div>
   <p class="muted" style="margin-top:4px">Was kostet uns die Rezeptur beim Lieferanten? Wo kein Preis steht, per „Preis anfragen" bei den Lieferanten einholen.</p>
   <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px"><?= (int)$_GET['angefragt'] ?> Preisanfrage(n) verschickt<?= isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '' ?>.</div><?php endif; ?>
+  <?php // Alternative zum Einzel-Rohstoff: das ganze Produkt fremdfertigen lassen (Kapsel/Tablette/Premix). ?>
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:12px">
+    <div>
+      <div>Ganzes Produkt fremdfertigen lassen <span class="muted" style="font-size:12px">· <?= h(anfrage_formen()[$df] ?? $df) ?></span></div>
+      <div class="muted" style="font-size:12px;margin-top:2px">Statt einzelner Rohstoffe direkt das fertige Produkt (Bulk) beim Lohnhersteller anfragen.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <?= anfrage_produkt_badge((int)$id) ?>
+      <?= anfrage_produkt_button((int)$id, (string)($r['name'] ?? 'Produkt'), (string)(anfrage_formen()[$df] ?? $df), 'Fertigprodukt anfragen', 'btn btn-primary btn-sm') ?>
+    </div>
+  </div>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th>Rohstoff</th><th>Status</th><th></th></tr></thead>
     <tbody>

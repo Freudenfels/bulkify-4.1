@@ -446,6 +446,23 @@ if (!$neu):
   <div class="bx-panel" style="margin-top:16px">
     <div style="margin-bottom:4px">Rohstoffkosten je Lieferant <span class="muted" style="font-size:12px">&ndash; Grundlage f&uuml;r deinen Preis</span></div>
     <div class="muted" style="font-size:12px;margin-bottom:10px">G&uuml;nstigster Lieferant bei der gr&ouml;&szlig;ten angebotenen Menge. Wo kein Preis steht, erst beim Lieferanten anfragen.</div>
+    <?php // Alternative: statt der Einzel-Rohstoffe das ganze Produkt fremdfertigen lassen.
+          $angRez = all("SELECT DISTINCT r.id, r.name, r.darreichungsform FROM angebot_position ap
+                         JOIN rezeptur r ON r.id=ap.rezeptur_id WHERE ap.angebot_id=? AND ap.rezeptur_id IS NOT NULL AND ap.rezeptur_id>0 ORDER BY r.name", [(int)$id]);
+          if ($angRez): ?>
+    <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:12px">
+      <div style="margin-bottom:6px">Oder das ganze Produkt fremdfertigen lassen (Bulk):</div>
+      <?php foreach ($angRez as $ar): $arf = anfrage_formen()[$ar['darreichungsform']] ?? $ar['darreichungsform']; ?>
+        <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px;padding:4px 0">
+          <div><?= h($ar['name']) ?> <span class="muted" style="font-size:12px">· <?= h($arf) ?></span></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <?= anfrage_produkt_badge((int)$ar['id']) ?>
+            <?= anfrage_produkt_button((int)$ar['id'], (string)$ar['name'], (string)$arf, 'Fertigprodukt anfragen') ?>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Rohstoff</th><th class="bx-num">Ben&ouml;tigt</th><th class="bx-num">EK / Einheit</th><th>Lieferant</th><th class="bx-num">Kosten</th><th>Status</th><th></th></tr></thead>
       <tbody>

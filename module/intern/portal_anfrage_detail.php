@@ -403,6 +403,20 @@ if ($anfZutaten):
   </div>
   <p class="muted" style="margin-top:4px">Was kostet uns die Rezeptur beim Lieferanten? Wo kein Preis steht, hier direkt anfragen – dann kannst du das Angebot sauber kalkulieren.</p>
   <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px"><?= (int)$_GET['angefragt'] ?> Preisanfrage(n) verschickt<?= isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '' ?>.</div><?php endif; ?>
+  <?php // Alternative: ganze Rezeptur als Fertigprodukt (Bulk) fremdfertigen lassen.
+        $anfRez = one("SELECT name, darreichungsform FROM rezeptur WHERE id=?", [$anfRid]);
+        if ($anfRez): $anfRform = anfrage_formen()[$anfRez['darreichungsform']] ?? $anfRez['darreichungsform']; ?>
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:12px">
+    <div>
+      <div>Ganzes Produkt fremdfertigen lassen <span class="muted" style="font-size:12px">· <?= h($anfRform) ?></span></div>
+      <div class="muted" style="font-size:12px;margin-top:2px">Statt einzelner Rohstoffe direkt das fertige Produkt (Bulk) beim Lohnhersteller anfragen.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <?= anfrage_produkt_badge((int)$anfRid) ?>
+      <?= anfrage_produkt_button((int)$anfRid, (string)$anfRez['name'], (string)$anfRform, 'Fertigprodukt anfragen', 'btn btn-primary btn-sm') ?>
+    </div>
+  </div>
+  <?php endif; ?>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th>Rohstoff</th><th>Status</th><th></th></tr></thead>
     <tbody>

@@ -116,9 +116,11 @@ if (!$a):
       <div class="bx-row" style="gap:var(--sp-4);align-items:flex-start;margin-bottom:8px">
         <div class="bx-field" style="margin:0;flex:1 1 340px;max-width:520px">
           <label><?= h(lp_t('ihr_preis')) ?></label>
+          <?php // Einheit an die Mengen-Felder, damit klar ist: 500 kg oder 500 Stück? ("ab Menge (kg)")
+                $mengePh = lp_t('ab_menge') . ' (' . lp_einheit($einheit, 2) . ')'; ?>
           <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:8px">
             <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
-            <input type="text" name="menge_haupt" value="<?= h($hauptMenge > 0 ? $zahl($hauptMenge, 3) : '') ?>" placeholder="<?= h(lp_t('ab_menge')) ?>" style="flex:1">
+            <input type="text" name="menge_haupt" value="<?= h($hauptMenge > 0 ? $zahl($hauptMenge, 3) : '') ?>" placeholder="<?= h($mengePh) ?>" style="flex:1">
           </div>
           <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>">
           <?php // Weitere Staffeln: je Zeile ein Preis und die Menge, ab der er gilt. Leere Zeilen
@@ -127,12 +129,12 @@ if (!$a):
             <?php foreach ($staffeln as $s): ?>
               <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:8px">
                 <input type="text" name="s_preis[]" value="<?= h($zahl($s['preis'], 4)) ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
-                <input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>" placeholder="<?= h(lp_t('ab_menge')) ?>" style="flex:1">
+                <input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>" placeholder="<?= h($mengePh) ?>" style="flex:1">
               </div>
             <?php endforeach; ?>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" id="staffelPlus"
-                  data-preis="<?= h(lp_t('preis')) ?>" data-menge="<?= h(lp_t('ab_menge')) ?>">+ <?= h(lp_t('staffel')) ?></button>
+                  data-preis="<?= h(lp_t('preis')) ?>" data-menge="<?= h($mengePh) ?>">+ <?= h(lp_t('staffel')) ?></button>
         </div>
         <div class="bx-field" style="margin:0;max-width:190px"><label><?= h(lp_t('preis_basis')) ?></label>
           <?php $pb = (int)($ang['preis_basis'] ?? 1); ?>

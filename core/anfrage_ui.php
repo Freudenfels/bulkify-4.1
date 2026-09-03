@@ -33,6 +33,33 @@ function anfrage_button(int $item_id, string $label = 'Preis anfragen', string $
          . h($label) . '</button>';
 }
 
+// --- Fertigprodukt (Fremdfertigung) statt Einzel-Rohstoffe -----------------
+// Manche Lieferanten fertigen das ganze Produkt (Kapsel/Tablette/Premix). Dafür fragen wir
+// die REZEPTUR als Fertigprodukt an, nicht die einzelnen Rohstoffe.
+
+// Status einer Fertigprodukt-Anfrage zu einer Rezeptur:
+//   'preise' – mind. ein Lieferant hat ein Angebot abgegeben (beantwortet)
+//   'angefragt' – offene Anfrage, noch kein Angebot
+//   'keine' – noch nichts angefragt
+function anfrage_produkt_status(int $rezeptur_id): string {
+    if ((int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE rezeptur_id=? AND art='fertigprodukt' AND status='beantwortet'", [$rezeptur_id]) > 0) return 'preise';
+    if ((int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE rezeptur_id=? AND art='fertigprodukt' AND status='offen'", [$rezeptur_id]) > 0) return 'angefragt';
+    return 'keine';
+}
+function anfrage_produkt_badge(int $rezeptur_id): string {
+    switch (anfrage_produkt_status($rezeptur_id)) {
+        case 'preise':    return bx_badge('Angebote liegen vor', 'ok');
+        case 'angefragt': return bx_badge('angefragt', 'warn');
+        default:          return bx_badge('nicht angefragt', 'err');
+    }
+}
+
+// Knopf „Fertigprodukt anfragen" – öffnet dasselbe Popup, aber im Rezeptur-Modus.
+function anfrage_produkt_button(int $rezeptur_id, string $name, string $form = '', string $label = 'Fertigprodukt anfragen', string $klasse = 'btn btn-ghost btn-sm'): string {
+    return '<button type="button" class="' . h($klasse) . '" data-name="' . h($name) . '" data-form="' . h($form)
+         . '" onclick="bxAnfrageProduktOeffnen(' . (int)$rezeptur_id . ',this)">' . h($label) . '</button>';
+}
+
 // Das Popup + JS EINMAL je Seite ausgeben. $back = wohin nach dem Senden zurück.
 // Die Lieferantenliste kommt bewusst als Parameter (jede Seite hat sie schon geladen).
 function anfrage_modal(array $lieferanten, string $back): void {
@@ -43,6 +70,8 @@ function anfrage_modal(array $lieferanten, string $back): void {
     <div class="muted" style="font-size:13px;margin-bottom:12px" id="bxAnfrageItem">Bei welchen Lieferanten möchten Sie anfragen?</div>
     <form method="post" action="?p=preis_anfragen">
       <input type="hidden" name="item_id" id="bxAnfrageItemId" value="">
+      <input type="hidden" name="rezeptur_id" id="bxAnfrageRezId" value="">
+      <input type="hidden" name="art" id="bxAnfrageArt" value="">
       <input type="hidden" name="back" value="<?= h($back) ?>">
       <div style="max-height:230px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin-bottom:12px">
         <?php if (!$lieferanten): ?>
@@ -72,10 +101,23 @@ function anfrage_modal(array $lieferanten, string $back): void {
 function bxAnfrageZu(){ document.getElementById('bxAnfrageOverlay').style.display='none'; }
 function bxAnfrageOeffnen(itemId, btn){
   document.getElementById('bxAnfrageItemId').value = itemId;
+  document.getElementById('bxAnfrageRezId').value = '';
+  document.getElementById('bxAnfrageArt').value = '';
   var name = btn && btn.getAttribute('data-name');
   document.getElementById('bxAnfrageItem').textContent = name
     ? ('Preis für „' + name + '" – bei welchen Lieferanten anfragen?')
     : 'Bei welchen Lieferanten möchten Sie anfragen?';
+  document.getElementById('bxAnfrageOverlay').style.display='flex';
+}
+// Fertigprodukt-Modus: ganze Rezeptur als Fremdfertigung anfragen.
+function bxAnfrageProduktOeffnen(rezId, btn){
+  document.getElementById('bxAnfrageItemId').value = '';
+  document.getElementById('bxAnfrageRezId').value = rezId;
+  document.getElementById('bxAnfrageArt').value = 'fertigprodukt';
+  var name = btn && btn.getAttribute('data-name');
+  var form = btn && btn.getAttribute('data-form');
+  document.getElementById('bxAnfrageItem').textContent =
+    'Fertigprodukt „' + (name || '') + '"' + (form ? ' (' + form + ')' : '') + ' – bei welchen Lieferanten fertigen lassen?';
   document.getElementById('bxAnfrageOverlay').style.display='flex';
 }
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape') bxAnfrageZu(); });
