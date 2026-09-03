@@ -85,3 +85,6 @@ setzen, während es Rohstoffpreise beim Lieferanten einholt.
 - `module/portal/kunde.php` – Kundensicht (Anfrage stellen + Angebot annehmen).
 ## E-Mail bei Absage
 Beim Absagen (`aktion=anfrage_absagen`) bekommt der Kunde die Begründung per Mail (`mail_kunde_absage()`), sofern der Versand eingerichtet ist. Ein Mailfehler wird oben auf der Seite gezeigt (`mailfehler`).
+
+## Rohstoffpreise & Status (Stand 2026-09-03)
+Bei einer Rezeptur-/Produktanfrage steht unten das Panel **Rohstoffpreise**: je Zutat der angefragten Rezeptur ein Status-Badge („Preise liegen vor" / „angefragt" / „kein Preis") und **„Preis anfragen"** (Popup aus `core/anfrage_ui.php`, Lieferanten auswählen). So sieht das Team die Lieferantenpreise, bevor es das Angebot kalkuliert. Das frühere manuelle **Bearbeitungsstatus**-Formular ist entfernt – der Status wird automatisch gesetzt (Angebot bauen → in Bearbeitung, senden → beantwortet, absagen → abgelehnt) und nur noch als Info-Zeile angezeigt.
