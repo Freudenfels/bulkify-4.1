@@ -99,6 +99,14 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 foreach (bedarf_bulk(true) as $b) if ($b['zu_bestellen'] > 1e-6) $ekl++;
             }
             $anfCount['einkaufsliste'] = $ekl;
+            // Offene Kundenfreigaben: Rohstoffe mit Spec-Inhalt ohne Spec-Freigabe + Chargen mit CoA-Werten ohne CoA-Freigabe.
+            $anfCount['freigaben'] =
+                (int) scalar("SELECT COUNT(*) FROM item i WHERE i.kategorie='rohstoff' AND i.gesperrt=0 AND COALESCE(i.spec_freigegeben,0)=0
+                    AND ( EXISTS (SELECT 1 FROM item_kennwert k WHERE k.item_id=i.id)
+                       OR EXISTS (SELECT 1 FROM item_wirkstoff w WHERE w.item_id=i.id)
+                       OR EXISTS (SELECT 1 FROM item_grenzwert g WHERE g.item_id=i.id)
+                       OR (i.spec_pdf IS NOT NULL AND i.spec_pdf<>'') )")
+              + (int) scalar("SELECT COUNT(*) FROM charge c WHERE COALESCE(c.coa_freigegeben,0)=0 AND EXISTS (SELECT 1 FROM charge_analyse a WHERE a.charge_id=c.id)");
         } catch (Throwable $e) { /* Tabellen evtl. noch nicht da */ }
     }
     foreach ($navdef as $gruppe => $seiten) {
@@ -120,6 +128,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 'aufgaben'      => "$n offene Aufgaben",
                 'bedarf'        => "$n Aufträge mit offenem Einkaufsbedarf (noch nicht gemeldet)",
                 'einkaufsliste' => "$n Positionen zu bestellen",
+                'freigaben'     => "$n offene Freigaben (Spezifikationen/CoA)",
                 default         => "$n offene Anfragen",
             };
             $badge = $n > 0 ? "<span class=\"bx-navbadge\" title=\"$badgeTitel\">$n</span>" : '';
