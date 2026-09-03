@@ -2415,6 +2415,67 @@ function vk_fuer_kunde(float $vk, ?int $kunde_id): float {
 // Staffel menge_ab<=Menge, dann der günstigste Lieferant). Fallback: flacher item.ek_preis.
 // Hinweis: rechnet in der Bezugseinheit des Rohstoffs; Fremdwährungen (waehrung != EUR)
 // werden aktuell nicht umgerechnet (später ergänzbar).
+// Günstigsten Lieferanten für einen Rohstoff bei einer Menge finden.
+// Rückgabe: ['lieferant_id'=>…, 'firma'=>…, 'preis'=>…] oder null, wenn kein Lieferantenpreis existiert.
+function rohstoff_bester_lieferant(int $item_id, float $menge): ?array {
+    // Passende Staffel je Lieferant: größte Staffel, deren menge_ab <= Bedarf. Liegt der Bedarf
+    // unter allen Staffeln (unter MOQ), gilt die KLEINSTE Staffel – so viel müsste man mindestens abnehmen.
+    $rows = all("SELECT lp.lieferant_id, lp.preis, lp.menge_ab, l.firma FROM lieferant_preis lp
+                 LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
+                 WHERE lp.item_id=? AND (lp.waehrung IS NULL OR lp.waehrung='EUR')
+                 ORDER BY lp.lieferant_id, lp.menge_ab", [$item_id]);
+    if (!$rows) return null;
+    $jeLief = [];
+    foreach ($rows as $r) {
+        $lid = (int)$r['lieferant_id'];
+        if (!isset($jeLief[$lid])) $jeLief[$lid] = ['firma'=>(string)$r['firma'], 'kleinste'=>(float)$r['preis'], 'passend'=>null];
+        if ((float)$r['menge_ab'] <= $menge) $jeLief[$lid]['passend'] = (float)$r['preis'];   // Staffeln aufsteigend -> letzte passende gewinnt
+    }
+    $best = null;
+    foreach ($jeLief as $lid => $d) {
+        $pr = $d['passend'] ?? $d['kleinste'];
+        if ($best === null || $pr < $best['preis']) $best = ['lieferant_id'=>$lid, 'firma'=>$d['firma'], 'preis'=>$pr, 'unter_moq'=>($d['passend'] === null)];
+    }
+    return $best;
+}
+
+// Rohstoffkosten eines Angebots je Zutat – für die Kalkulation VOR dem Preis.
+// Nimmt die größte Bestellmenge über alle Optionen (dort greifen die günstigsten Staffeln) und
+// löst die Rezeptur in ihre Rohstoffe auf. Zeigt je Zutat: benötigte Menge, bester Lieferanten-EK
+// bei dieser Menge, welcher Lieferant – und ob überhaupt ein Lieferantenpreis bekannt ist.
+// Rückgabe: ['zeilen'=>[…], 'summe'=>float, 'ohne_preis'=>int (Zutaten ohne Lieferantenpreis)]
+function angebot_rohstoffkosten(int $angebot_id): array {
+    $pos = all("SELECT rezeptur_id, stueck, menge FROM angebot_position
+                WHERE angebot_id=? AND quelle='herstellung' AND rezeptur_id IS NOT NULL AND stueck>0", [$angebot_id]);
+    // Je Rezeptur die größte Gesamtstückzahl (stueck je Packung × Packungen) über die Optionen.
+    $maxEinheiten = [];
+    foreach ($pos as $p) {
+        $rid = (int)$p['rezeptur_id'];
+        $e = (int)$p['stueck'] * (int) round((float)$p['menge']);
+        if ($e > ($maxEinheiten[$rid] ?? 0)) $maxEinheiten[$rid] = $e;
+    }
+    $zeilen = []; $summe = 0.0; $ohne = 0;
+    foreach ($maxEinheiten as $rid => $einheiten) {
+        foreach (all("SELECT z.item_id, z.menge_mg, i.name, i.preis_bezug, i.einheit, i.dichte
+                      FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]) as $z) {
+            $pb = (string)($z['preis_bezug'] ?: $z['einheit'] ?: 'kg');
+            $mg = (float)$z['menge_mg'] * $einheiten;
+            // Gesamtbedarf der Zutat in ihrer Bezugseinheit
+            $bedarf = $pb === 'kg' ? $mg / 1e6 : ($pb === 'g' ? $mg / 1e3
+                    : ($pb === 'L' && $z['dichte'] ? $mg / 1e6 / (float)$z['dichte'] : $mg / 1e6));
+            $best = rohstoff_bester_lieferant((int)$z['item_id'], $bedarf);
+            $kosten = $best ? $best['preis'] * $bedarf : null;
+            if ($best) $summe += $kosten; else $ohne++;
+            $zeilen[] = [
+                'item_id'   => (int)$z['item_id'], 'name' => (string)$z['name'],
+                'bedarf'    => $bedarf, 'bezug' => $pb,
+                'ek'        => $best['preis'] ?? null, 'lieferant' => $best['firma'] ?? '',
+                'lieferant_id' => $best['lieferant_id'] ?? 0, 'kosten' => $kosten,
+            ];
+        }
+    }
+    return ['zeilen'=>$zeilen, 'summe'=>$summe, 'ohne_preis'=>$ohne];
+}
 function rohstoff_ek_bei_menge(int $item_id, float $menge): ?float {
     $rows = all("SELECT lieferant_id, preis FROM lieferant_preis
                  WHERE item_id=? AND menge_ab<=? AND (waehrung IS NULL OR waehrung='EUR')

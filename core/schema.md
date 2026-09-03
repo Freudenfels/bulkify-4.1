@@ -78,3 +78,5 @@
 **Wichtig / Regel:**
 - Reihenfolge in `init_schema`: erst `CREATE` (frisch installierbar), dann `ensure_column`-Migrationen. Nie eine Spalte löschen.
 - `akteur` im Protokoll steuert die Chat-Seite: `team` = wir (links), `system` = mittig, alles andere (z. B. `kunde`, `lieferant`) = Gegenstelle (rechts).
+
+  - **Rohstoffkosten fürs Angebot:** `rohstoff_bester_lieferant($item_id,$menge)` gibt den günstigsten Lieferanten (Firma + Preis) für eine Menge, mit Rückfall auf die kleinste Staffel unter MOQ. `angebot_rohstoffkosten($angebot_id)` summiert die Rohstoffkosten der Angebots-Rezeptur bei der größten Bestellmenge und zählt Zutaten ohne Lieferantenpreis – Grundlage für das gleichnamige Panel im Angebots-Editor.

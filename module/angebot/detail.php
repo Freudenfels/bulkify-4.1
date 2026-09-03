@@ -436,6 +436,34 @@ if (!$neu):
     </table></div>
   </div>
   <?php endif; ?>
+
+  <?php // Rohstoffkosten VOR dem Preis: was kostet uns die Rezeptur beim Lieferanten?
+        // Zeigt je Zutat den guenstigsten Lieferanten-EK bei der groessten Bestellmenge und wo noch
+        // kein Preis bekannt ist - dann steht dort "Preis anfragen".
+        $rk = angebot_rohstoffkosten($id); if ($rk['zeilen']): $nfrk = fn($v,$d=2) => number_format($v, $d, ',', '.'); ?>
+  <div class="bx-panel" style="margin-top:16px">
+    <div style="margin-bottom:4px">Rohstoffkosten je Lieferant <span class="muted" style="font-size:12px">&ndash; Grundlage f&uuml;r deinen Preis</span></div>
+    <div class="muted" style="font-size:12px;margin-bottom:10px">G&uuml;nstigster Lieferant bei der gr&ouml;&szlig;ten angebotenen Menge. Wo kein Preis steht, erst beim Lieferanten anfragen.</div>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Rohstoff</th><th class="bx-num">Ben&ouml;tigt</th><th class="bx-num">EK / Einheit</th><th>Lieferant</th><th class="bx-num">Kosten</th></tr></thead>
+      <tbody>
+      <?php foreach ($rk['zeilen'] as $z): ?>
+        <tr>
+          <td><a href="?p=rohstoff&id=<?= (int)$z['item_id'] ?>"><?= h($z['name']) ?></a></td>
+          <td class="bx-num"><?= h($nfrk($z['bedarf'], $z['bedarf'] < 1 ? 3 : 1)) ?> <?= h($z['bezug']) ?></td>
+          <td class="bx-num"><?= $z['ek'] !== null ? h($nfrk($z['ek'], 4)) . ' &euro;' : '<span style="color:#8f231b">&ndash;</span>' ?></td>
+          <td><?= $z['lieferant'] !== '' ? h($z['lieferant']) : '<span style="color:#8f231b">Preis anfragen</span>' ?></td>
+          <td class="bx-num"><?= $z['kosten'] !== null ? h($nfrk($z['kosten'])) . ' &euro;' : '<span class="muted">?</span>' ?></td>
+        </tr>
+      <?php endforeach; ?>
+        <tr style="font-weight:600"><td colspan="4">Rohstoffkosten gesamt (gr&ouml;&szlig;te Menge)</td><td class="bx-num"><?= h($nfrk($rk['summe'])) ?> &euro;</td></tr>
+      </tbody>
+    </table></div>
+    <?php if ($rk['ohne_preis'] > 0): ?>
+      <div style="margin-top:10px;color:#8f231b;font-size:13px"><?= (int)$rk['ohne_preis'] ?> Rohstoff(e) ohne Lieferantenpreis &ndash; bitte zuerst anfragen (Lieferant &rarr; Preisanfragen), sonst ist die Kalkulation unvollst&auml;ndig.</div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
 </div>
 
 <script>

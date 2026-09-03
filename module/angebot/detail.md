@@ -99,3 +99,6 @@ verlinkt auf die Portal-PDF-Route mit dem Kunden-Token.
 Das alte Staffelpreis-Modell (`angebot_staffel`) wird hier nicht mehr bearbeitet.
 ## E-Mail beim Senden
 Beim Senden (`aktion=senden`) bekommt der Kunde eine Mail mit dem Portal-Link (`mail_kunde_angebot()` in `core/mail.php`) – nur wenn der Versand unter Einstellungen → E-Mail eingerichtet ist. Klappt die Mail nicht, bleibt das Angebot trotzdem gesendet; die Seite zeigt den Grund (`mailfehler`).
+
+## Rohstoffkosten je Lieferant (vor dem Preis)
+Unter „Preis je Packung" steht das Panel **Rohstoffkosten je Lieferant** (`angebot_rohstoffkosten()`). Es löst die Rezeptur der Herstellungspositionen in ihre Rohstoffe auf, rechnet die benötigte Menge zur **größten** angebotenen Bestellmenge und zeigt je Zutat den günstigsten Lieferanten-EK (`rohstoff_bester_lieferant()`) samt Lieferant und Gesamtkosten – damit die Kalkulation vor dem Preis steht. Liegt der Bedarf unter der kleinsten Staffel (MOQ), gilt die kleinste Staffel. Fehlt zu einem Rohstoff jeder Lieferantenpreis, steht dort **„Preis anfragen"** und ein Hinweis; den Preis holt man über Lieferant → Preisanfragen. Sobald ein Angebot angenommen wird, entsteht ein Produktionsauftrag, der im **Einkaufsbedarf** erscheint und den Rohstoffbedarf über `produktion_materialbedarf()` auflöst.
