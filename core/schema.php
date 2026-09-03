@@ -1849,20 +1849,20 @@ function std_fuellvolumen_ml(): array {
 // Form-abhängiges Größenraster: Pulver/Granulat nach Füllgewicht (g), Flüssig nach Füllvolumen (ml), sonst Stückzahlen.
 function std_groessen_fuer(string $form): array {
     if (in_array($form, ['pulver', 'granulat'], true)) return std_fuellgewichte();
-    if ($form === 'fluessig') return std_fuellvolumen_ml();
-    return std_stueckzahlen();
+    if (in_array($form, ['fluessig', 'gel'], true)) return std_fuellvolumen_ml();
+    return std_stueckzahlen();   // Stückzahlen auch für Gummi
 }
 // Einheit der Packungsgröße je Darreichungsform: 'g' (Pulver/Granulat), 'ml' (Flüssig), '' = Stückzahl.
 function form_groessen_einheit(string $form): string {
     if (in_array($form, ['pulver', 'granulat'], true)) return 'g';
-    if ($form === 'fluessig') return 'ml';
+    if (in_array($form, ['fluessig', 'gel'], true)) return 'ml';   // Gel wie Flüssig: nach Füllvolumen
     return '';
 }
 // Wird die Packungsgröße als Füllmenge (g/ml) angefragt statt als Stückzahl?
 function form_ist_fuellmenge(string $form): bool { return form_groessen_einheit($form) !== ''; }
 // Plural der Stück-Einheit (nur für Formen, die nach Stückzahl verkauft werden).
 function form_plural(string $form): string {
-    return ['kapsel'=>'Kapseln', 'tablette'=>'Tabletten', 'softgel'=>'Softgels', 'stick'=>'Sticks'][$form] ?? 'Stück';
+    return ['kapsel'=>'Kapseln', 'tablette'=>'Tabletten', 'softgel'=>'Softgels', 'stick'=>'Sticks', 'gummi'=>'Gummis'][$form] ?? 'Stück';
 }
 // Beschriftung einer Packungsgröße: „300 g", „250 ml", „120 Kapseln".
 function form_groessen_label(string $form, float $wert): string {
@@ -1906,6 +1906,24 @@ function tablette_hilfsstoff_ek_stueck(int $rezeptur_id): float {
 function fluessig_portion_ml(): float { return max(0.1, (float) meta_get('fluessig_portion_ml', 10)); }
 function fluessig_basis_ek_l(): float { return max(0.0, (float) meta_get('fluessig_basis_ek_l', 3)); }
 
+// ---- Fruchtgummi (Gummibärchen) ----
+// Stückware wie Tablette, aber die Grundmasse (Pektin/Gelatine, Zucker/Sirup, Aroma) macht den
+// Löwenanteil aus. Deshalb ein Zielgewicht je Gummi + EK der Grundmasse je kg (Einstellungen).
+function gummi_gewicht_mg(): float  { return max(1.0, (float) meta_get('gummi_gewicht_mg', 3000)); }   // Fertiggewicht je Gummi (mg)
+function gummi_basis_ek_kg(): float { return max(0.0, (float) meta_get('gummi_basis_ek_kg', 4)); }      // EK der Gummimasse je kg
+// Fertiggewicht einer Gummi (mg) – Basis für die Behälter-Auswahl (mind. das Wirkstoffgewicht).
+function gummi_gewicht_je_stueck(int $rezeptur_id): float { return max(gummi_gewicht_mg(), rezeptur_gewicht_mg($rezeptur_id)); }
+// EK der Grundmasse je Gummi (EUR): Zielgewicht minus Wirkstoffgewicht als Grundmasse.
+function gummi_basis_ek_stueck(int $rezeptur_id): float {
+    $basisMg = max(0.0, gummi_gewicht_mg() - rezeptur_gewicht_mg($rezeptur_id));
+    return $basisMg / 1e6 * gummi_basis_ek_kg();   // mg -> kg
+}
+
+// ---- Gel (Stick) ----
+// Wie Flüssig portionsweise (Rezeptur = eine Portion), eigene zähflüssige Grundmasse je Liter.
+function gel_portion_ml(): float { return max(0.1, (float) meta_get('gel_portion_ml', 15)); }
+function gel_basis_ek_l(): float { return max(0.0, (float) meta_get('gel_basis_ek_l', 5)); }
+
 // Herstellungs-EK je Packung (nur Rezeptur-Füllung + Leerkapseln bzw. Presshilfsstoffe/Trägerflüssigkeit).
 // Der BEHÄLTER kommt separat als eigene Angebotsposition (Dose/Deckel/Etikett kommen extra – EK-Staffel × Verpackungs-Aufschlag).
 // $bestellmenge (Packungen) macht die Mengendegression: die Rohstoffe werden mit der Staffel zur
@@ -1925,9 +1943,16 @@ function produkt_variante_ek(int $produkt_id, int $stueck, int $verp_id = 0, int
         $servings = (float)$stueck / fluessig_portion_ml();
         return rezeptur_kosten_pro_einheit($rid ?: null, $servings * $bm) * $servings + ((float)$stueck / 1000) * fluessig_basis_ek_l();
     }
+    if ($form === 'gel') {
+        // Wie Flüssig, aber mit der Gel-Grundmasse je ml.
+        $servings = (float)$stueck / gel_portion_ml();
+        return rezeptur_kosten_pro_einheit($rid ?: null, $servings * $bm) * $servings + ((float)$stueck / 1000) * gel_basis_ek_l();
+    }
     $fuell = rezeptur_kosten_pro_einheit($rid ?: null, $stueck * $bm) * $stueck;
     // Tablette: statt der Leerkapsel kommen die Presshilfsstoffe dazu.
     if ($form === 'tablette') return $fuell + tablette_hilfsstoff_ek_stueck($rid) * $stueck;
+    // Gummi: die Grundmasse je Gummi kommt dazu (statt Leerkapsel).
+    if ($form === 'gummi') return $fuell + gummi_basis_ek_stueck($rid) * $stueck;
     $kaps  = produkt_kapsel_ek($produkt_id) * $stueck;
     return $fuell + $kaps;
 }
@@ -2354,10 +2379,14 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
     } elseif ($form === 'fluessig') {
         $servings = $stueck / fluessig_portion_ml();
         $ekH = rezeptur_kosten_pro_einheit($rid, $servings * $menge) * $servings + ($stueck / 1000) * fluessig_basis_ek_l();
+    } elseif ($form === 'gel') {
+        $servings = $stueck / gel_portion_ml();
+        $ekH = rezeptur_kosten_pro_einheit($rid, $servings * $menge) * $servings + ($stueck / 1000) * gel_basis_ek_l();
     } else {
         $ekH = rezeptur_kosten_pro_einheit($rid, $stueck * $menge) * $stueck
              + ($istKapsel ? leerkapsel_ek_fuer_rezeptur($rid) * $stueck : 0)
-             + ($form === 'tablette' ? tablette_hilfsstoff_ek_stueck($rid) * $stueck : 0);
+             + ($form === 'tablette' ? tablette_hilfsstoff_ek_stueck($rid) * $stueck : 0)
+             + ($form === 'gummi' ? gummi_basis_ek_stueck($rid) * $stueck : 0);
     }
     $marge = $mo !== null ? $mo : max(marge_typ_prozent($form), marge_min_prozent());
     $vkH = vk_fuer_kunde($ekH * (1 + $marge/100), $kid);
@@ -2551,12 +2580,13 @@ function anfrage_arten(): array {
 // steht neben „Fertigprodukt · Kapseln".
 function anfrage_formen(): array {
     return ['kapsel'=>'Kapsel', 'tablette'=>'Tablette', 'softgel'=>'Softgel', 'stick'=>'Stick',
+            'gummi'=>'Fruchtgummi', 'gel'=>'Gel',
             'pulver'=>'Pulver', 'granulat'=>'Granulat', 'fluessig'=>'Flüssig', 'oel'=>'Öl', 'extrakt'=>'Extrakt'];
 }
 // Welche Formen zu welcher Art passen. Verpackung und Verbrauch haben keine.
 function anfrage_formen_fuer_art(string $art): array {
     $alle = anfrage_formen();
-    if ($art === 'fertigprodukt') return array_intersect_key($alle, array_flip(['kapsel','tablette','softgel','stick','pulver','granulat','fluessig']));
+    if ($art === 'fertigprodukt') return array_intersect_key($alle, array_flip(['kapsel','tablette','softgel','stick','gummi','gel','pulver','granulat','fluessig']));
     if ($art === 'rohstoff')      return array_intersect_key($alle, array_flip(['pulver','granulat','fluessig','oel','extrakt']));
     return [];
 }
@@ -2571,6 +2601,7 @@ function anfrage_form_fuer_item(?int $item_id): string {
 // Pulver/Granulat gehen nach Kilogramm, Flüssiges nach Liter.
 function anfrage_einheit_fuer_form(string $form): string {
     return ['kapsel'=>'Kapsel', 'tablette'=>'Tablette', 'softgel'=>'Softgel', 'stick'=>'Stick',
+            'gummi'=>'kg', 'gel'=>'L',
             'pulver'=>'kg', 'granulat'=>'kg', 'extrakt'=>'kg', 'fluessig'=>'L', 'oel'=>'L'][$form] ?? 'Stück';
 }
 // Die Einheit einer Anfrage – ohne dass jemand sie eintippen muss.
@@ -2644,6 +2675,8 @@ function einheit_wort(?string $e, float $menge = 1, string $sprache = 'de'): str
         'tablette' => ['Tablette', 'Tabletten', 'tablet', 'tablets', '片'],
         'softgel'  => ['Softgel', 'Softgels', 'softgel', 'softgels', '软胶囊'],
         'stick'    => ['Stick', 'Sticks', 'stick', 'sticks', '条'],
+        'gummi'    => ['Gummi', 'Gummis', 'gummy', 'gummies', '软糖'],
+        'gummis'   => ['Gummi', 'Gummis', 'gummy', 'gummies', '软糖'],
         'packung'  => ['Packung', 'Packungen', 'pack', 'packs', '包装'],
         'beutel'   => ['Beutel', 'Beutel', 'bag', 'bags', '袋'],
         'liter'    => ['Liter', 'Liter', 'litre', 'litres', '升'],
@@ -2669,6 +2702,8 @@ function anfrage_art_label(string $art, string $form = '', string $sprache = 'de
         'tablette' => ['de'=>'Tabletten', 'en'=>'Tablets', 'zh'=>'片剂'],
         'softgel'  => ['de'=>'Softgels', 'en'=>'Softgels', 'zh'=>'软胶囊'],
         'stick'    => ['de'=>'Sticks', 'en'=>'Sticks', 'zh'=>'条包'],
+        'gummi'    => ['de'=>'Fruchtgummi', 'en'=>'Gummies', 'zh'=>'软糖'],
+        'gel'      => ['de'=>'Gel', 'en'=>'Gel', 'zh'=>'凝胶'],
         'pulver'   => ['de'=>'Pulver', 'en'=>'Powder', 'zh'=>'粉剂'],
         'granulat' => ['de'=>'Granulat', 'en'=>'Granulate', 'zh'=>'颗粒'],
         'fluessig' => ['de'=>'Flüssig', 'en'=>'Liquid', 'zh'=>'液体'],
@@ -2926,8 +2961,16 @@ function passende_behaelter_fuer(int $rezeptur_id, string $form, int $stueck): a
                       WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0
                         AND max_fuellgewicht_g IS NOT NULL AND max_fuellgewicht_g >= ?
                       ORDER BY (material IS NULL), material, max_fuellgewicht_g ASC", [$fillG]);
-    } elseif ($form === 'fluessig') {
-        // Flüssig: $stueck = Füllvolumen in ml; Behälter über das Fassungsvermögen (volumen_ml).
+    } elseif ($form === 'gummi') {
+        // Gummi: $stueck = Anzahl Gummis; Füllgewicht = Gummigewicht × Anzahl.
+        $fillG = gummi_gewicht_je_stueck($rezeptur_id) / 1000 * $stueck;
+        if ($fillG <= 0) return [];
+        $cands = all("SELECT id AS item_id, material FROM item
+                      WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0
+                        AND max_fuellgewicht_g IS NOT NULL AND max_fuellgewicht_g >= ?
+                      ORDER BY (material IS NULL), material, max_fuellgewicht_g ASC", [$fillG]);
+    } elseif (in_array($form, ['fluessig', 'gel'], true)) {
+        // Flüssig/Gel: $stueck = Füllvolumen in ml; Behälter über das Fassungsvermögen (volumen_ml).
         $fillMl = (float) $stueck;
         if ($fillMl <= 0) return [];
         $cands = all("SELECT id AS item_id, material FROM item
@@ -3003,6 +3046,8 @@ function produktionsschritte_fuer(string $form, bool $zukauf = false): array {
         'stick'    => 'Stick-Abfüllung',
         'pulver'   => 'Pulver-Abfüllung',
         'fluessig' => 'Abfüllung',
+        'gummi'    => 'Gummi-Herstellung (Gießen)',
+        'gel'      => 'Gel-Abfüllung',
         default    => 'Herstellung',
     };
     return ['Rohstoffe bereitstellen', 'Mischen', $herstellung, 'Verpacken', 'Etikettieren',

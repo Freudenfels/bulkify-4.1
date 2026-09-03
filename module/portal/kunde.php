@@ -1242,10 +1242,10 @@ portal_head('Kundenportal · ' . $k['firma']);
       function upd(){
         var o=sel.options[sel.selectedIndex], f=o?o.getAttribute('data-form'):'';
         // Pulver/Granulat werden nach Gramm angefragt, Flüssiges nach Milliliter, alles andere nach Stückzahl
-        var fuell=(f==='pulver'||f==='granulat'||f==='fluessig');
+        var fuell=(f==='pulver'||f==='granulat'||f==='fluessig'||f==='gel');
         document.getElementById('pa_stueck_wrap').style.display=fuell?'none':'';
         document.getElementById('pa_fuell_wrap').style.display=fuell?'':'none';
-        document.getElementById('pa_fuell_einheit').textContent=(f==='fluessig')?'(ml)':'(g)';
+        document.getElementById('pa_fuell_einheit').textContent=(f==='fluessig'||f==='gel')?'(ml)':'(g)';
       }
       sel.addEventListener('change',upd); upd();
     })();</script>

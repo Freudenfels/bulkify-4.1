@@ -4,7 +4,7 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
 
-$DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
+$DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
 
@@ -257,6 +257,7 @@ var REZEPTE = <?= json_encode($REZEPTE, JSON_UNESCAPED_UNICODE) ?>;
 var VERP = <?= json_encode($VERP, JSON_UNESCAPED_UNICODE) ?>;
 var KAPSELN = <?= json_encode($KAPSELN, JSON_UNESCAPED_UNICODE) ?>;
 var TAB_HILFSSTOFF = <?= json_encode(tablette_hilfsstoff_prozent()) ?>;   // Presshilfsstoffe % oben auf das Wirkstoffgewicht (Tablette)
+var GUMMI_GEWICHT = <?= json_encode(gummi_gewicht_mg()) ?>;   // Fertiggewicht je Gummi (mg)
 var SLOTS = ['verpackung_id','verschluss_id','etikett_id','karton_id','beipack_id'];
 function nf(x,d){ return x.toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function getVerp(id){ var el=document.getElementById(id); return (el&&el.value)?VERP[el.value]:null; }
@@ -302,9 +303,18 @@ function verpCheck(rz, vp, einh, kV, vh){
     set('zu klein','var(--err)','Füllgewicht '+nf(tg,1)+' g übersteigt max. '+nf(vp.max_g,0)+' g. '+(pt.length?'Passend: '+pt.join(', '):'Keine passende Verpackung hinterlegt.'));
     return;
   }
-  if (form==='fluessig'){
+  if (form==='gummi'){
+    // Gummi: Fertiggewicht je Gummi × Anzahl gegen das max. Füllgewicht.
+    var gg = Math.max(GUMMI_GEWICHT, rz.weight||0)*einh/1000;
+    if (!vp){ set('– keine –','','Füllgewicht je Packung: '+nf(gg,1)+' g ('+einh+' Gummis). Bitte Verpackung wählen.'); return; }
+    if (vp.max_g===null||vp.max_g===undefined){ set('kein Füllgewicht','var(--warn)','Verpackung hat kein max. Füllgewicht hinterlegt (benötigt: '+nf(gg,1)+' g).'); return; }
+    if (gg<=vp.max_g){ set('passt','var(--gruen)',nf(gg,1)+' g von max. '+nf(vp.max_g,0)+' g ('+einh+' Gummis).'); return; }
+    set('zu klein','var(--err)','Füllgewicht '+nf(gg,1)+' g übersteigt max. '+nf(vp.max_g,0)+' g.');
+    return;
+  }
+  if (form==='fluessig' || form==='gel'){
     var ml=einh;
-    if (!vp){ set('– keine –','','Füllvolumen: '+nf(ml,0)+' ml. Bitte Flasche wählen.'); return; }
+    if (!vp){ set('– keine –','','Füllvolumen: '+nf(ml,0)+' ml. Bitte Gebinde wählen.'); return; }
     if (vp.vol===null||vp.vol===undefined){ set('kein Volumen','var(--warn)','Verpackung hat kein Volumen hinterlegt (benötigt: '+nf(ml,0)+' ml).'); return; }
     if (ml<=vp.vol){ set('passt','var(--gruen)',nf(ml,0)+' ml von '+nf(vp.vol,0)+' ml.'); return; }
     set('zu klein','var(--err)','Füllvolumen '+nf(ml,0)+' ml übersteigt '+nf(vp.vol,0)+' ml.');

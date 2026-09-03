@@ -24,7 +24,7 @@ $TABS = [
     'testlogin'  => 'Testlogin',
     'werkzeuge'  => 'Werkzeuge',
 ];
-$DFORM_M = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
+$DFORM_M = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 $tab = $_GET['tab'] ?? 'firma';
 if (!isset($TABS[$tab])) $tab = 'firma';
 
@@ -156,6 +156,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'preise_save') {
     meta_set('tablette_hilfsstoff_ek_kg', (string)(float)str_replace(',', '.', $_POST['tablette_hilfsstoff_ek_kg'] ?? '8'));
     meta_set('fluessig_portion_ml', (string)(float)str_replace(',', '.', $_POST['fluessig_portion_ml'] ?? '10'));
     meta_set('fluessig_basis_ek_l', (string)(float)str_replace(',', '.', $_POST['fluessig_basis_ek_l'] ?? '3'));
+    meta_set('gummi_gewicht_mg', (string)(float)str_replace(',', '.', $_POST['gummi_gewicht_mg'] ?? '3000'));
+    meta_set('gummi_basis_ek_kg', (string)(float)str_replace(',', '.', $_POST['gummi_basis_ek_kg'] ?? '4'));
+    meta_set('gel_portion_ml', (string)(float)str_replace(',', '.', $_POST['gel_portion_ml'] ?? '15'));
+    meta_set('gel_basis_ek_l', (string)(float)str_replace(',', '.', $_POST['gel_basis_ek_l'] ?? '5'));
     header('Location: ?p=einstellungen&tab=preise&ok=1'); exit;
 }
 // --- Behälter-Fassung speichern (Matrix: Kapseln je Größe + Pulver-Gramm + Flüssig-ml) ---
@@ -291,6 +295,13 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       <div class="bx-field"><label>EK Presshilfsstoffe (EUR/kg) <?= bx_hint('Einkaufspreis der Presshilfsstoffe – geht in den EK je Tablette ein') ?></label><input type="number" step="0.01" name="tablette_hilfsstoff_ek_kg" value="<?= $m('tablette_hilfsstoff_ek_kg','8') ?>"></div>
       <div class="bx-field"><label>Portionsvolumen Flüssig (ml) <?= bx_hint('wie viel ml eine Portion laut Rezeptur ist – daraus ergibt sich, wie viele Portionen in eine Flasche gehen') ?></label><input type="number" step="0.1" name="fluessig_portion_ml" value="<?= $m('fluessig_portion_ml','10') ?>"></div>
       <div class="bx-field"><label>EK Trägerflüssigkeit (EUR/L) <?= bx_hint('Wasser, Öl oder Glycerin als Basis – kommt je ml Füllvolumen zum EK dazu') ?></label><input type="number" step="0.01" name="fluessig_basis_ek_l" value="<?= $m('fluessig_basis_ek_l','3') ?>"></div>
+    </div>
+    <div style="font-weight:600;margin:14px 0 6px">Fruchtgummi &amp; Gel – Kalkulationsgrundlagen</div>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Gewicht je Gummi (mg) <?= bx_hint('Fertiggewicht einer Gummi – die Grundmasse (Pektin/Gelatine, Zucker/Sirup) trägt die Wirkstoffe; bestimmt Gummigewicht und Behälter-Auswahl') ?></label><input type="number" step="1" name="gummi_gewicht_mg" value="<?= $m('gummi_gewicht_mg','3000') ?>"></div>
+      <div class="bx-field"><label>EK Gummimasse (EUR/kg) <?= bx_hint('Einkaufspreis der Gummi-Grundmasse – geht je Gummi in den EK ein') ?></label><input type="number" step="0.01" name="gummi_basis_ek_kg" value="<?= $m('gummi_basis_ek_kg','4') ?>"></div>
+      <div class="bx-field"><label>Portionsvolumen Gel (ml) <?= bx_hint('wie viel ml eine Gel-Portion (ein Stick) laut Rezeptur ist – daraus ergibt sich, wie viele Portionen in ein Gebinde gehen') ?></label><input type="number" step="0.1" name="gel_portion_ml" value="<?= $m('gel_portion_ml','15') ?>"></div>
+      <div class="bx-field"><label>EK Gel-Grundmasse (EUR/L) <?= bx_hint('zähflüssige Gel-Basis – kommt je ml Füllvolumen zum EK dazu') ?></label><input type="number" step="0.01" name="gel_basis_ek_l" value="<?= $m('gel_basis_ek_l','5') ?>"></div>
     </div>
     <div style="font-weight:600;margin:14px 0 6px">Rohstoff- & Verpackungs-Weiterverkauf</div>
     <div class="bx-grid">

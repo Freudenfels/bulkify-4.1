@@ -4,7 +4,7 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status je Zutat
 
-$DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
+$DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 $FORMLBL = ['pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin'];
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
