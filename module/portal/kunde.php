@@ -1621,13 +1621,16 @@ portal_head('Kundenportal · ' . $k['firma']);
       // eingerahmt von Bestätigt (Anfang) und Versendet (Ende). Datum aus echten Zeitstempeln.
       $versendet = ($a['status'] === 'versendet');
       $sichtbar = array_values(array_filter($schritte, fn($s) => stripos((string)$s['station'], 'Freigabe') === false));
+      // Kundensicht: Wird der Bulk zugekauft (Fremdproduktion), heißt der erste Schritt intern
+      // „Fertigware bereitstellen". Das verrät den Zukauf – dem Kunden zeigen wir neutral „In Herstellung".
+      $kundenSchritt = fn(string $st) => stripos($st, 'Fertigware') !== false ? 'In Herstellung' : $st;
       $track = [['label'=>'Bestätigt', 'done'=>true, 'current'=>false, 'date'=>$a['angelegt']]];
       $curSet = false;
       foreach ($sichtbar as $s) {
           $done  = ((int)$s['erledigt'] === 1);
           $isCur = (!$done && !$curSet && !$versendet);
           if ($isCur) $curSet = true;
-          $track[] = ['label'=>$s['station'], 'done'=>$done, 'current'=>$isCur,
+          $track[] = ['label'=>$kundenSchritt((string)$s['station']), 'done'=>$done, 'current'=>$isCur,
                       'date'=>($done && !empty($s['erledigt_at'])) ? $s['erledigt_at'] : null];
       }
       $track[] = ['label'=>'Versendet', 'done'=>$versendet, 'current'=>(!$versendet && !$curSet), 'date'=>$versendet ? $a['aktualisiert'] : null];
