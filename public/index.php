@@ -38,6 +38,7 @@ $routes = [
     'partner_detail' => 'partner/detail.php',
     'rohstoffe'      => 'lager/rohstoffe_liste.php',
     'rohstoff'       => 'lager/rohstoff_detail.php',
+    'freigaben'      => 'lager/freigaben.php',       // offene Kundenfreigaben (Spec/CoA)
     'spec_pdf'       => 'lager/spec_download.php',
     'spec_bulkify'   => 'lager/spec_bulkify.php',   // unsere Spezifikation (bulkify-Layout)
     'coa_bulkify'    => 'lager/spec_bulkify.php',   // unser Analysenzertifikat zur Charge
