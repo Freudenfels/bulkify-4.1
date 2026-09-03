@@ -241,13 +241,24 @@ function lp_shell_start(string $aktiv): void {
         'lieferant_profil'      => lp_t('profil'),
         'lieferant_hilfe'       => lp_t('anleitung'),
     ];
-    $neu = $lf ? nachrichten_ungelesen((int)$lf['id'], 'lieferant') : 0;
-    if ($neu > 0) $menu['lieferant_nachrichten'] .= ' (' . $neu . ' ' . lp_t('neu') . ')';
+    // Zähler-Badges (Kreis mit Zahl): offene Preisanfragen und ungelesene Rückfragen.
+    $lid = (int)($lf['id'] ?? 0);
+    $badges = [];
+    if ($lid) {
+        $offeneAnf = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE lieferant_id=? AND status='offen'", [$lid]);
+        if ($offeneAnf > 0) $badges['lieferant_anfrage'] = $offeneAnf;
+        $neu = nachrichten_ungelesen($lid, 'lieferant');
+        if ($neu > 0) $badges['lieferant_nachrichten'] = $neu;
+    }
+    // Kleiner runder Zähler – inline gestylt, damit er ohne Portal-CSS funktioniert.
+    $zaehler = fn(int $n) => ' <span style="display:inline-block;min-width:18px;height:18px;line-height:18px;text-align:center;'
+        . 'background:var(--lime,#c0f24e);color:#10210f;border-radius:999px;padding:0 5px;font-size:11px;font-weight:700;float:right">' . $n . '</span>';
     echo '<div class="bx-shell"><aside class="bx-side">'
        . '<div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo"><span class="bx-ver">' . h(lp_t('portal')) . '</span></div>'
        . '<nav><div class="bx-navgroup">' . h((string)($lf['firma'] ?? '')) . '</div>';
     foreach ($menu as $route => $label) {
-        echo '<a href="?p=' . h($route) . '"' . ($aktiv === $route ? ' class="on"' : '') . '>' . h($label) . '</a>';
+        $badge = isset($badges[$route]) ? $zaehler((int)$badges[$route]) : '';
+        echo '<a href="?p=' . h($route) . '"' . ($aktiv === $route ? ' class="on"' : '') . '>' . h($label) . $badge . '</a>';
     }
     // Die Sprache stellt man einmal ein, deshalb steht der Umschalter klein ganz unten.
     echo '<div class="bx-userbox"><a href="?p=logout">' . h(lp_t('abmelden')) . '</a></div>'

@@ -24,3 +24,6 @@ Das Menü hat zwei weitere Punkte: **Rückfragen** (`lieferant_nachrichten`, mit
 Die Sprache stellt man einmal ein, deshalb steht der Umschalter klein (11px, Kürzel **DE · EN · 中文**) ganz unten in der Seitenleiste, unter Abmelden und dem Farbmodus. Die Links setzen `display:inline;padding:0`, sonst würde die Menü-Regel `.bx-side nav a` sie breit machen und der Umschalter bräche um.
 ## Menüpunkt Mein Katalog
 `lieferant_katalog` – der Lieferant pflegt dort, was er anbietet. Siehe `core/lieferant_katalog.md`.
+
+## Zähler-Badges im Menü
+`lp_shell_start()` zeigt am Menüpunkt **Anfragen** einen runden Zähler (Kreis mit Zahl), wenn offene Preisanfragen vorliegen (`lieferant_anfrage.status='offen'`), und an **Rückfragen** die Zahl ungelesener Nachrichten. Der Badge ist inline gestylt (lime, `border-radius:999px`, rechtsbündig), damit er ohne zusätzliches Portal-CSS funktioniert.
