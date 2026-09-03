@@ -23,6 +23,6 @@ Für bequemes Testen gibt es einen **Direktlink ohne Passwort**: `?p=autologin&t
 
 Ob der Direktlink greift, entscheidet `testlogin_erlaubt()`:
 - **Lokal** (`ist_lokal()`, REMOTE_ADDR 127.0.0.1/::1) immer.
-- **Auf einem Server** nur, wenn der Testlogin bewusst freigeschaltet ist (`app_meta testlogin=1`). Standard = aus, damit der Link kein Backdoor im Livebetrieb ist. Umschalten unter Einstellungen → Testlogin (dort stehen auch die fertigen Direktlinks für Admin/Team, Lieferant und Kunde). Nach dem Testen wieder ausschalten.
+- **Auf einem Server** nur, wenn der Testlogin bewusst freigeschaltet ist (`app_meta testlogin=1`) **und das Zeitfenster noch läuft** (`app_meta testlogin_bis`, UTC-Zeitstempel). Standard = aus, damit der Link kein Backdoor im Livebetrieb ist. Einschalten unter Einstellungen → Testlogin setzt `testlogin_bis` auf **jetzt + 4 Stunden**; nach Ablauf schaltet `testlogin_erlaubt()` den Schalter beim nächsten Aufruf selbst auf 0 (self-off), sodass kein offener Zugang vergessen werden kann. Erneut einschalten verlängert um weitere 4 Stunden.
 
 Der Kunden-Direktlink läuft nicht über Autologin, sondern über den Portal-Magic-Link `?p=portal&token=<kunden.portal_token>` – der funktioniert unabhängig vom Testlogin-Schalter überall.

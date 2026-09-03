@@ -174,10 +174,18 @@ function ist_lokal(): bool {
 }
 // Darf per Token ohne Passwort eingeloggt werden? Lokal immer (bequemes Testen).
 // Auf einem Server nur, wenn der Testlogin bewusst freigeschaltet ist
-// (app_meta testlogin=1) – gedacht für die Beta-/Testumgebung, jederzeit abschaltbar.
+// (app_meta testlogin=1) UND das Zeitfenster noch läuft (app_meta testlogin_bis, UTC).
+// Nach Ablauf schaltet er sich selbst wieder ab – kein offener Zugang, den man vergisst.
 function testlogin_erlaubt(): bool {
     if (ist_lokal()) return true;
-    return function_exists('meta_get') && (string) meta_get('testlogin', '') === '1';
+    if (!function_exists('meta_get') || (string) meta_get('testlogin', '') !== '1') return false;
+    $bis = (string) meta_get('testlogin_bis', '');
+    if ($bis !== '' && strtotime($bis . ' UTC') < time()) {
+        // Fenster abgelaufen: dauerhaft ausschalten und ablehnen.
+        if (function_exists('meta_set')) meta_set('testlogin', '0');
+        return false;
+    }
+    return true;
 }
 // Autologin per Benutzer-Token. Für bequemes Testen ohne Passwort.
 function auth_login_by_token(string $token): bool {

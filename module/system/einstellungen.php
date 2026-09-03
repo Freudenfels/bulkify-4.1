@@ -68,7 +68,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'agb_save') {
 }
 // --- Testlogin: passwortloser Direktlogin auf dem Server ein/aus ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'testlogin_save') {
-    meta_set('testlogin', isset($_POST['testlogin']) ? '1' : '0');
+    if (isset($_POST['testlogin'])) {
+        meta_set('testlogin', '1');
+        // Fenster von jetzt an 4 Stunden (UTC gespeichert). Danach schaltet sich der
+        // Testlogin selbst wieder ab (siehe testlogin_erlaubt()).
+        meta_set('testlogin_bis', gmdate('Y-m-d H:i:s', time() + 4 * 3600));
+    } else {
+        meta_set('testlogin', '0');
+        meta_set('testlogin_bis', '');
+    }
     header('Location: ?p=einstellungen&tab=testlogin&ok=1'); exit;
 }
 // --- Testlogin: fehlende Tokens erzeugen, damit jeder Direktlink funktioniert (nicht löschend) ---
@@ -652,7 +660,10 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
 </div>
 <?php endif; ?>
 <?php if ($tab === 'testlogin'):
-    $tlAn   = (string) meta_get('testlogin', '') === '1';
+    $tlBis    = (string) meta_get('testlogin_bis', '');
+    $tlOffen  = $tlBis === '' || strtotime($tlBis . ' UTC') >= time();   // Fenster noch offen?
+    $tlAn     = (string) meta_get('testlogin', '') === '1' && $tlOffen;   // effektiv aktiv
+    $tlRest   = ($tlAn && $tlBis !== '') ? max(0, strtotime($tlBis . ' UTC') - time()) : 0;
     $lokal  = function_exists('ist_lokal') && ist_lokal();
     $base   = ($_SERVER['REQUEST_SCHEME'] ?? 'https') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
     $alogin = fn(string $tok) => $base . '/?p=autologin&token=' . $tok;
@@ -667,17 +678,22 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   <h2>Testlogin <?= bx_hint('Passwortloser Direktlogin per Link – zum schnellen Testen. Lokal immer möglich; auf dem Server nur mit diesem Schalter.') ?></h2>
   <p class="muted" style="margin-top:0">
     Aktuell: <?= $lokal ? bx_badge('lokal – immer aktiv','info') : ($tlAn ? bx_badge('auf diesem Server AKTIV','warn') : bx_badge('auf diesem Server aus','info')) ?>
+    <?php if (!$lokal && $tlAn && $tlBis !== ''): $std = intdiv($tlRest, 3600); $min = intdiv($tlRest % 3600, 60); ?>
+      <span style="margin-left:8px">läuft ab um <strong><?= h(fmt_zeit($tlBis)) ?> Uhr</strong> – noch <?= $std ?> h <?= $min ?> min</span>
+    <?php elseif (!$lokal && !$tlAn && (string) meta_get('testlogin','') === '1'): ?>
+      <span style="margin-left:8px">– das 4-Stunden-Fenster ist abgelaufen, bitte neu einschalten</span>
+    <?php endif; ?>
   </p>
   <?php if (!$lokal && $tlAn): ?>
-    <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px">Achtung: Solange der Schalter an ist, kommt <strong>jeder mit einem dieser Links ohne Passwort</strong> ins System. Nur für die Testumgebung – danach wieder ausschalten.</div>
+    <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px">Achtung: Solange das Fenster offen ist, kommt <strong>jeder mit einem dieser Links ohne Passwort</strong> ins System. Es schaltet sich nach 4 Stunden von selbst wieder ab.</div>
   <?php endif; ?>
   <form method="post" style="margin-top:10px">
     <input type="hidden" name="aktion" value="testlogin_save">
     <div class="bx-row" style="gap:8px;align-items:center;margin-bottom:10px">
       <input type="checkbox" name="testlogin" id="f_tl" value="1" <?= $tlAn ? 'checked' : '' ?>>
-      <label for="f_tl" style="margin:0">Testlogin auf diesem Server erlauben (Direktlinks ohne Passwort)</label>
+      <label for="f_tl" style="margin:0">Testlogin auf diesem Server erlauben (Direktlinks ohne Passwort, gilt 4 Stunden)</label>
     </div>
-    <button class="btn btn-primary" type="submit">Speichern</button>
+    <button class="btn btn-primary" type="submit"><?= $tlAn ? 'Speichern / weitere 4 Stunden' : 'Für 4 Stunden einschalten' ?></button>
   </form>
   <?php if ($fehlt > 0): ?>
   <form method="post" style="margin-top:12px">
