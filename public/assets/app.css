@@ -347,3 +347,14 @@ body.bx-zieht{cursor:col-resize;user-select:none}
   .btn{padding:9px 14px}
   .bx-panel{padding:var(--sp-4)}
 }
+
+/* Lade-Rueckmeldung beim Absenden: der geklickte Knopf zeigt einen Spinner + Text,
+   damit man sieht, dass das Programm arbeitet (v. a. beim Spec-Upload mit KI-Auslesung).
+   Wird global vom Skript in core/layout.php (bx_busy_script) gesetzt. */
+.bx-spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;vertical-align:-2px;margin-right:8px;animation:bx-spin .6s linear infinite}
+@keyframes bx-spin{to{transform:rotate(360deg)}}
+.btn.is-busy{cursor:progress;opacity:.9}
+.btn.is-busy[disabled]{opacity:.9}
+/* Dezenter Ladebalken oben am Fensterrand, solange eine Seite laedt/verarbeitet. */
+#bxLadebalken{position:fixed;top:0;left:0;height:3px;width:0;background:var(--gruen,#2e7d5b);z-index:99999;transition:width .3s ease;box-shadow:0 0 8px var(--gruen,#2e7d5b)}
+#bxLadebalken.an{width:92%;transition:width 12s cubic-bezier(.05,.6,.1,1)}

@@ -225,7 +225,8 @@ function lp_head(string $titel): void {
 }
 
 function lp_foot(): void {
-    echo (function_exists('bx_theme_script') ? bx_theme_script() : '') . bx_menue_script() . pwa_script() . '</body></html>';
+    echo (function_exists('bx_theme_script') ? bx_theme_script() : '') . bx_menue_script()
+       . (function_exists('bx_busy_script') ? bx_busy_script() : '') . pwa_script() . '</body></html>';
 }
 
 // Menü + Rahmen. $aktiv = Routenname der aktuellen Seite.

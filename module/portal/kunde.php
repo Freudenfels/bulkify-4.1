@@ -267,7 +267,7 @@ function portal_head(string $titel): void {
     echo "<script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>";
     echo "</head><body>";
 }
-function portal_foot(): void { echo (function_exists('bx_theme_script') ? bx_theme_script() : '') . (function_exists('bx_side_scroll_script') ? bx_side_scroll_script() : '') . "</body></html>"; }
+function portal_foot(): void { echo (function_exists('bx_theme_script') ? bx_theme_script() : '') . (function_exists('bx_side_scroll_script') ? bx_side_scroll_script() : '') . (function_exists('bx_busy_script') ? bx_busy_script() : '') . "</body></html>"; }
 
 if (!$k) {
     portal_head('Kundenportal');

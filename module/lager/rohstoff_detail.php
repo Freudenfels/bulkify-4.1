@@ -306,7 +306,7 @@ if (!$neu) {
         <input type="hidden" name="aktion" value="spec_neu">
         <div class="bx-field" style="margin:0"><label>Unterlage</label>
           <input type="file" name="neu_spec" required accept="application/pdf,image/*"></div>
-        <button class="btn btn-primary" type="submit">Auslesen und Felder füllen</button>
+        <button class="btn btn-primary" type="submit" data-busy="Wird ausgelesen&#8230;">Auslesen und Felder füllen</button>
         <span class="muted" style="font-size:12px;align-self:center">dauert 10–60 Sekunden</span>
       </form>
     <?php endif; ?>
@@ -496,7 +496,7 @@ if (!$neu) {
   <?php endif; ?>
 
   <div class="bx-row" style="margin-top:var(--sp-4)">
-    <button class="btn btn-primary" type="submit"><?= $neu ? 'Rohstoff anlegen' : 'Speichern' ?></button>
+    <button class="btn btn-primary" type="submit" data-busy="<?= $neu ? 'Wird angelegt&#8230;' : 'Wird gespeichert&#8230;' ?>"><?= $neu ? 'Rohstoff anlegen' : 'Speichern' ?></button>
     <a class="btn btn-ghost" href="?p=rohstoffe">Abbrechen</a>
   </div>
 </form>
@@ -528,7 +528,7 @@ if (!$neu) {
               <option value="<?= (int)$d['id'] ?>"><?= h(strtoupper((string)$d['typ'])) ?> · <?= h($d['titel'] ?: $d['datei_orig']) ?><?= $d['ki_stand'] ? ' (schon gelesen)' : '' ?></option>
             <?php endforeach; ?>
           </select></div>
-        <button class="btn btn-primary" type="submit">Auslesen</button>
+        <button class="btn btn-primary" type="submit" data-busy="Wird ausgelesen&#8230;">Auslesen</button>
         <span class="muted" style="font-size:12px;align-self:center">dauert je nach Umfang 10–60 Sekunden</span>
       </form>
     <?php endif; ?>

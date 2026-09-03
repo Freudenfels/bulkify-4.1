@@ -185,8 +185,37 @@ function render_footer(): void {
     echo bx_side_scroll_script();
     echo bx_side_script();
     echo bx_menue_script();
+    echo bx_busy_script();
     echo pwa_script();
     echo "</body></html>";
+}
+
+// Lade-Rueckmeldung: Beim Absenden eines Formulars wird der geklickte Knopf zum Spinner
+// ("Bitte warten...") und oben laeuft ein dezenter Ladebalken. So sieht jeder (Team,
+// Lieferant, Kunde), dass das Programm arbeitet - wichtig beim Spec-Upload mit KI-Auslesung,
+// die einige Sekunden dauern kann. Ausnahmen: Formulare/Knoepfe mit data-no-busy oder
+// target=_blank (Download/neuer Tab navigieren nicht weg -> kein Dauer-Spinner).
+// Eigener Busy-Text je Knopf ueber data-busy="...".
+function bx_busy_script(): string {
+    return "<script>(function(){"
+        . "var bar;function ladebalken(){try{bar=document.createElement('div');bar.id='bxLadebalken';document.body.appendChild(bar);requestAnimationFrame(function(){bar.className='an';});}catch(e){}}"
+        . "document.addEventListener('submit',function(e){"
+        . "var f=e.target;if(!f||f.hasAttribute('data-no-busy'))return;"
+        . "var b=e.submitter||f.querySelector('button[type=submit],input[type=submit],button:not([type])');"
+        . "var t=(b&&(b.getAttribute('formtarget')))||f.getAttribute('target');if(t==='_blank')return;"
+        . "if(f.__busy)return;f.__busy=true;ladebalken();"
+        . "if(b&&!b.dataset.busyOn){b.dataset.busyOn='1';"
+        // data-busy setzt eigenen Text; sonst bleibt der (uebersetzte) Knopftext stehen - nur der Spinner kommt davor.
+        . "if(b.tagName==='BUTTON'){b.dataset.busyLabel=b.innerHTML;var tx=b.getAttribute('data-busy');b.innerHTML='<span class=\\\"bx-spin\\\" aria-hidden=\\\"true\\\"></span>'+(tx!==null?tx:b.dataset.busyLabel);}"
+        . "b.classList.add('is-busy');b.setAttribute('aria-busy','true');"
+        . "setTimeout(function(){b.disabled=true;},0);}"
+        . "},true);"
+        // Zurueck-Navigation (bfcache): Spinner/Balken + Original-Text zuruecksetzen, sonst haengt der Knopf.
+        . "window.addEventListener('pageshow',function(ev){if(!ev.persisted)return;"
+        . "var b=document.querySelector('.btn.is-busy');if(b){b.disabled=false;b.classList.remove('is-busy');b.removeAttribute('aria-busy');"
+        . "if(b.dataset.busyLabel!==undefined){b.innerHTML=b.dataset.busyLabel;delete b.dataset.busyLabel;}delete b.dataset.busyOn;}"
+        . "var l=document.getElementById('bxLadebalken');if(l)l.remove();});"
+        . "})();</script>";
 }
 
 // Merkt sich die Scroll-Position der Sidebar über Seitenwechsel (sonst springt das Menü bei jedem Klick nach oben).
