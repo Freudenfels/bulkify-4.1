@@ -3,11 +3,12 @@
 // Zweck: Damit sich das Dashboard auf dem Handy installieren laesst (Android verlangt dafuer einen
 // Service Worker) und damit es ohne Netz nicht mit einer Fehlerseite dasteht.
 //
-// Wichtig: Es werden NUR Dateien aus /assets/ zwischengespeichert (CSS, Icons). Seiten mit Daten
+// Wichtig: Zwischengespeichert werden nur Icons und die Offline-Seite. CSS kommt immer frisch
+// vom Server (das Aussehen aendert sich staendig), und Seiten mit Daten
 // - Kunden, Preise, Auftraege - landen NIE im Cache. Sonst haette jeder, der das Geraet in die Hand
 // bekommt, Zugriff darauf, auch ohne Anmeldung.
-const VERSION = 'bx-2026-09-03';
-const STATIC  = ['/assets/app.css', '/assets/app-icon-192.png', '/assets/offline.html'];
+const VERSION = 'bx-2026-09-03b';
+const STATIC  = ['/assets/app-icon-192.png', '/assets/offline.html'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(STATIC)).then(() => self.skipWaiting()));
@@ -28,8 +29,15 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
+  // Das Aussehen aendert sich staendig - CSS deshalb IMMER frisch holen. Sonst sieht man nach
+  // einem Deploy die alte Oberflaeche und haelt sie fuer kaputt.
+  if (url.pathname.endsWith('.css')) {
+    e.respondWith(fetch(req).catch(() => caches.match(req)));
+    return;
+  }
+
   if (url.pathname.startsWith('/assets/')) {
-    // CSS und Bilder: sofort aus dem Cache, im Hintergrund erneuern.
+    // Icons und Schriften: sofort aus dem Cache, im Hintergrund erneuern.
     e.respondWith(
       caches.match(req).then((treffer) => {
         const netz = fetch(req).then((r) => {

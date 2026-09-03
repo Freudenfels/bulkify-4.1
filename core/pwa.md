@@ -16,7 +16,7 @@ Es gibt keinen Play-Store-Download. bulkify ist eine **Web-App**: Android/Chrome
 `start_url` ist `/` – also die normale Einstiegsseite. Der Router entscheidet dann selbst: nicht angemeldet → Login, Lieferant → Lieferantenportal, Team → Dashboard. Deshalb reicht **eine** App fuer alle; niemand braucht eine eigene.
 
 ## Was NICHT zwischengespeichert wird
-Der Service Worker legt nur Dateien aus `/assets/` in den Cache (CSS, Icons). **Seiten mit Daten landen nie im Cache** – sonst koennte jemand ohne Anmeldung Kunden, Preise und Auftraege sehen, der das Geraet in die Hand bekommt. Ohne Netz erscheint `assets/offline.html`.
+Der Service Worker legt nur **Icons und die Offline-Seite** in den Cache. **CSS kommt immer frisch vom Server** – sonst sieht man nach einem Deploy die alte Oberflaeche und haelt sie fuer kaputt. **Seiten mit Daten landen nie im Cache** – sonst koennte jemand ohne Anmeldung Kunden, Preise und Auftraege sehen, der das Geraet in die Hand bekommt. Ohne Netz erscheint `assets/offline.html`.
 
 ## Kundenportal
 Bewusst **ohne** Manifest. Der Kunde kommt ueber einen persoenlichen Token-Link; eine installierte App wuerde auf `/` starten und ihn vor eine Login-Maske stellen, die er nicht bedienen kann.
