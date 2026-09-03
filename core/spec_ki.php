@@ -57,6 +57,9 @@ Gib NUR dieses JSON zurück:
   "typ": "spec|coa|beides|unklar",
   "sicherheit": "hoch|mittel|niedrig",
   "stamm": { Felder siehe unten, nur die gefundenen },
+  "wirkstoffe": [ { "name": "", "gehalt_prozent": null } ],
+  "kennwerte": [ { "parameter": "", "wert": "" } ],
+  "cas_vorschlag": null,
   "charge": { "charge_nr": null, "mhd": null, "herstelldatum": null, "menge": null, "einheit": null },
   "werte": [ { "parameter": "", "spezifikation": "", "ergebnis": "", "methode": "" } ],
   "hinweise": [ "kurze Anmerkungen, z. B. unleserliche Stellen" ]
@@ -65,10 +68,13 @@ Gib NUR dieses JSON zurück:
 Felder für "stamm":
 $felder
 Regeln, an die du dich halten musst:
-- Übernimm NUR, was tatsächlich im Dokument steht. Nichts ergänzen, nichts aus Fachwissen ableiten, nichts raten.
+- Übernimm NUR, was tatsächlich im Dokument steht. Nichts ergänzen, nichts aus Fachwissen ableiten, nichts raten. (Einzige Ausnahme: "cas_vorschlag", siehe unten.)
 - Ein Feld, das nicht im Dokument steht, lässt du WEG (nicht null, nicht leerer Text).
 - [datum] im Format JJJJ-MM-TT. [janein] als true oder false. [zahl] als Zahl ohne Einheit, Punkt als Dezimaltrennzeichen.
 - [text] wörtlich aus dem Dokument, höchstens gekürzt. Nicht übersetzen.
+- "wirkstoffe": die standardisierten Wirk-/Leitsubstanzen mit ihrem Gehalt. Der Assay bzw. die Standardisierung gehört hierher (z. B. "Assay [Content of Iron] NLT 3.0% NMT 5.0%", "Standardisation: Iron content" -> name "Iron", gehalt_prozent 3.0). Bei einer Spanne den unteren Wert (NLT/min) als gehalt_prozent nehmen. name wörtlich aus dem Dokument. Keine Verunreinigungen/Trägerstoffe, keine Excipients. Steht kein Gehalt, gehalt_prozent null. Nichts gefunden -> leere Liste.
+- "kennwerte": charakteristische, unterscheidende Kennwerte als Parameter+Wert-Paare: Assay-Spanne, Extraktverhältnis/DEV (z. B. "10:1"), pH, Schüttdichte, Partikelgröße/Mesh, Wassergehalt/Loss on Drying, Löslichkeit. NICHT die reinen Sicherheits-Grenzwerte (Schwermetalle, Mikrobiologie, Mykotoxine, Pestizide, Lösungsmittelreste) – die bleiben im PDF. "wert" wörtlich aus dem Dokument (z. B. "NLT 3.0% / NMT 5.0%", "10:1").
+- "cas_vorschlag": NUR füllen, wenn im Dokument KEINE CAS-Nummer steht (oder dort "TBA"/"n/a") UND der Rohstoff ein eindeutiger Reinstoff mit allgemein bekannter CAS ist (z. B. Vitamine, definierte Salze/Verbindungen). Dann die bekannte CAS als Vorschlag. Bei Pflanzenextrakten, Mischungen oder Unsicherheit: null. Wenn gesetzt, in "hinweise" vermerken, dass die CAS aus Fachwissen kommt und geprüft werden muss.
 - "werte": jede Zeile der Analysetabelle. "spezifikation" ist der Grenzwert (z. B. "≤ 3 ppm"), "ergebnis" der gemessene Wert. Steht nur eins von beidem, lass das andere leer.
 - Gebräuchliche Parameternamen, wenn sie passen: $params. Sonst den Namen aus dem Dokument.
 - Bei "sicherheit": "niedrig", wenn das Dokument schlecht lesbar ist oder du viel raten müsstest.
@@ -107,6 +113,26 @@ function spec_ki_lesen(string $pfad): array {
             'methode'       => mb_substr(trim((string)($z['methode'] ?? '')), 0, 120),
         ];
     }
+    // Standardisierte Wirkstoffe (Assay/Standardisierung) – gehören in die Wirkstoff-Tabelle des Rohstoffs.
+    $wirkstoffe = [];
+    foreach ((array)($d['wirkstoffe'] ?? []) as $w) {
+        $nm = trim((string)($w['name'] ?? ''));
+        if ($nm === '') continue;
+        $g = $w['gehalt_prozent'] ?? null;
+        $wirkstoffe[] = [
+            'name'           => mb_substr($nm, 0, 120),
+            'gehalt_prozent' => ($g === null || $g === '') ? null : (float) str_replace(',', '.', (string)$g),
+        ];
+    }
+    // Charakteristische Kennwerte (Assay-Spanne, Extraktverhältnis, pH, Dichte …) – ohne Sicherheits-Grenzwerte.
+    $kennwerte = [];
+    foreach ((array)($d['kennwerte'] ?? []) as $k) {
+        $p = trim((string)($k['parameter'] ?? ''));
+        if ($p === '') continue;
+        $kennwerte[] = ['parameter' => mb_substr($p, 0, 120), 'wert' => mb_substr(trim((string)($k['wert'] ?? '')), 0, 120)];
+    }
+    $casVorschlag = trim((string)($d['cas_vorschlag'] ?? ''));
+    if ($casVorschlag !== '') $casVorschlag = mb_substr($casVorschlag, 0, 30);
     $charge = [];
     foreach (['charge_nr', 'mhd', 'herstelldatum', 'menge', 'einheit'] as $k) {
         $v = $d['charge'][$k] ?? null;
@@ -119,6 +145,9 @@ function spec_ki_lesen(string $pfad): array {
         'typ'         => in_array($typ, ['spec', 'coa', 'beides', 'unklar'], true) ? $typ : 'unklar',
         'sicherheit'  => in_array(($d['sicherheit'] ?? ''), ['hoch', 'mittel', 'niedrig'], true) ? $d['sicherheit'] : 'mittel',
         'stamm'       => $stamm,
+        'wirkstoffe'  => $wirkstoffe,
+        'kennwerte'   => $kennwerte,
+        'cas_vorschlag' => $casVorschlag,
         'charge'      => $charge,
         'werte'       => $werte,
         'hinweise'    => array_slice(array_map(fn($h) => mb_substr(trim((string)$h), 0, 300), (array)($d['hinweise'] ?? [])), 0, 8),

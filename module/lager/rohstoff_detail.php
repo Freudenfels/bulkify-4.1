@@ -233,6 +233,12 @@ $neuDefault = $neuForm === 'kapselhuelle'
 // änderbar, und gespeichert wird erst beim Klick auf Speichern.
 $neuKi = $neu ? ($_SESSION['rohstoff_ki']['ergebnis'] ?? null) : null;
 if ($neuKi && !empty($neuKi['stamm'])) $neuDefault = array_merge($neuDefault, (array)$neuKi['stamm']);
+// CAS-Vorschlag der KI (aus Fachwissen) einsetzen, wenn im Dokument keine CAS stand.
+$casVorschlag = '';
+if ($neuKi) {
+    $casVorschlag = trim((string)($neuKi['cas_vorschlag'] ?? ''));
+    if ($casVorschlag !== '' && trim((string)($neuDefault['cas'] ?? '')) === '') $neuDefault['cas'] = $casVorschlag;
+}
 $it = $neu ? $neuDefault : one("SELECT * FROM item WHERE id=?", [(int)$id]);
 if (!$it) { $neu = true; $it = $neuDefault; }
 $v = fn($key) => h((string)($it[$key] ?? ''));
@@ -246,6 +252,19 @@ $wirkstoffe = $neu ? [] : all("SELECT iw.*, n.name AS n_name, n.nrv_wert, n.einh
                                FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id
                                WHERE iw.item_id=? ORDER BY iw.sort, iw.id", [(int)$id]);
 $kennwerte = $neu ? [] : all("SELECT * FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [(int)$id]);
+// Neuanlage aus einer Spezifikation: Wirkstoffe (Assay) und Kennwerte aus dem KI-Vorschlag vorbelegen,
+// damit z. B. der Eisen-Gehalt nicht verloren geht. Wird im Formular angezeigt, geprüft, dann gespeichert.
+if ($neu && $neuKi) {
+    foreach ((array)($neuKi['wirkstoffe'] ?? []) as $w) {
+        $nm = trim((string)($w['name'] ?? '')); if ($nm === '') continue;
+        $g = $w['gehalt_prozent'] ?? null;
+        $wirkstoffe[] = ['n_name' => $nm, 'gehalt_prozent' => ($g === null || $g === '') ? '' : (string)$g];
+    }
+    foreach ((array)($neuKi['kennwerte'] ?? []) as $kw) {
+        $p = trim((string)($kw['parameter'] ?? '')); if ($p === '') continue;
+        $kennwerte[] = ['parameter' => $p, 'wert' => trim((string)($kw['wert'] ?? ''))];
+    }
+}
 if (!$neu) { seed_aktivitaet_if_empty(); $verlauf = verlauf_fuer('item', (int)$id); } else { $verlauf = []; }
 $charges = $neu ? [] : all("SELECT c.*, l.firma AS lieferant_firma FROM charge c LEFT JOIN lieferanten l ON l.id=c.lieferant_id WHERE c.item_id=? ORDER BY c.status, c.mhd", [(int)$id]);
 $bestand_frei = $neu ? 0 : item_bestand((int)$id, true);
@@ -284,12 +303,21 @@ if (!$neu) {
         if ($neu): require_once BX_ROOT . '/core/spec_ki.php'; ?>
   <div class="bx-panel" style="border-color:var(--gruen)"><h2 style="margin-top:0">Rohstoff aus einer Spezifikation anlegen</h2>
     <?php if ($neuKiFehler !== ''): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h($neuKiFehler) ?></div><?php endif; ?>
-    <?php if ($neuKi): $anz = count((array)($neuKi['stamm'] ?? [])); ?>
+    <?php if ($neuKi): $anz = count((array)($neuKi['stamm'] ?? []));
+          $anzW = count((array)($neuKi['wirkstoffe'] ?? [])); $anzK = count((array)($neuKi['kennwerte'] ?? [])); ?>
       <div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">
         <strong><?= h((string)($_SESSION['rohstoff_ki']['orig'] ?? '')) ?></strong> ausgelesen –
-        <?= (int)$anz ?> Feld(er) unten eingetragen<?= ($neuKi['werte'] ?? []) ? ', dazu ' . count($neuKi['werte']) . ' Analysenwerte' : '' ?>.
-        Bitte prüfen und dann speichern.
+        <?= (int)$anz ?> Stammfeld(er)<?php
+          if ($anzW) echo ', ' . (int)$anzW . ' Wirkstoff(e)';
+          if ($anzK) echo ', ' . (int)$anzK . ' Kennwert(e)';
+          if ($neuKi['werte'] ?? []) echo ', ' . count($neuKi['werte']) . ' Analysenwerte';
+        ?> unten eingetragen. Bitte prüfen (Reiter „Wirkstoff &amp; Qualität" und „Spezifikation") und dann speichern.
       </div>
+      <?php if ($casVorschlag !== ''): ?>
+        <div class="bx-panel" style="border-color:#d8c48a;background:#fbf6e6;color:#6b571e;padding:8px 12px;margin-bottom:10px">
+          CAS-Nummer <strong><?= h($casVorschlag) ?></strong> stand nicht im Dokument – von der KI aus Fachwissen vorgeschlagen. Bitte vor dem Speichern prüfen (Reiter „Stammdaten").
+        </div>
+      <?php endif; ?>
       <div class="bx-row" style="gap:10px;align-items:center">
         <?= bx_badge('erkannt als ' . ['spec'=>'Spezifikation','coa'=>'Analysenzertifikat','beides'=>'Spezifikation + CoA','unklar'=>'unklar'][$neuKi['typ']], $neuKi['typ'] === 'unklar' ? 'warn' : 'info') ?>
         <?= bx_badge('Sicherheit ' . $neuKi['sicherheit'], $neuKi['sicherheit'] === 'hoch' ? 'ok' : ($neuKi['sicherheit'] === 'niedrig' ? 'warn' : 'info')) ?>
