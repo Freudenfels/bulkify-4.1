@@ -42,6 +42,16 @@ function spec_ki_anweisung(): string {
     $felder = '';
     foreach (spec_ki_felder() as $k => $f) $felder .= "  \"$k\": " . $f[0] . ' [' . $f[1] . "]\n";
     $params = implode(', ', array_keys(coa_parameter()));
+    // Offizielle NRV-Nährstoffnamen – die KI soll bei Wirkstoffen EXAKT diese Namen treffen,
+    // damit die Nährwert-/NRV-Berechnung für den Kunden greift (sonst entsteht ein Eintrag ohne NRV).
+    $nrvNamen = '';
+    try {
+        if (function_exists('all')) {
+            $rows = all("SELECT name FROM naehrstoff WHERE ist_nrv=1 ORDER BY sort, name");
+            $nrvNamen = implode(', ', array_map(fn($r) => (string)$r['name'], (array)$rows));
+        }
+    } catch (\Throwable $e) { $nrvNamen = ''; }
+    if ($nrvNamen === '') $nrvNamen = 'Vitamin A, Vitamin D, Vitamin E, Vitamin K, Vitamin C, Thiamin (B1), Riboflavin (B2), Niacin (B3), Vitamin B6, Folsäure, Vitamin B12, Biotin, Pantothensäure, Kalium, Chlorid, Calcium, Phosphor, Magnesium, Eisen, Zink, Kupfer, Mangan, Fluorid, Selen, Chrom, Molybdän, Jod';
 
     return <<<TXT
 Lies dieses Dokument eines Rohstoff-Lieferanten aus.
@@ -73,7 +83,7 @@ Regeln, an die du dich halten musst:
 - [datum] im Format JJJJ-MM-TT. [janein] als true oder false. [zahl] als Zahl ohne Einheit, Punkt als Dezimaltrennzeichen.
 - [text] wörtlich aus dem Dokument, höchstens gekürzt. Nicht übersetzen – AUSSER den beiden Namensfeldern: "name" ist IMMER Deutsch, "name_en" ist IMMER Englisch. Liegt der Produktname nur in einer Sprache vor, übersetze ihn für das jeweils andere Feld sinngemäß (auch aus dem Chinesischen). Beim Eindeutschen den botanischen/lateinischen Namen sowie Zahlen und Prozentangaben inhaltlich unverändert lassen. Steht ein Name schon in der Zielsprache, unverändert übernehmen.
 - Namens-Reihenfolge (beide Namensfelder): Der Name MUSS mit der Substanz/Bezeichnung beginnen, damit er alphabetisch auffindbar ist. Steht am ANFANG eine Prozent-/Gehalts-/Standardisierungsangabe, stelle sie ans ENDE (Wert unverändert). Beispiele: "50% Resveratrol Liposome" -> name_en "Resveratrol Liposome 50%", name "Resveratrol-Liposom 50%"; "Murraya koenigii leaf 3.0% Ferrous (Iron) powder extract" -> name_en unverändert (beginnt schon mit der Substanz), name "Murraya koenigii Blattextrakt Eisen (Ferrous) 3,0%".
-- "wirkstoffe": die standardisierten Wirk-/Leitsubstanzen mit ihrem Gehalt. Der Assay bzw. die Standardisierung gehört hierher (z. B. "Assay [Content of Iron] NLT 3.0% NMT 5.0%", "Standardisation: Iron content" -> name "Iron", gehalt_prozent 3.0). Bei einer Spanne den unteren Wert (NLT/min) als gehalt_prozent nehmen. Bei "name" den gebräuchlichen DEUTSCHEN bzw. international etablierten Substanznamen verwenden – KEINEN chinesischen/fremdsprachigen Text (z. B. 白藜芦醇 -> "Resveratrol", 维生素C -> "Vitamin C", "Iron" -> "Eisen"). Keine Verunreinigungen/Trägerstoffe, keine Excipients. Steht kein Gehalt, gehalt_prozent null. Nichts gefunden -> leere Liste.
+- "wirkstoffe": die standardisierten Wirk-/Leitsubstanzen mit ihrem Gehalt. Der Assay bzw. die Standardisierung gehört hierher (z. B. "Assay [Content of Iron] NLT 3.0% NMT 5.0%", "Standardisation: Iron content" -> name "Iron", gehalt_prozent 3.0). Bei einer Spanne den unteren Wert (NLT/min) als gehalt_prozent nehmen. Bei "name" den gebräuchlichen DEUTSCHEN bzw. international etablierten Substanznamen verwenden – KEINEN chinesischen/fremdsprachigen Text (z. B. 白藜芦醇 -> "Resveratrol", 维生素C -> "Vitamin C", "Iron" -> "Eisen"). WICHTIG: Entspricht der Wirkstoff einem dieser offiziellen NRV-Nährstoffe, nimm GENAU dessen Schreibweise aus dieser Liste (damit die NRV-Berechnung greift): $nrvNamen. Nur wenn keiner passt, einen eigenen Namen. Keine Verunreinigungen/Trägerstoffe, keine Excipients. Steht kein Gehalt, gehalt_prozent null. Nichts gefunden -> leere Liste.
 - "kennwerte": charakteristische, unterscheidende Kennwerte als Parameter+Wert-Paare: Assay-Spanne, Extraktverhältnis/DEV (z. B. "10:1"), pH, Schüttdichte, Partikelgröße/Mesh, Wassergehalt/Loss on Drying, Löslichkeit. NICHT die reinen Sicherheits-Grenzwerte (Schwermetalle, Mikrobiologie, Mykotoxine, Pestizide, Lösungsmittelreste) – die bleiben im PDF. "wert" wörtlich aus dem Dokument (z. B. "NLT 3.0% / NMT 5.0%", "10:1").
 - "cas_vorschlag": NUR füllen, wenn im Dokument KEINE CAS-Nummer steht (oder dort "TBA"/"n/a") UND der Rohstoff ein eindeutiger Reinstoff mit allgemein bekannter CAS ist (z. B. Vitamine, definierte Salze/Verbindungen). Dann die bekannte CAS als Vorschlag. Bei Pflanzenextrakten, Mischungen oder Unsicherheit: null. Wenn gesetzt, in "hinweise" vermerken, dass die CAS aus Fachwissen kommt und geprüft werden muss.
 - "werte": jede Zeile der Analysetabelle. "spezifikation" ist der Grenzwert (z. B. "≤ 3 ppm"), "ergebnis" der gemessene Wert. Steht nur eins von beidem, lass das andere leer.
