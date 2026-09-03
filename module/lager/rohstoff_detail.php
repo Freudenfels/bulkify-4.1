@@ -140,8 +140,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_u
     $dokId = dokument_upload('item', (int)$id);
     // Frisch hochgeladene Spezifikationen und CoA gleich auslesen - der Vorschlag wartet dann
     // im Reiter Spezifikation auf die Pruefung.
-    if ($dokId) { require_once BX_ROOT . '/core/spec_ki.php'; spec_ki_nach_upload($dokId); }
-    header('Location: ?p=rohstoff&id=' . $id . '&tab=dok&gespeichert=1'); exit;
+    $coaChargeNeu = 0;
+    if ($dokId) {
+        require_once BX_ROOT . '/core/spec_ki.php';
+        spec_ki_nach_upload($dokId);
+        // Ist es eine CoA? Dann direkt eine (Vorab-)Charge mit den Werten anlegen und die
+        // Grenzwerte am Rohstoff ergaenzen (fehlende), damit nichts verloren geht.
+        $erg = spec_ki_vorschlag($dokId);
+        if ($erg) {
+            $lief = (int) scalar("SELECT haupt_lieferant_id FROM item WHERE id=?", [(int)$id]) ?: null;
+            $coaChargeNeu = (int) (spec_ki_coa_charge((int)$id, $erg, $lief) ?? 0);
+            spec_ki_grenzwerte((int)$id, $erg);
+        }
+    }
+    header('Location: ?p=rohstoff&id=' . $id . '&tab=dok&gespeichert=1' . ($coaChargeNeu ? '&coacharge=' . $coaChargeNeu : '')); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && !$neu) {
     dokument_freigabe_toggle('item', (int)$id, (int)($_POST['dok_id'] ?? 0));
@@ -204,6 +216,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
         q("DELETE FROM item_kennwert WHERE item_id=?", [(int)$id]);
         $kp = $_POST['kw_param'] ?? []; $kw = $_POST['kw_wert'] ?? [];
         foreach ($kp as $i => $pn) { $pn = trim($pn); if ($pn === '') continue; q("INSERT INTO item_kennwert (item_id,parameter,wert,sort) VALUES (?,?,?,?)", [(int)$id, $pn, trim($kw[$i] ?? ''), (int)$i]); }
+        // Grenzwerte (Reinheit/Mikrobiologie · Sollwert) synchronisieren
+        q("DELETE FROM item_grenzwert WHERE item_id=?", [(int)$id]);
+        $gp = $_POST['gw_param'] ?? []; $gw = $_POST['gw_wert'] ?? [];
+        foreach ($gp as $i => $pn) { $pn = trim($pn); if ($pn === '') continue; q("INSERT INTO item_grenzwert (item_id,parameter,grenzwert,sort) VALUES (?,?,?,?)", [(int)$id, $pn, trim($gw[$i] ?? ''), (int)$i]); }
         // Spec-PDF hochladen (in data/uploads, außerhalb public)
         if (!empty($_FILES['spec_pdf']['name']) && is_uploaded_file($_FILES['spec_pdf']['tmp_name'] ?? '')) {
             if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
@@ -212,16 +228,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
                 q("UPDATE item SET spec_pdf=? WHERE id=?", [$fn, (int)$id]);
         }
         // Kam der Rohstoff aus einer hochgeladenen Spezifikation? Dann gehört die Datei jetzt an ihn.
+        $coaChargeNeu = 0;
         if ($war_neu && !empty($_SESSION['rohstoff_ki']['datei'])) {
             require_once BX_ROOT . '/core/spec_ki.php';
             $ki = $_SESSION['rohstoff_ki'];
-            $typ = (($ki['ergebnis']['typ'] ?? '') === 'coa') ? 'coa' : 'spec';
+            $typ = ((($ki['ergebnis']['typ'] ?? '') === 'coa') || (($ki['ergebnis']['typ'] ?? '') === 'beides')) ? 'coa' : 'spec';
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar) VALUES ('item',?,?,?,?,?,0)",
               [(int)$id, $typ, 'Aus dem Anlegen: ' . mb_substr((string)$ki['orig'], 0, 150), $ki['datei'], $ki['orig']]);
             spec_ki_merken((int)insert_id(), (array)$ki['ergebnis']);
+            // Ist es eine CoA? Dann direkt eine (Vorab-)Charge mit den gemessenen Werten anlegen –
+            // die Grenzwerte am Rohstoff kommen bereits aus dem Formular (oben synchronisiert).
+            $lief = ($_POST['haupt_lieferant_id'] ?? '') !== '' ? (int)$_POST['haupt_lieferant_id'] : null;
+            $coaChargeNeu = (int) (spec_ki_coa_charge((int)$id, (array)$ki['ergebnis'], $lief) ?? 0);
             unset($_SESSION['rohstoff_ki']);
         }
-        header('Location: ?p=rohstoff&id=' . $id . '&gespeichert=1'); exit;
+        header('Location: ?p=rohstoff&id=' . $id . '&gespeichert=1' . ($coaChargeNeu ? '&coacharge=' . $coaChargeNeu : '')); exit;
     }
 }
 
@@ -252,8 +273,10 @@ $wirkstoffe = $neu ? [] : all("SELECT iw.*, n.name AS n_name, n.nrv_wert, n.einh
                                FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id
                                WHERE iw.item_id=? ORDER BY iw.sort, iw.id", [(int)$id]);
 $kennwerte = $neu ? [] : all("SELECT * FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [(int)$id]);
-// Neuanlage aus einer Spezifikation: Wirkstoffe (Assay) und Kennwerte aus dem KI-Vorschlag vorbelegen,
-// damit z. B. der Eisen-Gehalt nicht verloren geht. Wird im Formular angezeigt, geprüft, dann gespeichert.
+$grenzwerte = $neu ? [] : all("SELECT * FROM item_grenzwert WHERE item_id=? ORDER BY sort, id", [(int)$id]);
+// Neuanlage aus einer Spezifikation: Wirkstoffe (Assay), Kennwerte und Grenzwerte aus dem KI-Vorschlag
+// vorbelegen, damit z. B. Eisen-Gehalt und Keim-/Metallgrenzwerte nicht verloren gehen. Werden im
+// Formular angezeigt, geprüft, dann gespeichert.
 if ($neu && $neuKi) {
     foreach ((array)($neuKi['wirkstoffe'] ?? []) as $w) {
         $nm = trim((string)($w['name'] ?? '')); if ($nm === '') continue;
@@ -263,6 +286,14 @@ if ($neu && $neuKi) {
     foreach ((array)($neuKi['kennwerte'] ?? []) as $kw) {
         $p = trim((string)($kw['parameter'] ?? '')); if ($p === '') continue;
         $kennwerte[] = ['parameter' => $p, 'wert' => trim((string)($kw['wert'] ?? ''))];
+    }
+    // Grenzwerte = die Sollwerte (spezifikation) aus den Analysewerten (Schwermetalle, Mikrobiologie ...).
+    $gwSeen = [];
+    foreach ((array)($neuKi['werte'] ?? []) as $z) {
+        $p = trim((string)($z['parameter'] ?? '')); $g = trim((string)($z['spezifikation'] ?? ''));
+        if ($p === '' || $g === '' || isset($gwSeen[$p])) continue;
+        $gwSeen[$p] = true;
+        $grenzwerte[] = ['parameter' => $p, 'grenzwert' => $g];
     }
 }
 if (!$neu) { seed_aktivitaet_if_empty(); $verlauf = verlauf_fuer('item', (int)$id); } else { $verlauf = []; }
@@ -284,7 +315,9 @@ bx_head($neu ? 'Neuer Rohstoff' : $v('name'),
         $neu ? 'Item anlegen' : trim(($v('artikelnummer') ? $v('artikelnummer').' · ' : '') . ($KAT[$it['kategorie']] ?? $it['kategorie']) . ($v('name_lat') ? ' · '.$v('name_lat') : '')),
         bx_btn('Zurück zur Liste', '?p=rohstoffe', 'ghost'));
 
-if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.'
+    . (isset($_GET['coacharge']) ? ' Aus der CoA wurde eine Charge angelegt (noch ohne Ware) – bei der Warenannahme wird sie über die Chargennummer abgeglichen und eingebucht.' : '')
+    . '</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 
 if (!$neu) {
@@ -459,6 +492,20 @@ if (!$neu) {
         <?php endforeach; ?>
       </div>
       <button type="button" class="btn btn-ghost btn-sm" id="addKw">+ Kennwert</button>
+    </div>
+
+    <div class="bx-panel">
+      <h2>Grenzwerte (Reinheit / Mikrobiologie) <?= bx_hint('dauerhafte Sollwerte am Rohstoff: Schwermetalle, Keimbelastung, Mykotoxine … aus der Spezifikation. Jede neue Charge (CoA) wird dagegen abgeglichen. Aus einer CoA werden diese automatisch vorbelegt.') ?></h2>
+      <div id="gwrows">
+        <?php $grows = $grenzwerte ?: [['parameter'=>'','grenzwert'=>'']]; foreach ($grows as $gwr): ?>
+        <div class="bx-row gwrow" style="flex-wrap:nowrap;margin-bottom:8px">
+          <input type="text" name="gw_param[]" value="<?= h($gwr['parameter'] ?? '') ?>" placeholder="Parameter, z. B. Blei (Pb)" style="flex:1">
+          <input type="text" name="gw_wert[]" value="<?= h($gwr['grenzwert'] ?? '') ?>" placeholder="Grenzwert, z. B. ≤ 3 ppm" style="flex:1">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.gwrow').remove()">entfernen</button>
+        </div>
+        <?php endforeach; ?>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="addGw">+ Grenzwert</button>
     </div>
 
     <div class="bx-panel"><h2>Deklaration &amp; Status</h2>
@@ -815,6 +862,17 @@ if (!$neu) {
       + '<button type="button" class="btn btn-ghost btn-sm">entfernen</button>';
     row.querySelector('button').addEventListener('click', function(){ row.remove(); });
     document.getElementById('kwrows').appendChild(row);
+  });
+  var addG = document.getElementById('addGw');
+  if (addG) addG.addEventListener('click', function(){
+    var row = document.createElement('div');
+    row.className = 'bx-row gwrow';
+    row.style.cssText = 'flex-wrap:nowrap;margin-bottom:8px';
+    row.innerHTML = '<input type="text" name="gw_param[]" placeholder="Parameter, z. B. Blei (Pb)" style="flex:1">'
+      + '<input type="text" name="gw_wert[]" placeholder="Grenzwert, z. B. ≤ 3 ppm" style="flex:1">'
+      + '<button type="button" class="btn btn-ghost btn-sm">entfernen</button>';
+    row.querySelector('button').addEventListener('click', function(){ row.remove(); });
+    document.getElementById('gwrows').appendChild(row);
   });
 })();
 </script>

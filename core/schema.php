@@ -610,6 +610,17 @@ function init_schema(): void {
         sort INT NOT NULL DEFAULT 0,
         KEY idx_charge (charge_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // item_grenzwert: dauerhafte Reinheits-/Sicherheits-Grenzwerte AM ROHSTOFF (Schwermetalle, Mikro-
+    // biologie, Mykotoxine ...), aus der Spezifikation. Jede neue Charge kann dagegen geprueft werden.
+    // Unterschied zu charge_analyse: dort stehen die GEMESSENEN Werte je Charge, hier die SOLL-Grenzwerte.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS item_grenzwert (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        item_id INT NOT NULL,
+        parameter VARCHAR(120) NOT NULL,
+        grenzwert VARCHAR(120) NULL,                        -- Sollwert/Grenzwert laut Spezifikation (z. B. NMT 3 ppm)
+        sort INT NOT NULL DEFAULT 0,
+        KEY idx_item (item_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     // oder als Freitext. Der Lieferant antwortet mit einem Angebot (siehe unten).
     $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_anfrage (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1699,6 +1710,22 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
     $it = one("SELECT kategorie, einheit FROM item WHERE id=?", [$item_id]);
     if (!$it || $menge <= 0) return null;
     $status = item_braucht_quarantaene($it['kategorie']) ? 'quarantaene' : 'frei';
+    // Abgleich: Wurde die Charge vorab aus einer CoA angelegt (gleiche Nummer, noch keine Ware:
+    // wareneingang IS NULL und menge 0)? Dann diese Charge einbuchen statt eine Dublette anzulegen -
+    // die Analysewerte aus der CoA bleiben so an der Charge haengen.
+    $charge_nr = trim($charge_nr);
+    if ($charge_nr !== '') {
+        $vorab = one("SELECT id FROM charge WHERE item_id=? AND wareneingang IS NULL AND menge<=0.0001 AND charge_nr=? ORDER BY id LIMIT 1",
+                     [$item_id, $charge_nr]);
+        if ($vorab) {
+            $altNotiz = trim((string) scalar("SELECT notiz FROM charge WHERE id=?", [(int)$vorab['id']]));
+            q("UPDATE charge SET menge=?, menge_verfuegbar=?, einheit=?, lieferant_id=COALESCE(?,lieferant_id), mhd=COALESCE(?,mhd), wareneingang=CURDATE(), status=?, notiz=?, auftrag_id=COALESCE(?,auftrag_id), bestellung_position_id=COALESCE(?,bestellung_position_id) WHERE id=?",
+              [$menge, $menge, $it['einheit'], $lieferant_id ?: null, $mhd ?: null, $status,
+               trim(($altNotiz !== '' ? $altNotiz . ' | ' : '') . ($notiz ?: 'Ware eingegangen, mit CoA-Charge abgeglichen')),
+               $auftrag_id ?: null, $bestellung_position_id ?: null, (int)$vorab['id']]);
+            return (int)$vorab['id'];
+        }
+    }
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,auftrag_id,bestellung_position_id,angelegt)
        VALUES (?,?,?,?,?,?,?,CURDATE(),?,?,?,?,?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $it['einheit'], $lieferant_id ?: null, $mhd ?: null, $status, $notiz ?: null, $auftrag_id ?: null, $bestellung_position_id ?: null, gmdate('Y-m-d H:i:s')]);

@@ -225,6 +225,64 @@ function spec_ki_uebernehmen(int $item_id, array $stamm, array $felder, bool $ue
     return $n;
 }
 
+// Aus einer erfassten CoA sofort eine Charge anlegen – auch VOR dem Wareneingang, damit die
+// Unterlage nicht verloren geht (wichtig für Import/Schriftverkehr). Menge 0, wareneingang NULL,
+// Status quarantaene = „CoA vorab, Ware noch nicht da". Bei der Warenannahme wird die Charge über
+// die Chargennummer abgeglichen (wareneingang_buchen) und mit Menge/Datum eingebucht.
+// Idempotent: existiert schon eine (Vorab-)Charge mit derselben Nummer, werden nur die Analysewerte
+// aktualisiert. Rückgabe: charge_id oder null.
+function spec_ki_coa_charge(int $item_id, array $ergebnis, ?int $lieferant_id = null): ?int {
+    if ($item_id <= 0) return null;
+    $typ    = (string)($ergebnis['typ'] ?? '');
+    $werte  = (array)($ergebnis['werte'] ?? []);
+    $chgNr  = trim((string)($ergebnis['charge']['charge_nr'] ?? ''));
+    // Nur bei CoA-Charakter (gemessene Werte einer Charge). Reine Spezifikation ohne Charge -> keine Charge.
+    if (!in_array($typ, ['coa', 'beides'], true) && $chgNr === '') return null;
+    if (!$werte && $chgNr === '') return null;
+    $it = one("SELECT einheit FROM item WHERE id=?", [$item_id]);
+    if (!$it) return null;
+    $mhd = spec_ki_wert((string)($ergebnis['charge']['mhd'] ?? ''), 'datum');
+
+    // Vorhandene Charge gleicher Nummer wiederverwenden (keine Dublette), sonst neu anlegen.
+    $charge_id = 0;
+    if ($chgNr !== '') $charge_id = (int) scalar("SELECT id FROM charge WHERE item_id=? AND charge_nr=? ORDER BY id LIMIT 1", [$item_id, $chgNr]);
+    if (!$charge_id) {
+        q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,angelegt)
+           VALUES (?,?,0,0,?,?,?,NULL,'quarantaene',?,?)",
+          [$chgNr ?: null, $item_id, $it['einheit'], $lieferant_id ?: null, $mhd ?: null,
+           'CoA vorab erfasst – Ware noch nicht eingegangen', gmdate('Y-m-d H:i:s')]);
+        $charge_id = (int) insert_id();
+    } elseif ($mhd) {
+        q("UPDATE charge SET mhd=COALESCE(mhd,?) WHERE id=?", [$mhd, $charge_id]);
+    }
+    if ($werte) spec_ki_werte_speichern($charge_id, $werte);
+    return $charge_id ?: null;
+}
+
+// Reinheits-/Sicherheits-Grenzwerte dauerhaft AM ROHSTOFF speichern (item_grenzwert), aus der
+// Spezifikation/CoA. Nimmt alle Werte mit einem Grenzwert (spezifikation). Ersetzt bestehende nur,
+// wenn $ueberschreiben=true; sonst werden fehlende ergänzt. Rückgabe: Anzahl gespeicherter Zeilen.
+function spec_ki_grenzwerte(int $item_id, array $ergebnis, bool $ueberschreiben = false): int {
+    if ($item_id <= 0) return 0;
+    $werte = (array)($ergebnis['werte'] ?? []);
+    $rows = [];
+    foreach ($werte as $z) {
+        $p = trim((string)($z['parameter'] ?? ''));
+        $g = trim((string)($z['spezifikation'] ?? ''));
+        if ($p === '' || $g === '') continue;   // nur echte Grenzwerte
+        $rows[$p] = $g;   // je Parameter der letzte Grenzwert
+    }
+    if (!$rows) return 0;
+    if ($ueberschreiben) q("DELETE FROM item_grenzwert WHERE item_id=?", [$item_id]);
+    $n = 0; $sort = (int) scalar("SELECT COALESCE(MAX(sort),-1)+1 FROM item_grenzwert WHERE item_id=?", [$item_id]);
+    foreach ($rows as $p => $g) {
+        if (!$ueberschreiben && scalar("SELECT id FROM item_grenzwert WHERE item_id=? AND parameter=?", [$item_id, $p])) continue;
+        q("INSERT INTO item_grenzwert (item_id,parameter,grenzwert,sort) VALUES (?,?,?,?)", [$item_id, mb_substr($p,0,120), mb_substr($g,0,120), $sort++]);
+        $n++;
+    }
+    return $n;
+}
+
 // Analysewerte eines CoA an einer Charge speichern (ersetzt die bisherigen Zeilen).
 function spec_ki_werte_speichern(int $charge_id, array $werte): int {
     if ($charge_id <= 0 || !$werte) return 0;
