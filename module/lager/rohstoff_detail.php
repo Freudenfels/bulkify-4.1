@@ -143,15 +143,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_u
     $coaChargeNeu = 0;
     if ($dokId) {
         require_once BX_ROOT . '/core/spec_ki.php';
+        // Liest die Datei aus und legt bei einer CoA automatisch Vorab-Charge + Grenzwerte an.
         spec_ki_nach_upload($dokId);
-        // Ist es eine CoA? Dann direkt eine (Vorab-)Charge mit den Werten anlegen und die
-        // Grenzwerte am Rohstoff ergaenzen (fehlende), damit nichts verloren geht.
         $erg = spec_ki_vorschlag($dokId);
-        if ($erg) {
-            $lief = (int) scalar("SELECT haupt_lieferant_id FROM item WHERE id=?", [(int)$id]) ?: null;
-            $coaChargeNeu = (int) (spec_ki_coa_charge((int)$id, $erg, $lief) ?? 0);
-            spec_ki_grenzwerte((int)$id, $erg);
-        }
+        if ($erg && in_array((string)($erg['typ'] ?? ''), ['coa', 'beides'], true)) $coaChargeNeu = 1;
     }
     header('Location: ?p=rohstoff&id=' . $id . '&tab=dok&gespeichert=1' . ($coaChargeNeu ? '&coacharge=' . $coaChargeNeu : '')); exit;
 }

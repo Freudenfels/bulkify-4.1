@@ -181,13 +181,21 @@ function spec_ki_wert($v, string $art) {
 // Gibt zurueck, ob etwas gelesen wurde - der Aufrufer entscheidet, ob er das anzeigt.
 function spec_ki_nach_upload(int $dokument_id): bool {
     if ($dokument_id <= 0 || !ki_bereit()) return false;
-    $d = one("SELECT typ, datei FROM dokument WHERE id=?", [$dokument_id]);
+    $d = one("SELECT typ, datei, objekt_typ, objekt_id, lieferant_id FROM dokument WHERE id=?", [$dokument_id]);
     if (!$d || !in_array((string)$d['typ'], ['coa', 'spec', 'analyse'], true)) return false;
     $pfad = BX_UPLOADS . '/' . basename((string)$d['datei']);
     if (!is_file($pfad)) return false;
     $r = spec_ki_lesen($pfad);
     if (!$r['ok']) return false;
     spec_ki_merken($dokument_id, $r);
+    // Gehört das Dokument zu einem Rohstoff, dann direkt verwerten – egal ob Team oder Lieferant es
+    // hochgeladen hat: bei einer CoA eine (Vorab-)Charge anlegen (mit dem hochladenden Lieferanten,
+    // falls bekannt) und die Grenzwerte am Rohstoff ergänzen. Idempotent über die Chargennummer.
+    if ((string)$d['objekt_typ'] === 'item' && (int)$d['objekt_id'] > 0) {
+        $lief = !empty($d['lieferant_id']) ? (int)$d['lieferant_id'] : null;
+        spec_ki_coa_charge((int)$d['objekt_id'], $r, $lief);
+        spec_ki_grenzwerte((int)$d['objekt_id'], $r);
+    }
     return true;
 }
 
@@ -291,7 +299,7 @@ function spec_ki_werte_speichern(int $charge_id, array $werte): int {
     foreach ($werte as $i => $z) {
         if (trim((string)($z['parameter'] ?? '')) === '') continue;
         q("INSERT INTO charge_analyse (charge_id,parameter,spezifikation,ergebnis,methode,sort) VALUES (?,?,?,?,?,?)",
-          [$charge_id, $z['parameter'], $z['spezifikation'] ?: null, $z['ergebnis'] ?: null, $z['methode'] ?: null, $i]);
+          [$charge_id, $z['parameter'], ($z['spezifikation'] ?? '') ?: null, ($z['ergebnis'] ?? '') ?: null, ($z['methode'] ?? '') ?: null, $i]);
         $n++;
     }
     return $n;
