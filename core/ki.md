@@ -54,6 +54,7 @@ Fachlogik. `ki.php` kennt nur die API. Was gefragt wird, steht in der jeweiligen
 Eine KI-Anfrage dauert leicht eine Minute. Zwei Vorkehrungen sorgen dafür, dass das niemanden trifft:
 
 - `ki_frage()` setzt selbst `set_time_limit(...)` hoch. Sonst wuerde PHP das Skript mitten im Warten abbrechen (`max_execution_time`) und die Arbeit waere verloren.
+- Dabei gilt ein **Gesamtbudget** (Standard 300 s, `budget` im $opt): Wiederholungen eingerechnet. Laeuft es ab, wird abgebrochen statt weiterprobiert. Grund: ein Aufruf belegt die ganze Zeit einen PHP-Arbeiter, und davon hat der Server nur wenige - ohne Obergrenze koennte eine einzige haengende Anfrage das ganze System ausbremsen.
 - `ki_antwort_abschliessen()` schickt die fertige Seite **vorher** an den Browser und rechnet danach weiter. So benutzt es das Kundenportal: Der Kunde bekommt seine Bestaetigung sofort, der Rezepturentwurf entsteht in den Sekunden danach. Vor dem Aufruf muss alles gesendet sein, was der Browser braucht – auch der `Location`-Header.
 
 Wo der Benutzer das Ergebnis sehen will (Spec auslesen, Vorschlag entwickeln), wird bewusst gewartet.

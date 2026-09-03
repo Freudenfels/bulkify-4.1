@@ -64,18 +64,26 @@ function ki_frage(string|array $inhalt, array $opt = []): array {
 
     $versuche = max(1, (int)($opt['versuche'] ?? 3));
     $timeout  = max(10, (int)($opt['timeout'] ?? 180));
-    // Eine KI-Anfrage dauert laenger als ein normaler Seitenaufruf. Ohne das hier wuerde PHP das
-    // Skript mitten im Warten abbrechen (max_execution_time) und die Arbeit waere verloren.
-    @set_time_limit($timeout * $versuche + 30);
+    // Gesamtbudget: so lange darf der ganze Aufruf hoechstens laufen, Wiederholungen eingerechnet.
+    // Es begrenzt, wie lange ein einzelner Seitenaufruf einen PHP-Arbeiter belegen kann.
+    $budget = max($timeout, (int)($opt['budget'] ?? 300));
+    $ende   = microtime(true) + $budget;
+    // Ohne das hier wuerde PHP das Skript mitten im Warten abbrechen (max_execution_time)
+    // und die Arbeit waere verloren.
+    @set_time_limit($budget + 30);
     $letzter  = '';
     for ($n = 1; $n <= $versuche; $n++) {
+        // Nur noch so lange warten, wie vom Budget uebrig ist - unter 15 Sekunden lohnt kein Versuch mehr.
+        $rest = (int) floor($ende - microtime(true));
+        if ($rest < 15) { $letzter = $letzter ?: 'Zeitbudget aufgebraucht.'; break; }
+        $rest = min($timeout, $rest);
         $ch = curl_init('https://api.anthropic.com/v1/messages');
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
             CURLOPT_HTTPHEADER     => ['content-type: application/json', 'x-api-key: ' . $key, 'anthropic-version: ' . KI_VERSION],
             CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
-            CURLOPT_TIMEOUT        => $timeout,
+            CURLOPT_TIMEOUT        => $rest,
         ]);
         $resp = curl_exec($ch);
         $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
