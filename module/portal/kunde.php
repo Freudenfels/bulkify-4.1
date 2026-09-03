@@ -574,6 +574,8 @@ $rohDetail = ($iid && $k['portal_rohstoffe']) ? one("SELECT id, name, name_lat, 
     haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben
     FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
 $rohKennwerte = $rohDetail ? all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$iid]) : [];
+// Freigegebene Analysenzertifikate (bulkify-Layout) zu diesem Rohstoff – nur was das Team freigegeben hat.
+$rohCoas = $rohDetail ? all("SELECT id, charge_nr, mhd FROM charge WHERE item_id=? AND coa_freigegeben=1 ORDER BY (wareneingang IS NULL), wareneingang DESC, id DESC", [$iid]) : [];
 $jaNein = fn($v) => $v === null || $v === '' ? null : ((int)$v === 1);
 $FORMLBL_P = ['pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle'];
 $offenAngebote = count(array_filter($angebote, fn($a) => $a['status'] === 'gesendet'));
@@ -631,6 +633,21 @@ if (($_GET['v'] ?? '') === 'spec_pdf') {
     if ($pdf === null) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
     header('Content-Type: application/pdf');
     header('Content-Disposition: inline; filename="Spezifikation_' . $rid . '.pdf"');
+    header('Content-Length: ' . strlen($pdf));
+    echo $pdf; exit;
+}
+// Analysenzertifikat (CoA) einer Charge im bulkify-Layout – nur wenn freigegeben und der Rohstoff
+// für den Kunden sichtbar ist.
+if (($_GET['v'] ?? '') === 'coa_pdf') {
+    $cid = (int)($_GET['cid'] ?? 0);
+    $ok = $cid && $k['portal_rohstoffe'] && scalar("SELECT c.id FROM charge c JOIN item i ON i.id=c.item_id
+             WHERE c.id=? AND c.coa_freigegeben=1 AND i.kategorie='rohstoff' AND i.gesperrt=0", [$cid]);
+    if (!$ok) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    require_once BX_ROOT . '/core/pdf_spec.php';
+    $pdf = build_coa_pdf($cid);
+    if ($pdf === null) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="CoA_' . $cid . '.pdf"');
     header('Content-Length: ' . strlen($pdf));
     echo $pdf; exit;
 }
@@ -1285,6 +1302,15 @@ portal_head('Kundenportal · ' . $k['firma']);
       <h2>Spezifikation</h2>
       <p class="muted" style="margin-top:0">Unsere Spezifikation zu diesem Rohstoff – Kennzahlen, Gehalt, Erklärungen und Lagerung.</p>
       <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('spec_pdf') ?>&rid=<?= (int)$rohDetail['id'] ?>">&#8681; Spezifikation (PDF)</a>
+    </div>
+    <?php endif; ?>
+    <?php if ($rohCoas): ?>
+    <div class="bx-panel">
+      <h2>Analysenzertifikate</h2>
+      <p class="muted" style="margin-top:0">CoA je Charge im bulkify-Layout – soweit freigegeben.</p>
+      <?php foreach ($rohCoas as $co): ?>
+        <a class="btn btn-ghost btn-sm" target="_blank" style="margin:0 8px 8px 0" href="<?= $portalLink('coa_pdf') ?>&cid=<?= (int)$co['id'] ?>">&#8681; CoA <?= h($co['charge_nr'] ?: ('#' . (int)$co['id'])) ?><?= $co['mhd'] ? ' <span class="muted">(MHD ' . h(date('m/Y', strtotime((string)$co['mhd']))) . ')</span>' : '' ?></a>
+      <?php endforeach; ?>
     </div>
     <?php endif; ?>
     <?php $rohDoks = dokumente_fuer_kunde('item', (int)$rohDetail['id']); if ($rohDoks): ?>

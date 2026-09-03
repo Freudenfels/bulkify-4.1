@@ -698,6 +698,9 @@ function init_schema(): void {
     ensure_column('charge', 'auftrag_id', "INT NULL");
     ensure_column('charge', 'bestellung_position_id', "INT NULL");
     ensure_column('charge', 'pa_id', "INT NULL");   // Produktionsauftrag der Fertigware-Charge (Rückverfolgung Zusammensetzung)
+    ensure_column('charge', 'coa_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");   // bulkify-CoA dieser Charge fuer den Kunden freigegeben?
+    ensure_column('charge', 'coa_freigabe_am', "DATETIME NULL");
+    ensure_column('charge', 'coa_freigabe_von', "VARCHAR(190) NULL");
     ensure_column('bestellung', 'bestelldatum', "DATE NULL");   // „gemeinsam bestellt am"
     ensure_column('bestellung_position', 'bezeichnung', "VARCHAR(200) NULL");   // Freitext (z. B. Bulk-Zukauf ohne Lagerartikel)
 

@@ -163,6 +163,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_
     }
     header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=spec&specfrei=' . ($an ? '1' : '0')); exit;
 }
+// bulkify-CoA einer Charge für den Kunden freigeben bzw. zurückziehen (separater Schritt, wie bei der Spec).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'coa_freigabe' && !$neu) {
+    $cid = (int)($_POST['charge_id'] ?? 0);
+    if ($cid && scalar("SELECT id FROM charge WHERE id=? AND item_id=?", [$cid, (int)$id])) {
+        if (isset($_POST['freigeben']) && $_POST['freigeben'] === '1') {
+            $wer = trim((string)(current_user()['name'] ?? 'Team'));
+            q("UPDATE charge SET coa_freigegeben=1, coa_freigabe_am=?, coa_freigabe_von=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $wer, $cid]);
+            log_aktivitaet('item', (int)$id, 'team', 'bulkify-CoA einer Charge für den Kunden freigegeben.', 'notiz');
+        } else {
+            q("UPDATE charge SET coa_freigegeben=0 WHERE id=?", [$cid]);
+            log_aktivitaet('item', (int)$id, 'team', 'Kundenfreigabe eines bulkify-CoA zurückgezogen.', 'notiz');
+        }
+    }
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&coafrei=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && !$neu) {
     dokument_freigabe_toggle('item', (int)$id, (int)($_POST['dok_id'] ?? 0));
     header('Location: ?p=rohstoff&id=' . $id . '&tab=dok'); exit;
@@ -713,10 +728,11 @@ if (!$neu) {
   <div class="bx-panel">
     <h2>Chargen <?= bx_hint('Wareneingang bucht neue Chargen; Rohstoffe starten in Quarantäne') ?></h2>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Charge</th><th class="bx-num">Verfügbar</th><th>MHD</th><th>Lieferant</th><th>Wareneingang</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Charge</th><th class="bx-num">Verfügbar</th><th>MHD</th><th>Lieferant</th><th>Wareneingang</th><th>Status</th><th>CoA-Freigabe</th><th></th></tr></thead>
       <tbody>
-      <?php if (!$charges): ?><tr><td colspan="7" class="muted">Noch keine Chargen. Über „Wareneingang" buchen.</td></tr><?php endif; ?>
-      <?php foreach ($charges as $c): ?>
+      <?php if (!$charges): ?><tr><td colspan="8" class="muted">Noch keine Chargen. Über „Wareneingang" buchen.</td></tr><?php endif; ?>
+      <?php if (isset($_GET['coafrei'])): ?><tr><td colspan="8" class="badge-ok" style="padding:8px 12px">CoA-Freigabe aktualisiert.</td></tr><?php endif; ?>
+      <?php foreach ($charges as $c): $coaFrei = (int)($c['coa_freigegeben'] ?? 0) === 1; ?>
         <tr>
           <td><?= h($c['charge_nr'] ?: '–') ?></td>
           <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$c['menge_verfuegbar'],3,',','.'),'0'),',')).' '.h($c['einheit']) ?></td>
@@ -724,6 +740,18 @@ if (!$neu) {
           <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
           <td><?= $c['wareneingang'] ? h(date('d.m.Y',strtotime($c['wareneingang']))) : '' ?></td>
           <td><?= match($c['status']){'frei'=>bx_badge('frei','ok'),'quarantaene'=>bx_badge('Quarantäne','warn'),'gesperrt'=>bx_badge('gesperrt','err'),default=>bx_badge(status_text($c['status']))} ?></td>
+          <td>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <?= $coaFrei ? bx_badge('freigegeben','ok') : bx_badge('nicht freigegeben','warn') ?>
+              <form method="post" style="margin:0">
+                <input type="hidden" name="aktion" value="coa_freigabe">
+                <input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
+                <input type="hidden" name="freigeben" value="<?= $coaFrei ? '0' : '1' ?>">
+                <button class="btn btn-ghost btn-sm" type="submit"><?= $coaFrei ? 'zurückziehen' : 'freigeben' ?></button>
+              </form>
+            </div>
+            <?php if ($coaFrei && !empty($c['coa_freigabe_am'])): ?><div class="muted" style="font-size:11px;margin-top:2px"><?= h(date('d.m.Y',strtotime((string)$c['coa_freigabe_am']))) ?><?= !empty($c['coa_freigabe_von']) ? ' · ' . h($c['coa_freigabe_von']) : '' ?></div><?php endif; ?>
+          </td>
           <td class="bx-num">
             <a class="btn btn-ghost btn-sm" target="_blank" href="?p=coa_bulkify&id=<?= (int)$c['id'] ?>" title="Analysenzertifikat im bulkify-Layout – das geht an den Kunden">&#8681; CoA</a>
           </td>
