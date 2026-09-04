@@ -11,6 +11,7 @@
 if (!defined('BX_ROOT')) define('BX_ROOT', dirname(__DIR__));
 require_once dirname(__DIR__) . '/core/config.php';
 require_once BX_ROOT . '/core/schema.php';
+init_schema();   // stellt alle Tabellen sicher (u. a. produkt_kundenpreis, rezeptur.exklusiv)
 
 $v3pfad = $argv[1] ?? '';
 $WRITE  = in_array('--write', $argv, true);
@@ -138,7 +139,55 @@ if ($WRITE) {
     }
     echo "\n" . str_repeat('=', 72) . "\nGESCHRIEBEN (Stufe 1):\n";
     foreach ($w as $k => $v) printf("  %-12s %d\n", $k, $v);
-    echo "  (Produkte + Preise = Stufe 2, separat)\n";
+
+    // ---- Stufe 2: Produkte (je Rezeptur) + Kundenpreise (aus produktanfrage) ----
+    ensure_column('produkt', 'v3_id', "INT NULL");   // = v3 rezept_id (ein Produkt je Rezeptur als Anker)
+    $w2 = ['produkt_neu'=>0,'preis_neu'=>0,'preis_upd'=>0,'ohne_produkt'=>0];
+    $preisParse = function ($s): ?float {
+        $s = trim((string)$s); if ($s === '') return null;
+        $s = str_replace(['€', ' '], '', $s); $s = str_replace(',', '.', $s);
+        return is_numeric($s) ? (float)$s : null;
+    };
+    foreach ($aktiveKunden as $k) {
+        if ((int)($k['intern'] ?? 0) === 1) continue;
+        $v3kid = (int)$k['id'];
+        $v4kid = (int) scalar("SELECT id FROM kunden WHERE v3_id=?", [$v3kid]);
+        if (!$v4kid) continue;
+        foreach ($v3->query("SELECT * FROM produktanfrage WHERE kunde_id=$v3kid ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $p) {
+            $v3rez = (int)$p['rezept_id'];
+            // v4-Rezeptur zu diesem v3-Rezept
+            $rz = one("SELECT id, name FROM rezeptur WHERE v3_id=?", [$v3rez]);
+            if (!$rz) { $w2['ohne_produkt']++; continue; }   // Rezept nicht importiert (z. B. fremder Kunde)
+            $v4rid = (int)$rz['id'];
+            // Produkt-Anker je Rezeptur (v3_id = v3 rezept_id)
+            $pr = one("SELECT id FROM produkt WHERE v3_id=?", [$v3rez]);
+            if ($pr) { $pid = (int)$pr['id']; }
+            else {
+                q("INSERT INTO produkt (nummer,name,rezeptur_id,exklusiv,einheiten_pro_packung,status,notiz,v3_id)
+                   VALUES (?,?,?,0,?, 'entwurf', ?, ?)",
+                  [naechste_nummer('P'), cut($rz['name']), $v4rid, (int)($p['menge_pro_vpe'] ?: 0),
+                   'Aus v3 übernommen (v3-Rezept #' . $v3rez . ')', $v3rez]);
+                $pid = (int)insert_id(); $w2['produkt_neu']++;
+            }
+            // Kundenpreis-Zeile (idempotent über v3 produktanfrage.id)
+            $preis = $preisParse($p['angebot_preis'] ?? '');
+            $mv = $p['menge_pro_vpe'] !== null && $p['menge_pro_vpe'] !== '' ? (int)$p['menge_pro_vpe'] : null;
+            $av = $p['anzahl_vpe'] !== null && $p['anzahl_vpe'] !== '' ? (int)$p['anzahl_vpe'] : null;
+            $verp = cut($p['verpackung'] ?? '');
+            $conf = trim((string)($p['bestaetigt_at'] ?? '')) !== '';
+            $pnotiz = $conf ? ('bestätigt ' . $p['bestaetigt_at']) : null;
+            $exP = one("SELECT id FROM produkt_kundenpreis WHERE v3_id=?", [(int)$p['id']]);
+            if ($exP) {
+                q("UPDATE produkt_kundenpreis SET produkt_id=?,kunde_id=?,menge_pro_vpe=?,anzahl_vpe=?,verpackung=?,preis=?,notiz=? WHERE id=?",
+                  [$pid, $v4kid, $mv, $av, $verp, $preis, cut($pnotiz,255), (int)$exP['id']]); $w2['preis_upd']++;
+            } else {
+                q("INSERT INTO produkt_kundenpreis (produkt_id,kunde_id,menge_pro_vpe,anzahl_vpe,verpackung,preis,notiz,v3_id) VALUES (?,?,?,?,?,?,?,?)",
+                  [$pid, $v4kid, $mv, $av, $verp, $preis, cut($pnotiz,255), (int)$p['id']]); $w2['preis_neu']++;
+            }
+        }
+    }
+    echo "\nGESCHRIEBEN (Stufe 2):\n";
+    foreach ($w2 as $k => $v) printf("  %-14s %d\n", $k, $v);
 }
 
 echo "\n" . str_repeat('=', 72) . "\n";

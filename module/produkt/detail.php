@@ -79,6 +79,8 @@ $kapEffektiv   = $neu ? null : produkt_leerkapsel_id((int)$id);
 $pForm = $neu ? 'kapsel' : ((string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$id]) ?: 'kapsel');
 // Preis-Matrix laden + nach (Stück, Verpackung) gruppieren, Bestellmengen als Spalten
 $matrix = $neu ? [] : all("SELECT pp.*, i.name AS verp FROM produkt_preis pp JOIN item i ON i.id=pp.verpackung_id WHERE pp.produkt_id=? ORDER BY pp.stueck, i.name, pp.bestellmenge", [(int)$id]);
+// Vereinbarte Kundenpreise je Produkt (welcher Kunde zahlt was) – u. a. aus dem v3-Import.
+$kundenpreise = $neu ? [] : all("SELECT kp.*, k.firma FROM produkt_kundenpreis kp JOIN kunden k ON k.id=kp.kunde_id WHERE kp.produkt_id=? ORDER BY k.firma, kp.anzahl_vpe", [(int)$id]);
 $matrixMengen = array_values(array_unique(array_map(fn($r) => (int)$r['bestellmenge'], $matrix)));
 sort($matrixMengen);
 $matrixGrid = [];
@@ -353,5 +355,26 @@ function recalc(){
 });
 recalc();
 </script>
+<?php if (!$neu && $kundenpreise): ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Kundenpreise <?= bx_hint('Was wurde welchem Kunden für dieses Produkt berechnet – je Konfiguration (Menge je Packung + Anzahl VPE). Aus früheren Angeboten/Bestätigungen bzw. dem v3-Import.') ?></h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Kunde</th><th class="bx-num">Menge je VPE</th><th class="bx-num">Anzahl VPE</th><th>Verpackung</th><th class="bx-num">Preis je VPE</th><th></th></tr></thead>
+    <tbody>
+      <?php foreach ($kundenpreise as $kp): ?>
+        <tr>
+          <td><?= h($kp['firma']) ?></td>
+          <td class="bx-num"><?= $kp['menge_pro_vpe'] !== null ? (int)$kp['menge_pro_vpe'] : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $kp['anzahl_vpe'] !== null ? number_format((int)$kp['anzahl_vpe'], 0, ',', '.') : '<span class="muted">–</span>' ?></td>
+          <td><?= $kp['verpackung'] !== '' && $kp['verpackung'] !== null ? h($kp['verpackung']) : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $kp['preis'] !== null ? '<strong>' . number_format((float)$kp['preis'], 2, ',', '.') . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
+          <td class="muted" style="font-size:12px"><?= $kp['notiz'] ? h($kp['notiz']) : '' ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <p class="muted" style="font-size:12px;margin-top:8px">Schneller Überblick, welcher Kunde welchen Preis hat. Verpackung ist teils Freitext (aus v3) – nach Bedarf einem Gebinde zuordnen.</p>
+</div>
+<?php endif; ?>
 <?php
 render_footer();

@@ -957,6 +957,23 @@ function init_schema(): void {
         KEY idx_produkt (produkt_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // produkt_kundenpreis: was wurde WELCHEM Kunden für dieses Produkt zu welcher Konfiguration
+    // (Menge je Packung + Anzahl VPE) berechnet. Damit man je Produkt schnell sieht, welcher Kunde
+    // welchen Preis hat. Quelle u. a. der v3-Import (bestätigte Produktanfragen).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS produkt_kundenpreis (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        produkt_id INT NOT NULL,
+        kunde_id INT NOT NULL,
+        menge_pro_vpe INT NULL,                            -- Stück je Packung (VPE)
+        anzahl_vpe INT NULL,                               -- Anzahl VPE (Bestellmenge)
+        verpackung VARCHAR(190) NULL,                      -- Freitext (Gebinde), solange nicht als Artikel verknüpft
+        preis DECIMAL(12,4) NULL,                          -- vereinbarter VK je Packung (EUR)
+        notiz VARCHAR(255) NULL,
+        v3_id INT NULL,                                    -- Herkunft: v3 produktanfrage.id (idempotenter Import)
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_produkt (produkt_id), KEY idx_kunde (kunde_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // portal_anfrage: Kundenanfragen aus dem Portal für Produkt / Rohstoff / Dienstleistung (Rezeptur läuft separat über rezeptur_anfrage).
     // AGB, versioniert: eine Fassung ist aktiv, alte bleiben als Beleg stehen. Beim verbindlichen
     // Annehmen wird die Versionsbezeichnung am Vorgang gespeichert.

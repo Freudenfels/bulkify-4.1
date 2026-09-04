@@ -20,8 +20,8 @@ php -d extension_dir=C:\php\ext -d extension=php_pdo_sqlite.dll tools/v3_import.
 - **Rezeptur** (`rezepte`) → `rezeptur`: Name, Darreichungsform (Kapsel/Pulver/Flüssig…), Kapselgröße (v3 „0"/„00" → „Größe 0/00"), **`kunde_id` = Herkunft, `exklusiv=0`, `status='freigegeben'`** → „eigene Rezeptur beim Kunden, aber für alle frei". Bestätigung als Info: `freigabe_name`/`freigabe_am` aus `rezept_kunde` (nur wenn wirklich bestätigt, sonst NULL).
 - **Zutaten** (`rezept_zutaten`) → `rezeptur_zutat`: Bezeichnung + Menge (mg). Versuchte Verknüpfung zu einem v4-Rohstoff per Name; kein Treffer → Freitext-Zutat (Nacharbeit: später verknüpfen).
 
-## Noch offen (Stufe 2)
-Produkte (`produktanfrage`) + Preise (bestätigte `angebot_preis`) + Auftragsbestätigungen. Repräsentation in v4 noch mit Nico zu klären.
+## Stufe 2 (Produkte + Kundenpreise)
+Aus `produktanfrage`: je referenzierter Rezeptur ein **Produkt-Anker** (`produkt`, `v3_id` = v3-Rezept) und je Anfrage eine Zeile in **`produkt_kundenpreis`** (Kunde · Menge je VPE · Anzahl VPE · Verpackung(Freitext) · Preis). Preis wird aus `angebot_preis` geparst (`"10,63"`, `"4,41€"`). Idempotent über `produkt_kundenpreis.v3_id` = v3 `produktanfrage.id`. Anzeige: Panel **„Kundenpreise"** auf der Produkt-Detailseite (`module/produkt/detail.php`) – schneller Überblick, welcher Kunde welchen Preis hat. Anfragen, deren Rezept nicht importiert wurde (z. B. interner Kunde), werden übersprungen (`ohne_produkt`).
 
 ## Modell-Ergänzung
 Nutzt `rezeptur.exklusiv` (analog `produkt.exklusiv`): `exklusiv=0 + freigegeben` = Katalog/für alle; `exklusiv=1 + kunde_id` = nur dieser Kunde. Einmaliger Backfill in `init_schema()` setzt bestehende Kunden-Rezepturen auf `exklusiv=1` (Verhalten unverändert). Sichtbarkeit im Kundenportal entsprechend angepasst.
