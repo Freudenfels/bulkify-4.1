@@ -361,13 +361,22 @@ if ($WRITE) {
         $menge  = (int)($a['anzahl_vpe'] ?: ($a['menge'] ?: 0));
         $stueck = (int)($a['menge_pro_vpe'] ?: ($a['stueckzahl'] ?: 0));
         $vid = $verpId($a['verpackung'] ?? '');
+        // Preis aus der verknüpften Produktanfrage (anfrage_id -> angebot_preis) -> Netto = Preis je VPE × Menge.
+        $vkStueck = 0.0; $netto = 0.0;
+        if (!empty($a['anfrage_id'])) {
+            $ap = $v3->query("SELECT angebot_preis FROM produktanfrage WHERE id=" . (int)$a['anfrage_id'])->fetchColumn();
+            if ($ap !== false && $ap !== null && $ap !== '') {
+                $p = (float) str_replace(',', '.', str_replace(['€', ' '], '', (string)$ap));
+                if ($p > 0) { $vkStueck = $p; $netto = $p * $menge; }
+            }
+        }
         $exA = one("SELECT id FROM auftrag WHERE v3_id=?", [$v3aid]);
         if ($exA) {
-            q("UPDATE auftrag SET kunde_id=?,produkt_id=?,menge=?,stueck=?,verpackung_id=?,status=? WHERE id=?",
-              [$kid, $pid, $menge, $stueck, $vid, $st, (int)$exA['id']]); $w5['auftrag_upd']++;
+            q("UPDATE auftrag SET kunde_id=?,produkt_id=?,menge=?,stueck=?,verpackung_id=?,status=?,vk_stueck=?,gesamt_netto=? WHERE id=?",
+              [$kid, $pid, $menge, $stueck, $vid, $st, $vkStueck, $netto, (int)$exA['id']]); $w5['auftrag_upd']++;
         } else {
-            q("INSERT INTO auftrag (nummer,kunde_id,produkt_id,menge,stueck,verpackung_id,status,v3_id) VALUES (?,?,?,?,?,?,?,?)",
-              [naechste_nummer('AB'), $kid, $pid, $menge, $stueck, $vid, $st, $v3aid]); $w5['auftrag_neu']++;
+            q("INSERT INTO auftrag (nummer,kunde_id,produkt_id,menge,stueck,verpackung_id,status,vk_stueck,gesamt_netto,v3_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('AB'), $kid, $pid, $menge, $stueck, $vid, $st, $vkStueck, $netto, $v3aid]); $w5['auftrag_neu']++;
         }
     }
     echo "\nGESCHRIEBEN (Stufe 5 – Aufträge):\n";
