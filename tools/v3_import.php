@@ -170,6 +170,27 @@ if ($WRITE) {
             }
         }
     }
+    // Hausrezepturen (v3 kunde_id NULL/0) als Katalog-Rezepturen (kunde_id NULL, exklusiv=0, freigegeben) –
+    // werden von Aufträgen/Produktanfragen referenziert, gehören also mit.
+    foreach ($v3->query("SELECT * FROM rezepte WHERE kunde_id IS NULL OR kunde_id=0 ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $v3rid = (int)$r['id'];
+        $form = v3_form($r['form']); $kaps = v3_kapsel_id($r['kapselgroesse'] ?? '');
+        $rnotiz = 'Aus v3 übernommen (v3-Hausrezept #' . $v3rid . ')';
+        $exR = one("SELECT id FROM rezeptur WHERE v3_id=?", [$v3rid]);
+        if ($exR) { $v4rid = (int)$exR['id'];
+            q("UPDATE rezeptur SET name=?,kunde_id=NULL,darreichungsform=?,kapselgroesse_id=?,exklusiv=0,status='freigegeben',notiz=? WHERE id=?",
+              [cut($r['name']), $form, $kaps, cut($rnotiz,500), $v4rid]); $w['rez_upd']++;
+        } else {
+            q("INSERT INTO rezeptur (nummer,name,kunde_id,darreichungsform,kapselgroesse_id,exklusiv,status,notiz,v3_id) VALUES (?,?,NULL,?,?,0,'freigegeben',?,?)",
+              [naechste_nummer('RZ'), cut($r['name']), $form, $kaps, cut($rnotiz,500), $v3rid]); $v4rid = (int)insert_id(); $w['rez_neu']++;
+        }
+        q("DELETE FROM rezeptur_zutat WHERE rezeptur_id=?", [$v4rid]);
+        foreach ($v3->query("SELECT bezeichnung,menge_mg,pos FROM rezept_zutaten WHERE rezept_id=$v3rid ORDER BY pos,id")->fetchAll(PDO::FETCH_ASSOC) as $z) {
+            $iid = v4_item_by_name((string)$z['bezeichnung']);
+            q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
+              [$v4rid, $iid, cut($z['bezeichnung']), (float)$z['menge_mg'], (int)$z['pos']]); $w['zutat']++;
+        }
+    }
     echo "\n" . str_repeat('=', 72) . "\nGESCHRIEBEN (Stufe 1):\n";
     foreach ($w as $k => $v) printf("  %-12s %d\n", $k, $v);
 
@@ -300,6 +321,57 @@ if ($WRITE) {
     }
     echo "\nGESCHRIEBEN (Stufe 4 – Lieferanten-Angebote):\n";
     foreach ($w4 as $k => $v) printf("  %-14s %d\n", $k, $v);
+
+    // ---- Stufe 5: Aufträge (Kundenbestellungen) ----
+    ensure_column('auftrag', 'v3_id', "INT NULL");
+    // Kunde per Firmenname -> v4-Id (v3 auftraege.kunde ist ein Name)
+    $firmaMap = [];
+    foreach (all("SELECT id, firma FROM kunden WHERE v3_id IS NOT NULL") as $kk) $firmaMap[$normName($kk['firma'])] = (int)$kk['id'];
+    // Verpackung per Name -> v4-Verpackungsartikel (sonst NULL)
+    $verpId = function (?string $name): ?int {
+        $name = trim((string)$name); if ($name === '') return null;
+        $id = scalar("SELECT id FROM item WHERE kategorie='verpackung' AND name=? LIMIT 1", [$name]);
+        return $id ? (int)$id : null;
+    };
+    $w5 = ['auftrag_neu'=>0,'auftrag_upd'=>0,'ohne_kunde'=>0,'ohne_produkt'=>0];
+    foreach ($v3->query("SELECT * FROM auftraege ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $a) {
+        $v3aid = (int)$a['id'];
+        $kid = $firmaMap[$normName($a['kunde'])] ?? null;
+        if (!$kid) { $w5['ohne_kunde']++; continue; }   // z. B. interner „Kunde"
+        // Produkt-Anker über das Rezept
+        $pid = null;
+        if (!empty($a['rezept_id'])) {
+            $rz = one("SELECT id, name FROM rezeptur WHERE v3_id=?", [(int)$a['rezept_id']]);
+            if ($rz) {
+                $prow = one("SELECT id FROM produkt WHERE v3_id=?", [(int)$a['rezept_id']]);
+                if ($prow) $pid = (int)$prow['id'];
+                else {
+                    q("INSERT INTO produkt (nummer,name,rezeptur_id,exklusiv,einheiten_pro_packung,status,notiz,v3_id) VALUES (?,?,?,0,?, 'entwurf', ?, ?)",
+                      [naechste_nummer('P'), cut($rz['name']), (int)$rz['id'], (int)($a['menge_pro_vpe'] ?: 0), 'Aus v3 (Auftrag)', (int)$a['rezept_id']]);
+                    $pid = (int)insert_id();
+                }
+            }
+        }
+        if (!$pid) $w5['ohne_produkt']++;
+        // Status aus den v3-Stufen-Flags ableiten
+        $flag = fn($v) => $v !== null && $v !== '' && (int)$v > 0;
+        $st = $flag($a['versand'] ?? 0) ? 'versendet'
+            : (($flag($a['verpackt'] ?? 0)) ? 'erledigt'
+            : (($flag($a['produziert'] ?? 0)) ? 'in_produktion' : 'offen'));
+        $menge  = (int)($a['anzahl_vpe'] ?: ($a['menge'] ?: 0));
+        $stueck = (int)($a['menge_pro_vpe'] ?: ($a['stueckzahl'] ?: 0));
+        $vid = $verpId($a['verpackung'] ?? '');
+        $exA = one("SELECT id FROM auftrag WHERE v3_id=?", [$v3aid]);
+        if ($exA) {
+            q("UPDATE auftrag SET kunde_id=?,produkt_id=?,menge=?,stueck=?,verpackung_id=?,status=? WHERE id=?",
+              [$kid, $pid, $menge, $stueck, $vid, $st, (int)$exA['id']]); $w5['auftrag_upd']++;
+        } else {
+            q("INSERT INTO auftrag (nummer,kunde_id,produkt_id,menge,stueck,verpackung_id,status,v3_id) VALUES (?,?,?,?,?,?,?,?)",
+              [naechste_nummer('AB'), $kid, $pid, $menge, $stueck, $vid, $st, $v3aid]); $w5['auftrag_neu']++;
+        }
+    }
+    echo "\nGESCHRIEBEN (Stufe 5 – Aufträge):\n";
+    foreach ($w5 as $k => $v) printf("  %-14s %d\n", $k, $v);
 }
 
 echo "\n" . str_repeat('=', 72) . "\n";

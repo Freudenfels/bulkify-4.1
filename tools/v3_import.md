@@ -39,3 +39,7 @@ Nutzt `rezeptur.exklusiv` (analog `produkt.exklusiv`): `exklusiv=0 + freigegeben
 Aus `lieferant_angebot` → neue Tabelle `rezeptur_lief_angebot` (rezeptur_id, lieferant_id, preis, einheit, menge, status, angenommen_am, v3_id). Nur Angebote, deren Rezeptur importiert wurde (sonst `ohne_rezeptur`). Anzeige: Panel „Lieferanten-Angebote (Fremdfertigung)" auf der Rezeptur-Detailseite. Idempotent über v3_id. Hinweis: v3 hatte bei den meisten Angeboten keinen echten Preis (0/leer) – nur die echten Preise werden hervorgehoben.
 
 **Nicht möglich:** Rohstoff↔Lieferant↔Preis in `lieferant_preis` – v3 hat keine solche Quelle (rohstoffe.kilo_preis leer, preisliste ohne Lieferant + andere Schreibweise). Die 635 EK-Preise bleiben die Referenzliste.
+
+## Stufe 5 (Aufträge) + Hausrezepturen
+- **Hausrezepturen** (v3 `kunde_id` NULL/0, 16) werden in Stufe 1 als Katalog-Rezepturen (kunde_id NULL, exklusiv=0, freigegeben) mitimportiert – Aufträge/Produktanfragen referenzieren sie.
+- **Aufträge** (`auftraege`, 27; interner Kunde übersprungen) → v4 `auftrag`: Kunde per Firmenname, Produkt über `rezept_id`→Produkt-Anker (fehlend? wird angelegt), Menge=anzahl_vpe × Stück=menge_pro_vpe, Verpackung per Name (sonst NULL), Status aus v3-Stufen-Flags abgeleitet (versand→versendet, verpackt→erledigt, produziert→in_produktion, sonst offen). Idempotent über `v3_id`. Anzeige im Kunden-Reiter „Bestellungen". Ohne Produkt bleiben nur Aufträge, deren Rezept in v3 fehlt (Nacharbeit).
