@@ -407,7 +407,8 @@ if ($WRITE) {
         $exG = one("SELECT id FROM angebot WHERE v3_id=?", [$v3paid]);
         if ($exG) { $gid = (int)$exG['id'];
             q("UPDATE angebot SET kunde_id=?,produkt_id=?,status=?,notiz=? WHERE id=?", [$kid, $pid, $status, cut($notiz,500), $gid]);
-            q("DELETE FROM angebot_position WHERE angebot_id=?", [$gid]); $w6['angebot_upd']++;
+            q("DELETE FROM angebot_position WHERE angebot_id=?", [$gid]);
+            q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$gid]); $w6['angebot_upd']++;
         } else {
             q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,v3_id) VALUES (?,?,?,?,?,?)",
               [naechste_nummer('AN'), $kid, $pid, $status, cut($notiz,500), $v3paid]); $gid = (int)insert_id(); $w6['angebot_neu']++;
@@ -417,6 +418,10 @@ if ($WRITE) {
            VALUES (?,0,?,?, 'Pkg.', ?, ?, ?, ?, 'v3import')",
           [$gid, cut($rezName), $menge, (int) round($preis * 100), $stueck, ($rz ? (int)$rz['id'] : null), $vid]);
         $w6['position']++;
+        // Preis-Staffel (Menge + VK je Packung) – das sieht der Kunde als wählbare Angebotsmenge.
+        if ($menge > 0 && $preis > 0)
+            q("INSERT INTO angebot_staffel (angebot_id,menge,vk_stueck,bestaetigt,sort) VALUES (?,?,?,?,0)",
+              [$gid, $menge, $preis, $conf ? 1 : 0]);
     }
     // Angenommene Angebote an ihren Auftrag hängen: v3 auftrag.anfrage_id -> v4 angebot.v3_id
     foreach ($v3->query("SELECT id, anfrage_id FROM auftraege WHERE anfrage_id IS NOT NULL AND anfrage_id>0")->fetchAll(PDO::FETCH_ASSOC) as $ar) {
