@@ -278,6 +278,28 @@ if ($WRITE) {
     }
     echo "\nGESCHRIEBEN (Stufe 3):\n";
     foreach ($w3 as $k => $v) printf("  %-12s %d\n", $k, $v);
+
+    // ---- Stufe 4: Lieferanten-Angebote pro Rezeptur (Fremdfertigung) ----
+    $w4 = ['angebot_neu'=>0,'angebot_upd'=>0,'ohne_rezeptur'=>0];
+    foreach ($v3->query("SELECT * FROM lieferant_angebot ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $a) {
+        $v3aid = (int)$a['id'];
+        $rz = one("SELECT id FROM rezeptur WHERE v3_id=?", [(int)$a['rezept_id']]);
+        if (!$rz) { $w4['ohne_rezeptur']++; continue; }   // Rezeptur nicht importiert -> überspringen
+        $v4rid = (int)$rz['id'];
+        $v4lid = $mapLief[(int)$a['lieferant_id']] ?? null;
+        $preis = ($a['preis'] !== null && $a['preis'] !== '') ? (float)str_replace(',', '.', (string)$a['preis']) : null;
+        $menge = ($a['menge'] !== null && $a['menge'] !== '') ? (float)str_replace(',', '.', (string)$a['menge']) : null;
+        $exA = one("SELECT id FROM rezeptur_lief_angebot WHERE v3_id=?", [$v3aid]);
+        if ($exA) {
+            q("UPDATE rezeptur_lief_angebot SET rezeptur_id=?,lieferant_id=?,preis=?,einheit=?,menge=?,status=?,notiz=?,angenommen_am=? WHERE id=?",
+              [$v4rid, $v4lid, $preis, cut($a['einheit'], 30), $menge, cut($a['status'], 20), cut($a['notiz'], 255), (!empty($a['angenommen_at']) ? $a['angenommen_at'] : null), (int)$exA['id']]); $w4['angebot_upd']++;
+        } else {
+            q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,menge,status,notiz,angenommen_am,v3_id) VALUES (?,?,?,?,?,?,?,?,?)",
+              [$v4rid, $v4lid, $preis, cut($a['einheit'], 30), $menge, cut($a['status'], 20), cut($a['notiz'], 255), (!empty($a['angenommen_at']) ? $a['angenommen_at'] : null), $v3aid]); $w4['angebot_neu']++;
+        }
+    }
+    echo "\nGESCHRIEBEN (Stufe 4 – Lieferanten-Angebote):\n";
+    foreach ($w4 as $k => $v) printf("  %-14s %d\n", $k, $v);
 }
 
 echo "\n" . str_repeat('=', 72) . "\n";

@@ -81,6 +81,9 @@ $locked = !$neu && in_array($status, ['freigegeben','eingefroren'], true);
 
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
 $zutaten = $neu ? [] : all("SELECT * FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [(int)$id]);
+// Lieferanten-Angebote für die Fremdfertigung dieser Rezeptur (u. a. aus dem v3-Import).
+$liefAngebote = $neu ? [] : all("SELECT la.*, l.firma FROM rezeptur_lief_angebot la LEFT JOIN lieferanten l ON l.id=la.lieferant_id
+                                 WHERE la.rezeptur_id=? ORDER BY (la.preis IS NULL), la.preis", [(int)$id]);
 
 // Rohstoffe für die Auswahl – nach passender Form für die Darreichungsform sortiert (flüssig zuerst bei flüssig)
 $prefForms = in_array($df, ['fluessig','softgel'], true) ? ['fluessig','oel'] : ['pulver','granulat','kristallin'];
@@ -269,6 +272,25 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   </table></div>
 </div>
 <?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 ORDER BY firma"), '?p=rezeptur_detail&id=' . (int)$id); ?>
+<?php endif; ?>
+
+<?php if (!$neu && $liefAngebote): ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Lieferanten-Angebote (Fremdfertigung) <?= bx_hint('Was Lieferanten für die Herstellung dieser Rezeptur angeboten haben – Preis je Einheit. U. a. aus v3 übernommen.') ?></h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Lieferant</th><th class="bx-num">Preis je Einheit</th><th>Einheit</th><th>Status</th></tr></thead>
+    <tbody>
+      <?php foreach ($liefAngebote as $la): ?>
+        <tr>
+          <td><?= $la['firma'] ? h($la['firma']) : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $la['preis'] !== null && (float)$la['preis'] > 0 ? '<strong>' . number_format((float)$la['preis'], 4, ',', '.') . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
+          <td><?= $la['einheit'] ? h($la['einheit']) : '<span class="muted">–</span>' ?></td>
+          <td><?= ($la['status'] ?? '') === 'angenommen' ? bx_badge('angenommen', 'ok') : bx_badge($la['status'] ?: 'offen', 'info') ?><?= !empty($la['angenommen_am']) ? ' <span class="muted" style="font-size:11px">' . h(date('d.m.Y', strtotime((string)$la['angenommen_am']))) . '</span>' : '' ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
 <?php endif; ?>
 
 <script>

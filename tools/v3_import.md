@@ -34,3 +34,8 @@ Nutzt `rezeptur.exklusiv` (analog `produkt.exklusiv`): `exklusiv=0 + freigegeben
 
 ## Stufe 0 (Rohstoffe) – mit Dublettenschutz
 Übernimmt die v3-`rohstoffe` (Kategorie rohstoff, 1.161) nach v4 `item` (Name de/en/lat, Form aus `art`, EK aus `kilo_preis`, Herkunft). Läuft VOR den Rezepturen, damit sich die Zutaten gleich verknüpfen. **Keine Dubletten:** (1) idempotent über `item.v3_id`; (2) bei gleichem normalisiertem Namen wird der bestehende v4-Rohstoff verknüpft statt neu angelegt. Verifiziert: 0 doppelte Namen, 0 doppelte v3_id, 2. Lauf legt nichts Neues an. Qualitätsfelder (CAS/EC/…) bleiben leer (Nacharbeit/Spec-KI). 136 Slash-Bündelnamen kommen als ein Eintrag.
+
+## Stufe 4 (Lieferanten-Angebote pro Rezeptur)
+Aus `lieferant_angebot` → neue Tabelle `rezeptur_lief_angebot` (rezeptur_id, lieferant_id, preis, einheit, menge, status, angenommen_am, v3_id). Nur Angebote, deren Rezeptur importiert wurde (sonst `ohne_rezeptur`). Anzeige: Panel „Lieferanten-Angebote (Fremdfertigung)" auf der Rezeptur-Detailseite. Idempotent über v3_id. Hinweis: v3 hatte bei den meisten Angeboten keinen echten Preis (0/leer) – nur die echten Preise werden hervorgehoben.
+
+**Nicht möglich:** Rohstoff↔Lieferant↔Preis in `lieferant_preis` – v3 hat keine solche Quelle (rohstoffe.kilo_preis leer, preisliste ohne Lieferant + andere Schreibweise). Die 635 EK-Preise bleiben die Referenzliste.

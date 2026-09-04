@@ -974,6 +974,23 @@ function init_schema(): void {
         KEY idx_produkt (produkt_id), KEY idx_kunde (kunde_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // rezeptur_lief_angebot: Angebote von Lieferanten für die FREMDFERTIGUNG einer Rezeptur
+    // (Preis je Einheit, z. B. je Kapsel). Aus v3 übernommen (lieferant_angebot). Anzeige an der Rezeptur.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS rezeptur_lief_angebot (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        rezeptur_id INT NOT NULL,
+        lieferant_id INT NULL,
+        preis DECIMAL(12,4) NULL,
+        einheit VARCHAR(30) NULL,
+        menge DECIMAL(14,3) NULL,
+        status VARCHAR(20) NULL,
+        notiz VARCHAR(255) NULL,
+        angenommen_am DATETIME NULL,
+        v3_id INT NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_rezeptur (rezeptur_id), KEY idx_lieferant (lieferant_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // lieferant_preisliste: Nachschlage-Liste der Rohstoff-Einkaufspreise (Name · Lieferant · EUR/kg),
     // aus v3 übernommen. Bewusst OHNE Verknüpfung zum v4-Lagerartikel (v4 hat einen eigenen Rohstoffstamm) –
     // reine Referenz zum schnellen „was zahlen wir wofür". Bei Bedarf später einem Artikel zuordnen.
