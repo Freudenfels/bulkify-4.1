@@ -65,7 +65,9 @@ $umsatz = $offen = 0.0;
 if (!$neu) {
     $kid = (int)$id;
     $k_angebote = all("SELECT a.*, p.name AS produkt_name,
-                       (SELECT COUNT(*) FROM angebot_staffel s WHERE s.angebot_id=a.id) AS staffel_anzahl
+                       (SELECT COUNT(*) FROM angebot_staffel s WHERE s.angebot_id=a.id) AS staffel_anzahl,
+                       (SELECT s.menge FROM angebot_staffel s WHERE s.angebot_id=a.id ORDER BY s.bestaetigt DESC, s.sort, s.id LIMIT 1) AS staffel_menge,
+                       (SELECT s.vk_stueck FROM angebot_staffel s WHERE s.angebot_id=a.id ORDER BY s.bestaetigt DESC, s.sort, s.id LIMIT 1) AS staffel_preis
                        FROM angebot a LEFT JOIN produkt p ON p.id=a.produkt_id
                        WHERE a.kunde_id=? ORDER BY a.angelegt DESC", [$kid]);
     $k_auftraege = all("SELECT a.*, p.name AS produkt_name,
@@ -85,7 +87,12 @@ $reBadge  = fn($s) => match ($s) { 'bezahlt'=>bx_badge('bezahlt','ok'),'offen'=>
 $colsAng = [
     'nummer'         => ['label'=>'Nummer'],
     'produkt_name'   => ['label'=>'Produkt','render'=>fn($r)=> $r['produkt_name']?h($r['produkt_name']):'<span class="muted">–</span>'],
-    'staffel_anzahl' => ['label'=>'Staffeln','num'=>true],
+    'staffel_menge'  => ['label'=>'Menge','num'=>true,'render'=>fn($r)=> $r['staffel_menge']!==null
+                          ? number_format((int)$r['staffel_menge'],0,',','.').' Pkg.'.((int)$r['staffel_anzahl']>1?' <span class="muted" style="font-size:11px">(+'.((int)$r['staffel_anzahl']-1).')</span>':'')
+                          : '<span class="muted">–</span>'],
+    'staffel_preis'  => ['label'=>'Preis/Pkg.','num'=>true,'render'=>fn($r)=> $r['staffel_preis']!==null && (float)$r['staffel_preis']>0
+                          ? '<strong>'.number_format((float)$r['staffel_preis'],2,',','.').' €</strong>'
+                          : '<span class="muted">–</span>'],
     'status'         => ['label'=>'Status','render'=>fn($r)=> $angBadge($r['status'])],
 ];
 $colsAuf = [
