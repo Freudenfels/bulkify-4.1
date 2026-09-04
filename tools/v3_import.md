@@ -31,3 +31,6 @@ Nutzt `rezeptur.exklusiv` (analog `produkt.exklusiv`): `exklusiv=0 + freigegeben
 - **EK-Preisliste** (`preisliste`, 635) → neue Referenztabelle **`lieferant_preisliste`** (Rohstoffname · Lieferant · EUR/kg · Stand). Bewusst OHNE Lager-Verknüpfung. Seite: `?p=lief_preisliste` (Menü Einkauf → EK-Preisliste), durchsuchbar.
 - **Bestellungen** (`bestellungen`, alle 13) → v4 `bestellung` + eine `bestellung_position` (Artikel als Freitext, `item_id` NULL). Status gemappt (offen/bestellt/geliefert), v3-Status in der Notiz, Tracking übernommen. `v3_id`.
 - **Nicht übernommen:** v3 `lieferant_angebot` (Angebote je Rezeptur) und `rohstoff_chargen` – beide setzen die v3-Rohstoffe voraus (Chargen brauchen in v4 zwingend einen Lagerartikel), die bewusst nicht importiert werden.
+
+## Stufe 0 (Rohstoffe) – mit Dublettenschutz
+Übernimmt die v3-`rohstoffe` (Kategorie rohstoff, 1.161) nach v4 `item` (Name de/en/lat, Form aus `art`, EK aus `kilo_preis`, Herkunft). Läuft VOR den Rezepturen, damit sich die Zutaten gleich verknüpfen. **Keine Dubletten:** (1) idempotent über `item.v3_id`; (2) bei gleichem normalisiertem Namen wird der bestehende v4-Rohstoff verknüpft statt neu angelegt. Verifiziert: 0 doppelte Namen, 0 doppelte v3_id, 2. Lauf legt nichts Neues an. Qualitätsfelder (CAS/EC/…) bleiben leer (Nacharbeit/Spec-KI). 136 Slash-Bündelnamen kommen als ein Eintrag.

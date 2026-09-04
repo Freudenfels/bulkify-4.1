@@ -99,6 +99,39 @@ if ($WRITE) {
     // v3_id an den Zieltabellen (idempotent, keine Dubletten)
     ensure_column('kunden', 'v3_id', "INT NULL");
     ensure_column('rezeptur', 'v3_id', "INT NULL");
+    ensure_column('item', 'v3_id', "INT NULL");
+
+    // ---- Stufe 0: Rohstoffe (VOR den Rezepturen, damit Zutaten sich verknüpfen). KEINE Dubletten:
+    // (1) idempotent über v3_id, (2) gleicher (normalisierter) Name -> bestehenden Rohstoff verknüpfen. ----
+    $normName = fn($s) => preg_replace('/\s+/', ' ', mb_strtolower(trim((string)$s)));
+    $vorhanden = [];   // normalisierter Name -> v4 item-id (bestehende + neu angelegte)
+    foreach (all("SELECT id, name FROM item WHERE kategorie='rohstoff'") as $it) $vorhanden[$normName($it['name'])] = (int)$it['id'];
+    $v3form = fn($a) => ['pulver'=>'pulver','flüssig'=>'fluessig','fluessig'=>'fluessig'][mb_strtolower(trim((string)$a))] ?? 'pulver';
+    $w0 = ['roh_neu'=>0, 'roh_upd'=>0, 'roh_link'=>0];
+    foreach ($v3->query("SELECT * FROM rohstoffe WHERE kategorie='rohstoff' ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $rs) {
+        $v3sid = (int)$rs['id'];
+        $name  = cut($rs['name_de']); if ($name === '' || $name === null) continue;
+        $nn    = $normName($rs['name_de']);
+        $ekp   = ($rs['kilo_preis'] !== null && $rs['kilo_preis'] !== '') ? (float)str_replace(',', '.', (string)$rs['kilo_preis']) : 0.0;
+        $ex = one("SELECT id FROM item WHERE v3_id=? AND kategorie='rohstoff'", [$v3sid]);
+        if ($ex) {   // schon importiert -> aktualisieren
+            q("UPDATE item SET name=?,name_en=?,name_lat=?,form=?,ek_preis=?,herkunft=? WHERE id=?",
+              [$name, cut($rs['name_en']), cut($rs['name_lat']), $v3form($rs['art']), $ekp, cut($rs['herkunft']), (int)$ex['id']]);
+            $vorhanden[$nn] = (int)$ex['id']; $w0['roh_upd']++;
+        } elseif (isset($vorhanden[$nn])) {   // gleicher Name existiert bereits -> verknüpfen, NICHT doppelt anlegen
+            q("UPDATE item SET v3_id=? WHERE id=? AND (v3_id IS NULL OR v3_id=?)", [$v3sid, $vorhanden[$nn], $v3sid]);
+            $w0['roh_link']++;
+        } else {   // neu anlegen
+            q("INSERT INTO item (artikelnummer,name,name_en,name_lat,kategorie,form,einheit,preis_bezug,ek_preis,herkunft,notiz,v3_id)
+               VALUES (?,?,?,?, 'rohstoff', ?, 'kg','kg', ?, ?, ?, ?)",
+              [naechste_nummer('R'), $name, cut($rs['name_en']), cut($rs['name_lat']), $v3form($rs['art']), $ekp, cut($rs['herkunft']),
+               'Aus v3 übernommen (v3-Rohstoff #' . $v3sid . ')', $v3sid]);
+            $vorhanden[$nn] = (int)insert_id(); $w0['roh_neu']++;
+        }
+    }
+    echo "\n" . str_repeat('=', 72) . "\nGESCHRIEBEN (Stufe 0 – Rohstoffe):\n";
+    foreach ($w0 as $k => $v) printf("  %-10s %d\n", $k, $v);
+
     $w = ['kunde_neu'=>0,'kunde_upd'=>0,'rez_neu'=>0,'rez_upd'=>0,'zutat'=>0,'best'=>0];
     foreach ($aktiveKunden as $k) {
         if ((int)($k['intern'] ?? 0) === 1) continue;   // interner „Kunde" wird übersprungen
