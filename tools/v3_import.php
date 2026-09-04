@@ -381,6 +381,51 @@ if ($WRITE) {
     }
     echo "\nGESCHRIEBEN (Stufe 5 – Aufträge):\n";
     foreach ($w5 as $k => $v) printf("  %-14s %d\n", $k, $v);
+
+    // ---- Stufe 6: Angebote (aus produktanfrage) – damit der Kunde sieht, was er vorliegen hat/hatte ----
+    ensure_column('angebot', 'v3_id', "INT NULL");
+    $v3kMap = [];
+    foreach (all("SELECT id, v3_id FROM kunden WHERE v3_id IS NOT NULL") as $kk) $v3kMap[(int)$kk['v3_id']] = (int)$kk['id'];
+    $w6 = ['angebot_neu'=>0,'angebot_upd'=>0,'position'=>0,'verknuepft'=>0,'ohne_produkt'=>0];
+    foreach ($v3->query("SELECT * FROM produktanfrage ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $pa) {
+        // reine Anfrage ohne Angebot (status 'offen', kein Preis) überspringen – da gibt es kein Angebot
+        $hatPreis = trim((string)($pa['angebot_preis'] ?? '')) !== '';
+        $conf = trim((string)($pa['bestaetigt_at'] ?? '')) !== '';
+        if ((string)$pa['status'] === 'offen' && !$hatPreis && !$conf) continue;
+        $v3paid = (int)$pa['id'];
+        $kid = $v3kMap[(int)$pa['kunde_id']] ?? null; if (!$kid) continue;
+        $rz = one("SELECT id, name FROM rezeptur WHERE v3_id=?", [(int)$pa['rezept_id']]);
+        $pid = $rz ? (int) scalar("SELECT id FROM produkt WHERE v3_id=?", [(int)$pa['rezept_id']]) : null;
+        if (!$pid) { $w6['ohne_produkt']++; }
+        $rezName = $rz ? (string)$rz['name'] : ('Rezept #' . $pa['rezept_id']);
+        $status = $conf ? 'bestaetigt' : ((string)$pa['status'] === 'abgelehnt' ? 'abgelehnt' : 'gesendet');
+        $preis  = $hatPreis ? (float) str_replace(',', '.', str_replace(['€', ' '], '', (string)$pa['angebot_preis'])) : 0.0;
+        $menge  = (int)($pa['anzahl_vpe'] ?: 0);
+        $stueck = (int)($pa['menge_pro_vpe'] ?: 0);
+        $vid = $verpId($pa['verpackung'] ?? '');
+        $notiz = 'Aus v3 (Produktanfrage #' . $v3paid . ')' . ($conf ? ' · bestätigt ' . $pa['bestaetigt_at'] : '') . (!empty($pa['ablehnung_grund']) ? ' · abgelehnt: ' . $pa['ablehnung_grund'] : '');
+        $exG = one("SELECT id FROM angebot WHERE v3_id=?", [$v3paid]);
+        if ($exG) { $gid = (int)$exG['id'];
+            q("UPDATE angebot SET kunde_id=?,produkt_id=?,status=?,notiz=? WHERE id=?", [$kid, $pid, $status, cut($notiz,500), $gid]);
+            q("DELETE FROM angebot_position WHERE angebot_id=?", [$gid]); $w6['angebot_upd']++;
+        } else {
+            q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,v3_id) VALUES (?,?,?,?,?,?)",
+              [naechste_nummer('AN'), $kid, $pid, $status, cut($notiz,500), $v3paid]); $gid = (int)insert_id(); $w6['angebot_neu']++;
+        }
+        // Eine Angebotsposition (Konfiguration + Preis)
+        q("INSERT INTO angebot_position (angebot_id,sort,bezeichnung,menge,einheit,preis_cent,stueck,rezeptur_id,verpackung_id,quelle)
+           VALUES (?,0,?,?, 'Pkg.', ?, ?, ?, ?, 'v3import')",
+          [$gid, cut($rezName), $menge, (int) round($preis * 100), $stueck, ($rz ? (int)$rz['id'] : null), $vid]);
+        $w6['position']++;
+    }
+    // Angenommene Angebote an ihren Auftrag hängen: v3 auftrag.anfrage_id -> v4 angebot.v3_id
+    foreach ($v3->query("SELECT id, anfrage_id FROM auftraege WHERE anfrage_id IS NOT NULL AND anfrage_id>0")->fetchAll(PDO::FETCH_ASSOC) as $ar) {
+        $gid = (int) scalar("SELECT id FROM angebot WHERE v3_id=?", [(int)$ar['anfrage_id']]);
+        $aid = (int) scalar("SELECT id FROM auftrag WHERE v3_id=?", [(int)$ar['id']]);
+        if ($gid && $aid) { q("UPDATE auftrag SET angebot_id=? WHERE id=?", [$gid, $aid]); q("UPDATE angebot SET anfrage_id=NULL WHERE id=?", [$gid]); $w6['verknuepft']++; }
+    }
+    echo "\nGESCHRIEBEN (Stufe 6 – Angebote):\n";
+    foreach ($w6 as $k => $v) printf("  %-14s %d\n", $k, $v);
 }
 
 echo "\n" . str_repeat('=', 72) . "\n";

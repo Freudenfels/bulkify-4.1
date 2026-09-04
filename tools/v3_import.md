@@ -43,3 +43,6 @@ Aus `lieferant_angebot` → neue Tabelle `rezeptur_lief_angebot` (rezeptur_id, l
 ## Stufe 5 (Aufträge) + Hausrezepturen
 - **Hausrezepturen** (v3 `kunde_id` NULL/0, 16) werden in Stufe 1 als Katalog-Rezepturen (kunde_id NULL, exklusiv=0, freigegeben) mitimportiert – Aufträge/Produktanfragen referenzieren sie.
 - **Aufträge** (`auftraege`, 27; interner Kunde übersprungen) → v4 `auftrag`: Kunde per Firmenname, Produkt über `rezept_id`→Produkt-Anker (fehlend? wird angelegt), Menge=anzahl_vpe × Stück=menge_pro_vpe, Verpackung per Name (sonst NULL), Status aus v3-Stufen-Flags abgeleitet (versand→versendet, verpackt→erledigt, produziert→in_produktion, sonst offen). Idempotent über `v3_id`. Anzeige im Kunden-Reiter „Bestellungen". Ohne Produkt bleiben nur Aufträge, deren Rezept in v3 fehlt (Nacharbeit).
+
+## Stufe 6 (Angebote)
+Aus `produktanfrage` → v4 `angebot` (+ `angebot_position`): Kunde · Produkt/Rezeptur · Menge/Stück · Preis (aus angebot_preis). Status: bestätigt (angenommen), gesendet (Angebot liegt vor), abgelehnt. Reine Anfragen ohne Angebot (status offen, kein Preis) werden übersprungen. Angenommene Angebote werden mit ihrem Auftrag verknüpft (v3 auftraege.anfrage_id → angebot.v3_id → auftrag.angebot_id). Idempotent über v3_id. So sieht man im Kunden-Reiter „Angebote", was der Kunde vorliegen hat (gesendet) und hatte (bestätigt/abgelehnt).
