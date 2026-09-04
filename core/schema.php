@@ -974,6 +974,20 @@ function init_schema(): void {
         KEY idx_produkt (produkt_id), KEY idx_kunde (kunde_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // lieferant_preisliste: Nachschlage-Liste der Rohstoff-Einkaufspreise (Name · Lieferant · EUR/kg),
+    // aus v3 übernommen. Bewusst OHNE Verknüpfung zum v4-Lagerartikel (v4 hat einen eigenen Rohstoffstamm) –
+    // reine Referenz zum schnellen „was zahlen wir wofür". Bei Bedarf später einem Artikel zuordnen.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_preisliste (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        rohstoff_name VARCHAR(190) NOT NULL,
+        lieferant VARCHAR(190) NULL,
+        eur_kg DECIMAL(12,4) NULL,
+        stand DATE NULL,
+        v3_id INT NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_name (rohstoff_name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // portal_anfrage: Kundenanfragen aus dem Portal für Produkt / Rohstoff / Dienstleistung (Rezeptur läuft separat über rezeptur_anfrage).
     // AGB, versioniert: eine Fassung ist aktiv, alte bleiben als Beleg stehen. Beim verbindlichen
     // Annehmen wird die Versionsbezeichnung am Vorgang gespeichert.

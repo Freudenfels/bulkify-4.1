@@ -188,6 +188,63 @@ if ($WRITE) {
     }
     echo "\nGESCHRIEBEN (Stufe 2):\n";
     foreach ($w2 as $k => $v) printf("  %-14s %d\n", $k, $v);
+
+    // ---- Stufe 3: Lieferanten + EK-Preisliste (Referenz) + Bestellungen ----
+    ensure_column('lieferanten', 'v3_id', "INT NULL");
+    ensure_column('bestellung', 'v3_id', "INT NULL");
+    $w3 = ['lief_neu'=>0,'lief_upd'=>0,'preisliste'=>0,'best_neu'=>0,'best_upd'=>0];
+    // Ländername -> ISO-2 (v4 land = VARCHAR(2))
+    $land2 = function (?string $l): ?string {
+        $l = mb_strtolower(trim((string)$l));
+        $m = ['deutschland'=>'DE','germany'=>'DE','china'=>'CN','österreich'=>'AT','oesterreich'=>'AT','schweiz'=>'CH','italien'=>'IT','spanien'=>'ES','indien'=>'IN','usa'=>'US','vereinigte staaten'=>'US','niederlande'=>'NL','frankreich'=>'FR','polen'=>'PL','irland'=>'IE'];
+        return $m[$l] ?? null;
+    };
+    // Lieferanten
+    $mapLief = [];   // v3 lieferant_id -> v4 id
+    foreach ($v3->query("SELECT * FROM lieferanten ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $l) {
+        $v3lid = (int)$l['id'];
+        $ex = one("SELECT id FROM lieferanten WHERE v3_id=?", [$v3lid]);
+        if ($ex) { $v4lid = (int)$ex['id'];
+            q("UPDATE lieferanten SET firma=?,ansprechpartner=?,email=?,land=?,kategorien=?,sprache=? WHERE id=?",
+              [cut($l['firma']), cut($l['ansprechpartner']), cut($l['email']), $land2($l["land"]), cut($l['kategorien']), cut($l['sprache'] ?: 'de', 5), $v4lid]); $w3['lief_upd']++;
+        } else {
+            q("INSERT INTO lieferanten (lieferantennummer,firma,ansprechpartner,email,land,kategorien,sprache,notiz,v3_id) VALUES (?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('L'), cut($l['firma']), cut($l['ansprechpartner']), cut($l['email']), $land2($l["land"]), cut($l['kategorien']), cut($l['sprache'] ?: 'de', 5), 'Aus v3 übernommen (v3-Lieferant #' . $v3lid . ')', $v3lid]);
+            $v4lid = (int)insert_id(); $w3['lief_neu']++;
+        }
+        $mapLief[$v3lid] = $v4lid;
+    }
+    // EK-Preisliste (Referenz) – komplett neu aufbauen (idempotent per Wipe der importierten Zeilen)
+    q("DELETE FROM lieferant_preisliste WHERE v3_id IS NOT NULL");
+    foreach ($v3->query("SELECT * FROM preisliste ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $pl) {
+        $eur = $pl['eur_kg'] !== null && $pl['eur_kg'] !== '' ? (float)str_replace(',', '.', (string)$pl['eur_kg']) : null;
+        q("INSERT INTO lieferant_preisliste (rohstoff_name,lieferant,eur_kg,stand,v3_id) VALUES (?,?,?,?,?)",
+          [cut($pl['name']), cut($pl['lieferant']), $eur, (!empty($pl['updated_at']) ? substr((string)$pl['updated_at'], 0, 10) : null), (int)$pl['id']]);
+        $w3['preisliste']++;
+    }
+    // Bestellungen (alle) -> v4 bestellung + eine Position (Artikel als Text)
+    $statusMap = ['offen'=>'offen','rohstoff_erhalten'=>'geliefert','versendet'=>'bestellt','versand_geplant'=>'bestellt','wartet_auf_zoll'=>'bestellt'];
+    foreach ($v3->query("SELECT * FROM bestellungen ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $b) {
+        $v3bid = (int)$b['id'];
+        $v4lid = $mapLief[(int)$b['lieferant_id']] ?? null;
+        $st = $statusMap[(string)$b['status']] ?? 'offen';
+        $notiz = 'Aus v3 (#' . $v3bid . ', Status v3: ' . $b['status'] . ')' . (!empty($b['lief_charge']) ? ' · Charge ' . $b['lief_charge'] : '');
+        $exB = one("SELECT id FROM bestellung WHERE v3_id=?", [$v3bid]);
+        if ($exB) { $bid = (int)$exB['id'];
+            q("UPDATE bestellung SET lieferant_id=?,status=?,notiz=?,bestelldatum=?,tracking=? WHERE id=?",
+              [$v4lid, $st, cut($notiz,500), (!empty($b['created_at']) ? substr((string)$b['created_at'],0,10) : null), cut($b['tracking']), $bid]);
+            q("DELETE FROM bestellung_position WHERE bestellung_id=?", [$bid]); $w3['best_upd']++;
+        } else {
+            q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum,tracking,v3_id) VALUES (?,?,?,?,?,?,?)",
+              [naechste_nummer('BE'), $v4lid, $st, cut($notiz,500), (!empty($b['created_at']) ? substr((string)$b['created_at'],0,10) : null), cut($b['tracking']), $v3bid]);
+            $bid = (int)insert_id(); $w3['best_neu']++;
+        }
+        $ekp = $b['einzelpreis'] !== null && $b['einzelpreis'] !== '' ? (float)str_replace(',', '.', (string)$b['einzelpreis']) : ($b['preis'] !== null && $b['preis'] !== '' ? (float)str_replace(',', '.', (string)$b['preis']) : 0.0);
+        q("INSERT INTO bestellung_position (bestellung_id,item_id,menge,ek_preis,einheit,sort,bezeichnung) VALUES (?,?,?,?,?,0,?)",
+          [$bid, null, (float)($b['menge'] ?: 0), $ekp, cut($b['einheit'], 20), cut($b['artikel'])]);
+    }
+    echo "\nGESCHRIEBEN (Stufe 3):\n";
+    foreach ($w3 as $k => $v) printf("  %-12s %d\n", $k, $v);
 }
 
 echo "\n" . str_repeat('=', 72) . "\n";

@@ -25,3 +25,9 @@ Aus `produktanfrage`: je referenzierter Rezeptur ein **Produkt-Anker** (`produkt
 
 ## Modell-Ergänzung
 Nutzt `rezeptur.exklusiv` (analog `produkt.exklusiv`): `exklusiv=0 + freigegeben` = Katalog/für alle; `exklusiv=1 + kunde_id` = nur dieser Kunde. Einmaliger Backfill in `init_schema()` setzt bestehende Kunden-Rezepturen auf `exklusiv=1` (Verhalten unverändert). Sichtbarkeit im Kundenportal entsprechend angepasst.
+
+## Stufe 3 (Lieferantenseite)
+- **Lieferanten** (`lieferanten`, 3) → v4 `lieferanten` (Firma, Kontakt, Land als ISO-2, Kategorien, Sprache). `v3_id`.
+- **EK-Preisliste** (`preisliste`, 635) → neue Referenztabelle **`lieferant_preisliste`** (Rohstoffname · Lieferant · EUR/kg · Stand). Bewusst OHNE Lager-Verknüpfung. Seite: `?p=lief_preisliste` (Menü Einkauf → EK-Preisliste), durchsuchbar.
+- **Bestellungen** (`bestellungen`, alle 13) → v4 `bestellung` + eine `bestellung_position` (Artikel als Freitext, `item_id` NULL). Status gemappt (offen/bestellt/geliefert), v3-Status in der Notiz, Tracking übernommen. `v3_id`.
+- **Nicht übernommen:** v3 `lieferant_angebot` (Angebote je Rezeptur) und `rohstoff_chargen` – beide setzen die v3-Rohstoffe voraus (Chargen brauchen in v4 zwingend einen Lagerartikel), die bewusst nicht importiert werden.

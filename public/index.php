@@ -39,6 +39,7 @@ $routes = [
     'rohstoffe'      => 'lager/rohstoffe_liste.php',
     'rohstoff'       => 'lager/rohstoff_detail.php',
     'freigaben'      => 'lager/freigaben.php',       // offene Kundenfreigaben (Spec/CoA)
+    'lief_preisliste'=> 'lager/lief_preisliste.php', // EK-Preisliste (Referenz aus v3)
     'spec_pdf'       => 'lager/spec_download.php',
     'spec_bulkify'   => 'lager/spec_bulkify.php',   // unsere Spezifikation (bulkify-Layout)
     'coa_bulkify'    => 'lager/spec_bulkify.php',   // unser Analysenzertifikat zur Charge
