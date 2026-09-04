@@ -1,0 +1,150 @@
+<?php
+// Gezielter v3 -> v4 Import (SQLite board.sqlite -> v4 MariaDB). NUR die Kunden mit Aktivität.
+// Standard = TROCKENLAUF (liest nur, schreibt nichts). Erst mit --write wird geschrieben.
+// Aufruf (SQLite-Treiber muss geladen sein):
+//   php -d extension_dir=C:\php\ext -d extension=php_pdo_sqlite.dll tools/v3_import.php "C:/…/board.sqlite" [--write]
+//
+// Grundsätze: v3_id an jeder Zieltabelle (idempotent, keine Dubletten), Trockenlauf zuerst,
+// Rezepturen als "eigene Rezeptur beim Kunden" (kunde_id gesetzt) ABER exklusiv=0 = für alle frei,
+// Kunden-Bestätigung nur als Info (freigabe_name/_am). Was v3 nicht hat -> Nacharbeitsliste.
+
+if (!defined('BX_ROOT')) define('BX_ROOT', dirname(__DIR__));
+require_once dirname(__DIR__) . '/core/config.php';
+require_once BX_ROOT . '/core/schema.php';
+
+$v3pfad = $argv[1] ?? '';
+$WRITE  = in_array('--write', $argv, true);
+if ($v3pfad === '' || !is_file($v3pfad)) { fwrite(STDERR, "v3-Datei fehlt. Aufruf: php tools/v3_import.php <pfad/board.sqlite> [--write]\n"); exit(1); }
+
+try { $v3 = new PDO('sqlite:' . $v3pfad); $v3->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); }
+catch (Throwable $e) { fwrite(STDERR, "SQLite-Treiber fehlt oder Datei unlesbar: " . $e->getMessage() . "\n"); exit(1); }
+
+// Darreichungsform v3 -> v4
+function v3_form(?string $f): string {
+    $f = mb_strtolower(trim((string)$f));
+    return ['kapsel'=>'kapsel','pulver'=>'pulver','flüssig'=>'fluessig','fluessig'=>'fluessig','tablette'=>'tablette','stick'=>'stick'][$f] ?? 'kapsel';
+}
+// v4-Rohstoff per Name finden (für die Zutat-Verknüpfung). Nur Treffer-Schätzung im Trockenlauf.
+function v4_item_by_name(string $name): ?int {
+    $name = trim($name); if ($name === '') return null;
+    $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND (name=? OR name_en=? OR synonym=?) LIMIT 1", [$name, $name, $name]);
+    return $id ? (int)$id : null;
+}
+
+$aktiveKunden = [];
+foreach ($v3->query("SELECT * FROM kunden ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $k) {
+    $id = (int)$k['id'];
+    $rez = (int)$v3->query("SELECT COUNT(*) FROM rezepte WHERE kunde_id=$id")->fetchColumn();
+    $pa  = (int)$v3->query("SELECT COUNT(*) FROM produktanfrage WHERE kunde_id=$id")->fetchColumn();
+    $stmt = $v3->prepare("SELECT COUNT(*) FROM auftraege WHERE kunde=?"); $stmt->execute([$k['firma']]);
+    $auf = (int)$stmt->fetchColumn();
+    if ($rez + $pa + $auf > 0) { $k['_rez']=$rez; $k['_pa']=$pa; $k['_auf']=$auf; $aktiveKunden[] = $k; }
+}
+
+echo str_repeat('=', 72) . "\n";
+echo ($WRITE ? "SCHREIBLAUF" : "TROCKENLAUF (nichts wird geschrieben)") . " – v3 -> v4 Import\n";
+echo "Aktive Kunden: " . count($aktiveKunden) . "\n" . str_repeat('=', 72) . "\n";
+
+$nacharbeit = [];
+$sum = ['kunden'=>0,'rezepturen'=>0,'zutaten'=>0,'zutaten_ohne_match'=>0,'produkte'=>0,'best_rez'=>0,'best_prod'=>0];
+
+foreach ($aktiveKunden as $k) {
+    $kid = (int)$k['id'];
+    echo "\n#{$kid}  " . $k['firma'] . ($k['intern'] ? "  [INTERN]" : "") . "\n";
+    echo "  Kunde: E-Mail " . ($k['email'] ?: '–');
+    $adr = trim((string)($k['lieferadresse'] ?? ''));
+    if ($adr === '') { echo " · KEINE Adresse"; $nacharbeit[] = "Kunde '{$k['firma']}': keine Adresse in v3"; }
+    else echo " · Adresse als 1 Textfeld (v4 hat 5 -> Nacharbeit)";
+    echo "\n";
+    if ($adr !== '') $nacharbeit[] = "Kunde '{$k['firma']}': Adresse aufteilen (Straße/PLZ/Ort/Land)";
+    $sum['kunden']++;
+
+    // Rezepturen des Kunden
+    $rezepte = $v3->query("SELECT * FROM rezepte WHERE kunde_id=$kid ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rezepte as $r) {
+        $rid = (int)$r['id'];
+        $zut = $v3->query("SELECT bezeichnung, menge_mg FROM rezept_zutaten WHERE rezept_id=$rid ORDER BY pos, id")->fetchAll(PDO::FETCH_ASSOC);
+        $match = 0; foreach ($zut as $z) if (v4_item_by_name((string)$z['bezeichnung'])) $match++;
+        $best = $v3->query("SELECT bestaetigt, bestaetigt_at, bestaetigt_von FROM rezept_kunde WHERE rezept_id=$rid AND kunde_id=$kid LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+        $bTxt = ($best && (int)$best['bestaetigt'] === 1) ? (" · bestätigt " . ($best['bestaetigt_at'] ?: '')) : "";
+        printf("    Rezeptur: %-38s [%s] %d Zutaten (%d in v4 gefunden)%s\n",
+            mb_substr((string)$r['name'],0,38), v3_form($r['form']), count($zut), $match, $bTxt);
+        $sum['rezepturen']++; $sum['zutaten'] += count($zut); $sum['zutaten_ohne_match'] += (count($zut) - $match);
+        if ($best && (int)$best['bestaetigt'] === 1) $sum['best_rez']++;
+    }
+
+    // Produktanfragen (= Produkte/Angebote)
+    $pas = $v3->query("SELECT * FROM produktanfrage WHERE kunde_id=$kid ORDER BY id")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($pas as $p) {
+        $rn = (string)$v3->query("SELECT name FROM rezepte WHERE id=" . (int)$p['rezept_id'])->fetchColumn();
+        $conf = trim((string)($p['bestaetigt_at'] ?? '')) !== '';
+        printf("    Produkt:  %-30s %s je %s Stk · %s%s\n",
+            mb_substr($rn,0,30) ?: ('Rezept #'.$p['rezept_id']),
+            $p['anzahl_vpe'] ?: '?', $p['menge_pro_vpe'] ?: '?',
+            $p['verpackung'] ?: '–', $conf ? (' · BESTÄTIGT ' . ($p['angebot_preis'] ? $p['angebot_preis'].' EUR' : '')) : '');
+        $sum['produkte']++; if ($conf) $sum['best_prod']++;
+    }
+}
+
+// ---- SCHREIBEN (Stufe 1: Kunden + Rezepturen + Zutaten + Bestätigungen) ----
+function v3_kapsel_id(?string $v): ?int {
+    $v = trim((string)$v); if ($v === '') return null;
+    $id = scalar("SELECT id FROM kapselgroesse WHERE name=?", ['Größe ' . $v]);
+    return $id ? (int)$id : null;
+}
+// Auf die v4-Spaltenbreite kappen (v3 erlaubt mehr Zeichen als v4). NULL bleibt NULL.
+function cut(?string $s, int $n = 190): ?string { if ($s === null) return null; return mb_substr(trim($s), 0, $n); }
+if ($WRITE) {
+    // v3_id an den Zieltabellen (idempotent, keine Dubletten)
+    ensure_column('kunden', 'v3_id', "INT NULL");
+    ensure_column('rezeptur', 'v3_id', "INT NULL");
+    $w = ['kunde_neu'=>0,'kunde_upd'=>0,'rez_neu'=>0,'rez_upd'=>0,'zutat'=>0,'best'=>0];
+    foreach ($aktiveKunden as $k) {
+        if ((int)($k['intern'] ?? 0) === 1) continue;   // interner „Kunde" wird übersprungen
+        $v3kid = (int)$k['id'];
+        $adr = trim((string)($k['lieferadresse'] ?? '')); if (mb_strtolower($adr) === 'keine') $adr = '';
+        $notiz = 'Aus v3 übernommen (v3-Kunde #' . $v3kid . ')' . ($adr !== '' ? ' · Adresse laut v3: ' . $adr : '');
+        $ex = one("SELECT id FROM kunden WHERE v3_id=?", [$v3kid]);
+        if ($ex) { $v4kid = (int)$ex['id']; q("UPDATE kunden SET firma=?, email=?, notiz=? WHERE id=?", [cut($k["firma"]), cut($k["email"] ?: null), cut($notiz,500), $v4kid]); $w['kunde_upd']++; }
+        else {
+            q("INSERT INTO kunden (kundennummer,firma,email,notiz,portal_token,portal_rezeptur,portal_produkte,v3_id) VALUES (?,?,?,?,?,1,1,?)",
+              [naechste_nummer('K'), cut($k["firma"]), cut($k["email"] ?: null), cut($notiz,500), bin2hex(random_bytes(16)), $v3kid]);
+            $v4kid = (int)insert_id(); $w['kunde_neu']++;
+        }
+        foreach ($v3->query("SELECT * FROM rezepte WHERE kunde_id=$v3kid ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $v3rid = (int)$r['id'];
+            $best = $v3->query("SELECT bestaetigt,bestaetigt_at,bestaetigt_von FROM rezept_kunde WHERE rezept_id=$v3rid AND kunde_id=$v3kid LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+            $confirmed = $best && (int)$best['bestaetigt'] === 1;
+            $frName = $confirmed ? ($best['bestaetigt_von'] ?: $k['firma']) : null;
+            $frAm   = $confirmed && $best['bestaetigt_at'] ? $best['bestaetigt_at'] : null;
+            if ($confirmed) $w['best']++;
+            $form = v3_form($r['form']); $kaps = v3_kapsel_id($r['kapselgroesse'] ?? '');
+            $rnotiz = 'Aus v3 übernommen (v3-Rezept #' . $v3rid . ')' . ($confirmed ? ' · vom Kunden bestätigt' . ($frAm ? ' ' . $frAm : '') : '');
+            $exR = one("SELECT id FROM rezeptur WHERE v3_id=?", [$v3rid]);
+            if ($exR) { $v4rid = (int)$exR['id'];
+                q("UPDATE rezeptur SET name=?,kunde_id=?,darreichungsform=?,kapselgroesse_id=?,exklusiv=0,status='freigegeben',freigabe_name=?,freigabe_am=?,notiz=? WHERE id=?",
+                  [cut($r['name']), $v4kid, $form, $kaps, cut($frName), $frAm, cut($rnotiz,500), $v4rid]); $w['rez_upd']++;
+            } else {
+                q("INSERT INTO rezeptur (nummer,name,kunde_id,darreichungsform,kapselgroesse_id,exklusiv,status,freigabe_name,freigabe_am,notiz,v3_id) VALUES (?,?,?,?,?,0,'freigegeben',?,?,?,?)",
+                  [naechste_nummer('RZ'), cut($r['name']), $v4kid, $form, $kaps, cut($frName), $frAm, cut($rnotiz,500), $v3rid]); $v4rid = (int)insert_id(); $w['rez_neu']++;
+            }
+            q("DELETE FROM rezeptur_zutat WHERE rezeptur_id=?", [$v4rid]);
+            foreach ($v3->query("SELECT bezeichnung,menge_mg,pos FROM rezept_zutaten WHERE rezept_id=$v3rid ORDER BY pos,id")->fetchAll(PDO::FETCH_ASSOC) as $z) {
+                $iid = v4_item_by_name((string)$z['bezeichnung']);
+                q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
+                  [$v4rid, $iid, cut($z['bezeichnung']), (float)$z['menge_mg'], (int)$z['pos']]); $w['zutat']++;
+            }
+        }
+    }
+    echo "\n" . str_repeat('=', 72) . "\nGESCHRIEBEN (Stufe 1):\n";
+    foreach ($w as $k => $v) printf("  %-12s %d\n", $k, $v);
+    echo "  (Produkte + Preise = Stufe 2, separat)\n";
+}
+
+echo "\n" . str_repeat('=', 72) . "\n";
+echo "SUMME würde angelegt:\n";
+foreach ($sum as $k => $v) printf("  %-22s %d\n", $k, $v);
+echo "\nNacharbeit (" . count($nacharbeit) . "):\n";
+foreach (array_slice(array_unique($nacharbeit), 0, 40) as $n) echo "  - $n\n";
+if ($sum['zutaten_ohne_match'] > 0) echo "  - {$sum['zutaten_ohne_match']} Zutaten ohne v4-Rohstoff-Treffer (Name abweichend -> nach Import verknüpfen)\n";
+echo "\n" . ($WRITE ? "" : ">> Trockenlauf. Mit --write schreiben.\n");

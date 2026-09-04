@@ -210,7 +210,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     if (preg_match('/^r(\d+)$/', $wahl, $m)) {
         $rezWahl = (int)$m[1];
         // nur eigene angenommene oder freigegebene Katalog-Rezepturen
-        if (!scalar("SELECT id FROM rezeptur WHERE id=? AND ((kunde_id=? AND status='eingefroren') OR (kunde_id IS NULL AND status='freigegeben'))",
+        if (!scalar("SELECT id FROM rezeptur WHERE id=? AND ((exklusiv=1 AND kunde_id=? AND status='eingefroren') OR (exklusiv=0 AND status='freigegeben'))",
                     [$rezWahl, (int)$k['id']])) $rezWahl = 0;
     } else {
         $pid = (int) preg_replace('/\D/', '', $wahl);
@@ -538,8 +538,8 @@ $pafBadge = fn($s) => match ($s) { 'neu'=>bx_badge('eingegangen','info'),'in_bea
 // „Meine Rezepturen" = nur ANGENOMMENE eigene (eingefroren) + freigegebene Katalog-Rezepturen.
 // Vorschläge sind noch keine Rezeptur → erscheinen über die Übersicht („Vorschlag erhalten"), nicht hier.
 $meineRezepturen = $k['portal_rezeptur'] ? all("SELECT * FROM rezeptur
-    WHERE ((kunde_id=? AND status='eingefroren')
-       OR (kunde_id IS NULL AND status='freigegeben'))
+    WHERE ((exklusiv=1 AND kunde_id=? AND status='eingefroren')
+       OR (exklusiv=0 AND status='freigegeben'))
       AND (? = '' OR name LIKE ?
            OR EXISTS (SELECT 1 FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                       WHERE z.rezeptur_id=rezeptur.id AND (z.bezeichnung LIKE ? OR i.name LIKE ?)))
@@ -548,7 +548,7 @@ $rezBadge = fn($s) => match ($s) { 'vorschlag'=>bx_badge('Vorschlag','info'),'ei
 $rid = (int)($_GET['rid'] ?? 0);
 $DOKTYP = dokument_typen();   // CoA / Spezifikation / Laboranalyse – Beschriftung der Download-Links
 $rezDetail = ($rid && $k['portal_rezeptur']) ? one("SELECT * FROM rezeptur WHERE id=?
-    AND ((kunde_id=? AND status IN ('vorschlag','eingefroren','freigegeben','abgelehnt')) OR (kunde_id IS NULL AND status='freigegeben'))", [$rid, $kid]) : null;
+    AND ((kunde_id=? AND status IN ('vorschlag','eingefroren','freigegeben','abgelehnt')) OR (exklusiv=0 AND status='freigegeben'))", [$rid, $kid]) : null;
 // Zutaten inklusive item_id – damit je Rohstoff die freigegebenen Dokumente (CoA/Spec) verlinkt werden können
 $rezZutaten = $rezDetail ? all("SELECT item_id, bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
 // Freigegebene Dokumente je Zutat-Rohstoff (nur, was intern ausdrücklich freigegeben wurde)

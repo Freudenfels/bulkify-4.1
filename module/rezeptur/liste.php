@@ -15,7 +15,7 @@ $dir  = $_GET['dir']  ?? 'desc';
 $rows = all("SELECT r.*, k.firma AS kunde_firma,
              (SELECT COUNT(*) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id) AS zutat_anzahl
              FROM rezeptur r LEFT JOIN kunden k ON k.id=r.kunde_id
-             WHERE r.kunde_id IS NULL OR r.status='eingefroren'");
+             WHERE r.kunde_id IS NULL OR r.status IN ('eingefroren','freigegeben')");
 if ($q !== '') {
     $needle = mb_strtolower($q);
     $rows = array_filter($rows, function($r) use ($needle) {

@@ -799,6 +799,15 @@ function init_schema(): void {
     ensure_column('angebot', 'freigabe_am', "DATETIME NULL");
     ensure_column('rezeptur', 'agb_version', "VARCHAR(40) NULL");   // welche AGB-Fassung bei der Freigabe galt
     ensure_column('angebot', 'agb_version', "VARCHAR(40) NULL");
+    // Rezeptur exklusiv (wie beim Produkt): kunde_id = Herkunft/Besitzer. exklusiv=1 -> nur dieser Kunde;
+    // exklusiv=0 + freigegeben -> Katalog, fuer ALLE (auch wenn ein Kunde als Herkunft dranhaengt).
+    ensure_column('rezeptur', 'exklusiv', "TINYINT(1) NOT NULL DEFAULT 0");
+    // Einmaliger Backfill: bestehende Rezepturen MIT Kunde waren bisher exklusiv (kunde_id = exklusiv).
+    // Danach steuert nur noch das Flag - importierte Katalog-Rezepturen bleiben exklusiv=0.
+    if (meta_get('rez_exklusiv_backfill', '') !== '1') {
+        q("UPDATE rezeptur SET exklusiv=1 WHERE kunde_id IS NOT NULL");
+        meta_set('rez_exklusiv_backfill', '1');
+    }
     ensure_column('portal_anfrage_pos', 'rezeptur_id', "INT NULL");
     ensure_column('rezeptur_anfrage', 'produktname', "VARCHAR(190) NULL");    // Wunsch-Produktname des Kunden bei der Rezepturanfrage
     ensure_column('produkt', 'kundenname', "VARCHAR(190) NULL");              // vom Kunden gewünschter Produktname (intern = name)
