@@ -296,7 +296,7 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
     <?php foreach ($angebote as $ag): ?>
       <div class="bx-row" style="gap:10px;align-items:center;margin-bottom:6px">
         <a href="?p=angebot&id=<?= (int)$ag['id'] ?>"><?= h($ag['nummer']) ?></a> <?= match ($ag['status']) { 'offen' => bx_badge('Entwurf – noch nicht beim Kunden', 'info'), 'gesendet' => bx_badge('beim Kunden', 'ok'), 'bestaetigt' => bx_badge('bestätigt', 'ok'), 'abgelehnt' => bx_badge('abgelehnt', 'err'), default => bx_badge(status_text($ag['status'])) } ?>
-        <a href="?p=angebot_pdf&id=<?= (int)$ag['id'] ?>" target="_blank" title="Angebot als PDF ansehen" style="font-size:17px;line-height:1;text-decoration:none">&#8681;</a>
+        <?= pdf_btn('?p=angebot_pdf&id=' . (int)$ag['id'], 'PDF', false, 'Angebot als PDF ansehen') ?>
         <?php if (($ag['marge_override'] ?? '')!=='' && $ag['marge_override']!==null): ?> <span class="muted">Marge <?= rtrim(rtrim(number_format((float)$ag['marge_override'],2,',','.'),'0'),',') ?> %</span><?php endif; ?>
         <?php if (in_array($ag['status'], ['offen','gesendet'], true)): ?>
           <form method="post" style="margin:0" onsubmit="return confirm('Angebot <?= h($ag['nummer']) ?> zurückziehen? Der Kunde kann es dann nicht mehr annehmen, und die Anfrage ist wieder offen.');">
@@ -361,7 +361,7 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
     <?php foreach ($angebote as $ag): ?>
       <div class="bx-row" style="gap:10px;align-items:center;margin-bottom:6px">
         <a href="?p=angebot&id=<?= (int)$ag['id'] ?>"><?= h($ag['nummer']) ?></a> <?= match ($ag['status']) { 'offen' => bx_badge('Entwurf – noch nicht beim Kunden', 'info'), 'gesendet' => bx_badge('beim Kunden', 'ok'), 'bestaetigt' => bx_badge('bestätigt', 'ok'), 'abgelehnt' => bx_badge('abgelehnt', 'err'), default => bx_badge(status_text($ag['status'])) } ?>
-        <a href="?p=angebot_pdf&id=<?= (int)$ag['id'] ?>" target="_blank" title="Angebot als PDF ansehen" style="font-size:17px;line-height:1;text-decoration:none">&#8681;</a>
+        <?= pdf_btn('?p=angebot_pdf&id=' . (int)$ag['id'], 'PDF', false, 'Angebot als PDF ansehen') ?>
         <?php if (in_array($ag['status'], ['offen','gesendet'], true)): ?>
           <form method="post" style="margin:0" onsubmit="return confirm('Angebot <?= h($ag['nummer']) ?> zurückziehen? Der Kunde kann es dann nicht mehr annehmen, und die Anfrage ist wieder offen.');">
             <input type="hidden" name="aktion" value="angebot_zurueck"><input type="hidden" name="angebot_id" value="<?= (int)$ag['id'] ?>">

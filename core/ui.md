@@ -9,6 +9,7 @@ Wandelt einen Statuswert aus der Datenbank in lesbares Deutsch **mit Umlauten**:
 - `bx_head($titel, $sub, $aktionen)` – Seitenkopf mit Titel und optionalen Buttons rechts.
 - `bx_btn($label, $href, $variante)` – ein Button (primary / accent / ghost / danger).
 - `bx_badge($text, $art)` – ein Status-Etikett (ok / warn / err / info).
+- `pdf_btn($href, $label='PDF', $stopRow=false, $title='')` – PDF-Download-Button (Dokument-Icon + Label, Klasse `.pdfbtn`), klar als PDF erkennbar statt nacktem Pfeil. `$stopRow=true` in klickbaren Listenzeilen (verhindert den Zeilen-Klick). Genutzt in Angebote-Liste/-Portal, Bestellungen-Liste, Portal-Anfrage-Detail.
 - `kunde_link($kunde_id, $firma)` – Kundenname als Link zum Kunden-Cockpit (`?p=kunde&id=…`), Klasse `.kundenlink` (in `app.css`: **immer unterstrichen**, damit die direkte Verbindung zum Kunden sichtbar ist; Textfarbe bleibt, Hover grün). In klickbaren Listenzeilen (`rowUrl`) verhindert `event.stopPropagation()`, dass der Zeilen-Klick zusätzlich auslöst. Ohne Firma „–", ohne id nur Text. **Überall** verwendet, wo ein Kundenname erscheint: alle Listen (Angebote/Anfragen/Aufträge/Produkte/Produktion/Versand/Rechnungen), Detailseiten (Auftrag/Rechnung/Produktion), Werk-Cockpit, Chargen und Dashboard.
 - `bx_hint($text)` – das kleine **ⓘ**-Symbol mit Tooltip für Hinweise.
 - `bx_tabs($tabs, $aktiv, $baseUrl)` – Reiter, die per Link umschalten.

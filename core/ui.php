@@ -65,6 +65,19 @@ function kunde_link($kunde_id, ?string $firma): string {
     return '<a class="kundenlink" href="?p=kunde&id=' . (int)$kunde_id . '" onclick="event.stopPropagation()">' . h($firma) . '</a>';
 }
 
+// PDF-Download-Button (Dokument-Icon + Label). Klar als „hier gibt's ein PDF" erkennbar – statt eines nackten Pfeils.
+// $stopRow=true in klickbaren Listenzeilen, damit der Zeilen-Klick nicht mit auslöst.
+function pdf_btn(string $href, string $label = 'PDF', bool $stopRow = false, string $title = ''): string {
+    $stop = $stopRow ? ' onclick="event.stopPropagation()"' : '';
+    $t = $title !== '' ? $title : 'Als PDF herunterladen';
+    $svg = '<svg class="pdf-ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" '
+         . 'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+         . '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'
+         . '<path d="M12 11v6"/><path d="M9.5 14.5 12 17l2.5-2.5"/></svg>';
+    return '<a class="pdfbtn" href="' . h($href) . '" target="_blank" rel="noopener" title="' . h($t) . '"' . $stop . '>'
+         . $svg . '<span>' . h($label) . '</span></a>';
+}
+
 // Prioritäts-Badge (1=Hoch, 2=Normal, 3=Niedrig)
 function prio_badge(int $p): string {
     return match ($p) {

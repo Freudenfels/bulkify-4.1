@@ -47,6 +47,10 @@ a:hover{text-decoration:underline}
 /* Kundenname als Link: immer unterstrichen (zeigt die direkte Verbindung zum Kunden), Textfarbe bleibt, Hover grün */
 .kundenlink{color:inherit;text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px;cursor:pointer}
 .kundenlink:hover{color:var(--gruen)}
+/* PDF-Download-Button: Dokument-Icon + Label, als klarer Button erkennbar (statt nacktem Pfeil) */
+.pdfbtn{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--line);border-radius:8px;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;line-height:1;white-space:nowrap;cursor:pointer}
+.pdfbtn:hover{border-color:var(--gruen);color:var(--gruen);background:var(--panel-2);text-decoration:none}
+.pdfbtn .pdf-ico{flex:0 0 auto}
 
 /* ---------- Grundgerüst ---------- */
 .bx-shell{display:flex;min-height:100vh}

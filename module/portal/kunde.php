@@ -1471,7 +1471,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <span class="bx-row" style="gap:10px;align-items:center">
         <?= $offen ? bx_badge('Angebot liegt vor – bitte wählen','info')
              : ($a['status']==='bestaetigt' ? bx_badge('bestätigt','ok') : bx_badge('abgelehnt','err')) ?>
-        <a href="<?= $portalLink('angebot_pdf') ?>&aid=<?= (int)$a['id'] ?>" target="_blank" title="Angebot als PDF herunterladen" onclick="event.stopPropagation()" style="font-size:18px;line-height:1">&#8681;</a>
+        <?= pdf_btn($portalLink('angebot_pdf') . '&aid=' . (int)$a['id'], 'PDF', true, 'Angebot als PDF herunterladen') ?>
       </span>
     </summary>
     <div class="muted" style="margin-top:10px;font-size:13px">Eingegangen: <?= h(fmt_zeit($a['angelegt'])) ?> Uhr<?= $a['aktualisiert'] ? ' · Angebot vom ' . h(fmt_zeit($a['aktualisiert'])) . ' Uhr' : '' ?></div>

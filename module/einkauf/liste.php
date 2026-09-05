@@ -47,7 +47,7 @@ $cols = [
     }],
     'status'           => ['label'=>'Status', 'sort'=>true, 'render'=>$statusBadge],
     'pdf'              => ['label'=>'', 'render'=>fn($r) => $r['lieferant_id']
-        ? '<a href="?p=bestellung_pdf&id=' . (int)$r['id'] . '" target="_blank" title="Bestellung als PDF" onclick="event.stopPropagation()" style="font-size:17px;line-height:1">&#8681;</a>'
+        ? pdf_btn('?p=bestellung_pdf&id=' . (int)$r['id'], 'PDF', true, 'Bestellung als PDF')
         : '<span class="muted" title="Kein Lieferant hinterlegt">–</span>'],
 ];
 
