@@ -14,9 +14,9 @@ $formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','st
 $mengeLbl = $einh . ' ' . ($formPl[$inf['form']] ?? 'Stück');
 $gPack = ($inf['istPulver'] && $inf['portionG'] > 0) ? $mg($einh * $inf['portionG']) . ' g pro Packung' : '';
 ?>
-<details class="bx-panel pt-ang" id="a<?= (int)$a['id'] ?>" style="scroll-margin-top:16px">
+<details class="bx-panel pt-ang" id="a<?= (int)$a['id'] ?>" style="scroll-margin-top:16px"<?= !empty($open) ? ' open' : '' ?>>
   <summary>
-    <span style="font-size:var(--fs-md)"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($titelFuer($a)) ?></strong></span>
+    <span style="font-size:var(--fs-md);flex:1;min-width:0"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($titelFuer($a)) ?></strong></span>
     <span class="bx-row" style="gap:10px;align-items:center">
       <?= $offen ? bx_badge($canAccept ? 'Angebot liegt vor – bitte wählen' : 'Angebot liegt vor','info')
            : ($a['status']==='bestaetigt' ? bx_badge('bestätigt','ok') : bx_badge('abgelehnt','err')) ?>

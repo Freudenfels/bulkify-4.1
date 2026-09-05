@@ -979,7 +979,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php if ($oatab === 'offen'): ?><p class="muted" style="margin:0 0 12px">Klappen Sie ein Angebot auf, wählen Sie die gewünschte Menge und bestätigen Sie verbindlich.</p><?php endif; ?>
   <?php if (!$aktAng): ?><div class="bx-panel"><div class="muted"><?= $oatab === 'bestaetigt' ? 'Sie haben noch kein Angebot angenommen.' : 'Aktuell liegen keine offenen Angebote vor.' ?></div></div><?php endif; ?>
-  <?php foreach ($aktAng as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = ($oatab === 'offen'); include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+  <?php foreach ($aktAng as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = ($oatab === 'offen'); $open = true; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
   <script>(function(){ var h=location.hash; if(h && /^#a\d+$/.test(h)){ var d=document.querySelector(h); if(d && d.tagName==='DETAILS'){ d.open=true; d.scrollIntoView(); } } })();</script>
   <?php endif; ?>
 
@@ -1480,7 +1480,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px">Ihre Angebote</h1>
   <p class="muted" style="margin:0 0 16px">Übersicht Ihrer Angebote (Datenablage). Eine Menge auswählen und verbindlich annehmen können Sie unter „Meine Anfragen".</p>
   <?php if (!$angebote): ?><div class="bx-panel"><div class="muted">Aktuell liegen keine Angebote vor.</div></div><?php endif; ?>
-  <?php foreach ($angebote as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+  <?php foreach ($angebote as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
 
   <script>(function(){
     var h = location.hash; if (h && /^#a\d+$/.test(h)) { var d = document.querySelector(h); if (d && d.tagName === 'DETAILS') { d.open = true; d.scrollIntoView(); } }
