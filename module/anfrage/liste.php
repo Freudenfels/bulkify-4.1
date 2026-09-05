@@ -36,7 +36,7 @@ $statusBadge = fn($r) => match ($r['status']) {
 
 $cols = [
     'nummer'        => ['label'=>'Nummer', 'sort'=>true],
-    'kunde_firma'   => ['label'=>'Kunde', 'sort'=>true, 'render'=>fn($r)=> $r['kunde_firma']?h($r['kunde_firma']):'<span class="muted">–</span>'],
+    'kunde_firma'   => ['label'=>'Kunde', 'sort'=>true, 'render'=>fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
     'produktname'   => ['label'=>'Wunsch-Produkt', 'sort'=>true, 'render'=>fn($r)=> !empty($r['produktname'])?h($r['produktname']):'<span class="muted">–</span>'],
     'darreichungsform' => ['label'=>'Form', 'sort'=>true, 'render'=>fn($r)=> h($DFORM[$r['darreichungsform']] ?? $r['darreichungsform'])],
     'wunsch_anzahl' => ['label'=>'Wünsche', 'sort'=>true, 'num'=>true],

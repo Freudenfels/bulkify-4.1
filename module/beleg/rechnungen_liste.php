@@ -37,7 +37,7 @@ $statusBadge = fn($r) => match ($r['status']) {
 $cols = [
     'nummer'      => ['label' => 'Nummer', 'sort' => true],
     'datum'       => ['label' => 'Datum', 'sort' => true, 'render' => $datum],
-    'kunde_firma' => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> $r['kunde_firma'] ? h($r['kunde_firma']) : '<span class="muted">–</span>'],
+    'kunde_firma' => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
     'netto'       => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['netto'])],
     'brutto'      => ['label' => 'Brutto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['brutto'])],
     'status'      => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],

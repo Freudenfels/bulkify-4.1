@@ -36,7 +36,7 @@ $dash = fn($x) => $x ? h($x) : '<span class="muted">–</span>';
 
 $cols = [
     'nummer'         => ['label' => 'Nummer', 'sort' => true],
-    'kunde_firma'    => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> $dash($r['kunde_firma'])],
+    'kunde_firma'    => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
     'produkt_name'   => ['label' => 'Produkt', 'sort' => true, 'render' => fn($r)=> $dash($r['produkt_name'])],
     'staffel_anzahl' => ['label' => 'Staffeln', 'sort' => true, 'num' => true],
     'status'         => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],

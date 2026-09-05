@@ -47,7 +47,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
   ?>
     <tr>
       <td><?= h($r['nummer']) ?></td>
-      <td><?= $r['kunde_firma'] ? h($r['kunde_firma']) : '<span class="muted">–</span>' ?></td>
+      <td><?= kunde_link($r['kunde_id'] ?? null, $r['kunde_firma']) ?></td>
       <td><?= $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>' ?></td>
       <td class="bx-num"><?= (int)$r['menge'] ?></td>
       <td class="bx-num"><?= (int)$r['fertig_frei'] ?></td>

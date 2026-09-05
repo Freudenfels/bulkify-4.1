@@ -57,6 +57,14 @@ function bx_badge(string $text, string $kind = ''): string {
     return '<span class="badge' . $c . '">' . h($text) . '</span>';
 }
 
+// Kundenname als Link zum Kunden-Cockpit (?p=kunde&id=…). In klickbaren Listenzeilen verhindert
+// event.stopPropagation(), dass zusätzlich der Zeilen-Klick auslöst. Ohne Firma: „–", ohne id: nur Text.
+function kunde_link($kunde_id, ?string $firma): string {
+    if ($firma === null || $firma === '') return '<span class="muted">–</span>';
+    if (!$kunde_id) return h($firma);
+    return '<a href="?p=kunde&id=' . (int)$kunde_id . '" onclick="event.stopPropagation()">' . h($firma) . '</a>';
+}
+
 // Prioritäts-Badge (1=Hoch, 2=Normal, 3=Niedrig)
 function prio_badge(int $p): string {
     return match ($p) {

@@ -9,6 +9,7 @@ Wandelt einen Statuswert aus der Datenbank in lesbares Deutsch **mit Umlauten**:
 - `bx_head($titel, $sub, $aktionen)` – Seitenkopf mit Titel und optionalen Buttons rechts.
 - `bx_btn($label, $href, $variante)` – ein Button (primary / accent / ghost / danger).
 - `bx_badge($text, $art)` – ein Status-Etikett (ok / warn / err / info).
+- `kunde_link($kunde_id, $firma)` – Kundenname als Link zum Kunden-Cockpit (`?p=kunde&id=…`). In klickbaren Listenzeilen (`rowUrl`) verhindert `event.stopPropagation()`, dass der Zeilen-Klick zusätzlich auslöst. Ohne Firma „–", ohne id nur Text. In allen Listen mit Kunde-Spalte verwendet.
 - `bx_hint($text)` – das kleine **ⓘ**-Symbol mit Tooltip für Hinweise.
 - `bx_tabs($tabs, $aktiv, $baseUrl)` – Reiter, die per Link umschalten.
 - `bx_table($cols, $rows, $opts)` – **die Listen-Tabelle**: definiert Spalten (Label, sortierbar, eigene Darstellung), macht Kopfzeilen anklickbar zum Sortieren, Zeilen anklickbar zum Öffnen.

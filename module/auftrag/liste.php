@@ -34,7 +34,7 @@ $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 
 $cols = [
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
-    'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> $r['kunde_firma'] ? h($r['kunde_firma']) : '<span class="muted">–</span>'],
+    'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
     'produkt_name' => ['label' => 'Produkt', 'render' => fn($r)=> $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>'],
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
     'gesamt_netto' => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['gesamt_netto'])],

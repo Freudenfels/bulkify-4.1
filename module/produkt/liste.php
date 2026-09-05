@@ -38,7 +38,7 @@ $dash = fn($x) => $x ? h($x) : '<span class="muted">–</span>';
 $cols = [
     'nummer'          => ['label' => 'Nummer', 'sort' => true],
     'name'            => ['label' => 'Produkt', 'sort' => true],
-    'kunde_firma'     => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> $dash($r['kunde_firma'])],
+    'kunde_firma'     => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
     'rezeptur_name'   => ['label' => 'Rezeptur', 'sort' => true, 'render' => fn($r)=> $dash($r['rezeptur_name'])],
     'verpackung_name' => ['label' => 'Verpackung', 'render' => fn($r)=> $dash($r['verpackung_name'])],
     'einheiten_pro_packung' => ['label' => 'Einh./Pack', 'sort' => true, 'num' => true],
