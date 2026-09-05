@@ -114,8 +114,9 @@ table.bx-table{border-collapse:collapse;width:100%}
 .pt-ang{margin-bottom:var(--sp-4)}
 .pt-ang>summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:12px}
 .pt-ang>summary::-webkit-details-marker{display:none}
-.pt-ang>summary::after{content:"\25BE";color:var(--muted);margin-left:8px;transition:transform .15s}
+.pt-ang>summary::after{content:"\25BE";font-size:24px;line-height:1;color:var(--muted);margin-left:6px;flex:0 0 auto;transition:transform .15s,color .15s}
 .pt-ang:not([open])>summary::after{transform:rotate(-90deg)}
+.pt-ang[open]>summary::after,.pt-ang>summary:hover::after{color:var(--gruen)}
 /* Anklickbare Bestellzeile + vertikaler Fortschritt */
 .bx-order-row{transition:border-color .12s,box-shadow .12s}
 .bx-order-row:hover{border-color:var(--gruen);box-shadow:0 1px 8px rgba(0,0,0,.08)}
