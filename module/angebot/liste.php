@@ -23,6 +23,13 @@ if ($q !== '') {
 }
 $rows = bx_sort_rows($rows, $sort, $dir);
 
+// Reiter: Offen (Entwurf + gesendet – noch nicht entschieden) vs. Archiv (bestätigt + abgelehnt).
+$grp = fn($status) => in_array($status, ['bestaetigt','abgelehnt'], true) ? 'archiv' : 'offen';
+$anzOffen = $anzArchiv = 0;
+foreach ($rows as $r) { $grp($r['status']) === 'archiv' ? $anzArchiv++ : $anzOffen++; }
+$tab = ($_GET['tab'] ?? 'offen') === 'archiv' ? 'archiv' : 'offen';
+$rows = array_values(array_filter($rows, fn($r) => $grp($r['status']) === $tab));
+
 $statusBadge = function($r) {
     return match ($r['status']) {
         'offen'      => bx_badge('offen','info'),
@@ -45,18 +52,27 @@ $cols = [
         : '<span class="muted" title="Kein Kunde hinterlegt">–</span>'],
 ];
 
+$TABS = ['offen' => 'Offen', 'archiv' => 'Archiv'];
+$TABCOUNT = ['offen' => $anzOffen, 'archiv' => $anzArchiv];
+
 render_header('angebote', 'Angebote');
 bx_head('Angebote', count($rows) . ' Einträge', bx_btn('Neues Angebot', '?p=angebot&id=neu', 'primary'));
 ?>
+<div class="settabs">
+  <?php foreach ($TABS as $key => $lbl): ?>
+    <a href="?p=angebote&tab=<?= $key ?><?= $q !== '' ? '&q=' . urlencode($q) : '' ?>" class="<?= $tab === $key ? 'on' : '' ?>"><?= h($lbl) ?><?= $TABCOUNT[$key] ? ' (' . $TABCOUNT[$key] . ')' : '' ?></a>
+  <?php endforeach; ?>
+</div>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="angebote">
+  <input type="hidden" name="tab" value="<?= h($tab) ?>">
   <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Nummer, Kunde, Produkt …">
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
-  <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=angebote">zurücksetzen</a><?php endif; ?>
+  <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=angebote&tab=<?= h($tab) ?>">zurücksetzen</a><?php endif; ?>
 </form>
 <?php
 bx_table($cols, array_values($rows), [
-    'baseUrl' => '?p=angebote' . ($q !== '' ? '&q=' . urlencode($q) : ''),
+    'baseUrl' => '?p=angebote&tab=' . $tab . ($q !== '' ? '&q=' . urlencode($q) : ''),
     'sort'    => $sort,
     'dir'     => $dir,
     'rowUrl'  => fn($r) => '?p=angebot&id=' . $r['id'],
