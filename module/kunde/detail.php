@@ -64,7 +64,8 @@ $k_angebote = $k_auftraege = $k_rechnungen = $k_produkte = $k_rezepturen = [];
 $umsatz = $offen = 0.0;
 if (!$neu) {
     $kid = (int)$id;
-    $k_angebote = all("SELECT a.*, p.name AS produkt_name,
+    $k_angebote = all("SELECT a.*,
+                       COALESCE(p.name, (SELECT ap.bezeichnung FROM angebot_position ap WHERE ap.angebot_id=a.id ORDER BY ap.sort, ap.id LIMIT 1)) AS produkt_name,
                        (SELECT COUNT(*) FROM angebot_staffel s WHERE s.angebot_id=a.id) AS staffel_anzahl,
                        (SELECT s.menge FROM angebot_staffel s WHERE s.angebot_id=a.id ORDER BY s.bestaetigt DESC, s.sort, s.id LIMIT 1) AS staffel_menge,
                        (SELECT s.vk_stueck FROM angebot_staffel s WHERE s.angebot_id=a.id ORDER BY s.bestaetigt DESC, s.sort, s.id LIMIT 1) AS staffel_preis

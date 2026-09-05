@@ -28,6 +28,18 @@ function v3_hat_tabelle(PDO $v3, string $t): bool {
     try { $v3->query("SELECT 1 FROM `$t` LIMIT 1"); return true; } catch (Throwable $e) { return false; }
 }
 // Preis aus v3 lesen: „10,63", „4,41€", „10,95 € / Pkg." -> 10.63 / 4.41 / 10.95 (erste Zahl).
+// Produktname aus dem Angebots-PDF-Dateinamen retten, wenn das v3-Rezept gelöscht wurde.
+// "mylab_report_Magnesium Komplex.pdf" -> "Magnesium Komplex". Reine Angebots-/Kundennummern -> null.
+function v3_name_aus_datei(?string $datei): ?string {
+    $s = trim((string)$datei);
+    if ($s === '') return null;
+    $s = preg_replace('/\.[A-Za-z0-9]{2,4}$/', '', $s);                              // Dateiendung
+    $s = preg_replace('/^(mylab|lab|analyse|analysis|coa|report)[ _-]*(report)?[ _-]+/i', '', $s); // Prefixe
+    $s = trim(preg_replace('/\s+/', ' ', str_replace('_', ' ', $s)));
+    $s = preg_replace('/\s*\(\d+\)$/', '', $s);                                      // " (1)"
+    if ($s === '' || preg_match('/^AN[ _-]?\d/i', $s) || stripos($s, 'Kdnr') !== false || preg_match('/^\d[\d _-]*$/', $s)) return null;
+    return $s;
+}
 function v3_preis($s): float {
     $s = str_replace(',', '.', (string)$s);
     return preg_match('/[0-9]+(?:\.[0-9]+)?/', $s, $m) ? (float)$m[0] : 0.0;
@@ -476,13 +488,19 @@ if ($WRITE) {
         $rz = one("SELECT id, name FROM rezeptur WHERE v3_id=?", [(int)$pa['rezept_id']]);
         $pid = $rz ? (int) scalar("SELECT id FROM produkt WHERE v3_id=?", [(int)$pa['rezept_id']]) : null;
         if (!$pid) { $w6['ohne_produkt']++; }
-        $rezName = $rz ? (string)$rz['name'] : ('Rezept #' . $pa['rezept_id']);
+        // Rezept in v3 gelöscht: Name aus dem Angebots-PDF retten, sonst kundenneutrales „Produkt".
+        // Der technische Hinweis „Rezeptur in v3 nicht mehr vorhanden" steht NUR in der internen Notiz
+        // (Positions-Bezeichnung ist auch im Kundenportal sichtbar).
+        $rezRecovered = $rz ? (string)$rz['name'] : v3_name_aus_datei($pa['angebot_datei_orig'] ?? '');
+        $rezName = $rezRecovered !== null && $rezRecovered !== '' ? $rezRecovered : 'Produkt';
         $status = $conf ? 'bestaetigt' : ((string)$pa['status'] === 'abgelehnt' ? 'abgelehnt' : 'gesendet');
         $preis  = $hatPreis ? v3_preis($pa['angebot_preis']) : 0.0;
         $menge  = (int)($pa['anzahl_vpe'] ?: 0);
         $stueck = (int)($pa['menge_pro_vpe'] ?: 0);
         $vid = $verpId($pa['verpackung'] ?? '');
-        $notiz = 'Aus v3 (Produktanfrage #' . $v3paid . ')' . ($conf ? ' · bestätigt ' . $pa['bestaetigt_at'] : '') . (!empty($pa['ablehnung_grund']) ? ' · abgelehnt: ' . $pa['ablehnung_grund'] : '');
+        $notiz = 'Aus v3 (Produktanfrage #' . $v3paid . ')'
+               . (!$rz ? ' · Rezeptur in v3 gelöscht' . ($rezRecovered ? ' (Name aus Angebots-PDF)' : ' (Name unbekannt)') : '')
+               . ($conf ? ' · bestätigt ' . $pa['bestaetigt_at'] : '') . (!empty($pa['ablehnung_grund']) ? ' · abgelehnt: ' . $pa['ablehnung_grund'] : '');
         $exG = one("SELECT id FROM angebot WHERE v3_id=?", [$v3paid]);
         if ($exG) { $gid = (int)$exG['id'];
             q("UPDATE angebot SET kunde_id=?,produkt_id=?,status=?,notiz=? WHERE id=?", [$kid, $pid, $status, cut($notiz,500), $gid]);
