@@ -140,8 +140,18 @@ $gPack = ($inf['istPulver'] && $inf['portionG'] > 0) ? $mg($einh * $inf['portion
     <?php endforeach; ?>
     </tbody>
   </table></div>
+  <?php elseif ($a['status'] === 'bestaetigt'):
+        $sel = null; foreach ($st as $s) if ((int)$s['bestaetigt'] === 1) { $sel = $s; break; } ?>
+    <?php if ($sel): $vk = vk_fuer_kunde((float)$sel['vk_stueck'], $kid); $netto = $vk * (int)$sel['menge']; $brutto = $netto * (1 + $ustP/100); ?>
+    <div class="bx-panel" style="margin-top:12px;padding:12px 14px;border-color:var(--gruen)">
+      <div><strong>Angenommene Menge:</strong> <?= number_format((int)$sel['menge'],0,',','.') ?> × <?= h($mengeLbl) ?> · <strong><?= $eur($vk) ?></strong> / Pkg. · Gesamt <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto' : '' ?></div>
+      <div class="muted" style="font-size:13px;margin-top:4px">Verbindlich angenommen – Status und Details unter „Bestellungen".</div>
+    </div>
+    <?php else: ?>
+    <div class="muted" style="margin-top:12px">Angebot bestätigt – Details unter „Bestellungen".</div>
+    <?php endif; ?>
   <?php else: ?>
-  <div class="muted" style="margin-top:12px"><?= $a['status'] === 'bestaetigt' ? 'Angebot bestätigt – Details unter „Bestellungen".' : ($a['ablehnung_grund'] ? 'Abgelehnt: ' . h($a['ablehnung_grund']) : 'Abgelehnt.') ?></div>
+  <div class="muted" style="margin-top:12px"><?= $a['ablehnung_grund'] ? 'Abgelehnt: ' . h($a['ablehnung_grund']) : 'Abgelehnt.' ?></div>
   <?php endif; ?>
 
   <?php if ($canAccept): ?>

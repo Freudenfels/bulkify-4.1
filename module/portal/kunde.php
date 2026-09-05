@@ -965,15 +965,21 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
 
   <?php
-  // Annehmen-Karten: Produkt-Anfragen mit vorliegendem (sichtbarem) Angebot – HIER bestätigt der Kunde die Menge.
-  $angById = []; foreach ($angebote as $x) $angById[(int)$x['id']] = $x;
-  $rowsTabAll = array_values(array_filter($meineAnfRows, fn($r) => $atab === 'alle' || $r['typ'] === $atab));
-  $annehmen = array_values(array_filter($rowsTabAll, fn($r) => !empty($r['angebot_id']) && isset($angById[$r['angebot_id']])));
+  // Angebote (Karten) mit Reitern: Offen (gesendet, hier annehmen) / Bestätigt (nur das, was genommen wurde).
+  $offen_ang = array_values(array_filter($angebote, fn($x) => $x['status'] === 'gesendet'));
+  $best_ang  = array_values(array_filter($angebote, fn($x) => $x['status'] === 'bestaetigt'));
+  $oatab = ($_GET['oatab'] ?? 'offen') === 'bestaetigt' ? 'bestaetigt' : 'offen';
+  $aktAng = $oatab === 'bestaetigt' ? $best_ang : $offen_ang;
   ?>
-  <?php if ($annehmen): ?>
-  <h2 style="margin:8px 0 6px">Angebote zum Annehmen (<?= count($annehmen) ?>)</h2>
-  <p class="muted" style="margin:0 0 12px">Klappen Sie ein Angebot auf, wählen Sie die gewünschte Menge und bestätigen Sie verbindlich.</p>
-  <?php foreach ($annehmen as $r): $a = $angById[$r['angebot_id']]; $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = true; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+  <?php if ($offen_ang || $best_ang): ?>
+  <h2 style="margin:8px 0 6px">Ihre Angebote</h2>
+  <div class="settabs" style="margin:0 0 12px">
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen" class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $offen_ang ? ' (' . count($offen_ang) . ')' : '' ?></a>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=bestaetigt" class="<?= $oatab === 'bestaetigt' ? 'on' : '' ?>">Bestätigt<?= $best_ang ? ' (' . count($best_ang) . ')' : '' ?></a>
+  </div>
+  <?php if ($oatab === 'offen'): ?><p class="muted" style="margin:0 0 12px">Klappen Sie ein Angebot auf, wählen Sie die gewünschte Menge und bestätigen Sie verbindlich.</p><?php endif; ?>
+  <?php if (!$aktAng): ?><div class="bx-panel"><div class="muted"><?= $oatab === 'bestaetigt' ? 'Sie haben noch kein Angebot angenommen.' : 'Aktuell liegen keine offenen Angebote vor.' ?></div></div><?php endif; ?>
+  <?php foreach ($aktAng as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = ($oatab === 'offen'); include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
   <script>(function(){ var h=location.hash; if(h && /^#a\d+$/.test(h)){ var d=document.querySelector(h); if(d && d.tagName==='DETAILS'){ d.open=true; d.scrollIntoView(); } } })();</script>
   <?php endif; ?>
 
