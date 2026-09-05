@@ -50,3 +50,13 @@ Aus `produktanfrage` → v4 `angebot` (+ `angebot_position`): Kunde · Produkt/R
 ## Wichtig: aktueller Export nötig + Mehr-Staffel-Angebote
 Die zuerst gelieferte `board.sqlite` war ein **älterer Stand** (neueste Daten ~08.07.2026) ohne die Tabelle `produktanfrage_staffel`. Die Live-v3 (app.bulkify.pro) hat neuere Angebote **mit mehreren Preis-Staffeln** (z. B. 1.500/2.500/3.500 Pkg. zu unterschiedlichen Preisen). Für die echte Migration daher einen **frischen Export** der Live-DB verwenden.
 Der Importer ist darauf vorbereitet: existiert `produktanfrage_staffel`, werden in Stufe 6 **alle** Preis-Stufen als `angebot_staffel` übernommen (Menge=anzahl_vpe, Preis, gewählt→bestätigt); sonst Fallback auf die eine Konfiguration.
+
+## Quelle: SQLite ODER MySQL (aktueller Stand)
+Die Live-v3 (app.bulkify.pro) läuft auf **MySQL** (die alte `board.sqlite` war eingefroren, Stand ~09.07.2026). Für den aktuellen Stand den **MySQL-Dump** aus phpMyAdmin (Export → SQL) lokal einspielen und den DB-Namen als Quelle übergeben:
+```
+# Dump lokal einspielen (legt seine DB per CREATE DATABASE/USE selbst an, z. B. dbs15879489):
+"C:/Program Files/MariaDB 12.3/bin/mysql.exe" -u root -p<pass> < dump.sql
+# dann dem App-DB-User Rechte geben und importieren:
+php tools/v3_import.php dbs15879489 --write
+```
+Ist die Quelle eine Datei → SQLite; sonst → MySQL-DB-Name (`mysql:host=…;dbname=…`, App-Zugangsdaten). `v3_preis()` parst „10,63", „4,41€" und „10,95 € / Pkg.". Mehr-Staffel-Angebote aus `produktanfrage_staffel` werden mitgenommen (getestet: AP Baobab 1.500/2.500/3.500 → 10,95/10,59/10,38 €).
