@@ -52,6 +52,8 @@ Der Aufbau des PDFs liegt in `core/pdf_angebot.php` – dieselbe Funktion nutzt 
 
 **Entwürfe sieht der Kunde nie:** Die Angebotsliste filtert `status <> 'offen'`; annehmbar ist nur `gesendet`.
 
+**Meine Anfragen – klickbares Produkt:** In „Meine Anfragen" ist der Produktname ein Link (`.kundenlink`, unterstrichen) auf das zugehörige Angebot (`&v=angebote#a<id>`). Ein kleines Skript in der Angebote-Ansicht klappt die angesprungene Karte automatisch auf – so kommt der Kunde wie in v3 mit einem Klick vom Produkt zur Staffel-Auswahl und kann die **Menge mit einem Klick annehmen**. Die Annehmbarkeit importierter Angebote kommt aus der verknüpften `portal_anfrage` (Rezeptur + Stück).
+
 **Waisen-Angebote ausgeblendet:** Angebote ohne Produkt UND ohne Rezeptur-Position (z. B. v3-Importe, deren Rezept in v3 gelöscht wurde) werden im Kundenportal nicht gezeigt – der Kunde könnte damit nichts anfangen (kein Produkt, kein nachbestellbarer Bezug). Intern im Kunden-Cockpit bleiben sie sichtbar. Die Query ergänzt dafür `AND (a.produkt_id IS NOT NULL OR EXISTS(angebot_position mit rezeptur_id))`.
 
 **Aufklappen der Angebotskarte:** Jede Karte ist ein `<details>`; die ganze Kopfzeile ist klickbar. Ganz rechts steht ein großer Chevron (`.pt-ang>summary::after` in `app.css`, ▾ – zeigt geschlossen nach rechts, dreht beim Öffnen nach unten, wird grün bei Hover/offen). Das kleine Standard-Dreieck ist ausgeblendet. So ist klar erkennbar, dass sich die Staffel-/Preistabelle aufklappt (wie in v3). Wichtig: nur EIN Pfeil – der ::after-Chevron; keinen zweiten ins Summary-Markup setzen.

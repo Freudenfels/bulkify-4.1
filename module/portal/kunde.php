@@ -638,7 +638,8 @@ foreach ($anfragen as $a) {
     $akt = null;
     if (($a['rezeptur_status'] ?? '') === 'vorschlag' && $a['rezeptur_id']) $akt = ['label'=>'Prüfen & entscheiden','href'=>$portalLink('rezeptur').'&rid='.(int)$a['rezeptur_id'],'primary'=>true];
     elseif (($a['status'] ?? '') === 'neu') $akt = ['label'=>'Bearbeiten','href'=>$portalLink('anfrage').'&edit='.(int)$a['id'],'primary'=>false];
-    $meineAnfRows[] = ['typ'=>'rezeptur','nummer'=>$a['nummer'],'bez'=>($a['produktname'] ?: '(Rezeptur)'),'datum'=>$a['angelegt'],'status'=>$anfStatus($a),'aktion'=>$akt, 'loeschbar'=>empty($a['rezeptur_id']), 'del_typ'=>'rezeptur', 'del_id'=>(int)$a['id']];
+    $meineAnfRows[] = ['typ'=>'rezeptur','nummer'=>$a['nummer'],'bez'=>($a['produktname'] ?: '(Rezeptur)'),'datum'=>$a['angelegt'],'status'=>$anfStatus($a),'aktion'=>$akt, 'loeschbar'=>empty($a['rezeptur_id']), 'del_typ'=>'rezeptur', 'del_id'=>(int)$a['id'],
+        'link'=>($akt['href'] ?? null)];
 }
 foreach ($portalAnfragen as $p) {
     // Bei einer Rezeptur-Anfrage gibt es noch kein Produkt – dann den Rezepturnamen zeigen statt „Produkt".
@@ -647,7 +648,8 @@ foreach ($portalAnfragen as $p) {
         : ($p['betreff'] ?: ($typLabelP[$p['typ']] ?? 'Anfrage'));
     $st  = ($p['status']==='beantwortet') ? bx_badge('Angebot erhalten','ok') : (($p['status']==='abgelehnt') ? (bx_badge('nicht machbar','err') . (!empty($p['absage_grund']) ? '<div class="muted" style="font-size:12px;white-space:normal;margin-top:4px">' . h($p['absage_grund']) . '</div>' : '')) : bx_badge('in Prüfung','warn'));
     $akt = !empty($p['angebot_id']) ? ['label'=>'Zum Angebot','href'=>$portalLink('angebote').'#a'.(int)$p['angebot_id'],'primary'=>true] : null;
-    $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt, 'loeschbar'=>empty($p['angebot_id']), 'del_typ'=>'portal', 'del_id'=>(int)$p['id']];
+    $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt, 'loeschbar'=>empty($p['angebot_id']), 'del_typ'=>'portal', 'del_id'=>(int)$p['id'],
+        'link'=>(!empty($p['angebot_id']) ? $portalLink('angebote') . '#a' . (int)$p['angebot_id'] : null)];
 }
 usort($meineAnfRows, fn($x,$y) => strcmp((string)$y['datum'], (string)$x['datum']));
 $anfTabs = ['alle'=>'Alle'];
@@ -972,7 +974,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <tr>
           <td><?= h($r['nummer']) ?></td>
           <?php if ($atab === 'alle'): ?><td><?= h($typLabelP[$r['typ']] ?? $r['typ']) ?></td><?php endif; ?>
-          <td><?= $r['bez'] ? h($r['bez']) : '<span class="muted">–</span>' ?></td>
+          <td><?php if (!empty($r['link']) && $r['bez']): ?><a class="kundenlink" href="<?= h($r['link']) ?>"><?= h($r['bez']) ?></a><?php else: ?><?= $r['bez'] ? h($r['bez']) : '<span class="muted">–</span>' ?><?php endif; ?></td>
           <td><?= $r['status'] ?></td>
           <td style="text-align:right">
             <div class="bx-row" style="gap:8px;justify-content:flex-end">
