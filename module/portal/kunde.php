@@ -1478,7 +1478,10 @@ portal_head('Kundenportal · ' . $k['firma']);
       <tbody>
       <?php foreach ($rohkatalog as $ro): ?>
         <tr><td><?= h($ro['name']) ?></td><td><?= h($FORMLBL_P[$ro['form']] ?? $ro['form']) ?></td><td><?= h($ro['cas'] ?: '–') ?></td>
-          <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$ro['id'] ?>">ansehen</a></td></tr>
+          <td style="text-align:right"><div class="bx-row" style="gap:6px;justify-content:flex-end">
+            <a class="btn btn-primary btn-sm" href="<?= $portalLink('rohanfrage') ?>&iid=<?= (int)$ro['id'] ?>">Anfragen</a>
+            <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$ro['id'] ?>">ansehen</a>
+          </div></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
@@ -1492,7 +1495,10 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php else: ?>
     <div class="bx-row" style="justify-content:space-between;align-items:center">
       <h1 style="margin:0"><?= h($rohDetail['name']) ?></h1>
-      <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rohstoffe') ?>">Zurück zum Katalog</a>
+      <div class="bx-row" style="gap:8px">
+        <a class="btn btn-primary btn-sm" href="<?= $portalLink('rohanfrage') ?>&iid=<?= (int)$rohDetail['id'] ?>">Rohstoff anfragen</a>
+        <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rohstoffe') ?>">Zurück zum Katalog</a>
+      </div>
     </div>
     <p class="bx-sub"><?= h($FORMLBL_P[$rohDetail['form']] ?? $rohDetail['form']) ?><?= $rohDetail['name_lat'] ? ' · '.h($rohDetail['name_lat']) : '' ?><?= $rohDetail['cas'] ? ' · CAS '.h($rohDetail['cas']) : '' ?></p>
 
@@ -1576,7 +1582,9 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
 
 <?php elseif ($view === 'rohanfrage'):
-    $meine = array_filter($portalAnfragen, fn($a) => $a['typ'] === 'rohstoff'); ?>
+    $meine = array_filter($portalAnfragen, fn($a) => $a['typ'] === 'rohstoff');
+    // Vorbefüllung aus dem Katalog-Direktlink (&iid=): Name des Rohstoffs in die erste Zeile.
+    $vorRohName = (int)($_GET['iid'] ?? 0) ? (string) scalar("SELECT name FROM item WHERE id=? AND kategorie='rohstoff'", [(int)$_GET['iid']]) : ''; ?>
   <h1 style="margin-bottom:4px">Rohstoff anfragen</h1>
   <div class="bx-panel">
     <p class="muted" style="margin-top:0">Wählen Sie einen Rohstoff aus dem Katalog oder tippen Sie ihn ein. Sie können mehrere Rohstoffe auf einmal anfragen – Sie erhalten <strong>je Rohstoff ein eigenes Angebot</strong>, das Sie einzeln annehmen können.</p>
@@ -1586,7 +1594,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div id="rohRows">
         <?php for ($i=0;$i<2;$i++): ?>
         <div class="rohrow bx-panel" style="background:var(--panel-2);padding:12px 14px;margin-bottom:10px">
-          <div class="bx-field"><label>Rohstoff</label><input type="text" name="roh_name[]" list="rohliste" placeholder="Rohstoff wählen oder eintippen"></div>
+          <div class="bx-field"><label>Rohstoff</label><input type="text" name="roh_name[]" list="rohliste" value="<?= $i === 0 ? h($vorRohName) : '' ?>" placeholder="Rohstoff wählen oder eintippen"></div>
           <div class="bx-grid">
             <div class="bx-field"><label>Menge</label><input type="number" name="roh_menge[]" min="0" step="0.001" placeholder="z. B. 25"></div>
             <div class="bx-field"><label>Einheit</label><select name="roh_einheit[]"><?php foreach (['kg','g','t','Stück','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
