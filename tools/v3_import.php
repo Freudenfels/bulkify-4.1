@@ -13,12 +13,25 @@ require_once dirname(__DIR__) . '/core/config.php';
 require_once BX_ROOT . '/core/schema.php';
 init_schema();   // stellt alle Tabellen sicher (u. a. produkt_kundenpreis, rezeptur.exklusiv)
 
-$v3pfad = $argv[1] ?? '';
+$v3quelle = $argv[1] ?? '';
 $WRITE  = in_array('--write', $argv, true);
-if ($v3pfad === '' || !is_file($v3pfad)) { fwrite(STDERR, "v3-Datei fehlt. Aufruf: php tools/v3_import.php <pfad/board.sqlite> [--write]\n"); exit(1); }
+if ($v3quelle === '') { fwrite(STDERR, "Quelle fehlt. Aufruf: php tools/v3_import.php <board.sqlite | mysql-DB-Name> [--write]\n"); exit(1); }
 
-try { $v3 = new PDO('sqlite:' . $v3pfad); $v3->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION); }
-catch (Throwable $e) { fwrite(STDERR, "SQLite-Treiber fehlt oder Datei unlesbar: " . $e->getMessage() . "\n"); exit(1); }
+// Quelle: entweder eine SQLite-Datei (alter Stand) ODER ein MySQL-DB-Name (aktueller Dump, lokal eingespielt).
+try {
+    if (is_file($v3quelle)) { $v3 = new PDO('sqlite:' . $v3quelle); $v3treiber = 'sqlite'; }
+    else { $v3 = new PDO('mysql:host=' . DB_HOST . ';dbname=' . $v3quelle . ';charset=utf8mb4', DB_USER, DB_PASS); $v3treiber = 'mysql'; }
+    $v3->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (Throwable $e) { fwrite(STDERR, "v3-Quelle nicht lesbar (" . $v3quelle . "): " . $e->getMessage() . "\n"); exit(1); }
+// Existiert eine Tabelle in der v3-Quelle? (treiberunabhängig)
+function v3_hat_tabelle(PDO $v3, string $t): bool {
+    try { $v3->query("SELECT 1 FROM `$t` LIMIT 1"); return true; } catch (Throwable $e) { return false; }
+}
+// Preis aus v3 lesen: „10,63", „4,41€", „10,95 € / Pkg." -> 10.63 / 4.41 / 10.95 (erste Zahl).
+function v3_preis($s): float {
+    $s = str_replace(',', '.', (string)$s);
+    return preg_match('/[0-9]+(?:\.[0-9]+)?/', $s, $m) ? (float)$m[0] : 0.0;
+}
 
 // Darreichungsform v3 -> v4
 function v3_form(?string $f): string {
@@ -197,11 +210,7 @@ if ($WRITE) {
     // ---- Stufe 2: Produkte (je Rezeptur) + Kundenpreise (aus produktanfrage) ----
     ensure_column('produkt', 'v3_id', "INT NULL");   // = v3 rezept_id (ein Produkt je Rezeptur als Anker)
     $w2 = ['produkt_neu'=>0,'preis_neu'=>0,'preis_upd'=>0,'ohne_produkt'=>0];
-    $preisParse = function ($s): ?float {
-        $s = trim((string)$s); if ($s === '') return null;
-        $s = str_replace(['€', ' '], '', $s); $s = str_replace(',', '.', $s);
-        return is_numeric($s) ? (float)$s : null;
-    };
+    $preisParse = fn($s) => trim((string)$s) === '' ? null : v3_preis($s);
     foreach ($aktiveKunden as $k) {
         if ((int)($k['intern'] ?? 0) === 1) continue;
         $v3kid = (int)$k['id'];
@@ -248,10 +257,10 @@ if ($WRITE) {
     ensure_column('bestellung', 'v3_id', "INT NULL");
     $w3 = ['lief_neu'=>0,'lief_upd'=>0,'preisliste'=>0,'best_neu'=>0,'best_upd'=>0];
     // Ländername -> ISO-2 (v4 land = VARCHAR(2))
-    $land2 = function (?string $l): ?string {
+    $land2 = function (?string $l): string {
         $l = mb_strtolower(trim((string)$l));
         $m = ['deutschland'=>'DE','germany'=>'DE','china'=>'CN','österreich'=>'AT','oesterreich'=>'AT','schweiz'=>'CH','italien'=>'IT','spanien'=>'ES','indien'=>'IN','usa'=>'US','vereinigte staaten'=>'US','niederlande'=>'NL','frankreich'=>'FR','polen'=>'PL','irland'=>'IE'];
-        return $m[$l] ?? null;
+        return $m[$l] ?? '';   // unbekannt/leer -> '' (Spalte ist NOT NULL)
     };
     // Lieferanten
     $mapLief = [];   // v3 lieferant_id -> v4 id
@@ -366,7 +375,7 @@ if ($WRITE) {
         if (!empty($a['anfrage_id'])) {
             $ap = $v3->query("SELECT angebot_preis FROM produktanfrage WHERE id=" . (int)$a['anfrage_id'])->fetchColumn();
             if ($ap !== false && $ap !== null && $ap !== '') {
-                $p = (float) str_replace(',', '.', str_replace(['€', ' '], '', (string)$ap));
+                $p = v3_preis($ap);
                 if ($p > 0) { $vkStueck = $p; $netto = $p * $menge; }
             }
         }
@@ -385,7 +394,7 @@ if ($WRITE) {
     // ---- Stufe 6: Angebote (aus produktanfrage) – damit der Kunde sieht, was er vorliegen hat/hatte ----
     ensure_column('angebot', 'v3_id', "INT NULL");
     // Gibt es in dieser v3-DB die Staffel-Tabelle (neuere Exporte)?
-    $hasPaStaffel = (bool) $v3->query("SELECT name FROM sqlite_master WHERE type='table' AND name='produktanfrage_staffel'")->fetchColumn();
+    $hasPaStaffel = v3_hat_tabelle($v3, 'produktanfrage_staffel');
     $v3kMap = [];
     foreach (all("SELECT id, v3_id FROM kunden WHERE v3_id IS NOT NULL") as $kk) $v3kMap[(int)$kk['v3_id']] = (int)$kk['id'];
     $w6 = ['angebot_neu'=>0,'angebot_upd'=>0,'position'=>0,'verknuepft'=>0,'ohne_produkt'=>0];
@@ -401,7 +410,7 @@ if ($WRITE) {
         if (!$pid) { $w6['ohne_produkt']++; }
         $rezName = $rz ? (string)$rz['name'] : ('Rezept #' . $pa['rezept_id']);
         $status = $conf ? 'bestaetigt' : ((string)$pa['status'] === 'abgelehnt' ? 'abgelehnt' : 'gesendet');
-        $preis  = $hatPreis ? (float) str_replace(',', '.', str_replace(['€', ' '], '', (string)$pa['angebot_preis'])) : 0.0;
+        $preis  = $hatPreis ? v3_preis($pa['angebot_preis']) : 0.0;
         $menge  = (int)($pa['anzahl_vpe'] ?: 0);
         $stueck = (int)($pa['menge_pro_vpe'] ?: 0);
         $vid = $verpId($pa['verpackung'] ?? '');
@@ -426,7 +435,7 @@ if ($WRITE) {
         if ($hasPaStaffel) {
             foreach ($v3->query("SELECT anzahl_vpe, preis, gewaehlt FROM produktanfrage_staffel WHERE anfrage_id=$v3paid ORDER BY anzahl_vpe")->fetchAll(PDO::FETCH_ASSOC) as $s) {
                 $sm = (int)($s['anzahl_vpe'] ?: 0);
-                $sp = trim((string)($s['preis'] ?? '')) !== '' ? (float) str_replace(',', '.', str_replace(['€', ' '], '', (string)$s['preis'])) : 0.0;
+                $sp = v3_preis($s['preis'] ?? '');
                 if ($sm > 0) $staffeln[] = ['menge'=>$sm, 'preis'=>$sp, 'best'=>(int)($s['gewaehlt'] ?? 0)];
             }
         }
