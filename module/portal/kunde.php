@@ -265,14 +265,13 @@ function portal_head(string $titel): void {
        . ".pt-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0;max-width:760px}"
        . ".pt-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}"
        . ".pt-card .k{font-size:12px;color:var(--muted)}.pt-card .val{font-size:22px;font-weight:600;margin-top:4px}"
-       // Ablauf-Grafik (Weg zum fertigen Produkt) für die Leeransicht
-       . ".pt-flow{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}"
-       . ".pt-flow .step{flex:1 1 150px;min-width:140px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;position:relative}"
-       . ".pt-flow .step .no{width:26px;height:26px;border-radius:50%;background:var(--gruen);color:#10210f;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px}"
-       . ".pt-flow .step .t{font-weight:600;margin-top:8px;font-size:14px}"
-       . ".pt-flow .step .s{color:var(--muted);font-size:12px;margin-top:3px;line-height:1.45}"
-       . ".pt-flow .step .wk{margin-top:8px;font-size:11px;color:var(--gruen);font-weight:700;letter-spacing:.03em}"
-       . ".pt-flow .step:not(:last-child)::after{content:'';position:absolute;right:-10px;top:26px;width:10px;height:2px;background:var(--line)}</style>";
+       // Einstiegs-Auswahl (Leeransicht): eine Karte je freigegebenem Anfrage-Typ
+       . ".pt-choice{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0 4px}"
+       . ".pt-choice-card{flex:1 1 200px;min-width:180px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;text-decoration:none;color:inherit;transition:border-color .15s}"
+       . ".pt-choice-card:hover{border-color:var(--gruen);text-decoration:none}"
+       . ".pt-choice-card .t{font-weight:600;font-size:15px}"
+       . ".pt-choice-card .s{color:var(--muted);font-size:13px;margin-top:4px;line-height:1.45}"
+       . ".pt-choice-go{display:inline-block;margin-top:10px;color:var(--gruen);font-weight:600;font-size:13px}</style>";
     echo "<script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>";
     echo "</head><body>";
 }
@@ -972,21 +971,26 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <?php
   $istLeer = !$meineAnfRows && empty($angebote);
-  $ctaLink = !empty($k['portal_rezeptur']) ? $portalLink('anfrage') : $portalLink('produkte');
-  $ctaText = !empty($k['portal_rezeptur']) ? 'Jetzt Rezeptur anfragen' : 'Produkte ansehen';
+  // Einstiegs-Optionen – nur die für diesen Kunden freigegebenen Anfrage-Typen.
+  $anfrageOpt = [];
+  if (!empty($k['portal_rezeptur']))      $anfrageOpt[] = ['t'=>'Rezeptur anfragen',      's'=>'Eigene Rezeptur von uns entwickeln lassen.', 'r'=>'anfrage'];
+  if (!empty($k['portal_produkte']))      $anfrageOpt[] = ['t'=>'Produkt anfragen',       's'=>'Fertiges Produkt aus unserem Katalog.',      'r'=>'prodanfrage'];
+  if (!empty($k['portal_rohstoffe']))     $anfrageOpt[] = ['t'=>'Rohstoff anfragen',      's'=>'Einzelnen Rohstoff anfragen.',                'r'=>'rohanfrage'];
+  if (!empty($k['portal_dienstleistung']))$anfrageOpt[] = ['t'=>'Dienstleistung anfragen','s'=>'z. B. Abfüllung oder Verpackung.',            'r'=>'dienstleistung'];
   ?>
   <?php if ($istLeer): ?>
-  <div class="bx-panel" style="border-color:var(--gruen)">
-    <h2 style="margin-top:0">Noch keine Anfragen – so kommen Sie zu Ihrem fertigen Produkt</h2>
-    <p class="muted" style="margin-top:0">Von der ersten Anfrage bis zum versandfertigen Produkt sind es in der Regel rund <strong>5 Wochen</strong>. Der Weg in fünf Schritten:</p>
-    <div class="pt-flow">
-      <div class="step"><div class="no">1</div><div class="t">Anfrage stellen</div><div class="s">Ihre Rezeptur oder Produktidee – in wenigen Minuten eingereicht.</div><div class="wk">WOCHE 1</div></div>
-      <div class="step"><div class="no">2</div><div class="t">Angebot erhalten</div><div class="s">Wir prüfen, entwickeln die Rezeptur und kalkulieren Ihr Angebot.</div><div class="wk">WOCHE 1</div></div>
-      <div class="step"><div class="no">3</div><div class="t">Menge wählen &amp; annehmen</div><div class="s">Sie wählen die gewünschte Menge und bestätigen verbindlich.</div><div class="wk">WOCHE 2</div></div>
-      <div class="step"><div class="no">4</div><div class="t">Produktion</div><div class="s">Rohstoffeinkauf, Herstellung und Qualitätsprüfung.</div><div class="wk">WOCHE 2–4</div></div>
-      <div class="step"><div class="no">5</div><div class="t">Versand</div><div class="s">Ihr fertiges Produkt geht an Sie raus.</div><div class="wk">WOCHE 5</div></div>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Noch keine Anfragen</h2>
+    <p class="muted" style="margin-top:0">Sagen Sie uns einfach, was Sie brauchen:</p>
+    <div class="pt-choice">
+      <?php foreach ($anfrageOpt as $o): ?>
+      <a class="pt-choice-card" href="<?= $portalLink($o['r']) ?>">
+        <div class="t"><?= h($o['t']) ?></div>
+        <div class="s"><?= h($o['s']) ?></div>
+        <span class="pt-choice-go">Anfragen →</span>
+      </a>
+      <?php endforeach; ?>
     </div>
-    <div style="margin-top:6px"><a class="btn btn-primary" href="<?= $ctaLink ?>"><?= h($ctaText) ?></a></div>
   </div>
   <?php else: ?>
 
