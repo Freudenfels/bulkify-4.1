@@ -235,19 +235,32 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     // Auf der Anfragenliste landen statt zurück im Katalog – dort sieht der Kunde seine Anfrage sofort stehen.
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
 }
-// Rohstoff- / Dienstleistungsanfrage (Freitext)
-if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['aktion'] ?? '', ['rohstoff_anfrage','dienstleistung_anfrage'], true)) {
-    $typ = $_POST['aktion'] === 'rohstoff_anfrage' ? 'rohstoff' : 'dienstleistung';
-    $erlaubt = $typ === 'rohstoff' ? $k['portal_rohstoffe'] : $k['portal_dienstleistung'];
-    if ($erlaubt && trim($_POST['betreff'] ?? '') !== '') {
-        $wm = (float) str_replace(',', '.', $_POST['wunsch_menge'] ?? '0');
-        $we = in_array($_POST['wunsch_einheit'] ?? '', ['kg','g','t','Stück','L'], true) ? $_POST['wunsch_einheit'] : null;
-        // Bei Anfrage aus dem Rohstoff-Katalog: konkreter Rohstoff (item) für die spätere Preisberechnung
-        $rid = ($typ === 'rohstoff' && ($_POST['rohstoff_id'] ?? '') !== '') ? (int)$_POST['rohstoff_id'] : null;
-        if ($rid && !one("SELECT id FROM item WHERE id=? AND kategorie='rohstoff'", [$rid])) $rid = null;
-        q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,betreff,notiz,wunsch_menge,wunsch_einheit,rohstoff_id,status) VALUES (?,?,?,?,?,?,?,?,'neu')",
-          [naechste_nummer('PAF'), (int)$k['id'], $typ, trim($_POST['betreff'] ?? ''), trim($_POST['notiz'] ?? ''), $wm > 0 ? $wm : null, $wm > 0 ? $we : null, $rid]);
-        log_aktivitaet('kunde', (int)$k['id'], 'kunde', ($typ === 'rohstoff' ? 'Rohstoffanfrage' : 'Dienstleistungsanfrage') . ' im Portal gestellt.', 'anfrage');
+// Rohstoffanfrage – MEHRERE Rohstoffe je Absendung; pro Rohstoff eine eigene Anfrage (=> je Rohstoff ein eigenes Angebot).
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rohstoff_anfrage') {
+    if ($k['portal_rohstoffe']) {
+        $namen = $_POST['roh_name'] ?? []; $mengen = $_POST['roh_menge'] ?? []; $einh = $_POST['roh_einheit'] ?? [];
+        $ziele = $_POST['roh_zielpreis'] ?? []; $notizen = $_POST['roh_notiz'] ?? [];
+        $n = 0;
+        foreach ($namen as $i => $nm) {
+            $nm = trim((string)$nm); if ($nm === '') continue;
+            $wm = (float) str_replace(',', '.', (string)($mengen[$i] ?? '0'));
+            $we = in_array($einh[$i] ?? '', ['kg','g','t','Stück','L'], true) ? $einh[$i] : null;
+            $zp = (float) str_replace(',', '.', (string)($ziele[$i] ?? '0'));
+            $rid = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND name=? LIMIT 1", [$nm]);   // Katalog-Treffer -> item-Id
+            q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,betreff,notiz,wunsch_menge,wunsch_einheit,rohstoff_id,zielpreis,status) VALUES (?,?, 'rohstoff', ?,?,?,?,?,?, 'neu')",
+              [naechste_nummer('PAF'), (int)$k['id'], $nm, trim((string)($notizen[$i] ?? '')), $wm > 0 ? $wm : null, $wm > 0 ? $we : null, $rid ?: null, $zp > 0 ? $zp : null]);
+            $n++;
+        }
+        if ($n) log_aktivitaet('kunde', (int)$k['id'], 'kunde', $n . ' Rohstoffanfrage(n) im Portal gestellt.', 'anfrage');
+    }
+    header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
+}
+// Dienstleistungsanfrage (Freitext) – Typen/Labortest folgen separat
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dienstleistung_anfrage') {
+    if ($k['portal_dienstleistung'] && trim($_POST['betreff'] ?? '') !== '') {
+        q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,betreff,notiz,status) VALUES (?,?, 'dienstleistung', ?,?, 'neu')",
+          [naechste_nummer('PAF'), (int)$k['id'], trim($_POST['betreff'] ?? ''), trim($_POST['notiz'] ?? '')]);
+        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Dienstleistungsanfrage im Portal gestellt.', 'anfrage');
     }
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
 }
@@ -1524,36 +1537,73 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
   <?php endif; ?>
 
-<?php elseif ($view === 'rohanfrage' || $view === 'dienstleistung'):
-    $istRoh = $view === 'rohanfrage';
-    $titel  = $istRoh ? 'Rohstoff anfragen' : 'Dienstleistung anfragen';
-    $akt    = $istRoh ? 'rohstoff_anfrage' : 'dienstleistung_anfrage';
-    $ph     = $istRoh ? 'z. B. Magnesiumcitrat, 25 kg' : 'z. B. Laboranalyse, Etikettengestaltung';
-    $meine  = array_filter($portalAnfragen, fn($a) => $a['typ'] === ($istRoh ? 'rohstoff' : 'dienstleistung')); ?>
-  <h1 style="margin-bottom:4px"><?= h($titel) ?></h1>
+<?php elseif ($view === 'rohanfrage'):
+    $meine = array_filter($portalAnfragen, fn($a) => $a['typ'] === 'rohstoff'); ?>
+  <h1 style="margin-bottom:4px">Rohstoff anfragen</h1>
+  <div class="bx-panel">
+    <p class="muted" style="margin-top:0">Wählen Sie einen Rohstoff aus dem Katalog oder tippen Sie ihn ein. Sie können mehrere Rohstoffe auf einmal anfragen – Sie erhalten <strong>je Rohstoff ein eigenes Angebot</strong>, das Sie einzeln annehmen können.</p>
+    <form method="post">
+      <input type="hidden" name="aktion" value="rohstoff_anfrage">
+      <datalist id="rohliste"><?php foreach ($rohkatalog as $r): ?><option value="<?= h($r['name']) ?>"></option><?php endforeach; ?></datalist>
+      <div id="rohRows">
+        <?php for ($i=0;$i<2;$i++): ?>
+        <div class="rohrow bx-panel" style="background:var(--panel-2);padding:12px 14px;margin-bottom:10px">
+          <div class="bx-field"><label>Rohstoff</label><input type="text" name="roh_name[]" list="rohliste" placeholder="Rohstoff wählen oder eintippen"></div>
+          <div class="bx-grid">
+            <div class="bx-field"><label>Menge</label><input type="number" name="roh_menge[]" min="0" step="0.001" placeholder="z. B. 25"></div>
+            <div class="bx-field"><label>Einheit</label><select name="roh_einheit[]"><?php foreach (['kg','g','t','Stück','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
+            <div class="bx-field"><label>Zielpreis <span class="muted">(optional, € / Einheit)</span></label><input type="number" name="roh_zielpreis[]" min="0" step="0.01" placeholder="z. B. 12,50"></div>
+          </div>
+          <div class="bx-field"><label>Notiz (optional)</label><input type="text" name="roh_notiz[]" placeholder="Spezifikation, Qualität, Termin …"></div>
+          <div style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.rohrow').remove()">entfernen</button></div>
+        </div>
+        <?php endfor; ?>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="rohAdd">+ weiterer Rohstoff</button>
+      <div style="margin-top:14px"><button class="btn btn-primary" type="submit">Anfrage senden</button></div>
+    </form>
+  </div>
+  <script>
+  document.getElementById('rohAdd').addEventListener('click', function(){
+    var rows = document.getElementById('rohRows'); var first = rows.querySelector('.rohrow');
+    var c = first.cloneNode(true); c.querySelectorAll('input').forEach(function(x){ x.value=''; }); rows.appendChild(c);
+  });
+  </script>
+  <?php if ($meine): ?>
+  <div class="bx-panel"><h2>Meine Rohstoffanfragen</h2>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Nr.</th><th>Rohstoff</th><th class="bx-num">Menge</th><th class="bx-num">Zielpreis</th><th>Status</th></tr></thead>
+      <tbody>
+      <?php foreach ($meine as $a): ?>
+        <tr><td><?= h($a['nummer']) ?></td><td><?= h($a['betreff'] ?: '–') ?></td>
+          <td class="bx-num"><?= $a['wunsch_menge'] ? rtrim(rtrim(number_format((float)$a['wunsch_menge'],3,',','.'),'0'),',').' '.h($a['wunsch_einheit'] ?: '') : '–' ?></td>
+          <td class="bx-num"><?= !empty($a['zielpreis']) ? $eur($a['zielpreis']) : '–' ?></td>
+          <td><?= $pafBadge($a['status']) ?><?php if ($a['status']==='abgelehnt' && !empty($a['absage_grund'])): ?><div class="muted" style="font-size:12px;white-space:normal"><?= h($a['absage_grund']) ?></div><?php endif; ?></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; ?>
+
+<?php elseif ($view === 'dienstleistung'):
+    $meine = array_filter($portalAnfragen, fn($a) => $a['typ'] === 'dienstleistung'); ?>
+  <h1 style="margin-bottom:4px">Dienstleistung anfragen</h1>
   <div class="bx-panel">
     <p class="muted" style="margin-top:0">Sagen Sie uns kurz, worum es geht – wir melden uns mit einem Angebot.</p>
     <form method="post">
-      <input type="hidden" name="aktion" value="<?= $akt ?>">
-      <div class="bx-field"><label><?= $istRoh ? 'Rohstoff' : 'Betreff' ?></label><input type="text" name="betreff" required placeholder="<?= h($ph) ?>"></div>
-      <?php if ($istRoh): ?>
-      <div class="bx-grid">
-        <div class="bx-field"><label>Gewünschte Menge</label><input type="number" name="wunsch_menge" min="0" step="0.001" placeholder="z. B. 25"></div>
-        <div class="bx-field"><label>Einheit</label><select name="wunsch_einheit"><?php foreach (['kg','g','t','Stück','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
-      </div>
-      <?php endif; ?>
-      <div class="bx-field"><label>Details (optional)</label><textarea name="notiz" placeholder="Spezifikation, Termin …"></textarea></div>
+      <input type="hidden" name="aktion" value="dienstleistung_anfrage">
+      <div class="bx-field"><label>Betreff</label><input type="text" name="betreff" required placeholder="z. B. Laboranalyse, Etikettengestaltung"></div>
+      <div class="bx-field"><label>Details (optional)</label><textarea name="notiz" placeholder="Worum geht es genau? Termin, Umfang …"></textarea></div>
       <button class="btn btn-primary" type="submit">Anfrage senden</button>
     </form>
   </div>
   <?php if ($meine): ?>
-  <div class="bx-panel"><h2>Meine Anfragen</h2>
+  <div class="bx-panel"><h2>Meine Dienstleistungsanfragen</h2>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Nr.</th><th><?= $istRoh ? 'Rohstoff' : 'Betreff' ?></th><?php if ($istRoh): ?><th class="bx-num">Menge</th><?php endif; ?><th>Status</th></tr></thead>
+      <thead><tr><th>Nr.</th><th>Betreff</th><th>Status</th></tr></thead>
       <tbody>
       <?php foreach ($meine as $a): ?>
         <tr><td><?= h($a['nummer']) ?></td><td><?= h($a['betreff'] ?: '–') ?></td>
-          <?php if ($istRoh): ?><td class="bx-num"><?= $a['wunsch_menge'] ? rtrim(rtrim(number_format((float)$a['wunsch_menge'],3,',','.'),'0'),',').' '.h($a['wunsch_einheit'] ?: '') : '–' ?></td><?php endif; ?>
           <td><?= $pafBadge($a['status']) ?><?php if ($a['status']==='abgelehnt' && !empty($a['absage_grund'])): ?><div class="muted" style="font-size:12px;white-space:normal"><?= h($a['absage_grund']) ?></div><?php endif; ?></td></tr>
       <?php endforeach; ?>
       </tbody>
