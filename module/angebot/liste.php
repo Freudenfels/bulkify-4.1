@@ -28,7 +28,8 @@ $grp = fn($status) => in_array($status, ['bestaetigt','abgelehnt'], true) ? 'arc
 $anzOffen = $anzArchiv = 0;
 foreach ($rows as $r) { $grp($r['status']) === 'archiv' ? $anzArchiv++ : $anzOffen++; }
 $tab = ($_GET['tab'] ?? 'offen') === 'archiv' ? 'archiv' : 'offen';
-$rows = array_values(array_filter($rows, fn($r) => $grp($r['status']) === $tab));
+// Bei aktiver Suche NICHT nach Reiter filtern – der Treffer kann in Offen oder Archiv liegen; alle zeigen.
+if ($q === '') $rows = array_values(array_filter($rows, fn($r) => $grp($r['status']) === $tab));
 
 $statusBadge = function($r) {
     return match ($r['status']) {
@@ -58,11 +59,13 @@ $TABCOUNT = ['offen' => $anzOffen, 'archiv' => $anzArchiv];
 render_header('angebote', 'Angebote');
 bx_head('Angebote', count($rows) . ' Einträge', bx_btn('Neues Angebot', '?p=angebot&id=neu', 'primary'));
 ?>
+<?php if ($q === ''): ?>
 <div class="settabs">
   <?php foreach ($TABS as $key => $lbl): ?>
-    <a href="?p=angebote&tab=<?= $key ?><?= $q !== '' ? '&q=' . urlencode($q) : '' ?>" class="<?= $tab === $key ? 'on' : '' ?>"><?= h($lbl) ?><?= $TABCOUNT[$key] ? ' (' . $TABCOUNT[$key] . ')' : '' ?></a>
+    <a href="?p=angebote&tab=<?= $key ?>" class="<?= $tab === $key ? 'on' : '' ?>"><?= h($lbl) ?><?= $TABCOUNT[$key] ? ' (' . $TABCOUNT[$key] . ')' : '' ?></a>
   <?php endforeach; ?>
 </div>
+<?php endif; ?>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="angebote">
   <input type="hidden" name="tab" value="<?= h($tab) ?>">

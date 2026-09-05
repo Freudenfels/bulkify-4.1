@@ -5,7 +5,7 @@
 **Was passiert hier:**
 1. `seed_angebot_if_empty()` – legt lokal ein Demo-Angebot mit Staffeln an.
 2. Liest alle Angebote inkl. Kunde, Produktname (Joins) und Staffel-Anzahl.
-3. **Reiter Offen/Archiv:** „Offen" = Entwurf + gesendet (noch nicht entschieden), „Archiv" = bestätigt + abgelehnt. Reiter zeigen die Anzahl je Gruppe; `?tab=offen|archiv` (Standard offen). Suche und Sortierung bleiben je Reiter erhalten.
+3. **Reiter Offen/Archiv:** „Offen" = Entwurf + gesendet (noch nicht entschieden), „Archiv" = bestätigt + abgelehnt. Reiter zeigen die Anzahl je Gruppe; `?tab=offen|archiv` (Standard offen). **Bei aktiver Suche greift der Reiter-Filter nicht** – dann werden alle Treffer (Offen + Archiv) gezeigt und die Reiter ausgeblendet, damit ein Treffer nicht „im falschen Reiter" verschwindet.
 4. **Suche** nach Nummer, Kunde, Produkt. **Sortierung** Standard = zuletzt geändert.
 4. Tabelle: **Nummer · Kunde · Produkt · Staffeln · Status.**
    - Status-Badges: offen / gesendet / bestätigt / abgelehnt.
