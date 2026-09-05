@@ -124,8 +124,10 @@ if (!$neu) $actions .= '<a class="btn btn-accent" href="' . h($portalUrl) . '" t
 $actions .= bx_btn('Zurück zur Liste', '?p=kunden', 'ghost');
 
 render_header('kunden', $neu ? 'Neuer Kunde' : $k['firma']);
+$markenTxt = implode(', ', array_filter(array_map(fn($m) => trim((string)$m['name']), $marken)));
 bx_head($neu ? 'Neuer Kunde' : $v('firma'),
-        $neu ? 'Stammdaten anlegen' : trim(($v('kundennummer') ? $v('kundennummer') . ' · ' : '') . $v('ort')),
+        $neu ? 'Stammdaten anlegen' : trim(($v('kundennummer') ? $v('kundennummer') . ' · ' : '') . $v('ort')
+               . ($markenTxt !== '' ? ' · Marke: ' . h($markenTxt) : '')),
         $actions);
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';

@@ -60,3 +60,7 @@ Die Live-v3 (app.bulkify.pro) läuft auf **MySQL** (die alte `board.sqlite` war 
 php tools/v3_import.php dbs15879489 --write
 ```
 Ist die Quelle eine Datei → SQLite; sonst → MySQL-DB-Name (`mysql:host=…;dbname=…`, App-Zugangsdaten). `v3_preis()` parst „10,63", „4,41€" und „10,95 € / Pkg.". Mehr-Staffel-Angebote aus `produktanfrage_staffel` werden mitgenommen (getestet: AP Baobab 1.500/2.500/3.500 → 10,95/10,59/10,38 €).
+
+## Kunden-Bündelung (Marke vs. Firma)
+Manche v3-„Kunden" sind in Wahrheit **eine** Firma unter verschiedenen Namen/Marken. Der Importer führt sie zusammen: `$KUNDE_KANON` legt pro kanonischer v3-Id `firma` (echte Firma) und `marke` (Markenname) fest, `$KUNDE_ALIAS` mappt weitere v3-Ids auf den Kanon. Rezepturen, Angebote, Aufträge und Kundenpreise der Alias-Kunden landen beim Kanon-Kunden; die Marke wird als White-Label-Eintrag in `kunde_marke` gepflegt (idempotent). Ein Alias-Datensatz aus einem früheren Lauf wird automatisch umgehängt und gelöscht. Aufträge werden per Firmenname gematcht – die Map wird darum aus **allen** v3-Firmennamen gebaut und auf den Kanon gezeigt, damit auch alte Marken-/Zweigstellen-Namen den gemergten Kunden treffen.
+Aktuell konfiguriert: v3 #3 Annapurna + #603/#656 (PURE HEALTH ALLIANCE INC. / Zweigniederlassung) → **Firma „Pure Health", Marke „Annapurna"**. Marke ist im Kundenkopf, in der „Marken & Webseiten"-Kachel und in der Kundenliste (Spalte + Suche) sichtbar. Angebote gehen immer an die Firma.

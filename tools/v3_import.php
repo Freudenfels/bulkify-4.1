@@ -45,6 +45,19 @@ function v4_item_by_name(string $name): ?int {
     return $id ? (int)$id : null;
 }
 
+// --- Kunden-Bündelung: mehrere v3-Firmen sind in Wahrheit EINE Firma (Marke separat) ---
+// Kanon: v3-Kunde-id => [firma (echte Firma), marke (Markenname)].
+// Alias: v3-Kunde-id => kanonische v3-Kunde-id. Deren Rezepte/Anfragen/Aufträge landen beim Kanon.
+// Beispiel: Annapurna ist nur die Marke; Firma ist Pure Health (in v3 auf 3 Datensätze verteilt).
+$KUNDE_KANON = [
+    3 => ['firma' => 'Pure Health', 'marke' => 'Annapurna'],   // v3 #3 Annapurna
+];
+$KUNDE_ALIAS = [
+    603 => 3,   // v3 #603 PURE HEALTH ALLIANCE INC
+    656 => 3,   // v3 #656 PURE HEALTH ALLIANCE INC. Zweigniederlassung
+];
+$kanonV3 = function (int $v3id) use ($KUNDE_ALIAS): int { return $KUNDE_ALIAS[$v3id] ?? $v3id; };
+
 $aktiveKunden = [];
 foreach ($v3->query("SELECT * FROM kunden ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $k) {
     $id = (int)$k['id'];
@@ -172,14 +185,28 @@ if ($WRITE) {
     foreach ($aktiveKunden as $k) {
         if ((int)($k['intern'] ?? 0) === 1) continue;   // interner „Kunde" wird übersprungen
         $v3kid = (int)$k['id'];
+        $kanon = $kanonV3($v3kid);
+        $istAlias = ($kanon !== $v3kid);   // dieser v3-Kunde gehört zu einer anderen Firma (Bündelung)
         $adr = trim((string)($k['lieferadresse'] ?? '')); if (mb_strtolower($adr) === 'keine') $adr = '';
-        $notiz = 'Aus v3 übernommen (v3-Kunde #' . $v3kid . ')' . ($adr !== '' ? ' · Adresse laut v3: ' . $adr : '');
-        $ex = one("SELECT id FROM kunden WHERE v3_id=?", [$v3kid]);
-        if ($ex) { $v4kid = (int)$ex['id']; q("UPDATE kunden SET firma=?, email=?, notiz=? WHERE id=?", [cut($k["firma"]), cut($k["email"] ?: null), cut($notiz,500), $v4kid]); $w['kunde_upd']++; }
-        else {
-            q("INSERT INTO kunden (kundennummer,firma,email,notiz,portal_token,portal_rezeptur,portal_produkte,v3_id) VALUES (?,?,?,?,?,1,1,?)",
-              [naechste_nummer('K'), cut($k["firma"]), cut($k["email"] ?: null), cut($notiz,500), bin2hex(random_bytes(16)), $v3kid]);
-            $v4kid = (int)insert_id(); $w['kunde_neu']++;
+        if ($istAlias) {
+            // Kein eigener Datensatz – Rezepte an den Kanon-Kunden hängen.
+            $v4kid = (int) scalar("SELECT id FROM kunden WHERE v3_id=?", [$kanon]);
+            if (!$v4kid) continue;   // Kanon kommt zuerst (kleinere id) – sollte existieren
+        } else {
+            $firma = $KUNDE_KANON[$v3kid]['firma'] ?? $k['firma'];   // echte Firma (Kanon override)
+            $marke = $KUNDE_KANON[$v3kid]['marke'] ?? null;          // Markenname -> kunde_marke (White-Label)
+            $notiz = 'Aus v3 übernommen (v3-Kunde #' . $v3kid . ')' . ($adr !== '' ? ' · Adresse laut v3: ' . $adr : '');
+            $ex = one("SELECT id FROM kunden WHERE v3_id=?", [$v3kid]);
+            if ($ex) { $v4kid = (int)$ex['id']; q("UPDATE kunden SET firma=?, email=?, notiz=? WHERE id=?", [cut($firma), cut($k["email"] ?: null), cut($notiz,500), $v4kid]); $w['kunde_upd']++; }
+            else {
+                q("INSERT INTO kunden (kundennummer,firma,email,notiz,portal_token,portal_rezeptur,portal_produkte,v3_id) VALUES (?,?,?,?,?,1,1,?)",
+                  [naechste_nummer('K'), cut($firma), cut($k["email"] ?: null), cut($notiz,500), bin2hex(random_bytes(16)), $v3kid]);
+                $v4kid = (int)insert_id(); $w['kunde_neu']++;
+            }
+            // Markenname als White-Label-Marke pflegen (kunde_marke), idempotent (kein Duplikat).
+            if ($marke && !scalar("SELECT id FROM kunde_marke WHERE kunde_id=? AND name=?", [$v4kid, $marke])) {
+                q("INSERT INTO kunde_marke (kunde_id,name,webseite,sort) VALUES (?,?,'',0)", [$v4kid, $marke]);
+            }
         }
         foreach ($v3->query("SELECT * FROM rezepte WHERE kunde_id=$v3kid ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $v3rid = (int)$r['id'];
@@ -227,6 +254,17 @@ if ($WRITE) {
               [$v4rid, $iid, cut($z['bezeichnung']), (float)$z['menge_mg'], (int)$z['pos']]); $w['zutat']++;
         }
     }
+    // Alt-Läufe: falls ein Alias-Kunde noch als eigener v4-Datensatz existiert, alles auf den Kanon umhängen und löschen.
+    foreach ($KUNDE_ALIAS as $aliasV3 => $kanonV3id) {
+        $aliasV4 = (int) scalar("SELECT id FROM kunden WHERE v3_id=?", [$aliasV3]);
+        $kanonV4 = (int) scalar("SELECT id FROM kunden WHERE v3_id=?", [$kanonV3id]);
+        if ($aliasV4 && $kanonV4 && $aliasV4 !== $kanonV4) {
+            foreach (['rezeptur','angebot','auftrag','produkt_kundenpreis','kunde_marke'] as $t)
+                q("UPDATE `$t` SET kunde_id=? WHERE kunde_id=?", [$kanonV4, $aliasV4]);
+            q("DELETE FROM kunden WHERE id=?", [$aliasV4]);
+            echo "  Kunde-Bündelung: v4 #$aliasV4 (v3 #$aliasV3) in #$kanonV4 überführt.\n";
+        }
+    }
     echo "\n" . str_repeat('=', 72) . "\nGESCHRIEBEN (Stufe 1):\n";
     foreach ($w as $k => $v) printf("  %-12s %d\n", $k, $v);
 
@@ -237,7 +275,7 @@ if ($WRITE) {
     foreach ($aktiveKunden as $k) {
         if ((int)($k['intern'] ?? 0) === 1) continue;
         $v3kid = (int)$k['id'];
-        $v4kid = (int) scalar("SELECT id FROM kunden WHERE v3_id=?", [$v3kid]);
+        $v4kid = (int) scalar("SELECT id FROM kunden WHERE v3_id=?", [$kanonV3($v3kid)]);
         if (!$v4kid) continue;
         foreach ($v3->query("SELECT * FROM produktanfrage WHERE kunde_id=$v3kid ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $p) {
             $v3rez = (int)$p['rezept_id'];
@@ -356,9 +394,14 @@ if ($WRITE) {
 
     // ---- Stufe 5: Aufträge (Kundenbestellungen) ----
     ensure_column('auftrag', 'v3_id', "INT NULL");
-    // Kunde per Firmenname -> v4-Id (v3 auftraege.kunde ist ein Name)
+    // Kunde per Firmenname -> v4-Id (v3 auftraege.kunde ist ein Name).
+    // Aus den v3-Firmennamen aufgebaut und über die Bündelung auf den Kanon gemappt,
+    // damit auch alte Marken-/Zweigstellen-Namen (z. B. "Annapurna") den gemergten Kunden treffen.
     $firmaMap = [];
-    foreach (all("SELECT id, firma FROM kunden WHERE v3_id IS NOT NULL") as $kk) $firmaMap[$normName($kk['firma'])] = (int)$kk['id'];
+    foreach ($v3->query("SELECT id, firma FROM kunden")->fetchAll(PDO::FETCH_ASSOC) as $vk) {
+        $v4 = (int) scalar("SELECT id FROM kunden WHERE v3_id=?", [$kanonV3((int)$vk['id'])]);
+        if ($v4) $firmaMap[$normName($vk['firma'])] = $v4;
+    }
     // Verpackung per Name -> v4-Verpackungsartikel (sonst NULL)
     $verpId = function (?string $name): ?int {
         $name = trim((string)$name); if ($name === '') return null;
@@ -427,7 +470,7 @@ if ($WRITE) {
         $conf = trim((string)($pa['bestaetigt_at'] ?? '')) !== '';
         if ((string)$pa['status'] === 'offen' && !$hatPreis && !$conf) continue;
         $v3paid = (int)$pa['id'];
-        $kid = $v3kMap[(int)$pa['kunde_id']] ?? null; if (!$kid) continue;
+        $kid = $v3kMap[$kanonV3((int)$pa['kunde_id'])] ?? null; if (!$kid) continue;
         $rz = one("SELECT id, name FROM rezeptur WHERE v3_id=?", [(int)$pa['rezept_id']]);
         $pid = $rz ? (int) scalar("SELECT id FROM produkt WHERE v3_id=?", [(int)$pa['rezept_id']]) : null;
         if (!$pid) { $w6['ohne_produkt']++; }

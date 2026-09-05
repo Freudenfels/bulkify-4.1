@@ -11,13 +11,20 @@ $dir  = $_GET['dir']  ?? 'desc';
 
 $rows = all("SELECT * FROM kunden");
 
-// Suche (Firma, Ansprechpartner, Ort, Kundennummer, E-Mail)
+// Marken je Kunde (White-Label) – für Anzeige und Suche
+$markenByKunde = [];
+foreach (all("SELECT kunde_id, name FROM kunde_marke WHERE name<>'' ORDER BY sort,id") as $m)
+    $markenByKunde[(int)$m['kunde_id']][] = (string)$m['name'];
+
+// Suche (Firma, Marke, Ansprechpartner, Ort, Kundennummer, E-Mail)
 if ($q !== '') {
     $needle = mb_strtolower($q);
-    $rows = array_filter($rows, function($r) use ($needle) {
+    $rows = array_filter($rows, function($r) use ($needle, $markenByKunde) {
         foreach (['firma','ansprechpartner','ort','kundennummer','email'] as $f) {
             if (mb_strpos(mb_strtolower((string)$r[$f]), $needle) !== false) return true;
         }
+        foreach ($markenByKunde[(int)$r['id']] ?? [] as $mn)
+            if (mb_strpos(mb_strtolower($mn), $needle) !== false) return true;
         return false;
     });
 }
@@ -29,6 +36,7 @@ $datum = fn($r) => h(date('d.m.Y', strtotime($r['aktualisiert'])));
 $cols = [
     'kundennummer'    => ['label' => 'Kundennr.', 'sort' => true],
     'firma'           => ['label' => 'Firma', 'sort' => true],
+    'marke'           => ['label' => 'Marke', 'sort' => false, 'render' => fn($r) => h(implode(', ', $markenByKunde[(int)$r['id']] ?? []))],
     'ort'             => ['label' => 'Ort', 'sort' => true],
     'ansprechpartner' => ['label' => 'Ansprechpartner', 'sort' => true],
     'gesperrt'        => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
