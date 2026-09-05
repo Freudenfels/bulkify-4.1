@@ -159,7 +159,7 @@ echo '</div>';
             <td><?= prio_badge((int)($r['prio'] ?? 2)) ?></td>
             <td><?= bereitschaft_badge($ber['status']) ?></td>
             <td><?= h($r['nummer'] ?: ('#' . $r['id'])) ?></td>
-            <td><?= $r['kunde_firma'] ? h($r['kunde_firma']) : '<span class="muted">–</span>' ?></td>
+            <td><?= kunde_link($r['kunde_id'] ?? null, $r['kunde_firma']) ?></td>
             <td><?= $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>' ?></td>
             <td class="bx-num"><?= (int)$r['menge'] ?></td>
             <td><?= $r['naechste_station'] ? h($r['naechste_station']) : '<span class="muted">–</span>' ?> <span class="muted">(<?= (int)$r['n_done'] ?>/<?= (int)$r['n_total'] ?>)</span></td>

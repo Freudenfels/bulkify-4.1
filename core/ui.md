@@ -9,7 +9,7 @@ Wandelt einen Statuswert aus der Datenbank in lesbares Deutsch **mit Umlauten**:
 - `bx_head($titel, $sub, $aktionen)` – Seitenkopf mit Titel und optionalen Buttons rechts.
 - `bx_btn($label, $href, $variante)` – ein Button (primary / accent / ghost / danger).
 - `bx_badge($text, $art)` – ein Status-Etikett (ok / warn / err / info).
-- `kunde_link($kunde_id, $firma)` – Kundenname als Link zum Kunden-Cockpit (`?p=kunde&id=…`). In klickbaren Listenzeilen (`rowUrl`) verhindert `event.stopPropagation()`, dass der Zeilen-Klick zusätzlich auslöst. Ohne Firma „–", ohne id nur Text. In allen Listen mit Kunde-Spalte verwendet.
+- `kunde_link($kunde_id, $firma)` – Kundenname als Link zum Kunden-Cockpit (`?p=kunde&id=…`), Klasse `.kundenlink` (in `app.css`: **immer unterstrichen**, damit die direkte Verbindung zum Kunden sichtbar ist; Textfarbe bleibt, Hover grün). In klickbaren Listenzeilen (`rowUrl`) verhindert `event.stopPropagation()`, dass der Zeilen-Klick zusätzlich auslöst. Ohne Firma „–", ohne id nur Text. **Überall** verwendet, wo ein Kundenname erscheint: alle Listen (Angebote/Anfragen/Aufträge/Produkte/Produktion/Versand/Rechnungen), Detailseiten (Auftrag/Rechnung/Produktion), Werk-Cockpit, Chargen und Dashboard.
 - `bx_hint($text)` – das kleine **ⓘ**-Symbol mit Tooltip für Hinweise.
 - `bx_tabs($tabs, $aktiv, $baseUrl)` – Reiter, die per Link umschalten.
 - `bx_table($cols, $rows, $opts)` – **die Listen-Tabelle**: definiert Spalten (Label, sortierbar, eigene Darstellung), macht Kopfzeilen anklickbar zum Sortieren, Zeilen anklickbar zum Öffnen.

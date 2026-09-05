@@ -25,7 +25,7 @@ if ($chId) {
 
     // Wohin ging diese Charge? (nur Rohstoff/Verpackung sinnvoll) – aus produktion_verbrauch
     $verwendet = all("SELECT v.menge, v.einheit, pa.id AS pa_id, pa.nummer AS pa_nr, pa.status AS pa_status,
-                             p.name AS produkt_name, k.firma AS kunde_firma
+                             p.name AS produkt_name, pa.kunde_id, k.firma AS kunde_firma
                       FROM produktion_verbrauch v
                       JOIN produktionsauftrag pa ON pa.id=v.pa_id
                       LEFT JOIN produkt p ON p.id=pa.produkt_id
@@ -96,7 +96,7 @@ if ($chId) {
             <tr>
               <td><a href="?p=produktionsauftrag&id=<?= (int)$v['pa_id'] ?>"><?= h($v['pa_nr'] ?: ('#' . $v['pa_id'])) ?></a></td>
               <td><?= $v['produkt_name'] ? h($v['produkt_name']) : '<span class="muted">–</span>' ?></td>
-              <td><?= $v['kunde_firma'] ? h($v['kunde_firma']) : '<span class="muted">–</span>' ?></td>
+              <td><?= kunde_link($v['kunde_id'] ?? null, $v['kunde_firma']) ?></td>
               <td class="bx-num"><?= $num($v['menge']) ?> <?= h($v['einheit']) ?></td>
             </tr>
           <?php endforeach; ?>

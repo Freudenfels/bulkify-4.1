@@ -62,7 +62,7 @@ function bx_badge(string $text, string $kind = ''): string {
 function kunde_link($kunde_id, ?string $firma): string {
     if ($firma === null || $firma === '') return '<span class="muted">–</span>';
     if (!$kunde_id) return h($firma);
-    return '<a href="?p=kunde&id=' . (int)$kunde_id . '" onclick="event.stopPropagation()">' . h($firma) . '</a>';
+    return '<a class="kundenlink" href="?p=kunde&id=' . (int)$kunde_id . '" onclick="event.stopPropagation()">' . h($firma) . '</a>';
 }
 
 // Prioritäts-Badge (1=Hoch, 2=Normal, 3=Niedrig)

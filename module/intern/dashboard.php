@@ -44,7 +44,7 @@ echo '</div>';
       <?php if (!$neue_anfragen): ?><tr><td class="muted">Keine offenen Anfragen.</td></tr><?php endif; ?>
       <?php foreach ($neue_anfragen as $a): ?>
         <tr style="cursor:pointer" onclick="location.href='?p=anfrage&id=<?= (int)$a['id'] ?>'">
-          <td><strong><?= h($a['nummer']) ?></strong></td><td><?= h($a['firma'] ?: '–') ?></td><td><?= $a['darreichungsform'] ?></td>
+          <td><strong><?= h($a['nummer']) ?></strong></td><td><?= kunde_link($a['kunde_id'] ?? null, $a['firma']) ?></td><td><?= $a['darreichungsform'] ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody></table></div>
@@ -55,7 +55,7 @@ echo '</div>';
       <?php if (!$versand_liste): ?><tr><td class="muted">Nichts versandbereit.</td></tr><?php endif; ?>
       <?php foreach ($versand_liste as $a): ?>
         <tr style="cursor:pointer" onclick="location.href='?p=versand'">
-          <td><strong><?= h($a['nummer']) ?></strong></td><td><?= h($a['firma'] ?: '–') ?></td><td class="bx-num"><?= (int)$a['menge'] ?></td>
+          <td><strong><?= h($a['nummer']) ?></strong></td><td><?= kunde_link($a['kunde_id'] ?? null, $a['firma']) ?></td><td class="bx-num"><?= (int)$a['menge'] ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody></table></div>
@@ -66,7 +66,7 @@ echo '</div>';
       <?php if (!$offene_rechn): ?><tr><td class="muted">Keine offenen Rechnungen.</td></tr><?php endif; ?>
       <?php foreach ($offene_rechn as $b): ?>
         <tr style="cursor:pointer" onclick="location.href='?p=rechnung&id=<?= (int)$b['id'] ?>'">
-          <td><strong><?= h($b['nummer']) ?></strong></td><td><?= h($b['firma'] ?: '–') ?></td><td class="bx-num"><?= $eur($b['brutto']) ?></td>
+          <td><strong><?= h($b['nummer']) ?></strong></td><td><?= kunde_link($b['kunde_id'] ?? null, $b['firma']) ?></td><td class="bx-num"><?= $eur($b['brutto']) ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody></table></div>

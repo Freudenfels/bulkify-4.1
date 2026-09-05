@@ -44,6 +44,9 @@ html,body{margin:0;padding:0}
 body{font-family:var(--font);font-size:var(--fs);line-height:1.45;color:var(--text);background:var(--bg)}
 a{color:var(--gruen);text-decoration:none}
 a:hover{text-decoration:underline}
+/* Kundenname als Link: immer unterstrichen (zeigt die direkte Verbindung zum Kunden), Textfarbe bleibt, Hover grün */
+.kundenlink{color:inherit;text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px;cursor:pointer}
+.kundenlink:hover{color:var(--gruen)}
 
 /* ---------- Grundgerüst ---------- */
 .bx-shell{display:flex;min-height:100vh}

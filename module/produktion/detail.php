@@ -507,7 +507,7 @@ if ($verbrauch || ($istVollerWeg && ($bedarf || $kapNeed))): ?>
 <div class="bx-panel">
   <h2>Details</h2>
   <div class="bx-grid">
-    <div><div class="k muted">Kunde</div><div><?= $pa['kunde_firma'] ? h($pa['kunde_firma']) : '–' ?></div></div>
+    <div><div class="k muted">Kunde</div><div><?= kunde_link($pa['kunde_id'] ?? null, $pa['kunde_firma']) ?></div></div>
     <div><div class="k muted">Aus Auftrag</div><div><?php if ($pa['auftrag_id']): ?><a href="?p=auftrag&id=<?= (int)$pa['auftrag_id'] ?>"><?= h($pa['auftrag_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
   </div>
 </div>
