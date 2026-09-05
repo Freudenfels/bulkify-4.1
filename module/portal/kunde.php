@@ -821,8 +821,9 @@ portal_head('Kundenportal · ' . $k['firma']);
           if ($gruppe !== ''): ?><div class="bx-navgroup"><?= h($gruppe) ?></div><?php endif;
           foreach ($sichtbar as $key): ?>
             <a href="<?= $portalLink($key) ?>"<?= $activeItem===$key ? ' class="on"' : '' ?>><?= h($L[$key]) ?><?php
-              if ($key === 'angebote' && $offenAngebote): ?> <span class="pt-badge" style="float:right"><?= $offenAngebote ?></span><?php
-              elseif ($key === 'meine_anfragen' && $anfPruef): $nv = count($anfPruef); ?> <span class="pt-badge" style="float:right" title="<?= $nv ?> <?= $nv === 1 ? 'Vorschlag wartet' : 'Vorschläge warten' ?> auf Ihre Freigabe"><?= $nv ?></span><?php endif; ?></a>
+              if ($key === 'meine_anfragen'): $nv = $offenAngebote + count($anfPruef);
+                 if ($nv): ?> <span class="pt-badge" style="float:right" title="<?= $nv ?> offene Vorgänge (Angebote zur Wahl / Vorschläge)"><?= $nv ?></span><?php endif;
+              endif; ?></a>
           <?php endforeach;
       endforeach; ?>
       <div class="bx-userbox"><button type="button" class="bx-themebtn">Dunkler Modus</button></div>
@@ -850,7 +851,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
 
   <div class="pt-cards">
-    <a class="pt-card" href="<?= $portalLink('angebote') ?>" style="text-decoration:none;color:inherit"><div class="k">Offene Angebote</div><div class="val"><?= $offenAngebote ?></div></a>
+    <a class="pt-card" href="<?= $portalLink('meine_anfragen') ?>&oatab=offen" style="text-decoration:none;color:inherit"><div class="k">Offene Angebote</div><div class="val"><?= $offenAngebote ?></div></a>
     <a class="pt-card" href="<?= $portalLink('bestellungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Bestellungen in Arbeit</div><div class="val"><?= $inArbeit ?></div></a>
     <a class="pt-card" href="<?= $portalLink('rechnungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Offene Rechnungen</div><div class="val"><?= $eur($offenBetrag) ?></div></a>
   </div>
@@ -881,7 +882,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <div class="bx-panel" style="border-color:#cfe0cb">
     <div class="bx-row" style="justify-content:space-between;align-items:center">
       <div>Sie haben <strong><?= $offenAngebote ?></strong> offene<?= $offenAngebote===1?'s':'' ?> Angebot<?= $offenAngebote===1?'':'e'?> zur Bestätigung.</div>
-      <a class="btn btn-primary" href="<?= $portalLink('angebote') ?>">Angebote ansehen</a>
+      <a class="btn btn-primary" href="<?= $portalLink('meine_anfragen') ?>&oatab=offen">Menge wählen &amp; annehmen</a>
     </div>
   </div>
   <?php endif; ?>
