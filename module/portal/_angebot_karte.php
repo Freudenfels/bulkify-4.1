@@ -157,15 +157,13 @@ $paketLbl = function (int $stk) use ($inf, $mg, $formPl, $mengeLbl) {
     <?php if ($sel): $vk = vk_fuer_kunde((float)$sel['vk_stueck'], $kid); $netto = $vk * (int)$sel['menge']; $brutto = $netto * (1 + $ustP/100); ?>
     <div class="bx-panel" style="margin-top:12px;padding:12px 14px;border-color:var(--gruen)">
       <div><strong>Angenommene Menge:</strong> <?= number_format((int)$sel['menge'],0,',','.') ?> × <?= h($paketLbl((int)($sel['stueck'] ?? 0))) ?> · <strong><?= $eur($vk) ?></strong> / Pkg. · Gesamt <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto' : '' ?></div>
-      <div class="bx-row" style="justify-content:space-between;align-items:center;margin-top:8px;gap:10px">
-        <span class="muted" style="font-size:13px">Verbindlich angenommen.</span>
-        <a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a>
-      </div>
+      <div class="muted" style="font-size:13px;margin-top:4px">Verbindlich angenommen.</div>
+      <div style="margin-top:10px"><a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a></div>
     </div>
     <?php else: ?>
-    <div class="bx-row" style="justify-content:space-between;align-items:center;margin-top:12px;gap:10px">
-      <span class="muted">Angebot bestätigt.</span>
-      <a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a>
+    <div style="margin-top:12px">
+      <div class="muted">Angebot bestätigt.</div>
+      <div style="margin-top:8px"><a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a></div>
     </div>
     <?php endif; ?>
   <?php else: ?>
