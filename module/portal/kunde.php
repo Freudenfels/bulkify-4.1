@@ -18,6 +18,18 @@ $freigabeName = function(): ?string {
     $n = trim((string)($_POST['freigabe_name'] ?? ''));
     return $n === '' ? null : mb_substr($n, 0, 190);
 };
+// Upsell aus dem Bestätigen-Popup: wenn der Kunde „Labortest dazubuchen" angehakt hat, legen wir nach der
+// Annahme eine Dienstleistungsanfrage (Labortest) an, bezogen auf das Produkt des bestätigten Angebots.
+function portal_labortest_upsell(array $kunde, int $angebotId): void {
+    if (empty($_POST['labortest']) || empty($kunde['portal_dienstleistung'])) return;
+    $pid = (int) scalar("SELECT produkt_id FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [$angebotId]);
+    if (!$pid) return;
+    q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,dienstleistung_typ,betreff,status) VALUES (?,?, 'dienstleistung','labortest','Labortest / Analyse','neu')",
+      [naechste_nummer('PAF'), (int)$kunde['id']]);
+    $aid = insert_id();
+    q("INSERT INTO portal_anfrage_pos (anfrage_id,produkt_id,sort) VALUES (?,?,0)", [$aid, $pid]);
+    log_aktivitaet('kunde', (int)$kunde['id'], 'kunde', 'Labortest zum bestätigten Angebot dazugebucht (Upsell).', 'anfrage');
+}
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_annehmen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT id FROM angebot WHERE id=? AND kunde_id=? AND status='gesendet'", [$aid, (int)$k['id']]) : null;
@@ -26,6 +38,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     if ($ang) {
         q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $aid]);
         $neuAuftrag = auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
+        portal_labortest_upsell($k, $aid);
         if (mail_bereit()) mail_angebot_angenommen($aid, $neuAuftrag);
     }
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&bestaetigt=1'); exit;
@@ -42,6 +55,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal verbindlich bestätigt durch ' . $name . '.', 'angebot', 'angebot', $aid);
         $neuAuftrag = auftrag_aus_angebot($aid);
+        portal_labortest_upsell($k, $aid);
         if (mail_bereit()) mail_angebot_angenommen($aid, $neuAuftrag);
     }
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&ok=1'); exit;
@@ -89,6 +103,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         if ($auf) {
             q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
             log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal verbindlich bestätigt durch ' . $name . '.', 'angebot', 'angebot', $aid);
+            portal_labortest_upsell($k, $aid);
             header('Location: ?p=portal&token=' . $token . '&v=bestellungen&ok=1'); exit;
         }
     }
@@ -1916,6 +1931,12 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div id="bxBestText" class="muted" style="font-size:14px;line-height:1.5;margin-bottom:14px"></div>
     <form method="post" id="bxBestForm">
       <div id="bxBestFelder"></div>
+      <div id="bxBestUpsell" style="display:none;border:1px solid var(--gruen);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;background:var(--panel-2)">
+        <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.4;margin:0">
+          <input type="checkbox" name="labortest" value="1" style="margin-top:3px;flex:none">
+          <span><strong>Labortest dazubuchen</strong> <span class="muted">– für <span id="bxUpProd"></span>. Wir prüfen Ihr Produkt im Labor (z. B. Schwermetalle, Mikrobiologie) und melden uns mit einem separaten Angebot. Unverbindlich.</span></span>
+        </label>
+      </div>
       <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.45;margin-bottom:12px">
         <input type="checkbox" name="bestaetigt" value="1" required style="margin-top:3px;flex:none">
         <span id="bxBestHaken">Ich habe alles geprüft und nehme verbindlich an.</span>
@@ -1938,7 +1959,7 @@ portal_head('Kundenportal · ' . $k['firma']);
 <script>
 function bxBestZu(){ document.getElementById('bxBestOverlay').style.display='none'; }
 // titel/text: was bestätigt wird · haken: Text neben der Checkbox · felder: {name: wert} für das POST
-function bxBestaetigen(titel, text, haken, felder){
+function bxBestaetigen(titel, text, haken, felder, upsell){
   document.getElementById('bxBestTitel').textContent = titel;
   document.getElementById('bxBestText').innerHTML = text;
   if (haken) document.getElementById('bxBestHaken').textContent = haken;
@@ -1946,6 +1967,11 @@ function bxBestaetigen(titel, text, haken, felder){
   for (var n in felder) {
     var el = document.createElement('input'); el.type='hidden'; el.name=n; el.value=felder[n]; box.appendChild(el);
   }
+  // Optionaler Upsell (Labortest): nur bei Angebots-Annahmen und wenn der Kunde Dienstleistungen anfragen darf.
+  var up = document.getElementById('bxBestUpsell'), upCb = up.querySelector('input[name="labortest"]');
+  upCb.checked = false;
+  if (upsell && upsell.name) { document.getElementById('bxUpProd').textContent = upsell.name; up.style.display=''; }
+  else { up.style.display='none'; }
   var ov = document.getElementById('bxBestOverlay');
   ov.style.display='flex';
   var eingabe = ov.querySelector('input[name="freigabe_name"]'); if (eingabe) setTimeout(function(){ eingabe.focus(); }, 50);

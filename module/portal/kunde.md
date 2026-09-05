@@ -85,3 +85,8 @@ AB/RE bauen **eine Sammelposition** aus der bestellten Konfiguration (Netto exak
 Nimmt der Kunde ein Angebot an (`angebot_annehmen` oder `bestaetigen`), geht eine Auftragsbestätigung an ihn und ein Hinweis an alle Admins (`mail_angebot_angenommen()` in `core/mail.php`) – nur wenn der Versand eingerichtet ist. Der Kunde sieht Mailfehler nicht; sie stehen in `data/mail.log`.
 ## Rezepturanfrage löst einen Entwurf aus
 Schickt der Kunde eine Rezepturanfrage, entwickelt die KI sofort einen internen Entwurf (`rezeptur_ki_entwickeln()`), sofern sie eingerichtet ist. Der Kunde sieht davon nichts; das Team findet ihn beim Öffnen der Anfrage.
+
+## Dienstleistung/Rohstoff-Anfragen + Labortest-Upsell
+- **Rohstoffanfrage:** mehrzeilig – je Zeile Rohstoff (Katalog-`datalist` oder Freitext), Menge/Einheit, optionaler Zielpreis (`portal_anfrage.zielpreis`), Notiz. Pro Zeile eine eigene `portal_anfrage` (typ=rohstoff) → je Rohstoff ein eigenes Angebot, einzeln annehmbar.
+- **Dienstleistungsanfrage:** Typ-Auswahl (`$DIENST_TYPEN`: labortest/abfuellung/sourcing/konfektionierung/lagerung/beratung/sonstiges) → `portal_anfrage.dienstleistung_typ`. **Labortest** verlangt ≥1 Produkt (Mehrfachauswahl → `portal_anfrage_pos.produkt_id`).
+- **Labortest-Upsell:** Das Bestätigen-Popup (`bxBestaetigen`, 5. Param `upsell`) zeigt bei Angebots-Annahmen – nur wenn `portal_dienstleistung` frei – eine Checkbox „Labortest dazubuchen". Angehakt legt `portal_labortest_upsell()` nach der Annahme eine Labortest-Dienstleistungsanfrage zum Auftrags-Produkt an.
