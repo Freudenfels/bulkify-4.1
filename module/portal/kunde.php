@@ -263,7 +263,14 @@ function portal_head(string $titel): void {
        . ".pt-badge{display:inline-block;background:var(--lime);color:#10210f;border-radius:10px;padding:0 7px;font-size:12px;font-weight:600}"
        . ".pt-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0;max-width:760px}"
        . ".pt-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}"
-       . ".pt-card .k{font-size:12px;color:var(--muted)}.pt-card .val{font-size:22px;font-weight:600;margin-top:4px}</style>";
+       . ".pt-card .k{font-size:12px;color:var(--muted)}.pt-card .val{font-size:22px;font-weight:600;margin-top:4px}"
+       // Angebots-Aufklapper: ganze Kopfzeile klickbar, großer Chevron rechts (dreht beim Öffnen), grüner Rand offen
+       . ".pt-ang>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:6px 2px}"
+       . ".pt-ang>summary::-webkit-details-marker{display:none}.pt-ang>summary::marker{content:''}"
+       . ".pt-ang>summary:hover .pt-chev{color:var(--gruen)}"
+       . ".pt-ang .pt-chev{font-size:26px;line-height:1;color:var(--muted);transition:transform .15s ease;flex:0 0 auto;padding:0 2px}"
+       . ".pt-ang[open]>summary .pt-chev{transform:rotate(90deg);color:var(--gruen)}"
+       . ".pt-ang[open]{border-color:var(--gruen)}</style>";
     echo "<script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>";
     echo "</head><body>";
 }
@@ -298,6 +305,10 @@ $angebote = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produk
                  FROM angebot a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                  WHERE a.kunde_id=? AND a.kunde_ausgeblendet=0
                    AND a.status <> 'offen'
+                   -- Waisen-Angebote (Produkt/Rezeptur in v3 gelöscht) nicht im Kundenportal zeigen: kein Produkt UND
+                   -- keine Rezeptur-Position => für den Kunden nicht handelbar. Intern (Cockpit) bleiben sie sichtbar.
+                   AND (a.produkt_id IS NOT NULL
+                        OR EXISTS (SELECT 1 FROM angebot_position ap WHERE ap.angebot_id=a.id AND ap.rezeptur_id IS NOT NULL AND ap.rezeptur_id>0))
                  ORDER BY a.angelegt DESC", [$kid]);
 // WICHTIG: Status 'offen' ist der interne ENTWURF – der Kunde darf ihn nicht sehen.
 // Sonst erscheint ein Angebot beim Kunden, sobald es im Editor angelegt wird, also bevor
@@ -1468,6 +1479,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?= $offen ? bx_badge('Angebot liegt vor – bitte wählen','info')
              : ($a['status']==='bestaetigt' ? bx_badge('bestätigt','ok') : bx_badge('abgelehnt','err')) ?>
         <a href="<?= $portalLink('angebot_pdf') ?>&aid=<?= (int)$a['id'] ?>" target="_blank" title="Angebot als PDF herunterladen" onclick="event.stopPropagation()" style="font-size:18px;line-height:1">&#8681;</a>
+        <span class="pt-chev" aria-hidden="true" title="Angebot öffnen">&#8250;</span>
       </span>
     </summary>
     <div class="muted" style="margin-top:10px;font-size:13px">Eingegangen: <?= h(fmt_zeit($a['angelegt'])) ?> Uhr<?= $a['aktualisiert'] ? ' · Angebot vom ' . h(fmt_zeit($a['aktualisiert'])) . ' Uhr' : '' ?></div>
