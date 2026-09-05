@@ -1070,76 +1070,73 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
 
   <?php
-  // Angebote (Karten) mit Reitern: Offen (gesendet, hier annehmen) / Bestätigt (nur das, was genommen wurde).
+  // Drei Reiter: Offen (gesendete Angebote + noch offene Anfragen) · Bestätigt (angenommen, Auftrag in Arbeit) ·
+  // Abgeschlossen (Auftrag versendet – nur noch nachbestellbar/zur Bestellung springbar).
   $offen_ang = array_values(array_filter($angebote, fn($x) => $x['status'] === 'gesendet'));
-  $best_ang  = array_values(array_filter($angebote, fn($x) => $x['status'] === 'bestaetigt'));
-  $oatab = ($_GET['oatab'] ?? 'offen') === 'bestaetigt' ? 'bestaetigt' : 'offen';
-  $aktAng = $oatab === 'bestaetigt' ? $best_ang : $offen_ang;
+  $best_prog = []; $abgeschl = [];
+  foreach (array_filter($angebote, fn($x) => $x['status'] === 'bestaetigt') as $x) {
+      $auSt = (string) scalar("SELECT status FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [(int)$x['id']]);
+      if ($auSt === 'versendet') $abgeschl[] = $x; else $best_prog[] = $x;
+  }
+  // Noch offene Anfragen ohne Angebot (in Prüfung) – NICHT die Rezeptur-Vorschläge (die stehen in „Wartet auf Sie").
+  $pruefNr = array_column($anfPruef, 'nummer');
+  $pending = array_values(array_filter($meineAnfRows, fn($r) => empty($r['angebot_id']) && !in_array($r['nummer'], $pruefNr, true)));
+  $oatab = in_array($_GET['oatab'] ?? '', ['bestaetigt','abgeschlossen'], true) ? $_GET['oatab'] : 'offen';
+  $nOffen = count($offen_ang) + count($pending);
   ?>
-  <?php if ($offen_ang || $best_ang): ?>
-  <h2 style="margin:8px 0 6px">Ihre Angebote</h2>
+  <h2 style="margin:8px 0 6px">Ihre Vorgänge</h2>
   <div class="settabs" style="margin:0 0 12px">
-    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen" class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $offen_ang ? ' (' . count($offen_ang) . ')' : '' ?></a>
-    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=bestaetigt" class="<?= $oatab === 'bestaetigt' ? 'on' : '' ?>">Bestätigt<?= $best_ang ? ' (' . count($best_ang) . ')' : '' ?></a>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen"        class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=bestaetigt"   class="<?= $oatab === 'bestaetigt' ? 'on' : '' ?>">Bestätigt<?= $best_prog ? ' (' . count($best_prog) . ')' : '' ?></a>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=abgeschlossen" class="<?= $oatab === 'abgeschlossen' ? 'on' : '' ?>">Abgeschlossen<?= $abgeschl ? ' (' . count($abgeschl) . ')' : '' ?></a>
   </div>
-  <?php if ($oatab === 'offen'): ?><p class="muted" style="margin:0 0 12px">Klappen Sie ein Angebot auf, wählen Sie die gewünschte Menge und bestätigen Sie verbindlich.</p><?php endif; ?>
-  <?php if (!$aktAng): ?><div class="bx-panel"><div class="muted"><?= $oatab === 'bestaetigt' ? 'Sie haben noch kein Angebot angenommen.' : 'Aktuell liegen keine offenen Angebote vor.' ?></div></div><?php endif; ?>
-  <?php foreach ($aktAng as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = ($oatab === 'offen'); $open = true; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
-  <script>(function(){ var h=location.hash; if(h && /^#a\d+$/.test(h)){ var d=document.querySelector(h); if(d && d.tagName==='DETAILS'){ d.open=true; d.scrollIntoView(); } } })();</script>
-  <?php endif; ?>
 
-  <?php
-  // Tabelle zeigt NUR Anfragen ohne (sichtbares) Angebot – die mit Angebot stehen oben als Karten (keine Doppelung).
-  $offeneAnfragen = array_values(array_filter($meineAnfRows, fn($r) => empty($r['angebot_id'])));
-  ?>
-  <?php if ($offeneAnfragen): ?>
-  <div class="bx-panel">
-    <h2 style="margin:0 0 4px">Weitere Anfragen</h2>
-    <p class="muted" style="margin:0 0 12px;font-size:13px">Anfragen, zu denen noch kein Angebot vorliegt (in Prüfung) bzw. Rezeptur-/Rohstoff-/Dienstleistungsanfragen.</p>
-    <div class="settabs" style="margin:0 0 12px">
-      <?php foreach ($anfTabs as $tk => $tl): $n = $tk === 'alle' ? count($offeneAnfragen) : count(array_filter($offeneAnfragen, fn($r) => $r['typ'] === $tk)); if ($tk !== 'alle' && !$n) continue; ?>
-        <a href="<?= $portalLink('meine_anfragen') ?>&atab=<?= $tk ?>" class="<?= $atab === $tk ? 'on' : '' ?>"><?= h($tl) ?><?= $n ? ' (' . $n . ')' : '' ?></a>
-      <?php endforeach; ?>
-    </div>
-    <?php $rowsTab = array_values(array_filter($offeneAnfragen, fn($r) => $atab === 'alle' || $r['typ'] === $atab)); ?>
-    <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Nummer</th><?php if ($atab === 'alle'): ?><th>Typ</th><?php endif; ?><th>Bezeichnung</th><th>Status</th><th></th></tr></thead>
-      <tbody>
-      <?php if (!$rowsTab): ?><tr><td colspan="5" class="muted">Keine Anfragen in diesem Bereich.</td></tr><?php endif; ?>
-      <?php foreach ($rowsTab as $r): ?>
-        <tr<?= !empty($r['erledigt']) ? ' style="opacity:.62"' : '' ?>>
-          <td><?= h($r['nummer']) ?></td>
-          <?php if ($atab === 'alle'): ?><td><?= h($typLabelP[$r['typ']] ?? $r['typ']) ?></td><?php endif; ?>
-          <td><?php if (!empty($r['link']) && $r['bez']): ?><a class="kundenlink" href="<?= h($r['link']) ?>"><?= h($r['bez']) ?></a><?php else: ?><?= $r['bez'] ? h($r['bez']) : '<span class="muted">–</span>' ?><?php endif; ?></td>
-          <td><?= $r['status'] ?></td>
-          <td style="text-align:right">
-            <div class="bx-row" style="gap:8px;justify-content:flex-end">
-              <?php if (!empty($r['erledigt']) && !empty($r['auftrag_id'])): ?><a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$r['auftrag_id'] ?>">Zur Bestellung</a><?php endif; ?>
-              <?php if ($r['aktion']): ?><a class="btn <?= $r['aktion']['primary'] ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="<?= h($r['aktion']['href']) ?>"><?= h($r['aktion']['label']) ?></a><?php endif; ?>
-              <?php // Löschen nur, solange wir die Anfrage noch nicht bearbeitet haben ?>
-              <?php if (!empty($r['loeschbar'])): ?>
+  <?php if ($oatab === 'offen'): ?>
+    <?php if ($offen_ang): ?>
+    <p class="muted" style="margin:0 0 12px">Klappen Sie ein Angebot auf, wählen Sie die gewünschte Menge und bestätigen Sie verbindlich.</p>
+    <?php foreach ($offen_ang as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = true; $open = true; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+    <?php endif; ?>
+    <?php if ($pending): ?>
+    <div class="bx-panel">
+      <h2 style="margin:0 0 4px">In Prüfung</h2>
+      <p class="muted" style="margin:0 0 12px;font-size:13px">Anfragen, zu denen wir uns mit einem Angebot melden.</p>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Nummer</th><th>Typ</th><th>Bezeichnung</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($pending as $r): ?>
+          <tr>
+            <td><?= h($r['nummer']) ?></td>
+            <td><?= h($typLabelP[$r['typ']] ?? $r['typ']) ?></td>
+            <td><?= $r['bez'] ? h($r['bez']) : '<span class="muted">–</span>' ?></td>
+            <td><?= $r['status'] ?></td>
+            <td style="text-align:right">
+              <div class="bx-row" style="gap:8px;justify-content:flex-end">
+                <?php if ($r['aktion']): ?><a class="btn <?= $r['aktion']['primary'] ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="<?= h($r['aktion']['href']) ?>"><?= h($r['aktion']['label']) ?></a><?php endif; ?>
+                <?php if (!empty($r['loeschbar'])): ?>
                 <form method="post" style="margin:0" onsubmit="return confirm('Anfrage <?= h($r['nummer']) ?> wirklich löschen?');">
-                  <input type="hidden" name="aktion" value="anfrage_loeschen">
-                  <input type="hidden" name="anf_typ" value="<?= h($r['del_typ']) ?>">
-                  <input type="hidden" name="anf_id" value="<?= (int)$r['del_id'] ?>">
+                  <input type="hidden" name="aktion" value="anfrage_loeschen"><input type="hidden" name="anf_typ" value="<?= h($r['del_typ']) ?>"><input type="hidden" name="anf_id" value="<?= (int)$r['del_id'] ?>">
                   <button class="btn btn-ghost btn-sm" type="submit">Löschen</button>
                 </form>
-              <?php endif; ?>
-            </div>
-          </td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table></div>
-    <div class="muted" style="font-size:12px;margin-top:10px;line-height:1.7">
-      <strong>Was die Status bedeuten:</strong><br>
-      <?= bx_badge('in Prüfung','warn') ?> Ihre Anfrage liegt bei uns – wir prüfen sie und melden uns mit einem Angebot (erscheint dann oben unter „Ihre Angebote").<br>
-      <?= bx_badge('Vorschlag erhalten','ok') ?> Wir haben Ihnen einen Rezeptur-Vorschlag gesendet – bitte prüfen und annehmen oder ablehnen.<br>
-      <?= bx_badge('abgelehnt','err') ?> Der Vorschlag wurde abgelehnt (von Ihnen oder von uns) – wir überarbeiten ihn.<br>
-      <?= bx_badge('Rezeptur angelegt','ok') ?> Der Vorschlag ist final bestätigt – die Rezeptur ist angelegt.
+                <?php endif; ?>
+              </div>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
     </div>
-  </div>
+    <?php endif; ?>
+    <?php if (!$offen_ang && !$pending): ?><div class="bx-panel"><div class="muted">Aktuell nichts Offenes. Neue Anfragen stellen Sie über das Menü links.</div></div><?php endif; ?>
+
+  <?php elseif ($oatab === 'bestaetigt'): ?>
+    <?php if (!$best_prog): ?><div class="bx-panel"><div class="muted">Keine bestätigten Vorgänge in Arbeit.</div></div><?php endif; ?>
+    <?php foreach ($best_prog as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+
+  <?php else: /* abgeschlossen */ ?>
+    <?php if (!$abgeschl): ?><div class="bx-panel"><div class="muted">Noch nichts abgeschlossen.</div></div><?php endif; ?>
+    <?php foreach ($abgeschl as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
   <?php endif; ?>
+  <script>(function(){ var h=location.hash; if(h && /^#a\d+$/.test(h)){ var d=document.querySelector(h); if(d && d.tagName==='DETAILS'){ d.open=true; d.scrollIntoView(); } } })();</script>
   <?php endif; /* istLeer */ ?>
 
 <?php elseif ($view === 'rezepturen'):
@@ -1691,11 +1688,22 @@ portal_head('Kundenportal · ' . $k['firma']);
     var h = location.hash; if (h && /^#a\d+$/.test(h)) { var d = document.querySelector(h); if (d && d.tagName === 'DETAILS') { d.open = true; d.scrollIntoView(); } }
   })();</script>
 
-<?php elseif ($view === 'bestellungen'): ?>
+<?php elseif ($view === 'bestellungen'):
+    $inArbeit    = array_values(array_filter($auftraege, fn($a) => $a['status'] !== 'versendet'));
+    $abgeschlBest = array_values(array_filter($auftraege, fn($a) => $a['status'] === 'versendet'));
+    $btab = ($_GET['btab'] ?? '') === 'abgeschlossen' ? 'abgeschlossen' : 'arbeit';
+    $aktBest = $btab === 'abgeschlossen' ? $abgeschlBest : $inArbeit; ?>
   <h1 style="margin-bottom:4px">Ihre Bestellungen</h1>
   <p class="muted" style="margin:0 0 16px">Klicken Sie auf eine Bestellung, um alle Schritte, Rechnung und Details zu sehen.</p>
-  <?php if (!$auftraege): ?><div class="bx-panel"><div class="muted">Noch keine Bestellungen.</div></div><?php endif; ?>
-  <?php foreach ($auftraege as $a): $cur = kunde_auftrag_phase($a)['idx']; $complete = $a['status'] === 'versendet'; ?>
+  <?php if (!$auftraege): ?><div class="bx-panel"><div class="muted">Noch keine Bestellungen.</div></div>
+  <?php else: ?>
+  <div class="settabs" style="margin:0 0 12px">
+    <a href="<?= $portalLink('bestellungen') ?>&btab=arbeit"        class="<?= $btab === 'arbeit' ? 'on' : '' ?>">In Bearbeitung<?= $inArbeit ? ' (' . count($inArbeit) . ')' : '' ?></a>
+    <a href="<?= $portalLink('bestellungen') ?>&btab=abgeschlossen" class="<?= $btab === 'abgeschlossen' ? 'on' : '' ?>">Abgeschlossene<?= $abgeschlBest ? ' (' . count($abgeschlBest) . ')' : '' ?></a>
+  </div>
+  <?php if (!$aktBest): ?><div class="bx-panel"><div class="muted"><?= $btab === 'abgeschlossen' ? 'Noch keine abgeschlossenen Bestellungen.' : 'Aktuell keine Bestellung in Bearbeitung.' ?></div></div><?php endif; ?>
+  <?php endif; ?>
+  <?php foreach ($aktBest as $a): $cur = kunde_auftrag_phase($a)['idx']; $complete = $a['status'] === 'versendet'; ?>
   <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span></div>
