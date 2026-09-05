@@ -517,7 +517,10 @@ $kapselAnzeige = function(array $rezRow, float $totalMg) use ($portalKapseln, $k
     return $kapselFuer($totalMg);
 };
 $portalAnfragen = all("SELECT pa.*, p.name AS produkt_name, i.name AS verp_name, rz.name AS rezeptur_name,
-    (SELECT a.id FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id AND a.kunde_ausgeblendet=0 AND a.status<>'offen' ORDER BY a.id DESC LIMIT 1) AS angebot_id
+    (SELECT a.id FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id AND a.kunde_ausgeblendet=0 AND a.status<>'offen' ORDER BY a.id DESC LIMIT 1) AS angebot_id,
+    (SELECT a.status FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id AND a.kunde_ausgeblendet=0 AND a.status<>'offen' ORDER BY a.id DESC LIMIT 1) AS angebot_status,
+    (SELECT au.id FROM angebot a JOIN auftrag au ON au.angebot_id=a.id WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id ORDER BY au.id DESC LIMIT 1) AS auftrag_id,
+    (SELECT au.status FROM angebot a JOIN auftrag au ON au.angebot_id=a.id WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id ORDER BY au.id DESC LIMIT 1) AS auftrag_status
     FROM portal_anfrage pa
     LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN item i ON i.id=pa.verpackung_id
     LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
@@ -647,12 +650,27 @@ foreach ($portalAnfragen as $p) {
     $bez = $p['typ']==='produkt'
         ? ($p['produkt_name'] ?: ($p['rezeptur_name'] ? $p['rezeptur_name'] . ' (aus Rezeptur)' : 'Produkt'))
         : ($p['betreff'] ?: ($typLabelP[$p['typ']] ?? 'Anfrage'));
-    $st  = ($p['status']==='beantwortet') ? bx_badge('Angebot erhalten','ok') : (($p['status']==='abgelehnt') ? (bx_badge('nicht machbar','err') . (!empty($p['absage_grund']) ? '<div class="muted" style="font-size:12px;white-space:normal;margin-top:4px">' . h($p['absage_grund']) . '</div>' : '')) : bx_badge('in Prüfung','warn'));
-    // Angebot liegt vor -> auf die Annehmen-Karte weiter unten auf DIESER Seite (#a<id>), dort wird die Menge bestätigt.
+    // Erledigt = Angebot bereits angenommen (es gibt einen Auftrag). Dann Bestell-Status zeigen + Nachbestellen.
+    $erledigt = ($p['angebot_status'] ?? '') === 'bestaetigt';
+    $aufSt = (string)($p['auftrag_status'] ?? '');
+    $aufStLbl = match ($aufSt) { 'in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet', default=>'bestellt' };
+    if ($erledigt) {
+        $st = bx_badge($aufStLbl, $aufSt === 'versendet' ? 'ok' : 'info');
+    } else {
+        $st = ($p['status']==='beantwortet') ? bx_badge('Angebot erhalten','ok') : (($p['status']==='abgelehnt') ? (bx_badge('nicht machbar','err') . (!empty($p['absage_grund']) ? '<div class="muted" style="font-size:12px;white-space:normal;margin-top:4px">' . h($p['absage_grund']) . '</div>' : '')) : bx_badge('in Prüfung','warn'));
+    }
+    // Nächster Schritt je Zustand: erledigt -> Nachbestellen (neue Anfrage zum selben Produkt/Rezeptur);
+    // Angebot liegt vor -> Menge annehmen (Karte #a<id> auf dieser Seite).
     $offLink = !empty($p['angebot_id']) ? $portalLink('meine_anfragen') . '#a' . (int)$p['angebot_id'] : null;
-    $akt = $offLink ? ['label'=>'Menge annehmen','href'=>$offLink,'primary'=>true] : null;
+    if ($erledigt) {
+        $nb = $portalLink('prodanfrage') . ((int)($p['produkt_id'] ?? 0) ? '&pid=' . (int)$p['produkt_id'] : ((int)($p['rezeptur_id'] ?? 0) ? '&rid=' . (int)$p['rezeptur_id'] : ''));
+        $akt = ['label'=>'Nachbestellen','href'=>$nb,'primary'=>false];
+    } else {
+        $akt = $offLink ? ['label'=>'Menge annehmen','href'=>$offLink,'primary'=>true] : null;
+    }
+    $zeilenLink = ($erledigt && (int)($p['auftrag_id'] ?? 0)) ? $portalLink('bestellung') . '&aid=' . (int)$p['auftrag_id'] : $offLink;
     $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt, 'loeschbar'=>empty($p['angebot_id']), 'del_typ'=>'portal', 'del_id'=>(int)$p['id'],
-        'link'=>$offLink, 'angebot_id'=>(int)($p['angebot_id'] ?? 0)];
+        'link'=>$zeilenLink, 'angebot_id'=>(int)($p['angebot_id'] ?? 0), 'erledigt'=>$erledigt, 'auftrag_id'=>(int)($p['auftrag_id'] ?? 0)];
 }
 usort($meineAnfRows, fn($x,$y) => strcmp((string)$y['datum'], (string)$x['datum']));
 $anfTabs = ['alle'=>'Alle'];
@@ -996,13 +1014,14 @@ portal_head('Kundenportal · ' . $k['firma']);
       <tbody>
       <?php if (!$rowsTab): ?><tr><td colspan="5" class="muted">Keine Anfragen in diesem Bereich.</td></tr><?php endif; ?>
       <?php foreach ($rowsTab as $r): ?>
-        <tr>
+        <tr<?= !empty($r['erledigt']) ? ' style="opacity:.62"' : '' ?>>
           <td><?= h($r['nummer']) ?></td>
           <?php if ($atab === 'alle'): ?><td><?= h($typLabelP[$r['typ']] ?? $r['typ']) ?></td><?php endif; ?>
           <td><?php if (!empty($r['link']) && $r['bez']): ?><a class="kundenlink" href="<?= h($r['link']) ?>"><?= h($r['bez']) ?></a><?php else: ?><?= $r['bez'] ? h($r['bez']) : '<span class="muted">–</span>' ?><?php endif; ?></td>
           <td><?= $r['status'] ?></td>
           <td style="text-align:right">
             <div class="bx-row" style="gap:8px;justify-content:flex-end">
+              <?php if (!empty($r['erledigt']) && !empty($r['auftrag_id'])): ?><a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$r['auftrag_id'] ?>">Zur Bestellung</a><?php endif; ?>
               <?php if ($r['aktion']): ?><a class="btn <?= $r['aktion']['primary'] ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="<?= h($r['aktion']['href']) ?>"><?= h($r['aktion']['label']) ?></a><?php endif; ?>
               <?php // Löschen nur, solange wir die Anfrage noch nicht bearbeitet haben ?>
               <?php if (!empty($r['loeschbar'])): ?>
@@ -1025,7 +1044,8 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?= bx_badge('Vorschlag erhalten','ok') ?> Wir haben Ihnen einen Rezeptur-Vorschlag gesendet – bitte prüfen und annehmen oder ablehnen.<br>
       <?= bx_badge('Angebot erhalten','ok') ?> Zu Ihrer Produkt-/Rohstoff-/Dienstleistungsanfrage liegt ein Angebot vor – Details unter „Angebote".<br>
       <?= bx_badge('abgelehnt','err') ?> Der Vorschlag wurde abgelehnt (von Ihnen oder von uns) – wir überarbeiten ihn.<br>
-      <?= bx_badge('Rezeptur angelegt','ok') ?> Der Vorschlag ist final bestätigt – die Rezeptur ist angelegt.
+      <?= bx_badge('Rezeptur angelegt','ok') ?> Der Vorschlag ist final bestätigt – die Rezeptur ist angelegt.<br>
+      <?= bx_badge('bestellt','info') ?> / <?= bx_badge('versendet','ok') ?> Angebot angenommen – die Anfrage ist erledigt (ausgegraut). Der Status zeigt den Stand Ihrer Bestellung; über „Nachbestellen" ordern Sie erneut.
     </div>
   </div>
 
