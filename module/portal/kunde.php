@@ -264,7 +264,15 @@ function portal_head(string $titel): void {
        . ".pt-badge{display:inline-block;background:var(--lime);color:#10210f;border-radius:10px;padding:0 7px;font-size:12px;font-weight:600}"
        . ".pt-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0;max-width:760px}"
        . ".pt-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}"
-       . ".pt-card .k{font-size:12px;color:var(--muted)}.pt-card .val{font-size:22px;font-weight:600;margin-top:4px}</style>";
+       . ".pt-card .k{font-size:12px;color:var(--muted)}.pt-card .val{font-size:22px;font-weight:600;margin-top:4px}"
+       // Ablauf-Grafik (Weg zum fertigen Produkt) für die Leeransicht
+       . ".pt-flow{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}"
+       . ".pt-flow .step{flex:1 1 150px;min-width:140px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;position:relative}"
+       . ".pt-flow .step .no{width:26px;height:26px;border-radius:50%;background:var(--gruen);color:#10210f;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px}"
+       . ".pt-flow .step .t{font-weight:600;margin-top:8px;font-size:14px}"
+       . ".pt-flow .step .s{color:var(--muted);font-size:12px;margin-top:3px;line-height:1.45}"
+       . ".pt-flow .step .wk{margin-top:8px;font-size:11px;color:var(--gruen);font-weight:700;letter-spacing:.03em}"
+       . ".pt-flow .step:not(:last-child)::after{content:'';position:absolute;right:-10px;top:26px;width:10px;height:2px;background:var(--line)}</style>";
     echo "<script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>";
     echo "</head><body>";
 }
@@ -962,6 +970,26 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (isset($_GET['freigabefehlt'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Für die verbindliche Annahme fehlen die Bestätigung und Ihr Name.</div><?php endif; ?>
   <?php if (isset($_GET['abgelehnt'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rückmeldung ist eingegangen – wir überarbeiten das Angebot.</div><?php endif; ?>
 
+  <?php
+  $istLeer = !$meineAnfRows && empty($angebote);
+  $ctaLink = !empty($k['portal_rezeptur']) ? $portalLink('anfrage') : $portalLink('produkte');
+  $ctaText = !empty($k['portal_rezeptur']) ? 'Jetzt Rezeptur anfragen' : 'Produkte ansehen';
+  ?>
+  <?php if ($istLeer): ?>
+  <div class="bx-panel" style="border-color:var(--gruen)">
+    <h2 style="margin-top:0">Noch keine Anfragen – so kommen Sie zu Ihrem fertigen Produkt</h2>
+    <p class="muted" style="margin-top:0">Von der ersten Anfrage bis zum versandfertigen Produkt sind es in der Regel rund <strong>5 Wochen</strong>. Der Weg in fünf Schritten:</p>
+    <div class="pt-flow">
+      <div class="step"><div class="no">1</div><div class="t">Anfrage stellen</div><div class="s">Ihre Rezeptur oder Produktidee – in wenigen Minuten eingereicht.</div><div class="wk">WOCHE 1</div></div>
+      <div class="step"><div class="no">2</div><div class="t">Angebot erhalten</div><div class="s">Wir prüfen, entwickeln die Rezeptur und kalkulieren Ihr Angebot.</div><div class="wk">WOCHE 1</div></div>
+      <div class="step"><div class="no">3</div><div class="t">Menge wählen &amp; annehmen</div><div class="s">Sie wählen die gewünschte Menge und bestätigen verbindlich.</div><div class="wk">WOCHE 2</div></div>
+      <div class="step"><div class="no">4</div><div class="t">Produktion</div><div class="s">Rohstoffeinkauf, Herstellung und Qualitätsprüfung.</div><div class="wk">WOCHE 2–4</div></div>
+      <div class="step"><div class="no">5</div><div class="t">Versand</div><div class="s">Ihr fertiges Produkt geht an Sie raus.</div><div class="wk">WOCHE 5</div></div>
+    </div>
+    <div style="margin-top:6px"><a class="btn btn-primary" href="<?= $ctaLink ?>"><?= h($ctaText) ?></a></div>
+  </div>
+  <?php else: ?>
+
   <?php if ($anfPruef): ?>
   <div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2)">
     <h2 style="margin-top:0">Wartet auf Sie (<?= count($anfPruef) ?>)</h2>
@@ -1054,6 +1082,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
   </div>
   <?php endif; ?>
+  <?php endif; /* istLeer */ ?>
 
 <?php elseif ($view === 'rezepturen'):
     // Eigene = Rezepturen DIESES Kunden (kunde_id == kid); Katalog = alle übrigen freigegebenen (kunde_id NULL/andere).
