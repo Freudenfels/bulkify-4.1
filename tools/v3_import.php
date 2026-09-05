@@ -235,7 +235,9 @@ if ($WRITE) {
     }
     // Hausrezepturen (v3 kunde_id NULL/0) als Katalog-Rezepturen (kunde_id NULL, exklusiv=0, freigegeben) –
     // werden von Aufträgen/Produktanfragen referenziert, gehören also mit.
-    foreach ($v3->query("SELECT * FROM rezepte WHERE kunde_id IS NULL OR kunde_id=0 ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $r) {
+    // Ebenso verwaiste Rezepte, deren v3-Kunde gelöscht wurde (kunde_id zeigt auf keinen existierenden Kunden) –
+    // sonst ginge eine echte Rezeptur verloren. Der interne Kunde bleibt ausgeschlossen (existiert -> nicht „orphan").
+    foreach ($v3->query("SELECT * FROM rezepte WHERE kunde_id IS NULL OR kunde_id=0 OR kunde_id NOT IN (SELECT id FROM kunden) ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $v3rid = (int)$r['id'];
         $form = v3_form($r['form']); $kaps = v3_kapsel_id($r['kapselgroesse'] ?? '');
         $rnotiz = 'Aus v3 übernommen (v3-Hausrezept #' . $v3rid . ')';
