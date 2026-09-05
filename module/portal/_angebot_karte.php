@@ -13,6 +13,14 @@ $einh = (int)$a['einheiten_pro_packung'];
 $formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'Portionen','granulat'=>'Portionen','fluessig'=>'ml'];
 $mengeLbl = $einh . ' ' . ($formPl[$inf['form']] ?? 'Stück');
 $gPack = ($inf['istPulver'] && $inf['portionG'] > 0) ? $mg($einh * $inf['portionG']) . ' g pro Packung' : '';
+// Packungs-Label je Staffel aus deren Stückzahl (v3 menge_pro_vpe): Kapseln/Tabletten als Anzahl,
+// Pulver/Granulat als Gramm-Packung (Portionen × Tagesdosis) – für den Kunden greifbarer (z. B. „250 g").
+$paketLbl = function (int $stk) use ($inf, $mg, $formPl, $mengeLbl) {
+    if ($stk <= 0) return $mengeLbl;
+    if (in_array($inf['form'], ['pulver','granulat'], true) && $inf['portionG'] > 0)
+        return $mg($stk * $inf['portionG']) . ' g';
+    return $stk . ' ' . ($formPl[$inf['form']] ?? 'Stück');
+};
 ?>
 <details class="bx-panel pt-ang" id="a<?= (int)$a['id'] ?>" style="scroll-margin-top:16px"<?= !empty($open) ? ' open' : '' ?>>
   <summary>
@@ -134,7 +142,7 @@ $gPack = ($inf['istPulver'] && $inf['portionG'] > 0) ? $mg($einh * $inf['portion
     <thead><tr><th>Menge</th><th class="bx-num">Preis / Pkg.</th><th></th></tr></thead>
     <tbody>
     <?php foreach ($st as $s): $vk = vk_fuer_kunde((float)$s['vk_stueck'], $kid); $netto = $vk * (int)$s['menge']; $brutto = $netto * (1 + $ustP/100); ?>
-      <tr><td><?= number_format((int)$s['menge'],0,',','.') ?> × <?= h($mengeLbl) ?></td>
+      <tr><td><?= number_format((int)$s['menge'],0,',','.') ?> × <?= h($paketLbl((int)($s['stueck'] ?? 0))) ?></td>
         <td><strong><?= $eur($vk) ?></strong><div class="muted" style="font-size:12px">Gesamt <?= $eur($netto) ?> netto<?= $ustP>0?' · '.$eur($brutto).' brutto':'' ?></div></td>
         <td class="bx-num"><?php if ($canAccept): ?><button class="btn btn-primary btn-sm" style="white-space:nowrap" type="button" onclick="bxBestaetigen('Menge verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich. Die Produktionszeit ist ein unverbindlicher Sch&auml;tzwert.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'bestaetigen', angebot_id:'<?= (int)$a['id'] ?>', staffel:'<?= (int)$s['id'] ?>'})">Diese Menge annehmen</button><?php endif; ?></td></tr>
     <?php endforeach; ?>
@@ -144,7 +152,7 @@ $gPack = ($inf['istPulver'] && $inf['portionG'] > 0) ? $mg($einh * $inf['portion
         $sel = null; foreach ($st as $s) if ((int)$s['bestaetigt'] === 1) { $sel = $s; break; } ?>
     <?php if ($sel): $vk = vk_fuer_kunde((float)$sel['vk_stueck'], $kid); $netto = $vk * (int)$sel['menge']; $brutto = $netto * (1 + $ustP/100); ?>
     <div class="bx-panel" style="margin-top:12px;padding:12px 14px;border-color:var(--gruen)">
-      <div><strong>Angenommene Menge:</strong> <?= number_format((int)$sel['menge'],0,',','.') ?> × <?= h($mengeLbl) ?> · <strong><?= $eur($vk) ?></strong> / Pkg. · Gesamt <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto' : '' ?></div>
+      <div><strong>Angenommene Menge:</strong> <?= number_format((int)$sel['menge'],0,',','.') ?> × <?= h($paketLbl((int)($sel['stueck'] ?? 0))) ?> · <strong><?= $eur($vk) ?></strong> / Pkg. · Gesamt <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto' : '' ?></div>
       <div class="muted" style="font-size:13px;margin-top:4px">Verbindlich angenommen – Status und Details unter „Bestellungen".</div>
     </div>
     <?php else: ?>

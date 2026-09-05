@@ -378,11 +378,13 @@ function init_schema(): void {
         id INT AUTO_INCREMENT PRIMARY KEY,
         angebot_id INT NOT NULL,
         menge INT NOT NULL DEFAULT 0,                      -- Anzahl Packungen
+        stueck INT NOT NULL DEFAULT 0,                     -- Stück je Packung (Kapseln/Tabletten … bzw. Portionen bei Pulver)
         vk_stueck DECIMAL(12,4) NOT NULL DEFAULT 0,        -- VK je Packung
         bestaetigt TINYINT(1) NOT NULL DEFAULT 0,
         sort INT NOT NULL DEFAULT 0,
         KEY idx_angebot (angebot_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('angebot_staffel', 'stueck', "INT NOT NULL DEFAULT 0");
 
     // angebot_position: editierbare Belegpositionen (Hybrid) – automatisch erzeugt, überschreibbar.
     // Sind Zeilen vorhanden, haben sie Vorrang vor der automatischen Berechnung (Editor + PDF).
