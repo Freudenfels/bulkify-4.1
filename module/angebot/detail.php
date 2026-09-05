@@ -96,6 +96,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: ?p=angebot&id=' . $id . '&zurueckgezogen=1'); exit;
         }
         header('Location: ?p=angebot&id=' . $id . '&zzfehler=1'); exit;
+    } elseif ($aktion === 'angebot_hard_loeschen' && !$neu) {
+        // TEMPORÄR (Aufräumen fehlerhafter v3-Importe): löscht GENAU dieses Angebot samt Staffeln/Positionen
+        // und der verknüpften Kunden-Anfrage (portal_anfrage). Ein evtl. verknüpfter Auftrag wird nur GELÖST,
+        // nicht gelöscht. Ausschließlich per exakter ID – kein pauschales DELETE.
+        $aid = (int)$id;
+        $anfrageId = (int) scalar("SELECT anfrage_id FROM angebot WHERE id=?", [$aid]);
+        $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [$aid]);
+        $nr = (string) scalar("SELECT nummer FROM angebot WHERE id=?", [$aid]);
+        q("UPDATE auftrag SET angebot_id=NULL WHERE angebot_id=?", [$aid]);
+        q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$aid]);
+        q("DELETE FROM angebot_position WHERE angebot_id=?", [$aid]);
+        q("DELETE FROM angebot WHERE id=?", [$aid]);
+        if ($anfrageId > 0) {
+            try { q("DELETE FROM portal_anfrage_pos WHERE anfrage_id=?", [$anfrageId]); } catch (Throwable $e) {}
+            q("DELETE FROM portal_anfrage WHERE id=?", [$anfrageId]);
+        }
+        if ($kd) log_aktivitaet('kunde', $kd, 'team', 'Angebot ' . $nr . ' inkl. Anfrage gelöscht (Import-Aufräumen).', 'angebot');
+        header('Location: ?p=angebote&geloescht=1'); exit;
     } elseif ($aktion === 'pos_reset' && !$neu) {
         q("DELETE FROM angebot_position WHERE angebot_id=?", [(int)$id]);
         header('Location: ?p=angebot&id=' . $id . '&zurueckgesetzt=1'); exit;
@@ -158,6 +176,10 @@ $kannSenden  = !$neu && $st === 'offen';
 $kannZurueck = !$neu && $st === 'gesendet';
 $kopfBtn = bx_btn('Zurück zur Liste', '?p=angebote', 'ghost');
 if (!$neu) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Angebot als PDF ansehen – genau das, was der Kunde bekommt" href="?p=angebot_pdf&id=' . (int)$id . '">&#8681; PDF</a>' . $kopfBtn;
+// TEMPORÄR: gezieltes Löschen fehlerhafter Import-Angebote (dieses Angebot + verknüpfte Anfrage). Später wieder entfernen.
+if (!$neu) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Dieses Angebot inkl. verknüpfter Anfrage endgültig löschen? (Ein verknüpfter Auftrag bleibt erhalten, nur die Verknüpfung wird gelöst.)\');">'
+    . '<input type="hidden" name="aktion" value="angebot_hard_loeschen">'
+    . '<button class="btn btn-danger" type="submit" title="Fehlerhaften Import löschen (temporär)">Löschen (temporär)</button></form>' . $kopfBtn;
 if ($kannZurueck) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot zurückziehen? Es verschwindet beim Kunden und ist hier wieder bearbeitbar.\');">'
     . '<input type="hidden" name="aktion" value="zurueckziehen">'
     . '<button class="btn btn-ghost" type="submit">Zurückziehen</button></form>' . $kopfBtn;

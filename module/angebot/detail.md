@@ -102,3 +102,6 @@ Beim Senden (`aktion=senden`) bekommt der Kunde eine Mail mit dem Portal-Link (`
 
 ## Rohstoffkosten je Lieferant (vor dem Preis)
 Unter „Preis je Packung" steht das Panel **Rohstoffkosten je Lieferant** (`angebot_rohstoffkosten()`). Es löst die Rezeptur der Herstellungspositionen in ihre Rohstoffe auf, rechnet die benötigte Menge zur **größten** angebotenen Bestellmenge und zeigt je Zutat den günstigsten Lieferanten-EK (`rohstoff_bester_lieferant()`) samt Lieferant und Gesamtkosten – damit die Kalkulation vor dem Preis steht. Liegt der Bedarf unter der kleinsten Staffel (MOQ), gilt die kleinste Staffel. Fehlt zu einem Rohstoff jeder Lieferantenpreis, steht dort **„Preis anfragen"** und ein Hinweis; den Preis holt man über Lieferant → Preisanfragen. Sobald ein Angebot angenommen wird, entsteht ein Produktionsauftrag, der im **Einkaufsbedarf** erscheint und den Rohstoffbedarf über `produktion_materialbedarf()` auflöst.
+
+## TEMPORÄR: „Löschen (temporär)"
+Roter Kopf-Button zum Aufräumen fehlerhafter v3-Import-Angebote (`aktion=angebot_hard_loeschen`). Löscht GENAU dieses Angebot samt Staffeln/Positionen und der verknüpften `portal_anfrage`; ein verknüpfter Auftrag wird nur GELÖST (angebot_id=NULL), nicht gelöscht. Ausschließlich per exakter ID – kein pauschales DELETE. **Nach dem Aufräumen wieder entfernen.**
