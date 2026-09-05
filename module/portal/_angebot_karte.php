@@ -21,13 +21,22 @@ $paketLbl = function (int $stk) use ($inf, $mg, $formPl, $mengeLbl) {
         return $mg($stk * $inf['portionG']) . ' g';
     return $stk . ' ' . ($formPl[$inf['form']] ?? 'Stück');
 };
+// Bei angenommenem Angebot den ECHTEN Bestell-Status zeigen (aus dem Auftrag), nicht nur „bestätigt".
+$kartAuftragId = 0; $bestStatusLbl = ''; $bestStatusKind = 'info';
+if ($a['status'] === 'bestaetigt') {
+    $auRow = one("SELECT id, status FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
+    $kartAuftragId = (int)($auRow['id'] ?? 0);
+    $bestStatusLbl = match ((string)($auRow['status'] ?? '')) {
+        'in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet','offen'=>'bestellt', default=>'bestätigt' };
+    $bestStatusKind = ($auRow['status'] ?? '') === 'versendet' ? 'ok' : 'info';
+}
 ?>
 <details class="bx-panel pt-ang" id="a<?= (int)$a['id'] ?>" style="scroll-margin-top:16px"<?= !empty($open) ? ' open' : '' ?>>
   <summary>
     <span style="font-size:var(--fs-md);flex:1;min-width:0"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($titelFuer($a)) ?></strong></span>
     <span class="bx-row" style="gap:10px;align-items:center">
       <?= $offen ? bx_badge($canAccept ? 'Angebot liegt vor – bitte wählen' : 'Angebot liegt vor','info')
-           : ($a['status']==='bestaetigt' ? bx_badge('bestätigt','ok') : bx_badge('abgelehnt','err')) ?>
+           : ($a['status']==='bestaetigt' ? bx_badge($bestStatusLbl, $bestStatusKind) : bx_badge('abgelehnt','err')) ?>
       <?= pdf_btn($portalLink('angebot_pdf') . '&aid=' . (int)$a['id'], 'PDF', true, 'Angebot als PDF herunterladen') ?>
     </span>
   </summary>
@@ -150,20 +159,21 @@ $paketLbl = function (int $stk) use ($inf, $mg, $formPl, $mengeLbl) {
   </table></div>
   <?php elseif ($a['status'] === 'bestaetigt'):
         $sel = null; foreach ($st as $s) if ((int)$s['bestaetigt'] === 1) { $sel = $s; break; }
-        // Direkt zur verknüpften Bestellung springen (aus diesem Angebot entstandener Auftrag); sonst zur Bestell-Liste.
-        $auftragId = (int) scalar("SELECT id FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
-        $bestLink  = $auftragId ? $portalLink('bestellung') . '&aid=' . $auftragId : $portalLink('bestellungen');
-        $bestTxt   = $auftragId ? 'Zur Bestellung' : 'Zu den Bestellungen'; ?>
+        // Direkt zur verknüpften Bestellung springen (Auftrag aus diesem Angebot); sonst zur Bestell-Liste.
+        $bestLink = $kartAuftragId ? $portalLink('bestellung') . '&aid=' . $kartAuftragId : $portalLink('bestellungen');
+        $bestTxt  = $kartAuftragId ? 'Zur Bestellung' : 'Zu den Bestellungen';
+        // Nachbestellen = neue Anfrage zum selben Produkt/Rezeptur.
+        $nbLink = $portalLink('prodanfrage') . ((int)($a['produkt_id'] ?? 0) ? '&pid=' . (int)$a['produkt_id'] : ((int)($a['rezeptur_id'] ?? 0) ? '&rid=' . (int)$a['rezeptur_id'] : '')); ?>
     <?php if ($sel): $vk = vk_fuer_kunde((float)$sel['vk_stueck'], $kid); $netto = $vk * (int)$sel['menge']; $brutto = $netto * (1 + $ustP/100); ?>
     <div class="bx-panel" style="margin-top:12px;padding:12px 14px;border-color:var(--gruen)">
       <div><strong>Angenommene Menge:</strong> <?= number_format((int)$sel['menge'],0,',','.') ?> × <?= h($paketLbl((int)($sel['stueck'] ?? 0))) ?> · <strong><?= $eur($vk) ?></strong> / Pkg. · Gesamt <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto' : '' ?></div>
-      <div class="muted" style="font-size:13px;margin-top:4px">Verbindlich angenommen.</div>
-      <div style="margin-top:10px"><a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a></div>
+      <div class="muted" style="font-size:13px;margin-top:4px">Verbindlich angenommen · Status: <strong><?= h($bestStatusLbl) ?></strong></div>
+      <div class="bx-row" style="margin-top:10px;gap:8px"><a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a><a class="btn btn-ghost btn-sm" href="<?= $nbLink ?>">Nachbestellen</a></div>
     </div>
     <?php else: ?>
     <div style="margin-top:12px">
-      <div class="muted">Angebot bestätigt.</div>
-      <div style="margin-top:8px"><a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a></div>
+      <div class="muted">Angebot bestätigt · Status: <strong><?= h($bestStatusLbl) ?></strong></div>
+      <div class="bx-row" style="margin-top:8px;gap:8px"><a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a><a class="btn btn-ghost btn-sm" href="<?= $nbLink ?>">Nachbestellen</a></div>
     </div>
     <?php endif; ?>
   <?php else: ?>

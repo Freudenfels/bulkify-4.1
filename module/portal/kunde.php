@@ -1002,13 +1002,20 @@ portal_head('Kundenportal · ' . $k['firma']);
   <script>(function(){ var h=location.hash; if(h && /^#a\d+$/.test(h)){ var d=document.querySelector(h); if(d && d.tagName==='DETAILS'){ d.open=true; d.scrollIntoView(); } } })();</script>
   <?php endif; ?>
 
+  <?php
+  // Tabelle zeigt NUR Anfragen ohne (sichtbares) Angebot – die mit Angebot stehen oben als Karten (keine Doppelung).
+  $offeneAnfragen = array_values(array_filter($meineAnfRows, fn($r) => empty($r['angebot_id'])));
+  ?>
+  <?php if ($offeneAnfragen): ?>
   <div class="bx-panel">
+    <h2 style="margin:0 0 4px">Weitere Anfragen</h2>
+    <p class="muted" style="margin:0 0 12px;font-size:13px">Anfragen, zu denen noch kein Angebot vorliegt (in Prüfung) bzw. Rezeptur-/Rohstoff-/Dienstleistungsanfragen.</p>
     <div class="settabs" style="margin:0 0 12px">
-      <?php foreach ($anfTabs as $tk => $tl): $n = $tk === 'alle' ? count($meineAnfRows) : count(array_filter($meineAnfRows, fn($r) => $r['typ'] === $tk)); ?>
+      <?php foreach ($anfTabs as $tk => $tl): $n = $tk === 'alle' ? count($offeneAnfragen) : count(array_filter($offeneAnfragen, fn($r) => $r['typ'] === $tk)); if ($tk !== 'alle' && !$n) continue; ?>
         <a href="<?= $portalLink('meine_anfragen') ?>&atab=<?= $tk ?>" class="<?= $atab === $tk ? 'on' : '' ?>"><?= h($tl) ?><?= $n ? ' (' . $n . ')' : '' ?></a>
       <?php endforeach; ?>
     </div>
-    <?php $rowsTab = array_values(array_filter($meineAnfRows, fn($r) => $atab === 'alle' || $r['typ'] === $atab)); ?>
+    <?php $rowsTab = array_values(array_filter($offeneAnfragen, fn($r) => $atab === 'alle' || $r['typ'] === $atab)); ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Nummer</th><?php if ($atab === 'alle'): ?><th>Typ</th><?php endif; ?><th>Bezeichnung</th><th>Status</th><th></th></tr></thead>
       <tbody>
@@ -1040,14 +1047,13 @@ portal_head('Kundenportal · ' . $k['firma']);
     </table></div>
     <div class="muted" style="font-size:12px;margin-top:10px;line-height:1.7">
       <strong>Was die Status bedeuten:</strong><br>
-      <?= bx_badge('in Prüfung','warn') ?> Ihre Anfrage liegt bei uns – wir prüfen sie.<br>
+      <?= bx_badge('in Prüfung','warn') ?> Ihre Anfrage liegt bei uns – wir prüfen sie und melden uns mit einem Angebot (erscheint dann oben unter „Ihre Angebote").<br>
       <?= bx_badge('Vorschlag erhalten','ok') ?> Wir haben Ihnen einen Rezeptur-Vorschlag gesendet – bitte prüfen und annehmen oder ablehnen.<br>
-      <?= bx_badge('Angebot erhalten','ok') ?> Zu Ihrer Produkt-/Rohstoff-/Dienstleistungsanfrage liegt ein Angebot vor – Details unter „Angebote".<br>
       <?= bx_badge('abgelehnt','err') ?> Der Vorschlag wurde abgelehnt (von Ihnen oder von uns) – wir überarbeiten ihn.<br>
-      <?= bx_badge('Rezeptur angelegt','ok') ?> Der Vorschlag ist final bestätigt – die Rezeptur ist angelegt.<br>
-      <?= bx_badge('bestellt','info') ?> / <?= bx_badge('versendet','ok') ?> Angebot angenommen – die Anfrage ist erledigt (ausgegraut). Der Status zeigt den Stand Ihrer Bestellung; über „Nachbestellen" ordern Sie erneut.
+      <?= bx_badge('Rezeptur angelegt','ok') ?> Der Vorschlag ist final bestätigt – die Rezeptur ist angelegt.
     </div>
   </div>
+  <?php endif; ?>
 
 <?php elseif ($view === 'rezepturen'):
     // Eigene = Rezepturen DIESES Kunden (kunde_id == kid); Katalog = alle übrigen freigegebenen (kunde_id NULL/andere).
