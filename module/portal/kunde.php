@@ -256,11 +256,37 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
 }
 // Dienstleistungsanfrage (Freitext) – Typen/Labortest folgen separat
+// Dienstleistungs-Typen (für Lohnhersteller). Labortest bezieht sich auf ein oder mehrere Produkte.
+$DIENST_TYPEN = [
+    'labortest'       => 'Labortest / Analyse',
+    'abfuellung'      => 'Reine Abfüllung',
+    'sourcing'        => 'Sourcing / Beschaffung',
+    'konfektionierung'=> 'Konfektionierung / Verpackung',
+    'lagerung'        => 'Lagerung / Fulfillment',
+    'beratung'        => 'Beratung / Regulatorik',
+    'sonstiges'       => 'Sonstiges',
+];
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dienstleistung_anfrage') {
-    if ($k['portal_dienstleistung'] && trim($_POST['betreff'] ?? '') !== '') {
-        q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,betreff,notiz,status) VALUES (?,?, 'dienstleistung', ?,?, 'neu')",
-          [naechste_nummer('PAF'), (int)$k['id'], trim($_POST['betreff'] ?? ''), trim($_POST['notiz'] ?? '')]);
-        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Dienstleistungsanfrage im Portal gestellt.', 'anfrage');
+    if ($k['portal_dienstleistung']) {
+        $dtyp = array_key_exists($_POST['dienstleistung_typ'] ?? '', $DIENST_TYPEN) ? $_POST['dienstleistung_typ'] : 'sonstiges';
+        $prodIds = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['dl_produkt'] ?? [])))));
+        // Labortest MUSS sich auf mindestens ein Produkt beziehen.
+        $ok = $dtyp !== 'labortest' || $prodIds;
+        if ($ok) {
+            $betreff = trim($_POST['betreff'] ?? '') ?: $DIENST_TYPEN[$dtyp];
+            q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,dienstleistung_typ,betreff,notiz,status) VALUES (?,?, 'dienstleistung', ?,?,?, 'neu')",
+              [naechste_nummer('PAF'), (int)$k['id'], $dtyp, $betreff, trim($_POST['notiz'] ?? '')]);
+            $aid = insert_id();
+            if ($dtyp === 'labortest') {
+                $sort = 0;
+                foreach ($prodIds as $pid) {
+                    // nur Produkte, die der Kunde sehen darf
+                    if (scalar("SELECT id FROM produkt WHERE id=? AND status='aktiv' AND (exklusiv=0 OR kunde_id=?)", [$pid, (int)$k['id']]))
+                        q("INSERT INTO portal_anfrage_pos (anfrage_id,produkt_id,sort) VALUES (?,?,?)", [$aid, $pid, $sort++]);
+                }
+            }
+            log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Dienstleistungsanfrage (' . $DIENST_TYPEN[$dtyp] . ') im Portal gestellt.', 'anfrage');
+        }
     }
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
 }
@@ -1586,24 +1612,53 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
 
 <?php elseif ($view === 'dienstleistung'):
-    $meine = array_filter($portalAnfragen, fn($a) => $a['typ'] === 'dienstleistung'); ?>
+    $meine = array_filter($portalAnfragen, fn($a) => $a['typ'] === 'dienstleistung');
+    $vorTyp = array_key_exists($_GET['typ'] ?? '', $DIENST_TYPEN) ? $_GET['typ'] : '';
+    // Produkte für den Labortest-Bezug (unabhängig von der Produkt-Freischaltung): eigene + Katalog.
+    $laborProdukte = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''),p.name) AS name FROM produkt p
+        WHERE p.status='aktiv' AND (p.exklusiv=0 OR p.kunde_id=?) ORDER BY (p.kunde_id<>?), name", [$kid, $kid]);
+    $vorProd = (int)($_GET['pid'] ?? 0); ?>
   <h1 style="margin-bottom:4px">Dienstleistung anfragen</h1>
   <div class="bx-panel">
-    <p class="muted" style="margin-top:0">Sagen Sie uns kurz, worum es geht – wir melden uns mit einem Angebot.</p>
+    <p class="muted" style="margin-top:0">Wählen Sie, worum es geht – wir melden uns mit einem Angebot.</p>
     <form method="post">
       <input type="hidden" name="aktion" value="dienstleistung_anfrage">
-      <div class="bx-field"><label>Betreff</label><input type="text" name="betreff" required placeholder="z. B. Laboranalyse, Etikettengestaltung"></div>
-      <div class="bx-field"><label>Details (optional)</label><textarea name="notiz" placeholder="Worum geht es genau? Termin, Umfang …"></textarea></div>
+      <div class="bx-field"><label>Art der Dienstleistung</label>
+        <select name="dienstleistung_typ" id="dlTyp" required>
+          <option value="">– bitte wählen –</option>
+          <?php foreach ($DIENST_TYPEN as $tk => $tl): ?><option value="<?= $tk ?>" <?= $vorTyp === $tk ? 'selected' : '' ?>><?= h($tl) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+      <div class="bx-field" id="dlLaborBox" style="display:none">
+        <label>Für welche Produkte? <span class="muted">(ein Labortest bezieht sich auf ein oder mehrere Produkte)</span></label>
+        <?php if ($laborProdukte): ?>
+        <div style="max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:var(--r);padding:10px 12px">
+          <?php foreach ($laborProdukte as $lp): ?>
+          <label style="display:flex;gap:8px;align-items:center;padding:3px 0"><input type="checkbox" name="dl_produkt[]" value="<?= (int)$lp['id'] ?>" <?= $vorProd === (int)$lp['id'] ? 'checked' : '' ?>> <?= h($lp['name']) ?></label>
+          <?php endforeach; ?>
+        </div>
+        <?php else: ?><div class="muted">Noch keine Produkte hinterlegt – beschreiben Sie den Labortest bitte im Detailfeld.</div><?php endif; ?>
+      </div>
+      <div class="bx-field"><label>Betreff <span class="muted">(optional)</span></label><input type="text" name="betreff" placeholder="Kurzbeschreibung – leer = Art der Dienstleistung"></div>
+      <div class="bx-field"><label>Details (optional)</label><textarea name="notiz" placeholder="Worum geht es genau? Umfang, Termin, gewünschte Parameter …"></textarea></div>
       <button class="btn btn-primary" type="submit">Anfrage senden</button>
     </form>
   </div>
+  <script>
+  (function(){ var s=document.getElementById('dlTyp'), b=document.getElementById('dlLaborBox');
+    function upd(){ b.style.display = s.value==='labortest' ? '' : 'none'; }
+    s.addEventListener('change', upd); upd();
+  })();
+  </script>
   <?php if ($meine): ?>
   <div class="bx-panel"><h2>Meine Dienstleistungsanfragen</h2>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Nr.</th><th>Betreff</th><th>Status</th></tr></thead>
+      <thead><tr><th>Nr.</th><th>Art</th><th>Betreff</th><th>Status</th></tr></thead>
       <tbody>
       <?php foreach ($meine as $a): ?>
-        <tr><td><?= h($a['nummer']) ?></td><td><?= h($a['betreff'] ?: '–') ?></td>
+        <tr><td><?= h($a['nummer']) ?></td>
+          <td><?= h($DIENST_TYPEN[$a['dienstleistung_typ'] ?? ''] ?? '–') ?></td>
+          <td><?= h($a['betreff'] ?: '–') ?></td>
           <td><?= $pafBadge($a['status']) ?><?php if ($a['status']==='abgelehnt' && !empty($a['absage_grund'])): ?><div class="muted" style="font-size:12px;white-space:normal"><?= h($a['absage_grund']) ?></div><?php endif; ?></td></tr>
       <?php endforeach; ?>
       </tbody>
