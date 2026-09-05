@@ -149,14 +149,24 @@ $paketLbl = function (int $stk) use ($inf, $mg, $formPl, $mengeLbl) {
     </tbody>
   </table></div>
   <?php elseif ($a['status'] === 'bestaetigt'):
-        $sel = null; foreach ($st as $s) if ((int)$s['bestaetigt'] === 1) { $sel = $s; break; } ?>
+        $sel = null; foreach ($st as $s) if ((int)$s['bestaetigt'] === 1) { $sel = $s; break; }
+        // Direkt zur verknüpften Bestellung springen (aus diesem Angebot entstandener Auftrag); sonst zur Bestell-Liste.
+        $auftragId = (int) scalar("SELECT id FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
+        $bestLink  = $auftragId ? $portalLink('bestellung') . '&aid=' . $auftragId : $portalLink('bestellungen');
+        $bestTxt   = $auftragId ? 'Zur Bestellung' : 'Zu den Bestellungen'; ?>
     <?php if ($sel): $vk = vk_fuer_kunde((float)$sel['vk_stueck'], $kid); $netto = $vk * (int)$sel['menge']; $brutto = $netto * (1 + $ustP/100); ?>
     <div class="bx-panel" style="margin-top:12px;padding:12px 14px;border-color:var(--gruen)">
       <div><strong>Angenommene Menge:</strong> <?= number_format((int)$sel['menge'],0,',','.') ?> × <?= h($paketLbl((int)($sel['stueck'] ?? 0))) ?> · <strong><?= $eur($vk) ?></strong> / Pkg. · Gesamt <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto' : '' ?></div>
-      <div class="muted" style="font-size:13px;margin-top:4px">Verbindlich angenommen – Status und Details unter „Bestellungen".</div>
+      <div class="bx-row" style="justify-content:space-between;align-items:center;margin-top:8px;gap:10px">
+        <span class="muted" style="font-size:13px">Verbindlich angenommen.</span>
+        <a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a>
+      </div>
     </div>
     <?php else: ?>
-    <div class="muted" style="margin-top:12px">Angebot bestätigt – Details unter „Bestellungen".</div>
+    <div class="bx-row" style="justify-content:space-between;align-items:center;margin-top:12px;gap:10px">
+      <span class="muted">Angebot bestätigt.</span>
+      <a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a>
+    </div>
     <?php endif; ?>
   <?php else: ?>
   <div class="muted" style="margin-top:12px"><?= $a['ablehnung_grund'] ? 'Abgelehnt: ' . h($a['ablehnung_grund']) : 'Abgelehnt.' ?></div>
