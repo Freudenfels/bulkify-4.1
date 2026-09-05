@@ -456,7 +456,7 @@ $q = trim((string)($_GET['q'] ?? ''));
 $qLike = '%' . $q . '%';
 
 // Katalog-Produkte (nicht exklusiv oder exklusiv für diesen Kunden), aktiv
-$katalog = $k['portal_produkte'] ? all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, p.nummer, p.rezeptur_id, r.darreichungsform
+$katalog = $k['portal_produkte'] ? all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, p.nummer, p.rezeptur_id, p.kunde_id, r.darreichungsform
     FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
     WHERE p.status='aktiv' AND (p.exklusiv=0 OR p.kunde_id=?)
       AND (? = '' OR COALESCE(NULLIF(p.kundenname,''), p.name) LIKE ? OR r.name LIKE ?
@@ -1030,8 +1030,9 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
 
 <?php elseif ($view === 'rezepturen'):
-    $eigeneRez  = array_values(array_filter($meineRezepturen, fn($r) => !empty($r['kunde_id'])));
-    $katalogRez = array_values(array_filter($meineRezepturen, fn($r) => empty($r['kunde_id'])));
+    // Eigene = Rezepturen DIESES Kunden (kunde_id == kid); Katalog = alle übrigen freigegebenen (kunde_id NULL/andere).
+    $eigeneRez  = array_values(array_filter($meineRezepturen, fn($r) => (int)($r['kunde_id'] ?? 0) === $kid));
+    $katalogRez = array_values(array_filter($meineRezepturen, fn($r) => (int)($r['kunde_id'] ?? 0) !== $kid));
     $rezTabelle = function(array $liste) use ($DFORM_P, $rezBadge, $portalLink) { ?>
       <div class="bx-tablewrap"><table class="bx-table">
         <thead><tr><th>Nummer</th><th>Name</th><th>Form</th><th>Status</th><th></th></tr></thead>
@@ -1058,18 +1059,24 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php endif; ?>
   </div>
 
+  <?php
+  $rtab = ($_GET['rtab'] ?? '') === 'katalog' ? 'katalog' : (($_GET['rtab'] ?? '') === 'eigene' ? 'eigene' : (!$eigeneRez && $katalogRez ? 'katalog' : 'eigene'));
+  $rezTabLink = fn($t) => $portalLink('rezepturen') . '&rtab=' . $t . ($q !== '' ? '&q=' . urlencode($q) : '');
+  ?>
   <div class="bx-panel">
-    <h2 style="margin-top:0">Eigene Rezepturen</h2>
-    <?php if ($eigeneRez) { $rezTabelle($eigeneRez); } else { ?>
-      <div class="muted"><?= $q !== '' ? 'Keine eigene Rezeptur passt zu „' . h($q) . '".' : 'Noch keine eigenen Rezepturen. Stellen Sie eine Rezepturanfrage – nach unserer Prüfung erscheint hier Ihr Vorschlag.' ?></div>
-    <?php } ?>
-  </div>
-
-  <div class="bx-panel">
-    <h2 style="margin-top:0">Katalog-Rezepturen</h2>
-    <?php if ($katalogRez) { $rezTabelle($katalogRez); } else { ?>
-      <div class="muted">Aktuell keine freigegebenen Katalog-Rezepturen verfügbar.</div>
-    <?php } ?>
+    <div class="settabs" style="margin:0 0 12px">
+      <a href="<?= $rezTabLink('eigene') ?>"  class="<?= $rtab === 'eigene'  ? 'on' : '' ?>">Eigene<?= $eigeneRez  ? ' (' . count($eigeneRez)  . ')' : '' ?></a>
+      <a href="<?= $rezTabLink('katalog') ?>" class="<?= $rtab === 'katalog' ? 'on' : '' ?>">Katalog<?= $katalogRez ? ' (' . count($katalogRez) . ')' : '' ?></a>
+    </div>
+    <?php if ($rtab === 'eigene'): ?>
+      <?php if ($eigeneRez) { $rezTabelle($eigeneRez); } else { ?>
+        <div class="muted"><?= $q !== '' ? 'Keine eigene Rezeptur passt zu „' . h($q) . '".' : 'Noch keine eigenen Rezepturen. Stellen Sie eine Rezepturanfrage – nach unserer Prüfung erscheint hier Ihr Vorschlag.' ?></div>
+      <?php } ?>
+    <?php else: ?>
+      <?php if ($katalogRez) { $rezTabelle($katalogRez); } else { ?>
+        <div class="muted">Aktuell keine freigegebenen Katalog-Rezepturen verfügbar.</div>
+      <?php } ?>
+    <?php endif; ?>
   </div>
 
 <?php elseif ($view === 'rezeptur'): ?>
@@ -1139,27 +1146,45 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
   <?php endif; ?>
 
-<?php elseif ($view === 'produkte'): ?>
+<?php elseif ($view === 'produkte'):
+    $eigeneProd  = array_values(array_filter($katalog, fn($p) => (int)($p['kunde_id'] ?? 0) === $kid));
+    $katalogProd = array_values(array_filter($katalog, fn($p) => (int)($p['kunde_id'] ?? 0) !== $kid));
+    $prodTabelle = function(array $liste) use ($DFORM_P, $abPreis, $eur, $portalLink) { ?>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Produkt</th><th>Form</th><th class="bx-num">Preis</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($liste as $pk): $ab = $abPreis($pk['id']); ?>
+          <tr><td><?= h($pk['name']) ?></td>
+            <td><?= $pk['darreichungsform'] ? h($DFORM_P[$pk['darreichungsform']] ?? $pk['darreichungsform']) : '–' ?></td>
+            <td class="bx-num"><?= $ab !== null ? 'ab '.$eur($ab).' *' : '<span class="muted">auf Anfrage</span>' ?></td>
+            <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('produkt') ?>&pid=<?= (int)$pk['id'] ?>">ansehen</a></td></tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <div class="muted" style="font-size:12px;margin-top:8px">* zzgl. Verpackung und Etikett</div>
+    <?php };
+    $ptab = ($_GET['ptab'] ?? '') === 'katalog' ? 'katalog' : (($_GET['ptab'] ?? '') === 'eigene' ? 'eigene' : (!$eigeneProd && $katalogProd ? 'katalog' : 'eigene'));
+    $prodTabLink = fn($t) => $portalLink('produkte') . '&ptab=' . $t . ($q !== '' ? '&q=' . urlencode($q) : '');
+    ?>
   <h1 style="margin-bottom:4px">Produkte</h1>
-  <p class="bx-sub">Unser Produktkatalog. Wählen Sie ein Produkt für Details und eine Anfrage.</p>
+  <p class="bx-sub">Ihre eigenen Produkte und unser Produktkatalog. Wählen Sie ein Produkt für Details und eine Anfrage.</p>
   <div class="bx-panel">
     <?php $sucheForm('produkte', 'Produkt oder Rohstoff suchen, z. B. Magnesium'); ?>
-    <?php if (!$katalog): ?><div class="muted"><?= $q !== '' ? 'Kein Produkt gefunden zu „' . h($q) . '". Sie können es auch direkt anfragen.' : 'Aktuell sind keine Produkte im Katalog verfügbar.' ?></div>
+    <?php if (!$katalog): ?><div class="muted"><?= $q !== '' ? 'Kein Produkt gefunden zu „' . h($q) . '". Sie können es auch direkt anfragen.' : 'Aktuell sind keine Produkte verfügbar.' ?></div><?php endif; ?>
+  </div>
+  <?php if ($katalog): ?>
+  <div class="bx-panel">
+    <div class="settabs" style="margin:0 0 12px">
+      <a href="<?= $prodTabLink('eigene') ?>"  class="<?= $ptab === 'eigene'  ? 'on' : '' ?>">Eigene<?= $eigeneProd  ? ' (' . count($eigeneProd)  . ')' : '' ?></a>
+      <a href="<?= $prodTabLink('katalog') ?>" class="<?= $ptab === 'katalog' ? 'on' : '' ?>">Katalog<?= $katalogProd ? ' (' . count($katalogProd) . ')' : '' ?></a>
+    </div>
+    <?php if ($ptab === 'eigene'): ?>
+      <?php if ($eigeneProd) { $prodTabelle($eigeneProd); } else { ?><div class="muted">Noch keine eigenen Produkte – diese entstehen aus Ihren angenommenen Angeboten.</div><?php } ?>
     <?php else: ?>
-    <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Produkt</th><th>Form</th><th class="bx-num">Preis</th><th></th></tr></thead>
-      <tbody>
-      <?php foreach ($katalog as $pk): $ab = $abPreis($pk['id']); ?>
-        <tr><td><?= h($pk['name']) ?></td>
-          <td><?= $pk['darreichungsform'] ? h($DFORM_P[$pk['darreichungsform']] ?? $pk['darreichungsform']) : '–' ?></td>
-          <td class="bx-num"><?= $ab !== null ? 'ab '.$eur($ab).' *' : '<span class="muted">auf Anfrage</span>' ?></td>
-          <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('produkt') ?>&pid=<?= (int)$pk['id'] ?>">ansehen</a></td></tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table></div>
-    <div class="muted" style="font-size:12px;margin-top:8px">* zzgl. Verpackung und Etikett</div>
+      <?php if ($katalogProd) { $prodTabelle($katalogProd); } else { ?><div class="muted">Aktuell keine Katalog-Produkte verfügbar.</div><?php } ?>
     <?php endif; ?>
   </div>
+  <?php endif; ?>
 
 <?php elseif ($view === 'produkt'): ?>
   <?php if (!$prodDetail): ?>
