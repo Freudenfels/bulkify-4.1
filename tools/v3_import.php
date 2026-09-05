@@ -108,6 +108,29 @@ function v3_kapsel_id(?string $v): ?int {
 }
 // Auf die v4-Spaltenbreite kappen (v3 erlaubt mehr Zeichen als v4). NULL bleibt NULL.
 function cut(?string $s, int $n = 190): ?string { if ($s === null) return null; return mb_substr(trim($s), 0, $n); }
+if ($WRITE && in_array('--reset', $argv, true)) {
+    // Sauberer Neustart: ALLE v3-importierten Datensätze (nur mit v3_id) löschen, dann frisch importieren.
+    // Manuell in v4 angelegte Daten (ohne v3_id) bleiben unberührt. Reihenfolge: Kinder vor Eltern.
+    foreach ([
+        "DELETE FROM angebot_staffel WHERE angebot_id IN (SELECT id FROM (SELECT id FROM angebot WHERE v3_id IS NOT NULL) t)",
+        "DELETE FROM angebot_position WHERE angebot_id IN (SELECT id FROM (SELECT id FROM angebot WHERE v3_id IS NOT NULL) t)",
+        "DELETE FROM produkt_kundenpreis",
+        "DELETE FROM rezeptur_lief_angebot",
+        "DELETE FROM lieferant_preisliste",
+        "DELETE FROM bestellung_position WHERE bestellung_id IN (SELECT id FROM (SELECT id FROM bestellung WHERE v3_id IS NOT NULL) t)",
+        "DELETE FROM rezeptur_zutat WHERE rezeptur_id IN (SELECT id FROM (SELECT id FROM rezeptur WHERE v3_id IS NOT NULL) t)",
+        "UPDATE auftrag SET angebot_id=NULL WHERE v3_id IS NOT NULL",
+        "DELETE FROM angebot WHERE v3_id IS NOT NULL",
+        "DELETE FROM auftrag WHERE v3_id IS NOT NULL",
+        "DELETE FROM bestellung WHERE v3_id IS NOT NULL",
+        "DELETE FROM produkt WHERE v3_id IS NOT NULL",
+        "DELETE FROM rezeptur WHERE v3_id IS NOT NULL",
+        "DELETE FROM item WHERE v3_id IS NOT NULL",
+        "DELETE FROM kunden WHERE v3_id IS NOT NULL",
+        "DELETE FROM lieferanten WHERE v3_id IS NOT NULL",
+    ] as $sql) { try { q($sql); } catch (Throwable $e) { fwrite(STDERR, "reset: " . $e->getMessage() . "\n"); } }
+    echo "RESET: alle v3-importierten Datensätze gelöscht.\n";
+}
 if ($WRITE) {
     // v3_id an den Zieltabellen (idempotent, keine Dubletten)
     ensure_column('kunden', 'v3_id', "INT NULL");
