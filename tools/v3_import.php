@@ -384,6 +384,8 @@ if ($WRITE) {
 
     // ---- Stufe 6: Angebote (aus produktanfrage) – damit der Kunde sieht, was er vorliegen hat/hatte ----
     ensure_column('angebot', 'v3_id', "INT NULL");
+    // Gibt es in dieser v3-DB die Staffel-Tabelle (neuere Exporte)?
+    $hasPaStaffel = (bool) $v3->query("SELECT name FROM sqlite_master WHERE type='table' AND name='produktanfrage_staffel'")->fetchColumn();
     $v3kMap = [];
     foreach (all("SELECT id, v3_id FROM kunden WHERE v3_id IS NOT NULL") as $kk) $v3kMap[(int)$kk['v3_id']] = (int)$kk['id'];
     $w6 = ['angebot_neu'=>0,'angebot_upd'=>0,'position'=>0,'verknuepft'=>0,'ohne_produkt'=>0];
@@ -418,10 +420,22 @@ if ($WRITE) {
            VALUES (?,0,?,?, 'Pkg.', ?, ?, ?, ?, 'v3import')",
           [$gid, cut($rezName), $menge, (int) round($preis * 100), $stueck, ($rz ? (int)$rz['id'] : null), $vid]);
         $w6['position']++;
-        // Preis-Staffel (Menge + VK je Packung) – das sieht der Kunde als wählbare Angebotsmenge.
-        if ($menge > 0 && $preis > 0)
-            q("INSERT INTO angebot_staffel (angebot_id,menge,vk_stueck,bestaetigt,sort) VALUES (?,?,?,?,0)",
-              [$gid, $menge, $preis, $conf ? 1 : 0]);
+        // Preis-Staffeln (Menge + VK je Packung) – das sieht der Kunde als wählbare Angebotsmengen.
+        // Neuere v3: alle Stufen aus produktanfrage_staffel; alte Exporte: die eine Konfiguration.
+        $staffeln = [];
+        if ($hasPaStaffel) {
+            foreach ($v3->query("SELECT anzahl_vpe, preis, gewaehlt FROM produktanfrage_staffel WHERE anfrage_id=$v3paid ORDER BY anzahl_vpe")->fetchAll(PDO::FETCH_ASSOC) as $s) {
+                $sm = (int)($s['anzahl_vpe'] ?: 0);
+                $sp = trim((string)($s['preis'] ?? '')) !== '' ? (float) str_replace(',', '.', str_replace(['€', ' '], '', (string)$s['preis'])) : 0.0;
+                if ($sm > 0) $staffeln[] = ['menge'=>$sm, 'preis'=>$sp, 'best'=>(int)($s['gewaehlt'] ?? 0)];
+            }
+        }
+        if (!$staffeln && $menge > 0 && $preis > 0) $staffeln[] = ['menge'=>$menge, 'preis'=>$preis, 'best'=>($conf ? 1 : 0)];
+        $si = 0;
+        foreach ($staffeln as $stf) {
+            q("INSERT INTO angebot_staffel (angebot_id,menge,vk_stueck,bestaetigt,sort) VALUES (?,?,?,?,?)",
+              [$gid, $stf['menge'], $stf['preis'], $stf['best'], $si++]);
+        }
     }
     // Angenommene Angebote an ihren Auftrag hängen: v3 auftrag.anfrage_id -> v4 angebot.v3_id
     foreach ($v3->query("SELECT id, anfrage_id FROM auftraege WHERE anfrage_id IS NOT NULL AND anfrage_id>0")->fetchAll(PDO::FETCH_ASSOC) as $ar) {
