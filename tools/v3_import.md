@@ -47,6 +47,10 @@ Aus `lieferant_angebot` → neue Tabelle `rezeptur_lief_angebot` (rezeptur_id, l
 ## Stufe 6 (Angebote)
 Aus `produktanfrage` → v4 `angebot` (+ `angebot_position`): Kunde · Produkt/Rezeptur · Menge/Stück · Preis (aus angebot_preis). Status: bestätigt (angenommen), gesendet (Angebot liegt vor), abgelehnt. Reine Anfragen ohne Angebot (status offen, kein Preis) werden übersprungen. Angenommene Angebote werden mit ihrem Auftrag verknüpft (v3 auftraege.anfrage_id → angebot.v3_id → auftrag.angebot_id). Idempotent über v3_id. So sieht man im Kunden-Reiter „Angebote", was der Kunde vorliegen hat (gesendet) und hatte (bestätigt/abgelehnt).
 
+**Preis-Fallback + leere Staffeln:** Hat eine `produktanfrage_staffel`-Zeile keinen eigenen Preis, aber die Anfrage einen `angebot_preis` und passende Menge, wird der Header-Preis übernommen (sonst stünde „–" trotz vorhandenem Preis). Leere Zusatz-Staffeln (Menge ohne Preis) werden verworfen, sobald es echte Preis-Staffeln gibt – der Kunde soll keine preislose Option wählen. Reine Anfragen ganz ohne Preis behalten ihre eine Staffel (Menge bleibt sichtbar, Preis „–").
+
+**Waisen aus v3:** Manche `produktanfrage` zeigen auf ein `rezept_id`, das in v3 gelöscht wurde (die `rezepte`-Tabelle beginnt bei id 6, hat Lücken). Solche Angebote werden importiert, zeigen aber „–" beim Produkt (kein Name mehr in v3 vorhanden – die Anfrage speichert keinen eigenen Produktnamen). Das ist kein Import-Fehler; alle real existierenden Rezepte werden übernommen.
+
 ## Wichtig: aktueller Export nötig + Mehr-Staffel-Angebote
 Die zuerst gelieferte `board.sqlite` war ein **älterer Stand** (neueste Daten ~08.07.2026) ohne die Tabelle `produktanfrage_staffel`. Die Live-v3 (app.bulkify.pro) hat neuere Angebote **mit mehreren Preis-Staffeln** (z. B. 1.500/2.500/3.500 Pkg. zu unterschiedlichen Preisen). Für die echte Migration daher einen **frischen Export** der Live-DB verwenden.
 Der Importer ist darauf vorbereitet: existiert `produktanfrage_staffel`, werden in Stufe 6 **alle** Preis-Stufen als `angebot_staffel` übernommen (Menge=anzahl_vpe, Preis, gewählt→bestätigt); sonst Fallback auf die eine Konfiguration.

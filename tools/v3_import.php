@@ -502,10 +502,16 @@ if ($WRITE) {
             foreach ($v3->query("SELECT anzahl_vpe, preis, gewaehlt FROM produktanfrage_staffel WHERE anfrage_id=$v3paid ORDER BY anzahl_vpe")->fetchAll(PDO::FETCH_ASSOC) as $s) {
                 $sm = (int)($s['anzahl_vpe'] ?: 0);
                 $sp = v3_preis($s['preis'] ?? '');
+                // Staffel ohne eigenen Preis: Header-Angebotspreis übernehmen, wenn die Menge passt (sonst 0/„–").
+                if ($sp <= 0 && $preis > 0 && $sm === $menge) $sp = $preis;
                 if ($sm > 0) $staffeln[] = ['menge'=>$sm, 'preis'=>$sp, 'best'=>(int)($s['gewaehlt'] ?? 0)];
             }
         }
         if (!$staffeln && $menge > 0 && $preis > 0) $staffeln[] = ['menge'=>$menge, 'preis'=>$preis, 'best'=>($conf ? 1 : 0)];
+        // Leere Zusatz-Staffeln (Menge ohne Preis) verwerfen, sobald es echte Preis-Staffeln gibt –
+        // der Kunde soll keine preislosen Optionen wählen können. Reine Anfragen ohne jeden Preis bleiben (Menge sichtbar).
+        $mitPreis = array_values(array_filter($staffeln, fn($s) => $s['preis'] > 0));
+        if ($mitPreis) $staffeln = $mitPreis;
         $si = 0;
         foreach ($staffeln as $stf) {
             q("INSERT INTO angebot_staffel (angebot_id,menge,vk_stueck,bestaetigt,sort) VALUES (?,?,?,?,?)",
