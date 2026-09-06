@@ -43,15 +43,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
         $tag  = $f('einnahme_pro_tag') === '' ? 1 : $f('einnahme_pro_tag');
         $kdname = $f('kundenname') ?: null;   // Name für den Kunden (leer = interner Name)
         $name = produkt_name_versioniert($f('name'), $neu ? 0 : (int)$id);   // interner Name eindeutig (v2, v3 …)
+        $nf = in_array($f('novelfood_status'), ['unklar','konform','novel_food','pruefung'], true) ? $f('novelfood_status') : 'unklar';
         if ($neu) {
-            q("INSERT INTO produkt (nummer,name,kundenname,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,notiz)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('P'), $name, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status') ?: 'entwurf', $f('notiz')]);
+            q("INSERT INTO produkt (nummer,name,kundenname,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,novelfood_status,notiz)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('P'), $name, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status') ?: 'entwurf', $nf, $f('notiz')]);
             $id = insert_id();
             log_aktivitaet('kunde', (int)($kunde_id ?: 0), 'team', 'Produkt „' . $name . '" angelegt.', 'produkt', (int)$id);
         } else {
-            q("UPDATE produkt SET name=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,notiz=? WHERE id=?",
-              [$name, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $f('notiz'), (int)$id]);
+            q("UPDATE produkt SET name=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,novelfood_status=?,notiz=? WHERE id=?",
+              [$name, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $nf, $f('notiz'), (int)$id]);
         }
         header('Location: ?p=produkt&id=' . $id . '&gespeichert=1'); exit;
     }
@@ -154,6 +155,12 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       <select name="status">
         <?php foreach (['entwurf'=>'Entwurf','aktiv'=>'aktiv','inaktiv'=>'inaktiv'] as $key=>$lbl): ?>
           <option value="<?= $key ?>" <?= ($p['status']??'')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
+      </select>
+    </div>
+    <div class="bx-field"><label>Novel-Food-Status <?= bx_hint('Novel-Food-Konformität: konform = kein/zugelassenes Novel Food; enthält Novel Food = nicht ohne Zulassung verkehrsfähig.') ?></label>
+      <select name="novelfood_status">
+        <?php foreach (['unklar'=>'ungeklärt','konform'=>'Novel-Food-konform','novel_food'=>'enthält Novel Food (Zulassung nötig)','pruefung'=>'in Prüfung'] as $key=>$lbl): ?>
+          <option value="<?= $key ?>" <?= ($p['novelfood_status'] ?? 'unklar')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
       </select>
     </div>
     <div class="bx-field"><label>Katalog / Exklusiv <?= bx_hint('Standard: gemeinsamer Katalog (für alle Kunden mit Produkt-Freischaltung). Exklusiv = nur für den oben gewählten Kunden sichtbar.') ?></label>
