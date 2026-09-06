@@ -155,6 +155,39 @@ function ek_manuell_zuordnen(int $id, string $eingabe, bool $bestaetigen = true)
     return $bestaetigen ? ek_bestaetigen($id) : true;
 }
 
+// Sieht ein Lieferantenwert wie ein (Marktplatz-)Link/URL aus? Dann ist es kein Lieferant.
+// Bewusst nur echte URL-Merkmale (Protokoll, www., Domain-Endung, Pfad-Slash) – der blosse
+// Plattformname „Alibaba"/„AliExpress" ist KEIN Link und bleibt als Lieferant erhalten.
+function ek_ist_link(?string $s): bool {
+    $s = trim((string)$s);
+    if ($s === '') return false;
+    return (bool) preg_match('~https?://|www\.|\.(com|cn|net|de|org|html)\b|/~i', $s);
+}
+// Plattformname aus einem Marktplatz-Link ableiten (fürs Lieferant-Feld statt des ganzen Links).
+function ek_plattform(string $link): string {
+    $l = mb_strtolower($link);
+    if (str_contains($l, 'aliexpress'))    return 'AliExpress';
+    if (str_contains($l, 'alibaba'))       return 'Alibaba';
+    if (str_contains($l, '1688'))          return '1688';
+    if (str_contains($l, 'made-in-china')) return 'Made-in-China';
+    return 'Marktplatz';
+}
+// Alle Zeilen bereinigen, deren Lieferant ein Link ist: Link -> notiz, Lieferant -> Plattformname.
+// So entstehen keine „Lieferanten" mit Alibaba-Link und die Tabelle bleibt schmal. Rückgabe: Anzahl.
+function ek_links_bereinigen(): int {
+    $n = 0;
+    foreach (all("SELECT id, lieferant, notiz FROM ek_import WHERE lieferant IS NOT NULL AND lieferant<>''") as $r) {
+        if (!ek_ist_link($r['lieferant'])) continue;
+        $link = trim((string)$r['lieferant']);
+        $plat = ek_plattform($link);
+        $notiz = trim((string)$r['notiz']);
+        $neu = ($notiz !== '' ? $notiz . ' | ' : '') . 'Quelle-Link: ' . $link;
+        q("UPDATE ek_import SET lieferant=?, notiz=? WHERE id=?", [$plat, mb_substr($neu, 0, 500), (int)$r['id']]);
+        $n++;
+    }
+    return $n;
+}
+
 // Vorschlag verwerfen (Zuordnung löschen, Zeile bleibt zum späteren Neu-Zuordnen).
 function ek_verwerfen(int $id): void {
     q("UPDATE ek_import SET item_id=NULL, produkt_id=NULL, ki_score=NULL, ki_hinweis=NULL, status='verworfen' WHERE id=?", [$id]);

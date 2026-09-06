@@ -18,6 +18,7 @@
 require_once __DIR__ . '/../core/config.php';
 require_once __DIR__ . '/../core/db.php';
 require_once __DIR__ . '/../core/schema.php';
+require_once __DIR__ . '/../core/ek_ki.php';   // ek_ist_link/ek_plattform: Marktplatz-Links nicht als Lieferant
 init_schema();
 
 $WRITE = in_array('--write', $argv, true);
@@ -56,13 +57,17 @@ $w = ['roh_neu' => 0, 'roh_dubl' => 0, 'roh_uebersprungen' => 0, 'fertig_neu' =>
 
 $einfuegen = function (array $d) use ($WRITE, &$w, $hash) {
     $key = $d['typ'] === 'rohstoff' ? 'roh' : 'fertig';
+    // Marktplatz-Link ist kein Lieferant: Link -> Notiz, Lieferant -> Plattformname.
+    $notiz = null;
+    if (ek_ist_link((string)$d['lieferant'])) { $notiz = 'Quelle-Link: ' . trim((string)$d['lieferant']); $d['lieferant'] = ek_plattform((string)$d['lieferant']); }
     $zh = $hash($d['typ'], $d['name'], (string)$d['lieferant'], (string)$d['groesse'], (float)$d['preis']);
     if (scalar("SELECT id FROM ek_import WHERE zeile_hash=?", [$zh])) { $w[$key . '_dubl']++; return; }
     if ($WRITE) {
-        q("INSERT INTO ek_import (typ,name,formulierung,groesse,lieferant,preis,einheit,menge,quelle,zeile_hash)
-           VALUES (?,?,?,?,?,?,?,?,?,?)",
+        q("INSERT INTO ek_import (typ,name,formulierung,groesse,lieferant,preis,einheit,menge,quelle,notiz,zeile_hash)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)",
           [$d['typ'], mb_substr($d['name'], 0, 255), $d['formulierung'] ?: null, mb_substr((string)$d['groesse'], 0, 60) ?: null,
-           mb_substr((string)$d['lieferant'], 0, 120) ?: null, $d['preis'], mb_substr((string)$d['einheit'], 0, 10), $d['menge'] ?: null, mb_substr((string)$d['quelle'], 0, 80), $zh]);
+           mb_substr((string)$d['lieferant'], 0, 120) ?: null, $d['preis'], mb_substr((string)$d['einheit'], 0, 10), $d['menge'] ?: null,
+           mb_substr((string)$d['quelle'], 0, 80), $notiz ? mb_substr($notiz, 0, 500) : null, $zh]);
     }
     $w[$key . '_neu']++;
 };

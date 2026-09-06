@@ -21,6 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($r['meldung'])) $_SESSION['ek_flash'] = $r['meldung'];
         header('Location: ' . $ret); exit;
     }
+    if ($akt === 'links_bereinigen') { $n = ek_links_bereinigen(); $_SESSION['ek_flash'] = $n . ' Marktplatz-Link(s) in die Notiz verschoben (Lieferant = Plattform).'; header('Location: ' . $ret); exit; }
     if ($akt === 'bestaetigen') { ek_bestaetigen((int)($_POST['id'] ?? 0)); header('Location: ' . $ret); exit; }
     if ($akt === 'verwerfen')   { ek_verwerfen((int)($_POST['id'] ?? 0));   header('Location: ' . $ret); exit; }
     if ($akt === 'manuell')     { $ok = ek_manuell_zuordnen((int)($_POST['id'] ?? 0), (string)($_POST['eingabe'] ?? ''), true);
@@ -32,9 +33,10 @@ $q        = trim((string)($_GET['q'] ?? ''));
 $statusF  = $_GET['status'] ?? '';
 $STATUS   = ['offen'=>'offen','vorschlag'=>'KI-Vorschlag','bestaetigt'=>'bestätigt','kein_treffer'=>'kein Treffer','verworfen'=>'verworfen'];
 
-$where = "WHERE typ=?"; $args = [$typ];
-if ($q !== '')  { $where .= " AND (name LIKE ? OR lieferant LIKE ? OR formulierung LIKE ?)"; array_push($args, "%$q%", "%$q%", "%$q%"); }
-if (isset($STATUS[$statusF])) { $where .= " AND status=?"; $args[] = $statusF; }
+// Spalten mit e. qualifizieren – durch die JOINs sind name/status/lieferant sonst mehrdeutig.
+$where = "WHERE e.typ=?"; $args = [$typ];
+if ($q !== '')  { $where .= " AND (e.name LIKE ? OR e.lieferant LIKE ? OR e.formulierung LIKE ? OR e.notiz LIKE ?)"; array_push($args, "%$q%", "%$q%", "%$q%", "%$q%"); }
+if (isset($STATUS[$statusF])) { $where .= " AND e.status=?"; $args[] = $statusF; }
 
 $rows = all("SELECT e.*, i.name AS item_name, i.artikelnummer, p.name AS produkt_name, p.nummer AS produkt_nr
              FROM ek_import e LEFT JOIN item i ON i.id=e.item_id LEFT JOIN produkt p ON p.id=e.produkt_id
@@ -45,6 +47,8 @@ $zaehler = [];
 foreach (all("SELECT status, COUNT(*) c FROM ek_import WHERE typ=? GROUP BY status", [$typ]) as $z) $zaehler[$z['status']] = (int)$z['c'];
 $anzRoh    = (int) scalar("SELECT COUNT(*) FROM ek_import WHERE typ='rohstoff'");
 $anzFertig = (int) scalar("SELECT COUNT(*) FROM ek_import WHERE typ='fertigprodukt'");
+// Nur echte URLs zählen (Pfad-Slash, Protokoll, www., Domain-Endung) – nicht den Plattformnamen „Alibaba".
+$linkN     = (int) scalar("SELECT COUNT(*) FROM ek_import WHERE lieferant REGEXP 'https?://|www[.]|[.](com|cn|net|de|org|html)|/'");
 $offenN    = $zaehler['offen'] ?? 0;
 $retQuery  = ($q !== '' ? '&q=' . urlencode($q) : '') . (isset($STATUS[$statusF]) ? '&status=' . $statusF : '');
 
@@ -89,6 +93,13 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
   </form>
 </div>
 <?php if (!$kiDa): ?><div class="muted" style="font-size:12px;margin:-6px 2px 10px">Die KI-Zuordnung läuft nur auf beta (Schlüssel serverseitig). Manuelle Zuordnung geht überall.</div><?php endif; ?>
+<?php if ($linkN > 0): ?>
+<div class="bx-panel" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border-color:#e6c4c0;background:#fdf7f2">
+  <div class="muted" style="font-size:13px"><strong style="font-weight:600"><?= $linkN ?></strong> Zeile(n) haben einen <strong>Marktplatz-Link</strong> (z. B. Alibaba) als „Lieferant". Verschieben in die Notiz – Lieferant wird zur Plattform (Alibaba/AliExpress). So legen wir keine Lieferanten mit Link an.</div>
+  <form method="post" style="margin:0"><input type="hidden" name="aktion" value="links_bereinigen"><input type="hidden" name="ret" value="<?= h($retQuery) ?>">
+    <button class="btn btn-primary btn-sm" type="submit" data-busy="…">Links in Notiz verschieben</button></form>
+</div>
+<?php endif; ?>
 
 <div class="bx-panel">
 <?php if (!$rows): ?>
@@ -108,9 +119,12 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
         $st = $e['status'];
     ?>
       <tr>
-        <td><?= h($e['name']) ?><?php if ($typ==='fertigprodukt' && trim((string)$e['formulierung'])!==''): ?><div class="muted" style="font-size:11px;max-width:280px"><?= h(mb_substr(trim((string)$e['formulierung']),0,80)) ?><?= mb_strlen(trim((string)$e['formulierung']))>80?'…':'' ?></div><?php endif; ?></td>
+        <td><?= h($e['name']) ?>
+          <?php if ($typ==='fertigprodukt' && trim((string)$e['formulierung'])!==''): ?><div class="muted" style="font-size:11px;max-width:280px"><?= h(mb_substr(trim((string)$e['formulierung']),0,80)) ?><?= mb_strlen(trim((string)$e['formulierung']))>80?'…':'' ?></div><?php endif; ?>
+          <?php if (trim((string)$e['notiz'])!==''): ?><div class="muted" style="font-size:11px;max-width:320px;word-break:break-all"><?= h($e['notiz']) ?></div><?php endif; ?>
+        </td>
         <?php if ($typ==='fertigprodukt'): ?><td class="muted"><?= $e['groesse']?h($e['groesse']):'–' ?></td><?php endif; ?>
-        <td><?= $e['lieferant']?h($e['lieferant']):'<span class="muted">–</span>' ?></td>
+        <td style="white-space:normal;max-width:160px;word-break:break-word"><?= $e['lieferant']?h($e['lieferant']):'<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $preisFmt($e) ?></td>
         <td>
           <?php if ($ziel && in_array($st,['vorschlag','bestaetigt'],true)): ?>

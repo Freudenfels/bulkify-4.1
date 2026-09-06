@@ -587,11 +587,13 @@ function init_schema(): void {
         ki_score TINYINT NULL,                              -- 0..100 KI-Zuversicht der Zuordnung
         ki_hinweis VARCHAR(255) NULL,
         quelle VARCHAR(80) NULL,                            -- CSV-Datei
+        notiz VARCHAR(500) NULL,                            -- z. B. Marktplatz-Link (statt als Lieferant)
         zeile_hash CHAR(32) NOT NULL,                       -- Idempotenz
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uq_hash (zeile_hash),
         KEY idx_typ (typ), KEY idx_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('ek_import', 'notiz', "VARCHAR(500) NULL");   // additiv fuer bereits bestehende Tabellen (beta)
 
     // db_import_log: Protokoll der Datenuebernahmen (DB-Import). BEWUSST NICHT im mysqldump enthalten
     // (--ignore-table), damit der Verlauf server-lokal bleibt und ein Import ihn nicht ueberschreibt.

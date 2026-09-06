@@ -8,7 +8,16 @@ Zeigt die aus CSV eingelesenen Einkaufspreise (Tabelle `ek_import`).
 - **Fertigprodukte – intern** – Produkt · Größe · Formulierung · Kapsel-EK · Menge ·
   Lieferant · Zuordnung → Produkt. **Zukauf-Preise, nie in der Kundensicht.**
 
-Suche über Name/Lieferant/Formulierung; Filter „nur nicht zugeordnete".
+Suche über Name/Lieferant/Formulierung/Notiz; Filter „nur nicht zugeordnete".
+
+## Marktplatz-Links (Alibaba & Co.)
+Steht im Lieferant-Feld eine URL (z. B. ein Alibaba-Produktlink), ist das kein
+Lieferant. Der Button **„Links in Notiz verschieben"** (erscheint, solange es solche
+Zeilen gibt) schiebt die URL in die **Notiz** und setzt den Lieferant auf die
+**Plattform** (Alibaba/AliExpress/Marktplatz). So entstehen keine Lieferanten mit Link,
+und die lange URL bläht die Tabelle nicht mehr auf (Preis-Spalte bleibt sichtbar).
+`tools/ek_import.php` macht das bei neuen Importen automatisch (`ek_ist_link`/`ek_plattform`
+in `core/ek_ki.php`, `ek_links_bereinigen()` für Bestandsdaten).
 „Zuordnung" verlinkt den v4-Rohstoff/das Produkt, sobald `item_id`/`produkt_id` gesetzt ist.
 
 ## Zuordnung (Review-UI)
