@@ -1627,6 +1627,11 @@ portal_head('Kundenportal · ' . $k['firma']);
   document.getElementById('rohRows').addEventListener('input', function(e){
     if (e.target.matches('input[name="roh_name[]"]')) rohInfoZeige(e.target);
   });
+  // Enter in einem Eingabefeld soll NICHT das Formular abschicken (nur Katalog-Auswahl übernehmen).
+  // Absenden ausschließlich über den Button „Anfrage senden".
+  document.getElementById('rohRows').closest('form').addEventListener('keydown', function(e){
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault();
+  });
   document.getElementById('rohAdd').addEventListener('click', function(){
     var rows = document.getElementById('rohRows'); var first = rows.querySelector('.rohrow');
     var c = first.cloneNode(true); c.querySelectorAll('input').forEach(function(x){ x.value=''; });
