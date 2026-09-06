@@ -19,6 +19,12 @@ und die lange URL bläht die Tabelle nicht mehr auf (Preis-Spalte bleibt sichtba
 `tools/ek_import.php` macht das bei neuen Importen automatisch (`ek_ist_link`/`ek_plattform`
 in `core/ek_ki.php`, `ek_links_bereinigen()` für Bestandsdaten).
 
+## Lieferant wählen (wenn keiner da ist)
+Zeilen ohne echten Lieferanten (leer oder Platzhalter „Marktplatz"/„Alibaba"/…) zeigen in
+der Lieferant-Spalte ein kleines Auswahlfeld (Datalist der Lieferanten aus dem Stamm,
+freie Eingabe möglich) + „setzen". Damit landet beim Bestätigen der richtige Lieferant im
+`lieferant_preis`. Bei echtem Lieferanten steht nur der Name.
+
 ## Lieferant-Aliase (Kontaktname → Firma)
 Viele „Lieferanten" sind Kontakt-/Agenten-Namen (Maggi, Diane, Amy …), die für eine Firma
 stehen. Panel **„Lieferant-Aliase"**: Alias → Firma (+ Kontakt) eintragen; wird sofort auf

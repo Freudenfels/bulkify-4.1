@@ -29,6 +29,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $ret); exit;
     }
     if ($akt === 'alias_del') { lieferant_alias_loeschen((int)($_POST['id'] ?? 0)); header('Location: ' . $ret); exit; }
+    if ($akt === 'lieferant_setzen') {
+        $lf = trim((string)($_POST['lieferant'] ?? ''));
+        if ($lf !== '') q("UPDATE ek_import SET lieferant=? WHERE id=?", [mb_substr($lf, 0, 120), (int)($_POST['id'] ?? 0)]);
+        $_SESSION['ek_flash'] = $lf !== '' ? 'Lieferant „' . h($lf) . '" gesetzt.' : null;
+        header('Location: ' . $ret); exit;
+    }
     if ($akt === 'bestaetigen') { ek_bestaetigen((int)($_POST['id'] ?? 0)); header('Location: ' . $ret); exit; }
     if ($akt === 'verwerfen')   { ek_verwerfen((int)($_POST['id'] ?? 0));   header('Location: ' . $ret); exit; }
     if ($akt === 'neu_anlegen') {
@@ -47,6 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // matcht der Lieferant den Alias nicht mehr). So wirkt z. B. Maggi = Wellgreen sofort.
 lieferant_alias_anwenden();
 $aliase = all("SELECT * FROM lieferant_alias ORDER BY firma, alias");
+$lieferantenListe = all("SELECT firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");
+// „kein echter Lieferant" – hier darf man einen wählen (Marktplatz-Platzhalter oder leer).
+$generischeLief = ['', 'Marktplatz', 'Alibaba', 'AliExpress', '1688', 'Made-in-China'];
 
 $q        = trim((string)($_GET['q'] ?? ''));
 $statusF  = $_GET['status'] ?? '';
@@ -170,7 +179,18 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
           <?php if (trim((string)$e['notiz'])!==''): ?><div class="muted" style="font-size:11px;white-space:normal;overflow-wrap:anywhere"><?= h($e['notiz']) ?></div><?php endif; ?>
         </td>
         <?php if ($typ==='fertigprodukt'): ?><td class="muted"><?= $e['groesse']?h($e['groesse']):'–' ?></td><?php endif; ?>
-        <td style="white-space:nowrap"><?= $e['lieferant']?h($e['lieferant']):'<span class="muted">–</span>' ?></td>
+        <td style="white-space:nowrap">
+          <?php if (in_array(trim((string)$e['lieferant']), $generischeLief, true)): ?>
+            <?php if (trim((string)$e['lieferant'])!==''): ?><div class="muted" style="font-size:11px"><?= h($e['lieferant']) ?></div><?php endif; ?>
+            <form method="post" style="margin:0;display:flex;gap:4px;align-items:center">
+              <input type="hidden" name="aktion" value="lieferant_setzen"><input type="hidden" name="id" value="<?= (int)$e['id'] ?>"><input type="hidden" name="ret" value="<?= h($retQuery) ?>">
+              <input type="text" name="lieferant" list="lief_dl" placeholder="Lieferant wählen…" style="width:130px;font-size:12px">
+              <button class="btn btn-ghost btn-sm" type="submit" data-busy="…" title="Lieferant setzen">setzen</button>
+            </form>
+          <?php else: ?>
+            <?= h($e['lieferant']) ?>
+          <?php endif; ?>
+        </td>
         <td class="bx-num"><?= $preisFmt($e) ?></td>
         <td style="white-space:normal;max-width:340px;overflow-wrap:anywhere">
           <?php if ($ziel && in_array($st,['vorschlag','bestaetigt'],true)): ?>
@@ -219,6 +239,11 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
 <?php endif; ?>
 </div>
 <?php
+// Lieferanten-Datalist für das Lieferant-Auswahlfeld (freie Eingabe möglich, Vorschläge aus dem Stamm).
+echo '<datalist id="lief_dl">';
+foreach ($lieferantenListe as $l) echo '<option value="' . h($l['firma']) . '">';
+echo '</datalist>';
+
 // Datalists für die manuelle Zuordnung (Autovervollständigung). Bewusst begrenzt gehalten.
 if ($rows) {
     if ($typ === 'rohstoff') {
