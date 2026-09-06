@@ -782,6 +782,29 @@ if (($_GET['v'] ?? '') === 'angebot_pdf') {
     exit;
 }
 
+// --- Rohstoff-Details für das Anfrage-Popup (JSON, on-demand) – kundenfreundliche Felder + Kennwerte ---
+if (($_GET['v'] ?? '') === 'rohstoff_info') {
+    header('Content-Type: application/json; charset=utf-8');
+    $iid = (int)($_GET['iid'] ?? 0);
+    $it = ($k['portal_rohstoffe'] && $iid) ? one("SELECT name, name_lat, form, cas, synonym, ec_nr, bot_quelle, herkunftsland,
+              allergene, haltbarkeit, lagerbedingungen, zusaetze, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate
+           FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
+    if (!$it) { echo '{}'; exit; }
+    $rows = [];
+    $add = function(string $label, $val) use (&$rows) { if ($val !== null && trim((string)$val) !== '') $rows[] = [$label, (string)$val]; };
+    $jn  = fn($x) => ($x === null || $x === '') ? null : ((int)$x ? 'Ja' : 'Nein');
+    $add('Darreichungsform', $FORMLBL_P[$it['form']] ?? $it['form']);
+    $add('CAS', $it['cas']); $add('Lateinischer Name', $it['name_lat']); $add('Synonym', $it['synonym']);
+    $add('EC-Nummer', $it['ec_nr']); $add('Botanische Quelle', $it['bot_quelle']); $add('Herkunftsland', $it['herkunftsland']);
+    $add('Allergene', $it['allergene']); $add('Vegan', $jn($it['vegan'])); $add('GVO-frei', $jn($it['gvo_frei']));
+    $add('Bestrahlt', $jn($it['bestrahlt'])); $add('TSE/BSE-frei', $jn($it['tse_bse_frei']));
+    $add('Zertifikate', $it['zertifikate']); $add('Zusätze', $it['zusaetze']);
+    $add('Haltbarkeit', $it['haltbarkeit']); $add('Lagerbedingungen', $it['lagerbedingungen']);
+    foreach (all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$iid]) as $kw) $add((string)$kw['parameter'], $kw['wert']);
+    echo json_encode(['name' => $it['name'], 'rows' => $rows], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // --- Verpackungs-Konformität (PPWR) je Bestellung als PDF ---
 if (($_GET['v'] ?? '') === 'ppwr_pdf') {
     $aid = (int)($_GET['aid'] ?? 0);
@@ -1629,6 +1652,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <script>
   window.rohInfo = <?= json_encode($rohInfoMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+  var rohToken = '<?= h($token) ?>';
   function rohEsc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
   function rohInfoZeige(inp){
     var box = inp.closest('.rohrow').querySelector('.rohinfo');
@@ -1644,12 +1668,20 @@ portal_head('Kundenportal · ' . $k['firma']);
   }
   function rohDetailsShow(name){
     var d = window.rohInfo[name]; if (!d) return;
-    var rows = [['Darreichungsform',d.form],['CAS',d.cas],['Lateinischer Name',d.lat],['Synonym',d.syn],['Botanische Quelle',d.quelle],['Herkunftsland',d.land]];
-    var html = ''; rows.forEach(function(r){ if (r[1]) html += '<tr><td style="color:var(--muted);padding:4px 14px 4px 0;white-space:nowrap;vertical-align:top">'+r[0]+'</td><td style="padding:4px 0">'+rohEsc(r[1])+'</td></tr>'; });
-    if (!html) html = '<tr><td class="muted">Zu diesem Rohstoff liegen noch keine weiteren Angaben vor.</td></tr>';
+    var body = document.getElementById('rohDetailBody');
     document.getElementById('rohDetailTitel').textContent = name;
-    document.getElementById('rohDetailBody').innerHTML = '<table style="width:100%;border-collapse:collapse">'+html+'</table>';
+    body.innerHTML = '<div class="muted">Lädt …</div>';
     document.getElementById('rohDetailModal').style.display = 'flex';
+    fetch('?p=portal&token=' + rohToken + '&v=rohstoff_info&iid=' + d.id)
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        var rows = (j && j.rows) || [];
+        if (!rows.length) { body.innerHTML = '<div class="muted">Zu diesem Rohstoff liegen noch keine weiteren Angaben vor.</div>'; return; }
+        var html = '<table style="width:100%;border-collapse:collapse">';
+        rows.forEach(function(r){ html += '<tr><td style="color:var(--muted);padding:4px 14px 4px 0;white-space:nowrap;vertical-align:top">'+rohEsc(r[0])+'</td><td style="padding:4px 0">'+rohEsc(r[1])+'</td></tr>'; });
+        body.innerHTML = html + '</table>';
+      })
+      .catch(function(){ body.innerHTML = '<div class="muted">Details konnten nicht geladen werden.</div>'; });
   }
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape') { var m=document.getElementById('rohDetailModal'); if(m) m.style.display='none'; } });
   document.getElementById('rohRows').addEventListener('input', function(e){
