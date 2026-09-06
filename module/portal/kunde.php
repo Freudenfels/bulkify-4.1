@@ -628,7 +628,7 @@ foreach ($rezZutaten as $z) if (!empty($z['item_id'])) {
 }
 
 // Rohstoff-Katalog (Preis auf Anfrage) – ohne Leerkapseln
-$rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, form, cas FROM item
+$rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, form, cas, name_lat, synonym, herkunft, bot_quelle, herkunftsland FROM item
     WHERE kategorie='rohstoff' AND gesperrt=0 AND (form<>'kapselhuelle' OR form IS NULL)
       AND (? = '' OR name LIKE ? OR name_lat LIKE ? OR synonym LIKE ? OR cas LIKE ?)
     ORDER BY name", [$q, $qLike, $qLike, $qLike, $qLike]) : [];
@@ -1585,9 +1585,14 @@ portal_head('Kundenportal · ' . $k['firma']);
     $meine = array_filter($portalAnfragen, fn($a) => $a['typ'] === 'rohstoff');
     // Vorbefüllung aus dem Katalog-Direktlink (&iid=): Name des Rohstoffs in die erste Zeile.
     $vorRohName = (int)($_GET['iid'] ?? 0) ? (string) scalar("SELECT name FROM item WHERE id=? AND kategorie='rohstoff'", [(int)$_GET['iid']]) : '';
-    // Info je Katalog-Rohstoff (Name -> Form/CAS/Detail-Link) für die Live-Anzeige nach der Auswahl.
+    // Info je Katalog-Rohstoff für die Live-Anzeige + Detail-Popup nach der Auswahl.
     $rohInfoMap = [];
-    foreach ($rohkatalog as $r) $rohInfoMap[$r['name']] = ['form' => ($FORMLBL_P[$r['form']] ?? $r['form']), 'cas' => ($r['cas'] ?: ''), 'id' => (int)$r['id']]; ?>
+    foreach ($rohkatalog as $r) $rohInfoMap[$r['name']] = [
+        'form' => ($FORMLBL_P[$r['form']] ?? $r['form']), 'cas' => ($r['cas'] ?: ''),
+        'lat' => ($r['name_lat'] ?? '') ?: '', 'syn' => ($r['synonym'] ?? '') ?: '',
+        'quelle' => ($r['bot_quelle'] ?? '') ?: '', 'land' => ($r['herkunftsland'] ?? '') ?: '',
+        'herk' => ($r['herkunft'] ?? '') ?: '', 'id' => (int)$r['id'],
+    ]; ?>
   <h1 style="margin-bottom:4px">Rohstoff anfragen</h1>
   <div class="bx-panel">
     <p class="muted" style="margin-top:0">Wählen Sie einen Rohstoff aus dem Katalog oder tippen Sie ihn ein. Sie können mehrere Rohstoffe auf einmal anfragen – Sie erhalten <strong>je Rohstoff ein eigenes Angebot</strong>, das Sie einzeln annehmen können.</p>
@@ -1613,17 +1618,40 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div style="margin-top:14px"><button class="btn btn-primary" type="submit">Anfrage senden</button></div>
     </form>
   </div>
+  <div id="rohDetailModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+    <div class="bx-panel" style="max-width:520px;width:100%;max-height:90vh;overflow:auto;margin:0">
+      <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px">
+        <h2 id="rohDetailTitel" style="margin:0">Rohstoff</h2>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('rohDetailModal').style.display='none'">Schließen</button>
+      </div>
+      <div id="rohDetailBody" style="margin-top:12px"></div>
+    </div>
+  </div>
   <script>
   window.rohInfo = <?= json_encode($rohInfoMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-  var rohToken = '<?= h($token) ?>';
+  function rohEsc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
   function rohInfoZeige(inp){
     var box = inp.closest('.rohrow').querySelector('.rohinfo');
-    var d = window.rohInfo[inp.value.trim()];
+    var name = inp.value.trim(); var d = window.rohInfo[name];
     if (d) {
       var t = []; if (d.form) t.push(d.form); if (d.cas) t.push('CAS ' + d.cas);
-      box.innerHTML = (t.join(' · ') || 'Im Katalog verfügbar') + ' · <a href="?p=portal&token=' + rohToken + '&v=rohstoff&iid=' + d.id + '" target="_blank">Details ansehen</a>';
-    } else { box.textContent = inp.value.trim() ? 'Nicht im Katalog – wir prüfen die Beschaffung.' : ''; }
+      box.innerHTML = '';
+      box.appendChild(document.createTextNode((t.join(' · ') || 'Im Katalog verfügbar') + ' · '));
+      var a = document.createElement('a'); a.href = '#'; a.textContent = 'Details ansehen';
+      a.addEventListener('click', function(ev){ ev.preventDefault(); rohDetailsShow(name); });
+      box.appendChild(a);
+    } else { box.textContent = name ? 'Nicht im Katalog – wir prüfen die Beschaffung.' : ''; }
   }
+  function rohDetailsShow(name){
+    var d = window.rohInfo[name]; if (!d) return;
+    var rows = [['Darreichungsform',d.form],['CAS',d.cas],['Lateinischer Name',d.lat],['Synonym',d.syn],['Botanische Quelle',d.quelle],['Herkunftsland',d.land],['Herkunft',d.herk]];
+    var html = ''; rows.forEach(function(r){ if (r[1]) html += '<tr><td style="color:var(--muted);padding:4px 14px 4px 0;white-space:nowrap;vertical-align:top">'+r[0]+'</td><td style="padding:4px 0">'+rohEsc(r[1])+'</td></tr>'; });
+    if (!html) html = '<tr><td class="muted">Zu diesem Rohstoff liegen noch keine weiteren Angaben vor.</td></tr>';
+    document.getElementById('rohDetailTitel').textContent = name;
+    document.getElementById('rohDetailBody').innerHTML = '<table style="width:100%;border-collapse:collapse">'+html+'</table>';
+    document.getElementById('rohDetailModal').style.display = 'flex';
+  }
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') { var m=document.getElementById('rohDetailModal'); if(m) m.style.display='none'; } });
   document.getElementById('rohRows').addEventListener('input', function(e){
     if (e.target.matches('input[name="roh_name[]"]')) rohInfoZeige(e.target);
   });
