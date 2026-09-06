@@ -193,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
     } else {
         $felder = ['artikelnummer','name','name_en','name_lat','cas','kategorie','form',
                    'material','farbe','kapselgroesse_id','leergewicht_mg',
-                   'dichte','allergene','herkunft','overage_prozent','einheit',
+                   'dichte','allergene','overage_prozent','einheit',
                    'ek_preis','preis_bezug','vk_aufschlag_prozent','haupt_lieferant_id','gesperrt','notiz',
                    // Spezifikation
                    'synonym','ec_nr','bot_quelle','herkunftsland','haltbarkeit','lagerbedingungen','zusaetze',
@@ -490,7 +490,6 @@ if (!$neu) {
     <div class="bx-panel"><div class="bx-grid">
       <div class="bx-field"><label>Dichte (g/ml) <?= bx_hint('Schüttdichte – bestimmt, wie viel in eine Kapsel passt') ?></label><input type="number" step="0.001" name="dichte" value="<?= $v('dichte') ?>"></div>
       <div class="bx-field"><label>Standard-Overage / Verlust (%) <?= bx_hint('Zuschlag/Schwund, der beim Einsatz einkalkuliert wird') ?></label><input type="number" step="0.01" name="overage_prozent" value="<?= $v('overage_prozent') ?>"></div>
-      <div class="bx-field"><label>Herkunft</label><input type="text" name="herkunft" value="<?= $v('herkunft') ?>" placeholder="z. B. EU, Indien, China"></div>
     </div>
     <div class="bx-field"><label>Allergene <?= bx_hint('z. B. Gluten, Soja, Laktose – erscheint später auf Etikett/Deklaration') ?></label><input type="text" name="allergene" value="<?= $v('allergene') ?>" placeholder="kommagetrennt, oder „keine"></div>
     </div>
@@ -501,7 +500,17 @@ if (!$neu) {
       <div class="bx-field"><label>Synonym / RM-Nr</label><input type="text" name="synonym" value="<?= $v('synonym') ?>" placeholder="z. B. RM940"></div>
       <div class="bx-field"><label>EC-Nummer</label><input type="text" name="ec_nr" value="<?= $v('ec_nr') ?>"></div>
       <div class="bx-field"><label>Botanische Quelle / Pflanzenteil</label><input type="text" name="bot_quelle" value="<?= $v('bot_quelle') ?>" placeholder="z. B. Theobroma cacao – Bohne"></div>
-      <div class="bx-field"><label>Herkunftsland</label><input type="text" name="herkunftsland" value="<?= $v('herkunftsland') ?>"></div>
+      <div class="bx-field"><label>Herkunftsland / Herkunft <?= bx_hint('Land oder Region (EU) des Rohstoffs – erscheint in der Spezifikation') ?></label>
+        <?php
+        $LAENDER = ['EU','Deutschland','Österreich','Schweiz','Frankreich','Italien','Spanien','Niederlande','Belgien','Polen','Vereinigtes Königreich','Dänemark','Schweden','USA','Kanada','China','Indien','Japan','Südkorea','Vietnam','Thailand','Indonesien','Malaysia','Türkei','Brasilien','Marokko','Ägypten'];
+        $hl = (string)($it['herkunftsland'] ?? '');
+        ?>
+        <select name="herkunftsland">
+          <option value="">– bitte wählen –</option>
+          <?php if ($hl !== '' && !in_array($hl, $LAENDER, true)): ?><option value="<?= h($hl) ?>" selected><?= h($hl) ?> (bestehend)</option><?php endif; ?>
+          <?php foreach ($LAENDER as $ld): ?><option value="<?= h($ld) ?>" <?= $hl === $ld ? 'selected' : '' ?>><?= h($ld) ?></option><?php endforeach; ?>
+        </select>
+      </div>
     </div>
     <div class="muted">Name (lat.) und CAS-Nr. stehen im Reiter „Stammdaten".</div>
     </div>

@@ -628,7 +628,7 @@ foreach ($rezZutaten as $z) if (!empty($z['item_id'])) {
 }
 
 // Rohstoff-Katalog (Preis auf Anfrage) – ohne Leerkapseln
-$rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, form, cas, name_lat, synonym, herkunft, bot_quelle, herkunftsland FROM item
+$rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, form, cas, name_lat, synonym, bot_quelle, herkunftsland FROM item
     WHERE kategorie='rohstoff' AND gesperrt=0 AND (form<>'kapselhuelle' OR form IS NULL)
       AND (? = '' OR name LIKE ? OR name_lat LIKE ? OR synonym LIKE ? OR cas LIKE ?)
     ORDER BY name", [$q, $qLike, $qLike, $qLike, $qLike]) : [];
@@ -1591,7 +1591,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         'form' => ($FORMLBL_P[$r['form']] ?? $r['form']), 'cas' => ($r['cas'] ?: ''),
         'lat' => ($r['name_lat'] ?? '') ?: '', 'syn' => ($r['synonym'] ?? '') ?: '',
         'quelle' => ($r['bot_quelle'] ?? '') ?: '', 'land' => ($r['herkunftsland'] ?? '') ?: '',
-        'herk' => ($r['herkunft'] ?? '') ?: '', 'id' => (int)$r['id'],
+        'id' => (int)$r['id'],
     ]; ?>
   <h1 style="margin-bottom:4px">Rohstoff anfragen</h1>
   <div class="bx-panel">
@@ -1644,7 +1644,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   }
   function rohDetailsShow(name){
     var d = window.rohInfo[name]; if (!d) return;
-    var rows = [['Darreichungsform',d.form],['CAS',d.cas],['Lateinischer Name',d.lat],['Synonym',d.syn],['Botanische Quelle',d.quelle],['Herkunftsland',d.land],['Herkunft',d.herk]];
+    var rows = [['Darreichungsform',d.form],['CAS',d.cas],['Lateinischer Name',d.lat],['Synonym',d.syn],['Botanische Quelle',d.quelle],['Herkunftsland',d.land]];
     var html = ''; rows.forEach(function(r){ if (r[1]) html += '<tr><td style="color:var(--muted);padding:4px 14px 4px 0;white-space:nowrap;vertical-align:top">'+r[0]+'</td><td style="padding:4px 0">'+rohEsc(r[1])+'</td></tr>'; });
     if (!html) html = '<tr><td class="muted">Zu diesem Rohstoff liegen noch keine weiteren Angaben vor.</td></tr>';
     document.getElementById('rohDetailTitel').textContent = name;
