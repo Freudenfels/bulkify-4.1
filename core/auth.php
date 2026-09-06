@@ -44,6 +44,8 @@ function route_rollen_map(): array {
         'rezeptur_detail'    => ['production', 'labor'],
         'produkte'           => ['production', 'sales'],
         'produkt'            => ['production', 'sales'],
+        'novelfood'          => ['production', 'sales', 'labor'],   // Novel-Food-Schnellsuche
+
         'produktion'         => ['production', 'labor', 'fulfillment'],
         'produktionsauftrag' => ['production', 'labor', 'fulfillment'],
         'versand'            => ['fulfillment', 'production', 'labor'],

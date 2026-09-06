@@ -53,6 +53,7 @@ $routes = [
     'rezeptur_detail' => 'rezeptur/detail.php',
     'produkte'        => 'produkt/liste.php',
     'produkt'         => 'produkt/detail.php',
+    'novelfood'       => 'produkt/novelfood.php',   // Schnell-Nachschlage: ist ein Stoff Novel Food?
     'angebote'        => 'angebot/liste.php',
     'angebot'         => 'angebot/detail.php',
     'angebot_pdf'     => 'angebot/pdf.php',
