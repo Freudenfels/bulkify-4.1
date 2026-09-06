@@ -1051,6 +1051,22 @@ function init_schema(): void {
         KEY idx_anfrage (anfrage_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // Novel-Food-Katalog (EU) – Grundlage für den automatischen Abgleich der Produkt-Rezepturen.
+    // Befüllt per tools/novelfood_import.php aus der JSON-Liste; Abgleich über produkt_novelfood_pruefen().
+    $pdo->exec("CREATE TABLE IF NOT EXISTS novelfood_katalog (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        code VARCHAR(40) NULL,
+        name VARCHAR(255) NOT NULL,
+        trivial VARCHAR(500) NULL,
+        syn VARCHAR(500) NULL,
+        status VARCHAR(120) NULL,
+        status_code VARCHAR(50) NULL,           -- NOT_NOVEL_IN_FOOD | NOT_NOVEL_IN_FOOD_SUPPLEMENTS | NOT_YET_AUTHORISED_NOVEL_FOOD | AUTHORISED_NOVEL_FOOD | SUBJECT_TO_A_CONSULTATION_REQUEST
+        teil VARCHAR(120) NULL,
+        beschreibung_de TEXT NULL,
+        UNIQUE KEY uq_code (code),
+        KEY idx_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // verpackung_dokument: Dokumente je Verpackung (PPWR-Nachweise, DoC, Spez., Etikett-Druckdatei …).
     $pdo->exec("CREATE TABLE IF NOT EXISTS verpackung_dokument (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -4684,4 +4700,50 @@ function meta_get(string $k, $default = null) {
 }
 function meta_set(string $k, $v): void {
     q("INSERT INTO app_meta (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)", [$k, $v]);
+}
+
+// Novel-Food-Abgleich: Zutaten der Produkt-Rezeptur gegen den EU-Katalog (novelfood_katalog).
+// Liefert ['status'=>konform|novel_food|pruefung|unklar, 'treffer'=>[...], 'grund'=>...].
+function produkt_novelfood_pruefen(int $pid): array {
+    $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$pid]);
+    if (!$rid) return ['status' => 'unklar', 'treffer' => [], 'grund' => 'Produkt hat keine Rezeptur'];
+    $zutaten = all("SELECT z.bezeichnung, i.name AS item_name, i.name_lat, i.synonym
+                    FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]);
+    if (!$zutaten) return ['status' => 'unklar', 'treffer' => [], 'grund' => 'Rezeptur hat keine Zutaten'];
+    $kat = all("SELECT name, trivial, syn, status, status_code FROM novelfood_katalog");
+    if (!$kat) return ['status' => 'unklar', 'treffer' => [], 'grund' => 'Novel-Food-Katalog ist leer – bitte importieren'];
+    $norm = function ($s) {
+        $s = mb_strtolower(trim((string)$s));
+        $s = preg_replace('/\([^)]*\)/u', ' ', $s);          // Klammerzusätze weg
+        $s = preg_replace('/[^a-z0-9äöüß ]+/u', ' ', $s);
+        return trim(preg_replace('/\s+/', ' ', $s));
+    };
+    // Katalog-Suchbegriffe (Name + Trivial + Synonyme), nur ab 4 Zeichen gegen Falschtreffer.
+    $begriffe = [];
+    // Zu generische Einzelwörter (Mineralien/Vitamine/Allerweltsbegriffe) NICHT als Novel-Food-Treffer werten.
+    $stop = ['magnesium'=>1,'calcium'=>1,'kalzium'=>1,'natrium'=>1,'sodium'=>1,'kalium'=>1,'potassium'=>1,'zink'=>1,'zinc'=>1,'eisen'=>1,'iron'=>1,'kupfer'=>1,'copper'=>1,'mangan'=>1,'selen'=>1,'selenium'=>1,'jod'=>1,'iodine'=>1,'chrom'=>1,'chromium'=>1,'vitamin'=>1,'wasser'=>1,'water'=>1,'salz'=>1,'salts'=>1,'salt'=>1,'extrakt'=>1,'extract'=>1,'pulver'=>1,'powder'=>1,'saeure'=>1,'acid'=>1];
+    foreach ($kat as $c) {
+        // Chemische Namen NICHT am "/" zerlegen (sonst wird aus "sodium/magnesium/calcium salts" das Wort "magnesium").
+        $terms = [$c['name']];
+        foreach (['trivial', 'syn'] as $f) foreach (preg_split('/[,;]/', (string)$c[$f]) as $t) { $t = preg_replace('/\([^)]*\)/u', '', (string)$t); if (trim($t) !== '') $terms[] = $t; }
+        foreach ($terms as $t) { $nt = $norm($t); if (mb_strlen($nt) >= 5 && !isset($stop[$nt])) $begriffe[$nt] = $c; }
+    }
+    $treffer = []; $problem = false; $pruef = false; $gesehen = [];
+    foreach ($zutaten as $z) {
+        $zlabel = $z['bezeichnung'] ?: ($z['item_name'] ?: '');
+        foreach ([$z['bezeichnung'], $z['item_name'], $z['name_lat'], $z['synonym']] as $cand) {
+            $nz = $norm($cand); if ($nz === '') continue;
+            foreach ($begriffe as $bt => $c) {
+                if ($nz === $bt || preg_match('/\b' . preg_quote($bt, '/') . '\b/u', $nz)) {
+                    $key = $zlabel . '|' . $c['name']; if (isset($gesehen[$key])) continue;
+                    $gesehen[$key] = 1;
+                    $treffer[] = ['zutat' => $zlabel, 'stoff' => $c['name'], 'status' => $c['status'], 'code' => (string)$c['status_code']];
+                    if ($c['status_code'] === 'NOT_YET_AUTHORISED_NOVEL_FOOD') $problem = true;
+                    elseif (in_array((string)$c['status_code'], ['AUTHORISED_NOVEL_FOOD', 'SUBJECT_TO_A_CONSULTATION_REQUEST', ''], true)) $pruef = true;
+                }
+            }
+        }
+    }
+    $status = $problem ? 'novel_food' : ($pruef ? 'pruefung' : 'konform');
+    return ['status' => $status, 'treffer' => $treffer, 'grund' => ''];
 }

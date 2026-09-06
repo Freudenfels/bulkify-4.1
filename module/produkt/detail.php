@@ -26,6 +26,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_d
     dokument_delete('produkt', (int)$id, (int)($_POST['dok_id'] ?? 0));
     header('Location: ?p=produkt&id=' . $id . '#dok'); exit;
 }
+// Novel-Food automatisch prüfen (Rezeptur-Zutaten gegen EU-Katalog) und Status setzen.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'novelfood_pruefen' && is_numeric($id)) {
+    $erg = produkt_novelfood_pruefen((int)$id);
+    if ($erg['status'] !== 'unklar') q("UPDATE produkt SET novelfood_status=? WHERE id=?", [$erg['status'], (int)$id]);
+    $_SESSION['nf_ergebnis'] = $erg;
+    header('Location: ?p=produkt&id=' . $id . '&nfcheck=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
     $f = fn($k) => trim($_POST[$k] ?? '');
     if ($f('name') === '') {
@@ -141,6 +148,7 @@ bx_head($neu ? 'Neues Produkt' : $v('name'),
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 ?>
+<form id="nfCheckForm" method="post"></form>
 <form method="post" class="bx-form">
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Produktname (intern) <?= bx_hint('unser Arbeitsname, z. B. „Zink". Gleiche Namen werden automatisch mit v2, v3 … fortlaufend nummeriert.') ?></label><input type="text" name="name" value="<?= $v('name') ?>" required placeholder="z. B. Zink"></div>
@@ -157,11 +165,23 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
           <option value="<?= $key ?>" <?= ($p['status']??'')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
       </select>
     </div>
-    <div class="bx-field"><label>Novel-Food-Status <?= bx_hint('Novel-Food-Konformität: konform = kein/zugelassenes Novel Food; enthält Novel Food = nicht ohne Zulassung verkehrsfähig.') ?></label>
+    <div class="bx-field"><label>Novel-Food-Status <?= bx_hint('Novel-Food-Konformität: konform = kein/zugelassenes Novel Food; enthält Novel Food = nicht ohne Zulassung verkehrsfähig. „Automatisch prüfen" gleicht die Rezeptur-Zutaten mit dem EU-Novel-Food-Katalog ab.') ?></label>
       <select name="novelfood_status">
         <?php foreach (['unklar'=>'ungeklärt','konform'=>'Novel-Food-konform','novel_food'=>'enthält Novel Food (Zulassung nötig)','pruefung'=>'in Prüfung'] as $key=>$lbl): ?>
           <option value="<?= $key ?>" <?= ($p['novelfood_status'] ?? 'unklar')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
       </select>
+      <?php if (!$neu): ?>
+      <div style="margin-top:6px"><button type="submit" form="nfCheckForm" name="aktion" value="novelfood_pruefen" class="btn btn-ghost btn-sm">Automatisch prüfen (EU-Katalog)</button></div>
+      <?php if (isset($_GET['nfcheck']) && !empty($_SESSION['nf_ergebnis'])): $nf = $_SESSION['nf_ergebnis']; unset($_SESSION['nf_ergebnis']); ?>
+        <div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">
+          <?php if ($nf['grund']): ?><?= h($nf['grund']) ?>
+          <?php elseif (!$nf['treffer']): ?>Keine Zutat im Novel-Food-Katalog gefunden → als <strong>konform</strong> eingestuft.
+          <?php else: ?><strong>Treffer im Katalog:</strong><br>
+            <?php foreach ($nf['treffer'] as $t): ?>• <?= h($t['zutat']) ?> → <?= h($t['stoff']) ?> <em>(<?= h($t['status']) ?>)</em><br><?php endforeach; ?>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
+      <?php endif; ?>
     </div>
     <div class="bx-field"><label>Katalog / Exklusiv <?= bx_hint('Standard: gemeinsamer Katalog (für alle Kunden mit Produkt-Freischaltung). Exklusiv = nur für den oben gewählten Kunden sichtbar.') ?></label>
       <div class="bx-check" style="padding-top:8px">
