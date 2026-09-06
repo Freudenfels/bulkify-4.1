@@ -164,12 +164,13 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
         $st = $e['status'];
     ?>
       <tr>
-        <td><?= h($e['name']) ?>
-          <?php if ($typ==='fertigprodukt' && trim((string)$e['formulierung'])!==''): ?><div class="muted" style="font-size:11px;max-width:280px"><?= h(mb_substr(trim((string)$e['formulierung']),0,80)) ?><?= mb_strlen(trim((string)$e['formulierung']))>80?'…':'' ?></div><?php endif; ?>
-          <?php if (trim((string)$e['notiz'])!==''): ?><div class="muted" style="font-size:11px;max-width:320px;word-break:break-all"><?= h($e['notiz']) ?></div><?php endif; ?>
+        <td style="max-width:300px">
+          <div style="white-space:normal"><?= h($e['name']) ?></div>
+          <?php if ($typ==='fertigprodukt' && trim((string)$e['formulierung'])!==''): ?><div class="muted" style="font-size:11px;white-space:normal;overflow-wrap:anywhere"><?= h(mb_substr(trim((string)$e['formulierung']),0,110)) ?><?= mb_strlen(trim((string)$e['formulierung']))>110?'…':'' ?></div><?php endif; ?>
+          <?php if (trim((string)$e['notiz'])!==''): ?><div class="muted" style="font-size:11px;white-space:normal;overflow-wrap:anywhere"><?= h($e['notiz']) ?></div><?php endif; ?>
         </td>
         <?php if ($typ==='fertigprodukt'): ?><td class="muted"><?= $e['groesse']?h($e['groesse']):'–' ?></td><?php endif; ?>
-        <td style="white-space:normal;max-width:220px;overflow-wrap:anywhere"><?= $e['lieferant']?h($e['lieferant']):'<span class="muted">–</span>' ?></td>
+        <td style="white-space:nowrap"><?= $e['lieferant']?h($e['lieferant']):'<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $preisFmt($e) ?></td>
         <td>
           <?php if ($ziel && in_array($st,['vorschlag','bestaetigt'],true)): ?>
