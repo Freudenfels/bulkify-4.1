@@ -443,6 +443,13 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
 <?php endif; ?>
 
 <?php if ($tab === 'werkzeuge'): $live = system_ist_live(); ?>
+<?php if (has_role('admin')): ?>
+<div class="bx-panel">
+  <h2>Datenübernahme (DB-Import) <?= bx_hint('Kompletten Datenbank-Stand von einem anderen Rechner einspielen – z. B. die lokal aufgebauten Rohstoffe/Kunden/Produkte auf beta bringen. Ohne phpMyAdmin/SSH. Ersetzt die komplette DB dieses Servers.') ?></h2>
+  <p class="muted" style="margin-top:0">Einen <code>.sql</code>-Dump hochladen und einspielen. Nützlich, um diesen Server auf den Stand eines anderen Rechners zu bringen (z. B. Laptop → beta). Ersetzt die komplette Datenbank – nur mit Bestätigung.</p>
+  <a class="btn btn-primary" href="?p=db_import">Zur Datenübernahme</a>
+</div>
+<?php endif; ?>
 <div class="bx-panel">
   <h2>Betriebsmodus <?= bx_hint('Solange das System nicht live ist, darf frei aufgeräumt werden. Im Live-Betrieb verlangen alle löschenden Werkzeuge zusätzlich das eingetippte Wort LÖSCHEN.') ?></h2>
   <?php if (isset($_GET['livesperre'])): ?>
