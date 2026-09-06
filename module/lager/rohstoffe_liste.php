@@ -120,7 +120,8 @@ if ($istKapsel) {
 } else {
 $cols = [
     'artikelnummer' => ['label' => 'Art.-Nr.', 'sort' => true],
-    'name'          => ['label' => 'Name', 'sort' => true],
+    // Namen sind teils sehr lang – kleiner + umbrechen (Tabelle ist sonst global nowrap und läuft über den Rand).
+    'name'          => ['label' => 'Name', 'sort' => true, 'render' => fn($r)=> '<span style="display:inline-block;white-space:normal;max-width:360px;font-size:12.5px;line-height:1.35">' . h($r['name']) . '</span>'],
     'ek_preis'      => ['label' => 'Preis ab', 'sort' => true, 'num' => true, 'render' => $preisAb],
     'form'          => ['label' => 'Form', 'sort' => true, 'render' => fn($r)=> h($FORM[$r['form']] ?? $r['form'])],
     'wirkstoffe' => ['label' => 'Wirkstoffe', 'render' => function($r) use ($wmap) {
