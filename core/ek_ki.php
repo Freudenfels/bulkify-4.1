@@ -225,6 +225,40 @@ function lieferant_alias_anwenden(): int {
     return $n;
 }
 
+// Aus einer EK-Zeile direkt einen NEUEN Rohstoff bzw. ein NEUES Produkt anlegen und zuordnen.
+// Fertigprodukt -> produkt (Entwurf, Zukauf-Infos in der Notiz). Rohstoff -> item + lieferant_preis.
+function ek_neu_anlegen(int $id): array {
+    $ek = one("SELECT * FROM ek_import WHERE id=?", [$id]);
+    if (!$ek) return ['ok' => false, 'fehler' => 'Zeile nicht gefunden.'];
+
+    if ((string)$ek['typ'] === 'fertigprodukt') {
+        if (!empty($ek['produkt_id'])) return ['ok' => false, 'fehler' => 'Schon einem Produkt zugeordnet.'];
+        $notiz = implode("\n", array_filter([
+            'Zukauf-Fertigprodukt (aus EK-Import angelegt).',
+            !empty($ek['lieferant']) ? 'Lieferant: ' . $ek['lieferant'] : '',
+            !empty($ek['groesse'])   ? 'Größe/Form: ' . $ek['groesse'] : '',
+            (float)$ek['preis'] > 0  ? 'Kapsel-EK: ' . number_format((float)$ek['preis'], 4, ',', '.') . ' €' : '',
+            trim((string)$ek['formulierung']) !== '' ? 'Formulierung: ' . $ek['formulierung'] : '',
+            !empty($ek['notiz']) ? $ek['notiz'] : '',
+        ]));
+        q("INSERT INTO produkt (nummer,name,status,notiz) VALUES (?,?, 'entwurf', ?)",
+          [naechste_nummer('P'), mb_substr((string)$ek['name'], 0, 190), $notiz]);
+        $pid = (int) insert_id();
+        q("UPDATE ek_import SET produkt_id=?, status='bestaetigt', ki_hinweis='Produkt neu angelegt' WHERE id=?", [$pid, $id]);
+        return ['ok' => true, 'typ' => 'produkt', 'neu_id' => $pid, 'name' => (string)$ek['name']];
+    }
+
+    // Rohstoff
+    if (!empty($ek['item_id'])) return ['ok' => false, 'fehler' => 'Schon einem Rohstoff zugeordnet.'];
+    q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug,ek_preis,notiz) VALUES (?,?, 'rohstoff','kg','kg',0,?)",
+      [naechste_nummer('R'), mb_substr((string)$ek['name'], 0, 190),
+       'Aus EK-Import angelegt' . (!empty($ek['lieferant']) ? ' (Lieferant ' . $ek['lieferant'] . ')' : '')]);
+    $iid = (int) insert_id();
+    q("UPDATE ek_import SET item_id=?, status='bestaetigt', ki_hinweis='Rohstoff neu angelegt' WHERE id=?", [$iid, $id]);
+    ek_lieferant_preis_schreiben(array_merge($ek, ['item_id' => $iid]));   // Preis (mit Staffel) an den neuen Rohstoff
+    return ['ok' => true, 'typ' => 'rohstoff', 'neu_id' => $iid, 'name' => (string)$ek['name']];
+}
+
 // Vorschlag verwerfen (Zuordnung löschen, Zeile bleibt zum späteren Neu-Zuordnen).
 function ek_verwerfen(int $id): void {
     q("UPDATE ek_import SET item_id=NULL, produkt_id=NULL, ki_score=NULL, ki_hinweis=NULL, status='verworfen' WHERE id=?", [$id]);

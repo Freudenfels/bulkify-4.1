@@ -33,7 +33,10 @@ beim Seitenaufruf idempotent nachgezogen (`lieferant_alias_anwenden()`). Tabelle
 - **KI-Zuordnung starten**: verarbeitet die nächsten N offenen Zeilen über
   `core/ek_ki.php` (Vorschlag mit Zuversicht in %). Knopf nur auf **beta** aktiv (KI dort).
 - Je Zeile: bei einem Vorschlag **Bestätigen**/**Verwerfen**; sonst **manuelle Zuordnung**
-  per Freitext (Datalist mit Rohstoff-/Produktnamen).
+  per Freitext (Datalist mit Rohstoff-/Produktnamen) **oder** **„+ Neuer Rohstoff/Neues
+  Produkt"** – legt aus der Zeile direkt einen neuen Datensatz an und ordnet ihn zu
+  (`ek_neu_anlegen()`): Fertigprodukt → `produkt` (Entwurf, Zukauf-Infos in der Notiz),
+  Rohstoff → `item` + `lieferant_preis` (mit Staffelmenge aus dem Namen).
 
 ## Datenfluss
 1. `tools/ek_import.php` füllt `ek_import` aus den CSVs (Rohnamen, noch ohne Zuordnung).

@@ -31,6 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($akt === 'alias_del') { lieferant_alias_loeschen((int)($_POST['id'] ?? 0)); header('Location: ' . $ret); exit; }
     if ($akt === 'bestaetigen') { ek_bestaetigen((int)($_POST['id'] ?? 0)); header('Location: ' . $ret); exit; }
     if ($akt === 'verwerfen')   { ek_verwerfen((int)($_POST['id'] ?? 0));   header('Location: ' . $ret); exit; }
+    if ($akt === 'neu_anlegen') {
+        $r = ek_neu_anlegen((int)($_POST['id'] ?? 0));
+        $_SESSION['ek_flash'] = $r['ok']
+            ? (($r['typ'] === 'produkt' ? 'Produkt' : 'Rohstoff') . ' „' . h($r['name']) . '" neu angelegt und zugeordnet.')
+            : ('Nicht angelegt: ' . ($r['fehler'] ?? ''));
+        header('Location: ' . $ret); exit;
+    }
     if ($akt === 'manuell')     { $ok = ek_manuell_zuordnen((int)($_POST['id'] ?? 0), (string)($_POST['eingabe'] ?? ''), true);
         $_SESSION['ek_flash'] = $ok ? 'Manuell zugeordnet und bestätigt.' : 'Kein passender Eintrag zur Eingabe gefunden.';
         header('Location: ' . $ret); exit; }
@@ -179,17 +186,26 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
           <?php endif; ?>
         </td>
         <td>
+          <?php
+            $neuLabel = $typ==='rohstoff' ? '+ Neuer Rohstoff' : '+ Neues Produkt';
+            $neuForm = '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="neu_anlegen"><input type="hidden" name="id" value="'.(int)$e['id'].'"><input type="hidden" name="ret" value="'.h($retQuery).'"><button class="btn btn-ghost btn-sm" type="submit" data-busy="…" title="'.($typ==='rohstoff'?'Rohstoff':'Produkt').' aus dieser Zeile neu anlegen und zuordnen">'.$neuLabel.'</button></form>';
+          ?>
           <?php if ($st==='vorschlag'): ?>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <form method="post" style="margin:0"><input type="hidden" name="aktion" value="bestaetigen"><input type="hidden" name="id" value="<?= (int)$e['id'] ?>"><input type="hidden" name="ret" value="<?= h($retQuery) ?>"><button class="btn btn-primary btn-sm" type="submit" data-busy="…">Bestätigen</button></form>
               <form method="post" style="margin:0"><input type="hidden" name="aktion" value="verwerfen"><input type="hidden" name="id" value="<?= (int)$e['id'] ?>"><input type="hidden" name="ret" value="<?= h($retQuery) ?>"><button class="btn btn-ghost btn-sm" type="submit">Verwerfen</button></form>
+              <?= $neuForm ?>
             </div>
           <?php elseif ($st!=='bestaetigt'): ?>
-            <form method="post" style="margin:0;display:flex;gap:6px">
-              <input type="hidden" name="aktion" value="manuell"><input type="hidden" name="id" value="<?= (int)$e['id'] ?>"><input type="hidden" name="ret" value="<?= h($retQuery) ?>">
-              <input type="text" name="eingabe" placeholder="<?= $typ==='rohstoff'?'Rohstoff-Name/Art.-Nr.':'Produkt-Name/Nr.' ?>" style="min-width:180px" list="<?= $typ==='rohstoff'?'roh_dl':'prod_dl' ?>">
-              <button class="btn btn-ghost btn-sm" type="submit" data-busy="…">zuordnen</button>
-            </form>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <form method="post" style="margin:0;display:flex;gap:6px">
+                <input type="hidden" name="aktion" value="manuell"><input type="hidden" name="id" value="<?= (int)$e['id'] ?>"><input type="hidden" name="ret" value="<?= h($retQuery) ?>">
+                <input type="text" name="eingabe" placeholder="<?= $typ==='rohstoff'?'Rohstoff-Name/Art.-Nr.':'Produkt-Name/Nr.' ?>" style="min-width:180px" list="<?= $typ==='rohstoff'?'roh_dl':'prod_dl' ?>">
+                <button class="btn btn-ghost btn-sm" type="submit" data-busy="…">zuordnen</button>
+              </form>
+              <span class="muted" style="font-size:12px">oder</span>
+              <?= $neuForm ?>
+            </div>
           <?php else: ?>
             <span class="muted" style="font-size:12px">fertig</span>
           <?php endif; ?>
