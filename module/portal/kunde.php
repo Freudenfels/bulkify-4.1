@@ -1584,7 +1584,10 @@ portal_head('Kundenportal · ' . $k['firma']);
 <?php elseif ($view === 'rohanfrage'):
     $meine = array_filter($portalAnfragen, fn($a) => $a['typ'] === 'rohstoff');
     // Vorbefüllung aus dem Katalog-Direktlink (&iid=): Name des Rohstoffs in die erste Zeile.
-    $vorRohName = (int)($_GET['iid'] ?? 0) ? (string) scalar("SELECT name FROM item WHERE id=? AND kategorie='rohstoff'", [(int)$_GET['iid']]) : ''; ?>
+    $vorRohName = (int)($_GET['iid'] ?? 0) ? (string) scalar("SELECT name FROM item WHERE id=? AND kategorie='rohstoff'", [(int)$_GET['iid']]) : '';
+    // Info je Katalog-Rohstoff (Name -> Form/CAS/Detail-Link) für die Live-Anzeige nach der Auswahl.
+    $rohInfoMap = [];
+    foreach ($rohkatalog as $r) $rohInfoMap[$r['name']] = ['form' => ($FORMLBL_P[$r['form']] ?? $r['form']), 'cas' => ($r['cas'] ?: ''), 'id' => (int)$r['id']]; ?>
   <h1 style="margin-bottom:4px">Rohstoff anfragen</h1>
   <div class="bx-panel">
     <p class="muted" style="margin-top:0">Wählen Sie einen Rohstoff aus dem Katalog oder tippen Sie ihn ein. Sie können mehrere Rohstoffe auf einmal anfragen – Sie erhalten <strong>je Rohstoff ein eigenes Angebot</strong>, das Sie einzeln annehmen können.</p>
@@ -1594,7 +1597,8 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div id="rohRows">
         <?php for ($i=0;$i<1;$i++): ?>
         <div class="rohrow bx-panel" style="background:var(--panel-2);padding:12px 14px;margin-bottom:10px">
-          <div class="bx-field"><label>Rohstoff</label><input type="text" name="roh_name[]" list="rohliste" value="<?= $i === 0 ? h($vorRohName) : '' ?>" placeholder="Rohstoff wählen oder eintippen"></div>
+          <div class="bx-field"><label>Rohstoff</label><input type="text" name="roh_name[]" list="rohliste" value="<?= $i === 0 ? h($vorRohName) : '' ?>" placeholder="Rohstoff wählen oder eintippen">
+            <div class="rohinfo muted" style="font-size:12px;margin-top:6px"></div></div>
           <div class="bx-grid">
             <div class="bx-field"><label>Menge</label><input type="number" name="roh_menge[]" min="0" step="0.001" placeholder="z. B. 25"></div>
             <div class="bx-field"><label>Einheit</label><select name="roh_einheit[]"><?php foreach (['kg','g','t','Stück','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
@@ -1610,10 +1614,26 @@ portal_head('Kundenportal · ' . $k['firma']);
     </form>
   </div>
   <script>
+  window.rohInfo = <?= json_encode($rohInfoMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+  var rohToken = '<?= h($token) ?>';
+  function rohInfoZeige(inp){
+    var box = inp.closest('.rohrow').querySelector('.rohinfo');
+    var d = window.rohInfo[inp.value.trim()];
+    if (d) {
+      var t = []; if (d.form) t.push(d.form); if (d.cas) t.push('CAS ' + d.cas);
+      box.innerHTML = (t.join(' · ') || 'Im Katalog verfügbar') + ' · <a href="?p=portal&token=' + rohToken + '&v=rohstoff&iid=' + d.id + '" target="_blank">Details ansehen</a>';
+    } else { box.textContent = inp.value.trim() ? 'Nicht im Katalog – wir prüfen die Beschaffung.' : ''; }
+  }
+  document.getElementById('rohRows').addEventListener('input', function(e){
+    if (e.target.matches('input[name="roh_name[]"]')) rohInfoZeige(e.target);
+  });
   document.getElementById('rohAdd').addEventListener('click', function(){
     var rows = document.getElementById('rohRows'); var first = rows.querySelector('.rohrow');
-    var c = first.cloneNode(true); c.querySelectorAll('input').forEach(function(x){ x.value=''; }); rows.appendChild(c);
+    var c = first.cloneNode(true); c.querySelectorAll('input').forEach(function(x){ x.value=''; });
+    var inf = c.querySelector('.rohinfo'); if (inf) inf.textContent = ''; rows.appendChild(c);
   });
+  // Vorbefüllte erste Zeile gleich mit Info versehen
+  document.querySelectorAll('#rohRows input[name="roh_name[]"]').forEach(function(x){ if (x.value.trim()) rohInfoZeige(x); });
   </script>
   <?php if ($meine): ?>
   <div class="bx-panel"><h2>Meine Rohstoffanfragen</h2>
