@@ -918,6 +918,8 @@ function init_schema(): void {
     ensure_column('rezeptur_anfrage', 'produktname', "VARCHAR(190) NULL");    // Wunsch-Produktname des Kunden bei der Rezepturanfrage
     ensure_column('produkt', 'kundenname', "VARCHAR(190) NULL");              // vom Kunden gewünschter Produktname (intern = name)
     ensure_column('produkt', 'novelfood_status', "VARCHAR(20) NOT NULL DEFAULT 'unklar'"); // Novel-Food-Konformität: unklar|konform|novel_food|pruefung
+    ensure_column('produkt', 'haltbarkeit', "VARCHAR(60) NULL");              // Mindesthaltbarkeit (z. B. „24 Monate"), aus Spec
+    ensure_column('produkt', 'allergene', "VARCHAR(255) NULL");               // Allergene des Fertigprodukts, aus Spec
     // Angebot als Preismatrix (Kunde wählt Zelle: Stückzahl × Bestellmenge) -> gewählte Werte fließen in Auftrag + Produktion
     ensure_column('auftrag', 'stueck', "INT NULL");
     ensure_column('auftrag', 'verpackung_id', "INT NULL");

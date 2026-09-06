@@ -28,3 +28,13 @@
 **Zwei Namen:** **Produktname (intern)** = `produkt.name` (unser Arbeitsname, z. B. „Zink") – heißen mehrere Produkte gleich, hängt `produkt_name_versioniert()` beim Speichern automatisch „ v2, v3 …" an (case-insensitiv, erster behält den Basisnamen). **Name für den Kunden** = `produkt.kundenname` (z. B. „Super Zink", leer = interner Name) – erscheint überall beim Kunden (Katalog, Produktdetail, Angebote, Bestellungen, Angebots-PDF, PPWR). Portal-Queries nutzen `COALESCE(NULLIF(kundenname,''), name)`; intern bleibt `name`.
 
 **Zusammenhang:** Die Produktkosten (inkl. kompletter Verpackung) sind die Basis, auf die im **Angebot** die Marge kommt. Die Tages-Deklaration ist die Etikett-Angabe „pro Tagesdosis".
+
+## Spezifikation & CoA (KI liest aus)
+Am Produkt (Panel „Spezifikation & CoA") lassen sich **Spec** und **CoA** hochladen (zwei
+Buttons, `dok_typ=spec`/`coa`, `objekt_typ='produkt'`). Nach dem Upload liest `spec_ki_nach_upload()`
+das Dokument aus (nur beta) und merkt den Vorschlag am Dokument (`dokument.ki_daten`). Das
+Panel zeigt je Dokument, was die KI gelesen hat: beim **Spec** Haltbarkeit/Allergene/
+Zertifikate/Lagerung, beim **CoA** Charge/MHD/Herstelldatum + die Analysewerte-Tabelle.
+„Haltbarkeit/Allergene ins Produkt übernehmen" (`aktion=spec_uebernehmen`) schreibt die
+Werte in die neuen Felder `produkt.haltbarkeit`/`produkt.allergene` (auch im Formular
+editierbar). Läuft die KI nicht (lokal), wird nur hochgeladen; Felder von Hand füllbar.

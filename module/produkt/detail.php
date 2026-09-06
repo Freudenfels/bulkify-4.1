@@ -3,6 +3,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
+require_once BX_ROOT . '/core/spec_ki.php';   // Spec/CoA am Produkt per KI auslesen
 
 $DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 $id  = $_GET['id'] ?? 'neu';
@@ -15,8 +16,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'matri
     header('Location: ?p=produkt&id=' . $id . '&matrix=' . $n); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_upload' && is_numeric($id)) {
-    dokument_upload('produkt', (int)$id);
-    header('Location: ?p=produkt&id=' . $id . '&gespeichert=1#dok'); exit;
+    $dokId = dokument_upload('produkt', (int)$id);
+    // Bei Spec/CoA direkt von der KI auslesen lassen (läuft nur auf beta) und den Vorschlag am Dokument merken.
+    $gelesen = ($dokId && in_array($_POST['dok_typ'] ?? '', ['spec', 'coa', 'analyse'], true)) ? (spec_ki_nach_upload($dokId) ? 1 : 0) : 0;
+    header('Location: ?p=produkt&id=' . $id . '&gespeichert=1' . ($gelesen ? '&kigelesen=1' : '') . '#specfeld'); exit;
+}
+// Von der KI aus dem Spec gelesene Produktfelder (Haltbarkeit, Allergene) übernehmen.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_uebernehmen' && is_numeric($id)) {
+    $vor = spec_ki_vorschlag((int)($_POST['dok_id'] ?? 0));
+    $stamm = (array)($vor['stamm'] ?? []);
+    $n = 0;
+    foreach (['haltbarkeit' => 60, 'allergene' => 255] as $f => $len) {
+        if (trim((string)($stamm[$f] ?? '')) !== '') { q("UPDATE produkt SET `$f`=? WHERE id=?", [mb_substr((string)$stamm[$f], 0, $len), (int)$id]); $n++; }
+    }
+    header('Location: ?p=produkt&id=' . $id . '&specueb=' . $n . '#specfeld'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && is_numeric($id)) {
     dokument_freigabe_toggle('produkt', (int)$id, (int)($_POST['dok_id'] ?? 0));
@@ -51,15 +64,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
         $kdname = $f('kundenname') ?: null;   // Name für den Kunden (leer = interner Name)
         $name = produkt_name_versioniert($f('name'), $neu ? 0 : (int)$id);   // interner Name eindeutig (v2, v3 …)
         $nf = in_array($f('novelfood_status'), ['unklar','konform','novel_food','pruefung'], true) ? $f('novelfood_status') : 'unklar';
+        $halt = mb_substr($f('haltbarkeit'), 0, 60) ?: null; $allerg = mb_substr($f('allergene'), 0, 255) ?: null;
         if ($neu) {
-            q("INSERT INTO produkt (nummer,name,kundenname,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,novelfood_status,notiz)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('P'), $name, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status') ?: 'entwurf', $nf, $f('notiz')]);
+            q("INSERT INTO produkt (nummer,name,kundenname,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,novelfood_status,haltbarkeit,allergene,notiz)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('P'), $name, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status') ?: 'entwurf', $nf, $halt, $allerg, $f('notiz')]);
             $id = insert_id();
             log_aktivitaet('kunde', (int)($kunde_id ?: 0), 'team', 'Produkt „' . $name . '" angelegt.', 'produkt', (int)$id);
         } else {
-            q("UPDATE produkt SET name=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,novelfood_status=?,notiz=? WHERE id=?",
-              [$name, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $nf, $f('notiz'), (int)$id]);
+            q("UPDATE produkt SET name=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,novelfood_status=?,haltbarkeit=?,allergene=?,notiz=? WHERE id=?",
+              [$name, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $nf, $halt, $allerg, $f('notiz'), (int)$id]);
         }
         header('Location: ?p=produkt&id=' . $id . '&gespeichert=1'); exit;
     }
@@ -202,6 +216,10 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     <div class="bx-field"><label>Einheiten je Packung <?= bx_hint('z. B. 120 Kapseln je Dose') ?></label><input type="number" name="einheiten_pro_packung" id="einheiten" value="<?= $v('einheiten_pro_packung') ?>"></div>
     <div class="bx-field"><label>Verzehr je Tag <?= bx_hint('Empfehlung – Basis für % NRV pro Tag und Reichweite') ?></label><input type="number" step="0.5" name="einnahme_pro_tag" id="intake" value="<?= $v('einnahme_pro_tag') ?>"></div>
   </div>
+  <div class="bx-grid">
+    <div class="bx-field"><label>Haltbarkeit <?= bx_hint('Mindesthaltbarkeit des Fertigprodukts, z. B. „24 Monate". Kann per Spec-Upload automatisch gefüllt werden.') ?></label><input type="text" name="haltbarkeit" value="<?= $v('haltbarkeit') ?>" placeholder="z. B. 24 Monate"></div>
+    <div class="bx-field"><label>Allergene <?= bx_hint('Allergene des Fertigprodukts. Aus dem Spec übernehmbar.') ?></label><input type="text" name="allergene" value="<?= $v('allergene') ?>" placeholder="z. B. keine"></div>
+  </div>
   <div class="bx-field"><label>Notiz</label><textarea name="notiz"><?= $v('notiz') ?></textarea></div>
   </div>
 
@@ -277,6 +295,48 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     </table></div>
     <div class="muted" style="margin-top:8px">VK je Packung (Basis, ohne Kundenrabatt). Stand: <?= h(fmt_zeit($matrix[0]['stand'])) ?>.</div>
   <?php endif; ?>
+</div>
+<div class="bx-panel" id="specfeld">
+  <h2 style="margin-top:0">Spezifikation &amp; CoA <?= bx_hint('Spec oder CoA (Analysenzertifikat) hochladen – die KI liest es aus. Spec füllt Haltbarkeit/Allergene ins Produkt; beim CoA werden Charge/MHD und die Analysewerte angezeigt. KI läuft nur auf beta.') ?></h2>
+  <?php if (isset($_GET['kigelesen'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Dokument von der KI ausgelesen – Vorschlag unten.</div><?php endif; ?>
+  <?php if (isset($_GET['specueb'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px"><?= (int)$_GET['specueb'] ?> Feld(er) ins Produkt übernommen.</div><?php endif; ?>
+  <?php if (!ki_bereit()): ?><div class="muted" style="font-size:12px;margin-bottom:8px">Automatisches Auslesen läuft nur auf beta. Hochladen geht überall; die Felder kannst du dann von Hand füllen.</div><?php endif; ?>
+  <div class="bx-row" style="gap:12px;flex-wrap:wrap;margin-bottom:6px">
+    <form method="post" enctype="multipart/form-data" style="margin:0"><input type="hidden" name="aktion" value="dok_upload"><input type="hidden" name="dok_typ" value="spec">
+      <label class="btn btn-primary btn-sm" style="cursor:pointer;margin:0">Spec hochladen (KI liest aus)<input type="file" name="dok" accept=".pdf,image/*" style="display:none" onchange="this.form.submit()"></label></form>
+    <form method="post" enctype="multipart/form-data" style="margin:0"><input type="hidden" name="aktion" value="dok_upload"><input type="hidden" name="dok_typ" value="coa">
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0">CoA hochladen (KI liest aus)<input type="file" name="dok" accept=".pdf,image/*" style="display:none" onchange="this.form.submit()"></label></form>
+  </div>
+  <?php $specDocs = all("SELECT id,typ,datei_orig,ki_daten,angelegt FROM dokument WHERE objekt_typ='produkt' AND objekt_id=? AND typ IN ('spec','coa','analyse') ORDER BY id DESC", [(int)$id]);
+        if (!$specDocs): ?><div class="muted">Noch kein Spec/CoA hochgeladen.</div>
+  <?php else: foreach ($specDocs as $d): $vor = $d['ki_daten'] ? json_decode((string)$d['ki_daten'], true) : null; ?>
+    <div class="bx-panel" style="background:var(--panel-2);margin-top:10px">
+      <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <div><strong style="font-weight:600"><?= strtoupper(h($d['typ'])) ?></strong> · <a class="kundenlink" href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['datei_orig']) ?></a></div>
+        <span class="muted" style="font-size:12px"><?= h(fmt_zeit($d['angelegt'])) ?></span>
+      </div>
+      <?php if (!is_array($vor)): ?><div class="muted" style="font-size:13px;margin-top:6px">Noch nicht ausgelesen (KI nur auf beta).</div>
+      <?php else: $stamm=(array)($vor['stamm']??[]); $charge=(array)($vor['charge']??[]); $werte=(array)($vor['werte']??[]); ?>
+        <div class="bx-grid" style="margin-top:8px;font-size:13px">
+          <?php foreach (['haltbarkeit'=>'Haltbarkeit','allergene'=>'Allergene','zertifikate'=>'Zertifikate','lagerbedingungen'=>'Lagerung'] as $k=>$lbl) if (!empty($stamm[$k])): ?>
+            <div><span class="muted"><?= $lbl ?>:</span> <?= h((string)$stamm[$k]) ?></div>
+          <?php endif; ?>
+          <?php foreach (['charge_nr'=>'Charge','mhd'=>'MHD','herstelldatum'=>'Herstelldatum','menge'=>'Menge'] as $k=>$lbl) if (!empty($charge[$k])): ?>
+            <div><span class="muted"><?= $lbl ?>:</span> <?= h((string)$charge[$k]) ?></div>
+          <?php endif; ?>
+        </div>
+        <?php if ($werte): ?>
+          <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table"><thead><tr><th>Parameter</th><th>Spezifikation</th><th>Ergebnis</th></tr></thead><tbody>
+          <?php foreach (array_slice($werte,0,40) as $w): ?><tr><td><?= h((string)($w['parameter']??'')) ?></td><td><?= h((string)($w['spezifikation']??'')) ?></td><td><?= h((string)($w['ergebnis']??'')) ?></td></tr><?php endforeach; ?>
+          </tbody></table></div>
+        <?php endif; ?>
+        <?php if (!empty($vor['hinweise'])): ?><div class="muted" style="font-size:12px;margin-top:6px"><?= h(implode(' · ', array_map('strval',(array)$vor['hinweise']))) ?></div><?php endif; ?>
+        <?php if ($d['typ']==='spec' && (!empty($stamm['haltbarkeit'])||!empty($stamm['allergene']))): ?>
+          <form method="post" style="margin-top:10px"><input type="hidden" name="aktion" value="spec_uebernehmen"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-primary btn-sm" type="submit" data-busy="…">Haltbarkeit/Allergene ins Produkt übernehmen</button></form>
+        <?php endif; ?>
+      <?php endif; ?>
+    </div>
+  <?php endforeach; endif; ?>
 </div>
 <div id="dok"><?php dokument_panel('produkt', (int)$id, $lieferanten); ?></div>
 <?php endif; ?>
