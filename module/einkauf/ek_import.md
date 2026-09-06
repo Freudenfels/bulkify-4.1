@@ -11,11 +11,21 @@ Zeigt die aus CSV eingelesenen Einkaufspreise (Tabelle `ek_import`).
 Suche über Name/Lieferant/Formulierung; Filter „nur nicht zugeordnete".
 „Zuordnung" verlinkt den v4-Rohstoff/das Produkt, sobald `item_id`/`produkt_id` gesetzt ist.
 
+## Zuordnung (Review-UI)
+- **Status-Filter** (offen / KI-Vorschlag / bestätigt / kein Treffer / verworfen) neben
+  dem Typ-Reiter.
+- **KI-Zuordnung starten**: verarbeitet die nächsten N offenen Zeilen über
+  `core/ek_ki.php` (Vorschlag mit Zuversicht in %). Knopf nur auf **beta** aktiv (KI dort).
+- Je Zeile: bei einem Vorschlag **Bestätigen**/**Verwerfen**; sonst **manuelle Zuordnung**
+  per Freitext (Datalist mit Rohstoff-/Produktnamen).
+
 ## Datenfluss
 1. `tools/ek_import.php` füllt `ek_import` aus den CSVs (Rohnamen, noch ohne Zuordnung).
-2. Zuordnung (manuell/KI auf beta) setzt `item_id`/`produkt_id` + `status`.
-3. Bestätigte Rohstoff-Zeilen → `lieferant_preis` → „Preis ab"/Lieferanten-Marker in der
-   Rohstoffliste. Fertigprodukt-Zeilen = interne Fertigprodukt-Preisliste.
+2. KI-Batch oder manuelle Eingabe setzt `item_id`/`produkt_id` + `status`.
+3. **Bestätigen** → bei Rohstoff wird `lieferant_preis` geschrieben (`quelle='ek_import'`,
+   idempotent über `ek_import_id`) → „Preis ab"/Lieferanten-Marker in der Rohstoffliste
+   füllen sich automatisch. Fertigprodukt-Zeilen bekommen nur `produkt_id` (interne
+   Fertigprodukt-Preisliste, nie Kundensicht).
 
-Der KI-Zuordnungsschritt (Vorschlag je Zeile, Bestätigung von Hand) folgt und läuft auf
-beta (KI nur dort).
+Logik in `core/ek_ki.php`. Der manuelle Pfad ist überall verifiziert; der KI-Pfad läuft
+identisch, nur mit KI-Vorschlag statt Handeingabe.
