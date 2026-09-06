@@ -265,7 +265,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             $coaChargeNeu = (int) (spec_ki_coa_charge((int)$id, (array)$ki['ergebnis'], $lief) ?? 0);
             unset($_SESSION['rohstoff_ki']);
         }
-        header('Location: ?p=rohstoff&id=' . $id . '&gespeichert=1' . ($coaChargeNeu ? '&coacharge=' . $coaChargeNeu : '')); exit;
+        // Auf dem Reiter bleiben, auf dem gespeichert wurde (statt zurück auf „Stammdaten").
+        $bleibTab = preg_replace('/[^a-z]/', '', (string)($_POST['active_tab'] ?? ''));
+        header('Location: ?p=rohstoff&id=' . $id . '&gespeichert=1' . ($bleibTab ? '&tab=' . $bleibTab : '') . ($coaChargeNeu ? '&coacharge=' . $coaChargeNeu : '')); exit;
     }
 }
 
@@ -399,6 +401,7 @@ if (!$neu) {
 
 
 <form method="post" class="bx-form" enctype="multipart/form-data">
+  <input type="hidden" name="active_tab" id="activeTab" value="<?= h(preg_replace('/[^a-z]/', '', (string)($_GET['tab'] ?? 'stamm')) ?: 'stamm') ?>">
   <div class="settabs" id="itabs">
     <a href="#" class="on" data-tab="stamm">Stammdaten</a>
     <a href="#" data-tab="quali">Wirkstoff &amp; Qualität</a>
@@ -885,6 +888,7 @@ if (!$neu) {
       document.querySelectorAll('[data-panel]').forEach(function(p){
         p.hidden = (p.getAttribute('data-panel') !== t.getAttribute('data-tab'));
       });
+      var at = document.getElementById('activeTab'); if (at) at.value = t.getAttribute('data-tab');
     });
   });
   var urlTab = new URLSearchParams(location.search).get('tab');
