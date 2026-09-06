@@ -85,8 +85,8 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
     <?php if ($statusF==='todo'): ?>
       <form method="post" style="margin:0">
         <input type="hidden" name="aktion" value="anwenden"><input type="hidden" name="item_id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="ret" value="&status=todo">
-        <label class="muted" style="font-size:12px">Varianten – eine pro Zeile (erste Zeile bleibt am Original-Datensatz):</label>
-        <textarea name="varianten" rows="<?= $zeilen ?>" style="width:100%;font-size:13px"><?= h($prefill) ?></textarea>
+        <label class="muted" style="font-size:12px">Varianten – eine pro Zeile (erste Zeile bleibt am Original-Datensatz): <span class="bx-vcount" style="font-weight:600;color:var(--gruen)"></span></label>
+        <textarea name="varianten" class="bx-var" rows="<?= $zeilen ?>" style="width:100%;font-size:13px"><?= h($prefill) ?></textarea>
         <div class="bx-row" style="gap:8px;margin-top:8px">
           <button class="btn btn-primary btn-sm" type="submit" data-busy="…">Aufschlüsseln übernehmen</button>
           <button class="btn btn-ghost btn-sm" type="submit" formnovalidate name="aktion" value="verwerfen">Überspringen</button>
@@ -96,5 +96,20 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
     <?php endif; ?>
   </div>
 <?php endforeach; endif; ?>
+<script>
+// Live-Zähler: zeigt je Textfeld, wie viele Varianten (nicht-leere Zeilen) daraus werden.
+(function(){
+  function zaehl(t){
+    var n = t.value.split(/\n/).map(function(s){return s.trim();}).filter(Boolean).length;
+    var f = t.closest('form'); if(!f) return;
+    var c = f.querySelector('.bx-vcount'); if(!c) return;
+    c.textContent = '→ ' + n + (n===1 ? ' Rohstoff' : ' Rohstoffe');
+  }
+  document.querySelectorAll('textarea.bx-var').forEach(function(t){
+    zaehl(t);
+    t.addEventListener('input', function(){ zaehl(t); });
+  });
+})();
+</script>
 <?php
 render_footer();
