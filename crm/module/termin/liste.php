@@ -22,7 +22,8 @@ $offen  = termin_liste(false);
 $fertig = termin_liste(true);
 
 kopf('Termine', 'mehr');
-seitenkopf('Termine', 'Was ansteht – und woran es hängt.');
+seitenkopf('Termine', 'Was ansteht – und woran es hängt.',
+    '<a class="btn btn-ghost" href="?p=kalender">Im Kalender</a>');
 if (isset($_GET['ok']))     hinweis($_GET['ok'] === '2' ? 'Erledigt.' : 'Termin eingetragen.');
 if (isset($_GET['fehler'])) hinweis('Titel und Zeitpunkt sind Pflicht.', 'warn');
 ?>

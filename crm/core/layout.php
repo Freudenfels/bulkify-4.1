@@ -16,7 +16,8 @@ function crm_nav(): array {
     return [
         'Start'    => ['wartet' => 'Wer wartet auf mich'],
         'Kontakte' => ['kontakte' => 'Kontakte', 'erfassen' => 'Schnell erfassen',
-                       'mail' => 'E-Mail einlesen', 'termine' => 'Termine'],
+                       'mail' => 'E-Mail einlesen'],
+        'Kalender' => ['kalender' => 'Kalender', 'termine' => 'Termine'],
         'Kunden'   => ['kunden' => 'Kunden'],
         'System'   => ['mehr' => 'Einstellungen'],
     ];

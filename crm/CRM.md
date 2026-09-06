@@ -52,6 +52,8 @@ Datei zu prüfen – dann weiß man auch, wo man sucht.
 - **Schnell erfassen** – auch Ziel des Android-Teilen-Menüs, mit KI-Auslesen von Text und Foto.
 - **E-Mail einlesen** (`/crm/?p=mail`) – Mail einfügen, die KI ordnet sie einem Kunden oder
   Kontakt zu und schlägt Notiz und Wiedervorlage vor. Ein Klick, dann steht es.
+- **Kalender** (`/crm/?p=kalender`) – Termine und Wiedervorlagen im Monat, im Aufbau des
+  Produktions-Kalenders. Höchstens vier Einträge je Tag, danach „+N weitere".
 - **Termine**, **Kunden mit Verlauf**, **Mehr**.
 - **KI:** Visitenkarte fotografieren, Text auslesen, Antwortvorschlag, Tagesbriefing. Alle vier
   füllen nur vor – gespeichert und verschickt wird nie automatisch.
