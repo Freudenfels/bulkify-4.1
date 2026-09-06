@@ -225,6 +225,17 @@ function lieferant_alias_anwenden(): int {
     return $n;
 }
 
+// Rohstoffnamen eindeutig halten: existiert der Name schon, wird v2/v3 … angehängt.
+function item_name_versioniert(string $name): string {
+    $base = trim(preg_replace('/\s+v\d+$/i', '', trim($name)));
+    if ($base === '') $base = trim($name);
+    if (!scalar("SELECT 1 FROM item WHERE kategorie='rohstoff' AND name=? LIMIT 1", [$base])) return $base;
+    $max = 1;
+    foreach (all("SELECT name FROM item WHERE kategorie='rohstoff' AND name LIKE ?", [$base . ' v%']) as $o)
+        if (preg_match('/\sv(\d+)$/i', (string)$o['name'], $m)) $max = max($max, (int)$m[1]);
+    return $base . ' v' . ($max + 1);
+}
+
 // Aus einer EK-Zeile direkt einen NEUEN Rohstoff bzw. ein NEUES Produkt anlegen und zuordnen.
 // Fertigprodukt -> produkt (Entwurf, Zukauf-Infos in der Notiz). Rohstoff -> item + lieferant_preis.
 function ek_neu_anlegen(int $id): array {
@@ -241,8 +252,14 @@ function ek_neu_anlegen(int $id): array {
             trim((string)$ek['formulierung']) !== '' ? 'Formulierung: ' . $ek['formulierung'] : '',
             !empty($ek['notiz']) ? $ek['notiz'] : '',
         ]));
+        // Namen unterscheidbar machen: Größe anhängen (z. B. „Ashwagandha · #0"), damit gleichnamige
+        // Zeilen nicht identisch heißen; danach versionieren (v2, v3 …) für echte Dubletten.
+        $gro = trim((string)$ek['groesse']);
+        $basis = (string)$ek['name'];
+        if ($gro !== '' && mb_stripos($basis, $gro) === false) $basis .= ' · ' . $gro;
+        $name = produkt_name_versioniert(mb_substr($basis, 0, 180));
         q("INSERT INTO produkt (nummer,name,status,notiz) VALUES (?,?, 'entwurf', ?)",
-          [naechste_nummer('P'), mb_substr((string)$ek['name'], 0, 190), $notiz]);
+          [naechste_nummer('P'), mb_substr($name, 0, 190), $notiz]);
         $pid = (int) insert_id();
         q("UPDATE ek_import SET produkt_id=?, status='bestaetigt', ki_hinweis='Produkt neu angelegt' WHERE id=?", [$pid, $id]);
         return ['ok' => true, 'typ' => 'produkt', 'neu_id' => $pid, 'name' => (string)$ek['name']];
@@ -251,7 +268,7 @@ function ek_neu_anlegen(int $id): array {
     // Rohstoff
     if (!empty($ek['item_id'])) return ['ok' => false, 'fehler' => 'Schon einem Rohstoff zugeordnet.'];
     q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug,ek_preis,notiz) VALUES (?,?, 'rohstoff','kg','kg',0,?)",
-      [naechste_nummer('R'), mb_substr((string)$ek['name'], 0, 190),
+      [naechste_nummer('R'), mb_substr(item_name_versioniert((string)$ek['name']), 0, 190),
        'Aus EK-Import angelegt' . (!empty($ek['lieferant']) ? ' (Lieferant ' . $ek['lieferant'] . ')' : '')]);
     $iid = (int) insert_id();
     q("UPDATE ek_import SET item_id=?, status='bestaetigt', ki_hinweis='Rohstoff neu angelegt' WHERE id=?", [$iid, $id]);

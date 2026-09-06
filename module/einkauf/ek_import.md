@@ -43,6 +43,9 @@ beim Seitenaufruf idempotent nachgezogen (`lieferant_alias_anwenden()`). Tabelle
   Produkt"** – legt aus der Zeile direkt einen neuen Datensatz an und ordnet ihn zu
   (`ek_neu_anlegen()`): Fertigprodukt → `produkt` (Entwurf, Zukauf-Infos in der Notiz),
   Rohstoff → `item` + `lieferant_preis` (mit Staffelmenge aus dem Namen).
+  Namen werden **unterscheidbar** angelegt: Produkt = Name + Größe (z. B. „Ashwagandha · #0"),
+  echte Dubletten bekommen „ v2/v3 …" (`produkt_name_versioniert` bzw. `item_name_versioniert`).
+  Die vollen Details (Dosierung, Lieferant, Formulierung) stehen in der Notiz.
 - **Alle ohne KI-Treffer anlegen:** Gibt es Zeilen mit Status `kein_treffer`, erscheint ein
   Sammel-Button „Alle N als neue Produkte/Rohstoffe anlegen" (`ek_neu_anlegen_alle()`, mit
   Sicherheitsabfrage) – legt für jede in einem Rutsch einen neuen Datensatz an.
