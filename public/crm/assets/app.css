@@ -1,0 +1,164 @@
+/* bulkify CRM - Handy zuerst.
+   Farben aus der Marke: Dunkelgruen als Traeger, Lime als Akzent, Gruen fuer Aktionen.
+   Die Wartezeit hat eigene Farben (ruhig / warm / heiss) - sie sagen etwas ueber die ZEIT,
+   nicht ueber die Wichtigkeit. */
+:root{
+  --lime:#C0F24E;
+  --gruen:#1D9E75;
+  --gruen-dunkel:#178762;
+  --dunkelgruen:#10210F;
+
+  --grund:#f4f6f2;
+  --flaeche:#ffffff;
+  --flaeche-2:#fafbf8;
+  --linie:#e2e7e0;
+  --linie-fein:#eef2ea;
+  --tinte:#1b241a;
+  --leise:#6b756a;
+
+  --ruhig:#6b756a;
+  --warm:#8a6414;
+  --heiss:#9c4420;
+  --warm-grund:#f6efdf;
+  --heiss-grund:#f7e9e3;
+  --ok-grund:#e7f1ec;
+
+  --r:12px; --r-klein:8px;
+  --schatten:0 1px 2px rgba(16,33,15,.05), 0 4px 14px rgba(16,33,15,.05);
+  --kopf-h:52px; --leiste-h:60px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --grund:#0f130d; --flaeche:#171d14; --flaeche-2:#1c231a;
+    --linie:#2b3428; --linie-fein:#232b21;
+    --tinte:#e6ebe2; --leise:#9aa695;
+    --gruen:#5cc79b; --gruen-dunkel:#4bb389;
+    --ruhig:#9aa695; --warm:#d8b45f; --heiss:#e0876a;
+    --warm-grund:#332a12; --heiss-grund:#361f16; --ok-grund:#16301f;
+    --schatten:0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --grund:#0f130d; --flaeche:#171d14; --flaeche-2:#1c231a;
+  --linie:#2b3428; --linie-fein:#232b21;
+  --tinte:#e6ebe2; --leise:#9aa695;
+  --gruen:#5cc79b; --gruen-dunkel:#4bb389;
+  --ruhig:#9aa695; --warm:#d8b45f; --heiss:#e0876a;
+  --warm-grund:#332a12; --heiss-grund:#361f16; --ok-grund:#16301f;
+  --schatten:0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--grund); color:var(--tinte);
+  font-family:"Segoe UI",-apple-system,system-ui,Roboto,Helvetica,Arial,sans-serif;
+  font-size:15px; line-height:1.5;
+  padding-bottom:calc(var(--leiste-h) + env(safe-area-inset-bottom));
+}
+a{color:var(--gruen); text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--gruen); outline-offset:2px; border-radius:4px}
+
+/* ---------- Kopfleiste ---------- */
+.kopf{
+  position:sticky; top:0; z-index:30; height:var(--kopf-h);
+  display:flex; align-items:center; gap:16px;
+  background:var(--dunkelgruen); color:#fff; padding:0 16px;
+}
+.kopf .marke{color:#fff; font-weight:600; letter-spacing:-.01em; white-space:nowrap}
+.kopf .marke span{color:var(--lime); font-weight:500}
+.kopf .wer{margin-left:auto; color:#b6c7ae; font-size:13px; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; max-width:40vw}
+.breitnav{display:none}
+
+/* ---------- Inhalt ---------- */
+.inhalt{max-width:760px; margin:0 auto; padding:16px}
+.seitenkopf{display:flex; gap:12px; align-items:flex-start; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap}
+h1{font-size:21px; font-weight:600; margin:0}
+h2{font-size:16px; font-weight:600; margin:24px 0 8px}
+.leise{color:var(--leise); margin:2px 0 0; font-size:14px}
+
+.karte{background:var(--flaeche); border:1px solid var(--linie); border-radius:var(--r);
+  box-shadow:var(--schatten); margin-bottom:14px; overflow:hidden}
+.karte .rumpf{padding:16px}
+
+.hinweis{border-radius:var(--r); padding:12px 16px; margin-bottom:14px; background:var(--ok-grund); color:var(--gruen-dunkel)}
+.hinweis.warn{background:var(--heiss-grund); color:var(--heiss)}
+
+/* ---------- Reiter ---------- */
+.reiter{display:flex; gap:4px; margin-bottom:14px; overflow-x:auto; -webkit-overflow-scrolling:touch}
+.reiter a{flex:none; padding:8px 14px; border-radius:20px; color:var(--leise);
+  background:var(--flaeche); border:1px solid var(--linie); font-size:14px; white-space:nowrap}
+.reiter a.an{background:var(--gruen); border-color:transparent; color:#fff; font-weight:600}
+.reiter a:hover{text-decoration:none}
+
+/* ---------- Wartezeilen ---------- */
+.zeile{display:flex; gap:14px; padding:14px 16px; border-bottom:1px solid var(--linie-fein)}
+.zeile:last-child{border-bottom:none}
+.alter{flex:none; width:74px; font-size:13px; font-weight:600; padding-top:1px}
+.alter.ruhig{color:var(--ruhig)} .alter.warm{color:var(--warm)} .alter.heiss{color:var(--heiss)}
+.alter .art{display:block; font-weight:400; font-size:11px; color:var(--leise); margin-top:2px}
+.mitte{flex:1; min-width:0}
+.mitte .titel{font-weight:600; display:block; color:var(--tinte)}
+.mitte .unter{color:var(--leise); font-size:13.5px; display:block; margin-top:2px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.mitte .betrag{color:var(--tinte); font-size:13px; font-variant-numeric:tabular-nums}
+.tuen{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap}
+
+/* ---------- Knoepfe ---------- */
+.btn{display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:14px;
+  padding:9px 14px; border-radius:var(--r-klein); border:1px solid var(--linie);
+  background:var(--flaeche); color:var(--tinte); cursor:pointer; white-space:nowrap}
+.btn:hover{text-decoration:none; border-color:var(--gruen)}
+.btn.stark{background:var(--gruen); border-color:transparent; color:#fff; font-weight:600}
+.btn.stark:hover{background:var(--gruen-dunkel)}
+.btn.klein{padding:6px 11px; font-size:13px}
+.btn.leise{color:var(--leise)}
+
+/* ---------- Formulare ---------- */
+.feld{margin-bottom:14px}
+.feld label{display:block; margin-bottom:5px; color:var(--tinte)}
+input[type=text],input[type=email],input[type=tel],input[type=password],input[type=date],
+input[type=datetime-local],input[type=number],input[type=search],select,textarea{
+  width:100%; font:inherit; color:var(--tinte); background:var(--flaeche);
+  border:1px solid var(--linie); border-radius:var(--r-klein); padding:11px 12px}
+textarea{min-height:110px; resize:vertical}
+input:focus,select:focus,textarea:focus{outline:none; border-color:var(--gruen); box-shadow:0 0 0 3px rgba(29,158,117,.12)}
+.zweispaltig{display:grid; grid-template-columns:1fr; gap:0 14px}
+
+/* ---------- Untere Leiste (Handy) ---------- */
+.tableiste{
+  position:fixed; left:0; right:0; bottom:0; z-index:40;
+  display:flex; background:var(--flaeche); border-top:1px solid var(--linie);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.tableiste a{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:3px; height:var(--leiste-h); color:var(--leise); font-size:11px}
+.tableiste a:hover{text-decoration:none}
+.tableiste a.an{color:var(--gruen)}
+.tableiste svg{width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.7;
+  stroke-linecap:round; stroke-linejoin:round}
+
+.leer{text-align:center; color:var(--leise); padding:48px 16px}
+.leer strong{display:block; color:var(--tinte); font-size:17px; margin-bottom:6px}
+
+/* ---------- Breiter Bildschirm ---------- */
+@media (min-width:861px){
+  body{padding-bottom:0}
+  .tableiste{display:none}
+  .breitnav{display:flex; gap:6px; margin-left:8px}
+  .breitnav a{color:#c3d2bc; padding:6px 12px; border-radius:16px; font-size:14px}
+  .breitnav a.an{background:rgba(192,242,78,.16); color:#fff}
+  .breitnav a:hover{text-decoration:none; color:#fff}
+  .inhalt{padding:24px 16px 64px}
+  .zweispaltig{grid-template-columns:1fr 1fr}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+
+/* Zahl am Menuepunkt "Wartet" - der einzige Grund, die App zu oeffnen. */
+.tableiste .zeichen{position:relative; display:block; line-height:0}
+.tableiste .zahl{position:absolute; top:-5px; left:12px; min-width:17px; height:17px; padding:0 4px;
+  border-radius:9px; background:var(--heiss); color:#fff; font-size:10px; font-weight:700;
+  font-style:normal; display:flex; align-items:center; justify-content:center; line-height:1}
+.breitnav .zahl{font-style:normal; font-weight:700; margin-left:5px}

@@ -5,6 +5,13 @@
 ## Was ist das?
 Clean-Slate-Neuaufbau des bulkify-ERP (Nahrungsergänzungs-Lohnhersteller, Marke **bulkify**). PHP 8.3 + **MariaDB/MySQL**, kein Framework, serverseitig gerendertes HTML. Front-Controller `public/index.php` (Whitelist `?p=<route>`). Ziel: Prozesse/Seiten vereinfachen, Doppelungen killen. Ablauf: Anfrage → Rezeptur/Vorschlag → Angebot → Auftrag → Produktion → Lager → Versand.
 
+## Zwei Programme in diesem Repo
+- **Dashboard** unter `/` - Werkzeug fuer den Rechner (`core/`, `module/`, `public/`).
+- **CRM** unter `/crm/` - Werkzeug fuers Handy (`crm/core/`, `crm/module/`, `public/crm/`).
+  Beantwortet eine Frage: wer wartet auf mich. Details: `crm/CRM.md`.
+  **Alle** Zugriffe des CRM auf Dashboard-Tabellen stehen in `crm/core/erp.php` - nirgends sonst.
+  Wer hier eine Spalte umbenennt, prueft genau diese eine Datei.
+
 ## Lokal starten
 ```
 php -S 127.0.0.1:8741 -t public

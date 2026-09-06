@@ -1,0 +1,64 @@
+{
+    "id": "/crm/",
+    "name": "bulkify CRM",
+    "short_name": "CRM",
+    "description": "Wer wartet auf mich - Anfragen, Angebote, Wiedervorlagen und Kontakte an einer Stelle.",
+    "lang": "de",
+    "start_url": "/crm/",
+    "scope": "/crm/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "background_color": "#10210F",
+    "theme_color": "#10210F",
+    "icons": [
+        {
+            "src": "/crm/assets/app-icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/crm/assets/app-icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/crm/assets/app-icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ],
+    "share_target": {
+        "action": "/crm/?p=erfassen",
+        "method": "POST",
+        "enctype": "multipart/form-data",
+        "params": {
+            "title": "title",
+            "text": "text",
+            "url": "url",
+            "files": [
+                {
+                    "name": "datei",
+                    "accept": [
+                        "image/*",
+                        "application/pdf"
+                    ]
+                }
+            ]
+        }
+    },
+    "shortcuts": [
+        {
+            "name": "Schnell erfassen",
+            "short_name": "Erfassen",
+            "url": "/crm/?p=erfassen"
+        },
+        {
+            "name": "Wer wartet auf mich",
+            "short_name": "Wartet",
+            "url": "/crm/?p=wartet"
+        }
+    ]
+}

@@ -1,5 +1,6 @@
 # Lokale Daten & Uploads (nicht ins Repo)
 /data/
+/crm/data/
 # Live-Zugangsdaten / Secrets
 secrets*.php
 config/config.php
