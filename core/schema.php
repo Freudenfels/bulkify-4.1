@@ -557,6 +557,13 @@ function init_schema(): void {
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         KEY idx_item (item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Lieferantenpreise koennen auch aus dem EK-Import stammen, wo der Lieferant nur als Rohname
+    // (z. B. "Maggi", "Vitaactives") vorliegt und keinem lieferanten-Datensatz entspricht. Daher
+    // Lieferant optional + Rohname als Text, und Herkunft/Bezug festhalten.
+    ensure_column('lieferant_preis', 'lieferant_name', "VARCHAR(120) NULL");
+    ensure_column('lieferant_preis', 'quelle', "VARCHAR(40) NULL");        // z. B. 'ek_import'
+    ensure_column('lieferant_preis', 'ek_import_id', "INT NULL");          // Rueckverweis (idempotent)
+    try { $pdo->exec("ALTER TABLE lieferant_preis MODIFY lieferant_id INT NULL"); } catch (\Throwable $e) {}
 
     // ek_import: Staging fuer eingelesene EK-Preislisten (CSV) – Rohstoff-/Bulk-EK je kg und
     // Fertigprodukt-Kapselpreise, jeweils mit Lieferant. Rohnamen aus der CSV; die Zuordnung zu
