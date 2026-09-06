@@ -558,6 +558,34 @@ function init_schema(): void {
         KEY idx_item (item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // ek_import: Staging fuer eingelesene EK-Preislisten (CSV) – Rohstoff-/Bulk-EK je kg und
+    // Fertigprodukt-Kapselpreise, jeweils mit Lieferant. Rohnamen aus der CSV; die Zuordnung zu
+    // konkreten v4-Rohstoffen (item_id) bzw. Produkten (produkt_id) passiert nachgelagert
+    // (manuell oder KI-gestuetzt auf beta). Bestaetigte Rohstoff-Zeilen werden als lieferant_preis
+    // uebernommen; Fertigprodukt-Zeilen sind die interne Fertigprodukt-Preisliste (nie Kundensicht).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS ek_import (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        typ VARCHAR(16) NOT NULL DEFAULT 'rohstoff',        -- rohstoff | fertigprodukt
+        name VARCHAR(255) NOT NULL,                         -- Rohname aus der CSV
+        formulierung TEXT NULL,
+        groesse VARCHAR(60) NULL,                           -- #0, #00, kg, softgel, tablette ...
+        lieferant VARCHAR(120) NULL,                        -- Roh-Lieferantenname aus der CSV
+        preis DECIMAL(14,6) NOT NULL DEFAULT 0,             -- EUR/kg (rohstoff) bzw. EUR/Kapsel (fertig)
+        einheit VARCHAR(10) NOT NULL DEFAULT 'kg',          -- kg | kapsel | stk | tablette
+        menge DECIMAL(14,3) NULL,                           -- Stueckzahl bzw. kg aus der CSV
+        item_id INT NULL,                                   -- Match: v4-Rohstoff
+        produkt_id INT NULL,                                -- Match: v4-Produkt
+        lieferant_id INT NULL,                              -- Match: v4-Lieferant
+        status VARCHAR(16) NOT NULL DEFAULT 'offen',        -- offen | bestaetigt | verworfen
+        ki_score TINYINT NULL,                              -- 0..100 KI-Zuversicht der Zuordnung
+        ki_hinweis VARCHAR(255) NULL,
+        quelle VARCHAR(80) NULL,                            -- CSV-Datei
+        zeile_hash CHAR(32) NOT NULL,                       -- Idempotenz
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_hash (zeile_hash),
+        KEY idx_typ (typ), KEY idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // bestellung: Einkaufsbestellung beim Lieferanten (BE-). Positionen in bestellung_position.
     $pdo->exec("CREATE TABLE IF NOT EXISTS bestellung (
         id INT AUTO_INCREMENT PRIMARY KEY,

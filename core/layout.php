@@ -29,7 +29,7 @@ function bx_nav(): array {
         'Produkt'      => ['rezeptur' => 'Rezepturen', 'produkte' => 'Produkte', 'novelfood' => 'Novel Food'],
         'Produktion'   => ['produktion' => 'Produktion', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
         'Lager'        => ['lager' => 'Warenlager', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'rohstoffe' => 'Rohstoffe', 'freigaben' => 'Freigaben', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
-        'Einkauf'      => ['bedarf' => 'Einkaufsbedarf', 'einkaufsliste' => 'Einkaufsliste', 'einkauf' => 'Bestellungen', 'lieferanten' => 'Lieferanten', 'lief_preisliste' => 'EK-Preisliste'],
+        'Einkauf'      => ['bedarf' => 'Einkaufsbedarf', 'einkaufsliste' => 'Einkaufsliste', 'einkauf' => 'Bestellungen', 'lieferanten' => 'Lieferanten', 'lief_preisliste' => 'EK-Preisliste', 'ek_import' => 'EK-Preise (Import)'],
         'Buchhaltung'  => ['rechnungen' => 'Rechnungen', 'buchhaltung' => 'Belege'],
         'System'       => ['einstellungen' => 'Einstellungen', 'benutzer' => 'Benutzer', 'app' => 'App aufs Handy'],
     ];
