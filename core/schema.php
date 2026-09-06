@@ -610,6 +610,21 @@ function init_schema(): void {
         benutzer VARCHAR(120) NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // rohstoff_variante_vorschlag: KI-Vorschlag, einen zu langen Rohstoffnamen (mehrere Varianten in
+    // einem Feld) in einzelne Rohstoffe aufzuschluesseln. Der Mensch prueft/editiert vor der Uebernahme.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS rohstoff_variante_vorschlag (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        item_id INT NOT NULL,
+        original_name VARCHAR(255) NULL,
+        basis VARCHAR(190) NULL,
+        varianten_json TEXT NULL,        -- JSON-Array sauberer Variantennamen
+        ki_stand DATETIME NULL,
+        status VARCHAR(16) NOT NULL DEFAULT 'offen',   -- offen | uebernommen | verworfen
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_item (item_id),
+        KEY idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // bestellung: Einkaufsbestellung beim Lieferanten (BE-). Positionen in bestellung_position.
     $pdo->exec("CREATE TABLE IF NOT EXISTS bestellung (
         id INT AUTO_INCREMENT PRIMARY KEY,

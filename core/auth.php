@@ -55,6 +55,7 @@ function route_rollen_map(): array {
         'wareneingang'       => ['einkauf', 'labor', 'production'],
         'rohstoffe'          => ['production', 'einkauf', 'labor'],
         'rohstoff'           => ['production', 'einkauf', 'labor'],
+        'rohstoff_split'     => ['production', 'einkauf', 'labor'],
         'freigaben'          => ['production', 'einkauf', 'labor'],
         'lief_preisliste'    => ['production', 'einkauf', 'labor'],
         'spec_pdf'           => ['production', 'einkauf', 'labor'],
