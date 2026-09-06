@@ -50,6 +50,10 @@ function sql_split(string $sql): array {
 function db_import_sql(PDO $pdo, string $sql): array {
     // MariaDB-Sandbox-Direktive am Dateianfang wegnehmen (sonst Syntaxfehler auf manchen Servern).
     $sql = preg_replace('~/\*M!999999.*?\*/~s', '', $sql);
+    // Neue MariaDB-12-Standardkollation (utf8mb4_uca1400_*) auf die breit unterstuetzte
+    // utf8mb4_unicode_ci normieren – sonst schlaegt der Import auf aelteren MariaDB/MySQL fehl
+    // ("Unknown collation: 'utf8mb4_uca1400_ai_ci'"). Betrifft v. a. Tabellen ohne explizite Kollation.
+    $sql = preg_replace('/utf8mb4_uca1400\w*/i', 'utf8mb4_unicode_ci', $sql);
     $stmts = sql_split($sql);
     $res = ['stmts' => count($stmts), 'ok' => 0, 'fehler' => [], 'abbruch' => false];
 
