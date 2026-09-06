@@ -16,6 +16,7 @@ $routen = [
     'kontakte' => 'kontakt/liste.php',
     'kontakt'  => 'kontakt/detail.php',
     'erfassen' => 'kontakt/erfassen.php',
+    'mail'     => 'mail/lesen.php',
     'termine'  => 'termin/liste.php',
     'kunden'   => 'kunde/liste.php',
     'kunde'    => 'kunde/detail.php',

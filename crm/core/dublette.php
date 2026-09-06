@@ -60,6 +60,11 @@ function dublette_suchen(string $name, string $firma, string $email = '', string
             'grund' => $grund];
     }
 
+    // Der verlaesslichste Treffer zuerst: eine gleiche E-Mail ist ein Beweis, eine aehnliche
+    // Firma nur ein Verdacht. Die Reihenfolge entscheidet, was beim Mail-Einlesen vorgeschlagen wird.
+    $rang = ['gleiche E-Mail' => 1, 'gleiche Telefonnummer' => 2, 'gleiche Firma' => 3,
+             'gleicher Name' => 4, 'ähnliche Firma' => 5];
+    usort($treffer, fn($a, $b) => ($rang[$a['grund']] ?? 9) <=> ($rang[$b['grund']] ?? 9));
     return array_slice($treffer, 0, 6);
 }
 
@@ -71,9 +76,14 @@ function dublette_grund(string $kernF, string $kernN, string $mail, string $tel,
     if ($tel !== '' && dublette_tel($aTel) !== '' && dublette_tel($aTel) === $tel) return 'gleiche Telefonnummer';
 
     $aF = dublette_kern($aFirma);
-    if ($kernF !== '' && $aF !== '' && strlen($kernF) >= 4) {
+    if ($kernF !== '' && $aF !== '') {
         if ($aF === $kernF) return 'gleiche Firma';
-        if (str_contains($aF, $kernF) || str_contains($kernF, $aF)) return 'ähnliche Firma';
+        // Aehnlich ist nur, was sich WIRKLICH aehnelt. Ohne diese Schranke wuerde "Test GmbH"
+        // auf "Testkunde Portal" passen - und eine Mail landete beim falschen Kunden.
+        $kurz = min(strlen($kernF), strlen($aF));
+        $lang = max(strlen($kernF), strlen($aF));
+        if ($kurz >= 6 && $kurz / $lang >= 0.6 && (str_contains($aF, $kernF) || str_contains($kernF, $aF)))
+            return 'ähnliche Firma';
     }
     $aN = dublette_kern($aName);
     if ($kernN !== '' && $aN !== '' && strlen($kernN) >= 5 && $aN === $kernN) return 'gleicher Name';

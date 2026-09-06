@@ -50,6 +50,8 @@ Datei zu prüfen – dann weiß man auch, wo man sucht.
   Versand + `CRM_ANGEBOT_NACHFASSEN` Tagen.
 - **Kontakte** mit Verlauf, Wiedervorlage und „Zum Kunden machen“.
 - **Schnell erfassen** – auch Ziel des Android-Teilen-Menüs, mit KI-Auslesen von Text und Foto.
+- **E-Mail einlesen** (`/crm/?p=mail`) – Mail einfügen, die KI ordnet sie einem Kunden oder
+  Kontakt zu und schlägt Notiz und Wiedervorlage vor. Ein Klick, dann steht es.
 - **Termine**, **Kunden mit Verlauf**, **Mehr**.
 - **KI:** Visitenkarte fotografieren, Text auslesen, Antwortvorschlag, Tagesbriefing. Alle vier
   füllen nur vor – gespeichert und verschickt wird nie automatisch.

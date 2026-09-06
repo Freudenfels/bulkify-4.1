@@ -15,7 +15,8 @@ require_once __DIR__ . '/auth.php';
 function crm_nav(): array {
     return [
         'Start'    => ['wartet' => 'Wer wartet auf mich'],
-        'Kontakte' => ['kontakte' => 'Kontakte', 'erfassen' => 'Schnell erfassen', 'termine' => 'Termine'],
+        'Kontakte' => ['kontakte' => 'Kontakte', 'erfassen' => 'Schnell erfassen',
+                       'mail' => 'E-Mail einlesen', 'termine' => 'Termine'],
         'Kunden'   => ['kunden' => 'Kunden'],
         'System'   => ['mehr' => 'Einstellungen'],
     ];
