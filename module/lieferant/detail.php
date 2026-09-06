@@ -678,8 +678,10 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
   })();
   </script>
 
+  <?php $VERSL = versandart_liste(); ?>
   <?php $anfr = all("SELECT af.*, i.name AS item_name, ag.id AS ang_id, ag.preis, ag.einheit AS ang_einheit,
-                            ag.mindestmenge, ag.lieferzeit_tage, ag.status AS ang_status, ag.preis_basis AS ang_basis
+                            ag.mindestmenge, ag.lieferzeit_tage, ag.status AS ang_status, ag.preis_basis AS ang_basis,
+                            ag.incoterm AS ang_incoterm, ag.versandart AS ang_versandart
                      FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
                      LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=af.id
                      WHERE af.lieferant_id=? ORDER BY af.angelegt DESC", [(int)$id]);
@@ -701,6 +703,8 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
                 <div class="muted" style="font-size:12px">
                   <?= $r['mindestmenge'] ? 'MOQ ' . $zahl($r['mindestmenge'], 3) . ' · ' : '' ?>
                   <?= $r['lieferzeit_tage'] ? (int)$r['lieferzeit_tage'] . ' Tage' : '' ?>
+                  <?php $terms = array_filter([(string)($r['ang_incoterm'] ?? ''), !empty($r['ang_versandart']) ? ($VERSL[$r['ang_versandart']] ?? $r['ang_versandart']) : '']); ?>
+                  <?php if ($terms): ?><br><span style="color:var(--gruen)"><?= h(implode(' · ', $terms)) ?></span><?php endif; ?>
                   <?php $stf = all("SELECT menge_ab,preis FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$r['ang_id']]);
                         if ($stf) { $tx = []; foreach ($stf as $s) $tx[] = $zahl($s['menge_ab'], 0) . '+: ' . $zahl($s['preis'], 4) . ' €'; echo '<br>' . h(implode(' · ', $tx)); } ?>
                 </div>

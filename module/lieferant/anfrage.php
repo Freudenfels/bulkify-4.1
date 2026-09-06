@@ -30,7 +30,8 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
             trim((string)($_POST['einheit_roh'] ?? $_POST['einheit'] ?? '')),
             ($_POST['mindestmenge'] ?? '') !== '' ? zahl_lesen((string)$_POST['mindestmenge'], true, $spr) : null,
             ($_POST['lieferzeit'] ?? '') !== '' ? (int)$_POST['lieferzeit'] : null,
-            (string)($_POST['notiz'] ?? ''), $staffeln, (int)($_POST['preis_basis'] ?? 1));
+            (string)($_POST['notiz'] ?? ''), $staffeln, (int)($_POST['preis_basis'] ?? 1),
+            ['incoterm' => (string)($_POST['incoterm'] ?? ''), 'versandart' => (string)($_POST['versandart'] ?? '')]);
         if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);
     } elseif ($aktion === 'nachricht') {
         $fehler = nachricht_post_verarbeiten($lid, 'lieferant', (string)(current_user()['name'] ?? 'Lieferant'), 'lieferant_anfrage', $id, lp_sprache());
@@ -103,6 +104,8 @@ if (!$a):
       <?php endif; ?>
       <?php if ($a['notiz']): ?><tr><td><?= h(lp_t('notiz')) ?></td><td style="white-space:pre-line"><?= h($a['notiz']) ?></td></tr><?php endif; ?>
       <?php if ((int)$a['coa_gewuenscht'] === 1): ?><tr><td>CoA / Spec</td><td><?= h(lp_t('coa_mitschicken')) ?></td></tr><?php endif; ?>
+      <?php $reqTerms = array_filter([(string)($a['incoterm'] ?? ''), !empty($a['versandart']) ? lp_t('vers_'.$a['versandart']) : '']); ?>
+      <?php if ($reqTerms): ?><tr><td><?= h(lp_t('incoterm')) ?> / <?= h(lp_t('versandart')) ?></td><td><?= h(implode(' · ', $reqTerms)) ?> <span class="muted">(<?= h(lp_t('gewuenscht')) ?>)</span></td></tr><?php endif; ?>
     </tbody></table></div>
   </div>
 
@@ -146,6 +149,11 @@ if (!$a):
           <input type="text" name="mindestmenge" value="<?= h($ang ? $zahl($ang['mindestmenge'], 3) : '') ?>"></div>
         <div class="bx-field" style="margin:0;max-width:110px"><label><?= h(lp_t('lieferzeit')) ?></label>
           <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>"></div>
+        <?php $curInco = (string)($ang['incoterm'] ?? '') ?: (string)($a['incoterm'] ?? ''); $curVers = (string)($ang['versandart'] ?? '') ?: (string)($a['versandart'] ?? ''); ?>
+        <div class="bx-field" style="margin:0;max-width:150px"><label><?= h(lp_t('incoterm')) ?></label>
+          <select name="incoterm"><option value="">–</option><?php foreach (array_keys(incoterm_liste()) as $k): ?><option value="<?= $k ?>" <?= $curInco===$k?'selected':'' ?>><?= h($k) ?></option><?php endforeach; ?></select></div>
+        <div class="bx-field" style="margin:0;max-width:150px"><label><?= h(lp_t('versandart')) ?></label>
+          <select name="versandart"><option value="">–</option><?php foreach (array_keys(versandart_liste()) as $k): ?><option value="<?= $k ?>" <?= $curVers===$k?'selected':'' ?>><?= h(lp_t('vers_'.$k)) ?></option><?php endforeach; ?></select></div>
       </div>
       <script>
       (function(){

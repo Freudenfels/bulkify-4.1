@@ -863,6 +863,8 @@ function init_schema(): void {
     ensure_column('lieferant_anfrage', 'incoterm', "VARCHAR(8) NULL");           // gewünschte Lieferbedingung (Standard DDP)
     ensure_column('lieferant_anfrage', 'versandart', "VARCHAR(20) NULL");        // gewünschte Versandart (Standard Luft)
     ensure_column('lieferant_angebot', 'preis_basis', "INT NOT NULL DEFAULT 1");  // Preis gilt je 1 oder je 1000 Einheiten
+    ensure_column('lieferant_angebot', 'incoterm', "VARCHAR(8) NULL");            // vom Lieferanten angebotene Lieferbedingung
+    ensure_column('lieferant_angebot', 'versandart', "VARCHAR(20) NULL");         // vom Lieferanten angebotene Versandart
     ensure_column('item', 'cas', "VARCHAR(30) NULL");              // CAS-Nummer (z. B. Ascorbinsäure 50-81-7)
     ensure_column('item', 'max_fuellgewicht_g', "DECIMAL(10,2) NULL"); // Verpackung: max. Füllgewicht (g) – für Pulver-Match (Glas/Dose)
     // Verpackungs-Stückliste: Rolle je Verpackungs-Item + Produkt-Slots für die komplette Stückliste
@@ -2927,20 +2929,22 @@ function lieferant_anfrage_stellen(int $lieferant_id, ?int $item_id, string $bet
 // Angebot des Lieferanten speichern (einmal je Anfrage – erneutes Senden ueberschreibt).
 // $staffeln: Liste [menge_ab, preis]; leere Zeilen werden ignoriert.
 function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $preis, string $einheit,
-                                     ?float $mindestmenge, ?int $lieferzeit, string $notiz, array $staffeln, int $preis_basis = 1): string {
+                                     ?float $mindestmenge, ?int $lieferzeit, string $notiz, array $staffeln, int $preis_basis = 1, array $opt = []): string {
     $preis_basis = $preis_basis === 1000 ? 1000 : 1;
     $a = one("SELECT * FROM lieferant_anfrage WHERE id=? AND lieferant_id=?", [$anfrage_id, $lieferant_id]);
     if (!$a) return 'Anfrage nicht gefunden.';
     if ($preis <= 0) return 'Bitte einen Preis eintragen.';
+    $inco = array_key_exists((string)($opt['incoterm'] ?? ''), incoterm_liste()) ? (string)$opt['incoterm'] : null;
+    $vers = array_key_exists((string)($opt['versandart'] ?? ''), versandart_liste()) ? (string)$opt['versandart'] : null;
     $vorhanden = one("SELECT id FROM lieferant_angebot WHERE anfrage_id=?", [$anfrage_id]);
     if ($vorhanden) {
-        q("UPDATE lieferant_angebot SET preis=?, einheit=?, preis_basis=?, mindestmenge=?, lieferzeit_tage=?, notiz=?, status='offen', angelegt=UTC_TIMESTAMP() WHERE id=?",
-          [$preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null, (int)$vorhanden['id']]);
+        q("UPDATE lieferant_angebot SET preis=?, einheit=?, preis_basis=?, mindestmenge=?, lieferzeit_tage=?, notiz=?, incoterm=?, versandart=?, status='offen', angelegt=UTC_TIMESTAMP() WHERE id=?",
+          [$preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null, $inco, $vers, (int)$vorhanden['id']]);
         $aid = (int)$vorhanden['id'];
         q("DELETE FROM lieferant_angebot_staffel WHERE angebot_id=?", [$aid]);
     } else {
-        q("INSERT INTO lieferant_angebot (anfrage_id,lieferant_id,preis,einheit,preis_basis,mindestmenge,lieferzeit_tage,notiz) VALUES (?,?,?,?,?,?,?,?)",
-          [$anfrage_id, $lieferant_id, $preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null]);
+        q("INSERT INTO lieferant_angebot (anfrage_id,lieferant_id,preis,einheit,preis_basis,mindestmenge,lieferzeit_tage,notiz,incoterm,versandart) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          [$anfrage_id, $lieferant_id, $preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null, $inco, $vers]);
         $aid = insert_id();
     }
     foreach ($staffeln as $s) {
@@ -2968,9 +2972,10 @@ function lieferant_angebot_annehmen(int $angebot_id): string {
     // Der Lieferant darf je 1 oder je 1000 anbieten (bei Kapseln üblich). Am Artikel steht immer
     // der Preis je EINER Einheit – sonst rechnet die Kalkulation mit dem Tausendfachen.
     $basis = ((int)($an['preis_basis'] ?? 1)) === 1000 ? 1000 : 1;
+    $inco = $an['incoterm'] ?: null; $vers = $an['versandart'] ?: null;   // Lieferbedingung vom Angebot mitnehmen
     foreach ($zeilen as $z)
-        q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand) VALUES (?,?,?,?,?,CURDATE())",
-          [$item, $lief, (float)$z['menge_ab'], (float)$z['preis'] / $basis, (string)($an['waehrung'] ?: 'EUR')]);
+        q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart) VALUES (?,?,?,?,?,CURDATE(),?,?)",
+          [$item, $lief, (float)$z['menge_ab'], (float)$z['preis'] / $basis, (string)($an['waehrung'] ?: 'EUR'), $inco, $vers]);
     q("UPDATE lieferant_angebot SET status='angenommen' WHERE id=?", [$angebot_id]);
     q("UPDATE lieferant_anfrage SET status='geschlossen' WHERE id=?", [(int)$an['anfrage_id']]);
     log_aktivitaet('lieferant', $lief, 'team', 'Angebot zu ' . $an['anfr_nummer'] . ' angenommen – ' . count($zeilen) . ' EK-Staffel(n) übernommen.', 'angebot', 'item', $item);
