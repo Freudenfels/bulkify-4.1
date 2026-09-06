@@ -1592,7 +1592,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <input type="hidden" name="aktion" value="rohstoff_anfrage">
       <datalist id="rohliste"><?php foreach ($rohkatalog as $r): ?><option value="<?= h($r['name']) ?>"></option><?php endforeach; ?></datalist>
       <div id="rohRows">
-        <?php for ($i=0;$i<2;$i++): ?>
+        <?php for ($i=0;$i<1;$i++): ?>
         <div class="rohrow bx-panel" style="background:var(--panel-2);padding:12px 14px;margin-bottom:10px">
           <div class="bx-field"><label>Rohstoff</label><input type="text" name="roh_name[]" list="rohliste" value="<?= $i === 0 ? h($vorRohName) : '' ?>" placeholder="Rohstoff wählen oder eintippen"></div>
           <div class="bx-grid">
