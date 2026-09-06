@@ -593,6 +593,23 @@ function init_schema(): void {
         KEY idx_typ (typ), KEY idx_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // db_import_log: Protokoll der Datenuebernahmen (DB-Import). BEWUSST NICHT im mysqldump enthalten
+    // (--ignore-table), damit der Verlauf server-lokal bleibt und ein Import ihn nicht ueberschreibt.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS db_import_log (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        db_name VARCHAR(64) NULL,
+        dateiname VARCHAR(255) NULL,
+        bytes INT NULL,
+        stmts INT NULL,
+        ok INT NULL,
+        fehler INT NULL,
+        rohstoffe INT NULL,
+        kunden INT NULL,
+        produkte INT NULL,
+        benutzer VARCHAR(120) NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // bestellung: Einkaufsbestellung beim Lieferanten (BE-). Positionen in bestellung_position.
     $pdo->exec("CREATE TABLE IF NOT EXISTS bestellung (
         id INT AUTO_INCREMENT PRIMARY KEY,

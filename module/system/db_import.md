@@ -18,6 +18,17 @@ anderen Rechners bringen (Laptop → beta), ohne phpMyAdmin/SSH.
 - Soll der Ziel-Server eigene Daten behalten, stattdessen einen Dump ohne
   `benutzer`/`app_meta` erzeugen.
 
+## Aktueller Stand + Import-Verlauf
+Die Seite zeigt oben den **Live-Stand** dieser Datenbank (DB-Name + Umgebung, Anzahl
+Rohstoffe/Kunden/Produkte/…). Wenige Rohstoffe (<100) → Voll-Dump hier noch nicht
+eingespielt (Warnhinweis). So sieht man sofort, ob die Daten wirklich in *dieser* DB liegen.
+
+Darunter der **Import-Verlauf** (`db_import_log`): jede Datenübernahme über diese Seite
+wird protokolliert (Zeitpunkt, Datei, Anweisungen ok/gesamt, Fehler, Rohstoffe danach, wer).
+Die Tabelle `db_import_log` ist bewusst **NICHT Teil des Dumps** (`--ignore-table`), damit
+der Verlauf server-lokal bleibt und ein Import ihn nicht überschreibt. Frühere Importe oder
+Importe über phpMyAdmin/SSH erscheinen nicht (sie liefen ohne dieses Protokoll).
+
 ## Upload-Grenzen
 Die Seite zeigt `upload_max_filesize`/`post_max_size` des Servers an. Ein typischer
 bulkify-Dump ist ~1–2 MB, liegt also unter den Standardgrenzen.

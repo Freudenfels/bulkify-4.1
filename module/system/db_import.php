@@ -56,6 +56,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'impor
                     $zip->close();
                 }
             }
+
+            // Import protokollieren (server-lokal; db_import_log ist nicht Teil des Dumps).
+            try {
+                $u = function_exists('current_user') ? (current_user()['name'] ?? '') : '';
+                q("INSERT INTO db_import_log (db_name,dateiname,bytes,stmts,ok,fehler,rohstoffe,kunden,produkte,benutzer)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)",
+                  [defined('DB_NAME') ? DB_NAME : '', mb_substr((string)($_FILES['dump']['name'] ?? ''), 0, 255),
+                   (int)($_FILES['dump']['size'] ?? 0), (int)$ergebnis['stmts'], (int)$ergebnis['ok'], count($ergebnis['fehler']),
+                   (int) scalar("SELECT COUNT(*) FROM item WHERE kategorie='rohstoff'"),
+                   (int) scalar("SELECT COUNT(*) FROM kunden"),
+                   (int) scalar("SELECT COUNT(*) FROM produkt"),
+                   mb_substr((string)$u, 0, 120)]);
+            } catch (\Throwable $e) {}
         }
     }
 }
@@ -64,10 +77,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'impor
 $maxUpload = ini_get('upload_max_filesize');
 $maxPost   = ini_get('post_max_size');
 
+// Aktueller Stand DIESER Datenbank (Live) – zeigt sofort, ob die Daten wirklich hier liegen.
+$stand = [
+    'Rohstoffe'          => (int) scalar("SELECT COUNT(*) FROM item WHERE kategorie='rohstoff'"),
+    'Kunden'             => (int) scalar("SELECT COUNT(*) FROM kunden"),
+    'Produkte'           => (int) scalar("SELECT COUNT(*) FROM produkt"),
+    'Rezepturen'         => (int) scalar("SELECT COUNT(*) FROM rezeptur"),
+    'Aufträge'           => (int) scalar("SELECT COUNT(*) FROM auftrag"),
+    'Produktionsaufträge'=> (int) scalar("SELECT COUNT(*) FROM produktionsauftrag"),
+];
+$verlauf = [];
+try { $verlauf = all("SELECT * FROM db_import_log ORDER BY id DESC LIMIT 20"); } catch (\Throwable $e) {}
+
 render_header('einstellungen', 'Datenübernahme');
 bx_head('Datenübernahme (DB-Import)', 'kompletten Datenbank-Stand einspielen', bx_btn('Zurück', '?p=einstellungen', 'ghost'));
 
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:14px 16px">' . h($fehler) . '</div>';
+
+// --- Aktueller Stand dieser Datenbank ---
+echo '<div class="bx-panel">';
+echo '<h2 style="margin-top:0">Aktueller Stand dieser Datenbank</h2>';
+echo '<div class="muted" style="font-size:12px;margin-bottom:10px">Datenbank: <code>' . h(defined('DB_NAME') ? DB_NAME : '?') . '</code>'
+   . (function_exists('ist_lokal') ? ' · Umgebung: ' . (ist_lokal() ? 'lokal' : 'Server (beta)') : '') . '</div>';
+echo '<div class="bx-cards">';
+foreach ($stand as $k => $v) {
+    $warn = ($k === 'Rohstoffe' && $v < 100) ? ' style="color:#8f231b"' : '';
+    echo '<div class="bx-card"><div class="k">' . h($k) . '</div><div class="v"' . $warn . '>' . number_format($v, 0, ',', '.') . '</div></div>';
+}
+echo '</div>';
+if ($stand['Rohstoffe'] < 100) echo '<p class="muted" style="margin:10px 0 0;color:#8f231b">Wenige Rohstoffe → in dieser Datenbank ist der Voll-Dump noch nicht (vollständig) eingespielt. Unten importieren.</p>';
+echo '</div>';
+
+// --- Import-Verlauf ---
+echo '<div class="bx-panel">';
+echo '<h2 style="margin-top:0">Import-Verlauf</h2>';
+if (!$verlauf) {
+    echo '<p class="muted" style="margin:0">Noch kein Import über diese Seite protokolliert. Der Verlauf zählt ab jetzt jede Datenübernahme mit (er wird bewusst NICHT vom Dump überschrieben, ist also server-lokal). Frühere Importe – oder Importe über phpMyAdmin/SSH – erscheinen hier nicht.</p>';
+} else {
+    echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Zeitpunkt</th><th>Datei</th><th class="bx-num">Anweisungen</th><th class="bx-num">Fehler</th><th class="bx-num">Rohstoffe danach</th><th>Von</th></tr></thead><tbody>';
+    foreach ($verlauf as $l) {
+        echo '<tr><td>' . h(fmt_zeit($l['angelegt'])) . '</td><td>' . ($l['dateiname'] ? h($l['dateiname']) : '<span class="muted">–</span>') . '</td>'
+           . '<td class="bx-num">' . (int)$l['ok'] . ' / ' . (int)$l['stmts'] . '</td>'
+           . '<td class="bx-num">' . ((int)$l['fehler'] > 0 ? '<span style="color:#8f231b">' . (int)$l['fehler'] . '</span>' : '0') . '</td>'
+           . '<td class="bx-num">' . number_format((int)$l['rohstoffe'], 0, ',', '.') . '</td>'
+           . '<td class="muted">' . h((string)$l['benutzer']) . '</td></tr>';
+    }
+    echo '</tbody></table></div>';
+}
+echo '</div>';
 
 if ($ergebnis !== null && !$fehler) {
     $anzFehler = count($ergebnis['fehler']);
@@ -136,7 +193,8 @@ if ($ergebnis !== null && !$fehler) {
   <div class="muted" style="line-height:1.7">
     Auf dem Quell-Rechner liegt sie unter <code>data/exports/</code> (z. B. <code>bulkify41_20260906_0754.sql</code>).
     Ist sie älter, erzeugt dieser Befehl eine frische:
-    <div style="margin-top:6px"><code>mysqldump -u root -p --single-transaction --no-tablespaces --add-drop-table bulkify41 &gt; data/exports/bulkify41.sql</code></div>
+    <div style="margin-top:6px"><code>mysqldump -u root -p --single-transaction --no-tablespaces --add-drop-table --ignore-table=bulkify41.db_import_log bulkify41 &gt; data/exports/bulkify41.sql</code></div>
+    <div class="muted" style="font-size:12px;margin-top:4px">Der <code>--ignore-table</code>-Teil hält den Import-Verlauf dieses Servers heraus, damit ein Import ihn nicht überschreibt.</div>
     Für die Dokument-PDFs den Ordner <code>data/uploads/</code> als ZIP packen und oben mit hochladen.
   </div>
 </div>
