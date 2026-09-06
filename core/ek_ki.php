@@ -122,16 +122,25 @@ function ek_menge_ab(string $name): float {
     return 0.0;
 }
 
+// Versandart aus dem Namen (nur GROSS geschrieben, damit „Sea Moss" o. Ä. nicht anschlägt).
+function ek_versandart(string $name): string {
+    if (preg_match('/\b(AIR|LUFT)\b/', $name))         return 'luft';
+    if (preg_match('/\bSEA\b/', $name))                return 'see';
+    if (preg_match('/\b(TRAIN|BAHN|RAIL)\b/', $name))  return 'bahn';
+    return '';
+}
+
 // Bestätigte Rohstoff-Zeile als lieferant_preis übernehmen (idempotent über ek_import_id).
-// menge_ab kommt aus der kg-Angabe im Namen (Staffel), falls vorhanden.
+// menge_ab kommt aus der kg-Angabe im Namen (Staffel), Versandart aus AIR/SEA/TRAIN im Namen.
 function ek_lieferant_preis_schreiben(array $ek): void {
     if ((string)$ek['typ'] !== 'rohstoff' || empty($ek['item_id'])) return;
     if (scalar("SELECT id FROM lieferant_preis WHERE ek_import_id=?", [(int)$ek['id']])) return;   // schon da
     $lid = ek_lieferant_id($ek['lieferant']);
     $mengeAb = ek_menge_ab((string)$ek['name']);
-    q("INSERT INTO lieferant_preis (item_id,lieferant_id,lieferant_name,menge_ab,preis,waehrung,stand,quelle,ek_import_id)
-       VALUES (?,?,?,?,?, 'EUR', CURDATE(), 'ek_import', ?)",
-      [(int)$ek['item_id'], $lid, mb_substr((string)$ek['lieferant'], 0, 120) ?: null, $mengeAb, (float)$ek['preis'], (int)$ek['id']]);
+    $vers = ek_versandart((string)$ek['name']) ?: null;
+    q("INSERT INTO lieferant_preis (item_id,lieferant_id,lieferant_name,menge_ab,preis,waehrung,stand,quelle,ek_import_id,versandart)
+       VALUES (?,?,?,?,?, 'EUR', CURDATE(), 'ek_import', ?, ?)",
+      [(int)$ek['item_id'], $lid, mb_substr((string)$ek['lieferant'], 0, 120) ?: null, $mengeAb, (float)$ek['preis'], (int)$ek['id'], $vers]);
 }
 
 // Eine Zeile bestätigen (Vorschlag oder manuelle Zuordnung annehmen).

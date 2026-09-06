@@ -563,6 +563,10 @@ function init_schema(): void {
     ensure_column('lieferant_preis', 'lieferant_name', "VARCHAR(120) NULL");
     ensure_column('lieferant_preis', 'quelle', "VARCHAR(40) NULL");        // z. B. 'ek_import'
     ensure_column('lieferant_preis', 'ek_import_id', "INT NULL");          // Rueckverweis (idempotent)
+    // Ein Preis ist nur mit Lieferbedingung vergleichbar: Incoterm (EXW/FOB/CIF/DAP/DDP - wer zahlt
+    // Fracht/Zoll) und Versandart (Luft/See/Bahn/... - Preis UND Lieferzeit). Beide je Preiszeile.
+    ensure_column('lieferant_preis', 'incoterm', "VARCHAR(8) NULL");
+    ensure_column('lieferant_preis', 'versandart', "VARCHAR(20) NULL");
     try { $pdo->exec("ALTER TABLE lieferant_preis MODIFY lieferant_id INT NULL"); } catch (\Throwable $e) {}
 
     // ek_import: Staging fuer eingelesene EK-Preislisten (CSV) – Rohstoff-/Bulk-EK je kg und
@@ -3320,6 +3324,14 @@ function reservierung_abgleichen(int $pa_id): void {
 
 // Bezeichnung + Darreichungsform + Stück-Einheit des zuzukaufenden Bulks eines Produkts.
 // Statt generisch „Bulk (Kapseln/Tabletten/Pulver)" -> Produktname + konkrete Form aus der Rezeptur.
+// Lieferbedingungen für Lieferantenpreise – Auswahllisten (Schlüssel = gespeicherter Wert).
+function incoterm_liste(): array {
+    return ['EXW'=>'EXW – ab Werk','FCA'=>'FCA','FOB'=>'FOB','CFR'=>'CFR','CIF'=>'CIF','DAP'=>'DAP – frei Haus, ohne Zoll','DDP'=>'DDP – frei Haus, alles inkl.'];
+}
+function versandart_liste(): array {
+    return ['luft'=>'Luft (Air)','see'=>'See (Sea)','bahn'=>'Bahn (Train)','lkw'=>'LKW / Straße','express'=>'Express','standard'=>'Standard'];
+}
+
 function produkt_bulk_info(int $produkt_id): array {
     $p = $produkt_id ? one("SELECT p.name, COALESCE(r.darreichungsform,'') AS form
                             FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]) : null;

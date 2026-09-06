@@ -15,7 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis
     $lid = (int)($_POST['lp_lieferant'] ?? 0);
     $preis = (float)str_replace(',', '.', $_POST['lp_preis'] ?? '0');
     $mengeab = (float)str_replace(',', '.', $_POST['lp_menge_ab'] ?? '0');
-    if ($lid && $preis > 0) q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand) VALUES (?,?,?,?, 'EUR', CURDATE())", [(int)$id, $lid, $mengeab, $preis]);
+    $inco = in_array($_POST['lp_incoterm'] ?? '', array_keys(incoterm_liste()), true) ? $_POST['lp_incoterm'] : null;
+    $vers = in_array($_POST['lp_versandart'] ?? '', array_keys(versandart_liste()), true) ? $_POST['lp_versandart'] : null;
+    if ($lid && $preis > 0) q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart) VALUES (?,?,?,?, 'EUR', CURDATE(), ?, ?)", [(int)$id, $lid, $mengeab, $preis, $inco, $vers]);
     header('Location: ?p=rohstoff&id=' . $id . '&preisok=1#'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis_del' && !$neu) {
@@ -855,14 +857,17 @@ if (!$neu) {
     </div>
     <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin:10px 0"><?= (int)$_GET['angefragt'] ?> Preisanfrage(n) verschickt<?= isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '' ?>.</div><?php endif; ?>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Lieferant</th><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Stand</th><th></th></tr></thead>
+      <?php $VERS = versandart_liste(); ?>
+      <thead><tr><th>Lieferant</th><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Incoterm</th><th>Versand</th><th>Stand</th><th></th></tr></thead>
       <tbody>
-      <?php if (!$preise): ?><tr><td colspan="5" class="muted">Noch keine Preise. Unten eintragen oder per Preisanfrage einholen.</td></tr><?php endif; ?>
+      <?php if (!$preise): ?><tr><td colspan="7" class="muted">Noch keine Preise. Unten eintragen oder per Preisanfrage einholen.</td></tr><?php endif; ?>
       <?php $best = $preise ? (float)$preise[0]['preis'] : null; foreach ($preise as $pz): $ist_best = $best !== null && abs((float)$pz['preis'] - $best) < 0.0001; ?>
         <tr<?= $ist_best ? ' style="font-weight:600"' : '' ?>>
           <td><?= h($pz['firma'] ?: '–') ?> <?= $ist_best ? bx_badge('günstigster','ok') : '' ?></td>
           <td class="bx-num"><?= rtrim(rtrim(number_format((float)$pz['menge_ab'],3,',','.'),'0'),',') ?> <?= h($it['einheit']) ?></td>
           <td class="bx-num"><?= number_format((float)$pz['preis'], (float)$pz['preis']<1?4:2, ',', '.') ?> <?= h($pz['waehrung']) ?>/<?= h($it['preis_bezug']) ?></td>
+          <td><?= $pz['incoterm'] ? h($pz['incoterm']) : '<span class="muted">–</span>' ?></td>
+          <td><?= !empty($pz['versandart']) ? h($VERS[$pz['versandart']] ?? $pz['versandart']) : '<span class="muted">–</span>' ?></td>
           <td><?= $pz['stand'] ? h(date('d.m.Y', strtotime($pz['stand']))) : '' ?></td>
           <td style="text-align:right"><form method="post" style="display:inline"><input type="hidden" name="aktion" value="preis_del"><input type="hidden" name="preis_id" value="<?= (int)$pz['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form></td>
         </tr>
@@ -878,6 +883,10 @@ if (!$neu) {
       </div>
       <div class="bx-field" style="margin:0;width:120px"><label>ab Menge</label><input type="number" step="0.001" name="lp_menge_ab" value="0"></div>
       <div class="bx-field" style="margin:0;width:120px"><label>Preis</label><input type="number" step="0.0001" name="lp_preis" required></div>
+      <div class="bx-field" style="margin:0;width:150px"><label>Incoterm <?= bx_hint('Lieferbedingung: EXW = ab Werk (du zahlst Fracht+Zoll), DDP = frei Haus alles inkl. Preise nur mit gleichem Incoterm vergleichbar.') ?></label>
+        <select name="lp_incoterm"><option value="">– offen –</option><?php foreach (incoterm_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
+      <div class="bx-field" style="margin:0;width:130px"><label>Versandart</label>
+        <select name="lp_versandart"><option value="">– offen –</option><?php foreach (versandart_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
       <button class="btn btn-ghost btn-sm" type="submit">Preis hinzufügen</button>
     </form>
   </div>
