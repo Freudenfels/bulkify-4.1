@@ -37,7 +37,7 @@ $rows = all("SELECT i.id, i.name, i.name_v3, i.artikelnummer, CHAR_LENGTH(i.name
              " . ($statusF === 'uebernommen' ? "AND v.status='uebernommen'"
                 : ($statusF === 'verworfen' ? "AND v.status='verworfen'"
                 : "AND (v.status IS NULL OR v.status='offen')")) . "
-             ORDER BY i.name LIMIT 400", [ROHSTOFF_NAME_LANG]);
+             ORDER BY (v.varianten_json IS NOT NULL) DESC, i.name LIMIT 400", [ROHSTOFF_NAME_LANG]);   // mit KI-Vorschlag zuerst
 
 $offenN = (int) scalar("SELECT COUNT(*) FROM item i LEFT JOIN rohstoff_variante_vorschlag v ON v.item_id=i.id
                         WHERE i.kategorie='rohstoff' AND CHAR_LENGTH(i.name) > ? AND (v.status IS NULL OR v.status='offen')", [ROHSTOFF_NAME_LANG]);
@@ -56,6 +56,7 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
     <?php foreach (['todo'=>'offen ('.$offenN.')','uebernommen'=>'übernommen ('.$fertigN.')','verworfen'=>'übersprungen'] as $k=>$lbl): ?>
       <a class="btn btn-sm <?= $statusF===$k?'btn-primary':'btn-ghost' ?>" href="?p=rohstoff_split&status=<?= $k ?>"><?= $lbl ?></a>
     <?php endforeach; ?>
+    <?php if ($statusF==='todo' && $mitVorschlag>0): ?><div class="muted" style="font-size:12px;margin-top:6px"><?= $mitVorschlag ?> mit KI-Vorschlag (stehen oben, zum Prüfen &amp; Übernehmen)</div><?php endif; ?>
   </div>
   <form method="post" style="display:flex;gap:8px;align-items:center;margin:0">
     <input type="hidden" name="aktion" value="ki_batch"><input type="hidden" name="ret" value="&status=<?= h($statusF) ?>">
