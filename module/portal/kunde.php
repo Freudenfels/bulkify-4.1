@@ -787,7 +787,7 @@ if (($_GET['v'] ?? '') === 'rohstoff_info') {
     header('Content-Type: application/json; charset=utf-8');
     $iid = (int)($_GET['iid'] ?? 0);
     $it = ($k['portal_rohstoffe'] && $iid) ? one("SELECT name, name_lat, form, cas, synonym, ec_nr, bot_quelle, herkunftsland,
-              allergene, haltbarkeit, lagerbedingungen, zusaetze, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate
+              allergene, haltbarkeit, lagerbedingungen, zusaetze, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben
            FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
     if (!$it) { echo '{}'; exit; }
     $rows = [];
@@ -801,7 +801,11 @@ if (($_GET['v'] ?? '') === 'rohstoff_info') {
     $add('Zertifikate', $it['zertifikate']); $add('Zusätze', $it['zusaetze']);
     $add('Haltbarkeit', $it['haltbarkeit']); $add('Lagerbedingungen', $it['lagerbedingungen']);
     foreach (all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$iid]) as $kw) $add((string)$kw['parameter'], $kw['wert']);
-    echo json_encode(['name' => $it['name'], 'rows' => $rows], JSON_UNESCAPED_UNICODE);
+    // Freigegebene Dokumente: Spezifikation (falls spec_freigegeben) + CoAs freigegebener Chargen.
+    $coaList = [];
+    foreach (all("SELECT id, charge_nr, mhd FROM charge WHERE item_id=? AND coa_freigegeben=1 ORDER BY (wareneingang IS NULL), wareneingang DESC, id DESC", [$iid]) as $c)
+        $coaList[] = ['cid' => (int)$c['id'], 'label' => ($c['charge_nr'] ?: ('#' . (int)$c['id'])) . ($c['mhd'] ? ' (MHD ' . date('m/Y', strtotime((string)$c['mhd'])) . ')' : '')];
+    echo json_encode(['name' => $it['name'], 'rows' => $rows, 'spec' => ((int)$it['spec_freigegeben'] === 1), 'coas' => $coaList], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -1676,10 +1680,18 @@ portal_head('Kundenportal · ' . $k['firma']);
       .then(function(r){ return r.json(); })
       .then(function(j){
         var rows = (j && j.rows) || [];
-        if (!rows.length) { body.innerHTML = '<div class="muted">Zu diesem Rohstoff liegen noch keine weiteren Angaben vor.</div>'; return; }
-        var html = '<table style="width:100%;border-collapse:collapse">';
-        rows.forEach(function(r){ html += '<tr><td style="color:var(--muted);padding:4px 14px 4px 0;white-space:nowrap;vertical-align:top">'+rohEsc(r[0])+'</td><td style="padding:4px 0">'+rohEsc(r[1])+'</td></tr>'; });
-        body.innerHTML = html + '</table>';
+        var html = '';
+        if (rows.length) {
+          html += '<table style="width:100%;border-collapse:collapse">';
+          rows.forEach(function(r){ html += '<tr><td style="color:var(--muted);padding:4px 14px 4px 0;white-space:nowrap;vertical-align:top">'+rohEsc(r[0])+'</td><td style="padding:4px 0">'+rohEsc(r[1])+'</td></tr>'; });
+          html += '</table>';
+        } else { html += '<div class="muted">Zu diesem Rohstoff liegen noch keine weiteren Angaben vor.</div>'; }
+        // Freigegebene Dokumente zum Download
+        var docs = '';
+        if (j && j.spec) docs += '<a class="btn btn-ghost btn-sm" style="margin:6px 6px 0 0" target="_blank" href="?p=portal&token='+rohToken+'&v=spec_pdf&rid='+d.id+'">Spezifikation (PDF)</a>';
+        if (j && j.coas) j.coas.forEach(function(c){ docs += '<a class="btn btn-ghost btn-sm" style="margin:6px 6px 0 0" target="_blank" href="?p=portal&token='+rohToken+'&v=coa_pdf&cid='+c.cid+'">CoA '+rohEsc(c.label)+'</a>'; });
+        if (docs) html += '<div style="margin-top:14px"><div style="color:var(--muted);font-size:13px;margin-bottom:2px">Dokumente</div>'+docs+'</div>';
+        body.innerHTML = html;
       })
       .catch(function(){ body.innerHTML = '<div class="muted">Details konnten nicht geladen werden.</div>'; });
   }
