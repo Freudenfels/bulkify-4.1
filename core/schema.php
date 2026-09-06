@@ -606,9 +606,14 @@ function init_schema(): void {
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uq_alias (alias)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    // Erst-Alias (nur solange noch keiner existiert – spaetere manuelle Aenderungen bleiben unberuehrt).
-    try { if ((int)$pdo->query("SELECT COUNT(*) FROM lieferant_alias")->fetchColumn() === 0)
-        $pdo->exec("INSERT INTO lieferant_alias (alias,firma,kontakt) VALUES ('Maggi','Wellgreen','Maggi')"); } catch (\Throwable $e) {}
+    // Bekannte Kontakt->Firma-Zuordnungen (vom Team bestaetigt). Additiv per INSERT IGNORE:
+    // fehlende werden ergaenzt, bestehende (auch manuell geaenderte) bleiben unberuehrt.
+    try {
+        foreach ([['Maggi','Wellgreen','Maggi'], ['Diane','Rainwood','Diane']] as $al) {
+            $st = $pdo->prepare("INSERT IGNORE INTO lieferant_alias (alias,firma,kontakt) VALUES (?,?,?)");
+            $st->execute($al);
+        }
+    } catch (\Throwable $e) {}
 
     // db_import_log: Protokoll der Datenuebernahmen (DB-Import). BEWUSST NICHT im mysqldump enthalten
     // (--ignore-table), damit der Verlauf server-lokal bleibt und ein Import ihn nicht ueberschreibt.
