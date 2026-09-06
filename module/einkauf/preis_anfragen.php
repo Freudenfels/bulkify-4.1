@@ -17,6 +17,9 @@ $lids  = array_values(array_filter(array_map('intval', (array)($_POST['anf_liefe
 $menge = (float) str_replace(',', '.', (string)($_POST['anf_menge'] ?? '0'));
 $notiz = trim((string)($_POST['anf_notiz'] ?? ''));
 $coa   = isset($_POST['anf_coa']);
+$incoterm   = (string)($_POST['anf_incoterm'] ?? '');
+$versandart = (string)($_POST['anf_versandart'] ?? '');
+$lieferOpt  = ['incoterm' => $incoterm, 'versandart' => $versandart];   // gewünschte Lieferbedingung
 
 if (!$lids) { header('Location: ' . $back . '&anffehler=1'); exit; }
 
@@ -26,7 +29,7 @@ if ($art === 'fertigprodukt' && $rez_id > 0) {
     if (!$rez) { header('Location: ' . $back . '&anffehler=1'); exit; }
     $form    = (string)($rez['darreichungsform'] ?: 'kapsel');
     $betreff = 'Fertigprodukt (Bulk): ' . (string)$rez['name'];
-    $opt     = ['art' => 'fertigprodukt', 'form' => $form, 'rezeptur_id' => $rez_id];
+    $opt     = ['art' => 'fertigprodukt', 'form' => $form, 'rezeptur_id' => $rez_id] + $lieferOpt;
     $einh    = anfrage_einheit_fuer_form($form);
     $n = 0; $gemailt = 0;
     foreach ($lids as $lid) {
@@ -45,7 +48,7 @@ $einh = (string) (scalar("SELECT preis_bezug FROM item WHERE id=?", [$item_id]) 
 $n = 0; $gemailt = 0;
 foreach ($lids as $lid) {
     if (!scalar("SELECT id FROM lieferanten WHERE id=? AND gesperrt=0", [$lid])) continue;
-    $af = lieferant_anfrage_stellen($lid, $item_id, '', $menge > 0 ? $menge : null, $einh, $notiz, $coa);
+    $af = lieferant_anfrage_stellen($lid, $item_id, '', $menge > 0 ? $menge : null, $einh, $notiz, $coa, $lieferOpt);
     $n++;
     if (mail_bereit() && function_exists('mail_lieferant_anfrage') && mail_lieferant_anfrage((int)$af) === '') $gemailt++;
 }

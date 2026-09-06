@@ -86,6 +86,14 @@ function anfrage_modal(array $lieferanten, string $back): void {
       <div class="bx-row" style="gap:10px">
         <div class="bx-field" style="margin:0;flex:1"><label>Menge (optional)</label><input type="text" name="anf_menge" placeholder="z. B. 500"></div>
       </div>
+      <div class="bx-row" style="gap:10px">
+        <?php $stdI = function_exists('meta_get') ? meta_get('ek_incoterm_standard','DDP') : 'DDP'; $stdV = function_exists('meta_get') ? meta_get('ek_versandart_standard','luft') : 'luft'; ?>
+        <div class="bx-field" style="margin:0;flex:1"><label>Lieferbedingung (Incoterm)</label>
+          <select name="anf_incoterm"><?php foreach (incoterm_liste() as $k=>$lbl): ?><option value="<?= $k ?>" <?= $k===$stdI?'selected':'' ?>><?= h($lbl) ?></option><?php endforeach; ?></select></div>
+        <div class="bx-field" style="margin:0;flex:1"><label>Versandart</label>
+          <select name="anf_versandart"><?php foreach (versandart_liste() as $k=>$lbl): ?><option value="<?= $k ?>" <?= $k===$stdV?'selected':'' ?>><?= h($lbl) ?></option><?php endforeach; ?></select></div>
+      </div>
+      <div class="muted" style="font-size:12px;margin:-4px 0 10px">Standard: DDP · Luft (frei Haus, alles inkl.). Anpassbar je Anfrage.</div>
       <div class="bx-field"><label>Notiz an den Lieferanten (optional)</label><input type="text" name="anf_notiz" maxlength="500"></div>
       <label style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
         <input type="checkbox" name="anf_coa" value="1" checked> <span>CoA / Spezifikation mit anfragen</span>

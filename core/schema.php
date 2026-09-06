@@ -860,6 +860,8 @@ function init_schema(): void {
     ensure_column('lieferant_anfrage', 'stueck_je_packung', "INT NULL");         // bei Fertigprodukt: Einheiten je Packung (z. B. 90 Kapseln)
     ensure_column('lieferant_anfrage', 'kapselgroesse_id', "INT NULL");          // bei Kapsel/Softgel: gewünschte Kapselgröße
     ensure_column('lieferant_anfrage', 'rezeptur_id', "INT NULL");               // optional: unsere Rezeptur als Vorlage
+    ensure_column('lieferant_anfrage', 'incoterm', "VARCHAR(8) NULL");           // gewünschte Lieferbedingung (Standard DDP)
+    ensure_column('lieferant_anfrage', 'versandart', "VARCHAR(20) NULL");        // gewünschte Versandart (Standard Luft)
     ensure_column('lieferant_angebot', 'preis_basis', "INT NOT NULL DEFAULT 1");  // Preis gilt je 1 oder je 1000 Einheiten
     ensure_column('item', 'cas', "VARCHAR(30) NULL");              // CAS-Nummer (z. B. Ascorbinsäure 50-81-7)
     ensure_column('item', 'max_fuellgewicht_g', "DECIMAL(10,2) NULL"); // Verpackung: max. Füllgewicht (g) – für Pulver-Match (Glas/Dose)
@@ -2910,11 +2912,13 @@ function lieferant_anfrage_stellen(int $lieferant_id, ?int $item_id, string $bet
     $stk  = (int)($opt['stueck_je_packung'] ?? 0);
     $kg   = (int)($opt['kapselgroesse_id'] ?? 0);
     $rez  = (int)($opt['rezeptur_id'] ?? 0);
-    q("INSERT INTO lieferant_anfrage (nummer,lieferant_id,item_id,betreff,menge,einheit,notiz,coa_gewuenscht,status,art,form,stueck_je_packung,kapselgroesse_id,rezeptur_id)
-       VALUES (?,?,?,?,?,?,?,?,'offen',?,?,?,?,?)",
+    $inco = array_key_exists((string)($opt['incoterm'] ?? ''), incoterm_liste()) ? (string)$opt['incoterm'] : null;
+    $vers = array_key_exists((string)($opt['versandart'] ?? ''), versandart_liste()) ? (string)$opt['versandart'] : null;
+    q("INSERT INTO lieferant_anfrage (nummer,lieferant_id,item_id,betreff,menge,einheit,notiz,coa_gewuenscht,status,art,form,stueck_je_packung,kapselgroesse_id,rezeptur_id,incoterm,versandart)
+       VALUES (?,?,?,?,?,?,?,?,'offen',?,?,?,?,?,?,?)",
       [naechste_nummer('LA'), $lieferant_id, $item_id ?: null, mb_substr(trim($betreff), 0, 190) ?: null,
        $menge && $menge > 0 ? $menge : null, mb_substr($einheit, 0, 20) ?: null, trim($notiz) ?: null, $coa ? 1 : 0,
-       $art, $form ?: null, $stk > 0 ? $stk : null, $kg > 0 ? $kg : null, $rez > 0 ? $rez : null]);
+       $art, $form ?: null, $stk > 0 ? $stk : null, $kg > 0 ? $kg : null, $rez > 0 ? $rez : null, $inco, $vers]);
     $id = insert_id();
     log_aktivitaet('lieferant', $lieferant_id, 'team', 'Preisanfrage ' . scalar("SELECT nummer FROM lieferant_anfrage WHERE id=?", [$id]) . ' gestellt.', 'anfrage', 'lieferant_anfrage', $id);
     return $id;

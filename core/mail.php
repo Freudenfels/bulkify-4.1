@@ -188,7 +188,7 @@ function mail_lieferant_bestellung(int $bestellung_id): string {
 
 // Preisanfrage an einen Lieferanten melden (Sprache je Lieferant). $anfrage_id = lieferant_anfrage.id
 function mail_lieferant_anfrage(int $anfrage_id): string {
-    $a = one("SELECT af.nummer, af.menge, af.einheit, i.name AS item_name, af.betreff,
+    $a = one("SELECT af.nummer, af.menge, af.einheit, i.name AS item_name, af.betreff, af.incoterm, af.versandart,
                      l.firma, l.ansprechpartner, l.email, l.sprache
               FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
               JOIN lieferanten l ON l.id=af.lieferant_id WHERE af.id=?", [$anfrage_id]);
@@ -200,18 +200,26 @@ function mail_lieferant_anfrage(int $anfrage_id): string {
     $was = trim((string)($a['item_name'] ?: $a['betreff']));
     $mng = $a['menge'] ? rtrim(rtrim(number_format((float)$a['menge'], 3, ',', '.'), '0'), ',') . ' ' . (string)$a['einheit'] : '';
     $link = mail_basis_url() . '/?p=lieferant_login';
+    // Gewünschte Lieferbedingung (Incoterm + Versandart), sprachabhängig übersetzt.
+    $vmap = ['luft'=>['Luftfracht','air freight','空运'],'see'=>['Seefracht','sea freight','海运'],'bahn'=>['Bahnfracht','rail freight','铁路运输'],'lkw'=>['LKW / Straße','road freight','陆运'],'express'=>['Express','express','快递'],'standard'=>['Standard','standard','标准']];
+    $spIdx = ['de'=>0,'zh'=>2][$sp] ?? 1;
+    $versLbl = (!empty($a['versandart']) && isset($vmap[$a['versandart']])) ? $vmap[$a['versandart']][$spIdx] : '';
+    $terms = implode(', ', array_filter([(string)($a['incoterm'] ?? ''), $versLbl]));
 
     if ($sp === 'de') {
         $betreff = 'Preisanfrage ' . $a['nummer'] . ' – ' . $was;
         $text = "Guten Tag $anrede,\n\nwir bitten um ein Preisangebot für: $was" . ($mng ? " (Menge: $mng)" : '') . ".\n\n"
+              . ($terms ? "Gewünschte Lieferbedingung: $terms.\n\n" : '')
               . "Bitte geben Sie Ihr Angebot im Portal ab (Preis, Mindestmenge, Staffeln, CoA/Spec):\n$link\n\nViele Grüße\n" . $fa['name'];
     } elseif ($sp === 'zh') {
         $betreff = '询价 ' . $a['nummer'] . ' – ' . $was;
         $text = "$anrede 您好，\n\n我方就以下产品请求报价：$was" . ($mng ? "（数量：$mng）" : '') . "。\n\n"
+              . ($terms ? "要求的交货条件：$terms。\n\n" : '')
               . "请在门户中提交您的报价（价格、最小起订量、阶梯价、COA/Spec）：\n$link\n\n此致\n" . $fa['name'];
     } else {
         $betreff = 'Price request ' . $a['nummer'] . ' – ' . $was;
         $text = "Dear $anrede,\n\nwe kindly ask for a quotation for: $was" . ($mng ? " (quantity: $mng)" : '') . ".\n\n"
+              . ($terms ? "Requested delivery terms: $terms.\n\n" : '')
               . "Please submit your offer in the portal (price, MOQ, tiers, CoA/Spec):\n$link\n\nBest regards\n" . $fa['name'];
     }
     return mail_senden((string)$a['email'], $betreff, $text);
