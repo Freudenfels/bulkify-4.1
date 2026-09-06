@@ -12,7 +12,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($akt === 'ki_batch') {
         @set_time_limit(300);
         $r = rohstoff_split_ki_batch(max(1, min(40, (int)($_POST['limit'] ?? 10))));
-        $_SESSION['rs_flash'] = !empty($r['meldung']) ? $r['meldung'] : ('KI: ' . $r['verarbeitet'] . ' Vorschlag/Vorschläge erzeugt.');
+        if (($r['verarbeitet'] ?? 0) === 0 && !empty($r['meldung'])) {
+            $_SESSION['rs_flash'] = $r['meldung'];   // z. B. KI nur auf beta
+        } else {
+            $msg = 'KI: ' . ($r['vorschlag'] ?? 0) . ' Vorschlag/Vorschläge erzeugt';
+            if (($r['fehler'] ?? 0) > 0) $msg .= ', ' . $r['fehler'] . ' übersprungen (kein verwertbarer Vorschlag – meist zu lange Antwort)';
+            $_SESSION['rs_flash'] = $msg . '.';
+        }
         header('Location: ' . $ret); exit;
     }
     if ($akt === 'anwenden') {

@@ -24,8 +24,18 @@ function rohstoff_split_ki_one(array $item): array {
         . "Gib höchstens 20 Varianten zurück.\n\n"
         . "Name: " . $name . "\n"
         . "\nAntworte als JSON: {\"basis\": \"<kurzer Substanzname>\", \"varianten\": [\"Name Variante 1\", \"Name Variante 2\", ...]}";
-    $r = ki_json($prompt, ['max_tokens' => 1500, 'zweck' => 'rohstoff-split']);
-    if (!$r['ok']) return $r;
+    $r = ki_json($prompt, ['max_tokens' => 2500, 'zweck' => 'rohstoff-split']);
+    if (!$r['ok']) {
+        // Fallback: JSON aus dem Rohtext bergen (erstes { bis letztes }) – falls die KI Text drumherum
+        // gesetzt hat. Bei echter Trunkierung bleibt es ungültig -> der Batch überspringt die Zeile.
+        $t = (string)($r['text'] ?? '');
+        $a = strpos($t, '{'); $b = strrpos($t, '}');
+        if ($a !== false && $b !== false && $b > $a) {
+            $d2 = json_decode(substr($t, $a, $b - $a + 1), true);
+            if (is_array($d2)) $r = ['ok' => true, 'daten' => $d2];
+        }
+        if (!$r['ok']) return $r;
+    }
     $d = $r['daten'];
     $varianten = [];
     foreach ((array)($d['varianten'] ?? []) as $v) { $v = trim((string)$v); if ($v !== '') $varianten[] = mb_substr($v, 0, 190); }
@@ -35,19 +45,24 @@ function rohstoff_split_ki_one(array $item): array {
 
 // Batch: für die nächsten $limit langen Rohstoffe ohne Vorschlag einen KI-Vorschlag erzeugen.
 function rohstoff_split_ki_batch(int $limit = 15): array {
-    $w = ['verarbeitet' => 0, 'fehler' => 0, 'meldung' => ''];
+    $w = ['verarbeitet' => 0, 'vorschlag' => 0, 'fehler' => 0, 'meldung' => ''];
+    // KI-Verfügbarkeit EINMAL prüfen – sonst würde jede Zeile denselben „nur auf beta"-Fehler werfen.
+    if (!ki_bereit()) { $w['meldung'] = 'Die KI ist nur auf beta verfügbar.'; return $w; }
     $rows = all("SELECT i.* FROM item i
                  LEFT JOIN rohstoff_variante_vorschlag v ON v.item_id=i.id
                  WHERE i.kategorie='rohstoff' AND CHAR_LENGTH(i.name) > ? AND v.id IS NULL
                  ORDER BY CHAR_LENGTH(i.name) DESC LIMIT ?", [ROHSTOFF_NAME_LANG, $limit]);
     foreach ($rows as $it) {
         $r = rohstoff_split_ki_one($it);
-        if (!$r['ok']) { $w['fehler']++; $w['meldung'] = $r['fehler'] ?? 'Fehler'; break; }
+        $w['verarbeitet']++;
+        // Eine einzelne Zeile ohne verwertbare Antwort (z. B. abgeschnittenes JSON) überspringt der
+        // Batch – die übrigen bekommen trotzdem ihren Vorschlag. So blockiert kein Ausreißer alles.
+        if (!$r['ok']) { $w['fehler']++; $w['meldung'] = $r['fehler'] ?? 'Fehler'; continue; }
         q("INSERT INTO rohstoff_variante_vorschlag (item_id,original_name,basis,varianten_json,ki_stand,status)
            VALUES (?,?,?,?,?, 'offen')
            ON DUPLICATE KEY UPDATE basis=VALUES(basis), varianten_json=VALUES(varianten_json), ki_stand=VALUES(ki_stand), status='offen'",
           [(int)$it['id'], mb_substr((string)$it['name'], 0, 255), $r['basis'], json_encode($r['varianten'], JSON_UNESCAPED_UNICODE), gmdate('Y-m-d H:i:s')]);
-        $w['verarbeitet']++;
+        $w['vorschlag']++;
     }
     return $w;
 }
