@@ -18,6 +18,13 @@ Zeilen gibt) schiebt die URL in die **Notiz** und setzt den Lieferant auf die
 und die lange URL bläht die Tabelle nicht mehr auf (Preis-Spalte bleibt sichtbar).
 `tools/ek_import.php` macht das bei neuen Importen automatisch (`ek_ist_link`/`ek_plattform`
 in `core/ek_ki.php`, `ek_links_bereinigen()` für Bestandsdaten).
+
+## Lieferant-Aliase (Kontaktname → Firma)
+Viele „Lieferanten" sind Kontakt-/Agenten-Namen (Maggi, Diane, Amy …), die für eine Firma
+stehen. Panel **„Lieferant-Aliase"**: Alias → Firma (+ Kontakt) eintragen; wird sofort auf
+alle passenden `ek_import`-Zeilen angewendet (Lieferant = Firma, Kontakt in die Notiz) und
+beim Seitenaufruf idempotent nachgezogen (`lieferant_alias_anwenden()`). Tabelle
+`lieferant_alias`; Erst-Alias **Maggi = Wellgreen** wird einmalig geseedet.
 „Zuordnung" verlinkt den v4-Rohstoff/das Produkt, sobald `item_id`/`produkt_id` gesetzt ist.
 
 ## Zuordnung (Review-UI)

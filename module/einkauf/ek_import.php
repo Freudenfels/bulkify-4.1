@@ -22,12 +22,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $ret); exit;
     }
     if ($akt === 'links_bereinigen') { $n = ek_links_bereinigen(); $_SESSION['ek_flash'] = $n . ' Marktplatz-Link(s) in die Notiz verschoben (Lieferant = Plattform).'; header('Location: ' . $ret); exit; }
+    if ($akt === 'alias_add') {
+        lieferant_alias_speichern((string)($_POST['alias'] ?? ''), (string)($_POST['firma'] ?? ''), (string)($_POST['kontakt'] ?? ''));
+        $n = lieferant_alias_anwenden();
+        $_SESSION['ek_flash'] = 'Alias gespeichert und auf ' . $n . ' Zeile(n) angewendet.';
+        header('Location: ' . $ret); exit;
+    }
+    if ($akt === 'alias_del') { lieferant_alias_loeschen((int)($_POST['id'] ?? 0)); header('Location: ' . $ret); exit; }
     if ($akt === 'bestaetigen') { ek_bestaetigen((int)($_POST['id'] ?? 0)); header('Location: ' . $ret); exit; }
     if ($akt === 'verwerfen')   { ek_verwerfen((int)($_POST['id'] ?? 0));   header('Location: ' . $ret); exit; }
     if ($akt === 'manuell')     { $ok = ek_manuell_zuordnen((int)($_POST['id'] ?? 0), (string)($_POST['eingabe'] ?? ''), true);
         $_SESSION['ek_flash'] = $ok ? 'Manuell zugeordnet und bestätigt.' : 'Kein passender Eintrag zur Eingabe gefunden.';
         header('Location: ' . $ret); exit; }
 }
+
+// Lieferant-Aliase (Kontaktname -> Firma) beim Laden anwenden – idempotent (nach dem Setzen
+// matcht der Lieferant den Alias nicht mehr). So wirkt z. B. Maggi = Wellgreen sofort.
+lieferant_alias_anwenden();
+$aliase = all("SELECT * FROM lieferant_alias ORDER BY firma, alias");
 
 $q        = trim((string)($_GET['q'] ?? ''));
 $statusF  = $_GET['status'] ?? '';
@@ -101,6 +113,32 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
 </div>
 <?php endif; ?>
 
+<details class="bx-panel" <?= $aliase ? '' : 'open' ?>>
+  <summary style="cursor:pointer;font-weight:600">Lieferant-Aliase <span class="muted" style="font-weight:400">(Kontaktname → Firma) · <?= count($aliase) ?></span></summary>
+  <p class="muted" style="font-size:13px;margin:8px 0">Viele „Lieferanten" in den Listen sind Kontakt-/Agenten-Namen (Maggi, Diane, Amy …). Trag hier ein, zu welcher <strong>Firma</strong> sie gehören – dann steht überall die echte Firma, der Kontakt wandert in die Notiz. Wirkt sofort auf alle passenden Zeilen.</p>
+  <?php if ($aliase): ?>
+    <div class="bx-tablewrap" style="margin-bottom:10px"><table class="bx-table">
+      <thead><tr><th>Kontakt/Alias</th><th>Firma</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($aliase as $a): ?>
+        <tr>
+          <td><?= h($a['alias']) ?></td>
+          <td><?= h($a['firma']) ?><?php if ($a['kontakt']): ?> <span class="muted" style="font-size:12px">· Kontakt <?= h($a['kontakt']) ?></span><?php endif; ?></td>
+          <td><form method="post" style="margin:0"><input type="hidden" name="aktion" value="alias_del"><input type="hidden" name="id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="ret" value="<?= h($retQuery) ?>"><button class="btn btn-ghost btn-sm" type="submit">entfernen</button></form></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  <?php endif; ?>
+  <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="alias_add"><input type="hidden" name="ret" value="<?= h($retQuery) ?>">
+    <div class="bx-field" style="margin:0"><label style="font-size:12px">Kontakt/Alias</label><input type="text" name="alias" placeholder="z. B. Maggi" required></div>
+    <div class="bx-field" style="margin:0"><label style="font-size:12px">Firma</label><input type="text" name="firma" placeholder="z. B. Wellgreen" required></div>
+    <div class="bx-field" style="margin:0"><label style="font-size:12px">Kontakt (optional)</label><input type="text" name="kontakt" placeholder="z. B. Maggi"></div>
+    <button class="btn btn-primary btn-sm" type="submit" data-busy="…">Alias speichern &amp; anwenden</button>
+  </form>
+</details>
+
 <div class="bx-panel">
 <?php if (!$rows): ?>
   <div class="muted"><?= ($q!==''||$statusF!=='') ? 'Keine Treffer.' : 'Noch nichts importiert.' ?></div>
@@ -124,7 +162,7 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
           <?php if (trim((string)$e['notiz'])!==''): ?><div class="muted" style="font-size:11px;max-width:320px;word-break:break-all"><?= h($e['notiz']) ?></div><?php endif; ?>
         </td>
         <?php if ($typ==='fertigprodukt'): ?><td class="muted"><?= $e['groesse']?h($e['groesse']):'–' ?></td><?php endif; ?>
-        <td style="white-space:normal;max-width:160px;word-break:break-word"><?= $e['lieferant']?h($e['lieferant']):'<span class="muted">–</span>' ?></td>
+        <td style="white-space:normal;max-width:220px;overflow-wrap:anywhere"><?= $e['lieferant']?h($e['lieferant']):'<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $preisFmt($e) ?></td>
         <td>
           <?php if ($ziel && in_array($st,['vorschlag','bestaetigt'],true)): ?>

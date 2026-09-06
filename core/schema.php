@@ -595,6 +595,21 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('ek_import', 'notiz', "VARCHAR(500) NULL");   // additiv fuer bereits bestehende Tabellen (beta)
 
+    // lieferant_alias: viele Lieferantennamen aus den Preislisten sind Kontakt-/Agenten-Namen
+    // (Maggi, Diane, Amy ...), die in Wahrheit fuer eine Firma stehen (z. B. Maggi = Wellgreen).
+    // Alias -> Firma (+ optional Kontakt). Wird auf ek_import angewendet, damit dort die echte Firma steht.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_alias (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        alias VARCHAR(120) NOT NULL,
+        firma VARCHAR(120) NOT NULL,
+        kontakt VARCHAR(120) NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_alias (alias)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Erst-Alias (nur solange noch keiner existiert – spaetere manuelle Aenderungen bleiben unberuehrt).
+    try { if ((int)$pdo->query("SELECT COUNT(*) FROM lieferant_alias")->fetchColumn() === 0)
+        $pdo->exec("INSERT INTO lieferant_alias (alias,firma,kontakt) VALUES ('Maggi','Wellgreen','Maggi')"); } catch (\Throwable $e) {}
+
     // db_import_log: Protokoll der Datenuebernahmen (DB-Import). BEWUSST NICHT im mysqldump enthalten
     // (--ignore-table), damit der Verlauf server-lokal bleibt und ein Import ihn nicht ueberschreibt.
     $pdo->exec("CREATE TABLE IF NOT EXISTS db_import_log (

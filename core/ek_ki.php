@@ -188,6 +188,34 @@ function ek_links_bereinigen(): int {
     return $n;
 }
 
+// Lieferant-Alias speichern (Alias -> Firma, optional Kontakt). Idempotent über den Alias.
+function lieferant_alias_speichern(string $alias, string $firma, ?string $kontakt = null): void {
+    $alias = trim($alias); $firma = trim($firma);
+    if ($alias === '' || $firma === '') return;
+    q("INSERT INTO lieferant_alias (alias,firma,kontakt) VALUES (?,?,?)
+       ON DUPLICATE KEY UPDATE firma=VALUES(firma), kontakt=VALUES(kontakt)",
+      [mb_substr($alias, 0, 120), mb_substr($firma, 0, 120), ($kontakt !== null && trim($kontakt) !== '') ? mb_substr(trim($kontakt), 0, 120) : null]);
+}
+function lieferant_alias_loeschen(int $id): void { q("DELETE FROM lieferant_alias WHERE id=?", [$id]); }
+
+// Alle Aliase auf ek_import anwenden: Lieferant = Firma, Kontakt in die Notiz. Idempotent –
+// nach dem Setzen ist der Lieferant die Firma und matcht den Alias nicht mehr. Rückgabe: geänderte Zeilen.
+function lieferant_alias_anwenden(): int {
+    $n = 0;
+    foreach (all("SELECT alias, firma, kontakt FROM lieferant_alias") as $a) {
+        if (trim((string)$a['alias']) === '' || trim((string)$a['firma']) === '' || $a['alias'] === $a['firma']) continue;
+        foreach (all("SELECT id, notiz FROM ek_import WHERE lieferant=?", [$a['alias']]) as $r) {
+            $notiz = trim((string)$r['notiz']);
+            $k = trim((string)$a['kontakt']);
+            $hin = $k !== '' ? 'Kontakt: ' . $k : '';
+            $neu = ($hin !== '' && mb_stripos($notiz, $hin) === false) ? (($notiz !== '' ? $notiz . ' | ' : '') . $hin) : $notiz;
+            q("UPDATE ek_import SET lieferant=?, notiz=? WHERE id=?", [$a['firma'], mb_substr($neu, 0, 500) ?: null, (int)$r['id']]);
+            $n++;
+        }
+    }
+    return $n;
+}
+
 // Vorschlag verwerfen (Zuordnung löschen, Zeile bleibt zum späteren Neu-Zuordnen).
 function ek_verwerfen(int $id): void {
     q("UPDATE ek_import SET item_id=NULL, produkt_id=NULL, ki_score=NULL, ki_hinweis=NULL, status='verworfen' WHERE id=?", [$id]);
