@@ -51,7 +51,7 @@ function rohstoff_split_ki_batch(int $limit = 15): array {
     $rows = all("SELECT i.* FROM item i
                  LEFT JOIN rohstoff_variante_vorschlag v ON v.item_id=i.id
                  WHERE i.kategorie='rohstoff' AND CHAR_LENGTH(i.name) > ? AND v.id IS NULL
-                 ORDER BY CHAR_LENGTH(i.name) DESC LIMIT ?", [ROHSTOFF_NAME_LANG, $limit]);
+                 ORDER BY CHAR_LENGTH(i.name) ASC LIMIT ?", [ROHSTOFF_NAME_LANG, $limit]);   // kürzeste zuerst (zuverlässiger)
     foreach ($rows as $it) {
         $r = rohstoff_split_ki_one($it);
         $w['verarbeitet']++;
