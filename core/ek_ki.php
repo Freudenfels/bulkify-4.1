@@ -259,6 +259,16 @@ function ek_neu_anlegen(int $id): array {
     return ['ok' => true, 'typ' => 'rohstoff', 'neu_id' => $iid, 'name' => (string)$ek['name']];
 }
 
+// Alle Zeilen eines Typs, die die KI NICHT gefunden hat (status 'kein_treffer', ohne Zuordnung),
+// auf einmal als neue Rohstoffe/Produkte anlegen. Rückgabe: Anzahl neu angelegter.
+function ek_neu_anlegen_alle(string $typ): int {
+    $spalte = $typ === 'rohstoff' ? 'item_id' : 'produkt_id';
+    $ids = array_column(all("SELECT id FROM ek_import WHERE typ=? AND status='kein_treffer' AND $spalte IS NULL ORDER BY id", [$typ]), 'id');
+    $n = 0;
+    foreach ($ids as $id) { $r = ek_neu_anlegen((int)$id); if (!empty($r['ok'])) $n++; }
+    return $n;
+}
+
 // Vorschlag verwerfen (Zuordnung löschen, Zeile bleibt zum späteren Neu-Zuordnen).
 function ek_verwerfen(int $id): void {
     q("UPDATE ek_import SET item_id=NULL, produkt_id=NULL, ki_score=NULL, ki_hinweis=NULL, status='verworfen' WHERE id=?", [$id]);

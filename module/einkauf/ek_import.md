@@ -43,6 +43,9 @@ beim Seitenaufruf idempotent nachgezogen (`lieferant_alias_anwenden()`). Tabelle
   Produkt"** – legt aus der Zeile direkt einen neuen Datensatz an und ordnet ihn zu
   (`ek_neu_anlegen()`): Fertigprodukt → `produkt` (Entwurf, Zukauf-Infos in der Notiz),
   Rohstoff → `item` + `lieferant_preis` (mit Staffelmenge aus dem Namen).
+- **Alle ohne KI-Treffer anlegen:** Gibt es Zeilen mit Status `kein_treffer`, erscheint ein
+  Sammel-Button „Alle N als neue Produkte/Rohstoffe anlegen" (`ek_neu_anlegen_alle()`, mit
+  Sicherheitsabfrage) – legt für jede in einem Rutsch einen neuen Datensatz an.
 
 ## Datenfluss
 1. `tools/ek_import.php` füllt `ek_import` aus den CSVs (Rohnamen, noch ohne Zuordnung).

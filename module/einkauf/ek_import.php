@@ -37,6 +37,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($akt === 'bestaetigen') { ek_bestaetigen((int)($_POST['id'] ?? 0)); header('Location: ' . $ret); exit; }
     if ($akt === 'verwerfen')   { ek_verwerfen((int)($_POST['id'] ?? 0));   header('Location: ' . $ret); exit; }
+    if ($akt === 'neu_alle') {
+        @set_time_limit(300);
+        $n = ek_neu_anlegen_alle($typ);
+        $_SESSION['ek_flash'] = $n . ($typ === 'rohstoff' ? ' neue Rohstoffe' : ' neue Produkte') . ' angelegt (alle ohne KI-Treffer).';
+        header('Location: ' . $ret); exit;
+    }
     if ($akt === 'neu_anlegen') {
         $r = ek_neu_anlegen((int)($_POST['id'] ?? 0));
         $_SESSION['ek_flash'] = $r['ok']
@@ -121,6 +127,15 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
   </form>
 </div>
 <?php if (!$kiDa): ?><div class="muted" style="font-size:12px;margin:-6px 2px 10px">Die KI-Zuordnung läuft nur auf beta (Schlüssel serverseitig). Manuelle Zuordnung geht überall.</div><?php endif; ?>
+<?php if (($zaehler['kein_treffer'] ?? 0) > 0): $ktN = (int)$zaehler['kein_treffer']; $wasNeu = $typ==='rohstoff' ? 'Rohstoffe' : 'Produkte'; ?>
+<div class="bx-panel" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+  <div class="muted" style="font-size:13px"><strong style="font-weight:600"><?= $ktN ?></strong> Zeile(n) ohne KI-Treffer. Alle auf einmal als neue <?= $wasNeu ?> anlegen und zuordnen?</div>
+  <form method="post" style="margin:0" onsubmit="return confirm('<?= $ktN ?> neue <?= $wasNeu ?> anlegen? Das legt für jede Zeile ohne KI-Treffer einen neuen Datensatz an.');">
+    <input type="hidden" name="aktion" value="neu_alle"><input type="hidden" name="ret" value="<?= h($retQuery) ?>">
+    <button class="btn btn-primary btn-sm" type="submit" data-busy="lege an…">Alle <?= $ktN ?> als neue <?= $wasNeu ?> anlegen</button>
+  </form>
+</div>
+<?php endif; ?>
 <?php if ($linkN > 0): ?>
 <div class="bx-panel" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border-color:#e6c4c0;background:#fdf7f2">
   <div class="muted" style="font-size:13px"><strong style="font-weight:600"><?= $linkN ?></strong> Zeile(n) haben einen <strong>Marktplatz-Link</strong> (z. B. Alibaba) als „Lieferant". Verschieben in die Notiz – Lieferant wird zur Plattform (Alibaba/AliExpress). So legen wir keine Lieferanten mit Link an.</div>
