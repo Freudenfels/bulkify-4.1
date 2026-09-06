@@ -12,6 +12,7 @@ $q    = trim($_GET['q'] ?? '');
 $kat  = $_GET['kat'] ?? 'rohstoff';          // Standard: Rohstoffe
 $sort = $_GET['sort'] ?? 'name';
 $dir  = $_GET['dir']  ?? 'asc';
+$fehlt = $_GET['fehlt'] ?? '';               // Lücken-Filter: '', 'lief', 'spec', 'coa', 'preis', 'irgendwas'
 $istKapsel = ($kat === 'leerkapsel');
 
 if ($kat === 'alle')            $rows = all("SELECT * FROM item");
@@ -70,6 +71,26 @@ if ($ids && !$istKapsel) {
         $liefMin[(int)$r['id']] = (float)$r['mp'];
     }
 }
+
+// Lücken-Filter: nur die Rohstoffe zeigen, bei denen etwas fehlt – damit man gezielt
+// sieht, was noch anzufragen/zu hinterlegen ist.
+if ($fehlt !== '' && !$istKapsel) {
+    $rows = array_filter($rows, function ($r) use ($fehlt, $specSet, $coaSet, $liefSet) {
+        $id = (int)$r['id'];
+        $hatLief = isset($liefSet[$id]);
+        $hatSpec = isset($specSet[$id]);
+        $hatCoa  = isset($coaSet[$id]);
+        $hatPreis = (float)$r['ek_preis'] > 0 || isset($liefSet[$id]);
+        return match ($fehlt) {
+            'lief'      => !$hatLief,
+            'spec'      => !$hatSpec,
+            'coa'       => !$hatCoa,
+            'preis'     => !$hatPreis,
+            'irgendwas' => !$hatLief || !$hatSpec || !$hatCoa || !$hatPreis,
+            default     => true,
+        };
+    });
+}
 // „Preis ab": günstigster bekannter EK (eigener EK vs. Lieferanten-EK), in der Einheit des Items.
 $preisAb = function ($r) use ($liefMin) {
     $min = (float)$r['ek_preis'];
@@ -119,8 +140,9 @@ if ($kat === 'alle') {
 $titel   = $istKapsel ? 'Leerkapseln' : 'Rohstoffe';
 $neuBtn  = $istKapsel ? bx_btn('Neue Leerkapsel', '?p=rohstoff&id=neu&form=kapselhuelle', 'primary')
                       : bx_btn('Neuer Rohstoff', '?p=rohstoff&id=neu', 'primary');
+$fehltLbl = ['irgendwas'=>'etwas fehlt','lief'=>'ohne Lieferant','preis'=>'ohne Preis','spec'=>'ohne Spec','coa'=>'ohne CoA'][$fehlt] ?? '';
 render_header('rohstoffe', $titel);
-bx_head($titel, count($rows) . ' Einträge', $neuBtn);
+bx_head($titel, count($rows) . ' Einträge' . ($fehltLbl ? ' · Filter: ' . $fehltLbl : ''), $neuBtn);
 ?>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="rohstoffe">
@@ -133,12 +155,19 @@ bx_head($titel, count($rows) . ' Einträge', $neuBtn);
     <option value="alle" <?= $kat==='alle'?'selected':'' ?>>Alle Kategorien</option>
   </select>
   <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Name, lat. Name, Art.-Nr …">
+  <?php if (!$istKapsel): ?>
+  <select name="fehlt" onchange="this.form.submit()" title="Nur Rohstoffe zeigen, bei denen etwas fehlt">
+    <?php foreach (['' => 'alle', 'irgendwas' => 'etwas fehlt', 'lief' => 'ohne Lieferant', 'preis' => 'ohne Preis', 'spec' => 'ohne Spec', 'coa' => 'ohne CoA'] as $k => $lbl): ?>
+      <option value="<?= $k ?>" <?= $fehlt === $k ? 'selected' : '' ?>><?= $lbl ?></option>
+    <?php endforeach; ?>
+  </select>
+  <?php endif; ?>
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
-  <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=rohstoffe&kat=<?= h($kat) ?>">zurücksetzen</a><?php endif; ?>
+  <?php if ($q !== '' || $fehlt !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=rohstoffe&kat=<?= h($kat) ?>">zurücksetzen</a><?php endif; ?>
 </form>
 <?php
 bx_table($cols, array_values($rows), [
-    'baseUrl' => '?p=rohstoffe&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : ''),
+    'baseUrl' => '?p=rohstoffe&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : '') . ($fehlt !== '' ? '&fehlt=' . h($fehlt) : ''),
     'sort'    => $sort,
     'dir'     => $dir,
     'rowUrl'  => fn($r) => '?p=rohstoff&id=' . $r['id'],

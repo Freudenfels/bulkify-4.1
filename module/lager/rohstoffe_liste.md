@@ -17,3 +17,5 @@
 
 **Leerkapsel-Sicht** behält ihre eigenen Spalten inkl. **EK-Preis**.
 Die **Suche** durchsucht weiterhin auch den lateinischen Namen, auch wenn er nicht mehr als Spalte steht.
+
+**Lücken-Filter (`?fehlt=`):** Dropdown in der Leiste – „alle / etwas fehlt / ohne Lieferant / ohne Preis / ohne Spec / ohne CoA". Zeigt gezielt die Rohstoffe, bei denen etwas fehlt, damit man sie anfragen/hinterlegen kann. Grundlage sind dieselben Sets wie die Marker (id-verknüpfte Lieferantenpreise, Spec/CoA-Inhalte). Die v3-`lieferant_preisliste` fließt bewusst NICHT ein: 636 Freitext-Zeilen (Menge/Verpackung im Namen, „5HTP 25Kg"), nur ~30 exakte Namenstreffer und keine Lieferantennamen – das würde die Marker verfälschen.
