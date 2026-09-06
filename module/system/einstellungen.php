@@ -160,6 +160,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'preise_save') {
     meta_set('gummi_basis_ek_kg', (string)(float)str_replace(',', '.', $_POST['gummi_basis_ek_kg'] ?? '4'));
     meta_set('gel_portion_ml', (string)(float)str_replace(',', '.', $_POST['gel_portion_ml'] ?? '15'));
     meta_set('gel_basis_ek_l', (string)(float)str_replace(',', '.', $_POST['gel_basis_ek_l'] ?? '5'));
+    // Standard-Lieferbedingung für Preisanfragen
+    meta_set('ek_incoterm_standard', array_key_exists($_POST['ek_incoterm_standard'] ?? '', incoterm_liste()) ? (string)$_POST['ek_incoterm_standard'] : 'DDP');
+    meta_set('ek_versandart_standard', array_key_exists($_POST['ek_versandart_standard'] ?? '', versandart_liste()) ? (string)$_POST['ek_versandart_standard'] : 'luft');
     header('Location: ?p=einstellungen&tab=preise&ok=1'); exit;
 }
 // --- Behälter-Fassung speichern (Matrix: Kapseln je Größe + Pulver-Gramm + Flüssig-ml) ---
@@ -302,6 +305,13 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       <div class="bx-field"><label>EK Gummimasse (EUR/kg) <?= bx_hint('Einkaufspreis der Gummi-Grundmasse – geht je Gummi in den EK ein') ?></label><input type="number" step="0.01" name="gummi_basis_ek_kg" value="<?= $m('gummi_basis_ek_kg','4') ?>"></div>
       <div class="bx-field"><label>Portionsvolumen Gel (ml) <?= bx_hint('wie viel ml eine Gel-Portion (ein Stick) laut Rezeptur ist – daraus ergibt sich, wie viele Portionen in ein Gebinde gehen') ?></label><input type="number" step="0.1" name="gel_portion_ml" value="<?= $m('gel_portion_ml','15') ?>"></div>
       <div class="bx-field"><label>EK Gel-Grundmasse (EUR/L) <?= bx_hint('zähflüssige Gel-Basis – kommt je ml Füllvolumen zum EK dazu') ?></label><input type="number" step="0.01" name="gel_basis_ek_l" value="<?= $m('gel_basis_ek_l','5') ?>"></div>
+    </div>
+    <div style="font-weight:600;margin:14px 0 6px">Preisanfragen – Standard-Lieferbedingung</div>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Incoterm (Standard) <?= bx_hint('Voreinstellung im Preisanfrage-Popup. EXW = ab Werk (du zahlst Fracht+Zoll), DDP = frei Haus, alles inkl. Je Anfrage änderbar.') ?></label>
+        <select name="ek_incoterm_standard"><?php $siv=$m('ek_incoterm_standard','DDP'); foreach (incoterm_liste() as $k=>$lbl): ?><option value="<?= $k ?>" <?= $siv===$k?'selected':'' ?>><?= h($lbl) ?></option><?php endforeach; ?></select></div>
+      <div class="bx-field"><label>Versandart (Standard) <?= bx_hint('Voreinstellung im Preisanfrage-Popup: Luft/See/Bahn/… Je Anfrage änderbar.') ?></label>
+        <select name="ek_versandart_standard"><?php $svv=$m('ek_versandart_standard','luft'); foreach (versandart_liste() as $k=>$lbl): ?><option value="<?= $k ?>" <?= $svv===$k?'selected':'' ?>><?= h($lbl) ?></option><?php endforeach; ?></select></div>
     </div>
     <div style="font-weight:600;margin:14px 0 6px">Rohstoff- & Verpackungs-Weiterverkauf</div>
     <div class="bx-grid">
