@@ -26,6 +26,12 @@ Erreichbar unter **`/crm/`** – also `beta.bulkify.pro/crm/`. Das Dashboard ble
   gepflegte Stelle für Datenbank und Anthropic-Schlüssel.
 - **Derselbe Deploy.** Keine zweite Subdomain, kein zweites Repo.
 
+## Aussehen
+Kein eigenes. Das CRM laedt **dasselbe Stylesheet wie das Dashboard** (`/assets/app.css`) und
+benutzt dessen Klassen; dazu kommt `public/crm/assets/crm.css` mit den wenigen Ergaenzungen fuer
+die Wartezeilen (alle mit `crm-` davor). Menue links, Burger auf dem Handy, dunkler Modus -
+alles wie im Dashboard, inklusive derselben Einstellung fuer hell/dunkel.
+
 ## Die wichtigste Regel: eine einzige Naht
 **Alle** Zugriffe auf Dashboard-Tabellen (`kunden`, `angebot`, `portal_anfrage`, `rezeptur_anfrage`,
 `aufgabe`, `nachricht`, `lieferant_anfrage`, `benutzer` …) stehen ausschließlich in

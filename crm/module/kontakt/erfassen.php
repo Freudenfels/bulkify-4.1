@@ -77,11 +77,11 @@ if ($hinweisKi !== '') hinweis($hinweisKi);
 <div class="karte" style="border-color:var(--warm)">
   <div class="rumpf">
     <strong>Gibt es vielleicht schon</strong>
-    <p class="leise" style="margin:4px 0 10px">Bevor du anlegst – vielleicht ist das derselbe.</p>
+    <p class="muted" style="margin:4px 0 10px">Bevor du anlegst – vielleicht ist das derselbe.</p>
     <?php foreach ($dubletten as $d): ?>
       <div style="margin-bottom:6px">
         <a href="?p=<?= $d['art'] === 'kunde' ? 'kunde' : 'kontakt' ?>&id=<?= (int)$d['id'] ?>"><?= h($d['text']) ?></a>
-        <span class="leise"><?= $d['art'] === 'kunde' ? 'Kunde' : 'Kontakt' ?> · <?= h($d['grund']) ?></span>
+        <span class="muted"><?= $d['art'] === 'kunde' ? 'Kunde' : 'Kontakt' ?> · <?= h($d['grund']) ?></span>
       </div>
     <?php endforeach; ?>
   </div>
@@ -92,12 +92,12 @@ if ($hinweisKi !== '') hinweis($hinweisKi);
 <form method="post" enctype="multipart/form-data">
   <input type="hidden" name="tun" value="bild">
   <div class="karte"><div class="rumpf">
-    <div class="feld" style="margin-bottom:8px">
+    <div class="bx-field" style="margin-bottom:8px">
       <label for="bild">Visitenkarte oder Foto</label>
       <input type="file" id="bild" name="bild" accept="image/*,application/pdf" capture="environment"
              onchange="this.form.submit()">
     </div>
-    <p class="leise" style="margin:0">Karte abfotografieren – die KI liest Name, Firma, Telefon und E-Mail ab.</p>
+    <p class="muted" style="margin:0">Karte abfotografieren – die KI liest Name, Firma, Telefon und E-Mail ab.</p>
   </div></div>
 </form>
 <?php endif; ?>
@@ -106,28 +106,28 @@ if ($hinweisKi !== '') hinweis($hinweisKi);
   <input type="hidden" name="tun" value="speichern" id="tun">
 
   <div class="karte"><div class="rumpf">
-    <div class="feld">
+    <div class="bx-field">
       <label for="notiz">Worum geht es</label>
       <textarea id="notiz" name="notiz" placeholder="Nachricht hier einfügen – oder selbst schreiben, z. B. „Magnesium-Kapseln, 50.000 Stück, Angebot bis Freitag“"><?= h($vor['notiz']) ?></textarea>
       <?php if (ki_bereit()): ?>
-        <button class="btn klein" type="submit" style="margin-top:8px"
+        <button class="btn btn-ghost btn-sm" type="submit" style="margin-top:8px"
                 onclick="document.getElementById('tun').value='lesen'">Aus dem Text ausfüllen</button>
-        <span class="leise" style="font-size:13px;margin-left:8px">Gespeichert wird dabei nichts.</span>
+        <span class="muted" style="font-size:13px;margin-left:8px">Gespeichert wird dabei nichts.</span>
       <?php endif; ?>
     </div>
   </div></div>
 
   <div class="karte"><div class="rumpf">
-    <div class="feld">
+    <div class="bx-field">
       <label for="name">Name</label>
       <input type="text" id="name" name="name" value="<?= h($vor['name']) ?>" placeholder="z. B. Lena Hoffmann">
     </div>
-    <div class="zweispaltig">
-      <div class="feld">
+    <div class="bx-grid">
+      <div class="bx-field">
         <label for="firma">Firma</label>
         <input type="text" id="firma" name="firma" value="<?= h($vor['firma']) ?>">
       </div>
-      <div class="feld">
+      <div class="bx-field">
         <label for="quelle">Woher</label>
         <select id="quelle" name="quelle">
           <?php foreach (crm_quellen() as $k => $v): ?>
@@ -136,32 +136,33 @@ if ($hinweisKi !== '') hinweis($hinweisKi);
         </select>
       </div>
     </div>
-    <div class="zweispaltig">
-      <div class="feld">
+    <div class="bx-grid">
+      <div class="bx-field">
         <label for="telefon">Telefon</label>
         <input type="tel" id="telefon" name="telefon" value="<?= h($vor['telefon']) ?>">
       </div>
-      <div class="feld">
+      <div class="bx-field">
         <label for="email">E-Mail</label>
         <input type="email" id="email" name="email" value="<?= h($vor['email']) ?>">
       </div>
     </div>
-    <div class="zweispaltig">
-      <div class="feld">
+    <div class="bx-grid">
+      <div class="bx-field">
         <label for="wert">Geschätzter Wert (optional)</label>
         <input type="text" id="wert" name="wert" inputmode="decimal" placeholder="z. B. 4800" value="<?= h($vor['wert']) ?>">
       </div>
-      <div class="feld">
+      <div class="bx-field">
         <label for="erinnern">Erinnere mich</label>
         <select id="erinnern" name="erinnern">
           <?php foreach (['0' => 'nicht', '1' => 'morgen', '3' => 'in 3 Tagen', '7' => 'in einer Woche',
                           '14' => 'in zwei Wochen', '30' => 'in einem Monat'] as $k => $v): ?>
-            <option value="<?= h($k) ?>" <?= $vor['erinnern'] === $k ? 'selected' : '' ?>><?= h($v) ?></option>
+            <?php // (string) ist noetig: PHP macht aus Schluesseln wie '3' die Zahl 3 - ein === schlaegt dann immer fehl. ?>
+            <option value="<?= h((string)$k) ?>" <?= $vor['erinnern'] === (string)$k ? 'selected' : '' ?>><?= h($v) ?></option>
           <?php endforeach; ?>
         </select>
       </div>
     </div>
-    <button class="btn stark" type="submit" style="width:100%;justify-content:center">Speichern</button>
+    <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">Speichern</button>
   </div></div>
 </form>
 <?php fuss('erfassen');

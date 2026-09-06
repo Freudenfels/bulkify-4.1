@@ -1,0 +1,59 @@
+/* Ergaenzungen des CRM zum Stylesheet des Dashboards.
+   Wird NACH /assets/app.css geladen. Hier steht nur, was es dort nicht gibt:
+   die Wartezeilen. Farben, Schrift, Knoepfe, Felder und Tabellen kommen alle von dort. */
+
+/* ---------- Wartezeile: Alter links, Sache in der Mitte, Knoepfe darunter ---------- */
+.crm-zeile{display:flex; gap:var(--sp-4); padding:var(--sp-4) var(--sp-5);
+  border-bottom:1px solid var(--line-2)}
+.crm-zeile:last-child{border-bottom:none}
+.crm-zeile:hover{background:var(--panel-2)}
+
+/* Die Wartezeit faerbt sich mit der Zeit - sie sagt etwas ueber das ALTER,
+   nicht ueber die Wichtigkeit. */
+.crm-alter{flex:none; width:82px; font-size:var(--fs-sm); font-weight:600; padding-top:2px}
+.crm-alter.ruhig{color:var(--muted)}
+.crm-alter.warm{color:#8a6414}
+.crm-alter.heiss{color:#9c4420}
+:root[data-theme="dark"] .crm-alter.warm{color:#d8b45f}
+:root[data-theme="dark"] .crm-alter.heiss{color:#e0876a}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .crm-alter.warm{color:#d8b45f}
+  :root:not([data-theme="light"]) .crm-alter.heiss{color:#e0876a}
+}
+.crm-alter .art{display:block; font-weight:400; font-size:var(--fs-xs); color:var(--muted); margin-top:2px}
+
+.crm-mitte{flex:1; min-width:0}
+.crm-mitte .titel{font-weight:600; display:block; color:var(--text)}
+.crm-mitte a.titel:hover{color:var(--gruen)}
+.crm-mitte .unter{color:var(--muted); font-size:var(--fs-sm); display:block; margin-top:2px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.crm-tuen{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap}
+.crm-tuen form{margin:0}
+
+/* Leerer Zustand - freundlicher als eine leere Flaeche. */
+.crm-leer{text-align:center; color:var(--muted); padding:48px var(--sp-5)}
+.crm-leer strong{display:block; color:var(--text); font-size:var(--fs-md); margin-bottom:6px}
+
+/* Reiter wie im Dashboard (settabs), nur als Links statt Schaltflaechen. */
+.crm-reiter{display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:var(--sp-5); flex-wrap:wrap}
+.crm-reiter a{padding:8px 14px; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px}
+.crm-reiter a:hover{text-decoration:none; color:var(--text)}
+.crm-reiter a.an{color:var(--gruen); border-bottom-color:var(--gruen); font-weight:600}
+
+@media (max-width:860px){
+  .crm-zeile{padding:var(--sp-4)}
+  .crm-alter{width:70px}
+}
+
+/* ---------- Karten ----------
+   Die Seiten des CRM benutzen .karte/.rumpf. Das ist dasselbe wie .bx-panel im Dashboard,
+   nur unter eigenem Namen - historisch gewachsen. Hier bekommen sie exakt dessen Aussehen,
+   damit beide Programme gleich wirken. Wer die Panels im Dashboard aendert, aendert sie mit. */
+.karte{background:var(--panel); border:1px solid var(--line); border-radius:var(--r);
+  box-shadow:var(--shadow); margin-bottom:var(--sp-5); overflow:hidden}
+.karte .rumpf{padding:var(--sp-5)}
+.karte > .crm-zeile:first-child{border-top:none}
+.karte h2{margin-top:0}
+
+/* Formularfelder im CRM duerfen umbrechen - die Beschriftungen sind laenger als im Dashboard. */
+.bx-field > label{white-space:normal}

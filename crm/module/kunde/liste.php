@@ -15,7 +15,7 @@ seitenkopf('Kunden', 'Aus dem Dashboard – hier siehst du, was zuletzt besproch
 </form>
 
 <?php if (!$liste): ?>
-  <div class="karte"><div class="leer">
+  <div class="karte"><div class="crm-leer">
     <strong><?= $suche !== '' ? 'Nichts gefunden.' : 'Keine Kunden.' ?></strong>
     <?= $suche !== '' ? 'Andere Schreibweise versuchen.' : 'Im Dashboard sind noch keine angelegt.' ?>
   </div></div>
@@ -23,9 +23,9 @@ seitenkopf('Kunden', 'Aus dem Dashboard – hier siehst du, was zuletzt besproch
   <div class="karte">
     <?php foreach ($liste as $k):
       $anz = (int) scalar("SELECT COUNT(*) FROM crm_verlauf WHERE kunde_id=?", [(int)$k['id']]); ?>
-      <div class="zeile">
-        <div class="alter ruhig"><?= h((string)($k['kundennummer'] ?? '')) ?></div>
-        <div class="mitte">
+      <div class="crm-zeile">
+        <div class="crm-alter ruhig"><?= h((string)($k['kundennummer'] ?? '')) ?></div>
+        <div class="crm-mitte">
           <a class="titel" href="?p=kunde&id=<?= (int)$k['id'] ?>"><?= h((string)$k['firma']) ?></a>
           <span class="unter">
             <?= h(trim((string)($k['ansprechpartner'] ?? ''))) ?>

@@ -43,19 +43,19 @@ if (isset($_GET['ok'])) hinweis($_GET['ok'] === 'spaeter' ? 'Auf Wiedervorlage g
   <div class="karte"><div class="rumpf">
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline">
       <strong>Heute</strong>
-      <a class="leise" style="font-size:13px" href="?p=wartet&neu=1">neu schreiben</a>
+      <a class="muted" style="font-size:13px" href="?p=wartet&neu=1">neu schreiben</a>
     </div>
     <p style="margin:8px 0 0"><?= nl2br(h($briefing)) ?></p>
   </div></div>
 <?php endif; ?>
 
-<div class="reiter">
+<div class="crm-reiter">
   <a href="?p=wartet"<?= $richtung === 'sie' ? ' class="an"' : '' ?>>Die warten auf mich<?= $richtung === 'sie' ? ' · ' . count($zeilen) : ' · ' . $andere ?></a>
   <a href="?p=wartet&r=wir"<?= $richtung === 'wir' ? ' class="an"' : '' ?>>Ich warte auf andere<?= $richtung === 'wir' ? ' · ' . count($zeilen) : ' · ' . $andere ?></a>
 </div>
 
 <?php if (!$zeilen): ?>
-  <div class="karte"><div class="leer">
+  <div class="karte"><div class="crm-leer">
     <strong>Nichts offen.</strong>
     <?= $richtung === 'sie' ? 'Niemand wartet gerade auf dich.' : 'Du wartest gerade auf niemanden.' ?>
   </div></div>
@@ -68,12 +68,12 @@ if (isset($_GET['ok'])) hinweis($_GET['ok'] === 'spaeter' ? 'Auf Wiedervorlage g
             : $z['link'];
       if (in_array($z['typ'], ['kontakt', 'wiedervorlage', 'termin'], true)) $ziel = $z['link'];
     ?>
-      <div class="zeile">
-        <div class="alter <?= h($z['stufe']) ?>">
+      <div class="crm-zeile">
+        <div class="crm-alter <?= h($z['stufe']) ?>">
           <?= h(warte_text((int)$z['tage'])) ?>
           <span class="art"><?= h(zeilen_art($z['typ'])) ?></span>
         </div>
-        <div class="mitte">
+        <div class="crm-mitte">
           <?php if ($ziel !== ''): ?>
             <a class="titel" href="<?= h($ziel) ?>"<?= str_starts_with($ziel, 'http') ? ' target="_blank" rel="noopener"' : '' ?>><?= h($z['titel']) ?></a>
           <?php else: ?>
@@ -81,19 +81,19 @@ if (isset($_GET['ok'])) hinweis($_GET['ok'] === 'spaeter' ? 'Auf Wiedervorlage g
           <?php endif; ?>
           <span class="unter"><?= h($z['unter']) ?><?= $z['betrag'] !== null ? ' · ' . eur((float)$z['betrag']) : '' ?></span>
 
-          <div class="tuen">
+          <div class="crm-tuen">
             <form method="post" style="margin:0">
               <input type="hidden" name="tun" value="spaeter"><input type="hidden" name="typ" value="<?= h($z['typ']) ?>">
               <input type="hidden" name="id" value="<?= (int)$z['id'] ?>"><input type="hidden" name="stand" value="<?= h((string)$z['seit']) ?>">
               <input type="hidden" name="titel" value="<?= h($z['titel']) ?>"><input type="hidden" name="tage" value="3">
               <input type="hidden" name="r" value="<?= h($richtung) ?>">
-              <button class="btn klein" type="submit">in 3 Tagen</button>
+              <button class="btn btn-ghost btn-sm" type="submit">in 3 Tagen</button>
             </form>
             <form method="post" style="margin:0">
               <input type="hidden" name="tun" value="erledigt"><input type="hidden" name="typ" value="<?= h($z['typ']) ?>">
               <input type="hidden" name="id" value="<?= (int)$z['id'] ?>"><input type="hidden" name="stand" value="<?= h((string)$z['seit']) ?>">
               <input type="hidden" name="r" value="<?= h($richtung) ?>">
-              <button class="btn klein leise" type="submit">erledigt</button>
+              <button class="btn btn-ghost btn-sm" type="submit">erledigt</button>
             </form>
           </div>
         </div>
@@ -102,7 +102,7 @@ if (isset($_GET['ok'])) hinweis($_GET['ok'] === 'spaeter' ? 'Auf Wiedervorlage g
   </div>
 
   <?php if ($dash === ''): ?>
-    <p class="leise">Die Vorgänge liegen im Dashboard. Hinterlege dessen Adresse unter <a href="?p=mehr">Mehr</a>,
+    <p class="muted">Die Vorgänge liegen im Dashboard. Hinterlege dessen Adresse unter <a href="?p=mehr">Mehr</a>,
        dann führt jede Zeile direkt dorthin.</p>
   <?php endif; ?>
 <?php endif; ?>

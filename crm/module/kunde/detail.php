@@ -42,7 +42,7 @@ $dash    = erp_dashboard_url();
 kopf((string)$k['firma'], 'mehr');
 seitenkopf((string)$k['firma'],
     trim((string)($k['kundennummer'] ?? '') . ' · ' . (string)($k['ansprechpartner'] ?? ''), ' ·'),
-    $dash !== '' ? '<a class="btn" target="_blank" rel="noopener" href="' . h($dash . '/?p=kunde&id=' . $id) . '">Im Dashboard</a>' : '');
+    $dash !== '' ? '<a class="btn btn-ghost" target="_blank" rel="noopener" href="' . h($dash . '/?p=kunde&id=' . $id) . '">Im Dashboard</a>' : '');
 
 $m = (string)($_GET['ok'] ?? '');
 if ($m !== '') hinweis($m === 'erinnert' ? 'Wiedervorlage gesetzt.' : 'Notiert.');
@@ -52,33 +52,33 @@ if ($m !== '') hinweis($m === 'erinnert' ? 'Wiedervorlage gesetzt.' : 'Notiert.'
   <div class="karte"><div class="rumpf">
     <h2 style="margin-top:0">Wiedervorlage</h2>
     <?php foreach ($wv as $w): ?>
-      <div class="leise"><?= h(fmt_zeit($w['faellig'] . ' 00:00:00', 'd.m.Y')) ?> · <?= h((string)$w['titel']) ?></div>
+      <div class="muted"><?= h(fmt_zeit($w['faellig'] . ' 00:00:00', 'd.m.Y')) ?> · <?= h((string)$w['titel']) ?></div>
     <?php endforeach; ?>
   </div></div>
 <?php endif; ?>
 
 <div class="karte"><div class="rumpf">
   <h2 style="margin-top:0">Notiz hinzufügen</h2>
-  <p class="leise" style="margin-bottom:12px">Was besprochen wurde – das steht im Dashboard nirgends.</p>
+  <p class="muted" style="margin-bottom:12px">Was besprochen wurde – das steht im Dashboard nirgends.</p>
   <form method="post">
     <input type="hidden" name="tun" value="verlauf">
-    <div class="feld"><textarea name="text" required placeholder="z. B. „will im Herbst nachbestellen, Preis nochmal ansehen“"></textarea></div>
-    <div class="zweispaltig">
-      <div class="feld">
+    <div class="bx-field"><textarea name="text" required placeholder="z. B. „will im Herbst nachbestellen, Preis nochmal ansehen“"></textarea></div>
+    <div class="bx-grid">
+      <div class="bx-field">
         <label for="typ">Art</label>
         <select id="typ" name="typ">
           <?php foreach (crm_verlauf_typen() as $tk => $tv): ?><option value="<?= h($tk) ?>"><?= h($tv) ?></option><?php endforeach; ?>
         </select>
       </div>
-      <div class="feld" style="display:flex;align-items:flex-end">
-        <button class="btn stark" type="submit" style="width:100%;justify-content:center">Speichern</button>
+      <div class="bx-field" style="display:flex;align-items:flex-end">
+        <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">Speichern</button>
       </div>
     </div>
   </form>
 
   <form method="post" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--linie-fein);padding-top:14px">
     <input type="hidden" name="tun" value="erinnern">
-    <span class="leise">Erinnere mich</span>
+    <span class="muted">Erinnere mich</span>
     <select name="tage" style="width:auto">
       <option value="1">morgen</option>
       <option value="3" selected>in 3 Tagen</option>
@@ -87,7 +87,7 @@ if ($m !== '') hinweis($m === 'erinnert' ? 'Wiedervorlage gesetzt.' : 'Notiert.'
       <option value="30">in einem Monat</option>
       <option value="90">in drei Monaten</option>
     </select>
-    <button class="btn" type="submit">Setzen</button>
+    <button class="btn btn-ghost" type="submit">Setzen</button>
   </form>
 </div></div>
 
@@ -98,16 +98,16 @@ if ($m !== '') hinweis($m === 'erinnert' ? 'Wiedervorlage gesetzt.' : 'Notiert.'
     <div class="hinweis warn"><?= h((string)$ant['fehler']) ?></div>
   <?php endif; ?>
   <?php if ($ant && $ant['ok']): ?>
-    <p class="leise" style="margin:0 0 10px">Entwurf – lies drüber, ändere ihn, kopiere ihn. Verschickt wird hier nichts.</p>
+    <p class="muted" style="margin:0 0 10px">Entwurf – lies drüber, ändere ihn, kopiere ihn. Verschickt wird hier nichts.</p>
     <form method="post">
       <input type="hidden" name="tun" value="antwort_verlauf">
-      <div class="feld"><textarea name="text" style="min-height:190px"><?= h((string)$ant['text']) ?></textarea></div>
-      <button class="btn" type="submit">Als gesendet im Verlauf vermerken</button>
+      <div class="bx-field"><textarea name="text" style="min-height:190px"><?= h((string)$ant['text']) ?></textarea></div>
+      <button class="btn btn-ghost" type="submit">Als gesendet im Verlauf vermerken</button>
     </form>
   <?php else: ?>
-    <p class="leise" style="margin:0 0 10px">Schreibt aus dem Verlauf einen kurzen Entwurf.</p>
+    <p class="muted" style="margin:0 0 10px">Schreibt aus dem Verlauf einen kurzen Entwurf.</p>
     <form method="post"><input type="hidden" name="tun" value="antwort">
-      <button class="btn" type="submit">Entwurf schreiben</button></form>
+      <button class="btn btn-ghost" type="submit">Entwurf schreiben</button></form>
   <?php endif; ?>
 </div></div>
 <?php endif; ?>
@@ -116,10 +116,10 @@ if ($m !== '') hinweis($m === 'erinnert' ? 'Wiedervorlage gesetzt.' : 'Notiert.'
 <div class="karte">
   <div class="rumpf" style="padding-bottom:0"><h2 style="margin-top:0">Verlauf</h2></div>
   <?php foreach ($verlauf as $v): ?>
-    <div class="zeile">
-      <div class="alter ruhig"><?= h(fmt_zeit((string)$v['angelegt'], 'd.m.')) ?>
+    <div class="crm-zeile">
+      <div class="crm-alter ruhig"><?= h(fmt_zeit((string)$v['angelegt'], 'd.m.')) ?>
         <span class="art"><?= h(crm_verlauf_typen()[$v['typ']] ?? (string)$v['typ']) ?></span></div>
-      <div class="mitte">
+      <div class="crm-mitte">
         <span class="titel" style="font-weight:400"><?= nl2br(h((string)$v['text'])) ?></span>
         <?php if (($v['wer'] ?? '') !== ''): ?><span class="unter"><?= h((string)$v['wer']) ?></span><?php endif; ?>
       </div>
@@ -127,12 +127,12 @@ if ($m !== '') hinweis($m === 'erinnert' ? 'Wiedervorlage gesetzt.' : 'Notiert.'
   <?php endforeach; ?>
 </div>
 <?php else: ?>
-  <div class="karte"><div class="leer"><strong>Noch nichts notiert.</strong>Die erste Notiz legst du oben an.</div></div>
+  <div class="karte"><div class="crm-leer"><strong>Noch nichts notiert.</strong>Die erste Notiz legst du oben an.</div></div>
 <?php endif; ?>
 
 <div class="karte"><div class="rumpf">
   <h2 style="margin-top:0">Kontakt</h2>
-  <div class="leise">
+  <div class="muted">
     <?php foreach ([['E-Mail', $k['email'] ?? ''], ['Telefon', $k['telefon'] ?? ''],
                     ['Ort', trim(((string)($k['plz'] ?? '')) . ' ' . ((string)($k['ort'] ?? '')))]] as [$l, $v]):
       if (trim((string)$v) === '') continue; ?>

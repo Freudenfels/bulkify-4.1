@@ -8,7 +8,7 @@ $liste  = kontakt_liste($suche, $archiv);
 
 kopf('Kontakte', 'kontakte');
 seitenkopf('Kontakte', $archiv ? 'Archiv' : 'Leute, die noch kein Kundenkonto haben',
-    '<a class="btn stark" href="?p=erfassen">Neu</a>');
+    '<a class="btn btn-primary" href="?p=erfassen">Neu</a>');
 ?>
 <form method="get" style="margin-bottom:14px">
   <input type="hidden" name="p" value="kontakte">
@@ -16,13 +16,13 @@ seitenkopf('Kontakte', $archiv ? 'Archiv' : 'Leute, die noch kein Kundenkonto ha
   <input type="search" name="q" value="<?= h($suche) ?>" placeholder="Name, Firma, Telefon, Notiz …">
 </form>
 
-<div class="reiter">
+<div class="crm-reiter">
   <a href="?p=kontakte"<?= !$archiv ? ' class="an"' : '' ?>>Aktiv</a>
   <a href="?p=kontakte&a=1"<?= $archiv ? ' class="an"' : '' ?>>Archiv</a>
 </div>
 
 <?php if (!$liste): ?>
-  <div class="karte"><div class="leer">
+  <div class="karte"><div class="crm-leer">
     <strong><?= $suche !== '' ? 'Nichts gefunden.' : 'Noch keine Kontakte.' ?></strong>
     <?= $suche !== '' ? 'Andere Schreibweise versuchen.' : 'Über „Erfassen“ legst du den ersten an.' ?>
   </div></div>
@@ -30,12 +30,12 @@ seitenkopf('Kontakte', $archiv ? 'Archiv' : 'Leute, die noch kein Kundenkonto ha
   <div class="karte">
     <?php foreach ($liste as $k):
       $tage = tage_seit((string)$k['angelegt']); ?>
-      <div class="zeile">
-        <div class="alter <?= h(warte_stufe($tage)) ?>">
+      <div class="crm-zeile">
+        <div class="crm-alter <?= h(warte_stufe($tage)) ?>">
           <?= h(warte_text($tage)) ?>
           <span class="art"><?= h(crm_quellen()[$k['quelle']] ?? '') ?></span>
         </div>
-        <div class="mitte">
+        <div class="crm-mitte">
           <a class="titel" href="?p=kontakt&id=<?= (int)$k['id'] ?>">
             <?= h(trim(((string)($k['firma'] ?? '') !== '' ? $k['firma'] . ' – ' : '') . $k['name'])) ?>
           </a>

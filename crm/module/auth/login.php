@@ -20,21 +20,21 @@ kopf('Anmeldung');
 <div class="karte" style="max-width:380px;margin:32px auto 0">
   <div class="rumpf">
     <h1 style="margin-bottom:4px">Anmelden</h1>
-    <p class="leise" style="margin-bottom:18px">Mit deinem Zugang aus dem bulkify Dashboard.</p>
+    <p class="muted" style="margin-bottom:18px">Mit deinem Zugang aus dem bulkify Dashboard.</p>
 
     <?php if ($fehler !== ''): ?><div class="hinweis warn"><?= h($fehler) ?></div><?php endif; ?>
 
     <form method="post">
-      <div class="feld">
+      <div class="bx-field">
         <label for="email">E-Mail</label>
         <input type="email" id="email" name="email" autocomplete="username"
                value="<?= h((string)($_POST['email'] ?? '')) ?>" required autofocus>
       </div>
-      <div class="feld">
+      <div class="bx-field">
         <label for="pass">Passwort</label>
         <input type="password" id="pass" name="pass" autocomplete="current-password" required>
       </div>
-      <button class="btn stark" type="submit" style="width:100%;justify-content:center">Anmelden</button>
+      <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">Anmelden</button>
     </form>
   </div>
 </div>

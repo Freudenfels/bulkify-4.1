@@ -31,21 +31,21 @@ if (isset($_GET['fehler'])) hinweis('Titel und Zeitpunkt sind Pflicht.', 'warn')
   <h2 style="margin-top:0">Neuer Termin</h2>
   <form method="post">
     <input type="hidden" name="tun" value="neu">
-    <div class="feld">
+    <div class="bx-field">
       <label for="titel">Worum geht es</label>
       <input type="text" id="titel" name="titel" required placeholder="z. B. Rückruf Herr Frei">
     </div>
-    <div class="zweispaltig">
-      <div class="feld">
+    <div class="bx-grid">
+      <div class="bx-field">
         <label for="start">Wann</label>
         <input type="datetime-local" id="start" name="start" required value="<?= h(termin_vorschlag()) ?>">
       </div>
-      <div class="feld">
+      <div class="bx-field">
         <label for="ort">Wo (optional)</label>
         <input type="text" id="ort" name="ort" placeholder="z. B. Messe Köln, Halle 7">
       </div>
     </div>
-    <div class="feld">
+    <div class="bx-field">
       <label for="kontakt_id">Gehört zu (optional)</label>
       <select id="kontakt_id" name="kontakt_id">
         <option value="">– kein Bezug –</option>
@@ -54,7 +54,7 @@ if (isset($_GET['fehler'])) hinweis('Titel und Zeitpunkt sind Pflicht.', 'warn')
         <?php endforeach; ?>
       </select>
     </div>
-    <button class="btn stark" type="submit">Eintragen</button>
+    <button class="btn btn-primary" type="submit">Eintragen</button>
   </form>
 </div></div>
 
@@ -62,22 +62,22 @@ if (isset($_GET['fehler'])) hinweis('Titel und Zeitpunkt sind Pflicht.', 'warn')
 <div class="karte">
   <div class="rumpf" style="padding-bottom:0"><h2 style="margin-top:0">Steht an</h2></div>
   <?php foreach ($offen as $t): ?>
-    <div class="zeile">
-      <div class="alter <?= h(termin_stufe((string)$t['start_at'])) ?>">
+    <div class="crm-zeile">
+      <div class="crm-alter <?= h(termin_stufe((string)$t['start_at'])) ?>">
         <?= h(fmt_zeit((string)$t['start_at'], 'd.m.')) ?>
         <span class="art"><?= h(fmt_zeit((string)$t['start_at'], 'H:i')) ?></span>
       </div>
-      <div class="mitte">
+      <div class="crm-mitte">
         <?php if ($t['bezug_typ'] === 'kontakt' && $t['bezug_id']): ?>
           <a class="titel" href="?p=kontakt&id=<?= (int)$t['bezug_id'] ?>"><?= h((string)$t['titel']) ?></a>
         <?php else: ?>
           <span class="titel"><?= h((string)$t['titel']) ?></span>
         <?php endif; ?>
         <span class="unter"><?= h(trim(((string)($t['ort'] ?? '') !== '' ? $t['ort'] . ' · ' : '') . ($t['kontakt_name'] ?? ''), ' ·')) ?></span>
-        <div class="tuen">
+        <div class="crm-tuen">
           <form method="post" style="margin:0">
             <input type="hidden" name="tun" value="erledigt"><input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
-            <button class="btn klein leise" type="submit">erledigt</button>
+            <button class="btn btn-ghost btn-sm" type="submit">erledigt</button>
           </form>
         </div>
       </div>
@@ -85,16 +85,16 @@ if (isset($_GET['fehler'])) hinweis('Titel und Zeitpunkt sind Pflicht.', 'warn')
   <?php endforeach; ?>
 </div>
 <?php else: ?>
-  <div class="karte"><div class="leer"><strong>Keine Termine.</strong>Nichts steht an.</div></div>
+  <div class="karte"><div class="crm-leer"><strong>Keine Termine.</strong>Nichts steht an.</div></div>
 <?php endif; ?>
 
 <?php if ($fertig): ?>
 <div class="karte">
   <div class="rumpf" style="padding-bottom:0"><h2 style="margin-top:0">Erledigt</h2></div>
   <?php foreach (array_slice($fertig, 0, 15) as $t): ?>
-    <div class="zeile">
-      <div class="alter ruhig"><?= h(fmt_zeit((string)$t['start_at'], 'd.m.')) ?></div>
-      <div class="mitte"><span class="titel" style="font-weight:400"><?= h((string)$t['titel']) ?></span></div>
+    <div class="crm-zeile">
+      <div class="crm-alter ruhig"><?= h(fmt_zeit((string)$t['start_at'], 'd.m.')) ?></div>
+      <div class="crm-mitte"><span class="titel" style="font-weight:400"><?= h((string)$t['titel']) ?></span></div>
     </div>
   <?php endforeach; ?>
 </div>
