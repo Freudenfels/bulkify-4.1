@@ -75,6 +75,7 @@ $routes = [
     'chargen'            => 'lager/chargen.php',
     'versand'            => 'versand/liste.php',
     'einstellungen'      => 'system/einstellungen.php',
+    'suche'              => 'system/suche.php',        // globale Suche (Admin) über alle Bereiche
     'db_import'          => 'system/db_import.php',   // einmalige DB-Übernahme (Admin) – Rohstoffe & Co. auf einen anderen Stand bringen
     'anfragen'           => 'anfrage/liste.php',
     'anfrage'            => 'anfrage/detail.php',

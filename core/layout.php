@@ -84,6 +84,14 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     // Sidebar
     echo "<aside class=\"bx-side\"><div class=\"bx-brand\"><img src=\"assets/bulkify-logo-white.png\" alt=\"$marke\" class=\"bx-logo\"><span class=\"bx-ver\">" . h($verLabel) . "</span></div><nav>";
     $darf = function_exists('route_erlaubt');   // Auth aktiv?
+    // Globale Suche (nur Admin): ein Feld ganz oben, sucht über alle Bereiche.
+    if (function_exists('has_role') && has_role('admin')) {
+        $sq = $aktiv === 'suche' ? h((string)($_GET['q'] ?? '')) : '';
+        echo "<form class=\"bx-sidesuche\" method=\"get\" action=\"?\" role=\"search\">"
+           . "<input type=\"hidden\" name=\"p\" value=\"suche\">"
+           . "<input type=\"search\" name=\"q\" value=\"$sq\" placeholder=\"Suche (alles)…\" aria-label=\"Globale Suche\">"
+           . "</form>";
+    }
     $curTyp = $_GET['typ'] ?? null;
     $anfCount = bx_anfrage_counts();
     if (function_exists('aufgabe_offen_zahl') && function_exists('current_user') && ($cu = current_user()))

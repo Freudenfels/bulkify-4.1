@@ -8,9 +8,12 @@
 3. **Suche:** Name, englischer/lateinischer Name, Artikelnummer, Form.
 4. **Sortierung:** Standard = Name A–Z.
 5. Tabelle über `bx_table()` mit Spalten:
-   **Art.-Nr. · Name · lat. Name · Form · Wirkstoffe · EK-Preis · Status** (bei „Alle" zusätzlich Kategorie).
-   - Spalte **Wirkstoffe** zeigt alle Wirkstoffe des Rohstoffs (aus `item_wirkstoff`), z. B. „95 % Curcumin" oder „Vitamin D · Vitamin K".
+   **Art.-Nr. · Name · Preis ab · Form · Wirkstoffe · Unterlagen/Lieferant · Status** (bei „Alle" zusätzlich Kategorie).
+   - **Preis ab** (statt lat. Name): günstigster bekannter EK, „ab X,YZ €/Bezug" – Minimum aus eigenem EK und id-verknüpften Lieferantenpreisen (`lieferant_preis`). Ohne Preis „–". Sub-Cent mit 4 Nachkommastellen.
+   - **Wirkstoffe** zeigt alle Wirkstoffe des Rohstoffs (aus `item_wirkstoff`).
+   - **Unterlagen/Lieferant**: drei kompakte Marker – **Spec · CoA · Lief.** – grün = vorhanden, grau = nicht. Spec = Spec-PDF, strukturierte Spec-Inhalte (`item_kennwert/-wirkstoff/-grenzwert`) oder Spec-Dokument; CoA = Charge mit Analysewerten oder CoA-Dokument; Lief. = id-verknüpfter Lieferantenpreis vorhanden. Ermittelt über wenige Sammelabfragen auf die angezeigten Item-IDs.
    - Klick auf eine Zeile öffnet den Rohstoff (`?p=rohstoff&id=...`).
 6. Button „Neuer Rohstoff".
 
-**Preis-Anzeige:** EK-Preis je Bezugseinheit (z. B. 42,00 €/kg); Sub-Cent-Preise mit 4 Nachkommastellen.
+**Leerkapsel-Sicht** behält ihre eigenen Spalten inkl. **EK-Preis**.
+Die **Suche** durchsucht weiterhin auch den lateinischen Namen, auch wenn er nicht mehr als Spalte steht.

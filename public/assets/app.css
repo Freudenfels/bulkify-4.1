@@ -366,3 +366,9 @@ body.bx-zieht{cursor:col-resize;user-select:none}
 /* Dezenter Ladebalken oben am Fensterrand, solange eine Seite laedt/verarbeitet. */
 #bxLadebalken{position:fixed;top:0;left:0;height:3px;width:0;background:var(--gruen,#2e7d5b);z-index:99999;transition:width .3s ease;box-shadow:0 0 8px var(--gruen,#2e7d5b)}
 #bxLadebalken.an{width:92%;transition:width 12s cubic-bezier(.05,.6,.1,1)}
+
+/* Globale Suche oben in der Seitenleiste (nur Admin) */
+.bx-sidesuche{padding:4px var(--sp-5) 10px}
+.bx-sidesuche input{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;font-size:13px}
+.bx-sidesuche input::placeholder{color:rgba(223,231,220,.6)}
+.bx-sidesuche input:focus{outline:none;border-color:rgba(192,242,78,.5);background:rgba(255,255,255,.14)}
