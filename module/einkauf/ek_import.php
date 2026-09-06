@@ -172,12 +172,12 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
         <?php if ($typ==='fertigprodukt'): ?><td class="muted"><?= $e['groesse']?h($e['groesse']):'–' ?></td><?php endif; ?>
         <td style="white-space:nowrap"><?= $e['lieferant']?h($e['lieferant']):'<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $preisFmt($e) ?></td>
-        <td>
+        <td style="white-space:normal;max-width:340px;overflow-wrap:anywhere">
           <?php if ($ziel && in_array($st,['vorschlag','bestaetigt'],true)): ?>
             <a class="kundenlink" href="<?= h($zielHref) ?>"><?= h($ziel) ?></a>
             <?php if ($e['ki_score']!==null): ?><span class="muted" style="font-size:11px"> · <?= (int)$e['ki_score'] ?>%</span><?php endif; ?>
             <?php if ($st==='bestaetigt'): ?><?= bx_badge('übernommen','ok') ?><?php endif; ?>
-            <?php if ($e['ki_hinweis']): ?><div class="muted" style="font-size:11px"><?= h($e['ki_hinweis']) ?></div><?php endif; ?>
+            <?php if ($e['ki_hinweis']): ?><div class="muted" style="font-size:11px;line-height:1.35;margin-top:2px"><?= h($e['ki_hinweis']) ?></div><?php endif; ?>
           <?php elseif ($st==='kein_treffer'): ?>
             <span class="muted">kein KI-Treffer</span>
           <?php elseif ($st==='verworfen'): ?>
