@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $statusF = $_GET['status'] ?? 'todo';   // todo | uebernommen | verworfen
-$rows = all("SELECT i.id, i.name, i.artikelnummer, CHAR_LENGTH(i.name) AS len, v.varianten_json, v.status AS vstatus, v.basis
+$rows = all("SELECT i.id, i.name, i.name_v3, i.artikelnummer, CHAR_LENGTH(i.name) AS len, v.varianten_json, v.status AS vstatus, v.basis
              FROM item i LEFT JOIN rohstoff_variante_vorschlag v ON v.item_id=i.id
              WHERE i.kategorie='rohstoff' AND CHAR_LENGTH(i.name) > ?
              " . ($statusF === 'uebernommen' ? "AND v.status='uebernommen'"
@@ -63,16 +63,18 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
 <?php if (!$rows): ?>
   <div class="bx-panel muted"><?= $statusF==='todo' ? 'Keine zu langen Rohstoffnamen offen. 🎉' : 'Nichts in dieser Ansicht.' ?></div>
 <?php else: foreach ($rows as $r):
+    $vollName = trim((string)($r['name_v3'] ?? '')) ?: (string)$r['name'];
+    $gekappt  = $vollName !== (string)$r['name'];
     $vorschlag = $r['varianten_json'] ? json_decode($r['varianten_json'], true) : null;
-    $prefill = is_array($vorschlag) && $vorschlag ? implode("\n", $vorschlag) : (string)$r['name'];
-    $zeilen = max(2, min(8, is_array($vorschlag) ? count($vorschlag) : 2));
+    $prefill = is_array($vorschlag) && $vorschlag ? implode("\n", $vorschlag) : $vollName;
+    $zeilen = max(2, min(12, is_array($vorschlag) ? count($vorschlag) : 3));
 ?>
   <div class="bx-panel">
     <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
-      <div><a class="kundenlink" href="?p=rohstoff&id=<?= (int)$r['id'] ?>"><?= h($r['artikelnummer']) ?></a> · <span class="muted" style="font-size:12px"><?= (int)$r['len'] ?> Zeichen</span></div>
+      <div><a class="kundenlink" href="?p=rohstoff&id=<?= (int)$r['id'] ?>"><?= h($r['artikelnummer']) ?></a> · <span class="muted" style="font-size:12px"><?= mb_strlen($vollName) ?> Zeichen<?= $gekappt ? ' (voller v3-Name; v4 war auf '.(int)$r['len'].' gekappt)' : '' ?></span></div>
       <?php if ($statusF==='uebernommen'): ?><?= bx_badge('übernommen','ok') ?><?php endif; ?>
     </div>
-    <div style="font-size:13px;line-height:1.4;margin:6px 0 10px"><?= h($r['name']) ?></div>
+    <div style="font-size:13px;line-height:1.4;margin:6px 0 10px"><?= h($vollName) ?></div>
     <?php if ($statusF==='todo'): ?>
       <form method="post" style="margin:0">
         <input type="hidden" name="aktion" value="anwenden"><input type="hidden" name="item_id" value="<?= (int)$r['id'] ?>"><input type="hidden" name="ret" value="&status=todo">

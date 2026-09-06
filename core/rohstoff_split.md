@@ -16,6 +16,13 @@ Zerlegt zu lange Rohstoffnamen, in denen mehrere Varianten in EINEM Feld stecken
 
 Schwelle: `ROHSTOFF_NAME_LANG = 70` Zeichen.
 
+## Voller Name (name_v3)
+Der v3-Import kappt `item.name` auf 190 Zeichen; die längsten Namen sind abgeschnitten.
+`tools/v3_namen_voll.php` füllt `item.name_v3` mit dem ungekürzten v3-Namen. Der Split
+nutzt **name_v3** (falls vorhanden) für den KI-Prompt, die Anzeige/Vorbefüllung und die
+Original-Sicherung in der Notiz – sonst würde bei den Extremfällen (z. B. Reishi, 1282
+Zeichen) der Großteil der Varianten fehlen.
+
 ## Wichtig
 - Der Mensch prüft/editiert die Varianten **vor** der Übernahme (Textarea, eine pro Zeile).
   Die KI ist nur Vorbefüllung; die manuelle Übernahme funktioniert überall.

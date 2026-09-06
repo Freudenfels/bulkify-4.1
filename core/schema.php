@@ -610,6 +610,11 @@ function init_schema(): void {
         benutzer VARCHAR(120) NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // Voller v3-Rohstoffname: der Import kappt name auf 190 Zeichen; die laengsten v3-Namen (mehrere
+    // Varianten in einem Feld) sind dadurch abgeschnitten. name_v3 haelt den ungekuerzten Originalnamen
+    // fuer das Aufschluesseln (tools/v3_namen_voll.php befuellt es aus der v3-Quelle).
+    ensure_column('item', 'name_v3', "TEXT NULL");
+
     // rohstoff_variante_vorschlag: KI-Vorschlag, einen zu langen Rohstoffnamen (mehrere Varianten in
     // einem Feld) in einzelne Rohstoffe aufzuschluesseln. Der Mensch prueft/editiert vor der Uebernahme.
     $pdo->exec("CREATE TABLE IF NOT EXISTS rohstoff_variante_vorschlag (
