@@ -326,7 +326,7 @@ $charges = $neu ? [] : all("SELECT c.*, l.firma AS lieferant_firma FROM charge c
 $bestand_frei = $neu ? 0 : item_bestand((int)$id, true);
 $bestand_qua  = $neu ? 0 : (item_bestand((int)$id, false) - $bestand_frei);
 if (!$neu) seed_lieferant_preis_if_empty();
-$preise = $neu ? [] : all("SELECT lp.*, l.firma FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id WHERE lp.item_id=? ORDER BY lp.preis ASC, lp.menge_ab ASC", [(int)$id]);
+$preise = $neu ? [] : all("SELECT lp.*, COALESCE(l.firma, lp.lieferant_name) AS firma FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id WHERE lp.item_id=? ORDER BY lp.preis ASC, lp.menge_ab ASC", [(int)$id]);
 $preis_lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 
 function bx_bald(string $modul): void {

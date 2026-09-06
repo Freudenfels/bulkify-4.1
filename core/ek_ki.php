@@ -115,14 +115,23 @@ function ek_lieferant_id(?string $name): ?int {
     return $id ? (int)$id : null;
 }
 
+// Staffel-Menge (kg) aus dem EK-Namen lesen: „5HTP 5Kg" -> 5, „1 Tonne Kreatin" -> 1000. Sonst 0.
+function ek_menge_ab(string $name): float {
+    if (preg_match('/(\d+(?:[.,]\d+)?)\s*(?:tonnen?|t)\b/iu', $name, $m)) return (float) str_replace(',', '.', $m[1]) * 1000;
+    if (preg_match('/(\d+(?:[.,]\d+)?)\s*kg\b/iu', $name, $m))            return (float) str_replace(',', '.', $m[1]);
+    return 0.0;
+}
+
 // Bestätigte Rohstoff-Zeile als lieferant_preis übernehmen (idempotent über ek_import_id).
+// menge_ab kommt aus der kg-Angabe im Namen (Staffel), falls vorhanden.
 function ek_lieferant_preis_schreiben(array $ek): void {
     if ((string)$ek['typ'] !== 'rohstoff' || empty($ek['item_id'])) return;
     if (scalar("SELECT id FROM lieferant_preis WHERE ek_import_id=?", [(int)$ek['id']])) return;   // schon da
     $lid = ek_lieferant_id($ek['lieferant']);
+    $mengeAb = ek_menge_ab((string)$ek['name']);
     q("INSERT INTO lieferant_preis (item_id,lieferant_id,lieferant_name,menge_ab,preis,waehrung,stand,quelle,ek_import_id)
-       VALUES (?,?,?,0,?, 'EUR', CURDATE(), 'ek_import', ?)",
-      [(int)$ek['item_id'], $lid, mb_substr((string)$ek['lieferant'], 0, 120) ?: null, (float)$ek['preis'], (int)$ek['id']]);
+       VALUES (?,?,?,?,?, 'EUR', CURDATE(), 'ek_import', ?)",
+      [(int)$ek['item_id'], $lid, mb_substr((string)$ek['lieferant'], 0, 120) ?: null, $mengeAb, (float)$ek['preis'], (int)$ek['id']]);
 }
 
 // Eine Zeile bestätigen (Vorschlag oder manuelle Zuordnung annehmen).
