@@ -3296,6 +3296,22 @@ function reservierung_abgleichen(int $pa_id): void {
        WHERE auftrag_id=? AND status='aktiv' AND item_id IN (SELECT item_id FROM produktion_verbrauch WHERE pa_id=?)", [$aid, $pa_id]);
 }
 
+// Bezeichnung + Darreichungsform + Stück-Einheit des zuzukaufenden Bulks eines Produkts.
+// Statt generisch „Bulk (Kapseln/Tabletten/Pulver)" -> Produktname + konkrete Form aus der Rezeptur.
+function produkt_bulk_info(int $produkt_id): array {
+    $p = $produkt_id ? one("SELECT p.name, COALESCE(r.darreichungsform,'') AS form
+                            FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]) : null;
+    $formMap = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks',
+                'gummi'=>'Fruchtgummis','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
+    $form = (string)($p['form'] ?? '');
+    $wort = $formMap[$form] ?? '';
+    $name = trim((string)($p['name'] ?? '')) ?: 'Produkt';
+    $einheit = $form === 'pulver' ? 'g' : (in_array($form, ['fluessig','gel'], true) ? 'ml' : 'Stück');
+    // Ohne bekannte Form (Produkt ohne Rezeptur) ehrlich als „Bulk (Form offen)" ausweisen.
+    $bez = $name . ' – ' . ($wort !== '' ? $wort : 'Bulk (Form offen)') . ' (Zukauf)';
+    return ['name'=>$name, 'form'=>$form, 'form_wort'=>$wort, 'einheit'=>$einheit, 'bezeichnung'=>$bez];
+}
+
 // Kompletter Einkaufsbedarf eines Auftrags (Stückliste × Menge vs. freier Bestand).
 // Rückgabe je Komponente: ['rolle','item_id','name','benoetigt','verfuegbar','fehlt','einheit']
 function auftrag_bedarf(int $pa_id): array {
@@ -3312,7 +3328,8 @@ function auftrag_bedarf(int $pa_id): array {
     if ($zukauf) {
         $verf = (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
                                 WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei'", [(int)$pa['auftrag_id']]);
-        $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>'Bulk (Kapseln/Tabletten/Pulver) – Zukauf','benoetigt'=>$einheiten,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$einheiten-$verf),'einheit'=>'Stück'];
+        $bi = produkt_bulk_info((int)$pa['produkt_id']);
+        $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>$einheiten,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$einheiten-$verf),'einheit'=>$bi['einheit']];
     } else {
         foreach (produktion_materialbedarf($pa_id) as $m)
             $rows[] = ['rolle'=>'Rohstoff','item_id'=>$m['item_id'],'name'=>$m['name'],'benoetigt'=>$m['benoetigt'],'verfuegbar'=>$m['verfuegbar'],'fehlt'=>$m['fehlt'],'einheit'=>$m['einheit']];

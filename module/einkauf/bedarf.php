@@ -86,8 +86,8 @@ $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
         <?php endif; ?>
       </div>
     </div>
-    <?php if ($fremd): ?>
-      <div class="muted" style="margin-top:8px">Fremdproduktion: der <strong>Bulk (Kapseln/Tabletten/Pulver)</strong> wird zugekauft – <strong>Verpackung und Etiketten werden trotzdem gebraucht</strong> und sind hier gelistet.</div>
+    <?php if ($fremd): $bi = produkt_bulk_info((int)$pa['produkt_id']); ?>
+      <div class="muted" style="margin-top:8px">Fremdproduktion: der <strong><?= h($bi['form_wort'] !== '' ? $bi['name'] . ' als ' . $bi['form_wort'] : $bi['name'] . ' (Bulk)') ?></strong> wird zugekauft – <strong>Verpackung und Etiketten werden trotzdem gebraucht</strong> und sind hier gelistet.</div>
     <?php endif; ?>
     <?php if ($bedarf): ?>
       <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
