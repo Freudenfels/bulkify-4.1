@@ -7,3 +7,11 @@
 - **Suche** nach Nummer, Kunde, Produkt. **Sortierung** Standard = neueste zuerst.
 - Tabelle: **Nummer · Kunde · Produkt · Menge · Fortschritt · Nächste Station · Status** (offen / läuft / fertig).
 - Klick öffnet den Produktionsauftrag (`?p=produktionsauftrag&id=...`).
+
+## Sammel-Umstellung Eigen-/Fremdproduktion
+Checkbox-Spalte + Spalte „Art" (Eigen/Fremd). Unten „alle markieren" und zwei Buttons
+„Markierte auf Eigenproduktion / auf Fremdproduktion (Zukauf)" (`aktion=art_bulk`).
+Ruft je Auftrag `produktionsauftrag_art_setzen()` (setzt produktionsart + regeneriert die
+Schritte: eigen=voller Weg, fremd=verkürzter Zukauf-Weg). Bereits begonnene Aufträge
+(ein Schritt erledigt) werden übersprungen und gemeldet. Nötig, weil importierte
+Produktionsaufträge per Default auf „fremd" stehen.

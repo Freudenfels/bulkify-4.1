@@ -3285,6 +3285,15 @@ function produktion_schritte_regenerieren(int $pa_id, bool $zukauf): bool {
     return true;
 }
 
+// Produktionsart eines Auftrags umstellen (eigen ↔ fremd) inkl. passender Schritte.
+// Gibt false zurück, wenn schon ein Schritt erledigt ist (dann nicht mehr umstellbar).
+function produktionsauftrag_art_setzen(int $pa_id, string $art): bool {
+    $art = $art === 'eigen' ? 'eigen' : 'fremd';
+    if (!produktion_schritte_regenerieren($pa_id, $art === 'fremd')) return false;   // fremd = verkürzter (Zukauf-)Weg
+    q("UPDATE produktionsauftrag SET produktionsart=? WHERE id=?", [$art, $pa_id]);
+    return true;
+}
+
 // --- Bestandsreservierung (manuell) ---
 function item_reserviert_andere(int $item_id, int $auftrag_id): float {
     return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv' AND (auftrag_id IS NULL OR auftrag_id<>?)", [$item_id, $auftrag_id]);
