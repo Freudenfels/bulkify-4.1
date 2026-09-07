@@ -215,7 +215,16 @@ function render_footer(): void {
 // Eigener Busy-Text je Knopf ueber data-busy="...".
 function bx_busy_script(): string {
     return "<script>(function(){"
-        . "var bar;function ladebalken(){try{bar=document.createElement('div');bar.id='bxLadebalken';document.body.appendChild(bar);requestAnimationFrame(function(){bar.className='an';});}catch(e){}}"
+        // Einmalig: Styles fuer Overlay + Spinner selbst mitbringen, damit die Rueckmeldung
+        // in ALLEN Layouts (intern + beide Portale) wirkt, unabhaengig vom Stylesheet.
+        . "if(!document.getElementById('bxBusyStyle')){var st=document.createElement('style');st.id='bxBusyStyle';"
+        . "st.textContent='#bxOverlay{position:fixed;inset:0;z-index:99998;background:rgba(18,20,23,.45);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s ease}#bxOverlay.an{opacity:1}#bxOverlay .bxo-spin{width:46px;height:46px;border:4px solid rgba(255,255,255,.55);border-top-color:#fff;border-radius:50%;animation:bxo-spin .7s linear infinite}@keyframes bxo-spin{to{transform:rotate(360deg)}}';"
+        . "document.head.appendChild(st);}"
+        . "var bar;function ladebalken(){try{if(document.getElementById('bxLadebalken'))return;bar=document.createElement('div');bar.id='bxLadebalken';document.body.appendChild(bar);requestAnimationFrame(function(){bar.className='an';});}catch(e){}}"
+        // Voll-Overlay: graut die Seite aus und sperrt Klicks, bis die naechste Seite geladen ist.
+        // Failsafe: falls eine Navigation doch abgebrochen wird, verschwindet es nach 15s von selbst.
+        . "function overlay(){try{if(document.getElementById('bxOverlay'))return;var o=document.createElement('div');o.id='bxOverlay';o.innerHTML='<div class=\\\"bxo-spin\\\" aria-hidden=\\\"true\\\"></div>';document.body.appendChild(o);requestAnimationFrame(function(){o.className='an';});setTimeout(function(){var x=document.getElementById('bxOverlay');if(x)x.remove();},15000);}catch(e){}}"
+        . "function weg(){try{var l=document.getElementById('bxLadebalken');if(l)l.remove();var o=document.getElementById('bxOverlay');if(o)o.remove();}catch(e){}}"
         . "document.addEventListener('submit',function(e){"
         . "var f=e.target;if(!f||f.hasAttribute('data-no-busy'))return;"
         . "var b=e.submitter||f.querySelector('button[type=submit],input[type=submit],button:not([type])');"
@@ -227,11 +236,15 @@ function bx_busy_script(): string {
         . "b.classList.add('is-busy');b.setAttribute('aria-busy','true');"
         . "setTimeout(function(){b.disabled=true;},0);}"
         . "},true);"
-        // Zurueck-Navigation (bfcache): Spinner/Balken + Original-Text zuruecksetzen, sonst haengt der Knopf.
-        . "window.addEventListener('pageshow',function(ev){if(!ev.persisted)return;"
+        // Jede ECHTE Navigation loest 'beforeunload' aus (Formular, Link, Zeilenklick per location.href,
+        // Zurueck/Vor). Downloads, neuer Tab (target=_blank) und reine #-Anker entladen die Seite NICHT
+        // -> dort erscheint bewusst kein Overlay.
+        . "window.addEventListener('beforeunload',function(){overlay();ladebalken();});"
+        // Zurueck-Navigation (bfcache): Overlay/Balken + Knopf zuruecksetzen, sonst haengt alles.
+        . "window.addEventListener('pageshow',function(ev){if(!ev.persisted)return;weg();"
         . "var b=document.querySelector('.btn.is-busy');if(b){b.disabled=false;b.classList.remove('is-busy');b.removeAttribute('aria-busy');"
         . "if(b.dataset.busyLabel!==undefined){b.innerHTML=b.dataset.busyLabel;delete b.dataset.busyLabel;}delete b.dataset.busyOn;}"
-        . "var l=document.getElementById('bxLadebalken');if(l)l.remove();});"
+        . "document.querySelectorAll('form').forEach(function(f){f.__busy=false;});});"
         . "})();</script>";
 }
 
