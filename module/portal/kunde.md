@@ -90,3 +90,7 @@ Schickt der Kunde eine Rezepturanfrage, entwickelt die KI sofort einen internen 
 - **Rohstoffanfrage:** mehrzeilig – je Zeile Rohstoff (Katalog-`datalist` oder Freitext), Menge/Einheit, optionaler Zielpreis (`portal_anfrage.zielpreis`), Notiz. Pro Zeile eine eigene `portal_anfrage` (typ=rohstoff) → je Rohstoff ein eigenes Angebot, einzeln annehmbar.
 - **Dienstleistungsanfrage:** Typ-Auswahl (`$DIENST_TYPEN`: labortest/abfuellung/sourcing/konfektionierung/lagerung/beratung/sonstiges) → `portal_anfrage.dienstleistung_typ`. **Labortest** verlangt ≥1 Produkt (Mehrfachauswahl → `portal_anfrage_pos.produkt_id`).
 - **Labortest-Upsell:** Das Bestätigen-Popup (`bxBestaetigen`, 5. Param `upsell`) zeigt bei Angebots-Annahmen – nur wenn `portal_dienstleistung` frei – eine Checkbox „Labortest dazubuchen". Angehakt legt `portal_labortest_upsell()` nach der Annahme eine Labortest-Dienstleistungsanfrage zum Auftrags-Produkt an.
+
+## Rechnungen und Rezeptur-Freigabe
+- **Ansicht „Rechnungen"** listet je Beleg Nummer/Datum/Betrag/Status und bietet pro Zeile einen **PDF-Download** (`v=rechnung_pdf&aid=<auftrag_id>`, prüft Eigentum über die Auftragsliste des Kunden). Ohne verknüpften Auftrag kein Link.
+- **Rezeptur annehmen:** Nach der Freigabe (`rezeptur_annehmen`) führt der Weg zu `v=prodanfrage` (Menge/Verpackung), **falls** `portal_produkte` frei ist. Ist das nicht der Fall, ginge `prodanfrage` ins Leere (Rückfall auf `start`) – dann leitet der Handler auf die Rezeptur selbst (`v=rezeptur&rid=…&freigegeben=1`), die jetzt als angenommen mit Erfolgshinweis erscheint.

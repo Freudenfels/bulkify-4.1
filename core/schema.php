@@ -3375,6 +3375,24 @@ function incoterm_liste(): array {
 function versandart_liste(): array {
     return ['luft'=>'Luft (Air)','see'=>'See (Sea)','bahn'=>'Bahn (Train)','lkw'=>'LKW / Straße','express'=>'Express','standard'=>'Standard'];
 }
+// Eine Versandart mehrsprachig beschriften. Deckt auch die alten Bestell-Werte (kurier/spedition/post)
+// mit ab, damit früher gespeicherte Bestellungen lesbar bleiben. Fallback: der Schlüssel selbst.
+function versandart_label(string $key, string $sprache = 'de'): string {
+    $m = [
+        'luft'      => ['de'=>'Luftfracht',   'en'=>'Air freight',       'zh'=>'空运'],
+        'see'       => ['de'=>'Seefracht',    'en'=>'Sea freight',       'zh'=>'海运'],
+        'bahn'      => ['de'=>'Bahn',         'en'=>'Rail',              'zh'=>'铁路'],
+        'lkw'       => ['de'=>'LKW / Straße', 'en'=>'Truck / Road',      'zh'=>'公路'],
+        'express'   => ['de'=>'Express',      'en'=>'Express',           'zh'=>'快递'],
+        'standard'  => ['de'=>'Standard',     'en'=>'Standard',          'zh'=>'标准'],
+        // Alt-Werte aus früheren Bestellungen:
+        'kurier'    => ['de'=>'Kurier',       'en'=>'Courier',           'zh'=>'快递'],
+        'spedition' => ['de'=>'Spedition',    'en'=>'Freight forwarder', 'zh'=>'货运代理'],
+        'post'      => ['de'=>'Post',         'en'=>'Postal',            'zh'=>'邮政'],
+    ];
+    $spr = in_array($sprache, ['de','en','zh'], true) ? $sprache : 'de';
+    return $m[$key][$spr] ?? ($m[$key]['de'] ?? $key);
+}
 
 function produkt_bulk_info(int $produkt_id): array {
     $p = $produkt_id ? one("SELECT p.name, COALESCE(r.darreichungsform,'') AS form

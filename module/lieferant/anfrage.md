@@ -29,3 +29,6 @@ Lädt der Lieferant eine Spezifikation oder ein CoA hoch, liest die KI sie sofor
 
 ## Lieferbedingung (Incoterm + Versandart)
 Die Anfrage nennt die von uns gewünschte Lieferbedingung (Incoterm + Versandart, Standard DDP/Luft). Der Lieferant sieht diesen Wunsch und gibt sein Angebot **mit** Incoterm + Versandart ab (`lieferant_angebot.incoterm/versandart`, vorbelegt mit unserem Wunsch). Beim Übernehmen (`lieferant_angebot_annehmen()`) landen beide an jeder EK-Staffel (`lieferant_preis.incoterm/versandart`). Das Team sieht die angebotene Lieferbedingung in der Angebotsübersicht (Lieferanten-Detail) schon vor dem Annehmen.
+
+## Angenommenes Angebot ist gesperrt
+Hat das Team ein Angebot übernommen (`lieferant_angebot.status='angenommen'`), sind die Preise bereits als EK-Staffeln kopiert. Der Lieferant kann es dann **nicht mehr überschreiben**: das Formular weicht einer schreibgeschützten Übersicht (Preis, Staffeln, MOQ, Lieferzeit, Lieferbedingung) mit Hinweis (`lp_t('angebot_gesperrt')`); der POST-Weg lehnt ein erneutes Speichern zusätzlich ab. So laufen Angebot und übernommener EK-Preis nicht auseinander.

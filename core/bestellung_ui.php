@@ -62,7 +62,11 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
 
         // 3) Versanddaten – Pflicht, bevor „versendet" gesetzt werden kann.
         if (!$fertig) {
-            $va = versandarten();
+            // Eine gemeinsame Versandart-Liste für Anfrage/Angebot UND Bestellung – mehrsprachig.
+            // Ein in einem Angebot gewählter Alt-Wert bleibt als Option erhalten und wird lesbar beschriftet.
+            $va = array_keys(versandart_liste());
+            $cur = (string)($b['versandart'] ?? '');
+            if ($cur !== '' && !in_array($cur, $va, true)) $va[] = $cur;
             $o .= '<form method="post" style="margin-top:16px"><input type="hidden" name="aktion" value="lief_versand">'
                 . '<div class="bx-grid">'
                 . '<div class="bx-field"><label>' . $t('Produktion geplant', 'Production planned', '计划生产日期') . '</label>'
@@ -70,7 +74,7 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
                 . '<div class="bx-field"><label>' . $t('Versandanbieter', 'Carrier', '承运商') . '</label>'
                 . '<input type="text" name="versandanbieter" maxlength="60" value="' . $h($b['versandanbieter'] ?? '') . '" placeholder="DHL, Maersk, …"></div>'
                 . '<div class="bx-field"><label>' . $t('Versandart', 'Shipping method', '运输方式') . '</label><select name="versandart"><option value="">–</option>';
-            foreach ($va as $vk => $vl) $o .= '<option value="' . $h($vk) . '"' . (((string)($b['versandart'] ?? '')) === $vk ? ' selected' : '') . '>' . $h($vl) . '</option>';
+            foreach ($va as $vk) $o .= '<option value="' . $h($vk) . '"' . ($cur === $vk ? ' selected' : '') . '>' . $h(versandart_label($vk, $sprache)) . '</option>';
             $o .= '</select></div>'
                 . '<div class="bx-field"><label>' . $t('Sendungsnummer', 'Tracking number', '物流单号') . '</label>'
                 . '<input type="text" name="tracking" maxlength="120" value="' . $h($b['tracking'] ?? '') . '"></div>'

@@ -154,6 +154,27 @@ $l_bestTabelle = function($rows) use ($l_beur, $l_bBadge) {
     echo '</tbody></table></div>';
 };
 
+// Echte Angebote/Preise dieses Lieferanten (aus Preisanfragen) – für die Übersicht und den Reiter „Preise / Angebote".
+$l_angebote = $neu ? [] : all("SELECT af.nummer, COALESCE(NULLIF(i.name,''), af.betreff) AS bez,
+        ag.preis, ag.einheit, ag.preis_basis, ag.status AS ang_status, ag.incoterm, ag.versandart, ag.angelegt
+    FROM lieferant_angebot ag
+    JOIN lieferant_anfrage af ON af.id=ag.anfrage_id
+    LEFT JOIN item i ON i.id=af.item_id
+    WHERE af.lieferant_id=? ORDER BY ag.angelegt DESC", [(int)$id]);
+$l_angTabelle = function($rows) {
+    $VERSL = versandart_liste();
+    echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Nummer</th><th>Artikel / Betreff</th><th class="bx-num">Preis</th><th>Lieferbedingung</th><th>Status</th></tr></thead><tbody>';
+    if (!$rows) echo '<tr><td colspan="5" class="muted">Noch keine Angebote von diesem Lieferanten. Anfragen stellen Sie unten im Bereich „Preisanfragen".</td></tr>';
+    foreach ($rows as $r) {
+        $pb = (int)($r['preis_basis'] ?? 1) === 1000 ? 1000 : 1;
+        $preis = $r['preis'] !== null ? number_format((float)$r['preis'], 4, ',', '.') . ' &euro; / ' . ($pb === 1000 ? '1.000 ' : '') . h($r['einheit'] ?: '–') : '–';
+        $terms = array_filter([(string)($r['incoterm'] ?? ''), !empty($r['versandart']) ? ($VERSL[$r['versandart']] ?? $r['versandart']) : '']);
+        $st = ($r['ang_status'] ?? '') === 'angenommen' ? bx_badge('übernommen', 'ok') : bx_badge('offen', 'info');
+        echo '<tr><td>' . h($r['nummer']) . '</td><td>' . h($r['bez'] ?: '–') . '</td><td class="bx-num">' . $preis . '</td><td class="muted">' . ($terms ? h(implode(' · ', $terms)) : '–') . '</td><td>' . $st . '</td></tr>';
+    }
+    echo '</tbody></table></div>';
+};
+
 function bx_bald(string $modul): void {
     echo '<div class="bx-tablewrap"><table class="bx-table"><tbody><tr><td class="muted">'
        . 'Sobald das Modul <strong>' . h($modul) . '</strong> steht, erscheinen hier automatisch alle '
@@ -216,40 +237,19 @@ if (!$neu) {
       <?php endif; ?>
       <?php endif; ?>
     </div>
-    <div class="bx-panel"><h2>Letzte Preise / Angebote</h2><?php bx_bald('Angebote'); ?></div>
+    <div class="bx-panel"><h2>Letzte Preise / Angebote</h2><?php $l_angTabelle(array_slice($l_angebote,0,5)); ?></div>
     <div class="bx-panel"><h2>Letzte Bestellungen</h2><?php $l_bestTabelle(array_slice($l_bestellungen,0,5)); ?></div>
   </section>
 
-  <section data-panel="angebote" hidden><div class="bx-panel"><h2>Preise / Angebote</h2><?php bx_bald('Angebote'); ?></div></section>
+  <section data-panel="angebote" hidden><div class="bx-panel"><h2>Preise / Angebote (<?= count($l_angebote) ?>)</h2><?php $l_angTabelle($l_angebote); ?>
+    <p class="muted" style="font-size:12px;margin-top:8px">Neue Preise holen Sie unten im Bereich „Preisanfragen" ein; angenommene Angebote stehen als EK-Staffeln am Artikel.</p></div></section>
   <section data-panel="bestell" hidden><div class="bx-panel"><h2>Bestellungen (<?= count($l_bestellungen) ?>)</h2><?php $l_bestTabelle($l_bestellungen); ?></div></section>
 
   <section data-panel="rechnungen" hidden>
     <div class="bx-panel">
-      <h2>Rechnungen &amp; Zahlungen <?= bx_hint('Zeigt je Auftrag, ob eine Rechnung vorliegt und ob sie bezahlt ist') ?></h2>
-      <div class="bx-row" style="margin-bottom:12px">
-        <?= bx_badge('bezahlt','ok') ?> <?= bx_badge('offen','warn') ?> <?= bx_badge('überfällig','err') ?> <?= bx_badge('keine Rechnung','info') ?>
-        <span class="muted">Vorschau mit Beispieldaten – echte Werte erscheinen, sobald Bestellungen &amp; Buchhaltung angebunden sind.</span>
-      </div>
-      <?php
-      $beispiel = [
-          ['B-3007','12.08.2026','2.100,00 €','R-5501','26.08.2026','bezahlt','ok'],
-          ['B-3012','18.08.2026','850,00 €','R-5540','01.09.2026','offen','warn'],
-          ['B-3015','05.08.2026','1.400,00 €','R-5480','19.08.2026','überfällig','err'],
-          ['B-3020','20.08.2026','3.200,00 €','—','—','keine Rechnung','info'],
-      ];
-      ?>
-      <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Auftrag</th><th>Datum</th><th class="bx-num">Betrag</th><th>Rechnung</th><th>fällig</th><th>Status</th></tr></thead>
-        <tbody>
-        <?php foreach ($beispiel as $b): ?>
-          <tr>
-            <td><?= h($b[0]) ?></td><td><?= h($b[1]) ?></td><td class="bx-num"><?= h($b[2]) ?></td>
-            <td><?= $b[3]==='—' ? '<span class="muted">—</span>' : h($b[3]) ?></td>
-            <td><?= h($b[4]) ?></td><td><?= bx_badge($b[5],$b[6]) ?></td>
-          </tr>
-        <?php endforeach; ?>
-        </tbody>
-      </table></div>
+      <h2>Rechnungen &amp; Zahlungen <?= bx_hint('Lieferanten-Rechnungen und Zahlungen zu den Bestellungen') ?></h2>
+      <p class="muted" style="margin-top:0">Die Erfassung von Lieferanten-Rechnungen und Zahlungen wird gerade angebunden. Die Bestellungen dieses Lieferanten sehen Sie im Reiter „Bestellungen"<?= $l_einkauf > 0 ? ' (Einkauf gesamt: ' . h(number_format($l_einkauf, 2, ',', '.')) . ' €)' : '' ?>.</p>
+      <?php bx_bald('Rechnungen &amp; Zahlungen'); ?>
     </div>
   </section>
 

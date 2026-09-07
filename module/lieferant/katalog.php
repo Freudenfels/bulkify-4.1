@@ -92,7 +92,13 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
         <td class="bx-num"><?= $z['preis'] !== null ? h($zahl($z['preis'], 4) . ' ' . $z['waehrung'] . ($z['einheit'] ? ' / ' . $z['einheit'] : '')) : '–' ?></td>
         <td class="bx-num"><?= $z['menge_ab'] !== null ? h(lp_num($z['menge_ab'], 3)) : '–' ?></td>
         <td><?= $neu ? h(lp_t('katalog_geprueft_nein')) : ($z['status'] === 'uebernommen' ? h(lp_t('katalog_uebernommen')) : h(lp_t('katalog_abgelehnt'))) ?></td>
-        <td class="bx-num"><?php if ($neu): ?>
+        <td class="bx-num" style="white-space:nowrap"><?php if ($neu): ?>
+          <button type="button" class="btn btn-ghost btn-sm bx-kat-edit"
+                  data-id="<?= (int)$z['id'] ?>" data-name="<?= h($z['name']) ?>" data-art="<?= h($z['art']) ?>"
+                  data-form="<?= h((string)$z['form']) ?>" data-spez="<?= h((string)$z['spezifikation']) ?>"
+                  data-herkunft="<?= h((string)$z['herkunft']) ?>" data-preis="<?= h($zahl($z['preis'], 4)) ?>"
+                  data-waehrung="<?= h((string)$z['waehrung'] ?: 'EUR') ?>" data-einheit="<?= h((string)$z['einheit']) ?>"
+                  data-menge="<?= h($zahl($z['menge_ab'], 3)) ?>" data-notiz="<?= h((string)$z['notiz']) ?>"><?= h(lp_t('bearbeiten')) ?></button>
           <form method="post" style="display:inline" onsubmit="return confirm('<?= h(lp_t('loeschen')) ?>?');">
             <input type="hidden" name="aktion" value="zeile_weg"><input type="hidden" name="zeile_id" value="<?= (int)$z['id'] ?>">
             <button class="btn btn-ghost btn-sm" type="submit">&times;</button></form>
@@ -104,25 +110,56 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
   <?php endif; ?>
 </div>
 
-<div class="bx-panel">
-  <h2 style="margin-top:0"><?= h(lp_t('katalog_zeile_neu')) ?></h2>
-  <form method="post">
-    <input type="hidden" name="aktion" value="zeile_neu">
+<div class="bx-panel" id="katFormPanel">
+  <h2 style="margin-top:0" id="katFormTitle"><?= h(lp_t('katalog_zeile_neu')) ?></h2>
+  <form method="post" id="katForm">
+    <input type="hidden" name="aktion" value="zeile_neu" id="katAktion">
+    <input type="hidden" name="zeile_id" value="" id="katZeileId">
     <div class="bx-grid">
-      <div class="bx-field"><label><?= h(lp_t('artikel')) ?></label><input type="text" name="name" required maxlength="190"></div>
+      <div class="bx-field"><label><?= h(lp_t('artikel')) ?></label><input type="text" name="name" id="kf_name" required maxlength="190"></div>
       <div class="bx-field" style="max-width:190px"><label><?= h(lp_t('produkttyp')) ?></label>
-        <select name="art"><option value="rohstoff"><?= h(anfrage_art_label('rohstoff', '', $spr)) ?></option><option value="fertigprodukt"><?= h(anfrage_art_label('fertigprodukt', '', $spr)) ?></option></select></div>
+        <select name="art" id="kf_art"><option value="rohstoff"><?= h(anfrage_art_label('rohstoff', '', $spr)) ?></option><option value="fertigprodukt"><?= h(anfrage_art_label('fertigprodukt', '', $spr)) ?></option></select></div>
       <div class="bx-field" style="max-width:170px"><label><?= h(lp_t('form_lbl')) ?></label>
-        <select name="form"><option value="">–</option><?php foreach (katalog_formen() as $k => $lbl): ?><option value="<?= h($k) ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
-      <div class="bx-field"><label><?= h(lp_t('spezifikation')) ?></label><input type="text" name="spezifikation" maxlength="190" placeholder="95 % Curcumin"></div>
-      <div class="bx-field" style="max-width:170px"><label><?= h(lp_t('herkunft')) ?></label><input type="text" name="herkunft" maxlength="120"></div>
-      <div class="bx-field" style="max-width:130px"><label><?= h(lp_t('preis')) ?></label><input type="text" name="preis"></div>
-      <div class="bx-field" style="max-width:90px"><label><?= h(lp_t('waehrung')) ?></label><input type="text" name="waehrung" value="EUR" maxlength="3"></div>
-      <div class="bx-field" style="max-width:110px"><label><?= h(lp_t('einheit')) ?></label><input type="text" name="einheit" placeholder="kg" maxlength="20"></div>
-      <div class="bx-field" style="max-width:130px"><label><?= h(lp_t('ab_menge')) ?></label><input type="text" name="menge_ab"></div>
+        <select name="form" id="kf_form"><option value="">–</option><?php foreach (katalog_formen() as $k => $lbl): ?><option value="<?= h($k) ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
+      <div class="bx-field"><label><?= h(lp_t('spezifikation')) ?></label><input type="text" name="spezifikation" id="kf_spez" maxlength="190" placeholder="95 % Curcumin"></div>
+      <div class="bx-field" style="max-width:170px"><label><?= h(lp_t('herkunft')) ?></label><input type="text" name="herkunft" id="kf_herkunft" maxlength="120"></div>
+      <div class="bx-field" style="max-width:130px"><label><?= h(lp_t('preis')) ?></label><input type="text" name="preis" id="kf_preis"></div>
+      <div class="bx-field" style="max-width:90px"><label><?= h(lp_t('waehrung')) ?></label><input type="text" name="waehrung" id="kf_waehrung" value="EUR" maxlength="3"></div>
+      <div class="bx-field" style="max-width:110px"><label><?= h(lp_t('einheit')) ?></label><input type="text" name="einheit" id="kf_einheit" placeholder="kg" maxlength="20"></div>
+      <div class="bx-field" style="max-width:130px"><label><?= h(lp_t('ab_menge')) ?></label><input type="text" name="menge_ab" id="kf_menge"></div>
     </div>
-    <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><input type="text" name="notiz" maxlength="500"></div>
-    <button class="btn btn-primary" type="submit"><?= h(lp_t('katalog_zeile_add')) ?></button>
+    <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><input type="text" name="notiz" id="kf_notiz" maxlength="500"></div>
+    <button class="btn btn-primary" type="submit" id="katSubmit"><?= h(lp_t('katalog_zeile_add')) ?></button>
+    <button type="button" class="btn btn-ghost" id="katCancel" hidden><?= h(lp_t('abbrechen')) ?></button>
   </form>
 </div>
+<script>
+(function(){
+  var form=document.getElementById('katForm'); if(!form) return;
+  var titel=document.getElementById('katFormTitle'), aktion=document.getElementById('katAktion'),
+      zeileId=document.getElementById('katZeileId'), submit=document.getElementById('katSubmit'),
+      cancel=document.getElementById('katCancel'), panel=document.getElementById('katFormPanel');
+  var T={neu:<?= json_encode(lp_t('katalog_zeile_neu'), JSON_UNESCAPED_UNICODE) ?>, edit:<?= json_encode(lp_t('katalog_zeile_edit'), JSON_UNESCAPED_UNICODE) ?>,
+         add:<?= json_encode(lp_t('katalog_zeile_add'), JSON_UNESCAPED_UNICODE) ?>, save:<?= json_encode(lp_t('speichern'), JSON_UNESCAPED_UNICODE) ?>};
+  var set=function(id,v){ var el=document.getElementById(id); if(el) el.value=(v==null?'':v); };
+  function neuModus(){
+    aktion.value='zeile_neu'; zeileId.value=''; titel.textContent=T.neu; submit.textContent=T.add; cancel.hidden=true;
+    form.reset(); set('kf_waehrung','EUR');
+  }
+  document.querySelectorAll('.bx-kat-edit').forEach(function(b){
+    b.addEventListener('click',function(){
+      var d=b.dataset;
+      aktion.value='zeile_save'; zeileId.value=d.id;
+      set('kf_name',d.name); set('kf_spez',d.spez); set('kf_herkunft',d.herkunft);
+      set('kf_preis',d.preis); set('kf_waehrung',d.waehrung); set('kf_einheit',d.einheit);
+      set('kf_menge',d.menge); set('kf_notiz',d.notiz);
+      var art=document.getElementById('kf_art'); if(art) art.value=d.art||'rohstoff';
+      var f=document.getElementById('kf_form'); if(f) f.value=d.form||'';
+      titel.textContent=T.edit; submit.textContent=T.save; cancel.hidden=false;
+      panel.scrollIntoView({behavior:'smooth',block:'start'}); document.getElementById('kf_name').focus();
+    });
+  });
+  cancel.addEventListener('click',neuModus);
+})();
+</script>
 <?php lp_shell_ende(); lp_foot();

@@ -80,3 +80,4 @@
 - `akteur` im Protokoll steuert die Chat-Seite: `team` = wir (links), `system` = mittig, alles andere (z. B. `kunde`, `lieferant`) = Gegenstelle (rechts).
 
   - **Rohstoffkosten fürs Angebot:** `rohstoff_bester_lieferant($item_id,$menge)` gibt den günstigsten Lieferanten (Firma + Preis) für eine Menge, mit Rückfall auf die kleinste Staffel unter MOQ. `angebot_rohstoffkosten($angebot_id)` summiert die Rohstoffkosten der Angebots-Rezeptur bei der größten Bestellmenge und zählt Zutaten ohne Lieferantenpreis – Grundlage für das gleichnamige Panel im Angebots-Editor.
+  - **Versandart (eine Wahrheit):** `versandart_liste()` ist die kanonische Liste (luft/see/bahn/lkw/express/standard) für Anfrage, Angebot UND Bestellung. `versandart_label($key,$sprache)` beschriftet mehrsprachig (de/en/zh) und deckt die Alt-Werte kurier/spedition/post aus früheren Bestellungen mit ab. Die alte `versandarten()` (nur deutsch) wird nicht mehr verwendet.

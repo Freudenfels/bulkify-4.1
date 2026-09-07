@@ -26,7 +26,7 @@ if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
         q("UPDATE bestellung SET produktion_geplant=?, versandanbieter=?, versandart=?, tracking=? WHERE id=? AND lieferant_id=?", [
             trim((string)($_POST['produktion_geplant'] ?? '')) ?: null,
             mb_substr(trim((string)($_POST['versandanbieter'] ?? '')), 0, 60) ?: null,
-            array_key_exists((string)($_POST['versandart'] ?? ''), versandarten()) ? $_POST['versandart'] : null,
+            array_key_exists((string)($_POST['versandart'] ?? ''), versandart_liste()) ? $_POST['versandart'] : null,
             mb_substr(trim((string)($_POST['tracking'] ?? '')), 0, 120) ?: null, $id, $lid]);
     }
     header('Location: ?p=lieferant_bestellung&id=' . $id . ($fehler === '' ? '&ok=1' : '&fehler=' . urlencode($fehler))); exit;

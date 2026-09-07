@@ -198,7 +198,11 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         q("UPDATE rezeptur SET status='eingefroren', freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $rid]);
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Rezeptur ' . $rez['nummer'] . ' verbindlich angenommen durch ' . $name . '.', 'rezeptur', 'rezeptur', $rid);
     }
-    header('Location: ?p=portal&token=' . $token . '&v=prodanfrage&rid=' . $rid . '&freigegeben=1'); exit;
+    // Kann der Kunde Produkte anfragen, ist der nächste Schritt „prodanfrage" (Menge/Verpackung).
+    // Ohne Produkt-Freischaltung führt das ins Leere (fällt auf „start" zurück) – dann zurück auf
+    // die Rezeptur selbst, die jetzt als angenommen angezeigt wird (mit Erfolgshinweis).
+    $frZiel = !empty($k['portal_produkte']) ? 'prodanfrage' : 'rezeptur';
+    header('Location: ?p=portal&token=' . $token . '&v=' . $frZiel . '&rid=' . $rid . '&freigegeben=1'); exit;
 }
 
 // Rezeptur-Vorschlag ablehnen (Pflicht-Grund) -> Status abgelehnt, Team überarbeitet
@@ -1217,6 +1221,13 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
 
 <?php elseif ($view === 'rezeptur'): ?>
+  <?php if (isset($_GET['freigegeben']) && $rezDetail): ?>
+  <div class="bx-panel badge-ok" style="padding:14px 18px">
+    <strong>Rezeptur freigegeben<?= ' – ' . h($rezDetail['nummer'] . ' ' . $rezDetail['name']) ?>.</strong>
+    <?= !empty($rezDetail['freigabe_name']) ? '<div class="muted" style="font-size:13px;margin-top:4px">Bestätigt durch ' . h($rezDetail['freigabe_name']) . '.</div>' : '' ?>
+    <div style="margin-top:6px">Vielen Dank – Ihre Freigabe ist bei uns eingegangen. Wir melden uns mit den nächsten Schritten.</div>
+  </div>
+  <?php endif; ?>
   <?php if (!$rezDetail): ?>
     <h1 style="margin-bottom:4px">Rezeptur</h1>
     <div class="bx-panel"><div class="muted">Rezeptur nicht gefunden.</div><div style="margin-top:12px"><a class="btn btn-ghost" href="<?= $portalLink('rezepturen') ?>">Zurück zur Liste</a></div></div>
@@ -1958,11 +1969,12 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px">Ihre Rechnungen</h1>
   <div class="bx-panel">
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Nummer</th><th>Datum</th><th class="bx-num">Betrag</th><th>Status</th></tr></thead>
+      <thead><tr><th>Nummer</th><th>Datum</th><th class="bx-num">Betrag</th><th>Status</th><th></th></tr></thead>
       <tbody>
-      <?php if (!$rechnungen): ?><tr><td colspan="4" class="muted">Noch keine Rechnungen.</td></tr><?php endif; ?>
+      <?php if (!$rechnungen): ?><tr><td colspan="5" class="muted">Noch keine Rechnungen.</td></tr><?php endif; ?>
       <?php foreach ($rechnungen as $r): ?>
-        <tr><td><?= h($r['nummer']) ?></td><td><?= $r['datum']?h(date('d.m.Y',strtotime($r['datum']))):'' ?></td><td class="bx-num"><?= $eur($r['brutto']) ?></td><td><?= $reBadge($r['status']) ?></td></tr>
+        <tr><td><?= h($r['nummer']) ?></td><td><?= $r['datum']?h(date('d.m.Y',strtotime($r['datum']))):'' ?></td><td class="bx-num"><?= $eur($r['brutto']) ?></td><td><?= $reBadge($r['status']) ?></td>
+          <td class="bx-num" style="white-space:nowrap"><?php if (!empty($r['auftrag_id'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_pdf') ?>&aid=<?= (int)$r['auftrag_id'] ?>">Rechnung (PDF)</a><?php endif; ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>

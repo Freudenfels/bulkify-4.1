@@ -13,7 +13,13 @@ $a   = $id ? one("SELECT af.*, i.name AS item_name, i.artikelnummer, i.einheit A
 if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
     $fehler = '';
-    if ($aktion === 'angebot') {
+    // Ein bereits angenommenes Angebot darf der Lieferant nicht mehr überschreiben – die Preise
+    // sind dann schon als EK-Staffeln übernommen; ein erneutes Speichern würde beides auseinanderlaufen lassen.
+    $angJetzt = one("SELECT status FROM lieferant_angebot WHERE anfrage_id=?", [$id]);
+    $angGesperrt = $angJetzt && ($angJetzt['status'] ?? '') === 'angenommen';
+    if ($aktion === 'angebot' && $angGesperrt) {
+        $fehler = lp_t('angebot_gesperrt');
+    } elseif ($aktion === 'angebot') {
         // Die erste Zeile ist der Hauptpreis mit der Menge, für die er gilt – sie zählt als
         // erste Staffel. Danach kommen die Zeilen, die der Lieferant selbst angehängt hat.
         $staffeln = [];
@@ -76,6 +82,8 @@ if (!$a):
   </div>
 <?php else:
     $ang = one("SELECT * FROM lieferant_angebot WHERE anfrage_id=?", [$id]);
+    // Angenommenes Angebot ist eingefroren – dann nur noch anzeigen, nicht mehr bearbeiten.
+    $gesperrt = $ang && ($ang['status'] ?? '') === 'angenommen';
     $staffeln = $ang ? all("SELECT * FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$ang['id']]) : [];
     // Die erste gespeicherte Staffel gehört zur Kopfzeile (Hauptpreis), der Rest steht darunter.
     // Ohne Angebot steht in der Kopfzeile die angefragte Menge.
@@ -105,13 +113,25 @@ if (!$a):
       <?php if ($a['notiz']): ?><tr><td><?= h(lp_t('notiz')) ?></td><td style="white-space:pre-line"><?= h($a['notiz']) ?></td></tr><?php endif; ?>
       <?php if ((int)$a['coa_gewuenscht'] === 1): ?><tr><td>CoA / Spec</td><td><?= h(lp_t('coa_mitschicken')) ?></td></tr><?php endif; ?>
       <?php $reqTerms = array_filter([(string)($a['incoterm'] ?? ''), !empty($a['versandart']) ? lp_t('vers_'.$a['versandart']) : '']); ?>
-      <?php if ($reqTerms): ?><tr><td><?= h(lp_t('incoterm')) ?> / <?= h(lp_t('versandart')) ?></td><td><?= h(implode(' · ', $reqTerms)) ?> <span class="muted">(<?= h(lp_t('gewuenscht')) ?>)</span></td></tr><?php endif; ?>
+      <?php if ($reqTerms): ?><tr><td><?= h(lp_t('incoterm')) ?> / <?= h(lp_t('versandart')) ?></td><td><?= h(implode(' · ', $reqTerms)) ?> <span class="muted">(<?= h(lp_t('gewuenscht_von_uns')) ?>)</span></td></tr><?php endif; ?>
     </tbody></table></div>
   </div>
 
   <div class="bx-panel">
     <h2 style="margin-top:0"><?= h(lp_t('angebot_abgeben')) ?></h2>
     <?php if ($ang): ?><div class="muted" style="margin-bottom:10px"><?= h(lp_t('abgegeben_am')) ?> <?= h(date('d.m.Y', strtotime((string)$ang['angelegt']))) ?><?= $ang['status'] === 'angenommen' ? ' · ' . h(lp_t('angenommen')) : '' ?></div><?php endif; ?>
+    <?php if ($gesperrt): $pb = (int)($ang['preis_basis'] ?? 1) === 1000 ? 1000 : 1; ?>
+      <div class="badge-ok" style="padding:10px 14px;border-radius:8px;margin-bottom:12px"><?= h(lp_t('angebot_gesperrt')) ?></div>
+      <div class="bx-tablewrap"><table class="bx-table"><tbody>
+        <tr><td style="width:220px"><?= h(lp_t('ihr_preis')) ?></td><td><strong><?= h($zahl($ang['preis'], 4)) ?></strong> <?= $pb === 1000 ? h(lp_t('je_1000')) : h(lp_t('preis_je')) ?> <?= h(lp_einheit($einheit, $pb)) ?><?= $hauptMenge > 0 ? ' · ' . h(lp_t('ab_menge')) . ' ' . h($zahl($hauptMenge, 3)) . ' ' . h(lp_einheit($einheit, $hauptMenge)) : '' ?></td></tr>
+        <?php foreach ($staffeln as $s): ?><tr><td><?= h(lp_t('staffel')) ?></td><td><?= h($zahl($s['preis'], 4)) ?> · <?= h(lp_t('ab_menge')) ?> <?= h($zahl($s['menge_ab'], 3)) ?> <?= h(lp_einheit($einheit, (float)$s['menge_ab'])) ?></td></tr><?php endforeach; ?>
+        <?php if ($ang['mindestmenge']): ?><tr><td><?= h(lp_t('moq')) ?></td><td><?= h($zahl($ang['mindestmenge'], 3)) ?> <?= h(lp_einheit($einheit, (float)$ang['mindestmenge'])) ?></td></tr><?php endif; ?>
+        <?php if ($ang['lieferzeit_tage']): ?><tr><td><?= h(lp_t('lieferzeit')) ?></td><td><?= (int)$ang['lieferzeit_tage'] ?></td></tr><?php endif; ?>
+        <?php $curInco = (string)($ang['incoterm'] ?? ''); $curVers = (string)($ang['versandart'] ?? ''); $terms = array_filter([$curInco, $curVers !== '' ? lp_t('vers_' . $curVers) : '']); ?>
+        <?php if ($terms): ?><tr><td><?= h(lp_t('incoterm')) ?> / <?= h(lp_t('versandart')) ?></td><td><?= h(implode(' · ', $terms)) ?></td></tr><?php endif; ?>
+        <?php if (trim((string)($ang['notiz'] ?? '')) !== ''): ?><tr><td><?= h(lp_t('notiz')) ?></td><td style="white-space:pre-line"><?= h($ang['notiz']) ?></td></tr><?php endif; ?>
+      </tbody></table></div>
+    <?php else: ?>
     <form method="post">
       <input type="hidden" name="aktion" value="angebot">
       <?php // Eine Zeile: links die Preisspalte, rechts daneben Basis, Mindestmenge und Lieferzeit.
@@ -177,6 +197,7 @@ if (!$a):
       <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><textarea name="notiz" rows="3"><?= h($ang['notiz'] ?? '') ?></textarea></div>
       <button class="btn btn-primary" type="submit"><?= h(lp_t('angebot_abgeben')) ?></button>
     </form>
+    <?php endif; ?>
   </div>
 
   <?= nachricht_panel($lid, 'lieferant', lp_sprache(), 'lieferant_anfrage', $id) ?>
