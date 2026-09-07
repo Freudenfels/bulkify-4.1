@@ -38,3 +38,11 @@ Zertifikate/Lagerung, beim **CoA** Charge/MHD/Herstelldatum + die Analysewerte-T
 „Haltbarkeit/Allergene ins Produkt übernehmen" (`aktion=spec_uebernehmen`) schreibt die
 Werte in die neuen Felder `produkt.haltbarkeit`/`produkt.allergene` (auch im Formular
 editierbar). Läuft die KI nicht (lokal), wird nur hochgeladen; Felder von Hand füllbar.
+
+## Lieferantenpreise (Zukauf) – Fertigprodukt-Preistabelle
+Panel „Lieferantenpreise (Zukauf)" (Tabelle `produkt_lieferant_preis`): mehrere Zukauf-Preise
+je Fertigprodukt (Lieferant · ab Menge · Preis/Kapsel · Größe · Incoterm · Versand),
+günstigster markiert, hinzufügen/löschen. Rein **intern** (nie Kundensicht). Preise kommen
+automatisch aus „EK-Preise (Import)" (Fertigprodukt bestätigen/neu anlegen →
+`produkt_zukauf_preis_schreiben()`, Versandart aus AIR/SEA/TRAIN im Namen) oder von Hand.
+Analog zu `lieferant_preis` beim Rohstoff.

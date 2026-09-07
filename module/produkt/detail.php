@@ -31,6 +31,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_
     }
     header('Location: ?p=produkt&id=' . $id . '&specueb=' . $n . '#specfeld'); exit;
 }
+// Zukauf-Preis (Fertigprodukt) manuell hinzufügen / löschen.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zk_preis_add' && is_numeric($id)) {
+    $lid   = ($_POST['zk_lieferant'] ?? '') !== '' ? (int)$_POST['zk_lieferant'] : null;
+    $lname = trim((string)($_POST['zk_lieferant_name'] ?? ''));
+    $preis = (float) str_replace(',', '.', $_POST['zk_preis'] ?? '0');
+    $mab   = (float) str_replace(',', '.', $_POST['zk_menge_ab'] ?? '0');
+    $inco  = array_key_exists($_POST['zk_incoterm'] ?? '', incoterm_liste()) ? $_POST['zk_incoterm'] : null;
+    $vers  = array_key_exists($_POST['zk_versandart'] ?? '', versandart_liste()) ? $_POST['zk_versandart'] : null;
+    if ($preis > 0) q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,lieferant_name,menge_ab,preis,einheit,incoterm,versandart,waehrung,stand) VALUES (?,?,?,?,?, 'kapsel',?,?, 'EUR', CURDATE())",
+        [(int)$id, $lid, $lname ?: null, $mab, $preis, $inco, $vers]);
+    header('Location: ?p=produkt&id=' . $id . '&zkok=1#zukauf'); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zk_preis_del' && is_numeric($id)) {
+    q("DELETE FROM produkt_lieferant_preis WHERE id=? AND produkt_id=?", [(int)($_POST['preis_id'] ?? 0), (int)$id]);
+    header('Location: ?p=produkt&id=' . $id . '#zukauf'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && is_numeric($id)) {
     dokument_freigabe_toggle('produkt', (int)$id, (int)($_POST['dok_id'] ?? 0));
     header('Location: ?p=produkt&id=' . $id . '#dok'); exit;
@@ -295,6 +311,41 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     </table></div>
     <div class="muted" style="margin-top:8px">VK je Packung (Basis, ohne Kundenrabatt). Stand: <?= h(fmt_zeit($matrix[0]['stand'])) ?>.</div>
   <?php endif; ?>
+</div>
+<div class="bx-panel" id="zukauf">
+  <h2 style="margin-top:0">Lieferantenpreise (Zukauf) <?= bx_hint('Einkaufspreise für dieses Fertigprodukt je Lieferant/Versandweg (AIR/SEA), günstigster markiert. Kommen aus „EK-Preise (Import)" oder von Hand. Rein intern – nie in der Kundensicht.') ?></h2>
+  <?php if (isset($_GET['zkok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Preis gespeichert.</div><?php endif; ?>
+  <?php $VERSZ = versandart_liste();
+        $zkpreise = all("SELECT z.*, COALESCE(l.firma, z.lieferant_name) AS firma FROM produkt_lieferant_preis z LEFT JOIN lieferanten l ON l.id=z.lieferant_id WHERE z.produkt_id=? ORDER BY z.preis ASC, z.menge_ab ASC", [(int)$id]); ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Lieferant</th><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Größe</th><th>Incoterm</th><th>Versand</th><th></th></tr></thead>
+    <tbody>
+    <?php if (!$zkpreise): ?><tr><td colspan="7" class="muted">Noch keine Zukauf-Preise. Unten eintragen oder über „EK-Preise (Import)" (Fertigprodukte) zuordnen.</td></tr><?php endif; ?>
+    <?php $best = $zkpreise ? (float)$zkpreise[0]['preis'] : null; foreach ($zkpreise as $z): $isb = $best!==null && abs((float)$z['preis']-$best)<1e-9; ?>
+      <tr<?= $isb?' style="font-weight:600"':'' ?>>
+        <td><?= h($z['firma'] ?: '–') ?> <?= $isb?bx_badge('günstigster','ok'):'' ?></td>
+        <td class="bx-num"><?= (float)$z['menge_ab']>0 ? number_format((float)$z['menge_ab'],0,',','.') : '<span class="muted">–</span>' ?></td>
+        <td class="bx-num"><?= number_format((float)$z['preis'], (float)$z['preis']<1?4:2,',','.') ?> €<?= $z['einheit']==='kapsel'?'/Kapsel':'/'.h((string)$z['einheit']) ?></td>
+        <td><?= $z['groesse']?h($z['groesse']):'<span class="muted">–</span>' ?></td>
+        <td><?= $z['incoterm']?h($z['incoterm']):'<span class="muted">–</span>' ?></td>
+        <td><?= !empty($z['versandart']) ? h($VERSZ[$z['versandart']]??$z['versandart']) : '<span class="muted">–</span>' ?></td>
+        <td style="text-align:right"><form method="post" style="display:inline"><input type="hidden" name="aktion" value="zk_preis_del"><input type="hidden" name="preis_id" value="<?= (int)$z['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <form method="post" class="bx-row" style="margin-top:12px;align-items:flex-end;gap:10px;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="zk_preis_add">
+    <div class="bx-field" style="margin:0"><label>Lieferant</label>
+      <select name="zk_lieferant"><option value="">– Freitext –</option><?php foreach ($lieferanten as $l): ?><option value="<?= $l['id'] ?>"><?= h($l['firma']) ?></option><?php endforeach; ?></select></div>
+    <div class="bx-field" style="margin:0;width:140px"><label>oder frei</label><input type="text" name="zk_lieferant_name" placeholder="z. B. Wellgreen"></div>
+    <div class="bx-field" style="margin:0;width:100px"><label>ab Menge</label><input type="number" name="zk_menge_ab" value="0"></div>
+    <div class="bx-field" style="margin:0;width:110px"><label>Preis/Kapsel</label><input type="number" step="0.0001" name="zk_preis" required></div>
+    <div class="bx-field" style="margin:0;width:120px"><label>Incoterm</label><select name="zk_incoterm"><option value="">–</option><?php foreach (incoterm_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($k) ?></option><?php endforeach; ?></select></div>
+    <div class="bx-field" style="margin:0;width:120px"><label>Versand</label><select name="zk_versandart"><option value="">–</option><?php foreach (versandart_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
+    <button class="btn btn-ghost btn-sm" type="submit">Preis hinzufügen</button>
+  </form>
+  <p class="muted" style="font-size:12px;margin-top:8px">Interne Zukauf-Preise – erscheinen nie in der Kundensicht.</p>
 </div>
 <div class="bx-panel" id="specfeld">
   <h2 style="margin-top:0">Spezifikation &amp; CoA <?= bx_hint('Spec oder CoA (Analysenzertifikat) hochladen – die KI liest es aus. Spec füllt Haltbarkeit/Allergene ins Produkt; beim CoA werden Charge/MHD und die Analysewerte angezeigt. KI läuft nur auf beta.') ?></h2>

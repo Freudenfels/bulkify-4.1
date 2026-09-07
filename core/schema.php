@@ -569,6 +569,27 @@ function init_schema(): void {
     ensure_column('lieferant_preis', 'versandart', "VARCHAR(20) NULL");
     try { $pdo->exec("ALTER TABLE lieferant_preis MODIFY lieferant_id INT NULL"); } catch (\Throwable $e) {}
 
+    // produkt_lieferant_preis: Zukauf-Preise je Fertigprodukt (mehrere Lieferanten/Versandwege).
+    // Analog zu lieferant_preis (Rohstoff), aber produktzentriert. Rein INTERN (Zukauf, nie Kundensicht).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS produkt_lieferant_preis (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        produkt_id INT NOT NULL,
+        lieferant_id INT NULL,
+        lieferant_name VARCHAR(120) NULL,      -- falls kein Lieferanten-Datensatz (Rohname aus EK-Import)
+        menge_ab DECIMAL(14,3) NOT NULL DEFAULT 0,   -- Staffel: ab dieser Stueckzahl
+        preis DECIMAL(14,6) NOT NULL DEFAULT 0,      -- Preis je Einheit (z. B. je Kapsel)
+        einheit VARCHAR(16) NOT NULL DEFAULT 'kapsel',
+        groesse VARCHAR(60) NULL,              -- z. B. #0, #00, tablette
+        waehrung VARCHAR(3) NOT NULL DEFAULT 'EUR',
+        incoterm VARCHAR(8) NULL,
+        versandart VARCHAR(20) NULL,
+        stand DATE NULL,
+        quelle VARCHAR(40) NULL,               -- z. B. 'ek_import'
+        ek_import_id INT NULL,                 -- Rueckverweis (idempotent)
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_produkt (produkt_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // ek_import: Staging fuer eingelesene EK-Preislisten (CSV) – Rohstoff-/Bulk-EK je kg und
     // Fertigprodukt-Kapselpreise, jeweils mit Lieferant. Rohnamen aus der CSV; die Zuordnung zu
     // konkreten v4-Rohstoffen (item_id) bzw. Produkten (produkt_id) passiert nachgelagert

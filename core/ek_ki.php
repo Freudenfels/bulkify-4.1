@@ -143,6 +143,19 @@ function ek_lieferant_preis_schreiben(array $ek): void {
       [(int)$ek['item_id'], $lid, mb_substr((string)$ek['lieferant'], 0, 120) ?: null, $mengeAb, (float)$ek['preis'], (int)$ek['id'], $vers]);
 }
 
+// Zukauf-Preis eines Fertigprodukts aus einer EK-Zeile übernehmen (idempotent über ek_import_id).
+// Menge (aus der CSV) = Staffelanker, Versandart aus AIR/SEA/TRAIN im Namen. Rein intern (Zukauf).
+function produkt_zukauf_preis_schreiben(array $ek, int $produkt_id): void {
+    if ((string)$ek['typ'] !== 'fertigprodukt' || $produkt_id <= 0) return;
+    if (scalar("SELECT id FROM produkt_lieferant_preis WHERE ek_import_id=?", [(int)$ek['id']])) return;   // schon da
+    $lid = ek_lieferant_id($ek['lieferant']);
+    q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,lieferant_name,menge_ab,preis,einheit,groesse,waehrung,versandart,stand,quelle,ek_import_id)
+       VALUES (?,?,?,?,?,?,?, 'EUR', ?, CURDATE(), 'ek_import', ?)",
+      [$produkt_id, $lid, mb_substr((string)$ek['lieferant'], 0, 120) ?: null, (float)($ek['menge'] ?? 0), (float)$ek['preis'],
+       mb_substr((string)($ek['einheit'] ?? 'kapsel'), 0, 16), mb_substr((string)($ek['groesse'] ?? ''), 0, 60) ?: null,
+       ek_versandart((string)$ek['name']) ?: null, (int)$ek['id']]);
+}
+
 // Eine Zeile bestätigen (Vorschlag oder manuelle Zuordnung annehmen).
 function ek_bestaetigen(int $id): bool {
     $ek = one("SELECT * FROM ek_import WHERE id=?", [$id]);
@@ -151,6 +164,7 @@ function ek_bestaetigen(int $id): bool {
     if ((string)$ek['typ'] === 'fertigprodukt' && empty($ek['produkt_id'])) return false;
     q("UPDATE ek_import SET status='bestaetigt' WHERE id=?", [$id]);
     ek_lieferant_preis_schreiben($ek);
+    if ((string)$ek['typ'] === 'fertigprodukt') produkt_zukauf_preis_schreiben($ek, (int)$ek['produkt_id']);
     return true;
 }
 
@@ -271,6 +285,7 @@ function ek_neu_anlegen(int $id): array {
           [naechste_nummer('P'), mb_substr($name, 0, 190), $notiz]);
         $pid = (int) insert_id();
         q("UPDATE ek_import SET produkt_id=?, status='bestaetigt', ki_hinweis='Produkt neu angelegt' WHERE id=?", [$pid, $id]);
+        produkt_zukauf_preis_schreiben($ek, $pid);   // Zukauf-Preis gleich ans neue Produkt
         return ['ok' => true, 'typ' => 'produkt', 'neu_id' => $pid, 'name' => (string)$ek['name']];
     }
 
