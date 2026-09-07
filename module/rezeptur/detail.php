@@ -271,7 +271,7 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     </tbody>
   </table></div>
 </div>
-<?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 ORDER BY firma"), '?p=rezeptur_detail&id=' . (int)$id); ?>
+<?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=rezeptur_detail&id=' . (int)$id); ?>
 <?php endif; ?>
 
 <?php if (!$neu && $liefAngebote): ?>

@@ -430,7 +430,7 @@ if ($anfZutaten):
     </tbody>
   </table></div>
 </div>
-<?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 ORDER BY firma"), '?p=portal_anfrage&id=' . (int)$id); ?>
+<?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=portal_anfrage&id=' . (int)$id); ?>
 <?php endif; ?>
 
 <?php // Status nur zur Info – gesetzt wird er automatisch (Angebot bauen/senden/absagen).

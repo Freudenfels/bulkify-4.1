@@ -33,7 +33,7 @@ if ($art === 'fertigprodukt' && $rez_id > 0) {
     $einh    = anfrage_einheit_fuer_form($form);
     $n = 0; $gemailt = 0;
     foreach ($lids as $lid) {
-        if (!scalar("SELECT id FROM lieferanten WHERE id=? AND gesperrt=0", [$lid])) continue;
+        if (!scalar("SELECT id FROM lieferanten WHERE id=? AND gesperrt=0 AND COALESCE(keine_anfragen,0)=0", [$lid])) continue;
         $af = lieferant_anfrage_stellen($lid, null, $betreff, $menge > 0 ? $menge : null, $einh, $notiz, $coa, $opt);
         $n++;
         if (mail_bereit() && function_exists('mail_lieferant_anfrage') && mail_lieferant_anfrage((int)$af) === '') $gemailt++;
@@ -47,7 +47,7 @@ $einh = (string) (scalar("SELECT preis_bezug FROM item WHERE id=?", [$item_id]) 
 
 $n = 0; $gemailt = 0;
 foreach ($lids as $lid) {
-    if (!scalar("SELECT id FROM lieferanten WHERE id=? AND gesperrt=0", [$lid])) continue;
+    if (!scalar("SELECT id FROM lieferanten WHERE id=? AND gesperrt=0 AND COALESCE(keine_anfragen,0)=0", [$lid])) continue;
     $af = lieferant_anfrage_stellen($lid, $item_id, '', $menge > 0 ? $menge : null, $einh, $notiz, $coa, $lieferOpt);
     $n++;
     if (mail_bereit() && function_exists('mail_lieferant_anfrage') && mail_lieferant_anfrage((int)$af) === '') $gemailt++;

@@ -16,7 +16,7 @@ $gesamt = (int) scalar("SELECT COUNT(*) FROM lieferant_preisliste");
 $norm = fn($s) => trim(preg_replace('/\s+/', ' ', preg_replace('/[^a-z0-9äöüß ]+/u', ' ', mb_strtolower(trim((string)$s)))));
 $itemMap = [];
 foreach (all("SELECT id, name FROM item WHERE kategorie='rohstoff'") as $it) { $n = $norm($it['name']); if ($n !== '' && !isset($itemMap[$n])) $itemMap[$n] = (int)$it['id']; }
-$lieferanten = all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 ORDER BY firma");
+$lieferanten = all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma");
 
 render_header('lief_preisliste', 'EK-Preisliste');
 bx_head('EK-Preisliste (Referenz)', $gesamt . ' Rohstoffpreise aus v3 – bekannte Rohstoffe sind verlinkt und direkt anfragbar');

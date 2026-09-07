@@ -99,9 +99,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $felder = ['lieferantennummer','firma','ansprechpartner','email','telefon','gesperrt','sprache','kategorien','fertig_formen','webseite',
                    'strasse','hausnummer','plz','ort','land','ust_id',
-                   'waehrung','zahlungsart','zahlungsziel_tage','lieferzeit_tage','mindestbestellwert','notiz'];
+                   'waehrung','zahlungsart','zahlungsziel_tage','lieferzeit_tage','mindestbestellwert','notiz',
+                   'keine_anfragen','shop_login','shop_passwort'];
         $vals = array_map($f, $felder);
-        $vals[array_search('gesperrt', $felder)]   = isset($_POST['gesperrt']) ? 1 : 0;
+        $vals[array_search('gesperrt', $felder)]        = isset($_POST['gesperrt']) ? 1 : 0;
+        $vals[array_search('keine_anfragen', $felder)]  = isset($_POST['keine_anfragen']) ? 1 : 0;
         foreach (['zahlungsziel_tage','lieferzeit_tage','mindestbestellwert'] as $nf) { $ix = array_search($nf, $felder); if (trim((string)$vals[$ix]) === '') $vals[$ix] = 0; }
         $katsSel = array_keys(array_intersect_key($KATS, (array)($_POST['kat'] ?? [])));
         $vals[array_search('kategorien', $felder)] = implode(',', $katsSel);
@@ -280,7 +282,27 @@ if (!$neu) {
           <label for="f_gesperrt" style="margin:0">Lieferant ist gesperrt</label>
         </div>
       </div>
+      <div class="bx-field"><label>Keine Preisanfragen <?= bx_hint('z. B. Onlineshop, bei dem wir direkt kaufen. Dann wird dieser Lieferant im Preisanfrage-Popup nicht mehr angeboten.') ?></label>
+        <div class="bx-check" style="padding-top:8px">
+          <input type="checkbox" name="keine_anfragen" id="f_keineanfr" value="1" <?= (int)($l['keine_anfragen']??0)===1?'checked':'' ?>>
+          <label for="f_keineanfr" style="margin:0">Keine Anfragen senden (Onlineshop – wir kaufen direkt)</label>
+        </div>
+      </div>
     </div>
+    <div style="font-weight:600;margin:14px 0 6px">Shop-Zugang <?= bx_hint('Gemeinsamer Login für den Onlineshop des Lieferanten, damit jeder im Team bestellen kann. Intern – nur für angemeldete Mitarbeiter sichtbar.') ?></div>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Shop-Login (Benutzer/E-Mail)</label><input type="text" name="shop_login" value="<?= $v('shop_login') ?>" autocomplete="off" placeholder="z. B. einkauf@firma.de"></div>
+      <div class="bx-field"><label>Shop-Passwort</label>
+        <div class="bx-row" style="gap:6px;flex-wrap:nowrap">
+          <input type="password" name="shop_passwort" id="f_shoppw" value="<?= $v('shop_passwort') ?>" autocomplete="new-password" style="flex:1">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="var p=document.getElementById('f_shoppw');p.type=p.type==='password'?'text':'password'">anzeigen</button>
+        </div>
+      </div>
+      <?php if (!$neu && trim((string)($l['webseite']??''))!==''): ?>
+      <div class="bx-field"><label>Shop öffnen</label><div style="padding-top:8px"><a class="btn btn-ghost btn-sm" href="<?= h($l['webseite']) ?>" target="_blank" rel="noopener">Zum Shop &#8599;</a></div></div>
+      <?php endif; ?>
+    </div>
+    <p class="muted" style="font-size:12px;margin:4px 0 0">Der Shop-Zugang ist ein gemeinsamer Team-Login und wird im Klartext gespeichert (nur intern sichtbar). Für sensible Zugänge besser einen Passwort-Manager nutzen.</p>
     <div class="bx-field"><label>Liefer-Kategorien <?= bx_hint('Was kann der Lieferant liefern? Steuert später die automatische Preisanfrage') ?></label>
       <div class="bx-row">
         <?php foreach ($KATS as $key=>$lbl): ?>

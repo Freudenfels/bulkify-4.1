@@ -892,7 +892,7 @@ if (!$neu) {
   </div>
 </section>
 <section data-panel="dok" hidden><?php dokument_panel('item', (int)$id, $lieferanten); ?></section>
-<?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 ORDER BY firma"), '?p=rohstoff&id=' . (int)$id . '&tab=ek'); ?>
+<?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=rohstoff&id=' . (int)$id . '&tab=ek'); ?>
 <?php endif; ?>
 
 <script>

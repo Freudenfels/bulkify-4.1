@@ -45,3 +45,7 @@ Im Reiter **Katalog** steht oben der Kasten **Alles auf einmal anfragen**: Ist e
 
 ## Katalog
 Der Reiter **Katalog** zeigt, was der Lieferant in seinem Portal hinterlegt oder als Preisliste hochgeladen hat (`core/lieferant_katalog.md`). **Preisliste einlesen** (nur bei eingerichteter KI) macht dasselbe von unserer Seite: Wer uns eine Liste per Mail schickt, muss sie nicht selbst hochladen - die Datei landet in der Ablage, die KI macht Zeilen daraus. Angelegt wird auch hier nichts von allein. Je Zeile steht **Anlegen** (neuer Artikel samt EK-Preis) oder – wenn es den Artikel über CAS-Nummer oder Namen schon gibt – **Preis dorthin**, dazu **ablehnen**. Für lange Kataloge gibt es „Alle übernehmen". Die Zahl am Reiter sind die noch offenen Zeilen.
+
+## Keine Anfragen + Shop-Zugang
+- **Haken „Keine Anfragen senden"** (`lieferanten.keine_anfragen`): z. B. Onlineshops (Buxtrade), bei denen direkt gekauft wird. Solche Lieferanten erscheinen NICHT mehr im Preisanfrage-Popup (alle `anfrage_modal`-Listen + `preis_anfragen`-Validierung filtern `COALESCE(keine_anfragen,0)=0`).
+- **Shop-Zugang** (`shop_login`, `shop_passwort`, + `webseite`): gemeinsamer Team-Login für den Shop, damit jeder Mitarbeiter bestellen kann. „anzeigen"-Knopf blendet das Passwort ein, „Zum Shop" öffnet die Webseite. Klartext-Speicherung (nur intern sichtbar) – Hinweis im Formular.

@@ -788,6 +788,9 @@ function init_schema(): void {
     ensure_column('lieferanten', 'wechat', "VARCHAR(80) NULL");
     ensure_column('lieferanten', 'whatsapp', "VARCHAR(40) NULL");
     ensure_column('lieferanten', 'logo', "VARCHAR(255) NULL");   // Dateiname in data/uploads
+    ensure_column('lieferanten', 'keine_anfragen', "TINYINT(1) NOT NULL DEFAULT 0");  // Onlineshop o. Ä. – keine Preisanfragen senden
+    ensure_column('lieferanten', 'shop_login', "VARCHAR(190) NULL");     // gemeinsamer Shop-Login (Benutzer/E-Mail)
+    ensure_column('lieferanten', 'shop_passwort', "VARCHAR(190) NULL");  // gemeinsames Shop-Passwort (intern, Team-Zugang)
     $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_einladung (
         id INT AUTO_INCREMENT PRIMARY KEY,
         lieferant_id INT NOT NULL,

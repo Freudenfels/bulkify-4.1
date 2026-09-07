@@ -506,7 +506,7 @@ if (!$neu):
       <div style="margin-top:10px;color:#8f231b;font-size:13px"><?= (int)$rk['ohne_preis'] ?> Rohstoff(e) ohne Lieferantenpreis &ndash; bitte zuerst anfragen, sonst ist die Kalkulation unvollst&auml;ndig.</div>
     <?php endif; ?>
   </div>
-  <?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 ORDER BY firma"), '?p=angebot&id=' . (int)$id); ?>
+  <?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=angebot&id=' . (int)$id); ?>
   <?php endif; ?>
 </div>
 
