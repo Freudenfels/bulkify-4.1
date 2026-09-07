@@ -96,7 +96,7 @@ $flash = $_SESSION['ek_flash'] ?? null; unset($_SESSION['ek_flash']);
 $kiDa  = ki_bereit();
 
 render_header('ek_import', 'EK-Preise (Import)');
-bx_head('EK-Preise (Import)', 'EK-Preise zuordnen – KI-Vorschlag oder von Hand', bx_btn('Zurück', '?p=lief_preisliste', 'ghost'));
+bx_head('EK-Preise (Import)', 'EK-Preise zuordnen – KI-Vorschlag oder von Hand', bx_btn('Lieferanten zuordnen', '?p=ek_lieferanten', 'ghost') . ' ' . bx_btn('Zurück', '?p=lief_preisliste', 'ghost'));
 if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h($flash) . '</div>';
 ?>
 <form method="get" class="bx-listbar">

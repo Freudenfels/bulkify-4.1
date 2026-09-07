@@ -220,6 +220,45 @@ function ek_links_bereinigen(): int {
     return $n;
 }
 
+// Lieferantennamen normieren (Klein, ohne Sonderzeichen/Leerzeichen) – „vita actives" == „VitaActives".
+function ek_lief_norm(string $s): string { return preg_replace('/[^a-z0-9]/', '', mb_strtolower(trim($s))); }
+
+// Passenden bestehenden Lieferanten zu einem Textnamen finden (normiert). Sonst null.
+function ek_lieferant_kandidat(string $name): ?int {
+    $n = ek_lief_norm($name); if ($n === '') return null;
+    foreach (all("SELECT id, firma FROM lieferanten") as $l) if (ek_lief_norm((string)$l['firma']) === $n) return (int)$l['id'];
+    return null;
+}
+
+// Einen Text-Lieferanten aus den EK-Preisen einem echten Lieferanten zuordnen (oder neu anlegen)
+// und alle Verweise (ek_import + Preistabellen) per id verknüpfen. Rückgabe: ['ok','id','firma','neu','zeilen'].
+function ek_lieferant_zuordnen(string $name, ?int $lieferant_id = null): array {
+    $name = trim($name); if ($name === '') return ['ok' => false, 'fehler' => 'Kein Name.'];
+    if (!$lieferant_id) $lieferant_id = ek_lieferant_kandidat($name);
+    $neu = false;
+    if (!$lieferant_id) {
+        q("INSERT INTO lieferanten (lieferantennummer, firma) VALUES (?, ?)", [naechste_nummer('L'), mb_substr($name, 0, 190)]);
+        $lieferant_id = (int) insert_id(); $neu = true;
+    }
+    $firma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lieferant_id]);
+    // EK-Import-Zeilen mit diesem Textnamen verknüpfen + Text auf die Firma normalisieren.
+    $st = q("UPDATE ek_import SET lieferant_id=?, lieferant=? WHERE lieferant=?", [$lieferant_id, $firma, $name]);
+    $zeilen = $st->rowCount();
+    // Preise, die nur den Textnamen tragen, nachträglich per id verknüpfen.
+    q("UPDATE lieferant_preis SET lieferant_id=? WHERE lieferant_id IS NULL AND lieferant_name=?", [$lieferant_id, $name]);
+    q("UPDATE produkt_lieferant_preis SET lieferant_id=? WHERE lieferant_id IS NULL AND lieferant_name=?", [$lieferant_id, $name]);
+    return ['ok' => true, 'id' => $lieferant_id, 'firma' => $firma, 'neu' => $neu, 'zeilen' => $zeilen];
+}
+
+// Ist ein Textname kein echter Lieferant (Marktplatz/Platzhalter/Müll)? Dann nicht anlegen.
+function ek_lief_ist_muell(string $name): bool {
+    $n = trim($name);
+    if (mb_strlen($n) < 3) return true;
+    if (is_numeric(str_replace([',', '.'], '', $n))) return true;
+    if (preg_match('/kg\s*$/i', $n)) return true;                          // z. B. „25kg" (Mengen-Fehlparse)
+    return in_array($n, ['Marktplatz', 'Alibaba', 'AliExpress', '1688', 'Made-in-China'], true);
+}
+
 // Lieferant-Alias speichern (Alias -> Firma, optional Kontakt). Idempotent über den Alias.
 function lieferant_alias_speichern(string $alias, string $firma, ?string $kontakt = null): void {
     $alias = trim($alias); $firma = trim($firma);

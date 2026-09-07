@@ -74,6 +74,7 @@ function route_rollen_map(): array {
         'bestellung_pdf'     => ['einkauf'],
         'preis_anfragen'     => ['einkauf', 'sales'],
         'ek_import'          => ['einkauf'],   // EK-Preislisten-Import (Rohstoff-EK + interne Fertigprodukt-Preise)
+        'ek_lieferanten'     => ['einkauf'],
         // Lieferantenportal: die Seiten pruefen selbst, dass ein Lieferant angemeldet ist.
         'lieferant_portal'        => ['*'],
         'lieferant_bestellung'    => ['*'],

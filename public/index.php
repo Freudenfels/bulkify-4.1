@@ -87,6 +87,7 @@ $routes = [
     'bestellung_pdf'     => 'einkauf/pdf.php',
     'preis_anfragen'     => 'einkauf/preis_anfragen.php',
     'ek_import'          => 'einkauf/ek_import.php',   // eingelesene EK-Preislisten (CSV) + Zuordnung
+    'ek_lieferanten'     => 'einkauf/ek_lieferanten.php',   // Text-Lieferanten der EK-Preise zuordnen/anlegen
     'bedarf'             => 'einkauf/bedarf.php',
     'einkaufsliste'      => 'einkauf/einkaufsliste.php',
     'benutzer'           => 'system/benutzer_liste.php',
