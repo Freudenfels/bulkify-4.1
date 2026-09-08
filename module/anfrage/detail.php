@@ -38,6 +38,21 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
     header('Location: ?p=anfrage&id=' . (int)$id . '&kizeilen=' . $n); exit;
 }
 
+// Kunde direkt aus der Anfrage anlegen und verknuepfen (Daten vorher pruefbar/editierbar).
+// Alle weiteren Kundenfelder haben DB-Defaults; portal_rezeptur ist standardmaessig an.
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kunde_anlegen') {
+    $g = fn($k) => trim((string)($_POST[$k] ?? ''));
+    if ($g('neu_firma') === '') { header('Location: ?p=anfrage&id=' . (int)$id . '&kfehler=1'); exit; }
+    q("INSERT INTO kunden (kundennummer, firma, ansprechpartner, email, telefon) VALUES (?,?,?,?,?)",
+      [naechste_nummer('K'), mb_substr($g('neu_firma'), 0, 190),
+       $g('neu_ansprechpartner') ?: null, $g('neu_email') ?: null, $g('neu_telefon') ?: null]);
+    $kid = insert_id();
+    q("UPDATE rezeptur_anfrage SET kunde_id=? WHERE id=?", [$kid, (int)$id]);
+    $anr = (string) scalar("SELECT nummer FROM rezeptur_anfrage WHERE id=?", [(int)$id]);
+    log_aktivitaet('kunde', $kid, 'team', 'Kunde aus Rezepturanfrage ' . $anr . ' angelegt und verknüpft.', 'notiz');
+    header('Location: ?p=anfrage&id=' . (int)$id . '&kunde_neu=1'); exit;
+}
+
 $fehler = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $f = fn($k) => trim($_POST[$k] ?? '');
@@ -203,6 +218,25 @@ if (!$neu):
     </form>
     <?php endif; ?>
   <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php if (isset($_GET['kunde_neu'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Kunde angelegt und mit der Anfrage verknüpft.</div>'; ?>
+<?php if (!$neu && empty($a['kunde_id'])): ?>
+<div class="bx-panel" style="border-color:var(--gruen)">
+  <h2 style="margin-top:0">Kunde anlegen &amp; verknüpfen</h2>
+  <p class="muted" style="margin-top:0">Diese Anfrage hat noch keinen Kunden. Daten prüfen bzw. ergänzen und anlegen – oder unten einen bestehenden Kunden auswählen.</p>
+  <?php if (isset($_GET['kfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:10px">Firma ist ein Pflichtfeld.</div><?php endif; ?>
+  <form method="post">
+    <input type="hidden" name="aktion" value="kunde_anlegen">
+    <div class="bx-grid">
+      <div class="bx-field"><label>Firma</label><input type="text" name="neu_firma" required placeholder="Firmenname"></div>
+      <div class="bx-field"><label>Ansprechpartner</label><input type="text" name="neu_ansprechpartner"></div>
+      <div class="bx-field"><label>E-Mail</label><input type="email" name="neu_email"></div>
+      <div class="bx-field"><label>Telefon</label><input type="text" name="neu_telefon"></div>
+    </div>
+    <button class="btn btn-primary" type="submit">Kunde anlegen &amp; verknüpfen</button>
+  </form>
 </div>
 <?php endif; ?>
 

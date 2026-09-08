@@ -13,6 +13,8 @@
 
 **Wunsch-Produktname:** Feld `rezeptur_anfrage.produktname` – vom Kunden im Portal angegebener Wunschname; dient beim „Rezeptur erstellen" als Default-Name der neuen Rezeptur.
 
+**Kunde anlegen aus der Anfrage:** Hat die Anfrage **noch keinen Kunden** (`kunde_id` leer), erscheint über dem Formular ein grünes Panel „Kunde anlegen & verknüpfen". Die Kundendaten (Firma – Pflicht, Ansprechpartner, E-Mail, Telefon) lassen sich dort **prüfen/ergänzen**, dann legt `aktion=kunde_anlegen` in einem Schritt einen Kunden an (Kundennummer automatisch `K-…`, `portal_rezeptur` an, übrige Felder per DB-Default) und verknüpft ihn mit der Anfrage. So deckt der Weg beides ab: **direkt anlegen** oder **erst prüfen**. Alternativ unten weiterhin einen **bestehenden** Kunden aus der Auswahl wählen.
+
 **Aktionen:**
 - **Speichern:** Kopf (inkl. Wunsch-Produktname) + Wunsch-/Zuordnungs-Zeilen (`rezeptur_anfrage_wunsch`).
 - **Rezeptur erstellen:** legt aus den zugeordneten Zeilen (Rohstoff + finale Menge) eine **Rezeptur** (`rezeptur` + `rezeptur_zutat`, Status Entwurf) an, verknüpft sie mit der Anfrage (`rezeptur_id`), setzt die Anfrage auf **beantwortet**, schreibt einen Verlaufseintrag und öffnet die neue Rezeptur im normalen Baukasten.
