@@ -2,6 +2,7 @@
 // Auftrag (Auftragsbestätigung) – Ansicht + Status
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/anfrage_ui.php';
 
 $id = (int)($_GET['id'] ?? 0);
 
@@ -11,6 +12,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     $bid = auftrag_express_bestellung($id, (int)($_POST['lieferant_id'] ?? 0));
     if ($bid) { header('Location: ?p=bestellung&id=' . $bid . '&ok=1'); exit; }
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nichts zu bestellen – alles auf Lager oder der Lieferant bietet die fehlenden Rohstoffe nicht.')); exit;
+}
+// Express-Zukauf des FERTIGPRODUKTS (Bulk) – nur Admin.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'express_bulk') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $bid = auftrag_express_bulk_bestellung($id, (int)($_POST['lieferant_id'] ?? 0));
+    if ($bid) { header('Location: ?p=bestellung&id=' . $bid . '&ok=1'); exit; }
+    header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Zukaufpreis für dieses Produkt bei dem Lieferanten hinterlegt.')); exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
@@ -69,6 +77,7 @@ $bStatus = function($b) {
 // EK-Preise je benötigtem Rohstoff (nur Admin) – „wo kann ich bestellen" + Express-Bestellung.
 $istAdmin = function_exists('has_role') && has_role('admin');
 $ekBedarf = []; $ekLieferanten = [];
+$zukaufPreise = []; $zukaufLief = []; $prodRezId = 0;
 if ($istAdmin && $pa) {
     foreach (produktion_materialbedarf((int)$pa['id']) as $bd) {
         $angebote = all("SELECT lp.lieferant_id, lp.menge_ab, lp.preis, lp.waehrung, COALESCE(l.firma, lp.lieferant_name, '') AS firma
@@ -78,6 +87,16 @@ if ($istAdmin && $pa) {
         $ekBedarf[] = $bd + ['angebote' => $angebote];
     }
 }
+// Fertigprodukt-Zukauf (Bulk): Zukaufpreise + Anfrage-Möglichkeit für das Produkt des Auftrags.
+if ($istAdmin && !empty($a['produkt_id'])) {
+    $prodRezId = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
+    $zukaufPreise = all("SELECT z.lieferant_id, z.menge_ab, z.preis, z.waehrung, z.einheit, z.groesse, z.incoterm, z.versandart,
+                                COALESCE(l.firma, z.lieferant_name, '') AS firma
+                         FROM produkt_lieferant_preis z LEFT JOIN lieferanten l ON l.id=z.lieferant_id
+                         WHERE z.produkt_id=? ORDER BY z.preis, z.menge_ab", [(int)$a['produkt_id']]);
+    foreach ($zukaufPreise as $z) if (!empty($z['lieferant_id'])) $zukaufLief[(int)$z['lieferant_id']] = (string)$z['firma'];
+}
+$anfrageLieferanten = $istAdmin ? all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma") : [];
 
 render_header('auftraege', $a['nummer']);
 bx_head($a['nummer'], 'Auftragsbestätigung', bx_btn('Zurück zur Liste', '?p=auftraege', 'ghost'));
@@ -175,7 +194,42 @@ echo '</div>';
     <p class="muted" style="font-size:12px;margin:8px 0 0">Legt sofort eine Bestellung (Entwurf) mit den fehlenden Rohstoffen an und öffnet sie – ohne den Umweg über Einkaufsbedarf/-liste. Absenden an den Lieferanten dann wie gewohnt in der Bestellung.</p>
     <?php endif; ?>
   <?php endif; ?>
+
+  <?php if ($zukaufPreise || $prodRezId): $nz = fn($x,$n=3)=>rtrim(rtrim(number_format((float)$x,$n,',','.'),'0'),','); ?>
+  <h3 style="margin:20px 0 8px;font-size:14px;font-weight:600">Fertigprodukt zukaufen (Bulk)</h3>
+  <?php if ($zukaufPreise): $VZ = versandart_liste(); ?>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Lieferant</th><th>Größe</th><th class="bx-num">ab Menge</th><th class="bx-num">EK je Einheit</th><th>Lieferbedingung</th></tr></thead>
+      <tbody>
+      <?php $bi = 0; foreach ($zukaufPreise as $z): $terms = array_filter([(string)$z['incoterm'], $z['versandart'] ? ($VZ[$z['versandart']] ?? $z['versandart']) : '']); ?>
+        <tr<?= $bi === 0 ? ' style="font-weight:600"' : '' ?>>
+          <td><?= h($z['firma'] ?: '–') ?><?= $bi === 0 ? ' <span class="muted" style="font-weight:normal">· günstigste</span>' : '' ?></td>
+          <td><?= $z['groesse'] ? h($z['groesse']) : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= (float)$z['menge_ab'] > 0 ? $nz($z['menge_ab']) : '–' ?></td>
+          <td class="bx-num"><?= $nz($z['preis'], 4) ?> <?= h($z['waehrung'] ?: 'EUR') ?><?= $z['einheit'] ? ' / ' . h($z['einheit']) : '' ?></td>
+          <td class="muted"><?= $terms ? h(implode(' · ', $terms)) : '–' ?></td>
+        </tr>
+      <?php $bi++; endforeach; ?>
+      </tbody>
+    </table></div>
+  <?php else: ?>
+    <div class="muted">Noch keine Zukaufpreise für dieses Produkt hinterlegt – per „Fertigprodukt anfragen" bei Lieferanten einholen.</div>
+  <?php endif; ?>
+  <div class="bx-row" style="gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center">
+    <?php if ($prodRezId) echo anfrage_produkt_button($prodRezId, (string)($a['produkt_name'] ?? ''), '', 'Fertigprodukt anfragen'); ?>
+    <?php if ($zukaufLief): ?><span class="muted" style="font-size:13px">· Express-Zukauf (Bulk, überspringt den Einkauf):</span>
+      <?php foreach ($zukaufLief as $lid => $firma): ?>
+      <form method="post" style="margin:0" onsubmit="return confirm('Fertigprodukt als Bulk direkt bei diesem Lieferanten bestellen?');">
+        <input type="hidden" name="aktion" value="express_bulk"><input type="hidden" name="lieferant_id" value="<?= (int)$lid ?>">
+        <button class="btn btn-primary btn-sm" type="submit" data-busy="Bestellt…">Express bei <?= h($firma ?: 'Lieferant') ?></button>
+      </form>
+      <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+  <p class="muted" style="font-size:12px;margin:8px 0 0">Zukauf des fertigen Produkts als Bulk (Kunde sieht das nie). „Anfragen" holt Preise bei Lieferanten ein; „Express" legt direkt eine Bulk-Bestellung an.</p>
+  <?php endif; ?>
 </div>
+<?php anfrage_modal($anfrageLieferanten, '?p=auftrag&id=' . $id); ?>
 <?php endif; ?>
 
 <form method="post" class="bx-form">

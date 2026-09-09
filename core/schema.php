@@ -3964,6 +3964,33 @@ function auftrag_express_bestellung(int $auftrag_id, int $lieferant_id): ?int {
     return $bid;
 }
 
+// Express-Bestellung eines FERTIGPRODUKTS (Bulk-Zukauf) direkt aus einem Auftrag.
+// Legt eine Bestellung mit EINER Bulk-Position an (item_id NULL, Freitext = Produktname), Menge =
+// Packungen × Einheiten je Packung, zum passenden Staffelpreis des Lieferanten (produkt_lieferant_preis).
+// Verknüpft über bestellung_position.auftrag_id. Rückgabe: bestellung-id oder null (kein Zukaufpreis).
+function auftrag_express_bulk_bestellung(int $auftrag_id, int $lieferant_id): ?int {
+    if ($auftrag_id <= 0 || $lieferant_id <= 0) return null;
+    $a = one("SELECT a.menge, a.produkt_id, p.name, p.einheiten_pro_packung
+              FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    if (!$a || !$a['produkt_id']) return null;
+    $stk = (int)$a['menge'] * (int)($a['einheiten_pro_packung'] ?? 0);
+    if ($stk <= 0) $stk = (int)$a['menge'];
+    $preis = null; $einheit = 'Stück'; $groesse = '';
+    foreach (all("SELECT preis, menge_ab, einheit, groesse FROM produkt_lieferant_preis
+                  WHERE produkt_id=? AND lieferant_id=? AND (waehrung IS NULL OR waehrung='EUR') ORDER BY menge_ab", [(int)$a['produkt_id'], $lieferant_id]) as $s) {
+        if ($preis === null) { $preis = (float)$s['preis']; $einheit = $s['einheit'] ?: 'Stück'; $groesse = (string)$s['groesse']; }
+        if ((float)$s['menge_ab'] <= $stk) { $preis = (float)$s['preis']; $einheit = $s['einheit'] ?: 'Stück'; $groesse = (string)$s['groesse']; }
+    }
+    if ($preis === null) return null;
+    q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum) VALUES (?,?,?,?,CURDATE())",
+      [naechste_nummer('BE'), $lieferant_id, 'offen', 'Express Fertigprodukt-Zukauf aus Auftrag ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id])]);
+    $bid = insert_id();
+    $bez = trim((string)$a['name'] . ($groesse !== '' ? ' · ' . $groesse : '')) ?: 'Fertigprodukt';
+    q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,NULL,?,?,?,?,?,0)",
+      [$bid, $bez, $stk, $preis, $einheit, $auftrag_id]);
+    return $bid;
+}
+
 // Rohstoffe für einen Produktionsauftrag nach FEFO entnehmen. Idempotent; blockiert bei zu wenig Bestand.
 function produktion_rohstoffe_entnehmen(int $pa_id): array {
     if ((int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=?", [$pa_id]) > 0) return ['ok'=>true, 'fehlt'=>[]];
