@@ -590,6 +590,23 @@ function init_schema(): void {
         KEY idx_produkt (produkt_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // kontingent: Rahmenvertrag/Jahresvertrag – Kunde ruft aus einer vereinbarten Gesamtmenge zum
+    // Festpreis Teilmengen ab (jeder Abruf erzeugt einen Auftrag; abgerufen steigt, Rest sinkt).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS kontingent (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        kunde_id INT NOT NULL,
+        produkt_id INT NOT NULL,
+        gesamt_menge INT NOT NULL DEFAULT 0,          -- vereinbarte Menge (in Packungen = Auftragseinheit)
+        abgerufen INT NOT NULL DEFAULT 0,             -- Summe der bisher abgerufenen Mengen
+        vk_stueck DECIMAL(12,4) NOT NULL DEFAULT 0,   -- vereinbarter VK je Packung
+        gueltig_von DATE NULL,
+        gueltig_bis DATE NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'aktiv',  -- aktiv | beendet
+        notiz TEXT NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_kunde (kunde_id), KEY idx_produkt (produkt_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // ek_import: Staging fuer eingelesene EK-Preislisten (CSV) – Rohstoff-/Bulk-EK je kg und
     // Fertigprodukt-Kapselpreise, jeweils mit Lieferant. Rohnamen aus der CSV; die Zuordnung zu
     // konkreten v4-Rohstoffen (item_id) bzw. Produkten (produkt_id) passiert nachgelagert
@@ -947,6 +964,7 @@ function init_schema(): void {
     // Angebot als Preismatrix (Kunde wählt Zelle: Stückzahl × Bestellmenge) -> gewählte Werte fließen in Auftrag + Produktion
     ensure_column('auftrag', 'stueck', "INT NULL");
     ensure_column('auftrag', 'verpackung_id', "INT NULL");
+    ensure_column('auftrag', 'kontingent_id', "INT NULL");   // Abruf aus einem Rahmenvertrag/Kontingent
     ensure_column('produktionsauftrag', 'stueck', "INT NULL");
     ensure_column('produktionsauftrag', 'verpackung_id', "INT NULL");
     ensure_column('angebot', 'kunde_ausgeblendet', "TINYINT(1) NOT NULL DEFAULT 0");  // Kunde hat es aus seiner Liste entfernt (Löschen)
@@ -4115,6 +4133,39 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     }
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftragsbestätigung, Rechnung & Produktionsauftrag automatisch erzeugt.', 'auftrag', 'auftrag', $aid);
     return $aid;
+}
+
+// Abruf aus einem Kontingent (Rahmenvertrag/Jahresvertrag): erzeugt einen Auftrag zum vereinbarten
+// Festpreis (+ Rechnung + Produktionsauftrag + Stationen) und schreibt die abgerufene Menge fort.
+// Rueckgabe: ['ok'=>true,'auftrag_id'=>…,'rest'=>…] oder ['ok'=>false,'fehler'=>…].
+function kontingent_abruf(int $kontingent_id, int $menge): array {
+    $k = one("SELECT * FROM kontingent WHERE id=?", [$kontingent_id]);
+    if (!$k) return ['ok' => false, 'fehler' => 'Kontingent nicht gefunden.'];
+    if (($k['status'] ?? '') !== 'aktiv') return ['ok' => false, 'fehler' => 'Dieses Kontingent ist nicht aktiv.'];
+    if (!empty($k['gueltig_bis']) && (string)$k['gueltig_bis'] < gmdate('Y-m-d')) return ['ok' => false, 'fehler' => 'Dieses Kontingent ist abgelaufen.'];
+    $rest = (int)$k['gesamt_menge'] - (int)$k['abgerufen'];
+    if ($menge < 1) return ['ok' => false, 'fehler' => 'Bitte eine Menge größer 0 abrufen.'];
+    if ($menge > $rest) return ['ok' => false, 'fehler' => 'Nur noch ' . $rest . ' verfügbar.'];
+
+    $kid = (int)$k['kunde_id']; $pid = (int)$k['produkt_id']; $vk = (float)$k['vk_stueck'];
+    $netto = round($menge * $vk, 2);
+    q("INSERT INTO auftrag (nummer,kunde_id,produkt_id,menge,vk_stueck,gesamt_netto,status,kontingent_id) VALUES (?,?,?,?,?,?,?,?)",
+      [naechste_nummer('AB'), $kid, $pid, $menge, $vk, $netto, 'offen', $kontingent_id]);
+    $aid = insert_id();
+    $land = scalar("SELECT land FROM kunden WHERE id=?", [$kid]) ?: 'DE';
+    $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
+    $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum) VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
+      [naechste_nummer('RE'), 'rechnung', $aid, $kid, $netto, $ustP, $ust, $brutto, 'offen']);
+    $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
+    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,produktionsart,status) VALUES (?,?,?,?,?,?,?)",
+      [naechste_nummer('PR'), $aid, $kid, $pid, $menge, 'fremd', 'offen']);
+    $paid = insert_id();
+    foreach (produktionsschritte_fuer($form, true) as $i => $station)
+        q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
+    q("UPDATE kontingent SET abgerufen = abgerufen + ? WHERE id=?", [$menge, $kontingent_id]);
+    log_aktivitaet('kunde', $kid, 'kunde', 'Abruf ' . $menge . ' aus Jahresvertrag/Kontingent – Auftrag, Rechnung & Produktionsauftrag erzeugt.', 'auftrag', 'auftrag', $aid);
+    return ['ok' => true, 'auftrag_id' => $aid, 'rest' => $rest - $menge];
 }
 
 // Ältere Angebote wurden gebaut, bevor die Positionen ihre Konfiguration mitspeicherten.

@@ -94,3 +94,6 @@ Schickt der Kunde eine Rezepturanfrage, entwickelt die KI sofort einen internen 
 ## Rechnungen und Rezeptur-Freigabe
 - **Ansicht „Rechnungen"** listet je Beleg Nummer/Datum/Betrag/Status und bietet pro Zeile einen **PDF-Download** (`v=rechnung_pdf&aid=<auftrag_id>`, prüft Eigentum über die Auftragsliste des Kunden). Ohne verknüpften Auftrag kein Link.
 - **Rezeptur annehmen:** Nach der Freigabe (`rezeptur_annehmen`) führt der Weg zu `v=prodanfrage` (Menge/Verpackung), **falls** `portal_produkte` frei ist. Ist das nicht der Fall, ginge `prodanfrage` ins Leere (Rückfall auf `start`) – dann leitet der Handler auf die Rezeptur selbst (`v=rezeptur&rid=…&freigegeben=1`), die jetzt als angenommen mit Erfolgshinweis erscheint.
+
+## Jahresverträge / Kontingente (Abruf)
+Hat der Kunde aktive Kontingente (`kontingent`, siehe `module/kontingent/liste.md`), erscheint der Menüpunkt **„Jahresverträge"** (View `kontingente`). Je Vertrag: Produkt, vereinbarter Preis, gültig bis, sowie **vereinbart / abgerufen / Rest**. Über das Abruf-Formular (`aktion=kontingent_abruf`, max = Rest) ruft der Kunde eine Menge ab → `kontingent_abruf()` erzeugt Auftrag + Rechnung + Produktionsauftrag zum vereinbarten Preis und senkt den Rest. Der Handler prüft, dass das Kontingent **diesem** Kunden gehört und nicht abgelaufen ist. Kein EK/Zukauf sichtbar – nur der vereinbarte VK.

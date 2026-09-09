@@ -19,7 +19,7 @@ function fmt_zeit(?string $utc, string $fmt = 'd.m.Y H:i'): string {
 function bx_nav(): array {
     return [
         'Start'        => ['dashboard' => 'Dashboard'],
-        'Vertrieb'     => ['kunden' => 'Kunden', 'partner' => 'Partner', 'angebote' => 'Angebote', 'auftraege' => 'Aufträge'],
+        'Vertrieb'     => ['kunden' => 'Kunden', 'partner' => 'Partner', 'angebote' => 'Angebote', 'auftraege' => 'Aufträge', 'kontingente' => 'Kontingente'],
         'Anfragen'     => [
             'anfragen'           => 'Rezepturanfragen',
             'paf_produkt'        => ['label'=>'Produktanfragen',        'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=produkt',        'typ'=>'produkt'],

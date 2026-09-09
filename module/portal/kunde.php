@@ -205,6 +205,19 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     header('Location: ?p=portal&token=' . $token . '&v=' . $frZiel . '&rid=' . $rid . '&freigegeben=1'); exit;
 }
 
+// Abruf aus einem Jahresvertrag/Kontingent: erzeugt einen Auftrag zum vereinbarten Preis.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kontingent_abruf') {
+    $konId = (int)($_POST['kontingent_id'] ?? 0);
+    $menge = (int)($_POST['menge'] ?? 0);
+    // Nur eigene Kontingente – Fremdzugriff verhindern.
+    if (!$konId || !scalar("SELECT id FROM kontingent WHERE id=? AND kunde_id=?", [$konId, (int)$k['id']])) {
+        header('Location: ?p=portal&token=' . $token . '&v=kontingente&kfehler=' . urlencode('Vertrag nicht gefunden.')); exit;
+    }
+    $r = kontingent_abruf($konId, $menge);
+    if (!empty($r['ok'])) { header('Location: ?p=portal&token=' . $token . '&v=kontingente&abgerufen=' . $menge); exit; }
+    header('Location: ?p=portal&token=' . $token . '&v=kontingente&kfehler=' . urlencode((string)($r['fehler'] ?? 'Abruf fehlgeschlagen.'))); exit;
+}
+
 // Rezeptur-Vorschlag ablehnen (Pflicht-Grund) -> Status abgelehnt, Team überarbeitet
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rezeptur_ablehnen') {
     $rid   = (int)($_POST['rezeptur_id'] ?? 0);
@@ -496,12 +509,15 @@ if ($k['portal_rezeptur'])     { $L['rezepturen'] = 'Rezepturen';  $L['anfrage']
 if ($k['portal_produkte'])     { $L['produkte']   = 'Produkte';    $L['prodanfrage'] = 'Produkt anfragen'; }
 if ($k['portal_rohstoffe'])    { $L['rohstoffe']  = 'Rohstoffe';   $L['rohanfrage'] = 'Rohstoff anfragen'; }
 if ($k['portal_dienstleistung']) $L['dienstleistung'] = 'Dienstleistung anfragen';
+// Jahresverträge/Kontingente: Menüpunkt nur, wenn der Kunde aktive Verträge hat.
+$hatKontingente = (int) scalar("SELECT COUNT(*) FROM kontingent WHERE kunde_id=? AND status='aktiv'", [(int)$k['id']]);
+if ($hatKontingente > 0) $L['kontingente'] = 'Jahresverträge';
 $L += ['angebote' => 'Angebote', 'bestellungen' => 'Bestellungen', 'rechnungen' => 'Rechnungen'];
 $NAVGROUPS = [
     ''          => ['start'],
     'Katalog'   => ['rezepturen', 'produkte', 'rohstoffe'],
     'Anfragen'  => ['meine_anfragen', 'anfrage', 'prodanfrage', 'rohanfrage', 'dienstleistung'],
-    'Vorgänge'  => ['angebote', 'bestellungen', 'rechnungen'],
+    'Vorgänge'  => ['kontingente', 'angebote', 'bestellungen', 'rechnungen'],
 ];
 // Detailansichten (kein Menüpunkt) – gültig je nach Freischaltung; hebt den Katalog-Punkt hervor
 $detailParent = [];
@@ -1953,6 +1969,43 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
 
   <?php endif; ?>
+
+<?php elseif ($view === 'kontingente'):
+  $kons = all("SELECT k.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
+               FROM kontingent k LEFT JOIN produkt p ON p.id=k.produkt_id
+               WHERE k.kunde_id=? AND k.status='aktiv' ORDER BY k.angelegt DESC", [(int)$k['id']]);
+  $nf = fn($x) => number_format((int)$x, 0, ',', '.'); ?>
+  <h1 style="margin-bottom:4px">Ihre Jahresverträge</h1>
+  <p class="bx-sub">Rufen Sie Ihre vereinbarten Mengen ab – jeder Abruf wird automatisch eine Bestellung zum vereinbarten Preis.</p>
+  <?php if (isset($_GET['abgerufen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px"><?= (int)$_GET['abgerufen'] ?> Packungen abgerufen – Ihre Bestellung wurde angelegt (siehe „Bestellungen").</div><?php endif; ?>
+  <?php if (isset($_GET['kfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['kfehler']) ?></div><?php endif; ?>
+  <?php if (!$kons): ?><div class="bx-panel"><div class="muted">Aktuell keine aktiven Verträge.</div></div>
+  <?php else: foreach ($kons as $kon): $rest = (int)$kon['gesamt_menge'] - (int)$kon['abgerufen'];
+      $bis = $kon['gueltig_bis'] ? date('d.m.Y', strtotime((string)$kon['gueltig_bis'])) : null;
+      $ab  = !empty($kon['gueltig_bis']) && (string)$kon['gueltig_bis'] < gmdate('Y-m-d'); ?>
+    <div class="bx-panel">
+      <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0"><?= h($kon['produkt'] ?: 'Produkt') ?></h2>
+        <div class="muted">Ihr Preis: <?= number_format((float)$kon['vk_stueck'], 2, ',', '.') ?> &euro; / Packung<?= $bis ? ' · gültig bis ' . h($bis) : '' ?></div>
+      </div>
+      <div class="bx-row" style="gap:24px;flex-wrap:wrap;margin:12px 0">
+        <div><div class="k muted">Vereinbart</div><div><?= $nf($kon['gesamt_menge']) ?></div></div>
+        <div><div class="k muted">Abgerufen</div><div><?= $nf($kon['abgerufen']) ?></div></div>
+        <div><div class="k muted">Rest</div><div><strong><?= $nf($rest) ?></strong></div></div>
+      </div>
+      <?php if ($ab): ?><div class="muted">Dieser Vertrag ist abgelaufen – bitte melden Sie sich bei uns.</div>
+      <?php elseif ($rest <= 0): ?><div class="muted">Kontingent ausgeschöpft.</div>
+      <?php else: ?>
+      <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap" onsubmit="return confirm('Menge verbindlich abrufen? Es entsteht eine Bestellung zum vereinbarten Preis.');">
+        <input type="hidden" name="aktion" value="kontingent_abruf">
+        <input type="hidden" name="kontingent_id" value="<?= (int)$kon['id'] ?>">
+        <div class="bx-field" style="margin:0;max-width:200px"><label>Menge abrufen (max. <?= $nf($rest) ?>)</label>
+          <input type="number" name="menge" min="1" max="<?= $rest ?>" required placeholder="z. B. 5000"></div>
+        <button class="btn btn-primary" type="submit">Menge abrufen</button>
+      </form>
+      <?php endif; ?>
+    </div>
+  <?php endforeach; endif; ?>
 
 <?php elseif ($view === 'agb'):
   // Aktuelle Fassung, oder eine bestimmte über ?fassung=<id> – so lässt sich nachlesen, was bei

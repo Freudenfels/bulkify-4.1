@@ -60,6 +60,7 @@ $routes = [
     'angebot'         => 'angebot/detail.php',
     'angebot_pdf'     => 'angebot/pdf.php',
     'auftraege'       => 'auftrag/liste.php',
+    'kontingente'     => 'kontingent/liste.php',
     'auftrag'         => 'auftrag/detail.php',
     'rechnungen'      => 'beleg/rechnungen_liste.php',
     'rechnung'        => 'beleg/detail.php',
