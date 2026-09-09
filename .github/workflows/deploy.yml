@@ -63,7 +63,11 @@ jobs:
             echo "Keine relevanten Aenderungen - nichts hochzuladen."
             exit 0
           fi
-          sudo apt-get update -qq
+          # Fremd-Paketquellen auf dem Runner (z. B. google-chrome) koennen "apt-get update"
+          # mit "Hash Sum mismatch" (exit 100) sprengen. Wir brauchen nur lftp aus den Ubuntu-
+          # Basisquellen (ubuntu.sources), daher die *.list-Fremdquellen vorher entfernen.
+          sudo rm -f /etc/apt/sources.list.d/*.list || true
+          sudo apt-get update -qq || sudo apt-get update -qq --allow-releaseinfo-change || true
           sudo apt-get install -y -qq lftp
           REMOTE="${SFTP_PATH%/}"
           esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
