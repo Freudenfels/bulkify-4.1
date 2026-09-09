@@ -595,5 +595,32 @@ function posRecalc(){
   posRecalc();
 })();
 </script>
+
+<?php // PDF-Vorschau direkt auf der Seite (wie in v3): zeigt genau das ausgelieferte PDF –
+      // entweder das generierte bulkify-PDF oder das nachgereichte v3-Original. Das PDF wird
+      // erst erzeugt, wenn das Panel offen ist (lazy), damit das Bearbeiten schnell bleibt. ?>
+<details class="bx-panel" id="angPdfVorschau" open style="margin-top:16px">
+  <summary style="cursor:pointer">PDF-Vorschau<span class="muted" style="font-weight:400;font-size:13px"> &middot; genau das, was der Kunde als Angebot bekommt</span></summary>
+  <div style="margin-top:12px">
+    <div class="bx-row" style="gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap">
+      <a class="btn btn-ghost btn-sm" target="_blank" href="?p=angebot_pdf&id=<?= (int)$id ?>">&#8681; In neuem Tab &ouml;ffnen</a>
+      <button type="button" class="btn btn-ghost btn-sm" id="angPdfReload">Neu laden</button>
+      <span class="muted" style="font-size:12px">Nach dem Speichern von Positionen hier neu laden, um die &Auml;nderung zu sehen.</span>
+    </div>
+    <iframe id="angPdfFrame" data-src="?p=angebot_pdf&id=<?= (int)$id ?>" title="Angebots-PDF Vorschau" style="width:100%;height:80vh;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>
+  </div>
+</details>
+<script>
+(function(){
+  var d=document.getElementById('angPdfVorschau'); if(!d) return;
+  var f=document.getElementById('angPdfFrame'); if(!f) return;
+  var src=f.getAttribute('data-src');
+  function load(){ f.src = src + '&_=' + Date.now(); }         // Cache umgehen, damit "Neu laden" wirklich neu baut
+  function ensure(){ if(d.open && !f.getAttribute('src')) load(); }
+  d.addEventListener('toggle', ensure);
+  var rb=document.getElementById('angPdfReload'); if(rb) rb.addEventListener('click', function(){ d.open=true; load(); });
+  ensure();
+})();
+</script>
 <?php endif;
 render_footer();
