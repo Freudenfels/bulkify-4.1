@@ -40,6 +40,7 @@ $routes = [
     'rohstoff'       => 'lager/rohstoff_detail.php',
     'rohstoff_split' => 'lager/rohstoff_split.php',   // lange Namen (Varianten) aufschluesseln
     'freigaben'      => 'lager/freigaben.php',       // offene Kundenfreigaben (Spec/CoA)
+    'lieferant_preise'=> 'einkauf/lieferant_preise.php', // strukturierte Lieferantenpreise (Rohstoff/Fertigprodukt)
     'lief_preisliste'=> 'lager/lief_preisliste.php', // EK-Preisliste (Referenz aus v3)
     'spec_pdf'       => 'lager/spec_download.php',
     'spec_bulkify'   => 'lager/spec_bulkify.php',   // unsere Spezifikation (bulkify-Layout)
