@@ -980,6 +980,15 @@ function init_schema(): void {
               [$name, $form, $nr]);
         meta_set('fix_auftrag_produkt_v3', '1');
     }
+    // Einmalig: 4 offene Annapurna-Auftraege ohne verknuepftes Produkt auf Wunsch loeschen
+    // (AB-3213/3214/3215/3217 mit PR-2729..2732). Sicherung: nur solange sie wirklich KEIN Produkt haben.
+    if (meta_get('del_auftrag_ohne_produkt_v3', '') !== '1') {
+        foreach (['AB-3213', 'AB-3214', 'AB-3215', 'AB-3217'] as $nr) {
+            $r = one("SELECT id FROM auftrag WHERE nummer=? AND (produkt_id IS NULL OR produkt_id=0)", [$nr]);
+            if ($r) auftrag_komplett_loeschen((int)$r['id']);
+        }
+        meta_set('del_auftrag_ohne_produkt_v3', '1');
+    }
     ensure_column('produktionsauftrag', 'stueck', "INT NULL");
     ensure_column('produktionsauftrag', 'verpackung_id', "INT NULL");
     ensure_column('angebot', 'kunde_ausgeblendet', "TINYINT(1) NOT NULL DEFAULT 0");  // Kunde hat es aus seiner Liste entfernt (Löschen)
@@ -1597,6 +1606,29 @@ function produktion_groesse_label(int $produkt_id): string {
 // Es gibt keine echten Foreign Keys, deshalb wird jede Kind-Tabelle gezielt geleert.
 // Sicherheitsstopp: produzierte Chargen (Lagerbezug/Rückverfolgung) werden NICHT blind gelöscht.
 // Läuft in einer Transaktion (alles oder nichts). Rückgabe: ['ok'=>bool, 'geloescht'=>int] oder ['ok'=>false,'fehler'=>…].
+// Einen Auftrag vollständig entfernen: der Auftrag selbst plus alles, was ausschließlich an ihm hängt
+// (Produktionsauftrag/-schritte/-verbrauch, dessen Fertigware-Chargen, Rechnung/Lieferschein, Verlauf).
+// Gemeinsame Daten bleiben: Lieferantenbestellungen werden nur vom Auftrag GELÖST (auftrag_id=NULL),
+// nicht gelöscht. Gezielt per ID, kein pauschales DELETE. Rückgabe true, wenn der Auftrag existierte.
+function auftrag_komplett_loeschen(int $auftrag_id): bool {
+    if ($auftrag_id <= 0) return false;
+    if (!one("SELECT id FROM auftrag WHERE id=?", [$auftrag_id])) return false;
+    $paids = array_map('intval', array_column(all("SELECT id FROM produktionsauftrag WHERE auftrag_id=?", [$auftrag_id]), 'id'));
+    if ($paids) {
+        $in = implode(',', $paids);
+        q("DELETE FROM produktion_schritt   WHERE pa_id IN ($in)");
+        q("DELETE FROM produktion_verbrauch WHERE pa_id IN ($in)");
+        q("DELETE FROM charge               WHERE pa_id IN ($in)");
+        q("DELETE FROM produktionsauftrag   WHERE id IN ($in)");
+    }
+    q("DELETE FROM charge WHERE auftrag_id=?", [$auftrag_id]);
+    q("DELETE FROM beleg  WHERE auftrag_id=?", [$auftrag_id]);                     // Rechnung/Lieferschein dieses Auftrags
+    q("UPDATE bestellung_position SET auftrag_id=NULL WHERE auftrag_id=?", [$auftrag_id]);  // Bestellungen bleiben erhalten
+    q("DELETE FROM aktivitaet WHERE objekt_typ='auftrag' AND objekt_id=?", [$auftrag_id]);
+    q("DELETE FROM auftrag WHERE id=?", [$auftrag_id]);
+    return true;
+}
+
 function kunde_komplett_loeschen(int $kid): array {
     if ($kid <= 0) return ['ok' => false, 'fehler' => 'Ungültige Kunden-ID.'];
     if (!one("SELECT id FROM kunden WHERE id=?", [$kid])) return ['ok' => false, 'fehler' => 'Kunde nicht gefunden.'];
