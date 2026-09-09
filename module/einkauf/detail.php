@@ -2,6 +2,7 @@
 // Bestellung anlegen & bearbeiten – Positionen + Aktionen (bestellen / Wareneingang)
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/ki.php';
 
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
@@ -50,6 +51,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: ?p=bestellung&id=' . $id); exit;
     }
+    // KI-Erfassung: Lieferanten-Dokument (PDF/Foto/Tabelle) auslesen -> Positionen vorbelegen.
+    if ($aktion === 'ki_lesen' && $neu) {
+        if (!ki_bereit()) { header('Location: ?p=bestellung&id=neu&fehler=' . urlencode('KI ist nicht eingerichtet (nur auf beta).')); exit; }
+        if (empty($_FILES['ki_datei']['tmp_name']) || !is_uploaded_file($_FILES['ki_datei']['tmp_name'])) {
+            header('Location: ?p=bestellung&id=neu&fehler=' . urlencode('Bitte eine Datei auswählen.')); exit;
+        }
+        $ext = preg_replace('/[^a-z0-9]/', '', strtolower(pathinfo((string)$_FILES['ki_datei']['name'], PATHINFO_EXTENSION)));
+        $tmp = BX_UPLOADS . '/ki_best_' . bin2hex(random_bytes(6)) . '.' . $ext;
+        if (!move_uploaded_file($_FILES['ki_datei']['tmp_name'], $tmp)) { header('Location: ?p=bestellung&id=neu&fehler=' . urlencode('Datei konnte nicht gespeichert werden.')); exit; }
+        $anw = "Dies ist ein Lieferanten-Dokument (Bestellung, Auftragsbestätigung, Angebot oder Rechnung) für einen "
+             . "Nahrungsergänzungs-Lohnhersteller. Lies ALLE Positionen aus. Antworte NUR mit JSON in dieser Form:\n"
+             . '{"lieferant":"<Firmenname oder leer>","waehrung":"EUR","positionen":[{"bezeichnung":"<Artikel>","menge":<Zahl>,"einheit":"kg/Stück/…","ek_preis":<Preis je Einheit oder null>}]}'
+             . "\nMengen und Preise als Zahl mit Punkt als Dezimaltrennzeichen, ohne Tausenderpunkte. Preis je EINHEIT (nicht Positionssumme). Unbekannter Preis: null.";
+        $r = ki_datei_frage($tmp, $anw, ['json' => true, 'zweck' => 'Bestellung erfassen', 'max_tokens' => 3000]);
+        @unlink($tmp);
+        if (empty($r['ok'])) { header('Location: ?p=bestellung&id=neu&fehler=' . urlencode('KI: ' . ($r['fehler'] ?? 'Dokument nicht lesbar.'))); exit; }
+        $_SESSION['ki_best'] = $r['daten'] ?? [];
+        header('Location: ?p=bestellung&id=neu&ki=1'); exit;
+    }
     if ($neu) {
         q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz) VALUES (?,?,?,?)",
           [naechste_nummer('BE'), $lief, 'offen', trim($_POST['notiz'] ?? '')]);
@@ -83,6 +103,35 @@ $positionen = $neu ? [] : all("SELECT * FROM bestellung_position WHERE bestellun
 $bulkPositionen = $neu ? [] : all("SELECT * FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL ORDER BY sort,id", [(int)$id]);
 $EK = []; foreach ($items as $it) $EK[$it['id']] = (float)$it['ek_preis'];
 
+// KI-Vorbelegung: Ergebnis der Dokument-Auslesung auf Lieferant + Lagerartikel abbilden.
+$kiRaw = null; $kiTreffer = [];
+if ($neu && isset($_GET['ki']) && !empty($_SESSION['ki_best'])) {
+    $kiRaw = (array) $_SESSION['ki_best']; unset($_SESSION['ki_best']);
+    $norm = fn($s) => preg_replace('/[^a-z0-9]/', '', mb_strtolower(trim((string)$s)));
+    // Lieferant zuordnen (exakt normiert, sonst enthält-Treffer)
+    $ln = $norm($kiRaw['lieferant'] ?? '');
+    if ($ln !== '') foreach ($lieferanten as $l) {
+        $fn = $norm($l['firma']); if ($fn === '') continue;
+        if ($fn === $ln || str_contains($ln, $fn) || str_contains($fn, $ln)) { $b['lieferant_id'] = (int)$l['id']; break; }
+    }
+    // Positionen auf Artikel abbilden; längster Namensüberlapp gewinnt (sonst passt „Zink" auf alles)
+    $kiPos = [];
+    foreach ((array)($kiRaw['positionen'] ?? []) as $p) {
+        $bez = trim((string)($p['bezeichnung'] ?? '')); if ($bez === '') continue;
+        $bn = $norm($bez); $mid = 0; $best = 0;
+        foreach ($items as $it) {
+            $inn = $norm($it['name']); if ($inn === '') continue;
+            if ($inn === $bn) { $mid = (int)$it['id']; break; }
+            if (str_contains($bn, $inn) || str_contains($inn, $bn)) { $len = min(strlen($inn), strlen($bn)); if ($len > $best) { $best = $len; $mid = (int)$it['id']; } }
+        }
+        $menge = (float) str_replace(',', '.', (string)($p['menge'] ?? 0));
+        $ek    = ($p['ek_preis'] ?? null) !== null && $p['ek_preis'] !== '' ? (float) str_replace(',', '.', (string)$p['ek_preis']) : '';
+        $kiPos[]     = ['item_id' => $mid, 'menge' => $menge > 0 ? $menge : '', 'ek_preis' => $ek, 'auftrag_id' => ''];
+        $kiTreffer[] = ['bez' => $bez, 'item_id' => $mid, 'einheit' => trim((string)($p['einheit'] ?? '')), 'menge' => $menge, 'ek' => $ek];
+    }
+    if ($kiPos) $positionen = $kiPos;   // Formular unten mit den erkannten Zeilen vorbelegen
+}
+
 function pos_options(array $items, $sel): string {
     $s = '<option value="">– Artikel wählen –</option>';
     foreach ($items as $it) $s .= '<option value="' . (int)$it['id'] . '"' . ((int)$sel === (int)$it['id'] ? ' selected' : '') . '>' . h($it['name']) . ' (' . h($it['einheit']) . ')</option>';
@@ -108,7 +157,37 @@ bx_head($neu ? 'Neue Bestellung' : $v('nummer'), $neu ? 'Beim Lieferanten bestel
 if (isset($_GET['ok']))        echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['geliefert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Als geliefert verbucht – Chargen im Wareneingang (Quarantäne) angelegt.</div>';
 if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
-
+?>
+<?php if ($neu && ki_bereit()): ?>
+<div class="bx-panel" style="border-color:var(--gruen)">
+  <h2 style="margin-top:0">KI-Erfassung aus Dokument</h2>
+  <p class="muted" style="margin-top:0">Bestellbestätigung, Angebot oder Rechnung des Lieferanten hochladen (PDF, Foto, CSV/Excel). Die KI liest Lieferant und alle Positionen aus und füllt das Formular unten – zum Prüfen, nicht blind speichern.</p>
+  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="ki_lesen">
+    <div class="bx-field" style="margin:0"><label>Dokument</label>
+      <input type="file" name="ki_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.tsv,.txt,.xlsx"></div>
+    <button class="btn btn-primary" type="submit" data-busy="Liest Dokument…">Auslesen</button>
+    <span class="muted" style="font-size:12px;align-self:center">dauert 10–60 Sekunden</span>
+  </form>
+</div>
+<?php endif; ?>
+<?php if ($kiTreffer): ?>
+<div class="bx-panel badge-ok" style="padding:14px 16px">
+  <strong><?= count($kiTreffer) ?> Position(en) erkannt</strong> – bitte prüfen, Zuordnung/Preise korrigieren und unten speichern.
+  <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
+    <thead><tr><th>Erkannt (Dokument)</th><th>Zugeordnet</th><th class="bx-num">Menge</th><th class="bx-num">EK</th></tr></thead>
+    <tbody>
+    <?php foreach ($kiTreffer as $t): $itName = $t['item_id'] ? (string) scalar("SELECT name FROM item WHERE id=?", [$t['item_id']]) : ''; ?>
+      <tr><td><?= h($t['bez']) ?><?= $t['einheit'] !== '' ? ' <span class="muted">(' . h($t['einheit']) . ')</span>' : '' ?></td>
+          <td><?= $itName !== '' ? h($itName) : '<span style="color:#8f231b">nicht gefunden – unten Artikel wählen</span>' ?></td>
+          <td class="bx-num"><?= $t['menge'] > 0 ? h(rtrim(rtrim(number_format($t['menge'],3,',','.'),'0'),',')) : '–' ?></td>
+          <td class="bx-num"><?= $t['ek'] !== '' ? h(number_format((float)$t['ek'],4,',','.')) . ' &euro;' : '–' ?></td></tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
+<?php
 if (!$neu) {
     echo '<div class="bx-panel"><div class="bx-row" style="justify-content:space-between;align-items:center">';
     echo '<div>Status: ' . (match($b['status']){'offen'=>bx_badge('offen','info'),'bestellt'=>bx_badge('bestellt','warn'),'geliefert'=>bx_badge('geliefert','ok'),default=>bx_badge(status_text($b['status']))}) . '</div><div class="bx-row">';
