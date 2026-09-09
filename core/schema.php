@@ -2787,6 +2787,40 @@ function angebot_positionen(int $angebot_id): array {
     if ($staffeln) return angebot_positionen_aus_staffel($a, $staffeln);
     return angebot_positionen_auto($a);
 }
+
+// Ein per KI aus einem Angebots-PDF ausgelesenes Angebot in v4 uebernehmen: schreibt die Positionen
+// (Herstellung + Glas + Etikett je Staffel, gruppiert nach Menge) und die Staffel („Preis je fertiges
+// Produkt"). Ersetzt vorhandene Positionen/Staffeln dieses Angebots. Rueckgabe: Anzahl Positionen.
+function angebot_ki_pdf_uebernehmen(int $angebot_id, array $d): int {
+    $a = one("SELECT id, kunde_id FROM angebot WHERE id=?", [$angebot_id]);
+    if (!$a) return 0;
+    $pos = array_values(array_filter((array)($d['positionen'] ?? []), fn($p) => trim((string)($p['bezeichnung'] ?? '')) !== ''));
+    if (!$pos) return 0;
+    $land = (string) scalar("SELECT land FROM kunden WHERE id=?", [(int)$a['kunde_id']]) ?: 'DE';
+    $mwst = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
+    q("DELETE FROM angebot_position WHERE angebot_id=?", [$angebot_id]);
+    q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$angebot_id]);
+    $letter = []; $next = 0; $sort = 0;
+    foreach ($pos as $p) {
+        $menge = (float) str_replace(',', '.', (string)($p['menge'] ?? 0));
+        $key = (string)(int)$menge;
+        if (!isset($letter[$key])) $letter[$key] = chr(65 + $next++);
+        $preis = (float) str_replace(',', '.', (string)($p['preis'] ?? 0));
+        q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe)
+           VALUES (?,?,?,?,?,?,?,?,0,?,'ki_pdf',?)",
+          [$angebot_id, $sort++, mb_substr(trim((string)($p['artikelnr'] ?? '')), 0, 40),
+           mb_substr(trim((string)$p['bezeichnung']), 0, 200), trim((string)($p['beschreibung'] ?? '')),
+           $menge, mb_substr(trim((string)($p['einheit'] ?? 'Stk.')), 0, 20), (int) round($preis * 100), $mwst, $letter[$key]]);
+    }
+    $ssort = 0;
+    foreach ((array)($d['staffel'] ?? []) as $s) {
+        $m = (int) round((float) str_replace(',', '.', (string)($s['menge'] ?? 0)));
+        if ($m <= 0) continue;
+        q("INSERT INTO angebot_staffel (angebot_id,menge,stueck,vk_stueck,bestaetigt,sort) VALUES (?,?,?,?,0,?)",
+          [$angebot_id, $m, (int)($s['stueck'] ?? 0), (float) str_replace(',', '.', (string)($s['preis_pkg'] ?? 0)), $ssort++]);
+    }
+    return count($pos);
+}
 function angebot_hat_positionen(int $angebot_id): bool {
     // Nur echte Positionen zählen – reine Null-Zeilen (v3-Import) gelten nicht als „manuell überschrieben".
     return (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=? AND (menge>0 OR preis_cent>0)", [$angebot_id]) > 0;

@@ -4,6 +4,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status-Badges
+require_once BX_ROOT . '/core/ki.php';           // KI-Angebots-PDF-Erfassung
 
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
@@ -38,6 +39,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
         }
+    } elseif ($aktion === 'ki_pdf' && !$neu) {
+        // Angebots-PDF (v3) per KI auslesen und die Positionen + Staffel dieses Angebots damit füllen.
+        if (!ki_bereit()) { header('Location: ?p=angebot&id=' . $id . '&kifehler=' . urlencode('KI ist nicht eingerichtet (nur auf beta).')); exit; }
+        if (empty($_FILES['ki_datei']['tmp_name']) || !is_uploaded_file($_FILES['ki_datei']['tmp_name'])) { header('Location: ?p=angebot&id=' . $id . '&kifehler=' . urlencode('Bitte eine Datei wählen.')); exit; }
+        $ext = preg_replace('/[^a-z0-9]/', '', strtolower(pathinfo((string)$_FILES['ki_datei']['name'], PATHINFO_EXTENSION)));
+        $tmp = BX_UPLOADS . '/ki_ang_' . bin2hex(random_bytes(6)) . '.' . $ext;
+        if (!move_uploaded_file($_FILES['ki_datei']['tmp_name'], $tmp)) { header('Location: ?p=angebot&id=' . $id . '&kifehler=' . urlencode('Datei nicht gespeichert.')); exit; }
+        $anw = "Dies ist ein Angebots-PDF (Nahrungsergänzung, Lohnherstellung). Lies ALLE Positionszeilen und die "
+             . "Tabelle 'Preis je fertiges Produkt' aus. Antworte NUR mit JSON:\n"
+             . '{"positionen":[{"artikelnr":"","bezeichnung":"","beschreibung":"","menge":0,"einheit":"Stk.","preis":0}],"staffel":[{"menge":0,"stueck":0,"preis_pkg":0}]}'
+             . "\nJede Positionszeile EINZELN (Herstellung, Glas/Verpackung, Deckel, Etikett …) mit ihrem Einzelpreis je Packung aus der Spalte 'Preis' (nicht Gesamt). menge = Spalte 'Menge'. beschreibung = die Zusatzzeilen unter der Bezeichnung. Zahlen mit Punkt als Dezimaltrennzeichen, keine Tausenderpunkte. staffel = Tabelle 'Preis je fertiges Produkt' (menge = ab Menge Packungen, stueck = Stück je Packung, preis_pkg = Preis/Packung).";
+        $r = ki_datei_frage($tmp, $anw, ['json' => true, 'zweck' => 'Angebot erfassen', 'max_tokens' => 4000]);
+        @unlink($tmp);
+        if (empty($r['ok'])) { header('Location: ?p=angebot&id=' . $id . '&kifehler=' . urlencode('KI: ' . ($r['fehler'] ?? 'Dokument nicht lesbar.'))); exit; }
+        $n = angebot_ki_pdf_uebernehmen((int)$id, (array)($r['daten'] ?? []));
+        header('Location: ?p=angebot&id=' . $id . ($n > 0 ? '&kiok=' . $n : '&kifehler=' . urlencode('Keine Positionen erkannt.'))); exit;
     } elseif ($aktion === 'pos_save' && !$neu) {
         // Alles oder nichts: Speichern loescht erst alle Positionen und schreibt sie neu.
         // Bricht eine Zeile ab, stuende das Angebot sonst halb leer da.
@@ -199,7 +216,21 @@ if (($_GET['sendfehler'] ?? '') === 'leer')   echo '<div class="bx-panel" style=
 if (($_GET['sendfehler'] ?? '') === 'status') echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Das Angebot ist nicht mehr im Entwurf – es wurde bereits gesendet oder beantwortet.</div>';
 if (isset($_GET['zurueckgesetzt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Positionen auf die automatische Berechnung zurückgesetzt.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
+if (isset($_GET['kiok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['kiok'] . ' Positionen aus dem PDF übernommen (Herstellung, Verpackung, Etikett) – bitte prüfen.</div>';
+if (isset($_GET['kifehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['kifehler']) . '</div>';
 ?>
+<?php if (!$neu && ki_bereit()): ?>
+<div class="bx-panel" style="border-color:var(--gruen)">
+  <h2 style="margin-top:0">Angebot aus PDF einlesen (KI)</h2>
+  <p class="muted" style="margin-top:0">Altes Angebots-PDF (z. B. aus v3) hochladen – die KI übernimmt die Positionen (Herstellung, Glas/Verpackung, Etikett) inkl. Preise und die Mengenstaffel in dieses Angebot. <strong>Ersetzt die aktuellen Positionen</strong> – danach prüfen.</p>
+  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap" onsubmit="return confirm('PDF einlesen? Die aktuellen Positionen dieses Angebots werden durch die aus dem PDF ersetzt.');">
+    <input type="hidden" name="aktion" value="ki_pdf">
+    <div class="bx-field" style="margin:0"><label>Angebots-PDF</label><input type="file" name="ki_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp"></div>
+    <button class="btn btn-primary" type="submit" data-busy="Liest PDF…">Einlesen</button>
+    <span class="muted" style="font-size:12px;align-self:center">dauert 10–60 Sekunden</span>
+  </form>
+</div>
+<?php endif; ?>
 <form method="post" class="bx-form">
   <input type="hidden" name="aktion" value="kopf_save">
   <details class="bx-panel" <?= $neu ? 'open' : '' ?>><summary style="cursor:pointer">Kopfdaten<span class="muted" style="font-size:13px"> · Kunde, Gültigkeit, Marge, Produktionszeit, Notiz</span></summary><div class="bx-grid" style="margin-top:12px">
