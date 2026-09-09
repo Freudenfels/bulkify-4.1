@@ -3084,10 +3084,15 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
 // Angebot annehmen: die Preise landen als EK-Staffeln am Artikel (lieferant_preis) – genau dort
 // rechnet die Kalkulation damit. Ohne Artikel an der Anfrage gibt es nichts zu uebernehmen.
 function lieferant_angebot_annehmen(int $angebot_id): string {
-    $an = one("SELECT ag.*, af.item_id, af.nummer AS anfr_nummer FROM lieferant_angebot ag
+    $an = one("SELECT ag.*, af.item_id, af.art, af.rezeptur_id, af.nummer AS anfr_nummer FROM lieferant_angebot ag
                JOIN lieferant_anfrage af ON af.id=ag.anfrage_id WHERE ag.id=?", [$angebot_id]);
     if (!$an) return 'Angebot nicht gefunden.';
-    if (!$an['item_id']) return 'Diese Anfrage hängt an keinem Artikel – die Preise lassen sich nicht automatisch übernehmen.';
+    if (!$an['item_id']) {
+        // Fertigprodukt-Anfrage (per Rezeptur, kein item_id): Zukaufpreis an die Produkte der Rezeptur schreiben.
+        if (($an['art'] ?? '') === 'fertigprodukt' && !empty($an['rezeptur_id']))
+            return lieferant_fertig_angebot_annehmen($angebot_id, $an);
+        return 'Diese Anfrage hängt an keinem Artikel – die Preise lassen sich nicht automatisch übernehmen.';
+    }
     $item = (int)$an['item_id']; $lief = (int)$an['lieferant_id'];
     // Alte Staffeln dieses Lieferanten fuer diesen Artikel ersetzen – sonst mischen sich Staende.
     q("DELETE FROM lieferant_preis WHERE item_id=? AND lieferant_id=?", [$item, $lief]);
@@ -3103,6 +3108,35 @@ function lieferant_angebot_annehmen(int $angebot_id): string {
     q("UPDATE lieferant_angebot SET status='angenommen' WHERE id=?", [$angebot_id]);
     q("UPDATE lieferant_anfrage SET status='geschlossen' WHERE id=?", [(int)$an['anfrage_id']]);
     log_aktivitaet('lieferant', $lief, 'team', 'Angebot zu ' . $an['anfr_nummer'] . ' angenommen – ' . count($zeilen) . ' EK-Staffel(n) übernommen.', 'angebot', 'item', $item);
+    return '';
+}
+
+// Fertigprodukt-Angebot annehmen: der Preis gilt je Rezeptur (Bulk) und wird als Zukaufpreis an ALLE
+// Produkte dieser Rezeptur geschrieben (produkt_lieferant_preis) – so erscheint er in „Lieferanten-Preise"
+// (Reiter Fertigprodukt) und am Produkt/Auftrag. Preisbasis (je 1 / je 1000) wird auf „je Einheit" normiert.
+function lieferant_fertig_angebot_annehmen(int $angebot_id, array $an): string {
+    $lief = (int)$an['lieferant_id']; $rez = (int)$an['rezeptur_id'];
+    $basis = ((int)($an['preis_basis'] ?? 1)) === 1000 ? 1000 : 1;
+    $inco = $an['incoterm'] ?: null; $vers = $an['versandart'] ?: null; $wae = (string)($an['waehrung'] ?: 'EUR');
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rez]) ?: 'kapsel';
+    $zeilen = all("SELECT menge_ab, preis FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [$angebot_id]);
+    if (!$zeilen) $zeilen = [['menge_ab' => (float)($an['mindestmenge'] ?: 0), 'preis' => (float)$an['preis']]];
+    $produkte = all("SELECT id, einheiten_pro_packung FROM produkt WHERE rezeptur_id=?", [$rez]);
+    foreach ($produkte as $p) {
+        // Alte Zukaufpreise dieses Lieferanten fuer dieses Produkt ersetzen (kein Mischen von Staenden).
+        q("DELETE FROM produkt_lieferant_preis WHERE produkt_id=? AND lieferant_id=?", [(int)$p['id'], $lief]);
+        $groesse = (int)($p['einheiten_pro_packung'] ?? 0) > 0 ? ((int)$p['einheiten_pro_packung'] . ' Stk') : null;
+        foreach ($zeilen as $z)
+            q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,menge_ab,preis,einheit,groesse,waehrung,incoterm,versandart,stand,quelle)
+               VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),'angebot')",
+              [(int)$p['id'], $lief, (float)$z['menge_ab'], (float)$z['preis'] / $basis, $form, $groesse, $wae, $inco, $vers]);
+    }
+    q("UPDATE lieferant_angebot SET status='angenommen' WHERE id=?", [$angebot_id]);
+    q("UPDATE lieferant_anfrage SET status='geschlossen' WHERE id=?", [(int)$an['anfrage_id']]);
+    log_aktivitaet('lieferant', $lief, 'team',
+        'Fertigprodukt-Angebot zu ' . $an['anfr_nummer'] . ' angenommen – Zukaufpreise übernommen (' . count($produkte) . ' Produkt(e)).',
+        'angebot', 'rezeptur', $rez);
+    // Kein Produkt zur Rezeptur? Angebot ist angenommen, aber der Preis erscheint erst, wenn es ein Produkt gibt.
     return '';
 }
 // Einladung fuer einen Lieferanten erzeugen (oder die offene wiederverwenden) und den Link liefern.
