@@ -5,6 +5,14 @@ require_once BX_ROOT . '/core/schema.php';
 
 $id = (int)($_GET['id'] ?? 0);
 
+// Express-Bestellung (nur Admin): überspringt Einkaufsbedarf/-liste und bestellt direkt beim Lieferanten.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'express_bestellung') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $bid = auftrag_express_bestellung($id, (int)($_POST['lieferant_id'] ?? 0));
+    if ($bid) { header('Location: ?p=bestellung&id=' . $bid . '&ok=1'); exit; }
+    header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nichts zu bestellen – alles auf Lager oder der Lieferant bietet die fehlenden Rohstoffe nicht.')); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     // Preis nachpflegen: VK je Packung + Menge editierbar, Netto = Menge × VK automatisch.
     $menge = max(0, (int)($_POST['menge'] ?? 0));
@@ -57,6 +65,19 @@ $bStatus = function($b) {
         default=>bx_badge((string)$b['status']),
     };
 };
+
+// EK-Preise je benötigtem Rohstoff (nur Admin) – „wo kann ich bestellen" + Express-Bestellung.
+$istAdmin = function_exists('has_role') && has_role('admin');
+$ekBedarf = []; $ekLieferanten = [];
+if ($istAdmin && $pa) {
+    foreach (produktion_materialbedarf((int)$pa['id']) as $bd) {
+        $angebote = all("SELECT lp.lieferant_id, lp.menge_ab, lp.preis, lp.waehrung, COALESCE(l.firma, lp.lieferant_name, '') AS firma
+                         FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
+                         WHERE lp.item_id=? ORDER BY lp.preis", [(int)$bd['item_id']]);
+        foreach ($angebote as $ao) if (!empty($ao['lieferant_id'])) $ekLieferanten[(int)$ao['lieferant_id']] = (string)$ao['firma'];
+        $ekBedarf[] = $bd + ['angebote' => $angebote];
+    }
+}
 
 render_header('auftraege', $a['nummer']);
 bx_head($a['nummer'], 'Auftragsbestätigung', bx_btn('Zurück zur Liste', '?p=auftraege', 'ghost'));
@@ -116,6 +137,46 @@ echo '</div>';
     </table></div>
   <?php endif; ?>
 </div>
+
+<?php if ($istAdmin): ?>
+<?php if (isset($_GET['expressfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['expressfehler']) ?></div><?php endif; ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">EK-Preise &amp; Express-Bestellung <span class="muted" style="font-weight:normal;font-size:13px">· nur intern (Admin)</span></h2>
+  <?php if (!$pa): ?>
+    <div class="muted">Kein Produktionsauftrag – Materialbedarf nicht berechenbar.</div>
+  <?php elseif (!$ekBedarf): ?>
+    <div class="muted">Keine Rohstoffe im Bedarf (Zukauf oder Rezeptur ohne Zutaten).</div>
+  <?php else: ?>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Rohstoff</th><th class="bx-num">benötigt</th><th>Wo bestellbar – EK je Einheit (günstigste zuerst)</th></tr></thead>
+      <tbody>
+      <?php foreach ($ekBedarf as $bd): $nz = fn($x,$n=3)=>rtrim(rtrim(number_format((float)$x,$n,',','.'),'0'),','); ?>
+        <tr>
+          <td><a class="kundenlink" href="?p=rohstoff&id=<?= (int)$bd['item_id'] ?>&tab=ek"><?= h($bd['name']) ?></a></td>
+          <td class="bx-num"><?= $nz($bd['benoetigt']) ?> <?= h($bd['einheit']) ?><?php if ($bd['fehlt'] > 0.0001): ?><br><span style="color:#8f231b;font-size:12px">fehlt <?= $nz($bd['fehlt']) ?></span><?php else: ?><br><span class="bx-ok" style="font-size:12px">auf Lager</span><?php endif; ?></td>
+          <td><?php if (!$bd['angebote']): ?><span class="muted">kein EK-Preis hinterlegt</span> · <a href="?p=rohstoff&id=<?= (int)$bd['item_id'] ?>&tab=ek" style="font-size:12px">anfragen</a>
+              <?php else: $bi = 0; foreach ($bd['angebote'] as $ao): ?>
+                <div style="<?= $bi === 0 ? 'font-weight:600' : '' ?>"><?= h($ao['firma'] ?: '–') ?>: <?= $nz($ao['preis'], 4) ?> <?= h($ao['waehrung'] ?: 'EUR') ?><?= (float)$ao['menge_ab'] > 0 ? ' <span class="muted">(ab ' . $nz($ao['menge_ab']) . ')</span>' : '' ?><?= $bi === 0 ? ' <span class="muted">· günstigste</span>' : '' ?></div>
+              <?php $bi++; endforeach; endif; ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <?php if ($ekLieferanten): ?>
+    <div class="bx-row" style="gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center">
+      <span class="muted" style="font-size:13px">Express-Bestellung (überspringt den Einkauf – bestellt die fehlenden Mengen direkt beim Lieferanten):</span>
+      <?php foreach ($ekLieferanten as $lid => $firma): ?>
+      <form method="post" style="margin:0" onsubmit="return confirm('Express-Bestellung anlegen? Bestellt die fehlenden Rohstoffe dieses Auftrags direkt bei diesem Lieferanten.');">
+        <input type="hidden" name="aktion" value="express_bestellung"><input type="hidden" name="lieferant_id" value="<?= (int)$lid ?>">
+        <button class="btn btn-primary btn-sm" type="submit" data-busy="Bestellt…">Express bei <?= h($firma ?: 'Lieferant') ?></button>
+      </form>
+      <?php endforeach; ?>
+    </div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Legt sofort eine Bestellung (Entwurf) mit den fehlenden Rohstoffen an und öffnet sie – ohne den Umweg über Einkaufsbedarf/-liste. Absenden an den Lieferanten dann wie gewohnt in der Bestellung.</p>
+    <?php endif; ?>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <form method="post" class="bx-form">
   <div class="bx-panel"><div class="bx-grid">

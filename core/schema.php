@@ -3931,6 +3931,39 @@ function produktion_materialbedarf(int $pa_id): array {
     return $out;
 }
 
+// Express-Bestellung direkt aus einem Auftrag – überspringt Einkaufsbedarf/-liste.
+// Legt EINE Bestellung an einen Lieferanten an, mit allen fehlenden Rohstoffen dieses Auftrags,
+// die der Lieferant anbietet, in der jeweils passenden Staffel. Menge = was fehlt (Bedarf minus Bestand).
+// Rückgabe: neue bestellung-id, oder null (kein Produktionsauftrag / Lieferant bietet nichts Fehlendes).
+function auftrag_express_bestellung(int $auftrag_id, int $lieferant_id): ?int {
+    if ($auftrag_id <= 0 || $lieferant_id <= 0) return null;
+    $pa = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$auftrag_id]);
+    if (!$pa) return null;
+    $pos = [];
+    foreach (produktion_materialbedarf((int)$pa['id']) as $b) {
+        $menge = (float)($b['fehlt'] ?? 0);
+        if ($menge <= 0.0001) continue;   // genug auf Lager
+        // Passenden Staffelpreis dieses Lieferanten holen (größte Staffel <= Menge, sonst kleinste).
+        $preis = null;
+        foreach (all("SELECT preis, menge_ab FROM lieferant_preis WHERE item_id=? AND lieferant_id=? AND (waehrung IS NULL OR waehrung='EUR') ORDER BY menge_ab", [(int)$b['item_id'], $lieferant_id]) as $s) {
+            if ($preis === null) $preis = (float)$s['preis'];              // kleinste als Rückfall (unter MOQ)
+            if ((float)$s['menge_ab'] <= $menge) $preis = (float)$s['preis'];
+        }
+        if ($preis === null) continue;     // Lieferant bietet diesen Rohstoff nicht
+        $pos[] = ['item_id' => (int)$b['item_id'], 'menge' => $menge, 'ek' => $preis, 'einheit' => (string)$b['einheit']];
+    }
+    if (!$pos) return null;
+    q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum) VALUES (?,?,?,?,CURDATE())",
+      [naechste_nummer('BE'), $lieferant_id, 'offen', 'Express-Bestellung aus Auftrag ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id])]);
+    $bid = insert_id();
+    $i = 0;
+    foreach ($pos as $p) {
+        q("INSERT INTO bestellung_position (bestellung_id,item_id,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?)",
+          [$bid, $p['item_id'], $p['menge'], $p['ek'], $p['einheit'], $auftrag_id, $i++]);
+    }
+    return $bid;
+}
+
 // Rohstoffe für einen Produktionsauftrag nach FEFO entnehmen. Idempotent; blockiert bei zu wenig Bestand.
 function produktion_rohstoffe_entnehmen(int $pa_id): array {
     if ((int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=?", [$pa_id]) > 0) return ['ok'=>true, 'fehlt'=>[]];
