@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                (float)str_replace(',', '.', $mng[$i] ?? '0'), trim($einh[$i] ?? ''),
                (int) round((float)str_replace(',', '.', $preis[$i] ?? '0') * 100),
                (int) round((float)str_replace(',', '.', $ek[$i] ?? '0') * 100),
-               (float)str_replace(',', '.', $mwst[$i] ?? '0'), in_array($quelle[$i] ?? '', ['herstellung','verpackung','manuell'], true) ? $quelle[$i] : 'manuell', $gv,
+               mwst_normalisieren((float)str_replace(',', '.', $mwst[$i] ?? '0')), in_array($quelle[$i] ?? '', ['herstellung','verpackung','manuell'], true) ? $quelle[$i] : 'manuell', $gv,
                (int)($prez[$i] ?? 0) ?: null, (int)($pstk[$i] ?? 0) ?: null, (int)($pvid[$i] ?? 0) ?: null]);
         }
         } catch (Throwable $e) { db()->rollBack(); throw $e; }
@@ -167,7 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($bez !== '') {
                 $preis = (float)str_replace(',', '.', $_POST['add_preis'] ?? '0');
                 $mng = (float)str_replace(',', '.', $_POST['add_menge'] ?? '1') ?: 1;
-                $mwst = ($_POST['add_mwst'] ?? '') !== '' ? (float)str_replace(',', '.', $_POST['add_mwst']) : angebot_ust_satz($kid);
+                $mwst = ($_POST['add_mwst'] ?? '') !== '' ? mwst_normalisieren((float)str_replace(',', '.', $_POST['add_mwst'])) : angebot_ust_satz($kid);
                 angebot_gruppe_anhaengen((int)$id, [['artikelnr'=>'', 'bezeichnung'=>$bez, 'beschreibung'=>trim($_POST['add_besch'] ?? ''), 'menge'=>$mng, 'einheit'=>trim($_POST['add_einheit'] ?? ''), 'preis_cent'=>(int)round($preis*100), 'ek_cent'=>0, 'mwst_satz'=>$mwst, 'quelle'=>'manuell']]);
             }
         }
@@ -453,7 +453,7 @@ if (!$neu):
           <td><input type="number" step="0.001" name="p_menge[]" class="p_menge" value="<?= h(rtrim(rtrim(number_format($pp['menge'],3,'.',''),'0'),'.')) ?>" style="width:100%"></td>
           <td><input type="text" name="p_einheit[]" value="<?= h($pp['einheit'] ?? '') ?>" style="width:100%"></td>
           <td><input type="number" step="0.0001" name="p_preis[]" class="p_preis" value="<?= h(rtrim(rtrim(number_format($pp['preis_cent']/100,4,'.',''),'0'),'.')) ?>" style="width:100%"></td>
-          <td><input type="number" step="0.1" name="p_mwst[]" value="<?= h(rtrim(rtrim(number_format($pp['mwst_satz'],2,'.',''),'0'),'.')) ?>" style="width:100%"></td>
+          <td><?php $mwCur = mwst_normalisieren((float)$pp['mwst_satz']); ?><select name="p_mwst[]" style="width:100%"><?php foreach (mwst_saetze() as $ms): ?><option value="<?= (int)$ms ?>" <?= (int)$ms === (int)$mwCur ? 'selected' : '' ?>><?= (int)$ms ?> %</option><?php endforeach; ?></select></td>
           <td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>
           <td><button type="button" class="btn btn-ghost btn-sm" title="Position löschen" onclick="var f=this.closest('form');this.closest('.posrow').remove();posRecalc();f.submit()">×</button></td>
           <td></td>
@@ -584,7 +584,7 @@ function posRecalc(){
       +'<td><input type="number" step="0.001" name="p_menge[]" class="p_menge"></td>'
       +'<td><input type="text" name="p_einheit[]" value="Stück"></td>'
       +'<td><input type="number" step="0.0001" name="p_preis[]" class="p_preis"></td>'
-      +'<td><input type="number" step="0.1" name="p_mwst[]" value="0"></td>'
+      +'<td><select name="p_mwst[]" style="width:100%"><?php foreach (mwst_saetze() as $ms): ?><option value="<?= (int)$ms ?>"<?= (int)$ms === (int)mwst_normalisieren(angebot_ust_satz($kid)) ? ' selected' : '' ?>><?= (int)$ms ?> %</option><?php endforeach; ?></select></td>'
       +'<td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>'
       +'<td><button type="button" class="btn btn-ghost btn-sm">×</button></td><td></td>';
     tr.querySelector('button').addEventListener('click',function(){tr.remove();posRecalc();});

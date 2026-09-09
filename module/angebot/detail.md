@@ -44,6 +44,7 @@ für das Produkt bei Bedarf die Preismatrix erzeugt. Marge/Produktionszeit wirke
 ## Positionen (Formular `aktion=pos_save`)
 Editierbare Tabelle: Bezeichnung (+ Beschreibung), Menge, Einheit, Preis/Einh, MwSt; dazu
 je Zeile EK/Marge und Gesamt (live per JS). Positionen hinzufügen/entfernen.
+- **MwSt ist ein Dropdown mit nur 0 / 7 / 19 %** (die einzig zulässigen deutschen Sätze). Beim Speichern wird jeder Wert über `mwst_normalisieren()` auf einen dieser drei gezogen; ein falsch importierter Wert (z. B. 10) wird auf 19 % gezogen (Nahrungsergänzung ist hier praktisch immer 19 %), ein echter 7er bleibt 7. Altbestand wird einmalig per Migration (`fix_mwst_saetze` in `init_schema()`) bereinigt.
 - **Speichern friert ein**: schreibt `angebot_position` (Overrides). Ab dann haben diese
   Zeilen Vorrang vor der Automatik – im Editor, im Angebots-PDF und überall über
   `angebot_positionen()`.

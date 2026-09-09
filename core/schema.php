@@ -977,6 +977,14 @@ function init_schema(): void {
         q("UPDATE angebot SET status='offen' WHERE status='zurueckgezogen'");
         meta_set('fix_angebot_zurueck', '1');
     }
+    // Einmalige Bereinigung: Angebots-Positionen dürfen nur die zulässigen MwSt-Sätze 0/7/19 tragen.
+    // Falsch importierte Werte (z. B. 10) werden auf den nächstliegenden gültigen Satz gezogen.
+    if (meta_get('fix_mwst_saetze', '') !== '1') {
+        q("UPDATE angebot_position SET mwst_satz=0  WHERE mwst_satz NOT IN (0,7,19) AND mwst_satz < 3.5");
+        q("UPDATE angebot_position SET mwst_satz=7  WHERE mwst_satz NOT IN (0,7,19) AND mwst_satz < 8.5");
+        q("UPDATE angebot_position SET mwst_satz=19 WHERE mwst_satz NOT IN (0,7,19)");
+        meta_set('fix_mwst_saetze', '1');
+    }
     // Rohstoff-Spezifikation (nur das Unterscheidende; Reinheits-Grenzwerte bleiben im PDF)
     ensure_column('item', 'synonym', "VARCHAR(60) NULL");            // z. B. RM940
     ensure_column('item', 'ec_nr', "VARCHAR(30) NULL");
@@ -2453,6 +2461,17 @@ function angebot_ust_satz(?int $kunde_id): float {
     $land = strtoupper(trim((string) (scalar("SELECT land FROM kunden WHERE id=?", [$kunde_id]) ?? '')));
     $inland = ($land === '' || in_array($land, ['DE','D','DEUTSCHLAND','GERMANY'], true));
     return $inland ? (float) meta_get('ust_inland', 19) : 0.0;
+}
+// Die einzig zulaessigen deutschen Mehrwertsteuersaetze. Nichts anderes darf in einer Position stehen.
+function mwst_saetze(): array { return [0.0, 7.0, 19.0]; }
+// Beliebigen (evtl. falsch importierten) Wert auf einen zulaessigen Satz ziehen.
+// Grenzen: unter 3,5 -> 0 %, bis unter 8,5 -> 7 % (nur nahe an echten 7), sonst 19 %.
+// Nahrungsergaenzung ist hier praktisch immer 19 %; ein falscher Wert wie 10 wird darum zu 19,
+// nicht zu 7. Ein echter 7er bleibt 7. Im Angebot laesst sich der Satz per Dropdown korrigieren.
+function mwst_normalisieren(float $v): float {
+    if ($v < 3.5) return 0.0;
+    if ($v < 8.5) return 7.0;
+    return 19.0;
 }
 // Preismatrix eines Produkts, Marge-Override berücksichtigt: [stueck][bestellmenge] = ['vk'=>, 'ek'=>].
 function angebot_matrix(int $produkt_id, ?float $marge_override): array {
