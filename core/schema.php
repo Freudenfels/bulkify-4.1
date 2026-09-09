@@ -2791,6 +2791,44 @@ function angebot_positionen(int $angebot_id): array {
 // Ein per KI aus einem Angebots-PDF ausgelesenes Angebot in v4 uebernehmen: schreibt die Positionen
 // (Herstellung + Glas + Etikett je Staffel, gruppiert nach Menge) und die Staffel („Preis je fertiges
 // Produkt"). Ersetzt vorhandene Positionen/Staffeln dieses Angebots. Rueckgabe: Anzahl Positionen.
+// Verpackungs-/Etikett-Artikel semantisch finden: v3-Namen ("Weithals … 250 ml") auf den v4-Artikel
+// mappen (Volumen + Typ), da die Artikelnummern (VG-/ET- vs. VP-) nicht deckungsgleich sind.
+function verpackung_item_finden(string $name, string $rolle): ?int {
+    $n = mb_strtolower($name);
+    preg_match('/(\d+)\s*(ml|g)\b/u', $n, $m);
+    $vol = $m ? $m[1] . $m[2] : '';                       // z. B. "250ml"
+    $typ = '';
+    foreach (['weithals'=>'weithalsglas', 'pet'=>'petpacker', 'braunglas'=>'braunglas', 'pla'=>'pla', 'becher'=>'pla', 'doypack'=>'doypack', 'beutel'=>'doypack', 'blister'=>'blister', 'dose'=>'dose'] as $k => $v)
+        if (mb_strpos($n, $k) !== false) { $typ = $v; break; }
+    if ($vol === '' && $typ === '') return null;
+    foreach (all("SELECT id, name FROM item WHERE kategorie='verpackung' AND gesperrt=0 AND verpackung_rolle=?", [$rolle]) as $it) {
+        $in = str_replace(' ', '', mb_strtolower((string)$it['name']));
+        if (($vol === '' || mb_strpos($in, $vol) !== false) && ($typ === '' || mb_strpos($in, $typ) !== false)) return (int)$it['id'];
+    }
+    return null;
+}
+// Teil B: nach dem PDF-Einlesen die erkannte Verpackung/Etikett dauerhaft am Produkt hinterlegen
+// (nur leere Slots), damit KÜNFTIGE Angebote/Aufträge dieses Produkts automatisch aufschlüsseln.
+function angebot_ki_produkt_verpackung(int $angebot_id, array $d): void {
+    $a = one("SELECT produkt_id, anfrage_id FROM angebot WHERE id=?", [$angebot_id]);
+    $pid = (int)($a['produkt_id'] ?? 0);
+    if (!$pid && !empty($a['anfrage_id'])) $pid = (int) scalar("SELECT produkt_id FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']]);
+    if (!$pid) return;
+    $verp = 0; $etik = 0;
+    foreach ((array)($d['positionen'] ?? []) as $p) {
+        $bez = trim((string)($p['bezeichnung'] ?? '')); if ($bez === '') continue;
+        if (mb_stripos($bez, 'etikett') !== false) { if (!$etik) $etik = (int) verpackung_item_finden($bez, 'etikett'); }
+        elseif (!$verp) { $verp = (int) verpackung_item_finden($bez, 'primaer'); }
+    }
+    $stueck = 0; foreach ((array)($d['staffel'] ?? []) as $s) { $stueck = (int)($s['stueck'] ?? 0); if ($stueck > 0) break; }
+    $cur = one("SELECT verpackung_id, etikett_id, einheiten_pro_packung FROM produkt WHERE id=?", [$pid]);
+    if (!$cur) return;
+    $sets = []; $args = [];
+    if ($verp && empty($cur['verpackung_id']))                              { $sets[] = 'verpackung_id=?';         $args[] = $verp; }
+    if ($etik && empty($cur['etikett_id']))                                 { $sets[] = 'etikett_id=?';            $args[] = $etik; }
+    if ($stueck > 0 && (int)($cur['einheiten_pro_packung'] ?? 0) <= 0)      { $sets[] = 'einheiten_pro_packung=?'; $args[] = $stueck; }
+    if ($sets) { $args[] = $pid; q("UPDATE produkt SET " . implode(',', $sets) . " WHERE id=?", $args); }
+}
 function angebot_ki_pdf_uebernehmen(int $angebot_id, array $d): int {
     $a = one("SELECT id, kunde_id FROM angebot WHERE id=?", [$angebot_id]);
     if (!$a) return 0;
@@ -2819,6 +2857,8 @@ function angebot_ki_pdf_uebernehmen(int $angebot_id, array $d): int {
         q("INSERT INTO angebot_staffel (angebot_id,menge,stueck,vk_stueck,bestaetigt,sort) VALUES (?,?,?,?,0,?)",
           [$angebot_id, $m, (int)($s['stueck'] ?? 0), (float) str_replace(',', '.', (string)($s['preis_pkg'] ?? 0)), $ssort++]);
     }
+    // Teil B: Verpackung/Etikett + Stück je Packung dauerhaft am Produkt hinterlegen (nur leere Slots).
+    angebot_ki_produkt_verpackung($angebot_id, $d);
     return count($pos);
 }
 function angebot_hat_positionen(int $angebot_id): bool {
