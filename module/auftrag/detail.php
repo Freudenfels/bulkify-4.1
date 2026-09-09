@@ -6,7 +6,12 @@ require_once BX_ROOT . '/core/schema.php';
 $id = (int)($_GET['id'] ?? 0);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
-    q("UPDATE auftrag SET status=? WHERE id=?", [trim($_POST['status'] ?? 'offen'), $id]);
+    // Preis nachpflegen: VK je Packung + Menge editierbar, Netto = Menge × VK automatisch.
+    $menge = max(0, (int)($_POST['menge'] ?? 0));
+    $vk    = round(zahl_lesen((string)($_POST['vk_stueck'] ?? '0')), 4);
+    $netto = round($menge * $vk, 2);
+    q("UPDATE auftrag SET status=?, menge=?, vk_stueck=?, gesamt_netto=? WHERE id=?",
+      [trim($_POST['status'] ?? 'offen'), $menge, $vk, $netto, $id]);
     header('Location: ?p=auftrag&id=' . $id . '&gespeichert=1'); exit;
 }
 
@@ -120,7 +125,24 @@ echo '</div>';
           <option value="<?= $key ?>" <?= $a['status']===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
       </select>
     </div>
-  </div></div>
-  <button class="btn btn-primary" type="submit">Status speichern</button>
+    <div class="bx-field"><label>Menge (Packungen)</label>
+      <input type="number" name="menge" min="0" value="<?= (int)$a['menge'] ?>"></div>
+    <div class="bx-field"><label>VK je Packung (netto)</label>
+      <input type="text" name="vk_stueck" id="vkFeld" value="<?= h((float)$a['vk_stueck'] > 0 ? rtrim(rtrim(number_format((float)$a['vk_stueck'], 4, ',', ''), '0'), ',') : '') ?>" placeholder="z. B. 0,84"></div>
+  </div>
+  <div class="muted" style="font-size:12px;margin-top:2px">Netto gesamt = Menge × VK je Packung – wird beim Speichern automatisch berechnet<span id="vkVorschau"></span>.</div>
+  </div>
+  <button class="btn btn-primary" type="submit" data-busy="Speichert…">Speichern</button>
 </form>
+<script>
+(function(){
+  var m = document.querySelector('input[name="menge"]'), v = document.getElementById('vkFeld'), out = document.getElementById('vkVorschau');
+  if (!m || !v || !out) return;
+  function rechne(){
+    var mv = parseFloat((m.value||'').replace(',','.'))||0, vv = parseFloat((v.value||'').replace(/\./g,'').replace(',','.'))||0;
+    out.textContent = (mv>0 && vv>0) ? ' → ' + (mv*vv).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €' : '';
+  }
+  m.addEventListener('input', rechne); v.addEventListener('input', rechne); rechne();
+})();
+</script>
 <?php render_footer(); ?>
