@@ -9,6 +9,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['tun'] ?? '') === 'dashboar
     header('Location: ?p=mehr&ok=1'); exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['tun'] ?? '') === 'intake_token_neu') {
+    crm_meta_schreiben('lead_intake_token', bin2hex(random_bytes(24)));
+    header('Location: ?p=mehr&ok=1'); exit;
+}
+
 $u = crm_benutzer();
 kopf('Mehr', 'mehr');
 seitenkopf('Mehr', h((string)($u['name'] ?? '')) . ' · ' . h((string)($u['email'] ?? '')));
@@ -32,6 +37,26 @@ if (isset($_GET['ok'])) hinweis('Gespeichert.');
     </div>
     <button class="btn btn-primary" type="submit">Speichern</button>
   </form>
+</div></div>
+
+<div class="karte"><div class="rumpf">
+  <?php $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $intakeUrl = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/crm/lead_intake.php'; ?>
+  <h2 style="margin-top:0">Website-Eingang</h2>
+  <p class="muted" style="margin-top:0">Anfragen von der Webseite (bulkify.pro) landen automatisch als Kontakt hier.
+     Die Webseite postet die Formularfelder an die URL unten und schickt den Token mit (Feld <code>token</code>
+     oder Header <code>X-Intake-Token</code>).</p>
+  <div class="bx-field"><label>Endpunkt-URL</label>
+    <input type="text" readonly onclick="this.select()" value="<?= h($intakeUrl) ?>"></div>
+  <div class="bx-field"><label>Token</label>
+    <input type="text" readonly onclick="this.select()" value="<?= h(lead_intake_token()) ?>"></div>
+  <form method="post" onsubmit="return confirm('Neuen Token erzeugen? Der alte gilt danach nicht mehr - die Webseite muss den neuen bekommen.');">
+    <input type="hidden" name="tun" value="intake_token_neu">
+    <button class="btn btn-ghost" type="submit">Neuen Token erzeugen</button>
+  </form>
+  <p class="muted" style="font-size:13px;margin:10px 0 0">Formularfelder (alle optional außer einem von Name/E-Mail/Telefon):
+     <code>name, firma, email, telefon, whatsapp</code> sowie <code>anliegen, ziel, produktform, menge,
+     wirkstoffe, rezeptur, nachricht</code>. Antwort: JSON <code>{ok, kontakt_id}</code>.</p>
 </div></div>
 
 <div class="karte"><div class="rumpf">

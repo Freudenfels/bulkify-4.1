@@ -113,3 +113,11 @@ function crm_meta_lesen(string $schluessel, string $standard = ''): string {
 function crm_meta_schreiben(string $schluessel, string $wert): void {
     q("INSERT INTO crm_meta (schluessel, wert) VALUES (?,?) ON DUPLICATE KEY UPDATE wert=VALUES(wert)", [$schluessel, $wert]);
 }
+
+// Token fuer den Website-Eingang (public/crm/lead_intake.php). Wird beim ersten Zugriff einmalig
+// erzeugt und in crm_meta gemerkt; ueber die CRM-Systemseite („Mehr") neu erzeugbar.
+function lead_intake_token(): string {
+    $t = crm_meta_lesen('lead_intake_token', '');
+    if ($t === '') { $t = bin2hex(random_bytes(24)); crm_meta_schreiben('lead_intake_token', $t); }
+    return $t;
+}
