@@ -108,6 +108,7 @@ if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="pad
 echo '<div class="bx-cards">';
 echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $statusBadge . '</div></div>';
 echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . (int)$a['menge'] . '</div></div>';
+if ($einhProP > 0) echo '<div class="bx-card"><div class="k">Stück je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . '</div></div>';
 if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamtstückzahl</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
 if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablette</div><div class="v">' . h($groesseLbl) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Herstellung</div><div class="v">' . ($istFremd ? bx_badge('Zukauf','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
