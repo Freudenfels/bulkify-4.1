@@ -2749,19 +2749,46 @@ function angebot_rohstoff_zeile(int $item_id, float $menge, string $einheit, ?in
     ]];
 }
 // Positionen eines Angebots: gespeicherte (überschrieben) haben Vorrang, sonst automatisch.
+// Angebot aus einer alten Mengen-Staffel (angebot_staffel) in Positionen abbilden – je Staffel eine
+// Gruppe. Fallback fuer v3-importierte Angebote, deren echter Inhalt nur in der Staffel steht (die
+// Kundenkarte liest die Staffel; PDF/Detail brauchen Positionen). Rein berechnet, nichts gespeichert.
+function angebot_positionen_aus_staffel(array $a, array $staffeln): array {
+    $basis = one("SELECT bezeichnung, rezeptur_id, verpackung_id FROM angebot_position WHERE angebot_id=? ORDER BY sort, id LIMIT 1", [(int)$a['id']]);
+    $bez   = trim((string)($basis['bezeichnung'] ?? '')) ?: ((string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [(int)($a['produkt_id'] ?? 0)]) ?: 'Position');
+    $rezId = !empty($basis['rezeptur_id']) ? (int)$basis['rezeptur_id'] : ((int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)($a['produkt_id'] ?? 0)]) ?: null);
+    $verpId= !empty($basis['verpackung_id']) ? (int)$basis['verpackung_id'] : null;
+    $land  = (string) scalar("SELECT land FROM kunden WHERE id=?", [(int)($a['kunde_id'] ?? 0)]) ?: 'DE';
+    $mwst  = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
+    $mehrere = count($staffeln) > 1; $out = []; $i = 0;
+    foreach ($staffeln as $s) {
+        $out[] = ['artikelnr'=>'', 'bezeichnung'=>$bez, 'beschreibung'=>'',
+            'menge'=>(float)$s['menge'], 'einheit'=>'Pkg.', 'preis_cent'=>(int) round((float)$s['vk_stueck'] * 100),
+            'ek_cent'=>0, 'mwst_satz'=>$mwst, 'quelle'=>'staffel', 'gruppe'=>($mehrere ? chr(65 + $i) : null),
+            'rezeptur_id'=>$rezId, 'stueck'=>(int)$s['stueck'] ?: null, 'verpackung_id'=>$verpId];
+        $i++;
+    }
+    return $out;
+}
 function angebot_positionen(int $angebot_id): array {
     $rows = all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]);
-    if ($rows) return array_map(fn($r) => [
+    // Kaputte Null-Positionen (v3-Import: menge=0 & preis=0) ignorieren – sonst verdecken sie den echten Inhalt.
+    $echt = array_values(array_filter($rows, fn($r) => (float)$r['menge'] > 1e-9 || (int)$r['preis_cent'] > 0));
+    if ($echt) return array_map(fn($r) => [
         'artikelnr'=>$r['artikelnr'], 'bezeichnung'=>$r['bezeichnung'], 'beschreibung'=>$r['beschreibung'],
         'menge'=>(float)$r['menge'], 'einheit'=>$r['einheit'], 'preis_cent'=>(int)$r['preis_cent'],
         'ek_cent'=>(int)$r['ek_cent'], 'mwst_satz'=>(float)$r['mwst_satz'], 'quelle'=>$r['quelle'], 'gruppe'=>$r['gruppe'] ?? null,
         'rezeptur_id'=>$r['rezeptur_id'] ?? null, 'stueck'=>$r['stueck'] ?? null, 'verpackung_id'=>$r['verpackung_id'] ?? null,
-    ], $rows);
+    ], $echt);
     $a = one("SELECT * FROM angebot WHERE id=?", [$angebot_id]);
-    return $a ? angebot_positionen_auto($a) : [];
+    if (!$a) return [];
+    // Kein echter Positionsinhalt: erst aus der Staffel ableiten, sonst automatisch aus der Anfrage rechnen.
+    $staffeln = all("SELECT menge, stueck, vk_stueck FROM angebot_staffel WHERE angebot_id=? ORDER BY menge", [$angebot_id]);
+    if ($staffeln) return angebot_positionen_aus_staffel($a, $staffeln);
+    return angebot_positionen_auto($a);
 }
 function angebot_hat_positionen(int $angebot_id): bool {
-    return (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=?", [$angebot_id]) > 0;
+    // Nur echte Positionen zählen – reine Null-Zeilen (v3-Import) gelten nicht als „manuell überschrieben".
+    return (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=? AND (menge>0 OR preis_cent>0)", [$angebot_id]) > 0;
 }
 // VK je Packung = EK × (1 + Marge je Typ), Boden = Mindestmarge. Ohne Kundenrabatt (der kommt beim Angebot).
 function produkt_variante_vk(int $produkt_id, float $ek): float {
