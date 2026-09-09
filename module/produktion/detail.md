@@ -6,7 +6,8 @@
 
 **Was passiert hier:**
 - **POST `aktion=erledigen`:** markiert die **nächste offene** Station als erledigt (Reihenfolge erzwungen – nur die erste offene Station hat einen Button). Danach wird der Status neu berechnet (offen / läuft / fertig). Ist alles erledigt (auch die Versand-Freigabe), wird der zugehörige **Auftrag auf „erledigt"** gesetzt und ein Verlaufseintrag am Kunden geschrieben.
-- **Anzeige:** Kennzahlen (Status, Fortschritt X/N, Menge, Produkt) und die Stationen als Ablaufliste: erledigte mit Häkchen + Zeit, die aktuelle mit Button, kommende ausgegraut. Freigaben sind als **Gate** markiert.
+- **Anzeige:** Kennzahlen (Status, Fortschritt X/N, Menge, Produkt) und die Stationen als Ablaufliste:
+  Alle Kennzahl-Werte (`.bx-cards .v`) laufen auf einer einheitlichen, ruhigen Größe (15px, wie „Produkt") – ein seitenlokaler `<style>` überschreibt das globale große `--fs-xl` nur hier, damit die Zeile sauber wirkt; Badges behalten ihre eigene Größe. erledigte mit Häkchen + Zeit, die aktuelle mit Button, kommende ausgegraut. Freigaben sind als **Gate** markiert.
 
 **Herkunft:** Wird von `auftrag_aus_angebot()` zusammen mit Auftrag + Rechnung automatisch erzeugt (Stationen aus der Darreichungsform der Rezeptur).
 

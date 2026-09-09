@@ -105,6 +105,8 @@ render_header('auftraege', $a['nummer']);
 bx_head($a['nummer'], 'Auftragsbestätigung', bx_btn('Zurück zur Liste', '?p=auftraege', 'ghost'));
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 
+// Einheitliche, ruhige Wertgröße für alle Kennzahl-Karten (Badges behalten ihre eigene Größe).
+echo '<style>.bx-cards .v{font-size:15px;line-height:1.4}</style>';
 echo '<div class="bx-cards">';
 echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $statusBadge . '</div></div>';
 echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . (int)$a['menge'] . '</div></div>';

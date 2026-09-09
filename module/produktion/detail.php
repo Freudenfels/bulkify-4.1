@@ -173,6 +173,9 @@ if (isset($_GET['resfrei'])) echo '<div class="bx-panel badge-ok" style="padding
 if (isset($_GET['teil'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Teilmenge als Charge ' . h((string)$_GET['teil']) . ' eingebucht.</div>';
 if (isset($_GET['teilfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Teilmenge nicht gebucht: ' . h((string)$_GET['teilfehler']) . '</div>';
 
+// Einheitliche, ruhige Wertgröße für alle Kennzahl-Karten dieser Seite (wie „Produkt").
+// Badges bringen ihre eigene Größe mit und bleiben unberührt; nur Text/Zahlen werden angeglichen.
+echo '<style>.bx-cards .v{font-size:15px;line-height:1.4}</style>';
 echo '<div class="bx-cards">';
 echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $statusBadge . '</div></div>';
 $prioSel = '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="prio"><select name="prio" onchange="this.form.submit()">';
@@ -187,7 +190,7 @@ echo '<div class="bx-card"><div class="k">Menge</div><div class="v">' . (int)$pa
 echo '<div class="bx-card"><div class="k">Charge' . ($chargeGeb ? (count($fwChargen) > 1 ? 'n' : '') : ' (geplant)') . '</div><div class="v">' . h($chargeNr) . (count($fwChargen) > 1 ? ' <span class="muted" style="font-size:13px">+' . (count($fwChargen) - 1) . '</span>' : '') . '</div></div>';
 echo '<div class="bx-card"><div class="k">MHD' . ($chargeGeb ? '' : ' (+18 Mon.)') . '</div><div class="v">' . h(date('d.m.Y', strtotime($chargeMhd))) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Art</div><div class="v">' . (($pa['produktionsart'] ?? 'eigen') === 'fremd' ? bx_badge('Fremdproduktion','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
-echo '<div class="bx-card"><div class="k">Produkt</div><div class="v" style="font-size:15px">' . h($pa['produkt_name'] ?: '–') . '</div></div>';
+echo '<div class="bx-card"><div class="k">Produkt</div><div class="v">' . h($pa['produkt_name'] ?: '–') . '</div></div>';
 $groesseLbl = produktion_groesse_label((int)$pa['produkt_id']);
 if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablette</div><div class="v">' . h($groesseLbl) . '</div></div>';
 echo '</div>';
