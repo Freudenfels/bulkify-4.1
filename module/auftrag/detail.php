@@ -61,7 +61,9 @@ $paStatusBadge = $pa ? match ($pa['status']) {
 } : '';
 $ber = $pa ? produktion_bereitschaft((int)$pa['id']) : ['status'=>''];
 $einhProP  = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
+if ($einhProP <= 0) $einhProP = (int)($a['stueck'] ?? 0);   // Fallback: Stück je Packung liegt am Auftrag (v3-Import)
 $gesamtStk = $einhProP > 0 ? (int)$a['menge'] * $einhProP : 0;
+$produktName = (string)($a['produkt_name'] ?? '') ?: (string)($a['produkt_bezeichnung'] ?? '');
 $groesseLbl = produktion_groesse_label((int)$a['produkt_id']);
 // Bestellungen (bei welchem Lieferanten, welcher Status) – verknüpft über die Position.
 $best = all("SELECT DISTINCT b.id, b.nummer, b.status, b.bestaetigt, b.angekommen_am, l.firma AS lieferant
@@ -122,7 +124,7 @@ echo '</div>';
   <h2>Details</h2>
   <div class="bx-grid">
     <div><div class="k muted">Kunde</div><div><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
-    <div><div class="k muted">Produkt</div><div><?= $a['produkt_name'] ? h($a['produkt_name']) : '–' ?></div></div>
+    <div><div class="k muted">Produkt</div><div><?= $produktName ? h($produktName) . (empty($a['produkt_id']) ? ' <span class="muted" style="font-size:12px">(aus v3)</span>' : '') : '–' ?></div></div>
     <div><div class="k muted">Rezeptur</div><div><?php if ($rezeptur): ?><a href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>"><?= h($rezeptur['nummer']) ?></a><?= $rezeptur['name'] ? ' · ' . h($rezeptur['name']) : '' ?><?php else: ?>–<?php endif; ?></div></div>
     <div><div class="k muted">Aus Angebot</div><div><?php if ($a['angebot_id']): ?><a href="?p=angebot&id=<?= (int)$a['angebot_id'] ?>"><?= h($a['angebot_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
     <div><div class="k muted">Rechnung</div><div><?php if ($rechnung): ?><a href="?p=rechnung&id=<?= (int)$rechnung['id'] ?>"><?= h($rechnung['nummer']) ?></a> · <?= $eur($rechnung['brutto']) ?> · <?= $rechnung['status']==='bezahlt'?bx_badge('bezahlt','ok'):bx_badge('offen','warn') ?><?php else: ?>–<?php endif; ?></div></div>

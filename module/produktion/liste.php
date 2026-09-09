@@ -22,12 +22,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'art_b
 }
 
 // Alle Produktionsaufträge laden (inkl. Fortschritt + nächste Station), Bereitschaft je Auftrag bestimmen.
-$alle = all("SELECT pa.*, k.firma AS kunde_firma, p.name AS produkt_name,
+$alle = all("SELECT pa.*, k.firma AS kunde_firma, COALESCE(NULLIF(p.name,''), a.produkt_bezeichnung) AS produkt_name,
              (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id) AS n_total,
              (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=1) AS n_done,
              (SELECT station FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=0 ORDER BY s.sort LIMIT 1) AS naechste_station
              FROM produktionsauftrag pa
-             LEFT JOIN kunden k ON k.id=pa.kunde_id LEFT JOIN produkt p ON p.id=pa.produkt_id");
+             LEFT JOIN kunden k ON k.id=pa.kunde_id LEFT JOIN produkt p ON p.id=pa.produkt_id
+             LEFT JOIN auftrag a ON a.id=pa.auftrag_id");
 foreach ($alle as &$r) { $r['_bereit'] = produktion_bereitschaft((int)$r['id'])['status']; } unset($r);
 
 // Einteilung in die Reiter

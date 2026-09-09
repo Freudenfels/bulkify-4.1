@@ -965,6 +965,21 @@ function init_schema(): void {
     ensure_column('auftrag', 'stueck', "INT NULL");
     ensure_column('auftrag', 'verpackung_id', "INT NULL");
     ensure_column('auftrag', 'kontingent_id', "INT NULL");   // Abruf aus einem Rahmenvertrag/Kontingent
+    ensure_column('auftrag', 'produkt_bezeichnung', "VARCHAR(190) NULL");  // Fallback-Produktname, wenn kein produkt_id (v3-Import ohne verknuepftes Produkt)
+    ensure_column('auftrag', 'produkt_form', "VARCHAR(20) NULL");          // Fallback-Darreichungsform dazu (kapsel|tablette|pulver|…)
+    // Einmalige Reparatur: 4 v3-importierte Zukauf-Auftraege (Annapurna) kamen ohne verknuepftes Produkt an.
+    // Name/Form aus der v3-Datenbank (board.sqlite) hier fest hinterlegt – gezielt per Auftragsnummer, idempotent.
+    if (meta_get('fix_auftrag_produkt_v3', '') !== '1') {
+        foreach ([
+            ['AB-3213', 'Gerstengrassaftpulver mono', 'pulver'],
+            ['AB-3214', 'Beruhigungskomplex (Calm+)', 'kapsel'],
+            ['AB-3215', 'Leberkomplex',                'kapsel'],
+            ['AB-3217', 'Jod/Kelp',                    'kapsel'],
+        ] as [$nr, $name, $form])
+            q("UPDATE auftrag SET produkt_bezeichnung=?, produkt_form=? WHERE nummer=? AND (produkt_id IS NULL OR produkt_id=0) AND (produkt_bezeichnung IS NULL OR produkt_bezeichnung='')",
+              [$name, $form, $nr]);
+        meta_set('fix_auftrag_produkt_v3', '1');
+    }
     ensure_column('produktionsauftrag', 'stueck', "INT NULL");
     ensure_column('produktionsauftrag', 'verpackung_id', "INT NULL");
     ensure_column('angebot', 'kunde_ausgeblendet', "TINYINT(1) NOT NULL DEFAULT 0");  // Kunde hat es aus seiner Liste entfernt (Löschen)
@@ -3647,14 +3662,14 @@ function versandart_label(string $key, string $sprache = 'de'): string {
     return $m[$key][$spr] ?? ($m[$key]['de'] ?? $key);
 }
 
-function produkt_bulk_info(int $produkt_id): array {
+function produkt_bulk_info(int $produkt_id, string $fbName = '', string $fbForm = ''): array {
     $p = $produkt_id ? one("SELECT p.name, COALESCE(r.darreichungsform,'') AS form
                             FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]) : null;
     $formMap = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks',
                 'gummi'=>'Fruchtgummis','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
-    $form = (string)($p['form'] ?? '');
+    $form = (string)($p['form'] ?? '') ?: trim($fbForm);          // Fallback-Form (v3-Auftrag ohne Produkt)
     $wort = $formMap[$form] ?? '';
-    $name = trim((string)($p['name'] ?? '')) ?: 'Produkt';
+    $name = trim((string)($p['name'] ?? '')) ?: (trim($fbName) ?: 'Produkt');
     $einheit = $form === 'pulver' ? 'g' : (in_array($form, ['fluessig','gel'], true) ? 'ml' : 'Stück');
     // Ohne bekannte Form (Produkt ohne Rezeptur) ehrlich als „Bulk (Form offen)" ausweisen.
     $bez = $name . ' – ' . ($wort !== '' ? $wort : 'Bulk (Form offen)') . ' (Zukauf)';
@@ -3687,7 +3702,8 @@ function auftrag_bedarf(int $pa_id): array {
     if ($zukauf) {
         $verf = (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
                                 WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei'", [(int)$pa['auftrag_id']]);
-        $bi = produkt_bulk_info((int)$pa['produkt_id']);
+        $af = one("SELECT produkt_bezeichnung, produkt_form FROM auftrag WHERE id=?", [$aid]);
+        $bi = produkt_bulk_info((int)$pa['produkt_id'], (string)($af['produkt_bezeichnung'] ?? ''), (string)($af['produkt_form'] ?? ''));
         $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>$einheiten,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$einheiten-$verf),'einheit'=>$bi['einheit']];
     } else {
         foreach (produktion_materialbedarf($pa_id) as $m)
