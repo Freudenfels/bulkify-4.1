@@ -40,6 +40,9 @@ $a = $id ? one("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name, ang.
 if (!$a) { render_header('auftraege','Auftrag'); bx_head('Auftrag nicht gefunden','', bx_btn('Zurück','?p=auftraege','ghost')); render_footer(); exit; }
 
 $rechnung = one("SELECT id, nummer, brutto, status FROM beleg WHERE auftrag_id=? AND typ='rechnung' LIMIT 1", [$id]);
+$rezeptur = !empty($a['produkt_id'])
+    ? one("SELECT r.id, r.nummer, r.name FROM produkt p JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$a['produkt_id']])
+    : null;
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 $statusBadge = match ($a['status']) {
     'offen'         => bx_badge('offen','info'),
@@ -117,6 +120,7 @@ echo '</div>';
   <div class="bx-grid">
     <div><div class="k muted">Kunde</div><div><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
     <div><div class="k muted">Produkt</div><div><?= $a['produkt_name'] ? h($a['produkt_name']) : '–' ?></div></div>
+    <div><div class="k muted">Rezeptur</div><div><?php if ($rezeptur): ?><a href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>"><?= h($rezeptur['nummer']) ?></a><?= $rezeptur['name'] ? ' · ' . h($rezeptur['name']) : '' ?><?php else: ?>–<?php endif; ?></div></div>
     <div><div class="k muted">Aus Angebot</div><div><?php if ($a['angebot_id']): ?><a href="?p=angebot&id=<?= (int)$a['angebot_id'] ?>"><?= h($a['angebot_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
     <div><div class="k muted">Rechnung</div><div><?php if ($rechnung): ?><a href="?p=rechnung&id=<?= (int)$rechnung['id'] ?>"><?= h($rechnung['nummer']) ?></a> · <?= $eur($rechnung['brutto']) ?> · <?= $rechnung['status']==='bezahlt'?bx_badge('bezahlt','ok'):bx_badge('offen','warn') ?><?php else: ?>–<?php endif; ?></div></div>
   </div>
