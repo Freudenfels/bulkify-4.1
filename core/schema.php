@@ -1527,6 +1527,30 @@ function produkt_leerkapsel_id(int $produkt_id): ?int {
     return count($k) === 1 ? (int)$k[0]['id'] : null;   // nur bei Eindeutigkeit automatisch
 }
 
+// Anzeige-Groesse fuer die Produktion: bei Kapsel/Softgel die Kapselgroesse (gepflegt an der
+// Rezeptur, sonst aus dem Fuellgewicht berechnet = kleinste passende Kapsel); bei Tablette das
+// Fuellgewicht in mg (echte Tablettengroesse kennt das Schema nicht). Sonst leer.
+function produktion_groesse_label(int $produkt_id): string {
+    if ($produkt_id <= 0) return '';
+    $p = one("SELECT r.darreichungsform AS form, kg.name AS kapsel_name,
+                     (SELECT COALESCE(SUM(z.menge_mg),0) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id) AS fg
+              FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+              LEFT JOIN kapselgroesse kg ON kg.id=r.kapselgroesse_id WHERE p.id=?", [$produkt_id]);
+    if (!$p) return '';
+    $form = (string)($p['form'] ?? '');
+    $fg   = (float)($p['fg'] ?? 0);
+    if (in_array($form, ['kapsel', 'softgel'], true)) {
+        if (!empty($p['kapsel_name'])) return (string)$p['kapsel_name'];
+        if ($fg > 0) {
+            $k = one("SELECT name FROM kapselgroesse WHERE fuellmenge_mg >= ? ORDER BY fuellmenge_mg ASC LIMIT 1", [$fg]);
+            return $k ? $k['name'] . ' (berechnet)' : 'größer als größte Kapsel';
+        }
+        return '';
+    }
+    if ($form === 'tablette') return $fg > 0 ? '≈ ' . number_format($fg, 0, ',', '.') . ' mg' : '';
+    return '';
+}
+
 // Station Verkapselung: Leerkapseln nach FEFO abbuchen (menge × einheiten je Packung). Blockiert bei zu wenig Bestand.
 function produktion_kapseln_entnehmen(int $pa_id): array {
     $pa = one("SELECT menge, produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);

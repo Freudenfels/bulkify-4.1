@@ -188,6 +188,8 @@ echo '<div class="bx-card"><div class="k">Charge' . ($chargeGeb ? (count($fwChar
 echo '<div class="bx-card"><div class="k">MHD' . ($chargeGeb ? '' : ' (+18 Mon.)') . '</div><div class="v">' . h(date('d.m.Y', strtotime($chargeMhd))) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Art</div><div class="v">' . (($pa['produktionsart'] ?? 'eigen') === 'fremd' ? bx_badge('Fremdproduktion','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Produkt</div><div class="v" style="font-size:15px">' . h($pa['produkt_name'] ?: '–') . '</div></div>';
+$groesseLbl = produktion_groesse_label((int)$pa['produkt_id']);
+if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablette</div><div class="v">' . h($groesseLbl) . '</div></div>';
 echo '</div>';
 if (!$chargeGeb) echo '<div class="bx-panel" style="padding:10px 14px;font-size:13px;color:var(--muted)">Chargennummer <strong>' . h($chargeNr) . '</strong> und MHD <strong>' . h(date('d.m.Y', strtotime($chargeMhd))) . '</strong> in die Produktionsgeräte eintragen. Teilproduktionen an weiteren Tagen erhalten dieselbe Basis mit <strong>.B</strong>, <strong>.C</strong> …</div>';
 

@@ -15,3 +15,9 @@ Ruft je Auftrag `produktionsauftrag_art_setzen()` (setzt produktionsart + regene
 Schritte: eigen=voller Weg, fremd=verkürzter Zukauf-Weg). Bereits begonnene Aufträge
 (ein Schritt erledigt) werden übersprungen und gemeldet. Nötig, weil importierte
 Produktionsaufträge per Default auf „fremd" stehen.
+
+## Spalte „Kapsel/Tablette"
+Zeigt je Auftrag direkt die Größe (`produktion_groesse_label()` in `core/schema.php`): bei
+Kapsel/Softgel die gepflegte Kapselgröße, sonst die **kleinste passende** aus dem Füllgewicht
+der Rezeptur berechnet (Zusatz „(berechnet)"); bei Tablette das Füllgewicht in mg. Bei
+Pulver/Stick/Flüssig steht „–".
