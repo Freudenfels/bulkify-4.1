@@ -131,7 +131,7 @@ $bedarf = produktion_materialbedarf($id);
 $kapId = produkt_leerkapsel_id((int)$pa['produkt_id']);
 $kapNeed = null;
 if ($kapId) {
-    $einhK = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [$pa['produkt_id']]);
+    $einhK = produktion_stueck_je_packung($pa);
     $needK = (float)$pa['menge'] * $einhK;
     $verfK = item_bestand($kapId, true);
     $kapNeed = ['name'=>scalar("SELECT name FROM item WHERE id=?", [$kapId]), 'benoetigt'=>$needK, 'verfuegbar'=>$verfK, 'fehlt'=>max(0.0, $needK - $verfK)];
@@ -177,7 +177,7 @@ if (isset($_GET['teilfehler'])) echo '<div class="bx-panel" style="border-color:
 // Badges bringen ihre eigene Größe mit und bleiben unberührt; nur Text/Zahlen werden angeglichen.
 echo '<style>.bx-cards .v{font-size:15px;line-height:1.4}</style>';
 // Mengen-Aufschlüsselung: menge = Packungen, einheiten_pro_packung = Stück/Kapseln je Packung.
-$einhProP  = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+$einhProP  = produktion_stueck_je_packung($pa);
 $formPa    = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$pa['produkt_id']]);
 $stkWort   = in_array($formPa, ['kapsel','softgel'], true) ? 'Kapseln' : ($formPa === 'tablette' ? 'Tabletten' : 'Stück');
 $gesamtStk = $einhProP > 0 ? (int)$pa['menge'] * $einhProP : 0;

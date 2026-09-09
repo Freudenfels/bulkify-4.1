@@ -3661,6 +3661,16 @@ function produkt_bulk_info(int $produkt_id): array {
     return ['name'=>$name, 'form'=>$form, 'form_wort'=>$wort, 'einheit'=>$einheit, 'bezeichnung'=>$bez];
 }
 
+// Stück/Kapseln je Packung für einen Produktionsauftrag. Bevorzugt das Produkt
+// (einheiten_pro_packung); ist das 0 (v3-Import ohne verknüpftes Produkt), fällt es
+// auf den Auftrag zurück, der die Zahl als „stueck" trägt. Sonst 0.
+// $pa = Zeile aus produktionsauftrag (braucht produkt_id + auftrag_id).
+function produktion_stueck_je_packung(array $pa): int {
+    $e = !empty($pa['produkt_id']) ? (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) : 0;
+    if ($e > 0) return $e;
+    if (!empty($pa['auftrag_id'])) { $s = (int) scalar("SELECT stueck FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]); if ($s > 0) return $s; }
+    return 0;
+}
 // Kompletter Einkaufsbedarf eines Auftrags (Stückliste × Menge vs. freier Bestand).
 // Rückgabe je Komponente: ['rolle','item_id','name','benoetigt','verfuegbar','fehlt','einheit']
 function auftrag_bedarf(int $pa_id): array {
@@ -3668,7 +3678,7 @@ function auftrag_bedarf(int $pa_id): array {
     if (!$pa) return [];
     $aid = (int)$pa['auftrag_id'];
     $menge = (int)$pa['menge'];
-    $einh  = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    $einh  = produktion_stueck_je_packung($pa);
     $einheiten = $menge * $einh;
     $rows = [];
     // Zukauf des Bulks (Kapseln/Tabletten/Pulver) – wenn so entschieden (Fremdproduktion) ODER schon zugekauft eingegangen.
