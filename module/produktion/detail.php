@@ -181,25 +181,31 @@ $einhProP  = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?"
 $formPa    = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$pa['produkt_id']]);
 $stkWort   = in_array($formPa, ['kapsel','softgel'], true) ? 'Kapseln' : ($formPa === 'tablette' ? 'Tabletten' : 'Stück');
 $gesamtStk = $einhProP > 0 ? (int)$pa['menge'] * $einhProP : 0;
-echo '<div class="bx-cards">';
-echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $statusBadge . '</div></div>';
+// Eingabe-Kacheln vorbereiten (Priorität, Geplant am) und Größe.
 $prioSel = '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="prio"><select name="prio" onchange="this.form.submit()">';
 foreach (prio_liste() as $pk => $pl) $prioSel .= '<option value="' . $pk . '"' . ((int)$pa['prio'] === $pk ? ' selected' : '') . '>' . $pl . '</option>';
 $prioSel .= '</select></form>';
-echo '<div class="bx-card"><div class="k">Priorität</div><div class="v">' . $prioSel . '</div></div>';
 $geplantForm = '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="geplant"><input type="date" name="geplant_am" value="' . h((string)($pa['geplant_am'] ?? '')) . '" onchange="this.form.submit()"></form>';
-echo '<div class="bx-card"><div class="k">Geplant am</div><div class="v">' . $geplantForm . '</div></div>';
+$groesseLbl = produktion_groesse_label((int)$pa['produkt_id']);
+$artBadge = ($pa['produktionsart'] ?? 'eigen') === 'fremd' ? bx_badge('Fremdproduktion','info') : bx_badge('Eigenproduktion','ok');
+echo '<div class="bx-cards">';
+// 1) Zustand
+echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $statusBadge . '</div></div>';
 echo '<div class="bx-card"><div class="k">Bereitschaft</div><div class="v">' . bereitschaft_badge($ber['status']) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Fortschritt</div><div class="v">' . $done . ' / ' . $total . '</div></div>';
+echo '<div class="bx-card"><div class="k">Priorität</div><div class="v">' . $prioSel . '</div></div>';
+// 2) Produkt
+echo '<div class="bx-card"><div class="k">Produkt</div><div class="v">' . h($pa['produkt_name'] ?: '–') . '</div></div>';
+if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablette</div><div class="v">' . h($groesseLbl) . '</div></div>';
+echo '<div class="bx-card"><div class="k">Art</div><div class="v">' . $artBadge . '</div></div>';
+// 3) Menge
 echo '<div class="bx-card"><div class="k">Packungen gesamt</div><div class="v">' . number_format((int)$pa['menge'], 0, ',', '.') . '</div></div>';
 if ($einhProP > 0)  echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . '</div></div>';
 if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' gesamt</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
+// 4) Planung / Charge
+echo '<div class="bx-card"><div class="k">Geplant am</div><div class="v">' . $geplantForm . '</div></div>';
 echo '<div class="bx-card"><div class="k">Charge' . ($chargeGeb ? (count($fwChargen) > 1 ? 'n' : '') : ' (geplant)') . '</div><div class="v">' . h($chargeNr) . (count($fwChargen) > 1 ? ' <span class="muted" style="font-size:13px">+' . (count($fwChargen) - 1) . '</span>' : '') . '</div></div>';
 echo '<div class="bx-card"><div class="k">MHD' . ($chargeGeb ? '' : ' (+18 Mon.)') . '</div><div class="v">' . h(date('d.m.Y', strtotime($chargeMhd))) . '</div></div>';
-echo '<div class="bx-card"><div class="k">Art</div><div class="v">' . (($pa['produktionsart'] ?? 'eigen') === 'fremd' ? bx_badge('Fremdproduktion','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
-echo '<div class="bx-card"><div class="k">Produkt</div><div class="v">' . h($pa['produkt_name'] ?: '–') . '</div></div>';
-$groesseLbl = produktion_groesse_label((int)$pa['produkt_id']);
-if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablette</div><div class="v">' . h($groesseLbl) . '</div></div>';
 echo '</div>';
 if (!$chargeGeb) echo '<div class="bx-panel" style="padding:10px 14px;font-size:13px;color:var(--muted)">Chargennummer <strong>' . h($chargeNr) . '</strong> und MHD <strong>' . h(date('d.m.Y', strtotime($chargeMhd))) . '</strong> in die Produktionsgeräte eintragen. Teilproduktionen an weiteren Tagen erhalten dieselbe Basis mit <strong>.B</strong>, <strong>.C</strong> …</div>';
 
