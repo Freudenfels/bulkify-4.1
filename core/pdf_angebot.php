@@ -82,6 +82,23 @@ function angebot_pdf_bauen(int $angebot_id): ?string {
 
 // PDF ausliefern (inline im Browser). Gibt false zurueck, wenn es das Angebot nicht gibt.
 function angebot_pdf_ausliefern(int $angebot_id, string $nummer): bool {
+    // Nachgereichtes Original-PDF (z. B. das v3-Angebot) hat Vorrang: dann bekommt der Kunde/das Team
+    // genau diese Datei statt des neu erzeugten PDFs.
+    $orig = one("SELECT datei FROM dokument WHERE objekt_typ='angebot' AND objekt_id=? AND typ='angebot_original' ORDER BY id DESC LIMIT 1", [$angebot_id]);
+    if ($orig && $orig['datei']) {
+        $pfad = BX_UPLOADS . '/' . basename((string)$orig['datei']);
+        if (is_file($pfad) && strtolower(pathinfo($pfad, PATHINFO_EXTENSION)) === 'pdf') {
+            $roh = @file_get_contents($pfad);
+            if ($roh !== false && $roh !== '') {
+                header('Content-Type: application/pdf');
+                header('Content-Disposition: inline; filename="Angebot_' . preg_replace('/[^A-Za-z0-9_-]/', '', $nummer) . '.pdf"');
+                header('Content-Length: ' . strlen($roh));
+                header('Cache-Control: private, max-age=0, must-revalidate');
+                echo $roh;
+                return true;
+            }
+        }
+    }
     $pdf = angebot_pdf_bauen($angebot_id);
     if ($pdf === null) return false;
     header('Content-Type: application/pdf');

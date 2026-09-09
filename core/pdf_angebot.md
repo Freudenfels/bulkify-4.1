@@ -14,6 +14,10 @@ Stand des Angebots. Änderst du Positionen, ändert sich das PDF mit.
   wenn es das Angebot nicht gibt **oder kein Kunde daran hängt** (ohne Empfänger kein Beleg).
 - `angebot_pdf_ausliefern(int $angebot_id, string $nummer): bool` – setzt die Header und gibt
   das PDF aus (inline im Browser, Dateiname `Angebot_<Nr>.pdf`). `false` = nichts zu liefern.
+  **Vorrang für ein nachgereichtes Original:** Gibt es zum Angebot ein `dokument` mit
+  `typ='angebot_original'` (eine PDF-Datei, z. B. das per KI eingelesene v3-Angebot), wird
+  **genau diese Datei** ausgeliefert statt eines neu gebauten PDFs – so sieht der Kunde beim
+  Download exakt das Original. Fehlt es (oder ist es kein lesbares PDF), wird wie bisher gebaut.
 
 ## Was ins PDF kommt
 - **Kopf:** Angebotsnummer, Datum, **Gültig bis** (aus `angebot.gueltig_bis`, sonst Datum +

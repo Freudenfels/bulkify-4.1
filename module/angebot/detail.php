@@ -51,9 +51,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              . '{"positionen":[{"artikelnr":"","bezeichnung":"","beschreibung":"","menge":0,"einheit":"Stk.","preis":0}],"staffel":[{"menge":0,"stueck":0,"preis_pkg":0}]}'
              . "\nJede Positionszeile EINZELN (Herstellung, Glas/Verpackung, Deckel, Etikett …) mit ihrem Einzelpreis je Packung aus der Spalte 'Preis' (nicht Gesamt). menge = Spalte 'Menge'. beschreibung = die Zusatzzeilen unter der Bezeichnung. Zahlen mit Punkt als Dezimaltrennzeichen, keine Tausenderpunkte. staffel = Tabelle 'Preis je fertiges Produkt' (menge = ab Menge Packungen, stueck = Stück je Packung, preis_pkg = Preis/Packung).";
         $r = ki_datei_frage($tmp, $anw, ['json' => true, 'zweck' => 'Angebot erfassen', 'max_tokens' => 4000]);
-        @unlink($tmp);
-        if (empty($r['ok'])) { header('Location: ?p=angebot&id=' . $id . '&kifehler=' . urlencode('KI: ' . ($r['fehler'] ?? 'Dokument nicht lesbar.'))); exit; }
+        if (empty($r['ok'])) { @unlink($tmp); header('Location: ?p=angebot&id=' . $id . '&kifehler=' . urlencode('KI: ' . ($r['fehler'] ?? 'Dokument nicht lesbar.'))); exit; }
         $n = angebot_ki_pdf_uebernehmen((int)$id, (array)($r['daten'] ?? []));
+        // Original-PDF behalten und ans Angebot hängen – wird dem Kunden/Team als Download bevorzugt ausgeliefert.
+        if ($ext === 'pdf') {
+            $alt = one("SELECT datei FROM dokument WHERE objekt_typ='angebot' AND objekt_id=? AND typ='angebot_original'", [(int)$id]);
+            if ($alt && $alt['datei']) { @unlink(BX_UPLOADS . '/' . basename((string)$alt['datei'])); q("DELETE FROM dokument WHERE objekt_typ='angebot' AND objekt_id=? AND typ='angebot_original'", [(int)$id]); }
+            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar) VALUES ('angebot',?,?,?,?,?,1)",
+              [(int)$id, 'angebot_original', 'Original-Angebot (PDF)', basename($tmp), mb_substr((string)($_FILES['ki_datei']['name'] ?? 'angebot.pdf'), 0, 190)]);
+        } else {
+            @unlink($tmp);   // Bilder werden nicht als Kunden-PDF ausgeliefert
+        }
         header('Location: ?p=angebot&id=' . $id . ($n > 0 ? '&kiok=' . $n : '&kifehler=' . urlencode('Keine Positionen erkannt.'))); exit;
     } elseif ($aktion === 'pos_save' && !$neu) {
         // Alles oder nichts: Speichern loescht erst alle Positionen und schreibt sie neu.
