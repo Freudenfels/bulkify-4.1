@@ -107,6 +107,8 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 foreach (bedarf_bulk(true) as $b) if ($b['zu_bestellen'] > 1e-6) $ekl++;
             }
             $anfCount['einkaufsliste'] = $ekl;
+            // Aufträge, die noch nicht fertig (= versendet) sind.
+            $anfCount['auftraege'] = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status NOT IN ('versendet','storniert')");
             // Offene Kundenfreigaben: Rohstoffe mit Spec-Inhalt ohne Spec-Freigabe + Chargen mit CoA-Werten ohne CoA-Freigabe.
             $anfCount['freigaben'] =
                 (int) scalar("SELECT COUNT(*) FROM item i WHERE i.kategorie='rohstoff' AND i.gesperrt=0 AND COALESCE(i.spec_freigegeben,0)=0
@@ -136,6 +138,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 'aufgaben'      => "$n offene Aufgaben",
                 'bedarf'        => "$n Aufträge mit offenem Einkaufsbedarf (noch nicht gemeldet)",
                 'einkaufsliste' => "$n Positionen zu bestellen",
+                'auftraege'     => "$n Aufträge noch nicht fertig",
                 'freigaben'     => "$n offene Freigaben (Spezifikationen/CoA)",
                 default         => "$n offene Anfragen",
             };
