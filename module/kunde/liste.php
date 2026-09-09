@@ -45,6 +45,7 @@ $cols = [
 
 render_header('kunden', 'Kunden');
 bx_head('Kunden', count($rows) . ' Einträge', bx_btn('Neuer Kunde', '?p=kunde&id=neu', 'primary'));
+if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Kunde gelöscht (' . (int)$_GET['geloescht'] . ' Datensätze entfernt).</div>';
 ?>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="kunden">

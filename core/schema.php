@@ -1551,6 +1551,62 @@ function produktion_groesse_label(int $produkt_id): string {
     return '';
 }
 
+// Kunde KOMPLETT entfernen: der Kunde und alle an ihm hängenden Vorgänge (Angebote, Aufträge,
+// Belege, Produktionsaufträge, Rezepturen, Anfragen, Produkte, CRM) inkl. deren Unterzeilen.
+// Es gibt keine echten Foreign Keys, deshalb wird jede Kind-Tabelle gezielt geleert.
+// Sicherheitsstopp: produzierte Chargen (Lagerbezug/Rückverfolgung) werden NICHT blind gelöscht.
+// Läuft in einer Transaktion (alles oder nichts). Rückgabe: ['ok'=>bool, 'geloescht'=>int] oder ['ok'=>false,'fehler'=>…].
+function kunde_komplett_loeschen(int $kid): array {
+    if ($kid <= 0) return ['ok' => false, 'fehler' => 'Ungültige Kunden-ID.'];
+    if (!one("SELECT id FROM kunden WHERE id=?", [$kid])) return ['ok' => false, 'fehler' => 'Kunde nicht gefunden.'];
+
+    $idl = function(string $sql) use ($kid): array {
+        return array_map('intval', array_column(all($sql, [$kid]), 'id'));
+    };
+    $angebote  = $idl("SELECT id FROM angebot WHERE kunde_id=?");
+    $auftraege = $idl("SELECT id FROM auftrag WHERE kunde_id=?");
+    $pas       = $idl("SELECT id FROM produktionsauftrag WHERE kunde_id=?");
+    $rezepte   = $idl("SELECT id FROM rezeptur WHERE kunde_id=?");
+    $panfr     = $idl("SELECT id FROM portal_anfrage WHERE kunde_id=?");
+    $ranfr     = $idl("SELECT id FROM rezeptur_anfrage WHERE kunde_id=?");
+    $kontakte  = $idl("SELECT id FROM crm_kontakt WHERE kunde_id=?");
+    $belege    = array_values(array_unique(array_merge(
+        array_map('intval', array_column(all("SELECT id FROM beleg WHERE kunde_id=?", [$kid]), 'id')),
+        $auftraege ? array_map('intval', array_column(all("SELECT id FROM beleg WHERE auftrag_id IN (" . implode(',', $auftraege) . ")"), 'id')) : []
+    )));
+
+    // Sicherheitsstopp: echte Chargen bedeuten Lagerbestand + Rückverfolgung – die nie blind löschen.
+    $chargen = 0;
+    if ($auftraege) $chargen += (int) scalar("SELECT COUNT(*) FROM charge WHERE auftrag_id IN (" . implode(',', $auftraege) . ")");
+    if ($pas)       $chargen += (int) scalar("SELECT COUNT(*) FROM charge WHERE pa_id IN (" . implode(',', $pas) . ")");
+    if ($chargen > 0) return ['ok' => false, 'fehler' => 'Dieser Kunde hat ' . $chargen . ' produzierte Charge(n) mit Lagerbezug. Bitte erst im Lager/den Chargen bereinigen – dann erneut löschen.'];
+
+    $in = fn(array $a) => implode(',', array_map('intval', $a));
+    $del = 0;
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $x = function(string $sql) use (&$del) { $del += q($sql)->rowCount(); };
+        if ($angebote)  { $s = $in($angebote);  $x("DELETE FROM angebot_position WHERE angebot_id IN ($s)"); $x("DELETE FROM angebot_produkt WHERE angebot_id IN ($s)"); $x("DELETE FROM angebot_staffel WHERE angebot_id IN ($s)"); }
+        if ($auftraege) { $s = $in($auftraege); $x("DELETE FROM bestellung_position WHERE auftrag_id IN ($s)"); $x("DELETE FROM reservierung WHERE auftrag_id IN ($s)"); }
+        if ($pas)       { $s = $in($pas);       $x("DELETE FROM produktion_schritt WHERE pa_id IN ($s)"); $x("DELETE FROM produktion_verbrauch WHERE pa_id IN ($s)"); $x("DELETE FROM reservierung WHERE pa_id IN ($s)"); }
+        if ($belege)    { $s = $in($belege);    $x("DELETE FROM beleg_status_log WHERE beleg_id IN ($s)"); $x("DELETE FROM zahlung WHERE beleg_id IN ($s)"); }
+        if ($rezepte)   { $s = $in($rezepte);   $x("DELETE FROM rezeptur_zutat WHERE rezeptur_id IN ($s)"); $x("DELETE FROM portal_anfrage_pos WHERE rezeptur_id IN ($s)"); }
+        if ($panfr)     { $s = $in($panfr);     $x("DELETE FROM portal_anfrage_pos WHERE anfrage_id IN ($s)"); }
+        if ($ranfr)     { $s = $in($ranfr);     $x("DELETE FROM rezeptur_anfrage_wunsch WHERE anfrage_id IN ($s)"); }
+        if ($kontakte)  { $s = $in($kontakte);  $x("DELETE FROM crm_verlauf WHERE kontakt_id IN ($s)"); }
+        // Direkt am Kunden hängende Tabellen
+        foreach (['angebot','auftrag','beleg','produktionsauftrag','rezeptur','portal_anfrage','rezeptur_anfrage','produkt','produkt_kundenpreis','kunde_marke','crm_kontakt','crm_verlauf'] as $t)
+            $x("DELETE FROM $t WHERE kunde_id=$kid");
+        $x("DELETE FROM kunden WHERE id=$kid");
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        $pdo->rollBack();
+        return ['ok' => false, 'fehler' => 'Löschen abgebrochen: ' . $e->getMessage()];
+    }
+    return ['ok' => true, 'geloescht' => $del];
+}
+
 // Station Verkapselung: Leerkapseln nach FEFO abbuchen (menge × einheiten je Packung). Blockiert bei zu wenig Bestand.
 function produktion_kapseln_entnehmen(int $pa_id): array {
     $pa = one("SELECT menge, produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);

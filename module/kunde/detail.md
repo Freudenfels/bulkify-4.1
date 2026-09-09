@@ -24,3 +24,5 @@
 **Technik-Hinweis:** Alle Reiter liegen in **einem** Formular; ein kleines JavaScript blendet den aktiven Reiter ein und fügt Marken-Zeilen über „+" hinzu.
 
 **Regel / Muster:** Vorlage für weitere Detail-/Konto-Seiten. Neue Vorgangs-Reiter docken an, indem ihr Modul beim Speichern `log_aktivitaet(...)` mit `ref_typ`/`ref_id` aufruft – dann ist der Verlaufseintrag automatisch klickbar.
+
+**Gefahrenzone – Kunde komplett löschen:** Nur für **Admins** und nur bei bestehenden Kunden sichtbar. `aktion=komplett_loeschen` ruft `kunde_komplett_loeschen()` (in `core/schema.php`) auf – entfernt den Kunden **unwiderruflich** mit allen Angeboten/Aufträgen/Belegen/Produktionsaufträgen/Rezepturen/Anfragen/Produkten/CRM inkl. deren Unterzeilen, in einer Transaktion. **Sicherheitsstopp:** produzierte Chargen (Lagerbezug) blockieren das Löschen. **Bestätigung:** der Firmenname muss exakt eingetippt werden (Knopf sonst deaktiviert) und ein `confirm()` bestätigt. Erfolg leitet auf die Kundenliste (`?p=kunden&geloescht=N`).

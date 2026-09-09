@@ -8,6 +8,18 @@ require_once BX_ROOT . '/core/schema.php';
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
 
+// Kunde KOMPLETT löschen (nur Admin, unwiderruflich, Firmenname muss zur Bestätigung getippt werden).
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'komplett_loeschen') {
+    if (!has_role('admin')) { header('Location: ?p=kunde&id=' . (int)$id . '&loeschfehler=' . urlencode('Nur Admins dürfen Kunden löschen.')); exit; }
+    $firma = (string) scalar("SELECT firma FROM kunden WHERE id=?", [(int)$id]);
+    if (trim((string)($_POST['bestaetigung'] ?? '')) !== $firma) {
+        header('Location: ?p=kunde&id=' . (int)$id . '&loeschfehler=' . urlencode('Firmenname stimmt nicht – es wurde nichts gelöscht.')); exit;
+    }
+    $r = kunde_komplett_loeschen((int)$id);
+    if (!empty($r['ok'])) { header('Location: ?p=kunden&geloescht=' . (int)($r['geloescht'] ?? 0)); exit; }
+    header('Location: ?p=kunde&id=' . (int)$id . '&loeschfehler=' . urlencode((string)($r['fehler'] ?? 'Löschen fehlgeschlagen.'))); exit;
+}
+
 // Speichern
 $fehler = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -376,6 +388,30 @@ if (!$neu) {
     <a class="btn btn-ghost" href="?p=kunden">Abbrechen</a>
   </div>
 </form>
+
+<?php if (!$neu && function_exists('has_role') && has_role('admin')): ?>
+<?php if (isset($_GET['loeschfehler'])): ?>
+  <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['loeschfehler']) ?></div>
+<?php endif; ?>
+<div class="bx-panel" style="border-color:#e6c4c0;margin-top:20px">
+  <h2 style="margin-top:0;color:#8f231b">Gefahrenzone – Kunde komplett löschen</h2>
+  <p class="muted" style="margin-top:0">Entfernt <strong>unwiderruflich</strong> den Kunden <strong><?= $v('firma') ?></strong> mit allen Angeboten, Aufträgen, Rechnungen, Produktionsaufträgen, Rezepturen, Anfragen, Produkten und CRM-Einträgen. Nur für Testkunden gedacht. Produzierte Chargen (Lagerbezug) blockieren das Löschen zur Sicherheit.</p>
+  <form method="post" onsubmit="return confirm('Diesen Kunden und ALLE zugehörigen Vorgänge endgültig löschen?');">
+    <input type="hidden" name="aktion" value="komplett_loeschen">
+    <div class="bx-field" style="max-width:420px"><label>Zum Bestätigen den Firmennamen exakt eintippen</label>
+      <input type="text" name="bestaetigung" id="delConfirm" placeholder="<?= $v('firma') ?>" autocomplete="off"></div>
+    <button class="btn btn-danger" type="submit" id="delBtn" disabled>Kunde unwiderruflich löschen</button>
+  </form>
+</div>
+<script>
+(function(){
+  var soll = <?= json_encode((string)($k['firma'] ?? ''), JSON_UNESCAPED_UNICODE) ?>;
+  var inp = document.getElementById('delConfirm'), btn = document.getElementById('delBtn');
+  if (!inp || !btn) return;
+  inp.addEventListener('input', function(){ btn.disabled = (inp.value.trim() !== soll); });
+})();
+</script>
+<?php endif; ?>
 
 <script>
 (function(){
