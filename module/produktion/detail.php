@@ -176,6 +176,11 @@ if (isset($_GET['teilfehler'])) echo '<div class="bx-panel" style="border-color:
 // Einheitliche, ruhige Wertgröße für alle Kennzahl-Karten dieser Seite (wie „Produkt").
 // Badges bringen ihre eigene Größe mit und bleiben unberührt; nur Text/Zahlen werden angeglichen.
 echo '<style>.bx-cards .v{font-size:15px;line-height:1.4}</style>';
+// Mengen-Aufschlüsselung: menge = Packungen, einheiten_pro_packung = Stück/Kapseln je Packung.
+$einhProP  = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+$formPa    = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$pa['produkt_id']]);
+$stkWort   = in_array($formPa, ['kapsel','softgel'], true) ? 'Kapseln' : ($formPa === 'tablette' ? 'Tabletten' : 'Stück');
+$gesamtStk = $einhProP > 0 ? (int)$pa['menge'] * $einhProP : 0;
 echo '<div class="bx-cards">';
 echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $statusBadge . '</div></div>';
 $prioSel = '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="prio"><select name="prio" onchange="this.form.submit()">';
@@ -186,7 +191,9 @@ $geplantForm = '<form method="post" style="margin:0"><input type="hidden" name="
 echo '<div class="bx-card"><div class="k">Geplant am</div><div class="v">' . $geplantForm . '</div></div>';
 echo '<div class="bx-card"><div class="k">Bereitschaft</div><div class="v">' . bereitschaft_badge($ber['status']) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Fortschritt</div><div class="v">' . $done . ' / ' . $total . '</div></div>';
-echo '<div class="bx-card"><div class="k">Menge</div><div class="v">' . (int)$pa['menge'] . '</div></div>';
+echo '<div class="bx-card"><div class="k">Packungen gesamt</div><div class="v">' . number_format((int)$pa['menge'], 0, ',', '.') . '</div></div>';
+if ($einhProP > 0)  echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . '</div></div>';
+if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' gesamt</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
 echo '<div class="bx-card"><div class="k">Charge' . ($chargeGeb ? (count($fwChargen) > 1 ? 'n' : '') : ' (geplant)') . '</div><div class="v">' . h($chargeNr) . (count($fwChargen) > 1 ? ' <span class="muted" style="font-size:13px">+' . (count($fwChargen) - 1) . '</span>' : '') . '</div></div>';
 echo '<div class="bx-card"><div class="k">MHD' . ($chargeGeb ? '' : ' (+18 Mon.)') . '</div><div class="v">' . h(date('d.m.Y', strtotime($chargeMhd))) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Art</div><div class="v">' . (($pa['produktionsart'] ?? 'eigen') === 'fremd' ? bx_badge('Fremdproduktion','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
