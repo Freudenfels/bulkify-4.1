@@ -61,65 +61,96 @@ function spec_fuss(MiniPDF $p, float $y): void {
     $p->text($L, 812, $p->fit($foot, $R - $L, 7.5, false), 7.5, false, $GRAY);
 }
 
+// Abschnitts-Tabelle im bulkify-Stil: Titel, Kopfzeile (colA | colB), dann die Zeilen.
+// Gleiche Optik wie die Analysenwerte-Tabelle im CoA. Bricht bei Bedarf auf eine neue Seite um.
+function spec_tabelle(MiniPDF $p, float $y, string $titel, string $colA, string $colB, array $rows): float {
+    $INK = [44, 44, 42]; $GRAY = [95, 94, 90]; $LINE = [210, 208, 200];
+    $L = 40; $R = 555; $C2 = 360;
+    if ($y > 720) { $p->addPage(); $y = 54; }
+    $y += 14;
+    $p->text($L, $y, $titel, 11, true, $INK); $y += 6;
+    $p->line($L, $y + 4, $R, $y + 4, 0.8, $INK); $y += 8;
+    $p->text($L, $y + 10, $colA, 8, true, $GRAY);
+    $p->text($C2, $y + 10, $colB, 8, true, $GRAY);
+    $p->line($L, $y + 15, $R, $y + 15, 0.4, $LINE);
+    $y += 19;
+    foreach ($rows as $r) {
+        if ($y > 770) { $p->addPage(); $y = 54; }
+        $p->text($L, $y + 10, $p->fit((string)$r[0], $C2 - $L - 10, 9, false), 9, false, $INK);
+        $p->text($C2, $y + 10, $p->fit(((string)$r[1] !== '' ? (string)$r[1] : '–'), $R - $C2, 9, true), 9, true, $INK);
+        $p->line($L, $y + 15, $R, $y + 15, 0.3, $LINE);
+        $y += 16;
+    }
+    return $y;
+}
+
 // ---------------------------------------------------------------------------
 // Spezifikation eines Rohstoffs (Artikel-Ebene) – aus unseren Stammdaten.
+// Alle erfassten Spec-Daten kommen aufs Blatt: Identität, Gehalt (Assay),
+// charakteristische Kennwerte, Reinheit/Grenzwerte (Schwermetalle, Mikrobiologie,
+// Mykotoxine), Deklarationen und Lagerung – als saubere Abschnittstabellen.
 // ---------------------------------------------------------------------------
 function build_spec_pdf(int $item_id): ?string {
     $it = one("SELECT * FROM item WHERE id=?", [$item_id]);
     if (!$it) return null;
-    $INK = [44, 44, 42]; $GRAY = [95, 94, 90]; $LINE = [210, 208, 200];
+    $GRAY = [95, 94, 90];
     $L = 40; $R = 555;
     $p = new MiniPDF();
     $y = spec_kopf($p, 'Spezifikation', 'Specification · ' . (string)$it['name']);
 
     $fmtD = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '';
+
+    // --- Produktidentität ---
     $y = spec_zeile($p, $y, 'Bezeichnung', (string)$it['name']);
     if (!empty($it['synonym']))       $y = spec_zeile($p, $y, 'Synonyme', (string)$it['synonym']);
     if (!empty($it['bot_quelle']))    $y = spec_zeile($p, $y, 'Botanische Quelle', (string)$it['bot_quelle']);
     if (!empty($it['cas']))           $y = spec_zeile($p, $y, 'CAS-Nr.', (string)$it['cas']);
     if (!empty($it['ec_nr']))         $y = spec_zeile($p, $y, 'EC-Nr.', (string)$it['ec_nr']);
-    $y = spec_zeile($p, $y, 'Spezifikations-Nr.', trim((string)($it['spec_nr'] ?? '') . ' ' . (string)($it['spec_version'] ?? '')));
+    if (!empty($it['herkunftsland'])) $y = spec_zeile($p, $y, 'Herkunft', (string)$it['herkunftsland']);
+    if (!empty($it['zusaetze']))      $y = spec_zeile($p, $y, 'Zusätze / Trägerstoffe', (string)$it['zusaetze']);
+    $y = spec_zeile($p, $y, 'Spezifikations-Nr.', trim((string)($it['spec_nr'] ?? '') . ' ' . (string)($it['spec_version'] ?? '')) ?: '–');
     $y = spec_zeile($p, $y, 'Gültig ab', $fmtD($it['spec_gueltig_ab'] ?? '') ?: date('d.m.Y'));
-    if (!empty($it['herkunftsland']))    $y = spec_zeile($p, $y, 'Herkunft', (string)$it['herkunftsland']);
-    if (!empty($it['zusaetze']))         $y = spec_zeile($p, $y, 'Zusätze / Trägerstoffe', (string)$it['zusaetze']);
-    if (!empty($it['haltbarkeit']))      $y = spec_zeile($p, $y, 'Mindesthaltbarkeit', (string)$it['haltbarkeit']);
-    if (!empty($it['lagerbedingungen'])) $y = spec_zeile($p, $y, 'Lagerung', (string)$it['lagerbedingungen']);
-    $y = spec_zeile($p, $y, 'Allergene', (string)($it['allergene'] ?? '') !== '' ? (string)$it['allergene'] : 'keine deklarationspflichtigen Allergene');
 
-    // Gehalt an Wirkstoffen – das, wonach der Kunde als Erstes fragt.
-    $wirk = all("SELECT n.name, w.gehalt_prozent, n.einheit FROM item_wirkstoff w
+    // --- Gehalt (Assay) ---
+    $wirk = all("SELECT n.name, w.gehalt_prozent FROM item_wirkstoff w
                  JOIN naehrstoff n ON n.id=w.naehrstoff_id
                  WHERE w.item_id=? AND w.gehalt_prozent IS NOT NULL ORDER BY w.sort, n.name", [$item_id]);
-    if ($wirk) {
-        $y += 12;
-        $p->text($L, $y, 'Gehalt', 11, true, $INK); $y += 6;
-        $p->line($L, $y + 4, $R, $y + 4, 0.5, $LINE); $y += 16;
-        foreach ($wirk as $w) {
-            $p->text($L, $y, $p->fit((string)$w['name'], 300, 9, false), 9, false, $INK);
-            $p->textRight($R, $y, rtrim(rtrim(number_format((float)$w['gehalt_prozent'], 2, ',', '.'), '0'), ',') . ' %', 9, true, $INK);
-            $y += 13;
-        }
-    }
+    $wrows = array_map(fn($w) => [(string)$w['name'],
+        rtrim(rtrim(number_format((float)$w['gehalt_prozent'], 2, ',', '.'), '0'), ',') . ' %'], $wirk);
+    if ($wrows) $y = spec_tabelle($p, $y, 'Gehalt (Assay)', 'Wirkstoff', 'Gehalt', $wrows);
 
-    // Erklärungen – NULL heißt „nicht erklärt", darum das ausdrückliche „–".
-    $y += 14;
-    $p->text($L, $y, 'Erklärungen', 11, true, $INK); $y += 6;
-    $p->line($L, $y + 4, $R, $y + 4, 0.5, $LINE); $y += 16;
-    foreach ([
-        ['Vegan',            spec_jn($it['vegan'] ?? null)],
-        ['GVO-frei',         spec_jn($it['gvo_frei'] ?? null)],
-        ['Nicht bestrahlt',  spec_jn(isset($it['bestrahlt']) && $it['bestrahlt'] !== null ? (1 - (int)$it['bestrahlt']) : null)],
-        ['TSE/BSE-frei',     spec_jn($it['tse_bse_frei'] ?? null)],
-    ] as $e) {
-        $p->text($L, $y, $e[0], 9, false, $INK);
-        $p->text($L + 150, $y, $e[1], 9, true, $INK);
-        $y += 13;
-    }
-    if (!empty($it['zertifikate'])) $y = spec_zeile($p, $y + 4, 'Zertifikate', (string)$it['zertifikate']);
+    // --- Charakteristische Kennwerte (Sensorik, physikalisch-chemisch) ---
+    $kw = all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$item_id]);
+    $krows = array_map(fn($k) => [(string)$k['parameter'], (string)$k['wert']], $kw);
+    if ($krows) $y = spec_tabelle($p, $y, 'Charakteristische Kennwerte', 'Parameter', 'Wert', $krows);
 
-    $y += 18;
+    // --- Reinheit & Grenzwerte (Schwermetalle, Mikrobiologie, Mykotoxine …) ---
+    $gw = all("SELECT parameter, grenzwert FROM item_grenzwert WHERE item_id=? ORDER BY sort, id", [$item_id]);
+    $grows = array_map(fn($g) => [(string)$g['parameter'], (string)$g['grenzwert']], $gw);
+    if ($grows) $y = spec_tabelle($p, $y, 'Reinheit & Grenzwerte', 'Parameter', 'Grenzwert', $grows);
+
+    // --- Deklarationen (NULL = „nicht erklärt" -> „–") ---
+    $dekl = [
+        ['Vegan',           spec_jn($it['vegan'] ?? null)],
+        ['GVO-frei',        spec_jn($it['gvo_frei'] ?? null)],
+        ['Nicht bestrahlt', spec_jn(isset($it['bestrahlt']) && $it['bestrahlt'] !== null ? (1 - (int)$it['bestrahlt']) : null)],
+        ['TSE/BSE-frei',    spec_jn($it['tse_bse_frei'] ?? null)],
+        ['Allergene',       (string)($it['allergene'] ?? '') !== '' ? (string)$it['allergene'] : 'keine deklarationspflichtigen Allergene'],
+    ];
+    if (!empty($it['zertifikate'])) $dekl[] = ['Zertifikate', (string)$it['zertifikate']];
+    $y = spec_tabelle($p, $y, 'Deklarationen', 'Merkmal', 'Angabe', $dekl);
+
+    // --- Lagerung & Haltbarkeit ---
+    $lag = [];
+    if (!empty($it['lagerbedingungen'])) $lag[] = ['Lagerung', (string)$it['lagerbedingungen']];
+    if (!empty($it['haltbarkeit']))      $lag[] = ['Mindesthaltbarkeit', (string)$it['haltbarkeit']];
+    if ($lag) $y = spec_tabelle($p, $y, 'Lagerung & Haltbarkeit', 'Merkmal', 'Angabe', $lag);
+
+    // Schlusstext
+    $y += 16;
     foreach ($p->wrap('Diese Spezifikation beschreibt den Rohstoff, wie er von uns eingesetzt und weitergegeben wird. '
                     . 'Die Analysenwerte der einzelnen Lieferung stehen im Analysenzertifikat (CoA) zur jeweiligen Charge.', $R - $L, 9, false) as $wl) {
+        if ($y > 770) { $p->addPage(); $y = 54; }
         $p->text($L, $y, $wl, 9, false, $GRAY); $y += 12;
     }
     spec_fuss($p, $y + 20);
