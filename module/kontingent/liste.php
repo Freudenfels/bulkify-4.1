@@ -30,9 +30,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$rows = all("SELECT k.*, kd.firma AS kunde, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
+$rows = all("SELECT k.*, kd.firma AS kunde, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt,
+                    (SELECT id FROM dokument d WHERE d.objekt_typ='kontingent' AND d.objekt_id=k.id AND d.typ='jv_signiert' ORDER BY d.id DESC LIMIT 1) AS sig_dok
              FROM kontingent k LEFT JOIN kunden kd ON kd.id=k.kunde_id LEFT JOIN produkt p ON p.id=k.produkt_id
-             ORDER BY (k.status<>'aktiv'), k.angelegt DESC");
+             ORDER BY (k.status='wartet_freigabe') DESC, (k.status='aktiv') DESC, k.angelegt DESC");
+$statusBadge = fn($s) => match ($s) {
+    'aktiv'           => bx_badge('aktiv', 'ok'),
+    'wartet_vertrag'  => bx_badge('wartet auf Vertrag', 'info'),
+    'wartet_freigabe' => bx_badge('Vertrag prüfen', 'warn'),
+    'beendet'         => bx_badge('beendet', 'info'),
+    default           => bx_badge((string)$s),
+};
 $kunden   = all("SELECT id, firma FROM kunden WHERE gesperrt=0 ORDER BY firma");
 $produkte = all("SELECT id, COALESCE(NULLIF(kundenname,''), name) AS name FROM produkt ORDER BY name");
 $eur = fn($x) => number_format((float)$x, 4, ',', '.');
@@ -57,10 +65,14 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
         <td class="bx-num"><strong><?= number_format($rest, 0, ',', '.') ?></strong></td>
         <td class="bx-num"><?= $eur($r['vk_stueck']) ?> &euro;</td>
         <td><?= $r['gueltig_bis'] ? h(date('d.m.Y', strtotime((string)$r['gueltig_bis']))) . ($abgelaufen ? ' <span style="color:#8f231b;font-size:12px">abgelaufen</span>' : '') : '<span class="muted">–</span>' ?></td>
-        <td><?= ($r['status'] === 'aktiv') ? bx_badge('aktiv', 'ok') : bx_badge('beendet', 'info') ?></td>
-        <td class="bx-num"><form method="post" style="margin:0">
+        <td><?= $statusBadge($r['status']) ?></td>
+        <td class="bx-num" style="white-space:nowrap">
+          <?php if ($r['sig_dok']): ?><a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id=<?= (int)$r['sig_dok'] ?>">Vertrag</a><?php endif; ?>
+          <form method="post" style="margin:0;display:inline">
           <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-          <?php if ($r['status'] === 'aktiv'): ?><button class="btn btn-ghost btn-sm" type="submit" name="aktion" value="beenden">beenden</button>
+          <?php if ($r['status'] === 'wartet_freigabe'): ?><button class="btn btn-primary btn-sm" type="submit" name="aktion" value="aktivieren" title="Unterschriebenen Vertrag geprüft – Kontingent aktivieren">freigeben</button>
+          <?php elseif ($r['status'] === 'wartet_vertrag'): ?><span class="muted" style="font-size:12px">wartet auf Kunde</span>
+          <?php elseif ($r['status'] === 'aktiv'): ?><button class="btn btn-ghost btn-sm" type="submit" name="aktion" value="beenden">beenden</button>
           <?php else: ?><button class="btn btn-ghost btn-sm" type="submit" name="aktion" value="aktivieren">aktivieren</button><?php endif; ?>
         </form></td>
       </tr>

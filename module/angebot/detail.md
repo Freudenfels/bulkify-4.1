@@ -116,3 +116,6 @@ Bei bestehendem Angebot + eingerichteter KI (nur beta) steht oben ein Panel „A
 
 ## TEMPORÄR: „Löschen (temporär)"
 Roter Kopf-Button zum Aufräumen fehlerhafter v3-Import-Angebote (`aktion=angebot_hard_loeschen`). Löscht GENAU dieses Angebot samt Staffeln/Positionen und der verknüpften `portal_anfrage`; ein verknüpfter Auftrag wird nur GELÖST (angebot_id=NULL), nicht gelöscht. Ausschließlich per exakter ID – kein pauschales DELETE. **Nach dem Aufräumen wieder entfernen.**
+
+## Jahresabnahmevertrag
+In den Kopfdaten das Häkchen **„Jahresabnahmevertrag"** + **Jahresmenge** + **Festpreis je Packung** (+ Laufzeit). Dann bestätigt der Kunde das Angebot im Portal nicht als Einzelauftrag, sondern schließt einen **Jahresvertrag** ab (`kontingent_aus_angebot()` → Kontingent), lädt den unterschriebenen Vertrag hoch, und ruft nach eurer Freigabe die Mengen ab. Kopf-Button **⇩ Vertrag** zeigt das Vertrags-PDF (`?p=vertrag_pdf&id=`, siehe `core/pdf_vertrag.md`).

@@ -218,6 +218,47 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     header('Location: ?p=portal&token=' . $token . '&v=kontingente&kfehler=' . urlencode((string)($r['fehler'] ?? 'Abruf fehlgeschlagen.'))); exit;
 }
 
+// Jahresvertrag verbindlich abschließen: aus dem Jahresvertrags-Angebot ein Kontingent erzeugen
+// (Status 'wartet_vertrag'). Braucht Häkchen + Name (verbindlicher als eine normale Bestellung).
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'jahresvertrag_abschliessen') {
+    $aid  = (int)($_POST['angebot_id'] ?? 0);
+    $name = trim((string)($_POST['freigabe_name'] ?? ''));
+    $ok   = !empty($_POST['bestaetigt']);
+    $ang  = $aid ? one("SELECT id FROM angebot WHERE id=? AND kunde_id=? AND jahresvertrag=1", [$aid, (int)$k['id']]) : null;
+    if (!$ang || !$ok || $name === '') {
+        header('Location: ?p=portal&token=' . $token . '&v=kontingente&kfehler=' . urlencode('Für den verbindlichen Abschluss fehlen Bestätigung und Name.')); exit;
+    }
+    q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $aid]);
+    $r = kontingent_aus_angebot($aid, $name);
+    if (!empty($r['ok'])) { header('Location: ?p=portal&token=' . $token . '&v=kontingente&jvok=1'); exit; }
+    header('Location: ?p=portal&token=' . $token . '&v=kontingente&kfehler=' . urlencode((string)($r['fehler'] ?? 'Abschluss fehlgeschlagen.'))); exit;
+}
+
+// Unterschriebenen Jahresvertrag hochladen: Dokument ablegen + Kontingent auf 'wartet_freigabe'.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'jahresvertrag_upload') {
+    $konId = (int)($_POST['kontingent_id'] ?? 0);
+    $kon = $konId ? one("SELECT id, status FROM kontingent WHERE id=? AND kunde_id=?", [$konId, (int)$k['id']]) : null;
+    if (!$kon) { header('Location: ?p=portal&token=' . $token . '&v=kontingente&kfehler=' . urlencode('Vertrag nicht gefunden.')); exit; }
+    if (empty($_FILES['vertrag']['tmp_name']) || !is_uploaded_file($_FILES['vertrag']['tmp_name'])) {
+        header('Location: ?p=portal&token=' . $token . '&v=kontingente&kfehler=' . urlencode('Bitte die unterschriebene Datei wählen.')); exit;
+    }
+    $ext = preg_replace('/[^a-z0-9]/', '', strtolower(pathinfo((string)$_FILES['vertrag']['name'], PATHINFO_EXTENSION)));
+    if (!in_array($ext, ['pdf', 'jpg', 'jpeg', 'png', 'webp'], true)) {
+        header('Location: ?p=portal&token=' . $token . '&v=kontingente&kfehler=' . urlencode('Nur PDF oder Bild (PDF/JPG/PNG).')); exit;
+    }
+    if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+    $fn = 'jv_' . $konId . '_' . bin2hex(random_bytes(5)) . '.' . $ext;
+    if (!move_uploaded_file($_FILES['vertrag']['tmp_name'], BX_UPLOADS . '/' . $fn)) {
+        header('Location: ?p=portal&token=' . $token . '&v=kontingente&kfehler=' . urlencode('Datei nicht gespeichert.')); exit;
+    }
+    q("DELETE FROM dokument WHERE objekt_typ='kontingent' AND objekt_id=? AND typ='jv_signiert'", [$konId]);
+    q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar) VALUES ('kontingent',?,?,?,?,?,1)",
+      [$konId, 'jv_signiert', 'Unterschriebener Jahresvertrag', $fn, mb_substr((string)($_FILES['vertrag']['name'] ?? 'vertrag'), 0, 190)]);
+    kontingent_status($konId, 'wartet_freigabe');
+    log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Unterschriebenen Jahresvertrag hochgeladen – wartet auf Freigabe.', 'kontingent');
+    header('Location: ?p=portal&token=' . $token . '&v=kontingente&jvupload=1'); exit;
+}
+
 // Rezeptur-Vorschlag ablehnen (Pflicht-Grund) -> Status abgelehnt, Team überarbeitet
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rezeptur_ablehnen') {
     $rid   = (int)($_POST['rezeptur_id'] ?? 0);
@@ -510,7 +551,8 @@ if ($k['portal_produkte'])     { $L['produkte']   = 'Produkte';    $L['prodanfra
 if ($k['portal_rohstoffe'])    { $L['rohstoffe']  = 'Rohstoffe';   $L['rohanfrage'] = 'Rohstoff anfragen'; }
 if ($k['portal_dienstleistung']) $L['dienstleistung'] = 'Dienstleistung anfragen';
 // Jahresverträge/Kontingente: Menüpunkt nur, wenn der Kunde aktive Verträge hat.
-$hatKontingente = (int) scalar("SELECT COUNT(*) FROM kontingent WHERE kunde_id=? AND status='aktiv'", [(int)$k['id']]);
+$hatKontingente = (int) scalar("SELECT COUNT(*) FROM kontingent WHERE kunde_id=?", [(int)$k['id']])
+    + (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND jahresvertrag=1 AND status<>'offen' AND kunde_ausgeblendet=0", [(int)$k['id']]);
 if ($hatKontingente > 0) $L['kontingente'] = 'Jahresverträge';
 $L += ['angebote' => 'Angebote', 'bestellungen' => 'Bestellungen', 'rechnungen' => 'Rechnungen'];
 $NAVGROUPS = [
@@ -800,6 +842,34 @@ if (($_GET['v'] ?? '') === 'angebot_pdf') {
     require_once BX_ROOT . '/core/pdf_angebot.php';
     if (!angebot_pdf_ausliefern($aid, (string)$a['nummer'])) { http_response_code(404); echo 'Angebot nicht gefunden.'; }
     exit;
+}
+
+// Jahresabnahmevertrag als PDF (Kunde) – nur eigenes Jahresvertrags-Angebot.
+if (($_GET['v'] ?? '') === 'vertrag_pdf') {
+    $aid = (int)($_GET['aid'] ?? 0);
+    $a = $aid ? one("SELECT nummer FROM angebot WHERE id=? AND kunde_id=? AND jahresvertrag=1", [$aid, (int)$k['id']]) : null;
+    if (!$a) { http_response_code(404); echo 'Vertrag nicht gefunden.'; exit; }
+    require_once BX_ROOT . '/core/pdf_vertrag.php';
+    $pdf = build_jahresvertrag_pdf($aid);
+    if ($pdf === null) { http_response_code(409); echo 'Vertrag kann nicht erzeugt werden.'; exit; }
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="Jahresvertrag_' . preg_replace('/[^A-Za-z0-9_-]/', '', (string)$a['nummer']) . '.pdf"');
+    header('Content-Length: ' . strlen($pdf));
+    echo $pdf; exit;
+}
+
+// Unterschriebenen Jahresvertrag (Scan) herunterladen – Kunde sieht seinen eigenen Upload.
+if (($_GET['v'] ?? '') === 'jv_signiert') {
+    $konId = (int)($_GET['kid'] ?? 0);
+    $d = $konId ? one("SELECT d.datei, d.datei_orig FROM dokument d JOIN kontingent k ON k.id=d.objekt_id
+                       WHERE d.objekt_typ='kontingent' AND d.objekt_id=? AND d.typ='jv_signiert' AND k.kunde_id=?
+                       ORDER BY d.id DESC LIMIT 1", [$konId, (int)$k['id']]) : null;
+    $pfad = $d ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
+    if (!$d || !is_file($pfad)) { http_response_code(404); echo 'Datei nicht gefunden.'; exit; }
+    $ext = strtolower(pathinfo($pfad, PATHINFO_EXTENSION));
+    header('Content-Type: ' . ($ext === 'pdf' ? 'application/pdf' : 'image/' . ($ext === 'jpg' ? 'jpeg' : $ext)));
+    header('Content-Disposition: inline; filename="' . basename((string)($d['datei_orig'] ?: $d['datei'])) . '"');
+    readfile($pfad); exit;
 }
 
 // --- Rohstoff-Details für das Anfrage-Popup (JSON, on-demand) – kundenfreundliche Felder + Kennwerte ---
@@ -1838,7 +1908,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php foreach ($aktBest as $a): $cur = kunde_auftrag_phase($a)['idx']; $complete = $a['status'] === 'versendet'; ?>
   <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span></div>
+      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?></div>
       <div class="bx-row" style="gap:10px;align-items:center"><?= $aufBadge($a['status']) ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
     <ul class="bx-steps" style="margin-top:12px">
@@ -1971,16 +2041,89 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
 
 <?php elseif ($view === 'kontingente'):
+  $nf  = fn($x) => number_format((int)$x, 0, ',', '.');
+  $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
+  // Offene Jahresvertrags-Angebote (noch kein Kontingent) – zum verbindlichen Abschluss.
+  $jvOffers = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
+                   FROM angebot a LEFT JOIN produkt p ON p.id=a.produkt_id
+                   WHERE a.kunde_id=? AND a.jahresvertrag=1 AND a.status<>'offen' AND a.kunde_ausgeblendet=0
+                     AND NOT EXISTS (SELECT 1 FROM kontingent kk WHERE kk.angebot_id=a.id)
+                   ORDER BY a.angelegt DESC", [(int)$k['id']]);
+  // In Abwicklung: Kontingent existiert, aber noch nicht aktiv (wartet auf Vertrag / Freigabe).
+  $konsPend = all("SELECT k.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt,
+                          (SELECT id FROM dokument d WHERE d.objekt_typ='kontingent' AND d.objekt_id=k.id AND d.typ='jv_signiert' ORDER BY d.id DESC LIMIT 1) AS sig
+                   FROM kontingent k LEFT JOIN produkt p ON p.id=k.produkt_id
+                   WHERE k.kunde_id=? AND k.status IN ('wartet_vertrag','wartet_freigabe') ORDER BY k.angelegt DESC", [(int)$k['id']]);
   $kons = all("SELECT k.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
                FROM kontingent k LEFT JOIN produkt p ON p.id=k.produkt_id
-               WHERE k.kunde_id=? AND k.status='aktiv' ORDER BY k.angelegt DESC", [(int)$k['id']]);
-  $nf = fn($x) => number_format((int)$x, 0, ',', '.'); ?>
+               WHERE k.kunde_id=? AND k.status='aktiv' ORDER BY k.angelegt DESC", [(int)$k['id']]); ?>
   <h1 style="margin-bottom:4px">Ihre Jahresverträge</h1>
-  <p class="bx-sub">Rufen Sie Ihre vereinbarten Mengen ab – jeder Abruf wird automatisch eine Bestellung zum vereinbarten Preis.</p>
+  <p class="bx-sub">Jahresabnahmeverträge zum Festpreis. Nach Abschluss rufen Sie Ihre Mengen nach Bedarf ab – jeder Abruf wird eine Bestellung zum vereinbarten Preis.</p>
   <?php if (isset($_GET['abgerufen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px"><?= (int)$_GET['abgerufen'] ?> Packungen abgerufen – Ihre Bestellung wurde angelegt (siehe „Bestellungen").</div><?php endif; ?>
+  <?php if (isset($_GET['jvok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Jahresvertrag abgeschlossen. Bitte laden Sie unten den <strong>unterschriebenen Vertrag</strong> hoch – nach unserer Prüfung wird er aktiv.</div><?php endif; ?>
+  <?php if (isset($_GET['jvupload'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – der unterschriebene Vertrag ist eingegangen und wird von uns geprüft.</div><?php endif; ?>
   <?php if (isset($_GET['kfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['kfehler']) ?></div><?php endif; ?>
-  <?php if (!$kons): ?><div class="bx-panel"><div class="muted">Aktuell keine aktiven Verträge.</div></div>
-  <?php else: foreach ($kons as $kon): $rest = (int)$kon['gesamt_menge'] - (int)$kon['abgerufen'];
+
+  <?php // 1) Offene Jahresvertrags-Angebote – verbindlich abschließen (alle Konditionen sichtbar).
+  foreach ($jvOffers as $o):
+      $jm = (int)($o['jahresmenge'] ?? 0); $jvk = (float)($o['jahres_vk'] ?? 0); $jmon = (int)($o['jahres_laufzeit_monate'] ?? 12) ?: 12; ?>
+    <div class="bx-panel" style="border-color:var(--gruen)">
+      <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">Jahresabnahmevertrag: <?= h($o['produkt'] ?: 'Produkt') ?></h2>
+        <span class="badge" style="background:var(--gruen);color:#fff;padding:2px 10px;border-radius:999px;font-size:12px">zum Abschluss</span>
+      </div>
+      <div class="bx-row" style="gap:24px;flex-wrap:wrap;margin:12px 0">
+        <div><div class="k muted">Gesamtmenge</div><div><strong><?= $nf($jm) ?></strong> Packungen</div></div>
+        <div><div class="k muted">Festpreis</div><div><?= $eur($jvk) ?> / Packung</div></div>
+        <div><div class="k muted">Gesamtwert (netto)</div><div><?= $eur($jm * $jvk) ?></div></div>
+        <div><div class="k muted">Laufzeit</div><div><?= $jmon ?> Monate</div></div>
+      </div>
+      <p class="muted" style="margin:0 0 10px;font-size:13px">Mit dem Abschluss verpflichten Sie sich, die Gesamtmenge innerhalb der Laufzeit abzunehmen. Sie rufen die Mengen später nach Bedarf hier ab – zum festen Preis. <a href="<?= $portalLink('vertrag_pdf') ?>&aid=<?= (int)$o['id'] ?>" target="_blank"><strong>Vertrag als PDF ansehen</strong></a>.</p>
+      <form method="post" onsubmit="return confirm('Jahresabnahmevertrag über <?= $nf($jm) ?> Packungen verbindlich abschließen?');">
+        <input type="hidden" name="aktion" value="jahresvertrag_abschliessen">
+        <input type="hidden" name="angebot_id" value="<?= (int)$o['id'] ?>">
+        <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.45;margin-bottom:10px">
+          <input type="checkbox" name="bestaetigt" value="1" required style="margin-top:3px;flex:none">
+          <span>Ich schließe diesen Jahresabnahmevertrag über <strong><?= $nf($jm) ?> Packungen</strong> zum Festpreis <strong><?= $eur($jvk) ?>/Packung</strong> verbindlich ab und verpflichte mich zur Abnahme der Gesamtmenge innerhalb der Laufzeit.</span>
+        </label>
+        <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="bx-field" style="margin:0;max-width:280px"><label>Ihr Name <span class="muted">(gilt als verbindliche Bestätigung)</span></label>
+            <input type="text" name="freigabe_name" required autocomplete="name" placeholder="Vor- und Nachname"></div>
+          <button class="btn btn-primary" type="submit">Jahresvertrag verbindlich abschließen</button>
+        </div>
+      </form>
+    </div>
+  <?php endforeach; ?>
+
+  <?php // 2) In Abwicklung: Vertrag hochladen / wird geprüft.
+  foreach ($konsPend as $kp): $wartetVertrag = ($kp['status'] === 'wartet_vertrag'); ?>
+    <div class="bx-panel">
+      <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0"><?= h($kp['produkt'] ?: 'Produkt') ?></h2>
+        <span class="muted"><?= $nf($kp['gesamt_menge']) ?> Packungen · <?= $eur($kp['vk_stueck']) ?>/Packung</span>
+      </div>
+      <?php if ($wartetVertrag): ?>
+        <p style="margin:10px 0">Bitte laden Sie den <strong>unterschriebenen Vertrag</strong> hoch. Nach unserer Prüfung wird der Vertrag aktiv und Sie können Mengen abrufen.
+          <?php if ($kp['angebot_id']): ?><br><a href="<?= $portalLink('vertrag_pdf') ?>&aid=<?= (int)$kp['angebot_id'] ?>" target="_blank"><strong>Vertrag als PDF herunterladen</strong></a> → unterschreiben → einscannen → unten hochladen.<?php endif; ?></p>
+        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <input type="hidden" name="aktion" value="jahresvertrag_upload">
+          <input type="hidden" name="kontingent_id" value="<?= (int)$kp['id'] ?>">
+          <div class="bx-field" style="margin:0"><label>Unterschriebener Vertrag (PDF oder Foto)</label><input type="file" name="vertrag" required accept=".pdf,.jpg,.jpeg,.png,.webp"></div>
+          <button class="btn btn-primary" type="submit">Hochladen</button>
+        </form>
+      <?php else: ?>
+        <div class="bx-panel" style="background:var(--panel-2);padding:10px 14px;margin:10px 0 0">
+          <strong>Vertrag eingegangen – wird von uns geprüft.</strong> Sobald wir ihn freigegeben haben, können Sie hier Ihre Mengen abrufen.
+          <?php if ($kp['sig']): ?> <a href="<?= $portalLink('jv_signiert') ?>&kid=<?= (int)$kp['id'] ?>" target="_blank">Ihren Upload ansehen</a>.<?php endif; ?>
+        </div>
+      <?php endif; ?>
+    </div>
+  <?php endforeach; ?>
+
+  <?php // 3) Aktive Verträge – Mengen abrufen.
+  if (!$kons && !$jvOffers && !$konsPend): ?><div class="bx-panel"><div class="muted">Aktuell keine Jahresverträge.</div></div>
+  <?php elseif ($kons): ?><h2 style="margin:22px 0 8px">Aktive Verträge</h2><?php endif; ?>
+  <?php foreach ($kons as $kon): $rest = (int)$kon['gesamt_menge'] - (int)$kon['abgerufen'];
       $bis = $kon['gueltig_bis'] ? date('d.m.Y', strtotime((string)$kon['gueltig_bis'])) : null;
       $ab  = !empty($kon['gueltig_bis']) && (string)$kon['gueltig_bis'] < gmdate('Y-m-d'); ?>
     <div class="bx-panel">
@@ -2005,7 +2148,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       </form>
       <?php endif; ?>
     </div>
-  <?php endforeach; endif; ?>
+  <?php endforeach; ?>
 
 <?php elseif ($view === 'agb'):
   // Aktuelle Fassung, oder eine bestimmte über ?fassung=<id> – so lässt sich nachlesen, was bei

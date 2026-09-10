@@ -27,15 +27,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $gueltig = $f('gueltig_bis') !== '' ? $f('gueltig_bis') : null;
             $marge   = $f('marge') !== '' ? (float)str_replace(',', '.', $f('marge')) : null;
             $pz      = $f('produktionszeit') !== '' ? (float)str_replace(',', '.', $f('produktionszeit')) : null;
+            // Jahresabnahmevertrag: Häkchen + Jahresmenge + Festpreis (dann kein Einzelauftrag, sondern Kontingent).
+            $jv  = !empty($_POST['jahresvertrag']) ? 1 : 0;
+            $jm  = $f('jahresmenge') !== '' ? (int)str_replace(['.', ' '], '', $f('jahresmenge')) : null;
+            $jvk = $f('jahres_vk') !== '' ? (float)str_replace(',', '.', $f('jahres_vk')) : null;
+            $jlz = $f('jahres_laufzeit_monate') !== '' ? max(1, (int)$f('jahres_laufzeit_monate')) : 12;
             if ($produkt_id && (int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$produkt_id]) === 0) produkt_matrix_generieren($produkt_id);
             if ($neu) {
-                q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,gueltig_bis,notiz,marge_override,produktionszeit_wochen) VALUES (?,?,?,?,?,?,?,?)",
-                  [naechste_nummer('AN'), $kunde_id, $produkt_id, $status, $gueltig, $f('notiz'), $marge, $pz]);
+                q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,gueltig_bis,notiz,marge_override,produktionszeit_wochen,jahresvertrag,jahresmenge,jahres_vk,jahres_laufzeit_monate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                  [naechste_nummer('AN'), $kunde_id, $produkt_id, $status, $gueltig, $f('notiz'), $marge, $pz, $jv, $jm, $jvk, $jlz]);
                 $id = insert_id();
                 if ($kunde_id) log_aktivitaet('kunde', $kunde_id, 'team', 'Angebot erstellt.', 'angebot', 'angebot', (int)$id);
             } else {
-                q("UPDATE angebot SET kunde_id=?,produkt_id=?,status=?,gueltig_bis=?,notiz=?,marge_override=?,produktionszeit_wochen=? WHERE id=?",
-                  [$kunde_id, $produkt_id, $status, $gueltig, $f('notiz'), $marge, $pz, (int)$id]);
+                q("UPDATE angebot SET kunde_id=?,produkt_id=?,status=?,gueltig_bis=?,notiz=?,marge_override=?,produktionszeit_wochen=?,jahresvertrag=?,jahresmenge=?,jahres_vk=?,jahres_laufzeit_monate=? WHERE id=?",
+                  [$kunde_id, $produkt_id, $status, $gueltig, $f('notiz'), $marge, $pz, $jv, $jm, $jvk, $jlz, (int)$id]);
             }
             header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
         }
@@ -201,6 +206,7 @@ $kannSenden  = !$neu && $st === 'offen';
 $kannZurueck = !$neu && $st === 'gesendet';
 $kopfBtn = bx_btn('Zurück zur Liste', '?p=angebote', 'ghost');
 if (!$neu) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Angebot als PDF ansehen – genau das, was der Kunde bekommt" href="?p=angebot_pdf&id=' . (int)$id . '">&#8681; PDF</a>' . $kopfBtn;
+if (!$neu && (int)($a['jahresvertrag'] ?? 0) === 1) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Jahresabnahmevertrag als PDF" href="?p=vertrag_pdf&id=' . (int)$id . '">&#8681; Vertrag</a>' . $kopfBtn;
 // TEMPORÄR: gezieltes Löschen fehlerhafter Import-Angebote (dieses Angebot + verknüpfte Anfrage). Später wieder entfernen.
 if (!$neu) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Dieses Angebot inkl. verknüpfter Anfrage endgültig löschen? (Ein verknüpfter Auftrag bleibt erhalten, nur die Verknüpfung wird gelöst.)\');">'
     . '<input type="hidden" name="aktion" value="angebot_hard_loeschen">'
@@ -277,6 +283,20 @@ if (isset($_GET['kifehler'])) echo '<div class="bx-panel" style="border-color:#e
     <div class="bx-field"><label>Produktionszeit (Wochen)</label><input type="number" step="0.5" name="produktionszeit" value="<?= ($a['produktionszeit_wochen'] ?? '') !== '' && $a['produktionszeit_wochen'] !== null ? h(rtrim(rtrim(number_format((float)$a['produktionszeit_wochen'],1,'.',''),'0'),'.')) : '' ?>" placeholder="<?= h(rtrim(rtrim(number_format($defPz,1,',','.'),'0'),',')) ?> (Standard)"></div>
   </div>
   <div class="bx-field"><label>Notiz</label><textarea name="notiz"><?= $v('notiz') ?></textarea></div>
+  <?php $istJV = (int)($a['jahresvertrag'] ?? 0) === 1; ?>
+  <div class="bx-field" style="border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:4px">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" name="jahresvertrag" value="1" id="jvChk" <?= $istJV ? 'checked' : '' ?> style="width:auto">
+      <span><strong>Jahresabnahmevertrag</strong> – kein Einzelauftrag, sondern ein Kontingent, aus dem der Kunde übers Portal abruft</span>
+    </label>
+    <div class="bx-grid" id="jvFelder" style="margin-top:10px<?= $istJV ? '' : ';display:none' ?>">
+      <div class="bx-field"><label>Jahresmenge (Packungen)</label><input type="number" min="1" name="jahresmenge" value="<?= ($a['jahresmenge'] ?? '') !== '' && $a['jahresmenge'] !== null ? (int)$a['jahresmenge'] : '' ?>" placeholder="z. B. 45000"></div>
+      <div class="bx-field"><label>Festpreis je Packung (€)</label><input type="number" step="0.0001" name="jahres_vk" value="<?= ($a['jahres_vk'] ?? '') !== '' && $a['jahres_vk'] !== null ? h(rtrim(rtrim(number_format((float)$a['jahres_vk'],4,'.',''),'0'),'.')) : '' ?>" placeholder="z. B. 0,84"></div>
+      <div class="bx-field"><label>Laufzeit (Monate)</label><input type="number" min="1" name="jahres_laufzeit_monate" value="<?= (int)($a['jahres_laufzeit_monate'] ?? 12) ?: 12 ?>"></div>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:6px">Der Kunde bestätigt das Angebot wie gewohnt, lädt den unterschriebenen Vertrag hoch; nach eurer Freigabe wird das Kontingent aktiv.</div>
+  </div>
+  <script>(function(){var c=document.getElementById('jvChk'),f=document.getElementById('jvFelder');if(c&&f)c.addEventListener('change',function(){f.style.display=c.checked?'':'none';});})();</script>
   <div class="bx-row"><button class="btn btn-primary" type="submit"><?= $neu ? 'Angebot anlegen' : 'Kopfdaten speichern' ?></button><a class="btn btn-ghost" href="?p=angebote">Abbrechen</a></div>
   </details>
 </form>
