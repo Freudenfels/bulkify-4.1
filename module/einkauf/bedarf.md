@@ -3,6 +3,7 @@
 **Stufe 1 des Einkaufs-Ablaufs.** Nach der Auftragsbestätigung erscheint jeder offene/laufende Produktionsauftrag hier automatisch. Route `?p=bedarf` (Rollen production/labor/fulfillment/einkauf, admin). Menü: Werk → Warenwirtschaft, Admin → Einkauf.
 
 **Je Auftrag:**
+- **Kopfzeile:** Auftragsnummer · Produkt · Kunde · Packungen · **Kapsel-/Tablettengröße** (`produktion_groesse_label()`, nur wenn vorhanden) · Priorität · Meldestatus.
 - **Produktionsart** (`produktionsauftrag.produktionsart`, Dropdown): **Eigenproduktion** (wir machen es selbst → Rohstoff-/Verpackungsbedarf) oder **Fremdproduktion (zukaufen)** (fertiges Produkt extern beschaffen, kein Komponentenbedarf).
 - Bei Eigenproduktion: Kurzliste des **Fehlbedarfs** (`auftrag_fehlbedarf`, netto inkl. Netting gegen offene Bestellungen – auch Sammelbestellungen/Lager).
 - **„An Einkauf melden"** (`aktion=melden` → `produktionsauftrag.bedarf_gemeldet`): schiebt den Bedarf in die Einkäufer-Tagesliste. Rücknahme per `melden_zurueck`. Badge „an Einkauf gemeldet".

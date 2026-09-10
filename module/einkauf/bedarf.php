@@ -66,6 +66,7 @@ $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
         <a href="?p=produktionsauftrag&id=<?= (int)$pa['id'] ?>"><strong><?= h($pa['auftrag_nr'] ?: $pa['nummer']) ?></strong></a>
         · <?= h($pa['produkt'] ?: '–') ?><?= $pa['kunde'] ? ' · ' . h($pa['kunde']) : '' ?>
         <span class="muted">· <?= (int)$pa['menge'] ?> Packungen</span>
+        <?php $groesse = produktion_groesse_label((int)$pa['produkt_id']); if ($groesse !== ''): ?><span class="muted">· <?= h($groesse) ?></span><?php endif; ?>
         <?= prio_badge((int)($pa['prio'] ?? 2)) ?>
         <?= $gemeldet ? bx_badge('an Einkauf gemeldet','ok') : bx_badge('noch nicht gemeldet','warn') ?>
       </div>
