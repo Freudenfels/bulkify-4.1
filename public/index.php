@@ -59,6 +59,7 @@ $routes = [
     'angebote'        => 'angebot/liste.php',
     'angebot'         => 'angebot/detail.php',
     'angebot_pdf'     => 'angebot/pdf.php',
+    'vertrag_pdf'     => 'angebot/vertrag_pdf.php',   // Jahresabnahmevertrag (PDF) zum Angebot
     'auftraege'       => 'auftrag/liste.php',
     'kontingente'     => 'kontingent/liste.php',
     'auftrag'         => 'auftrag/detail.php',

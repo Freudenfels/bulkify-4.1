@@ -128,11 +128,12 @@ function spec_release(MiniPDF $p, float $y, string $datum): float {
     return $ly + 22;
 }
 
-// Fußzeile: rechtssichere Firmenzeile, unten auf der Seite.
-function spec_fuss(MiniPDF $p, float $y): void {
+// Fußzeile: rechtssichere Firmenzeile, unten auf der Seite. $maschHinweis=false unterdrückt den
+// „ohne Unterschrift gültig"-Satz (bei Verträgen, die ja gerade unterschrieben werden sollen).
+function spec_fuss(MiniPDF $p, float $y, bool $maschHinweis = true): void {
     $fa = beleg_firma(); $L = 40; $R = 555;
     if ($y > 748) { $p->addPage(); $y = 54; }
-    $p->text($L, $y, 'Dieses Dokument wurde maschinell erstellt und ist ohne Unterschrift gültig.', 8, false, SPEC_GRAU);
+    if ($maschHinweis) $p->text($L, $y, 'Dieses Dokument wurde maschinell erstellt und ist ohne Unterschrift gültig.', 8, false, SPEC_GRAU);
     $foot = $fa['name'] . ' · ' . $fa['strasse'] . ' · ' . $fa['plz_ort']
           . ($fa['land'] !== '' ? ' · ' . $fa['land'] : '')
           . ($fa['ust_id'] !== '' ? ' · USt-IdNr. ' . $fa['ust_id'] : '')

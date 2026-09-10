@@ -34,6 +34,7 @@ function route_rollen_map(): array {
         'angebote'           => ['sales', 'finance'],
         'angebot'            => ['sales', 'finance'],
         'angebot_pdf'        => ['sales', 'finance'],
+        'vertrag_pdf'        => ['sales', 'finance'],
         'auftraege'          => ['sales', 'finance', 'production', 'fulfillment'],
         'auftrag'            => ['sales', 'finance', 'production', 'fulfillment'],
         'anfragen'           => ['sales', 'production'],

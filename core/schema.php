@@ -995,6 +995,13 @@ function init_schema(): void {
     ensure_column('angebot', 'marge_override', "DECIMAL(6,2) NULL");          // je Angebot gesetzte Marge % (überschreibt Marge-je-Typ; VK = EK×(1+Marge))
     ensure_column('angebot', 'produktionszeit_wochen', "DECIMAL(5,1) NULL");  // je Angebot gesetzte Produktionszeit (Wochen); leer = globaler Wert
     ensure_column('angebot', 'anfrage_id', "INT NULL");                       // Herkunft: portal_anfrage (angefragte Konfiguration fürs Angebots-PDF)
+    ensure_column('angebot', 'jahresvertrag', "TINYINT(1) NOT NULL DEFAULT 0"); // Angebot ist ein Jahresabnahmevertrag (Kontingent statt Einzelauftrag)
+    ensure_column('angebot', 'jahresmenge', "INT NULL");                       // vereinbarte Jahres-Gesamtmenge (Packungen)
+    ensure_column('angebot', 'jahres_vk', "DECIMAL(12,4) NULL");               // Festpreis je Packung im Jahresvertrag
+    ensure_column('angebot', 'jahres_laufzeit_monate', "INT NOT NULL DEFAULT 12"); // Laufzeit des Jahresvertrags in Monaten
+    ensure_column('kontingent', 'angebot_id', "INT NULL");                     // Herkunft: aus welchem Jahresvertrags-Angebot entstanden
+    ensure_column('kontingent', 'freigabe_name', "VARCHAR(190) NULL");         // Unterzeichner (Portal-Bestätigung)
+    ensure_column('kontingent', 'freigabe_am', "DATETIME NULL");
     // Einmalige Bereinigung: Der Zwischenstand „zurueckgezogen" ist entfallen – Zurückziehen heißt jetzt
     // schlicht zurück in den Entwurf. Bestehende Datensätze einmalig auf 'offen' ziehen.
     if (meta_get('fix_angebot_zurueck', '') !== '1') {
@@ -4346,6 +4353,38 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     }
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftragsbestätigung, Rechnung & Produktionsauftrag automatisch erzeugt.', 'auftrag', 'auftrag', $aid);
     return $aid;
+}
+
+// Jahresvertrag aus einem Angebot: erzeugt (einmalig) das Kontingent im Status 'wartet_vertrag'.
+// Aktiv (abrufbar) wird es erst, wenn der unterschriebene Vertrag hochgeladen UND vom Team
+// freigegeben ist. Rueckgabe: ['ok'=>true,'kontingent_id'=>…] oder ['ok'=>false,'fehler'=>…].
+function kontingent_aus_angebot(int $angebot_id, string $unterzeichner = ''): array {
+    $a = one("SELECT * FROM angebot WHERE id=?", [$angebot_id]);
+    if (!$a) return ['ok' => false, 'fehler' => 'Angebot nicht gefunden.'];
+    if ((int)($a['jahresvertrag'] ?? 0) !== 1) return ['ok' => false, 'fehler' => 'Dieses Angebot ist kein Jahresvertrag.'];
+    if (empty($a['kunde_id']) || empty($a['produkt_id'])) return ['ok' => false, 'fehler' => 'Jahresvertrag braucht Kunde und Produkt.'];
+    $menge = (int)($a['jahresmenge'] ?? 0);
+    $vk    = (float)($a['jahres_vk'] ?? 0);
+    if ($menge < 1 || $vk <= 0) return ['ok' => false, 'fehler' => 'Jahresmenge und Festpreis müssen gesetzt sein.'];
+    // Schon vorhanden? (idempotent je Angebot)
+    $ex = one("SELECT id FROM kontingent WHERE angebot_id=?", [$angebot_id]);
+    if ($ex) return ['ok' => true, 'kontingent_id' => (int)$ex['id'], 'schon_da' => true];
+    $mon = (int)($a['jahres_laufzeit_monate'] ?? 12) ?: 12;
+    q("INSERT INTO kontingent (kunde_id,produkt_id,angebot_id,gesamt_menge,abgerufen,vk_stueck,gueltig_von,gueltig_bis,status,freigabe_name,freigabe_am,notiz)
+       VALUES (?,?,?,?,0,?,CURDATE(),DATE_ADD(CURDATE(), INTERVAL ? MONTH),'wartet_vertrag',?,UTC_TIMESTAMP(),?)",
+      [(int)$a['kunde_id'], (int)$a['produkt_id'], $angebot_id, $menge, $vk, $mon, ($unterzeichner ?: null),
+       'Aus Angebot ' . (string)$a['nummer'] . ' (Jahresvertrag).']);
+    $kid = insert_id();
+    q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$angebot_id]);
+    log_aktivitaet('kunde', (int)$a['kunde_id'], 'kunde', 'Jahresvertrag aus Angebot ' . (string)$a['nummer'] . ' abgeschlossen – wartet auf unterschriebenen Vertrag.', 'kontingent', 'angebot', $angebot_id);
+    return ['ok' => true, 'kontingent_id' => $kid];
+}
+
+// Status eines Jahresvertrags-Kontingents weiterschalten (Upload/Freigabe/Ablehnung).
+function kontingent_status(int $kontingent_id, string $status): bool {
+    if (!in_array($status, ['wartet_vertrag', 'wartet_freigabe', 'aktiv', 'beendet'], true)) return false;
+    q("UPDATE kontingent SET status=? WHERE id=?", [$status, $kontingent_id]);
+    return true;
 }
 
 // Abruf aus einem Kontingent (Rahmenvertrag/Jahresvertrag): erzeugt einen Auftrag zum vereinbarten
