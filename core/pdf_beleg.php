@@ -6,20 +6,24 @@ require_once __DIR__ . '/schema.php';
 
 // Firmenstammdaten fürs Dokument (aus den Einstellungen).
 function beleg_firma(): array {
+    // Defaults = echte Maniso-Stammdaten (wie v3 bh_firma). In den Einstellungen per meta überschreibbar,
+    // aber nie leer – so tragen Angebot/Rechnung/Spec/CoA immer Adresse, USt-IdNr., EORI und Bankdaten.
+    $strasse = trim((string) meta_get('firma_strasse', 'Ahornstraße') . ' ' . (string) meta_get('firma_hausnr', '45'));
+    $plzOrt  = trim((string) meta_get('firma_plz', '26842') . ' ' . (string) meta_get('firma_ort', 'Ostrhauderfehn'));
     return [
         'name'    => (string) meta_get('firma_name', 'Maniso GmbH'),
-        'strasse' => trim((string) meta_get('firma_strasse', '') . ' ' . (string) meta_get('firma_hausnr', '')),
-        'plz_ort' => trim((string) meta_get('firma_plz', '') . ' ' . (string) meta_get('firma_ort', '')),
+        'strasse' => $strasse !== '' ? $strasse : 'Ahornstraße 45',
+        'plz_ort' => $plzOrt !== '' ? $plzOrt : '26842 Ostrhauderfehn',
         'land'    => (string) meta_get('firma_land', 'Deutschland'),
-        'email'   => (string) meta_get('firma_email', ''),
-        'ust_id'  => (string) meta_get('firma_ustid', ''),
-        'eori'    => (string) meta_get('firma_eori', ''),
-        'bank_de_name'  => (string) meta_get('bank_de_name', ''),
-        'bank_de_iban'  => (string) meta_get('bank_de_iban', ''),
-        'bank_de_bic'   => (string) meta_get('bank_de_bic', ''),
-        'bank_int_name' => (string) meta_get('bank_int_name', ''),
-        'bank_int_iban' => (string) meta_get('bank_int_iban', ''),
-        'bank_int_bic'  => (string) meta_get('bank_int_bic', ''),
+        'email'   => (string) meta_get('firma_email', 'info@bulkify.pro'),
+        'ust_id'  => (string) meta_get('firma_ustid', 'DE364811989'),
+        'eori'    => (string) meta_get('firma_eori', 'DE554196572353634'),
+        'bank_de_name'  => (string) meta_get('bank_de_name', 'Commerzbank AG'),
+        'bank_de_iban'  => (string) meta_get('bank_de_iban', 'DE41 2904 0090 0450 3868 00'),
+        'bank_de_bic'   => (string) meta_get('bank_de_bic', 'COBADEFFXXX'),
+        'bank_int_name' => (string) meta_get('bank_int_name', 'Wise AG'),
+        'bank_int_iban' => (string) meta_get('bank_int_iban', 'BE71 9051 5297 5269'),
+        'bank_int_bic'  => (string) meta_get('bank_int_bic', 'TRWIBEB1XXX'),
     ];
 }
 

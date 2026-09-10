@@ -37,7 +37,10 @@ ein echtes bulkify-Angebot aus (Nutzer-Feedback: Vorlage `Angebot_Artischocke_AN
 - `$produktStaffel`: `[ ['name'=>, 'mpp'=>Stück/Pkg, 'rows'=>[['ab'=>,'stueck_cent'=>,'pack_cent'=>]]] ]`.
 
 Firmendaten kommen aus `beleg_firma()` (app_meta: firma_name/strasse/hausnr/plz/ort/land/
-email/ustid/eori). Zahlungsbedingung/Hinweis-Defaults aus `bh_zahlungsbedingung` /
+email/ustid/eori + Bank). **Defaults = echte Maniso-Stammdaten** (Ahornstraße 45, 26842
+Ostrhauderfehn, USt-IdNr. DE364811989, EORI DE554196572353634, info@bulkify.pro, Commerzbank/
+Wise – aus v3 `bh_firma`), sodass Adresse/USt/Bank nie leer sind; per Einstellungen
+überschreibbar. Zahlungsbedingung/Hinweis-Defaults aus `bh_zahlungsbedingung` /
 `bh_hinweis_herstellung`.
 
 ## Aufruf
