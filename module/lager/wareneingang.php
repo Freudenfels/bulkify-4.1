@@ -47,11 +47,19 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
 <form method="post" class="bx-form">
   <input type="hidden" name="aktion" value="buchen">
   <div class="bx-panel"><div class="bx-grid">
-    <div class="bx-field"><label>Artikel</label>
-      <select name="item_id" required>
-        <option value="">– wählen –</option>
-        <?php foreach ($items as $it): ?><option value="<?= $it['id'] ?>"><?= h($it['name']) ?> (<?= h($it['einheit']) ?>)</option><?php endforeach; ?>
-      </select>
+    <style>
+      .bx-combo{position:relative}
+      .bx-combo-list{position:absolute;left:0;right:0;top:100%;z-index:30;max-height:300px;overflow:auto;
+        background:var(--panel,#fff);border:1px solid var(--line,#ddd);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);margin-top:3px}
+      .bx-combo-list .opt{padding:8px 12px;cursor:pointer;font-size:14px}
+      .bx-combo-list .opt:hover,.bx-combo-list .opt.hl{background:var(--panel-2,#f2f2f0)}
+      .bx-combo-list .opt .muted{font-size:12px}
+      .bx-combo-empty{padding:8px 12px;color:var(--muted);font-size:13px}
+    </style>
+    <div class="bx-field bx-combo"><label>Artikel</label>
+      <input type="text" id="weArtSuche" autocomplete="off" placeholder="Artikel suchen oder wählen…" required aria-expanded="false">
+      <input type="hidden" name="item_id" id="weArtId">
+      <div id="weArtList" class="bx-combo-list" hidden></div>
     </div>
     <div class="bx-field"><label>Menge</label><input type="number" step="0.001" name="menge" required></div>
     <div class="bx-field"><label>Charge (Lieferant) <?= bx_hint('Chargennummer laut Lieferant/CoA') ?></label><input type="text" name="charge_nr"></div>
@@ -74,6 +82,43 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
   <button class="btn btn-primary" type="submit">Wareneingang buchen</button>
   </div>
 </form>
+<script>
+(function(){
+  var items = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie']], $items), JSON_UNESCAPED_UNICODE) ?>;
+  var box=document.getElementById('weArtSuche'), hid=document.getElementById('weArtId'), list=document.getElementById('weArtList');
+  if(!box||!hid||!list) return;
+  var katLbl={rohstoff:'Rohstoff',verpackung:'Verpackung',fertig:'Fertigware',verkaufsfertig:'Verkaufsfertig'};
+  var hl=-1, shown=[];
+  function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function render(q){
+    q=(q||'').trim().toLowerCase();
+    shown = items.filter(function(it){ return !q || it.n.toLowerCase().indexOf(q)>=0; }).slice(0,50);
+    if(!shown.length){ list.innerHTML='<div class="bx-combo-empty">Kein Artikel gefunden.</div>'; }
+    else list.innerHTML = shown.map(function(it,i){
+      return '<div class="opt" data-i="'+i+'">'+esc(it.n)+' <span class="muted">('+esc(it.e||'')+(it.k&&katLbl[it.k]?' · '+katLbl[it.k]:'')+')</span></div>';
+    }).join('');
+    hl=-1; list.hidden=false; box.setAttribute('aria-expanded','true');
+  }
+  function paint(){ Array.prototype.forEach.call(list.querySelectorAll('.opt'),function(o){ o.classList.toggle('hl', +o.dataset.i===hl); }); var el=list.querySelector('.opt.hl'); if(el) el.scrollIntoView({block:'nearest'}); }
+  function choose(i){ var it=shown[i]; if(!it) return; hid.value=it.id; box.value=it.n; box.setCustomValidity(''); close(); }
+  function close(){ list.hidden=true; box.setAttribute('aria-expanded','false'); }
+  box.addEventListener('input', function(){ hid.value=''; render(box.value); });
+  box.addEventListener('focus', function(){ render(box.value); });
+  box.addEventListener('keydown', function(e){
+    if(list.hidden){ if(e.key==='ArrowDown') render(box.value); return; }
+    if(e.key==='ArrowDown'){ e.preventDefault(); hl=Math.min(hl+1,shown.length-1); paint(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); hl=Math.max(hl-1,0); paint(); }
+    else if(e.key==='Enter'){ if(hl>=0){ e.preventDefault(); choose(hl); } }
+    else if(e.key==='Escape'){ close(); }
+  });
+  list.addEventListener('mousedown', function(e){ var o=e.target.closest('.opt'); if(o){ e.preventDefault(); choose(+o.dataset.i); } });
+  document.addEventListener('click', function(e){ if(!e.target.closest('#weArtSuche')&&!e.target.closest('#weArtList')) close(); });
+  if(box.form) box.form.addEventListener('submit', function(e){
+    if((box.value||'').trim()==='') return;   // leer -> HTML5 required greift
+    if(!hid.value){ e.preventDefault(); box.setCustomValidity('Bitte einen Artikel aus der Liste wählen.'); box.reportValidity(); }
+  });
+})();
+</script>
 
 <div class="bx-panel">
   <h2>Letzte Chargen</h2>
