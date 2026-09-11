@@ -42,6 +42,7 @@ $cols = [
     'wunsch_anzahl' => ['label'=>'Wünsche', 'sort'=>true, 'num'=>true],
     'rezeptur_nr'   => ['label'=>'Rezeptur', 'render'=>fn($r)=> $r['rezeptur_nr']?h($r['rezeptur_nr']):'<span class="muted">–</span>'],
     'status'        => ['label'=>'Status', 'sort'=>true, 'render'=>$statusBadge],
+    'angelegt'      => ['label'=>'Angefragt', 'sort'=>true, 'render'=>fn($r)=> $r['angelegt'] ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
 ];
 
 render_header('anfragen', 'Rezepturanfragen');

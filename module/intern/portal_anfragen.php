@@ -36,9 +36,9 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   </select>
 </form>
 <div class="bx-tablewrap"><table class="bx-table">
-  <thead><tr><th>Nr.</th><th>Kunde</th><th>Typ</th><th>Anfrage</th><th>Status</th><th></th></tr></thead>
+  <thead><tr><th>Nr.</th><th>Kunde</th><th>Typ</th><th>Anfrage</th><th>Status</th><th>Angefragt</th><th></th></tr></thead>
   <tbody>
-  <?php if (!$rows): ?><tr><td colspan="6" class="muted">Keine Portal-Anfragen.</td></tr><?php endif; ?>
+  <?php if (!$rows): ?><tr><td colspan="7" class="muted">Keine Portal-Anfragen.</td></tr><?php endif; ?>
   <?php foreach ($rows as $r):
       if ($r['typ'] === 'produkt') {
           $groesse = $r['fuellmenge_g'] ? rtrim(rtrim(number_format((float)$r['fuellmenge_g'],1,',','.'),'0'),',') . ' g/Pkg'
@@ -58,6 +58,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       <td><?= h($TYP[$r['typ']] ?? $r['typ']) ?></td>
       <td><?= h($txt) ?><?php if ($r['notiz']): ?><div class="muted" style="font-size:12px"><?= h($r['notiz']) ?></div><?php endif; ?></td>
       <td><?= $stBadge($r['status']) ?></td>
+      <td style="white-space:nowrap"><?= $r['angelegt'] ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>' ?></td>
       <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=portal_anfrage&id=<?= (int)$r['id'] ?>">öffnen</a></td>
     </tr>
   <?php endforeach; ?>

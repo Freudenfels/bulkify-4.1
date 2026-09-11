@@ -220,6 +220,7 @@ if ($kannSenden) $kopfBtn = '<form method="post" style="display:inline;margin-ri
 bx_head($neu ? 'Neues Angebot' : $v('nummer'),
         $neu ? 'Positionen' : 'Angebot bearbeiten',
         $kopfBtn);
+if (!$neu && !empty($a['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Erstellt am ' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . (!empty($a['aktualisiert']) && $a['aktualisiert'] !== $a['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($a['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
 if (isset($_GET['angefragt']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['angefragt'] . ' Preisanfrage(n) verschickt' . (isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '') . '. Sobald ein Lieferant antwortet, steht der Preis hier.</div>';
 if (isset($_GET['gespeichert']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['gesendet']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot an den Kunden gesendet – er sieht es jetzt im Portal.</div>';

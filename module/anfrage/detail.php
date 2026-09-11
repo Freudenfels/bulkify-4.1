@@ -126,6 +126,7 @@ render_header('anfragen', $neu ? 'Neue Anfrage' : ($a['nummer'] ?? 'Anfrage'));
 bx_head($neu ? 'Neue Rezepturanfrage' : $v('nummer'),
         $neu ? 'Kundenwunsch erfassen' : 'Anfrage bearbeiten',
         bx_btn('Zurück zur Liste', '?p=anfragen', 'ghost'));
+if (!$neu && !empty($a['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angefragt am ' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . ' Uhr</div>';
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['leer'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Bitte mindestens einen Rohstoff zuordnen (mit Menge in mg), bevor du den Vorschlag sendest.</div>';
 if (!$neu && ($a['status'] ?? '') === 'ueberarbeiten') {

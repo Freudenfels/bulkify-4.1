@@ -175,6 +175,7 @@ render_header('produkte', $neu ? 'Neues Produkt' : $p['name']);
 bx_head($neu ? 'Neues Produkt' : $v('name'),
         $neu ? 'Rezeptur + Verpackung + Kunde' : trim($v('nummer')),
         bx_btn('Zurück zur Liste', '?p=produkte', 'ghost'));
+if (!$neu && !empty($p['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angelegt am ' . h(fmt_zeit($p['angelegt'], 'd.m.Y H:i')) . (!empty($p['aktualisiert']) && $p['aktualisiert'] !== $p['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($p['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 ?>

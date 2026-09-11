@@ -45,6 +45,7 @@ $cols = [
     'darreichungsform' => ['label' => 'Form', 'sort' => true, 'render' => fn($r)=> h($DFORM[$r['darreichungsform']] ?? $r['darreichungsform'])],
     'zutat_anzahl'     => ['label' => 'Zutaten', 'sort' => true, 'num' => true],
     'status'           => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
+    'angelegt'         => ['label' => 'Angelegt', 'sort' => true, 'render' => fn($r)=> $r['angelegt'] ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
 ];
 
 render_header('rezeptur', 'Rezepturen');

@@ -47,6 +47,7 @@ $cols = [
     'gesamt_netto' => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['gesamt_netto'])],
     'rechnung_nr'  => ['label' => 'Rechnung', 'render' => fn($r)=> $r['rechnung_nr'] ? h($r['rechnung_nr']) : '<span class="muted">–</span>'],
     'status'       => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
+    'angelegt'     => ['label' => 'Erstellt', 'sort' => true, 'render' => fn($r)=> !empty($r['angelegt']) ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
 ];
 
 $TABS = ['offen' => 'Offen', 'abgeschlossen' => 'Abgeschlossen'];

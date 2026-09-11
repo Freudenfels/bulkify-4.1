@@ -209,6 +209,7 @@ if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">' . h($stkWort) . 
 echo '<div class="bx-card"><div class="k">Geplant am</div><div class="v">' . $geplantForm . '</div></div>';
 echo '<div class="bx-card"><div class="k">Charge' . ($chargeGeb ? (count($fwChargen) > 1 ? 'n' : '') : ' (geplant)') . '</div><div class="v">' . h($chargeNr) . (count($fwChargen) > 1 ? ' <span class="muted" style="font-size:13px">+' . (count($fwChargen) - 1) . '</span>' : '') . '</div></div>';
 echo '<div class="bx-card"><div class="k">MHD' . ($chargeGeb ? '' : ' (+18 Mon.)') . '</div><div class="v">' . h(date('d.m.Y', strtotime($chargeMhd))) . '</div></div>';
+if (!empty($pa['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($pa['angelegt'], 'd.m.Y H:i')) . '</div></div>';
 echo '</div>';
 if (!$chargeGeb) echo '<div class="bx-panel" style="padding:10px 14px;font-size:13px;color:var(--muted)">Chargennummer <strong>' . h($chargeNr) . '</strong> und MHD <strong>' . h(date('d.m.Y', strtotime($chargeMhd))) . '</strong> in die Produktionsgeräte eintragen. Teilproduktionen an weiteren Tagen erhalten dieselbe Basis mit <strong>.B</strong>, <strong>.C</strong> …</div>';
 

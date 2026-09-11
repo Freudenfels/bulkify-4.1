@@ -43,6 +43,7 @@ $cols = [
     'verpackung_name' => ['label' => 'Verpackung', 'render' => fn($r)=> $dash($r['verpackung_name'])],
     'einheiten_pro_packung' => ['label' => 'Einh./Pack', 'sort' => true, 'num' => true],
     'status'          => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
+    'angelegt'        => ['label' => 'Angelegt', 'sort' => true, 'render' => fn($r)=> $r['angelegt'] ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
 ];
 
 render_header('produkte', 'Produkte');

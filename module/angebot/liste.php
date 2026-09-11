@@ -48,6 +48,7 @@ $cols = [
     'produkt_name'   => ['label' => 'Produkt', 'sort' => true, 'render' => fn($r)=> $dash($r['produkt_name'])],
     'staffel_anzahl' => ['label' => 'Staffeln', 'sort' => true, 'num' => true],
     'status'         => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
+    'angelegt'       => ['label' => 'Erstellt', 'sort' => true, 'render' => fn($r)=> $r['angelegt'] ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
     'pdf'            => ['label' => '', 'render' => fn($r) => $r['kunde_id']
         ? pdf_btn('?p=angebot_pdf&id=' . (int)$r['id'], 'PDF', true, 'Angebot als PDF')
         : '<span class="muted" title="Kein Kunde hinterlegt">–</span>'],

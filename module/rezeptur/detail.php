@@ -118,6 +118,7 @@ render_header('rezeptur', $neu ? 'Neue Rezeptur' : $r['name']);
 bx_head($neu ? 'Neue Rezeptur' : $v('name'),
         $neu ? 'Formulierung anlegen' : trim($v('nummer') . ' · ' . ($DFORM[$df] ?? $df)),
         bx_btn('Zurück zur Liste', '?p=rezeptur', 'ghost'));
+if (!$neu && !empty($r['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angelegt am ' . h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) . (!empty($r['aktualisiert']) && $r['aktualisiert'] !== $r['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($r['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['gesendet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Vorschlag an den Kunden gesendet – er sieht ihn jetzt in seinem Portal. Änderungen hier speichern und ggf. „Erneut als Vorschlag senden".</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
