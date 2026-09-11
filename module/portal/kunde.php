@@ -371,7 +371,7 @@ $mg  = fn($x) => rtrim(rtrim(number_format((float)$x, 2, ',', '.'), '0'), ','); 
 function portal_head(string $titel): void {
     echo "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\">";
     echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
-    echo "<title>" . h($titel) . "</title><link rel=\"stylesheet\" href=\"assets/app.css\">";
+    echo "<title>" . h($titel) . "</title><link rel=\"stylesheet\" href=\"assets/app.css?v=" . (int) @filemtime(BX_ROOT . '/public/assets/app.css') . "\">";
     echo "<style>"
        . ".pt-badge{display:inline-block;background:var(--lime);color:#10210f;border-radius:10px;padding:0 7px;font-size:12px;font-weight:600}"
        . ".pt-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0;max-width:760px}"

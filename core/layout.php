@@ -67,7 +67,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     echo "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\">";
     echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
     echo "<title>" . h($titel ? "$titel – $marke $ver" : "$marke $ver") . "</title>";
-    echo "<link rel=\"stylesheet\" href=\"assets/app.css\">";
+    echo "<link rel=\"stylesheet\" href=\"assets/app.css?v=" . (int) @filemtime(BX_ROOT . '/public/assets/app.css') . "\">";
     echo pwa_head();
     echo "<script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>";
     // Menübreite + Einklapp-Zustand VOR dem Rendern setzen, sonst springt die Leiste beim Laden kurz.
