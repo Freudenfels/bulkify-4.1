@@ -102,7 +102,7 @@ h2{font-size:var(--fs-lg);font-weight:600;margin:0 0 var(--sp-3)}
 /* ---------- Tabelle / Liste ---------- */
 .bx-listbar{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3);flex-wrap:wrap}
 .bx-search{flex:1;min-width:220px;max-width:360px}
-.bx-tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
+.bx-tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow-x:auto;-webkit-overflow-scrolling:touch;box-shadow:var(--shadow)}
 table.bx-table{border-collapse:collapse;width:100%}
 .bx-table th,.bx-table td{text-align:left;padding:6px 12px;border-bottom:1px solid var(--line-2);font-weight:400;white-space:nowrap}
 /* Ausgewählte Zeile (Radio/Checkbox) mit Rahmen hervorheben */
