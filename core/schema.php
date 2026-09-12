@@ -1587,7 +1587,8 @@ function produkt_leerkapsel_id(int $produkt_id): ?int {
 // Anzeige-Groesse fuer die Produktion: bei Kapsel/Softgel die Kapselgroesse (gepflegt an der
 // Rezeptur, sonst aus dem Fuellgewicht berechnet = kleinste passende Kapsel); bei Tablette das
 // Fuellgewicht in mg (echte Tablettengroesse kennt das Schema nicht). Sonst leer.
-function produktion_groesse_label(int $produkt_id): string {
+// $kurz=true kürzt „(berechnet)" zu „(b)" – für schmale Listen-Tabellen.
+function produktion_groesse_label(int $produkt_id, bool $kurz = false): string {
     if ($produkt_id <= 0) return '';
     $p = one("SELECT r.darreichungsform AS form, kg.name AS kapsel_name,
                      (SELECT COALESCE(SUM(z.menge_mg),0) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id) AS fg
@@ -1600,7 +1601,7 @@ function produktion_groesse_label(int $produkt_id): string {
         if (!empty($p['kapsel_name'])) return (string)$p['kapsel_name'];
         if ($fg > 0) {
             $k = one("SELECT name FROM kapselgroesse WHERE fuellmenge_mg >= ? ORDER BY fuellmenge_mg ASC LIMIT 1", [$fg]);
-            return $k ? $k['name'] . ' (berechnet)' : 'größer als größte Kapsel';
+            return $k ? $k['name'] . ($kurz ? ' (b)' : ' (berechnet)') : 'größer als größte Kapsel';
         }
         return '';
     }

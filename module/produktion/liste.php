@@ -71,7 +71,7 @@ $cols = [
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
     'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
     'produkt_name' => ['label' => 'Produkt', 'render' => fn($r)=> $r['produkt_name']?h($r['produkt_name']):'<span class="muted">–</span>'],
-    'groesse'      => ['label' => 'Kapsel/Tablette', 'render' => function($r){ $g = produktion_groesse_label((int)($r['produkt_id'] ?? 0)); return $g !== '' ? h($g) : '<span class="muted">–</span>'; }],
+    'groesse'      => ['label' => 'Kapsel/Tablette', 'render' => function($r){ $g = produktion_groesse_label((int)($r['produkt_id'] ?? 0), true); return $g !== '' ? h($g) : '<span class="muted">–</span>'; }],
     'produktionsart' => ['label' => 'Art', 'render' => fn($r)=> ($r['produktionsart'] ?? 'fremd')==='eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info')],
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
     'fortschritt'  => ['label' => 'Fortschritt', 'render' => fn($r)=> (int)$r['n_done'].' / '.(int)$r['n_total']],
