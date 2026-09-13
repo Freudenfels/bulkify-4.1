@@ -1287,7 +1287,31 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php endforeach; ?>
     </div>
   </div>
-  <?php else: ?>
+  <?php else:
+    // Übersicht: was ist noch offen (angefragt / wartet auf Entscheidung) vs. erledigt (bestellt/abgeschlossen)?
+    $offen_ang = array_values(array_filter($angebote, fn($x) => $x['status'] === 'gesendet'));
+    $best_prog = []; $abgeschl = [];
+    foreach (array_filter($angebote, fn($x) => $x['status'] === 'bestaetigt') as $x) {
+        $auSt = (string) scalar("SELECT status FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [(int)$x['id']]);
+        if ($auSt === 'versendet') $abgeschl[] = $x; else $best_prog[] = $x;
+    }
+    $pruefNr = array_column($anfPruef, 'nummer');
+    $pending = array_values(array_filter($meineAnfRows, fn($r) => empty($r['angebot_id']) && !in_array($r['nummer'], $pruefNr, true)));
+    $nOffen  = count($offen_ang) + count($pending);
+    $sumOffen    = count($anfPruef) + $nOffen;          // wartet auf Sie + Angebot zum Bestätigen + in Prüfung
+    $sumErledigt = count($best_prog) + count($abgeschl); // bestätigt/in Arbeit + abgeschlossen
+  ?>
+
+  <div class="bx-row" style="gap:12px;margin:6px 0 16px;flex-wrap:wrap">
+    <div style="flex:1;min-width:150px;border:1px solid var(--line);border-left:4px solid var(--gruen);border-radius:10px;padding:12px 16px;background:var(--panel-2)">
+      <div style="font-size:26px;font-weight:700;line-height:1"><?= (int)$sumOffen ?></div>
+      <div class="muted" style="font-size:13px;margin-top:4px">offen <span style="font-size:12px">· angefragt / wartet auf Sie</span></div>
+    </div>
+    <div style="flex:1;min-width:150px;border:1px solid var(--line);border-left:4px solid var(--lime);border-radius:10px;padding:12px 16px;background:var(--panel-2)">
+      <div style="font-size:26px;font-weight:700;line-height:1"><?= (int)$sumErledigt ?></div>
+      <div class="muted" style="font-size:13px;margin-top:4px">erledigt <span style="font-size:12px">· bestellt / abgeschlossen</span></div>
+    </div>
+  </div>
 
   <?php if ($anfPruef): ?>
   <div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2)">
@@ -1312,18 +1336,8 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <?php
   // Drei Reiter: Offen (gesendete Angebote + noch offene Anfragen) · Bestätigt (angenommen, Auftrag in Arbeit) ·
-  // Abgeschlossen (Auftrag versendet – nur noch nachbestellbar/zur Bestellung springbar).
-  $offen_ang = array_values(array_filter($angebote, fn($x) => $x['status'] === 'gesendet'));
-  $best_prog = []; $abgeschl = [];
-  foreach (array_filter($angebote, fn($x) => $x['status'] === 'bestaetigt') as $x) {
-      $auSt = (string) scalar("SELECT status FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [(int)$x['id']]);
-      if ($auSt === 'versendet') $abgeschl[] = $x; else $best_prog[] = $x;
-  }
-  // Noch offene Anfragen ohne Angebot (in Prüfung) – NICHT die Rezeptur-Vorschläge (die stehen in „Wartet auf Sie").
-  $pruefNr = array_column($anfPruef, 'nummer');
-  $pending = array_values(array_filter($meineAnfRows, fn($r) => empty($r['angebot_id']) && !in_array($r['nummer'], $pruefNr, true)));
+  // Abgeschlossen (Auftrag versendet). Die Zahlen stehen bereits oben (Übersicht); hier nur der aktive Reiter.
   $oatab = in_array($_GET['oatab'] ?? '', ['bestaetigt','abgeschlossen'], true) ? $_GET['oatab'] : 'offen';
-  $nOffen = count($offen_ang) + count($pending);
   ?>
   <h2 style="margin:8px 0 6px">Ihre Vorgänge</h2>
   <div class="settabs" style="margin:0 0 12px">
