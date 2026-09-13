@@ -345,7 +345,13 @@ if (!$neu):
     <div id="ksplitbreak" style="display:none;margin-top:12px"></div>
   </div>
   <?php if (!$istKapsel): ?>
-  <div class="bx-panel muted">Bei <?= h($DFORM[$form]) ?> rechnen wir pro <strong>Portion</strong> (z. B. 1 Löffel/Stick) – kein Kapsel-Limit.</div>
+  <div class="bx-panel" id="portionpanel">
+    <h2>Portion</h2>
+    <div class="bx-row" style="gap:20px;align-items:center">
+      <div>Portionsgröße (Tagesdosis): <strong id="psumme">0 mg</strong></div>
+    </div>
+    <div class="muted" style="margin-top:8px">Bei <?= h($DFORM[$form]) ?> rechnen wir pro <strong>Portion</strong> (z. B. 1 Löffel/Stick) – kein Kapsel-Limit. Summe aus der finalen Zuordnung (oder ersatzweise aus der Wunschmenge des Kunden).</div>
+  </div>
   <?php endif; ?>
 
   <div class="bx-row" style="margin-top:var(--sp-4)">
@@ -454,10 +460,14 @@ function ksplitRender(n, cap){
     +'<div class="muted" style="margin-top:6px;font-size:12px">Kapazitaet Zielgroesse: '+nf(cap)+' mg je Kapsel. Werte gerundet (nur Anzeige – Rezeptur/Preis bleiben unveraendert).</div>';
   box.style.display='';
 }
+// Menge lesbar: mg, ab 1000 mg zusaetzlich in g.
+function fmtMenge(mg){ return nf1(mg)+' mg'+(mg>=1000?' ('+nf1(mg/1000)+' g)':''); }
 function kcheck(){
+  var total=0; document.querySelectorAll('#wrows .wrow').forEach(function(tr){ total += rowMg(tr); });
+  // Portions-Panel (Pulver/Stick/Fluessig): Portionsgroesse = Tagesdosis, kein Kapsel-Limit.
+  var pel=document.getElementById('psumme'); if(pel) pel.textContent=fmtMenge(total);
   var panel=document.getElementById('kapselpanel');
   if (!panel || panel.style.display==='none') return;
-  var total=0; document.querySelectorAll('#wrows .wrow').forEach(function(tr){ total += rowMg(tr); });
   var cap=parseInt(document.getElementById('kgroesse').value)||0;
   document.getElementById('ksumme').textContent=nf1(total)+' mg';
   var st=document.getElementById('kstatus'), sp=document.getElementById('ksplit');
