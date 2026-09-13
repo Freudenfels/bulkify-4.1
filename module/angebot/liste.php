@@ -48,6 +48,10 @@ $cols = [
     'produkt_name'   => ['label' => 'Produkt', 'sort' => true, 'render' => fn($r)=> $dash($r['produkt_name'])],
     'staffel_anzahl' => ['label' => 'Staffeln', 'sort' => true, 'num' => true],
     'status'         => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
+    // Sieht der Kunde die Preise? Nur relevant, sobald das Angebot raus ist (kein Entwurf).
+    'preise_kunde'   => ['label' => 'Kunde sieht Preise', 'render' => fn($r)=> $r['status'] === 'offen'
+        ? '<span class="muted">–</span>'
+        : ((int)($r['preise_kunde'] ?? 0) === 1 ? bx_badge('ja','ok') : bx_badge('gesperrt','warn'))],
     'angelegt'       => ['label' => 'Erstellt', 'sort' => true, 'render' => fn($r)=> $r['angelegt'] ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
     'pdf'            => ['label' => '', 'render' => fn($r) => $r['kunde_id']
         ? pdf_btn('?p=angebot_pdf&id=' . (int)$r['id'], 'PDF', true, 'Angebot als PDF')

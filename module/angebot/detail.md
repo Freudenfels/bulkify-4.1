@@ -33,6 +33,12 @@ Die Hinzufügen-Maske merkt sich die zuletzt benutzten Werte (Rezeptur, Größe,
 
 **„An Kunden senden" ist ein eigener Knopf.** Das Speichern der Kopfdaten ändert den Status **nie** – sonst wäre ein Angebot versehentlich beim Kunden. Ablauf: Angebot anlegen → Positionen bauen → **An Kunden senden** (setzt `gesendet`, sichert die Produkte via `angebot_produkte_sichern()`, setzt die Anfrage auf „beantwortet") → bei Bedarf **Zurückziehen** (zurück auf `offen`). Ein Angebot **ohne Positionen** wird nicht gesendet. Der Status ist im Kopf nur noch eine Anzeige; `bestätigt`/`abgelehnt` setzt der Kunde im Portal.
 
+**Preis-Freigabe für den Kunden (`angebot.preise_kunde`).** Getrennt vom Status. Der Kunde sieht ein Angebot im Portal **nur**, wenn `status<>'offen'` UND `preise_kunde=1`. So wird verhindert, dass beim Nachbearbeiten eines bereits gesendeten Angebots Zwischenstände/Preise leaken.
+- **Senden** setzt `preise_kunde=1` (Popup weist darauf hin, dass der Kunde die Preise sieht).
+- Werden Positionen eines **bereits gesendeten** Angebots erneut gespeichert (`pos_save`), wird `preise_kunde` automatisch auf 0 gesetzt (Sicherheitsnetz) – Hinweis „Preise gesperrt". Nach der Prüfung mit **Preise freigeben** wieder sichtbar machen.
+- Kopfzeilen-Knöpfe (nur wenn nicht Entwurf): **Preise freigeben** (`aktion=preise_freigeben`, Popup „Kunde wird die Preise sehen") und **Preise sperren** (`aktion=preise_sperren`). **Zurückziehen** setzt `preise_kunde=0` mit.
+- Anzeige: Kopf-Feld „Kunde sieht Preise: Ja/Nein" und Spalte in der Angebotsliste. Bestandsangebote (gesendet/bestätigt/abgelehnt) sind per einmaliger Migration `init_preise_kunde` auf 1 gesetzt.
+
 **Wunsch aus der Anfrage vorbelegt:** Hängt am Angebot eine `anfrage_id`, füllt „Position hinzufügen" die Felder vor: Rezeptur, Menge je Packung (Stück bzw. Füllmenge), Anzahl Packungen und ein zum Wunsch-Verpackungstyp passender Behälter (über `passende_behaelter_fuer()` + `verpackung_passt_zu_typ()`). Darüber steht, was übernommen wurde. Vorher musste das Team alles aus der Anfrage abtippen.
 
 **Angebot zurückziehen:** Knopf oben rechts, nur solange der Status `offen` oder `gesendet` ist – ein bestätigtes Angebot hängt bereits an einem Auftrag. Setzt den Status auf `zurueckgezogen` und schreibt einen Verlaufseintrag am Kunden. Im Portal fällt das Angebot damit automatisch aus der Annehmen-Logik (die prüft `status IN ('offen','gesendet')`) und wird als „zurückgezogen" angezeigt.

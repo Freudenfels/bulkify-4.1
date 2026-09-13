@@ -1002,6 +1002,15 @@ function init_schema(): void {
     ensure_column('angebot', 'jahresmenge', "INT NULL");                       // vereinbarte Jahres-Gesamtmenge (Packungen)
     ensure_column('angebot', 'jahres_vk', "DECIMAL(12,4) NULL");               // Festpreis je Packung im Jahresvertrag
     ensure_column('angebot', 'jahres_laufzeit_monate', "INT NOT NULL DEFAULT 12"); // Laufzeit des Jahresvertrags in Monaten
+    // Preis-Freigabe fuer den Kunden: erst wenn =1 sieht der Kunde das Angebot samt Preisen im Portal.
+    // Getrennt vom Status, damit ein bereits gesendetes Angebot beim Nachbearbeiten NICHT ungewollt Preise zeigt.
+    ensure_column('angebot', 'preise_kunde', "TINYINT(1) NOT NULL DEFAULT 0");
+    // Einmalig: bestehende, dem Kunden bereits sichtbare Angebote (gesendet/bestaetigt/abgelehnt) freigeben,
+    // damit laufende Angebote durch die neue Freigabe-Logik nicht ploetzlich verschwinden.
+    if (meta_get('init_preise_kunde', '') !== '1') {
+        q("UPDATE angebot SET preise_kunde=1 WHERE status IN ('gesendet','bestaetigt','abgelehnt')");
+        meta_set('init_preise_kunde', '1');
+    }
     ensure_column('kontingent', 'angebot_id', "INT NULL");                     // Herkunft: aus welchem Jahresvertrags-Angebot entstanden
     ensure_column('kontingent', 'freigabe_name', "VARCHAR(190) NULL");         // Unterzeichner (Portal-Bestätigung)
     ensure_column('kontingent', 'freigabe_am', "DATETIME NULL");

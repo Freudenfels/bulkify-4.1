@@ -92,14 +92,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         } catch (Throwable $e) { db()->rollBack(); throw $e; }
         db()->commit();
-        header('Location: ?p=angebot&id=' . $id . '&gespeichert=1#positionen'); exit;
+        // Sicherheitsnetz: Wird ein bereits gesendetes Angebot nachbearbeitet, werden die Preise fuer den
+        // Kunden automatisch GESPERRT. So sieht der Kunde nie einen Zwischenstand – erst nach erneuter Freigabe.
+        $warnP = '';
+        if ((int) scalar("SELECT preise_kunde FROM angebot WHERE id=?", [(int)$id]) === 1) {
+            q("UPDATE angebot SET preise_kunde=0 WHERE id=?", [(int)$id]);
+            $warnP = '&preisgesperrt=1';
+        }
+        header('Location: ?p=angebot&id=' . $id . '&gespeichert=1' . $warnP . '#positionen'); exit;
+    } elseif ($aktion === 'preise_freigeben' && !$neu) {
+        // Preise ausdruecklich fuer den Kunden freigeben (Bestaetigung erfolgt im UI-Popup).
+        q("UPDATE angebot SET preise_kunde=1 WHERE id=?", [(int)$id]);
+        $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [(int)$id]);
+        if ($kd) log_aktivitaet('kunde', $kd, 'team', 'Preise fuer Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [(int)$id]) . ' fuer den Kunden freigegeben.', 'angebot', 'angebot', (int)$id);
+        header('Location: ?p=angebot&id=' . $id . '&preisfrei=1'); exit;
+    } elseif ($aktion === 'preise_sperren' && !$neu) {
+        // Preise wieder sperren – der Kunde sieht das Angebot dann nicht mehr.
+        q("UPDATE angebot SET preise_kunde=0 WHERE id=?", [(int)$id]);
+        $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [(int)$id]);
+        if ($kd) log_aktivitaet('kunde', $kd, 'team', 'Preise fuer Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [(int)$id]) . ' fuer den Kunden gesperrt.', 'angebot', 'angebot', (int)$id);
+        header('Location: ?p=angebot&id=' . $id . '&preisgesperrt=1'); exit;
     } elseif ($aktion === 'senden' && !$neu) {
         // Der einzige Weg, ein Angebot beim Kunden sichtbar zu machen. Leere Angebote gehen nicht raus.
         $st  = (string) scalar("SELECT status FROM angebot WHERE id=?", [(int)$id]);
         $anz = (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=?", [(int)$id]);
         if ($st !== 'offen')  { header('Location: ?p=angebot&id=' . $id . '&sendfehler=status'); exit; }
         if ($anz === 0)       { header('Location: ?p=angebot&id=' . $id . '&sendfehler=leer'); exit; }
-        q("UPDATE angebot SET status='gesendet' WHERE id=?", [(int)$id]);
+        // Senden gibt die Preise fuer den Kunden frei (er sieht das Angebot erst dann im Portal).
+        q("UPDATE angebot SET status='gesendet', preise_kunde=1 WHERE id=?", [(int)$id]);
         // Gültigkeit zählt ab dem Tag, an dem das Angebot beim Kunden landet – ein alter Entwurf
         // wäre sonst schon abgelaufen. Ein selbst gesetztes Datum in der Zukunft bleibt stehen.
         q("UPDATE angebot SET gueltig_bis=? WHERE id=? AND (gueltig_bis IS NULL OR gueltig_bis < CURDATE())",
@@ -120,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // (das Portal zeigt nur 'gesendet'), hier bleibt dasselbe Angebot bearbeitbar.
         $st = (string) scalar("SELECT status FROM angebot WHERE id=?", [(int)$id]);
         if ($st === 'gesendet') {
-            q("UPDATE angebot SET status='offen' WHERE id=?", [(int)$id]);
+            q("UPDATE angebot SET status='offen', preise_kunde=0 WHERE id=?", [(int)$id]);
             $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [(int)$id]);
             if ($kd) log_aktivitaet('kunde', $kd, 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [(int)$id]) . ' zurückgezogen.', 'angebot', 'angebot', (int)$id);
             header('Location: ?p=angebot&id=' . $id . '&zurueckgezogen=1'); exit;
@@ -202,8 +222,12 @@ $defPz    = (float) meta_get('produktionszeit_wochen', 7);
 render_header('angebote', $neu ? 'Neues Angebot' : ($a['nummer'] ?? 'Angebot'));
 // Senden und Zurückziehen sind die einzigen Wege, die Sichtbarkeit beim Kunden zu ändern.
 $st          = (string)($a['status'] ?? 'offen');
+$preiseKunde = (int)($a['preise_kunde'] ?? 0) === 1;   // sieht der Kunde die Preise?
 $kannSenden  = !$neu && $st === 'offen';
 $kannZurueck = !$neu && $st === 'gesendet';
+// Preise nachtraeglich freigeben/sperren – nur sinnvoll, wenn das Angebot schon raus ist (nicht Entwurf).
+$kannPreisFreigeben = !$neu && $st !== 'offen' && !$preiseKunde;
+$kannPreisSperren   = !$neu && $st !== 'offen' && $preiseKunde;
 $kopfBtn = bx_btn('Zurück zur Liste', '?p=angebote', 'ghost');
 if (!$neu) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Angebot als PDF ansehen – genau das, was der Kunde bekommt" href="?p=angebot_pdf&id=' . (int)$id . '">&#8681; PDF</a>' . $kopfBtn;
 if (!$neu && (int)($a['jahresvertrag'] ?? 0) === 1) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Jahresabnahmevertrag als PDF" href="?p=vertrag_pdf&id=' . (int)$id . '">&#8681; Vertrag</a>' . $kopfBtn;
@@ -214,7 +238,13 @@ if (!$neu) $kopfBtn = '<form method="post" style="display:inline;margin-right:8p
 if ($kannZurueck) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot zurückziehen? Es verschwindet beim Kunden und ist hier wieder bearbeitbar.\');">'
     . '<input type="hidden" name="aktion" value="zurueckziehen">'
     . '<button class="btn btn-ghost" type="submit">Zurückziehen</button></form>' . $kopfBtn;
-if ($kannSenden) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot jetzt an den Kunden senden?\');">'
+if ($kannPreisSperren) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Preise für den Kunden sperren? Das Angebot verschwindet dann aus seinem Portal, bis du die Preise wieder freigibst.\');">'
+    . '<input type="hidden" name="aktion" value="preise_sperren">'
+    . '<button class="btn btn-ghost" type="submit">Preise sperren</button></form>' . $kopfBtn;
+if ($kannPreisFreigeben) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Der Kunde wird damit die Preise dieses Angebots im Portal sehen. Jetzt freigeben?\');">'
+    . '<input type="hidden" name="aktion" value="preise_freigeben">'
+    . '<button class="btn btn-primary" type="submit">Preise freigeben</button></form>' . $kopfBtn;
+if ($kannSenden) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot jetzt an den Kunden senden? Der Kunde wird damit das Angebot inkl. Preise im Portal sehen.\');">'
     . '<input type="hidden" name="aktion" value="senden">'
     . '<button class="btn btn-primary" type="submit">An Kunden senden</button></form>' . $kopfBtn;
 bx_head($neu ? 'Neues Angebot' : $v('nummer'),
@@ -223,7 +253,9 @@ bx_head($neu ? 'Neues Angebot' : $v('nummer'),
 if (!$neu && !empty($a['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Erstellt am ' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . (!empty($a['aktualisiert']) && $a['aktualisiert'] !== $a['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($a['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
 if (isset($_GET['angefragt']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['angefragt'] . ' Preisanfrage(n) verschickt' . (isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '') . '. Sobald ein Lieferant antwortet, steht der Preis hier.</div>';
 if (isset($_GET['gespeichert']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
-if (isset($_GET['gesendet']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot an den Kunden gesendet – er sieht es jetzt im Portal.</div>';
+if (isset($_GET['gesendet']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot an den Kunden gesendet – er sieht es jetzt im Portal (inkl. Preise).</div>';
+if (isset($_GET['preisfrei']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Preise freigegeben – der Kunde sieht das Angebot jetzt im Portal.</div>';
+if (isset($_GET['preisgesperrt'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Preise sind für den Kunden <strong>gesperrt</strong> – das Angebot ist in seinem Portal nicht sichtbar. Nach der Prüfung mit „Preise freigeben" wieder sichtbar machen.</div>';
 if (isset($_GET['mailfehler']))    echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">E-Mail an den Kunden nicht verschickt: ' . h((string)$_GET['mailfehler']) . '</div>';
 if (isset($_GET['zurueckgezogen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot zurückgezogen – beim Kunden verschwunden, hier wieder als Entwurf bearbeitbar.</div>';
 if (isset($_GET['zzfehler']))      echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Zurückziehen nicht mehr möglich – das Angebot ist bereits bestätigt oder abgelehnt.</div>';
@@ -274,6 +306,11 @@ if (isset($_GET['kifehler'])) echo '<div class="bx-panel" style="border-color:#e
               'abgelehnt'  => bx_badge('vom Kunden abgelehnt', 'err'),
               default      => bx_badge($st),
             } ?>
+      </div>
+    </div>
+    <div class="bx-field"><label>Kunde sieht Preise <?= bx_hint('Erst wenn die Preise freigegeben sind, sieht der Kunde das Angebot samt Preisen im Portal. Beim Nachbearbeiten der Positionen werden sie automatisch gesperrt.') ?></label>
+      <div style="padding:8px 0">
+        <?= $preiseKunde ? bx_badge('Ja – Preise für den Kunden sichtbar', 'ok') : bx_badge('Nein – für den Kunden gesperrt', 'warn') ?>
       </div>
       <?php if (!empty($a['freigabe_name'])): ?>
       <div class="muted" style="font-size:12px">Verbindlich bestätigt durch <strong><?= h($a['freigabe_name']) ?></strong><?= $a['freigabe_am'] ? ' am ' . h(fmt_zeit($a['freigabe_am'])) . ' Uhr' : '' ?></div>

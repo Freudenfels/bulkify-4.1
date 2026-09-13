@@ -468,6 +468,7 @@ $angebote = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produk
                  FROM angebot a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                  WHERE a.kunde_id=? AND a.kunde_ausgeblendet=0
                    AND a.status <> 'offen'
+                   AND a.preise_kunde = 1
                    -- Waisen-Angebote (Produkt/Rezeptur in v3 gelöscht) nicht im Kundenportal zeigen: kein Produkt UND
                    -- keine Rezeptur-Position => für den Kunden nicht handelbar. Intern (Cockpit) bleiben sie sichtbar.
                    AND (a.produkt_id IS NOT NULL
@@ -690,8 +691,8 @@ $kapselAnzeige = function(array $rezRow, float $totalMg) use ($portalKapseln, $k
     return $kapselFuer($totalMg);
 };
 $portalAnfragen = all("SELECT pa.*, p.name AS produkt_name, i.name AS verp_name, rz.name AS rezeptur_name,
-    (SELECT a.id FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id AND a.kunde_ausgeblendet=0 AND a.status<>'offen' ORDER BY a.id DESC LIMIT 1) AS angebot_id,
-    (SELECT a.status FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id AND a.kunde_ausgeblendet=0 AND a.status<>'offen' ORDER BY a.id DESC LIMIT 1) AS angebot_status,
+    (SELECT a.id FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id AND a.kunde_ausgeblendet=0 AND a.status<>'offen' AND a.preise_kunde=1 ORDER BY a.id DESC LIMIT 1) AS angebot_id,
+    (SELECT a.status FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id AND a.kunde_ausgeblendet=0 AND a.status<>'offen' AND a.preise_kunde=1 ORDER BY a.id DESC LIMIT 1) AS angebot_status,
     (SELECT au.id FROM angebot a JOIN auftrag au ON au.angebot_id=a.id WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id ORDER BY au.id DESC LIMIT 1) AS auftrag_id,
     (SELECT au.status FROM angebot a JOIN auftrag au ON au.angebot_id=a.id WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id ORDER BY au.id DESC LIMIT 1) AS auftrag_status
     FROM portal_anfrage pa
@@ -1175,7 +1176,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       </div>
       <div class="bx-field" style="margin-bottom:16px"><label>Ihre Idee</label>
         <textarea name="notiz" rows="4" placeholder="z. B. veganes Produkt für besseren Schlaf, 2 Kapseln abends, gerne pflanzlich und ohne Melatonin"><?= $ea('notiz') ?></textarea>
-        <div class="muted" style="font-size:13px;margin-top:4px">Zielgruppe, Wirkung, Wünsche – alles, was Ihnen wichtig ist.</div></div>
+        <div class="muted" style="font-size:13px;margin-top:4px">Zielgruppe, Wirkung, Wünsche – alles, was Ihnen wichtig ist. Je mehr Sie uns verraten, desto besser: Das hilft uns, Ihnen direkt die bestmögliche Rezeptur anzubieten.</div></div>
       <div class="muted" style="font-size:13px;margin-bottom:6px">Sie haben schon konkrete Zutaten? Dann tragen Sie sie hier ein – sonst lassen Sie die Tabelle einfach leer.</div>
       <table class="bx-table" style="margin-bottom:10px">
         <thead><tr><th>Wirkstoff / Zutat</th><th style="width:120px">Menge je Kapsel</th><th style="width:90px">Einheit</th><th></th></tr></thead>
