@@ -147,9 +147,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: ?p=angebot&id=' . $id . '&zzfehler=1'); exit;
     } elseif ($aktion === 'angebot_hard_loeschen' && !$neu) {
-        // TEMPORÄR (Aufräumen fehlerhafter v3-Importe): löscht GENAU dieses Angebot samt Staffeln/Positionen
-        // und der verknüpften Kunden-Anfrage (portal_anfrage). Ein evtl. verknüpfter Auftrag wird nur GELÖST,
-        // nicht gelöscht. Ausschließlich per exakter ID – kein pauschales DELETE.
+        // NUR dieses Angebot löschen (samt Staffeln/Positionen). Die verknüpfte Anfrage bleibt erhalten und
+        // wird wieder auf „offen/in Prüfung" gesetzt, damit ein neues Angebot gebaut werden kann. Ein evtl.
+        // verknüpfter Auftrag wird nur GELÖST, nicht gelöscht. Ausschließlich per exakter ID – kein pauschales DELETE.
         $aid = (int)$id;
         $anfrageId = (int) scalar("SELECT anfrage_id FROM angebot WHERE id=?", [$aid]);
         $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [$aid]);
@@ -158,11 +158,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$aid]);
         q("DELETE FROM angebot_position WHERE angebot_id=?", [$aid]);
         q("DELETE FROM angebot WHERE id=?", [$aid]);
-        if ($anfrageId > 0) {
-            try { q("DELETE FROM portal_anfrage_pos WHERE anfrage_id=?", [$anfrageId]); } catch (Throwable $e) {}
-            q("DELETE FROM portal_anfrage WHERE id=?", [$anfrageId]);
-        }
-        if ($kd) log_aktivitaet('kunde', $kd, 'team', 'Angebot ' . $nr . ' inkl. Anfrage gelöscht (Import-Aufräumen).', 'angebot');
+        // Anfrage NICHT löschen – nur wieder öffnen (sofern nicht vom Kunden abgelehnt).
+        if ($anfrageId > 0) q("UPDATE portal_anfrage SET status='neu' WHERE id=? AND status NOT IN ('abgelehnt')", [$anfrageId]);
+        if ($kd) log_aktivitaet('kunde', $kd, 'team', 'Angebot ' . $nr . ' gelöscht – die Anfrage bleibt bestehen.', 'angebot');
         header('Location: ?p=angebote&geloescht=1'); exit;
     } elseif ($aktion === 'pos_reset' && !$neu) {
         q("DELETE FROM angebot_position WHERE angebot_id=?", [(int)$id]);
@@ -231,10 +229,10 @@ $kannPreisSperren   = !$neu && $st !== 'offen' && $preiseKunde;
 $kopfBtn = bx_btn('Zurück zur Liste', '?p=angebote', 'ghost');
 if (!$neu) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Angebot als PDF ansehen – genau das, was der Kunde bekommt" href="?p=angebot_pdf&id=' . (int)$id . '">&#8681; PDF</a>' . $kopfBtn;
 if (!$neu && (int)($a['jahresvertrag'] ?? 0) === 1) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Jahresabnahmevertrag als PDF" href="?p=vertrag_pdf&id=' . (int)$id . '">&#8681; Vertrag</a>' . $kopfBtn;
-// TEMPORÄR: gezieltes Löschen fehlerhafter Import-Angebote (dieses Angebot + verknüpfte Anfrage). Später wieder entfernen.
-if (!$neu) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Dieses Angebot inkl. verknüpfter Anfrage endgültig löschen? (Ein verknüpfter Auftrag bleibt erhalten, nur die Verknüpfung wird gelöst.)\');">'
+// Angebot löschen: NUR das Angebot – die Anfrage bleibt bestehen und ist danach wieder offen für ein neues Angebot.
+if (!$neu) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Dieses Angebot löschen? Die Anfrage bleibt bestehen und ist danach wieder offen für ein neues Angebot. Ein verknüpfter Auftrag wird nur gelöst.\');">'
     . '<input type="hidden" name="aktion" value="angebot_hard_loeschen">'
-    . '<button class="btn btn-danger" type="submit" title="Fehlerhaften Import löschen (temporär)">Löschen (temporär)</button></form>' . $kopfBtn;
+    . '<button class="btn btn-danger" type="submit" title="Angebot löschen (Anfrage bleibt bestehen)">Angebot löschen</button></form>' . $kopfBtn;
 if ($kannZurueck) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot zurückziehen? Es verschwindet beim Kunden und ist hier wieder bearbeitbar.\');">'
     . '<input type="hidden" name="aktion" value="zurueckziehen">'
     . '<button class="btn btn-ghost" type="submit">Zurückziehen</button></form>' . $kopfBtn;
