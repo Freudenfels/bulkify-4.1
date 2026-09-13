@@ -300,10 +300,15 @@ if (!$neu):
           <?php foreach ($kapseln as $kg): ?><option value="<?= (int)$kg['fuellmenge_mg'] ?>" <?= $kg['name']==='Größe 0'?'selected':'' ?>><?= h($kg['name']) ?> (<?= (int)$kg['fuellmenge_mg'] ?> mg)</option><?php endforeach; ?>
         </select>
       </div>
-      <div>Summe je <?= $istKapsel?'Kapsel':'Portion' ?>: <strong id="ksumme">0 mg</strong></div>
+      <div>Tagesdosis gesamt: <strong id="ksumme">0 mg</strong></div>
       <div id="kstatus"></div>
     </div>
     <div class="muted" id="ksplit" style="margin-top:8px"></div>
+    <div id="ksplitwrap" style="display:none;margin-top:10px">
+      <button type="button" class="btn btn-ghost btn-sm" id="ksplitbtn">Aufteilung anzeigen</button>
+      <span class="muted" id="kalt" style="margin-left:10px"></span>
+    </div>
+    <div id="ksplitbreak" style="display:none;margin-top:12px"></div>
   </div>
   <?php if (!$istKapsel): ?>
   <div class="bx-panel muted">Bei <?= h($DFORM[$form]) ?> rechnen wir pro <strong>Portion</strong> (z. B. 1 Löffel/Stick) – kein Kapsel-Limit.</div>
@@ -368,20 +373,66 @@ function bxRohstoffCombo(sel){
   document.addEventListener('click',function(e){ if(!wrap.contains(e.target)) list.hidden=true; });
 }
 function nf(x){ return x.toLocaleString('de-DE'); }
+function nf1(x){ return Number(x).toLocaleString('de-DE',{maximumFractionDigits:1}); }
+// Aufgabe 3: automatische Kapsel-Aufteilung. Groessen (Fuellmenge mg) einmal aus der DB eingebettet.
+var KGROESSEN = <?= json_encode(array_map(fn($g)=>['name'=>(string)$g['name'],'mg'=>(int)$g['fuellmenge_mg']], $kapseln), JSON_UNESCAPED_UNICODE) ?>;
+// Aktuelle Zeilen als [{name, mg}] – Name = Kundenwunsch (Bezeichnung) oder gewaehlter Rohstoff.
+function ksplitRows(){
+  var rows=[];
+  document.querySelectorAll('#wrows .wrow').forEach(function(tr){
+    var mg=parseFloat(((tr.querySelector('.wfinal')||{}).value||'').replace(',','.'))||0;
+    if(!mg) return;
+    var bez=(tr.querySelector('input[name="w_bez[]"]')||{}).value||'';
+    if(!bez){ var sel=tr.querySelector('select[name="w_item[]"]'); if(sel && sel.selectedIndex>=0) bez=sel.options[sel.selectedIndex].textContent; }
+    rows.push({name:(bez||'Rohstoff').trim(), mg:mg});
+  });
+  return rows;
+}
+function ksplitRender(n, cap){
+  var rows=ksplitRows(), box=document.getElementById('ksplitbreak');
+  if(!rows.length){ box.style.display='none'; return; }
+  var jeKapsel=0;
+  var body=rows.map(function(r){
+    var je=r.mg/n; jeKapsel+=je;
+    return '<tr><td>'+bxEsc(r.name)+'</td><td style="text-align:right">'+nf1(r.mg)+' mg</td>'
+      +'<td style="text-align:right">'+nf1(je)+' mg</td><td style="text-align:right">'+n+'</td></tr>';
+  }).join('');
+  var passt = jeKapsel<=cap;
+  box.innerHTML='<div class="muted" style="margin-bottom:6px">So wird die Tagesdosis auf <strong>'+n+' Kapseln</strong> verteilt (jede Kapsel enthaelt anteilig alle Rohstoffe):</div>'
+    +'<div class="bx-tablewrap"><table class="bx-table"><thead><tr>'
+    +'<th>Rohstoff</th><th style="text-align:right">Tagesdosis</th><th style="text-align:right">je Kapsel</th><th style="text-align:right">Kapseln/Tag</th></tr></thead>'
+    +'<tbody>'+body+'</tbody>'
+    +'<tfoot><tr><th>Fuellgewicht je Kapsel</th><th style="text-align:right"></th>'
+    +'<th style="text-align:right">'+nf1(jeKapsel)+' mg</th>'
+    +'<th style="text-align:right">'+(passt?'<span class="badge badge-ok">passt</span>':'<span class="badge badge-err">zu viel</span>')+'</th></tr></tfoot>'
+    +'</table></div>'
+    +'<div class="muted" style="margin-top:6px;font-size:12px">Kapazitaet Zielgroesse: '+nf(cap)+' mg je Kapsel. Werte gerundet (nur Anzeige – Rezeptur/Preis bleiben unveraendert).</div>';
+  box.style.display='';
+}
 function kcheck(){
   var panel=document.getElementById('kapselpanel');
   if (!panel || panel.style.display==='none') return;
   var total=0; document.querySelectorAll('.wfinal').forEach(function(i){ total += parseFloat((i.value||'').replace(',','.'))||0; });
   var cap=parseInt(document.getElementById('kgroesse').value)||0;
-  document.getElementById('ksumme').textContent=nf(total)+' mg';
+  document.getElementById('ksumme').textContent=nf1(total)+' mg';
   var st=document.getElementById('kstatus'), sp=document.getElementById('ksplit');
-  if (!total || !cap){ st.innerHTML=''; sp.textContent=''; return; }
-  if (total<=cap){ st.innerHTML='<span class="badge badge-ok">passt</span>'; sp.textContent=''; }
-  else {
-    var n=Math.ceil(total/cap);
-    st.innerHTML='<span class="badge badge-err">passt nicht</span>';
-    sp.textContent='Vorschlag: auf '+n+' Kapseln/Tag aufteilen (je ~'+nf(Math.round(total/n))+' mg).';
+  var wrap=document.getElementById('ksplitwrap'), brk=document.getElementById('ksplitbreak'), alt=document.getElementById('kalt');
+  if (!total || !cap){ st.innerHTML=''; sp.textContent=''; wrap.style.display='none'; brk.style.display='none'; return; }
+  if (total<=cap){
+    st.innerHTML='<span class="badge badge-ok">passt</span>';
+    sp.textContent='Die gesamte Tagesdosis passt in eine Kapsel der gewaehlten Groesse.';
+    wrap.style.display='none'; brk.style.display='none';
+    return;
   }
+  var n=Math.ceil(total/cap);
+  st.innerHTML='<span class="badge badge-err">passt nicht</span>';
+  sp.innerHTML='Passt nicht in die gewaehlte Groesse ('+nf(cap)+' mg) – benoetigt <strong>'+n+' Kapseln pro Tag</strong> (je ~'+nf1(total/n)+' mg).';
+  // Alternative: kleinste Einzelgroesse, in die die gesamte Tagesdosis ohne Aufteilung passt.
+  var fit=KGROESSEN.filter(function(g){return g.mg>=total;}).sort(function(a,b){return a.mg-b.mg;})[0];
+  alt.textContent = fit ? ('Ohne Aufteilung wuerde passen: '+fit.name+' ('+nf(fit.mg)+' mg).') : 'Auch die groesste Kapsel reicht fuer eine Kapsel nicht – Aufteilung noetig.';
+  wrap.style.display='';
+  // Aufschluesselung nur zeigen, wenn schon aufgeklappt (Button toggelt sie).
+  if (brk.style.display!=='none') ksplitRender(n, cap);
 }
 (function(){
   document.getElementById('addW').addEventListener('click', function(){
@@ -398,6 +449,15 @@ function kcheck(){
   });
   document.querySelectorAll('.wfinal').forEach(function(i){i.addEventListener('input',kcheck);});
   var kg=document.getElementById('kgroesse'); if(kg) kg.addEventListener('change',kcheck);
+  var sb=document.getElementById('ksplitbtn');
+  if(sb) sb.addEventListener('click',function(){
+    var brk=document.getElementById('ksplitbreak');
+    if(brk.style.display==='none'){
+      var total=0; document.querySelectorAll('.wfinal').forEach(function(i){ total += parseFloat((i.value||'').replace(',','.'))||0; });
+      var cap=parseInt(document.getElementById('kgroesse').value)||0;
+      if(total&&cap&&total>cap){ ksplitRender(Math.ceil(total/cap), cap); sb.textContent='Aufteilung ausblenden'; }
+    } else { brk.style.display='none'; sb.textContent='Aufteilung anzeigen'; }
+  });
   document.querySelectorAll('select[name="w_item[]"]').forEach(bxRohstoffCombo);   // bestehende Zeilen aufwerten
   kcheck();
 })();

@@ -9,7 +9,7 @@
   - rechts **unsere Zuordnung**: echter **Rohstoff** (Auswahl mit **CAS**) + **finale Menge (mg)** je Einheit/Portion.
   - **Auto-Zuordnung:** `anfrage_auto_item()` schlägt beim Öffnen den passenden Rohstoff vor (über Nährstoff- oder Item-Name) – z. B. „Vitamin C" → Ascorbinsäure (CAS 50-81-7).
   - Zeilen hinzufügbar (z. B. Füllstoff).
-- **Kapsel-Check** (bei Kapsel/Tablette/Softgel): Zielgröße wählen → Summe je Kapsel vs. Füllmenge; passt nicht → **Split-Vorschlag** (z. B. 1000 mg → 2 Kapseln/Tag je ~500 mg). Bei Pulver/Stick/Flüssig: Hinweis „pro Portion", kein Kapsel-Limit.
+- **Kapsel-Check** (bei Kapsel/Tablette/Softgel): Zielgröße wählen → Tagesdosis gesamt vs. Füllmenge der Zielgröße; passt nicht → **automatische Aufteilung** (z. B. 1000 mg, Größe 0 = 600 mg → 2 Kapseln/Tag). **Aufteilung anzeigen** blendet eine Tabelle ein (je Rohstoff: Tagesdosis, je Kapsel = Tagesdosis/Anzahl, Kapseln/Tag; Fußzeile: Füllgewicht je Kapsel vs. Kapazität). Zusätzlich **Alternativ-Hinweis**: kleinste Einzelgröße, in die die gesamte Tagesdosis ohne Aufteilung passen würde. Reine Anzeige – Rezeptur/Preis bleiben unverändert. Bei Pulver/Stick/Flüssig: Hinweis „pro Portion", kein Kapsel-Limit.
 
 **Wunsch-Produktname:** Feld `rezeptur_anfrage.produktname` – vom Kunden im Portal angegebener Wunschname; dient beim „Rezeptur erstellen" als Default-Name der neuen Rezeptur.
 

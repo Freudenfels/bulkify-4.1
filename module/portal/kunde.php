@@ -1415,6 +1415,24 @@ portal_head('Kundenportal · ' . $k['firma']);
           <?= $kg ? h($kg['name']) . ' <span class="muted">(fasst bis ' . (int)$kg['fuellmenge_mg'] . ' mg)</span>' : '<span class="muted">Füllgewicht zu groß für eine Standardkapsel – wir schlagen eine andere Form oder Aufteilung vor.</span>' ?>
           <?php if (!$fix): ?><div class="muted" style="font-size:12px">Richtwert aus dem Wirkstoffgewicht – die endgültige Größe legen wir mit der finalen Rezeptur (inkl. Hilfsstoffe) fest.</div><?php endif; ?>
         </div>
+        <?php
+        // Aufgabe 3: Passt die Tagesdosis nicht in eine Kapsel, dem Kunden verständlich zeigen, wie auf mehrere Kapseln pro Tag verteilt wird.
+        $capMg = $kg ? (int)$kg['fuellmenge_mg'] : (int)((end($portalKapseln) ?: ['fuellmenge_mg'=>0])['fuellmenge_mg']);
+        if ($capMg > 0 && $sum > $capMg): $nKap = (int)ceil($sum / $capMg); ?>
+        <div class="bx-panel" style="margin-top:12px;background:var(--panel-2)">
+          <div style="font-weight:600;margin-bottom:4px">Einnahme: <?= $nKap ?> Kapseln pro Tag</div>
+          <div class="muted" style="font-size:13px;margin-bottom:10px">Die gesamte Tagesdosis ist zu viel für eine einzelne Kapsel. Sie wird gleichmäßig auf <?= $nKap ?> Kapseln pro Tag verteilt – jede Kapsel enthält anteilig alle Zutaten.</div>
+          <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Zutat</th><th class="bx-num">Tagesdosis</th><th class="bx-num">je Kapsel</th></tr></thead><tbody>
+            <?php foreach ($rezZutaten as $z): $je = (float)$z['menge_mg'] / $nKap; ?>
+              <tr><td><?= h($z['bezeichnung']) ?></td>
+                <td class="bx-num"><?= rtrim(rtrim(number_format((float)$z['menge_mg'],1,',','.'),'0'),',') ?> mg</td>
+                <td class="bx-num"><?= rtrim(rtrim(number_format($je,1,',','.'),'0'),',') ?> mg</td></tr>
+            <?php endforeach; ?>
+            <tr style="font-weight:600"><td>Füllgewicht je Kapsel</td><td class="bx-num"></td><td class="bx-num"><?= rtrim(rtrim(number_format($sum/$nKap,1,',','.'),'0'),',') ?> mg</td></tr>
+          </tbody></table></div>
+          <div class="muted" style="font-size:12px;margin-top:6px">Werte gerundet. Die endgültige Aufteilung stimmen wir mit der finalen Rezeptur ab.</div>
+        </div>
+        <?php endif; ?>
       <?php endif; ?>
       <?php endif; ?>
       <?php if ($rezDetail['status'] === 'vorschlag'): ?>
