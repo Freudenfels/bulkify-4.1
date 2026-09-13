@@ -1317,6 +1317,22 @@ portal_head('Kundenportal · ' . $k['firma']);
     // Unterreiter nach Typ: die Zähler oben bleiben GESAMT; hier nur die Anzeige-Listen filtern.
     $angTyp = [];
     foreach ($angebote as $ang) { $angTyp[$ang['id']] = !empty($ang['anfrage_id']) ? ((string) scalar("SELECT typ FROM portal_anfrage WHERE id=?", [(int)$ang['anfrage_id']]) ?: 'produkt') : 'produkt'; }
+    // Aktiver Haupt-Reiter + Anzahl je Typ IN diesem Reiter (für die Zahlen an den Unterreitern) – aus den ungefilterten Listen.
+    $oatab = in_array($_GET['oatab'] ?? '', ['bestaetigt','abgelehnt'], true) ? $_GET['oatab'] : 'offen';
+    $typsInTab = [];
+    if ($oatab === 'offen') {
+        foreach ($anfPruef as $x)   $typsInTab[] = 'rezeptur';
+        foreach ($offen_ang as $a)  $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
+        foreach ($pending as $r)    $typsInTab[] = $r['typ'] ?? '';
+    } elseif ($oatab === 'bestaetigt') {
+        foreach ($best_ang as $a)   $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
+        foreach ($bestRows as $r)   $typsInTab[] = $r['typ'] ?? '';
+    } else {
+        foreach ($abgel_ang as $a)  $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
+        foreach ($abglRows as $r)   $typsInTab[] = $r['typ'] ?? '';
+    }
+    $typCount = ['alle' => count($typsInTab)];
+    foreach ($typsInTab as $t) $typCount[$t] = ($typCount[$t] ?? 0) + 1;
     $mt = fn($t) => $atab === 'alle' || $t === $atab;
     $offen_ang = array_values(array_filter($offen_ang, fn($a) => $mt($angTyp[$a['id']] ?? 'produkt')));
     $best_ang  = array_values(array_filter($best_ang,  fn($a) => $mt($angTyp[$a['id']] ?? 'produkt')));
@@ -1363,10 +1379,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
 
-  <?php
-  // Drei Reiter: Offen · Bestätigt (angenommen/bestellt/versendet + Rezeptur angelegt) · Abgelehnt.
-  $oatab = in_array($_GET['oatab'] ?? '', ['bestaetigt','abgelehnt'], true) ? $_GET['oatab'] : 'offen';
-  ?>
+  <?php // Drei Reiter: Offen · Bestätigt (angenommen/bestellt/versendet + Rezeptur angelegt) · Abgelehnt. ($oatab oben gesetzt.) ?>
   <h2 style="margin:8px 0 6px">Ihre Vorgänge</h2>
   <div class="settabs" style="margin:0 0 8px">
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen&atab=<?= $atab ?>"      class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
@@ -1375,8 +1388,8 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php if (count($anfTabs) > 1): ?>
   <div class="settabs" style="margin:0 0 12px;font-size:13px;opacity:.95">
-    <?php foreach ($anfTabs as $tk => $tl): ?>
-      <a href="<?= $portalLink('meine_anfragen') ?>&oatab=<?= $oatab ?>&atab=<?= $tk ?>" class="<?= $atab === $tk ? 'on' : '' ?>"><?= h($tl) ?></a>
+    <?php foreach ($anfTabs as $tk => $tl): $tc = (int)($typCount[$tk] ?? 0); ?>
+      <a href="<?= $portalLink('meine_anfragen') ?>&oatab=<?= $oatab ?>&atab=<?= $tk ?>" class="<?= $atab === $tk ? 'on' : '' ?>"><?= h($tl) ?><?= $tc ? ' (' . $tc . ')' : '' ?></a>
     <?php endforeach; ?>
   </div>
   <?php endif; ?>
