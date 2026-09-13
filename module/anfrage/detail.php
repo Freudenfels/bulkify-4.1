@@ -107,7 +107,7 @@ $form = $a['darreichungsform'] ?? 'kapsel';
 $istKapsel = in_array($form, $KAPSELFORMEN, true);
 
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
-$rohstoffe = all("SELECT id, name, cas FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name");
+$rohstoffe = all("SELECT id, name, artikelnummer, synonym, cas FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name");
 $kapseln = all("SELECT * FROM kapselgroesse ORDER BY sort, fuellmenge_mg");
 $wuensche = $neu ? [] : all("SELECT * FROM rezeptur_anfrage_wunsch WHERE anfrage_id=? ORDER BY sort, id", [(int)$id]);
 // Auto-Zuordnung vorschlagen, wo noch keine da ist
@@ -321,8 +321,52 @@ if (!$neu):
   </div>
 </form>
 
+<style>
+  .rs-combo{position:relative}
+  .rs-input{width:100%;box-sizing:border-box}
+  .rs-list{position:absolute;left:0;top:100%;z-index:40;min-width:260px;max-width:440px;max-height:300px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.16);margin-top:3px}
+  .rs-list .rs-opt{padding:7px 11px;cursor:pointer;font-size:14px}
+  .rs-list .rs-opt:hover,.rs-list .rs-opt.hl{background:var(--row-hover)}
+  .rs-list .rs-opt .muted{font-size:12px}
+  .rs-empty{padding:8px 12px;color:var(--muted);font-size:13px}
+</style>
 <script>
-var OPTIONS = <?= json_encode(rohstoff_options($rohstoffe, 0), JSON_UNESCAPED_UNICODE) ?>;
+var OPTIONS =<?= json_encode(rohstoff_options($rohstoffe, 0), JSON_UNESCAPED_UNICODE) ?>;
+// Aufgabe 2: durchsuchbare Rohstoff-Auswahl. Daten einmal eingebettet; das <select name="w_item[]">
+// bleibt (versteckt) erhalten -> gleicher gespeicherter Wert, funktioniert auch ohne JS.
+var ROHSTOFFE = <?= json_encode(array_map(fn($r)=>['id'=>(int)$r['id'],'n'=>(string)$r['name'],'a'=>(string)($r['artikelnummer'] ?? ''),'s'=>(string)($r['synonym'] ?? ''),'c'=>(string)($r['cas'] ?? '')], $rohstoffe), JSON_UNESCAPED_UNICODE) ?>;
+function bxNorm(s){ return String(s).toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss'); }
+function bxEsc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function bxRohstoffCombo(sel){
+  if(!sel || sel.dataset.combo) return; sel.dataset.combo='1'; sel.style.display='none';
+  var wrap=document.createElement('div'); wrap.className='rs-combo';
+  sel.parentNode.insertBefore(wrap, sel); wrap.appendChild(sel);
+  var box=document.createElement('input'); box.type='text'; box.className='rs-input'; box.autocomplete='off'; box.placeholder='Rohstoff suchen…';
+  var cur=sel.options[sel.selectedIndex]; if(cur && sel.value) box.value=cur.textContent;
+  var list=document.createElement('div'); list.className='rs-list'; list.hidden=true;
+  wrap.appendChild(box); wrap.appendChild(list);
+  var hl=-1, shown=[];
+  function render(q){
+    q=bxNorm((q||'').trim());
+    shown = !q ? ROHSTOFFE.slice(0,50) : ROHSTOFFE.filter(function(r){ return bxNorm(r.n+' '+r.a+' '+r.s+' '+r.c).indexOf(q)>=0; }).slice(0,50);
+    if(!shown.length){ list.innerHTML='<div class="rs-empty">Kein Rohstoff gefunden.</div>'; }
+    else list.innerHTML=shown.map(function(r,i){ var sub=[r.a, r.c?('CAS '+r.c):'', r.s].filter(Boolean).join(' · '); return '<div class="rs-opt" data-i="'+i+'">'+bxEsc(r.n)+(sub?' <span class="muted">('+bxEsc(sub)+')</span>':'')+'</div>'; }).join('');
+    hl=-1; list.hidden=false;
+  }
+  function paint(){ Array.prototype.forEach.call(list.querySelectorAll('.rs-opt'),function(o){o.classList.toggle('hl',+o.dataset.i===hl);}); var e=list.querySelector('.rs-opt.hl'); if(e)e.scrollIntoView({block:'nearest'}); }
+  function pick(i){ var r=shown[i]; if(!r)return; sel.value=r.id; box.value=r.n; list.hidden=true; }
+  box.addEventListener('input',function(){ sel.value=''; render(box.value); });
+  box.addEventListener('focus',function(){ render(box.value); });
+  box.addEventListener('keydown',function(e){
+    if(list.hidden){ if(e.key==='ArrowDown'){ render(box.value); } return; }
+    if(e.key==='ArrowDown'){ e.preventDefault(); hl=Math.min(hl+1,shown.length-1); paint(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); hl=Math.max(hl-1,0); paint(); }
+    else if(e.key==='Enter'){ if(hl>=0){ e.preventDefault(); pick(hl); } }
+    else if(e.key==='Escape'){ list.hidden=true; }
+  });
+  list.addEventListener('mousedown',function(e){ var o=e.target.closest('.rs-opt'); if(o){ e.preventDefault(); pick(+o.dataset.i); } });
+  document.addEventListener('click',function(e){ if(!wrap.contains(e.target)) list.hidden=true; });
+}
 function nf(x){ return x.toLocaleString('de-DE'); }
 function kcheck(){
   var panel=document.getElementById('kapselpanel');
@@ -350,9 +394,11 @@ function kcheck(){
     tr.querySelector('button').addEventListener('click',function(){tr.remove();kcheck();});
     tr.querySelector('.wfinal').addEventListener('input',kcheck);
     document.getElementById('wrows').appendChild(tr);
+    bxRohstoffCombo(tr.querySelector('select[name="w_item[]"]'));   // neue Zeile: Suche aktivieren
   });
   document.querySelectorAll('.wfinal').forEach(function(i){i.addEventListener('input',kcheck);});
   var kg=document.getElementById('kgroesse'); if(kg) kg.addEventListener('change',kcheck);
+  document.querySelectorAll('select[name="w_item[]"]').forEach(bxRohstoffCombo);   // bestehende Zeilen aufwerten
   kcheck();
 })();
 // Aufgabe 1: Nach dem Speichern an der Arbeitsstelle bleiben (Scroll merken + wiederherstellen) + Toast ausblenden.
