@@ -1311,9 +1311,13 @@ portal_head('Kundenportal · ' . $k['firma']);
         $auSt = (string) scalar("SELECT status FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [(int)$x['id']]);
         if ($auSt === 'versendet') $abgeschl[] = $x; else $best_prog[] = $x;
     }
+    // Angenommene Rezepturen (eingefroren = „Rezeptur angelegt") zählen zu BESTÄTIGT; abgelehnte/abgeschlossene
+    // Anfragen ohne Auftrag zu ABGESCHLOSSEN.
+    $bestRows = array_values(array_filter($erledigtRows, fn($r) => ($r['stufe'] ?? '') === 'erledigt'));
+    $abgRows  = array_values(array_filter($erledigtRows, fn($r) => in_array($r['stufe'] ?? '', ['abgeschlossen','abgelehnt'], true)));
     $nOffen  = count($offen_ang) + count($pending);
     $sumOffen    = count($anfPruef) + $nOffen;                                 // wartet auf Sie + Angebot zum Bestätigen + in Prüfung
-    $sumErledigt = count($best_prog) + count($abgeschl) + count($erledigtRows); // bestätigt/in Arbeit + versendet + Rezeptur angelegt/abgelehnt
+    $sumErledigt = count($best_prog) + count($bestRows) + count($abgeschl) + count($abgRows); // bestätigt + angelegt + versendet + abgelehnt
   ?>
 
   <div class="bx-row" style="gap:12px;margin:6px 0 16px;flex-wrap:wrap">
@@ -1356,11 +1360,35 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h2 style="margin:8px 0 6px">Ihre Vorgänge</h2>
   <div class="settabs" style="margin:0 0 12px">
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen"        class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
-    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=bestaetigt"   class="<?= $oatab === 'bestaetigt' ? 'on' : '' ?>">Bestätigt<?= $best_prog ? ' (' . count($best_prog) . ')' : '' ?></a>
-    <?php $nAbg = count($abgeschl) + count($erledigtRows); ?>
+    <?php $nBest = count($best_prog) + count($bestRows); ?>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=bestaetigt"   class="<?= $oatab === 'bestaetigt' ? 'on' : '' ?>">Bestätigt<?= $nBest ? ' (' . $nBest . ')' : '' ?></a>
+    <?php $nAbg = count($abgeschl) + count($abgRows); ?>
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=abgeschlossen" class="<?= $oatab === 'abgeschlossen' ? 'on' : '' ?>">Abgeschlossen<?= $nAbg ? ' (' . $nAbg . ')' : '' ?></a>
   </div>
 
+  <?php
+  // Kleine Tabelle für Anfragen ohne Angebotskarte (Rezeptur angelegt / abgelehnt). Vor der if/elseif-Kette
+  // definiert, damit sie in allen Reitern verfügbar ist.
+  $anfrageTabelle = function(array $rows, string $titel, string $sub) use ($typLabelP) { if (!$rows) return; ?>
+    <div class="bx-panel">
+      <h2 style="margin:0 0 4px"><?= h($titel) ?></h2>
+      <p class="muted" style="margin:0 0 12px;font-size:13px"><?= h($sub) ?></p>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Nummer</th><th>Typ</th><th>Bezeichnung</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($rows as $r): ?>
+          <tr>
+            <td><?= h($r['nummer']) ?></td>
+            <td><?= h($typLabelP[$r['typ']] ?? $r['typ']) ?></td>
+            <td><?= $r['bez'] ? h($r['bez']) : '<span class="muted">–</span>' ?></td>
+            <td><?= $r['status'] ?></td>
+            <td style="text-align:right"><?php if (!empty($r['link'])): ?><a class="btn btn-ghost btn-sm" href="<?= h($r['link']) ?>">ansehen</a><?php endif; ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    </div>
+  <?php }; ?>
   <?php if ($oatab === 'offen'): ?>
     <?php if ($offen_ang): ?>
     <p class="muted" style="margin:0 0 12px">Klappen Sie ein Angebot auf, wählen Sie die gewünschte Menge und bestätigen Sie verbindlich.</p>
@@ -1399,32 +1427,14 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php if (!$offen_ang && !$pending): ?><div class="bx-panel"><div class="muted">Aktuell nichts Offenes. Neue Anfragen stellen Sie über das Menü links.</div></div><?php endif; ?>
 
   <?php elseif ($oatab === 'bestaetigt'): ?>
-    <?php if (!$best_prog): ?><div class="bx-panel"><div class="muted">Keine bestätigten Vorgänge in Arbeit.</div></div><?php endif; ?>
+    <?php if (!$best_prog && !$bestRows): ?><div class="bx-panel"><div class="muted">Keine bestätigten Vorgänge.</div></div><?php endif; ?>
     <?php foreach ($best_prog as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+    <?php $anfrageTabelle($bestRows, 'Angenommene Rezepturen', 'Von Ihnen angenommen – die Rezeptur ist angelegt. Als nächstes können Sie sie als Produkt anfragen.'); ?>
 
   <?php else: /* abgeschlossen */ ?>
-    <?php if (!$abgeschl && !$erledigtRows): ?><div class="bx-panel"><div class="muted">Noch nichts abgeschlossen.</div></div><?php endif; ?>
+    <?php if (!$abgeschl && !$abgRows): ?><div class="bx-panel"><div class="muted">Noch nichts abgeschlossen.</div></div><?php endif; ?>
     <?php foreach ($abgeschl as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
-    <?php if ($erledigtRows): ?>
-    <div class="bx-panel">
-      <h2 style="margin:0 0 4px">Anfragen</h2>
-      <p class="muted" style="margin:0 0 12px;font-size:13px">Erledigte bzw. abgelehnte Anfragen (z. B. Rezeptur angelegt).</p>
-      <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Nummer</th><th>Typ</th><th>Bezeichnung</th><th>Status</th><th></th></tr></thead>
-        <tbody>
-        <?php foreach ($erledigtRows as $r): ?>
-          <tr>
-            <td><?= h($r['nummer']) ?></td>
-            <td><?= h($typLabelP[$r['typ']] ?? $r['typ']) ?></td>
-            <td><?= $r['bez'] ? h($r['bez']) : '<span class="muted">–</span>' ?></td>
-            <td><?= $r['status'] ?></td>
-            <td style="text-align:right"><?php if (!empty($r['link'])): ?><a class="btn btn-ghost btn-sm" href="<?= h($r['link']) ?>">ansehen</a><?php endif; ?></td>
-          </tr>
-        <?php endforeach; ?>
-        </tbody>
-      </table></div>
-    </div>
-    <?php endif; ?>
+    <?php $anfrageTabelle($abgRows, 'Abgeschlossene Anfragen', 'Versendet bzw. abgelehnt/nicht machbar.'); ?>
   <?php endif; ?>
   <script>(function(){ var h=location.hash; if(h && /^#a\d+$/.test(h)){ var d=document.querySelector(h); if(d && d.tagName==='DETAILS'){ d.open=true; d.scrollIntoView(); } } })();</script>
   <?php endif; /* istLeer */ ?>
