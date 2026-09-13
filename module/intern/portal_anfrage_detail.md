@@ -12,7 +12,9 @@ Route: `?p=portal_anfrage&id=<ID>`  (Rollen: sales, production, einkauf, admin)
 - **Kunde / Typ / Status / Eingegangen** als Kärtchen oben.
 - **Wunsch des Kunden**: bei einer Produktanfrage Produkt, Größe je Packung
   (Stück, *oder* Füllmenge in Gramm bei Pulver/Granulat bzw. in Milliliter bei Flüssig),
-  Verpackungstyp, Anzahl Packungen.
+  Verpackungstyp, Anzahl Packungen. Hat der Kunde eine **Staffel** angefragt (mehrere
+  `portal_anfrage_pos`), zeigt der Wunschblock statt der Einzelwerte eine **Staffel-Tabelle**
+  (Anzahl pro Verpackung + Menge VPE je Zeile).
   Bei Rohstoff/Dienstleistung Betreff und gewünschte Menge + Einheit.
 - **Angebot abgeben** (bei Produktanfragen – mit hinterlegtem Produkt über die Preismatrix, bei einer Rezeptur-Anfrage über den Angebots-Editor).
 - **Anfrage aus einer Rezeptur:** Hat der Kunde eine Rezeptur angenommen, für die es noch kein Produkt gibt, kommt die Anfrage mit `portal_anfrage.rezeptur_id` (und ohne `produkt_id`) herein. Statt der Preismatrix erscheint dann ein Hinweis plus **„Im Angebots-Editor bauen"** – dort wird die Rezeptur als Position gebaut (`angebot_rezeptur_zeilen()`), und beim Senden entsteht daraus das Produkt (`angebot_produkte_sichern()`).
