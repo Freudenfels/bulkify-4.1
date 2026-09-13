@@ -90,9 +90,18 @@ if (!$a):
     $gesperrt = $ang && ($ang['status'] ?? '') === 'angenommen';
     $staffeln = $ang ? all("SELECT * FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$ang['id']]) : [];
     // Die erste gespeicherte Staffel gehört zur Kopfzeile (Hauptpreis), der Rest steht darunter.
-    // Ohne Angebot steht in der Kopfzeile die angefragte Menge.
-    $hauptMenge = $staffeln ? (float)$staffeln[0]['menge_ab'] : (float)($a['menge'] ?? 0);
-    if ($staffeln) array_shift($staffeln);
+    if ($staffeln) {
+        $hauptMenge = (float)$staffeln[0]['menge_ab'];
+        array_shift($staffeln);
+    } elseif (!$ang && trim((string)($a['menge_staffel'] ?? '')) !== '') {
+        // Noch kein Angebot: die von uns GEWÜNSCHTE Mengen-Staffel vorausfüllen – erste Menge in die Kopfzeile,
+        // die weiteren als Staffelzeilen (Preise leer, der Lieferant trägt nur die Preise ein).
+        $req = array_values(array_filter(array_map('intval', preg_split('/[,;\s]+/', (string)$a['menge_staffel'])), fn($m) => $m > 0));
+        $hauptMenge = $req ? (float)$req[0] : (float)($a['menge'] ?? 0);
+        $staffeln = array_map(fn($m) => ['menge_ab' => $m, 'preis' => ''], array_slice($req, 1));
+    } else {
+        $hauptMenge = (float)($a['menge'] ?? 0);
+    }
     // Die Einheit steht schon in der Anfrage (dort wird sie automatisch gesetzt) – der Lieferant
     // muss sie nicht raten. Ein bereits abgegebenes Angebot behält seine eigene Einheit.
     $einheit = trim((string)($ang['einheit'] ?? '')) ?: (trim((string)($a['einheit'] ?? '')) ?: trim((string)($a['item_einheit'] ?? '')));
@@ -107,7 +116,11 @@ if (!$a):
       <?php $typ = anfrage_art_label((string)($a['art'] ?? ''), (string)($a['form'] ?? ''), lp_sprache()); ?>
       <?php if ($typ !== ''): ?><tr><td style="width:220px"><?= h(lp_t('produkttyp')) ?></td><td><?= h($typ) ?></td></tr><?php endif; ?>
       <?php if ($a['artikelnummer']): ?><tr><td style="width:220px"><?= h(lp_t('artikelnummer')) ?></td><td><?= h($a['artikelnummer']) ?></td></tr><?php endif; ?>
-      <tr><td style="width:220px"><?= h(lp_t('gewuenscht')) ?></td><td><?= $a['menge'] ? h(lp_num($a['menge'])) . ' ' . h(lp_einheit($einheit, (float)$a['menge'])) : '–' ?></td></tr>
+      <?php $reqStaffel = array_values(array_filter(array_map('intval', preg_split('/[,;\s]+/', (string)($a['menge_staffel'] ?? ''))), fn($m) => $m > 0)); ?>
+      <tr><td style="width:220px"><?= h(lp_t('gewuenscht')) ?></td><td><?php
+        if (count($reqStaffel) > 1) { echo h(implode(' · ', array_map(fn($m) => lp_num($m) . ' ' . lp_einheit($einheit, (float)$m), $reqStaffel))); }
+        else { echo $a['menge'] ? h(lp_num($a['menge'])) . ' ' . h(lp_einheit($einheit, (float)$a['menge'])) : '–'; }
+      ?></td></tr>
       <?php if ($a['stueck_je_packung']): ?><tr><td><?= h(lp_t('je_packung')) ?></td><td><?= h(lp_num($a['stueck_je_packung'], 0)) ?> <?= h(lp_einheit($einheit, (float)$a['stueck_je_packung'])) ?></td></tr><?php endif; ?>
       <?php if ($a['kapselgroesse_id']): $kgN = (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$a['kapselgroesse_id']]);
               // Die Größe steht deutsch in den Stammdaten („Größe 0"); international ist „#0" verständlich.

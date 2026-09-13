@@ -906,6 +906,7 @@ function init_schema(): void {
     ensure_column('lieferant_anfrage', 'rezeptur_id', "INT NULL");               // optional: unsere Rezeptur als Vorlage
     ensure_column('lieferant_anfrage', 'incoterm', "VARCHAR(8) NULL");           // gewünschte Lieferbedingung (Standard DDP)
     ensure_column('lieferant_anfrage', 'versandart', "VARCHAR(20) NULL");        // gewünschte Versandart (Standard Luft)
+    ensure_column('lieferant_anfrage', 'menge_staffel', "VARCHAR(190) NULL");    // gewünschte Mengen-Staffel (kommagetrennt) -> Lieferant sieht sie vorausgefüllt
     ensure_column('lieferant_angebot', 'preis_basis', "INT NOT NULL DEFAULT 1");  // Preis gilt je 1 oder je 1000 Einheiten
     ensure_column('lieferant_angebot', 'incoterm', "VARCHAR(8) NULL");            // vom Lieferanten angebotene Lieferbedingung
     ensure_column('lieferant_angebot', 'versandart', "VARCHAR(20) NULL");         // vom Lieferanten angebotene Versandart
@@ -3378,10 +3379,16 @@ function lieferant_anfrage_stellen(int $lieferant_id, ?int $item_id, string $bet
     $rez  = (int)($opt['rezeptur_id'] ?? 0);
     $inco = array_key_exists((string)($opt['incoterm'] ?? ''), incoterm_liste()) ? (string)$opt['incoterm'] : null;
     $vers = array_key_exists((string)($opt['versandart'] ?? ''), versandart_liste()) ? (string)$opt['versandart'] : null;
-    q("INSERT INTO lieferant_anfrage (nummer,lieferant_id,item_id,betreff,menge,einheit,notiz,coa_gewuenscht,status,art,form,stueck_je_packung,kapselgroesse_id,rezeptur_id,incoterm,versandart)
-       VALUES (?,?,?,?,?,?,?,?,'offen',?,?,?,?,?,?,?)",
+    // Wunsch-Mengenstaffel (mehrere Mengen): als kommagetrennte Ganzzahlen ablegen; erste Menge = Hauptmenge.
+    $staffel = [];
+    foreach ((array)($opt['menge_staffel'] ?? []) as $mv) { $mi = (int) round((float) str_replace(',', '.', (string)$mv)); if ($mi > 0) $staffel[] = $mi; }
+    $staffel = array_values(array_unique($staffel)); sort($staffel);
+    $mengeStaffel = $staffel ? implode(',', $staffel) : null;
+    if ((!$menge || $menge <= 0) && $staffel) $menge = (float) $staffel[0];
+    q("INSERT INTO lieferant_anfrage (nummer,lieferant_id,item_id,betreff,menge,menge_staffel,einheit,notiz,coa_gewuenscht,status,art,form,stueck_je_packung,kapselgroesse_id,rezeptur_id,incoterm,versandart)
+       VALUES (?,?,?,?,?,?,?,?,?,'offen',?,?,?,?,?,?,?)",
       [naechste_nummer('LA'), $lieferant_id, $item_id ?: null, mb_substr(trim($betreff), 0, 190) ?: null,
-       $menge && $menge > 0 ? $menge : null, mb_substr($einheit, 0, 20) ?: null, trim($notiz) ?: null, $coa ? 1 : 0,
+       $menge && $menge > 0 ? $menge : null, $mengeStaffel, mb_substr($einheit, 0, 20) ?: null, trim($notiz) ?: null, $coa ? 1 : 0,
        $art, $form ?: null, $stk > 0 ? $stk : null, $kg > 0 ? $kg : null, $rez > 0 ? $rez : null, $inco, $vers]);
     $id = insert_id();
     log_aktivitaet('lieferant', $lieferant_id, 'team', 'Preisanfrage ' . scalar("SELECT nummer FROM lieferant_anfrage WHERE id=?", [$id]) . ' gestellt.', 'anfrage', 'lieferant_anfrage', $id);

@@ -90,7 +90,8 @@ function anfrage_modal(array $lieferanten, string $back): void {
       <!-- Preis-Block: im Dokumente-Modus (nicht vorhandener Rohstoff aus der Anfrage) optional/ausgeblendet. -->
       <div id="bxAnfPreisBlock">
         <div class="bx-row" style="gap:10px">
-          <div class="bx-field" style="margin:0;flex:1"><label id="bxAnfMengeLbl">Menge (optional)</label><input type="text" name="anf_menge" placeholder="z. B. 500"></div>
+          <div class="bx-field" style="margin:0;flex:1"><label id="bxAnfMengeLbl">Menge (optional)</label><input type="text" name="anf_menge" id="bxAnfMenge" placeholder="z. B. 500">
+            <div id="bxAnfMengeHint" class="muted" style="font-size:12px;margin-top:4px;display:none">Mehrere Mengen mit Komma für eine Staffel, z. B. 1000, 2500, 5000 – der Lieferant sieht sie vorausgefüllt.</div></div>
         </div>
         <div class="bx-row" style="gap:10px">
           <?php $stdI = function_exists('meta_get') ? meta_get('ek_incoterm_standard','DDP') : 'DDP'; $stdV = function_exists('meta_get') ? meta_get('ek_versandart_standard','luft') : 'luft'; ?>
@@ -141,12 +142,19 @@ document.addEventListener('change', function(e){
     if(block) block.style.display = e.target.checked ? '' : 'none';
   }
 });
+// Mengen-Feld auf Staffel (kommagetrennt) umschalten – für Fertigprodukt-Anfragen.
+function bxAnfMengeStaffel(on){
+  var h=document.getElementById('bxAnfMengeHint'), m=document.getElementById('bxAnfMenge'), l=document.getElementById('bxAnfMengeLbl');
+  if(h) h.style.display = on ? '' : 'none';
+  if(m) m.placeholder = on ? 'z. B. 1000, 2500, 5000' : 'z. B. 500';
+  if(l) l.textContent = on ? 'Mengen-Staffel (optional)' : 'Menge (optional)';
+}
 function bxAnfrageOeffnen(itemId, btn){
   document.getElementById('bxAnfrageItemId').value = itemId;
   document.getElementById('bxAnfrageRezId').value = '';
   document.getElementById('bxAnfrageArt').value = '';
   document.getElementById('bxAnfrageNeu').value = '';
-  bxAnfrageModus('preis');
+  bxAnfrageModus('preis'); bxAnfMengeStaffel(false);
   var name = btn && btn.getAttribute('data-name');
   document.getElementById('bxAnfrageItem').textContent = name
     ? ('Preis für „' + name + '" – bei welchen Lieferanten anfragen?')
@@ -160,7 +168,7 @@ window.bxAnfrageNeuOeffnen = function(name){
   document.getElementById('bxAnfrageRezId').value = '';
   document.getElementById('bxAnfrageArt').value = '';
   document.getElementById('bxAnfrageNeu').value = name;
-  bxAnfrageModus('doku');   // Fokus: CoA / Spezifikation – Kilopreis optional
+  bxAnfrageModus('doku'); bxAnfMengeStaffel(false);   // Fokus: CoA / Spezifikation – Kilopreis optional
   document.getElementById('bxAnfrageItem').textContent = name
     ? ('Neuer Rohstoff „' + name + '" – bei welchen Lieferanten anfragen? (wird als Rohstoff angelegt, CoA/Spezifikation inklusive)')
     : 'Neuer Rohstoff – bitte zuerst eine Bezeichnung eingeben.';
@@ -172,7 +180,7 @@ function bxAnfrageProduktOeffnen(rezId, btn){
   document.getElementById('bxAnfrageRezId').value = rezId;
   document.getElementById('bxAnfrageArt').value = 'fertigprodukt';
   document.getElementById('bxAnfrageNeu').value = '';
-  bxAnfrageModus('preis');
+  bxAnfrageModus('preis'); bxAnfMengeStaffel(true);   // Fertigprodukt: Mengen-Staffel (kommagetrennt) möglich
   var name = btn && btn.getAttribute('data-name');
   var form = btn && btn.getAttribute('data-form');
   document.getElementById('bxAnfrageItem').textContent =

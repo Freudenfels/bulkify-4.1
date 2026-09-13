@@ -29,12 +29,14 @@ if ($art === 'fertigprodukt' && $rez_id > 0) {
     if (!$rez) { header('Location: ' . $back . '&anffehler=1'); exit; }
     $form    = (string)($rez['darreichungsform'] ?: 'kapsel');
     $betreff = 'Fertigprodukt (Bulk): ' . (string)$rez['name'];
-    $opt     = ['art' => 'fertigprodukt', 'form' => $form, 'rezeptur_id' => $rez_id] + $lieferOpt;
+    // Fertigprodukt: mehrere Mengen (Staffel) kommagetrennt möglich – der Lieferant bekommt sie vorausgefüllt.
+    $mengen  = array_values(array_filter(array_map('intval', preg_split('/[,;\s]+/', (string)($_POST['anf_menge'] ?? ''))), fn($m) => $m > 0));
+    $opt     = ['art' => 'fertigprodukt', 'form' => $form, 'rezeptur_id' => $rez_id, 'menge_staffel' => $mengen] + $lieferOpt;
     $einh    = anfrage_einheit_fuer_form($form);
     $n = 0; $gemailt = 0;
     foreach ($lids as $lid) {
         if (!scalar("SELECT id FROM lieferanten WHERE id=? AND gesperrt=0 AND COALESCE(keine_anfragen,0)=0", [$lid])) continue;
-        $af = lieferant_anfrage_stellen($lid, null, $betreff, $menge > 0 ? $menge : null, $einh, $notiz, $coa, $opt);
+        $af = lieferant_anfrage_stellen($lid, null, $betreff, $mengen ? (float)$mengen[0] : ($menge > 0 ? $menge : null), $einh, $notiz, $coa, $opt);
         $n++;
         if (mail_bereit() && function_exists('mail_lieferant_anfrage') && mail_lieferant_anfrage((int)$af) === '') $gemailt++;
     }
