@@ -2368,7 +2368,21 @@ function verpackung_passt_zu_typ(int $item_id, ?string $typ): bool {
         'beutel'  => $art === 'beutel',
         'stick'   => $art === 'stick',
         'blister' => $art === 'blister',
+        'karton'  => $art === 'karton',
         default   => true,
+    };
+}
+
+// Wunsch-Verpackungstypen (Schlüssel aus $VTYPEN) je Darreichungsform. Der Kunde soll nur sinnvolle
+// Kombinationen wählen können (z. B. Sticks in Standbodenbeutel/Karton, nicht in Glas oder „Stick im Stick").
+// ZUR PRÜFUNG durch das Team – zentrale Stelle, hier bei Bedarf anpassen.
+function verpackung_typen_fuer_form(?string $form): array {
+    return match ($form) {
+        'kapsel', 'tablette', 'softgel', 'gummi' => ['glas', 'pet', 'beutel', 'blister'],
+        'pulver', 'granulat'                     => ['glas', 'pet', 'pla', 'beutel', 'stick'],
+        'stick'                                  => ['beutel', 'karton'],
+        'fluessig', 'gel'                        => ['glas', 'pet', 'stick'],
+        default                                  => ['glas', 'pet', 'pla', 'beutel', 'stick', 'blister', 'karton'],
     };
 }
 // Den konkreten Behälter für eine Packungsgröße wählen: bevorzugt den Wunsch-Typ des Kunden,

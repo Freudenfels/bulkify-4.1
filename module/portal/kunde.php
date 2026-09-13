@@ -668,7 +668,7 @@ $katalog = $k['portal_produkte'] ? all("SELECT p.id, COALESCE(NULLIF(p.kundennam
 $primVerp  = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name");
 $stdStueck = std_stueckzahlen();
 // Kundenseitige Verpackungstypen – wir wählen intern den perfekt passenden Behälter
-$VTYPEN = ['glas'=>'Glas', 'pet'=>'PET-Dose', 'pla'=>'PLA-Becher', 'beutel'=>'Standbodenbeutel', 'stick'=>'Stick', 'blister'=>'Blister'];
+$VTYPEN = ['glas'=>'Glas', 'pet'=>'PET-Dose', 'pla'=>'PLA-Becher', 'beutel'=>'Standbodenbeutel', 'stick'=>'Stick', 'blister'=>'Blister', 'karton'=>'Karton/Faltschachtel'];
 // „ab"-Preise je Produkt (günstigste VK aus der Preismatrix, mit Kundenrabatt).
 // Preise sind KUNDENSPEZIFISCH: sichtbar nur, wenn diesem Kunden das Produkt schon angeboten wurde.
 // Alle anderen sehen „auf Anfrage" – sonst wandert die Kalkulation eines Kunden zum nächsten.
@@ -1624,8 +1624,9 @@ portal_head('Kundenportal · ' . $k['firma']);
             <input type="number" name="<?= $prodIstFuell ? 'fuellmenge_g' : 'stueck' ?>" min="1" step="1"
                    placeholder="<?= $prodIstFuell ? ($prodFuellEinheit === 'ml' ? 'z. B. 250' : 'z. B. 200') : 'z. B. 120' ?>">
           </div>
-          <div class="bx-field"><label>Verpackungstyp <?= bx_hint('Sie wählen nur die Art – wir bestimmen das perfekt passende Gebinde in der richtigen Größe.') ?></label>
-            <select name="verpackung_typ"><option value="">– egal / bitte empfehlen –</option><?php foreach ($VTYPEN as $tk=>$tl): ?><option value="<?= $tk ?>"><?= h($tl) ?></option><?php endforeach; ?></select>
+          <div class="bx-field"><label>Verpackungstyp <?= bx_hint('Sie wählen nur die Art – wir bestimmen das perfekt passende Gebinde in der richtigen Größe. Es werden nur zur Darreichungsform passende Typen angeboten.') ?></label>
+            <?php $prodVtyp = verpackung_typen_fuer_form($prodForm); ?>
+            <select name="verpackung_typ"><option value="">– egal / bitte empfehlen –</option><?php foreach ($VTYPEN as $tk=>$tl): if (!in_array($tk, $prodVtyp, true)) continue; ?><option value="<?= $tk ?>"><?= h($tl) ?></option><?php endforeach; ?></select>
           </div>
           <div class="bx-field"><label>Anzahl (Packungen) <?= bx_hint('Mehrere Mengen mit Komma für Staffelpreise, z. B. 1000, 2500, 5000') ?></label><input type="text" name="menge" placeholder="z. B. 1000, 2500, 5000"></div>
         </div>
@@ -1674,8 +1675,8 @@ portal_head('Kundenportal · ' . $k['firma']);
             <?php endif; ?>
           </select>
         </div>
-        <div class="bx-field"><label>Verpackungstyp <?= bx_hint('Sie wählen nur die Art – wir bestimmen das perfekt passende Gebinde in der richtigen Größe.') ?></label>
-          <select name="verpackung_typ"><option value="">– egal / bitte empfehlen –</option><?php foreach ($VTYPEN as $tk=>$tl): ?><option value="<?= $tk ?>"><?= h($tl) ?></option><?php endforeach; ?></select>
+        <div class="bx-field"><label>Verpackungstyp <?= bx_hint('Sie wählen nur die Art – wir bestimmen das perfekt passende Gebinde in der richtigen Größe. Es werden nur zur Darreichungsform passende Typen angeboten.') ?></label>
+          <select name="verpackung_typ" id="pa_verp"><option value="">– egal / bitte empfehlen –</option><?php foreach ($VTYPEN as $tk=>$tl): ?><option value="<?= $tk ?>"><?= h($tl) ?></option><?php endforeach; ?></select>
         </div>
       </div>
       <!-- Task 3: Staffel – je Zeile Anzahl pro Verpackung + Menge VPE (Anzahl Verpackungen). -->
@@ -1702,14 +1703,28 @@ portal_head('Kundenportal · ' . $k['firma']);
     </form>
     <script>(function(){
       var sel=document.getElementById('pa_produkt'); if(!sel) return;
+      // Verpackungstyp je Darreichungsform (aus core/schema.php verpackung_typen_fuer_form()).
+      var VTYP_LABELS=<?= json_encode($VTYPEN, JSON_UNESCAPED_UNICODE) ?>;
+      var VTYP_FORM=<?= json_encode((function(){ $m=[]; foreach(['kapsel','tablette','softgel','gummi','pulver','granulat','stick','fluessig','gel'] as $f) $m[$f]=verpackung_typen_fuer_form($f); return $m; })(), JSON_UNESCAPED_UNICODE) ?>;
+      var VTYP_ALL=<?= json_encode(verpackung_typen_fuer_form(null)) ?>;
+      function curForm(){ var o=sel.options[sel.selectedIndex]; return o?(o.getAttribute('data-form')||''):''; }
       function lbl(){
-        var o=sel.options[sel.selectedIndex], f=o?o.getAttribute('data-form'):'';
+        var f=curForm();
         // Pulver/Granulat werden nach Gramm angefragt, Flüssiges/Gel nach Milliliter, alles andere nach Stückzahl.
         var t = (f==='pulver'||f==='granulat') ? 'Füllmenge pro Verpackung (g)'
               : ((f==='fluessig'||f==='gel') ? 'Füllmenge pro Verpackung (ml)' : 'Anzahl pro Verpackung');
         Array.prototype.forEach.call(document.querySelectorAll('.pa_anzahl_lbl'), function(e){ e.textContent=t; });
       }
-      sel.addEventListener('change',lbl); lbl();
+      function updVerp(){
+        var vp=document.getElementById('pa_verp'); if(!vp) return;
+        var f=curForm(); var allow=(f && VTYP_FORM[f]) ? VTYP_FORM[f] : VTYP_ALL;
+        var keep=vp.value;
+        var html='<option value="">– egal / bitte empfehlen –</option>';
+        allow.forEach(function(k){ if(VTYP_LABELS[k]) html+='<option value="'+k+'">'+VTYP_LABELS[k]+'</option>'; });
+        vp.innerHTML=html;
+        if(keep && allow.indexOf(keep)>=0) vp.value=keep;   // vorherige Wahl behalten, wenn noch gültig
+      }
+      sel.addEventListener('change',function(){ lbl(); updVerp(); }); lbl(); updVerp();
       var tb=document.querySelector('#pa_staffel tbody');
       document.getElementById('pa_addrow').addEventListener('click',function(){
         var tr=document.createElement('tr'); tr.className='pa_srow';
