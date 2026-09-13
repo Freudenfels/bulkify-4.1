@@ -883,7 +883,10 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     // --- additive Migrationen ab hier (Beispielmuster) ---
-    ensure_column('kunden', 'portal_token', "VARCHAR(64) NULL");   // Magic-Link-Zugang zum Kundenportal
+    ensure_column('kunden', 'portal_token', "VARCHAR(64) NULL");   // Magic-Link-Zugang zum Kundenportal (Backup/Erstzugang)
+    ensure_column('kunden', 'passwort', "VARCHAR(255) NULL");       // Passwort-Hash fuers Kunden-Login (password_hash); leer = noch nicht eingerichtet
+    ensure_column('kunden', 'erstlogin_am', "DATETIME NULL");       // Zeitpunkt der Konto-Einrichtung (Erstzugang abgeschlossen)
+    ensure_column('kunden', 'letzter_login', "DATETIME NULL");      // letzter erfolgreicher Kunden-Login
     ensure_column('item', 'produkt_id', "INT NULL");               // Verkaufsfertig-Item <-> Produkt (Fertigware-Bestand)
     // Dokumente: erst nach ausdrücklicher Freigabe im Kundenportal sichtbar. Standard 0 – ein Lieferanten-Spec
     // darf nicht versehentlich beim Kunden landen, nur weil es am Rohstoff hängt.
@@ -1976,6 +1979,24 @@ function kunde_portal_token(int $kid): string {
     $t = bin2hex(random_bytes(16));
     q("UPDATE kunden SET portal_token=? WHERE id=?", [$t, $kid]);
     return $t;
+}
+
+// Kunden-Login per E-Mail + Passwort. Gibt die Kunden-Zeile zurueck oder null.
+function kunde_login(string $email, string $passwort): ?array {
+    $email = trim(mb_strtolower($email));
+    if ($email === '' || $passwort === '') return null;
+    $k = one("SELECT * FROM kunden WHERE LOWER(email)=? AND passwort IS NOT NULL AND passwort<>'' AND COALESCE(gesperrt,0)=0", [$email]);
+    if (!$k || !password_verify($passwort, (string)$k['passwort'])) return null;
+    q("UPDATE kunden SET letzter_login=UTC_TIMESTAMP() WHERE id=?", [(int)$k['id']]);
+    return $k;
+}
+
+// Passwort setzen/aendern (Erstzugang oder Wechsel). Mindestens 8 Zeichen. Speichert nur den Hash.
+function kunde_passwort_setzen(int $kid, string $passwort): bool {
+    if ($kid <= 0 || strlen($passwort) < 8) return false;
+    q("UPDATE kunden SET passwort=?, erstlogin_am=COALESCE(erstlogin_am, UTC_TIMESTAMP()) WHERE id=?",
+      [password_hash($passwort, PASSWORD_DEFAULT), $kid]);
+    return true;
 }
 
 // Nächste feste Nummer für einen Präfix, z. B. naechste_nummer('K') -> "K-0001". Atomar hochgezählt.

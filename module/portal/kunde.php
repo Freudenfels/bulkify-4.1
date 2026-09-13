@@ -6,7 +6,36 @@ require_once BX_ROOT . '/core/dokument_ui.php';
 
 $token = preg_replace('/[^a-f0-9]/', '', $_GET['token'] ?? '');
 agb_seed_wenn_leer();   // AGB-Entwurf anlegen, solange keine Fassung existiert
+
+// Logout aus dem Kundenportal (E-Mail/Passwort-Session beenden).
+if (($_GET['v'] ?? '') === 'logout') { unset($_SESSION['portal_kid']); header('Location: ?p=portal_login&abgemeldet=1'); exit; }
+
 $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
+// Zugang auch per Kunden-Login (E-Mail+Passwort): Session-basiert. Magic-Link bleibt Backup.
+if (!$k && !empty($_SESSION['portal_kid'])) $k = one("SELECT * FROM kunden WHERE id=?", [(int)$_SESSION['portal_kid']]);
+if ($k) { $_SESSION['portal_kid'] = (int)$k['id']; if (!empty($k['portal_token'])) $token = (string)$k['portal_token']; }
+
+// Erstzugang abschliessen: E-Mail + Passwort setzen und fehlende Stammdaten ergaenzen.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'konto_einrichten') {
+    $email = trim(mb_strtolower((string)($_POST['email'] ?? '')));
+    $pw  = (string)($_POST['passwort'] ?? '');
+    $pw2 = (string)($_POST['passwort2'] ?? '');
+    $err = '';
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $err = 'Bitte eine gültige E-Mail-Adresse eingeben.';
+    elseif (strlen($pw) < 8) $err = 'Das Passwort muss mindestens 8 Zeichen haben.';
+    elseif ($pw !== $pw2)    $err = 'Die beiden Passwörter stimmen nicht überein.';
+    elseif ((int) scalar("SELECT COUNT(*) FROM kunden WHERE LOWER(email)=? AND id<>?", [$email, (int)$k['id']]) > 0)
+        $err = 'Diese E-Mail-Adresse wird bereits verwendet.';
+    if ($err === '') {
+        q("UPDATE kunden SET email=?, ansprechpartner=COALESCE(NULLIF(?,''), ansprechpartner), telefon=COALESCE(NULLIF(?,''), telefon) WHERE id=?",
+          [$email, trim((string)($_POST['ansprechpartner'] ?? '')), trim((string)($_POST['telefon'] ?? '')), (int)$k['id']]);
+        kunde_passwort_setzen((int)$k['id'], $pw);
+        $_SESSION['portal_kid'] = (int)$k['id'];
+        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Portal-Konto eingerichtet (E-Mail + Passwort gesetzt).', 'kunde');
+        header('Location: ?p=portal&token=' . (string)($k['portal_token'] ?? '') . '&eingerichtet=1'); exit;
+    }
+    header('Location: ?p=portal&token=' . (string)($k['portal_token'] ?? '') . '&setupfehler=' . urlencode($err)); exit;
+}
 
 // Angebot bestätigen (Kundenaktion) -> löst Auftrag + Rechnung aus
 // Angebot aus POSITIONEN annehmen (kein Produkt/keine Matrix) – hier entsteht das Produkt.
@@ -390,9 +419,30 @@ function portal_head(string $titel): void {
 function portal_foot(): void { echo (function_exists('bx_theme_script') ? bx_theme_script() : '') . (function_exists('bx_side_scroll_script') ? bx_side_scroll_script() : '') . (function_exists('bx_busy_script') ? bx_busy_script() : '') . "</body></html>"; }
 
 if (!$k) {
-    portal_head('Kundenportal');
-    echo '<div class="bx-shell"><aside class="bx-side"><div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo"><span class="bx-ver">Portal</span></div></aside>'
-       . '<main class="bx-main"><div class="bx-panel"><h2 style="margin-top:0">Zugang ungültig</h2><p class="muted">Dieser Portal-Link ist nicht gültig. Bitte wenden Sie sich an bulkify.</p></div></main></div>';
+    // Kein gültiger Token und keine Login-Session -> zur Kunden-Anmeldung.
+    header('Location: ?p=portal_login'); exit;
+}
+
+// Erstzugang: solange kein Passwort gesetzt ist, muss der Kunde zuerst sein Konto einrichten
+// (E-Mail + Passwort + fehlende Stammdaten). Danach greift das normale Portal.
+if (empty($k['passwort'])) {
+    $setupErr = (string)($_GET['setupfehler'] ?? '');
+    portal_head('Konto einrichten · bulkify');
+    echo '<div style="max-width:460px;margin:6vh auto;padding:0 16px">'
+       . '<div style="text-align:center;margin-bottom:18px"><img src="assets/bulkify-logo-dark.png" alt="bulkify" style="height:38px"></div>'
+       . '<div class="bx-panel"><h1 style="margin:0 0 4px;font-size:22px">Willkommen bei bulkify</h1>'
+       . '<p class="bx-sub" style="margin-top:0">Bitte richten Sie einmalig Ihren Zugang ein: E-Mail und Passwort. Danach melden Sie sich künftig damit an.</p>';
+    if ($setupErr !== '') echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px">' . h($setupErr) . '</div>';
+    echo '<form method="post">'
+       . '<input type="hidden" name="aktion" value="konto_einrichten">'
+       . '<div class="bx-field"><label>Firma</label><input type="text" value="' . h((string)($k['firma'] ?? '')) . '" disabled></div>'
+       . '<div class="bx-field"><label>Ansprechpartner</label><input type="text" name="ansprechpartner" value="' . h((string)($k['ansprechpartner'] ?? '')) . '" placeholder="Vor- und Nachname"></div>'
+       . '<div class="bx-field"><label>Telefon</label><input type="text" name="telefon" value="' . h((string)($k['telefon'] ?? '')) . '"></div>'
+       . '<div class="bx-field"><label>E-Mail (Ihr Login)</label><input type="email" name="email" required value="' . h((string)($k['email'] ?? '')) . '" placeholder="name@firma.de" autocomplete="email"></div>'
+       . '<div class="bx-field"><label>Passwort (mind. 8 Zeichen)</label><input type="password" name="passwort" required minlength="8" autocomplete="new-password"></div>'
+       . '<div class="bx-field"><label>Passwort wiederholen</label><input type="password" name="passwort2" required minlength="8" autocomplete="new-password"></div>'
+       . '<button class="btn btn-primary" type="submit" style="width:100%;margin-top:6px">Zugang einrichten &amp; anmelden</button>'
+       . '</form></div></div>';
     portal_foot(); exit;
 }
 
@@ -1023,6 +1073,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <?php endforeach;
       endforeach; ?>
       <div class="bx-userbox"><button type="button" class="bx-themebtn">Dunkler Modus</button></div>
+      <div class="bx-userbox" style="padding-top:0"><a class="muted" style="font-size:12px" href="?p=portal&v=logout">Abmelden</a></div>
       <?php if (agb_aktuell()): ?><div class="bx-userbox" style="padding-top:0"><a class="muted" style="font-size:12px" href="<?= $portalLink('agb') ?>">AGB</a></div><?php endif; ?>
     </nav>
   </aside>

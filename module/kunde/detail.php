@@ -379,7 +379,27 @@ if (!$neu) {
         </div>
         <div class="muted" style="font-size:12px;margin-top:4px">Nur dann wird die Fertigware dieses Kunden bei uns eingelagert (Fremdlager) und mit dem Versandsystem gekoppelt. Ohne Haken wird nur produziert und an den Kunden geliefert.</div>
       </div>
-      <?php if (!$neu): ?><div class="muted" style="margin-top:12px">Portal-Link: <a href="<?= h($portalUrl) ?>" target="_blank"><?= h($portalUrl) ?></a></div><?php endif; ?>
+      <?php if (!$neu):
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $absLink = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? '') . '/' . $portalUrl;   // voller Link zum Weitergeben
+        $eingerichtet = !empty($k['passwort']); ?>
+      <div style="margin-top:14px;border:1px solid var(--line);border-radius:8px;padding:12px 14px">
+        <div style="font-weight:600;margin-bottom:4px">Erstzugang / Portal-Link</div>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Diesen Link dem Kunden senden. Beim ersten Öffnen richtet er einmalig <strong>E-Mail &amp; Passwort</strong> ein (und ergänzt fehlende Daten); danach meldet er sich unter <em>Anmelden</em> mit E-Mail/Passwort an. Der Link bleibt als Notfall-Zugang gültig.</div>
+        <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" id="ezLink" readonly value="<?= h($absLink) ?>" style="flex:1;min-width:240px;font-size:12px" onclick="this.select()">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="var i=document.getElementById('ezLink');i.select();navigator.clipboard&&navigator.clipboard.writeText(i.value);this.textContent='kopiert';setTimeout(()=>this.textContent='Link kopieren',1500)">Link kopieren</button>
+          <a class="btn btn-ghost btn-sm" target="_blank" href="<?= h($portalUrl) ?>">öffnen</a>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:8px">
+          <?php if ($eingerichtet): ?>
+            <span class="bx-ok">Zugang eingerichtet</span><?= !empty($k['erstlogin_am']) ? ' am ' . h(fmt_zeit($k['erstlogin_am'], 'd.m.Y H:i')) : '' ?><?= !empty($k['letzter_login']) ? ' · letzter Login ' . h(fmt_zeit($k['letzter_login'], 'd.m.Y H:i')) : '' ?> · Anmeldeseite: <a href="?p=portal_login" target="_blank">?p=portal_login</a>
+          <?php else: ?>
+            Status: <strong>noch nicht eingerichtet</strong> – der Kunde setzt E-Mail &amp; Passwort über den Link.
+          <?php endif; ?>
+        </div>
+      </div>
+      <?php endif; ?>
     </div>
   </section>
 
