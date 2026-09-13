@@ -2,6 +2,7 @@
 // Rezepturanfrage bearbeiten: Kundenwunsch -> Rohstoff-Zuordnung + Kapsel-Check -> Rezeptur erstellen
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup (Lieferantenauswahl) für nicht vorhandene Rohstoffe
 
 $DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 $KAPSELFORMEN = ['kapsel','tablette','softgel'];
@@ -108,6 +109,8 @@ $istKapsel = in_array($form, $KAPSELFORMEN, true);
 
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
 $rohstoffe = all("SELECT id, name, artikelnummer, synonym, cas FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name");
+// Lieferanten für das Anfrage-Popup (nicht vorhandener Rohstoff -> direkt anfragen)
+$lieferantenListe = all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma");
 $kapseln = all("SELECT * FROM kapselgroesse ORDER BY sort, fuellmenge_mg");
 $wuensche = $neu ? [] : all("SELECT * FROM rezeptur_anfrage_wunsch WHERE anfrage_id=? ORDER BY sort, id", [(int)$id]);
 // Auto-Zuordnung vorschlagen, wo noch keine da ist
@@ -399,7 +402,7 @@ function bxRohstoffCombo(sel){
   function render(q){
     q=bxNorm((q||'').trim());
     shown = !q ? ROHSTOFFE.slice(0,50) : ROHSTOFFE.filter(function(r){ return bxNorm(r.n+' '+r.a+' '+r.s+' '+r.c).indexOf(q)>=0; }).slice(0,50);
-    if(!shown.length){ list.innerHTML='<div class="rs-empty">Kein Rohstoff gefunden.</div>'; }
+    if(!shown.length){ list.innerHTML='<div class="rs-empty">Kein Rohstoff gefunden.<div style="margin-top:8px"><button type="button" class="btn btn-ghost btn-sm rs-neu">Beim Lieferanten anfragen</button></div></div>'; }
     else list.innerHTML=shown.map(function(r,i){ var sub=[r.a, r.c?('CAS '+r.c):'', r.s].filter(Boolean).join(' · '); return '<div class="rs-opt" data-i="'+i+'">'+bxEsc(r.n)+(sub?' <span class="muted">('+bxEsc(sub)+')</span>':'')+'</div>'; }).join('');
     hl=-1; list.hidden=false;
   }
@@ -414,7 +417,16 @@ function bxRohstoffCombo(sel){
     else if(e.key==='Enter'){ if(hl>=0){ e.preventDefault(); pick(hl); } }
     else if(e.key==='Escape'){ list.hidden=true; }
   });
-  list.addEventListener('mousedown',function(e){ var o=e.target.closest('.rs-opt'); if(o){ e.preventDefault(); pick(+o.dataset.i); } });
+  list.addEventListener('mousedown',function(e){
+    var o=e.target.closest('.rs-opt'); if(o){ e.preventDefault(); pick(+o.dataset.i); return; }
+    // „Beim Lieferanten anfragen" für einen (noch) nicht vorhandenen Rohstoff.
+    var n=e.target.closest('.rs-neu');
+    if(n){ e.preventDefault(); list.hidden=true;
+      var wunsch=box.value.trim(); var tr=wrap.closest('.wrow');
+      if(!wunsch && tr){ var wb=tr.querySelector('input[name="w_bez[]"]'); if(wb) wunsch=(wb.value||'').trim(); }
+      if(window.bxAnfrageNeuOeffnen) window.bxAnfrageNeuOeffnen(wunsch);
+    }
+  });
   document.addEventListener('click',function(e){ if(!wrap.contains(e.target)) list.hidden=true; });
 }
 function nf(x){ return x.toLocaleString('de-DE'); }
@@ -564,4 +576,7 @@ function kcheck(){
   }
 })();
 </script>
-<?php render_footer(); ?>
+<?php
+// Popup „Beim Lieferanten anfragen" (Lieferantenauswahl + CoA/Spezifikation) – für nicht vorhandene Rohstoffe.
+if (!$neu) anfrage_modal($lieferantenListe, '?p=anfrage&id=' . (int)$id);
+render_footer(); ?>

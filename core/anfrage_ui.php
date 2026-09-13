@@ -72,6 +72,7 @@ function anfrage_modal(array $lieferanten, string $back): void {
       <input type="hidden" name="item_id" id="bxAnfrageItemId" value="">
       <input type="hidden" name="rezeptur_id" id="bxAnfrageRezId" value="">
       <input type="hidden" name="art" id="bxAnfrageArt" value="">
+      <input type="hidden" name="neu_rohstoff" id="bxAnfrageNeu" value="">
       <input type="hidden" name="back" value="<?= h($back) ?>">
       <div style="max-height:230px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin-bottom:12px">
         <?php if (!$lieferanten): ?>
@@ -111,12 +112,25 @@ function bxAnfrageOeffnen(itemId, btn){
   document.getElementById('bxAnfrageItemId').value = itemId;
   document.getElementById('bxAnfrageRezId').value = '';
   document.getElementById('bxAnfrageArt').value = '';
+  document.getElementById('bxAnfrageNeu').value = '';
   var name = btn && btn.getAttribute('data-name');
   document.getElementById('bxAnfrageItem').textContent = name
     ? ('Preis für „' + name + '" – bei welchen Lieferanten anfragen?')
     : 'Bei welchen Lieferanten möchten Sie anfragen?';
   document.getElementById('bxAnfrageOverlay').style.display='flex';
 }
+// Neuer Rohstoff (noch nicht im Katalog): wird beim Absenden als Rohstoff angelegt und direkt angefragt.
+window.bxAnfrageNeuOeffnen = function(name){
+  name = (name || '').trim();
+  document.getElementById('bxAnfrageItemId').value = '';
+  document.getElementById('bxAnfrageRezId').value = '';
+  document.getElementById('bxAnfrageArt').value = '';
+  document.getElementById('bxAnfrageNeu').value = name;
+  document.getElementById('bxAnfrageItem').textContent = name
+    ? ('Neuer Rohstoff „' + name + '" – bei welchen Lieferanten anfragen? (wird als Rohstoff angelegt, CoA/Spezifikation inklusive)')
+    : 'Neuer Rohstoff – bitte zuerst eine Bezeichnung eingeben.';
+  document.getElementById('bxAnfrageOverlay').style.display='flex';
+};
 // Fertigprodukt-Modus: ganze Rezeptur als Fremdfertigung anfragen.
 function bxAnfrageProduktOeffnen(rezId, btn){
   document.getElementById('bxAnfrageItemId').value = '';

@@ -42,6 +42,21 @@ if ($art === 'fertigprodukt' && $rez_id > 0) {
     header('Location: ' . $back . $sep . 'angefragt=' . $n . '&gemailt=' . $gemailt); exit;
 }
 
+// Neuer Rohstoff aus einer Rezepturanfrage: existiert der Rohstoff noch nicht (kein Treffer in der Zuordnung),
+// legen wir ihn hier als Rohstoff-Entwurf an und fragen ihn direkt bei den Lieferanten an (inkl. CoA/Spec).
+$neuName = trim((string)($_POST['neu_rohstoff'] ?? ''));
+if ($item_id <= 0 && $neuName !== '') {
+    $vorhanden = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND name=? LIMIT 1", [$neuName]);
+    if ($vorhanden > 0) {
+        $item_id = $vorhanden;
+    } else {
+        q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug,notiz) VALUES (?,?,?,?,?,?)",
+          [naechste_nummer(item_prefix('rohstoff')), mb_substr($neuName, 0, 190), 'rohstoff', 'kg', 'kg',
+           'Aus einer Rezepturanfrage angelegt und bei Lieferanten angefragt (CoA/Spezifikation).']);
+        $item_id = insert_id();
+    }
+}
+
 if ($item_id <= 0) { header('Location: ' . $back . '&anffehler=1'); exit; }
 $einh = (string) (scalar("SELECT preis_bezug FROM item WHERE id=?", [$item_id]) ?: scalar("SELECT einheit FROM item WHERE id=?", [$item_id]));
 
