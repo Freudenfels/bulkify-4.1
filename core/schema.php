@@ -2890,11 +2890,15 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
     }
     $besch = $rezLines ? (implode("\n", $rezLines) . "\n" . $summary) : $summary;
     // Die angebotene Konfiguration mitspeichern – daraus entsteht beim Annehmen das Produkt.
-    $primaer = null;
+    $primaer = null; $hatEtikett = false;
     foreach ($verp_ids as $vid) {
         if (!$vid) continue;
-        if ((string) scalar("SELECT COALESCE(verpackung_rolle,'primaer') FROM item WHERE id=?", [(int)$vid]) === 'primaer') { $primaer = (int)$vid; break; }
+        $rolle = (string) scalar("SELECT COALESCE(verpackung_rolle,'primaer') FROM item WHERE id=?", [(int)$vid]);
+        if ($rolle === 'primaer' && !$primaer) $primaer = (int)$vid;
+        if ($rolle === 'etikett') $hatEtikett = true;
     }
+    // Etikett automatisch aus dem Behälter ableiten (Endformat/Maße am Behälter), wenn keins gewählt wurde – wie v3.
+    if ($primaer && !$hatEtikett) { $eid = etikett_id_fuer_behaelter($primaer); if ($eid) $verp_ids[] = $eid; }
     $rows = [[
         'artikelnr'=>'', 'bezeichnung'=>$r['name'], 'beschreibung'=>$besch,
         'menge'=>(float)$menge, 'einheit'=>'Pkg.', 'preis_cent'=>(int) round($vkH * 100),
@@ -3586,6 +3590,12 @@ function passende_etiketten_fuer(?int $verpackung_id): array {
     return $out;
 }
 
+// Das passende Etikett zu einem Behälter (erstes Endformat-Match) – für die automatische Zuordnung.
+function etikett_id_fuer_behaelter(int $verp_id): ?int {
+    if ($verp_id <= 0) return null;
+    $et = passende_etiketten_fuer($verp_id);
+    return $et ? (int)$et[0]['id'] : null;
+}
 // Behälter -> passende Etiketten-IDs, für die Auswahl im Angebots-Editor (ohne Nachladen).
 function etikett_zuordnung(): array {
     $map = [];
