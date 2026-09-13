@@ -484,13 +484,13 @@ if (!$neu):
     <input type="hidden" name="aktion" value="pos_save">
     <table class="bx-table" id="postab">
       <colgroup>
-        <col style="width:400px"><col style="width:92px"><col style="width:72px"><col style="width:92px"><col style="width:78px">
-        <col style="width:84px"><col style="width:92px"><col style="width:96px"><col style="width:40px"><col>
+        <col><col style="width:88px"><col style="width:72px"><col style="width:92px"><col style="width:74px">
+        <col style="width:80px"><col style="width:88px"><col style="width:96px"><col style="width:40px">
       </colgroup>
       <thead><tr>
         <th>Bezeichnung</th><th class="bx-num">Menge</th><th>Einheit</th>
         <th class="bx-num">Preis/Einh €</th><th class="bx-num">MwSt %</th>
-        <th class="bx-num">EK/Einh</th><th class="bx-num">Marge</th><th class="bx-num">Gesamt</th><th></th><th></th>
+        <th class="bx-num">EK/Einh</th><th class="bx-num">Marge</th><th class="bx-num">Gesamt</th><th></th>
       </tr></thead>
       <tbody id="posrows">
         <?php foreach ($pos as $i => $pp): ?>
@@ -512,7 +512,6 @@ if (!$neu):
           <td><?php $mwCur = mwst_normalisieren((float)$pp['mwst_satz']); ?><select name="p_mwst[]" style="width:100%"><?php foreach (mwst_saetze() as $ms): ?><option value="<?= (int)$ms ?>" <?= (int)$ms === (int)$mwCur ? 'selected' : '' ?>><?= (int)$ms ?> %</option><?php endforeach; ?></select></td>
           <td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>
           <td><button type="button" class="btn btn-ghost btn-sm" title="Position löschen" onclick="var f=this.closest('form');this.closest('.posrow').remove();posRecalc();f.submit()">×</button></td>
-          <td></td>
         </tr>
         <?php endforeach; ?>
       </tbody>
@@ -642,7 +641,7 @@ function posRecalc(){
       +'<td><input type="number" step="0.0001" name="p_preis[]" class="p_preis"></td>'
       +'<td><select name="p_mwst[]" style="width:100%"><?php foreach (mwst_saetze() as $ms): ?><option value="<?= (int)$ms ?>"<?= (int)$ms === (int)mwst_normalisieren(angebot_ust_satz($kid)) ? ' selected' : '' ?>><?= (int)$ms ?> %</option><?php endforeach; ?></select></td>'
       +'<td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>'
-      +'<td><button type="button" class="btn btn-ghost btn-sm">×</button></td><td></td>';
+      +'<td><button type="button" class="btn btn-ghost btn-sm">×</button></td>';
     tr.querySelector('button').addEventListener('click',function(){tr.remove();posRecalc();});
     tr.querySelectorAll('input').forEach(function(i){i.addEventListener('input',posRecalc);});
     document.getElementById('posrows').appendChild(tr);
