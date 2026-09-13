@@ -852,7 +852,7 @@ $navBadges = [
     'kontingente'    => $navKontingente,
 ];
 $navBadgeTitel = [
-    'meine_anfragen' => 'offene Vorgänge (Angebote zur Wahl / Vorschläge zur Prüfung)',
+    'meine_anfragen' => 'offene Vorgänge (Angebote zur Wahl / Vorschläge zur Prüfung / in Prüfung)',
     'angebote'       => 'Angebote zur Bestätigung',
     'bestellungen'   => 'Bestellungen in Bearbeitung',
     'rechnungen'     => 'offene Rechnungen',
@@ -877,8 +877,15 @@ foreach ($anfragen as $a) {
     $akt = null;
     if (($a['rezeptur_status'] ?? '') === 'vorschlag' && $a['rezeptur_id']) $akt = ['label'=>'Prüfen & entscheiden','href'=>$portalLink('rezeptur').'&rid='.(int)$a['rezeptur_id'],'primary'=>true];
     elseif (($a['status'] ?? '') === 'neu') $akt = ['label'=>'Bearbeiten','href'=>$portalLink('anfrage').'&edit='.(int)$a['id'],'primary'=>false];
+    // Stufe (fuer Zaehlung/Reiter): wartet = Vorschlag zum Pruefen · erledigt = Rezeptur angelegt (eingefroren) ·
+    // abgelehnt = abgelehnt/ueberarbeiten · offen = in Pruefung (neu/in Bearbeitung).
+    $rs = $a['rezeptur_status'] ?? ''; $as2 = $a['status'] ?? '';
+    $stufe = $rs === 'eingefroren' ? 'erledigt'
+           : ($rs === 'vorschlag' ? 'wartet'
+           : (($rs === 'abgelehnt' || $as2 === 'abgelehnt' || $as2 === 'ueberarbeiten') ? 'abgelehnt' : 'offen'));
+    $rezLink = $akt['href'] ?? ((int)($a['rezeptur_id'] ?? 0) ? $portalLink('rezeptur') . '&rid=' . (int)$a['rezeptur_id'] : null);
     $meineAnfRows[] = ['typ'=>'rezeptur','nummer'=>$a['nummer'],'bez'=>($a['produktname'] ?: '(Rezeptur)'),'datum'=>$a['angelegt'],'status'=>$anfStatus($a),'aktion'=>$akt, 'loeschbar'=>empty($a['rezeptur_id']), 'del_typ'=>'rezeptur', 'del_id'=>(int)$a['id'],
-        'link'=>($akt['href'] ?? null)];
+        'link'=>$rezLink, 'stufe'=>$stufe];
 }
 foreach ($portalAnfragen as $p) {
     // Bei einer Rezeptur-Anfrage gibt es noch kein Produkt – dann den Rezepturnamen zeigen statt „Produkt".
@@ -904,10 +911,18 @@ foreach ($portalAnfragen as $p) {
         $akt = $offLink ? ['label'=>'Menge annehmen','href'=>$offLink,'primary'=>true] : null;
     }
     $zeilenLink = ($erledigt && (int)($p['auftrag_id'] ?? 0)) ? $portalLink('bestellung') . '&aid=' . (int)$p['auftrag_id'] : $offLink;
+    // Stufe: erledigt (bestellt) bzw. abgeschlossen (versendet) · abgelehnt (nicht machbar) · offen (in Prüfung/Angebot erhalten).
+    $stufe = $erledigt ? ($aufSt === 'versendet' ? 'abgeschlossen' : 'erledigt')
+           : (($p['status'] === 'abgelehnt') ? 'abgelehnt' : 'offen');
     $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt, 'loeschbar'=>empty($p['angebot_id']), 'del_typ'=>'portal', 'del_id'=>(int)$p['id'],
-        'link'=>$zeilenLink, 'angebot_id'=>(int)($p['angebot_id'] ?? 0), 'erledigt'=>$erledigt, 'auftrag_id'=>(int)($p['auftrag_id'] ?? 0)];
+        'link'=>$zeilenLink, 'angebot_id'=>(int)($p['angebot_id'] ?? 0), 'erledigt'=>$erledigt, 'auftrag_id'=>(int)($p['auftrag_id'] ?? 0), 'stufe'=>$stufe];
 }
 usort($meineAnfRows, fn($x,$y) => strcmp((string)$y['datum'], (string)$x['datum']));
+// Wirklich offene Anfragen (in Prüfung, noch kein Angebot) – für Zähler & Menü-Badge.
+$pending      = array_values(array_filter($meineAnfRows, fn($r) => empty($r['angebot_id']) && ($r['stufe'] ?? '') === 'offen'));
+$erledigtRows = array_values(array_filter($meineAnfRows, fn($r) => empty($r['angebot_id']) && in_array($r['stufe'] ?? '', ['erledigt','abgeschlossen','abgelehnt'], true)));
+// Menü-Badge „Meine Anfragen": offene Angebote + Vorschläge zum Prüfen + Anfragen in Prüfung.
+$navBadges['meine_anfragen'] = $offenAngebote + count($anfPruef) + count($pending);
 $anfTabs = ['alle'=>'Alle'];
 if ($k['portal_rezeptur'])       $anfTabs['rezeptur']='Rezepturen';
 if ($k['portal_produkte'])       $anfTabs['produkt']='Produkte';
@@ -1288,18 +1303,17 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
   </div>
   <?php else:
-    // Übersicht: was ist noch offen (angefragt / wartet auf Entscheidung) vs. erledigt (bestellt/abgeschlossen)?
+    // Übersicht: offen (angefragt / wartet auf Entscheidung) vs. erledigt (bestellt/abgeschlossen).
+    // $pending (in Prüfung) und $erledigtRows (Rezeptur angelegt/abgelehnt) stehen global (oben berechnet).
     $offen_ang = array_values(array_filter($angebote, fn($x) => $x['status'] === 'gesendet'));
     $best_prog = []; $abgeschl = [];
     foreach (array_filter($angebote, fn($x) => $x['status'] === 'bestaetigt') as $x) {
         $auSt = (string) scalar("SELECT status FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [(int)$x['id']]);
         if ($auSt === 'versendet') $abgeschl[] = $x; else $best_prog[] = $x;
     }
-    $pruefNr = array_column($anfPruef, 'nummer');
-    $pending = array_values(array_filter($meineAnfRows, fn($r) => empty($r['angebot_id']) && !in_array($r['nummer'], $pruefNr, true)));
     $nOffen  = count($offen_ang) + count($pending);
-    $sumOffen    = count($anfPruef) + $nOffen;          // wartet auf Sie + Angebot zum Bestätigen + in Prüfung
-    $sumErledigt = count($best_prog) + count($abgeschl); // bestätigt/in Arbeit + abgeschlossen
+    $sumOffen    = count($anfPruef) + $nOffen;                                 // wartet auf Sie + Angebot zum Bestätigen + in Prüfung
+    $sumErledigt = count($best_prog) + count($abgeschl) + count($erledigtRows); // bestätigt/in Arbeit + versendet + Rezeptur angelegt/abgelehnt
   ?>
 
   <div class="bx-row" style="gap:12px;margin:6px 0 16px;flex-wrap:wrap">
@@ -1343,7 +1357,8 @@ portal_head('Kundenportal · ' . $k['firma']);
   <div class="settabs" style="margin:0 0 12px">
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen"        class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=bestaetigt"   class="<?= $oatab === 'bestaetigt' ? 'on' : '' ?>">Bestätigt<?= $best_prog ? ' (' . count($best_prog) . ')' : '' ?></a>
-    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=abgeschlossen" class="<?= $oatab === 'abgeschlossen' ? 'on' : '' ?>">Abgeschlossen<?= $abgeschl ? ' (' . count($abgeschl) . ')' : '' ?></a>
+    <?php $nAbg = count($abgeschl) + count($erledigtRows); ?>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=abgeschlossen" class="<?= $oatab === 'abgeschlossen' ? 'on' : '' ?>">Abgeschlossen<?= $nAbg ? ' (' . $nAbg . ')' : '' ?></a>
   </div>
 
   <?php if ($oatab === 'offen'): ?>
@@ -1388,8 +1403,28 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php foreach ($best_prog as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
 
   <?php else: /* abgeschlossen */ ?>
-    <?php if (!$abgeschl): ?><div class="bx-panel"><div class="muted">Noch nichts abgeschlossen.</div></div><?php endif; ?>
+    <?php if (!$abgeschl && !$erledigtRows): ?><div class="bx-panel"><div class="muted">Noch nichts abgeschlossen.</div></div><?php endif; ?>
     <?php foreach ($abgeschl as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+    <?php if ($erledigtRows): ?>
+    <div class="bx-panel">
+      <h2 style="margin:0 0 4px">Anfragen</h2>
+      <p class="muted" style="margin:0 0 12px;font-size:13px">Erledigte bzw. abgelehnte Anfragen (z. B. Rezeptur angelegt).</p>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Nummer</th><th>Typ</th><th>Bezeichnung</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($erledigtRows as $r): ?>
+          <tr>
+            <td><?= h($r['nummer']) ?></td>
+            <td><?= h($typLabelP[$r['typ']] ?? $r['typ']) ?></td>
+            <td><?= $r['bez'] ? h($r['bez']) : '<span class="muted">–</span>' ?></td>
+            <td><?= $r['status'] ?></td>
+            <td style="text-align:right"><?php if (!empty($r['link'])): ?><a class="btn btn-ghost btn-sm" href="<?= h($r['link']) ?>">ansehen</a><?php endif; ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    </div>
+    <?php endif; ?>
   <?php endif; ?>
   <script>(function(){ var h=location.hash; if(h && /^#a\d+$/.test(h)){ var d=document.querySelector(h); if(d && d.tagName==='DETAILS'){ d.open=true; d.scrollIntoView(); } } })();</script>
   <?php endif; /* istLeer */ ?>
