@@ -84,35 +84,69 @@ function anfrage_modal(array $lieferanten, string $back): void {
           </label>
         <?php endforeach; endif; ?>
       </div>
-      <div class="bx-row" style="gap:10px">
-        <div class="bx-field" style="margin:0;flex:1"><label>Menge (optional)</label><input type="text" name="anf_menge" placeholder="z. B. 500"></div>
-      </div>
-      <div class="bx-row" style="gap:10px">
-        <?php $stdI = function_exists('meta_get') ? meta_get('ek_incoterm_standard','DDP') : 'DDP'; $stdV = function_exists('meta_get') ? meta_get('ek_versandart_standard','luft') : 'luft'; ?>
-        <div class="bx-field" style="margin:0;flex:1"><label>Lieferbedingung (Incoterm)</label>
-          <select name="anf_incoterm"><?php foreach (incoterm_liste() as $k=>$lbl): ?><option value="<?= $k ?>" <?= $k===$stdI?'selected':'' ?>><?= h($lbl) ?></option><?php endforeach; ?></select></div>
-        <div class="bx-field" style="margin:0;flex:1"><label>Versandart</label>
-          <select name="anf_versandart"><?php foreach (versandart_liste() as $k=>$lbl): ?><option value="<?= $k ?>" <?= $k===$stdV?'selected':'' ?>><?= h($lbl) ?></option><?php endforeach; ?></select></div>
-      </div>
-      <div class="muted" style="font-size:12px;margin:-4px 0 10px">Standard: DDP · Luft (frei Haus, alles inkl.). Anpassbar je Anfrage.</div>
-      <div class="bx-field"><label>Notiz an den Lieferanten (optional)</label><input type="text" name="anf_notiz" maxlength="500"></div>
-      <label style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
-        <input type="checkbox" name="anf_coa" value="1" checked> <span>CoA / Spezifikation mit anfragen</span>
+      <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px" id="bxAnfCoaWrap">
+        <input type="checkbox" name="anf_coa" id="bxAnfCoa" value="1" checked> <span id="bxAnfCoaLbl">CoA / Spezifikation mit anfragen</span>
       </label>
+      <!-- Preis-Block: im Dokumente-Modus (nicht vorhandener Rohstoff aus der Anfrage) optional/ausgeblendet. -->
+      <div id="bxAnfPreisBlock">
+        <div class="bx-row" style="gap:10px">
+          <div class="bx-field" style="margin:0;flex:1"><label id="bxAnfMengeLbl">Menge (optional)</label><input type="text" name="anf_menge" placeholder="z. B. 500"></div>
+        </div>
+        <div class="bx-row" style="gap:10px">
+          <?php $stdI = function_exists('meta_get') ? meta_get('ek_incoterm_standard','DDP') : 'DDP'; $stdV = function_exists('meta_get') ? meta_get('ek_versandart_standard','luft') : 'luft'; ?>
+          <div class="bx-field" style="margin:0;flex:1"><label>Lieferbedingung (Incoterm)</label>
+            <select name="anf_incoterm"><?php foreach (incoterm_liste() as $k=>$lbl): ?><option value="<?= $k ?>" <?= $k===$stdI?'selected':'' ?>><?= h($lbl) ?></option><?php endforeach; ?></select></div>
+          <div class="bx-field" style="margin:0;flex:1"><label>Versandart</label>
+            <select name="anf_versandart"><?php foreach (versandart_liste() as $k=>$lbl): ?><option value="<?= $k ?>" <?= $k===$stdV?'selected':'' ?>><?= h($lbl) ?></option><?php endforeach; ?></select></div>
+        </div>
+        <div class="muted" style="font-size:12px;margin:-4px 0 10px">Standard: DDP · Luft (frei Haus, alles inkl.). Anpassbar je Anfrage.</div>
+      </div>
+      <!-- Kilopreis im Dokumente-Modus optional dazuschalten. -->
+      <label style="display:none;gap:8px;align-items:center;margin-bottom:12px" id="bxAnfPreisOptWrap">
+        <input type="checkbox" id="bxAnfPreisOpt"> <span>Auch Kilopreis anfragen (optional)</span>
+      </label>
+      <div class="bx-field"><label>Notiz an den Lieferanten (optional)</label><input type="text" name="anf_notiz" maxlength="500"></div>
       <div class="bx-row" style="justify-content:flex-end;gap:10px">
         <button type="button" class="btn btn-ghost" onclick="bxAnfrageZu()">Abbrechen</button>
-        <button type="submit" class="btn btn-primary">Anfrage senden</button>
+        <button type="submit" class="btn btn-primary" id="bxAnfSubmit">Anfrage senden</button>
       </div>
     </form>
   </div>
 </div>
 <script>
 function bxAnfrageZu(){ document.getElementById('bxAnfrageOverlay').style.display='none'; }
+// Modus umschalten: 'preis' = normale Preisanfrage (Preis-Block sichtbar);
+// 'doku' = Fokus CoA/Spezifikation (Preis-Block optional, per Häkchen dazuschaltbar).
+function bxAnfrageModus(modus){
+  var block=document.getElementById('bxAnfPreisBlock'),
+      optWrap=document.getElementById('bxAnfPreisOptWrap'),
+      opt=document.getElementById('bxAnfPreisOpt'),
+      coa=document.getElementById('bxAnfCoa'),
+      submit=document.getElementById('bxAnfSubmit');
+  if(modus==='doku'){
+    if(coa) coa.checked=true;
+    if(opt) opt.checked=false;
+    if(block) block.style.display='none';
+    if(optWrap) optWrap.style.display='flex';
+    if(submit) submit.textContent='CoA / Spezifikation anfragen';
+  } else {
+    if(block) block.style.display='';
+    if(optWrap) optWrap.style.display='none';
+    if(submit) submit.textContent='Anfrage senden';
+  }
+}
+document.addEventListener('change', function(e){
+  if(e.target && e.target.id==='bxAnfPreisOpt'){
+    var block=document.getElementById('bxAnfPreisBlock');
+    if(block) block.style.display = e.target.checked ? '' : 'none';
+  }
+});
 function bxAnfrageOeffnen(itemId, btn){
   document.getElementById('bxAnfrageItemId').value = itemId;
   document.getElementById('bxAnfrageRezId').value = '';
   document.getElementById('bxAnfrageArt').value = '';
   document.getElementById('bxAnfrageNeu').value = '';
+  bxAnfrageModus('preis');
   var name = btn && btn.getAttribute('data-name');
   document.getElementById('bxAnfrageItem').textContent = name
     ? ('Preis für „' + name + '" – bei welchen Lieferanten anfragen?')
@@ -126,6 +160,7 @@ window.bxAnfrageNeuOeffnen = function(name){
   document.getElementById('bxAnfrageRezId').value = '';
   document.getElementById('bxAnfrageArt').value = '';
   document.getElementById('bxAnfrageNeu').value = name;
+  bxAnfrageModus('doku');   // Fokus: CoA / Spezifikation – Kilopreis optional
   document.getElementById('bxAnfrageItem').textContent = name
     ? ('Neuer Rohstoff „' + name + '" – bei welchen Lieferanten anfragen? (wird als Rohstoff angelegt, CoA/Spezifikation inklusive)')
     : 'Neuer Rohstoff – bitte zuerst eine Bezeichnung eingeben.';
@@ -136,6 +171,8 @@ function bxAnfrageProduktOeffnen(rezId, btn){
   document.getElementById('bxAnfrageItemId').value = '';
   document.getElementById('bxAnfrageRezId').value = rezId;
   document.getElementById('bxAnfrageArt').value = 'fertigprodukt';
+  document.getElementById('bxAnfrageNeu').value = '';
+  bxAnfrageModus('preis');
   var name = btn && btn.getAttribute('data-name');
   var form = btn && btn.getAttribute('data-form');
   document.getElementById('bxAnfrageItem').textContent =
