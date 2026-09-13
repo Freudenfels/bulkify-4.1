@@ -1314,6 +1314,17 @@ portal_head('Kundenportal · ' . $k['firma']);
     $sumOffen = count($anfPruef) + $nOffen;              // wartet auf Sie + Angebot zum Bestätigen + in Prüfung
     $sumBest  = count($best_ang) + count($bestRows);     // bestätigt (in Arbeit/versendet) + Rezeptur angelegt
     $sumAbgel = count($abgel_ang) + count($abglRows);    // abgelehnt / nicht machbar
+    // Unterreiter nach Typ: die Zähler oben bleiben GESAMT; hier nur die Anzeige-Listen filtern.
+    $angTyp = [];
+    foreach ($angebote as $ang) { $angTyp[$ang['id']] = !empty($ang['anfrage_id']) ? ((string) scalar("SELECT typ FROM portal_anfrage WHERE id=?", [(int)$ang['anfrage_id']]) ?: 'produkt') : 'produkt'; }
+    $mt = fn($t) => $atab === 'alle' || $t === $atab;
+    $offen_ang = array_values(array_filter($offen_ang, fn($a) => $mt($angTyp[$a['id']] ?? 'produkt')));
+    $best_ang  = array_values(array_filter($best_ang,  fn($a) => $mt($angTyp[$a['id']] ?? 'produkt')));
+    $abgel_ang = array_values(array_filter($abgel_ang, fn($a) => $mt($angTyp[$a['id']] ?? 'produkt')));
+    $pending   = array_values(array_filter($pending,   fn($r) => $mt($r['typ'] ?? '')));
+    $bestRows  = array_values(array_filter($bestRows,  fn($r) => $mt($r['typ'] ?? '')));
+    $abglRows  = array_values(array_filter($abglRows,  fn($r) => $mt($r['typ'] ?? '')));
+    $anfPruefShow = ($atab === 'alle' || $atab === 'rezeptur') ? $anfPruef : [];  // Vorschläge = Rezepturen
   ?>
 
   <div class="bx-row" style="gap:12px;margin:6px 0 16px;flex-wrap:wrap">
@@ -1331,14 +1342,14 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
   </div>
 
-  <?php if ($anfPruef): ?>
+  <?php if ($anfPruefShow): ?>
   <div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2)">
-    <h2 style="margin-top:0">Wartet auf Sie (<?= count($anfPruef) ?>)</h2>
+    <h2 style="margin-top:0">Wartet auf Sie (<?= count($anfPruefShow) ?>)</h2>
     <p class="muted" style="margin-top:0">Zu diesen Anfragen liegt ein Vorschlag bereit – bitte prüfen und annehmen oder ablehnen.</p>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Nummer</th><th>Wunschname</th><th>Form</th><th>Vorschlag</th><th></th></tr></thead>
       <tbody>
-      <?php foreach ($anfPruef as $an): ?>
+      <?php foreach ($anfPruefShow as $an): ?>
         <tr>
           <td><?= h($an['nummer']) ?></td>
           <td><?= $an['produktname'] ? h($an['produktname']) : '<span class="muted">–</span>' ?></td>
@@ -1357,11 +1368,18 @@ portal_head('Kundenportal · ' . $k['firma']);
   $oatab = in_array($_GET['oatab'] ?? '', ['bestaetigt','abgelehnt'], true) ? $_GET['oatab'] : 'offen';
   ?>
   <h2 style="margin:8px 0 6px">Ihre Vorgänge</h2>
-  <div class="settabs" style="margin:0 0 12px">
-    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen"      class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
-    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=bestaetigt" class="<?= $oatab === 'bestaetigt' ? 'on' : '' ?>">Bestätigt<?= $sumBest ? ' (' . $sumBest . ')' : '' ?></a>
-    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=abgelehnt"  class="<?= $oatab === 'abgelehnt' ? 'on' : '' ?>">Abgelehnt<?= $sumAbgel ? ' (' . $sumAbgel . ')' : '' ?></a>
+  <div class="settabs" style="margin:0 0 8px">
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen&atab=<?= $atab ?>"      class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=bestaetigt&atab=<?= $atab ?>" class="<?= $oatab === 'bestaetigt' ? 'on' : '' ?>">Bestätigt<?= $sumBest ? ' (' . $sumBest . ')' : '' ?></a>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=abgelehnt&atab=<?= $atab ?>"  class="<?= $oatab === 'abgelehnt' ? 'on' : '' ?>">Abgelehnt<?= $sumAbgel ? ' (' . $sumAbgel . ')' : '' ?></a>
   </div>
+  <?php if (count($anfTabs) > 1): ?>
+  <div class="settabs" style="margin:0 0 12px;font-size:13px;opacity:.95">
+    <?php foreach ($anfTabs as $tk => $tl): ?>
+      <a href="<?= $portalLink('meine_anfragen') ?>&oatab=<?= $oatab ?>&atab=<?= $tk ?>" class="<?= $atab === $tk ? 'on' : '' ?>"><?= h($tl) ?></a>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
 
   <?php
   // Kleine Tabelle für Anfragen ohne Angebotskarte (Rezeptur angelegt / abgelehnt). Vor der if/elseif-Kette
