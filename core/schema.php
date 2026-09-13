@@ -2583,6 +2583,12 @@ function produkt_verpackung_items(int $produkt_id, ?int $verp_override = null): 
     $p = one("SELECT verpackung_id, verschluss_id, etikett_id FROM produkt WHERE id=?", [$produkt_id]);
     if (!$p) return [];
     if ($verp_override) $p['verpackung_id'] = $verp_override;
+    // Kein Etikett am Produkt hinterlegt? Passendes Etikett automatisch aus dem Behälter ableiten (Maße/Endformat
+    // am Behälter, wie v3) – so erscheint das Etikett als Position + Preis, ohne es am Produkt pflegen zu müssen.
+    if (empty($p['etikett_id']) && !empty($p['verpackung_id'])) {
+        $autoEt = etikett_id_fuer_behaelter((int)$p['verpackung_id']);
+        if ($autoEt) $p['etikett_id'] = $autoEt;
+    }
     $out = [];
     foreach (['verpackung_id'=>'Verpackung', 'verschluss_id'=>'Deckel', 'etikett_id'=>'Etikett'] as $f => $rolle) {
         if (!empty($p[$f])) {
