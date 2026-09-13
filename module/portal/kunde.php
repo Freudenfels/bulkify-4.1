@@ -796,6 +796,23 @@ $offenAngebote = count(array_filter($angebote, fn($a) => $a['status'] === 'gesen
 $offenRechnungen = array_values(array_filter($rechnungen, fn($r) => ($r['status'] ?? '') === 'offen'));
 $offenBetrag = array_sum(array_map(fn($r) => (float)$r['brutto'], $offenRechnungen));
 $inArbeit = count(array_filter($auftraege, fn($a) => $a['status'] !== 'versendet'));
+// Menü-Zähler: was ist offen bzw. in Bearbeitung (Kundensicht) – als Badge am jeweiligen Menüpunkt.
+$navKontingente = (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND jahresvertrag=1 AND status<>'offen' AND kunde_ausgeblendet=0 AND NOT EXISTS (SELECT 1 FROM kontingent kk WHERE kk.angebot_id=angebot.id)", [$kid])
+                + (int) scalar("SELECT COUNT(*) FROM kontingent WHERE kunde_id=? AND status='wartet_vertrag'", [$kid]);
+$navBadges = [
+    'meine_anfragen' => $offenAngebote + count($anfPruef),
+    'angebote'       => $offenAngebote,
+    'bestellungen'   => $inArbeit,
+    'rechnungen'     => count($offenRechnungen),
+    'kontingente'    => $navKontingente,
+];
+$navBadgeTitel = [
+    'meine_anfragen' => 'offene Vorgänge (Angebote zur Wahl / Vorschläge zur Prüfung)',
+    'angebote'       => 'Angebote zur Bestätigung',
+    'bestellungen'   => 'Bestellungen in Bearbeitung',
+    'rechnungen'     => 'offene Rechnungen',
+    'kontingente'    => 'Jahresverträge, die auf Sie warten',
+];
 $portalLink = fn($v) => '?p=portal&token=' . $token . '&v=' . $v;
 // Suchfeld für die Katalog-Listen. Behält Token und Ansicht bei, damit die Suche im Portal bleibt.
 $sucheForm = function (string $v, string $platzhalter) use ($token, $q) { ?>
@@ -1067,9 +1084,8 @@ portal_head('Kundenportal · ' . $k['firma']);
           if ($gruppe !== ''): ?><div class="bx-navgroup"><?= h($gruppe) ?></div><?php endif;
           foreach ($sichtbar as $key): ?>
             <a href="<?= $portalLink($key) ?>"<?= $activeItem===$key ? ' class="on"' : '' ?>><?= h($L[$key]) ?><?php
-              if ($key === 'meine_anfragen'): $nv = $offenAngebote + count($anfPruef);
-                 if ($nv): ?> <span class="pt-badge" style="float:right" title="<?= $nv ?> offene Vorgänge (Angebote zur Wahl / Vorschläge)"><?= $nv ?></span><?php endif;
-              endif; ?></a>
+              $nv = (int)($navBadges[$key] ?? 0);
+              if ($nv > 0): ?> <span class="pt-badge" style="float:right" title="<?= $nv ?> <?= h($navBadgeTitel[$key] ?? 'offen') ?>"><?= $nv ?></span><?php endif; ?></a>
           <?php endforeach;
       endforeach; ?>
       <div class="bx-userbox"><button type="button" class="bx-themebtn">Dunkler Modus</button></div>
