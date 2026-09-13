@@ -1885,7 +1885,12 @@ portal_head('Kundenportal · ' . $k['firma']);
         <tr><td><?= h($a['nummer']) ?></td><td><?= h($titelFuer($a)) ?></td>
           <td class="bx-num"><?= $a['fuellmenge_g'] ? rtrim(rtrim(number_format((float)$a['fuellmenge_g'],1,',','.'),'0'),',').' g' : ($a['stueck'] ? (int)$a['stueck'].' Stk' : '–') ?></td>
           <td><?= h($a['verpackung_typ'] ? ($VTYPEN[$a['verpackung_typ']] ?? $a['verpackung_typ']) : '–') ?></td><td class="bx-num"><?= $a['menge'] ? (int)$a['menge'] : '–' ?></td><td><?= $pafBadge($a['status']) ?><?php if ($a['status']==='abgelehnt' && !empty($a['absage_grund'])): ?><div class="muted" style="font-size:12px;white-space:normal"><?= h($a['absage_grund']) ?></div><?php endif; ?></td>
-          <td style="text-align:right"><?php if (!empty($a['angebot_id'])): ?><a class="btn btn-primary btn-sm" href="<?= $portalLink('angebote') ?>#a<?= (int)$a['angebot_id'] ?>">Zum Angebot</a><?php endif; ?></td></tr>
+          <td style="text-align:right"><?php if (!empty($a['angebot_id'])): ?>
+            <?php // Link dorthin, wo der Kunde die Menge wählt und bestätigt (Angebotskarte in „Meine Anfragen"),
+                  //  nicht in die reine Angebote-Liste. Bereits bestätigt -> Reiter „Bestätigt".
+                  $oa = ($a['angebot_status'] ?? '') === 'bestaetigt' ? 'bestaetigt' : 'offen'; ?>
+            <a class="btn btn-primary btn-sm" href="<?= $portalLink('meine_anfragen') ?>&oatab=<?= $oa ?>#a<?= (int)$a['angebot_id'] ?>">Angebot ansehen &amp; wählen</a>
+          <?php endif; ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
