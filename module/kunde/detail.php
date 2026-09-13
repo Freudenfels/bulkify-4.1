@@ -58,7 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($nm === '' && $wb === '') continue;
             q("INSERT INTO kunde_marke (kunde_id,name,webseite,sort) VALUES (?,?,?,?)", [(int)$id, $nm, $wb, $i]);
         }
-        header('Location: ?p=kunde&id=' . $id . '&gespeichert=1'); exit;
+        $tabQ = preg_replace('/[^a-z]/', '', (string)($_POST['tab'] ?? ''));   // im zuletzt genutzten Tab bleiben
+        header('Location: ?p=kunde&id=' . $id . '&gespeichert=1' . ($tabQ !== '' ? '&tab=' . $tabQ : '')); exit;
     }
 }
 
@@ -159,6 +160,7 @@ if (!$neu) {
 }
 ?>
 <form method="post" class="bx-form">
+  <input type="hidden" name="tab" id="kundAktivTab" value="<?= h((string)($_GET['tab'] ?? '')) ?>">
   <div class="settabs" id="kundtabs">
     <?php if (!$neu): ?>
     <a href="#" class="on" data-tab="ueber">Übersicht</a>
@@ -436,16 +438,21 @@ if (!$neu) {
 <script>
 (function(){
   var tabs = document.querySelectorAll('#kundtabs a');
+  var aktiv = document.getElementById('kundAktivTab');
+  function activate(name){
+    var ziel = null;
+    tabs.forEach(function(x){ var on = x.getAttribute('data-tab') === name; x.classList.toggle('on', on); if (on) ziel = x; });
+    if (!ziel) return false;
+    document.querySelectorAll('[data-panel]').forEach(function(p){ p.hidden = (p.getAttribute('data-panel') !== name); });
+    if (aktiv) aktiv.value = name;
+    return true;
+  }
   tabs.forEach(function(t){
-    t.addEventListener('click', function(e){
-      e.preventDefault();
-      tabs.forEach(function(x){ x.classList.remove('on'); });
-      t.classList.add('on');
-      document.querySelectorAll('[data-panel]').forEach(function(p){
-        p.hidden = (p.getAttribute('data-panel') !== t.getAttribute('data-tab'));
-      });
-    });
+    t.addEventListener('click', function(e){ e.preventDefault(); activate(t.getAttribute('data-tab')); });
   });
+  // Nach dem Speichern (oder per ?tab=) im zuletzt genutzten Tab bleiben statt zur Übersicht zu springen.
+  var wunsch = new URLSearchParams(location.search).get('tab');
+  if (wunsch) activate(wunsch);
   var add = document.getElementById('addMarke');
   if (add) add.addEventListener('click', function(){
     var row = document.createElement('div');
