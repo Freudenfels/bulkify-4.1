@@ -4919,6 +4919,70 @@ function anfrage_auto_item(string $bez): ?int {
     return $id ? (int)$id : null;
 }
 
+/**
+ * Aufgabe 4 – Ähnliche Rezepturen finden (Stufe A: intern, sieht ALLES).
+ *
+ * Vergleicht eine Zutatenliste (item_id => menge_mg) mit bestehenden Rezepturen
+ * derselben Darreichungsform. Ähnlichkeit = Mengen-Anteils-Überlappung
+ * (Summe der min(AnteilA, AnteilB) über alle Zutaten, 0..1) – so zählt sowohl,
+ * WELCHE Rohstoffe vorkommen als auch in welchem Verhältnis.
+ *
+ * $zutaten       : [item_id => menge_mg]  (item_id>0, menge_mg>0)
+ * $form          : Darreichungsform (nur gleiche Form wird verglichen)
+ * $exclRezeptId  : optionale eigene Rezeptur-ID ausschließen
+ * $nurKundeId    : Stufe B (Kundensicht): nur Hausrezepturen (kunde_id NULL) + eigene
+ *                  dieses Kunden. NIEMALS Rezepturen anderer Kunden. null = intern (alle).
+ * Rückgabe: bis $limit Treffer, je [rezeptur, prozent, gleiche, abweichungen[], nur_dort[], fehlt[]]
+ */
+function rezeptur_aehnliche(array $zutaten, string $form, ?int $exclRezeptId = null, ?int $nurKundeId = null, int $limit = 3): array {
+    // Eingabe säubern + Anteile bilden
+    $a = [];
+    foreach ($zutaten as $iid => $mg) { $iid = (int)$iid; $mg = (float)$mg; if ($iid > 0 && $mg > 0) $a[$iid] = ($a[$iid] ?? 0) + $mg; }
+    $sumA = array_sum($a);
+    if (!$a || $sumA <= 0) return [];
+    $pa = []; foreach ($a as $iid => $mg) $pa[$iid] = $mg / $sumA;
+
+    // Kandidaten: gleiche Darreichungsform, echte Rezepturen (kein Entwurf/abgelehnt).
+    $sql = "SELECT id, nummer, name, kunde_id, status FROM rezeptur
+            WHERE darreichungsform=? AND status IN ('vorschlag','eingefroren','freigegeben')";
+    $par = [$form];
+    if ($exclRezeptId) { $sql .= " AND id<>?"; $par[] = $exclRezeptId; }
+    if ($nurKundeId !== null) { $sql .= " AND (kunde_id IS NULL OR kunde_id=?)"; $par[] = $nurKundeId; }   // Stufe B: nie fremde Kunden
+    $kandidaten = all($sql, $par);
+    if (!$kandidaten) return [];
+
+    $treffer = [];
+    foreach ($kandidaten as $c) {
+        $zt = all("SELECT item_id, bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? AND item_id>0", [(int)$c['id']]);
+        if (!$zt) continue;
+        $b = []; $namen = [];
+        foreach ($zt as $z) { $iid=(int)$z['item_id']; $mg=(float)$z['menge_mg']; if ($iid>0 && $mg>0){ $b[$iid]=($b[$iid]??0)+$mg; $namen[$iid]=$z['bezeichnung']; } }
+        $sumB = array_sum($b); if ($sumB <= 0) continue;
+        $pb = []; foreach ($b as $iid=>$mg) $pb[$iid] = $mg / $sumB;
+
+        $union = array_unique(array_merge(array_keys($pa), array_keys($pb)));
+        $overlap = 0.0; $gleiche = 0;
+        foreach ($union as $iid) { $va=$pa[$iid]??0; $vb=$pb[$iid]??0; $overlap += min($va,$vb); if($va>0 && $vb>0) $gleiche++; }
+        $prozent = (int) round($overlap * 100);
+        if ($prozent < 15) continue;   // zu unähnlich -> weglassen
+
+        // Klartext-Abweichungen (nur geteilte Zutaten mit spürbarem Mengenunterschied).
+        $abw = []; $nurDort = []; $fehlt = [];
+        foreach ($union as $iid) {
+            $ma = $a[$iid] ?? 0; $mb = $b[$iid] ?? 0; $nm = $namen[$iid] ?? ('#'.$iid);
+            if ($ma>0 && $mb>0) {
+                $d = $ma>0 ? ($mb-$ma)/$ma*100 : 0;
+                if (abs($d) >= 10) $abw[] = $nm.' '.($d>0?'+':'').(int)round($d).' %';
+            } elseif ($mb>0) { $nurDort[] = $nm; }
+            else { $fehlt[] = $nm; }
+        }
+        $treffer[] = ['rezeptur'=>$c, 'prozent'=>$prozent, 'gleiche'=>$gleiche, 'zutaten_gesamt'=>count($pb),
+                      'abweichungen'=>$abw, 'nur_dort'=>$nurDort, 'fehlt'=>$fehlt];
+    }
+    usort($treffer, fn($x,$y)=> $y['prozent'] <=> $x['prozent']);
+    return array_slice($treffer, 0, $limit);
+}
+
 // Demo-Anfrage (Kundenwunsch in Laiensprache)
 function seed_anfrage_if_empty(): void {
     if (meta_get('seed_demo_off','') === '1') return;   // Demo-Seeding nach Reset deaktiviert

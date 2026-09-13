@@ -114,6 +114,17 @@ $wuensche = $neu ? [] : all("SELECT * FROM rezeptur_anfrage_wunsch WHERE anfrage
 foreach ($wuensche as &$w) if (!$w['item_id']) $w['item_id'] = anfrage_auto_item($w['bezeichnung']);
 unset($w);
 
+// Aufgabe 4 (Stufe A, intern): ähnliche bestehende Rezepturen aus den zugeordneten Zeilen finden.
+$zutatenIst = [];
+foreach ($wuensche as $w) {
+    $iid = (int)($w['item_id'] ?? 0);
+    $mg  = ($w['menge_final'] !== '' && $w['menge_final'] !== null) ? (float)$w['menge_final'] : 0.0;
+    if ($iid > 0 && $mg > 0) $zutatenIst[$iid] = ($zutatenIst[$iid] ?? 0) + $mg;
+}
+$aehnliche = (!$neu && count($zutatenIst) >= 1)
+    ? rezeptur_aehnliche($zutatenIst, $form, (int)($a['rezeptur_id'] ?? 0) ?: null, null, 3)
+    : [];
+
 function rohstoff_options(array $rohstoffe, $sel): string {
     $s = '<option value="">– Rohstoff wählen –</option>';
     foreach ($rohstoffe as $r) {
@@ -291,6 +302,29 @@ if (!$neu):
     </table>
     <button type="button" class="btn btn-ghost btn-sm" id="addW">+ Zeile</button>
   </div>
+
+  <?php if ($aehnliche): ?>
+  <div class="bx-panel">
+    <h2>Ähnliche bestehende Rezepturen <?= bx_hint('Intern: Rezepturen derselben Darreichungsform mit ähnlicher Zusammensetzung (Mengen-Anteile). Hilft, Doppelarbeit zu vermeiden und Bewährtes wiederzuverwenden. Basis = gespeicherte Zuordnung.') ?></h2>
+    <div class="muted" style="font-size:12px;margin:-4px 0 10px">Vergleich der zugeordneten Rohstoffe/Mengen mit vorhandenen Rezepturen. Rein zur Orientierung – nichts wird verändert.</div>
+    <?php foreach ($aehnliche as $t): $r = $t['rezeptur']; ?>
+      <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:14px;padding:10px 0;border-top:1px solid var(--line)">
+        <div style="flex:1;min-width:0">
+          <div><a href="?p=rezeptur_detail&id=<?= (int)$r['id'] ?>"><strong><?= h($r['nummer']) ?></strong> <?= h($r['name']) ?></a>
+            <span class="muted" style="font-size:12px">· <?= $r['kunde_id'] ? h((string)(scalar("SELECT firma FROM kunden WHERE id=?", [(int)$r['kunde_id']]) ?: 'Kunde')) : 'Hausrezeptur' ?> · <?= h(status_text($r['status'])) ?></span>
+          </div>
+          <div class="muted" style="font-size:13px;margin-top:3px">
+            <?= (int)$t['gleiche'] ?> gemeinsame Zutat<?= $t['gleiche']===1?'':'en' ?> (von <?= (int)$t['zutaten_gesamt'] ?>).
+            <?php if ($t['abweichungen']): ?> Mengen abweichend: <?= h(implode(', ', array_slice($t['abweichungen'],0,6))) ?>.<?php endif; ?>
+            <?php if ($t['nur_dort']): ?> Zusätzlich dort: <?= h(implode(', ', array_slice($t['nur_dort'],0,5))) ?>.<?php endif; ?>
+            <?php if ($t['fehlt']): ?> Fehlt dort: <?= h(implode(', ', array_slice($t['fehlt'],0,5))) ?>.<?php endif; ?>
+          </div>
+        </div>
+        <div style="white-space:nowrap"><?= bx_badge($t['prozent'].' % ähnlich', $t['prozent']>=70?'ok':($t['prozent']>=40?'warn':'info')) ?></div>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
 
   <div class="bx-panel" id="kapselpanel" <?= $istKapsel ? '' : 'style="display:none"' ?>>
     <h2>Kapsel-Check</h2>
