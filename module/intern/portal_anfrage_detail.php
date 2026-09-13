@@ -102,6 +102,26 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
         q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,anfrage_id,gueltig_bis) VALUES (?,?,?,?,?,?,?)",
           [naechste_nummer('AN'), (int)$pa['kunde_id'], $pa['produkt_id'] ? (int)$pa['produkt_id'] : null, 'offen', 'Aus Anfrage ' . $pa['nummer'], $id, angebot_gueltig_bis_default()]);
         $angid = insert_id();
+        // Bei einer Rezeptur-Anfrage die vom Kunden angefragten Staffel-Konfigurationen (Anzahl pro Verpackung
+        // + Menge VPE, je portal_anfrage_pos) direkt als Gruppen ins Angebot übernehmen – nicht nur eine.
+        $rid = (int)($pa['rezeptur_id'] ?? 0);
+        if ($rid > 0) {
+            $kid  = (int)$pa['kunde_id'];
+            $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
+            $pos = all("SELECT stueck, fuellmenge_g, verpackung_typ, menge FROM portal_anfrage_pos WHERE anfrage_id=? ORDER BY sort, id", [$id]);
+            if (!$pos) $pos = [['stueck'=>$pa['stueck'], 'fuellmenge_g'=>$pa['fuellmenge_g'], 'verpackung_typ'=>$pa['verpackung_typ'], 'menge'=>$pa['menge']]];
+            foreach ($pos as $p) {
+                $stk   = (int) round((float)(($p['fuellmenge_g'] ?? 0) ?: ($p['stueck'] ?? 0)));   // Anzahl bzw. Füllmenge je Verpackung
+                $menge = (int)($p['menge'] ?? 0);
+                if ($stk <= 0 || $menge <= 0) continue;
+                // Wunsch-Verpackungstyp -> konkreter Behälter (best effort); sonst ohne (Team wählt im Editor).
+                $verps = []; $typ = trim((string)($p['verpackung_typ'] ?? ''));
+                if ($typ !== '') foreach (passende_behaelter_fuer($rid, $form, $stk) as $vid) {
+                    if (verpackung_passt_zu_typ((int)$vid, $typ)) { $verps = [(int)$vid]; break; }
+                }
+                angebot_gruppe_anhaengen($angid, angebot_rezeptur_zeilen($rid, $stk, $verps, $menge, null, $kid));
+            }
+        }
         q("UPDATE portal_anfrage SET status='in_bearbeitung' WHERE id=?", [$id]);
         log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [$angid]) . ' aus Anfrage ' . $pa['nummer'] . ' im Editor angelegt.', 'angebot', 'angebot', $angid);
         header('Location: ?p=angebot&id=' . $angid); exit;
