@@ -1079,6 +1079,9 @@ function init_schema(): void {
         }
         meta_set('seed_beleg_hinweise', '1');
     }
+    // Etikettenformate je Behälter (item.etikett_final) + Etiketten-Artikel sicherstellen – damit jedes Glas/PET
+    // standardmäßig ein passendes Etikett hat (Auto-Zuordnung im Angebot). Läuft genau einmal (eigener Marker).
+    if (function_exists('seed_etikett_formate')) seed_etikett_formate();
     // Aus einer Rezepturanfrage angelegter Rohstoff: bleibt Entwurf (gesperrt) und kommt erst mit der
     // Lieferantenantwort (Preis oder CoA/Spezifikation) in den Katalog.
     ensure_column('item', 'anfrage_entwurf', "TINYINT(1) NOT NULL DEFAULT 0");
