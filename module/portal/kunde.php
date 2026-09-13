@@ -313,7 +313,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     if (preg_match('/^r(\d+)$/', $wahl, $m)) {
         $rezWahl = (int)$m[1];
         // nur eigene angenommene oder freigegebene Katalog-Rezepturen
-        if (!scalar("SELECT id FROM rezeptur WHERE id=? AND ((exklusiv=1 AND kunde_id=? AND status='eingefroren') OR (exklusiv=0 AND status='freigegeben'))",
+        if (!scalar("SELECT id FROM rezeptur WHERE id=? AND ((kunde_id=? AND status IN ('eingefroren','freigegeben')) OR (kunde_id IS NULL AND status='freigegeben'))",
                     [$rezWahl, (int)$k['id']])) $rezWahl = 0;
     } else {
         $pid = (int) preg_replace('/\D/', '', $wahl);
@@ -624,7 +624,7 @@ if ($k['portal_rezeptur'])     { $L['rezepturen'] = 'Rezepturen';  $L['anfrage']
 // Produkt anfragen: mit Katalog-Recht immer; ohne Katalog, sobald der Kunde eine anfragbare eigene/freigegebene
 // Rezeptur hat (angenommene Rezeptur -> als Produkt anfragen). So ist der Weg nach dem Annehmen nie eine Sackgasse.
 $kannProduktAnfrage = !empty($k['portal_produkte']) || (!empty($k['portal_rezeptur']) &&
-    (int) scalar("SELECT COUNT(*) FROM rezeptur WHERE (exklusiv=1 AND kunde_id=? AND status='eingefroren') OR (exklusiv=0 AND status='freigegeben')", [(int)$k['id']]) > 0);
+    (int) scalar("SELECT COUNT(*) FROM rezeptur WHERE (kunde_id=? AND status IN ('eingefroren','freigegeben')) OR (kunde_id IS NULL AND status='freigegeben')", [(int)$k['id']]) > 0);
 if ($k['portal_produkte'])     { $L['produkte']   = 'Produkte';    $L['prodanfrage'] = 'Produkt anfragen'; }
 elseif ($kannProduktAnfrage)   { $L['prodanfrage'] = 'Produkt anfragen'; }
 if ($k['portal_rohstoffe'])    { $L['rohstoffe']  = 'Rohstoffe';   $L['rohanfrage'] = 'Rohstoff anfragen'; }
@@ -745,11 +745,13 @@ $titelFuer = function(array $r): string {
 };
 $pafBadge = fn($s) => match ($s) { 'neu'=>bx_badge('eingegangen','info'),'in_bearbeitung'=>bx_badge('in Bearbeitung','warn'),'beantwortet'=>bx_badge('Angebot abgegeben','ok'),'abgelehnt'=>bx_badge('nicht machbar','err'),default=>bx_badge($s) };
 // Rezeptur-Katalog: eigene Rezepturen (ab Vorschlag) + freigegebene Hausrezepturen (allen Kunden verfügbar)
-// „Meine Rezepturen" = nur ANGENOMMENE eigene (eingefroren) + freigegebene Katalog-Rezepturen.
+// „Meine Rezepturen" = die EIGENEN des Kunden (kunde_id), sobald angenommen/freigegeben, plus die
+// freigegebenen Haus-/Katalog-Rezepturen (kunde_id NULL). Eigene zählen über kunde_id – nicht über das
+// exklusiv-Flag (aus einer Anfrage entstandene Rezepturen sind nicht zwingend exklusiv).
 // Vorschläge sind noch keine Rezeptur → erscheinen über die Übersicht („Vorschlag erhalten"), nicht hier.
 $meineRezepturen = $k['portal_rezeptur'] ? all("SELECT * FROM rezeptur
-    WHERE ((exklusiv=1 AND kunde_id=? AND status='eingefroren')
-       OR (exklusiv=0 AND status='freigegeben'))
+    WHERE ((kunde_id=? AND status IN ('eingefroren','freigegeben'))
+       OR (kunde_id IS NULL AND status='freigegeben'))
       AND (? = '' OR name LIKE ?
            OR EXISTS (SELECT 1 FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                       WHERE z.rezeptur_id=rezeptur.id AND (z.bezeichnung LIKE ? OR i.name LIKE ?)))
@@ -758,7 +760,7 @@ $rezBadge = fn($s) => match ($s) { 'vorschlag'=>bx_badge('Vorschlag','info'),'ei
 $rid = (int)($_GET['rid'] ?? 0);
 $DOKTYP = dokument_typen();   // CoA / Spezifikation / Laboranalyse – Beschriftung der Download-Links
 $rezDetail = ($rid && $k['portal_rezeptur']) ? one("SELECT * FROM rezeptur WHERE id=?
-    AND ((kunde_id=? AND status IN ('vorschlag','eingefroren','freigegeben','abgelehnt')) OR (exklusiv=0 AND status='freigegeben'))", [$rid, $kid]) : null;
+    AND ((kunde_id=? AND status IN ('vorschlag','eingefroren','freigegeben','abgelehnt')) OR (kunde_id IS NULL AND status='freigegeben'))", [$rid, $kid]) : null;
 // Zutaten inklusive item_id – damit je Rohstoff die freigegebenen Dokumente (CoA/Spec) verlinkt werden können
 $rezZutaten = $rezDetail ? all("SELECT item_id, bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
 // Freigegebene Dokumente je Zutat-Rohstoff (nur, was intern ausdrücklich freigegeben wurde)
@@ -1651,10 +1653,18 @@ portal_head('Kundenportal · ' . $k['firma']);
       <input type="hidden" name="aktion" value="produkt_anfrage">
       <div class="bx-grid">
         <div class="bx-field"><label>Produkt</label>
+          <?php // Eigene Rezepturen (selbst angelegt) getrennt von Katalog-Rezepturen (Haus) – bessere Übersicht.
+                $paEigene  = array_values(array_filter($meineRezepturen, fn($r) => (int)($r['kunde_id'] ?? 0) === $kid));
+                $paKatalog = array_values(array_filter($meineRezepturen, fn($r) => (int)($r['kunde_id'] ?? 0) !== $kid)); ?>
           <select name="produkt_id" id="pa_produkt" required><option value="">– wählen –</option>
-            <?php if ($meineRezepturen): ?>
+            <?php if ($paEigene): ?>
             <optgroup label="Meine Rezepturen (noch kein fertiges Produkt)">
-              <?php foreach ($meineRezepturen as $rz): ?><option value="r<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>" <?= $rid === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?> · <?= h($DFORM_P[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
+              <?php foreach ($paEigene as $rz): ?><option value="r<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>" <?= $rid === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?> · <?= h($DFORM_P[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
+            </optgroup>
+            <?php endif; ?>
+            <?php if ($paKatalog): ?>
+            <optgroup label="Katalog-Rezepturen">
+              <?php foreach ($paKatalog as $rz): ?><option value="r<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>" <?= $rid === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?> · <?= h($DFORM_P[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
             </optgroup>
             <?php endif; ?>
             <?php if ($katalog): ?>

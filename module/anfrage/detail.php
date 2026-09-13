@@ -410,11 +410,22 @@ function nf(x){ return x.toLocaleString('de-DE'); }
 function nf1(x){ return Number(x).toLocaleString('de-DE',{maximumFractionDigits:1}); }
 // Aufgabe 3: automatische Kapsel-Aufteilung. Groessen (Fuellmenge mg) einmal aus der DB eingebettet.
 var KGROESSEN = <?= json_encode(array_map(fn($g)=>['name'=>(string)$g['name'],'mg'=>(int)$g['fuellmenge_mg']], $kapseln), JSON_UNESCAPED_UNICODE) ?>;
+// Menge einer Zeile in mg: bevorzugt die finale Zuordnung (rechts); ist die noch leer, ersatzweise die
+// Wunschmenge des Kunden (links), umgerechnet nach Einheit (mg/g/µg). IE/ml zaehlen nicht zum Fuellgewicht.
+function rowMg(tr){
+  var f=tr.querySelector('.wfinal');
+  var v=f?(parseFloat((f.value||'').replace(',','.'))||0):0;
+  if(v>0) return v;
+  var mEl=tr.querySelector('input[name="w_menge[]"]'); var eEl=tr.querySelector('select[name="w_einheit[]"]');
+  var m=mEl?(parseFloat((mEl.value||'').replace(',','.'))||0):0; if(!(m>0)) return 0;
+  var faktor={mg:1,g:1000,'µg':0.001}[eEl?eEl.value:'mg'];
+  return faktor?m*faktor:0;
+}
 // Aktuelle Zeilen als [{name, mg}] – Name = Kundenwunsch (Bezeichnung) oder gewaehlter Rohstoff.
 function ksplitRows(){
   var rows=[];
   document.querySelectorAll('#wrows .wrow').forEach(function(tr){
-    var mg=parseFloat(((tr.querySelector('.wfinal')||{}).value||'').replace(',','.'))||0;
+    var mg=rowMg(tr);
     if(!mg) return;
     var bez=(tr.querySelector('input[name="w_bez[]"]')||{}).value||'';
     if(!bez){ var sel=tr.querySelector('select[name="w_item[]"]'); if(sel && sel.selectedIndex>=0) bez=sel.options[sel.selectedIndex].textContent; }
@@ -446,7 +457,7 @@ function ksplitRender(n, cap){
 function kcheck(){
   var panel=document.getElementById('kapselpanel');
   if (!panel || panel.style.display==='none') return;
-  var total=0; document.querySelectorAll('.wfinal').forEach(function(i){ total += parseFloat((i.value||'').replace(',','.'))||0; });
+  var total=0; document.querySelectorAll('#wrows .wrow').forEach(function(tr){ total += rowMg(tr); });
   var cap=parseInt(document.getElementById('kgroesse').value)||0;
   document.getElementById('ksumme').textContent=nf1(total)+' mg';
   var st=document.getElementById('kstatus'), sp=document.getElementById('ksplit');
@@ -477,17 +488,18 @@ function kcheck(){
       +'<td><input type="number" step="0.001" class="wfinal" name="w_final[]"></td>'
       +'<td><button type="button" class="btn btn-ghost btn-sm">×</button></td>';
     tr.querySelector('button').addEventListener('click',function(){tr.remove();kcheck();});
-    tr.querySelector('.wfinal').addEventListener('input',kcheck);
+    tr.querySelectorAll('.wfinal, input[name="w_menge[]"], select[name="w_einheit[]"]').forEach(function(i){ i.addEventListener('input',kcheck); i.addEventListener('change',kcheck); });
     document.getElementById('wrows').appendChild(tr);
     bxRohstoffCombo(tr.querySelector('select[name="w_item[]"]'));   // neue Zeile: Suche aktivieren
   });
-  document.querySelectorAll('.wfinal').forEach(function(i){i.addEventListener('input',kcheck);});
+  // Kapsel-Check reagiert auf finale Menge UND (als Fallback) auf Wunschmenge/Einheit.
+  document.querySelectorAll('#wrows .wfinal, #wrows input[name="w_menge[]"], #wrows select[name="w_einheit[]"]').forEach(function(i){ i.addEventListener('input',kcheck); i.addEventListener('change',kcheck); });
   var kg=document.getElementById('kgroesse'); if(kg) kg.addEventListener('change',kcheck);
   var sb=document.getElementById('ksplitbtn');
   if(sb) sb.addEventListener('click',function(){
     var brk=document.getElementById('ksplitbreak');
     if(brk.style.display==='none'){
-      var total=0; document.querySelectorAll('.wfinal').forEach(function(i){ total += parseFloat((i.value||'').replace(',','.'))||0; });
+      var total=0; document.querySelectorAll('#wrows .wrow').forEach(function(tr){ total += rowMg(tr); });
       var cap=parseInt(document.getElementById('kgroesse').value)||0;
       if(total&&cap&&total>cap){ ksplitRender(Math.ceil(total/cap), cap); sb.textContent='Aufteilung ausblenden'; }
     } else { brk.style.display='none'; sb.textContent='Aufteilung anzeigen'; }
