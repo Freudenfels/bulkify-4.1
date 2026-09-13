@@ -92,6 +92,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         } catch (Throwable $e) { db()->rollBack(); throw $e; }
         db()->commit();
+        // „Speichern & an Kunden senden" (Button unten bei den Positionen): direkt nach dem Speichern senden.
+        if (!empty($_POST['und_senden'])) {
+            $st  = (string) scalar("SELECT status FROM angebot WHERE id=?", [(int)$id]);
+            $anz = (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=?", [(int)$id]);
+            if ($st === 'offen' && $anz > 0) {
+                q("UPDATE angebot SET status='gesendet', preise_kunde=1 WHERE id=?", [(int)$id]);
+                q("UPDATE angebot SET gueltig_bis=? WHERE id=? AND (gueltig_bis IS NULL OR gueltig_bis < CURDATE())", [angebot_gueltig_bis_default(), (int)$id]);
+                angebot_produkte_sichern((int)$id);
+                $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [(int)$id]);
+                if ($kd) {
+                    q("UPDATE portal_anfrage SET status='beantwortet' WHERE id=(SELECT anfrage_id FROM angebot WHERE id=?) AND status<>'beantwortet'", [(int)$id]);
+                    log_aktivitaet('kunde', $kd, 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [(int)$id]) . ' gespeichert und an den Kunden gesendet.', 'angebot', 'angebot', (int)$id);
+                }
+                $f = ($kd && mail_bereit()) ? mail_kunde_angebot((int)$id) : '';
+                header('Location: ?p=angebot&id=' . $id . '&gesendet=1' . ($f !== '' ? '&mailfehler=' . urlencode($f) : '')); exit;
+            }
+            if ($anz === 0) { header('Location: ?p=angebot&id=' . $id . '&sendfehler=leer'); exit; }
+            // Status nicht mehr Entwurf -> nur gespeichert (kein erneutes Senden).
+            header('Location: ?p=angebot&id=' . $id . '&gespeichert=1&sendfehler=status#positionen'); exit;
+        }
         // Sicherheitsnetz: Wird ein bereits gesendetes Angebot nachbearbeitet, werden die Preise fuer den
         // Kunden automatisch GESPERRT. So sieht der Kunde nie einen Zwischenstand – erst nach erneuter Freigabe.
         $warnP = '';
@@ -265,16 +285,18 @@ if (isset($_GET['kiok'])) echo '<div class="bx-panel badge-ok" style="padding:12
 if (isset($_GET['kifehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['kifehler']) . '</div>';
 ?>
 <?php if (!$neu && ki_bereit()): ?>
-<div class="bx-panel" style="border-color:var(--gruen)">
-  <h2 style="margin-top:0">Angebot aus PDF einlesen (KI)</h2>
-  <p class="muted" style="margin-top:0">Altes Angebots-PDF (z. B. aus v3) hochladen – die KI übernimmt die Positionen (Herstellung, Glas/Verpackung, Etikett) inkl. Preise und die Mengenstaffel in dieses Angebot. <strong>Ersetzt die aktuellen Positionen</strong> – danach prüfen.</p>
-  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap" onsubmit="return confirm('PDF einlesen? Die aktuellen Positionen dieses Angebots werden durch die aus dem PDF ersetzt.');">
-    <input type="hidden" name="aktion" value="ki_pdf">
-    <div class="bx-field" style="margin:0"><label>Angebots-PDF</label><input type="file" name="ki_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp"></div>
-    <button class="btn btn-primary" type="submit" data-busy="Liest PDF…">Einlesen</button>
-    <span class="muted" style="font-size:12px;align-self:center">dauert 10–60 Sekunden</span>
-  </form>
-</div>
+<details class="bx-panel" style="border-color:var(--gruen)" <?= isset($_GET['kifehler']) || isset($_GET['kiok']) ? 'open' : '' ?>>
+  <summary style="cursor:pointer;font-weight:600">Angebot aus PDF einlesen (KI) <span class="muted" style="font-weight:400;font-size:13px">· nur bei Bedarf – z. B. altes v3-Angebot übernehmen</span></summary>
+  <div style="margin-top:12px">
+    <p class="muted" style="margin-top:0">Altes Angebots-PDF (z. B. aus v3) hochladen – die KI übernimmt die Positionen (Herstellung, Glas/Verpackung, Etikett) inkl. Preise und die Mengenstaffel in dieses Angebot. <strong>Ersetzt die aktuellen Positionen</strong> – danach prüfen.</p>
+    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap" onsubmit="return confirm('PDF einlesen? Die aktuellen Positionen dieses Angebots werden durch die aus dem PDF ersetzt.');">
+      <input type="hidden" name="aktion" value="ki_pdf">
+      <div class="bx-field" style="margin:0"><label>Angebots-PDF</label><input type="file" name="ki_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp"></div>
+      <button class="btn btn-primary" type="submit" data-busy="Liest PDF…">Einlesen</button>
+      <span class="muted" style="font-size:12px;align-self:center">dauert 10–60 Sekunden</span>
+    </form>
+  </div>
+</details>
 <?php endif; ?>
 <form method="post" class="bx-form">
   <input type="hidden" name="aktion" value="kopf_save">
@@ -524,7 +546,13 @@ if (!$neu):
         <div class="muted" style="font-size:12px" id="intMarge">Intern: EK <?= $eur($sumEk) ?> · Marge <?= $eur($marge) ?> (<?= number_format($margePct,0,',','.') ?> %)</div>
       </div>
     </div>
-    <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Positionen speichern</button></div>
+    <div class="bx-row" style="margin-top:10px;gap:10px">
+      <button class="btn <?= $kannSenden ? 'btn-ghost' : 'btn-primary' ?>" type="submit">Positionen speichern</button>
+      <?php if ($kannSenden): ?>
+      <button class="btn btn-primary" type="submit" name="und_senden" value="1"
+              onclick="return confirm('Positionen speichern und das Angebot an den Kunden senden? Der Kunde sieht damit das Angebot inkl. Preise im Portal.');">Speichern &amp; an Kunden senden</button>
+      <?php endif; ?>
+    </div>
   </form>
 
   <?php // Preis je Packung – genau die Zeilen, aus denen der Kunde im Portal auswaehlt.
