@@ -1631,6 +1631,14 @@ function rezeptur_kapselgroesse(int $rezeptur_id): ?array {
     return $kg ?: null;
 }
 
+// Wie viele Kapseln der Kapselgröße dieser Rezeptur passen höchstens in eine (Standard-)Verpackung?
+// = größte hinterlegte Kapazität (pack_kapazitaet) über alle Behälter. 0 = keine Angabe/keine Kapselform.
+function kapsel_max_stueck_je_verpackung(int $rezeptur_id): int {
+    $kg = rezeptur_kapselgroesse($rezeptur_id);
+    if (!$kg) return 0;
+    return (int) scalar("SELECT COALESCE(MAX(stueck),0) FROM pack_kapazitaet WHERE kapselgroesse_id=?", [(int)$kg['id']]);
+}
+
 // Welche Leerkapseln (Rohstoff, form=kapselhuelle) passen zur Kapselgröße eines Produkts? (für die Auto-Wahl / Auswahl bei Mehrdeutigkeit)
 function produkt_leerkapsel_kandidaten(int $produkt_id): array {
     $p = one("SELECT rezeptur_id FROM produkt WHERE id=?", [$produkt_id]);

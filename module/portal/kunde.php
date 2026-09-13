@@ -1723,6 +1723,8 @@ portal_head('Kundenportal · ' . $k['firma']);
           </tbody>
         </table></div>
         <button type="button" class="btn btn-ghost btn-sm" id="pa_addrow">+ Staffel</button>
+        <div id="pa_stickhint" class="muted" style="display:none;font-size:12px;margin-top:8px">Bei Sticks geben Sie die <strong>Sticks je Verpackung</strong> an (z. B. Karton mit je 30 Sticks) und darunter die gewünschte Anzahl Verpackungen.</div>
+        <div id="pa_warn" style="display:none;margin-top:10px;border:1px solid #e6c4c0;background:#fbeeec;color:#8f231b;border-radius:8px;padding:10px 12px;font-size:13px"></div>
       </div>
       <div class="bx-field" style="margin-top:14px"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"></textarea></div>
       <button class="btn btn-primary" type="submit">Anfrage senden</button>
@@ -1733,13 +1735,31 @@ portal_head('Kundenportal · ' . $k['firma']);
       var VTYP_LABELS=<?= json_encode($VTYPEN, JSON_UNESCAPED_UNICODE) ?>;
       var VTYP_FORM=<?= json_encode((function(){ $m=[]; foreach(['kapsel','tablette','softgel','gummi','pulver','granulat','stick','fluessig','gel'] as $f) $m[$f]=verpackung_typen_fuer_form($f); return $m; })(), JSON_UNESCAPED_UNICODE) ?>;
       var VTYP_ALL=<?= json_encode(verpackung_typen_fuer_form(null)) ?>;
+      // Max. Kapseln je Verpackung (aus pack_kapazitaet) je Auswahl – fuer die Machbarkeitspruefung bei Kapseln.
+      var PA_KAPMAX=<?= json_encode((function() use ($meineRezepturen, $katalog) {
+          $m = [];
+          foreach ($meineRezepturen as $rz) if (in_array($rz['darreichungsform'] ?? '', ['kapsel','softgel'], true)) { $x = kapsel_max_stueck_je_verpackung((int)$rz['id']); if ($x > 0) $m['r'.$rz['id']] = $x; }
+          foreach ($katalog as $pk) if (in_array($pk['darreichungsform'] ?? '', ['kapsel','softgel'], true) && !empty($pk['rezeptur_id'])) { $x = kapsel_max_stueck_je_verpackung((int)$pk['rezeptur_id']); if ($x > 0) $m['p'.$pk['id']] = $x; }
+          return $m;
+      })(), JSON_UNESCAPED_UNICODE) ?>;
       function curForm(){ var o=sel.options[sel.selectedIndex]; return o?(o.getAttribute('data-form')||''):''; }
       function lbl(){
         var f=curForm();
-        // Pulver/Granulat werden nach Gramm angefragt, Flüssiges/Gel nach Milliliter, alles andere nach Stückzahl.
+        // Pulver/Granulat nach Gramm, Flüssig/Gel nach Milliliter, Stick = Sticks je Verpackung, sonst Stückzahl.
         var t = (f==='pulver'||f==='granulat') ? 'Füllmenge pro Verpackung (g)'
-              : ((f==='fluessig'||f==='gel') ? 'Füllmenge pro Verpackung (ml)' : 'Anzahl pro Verpackung');
+              : ((f==='fluessig'||f==='gel') ? 'Füllmenge pro Verpackung (ml)'
+              : (f==='stick' ? 'Sticks je Verpackung' : 'Anzahl pro Verpackung'));
         Array.prototype.forEach.call(document.querySelectorAll('.pa_anzahl_lbl'), function(e){ e.textContent=t; });
+        var sh=document.getElementById('pa_stickhint'); if(sh) sh.style.display=(f==='stick')?'':'none';
+      }
+      function paCheck(){
+        var warn=document.getElementById('pa_warn'); if(!warn) return;
+        var max=PA_KAPMAX[sel.value]||0;
+        if(!max){ warn.style.display='none'; warn.textContent=''; return; }
+        var over=false;
+        Array.prototype.forEach.call(document.querySelectorAll('#pa_staffel .pa_srow input[name="st_anzahl[]"]'), function(i){ if((parseInt(i.value)||0)>max) over=true; });
+        if(over){ warn.style.display=''; warn.textContent='In eine Standardverpackung passen bei dieser Kapselgröße max. ca. '+max+' Kapseln. Mehr ist nicht ohne Weiteres machbar – bitte eine kleinere Anzahl je Verpackung wählen, dann melden wir uns mit dem passenden Gebinde.'; }
+        else { warn.style.display='none'; warn.textContent=''; }
       }
       function updVerp(){
         var vp=document.getElementById('pa_verp'); if(!vp) return;
@@ -1750,8 +1770,9 @@ portal_head('Kundenportal · ' . $k['firma']);
         vp.innerHTML=html;
         if(keep && allow.indexOf(keep)>=0) vp.value=keep;   // vorherige Wahl behalten, wenn noch gültig
       }
-      sel.addEventListener('change',function(){ lbl(); updVerp(); }); lbl(); updVerp();
+      sel.addEventListener('change',function(){ lbl(); updVerp(); paCheck(); }); lbl(); updVerp(); paCheck();
       var tb=document.querySelector('#pa_staffel tbody');
+      tb.addEventListener('input', paCheck);
       document.getElementById('pa_addrow').addEventListener('click',function(){
         var tr=document.createElement('tr'); tr.className='pa_srow';
         tr.innerHTML='<td><input type="number" name="st_anzahl[]" min="1" step="1" placeholder="z. B. 120"></td>'
@@ -1763,6 +1784,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         var b=e.target.closest('.pa_del'); if(!b) return;
         if(tb.querySelectorAll('.pa_srow').length>1) b.closest('.pa_srow').remove();
         else { b.closest('.pa_srow').querySelectorAll('input').forEach(function(i){i.value='';}); }
+        paCheck();
       });
     })();</script>
     <?php endif; ?>
@@ -1924,7 +1946,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <div class="bx-grid">
             <div class="bx-field"><label>Menge</label><input type="number" name="roh_menge[]" min="0" step="0.001" placeholder="z. B. 25"></div>
             <div class="bx-field"><label>Einheit</label><select name="roh_einheit[]"><?php foreach (['kg','g','t','Stück','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
-            <div class="bx-field"><label>Zielpreis <span class="muted">(optional, € / Einheit)</span></label><input type="number" name="roh_zielpreis[]" min="0" step="0.01" placeholder="z. B. 12,50"></div>
+            <div class="bx-field"><label>Wunschpreis <span class="muted">(optional)</span> <?= bx_hint('Falls Sie schon eine Preisvorstellung haben – € pro Einheit (z. B. je kg). Kein Muss; hilft uns nur bei der Einordnung.') ?></label><input type="number" name="roh_zielpreis[]" min="0" step="0.01" placeholder="z. B. 12,50 € / kg"></div>
           </div>
           <div class="bx-field"><label>Notiz (optional)</label><input type="text" name="roh_notiz[]" placeholder="Spezifikation, Qualität, Termin …"></div>
           <div style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.rohrow').remove()">entfernen</button></div>
@@ -2005,7 +2027,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if ($meine): ?>
   <div class="bx-panel"><h2>Meine Rohstoffanfragen</h2>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Nr.</th><th>Rohstoff</th><th class="bx-num">Menge</th><th class="bx-num">Zielpreis</th><th>Status</th></tr></thead>
+      <thead><tr><th>Nr.</th><th>Rohstoff</th><th class="bx-num">Menge</th><th class="bx-num">Wunschpreis</th><th>Status</th></tr></thead>
       <tbody>
       <?php foreach ($meine as $a): ?>
         <tr><td><?= h($a['nummer']) ?></td><td><?= h($a['betreff'] ?: '–') ?></td>
