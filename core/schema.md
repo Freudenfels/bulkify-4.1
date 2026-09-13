@@ -68,6 +68,7 @@
  
 - **Migrations-Werkzeug:** `table_exists`, `column_exists`, `ensure_column` – so kommen später neue Felder **additiv** dazu (nur hinzufügen, nie löschen). Alte Daten bleiben unberührt.
 - **Einstellungen:** `meta_get` / `meta_set` – lesen/schreiben in `app_meta`.
+- **v3-Anfragen: fehlende Inhaltsstoffe nachgetragen** (`fix_anfrage_wunsch_v3`): Bei aus v3 übernommenen Rezepturanfragen fehlten die vom Kunden gewünschten Zutaten (`rezeptur_anfrage_wunsch`). Die Migration hat die Zutaten je Anfrage-Nummer (RZA…) aus der v3-Datenbank fest hinterlegt und trägt sie nach – **nur** wenn die Anfrage existiert und noch keine Wunschzeilen hat (idempotent, überschreibt nichts).
 - **Protokoll:** `log_aktivitaet(objekt_typ, objekt_id, akteur, text, typ, ref_typ, ref_id)` – schreibt einen Verlaufseintrag (Zeit als UTC). **Jedes künftige Modul ruft das auf**, dann erscheint der Eintrag automatisch im Verlauf des Objekts (Kunde/Lieferant/…). `verlauf_fuer(objekt_typ, id)` liest ihn zurück.
 - **Testdaten:** `seed_kunden_if_empty` / `seed_lieferanten_if_empty` / `seed_aktivitaet_if_empty` – füllen lokal Demo-Daten, wenn leer.
 - **Dokument-Freigabe:** `dokument.kunde_sichtbar` (Migration, Standard 0 = intern) steuert, ob ein CoA/Spec im Kundenportal erscheint. Helfer in `core/dokument_ui.php`: `dokumente_fuer_kunde()`, `dokument_freigabe_toggle()`. Ausgeliefert wird im Portal über die eigene öffentliche Route `portal_dok`, die Token, Freigabe und Bereichs-Freischaltung prüft.

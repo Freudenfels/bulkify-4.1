@@ -1028,6 +1028,49 @@ function init_schema(): void {
         q("UPDATE angebot_position SET mwst_satz=19 WHERE mwst_satz NOT IN (0,7,19)");
         meta_set('fix_mwst_saetze', '1');
     }
+    // Einmalig: bei aus v3 uebernommenen Rezepturanfragen fehlten die vom Kunden gewuenschten Inhaltsstoffe
+    // (rezeptur_anfrage_wunsch). Hier je Anfrage-Nummer aus der v3-Datenbank fest hinterlegt und nachgetragen –
+    // nur wenn die Anfrage existiert UND noch keine Wunschzeilen hat (idempotent, keine Ueberschreibung).
+    if (meta_get('fix_anfrage_wunsch_v3', '') !== '1') {
+        $V3WUNSCH = [
+            'RZA-V3-45' => [['Methylcobalamin','0.25','mg'], ['Adenosylcobalamin Pulver [Vitamin B12]','0.25','mg']],
+            'RZA-V3-49' => [['Amla (Phyllanthus emblica) Fruchtextrakt, 40 % Gerbstoffe (Titration), Pulver','800','mg'], ['Murraya koenigii','700','mg']],
+            'RZA0033' => [['Chlorella','1600','mg']],
+            'RZA0065' => [['Cotinus coggygria','1000','mg'], ['Quercetin','500','mg'], ['Weizen Triticum aestivum L Spermidin 0,02%','1250','mg']],
+            'RZA0061' => [['Glycin','3000','mg']],
+            'RZA0046' => [['Guave-Extrakt Zink 4%','20','mg']],
+            'RZA0045' => [['Gurmarin aus Gymnema sylvestre','500','mg']],
+            'RZA0039' => [['Phospholipide','1000','mg']],
+            'RZA0017' => [['Leucin','800','mg'], ['Valin','800','mg'], ['Lysin','800','mg'], ['Threonin','800','mg'], ['Phenylalanin','700','mg'], ['Isoleucin','500','mg'], ['Taurin','500','mg'], ['Tryptophan','200','mg'], ['Tyrosin','200','mg'], ['Arginin','150','mg'], ['Methionin','150','mg'], ['Histidin','100','mg'], ['Cystein','100','mg'], ['Ribose','1000','mg'], ['Galaktose','1000','mg']],
+            'RZA0003' => [['Ascorbinsäure Pulver [Vitamin C]','500','mg']],
+            'RZA0001' => [['Ascorbinsäure Pulver [Vitamin C]','3000','mg'], ['Microcrystalline cellulose Pulver [PH101]','500','mg']],
+            'RZA0007' => [['Guave-Extrakt Zink 4%','300','mg']],
+            'RZA0015' => [['Ascorbinsäure Pulver [Vitamin C]','500','mg']],
+            'RZA0024' => [['L-Carnitin','200','mg'], ['Grüner Tee-Extrakt','56.25','mg'], ['Coleus-forskohlii-Wurzelextrakt 10 % Forskolin','30','mg'], ['Cholin','20.625','mg'], ['Garcinia-cambogia-Fruchtschalenextrakt 60 % HCA','6.25','mg'], ['Shatavari-Wurzelextrakt 10:1','6','mg'], ['Bittermelonen-Extrakt','6','mg'], ['Chrompicolinat USP (CrPIX)','0.5','mg']],
+            'RZA0026' => [['Magnesiumbisglycinat (ca. 14% Mg)','535','mg'], ['Melatonin','0.25','mg'], ['L-Theanin','50','mg'], ['Reismehl (Füllstoff)','15','mg'], ['Magnesiumstearat (Fließmittel)','5','mg']],
+            'RZA0027' => [['Carnosin','2500','mg']],
+            'RZA0030' => [['Magnesium (aus Magnesiumoxid)','150','mg'], ['Vitamin B6 (Pyridoxin-HCl)','0.7','mg'], ['Zink (aus Zinkbisglycinat)','5','mg'], ['Biotin','0.025','mg'], ['Mönchspfeffer-Extrakt (Vitex agnus-castus)','20','mg'], ['Reismehl (Füllstoff)','280','mg'], ['Magnesiumsalze der Speisefettsäuren (Fließmittel)','10','mg']],
+            'RZA0047' => [['Triphala','500','mg']],
+            'RZA0054' => [['Traubenkernextrakt (95% OPC)','500','mg']],
+            'RZA0055' => [['L-Ascorbinsäure (Vitamin C)','400','mg']],
+            'RZA0056' => [['Natriumselenit','21.9','mg'], ['Akazienfaser','225','mg']],
+            'RZA0057' => [['Magnesiumbisglycinat (ca. 14% Magnesium)','1071','mg']],
+            'RZA0058' => [['Ashwagandha-Wurzelextrakt (KSM-66, standardisiert auf 5% Withanolide)','600','mg']],
+            'RZA0059' => [['Ashwagandha KSM66®','450','mg']],
+            'RZA0072' => [['Carnosin','2500','mg']],
+        ];
+        foreach ($V3WUNSCH as $nr => $zeilen) {
+            $aid = (int) scalar("SELECT id FROM rezeptur_anfrage WHERE nummer=?", [$nr]);
+            if (!$aid) continue;
+            if ((int) scalar("SELECT COUNT(*) FROM rezeptur_anfrage_wunsch WHERE anfrage_id=?", [$aid]) > 0) continue;
+            $sort = 0;
+            foreach ($zeilen as $z) {
+                q("INSERT INTO rezeptur_anfrage_wunsch (anfrage_id,bezeichnung,wunsch_menge,einheit,sort) VALUES (?,?,?,?,?)",
+                  [$aid, $z[0], $z[1], $z[2], $sort++]);
+            }
+        }
+        meta_set('fix_anfrage_wunsch_v3', '1');
+    }
     // Rohstoff-Spezifikation (nur das Unterscheidende; Reinheits-Grenzwerte bleiben im PDF)
     ensure_column('item', 'synonym', "VARCHAR(60) NULL");            // z. B. RM940
     ensure_column('item', 'ec_nr', "VARCHAR(30) NULL");
