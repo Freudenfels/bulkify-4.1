@@ -145,8 +145,21 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     header('Location: ?p=portal&token=' . $token . '&v=angebote&geloescht=1'); exit;
 }
 
+// Pflichtprüfung für eine Rezepturanfrage: Produktname muss da sein UND entweder eine Idee (Text)
+// oder mindestens eine Zutat mit Bezeichnung UND Menge. „Nur Menge ohne Text" reicht nicht.
+$anfrageGueltig = function(): bool {
+    if (trim((string)($_POST['produktname'] ?? '')) === '') return false;
+    if (trim((string)($_POST['notiz'] ?? '')) !== '') return true;
+    $bez = $_POST['w_bez'] ?? []; $wm = $_POST['w_menge'] ?? [];
+    foreach ((array)$bez as $i => $b) {
+        if (trim((string)$b) !== '' && trim((string)($wm[$i] ?? '')) !== '') return true;
+    }
+    return false;
+};
+
 // Neue Rezepturanfrage vom Kunden entgegennehmen
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage_senden') {
+    if (!$anfrageGueltig()) { header('Location: ?p=portal&token=' . $token . '&v=anfrage&fehlt=1'); exit; }
     $form = in_array($_POST['form'] ?? '', ['kapsel','tablette','softgel','stick','pulver','fluessig'], true) ? $_POST['form'] : 'kapsel';
     q("INSERT INTO rezeptur_anfrage (nummer,kunde_id,darreichungsform,produktname,notiz,status) VALUES (?,?,?,?,?,'neu')",
       [naechste_nummer('RZA'), (int)$k['id'], $form, trim($_POST['produktname'] ?? '') ?: null, trim($_POST['notiz'] ?? '')]);
@@ -201,6 +214,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage_bearbeiten') {
     $aid = (int)($_POST['anfrage_id'] ?? 0);
     $an  = $aid ? one("SELECT * FROM rezeptur_anfrage WHERE id=? AND kunde_id=? AND status='neu'", [$aid, (int)$k['id']]) : null;
+    if ($an && !$anfrageGueltig()) { header('Location: ?p=portal&token=' . $token . '&v=anfrage&edit=' . $aid . '&fehlt=1'); exit; }
     if ($an) {
         $form = in_array($_POST['form'] ?? '', ['kapsel','tablette','softgel','stick','pulver','fluessig'], true) ? $_POST['form'] : 'kapsel';
         q("UPDATE rezeptur_anfrage SET darreichungsform=?, produktname=?, notiz=? WHERE id=?",
@@ -1194,12 +1208,13 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px"><?= $editAnf ? 'Anfrage bearbeiten' : 'Rezeptur anfragen' ?></h1>
   <div class="bx-panel">
     <?php if (isset($_GET['geaendert'])): ?><div class="bx-panel badge-ok" style="padding:10px 14px;margin-bottom:12px">Ihre Anfrage wurde aktualisiert.</div><?php endif; ?>
+    <?php if (isset($_GET['fehlt'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px">Bitte einen <strong>Wunsch-Produktnamen</strong> angeben und entweder <strong>Ihre Idee</strong> beschreiben oder mindestens eine <strong>Zutat mit Menge</strong> eintragen.</div><?php endif; ?>
     <p class="muted" style="margin-top:0"><?= $editAnf ? 'Sie können Ihre Anfrage <strong>' . h($editAnf['nummer']) . '</strong> ändern, solange wir sie noch nicht bearbeiten.' : 'Beschreiben Sie einfach Ihre Idee – konkrete Zutaten sind nicht nötig. Wir prüfen die Machbarkeit und melden uns mit einem Vorschlag.' ?></p>
-    <form method="post">
+    <form method="post" id="pf_anfrageform">
       <input type="hidden" name="aktion" value="<?= $editAnf ? 'anfrage_bearbeiten' : 'anfrage_senden' ?>">
       <?php if ($editAnf): ?><input type="hidden" name="anfrage_id" value="<?= (int)$editAnf['id'] ?>"><?php endif; ?>
       <div class="bx-grid">
-        <div class="bx-field"><label>Wunsch-Produktname <?= bx_hint('Wie soll das Produkt heißen? Arbeitstitel – Sie können ihn später ändern.') ?></label><input type="text" name="produktname" value="<?= $ea('produktname') ?>" placeholder="z. B. Immun-Komplex Forte"></div>
+        <div class="bx-field"><label>Wunsch-Produktname <?= bx_hint('Wie soll das Produkt heißen? Arbeitstitel – Sie können ihn später ändern.') ?></label><input type="text" name="produktname" required value="<?= $ea('produktname') ?>" placeholder="z. B. Immun-Komplex Forte"></div>
         <div class="bx-field"><label>Darreichungsform</label>
           <select name="form" id="pf_form"><?php foreach ($DFORM_P as $key=>$lbl): ?><option value="<?= $key ?>" <?= ($editAnf['darreichungsform'] ?? '')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?></select>
         </div>
@@ -2357,6 +2372,27 @@ portal_head('Kundenportal · ' . $k['firma']);
     tr.querySelector('button').addEventListener('click',function(){tr.remove();kapUpdate();});
     document.getElementById('pwrows').appendChild(tr);
   });
+
+  // Absenden nur mit Produktname UND (Idee ODER mind. eine Zutat mit Menge). Kein versehentliches Enter-Absenden.
+  var pf=document.getElementById('pf_anfrageform');
+  if(pf){
+    pf.addEventListener('keydown',function(e){
+      // Enter in normalen Feldern nicht absenden lassen; im Textarea bleibt der Zeilenumbruch erhalten.
+      if(e.key==='Enter' && e.target && e.target.tagName!=='TEXTAREA' && e.target.type!=='submit'){ e.preventDefault(); }
+    });
+    pf.addEventListener('submit',function(e){
+      var nEl=pf.querySelector('[name=produktname]'); var name=(nEl?nEl.value:'').trim();
+      var idee=((pf.querySelector('[name=notiz]')||{}).value||'').trim();
+      var hatZutat=false;
+      pf.querySelectorAll('.pwrow').forEach(function(tr){
+        var b=((tr.querySelector('[name="w_bez[]"]')||{}).value||'').trim();
+        var m=((tr.querySelector('[name="w_menge[]"]')||{}).value||'').trim();
+        if(b!=='' && m!=='') hatZutat=true;
+      });
+      if(name===''){ e.preventDefault(); alert('Bitte geben Sie einen Wunsch-Produktnamen an.'); if(nEl) nEl.focus(); return; }
+      if(idee==='' && !hatZutat){ e.preventDefault(); alert('Bitte beschreiben Sie Ihre Idee oder tragen Sie mindestens eine Zutat mit Menge ein.'); return; }
+    });
+  }
 
   // Live-Kapsel-Check im Anfrageformular – erklärt dem Kunden freundlich, ob die Menge je Kapsel passt.
   var KAPS = <?= json_encode($portalKapseln ?? [], JSON_UNESCAPED_UNICODE) ?>;
