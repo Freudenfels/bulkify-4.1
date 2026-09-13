@@ -96,7 +96,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($kunde_id) log_aktivitaet('kunde', $kunde_id, 'team', 'Vorschlag aus Anfrage ' . $anr . ' erstellt und an den Kunden gesendet.', 'rezeptur', 'rezeptur', $rid);
         header('Location: ?p=rezeptur_detail&id=' . $rid . '&gesendet=1'); exit;
     }
-    header('Location: ?p=anfrage&id=' . $id . '&ok=1'); exit;
+    $anker = preg_replace('/[^a-z0-9_-]/i', '', (string)($_POST['anker'] ?? ''));   // an der Arbeitsstelle bleiben statt oben
+    header('Location: ?p=anfrage&id=' . $id . '&ok=1' . ($anker !== '' ? '#' . $anker : '')); exit;
 }
 
 $a = $neu ? ['darreichungsform'=>'kapsel','status'=>'neu'] : one("SELECT * FROM rezeptur_anfrage WHERE id=?", [(int)$id]);
@@ -127,7 +128,7 @@ bx_head($neu ? 'Neue Rezepturanfrage' : $v('nummer'),
         $neu ? 'Kundenwunsch erfassen' : 'Anfrage bearbeiten',
         bx_btn('Zurück zur Liste', '?p=anfragen', 'ghost'));
 if (!$neu && !empty($a['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angefragt am ' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . ' Uhr</div>';
-if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['ok'])) echo '<div id="bxToast" class="badge-ok" style="position:fixed;top:16px;right:16px;z-index:9999;padding:10px 16px;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);font-weight:600">Gespeichert.</div>';
 if (isset($_GET['leer'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Bitte mindestens einen Rohstoff zuordnen (mit Menge in mg), bevor du den Vorschlag sendest.</div>';
 if (!$neu && ($a['status'] ?? '') === 'ueberarbeiten') {
     $g = !empty($a['rezeptur_id']) ? (string) scalar("SELECT ablehnung_grund FROM rezeptur WHERE id=?", [(int)$a['rezeptur_id']]) : '';
@@ -241,7 +242,8 @@ if (!$neu):
 </div>
 <?php endif; ?>
 
-<form method="post" class="bx-form">
+<form method="post" class="bx-form" id="block-zuordnung">
+  <input type="hidden" name="anker" value="block-zuordnung">
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Kunde</label>
       <select name="kunde_id"><option value="">– keiner –</option>
@@ -352,6 +354,22 @@ function kcheck(){
   document.querySelectorAll('.wfinal').forEach(function(i){i.addEventListener('input',kcheck);});
   var kg=document.getElementById('kgroesse'); if(kg) kg.addEventListener('change',kcheck);
   kcheck();
+})();
+// Aufgabe 1: Nach dem Speichern an der Arbeitsstelle bleiben (Scroll merken + wiederherstellen) + Toast ausblenden.
+(function(){
+  var KEY='anfrage-scroll-<?= (int)$id ?>';
+  // Vor jedem Absenden die aktuelle Scroll-Position merken (alle Formulare der Seite).
+  document.querySelectorAll('form').forEach(function(f){
+    f.addEventListener('submit', function(){ try{ sessionStorage.setItem(KEY, String(window.scrollY)); }catch(e){} });
+  });
+  var params=new URLSearchParams(location.search);
+  // Nach einem Redirect mit Statusmeldung: exakt an die gemerkte Stelle zurueck (ueberschreibt den Anker-Sprung).
+  var flash=['ok','kizeilen','kiok','kifehler','kunde_neu','leer'].some(function(p){ return params.has(p); });
+  if(flash){
+    try{ var y=sessionStorage.getItem(KEY); if(y!==null){ window.scrollTo(0, parseInt(y,10)||0); sessionStorage.removeItem(KEY); } }catch(e){}
+    var t=document.getElementById('bxToast');
+    if(t){ setTimeout(function(){ t.style.transition='opacity .5s'; t.style.opacity='0'; setTimeout(function(){ t.remove(); },600); }, 2600); }
+  }
 })();
 </script>
 <?php render_footer(); ?>
