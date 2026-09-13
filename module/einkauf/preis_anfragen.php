@@ -50,9 +50,10 @@ if ($item_id <= 0 && $neuName !== '') {
     if ($vorhanden > 0) {
         $item_id = $vorhanden;
     } else {
-        q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug,notiz) VALUES (?,?,?,?,?,?)",
+        // Entwurf: gesperrt + Marker – kommt erst mit der Lieferantenantwort (Preis/CoA/Spec) in den Katalog.
+        q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug,gesperrt,anfrage_entwurf,notiz) VALUES (?,?,?,?,?,1,1,?)",
           [naechste_nummer(item_prefix('rohstoff')), mb_substr($neuName, 0, 190), 'rohstoff', 'kg', 'kg',
-           'Aus einer Rezepturanfrage angelegt und bei Lieferanten angefragt (CoA/Spezifikation).']);
+           'Aus einer Rezepturanfrage angelegt und bei Lieferanten angefragt (CoA/Spezifikation). Entwurf – wird mit der Lieferantenantwort aktiviert.']);
         $item_id = insert_id();
     }
 }

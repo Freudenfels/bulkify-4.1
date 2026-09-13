@@ -1079,6 +1079,9 @@ function init_schema(): void {
         }
         meta_set('seed_beleg_hinweise', '1');
     }
+    // Aus einer Rezepturanfrage angelegter Rohstoff: bleibt Entwurf (gesperrt) und kommt erst mit der
+    // Lieferantenantwort (Preis oder CoA/Spezifikation) in den Katalog.
+    ensure_column('item', 'anfrage_entwurf', "TINYINT(1) NOT NULL DEFAULT 0");
     // Rohstoff-Spezifikation (nur das Unterscheidende; Reinheits-Grenzwerte bleiben im PDF)
     ensure_column('item', 'synonym', "VARCHAR(60) NULL");            // z. B. RM940
     ensure_column('item', 'ec_nr', "VARCHAR(30) NULL");
@@ -5036,6 +5039,14 @@ function anfrage_auto_item(string $bez): ?int {
     if ($id) return (int)$id;
     $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name LIKE ? LIMIT 1", ['%'.$bez.'%']);
     return $id ? (int)$id : null;
+}
+
+// Aus einer Rezepturanfrage angelegter Rohstoff-Entwurf: mit der Lieferantenantwort (Preis/CoA/Spec) in den
+// Katalog heben – entsperren + Entwurfs-Marker entfernen. Auf normale Rohstoffe wirkt es nicht.
+function rohstoff_entwurf_aktivieren(int $item_id): void {
+    if ($item_id <= 0) return;
+    if ((int) scalar("SELECT anfrage_entwurf FROM item WHERE id=?", [$item_id]) !== 1) return;
+    q("UPDATE item SET gesperrt=0, anfrage_entwurf=0 WHERE id=?", [$item_id]);
 }
 
 /**

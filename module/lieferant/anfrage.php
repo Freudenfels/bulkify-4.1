@@ -38,6 +38,8 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
             ($_POST['lieferzeit'] ?? '') !== '' ? (int)$_POST['lieferzeit'] : null,
             (string)($_POST['notiz'] ?? ''), $staffeln, (int)($_POST['preis_basis'] ?? 1),
             ['incoterm' => (string)($_POST['incoterm'] ?? ''), 'versandart' => (string)($_POST['versandart'] ?? '')]);
+        // Antwort da -> aus einer Rezepturanfrage angelegten Rohstoff-Entwurf in den Katalog heben.
+        if ($fehler === '' && $a['item_id']) rohstoff_entwurf_aktivieren((int)$a['item_id']);
         if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);
     } elseif ($aktion === 'nachricht') {
         $fehler = nachricht_post_verarbeiten($lid, 'lieferant', (string)(current_user()['name'] ?? 'Lieferant'), 'lieferant_anfrage', $id, lp_sprache());
@@ -48,6 +50,8 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
         // Gleich auslesen lassen: das Team findet den Vorschlag am Rohstoff und prueft ihn.
         // Der Lieferant schreibt damit KEINE Stammdaten – er liefert nur die Unterlage.
         if ($dokId) { require_once BX_ROOT . '/core/spec_ki.php'; $gelesen = spec_ki_nach_upload($dokId); }
+        // CoA/Spec eingegangen -> Rohstoff-Entwurf in den Katalog heben.
+        if ($dokId) rohstoff_entwurf_aktivieren((int)$a['item_id']);
     }
     header('Location: ?p=lieferant_anfrage&id=' . $id . ($fehler === '' ? '&ok=1' . (!empty($gelesen) ? '&gelesen=1' : '') : '&fehler=' . urlencode($fehler))); exit;
 }
