@@ -344,6 +344,7 @@ if (!$neu):
     <div class="muted" id="ksplit" style="margin-top:8px"></div>
     <div id="ksplitwrap" style="display:none;margin-top:10px">
       <button type="button" class="btn btn-ghost btn-sm" id="ksplitbtn">Aufteilung anzeigen</button>
+      <button type="button" class="btn btn-primary btn-sm" id="ksplitapply" title="Setzt die Menge (mg) je Zutat auf die Menge JE KAPSEL – danach speichern nicht vergessen.">Mengen je Kapsel übernehmen</button>
       <span class="muted" id="kalt" style="margin-left:10px"></span>
     </div>
     <div id="ksplitbreak" style="display:none;margin-top:12px"></div>
@@ -517,6 +518,21 @@ function kcheck(){
       var cap=parseInt(document.getElementById('kgroesse').value)||0;
       if(total&&cap&&total>cap){ ksplitRender(Math.ceil(total/cap), cap); sb.textContent='Aufteilung ausblenden'; }
     } else { brk.style.display='none'; sb.textContent='Aufteilung anzeigen'; }
+  });
+  // Aufteilung uebernehmen: setzt die Menge (mg) je Zutat auf die Menge JE KAPSEL (Tagesmenge geteilt durch n).
+  var ab=document.getElementById('ksplitapply');
+  if(ab) ab.addEventListener('click',function(){
+    var total=0; document.querySelectorAll('#wrows .wrow').forEach(function(tr){ total += rowMg(tr); });
+    var cap=parseInt(document.getElementById('kgroesse').value)||0;
+    if(!cap || !(total>cap)) return;
+    var n=Math.ceil(total/cap);
+    if(!confirm('Die Menge (mg) je Zutat wird auf die Menge JE KAPSEL umgestellt (geteilt durch '+n+'). Danach bitte speichern. Fortfahren?')) return;
+    document.querySelectorAll('#wrows .wrow').forEach(function(tr){
+      var mg=rowMg(tr); if(!(mg>0)) return;   // Zeilen ohne mg (z. B. µg/IE) unveraendert lassen
+      var f=tr.querySelector('.wfinal'); if(!f) return;
+      var per=mg/n; f.value=String(Math.round(per*1000)/1000);
+    });
+    kcheck();
   });
   document.querySelectorAll('select[name="w_item[]"]').forEach(bxRohstoffCombo);   // bestehende Zeilen aufwerten
   kcheck();
