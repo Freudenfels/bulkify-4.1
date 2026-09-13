@@ -16,7 +16,10 @@ Route: `?p=portal_anfrage&id=<ID>`  (Rollen: sales, production, einkauf, admin)
   `portal_anfrage_pos`), zeigt der Wunschblock statt der Einzelwerte eine **Staffel-Tabelle**
   (Anzahl pro Verpackung + Menge VPE je Zeile).
   Bei Rohstoff/Dienstleistung Betreff und gewünschte Menge + Einheit.
-- **Angebot abgeben** (bei Produktanfragen – mit hinterlegtem Produkt über die Preismatrix, bei einer Rezeptur-Anfrage über den Angebots-Editor).
+- **Verpackungstyp ändern** (`verpackung_typ_aendern`): Im Wunschblock lässt sich der gewünschte Verpackungstyp inline ändern oder auf **„egal"** setzen (wirkt auf Kopf + alle Staffelzeilen). Dient dazu, einen **nicht machbaren** Kundenwunsch (z. B. Glas, aber kein passendes Gebinde vorhanden) zu korrigieren. Auswahl gefiltert nach Darreichungsform (`verpackung_typen_fuer_form()`).
+  - **„egal" / kein Wunsch** = das System wählt beim Angebot selbst das passende Gebinde (`behaelter_fuer_groesse()`: Produkt-eigenes, sonst erstes machbares). Damit ist immer ein Preis berechenbar.
+  - **Wunschtyp gesetzt, aber nicht machbar** = die Matrix zeigt „auf Anfrage" (nicht machbar); dann entweder hier den Typ ändern/auf „egal" setzen, oder im **Angebots-Editor** die Verpackung direkt wählen (überschreibt den Wunsch).
+- **Angebot abgeben** (bei Produktanfragen – mit hinterlegtem Produkt über die Preismatrix, bei einer Rezeptur-Anfrage über den Angebots-Editor). Direktes Abgeben setzt `angebot.preise_kunde=1` (sonst blendet das Portal das Angebot aus).
 - **Anfrage aus einer Rezeptur:** Hat der Kunde eine Rezeptur angenommen, für die es noch kein Produkt gibt, kommt die Anfrage mit `portal_anfrage.rezeptur_id` (und ohne `produkt_id`) herein. Statt der Preismatrix erscheint dann ein Hinweis plus **„Im Angebots-Editor bauen"** – dort wird die Rezeptur als Position gebaut (`angebot_rezeptur_zeilen()`), und beim Senden entsteht daraus das Produkt (`angebot_produkte_sichern()`).
 - **Bearbeitungsstatus** zum manuellen Setzen.
 - **Rezeptur im Klartext:** Bei einer Rezeptur-Anfrage stehen Darreichungsform und die komplette Zusammensetzung (Zutat + mg, Summe je Einheit) direkt hier – man muss kein Angebot anlegen, um zu sehen, worum es geht.

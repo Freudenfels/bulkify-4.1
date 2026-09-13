@@ -17,6 +17,15 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     q("UPDATE portal_anfrage SET rohstoff_id=? WHERE id=?", [$rid, $id]);
     header('Location: ?p=portal_anfrage&id=' . $id . '&ok=1'); exit;
 }
+// Gewuenschten Verpackungstyp aendern (z. B. wenn der Kundenwunsch nicht machbar ist oder auf „egal" gesetzt
+// werden soll). Wirkt auf Kopf + alle Staffelzeilen der Anfrage.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'verpackung_typ_aendern') {
+    $vt = preg_replace('/[^a-z]/', '', (string)($_POST['verpackung_typ'] ?? ''));
+    $vt = $vt === '' ? null : $vt;
+    q("UPDATE portal_anfrage SET verpackung_typ=? WHERE id=?", [$vt, $id]);
+    q("UPDATE portal_anfrage_pos SET verpackung_typ=? WHERE anfrage_id=?", [$vt, $id]);
+    header('Location: ?p=portal_anfrage&id=' . $id . '&vtok=1'); exit;
+}
 // Angebot abgeben (Preise zurück) – aus einer Produktanfrage
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_abgeben') {
     $pa = one("SELECT * FROM portal_anfrage WHERE id=?", [$id]);
@@ -27,7 +36,8 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
         $pz    = trim($_POST['produktionszeit'] ?? '') !== '' ? (float) str_replace(',', '.', $_POST['produktionszeit']) : null;
         $notiz = trim($_POST['notiz'] ?? '');
         $notizFull = 'Aus Anfrage ' . $pa['nummer'] . ($notiz !== '' ? ' — ' . $notiz : '');
-        q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,marge_override,produktionszeit_wochen,anfrage_id) VALUES (?,?,?,?,?,?,?,?)",
+        // Direktes Senden -> Preise sofort fuer den Kunden freigeben (sonst blendet das Portal es aus).
+        q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,preise_kunde,notiz,marge_override,produktionszeit_wochen,anfrage_id) VALUES (?,?,?,?,1,?,?,?,?)",
           [naechste_nummer('AN'), (int)$pa['kunde_id'], (int)$pa['produkt_id'], 'gesendet', $notizFull, $marge, $pz, $id]);
         $angid = insert_id();
         // Jede angebotene Konfiguration (Rezeptur x Menge + Verpackung) als eigenes Produkt sichern –
@@ -71,7 +81,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT id, nummer, status, kunde_id FROM angebot WHERE id=?", [$aid]) : null;
     if ($ang && $ang['status'] === 'gesendet') {
-        q("UPDATE angebot SET status='offen' WHERE id=?", [$aid]);
+        q("UPDATE angebot SET status='offen', preise_kunde=0 WHERE id=?", [$aid]);
         q("UPDATE portal_anfrage SET status='in_bearbeitung' WHERE id=?", [$id]);
         if ($ang['kunde_id']) log_aktivitaet('kunde', (int)$ang['kunde_id'], 'team', 'Angebot ' . $ang['nummer'] . ' zurückgezogen – wieder in Bearbeitung.', 'angebot', 'angebot', $aid);
         header('Location: ?p=angebot&id=' . $aid . '&zurueckgezogen=1'); exit;   // direkt in den Editor
@@ -121,6 +131,7 @@ $angeboteAktiv = array_values(array_filter($angebote, fn($x) => $x['status'] !==
 render_header('portal_anfragen', $pa['nummer']);
 bx_head($pa['nummer'], $TYP[$pa['typ']] ?? $pa['typ'], bx_btn('Zurück zur Liste', '?p=portal_anfragen', 'ghost'));
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['vtok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Verpackungstyp aktualisiert.</div>';
 if (isset($_GET['mailfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">E-Mail an den Kunden nicht verschickt: ' . h((string)$_GET['mailfehler']) . '</div>';
 if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot abgegeben – der Kunde sieht jetzt die Preise im Portal.</div>';
 if (isset($_GET['zurueckgezogen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot zurückgezogen – der Kunde kann es nicht mehr annehmen. Die Anfrage steht wieder auf „in Bearbeitung", du kannst ein neues Angebot bauen.</div>';
@@ -157,7 +168,22 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
       <?php $fEinheit = form_groessen_einheit($pa['darreichungsform'] ?: 'kapsel') ?: 'g';   // Füllmenge: g bei Pulver, ml bei Flüssig
             // Staffel: vom Kunden angefragte Kombinationen (Anzahl pro Verpackung + Menge VPE).
             $paPos = all("SELECT stueck, fuellmenge_g, verpackung_typ, menge FROM portal_anfrage_pos WHERE anfrage_id=? ORDER BY sort, id", [(int)$pa['id']]);
-            $paStaffel = array_values(array_filter($paPos, fn($p) => (int)$p['menge'] > 0 || (int)$p['stueck'] > 0 || (float)$p['fuellmenge_g'] > 0)); ?>
+            $paStaffel = array_values(array_filter($paPos, fn($p) => (int)$p['menge'] > 0 || (int)$p['stueck'] > 0 || (float)$p['fuellmenge_g'] > 0));
+            // Verpackungstyp: Anzeige + Inline-Bearbeitung. „egal" = wir wählen das passende Gebinde selbst.
+            // So lässt sich ein nicht machbarer Kundenwunsch (z. B. Glas, aber kein passendes vorhanden) korrigieren.
+            $paForm = $pa['darreichungsform'] ?: ((int)($pa['rezeptur_id'] ?? 0) ? (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$pa['rezeptur_id']]) : '');
+            $vtypErlaubt = verpackung_typen_fuer_form($paForm ?: null);
+            $vtypEdit = function() use ($pa, $VTYPEN, $vtypErlaubt) {
+                $cur = (string)($pa['verpackung_typ'] ?? '');
+                $o = '<div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap">'
+                   . '<span>' . ($cur ? h($VTYPEN[$cur] ?? $cur) : '<span class="muted">– egal (wir empfehlen)</span>') . '</span>'
+                   . '<form method="post" style="margin:0;display:flex;gap:6px;align-items:center">'
+                   . '<input type="hidden" name="aktion" value="verpackung_typ_aendern">'
+                   . '<select name="verpackung_typ" style="width:auto"><option value="">– egal / bitte empfehlen –</option>';
+                foreach ($vtypErlaubt as $tk) { if (!isset($VTYPEN[$tk])) continue; $o .= '<option value="' . $tk . '"' . ($cur === $tk ? ' selected' : '') . '>' . h($VTYPEN[$tk]) . '</option>'; }
+                $o .= '</select><button class="btn btn-ghost btn-sm" type="submit">ändern</button></form></div>';
+                return $o;
+            }; ?>
       <?php if (count($paStaffel) > 1): ?>
       <tr><td>Staffel (Kundenwunsch)</td><td>
         <table class="bx-table" style="margin:0"><thead><tr><th>Anzahl pro Verpackung</th><th class="bx-num">Menge (VPE)</th></tr></thead><tbody>
@@ -167,10 +193,10 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
           <?php endforeach; ?>
         </tbody></table>
       </td></tr>
-      <tr><td>Verpackungstyp</td><td><?= h($pa['verpackung_typ'] ? ($VTYPEN[$pa['verpackung_typ']] ?? $pa['verpackung_typ']) : '– (bitte empfehlen)') ?></td></tr>
+      <tr><td>Verpackungstyp</td><td><?= $vtypEdit() ?></td></tr>
       <?php else: ?>
       <tr><td>Größe je Packung</td><td><?= $pa['fuellmenge_g'] ? $mg($pa['fuellmenge_g']) . ' ' . h($fEinheit) : ($pa['stueck'] ? (int)$pa['stueck'] . ' Stück' : '–') ?></td></tr>
-      <tr><td>Verpackungstyp</td><td><?= h($pa['verpackung_typ'] ? ($VTYPEN[$pa['verpackung_typ']] ?? $pa['verpackung_typ']) : '– (bitte empfehlen)') ?></td></tr>
+      <tr><td>Verpackungstyp</td><td><?= $vtypEdit() ?></td></tr>
       <tr><td>Anzahl Packungen</td><td><?= $pa['menge'] ? number_format((int)$pa['menge'], 0, ',', '.') : '–' ?></td></tr>
       <?php endif; ?>
     <?php else: ?>
