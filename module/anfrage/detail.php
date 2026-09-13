@@ -467,12 +467,22 @@ function ksplitRender(n, cap){
 }
 // Menge lesbar: mg, ab 1000 mg zusaetzlich in g.
 function fmtMenge(mg){ return nf1(mg)+' mg'+(mg>=1000?' ('+nf1(mg/1000)+' g)':''); }
+// Merker: hat das Team die Zielgroesse selbst gewaehlt? Dann nicht mehr automatisch umstellen.
+var kgTouched=false;
 function kcheck(){
   var total=0; document.querySelectorAll('#wrows .wrow').forEach(function(tr){ total += rowMg(tr); });
   // Portions-Panel (Pulver/Stick/Fluessig): Portionsgroesse = Tagesdosis, kein Kapsel-Limit.
   var pel=document.getElementById('psumme'); if(pel) pel.textContent=fmtMenge(total);
   var panel=document.getElementById('kapselpanel');
   if (!panel || panel.style.display==='none') return;
+  var kgsel=document.getElementById('kgroesse');
+  // Zielgroesse ist nur ein Vorschlag (kein Kundenwunsch): solange das Team sie nicht selbst gewaehlt hat,
+  // automatisch die KLEINSTE Groesse waehlen, in die die Tagesdosis als EINE Kapsel passt – sonst die groesste.
+  if (kgsel && !kgTouched && total>0) {
+    var fit=null; KGROESSEN.forEach(function(g){ if(g.mg>=total && (fit===null||g.mg<fit)) fit=g.mg; });
+    if (fit===null) KGROESSEN.forEach(function(g){ if(fit===null||g.mg>fit) fit=g.mg; });
+    if (fit!==null) kgsel.value=String(fit);
+  }
   var cap=parseInt(document.getElementById('kgroesse').value)||0;
   document.getElementById('ksumme').textContent=nf1(total)+' mg';
   var st=document.getElementById('kstatus'), sp=document.getElementById('ksplit');
@@ -509,7 +519,7 @@ function kcheck(){
   });
   // Kapsel-Check reagiert auf finale Menge UND (als Fallback) auf Wunschmenge/Einheit.
   document.querySelectorAll('#wrows .wfinal, #wrows input[name="w_menge[]"], #wrows select[name="w_einheit[]"]').forEach(function(i){ i.addEventListener('input',kcheck); i.addEventListener('change',kcheck); });
-  var kg=document.getElementById('kgroesse'); if(kg) kg.addEventListener('change',kcheck);
+  var kg=document.getElementById('kgroesse'); if(kg) kg.addEventListener('change',function(){ kgTouched=true; kcheck(); });
   var sb=document.getElementById('ksplitbtn');
   if(sb) sb.addEventListener('click',function(){
     var brk=document.getElementById('ksplitbreak');
