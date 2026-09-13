@@ -2596,11 +2596,30 @@ function produkt_verpackung_items(int $produkt_id, ?int $verp_override = null): 
     $out = [];
     foreach (['verpackung_id'=>'Verpackung', 'verschluss_id'=>'Deckel', 'etikett_id'=>'Etikett'] as $f => $rolle) {
         if (!empty($p[$f])) {
-            $it = one("SELECT id, name, artikelnummer FROM item WHERE id=?", [(int)$p[$f]]);
-            if ($it) $out[] = ['rolle' => $rolle, 'id' => (int)$it['id'], 'name' => $it['name'], 'artikelnummer' => $it['artikelnummer']];
+            $it = one("SELECT id, name, artikelnummer, volumen_ml, etikett_format FROM item WHERE id=?", [(int)$p[$f]]);
+            if ($it) $out[] = ['rolle' => $rolle, 'id' => (int)$it['id'], 'name' => $it['name'], 'artikelnummer' => $it['artikelnummer'],
+                               'volumen_ml' => $it['volumen_ml'], 'etikett_format' => $it['etikett_format']];
         }
     }
     return $out;
+}
+// Überschrift + Beschreibung einer Verpackungs-/Etikett-Position: Art in die Überschrift, Größe in die Beschreibung.
+// $vp: ['rolle'=>'Verpackung'|'Deckel'|'Etikett', 'name'=>…, 'volumen_ml'=>…?, 'etikett_format'=>…?]
+function verpackung_zeile_teile(array $vp): array {
+    $rolle = (string)($vp['rolle'] ?? 'Verpackung');
+    $name  = trim((string)($vp['name'] ?? ''));
+    if ($rolle === 'Etikett') {
+        // Größe = Etikettenformat (B x H mm); der Behälter-Zusatz in Klammern entfällt in der Überschrift.
+        $fmt = trim((string)($vp['etikett_format'] ?? ''));
+        if ($fmt === '' && preg_match('/(\d+\s*[x×]\s*\d+\s*mm)/iu', $name, $m)) $fmt = trim($m[1]);
+        return ['bezeichnung' => 'Etikett', 'beschreibung' => $fmt];
+    }
+    // Verpackung/Deckel: Volumen als Größe in die Beschreibung, reine Art in die Überschrift.
+    $groesse = !empty($vp['volumen_ml']) ? (number_format((float)$vp['volumen_ml'], 0, ',', '.') . ' ml') : '';
+    if ($groesse === '' && preg_match('/^\s*(\d+(?:[.,]\d+)?)\s*ml\b/i', $name, $m)) $groesse = trim($m[1]) . ' ml';
+    $art = trim(preg_replace('/^\s*\d+(?:[.,]\d+)?\s*ml\s*/i', '', $name));   // Volumen-Präfix raus
+    if ($art === '') $art = $name;
+    return ['bezeichnung' => $rolle . ': ' . $art, 'beschreibung' => $groesse];
 }
 // Summe Verpackungs-VK je Packung (Dose+Deckel+Etikett) bei einer Bestellmenge, mit Kundenrabatt.
 function produkt_verpackung_vk_je_pack(int $produkt_id, int $menge, ?int $kunde_id): float {
@@ -2738,8 +2757,9 @@ function angebot_gruppe_positionen(array $g, ?float $mo, ?int $kid, ?string $let
         'ek_cent'=>(int) round($cell['ek'] * 100), 'mwst_satz'=>$ust, 'quelle'=>'herstellung', 'gruppe'=>$letter,
     ]];
     foreach (produkt_verpackung_items($pid) as $vp) {
+        $t = verpackung_zeile_teile($vp);   // Art in die Überschrift, Größe/Format in die Beschreibung
         $out[] = [
-            'artikelnr'=>$vp['artikelnummer'] ?? '', 'bezeichnung'=>$vp['rolle'] . ': ' . $vp['name'], 'beschreibung'=>'',
+            'artikelnr'=>$vp['artikelnummer'] ?? '', 'bezeichnung'=>$t['bezeichnung'], 'beschreibung'=>$t['beschreibung'],
             'menge'=>(float)($featMenge ?: 1), 'einheit'=>'Stück',
             'preis_cent'=>(int) round(vk_fuer_kunde(verpackung_vk_bei_menge($vp['id'], $featMenge ?: 1), $kid) * 100),
             'ek_cent'=>(int) round(pack_ek_bei_menge($vp['id'], $featMenge ?: 1) * 100), 'mwst_satz'=>$ust, 'quelle'=>'verpackung', 'gruppe'=>$letter,
@@ -2917,11 +2937,12 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
     ]];
     foreach ($verp_ids as $vid) {
         $vid = (int)$vid; if (!$vid) continue;
-        $vp = one("SELECT name, artikelnummer, verpackung_rolle FROM item WHERE id=? AND kategorie='verpackung'", [$vid]);
+        $vp = one("SELECT name, artikelnummer, verpackung_rolle, volumen_ml, etikett_format FROM item WHERE id=? AND kategorie='verpackung'", [$vid]);
         if (!$vp) continue;
         $rolleLbl = ['primaer'=>'Verpackung','verschluss'=>'Deckel','etikett'=>'Etikett','karton'=>'Karton','beipack'=>'Beipack'][$vp['verpackung_rolle'] ?? 'primaer'] ?? 'Verpackung';
+        $t = verpackung_zeile_teile(['rolle'=>$rolleLbl, 'name'=>$vp['name'], 'volumen_ml'=>$vp['volumen_ml'], 'etikett_format'=>$vp['etikett_format']]);
         $rows[] = [
-            'artikelnr'=>$vp['artikelnummer'] ?? '', 'bezeichnung'=>$rolleLbl . ': ' . $vp['name'], 'beschreibung'=>'',
+            'artikelnr'=>$vp['artikelnummer'] ?? '', 'bezeichnung'=>$t['bezeichnung'], 'beschreibung'=>$t['beschreibung'],
             'menge'=>(float)$menge, 'einheit'=>'Stück',
             'preis_cent'=>(int) round(vk_fuer_kunde(verpackung_vk_bei_menge($vid, $menge), $kid) * 100),
             'ek_cent'=>(int) round(pack_ek_bei_menge($vid, $menge) * 100), 'mwst_satz'=>$ust, 'quelle'=>'verpackung',
