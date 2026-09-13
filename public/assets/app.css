@@ -15,6 +15,7 @@
   --bg:#f4f6f3;
   --panel:#ffffff;
   --panel-2:#fafcf8;
+  --row-hover:#eef3ea;   /* deutlich sichtbare Zeilen-Hervorhebung beim Ueberfahren (hell) */
   --line:#e2e7e0;
   --line-2:#eef2ea;
   --text:#1b241a;
@@ -111,7 +112,7 @@ table.bx-table{border-collapse:collapse;width:100%}
 .bx-table thead th{color:var(--muted);font-size:var(--fs-sm);background:var(--panel-2);border-bottom:1px solid var(--line)}
 .bx-table thead th a{color:var(--muted);display:inline-flex;gap:4px;align-items:center}
 .bx-table thead th .arw{color:var(--gruen)}
-.bx-table tbody tr:hover{background:var(--panel-2)}
+.bx-table tbody tr:hover{background:var(--row-hover)}
 .bx-table tbody tr:last-child td{border-bottom:none}
 .bx-num{text-align:right;font-variant-numeric:tabular-nums}
 
@@ -209,6 +210,7 @@ hr.bx{border:none;border-top:1px solid var(--line);margin:var(--sp-5) 0}
 /* ---------- Dark Mode ---------- */
 :root[data-theme="dark"]{
   --bg:#0f1310; --panel:#171d16; --panel-2:#1e251c;
+  --row-hover:#26301f;   /* Zeilen-Hover (dunkel), etwas heller als panel-2 fuer Kontrast */
   --line:#2b3327; --line-2:#232a20;
   --text:#e7ede3; --muted:#9aa694;
   --shadow:0 1px 2px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.4);

@@ -36,8 +36,10 @@ $statusBadge = fn($r) => match ($r['status']) {
 
 $cols = [
     'nummer'        => ['label'=>'Nummer', 'sort'=>true],
-    'kunde_firma'   => ['label'=>'Kunde', 'sort'=>true, 'render'=>fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
-    'produktname'   => ['label'=>'Wunsch-Produkt', 'sort'=>true, 'render'=>fn($r)=> !empty($r['produktname'])?h($r['produktname']):'<span class="muted">–</span>'],
+    // Rezeptur/Wunsch-Produkt an 2. Stelle – so ist auf einen Blick klar, worum es geht.
+    'produktname'   => ['label'=>'Rezeptur / Wunsch-Produkt', 'sort'=>true, 'render'=>fn($r)=> !empty($r['produktname'])?h($r['produktname']):'<span class="muted">–</span>'],
+    // Kundenname als reiner Text (kein Link – verleitet sonst zum Klicken).
+    'kunde_firma'   => ['label'=>'Kunde', 'sort'=>true, 'render'=>fn($r)=> $r['kunde_firma'] ? h($r['kunde_firma']) : '<span class="muted">–</span>'],
     'darreichungsform' => ['label'=>'Form', 'sort'=>true, 'render'=>fn($r)=> h($DFORM[$r['darreichungsform']] ?? $r['darreichungsform'])],
     'wunsch_anzahl' => ['label'=>'Wünsche', 'sort'=>true, 'num'=>true],
     'rezeptur_nr'   => ['label'=>'Rezeptur', 'render'=>fn($r)=> $r['rezeptur_nr']?h($r['rezeptur_nr']):'<span class="muted">–</span>'],
