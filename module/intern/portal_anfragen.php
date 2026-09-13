@@ -15,10 +15,11 @@ $TYP = ['produkt'=>'Produkt', 'rohstoff'=>'Rohstoff', 'dienstleistung'=>'Dienstl
 $filterTyp = $_GET['typ'] ?? 'alle';
 
 $where = $filterTyp !== 'alle' && isset($TYP[$filterTyp]) ? "WHERE pa.typ=" . "'" . $filterTyp . "'" : '';
-$rows = all("SELECT pa.*, k.firma, p.name AS produkt_name
+$rows = all("SELECT pa.*, k.firma, p.name AS produkt_name, rz.name AS rezeptur_name
              FROM portal_anfrage pa
              LEFT JOIN kunden k ON k.id=pa.kunde_id
              LEFT JOIN produkt p ON p.id=pa.produkt_id
+             LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
              $where ORDER BY (pa.status='neu') DESC, pa.angelegt DESC");
 $VTYPEN = ['glas'=>'Glas', 'pet'=>'PET-Dose', 'pla'=>'PLA-Becher', 'beutel'=>'Standbodenbeutel', 'stick'=>'Stick', 'blister'=>'Blister'];
 
@@ -43,7 +44,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       if ($r['typ'] === 'produkt') {
           $groesse = $r['fuellmenge_g'] ? rtrim(rtrim(number_format((float)$r['fuellmenge_g'],1,',','.'),'0'),',') . ' g/Pkg'
                    : ($r['stueck'] ? (int)$r['stueck'] . ' Stk/Pkg' : '');
-          $txt = ($r['produkt_name'] ?: '–')
+          $txt = ($r['produkt_name'] ?: ($r['rezeptur_name'] ?: '–'))
                . ($groesse ? ' · ' . $groesse : '')
                . ($r['verpackung_typ'] ? ' · ' . ($VTYPEN[$r['verpackung_typ']] ?? $r['verpackung_typ']) : '')
                . ($r['menge'] ? ' · ' . (int)$r['menge'] . ' Pkg' : '');
