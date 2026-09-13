@@ -198,7 +198,8 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $p->line($L, $y + 2, $R, $y + 2, 0.4, $LINE); $y += 6; $i++;
     }
 
-    // ---- Summen ----
+    // ---- Summen ---- (bei mehreren Varianten ausgeblendet: es gibt keine eine Gesamtsumme; Preise je Variante unten)
+    if (empty($b['ohne_summen'])) {
     if ($y > 680) { $p->addPage(); $y = 54; }
     $sumX = 330; $valR = $R; $y += 10;
     $p->line($sumX, $y, $R, $y, 0.8, $INK); $y += 14;
@@ -218,6 +219,11 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     $p->line($sumX, $y - 2, $R, $y - 2, 0.5, $LINE);
     $p->text($sumX, $y + 10, $T['endsumme'], 10, true, $INK);
     $p->textRight($valR, $y + 10, beleg_eur($bruttoSum), 11, true, $INK); $y += 26;
+    } else {
+        $y += 6;
+        foreach ($p->wrap('Mehrere Varianten – die Preise je Variante finden Sie unten unter „Preis je fertiges Produkt". Preise netto, zzgl. gesetzl. USt.', $R - $L, 8, false) as $wl) { $p->text($L, $y + 8, $wl, 8, false, $GRAY); $y += 10; }
+        $y += 8;
+    }
 
     // ---- Preis je fertiges Produkt (Staffel) ----
     if ($produktStaffel) {

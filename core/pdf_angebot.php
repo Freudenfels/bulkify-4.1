@@ -37,15 +37,14 @@ function angebot_pdf_bauen(int $angebot_id): ?string {
     // Staffel „Preis je fertiges Produkt" – bei Matrix-Angeboten aus dem Produkt, sonst aus den Optionen.
     $produktStaffel = angebot_hat_positionen($angebot_id) ? [] : angebot_staffel_gruppen($a);
     // Angebot aus Optionen (aus einer Rezeptur gebaut): jede Gruppe ist eine WAHL, keine Bestellzeile.
-    // Sonst stuende unter dem PDF eine Summe ueber alle Varianten – die bestellt der Kunde nie.
+    // Bei MEHREREN Varianten zeigen wir ALLE Positionen (je Variante A/B/…), aber KEINE Gesamtsumme –
+    // die wäre über alle Varianten und bestellt der Kunde nie. Der Preis steht je Variante unter
+    // „Preis je fertiges Produkt". Vorher war die Positionstabelle auf die erste Variante gekürzt (wirkte abgeschnitten).
     $opt = angebot_optionen($angebot_id);
+    $ohneSummen = false;
     if ($opt['optionen']) {
         $produktStaffel = angebot_staffel_aus_optionen($opt['optionen']);
-        if (count($opt['optionen']) > 1) {
-            $ersteG = $opt['optionen'][0]['gruppe'];
-            $positionen = array_values(array_filter($positionen,
-                fn($pp) => trim((string)($pp['gruppe'] ?? '')) === $ersteG || trim((string)($pp['gruppe'] ?? '')) === ''));
-        }
+        if (count($opt['optionen']) > 1) $ohneSummen = true;
     }
 
     // Begleittext: Hinweis aus der Notiz („Aus Anfrage X — <Hinweis>") plus Produktionszeit.
@@ -77,6 +76,7 @@ function angebot_pdf_bauen(int $angebot_id): ?string {
         'kopf_text'        => $kopf,
         'zahlungsart_label'=> $zaMap[$k['zahlungsart'] ?? 'vorkasse'] ?? ucfirst((string)($k['zahlungsart'] ?? 'Vorkasse')),
         'hinweis'          => '',
+        'ohne_summen'      => $ohneSummen,   // mehrere Varianten -> keine Gesamtsumme, Preise je Variante unten
     ], $positionen, $produktStaffel);
 }
 
