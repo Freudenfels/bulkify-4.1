@@ -3077,10 +3077,8 @@ function beleg_staffel_aus_auftrag(array $auf): array {
     if ($netto <= 0) return [];
     $packCent = (int) round($netto * 100 / $menge);
     $stk = (int)($auf['stueck'] ?? 0);
-    $pid = (int)($auf['produkt_id'] ?? 0);
-    $form = $pid ? ((string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel') : 'kapsel';
+    // Name = Produktname (die Größe ergänzt build_beleg_pdf über mpp als „(N Stück/Packung)").
     $name = (string)($auf['produkt_name'] ?? '') ?: 'Produkt';
-    if ($stk > 0) $name .= ' · ' . form_groessen_label($form, (float)$stk);
     return [[
         'name' => $name, 'mpp' => $stk ?: 0,
         'rows' => [['ab'=>$menge, 'stueck_cent'=>($stk>0 ? (int) round($packCent / $stk) : null), 'pack_cent'=>$packCent]],
