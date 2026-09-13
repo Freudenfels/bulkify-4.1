@@ -154,10 +154,25 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
       <?php else: ?>
       <tr><td style="width:220px">Produkt</td><td><?php if ($pa['produkt_id']): ?><a href="?p=produkt&id=<?= (int)$pa['produkt_id'] ?>"><?= h($pa['produkt_name'] ?: '–') ?></a><?php else: ?><?= h($pa['produkt_name'] ?: '–') ?><?php endif; ?></td></tr>
       <?php endif; ?>
-      <?php $fEinheit = form_groessen_einheit($pa['darreichungsform'] ?: 'kapsel') ?: 'g';   // Füllmenge: g bei Pulver, ml bei Flüssig ?>
+      <?php $fEinheit = form_groessen_einheit($pa['darreichungsform'] ?: 'kapsel') ?: 'g';   // Füllmenge: g bei Pulver, ml bei Flüssig
+            // Staffel: vom Kunden angefragte Kombinationen (Anzahl pro Verpackung + Menge VPE).
+            $paPos = all("SELECT stueck, fuellmenge_g, verpackung_typ, menge FROM portal_anfrage_pos WHERE anfrage_id=? ORDER BY sort, id", [(int)$pa['id']]);
+            $paStaffel = array_values(array_filter($paPos, fn($p) => (int)$p['menge'] > 0 || (int)$p['stueck'] > 0 || (float)$p['fuellmenge_g'] > 0)); ?>
+      <?php if (count($paStaffel) > 1): ?>
+      <tr><td>Staffel (Kundenwunsch)</td><td>
+        <table class="bx-table" style="margin:0"><thead><tr><th>Anzahl pro Verpackung</th><th class="bx-num">Menge (VPE)</th></tr></thead><tbody>
+          <?php foreach ($paStaffel as $ps): ?>
+            <tr><td><?= $ps['fuellmenge_g'] ? $mg($ps['fuellmenge_g']) . ' ' . h($fEinheit) : ((int)$ps['stueck'] ? (int)$ps['stueck'] . ' Stück' : '–') ?></td>
+                <td class="bx-num"><?= (int)$ps['menge'] ? number_format((int)$ps['menge'], 0, ',', '.') : '–' ?></td></tr>
+          <?php endforeach; ?>
+        </tbody></table>
+      </td></tr>
+      <tr><td>Verpackungstyp</td><td><?= h($pa['verpackung_typ'] ? ($VTYPEN[$pa['verpackung_typ']] ?? $pa['verpackung_typ']) : '– (bitte empfehlen)') ?></td></tr>
+      <?php else: ?>
       <tr><td>Größe je Packung</td><td><?= $pa['fuellmenge_g'] ? $mg($pa['fuellmenge_g']) . ' ' . h($fEinheit) : ($pa['stueck'] ? (int)$pa['stueck'] . ' Stück' : '–') ?></td></tr>
       <tr><td>Verpackungstyp</td><td><?= h($pa['verpackung_typ'] ? ($VTYPEN[$pa['verpackung_typ']] ?? $pa['verpackung_typ']) : '– (bitte empfehlen)') ?></td></tr>
       <tr><td>Anzahl Packungen</td><td><?= $pa['menge'] ? number_format((int)$pa['menge'], 0, ',', '.') : '–' ?></td></tr>
+      <?php endif; ?>
     <?php else: ?>
       <tr><td style="width:220px">Betreff</td><td><?= h($pa['betreff'] ?: '–') ?></td></tr>
       <?php if ($pa['wunsch_menge']): ?><tr><td>Gewünschte Menge</td><td><?= $mg($pa['wunsch_menge']) . ' ' . h($pa['wunsch_einheit'] ?: '') ?></td></tr><?php endif; ?>

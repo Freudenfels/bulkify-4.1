@@ -230,8 +230,9 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     // Kann der Kunde Produkte anfragen, ist der nächste Schritt „prodanfrage" (Menge/Verpackung).
     // Ohne Produkt-Freischaltung führt das ins Leere (fällt auf „start" zurück) – dann zurück auf
     // die Rezeptur selbst, die jetzt als angenommen angezeigt wird (mit Erfolgshinweis).
-    $frZiel = !empty($k['portal_produkte']) ? 'prodanfrage' : 'rezeptur';
-    header('Location: ?p=portal&token=' . $token . '&v=' . $frZiel . '&rid=' . $rid . '&freigegeben=1'); exit;
+    // Nach dem Annehmen der eigenen Rezeptur direkt zum Schritt „Produkt anfragen" (Menge/Verpackung) –
+    // die Rezeptur ist damit immer als Produkt anfragbar, auch ohne Katalog-Recht.
+    header('Location: ?p=portal&token=' . $token . '&v=prodanfrage&rid=' . $rid . '&freigegeben=1'); exit;
 }
 
 // Abruf aus einem Jahresvertrag/Kontingent: erzeugt einen Auftrag zum vereinbarten Preis.
@@ -317,22 +318,44 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     } else {
         $pid = (int) preg_replace('/\D/', '', $wahl);
     }
-    if (($pid || $rezWahl) && $k['portal_produkte']) {
-        $fg = (float) str_replace(',', '.', $_POST['fuellmenge_g'] ?? '0');
-        $stueck = (int)($_POST['stueck'] ?? 0) ?: null;
+    // Eigene/freigegebene Rezeptur: braucht nur das Rezeptur-Recht. Katalog-Produkt: braucht das Produkt-Recht.
+    $erlaubt = ($rezWahl && !empty($k['portal_rezeptur'])) || ($pid && !empty($k['portal_produkte']));
+    if ($erlaubt) {
+        // Darreichungsform des gewählten Produkts/der Rezeptur -> „Anzahl pro Verpackung" ist Stück oder Füllmenge.
+        $form = $rezWahl
+            ? (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezWahl])
+            : (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]);
+        $istFuell = in_array($form, ['pulver','granulat','fluessig','gel'], true);
         $vtyp = trim($_POST['verpackung_typ'] ?? '') ?: null;
-        // mehrere Mengen (Staffeln) kommagetrennt möglich, z. B. „1000, 2500, 5000"
-        $mengen = array_values(array_filter(array_map('intval', preg_split('/[,;\s]+/', (string)($_POST['menge'] ?? ''))), fn($m) => $m > 0));
-        $first = $mengen[0] ?? null;
-        q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,produkt_id,rezeptur_id,stueck,fuellmenge_g,verpackung_typ,menge,notiz,status) VALUES (?,?,?,?,?,?,?,?,?,?,'neu')",
-          [naechste_nummer('PAF'), (int)$k['id'], 'produkt', $pid ?: null, $rezWahl ?: null, $stueck, $fg > 0 ? $fg : null, $vtyp, $first, trim($_POST['notiz'] ?? '')]);
-        $paf = insert_id();
-        $sort = 0;
-        foreach (($mengen ?: [0]) as $m) {
-            q("INSERT INTO portal_anfrage_pos (anfrage_id,produkt_id,rezeptur_id,stueck,fuellmenge_g,verpackung_typ,menge,sort) VALUES (?,?,?,?,?,?,?,?)",
-              [$paf, $pid ?: null, $rezWahl ?: null, $stueck, $fg > 0 ? $fg : null, $vtyp, $m ?: null, $sort++]);
+        // Task 3: Staffel = mehrere Zeilen aus „Anzahl pro Verpackung" + „Menge VPE" (Anzahl Verpackungen).
+        $anz = $_POST['st_anzahl'] ?? []; $vpe = $_POST['st_vpe'] ?? [];
+        $zeilen = [];
+        foreach ((array)$anz as $i => $a) {
+            $aA = (int) round((float) str_replace(',', '.', (string)$a));            // Anzahl pro Verpackung
+            $mV = (int) round((float) str_replace(',', '.', (string)($vpe[$i] ?? ''))); // Menge VPE (Packungen)
+            if ($aA <= 0 && $mV <= 0) continue;
+            $zeilen[] = ['anzahl' => $aA > 0 ? $aA : null, 'vpe' => $mV > 0 ? $mV : null];
         }
-        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Produktanfrage im Portal gestellt' . (count($mengen) > 1 ? ' (' . count($mengen) . ' Staffeln)' : '') . '.', 'anfrage');
+        // Fallback: Einzelfelder (falls ohne JS gesendet)
+        if (!$zeilen) {
+            $aA = (int) round((float) str_replace(',', '.', (string)($_POST['stueck'] ?? $_POST['fuellmenge_g'] ?? '0')));
+            $mV = (int) round((float) str_replace(',', '.', (string)($_POST['menge'] ?? '0')));
+            if ($aA > 0 || $mV > 0) $zeilen[] = ['anzahl' => $aA > 0 ? $aA : null, 'vpe' => $mV > 0 ? $mV : null];
+        }
+        if ($zeilen) {
+            $mapAnzahl = fn($a) => $istFuell ? [null, $a] : [$a, null];   // -> [stueck, fuellmenge_g]
+            [$hStk, $hFg] = $mapAnzahl($zeilen[0]['anzahl']);
+            q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,produkt_id,rezeptur_id,stueck,fuellmenge_g,verpackung_typ,menge,notiz,status) VALUES (?,?,?,?,?,?,?,?,?,?,'neu')",
+              [naechste_nummer('PAF'), (int)$k['id'], 'produkt', $pid ?: null, $rezWahl ?: null, $hStk, $hFg, $vtyp, $zeilen[0]['vpe'], trim($_POST['notiz'] ?? '')]);
+            $paf = insert_id();
+            $sort = 0;
+            foreach ($zeilen as $z) {
+                [$stk, $fgv] = $mapAnzahl($z['anzahl']);
+                q("INSERT INTO portal_anfrage_pos (anfrage_id,produkt_id,rezeptur_id,stueck,fuellmenge_g,verpackung_typ,menge,sort) VALUES (?,?,?,?,?,?,?,?)",
+                  [$paf, $pid ?: null, $rezWahl ?: null, $stk, $fgv, $vtyp, $z['vpe'], $sort++]);
+            }
+            log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Produktanfrage im Portal gestellt' . (count($zeilen) > 1 ? ' (' . count($zeilen) . ' Staffeln)' : '') . '.', 'anfrage');
+        }
     }
     // Auf der Anfragenliste landen statt zurück im Katalog – dort sieht der Kunde seine Anfrage sofort stehen.
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
@@ -598,7 +621,12 @@ $L = ['start' => 'Übersicht'];
 if ($k['portal_rezeptur'] || $k['portal_produkte'] || $k['portal_rohstoffe'] || $k['portal_dienstleistung'])
     $L['meine_anfragen'] = 'Meine Anfragen';
 if ($k['portal_rezeptur'])     { $L['rezepturen'] = 'Rezepturen';  $L['anfrage'] = 'Rezeptur anfragen'; }
+// Produkt anfragen: mit Katalog-Recht immer; ohne Katalog, sobald der Kunde eine anfragbare eigene/freigegebene
+// Rezeptur hat (angenommene Rezeptur -> als Produkt anfragen). So ist der Weg nach dem Annehmen nie eine Sackgasse.
+$kannProduktAnfrage = !empty($k['portal_produkte']) || (!empty($k['portal_rezeptur']) &&
+    (int) scalar("SELECT COUNT(*) FROM rezeptur WHERE (exklusiv=1 AND kunde_id=? AND status='eingefroren') OR (exklusiv=0 AND status='freigegeben')", [(int)$k['id']]) > 0);
 if ($k['portal_produkte'])     { $L['produkte']   = 'Produkte';    $L['prodanfrage'] = 'Produkt anfragen'; }
+elseif ($kannProduktAnfrage)   { $L['prodanfrage'] = 'Produkt anfragen'; }
 if ($k['portal_rohstoffe'])    { $L['rohstoffe']  = 'Rohstoffe';   $L['rohanfrage'] = 'Rohstoff anfragen'; }
 if ($k['portal_dienstleistung']) $L['dienstleistung'] = 'Dienstleistung anfragen';
 // Jahresverträge/Kontingente: Menüpunkt nur, wenn der Kunde aktive Verträge hat.
@@ -1390,7 +1418,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <h1 style="margin:0"><?= h($rezDetail['name']) ?></h1>
       <div class="bx-row" style="gap:8px">
         <?php // Angenommene eigene und freigegebene Katalog-Rezepturen kann der Kunde direkt als Produkt anfragen.
-              if (!empty($k['portal_produkte']) && in_array($rezDetail['status'], ['eingefroren','freigegeben'], true)): ?>
+              if ($kannProduktAnfrage && in_array($rezDetail['status'], ['eingefroren','freigegeben'], true)): ?>
           <a class="btn btn-primary btn-sm" href="<?= $portalLink('prodanfrage') ?>&rid=<?= (int)$rezDetail['id'] ?>">Als Produkt anfragen</a>
         <?php endif; ?>
         <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezepturen') ?>">Zurück zur Liste</a>
@@ -1636,27 +1664,55 @@ portal_head('Kundenportal · ' . $k['firma']);
             <?php endif; ?>
           </select>
         </div>
-        <div class="bx-field" id="pa_stueck_wrap"><label>Stück je Packung <?= bx_hint('Ihre Wunschmenge – wir kalkulieren genau diese Größe.') ?></label><input type="number" name="stueck" min="1" step="1" placeholder="z. B. 120"></div>
-        <div class="bx-field" id="pa_fuell_wrap" style="display:none"><label>Füllmenge je Packung <span id="pa_fuell_einheit">(g)</span> <?= bx_hint('Ihre Wunschmenge – wir kalkulieren genau diese Größe und wählen die passende Verpackung dazu.') ?></label><input type="number" name="fuellmenge_g" min="1" step="1" placeholder="z. B. 200"></div>
         <div class="bx-field"><label>Verpackungstyp <?= bx_hint('Sie wählen nur die Art – wir bestimmen das perfekt passende Gebinde in der richtigen Größe.') ?></label>
           <select name="verpackung_typ"><option value="">– egal / bitte empfehlen –</option><?php foreach ($VTYPEN as $tk=>$tl): ?><option value="<?= $tk ?>"><?= h($tl) ?></option><?php endforeach; ?></select>
         </div>
-        <div class="bx-field"><label>Bestellmenge (Packungen) <?= bx_hint('Mehrere Mengen mit Komma für Staffelpreise, z. B. 1000, 2500, 5000') ?></label><input type="text" name="menge" placeholder="z. B. 1000, 2500, 5000"></div>
       </div>
-      <div class="bx-field"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"></textarea></div>
+      <!-- Task 3: Staffel – je Zeile Anzahl pro Verpackung + Menge VPE (Anzahl Verpackungen). -->
+      <div style="margin-top:6px">
+        <label style="display:block;margin-bottom:6px">Staffel <?= bx_hint('Fragen Sie mehrere Varianten auf einmal an: je Zeile die Anzahl pro Verpackung (z. B. 120 Kapseln) und die gewünschte Menge an Verpackungen (VPE). Wir rechnen Ihnen jede Zeile als Staffelpreis.') ?></label>
+        <div class="bx-tablewrap"><table class="bx-table" id="pa_staffel">
+          <thead><tr>
+            <th><span class="pa_anzahl_lbl">Anzahl pro Verpackung</span></th>
+            <th style="width:190px">Menge (Verpackungen / VPE)</th>
+            <th style="width:40px"></th>
+          </tr></thead>
+          <tbody>
+            <tr class="pa_srow">
+              <td><input type="number" name="st_anzahl[]" min="1" step="1" placeholder="z. B. 120"></td>
+              <td><input type="number" name="st_vpe[]" min="1" step="1" placeholder="z. B. 1000"></td>
+              <td><button type="button" class="btn btn-ghost btn-sm pa_del" title="Zeile entfernen">×</button></td>
+            </tr>
+          </tbody>
+        </table></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="pa_addrow">+ Staffel</button>
+      </div>
+      <div class="bx-field" style="margin-top:14px"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"></textarea></div>
       <button class="btn btn-primary" type="submit">Anfrage senden</button>
     </form>
     <script>(function(){
       var sel=document.getElementById('pa_produkt'); if(!sel) return;
-      function upd(){
+      function lbl(){
         var o=sel.options[sel.selectedIndex], f=o?o.getAttribute('data-form'):'';
-        // Pulver/Granulat werden nach Gramm angefragt, Flüssiges nach Milliliter, alles andere nach Stückzahl
-        var fuell=(f==='pulver'||f==='granulat'||f==='fluessig'||f==='gel');
-        document.getElementById('pa_stueck_wrap').style.display=fuell?'none':'';
-        document.getElementById('pa_fuell_wrap').style.display=fuell?'':'none';
-        document.getElementById('pa_fuell_einheit').textContent=(f==='fluessig'||f==='gel')?'(ml)':'(g)';
+        // Pulver/Granulat werden nach Gramm angefragt, Flüssiges/Gel nach Milliliter, alles andere nach Stückzahl.
+        var t = (f==='pulver'||f==='granulat') ? 'Füllmenge pro Verpackung (g)'
+              : ((f==='fluessig'||f==='gel') ? 'Füllmenge pro Verpackung (ml)' : 'Anzahl pro Verpackung');
+        Array.prototype.forEach.call(document.querySelectorAll('.pa_anzahl_lbl'), function(e){ e.textContent=t; });
       }
-      sel.addEventListener('change',upd); upd();
+      sel.addEventListener('change',lbl); lbl();
+      var tb=document.querySelector('#pa_staffel tbody');
+      document.getElementById('pa_addrow').addEventListener('click',function(){
+        var tr=document.createElement('tr'); tr.className='pa_srow';
+        tr.innerHTML='<td><input type="number" name="st_anzahl[]" min="1" step="1" placeholder="z. B. 120"></td>'
+          +'<td><input type="number" name="st_vpe[]" min="1" step="1" placeholder="z. B. 1000"></td>'
+          +'<td><button type="button" class="btn btn-ghost btn-sm pa_del" title="Zeile entfernen">×</button></td>';
+        tb.appendChild(tr);
+      });
+      tb.addEventListener('click',function(e){
+        var b=e.target.closest('.pa_del'); if(!b) return;
+        if(tb.querySelectorAll('.pa_srow').length>1) b.closest('.pa_srow').remove();
+        else { b.closest('.pa_srow').querySelectorAll('input').forEach(function(i){i.value='';}); }
+      });
     })();</script>
     <?php endif; ?>
   </div>
