@@ -14,7 +14,7 @@ Der Kunde schreibt im Portal nur, was er will („etwas für besseren Schlaf, ve
 ## Funktionen
 - `rezeptur_ki_katalog()` – unsere Rohstoffe als Liste für die KI. Sie soll bevorzugt vorschlagen, was wir einkaufen können.
 - `rezeptur_ki_anweisung($form, $katalog)` – der Auftrag: Novel Food nach VO 2015/2283, Höchstmengen nach BfR/NRV, Claims nur aus der EU-Liste (VO 432/2012), im Zweifel „prüfen" statt raten.
-- `rezeptur_ki_entwickeln($anfrage_id)` – entwickelt den Vorschlag; nutzt Idee, Produktname und die vom Kunden genannten Wunschzutaten.
+- `rezeptur_ki_entwickeln($anfrage_id)` – entwickelt den Vorschlag; nutzt Idee, Produktname und die vom Kunden genannten Wunschzutaten. Jede Zutat trägt neben `item_id`/`item_name` auch die **`cas`** aus unserem Katalog (wenn der Rohstoff zugeordnet ist) – die wird im Vorschlag mit angezeigt, damit es bei der Zuordnung nicht zu Verwechslungen kommt.
 - `rezeptur_ki_item_finden($bezeichnung)` – Zuordnung zu unserem Rohstoff: exakt, dann ohne Klammerzusatz („Magnesiumbisglycinat (ca. 14 % Mg)" → „Magnesiumbisglycinat"), dann enthalten, zuletzt andersherum (unser Name steckt in der Bezeichnung der KI, ab 6 Zeichen, laengster Treffer gewinnt).
 - `rezeptur_ki_merken()` / `rezeptur_ki_vorschlag()` – Entwurf an der Anfrage.
 - `rezeptur_ki_zeilen_uebernehmen()` – Zutaten als Wunschzeilen schreiben (ersetzt die bisherigen).

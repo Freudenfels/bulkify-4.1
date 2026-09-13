@@ -184,7 +184,11 @@ if (!$neu):
         <tr><td><?= h($z['bezeichnung']) ?><?php if ($z['begruendung']): ?><div class="muted" style="font-size:12px"><?= h($z['begruendung']) ?></div><?php endif; ?></td>
             <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$z['menge_mg'], 3, ',', '.'), '0'), ',')) ?></td>
             <td><?= h($z['funktion']) ?></td>
-            <td><?= $z['item_id'] ? h($z['item_name']) : '<span class="muted">nicht im Katalog</span>' ?></td></tr>
+            <td><?php if ($z['item_id']): ?><?= h($z['item_name']) ?>
+                <?php // CAS aus dem Vorschlag oder – bei aelteren Vorschlaegen – frisch aus dem Katalog.
+                      $zcas = $z['cas'] ?? ''; if ($zcas === '') $zcas = (string) scalar("SELECT cas FROM item WHERE id=?", [(int)$z['item_id']]);
+                      if ($zcas !== ''): ?><div class="muted" style="font-size:12px">CAS <?= h($zcas) ?></div><?php endif; ?>
+                <?php else: ?><span class="muted">nicht im Katalog</span><?php endif; ?></td></tr>
       <?php endforeach; ?></tbody>
     </table></div>
     <?php endif; ?>

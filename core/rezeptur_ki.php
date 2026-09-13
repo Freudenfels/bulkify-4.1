@@ -103,6 +103,8 @@ function rezeptur_ki_entwickeln(int $anfrage_id): array {
             'menge_mg'    => $mg,
             'item_id'     => $iid,
             'item_name'   => $iid ? ($katalog[$iid] ?? (string) scalar("SELECT name FROM item WHERE id=?", [$iid])) : '',
+            // CAS aus unserem Katalog (wenn der Rohstoff zugeordnet ist) – hilft, Verwechslungen zu vermeiden.
+            'cas'         => $iid ? (string) scalar("SELECT cas FROM item WHERE id=?", [$iid]) : '',
             'funktion'    => mb_substr(trim((string)($z['funktion'] ?? '')), 0, 190),
             'begruendung' => mb_substr(trim((string)($z['begruendung'] ?? '')), 0, 400),
         ];
