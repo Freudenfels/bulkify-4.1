@@ -2190,9 +2190,9 @@ portal_head('Kundenportal · ' . $k['firma']);
 
 <?php elseif ($view === 'angebote'): ?>
   <h1 style="margin-bottom:4px">Ihre Angebote</h1>
-  <p class="muted" style="margin:0 0 16px">Übersicht Ihrer Angebote (Datenablage). Eine Menge auswählen und verbindlich annehmen können Sie unter „Meine Anfragen".</p>
+  <p class="muted" style="margin:0 0 16px">Übersicht Ihrer Angebote. Offene Angebote können Sie hier direkt prüfen, eine Menge wählen und verbindlich annehmen.</p>
   <?php if (!$angebote): ?><div class="bx-panel"><div class="muted">Aktuell liegen keine Angebote vor.</div></div><?php endif; ?>
-  <?php foreach ($angebote as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+  <?php foreach ($angebote as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = true; $open = ($a['status'] === 'gesendet'); include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
 
   <script>(function(){
     var h = location.hash; if (h && /^#a\d+$/.test(h)) { var d = document.querySelector(h); if (d && d.tagName === 'DETAILS') { d.open = true; d.scrollIntoView(); } }
