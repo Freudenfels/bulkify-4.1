@@ -1071,6 +1071,14 @@ function init_schema(): void {
         }
         meta_set('fix_anfrage_wunsch_v3', '1');
     }
+    // Einmalig: Standard-„Hinweis zur Herstellung" für Belege setzen (wie in v3), falls noch keiner hinterlegt
+    // ist. Überschreibt einen selbst gesetzten Text NICHT (nur bei leerem Wert, einmal per Marker).
+    if (meta_get('seed_beleg_hinweise', '') !== '1') {
+        if (trim((string) meta_get('bh_hinweis_herstellung', '')) === '') {
+            meta_set('bh_hinweis_herstellung', 'Aufgrund der Verwendung natürlicher Rohstoffe sowie produktionstechnischer Prozesse können geringfügige Abweichungen in Farbe, Geruch, Geschmack und Optik auftreten. Ebenso sind bei den Füllmengen produktionsbedingte Schwankungen von bis zu ± 10 % möglich. Diese Abweichungen stellen keinen Qualitätsmangel dar.');
+        }
+        meta_set('seed_beleg_hinweise', '1');
+    }
     // Rohstoff-Spezifikation (nur das Unterscheidende; Reinheits-Grenzwerte bleiben im PDF)
     ensure_column('item', 'synonym', "VARCHAR(60) NULL");            // z. B. RM940
     ensure_column('item', 'ec_nr', "VARCHAR(30) NULL");
@@ -3021,6 +3029,51 @@ function angebot_ki_pdf_uebernehmen(int $angebot_id, array $d): int {
     // Teil B: Verpackung/Etikett + Stück je Packung dauerhaft am Produkt hinterlegen (nur leere Slots).
     angebot_ki_produkt_verpackung($angebot_id, $d);
     return count($pos);
+}
+// Rechnungs-/AB-Positionen zu einem Auftrag: die EINZELPOSITIONEN der bestaetigten Konfiguration
+// (Herstellung + Verpackung + Deckel + Etikett …) wie im Angebot, statt einer Sammelposition.
+// Streng: nur wenn die Summe (Preis je Packung × Menge) EXAKT den Auftrags-Netto ergibt – sonst [].
+// So kann eine Rechnung nie eine falsche Summe zeigen; der Aufrufer faellt dann auf die Sammelposition zurueck.
+function beleg_positionen_aus_auftrag(array $auf, float $ustSatz): array {
+    $angId = (int)($auf['angebot_id'] ?? 0);
+    if ($angId <= 0) return [];
+    $menge = max(1, (int)($auf['menge'] ?? 0));
+    $zielCent = (int) round((float)($auf['gesamt_netto'] ?? 0) * 100);
+    if ($zielCent <= 0) return [];
+    $pos = angebot_positionen($angId);
+    if (!$pos) return [];
+    // Nach Konfigurations-Gruppe buendeln (A/B/C …; leer = einzige Gruppe).
+    $grp = [];
+    foreach ($pos as $p) { $grp[trim((string)($p['gruppe'] ?? ''))][] = $p; }
+    foreach ($grp as $rows) {
+        $sumPack = 0; foreach ($rows as $r) $sumPack += (int)$r['preis_cent'];   // Preis je Packung (alle Positionen)
+        if ($sumPack * $menge !== $zielCent) continue;                            // nur die exakt passende Gruppe
+        $out = [];
+        foreach ($rows as $r) {
+            $bez = preg_replace('/^[A-Z]\)\s*/', '', (string)$r['bezeichnung']);   // Gruppen-Buchstabe raus (eine Konfig)
+            $out[] = ['bezeichnung'=>$bez, 'beschreibung'=>(string)($r['beschreibung'] ?? ''),
+                      'menge'=>$menge, 'einheit'=>($r['einheit'] ?: 'Stk.'),
+                      'preis_cent'=>(int)$r['preis_cent'], 'ust_satz'=>$ustSatz];
+        }
+        return $out;
+    }
+    return [];
+}
+// „Preis je fertiges Produkt"-Zeile fuer Rechnung/AB (eine Konfiguration) – wie im Angebot.
+function beleg_staffel_aus_auftrag(array $auf): array {
+    $menge = max(1, (int)($auf['menge'] ?? 0));
+    $netto = (float)($auf['gesamt_netto'] ?? 0);
+    if ($netto <= 0) return [];
+    $packCent = (int) round($netto * 100 / $menge);
+    $stk = (int)($auf['stueck'] ?? 0);
+    $pid = (int)($auf['produkt_id'] ?? 0);
+    $form = $pid ? ((string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel') : 'kapsel';
+    $name = (string)($auf['produkt_name'] ?? '') ?: 'Produkt';
+    if ($stk > 0) $name .= ' · ' . form_groessen_label($form, (float)$stk);
+    return [[
+        'name' => $name, 'mpp' => $stk ?: 0,
+        'rows' => [['ab'=>$menge, 'stueck_cent'=>($stk>0 ? (int) round($packCent / $stk) : null), 'pack_cent'=>$packCent]],
+    ]];
 }
 function angebot_hat_positionen(int $angebot_id): bool {
     // Nur echte Positionen zählen – reine Null-Zeilen (v3-Import) gelten nicht als „manuell überschrieben".

@@ -1053,20 +1053,29 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
     $istInland = ($land === '' || in_array($land, ['DE','D','DEUTSCHLAND','GERMANY'], true));
     $ustSatz = $re ? (float)$re['ust_prozent'] : ($istInland ? (float) meta_get('ust_inland', 19) : 0.0);
 
-    // Eine Sammelposition aus der bestellten Konfiguration (Netto exakt aus Beleg bzw. Auftrag)
+    // Positionen: bevorzugt EINZELN wie im Angebot (Herstellung + Verpackung + Deckel + Etikett …) für die
+    // bestätigte Konfiguration. Passt die Summe nicht exakt zum Auftrags-Netto, greift die Sammelposition.
     $nettoGesamt = $re ? (float)$re['netto'] : (float)$auf['gesamt_netto'];
     $menge = max(1, (int)$auf['menge']);
-    $preisCent = (int) round($nettoGesamt * 100 / $menge);
-    $vName = $auf['verpackung_id'] ? scalar("SELECT name FROM item WHERE id=?", [(int)$auf['verpackung_id']]) : '';
-    $besch = trim(((int)$auf['stueck'] ? (int)$auf['stueck'] . ' Stück je Packung' : '') . ($vName ? ' · ' . $vName : ''), ' ·');
-    $positionen = [[
-        'bezeichnung'  => $auf['produkt_name'] ?: 'Produkt',
-        'beschreibung' => $besch,
-        'menge'        => $menge,
-        'einheit'      => 'Pkg.',
-        'preis_cent'   => $preisCent,
-        'ust_satz'     => $ustSatz,
-    ]];
+    $aufReco = ['angebot_id'=>$auf['angebot_id'] ?? null, 'menge'=>$menge, 'gesamt_netto'=>$nettoGesamt];
+    $positionen = beleg_positionen_aus_auftrag($aufReco, $ustSatz);
+    $produktStaffel = [];
+    if ($positionen) {
+        $produktStaffel = beleg_staffel_aus_auftrag(['menge'=>$menge, 'gesamt_netto'=>$nettoGesamt, 'stueck'=>$auf['stueck'] ?? 0, 'produkt_id'=>$auf['produkt_id'] ?? 0, 'produkt_name'=>$auf['produkt_name'] ?? '']);
+    } else {
+        // Fallback: eine Sammelposition (Netto exakt aus Beleg bzw. Auftrag).
+        $preisCent = (int) round($nettoGesamt * 100 / $menge);
+        $vName = $auf['verpackung_id'] ? scalar("SELECT name FROM item WHERE id=?", [(int)$auf['verpackung_id']]) : '';
+        $besch = trim(((int)$auf['stueck'] ? (int)$auf['stueck'] . ' Stück je Packung' : '') . ($vName ? ' · ' . $vName : ''), ' ·');
+        $positionen = [[
+            'bezeichnung'  => $auf['produkt_name'] ?: 'Produkt',
+            'beschreibung' => $besch,
+            'menge'        => $menge,
+            'einheit'      => 'Pkg.',
+            'preis_cent'   => $preisCent,
+            'ust_satz'     => $ustSatz,
+        ]];
+    }
 
     $adr = trim(($k['strasse'] ?? '') . ' ' . ($k['hausnummer'] ?? '')) . "\n" . trim(($k['plz'] ?? '') . ' ' . ($k['ort'] ?? ''));
     if (!$istInland && !empty($k['land'])) $adr .= "\n" . $k['land'];
@@ -1084,7 +1093,9 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
             'faellig_bis'       => date('Y-m-d', strtotime($datum . ' +' . $ziel . ' days')),
             'bezug'             => 'Auftrag ' . $auf['nummer'],
             'kopf_text'         => 'Wir berechnen Ihnen wie folgt:',
-            'hinweis'           => 'Zahlbar innerhalb von ' . $ziel . ' Tagen ohne Abzug.',
+            // Zahlungsziel gehört in die Zahlungsbedingung; „hinweis" bleibt frei -> Hinweis zur Herstellung
+            // kommt aus den Einstellungen (bh_hinweis_herstellung).
+            'zahlungsbedingung' => 'Zahlbar innerhalb von ' . $ziel . ' Tagen ohne Abzug.',
         ];
         $fname = 'Rechnung_' . $re['nummer'];
     } else {
@@ -1108,7 +1119,7 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
         'bearbeiter_email' => '',
     ];
 
-    $pdf = build_beleg_pdf($b, $positionen);
+    $pdf = build_beleg_pdf($b, $positionen, $produktStaffel);
     header('Content-Type: application/pdf');
     header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9_-]/', '', $fname) . '.pdf"');
     header('Content-Length: ' . strlen($pdf));
