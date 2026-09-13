@@ -227,28 +227,35 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
 
     // ---- Preis je fertiges Produkt (Staffel) ----
     if ($produktStaffel) {
-        if ($y > 620) { $p->addPage(); $y = 54; }
+        if ($y > 600) { $p->addPage(); $y = 54; }
         $y += 8;
+        $ustStaffel = isset($b['staffel_ust']) ? (float) $b['staffel_ust'] : 0.0;   // % für die Gesamt-inkl.-USt-Spalte
         $p->text($L, $y, 'Preis je fertiges Produkt', 10, true, $INK); $y += 6;
-        $iAb = 330; $iKap = 445; $iDose = $R;
+        // 6 Spalten: Produkt · ab Menge · je Packung · Gesamt netto · inkl. USt (rechtsbündige Zahlenspalten).
+        $iAb = 300; $iPk = 372; $iNet = 452; $iBr = $R;
         $p->text($L, $y + 9, 'Produkt', 8, true, $INK);
-        $p->textRight($iAb, $y + 9, 'ab Menge (Packungen)', 8, true, $INK);
-        $p->textRight($iKap, $y + 9, 'Stückpreis', 8, true, $INK);
-        $p->textRight($iDose, $y + 9, 'Preis/Packung', 8, true, $INK);
+        $p->textRight($iAb, $y + 9, 'ab Menge (Pkg.)', 8, true, $INK);
+        $p->textRight($iPk, $y + 9, 'Preis/Pkg.', 8, true, $INK);
+        $p->textRight($iNet, $y + 9, 'Gesamt netto', 8, true, $INK);
+        $p->textRight($iBr, $y + 9, $ustStaffel > 0 ? 'inkl. USt' : 'Gesamt', 8, true, $INK);
         $p->line($L, $y + 13, $R, $y + 13, 0.6, $INK); $y += 17;
         foreach ($produktStaffel as $g) {
-            $label = $p->fit($g['name'] . (!empty($g['mpp']) ? ' (' . beleg_num((float) $g['mpp']) . ' Stück/Packung)' : ''), 260, 9, true);
+            $label = $p->fit($g['name'] . (!empty($g['mpp']) ? ' (' . beleg_num((float) $g['mpp']) . ' Stück/Packung)' : ''), 235, 9, true);
             $first = true;
             foreach ($g['rows'] as $rw) {
                 if ($y > 778) { $p->addPage(); $y = 54; }
                 if ($first) { $p->text($L, $y + 8, $label, 9, true, $INK); $first = false; }
+                $netCent = (int) round((int) $rw['pack_cent'] * (float) $rw['ab']);
+                $brCent  = (int) round($netCent * (1 + $ustStaffel / 100));
                 $p->textRight($iAb, $y + 8, beleg_num((float) $rw['ab']), 9, false, $INK);
-                $p->textRight($iKap, $y + 8, isset($rw['stueck_cent']) ? beleg_eur((int) $rw['stueck_cent']) : '–', 9, false, $INK);
-                $p->textRight($iDose, $y + 8, beleg_eur((int) $rw['pack_cent']), 9, true, $INK);
+                $p->textRight($iPk, $y + 8, beleg_eur((int) $rw['pack_cent']), 9, false, $INK);
+                $p->textRight($iNet, $y + 8, beleg_eur($netCent), 9, false, $INK);
+                $p->textRight($iBr, $y + 8, beleg_eur($brCent), 9, true, $INK);
                 $y += 12; $p->line($L, $y, $R, $y, 0.3, $LINE);
             }
             $y += 3;
         }
+        if ($ustStaffel > 0) { $p->text($L, $y + 8, 'Gesamtpreise je Variante (Preis/Packung × Menge), „inkl. USt" mit ' . number_format($ustStaffel, 0, ',', '.') . ' % Umsatzsteuer.', 7, false, $GRAY); $y += 12; }
         $y += 8;
     }
 

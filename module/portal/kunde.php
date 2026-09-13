@@ -1132,6 +1132,7 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
         'zahlungsart_label'=> $za,
         'bearbeiter'       => '',
         'bearbeiter_email' => '',
+        'staffel_ust'      => $ustSatz,   // Gesamt-inkl.-USt-Spalte in „Preis je fertiges Produkt"
     ];
 
     $pdf = build_beleg_pdf($b, $positionen, $produktStaffel);

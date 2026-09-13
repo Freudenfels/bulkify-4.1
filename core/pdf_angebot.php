@@ -77,6 +77,7 @@ function angebot_pdf_bauen(int $angebot_id): ?string {
         'zahlungsart_label'=> $zaMap[$k['zahlungsart'] ?? 'vorkasse'] ?? ucfirst((string)($k['zahlungsart'] ?? 'Vorkasse')),
         'hinweis'          => '',
         'ohne_summen'      => $ohneSummen,   // mehrere Varianten -> keine Gesamtsumme, Preise je Variante unten
+        'staffel_ust'      => (meta_get('kleinunternehmer', '0') === '1' || !$istInland) ? 0.0 : (float) meta_get('ust_inland', 19),
     ], $positionen, $produktStaffel);
 }
 
