@@ -47,14 +47,11 @@ function angebot_pdf_bauen(int $angebot_id): ?string {
         if (count($opt['optionen']) > 1) $ohneSummen = true;
     }
 
-    // Begleittext: Hinweis aus der Notiz („Aus Anfrage X — <Hinweis>") plus Produktionszeit.
+    // Begleittext: Hinweis aus der Notiz („Aus Anfrage X — <Hinweis>").
     $teamNote = '';
     if (preg_match('/—\s*(.+)$/u', (string)$a['notiz'], $mm)) $teamNote = trim($mm[1]);
-    $pz = ($a['produktionszeit_wochen'] ?? '') !== '' && $a['produktionszeit_wochen'] !== null
-        ? (float)$a['produktionszeit_wochen'] : (float) meta_get('produktionszeit_wochen', 7);
     $kopf = 'Vielen Dank für Ihre Anfrage. Gerne bieten wir Ihnen an:'
-          . ($teamNote !== '' ? "\n" . $teamNote : '')
-          . "\nProduktionszeit: ca. " . rtrim(rtrim(number_format($pz, 1, ',', '.'), '0'), ',') . ' Wochen (unverbindlich).';
+          . ($teamNote !== '' ? "\n" . $teamNote : '');
 
     $adr = trim(($k['strasse'] ?? '') . ' ' . ($k['hausnummer'] ?? '')) . "\n" . trim(($k['plz'] ?? '') . ' ' . ($k['ort'] ?? ''));
     if (!$istInland && !empty($k['land'])) $adr .= "\n" . $k['land'];

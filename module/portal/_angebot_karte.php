@@ -47,7 +47,6 @@ if ($a['status'] === 'bestaetigt') {
   <?php if ($inf['verp'] || $inf['deckel'] || $inf['etikett']): ?>
   <div class="muted" style="font-size:13px"><?= $inf['verp'] ? 'Verpackung: ' . h($inf['verp']) : '' ?><?= $inf['deckel'] ? ' · Deckel: ' . h($inf['deckel']) : '' ?><?= $inf['etikett'] ? ' · Etikett: ' . h($inf['etikett']) : '' ?></div>
   <?php endif; ?>
-  <div class="muted" style="font-size:13px">Produktionszeit: <strong><?= 'ca. ' . rtrim(rtrim(number_format($inf['prodzeit'],1,',','.'),'0'),',') . ' Wochen' ?></strong> (unverbindlicher Schätzwert)</div>
 
   <?php if ($inf['zutaten']): ?>
   <details style="margin-top:10px">
@@ -81,7 +80,7 @@ if ($a['status'] === 'bestaetigt') {
             $pCent = verpackung_cent_je_pack((int)$a['produkt_id'], $bm, $kid, (int)$cell['verp']);
             $vk = ($hCent + $pCent) / 100; $netto = ($hCent + $pCent) * $bm / 100; $brutto = $netto * (1 + $ustP/100); ?>
           <td><strong><?= $eur($vk) ?> / Pkg.</strong><div class="muted" style="font-size:12px"><?= $pCent > 0 ? 'Herstellung ' . $eur($hCent/100) . ' + Verpackung ' . $eur($pCent/100) . ' · ' : '' ?>Gesamt <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto (inkl. ' . $mg($ustP) . ' % MwSt)' : '' ?></div></td>
-          <td class="bx-num"><?php if ($canAccept): ?><button class="btn btn-primary btn-sm" style="white-space:nowrap" type="button" onclick="bxBestaetigen('Menge verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich. Die Produktionszeit ist ein unverbindlicher Sch&auml;tzwert.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'zelle_annehmen', angebot_id:'<?= (int)$a['id'] ?>', stueck:'<?= $stk ?>', verpackung_id:'<?= (int)$cell['verp'] ?>', bestellmenge:'<?= $bm ?>'}, <?= $upsellJs ?>)">Diese Menge annehmen</button><?php endif; ?></td>
+          <td class="bx-num"><?php if ($canAccept): ?><button class="btn btn-primary btn-sm" style="white-space:nowrap" type="button" onclick="bxBestaetigen('Menge verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'zelle_annehmen', angebot_id:'<?= (int)$a['id'] ?>', stueck:'<?= $stk ?>', verpackung_id:'<?= (int)$cell['verp'] ?>', bestellmenge:'<?= $bm ?>'}, <?= $upsellJs ?>)">Diese Menge annehmen</button><?php endif; ?></td>
         <?php else: ?>
           <td><?= bx_badge('Nicht machbar','err') ?><div class="muted" style="font-size:12px">Diese Menge ist so nicht produzierbar</div></td>
           <td></td>
@@ -114,7 +113,7 @@ if ($a['status'] === 'bestaetigt') {
         </td>
         <td class="bx-num">
           <?php if ($canAccept && $o['waehlbar']): ?>
-          <button class="btn btn-primary btn-sm" style="white-space:nowrap" type="button" onclick="bxBestaetigen('Menge verbindlich annehmen', '<div class=\'bx-panel\' style=\'margin:0 0 12px;padding:12px 14px\'><strong><?= h(trim(($o['groesse'] !== '' ? $o['groesse'] : $o['titel']) . ($o['verpackung'] !== '' ? ' · ' . $o['verpackung'] : ''))) ?></strong><br><?= number_format($o['pakete'], 0, ',', '.') ?> Packungen · <?= $eur($o['pro_pkg']) ?> je Packung<br>Gesamt <?= $eur($o['netto']) ?> netto<?= $ustP > 0 ? ' · ' . $eur($o['netto'] * (1 + $ustP/100)) . ' brutto' : '' ?></div>Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich. Die Produktionszeit ist ein unverbindlicher Sch&auml;tzwert.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'angebot_annehmen', angebot_id:'<?= (int)$a['id'] ?>', gruppe:'<?= h($o['gruppe']) ?>'}, <?= $upsellJs ?>)">Diese Menge annehmen</button>
+          <button class="btn btn-primary btn-sm" style="white-space:nowrap" type="button" onclick="bxBestaetigen('Menge verbindlich annehmen', '<div class=\'bx-panel\' style=\'margin:0 0 12px;padding:12px 14px\'><strong><?= h(trim(($o['groesse'] !== '' ? $o['groesse'] : $o['titel']) . ($o['verpackung'] !== '' ? ' · ' . $o['verpackung'] : ''))) ?></strong><br><?= number_format($o['pakete'], 0, ',', '.') ?> Packungen · <?= $eur($o['pro_pkg']) ?> je Packung<br>Gesamt <?= $eur($o['netto']) ?> netto<?= $ustP > 0 ? ' · ' . $eur($o['netto'] * (1 + $ustP/100)) . ' brutto' : '' ?></div>Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'angebot_annehmen', angebot_id:'<?= (int)$a['id'] ?>', gruppe:'<?= h($o['gruppe']) ?>'}, <?= $upsellJs ?>)">Diese Menge annehmen</button>
           <?php elseif ($canAccept): ?><span class="muted" style="font-size:12px">Bitte kurz melden</span><?php endif; ?>
         </td>
       </tr>
@@ -145,7 +144,7 @@ if ($a['status'] === 'bestaetigt') {
   <?php if ($canAccept): ?>
   <div class="bx-row" style="justify-content:flex-end;margin-top:10px">
     <?php if ($inf['annehmbar']): ?>
-    <button class="btn btn-primary" type="button" onclick="bxBestaetigen('Angebot verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich. Die Produktionszeit ist ein unverbindlicher Sch&auml;tzwert.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'angebot_annehmen', angebot_id:'<?= (int)$a['id'] ?>'}, <?= $upsellJs ?>)">Angebot annehmen</button>
+    <button class="btn btn-primary" type="button" onclick="bxBestaetigen('Angebot verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'angebot_annehmen', angebot_id:'<?= (int)$a['id'] ?>'}, <?= $upsellJs ?>)">Angebot annehmen</button>
     <?php else: ?><div class="muted">Zum Annehmen bitte kurz bei uns melden.</div><?php endif; ?>
   </div>
   <?php endif; ?>
@@ -156,7 +155,7 @@ if ($a['status'] === 'bestaetigt') {
     <?php foreach ($st as $s): $vk = vk_fuer_kunde((float)$s['vk_stueck'], $kid); $netto = $vk * (int)$s['menge']; $brutto = $netto * (1 + $ustP/100); ?>
       <tr><td><?= number_format((int)$s['menge'],0,',','.') ?> × <?= h($paketLbl((int)($s['stueck'] ?? 0))) ?></td>
         <td><strong><?= $eur($vk) ?></strong><div class="muted" style="font-size:12px">Gesamt <?= $eur($netto) ?> netto<?= $ustP>0?' · '.$eur($brutto).' brutto':'' ?></div></td>
-        <td class="bx-num"><?php if ($canAccept): ?><button class="btn btn-primary btn-sm" style="white-space:nowrap" type="button" onclick="bxBestaetigen('Menge verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich. Die Produktionszeit ist ein unverbindlicher Sch&auml;tzwert.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'bestaetigen', angebot_id:'<?= (int)$a['id'] ?>', staffel:'<?= (int)$s['id'] ?>'}, <?= $upsellJs ?>)">Diese Menge annehmen</button><?php endif; ?></td></tr>
+        <td class="bx-num"><?php if ($canAccept): ?><button class="btn btn-primary btn-sm" style="white-space:nowrap" type="button" onclick="bxBestaetigen('Menge verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'bestaetigen', angebot_id:'<?= (int)$a['id'] ?>', staffel:'<?= (int)$s['id'] ?>'}, <?= $upsellJs ?>)">Diese Menge annehmen</button><?php endif; ?></td></tr>
     <?php endforeach; ?>
     </tbody>
   </table></div>

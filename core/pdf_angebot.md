@@ -22,8 +22,8 @@ Stand des Angebots. Änderst du Positionen, ändert sich das PDF mit.
 ## Was ins PDF kommt
 - **Kopf:** Angebotsnummer, Datum, **Gültig bis** (aus `angebot.gueltig_bis`, sonst Datum +
   `angebot_gueltig_tage`), Kundennummer, Bezug zur Anfrage, Anschrift und USt-IdNr. des Kunden.
-- **Begleittext:** der Hinweis aus der Notiz (alles nach dem „—") plus die Produktionszeit
-  (Angebot vor globalem Wert), ausdrücklich als unverbindlich.
+- **Begleittext:** der Hinweis aus der Notiz (alles nach dem „—"). Eine Produktionszeit
+  wird bewusst **nicht** ausgewiesen (weder im PDF noch auf der Portal-Karte).
 - **Positionen:** die gespeicherten Positionen, sonst die automatische Kalkulation.
   Bei einem Angebot mit **mehreren Varianten** (Gruppen A, B, C) nur die erste Variante plus die
   gruppenlosen Zuschläge – die Gruppen sind eine *Wahl*, keine Bestellzeilen; sonst stünde unter
