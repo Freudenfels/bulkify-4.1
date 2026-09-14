@@ -101,8 +101,11 @@ AB/RE zeigen die **Einzelpositionen** der bestätigten Konfiguration – Herstel
 **Meine Produktanfragen (View prodanfrage):** Tabelle mit Status; sobald ein Angebot vorliegt (`angebot.anfrage_id = portal_anfrage.id`), erscheint je Zeile ein Button **„Zum Angebot"** → `v=angebote#a<angebot_id>` (springt per Anker `id="a<ID>"` direkt zur Angebotskarte). Die Verknüpfung wird per Subquery ermittelt; Altangebote wurden per Backfill aus der Notiz „Aus Anfrage PAF-…" auf `anfrage_id` gesetzt.
 
 **Sicherheit/Ausblick:** aktuell passwortloser Token-Link (Vorschau). Später echtes Login/Rollen; Lieferanten-/Partner-Portal nach demselben Muster.
-## E-Mail bei Annahme
-Nimmt der Kunde ein Angebot an (`angebot_annehmen` oder `bestaetigen`), geht eine Auftragsbestätigung an ihn und ein Hinweis an alle Admins (`mail_angebot_angenommen()` in `core/mail.php`) – nur wenn der Versand eingerichtet ist. Der Kunde sieht Mailfehler nicht; sie stehen in `data/mail.log`.
+## E-Mail bei Anfrage und Annahme
+- **Anfrageneingang:** Schickt der Kunde eine Anfrage (`anfrage_senden` = Rezeptur, `produkt_anfrage`, `rohstoff_anfrage`, `dienstleistung_anfrage`), geht ihm eine **Eingangsbestätigung** (`mail_kunde_anfrage_eingang()`). Bei mehreren Rohstoffen in einer Absendung nur **eine** Mail (Portal-Link zeigt alle).
+- **Annahme:** Nimmt der Kunde ein Angebot an, geht eine Auftragsbestätigung an ihn und ein Hinweis an alle Admins (`mail_angebot_angenommen()`) – bei **allen drei** Annahme-Wegen: `bestaetigen` (Staffel), `angebot_annehmen` (Positionen) und `zelle_annehmen` (Matrix-Zelle).
+
+Beides nur bei eingerichtetem Versand (`mail_bereit()`); der Wortlaut ist unter **Einstellungen → E-Mail-Texte** editierbar. Der Kunde sieht Mailfehler nicht; sie stehen in `data/mail.log`.
 ## Rezepturanfrage löst einen Entwurf aus
 Schickt der Kunde eine Rezepturanfrage, entwickelt die KI sofort einen internen Entwurf (`rezeptur_ki_entwickeln()`), sofern sie eingerichtet ist. Der Kunde sieht davon nichts; das Team findet ihn beim Öffnen der Anfrage.
 
