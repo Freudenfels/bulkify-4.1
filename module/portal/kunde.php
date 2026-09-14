@@ -133,6 +133,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
             q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
             log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal verbindlich bestätigt durch ' . $name . '.', 'angebot', 'angebot', $aid);
             portal_labortest_upsell($k, $aid);
+            if (mail_bereit()) mail_angebot_angenommen($aid, $auf);
             header('Location: ?p=portal&token=' . $token . '&v=bestellungen&ok=1'); exit;
         }
     }
@@ -171,6 +172,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
           [$aid, $b, trim($wm[$i] ?? ''), trim($we[$i] ?? 'mg'), $i]);
     }
     log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Neue Rezepturanfrage im Portal eingereicht.', 'anfrage', 'anfrage', $aid);
+    if (mail_bereit()) mail_kunde_anfrage_eingang('rezeptur', (int)$aid);
     // Gleich einen Rezepturentwurf entwickeln lassen – das Team findet ihn beim Öffnen der Anfrage
     // vor und muss nicht bei null anfangen. Der Kunde sieht davon nichts; es ist ein interner Entwurf.
     // Wichtig: gerechnet wird im Hintergrund (?p=ki_job). Die KI braucht bis zu einer Minute –
@@ -369,6 +371,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
                   [$paf, $pid ?: null, $rezWahl ?: null, $stk, $fgv, $vtyp, $z['vpe'], $sort++]);
             }
             log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Produktanfrage im Portal gestellt' . (count($zeilen) > 1 ? ' (' . count($zeilen) . ' Staffeln)' : '') . '.', 'anfrage');
+            if (mail_bereit()) mail_kunde_anfrage_eingang('portal', (int)$paf);
         }
     }
     // Auf der Anfragenliste landen statt zurück im Katalog – dort sieht der Kunde seine Anfrage sofort stehen.
@@ -379,7 +382,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     if ($k['portal_rohstoffe']) {
         $namen = $_POST['roh_name'] ?? []; $mengen = $_POST['roh_menge'] ?? []; $einh = $_POST['roh_einheit'] ?? [];
         $ziele = $_POST['roh_zielpreis'] ?? []; $notizen = $_POST['roh_notiz'] ?? [];
-        $n = 0;
+        $n = 0; $erstePaf = 0;
         foreach ($namen as $i => $nm) {
             $nm = trim((string)$nm); if ($nm === '') continue;
             $wm = (float) str_replace(',', '.', (string)($mengen[$i] ?? '0'));
@@ -388,9 +391,14 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
             $rid = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND name=? LIMIT 1", [$nm]);   // Katalog-Treffer -> item-Id
             q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,betreff,notiz,wunsch_menge,wunsch_einheit,rohstoff_id,zielpreis,status) VALUES (?,?, 'rohstoff', ?,?,?,?,?,?, 'neu')",
               [naechste_nummer('PAF'), (int)$k['id'], $nm, trim((string)($notizen[$i] ?? '')), $wm > 0 ? $wm : null, $wm > 0 ? $we : null, $rid ?: null, $zp > 0 ? $zp : null]);
+            if (!$erstePaf) $erstePaf = insert_id();
             $n++;
         }
-        if ($n) log_aktivitaet('kunde', (int)$k['id'], 'kunde', $n . ' Rohstoffanfrage(n) im Portal gestellt.', 'anfrage');
+        if ($n) {
+            log_aktivitaet('kunde', (int)$k['id'], 'kunde', $n . ' Rohstoffanfrage(n) im Portal gestellt.', 'anfrage');
+            // Eine Eingangsbestätigung für die Absendung (Portal-Link zeigt alle Positionen).
+            if (mail_bereit() && $erstePaf) mail_kunde_anfrage_eingang('portal', (int)$erstePaf);
+        }
     }
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
 }
@@ -425,6 +433,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
                 }
             }
             log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Dienstleistungsanfrage (' . $DIENST_TYPEN[$dtyp] . ') im Portal gestellt.', 'anfrage');
+            if (mail_bereit()) mail_kunde_anfrage_eingang('portal', (int)$aid);
         }
     }
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;

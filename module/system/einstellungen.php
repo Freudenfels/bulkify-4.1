@@ -19,6 +19,7 @@ $TABS = [
     'nummern'    => 'Nummernkreise',
     'fulfillment'=> 'Fulfillment-Schnittstelle',
     'mail'       => 'E-Mail',
+    'mailtext'   => 'E-Mail-Texte',
     'ki'         => 'KI (Claude)',
     'agb'        => 'AGB',
     'testlogin'  => 'Testlogin',
@@ -59,6 +60,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mail_test') {
         "Diese Testmail kommt aus dem bulkify-Dashboard.\n\nWenn sie ankommt, ist der Versand richtig eingerichtet:\n"
         . "Lieferanten-Einladungen und Benachrichtigungen gehen dann denselben Weg.\n\n" . $fa['name']);
     header('Location: ?p=einstellungen&tab=mail&' . ($f === '' ? 'mailok=1' : 'mailfehler=' . urlencode($f))); exit;
+}
+// --- E-Mail-Texte: einen Vorlagentext speichern. Leerer Betreff/Text = zurück auf Standard. ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mailtext_save') {
+    $key = (string)($_POST['key'] ?? '');
+    if (array_key_exists($key, mail_vorlagen())) {
+        meta_set('mailtpl_' . $key . '_betreff', trim((string)($_POST['betreff'] ?? '')));
+        meta_set('mailtpl_' . $key . '_text', rtrim((string)($_POST['text'] ?? '')));
+    }
+    header('Location: ?p=einstellungen&tab=mailtext&ok=1#tpl_' . $key); exit;
+}
+// --- E-Mail-Texte: eine Vorlage auf den Standardtext zurücksetzen. ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mailtext_reset') {
+    $key = (string)($_POST['key'] ?? '');
+    if (array_key_exists($key, mail_vorlagen())) {
+        meta_set('mailtpl_' . $key . '_betreff', '');
+        meta_set('mailtpl_' . $key . '_text', '');
+    }
+    header('Location: ?p=einstellungen&tab=mailtext&reset=1#tpl_' . $key); exit;
 }
 // --- AGB: neue Fassung speichern (die bisherige bleibt als Beleg erhalten) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'agb_save') {
@@ -666,6 +685,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <tbody>
       <tr><td>Lieferant einladen</td><td>Lieferant</td></tr>
       <tr><td>Bestellung erteilt (als bestellt markiert oder aus der Einkaufsliste mit Bestelldatum)</td><td>Lieferant, in seiner Sprache</td></tr>
+      <tr><td>Kunde stellt eine Anfrage (Rezeptur, Produkt, Rohstoff, Dienstleistung)</td><td>Kunde (Eingangsbestätigung)</td></tr>
       <tr><td>Angebot an den Kunden gesendet</td><td>Kunde, mit Link ins Portal</td></tr>
       <tr><td>Kunde nimmt ein Angebot an</td><td>Kunde (Auftragsbestätigung) und alle Admins</td></tr>
       <tr><td>Anfrage abgesagt (nicht machbar)</td><td>Kunde, mit Begründung</td></tr>
@@ -686,6 +706,52 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <button class="btn btn-ghost" type="submit">Testmail senden</button>
   </form>
 </div>
+<?php endif; ?>
+<?php if ($tab === 'mailtext'): ?>
+<div class="bx-panel">
+  <h2>E-Mail-Texte an Kunden</h2>
+  <p class="muted" style="margin-top:0">Wortlaut der automatischen Kunden-Mails. Platzhalter in geschweiften Klammern (z. B. <code>{anrede}</code>) werden beim Versand ersetzt. Ein leeres Feld speichern heißt: der Standardtext gilt wieder. Kunden werden immer auf Deutsch angeschrieben; die Mails an Lieferanten (mehrsprachig) und die internen Team-Hinweise sind hier bewusst nicht enthalten.</p>
+  <?php if (isset($_GET['ok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Text gespeichert.</div><?php endif; ?>
+  <?php if (isset($_GET['reset'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Auf den Standardtext zurückgesetzt.</div><?php endif; ?>
+</div>
+<?php foreach (mail_vorlagen() as $key => $v):
+    $eff = mail_vorlage($key);
+    $eigen = trim((string) meta_get('mailtpl_' . $key . '_betreff', '')) !== '' || trim((string) meta_get('mailtpl_' . $key . '_text', '')) !== '';
+?>
+<div class="bx-panel" id="tpl_<?= h($key) ?>" style="scroll-margin-top:16px">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <h2 style="margin:0"><?= h($v['titel']) ?></h2>
+    <?= $eigen ? bx_badge('angepasst', 'info') : '<span class="muted" style="font-size:12px">Standardtext</span>' ?>
+  </div>
+  <p class="muted" style="margin:6px 0 12px"><?= h($v['beschreibung']) ?></p>
+  <form method="post">
+    <input type="hidden" name="aktion" value="mailtext_save">
+    <input type="hidden" name="key" value="<?= h($key) ?>">
+    <div class="bx-field"><label>Betreff</label>
+      <input type="text" name="betreff" value="<?= h($eff['betreff']) ?>"></div>
+    <div class="bx-field"><label>Text</label>
+      <textarea name="text" rows="<?= max(8, substr_count($eff['text'], "\n") + 2) ?>" style="font-family:inherit;line-height:1.5"><?= h($eff['text']) ?></textarea></div>
+    <div class="bx-field">
+      <label>Verfügbare Platzhalter</label>
+      <div class="bx-tablewrap"><table class="bx-table" style="max-width:640px">
+        <tbody>
+        <?php foreach ($v['platzhalter'] as $ph => $beschr): ?>
+          <tr><td style="white-space:nowrap"><code>{<?= h($ph) ?>}</code></td><td><?= h($beschr) ?></td></tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    </div>
+    <button class="btn btn-primary" type="submit">Speichern</button>
+  </form>
+  <?php if ($eigen): ?>
+  <form method="post" style="margin-top:8px" onsubmit="return confirm('Diesen Text auf den Standard zurücksetzen? Ihre Anpassung geht dabei verloren.')">
+    <input type="hidden" name="aktion" value="mailtext_reset">
+    <input type="hidden" name="key" value="<?= h($key) ?>">
+    <button class="btn btn-ghost btn-sm" type="submit">Auf Standardtext zurücksetzen</button>
+  </form>
+  <?php endif; ?>
+</div>
+<?php endforeach; ?>
 <?php endif; ?>
 <?php if ($tab === 'testlogin'):
     $tlBis    = (string) meta_get('testlogin_bis', '');

@@ -253,7 +253,141 @@ function mail_kunde_anrede(array $k): string {
     return $a !== '' ? $a : (string)($k['firma'] ?? '');
 }
 
+// --- Editierbare E-Mail-Vorlagen (Kunde, Deutsch) ---------------------------
+// Die Texte der Kunden-Mails lassen sich unter Einstellungen → E-Mail-Texte
+// anpassen. Solange nichts hinterlegt ist, gilt der Standardtext hier – das
+// Verhalten ist dann identisch zum bisherigen fest verdrahteten Wortlaut.
+// Platzhalter in {geschweiften Klammern} werden beim Versand ersetzt.
+
+function mail_vorlagen(): array {
+    return [
+        'anfrage_eingang' => [
+            'titel'        => 'Anfrage eingegangen',
+            'beschreibung' => 'Bestätigung an den Kunden, sobald er im Portal eine Anfrage abgeschickt hat (Rezeptur, Produkt, Rohstoff oder Dienstleistung).',
+            'betreff'      => 'Ihre Anfrage {nummer} ist bei uns eingegangen',
+            'text'         => "Guten Tag {anrede},\n\n"
+                            . "vielen Dank für Ihre Anfrage {nummer}{betreff_hinweis}.\n"
+                            . "Wir haben sie erhalten und melden uns mit einem Angebot bei Ihnen.\n\n"
+                            . "Den Stand Ihrer Anfragen sehen Sie jederzeit im Kundenportal:\n{link}\n\n"
+                            . "Viele Grüße\n{absender}",
+            'platzhalter'  => [
+                'anrede'         => 'Ansprechpartner des Kunden (sonst Firma)',
+                'nummer'         => 'Nummer der Anfrage (z. B. RZA-2026-0001)',
+                'betreff'        => 'Betreff / Thema der Anfrage',
+                'betreff_hinweis'=> 'Betreff in Klammern, z. B. („Magnesium Komplex") – oder leer',
+                'link'           => 'Link ins Kundenportal',
+                'absender'       => 'Ihr Firmenname (Absender)',
+            ],
+        ],
+        'angebot' => [
+            'titel'        => 'Angebot ist da',
+            'beschreibung' => 'Geht an den Kunden, sobald ihm ein Angebot ins Portal gesendet wird.',
+            'betreff'      => 'Ihr Angebot {nummer} von {absender}',
+            'text'         => "Guten Tag {anrede},\n\n"
+                            . "Ihr Angebot {nummer} liegt im Kundenportal bereit{gueltig_hinweis}.\n"
+                            . "Dort sehen Sie alle Varianten und können die passende verbindlich annehmen:\n{link}\n\n"
+                            . "Bei Fragen antworten Sie einfach auf diese E-Mail.\n\n"
+                            . "Viele Grüße\n{absender}",
+            'platzhalter'  => [
+                'anrede'         => 'Ansprechpartner des Kunden (sonst Firma)',
+                'nummer'         => 'Nummer des Angebots',
+                'gueltig_bis'    => 'Gültig-bis-Datum, z. B. 31.12.2026 – oder leer',
+                'gueltig_hinweis'=> 'Fertiger Zusatz „ und gilt bis 31.12.2026" – oder leer',
+                'link'           => 'Link ins Kundenportal (Angebote)',
+                'absender'       => 'Ihr Firmenname (Absender)',
+            ],
+        ],
+        'auftrag' => [
+            'titel'        => 'Auftragsbestätigung',
+            'beschreibung' => 'Geht an den Kunden, sobald er ein Angebot verbindlich angenommen hat.',
+            'betreff'      => 'Auftragsbestätigung {auftrag_nummer} von {absender}',
+            'text'         => "Guten Tag {anrede},\n\n"
+                            . "vielen Dank, Sie haben das Angebot {angebot_nummer} verbindlich angenommen.\n"
+                            . "{auftrag_zeile}"
+                            . "Den Stand des Auftrags und die Rechnung finden Sie im Kundenportal:\n{link}\n\n"
+                            . "Viele Grüße\n{absender}",
+            'platzhalter'  => [
+                'anrede'        => 'Ansprechpartner des Kunden (sonst Firma)',
+                'angebot_nummer'=> 'Nummer des angenommenen Angebots',
+                'auftrag_nummer'=> 'Nummer des Auftrags (z. B. AB-2026-0001)',
+                'auftrag_zeile' => 'Fertige Zeile „Wir führen den Auftrag unter der Nummer AB-…" – oder leer',
+                'link'          => 'Link ins Kundenportal (Bestellungen)',
+                'absender'      => 'Ihr Firmenname (Absender)',
+            ],
+        ],
+        'absage' => [
+            'titel'        => 'Anfrage nicht machbar',
+            'beschreibung' => 'Geht an den Kunden, wenn eine Anfrage als „nicht machbar" abgesagt wird.',
+            'betreff'      => 'Ihre Anfrage {nummer}: leider nicht machbar',
+            'text'         => "Guten Tag {anrede},\n\n"
+                            . "wir haben Ihre Anfrage {nummer}{betreff_hinweis} geprüft und können sie leider nicht umsetzen.\n\n"
+                            . "Grund:\n{grund}\n\n"
+                            . "Wenn Sie eine angepasste Variante anfragen möchten, geht das jederzeit über das Kundenportal:\n{link}\n\n"
+                            . "Viele Grüße\n{absender}",
+            'platzhalter'  => [
+                'anrede'         => 'Ansprechpartner des Kunden (sonst Firma)',
+                'nummer'         => 'Nummer der Anfrage',
+                'betreff'        => 'Betreff / Thema der Anfrage',
+                'betreff_hinweis'=> 'Betreff in Klammern – oder leer',
+                'grund'          => 'Begründung der Absage',
+                'link'           => 'Link ins Kundenportal',
+                'absender'       => 'Ihr Firmenname (Absender)',
+            ],
+        ],
+    ];
+}
+
+// Effektiver Betreff/Text einer Vorlage: hinterlegte Fassung, sonst Standard.
+// Leerer gespeicherter Wert = zurück auf Standard (so wirkt „Feld leeren + speichern").
+function mail_vorlage(string $key): array {
+    $def = mail_vorlagen()[$key] ?? null;
+    if (!$def) return ['betreff' => '', 'text' => ''];
+    $b = trim((string) meta_get('mailtpl_' . $key . '_betreff', ''));
+    $t = (string) meta_get('mailtpl_' . $key . '_text', '');
+    return [
+        'betreff' => $b !== '' ? $b : $def['betreff'],
+        'text'    => trim($t) !== '' ? $t : $def['text'],
+    ];
+}
+
+// Vorlage rendern: Platzhalter {name} durch die Werte aus $vars ersetzen.
+function mail_render(string $key, array $vars): array {
+    $v = mail_vorlage($key);
+    $such = []; $ers = [];
+    foreach ($vars as $name => $wert) { $such[] = '{' . $name . '}'; $ers[] = (string)$wert; }
+    return [
+        'betreff' => str_replace($such, $ers, $v['betreff']),
+        'text'    => str_replace($such, $ers, $v['text']),
+    ];
+}
+
 // --- Vorlagen Kunde (Kunden werden auf Deutsch angeschrieben) ----------------
+
+// Eingangsbestätigung für eine Kundenanfrage. $quelle: 'portal' (portal_anfrage)
+// oder 'rezeptur' (rezeptur_anfrage). Gibt '' zurück, wenn verschickt.
+function mail_kunde_anfrage_eingang(string $quelle, int $id): string {
+    if ($quelle === 'rezeptur') {
+        $p = one("SELECT r.nummer, r.produktname AS betreff, r.kunde_id, k.firma, k.ansprechpartner, k.email
+                  FROM rezeptur_anfrage r JOIN kunden k ON k.id=r.kunde_id WHERE r.id=?", [$id]);
+    } else {
+        $p = one("SELECT p.nummer, p.betreff, p.kunde_id, k.firma, k.ansprechpartner, k.email
+                  FROM portal_anfrage p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [$id]);
+    }
+    if (!$p) return 'Anfrage oder Kunde nicht gefunden.';
+    if (trim((string)$p['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
+    $fa   = beleg_firma();
+    $link = mail_link_kundenportal((int)$p['kunde_id'], 'meine_anfragen');
+    $bet  = trim((string)($p['betreff'] ?? ''));
+    $m = mail_render('anfrage_eingang', [
+        'anrede'         => mail_kunde_anrede($p),
+        'nummer'         => (string)$p['nummer'],
+        'betreff'        => $bet,
+        'betreff_hinweis'=> $bet !== '' ? ' („' . $bet . '")' : '',
+        'link'           => $link,
+        'absender'       => $fa['name'],
+    ]);
+    return mail_senden((string)$p['email'], $m['betreff'], $m['text']);
+}
 
 // Ein Angebot wurde an den Kunden gesendet: er bekommt den Link ins Portal.
 function mail_kunde_angebot(int $angebot_id): string {
@@ -264,12 +398,15 @@ function mail_kunde_angebot(int $angebot_id): string {
     $fa   = beleg_firma();
     $link = mail_link_kundenportal((int)$a['kunde_id'], 'angebote');
     $bis  = $a['gueltig_bis'] ? date('d.m.Y', strtotime((string)$a['gueltig_bis'])) : '';
-    $betreff = 'Ihr Angebot ' . $a['nummer'] . ' von ' . $fa['name'];
-    $text = "Guten Tag " . mail_kunde_anrede($a) . ",\n\n"
-          . "Ihr Angebot " . $a['nummer'] . " liegt im Kundenportal bereit" . ($bis !== '' ? " und gilt bis $bis" : '') . ".\n"
-          . "Dort sehen Sie alle Varianten und können die passende verbindlich annehmen:\n$link\n\n"
-          . "Bei Fragen antworten Sie einfach auf diese E-Mail.\n\nViele Grüße\n" . $fa['name'];
-    return mail_senden((string)$a['email'], $betreff, $text);
+    $m = mail_render('angebot', [
+        'anrede'         => mail_kunde_anrede($a),
+        'nummer'         => (string)$a['nummer'],
+        'gueltig_bis'    => $bis,
+        'gueltig_hinweis'=> $bis !== '' ? ' und gilt bis ' . $bis : '',
+        'link'           => $link,
+        'absender'       => $fa['name'],
+    ]);
+    return mail_senden((string)$a['email'], $m['betreff'], $m['text']);
 }
 
 // Der Kunde hat ein Angebot angenommen: Bestätigung an den Kunden, Hinweis ans Team.
@@ -289,13 +426,15 @@ function mail_angebot_angenommen(int $angebot_id, ?int $auftrag_id = null): stri
 
     if (trim((string)$a['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
     $link = mail_link_kundenportal((int)$a['kunde_id'], 'bestellungen');
-    $betreff = 'Auftragsbestätigung' . ($aufNr !== '' ? ' ' . $aufNr : '') . ' von ' . $fa['name'];
-    $text = "Guten Tag " . mail_kunde_anrede($a) . ",\n\n"
-          . "vielen Dank, Sie haben das Angebot " . $a['nummer'] . " verbindlich angenommen.\n"
-          . ($aufNr !== '' ? "Wir führen den Auftrag unter der Nummer $aufNr.\n" : '')
-          . "Den Stand des Auftrags und die Rechnung finden Sie im Kundenportal:\n$link\n\n"
-          . "Viele Grüße\n" . $fa['name'];
-    return mail_senden((string)$a['email'], $betreff, $text);
+    $m = mail_render('auftrag', [
+        'anrede'        => mail_kunde_anrede($a),
+        'angebot_nummer'=> (string)$a['nummer'],
+        'auftrag_nummer'=> $aufNr,
+        'auftrag_zeile' => $aufNr !== '' ? 'Wir führen den Auftrag unter der Nummer ' . $aufNr . ".\n" : '',
+        'link'          => $link,
+        'absender'      => $fa['name'],
+    ]);
+    return mail_senden((string)$a['email'], $m['betreff'], $m['text']);
 }
 
 // Eine Anfrage wurde abgesagt („nicht machbar"): der Kunde erfährt den Grund.
@@ -306,13 +445,17 @@ function mail_kunde_absage(int $anfrage_id): string {
     if (trim((string)$p['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
     $fa   = beleg_firma();
     $link = mail_link_kundenportal((int)$p['kunde_id'], 'meine_anfragen');
-    $betreff = 'Ihre Anfrage ' . $p['nummer'] . ': leider nicht machbar';
-    $text = "Guten Tag " . mail_kunde_anrede($p) . ",\n\n"
-          . "wir haben Ihre Anfrage " . $p['nummer'] . ($p['betreff'] ? ' („' . $p['betreff'] . '")' : '') . " geprüft und können sie leider nicht umsetzen.\n\n"
-          . "Grund:\n" . trim((string)$p['absage_grund']) . "\n\n"
-          . "Wenn Sie eine angepasste Variante anfragen möchten, geht das jederzeit über das Kundenportal:\n$link\n\n"
-          . "Viele Grüße\n" . $fa['name'];
-    return mail_senden((string)$p['email'], $betreff, $text);
+    $bet  = trim((string)($p['betreff'] ?? ''));
+    $m = mail_render('absage', [
+        'anrede'         => mail_kunde_anrede($p),
+        'nummer'         => (string)$p['nummer'],
+        'betreff'        => $bet,
+        'betreff_hinweis'=> $bet !== '' ? ' („' . $bet . '")' : '',
+        'grund'          => trim((string)$p['absage_grund']),
+        'link'           => $link,
+        'absender'       => $fa['name'],
+    ]);
+    return mail_senden((string)$p['email'], $m['betreff'], $m['text']);
 }
 
 // --- Vorlagen Team (Lieferant hat im Portal etwas getan) ---------------------
