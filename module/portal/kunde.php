@@ -2358,10 +2358,10 @@ portal_head('Kundenportal · ' . $k['firma']);
       $angVorhanden = false;
       if (!empty($a['angebot_id'])) foreach ($angebote as $x) if ((int)$x['id'] === (int)$a['angebot_id']) { $angVorhanden = true; break; }
     ?>
-    <div class="bx-row" style="justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:14px">
-      <?php if ($angVorhanden): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('angebot_pdf') ?>&aid=<?= (int)$a['angebot_id'] ?>">Angebot (AN)</a><?php endif; ?>
-      <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('ab_pdf') ?>&aid=<?= (int)$a['id'] ?>">Auftragsbestätigung (AB)</a>
-      <?php if ($re): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_pdf') ?>&aid=<?= (int)$a['id'] ?>">Rechnung (RE)</a><?php endif; ?>
+    <div class="bx-row" style="gap:10px;flex-wrap:wrap;margin-top:14px">
+      <?php if ($angVorhanden): ?><a class="btn btn-ghost" target="_blank" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('angebot_pdf') ?>&aid=<?= (int)$a['angebot_id'] ?>">Angebot (AN)</a><?php endif; ?>
+      <a class="btn btn-ghost" target="_blank" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('ab_pdf') ?>&aid=<?= (int)$a['id'] ?>">Auftragsbestätigung (AB)</a>
+      <?php if ($re): ?><a class="btn btn-ghost" target="_blank" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('rechnung_pdf') ?>&aid=<?= (int)$a['id'] ?>">Rechnung (RE)</a><?php endif; ?>
     </div>
   </div>
   </div>
