@@ -529,12 +529,21 @@ $angebote = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produk
 // WICHTIG: Status 'offen' ist der interne ENTWURF – der Kunde darf ihn nicht sehen.
 // Sonst erscheint ein Angebot beim Kunden, sobald es im Editor angelegt wird, also bevor
 // überhaupt eine Position darin steht. Sichtbar wird es erst mit 'gesendet'.
-$staffelMap = [];
-$angInfo = [];
+// Staffeln + Angebots-Infos werden LAZY berechnet – erst wenn eine Angebotskarte wirklich
+// gerendert wird. Ein Seitenaufruf zeigt nur einen Reiter (oft wenige oder keine Karten),
+// vorher wurde das für ALLE Angebote des Kunden gebaut (hunderte Abfragen umsonst).
+$staffelMap = [];  // Cache je Angebot-ID
+$angInfo    = [];  // Cache je Angebot-ID
 $produktionszeit = (float) meta_get('produktionszeit_wochen', 7);   // globaler Standard
 $itemName = fn($id) => $id ? (string) scalar("SELECT name FROM item WHERE id=?", [(int)$id]) : '';
-foreach ($angebote as $a) {
-    $staffelMap[$a['id']] = all("SELECT * FROM angebot_staffel WHERE angebot_id=? ORDER BY sort, id", [$a['id']]);
+$staffelFuer = function(array $a) use (&$staffelMap) {
+    $id = (int)$a['id'];
+    if (!array_key_exists($id, $staffelMap)) $staffelMap[$id] = all("SELECT * FROM angebot_staffel WHERE angebot_id=? ORDER BY sort, id", [$id]);
+    return $staffelMap[$id];
+};
+$angInfoFuer = function(array $a) use (&$angInfo, $itemName, $produktionszeit) {
+    $id = (int)$a['id'];
+    if (array_key_exists($id, $angInfo)) return $angInfo[$id];
     $rid = (int)($a['rezeptur_id'] ?? 0);
     // je Angebot gesetzte Marge (überschreibt die Marge-je-Typ; VK wird dann aus EK gerechnet)
     $mo = ($a['marge_override'] ?? '') !== '' && $a['marge_override'] !== null ? (float)$a['marge_override'] : null;
@@ -545,7 +554,7 @@ foreach ($angebote as $a) {
         $vk = $mo !== null ? (float)$mr['ek_preis'] * (1 + $mo/100) : (float)$mr['vk_preis'];
         if (!isset($matrix[$s][$bm])) $matrix[$s][$bm] = ['vk'=>$vk, 'verp'=>(int)$mr['verpackung_id']];
     }
-    $angInfo[$a['id']] = [
+    return $angInfo[$id] = [
         'verp'    => $itemName($a['verpackung_id']),
         'deckel'  => $itemName($a['verschluss_id']),
         'etikett' => $itemName($a['etikett_id']),
@@ -573,7 +582,7 @@ foreach ($angebote as $a) {
         ),
         'prodzeit'=> ($a['produktionszeit_wochen'] ?? '') !== '' && $a['produktionszeit_wochen'] !== null ? (float)$a['produktionszeit_wochen'] : $produktionszeit,
     ];
-}
+};
 $std_stueck_ang = std_stueckzahlen();
 $std_menge_ang  = std_bestellmengen();
 // USt-Satz dieses Kunden (EU-Ausland/Kleinunternehmer 0 %, sonst Inland)
@@ -1430,7 +1439,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if ($oatab === 'zubestaetigen'): ?>
     <?php if ($offen_ang): ?>
     <p class="muted" style="margin:0 0 12px">Klappen Sie ein Angebot auf, wählen Sie die gewünschte Menge und bestätigen Sie verbindlich.</p>
-    <?php foreach ($offen_ang as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = true; $open = true; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+    <?php foreach ($offen_ang as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = true; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
     <?php else: ?><div class="bx-panel"><div class="muted">Aktuell liegt kein Angebot zum Bestätigen vor.</div></div><?php endif; ?>
 
   <?php elseif ($oatab === 'offen'): ?>
@@ -1468,12 +1477,12 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <?php elseif ($oatab === 'bestaetigt'): ?>
     <?php if (!$best_ang && !$bestRows): ?><div class="bx-panel"><div class="muted">Keine bestätigten Vorgänge.</div></div><?php endif; ?>
-    <?php foreach ($best_ang as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+    <?php foreach ($best_ang as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
     <?php $anfrageTabelle($bestRows, 'Angenommene Rezepturen', 'Von Ihnen angenommen – die Rezeptur ist angelegt. Als nächstes können Sie sie als Produkt anfragen.'); ?>
 
   <?php else: /* abgelehnt */ ?>
     <?php if (!$abgel_ang && !$abglRows): ?><div class="bx-panel"><div class="muted">Nichts abgelehnt.</div></div><?php endif; ?>
-    <?php foreach ($abgel_ang as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+    <?php foreach ($abgel_ang as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
     <?php $anfrageTabelle($abglRows, 'Abgelehnte Anfragen', 'Vom Kunden abgelehnt oder von uns als nicht machbar zurückgemeldet.'); ?>
   <?php endif; ?>
   <script>(function(){ var h=location.hash; if(h && /^#a\d+$/.test(h)){ var d=document.querySelector(h); if(d && d.tagName==='DETAILS'){ d.open=true; d.scrollIntoView(); } } })();</script>
@@ -2203,7 +2212,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px">Ihre Angebote</h1>
   <p class="muted" style="margin:0 0 16px">Übersicht Ihrer Angebote. Offene Angebote können Sie hier direkt prüfen, eine Menge wählen und verbindlich annehmen.</p>
   <?php if (!$angebote): ?><div class="bx-panel"><div class="muted">Aktuell liegen keine Angebote vor.</div></div><?php endif; ?>
-  <?php foreach ($angebote as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = true; $open = ($a['status'] === 'gesendet'); include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+  <?php foreach ($angebote as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = ($a['status'] === 'gesendet'); include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
 
   <script>(function(){
     var h = location.hash; if (h && /^#a\d+$/.test(h)) { var d = document.querySelector(h); if (d && d.tagName === 'DETAILS') { d.open = true; d.scrollIntoView(); } }
