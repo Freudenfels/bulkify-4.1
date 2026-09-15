@@ -33,12 +33,16 @@ $alle = all("SELECT pa.*, k.firma AS kunde_firma, COALESCE(NULLIF(p.name,''), a.
 // auftrag_bedarf) macht mehrere Abfragen je Auftrag. Sie ist NUR für noch nicht begonnene Aufträge
 // nötig: 'erledigt' wird nie ausgewertet, und wer schon einen Schritt erledigt hat, „läuft" bereits
 // (das weiß die Liste aus n_done, ohne weitere Abfrage). So bleibt die teure Prüfung den offenen vorbehalten.
+// Diese Liste ist schreibfrei -> Bestandsabfragen dürfen request-lokal gecacht werden. Viele Aufträge
+// teilen dieselben Artikel (Verpackung/Leerkapsel/Rohstoffe); so wird jeder Bestand nur EINMAL geholt.
+$GLOBALS['bx_stock_cache'] = [];
 foreach ($alle as &$r) {
     if ($r['status'] === 'erledigt')  $r['_bereit'] = 'erledigt';
     elseif ((int)$r['n_done'] > 0)    $r['_bereit'] = 'laeuft';                                    // begonnen -> Material war da
     else                              $r['_bereit'] = produktion_bereitschaft((int)$r['id'])['status'];
 }
 unset($r);
+unset($GLOBALS['bx_stock_cache']);   // Cache nach der Liste wieder aus (Schreibpfade rechnen frisch)
 
 // Einteilung in die Reiter
 $istErledigt = fn($r) => $r['status'] === 'erledigt';

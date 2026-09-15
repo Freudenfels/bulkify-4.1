@@ -2180,9 +2180,16 @@ function pruefungen_faellig(): array {
 }
 
 // Verfügbarer Bestand eines Items (Summe freier Chargen; optional inkl. Quarantäne).
+// Optionaler request-lokaler Bestands-Cache. NUR aktiv, wenn $GLOBALS['bx_stock_cache'] gesetzt ist
+// (das macht ausschließlich die schreibfreie Produktionsliste). Schreibpfade (z. B. reservieren)
+// setzen ihn nie -> sie rechnen immer frisch, bleiben also korrekt.
 function item_bestand(int $item_id, bool $nur_frei = true): float {
+    $ck = 'b:' . $item_id . ':' . ($nur_frei ? 1 : 0);
+    if (isset($GLOBALS['bx_stock_cache']) && array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
     $status = $nur_frei ? "status='frei'" : "status IN ('frei','quarantaene')";
-    return (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND $status", [$item_id]);
+    $v = (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND $status", [$item_id]);
+    if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
+    return $v;
 }
 
 // Wareneingang buchen -> neue Charge. Rohstoffe landen in Quarantäne, Rest direkt frei.
@@ -3859,10 +3866,18 @@ function produktionsauftrag_art_setzen(int $pa_id, string $art): bool {
 
 // --- Bestandsreservierung (manuell) ---
 function item_reserviert_andere(int $item_id, int $auftrag_id): float {
-    return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv' AND (auftrag_id IS NULL OR auftrag_id<>?)", [$item_id, $auftrag_id]);
+    $ck = 'ra:' . $item_id . ':' . $auftrag_id;
+    if (isset($GLOBALS['bx_stock_cache']) && array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
+    $v = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv' AND (auftrag_id IS NULL OR auftrag_id<>?)", [$item_id, $auftrag_id]);
+    if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
+    return $v;
 }
 function item_reserviert_eigen(int $item_id, int $auftrag_id): float {
-    return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv' AND auftrag_id=?", [$item_id, $auftrag_id]);
+    $ck = 're:' . $item_id . ':' . $auftrag_id;
+    if (isset($GLOBALS['bx_stock_cache']) && array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
+    $v = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv' AND auftrag_id=?", [$item_id, $auftrag_id]);
+    if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
+    return $v;
 }
 // Netto verfügbar FÜR diesen Auftrag = freier Bestand − Reservierungen ANDERER Aufträge (eigene Reservierung zählt als verfügbar).
 function item_verfuegbar_fuer(int $item_id, int $auftrag_id): float {
