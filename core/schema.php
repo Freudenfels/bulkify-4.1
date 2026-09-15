@@ -32,6 +32,14 @@ function init_schema(): void {
         aktualisiert DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // Schnell-Pfad: Die Migrationen unten (~67 CREATE TABLE IF NOT EXISTS + ~165 ensure_column
+    // à 2 information_schema-Abfragen + Backfills) sind idempotent, aber teuer – besonders auf einer
+    // entfernten DB. Sie müssen nur nach einer Schema-Änderung laufen. Marker = mtime dieser Datei:
+    // Nach jedem Deploy (Datei neu geschrieben) ändert sie sich -> Migrationen laufen genau einmal,
+    // danach überspringt jeder Request den ganzen Block und macht nur EINE meta_get-Abfrage.
+    $schemaBuild = (string) @filemtime(__FILE__);
+    if ($schemaBuild !== '' && meta_get('schema_build', '') === $schemaBuild) return;
+
     // users: interne Mitarbeiter + Portal-Logins (Rolle steuert die Sicht)
     $pdo->exec("CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1358,6 +1366,9 @@ function init_schema(): void {
         sort INT NOT NULL DEFAULT 0,
         KEY idx_item (item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // Migrationen durch -> Marker setzen, damit der nächste Request den Block überspringt.
+    if ($schemaBuild !== '') meta_set('schema_build', $schemaBuild);
 }
 
 // Erster Admin, falls noch kein Benutzer existiert. Zugang danach bitte ändern.
