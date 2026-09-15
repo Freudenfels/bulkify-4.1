@@ -3817,8 +3817,11 @@ function produktion_bereitschaft(int $pa_id): array {
     $pa = pa_row_cached($pa_id);
     if (!$pa) return ['status'=>'unbekannt', 'fehlend'=>[]];
     if ($pa['status'] === 'erledigt') return ['status'=>'fertig', 'fehlend'=>[]];
-    if ((int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]) > 0)
-        return ['status'=>'laeuft', 'fehlend'=>[]];
+    // Anzahl erledigter Schritte – in der Liste per Bulk vorgeladen (Cache 'sch:'.pa_id), sonst Einzelabfrage.
+    $schritteDone = isset($GLOBALS['bx_stock_cache']) && array_key_exists('schr:' . $pa_id, $GLOBALS['bx_stock_cache'])
+        ? (int) $GLOBALS['bx_stock_cache']['schr:' . $pa_id]
+        : (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]);
+    if ($schritteDone > 0) return ['status'=>'laeuft', 'fehlend'=>[]];
 
     // Voller Stücklisten-Bedarf inkl. Verpackung/Etiketten, netto (Reservierungen anderer abgezogen).
     $fehlend = [];
@@ -3839,8 +3842,7 @@ function bereitschaft_badge(string $s): string {
 // Wurde für diesen Auftrag fertige Bulkware zugekauft? (Charge eines Items der Kategorie 'fertig')
 function produktion_ist_zukauf(int $auftrag_id): bool {
     if (!$auftrag_id) return false;
-    return (int) scalar("SELECT COUNT(*) FROM charge c JOIN item i ON i.id=c.item_id
-                         WHERE c.auftrag_id=? AND i.kategorie='fertig'", [$auftrag_id]) > 0;
+    return auftrag_fertigware_cached($auftrag_id)['n'] > 0;
 }
 
 // Produktionsschritte neu erzeugen (Weg umstellen) – nur solange KEIN Schritt erledigt ist.
@@ -3899,6 +3901,26 @@ function item_name_cached(int $item_id): string {
     $ck = 'iname:' . $item_id;
     if (!array_key_exists($ck, $GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = (string) scalar("SELECT name FROM item WHERE id=?", [$item_id]);
     return $GLOBALS['bx_stock_cache'][$ck];
+}
+function auftrag_row_cached(int $auftrag_id): ?array {
+    if (!isset($GLOBALS['bx_stock_cache'])) return one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]);
+    $ck = 'auf:' . $auftrag_id;
+    if (!array_key_exists($ck, $GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]);
+    return $GLOBALS['bx_stock_cache'][$ck];
+}
+// Fertigware-Zukauf je Auftrag: ['n'=>Anzahl fertig-Chargen, 'frei'=>Summe verfügbar (status frei)].
+// Aus zwei Skalaren zusammengesetzt (Verhalten wie bisher); in der Liste per Cache/Bulk nur einmal.
+function auftrag_fertigware_cached(int $auftrag_id): array {
+    if (isset($GLOBALS['bx_stock_cache'])) {
+        $ck = 'fw:' . $auftrag_id;
+        if (array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
+    }
+    $r = [
+        'n'    => (int) scalar("SELECT COUNT(*) FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie='fertig'", [$auftrag_id]),
+        'frei' => (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei'", [$auftrag_id]),
+    ];
+    if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache']['fw:' . $auftrag_id] = $r;
+    return $r;
 }
 // Netto verfügbar FÜR diesen Auftrag = freier Bestand − Reservierungen ANDERER Aufträge (eigene Reservierung zählt als verfügbar).
 function item_verfuegbar_fuer(int $item_id, int $auftrag_id): float {
@@ -3970,8 +3992,17 @@ function versandart_label(string $key, string $sprache = 'de'): string {
 }
 
 function produkt_bulk_info(int $produkt_id, string $fbName = '', string $fbForm = ''): array {
-    $p = $produkt_id ? one("SELECT p.name, COALESCE(r.darreichungsform,'') AS form
-                            FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]) : null;
+    $p = null;
+    if ($produkt_id) {
+        $sql = "SELECT p.name, COALESCE(r.darreichungsform,'') AS form FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?";
+        if (isset($GLOBALS['bx_stock_cache'])) {
+            $ck = 'pbulk:' . $produkt_id;
+            if (!array_key_exists($ck, $GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = one($sql, [$produkt_id]);
+            $p = $GLOBALS['bx_stock_cache'][$ck];
+        } else {
+            $p = one($sql, [$produkt_id]);
+        }
+    }
     $formMap = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks',
                 'gummi'=>'Fruchtgummis','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
     $form = (string)($p['form'] ?? '') ?: trim($fbForm);          // Fallback-Form (v3-Auftrag ohne Produkt)
@@ -4006,9 +4037,8 @@ function auftrag_bedarf(int $pa_id): array {
     // Verpackung + Etiketten braucht es TROTZDEM (werden unten immer angehängt).
     $zukauf = produktion_ist_zukauf((int)$pa['auftrag_id']) || ($pa['produktionsart'] ?? 'eigen') === 'fremd';
     if ($zukauf) {
-        $verf = (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
-                                WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei'", [(int)$pa['auftrag_id']]);
-        $af = one("SELECT produkt_bezeichnung, produkt_form FROM auftrag WHERE id=?", [$aid]);
+        $verf = auftrag_fertigware_cached((int)$pa['auftrag_id'])['frei'];
+        $af = auftrag_row_cached($aid);
         $bi = produkt_bulk_info((int)$pa['produkt_id'], (string)($af['produkt_bezeichnung'] ?? ''), (string)($af['produkt_form'] ?? ''));
         $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>$einheiten,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$einheiten-$verf),'einheit'=>$bi['einheit']];
     } else {

@@ -38,19 +38,36 @@ $alle = all("SELECT pa.*, k.firma AS kunde_firma, COALESCE(NULLIF(p.name,''), a.
 $GLOBALS['bx_stock_cache'] = [];
 // Vorladen in EINER Sammelabfrage statt je Auftrag einzeln: alle Auftrag-/Produktzeilen der noch nicht
 // begonnenen Aufträge auf einmal holen und in den Cache legen (pa_row_cached/produkt_row_cached finden sie dann).
-$vorPa = []; $vorProd = [];
+$vorPa = []; $vorProd = []; $vorAuf = [];
 foreach ($alle as $r) {
     if ($r['status'] !== 'erledigt' && (int)$r['n_done'] === 0) {
         $vorPa[] = (int)$r['id'];
-        if (!empty($r['produkt_id'])) $vorProd[] = (int)$r['produkt_id'];
+        if (!empty($r['produkt_id']))  $vorProd[] = (int)$r['produkt_id'];
+        if (!empty($r['auftrag_id']))  $vorAuf[]  = (int)$r['auftrag_id'];
     }
 }
 $vorPa = array_values(array_unique($vorPa));
 $vorProd = array_values(array_unique($vorProd));
+$vorAuf = array_values(array_unique($vorAuf));
+$sc = &$GLOBALS['bx_stock_cache'];
 if ($vorPa) { $in = implode(',', array_fill(0, count($vorPa), '?'));
-    foreach (all("SELECT * FROM produktionsauftrag WHERE id IN ($in)", $vorPa) as $row) $GLOBALS['bx_stock_cache']['pa:' . (int)$row['id']] = $row; }
+    foreach (all("SELECT * FROM produktionsauftrag WHERE id IN ($in)", $vorPa) as $row) $sc['pa:' . (int)$row['id']] = $row;
+    // Erledigte Schritte je Auftrag gebündelt (default 0, dann aus der Gruppierung überschreiben).
+    foreach ($vorPa as $id) $sc['schr:' . $id] = 0;
+    foreach (all("SELECT pa_id, COUNT(*) AS n FROM produktion_schritt WHERE pa_id IN ($in) AND erledigt=1 GROUP BY pa_id", $vorPa) as $row) $sc['schr:' . (int)$row['pa_id']] = (int)$row['n'];
+}
 if ($vorProd) { $in = implode(',', array_fill(0, count($vorProd), '?'));
-    foreach (all("SELECT * FROM produkt WHERE id IN ($in)", $vorProd) as $row) $GLOBALS['bx_stock_cache']['prod:' . (int)$row['id']] = $row; }
+    foreach (all("SELECT * FROM produkt WHERE id IN ($in)", $vorProd) as $row) $sc['prod:' . (int)$row['id']] = $row;
+    foreach (all("SELECT p.id, p.name, COALESCE(r.darreichungsform,'') AS form FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id IN ($in)", $vorProd) as $row)
+        $sc['pbulk:' . (int)$row['id']] = ['name'=>$row['name'], 'form'=>$row['form']]; }
+if ($vorAuf) { $in = implode(',', array_fill(0, count($vorAuf), '?'));
+    foreach (all("SELECT * FROM auftrag WHERE id IN ($in)", $vorAuf) as $row) $sc['auf:' . (int)$row['id']] = $row;
+    // Fertigware-Zukauf je Auftrag gebündelt: Anzahl fertig-Chargen + freie Summe (default 0).
+    foreach ($vorAuf as $id) $sc['fw:' . $id] = ['n'=>0, 'frei'=>0.0];
+    foreach (all("SELECT c.auftrag_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN c.status='frei' THEN c.menge_verfuegbar ELSE 0 END),0) AS frei
+                  FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id IN ($in) AND i.kategorie='fertig' GROUP BY c.auftrag_id", $vorAuf) as $row)
+        $sc['fw:' . (int)$row['auftrag_id']] = ['n'=>(int)$row['n'], 'frei'=>(float)$row['frei']]; }
+unset($sc);
 foreach ($alle as &$r) {
     if ($r['status'] === 'erledigt')  $r['_bereit'] = 'erledigt';
     elseif ((int)$r['n_done'] > 0)    $r['_bereit'] = 'laeuft';                                    // begonnen -> Material war da
