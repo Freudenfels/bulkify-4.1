@@ -1332,7 +1332,14 @@ portal_head('Kundenportal · ' . $k['firma']);
     $sumAbgel = count($abgel_ang) + count($abglRows);    // abgelehnt / nicht machbar
     // Unterreiter nach Typ: die Zähler oben bleiben GESAMT; hier nur die Anzeige-Listen filtern.
     $angTyp = [];
-    foreach ($angebote as $ang) { $angTyp[$ang['id']] = !empty($ang['anfrage_id']) ? ((string) scalar("SELECT typ FROM portal_anfrage WHERE id=?", [(int)$ang['anfrage_id']]) ?: 'produkt') : 'produkt'; }
+    // Typ je verknüpfter Anfrage in EINER Abfrage holen (statt einer pro Angebot – N+1 vermeiden).
+    $anfIds = array_values(array_unique(array_filter(array_map(fn($a) => (int)($a['anfrage_id'] ?? 0), $angebote))));
+    $anfTypMap = [];
+    if ($anfIds) {
+        $in = implode(',', array_fill(0, count($anfIds), '?'));
+        foreach (all("SELECT id, typ FROM portal_anfrage WHERE id IN ($in)", $anfIds) as $row) $anfTypMap[(int)$row['id']] = (string)$row['typ'];
+    }
+    foreach ($angebote as $ang) { $angTyp[$ang['id']] = !empty($ang['anfrage_id']) ? ($anfTypMap[(int)$ang['anfrage_id']] ?? 'produkt') : 'produkt'; }
     // Aktiver Haupt-Reiter + Anzahl je Typ IN diesem Reiter (für die Zahlen an den Unterreitern) – aus den ungefilterten Listen.
     $oatab = in_array($_GET['oatab'] ?? '', ['zubestaetigen','bestaetigt','abgelehnt'], true) ? $_GET['oatab'] : 'offen';
     $typsInTab = [];
