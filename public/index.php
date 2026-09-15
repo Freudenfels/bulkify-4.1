@@ -1,5 +1,6 @@
 <?php
 // Einziger Web-Einstieg bulkify 4.1 (Front Controller)
+define('BX_T0', microtime(true));   // Request-Start für die Diagnose-Messung
 session_start();
 require_once __DIR__ . '/../core/schema.php';
 require_once __DIR__ . '/../core/pdf_beleg.php';   // beleg_firma() – auch fuer den AGB-Entwurfstext
@@ -7,6 +8,9 @@ require_once __DIR__ . '/../core/agb.php';
 require_once __DIR__ . '/../core/mail.php';
 require_once __DIR__ . '/../core/auth.php';
 require_once __DIR__ . '/../core/layout.php';
+require_once __DIR__ . '/../core/perf.php';
+// Am Ende jedes Requests eine Messzeile schreiben – nur wenn die Diagnose eingeschaltet ist.
+register_shutdown_function(function () { perf_aufzeichnen(BX_T0); });
 
 // Schema beim Start sicherstellen (idempotent) + ersten Admin anlegen
 init_schema();

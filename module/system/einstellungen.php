@@ -23,6 +23,7 @@ $TABS = [
     'ki'         => 'KI (Claude)',
     'agb'        => 'AGB',
     'testlogin'  => 'Testlogin',
+    'diagnose'   => 'Diagnose',
     'werkzeuge'  => 'Werkzeuge',
 ];
 $DFORM_M = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
@@ -78,6 +79,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mailtext_reset') {
         meta_set('mailtpl_' . $key . '_text', '');
     }
     header('Location: ?p=einstellungen&tab=mailtext&reset=1#tpl_' . $key); exit;
+}
+// --- Diagnose: Messung ein/aus, Protokoll leeren ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'perf_toggle') {
+    meta_set('perf_log', isset($_POST['perf_log']) ? '1' : '0');
+    header('Location: ?p=einstellungen&tab=diagnose&ok=1'); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'perf_clear') {
+    perf_logdatei_leeren();
+    header('Location: ?p=einstellungen&tab=diagnose&geleert=1'); exit;
 }
 // --- AGB: neue Fassung speichern (die bisherige bleibt als Beleg erhalten) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'agb_save') {
@@ -752,6 +762,102 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   <?php endif; ?>
 </div>
 <?php endforeach; ?>
+<?php endif; ?>
+<?php if ($tab === 'diagnose'):
+    $st = perf_selftest();
+    $an = perf_aktiv();
+    $letzte = perf_letzte(40);
+    $jeRoute = perf_je_route();
+    $ampel = fn($ms, $gut, $mittel) => $ms <= $gut ? 'ok' : ($ms <= $mittel ? 'warn' : 'err');
+?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Diagnose &amp; Geschwindigkeit</h2>
+  <p class="muted" style="margin-top:0">Hier siehst du, wie schnell das System gerade ist und woran es liegt. Die Live-Messung unten läuft bei jedem Öffnen dieser Seite neu.</p>
+  <?php if (isset($_GET['ok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Gespeichert.</div><?php endif; ?>
+  <?php if (isset($_GET['geleert'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Protokoll geleert.</div><?php endif; ?>
+
+  <h3 style="margin:6px 0 8px">Live-Messung (jetzt)</h3>
+  <div class="bx-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:6px">
+    <div class="bx-panel" style="padding:12px 14px;margin:0">
+      <div class="muted" style="font-size:12px">Zeit je DB-Abfrage <?= bx_hint('Aus 50 winzigen Test-Abfragen. Das ist die Grundlatenz – jede Seite multipliziert diesen Wert mit ihrer Abfrage-Anzahl.') ?></div>
+      <div style="font-size:22px;font-weight:600;margin-top:4px"><?= h(number_format($st['ping_ms'],2,',','.')) ?> ms <?= bx_badge($st['ping_ms']<=1?'schnell':($st['ping_ms']<=3?'ok':'langsam'), $ampel($st['ping_ms'],1,3)) ?></div>
+    </div>
+    <div class="bx-panel" style="padding:12px 14px;margin:0">
+      <div class="muted" style="font-size:12px">Verbindungsaufbau <?= bx_hint('Zeit, um die DB-Verbindung zu öffnen – einmal je Seitenaufruf.') ?></div>
+      <div style="font-size:22px;font-weight:600;margin-top:4px"><?= h(number_format($st['connect_ms'],1,',','.')) ?> ms <?= bx_badge($st['connect_ms']<=20?'ok':($st['connect_ms']<=100?'mittel':'hoch'), $ampel($st['connect_ms'],20,100)) ?></div>
+    </div>
+    <div class="bx-panel" style="padding:12px 14px;margin:0">
+      <div class="muted" style="font-size:12px">Schema-Prüfung (information_schema) <?= bx_hint('War früher die große Bremse – lief pro Seite hunderte Male. Jetzt nur noch selten.') ?></div>
+      <div style="font-size:22px;font-weight:600;margin-top:4px"><?= h(number_format($st['is_ms'],1,',','.')) ?> ms</div>
+    </div>
+  </div>
+
+  <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table" style="max-width:640px">
+    <tbody>
+      <tr><td>OPcache (PHP-Beschleuniger)</td><td><?= $st['opcache']['aktiv'] ? bx_badge('an','ok') . ($st['opcache']['hits']!==null?' <span class="muted" style="font-size:12px">Trefferquote '.h($st['opcache']['hits']).' %</span>':'') : bx_badge('AUS','err') . ' <span class="muted" style="font-size:12px">– einschalten beschleunigt jede Seite spürbar (Hoster/php.ini)</span>' ?></td></tr>
+      <tr><td>Datenbank</td><td><?= h($st['db_version'] ?: '–') ?> · <?= $st['db_lokal'] ? bx_badge('lokal','ok') : bx_badge('entfernt','warn') . ' <span class="muted" style="font-size:12px">– jede Abfrage kostet Netzwerk-Latenz</span>' ?></td></tr>
+      <tr><td>PHP</td><td><?= h($st['php_version']) ?> · Speicher-Limit <?= h($st['mem_limit']) ?></td></tr>
+      <tr><td>Prepared Statements emuliert</td><td><?= $st['emulate_prep'] ? bx_badge('ja','ok') . ' <span class="muted" style="font-size:12px">– 1 statt 2 Roundtrips je Abfrage</span>' : bx_badge('nein','warn') ?></td></tr>
+      <tr><td>Schema-Schnellpfad</td><td><?= $st['schema_guard'] ? bx_badge('aktiv','ok') . ' <span class="muted" style="font-size:12px">– Migrationen laufen nur nach einem Deploy</span>' : bx_badge('nicht gesetzt','warn') ?></td></tr>
+    </tbody>
+  </table></div>
+
+  <?php $langsamGrund = [];
+        if ($st['ping_ms'] > 3) $langsamGrund[] = 'Jede DB-Abfrage kostet ' . number_format($st['ping_ms'],2,',','.') . ' ms – bei Seiten mit vielen Abfragen summiert sich das. Ursache ist meist eine entfernte/ausgelastete Datenbank.';
+        if (!$st['opcache']['aktiv']) $langsamGrund[] = 'OPcache ist AUS: PHP kompiliert bei jedem Aufruf alle Dateien neu. Einschalten (beim Hoster/in der php.ini) beschleunigt alles.';
+        if ($st['connect_ms'] > 100) $langsamGrund[] = 'Der Verbindungsaufbau zur DB dauert ' . number_format($st['connect_ms'],0,',','.') . ' ms je Aufruf.';
+        if (!$st['db_lokal']) $langsamGrund[] = 'Die Datenbank läuft nicht auf demselben Server wie PHP – das kostet bei jeder Abfrage Netzwerkzeit.'; ?>
+  <?php if ($langsamGrund): ?>
+  <div style="border:1px solid var(--line);border-left:4px solid #d99;border-radius:8px;padding:10px 14px;margin-top:12px;background:var(--panel-2)">
+    <strong>Mögliche Bremsen</strong>
+    <ul style="margin:6px 0 0;padding-left:18px"><?php foreach ($langsamGrund as $g): ?><li style="margin:3px 0"><?= h($g) ?></li><?php endforeach; ?></ul>
+  </div>
+  <?php else: ?>
+  <div class="badge-ok" style="padding:8px 12px;margin-top:12px">Die Messwerte sehen gut aus – keine offensichtliche Bremse.</div>
+  <?php endif; ?>
+</div>
+
+<div class="bx-panel">
+  <h2>Aufzeichnung der Seitenaufrufe</h2>
+  <p class="muted" style="margin-top:0">Wenn eingeschaltet, wird zu jedem Seitenaufruf eine Zeile mitgeschrieben (Dauer, Anzahl DB-Abfragen, DB-Zeit). So findest du gezielt die langsamen Seiten. Läuft mit, bis du es wieder ausschaltest.</p>
+  <form method="post">
+    <input type="hidden" name="aktion" value="perf_toggle">
+    <div class="bx-check"><input type="checkbox" name="perf_log" id="perf_log" value="1" <?= $an ? 'checked' : '' ?> onchange="this.form.submit()">
+      <label for="perf_log" style="margin:0">Messung eingeschaltet</label></div>
+  </form>
+  <?php if ($jeRoute): ?>
+  <h3 style="margin:14px 0 6px">Seiten nach Durchschnittsdauer (langsamste zuerst)</h3>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Seite</th><th class="bx-num">Ø Dauer</th><th class="bx-num">max</th><th class="bx-num">Ø Abfragen</th><th class="bx-num">Aufrufe</th></tr></thead>
+    <tbody>
+    <?php foreach ($jeRoute as $r): ?>
+      <tr><td><?= h($r['route']) ?></td>
+        <td class="bx-num"><?= bx_badge($r['avg'].' ms', $r['avg']<=300?'ok':($r['avg']<=1500?'warn':'err')) ?></td>
+        <td class="bx-num"><?= (int)$r['max'] ?> ms</td>
+        <td class="bx-num"><?= (int)$r['avgq'] ?></td>
+        <td class="bx-num"><?= (int)$r['n'] ?></td></tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <h3 style="margin:14px 0 6px">Letzte Aufrufe</h3>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Zeitpunkt</th><th>Seite</th><th class="bx-num">Dauer</th><th class="bx-num">Abfragen</th><th class="bx-num">DB-Zeit</th><th class="bx-num">RAM</th></tr></thead>
+    <tbody>
+    <?php foreach ($letzte as $r): ?>
+      <tr><td class="muted" style="font-size:12px"><?= h(fmt_zeit($r['zeit'])) ?></td><td><?= h($r['route']) ?></td>
+        <td class="bx-num"><?= bx_badge($r['dauer'].' ms', $r['dauer']<=300?'ok':($r['dauer']<=1500?'warn':'err')) ?></td>
+        <td class="bx-num"><?= $r['abfragen'] ?></td><td class="bx-num"><?= $r['db_ms'] ?> ms</td><td class="bx-num"><?= h(number_format($r['ram'],1,',','.')) ?> MB</td></tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <form method="post" style="margin-top:10px" onsubmit="return confirm('Aufzeichnungs-Protokoll wirklich leeren?')">
+    <input type="hidden" name="aktion" value="perf_clear">
+    <button class="btn btn-ghost btn-sm" type="submit">Protokoll leeren</button>
+  </form>
+  <?php elseif ($an): ?>
+  <p class="muted" style="margin-top:12px">Noch keine Aufrufe aufgezeichnet – klick dich einmal durch ein paar Seiten und lade diese Seite neu.</p>
+  <?php endif; ?>
+</div>
 <?php endif; ?>
 <?php if ($tab === 'testlogin'):
     $tlBis    = (string) meta_get('testlogin_bis', '');
