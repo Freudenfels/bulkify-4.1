@@ -36,6 +36,21 @@ $alle = all("SELECT pa.*, k.firma AS kunde_firma, COALESCE(NULLIF(p.name,''), a.
 // Diese Liste ist schreibfrei -> Bestandsabfragen dürfen request-lokal gecacht werden. Viele Aufträge
 // teilen dieselben Artikel (Verpackung/Leerkapsel/Rohstoffe); so wird jeder Bestand nur EINMAL geholt.
 $GLOBALS['bx_stock_cache'] = [];
+// Vorladen in EINER Sammelabfrage statt je Auftrag einzeln: alle Auftrag-/Produktzeilen der noch nicht
+// begonnenen Aufträge auf einmal holen und in den Cache legen (pa_row_cached/produkt_row_cached finden sie dann).
+$vorPa = []; $vorProd = [];
+foreach ($alle as $r) {
+    if ($r['status'] !== 'erledigt' && (int)$r['n_done'] === 0) {
+        $vorPa[] = (int)$r['id'];
+        if (!empty($r['produkt_id'])) $vorProd[] = (int)$r['produkt_id'];
+    }
+}
+$vorPa = array_values(array_unique($vorPa));
+$vorProd = array_values(array_unique($vorProd));
+if ($vorPa) { $in = implode(',', array_fill(0, count($vorPa), '?'));
+    foreach (all("SELECT * FROM produktionsauftrag WHERE id IN ($in)", $vorPa) as $row) $GLOBALS['bx_stock_cache']['pa:' . (int)$row['id']] = $row; }
+if ($vorProd) { $in = implode(',', array_fill(0, count($vorProd), '?'));
+    foreach (all("SELECT * FROM produkt WHERE id IN ($in)", $vorProd) as $row) $GLOBALS['bx_stock_cache']['prod:' . (int)$row['id']] = $row; }
 foreach ($alle as &$r) {
     if ($r['status'] === 'erledigt')  $r['_bereit'] = 'erledigt';
     elseif ((int)$r['n_done'] > 0)    $r['_bereit'] = 'laeuft';                                    // begonnen -> Material war da

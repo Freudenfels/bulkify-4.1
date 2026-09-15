@@ -3988,8 +3988,7 @@ function produkt_bulk_info(int $produkt_id, string $fbName = '', string $fbForm 
 // auf den Auftrag zurück, der die Zahl als „stueck" trägt. Sonst 0.
 // $pa = Zeile aus produktionsauftrag (braucht produkt_id + auftrag_id).
 function produktion_stueck_je_packung(array $pa): int {
-    $e = !empty($pa['produkt_id']) ? (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) : 0;
-    if ($e > 0) return $e;
+    if (!empty($pa['produkt_id'])) { $pr = produkt_row_cached((int)$pa['produkt_id']); $e = (int)($pr['einheiten_pro_packung'] ?? 0); if ($e > 0) return $e; }
     if (!empty($pa['auftrag_id'])) { $s = (int) scalar("SELECT stueck FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]); if ($s > 0) return $s; }
     return 0;
 }
