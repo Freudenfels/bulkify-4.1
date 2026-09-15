@@ -1201,7 +1201,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
 
   <div class="pt-cards">
-    <a class="pt-card" href="<?= $portalLink('meine_anfragen') ?>&oatab=offen" style="text-decoration:none;color:inherit"><div class="k">Offene Angebote</div><div class="val"><?= $offenAngebote ?></div></a>
+    <a class="pt-card" href="<?= $portalLink('meine_anfragen') ?>&oatab=zubestaetigen" style="text-decoration:none;color:inherit"><div class="k">Offene Angebote</div><div class="val"><?= $offenAngebote ?></div></a>
     <a class="pt-card" href="<?= $portalLink('bestellungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Bestellungen in Arbeit</div><div class="val"><?= $inArbeit ?></div></a>
     <a class="pt-card" href="<?= $portalLink('rechnungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Offene Rechnungen</div><div class="val"><?= $eur($offenBetrag) ?></div></a>
   </div>
@@ -1232,7 +1232,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <div class="bx-panel" style="border-color:#cfe0cb">
     <div class="bx-row" style="justify-content:space-between;align-items:center">
       <div>Sie haben <strong><?= $offenAngebote ?></strong> offene<?= $offenAngebote===1?'s':'' ?> Angebot<?= $offenAngebote===1?'':'e'?> zur Bestätigung.</div>
-      <a class="btn btn-primary" href="<?= $portalLink('meine_anfragen') ?>&oatab=offen">Menge wählen &amp; annehmen</a>
+      <a class="btn btn-primary" href="<?= $portalLink('meine_anfragen') ?>&oatab=zubestaetigen">Menge wählen &amp; annehmen</a>
     </div>
   </div>
   <?php endif; ?>
@@ -1326,19 +1326,21 @@ portal_head('Kundenportal · ' . $k['firma']);
     // Angenommene Rezepturen (eingefroren = „Rezeptur angelegt") -> BESTÄTIGT; abgelehnte Anfragen -> ABGELEHNT.
     $bestRows = array_values(array_filter($erledigtRows, fn($r) => ($r['stufe'] ?? '') === 'erledigt'));
     $abglRows = array_values(array_filter($erledigtRows, fn($r) => in_array($r['stufe'] ?? '', ['abgelehnt','abgeschlossen'], true)));
-    $nOffen = count($offen_ang) + count($pending);
+    $nZuBest = count($offen_ang);                        // Angebote mit Preis – „Zu bestätigen"
+    $nOffen  = count($anfPruef) + count($pending);       // Vorschläge (wartet auf Sie) + in Prüfung – noch ohne Preis
     $sumBest  = count($best_ang) + count($bestRows);     // bestätigt (in Arbeit/versendet) + Rezeptur angelegt
     $sumAbgel = count($abgel_ang) + count($abglRows);    // abgelehnt / nicht machbar
     // Unterreiter nach Typ: die Zähler oben bleiben GESAMT; hier nur die Anzeige-Listen filtern.
     $angTyp = [];
     foreach ($angebote as $ang) { $angTyp[$ang['id']] = !empty($ang['anfrage_id']) ? ((string) scalar("SELECT typ FROM portal_anfrage WHERE id=?", [(int)$ang['anfrage_id']]) ?: 'produkt') : 'produkt'; }
     // Aktiver Haupt-Reiter + Anzahl je Typ IN diesem Reiter (für die Zahlen an den Unterreitern) – aus den ungefilterten Listen.
-    $oatab = in_array($_GET['oatab'] ?? '', ['bestaetigt','abgelehnt'], true) ? $_GET['oatab'] : 'offen';
+    $oatab = in_array($_GET['oatab'] ?? '', ['zubestaetigen','bestaetigt','abgelehnt'], true) ? $_GET['oatab'] : 'offen';
     $typsInTab = [];
     if ($oatab === 'offen') {
         foreach ($anfPruef as $x)   $typsInTab[] = 'rezeptur';
-        foreach ($offen_ang as $a)  $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
         foreach ($pending as $r)    $typsInTab[] = $r['typ'] ?? '';
+    } elseif ($oatab === 'zubestaetigen') {
+        foreach ($offen_ang as $a)  $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
     } elseif ($oatab === 'bestaetigt') {
         foreach ($best_ang as $a)   $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
         foreach ($bestRows as $r)   $typsInTab[] = $r['typ'] ?? '';
@@ -1383,6 +1385,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h2 style="margin:8px 0 6px">Ihre Vorgänge</h2>
   <div class="settabs" style="margin:0 0 8px">
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen&atab=<?= $atab ?>"      class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=zubestaetigen&atab=<?= $atab ?>" class="<?= $oatab === 'zubestaetigen' ? 'on' : '' ?>">Zu bestätigen<?= $nZuBest ? ' (' . $nZuBest . ')' : '' ?></a>
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=bestaetigt&atab=<?= $atab ?>" class="<?= $oatab === 'bestaetigt' ? 'on' : '' ?>">Bestätigt<?= $sumBest ? ' (' . $sumBest . ')' : '' ?></a>
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=abgelehnt&atab=<?= $atab ?>"  class="<?= $oatab === 'abgelehnt' ? 'on' : '' ?>">Abgelehnt<?= $sumAbgel ? ' (' . $sumAbgel . ')' : '' ?></a>
   </div>
@@ -1417,11 +1420,13 @@ portal_head('Kundenportal · ' . $k['firma']);
       </table></div>
     </div>
   <?php }; ?>
-  <?php if ($oatab === 'offen'): ?>
+  <?php if ($oatab === 'zubestaetigen'): ?>
     <?php if ($offen_ang): ?>
     <p class="muted" style="margin:0 0 12px">Klappen Sie ein Angebot auf, wählen Sie die gewünschte Menge und bestätigen Sie verbindlich.</p>
     <?php foreach ($offen_ang as $a): $st = $staffelMap[$a['id']]; $inf = $angInfo[$a['id']]; $accept = true; $open = true; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
-    <?php endif; ?>
+    <?php else: ?><div class="bx-panel"><div class="muted">Aktuell liegt kein Angebot zum Bestätigen vor.</div></div><?php endif; ?>
+
+  <?php elseif ($oatab === 'offen'): ?>
     <?php if ($pending): ?>
     <div class="bx-panel">
       <h2 style="margin:0 0 4px">In Prüfung</h2>
@@ -1452,7 +1457,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       </table></div>
     </div>
     <?php endif; ?>
-    <?php if (!$offen_ang && !$pending): ?><div class="bx-panel"><div class="muted">Aktuell nichts Offenes. Neue Anfragen stellen Sie über das Menü links.</div></div><?php endif; ?>
+    <?php if (!$pending && !$anfPruefShow): ?><div class="bx-panel"><div class="muted">Aktuell nichts Offenes. Neue Anfragen stellen Sie über das Menü links.</div></div><?php endif; ?>
 
   <?php elseif ($oatab === 'bestaetigt'): ?>
     <?php if (!$best_ang && !$bestRows): ?><div class="bx-panel"><div class="muted">Keine bestätigten Vorgänge.</div></div><?php endif; ?>
@@ -1888,7 +1893,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <td style="text-align:right"><?php if (!empty($a['angebot_id'])): ?>
             <?php // Link dorthin, wo der Kunde die Menge wählt und bestätigt (Angebotskarte in „Meine Anfragen"),
                   //  nicht in die reine Angebote-Liste. Bereits bestätigt -> Reiter „Bestätigt".
-                  $oa = ($a['angebot_status'] ?? '') === 'bestaetigt' ? 'bestaetigt' : 'offen'; ?>
+                  $oa = ($a['angebot_status'] ?? '') === 'bestaetigt' ? 'bestaetigt' : (($a['angebot_status'] ?? '') === 'abgelehnt' ? 'abgelehnt' : 'zubestaetigen'); ?>
             <a class="btn btn-primary btn-sm" href="<?= $portalLink('meine_anfragen') ?>&oatab=<?= $oa ?>#a<?= (int)$a['angebot_id'] ?>">Angebot ansehen &amp; wählen</a>
           <?php endif; ?></td></tr>
       <?php endforeach; ?>
