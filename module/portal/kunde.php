@@ -1321,7 +1321,6 @@ portal_head('Kundenportal · ' . $k['firma']);
     $bestRows = array_values(array_filter($erledigtRows, fn($r) => ($r['stufe'] ?? '') === 'erledigt'));
     $abglRows = array_values(array_filter($erledigtRows, fn($r) => in_array($r['stufe'] ?? '', ['abgelehnt','abgeschlossen'], true)));
     $nOffen = count($offen_ang) + count($pending);
-    $sumOffen = count($anfPruef) + $nOffen;              // wartet auf Sie + Angebot zum Bestätigen + in Prüfung
     $sumBest  = count($best_ang) + count($bestRows);     // bestätigt (in Arbeit/versendet) + Rezeptur angelegt
     $sumAbgel = count($abgel_ang) + count($abglRows);    // abgelehnt / nicht machbar
     // Unterreiter nach Typ: die Zähler oben bleiben GESAMT; hier nur die Anzeige-Listen filtern.
@@ -1352,21 +1351,6 @@ portal_head('Kundenportal · ' . $k['firma']);
     $abglRows  = array_values(array_filter($abglRows,  fn($r) => $mt($r['typ'] ?? '')));
     $anfPruefShow = ($atab === 'alle' || $atab === 'rezeptur') ? $anfPruef : [];  // Vorschläge = Rezepturen
   ?>
-
-  <div class="bx-row" style="gap:12px;margin:6px 0 16px;flex-wrap:wrap">
-    <div style="flex:1;min-width:130px;border:1px solid var(--line);border-left:4px solid var(--gruen);border-radius:10px;padding:12px 16px;background:var(--panel-2)">
-      <div style="font-size:26px;font-weight:700;line-height:1"><?= (int)$sumOffen ?></div>
-      <div class="muted" style="font-size:13px;margin-top:4px">offen <span style="font-size:12px">· wartet auf Sie</span></div>
-    </div>
-    <div style="flex:1;min-width:130px;border:1px solid var(--line);border-left:4px solid var(--lime);border-radius:10px;padding:12px 16px;background:var(--panel-2)">
-      <div style="font-size:26px;font-weight:700;line-height:1"><?= (int)$sumBest ?></div>
-      <div class="muted" style="font-size:13px;margin-top:4px">bestätigt <span style="font-size:12px">· angelegt / bestellt</span></div>
-    </div>
-    <div style="flex:1;min-width:130px;border:1px solid var(--line);border-left:4px solid #d99;border-radius:10px;padding:12px 16px;background:var(--panel-2)">
-      <div style="font-size:26px;font-weight:700;line-height:1"><?= (int)$sumAbgel ?></div>
-      <div class="muted" style="font-size:13px;margin-top:4px">abgelehnt <span style="font-size:12px">· nicht machbar</span></div>
-    </div>
-  </div>
 
   <?php if ($anfPruefShow): ?>
   <div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2)">
