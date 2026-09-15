@@ -795,7 +795,11 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table" style="max-width:640px">
     <tbody>
       <tr><td>OPcache (PHP-Beschleuniger)</td><td><?= $st['opcache']['aktiv'] ? bx_badge('an','ok') . ($st['opcache']['hits']!==null?' <span class="muted" style="font-size:12px">Trefferquote '.h($st['opcache']['hits']).' %</span>':'') : bx_badge('AUS','err') . ' <span class="muted" style="font-size:12px">– einschalten beschleunigt jede Seite spürbar (Hoster/php.ini)</span>' ?></td></tr>
-      <tr><td>Datenbank</td><td><?= h($st['db_version'] ?: '–') ?> · <?= $st['db_lokal'] ? bx_badge('lokal','ok') : bx_badge('entfernt','warn') . ' <span class="muted" style="font-size:12px">– jede Abfrage kostet Netzwerk-Latenz</span>' ?></td></tr>
+      <tr><td>Datenbank</td><td><?= h($st['db_version'] ?: '–') ?> · Adresse: <code><?= h($st['db_host'] ?: '–') ?></code>
+        <?= $st['ping_ms'] <= 3 ? bx_badge('schnell', 'ok') : bx_badge('langsam: ' . number_format($st['ping_ms'],1,',','.') . ' ms je Abfrage', 'err') ?>
+        <?php if (!$st['db_lokal']): ?><div class="muted" style="font-size:12px">Die Adresse ist nicht <code>localhost</code>/<code>127.0.0.1</code>. Auch auf demselben Server ist der Zugriff über <code>localhost</code> (direkter Draht/Socket) meist deutlich schneller als über einen Hostnamen/eine IP (Umweg übers Netzwerk).</div>
+        <?php else: ?><div class="muted" style="font-size:12px">Zugriff über <code>localhost</code> – das ist der schnelle, direkte Weg.</div><?php endif; ?>
+      </td></tr>
       <tr><td>PHP</td><td><?= h($st['php_version']) ?> · Speicher-Limit <?= h($st['mem_limit']) ?></td></tr>
       <tr><td>Prepared Statements emuliert</td><td><?= $st['emulate_prep'] ? bx_badge('ja','ok') . ' <span class="muted" style="font-size:12px">– 1 statt 2 Roundtrips je Abfrage</span>' : bx_badge('nein','warn') ?></td></tr>
       <tr><td>Schema-Schnellpfad</td><td><?= $st['schema_guard'] ? bx_badge('aktiv','ok') . ' <span class="muted" style="font-size:12px">– Migrationen laufen nur nach einem Deploy</span>' : bx_badge('nicht gesetzt','warn') ?></td></tr>
@@ -806,7 +810,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
         if ($st['ping_ms'] > 3) $langsamGrund[] = 'Jede DB-Abfrage kostet ' . number_format($st['ping_ms'],2,',','.') . ' ms – bei Seiten mit vielen Abfragen summiert sich das. Ursache ist meist eine entfernte/ausgelastete Datenbank.';
         if (!$st['opcache']['aktiv']) $langsamGrund[] = 'OPcache ist AUS: PHP kompiliert bei jedem Aufruf alle Dateien neu. Einschalten (beim Hoster/in der php.ini) beschleunigt alles.';
         if ($st['connect_ms'] > 100) $langsamGrund[] = 'Der Verbindungsaufbau zur DB dauert ' . number_format($st['connect_ms'],0,',','.') . ' ms je Aufruf.';
-        if (!$st['db_lokal']) $langsamGrund[] = 'Die Datenbank läuft nicht auf demselben Server wie PHP – das kostet bei jeder Abfrage Netzwerkzeit.'; ?>
+        if (!$st['db_lokal']) $langsamGrund[] = 'Die DB-Adresse ist „' . $st['db_host'] . '" statt „localhost". Selbst auf demselben Server geht der Zugriff dann über einen Netzwerk-Umweg statt über den direkten localhost-Draht. In den Zugangsdaten (secrets.php/config.php) den DB-Host auf „localhost" stellen und prüfen, ob „Zeit je DB-Abfrage" danach sinkt.'; ?>
   <?php if ($langsamGrund): ?>
   <div style="border:1px solid var(--line);border-left:4px solid #d99;border-radius:8px;padding:10px 14px;margin-top:12px;background:var(--panel-2)">
     <strong>Mögliche Bremsen</strong>
