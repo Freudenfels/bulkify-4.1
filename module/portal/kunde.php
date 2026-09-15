@@ -729,19 +729,10 @@ if (!function_exists('pt_naehr')) {
         return array_values($n);
     }
 }
-// Katalog je Produkt anreichern: Rezeptur (Zutaten + Nährwerte) + Preistabelle
-foreach ($katalog as &$pk) {
-    $rid = (int)$pk['rezeptur_id'];
-    $pk['zutaten']  = $rid ? all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
-    $pk['nutr']     = $rid ? pt_naehr($rid) : [];
-    $pk['istPulver'] = in_array($pk['darreichungsform'] ?? '', ['pulver','stick','granulat'], true);
-    $pk['portionG'] = $rid ? (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rid]) / 1000 : 0;
-    $pr = [];
-    foreach (all("SELECT stueck, MIN(vk_preis) AS mn FROM produkt_preis WHERE produkt_id=? GROUP BY stueck ORDER BY stueck", [(int)$pk['id']]) as $r)
-        $pr[] = ['stueck'=>(int)$r['stueck'], 'ab'=>vk_fuer_kunde((float)$r['mn'], $kid)];
-    $pk['preise'] = $pr;
-}
-unset($pk);
+// (Früher wurde hier jedes Katalog-Produkt mit Zutaten/Nährwerten/Preistabelle angereichert – auf JEDER
+//  Portal-Seite, ~4 Abfragen je Produkt. Diese Felder werden aber nirgends gelesen: die Produktliste zeigt
+//  nur den „ab"-Preis ($abPreis), das Produktdetail baut seine Zutaten/Nährwerte selbst ($prodZutaten/
+//  $prodNaehr), und die Angebotskarten nutzen $angInfo. Der Loop war toter Code und ist entfernt.)
 seed_kapselgroesse_if_empty();
 $portalKapseln = all("SELECT id, name, fuellmenge_mg FROM kapselgroesse ORDER BY fuellmenge_mg ASC");
 // Kleinste Kapselgröße, in die das Gesamt-Füllgewicht (mg) passt; null = größer als jede Standardkapsel.
