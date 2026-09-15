@@ -2347,9 +2347,11 @@ function form_groessen_label(string $form, float $wert): string {
 
 // Behälter-EK bei einer Bestellmenge: passende Staffel, sonst flacher item.ek_preis.
 function pack_ek_bei_menge(int $verp_id, int $menge): float {
+    static $cache = [];
+    $ck = $verp_id . ':' . $menge;
+    if (array_key_exists($ck, $cache)) return $cache[$ck];
     $st = one("SELECT ek_preis FROM pack_ek_staffel WHERE item_id=? AND menge_ab<=? ORDER BY menge_ab DESC LIMIT 1", [$verp_id, $menge]);
-    if ($st) return (float) $st['ek_preis'];
-    return (float) scalar("SELECT ek_preis FROM item WHERE id=?", [$verp_id]);
+    return $cache[$ck] = $st ? (float) $st['ek_preis'] : (float) scalar("SELECT ek_preis FROM item WHERE id=?", [$verp_id]);
 }
 // Leerkapsel-EK je Stück für ein Produkt (0 wenn nicht bestimmbar / kein Kapselprodukt).
 function produkt_kapsel_ek(int $produkt_id): float {
@@ -2563,16 +2565,21 @@ function kunde_produkt_preise(int $kunde_id): array {
 // ---- Verpackung als eigene Position (Dose/Deckel/Etikett kommen extra) ----
 // Aufschlag % für einen Verpackungsartikel: eigener Wert am Artikel, sonst globaler aufschlag_verpackung.
 function verpackung_aufschlag_prozent(int $item_id): float {
+    static $cache = [];
+    if (array_key_exists($item_id, $cache)) return $cache[$item_id];
     $o = scalar("SELECT vk_aufschlag_prozent FROM item WHERE id=?", [$item_id]);
-    if ($o !== null && trim((string) $o) !== '') return (float) $o;
-    return (float) meta_get('aufschlag_verpackung', 30);
+    if ($o !== null && trim((string) $o) !== '') return $cache[$item_id] = (float) $o;
+    return $cache[$item_id] = (float) meta_get('aufschlag_verpackung', 30);
 }
 // VK je Stück eines Verpackungsartikels bei einer Bestellmenge = EK-Staffel × (1 + Aufschlag). Ohne Kundenrabatt.
 function verpackung_vk_bei_menge(int $item_id, int $menge): float {
+    static $cache = [];
+    $ck = $item_id . ':' . $menge;
+    if (array_key_exists($ck, $cache)) return $cache[$ck];
     // Direkter VK-Override je Bestellmenge hat Vorrang (von Hand im Verkauf-Reiter gesetzt).
     $vk = scalar("SELECT vk_preis FROM pack_vk_staffel WHERE item_id=? AND menge_ab<=? ORDER BY menge_ab DESC LIMIT 1", [$item_id, $menge]);
-    if ($vk !== null && $vk !== false) return (float) $vk;
-    return pack_ek_bei_menge($item_id, $menge) * (1 + verpackung_aufschlag_prozent($item_id) / 100);
+    if ($vk !== null && $vk !== false) return $cache[$ck] = (float) $vk;
+    return $cache[$ck] = pack_ek_bei_menge($item_id, $menge) * (1 + verpackung_aufschlag_prozent($item_id) / 100);
 }
 // Eindeutiger interner Produktname: heißen mehrere Produkte gleich, wird fortlaufend „ v2, v3 …" angehängt.
 // Der erste behält den Basisnamen (= implizit v1); Groß/Kleinschreibung wird ignoriert.
@@ -2595,8 +2602,11 @@ function produkt_name_versioniert(string $name, int $exclude_id = 0): string {
 // Verknüpfte Verpackungsartikel eines Produkts (Dose/Deckel/Etikett), die gesetzt sind.
 // $verp_override: Behälter einer konkreten Matrixzelle – dann wird DER bepreist statt der am Produkt hinterlegte.
 function produkt_verpackung_items(int $produkt_id, ?int $verp_override = null): array {
+    static $cache = [];
+    $ck = $produkt_id . ':' . ($verp_override ?? 0);
+    if (array_key_exists($ck, $cache)) return $cache[$ck];
     $p = one("SELECT verpackung_id, verschluss_id, etikett_id FROM produkt WHERE id=?", [$produkt_id]);
-    if (!$p) return [];
+    if (!$p) return $cache[$ck] = [];
     if ($verp_override) $p['verpackung_id'] = $verp_override;
     // Kein Etikett am Produkt hinterlegt? Passendes Etikett automatisch aus dem Behälter ableiten (Maße/Endformat
     // am Behälter, wie v3) – so erscheint das Etikett als Position + Preis, ohne es am Produkt pflegen zu müssen.
@@ -2612,7 +2622,7 @@ function produkt_verpackung_items(int $produkt_id, ?int $verp_override = null): 
                                'volumen_ml' => $it['volumen_ml'], 'etikett_format' => $it['etikett_format']];
         }
     }
-    return $out;
+    return $cache[$ck] = $out;
 }
 // Überschrift + Beschreibung einer Verpackungs-/Etikett-Position: Art in die Überschrift, Größe in die Beschreibung.
 // $vp: ['rolle'=>'Verpackung'|'Deckel'|'Etikett', 'name'=>…, 'volumen_ml'=>…?, 'etikett_format'=>…?]
@@ -2996,7 +3006,13 @@ function angebot_positionen_aus_staffel(array $a, array $staffeln): array {
     }
     return $out;
 }
+// Pro Angebot innerhalb eines Requests mehrfach aufgerufen (Übersicht + Karte) – request-lokal cachen.
 function angebot_positionen(int $angebot_id): array {
+    static $cache = [];
+    if (!array_key_exists($angebot_id, $cache)) $cache[$angebot_id] = angebot_positionen_calc($angebot_id);
+    return $cache[$angebot_id];
+}
+function angebot_positionen_calc(int $angebot_id): array {
     $rows = all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]);
     // Kaputte Null-Positionen (v3-Import: menge=0 & preis=0) ignorieren – sonst verdecken sie den echten Inhalt.
     $echt = array_values(array_filter($rows, fn($r) => (float)$r['menge'] > 1e-9 || (int)$r['preis_cent'] > 0));
@@ -3143,8 +3159,12 @@ function produkt_variante_vk(int $produkt_id, float $ek): float {
 // VK mit Kundenrabatt/-aufschlag (kunden.rabatt_marge: positiv = Rabatt %).
 function vk_fuer_kunde(float $vk, ?int $kunde_id): float {
     if (!$kunde_id) return $vk;
-    $rab = (float) scalar("SELECT rabatt_marge FROM kunden WHERE id=?", [$kunde_id]);
-    return $vk * (1 - $rab / 100);
+    // Rabatt je Kunde ist innerhalb eines Requests konstant, wird aber pro Preiszeile
+    // aufgerufen (Angebots-/Matrixseiten hunderte Male) – daher request-lokal cachen.
+    static $rabCache = [];
+    if (!array_key_exists($kunde_id, $rabCache))
+        $rabCache[$kunde_id] = (float) scalar("SELECT rabatt_marge FROM kunden WHERE id=?", [$kunde_id]);
+    return $vk * (1 - $rabCache[$kunde_id] / 100);
 }
 
 // ---- Rohstoff-Preise (Weiterverkauf an Kunden): EK-Staffel + Aufschlag ----
@@ -3625,17 +3645,21 @@ function etikett_masse(?string $s): ?array {
 // Ohne Endformat am Behälter lässt sich nichts zuordnen: dann kommt eine leere Liste zurück,
 // und die Oberfläche sagt, was fehlt – statt wahllos alle Etiketten anzubieten.
 function passende_etiketten_fuer(?int $verpackung_id): array {
-    $alle = all("SELECT id, name, breite_mm, hoehe_mm, etikett_format FROM item
+    static $alleCache = null, $resCache = [];
+    $ck = (int)$verpackung_id;
+    if (array_key_exists($ck, $resCache)) return $resCache[$ck];
+    if ($alleCache === null) $alleCache = all("SELECT id, name, breite_mm, hoehe_mm, etikett_format FROM item
                  WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0 ORDER BY name");
-    if (!$verpackung_id) return $alle;
+    $alle = $alleCache;
+    if (!$verpackung_id) return $resCache[$ck] = $alle;
     $ziel = etikett_masse((string) scalar("SELECT etikett_final FROM item WHERE id=?", [$verpackung_id]));
-    if (!$ziel) return [];
+    if (!$ziel) return $resCache[$ck] = [];
     $out = [];
     foreach ($alle as $e) {
         $m = ($e['breite_mm'] && $e['hoehe_mm']) ? [(float)$e['breite_mm'], (float)$e['hoehe_mm']] : etikett_masse($e['etikett_format']);
         if ($m && abs($m[0] - $ziel[0]) <= 2.0 && abs($m[1] - $ziel[1]) <= 2.0) $out[] = $e;
     }
-    return $out;
+    return $resCache[$ck] = $out;
 }
 
 // Das passende Etikett zu einem Behälter (erstes Endformat-Match) – für die automatische Zuordnung.
@@ -5602,12 +5626,22 @@ function demo_testset_einspielen(): array {
     return ['ok'=>true, 'neu'=>$neu, 'log'=>$log];
 }
 
+// Request-lokaler Cache für app_meta: dieselben Schlüssel werden pro Seitenaufruf
+// sehr oft gelesen (z. B. Margen/Aufschläge in Preisrechnungen). &-Referenz, damit
+// meta_set denselben Cache aktualisieren kann.
+function &meta_cache(): array { static $c = []; return $c; }
 function meta_get(string $k, $default = null) {
-    $v = scalar("SELECT v FROM app_meta WHERE k = ?", [$k]);
-    return $v === false ? $default : $v;
+    $c = &meta_cache();
+    if (!array_key_exists($k, $c)) {
+        $v = scalar("SELECT v FROM app_meta WHERE k = ?", [$k]);
+        $c[$k] = $v === false ? null : $v;
+    }
+    return $c[$k] === null ? $default : $c[$k];
 }
 function meta_set(string $k, $v): void {
     q("INSERT INTO app_meta (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)", [$k, $v]);
+    $c = &meta_cache();
+    $c[$k] = (string)$v;   // Cache mitziehen, damit späterer meta_get im selben Request stimmt
 }
 
 // Novel-Food-Abgleich: Zutaten der Produkt-Rezeptur gegen den EU-Katalog (novelfood_katalog).
