@@ -26,6 +26,18 @@ function mail_bereit(): bool {
     return $c['aktiv'] && $c['host'] !== '' && $c['from'] !== '';
 }
 
+// Eine Aktion (typisch: Mailversand) ERST NACH dem Senden der Antwort ausführen.
+// Grund: SMTP kann langsam sein (Timeout bis 15 s je Mail). Läuft das im Request des
+// Kunden, wartet er mit – und bei wackeliger Verbindung reißt die Antwort ab
+// (ERR_SSL_PROTOCOL_ERROR). Mit fastcgi_finish_request() ist die Seite beim Kunden
+// sofort fertig; die Mail geht im Hintergrund raus. Fehler werden verschluckt.
+function nach_antwort(callable $fn): void {
+    register_shutdown_function(function () use ($fn) {
+        if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
+        try { $fn(); } catch (\Throwable $e) { /* ein Mailproblem darf nichts weiter stören */ }
+    });
+}
+
 // Mail verschicken. Gibt '' zurück, wenn es geklappt hat, sonst den Grund.
 // Wirft nie – ein fehlgeschlagener Versand darf keinen Vorgang abbrechen.
 function mail_senden(string $to, string $betreff, string $text): string {

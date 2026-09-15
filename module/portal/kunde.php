@@ -68,7 +68,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $aid]);
         $neuAuftrag = auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
         portal_labortest_upsell($k, $aid);
-        if (mail_bereit()) mail_angebot_angenommen($aid, $neuAuftrag);
+        if (mail_bereit()) nach_antwort(fn() => mail_angebot_angenommen($aid, $neuAuftrag));
     }
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&bestaetigt=1'); exit;
 }
@@ -85,7 +85,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal verbindlich bestätigt durch ' . $name . '.', 'angebot', 'angebot', $aid);
         $neuAuftrag = auftrag_aus_angebot($aid);
         portal_labortest_upsell($k, $aid);
-        if (mail_bereit()) mail_angebot_angenommen($aid, $neuAuftrag);
+        if (mail_bereit()) nach_antwort(fn() => mail_angebot_angenommen($aid, $neuAuftrag));
     }
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&ok=1'); exit;
 }
@@ -133,7 +133,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
             q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
             log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal verbindlich bestätigt durch ' . $name . '.', 'angebot', 'angebot', $aid);
             portal_labortest_upsell($k, $aid);
-            if (mail_bereit()) mail_angebot_angenommen($aid, $auf);
+            if (mail_bereit()) nach_antwort(fn() => mail_angebot_angenommen($aid, $auf));
             header('Location: ?p=portal&token=' . $token . '&v=bestellungen&ok=1'); exit;
         }
     }
@@ -172,7 +172,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
           [$aid, $b, trim($wm[$i] ?? ''), trim($we[$i] ?? 'mg'), $i]);
     }
     log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Neue Rezepturanfrage im Portal eingereicht.', 'anfrage', 'anfrage', $aid);
-    if (mail_bereit()) mail_kunde_anfrage_eingang('rezeptur', (int)$aid);
+    if (mail_bereit()) nach_antwort(fn() => mail_kunde_anfrage_eingang('rezeptur', (int)$aid));
     // Gleich einen Rezepturentwurf entwickeln lassen – das Team findet ihn beim Öffnen der Anfrage
     // vor und muss nicht bei null anfangen. Der Kunde sieht davon nichts; es ist ein interner Entwurf.
     // Wichtig: gerechnet wird im Hintergrund (?p=ki_job). Die KI braucht bis zu einer Minute –
@@ -371,7 +371,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
                   [$paf, $pid ?: null, $rezWahl ?: null, $stk, $fgv, $vtyp, $z['vpe'], $sort++]);
             }
             log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Produktanfrage im Portal gestellt' . (count($zeilen) > 1 ? ' (' . count($zeilen) . ' Staffeln)' : '') . '.', 'anfrage');
-            if (mail_bereit()) mail_kunde_anfrage_eingang('portal', (int)$paf);
+            if (mail_bereit()) nach_antwort(fn() => mail_kunde_anfrage_eingang('portal', (int)$paf));
         }
     }
     // Auf der Anfragenliste landen statt zurück im Katalog – dort sieht der Kunde seine Anfrage sofort stehen.
@@ -397,7 +397,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         if ($n) {
             log_aktivitaet('kunde', (int)$k['id'], 'kunde', $n . ' Rohstoffanfrage(n) im Portal gestellt.', 'anfrage');
             // Eine Eingangsbestätigung für die Absendung (Portal-Link zeigt alle Positionen).
-            if (mail_bereit() && $erstePaf) mail_kunde_anfrage_eingang('portal', (int)$erstePaf);
+            if (mail_bereit() && $erstePaf) nach_antwort(fn() => mail_kunde_anfrage_eingang('portal', (int)$erstePaf));
         }
     }
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
@@ -433,7 +433,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
                 }
             }
             log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Dienstleistungsanfrage (' . $DIENST_TYPEN[$dtyp] . ') im Portal gestellt.', 'anfrage');
-            if (mail_bereit()) mail_kunde_anfrage_eingang('portal', (int)$aid);
+            if (mail_bereit()) nach_antwort(fn() => mail_kunde_anfrage_eingang('portal', (int)$aid));
         }
     }
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
