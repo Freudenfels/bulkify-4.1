@@ -29,7 +29,16 @@ $alle = all("SELECT pa.*, k.firma AS kunde_firma, COALESCE(NULLIF(p.name,''), a.
              FROM produktionsauftrag pa
              LEFT JOIN kunden k ON k.id=pa.kunde_id LEFT JOIN produkt p ON p.id=pa.produkt_id
              LEFT JOIN auftrag a ON a.id=pa.auftrag_id");
-foreach ($alle as &$r) { $r['_bereit'] = produktion_bereitschaft((int)$r['id'])['status']; } unset($r);
+// Bereitschaft (Material da?) sparsam bestimmen – die volle Prüfung (produktion_bereitschaft ->
+// auftrag_bedarf) macht mehrere Abfragen je Auftrag. Sie ist NUR für noch nicht begonnene Aufträge
+// nötig: 'erledigt' wird nie ausgewertet, und wer schon einen Schritt erledigt hat, „läuft" bereits
+// (das weiß die Liste aus n_done, ohne weitere Abfrage). So bleibt die teure Prüfung den offenen vorbehalten.
+foreach ($alle as &$r) {
+    if ($r['status'] === 'erledigt')  $r['_bereit'] = 'erledigt';
+    elseif ((int)$r['n_done'] > 0)    $r['_bereit'] = 'laeuft';                                    // begonnen -> Material war da
+    else                              $r['_bereit'] = produktion_bereitschaft((int)$r['id'])['status'];
+}
+unset($r);
 
 // Einteilung in die Reiter
 $istErledigt = fn($r) => $r['status'] === 'erledigt';
