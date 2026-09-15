@@ -3814,7 +3814,7 @@ function produktionsschritte_fuer(string $form, bool $zukauf = false): array {
 // Produktionsbereitschaft: ist das Material komplett da, um den Auftrag zu produzieren?
 // Rückgabe: ['status'=>bereit|wartet|laeuft|fertig|unbekannt, 'fehlend'=>[['name','benoetigt','verfuegbar','einheit'], ...]]
 function produktion_bereitschaft(int $pa_id): array {
-    $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = pa_row_cached($pa_id);
     if (!$pa) return ['status'=>'unbekannt', 'fehlend'=>[]];
     if ($pa['status'] === 'erledigt') return ['status'=>'fertig', 'fehlend'=>[]];
     if ((int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]) > 0)
@@ -3878,6 +3878,27 @@ function item_reserviert_eigen(int $item_id, int $auftrag_id): float {
     $v = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv' AND auftrag_id=?", [$item_id, $auftrag_id]);
     if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
     return $v;
+}
+
+// Flag-gesteuerte (nur in der schreibfreien Produktionsliste aktive) Cache-Helfer, damit dieselbe
+// Zeile nicht mehrfach je Auftrag geholt wird. Ohne aktiven Cache = normale Einzelabfrage.
+function pa_row_cached(int $pa_id): ?array {
+    if (!isset($GLOBALS['bx_stock_cache'])) return one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $ck = 'pa:' . $pa_id;
+    if (!array_key_exists($ck, $GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    return $GLOBALS['bx_stock_cache'][$ck];
+}
+function produkt_row_cached(int $produkt_id): ?array {
+    if (!isset($GLOBALS['bx_stock_cache'])) return one("SELECT * FROM produkt WHERE id=?", [$produkt_id]);
+    $ck = 'prod:' . $produkt_id;
+    if (!array_key_exists($ck, $GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = one("SELECT * FROM produkt WHERE id=?", [$produkt_id]);
+    return $GLOBALS['bx_stock_cache'][$ck];
+}
+function item_name_cached(int $item_id): string {
+    if (!isset($GLOBALS['bx_stock_cache'])) return (string) scalar("SELECT name FROM item WHERE id=?", [$item_id]);
+    $ck = 'iname:' . $item_id;
+    if (!array_key_exists($ck, $GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = (string) scalar("SELECT name FROM item WHERE id=?", [$item_id]);
+    return $GLOBALS['bx_stock_cache'][$ck];
 }
 // Netto verfügbar FÜR diesen Auftrag = freier Bestand − Reservierungen ANDERER Aufträge (eigene Reservierung zählt als verfügbar).
 function item_verfuegbar_fuer(int $item_id, int $auftrag_id): float {
@@ -3975,7 +3996,7 @@ function produktion_stueck_je_packung(array $pa): int {
 // Kompletter Einkaufsbedarf eines Auftrags (Stückliste × Menge vs. freier Bestand).
 // Rückgabe je Komponente: ['rolle','item_id','name','benoetigt','verfuegbar','fehlt','einheit']
 function auftrag_bedarf(int $pa_id): array {
-    $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = pa_row_cached($pa_id);
     if (!$pa) return [];
     $aid = (int)$pa['auftrag_id'];
     $menge = (int)$pa['menge'];
@@ -3997,15 +4018,15 @@ function auftrag_bedarf(int $pa_id): array {
         $kapId = produkt_leerkapsel_id((int)$pa['produkt_id']);
         if ($kapId && $einheiten > 0) {
             $verfK = item_bestand($kapId, true);
-            $rows[] = ['rolle'=>'Leerkapsel','item_id'=>$kapId,'name'=>scalar("SELECT name FROM item WHERE id=?",[$kapId]),'benoetigt'=>$einheiten,'verfuegbar'=>$verfK,'fehlt'=>max(0.0,$einheiten-$verfK),'einheit'=>'Stück'];
+            $rows[] = ['rolle'=>'Leerkapsel','item_id'=>$kapId,'name'=>item_name_cached($kapId),'benoetigt'=>$einheiten,'verfuegbar'=>$verfK,'fehlt'=>max(0.0,$einheiten-$verfK),'einheit'=>'Stück'];
         }
     }
     // Verpackungs-Stückliste (alle Slots) – je Packung 1 Stück
-    $slots = one("SELECT verpackung_id, verschluss_id, etikett_id, karton_id, beipack_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    $slots = produkt_row_cached((int)$pa['produkt_id']);
     foreach (['verpackung_id'=>'Verpackung','verschluss_id'=>'Deckel','etikett_id'=>'Etikett','karton_id'=>'Karton','beipack_id'=>'Beipackzettel'] as $f => $rolle) {
         if (!empty($slots[$f]) && $menge > 0) {
             $iid = (int)$slots[$f]; $verf = item_bestand($iid, true);
-            $rows[] = ['rolle'=>$rolle,'item_id'=>$iid,'name'=>scalar("SELECT name FROM item WHERE id=?",[$iid]),'benoetigt'=>$menge,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$menge-$verf),'einheit'=>'Stück'];
+            $rows[] = ['rolle'=>$rolle,'item_id'=>$iid,'name'=>item_name_cached($iid),'benoetigt'=>$menge,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$menge-$verf),'einheit'=>'Stück'];
         }
     }
     // Netto-Verfügbarkeit: freier Bestand abzüglich Reservierungen anderer Aufträge; eigene Reservierung ausweisen.
@@ -4398,14 +4419,25 @@ function produktion_scan_pruefen(string $scan, ?string $kat): array {
 
 // Materialbedarf eines Produktionsauftrags: je Rohstoff benötigte vs. verfügbare Menge.
 function produktion_materialbedarf(int $pa_id): array {
-    $pa = one("SELECT menge, produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = pa_row_cached($pa_id);
     if (!$pa) return [];
-    $prod = one("SELECT rezeptur_id, einheiten_pro_packung FROM produkt WHERE id=?", [$pa['produkt_id']]);
+    $prod = produkt_row_cached((int)$pa['produkt_id']);
     if (!$prod || !$prod['rezeptur_id']) return [];
     $einheiten_total = (int)$pa['menge'] * (int)$prod['einheiten_pro_packung'];
+    // Zutaten der Rezeptur – in der Liste request-lokal gecacht (Rezepturen mehrerer Aufträge nur einmal holen).
+    $rid = (int)$prod['rezeptur_id'];
+    if (isset($GLOBALS['bx_stock_cache'])) {
+        $zk = 'rz:' . $rid;
+        if (!array_key_exists($zk, $GLOBALS['bx_stock_cache']))
+            $GLOBALS['bx_stock_cache'][$zk] = all("SELECT z.item_id, z.menge_mg, i.name, i.einheit
+                  FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]);
+        $zutaten = $GLOBALS['bx_stock_cache'][$zk];
+    } else {
+        $zutaten = all("SELECT z.item_id, z.menge_mg, i.name, i.einheit
+                  FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]);
+    }
     $out = [];
-    foreach (all("SELECT z.item_id, z.menge_mg, i.name, i.einheit
-                  FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$prod['rezeptur_id']]) as $z) {
+    foreach ($zutaten as $z) {
         $mg = (float)$z['menge_mg'] * $einheiten_total;
         $faktor = $z['einheit'] === 'g' ? 1e3 : 1e6;          // mg -> Basiseinheit (kg-Standard)
         $benoetigt = $mg / $faktor;
