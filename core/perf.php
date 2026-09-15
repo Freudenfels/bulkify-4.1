@@ -20,6 +20,12 @@ function perf_aktiv(): bool {
 function perf_aufzeichnen(float $startT): void {
     if (!perf_aktiv()) return;
     $s = db_stats();
+    // Die Live-Messung der Diagnose-Seite (50x SELECT 1 etc.) NICHT mitzählen – sonst sieht die
+    // Diagnose-Seite kuenstlich teuer aus.
+    $selbstQ  = (int)($GLOBALS['bx_perf_selbst_q'] ?? 0);
+    $selbstMs = (float)($GLOBALS['bx_perf_selbst_ms'] ?? 0.0);
+    $s['anzahl'] = max(0, $s['anzahl'] - $selbstQ);
+    $s['db_ms']  = max(0.0, $s['db_ms'] - $selbstMs);
     $route = preg_replace('/[^a-z0-9_]/i', '', (string)($_GET['p'] ?? '')) ?: 'start';
     $view  = preg_replace('/[^a-z0-9_]/i', '', (string)($_GET['v'] ?? ''));
     if ($view !== '') $route .= ':' . $view;
@@ -36,7 +42,7 @@ function perf_aufzeichnen(float $startT): void {
     $zeile = implode("\t", [
         gmdate('Y-m-d H:i:s'),
         $route,
-        (string) round((microtime(true) - $startT) * 1000),      // Gesamtdauer ms
+        (string) round(max(0.0, (microtime(true) - $startT) * 1000 - $selbstMs)),   // Gesamtdauer ms (ohne Selbstmessung)
         (string) $s['anzahl'],                                    // Anzahl Abfragen
         (string) round($s['db_ms']),                             // DB-Zeit ms
         (string) round($s['connect_ms']),                        // Verbindungsaufbau ms
@@ -88,7 +94,9 @@ function perf_logdatei_leeren(): void { @file_put_contents(perf_logdatei(), '', 
 // Live-Messung: reine DB-Latenz + Umgebungsinfos. Läuft synchron beim Öffnen der Seite.
 function perf_selftest(): array {
     // Latenz je Abfrage: viele triviale Roundtrips messen (SELECT 1) + eine information_schema-Abfrage,
-    // die auf beta bisher teuer war.
+    // die auf beta bisher teuer war. Diese Mess-Abfragen selbst sollen die aufgezeichneten Seitenzahlen
+    // NICHT verfälschen – Anzahl/Zeit merken, damit perf_aufzeichnen() sie wieder abzieht.
+    $qBefore = (int)($GLOBALS['bx_q_n'] ?? 0); $msBefore = (float)($GLOBALS['bx_q_ms'] ?? 0.0);
     $n = 50; $t0 = microtime(true);
     for ($i = 0; $i < $n; $i++) scalar("SELECT 1");
     $pingMs = (microtime(true) - $t0) * 1000 / $n;
@@ -96,6 +104,8 @@ function perf_selftest(): array {
     $t1 = microtime(true);
     scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ?", [DB_NAME]);
     $isMs = (microtime(true) - $t1) * 1000;
+    $GLOBALS['bx_perf_selbst_q']  = (int)($GLOBALS['bx_q_n'] ?? 0) - $qBefore;
+    $GLOBALS['bx_perf_selbst_ms'] = (float)($GLOBALS['bx_q_ms'] ?? 0.0) - $msBefore;
 
     // OPcache-Status (beschleunigt PHP enorm, wenn an).
     $op = ['aktiv' => false, 'hits' => null];
