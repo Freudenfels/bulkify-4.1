@@ -10,6 +10,8 @@ require_once __DIR__ . '/../core/auth.php';
 require_once __DIR__ . '/../core/layout.php';
 require_once __DIR__ . '/../core/perf.php';
 // Am Ende jedes Requests eine Messzeile schreiben – nur wenn die Diagnose eingeschaltet ist.
+// Bei eingeschalteter Diagnose zusätzlich die Abfrage-Muster mitzählen (core/db.php).
+$GLOBALS['bx_q_trace'] = perf_aktiv();
 register_shutdown_function(function () { perf_aufzeichnen(BX_T0); });
 
 // Schema beim Start sicherstellen (idempotent) + ersten Admin anlegen

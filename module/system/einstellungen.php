@@ -840,13 +840,25 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     </tbody>
   </table></div>
   <h3 style="margin:14px 0 6px">Letzte Aufrufe</h3>
+  <p class="muted" style="margin:0 0 8px;font-size:13px">Zeile aufklappen zeigt, welche Abfragen die Seite am häufigsten/längsten macht – so sieht man die konkrete Bremse.</p>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Zeitpunkt</th><th>Seite</th><th class="bx-num">Dauer</th><th class="bx-num">Abfragen</th><th class="bx-num">DB-Zeit</th><th class="bx-num">RAM</th></tr></thead>
+    <thead><tr><th></th><th>Zeitpunkt</th><th>Seite</th><th class="bx-num">Dauer</th><th class="bx-num">Abfragen</th><th class="bx-num">DB-Zeit</th><th class="bx-num">RAM</th></tr></thead>
     <tbody>
-    <?php foreach ($letzte as $r): ?>
-      <tr><td class="muted" style="font-size:12px"><?= h(fmt_zeit($r['zeit'])) ?></td><td><?= h($r['route']) ?></td>
+    <?php foreach ($letzte as $i => $r): $hatMuster = trim((string)$r['muster']) !== ''; ?>
+      <tr>
+        <td><?php if ($hatMuster): ?><a href="#" onclick="var d=document.getElementById('m<?= $i ?>');d.hidden=!d.hidden;this.textContent=d.hidden?'+':'−';return false;" style="text-decoration:none">+</a><?php endif; ?></td>
+        <td class="muted" style="font-size:12px"><?= h(fmt_zeit($r['zeit'])) ?></td><td><?= h($r['route']) ?></td>
         <td class="bx-num"><?= bx_badge($r['dauer'].' ms', $r['dauer']<=300?'ok':($r['dauer']<=1500?'warn':'err')) ?></td>
-        <td class="bx-num"><?= $r['abfragen'] ?></td><td class="bx-num"><?= $r['db_ms'] ?> ms</td><td class="bx-num"><?= h(number_format($r['ram'],1,',','.')) ?> MB</td></tr>
+        <td class="bx-num"><?= $r['abfragen'] ?></td><td class="bx-num"><?= $r['db_ms'] ?> ms</td><td class="bx-num"><?= h(number_format($r['ram'],1,',','.')) ?> MB</td>
+      </tr>
+      <?php if ($hatMuster): ?>
+      <tr id="m<?= $i ?>" hidden><td></td><td colspan="6" style="background:var(--panel-2)">
+        <div class="muted" style="font-size:12px;margin-bottom:4px">Häufigste Abfragen (Anzahl / Gesamtzeit):</div>
+        <?php foreach (explode(' ~ ', $r['muster']) as $ms): ?>
+          <div style="font-family:monospace;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= h($ms) ?></div>
+        <?php endforeach; ?>
+      </td></tr>
+      <?php endif; ?>
     <?php endforeach; ?>
     </tbody>
   </table></div>

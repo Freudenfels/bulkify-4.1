@@ -32,8 +32,18 @@ function q(string $sql, array $params = []): PDOStatement {
     $t0 = microtime(true);
     $st = db()->prepare($sql);
     $st->execute($params);
+    $dt = (microtime(true) - $t0) * 1000;
     $GLOBALS['bx_q_n']  = ($GLOBALS['bx_q_n']  ?? 0) + 1;
-    $GLOBALS['bx_q_ms'] = ($GLOBALS['bx_q_ms'] ?? 0.0) + (microtime(true) - $t0) * 1000;
+    $GLOBALS['bx_q_ms'] = ($GLOBALS['bx_q_ms'] ?? 0.0) + $dt;
+    // Nur bei eingeschalteter Diagnose: Abfrage-Muster (ohne konkrete Werte) zählen + Zeit sammeln,
+    // damit die Diagnose je Seite zeigt, WELCHE Abfragen wie oft laufen.
+    if (!empty($GLOBALS['bx_q_trace'])) {
+        $shape = preg_replace(['/\s+/', "/'[^']*'/", '/\b\d+\b/'], [' ', "'?'", 'N'], trim($sql));
+        $shape = substr($shape, 0, 100);
+        if (!isset($GLOBALS['bx_q_shapes'][$shape])) $GLOBALS['bx_q_shapes'][$shape] = ['n' => 0, 'ms' => 0.0];
+        $GLOBALS['bx_q_shapes'][$shape]['n']++;
+        $GLOBALS['bx_q_shapes'][$shape]['ms'] += $dt;
+    }
     return $st;
 }
 function one(string $sql, array $params = []): ?array {

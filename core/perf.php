@@ -23,6 +23,16 @@ function perf_aufzeichnen(float $startT): void {
     $route = preg_replace('/[^a-z0-9_]/i', '', (string)($_GET['p'] ?? '')) ?: 'start';
     $view  = preg_replace('/[^a-z0-9_]/i', '', (string)($_GET['v'] ?? ''));
     if ($view !== '') $route .= ':' . $view;
+    // Top-Abfragemuster dieses Requests (nur wenn erfasst): "anzahl×ms|muster" ~ getrennt.
+    $shapes = '';
+    if (!empty($GLOBALS['bx_q_shapes'])) {
+        $arr = $GLOBALS['bx_q_shapes'];
+        uasort($arr, fn($x, $y) => ($y['n'] * 1000 + $y['ms']) <=> ($x['n'] * 1000 + $x['ms']));
+        $top = array_slice($arr, 0, 6, true);
+        $teile = [];
+        foreach ($top as $muster => $d) $teile[] = $d['n'] . 'x/' . round($d['ms']) . 'ms ' . str_replace(['~', '|'], ' ', $muster);
+        $shapes = implode(' ~ ', $teile);
+    }
     $zeile = implode("\t", [
         gmdate('Y-m-d H:i:s'),
         $route,
@@ -31,6 +41,7 @@ function perf_aufzeichnen(float $startT): void {
         (string) round($s['db_ms']),                             // DB-Zeit ms
         (string) round($s['connect_ms']),                        // Verbindungsaufbau ms
         (string) round(memory_get_peak_usage() / 1048576, 1),    // Spitzen-RAM MB
+        $shapes,                                                  // Top-Abfragemuster (optional)
     ]);
     $f = perf_logdatei();
     @file_put_contents($f, $zeile . "\n", FILE_APPEND | LOCK_EX);
@@ -52,7 +63,8 @@ function perf_letzte(int $n = 60): array {
         $t = explode("\t", $z);
         if (count($t) < 7) continue;
         $out[] = ['zeit'=>$t[0], 'route'=>$t[1], 'dauer'=>(int)$t[2], 'abfragen'=>(int)$t[3],
-                  'db_ms'=>(int)$t[4], 'connect_ms'=>(int)$t[5], 'ram'=>(float)$t[6]];
+                  'db_ms'=>(int)$t[4], 'connect_ms'=>(int)$t[5], 'ram'=>(float)$t[6],
+                  'muster'=>$t[7] ?? ''];
     }
     return $out;
 }
