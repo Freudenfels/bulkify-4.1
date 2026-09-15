@@ -74,7 +74,7 @@ foreach ($alle as &$r) {
     else                              $r['_bereit'] = produktion_bereitschaft((int)$r['id'])['status'];
 }
 unset($r);
-unset($GLOBALS['bx_stock_cache']);   // Cache nach der Liste wieder aus (Schreibpfade rechnen frisch)
+// Cache bleibt für die (schreibfreie) Anzeige aktiv (Spalte „Kapsel/Tablette"); am Dateiende wieder aus.
 
 // Einteilung in die Reiter
 $istErledigt = fn($r) => $r['status'] === 'erledigt';
@@ -99,6 +99,17 @@ if ($q !== '') {
     });
 }
 $rows = bx_sort_rows($rows, $sort, $dir);
+
+// Spalte „Kapsel/Tablette": Grunddaten aller ANGEZEIGTEN Produkte in EINER Abfrage vorladen
+// (statt je Zeile eine) -> produktion_groesse_label() findet sie dann im Cache.
+$grlIds = array_values(array_unique(array_filter(array_map(fn($r) => (int)($r['produkt_id'] ?? 0), $rows))));
+if ($grlIds) { $in = implode(',', array_fill(0, count($grlIds), '?'));
+    foreach (all("SELECT p.id, r.darreichungsform AS form, kg.name AS kapsel_name,
+                         (SELECT COALESCE(SUM(z.menge_mg),0) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id) AS fg
+                  FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                  LEFT JOIN kapselgroesse kg ON kg.id=r.kapselgroesse_id WHERE p.id IN ($in)", $grlIds) as $row)
+        $GLOBALS['bx_stock_cache']['grl:' . (int)$row['id']] = $row;
+}
 
 $statusBadge = function ($r) {
     return match ($r['status']) {
@@ -179,4 +190,5 @@ bx_table($cols, array_values($rows), [
 <div class="muted" style="font-size:12px;margin-top:6px">Eigenproduktion = wir stellen selbst her (voller Weg mit Rohstoffen/Mischen/Verkapseln). Fremdproduktion = fertige Bulkware zukaufen (verkürzter Weg). Bereits begonnene Aufträge lassen sich nicht mehr umstellen.</div>
 <?php endif; ?>
 <?php
+unset($GLOBALS['bx_stock_cache']);   // Anzeige fertig -> Cache aus (falls danach noch etwas rechnet)
 render_footer();

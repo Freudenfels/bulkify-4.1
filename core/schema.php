@@ -1679,10 +1679,17 @@ function produkt_leerkapsel_id(int $produkt_id): ?int {
 // $kurz=true kürzt „(berechnet)" zu „(b)" – für schmale Listen-Tabellen.
 function produktion_groesse_label(int $produkt_id, bool $kurz = false): string {
     if ($produkt_id <= 0) return '';
-    $p = one("SELECT r.darreichungsform AS form, kg.name AS kapsel_name,
-                     (SELECT COALESCE(SUM(z.menge_mg),0) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id) AS fg
-              FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
-              LEFT JOIN kapselgroesse kg ON kg.id=r.kapselgroesse_id WHERE p.id=?", [$produkt_id]);
+    // Grunddaten (Form/Kapselgröße/Füllgewicht) – in der Liste per Bulk vorgeladen (Cache 'grl:'.id),
+    // sonst Einzelabfrage. Spart je angezeigter Zeile eine Abfrage.
+    if (isset($GLOBALS['bx_stock_cache']) && array_key_exists('grl:' . $produkt_id, $GLOBALS['bx_stock_cache'])) {
+        $p = $GLOBALS['bx_stock_cache']['grl:' . $produkt_id];
+    } else {
+        $p = one("SELECT r.darreichungsform AS form, kg.name AS kapsel_name,
+                         (SELECT COALESCE(SUM(z.menge_mg),0) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id) AS fg
+                  FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                  LEFT JOIN kapselgroesse kg ON kg.id=r.kapselgroesse_id WHERE p.id=?", [$produkt_id]);
+        if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache']['grl:' . $produkt_id] = $p;
+    }
     if (!$p) return '';
     $form = (string)($p['form'] ?? '');
     $fg   = (float)($p['fg'] ?? 0);
