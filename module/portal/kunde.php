@@ -458,7 +458,13 @@ function portal_head(string $titel): void {
        . ".pt-choice-card:hover{border-color:var(--gruen);text-decoration:none}"
        . ".pt-choice-card .t{font-weight:600;font-size:15px}"
        . ".pt-choice-card .s{color:var(--muted);font-size:13px;margin-top:4px;line-height:1.45}"
-       . ".pt-choice-go{display:inline-block;margin-top:10px;color:var(--gruen);font-weight:600;font-size:13px}</style>";
+       . ".pt-choice-go{display:inline-block;margin-top:10px;color:var(--gruen);font-weight:600;font-size:13px}"
+       // Unterreiter (Typ-Filter): dezente Pillen, klar abgesetzt von den Hauptreitern darüber
+       . ".pt-subtabs{display:flex;flex-wrap:wrap;gap:6px;border:none;margin:0 0 14px}"
+       . ".pt-subtabs a{padding:4px 12px;font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:999px;background:transparent;line-height:1.6}"
+       . ".pt-subtabs a:hover{color:var(--text);text-decoration:none;background:var(--panel-2)}"
+       . ".pt-subtabs a.on{color:var(--dunkelgruen);background:var(--panel-2);border-color:var(--gruen);font-weight:600}"
+       . ':root[data-theme="dark"] .pt-subtabs a.on{color:var(--lime)}</style>';
     echo "<script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>";
     echo "</head><body>";
 }
@@ -1381,7 +1387,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=abgelehnt&atab=<?= $atab ?>"  class="<?= $oatab === 'abgelehnt' ? 'on' : '' ?>">Abgelehnt<?= $sumAbgel ? ' (' . $sumAbgel . ')' : '' ?></a>
   </div>
   <?php if (count($anfTabs) > 1): ?>
-  <div class="settabs" style="margin:0 0 12px;font-size:13px;opacity:.95">
+  <div class="pt-subtabs">
     <?php foreach ($anfTabs as $tk => $tl): $tc = (int)($typCount[$tk] ?? 0); ?>
       <a href="<?= $portalLink('meine_anfragen') ?>&oatab=<?= $oatab ?>&atab=<?= $tk ?>" class="<?= $atab === $tk ? 'on' : '' ?>"><?= h($tl) ?><?= $tc ? ' (' . $tc . ')' : '' ?></a>
     <?php endforeach; ?>
