@@ -100,24 +100,10 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     if (function_exists('scalar')) {
         try {
             $anfCount['bedarf'] = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE status IN ('offen','laufend') AND auftrag_id IS NOT NULL AND bedarf_gemeldet IS NULL");
-            $anzGem = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE status IN ('offen','laufend') AND bedarf_gemeldet IS NOT NULL");
-            // „Einkaufsliste"-Badge: die exakte Zahl erfordert den vollen Bedarf (bedarf_aggregiert schleift
-            // über alle gemeldeten Produktionsaufträge -> teuer). Das lief bisher bei JEDEM Seitenaufruf im
-            // Menü und war die Hauptbremse. Jetzt kurz cachen (2 Min) – die Einkaufsliste-Seite selbst rechnet
-            // weiterhin live. Beim Neuberechnen den Bestands-Cache aktivieren, damit auch das gebündelt läuft.
-            $ekl = (int) meta_get('nav_ekl_cache', 0);
-            if ($anzGem > 0 && function_exists('bedarf_aggregiert') && (time() - (int) meta_get('nav_ekl_cache_at', 0)) >= 120) {
-                $ekl = 0;
-                $GLOBALS['bx_stock_cache'] = [];
-                foreach (bedarf_aggregiert(true) as $a) if ($a['zu_bestellen'] > 1e-6) $ekl++;
-                foreach (bedarf_bulk(true) as $b) if ($b['zu_bestellen'] > 1e-6) $ekl++;
-                unset($GLOBALS['bx_stock_cache']);
-                meta_set('nav_ekl_cache', (string)$ekl);
-                meta_set('nav_ekl_cache_at', (string)time());
-            } elseif ($anzGem === 0) {
-                $ekl = 0;
-            }
-            $anfCount['einkaufsliste'] = $ekl;
+            // Kein Badge an „Einkaufsliste": die exakte Zahl erfordert den vollen Bedarf (bedarf_aggregiert
+            // über alle gemeldeten Produktionsaufträge -> teuer) und lief bisher bei JEDEM Seitenaufruf im
+            // Menü – die Hauptbremse. Auf Wunsch entfernt; die Einkaufsliste-Seite selbst zeigt alles.
+            $anfCount['einkaufsliste'] = 0;
             // Aufträge, die noch nicht fertig (= versendet) sind.
             $anfCount['auftraege'] = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status NOT IN ('versendet','storniert')");
             // Offene Kundenfreigaben: Rohstoffe mit Spec-Inhalt ohne Spec-Freigabe + Chargen mit CoA-Werten ohne CoA-Freigabe.
