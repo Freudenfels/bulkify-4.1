@@ -46,7 +46,15 @@ $sc = &$GLOBALS['bx_stock_cache'];
 if ($vorPa) { $in = implode(',', array_fill(0, count($vorPa), '?'));
     foreach (all("SELECT * FROM produktionsauftrag WHERE id IN ($in)", $vorPa) as $row) $sc['pa:' . (int)$row['id']] = $row; }
 if ($vorProd) { $in = implode(',', array_fill(0, count($vorProd), '?'));
-    foreach (all("SELECT * FROM produkt WHERE id IN ($in)", $vorProd) as $row) $sc['prod:' . (int)$row['id']] = $row; }
+    foreach (all("SELECT * FROM produkt WHERE id IN ($in)", $vorProd) as $row) $sc['prod:' . (int)$row['id']] = $row;
+    // Anzeige-Helfer vorwaermen: Groessen-Label (produktion_groesse_label) + Bulk-Info (produkt_bulk_info).
+    foreach (all("SELECT p.id, r.darreichungsform AS form, kg.name AS kapsel_name,
+                         (SELECT COALESCE(SUM(z.menge_mg),0) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id) AS fg
+                  FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                  LEFT JOIN kapselgroesse kg ON kg.id=r.kapselgroesse_id WHERE p.id IN ($in)", $vorProd) as $row)
+        $sc['grl:' . (int)$row['id']] = ['form'=>$row['form'], 'kapsel_name'=>$row['kapsel_name'], 'fg'=>$row['fg']];
+    foreach (all("SELECT p.id, p.name, COALESCE(r.darreichungsform,'') AS form FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id IN ($in)", $vorProd) as $row)
+        $sc['pbulk:' . (int)$row['id']] = ['name'=>$row['name'], 'form'=>$row['form']]; }
 if ($vorAuf) { $in = implode(',', array_fill(0, count($vorAuf), '?'));
     foreach (all("SELECT * FROM auftrag WHERE id IN ($in)", $vorAuf) as $row) $sc['auf:' . (int)$row['id']] = $row;
     foreach ($vorAuf as $id) $sc['fw:' . $id] = ['n'=>0, 'frei'=>0.0];
@@ -83,7 +91,7 @@ $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 <?php else: foreach ($pas as $pa):
     $gemeldet = !empty($pa['bedarf_gemeldet']);
     $fremd    = ($pa['produktionsart'] ?? 'eigen') === 'fremd';
-    $bedarf   = auftrag_bedarf((int)$pa['id']);                        // komplette Stückliste (bei Fremd: Bulk-Zukauf + Verpackung/Etiketten)
+    $bedarf   = auftrag_bedarf_cached((int)$pa['id']);                 // komplette Stückliste (gecacht; bei Fremd: Bulk-Zukauf + Verpackung/Etiketten)
     $hatFehl  = false; foreach ($bedarf as $bb) if ((float)$bb['fehlt'] > 1e-6) { $hatFehl = true; break; }
 ?>
   <div class="bx-panel"<?= $gemeldet ? ' style="border-color:var(--gruen)"' : '' ?>>

@@ -1373,6 +1373,16 @@ function init_schema(): void {
         KEY idx_item (item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // Cache der Material-Bedarfsrechnung je Produktionsauftrag (auftrag_bedarf). Gilt, solange die globale
+    // bedarf_version unverändert ist; relevante Schreibvorgänge (Wareneingang, Reservierung, Bestellung,
+    // Chargen-Status, Auftragsänderung) erhöhen die Version -> Cache wird ungültig. Zusätzlich Sicherheits-TTL.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS bedarf_cache (
+        pa_id INT PRIMARY KEY,
+        version INT NOT NULL,
+        daten MEDIUMTEXT NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // Zusätzliche Indizes für häufige Lookups, die sonst Volltabellen-Scans wären (v. a. auf beta mit
     // mehr Daten spürbar). Idempotent über ensure_index. Reihenfolge/Spaltenwahl aus den echten Abfragen.
     ensure_index('charge', 'idx_auftrag', 'auftrag_id');                 // Fertigware/Zukauf: WHERE auftrag_id=?
@@ -2246,6 +2256,7 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,auftrag_id,bestellung_position_id,angelegt)
        VALUES (?,?,?,?,?,?,?,CURDATE(),?,?,?,?,?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $it['einheit'], $lieferant_id ?: null, $mhd ?: null, $status, $notiz ?: null, $auftrag_id ?: null, $bestellung_position_id ?: null, gmdate('Y-m-d H:i:s')]);
+    bedarf_bump();   // neuer Bestand -> Bedarf-Cache ungueltig
     return insert_id();
 }
 
@@ -3855,7 +3866,7 @@ function produktion_bereitschaft(int $pa_id): array {
 
     // Voller Stücklisten-Bedarf inkl. Verpackung/Etiketten, netto (Reservierungen anderer abgezogen).
     $fehlend = [];
-    foreach (auftrag_bedarf($pa_id) as $r)
+    foreach (auftrag_bedarf_cached($pa_id) as $r)
         if ((float)$r['fehlt'] > 1e-6) $fehlend[] = $r;
     return ['status'=>$fehlend ? 'wartet' : 'bereit', 'fehlend'=>$fehlend];
 }
@@ -3893,6 +3904,7 @@ function produktionsauftrag_art_setzen(int $pa_id, string $art): bool {
     $art = $art === 'eigen' ? 'eigen' : 'fremd';
     if (!produktion_schritte_regenerieren($pa_id, $art === 'fremd')) return false;   // fremd = verkürzter (Zukauf-)Weg
     q("UPDATE produktionsauftrag SET produktionsart=? WHERE id=?", [$art, $pa_id]);
+    bedarf_bump();   // Eigen/Fremd geaendert -> andere Stueckliste
     return true;
 }
 
@@ -3975,6 +3987,7 @@ function auftrag_reservieren(int $pa_id): int {
             $n++;
         }
     }
+    if ($n > 0) bedarf_bump();   // Reservierungen geaendert -> Bedarf-Cache ungueltig
     return $n;
 }
 function auftrag_reservierung_freigeben(int $pa_id): void {
@@ -3984,6 +3997,7 @@ function auftrag_reservierung_freigeben(int $pa_id): void {
 function reservierung_verbrauchen(int $auftrag_id, int $item_id): void {
     if (!$auftrag_id) return;
     q("UPDATE reservierung SET status='verbraucht' WHERE auftrag_id=? AND item_id=? AND status='aktiv'", [$auftrag_id, $item_id]);
+    bedarf_bump();
 }
 // Nach Produktionsschritten: Reservierungen für bereits (teil)entnommene Items schließen.
 function reservierung_abgleichen(int $pa_id): void {
@@ -3991,6 +4005,7 @@ function reservierung_abgleichen(int $pa_id): void {
     if (!$aid) return;
     q("UPDATE reservierung SET status='verbraucht'
        WHERE auftrag_id=? AND status='aktiv' AND item_id IN (SELECT item_id FROM produktion_verbrauch WHERE pa_id=?)", [$aid, $pa_id]);
+    bedarf_bump();
 }
 
 // Bezeichnung + Darreichungsform + Stück-Einheit des zuzukaufenden Bulks eines Produkts.
@@ -4106,6 +4121,27 @@ function auftrag_bedarf(int $pa_id): array {
     unset($r);
     return $rows;
 }
+
+// --- Bedarf-Cache: auftrag_bedarf ist teuer; Ergebnis je Auftrag zwischenspeichern. ------------------
+// Gültig, solange bedarf_version unverändert ist. Jede materialrelevante Änderung ruft bedarf_bump().
+function bedarf_version(): int { return (int) meta_get('bedarf_version', 1); }
+function bedarf_bump(): void { meta_set('bedarf_version', (string)(bedarf_version() + 1)); }
+
+// auftrag_bedarf mit Cache. Sicherheits-TTL 900 s (falls mal ein bump fehlt, heilt es sich).
+function auftrag_bedarf_cached(int $pa_id): array {
+    $ver = bedarf_version();
+    $row = one("SELECT version, daten, angelegt FROM bedarf_cache WHERE pa_id=?", [$pa_id]);
+    if ($row && (int)$row['version'] === $ver && strtotime((string)$row['angelegt'] . ' UTC') > time() - 900) {
+        $d = json_decode((string)$row['daten'], true);
+        if (is_array($d)) return $d;
+    }
+    $d = auftrag_bedarf($pa_id);
+    q("INSERT INTO bedarf_cache (pa_id,version,daten,angelegt) VALUES (?,?,?,UTC_TIMESTAMP())
+       ON DUPLICATE KEY UPDATE version=VALUES(version), daten=VALUES(daten), angelegt=VALUES(angelegt)",
+      [$pa_id, $ver, json_encode($d)]);
+    return $d;
+}
+
 // Kombinierte Bestellung für EINEN Lieferant. $itemPositionen = [['item_id','menge','auftrag_id'(0=Lager)], ...] + Bulk (produkt_ids).
 function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int $lieferant, ?string $datum, array $freiIds = []): int {
     $itemPositionen = array_values(array_filter($itemPositionen, fn($p) => (int)($p['item_id'] ?? 0) > 0 && (float)($p['menge'] ?? 0) > 0));
@@ -4157,6 +4193,7 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
     }
     foreach (array_keys($betroffen) as $aid) if ($aid > 0)
         log_aktivitaet('auftrag', $aid, 'team', 'Material per Bestellung ' . $nummer . $wann . ' bestellt.', 'bestellung', 'bestellung', $bid);
+    bedarf_bump();   // bestellt -> offener Bedarf aendert sich
     return $bid;
 }
 // Offener freier Einkaufsbedarf (ohne Produktionsbezug), inkl. Lieferant-Firma.
@@ -4170,7 +4207,7 @@ function auftrag_fehlbedarf(int $pa_id): array {
     $pa = pa_row_cached($pa_id);
     $aid = $pa ? (int)$pa['auftrag_id'] : 0;
     $out = [];
-    foreach (auftrag_bedarf($pa_id) as $r) {
+    foreach (auftrag_bedarf_cached($pa_id) as $r) {
         if ($r['fehlt'] <= 1e-6 || (int)$r['item_id'] <= 0) continue;
         // schon offen bestellt: für diesen Auftrag ODER als Sammelbestellung (Lager, auftrag_id NULL)
         $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
@@ -4252,7 +4289,7 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
         . ($nur_gemeldet ? " AND pa.bedarf_gemeldet IS NOT NULL" : "");
     foreach (all("SELECT pa.id, pa.auftrag_id, a.nummer AS auftrag_nr FROM produktionsauftrag pa
                   LEFT JOIN auftrag a ON a.id=pa.auftrag_id WHERE $wo") as $pa) {
-        foreach (auftrag_bedarf((int)$pa['id']) as $r) {
+        foreach (auftrag_bedarf_cached((int)$pa['id']) as $r) {
             $iid = (int)$r['item_id']; if ($iid <= 0) continue;
             // Etiketten NICHT gruppieren (jedes braucht das Kundendesign) -> Schlüssel je (Item + Auftrag).
             $etikett = $r['rolle'] === 'Etikett';
@@ -4401,6 +4438,7 @@ function bestellung_aus_positionen(array $mengen, ?int $lieferant, ?string $datu
     $wann = $datum ? ' (bestellt am ' . date('d.m.Y', strtotime($datum)) . ')' : '';
     foreach (array_keys($betroffen) as $aid) if ($aid > 0)
         log_aktivitaet('auftrag', $aid, 'team', 'Material per Bestellung ' . $nummer . $wann . ' bestellt.', 'bestellung', 'bestellung', $bid);
+    bedarf_bump();   // bestellt -> offener Bedarf aendert sich
     return $bid;
 }
 
@@ -4661,6 +4699,7 @@ function auftrag_versenden(int $auftrag_id): array {
       [naechste_nummer('LS'), $auftrag_id, $a['kunde_id'], $a['gesamt_netto'], $a['gesamt_netto']]);
     q("UPDATE auftrag SET status='versendet' WHERE id=?", [$auftrag_id]);
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftrag ' . $a['nummer'] . ' versendet.', 'auftrag', 'auftrag', $auftrag_id);
+    bedarf_bump();   // Fertigware ausgebucht/Auftrag raus
     return ['ok'=>true, 'msg'=>'Versendet.'];
 }
 
