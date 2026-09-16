@@ -19,7 +19,6 @@ $TABS = [
     'nummern'    => 'Nummernkreise',
     'fulfillment'=> 'Fulfillment-Schnittstelle',
     'mail'       => 'E-Mail',
-    'mailtext'   => 'E-Mail-Texte',
     'ki'         => 'KI (Claude)',
     'agb'        => 'AGB',
     'testlogin'  => 'Testlogin',
@@ -69,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mailtext_save') {
         meta_set('mailtpl_' . $key . '_betreff', trim((string)($_POST['betreff'] ?? '')));
         meta_set('mailtpl_' . $key . '_text', rtrim((string)($_POST['text'] ?? '')));
     }
-    header('Location: ?p=einstellungen&tab=mailtext&ok=1#tpl_' . $key); exit;
+    header('Location: ?p=einstellungen&tab=mail&ok=1#tpl_' . $key); exit;
 }
 // --- E-Mail-Texte: eine Vorlage auf den Standardtext zurücksetzen. ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mailtext_reset') {
@@ -78,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mailtext_reset') {
         meta_set('mailtpl_' . $key . '_betreff', '');
         meta_set('mailtpl_' . $key . '_text', '');
     }
-    header('Location: ?p=einstellungen&tab=mailtext&reset=1#tpl_' . $key); exit;
+    header('Location: ?p=einstellungen&tab=mail&reset=1#tpl_' . $key); exit;
 }
 // --- Diagnose: Messung ein/aus, Protokoll leeren ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'perf_toggle') {
@@ -717,8 +716,8 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   </form>
 </div>
 <?php endif; ?>
-<?php if ($tab === 'mailtext'): ?>
-<div class="bx-panel">
+<?php if ($tab === 'mail'): ?>
+<div class="bx-panel" style="margin-top:16px">
   <h2>E-Mail-Texte an Kunden</h2>
   <p class="muted" style="margin-top:0">Wortlaut der automatischen Kunden-Mails. Platzhalter in geschweiften Klammern (z. B. <code>{anrede}</code>) werden beim Versand ersetzt. Ein leeres Feld speichern heißt: der Standardtext gilt wieder. Kunden werden immer auf Deutsch angeschrieben; die Mails an Lieferanten (mehrsprachig) und die internen Team-Hinweise sind hier bewusst nicht enthalten.</p>
   <?php if (isset($_GET['ok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Text gespeichert.</div><?php endif; ?>
