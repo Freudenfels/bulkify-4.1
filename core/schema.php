@@ -987,6 +987,7 @@ function init_schema(): void {
     ensure_column('rezeptur', 'exklusiv', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('rezeptur', 'basis_rezeptur_id', "INT NULL");   // abgeleitet: Kunde hat diese Rezeptur aus einer Katalog-Rezeptur/-Produkt weiterentwickelt (intern sichtbar)
     ensure_column('health_claim', 'entry_id', "VARCHAR(120) NULL");   // Entry-Id aus dem EU-Register (idempotenter Import)
+    ensure_column('kapselgroesse', 'leergewicht_mg', "DECIMAL(8,2) NULL");   // Leergewicht der Kapselhuelle je Groesse (fuers Gesamtgewicht/Nettofuellmenge)
     // Einmaliger Backfill: bestehende Rezepturen MIT Kunde waren bisher exklusiv (kunde_id = exklusiv).
     // Danach steuert nur noch das Flag - importierte Katalog-Rezepturen bleiben exklusiv=0.
     if (meta_get('rez_exklusiv_backfill', '') !== '1') {
@@ -1692,6 +1693,15 @@ function pack_kapazitaet_fuer(int $item_id): array {
 
 // Kapselgröße einer Kapsel-Rezeptur: bevorzugt die AM REZEPT gespeicherte Größe (kapselgroesse_id),
 // sonst die kleinste Größe, in die das Füllgewicht je Kapsel passt. Gibt Zeile aus kapselgroesse oder null.
+// Standard-Leergewichte der Kapselhuelle (Gelatine, mg) je Kapselgröße – einmalig setzen, wo noch leer.
+// Werte sind Richtwerte; das Team kann sie je Kapselgröße überschreiben.
+function seed_kapsel_leergewicht(): void {
+    $std = ['000' => 163, '00' => 118, '0' => 96, '1' => 76, '2' => 61, '3' => 48, '4' => 38, '5' => 28];
+    foreach (all("SELECT id, name FROM kapselgroesse WHERE leergewicht_mg IS NULL") as $k) {
+        if (preg_match('/(\d+)\s*$/', trim((string)$k['name']), $m) && isset($std[$m[1]]))
+            q("UPDATE kapselgroesse SET leergewicht_mg=? WHERE id=?", [$std[$m[1]], (int)$k['id']]);
+    }
+}
 function rezeptur_kapselgroesse(int $rezeptur_id): ?array {
     $gid = (int) scalar("SELECT kapselgroesse_id FROM rezeptur WHERE id=?", [$rezeptur_id]);
     if ($gid > 0) { $kg = one("SELECT * FROM kapselgroesse WHERE id=?", [$gid]); if ($kg) return $kg; }

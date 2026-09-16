@@ -116,22 +116,23 @@ function pib_pdf_bauen(int $produkt_id): ?string {
 
     // Gewichte: je Kapsel/Einheit, netto (Inhalt) und brutto (Gesamtgewicht der Packung).
     if ($sumMg > 0 || $einh > 0) {
-        $shellMg = ($istKapsel && !empty($prod['leerkapsel_id'])) ? (float) scalar("SELECT leergewicht_mg FROM item WHERE id=?", [(int)$prod['leerkapsel_id']]) : 0.0;
-        $einheitG = $sumMg + $shellMg;                                  // je Kapsel gefüllt (mg) – bzw. Einheit
-        $verpG = ((float)($verp['gewicht_g'] ?? 0)) + ((float)($versch['gewicht_g'] ?? 0)) + ((float)($etik['gewicht_g'] ?? 0));
-        $nettoG = $einh > 0 ? $sumMg * $einh / 1000 : 0.0;             // reiner Inhalt (Wirkstoffe) je Packung
-        $einheitenG = $einh > 0 ? $einheitG * $einh / 1000 : 0.0;      // Gewicht aller Kapseln (inkl. Hüllen) je Packung
-        $bruttoG = $einheitenG + $verpG;                               // Gesamtgewicht der Packung
+        // Leerkapsel-Gewicht: bevorzugt der hinterlegte Leerkapsel-Artikel, sonst der Standardwert der Kapselgröße.
+        seed_kapsel_leergewicht();
+        $shellMg = 0.0; $shellQuelle = '';
+        if ($istKapsel) {
+            if (!empty($prod['leerkapsel_id'])) { $shellMg = (float) scalar("SELECT leergewicht_mg FROM item WHERE id=?", [(int)$prod['leerkapsel_id']]); if ($shellMg > 0) $shellQuelle = 'Leerkapsel-Artikel'; }
+            if ($shellMg <= 0 && $kg && (float)($kg['leergewicht_mg'] ?? 0) > 0) { $shellMg = (float)$kg['leergewicht_mg']; $shellQuelle = 'Standardwert ' . (string)$kg['name']; }
+        }
+        $kapselTotalMg = $sumMg + $shellMg;                              // eine gefüllte Kapsel gesamt (mg)
+        $nettoGesamtG  = $einh > 0 ? $kapselTotalMg * $einh / 1000 : 0.0; // alle Kapseln = Nettofüllmenge für die Verpackung
         $gw = [];
-        $gw[] = [$istKapsel ? 'Füllgewicht je Kapsel' : 'Gewicht je Einheit', $mg($sumMg) . ' mg'];
-        if ($shellMg > 0) $gw[] = ['Kapselgewicht (gefüllt, inkl. Hülle)', $mg($einheitG) . ' mg (Hülle ' . $mg($shellMg) . ' mg)'];
-        if ($nettoG > 0)      $gw[] = ['Netto-Füllgewicht je Packung (Inhalt)', $mg($nettoG) . ' g'];
-        if ($einheitenG > 0)  $gw[] = [$istKapsel ? 'Gewicht aller Kapseln je Packung' : 'Gewicht aller Einheiten je Packung', $mg($einheitenG) . ' g'];
-        if ($verpG > 0)       $gw[] = ['Verpackung leer (Behälter + Deckel + Etikett)', $mg($verpG) . ' g'];
-        if ($bruttoG > 0)     $gw[] = ['Gesamtgewicht je Packung (brutto)', $mg($bruttoG) . ' g'];
+        $gw[] = [$istKapsel ? 'Füllgewicht je Kapsel (Wirkstoffe)' : 'Gewicht je Einheit', $mg($sumMg) . ' mg'];
+        if ($istKapsel && $shellMg > 0) $gw[] = ['Leerkapsel (Hülle)', $mg($shellMg) . ' mg' . ($shellQuelle ? ' · ' . $shellQuelle : '')];
+        if ($istKapsel && $shellMg > 0) $gw[] = ['Kapselgewicht gesamt (gefüllt)', $mg($kapselTotalMg) . ' mg'];
+        if ($nettoGesamtG > 0) $gw[] = [$istKapsel ? 'Nettofüllmenge je Packung (für die Verpackung)' : 'Nettofüllmenge je Packung', $mg($nettoGesamtG) . ' g' . ($einh > 0 ? ' (' . number_format($einh, 0, ',', '.') . ' × ' . $mg($kapselTotalMg) . ' mg)' : '')];
         $y = spec_h($p, $y, 'Gewichte');
         $y = spec_grid($p, $y, $gw);
-        if ($verpG <= 0) { $p->text($L, $y, 'Behälter-/Verschluss-/Etikettgewichte sind teilweise nicht hinterlegt – Bruttogewicht ggf. unvollständig.', 8, false, [110, 110, 108]); $y += 14; }
+        if ($istKapsel && $shellMg <= 0) { $p->text($L, $y, 'Leerkapsel-Gewicht nicht hinterlegt – Nettofüllmenge zeigt nur das Füllgewicht ohne Hülle.', 8, false, [110, 110, 108]); $y += 14; }
     }
 
     // Zutaten je Einheit – ABSTEIGEND nach Menge (= gesetzliche Reihenfolge fürs Zutatenverzeichnis) + Gesamt.
