@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etike
     header('Location: ?p=verpackung&id=' . $id . '&tab=etipreis&gespeichert=1'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_upload' && is_numeric($id)) {
-    $kat = in_array($_POST['dok_kategorie'] ?? '', ['ppwr','doc','spez','etikett','sonstiges'], true) ? $_POST['dok_kategorie'] : 'ppwr';
+    $kat = in_array($_POST['dok_kategorie'] ?? '', ['ppwr','doc','spez','etikett','druckvorlage','sonstiges'], true) ? $_POST['dok_kategorie'] : 'ppwr';
     if (!empty($_FILES['dok']['name']) && ($_FILES['dok']['error'] ?? 1) === UPLOAD_ERR_OK) {
         if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
         $orig = $_FILES['dok']['name'];
@@ -131,7 +131,7 @@ $etikettstaffel = (!$neu) ? etikett_staffel((int)$id) : [];
 $ekstaffel = (!$neu) ? all("SELECT s.*, l.firma AS lieferant_firma FROM pack_ek_staffel s LEFT JOIN lieferanten l ON l.id=s.lieferant_id WHERE s.item_id=? ORDER BY s.menge_ab", [(int)$id]) : [];
 $vkstaffel = (!$neu) ? all("SELECT * FROM pack_vk_staffel WHERE item_id=? ORDER BY menge_ab", [(int)$id]) : [];
 $dokumente = (!$neu) ? all("SELECT * FROM verpackung_dokument WHERE item_id=? ORDER BY kategorie, id DESC", [(int)$id]) : [];
-$DOKKAT = ['ppwr'=>'PPWR-Nachweis', 'doc'=>'Konformität (DoC)', 'spez'=>'Spezifikation', 'etikett'=>'Etikett-Druckdatei', 'sonstiges'=>'Sonstiges'];
+$DOKKAT = ['ppwr'=>'PPWR-Nachweis', 'doc'=>'Konformität (DoC)', 'spez'=>'Spezifikation', 'etikett'=>'Etikett-Druckdatei', 'druckvorlage'=>'Etikett-Druckvorlage (Kunde)', 'sonstiges'=>'Sonstiges'];
 if (!$neu) { seed_aktivitaet_if_empty(); $verlauf = verlauf_fuer('item', (int)$id); } else { $verlauf = []; }
 
 function bx_bald(string $modul): void {

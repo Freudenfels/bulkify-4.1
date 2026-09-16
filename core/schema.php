@@ -1693,6 +1693,13 @@ function pack_kapazitaet_fuer(int $item_id): array {
 
 // Kapselgröße einer Kapsel-Rezeptur: bevorzugt die AM REZEPT gespeicherte Größe (kapselgroesse_id),
 // sonst die kleinste Größe, in die das Füllgewicht je Kapsel passt. Gibt Zeile aus kapselgroesse oder null.
+// Etikett-Druckvorlage eines Produkts (am Etikett-Artikel als verpackung_dokument kategorie='druckvorlage').
+function etikett_druckvorlage_datei(int $produkt_id): ?array {
+    if ($produkt_id <= 0) return null;
+    $eid = (int) scalar("SELECT etikett_id FROM produkt WHERE id=?", [$produkt_id]);
+    if (!$eid) return null;
+    return one("SELECT * FROM verpackung_dokument WHERE item_id=? AND kategorie='druckvorlage' ORDER BY id DESC LIMIT 1", [$eid]);
+}
 // Standard-Leergewichte der Kapselhuelle (Gelatine, mg) je Kapselgröße – einmalig setzen, wo noch leer.
 // Werte sind Richtwerte; das Team kann sie je Kapselgröße überschreiben.
 function seed_kapsel_leergewicht(): void {

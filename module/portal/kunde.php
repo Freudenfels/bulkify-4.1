@@ -120,6 +120,19 @@ if ($k && ($_GET['v'] ?? '') === 'pib') {
     if (!$pid || !pib_ausliefern($pid, 'Produktinfo-' . $aid)) { http_response_code(404); echo 'Produktinformationsblatt nicht verfügbar.'; }
     exit;
 }
+// Etikett-Druckvorlage (fertige Vorlage mit Maßen/Stanzkontur) zum eigenen Auftrag herunterladen.
+if ($k && ($_GET['v'] ?? '') === 'druckvorlage') {
+    $aid = (int)($_GET['aid'] ?? 0);
+    $pid = $aid ? (int) scalar("SELECT produkt_id FROM auftrag WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : 0;
+    $d  = $pid ? etikett_druckvorlage_datei($pid) : null;
+    $pf = $d ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
+    if (!$d || !is_file($pf)) { http_response_code(404); echo 'Keine Etikett-Druckvorlage hinterlegt.'; exit; }
+    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
+    header('Content-Type: ' . ($ext === 'pdf' ? 'application/pdf' : ($ext === 'png' ? 'image/png' : ($ext === 'jpg' || $ext === 'jpeg' ? 'image/jpeg' : 'application/octet-stream'))));
+    header('Content-Disposition: inline; filename="Etikett-Druckvorlage-' . $aid . '.' . ($ext ?: 'pdf') . '"');
+    header('Content-Length: ' . filesize($pf));
+    readfile($pf); exit;
+}
 
 // Angebot ablehnen (mit Begründung) -> Status zurück, Team überarbeitet
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_ablehnen') {
@@ -2578,6 +2591,9 @@ portal_head('Kundenportal · ' . $k['firma']);
     <h2 style="margin:0 0 8px;font-size:16px">Ihr Etikett-Design</h2>
     <?php if (isset($_GET['etikett'])): ?><div class="muted" style="margin-bottom:8px"><span class="bx-ok">Gespeichert.</span> Danke!</div><?php endif; ?>
     <p style="margin:0 0 10px"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('pib') ?>&aid=<?= (int)$a['id'] ?>" target="_blank">Produktinformationsblatt (PIB) herunterladen</a> <span class="muted" style="font-size:12px">– Grundlage für Ihr Etikett (Zutaten, Nährwerte, Menge)</span></p>
+    <?php if (etikett_druckvorlage_datei((int)($a['produkt_id'] ?? 0))): ?>
+    <p style="margin:0 0 10px"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('druckvorlage') ?>&aid=<?= (int)$a['id'] ?>" target="_blank">Etikett-Druckvorlage herunterladen</a> <span class="muted" style="font-size:12px">– Vorlage mit Maßen/Stanzkontur für Ihr Etikett</span></p>
+    <?php endif; ?>
     <?php if ($etDok): ?>
       <p style="margin-top:0">Hochgeladen: <a href="<?= $portalLink('etikett_datei') ?>&aid=<?= (int)$a['id'] ?>" target="_blank"><?= h($etDok['datei_orig'] ?: 'Etikett-Design') ?></a> <span class="muted">· <?= h(fmt_zeit($etDok['angelegt'], 'd.m.Y')) ?></span></p>
       <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-ghost btn-sm" type="submit">Neues Design hochladen</button></form>
