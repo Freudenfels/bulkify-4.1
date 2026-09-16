@@ -258,7 +258,7 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         'Nahrungsergänzungsmittel sind kein Ersatz für eine ausgewogene und abwechslungsreiche Ernährung und eine gesunde Lebensweise.',
         'Außerhalb der Reichweite von kleinen Kindern aufbewahren.',
         'Kühl, trocken und lichtgeschützt lagern.',
-        'Mindesthaltbarkeitsdatum („mindestens haltbar bis …") und Chargennummer angeben.',
+        'Mindesthaltbarkeitsdatum und Chargennummer werden auf dem Boden aufgebracht (Format TT.MM.JJJJ) – bitte Platz dafür freihalten.',
         'Verantwortlicher Lebensmittelunternehmer: Name und Anschrift angeben.',
     ];
     $y += 6;
