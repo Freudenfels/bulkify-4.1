@@ -108,9 +108,12 @@ function pib_pdf_bauen(int $produkt_id): ?string {
     $verp   = !empty($prod['verpackung_id']) ? one("SELECT name, volumen_ml, gewicht_g, etikett_final FROM item WHERE id=?", [(int)$prod['verpackung_id']]) : null;
     $versch = !empty($prod['verschluss_id']) ? one("SELECT name, gewicht_g FROM item WHERE id=?", [(int)$prod['verschluss_id']]) : null;
     $etik   = !empty($prod['etikett_id'])    ? one("SELECT name, gewicht_g, breite_mm, hoehe_mm, etikett_format FROM item WHERE id=?", [(int)$prod['etikett_id']]) : null;
-    // Etikettmaße (B x H): bevorzugt Endformat am Behälter, sonst Maße/Format des Etikett-Artikels.
-    $emass = etikett_masse((string)($verp['etikett_final'] ?? ''));
-    if (!$emass && $etik) $emass = ($etik['breite_mm'] && $etik['hoehe_mm']) ? [(float)$etik['breite_mm'], (float)$etik['hoehe_mm']] : etikett_masse((string)$etik['etikett_format']);
+    // Etikettmaße: bevorzugt Endformat am Behälter, sonst Maße/Format des Etikett-Artikels.
+    // Wickeletiketten (Glas/PET): die BREITE (Umfang) ist die größere Zahl, die HÖHE die kleinere –
+    // deshalb Breite = max, Höhe = min (die Stammdaten speichern die zwei Maße uneinheitlich).
+    $dims = etikett_masse((string)($verp['etikett_final'] ?? ''));
+    if (!$dims && $etik) $dims = ($etik['breite_mm'] && $etik['hoehe_mm']) ? [(float)$etik['breite_mm'], (float)$etik['hoehe_mm']] : etikett_masse((string)$etik['etikett_format']);
+    $emass = $dims ? [max($dims[0], $dims[1]), min($dims[0], $dims[1])] : null;   // [Breite, Höhe]
     $vp = [];
     if ($verp)   $vp[] = ['Behälter', (string)$verp['name'] . ((float)($verp['volumen_ml'] ?? 0) > 0 ? ' · ' . $mg($verp['volumen_ml']) . ' ml' : '')];
     if ($versch) $vp[] = ['Verschluss', (string)$versch['name']];
@@ -118,7 +121,8 @@ function pib_pdf_bauen(int $produkt_id): ?string {
     if ($emass)  $vp[] = ['Etikettmaße (B × H)', $mg($emass[0]) . ' × ' . $mg($emass[1]) . ' mm'];
     if ($vp) {
         $y = spec_h($p, $y, 'Verpackung & Etikett'); $y = spec_grid($p, $y, $vp);
-        $p->text($L, $y, $emass ? 'Endformat der Etikettendatei; Druckvorlage separat im Portal. Bitte 2–3 mm Beschnitt einplanen.' : 'Etikettmaße noch nicht hinterlegt – Druckvorlage separat im Portal.', 8, false, [110, 110, 108]); $y += 16;
+        $y += 12;
+        $p->text($L, $y, $emass ? 'Endformat der Etikettendatei (Wickeletikett); Druckvorlage separat im Portal. Bitte 2–3 mm Beschnitt einplanen.' : 'Etikettmaße noch nicht hinterlegt – Druckvorlage separat im Portal.', 8, false, [110, 110, 108]); $y += 16;
     }
 
     // Gewichte: je Kapsel/Einheit, netto (Inhalt) und brutto (Gesamtgewicht der Packung).
@@ -139,22 +143,19 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         if ($nettoGesamtG > 0) $gw[] = [$istKapsel ? 'Nettofüllmenge je Packung (für die Verpackung)' : 'Nettofüllmenge je Packung', $mg($nettoGesamtG) . ' g' . ($einh > 0 ? ' (' . number_format($einh, 0, ',', '.') . ' × ' . $mg($kapselTotalMg) . ' mg)' : '')];
         $y = spec_h($p, $y, 'Gewichte');
         $y = spec_grid($p, $y, $gw);
-        if ($istKapsel && $shellMg <= 0) { $p->text($L, $y, 'Leerkapsel-Gewicht nicht hinterlegt – Nettofüllmenge zeigt nur das Füllgewicht ohne Hülle.', 8, false, [110, 110, 108]); $y += 14; }
+        if ($istKapsel && $shellMg <= 0) { $y += 11; $p->text($L, $y, 'Leerkapsel-Gewicht nicht hinterlegt – Nettofüllmenge zeigt nur das Füllgewicht ohne Hülle.', 8, false, [110, 110, 108]); $y += 14; }
     }
 
     // Kapselhülle als eigene Zutat: bei Kapseln gehört die Hülle (HPMC/Gelatine) ins Zutatenverzeichnis.
     $shellMg = $shellMg ?? 0.0;
     $huelleTxt = '';
     if ($istKapsel) {
-        $hu = !empty($prod['leerkapsel_id']) ? one("SELECT name, material FROM item WHERE id=?", [(int)$prod['leerkapsel_id']]) : null;
-        $src = mb_strtolower(trim(((string)($hu['material'] ?? '')) . ' ' . ((string)($hu['name'] ?? ''))));
-        if ($src !== '' && (strpos($src, 'hpmc') !== false || strpos($src, 'hydroxypropyl') !== false || strpos($src, 'cellulose') !== false))
-            $huelleTxt = 'Überzugsmittel Hydroxypropylmethylcellulose (Kapselhülle)';
-        elseif ($src !== '' && (strpos($src, 'gelatine') !== false || strpos($src, 'gelatin') !== false))
-            $huelleTxt = 'Gelatine (Kapselhülle)';
-        elseif ($hu && trim((string)($hu['material'] ?? '')) !== '') $huelleTxt = trim((string)$hu['material']) . ' (Kapselhülle)';
-        elseif ($hu) $huelleTxt = trim((string)$hu['name']) . ' (Kapselhülle)';
-        else $huelleTxt = 'Kapselhülle (HPMC/Gelatine – bitte prüfen)';
+        // Wir verwenden ausschliesslich HPMC-Kapseln -> Standard-Deklaration. (Nur falls am Leerkapsel-Artikel
+        // ausdruecklich Gelatine hinterlegt ist, wird das uebernommen.)
+        $huMat = !empty($prod['leerkapsel_id']) ? mb_strtolower((string) scalar("SELECT CONCAT(COALESCE(material,''),' ',name) FROM item WHERE id=?", [(int)$prod['leerkapsel_id']])) : '';
+        $huelleTxt = (strpos($huMat, 'gelatine') !== false || strpos($huMat, 'gelatin') !== false)
+            ? 'Gelatine (Kapselhülle)'
+            : 'Überzugsmittel Hydroxypropylmethylcellulose (Kapselhülle)';
     }
 
     // Zutaten je Einheit – ABSTEIGEND nach Menge (= gesetzliche Reihenfolge fürs Zutatenverzeichnis) + Gesamt.
@@ -195,7 +196,7 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         $y = pib_table($p, $y, [[$L, 'Nährstoff'], [330, 'je ' . $einheitWort], [455, '% NRV*']], $rows);
     } else {
         $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration');
-        $y += 2;
+        $y += 11;
         $p->text($L, $y, 'Für die eingesetzten Rohstoffe sind noch keine Wirkstoffgehalte/NRV hinterlegt.', 9, false, [110, 110, 108]); $y += 16;
     }
 
@@ -203,6 +204,7 @@ function pib_pdf_bauen(int $produkt_id): ?string {
     $claims = health_claims_fuer_rezeptur($rid);
     if ($claims) {
         $y = spec_h($p, $y, 'Zugelassene Angaben (Health Claims, EU 432/2012)');
+        $y += 11;   // Grundlinie eine Zeile absetzen, sonst überlappt der erste Punkt die Überschrift
         foreach ($claims as $c) {
             foreach ($p->wrap('• ' . (string)$c['claim'], $R - $L, 9, false) as $i => $wl) {
                 if ($y > 780) { $p->addPage(); $y = 48; }
@@ -262,6 +264,7 @@ function pib_pdf_bauen(int $produkt_id): ?string {
     $y += 6;
     if ($y > 700) { $p->addPage(); $y = 48; }
     $y = spec_h($p, $y, 'Pflichtangaben für Ihr Etikett');
+    $y += 11;   // Grundlinie eine Zeile absetzen (sonst überlappt der erste Punkt die Überschrift)
     foreach ($pflicht as $t) {
         foreach ($p->wrap('• ' . $t, $R - $L, 9, false) as $i => $wl) {
             if ($y > 785) { $p->addPage(); $y = 48; }
