@@ -194,6 +194,9 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         }
         $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration (je ' . $einheitWort . ')');
         $y = pib_table($p, $y, [[$L, 'Nährstoff'], [330, 'je ' . $einheitWort], [455, '% NRV*']], $rows);
+        // Pflicht-Fußnote direkt unter der Tabelle (wie auf dem Etikett).
+        $y += 12;
+        $p->text($L, $y, '* NRV = Prozentsatz der Nährstoffbezugswerte (Referenzmenge) gemäß Verordnung (EU) Nr. 1169/2011.', 8, false, [90, 90, 88]); $y += 16;
     } else {
         $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration');
         $y += 11;
@@ -273,7 +276,7 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         $y += 2;
     }
     $y += 6;
-    $p->text($L, $y, '*NRV = Nährstoffbezugswert. Fertige Etikettendatei bitte im Kundenportal hochladen.', 8, false, [110, 110, 108]); $y += 14;
+    $p->text($L, $y, 'Fertige Etikettendatei bitte im Kundenportal hochladen.', 8, false, [110, 110, 108]); $y += 14;
     spec_fuss($p, $y + 16);
     return $p->output();
 }
