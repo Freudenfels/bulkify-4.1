@@ -3717,10 +3717,26 @@ function etikett_id_fuer_behaelter(int $verp_id): ?int {
     return $et ? (int)$et[0]['id'] : null;
 }
 // Behälter -> passende Etiketten-IDs, für die Auswahl im Angebots-Editor (ohne Nachladen).
+// Gebündelt: statt je Primärbehälter ein "SELECT etikett_final" (waren dutzende Abfragen, auf der
+// Remote-DB der Haupt-Bremser im Editor) werden Etiketten UND Behälter je in EINER Abfrage geladen
+// und das Zuordnungs-Raster in PHP gerechnet (gleiche Logik wie passende_etiketten_fuer).
 function etikett_zuordnung(): array {
+    $etks = all("SELECT id, breite_mm, hoehe_mm, etikett_format FROM item
+                 WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0 ORDER BY name");
+    $etkMass = [];
+    foreach ($etks as $e)
+        $etkMass[(int)$e['id']] = ($e['breite_mm'] && $e['hoehe_mm']) ? [(float)$e['breite_mm'], (float)$e['hoehe_mm']] : etikett_masse($e['etikett_format']);
     $map = [];
-    foreach (all("SELECT id FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0") as $v)
-        $map[(int)$v['id']] = array_map(fn($e) => (int)$e['id'], passende_etiketten_fuer((int)$v['id']));
+    foreach (all("SELECT id, etikett_final FROM item
+                  WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0") as $v) {
+        $ziel = etikett_masse((string)$v['etikett_final']);
+        $ids = [];
+        if ($ziel) foreach ($etks as $e) {
+            $m = $etkMass[(int)$e['id']];
+            if ($m && abs($m[0] - $ziel[0]) <= 2.0 && abs($m[1] - $ziel[1]) <= 2.0) $ids[] = (int)$e['id'];
+        }
+        $map[(int)$v['id']] = $ids;
+    }
     return $map;
 }
 // Passende Behälter je Stückzahl bestimmen – je Darreichungsform über die richtige Kennzahl.
