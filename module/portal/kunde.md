@@ -133,3 +133,11 @@ Button "Menge ändern" auf der Angebotskarte (nur wenn `$mengeAenderbar[anfrage_
 Speichern (`produkt_anfrage_bearbeiten`) aktualisiert die bestehende Anfrage (keine neue), setzt die
 vorliegenden, noch nicht bestätigten Angebote zurück in den Entwurf (`status='offen'`, `preise_kunde=0` →
 verschwinden beim Kunden) und die Anfrage auf `status='neu'` (in Prüfung). Das Team überarbeitet das Angebot.
+
+## Katalog weiterentwickeln (eigene Rezeptur aus Basis)
+Pro Kunde per Flag `kunden.portal_rezeptur_ableiten` freischaltbar (Admin: Kunde → Portal-Freischaltungen).
+Auf Produkt-/Rezeptur-Detail erscheint dann "Als Basis weiterentwickeln" → View `v=rezeptur_ableiten&basis=<rezeptur_id>`:
+Bearbeitungstool mit den Zutaten der Basis (Mengen ändern, entfernen, ergänzen) + Name + Anmerkung.
+Speichern (`rezeptur_ableiten_speichern`) legt eine EIGENE Kunden-Rezeptur an (Status `entwurf`, `basis_rezeptur_id` gesetzt,
+Darreichungsform von der Basis) + eine Rezeptur-Anfrage fürs Team (RZA, `rezeptur_id` verknüpft). Das Team sieht im
+Rezeptur-Editor die Herkunft ("Vom Kunden weiterentwickelt aus Basis …"), finalisiert und sendet als Vorschlag; der Kunde nimmt an.

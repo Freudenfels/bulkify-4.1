@@ -949,6 +949,7 @@ function init_schema(): void {
     ensure_column('kunden', 'portal_produkte', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('kunden', 'portal_rohstoffe', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('kunden', 'portal_dienstleistung', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('kunden', 'portal_rezeptur_ableiten', "TINYINT(1) NOT NULL DEFAULT 0");   // darf Katalog-Produkte/Rezepturen als Basis fuer eine eigene Rezeptur weiterentwickeln
     ensure_column('portal_anfrage', 'verpackung_typ', "VARCHAR(40) NULL");   // Kundenwunsch Verpackungstyp (Glas/PET/…); wir wählen den passenden Behälter
     ensure_column('portal_anfrage', 'fuellmenge_g', "DECIMAL(10,2) NULL");   // Pulver-Anfrage: Füllmenge je Packung (g) statt Stück je Packung
     ensure_column('portal_anfrage', 'wunsch_menge', "DECIMAL(12,3) NULL");   // Rohstoff-Anfrage: gewünschte Menge
@@ -970,6 +971,7 @@ function init_schema(): void {
     // Rezeptur exklusiv (wie beim Produkt): kunde_id = Herkunft/Besitzer. exklusiv=1 -> nur dieser Kunde;
     // exklusiv=0 + freigegeben -> Katalog, fuer ALLE (auch wenn ein Kunde als Herkunft dranhaengt).
     ensure_column('rezeptur', 'exklusiv', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('rezeptur', 'basis_rezeptur_id', "INT NULL");   // abgeleitet: Kunde hat diese Rezeptur aus einer Katalog-Rezeptur/-Produkt weiterentwickelt (intern sichtbar)
     // Einmaliger Backfill: bestehende Rezepturen MIT Kunde waren bisher exklusiv (kunde_id = exklusiv).
     // Danach steuert nur noch das Flag - importierte Katalog-Rezepturen bleiben exklusiv=0.
     if (meta_get('rez_exklusiv_backfill', '') !== '1') {
@@ -1400,6 +1402,7 @@ function init_schema(): void {
     ensure_index('produkt', 'idx_rezeptur', 'rezeptur_id');            // Produkt -> Rezeptur
     ensure_index('rezeptur', 'idx_kunde', 'kunde_id');                  // eigene Rezepturen je Kunde
     ensure_index('rezeptur', 'idx_v3', 'v3_id');                        // v3-Import/Nachlieferung
+    ensure_index('rezeptur', 'idx_basis', 'basis_rezeptur_id');         // abgeleitete Rezepturen je Basis
     ensure_index('dokument', 'idx_typ_obj', 'objekt_typ, objekt_id, typ'); // CoA/PIB/Etikett je Objekt+Typ
     ensure_index('beleg', 'idx_auftrag', 'auftrag_id');                // Rechnung je Auftrag
     ensure_index('beleg', 'idx_kunde_typ', 'kunde_id, typ');           // Rechnungen je Kunde

@@ -32,10 +32,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    'rechnung_firma','rechnung_strasse','rechnung_hausnummer','rechnung_plz','rechnung_ort','rechnung_land',
                    'liefer_strasse','liefer_hausnummer','liefer_plz','liefer_ort','liefer_land',
                    'zahlungsart','zahlungsziel_tage','rabatt_marge','aufschlag_marge',
-                   'portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','nutzt_fulfillment','notiz'];
+                   'portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','notiz'];
         $vals = array_map($f, $felder);
         $vals[array_search('gesperrt', $felder)] = isset($_POST['gesperrt']) ? 1 : 0;
-        foreach (['portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','nutzt_fulfillment'] as $pf)
+        foreach (['portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment'] as $pf)
             $vals[array_search($pf, $felder)] = isset($_POST[$pf]) ? 1 : 0;
         foreach (['zahlungsziel_tage','rabatt_marge','aufschlag_marge'] as $nf) { $ix = array_search($nf, $felder); if (trim((string)$vals[$ix]) === '') $vals[$ix] = 0; }
         if ($neu) {
@@ -367,6 +367,7 @@ if (!$neu) {
             'portal_produkte'=>'Produkte anfragen (Katalog)',
             'portal_rohstoffe'=>'Rohstoffe anfragen',
             'portal_dienstleistung'=>'Dienstleistung anfragen',
+            'portal_rezeptur_ableiten'=>'Katalog weiterentwickeln (eigene Rezeptur aus Katalog-Basis)',
         ] as $key=>$lbl): ?>
           <div class="bx-check">
             <input type="checkbox" name="<?= $key ?>" id="f_<?= $key ?>" value="1" <?= (int)($k[$key] ?? 0)===1?'checked':'' ?>>

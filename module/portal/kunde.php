@@ -432,6 +432,41 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     }
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&geaendert=1'); exit;
 }
+// Katalog weiterentwickeln: Kunde leitet aus einer Katalog-/Haus-/eigenen Rezeptur eine EIGENE Rezeptur ab.
+// Ergebnis: neue Kunden-Rezeptur (Status 'entwurf', basis_rezeptur_id gesetzt) + Rezeptur-Anfrage fuers Team.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rezeptur_ableiten_speichern' && !empty($k['portal_rezeptur_ableiten'])) {
+    $basisId = (int)($_POST['basis_id'] ?? 0);
+    // Basis muss existieren und fuer den Kunden zulaessig sein: eigene, freigegebene Haus-Rezeptur oder Katalog-Produkt-Rezeptur.
+    $basis = $basisId ? one("SELECT * FROM rezeptur WHERE id=? AND (kunde_id=? OR kunde_id IS NULL OR status IN ('freigegeben','eingefroren'))", [$basisId, (int)$k['id']]) : null;
+    $name  = trim((string)($_POST['name'] ?? ''));
+    $bez   = (array)($_POST['z_bez'] ?? []); $zmg = (array)($_POST['z_menge'] ?? []);
+    // Mindestens eine gueltige Zutat (Bezeichnung + Menge) noetig.
+    $zeilen = [];
+    foreach ($bez as $i => $b) {
+        $b = trim((string)$b); $m = (float) str_replace(',', '.', (string)($zmg[$i] ?? '0'));
+        if ($b !== '' && $m > 0) $zeilen[] = ['bez'=>$b, 'mg'=>$m];
+    }
+    if ($basis && $name !== '' && $zeilen) {
+        $form = (string)$basis['darreichungsform'] ?: 'kapsel';
+        q("INSERT INTO rezeptur (nummer,name,kunde_id,darreichungsform,kapselgroesse_id,status,basis_rezeptur_id,notiz) VALUES (?,?,?,?,?, 'entwurf', ?, ?)",
+          [naechste_nummer('RZ'), $name, (int)$k['id'], $form, $basis['kapselgroesse_id'] ?: null, $basisId, trim((string)($_POST['notiz'] ?? ''))]);
+        $rezId = insert_id();
+        $sort = 0;
+        foreach ($zeilen as $z) {
+            $itemId = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND name=? LIMIT 1", [$z['bez']]) ?: null;
+            q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)", [$rezId, $itemId, $z['bez'], $z['mg'], $sort++]);
+        }
+        // Rezeptur-Anfrage fuers Team (landet in der normalen Warteschlange + beim Kunden unter „Meine Anfragen").
+        q("INSERT INTO rezeptur_anfrage (nummer,kunde_id,darreichungsform,produktname,notiz,status,rezeptur_id) VALUES (?,?,?,?,?, 'neu', ?)",
+          [naechste_nummer('RZA'), (int)$k['id'], $form, $name,
+           'Vom Kunden aus „' . (string)$basis['name'] . '" (Nr. ' . (string)$basis['nummer'] . ') weiterentwickelt.', $rezId]);
+        $anfId = insert_id();
+        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Eigene Rezeptur „' . $name . '" aus Basis ' . (string)$basis['nummer'] . ' weiterentwickelt – zur Prüfung eingereicht.', 'rezeptur', 'rezeptur', $rezId);
+        if (mail_bereit()) nach_antwort(fn() => mail_kunde_anfrage_eingang('rezeptur', (int)$anfId));
+        header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&abgeleitet=1'); exit;
+    }
+    header('Location: ?p=portal&token=' . $token . '&v=rezeptur_ableiten&basis=' . $basisId . '&fehlt=1'); exit;
+}
 // Rohstoffanfrage – MEHRERE Rohstoffe je Absendung; pro Rohstoff eine eigene Anfrage (=> je Rohstoff ein eigenes Angebot).
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rohstoff_anfrage') {
     if ($k['portal_rohstoffe']) {
@@ -807,6 +842,7 @@ if ($k['portal_produkte']) $detailParent['produkt']  = 'produkte';
 if ($k['portal_rohstoffe']) $detailParent['rohstoff'] = 'rohstoffe';
 $detailParent['bestellung'] = 'bestellungen';   // Bestell-Detail (eigene Bestellung)
 $detailParent['menge_aendern'] = 'meine_anfragen';   // Menge einer Produktanfrage aendern (kein Menuepunkt)
+if (!empty($k['portal_rezeptur_ableiten'])) $detailParent['rezeptur_ableiten'] = 'rezepturen';   // Katalog weiterentwickeln (kein Menuepunkt)
 $detailParent['agb'] = 'start';   // AGB: kein Menuepunkt, aber eine echte Seite (Fussleiste + Bestaetigungsdialog)
 $view = $_GET['v'] ?? 'start';
 if (!isset($L[$view]) && !isset($detailParent[$view])) $view = 'start';
@@ -1319,6 +1355,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (isset($_GET['angenommen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – die Rezeptur ist angenommen. Sie ist jetzt verbindlich festgelegt.</div><?php endif; ?>
   <?php if (isset($_GET['gesendet'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Anfrage ist eingegangen – wir prüfen sie und melden uns mit einem Angebot.</div><?php endif; ?>
   <?php if (isset($_GET['geaendert'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre geänderte Menge ist eingegangen – wir überarbeiten das Angebot und melden uns.</div><?php endif; ?>
+  <?php if (isset($_GET['abgeleitet'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre eigene Rezeptur ist eingegangen – wir prüfen sie und melden uns mit einem Vorschlag.</div><?php endif; ?>
   <?php if (isset($_GET['geloescht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Anfrage gelöscht.</div><?php endif; ?>
   <?php if (isset($_GET['loeschfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Diese Anfrage lässt sich nicht mehr löschen – wir sind bereits dabei oder haben Ihnen schon ein Angebot gemacht. Melden Sie sich bei uns, dann klären wir das.</div><?php endif; ?>
 
@@ -1681,6 +1718,9 @@ portal_head('Kundenportal · ' . $k['firma']);
               if ($kannProduktAnfrage && in_array($rezDetail['status'], ['eingefroren','freigegeben'], true)): ?>
           <a class="btn btn-primary btn-sm" href="<?= $portalLink('prodanfrage') ?>&rid=<?= (int)$rezDetail['id'] ?>">Als Produkt anfragen</a>
         <?php endif; ?>
+        <?php if (!empty($k['portal_rezeptur_ableiten']) && $rezZutaten): ?>
+          <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezeptur_ableiten') ?>&basis=<?= (int)$rezDetail['id'] ?>">Als Basis weiterentwickeln</a>
+        <?php endif; ?>
         <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezepturen') ?>">Zurück zur Liste</a>
       </div>
     </div>
@@ -1801,7 +1841,12 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php else: ?>
     <div class="bx-row" style="justify-content:space-between;align-items:center">
       <h1 style="margin:0"><?= h($prodDetail['anzeige_name'] ?? $prodDetail['name']) ?></h1>
-      <a class="btn btn-ghost btn-sm" href="<?= $portalLink('produkte') ?>">Zurück zum Katalog</a>
+      <div class="bx-row" style="gap:8px">
+        <?php if (!empty($k['portal_rezeptur_ableiten']) && !empty($prodDetail['rezeptur_id'])): ?>
+          <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezeptur_ableiten') ?>&basis=<?= (int)$prodDetail['rezeptur_id'] ?>">Als Basis weiterentwickeln</a>
+        <?php endif; ?>
+        <a class="btn btn-ghost btn-sm" href="<?= $portalLink('produkte') ?>">Zurück zum Katalog</a>
+      </div>
     </div>
     <p class="bx-sub"><?= h($prodDetail['nummer']) ?><?= $prodDetail['darreichungsform'] ? ' · '.h($DFORM_P[$prodDetail['darreichungsform']] ?? $prodDetail['darreichungsform']) : '' ?></p>
     <?php $dfE = in_array($prodDetail['darreichungsform'] ?? '', ['pulver','stick','granulat'], true) ? 'Portion' : 'Einheit'; ?>
@@ -1892,6 +1937,61 @@ portal_head('Kundenportal · ' . $k['firma']);
         <button class="btn btn-primary" type="submit">Anfrage senden</button>
       </form>
     </div>
+  <?php endif; ?>
+
+<?php elseif ($view === 'rezeptur_ableiten' && !empty($k['portal_rezeptur_ableiten'])):
+  $basisId = (int)($_GET['basis'] ?? 0);
+  $basis = $basisId ? one("SELECT * FROM rezeptur WHERE id=? AND (kunde_id=? OR kunde_id IS NULL OR status IN ('freigegeben','eingefroren'))", [$basisId, $kid]) : null;
+  if (!$basis): ?>
+    <h1 style="margin-bottom:4px">Rezeptur weiterentwickeln</h1>
+    <div class="bx-panel"><div class="muted">Diese Basis-Rezeptur ist nicht verfügbar.</div>
+      <div style="margin-top:10px"><a class="btn btn-ghost" href="<?= $portalLink('rezepturen') ?>">Zurück</a></div></div>
+  <?php else:
+    $basisZut = all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$basisId]);
+    $dfP = in_array($basis['darreichungsform'], ['pulver','stick','granulat'], true) ? 'Portion' : 'Einheit'; ?>
+  <h1 style="margin-bottom:4px">Rezeptur weiterentwickeln</h1>
+  <p class="bx-sub">Basis: <?= h($basis['nummer'] . ' ' . $basis['name']) ?> · <?= h($DFORM_P[$basis['darreichungsform']] ?? $basis['darreichungsform']) ?></p>
+  <div class="bx-panel">
+    <?php if (isset($_GET['fehlt'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px">Bitte einen Namen und mindestens eine Zutat mit Menge angeben.</div><?php endif; ?>
+    <p class="muted" style="margin-top:0">Passen Sie die Zutaten an – Mengen ändern, Zutaten entfernen oder neue ergänzen. Wir prüfen Ihre Variante und melden uns mit einem Vorschlag. Darreichungsform bleibt <strong><?= h($DFORM_P[$basis['darreichungsform']] ?? $basis['darreichungsform']) ?></strong> (wie die Basis).</p>
+    <form method="post">
+      <input type="hidden" name="aktion" value="rezeptur_ableiten_speichern">
+      <input type="hidden" name="basis_id" value="<?= $basisId ?>">
+      <div class="bx-field" style="max-width:420px"><label>Name Ihrer Rezeptur</label>
+        <input type="text" name="name" required value="<?= h($basis['name'] . ' (eigene Variante)') ?>"></div>
+      <label style="display:block;margin:12px 0 6px">Zutaten je <?= $dfP ?></label>
+      <div class="bx-tablewrap"><table class="bx-table" id="ra_tab">
+        <thead><tr><th>Zutat</th><th style="width:170px">Menge (mg)</th><th style="width:40px"></th></tr></thead>
+        <tbody>
+        <?php $rows = $basisZut ?: [['bezeichnung'=>'', 'menge_mg'=>'']]; foreach ($rows as $z): ?>
+          <tr class="ra_row">
+            <td><input type="text" name="z_bez[]" value="<?= h($z['bezeichnung']) ?>" placeholder="z. B. Magnesiumcitrat"></td>
+            <td><input type="number" name="z_menge[]" step="0.01" min="0" value="<?= ($z['menge_mg'] !== '' && $z['menge_mg'] !== null) ? h(rtrim(rtrim(number_format((float)$z['menge_mg'], 2, '.', ''), '0'), '.')) : '' ?>"></td>
+            <td><button type="button" class="btn btn-ghost btn-sm ra_del" title="Zeile entfernen">×</button></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="ra_add">+ Zutat</button>
+      <div class="bx-field" style="margin-top:14px"><label>Anmerkung (optional)</label><textarea name="notiz" placeholder="Was möchten Sie ändern / erreichen?"></textarea></div>
+      <div class="bx-row" style="gap:10px;margin-top:8px">
+        <button class="btn btn-primary" type="submit">Als meine Rezeptur einreichen</button>
+        <a class="btn btn-ghost" href="<?= $portalLink('rezepturen') ?>">Abbrechen</a>
+      </div>
+    </form>
+    <script>(function(){
+      var tb=document.querySelector('#ra_tab tbody'); if(!tb) return;
+      var add=document.getElementById('ra_add');
+      if(add) add.addEventListener('click',function(){
+        var tr=document.createElement('tr'); tr.className='ra_row';
+        tr.innerHTML='<td><input type="text" name="z_bez[]" placeholder="z. B. Magnesiumcitrat"></td>'
+          +'<td><input type="number" name="z_menge[]" step="0.01" min="0"></td>'
+          +'<td><button type="button" class="btn btn-ghost btn-sm ra_del" title="Zeile entfernen">×</button></td>';
+        tb.appendChild(tr);
+      });
+      tb.addEventListener('click',function(e){ var b=e.target.closest('.ra_del'); if(!b) return; if(tb.querySelectorAll('.ra_row').length>1) b.closest('tr').remove(); });
+    })();</script>
+  </div>
   <?php endif; ?>
 
 <?php elseif ($view === 'menge_aendern'):
