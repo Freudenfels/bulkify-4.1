@@ -125,3 +125,10 @@ Roter Kopf-Button zum Aufräumen fehlerhafter v3-Import-Angebote (`aktion=angebo
 
 ## Jahresabnahmevertrag
 In den Kopfdaten das Häkchen **„Jahresabnahmevertrag"** + **Jahresmenge** + **Festpreis je Packung** (+ Laufzeit). Dann bestätigt der Kunde das Angebot im Portal nicht als Einzelauftrag, sondern schließt einen **Jahresvertrag** ab (`kontingent_aus_angebot()` → Kontingent), lädt den unterschriebenen Vertrag hoch, und ruft nach eurer Freigabe die Mengen ab. Kopf-Button **⇩ Vertrag** zeigt das Vertrags-PDF (`?p=vertrag_pdf&id=`, siehe `core/pdf_vertrag.md`).
+
+## Angefragte Menge übernehmen
+Ändert der Kunde nach einem Angebot seine Menge (Portal: "Menge ändern"), wird das Angebot in den Entwurf
+zurückgesetzt – die neue Konfiguration steckt dann in der verknüpften portal_anfrage, nicht im Angebot.
+In der Positionen-Leiste erscheint ein Hinweis "Vom Kunden angefragt: …" + Button **"Angefragte Menge übernehmen"**
+(`aktion=anfrage_uebernehmen`): baut die Positionen aus der Anfrage (Rezeptur × Stück × Staffelmengen, je Zeile
+eine Gruppe) neu auf – ersetzt die bisherigen. Preise werden dabei gesperrt (Zwischenstand nicht sichtbar).

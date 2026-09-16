@@ -215,6 +215,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         header('Location: ?p=angebot&id=' . $id . '&gespeichert=1#positionen'); exit;
+    } elseif ($aktion === 'anfrage_uebernehmen' && !$neu) {
+        // Der Kunde hat seine Anfrage (z. B. Menge) geaendert. Die neu angefragte Konfiguration aus der
+        // verknuepften Portal-Anfrage als Positionen ins Angebot uebernehmen (ersetzt die bisherigen).
+        $aRow  = one("SELECT kunde_id, marge_override, anfrage_id FROM angebot WHERE id=?", [(int)$id]);
+        $kid   = (int)($aRow['kunde_id'] ?? 0) ?: null;
+        $mo    = ($aRow['marge_override'] ?? '') !== '' && $aRow['marge_override'] !== null ? (float)$aRow['marge_override'] : null;
+        $anfId = (int)($aRow['anfrage_id'] ?? 0);
+        $pa    = $anfId ? one("SELECT * FROM portal_anfrage WHERE id=?", [$anfId]) : null;
+        $rid   = $pa ? (int)($pa['rezeptur_id'] ?: scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']])) : 0;
+        if ($pa && $rid) {
+            $wform = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
+            $vtyp  = (string)($pa['verpackung_typ'] ?? '');
+            $pos = all("SELECT stueck, fuellmenge_g, menge FROM portal_anfrage_pos WHERE anfrage_id=? ORDER BY sort, id", [$anfId]);
+            if (!$pos) $pos = [['stueck'=>$pa['stueck'], 'fuellmenge_g'=>$pa['fuellmenge_g'], 'menge'=>$pa['menge']]];
+            // Nur gueltige Staffelzeilen (Stueck UND Menge > 0) – je Zeile eine Gruppe (A, B, C …).
+            $gueltig = [];
+            foreach ($pos as $z) {
+                $stk = (int) round((float)($z['fuellmenge_g'] ?: $z['stueck'])); $menge = (int)$z['menge'];
+                if ($stk > 0 && $menge > 0) $gueltig[] = ['stueck'=>$stk, 'menge'=>$menge];
+            }
+            if ($gueltig) {
+                db()->beginTransaction();
+                try {
+                    // Positionen direkt ersetzen (NICHT via angebot_gruppe_anhaengen, das sonst die leere
+                    // Automatik als Gruppe A einfrieren wuerde). Gruppenbuchstaben je Staffelzeile.
+                    q("DELETE FROM angebot_position WHERE angebot_id=?", [(int)$id]);
+                    $sort = 0; $gi = 0;
+                    foreach ($gueltig as $z) {
+                        $verps = [];
+                        foreach (passende_behaelter_fuer($rid, $wform, $z['stueck']) as $cand)
+                            if (verpackung_passt_zu_typ((int)$cand, $vtyp ?: null)) { $verps[] = (int)$cand; break; }
+                        $letter = chr(65 + $gi++);
+                        foreach (angebot_rezeptur_zeilen($rid, $z['stueck'], $verps, $z['menge'], $mo, $kid) as $p) {
+                            q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                              [(int)$id, $sort++, $p['artikelnr'] ?? '', $p['bezeichnung'], $p['beschreibung'] ?? '', (float)$p['menge'], $p['einheit'] ?? '', (int)$p['preis_cent'], (int)($p['ek_cent'] ?? 0), (float)($p['mwst_satz'] ?? 0), $p['quelle'] ?? 'manuell', $letter, $p['rezeptur_id'] ?? null, $p['stueck'] ?? null, $p['verpackung_id'] ?? null]);
+                        }
+                    }
+                    // Positions-Bezeichnungen (A) B) … / ohne Prefix bei nur einer Gruppe) konsistent setzen.
+                    $allp = all("SELECT id,bezeichnung,gruppe FROM angebot_position WHERE angebot_id=? ORDER BY sort,id", [(int)$id]);
+                    foreach (angebot_positionen_prefix($allp) as $p) q("UPDATE angebot_position SET bezeichnung=? WHERE id=?", [$p['bezeichnung'], (int)$p['id']]);
+                } catch (Throwable $e) { db()->rollBack(); throw $e; }
+                db()->commit();
+                q("UPDATE angebot SET preise_kunde=0 WHERE id=?", [(int)$id]);   // Zwischenstand nicht sichtbar bis zur Freigabe
+                header('Location: ?p=angebot&id=' . $id . '&uebernommen=1#positionen'); exit;
+            }
+        }
+        header('Location: ?p=angebot&id=' . $id . '&uebernahmefehler=1#positionen'); exit;
     }
 }
 
@@ -271,6 +318,8 @@ bx_head($neu ? 'Neues Angebot' : $v('nummer'),
 if (!$neu && !empty($a['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Erstellt am ' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . (!empty($a['aktualisiert']) && $a['aktualisiert'] !== $a['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($a['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
 if (isset($_GET['angefragt']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['angefragt'] . ' Preisanfrage(n) verschickt' . (isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '') . '. Sobald ein Lieferant antwortet, steht der Preis hier.</div>';
 if (isset($_GET['gespeichert']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['uebernommen']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angefragte Konfiguration übernommen – die Positionen wurden neu aufgebaut. Preise prüfen, dann freigeben/senden.</div>';
+if (isset($_GET['uebernahmefehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Übernahme nicht möglich – zur verknüpften Anfrage fehlt eine Rezeptur/Konfiguration.</div>';
 if (isset($_GET['gesendet']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot an den Kunden gesendet – er sieht es jetzt im Portal (inkl. Preise).</div>';
 if (isset($_GET['preisfrei']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Preise freigegeben – der Kunde sieht das Angebot jetzt im Portal.</div>';
 if (isset($_GET['preisgesperrt'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Preise sind für den Kunden <strong>gesperrt</strong> – das Angebot ist in seinem Portal nicht sichtbar. Nach der Prüfung mit „Preise freigeben" wieder sichtbar machen.</div>';
@@ -390,6 +439,18 @@ if (!$neu):
             }
         }
     }
+    // Alle aktuell angefragten Staffelzeilen (auch nach einer Kunden-Aenderung der Menge) – Grundlage fuer den
+    // Button "Angefragte Menge uebernehmen", der die Positionen aus der verknuepften Anfrage neu aufbaut.
+    $anfStaffel = [];
+    if (!empty($a['anfrage_id']) && $wunsch['rezeptur_id']) {
+        $pap = all("SELECT stueck, fuellmenge_g, menge FROM portal_anfrage_pos WHERE anfrage_id=? ORDER BY sort, id", [(int)$a['anfrage_id']]);
+        if (!$pap && !empty($wa)) $pap = [['stueck'=>$wa['stueck'], 'fuellmenge_g'=>$wa['fuellmenge_g'], 'menge'=>$wa['menge']]];
+        foreach ($pap as $z) {
+            $stk = (int) round((float)($z['fuellmenge_g'] ?: $z['stueck'])); $mng = (int)$z['menge'];
+            if ($stk > 0 && $mng > 0) $anfStaffel[] = ['stueck'=>$stk, 'menge'=>$mng];
+        }
+    }
+    $anfLabel = implode(' · ', array_map(fn($s) => number_format($s['menge'], 0, ',', '.') . ' × ' . $s['stueck'] . '/Pkg', $anfStaffel));
 ?>
 <div style="display:flex;flex-direction:column">
   <div class="bx-panel" style="order:2">
@@ -495,6 +556,20 @@ if (!$neu):
     </div>
   </div>
   <p class="muted" style="margin-top:4px;font-size:13px">Automatisch erzeugt aus Produkt + Preismatrix + Verpackung (Dose/Deckel/Etikett kommen extra). Du kannst Menge, Preis, MwSt anpassen oder Positionen hinzufügen/entfernen. <strong>Speichern friert die Positionen ein</strong> (überschreibt die Automatik).</p>
+  <?php if ($anfStaffel): ?>
+  <div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2);padding:12px 14px;margin:0 0 12px">
+    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div>
+        <strong>Vom Kunden angefragt:</strong> <?= h($anfLabel) ?>
+        <div class="muted" style="font-size:12px;margin-top:2px">Baut die Positionen aus dieser Anfrage neu auf (ersetzt die aktuellen) – danach Preise prüfen und freigeben/senden.</div>
+      </div>
+      <form method="post" style="margin:0" onsubmit="return confirm('Angefragte Konfiguration übernehmen? Die aktuellen Positionen dieses Angebots werden dadurch ersetzt.');">
+        <input type="hidden" name="aktion" value="anfrage_uebernehmen">
+        <button class="btn btn-primary btn-sm" type="submit" style="white-space:nowrap">Angefragte Menge übernehmen</button>
+      </form>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <style>
     #postab{table-layout:fixed;width:100%}
