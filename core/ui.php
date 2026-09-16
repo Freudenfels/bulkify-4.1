@@ -57,6 +57,16 @@ function bx_badge(string $text, string $kind = ''): string {
     return '<span class="badge' . $c . '">' . h($text) . '</span>';
 }
 
+// Firmenname für Listen kürzen: nur den Teil VOR einem umschlossenen Trenner „ / " oder „ - "
+// (z. B. „BioMedical Company / FuturaYou" -> „BioMedical Company", „Get Fit - Dr. Arnd Schürmann"
+// -> „Get Fit"). Namen ohne umschlossenen Trenner (z. B. „Coca-Cola") bleiben unveraendert.
+function firma_kurz(?string $firma): string {
+    $f = trim((string)$firma);
+    if ($f === '') return '';
+    $teile = preg_split('/\s+[\/\-]\s+/', $f);
+    return trim($teile[0] ?? $f);
+}
+
 // Kundenname als Link zum Kunden-Cockpit (?p=kunde&id=…). In klickbaren Listenzeilen verhindert
 // event.stopPropagation(), dass zusätzlich der Zeilen-Klick auslöst. Ohne Firma: „–", ohne id: nur Text.
 function kunde_link($kunde_id, ?string $firma): string {
