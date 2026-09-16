@@ -2,6 +2,8 @@
 // Ein Kontakt: Stammdaten, Verlauf, Wiedervorlage, und der Weg zum Kunden. Route: ?p=kontakt&id=
 require_once BX_ROOT . '/core/kontakt.php';
 require_once BX_ROOT . '/core/antwort_ki.php';
+require_once BX_ROOT . '/core/fragenkatalog_ki.php';
+require_once BX_ROOT . '/core/markdown.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $k  = kontakt($id);
@@ -22,7 +24,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         kontakt_wiedervorlage($id, 'Nachfassen: ' . $k['name'], $tage, crm_uid(), (string)($_POST['notiz'] ?? ''));
         header('Location: ?p=kontakt&id=' . $id . '&ok=erinnert'); exit;
     }
-    if ($tun === 'antwort') {
+    if ($tun === 'fragenkatalog') {
+        $r = fragenkatalog_erzeugen(trim(((string)($k['firma'] ?? '') !== '' ? $k['firma'] . ' – ' : '') . $k['name']), ['Anliegen' => (string)($k['notiz'] ?? ''), 'Quelle' => crm_quellen()[$k['quelle']] ?? '',
+             'Geschätzter Wert' => $k['wert_eur'] !== null ? eur((float)$k['wert_eur']) : '',
+             'Telefon' => (string)($k['telefon'] ?? ''), 'E-Mail' => (string)($k['email'] ?? '')], implode("\n", array_map(fn($v) => fmt_zeit((string)$v['angelegt'], 'd.m.Y') . ': ' . $v['text'], kontakt_verlauf_liste($id))));
+        if ($r['ok']) fragenkatalog_merken('kontakt', $id, $r['text']);
+        header('Location: ?p=kontakt&id=' . $id . ($r['ok'] ? '#fragenkatalog' : '&ok=kifehler')); exit;
+    }
+    if ($tun === 'fragenkatalog_weg') {
+        fragenkatalog_loeschen('kontakt', $id);
+        header('Location: ?p=kontakt&id=' . $id); exit;
+    }    if ($tun === 'antwort') {
         // Entwurf erzeugen und im Formular stehen lassen - verschickt wird nichts.
         $_SESSION['antwort'] = antwort_ki_entwurf(
             trim(((string)($k['firma'] ?? '') !== '' ? $k['firma'] . ' – ' : '') . $k['name']),
@@ -103,6 +115,42 @@ elseif ($m !== '')        hinweis(['gespeichert' => 'Gespeichert.', 'notiert' =>
     </select>
     <button class="btn btn-ghost" type="submit">Setzen</button>
   </form>
+</div></div>
+
+<?php // --- Fragenkatalog fuers Erstgespraech (aus dem v3-CRM uebernommen) ---
+$fk = fragenkatalog('kontakt', $id); ?>
+<div class="karte" id="fragenkatalog"><div class="rumpf">
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:12px">
+    <h2 style="margin:0">Fragenkatalog fürs Erstgespräch</h2>
+    <?php if ($fk): ?>
+      <span class="muted" style="font-size:var(--fs-sm)">erstellt <?= h(fmt_zeit((string)$fk['stand'], 'd.m.Y H:i')) ?></span>
+    <?php endif; ?>
+  </div>
+
+  <?php if (!$fk): ?>
+    <p class="muted" style="margin:8px 0 12px">Bereitet den Erstkontakt vor: Kurzbriefing, der fachliche
+      Knackpunkt mit Zahlen, die Fragen an den Kunden, was wir ihm aktiv sagen müssen, und die Hausaufgaben
+      auf beiden Seiten. <strong>Ein Entwurf für dich – keine Nachricht an den Kunden.</strong></p>
+  <?php endif; ?>
+
+  <?php if (ki_bereit()): ?>
+    <form method="post" style="margin:0 0 <?= $fk ? '14px' : '0' ?>">
+      <input type="hidden" name="tun" value="fragenkatalog">
+      <button class="btn <?= $fk ? 'btn-ghost btn-sm' : 'btn-primary' ?>" type="submit"
+              data-busy="Der Kollege denkt nach …"><?= $fk ? 'Neu erstellen' : 'Gesprächsvorbereitung erstellen' ?></button>
+      <span class="muted" style="margin-left:10px;font-size:var(--fs-sm)">Dauert etwa eine Minute.</span>
+    </form>
+  <?php else: ?>
+    <p class="muted" style="margin:0">Die KI ist hier nicht eingerichtet.</p>
+  <?php endif; ?>
+
+  <?php if ($fk): ?>
+    <div class="crm-md"><?= md_zu_html((string)$fk['inhalt']) ?></div>
+    <form method="post" style="margin-top:12px">
+      <input type="hidden" name="tun" value="fragenkatalog_weg">
+      <button class="btn btn-ghost btn-sm" type="submit">Verwerfen</button>
+    </form>
+  <?php endif; ?>
 </div></div>
 
 <?php if (ki_bereit()): $ant = $_SESSION['antwort'] ?? null; unset($_SESSION['antwort']); ?>

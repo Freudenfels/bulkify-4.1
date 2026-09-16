@@ -99,6 +99,19 @@ function crm_schema(): void {
         UNIQUE KEY bezug (bezug_typ, bezug_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    // --- Fragenkatalog fuers Erstgespraech (aus v3 uebernommen). ------------------------------
+    // Eigene Tabelle statt einer Spalte am Kontakt: So haengt derselbe Katalog wahlweise an einem
+    // Kontakt ODER an einem Kunden des Dashboards - und an dessen Tabellen fassen wir nichts an.
+    q("CREATE TABLE IF NOT EXISTS crm_briefing (
+        id        INT AUTO_INCREMENT PRIMARY KEY,
+        bezug_typ VARCHAR(20) NOT NULL,      -- kontakt|kunde
+        bezug_id  INT NOT NULL,
+        inhalt    MEDIUMTEXT NOT NULL,       -- Markdown, sechs Bloecke
+        modell    VARCHAR(60) NULL,
+        stand     DATETIME NOT NULL,
+        UNIQUE KEY bezug (bezug_typ, bezug_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     // --- Einstellungen des CRM (Schluessel/Wert), damit nichts im Dashboard gespeichert wird. ---
     q("CREATE TABLE IF NOT EXISTS crm_meta (
         schluessel VARCHAR(60) PRIMARY KEY,

@@ -55,6 +55,9 @@ Datei zu prüfen – dann weiß man auch, wo man sucht.
 - **Kalender** (`/crm/?p=kalender`) – Termine und Wiedervorlagen im Monat, im Aufbau des
   Produktions-Kalenders. Höchstens vier Einträge je Tag, danach „+N weitere".
 - **Termine**, **Kunden mit Verlauf**, **Mehr**.
+- **Fragenkatalog fürs Erstgespräch** (aus dem v3-CRM) – an Kontakt und Kunde: Kurzbriefing,
+  fachlicher Knackpunkt mit Zahlen, Fragen an den Kunden, was wir aktiv sagen müssen,
+  Hausaufgaben beidseitig. Das Wissen steht in `crm/prompts/fragenkatalog.md` – von Hand pflegbar.
 - **KI:** Visitenkarte fotografieren, Text auslesen, Antwortvorschlag, Tagesbriefing. Alle vier
   füllen nur vor – gespeichert und verschickt wird nie automatisch.
 - **Dublettenprüfung** beim Erfassen (rein rechnerisch, ohne KI).

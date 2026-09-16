@@ -57,3 +57,19 @@
 
 /* Formularfelder im CRM duerfen umbrechen - die Beschriftungen sind laenger als im Dashboard. */
 .bx-field > label{white-space:normal}
+
+/* ---------- Fragenkatalog: Markdown lesbar machen ----------
+   Sechs Bloecke mit Ueberschriften, Listen und fetten Stellen. Enger Zeilenabstand waere hier
+   falsch - das wird im Gespraech gelesen, oft ueberflogen. */
+.crm-md{max-width:76ch}
+.crm-md h2{font-size:var(--fs-md); margin:22px 0 6px; color:var(--text)}
+.crm-md h2:first-child{margin-top:4px}
+.crm-md h3{font-size:var(--fs); margin:18px 0 4px; color:var(--gruen)}
+.crm-md p{margin:0 0 10px; line-height:1.6}
+.crm-md ul,.crm-md ol{margin:0 0 12px; padding-left:22px}
+.crm-md li{margin-bottom:5px; line-height:1.55}
+.crm-md hr{border:0; border-top:1px solid var(--line); margin:18px 0}
+.crm-md em{color:var(--muted); font-style:normal; font-size:var(--fs-sm); display:inline-block}
+.crm-md code{background:var(--panel-2); border:1px solid var(--line-2); border-radius:4px; padding:1px 5px; font-size:.9em}
+/* [Angebotsblocker] faellt ins Auge - ohne die Antwort geht kein Angebot raus. */
+.crm-md strong{color:var(--text)}

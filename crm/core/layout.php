@@ -111,6 +111,9 @@ function fuss(string $aktiv = ''): void {
        . 'document.addEventListener("keydown",function(e){if(e.key==="Escape")zu();});'
        . 'document.querySelectorAll(".bx-side nav a").forEach(function(a){a.addEventListener("click",zu);});'
        . 'addEventListener("resize",function(){if(innerWidth>860)zu();});})();</script>';
+    // Lade-Rueckmeldung: Spinner am Knopf und Ladebalken oben. Pflicht bei jeder Aktion -
+    // die KI-Knoepfe hier laufen bis zu einer Minute, sonst klickt jeder zweimal.
+    echo '<script src="assets/busy.js" defer></script>';
     echo '<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){'
        . 'navigator.serviceWorker.register("sw.js").catch(function(){});});}</script>';
     echo '</body></html>';
