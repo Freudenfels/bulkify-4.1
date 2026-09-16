@@ -277,9 +277,14 @@ function lp_shell_start(string $aktiv): void {
         echo '<a href="?p=' . h($route) . '"' . ($aktiv === $route ? ' class="on"' : '') . '>' . h($label) . $badge . '</a>';
     }
     // Die Sprache stellt man einmal ein, deshalb steht der Umschalter klein ganz unten.
-    echo '<div class="bx-userbox"><a href="?p=logout">' . h(lp_t('abmelden')) . '</a></div>'
-       . '<div class="bx-userbox" style="margin-top:0"><button type="button" class="bx-themebtn" data-dunkel="' . h(lp_t('dunkel')) . '" data-hell="' . h(lp_t('hell')) . '">' . h(lp_t('dunkel')) . '</button></div>'
-       . '<div class="bx-userbox" style="margin-top:0;padding-top:8px">' . lp_sprachwahl() . '</div>'
+    // Fuss wie im Kundenportal: EINE Box am unteren Rand – Modus-Umschalter oben, darunter Abmelden + Sprache.
+    echo '<div class="bx-userbox">'
+       . '<button type="button" class="bx-themebtn" data-dunkel="' . h(lp_t('dunkel')) . '" data-hell="' . h(lp_t('hell')) . '">' . h(lp_t('dunkel')) . '</button>'
+       . '<div class="bx-row" style="gap:14px;margin-top:10px;flex-wrap:wrap;align-items:center">'
+       .   '<a class="muted" style="font-size:12px" href="?p=logout">' . h(lp_t('abmelden')) . '</a>'
+       .   lp_sprachwahl()
+       . '</div>'
+       . '</div>'
        . '</nav></aside>' . bx_menue_scrim() . '<main class="bx-main">' . bx_mobilbar();
     // Admin-Vorschau: sichtbarer Hinweis + Ausstieg (nur wenn ein Team-Mitglied das Portal ansieht).
     if (function_exists('lief_vorschau_id') && lief_vorschau_id() > 0) {
