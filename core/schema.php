@@ -264,7 +264,7 @@ function init_schema(): void {
         naehrstoff_id INT NULL,
         stoff VARCHAR(120) NULL,                           -- Klartext-Stoff (Fallback, wenn kein Naehrstoff verknuepft)
         claim TEXT NOT NULL,                               -- zugelassener Wortlaut
-        bedingung VARCHAR(255) NULL,                       -- Bedingung (z. B. signifikante Menge / 15% NRV)
+        bedingung TEXT NULL,                               -- Bedingung (kann lang sein, EU-Register)
         quelle VARCHAR(80) NOT NULL DEFAULT 'EU 432/2012',
         aktiv TINYINT(1) NOT NULL DEFAULT 1,
         sort INT NOT NULL DEFAULT 0,
@@ -986,6 +986,7 @@ function init_schema(): void {
     // exklusiv=0 + freigegeben -> Katalog, fuer ALLE (auch wenn ein Kunde als Herkunft dranhaengt).
     ensure_column('rezeptur', 'exklusiv', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('rezeptur', 'basis_rezeptur_id', "INT NULL");   // abgeleitet: Kunde hat diese Rezeptur aus einer Katalog-Rezeptur/-Produkt weiterentwickelt (intern sichtbar)
+    ensure_column('health_claim', 'entry_id', "VARCHAR(120) NULL");   // Entry-Id aus dem EU-Register (idempotenter Import)
     // Einmaliger Backfill: bestehende Rezepturen MIT Kunde waren bisher exklusiv (kunde_id = exklusiv).
     // Danach steuert nur noch das Flag - importierte Katalog-Rezepturen bleiben exklusiv=0.
     if (meta_get('rez_exklusiv_backfill', '') !== '1') {

@@ -43,6 +43,37 @@ function pib_del(int $produkt_id): void {
     if ($d) { @unlink(BX_UPLOADS . '/' . basename((string)$d['datei'])); q("DELETE FROM dokument WHERE id=? AND typ='pib'", [(int)$d['id']]); }
 }
 
+// Tabelle mit UMBRECHENDEN Zellen (statt abzuschneiden wie spec_table) – für lange Zutaten-/Nährstoffnamen.
+function pib_table(MiniPDF $p, float $y, array $colDefs, array $rows): float {
+    $L = 40; $R = 555; $W = $R - $L; $hH = 20; $lh = 12;
+    $head = function ($yy) use ($p, $colDefs, $L, $W) {
+        $p->rect($L, $yy, $W, 20, SPEC_CHARCOAL);
+        foreach ($colDefs as $c) $p->text($c[0] + 6, $yy + 13, $c[1], 8, true, SPEC_WHITE);
+    };
+    if ($y > 740) { $p->addPage(); $y = 48; }
+    $y0 = $y; $head($y); $y += $hH; $i = 0;
+    foreach ($rows as $r) {
+        $wrapped = []; $maxLines = 1;
+        foreach ($colDefs as $ci => $c) {
+            $x = $c[0]; $nx = $colDefs[$ci + 1][0] ?? $R;
+            $txt = ((string)($r[$ci] ?? '') !== '' ? (string)$r[$ci] : '–');
+            $lines = $p->wrap($txt, $nx - $x - 10, 8.5, false) ?: [$txt];
+            $wrapped[$ci] = $lines; $maxLines = max($maxLines, count($lines));
+        }
+        $rH = $maxLines * $lh + 5;
+        if ($y + $rH > 805) { $p->rectStroke($L, $y0, $W, $y - $y0, 0.6, SPEC_LINE); $p->addPage(); $y = 48; $y0 = $y; $head($y); $y += $hH; }
+        if ($i % 2 === 1) $p->rect($L, $y, $W, $rH, SPEC_ALT);
+        foreach ($colDefs as $ci => $c) {
+            $ly = $y + 12;
+            foreach ($wrapped[$ci] as $wl) { $p->text($c[0] + 6, $ly, $wl, 8.5, false, SPEC_INK); $ly += $lh; }
+        }
+        $y += $rH; $i++;
+    }
+    $p->rectStroke($L, $y0, $W, $y - $y0, 0.6, SPEC_LINE);
+    foreach ($colDefs as $ci => $c) if ($ci > 0) $p->line($c[0], $y0, $c[0], $y, 0.4, SPEC_LINE);
+    return $y;
+}
+
 // Auto-PIB als PDF-Bytes aus den vorhandenen Produktdaten. Null, wenn das Produkt fehlt.
 function pib_pdf_bauen(int $produkt_id): ?string {
     $prod = one("SELECT p.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS anzeige, r.darreichungsform, r.id AS rez_id
@@ -68,50 +99,39 @@ function pib_pdf_bauen(int $produkt_id): ?string {
     // Identität
     $ident = [['Produkt', (string)$prod['anzeige']]];
     if ($formLbl !== '') $ident[] = ['Darreichungsform', $formLbl];
-    if ($kg)             $ident[] = ['Kapselgröße', (string)$kg['name'] . ' (fasst bis ' . number_format((float)$kg['fuellmenge_mg'], 0, ',', '.') . ' mg)'];
+    if ($kg)             $ident[] = ['Kapselgröße', (string)$kg['name']];
     if ($einh > 0)       $ident[] = ['Einheiten pro Packung', number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stück')];
     $ident[] = ['Stand', date('d.m.Y')];
     $y = spec_grid($p, $y, $ident);
 
-    // Verpackung & Etikett (inkl. Etikettengröße B x H für die Gestaltung)
-    $verp   = !empty($prod['verpackung_id']) ? one("SELECT name, volumen_ml, etikett_final FROM item WHERE id=?", [(int)$prod['verpackung_id']]) : null;
-    $versch = !empty($prod['verschluss_id']) ? (string) scalar("SELECT name FROM item WHERE id=?", [(int)$prod['verschluss_id']]) : '';
-    $etik   = !empty($prod['etikett_id'])    ? one("SELECT name, breite_mm, hoehe_mm, etikett_format FROM item WHERE id=?", [(int)$prod['etikett_id']]) : null;
-    $emass  = etikett_masse((string)($verp['etikett_final'] ?? ''));
-    if (!$emass && $etik) $emass = ($etik['breite_mm'] && $etik['hoehe_mm']) ? [(float)$etik['breite_mm'], (float)$etik['hoehe_mm']] : etikett_masse((string)$etik['etikett_format']);
+    // Verpackung & Etikett (+ Leergewichte für die Brutto-Rechnung)
+    $verp   = !empty($prod['verpackung_id']) ? one("SELECT name, volumen_ml, gewicht_g FROM item WHERE id=?", [(int)$prod['verpackung_id']]) : null;
+    $versch = !empty($prod['verschluss_id']) ? one("SELECT name, gewicht_g FROM item WHERE id=?", [(int)$prod['verschluss_id']]) : null;
+    $etik   = !empty($prod['etikett_id'])    ? one("SELECT name, gewicht_g FROM item WHERE id=?", [(int)$prod['etikett_id']]) : null;
     $vp = [];
-    if ($verp)          $vp[] = ['Behälter', (string)$verp['name'] . ((float)($verp['volumen_ml'] ?? 0) > 0 ? ' · ' . $mg($verp['volumen_ml']) . ' ml' : '')];
-    if ($versch !== '') $vp[] = ['Verschluss', $versch];
-    if ($etik)          $vp[] = ['Etikett', (string)$etik['name']];
-    if ($emass)         $vp[] = ['Etikettengröße (B × H)', $mg($emass[0]) . ' × ' . $mg($emass[1]) . ' mm'];
+    if ($verp)   $vp[] = ['Behälter', (string)$verp['name'] . ((float)($verp['volumen_ml'] ?? 0) > 0 ? ' · ' . $mg($verp['volumen_ml']) . ' ml' : '')];
+    if ($versch) $vp[] = ['Verschluss', (string)$versch['name']];
+    if ($etik)   $vp[] = ['Etikett', (string)$etik['name']];
     if ($vp) { $y = spec_h($p, $y, 'Verpackung & Etikett'); $y = spec_grid($p, $y, $vp); }
 
-    // Etikett-Maßskizze (wir kennen die Größe -> als kleine Druckvorlage-Skizze mit Maßen)
-    if ($emass) {
-        $bw = (float)$emass[0]; $bh = (float)$emass[1];   // mm
-        if ($y > 610) { $p->addPage(); $y = 48; }
-        $y = spec_h($p, $y, 'Etikett-Maße (Druckvorlage)');
-        $sc = 150.0 / max($bw, $bh, 1); $wpt = $bw * $sc; $hpt = $bh * $sc;
-        $bx = $L + 24; $by = $y + 6;
-        $p->rectStroke($bx, $by, $wpt, $hpt, 0.8, [120, 120, 118]);
-        $p->textCenter($bx + $wpt / 2, $by + $hpt / 2 + 3, 'Etikett', 8, false, [160, 160, 158]);
-        // Breite (unten) + Höhe (rechts) bemaßen
-        $p->line($bx, $by + $hpt + 8, $bx + $wpt, $by + $hpt + 8, 0.5, [150, 150, 148]);
-        $p->textCenter($bx + $wpt / 2, $by + $hpt + 20, 'Breite ' . $mg($bw) . ' mm', 9, false, [90, 90, 88]);
-        $p->line($bx + $wpt + 8, $by, $bx + $wpt + 8, $by + $hpt, 0.5, [150, 150, 148]);
-        $p->text($bx + $wpt + 14, $by + $hpt / 2 + 3, 'Höhe ' . $mg($bh) . ' mm', 9, false, [90, 90, 88]);
-        $y = $by + $hpt + 30;
-        $p->text($L, $y, 'Endformat der Druckdatei (Breite × Höhe). Bitte 2–3 mm Beschnitt einplanen.', 8, false, [110, 110, 108]);
-        $y += 18;
-    }
-
-    // Gewichte je Einheit / je Packung
-    if ($sumMg > 0) {
-        $gw = [[($istKapsel ? 'Füllgewicht je Kapsel' : 'Wirkstoffgewicht je Einheit'),
-                $mg($sumMg) . ' mg' . ($sumMg >= 1000 ? ' · ' . $mg($sumMg / 1000) . ' g' : '')]];
-        if ($einh > 0) $gw[] = ['Netto-Füllgewicht je Packung (Wirkstoffe)', $mg($sumMg * $einh / 1000) . ' g'];
+    // Gewichte: je Kapsel/Einheit, netto (Inhalt) und brutto (Gesamtgewicht der Packung).
+    if ($sumMg > 0 || $einh > 0) {
+        $shellMg = ($istKapsel && !empty($prod['leerkapsel_id'])) ? (float) scalar("SELECT leergewicht_mg FROM item WHERE id=?", [(int)$prod['leerkapsel_id']]) : 0.0;
+        $einheitG = $sumMg + $shellMg;                                  // je Kapsel gefüllt (mg) – bzw. Einheit
+        $verpG = ((float)($verp['gewicht_g'] ?? 0)) + ((float)($versch['gewicht_g'] ?? 0)) + ((float)($etik['gewicht_g'] ?? 0));
+        $nettoG = $einh > 0 ? $sumMg * $einh / 1000 : 0.0;             // reiner Inhalt (Wirkstoffe) je Packung
+        $einheitenG = $einh > 0 ? $einheitG * $einh / 1000 : 0.0;      // Gewicht aller Kapseln (inkl. Hüllen) je Packung
+        $bruttoG = $einheitenG + $verpG;                               // Gesamtgewicht der Packung
+        $gw = [];
+        $gw[] = [$istKapsel ? 'Füllgewicht je Kapsel' : 'Gewicht je Einheit', $mg($sumMg) . ' mg'];
+        if ($shellMg > 0) $gw[] = ['Kapselgewicht (gefüllt, inkl. Hülle)', $mg($einheitG) . ' mg (Hülle ' . $mg($shellMg) . ' mg)'];
+        if ($nettoG > 0)      $gw[] = ['Netto-Füllgewicht je Packung (Inhalt)', $mg($nettoG) . ' g'];
+        if ($einheitenG > 0)  $gw[] = [$istKapsel ? 'Gewicht aller Kapseln je Packung' : 'Gewicht aller Einheiten je Packung', $mg($einheitenG) . ' g'];
+        if ($verpG > 0)       $gw[] = ['Verpackung leer (Behälter + Deckel + Etikett)', $mg($verpG) . ' g'];
+        if ($bruttoG > 0)     $gw[] = ['Gesamtgewicht je Packung (brutto)', $mg($bruttoG) . ' g'];
         $y = spec_h($p, $y, 'Gewichte');
         $y = spec_grid($p, $y, $gw);
+        if ($verpG <= 0) { $p->text($L, $y, 'Behälter-/Verschluss-/Etikettgewichte sind teilweise nicht hinterlegt – Bruttogewicht ggf. unvollständig.', 8, false, [110, 110, 108]); $y += 14; }
     }
 
     // Zutaten je Einheit – ABSTEIGEND nach Menge (= gesetzliche Reihenfolge fürs Zutatenverzeichnis) + Gesamt.
@@ -121,7 +141,7 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         $rows = array_map(fn($z) => [(string)$z['bezeichnung'], $mg($z['menge_mg']) . ' mg'], $zutSort);
         $rows[] = ['Gesamt', $mg($sumMg) . ' mg'];
         $y = spec_h($p, $y, 'Zutaten (je ' . $einheitWort . ', absteigend nach Menge)');
-        $y = spec_table($p, $y, [[$L, 'Zutat'], [400, 'Menge je ' . $einheitWort]], $rows);
+        $y = pib_table($p, $y, [[$L, 'Zutat'], [400, 'Menge je ' . $einheitWort]], $rows);
         // Fertige Zutatenverzeichnis-Zeile fürs Etikett (Reihenfolge nach Menge, zum Kopieren).
         $verz = 'Zutaten: ' . implode(', ', array_map(fn($z) => (string)$z['bezeichnung'], $zutSort)) . '.';
         $y += 4;
@@ -146,7 +166,7 @@ function pib_pdf_bauen(int $produkt_id): ?string {
             $rows[] = [(string)$n['name'], $betr, $pct];
         }
         $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration (je ' . $einheitWort . ')');
-        $y = spec_table($p, $y, [[$L, 'Nährstoff'], [330, 'je ' . $einheitWort], [455, '% NRV*']], $rows);
+        $y = pib_table($p, $y, [[$L, 'Nährstoff'], [330, 'je ' . $einheitWort], [455, '% NRV*']], $rows);
     } else {
         $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration');
         $y += 2;
