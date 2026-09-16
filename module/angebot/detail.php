@@ -391,8 +391,9 @@ if (!$neu):
         }
     }
 ?>
-<div class="bx-panel">
-  <h2 id="positionen" style="margin-top:0;scroll-margin-top:16px">Position hinzufügen</h2>
+<div style="display:flex;flex-direction:column">
+  <div class="bx-panel" style="order:2">
+  <h2 style="margin-top:0">Position hinzufügen</h2>
   <p class="muted" style="margin-top:0">Erst den Typ wählen – dann kommt der passende Katalog. Jede Position wird als eigene Gruppe (A, B, C …) angehängt.</p>
   <?php if ($wunsch['rezeptur_id'] || $wunsch['stueck'] || $wunsch['menge']): ?>
     <div class="bx-panel" style="padding:10px 14px;margin-bottom:12px;background:var(--panel-2)">
@@ -483,9 +484,9 @@ if (!$neu):
   </form>
 </div>
 
-<div class="bx-panel">
+<div class="bx-panel" style="order:1">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
-    <h2 style="margin:0">Positionen <span class="muted" style="font-weight:400;font-size:13px"><?= $ueberschrieben ? 'manuell überschrieben' : 'automatisch berechnet' ?></span></h2>
+    <h2 id="positionen" style="margin:0;scroll-margin-top:16px">Positionen <span class="muted" style="font-weight:400;font-size:13px"><?= $ueberschrieben ? 'manuell überschrieben' : 'automatisch berechnet' ?></span></h2>
     <div class="bx-row" style="gap:8px">
       <a class="btn btn-ghost btn-sm" target="_blank" href="?p=angebot_pdf&id=<?= (int)$id ?>">&#8681; PDF ansehen</a>
       <?php if ($ueberschrieben): ?>
@@ -630,6 +631,7 @@ if (!$neu):
   </div>
   <?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=angebot&id=' . (int)$id); ?>
   <?php endif; ?>
+</div>
 </div>
 
 <script>
