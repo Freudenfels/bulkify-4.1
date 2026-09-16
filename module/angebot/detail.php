@@ -236,6 +236,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($stk > 0 && $menge > 0) $gueltig[] = ['stueck'=>$stk, 'menge'=>$menge];
             }
             if ($gueltig) {
+                // Bereits vergebene Preise je Konfiguration merken (Herstellung/Verpackung nach Stueck + Artikel +
+                // Behaelter). Aendert der Kunde nur die MENGE, bleibt der Preis je Packung erhalten – der Preis wird
+                // NICHT neu berechnet. Nur wo es keine passende alte Position gibt (z. B. neue Staffel/anderes Stueck),
+                // greift die automatische Kalkulation.
+                $altPreis = [];
+                $pkey = fn($quelle, $stueck, $art, $verp) => ($quelle ?: 'manuell') . '|' . (int)$stueck . '|' . trim((string)$art) . '|' . (int)$verp;
+                foreach (all("SELECT quelle, stueck, artikelnr, verpackung_id, preis_cent, ek_cent, mwst_satz FROM angebot_position WHERE angebot_id=?", [(int)$id]) as $o) {
+                    $key = $pkey($o['quelle'], $o['stueck'], $o['artikelnr'], $o['verpackung_id'] ?? 0);
+                    if (!isset($altPreis[$key])) $altPreis[$key] = $o;   // erste Uebereinstimmung je Konfiguration
+                }
                 db()->beginTransaction();
                 try {
                     // Positionen direkt ersetzen (NICHT via angebot_gruppe_anhaengen, das sonst die leere
@@ -248,6 +258,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             if (verpackung_passt_zu_typ((int)$cand, $vtyp ?: null)) { $verps[] = (int)$cand; break; }
                         $letter = chr(65 + $gi++);
                         foreach (angebot_rezeptur_zeilen($rid, $z['stueck'], $verps, $z['menge'], $mo, $kid) as $p) {
+                            // Vorhandenen Preis dieser Konfiguration wiederverwenden, statt neu zu rechnen.
+                            $key = $pkey($p['quelle'] ?? 'manuell', $p['stueck'] ?? 0, $p['artikelnr'] ?? '', $p['verpackung_id'] ?? 0);
+                            if (isset($altPreis[$key])) {
+                                $p['preis_cent'] = (int)$altPreis[$key]['preis_cent'];
+                                $p['ek_cent']    = (int)$altPreis[$key]['ek_cent'];
+                                $p['mwst_satz']  = (float)$altPreis[$key]['mwst_satz'];
+                            }
                             q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                               [(int)$id, $sort++, $p['artikelnr'] ?? '', $p['bezeichnung'], $p['beschreibung'] ?? '', (float)$p['menge'], $p['einheit'] ?? '', (int)$p['preis_cent'], (int)($p['ek_cent'] ?? 0), (float)($p['mwst_satz'] ?? 0), $p['quelle'] ?? 'manuell', $letter, $p['rezeptur_id'] ?? null, $p['stueck'] ?? null, $p['verpackung_id'] ?? null]);
                         }
