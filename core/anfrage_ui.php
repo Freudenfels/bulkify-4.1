@@ -155,6 +155,13 @@ function bxAnfrageOeffnen(itemId, btn){
   document.getElementById('bxAnfrageArt').value = '';
   document.getElementById('bxAnfrageNeu').value = '';
   bxAnfrageModus('preis'); bxAnfMengeStaffel(false);
+  // Benötigte Menge (Bedarf aus der Kundenkalkulation) vorbefüllen, falls der Knopf sie mitgibt.
+  var mEl = document.getElementById('bxAnfMenge');
+  var mv = btn && btn.getAttribute('data-menge');
+  var meinh = btn && btn.getAttribute('data-einheit');
+  if (mEl) mEl.value = (mv && parseFloat(mv) > 0) ? mv : '';
+  var mLbl = document.getElementById('bxAnfMengeLbl');
+  if (mLbl) mLbl.textContent = (mv && parseFloat(mv) > 0 && meinh) ? ('Menge (' + meinh + ')') : 'Menge (optional)';
   var name = btn && btn.getAttribute('data-name');
   document.getElementById('bxAnfrageItem').textContent = name
     ? ('Preis für „' + name + '" – bei welchen Lieferanten anfragen?')
@@ -168,6 +175,8 @@ window.bxAnfrageNeuOeffnen = function(name){
   document.getElementById('bxAnfrageRezId').value = '';
   document.getElementById('bxAnfrageArt').value = '';
   document.getElementById('bxAnfrageNeu').value = name;
+  var mEl0 = document.getElementById('bxAnfMenge'); if (mEl0) mEl0.value = '';
+  var mLbl0 = document.getElementById('bxAnfMengeLbl'); if (mLbl0) mLbl0.textContent = 'Menge (optional)';
   bxAnfrageModus('doku'); bxAnfMengeStaffel(false);   // Fokus: CoA / Spezifikation – Kilopreis optional
   document.getElementById('bxAnfrageItem').textContent = name
     ? ('Neuer Rohstoff „' + name + '" – bei welchen Lieferanten anfragen? (wird als Rohstoff angelegt, CoA/Spezifikation inklusive)')

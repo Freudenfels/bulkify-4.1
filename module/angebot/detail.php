@@ -711,7 +711,7 @@ if (!$neu):
           <td><?= $z['lieferant'] !== '' ? h($z['lieferant']) : '<span class="muted">&ndash;</span>' ?></td>
           <td class="bx-num"><?= $z['kosten'] !== null ? h($nfrk($z['kosten'])) . ' &euro;' : '<span class="muted">?</span>' ?></td>
           <td><?= anfrage_badge((int)$z['item_id']) ?></td>
-          <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" data-name="<?= h($z['name']) ?>" onclick="bxAnfrageOeffnen(<?= (int)$z['item_id'] ?>,this)">Preis anfragen</button></td>
+          <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" data-name="<?= h($z['name']) ?>" data-menge="<?= h(rtrim(rtrim(number_format((float)$z['bedarf'], 3, '.', ''), '0'), '.')) ?>" data-einheit="<?= h($z['bezug']) ?>" onclick="bxAnfrageOeffnen(<?= (int)$z['item_id'] ?>,this)">Preis anfragen</button></td>
         </tr>
       <?php endforeach; ?>
         <tr style="font-weight:600"><td colspan="4">Rohstoffkosten gesamt (gr&ouml;&szlig;te Menge)</td><td class="bx-num"><?= h($nfrk($rk['summe'])) ?> &euro;</td><td colspan="2"></td></tr>
