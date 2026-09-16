@@ -99,10 +99,10 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     // Einkaufs-Zähler: offener Einkaufsbedarf (noch nicht gemeldet) + Einkaufsliste (Positionen zu bestellen)
     if (function_exists('scalar')) {
         try {
-            $anfCount['bedarf'] = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE status IN ('offen','laufend') AND auftrag_id IS NOT NULL AND bedarf_gemeldet IS NULL");
-            // Kein Badge an „Einkaufsliste": die exakte Zahl erfordert den vollen Bedarf (bedarf_aggregiert
-            // über alle gemeldeten Produktionsaufträge -> teuer) und lief bisher bei JEDEM Seitenaufruf im
-            // Menü – die Hauptbremse. Auf Wunsch entfernt; die Einkaufsliste-Seite selbst zeigt alles.
+            // Keine Badges an „Einkaufsbedarf" und „Einkaufsliste" (auf Wunsch entfernt). Die Zahl an
+            // „Einkaufsliste" erforderte zudem den vollen Bedarf je Seitenaufruf – die Hauptbremse. Die
+            // jeweiligen Seiten selbst zeigen alles live.
+            $anfCount['bedarf'] = 0;
             $anfCount['einkaufsliste'] = 0;
             // Aufträge, die noch nicht fertig (= versendet) sind.
             $anfCount['auftraege'] = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status NOT IN ('versendet','storniert')");
