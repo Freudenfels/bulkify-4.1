@@ -21,6 +21,12 @@ function ensure_column(string $t, string $c, string $definition): void {
         db()->exec("ALTER TABLE `$t` ADD COLUMN `$c` $definition");
     }
 }
+// Index anlegen, falls er fehlt (MySQL kennt kein CREATE INDEX IF NOT EXISTS -> selbst prüfen).
+function ensure_index(string $t, string $name, string $cols): void {
+    if (!table_exists($t)) return;
+    $da = (int) scalar("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=? AND table_name=? AND index_name=?", [DB_NAME, $t, $name]);
+    if ($da === 0) { try { db()->exec("ALTER TABLE `$t` ADD INDEX `$name` ($cols)"); } catch (\Throwable $e) {} }
+}
 
 function init_schema(): void {
     $pdo = db();
@@ -1366,6 +1372,23 @@ function init_schema(): void {
         sort INT NOT NULL DEFAULT 0,
         KEY idx_item (item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // Zusätzliche Indizes für häufige Lookups, die sonst Volltabellen-Scans wären (v. a. auf beta mit
+    // mehr Daten spürbar). Idempotent über ensure_index. Reihenfolge/Spaltenwahl aus den echten Abfragen.
+    ensure_index('charge', 'idx_auftrag', 'auftrag_id');                 // Fertigware/Zukauf: WHERE auftrag_id=?
+    ensure_index('item', 'idx_name', 'name');                           // Rohstoff-/Artikel-Lookup: WHERE name=?
+    ensure_index('item', 'idx_kat_rolle', 'kategorie, verpackung_rolle'); // Etiketten/Verpackung: kategorie+rolle
+    ensure_index('rezeptur_zutat', 'idx_item', 'item_id');              // Nährwert-Joins über item_id
+    ensure_index('angebot', 'idx_anfrage', 'anfrage_id');               // Angebot je Anfrage
+    ensure_index('angebot', 'idx_status', 'status');                    // offene/gesendete Angebote
+    ensure_index('auftrag', 'idx_status', 'status');                    // Aufträge nach Status (Versand/Bedarf)
+    ensure_index('produktionsauftrag', 'idx_status', 'status');         // Produktionslisten nach Status
+    ensure_index('produkt', 'idx_rezeptur', 'rezeptur_id');            // Produkt -> Rezeptur
+    ensure_index('rezeptur', 'idx_kunde', 'kunde_id');                  // eigene Rezepturen je Kunde
+    ensure_index('rezeptur', 'idx_v3', 'v3_id');                        // v3-Import/Nachlieferung
+    ensure_index('dokument', 'idx_typ_obj', 'objekt_typ, objekt_id, typ'); // CoA/PIB/Etikett je Objekt+Typ
+    ensure_index('beleg', 'idx_auftrag', 'auftrag_id');                // Rechnung je Auftrag
+    ensure_index('beleg', 'idx_kunde_typ', 'kunde_id, typ');           // Rechnungen je Kunde
 
     // Migrationen durch -> Marker setzen, damit der nächste Request den Block überspringt.
     if ($schemaBuild !== '') meta_set('schema_build', $schemaBuild);
