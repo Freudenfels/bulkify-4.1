@@ -543,6 +543,9 @@ $angebote = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produk
                    AND (a.produkt_id IS NOT NULL
                         OR EXISTS (SELECT 1 FROM angebot_position ap WHERE ap.angebot_id=a.id AND ap.rezeptur_id IS NOT NULL AND ap.rezeptur_id>0))
                  ORDER BY a.angelegt DESC", [$kid]);
+// Portal-Render ist schreibfrei (die POST-Handler oben sind bereits mit exit raus) -> Bestands-/Zeilen-Cache
+// aktivieren, damit Verpackungs-/Preis-/Artikel-Lookups über alle Angebotskarten nur EINMAL laufen (dedupe).
+if (!isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'] = [];
 // WICHTIG: Status 'offen' ist der interne ENTWURF – der Kunde darf ihn nicht sehen.
 // Sonst erscheint ein Angebot beim Kunden, sobald es im Editor angelegt wird, also bevor
 // überhaupt eine Position darin steht. Sichtbar wird es erst mit 'gesendet'.
