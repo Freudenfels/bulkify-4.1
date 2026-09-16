@@ -28,7 +28,8 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $spr = lp_sprache();
         $hauptMenge = zahl_lesen((string)($_POST['menge_haupt'] ?? ''), true, $spr);
         $hauptPreis = zahl_lesen((string)($_POST['preis'] ?? ''), false, $spr);
-        if ($hauptMenge > 0 && $hauptPreis > 0) $staffeln[] = [$hauptMenge, $hauptPreis];
+        // Leere "ab Menge" => der Hauptpreis gilt ab 1 (nicht verwerfen). So zaehlt der eingetragene Preis immer.
+        if ($hauptPreis > 0) $staffeln[] = [$hauptMenge > 0 ? $hauptMenge : 1, $hauptPreis];
         foreach (($_POST['s_menge'] ?? []) as $i2 => $m)
             $staffeln[] = [zahl_lesen((string)$m, true, $spr), zahl_lesen((string)($_POST['s_preis'][$i2] ?? ''), false, $spr)];
         $fehler = lieferant_angebot_speichern($id, $lid,
@@ -155,13 +156,17 @@ if (!$a):
             // Die Staffelzeilen stehen IN der Preisspalte, damit sie exakt gleich breit sind. ?>
       <div class="bx-row" style="gap:var(--sp-4);align-items:flex-start;margin-bottom:8px">
         <div class="bx-field" style="margin:0;flex:1 1 340px;max-width:520px">
-          <label><?= h(lp_t('ihr_preis')) ?></label>
           <?php // Einheit an die Mengen-Felder, damit klar ist: 500 kg oder 500 Stück? ("ab Menge (kg)")
                 $mengePh = lp_t('ab_menge') . ' (' . lp_einheit($einheit, 2) . ')'; ?>
-          <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:8px">
+          <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:4px">
+            <label style="flex:1;margin:0"><?= h(lp_t('ihr_preis')) ?></label>
+            <label style="flex:1;margin:0"><?= h($mengePh) ?></label>
+          </div>
+          <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:2px">
             <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
             <input type="text" name="menge_haupt" value="<?= h($hauptMenge > 0 ? $zahl($hauptMenge, 3) : '') ?>" placeholder="<?= h($mengePh) ?>" style="flex:1">
           </div>
+          <div class="muted" style="font-size:12px;margin-bottom:8px"><?= h(lp_t('ab_menge_leer')) ?></div>
           <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>">
           <?php // Weitere Staffeln: je Zeile ein Preis und die Menge, ab der er gilt. Leere Zeilen
                 // ignoriert das Speichern, deshalb braucht es keinen Entfernen-Knopf. ?>
