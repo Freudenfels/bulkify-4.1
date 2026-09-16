@@ -153,6 +153,20 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         $p->text($L, $y, 'Für die eingesetzten Rohstoffe sind noch keine Wirkstoffgehalte/NRV hinterlegt.', 9, false, [110, 110, 108]); $y += 16;
     }
 
+    // Zugelassene Angaben (Health Claims) für die enthaltenen Nährstoffe (EU 432/2012).
+    $claims = health_claims_fuer_rezeptur($rid);
+    if ($claims) {
+        $y = spec_h($p, $y, 'Zugelassene Angaben (Health Claims, EU 432/2012)');
+        foreach ($claims as $c) {
+            foreach ($p->wrap('• ' . (string)$c['claim'], $R - $L, 9, false) as $i => $wl) {
+                if ($y > 780) { $p->addPage(); $y = 48; }
+                $p->text($i === 0 ? $L : $L + 10, $y, $wl, 9, false, [60, 60, 58]); $y += 12;
+            }
+        }
+        $y += 2;
+        $p->text($L, $y, 'Nur verwendbar, wenn die signifikante Menge (i. d. R. 15 % NRV je Tagesdosis) erreicht ist.', 8, false, [110, 110, 108]); $y += 16;
+    }
+
     // Deklaration (Allergene / vegan / GVO) – aus den verknüpften Rohstoffen abgeleitet.
     $allerg = []; $vegF = []; $gvoF = [];
     foreach ($rid ? all("SELECT z.item_id, i.allergene, i.vegan, i.gvo_frei FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]) : [] as $z) {

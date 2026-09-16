@@ -257,6 +257,20 @@ function init_schema(): void {
         UNIQUE KEY uniq_name (name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // Health Claims (zugelassene Angaben, EU-VO 432/2012) je Naehrstoff. Wortlaut MUSS der offiziellen
+    // Liste entsprechen; das Team pflegt/importiert die Texte. Fuers PIB werden sie je enthaltenem Naehrstoff gezeigt.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS health_claim (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        naehrstoff_id INT NULL,
+        stoff VARCHAR(120) NULL,                           -- Klartext-Stoff (Fallback, wenn kein Naehrstoff verknuepft)
+        claim TEXT NOT NULL,                               -- zugelassener Wortlaut
+        bedingung VARCHAR(255) NULL,                       -- Bedingung (z. B. signifikante Menge / 15% NRV)
+        quelle VARCHAR(80) NOT NULL DEFAULT 'EU 432/2012',
+        aktiv TINYINT(1) NOT NULL DEFAULT 1,
+        sort INT NOT NULL DEFAULT 0,
+        KEY idx_naehr (naehrstoff_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // item: EIN Stamm für alle Warenlager-Artikel. kategorie steuert später die Strenge (Charge/Quarantäne).
     // Start-Fokus: Rohstoffe (Zutaten für Rezepturen). Nimmt später Verpackung/Verbrauch/Fertigware auf.
     $pdo->exec("CREATE TABLE IF NOT EXISTS item (
@@ -1684,6 +1698,51 @@ function rezeptur_kapselgroesse(int $rezeptur_id): ?array {
     if ($weight <= 0) return null;
     $kg = one("SELECT * FROM kapselgroesse WHERE fuellmenge_mg >= ? ORDER BY fuellmenge_mg ASC LIMIT 1", [$weight]);
     return $kg ?: null;
+}
+
+// ===== Health Claims (EU-VO 432/2012) =====
+// Aktive Claims eines Naehrstoffs.
+function health_claims_naehrstoff(int $naehrstoff_id): array {
+    if ($naehrstoff_id <= 0) return [];
+    return all("SELECT * FROM health_claim WHERE naehrstoff_id=? AND aktiv=1 ORDER BY sort, id", [$naehrstoff_id]);
+}
+// Zugelassene Claims fuer die Naehrstoffe einer Rezeptur (ueber die verknuepften Rohstoff-Wirkstoffe).
+// Rueckgabe: [['stoff'=>Name, 'claim'=>Text, 'bedingung'=>...], ...] nach Naehrstoffname sortiert.
+function health_claims_fuer_rezeptur(int $rezeptur_id): array {
+    if ($rezeptur_id <= 0) return [];
+    $nids = array_column(all("SELECT DISTINCT na.id FROM rezeptur_zutat z
+                              JOIN item_wirkstoff iw ON iw.item_id=z.item_id
+                              JOIN naehrstoff na ON na.id=iw.naehrstoff_id
+                              WHERE z.rezeptur_id=?", [$rezeptur_id]), 'id');
+    if (!$nids) return [];
+    $in = implode(',', array_map('intval', $nids));
+    return all("SELECT hc.claim, hc.bedingung, na.name AS stoff FROM health_claim hc
+                JOIN naehrstoff na ON na.id=hc.naehrstoff_id
+                WHERE hc.naehrstoff_id IN ($in) AND hc.aktiv=1 ORDER BY na.name, hc.sort, hc.id");
+}
+// Startsatz gaengiger Standard-Wortlaute (EU 432/2012). Nur wenn die Tabelle leer ist. Vom Team zu pruefen/ergaenzen.
+function seed_health_claims_if_empty(): void {
+    if ((int) scalar("SELECT COUNT(*) FROM health_claim") > 0) return;
+    $seed = [
+        'Vitamin C'   => ['Vitamin C trägt zu einer normalen Funktion des Immunsystems bei.', 'Vitamin C trägt zur Verringerung von Müdigkeit und Ermüdung bei.', 'Vitamin C erhöht die Eisenaufnahme.'],
+        'Vitamin D'   => ['Vitamin D trägt zu einer normalen Funktion des Immunsystems bei.', 'Vitamin D trägt zur Erhaltung normaler Knochen bei.', 'Vitamin D trägt zu einer normalen Muskelfunktion bei.'],
+        'Magnesium'   => ['Magnesium trägt zu einer normalen Muskelfunktion bei.', 'Magnesium trägt zur Verringerung von Müdigkeit und Ermüdung bei.', 'Magnesium trägt zu einer normalen Funktion des Nervensystems bei.'],
+        'Zink'        => ['Zink trägt zu einer normalen Funktion des Immunsystems bei.', 'Zink trägt zum Schutz der Zellen vor oxidativem Stress bei.'],
+        'Eisen'       => ['Eisen trägt zur Verringerung von Müdigkeit und Ermüdung bei.', 'Eisen trägt zu einem normalen Sauerstofftransport im Körper bei.'],
+        'Calcium'     => ['Calcium trägt zur Erhaltung normaler Knochen bei.', 'Calcium wird für die Erhaltung normaler Zähne benötigt.'],
+        'Vitamin B12' => ['Vitamin B12 trägt zur Verringerung von Müdigkeit und Ermüdung bei.', 'Vitamin B12 trägt zu einer normalen Funktion des Nervensystems bei.'],
+        'Vitamin B6'  => ['Vitamin B6 trägt zu einem normalen Energiestoffwechsel bei.', 'Vitamin B6 trägt zu einer normalen Funktion des Immunsystems bei.'],
+        'Folsäure'    => ['Folat trägt zur normalen Blutbildung bei.', 'Folat trägt zur Verringerung von Müdigkeit und Ermüdung bei.'],
+        'Biotin'      => ['Biotin trägt zur Erhaltung normaler Haare bei.', 'Biotin trägt zur Erhaltung normaler Haut bei.'],
+    ];
+    $bed = 'Zulässig, wenn eine signifikante Menge (mind. 15 % NRV je Tagesdosis) enthalten ist.';
+    foreach ($seed as $name => $claims) {
+        $nid = (int) scalar("SELECT id FROM naehrstoff WHERE name=? LIMIT 1", [$name]);
+        $sort = 0;
+        foreach ($claims as $c)
+            q("INSERT INTO health_claim (naehrstoff_id, stoff, claim, bedingung, quelle, sort) VALUES (?,?,?,?, 'EU 432/2012', ?)",
+              [$nid ?: null, $name, $c, $bed, $sort++]);
+    }
 }
 
 // Wie viele Kapseln der Kapselgröße dieser Rezeptur passen höchstens in eine (Standard-)Verpackung?
