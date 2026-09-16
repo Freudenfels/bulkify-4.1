@@ -487,9 +487,14 @@ if (!$k) {
     header('Location: ?p=portal_login'); exit;
 }
 
+// Interne Vorschau: ist ein Mitarbeiter (kein Lieferant) angemeldet und ruft das Portal auf,
+// überspringen wir die Erstzugangs-Seite – so kann das Team das Kundenkonto ansehen, auch wenn
+// der Kunde sein Passwort noch nicht gesetzt hat. Der echte Kunde (ohne interne Session) sieht sie.
+$internVorschau = function_exists('is_logged_in') && is_logged_in() && function_exists('ist_lieferant') && !ist_lieferant();
+
 // Erstzugang: solange kein Passwort gesetzt ist, muss der Kunde zuerst sein Konto einrichten
 // (E-Mail + Passwort + fehlende Stammdaten). Danach greift das normale Portal.
-if (empty($k['passwort'])) {
+if (empty($k['passwort']) && !$internVorschau) {
     $setupErr = (string)($_GET['setupfehler'] ?? '');
     portal_head('Konto einrichten · bulkify');
     echo '<div style="max-width:460px;margin:6vh auto;padding:0 16px">'
