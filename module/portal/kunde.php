@@ -554,6 +554,54 @@ if (!isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'] = [];
 // vorher wurde das für ALLE Angebote des Kunden gebaut (hunderte Abfragen umsonst).
 $staffelMap = [];  // Cache je Angebot-ID
 $angInfo    = [];  // Cache je Angebot-ID
+// --- Buendel-Vorladung fuer ALLE gezeigten Angebotskarten ---
+// Statt je Karte einzeln Preismatrix, Zutaten, Naehrwerte, Staffeln und die Annehmbar-Zaehler
+// abzufragen (das waren ~7 Abfragen je Angebot), holen wir sie hier in je EINER Abfrage vor.
+// Die Closures unten lesen nur noch aus diesen Maps.
+$prodIds = $rezIds = $angIds = $anfIds = [];
+foreach ($angebote as $a) {
+    if (!empty($a['produkt_id']))  $prodIds[(int)$a['produkt_id']]  = true;
+    if (!empty($a['rezeptur_id'])) $rezIds[(int)$a['rezeptur_id']]  = true;
+    $angIds[(int)$a['id']] = true;
+    if (!empty($a['anfrage_id'])) $anfIds[(int)$a['anfrage_id']] = true;
+}
+$prodIds = array_keys($prodIds); $rezIds = array_keys($rezIds);
+$angIds  = array_keys($angIds);  $anfIds = array_keys($anfIds);
+$inList  = fn(array $ids) => implode(',', array_map('intval', $ids));
+
+$matrixRows = [];   // produkt_id => Rohzeilen der Preismatrix (VK/EK roh; Marge rechnet die Closure)
+if ($prodIds) foreach (all("SELECT produkt_id, stueck, bestellmenge, verpackung_id, ek_preis, vk_preis
+                            FROM produkt_preis WHERE produkt_id IN (" . $inList($prodIds) . ") ORDER BY vk_preis ASC") as $mr) {
+    $matrixRows[(int)$mr['produkt_id']][] = $mr;
+}
+$zutMap = $portionMap = [];   // rezeptur_id => Zutaten / Portionssumme (mg)
+if ($rezIds) foreach (all("SELECT rezeptur_id, bezeichnung, menge_mg FROM rezeptur_zutat
+                           WHERE rezeptur_id IN (" . $inList($rezIds) . ") ORDER BY sort, id") as $z) {
+    $rz = (int)$z['rezeptur_id'];
+    $zutMap[$rz][]   = ['bezeichnung'=>$z['bezeichnung'], 'menge_mg'=>$z['menge_mg']];
+    $portionMap[$rz] = ($portionMap[$rz] ?? 0) + (float)$z['menge_mg'];
+}
+$nutrMap = [];   // rezeptur_id => Naehrwerte (gleiche Aggregation wie pt_naehr, gebuendelt)
+if ($rezIds) foreach (all("SELECT z.rezeptur_id, z.menge_mg, iw.gehalt_prozent, na.name, na.nrv_wert, na.einheit
+                           FROM rezeptur_zutat z JOIN item_wirkstoff iw ON iw.item_id=z.item_id
+                           JOIN naehrstoff na ON na.id=iw.naehrstoff_id
+                           WHERE z.rezeptur_id IN (" . $inList($rezIds) . ") AND iw.gehalt_prozent IS NOT NULL") as $w) {
+    $rz = (int)$w['rezeptur_id'];
+    $mgN = (float)$w['menge_mg'] * (float)$w['gehalt_prozent'] / 100;
+    if (!isset($nutrMap[$rz][$w['name']])) $nutrMap[$rz][$w['name']] = ['name'=>$w['name'], 'mg'=>0.0, 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit']];
+    $nutrMap[$rz][$w['name']]['mg'] += $mgN;
+}
+if ($angIds) foreach (all("SELECT * FROM angebot_staffel WHERE angebot_id IN (" . $inList($angIds) . ") ORDER BY sort, id") as $s) {
+    $staffelMap[(int)$s['angebot_id']][] = $s;
+}
+foreach ($angIds as $id) if (!isset($staffelMap[$id])) $staffelMap[$id] = [];   // leere Angebote merken -> kein Nachladen
+$posRezCount = $anfRezOk = [];   // Annehmbar-Zaehler je Angebot / je Anfrage
+if ($angIds) foreach (all("SELECT angebot_id, COUNT(*) n FROM angebot_position
+                           WHERE angebot_id IN (" . $inList($angIds) . ") AND rezeptur_id IS NOT NULL AND stueck > 0
+                           GROUP BY angebot_id") as $c) $posRezCount[(int)$c['angebot_id']] = (int)$c['n'];
+if ($anfIds) foreach (all("SELECT id FROM portal_anfrage
+                           WHERE id IN (" . $inList($anfIds) . ") AND rezeptur_id IS NOT NULL AND COALESCE(stueck, fuellmenge_g, 0) > 0") as $c)
+    $anfRezOk[(int)$c['id']] = true;
 $produktionszeit = (float) meta_get('produktionszeit_wochen', 7);   // globaler Standard
 $itemName = fn($id) => $id ? (string) scalar("SELECT name FROM item WHERE id=?", [(int)$id]) : '';
 $staffelFuer = function(array $a) use (&$staffelMap) {
@@ -561,19 +609,30 @@ $staffelFuer = function(array $a) use (&$staffelMap) {
     if (!array_key_exists($id, $staffelMap)) $staffelMap[$id] = all("SELECT * FROM angebot_staffel WHERE angebot_id=? ORDER BY sort, id", [$id]);
     return $staffelMap[$id];
 };
-$angInfoFuer = function(array $a) use (&$angInfo, $itemName, $produktionszeit) {
+$angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $produktionszeit, $matrixRows, $zutMap, $portionMap, $nutrMap, $posRezCount, $anfRezOk) {
     $id = (int)$a['id'];
     if (array_key_exists($id, $angInfo)) return $angInfo[$id];
     $rid = (int)($a['rezeptur_id'] ?? 0);
     // je Angebot gesetzte Marge (überschreibt die Marge-je-Typ; VK wird dann aus EK gerechnet)
     $mo = ($a['marge_override'] ?? '') !== '' && $a['marge_override'] !== null ? (float)$a['marge_override'] : null;
-    // Preismatrix des Produkts: [stueck][bestellmenge] = günstigste Zelle (vk + verpackung)
+    // Preismatrix des Produkts: [stueck][bestellmenge] = günstigste Zelle (vk + verpackung) – aus der Buendel-Vorladung
     $matrix = [];
-    foreach (all("SELECT stueck, bestellmenge, verpackung_id, ek_preis, vk_preis FROM produkt_preis WHERE produkt_id=? ORDER BY vk_preis ASC", [(int)($a['produkt_id'] ?? 0)]) as $mr) {
+    foreach ($matrixRows[(int)($a['produkt_id'] ?? 0)] ?? [] as $mr) {
         $s = (int)$mr['stueck']; $bm = (int)$mr['bestellmenge'];
         $vk = $mo !== null ? (float)$mr['ek_preis'] * (1 + $mo/100) : (float)$mr['vk_preis'];
         if (!isset($matrix[$s][$bm])) $matrix[$s][$bm] = ['vk'=>$vk, 'verp'=>(int)$mr['verpackung_id']];
     }
+    // Positionen/Optionen liest die Karte ausschliesslich im Zweig "gesendet UND keine Matrix UND keine Staffel"
+    // (positionsbasiertes Angebot). Fuer Matrix-/Staffel-Angebote NIE laden.
+    $brauchtPos = $a['status'] === 'gesendet' && empty($matrix) && empty($staffelMap[$id]);
+    // WICHTIG: im Kundenportal NUR die GESPEICHERTEN Positionen lesen – niemals die Live-Preis-Engine
+    // (angebot_positionen()) anstossen. Der Kunde hat seinen Preis bereits; eine erneute EK-/Lieferanten-
+    // Kalkulation je Zutat kostete auf der Remote-DB ~100 Abfragen JE KARTE (=> 127 s / ERR_SSL beim Laden).
+    // Ist ein Angebot nicht eingefroren, sieht der Kunde keine Preistabelle (Knopf: "bitte kurz melden").
+    $posGespeichert = $brauchtPos
+        ? all("SELECT bezeichnung, beschreibung, menge, einheit, preis_cent, mwst_satz FROM angebot_position
+               WHERE angebot_id=? AND (menge > 0 OR preis_cent > 0) ORDER BY sort, id", [$id])
+        : [];
     return $angInfo[$id] = [
         'verp'    => $itemName($a['verpackung_id']),
         'deckel'  => $itemName($a['verschluss_id']),
@@ -581,24 +640,24 @@ $angInfoFuer = function(array $a) use (&$angInfo, $itemName, $produktionszeit) {
         'form'    => $a['darreichungsform'] ?? '',
         'istPulver' => in_array($a['darreichungsform'] ?? '', ['pulver','stick','granulat'], true),   // Rezeptur beschreibt eine Portion (g je Packung anzeigen)
         'istFuell'  => form_ist_fuellmenge($a['darreichungsform'] ?? ''),                              // Packungsgröße ist eine Füllmenge (g/ml) statt einer Stückzahl
-        'portionG' => $rid ? (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rid]) / 1000 : 0,
-        'zutaten' => $rid ? all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [],
-        'nutr'    => $rid ? pt_naehr($rid) : [],
+        'portionG' => $rid ? (float)($portionMap[$rid] ?? 0) / 1000 : 0,
+        'zutaten' => $rid ? ($zutMap[$rid] ?? []) : [],
+        'nutr'    => $rid ? array_values($nutrMap[$rid] ?? []) : [],
         'matrix'  => $matrix,
         // Positionen des Angebots (Rezeptur/Rohstoff/Dienstleistung). Nötig, wenn es keine Preismatrix gibt –
         // sonst sähe der Kunde bei einem Angebot aus Positionen nur eine leere Tabelle.
         'pos'     => array_map(fn($p) => ['bezeichnung'=>$p['bezeichnung'], 'beschreibung'=>$p['beschreibung'],
                                           'menge'=>(float)$p['menge'], 'einheit'=>$p['einheit'],
                                           'preis_cent'=>(int)$p['preis_cent'], 'mwst'=>(float)$p['mwst_satz']],
-                                $a['status'] === 'offen' ? [] : angebot_positionen((int)$a['id'])),
+                                $posGespeichert),
         // Wählbare Optionen: je Gruppe (A, B, C …) eine Konfiguration mit Anzahl Packungen und
         // Preis je Packung – daraus wird die Auswahltabelle wie bei der Preismatrix.
-        'opt'     => $a['status'] === 'offen' ? ['optionen'=>[], 'extra'=>[]] : angebot_optionen((int)$a['id']),
+        'opt'     => $brauchtPos ? angebot_optionen((int)$a['id']) : ['optionen'=>[], 'extra'=>[]],
         // Annehmbar ist ein Positions-Angebot nur, wenn die Konfiguration bekannt ist – aus der
         // Position selbst oder aus der zugehoerigen Anfrage. Sonst waere der Knopf ein Blindgaenger.
-        'annehmbar' => $a['status'] === 'gesendet' && (
-              (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=? AND rezeptur_id IS NOT NULL AND stueck > 0", [(int)$a['id']]) > 0
-           || (int) scalar("SELECT COUNT(*) FROM portal_anfrage WHERE id=? AND rezeptur_id IS NOT NULL AND COALESCE(stueck, fuellmenge_g, 0) > 0", [(int)($a['anfrage_id'] ?? 0)]) > 0
+        'annehmbar' => $brauchtPos && (
+              ($posRezCount[$id] ?? 0) > 0
+           || !empty($anfRezOk[(int)($a['anfrage_id'] ?? 0)])
         ),
         'prodzeit'=> ($a['produktionszeit_wochen'] ?? '') !== '' && $a['produktionszeit_wochen'] !== null ? (float)$a['produktionszeit_wochen'] : $produktionszeit,
     ];
