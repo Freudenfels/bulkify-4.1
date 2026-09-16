@@ -856,6 +856,9 @@ function init_schema(): void {
     ensure_column('charge', 'coa_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");   // bulkify-CoA dieser Charge fuer den Kunden freigegeben?
     ensure_column('charge', 'coa_freigabe_am', "DATETIME NULL");
     ensure_column('charge', 'coa_freigabe_von', "VARCHAR(190) NULL");
+    // Fremdlager: Charge gehoert einem KUNDEN (Fulfillment) und ist NICHT unser Bestand. NULL = Warenlager (uns).
+    // Fremdlager-Chargen werden aus item_bestand()/Reservierung/Produktion/Versand ausgeschlossen (Kundenware).
+    ensure_column('charge', 'fremd_kunde_id', "INT NULL");
     ensure_column('bestellung', 'bestelldatum', "DATE NULL");   // „gemeinsam bestellt am"
     ensure_column('bestellung_position', 'bezeichnung', "VARCHAR(200) NULL");   // Freitext (z. B. Bulk-Zukauf ohne Lagerartikel)
 
@@ -1386,6 +1389,7 @@ function init_schema(): void {
     // Zusätzliche Indizes für häufige Lookups, die sonst Volltabellen-Scans wären (v. a. auf beta mit
     // mehr Daten spürbar). Idempotent über ensure_index. Reihenfolge/Spaltenwahl aus den echten Abfragen.
     ensure_index('charge', 'idx_auftrag', 'auftrag_id');                 // Fertigware/Zukauf: WHERE auftrag_id=?
+    ensure_index('charge', 'idx_fremd', 'fremd_kunde_id');               // Fremdlager: Bestand je Kunde / Ausschluss aus unserem Bestand
     ensure_index('item', 'idx_name', 'name');                           // Rohstoff-/Artikel-Lookup: WHERE name=?
     ensure_index('item', 'idx_kat_rolle', 'kategorie, verpackung_rolle'); // Etiketten/Verpackung: kategorie+rolle
     ensure_index('rezeptur_zutat', 'idx_item', 'item_id');              // Nährwert-Joins über item_id
@@ -1831,7 +1835,7 @@ function produktion_kapseln_entnehmen(int $pa_id): array {
         return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
     }
     $rest = $benoetigt;
-    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$kid]) as $c) {
+    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$kid]) as $c) {
         if ($rest <= 0.0001) break;
         $nimm = min($rest, (float)$c['menge_verfuegbar']);
         $neu = (float)$c['menge_verfuegbar'] - $nimm;
@@ -1878,6 +1882,46 @@ function produkt_lageritem(int $produkt_id): ?int {
     q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug,produkt_id) VALUES (?,?,?,?,?,?)",
       [naechste_nummer('VF'), $p['name'], 'verkaufsfertig', 'Stück', 'Stück', $produkt_id]);
     return insert_id();
+}
+
+// ===== Fremdlager je Artikel (Ware gehoert einem Kunden, physisch bei uns, NICHT unser Bestand) =====
+// Freier Fremdlager-Bestand eines Artikels. $kunde_id=null => Summe ueber alle Kunden.
+function item_fremdbestand(int $item_id, ?int $kunde_id = null): float {
+    if ($kunde_id) return (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei' AND fremd_kunde_id=?", [$item_id, $kunde_id]);
+    return (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei' AND fremd_kunde_id IS NOT NULL", [$item_id]);
+}
+// Fremdlager-Bestand eines Artikels je Kunde (fuer die Anzeige auf der Artikel-Seite).
+function item_fremdbestand_je_kunde(int $item_id): array {
+    return all("SELECT c.fremd_kunde_id AS kunde_id, k.firma, COALESCE(SUM(c.menge_verfuegbar),0) AS menge
+               FROM charge c LEFT JOIN kunden k ON k.id=c.fremd_kunde_id
+               WHERE c.item_id=? AND c.status='frei' AND c.fremd_kunde_id IS NOT NULL
+               GROUP BY c.fremd_kunde_id, k.firma HAVING menge > 0 ORDER BY k.firma", [$item_id]);
+}
+// Menge aus UNSEREM Bestand (Warenlager) ins Fremdlager eines Kunden umbuchen: unsere freien Chargen
+// FEFO reduzieren und eine neue Fremd-Charge (dem Kunden gehoerend) mit derselben Menge anlegen.
+function fremdlager_umbuchen(int $item_id, int $kunde_id, float $menge, ?string $charge_nr, ?string $mhd, string $notiz = ''): array {
+    if ($item_id <= 0 || $kunde_id <= 0) return ['ok'=>false, 'msg'=>'Artikel und Kunde sind nötig.'];
+    if ($menge <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Menge größer 0 angeben.'];
+    $frei = item_bestand($item_id, true);   // nur unser Bestand (Fremdlager ist hier schon ausgeschlossen)
+    if ($frei + 1e-9 < $menge) return ['ok'=>false, 'msg'=>'Nicht genug im Warenlager (' . rtrim(rtrim(number_format($frei, 3, ',', '.'), '0'), ',') . ' verfügbar).'];
+    $einheit = (string) scalar("SELECT einheit FROM item WHERE id=?", [$item_id]) ?: 'Stück';
+    // FEFO aus unseren freien Chargen abbuchen (Fremdlager-Chargen sind ausgeschlossen).
+    $rest = $menge;
+    foreach (all("SELECT id, menge_verfuegbar FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$item_id]) as $c) {
+        if ($rest <= 1e-9) break;
+        $nimm = min($rest, (float)$c['menge_verfuegbar']);
+        $neu  = (float)$c['menge_verfuegbar'] - $nimm;
+        q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 1e-9 ? 'leer' : 'frei', $c['id']]);
+        $rest -= $nimm;
+    }
+    // Neue Fremd-Charge (Kundenware) anlegen.
+    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,fremd_kunde_id,notiz,angelegt)
+       VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,?,?)",
+      [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $mhd ?: null, $kunde_id, $notiz ?: 'Umbuchung ins Fremdlager', gmdate('Y-m-d H:i:s')]);
+    $cid = insert_id();
+    $kfirma = (string) scalar("SELECT firma FROM kunden WHERE id=?", [$kunde_id]);
+    log_aktivitaet('item', $item_id, 'team', 'Menge ' . rtrim(rtrim(number_format($menge, 3, ',', '.'), '0'), ',') . ' ' . $einheit . ' ins Fremdlager umgebucht (Kunde: ' . $kfirma . ').', 'notiz');
+    return ['ok'=>true, 'msg'=>'Ins Fremdlager umgebucht.', 'charge_id'=>$cid];
 }
 
 // Basis-Chargennummer eines Produktionsauftrags = PR-Nummer ohne "PR-" Präfix (z. B. PR-2696 -> 2696).
@@ -2227,7 +2271,8 @@ function item_bestand(int $item_id, bool $nur_frei = true): float {
     $ck = 'b:' . $item_id . ':' . ($nur_frei ? 1 : 0);
     if (isset($GLOBALS['bx_stock_cache']) && array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
     $status = $nur_frei ? "status='frei'" : "status IN ('frei','quarantaene')";
-    $v = (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND $status", [$item_id]);
+    // Fremdlager-Chargen (fremd_kunde_id gesetzt) gehoeren dem Kunden -> zaehlen NICHT zu unserem Bestand.
+    $v = (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND $status AND fremd_kunde_id IS NULL", [$item_id]);
     if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
     return $v;
 }
@@ -4634,7 +4679,7 @@ function produktion_rohstoffe_entnehmen(int $pa_id): array {
     if ($fehlt) return ['ok'=>false, 'fehlt'=>$fehlt];
     foreach ($bedarf as $b) {
         $rest = $b['benoetigt'];
-        foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0
+        foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL
                       ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$b['item_id']]) as $c) {
             if ($rest <= 0.0001) break;
             $nimm = min($rest, (float)$c['menge_verfuegbar']);
@@ -4661,7 +4706,7 @@ function produktion_verpackung_entnehmen(int $pa_id): array {
         return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$vid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
     }
     $rest = $benoetigt;
-    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$vid]) as $c) {
+    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$vid]) as $c) {
         if ($rest <= 0.0001) break;
         $nimm = min($rest, (float)$c['menge_verfuegbar']);
         $neu = (float)$c['menge_verfuegbar'] - $nimm;
@@ -4702,7 +4747,7 @@ function auftrag_versenden(int $auftrag_id): array {
     if ($verf + 0.0001 < (float)$a['menge']) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$a['menge'] . ').'];
     // Fertigware FEFO ausbuchen
     $rest = (float)$a['menge'];
-    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$vfitem]) as $c) {
+    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$vfitem]) as $c) {
         if ($rest <= 0.0001) break;
         $nimm = min($rest, (float)$c['menge_verfuegbar']);
         $neu = (float)$c['menge_verfuegbar'] - $nimm;

@@ -24,6 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis
     q("DELETE FROM lieferant_preis WHERE id=? AND item_id=?", [(int)($_POST['preis_id'] ?? 0), (int)$id]);
     header('Location: ?p=rohstoff&id=' . $id . '&preisok=1'); exit;
 }
+// Menge aus dem Warenlager (unser Bestand) ins Fremdlager eines Kunden umbuchen.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'fremdlager_umbuchen' && !$neu) {
+    $r = fremdlager_umbuchen((int)$id, (int)($_POST['fl_kunde'] ?? 0),
+            (float) str_replace(',', '.', (string)($_POST['fl_menge'] ?? '0')),
+            trim($_POST['fl_charge'] ?? '') ?: null, trim($_POST['fl_mhd'] ?? '') ?: null);
+    header('Location: ?p=rohstoff&id=' . $id . ($r['ok'] ? '&flok=1' : '&flfehler=' . rawurlencode($r['msg']))); exit;
+}
 // Analysewerte einer Charge erfassen – daraus entsteht UNSER Analysenzertifikat (CoA).
 // Die Unterlagen des Vorlieferanten sind die Quelle; weitergegeben wird das bulkify-Dokument.
 // Werte aus einem hochgeladenen Lieferanten-PDF VORSCHLAGEN (nicht speichern).
@@ -327,6 +334,9 @@ if (!$neu) { seed_aktivitaet_if_empty(); $verlauf = verlauf_fuer('item', (int)$i
 $charges = $neu ? [] : all("SELECT c.*, l.firma AS lieferant_firma FROM charge c LEFT JOIN lieferanten l ON l.id=c.lieferant_id WHERE c.item_id=? ORDER BY c.status, c.mhd", [(int)$id]);
 $bestand_frei = $neu ? 0 : item_bestand((int)$id, true);
 $bestand_qua  = $neu ? 0 : (item_bestand((int)$id, false) - $bestand_frei);
+$fremd_gesamt = $neu ? 0 : item_fremdbestand((int)$id);
+$fremdJeKunde = $neu ? [] : item_fremdbestand_je_kunde((int)$id);
+$fremdKunden  = $neu ? [] : all("SELECT id, firma FROM kunden ORDER BY firma");
 if (!$neu) seed_lieferant_preis_if_empty();
 $preise = $neu ? [] : all("SELECT lp.*, COALESCE(l.firma, lp.lieferant_name) AS firma FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id WHERE lp.item_id=? ORDER BY lp.preis ASC, lp.menge_ab ASC", [(int)$id]);
 $preis_lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
@@ -346,6 +356,8 @@ if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="pad
     . (isset($_GET['coacharge']) ? ' Aus der CoA wurde eine Charge angelegt (noch ohne Ware) – bei der Warenannahme wird sie über die Chargennummer abgeglichen und eingebucht.' : '')
     . '</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
+if (isset($_GET['flok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Ins Fremdlager umgebucht – die Menge zählt jetzt zum Kundenbestand, nicht mehr zu unserem.</div>';
+if (isset($_GET['flfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['flfehler']) . '</div>';
 
 if (!$neu) {
     $pr = number_format((float)$it['ek_preis'], (float)$it['ek_preis'] < 1 ? 4 : 2, ',', '.');
@@ -354,9 +366,50 @@ if (!$neu) {
     echo '<div class="bx-card"><div class="k">Kategorie</div><div class="v">' . h($KAT[$it['kategorie']] ?? $it['kategorie']) . '</div></div>';
     echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . $pr . ' €/' . h($it['preis_bezug']) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Bestand (frei)</div><div class="v">' . ($bestand_frei>0 ? h(rtrim(rtrim(number_format($bestand_frei,3,',','.'),'0'),',')).' '.h($it['einheit']) : '<span class="muted">0</span>') . '</div></div>';
+    if ($fremd_gesamt > 0) echo '<div class="bx-card"><div class="k">Fremdlager (Kunden)</div><div class="v">' . h(rtrim(rtrim(number_format($fremd_gesamt,3,',','.'),'0'),',')) . ' ' . h($it['einheit']) . '</div></div>';
     echo '</div>';
 }
 ?>
+<?php // Fremdlager: Ware, die einem Kunden gehoert (Fulfillment). Sie liegt physisch bei uns, zaehlt aber
+      // NICHT zu unserem Bestand und geht nicht in Berechnungen/Angebote/Produktion ein. Umbuchen = Menge
+      // aus unserem Warenlager dem Kunden zuschreiben. ?>
+<?php if (!$neu): ?>
+<div class="bx-panel">
+  <h2 style="margin:0">Fremdlager <span class="muted" style="font-weight:400;font-size:13px">Ware, die einem Kunden gehört – nicht unser Bestand, nicht für Produktion/Angebote</span></h2>
+  <?php if ($fremdJeKunde): ?>
+  <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
+    <thead><tr><th>Kunde</th><th class="bx-num">Bestand</th></tr></thead>
+    <tbody>
+    <?php foreach ($fremdJeKunde as $fk): ?>
+      <tr><td><?= h($fk['firma'] ?: ('Kunde #' . (int)$fk['kunde_id'])) ?></td>
+          <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$fk['menge'], 3, ',', '.'), '0'), ',')) ?> <?= h($it['einheit']) ?></td></tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php else: ?><p class="muted" style="margin:10px 0 0;font-size:13px">Für diesen Artikel liegt noch keine Kundenware im Fremdlager.</p><?php endif; ?>
+
+  <details style="margin-top:12px">
+    <summary class="btn btn-ghost btn-sm" style="list-style:none;display:inline-block">Ins Fremdlager umbuchen</summary>
+    <form method="post" onsubmit="return confirm('Menge aus dem Warenlager ins Fremdlager des Kunden umbuchen? Diese Menge zählt danach nicht mehr zu unserem Bestand.');">
+      <input type="hidden" name="aktion" value="fremdlager_umbuchen">
+      <div class="bx-grid" style="margin-top:10px">
+        <div class="bx-field"><label>Kunde (Eigentümer)</label>
+          <select name="fl_kunde" required><option value="">– wählen –</option>
+            <?php foreach ($fremdKunden as $kk): ?><option value="<?= (int)$kk['id'] ?>"><?= h($kk['firma']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <div class="bx-field"><label>Menge (<?= h($it['einheit']) ?>)</label><input type="number" step="0.001" min="0.001" name="fl_menge" required placeholder="max. <?= h(rtrim(rtrim(number_format($bestand_frei, 3, ',', '.'), '0'), ',')) ?>"></div>
+        <div class="bx-field"><label>Charge (optional)</label><input type="text" name="fl_charge" placeholder="z. B. BF26801"></div>
+        <div class="bx-field"><label>MHD (optional)</label><input type="date" name="fl_mhd"></div>
+      </div>
+      <div class="bx-row" style="margin-top:10px;align-items:center;gap:10px">
+        <button class="btn btn-primary" type="submit">Umbuchen</button>
+        <span class="muted" style="font-size:12px">Verfügbar im Warenlager: <?= h(rtrim(rtrim(number_format($bestand_frei, 3, ',', '.'), '0'), ',')) ?> <?= h($it['einheit']) ?></span>
+      </div>
+    </form>
+  </details>
+</div>
+<?php endif; ?>
 <?php // Beim Anlegen sofort sichtbar – und ausserhalb des Formulars, weil es ein eigenes hat. ?>
   <?php // Beim Anlegen: aus einer Spezifikation heraus starten. Spart das Abtippen und ist der
         // Weg, über den jeder Rohstoff von Anfang an Papiere hat.

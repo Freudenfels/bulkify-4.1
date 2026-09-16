@@ -54,3 +54,10 @@ Die Stammdaten liegen in einem großen `<form>`. Abschnitte mit **eigenen** Form
 - **Lager / Analysenwerte je Charge** – dahinter, als eigener `<section data-panel="lager">`.
 
 Die Reiter-Logik blendet jedes `[data-panel]` im Dokument, nicht nur die innerhalb des Formulars – die Abschnitte erscheinen also weiterhin im richtigen Reiter.
+
+## Fremdlager (Kundenware)
+Panel "Fremdlager" auf jeder Artikel-Seite: Ware, die einem KUNDEN gehört (Fulfillment), liegt physisch bei uns,
+zählt aber NICHT zu unserem Bestand. Umgesetzt über `charge.fremd_kunde_id` (NULL = Warenlager/uns, gesetzt = Kunde).
+`item_bestand()` schließt Fremd-Chargen aus → sie gehen NICHT in Berechnungen/Angebote/Produktion/Reservierung/Versand ein.
+Button "Ins Fremdlager umbuchen" (`fremdlager_umbuchen()`): reduziert unsere freien Chargen FEFO und legt eine
+Fremd-Charge (dem Kunden gehörend) an. Anzeige je Kunde via `item_fremdbestand_je_kunde()`.
