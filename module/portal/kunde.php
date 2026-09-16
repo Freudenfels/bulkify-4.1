@@ -1303,9 +1303,13 @@ portal_head('Kundenportal · ' . $k['firma']);
               if ($nv > 0): ?> <span class="pt-badge" style="float:right" title="<?= $nv ?> <?= h($navBadgeTitel[$key] ?? 'offen') ?>"><?= $nv ?></span><?php endif; ?></a>
           <?php endforeach;
       endforeach; ?>
-      <div class="bx-userbox"><button type="button" class="bx-themebtn">Dunkler Modus</button></div>
-      <div class="bx-userbox" style="padding-top:0"><a class="muted" style="font-size:12px" href="?p=portal&v=logout">Abmelden</a></div>
-      <?php if (agb_aktuell()): ?><div class="bx-userbox" style="padding-top:0"><a class="muted" style="font-size:12px" href="<?= $portalLink('agb') ?>">AGB</a></div><?php endif; ?>
+      <div class="bx-userbox">
+        <button type="button" class="bx-themebtn">Dunkler Modus</button>
+        <div class="bx-row" style="gap:14px;margin-top:10px;flex-wrap:wrap">
+          <a class="muted" style="font-size:12px" href="?p=portal&v=logout">Abmelden</a>
+          <?php if (agb_aktuell()): ?><a class="muted" style="font-size:12px" href="<?= $portalLink('agb') ?>">AGB</a><?php endif; ?>
+        </div>
+      </div>
     </nav>
   </aside>
   <?= bx_menue_scrim() ?>
