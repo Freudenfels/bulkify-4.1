@@ -258,8 +258,7 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         'Nahrungsergänzungsmittel sind kein Ersatz für eine ausgewogene und abwechslungsreiche Ernährung und eine gesunde Lebensweise.',
         'Außerhalb der Reichweite von kleinen Kindern aufbewahren.',
         'Kühl, trocken und lichtgeschützt lagern.',
-        'Auf das Etikett gehört der Text „Mindestens haltbar bis: siehe Boden".',
-        'MHD (Format TT.MM.JJJJ) und Chargennummer bringen wir auf dem Boden auf – bitte dort Platz freihalten.',
+        'Auf das Etikett gehört der Text „Mindestens haltbar bis: siehe Boden" (MHD und Charge bringen wir auf dem Boden auf).',
         'Verantwortlicher Lebensmittelunternehmer: Name und Anschrift angeben.',
     ];
     $y += 6;
