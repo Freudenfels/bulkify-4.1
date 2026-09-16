@@ -13,55 +13,60 @@ $pdo  = db();
 $q    = fn($v) => $v === null ? 'NULL' : $pdo->quote((string)$v);
 $numN = fn($v) => ($v === null || $v === '') ? 'NULL' : (string)(0 + $v);   // Zahl oder NULL
 
-$L = [];
-$L[] = "-- bulkify: gezielte Nachlieferung der Kunden-Rezepturen (idempotent, Verknüpfung über v3_id).";
-$L[] = "-- Erzeugt " . gmdate('Y-m-d H:i') . " UTC. Aendert NUR rezeptur + rezeptur_zutat der v3-Kunden-Rezepturen.";
-$L[] = "";
+// Chunk-Groesse (Rezepturen je Datei) – kleine Dateien = kurze Requests (beta-TLS reisst bei langen ab).
+$chunk = 12;
+foreach ($argv as $a) if (preg_match('/^--chunk=(\d+)$/', $a, $m)) $chunk = max(1, (int)$m[1]);
 
 // Nur kundeneigene, v3-verknüpfte Rezepturen, deren Kunde selbst eine v3_id hat (sonst nicht zuordenbar).
 $rez = all("SELECT r.*, k.v3_id AS kunde_v3 FROM rezeptur r JOIN kunden k ON k.id=r.kunde_id
             WHERE r.v3_id IS NOT NULL AND k.v3_id IS NOT NULL ORDER BY r.id");
-$nRez = 0; $nZut = 0;
+
+// Je Rezeptur einen Statement-Block bauen (bleibt zusammen in einer Datei).
+$bloecke = []; $nRez = 0; $nZut = 0;
 foreach ($rez as $r) {
     $v3rid = (int)$r['v3_id']; $kv3 = (int)$r['kunde_v3'];
-    $kid   = "(SELECT id FROM kunden WHERE v3_id=$kv3 LIMIT 1)";           // Kunden-ID AUF beta (per v3_id)
-    $rezId = "(SELECT id FROM (SELECT id FROM rezeptur WHERE v3_id=$v3rid LIMIT 1) t1)";  // Rezeptur-ID auf beta
-
-    // 1) Fehlende Rezeptur anlegen – nur wenn der Kunde auf beta existiert und die v3_id noch fehlt.
-    //    Derived-Table-Wrap bei NOT EXISTS wegen MySQL-Fehler 1093 (gleiche Zieltabelle).
-    $L[] = "INSERT INTO rezeptur (nummer,name,kunde_id,darreichungsform,kapselgroesse_id,exklusiv,status,freigabe_name,freigabe_am,notiz,v3_id) "
+    $kid   = "(SELECT id FROM kunden WHERE v3_id=$kv3 LIMIT 1)";
+    $rezId = "(SELECT id FROM (SELECT id FROM rezeptur WHERE v3_id=$v3rid LIMIT 1) t1)";
+    $b = [];
+    $b[] = "-- Rezeptur v3#$v3rid (Kunde v3#$kv3): " . str_replace(["\r","\n"], ' ', (string)$r['name']);
+    $b[] = "INSERT INTO rezeptur (nummer,name,kunde_id,darreichungsform,kapselgroesse_id,exklusiv,status,freigabe_name,freigabe_am,notiz,v3_id) "
          . "SELECT " . $q($r['nummer']) . "," . $q($r['name']) . ",$kid," . $q($r['darreichungsform']) . "," . $numN($r['kapselgroesse_id']) . ","
          . (int)$r['exklusiv'] . "," . $q($r['status']) . "," . $q($r['freigabe_name']) . "," . $q($r['freigabe_am']) . "," . $q($r['notiz']) . ",$v3rid "
          . "FROM DUAL WHERE $kid IS NOT NULL AND NOT EXISTS (SELECT 1 FROM (SELECT id FROM rezeptur WHERE v3_id=$v3rid) t0);";
-
-    // 2) Vorhandene Rezeptur korrekt verknüpfen/aktualisieren (falls auf beta ohne kunde_id importiert).
-    $L[] = "UPDATE rezeptur SET kunde_id=$kid, exklusiv=" . (int)$r['exklusiv'] . ", status=" . $q($r['status'])
+    $b[] = "UPDATE rezeptur SET kunde_id=$kid, exklusiv=" . (int)$r['exklusiv'] . ", status=" . $q($r['status'])
          . ", name=" . $q($r['name']) . ", darreichungsform=" . $q($r['darreichungsform'])
          . " WHERE v3_id=$v3rid AND $kid IS NOT NULL;";
-
-    // 3) Zutaten idempotent neu aufbauen: erst löschen, dann einfügen (item_id auf beta per Name auflösen).
-    $L[] = "DELETE FROM rezeptur_zutat WHERE rezeptur_id IN (SELECT id FROM (SELECT id FROM rezeptur WHERE v3_id=$v3rid) t2);";
+    $b[] = "DELETE FROM rezeptur_zutat WHERE rezeptur_id IN (SELECT id FROM (SELECT id FROM rezeptur WHERE v3_id=$v3rid) t2);";
     foreach (all("SELECT bezeichnung, menge_mg, sort FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [(int)$r['id']]) as $z) {
         $bez = $q($z['bezeichnung']);
-        $L[] = "INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) "
+        $b[] = "INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) "
              . "SELECT $rezId,(SELECT id FROM item WHERE kategorie='rohstoff' AND name=$bez LIMIT 1),$bez," . $numN($z['menge_mg']) . "," . (int)$z['sort'] . " "
              . "FROM DUAL WHERE $rezId IS NOT NULL;";
         $nZut++;
     }
+    $bloecke[] = implode("\n", $b);
     $nRez++;
 }
-$L[] = "";
-$L[] = "-- Fertig: $nRez Kunden-Rezepturen, $nZut Zutaten.";
-$sql = implode("\n", $L) . "\n";
 
-$datei = BX_ROOT . '/data/kundenrezepturen_' . gmdate('Ymd_Hi') . '.sql';
-if (!is_dir(dirname($datei))) @mkdir(dirname($datei), 0775, true);
-file_put_contents($datei, $sql);
-echo "Geschrieben: $datei\n$nRez Rezepturen, $nZut Zutaten, " . strlen($sql) . " Bytes\n";
+if (!is_dir(BX_ROOT . '/data')) @mkdir(BX_ROOT . '/data', 0775, true);
+$stamp = gmdate('Ymd_Hi');
+$teile = array_chunk($bloecke, $chunk);
+$anzTeile = count($teile);
+$dateien = [];
+foreach ($teile as $i => $grp) {
+    $kopf = "-- bulkify Kunden-Rezepturen – Teil " . ($i + 1) . " / $anzTeile (idempotent, per v3_id). Erzeugt $stamp UTC.\n"
+          . "-- Ueber ?p=db_import hochladen. Ergaenzt NUR Rezepturen/Zutaten.\n\n";
+    $sql = $kopf . implode("\n\n", $grp) . "\n";
+    $datei = BX_ROOT . '/data/kundenrezepturen_' . $stamp . '_teil' . ($i + 1) . 'von' . $anzTeile . '.sql';
+    file_put_contents($datei, $sql);
+    $dateien[] = $datei;
+    echo "Teil " . ($i + 1) . "/$anzTeile: " . basename($datei) . " (" . count($grp) . " Rezepturen, " . strlen($sql) . " Bytes)\n";
+}
+echo "Gesamt: $nRez Rezepturen, $nZut Zutaten in $anzTeile Dateien (chunk=$chunk).\n";
 
 if (in_array('--apply', $argv, true)) {
     require_once BX_ROOT . '/core/db_import.php';
-    $res = db_import_sql($pdo, $sql);
-    echo "Selbsttest lokal: {$res['ok']}/{$res['stmts']} Anweisungen ok, Fehler: " . count($res['fehler']) . "\n";
-    foreach (array_slice($res['fehler'], 0, 5) as $f) echo "  FEHLER: $f\n";
+    $okAll = 0; $stAll = 0; $errAll = 0;
+    foreach ($dateien as $d) { $res = db_import_sql($pdo, file_get_contents($d)); $okAll += $res['ok']; $stAll += $res['stmts']; $errAll += count($res['fehler']); }
+    echo "Selbsttest lokal (alle Teile): $okAll/$stAll Anweisungen ok, Fehler: $errAll\n";
 }
