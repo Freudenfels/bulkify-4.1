@@ -501,6 +501,18 @@ function mail_team_preisanfrage(int $anfrage_id): int {
         . $details . "\n" . mail_basis_url() . '/?p=lieferant&id=' . (int)$a['lieferant_id'] . "\n");
 }
 
+// Der Kunde hat ein Etikett-Design hochgeladen -> Team informieren, dass die Etiketten bestellt werden können.
+function mail_team_etikett_hochgeladen(int $auftrag_id): int {
+    $a = one("SELECT a.nummer, k.firma, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
+              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    if (!$a) return 0;
+    return mail_team('Etikett-Design hochgeladen: ' . $a['nummer'] . ' (' . $a['firma'] . ')',
+        "Der Kunde " . $a['firma'] . " hat ein Etikett-Design für Auftrag " . $a['nummer']
+        . ($a['produkt'] ? " (" . $a['produkt'] . ")" : '') . " hochgeladen.\n"
+        . "Die Etiketten können jetzt bestellt werden (Einkaufsbedarf / Auftrag).\n\n"
+        . mail_basis_url() . '/?p=auftrag&id=' . $auftrag_id . "\n");
+}
+
 // Neue Rückfrage/Antwort: die andere Seite bekommt den Text und einen Link zum Antworten.
 function mail_nachricht(int $lieferant_id, string $akteur, string $text, ?string $bezug_typ = null, ?int $bezug_id = null): void {
     $lf = one("SELECT firma, ansprechpartner, email, sprache FROM lieferanten WHERE id=?", [$lieferant_id]);

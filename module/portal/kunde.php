@@ -90,10 +90,13 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&ok=1'); exit;
 }
 
-// Etikett-Design zum Auftrag hochladen (Kunde)
+// Etikett-Design zum Auftrag hochladen (Kunde) -> Team informieren, dass die Etiketten bestellt werden können.
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_upload') {
     $aid = (int)($_POST['auftrag_id'] ?? 0);
-    if ($aid && (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]) === (int)$k['id']) etikett_upload($aid);
+    if ($aid && (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]) === (int)$k['id'] && etikett_upload($aid)) {
+        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Etikett-Design hochgeladen – Etiketten können bestellt werden.', 'auftrag', 'auftrag', $aid);
+        if (mail_bereit()) nach_antwort(fn() => mail_team_etikett_hochgeladen($aid));
+    }
     header('Location: ?p=portal&token=' . $token . '&v=bestellung&aid=' . $aid . '&etikett=1'); exit;
 }
 // Etikett-Design herunterladen (nur eigener Auftrag)
