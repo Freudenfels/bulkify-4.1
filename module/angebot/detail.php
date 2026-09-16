@@ -262,9 +262,9 @@ if ($kannPreisSperren) $kopfBtn = '<form method="post" style="display:inline;mar
 if ($kannPreisFreigeben) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Der Kunde wird damit die Preise dieses Angebots im Portal sehen. Jetzt freigeben?\');">'
     . '<input type="hidden" name="aktion" value="preise_freigeben">'
     . '<button class="btn btn-primary" type="submit">Preise freigeben</button></form>' . $kopfBtn;
-if ($kannSenden) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Angebot jetzt an den Kunden senden? Der Kunde wird damit das Angebot inkl. Preise im Portal sehen.\');">'
+if ($kannSenden) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px">'
     . '<input type="hidden" name="aktion" value="senden">'
-    . '<button class="btn btn-primary" type="submit">An Kunden senden</button></form>' . $kopfBtn;
+    . '<button class="btn btn-primary" type="submit" data-confirm="Angebot jetzt an den Kunden senden? Der Kunde wird damit das Angebot inkl. Preise im Portal sehen.">An Kunden senden</button></form>' . $kopfBtn;
 bx_head($neu ? 'Neues Angebot' : $v('nummer'),
         $neu ? 'Positionen' : 'Angebot bearbeiten',
         $kopfBtn);
@@ -551,7 +551,7 @@ if (!$neu):
       <button class="btn <?= $kannSenden ? 'btn-ghost' : 'btn-primary' ?>" type="submit">Positionen speichern</button>
       <?php if ($kannSenden): ?>
       <button class="btn btn-primary" type="submit" name="und_senden" value="1"
-              onclick="return confirm('Positionen speichern und das Angebot an den Kunden senden? Der Kunde sieht damit das Angebot inkl. Preise im Portal.');">Speichern &amp; an Kunden senden</button>
+              data-confirm="Positionen speichern und das Angebot an den Kunden senden? Der Kunde sieht damit das Angebot inkl. Preise im Portal.">Speichern &amp; an Kunden senden</button>
       <?php endif; ?>
     </div>
   </form>
@@ -705,6 +705,43 @@ function posRecalc(){
   d.addEventListener('toggle', ensure);
   var rb=document.getElementById('angPdfReload'); if(rb) rb.addEventListener('click', function(){ d.open=true; load(); });
   ensure();
+})();
+</script>
+<?php // Gestylte Bestaetigung fuer folgenreiche Aktionen (v. a. "An Kunden senden"). Ersetzt das native
+      // confirm(), das manche Browser unterdruecken ("Weitere Dialoge dieser Seite verhindern") - dann
+      // liefe die Aktion ohne Rueckfrage. Der eigene Dialog ist nicht unterdrueckbar. Greift auf jedes
+      // Element mit data-confirm="...". Nach dem OK wird das Formular mit demselben Button abgeschickt. ?>
+<script>
+(function(){
+  function dialog(text, onOk){
+    var ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(18,20,23,.5);display:flex;align-items:center;justify-content:center;padding:16px';
+    var p=document.createElement('div');
+    p.style.cssText='background:var(--card,#fff);color:var(--text,#111);border:1px solid var(--line,#e2e5ea);border-radius:14px;max-width:440px;width:100%;padding:22px 22px 18px;box-shadow:0 24px 70px rgba(0,0,0,.35)';
+    var t=document.createElement('div'); t.textContent=text; t.style.cssText='font-size:15px;line-height:1.45;margin-bottom:18px';
+    var row=document.createElement('div'); row.style.cssText='display:flex;gap:10px;justify-content:flex-end';
+    var no=document.createElement('button'); no.className='btn btn-ghost'; no.type='button'; no.textContent='Abbrechen';
+    var yes=document.createElement('button'); yes.className='btn btn-primary'; yes.type='button'; yes.textContent='Ja, senden';
+    row.appendChild(no); row.appendChild(yes); p.appendChild(t); p.appendChild(row); ov.appendChild(p); document.body.appendChild(ov);
+    yes.focus();
+    function zu(){ try{ov.remove();}catch(e){} document.removeEventListener('keydown',esc,true); }
+    function esc(e){ if(e.key==='Escape'){e.preventDefault();zu();} }
+    document.addEventListener('keydown',esc,true);
+    no.addEventListener('click',zu);
+    ov.addEventListener('click',function(e){ if(e.target===ov) zu(); });
+    yes.addEventListener('click',function(){ zu(); onOk(); });
+  }
+  document.addEventListener('click', function(e){
+    var b=e.target.closest('[data-confirm]'); if(!b) return;
+    if(b.__ok) return;                       // bereits bestaetigt -> normal durchlassen
+    e.preventDefault(); e.stopImmediatePropagation();
+    dialog(b.getAttribute('data-confirm'), function(){
+      b.__ok=true;
+      var f=b.form||b.closest('form'); if(!f) return;
+      if(f.requestSubmit) f.requestSubmit(b.type==='submit'?b:undefined);   // erhaelt den Submitter (z. B. und_senden)
+      else { if(b.name){var h=document.createElement('input');h.type='hidden';h.name=b.name;h.value=b.value;f.appendChild(h);} f.submit(); }
+    });
+  }, true);
 })();
 </script>
 <?php endif;
