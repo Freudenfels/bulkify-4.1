@@ -4047,7 +4047,11 @@ function auftrag_bedarf(int $pa_id): array {
         $verf = auftrag_fertigware_cached((int)$pa['auftrag_id'])['frei'];
         $af = auftrag_row_cached($aid);
         $bi = produkt_bulk_info((int)$pa['produkt_id'], (string)($af['produkt_bezeichnung'] ?? ''), (string)($af['produkt_form'] ?? ''));
-        $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>$einheiten,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$einheiten-$verf),'einheit'=>$bi['einheit']];
+        // Bedarf = Einheiten (Menge × Einheiten/Packung). Ist keine „Einheiten pro Packung" gepflegt
+        // (z. B. Pulver/Füllprodukte), fällt der Bedarf auf die Packungsmenge zurück – sonst käme 0 heraus
+        // und ein Fremdauftrag OHNE zugekaufte Fertigware würde faelschlich als „produktionsbereit" gelten.
+        $benoetigt = $einheiten > 0 ? $einheiten : (float)$menge;
+        $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>$benoetigt,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$benoetigt-$verf),'einheit'=>$bi['einheit']];
     } else {
         foreach (produktion_materialbedarf($pa_id) as $m)
             $rows[] = ['rolle'=>'Rohstoff','item_id'=>$m['item_id'],'name'=>$m['name'],'benoetigt'=>$m['benoetigt'],'verfuegbar'=>$m['verfuegbar'],'fehlt'=>$m['fehlt'],'einheit'=>$m['einheit']];
