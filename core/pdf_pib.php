@@ -57,20 +57,50 @@ function pib_pdf_bauen(int $produkt_id): ?string {
     $p = new MiniPDF();
     $y = spec_kopf($p, 'PRODUKTINFORMATIONSBLATT', 'Grundlage für Ihre Etikettengestaltung · ' . (string)$prod['anzeige']);
 
+    // Rezeptur/Zutaten + Kennzahlen vorab laden.
+    $rid = (int)($prod['rez_id'] ?? 0);
+    $zut = $rid ? all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
+    $sumMg = 0.0; foreach ($zut as $z) $sumMg += (float)$z['menge_mg'];
+    $istKapsel = in_array($prod['darreichungsform'] ?? '', ['kapsel', 'softgel'], true);
+    $einheitWort = $istKapsel ? 'Kapsel' : 'Einheit';
+    $kg = ($istKapsel && $rid) ? rezeptur_kapselgroesse($rid) : null;
+
     // Identität
     $ident = [['Produkt', (string)$prod['anzeige']]];
     if ($formLbl !== '') $ident[] = ['Darreichungsform', $formLbl];
+    if ($kg)             $ident[] = ['Kapselgröße', (string)$kg['name'] . ' (fasst bis ' . number_format((float)$kg['fuellmenge_mg'], 0, ',', '.') . ' mg)'];
     if ($einh > 0)       $ident[] = ['Einheiten pro Packung', number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stück')];
     $ident[] = ['Stand', date('d.m.Y')];
     $y = spec_grid($p, $y, $ident);
 
-    // Zutaten je Einheit
-    $rid = (int)($prod['rez_id'] ?? 0);
-    $zut = $rid ? all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
+    // Verpackung & Etikett (inkl. Etikettengröße B x H für die Gestaltung)
+    $verp   = !empty($prod['verpackung_id']) ? one("SELECT name, volumen_ml, etikett_final FROM item WHERE id=?", [(int)$prod['verpackung_id']]) : null;
+    $versch = !empty($prod['verschluss_id']) ? (string) scalar("SELECT name FROM item WHERE id=?", [(int)$prod['verschluss_id']]) : '';
+    $etik   = !empty($prod['etikett_id'])    ? one("SELECT name, breite_mm, hoehe_mm, etikett_format FROM item WHERE id=?", [(int)$prod['etikett_id']]) : null;
+    $emass  = etikett_masse((string)($verp['etikett_final'] ?? ''));
+    if (!$emass && $etik) $emass = ($etik['breite_mm'] && $etik['hoehe_mm']) ? [(float)$etik['breite_mm'], (float)$etik['hoehe_mm']] : etikett_masse((string)$etik['etikett_format']);
+    $vp = [];
+    if ($verp)          $vp[] = ['Behälter', (string)$verp['name'] . ((float)($verp['volumen_ml'] ?? 0) > 0 ? ' · ' . $mg($verp['volumen_ml']) . ' ml' : '')];
+    if ($versch !== '') $vp[] = ['Verschluss', $versch];
+    if ($etik)          $vp[] = ['Etikett', (string)$etik['name']];
+    if ($emass)         $vp[] = ['Etikettengröße (B × H)', $mg($emass[0]) . ' × ' . $mg($emass[1]) . ' mm'];
+    if ($vp) { $y = spec_h($p, $y, 'Verpackung & Etikett'); $y = spec_grid($p, $y, $vp); }
+
+    // Gewichte je Einheit / je Packung
+    if ($sumMg > 0) {
+        $gw = [[($istKapsel ? 'Füllgewicht je Kapsel' : 'Wirkstoffgewicht je Einheit'),
+                $mg($sumMg) . ' mg' . ($sumMg >= 1000 ? ' · ' . $mg($sumMg / 1000) . ' g' : '')]];
+        if ($einh > 0) $gw[] = ['Netto-Füllgewicht je Packung (Wirkstoffe)', $mg($sumMg * $einh / 1000) . ' g'];
+        $y = spec_h($p, $y, 'Gewichte');
+        $y = spec_grid($p, $y, $gw);
+    }
+
+    // Zutaten je Einheit (+ Gesamtzeile)
     if ($zut) {
-        $y = spec_h($p, $y, 'Zutaten (je Einheit)');
-        $y = spec_table($p, $y, [[$L, 'Zutat'], [400, 'Menge je Einheit']],
-            array_map(fn($z) => [(string)$z['bezeichnung'], $mg($z['menge_mg']) . ' mg'], $zut));
+        $rows = array_map(fn($z) => [(string)$z['bezeichnung'], $mg($z['menge_mg']) . ' mg'], $zut);
+        $rows[] = ['Gesamt', $mg($sumMg) . ' mg'];
+        $y = spec_h($p, $y, 'Zutaten (je ' . $einheitWort . ')');
+        $y = spec_table($p, $y, [[$L, 'Zutat'], [400, 'Menge je ' . $einheitWort]], $rows);
     }
 
     // Nährwert-/Wirkstoffdeklaration je Einheit (Name · Menge · % NRV)
@@ -86,8 +116,12 @@ function pib_pdf_bauen(int $produkt_id): ?string {
             }
             $rows[] = [(string)$n['name'], $betr, $pct];
         }
-        $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration (je Einheit)');
-        $y = spec_table($p, $y, [[$L, 'Nährstoff'], [330, 'je Einheit'], [455, '% NRV*']], $rows);
+        $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration (je ' . $einheitWort . ')');
+        $y = spec_table($p, $y, [[$L, 'Nährstoff'], [330, 'je ' . $einheitWort], [455, '% NRV*']], $rows);
+    } else {
+        $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration');
+        $y += 2;
+        $p->text($L, $y, 'Für die eingesetzten Rohstoffe sind noch keine Wirkstoffgehalte/NRV hinterlegt.', 9, false, [110, 110, 108]); $y += 16;
     }
 
     // Hinweis für die Etikettengestaltung
