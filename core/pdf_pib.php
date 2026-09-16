@@ -45,7 +45,7 @@ function pib_del(int $produkt_id): void {
 
 // Tabelle mit UMBRECHENDEN Zellen (statt abzuschneiden wie spec_table) – für lange Zutaten-/Nährstoffnamen.
 function pib_table(MiniPDF $p, float $y, array $colDefs, array $rows): float {
-    $L = 40; $R = 555; $W = $R - $L; $hH = 20; $lh = 12;
+    $L = 40; $R = 555; $W = $R - $L; $hH = 20; $lh = 13;
     $head = function ($yy) use ($p, $colDefs, $L, $W) {
         $p->rect($L, $yy, $W, 20, SPEC_CHARCOAL);
         foreach ($colDefs as $c) $p->text($c[0] + 6, $yy + 13, $c[1], 8, true, SPEC_WHITE);
@@ -60,7 +60,7 @@ function pib_table(MiniPDF $p, float $y, array $colDefs, array $rows): float {
             $lines = $p->wrap($txt, $nx - $x - 10, 8.5, false) ?: [$txt];
             $wrapped[$ci] = $lines; $maxLines = max($maxLines, count($lines));
         }
-        $rH = $maxLines * $lh + 5;
+        $rH = $maxLines * $lh + 8;
         if ($y + $rH > 805) { $p->rectStroke($L, $y0, $W, $y - $y0, 0.6, SPEC_LINE); $p->addPage(); $y = 48; $y0 = $y; $head($y); $y += $hH; }
         if ($i % 2 === 1) $p->rect($L, $y, $W, $rH, SPEC_ALT);
         foreach ($colDefs as $ci => $c) {
@@ -101,18 +101,25 @@ function pib_pdf_bauen(int $produkt_id): ?string {
     if ($formLbl !== '') $ident[] = ['Darreichungsform', $formLbl];
     if ($kg)             $ident[] = ['Kapselgröße', (string)$kg['name']];
     if ($einh > 0)       $ident[] = ['Einheiten pro Packung', number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stück')];
-    $ident[] = ['Stand', date('d.m.Y')];
+    $ident[] = ['Erstellt am', (function_exists('fmt_zeit') ? fmt_zeit(gmdate('Y-m-d H:i:s'), 'd.m.Y, H:i') : date('d.m.Y, H:i')) . ' Uhr'];
     $y = spec_grid($p, $y, $ident);
 
-    // Verpackung & Etikett (+ Leergewichte für die Brutto-Rechnung)
-    $verp   = !empty($prod['verpackung_id']) ? one("SELECT name, volumen_ml, gewicht_g FROM item WHERE id=?", [(int)$prod['verpackung_id']]) : null;
+    // Verpackung & Etikett (+ Leergewichte für die Brutto-Rechnung, + Etikettmaße für die Gestaltung)
+    $verp   = !empty($prod['verpackung_id']) ? one("SELECT name, volumen_ml, gewicht_g, etikett_final FROM item WHERE id=?", [(int)$prod['verpackung_id']]) : null;
     $versch = !empty($prod['verschluss_id']) ? one("SELECT name, gewicht_g FROM item WHERE id=?", [(int)$prod['verschluss_id']]) : null;
-    $etik   = !empty($prod['etikett_id'])    ? one("SELECT name, gewicht_g FROM item WHERE id=?", [(int)$prod['etikett_id']]) : null;
+    $etik   = !empty($prod['etikett_id'])    ? one("SELECT name, gewicht_g, breite_mm, hoehe_mm, etikett_format FROM item WHERE id=?", [(int)$prod['etikett_id']]) : null;
+    // Etikettmaße (B x H): bevorzugt Endformat am Behälter, sonst Maße/Format des Etikett-Artikels.
+    $emass = etikett_masse((string)($verp['etikett_final'] ?? ''));
+    if (!$emass && $etik) $emass = ($etik['breite_mm'] && $etik['hoehe_mm']) ? [(float)$etik['breite_mm'], (float)$etik['hoehe_mm']] : etikett_masse((string)$etik['etikett_format']);
     $vp = [];
     if ($verp)   $vp[] = ['Behälter', (string)$verp['name'] . ((float)($verp['volumen_ml'] ?? 0) > 0 ? ' · ' . $mg($verp['volumen_ml']) . ' ml' : '')];
     if ($versch) $vp[] = ['Verschluss', (string)$versch['name']];
     if ($etik)   $vp[] = ['Etikett', (string)$etik['name']];
-    if ($vp) { $y = spec_h($p, $y, 'Verpackung & Etikett'); $y = spec_grid($p, $y, $vp); }
+    if ($emass)  $vp[] = ['Etikettmaße (B × H)', $mg($emass[0]) . ' × ' . $mg($emass[1]) . ' mm'];
+    if ($vp) {
+        $y = spec_h($p, $y, 'Verpackung & Etikett'); $y = spec_grid($p, $y, $vp);
+        $p->text($L, $y, $emass ? 'Endformat der Etikettendatei; Druckvorlage separat im Portal. Bitte 2–3 mm Beschnitt einplanen.' : 'Etikettmaße noch nicht hinterlegt – Druckvorlage separat im Portal.', 8, false, [110, 110, 108]); $y += 16;
+    }
 
     // Gewichte: je Kapsel/Einheit, netto (Inhalt) und brutto (Gesamtgewicht der Packung).
     if ($sumMg > 0 || $einh > 0) {
@@ -135,22 +142,40 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         if ($istKapsel && $shellMg <= 0) { $p->text($L, $y, 'Leerkapsel-Gewicht nicht hinterlegt – Nettofüllmenge zeigt nur das Füllgewicht ohne Hülle.', 8, false, [110, 110, 108]); $y += 14; }
     }
 
+    // Kapselhülle als eigene Zutat: bei Kapseln gehört die Hülle (HPMC/Gelatine) ins Zutatenverzeichnis.
+    $shellMg = $shellMg ?? 0.0;
+    $huelleTxt = '';
+    if ($istKapsel) {
+        $hu = !empty($prod['leerkapsel_id']) ? one("SELECT name, material FROM item WHERE id=?", [(int)$prod['leerkapsel_id']]) : null;
+        $src = mb_strtolower(trim(((string)($hu['material'] ?? '')) . ' ' . ((string)($hu['name'] ?? ''))));
+        if ($src !== '' && (strpos($src, 'hpmc') !== false || strpos($src, 'hydroxypropyl') !== false || strpos($src, 'cellulose') !== false))
+            $huelleTxt = 'Überzugsmittel Hydroxypropylmethylcellulose (Kapselhülle)';
+        elseif ($src !== '' && (strpos($src, 'gelatine') !== false || strpos($src, 'gelatin') !== false))
+            $huelleTxt = 'Gelatine (Kapselhülle)';
+        elseif ($hu && trim((string)($hu['material'] ?? '')) !== '') $huelleTxt = trim((string)$hu['material']) . ' (Kapselhülle)';
+        elseif ($hu) $huelleTxt = trim((string)$hu['name']) . ' (Kapselhülle)';
+        else $huelleTxt = 'Kapselhülle (HPMC/Gelatine – bitte prüfen)';
+    }
+
     // Zutaten je Einheit – ABSTEIGEND nach Menge (= gesetzliche Reihenfolge fürs Zutatenverzeichnis) + Gesamt.
     if ($zut) {
-        $zutSort = $zut;
-        usort($zutSort, fn($a, $b) => (float)$b['menge_mg'] <=> (float)$a['menge_mg']);
-        $rows = array_map(fn($z) => [(string)$z['bezeichnung'], $mg($z['menge_mg']) . ' mg'], $zutSort);
-        $rows[] = ['Gesamt', $mg($sumMg) . ' mg'];
+        $zutSort = array_map(fn($z) => ['bezeichnung' => (string)$z['bezeichnung'], 'menge_mg' => (float)$z['menge_mg']], $zut);
+        if ($huelleTxt !== '') $zutSort[] = ['bezeichnung' => $huelleTxt, 'menge_mg' => $shellMg];   // Hülle als Zutat mitführen
+        usort($zutSort, fn($a, $b) => $b['menge_mg'] <=> $a['menge_mg']);
+        $gesamtMg = $sumMg + ($huelleTxt !== '' ? $shellMg : 0.0);
+        $rows = array_map(fn($z) => [$z['bezeichnung'], ($z['menge_mg'] > 0 ? $mg($z['menge_mg']) . ' mg' : '–')], $zutSort);
+        $rows[] = ['Gesamt', $mg($gesamtMg) . ' mg'];
         $y = spec_h($p, $y, 'Zutaten (je ' . $einheitWort . ', absteigend nach Menge)');
         $y = pib_table($p, $y, [[$L, 'Zutat'], [400, 'Menge je ' . $einheitWort]], $rows);
-        // Fertige Zutatenverzeichnis-Zeile fürs Etikett (Reihenfolge nach Menge, zum Kopieren).
-        $verz = 'Zutaten: ' . implode(', ', array_map(fn($z) => (string)$z['bezeichnung'], $zutSort)) . '.';
-        $y += 4;
+        // Fertiges Zutatenverzeichnis fürs Etikett (Reihenfolge nach Menge, zum Kopieren).
+        $y += 12;
+        $p->text($L, $y, 'Zutatenverzeichnis für das Etikett:', 9, true); $y += 13;
+        $verz = implode(', ', array_map(fn($z) => $z['bezeichnung'], $zutSort)) . '.';
         foreach ($p->wrap($verz, $R - $L, 9, false) as $wl) {
             if ($y > 780) { $p->addPage(); $y = 48; }
-            $p->text($L, $y, $wl, 9, false, [70, 70, 68]); $y += 12;
+            $p->text($L, $y, $wl, 9, false, [70, 70, 68]); $y += 13;
         }
-        $y += 6;
+        $y += 10;
     }
 
     // Nährwert-/Wirkstoffdeklaration je Einheit (Name · Menge · % NRV)
@@ -181,8 +206,9 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         foreach ($claims as $c) {
             foreach ($p->wrap('• ' . (string)$c['claim'], $R - $L, 9, false) as $i => $wl) {
                 if ($y > 780) { $p->addPage(); $y = 48; }
-                $p->text($i === 0 ? $L : $L + 10, $y, $wl, 9, false, [60, 60, 58]); $y += 12;
+                $p->text($i === 0 ? $L : $L + 10, $y, $wl, 9, false, [60, 60, 58]); $y += 13;
             }
+            $y += 3;
         }
         $y += 2;
         $p->text($L, $y, 'Nur verwendbar, wenn die signifikante Menge (i. d. R. 15 % NRV je Tagesdosis) erreicht ist.', 8, false, [110, 110, 108]); $y += 16;
@@ -215,16 +241,36 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         $y = spec_grid($p, $y, $vz);
     }
 
-    // Hinweis für die Etikettengestaltung
-    $y += 14;
-    $hinweis = 'Dieses Produktinformationsblatt fasst die für Ihr Etikett relevanten Angaben zusammen. '
-             . 'Bitte ergänzen Sie auf dem Etikett die gesetzlich vorgeschriebenen Pflichtangaben (u. a. Nettofüllmenge, '
-             . 'Verzehrempfehlung, Aufbewahrungshinweis, Warnhinweise, verantwortlicher Lebensmittelunternehmer, Los-/Chargenkennzeichnung, MHD). '
-             . '*NRV = Nährstoffbezugswert (soweit vorhanden). Fertige Etikettendatei bitte im Kundenportal hochladen.';
-    foreach ($p->wrap($hinweis, $R - $L, 9, false) as $wl) {
-        if ($y > 780) { $p->addPage(); $y = 48; }
-        $p->text($L, $y, $wl, 9, false, [110, 110, 108]); $y += 12;
+    // Pflichtangaben, die der Kunde auf das Etikett bringen MUSS (LMIV/VO 1169/2011 + NemV) – vorbefüllt, wo bekannt.
+    $nettoTxt = (isset($nettoGesamtG) && $nettoGesamtG > 0)
+        ? $mg($nettoGesamtG) . ' g' . ($einh > 0 ? ' (' . number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stück') . ')' : '')
+        : '____ (Nettofüllmenge eintragen)';
+    $verzehrTxt = $proTag > 0
+        ? number_format($proTag, 0, ',', '.') . ' ' . ($istKapsel ? ($proTag === 1 ? 'Kapsel' : 'Kapseln') : ($formLbl !== '' ? $formLbl : 'Einheiten')) . ' täglich mit ausreichend Flüssigkeit'
+        : '____ (z. B. 1 Kapsel täglich mit ausreichend Flüssigkeit)';
+    $pflicht = [
+        'Bezeichnung: „Nahrungsergänzungsmittel" (ggf. ergänzt um die namensgebenden Nährstoffe).',
+        'Nettofüllmenge: ' . $nettoTxt . '.',
+        'Verzehrempfehlung: ' . $verzehrTxt . '.',
+        'Die angegebene empfohlene tägliche Verzehrmenge darf nicht überschritten werden.',
+        'Nahrungsergänzungsmittel sind kein Ersatz für eine ausgewogene und abwechslungsreiche Ernährung und eine gesunde Lebensweise.',
+        'Außerhalb der Reichweite von kleinen Kindern aufbewahren.',
+        'Kühl, trocken und lichtgeschützt lagern.',
+        'Mindesthaltbarkeitsdatum („mindestens haltbar bis …") und Chargennummer angeben.',
+        'Verantwortlicher Lebensmittelunternehmer: Name und Anschrift angeben.',
+    ];
+    $y += 6;
+    if ($y > 700) { $p->addPage(); $y = 48; }
+    $y = spec_h($p, $y, 'Pflichtangaben für Ihr Etikett');
+    foreach ($pflicht as $t) {
+        foreach ($p->wrap('• ' . $t, $R - $L, 9, false) as $i => $wl) {
+            if ($y > 785) { $p->addPage(); $y = 48; }
+            $p->text($i === 0 ? $L : $L + 10, $y, $wl, 9, false, [60, 60, 58]); $y += 13;
+        }
+        $y += 2;
     }
+    $y += 6;
+    $p->text($L, $y, '*NRV = Nährstoffbezugswert. Fertige Etikettendatei bitte im Kundenportal hochladen.', 8, false, [110, 110, 108]); $y += 14;
     spec_fuss($p, $y + 16);
     return $p->output();
 }

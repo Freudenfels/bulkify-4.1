@@ -2590,7 +2590,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <div class="bx-panel" style="border-color:var(--gruen)">
     <h2 style="margin:0 0 8px;font-size:16px">Ihr Etikett-Design</h2>
     <?php if (isset($_GET['etikett'])): ?><div class="muted" style="margin-bottom:8px"><span class="bx-ok">Gespeichert.</span> Danke!</div><?php endif; ?>
-    <p style="margin:0 0 10px"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('pib') ?>&aid=<?= (int)$a['id'] ?>" target="_blank">Produktinformationsblatt (PIB) herunterladen</a> <span class="muted" style="font-size:12px">– Grundlage für Ihr Etikett (Zutaten, Nährwerte, Menge)</span></p>
+    <p style="margin:0 0 10px"><a class="btn btn-primary btn-sm" href="<?= $portalLink('pib') ?>&aid=<?= (int)$a['id'] ?>" target="_blank" data-busy="PIB wird erstellt…">Produktinformationsblatt (PIB) erstellen</a> <span class="muted" style="font-size:12px">– wird frisch mit aktuellem Stand erzeugt (Zutaten, Nährwerte, Gewichte, Health Claims, Pflichtangaben)</span></p>
     <?php if (etikett_druckvorlage_datei((int)($a['produkt_id'] ?? 0))): ?>
     <p style="margin:0 0 10px"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('druckvorlage') ?>&aid=<?= (int)$a['id'] ?>" target="_blank">Etikett-Druckvorlage herunterladen</a> <span class="muted" style="font-size:12px">– Vorlage mit Maßen/Stanzkontur für Ihr Etikett</span></p>
     <?php endif; ?>
