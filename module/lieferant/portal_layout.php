@@ -105,6 +105,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'lieferzeit'      => ['de'=>'Lieferzeit (Tage)',       'en'=>'Lead time (days)', 'zh'=>'交货周期（天）'],
         'mengenstaffeln'  => ['de'=>'Mengenstaffeln',          'en'=>'Volume tiers', 'zh'=>'阶梯数量'],
         'ab_menge_leer'   => ['de'=>'Leer = gilt ab 1.',       'en'=>'Empty = applies from 1.', 'zh'=>'留空 = 从 1 起适用。'],
+        'menge_beispiel'  => ['de'=>'z. B. 1000',              'en'=>'e.g. 1000', 'zh'=>'例如 1000'],
         'incoterm'        => ['de'=>'Incoterm','en'=>'Incoterm', 'zh'=>'Incoterm'],
         'versandart'      => ['de'=>'Versandart',              'en'=>'Shipping method', 'zh'=>'运输方式'],
         'vers_luft'       => ['de'=>'Luft (Air)',              'en'=>'Air',   'zh'=>'空运'],

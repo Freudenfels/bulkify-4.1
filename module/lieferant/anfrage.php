@@ -164,9 +164,12 @@ if (!$a):
           </div>
           <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:2px">
             <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
-            <input type="text" name="menge_haupt" value="<?= h($hauptMenge > 0 ? $zahl($hauptMenge, 3) : '') ?>" placeholder="<?= h($mengePh) ?>" style="flex:1">
+            <input type="text" name="menge_haupt" value="<?= h($hauptMenge > 0 ? $zahl($hauptMenge, 3) : '') ?>" placeholder="<?= h(lp_t('menge_beispiel')) ?>" style="flex:1">
           </div>
-          <div class="muted" style="font-size:12px;margin-bottom:8px"><?= h(lp_t('ab_menge_leer')) ?></div>
+          <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:8px">
+            <div style="flex:1"></div>
+            <div class="muted" style="flex:1;font-size:12px"><?= h(lp_t('ab_menge_leer')) ?></div>
+          </div>
           <input type="hidden" name="einheit_roh" value="<?= h($einheit) ?>">
           <?php // Weitere Staffeln: je Zeile ein Preis und die Menge, ab der er gilt. Leere Zeilen
                 // ignoriert das Speichern, deshalb braucht es keinen Entfernen-Knopf. ?>
