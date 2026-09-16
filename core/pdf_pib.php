@@ -86,6 +86,25 @@ function pib_pdf_bauen(int $produkt_id): ?string {
     if ($emass)         $vp[] = ['Etikettengröße (B × H)', $mg($emass[0]) . ' × ' . $mg($emass[1]) . ' mm'];
     if ($vp) { $y = spec_h($p, $y, 'Verpackung & Etikett'); $y = spec_grid($p, $y, $vp); }
 
+    // Etikett-Maßskizze (wir kennen die Größe -> als kleine Druckvorlage-Skizze mit Maßen)
+    if ($emass) {
+        $bw = (float)$emass[0]; $bh = (float)$emass[1];   // mm
+        if ($y > 610) { $p->addPage(); $y = 48; }
+        $y = spec_h($p, $y, 'Etikett-Maße (Druckvorlage)');
+        $sc = 150.0 / max($bw, $bh, 1); $wpt = $bw * $sc; $hpt = $bh * $sc;
+        $bx = $L + 24; $by = $y + 6;
+        $p->rectStroke($bx, $by, $wpt, $hpt, 0.8, [120, 120, 118]);
+        $p->textCenter($bx + $wpt / 2, $by + $hpt / 2 + 3, 'Etikett', 8, false, [160, 160, 158]);
+        // Breite (unten) + Höhe (rechts) bemaßen
+        $p->line($bx, $by + $hpt + 8, $bx + $wpt, $by + $hpt + 8, 0.5, [150, 150, 148]);
+        $p->textCenter($bx + $wpt / 2, $by + $hpt + 20, 'Breite ' . $mg($bw) . ' mm', 9, false, [90, 90, 88]);
+        $p->line($bx + $wpt + 8, $by, $bx + $wpt + 8, $by + $hpt, 0.5, [150, 150, 148]);
+        $p->text($bx + $wpt + 14, $by + $hpt / 2 + 3, 'Höhe ' . $mg($bh) . ' mm', 9, false, [90, 90, 88]);
+        $y = $by + $hpt + 30;
+        $p->text($L, $y, 'Endformat der Druckdatei (Breite × Höhe). Bitte 2–3 mm Beschnitt einplanen.', 8, false, [110, 110, 108]);
+        $y += 18;
+    }
+
     // Gewichte je Einheit / je Packung
     if ($sumMg > 0) {
         $gw = [[($istKapsel ? 'Füllgewicht je Kapsel' : 'Wirkstoffgewicht je Einheit'),
@@ -95,12 +114,22 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         $y = spec_grid($p, $y, $gw);
     }
 
-    // Zutaten je Einheit (+ Gesamtzeile)
+    // Zutaten je Einheit – ABSTEIGEND nach Menge (= gesetzliche Reihenfolge fürs Zutatenverzeichnis) + Gesamt.
     if ($zut) {
-        $rows = array_map(fn($z) => [(string)$z['bezeichnung'], $mg($z['menge_mg']) . ' mg'], $zut);
+        $zutSort = $zut;
+        usort($zutSort, fn($a, $b) => (float)$b['menge_mg'] <=> (float)$a['menge_mg']);
+        $rows = array_map(fn($z) => [(string)$z['bezeichnung'], $mg($z['menge_mg']) . ' mg'], $zutSort);
         $rows[] = ['Gesamt', $mg($sumMg) . ' mg'];
-        $y = spec_h($p, $y, 'Zutaten (je ' . $einheitWort . ')');
+        $y = spec_h($p, $y, 'Zutaten (je ' . $einheitWort . ', absteigend nach Menge)');
         $y = spec_table($p, $y, [[$L, 'Zutat'], [400, 'Menge je ' . $einheitWort]], $rows);
+        // Fertige Zutatenverzeichnis-Zeile fürs Etikett (Reihenfolge nach Menge, zum Kopieren).
+        $verz = 'Zutaten: ' . implode(', ', array_map(fn($z) => (string)$z['bezeichnung'], $zutSort)) . '.';
+        $y += 4;
+        foreach ($p->wrap($verz, $R - $L, 9, false) as $wl) {
+            if ($y > 780) { $p->addPage(); $y = 48; }
+            $p->text($L, $y, $wl, 9, false, [70, 70, 68]); $y += 12;
+        }
+        $y += 6;
     }
 
     // Nährwert-/Wirkstoffdeklaration je Einheit (Name · Menge · % NRV)
@@ -122,6 +151,33 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration');
         $y += 2;
         $p->text($L, $y, 'Für die eingesetzten Rohstoffe sind noch keine Wirkstoffgehalte/NRV hinterlegt.', 9, false, [110, 110, 108]); $y += 16;
+    }
+
+    // Deklaration (Allergene / vegan / GVO) – aus den verknüpften Rohstoffen abgeleitet.
+    $allerg = []; $vegF = []; $gvoF = [];
+    foreach ($rid ? all("SELECT z.item_id, i.allergene, i.vegan, i.gvo_frei FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]) : [] as $z) {
+        if (!$z['item_id']) continue;
+        $al = trim((string)$z['allergene']);
+        if ($al !== '' && mb_stripos($al, 'keine') === false) $allerg[] = $al;
+        $vegF[] = $z['vegan']; $gvoF[] = $z['gvo_frei'];
+    }
+    // Nur behaupten, wenn ALLE Rohstoffe bekannt & konform sind (sonst weglassen).
+    $aggFlag = function ($flags) { $known = array_filter($flags, fn($x) => $x !== null && $x !== ''); if (!$known || count($known) < count($flags)) return null; foreach ($known as $f) if ((int)$f === 0) return false; return true; };
+    $decl = [];
+    $prodAll = trim((string)($prod['allergene'] ?? ''));
+    $decl[] = ['Allergene', $prodAll !== '' ? $prodAll : ($allerg ? implode(', ', array_values(array_unique($allerg))) : 'keine deklarationspflichtigen Allergene')];
+    $vv = $aggFlag($vegF); if ($vv !== null) $decl[] = ['Vegan', $vv ? 'ja' : 'nein'];
+    $gg = $aggFlag($gvoF); if ($gg !== null) $decl[] = ['GVO-frei', $gg ? 'ja' : 'nein'];
+    $y = spec_h($p, $y, 'Deklaration');
+    $y = spec_grid($p, $y, $decl);
+
+    // Verzehrempfehlung + Nährwerte je Tagesdosis (wenn Einnahme/Tag am Produkt gepflegt).
+    $proTag = (int)($prod['einnahme_pro_tag'] ?? 0);
+    if ($proTag > 0) {
+        $vz = [['Verzehrempfehlung', number_format($proTag, 0, ',', '.') . ' ' . ($istKapsel ? ($proTag === 1 ? 'Kapsel' : 'Kapseln') : ($formLbl !== '' ? $formLbl : 'Einheiten')) . ' pro Tag']];
+        if ($sumMg > 0) $vz[] = ['Wirkstoffe je Tagesdosis', $mg($sumMg * $proTag) . ' mg' . ($sumMg * $proTag >= 1000 ? ' · ' . $mg($sumMg * $proTag / 1000) . ' g' : '')];
+        $y = spec_h($p, $y, 'Verzehrempfehlung');
+        $y = spec_grid($p, $y, $vz);
     }
 
     // Hinweis für die Etikettengestaltung
