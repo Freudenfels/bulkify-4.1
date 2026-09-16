@@ -116,7 +116,7 @@ if ($p === 'logout') { auth_logout(); header('Location: ?p=login'); exit; }
 // Autologin per Token (nur localhost) – bequemer Direktlink zum Testen
 if ($p === 'autologin') {
     if (auth_login_by_token($_GET['token'] ?? '')) {
-        $ziel = (function_exists('ist_lieferant') && ist_lieferant()) ? 'lieferant_portal'
+        $ziel = (function_exists('ist_echter_lieferant') && ist_echter_lieferant()) ? 'lieferant_portal'
               : ((function_exists('ist_produktionsbereich') && ist_produktionsbereich()) ? 'werk' : 'dashboard');
         header('Location: ?p=' . $ziel); exit;
     }
@@ -132,8 +132,17 @@ if (!in_array($p, $PUBLIC, true) && !is_logged_in()) { header('Location: ?p=logi
 // Produktionsmitarbeiter haben einen eigenen Bereich (Werk) statt des Verkaufs-Dashboards
 $istWerk = is_logged_in() && function_exists('ist_produktionsbereich') && ist_produktionsbereich();
 
+// Admin-Vorschau ins Lieferantenportal: ein Team-Mitglied schaut sich das Portal eines Lieferanten an
+// (wie die interne Vorschau beim Kunden). Nur fuer angemeldete Team-Mitglieder, kein echter Lieferant.
+if (is_logged_in() && function_exists('ist_echter_lieferant') && !ist_echter_lieferant()) {
+    if ($p === 'lief_vorschau_start' && (int)($_GET['id'] ?? 0) > 0) { $_SESSION['lief_vorschau'] = (int)$_GET['id']; header('Location: ?p=lieferant_portal'); exit; }
+    if ($p === 'lief_vorschau_stop') { $lz = (int)($_SESSION['lief_vorschau'] ?? 0); unset($_SESSION['lief_vorschau']); header('Location: ?p=' . ($lz ? 'lieferant&id=' . $lz : 'lieferanten')); exit; }
+}
+
 // Lieferanten haben ein eigenes Portal und duerfen NICHT in den internen Bereich.
-$istLieferant = is_logged_in() && function_exists('ist_lieferant') && ist_lieferant();
+// Fuer die ROUTE-Sperre zaehlt nur ein ECHTER Lieferant (Login am Lieferanten) – ein Team-Mitglied
+// in der Vorschau bleibt frei navigierbar und kann zurueck in den Admin-Bereich.
+$istLieferant = is_logged_in() && function_exists('ist_echter_lieferant') && ist_echter_lieferant();
 $LIEF_ROUTEN  = ['lieferant_portal', 'lieferant_bestellung', 'lieferant_bestellung_pdf', 'lieferant_anfrage', 'lieferant_profil', 'lieferant_logo',
                  'lieferant_nachrichten', 'lieferant_dateien', 'lieferant_dokument', 'lieferant_katalog', 'lieferant_hilfe', 'logout'];
 if ($istLieferant && !in_array($p, $LIEF_ROUTEN, true) && !in_array($p, ['lieferant_login','lieferant_einladung'], true)) {

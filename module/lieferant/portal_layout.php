@@ -281,6 +281,12 @@ function lp_shell_start(string $aktiv): void {
        . '<div class="bx-userbox" style="margin-top:0"><button type="button" class="bx-themebtn" data-dunkel="' . h(lp_t('dunkel')) . '" data-hell="' . h(lp_t('hell')) . '">' . h(lp_t('dunkel')) . '</button></div>'
        . '<div class="bx-userbox" style="margin-top:0;padding-top:8px">' . lp_sprachwahl() . '</div>'
        . '</nav></aside>' . bx_menue_scrim() . '<main class="bx-main">' . bx_mobilbar();
+    // Admin-Vorschau: sichtbarer Hinweis + Ausstieg (nur wenn ein Team-Mitglied das Portal ansieht).
+    if (function_exists('lief_vorschau_id') && lief_vorschau_id() > 0) {
+        echo '<div style="background:var(--lime,#c0f24e);color:#10210f;padding:8px 14px;border-radius:8px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'
+           . '<span><strong>Interne Vorschau</strong> als Lieferant: ' . h((string)($lf['firma'] ?? '')) . '</span>'
+           . '<a href="?p=lief_vorschau_stop" style="color:#10210f;font-weight:600;text-decoration:underline">Vorschau beenden</a></div>';
+    }
 }
 function lp_shell_ende(): void { echo '</main></div>'; }
 

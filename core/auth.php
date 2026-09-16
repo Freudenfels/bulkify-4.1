@@ -122,13 +122,26 @@ function has_role(string $r): bool {
 // KEINE Verkaufs-/Finanzsicht. Wahr, wenn Produktionsrolle vorhanden und KEINE Admin-/Sales-/Finance-Rolle.
 // Lieferanten-Login: der Benutzer haengt an einem Lieferanten und sieht NUR dessen Portal.
 // Bewusst getrennt von den Team-Rollen – ein Lieferant darf nie im internen Bereich landen.
-function ist_lieferant(): bool {
+// Echter Lieferant: der Login-Benutzer haengt an einem Lieferanten. Fuer die Router-Sperre maßgeblich.
+function ist_echter_lieferant(): bool {
     $u = current_user();
     return $u !== null && !empty($u['lieferant_id']);
 }
+// Admin-Vorschau: ein Team-Mitglied (KEIN echter Lieferant) schaut sich das Lieferantenportal an.
+// Gibt die Lieferanten-ID der Vorschau zurueck, sonst 0. Nur fuer angemeldete Team-Mitglieder.
+function lief_vorschau_id(): int {
+    if (empty($_SESSION['lief_vorschau'])) return 0;
+    if (!is_logged_in() || ist_echter_lieferant()) return 0;
+    return (int)$_SESSION['lief_vorschau'];
+}
+// Sieht der aktuelle Nutzer das Lieferantenportal? Echter Lieferant ODER Admin-Vorschau.
+function ist_lieferant(): bool {
+    return ist_echter_lieferant() || lief_vorschau_id() > 0;
+}
 function aktueller_lieferant_id(): int {
     $u = current_user();
-    return (int)($u['lieferant_id'] ?? 0);
+    if ($u && !empty($u['lieferant_id'])) return (int)$u['lieferant_id'];
+    return lief_vorschau_id();
 }
 function aktueller_lieferant(): ?array {
     $id = aktueller_lieferant_id();

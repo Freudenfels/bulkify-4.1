@@ -27,3 +27,10 @@ Die Sprache stellt man einmal ein, deshalb steht der Umschalter klein (11px, Kü
 
 ## Zähler-Badges im Menü
 `lp_shell_start()` zeigt am Menüpunkt **Anfragen** einen runden Zähler (Kreis mit Zahl), wenn offene Preisanfragen vorliegen (`lieferant_anfrage.status='offen'`), und an **Rückfragen** die Zahl ungelesener Nachrichten. Der Badge ist inline gestylt (lime, `border-radius:999px`, rechtsbündig), damit er ohne zusätzliches Portal-CSS funktioniert.
+
+## Admin-Vorschau (wie beim Kunden)
+Ein Team-Mitglied kann das Lieferantenportal aus Sicht eines Lieferanten ansehen:
+Lieferant → "Zugang zum Lieferantenportal" → Button "Portal ansehen (Vorschau)" (`?p=lief_vorschau_start&id=<id>`).
+Technik: `$_SESSION['lief_vorschau']` + `lief_vorschau_id()` (auth.php). `ist_lieferant()`/`aktueller_lieferant_id()` sind
+vorschau-bewusst (alle Portal-Guards greifen), die ROUTE-Sperre im Router nutzt `ist_echter_lieferant()`, damit der
+Admin nicht gefangen ist. Oben im Portal erscheint das Banner "Interne Vorschau … · Vorschau beenden" (`?p=lief_vorschau_stop`).

@@ -550,7 +550,10 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
 </div>
 <?php endif; ?>
 <div class="bx-panel">
-  <h2 style="margin-top:0">Zugang zum Lieferantenportal</h2>
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <h2 style="margin:0">Zugang zum Lieferantenportal</h2>
+    <a class="btn btn-ghost btn-sm" href="?p=lief_vorschau_start&id=<?= (int)$id ?>" target="_blank" rel="noopener" title="Das Portal aus Sicht dieses Lieferanten ansehen (nur intern)">Portal ansehen (Vorschau)</a>
+  </div>
   <?php if (isset($_GET['eingeladen'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Einladungslink erzeugt – bitte an den Lieferanten schicken.</div><?php endif; ?>
   <?php if (isset($_GET['gemailt'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Einladung per E-Mail verschickt.</div><?php endif; ?>
   <?php if (isset($_GET['mailfehler'])): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px">E-Mail nicht verschickt: <?= h((string)$_GET['mailfehler']) ?></div><?php endif; ?>
