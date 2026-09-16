@@ -21,6 +21,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_u
     $gelesen = ($dokId && in_array($_POST['dok_typ'] ?? '', ['spec', 'coa', 'analyse'], true)) ? (spec_ki_nach_upload($dokId) ? 1 : 0) : 0;
     header('Location: ?p=produkt&id=' . $id . '&gespeichert=1' . ($gelesen ? '&kigelesen=1' : '') . '#specfeld'); exit;
 }
+// Produktinformationsblatt (PIB) hochladen bzw. entfernen (hochgeladenes hat Vorrang vor dem Auto-PIB).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'pib_upload' && is_numeric($id)) {
+    require_once BX_ROOT . '/core/pdf_pib.php';
+    pib_upload((int)$id);
+    header('Location: ?p=produkt&id=' . $id . '&pib=1#pibfeld'); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'pib_del' && is_numeric($id)) {
+    require_once BX_ROOT . '/core/pdf_pib.php';
+    pib_del((int)$id);
+    header('Location: ?p=produkt&id=' . $id . '&pibweg=1#pibfeld'); exit;
+}
 // Von der KI aus dem Spec gelesene Produktfelder (Haltbarkeit, Allergene) übernehmen.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_uebernehmen' && is_numeric($id)) {
     $vor = spec_ki_vorschlag((int)($_POST['dok_id'] ?? 0));
@@ -348,6 +359,26 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   </form>
   <p class="muted" style="font-size:12px;margin-top:8px">Interne Zukauf-Preise – erscheinen nie in der Kundensicht.</p>
 </div>
+<?php require_once BX_ROOT . '/core/pdf_pib.php'; $pibDok = pib_datei((int)$id); ?>
+<div class="bx-panel" id="pibfeld">
+  <h2 style="margin-top:0">Produktinformationsblatt (PIB) <?= bx_hint('Der Kunde bekommt beim Bestellen automatisch ein PIB aus den Produktdaten (Zutaten, Nährwerte, Darreichung) – als Grundlage für sein Etikett. Optional hier ein fertiges PIB hochladen (PDF/Bild); das hat dann Vorrang.') ?></h2>
+  <?php if (isset($_GET['pib'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">PIB hochgeladen.</div><?php endif; ?>
+  <?php if (isset($_GET['pibweg'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Hochgeladenes PIB entfernt – es gilt wieder das automatische.</div><?php endif; ?>
+  <p class="muted" style="margin-top:0">Aktuell: <strong><?= $pibDok ? 'hochgeladenes PIB (' . h($pibDok['datei_orig'] ?: 'Datei') . ')' : 'automatisch aus den Produktdaten erzeugt' ?></strong></p>
+  <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap">
+    <a class="btn btn-ghost btn-sm" href="?p=produkt_pib&id=<?= (int)$id ?>" target="_blank">PIB ansehen</a>
+    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0">
+      <input type="hidden" name="aktion" value="pib_upload"><input type="file" name="pib" required accept="application/pdf,image/*">
+      <button class="btn btn-primary btn-sm" type="submit"><?= $pibDok ? 'PIB ersetzen' : 'Eigenes PIB hochladen' ?></button>
+    </form>
+    <?php if ($pibDok): ?>
+    <form method="post" onsubmit="return confirm('Hochgeladenes PIB entfernen? Danach gilt wieder das automatische.')" style="margin:0">
+      <input type="hidden" name="aktion" value="pib_del"><button class="btn btn-ghost btn-sm" type="submit">Hochgeladenes PIB entfernen</button>
+    </form>
+    <?php endif; ?>
+  </div>
+</div>
+
 <div class="bx-panel" id="specfeld">
   <h2 style="margin-top:0">Spezifikation &amp; CoA <?= bx_hint('Spec oder CoA (Analysenzertifikat) hochladen – die KI liest es aus. Spec füllt Haltbarkeit/Allergene ins Produkt; beim CoA werden Charge/MHD und die Analysewerte angezeigt. KI läuft nur auf beta.') ?></h2>
   <?php if (isset($_GET['kigelesen'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Dokument von der KI ausgelesen – Vorschlag unten.</div><?php endif; ?>

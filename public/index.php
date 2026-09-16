@@ -61,6 +61,7 @@ $routes = [
     'rezeptur_detail' => 'rezeptur/detail.php',
     'produkte'        => 'produkt/liste.php',
     'produkt'         => 'produkt/detail.php',
+    'produkt_pib'     => 'produkt/pib.php',          // Produktinformationsblatt (PIB) ansehen (Auto oder hochgeladen)
     'novelfood'       => 'produkt/novelfood.php',   // Schnell-Nachschlage: ist ein Stoff Novel Food?
     'angebote'        => 'angebot/liste.php',
     'angebot'         => 'angebot/detail.php',
