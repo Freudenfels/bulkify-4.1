@@ -126,3 +126,10 @@ Schickt der Kunde eine Rezepturanfrage, entwickelt die KI sofort einen internen 
 
 ## Jahresverträge / Kontingente (Abruf)
 Hat der Kunde aktive Kontingente (`kontingent`, siehe `module/kontingent/liste.md`), erscheint der Menüpunkt **„Jahresverträge"** (View `kontingente`). Je Vertrag: Produkt, vereinbarter Preis, gültig bis, sowie **vereinbart / abgerufen / Rest**. Über das Abruf-Formular (`aktion=kontingent_abruf`, max = Rest) ruft der Kunde eine Menge ab → `kontingent_abruf()` erzeugt Auftrag + Rechnung + Produktionsauftrag zum vereinbarten Preis und senkt den Rest. Der Handler prüft, dass das Kontingent **diesem** Kunden gehört und nicht abgelaufen ist. Kein EK/Zukauf sichtbar – nur der vereinbarte VK.
+
+## Menge ändern (Produktanfrage nach Angebot)
+Solange zu einer Produktanfrage noch KEIN Auftrag existiert, kann der Kunde die Menge ändern:
+Button "Menge ändern" auf der Angebotskarte (nur wenn `$mengeAenderbar[anfrage_id]`) → View `v=menge_aendern&paf=<id>`.
+Speichern (`produkt_anfrage_bearbeiten`) aktualisiert die bestehende Anfrage (keine neue), setzt die
+vorliegenden, noch nicht bestätigten Angebote zurück in den Entwurf (`status='offen'`, `preise_kunde=0` →
+verschwinden beim Kunden) und die Anfrage auf `status='neu'` (in Prüfung). Das Team überarbeitet das Angebot.

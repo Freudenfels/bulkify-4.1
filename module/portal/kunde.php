@@ -389,6 +389,49 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     // Auf der Anfragenliste landen statt zurück im Katalog – dort sieht der Kunde seine Anfrage sofort stehen.
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
 }
+// Menge einer bestehenden Produktanfrage ÄNDERN (z. B. Kunde hat ein Angebot, will jetzt mehr Stück).
+// Die Anfrage wird bearbeitet (keine neue), das vorliegende Angebot geht zurück in den Entwurf
+// (verschwindet beim Kunden), das Team überarbeitet es. Nur solange NOCH KEIN Auftrag existiert.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'produkt_anfrage_bearbeiten') {
+    $paf = (int)($_POST['paf_id'] ?? 0);
+    $p = $paf ? one("SELECT * FROM portal_anfrage WHERE id=? AND kunde_id=? AND typ='produkt'", [$paf, (int)$k['id']]) : null;
+    // Bereits bestellt (Auftrag da)? Dann nicht mehr änderbar – der Kunde muss neu anfragen/nachbestellen.
+    $hatAuftrag = $p ? (int) scalar("SELECT COUNT(*) FROM angebot a JOIN auftrag au ON au.angebot_id=a.id WHERE a.anfrage_id=? AND a.kunde_id=?", [$paf, (int)$k['id']]) : 1;
+    if ($p && !$hatAuftrag) {
+        // Darreichungsform bestimmt, ob die Packungsgröße eine Füllmenge (g/ml) oder eine Stückzahl ist.
+        $form = (string) scalar("SELECT COALESCE(r.darreichungsform, r2.darreichungsform) FROM portal_anfrage pa
+                     LEFT JOIN produkt pr ON pr.id=pa.produkt_id LEFT JOIN rezeptur r ON r.id=pr.rezeptur_id
+                     LEFT JOIN rezeptur r2 ON r2.id=pa.rezeptur_id WHERE pa.id=?", [$paf]);
+        $istFuell = form_ist_fuellmenge($form);
+        // Staffelzeilen einlesen (Anzahl je Verpackung + Menge Verpackungen) – wie beim Anlegen.
+        $anz = (array)($_POST['st_anzahl'] ?? []); $vpe = (array)($_POST['st_vpe'] ?? []);
+        $zeilen = [];
+        foreach ($anz as $i => $a) {
+            $aA = (int) round((float) str_replace(',', '.', (string)$a));
+            $mV = (int) round((float) str_replace(',', '.', (string)($vpe[$i] ?? '0')));
+            if ($aA > 0 || $mV > 0) $zeilen[] = ['anzahl' => $aA ?: null, 'vpe' => $mV ?: null];
+        }
+        if ($zeilen) {
+            $mapAnzahl = fn($a) => $istFuell ? [null, $a] : [$a, null];   // -> [stueck, fuellmenge_g]
+            [$hStk, $hFg] = $mapAnzahl($zeilen[0]['anzahl']);
+            q("UPDATE portal_anfrage SET stueck=?, fuellmenge_g=?, menge=?, notiz=?, status='neu' WHERE id=?",
+              [$hStk, $hFg, $zeilen[0]['vpe'], trim($_POST['notiz'] ?? ''), $paf]);
+            q("DELETE FROM portal_anfrage_pos WHERE anfrage_id=?", [$paf]);
+            $sort = 0;
+            foreach ($zeilen as $z) {
+                [$stk, $fgv] = $mapAnzahl($z['anzahl']);
+                q("INSERT INTO portal_anfrage_pos (anfrage_id,produkt_id,rezeptur_id,stueck,fuellmenge_g,verpackung_typ,menge,sort) VALUES (?,?,?,?,?,?,?,?)",
+                  [$paf, $p['produkt_id'] ?: null, $p['rezeptur_id'] ?: null, $stk, $fgv, $p['verpackung_typ'], $z['vpe'], $sort++]);
+            }
+            // Vorliegende (noch nicht bestätigte) Angebote zu dieser Anfrage in den Entwurf zurücksetzen:
+            // Sie verschwinden beim Kunden (Status 'offen' + Preise gesperrt), das Team überarbeitet sie.
+            q("UPDATE angebot SET status='offen', preise_kunde=0 WHERE anfrage_id=? AND kunde_id=? AND status<>'bestaetigt'", [$paf, (int)$k['id']]);
+            log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Menge einer Produktanfrage im Portal geändert – Angebot bitte überarbeiten.', 'anfrage', 'anfrage', $paf);
+            if (mail_bereit()) nach_antwort(fn() => mail_kunde_anfrage_eingang('portal', (int)$paf));
+        }
+    }
+    header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&geaendert=1'); exit;
+}
 // Rohstoffanfrage – MEHRERE Rohstoffe je Absendung; pro Rohstoff eine eigene Anfrage (=> je Rohstoff ein eigenes Angebot).
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rohstoff_anfrage') {
     if ($k['portal_rohstoffe']) {
@@ -763,6 +806,7 @@ if ($k['portal_rezeptur']) $detailParent['rezeptur'] = 'rezepturen';
 if ($k['portal_produkte']) $detailParent['produkt']  = 'produkte';
 if ($k['portal_rohstoffe']) $detailParent['rohstoff'] = 'rohstoffe';
 $detailParent['bestellung'] = 'bestellungen';   // Bestell-Detail (eigene Bestellung)
+$detailParent['menge_aendern'] = 'meine_anfragen';   // Menge einer Produktanfrage aendern (kein Menuepunkt)
 $detailParent['agb'] = 'start';   // AGB: kein Menuepunkt, aber eine echte Seite (Fussleiste + Bestaetigungsdialog)
 $view = $_GET['v'] ?? 'start';
 if (!isset($L[$view]) && !isset($detailParent[$view])) $view = 'start';
@@ -835,6 +879,11 @@ $portalAnfragen = all("SELECT pa.*, p.name AS produkt_name, i.name AS verp_name,
     LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN item i ON i.id=pa.verpackung_id
     LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
     WHERE pa.kunde_id=? ORDER BY pa.angelegt DESC", [$kid]);
+// Produktanfragen, deren Menge der Kunde noch ändern darf: solange NOCH KEIN Auftrag existiert
+// (auch wenn schon ein Angebot vorliegt). Danach ist die Konfiguration verbindlich -> nur Nachbestellen.
+$mengeAenderbar = [];
+foreach ($portalAnfragen as $pp)
+    if (($pp['typ'] ?? '') === 'produkt' && empty($pp['auftrag_id'])) $mengeAenderbar[(int)$pp['id']] = true;
 // Anzeigename einer Zeile (Angebot, Bestellung, Anfrage): Produktname, sonst die Rezeptur,
 // sonst die erste Angebotsposition. Ohne Produkt stand hier sonst nur ein nichtssagendes „–".
 $titelFuer = function(array $r): string {
@@ -1265,6 +1314,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (isset($_GET['anfrage'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rezepturanfrage ist eingegangen – wir prüfen sie und melden uns.</div><?php endif; ?>
   <?php if (isset($_GET['angenommen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – die Rezeptur ist angenommen. Sie ist jetzt verbindlich festgelegt.</div><?php endif; ?>
   <?php if (isset($_GET['gesendet'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Anfrage ist eingegangen – wir prüfen sie und melden uns mit einem Angebot.</div><?php endif; ?>
+  <?php if (isset($_GET['geaendert'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre geänderte Menge ist eingegangen – wir überarbeiten das Angebot und melden uns.</div><?php endif; ?>
   <?php if (isset($_GET['geloescht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Anfrage gelöscht.</div><?php endif; ?>
   <?php if (isset($_GET['loeschfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Diese Anfrage lässt sich nicht mehr löschen – wir sind bereits dabei oder haben Ihnen schon ein Angebot gemacht. Melden Sie sich bei uns, dann klären wir das.</div><?php endif; ?>
 
@@ -1838,6 +1888,66 @@ portal_head('Kundenportal · ' . $k['firma']);
         <button class="btn btn-primary" type="submit">Anfrage senden</button>
       </form>
     </div>
+  <?php endif; ?>
+
+<?php elseif ($view === 'menge_aendern'):
+  $paf = (int)($_GET['paf'] ?? 0);
+  $pa  = $paf ? one("SELECT * FROM portal_anfrage WHERE id=? AND kunde_id=? AND typ='produkt'", [$paf, $kid]) : null;
+  $hatAuf = $pa ? (int) scalar("SELECT COUNT(*) FROM angebot a JOIN auftrag au ON au.angebot_id=a.id WHERE a.anfrage_id=? AND a.kunde_id=?", [$paf, $kid]) : 1;
+  if (!$pa || $hatAuf): ?>
+    <h1 style="margin-bottom:4px">Menge ändern</h1>
+    <div class="bx-panel"><div class="muted">Diese Anfrage kann nicht (mehr) geändert werden – sie ist bereits bestellt oder nicht vorhanden.</div>
+      <div style="margin-top:10px"><a class="btn btn-ghost" href="<?= $portalLink('meine_anfragen') ?>">Zurück zu Meine Anfragen</a></div></div>
+  <?php else:
+    $paForm  = (string) scalar("SELECT COALESCE(r.darreichungsform, r2.darreichungsform) FROM portal_anfrage pa
+                   LEFT JOIN produkt pr ON pr.id=pa.produkt_id LEFT JOIN rezeptur r ON r.id=pr.rezeptur_id
+                   LEFT JOIN rezeptur r2 ON r2.id=pa.rezeptur_id WHERE pa.id=?", [$paf]);
+    $paFuell = form_ist_fuellmenge($paForm);
+    $anzLbl  = $paFuell ? (form_groessen_einheit($paForm) === 'ml' ? 'Füllmenge pro Verpackung (ml)' : 'Füllmenge pro Verpackung (g)')
+                        : ($paForm === 'stick' ? 'Sticks je Verpackung' : 'Anzahl pro Verpackung');
+    $paName  = $pa['produkt_id'] ? (string) scalar("SELECT COALESCE(NULLIF(kundenname,''),name) FROM produkt WHERE id=?", [(int)$pa['produkt_id']])
+             : ($pa['rezeptur_id'] ? (string) scalar("SELECT name FROM rezeptur WHERE id=?", [(int)$pa['rezeptur_id']]) : 'Produkt');
+    $paPos   = all("SELECT stueck, fuellmenge_g, menge FROM portal_anfrage_pos WHERE anfrage_id=? ORDER BY sort, id", [$paf]);
+    if (!$paPos) $paPos = [['stueck'=>$pa['stueck'], 'fuellmenge_g'=>$pa['fuellmenge_g'], 'menge'=>$pa['menge']]]; ?>
+  <h1 style="margin-bottom:4px">Menge ändern</h1>
+  <div class="bx-panel">
+    <p class="muted" style="margin-top:0"><strong><?= h($paName) ?></strong> · <?= h($pa['nummer']) ?><br>
+       Passen Sie die gewünschten Mengen an – wir überarbeiten Ihr Angebot und melden uns. Das bisherige Angebot wird dabei zurückgezogen.</p>
+    <form method="post">
+      <input type="hidden" name="aktion" value="produkt_anfrage_bearbeiten">
+      <input type="hidden" name="paf_id" value="<?= $paf ?>">
+      <div class="bx-tablewrap"><table class="bx-table" id="ma_staffel">
+        <thead><tr><th><?= h($anzLbl) ?></th><th style="width:190px">Menge (Verpackungen)</th><th style="width:40px"></th></tr></thead>
+        <tbody>
+        <?php foreach ($paPos as $z): $anz = $paFuell ? (float)$z['fuellmenge_g'] : (int)$z['stueck']; ?>
+          <tr class="ma_srow">
+            <td><input type="number" name="st_anzahl[]" min="1" step="1" value="<?= $anz > 0 ? (int) round($anz) : '' ?>"></td>
+            <td><input type="number" name="st_vpe[]" min="1" step="1" value="<?= (int)$z['menge'] > 0 ? (int)$z['menge'] : '' ?>"></td>
+            <td><button type="button" class="btn btn-ghost btn-sm ma_del" title="Zeile entfernen">×</button></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="ma_addrow">+ Staffel</button>
+      <div class="bx-field" style="margin-top:14px"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"><?= h((string)$pa['notiz']) ?></textarea></div>
+      <div class="bx-row" style="gap:10px;margin-top:8px">
+        <button class="btn btn-primary" type="submit">Änderung senden</button>
+        <a class="btn btn-ghost" href="<?= $portalLink('meine_anfragen') ?>">Abbrechen</a>
+      </div>
+    </form>
+    <script>(function(){
+      var tb=document.querySelector('#ma_staffel tbody'); if(!tb) return;
+      var add=document.getElementById('ma_addrow');
+      if(add) add.addEventListener('click',function(){
+        var tr=document.createElement('tr'); tr.className='ma_srow';
+        tr.innerHTML='<td><input type="number" name="st_anzahl[]" min="1" step="1"></td>'
+          +'<td><input type="number" name="st_vpe[]" min="1" step="1"></td>'
+          +'<td><button type="button" class="btn btn-ghost btn-sm ma_del" title="Zeile entfernen">×</button></td>';
+        tb.appendChild(tr);
+      });
+      tb.addEventListener('click',function(e){ var b=e.target.closest('.ma_del'); if(!b) return; if(tb.querySelectorAll('.ma_srow').length>1) b.closest('tr').remove(); });
+    })();</script>
+  </div>
   <?php endif; ?>
 
 <?php elseif ($view === 'prodanfrage'): ?>

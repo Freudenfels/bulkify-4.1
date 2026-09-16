@@ -184,6 +184,9 @@ if ($a['status'] === 'bestaetigt') {
 
   <?php if ($canAccept): ?>
   <div class="bx-row" style="justify-content:flex-end;margin-top:12px;gap:8px">
+    <?php if (!empty($mengeAenderbar[(int)($a['anfrage_id'] ?? 0)])): ?>
+    <a class="btn btn-ghost btn-sm" href="<?= $portalLink('menge_aendern') ?>&paf=<?= (int)$a['anfrage_id'] ?>" title="Menge ändern – wir überarbeiten dann das Angebot">Menge ändern</a>
+    <?php endif; ?>
     <details>
       <summary class="btn btn-ghost btn-sm" style="list-style:none">Ablehnen</summary>
       <form method="post" style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap">
