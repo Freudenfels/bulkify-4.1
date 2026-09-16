@@ -4167,7 +4167,7 @@ function freibedarf_offen(): array {
 }
 // Offener Fehlbedarf (nur bestellbare Positionen mit item_id, abzüglich schon offen bestellter Menge für diesen Auftrag).
 function auftrag_fehlbedarf(int $pa_id): array {
-    $pa = one("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = pa_row_cached($pa_id);
     $aid = $pa ? (int)$pa['auftrag_id'] : 0;
     $out = [];
     foreach (auftrag_bedarf($pa_id) as $r) {
@@ -4407,9 +4407,10 @@ function bestellung_aus_positionen(array $mengen, ?int $lieferant, ?string $datu
 // Hat dieser Produktionsauftrag noch offenen (nicht bestellten) Bedarf? (Komponenten/Etikett oder Fremd-Bulk)
 function auftrag_offener_bedarf(int $pa_id): bool {
     if (auftrag_fehlbedarf($pa_id)) return true;
-    $pa = one("SELECT auftrag_id, menge, produkt_id, produktionsart FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = pa_row_cached($pa_id);
     if ($pa && ($pa['produktionsart'] ?? 'eigen') === 'fremd') {
-        $einh = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+        $prd = produkt_row_cached((int)$pa['produkt_id']);
+        $einh = (int)($prd['einheiten_pro_packung'] ?? 0);
         $need = (int)$pa['menge'] * $einh;
         $ordered = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                    WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status<>'geliefert'", [(int)$pa['auftrag_id']]);

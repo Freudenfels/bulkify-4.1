@@ -29,6 +29,32 @@ $alle = all("SELECT pa.*, a.nummer AS auftrag_nr, COALESCE(NULLIF(p.kundenname,'
              LEFT JOIN kunden k ON k.id=pa.kunde_id
              WHERE pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL
              ORDER BY pa.prio, pa.angelegt");
+// Diese Seite ist schreibfrei (POST-Handler oben leiten weiter) -> Bestands-/Zeilen-Cache aktivieren und
+// Auftrag/Produkt/Fertigware/Schritte aller Auftraege gebuendelt vorladen, damit die Material-Rechnung
+// (auftrag_bedarf je Auftrag) nicht je Auftrag einzeln abfragt. Gleiche Bündelung wie in der Produktionsliste.
+$GLOBALS['bx_stock_cache'] = [];
+$vorPa = []; $vorProd = []; $vorAuf = [];
+foreach ($alle as $pa) {
+    $vorPa[] = (int)$pa['id'];
+    if (!empty($pa['produkt_id'])) $vorProd[] = (int)$pa['produkt_id'];
+    if (!empty($pa['auftrag_id'])) $vorAuf[]  = (int)$pa['auftrag_id'];
+}
+$vorPa = array_values(array_unique($vorPa));
+$vorProd = array_values(array_unique($vorProd));
+$vorAuf = array_values(array_unique($vorAuf));
+$sc = &$GLOBALS['bx_stock_cache'];
+if ($vorPa) { $in = implode(',', array_fill(0, count($vorPa), '?'));
+    foreach (all("SELECT * FROM produktionsauftrag WHERE id IN ($in)", $vorPa) as $row) $sc['pa:' . (int)$row['id']] = $row; }
+if ($vorProd) { $in = implode(',', array_fill(0, count($vorProd), '?'));
+    foreach (all("SELECT * FROM produkt WHERE id IN ($in)", $vorProd) as $row) $sc['prod:' . (int)$row['id']] = $row; }
+if ($vorAuf) { $in = implode(',', array_fill(0, count($vorAuf), '?'));
+    foreach (all("SELECT * FROM auftrag WHERE id IN ($in)", $vorAuf) as $row) $sc['auf:' . (int)$row['id']] = $row;
+    foreach ($vorAuf as $id) $sc['fw:' . $id] = ['n'=>0, 'frei'=>0.0];
+    foreach (all("SELECT c.auftrag_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN c.status='frei' THEN c.menge_verfuegbar ELSE 0 END),0) AS frei
+                  FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id IN ($in) AND i.kategorie='fertig' GROUP BY c.auftrag_id", $vorAuf) as $row)
+        $sc['fw:' . (int)$row['auftrag_id']] = ['n'=>(int)$row['n'], 'frei'=>(float)$row['frei']]; }
+unset($sc);
+
 // Reiter aufteilen: „offen" = noch nicht gemeldet; „übergeben" = gemeldet & noch nicht komplett bestellt
 $offenPas = []; $uebergebenPas = [];
 foreach ($alle as $pa) {
@@ -109,4 +135,4 @@ $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
     <?php endif; ?>
   </div>
 <?php endforeach; endif; ?>
-<?php render_footer(); ?>
+<?php unset($GLOBALS['bx_stock_cache']); render_footer(); ?>
