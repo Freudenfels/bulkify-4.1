@@ -717,7 +717,7 @@ function posRecalc(){
     var ov=document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(18,20,23,.5);display:flex;align-items:center;justify-content:center;padding:16px';
     var p=document.createElement('div');
-    p.style.cssText='background:var(--card,#fff);color:var(--text,#111);border:1px solid var(--line,#e2e5ea);border-radius:14px;max-width:440px;width:100%;padding:22px 22px 18px;box-shadow:0 24px 70px rgba(0,0,0,.35)';
+    p.style.cssText='background:var(--panel,#fff);color:var(--text,#1b241a);border:1px solid var(--line,#e2e5ea);border-radius:14px;max-width:440px;width:100%;padding:22px 22px 18px;box-shadow:0 24px 70px rgba(0,0,0,.35)';
     var t=document.createElement('div'); t.textContent=text; t.style.cssText='font-size:15px;line-height:1.45;margin-bottom:18px';
     var row=document.createElement('div'); row.style.cssText='display:flex;gap:10px;justify-content:flex-end';
     var no=document.createElement('button'); no.className='btn btn-ghost'; no.type='button'; no.textContent='Abbrechen';
