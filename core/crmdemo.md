@@ -1,15 +1,35 @@
-# core/crmdemo.php – CRM-Demo (Lieferanten-Beta)
+# core/crmdemo.php – Kern der isolierten CRM-Demo
 
-Eigenständiges, **isoliertes** Mini-System zum Vorführen: CRM + KI-Produktentwickler + Angebote +
-Rechnungen + Produktion + Finanzen. Greift AUSSCHLIESSLICH auf eigene Tabellen `crmdemo_*` zu
-(kein Mix mit echten bulkify-Daten). Deutsch/中文 umschaltbar. Vollständig löschbar.
+Eigenständiges Mini-System, um einem Lieferanten in einer kurzen Testphase zu zeigen, was das
+Tool kann. **Vollständig isoliert:** greift nur auf eigene Tabellen `crmdemo_*` zu, kein Mix mit
+echten bulkify-Daten, jederzeit löschbar. **Ansicht-only:** keine Downloads/Exporte – Belege
+werden nur am Bildschirm gezeigt.
 
-- `crmdemo_schema()` – legt die crmdemo_*-Tabellen an (idempotent, 1× je Request).
-- `cd_lang()` / `cd_t($key)` – Sprache (de/zh, in crmdemo_meta) + Übersetzungen.
-- `cd_head()/cd_shell_start()/cd_shell_ende()` – eigenes Layout (nutzt app.css, eigenes Menü + Sprachumschalter).
-- `cd_meta_get/set`, `cd_nummer($prefix)` – Meta + Nummernkreise (AN-/RE-) auf crmdemo_meta.
-- `crmdemo_kennzahlen()` – Dashboard-Zahlen.
-- `crmdemo_seed()` – Beispieldaten (nur wenn leer). `crmdemo_reset()` – Daten leeren. `crmdemo_loeschen()` – ALLE crmdemo_-Tabellen droppen.
+## Was hier steht
+- **Schema** (`crmdemo_schema`): eigene Tabellen `crmdemo_meta/kunde/produkt/rohstoff/rohstoff_preis/
+  angebot/angebot_pos/rechnung/produktion/charge_zutat/mail/chat`. Idempotent (CREATE IF NOT EXISTS)
+  plus additive `ensure_column`-Migration, damit die frühere MVP-Version ohne Datenverlust nachwächst.
+- **Sprachen DE/EN/ZH**: `cd_lang()` (Meta-gespeichert, per `?lang=` umschaltbar), `cd_t($key)` für die
+  aktive Sprache, `cd_tl($key,$lang)` für eine feste Sprache (Belege in Kundensprache). Alle Texte in
+  `crmdemo_i18n()`.
+- **Rollen/Rechte** (Demo): `cd_rolle()` (per `?rolle=` umschaltbar), `cd_rechte()` mappt Rolle → sichtbare
+  Module, `cd_darf($modul)` prüft, `cd_gate($modul)` sperrt. Rollen: Verkauf · Pricing/Sourcing ·
+  Produktion · Buchhaltung · Admin. Admin kann jede Rolle „vorführen".
+- **Geld/Währung**: `cd_waehrungen()` (EUR/USD/CNY), `cd_money($cent,$waehrung)`. Beträge immer als Cent
+  gespeichert; Währung ist reine Anzeige (keine FX-Umrechnung in der Demo).
+- **Briefkopf/Logo**: `cd_absender()` (Meta-Felder `abs_*`), `cd_logo_datauri()` (Logo als inline
+  base64 in `crmdemo_meta.logo_b64` – kein Datei-URL, bleibt isoliert).
+- **Layout**: `cd_head/cd_shell_start/cd_shell_ende` (eigenes Menü, Rollen-Chips, Sprach-Chips, Theme).
+- **KI-Ähnlichkeit lokal**: `cd_similarity($anfrage,$rohstoff)` – Wort-Overlap (70 %) + Zahlnähe (30 %).
+  Löst das „Ashwagandha 350 mg vs. 360 mg"-Beispiel auch **ohne API-Schlüssel** (Extrakt 360 mg = Top-Treffer).
+  Mit Schlüssel läuft zusätzlich der KI-Produktentwickler/-Chat über `core/ki.php`.
+- **Seed/Reset/Löschen**: `crmdemo_seed()` (abschnittsweise idempotent), `crmdemo_reset()` (Daten leeren),
+  `crmdemo_loeschen()` (alle Tabellen droppen). Steuerung über den versteckten Reiter
+  `?p=einstellungen&tab=crmdemo`.
 
-Einstieg: versteckter Reiter „CRM-Demo" in den Einstellungen (`?p=einstellungen&tab=crmdemo`) → Button „CRM-Demo öffnen" → `?p=crmdemo`.
-Route/Rechte: `crmdemo` ist nicht im Rollen-Map → nur Admin. KI nur auf beta aktiv (sonst wird die Idee ohne Konzept gespeichert).
+## Isolation – Merksatz
+Eine einzige Quelle für die Tabellenliste: `crmdemo_tabellen()`. Wer eine Tabelle hinzufügt, trägt sie
+dort ein – dann greifen Reset und Löschen automatisch. Kein Zugriff auf echte bulkify-Tabellen.
+
+## Rendering / Routen
+Die Modul-Views liegen in `module/crmdemo/app.php` (Route `?p=crmdemo&m=<modul>`).
