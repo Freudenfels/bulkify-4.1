@@ -59,6 +59,7 @@ $routes = [
     'verpackung_dok' => 'lager/verpackung_dok_download.php',
     'rezeptur'        => 'rezeptur/liste.php',
     'rezeptur_detail' => 'rezeptur/detail.php',
+    'kapsel_referenz' => 'system/kapsel_referenz.php',   // Nachschlagewerk Kapselgrößen
     'produkte'        => 'produkt/liste.php',
     'produkt'         => 'produkt/detail.php',
     'produkt_pib'     => 'produkt/pib.php',          // Produktinformationsblatt (PIB) ansehen (Auto oder hochgeladen)

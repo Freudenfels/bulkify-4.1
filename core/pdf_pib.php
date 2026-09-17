@@ -99,7 +99,7 @@ function pib_pdf_bauen(int $produkt_id): ?string {
     // Identität
     $ident = [['Produkt', (string)$prod['anzeige']]];
     if ($formLbl !== '') $ident[] = ['Darreichungsform', $formLbl];
-    if ($kg)             $ident[] = ['Kapselgröße', (string)$kg['name']];
+    if ($kg)             $ident[] = ['Kapselgröße', (string)$kg['name'] . ((float)($kg['volumen_ml'] ?? 0) > 0 ? ' · ' . $mg($kg['volumen_ml']) . ' ml' : '')];
     if ($einh > 0)       $ident[] = ['Einheiten pro Packung', number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stück')];
     $ident[] = ['Erstellt am', (function_exists('fmt_zeit') ? fmt_zeit(gmdate('Y-m-d H:i:s'), 'd.m.Y, H:i') : date('d.m.Y, H:i')) . ' Uhr'];
     $y = spec_grid($p, $y, $ident);
@@ -143,6 +143,13 @@ function pib_pdf_bauen(int $produkt_id): ?string {
         if ($nettoGesamtG > 0) $gw[] = [$istKapsel ? 'Nettofüllmenge je Packung (für die Verpackung)' : 'Nettofüllmenge je Packung', $mg($nettoGesamtG) . ' g' . ($einh > 0 ? ' (' . number_format($einh, 0, ',', '.') . ' × ' . $mg($kapselTotalMg) . ' mg)' : '')];
         $y = spec_h($p, $y, 'Gewichte');
         $y = spec_grid($p, $y, $gw);
+        // Kapsel-Kapazitaet je Dichte als Info (Nachschlagewerk-Bezug) + genutzte Misch-Dichte.
+        if ($istKapsel && $kg && (int)($kg['fuell_typ_mg'] ?? 0) > 0) {
+            $mixD = rezeptur_mix_dichte($rid);
+            $y += 11;
+            $p->text($L, $y, 'Kapsel-Kapazität ' . (string)$kg['name'] . ': ' . number_format((float)$kg['fuell_light_mg'], 0, ',', '.') . ' / ' . number_format((float)$kg['fuell_typ_mg'], 0, ',', '.') . ' / ' . number_format((float)$kg['fuell_heavy_mg'], 0, ',', '.') . ' mg (leicht/typisch/dicht)'
+                . ($mixD ? ' · Rezeptur-Dichte ~' . $mg($mixD) . ' g/ml' : ' · Dichte unbekannt (Backup-Wert)'), 8, false, [110, 110, 108]); $y += 14;
+        }
         if ($istKapsel && $shellMg <= 0) { $y += 11; $p->text($L, $y, 'Leerkapsel-Gewicht nicht hinterlegt – Nettofüllmenge zeigt nur das Füllgewicht ohne Hülle.', 8, false, [110, 110, 108]); $y += 14; }
     }
 

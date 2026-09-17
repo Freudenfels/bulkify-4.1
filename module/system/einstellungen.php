@@ -363,7 +363,10 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
 </div>
 
 <div class="bx-panel">
-  <h2>Kapselgrößen &amp; Füllmengen <?= bx_hint('nominelle Füllmenge je Kapselgröße – Basis für die Kapsel-Auswahl in Rezeptur und Produkt (welche Größe passt, welche Leerkapsel)') ?></h2>
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <h2 style="margin:0">Kapselgrößen &amp; Füllmengen <?= bx_hint('nominelle Füllmenge je Kapselgröße – Basis für die Kapsel-Auswahl in Rezeptur und Produkt (welche Größe passt, welche Leerkapsel)') ?></h2>
+    <a class="btn btn-ghost btn-sm" href="?p=kapsel_referenz">Nachschlagewerk Kapselgrößen</a>
+  </div>
   <form method="post">
     <input type="hidden" name="aktion" value="kapsel_save">
     <div class="bx-tablewrap"><table class="bx-table">

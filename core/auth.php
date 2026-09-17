@@ -42,6 +42,7 @@ function route_rollen_map(): array {
         'portal_anfragen'    => ['sales', 'production', 'einkauf'],
         'portal_anfrage'     => ['sales', 'production', 'einkauf'],
         'rezeptur'           => ['production', 'labor'],
+        'kapsel_referenz'    => ['production', 'labor', 'sales'],   // Nachschlagewerk Kapselgrößen
         'rezeptur_detail'    => ['production', 'labor'],
         'produkte'           => ['production', 'sales'],
         'produkt'            => ['production', 'sales'],

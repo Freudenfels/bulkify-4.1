@@ -988,6 +988,10 @@ function init_schema(): void {
     ensure_column('rezeptur', 'basis_rezeptur_id', "INT NULL");   // abgeleitet: Kunde hat diese Rezeptur aus einer Katalog-Rezeptur/-Produkt weiterentwickelt (intern sichtbar)
     ensure_column('health_claim', 'entry_id', "VARCHAR(120) NULL");   // Entry-Id aus dem EU-Register (idempotenter Import)
     ensure_column('kapselgroesse', 'leergewicht_mg', "DECIMAL(8,2) NULL");   // Leergewicht der Kapselhuelle je Groesse (fuers Gesamtgewicht/Nettofuellmenge)
+    ensure_column('kapselgroesse', 'volumen_ml', "DECIMAL(6,3) NULL");        // theoretisches Fuellvolumen je Groesse (ml) – fuer dichteabhaengige Fuellmenge
+    ensure_column('kapselgroesse', 'fuell_light_mg', "INT NULL");             // Referenz-Fuellgewicht bei Dichte 0,45 (leicht)
+    ensure_column('kapselgroesse', 'fuell_typ_mg', "INT NULL");               // Referenz-Fuellgewicht bei Dichte 0,70 (typisch)
+    ensure_column('kapselgroesse', 'fuell_heavy_mg', "INT NULL");             // Referenz-Fuellgewicht bei Dichte 1,00 (dicht)
     // Einmaliger Backfill: bestehende Rezepturen MIT Kunde waren bisher exklusiv (kunde_id = exklusiv).
     // Danach steuert nur noch das Flag - importierte Katalog-Rezepturen bleiben exklusiv=0.
     if (meta_get('rez_exklusiv_backfill', '') !== '1') {
@@ -1711,22 +1715,62 @@ function etikett_druckvorlage_datei(int $produkt_id): ?array {
     if (!$eids) return null;
     return one("SELECT * FROM verpackung_dokument WHERE item_id IN (" . implode(',', array_map('intval', $eids)) . ") AND kategorie='druckvorlage' ORDER BY id DESC LIMIT 1");
 }
-// Standard-Leergewichte der Kapselhuelle (Gelatine, mg) je Kapselgröße – einmalig setzen, wo noch leer.
-// Werte sind Richtwerte; das Team kann sie je Kapselgröße überschreiben.
-function seed_kapsel_leergewicht(): void {
-    $std = ['000' => 163, '00' => 118, '0' => 96, '1' => 76, '2' => 61, '3' => 48, '4' => 38, '5' => 28];
-    foreach (all("SELECT id, name FROM kapselgroesse WHERE leergewicht_mg IS NULL") as $k) {
-        if (preg_match('/(\d+)\s*$/', trim((string)$k['name']), $m) && isset($std[$m[1]]))
-            q("UPDATE kapselgroesse SET leergewicht_mg=? WHERE id=?", [$std[$m[1]], (int)$k['id']]);
+// Kapsel-Referenztabelle (Nachschlagewerk): je Größe die Standardwerte.
+// [Fuellgewicht 0.45 leicht, 0.70 typisch, 1.00 dicht (mg)], Volumen ml, Verschlusslänge mm,
+// Kappe [Außen-Ø, Schnittlänge, Wandstärke], Körper [Außen-Ø, Schnittlänge, Wandstärke], Leergewicht Ø/100 (mg).
+function kapsel_referenz_tabelle(): array {
+    return [
+        '000' => ['fill'=>[615,960,1370], 'vol'=>1.37, 'lock'=>26.14, 'cap'=>[9.91,12.95,0.112], 'body'=>[9.55,22.20,0.110], 'leer'=>163],
+        '00'  => ['fill'=>[430,665,950],  'vol'=>0.95, 'lock'=>23.30, 'cap'=>[8.53,11.74,0.109], 'body'=>[8.18,20.22,0.107], 'leer'=>118],
+        '0'   => ['fill'=>[305,475,680],  'vol'=>0.68, 'lock'=>21.70, 'cap'=>[7.65,10.72,0.107], 'body'=>[7.34,18.44,0.104], 'leer'=>96],
+        '1'   => ['fill'=>[225,350,500],  'vol'=>0.50, 'lock'=>19.40, 'cap'=>[6.91,9.78,0.104],  'body'=>[6.63,16.61,0.102], 'leer'=>76],
+        '2'   => ['fill'=>[165,260,370],  'vol'=>0.37, 'lock'=>18.00, 'cap'=>[6.35,8.94,0.102],  'body'=>[6.07,15.27,0.099], 'leer'=>61],
+        '3'   => ['fill'=>[135,210,300],  'vol'=>0.30, 'lock'=>15.90, 'cap'=>[5.82,8.08,0.092],  'body'=>[5.56,13.59,0.089], 'leer'=>48],
+        '4'   => ['fill'=>[95,145,210],   'vol'=>0.21, 'lock'=>14.30, 'cap'=>[5.31,7.21,0.096],  'body'=>[5.05,12.19,0.091], 'leer'=>38],
+        '5'   => ['fill'=>[60,90,130],    'vol'=>0.13, 'lock'=>11.10, 'cap'=>[4.91,6.20,0.089],  'body'=>[4.68,9.32,0.086],  'leer'=>28],
+    ];
+}
+// Referenzdaten in die kapselgroesse-Tabelle uebernehmen (nur wo noch leer – Team-Werte bleiben erhalten).
+function seed_kapsel_referenz(): void {
+    $ref = kapsel_referenz_tabelle();
+    foreach (all("SELECT id, name FROM kapselgroesse") as $k) {
+        if (!preg_match('/(\d+)\s*$/', trim((string)$k['name']), $m) || !isset($ref[$m[1]])) continue;
+        $r = $ref[$m[1]];
+        q("UPDATE kapselgroesse SET leergewicht_mg=COALESCE(leergewicht_mg,?), volumen_ml=COALESCE(volumen_ml,?),
+             fuell_light_mg=COALESCE(fuell_light_mg,?), fuell_typ_mg=COALESCE(fuell_typ_mg,?), fuell_heavy_mg=COALESCE(fuell_heavy_mg,?) WHERE id=?",
+          [$r['leer'], $r['vol'], $r['fill'][0], $r['fill'][1], $r['fill'][2], (int)$k['id']]);
     }
+}
+// Kompatibilitaet: alter Name ruft jetzt die vollstaendige Referenz-Befuellung.
+function seed_kapsel_leergewicht(): void { seed_kapsel_referenz(); }
+
+// Mittlere (Schuett-)Dichte einer Rezeptur in g/ml aus den Rohstoff-Dichten (massegewichtet). null, wenn nichts hinterlegt.
+function rezeptur_mix_dichte(int $rezeptur_id): ?float {
+    $mSum = 0.0; $vSum = 0.0;
+    foreach (all("SELECT z.menge_mg, i.dichte FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id
+                  WHERE z.rezeptur_id=? AND i.dichte IS NOT NULL AND i.dichte>0", [$rezeptur_id]) as $r) {
+        $m = (float)$r['menge_mg']; $d = (float)$r['dichte'];
+        if ($m <= 0 || $d <= 0) continue;
+        $mSum += $m; $vSum += $m / $d;
+    }
+    return $vSum > 0 ? $mSum / $vSum : null;   // g/ml
+}
+// Fuellkapazitaet einer Kapselgröße in mg. Mit bekannter Dichte: Volumen × Dichte. Sonst Backup: fuellmenge_mg.
+function kapsel_kapazitaet_mg(array $kg, ?float $dichte): float {
+    $vol = (float)($kg['volumen_ml'] ?? 0);
+    if ($dichte !== null && $dichte > 0 && $vol > 0) return $vol * $dichte * 1000.0;
+    return (float)($kg['fuellmenge_mg'] ?? 0);   // Backup, wenn keine Dichte/Volumen
 }
 function rezeptur_kapselgroesse(int $rezeptur_id): ?array {
     $gid = (int) scalar("SELECT kapselgroesse_id FROM rezeptur WHERE id=?", [$rezeptur_id]);
     if ($gid > 0) { $kg = one("SELECT * FROM kapselgroesse WHERE id=?", [$gid]); if ($kg) return $kg; }
+    seed_kapsel_referenz();
     $weight = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rezeptur_id]);
     if ($weight <= 0) return null;
-    $kg = one("SELECT * FROM kapselgroesse WHERE fuellmenge_mg >= ? ORDER BY fuellmenge_mg ASC LIMIT 1", [$weight]);
-    return $kg ?: null;
+    $dichte = rezeptur_mix_dichte($rezeptur_id);   // g/ml oder null -> Backup ueber fuellmenge_mg
+    foreach (all("SELECT * FROM kapselgroesse ORDER BY fuellmenge_mg ASC") as $kg)
+        if (kapsel_kapazitaet_mg($kg, $dichte) + 0.001 >= $weight) return $kg;
+    return null;   // passt in keine Standardgröße
 }
 
 // ===== Health Claims (EU-VO 432/2012) =====
