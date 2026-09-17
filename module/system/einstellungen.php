@@ -3,6 +3,7 @@ agb_seed_wenn_leer();   // AGB-Entwurf anlegen, solange keine Fassung existiert
 // Einstellungen – nach Kategorien gegliedert (Reiter). Datenquellen: app_meta (k/v), kapselgroesse, nummernkreis.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/crmdemo.php';   // versteckter CRM-Demo-Reiter (Lieferanten-Beta)
 
 seed_kapselgroesse_if_empty();
 seed_behaelter_kapazitaet();   // Standard-Behälter + Kapsel-Fassung (Herstellerwerte, einmalig)
@@ -27,7 +28,7 @@ $TABS = [
 ];
 $DFORM_M = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 $tab = $_GET['tab'] ?? 'firma';
-if (!isset($TABS[$tab])) $tab = 'firma';
+if (!isset($TABS[$tab]) && $tab !== 'crmdemo') $tab = 'firma';   // 'crmdemo' = versteckter Reiter (nicht in der Leiste)
 
 $aktion = $_POST['aktion'] ?? '';
 
@@ -79,6 +80,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mailtext_reset') {
     }
     header('Location: ?p=einstellungen&tab=mail&reset=1#tpl_' . $key); exit;
 }
+// --- CRM-Demo (versteckt): Beispieldaten / zuruecksetzen / komplett loeschen ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'crmdemo_seed')   { crmdemo_reset(); crmdemo_seed(); header('Location: ?p=einstellungen&tab=crmdemo&cdok=1'); exit; }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'crmdemo_reset')  { crmdemo_reset(); header('Location: ?p=einstellungen&tab=crmdemo&cdok=1'); exit; }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'crmdemo_loeschen') { crmdemo_loeschen(); header('Location: ?p=einstellungen&tab=crmdemo&cdweg=1'); exit; }
 // --- Diagnose: Messung ein/aus, Protokoll leeren ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'perf_toggle') {
     meta_set('perf_log', isset($_POST['perf_log']) ? '1' : '0');
@@ -241,6 +246,8 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   <?php foreach ($TABS as $key => $lbl): ?>
     <a href="?p=einstellungen&tab=<?= $key ?>" class="<?= $tab===$key?'on':'' ?>"><?= h($lbl) ?></a>
   <?php endforeach; ?>
+  <?php // Versteckter Reiter: unauffällig ganz rechts, für die Vorführung der CRM-Demo. ?>
+  <a href="?p=einstellungen&tab=crmdemo" class="<?= $tab==='crmdemo'?'on':'' ?>" style="margin-left:auto;opacity:.45" title="CRM-Demo (versteckt)">CRM-Demo</a>
 </div>
 
 <?php if ($tab === 'firma'): ?>
@@ -480,6 +487,30 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Speichern</button></div>
   </form>
   <p class="muted" style="font-size:12px;margin-top:8px">Abgerufen und verknüpft wird dann direkt im <a href="?p=lager2">Fremdlager</a> („Fulfillment-Artikel abrufen").</p>
+</div>
+<?php endif; ?>
+
+<?php if ($tab === 'crmdemo'):
+    crmdemo_schema();
+    $cdKunden = (int) scalar("SELECT COUNT(*) FROM crmdemo_kunde");
+    $cdAng    = (int) scalar("SELECT COUNT(*) FROM crmdemo_angebot");
+    $cdRech   = (int) scalar("SELECT COUNT(*) FROM crmdemo_rechnung"); ?>
+<div class="bx-panel" style="border-color:var(--gruen)">
+  <h2 style="margin-top:0">CRM-Demo <span class="muted" style="font-weight:400;font-size:13px">– versteckte Beta zum Vorführen (isolierte Daten, jederzeit löschbar)</span></h2>
+  <?php if (isset($_GET['cdok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Gespeichert.</div><?php endif; ?>
+  <?php if (isset($_GET['cdweg'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">CRM-Demo samt Daten gelöscht.</div><?php endif; ?>
+  <p class="muted" style="margin-top:0">Ein eigenständiges Mini-System (CRM, KI-Produktentwickler, Angebote, Rechnungen, Produktion, Finanzen) auf <strong>eigenen Tabellen</strong> (<code>crmdemo_*</code>) – kein Mix mit den echten Daten. Deutsch/中文 umschaltbar. Gedacht, um einem Lieferanten zu zeigen, was das Tool kann.</p>
+  <div class="bx-cards" style="margin:10px 0">
+    <div class="bx-card"><div class="k">Kunden</div><div class="v"><?= $cdKunden ?></div></div>
+    <div class="bx-card"><div class="k">Angebote</div><div class="v"><?= $cdAng ?></div></div>
+    <div class="bx-card"><div class="k">Rechnungen</div><div class="v"><?= $cdRech ?></div></div>
+  </div>
+  <div class="bx-row" style="gap:10px;flex-wrap:wrap;align-items:center">
+    <a class="btn btn-primary" href="?p=crmdemo" target="_blank" rel="noopener">CRM-Demo öffnen</a>
+    <form method="post" style="margin:0" onsubmit="return confirm('Demo mit frischen Beispieldaten neu starten?');"><input type="hidden" name="aktion" value="crmdemo_seed"><button class="btn btn-ghost" type="submit">Beispieldaten laden</button></form>
+    <form method="post" style="margin:0" onsubmit="return confirm('Alle Demo-Daten leeren (Struktur bleibt)?');"><input type="hidden" name="aktion" value="crmdemo_reset"><button class="btn btn-ghost" type="submit">Daten leeren</button></form>
+    <form method="post" style="margin:0" onsubmit="return confirm('CRM-Demo KOMPLETT löschen (alle crmdemo_-Tabellen entfernen)? Nur die Demo, echte Daten bleiben unberührt.');"><input type="hidden" name="aktion" value="crmdemo_loeschen"><button class="btn btn-danger" type="submit">CRM-Demo löschen</button></form>
+  </div>
 </div>
 <?php endif; ?>
 
