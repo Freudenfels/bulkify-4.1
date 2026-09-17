@@ -1,7 +1,9 @@
 # Übergabe – bulkify Dashboard 4.1
 
 > Stand zum Weiterarbeiten in einer neuen Session (auch mit einem anderen Modell).
-> Ergänzt `CLAUDE.md` (dort stehen die Dauer-Regeln). **Stand: 2026-09-02, alles gepusht und auf beta.**
+> Ergänzt `CLAUDE.md` (dort stehen die Dauer-Regeln). **Stand: 2026-09-17, alles gepusht und auf beta.**
+>
+> **Seit 09-02 zusätzlich fertig** (Details je in der co-located `.md`): PIB (Produktinformationsblatt, `core/pdf_pib.md`) inkl. Health Claims (EU 432/2012, DB + Pflege je Nährstoff), Kapsel-Nachschlagewerk + dichtebewusste Kapselgrößen-Wahl (`module/system/kapsel_referenz.md`), Fremdlager je Artikel (`fremdlager-charge-besitzer`), Etikett-Druckvorlage-Download, Admin-Vorschau ins Lieferantenportal, „Menge ändern"/„Angefragte Menge übernehmen" im Angebot, Performance-Umbau (Schema-Guard, Portal-/Editor-Bündelung).
 >
 > **Für eine neue Session:** Diese Datei plus `CLAUDE.md` lesen, dann `git pull`. Wer tiefer einsteigt,
 > findet zu **jeder** `.php` eine `.md` daneben – die ist die eigentliche Doku.
@@ -43,22 +45,19 @@
 
 ## E-Mail
 `core/mail.php` – SMTP über Socket, kein Composer. Eingerichtet unter **Einstellungen → E-Mail** (United-Domains-Daten) mit Testversand; jede Mail zusätzlich in `data/mail.log`.
-**Automatisch verschickt wird bisher nur die Lieferanten-Einladung.** Vorlagen für „neue Bestellung" und Team-Benachrichtigung liegen bereit, sind aber noch nirgends angehängt.
+**Automatische Mails sind angebunden** (Lieferanten-Einladung, Bestellung raus, Angebot gesendet/angenommen, Anfrage-Eingang/Absage, Team-Hinweise). Kunden-Mailtexte sind unter **Einstellungen → E-Mail** pflegbar. Es fehlt nur noch, die **SMTP-Zugangsdaten einzutragen** (siehe Offene Punkte).
 
 ## Offene Punkte / als Nächstes
-1. **SMTP-Zugangsdaten eintragen** (Einstellungen → E-Mail) und Testmail schicken. Die Ereignisse sind angebunden (Tabelle unter Einstellungen → E-Mail, Details in `core/mail.md`): Bestellung raus, Angebot gesendet/angenommen, Anfrage abgesagt, Lieferanten-Aktionen ans Team.
+> Erledigte Punkte wurden am 2026-09-17 entfernt. Was hier steht, ist noch offen – überwiegend Daten-/Fachpflege durch das Team, kein Code.
+1. **SMTP-Zugangsdaten eintragen** (Einstellungen → E-Mail) und Testmail schicken. Die Ereignisse/Vorlagen sind angebunden.
 2. **AGB anwaltlich prüfen** und die geprüfte Fassung als neue Version eintragen.
-3. ~~Etiketten~~ – **erledigt** (2026-09-02, aus dem Herstellerblatt „Kapselgrößen/Etikettengrößen"): `seed_etikett_formate()` trägt Druckdatei- und Endmaß an PET Packer, Weithalsglas (100–250 ml) und Braunglas 10/30 ml ein und legt je Endformat einen Etiketten-Artikel mit EK-Staffel aus den Labelisten-Preisen an. Läuft beim ersten Aufruf von Verpackungen/Einstellungen einmal (Marker). **Offen:** Etikettenpreise für die Braungläser 10/30 ml und die Standbodenbeutel; Formate für die Beutel.
-4. ~~Mengenrabatt bei Rezeptur-Angeboten~~ – **erledigt** (2026-09-02): Rohstoffe werden mit der Lieferanten-Staffel zur Gesamtmenge gerechnet (Matrix und Rezeptur-Angebot); im Editor mehrere Mengen mit Komma. Wirkt nur, wenn am Rohstoff Staffeln (`lieferant_preis`) gepflegt sind – ein Rüstkosten-/Fixkostenmodell je Charge gibt es weiterhin nicht.
-5. **Rohstoff-Stammdaten füllen** (Herkunft, Haltbarkeit, Lagerung, Allergene, vegan/GVO/bestrahlt/TSE, Zertifikate, Spec-Nr.) – ohne sie steht in der Spezifikation überall „–".
-6. **Chinesische Übersetzungen:** am 2026-09-02 vervollständigt – vorher fielen Preisanfrage, Profil-Fehlermeldungen und die Einladung bei Chinesisch auf Englisch zurück (nur de/en hinterlegt). Jetzt läuft alles über `lp_t()`, dazu `lp_num()` für Zahlen und `lp_einheit()` für Einheiten. Eine Endkontrolle durch einen Muttersprachler bleibt sinnvoll. **Achtung:** Welche Sprache ein Lieferant sieht, steht in `lieferanten.sprache` – bei einem chinesischen Lieferanten dort auch `zh` eintragen.
-7. ~~Lieferantenportal: Rückfragen/Chat und Dateiablage~~ – **erledigt** (2026-09-02): Menüpunkte „Rückfragen" und „Dateien" im Portal, dazu Rückfragen an jeder Bestellung/Preisanfrage; intern Reiter „Dokumente" und „Rückfragen" im Lieferantenkonto und Rückfragen an der Bestellung (`core/nachricht.php`, `core/lieferant_dateien.php`).
-8. ~~Beta-Admin-Passwort ändern~~ – **erledigt** (2026-09-02).
-9. **Demo-Rezepturen ohne Rohstoffpreise** → Preis-Matrix zeigt 0 €.
-10. **Flaschen/Tuben für Flüssig anlegen:** Braunglas 10 ml und 30 ml gibt es jetzt als Artikel (über `seed_etikett_formate()`, ohne EK – Preis nachtragen). Tropfflasche/Pipette, Pumpspender und Tuben fehlen weiterhin.
-11. **Kalkulationsgrundlagen prüfen:** Presshilfsstoffe 20 % / 8 €/kg, Trägerflüssigkeit 3 €/L sind gesetzte Startwerte.
-12. **Deckel-Preisliste bei Packari erfragen** – der EK der vier Pressure-Seal-Deckel ist als Differenz „Set minus Dose" gerechnet (0,26–0,35 €).
-13. ~~Teilproduktion .B/.C~~ – **erledigt** (2026-09-02): Panel „Teilmenge einbuchen" am Produktionsauftrag, der Abschluss bucht nur noch den Rest. Teilversand gibt es weiterhin nicht (`auftrag_versenden()` liefert ganz oder gar nicht).
+3. **Rohstoff-Stammdaten füllen** (Herkunft, Haltbarkeit, Lagerung, Allergene, vegan/GVO/bestrahlt/TSE, Zertifikate, Spec-Nr.) – sonst steht in Spezifikation/PIB überall „–".
+4. **Rohstoff-Dichte pflegen** (`item.dichte`) – steuert die dichtebewusste Kapselgrößen-Wahl; fehlt sie, gilt der Backup-Füllwert. Referenz: Einstellungen → Produktion → „Nachschlagewerk Kapselgrößen".
+5. **Health Claims + Etikett-Druckvorlagen auf beta einspielen:** Claim-Import/Übersetzung liefen lokal (Tools `tools/import_health_claims.php`, `tools/translate_health_claims.php`); auf beta je Nährstoff pflegen oder Web-Import bauen. Etikett-Druckvorlage je Etikettgröße am Etikett-Artikel hochladen (Kategorie „Etikett-Druckvorlage").
+6. **Demo-Rezepturen ohne Rohstoffpreise** → Preis-Matrix zeigt 0 €.
+7. **Verpackung ergänzen:** Tropfflasche/Pipette, Pumpspender, Tuben; Etikettenpreise für Braunglas 10/30 ml + Standbodenbeutel (+ Beutel-Formate).
+8. **Kalkulationsgrundlagen prüfen:** Presshilfsstoffe 20 % / 8 €/kg, Trägerflüssigkeit 3 €/L sind gesetzte Startwerte.
+9. **Deckel-Preisliste bei Packari erfragen** – der EK der vier Pressure-Seal-Deckel ist als Differenz „Set minus Dose" gerechnet (0,26–0,35 €).
 
 ## Deploy / GitHub
 - Repo **github.com/Freudenfels/bulkify-4.1** (privat), Branch `main`.
