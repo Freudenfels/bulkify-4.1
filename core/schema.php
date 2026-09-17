@@ -1696,9 +1696,20 @@ function pack_kapazitaet_fuer(int $item_id): array {
 // Etikett-Druckvorlage eines Produkts (am Etikett-Artikel als verpackung_dokument kategorie='druckvorlage').
 function etikett_druckvorlage_datei(int $produkt_id): ?array {
     if ($produkt_id <= 0) return null;
-    $eid = (int) scalar("SELECT etikett_id FROM produkt WHERE id=?", [$produkt_id]);
-    if (!$eid) return null;
-    return one("SELECT * FROM verpackung_dokument WHERE item_id=? AND kategorie='druckvorlage' ORDER BY id DESC LIMIT 1", [$eid]);
+    $p = one("SELECT etikett_id, verpackung_id FROM produkt WHERE id=?", [$produkt_id]);
+    if (!$p) return null;
+    $eids = [];
+    if (!empty($p['etikett_id'])) $eids[] = (int)$p['etikett_id'];
+    // Kein direkt verknuepftes Etikett? Dann den Etikett-Artikel ueber die Groesse des Behaelters
+    // (item.etikett_final, B x H) finden – so genuegt EINE Druckvorlage je Etikettgroesse.
+    if (!$eids && !empty($p['verpackung_id'])) {
+        $m = etikett_masse((string) scalar("SELECT etikett_final FROM item WHERE id=?", [(int)$p['verpackung_id']]));
+        if ($m) foreach (all("SELECT id, breite_mm, hoehe_mm FROM item WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0") as $e) {
+            if ((float)$e['breite_mm'] && (float)$e['hoehe_mm'] && abs((float)$e['breite_mm'] - $m[0]) <= 2 && abs((float)$e['hoehe_mm'] - $m[1]) <= 2) $eids[] = (int)$e['id'];
+        }
+    }
+    if (!$eids) return null;
+    return one("SELECT * FROM verpackung_dokument WHERE item_id IN (" . implode(',', array_map('intval', $eids)) . ") AND kategorie='druckvorlage' ORDER BY id DESC LIMIT 1");
 }
 // Standard-Leergewichte der Kapselhuelle (Gelatine, mg) je Kapselgröße – einmalig setzen, wo noch leer.
 // Werte sind Richtwerte; das Team kann sie je Kapselgröße überschreiben.
