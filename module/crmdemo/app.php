@@ -546,7 +546,10 @@ elseif ($m === 'konversation'):
     if ($fk) { $wo[]='ml.kunde_id=?'; $pa[]=$fk; }
     if ($q!==''){ $like='%'.$q.'%'; $wo[]='(ml.betreff LIKE ? OR ml.text LIKE ? OR k.firma LIKE ?)'; array_push($pa,$like,$like,$like); }
     $rows = all("SELECT ml.*, k.firma FROM crmdemo_mail ml LEFT JOIN crmdemo_kunde k ON k.id=ml.kunde_id".($wo?' WHERE '.implode(' AND ',$wo):'').' ORDER BY ml.id DESC', $pa); ?>
-    <h1 style="margin-bottom:4px"><?= h(cd_t('konversation')) ?></h1>
+    <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:2px">
+      <h1 style="margin:0"><?= h(cd_t('konversation')) ?></h1>
+      <?php if (cd_darf('chat')): ?><a class="btn btn-ghost btn-sm" href="<?= h(cd_url('chat')) ?>"><?= h(cd_t('chat')) ?></a><?php endif; ?>
+    </div>
     <p class="bx-sub"><?= h(cd_t('konv_intro')) ?></p>
     <div class="bx-panel">
       <form method="get" class="bx-row" style="gap:8px;flex-wrap:wrap;align-items:center"><input type="hidden" name="p" value="crmdemo"><input type="hidden" name="m" value="konversation">
@@ -611,7 +614,10 @@ elseif ($m === 'katalog'):
     <?php else:
       $anf = trim((string)($_GET['q'] ?? ''));
       $roh = all("SELECT * FROM crmdemo_rohstoff WHERE aktiv=1 ORDER BY name"); ?>
-      <h1 style="margin-bottom:6px"><?= h(cd_t('katalog')) ?></h1>
+      <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+        <h1 style="margin:0"><?= h(cd_t('katalog')) ?></h1>
+        <?php if (cd_darf('coareader')): ?><a class="btn btn-ghost btn-sm" href="<?= h(cd_url('coareader')) ?>"><?= h(cd_t('coareader')) ?></a><?php endif; ?>
+      </div>
       <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('matching')) ?></h2>
         <p class="muted" style="margin-top:0"><?= h(cd_t('matching_hint')) ?></p>
         <form method="get" class="bx-row" style="gap:8px;flex-wrap:wrap"><input type="hidden" name="p" value="crmdemo"><input type="hidden" name="m" value="katalog">
@@ -791,7 +797,10 @@ elseif ($m === 'rezepturen'):
       } else {
           $rows = all("SELECT * FROM crmdemo_rezeptur ORDER BY verwendet DESC, name");
       } ?>
-      <h1 style="margin-bottom:6px"><?= h(cd_t('rezepturen')) ?></h1>
+      <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:2px">
+        <h1 style="margin:0"><?= h(cd_t('rezepturen')) ?></h1>
+        <?php if (cd_darf('produktentwickler')): ?><a class="btn btn-ghost btn-sm" href="<?= h(cd_url('produktentwickler')) ?>"><?= h(cd_t('produktentwickler')) ?></a><?php endif; ?>
+      </div>
       <p class="bx-sub"><?= (int) scalar("SELECT COUNT(*) FROM crmdemo_rezeptur") ?> <?= h(cd_t('rezepturen')) ?></p>
       <div class="bx-panel">
         <form method="get" class="bx-row" style="gap:8px;flex-wrap:wrap"><input type="hidden" name="p" value="crmdemo"><input type="hidden" name="m" value="rezepturen">
@@ -1063,7 +1072,25 @@ elseif ($m === 'chat'):
     </div>
     <?php endforeach;
 
-// ================= FINANZEN =================
+// ================= KI-WERKZEUGE (Sammel-Hub) =================
+elseif ($m === 'ki'):
+    $tools = [
+        ['produktentwickler', 'pe_desc',  'rezepturen'],
+        ['coareader',         'coa_desc', 'katalog'],
+        ['chat',              'chat_desc','konversation'],
+    ]; ?>
+    <h1 style="margin-bottom:4px"><?= h(cd_t('ki')) ?></h1>
+    <p class="bx-sub"><?= h(cd_t('ki_intro')) ?></p>
+    <div class="bx-grid">
+      <?php foreach ($tools as [$key,$desc,$ctx]): if (!cd_darf($key)) continue; ?>
+        <a class="bx-panel cd-konv" style="border-left:3px solid var(--gruen,#2f8f5b)" href="<?= h(cd_url($key)) ?>">
+          <div class="cd-firma" style="font-size:15px"><?= h(cd_t($key)) ?></div>
+          <div class="muted" style="font-size:13px;margin-top:4px"><?= h(cd_t($desc)) ?></div>
+        </a>
+      <?php endforeach; ?>
+    </div>
+
+<?php // ================= FINANZEN =================
 elseif ($m === 'finanzen'):
     $z = crmdemo_kennzahlen(); ?>
     <h1 style="margin-bottom:12px"><?= h(cd_t('finanzen')) ?></h1>

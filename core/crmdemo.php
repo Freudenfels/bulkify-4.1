@@ -192,6 +192,11 @@ function crmdemo_i18n(): array {
         'produktentwickler'=>['de'=>'Produktentwickler (KI)','en'=>'Product developer (AI)','zh'=>'产品开发（AI）'],
         'coareader'      => ['de'=>'COA/Spec-Reader (KI)','en'=>'COA/Spec reader (AI)','zh'=>'COA/规格读取（AI）'],
         'einstellungen'  => ['de'=>'Einstellungen','en'=>'Settings','zh'=>'设置'],
+        'ki'             => ['de'=>'KI-Werkzeuge','en'=>'AI tools','zh'=>'AI 工具'],
+        'ki_intro'       => ['de'=>'Alle KI-Funktionen an einem Ort – jede ist auch direkt auf der passenden Seite verlinkt.','en'=>'All AI features in one place – each is also linked on its related page.','zh'=>'所有 AI 功能集中于此 — 也可在相应页面直接打开。'],
+        'pe_desc'        => ['de'=>'Aus einer Produktidee ein Konzept mit Zutaten generieren.','en'=>'Turn a product idea into a concept with ingredients.','zh'=>'将产品创意生成含配料的方案。'],
+        'coa_desc'       => ['de'=>'Lieferanten-COA/Spec auslesen und Kunden-COA erstellen.','en'=>'Read supplier COA/spec and build a customer COA.','zh'=>'读取供应商 COA/规格并生成客户 COA。'],
+        'chat_desc'      => ['de'=>'Fragen zu Rohstoffen, Kombinationen und Sourcing.','en'=>'Questions on materials, combinations and sourcing.','zh'=>'关于原料、组合与采购的问答。'],
         'angebote'       => ['de'=>'Angebote','en'=>'Quotes','zh'=>'报价'],
         'rechnungen'     => ['de'=>'Rechnungen','en'=>'Invoices','zh'=>'发票'],
         'produktion'     => ['de'=>'Produktion','en'=>'Production','zh'=>'生产'],
@@ -411,11 +416,11 @@ function cd_rolle(): string {
 // Welche Module darf eine Rolle sehen?
 function cd_rechte(string $rolle): array {
     $map = [
-        'verkauf'     => ['dashboard','kunden','konversation','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','chat'],
-        'pricing'     => ['dashboard','katalog','rezepturen','coareader','angebote','chat'],
+        'verkauf'     => ['dashboard','kunden','konversation','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','chat','ki'],
+        'pricing'     => ['dashboard','katalog','rezepturen','coareader','angebote','chat','ki'],
         'produktion'  => ['dashboard','produktion','katalog','rezepturen'],
         'buchhaltung' => ['dashboard','rechnungen','finanzen','kunden','konversation'],
-        'admin'       => ['dashboard','kunden','konversation','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','produktion','chat','finanzen','einstellungen'],
+        'admin'       => ['dashboard','kunden','konversation','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','produktion','chat','finanzen','ki','einstellungen'],
     ];
     return $map[$rolle] ?? $map['admin'];
 }
@@ -501,7 +506,6 @@ function cd_head(string $titel): void {
        . '.cd-rolchips a.on{background:var(--gruen,#2f8f5b);color:#fff;border-color:transparent}'
        . '.cd-az{display:flex;flex-wrap:wrap;gap:3px}.cd-az a{padding:2px 7px;border-radius:6px;font-size:12px;color:var(--muted);text-decoration:none}'
        . '.cd-az a.on{background:var(--gruen,#2f8f5b);color:#fff}'
-       . '.bx-side nav a.cd-sub{padding-left:30px;font-size:13px;opacity:.82}.bx-side nav a.cd-sub::before{content:"\\21B3";margin-right:6px;opacity:.6}'
        . '.cd-konv{display:block;text-decoration:none;color:var(--text,inherit);border-left:3px solid var(--line);border-bottom:1px solid var(--line);border-radius:6px;padding:8px 12px;margin:2px 0;transition:background .12s}'
        . '.cd-konv:hover{background:rgba(127,127,127,.14)}.cd-konv .cd-firma{color:var(--gruen,#2f8f5b);font-weight:600}'
        . '.cd-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;z-index:60;padding:56px 16px}'
@@ -511,35 +515,16 @@ function cd_head(string $titel): void {
 }
 function cd_shell_start(string $aktiv): void {
     $rolle = cd_rolle();
-    // Navigation ohne Gruppen-Ueberschriften: KI-Werkzeuge sitzen als Unterpunkt
-    // beim passenden Hauptpunkt (COA-Reader unter Rohstoff-Katalog, Produktentwickler
-    // unter Rezeptur-Katalog, KI-Chat unter Konversation).
-    $menu = [
-        ['dashboard',    []],
-        ['kunden',       []],
-        ['konversation', ['chat']],
-        ['angebote',     []],
-        ['rechnungen',   []],
-        ['rezepturen',   ['produktentwickler']],
-        ['katalog',      ['coareader']],
-        ['produktion',   []],
-        ['finanzen',     []],
-        ['einstellungen',[]],
-    ];
+    // Flache Navigation. Die einzelnen KI-Funktionen erscheinen NICHT im Menue,
+    // sondern jeweils als Button auf der passenden Seite + gebuendelt unter "KI-Werkzeuge".
+    $menu = ['dashboard','kunden','konversation','angebote','rechnungen','rezepturen','katalog','produktion','finanzen','ki','einstellungen'];
     $l = cd_lang();
-    $navLink = function (string $key, bool $sub) use ($aktiv) {
-        return '<a href="' . h(cd_url($key)) . '" class="' . ($sub ? 'cd-sub' : '') . ($aktiv === $key ? ' on' : '') . '">' . h(cd_t($key)) . '</a>';
-    };
     echo '<div class="bx-shell"><aside class="bx-side">'
        . '<div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="" class="bx-logo"><span class="bx-ver">' . h(cd_t('app')) . '</span></div>'
        . '<nav>';
-    foreach ($menu as [$key, $kinder]) {
-        $parent = cd_darf($key);
-        if ($parent) echo $navLink($key, false);
-        foreach ($kinder as $ck) {
-            if (!cd_darf($ck)) continue;
-            echo $navLink($ck, $parent); // nur einruecken, wenn der Hauptpunkt sichtbar ist
-        }
+    foreach ($menu as $key) {
+        if (!cd_darf($key)) continue;
+        echo '<a href="' . h(cd_url($key)) . '"' . ($aktiv === $key ? ' class="on"' : '') . '>' . h(cd_t($key)) . '</a>';
     }
     // Rollen-Umschalter (Demo) ------------------------------------------------
     echo '<div class="bx-navgroup" style="margin-top:14px">' . h(cd_t('rolle')) . '</div><div class="cd-rolchips" style="padding:0 14px 6px">';
