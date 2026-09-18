@@ -168,6 +168,31 @@ function ek_bestaetigen(int $id): bool {
     return true;
 }
 
+// Normalisierter Name für einen exakten (reihenfolge-unabhängigen) Namensabgleich.
+function ek_name_norm(string $s): string { $t = ek_tokens($s); sort($t); return implode(' ', $t); }
+
+// KI-frei: alle offenen Rohstoff-Zeilen, deren normalisierter Name EINDEUTIG genau einem Rohstoff
+// entspricht, automatisch zuordnen und bestätigen (-> lieferant_preis). Rückgabe: Anzahl.
+function ek_auto_zuordnen_exakt(string $typ): int {
+    if ($typ !== 'rohstoff') return 0;   // nur Rohstoffe – füllt die Kalkulation
+    $map = [];   // normalisierter Name -> [item_id => true]
+    foreach (all("SELECT id, name, name_en, synonym FROM item WHERE kategorie='rohstoff' AND (form<>'kapselhuelle' OR form IS NULL)") as $r) {
+        foreach ([$r['name'], $r['name_en'], $r['synonym']] as $nm) {
+            $k = ek_name_norm((string)$nm); if ($k === '') continue;
+            $map[$k][(int)$r['id']] = true;
+        }
+    }
+    $n = 0;
+    foreach (all("SELECT * FROM ek_import WHERE typ='rohstoff' AND item_id IS NULL AND status NOT IN ('bestaetigt','verworfen') ORDER BY id") as $ek) {
+        $k = ek_name_norm((string)$ek['name']);
+        if ($k === '' || !isset($map[$k]) || count($map[$k]) !== 1) continue;   // nur eindeutige Treffer
+        $iid = (int) array_key_first($map[$k]);
+        q("UPDATE ek_import SET item_id=?, ki_hinweis='Exakter Namenstreffer', status='vorschlag' WHERE id=?", [$iid, (int)$ek['id']]);
+        if (ek_bestaetigen((int)$ek['id'])) $n++;
+    }
+    return $n;
+}
+
 // Manuelle Zuordnung: freie Namens-/Nummerneingabe -> item/produkt auflösen und (optional) bestätigen.
 function ek_manuell_zuordnen(int $id, string $eingabe, bool $bestaetigen = true): bool {
     $ek = one("SELECT * FROM ek_import WHERE id=?", [$id]);

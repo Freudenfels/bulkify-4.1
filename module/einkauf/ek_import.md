@@ -38,6 +38,10 @@ beim Seitenaufruf idempotent nachgezogen (`lieferant_alias_anwenden()`). Tabelle
   dem Typ-Reiter.
 - **KI-Zuordnung starten**: verarbeitet die nächsten N offenen Zeilen über
   `core/ek_ki.php` (Vorschlag mit Zuversicht in %). Knopf nur auf **beta** aktiv (KI dort).
+- **Exakte Namenstreffer automatisch zuordnen** (nur Rohstoffe, überall aktiv – **ohne KI**):
+  `ek_auto_zuordnen_exakt()` ordnet alle offenen Zeilen zu, deren normalisierter Name (reihenfolge-
+  unabhängig, ohne Mengen/Einheiten) **eindeutig** genau einem Rohstoff entspricht, und bestätigt
+  sie sofort (→ `lieferant_preis`). Schneller Erst-Durchlauf; den Rest erledigen KI/Handeingabe.
 - Je Zeile: bei einem Vorschlag **Bestätigen**/**Verwerfen**; sonst **manuelle Zuordnung**
   per Freitext (Datalist mit Rohstoff-/Produktnamen) **oder** **„+ Neuer Rohstoff/Neues
   Produkt"** – legt aus der Zeile direkt einen neuen Datensatz an und ordnet ihn zu

@@ -21,6 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($r['meldung'])) $_SESSION['ek_flash'] = $r['meldung'];
         header('Location: ' . $ret); exit;
     }
+    if ($akt === 'auto_exakt') { @set_time_limit(300); $n = ek_auto_zuordnen_exakt($typ); $_SESSION['ek_flash'] = $n . ' Zeile(n) über exakte Namenstreffer automatisch zugeordnet und als EK übernommen.'; header('Location: ' . $ret); exit; }
     if ($akt === 'links_bereinigen') { $n = ek_links_bereinigen(); $_SESSION['ek_flash'] = $n . ' Marktplatz-Link(s) in die Notiz verschoben (Lieferant = Plattform).'; header('Location: ' . $ret); exit; }
     if ($akt === 'alias_add') {
         lieferant_alias_speichern((string)($_POST['alias'] ?? ''), (string)($_POST['firma'] ?? ''), (string)($_POST['kontakt'] ?? ''));
@@ -126,7 +127,15 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
     <button class="btn btn-primary btn-sm" type="submit" data-busy="KI ordnet zu…" <?= ($offenN===0 || !$kiDa) ? 'disabled' : '' ?>>KI-Zuordnung starten</button>
   </form>
 </div>
-<?php if (!$kiDa): ?><div class="muted" style="font-size:12px;margin:-6px 2px 10px">Die KI-Zuordnung läuft nur auf beta (Schlüssel serverseitig). Manuelle Zuordnung geht überall.</div><?php endif; ?>
+<?php if (!$kiDa): ?><div class="muted" style="font-size:12px;margin:-6px 2px 10px">Die KI-Zuordnung läuft nur auf beta (Schlüssel serverseitig). Manuelle Zuordnung und „exakte Namenstreffer" gehen überall.</div><?php endif; ?>
+<?php if ($typ === 'rohstoff' && $offenN > 0): ?>
+<div class="bx-panel" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+  <div class="muted" style="font-size:13px">Ohne KI: alle offenen Zeilen, deren Name <strong style="font-weight:600">eindeutig</strong> einem Rohstoff entspricht, sofort zuordnen und als EK (lieferant_preis) übernehmen.</div>
+  <form method="post" style="margin:0"><input type="hidden" name="aktion" value="auto_exakt"><input type="hidden" name="ret" value="<?= h($retQuery) ?>">
+    <button class="btn btn-primary btn-sm" type="submit" data-busy="ordne zu…">Exakte Namenstreffer automatisch zuordnen</button>
+  </form>
+</div>
+<?php endif; ?>
 <?php if (($zaehler['kein_treffer'] ?? 0) > 0): $ktN = (int)$zaehler['kein_treffer']; $wasNeu = $typ==='rohstoff' ? 'Rohstoffe' : 'Produkte'; ?>
 <div class="bx-panel" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
   <div class="muted" style="font-size:13px"><strong style="font-weight:600"><?= $ktN ?></strong> Zeile(n) ohne KI-Treffer. Alle auf einmal als neue <?= $wasNeu ?> anlegen und zuordnen?</div>
