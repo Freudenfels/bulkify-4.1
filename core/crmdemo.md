@@ -27,6 +27,14 @@ werden nur am Bildschirm gezeigt.
   `crmdemo_loeschen()` (alle Tabellen droppen). Steuerung über den versteckten Reiter
   `?p=einstellungen&tab=crmdemo`.
 
+## COA/Spec-Reader & Standardwerte
+- `cd_coa_extract($text,$ziel)` – liest ein Lieferanten-COA/Spec (auch chinesisch) per KI aus und gibt
+  strukturierte Werte in der Zielsprache zurück (`['ok','daten']`). Ohne Schlüssel `ok=false`. Ergebnis
+  landet in `crmdemo_coa`; fehlt der Rohstoff, wird er in `crmdemo_rohstoff` angelegt.
+- `cd_std($k,$default)` – Einmal-Einstellungen (Standard-Währung/USt/Zahlungsziel) aus `crmdemo_meta`.
+- Angebotspositionen tragen `typ` (produkt|rohstoff|frei), `einheit` (Stk./kg), `rohstoff_id` und
+  `rezeptur_id`.
+
 ## Rezeptur-Katalog
 `crmdemo_rezeptur` ist die geteilte Bibliothek fertiger Rezepturen. Positionen im Angebot verweisen per
 `crmdemo_angebot_pos.rezeptur_id` darauf; jede Verwendung erhöht `verwendet`. Neue, im Editor angehakte

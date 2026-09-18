@@ -30,8 +30,9 @@ function crmdemo_schema(): void {
         sprache VARCHAR(5) NOT NULL DEFAULT 'de', waehrung VARCHAR(3) NOT NULL DEFAULT 'EUR',
         adresse VARCHAR(190) NULL, plz VARCHAR(20) NULL, ort VARCHAR(120) NULL,
         ust_id VARCHAR(40) NULL, website VARCHAR(190) NULL, wechat VARCHAR(80) NULL,
-        segment VARCHAR(40) NULL, notiz TEXT NULL,
-        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
+        segment VARCHAR(40) NULL, kundennummer VARCHAR(30) NULL, betreuer VARCHAR(80) NULL,
+        zahlungsziel INT NULL, liefer_adresse VARCHAR(190) NULL, branche VARCHAR(80) NULL,
+        notiz TEXT NULL, angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_produkt (
         id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT NULL, form VARCHAR(30) NULL,
         idee TEXT NULL, konzept MEDIUMTEXT NULL, angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
@@ -63,7 +64,8 @@ function crmdemo_schema(): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_angebot_pos (
         id INT AUTO_INCREMENT PRIMARY KEY, angebot_id INT NOT NULL, bezeichnung VARCHAR(190) NOT NULL,
         menge DECIMAL(12,2) NOT NULL DEFAULT 1, einheit VARCHAR(20) NULL, preis_cent INT NOT NULL DEFAULT 0,
-        rezeptur_id INT NULL, sort INT NOT NULL DEFAULT 0)$eng");
+        typ VARCHAR(20) NOT NULL DEFAULT 'produkt', rezeptur_id INT NULL, rohstoff_id INT NULL,
+        sort INT NOT NULL DEFAULT 0)$eng");
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_rechnung (
         id INT AUTO_INCREMENT PRIMARY KEY, nummer VARCHAR(30) NULL, kunde_id INT NULL, angebot_id INT NULL,
         waehrung VARCHAR(3) NOT NULL DEFAULT 'EUR', netto_cent INT NOT NULL DEFAULT 0,
@@ -86,6 +88,11 @@ function crmdemo_schema(): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_chat (
         id INT AUTO_INCREMENT PRIMARY KEY, rolle VARCHAR(20) NULL, frage TEXT NULL, antwort MEDIUMTEXT NULL,
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
+    // KI-COA/Spec-Reader: eingelesenes Lieferanten-Dokument -> Kunden-COA (DE/EN).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_coa (
+        id INT AUTO_INCREMENT PRIMARY KEY, rohstoff_id INT NULL, typ VARCHAR(10) NOT NULL DEFAULT 'coa',
+        sprache VARCHAR(5) NOT NULL DEFAULT 'de', produkt VARCHAR(190) NULL, charge VARCHAR(60) NULL,
+        daten MEDIUMTEXT NULL, quelle MEDIUMTEXT NULL, angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
     // Additive Migration: aus der frueheren MVP-Version fehlende Spalten ergaenzen.
     if (function_exists('ensure_column')) {
         ensure_column('crmdemo_kunde', 'sprache',  "VARCHAR(5) NOT NULL DEFAULT 'de'");
@@ -104,13 +111,18 @@ function crmdemo_schema(): void {
         ensure_column('crmdemo_produktion', 'charge_nr', "VARCHAR(40) NULL");
         ensure_column('crmdemo_produktion', 'mhd', "DATE NULL");
         ensure_column('crmdemo_angebot_pos', 'rezeptur_id', "INT NULL");
+        ensure_column('crmdemo_angebot_pos', 'typ', "VARCHAR(20) NOT NULL DEFAULT 'produkt'");
+        ensure_column('crmdemo_angebot_pos', 'rohstoff_id', "INT NULL");
+        foreach (['kundennummer'=>"VARCHAR(30) NULL",'betreuer'=>"VARCHAR(80) NULL",'zahlungsziel'=>"INT NULL",
+                  'liefer_adresse'=>"VARCHAR(190) NULL",'branche'=>"VARCHAR(80) NULL"] as $c=>$d)
+            ensure_column('crmdemo_kunde', $c, $d);
     }
 }
 
 // --- Alle eigenen Tabellen (eine Quelle fuer Loeschen/Reset). ----------------
 function crmdemo_tabellen(): array {
     return ['crmdemo_charge_zutat','crmdemo_angebot_pos','crmdemo_angebot','crmdemo_rechnung',
-            'crmdemo_produktion','crmdemo_produkt','crmdemo_rezeptur','crmdemo_rohstoff_preis','crmdemo_rohstoff',
+            'crmdemo_produktion','crmdemo_produkt','crmdemo_rezeptur','crmdemo_coa','crmdemo_rohstoff_preis','crmdemo_rohstoff',
             'crmdemo_mail','crmdemo_chat','crmdemo_kunde'];
 }
 
@@ -159,6 +171,8 @@ function crmdemo_i18n(): array {
         'katalog'        => ['de'=>'Rohstoff-Katalog','en'=>'Material catalog','zh'=>'原料目录'],
         'rezepturen'     => ['de'=>'Rezeptur-Katalog','en'=>'Formulation catalog','zh'=>'配方目录'],
         'produktentwickler'=>['de'=>'Produktentwickler (KI)','en'=>'Product developer (AI)','zh'=>'产品开发（AI）'],
+        'coareader'      => ['de'=>'COA/Spec-Reader (KI)','en'=>'COA/Spec reader (AI)','zh'=>'COA/规格读取（AI）'],
+        'einstellungen'  => ['de'=>'Einstellungen','en'=>'Settings','zh'=>'设置'],
         'angebote'       => ['de'=>'Angebote','en'=>'Quotes','zh'=>'报价'],
         'rechnungen'     => ['de'=>'Rechnungen','en'=>'Invoices','zh'=>'发票'],
         'produktion'     => ['de'=>'Produktion','en'=>'Production','zh'=>'生产'],
@@ -274,6 +288,44 @@ function crmdemo_i18n(): array {
         'katalog_suche'  => ['de'=>'Katalog durchsuchen (Name, Kategorie, Zutat)','en'=>'Search catalog (name, category, ingredient)','zh'=>'搜索目录（名称、类别、成分）'],
         'in_katalog'     => ['de'=>'In den Rezeptur-Katalog speichern','en'=>'Save to formulation catalog','zh'=>'保存到配方目录'],
         'gespeichert'    => ['de'=>'Im Katalog','en'=>'In catalog','zh'=>'已在目录'],
+        // Positionstyp im Angebot
+        'typ'            => ['de'=>'Typ','en'=>'Type','zh'=>'类型'],
+        'einheit'        => ['de'=>'Einheit','en'=>'Unit','zh'=>'单位'],
+        'typ_produkt'    => ['de'=>'Fertigprodukt (Rezeptur)','en'=>'Finished product (formulation)','zh'=>'成品（配方）'],
+        'typ_rohstoff'   => ['de'=>'Rohstoff','en'=>'Raw material','zh'=>'原料'],
+        'typ_frei'       => ['de'=>'Freie Position','en'=>'Free item','zh'=>'自由项目'],
+        'plus_produkt'   => ['de'=>'+ Fertigprodukt','en'=>'+ Finished product','zh'=>'+ 成品'],
+        'plus_rohstoff'  => ['de'=>'+ Rohstoff','en'=>'+ Raw material','zh'=>'+ 原料'],
+        'plus_frei'      => ['de'=>'+ Freie Position','en'=>'+ Free item','zh'=>'+ 自由项目'],
+        'mg_je_einheit'  => ['de'=>'mg je Einheit','en'=>'mg per unit','zh'=>'每单位 mg'],
+        'zutat_zeile'    => ['de'=>'+ Rohstoff-Zeile','en'=>'+ ingredient row','zh'=>'+ 原料行'],
+        // Profil / CRM
+        'bearbeiten'     => ['de'=>'Bearbeiten','en'=>'Edit','zh'=>'编辑'],
+        'kundennummer'   => ['de'=>'Kundennummer','en'=>'Customer no.','zh'=>'客户编号'],
+        'betreuer'       => ['de'=>'Betreuer (Verkauf)','en'=>'Account manager','zh'=>'客户经理'],
+        'zahlungsziel'   => ['de'=>'Zahlungsziel (Tage)','en'=>'Payment terms (days)','zh'=>'付款期限（天）'],
+        'liefer_adresse' => ['de'=>'Lieferadresse','en'=>'Delivery address','zh'=>'收货地址'],
+        'branche'        => ['de'=>'Branche','en'=>'Industry','zh'=>'行业'],
+        'stammdaten'     => ['de'=>'Stammdaten','en'=>'Master data','zh'=>'主数据'],
+        // COA/Spec-Reader
+        'coa_intro'      => ['de'=>'Lieferanten-COA oder -Spezifikation (auch chinesisch) einfügen. Die KI liest die Werte aus, legt den Rohstoff an, falls er fehlt, und erzeugt ein Kunden-COA in der gewählten Sprache.','en'=>'Paste a supplier COA or specification (Chinese too). The AI extracts the values, creates the material if missing, and produces a customer COA in the chosen language.','zh'=>'粘贴供应商 COA 或规格（中文亦可）。AI 会提取数值，若原料不存在则创建，并生成所选语言的客户 COA。'],
+        'quelle_text'    => ['de'=>'COA/Spec-Text','en'=>'COA/Spec text','zh'=>'COA/规格文本'],
+        'zielsprache'    => ['de'=>'Zielsprache (Kunde)','en'=>'Target language (customer)','zh'=>'目标语言（客户）'],
+        'auslesen'       => ['de'=>'Auslesen & Kunden-COA erstellen','en'=>'Extract & build customer COA','zh'=>'提取并生成客户 COA'],
+        'coa'            => ['de'=>'Kunden-COA','en'=>'Customer COA','zh'=>'客户 COA'],
+        'coa_liste'      => ['de'=>'Erstellte COAs','en'=>'Created COAs','zh'=>'已生成的 COA'],
+        'parameter'      => ['de'=>'Parameter','en'=>'Parameter','zh'=>'参数'],
+        'wert'           => ['de'=>'Wert','en'=>'Result','zh'=>'结果'],
+        'grenzwert'      => ['de'=>'Spezifikation','en'=>'Specification','zh'=>'规格'],
+        'methode'        => ['de'=>'Methode','en'=>'Method','zh'=>'方法'],
+        'coa_neu_rohstoff'=>['de'=>'Neuer Rohstoff angelegt','en'=>'New material created','zh'=>'已创建新原料'],
+        'coa_bestehend'  => ['de'=>'Bestehender Rohstoff erkannt','en'=>'Existing material matched','zh'=>'匹配到已有原料'],
+        // Settings
+        'set_briefkopf'  => ['de'=>'Briefkopf','en'=>'Letterhead','zh'=>'抬头'],
+        'set_standard'   => ['de'=>'Standardwerte','en'=>'Defaults','zh'=>'默认值'],
+        'std_waehrung'   => ['de'=>'Standard-Währung','en'=>'Default currency','zh'=>'默认货币'],
+        'std_ust'        => ['de'=>'Standard-USt (%)','en'=>'Default VAT (%)','zh'=>'默认增值税 (%)'],
+        'std_zahlungsziel'=>['de'=>'Standard-Zahlungsziel (Tage)','en'=>'Default payment terms (days)','zh'=>'默认付款期限（天）'],
         'frage'          => ['de'=>'Frage zum Rohstoff','en'=>'Material question','zh'=>'原料问题'],
         'senden'         => ['de'=>'Senden','en'=>'Send','zh'=>'发送'],
         'logo'           => ['de'=>'Logo','en'=>'Logo','zh'=>'标志'],
@@ -299,11 +351,11 @@ function cd_rolle(): string {
 // Welche Module darf eine Rolle sehen?
 function cd_rechte(string $rolle): array {
     $map = [
-        'verkauf'     => ['dashboard','kunden','katalog','rezepturen','produktentwickler','angebote','rechnungen','chat'],
-        'pricing'     => ['dashboard','katalog','rezepturen','angebote','chat'],
+        'verkauf'     => ['dashboard','kunden','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','chat'],
+        'pricing'     => ['dashboard','katalog','rezepturen','coareader','angebote','chat'],
         'produktion'  => ['dashboard','produktion','katalog','rezepturen'],
         'buchhaltung' => ['dashboard','rechnungen','finanzen','kunden'],
-        'admin'       => ['dashboard','kunden','katalog','rezepturen','produktentwickler','angebote','rechnungen','produktion','chat','finanzen','firma'],
+        'admin'       => ['dashboard','kunden','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','produktion','chat','finanzen','einstellungen'],
     ];
     return $map[$rolle] ?? $map['admin'];
 }
@@ -330,6 +382,27 @@ function cd_absender(): array {
     ];
 }
 
+// --- Standardwerte (einmalige Einstellungen). --------------------------------
+function cd_std(string $k, string $default = ''): string {
+    static $def = ['std_waehrung'=>'EUR','std_ust'=>'19','std_zahlungsziel'=>'14'];
+    return cd_meta_get($k, $default !== '' ? $default : ($def[$k] ?? ''));
+}
+
+// --- KI-COA/Spec-Reader: Lieferantentext -> strukturierte Werte in Zielsprache. -
+// Gibt ['ok'=>bool,'daten'=>[...]] zurueck. Ohne API-Schluessel: ok=false.
+function cd_coa_extract(string $text, string $ziel): array {
+    require_once __DIR__ . '/ki.php';
+    if (!function_exists('ki_bereit') || !ki_bereit()) return ['ok'=>false, 'daten'=>null];
+    $lang = ['de'=>'Deutsch','en'=>'Englisch','zh'=>'Chinesisch'][$ziel] ?? 'Deutsch';
+    $sys = 'Du liest Analysenzertifikate (COA) und Spezifikationen von Rohstoff-Lieferanten für '
+         . 'Nahrungsergänzung, auch auf Chinesisch. Übersetze Parameter-Bezeichnungen nach ' . $lang . '. '
+         . 'Gib NUR JSON: {"produkt":"","charge":"","kategorie":"","wirkstoff":"","gehalt":"","herkunft":"",'
+         . '"analytik":[{"parameter":"","wert":"","grenzwert":"","methode":""}]}. '
+         . 'Zahlen und Einheiten unverändert übernehmen. Nichts erfinden – fehlende Felder leer lassen.';
+    $r = ki_json('COA/Spezifikation:' . "\n" . mb_substr($text, 0, 6000), ['system'=>$sys]);
+    return ['ok'=>!empty($r['ok']) && !empty($r['daten']), 'daten'=>$r['daten'] ?? null];
+}
+
 // --- Eigenständiges Layout (nutzt app.css, eigenes Menü, Sprach-/Rollenwahl). -
 function cd_url(string $m, array $extra = []): string {
     $q = array_merge(['p' => 'crmdemo', 'm' => $m], $extra);
@@ -352,7 +425,7 @@ function cd_head(string $titel): void {
 }
 function cd_shell_start(string $aktiv): void {
     $rolle = cd_rolle();
-    $menu = ['dashboard','kunden','katalog','rezepturen','produktentwickler','angebote','rechnungen','produktion','chat','finanzen','firma'];
+    $menu = ['dashboard','kunden','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','produktion','chat','finanzen','einstellungen'];
     $l = cd_lang();
     echo '<div class="bx-shell"><aside class="bx-side">'
        . '<div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="" class="bx-logo"><span class="bx-ver">' . h(cd_t('app')) . '</span></div>'

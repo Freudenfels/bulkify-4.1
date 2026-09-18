@@ -5,9 +5,13 @@ Eigenständige App unter `?p=crmdemo&m=<modul>`. Nutzt nur `crmdemo_*`-Tabellen 
 
 ## Module
 - **dashboard** – Kennzahlen + Schnellzugriff (rollenabhängig).
-- **kunden** – Liste → **tiefes Profil** (Stammdaten inkl. Sprache/Währung/Adresse/WeChat),
-  **Verlauf** (Angebote + Rechnungen + Produktion des Kunden), **simuliertes Postfach** (ein/aus).
-  Anlegen/Bearbeiten über `cd_kunde_form()`.
+- **kunden** – Liste → **tiefes Profil** (Stammdaten inkl. Kundennummer, Betreuer, Zahlungsziel,
+  Branche, Liefer-/Rechnungsadresse, Sprache/Währung/WeChat), **Verlauf** (alte Angebote + Rechnungen
+  + Produktion des Kunden), **simuliertes Postfach** (ein/aus). Prominenter **Bearbeiten**-Button →
+  `?edit=1`; Anlegen/Bearbeiten über `cd_kunde_form()`. Gedacht als Kopie des echten bulkify-Kundenprofils.
+- **coareader** – **KI-COA/Spec-Reader**: Lieferanten-COA/Spezifikation (auch chinesisch) einfügen →
+  KI liest Werte aus (`cd_coa_extract`), legt den Rohstoff an, falls er fehlt, und erzeugt ein
+  **Kunden-COA in DE/EN** (DIN-A4-Bildschirmansicht, `crmdemo_coa`). Ohne API-Schlüssel: Hinweis, läuft auf beta.
 - **katalog** – Rohstoff-Katalog mit **KI-/lokaler Ähnlichkeitssuche** (Feld oben, z. B.
   „Ashwagandha 350 mg 5%") und Detail mit **Preishistorie** (Pricing/Admin darf Preise erfassen).
 - **rezepturen** – **geteilter Rezeptur-Katalog** (fertige Formulierungen). Durchsuchbar (Name/
@@ -21,6 +25,11 @@ Eigenständige App unter `?p=crmdemo&m=<modul>`. Nutzt nur `crmdemo_*`-Tabellen 
   Annahme erzeugt automatisch die Rechnung. **Positionen aus Rezeptur wählbar** („Aus Rezeptur
   übernehmen") oder neue Positionen per Haken **„In Katalog aufnehmen"** – so wächst der geteilte
   Rezeptur-Katalog, und jede Verwendung erhöht den Zähler der Rezeptur (`angebot_pos.rezeptur_id`).
+  **Positionstyp** je Zeile: Fertigprodukt (nach Rezeptur, Einheit „Stk.") · Rohstoff (aus Katalog,
+  Einheit „kg") · freie Position. Einheit wird serverseitig aus `angebot_pos.typ` abgeleitet.
+- **einstellungen** (nur Admin, Reiter) – Einmal-Einstellungen: **Briefkopf** (Absender + Logo-Upload)
+  und **Standardwerte** (Standard-Währung, Standard-USt, Standard-Zahlungsziel), gespeichert in
+  `crmdemo_meta` (`cd_std()`), greifen als Vorgabe bei Kunden/Rechnungen.
 - **rechnungen** – Liste + Status (offen/bezahlt); Nummer öffnet den **DIN-A4-Beleg**.
 - **produktion** – Chargen (Nr. + MHD) → Detail mit **Rückverfolgbarkeit** (eingesetzte Rohstoff-Lots
   aus dem Katalog). Statuskette geplant → in Produktion → fertig.
