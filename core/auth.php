@@ -96,7 +96,6 @@ function route_rollen_map(): array {
         'einstellungen'      => ['admin', 'finance', 'production'],
         'benutzer'           => ['admin'],
         'benutzer_detail'    => ['admin'],
-        'v3_reparatur'       => ['admin'],   // TEMPORÄR (v3-Migration) – nach Abschluss entfernen
     ];
 }
 
