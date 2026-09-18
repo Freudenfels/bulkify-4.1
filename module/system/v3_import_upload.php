@@ -62,6 +62,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($db->connect_errno) $fehler = 'DB-Verbindung fehlgeschlagen: ' . $db->connect_error;
                 else {
                     $db->set_charset('utf8mb4');
+                    // Sauberer Neustart: einen evtl. halb geladenen v3imp_-Stand vorher wegräumen
+                    // (Exporte ohne „DROP TABLE" würden sonst an „already exists" scheitern).
+                    $db->query("SET FOREIGN_KEY_CHECKS=0");
+                    if ($alt = $db->query("SELECT table_name FROM information_schema.tables WHERE table_schema='" . $db->real_escape_string(DB_NAME) . "' AND table_name LIKE 'v3imp\\_%'")) {
+                        while ($row = $alt->fetch_row()) $db->query('DROP TABLE IF EXISTS `' . $row[0] . '`');
+                        $alt->free();
+                    }
                     $ok = $db->multi_query($sql); $err = '';
                     if ($ok) { do { if ($r = $db->store_result()) $r->free(); } while ($db->more_results() && $db->next_result()); }
                     if ($db->errno) $err = $db->error;
