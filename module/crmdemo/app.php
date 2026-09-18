@@ -323,6 +323,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ---------------- Render ----------------
+// Druck-/Download-Ansicht eines Belegs: eigene Seite ohne App-Shell (A4-Druck-CSS).
+if (in_array($m, ['angebote','rechnungen'], true) && ($_GET['beleg'] ?? '') === '1' && ($_GET['druck'] ?? '') === '1' && cd_darf($m)) {
+    $eurP = fn($c, $w='EUR') => cd_money((int)$c, $w);
+    $did = (int)($_GET['id'] ?? 0);
+    if ($m === 'angebote') {
+        $a = one("SELECT a.*, k.firma, k.sprache, k.adresse, k.plz, k.ort, k.land AS kland, k.betreuer_id FROM crmdemo_angebot a LEFT JOIN crmdemo_kunde k ON k.id=a.kunde_id WHERE a.id=?", [$did]);
+        if ($a) { cd_beleg_print('angebot', $a, all("SELECT * FROM crmdemo_angebot_pos WHERE angebot_id=? ORDER BY sort,id", [$did]), $eurP); exit; }
+    } else {
+        $r = one("SELECT r.*, k.firma, k.sprache, k.adresse, k.plz, k.ort, k.land AS kland, k.ust_id, k.betreuer_id FROM crmdemo_rechnung r LEFT JOIN crmdemo_kunde k ON k.id=r.kunde_id WHERE r.id=?", [$did]);
+        if ($r) { $posP = $r['angebot_id'] ? all("SELECT * FROM crmdemo_angebot_pos WHERE angebot_id=? ORDER BY sort,id", [(int)$r['angebot_id']]) : []; cd_beleg_print('rechnung', $r, $posP, $eurP); exit; }
+    }
+}
+
 cd_head(cd_t($m));
 cd_shell_start($m);
 $eur = fn($c, $w='EUR') => cd_money((int)$c, $w);
@@ -1120,22 +1133,54 @@ function cd_kunde_form(?array $k, callable $mnf): void {
 <?php }
 
 // DIN-A4-Beleg in Kundensprache (nur Ansicht, kein Download).
+// In-Shell-Ansicht des Belegs (mit Toolbar + Download-Knopf).
 function cd_beleg_a4(string $typ, array $doc, array $pos, callable $eur): void {
+    $backM = $typ === 'rechnung' ? 'rechnungen' : 'angebote'; ?>
+    <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+      <a class="btn btn-ghost btn-sm" href="<?= h(cd_url($backM, ['id'=>(int)$doc['id']])) ?>">← <?= h(cd_t('zurueck')) ?></a>
+      <a class="btn btn-primary btn-sm" href="<?= h(cd_url($backM, ['id'=>(int)$doc['id'],'beleg'=>1,'druck'=>1])) ?>" target="_blank" rel="noopener"><?= h(cd_t('herunterladen')) ?></a>
+    </div>
+    <?php cd_beleg_sheet($typ, $doc, $pos, $eur);
+}
+
+// Standalone-Druckseite (eigene HTML-Seite, A4-Druck-CSS, CJK-Fonts) -> "Als PDF speichern".
+function cd_beleg_print(string $typ, array $doc, array $pos, callable $eur): void {
+    $lang = in_array($doc['sprache'] ?? 'de', ['de','en','zh'], true) ? $doc['sprache'] : 'de';
+    $backM = $typ === 'rechnung' ? 'rechnungen' : 'angebote';
+    $titel = ($typ === 'rechnung' ? cd_tl('beleg_rechnung',$lang) : cd_tl('beleg_angebot',$lang)) . ' ' . (string)($doc['nummer'] ?? '');
+    echo '<!doctype html><html lang="' . h($lang) . '"><head><meta charset="utf-8">'
+       . '<meta name="viewport" content="width=device-width, initial-scale=1"><title>' . h($titel) . '</title>'
+       . '<style>'
+       . '*{box-sizing:border-box} html,body{margin:0;padding:0;background:#eceef0;color:#111;'
+       . "font-family:'Segoe UI',Arial,'Noto Sans SC','Microsoft YaHei','PingFang SC','Hiragino Sans GB',sans-serif}"
+       . '.cd-a4{background:#fff;color:#111;max-width:820px;margin:20px auto;padding:44px 52px;box-shadow:0 1px 12px rgba(0,0,0,.12)}'
+       . '.cd-a4 table{width:100%;border-collapse:collapse}.cd-a4 h1{font-size:22px;letter-spacing:2px;margin:0}'
+       . '.cd-a4 .cd-th{border-bottom:2px solid #222}.cd-a4 td,.cd-a4 th{padding:7px 6px;font-size:13px}'
+       . '.cd-bar{max-width:820px;margin:16px auto 0;display:flex;gap:10px;justify-content:flex-end}'
+       . '.cd-bar a,.cd-bar button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid #cfd4d8;background:#fff;color:#111;text-decoration:none;cursor:pointer}'
+       . '.cd-bar .pri{background:#2f8f5b;color:#fff;border-color:#2f8f5b}'
+       . '@page{size:A4;margin:12mm}'
+       . '@media print{.cd-bar{display:none!important}body{background:#fff}.cd-a4{box-shadow:none;margin:0;max-width:none;padding:0}}'
+       . '</style></head><body>'
+       . '<div class="cd-bar"><a href="' . h(cd_url($backM, ['id'=>(int)$doc['id'],'beleg'=>1])) . '">← ' . h(cd_t('zurueck')) . '</a>'
+       . '<button class="pri" onclick="window.print()">' . h(cd_t('drucken')) . '</button></div>';
+    cd_beleg_sheet($typ, $doc, $pos, $eur);
+    echo '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},350);});</script>'
+       . '</body></html>';
+}
+
+// Reines A4-Blatt (ohne Toolbar/Shell) – von Ansicht und Druckseite genutzt.
+function cd_beleg_sheet(string $typ, array $doc, array $pos, callable $eur): void {
     $lang = in_array($doc['sprache'] ?? 'de', ['de','en','zh'], true) ? $doc['sprache'] : 'de';
     $abs = cd_absender(); $logo = cd_logo_datauri();
     $mit = cd_mitarbeiter((int)($doc['betreuer_id'] ?? 0));
     $wae = (string)($doc['waehrung'] ?? 'EUR');
     $titelKey = $typ === 'rechnung' ? 'beleg_rechnung' : 'beleg_angebot';
-    $backM = $typ === 'rechnung' ? 'rechnungen' : 'angebote';
     $netto = (int)($doc['netto_cent'] ?? 0);
     $ust = isset($doc['ust_prozent']) ? (float)$doc['ust_prozent'] : 0.0;
     $brutto = isset($doc['brutto_cent']) ? (int)$doc['brutto_cent'] : $netto;
     $mnf = fn($v) => rtrim(rtrim(number_format((float)$v, 2, ',', '.'), '0'), ',');
     ?>
-    <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
-      <a class="btn btn-ghost btn-sm" href="<?= h(cd_url($backM, ['id'=>(int)$doc['id']])) ?>">← <?= h(cd_t('zurueck')) ?></a>
-      <span class="muted" style="font-size:12px"><?= h(cd_tl('ansicht_hinweis',$lang)) ?></span>
-    </div>
     <div class="cd-a4">
       <table style="margin-bottom:22px"><tr>
         <td style="vertical-align:top"><?php if ($logo): ?><img src="<?= h($logo) ?>" alt="" style="max-height:52px;max-width:200px"><?php else: ?><strong style="font-size:16px"><?= h($abs['name']) ?></strong><?php endif; ?></td>

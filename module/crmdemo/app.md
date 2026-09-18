@@ -46,10 +46,13 @@ Eigenständige App unter `?p=crmdemo&m=<modul>`. Nutzt nur `crmdemo_*`-Tabellen 
 - **finanzen** – Summen offen/bezahlt + Rechnungsliste.
 - **firma** – Briefkopf (Absender) + **Logo-Upload** (inline base64), nur Admin. Speist die A4-Belege.
 
-## DIN-A4-Beleg (`cd_beleg_a4`)
+## DIN-A4-Beleg (`cd_beleg_sheet` / `cd_beleg_a4` / `cd_beleg_print`)
 `?p=crmdemo&m=angebote|rechnungen&id=<id>&beleg=1` rendert Angebot/Rechnung als A4-Blatt **in der
-Sprache des Kunden** (`kunde.sprache`), mit Logo/Absender aus dem Briefkopf, Netto/USt/Brutto.
-Nur Ansicht – bewusst kein Download/PDF in der Demo.
+Sprache des Kunden** (`kunde.sprache`), mit Logo/Absender, Netto/USt/Brutto, Beleg-Angaben und
+Unterschrift/Stempel des zugeordneten Mitarbeiters. Das reine Blatt liefert `cd_beleg_sheet()`.
+**Herunterladen:** Knopf „Herunterladen (PDF)" öffnet `&druck=1` → `cd_beleg_print()` gibt eine
+**eigenständige A4-Druckseite** (ohne App-Shell, `@page A4`, CJK-Fonts, Auto-`window.print()`) aus –
+der Nutzer speichert sie im Druckdialog als PDF. Funktioniert auch für chinesische Belege (报价单/发票).
 
 ## Rollen (Demo-Umschalter oben)
 Verkauf · Pricing/Sourcing · Produktion · Buchhaltung · Admin. `cd_gate()` sperrt Module, die die

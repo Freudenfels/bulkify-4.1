@@ -9,7 +9,7 @@
 //
 // ISOLATION: greift AUSSCHLIESSLICH auf eigene Tabellen `crmdemo_*` zu – kein Mix
 // mit echten bulkify-Daten. Vollstaendig loeschbar (crmdemo_loeschen()).
-// ANSICHT-ONLY: keine Downloads/Exporte; Belege werden nur am Bildschirm gezeigt.
+// Belege (Angebot/Rechnung) sind als A4-Druckseite herunterladbar (Als PDF speichern).
 // SPRACHE: Deutsch / English / 中文 umschaltbar (cd_lang / cd_t).
 // ============================================================================
 require_once __DIR__ . '/db.php';
@@ -259,6 +259,8 @@ function crmdemo_i18n(): array {
         'nummer'         => ['de'=>'Nummer','en'=>'No.','zh'=>'编号'],
         'summe'          => ['de'=>'Summe','en'=>'Total','zh'=>'合计'],
         'beleg_ansehen'  => ['de'=>'Beleg ansehen','en'=>'View document','zh'=>'查看单据'],
+        'herunterladen'  => ['de'=>'Herunterladen (PDF)','en'=>'Download (PDF)','zh'=>'下载 (PDF)'],
+        'drucken'        => ['de'=>'Drucken / Als PDF speichern','en'=>'Print / Save as PDF','zh'=>'打印 / 另存为 PDF'],
         'rechnung_aus'   => ['de'=>'Rechnung erstellen','en'=>'Create invoice','zh'=>'生成发票'],
         'kalk_anfragen'  => ['de'=>'Kalkulation anfragen','en'=>'Request pricing','zh'=>'申请核价'],
         'kalk_uebernehmen'=>['de'=>'Preise übernehmen','en'=>'Apply prices','zh'=>'应用价格'],
