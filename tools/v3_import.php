@@ -15,11 +15,15 @@ init_schema();   // stellt alle Tabellen sicher (u. a. produkt_kundenpreis, reze
 
 $v3quelle = $argv[1] ?? '';
 $WRITE  = in_array('--write', $argv, true);
-if ($v3quelle === '') { fwrite(STDERR, "Quelle fehlt. Aufruf: php tools/v3_import.php <board.sqlite | mysql-DB-Name> [--write]\n"); exit(1); }
+// Die Browser-Upload-Seite (module/system/v3_import_upload.php) reicht ihre eigene PDO-Verbindung
+// über $GLOBALS['V3_PDO'] herein (beliebige Ziel-DB samt Zugangsdaten) und bindet dieses Skript ein.
+$INJECT = isset($GLOBALS['V3_PDO']) && $GLOBALS['V3_PDO'] instanceof PDO;
+if (!$INJECT && $v3quelle === '') { fwrite(STDERR, "Quelle fehlt. Aufruf: php tools/v3_import.php <board.sqlite | mysql-DB-Name> [--write]\n"); exit(1); }
 
-// Quelle: entweder eine SQLite-Datei (alter Stand) ODER ein MySQL-DB-Name (aktueller Dump, lokal eingespielt).
+// Quelle: injizierte PDO, ODER eine SQLite-Datei, ODER ein MySQL-DB-Name (App-Zugangsdaten).
 try {
-    if (is_file($v3quelle)) { $v3 = new PDO('sqlite:' . $v3quelle); $v3treiber = 'sqlite'; }
+    if ($INJECT) { $v3 = $GLOBALS['V3_PDO']; $v3treiber = 'inject'; }
+    elseif (is_file($v3quelle)) { $v3 = new PDO('sqlite:' . $v3quelle); $v3treiber = 'sqlite'; }
     else { $v3 = new PDO('mysql:host=' . DB_HOST . ';dbname=' . $v3quelle . ';charset=utf8mb4', DB_USER, DB_PASS); $v3treiber = 'mysql'; }
     $v3->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (Throwable $e) { fwrite(STDERR, "v3-Quelle nicht lesbar (" . $v3quelle . "): " . $e->getMessage() . "\n"); exit(1); }

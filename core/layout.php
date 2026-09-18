@@ -31,7 +31,7 @@ function bx_nav(): array {
         'Lager'        => ['lager' => 'Warenlager', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'freigaben' => 'Freigaben', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
         'Einkauf'      => ['bedarf' => 'Einkaufsbedarf', 'einkaufsliste' => 'Einkaufsliste', 'einkauf' => 'Bestellungen', 'lieferanten' => 'Lieferanten', 'lieferant_preise' => 'Lieferanten-Preise', 'lief_preisliste' => 'EK-Preisliste', 'ek_import' => 'EK-Preise (Import)'],
         'Buchhaltung'  => ['rechnungen' => 'Rechnungen', 'buchhaltung' => 'Belege'],
-        'System'       => ['einstellungen' => 'Einstellungen', 'benutzer' => 'Benutzer', 'app' => 'App aufs Handy'],
+        'System'       => ['einstellungen' => 'Einstellungen', 'benutzer' => 'Benutzer', 'v3_import_upload' => 'v3 neu einlesen (Upload)', 'app' => 'App aufs Handy'],
     ];
 }
 
