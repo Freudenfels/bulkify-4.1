@@ -462,70 +462,123 @@ elseif ($m === 'kunden'):
       <p class="bx-sub"><?= $k['kundennummer']?h((string)$k['kundennummer']).' · ':'' ?><?= h((string)$k['segment']) ?> · <?= h(strtoupper((string)$k['sprache'])) ?> · <?= h((string)$k['waehrung']) ?><?= $k['land']?' · '.h((string)$k['land']):'' ?><?= $k['betreuer_name']?' · '.h(cd_t('zugeordnet')).': '.h((string)$k['betreuer_name']):'' ?></p>
       <?php if (!empty($k['fraud'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px"><?= h(cd_t('fraud_warnung')) ?></div><?php endif; ?>
 
-      <?php if (!$edit): ?>
-      <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('stammdaten')) ?></h2>
-        <div class="bx-grid">
-          <div><label class="muted"><?= h(cd_t('ansprechpartner')) ?></label><div><?= h((string)$k['ansprechpartner']) ?: '–' ?></div></div>
-          <div><label class="muted"><?= h(cd_t('email')) ?></label><div><?= h((string)$k['email']) ?: '–' ?></div></div>
-          <div><label class="muted"><?= h(cd_t('telefon')) ?></label><div><?= h((string)$k['telefon']) ?: '–' ?></div></div>
-          <div><label class="muted"><?= h(cd_t('wechat')) ?></label><div><?= h((string)$k['wechat']) ?: '–' ?></div></div>
-          <div><label class="muted"><?= h(cd_t('branche')) ?></label><div><?= h((string)$k['branche']) ?: '–' ?></div></div>
-          <div><label class="muted"><?= h(cd_t('zugeordnet')) ?></label><div><?= h((string)$k['betreuer_name']) ?: '–' ?></div></div>
-          <div><label class="muted"><?= h(cd_t('adresse')) ?></label><div><?= h(trim(($k['adresse']?:'').' '.($k['plz']?:'').' '.($k['ort']?:''))) ?: '–' ?></div></div>
-          <div><label class="muted"><?= h(cd_t('liefer_adresse')) ?></label><div><?= h((string)$k['liefer_adresse']) ?: '–' ?></div></div>
-          <div><label class="muted"><?= h(cd_t('zahlungsziel')) ?></label><div><?= $k['zahlungsziel']!==null ? (int)$k['zahlungsziel'].' d' : '–' ?></div></div>
-          <div><label class="muted"><?= h(cd_t('ust_id')) ?></label><div><?= h((string)$k['ust_id']) ?: '–' ?></div></div>
-          <div><label class="muted"><?= h(cd_t('website')) ?></label><div><?= h((string)$k['website']) ?: '–' ?></div></div>
-        </div>
-        <?php if ($k['notiz']): ?><div style="margin-top:14px"><label class="muted" style="font-size:12px"><?= h(cd_t('notiz')) ?></label><div><?= nl2br(h((string)$k['notiz'])) ?></div></div><?php endif; ?>
-        <?php // Zuordnung: nur Admin, in eigener kompakter Zeile ?>
-        <?php if ($rolle === 'admin'): $mits = cd_mitarbeiter_list(); ?>
-        <form method="post" class="bx-row" style="margin:14px 0 0;gap:8px;align-items:center;flex-wrap:wrap"><input type="hidden" name="aktion" value="kunde_zuordnen"><input type="hidden" name="id" value="<?= $kid ?>">
-          <label class="muted" style="font-size:13px;margin:0"><?= h(cd_t('zuordnen')) ?></label>
-          <select name="betreuer_id" style="max-width:220px;padding:5px 10px;font-size:14px"><option value="">– <?= h(cd_t('zugeordnet')) ?> –</option><?php foreach ($mits as $mi): ?><option value="<?= (int)$mi['id'] ?>"<?= (int)$k['betreuer_id']===(int)$mi['id']?' selected':'' ?>><?= h($mi['name']) ?></option><?php endforeach; ?></select>
-          <button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('speichern')) ?></button>
-        </form>
-        <?php endif; ?>
-        <div class="bx-row" style="gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap">
-          <a class="btn btn-primary btn-sm" href="<?= h(cd_url('kunden', ['id'=>$kid,'edit'=>1])) ?>"><?= h(cd_t('bearbeiten')) ?></a>
-          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="kunde_fraud"><input type="hidden" name="id" value="<?= $kid ?>"><input type="hidden" name="fraud" value="<?= !empty($k['fraud'])?'0':'1' ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= !empty($k['fraud'])?h(cd_t('fraud_aufheben')):h(cd_t('fraud_markieren')) ?></button></form>
-          <form method="post" style="margin:0" onsubmit="return confirm('<?= h(cd_t('loeschen')) ?>?')"><input type="hidden" name="aktion" value="kunde_del"><input type="hidden" name="id" value="<?= $kid ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('loeschen')) ?></button></form>
-        </div>
+      <?php if (!$edit):
+        // Vorgaenge des Kunden einmal laden
+        $kAng = all("SELECT id,angelegt,nummer,titel,netto_cent,waehrung,status FROM crmdemo_angebot WHERE kunde_id=? ORDER BY id DESC", [$kid]);
+        $kRe  = all("SELECT id,angelegt,nummer,brutto_cent,waehrung,status FROM crmdemo_rechnung WHERE kunde_id=? ORDER BY id DESC", [$kid]);
+        $kPr  = all("SELECT id,angelegt,charge_nr,titel,menge,status FROM crmdemo_produktion WHERE kunde_id=? ORDER BY id DESC", [$kid]);
+        $kMail= all("SELECT * FROM crmdemo_mail WHERE kunde_id=? ORDER BY id DESC", [$kid]);
+        $wae = (string)$k['waehrung']; $bez=0; $off=0;
+        foreach ($kRe as $r) { if ($r['status']==='bezahlt') $bez += (int)$r['brutto_cent']; else $off += (int)$r['brutto_cent']; }
+        $seit = scalar("SELECT MIN(angelegt) FROM crmdemo_angebot WHERE kunde_id=?", [$kid]) ?: $k['angelegt'];
+        // Klickbare Tabellen je Vorgangstyp
+        $tblAng = function(array $list) use ($eur,$badgeA,$mnf) { ?>
+          <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('datum')) ?></th><th><?= h(cd_t('nummer')) ?></th><th><?= h(cd_t('titel')) ?></th><th class="bx-num"><?= h(cd_t('netto')) ?></th><th><?= h(cd_t('status')) ?></th></tr></thead><tbody>
+          <?php if(!$list): ?><tr><td colspan="5" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
+          foreach($list as $r): $u=cd_url('angebote',['id'=>(int)$r['id']]); ?><tr class="cd-click" onclick="location.href='<?= h($u) ?>'"><td class="muted"><?= h(substr((string)$r['angelegt'],0,10)) ?></td><td><a href="<?= h($u) ?>" onclick="event.stopPropagation()"><?= h((string)$r['nummer']) ?></a></td><td><?= h((string)$r['titel']) ?></td><td class="bx-num"><?= $eur($r['netto_cent'],$r['waehrung']) ?></td><td><?= $badgeA($r['status']) ?></td></tr><?php endforeach; ?>
+          </tbody></table></div>
+        <?php };
+        $tblRe = function(array $list) use ($eur,$badgeR) { ?>
+          <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('datum')) ?></th><th><?= h(cd_t('nummer')) ?></th><th class="bx-num"><?= h(cd_t('brutto')) ?></th><th><?= h(cd_t('status')) ?></th></tr></thead><tbody>
+          <?php if(!$list): ?><tr><td colspan="4" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
+          foreach($list as $r): $u=cd_url('rechnungen',['id'=>(int)$r['id'],'beleg'=>1]); ?><tr class="cd-click" onclick="location.href='<?= h($u) ?>'"><td class="muted"><?= h(substr((string)$r['angelegt'],0,10)) ?></td><td><a href="<?= h($u) ?>" onclick="event.stopPropagation()"><?= h((string)$r['nummer']) ?></a></td><td class="bx-num"><?= $eur($r['brutto_cent'],$r['waehrung']) ?></td><td><?= $badgeR($r['status']) ?></td></tr><?php endforeach; ?>
+          </tbody></table></div>
+        <?php };
+        $tblPr = function(array $list) use ($badgeP) { ?>
+          <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('datum')) ?></th><th><?= h(cd_t('charge')) ?></th><th><?= h(cd_t('titel')) ?></th><th class="bx-num"><?= h(cd_t('menge')) ?></th><th><?= h(cd_t('status')) ?></th></tr></thead><tbody>
+          <?php if(!$list): ?><tr><td colspan="5" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
+          foreach($list as $r): $u=cd_url('produktion',['id'=>(int)$r['id']]); ?><tr class="cd-click" onclick="location.href='<?= h($u) ?>'"><td class="muted"><?= h(substr((string)$r['angelegt'],0,10)) ?></td><td><a href="<?= h($u) ?>" onclick="event.stopPropagation()"><?= h((string)$r['charge_nr']) ?></a></td><td><?= h((string)$r['titel']) ?></td><td class="bx-num"><?= (int)$r['menge'] ?></td><td><?= $badgeP($r['status']) ?></td></tr><?php endforeach; ?>
+          </tbody></table></div>
+        <?php }; ?>
+
+      <div class="bx-cards">
+        <div class="bx-card"><div class="k"><?= h(cd_t('status')) ?></div><div class="v"><?= !empty($k['fraud']) ? bx_badge(cd_t('fraud'),'warn') : bx_badge(cd_t('aktiv'),'ok') ?></div></div>
+        <div class="bx-card"><div class="k"><?= h(cd_t('umsatz')) ?></div><div class="v"><?= $eur($bez,$wae) ?></div></div>
+        <div class="bx-card"><div class="k"><?= h(cd_t('offene_posten')) ?></div><div class="v"<?= $off>0?' style="color:var(--warn,#b8860b)"':'' ?>><?= $eur($off,$wae) ?></div></div>
+        <div class="bx-card"><div class="k"><?= h(cd_t('angebote')) ?></div><div class="v"><?= count($kAng) ?></div></div>
+        <div class="bx-card"><div class="k"><?= h(cd_t('kunde_seit')) ?></div><div class="v"><?= $seit ? h(date('m.Y', strtotime((string)$seit))) : '–' ?></div></div>
+        <div class="bx-card"><div class="k"><?= h(cd_t('zugeordnet')) ?></div><div class="v"><?= h((string)$k['betreuer_name']) ?: '<span class="muted">–</span>' ?></div></div>
       </div>
 
-      <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('verlauf')) ?></h2>
-        <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('datum')) ?></th><th><?= h(cd_t('position')) ?></th><th class="bx-num"><?= h(cd_t('summe')) ?></th><th><?= h(cd_t('status')) ?></th></tr></thead><tbody>
-        <?php
-          $rows = [];
-          foreach (all("SELECT angelegt,nummer,titel,netto_cent,waehrung,status FROM crmdemo_angebot WHERE kunde_id=?", [$kid]) as $r)
-              $rows[] = [$r['angelegt'], cd_t('angebote').' '.$r['nummer'].' · '.$r['titel'], $eur($r['netto_cent'],$r['waehrung']), $badgeA($r['status'])];
-          foreach (all("SELECT angelegt,nummer,brutto_cent,waehrung,status FROM crmdemo_rechnung WHERE kunde_id=?", [$kid]) as $r)
-              $rows[] = [$r['angelegt'], cd_t('rechnungen').' '.$r['nummer'], $eur($r['brutto_cent'],$r['waehrung']), $badgeR($r['status'])];
-          foreach (all("SELECT angelegt,titel,charge_nr,menge,status FROM crmdemo_produktion WHERE kunde_id=?", [$kid]) as $r)
-              $rows[] = [$r['angelegt'], cd_t('produktion').' '.$r['charge_nr'].' · '.$r['titel'], (int)$r['menge'], $badgeP($r['status'])];
-          usort($rows, fn($a,$b)=>strcmp((string)$b[0],(string)$a[0]));
-          if (!$rows): ?><tr><td colspan="4" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
-          foreach ($rows as $r): ?><tr><td class="muted"><?= h(substr((string)$r[0],0,10)) ?></td><td><?= h((string)$r[1]) ?></td><td class="bx-num"><?= is_string($r[2])?$r[2]:h((string)$r[2]) ?></td><td><?= $r[3] ?></td></tr><?php endforeach; ?>
-        </tbody></table></div>
+      <div class="cd-tabbar" id="cdtabs">
+        <a href="#" data-cdtab="ueber" class="on"><?= h(cd_t('tab_ueber')) ?></a>
+        <a href="#" data-cdtab="ang"><?= h(cd_t('angebote')) ?> (<?= count($kAng) ?>)</a>
+        <a href="#" data-cdtab="re"><?= h(cd_t('rechnungen')) ?> (<?= count($kRe) ?>)</a>
+        <a href="#" data-cdtab="prod"><?= h(cd_t('produktion')) ?> (<?= count($kPr) ?>)</a>
+        <a href="#" data-cdtab="post"><?= h(cd_t('postfach')) ?> (<?= count($kMail) ?>)</a>
+        <a href="#" data-cdtab="stamm"><?= h(cd_t('stammdaten')) ?></a>
       </div>
 
-      <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('postfach')) ?></h2>
-        <?php $mails = all("SELECT * FROM crmdemo_mail WHERE kunde_id=? ORDER BY id DESC", [$kid]); if (!$mails): ?><p class="muted"><?= h(cd_t('keine_daten')) ?></p><?php endif;
-        foreach ($mails as $ml): ?>
-          <div style="border-left:3px solid <?= $ml['richtung']==='ein'?'var(--gruen,#2f8f5b)':'var(--line)' ?>;padding:4px 0 4px 10px;margin:8px 0">
-            <div class="bx-row" style="justify-content:space-between"><strong><?= h((string)$ml['betreff']) ?></strong><span class="muted" style="font-size:12px"><?= $ml['richtung']==='ein'?'⟵ '.h(cd_t('kunde')):'⟶ '.h(cd_t('r_verkauf')) ?> · <?= h(substr((string)$ml['angelegt'],0,16)) ?></span></div>
-            <?php if ($ml['text']): ?><div class="muted" style="font-size:13px;margin-top:2px"><?= nl2br(h((string)$ml['text'])) ?></div><?php endif; ?>
-          </div>
-        <?php endforeach; ?>
-        <form method="post" style="margin-top:10px"><input type="hidden" name="aktion" value="mail_add"><input type="hidden" name="kunde_id" value="<?= $kid ?>">
+      <section data-cdpanel="ueber">
+        <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('kontakt')) ?></h2>
           <div class="bx-grid">
-            <div class="bx-field"><label><?= h(cd_t('betreff')) ?></label><input type="text" name="betreff"></div>
-            <div class="bx-field"><label><?= h(cd_t('rolle')) ?></label><select name="richtung"><option value="ein"><?= h(cd_t('kunde')) ?> ⟶</option><option value="aus"><?= h(cd_t('r_verkauf')) ?> ⟶</option></select></div>
+            <div><label class="muted"><?= h(cd_t('ansprechpartner')) ?></label><div><?= h((string)$k['ansprechpartner']) ?: '–' ?></div></div>
+            <div><label class="muted"><?= h(cd_t('email')) ?></label><div><?= h((string)$k['email']) ?: '–' ?></div></div>
+            <div><label class="muted"><?= h(cd_t('telefon')) ?></label><div><?= h((string)$k['telefon']) ?: '–' ?></div></div>
+            <div><label class="muted"><?= h(cd_t('wechat')) ?></label><div><?= h((string)$k['wechat']) ?: '–' ?></div></div>
+            <div><label class="muted"><?= h(cd_t('adresse')) ?></label><div><?= h(trim(($k['adresse']?:'').' '.($k['plz']?:'').' '.($k['ort']?:''))) ?: '–' ?></div></div>
+            <div><label class="muted"><?= h(cd_t('zahlungsziel')) ?></label><div><?= $k['zahlungsziel']!==null ? (int)$k['zahlungsziel'].' d' : '–' ?></div></div>
           </div>
-          <div class="bx-field"><label><?= h(cd_t('notiz')) ?></label><textarea name="text" rows="2"></textarea></div>
-          <button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('senden')) ?></button>
-        </form>
-      </div>
+        </div>
+        <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('letzte_angebote')) ?></h2><?php $tblAng(array_slice($kAng,0,5)); ?></div>
+        <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('letzte_rechnungen')) ?></h2><?php $tblRe(array_slice($kRe,0,5)); ?></div>
+      </section>
+
+      <section data-cdpanel="ang" hidden><div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('angebote')) ?></h2><?php $tblAng($kAng); ?></div></section>
+      <section data-cdpanel="re" hidden><div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('rechnungen')) ?></h2><?php $tblRe($kRe); ?></div></section>
+      <section data-cdpanel="prod" hidden><div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('produktion')) ?></h2><?php $tblPr($kPr); ?></div></section>
+
+      <section data-cdpanel="post" hidden>
+        <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('postfach')) ?></h2>
+          <?php if (!$kMail): ?><p class="muted"><?= h(cd_t('keine_daten')) ?></p><?php endif;
+          foreach ($kMail as $ml): ?>
+            <div style="border-left:3px solid <?= $ml['richtung']==='ein'?'var(--gruen,#2f8f5b)':'var(--line)' ?>;padding:4px 0 4px 10px;margin:8px 0">
+              <div class="bx-row" style="justify-content:space-between"><strong><?= h((string)$ml['betreff']) ?></strong><span class="muted" style="font-size:12px"><?= $ml['richtung']==='ein'?'⟵ '.h(cd_t('kunde')):'⟶ '.h(cd_t('r_verkauf')) ?> · <?= h(substr((string)$ml['angelegt'],0,16)) ?></span></div>
+              <?php if ($ml['text']): ?><div class="muted" style="font-size:13px;margin-top:2px"><?= nl2br(h((string)$ml['text'])) ?></div><?php endif; ?>
+            </div>
+          <?php endforeach; ?>
+          <form method="post" style="margin-top:10px"><input type="hidden" name="aktion" value="mail_add"><input type="hidden" name="kunde_id" value="<?= $kid ?>">
+            <div class="bx-grid">
+              <div class="bx-field"><label><?= h(cd_t('betreff')) ?></label><input type="text" name="betreff"></div>
+              <div class="bx-field"><label><?= h(cd_t('rolle')) ?></label><select name="richtung"><option value="ein"><?= h(cd_t('kunde')) ?> ⟶</option><option value="aus"><?= h(cd_t('r_verkauf')) ?> ⟶</option></select></div>
+            </div>
+            <div class="bx-field"><label><?= h(cd_t('notiz')) ?></label><textarea name="text" rows="2"></textarea></div>
+            <button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('senden')) ?></button>
+          </form>
+        </div>
+      </section>
+
+      <section data-cdpanel="stamm" hidden>
+        <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('stammdaten')) ?></h2>
+          <div class="bx-grid">
+            <div><label class="muted"><?= h(cd_t('branche')) ?></label><div><?= h((string)$k['branche']) ?: '–' ?></div></div>
+            <div><label class="muted"><?= h(cd_t('segment')) ?></label><div><?= h((string)$k['segment']) ?: '–' ?></div></div>
+            <div><label class="muted"><?= h(cd_t('liefer_adresse')) ?></label><div><?= h((string)$k['liefer_adresse']) ?: '–' ?></div></div>
+            <div><label class="muted"><?= h(cd_t('ust_id')) ?></label><div><?= h((string)$k['ust_id']) ?: '–' ?></div></div>
+            <div><label class="muted"><?= h(cd_t('website')) ?></label><div><?= h((string)$k['website']) ?: '–' ?></div></div>
+            <div><label class="muted"><?= h(cd_t('sprache')) ?> · <?= h(cd_t('waehrung')) ?></label><div><?= h(strtoupper((string)$k['sprache'])) ?> · <?= h($wae) ?></div></div>
+          </div>
+          <?php if ($k['notiz']): ?><div style="margin-top:14px"><label class="muted" style="font-size:12px"><?= h(cd_t('notiz')) ?></label><div><?= nl2br(h((string)$k['notiz'])) ?></div></div><?php endif; ?>
+          <?php if ($rolle === 'admin'): $mits = cd_mitarbeiter_list(); ?>
+          <form method="post" class="bx-row" style="margin:14px 0 0;gap:8px;align-items:center;flex-wrap:wrap"><input type="hidden" name="aktion" value="kunde_zuordnen"><input type="hidden" name="id" value="<?= $kid ?>">
+            <label class="muted" style="font-size:13px;margin:0"><?= h(cd_t('zuordnen')) ?></label>
+            <select name="betreuer_id" style="max-width:220px;padding:5px 10px;font-size:14px"><option value="">– <?= h(cd_t('zugeordnet')) ?> –</option><?php foreach ($mits as $mi): ?><option value="<?= (int)$mi['id'] ?>"<?= (int)$k['betreuer_id']===(int)$mi['id']?' selected':'' ?>><?= h($mi['name']) ?></option><?php endforeach; ?></select>
+            <button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('speichern')) ?></button>
+          </form>
+          <?php endif; ?>
+          <div class="bx-row" style="gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap">
+            <a class="btn btn-primary btn-sm" href="<?= h(cd_url('kunden', ['id'=>$kid,'edit'=>1])) ?>"><?= h(cd_t('bearbeiten')) ?></a>
+            <form method="post" style="margin:0"><input type="hidden" name="aktion" value="kunde_fraud"><input type="hidden" name="id" value="<?= $kid ?>"><input type="hidden" name="fraud" value="<?= !empty($k['fraud'])?'0':'1' ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= !empty($k['fraud'])?h(cd_t('fraud_aufheben')):h(cd_t('fraud_markieren')) ?></button></form>
+            <form method="post" style="margin:0" onsubmit="return confirm('<?= h(cd_t('loeschen')) ?>?')"><input type="hidden" name="aktion" value="kunde_del"><input type="hidden" name="id" value="<?= $kid ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('loeschen')) ?></button></form>
+          </div>
+        </div>
+      </section>
+      <script>(function(){var bar=document.getElementById('cdtabs');if(!bar)return;
+        function show(t){document.querySelectorAll('[data-cdpanel]').forEach(function(s){s.hidden=s.getAttribute('data-cdpanel')!==t;});
+          bar.querySelectorAll('a').forEach(function(a){a.classList.toggle('on',a.getAttribute('data-cdtab')===t);});
+          try{localStorage.setItem('cd-kundtab',t);}catch(e){}}
+        bar.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();show(a.getAttribute('data-cdtab'));});});
+        var init='ueber';try{var s=localStorage.getItem('cd-kundtab');if(s&&document.querySelector('[data-cdpanel="'+s+'"]'))init=s;}catch(e){}show(init);})();</script>
 
       <?php else: /* Profil bearbeiten */ ?>
       <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('profil')) ?></h2>

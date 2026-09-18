@@ -248,6 +248,15 @@ function crmdemo_i18n(): array {
         'notiz'          => ['de'=>'Notiz','en'=>'Note','zh'=>'备注'],
         'kunde'          => ['de'=>'Kunde','en'=>'Customer','zh'=>'客户'],
         'postfach'       => ['de'=>'Postfach','en'=>'Mailbox','zh'=>'邮箱'],
+        'tab_ueber'      => ['de'=>'Übersicht','en'=>'Overview','zh'=>'概览'],
+        'kontakt'        => ['de'=>'Kontakt','en'=>'Contact','zh'=>'联系'],
+        'umsatz'         => ['de'=>'Umsatz (bezahlt)','en'=>'Revenue (paid)','zh'=>'营收（已付）'],
+        'offene_posten'  => ['de'=>'Offene Posten','en'=>'Open items','zh'=>'未结款'],
+        'kunde_seit'     => ['de'=>'Kunde seit','en'=>'Customer since','zh'=>'客户始于'],
+        'letzte_angebote'=> ['de'=>'Letzte Angebote','en'=>'Recent quotes','zh'=>'最近报价'],
+        'letzte_rechnungen'=>['de'=>'Letzte Rechnungen','en'=>'Recent invoices','zh'=>'最近发票'],
+        'aktiv'          => ['de'=>'Aktiv','en'=>'Active','zh'=>'活跃'],
+        'anzahl'         => ['de'=>'Anzahl','en'=>'Count','zh'=>'数量'],
         'betreff'        => ['de'=>'Betreff','en'=>'Subject','zh'=>'主题'],
         'verlauf'        => ['de'=>'Verlauf','en'=>'History','zh'=>'记录'],
         'name'           => ['de'=>'Name','en'=>'Name','zh'=>'名称'],
@@ -552,6 +561,10 @@ function cd_head(string $titel): void {
        . '.cd-az a.on{background:var(--gruen,#2f8f5b);color:#fff}'
        . '.cd-konv{display:block;text-decoration:none;color:var(--text,inherit);border-left:3px solid var(--line);border-bottom:1px solid var(--line);border-radius:6px;padding:8px 12px;margin:2px 0;transition:background .12s}'
        . '.cd-konv:hover{background:rgba(127,127,127,.14)}.cd-konv .cd-firma{color:var(--gruen,#2f8f5b);font-weight:600}'
+       . '.bx-table tr.cd-click{cursor:pointer}.bx-table tr.cd-click:hover{background:rgba(127,127,127,.10)}'
+       . '.cd-tabbar{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:16px 0 16px}'
+       . '.cd-tabbar a{padding:8px 14px;border-radius:8px 8px 0 0;font-size:14px;color:var(--muted);text-decoration:none;border:1px solid transparent;border-bottom:none;margin-bottom:-1px}'
+       . '.cd-tabbar a.on{color:var(--text);background:var(--panel);border-color:var(--line)}'
        . '.cd-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;z-index:60;padding:56px 16px}'
        . '.cd-modal.on{display:flex}.cd-modal .box{background:var(--panel,#fff);color:var(--text,#111);border:1px solid var(--line);border-radius:12px;max-width:460px;width:100%;padding:22px;box-shadow:0 12px 44px rgba(0,0,0,.32)}</style>'
        . '<script>(function(){try{var t=localStorage.getItem("bx-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>'

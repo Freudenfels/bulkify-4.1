@@ -5,10 +5,11 @@ Eigenständige App unter `?p=crmdemo&m=<modul>`. Nutzt nur `crmdemo_*`-Tabellen 
 
 ## Module
 - **dashboard** – Kennzahlen + Schnellzugriff (rollenabhängig).
-- **kunden** – Liste → **tiefes Profil** (Stammdaten inkl. Kundennummer, Betreuer, Zahlungsziel,
-  Branche, Liefer-/Rechnungsadresse, Sprache/Währung/WeChat), **Verlauf** (alte Angebote + Rechnungen
-  + Produktion des Kunden), **simuliertes Postfach** (ein/aus). Prominenter **Bearbeiten**-Button →
-  `?edit=1`; Anlegen/Bearbeiten über `cd_kunde_form()`. Gedacht als Kopie des echten bulkify-Kundenprofils.
+- **kunden** – Liste → **Kundenprofil als Cockpit** (angelehnt an das echte bulkify-Kundenprofil):
+  **KPI-Kacheln** (Status/Fraud, Umsatz bezahlt, Offene Posten, Anzahl Angebote, Kunde seit, Betreuer)
+  und **Reiter**: Übersicht (Kontakt + letzte Angebote/Rechnungen), Angebote, Rechnungen, Produktion,
+  Postfach, Stammdaten. **Alle Vorgangs-Zeilen sind klickbar** und öffnen Angebot/Rechnung(Beleg)/
+  Produktion (`.cd-click`). Bearbeiten → `?edit=1` (`cd_kunde_form()`). Aktiver Reiter wird gemerkt.
   **Globale Suche** (E-Mail/Firma/Telefon/Ansprechpartner) + **Dublettenprüfung** beim Neuanlegen
   (`cd_kunde_dupes()`): existiert der Kunde schon, Meldung „Kontakt mit Vorgesetzten aufnehmen"; nur
   Admin kann per „Trotzdem anlegen" übersteuern. **Fraud-Markierung** (Warnbanner) und **Zuordnung zu
