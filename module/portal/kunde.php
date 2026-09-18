@@ -1052,16 +1052,21 @@ $navBadgeTitel = [
 ];
 $portalLink = fn($v) => '?p=portal&token=' . $token . '&v=' . $v;
 // Suchfeld für die Katalog-Listen. Behält Token und Ansicht bei, damit die Suche im Portal bleibt.
-$sucheForm = function (string $v, string $platzhalter) use ($token, $q) { ?>
+$sucheForm = function (string $v, string $platzhalter) use ($token, $q) {
+    static $once = false; ?>
   <form method="get" class="bx-row" style="gap:8px;margin-bottom:14px;align-items:center">
     <input type="hidden" name="p" value="portal">
     <input type="hidden" name="token" value="<?= h($token) ?>">
     <input type="hidden" name="v" value="<?= h($v) ?>">
-    <input type="search" name="q" value="<?= h($q) ?>" placeholder="<?= h($platzhalter) ?>" style="max-width:360px">
+    <input type="search" name="q" value="<?= h($q) ?>" placeholder="<?= h($platzhalter) ?>" style="max-width:360px" data-live autofocus>
     <button class="btn btn-primary" type="submit">Suchen</button>
     <?php if ($q !== ''): ?><a class="btn btn-ghost" href="?p=portal&token=<?= h($token) ?>&v=<?= h($v) ?>">Zurücksetzen</a><?php endif; ?>
   </form>
-<?php };
+  <?php if (!$once) { $once = true; ?>
+  <script>document.addEventListener('input',function(e){var el=e.target;if(el.tagName==='INPUT'&&el.type==='search'&&el.hasAttribute('data-live')){clearTimeout(el._t);el._t=setTimeout(function(){try{var p=el.selectionStart;sessionStorage.setItem('bxLiveFocus',el.name||'q');}catch(x){}if(el.form)el.form.submit();},400);}},true);
+  window.addEventListener('load',function(){try{if(sessionStorage.getItem('bxLiveFocus')){sessionStorage.removeItem('bxLiveFocus');var f=document.querySelector('input[type=search][data-live]');if(f){var vv=f.value;f.focus();f.value='';f.value=vv;}}}catch(x){}});</script>
+  <?php }
+};
 // Einheitliche Liste „Meine Anfragen" über ALLE Typen (Reiter nach Typ + Alle). Nach $portalLink, da dieser genutzt wird.
 $typLabelP = ['rezeptur'=>'Rezeptur','produkt'=>'Produkt','rohstoff'=>'Rohstoff','dienstleistung'=>'Dienstleistung'];
 $meineAnfRows = [];
@@ -1807,8 +1812,26 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
 
 <?php elseif ($view === 'produkte'):
-    $eigeneProd  = array_values(array_filter($katalog, fn($p) => (int)($p['kunde_id'] ?? 0) === $kid));
-    $katalogProd = array_values(array_filter($katalog, fn($p) => (int)($p['kunde_id'] ?? 0) !== $kid));
+    // Eigene Produkte = was der Kunde schon bezieht/gekauft hat: produkt.kunde_id + Kaufhistorie
+    // (produkt_kundenpreis, u. a. aus dem v3-Import) + Auftraege.
+    $meineProdIds = [];
+    foreach ($katalog as $p) if ((int)($p['kunde_id'] ?? 0) === $kid) $meineProdIds[(int)$p['id']] = true;
+    foreach (all("SELECT DISTINCT produkt_id FROM produkt_kundenpreis WHERE kunde_id=? AND produkt_id IS NOT NULL", [$kid]) as $r) $meineProdIds[(int)$r['produkt_id']] = true;
+    foreach (all("SELECT DISTINCT produkt_id FROM auftrag WHERE kunde_id=? AND produkt_id IS NOT NULL", [$kid]) as $r) $meineProdIds[(int)$r['produkt_id']] = true;
+    $eigeneProd = array_values(array_filter($katalog, fn($p) => isset($meineProdIds[(int)$p['id']])));
+    $eigeneIds  = array_flip(array_map(fn($p) => (int)$p['id'], $eigeneProd));
+    // Gekaufte Produkte, die nicht im allgemeinen Katalog stehen (exklusiv/nicht aktiv), separat nachladen.
+    $fehlIds = array_values(array_filter(array_keys($meineProdIds), fn($pid) => !isset($eigeneIds[$pid])));
+    if ($fehlIds) {
+        $ph = implode(',', array_fill(0, count($fehlIds), '?'));
+        $args = array_merge($fehlIds, [$q, $qLike, $qLike]);
+        foreach (all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''),p.name) AS name, p.nummer, p.rezeptur_id, p.kunde_id, r.darreichungsform
+                      FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                      WHERE p.id IN ($ph) AND (?='' OR COALESCE(NULLIF(p.kundenname,''),p.name) LIKE ? OR r.name LIKE ?) ORDER BY name", $args) as $p)
+            $eigeneProd[] = $p;
+        usort($eigeneProd, fn($a,$b) => strcasecmp((string)$a['name'], (string)$b['name']));
+    }
+    $katalogProd = array_values(array_filter($katalog, fn($p) => !isset($meineProdIds[(int)$p['id']])));
     $prodTabelle = function(array $liste) use ($DFORM_P, $abPreis, $eur, $portalLink) { ?>
       <div class="bx-tablewrap"><table class="bx-table">
         <thead><tr><th>Produkt</th><th>Form</th><th class="bx-num">Preis</th><th></th></tr></thead>
@@ -1830,9 +1853,9 @@ portal_head('Kundenportal · ' . $k['firma']);
   <p class="bx-sub">Ihre eigenen Produkte und unser Produktkatalog. Wählen Sie ein Produkt für Details und eine Anfrage.</p>
   <div class="bx-panel">
     <?php $sucheForm('produkte', 'Produkt oder Rohstoff suchen, z. B. Magnesium'); ?>
-    <?php if (!$katalog): ?><div class="muted"><?= $q !== '' ? 'Kein Produkt gefunden zu „' . h($q) . '". Sie können es auch direkt anfragen.' : 'Aktuell sind keine Produkte verfügbar.' ?></div><?php endif; ?>
+    <?php if (!$katalog && !$eigeneProd): ?><div class="muted"><?= $q !== '' ? 'Kein Produkt gefunden zu „' . h($q) . '". Sie können es auch direkt anfragen.' : 'Aktuell sind keine Produkte verfügbar.' ?></div><?php endif; ?>
   </div>
-  <?php if ($katalog): ?>
+  <?php if ($katalog || $eigeneProd): ?>
   <div class="bx-panel">
     <div class="settabs" style="margin:0 0 12px">
       <a href="<?= $prodTabLink('eigene') ?>"  class="<?= $ptab === 'eigene'  ? 'on' : '' ?>">Eigene<?= $eigeneProd  ? ' (' . count($eigeneProd)  . ')' : '' ?></a>

@@ -148,3 +148,11 @@ alle angenommenen UND abgelehnten Angebote/Anfragen (Sektionen „Angenommen" un
 machbar"); die früheren Einzelreiter `oatab=bestaetigt`/`oatab=abgelehnt` leiten dorthin.
 In der **Angebote-Ansicht** (`v=angebote`) stehen offene Angebote oben, angenommene/abgelehnte in einem
 aufklappbaren **„Archiv"**-Abschnitt darunter.
+
+## Eigene Produkte (Kaufhistorie) + Live-Suche
+Der Reiter **Eigene** unter „Produkte" zeigt jetzt alles, was der Kunde schon bezieht/gekauft hat:
+`produkt.kunde_id` + Kaufhistorie aus **`produkt_kundenpreis`** (u. a. v3-Import) + **`auftrag`**. Gekaufte
+Produkte, die nicht im allgemeinen Katalog stehen (exklusiv/nicht aktiv), werden separat nachgeladen; die
+Katalog-Guards berücksichtigen `$eigeneProd`. Der Rest bleibt unter **Katalog**.
+Die Portal-**Suche** (`$sucheForm`) ist **live**: Eingabe filtert automatisch (debounced Auto-Submit,
+`data-live`), mit Autofokus und Fokus-Wiederherstellung nach dem Reload – kein „Suchen"-Klick nötig.
