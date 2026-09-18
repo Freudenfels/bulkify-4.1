@@ -12,6 +12,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
         $aid = ($_POST['auftrag_id'] ?? '') !== '' ? (int)$_POST['auftrag_id'] : null;
         $cid = wareneingang_buchen($item_id, $menge, trim($_POST['charge_nr'] ?? ''), trim($_POST['mhd'] ?? '') ?: null, $lief, trim($_POST['notiz'] ?? ''), $aid);
+        // Tracking-Code(s) der eingegangenen Pakete/Palette an die Charge haengen (je Zeile ein Code, gescannt).
+        if ($cid) {
+            $codes = array_values(array_unique(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($_POST['tracking'] ?? ''))))));
+            q("UPDATE charge SET tracking=? WHERE id=?", [$codes ? implode("\n", $codes) : null, $cid]);
+        }
         header('Location: ?p=wareneingang' . ($cid ? '&ok=1' : '&fehler=1')); exit;
     }
     if ($aktion === 'freigeben') {
@@ -25,9 +30,18 @@ $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 $offeneAuftraege = all("SELECT a.id, a.nummer, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, k.firma
                         FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN kunden k ON k.id=a.kunde_id
                         WHERE a.status <> 'versendet' ORDER BY a.angelegt DESC");
-$charges = all("SELECT c.*, i.name AS item_name, l.firma AS lieferant_firma
-                FROM charge c LEFT JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id
-                ORDER BY c.angelegt DESC LIMIT 25");
+$such = trim((string)($_GET['such'] ?? ''));   // Suche nach Tracking-Code / Charge / Artikel (Paket wiederfinden)
+if ($such !== '') {
+    $like = '%' . $such . '%';
+    $charges = all("SELECT c.*, i.name AS item_name, l.firma AS lieferant_firma
+                    FROM charge c LEFT JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id
+                    WHERE c.tracking LIKE ? OR c.charge_nr LIKE ? OR i.name LIKE ?
+                    ORDER BY c.angelegt DESC LIMIT 100", [$like, $like, $like]);
+} else {
+    $charges = all("SELECT c.*, i.name AS item_name, l.firma AS lieferant_firma
+                    FROM charge c LEFT JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id
+                    ORDER BY c.angelegt DESC LIMIT 25");
+}
 
 $statusBadge = fn($s) => match ($s) {
     'frei'        => bx_badge('frei','ok'),
@@ -77,6 +91,10 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
       </select>
     </div>
   </div>
+  <div class="bx-field"><label>Tracking-Code(s) Paket / Palette <?= bx_hint('Barcode/Sendungsnummer vom Paket- oder Palettenetikett scannen. Mehrere Pakete: einfach nacheinander scannen – jeder Scan landet automatisch in einer eigenen Zeile.') ?></label>
+    <textarea name="tracking" id="weTracking" rows="2" placeholder="Etikett scannen … (je Paket eine Zeile)" style="font-variant-numeric:tabular-nums"></textarea>
+    <div class="muted" id="weTrackCount" style="font-size:12px;margin-top:4px"></div>
+  </div>
   <div class="bx-field"><label>Notiz</label><input type="text" name="notiz"></div>
   <div class="muted" style="margin-bottom:8px">Rohstoffe gehen zunächst in <strong>Quarantäne</strong> und müssen unten freigegeben werden. Verpackungen sind sofort frei.</div>
   <button class="btn btn-primary" type="submit">Wareneingang buchen</button>
@@ -121,18 +139,27 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
 </script>
 
 <div class="bx-panel">
-  <h2>Letzte Chargen</h2>
-  <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Charge</th><th>Artikel</th><th class="bx-num">Menge</th><th>MHD</th><th>Lieferant</th><th>Status</th><th></th></tr></thead>
+  <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0"><?= $such !== '' ? 'Suchergebnis' : 'Letzte Chargen' ?></h2>
+    <form method="get" class="bx-row" style="gap:6px;margin:0" role="search">
+      <input type="hidden" name="p" value="wareneingang">
+      <input type="text" name="such" value="<?= h($such) ?>" placeholder="Tracking-Code / Charge / Artikel suchen" style="width:280px">
+      <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
+      <?php if ($such !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=wareneingang">×</a><?php endif; ?>
+    </form>
+  </div>
+  <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
+    <thead><tr><th>Charge</th><th>Artikel</th><th class="bx-num">Menge</th><th>MHD</th><th>Lieferant</th><th>Tracking</th><th>Status</th><th></th></tr></thead>
     <tbody>
-    <?php if (!$charges): ?><tr><td colspan="7" class="muted">Noch keine Chargen gebucht.</td></tr><?php endif; ?>
-    <?php foreach ($charges as $c): ?>
+    <?php if (!$charges): ?><tr><td colspan="8" class="muted"><?= $such !== '' ? 'Kein Treffer zu „' . h($such) . '".' : 'Noch keine Chargen gebucht.' ?></td></tr><?php endif; ?>
+    <?php foreach ($charges as $c): $tc = array_values(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($c['tracking'] ?? ''))))); ?>
       <tr>
         <td><?= h($c['charge_nr'] ?: '–') ?></td>
         <td><?= h($c['item_name'] ?: '–') ?></td>
         <td class="bx-num"><?= $mng($c['menge_verfuegbar'], $c['einheit']) ?></td>
         <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '<span class="muted">–</span>' ?></td>
         <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
+        <td><?php if (!$tc): ?><span class="muted">–</span><?php else: ?><span style="font-variant-numeric:tabular-nums"><?= h($tc[0]) ?></span><?php if (count($tc) > 1): ?> <span class="muted" style="font-size:11px" title="<?= h(implode(', ', $tc)) ?>">+<?= count($tc)-1 ?> Pakete</span><?php endif; ?><?php endif; ?></td>
         <td><?= $statusBadge($c['status']) ?></td>
         <td style="text-align:right">
           <?php if ($c['status']==='quarantaene'): ?>
@@ -144,4 +171,14 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
     </tbody>
   </table></div>
 </div>
+<script>
+(function(){
+  var ta=document.getElementById('weTracking'), out=document.getElementById('weTrackCount'); if(!ta||!out) return;
+  function upd(){
+    var codes=ta.value.split(/[\r\n]+/).map(function(s){return s.trim();}).filter(Boolean);
+    out.textContent = codes.length ? codes.length + (codes.length===1?' Paket erfasst':' Pakete erfasst') : '';
+  }
+  ta.addEventListener('input', upd); upd();
+})();
+</script>
 <?php render_footer(); ?>

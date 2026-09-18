@@ -866,6 +866,7 @@ function init_schema(): void {
     ensure_column('bestellung_position', 'auftrag_id', "INT NULL");
     ensure_column('charge', 'auftrag_id', "INT NULL");
     ensure_column('charge', 'bestellung_position_id', "INT NULL");
+    ensure_column('charge', 'tracking', "TEXT NULL");   // Tracking-Code(s) der eingegangenen Pakete/Palette (Wareneingang, je Zeile einer)
     ensure_column('charge', 'pa_id', "INT NULL");   // Produktionsauftrag der Fertigware-Charge (Rückverfolgung Zusammensetzung)
     ensure_column('charge', 'coa_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");   // bulkify-CoA dieser Charge fuer den Kunden freigegeben?
     ensure_column('charge', 'coa_freigabe_am', "DATETIME NULL");
@@ -2461,8 +2462,9 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,auftrag_id,bestellung_position_id,angelegt)
        VALUES (?,?,?,?,?,?,?,CURDATE(),?,?,?,?,?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $it['einheit'], $lieferant_id ?: null, $mhd ?: null, $status, $notiz ?: null, $auftrag_id ?: null, $bestellung_position_id ?: null, gmdate('Y-m-d H:i:s')]);
+    $neu = (int) insert_id();   // ID VOR bedarf_bump() sichern (meta_set() setzt LAST_INSERT_ID sonst auf 0)
     bedarf_bump();   // neuer Bestand -> Bedarf-Cache ungueltig
-    return insert_id();
+    return $neu;
 }
 
 // Bestellung als geliefert verbuchen: für jede Position eine Charge (Wareneingang) anlegen. Idempotent.
