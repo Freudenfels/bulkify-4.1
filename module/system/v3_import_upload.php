@@ -49,9 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // DB-Auswahl raus, Kollation normieren, alle Tabellennamen auf v3imp_ umschreiben (nur nach TABLE/INTO/LOCK).
                 $sql = preg_replace('/^\s*(CREATE\s+DATABASE|USE)\b[^\n;]*;?\s*$/im', '', $sql);
                 $sql = preg_replace('/utf8mb4_uca1400\w*/i', 'utf8mb4_unicode_ci', $sql);
-                // Fremdschlüssel-Constraints entfernen – die Zwischentabellen brauchen keine referentielle
-                // Integrität, und ihre REFERENCES zeigen auf unpräfixte Tabellen (würden sonst scheitern).
-                $sql = preg_replace('/^\s*CONSTRAINT\s+`[^`]+`\s+FOREIGN KEY.*$\n?/im', '', $sql);
+                // Fremdschlüssel entfernen – die Zwischentabellen brauchen keine referentielle Integrität.
+                // phpMyAdmin legt FKs als eigene „ALTER TABLE `t` ADD CONSTRAINT `..` FOREIGN KEY .. ;" ans
+                // Dateiende; die komplett entfernen. Zusätzlich der Fallback für inline-FKs in CREATE TABLE.
+                $sql = preg_replace('/ALTER TABLE\s+`[^`]+`[^;]*FOREIGN KEY[^;]*;/is', '', $sql);
+                $sql = preg_replace('/^\s*(ADD\s+)?CONSTRAINT\s+`[^`]+`\s+FOREIGN KEY.*$\n?/im', '', $sql);
                 $sql = preg_replace('/^\s*FOREIGN KEY\s*\(.*$\n?/im', '', $sql);
                 $sql = preg_replace('/,(\s*\n\s*)\)(\s*ENGINE=)/i', '$1)$2', $sql);   // evtl. hängendes Komma vor der Klammer
                 // Alle Tabellennamen auf den Prefix v3imp_ umschreiben (nur nach TABLE/INTO/LOCK).
