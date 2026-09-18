@@ -60,6 +60,7 @@ function route_rollen_map(): array {
         'rohstoff_split'     => ['production', 'einkauf', 'labor'],
         'freigaben'          => ['production', 'einkauf', 'labor'],
         'lief_preisliste'    => ['production', 'einkauf', 'labor'],
+        'rezept_preise'      => ['production', 'einkauf', 'labor'],
         'spec_pdf'           => ['production', 'einkauf', 'labor'],
         'spec_bulkify'       => ['production', 'einkauf', 'labor'],
         'coa_bulkify'        => ['production', 'einkauf', 'labor'],

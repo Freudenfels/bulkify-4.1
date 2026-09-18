@@ -59,6 +59,7 @@ $routes = [
     'verpackung_dok' => 'lager/verpackung_dok_download.php',
     'rezeptur'        => 'rezeptur/liste.php',
     'rezeptur_detail' => 'rezeptur/detail.php',
+    'rezept_preise'   => 'rezeptur/lief_preise.php', // Rezeptur-Preise (Fremdfertigung) – Uebersicht wie v3
     'kapsel_referenz' => 'system/kapsel_referenz.php',   // Nachschlagewerk Kapselgrößen
     'crmdemo'         => 'crmdemo/app.php',               // isolierte CRM-Demo (Lieferanten-Beta), versteckt
     'produkte'        => 'produkt/liste.php',
