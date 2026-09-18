@@ -624,7 +624,8 @@ if (!$neu):
             <input type="hidden" name="p_vid[]" value="<?= (int)($pp['verpackung_id'] ?? 0) ?: '' ?>">
             <input type="hidden" name="p_ek[]" class="p_ek" value="<?= h(number_format($pp['ek_cent']/100,4,'.','')) ?>">
           </td>
-          <td><div style="display:flex;align-items:center;gap:4px"><input type="number" step="1" min="0" name="p_stk[]" value="<?= (int)($pp['stueck'] ?? 0) ?: '' ?>" placeholder="&ndash;" style="width:100%;text-align:right"><?php $u=$inhaltUnit($pp['rezeptur_id']??0); if($u!==''): ?><span class="muted" style="font-size:11px;white-space:nowrap"><?= h($u) ?></span><?php endif; ?></div></td>
+          <?php $u=$inhaltUnit($pp['rezeptur_id']??0); ?>
+          <td><div style="display:flex;align-items:center;gap:4px"><input type="number" step="1" min="0" name="p_stk[]" class="p_stk" data-unit="<?= h($u) ?>" value="<?= (int)($pp['stueck'] ?? 0) ?: '' ?>" placeholder="&ndash;" style="width:100%;text-align:right"><?php if($u!==''): ?><span class="muted" style="font-size:11px;white-space:nowrap"><?= h($u) ?></span><?php endif; ?></div></td>
           <td><input type="number" step="0.001" name="p_menge[]" class="p_menge" value="<?= h(rtrim(rtrim(number_format($pp['menge'],3,'.',''),'0'),'.')) ?>" style="width:100%"></td>
           <td><input type="text" name="p_einheit[]" value="<?= h($pp['einheit'] ?? '') ?>" style="width:100%"></td>
           <td><input type="number" step="0.01" min="0" name="p_preis[]" class="p_preis" value="<?= h(number_format((int)$pp['preis_cent']/100,2,'.','')) ?>" style="width:100%"></td>
@@ -762,7 +763,7 @@ function posRecalc(){
       +'<textarea name="p_besch[]" class="p_besch" rows="2" placeholder="Beschreibung / Rezeptur (optional)"></textarea>'
       +'<input type="hidden" name="p_art[]" value=""><input type="hidden" name="p_quelle[]" value="manuell"><input type="hidden" name="p_gruppe[]" value=""><input type="hidden" name="p_ek[]" class="p_ek" value="0">'
       +'<input type="hidden" name="p_rez[]" value=""><input type="hidden" name="p_vid[]" value=""></td>'
-      +'<td><input type="number" step="1" min="0" name="p_stk[]" placeholder="&ndash;" style="width:100%;text-align:right"></td>'
+      +'<td><input type="number" step="1" min="0" name="p_stk[]" class="p_stk" data-unit="" placeholder="&ndash;" style="width:100%;text-align:right"></td>'
       +'<td><input type="number" step="0.001" name="p_menge[]" class="p_menge"></td>'
       +'<td><input type="text" name="p_einheit[]" value="Stück"></td>'
       +'<td><input type="number" step="0.01" min="0" name="p_preis[]" class="p_preis"></td>'
@@ -775,6 +776,17 @@ function posRecalc(){
   });
   document.querySelectorAll('#postab input').forEach(function(i){i.addEventListener('input',posRecalc);});
   posRecalc();
+  // Inhalt (Stueck je Packung) -> Groessen-Baustein im Beschreibungstext derselben Zeile mitziehen,
+  // damit der Kunde nicht "69 Kapseln" liest, waehrend im Inhalt schon 60 steht.
+  function syncInhalt(inp){
+    var unit=(inp.getAttribute('data-unit')||'').trim(); if(!unit) return;
+    var val=(inp.value||'').trim(); if(val==='') return;
+    var row=inp.closest('.posrow'); var ta=row&&row.querySelector('.p_besch'); if(!ta||!ta.value) return;
+    var esc=unit.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    var re=new RegExp('\\b\\d[\\d.,]*\\s*'+esc+'\\b');
+    if(re.test(ta.value)) ta.value=ta.value.replace(re, val+' '+unit);
+  }
+  document.querySelectorAll('#postab .p_stk').forEach(function(i){ i.addEventListener('change',function(){syncInhalt(i);}); });
 })();
 </script>
 
