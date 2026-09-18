@@ -232,7 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Nur gueltige Staffelzeilen (Stueck UND Menge > 0) – je Zeile eine Gruppe (A, B, C …).
             $gueltig = [];
             foreach ($pos as $z) {
-                $stk = (int) round((float)($z['fuellmenge_g'] ?: $z['stueck'])); $menge = (int)$z['menge'];
+                $stk = anfrage_groesse($z['stueck'] ?? null, $z['fuellmenge_g'] ?? null, $wform); $menge = (int)$z['menge'];
                 if ($stk > 0 && $menge > 0) $gueltig[] = ['stueck'=>$stk, 'menge'=>$menge];
             }
             if ($gueltig) {
@@ -445,12 +445,12 @@ if (!$neu):
         $wa = one("SELECT rezeptur_id, produkt_id, stueck, fuellmenge_g, verpackung_typ, menge FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']]);
         if ($wa) {
             $wunsch['rezeptur_id'] = (int)($wa['rezeptur_id'] ?: scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$wa['produkt_id']]));
-            $wunsch['stueck'] = (float)$wa['fuellmenge_g'] > 0 ? (int) round((float)$wa['fuellmenge_g']) : (int)$wa['stueck'];
+            $wform = $wunsch['rezeptur_id'] ? ((string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$wunsch['rezeptur_id']]) ?: 'kapsel') : 'kapsel';
+            $wunsch['stueck'] = anfrage_groesse($wa['stueck'] ?? null, $wa['fuellmenge_g'] ?? null, $wform);   // formrichtig: Kapselzahl aus stueck, nicht aus fuellmenge_g
             $wunsch['menge']  = (int)$wa['menge'];
             $wunsch['typ_label'] = (string)($wa['verpackung_typ'] ?? '');
             // Behälter zum Wunschtyp vorschlagen, der die Menge auch fasst
             if ($wunsch['rezeptur_id'] && $wunsch['stueck'] > 0) {
-                $wform = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$wunsch['rezeptur_id']]) ?: 'kapsel';
                 foreach (passende_behaelter_fuer($wunsch['rezeptur_id'], $wform, (int)$wunsch['stueck']) as $cand)
                     if (verpackung_passt_zu_typ((int)$cand, $wunsch['typ_label'] ?: null)) { $wunsch['verp_id'] = (int)$cand; break; }
             }
@@ -463,7 +463,7 @@ if (!$neu):
         $pap = all("SELECT stueck, fuellmenge_g, menge FROM portal_anfrage_pos WHERE anfrage_id=? ORDER BY sort, id", [(int)$a['anfrage_id']]);
         if (!$pap && !empty($wa)) $pap = [['stueck'=>$wa['stueck'], 'fuellmenge_g'=>$wa['fuellmenge_g'], 'menge'=>$wa['menge']]];
         foreach ($pap as $z) {
-            $stk = (int) round((float)($z['fuellmenge_g'] ?: $z['stueck'])); $mng = (int)$z['menge'];
+            $stk = anfrage_groesse($z['stueck'] ?? null, $z['fuellmenge_g'] ?? null, $wform ?? 'kapsel'); $mng = (int)$z['menge'];
             if ($stk > 0 && $mng > 0) $anfStaffel[] = ['stueck'=>$stk, 'menge'=>$mng];
         }
     }

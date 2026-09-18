@@ -132,3 +132,8 @@ zurückgesetzt – die neue Konfiguration steckt dann in der verknüpften portal
 In der Positionen-Leiste erscheint ein Hinweis "Vom Kunden angefragt: …" + Button **"Angefragte Menge übernehmen"**
 (`aktion=anfrage_uebernehmen`): baut die Positionen aus der Anfrage (Rezeptur × Stück × Staffelmengen, je Zeile
 eine Gruppe) neu auf – ersetzt die bisherigen. Preise werden dabei gesperrt (Zwischenstand nicht sichtbar).
+
+**Größe je Packung formrichtig lesen:** Die angefragte Größe kommt über `anfrage_groesse($stueck,$fuellmenge_g,$form)`
+(core/schema.php) – bei Stück-Formen (Kapsel/Tablette/…) zählt `stueck`, bei Füllmengen-Formen (Pulver/Granulat/
+Flüssig/Gel) `fuellmenge_g`. Vorher wurde blind `fuellmenge_g ?: stueck` genommen; ein (importierter/veralteter)
+`fuellmenge_g`-Wert konnte so die Kapselzahl überschreiben (z. B. 69 statt der angefragten 60 im „Vom Kunden angefragt"-Hinweis und in der Position).

@@ -111,7 +111,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
             $pos = all("SELECT stueck, fuellmenge_g, verpackung_typ, menge FROM portal_anfrage_pos WHERE anfrage_id=? ORDER BY sort, id", [$id]);
             if (!$pos) $pos = [['stueck'=>$pa['stueck'], 'fuellmenge_g'=>$pa['fuellmenge_g'], 'verpackung_typ'=>$pa['verpackung_typ'], 'menge'=>$pa['menge']]];
             foreach ($pos as $p) {
-                $stk   = (int) round((float)(($p['fuellmenge_g'] ?? 0) ?: ($p['stueck'] ?? 0)));   // Anzahl bzw. Füllmenge je Verpackung
+                $stk   = anfrage_groesse($p['stueck'] ?? null, $p['fuellmenge_g'] ?? null, $form);   // Anzahl bzw. Füllmenge je Verpackung (formrichtig)
                 $menge = (int)($p['menge'] ?? 0);
                 if ($stk <= 0 || $menge <= 0) continue;
                 // Wunsch-Verpackungstyp -> konkreter Behälter (best effort); sonst ohne (Team wählt im Editor).

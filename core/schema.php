@@ -2614,6 +2614,16 @@ function form_groessen_einheit(string $form): string {
 }
 // Wird die Packungsgröße als Füllmenge (g/ml) angefragt statt als Stückzahl?
 function form_ist_fuellmenge(string $form): bool { return form_groessen_einheit($form) !== ''; }
+// Angefragte Größe je Packung – FORMRICHTIG lesen. Füllmengen-Formen (Pulver/Granulat/Flüssig/Gel)
+// stecken in fuellmenge_g (g bzw. ml), Stück-Formen (Kapsel/Tablette/Softgel/Stick/Gummi) in stueck.
+// Wichtig: bei einer Kapsel-Anfrage darf ein (z. B. importierter oder veralteter) fuellmenge_g-Wert
+// die Kapselzahl NICHT überschreiben – sonst zeigt das System z. B. 69 statt der angefragten 60.
+// Nur wenn das formrichtige Feld leer ist, wird das andere als Rückfall genutzt.
+function anfrage_groesse($stueck, $fuellmenge_g, string $form): int {
+    $stk = (float)($stueck ?? 0); $fg = (float)($fuellmenge_g ?? 0);
+    if (form_ist_fuellmenge($form)) return (int) round($fg > 0 ? $fg : $stk);
+    return (int) round($stk > 0 ? $stk : $fg);
+}
 // Plural der Stück-Einheit (nur für Formen, die nach Stückzahl verkauft werden).
 function form_plural(string $form): string {
     return ['kapsel'=>'Kapseln', 'tablette'=>'Tabletten', 'softgel'=>'Softgels', 'stick'=>'Sticks', 'gummi'=>'Gummis'][$form] ?? 'Stück';
@@ -5098,7 +5108,8 @@ function angebot_positionen_konfig_nachtragen(int $angebot_id): void {
     if (!$a || !$a['anfrage_id']) return;
     $an = one("SELECT rezeptur_id, stueck, fuellmenge_g, verpackung_id FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']]);
     if (!$an || !$an['rezeptur_id']) return;
-    $stueck = (int) round((float)($an['stueck'] ?: $an['fuellmenge_g']));
+    $anForm = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$an['rezeptur_id']]) ?: 'kapsel';
+    $stueck = anfrage_groesse($an['stueck'] ?? null, $an['fuellmenge_g'] ?? null, $anForm);
     if ($stueck <= 0) return;
     $erste = one("SELECT id, gruppe FROM angebot_position WHERE angebot_id=? AND quelle='herstellung' ORDER BY sort, id LIMIT 1", [$angebot_id])
           ?: one("SELECT id, gruppe FROM angebot_position WHERE angebot_id=? ORDER BY sort, id LIMIT 1", [$angebot_id]);
