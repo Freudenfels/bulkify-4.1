@@ -4985,6 +4985,36 @@ function kontingent_aus_angebot(int $angebot_id, string $unterzeichner = ''): ar
     return ['ok' => true, 'kontingent_id' => $kid];
 }
 
+// Kontingent aus einem angenommenen Auftrag: die vereinbarte Menge wird zum abrufbaren Kontingent
+// (der Kunde ruft in Teilmengen zum Festpreis ab, statt einer einzigen Riesen-Produktion).
+// Der Ursprungsauftrag wird storniert (die Produktion laeuft dann ueber die Abrufe). Idempotent.
+// Rueckgabe: ['ok'=>true,'kontingent_id'=>…] oder ['ok'=>false,'fehler'=>…].
+function kontingent_aus_auftrag(int $auftrag_id, int $monate = 12): array {
+    $a = one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a) return ['ok' => false, 'fehler' => 'Auftrag nicht gefunden.'];
+    if (!empty($a['kontingent_id'])) return ['ok' => false, 'fehler' => 'Dieser Auftrag stammt bereits aus einem Kontingent.'];
+    if (empty($a['kunde_id']) || empty($a['produkt_id'])) return ['ok' => false, 'fehler' => 'Kontingent braucht Kunde und Produkt.'];
+    $menge = (int)($a['menge'] ?? 0); $vk = (float)($a['vk_stueck'] ?? 0);
+    if ($menge < 1 || $vk <= 0) return ['ok' => false, 'fehler' => 'Menge und Stückpreis müssen gesetzt sein.'];
+    if ((string)($a['status'] ?? '') === 'storniert') return ['ok' => false, 'fehler' => 'Auftrag ist bereits storniert.'];
+    // Bereits eine bezahlte Rechnung? Dann nicht umwandeln (Buchhaltung).
+    $bezahlt = (int) scalar("SELECT COUNT(*) FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status='bezahlt'", [$auftrag_id]);
+    if ($bezahlt > 0) return ['ok' => false, 'fehler' => 'Zu diesem Auftrag gibt es bereits eine bezahlte Rechnung – nicht umwandelbar.'];
+    // Schon einmal umgewandelt? (idempotent über die Notiz-Referenz auf den Auftrag)
+    $ref = 'Aus Auftrag ' . (string)$a['nummer'] . ' als Kontingent';
+    $ex = one("SELECT id FROM kontingent WHERE kunde_id=? AND produkt_id=? AND notiz LIKE ?", [(int)$a['kunde_id'], (int)$a['produkt_id'], $ref . '%']);
+    if ($ex) return ['ok' => true, 'kontingent_id' => (int)$ex['id'], 'schon_da' => true];
+    $mon = $monate > 0 ? $monate : 12;
+    q("INSERT INTO kontingent (kunde_id,produkt_id,angebot_id,gesamt_menge,abgerufen,vk_stueck,gueltig_von,gueltig_bis,status,notiz)
+       VALUES (?,?,?,?,0,?,CURDATE(),DATE_ADD(CURDATE(), INTERVAL ? MONTH),'aktiv',?)",
+      [(int)$a['kunde_id'], (int)$a['produkt_id'], ($a['angebot_id'] ?? null) ?: null, $menge, $vk, $mon, $ref . ' angelegt.']);
+    $kid = insert_id();
+    // Ursprungsauftrag stornieren – produziert wird ueber die Abrufe.
+    q("UPDATE auftrag SET status='storniert' WHERE id=?", [$auftrag_id]);
+    log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftrag ' . (string)$a['nummer'] . ' in ein Kontingent (' . $menge . ' Stück, Abruf) umgewandelt.', 'kontingent', 'auftrag', $auftrag_id);
+    return ['ok' => true, 'kontingent_id' => $kid];
+}
+
 // Status eines Jahresvertrags-Kontingents weiterschalten (Upload/Freigabe/Ablehnung).
 function kontingent_status(int $kontingent_id, string $status): bool {
     if (!in_array($status, ['wartet_vertrag', 'wartet_freigabe', 'aktiv', 'beendet'], true)) return false;

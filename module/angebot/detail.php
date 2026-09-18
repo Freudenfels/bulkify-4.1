@@ -623,7 +623,7 @@ if (!$neu):
           </td>
           <td><input type="number" step="0.001" name="p_menge[]" class="p_menge" value="<?= h(rtrim(rtrim(number_format($pp['menge'],3,'.',''),'0'),'.')) ?>" style="width:100%"></td>
           <td><input type="text" name="p_einheit[]" value="<?= h($pp['einheit'] ?? '') ?>" style="width:100%"></td>
-          <td><input type="number" step="0.0001" name="p_preis[]" class="p_preis" value="<?= h(rtrim(rtrim(number_format($pp['preis_cent']/100,4,'.',''),'0'),'.')) ?>" style="width:100%"></td>
+          <td><input type="number" step="0.01" min="0" name="p_preis[]" class="p_preis" value="<?= h(number_format((int)$pp['preis_cent']/100,2,'.','')) ?>" style="width:100%"></td>
           <td><?php $mwCur = mwst_normalisieren((float)$pp['mwst_satz']); ?><select name="p_mwst[]" style="width:100%"><?php foreach (mwst_saetze() as $ms): ?><option value="<?= (int)$ms ?>" <?= (int)$ms === (int)$mwCur ? 'selected' : '' ?>><?= (int)$ms ?> %</option><?php endforeach; ?></select></td>
           <td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>
           <td><button type="button" class="btn btn-ghost btn-sm" title="Position löschen" onclick="var f=this.closest('form');this.closest('.posrow').remove();posRecalc();f.submit()">×</button></td>
@@ -760,7 +760,7 @@ function posRecalc(){
       +'<input type="hidden" name="p_rez[]" value=""><input type="hidden" name="p_stk[]" value=""><input type="hidden" name="p_vid[]" value=""></td>'
       +'<td><input type="number" step="0.001" name="p_menge[]" class="p_menge"></td>'
       +'<td><input type="text" name="p_einheit[]" value="Stück"></td>'
-      +'<td><input type="number" step="0.0001" name="p_preis[]" class="p_preis"></td>'
+      +'<td><input type="number" step="0.01" min="0" name="p_preis[]" class="p_preis"></td>'
       +'<td><select name="p_mwst[]" style="width:100%"><?php foreach (mwst_saetze() as $ms): ?><option value="<?= (int)$ms ?>"<?= (int)$ms === (int)mwst_normalisieren(angebot_ust_satz($kid)) ? ' selected' : '' ?>><?= (int)$ms ?> %</option><?php endforeach; ?></select></td>'
       +'<td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>'
       +'<td><button type="button" class="btn btn-ghost btn-sm">×</button></td>';

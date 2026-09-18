@@ -13,3 +13,10 @@
   Absenden an den Lieferanten in beiden Fällen wie gewohnt in der Bestellung.
 
 **Herkunft:** Der Auftrag wird von `auftrag_aus_angebot()` erzeugt, sobald im Angebot eine Staffel bestätigt wird. Menge und VK stammen aus der bestätigten Staffel.
+
+## Zu Kontingent machen
+Ein angenommener Auftrag mit Menge + VK (und Kunde/Produkt) kann per Button **„Zu Kontingent machen"**
+(nur Admin) in ein **Kontingent** (Rahmen/Abruf) umgewandelt werden: `kontingent_aus_auftrag()` legt ein
+aktives Kontingent (gesamt_menge = Auftragsmenge, vk_stueck) an und **storniert** den Ursprungsauftrag –
+produziert wird danach über die Abrufe (`kontingent_abruf`, je Abruf ein Auftrag). Idempotent; blockiert,
+wenn bereits eine bezahlte Rechnung existiert oder der Auftrag selbst aus einem Kontingent stammt.

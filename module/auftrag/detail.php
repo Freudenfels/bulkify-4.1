@@ -21,6 +21,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Zukaufpreis für dieses Produkt bei dem Lieferanten hinterlegt.')); exit;
 }
 
+// Auftrag in ein Kontingent (Rahmen/Abruf) umwandeln – nur Admin.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'zu_kontingent') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $r = kontingent_aus_auftrag($id);
+    if (!empty($r['ok'])) { header('Location: ?p=kontingente&neu=' . (int)$r['kontingent_id']); exit; }
+    header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode($r['fehler'] ?? 'Umwandlung nicht möglich.')); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     // Preis nachpflegen: VK je Packung + Menge editierbar, Netto = Menge × VK automatisch.
     $menge = max(0, (int)($_POST['menge'] ?? 0));
@@ -243,11 +251,22 @@ echo '</div>';
 <?php anfrage_modal($anfrageLieferanten, '?p=auftrag&id=' . $id); ?>
 <?php endif; ?>
 
+<?php if (has_role('admin') && empty($a['kontingent_id']) && (string)$a['status'] !== 'storniert' && (int)$a['menge'] > 0 && (float)$a['vk_stueck'] > 0): ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Zu Kontingent machen</h2>
+  <p class="muted" style="margin-top:0">Wandelt die angenommene Menge (<?= number_format((int)$a['menge'],0,',','.') ?> × <?= $eur((float)$a['vk_stueck']) ?>) in ein <strong>Kontingent</strong> (Rahmen/Abruf) um: Der Kunde ruft daraus Teilmengen zum Festpreis ab – je Abruf entsteht ein Auftrag. Der jetzige Auftrag wird dabei storniert (produziert wird über die Abrufe).</p>
+  <form method="post" style="margin:0" onsubmit="return confirm('Auftrag <?= h($a['nummer']) ?> in ein Kontingent umwandeln? Der Auftrag wird storniert; produziert wird über die Abrufe.');">
+    <input type="hidden" name="aktion" value="zu_kontingent">
+    <button class="btn btn-primary" type="submit" data-busy="Wandle um…">Zu Kontingent machen</button>
+  </form>
+</div>
+<?php endif; ?>
+
 <form method="post" class="bx-form">
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Status</label>
       <select name="status">
-        <?php foreach (['offen'=>'offen','in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet'] as $key=>$lbl): ?>
+        <?php foreach (['offen'=>'offen','in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet','storniert'=>'storniert'] as $key=>$lbl): ?>
           <option value="<?= $key ?>" <?= $a['status']===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
       </select>
     </div>
