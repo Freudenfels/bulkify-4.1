@@ -187,6 +187,12 @@ function crmdemo_i18n(): array {
         'produktentwickler'=>['de'=>'Produktentwickler (KI)','en'=>'Product developer (AI)','zh'=>'产品开发（AI）'],
         'coareader'      => ['de'=>'COA/Spec-Reader (KI)','en'=>'COA/Spec reader (AI)','zh'=>'COA/规格读取（AI）'],
         'einstellungen'  => ['de'=>'Einstellungen','en'=>'Settings','zh'=>'设置'],
+        // Menue-Gruppen
+        'grp_vertrieb'   => ['de'=>'Vertrieb','en'=>'Sales','zh'=>'销售'],
+        'grp_entwicklung'=> ['de'=>'Entwicklung & Katalog','en'=>'R&D & Catalog','zh'=>'研发与目录'],
+        'grp_fertigung'  => ['de'=>'Fertigung','en'=>'Manufacturing','zh'=>'生产制造'],
+        'grp_finanzen'   => ['de'=>'Finanzen & Buchhaltung','en'=>'Finance & Accounting','zh'=>'财务与会计'],
+        'grp_system'     => ['de'=>'System','en'=>'System','zh'=>'系统'],
         'angebote'       => ['de'=>'Angebote','en'=>'Quotes','zh'=>'报价'],
         'rechnungen'     => ['de'=>'Rechnungen','en'=>'Invoices','zh'=>'发票'],
         'produktion'     => ['de'=>'Produktion','en'=>'Production','zh'=>'生产'],
@@ -503,14 +509,25 @@ function cd_head(string $titel): void {
 }
 function cd_shell_start(string $aktiv): void {
     $rolle = cd_rolle();
-    $menu = ['dashboard','kunden','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','produktion','chat','finanzen','einstellungen'];
+    // Logisch gruppierte Navigation (Gruppen ohne sichtbare Punkte werden ausgeblendet).
+    $gruppen = [
+        [null,             ['dashboard']],
+        ['grp_vertrieb',   ['kunden','angebote']],
+        ['grp_entwicklung',['rezepturen','katalog','produktentwickler','coareader','chat']],
+        ['grp_fertigung',  ['produktion']],
+        ['grp_finanzen',   ['rechnungen','finanzen']],
+        ['grp_system',     ['einstellungen']],
+    ];
     $l = cd_lang();
     echo '<div class="bx-shell"><aside class="bx-side">'
        . '<div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="" class="bx-logo"><span class="bx-ver">' . h(cd_t('app')) . '</span></div>'
-       . '<nav><div class="bx-navgroup">' . h(cd_t('untertitel')) . '</div>';
-    foreach ($menu as $key) {
-        if (!cd_darf($key)) continue;
-        echo '<a href="' . h(cd_url($key)) . '"' . ($aktiv === $key ? ' class="on"' : '') . '>' . h(cd_t($key)) . '</a>';
+       . '<nav>';
+    foreach ($gruppen as [$label, $items]) {
+        $sichtbar = array_values(array_filter($items, 'cd_darf'));
+        if (!$sichtbar) continue;
+        if ($label !== null) echo '<div class="bx-navgroup">' . h(cd_t($label)) . '</div>';
+        foreach ($sichtbar as $key)
+            echo '<a href="' . h(cd_url($key)) . '"' . ($aktiv === $key ? ' class="on"' : '') . '>' . h(cd_t($key)) . '</a>';
     }
     // Rollen-Umschalter (Demo) ------------------------------------------------
     echo '<div class="bx-navgroup" style="margin-top:14px">' . h(cd_t('rolle')) . '</div><div class="cd-rolchips" style="padding:0 14px 6px">';

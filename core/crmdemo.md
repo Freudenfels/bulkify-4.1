@@ -20,6 +20,8 @@ werden nur am Bildschirm gezeigt.
 - **Briefkopf/Logo**: `cd_absender()` (Meta-Felder `abs_*`), `cd_logo_datauri()` (Logo als inline
   base64 in `crmdemo_meta.logo_b64` – kein Datei-URL, bleibt isoliert).
 - **Layout**: `cd_head/cd_shell_start/cd_shell_ende` (eigenes Menü, Rollen-Chips, Sprach-Chips, Theme).
+  Das Menü ist in `cd_shell_start()` logisch gruppiert (Übersicht · Vertrieb · Entwicklung & Katalog ·
+  Fertigung · Finanzen & Buchhaltung · System); Gruppen ohne für die Rolle sichtbare Punkte entfallen.
 - **KI-Ähnlichkeit lokal**: `cd_similarity($anfrage,$rohstoff)` – Wort-Overlap (70 %) + Zahlnähe (30 %).
   Löst das „Ashwagandha 350 mg vs. 360 mg"-Beispiel auch **ohne API-Schlüssel** (Extrakt 360 mg = Top-Treffer).
   Mit Schlüssel läuft zusätzlich der KI-Produktentwickler/-Chat über `core/ki.php`.
