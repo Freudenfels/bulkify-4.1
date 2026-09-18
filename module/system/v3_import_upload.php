@@ -49,6 +49,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // DB-Auswahl raus, Kollation normieren, alle Tabellennamen auf v3imp_ umschreiben (nur nach TABLE/INTO/LOCK).
                 $sql = preg_replace('/^\s*(CREATE\s+DATABASE|USE)\b[^\n;]*;?\s*$/im', '', $sql);
                 $sql = preg_replace('/utf8mb4_uca1400\w*/i', 'utf8mb4_unicode_ci', $sql);
+                // Fremdschlüssel-Constraints entfernen – die Zwischentabellen brauchen keine referentielle
+                // Integrität, und ihre REFERENCES zeigen auf unpräfixte Tabellen (würden sonst scheitern).
+                $sql = preg_replace('/^\s*CONSTRAINT\s+`[^`]+`\s+FOREIGN KEY.*$\n?/im', '', $sql);
+                $sql = preg_replace('/^\s*FOREIGN KEY\s*\(.*$\n?/im', '', $sql);
+                $sql = preg_replace('/,(\s*\n\s*)\)(\s*ENGINE=)/i', '$1)$2', $sql);   // evtl. hängendes Komma vor der Klammer
+                // Alle Tabellennamen auf den Prefix v3imp_ umschreiben (nur nach TABLE/INTO/LOCK).
                 $sql = preg_replace('/\b(DROP TABLE IF EXISTS|CREATE TABLE|ALTER TABLE|TRUNCATE TABLE|INSERT INTO|REPLACE INTO|LOCK TABLES)\s+`([^`]+)`/i', '$1 `v3imp_$2`', $sql);
                 $sql = "SET FOREIGN_KEY_CHECKS=0;\n" . $sql;
                 mysqli_report(MYSQLI_REPORT_OFF);
