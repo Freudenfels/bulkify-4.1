@@ -430,6 +430,10 @@ if (isset($_GET['kifehler'])) echo '<div class="bx-panel" style="border-color:#e
 // (Vorher hing der ganze Bereich an $pid: Bei einer Rezeptur-Anfrage ohne Produkt blieb nur der Kopf stehen.)
 if (!$neu):
     $pos = angebot_positionen((int)$id);
+    // Einheit fuer die Spalte "Inhalt" (Stueck je Packung): je Rezeptur die Darreichungsform -> Kapseln/g/ml.
+    $rezForm = [];
+    foreach ($pos as $pp) { $rid = (int)($pp['rezeptur_id'] ?? 0); if ($rid && !isset($rezForm[$rid])) $rezForm[$rid] = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: ''; }
+    $inhaltUnit = function($rid) use ($rezForm) { $f = $rezForm[(int)$rid] ?? ''; return $f === '' ? '' : (form_ist_fuellmenge($f) ? form_groessen_einheit($f) : form_plural($f)); };
     $ueberschrieben = angebot_hat_positionen((int)$id);
     $eur = fn($c) => number_format($c/100, 2, ',', '.') . ' €';
     // interne Summen
@@ -599,11 +603,11 @@ if (!$neu):
     <input type="hidden" name="aktion" value="pos_save">
     <table class="bx-table" id="postab">
       <colgroup>
-        <col><col style="width:88px"><col style="width:72px"><col style="width:92px"><col style="width:74px">
+        <col><col style="width:118px"><col style="width:88px"><col style="width:72px"><col style="width:92px"><col style="width:74px">
         <col style="width:80px"><col style="width:88px"><col style="width:96px"><col style="width:40px">
       </colgroup>
       <thead><tr>
-        <th>Bezeichnung</th><th class="bx-num">Menge</th><th>Einheit</th>
+        <th>Bezeichnung</th><th class="bx-num">Inhalt <?= bx_hint('Stück je Packung (z. B. 60 Kapseln). Notfalls hier direkt korrigieren – wird als Packungsgröße gespeichert.') ?></th><th class="bx-num">Menge</th><th>Einheit</th>
         <th class="bx-num">Preis/Einh €</th><th class="bx-num">MwSt %</th>
         <th class="bx-num">EK/Einh</th><th class="bx-num">Marge</th><th class="bx-num">Gesamt</th><th></th>
       </tr></thead>
@@ -617,10 +621,10 @@ if (!$neu):
             <input type="hidden" name="p_quelle[]" value="<?= h($pp['quelle'] ?? 'manuell') ?>">
             <input type="hidden" name="p_gruppe[]" value="<?= h($pp['gruppe'] ?? '') ?>">
             <input type="hidden" name="p_rez[]" value="<?= (int)($pp['rezeptur_id'] ?? 0) ?: '' ?>">
-            <input type="hidden" name="p_stk[]" value="<?= (int)($pp['stueck'] ?? 0) ?: '' ?>">
             <input type="hidden" name="p_vid[]" value="<?= (int)($pp['verpackung_id'] ?? 0) ?: '' ?>">
             <input type="hidden" name="p_ek[]" class="p_ek" value="<?= h(number_format($pp['ek_cent']/100,4,'.','')) ?>">
           </td>
+          <td><div style="display:flex;align-items:center;gap:4px"><input type="number" step="1" min="0" name="p_stk[]" value="<?= (int)($pp['stueck'] ?? 0) ?: '' ?>" placeholder="&ndash;" style="width:100%;text-align:right"><?php $u=$inhaltUnit($pp['rezeptur_id']??0); if($u!==''): ?><span class="muted" style="font-size:11px;white-space:nowrap"><?= h($u) ?></span><?php endif; ?></div></td>
           <td><input type="number" step="0.001" name="p_menge[]" class="p_menge" value="<?= h(rtrim(rtrim(number_format($pp['menge'],3,'.',''),'0'),'.')) ?>" style="width:100%"></td>
           <td><input type="text" name="p_einheit[]" value="<?= h($pp['einheit'] ?? '') ?>" style="width:100%"></td>
           <td><input type="number" step="0.01" min="0" name="p_preis[]" class="p_preis" value="<?= h(number_format((int)$pp['preis_cent']/100,2,'.','')) ?>" style="width:100%"></td>
@@ -757,7 +761,8 @@ function posRecalc(){
     tr.innerHTML='<td><input type="text" name="p_bez[]">'
       +'<textarea name="p_besch[]" class="p_besch" rows="2" placeholder="Beschreibung / Rezeptur (optional)"></textarea>'
       +'<input type="hidden" name="p_art[]" value=""><input type="hidden" name="p_quelle[]" value="manuell"><input type="hidden" name="p_gruppe[]" value=""><input type="hidden" name="p_ek[]" class="p_ek" value="0">'
-      +'<input type="hidden" name="p_rez[]" value=""><input type="hidden" name="p_stk[]" value=""><input type="hidden" name="p_vid[]" value=""></td>'
+      +'<input type="hidden" name="p_rez[]" value=""><input type="hidden" name="p_vid[]" value=""></td>'
+      +'<td><input type="number" step="1" min="0" name="p_stk[]" placeholder="&ndash;" style="width:100%;text-align:right"></td>'
       +'<td><input type="number" step="0.001" name="p_menge[]" class="p_menge"></td>'
       +'<td><input type="text" name="p_einheit[]" value="Stück"></td>'
       +'<td><input type="number" step="0.01" min="0" name="p_preis[]" class="p_preis"></td>'

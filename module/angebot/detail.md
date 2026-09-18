@@ -8,6 +8,9 @@ erzeugt, sind aber **überschreibbar**. Dazu die interne Marge (VK vs. EK, nur i
 ## Preis je Packung – so sieht es der Kunde
 Unter der Positionstabelle steht eine reine Anzeige: je Gruppe eine Zeile mit **Variante** (Größe + Verpackung), **Packungen**, **Preis je Packung**, **Preis je Stück** und **Gesamt netto**. In den Positionen stehen Herstellung und Verpackung getrennt – hier zusammengerechnet, also genau die Zahlen, die der Kunde im Portal sieht. Sie kommen aus `angebot_optionen()` und zeigen den Stand **nach dem letzten Speichern**. Positionen ohne Gruppe (Zuschläge) stehen darunter.
 
+## Spalte „Inhalt" (Stück je Packung)
+Neben der Bezeichnung steht die editierbare Spalte **Inhalt** = `angebot_position.stueck` (Packungsgröße, z. B. 60 Kapseln; bei Pulver/Flüssig die Füllmenge). Vorher lag der Wert nur in einem versteckten Feld (`p_stk[]`) – jetzt kann man ihn **direkt korrigieren**, falls die aus der Anfrage übernommene Größe falsch ist. Rechts ein kleiner Einheiten-Hinweis (Kapseln/g/ml) aus der Rezepturform (`$inhaltUnit`). Freie Positionen (Zuschläge) haben keinen Inhalt – Feld bleibt leer. Beim Speichern (`pos_save`) wird der Wert wie gehabt nach `stueck` geschrieben.
+
 ## Etikett zur Verpackung
 Die Etiketten-Auswahl zeigt nur, was auf die gewählte Verpackung passt (`etikett_zuordnung()`, Vergleich mit `item.etikett_final` am Behälter). Unter dem Feld steht, warum nichts zur Auswahl steht: **keine Etiketten im Katalog**, **noch keine Verpackung gewählt** oder **kein passendes Etikett / Endformat am Behälter fehlt**. Gepflegt wird das Endformat am Behälter unter Lager → Verpackungen („Etikett – Endformat (B×H mm)"), das Etikett selbst wird dort als Artikel mit Rolle „Etikett" und Breite/Höhe angelegt.
 
