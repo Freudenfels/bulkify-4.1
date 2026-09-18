@@ -4391,7 +4391,9 @@ function auftrag_bedarf_cached(int $pa_id): array {
 }
 
 // Kombinierte Bestellung für EINEN Lieferant. $itemPositionen = [['item_id','menge','auftrag_id'(0=Lager)], ...] + Bulk (produkt_ids).
-function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int $lieferant, ?string $datum, array $freiIds = []): int {
+// $bulkMenge (produkt_id => Wunschmenge) hebt die Bestellmenge eines Bulk-Produkts über den reinen
+// Auftragsbedarf: Überschuss (Wunsch - zu_bestellen) wird als auftragsloser Puffer-Posten ergänzt.
+function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int $lieferant, ?string $datum, array $freiIds = [], array $bulkMenge = []): int {
     $itemPositionen = array_values(array_filter($itemPositionen, fn($p) => (int)($p['item_id'] ?? 0) > 0 && (float)($p['menge'] ?? 0) > 0));
     $bulkProduktIds = array_values(array_filter(array_map('intval', $bulkProduktIds)));
     $freiIds        = array_values(array_filter(array_map('intval', $freiIds)));
@@ -4427,6 +4429,13 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
                 q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
                   [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, 0, 'Stück', (int)$o['auftrag_id'], $i++]);
                 $betroffen[(int)$o['auftrag_id']] = true;
+            }
+            // Vom Einkauf angehobene Menge: Überschuss über den Auftragsbedarf als Puffer (ohne Auftrag) ergänzen.
+            $wunsch = (float)($bulkMenge[(int)$g['produkt_id']] ?? 0);
+            $ueber  = $wunsch - (float)$g['zu_bestellen'];
+            if ($ueber > 1e-6) {
+                q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
+                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (Puffer/Lager)', $ueber, 0, 'Stück', null, $i++]);
             }
         }
     }

@@ -28,7 +28,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'freib
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bestellen') {
     $sel     = (array)($_POST['sel'] ?? []);
     $liefMap = (array)($_POST['lief'] ?? []);
+    $mengeMap = (array)($_POST['menge'] ?? []);   // vom Einkauf angehobene Bestellmenge je Zeile (optional)
     $datum   = trim($_POST['datum'] ?? '') ?: null;
+    // Mengen-Override aus dem Feld lesen (deutsche Schreibweise: Punkt = Tausender, Komma = Dezimal); nur positiv zählt.
+    $ovMenge = function(string $key) use ($mengeMap): ?float {
+        $r = preg_replace('/[^0-9.,]/', '', trim((string)($mengeMap[$key] ?? '')));
+        if ($r === '') return null;
+        $f = (float) str_replace(',', '.', str_replace('.', '', $r));
+        return $f > 0 ? $f : null;
+    };
     // Zeilen-Info je Schlüssel (Etikett: etikett:<item>:<auftrag>, sonst item:<item>)
     $info = [];
     foreach (bedarf_aggregiert(true) as $a) {
@@ -39,18 +47,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     $bulkIds = []; foreach (bedarf_bulk(true) as $b) $bulkIds[(int)$b['produkt_id']] = true;
     $freiIds = []; foreach (freibedarf_offen() as $f) $freiIds[(int)$f['id']] = true;
     $groups = [];  // lieferant_id => ['pos'=>[{item_id,menge,auftrag_id}], 'bulk'=>[pid], 'frei'=>[fid]]
+    $bulkMengeMap = [];  // produkt_id => angehobene Wunschmenge (global, da bestellung_erstellen nur die Gruppen-pids nutzt)
     foreach ($sel as $key) {
         $sup = (int)($liefMap[$key] ?? 0);
-        if (strncmp($key, 'bulk:', 5) === 0) { $pid = (int)substr($key, 5); if (isset($bulkIds[$pid])) $groups[$sup]['bulk'][] = $pid; continue; }
+        if (strncmp($key, 'bulk:', 5) === 0) {
+            $pid = (int)substr($key, 5);
+            if (isset($bulkIds[$pid])) { $groups[$sup]['bulk'][] = $pid; $ov = $ovMenge($key); if ($ov !== null) $bulkMengeMap[$pid] = $ov; }
+            continue;
+        }
         if (strncmp($key, 'frei:', 5) === 0) { $fid = (int)substr($key, 5); if (isset($freiIds[$fid])) $groups[$sup]['frei'][] = $fid; continue; }
         if (!isset($info[$key])) continue;
         $a = $info[$key];
         if (!empty($a['etikett']) && empty($a['etikett_ok'])) continue;   // Sperre: ohne Etikett-Design nicht bestellen
-        $groups[$sup]['pos'][] = ['item_id'=>(int)$a['item_id'], 'menge'=>(float)$a['zu_bestellen'], 'auftrag_id'=>(int)($a['auftrag_id'] ?? 0)];
+        $menge = $ovMenge($key) ?? (float)$a['zu_bestellen'];   // Einkauf darf die Menge anheben (z. B. 1000 -> 2000)
+        $groups[$sup]['pos'][] = ['item_id'=>(int)$a['item_id'], 'menge'=>$menge, 'auftrag_id'=>(int)($a['auftrag_id'] ?? 0)];
     }
     $n = 0;
     foreach ($groups as $sup => $g) {
-        $bid = bestellung_erstellen($g['pos'] ?? [], $g['bulk'] ?? [], $sup ?: null, $datum, $g['frei'] ?? []);
+        $bid = bestellung_erstellen($g['pos'] ?? [], $g['bulk'] ?? [], $sup ?: null, $datum, $g['frei'] ?? [], $bulkMengeMap);
         if (!$bid) continue;
         $n++;
         // Mit Bestelldatum ist die Bestellung sofort erteilt – der Lieferant bekommt die Mail (falls eingerichtet).
@@ -85,6 +99,13 @@ $bulkTab = ($aktTyp === '' || $aktTyp === 'fertig') ? $bulkBedarf : [];
 $freiTab = ($aktTyp === '') ? $freiBedarf : ($istFreiTyp ? array_values(array_filter($freiBedarf, fn($f) => $freiMatch($f, $aktTyp))) : []);
 $hatWas  = $aggTab || $bulkTab || $freiTab;
 $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+// Wert fürs Eingabefeld: Komma-Dezimal, aber OHNE Tausenderpunkt (sonst würde die Rückgabe falsch geparst).
+$minput = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', ''), '0'), ',');
+// Editierbares Mengenfeld je Zeile – der Einkauf darf die Menge über den Bedarf anheben (z. B. 1000 -> 2000).
+$mengeInput = fn(string $key, float $wert, string $einheit) =>
+    '<input type="text" inputmode="decimal" name="menge[' . h($key) . ']" value="' . h($minput($wert)) . '"'
+  . ' style="width:88px;text-align:right" title="Bestellmenge – kann über den Bedarf angehoben werden">'
+  . ' <span class="muted">' . h($einheit) . '</span>';
 $rolleBadge = fn($r) => bx_badge($r, $r === 'Fertigware' ? 'info' : '');
 // Lieferant-Dropdown je Zeile (vorbelegt)
 $liefSelect = function(string $key, int $sel) use ($lieferanten): string {
@@ -135,7 +156,7 @@ if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="pa
             <?php endif; ?>
           </td>
           <td><?= $rolleBadge($a['rolle']) ?></td>
-          <td class="bx-num"><strong style="color:#8f231b"><?= $mfmt($a['zu_bestellen']) ?> <?= h($a['einheit']) ?></strong><?php if (!$istEtikett): ?><div class="muted" style="font-size:11px">Lager <?= $mfmt($a['stock']) ?><?= $a['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($a['bestellt']) : '' ?></div><?php else: ?><div class="muted" style="font-size:11px">kundenspezifisch</div><?php endif; ?></td>
+          <td class="bx-num"><?php if ($gesperrt): ?><strong style="color:#8f231b"><?= $mfmt($a['zu_bestellen']) ?> <?= h($a['einheit']) ?></strong><?php else: ?><?= $mengeInput($key, (float)$a['zu_bestellen'], (string)$a['einheit']) ?><?php endif; ?><?php if (!$istEtikett): ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($a['zu_bestellen']) ?> · Lager <?= $mfmt($a['stock']) ?><?= $a['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($a['bestellt']) : '' ?></div><?php else: ?><div class="muted" style="font-size:11px">kundenspezifisch</div><?php endif; ?></td>
           <td><?= $gesperrt ? '<span class="muted">–</span>' : $liefSelect($key, (int)($a['haupt_lieferant'] ?? 0)) ?></td>
           <td style="font-size:12px"><?php foreach ($a['orders'] as $o): if ($o['need'] <= 1e-6) continue; ?>
             <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a><?php endforeach; ?></td>
@@ -146,7 +167,7 @@ if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="pa
           <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
           <td>Bulk: <?= h($b['produkt'] ?: '–') ?></td>
           <td><?= bx_badge('Fertiges Produkt','info') ?></td>
-          <td class="bx-num"><strong style="color:#8f231b"><?= $mfmt($b['zu_bestellen']) ?> Stück</strong></td>
+          <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], 'Stück') ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($b['zu_bestellen']) ?> Stück</div></td>
           <td><?= $liefSelect($key, 0) ?></td>
           <td style="font-size:12px"><?php foreach ($b['orders'] as $o): ?>
             <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a><?php endforeach; ?><span class="muted">· Fremdfertigung</span></td>
