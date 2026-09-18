@@ -40,16 +40,23 @@ function crmdemo_schema(): void {
     // Rezeptur-Katalog: geteilte Bibliothek fertiger Rezepturen. Waechst, wenn Sales einem
     // Kunden eine Rezeptur vorstellen -> im Angebot wieder waehlbar (kein Wildwuchs bei 25 Sales).
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_rezeptur (
-        id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT NULL, form VARCHAR(30) NULL,
+        id INT AUTO_INCREMENT PRIMARY KEY, nummer VARCHAR(30) NULL, name VARCHAR(190) NOT NULL, form VARCHAR(30) NULL,
         kategorie VARCHAR(80) NULL, beschreibung TEXT NULL, zutaten MEDIUMTEXT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'entwurf', freigabe_von VARCHAR(20) NULL, freigabe_am DATETIME NULL,
+        preis_cent INT NULL, preis_notiz TEXT NULL,
         erstellt_von VARCHAR(40) NULL, verwendet INT NOT NULL DEFAULT 0,
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
     // Rohstoff-Katalog + Preishistorie (fuer KI-Aehnlichkeit + Sourcing) --------
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_rohstoff (
-        id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT NULL, kategorie VARCHAR(80) NULL,
+        id INT AUTO_INCREMENT PRIMARY KEY, nummer VARCHAR(30) NULL, name VARCHAR(190) NOT NULL, kategorie VARCHAR(80) NULL,
         wirkstoff VARCHAR(120) NULL, gehalt VARCHAR(60) NULL, form VARCHAR(40) NULL,
         herkunft VARCHAR(80) NULL, cas VARCHAR(40) NULL, moq_kg DECIMAL(12,2) NULL,
         notiz TEXT NULL, aktiv TINYINT NOT NULL DEFAULT 1,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
+    // Dokumente je Rohstoff (Upload wie in v4; inline base64, kein Datei-URL) ----
+    $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_dokument (
+        id INT AUTO_INCREMENT PRIMARY KEY, rohstoff_id INT NOT NULL, name VARCHAR(190) NULL,
+        typ VARCHAR(80) NULL, groesse INT NULL, daten MEDIUMTEXT NULL,
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_rohstoff_preis (
         id INT AUTO_INCREMENT PRIMARY KEY, rohstoff_id INT NOT NULL, datum DATE NULL,
@@ -130,13 +137,17 @@ function crmdemo_schema(): void {
                   'ablehnungsgrund'=>"TEXT NULL"] as $c=>$d) ensure_column('crmdemo_angebot', $c, $d);
         foreach (['notiz'=>"TEXT NULL",'zahlungsbedingungen'=>"VARCHAR(190) NULL",'versandart'=>"VARCHAR(120) NULL",
                   'bankverbindung'=>"TEXT NULL"] as $c=>$d) ensure_column('crmdemo_rechnung', $c, $d);
+        foreach (['nummer'=>"VARCHAR(30) NULL",'status'=>"VARCHAR(20) NOT NULL DEFAULT 'entwurf'",
+                  'freigabe_von'=>"VARCHAR(20) NULL",'freigabe_am'=>"DATETIME NULL",'preis_cent'=>"INT NULL",
+                  'preis_notiz'=>"TEXT NULL"] as $c=>$d) ensure_column('crmdemo_rezeptur', $c, $d);
+        ensure_column('crmdemo_rohstoff', 'nummer', "VARCHAR(30) NULL");
     }
 }
 
 // --- Alle eigenen Tabellen (eine Quelle fuer Loeschen/Reset). ----------------
 function crmdemo_tabellen(): array {
     return ['crmdemo_charge_zutat','crmdemo_angebot_pos','crmdemo_angebot','crmdemo_rechnung',
-            'crmdemo_produktion','crmdemo_produkt','crmdemo_rezeptur','crmdemo_coa','crmdemo_rohstoff_preis','crmdemo_rohstoff',
+            'crmdemo_produktion','crmdemo_produkt','crmdemo_rezeptur','crmdemo_coa','crmdemo_dokument','crmdemo_rohstoff_preis','crmdemo_rohstoff',
             'crmdemo_mail','crmdemo_chat','crmdemo_mitarbeiter','crmdemo_kunde'];
 }
 
@@ -206,6 +217,7 @@ function crmdemo_i18n(): array {
         'verlassen'      => ['de'=>'Demo verlassen','en'=>'Leave demo','zh'=>'退出演示'],
         'rolle'          => ['de'=>'Rolle','en'=>'Role','zh'=>'角色'],
         'r_verkauf'      => ['de'=>'Verkauf','en'=>'Sales','zh'=>'销售'],
+        'r_entwicklung'  => ['de'=>'Entwicklung','en'=>'R&D','zh'=>'研发'],
         'r_pricing'      => ['de'=>'Pricing / Sourcing','en'=>'Pricing / Sourcing','zh'=>'定价 / 采购'],
         'r_produktion'   => ['de'=>'Produktion','en'=>'Production','zh'=>'生产'],
         'r_buchhaltung'  => ['de'=>'Buchhaltung','en'=>'Accounting','zh'=>'会计'],
@@ -314,6 +326,24 @@ function crmdemo_i18n(): array {
         'katalog_suche'  => ['de'=>'Katalog durchsuchen (Name, Kategorie, Zutat)','en'=>'Search catalog (name, category, ingredient)','zh'=>'搜索目录（名称、类别、成分）'],
         'in_katalog'     => ['de'=>'In den Rezeptur-Katalog speichern','en'=>'Save to formulation catalog','zh'=>'保存到配方目录'],
         'gespeichert'    => ['de'=>'Im Katalog','en'=>'In catalog','zh'=>'已在目录'],
+        // Rezeptur-Workflow
+        'neue_rezeptur'  => ['de'=>'+ Neue Rezeptur','en'=>'+ New formulation','zh'=>'+ 新配方'],
+        'rez_status'     => ['de'=>'Status','en'=>'Status','zh'=>'状态'],
+        'rs_entwurf'     => ['de'=>'Entwurf','en'=>'Draft','zh'=>'草稿'],
+        'rs_freigegeben' => ['de'=>'Freigegeben','en'=>'Approved','zh'=>'已批准'],
+        'rs_kalkuliert'  => ['de'=>'Kalkuliert','en'=>'Priced','zh'=>'已核价'],
+        'rez_freigeben'  => ['de'=>'Rezeptur freigeben (Entwicklung/Produktion)','en'=>'Approve formulation (R&D/Production)','zh'=>'批准配方（研发/生产）'],
+        'rez_an_pricing' => ['de'=>'Nach Freigabe: Pricing berechnet den Preis.','en'=>'After approval: Pricing calculates the price.','zh'=>'批准后：定价核算价格。'],
+        'rez_preis'      => ['de'=>'Preis (je Einheit)','en'=>'Price (per unit)','zh'=>'单价'],
+        'rez_preis_setzen'=>['de'=>'Preis berechnen & übernehmen','en'=>'Set price','zh'=>'核算并保存价格'],
+        'freigegeben_von'=> ['de'=>'Freigegeben von','en'=>'Approved by','zh'=>'批准人'],
+        // Rohstoff-Nummer + Dokumente
+        'roh_nummer'     => ['de'=>'Rohstoff-Nr.','en'=>'Material no.','zh'=>'原料编号'],
+        'dokumente'      => ['de'=>'Dokumente','en'=>'Documents','zh'=>'文件'],
+        'dok_hochladen'  => ['de'=>'Dokument hochladen (PDF/Bild)','en'=>'Upload document (PDF/image)','zh'=>'上传文件（PDF/图片）'],
+        'dok_ansehen'    => ['de'=>'Ansehen','en'=>'View','zh'=>'查看'],
+        'roh_neu'        => ['de'=>'+ Neuer Rohstoff','en'=>'+ New material','zh'=>'+ 新原料'],
+        'zutat_katalog'  => ['de'=>'Zutat aus Katalog (unbekannte werden neu angelegt)','en'=>'Ingredient from catalog (unknown ones are created)','zh'=>'从目录选择成分（未知项将新建）'],
         // Positionstyp im Angebot
         'typ'            => ['de'=>'Typ','en'=>'Type','zh'=>'类型'],
         'einheit'        => ['de'=>'Einheit','en'=>'Unit','zh'=>'单位'],
@@ -406,7 +436,7 @@ function crmdemo_i18n(): array {
 }
 
 // --- Rollen / Rechte (Demo: Admin kann jede Rolle „vorfuehren"). --------------
-function cd_rollen(): array { return ['verkauf','pricing','produktion','buchhaltung','admin']; }
+function cd_rollen(): array { return ['verkauf','entwicklung','pricing','produktion','buchhaltung','admin']; }
 function cd_rolle(): string {
     $r = strtolower(trim((string)($_GET['rolle'] ?? '')));
     if (in_array($r, cd_rollen(), true)) { cd_meta_set('rolle', $r); return $r; }
@@ -417,6 +447,7 @@ function cd_rolle(): string {
 function cd_rechte(string $rolle): array {
     $map = [
         'verkauf'     => ['dashboard','kunden','konversation','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','chat','ki'],
+        'entwicklung' => ['dashboard','katalog','rezepturen','produktentwickler','coareader','chat','ki'],
         'pricing'     => ['dashboard','katalog','rezepturen','coareader','angebote','chat','ki'],
         'produktion'  => ['dashboard','produktion','katalog','rezepturen'],
         'buchhaltung' => ['dashboard','rechnungen','finanzen','kunden','konversation'],
@@ -453,6 +484,16 @@ function cd_std(string $k, string $default = ''): string {
                    'std_zahlungsbed'=>'Zahlbar innerhalb 14 Tagen ohne Abzug.',
                    'std_versandart'=>'Spedition / Kurier', 'std_bank'=>'Musterbank · IBAN DE00 0000 0000 0000 0000 00 · BIC XXXXDEXX'];
     return cd_meta_get($k, $default !== '' ? $default : ($def[$k] ?? ''));
+}
+
+// --- Rohstoff im Katalog finden oder neu anlegen (Zutaten waelen aus Katalog). -
+function cd_rohstoff_find_or_create(string $name): int {
+    $name = trim($name); if ($name === '') return 0;
+    $id = (int) scalar("SELECT id FROM crmdemo_rohstoff WHERE name=? LIMIT 1", [$name]);
+    if ($id) return $id;
+    q("INSERT INTO crmdemo_rohstoff (nummer,name,kategorie,notiz) VALUES (?,?,?,?)",
+      [cd_nummer('RM'), $name, null, 'Automatisch aus Rezeptur angelegt']);
+    return insert_id();
 }
 
 // --- Mitarbeiter (Demo). -----------------------------------------------------
@@ -652,16 +693,16 @@ function crmdemo_seed(): void {
         $z1 = json_encode([['name'=>'Magnesiumcitrat','menge_mg'=>375],['name'=>'Vitamin B6','menge_mg'=>1.4]], JSON_UNESCAPED_UNICODE);
         $z2 = json_encode([['name'=>'Ashwagandha-Extrakt (5% Withanolide)','menge_mg'=>360],['name'=>'Schwarzer Pfeffer-Extrakt','menge_mg'=>5]], JSON_UNESCAPED_UNICODE);
         $z3 = json_encode([['name'=>'Vitamin D3','menge_mg'=>0.025],['name'=>'Vitamin K2 (MK-7)','menge_mg'=>0.075]], JSON_UNESCAPED_UNICODE);
-        q("INSERT INTO crmdemo_rezeptur (name,form,kategorie,beschreibung,zutaten,erstellt_von,verwendet) VALUES
-            ('Magnesium Complex','kapsel','Mineralstoffe','Magnesium für Muskeln & Nerven, gut verträglich',?, 'verkauf', 1),
-            ('Ashwagandha 360 mg','kapsel','Pflanzenextrakte','Adaptogen, standardisiert auf 5% Withanolide',?, 'verkauf', 2),
-            ('Vitamin D3 + K2','kapsel','Vitamine','Klassische Kombination für Knochen & Immunsystem',?, 'verkauf', 0)",
+        q("INSERT INTO crmdemo_rezeptur (name,form,kategorie,beschreibung,zutaten,erstellt_von,verwendet,status,freigabe_von,freigabe_am,preis_cent) VALUES
+            ('Magnesium Complex','kapsel','Mineralstoffe','Magnesium für Muskeln & Nerven, gut verträglich',?, 'verkauf', 1,'kalkuliert','entwicklung',NOW(),249),
+            ('Ashwagandha 360 mg','kapsel','Pflanzenextrakte','Adaptogen, standardisiert auf 5% Withanolide',?, 'verkauf', 2,'freigegeben','produktion',NOW(),NULL),
+            ('Vitamin D3 + K2','kapsel','Vitamine','Klassische Kombination für Knochen & Immunsystem',?, 'verkauf', 0,'entwurf',NULL,NULL,NULL)",
             [$z1,$z2,$z3]);
     }
     if ((int) scalar("SELECT COUNT(*) FROM crmdemo_rohstoff") === 0) {
         // Rohstoff-Katalog ----------------------------------------------------
         q("INSERT INTO crmdemo_rohstoff (name,kategorie,wirkstoff,gehalt,form,herkunft,moq_kg,notiz) VALUES
-            ('Ashwagandha-Extrakt 360 mg','Pflanzenextrakt','Withania somnifera','5% Withanolide','Pulver','IN',25,'KSM-artig, wasserlöslich'),
+            ('Ashwagandha-Extrakt (5% Withanolide)','Pflanzenextrakt','Withania somnifera','5% Withanolide','Pulver','IN',25,'KSM-artig, wasserlöslich'),
             ('Ashwagandha-Wurzelpulver','Pflanzenpulver','Withania somnifera','roh, unstandardisiert','Pulver','IN',50,'günstige Variante'),
             ('Magnesiumcitrat','Mineralstoff','Magnesium','16% elementar','Pulver','DE',100,NULL),
             ('Vitamin D3 100.000 I.E./g','Vitamin','Cholecalciferol','100.000 I.E./g','Öl/Pulver','CH',5,NULL),
@@ -672,6 +713,12 @@ function crmdemo_seed(): void {
             (?, DATE_SUB(CURDATE(),INTERVAL 90 DAY), 3900,'EUR','Shandong'),
             (?, DATE_SUB(CURDATE(),INTERVAL 20 DAY), 3750,'EUR','Nutra Yunnan')", [$r1,$r1,$r1]);
     }
+
+    // Nummern nachziehen (idempotent): jede Rezeptur RZ-…, jeder Rohstoff RM-….
+    foreach (all("SELECT id FROM crmdemo_rohstoff WHERE nummer IS NULL OR nummer='' ORDER BY id") as $r)
+        q("UPDATE crmdemo_rohstoff SET nummer=? WHERE id=?", [cd_nummer('RM'), (int)$r['id']]);
+    foreach (all("SELECT id FROM crmdemo_rezeptur WHERE nummer IS NULL OR nummer='' ORDER BY id") as $r)
+        q("UPDATE crmdemo_rezeptur SET nummer=? WHERE id=?", [cd_nummer('RZ'), (int)$r['id']]);
 
     // --- Beleg-Demo: je ein Angebot pro Status + Rechnungen + Produktion. -----
     // So laesst sich jeder Schritt der Prozesskette komplett durchklicken.

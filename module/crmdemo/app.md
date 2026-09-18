@@ -22,14 +22,16 @@ Eigenständige App unter `?p=crmdemo&m=<modul>`. Nutzt nur `crmdemo_*`-Tabellen 
 - **coareader** – **KI-COA/Spec-Reader**: Lieferanten-COA/Spezifikation (auch chinesisch) einfügen →
   KI liest Werte aus (`cd_coa_extract`), legt den Rohstoff an, falls er fehlt, und erzeugt ein
   **Kunden-COA in DE/EN** (DIN-A4-Bildschirmansicht, `crmdemo_coa`). Ohne API-Schlüssel: Hinweis, läuft auf beta.
-- **katalog** – Rohstoff-Katalog mit **KI-/lokaler Ähnlichkeitssuche** (Feld oben, z. B.
-  „Ashwagandha 350 mg 5%") und Detail mit **Preishistorie** (Pricing/Admin darf Preise erfassen).
-- **rezepturen** – **geteilter Rezeptur-Katalog** (fertige Formulierungen). Durchsuchbar (Name/
-  Kategorie/Zutat), nach Verwendung sortiert. Detail zeigt Zutaten, **Verwendet**-Zähler und
-  **„Vorgestellt bei"** (Kunden, denen die Rezeptur schon angeboten wurde). Wächst automatisch:
-  siehe Angebotseditor. KI-Konzepte lassen sich mit „In den Rezeptur-Katalog speichern" übernehmen.
-- **produktentwickler** – KI-Konzept aus Idee (JSON: Kurzbeschreibung/Zutaten/Hinweise), Fallback-Hinweis
-  ohne Schlüssel.
+- **katalog** – Rohstoff-Katalog mit **KI-/lokaler Ähnlichkeitssuche**; jeder Rohstoff hat eine eigene
+  **Nummer (RM-…)**. Detail mit **Preishistorie**, **Bearbeiten** (Name/CAS/Wirkstoff/… via `rohstoff_update`)
+  und **Dokumenten-Upload** (`crmdemo_dokument`, PDF/Bild inline, ansehen/löschen) – wie in v4.
+- **rezepturen** – **geteilter Rezeptur-Katalog** (fertige Formulierungen) mit eigener **Nummer (RZ-…)**
+  und **Freigabe-Workflow**: `entwurf → freigegeben (Entwicklung/Produktion) → kalkuliert (Pricing setzt
+  Preis)`. Liste mit Nummer/Status, Suche, **„+ Neue Rezeptur"** als Popup (kein Scrollen zum Formular).
+  Zutaten werden aus dem Rohstoff-Katalog gewählt (Datalist); unbekannte werden neu angelegt. Detail
+  zeigt Zutaten, Status, Freigabe/Preis, **Verwendet** und **„Vorgestellt bei"**.
+- **produktentwickler** – KI-Konzept aus einer Idee. Erzeugt direkt eine **Rezeptur (Entwurf)** und
+  öffnet sie (Zutaten aus dem KI-Konzept, unbekannte werden im Rohstoff-Katalog neu angelegt).
 - **angebote** – Liste → Detail mit **Pricing-Workflow**: `entwurf → kalkulation → kalkuliert →
   gesendet → angenommen`. Verkauf fragt Kalkulation an / sendet / nimmt an; Pricing trägt Preise + Notiz ein.
   Annahme erzeugt automatisch die Rechnung. **Positionen aus Rezeptur wählbar** („Aus Rezeptur

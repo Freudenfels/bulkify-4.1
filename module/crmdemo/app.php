@@ -98,12 +98,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // --- Rohstoff-Katalog ---
     if ($akt === 'rohstoff_save') {
         $f = fn($n) => trim((string)($_POST[$n] ?? ''));
-        q("INSERT INTO crmdemo_rohstoff (name,kategorie,wirkstoff,gehalt,form,herkunft,cas,moq_kg,notiz) VALUES (?,?,?,?,?,?,?,?,?)",
-          [$f('name') ?: '(Rohstoff)', $f('kategorie') ?: null, $f('wirkstoff') ?: null, $f('gehalt') ?: null, $f('form') ?: null,
+        q("INSERT INTO crmdemo_rohstoff (nummer,name,kategorie,wirkstoff,gehalt,form,herkunft,cas,moq_kg,notiz) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          [cd_nummer('RM'), $f('name') ?: '(Rohstoff)', $f('kategorie') ?: null, $f('wirkstoff') ?: null, $f('gehalt') ?: null, $f('form') ?: null,
            $f('herkunft') ?: null, $f('cas') ?: null, $f('moq_kg') !== '' ? (float)str_replace(',','.',$f('moq_kg')) : null, $f('notiz') ?: null]);
         header('Location: ' . cd_url('katalog', ['id'=>insert_id()])); exit;
     }
-    if ($akt === 'rohstoff_del') { $id=(int)($_POST['id']??0); q("DELETE FROM crmdemo_rohstoff WHERE id=?", [$id]); q("DELETE FROM crmdemo_rohstoff_preis WHERE rohstoff_id=?", [$id]); header('Location: ' . cd_url('katalog')); exit; }
+    if ($akt === 'rohstoff_update') {
+        $f = fn($n) => trim((string)($_POST[$n] ?? '')); $id=(int)($_POST['id']??0);
+        q("UPDATE crmdemo_rohstoff SET name=?,kategorie=?,wirkstoff=?,gehalt=?,form=?,herkunft=?,cas=?,moq_kg=?,notiz=? WHERE id=?",
+          [$f('name') ?: '(Rohstoff)', $f('kategorie') ?: null, $f('wirkstoff') ?: null, $f('gehalt') ?: null, $f('form') ?: null,
+           $f('herkunft') ?: null, $f('cas') ?: null, $f('moq_kg') !== '' ? (float)str_replace(',','.',$f('moq_kg')) : null, $f('notiz') ?: null, $id]);
+        header('Location: ' . cd_url('katalog', ['id'=>$id])); exit;
+    }
+    if ($akt === 'rohstoff_del') { $id=(int)($_POST['id']??0); q("DELETE FROM crmdemo_rohstoff WHERE id=?", [$id]); q("DELETE FROM crmdemo_rohstoff_preis WHERE rohstoff_id=?", [$id]); q("DELETE FROM crmdemo_dokument WHERE rohstoff_id=?", [$id]); header('Location: ' . cd_url('katalog')); exit; }
+    if ($akt === 'dokument_add') {
+        $rid=(int)($_POST['rohstoff_id']??0);
+        if (!empty($_FILES['datei']['tmp_name']) && is_uploaded_file($_FILES['datei']['tmp_name'])) {
+            $sz=(int)($_FILES['datei']['size']??0); $typ=(string)($_FILES['datei']['type']??''); $nm=(string)($_FILES['datei']['name']??'Dokument');
+            if ($sz>0 && $sz<=4*1024*1024 && preg_match('~^(application/pdf|image/(png|jpe?g|webp|gif))$~', $typ)) {
+                $bin=file_get_contents($_FILES['datei']['tmp_name']);
+                if ($bin!==false) q("INSERT INTO crmdemo_dokument (rohstoff_id,name,typ,groesse,daten) VALUES (?,?,?,?,?)",
+                    [$rid, mb_substr($nm,0,190), $typ, $sz, 'data:'.$typ.';base64,'.base64_encode($bin)]);
+            }
+        }
+        header('Location: ' . cd_url('katalog', ['id'=>$rid])); exit;
+    }
+    if ($akt === 'dokument_del') { $did=(int)($_POST['id']??0); $rid=(int)($_POST['rohstoff_id']??0); q("DELETE FROM crmdemo_dokument WHERE id=?", [$did]); header('Location: ' . cd_url('katalog', ['id'=>$rid])); exit; }
     if ($akt === 'rohpreis_add') {
         $rid=(int)($_POST['rohstoff_id']??0);
         $wae=array_key_exists($_POST['waehrung']??'',cd_waehrungen())?$_POST['waehrung']:'EUR';
@@ -112,21 +132,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . cd_url('katalog', ['id'=>$rid])); exit;
     }
 
-    // --- KI-Produktentwickler ---
+    // --- KI-Produktentwickler: erzeugt eine Rezeptur (Entwurf) und oeffnet sie ---
     if ($akt === 'produkt_ki') {
         require_once BX_ROOT . '/core/ki.php';
         $name = trim($_POST['name'] ?? ''); $form = trim($_POST['form'] ?? 'kapsel'); $idee = trim($_POST['idee'] ?? '');
-        $konzept = null;
+        $besch = $idee ?: null; $zutJson = null;
         if (function_exists('ki_bereit') && ki_bereit()) {
             $sysLang = ['de'=>'Deutsch','en'=>'Englisch','zh'=>'Chinesisch'][cd_lang()] ?? 'Deutsch';
             $r = ki_json('Produktidee: ' . $idee . '. Darreichungsform: ' . $form . '. Erzeuge ein kompaktes Produktkonzept für ein Nahrungsergänzungsmittel.',
                 ['system' => 'Du bist Produktentwickler für Nahrungsergänzungsmittel. Antworte auf ' . $sysLang . '. Gib NUR JSON: {"name":"","kurzbeschreibung":"","zutaten":[{"name":"","menge_mg":0}],"hinweise":""}. Erfinde keine unzulässigen Heilaussagen.']);
-            if (!empty($r['ok']) && !empty($r['daten'])) $konzept = json_encode($r['daten'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+            if (!empty($r['ok']) && !empty($r['daten'])) {
+                $d = $r['daten'];
+                if ($name === '' && !empty($d['name'])) $name = (string)$d['name'];
+                if (!empty($d['kurzbeschreibung'])) $besch = (string)$d['kurzbeschreibung'];
+                if (!empty($d['zutaten']) && is_array($d['zutaten'])) $zutJson = json_encode($d['zutaten'], JSON_UNESCAPED_UNICODE);
+            }
         }
-        q("INSERT INTO crmdemo_produkt (name,form,idee,konzept) VALUES (?,?,?,?)", [$name ?: ($idee !== '' ? mb_substr($idee, 0, 60) : '(Idee)'), $form, $idee ?: null, $konzept]);
-        header('Location: ' . cd_url('produktentwickler')); exit;
+        $rzName = $name !== '' ? $name : ($idee !== '' ? mb_substr($idee, 0, 60) : '(Rezeptur-Entwurf)');
+        q("INSERT INTO crmdemo_rezeptur (nummer,name,form,beschreibung,zutaten,status,erstellt_von,verwendet) VALUES (?,?,?,?,?, 'entwurf', ?, 0)",
+          [cd_nummer('RZ'), $rzName, $form ?: 'kapsel', $besch, $zutJson, $rolle]);
+        $rid = insert_id();
+        if ($zutJson) foreach ((array)json_decode($zutJson, true) as $z) if (!empty($z['name'])) cd_rohstoff_find_or_create((string)$z['name']);
+        header('Location: ' . cd_url('rezepturen', ['id'=>$rid])); exit;
     }
-    if ($akt === 'produkt_del') { q("DELETE FROM crmdemo_produkt WHERE id=?", [(int)($_POST['id'] ?? 0)]); header('Location: ' . cd_url('produktentwickler')); exit; }
 
     // --- Rezeptur-Katalog ---
     if ($akt === 'rezeptur_save') {
@@ -150,11 +178,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach (preg_split('/\r?\n/', $f('zutaten')) as $z) { $z = trim($z); if ($z !== '') $arr[] = ['name'=>$z]; }
             $zut = $arr ? json_encode($arr, JSON_UNESCAPED_UNICODE) : null;
         }
-        q("INSERT INTO crmdemo_rezeptur (name,form,kategorie,beschreibung,zutaten,erstellt_von,verwendet) VALUES (?,?,?,?,?,?,0)",
-          [$f('name') ?: '(Rezeptur)', $f('form') ?: 'kapsel', $f('kategorie') ?: null, $f('beschreibung') ?: null, $zut ?: null, $rolle]);
-        header('Location: ' . cd_url('rezepturen', ['id'=>insert_id()])); exit;
+        q("INSERT INTO crmdemo_rezeptur (nummer,name,form,kategorie,beschreibung,zutaten,status,erstellt_von,verwendet) VALUES (?,?,?,?,?,?, 'entwurf', ?, 0)",
+          [cd_nummer('RZ'), $f('name') ?: '(Rezeptur)', $f('form') ?: 'kapsel', $f('kategorie') ?: null, $f('beschreibung') ?: null, $zut ?: null, $rolle]);
+        $rid = insert_id();
+        // Katalog waechst: jede Zutat als Rohstoff finden oder neu anlegen.
+        if ($zut) foreach ((array)json_decode((string)$zut, true) as $z) if (!empty($z['name'])) cd_rohstoff_find_or_create((string)$z['name']);
+        header('Location: ' . cd_url('rezepturen', ['id'=>$rid])); exit;
     }
     if ($akt === 'rezeptur_del') { q("DELETE FROM crmdemo_rezeptur WHERE id=?", [(int)($_POST['id'] ?? 0)]); q("UPDATE crmdemo_angebot_pos SET rezeptur_id=NULL WHERE rezeptur_id=?", [(int)($_POST['id'] ?? 0)]); header('Location: ' . cd_url('rezepturen')); exit; }
+    if ($akt === 'rezeptur_freigeben' && in_array($rolle,['entwicklung','produktion','admin'],true)) {
+        $rid=(int)($_POST['id']??0);
+        q("UPDATE crmdemo_rezeptur SET status='freigegeben', freigabe_von=?, freigabe_am=NOW() WHERE id=? AND status='entwurf'", [$rolle, $rid]);
+        header('Location: ' . cd_url('rezepturen', ['id'=>$rid])); exit;
+    }
+    if ($akt === 'rezeptur_preis' && in_array($rolle,['pricing','admin'],true)) {
+        $rid=(int)($_POST['id']??0);
+        q("UPDATE crmdemo_rezeptur SET status='kalkuliert', preis_cent=?, preis_notiz=? WHERE id=? AND status IN ('freigegeben','kalkuliert')",
+          [$cent($_POST['preis']??'0'), trim($_POST['preis_notiz']??'') ?: null, $rid]);
+        header('Location: ' . cd_url('rezepturen', ['id'=>$rid])); exit;
+    }
 
     // --- Angebote + Pricing-Workflow ---
     if ($akt === 'angebot_save') {
@@ -579,18 +621,60 @@ elseif ($m === 'konversation'):
 <?php // ================= KATALOG (Rohstoffe + KI-Ähnlichkeit + Preishistorie) =================
 elseif ($m === 'katalog'):
     $rid = (int)($_GET['id'] ?? 0);
-    if ($rid && ($r = one("SELECT * FROM crmdemo_rohstoff WHERE id=?", [$rid]))): ?>
+    if ($rid && ($r = one("SELECT * FROM crmdemo_rohstoff WHERE id=?", [$rid]))):
+      $edit = ($_GET['edit'] ?? '') === '1'; $darfR = in_array($rolle,['verkauf','entwicklung','pricing','admin'],true); ?>
       <div class="bx-row" style="justify-content:space-between;align-items:center">
-        <h1 style="margin:0"><?= h($r['name']) ?></h1>
-        <a class="btn btn-ghost btn-sm" href="<?= h(cd_url('katalog')) ?>">← <?= h(cd_t('katalog')) ?></a>
+        <h1 style="margin:0"><?= h($r['name']) ?> <span class="muted" style="font-size:14px"><?= h((string)$r['nummer']) ?></span></h1>
+        <div class="bx-row" style="gap:8px">
+          <?php if (!$edit && $darfR): ?><a class="btn btn-primary btn-sm" href="<?= h(cd_url('katalog', ['id'=>$rid,'edit'=>1])) ?>"><?= h(cd_t('bearbeiten')) ?></a><?php endif; ?>
+          <a class="btn btn-ghost btn-sm" href="<?= h(cd_url('katalog')) ?>">← <?= h(cd_t('katalog')) ?></a>
+        </div>
       </div>
       <p class="bx-sub"><?= h((string)$r['kategorie']) ?><?= $r['wirkstoff']?' · '.h((string)$r['wirkstoff']):'' ?><?= $r['gehalt']?' · '.h((string)$r['gehalt']):'' ?></p>
+      <?php if (!$edit): ?>
       <div class="bx-panel"><div class="bx-grid">
+        <div><label class="muted"><?= h(cd_t('roh_nummer')) ?></label><div><?= h((string)$r['nummer']) ?: '–' ?></div></div>
         <div><label class="muted"><?= h(cd_t('herkunft')) ?></label><div><?= h((string)$r['herkunft']) ?: '–' ?></div></div>
         <div><label class="muted"><?= h(cd_t('form')) ?></label><div><?= h((string)$r['form']) ?: '–' ?></div></div>
         <div><label class="muted"><?= h(cd_t('moq')) ?></label><div><?= $r['moq_kg']!==null?$mnf($r['moq_kg']):'–' ?></div></div>
         <div><label class="muted">CAS</label><div><?= h((string)$r['cas']) ?: '–' ?></div></div>
       </div><?php if ($r['notiz']): ?><p style="margin-top:8px"><?= nl2br(h((string)$r['notiz'])) ?></p><?php endif; ?></div>
+      <?php else: ?>
+      <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('bearbeiten')) ?></h2>
+        <form method="post"><input type="hidden" name="aktion" value="rohstoff_update"><input type="hidden" name="id" value="<?= $rid ?>">
+          <div class="bx-grid">
+            <div class="bx-field"><label><?= h(cd_t('roh_nummer')) ?></label><input type="text" value="<?= h((string)$r['nummer']) ?>" disabled></div>
+            <div class="bx-field"><label><?= h(cd_t('name')) ?></label><input type="text" name="name" value="<?= h((string)$r['name']) ?>" required></div>
+            <div class="bx-field"><label><?= h(cd_t('kategorie')) ?></label><input type="text" name="kategorie" value="<?= h((string)$r['kategorie']) ?>"></div>
+            <div class="bx-field"><label><?= h(cd_t('wirkstoff')) ?></label><input type="text" name="wirkstoff" value="<?= h((string)$r['wirkstoff']) ?>"></div>
+            <div class="bx-field"><label><?= h(cd_t('gehalt')) ?></label><input type="text" name="gehalt" value="<?= h((string)$r['gehalt']) ?>"></div>
+            <div class="bx-field"><label><?= h(cd_t('form')) ?></label><input type="text" name="form" value="<?= h((string)$r['form']) ?>"></div>
+            <div class="bx-field"><label><?= h(cd_t('herkunft')) ?></label><input type="text" name="herkunft" value="<?= h((string)$r['herkunft']) ?>"></div>
+            <div class="bx-field"><label>CAS</label><input type="text" name="cas" value="<?= h((string)$r['cas']) ?>"></div>
+            <div class="bx-field"><label><?= h(cd_t('moq')) ?></label><input type="number" step="0.1" name="moq_kg" value="<?= $r['moq_kg']!==null?h((string)$r['moq_kg']):'' ?>"></div>
+          </div>
+          <div class="bx-field" style="margin-top:8px"><label><?= h(cd_t('notiz')) ?></label><textarea name="notiz" rows="2"><?= h((string)$r['notiz']) ?></textarea></div>
+          <div class="bx-row" style="margin-top:10px;gap:8px"><button class="btn btn-primary" type="submit"><?= h(cd_t('speichern')) ?></button><a class="btn btn-ghost" href="<?= h(cd_url('katalog',['id'=>$rid])) ?>"><?= h(cd_t('abbrechen')) ?></a></div>
+        </form>
+      </div>
+      <?php endif; ?>
+
+      <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('dokumente')) ?></h2>
+        <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('name')) ?></th><th>Typ</th><th class="bx-num">KB</th><th></th></tr></thead><tbody>
+        <?php $dok = all("SELECT * FROM crmdemo_dokument WHERE rohstoff_id=? ORDER BY id DESC", [$rid]); if (!$dok): ?><tr><td colspan="4" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
+        foreach ($dok as $d): ?><tr>
+          <td><?= h((string)$d['name']) ?></td><td class="muted"><?= h((string)$d['typ']) ?></td><td class="bx-num"><?= $d['groesse']?number_format((int)$d['groesse']/1024,0,',','.'):'–' ?></td>
+          <td style="text-align:right;white-space:nowrap"><a class="btn btn-ghost btn-sm" href="<?= h((string)$d['daten']) ?>" target="_blank" rel="noopener"><?= h(cd_t('dok_ansehen')) ?></a>
+            <?php if ($darfR): ?><form method="post" style="display:inline;margin:0" onsubmit="return confirm('<?= h(cd_t('loeschen')) ?>?')"><input type="hidden" name="aktion" value="dokument_del"><input type="hidden" name="id" value="<?= (int)$d['id'] ?>"><input type="hidden" name="rohstoff_id" value="<?= $rid ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form><?php endif; ?></td>
+        </tr><?php endforeach; ?>
+        </tbody></table></div>
+        <?php if ($darfR): ?>
+        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap"><input type="hidden" name="aktion" value="dokument_add"><input type="hidden" name="rohstoff_id" value="<?= $rid ?>">
+          <input type="file" name="datei" accept="application/pdf,image/*" required>
+          <button class="btn btn-ghost btn-sm" type="submit" data-busy="…"><?= h(cd_t('dok_hochladen')) ?></button>
+        </form>
+        <?php endif; ?>
+      </div>
 
       <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('preishistorie')) ?></h2>
         <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('datum')) ?></th><th class="bx-num"><?= h(cd_t('preis_kg')) ?></th><th>Lieferant</th></tr></thead><tbody>
@@ -638,10 +722,10 @@ elseif ($m === 'katalog'):
         <?php endif; ?>
       </div>
       <div class="bx-panel"><div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th><?= h(cd_t('name')) ?></th><th><?= h(cd_t('kategorie')) ?></th><th><?= h(cd_t('gehalt')) ?></th><th><?= h(cd_t('herkunft')) ?></th><th class="bx-num"><?= h(cd_t('preis_kg')) ?></th></tr></thead><tbody>
-        <?php if (!$roh): ?><tr><td colspan="5" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
+        <thead><tr><th><?= h(cd_t('roh_nummer')) ?></th><th><?= h(cd_t('name')) ?></th><th><?= h(cd_t('kategorie')) ?></th><th><?= h(cd_t('gehalt')) ?></th><th><?= h(cd_t('herkunft')) ?></th><th class="bx-num"><?= h(cd_t('preis_kg')) ?></th></tr></thead><tbody>
+        <?php if (!$roh): ?><tr><td colspan="6" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
         foreach ($roh as $x): $lp = one("SELECT preis_cent,waehrung FROM crmdemo_rohstoff_preis WHERE rohstoff_id=? ORDER BY datum DESC,id DESC LIMIT 1", [(int)$x['id']]); ?>
-          <tr><td><a href="<?= h(cd_url('katalog',['id'=>(int)$x['id']])) ?>"><?= h($x['name']) ?></a></td><td><?= h((string)$x['kategorie']) ?></td><td class="muted"><?= h((string)$x['gehalt']) ?></td><td><?= h((string)$x['herkunft']) ?></td><td class="bx-num"><?= $lp?$eur($lp['preis_cent'],$lp['waehrung']):'–' ?></td></tr>
+          <tr><td class="muted"><?= h((string)$x['nummer']) ?></td><td><a href="<?= h(cd_url('katalog',['id'=>(int)$x['id']])) ?>"><?= h($x['name']) ?></a></td><td><?= h((string)$x['kategorie']) ?></td><td class="muted"><?= h((string)$x['gehalt']) ?></td><td><?= h((string)$x['herkunft']) ?></td><td class="bx-num"><?= $lp?$eur($lp['preis_cent'],$lp['waehrung']):'–' ?></td></tr>
         <?php endforeach; ?>
         </tbody></table></div></div>
       <?php if (in_array($rolle,['pricing','admin','verkauf'],true)): ?>
@@ -670,6 +754,7 @@ elseif ($m === 'produktentwickler'):
     <h1 style="margin-bottom:4px"><?= h(cd_t('produktentwickler')) ?></h1>
     <?php if (!$kiBereit): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px"><?= h(cd_t('ki_nicht_bereit')) ?></div><?php endif; ?>
     <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('neu')) ?></h2>
+      <p class="muted" style="margin-top:0;font-size:13px"><?= h(cd_t('rez_an_pricing')) ?></p>
       <form method="post"><input type="hidden" name="aktion" value="produkt_ki">
         <div class="bx-grid">
           <div class="bx-field"><label><?= h(cd_t('name')) ?></label><input type="text" name="name" placeholder="Immun Boost"></div>
@@ -679,33 +764,13 @@ elseif ($m === 'produktentwickler'):
         <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit" data-busy="…"><?= h(cd_t('entwickeln')) ?></button></div>
       </form>
     </div>
-    <?php foreach (all("SELECT * FROM crmdemo_produkt ORDER BY id DESC") as $pr):
-        $kz = $pr['konzept'] ? json_decode((string)$pr['konzept'], true) : null; ?>
-    <div class="bx-panel"><div class="bx-row" style="justify-content:space-between;align-items:center">
-        <h2 style="margin:0"><?= h($pr['name']) ?> <span class="muted" style="font-weight:400;font-size:13px"><?= h((string)$pr['form']) ?></span></h2>
-        <form method="post" style="margin:0" onsubmit="return confirm('<?= h(cd_t('loeschen')) ?>?')"><input type="hidden" name="aktion" value="produkt_del"><input type="hidden" name="id" value="<?= (int)$pr['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form></div>
-      <?php if ($pr['idee']): ?><p class="muted" style="margin:4px 0"><?= h($pr['idee']) ?></p><?php endif; ?>
-      <?php if (in_array($rolle,['verkauf','admin'],true)):
-        $zjson = (is_array($kz) && !empty($kz['zutaten'])) ? json_encode($kz['zutaten'], JSON_UNESCAPED_UNICODE) : ''; ?>
-        <form method="post" style="margin:6px 0">
-          <input type="hidden" name="aktion" value="rezeptur_save">
-          <input type="hidden" name="name" value="<?= h((string)(is_array($kz)&&!empty($kz['name'])?$kz['name']:$pr['name'])) ?>">
-          <input type="hidden" name="form" value="<?= h((string)$pr['form'] ?: 'kapsel') ?>">
-          <input type="hidden" name="beschreibung" value="<?= h((string)(is_array($kz)?($kz['kurzbeschreibung'] ?? ''):'')) ?>">
-          <input type="hidden" name="zutaten_json" value="<?= h($zjson) ?>">
-          <button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('in_katalog')) ?></button>
-        </form>
-      <?php endif; ?>
-      <?php if (is_array($kz)): ?>
-        <?php if (!empty($kz['kurzbeschreibung'])): ?><p style="margin:6px 0"><?= h($kz['kurzbeschreibung']) ?></p><?php endif; ?>
-        <?php if (!empty($kz['zutaten']) && is_array($kz['zutaten'])): ?>
-        <table class="bx-table"><thead><tr><th><?= h(cd_t('name')) ?></th><th class="bx-num">mg</th></tr></thead><tbody>
-          <?php foreach ($kz['zutaten'] as $z): ?><tr><td><?= h((string)($z['name'] ?? '')) ?></td><td class="bx-num"><?= h((string)($z['menge_mg'] ?? '')) ?></td></tr><?php endforeach; ?>
-        </tbody></table><?php endif; ?>
-        <?php if (!empty($kz['hinweise'])): ?><p class="muted" style="font-size:12px;margin-top:6px"><?= h($kz['hinweise']) ?></p><?php endif; ?>
-      <?php elseif ($pr['konzept']): ?><pre style="white-space:pre-wrap;font-size:12px"><?= h((string)$pr['konzept']) ?></pre><?php endif; ?>
+    <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('rezepturen')) ?> · <?= h(cd_t('rs_entwurf')) ?></h2>
+      <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('nummer')) ?></th><th><?= h(cd_t('name')) ?></th><th><?= h(cd_t('form')) ?></th><th></th></tr></thead><tbody>
+      <?php $entw = all("SELECT id,nummer,name,form FROM crmdemo_rezeptur WHERE status='entwurf' ORDER BY id DESC LIMIT 20"); if (!$entw): ?><tr><td colspan="4" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
+      foreach ($entw as $e): ?><tr><td class="muted"><?= h((string)$e['nummer']) ?></td><td><a href="<?= h(cd_url('rezepturen',['id'=>(int)$e['id']])) ?>"><?= h((string)$e['name']) ?></a></td><td class="muted"><?= h((string)$e['form']) ?></td><td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= h(cd_url('rezepturen',['id'=>(int)$e['id']])) ?>"><?= h(cd_t('oeffnen')) ?></a></td></tr><?php endforeach; ?>
+      </tbody></table></div>
     </div>
-    <?php endforeach;
+    <?php
 
 // ================= KI-COA/SPEC-READER =================
 elseif ($m === 'coareader'):
@@ -767,20 +832,51 @@ elseif ($m === 'coareader'):
 // ================= REZEPTUR-KATALOG (geteilte, wachsende Bibliothek) =================
 elseif ($m === 'rezepturen'):
     $rid = (int)($_GET['id'] ?? 0);
+    $badgeRz = function (string $s) {
+        $map = ['entwurf'=>['rs_entwurf','warn'],'freigegeben'=>['rs_freigegeben','info'],'kalkuliert'=>['rs_kalkuliert','ok']];
+        [$k,$t] = $map[$s] ?? ['rs_entwurf','warn']; return bx_badge(cd_t($k), $t);
+    };
     if ($rid && ($rz = one("SELECT * FROM crmdemo_rezeptur WHERE id=?", [$rid]))):
-        $zut = $rz['zutaten'] ? json_decode((string)$rz['zutaten'], true) : null; ?>
+        $zut = $rz['zutaten'] ? json_decode((string)$rz['zutaten'], true) : null; $st = (string)$rz['status']; ?>
       <div class="bx-row" style="justify-content:space-between;align-items:center">
-        <h1 style="margin:0"><?= h($rz['name']) ?> <span class="muted" style="font-size:14px"><?= h((string)$rz['form']) ?></span></h1>
+        <h1 style="margin:0"><?= h($rz['name']) ?> <span class="muted" style="font-size:14px"><?= h((string)$rz['nummer']) ?> · <?= h((string)$rz['form']) ?></span></h1>
         <a class="btn btn-ghost btn-sm" href="<?= h(cd_url('rezepturen')) ?>">← <?= h(cd_t('rezepturen')) ?></a>
       </div>
-      <p class="bx-sub"><?= h((string)$rz['kategorie']) ?> · <?= h(cd_t('verwendet')) ?>: <?= (int)$rz['verwendet'] ?> · <?= h(cd_t('erstellt_von')) ?> <?= h(cd_t('r_'.($rz['erstellt_von']?:'admin'))) ?></p>
+      <p class="bx-sub"><?= $badgeRz($st) ?> · <?= h((string)$rz['kategorie']) ?> · <?= h(cd_t('verwendet')) ?>: <?= (int)$rz['verwendet'] ?> · <?= h(cd_t('erstellt_von')) ?> <?= h(cd_t('r_'.($rz['erstellt_von']?:'admin'))) ?>
+        <?php if ($rz['freigabe_von']): ?> · <?= h(cd_t('freigegeben_von')) ?> <?= h(cd_t('r_'.$rz['freigabe_von'])) ?><?php endif; ?>
+        <?php if ($rz['preis_cent'] !== null): ?> · <?= h(cd_t('rez_preis')) ?>: <strong><?= $eur((int)$rz['preis_cent']) ?></strong><?php endif; ?></p>
       <div class="bx-panel">
         <?php if ($rz['beschreibung']): ?><p style="margin-top:0"><?= nl2br(h((string)$rz['beschreibung'])) ?></p><?php endif; ?>
         <?php if (is_array($zut) && $zut): ?>
-        <table class="bx-table"><thead><tr><th><?= h(cd_t('name')) ?></th><th class="bx-num">mg</th></tr></thead><tbody>
+        <table class="bx-table"><thead><tr><th><?= h(cd_t('wirkstoff')) ?> / <?= h(cd_t('typ_rohstoff')) ?></th><th class="bx-num"><?= h(cd_t('mg_je_einheit')) ?></th></tr></thead><tbody>
           <?php foreach ($zut as $z): ?><tr><td><?= h((string)($z['name'] ?? '')) ?></td><td class="bx-num"><?= isset($z['menge_mg'])?h((string)$z['menge_mg']):'' ?></td></tr><?php endforeach; ?>
-        </tbody></table><?php endif; ?>
+        </tbody></table><?php else: ?><p class="muted" style="margin:0"><?= h(cd_t('keine_daten')) ?></p><?php endif; ?>
       </div>
+
+      <?php // ---- Freigabe-/Preis-Workflow ---- ?>
+      <div class="bx-panel"><h2 style="margin-top:0">Workflow</h2>
+        <p class="muted" style="margin-top:0;font-size:13px"><?= h(cd_t('rez_an_pricing')) ?></p>
+        <div class="bx-row" style="gap:10px;flex-wrap:wrap;align-items:center">
+          <?php if ($st==='entwurf' && in_array($rolle,['entwicklung','produktion','admin'],true)): ?>
+            <form method="post" style="margin:0"><input type="hidden" name="aktion" value="rezeptur_freigeben"><input type="hidden" name="id" value="<?= $rid ?>"><button class="btn btn-primary" type="submit"><?= h(cd_t('rez_freigeben')) ?></button></form>
+          <?php endif; ?>
+          <?php if ($st==='entwurf' && !in_array($rolle,['entwicklung','produktion','admin'],true)): ?>
+            <span class="muted" style="font-size:13px"><?= h(cd_t('rs_entwurf')) ?> – <?= h(cd_t('rez_freigeben')) ?></span>
+          <?php endif; ?>
+        </div>
+        <?php if (in_array($st,['freigegeben','kalkuliert'],true) && in_array($rolle,['pricing','admin'],true)): ?>
+          <form method="post" style="margin-top:12px"><input type="hidden" name="aktion" value="rezeptur_preis"><input type="hidden" name="id" value="<?= $rid ?>">
+            <div class="bx-grid">
+              <div class="bx-field"><label><?= h(cd_t('rez_preis')) ?> (EUR)</label><input type="number" step="0.0001" name="preis" value="<?= $rz['preis_cent']!==null?number_format((int)$rz['preis_cent']/100,4,'.',''):'' ?>"></div>
+              <div class="bx-field"><label><?= h(cd_t('kalk_notiz')) ?></label><input type="text" name="preis_notiz" value="<?= h((string)$rz['preis_notiz']) ?>"></div>
+            </div>
+            <button class="btn btn-primary btn-sm" type="submit" style="margin-top:8px"><?= h(cd_t('rez_preis_setzen')) ?></button>
+          </form>
+        <?php elseif ($st==='freigegeben'): ?>
+          <p class="muted" style="font-size:13px;margin:8px 0 0"><?= h(cd_t('rs_freigegeben')) ?> – <?= h(cd_t('rez_preis_setzen')) ?> (Pricing)</p>
+        <?php endif; ?>
+      </div>
+
       <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('vorgestellt_bei')) ?></h2>
         <?php $kd = all("SELECT DISTINCT k.firma FROM crmdemo_angebot_pos p JOIN crmdemo_angebot a ON a.id=p.angebot_id JOIN crmdemo_kunde k ON k.id=a.kunde_id WHERE p.rezeptur_id=? ORDER BY k.firma", [$rid]);
         if (!$kd): ?><p class="muted"><?= h(cd_t('keine_daten')) ?></p><?php else: ?>
@@ -793,13 +889,17 @@ elseif ($m === 'rezepturen'):
       $q = trim((string)($_GET['q'] ?? ''));
       if ($q !== '') {
           $like = '%' . $q . '%';
-          $rows = all("SELECT * FROM crmdemo_rezeptur WHERE name LIKE ? OR kategorie LIKE ? OR zutaten LIKE ? ORDER BY verwendet DESC, name", [$like,$like,$like]);
+          $rows = all("SELECT * FROM crmdemo_rezeptur WHERE name LIKE ? OR nummer LIKE ? OR kategorie LIKE ? OR zutaten LIKE ? ORDER BY verwendet DESC, name", [$like,$like,$like,$like]);
       } else {
           $rows = all("SELECT * FROM crmdemo_rezeptur ORDER BY verwendet DESC, name");
-      } ?>
+      }
+      $darfNeu = in_array($rolle,['verkauf','entwicklung','pricing','admin'],true); ?>
       <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:2px">
         <h1 style="margin:0"><?= h(cd_t('rezepturen')) ?></h1>
-        <?php if (cd_darf('produktentwickler')): ?><a class="btn btn-ghost btn-sm" href="<?= h(cd_url('produktentwickler')) ?>"><?= h(cd_t('produktentwickler')) ?></a><?php endif; ?>
+        <div class="bx-row" style="gap:8px">
+          <?php if ($darfNeu): ?><button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('cdrez').classList.add('on')"><?= h(cd_t('neue_rezeptur')) ?></button><?php endif; ?>
+          <?php if (cd_darf('produktentwickler')): ?><a class="btn btn-ghost btn-sm" href="<?= h(cd_url('produktentwickler')) ?>"><?= h(cd_t('produktentwickler')) ?></a><?php endif; ?>
+        </div>
       </div>
       <p class="bx-sub"><?= (int) scalar("SELECT COUNT(*) FROM crmdemo_rezeptur") ?> <?= h(cd_t('rezepturen')) ?></p>
       <div class="bx-panel">
@@ -808,30 +908,33 @@ elseif ($m === 'rezepturen'):
           <button class="btn btn-primary" type="submit"><?= h(cd_t('suchen')) ?></button>
         </form>
         <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
-          <thead><tr><th><?= h(cd_t('name')) ?></th><th><?= h(cd_t('form')) ?></th><th><?= h(cd_t('kategorie')) ?></th><th class="bx-num"><?= h(cd_t('verwendet')) ?></th></tr></thead><tbody>
-          <?php if (!$rows): ?><tr><td colspan="4" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
-          foreach ($rows as $rz): ?><tr><td><a href="<?= h(cd_url('rezepturen',['id'=>(int)$rz['id']])) ?>"><?= h($rz['name']) ?></a></td><td><?= h((string)$rz['form']) ?></td><td class="muted"><?= h((string)$rz['kategorie']) ?></td><td class="bx-num"><?= (int)$rz['verwendet'] ?></td></tr><?php endforeach; ?>
+          <thead><tr><th><?= h(cd_t('nummer')) ?></th><th><?= h(cd_t('name')) ?></th><th><?= h(cd_t('form')) ?></th><th><?= h(cd_t('rez_status')) ?></th><th class="bx-num"><?= h(cd_t('verwendet')) ?></th></tr></thead><tbody>
+          <?php if (!$rows): ?><tr><td colspan="5" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
+          foreach ($rows as $rz): ?><tr><td class="muted"><?= h((string)$rz['nummer']) ?></td><td><a href="<?= h(cd_url('rezepturen',['id'=>(int)$rz['id']])) ?>"><?= h($rz['name']) ?></a></td><td class="muted"><?= h((string)$rz['form']) ?></td><td><?= $badgeRz((string)$rz['status']) ?></td><td class="bx-num"><?= (int)$rz['verwendet'] ?></td></tr><?php endforeach; ?>
           </tbody></table></div>
       </div>
-      <?php if (in_array($rolle,['verkauf','pricing','admin'],true)): ?>
-      <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('neu')) ?></h2>
-        <form method="post"><input type="hidden" name="aktion" value="rezeptur_save">
-          <div class="bx-grid">
-            <div class="bx-field"><label><?= h(cd_t('name')) ?></label><input type="text" name="name" required></div>
-            <div class="bx-field"><label><?= h(cd_t('form')) ?></label><select name="form"><?php foreach (['kapsel'=>'Kapsel','tablette'=>'Tablette','pulver'=>'Pulver','fluessig'=>'Flüssig'] as $kk=>$vv): ?><option value="<?= $kk ?>"><?= h($vv) ?></option><?php endforeach; ?></select></div>
-            <div class="bx-field"><label><?= h(cd_t('kategorie')) ?></label><input type="text" name="kategorie"></div>
-          </div>
-          <div class="bx-field" style="margin-top:8px"><label><?= h(cd_t('beschreibung')) ?></label><input type="text" name="beschreibung"></div>
-          <label style="display:block;margin:10px 0 6px"><?= h(cd_t('zutaten')) ?></label>
-          <?php $rohL = all("SELECT name FROM crmdemo_rohstoff WHERE aktiv=1 ORDER BY name"); ?>
-          <datalist id="rohnames"><?php foreach ($rohL as $ro): ?><option value="<?= h($ro['name']) ?>"><?php endforeach; ?></datalist>
-          <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('wirkstoff')) ?> / <?= h(cd_t('typ_rohstoff')) ?></th><th style="width:160px"><?= h(cd_t('mg_je_einheit')) ?></th></tr></thead>
-            <tbody id="zutrows"><?php for ($i=0;$i<3;$i++): ?><tr><td><input type="text" name="z_name[]" list="rohnames"></td><td><input type="number" step="0.001" name="z_mg[]"></td></tr><?php endfor; ?></tbody></table></div>
-          <button type="button" class="btn btn-ghost btn-sm" id="addzut"><?= h(cd_t('zutat_zeile')) ?></button>
-          <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit"><?= h(cd_t('anlegen')) ?></button></div>
-        </form>
-        <script>document.getElementById('addzut').addEventListener('click',function(){var tb=document.getElementById('zutrows');var tr=document.createElement('tr');tr.innerHTML='<td><input type="text" name="z_name[]" list="rohnames"></td><td><input type="number" step="0.001" name="z_mg[]"></td>';tb.appendChild(tr);});</script>
+      <?php if ($darfNeu): $rohL = all("SELECT name FROM crmdemo_rohstoff WHERE aktiv=1 ORDER BY name"); ?>
+      <div class="cd-modal" id="cdrez" onclick="if(event.target===this)this.classList.remove('on')">
+        <div class="box" style="max-width:560px">
+          <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><h2 style="margin:0"><?= h(cd_t('neue_rezeptur')) ?></h2><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('cdrez').classList.remove('on')">×</button></div>
+          <form method="post"><input type="hidden" name="aktion" value="rezeptur_save">
+            <div class="bx-grid">
+              <div class="bx-field"><label><?= h(cd_t('name')) ?></label><input type="text" name="name" required></div>
+              <div class="bx-field"><label><?= h(cd_t('form')) ?></label><select name="form"><?php foreach (['kapsel'=>'Kapsel','tablette'=>'Tablette','pulver'=>'Pulver','fluessig'=>'Flüssig'] as $kk=>$vv): ?><option value="<?= $kk ?>"><?= h($vv) ?></option><?php endforeach; ?></select></div>
+              <div class="bx-field"><label><?= h(cd_t('kategorie')) ?></label><input type="text" name="kategorie"></div>
+            </div>
+            <div class="bx-field" style="margin-top:8px"><label><?= h(cd_t('beschreibung')) ?></label><input type="text" name="beschreibung"></div>
+            <label style="display:block;margin:10px 0 4px"><?= h(cd_t('zutat_katalog')) ?></label>
+            <datalist id="rohnames"><?php foreach ($rohL as $ro): ?><option value="<?= h($ro['name']) ?>"><?php endforeach; ?></datalist>
+            <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('wirkstoff')) ?> / <?= h(cd_t('typ_rohstoff')) ?></th><th style="width:130px"><?= h(cd_t('mg_je_einheit')) ?></th></tr></thead>
+              <tbody id="zutrows"><?php for ($i=0;$i<3;$i++): ?><tr><td><input type="text" name="z_name[]" list="rohnames"></td><td><input type="number" step="0.001" name="z_mg[]"></td></tr><?php endfor; ?></tbody></table></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="addzut"><?= h(cd_t('zutat_zeile')) ?></button>
+            <div class="bx-row" style="margin-top:12px;gap:8px"><button class="btn btn-primary" type="submit"><?= h(cd_t('anlegen')) ?></button><button type="button" class="btn btn-ghost" onclick="document.getElementById('cdrez').classList.remove('on')"><?= h(cd_t('abbrechen')) ?></button></div>
+          </form>
+        </div>
       </div>
+      <script>document.getElementById('addzut').addEventListener('click',function(){var tb=document.getElementById('zutrows');var tr=document.createElement('tr');tr.innerHTML='<td><input type="text" name="z_name[]" list="rohnames"></td><td><input type="number" step="0.001" name="z_mg[]"></td>';tb.appendChild(tr);});
+      document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=document.getElementById('cdrez');if(m)m.classList.remove('on');}});</script>
       <?php endif; ?>
     <?php endif;
 
