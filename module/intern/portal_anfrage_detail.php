@@ -153,6 +153,7 @@ bx_head($pa['nummer'], $TYP[$pa['typ']] ?? $pa['typ'], bx_btn('Zurück zur Liste
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['vtok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Verpackungstyp aktualisiert.</div>';
 if (isset($_GET['mailfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">E-Mail an den Kunden nicht verschickt: ' . h((string)$_GET['mailfehler']) . '</div>';
+if (isset($_GET['auftrag_geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftragsbestätigung gelöscht – das Angebot ist wieder offen. Sie können es hier anpassen oder neu senden.</div>';
 if (isset($_GET['angebot'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot abgegeben – der Kunde sieht jetzt die Preise im Portal.</div>';
 if (isset($_GET['zurueckgezogen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot zurückgezogen – der Kunde kann es nicht mehr annehmen. Die Anfrage steht wieder auf „in Bearbeitung", du kannst ein neues Angebot bauen.</div>';
 if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Zurückziehen nicht möglich – das Angebot ist bereits bestätigt oder abgelehnt.</div>';

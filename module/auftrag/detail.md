@@ -20,3 +20,10 @@ Ein angenommener Auftrag mit Menge + VK (und Kunde/Produkt) kann per Button **�
 aktives Kontingent (gesamt_menge = Auftragsmenge, vk_stueck) an und **storniert** den Ursprungsauftrag –
 produziert wird danach über die Abrufe (`kontingent_abruf`, je Abruf ein Auftrag). Idempotent; blockiert,
 wenn bereits eine bezahlte Rechnung existiert oder der Auftrag selbst aus einem Kontingent stammt.
+
+## Löschen & zurück zur Anfrage
+Button **„Löschen & zurück zur Anfrage"** (nur Admin, nicht bei versendet): `auftrag_zurueck_und_loeschen()`
+löscht die Auftragsbestätigung samt Produktionsauftrag/Schritten und (unbezahlter) Rechnung
+(`auftrag_komplett_loeschen`), setzt das zugehörige Angebot von `bestaetigt` zurück auf `gesendet`
+(Staffel-Haken zurück) und springt zur **Anfrage** (`?p=portal_anfrage&id=…`), um sie anzupassen oder
+neu zu senden. Blockiert bei bezahlter Rechnung oder bereits versendetem Auftrag.

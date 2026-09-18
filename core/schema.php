@@ -1905,6 +1905,31 @@ function auftrag_komplett_loeschen(int $auftrag_id): bool {
     return true;
 }
 
+// Auftrag(sbestaetigung) loeschen und zurueck zur Anfrage: raeumt Produktion/Rechnung mit auf
+// (auftrag_komplett_loeschen), setzt das zugehoerige Angebot von 'bestaetigt' zurueck auf 'gesendet'
+// (Staffel-Haken zurueck) und liefert die Anfrage-/Angebots-ID fuer den Ruecksprung.
+// Geblockt bei bezahlter Rechnung oder bereits versendetem Auftrag. Rueckgabe:
+// ['ok'=>true,'anfrage_id'=>…,'angebot_id'=>…] | ['ok'=>false,'fehler'=>…].
+function auftrag_zurueck_und_loeschen(int $auftrag_id): array {
+    $a = one("SELECT id, nummer, angebot_id, kunde_id, status FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a) return ['ok' => false, 'fehler' => 'Auftrag nicht gefunden.'];
+    if ((string)$a['status'] === 'versendet') return ['ok' => false, 'fehler' => 'Auftrag ist bereits versendet – nicht mehr zurückholbar.'];
+    $bezahlt = (int) scalar("SELECT COUNT(*) FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status='bezahlt'", [$auftrag_id]);
+    if ($bezahlt > 0) return ['ok' => false, 'fehler' => 'Zu diesem Auftrag gibt es eine bezahlte Rechnung – bitte erst in der Buchhaltung klären.'];
+    $angId = (int)($a['angebot_id'] ?? 0);
+    $anfId = $angId ? (int) scalar("SELECT anfrage_id FROM angebot WHERE id=?", [$angId]) : 0;
+    $angNr = $angId ? (string) scalar("SELECT nummer FROM angebot WHERE id=?", [$angId]) : '';
+    auftrag_komplett_loeschen($auftrag_id);
+    if ($angId) {
+        q("UPDATE angebot SET status='gesendet', preise_kunde=1 WHERE id=? AND status='bestaetigt'", [$angId]);
+        q("UPDATE angebot_staffel SET bestaetigt=0 WHERE angebot_id=?", [$angId]);
+    }
+    if ($anfId) q("UPDATE portal_anfrage SET status='beantwortet' WHERE id=? AND status<>'abgelehnt'", [$anfId]);
+    if (!empty($a['kunde_id']) && function_exists('log_aktivitaet'))
+        log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftragsbestätigung ' . (string)$a['nummer'] . ' gelöscht – zurück zur Anfrage' . ($angNr ? ' (Angebot ' . $angNr . ' wieder offen)' : '') . '.', 'auftrag', 'angebot', $angId ?: (int)$a['id']);
+    return ['ok' => true, 'anfrage_id' => $anfId, 'angebot_id' => $angId];
+}
+
 function kunde_komplett_loeschen(int $kid): array {
     if ($kid <= 0) return ['ok' => false, 'fehler' => 'Ungültige Kunden-ID.'];
     if (!one("SELECT id FROM kunden WHERE id=?", [$kid])) return ['ok' => false, 'fehler' => 'Kunde nicht gefunden.'];

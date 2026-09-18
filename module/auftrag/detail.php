@@ -29,6 +29,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode($r['fehler'] ?? 'Umwandlung nicht möglich.')); exit;
 }
 
+// Auftragsbestaetigung loeschen und zurueck zur Anfrage (Angebot wird wieder offen) – nur Admin.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'auftrag_zurueck') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $r = auftrag_zurueck_und_loeschen($id);
+    if (empty($r['ok'])) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode($r['fehler'] ?? 'Löschen nicht möglich.')); exit; }
+    if (!empty($r['anfrage_id'])) { header('Location: ?p=portal_anfrage&id=' . (int)$r['anfrage_id'] . '&auftrag_geloescht=1'); exit; }
+    if (!empty($r['angebot_id'])) { header('Location: ?p=angebot&id=' . (int)$r['angebot_id'] . '&auftrag_geloescht=1'); exit; }
+    header('Location: ?p=auftraege&geloescht=1'); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     // Preis nachpflegen: VK je Packung + Menge editierbar, Netto = Menge × VK automatisch.
     $menge = max(0, (int)($_POST['menge'] ?? 0));
@@ -279,6 +289,17 @@ echo '</div>';
   </div>
   <button class="btn btn-primary" type="submit" data-busy="Speichert…">Speichern</button>
 </form>
+
+<?php if (has_role('admin') && (string)$a['status'] !== 'versendet'): ?>
+<div class="bx-panel" style="border-color:#e6c4c0">
+  <h2 style="margin-top:0">Löschen &amp; zurück zur Anfrage</h2>
+  <p class="muted" style="margin-top:0">Löscht diese Auftragsbestätigung samt Produktionsauftrag und (unbezahlter) Rechnung. Das zugehörige Angebot wird wieder <strong>offen</strong>, und Sie springen zurück zur Anfrage, um es anzupassen oder neu zu senden.</p>
+  <form method="post" style="margin:0" onsubmit="return confirm('Auftragsbestätigung <?= h($a['nummer']) ?> löschen? Produktionsauftrag und unbezahlte Rechnung werden entfernt; das Angebot wird wieder offen.');">
+    <input type="hidden" name="aktion" value="auftrag_zurueck">
+    <button class="btn btn-danger" type="submit" data-busy="Lösche…">Löschen &amp; zurück zur Anfrage</button>
+  </form>
+</div>
+<?php endif; ?>
 <script>
 (function(){
   var m = document.querySelector('input[name="menge"]'), v = document.getElementById('vkFeld'), out = document.getElementById('vkVorschau');
