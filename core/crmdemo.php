@@ -508,6 +508,32 @@ function cd_rohstoff_find_or_create(string $name): int {
     return insert_id();
 }
 
+// --- Rezeptur-Info-Popup: (i)-Icon zeigt Nummer/Form/Zutaten, ohne die Seite zu verlassen. ---
+// Einmal je Seite ausgeben; die (i)-Buttons rufen cdRezInfo(<id>). $rez = Zeilen mit id,nummer,name,form,zutaten.
+function cd_rez_popup(array $rez): void {
+    $map = [];
+    foreach ($rez as $r) {
+        $z = !empty($r['zutaten']) ? json_decode((string)$r['zutaten'], true) : [];
+        $map[(int)$r['id']] = ['nummer'=>(string)($r['nummer'] ?? ''), 'name'=>(string)$r['name'],
+                               'form'=>(string)($r['form'] ?? ''), 'zutaten'=>is_array($z) ? $z : []];
+    }
+    $lbl = ['zutat'=>cd_t('wirkstoff').' / '.cd_t('typ_rohstoff'), 'leer'=>cd_t('keine_daten')];
+    echo '<div class="cd-modal" id="cdRezModal" onclick="if(event.target===this)this.classList.remove(\'on\')">'
+       . '<div class="box"><div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:8px">'
+       . '<h2 id="cdRezT" style="margin:0"></h2><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'cdRezModal\').classList.remove(\'on\')">×</button></div>'
+       . '<div id="cdRezBody"></div></div></div>';
+    echo '<script>var CD_REZ=' . json_encode($map, JSON_UNESCAPED_UNICODE) . ';var CD_REZL=' . json_encode($lbl, JSON_UNESCAPED_UNICODE) . ';'
+       . 'function cdEsc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}'
+       . 'function cdRezInfo(id){var r=CD_REZ[id];if(!r)return;'
+       . 'document.getElementById("cdRezT").textContent=r.name+(r.nummer?" · "+r.nummer:"");'
+       . 'var h="<div class=\"muted\" style=\"font-size:13px;margin-bottom:8px\">"+cdEsc(r.form)+"</div>";'
+       . 'if(r.zutaten&&r.zutaten.length){h+="<table class=\"bx-table\"><thead><tr><th>"+cdEsc(CD_REZL.zutat)+"</th><th class=\"bx-num\">mg</th></tr></thead><tbody>";'
+       . 'r.zutaten.forEach(function(z){h+="<tr><td>"+cdEsc(z.name)+"</td><td class=\"bx-num\">"+(z.menge_mg!=null?cdEsc(z.menge_mg):"")+"</td></tr>";});h+="</tbody></table>";}'
+       . 'else{h+="<div class=\"muted\">"+cdEsc(CD_REZL.leer)+"</div>";}'
+       . 'document.getElementById("cdRezBody").innerHTML=h;document.getElementById("cdRezModal").classList.add("on");}'
+       . 'document.addEventListener("keydown",function(e){if(e.key==="Escape"){var m=document.getElementById("cdRezModal");if(m)m.classList.remove("on");}});</script>';
+}
+
 // --- Mitarbeiter (Demo). -----------------------------------------------------
 function cd_mitarbeiter_list(): array { return all("SELECT * FROM crmdemo_mitarbeiter WHERE aktiv=1 ORDER BY name"); }
 function cd_mitarbeiter(int $id): ?array { return $id ? one("SELECT * FROM crmdemo_mitarbeiter WHERE id=?", [$id]) : null; }
@@ -551,7 +577,10 @@ function cd_head(string $titel): void {
     echo '<!doctype html><html lang="' . h($l) . '"><head><meta charset="utf-8">'
        . '<meta name="viewport" content="width=device-width, initial-scale=1"><title>' . h($titel . ' · ' . cd_t('app')) . '</title>'
        . '<link rel="stylesheet" href="assets/app.css?v=' . $cssV . '">'
-       . '<style>.cd-a4{background:#fff;color:#111;max-width:820px;margin:0 auto;padding:44px 52px;border:1px solid var(--line);box-shadow:0 1px 8px rgba(0,0,0,.08)}'
+       . '<style>.cd-a4wrap{background:#e9ebee;padding:20px;border-radius:10px;overflow-x:auto}'
+       . '.cd-a4{background:#fff;color:#111;width:210mm;max-width:100%;min-height:297mm;margin:0 auto;padding:18mm 20mm;box-shadow:0 2px 18px rgba(0,0,0,.16)}'
+       . '.cd-iinfo{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:12px;font-style:italic;font-weight:600;cursor:pointer;text-decoration:none;padding:0;vertical-align:middle}'
+       . '.cd-iinfo:hover{color:#fff;background:var(--gruen,#2f8f5b);border-color:transparent}'
        . '.cd-a4 table{width:100%;border-collapse:collapse}.cd-a4 h1{font-size:22px;letter-spacing:2px;margin:0}'
        . '.cd-a4 .cd-th{border-bottom:2px solid #222}.cd-a4 td,.cd-a4 th{padding:7px 6px;font-size:13px}'
        . '.cd-match{height:8px;border-radius:5px;background:var(--line);overflow:hidden}.cd-match>span{display:block;height:100%;background:var(--gruen,#2f8f5b)}'

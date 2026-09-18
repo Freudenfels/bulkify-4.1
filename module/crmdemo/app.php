@@ -995,9 +995,10 @@ elseif ($m === 'rezepturen'):
         <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
           <thead><tr><th><?= h(cd_t('nummer')) ?></th><th><?= h(cd_t('name')) ?></th><th><?= h(cd_t('form')) ?></th><th><?= h(cd_t('rez_status')) ?></th><th class="bx-num"><?= h(cd_t('verwendet')) ?></th></tr></thead><tbody>
           <?php if (!$rows): ?><tr><td colspan="5" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
-          foreach ($rows as $rz): ?><tr><td class="muted"><?= h((string)$rz['nummer']) ?></td><td><a href="<?= h(cd_url('rezepturen',['id'=>(int)$rz['id']])) ?>"><?= h($rz['name']) ?></a></td><td class="muted"><?= h((string)$rz['form']) ?></td><td><?= $badgeRz((string)$rz['status']) ?></td><td class="bx-num"><?= (int)$rz['verwendet'] ?></td></tr><?php endforeach; ?>
+          foreach ($rows as $rz): ?><tr><td class="muted"><?= h((string)$rz['nummer']) ?></td><td><a href="<?= h(cd_url('rezepturen',['id'=>(int)$rz['id']])) ?>"><?= h($rz['name']) ?></a> <button type="button" class="cd-iinfo" title="<?= h(cd_t('zutaten')) ?>" onclick="cdRezInfo(<?= (int)$rz['id'] ?>)">i</button></td><td class="muted"><?= h((string)$rz['form']) ?></td><td><?= $badgeRz((string)$rz['status']) ?></td><td class="bx-num"><?= (int)$rz['verwendet'] ?></td></tr><?php endforeach; ?>
           </tbody></table></div>
       </div>
+      <?php cd_rez_popup($rows); ?>
       <?php if ($darfNeu): $rohL = all("SELECT name FROM crmdemo_rohstoff WHERE aktiv=1 ORDER BY name"); ?>
       <div class="cd-modal" id="cdrez" onclick="if(event.target===this)this.classList.remove('on')">
         <div class="box" style="max-width:560px">
@@ -1116,12 +1117,13 @@ elseif ($m === 'angebote'):
             <div class="bx-field"><label><?= h(cd_t('titel')) ?></label><input type="text" name="titel" placeholder="Angebot"></div>
           </div>
           <label style="display:block;margin:10px 0 6px"><?= h(cd_t('position')) ?></label>
-          <?php $rezList = all("SELECT id,name FROM crmdemo_rezeptur ORDER BY name");
+          <?php $rezList = all("SELECT id,nummer,name,form,zutaten FROM crmdemo_rezeptur ORDER BY name");
                 $rohList = all("SELECT id,name FROM crmdemo_rohstoff WHERE aktiv=1 ORDER BY name"); ?>
           <div class="bx-row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center">
             <select id="rezpick"><option value="">– <?= h(cd_t('rezeptur')) ?> –</option>
-              <?php foreach ($rezList as $rz): ?><option value="<?= (int)$rz['id'] ?>" data-name="<?= h($rz['name']) ?>"><?= h($rz['name']) ?></option><?php endforeach; ?>
+              <?php foreach ($rezList as $rz): ?><option value="<?= (int)$rz['id'] ?>" data-name="<?= h($rz['name']) ?>"><?= h($rz['name']) ?><?= $rz['nummer']?' ('.h((string)$rz['nummer']).')':'' ?></option><?php endforeach; ?>
             </select>
+            <button type="button" class="cd-iinfo" title="<?= h(cd_t('zutaten')) ?>" onclick="var v=document.getElementById('rezpick').value;if(v)cdRezInfo(v);">i</button>
             <button type="button" class="btn btn-ghost btn-sm" id="addprod"><?= h(cd_t('plus_produkt')) ?></button>
             <select id="rohpick"><option value="">– <?= h(cd_t('typ_rohstoff')) ?> –</option>
               <?php foreach ($rohList as $ro): ?><option value="<?= (int)$ro['id'] ?>" data-name="<?= h($ro['name']) ?>"><?= h($ro['name']) ?></option><?php endforeach; ?>
@@ -1129,6 +1131,7 @@ elseif ($m === 'angebote'):
             <button type="button" class="btn btn-ghost btn-sm" id="addroh"><?= h(cd_t('plus_rohstoff')) ?></button>
             <button type="button" class="btn btn-ghost btn-sm" id="addfrei"><?= h(cd_t('plus_frei')) ?></button>
           </div>
+          <?php cd_rez_popup($rezList); ?>
           <div class="bx-tablewrap"><table class="bx-table" id="postab"><thead><tr><th style="width:130px"><?= h(cd_t('typ')) ?></th><th><?= h(cd_t('position')) ?></th><th style="width:100px"><?= h(cd_t('menge')) ?></th><th style="width:60px"><?= h(cd_t('einheit')) ?></th><th style="width:120px"><?= h(cd_t('preis')) ?></th><th style="width:110px;text-align:center"><?= h(cd_t('als_rezeptur')) ?></th></tr></thead>
             <tbody id="posrows"></tbody></table></div>
           <p class="muted" style="font-size:12px;margin:8px 0 0"><?= h(cd_t('als_rezeptur_hint')) ?></p>
@@ -1422,7 +1425,8 @@ function cd_beleg_a4(string $typ, array $doc, array $pos, callable $eur): void {
       <a class="btn btn-ghost btn-sm" href="<?= h(cd_url($backM, ['id'=>(int)$doc['id']])) ?>">← <?= h(cd_t('zurueck')) ?></a>
       <a class="btn btn-primary btn-sm" href="<?= h(cd_url($backM, ['id'=>(int)$doc['id'],'beleg'=>1,'druck'=>1])) ?>" target="_blank" rel="noopener"><?= h(cd_t('herunterladen')) ?></a>
     </div>
-    <?php cd_beleg_sheet($typ, $doc, $pos, $eur);
+    <div class="cd-a4wrap"><?php cd_beleg_sheet($typ, $doc, $pos, $eur); ?></div>
+    <?php
 }
 
 // Standalone-Druckseite (eigene HTML-Seite, A4-Druck-CSS, CJK-Fonts) -> "Als PDF speichern".
@@ -1435,14 +1439,14 @@ function cd_beleg_print(string $typ, array $doc, array $pos, callable $eur): voi
        . '<style>'
        . '*{box-sizing:border-box} html,body{margin:0;padding:0;background:#eceef0;color:#111;'
        . "font-family:'Segoe UI',Arial,'Noto Sans SC','Microsoft YaHei','PingFang SC','Hiragino Sans GB',sans-serif}"
-       . '.cd-a4{background:#fff;color:#111;max-width:820px;margin:20px auto;padding:44px 52px;box-shadow:0 1px 12px rgba(0,0,0,.12)}'
+       . '.cd-a4{background:#fff;color:#111;width:210mm;max-width:100%;min-height:297mm;margin:20px auto;padding:18mm 20mm;box-shadow:0 1px 14px rgba(0,0,0,.16)}'
        . '.cd-a4 table{width:100%;border-collapse:collapse}.cd-a4 h1{font-size:22px;letter-spacing:2px;margin:0}'
        . '.cd-a4 .cd-th{border-bottom:2px solid #222}.cd-a4 td,.cd-a4 th{padding:7px 6px;font-size:13px}'
        . '.cd-bar{max-width:820px;margin:16px auto 0;display:flex;gap:10px;justify-content:flex-end}'
        . '.cd-bar a,.cd-bar button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid #cfd4d8;background:#fff;color:#111;text-decoration:none;cursor:pointer}'
        . '.cd-bar .pri{background:#2f8f5b;color:#fff;border-color:#2f8f5b}'
        . '@page{size:A4;margin:12mm}'
-       . '@media print{.cd-bar{display:none!important}body{background:#fff}.cd-a4{box-shadow:none;margin:0;max-width:none;padding:0}}'
+       . '@media print{.cd-bar{display:none!important}body{background:#fff}.cd-a4{box-shadow:none;margin:0;width:auto;max-width:none;min-height:0;padding:0}}'
        . '</style></head><body>'
        . '<div class="cd-bar"><a href="' . h(cd_url($backM, ['id'=>(int)$doc['id'],'beleg'=>1])) . '">← ' . h(cd_t('zurueck')) . '</a>'
        . '<button class="pri" onclick="window.print()">' . h(cd_t('drucken')) . '</button></div>';

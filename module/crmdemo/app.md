@@ -34,6 +34,8 @@ Eigenständige App unter `?p=crmdemo&m=<modul>`. Nutzt nur `crmdemo_*`-Tabellen 
   Preis)`. Liste mit Nummer/Status, Suche, **„+ Neue Rezeptur"** als Popup (kein Scrollen zum Formular).
   Zutaten werden aus dem Rohstoff-Katalog gewählt (Datalist); unbekannte werden neu angelegt. Detail
   zeigt Zutaten, Status, Freigabe/Preis, **Verwendet** und **„Vorgestellt bei"**.
+  Neben jeder Rezeptur (Liste + Angebotseditor) ein **(i)-Icon** → `cd_rez_popup()` zeigt Nummer/Form/
+  Zutaten in einem Popup (unterscheidet gleichnamige Rezepturen, ohne die Seite zu verlassen).
 - **produktentwickler** – KI-Konzept aus einer Idee. Erzeugt direkt eine **Rezeptur (Entwurf)** und
   öffnet sie (Zutaten aus dem KI-Konzept, unbekannte werden im Rohstoff-Katalog neu angelegt).
 - **angebote** – Liste → Detail mit **Pricing-Workflow**: `entwurf → kalkulation → kalkuliert →
@@ -65,6 +67,7 @@ Unterschrift/Stempel des zugeordneten Mitarbeiters. Das reine Blatt liefert `cd_
 **Herunterladen:** Knopf „Herunterladen (PDF)" öffnet `&druck=1` → `cd_beleg_print()` gibt eine
 **eigenständige A4-Druckseite** (ohne App-Shell, `@page A4`, CJK-Fonts, Auto-`window.print()`) aus –
 der Nutzer speichert sie im Druckdialog als PDF. Funktioniert auch für chinesische Belege (报价单/发票).
+Das Blatt ist echtes **A4-Maß** (`.cd-a4` = 210×297 mm, 18/20 mm Rand; Ansicht auf grauem `.cd-a4wrap`).
 
 ## Rollen (Demo-Umschalter oben)
 Verkauf · Pricing/Sourcing · Produktion · Buchhaltung · Admin. `cd_gate()` sperrt Module, die die
