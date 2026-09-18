@@ -310,6 +310,9 @@ $kannZurueck = !$neu && $st === 'gesendet';
 // Preise nachtraeglich freigeben/sperren – nur sinnvoll, wenn das Angebot schon raus ist (nicht Entwurf).
 $kannPreisFreigeben = !$neu && $st !== 'offen' && !$preiseKunde;
 $kannPreisSperren   = !$neu && $st !== 'offen' && $preiseKunde;
+// Nach dem Senden zeigt die Seite eine ruhige Übersicht; „Bearbeiten" (?edit=1) schaltet in den Editor.
+// Entwürfe (offen) und neue Angebote öffnen direkt im Editor.
+$editMode = $neu || $st === 'offen' || isset($_GET['edit']);
 $kopfBtn = bx_btn('Zurück zur Liste', '?p=angebote', 'ghost');
 if (!$neu) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Angebot als PDF ansehen – genau das, was der Kunde bekommt" href="?p=angebot_pdf&id=' . (int)$id . '">&#8681; PDF</a>' . $kopfBtn;
 if (!$neu && (int)($a['jahresvertrag'] ?? 0) === 1) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Jahresabnahmevertrag als PDF" href="?p=vertrag_pdf&id=' . (int)$id . '">&#8681; Vertrag</a>' . $kopfBtn;
@@ -329,8 +332,12 @@ if ($kannPreisFreigeben) $kopfBtn = '<form method="post" style="display:inline;m
 if ($kannSenden) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px">'
     . '<input type="hidden" name="aktion" value="senden">'
     . '<button class="btn btn-primary" type="submit" data-confirm="Angebot jetzt an den Kunden senden? Der Kunde wird damit das Angebot inkl. Preise im Portal sehen.">An Kunden senden</button></form>' . $kopfBtn;
+// Übersicht <-> Editor: aus der Übersicht per „Bearbeiten" in den Editor, aus dem Editor zurück zur Übersicht.
+if (!$neu && !$editMode) $kopfBtn = '<a class="btn btn-primary" style="margin-right:8px" href="?p=angebot&id=' . (int)$id . '&edit=1">Bearbeiten</a>' . $kopfBtn;
+elseif (!$neu && $st !== 'offen') $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" href="?p=angebot&id=' . (int)$id . '">Zur Übersicht</a>' . $kopfBtn;
+$stLabel = match ($st) { 'gesendet'=>'gesendet','bestaetigt'=>'bestätigt','abgelehnt'=>'abgelehnt','offen'=>'Entwurf', default=>$st };
 bx_head($neu ? 'Neues Angebot' : $v('nummer'),
-        $neu ? 'Positionen' : 'Angebot bearbeiten',
+        $neu ? 'Positionen' : ($editMode ? 'Angebot bearbeiten' : 'Übersicht · ' . $stLabel),
         $kopfBtn);
 if (!$neu && !empty($a['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Erstellt am ' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . (!empty($a['aktualisiert']) && $a['aktualisiert'] !== $a['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($a['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
 if (isset($_GET['angefragt']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['angefragt'] . ' Preisanfrage(n) verschickt' . (isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '') . '. Sobald ein Lieferant antwortet, steht der Preis hier.</div>';
@@ -349,6 +356,104 @@ if (isset($_GET['zurueckgesetzt'])) echo '<div class="bx-panel badge-ok" style="
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 if (isset($_GET['kiok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['kiok'] . ' Positionen aus dem PDF übernommen (Herstellung, Verpackung, Etikett) – bitte prüfen.</div>';
 if (isset($_GET['kifehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['kifehler']) . '</div>';
+
+// ===================== ÜBERSICHT (nach dem Senden, wie v3) =====================
+// Ruhige, belegartige Ansicht: Kopfdaten (Kunde) · Positionen · Summen. „Bearbeiten" oben schaltet in den Editor.
+if (!$neu && !$editMode) {
+    $eur = fn($c) => number_format($c / 100, 2, ',', '.') . ' €';
+    $posU = angebot_positionen((int)$id);
+    $nettoU = 0; $ustGrp = [];
+    foreach ($posU as $pp) {
+        $g = (int) round((float)$pp['menge'] * (int)$pp['preis_cent']);
+        $nettoU += $g;
+        $s = (string) mwst_normalisieren((float)$pp['mwst_satz']);
+        $ustGrp[$s] = ($ustGrp[$s] ?? 0) + $g;
+    }
+    $ustSum = 0; foreach ($ustGrp as $s => $base) $ustSum += (int) round($base * ((float)$s) / 100);
+    $bruttoU = $nettoU + $ustSum;
+    $kd  = $kid ? one("SELECT * FROM kunden WHERE id=?", [$kid]) : null;
+    $paNr = scalar("SELECT pa.nummer FROM produktionsauftrag pa JOIN auftrag au ON au.id=pa.auftrag_id WHERE au.angebot_id=? ORDER BY pa.id DESC LIMIT 1", [(int)$id]);
+    // Echte (eingefrorene) Positionen -> Beleg-Ansicht mit Summe. Reines Staffelangebot -> die Staffeln, aus denen der Kunde wählt.
+    $hatPos = angebot_hat_positionen((int)$id);
+    ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Kopfdaten</h2>
+      <?php if ($kd): $strasse = trim(($kd['strasse'] ?? '') . ' ' . ($kd['hausnummer'] ?? '')); $ort = trim(($kd['plz'] ?? '') . ' ' . ($kd['ort'] ?? '')); ?>
+      <div style="line-height:1.7">
+        <strong style="font-weight:600"><?= h($kd['firma'] ?? '') ?></strong>
+        <?php if ($strasse !== ''): ?><br><?= h($strasse) ?><?php endif; ?>
+        <?php if ($ort !== ''): ?><br><?= h($ort) ?><?php endif; ?>
+        <?php if (($kd['kundennummer'] ?? '') !== ''): ?><br><span class="muted">Kunden-Nr.:</span> <?= h((string)$kd['kundennummer']) ?><?php endif; ?>
+        <?php if ($paNr): ?><br><span class="muted">Produktionsauftrag:</span> <?= h((string)$paNr) ?><?php endif; ?>
+        <?php if (($a['gueltig_bis'] ?? null)): ?><br><span class="muted">Gültig bis:</span> <?= h(date('d.m.Y', strtotime((string)$a['gueltig_bis']))) ?><?php endif; ?>
+      </div>
+      <?php else: ?><div class="muted">Kein Kunde in den Kopfdaten hinterlegt.</div><?php endif; ?>
+      <?php if (($a['notiz'] ?? '') !== ''): ?><div style="margin-top:12px;white-space:pre-line"><span class="muted">Notiz:</span> <?= h((string)$a['notiz']) ?></div><?php endif; ?>
+    </div>
+
+    <?php if ($hatPos): ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Positionen</h2>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th style="width:34px">#</th><th style="width:90px">Art.-Nr.</th><th>Bezeichnung</th><th class="bx-num">Menge</th><th>Einheit</th><th class="bx-num">Preis/Einh</th><th class="bx-num">Gesamt</th></tr></thead>
+        <tbody>
+        <?php if (!$posU): ?><tr><td colspan="7" class="muted">Noch keine Positionen.</td></tr><?php endif; ?>
+        <?php foreach ($posU as $i => $pp): $g = (float)$pp['menge'] * (int)$pp['preis_cent']; ?>
+          <tr>
+            <td class="muted"><?= $i + 1 ?></td>
+            <td><?= $pp['artikelnr'] !== '' ? h($pp['artikelnr']) : '<span class="muted">–</span>' ?></td>
+            <td>
+              <strong style="font-weight:600"><?= h($pp['bezeichnung']) ?></strong>
+              <?php if (trim((string)($pp['beschreibung'] ?? '')) !== ''): ?><div class="muted" style="font-size:13px;white-space:pre-line;margin-top:2px"><?= h((string)$pp['beschreibung']) ?></div><?php endif; ?>
+            </td>
+            <td class="bx-num"><?= rtrim(rtrim(number_format((float)$pp['menge'], 3, ',', '.'), '0'), ',') ?></td>
+            <td><?= h((string)($pp['einheit'] ?? '')) ?></td>
+            <td class="bx-num"><?= $eur((int)$pp['preis_cent']) ?></td>
+            <td class="bx-num"><?= $eur($g) ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="bx-panel">
+      <div style="max-width:360px;margin-left:auto;font-size:15px;line-height:2">
+        <div class="bx-row" style="justify-content:space-between"><span>Positionen netto</span><strong><?= $eur($nettoU) ?></strong></div>
+        <?php foreach ($ustGrp as $s => $base): if ((float)$s <= 0) continue; ?>
+          <div class="bx-row" style="justify-content:space-between"><span>USt. <?= rtrim(rtrim(number_format((float)$s,2,',',''),'0'),',') ?>% auf <?= $eur($base) ?></span><span><?= $eur((int) round($base * ((float)$s)/100)) ?></span></div>
+        <?php endforeach; ?>
+        <div class="bx-row" style="justify-content:space-between;border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-size:18px"><span>Endsumme</span><strong><?= $eur($bruttoU) ?></strong></div>
+      </div>
+    </div>
+    <?php else: $optU = angebot_optionen((int)$id); ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Angebotene Preise – so sieht es der Kunde</h2>
+      <div class="muted" style="font-size:12px;margin:-4px 0 10px">Der Kunde wählt im Portal eine dieser Zeilen. Gesamt netto je Zeile bei der angegebenen Packungszahl.</div>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Variante</th><th class="bx-num">Packungen</th><th class="bx-num">Preis / Packung</th><th class="bx-num">Preis / Stück</th><th class="bx-num">Gesamt netto</th></tr></thead>
+        <tbody>
+        <?php if (!$optU['optionen']): ?><tr><td colspan="5" class="muted">Noch keine Preiszeilen. Über „Bearbeiten" Positionen/Staffeln ergänzen.</td></tr><?php endif; ?>
+        <?php foreach ($optU['optionen'] as $o): ?>
+          <tr>
+            <td><?= h(trim(($o['groesse'] !== '' ? $o['groesse'] : $o['titel']) . ($o['verpackung'] !== '' ? ' · ' . $o['verpackung'] : ''))) ?></td>
+            <td class="bx-num"><?= number_format($o['pakete'], 0, ',', '.') ?></td>
+            <td class="bx-num"><strong><?= $eur($o['pro_pkg'] * 100) ?></strong></td>
+            <td class="bx-num"><?= (!$o['ist_fuell'] && $o['stueck'] > 0) ? (fn($v) => number_format($v, $v < 0.1 ? 4 : 2, ',', '.') . ' €')($o['pro_pkg'] / $o['stueck']) : '–' ?></td>
+            <td class="bx-num"><?= $eur($o['netto'] * 100) ?></td>
+          </tr>
+        <?php endforeach; ?>
+        <?php foreach ($optU['extra'] as $x): ?>
+          <tr><td colspan="4"><?= h($x['bezeichnung']) ?><span class="muted" style="font-size:12px"> · wird zusätzlich berechnet</span></td>
+              <td class="bx-num"><?= $eur((float)$x['menge'] * (int)$x['preis_cent']) ?></td></tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    </div>
+    <?php endif; ?>
+    <?php
+    render_footer();
+    return;
+}
 ?>
 <?php if (!$neu && ki_bereit()): ?>
 <details class="bx-panel" style="border-color:var(--gruen)" <?= isset($_GET['kifehler']) || isset($_GET['kiok']) ? 'open' : '' ?>>

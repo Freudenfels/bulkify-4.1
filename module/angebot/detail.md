@@ -5,6 +5,13 @@ Interner Editor für ein Angebot. **Hybrid-Modell** (wie in v3 `buchhaltung_bele
 aber schlanker): die Positionen werden **automatisch** aus Produkt + Preismatrix + Verpackung
 erzeugt, sind aber **überschreibbar**. Dazu die interne Marge (VK vs. EK, nur intern).
 
+## Übersicht nach dem Senden (wie v3) · „Bearbeiten" öffnet den Editor
+Ein **gesendetes/bestätigtes/abgelehntes** Angebot öffnet standardmäßig als ruhige **Übersicht** (belegartig), nicht im Editor. Entwürfe (`offen`) und neue Angebote gehen direkt in den Editor. Umschalten über `$editMode = $neu || $st==='offen' || isset($_GET['edit'])`: Button **„Bearbeiten"** (`?edit=1`) im Kopf schaltet in den Editor, „Zur Übersicht" zurück. Kopf-Aktionen (PDF, Senden, Zurückziehen, Preise freigeben/sperren, Löschen) bleiben in beiden Ansichten.
+
+Die Übersicht zeigt **Kopfdaten** (Kundenname + Adresse, Kunden-Nr., ggf. Produktionsauftrag, Gültig-bis, Notiz) und dann – je nach Angebotstyp:
+- **echte Positionen** (`angebot_hat_positionen()`): Positionstabelle (#, Art.-Nr., Bezeichnung + Beschreibung, Menge, Einheit, Preis/Einh, Gesamt) + Summenblock (Positionen netto, USt. je Satz, Endsumme).
+- **reines Staffelangebot** (keine eingefrorenen Positionen, z. B. aus der Matrix): die **Staffel-/Optionentabelle** (`angebot_optionen()`) „so sieht es der Kunde" – Variante · Packungen · Preis/Packung · Preis/Stück · Gesamt netto je Zeile. **Keine** Gesamt-Endsumme (die Staffeln sind Alternativen, kein Beleg).
+
 ## Preis je Packung – so sieht es der Kunde
 Unter der Positionstabelle steht eine reine Anzeige: je Gruppe eine Zeile mit **Variante** (Größe + Verpackung), **Packungen**, **Preis je Packung**, **Preis je Stück** und **Gesamt netto**. In den Positionen stehen Herstellung und Verpackung getrennt – hier zusammengerechnet, also genau die Zahlen, die der Kunde im Portal sieht. Sie kommen aus `angebot_optionen()` und zeigen den Stand **nach dem letzten Speichern**. Positionen ohne Gruppe (Zuschläge) stehen darunter.
 
