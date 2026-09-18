@@ -25,6 +25,9 @@ Eigenständige App unter `?p=crmdemo&m=<modul>`. Nutzt nur `crmdemo_*`-Tabellen 
 - **katalog** – Rohstoff-Katalog mit **KI-/lokaler Ähnlichkeitssuche**; jeder Rohstoff hat eine eigene
   **Nummer (RM-…)**. Detail mit **Preishistorie**, **Bearbeiten** (Name/CAS/Wirkstoff/… via `rohstoff_update`)
   und **Dokumenten-Upload** (`crmdemo_dokument`, PDF/Bild inline, ansehen/löschen) – wie in v4.
+  Panel **„Chargen & COAs"**: chinesische COA einfügen → KI erzeugt ein **Kunden-COA in der Zielsprache**
+  (EN/DE) UND liest die **Charge**; jede COA wird als **Batch unter dem Rohstoff** gespeichert
+  (`crmdemo_coa.rohstoff_id`) und in der Charge-Liste angezeigt (COA-Ansicht je Batch).
 - **rezepturen** – **geteilter Rezeptur-Katalog** (fertige Formulierungen) mit eigener **Nummer (RZ-…)**
   und **Freigabe-Workflow**: `entwurf → freigegeben (Entwicklung/Produktion) → kalkuliert (Pricing setzt
   Preis)`. Liste mit Nummer/Status, Suche, **„+ Neue Rezeptur"** als Popup (kein Scrollen zum Formular).

@@ -217,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($typ === 'produkt') {
                 // Neue Position "in den Katalog aufnehmen"? -> Rezeptur anlegen und verknuepfen.
                 if (!$rez && !empty($_POST['p_asrez'][$i])) {
-                    q("INSERT INTO crmdemo_rezeptur (name,form,kategorie,erstellt_von,verwendet) VALUES (?,?,?,?,1)", [$b, 'kapsel', null, $rolle]);
+                    q("INSERT INTO crmdemo_rezeptur (nummer,name,form,kategorie,status,erstellt_von,verwendet) VALUES (?,?,?,?, 'entwurf', ?,1)", [cd_nummer('RZ'), $b, 'kapsel', null, $rolle]);
                     $rez = insert_id();
                 } elseif ($rez) {
                     q("UPDATE crmdemo_rezeptur SET verwendet = verwendet + 1 WHERE id=?", [$rez]);
@@ -319,24 +319,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($akt === 'coa_erstellen') {
         $text = trim($_POST['quelle'] ?? '');
         $ziel = in_array($_POST['zielsprache'] ?? '', ['de','en','zh'], true) ? $_POST['zielsprache'] : 'de';
-        if ($text === '') { header('Location: ' . cd_url('coareader')); exit; }
+        $fromRoh = (int)($_POST['rohstoff_id'] ?? 0); // aus der Rohstoff-Detailseite
+        $back = $fromRoh ? cd_url('katalog', ['id'=>$fromRoh]) : cd_url('coareader');
+        if ($text === '') { header('Location: ' . $back); exit; }
         $ext = cd_coa_extract($text, $ziel);
-        if (empty($ext['ok']) || empty($ext['daten'])) { header('Location: ' . cd_url('coareader', ['err'=>1])); exit; }
+        if (empty($ext['ok']) || empty($ext['daten'])) { header('Location: ' . ($fromRoh ? cd_url('katalog', ['id'=>$fromRoh,'coaerr'=>1]) : cd_url('coareader', ['err'=>1]))); exit; }
         $d = $ext['daten'];
         $name = trim((string)($d['produkt'] ?? '')) ?: (trim((string)($d['wirkstoff'] ?? '')) ?: 'Rohstoff');
-        // Bestehenden Rohstoff finden, sonst neu anlegen.
-        $rid = (int) scalar("SELECT id FROM crmdemo_rohstoff WHERE name=? OR (wirkstoff<>'' AND wirkstoff=?) LIMIT 1", [$name, (string)($d['wirkstoff'] ?? '')]);
-        if (!$rid) {
-            q("INSERT INTO crmdemo_rohstoff (name,kategorie,wirkstoff,gehalt,herkunft,notiz) VALUES (?,?,?,?,?,?)",
-              [$name, (string)($d['kategorie'] ?? '') ?: null, (string)($d['wirkstoff'] ?? '') ?: null,
-               (string)($d['gehalt'] ?? '') ?: null, (string)($d['herkunft'] ?? '') ?: null, 'Angelegt aus COA/Spec-Reader']);
-            $rid = insert_id();
+        if ($fromRoh) {
+            // Direkt an diesen Rohstoff haengen; Name des Rohstoffs beibehalten.
+            $rid = $fromRoh; $name = (string) scalar("SELECT name FROM crmdemo_rohstoff WHERE id=?", [$rid]) ?: $name;
+        } else {
+            // Bestehenden Rohstoff finden, sonst neu anlegen.
+            $rid = (int) scalar("SELECT id FROM crmdemo_rohstoff WHERE name=? OR (wirkstoff<>'' AND wirkstoff=?) LIMIT 1", [$name, (string)($d['wirkstoff'] ?? '')]);
+            if (!$rid) {
+                q("INSERT INTO crmdemo_rohstoff (nummer,name,kategorie,wirkstoff,gehalt,herkunft,notiz) VALUES (?,?,?,?,?,?,?)",
+                  [cd_nummer('RM'), $name, (string)($d['kategorie'] ?? '') ?: null, (string)($d['wirkstoff'] ?? '') ?: null,
+                   (string)($d['gehalt'] ?? '') ?: null, (string)($d['herkunft'] ?? '') ?: null, 'Angelegt aus COA/Spec-Reader']);
+                $rid = insert_id();
+            }
         }
         q("INSERT INTO crmdemo_coa (rohstoff_id,typ,sprache,produkt,charge,daten,quelle) VALUES (?,?,?,?,?,?,?)",
           [$rid, 'coa', $ziel, $name, (string)($d['charge'] ?? '') ?: null, json_encode($d, JSON_UNESCAPED_UNICODE), mb_substr($text,0,4000)]);
-        header('Location: ' . cd_url('coareader', ['id'=>insert_id()])); exit;
+        header('Location: ' . ($fromRoh ? cd_url('katalog', ['id'=>$fromRoh]) : cd_url('coareader', ['id'=>insert_id()]))); exit;
     }
-    if ($akt === 'coa_del') { q("DELETE FROM crmdemo_coa WHERE id=?", [(int)($_POST['id']??0)]); header('Location: ' . cd_url('coareader')); exit; }
+    if ($akt === 'coa_del') { $did=(int)($_POST['id']??0); $rb=(int)($_POST['rohstoff_id']??0); q("DELETE FROM crmdemo_coa WHERE id=?", [$did]); header('Location: ' . ($rb ? cd_url('katalog', ['id'=>$rb]) : cd_url('coareader'))); exit; }
 
     // --- Briefkopf / Firma (Absender + Logo) ---
     if ($akt === 'firma_save' && in_array($rolle,['admin'],true)) {
@@ -658,6 +665,31 @@ elseif ($m === 'katalog'):
         </form>
       </div>
       <?php endif; ?>
+
+      <?php // Chargen & COAs: chinesische COA einlesen -> Kunden-COA (Zielsprache) + Charge als Batch.
+        require_once BX_ROOT . '/core/ki.php'; $kiOK = function_exists('ki_bereit') && ki_bereit(); ?>
+      <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('chargen_coas')) ?></h2>
+        <?php if (($_GET['coaerr'] ?? '')==='1'): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:8px 12px"><?= h(cd_t('ki_nicht_bereit')) ?></div><?php endif; ?>
+        <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('charge')) ?></th><th><?= h(cd_t('sprache')) ?></th><th><?= h(cd_t('datum')) ?></th><th></th></tr></thead><tbody>
+        <?php $coas = all("SELECT * FROM crmdemo_coa WHERE rohstoff_id=? ORDER BY id DESC", [$rid]); if (!$coas): ?><tr><td colspan="4" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
+        foreach ($coas as $co): ?><tr>
+          <td><strong><?= h((string)$co['charge']) ?: '<span class="muted">–</span>' ?></strong></td>
+          <td><?= h(strtoupper((string)$co['sprache'])) ?></td><td class="muted"><?= h(substr((string)$co['angelegt'],0,10)) ?></td>
+          <td style="text-align:right;white-space:nowrap"><a class="btn btn-ghost btn-sm" href="<?= h(cd_url('coareader',['id'=>(int)$co['id']])) ?>"><?= h(cd_t('coa')) ?></a>
+            <?php if ($darfR): ?><form method="post" style="display:inline;margin:0" onsubmit="return confirm('<?= h(cd_t('loeschen')) ?>?')"><input type="hidden" name="aktion" value="coa_del"><input type="hidden" name="id" value="<?= (int)$co['id'] ?>"><input type="hidden" name="rohstoff_id" value="<?= $rid ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form><?php endif; ?></td>
+        </tr><?php endforeach; ?>
+        </tbody></table></div>
+        <?php if ($darfR): ?>
+        <p class="muted" style="font-size:12px;margin:10px 0 4px"><?= h(cd_t('coa_charge_hint')) ?><?= $kiOK ? '' : ' · '.h(cd_t('ki_nicht_bereit')) ?></p>
+        <form method="post"><input type="hidden" name="aktion" value="coa_erstellen"><input type="hidden" name="rohstoff_id" value="<?= $rid ?>">
+          <div class="bx-field"><label><?= h(cd_t('quelle_text')) ?></label><textarea name="quelle" rows="5" placeholder="产品名称 / 批号 / 含量 / 重金属 …"></textarea></div>
+          <div class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
+            <div class="bx-field" style="margin:0"><label><?= h(cd_t('zielsprache')) ?></label><select name="zielsprache"><option value="en">English</option><option value="de">Deutsch</option></select></div>
+            <button class="btn btn-primary btn-sm" type="submit" data-busy="…"><?= h(cd_t('coa_einlesen')) ?></button>
+          </div>
+        </form>
+        <?php endif; ?>
+      </div>
 
       <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('dokumente')) ?></h2>
         <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('name')) ?></th><th>Typ</th><th class="bx-num">KB</th><th></th></tr></thead><tbody>

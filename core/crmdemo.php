@@ -376,6 +376,9 @@ function crmdemo_i18n(): array {
         'methode'        => ['de'=>'Methode','en'=>'Method','zh'=>'方法'],
         'coa_neu_rohstoff'=>['de'=>'Neuer Rohstoff angelegt','en'=>'New material created','zh'=>'已创建新原料'],
         'coa_bestehend'  => ['de'=>'Bestehender Rohstoff erkannt','en'=>'Existing material matched','zh'=>'匹配到已有原料'],
+        'chargen_coas'   => ['de'=>'Chargen & COAs','en'=>'Batches & COAs','zh'=>'批次与 COA'],
+        'coa_einlesen'   => ['de'=>'COA einlesen (chinesisch → Kunden-COA)','en'=>'Read COA (Chinese → customer COA)','zh'=>'读取 COA（中文 → 客户 COA）'],
+        'coa_charge_hint'=> ['de'=>'Beim Einlesen wird die Charge erkannt und als Batch unter diesem Rohstoff gespeichert.','en'=>'On import the batch number is detected and stored under this material.','zh'=>'导入时会识别批号并保存到该原料下。'],
         // Settings
         'set_briefkopf'  => ['de'=>'Briefkopf','en'=>'Letterhead','zh'=>'抬头'],
         'set_standard'   => ['de'=>'Standardwerte','en'=>'Defaults','zh'=>'默认值'],
