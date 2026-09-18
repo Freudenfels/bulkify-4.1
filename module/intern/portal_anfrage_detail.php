@@ -227,8 +227,8 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
   </tbody></table></div>
 </div>
 
-<?php // „Geht nicht" – z. B. eine Darreichungsform, die wir für diese Rezeptur nicht herstellen können.
-      // Bewusst hier, direkt unter dem Wunsch: entscheiden, BEVOR eine Angebotsnummer vergeben wird. ?>
+<?php // „Geht nicht": Absage jetzt als roter Button + Popup neben den Angebot-Aktionen (siehe unten).
+      $darfAbsage = !in_array($pa['status'], ['beantwortet','abgelehnt'], true); ?>
 <?php if ($pa['status'] === 'abgelehnt'): ?>
 <div class="bx-panel">
   <h2>Abgesagt</h2>
@@ -239,18 +239,10 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
     <button class="btn btn-ghost btn-sm" type="submit">Absage zurücknehmen</button>
   </form>
 </div>
-<?php elseif ($pa['status'] !== 'beantwortet'): ?>
-<div class="bx-panel">
-  <h2>Nicht machbar</h2>
-  <p class="muted" style="margin-top:0">Wenn wir das so nicht herstellen können – etwa die gewünschte Darreichungsform für diese Rezeptur – sagen wir hier ab, statt ein leeres Angebot anzulegen. Ein noch nicht gesendeter Entwurf wird dabei verworfen und die Angebotsnummer freigegeben.</p>
-  <?php if (isset($_GET['grundfehlt'])): ?><div class="badge-err" style="padding:8px 12px;margin-bottom:10px">Bitte einen Grund angeben – der Kunde bekommt ihn zu lesen.</div><?php endif; ?>
-  <form method="post" onsubmit="return confirm('Anfrage absagen? Der Kunde sieht die Begründung im Portal.');">
-    <input type="hidden" name="aktion" value="anfrage_absagen">
-    <div class="bx-field"><label>Begründung für den Kunden</label>
-      <input type="text" name="grund" maxlength="500" placeholder="z. B. D3/K2 flüssig im Stick ist nicht stabil – wir bieten es als Kapsel oder Tropfen an"></div>
-    <button class="btn btn-ghost" type="submit">Anfrage absagen</button>
-  </form>
-</div>
+<?php endif; ?>
+<?php // Rohstoff-/Dienstleistungsanfragen haben keine Angebot-Aktionszeile -> hier der rote Absage-Button.
+if ($darfAbsage && in_array($pa['typ'], ['rohstoff','dienstleistung'], true)): ?>
+<div class="bx-row" style="gap:10px;margin:0 0 16px"><button class="btn btn-danger" type="button" onclick="bxAbsageOeffnen()">Nicht machbar</button></div>
 <?php endif; ?>
 
 <?php if ($pa['typ'] === 'rohstoff'):
@@ -409,6 +401,7 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
         <button class="btn btn-ghost" type="submit" name="aktion" value="angebot_vorschau">Vorschau aktualisieren</button>
         <button class="btn btn-primary" type="submit" name="aktion" value="angebot_abgeben"<?= $hatPreise ? '' : ' disabled title="Keine berechenbaren Preise – nutze „Im Angebots-Editor bauen“"' ?>>Angebot senden</button>
         <button class="btn <?= $hatPreise ? 'btn-ghost' : 'btn-primary' ?>" type="submit" name="aktion" value="angebot_bauen">Im Angebots-Editor bauen</button>
+        <?php if ($darfAbsage): ?><button class="btn btn-danger" type="button" onclick="bxAbsageOeffnen()">Nicht machbar</button><?php endif; ?>
       </div>
     </form>
   <?php endif; ?>
@@ -439,9 +432,12 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
     <?php endforeach; ?>
   <?php endif; ?>
   <?php if (!$angeboteAktiv): ?>
-    <form method="post" style="margin-top:8px">
-      <button class="btn btn-primary" type="submit" name="aktion" value="angebot_bauen">Im Angebots-Editor bauen</button>
-    </form>
+    <div class="bx-row" style="gap:10px;margin-top:8px">
+      <form method="post" style="margin:0">
+        <button class="btn btn-primary" type="submit" name="aktion" value="angebot_bauen">Im Angebots-Editor bauen</button>
+      </form>
+      <?php if ($darfAbsage): ?><button class="btn btn-danger" type="button" onclick="bxAbsageOeffnen()">Nicht machbar</button><?php endif; ?>
+    </div>
   <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -497,4 +493,31 @@ if ($anfZutaten):
 <?php // Status nur zur Info – gesetzt wird er automatisch (Angebot bauen/senden/absagen).
 $statusLbl = ['neu'=>'eingegangen', 'in_bearbeitung'=>'in Bearbeitung', 'beantwortet'=>'Angebot abgegeben', 'abgelehnt'=>'abgesagt']; ?>
 <div class="muted" style="margin-top:12px;font-size:13px">Status: <strong><?= h($statusLbl[$pa['status']] ?? $pa['status']) ?></strong> · wird automatisch gesetzt.</div>
+
+<?php // Popup „Nicht machbar" (Absage mit Pflicht-Begruendung) – geoeffnet ueber den roten Button. ?>
+<?php if ($darfAbsage): ?>
+<div id="bxAbsageOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;padding:16px">
+  <div role="dialog" aria-modal="true" class="bx-panel" style="max-width:520px;width:100%;max-height:92vh;overflow:auto;margin:0">
+    <h2 style="margin-top:0">Nicht machbar – Anfrage absagen</h2>
+    <p class="muted" style="margin-top:0">Wenn wir das so nicht herstellen können (z. B. die gewünschte Darreichungsform für diese Rezeptur), sagen wir hier ab, statt ein leeres Angebot anzulegen. Ein noch nicht gesendeter Entwurf wird verworfen und die Angebotsnummer freigegeben. <strong>Der Kunde sieht die Begründung im Portal.</strong></p>
+    <?php if (isset($_GET['grundfehlt'])): ?><div class="badge-err" style="padding:8px 12px;margin-bottom:10px">Bitte einen Grund angeben – der Kunde bekommt ihn zu lesen.</div><?php endif; ?>
+    <form method="post">
+      <input type="hidden" name="aktion" value="anfrage_absagen">
+      <div class="bx-field"><label>Begründung für den Kunden</label>
+        <input type="text" name="grund" maxlength="500" placeholder="z. B. D3/K2 flüssig im Stick ist nicht stabil – wir bieten es als Kapsel oder Tropfen an"></div>
+      <div class="bx-row" style="justify-content:flex-end;gap:10px;margin-top:6px">
+        <button type="button" class="btn btn-ghost" onclick="bxAbsageZu()">Abbrechen</button>
+        <button type="submit" class="btn btn-danger">Anfrage absagen</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function bxAbsageOeffnen(){var o=document.getElementById('bxAbsageOverlay');if(o){o.style.display='flex';var i=o.querySelector('input[name=grund]');if(i)i.focus();}}
+function bxAbsageZu(){var o=document.getElementById('bxAbsageOverlay');if(o)o.style.display='none';}
+document.getElementById('bxAbsageOverlay').addEventListener('click',function(e){if(e.target===this)bxAbsageZu();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')bxAbsageZu();});
+<?php if (isset($_GET['grundfehlt'])): ?>bxAbsageOeffnen();<?php endif; ?>
+</script>
+<?php endif; ?>
 <?php render_footer(); ?>
