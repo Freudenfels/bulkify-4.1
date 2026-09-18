@@ -7,9 +7,11 @@ require_once BX_ROOT . '/core/schema.php';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
     $paId = (int)($_POST['pa_id'] ?? 0);
+    $tabRedir = ($_POST['tab'] ?? '') === 'uebergeben' ? '&tab=uebergeben' : '';
     if ($aktion === 'produktionsart' && $paId) {
         $art = ($_POST['produktionsart'] ?? 'eigen') === 'fremd' ? 'fremd' : 'eigen';
         q("UPDATE produktionsauftrag SET produktionsart=? WHERE id=?", [$art, $paId]);
+        header('Location: ?p=bedarf' . $tabRedir); exit;   // frisch laden -> Seite startet oben
     } elseif ($aktion === 'melden' && $paId) {
         q("UPDATE produktionsauftrag SET bedarf_gemeldet=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $paId]);
         $nr = scalar("SELECT a.nummer FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id WHERE pa.id=?", [$paId]);
@@ -72,6 +74,9 @@ foreach ($alle as $pa) {
 $pas = $tab === 'uebergeben' ? $uebergebenPas : $offenPas;
 
 render_header('bedarf', 'Einkaufsbedarf');
+// Nach dem Umschalten Eigen-/Fremdproduktion (POST -> Redirect auf dieselbe URL) stellt der Browser
+// sonst die alte Scroll-Position wieder her. Manuell abschalten -> die Seite startet oben.
+echo '<script>if("scrollRestoration" in history)history.scrollRestoration="manual";</script>';
 bx_head('Einkaufsbedarf', 'Prüfen (Eigen-/Fremdproduktion) und an den Einkauf melden.',
         bx_btn('Zur Einkaufsliste' . (count($uebergebenPas) ? ' (' . count($uebergebenPas) . ')' : ''), '?p=einkaufsliste', 'ghost'));
 ?>
@@ -105,7 +110,7 @@ $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
         <?= $gemeldet ? bx_badge('an Einkauf gemeldet','ok') : bx_badge('noch nicht gemeldet','warn') ?>
       </div>
       <div class="bx-row" style="gap:8px;align-items:center">
-        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="produktionsart"><input type="hidden" name="pa_id" value="<?= (int)$pa['id'] ?>">
+        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="produktionsart"><input type="hidden" name="pa_id" value="<?= (int)$pa['id'] ?>"><input type="hidden" name="tab" value="<?= h($tab) ?>">
           <select name="produktionsart" onchange="this.form.submit()" title="Machen wir es selbst oder kaufen wir das fertige Produkt zu?">
             <option value="eigen" <?= !$fremd ? 'selected' : '' ?>>Eigenproduktion</option>
             <option value="fremd" <?= $fremd ? 'selected' : '' ?>>Fremdproduktion (zukaufen)</option>

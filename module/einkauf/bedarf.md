@@ -4,7 +4,7 @@
 
 **Je Auftrag:**
 - **Kopfzeile:** Auftragsnummer · Produkt · Kunde · Packungen · **Kapsel-/Tablettengröße** (`produktion_groesse_label()`, nur wenn vorhanden) · Priorität · Meldestatus.
-- **Produktionsart** (`produktionsauftrag.produktionsart`, Dropdown): **Eigenproduktion** (wir machen es selbst → Rohstoff-/Verpackungsbedarf) oder **Fremdproduktion (zukaufen)** (fertiges Produkt extern beschaffen, kein Komponentenbedarf).
+- **Produktionsart** (`produktionsauftrag.produktionsart`, Dropdown): **Eigenproduktion** (wir machen es selbst → Rohstoff-/Verpackungsbedarf) oder **Fremdproduktion (zukaufen)** (fertiges Produkt extern beschaffen, kein Komponentenbedarf). Umschalten macht ein POST + Redirect (bleibt im aktuellen Reiter über das Hidden-Feld `tab`); die Seite startet danach wieder **oben** (`history.scrollRestoration='manual'`, sonst stellt der Browser bei gleicher URL die alte Scroll-Position wieder her).
 - Bei Eigenproduktion: Kurzliste des **Fehlbedarfs** (`auftrag_fehlbedarf`, netto inkl. Netting gegen offene Bestellungen – auch Sammelbestellungen/Lager).
 - **„An Einkauf melden"** (`aktion=melden` → `produktionsauftrag.bedarf_gemeldet`): schiebt den Bedarf in die Einkäufer-Tagesliste. Rücknahme per `melden_zurueck`. Badge „an Einkauf gemeldet".
 
