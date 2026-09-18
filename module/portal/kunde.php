@@ -1524,17 +1524,18 @@ portal_head('Kundenportal · ' . $k['firma']);
     }
     foreach ($angebote as $ang) { $angTyp[$ang['id']] = !empty($ang['anfrage_id']) ? ($anfTypMap[(int)$ang['anfrage_id']] ?? 'produkt') : 'produkt'; }
     // Aktiver Haupt-Reiter + Anzahl je Typ IN diesem Reiter (für die Zahlen an den Unterreitern) – aus den ungefilterten Listen.
-    $oatab = in_array($_GET['oatab'] ?? '', ['zubestaetigen','bestaetigt','abgelehnt'], true) ? $_GET['oatab'] : 'offen';
+    $oatabRaw = (string)($_GET['oatab'] ?? '');
+    if (in_array($oatabRaw, ['bestaetigt','abgelehnt'], true)) $oatabRaw = 'archiv';   // Alt-Links -> Archiv
+    $oatab = in_array($oatabRaw, ['zubestaetigen','archiv'], true) ? $oatabRaw : 'offen';
     $typsInTab = [];
     if ($oatab === 'offen') {
         foreach ($anfPruef as $x)   $typsInTab[] = 'rezeptur';
         foreach ($pending as $r)    $typsInTab[] = $r['typ'] ?? '';
     } elseif ($oatab === 'zubestaetigen') {
         foreach ($offen_ang as $a)  $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
-    } elseif ($oatab === 'bestaetigt') {
+    } else { /* archiv: angenommen + abgelehnt */
         foreach ($best_ang as $a)   $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
         foreach ($bestRows as $r)   $typsInTab[] = $r['typ'] ?? '';
-    } else {
         foreach ($abgel_ang as $a)  $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
         foreach ($abglRows as $r)   $typsInTab[] = $r['typ'] ?? '';
     }
@@ -1576,8 +1577,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <div class="settabs" style="margin:0 0 8px">
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen&atab=<?= $atab ?>"      class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=zubestaetigen&atab=<?= $atab ?>" class="<?= $oatab === 'zubestaetigen' ? 'on' : '' ?>">Zu bestätigen<?= $nZuBest ? ' (' . $nZuBest . ')' : '' ?></a>
-    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=bestaetigt&atab=<?= $atab ?>" class="<?= $oatab === 'bestaetigt' ? 'on' : '' ?>">Bestätigt<?= $sumBest ? ' (' . $sumBest . ')' : '' ?></a>
-    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=abgelehnt&atab=<?= $atab ?>"  class="<?= $oatab === 'abgelehnt' ? 'on' : '' ?>">Abgelehnt<?= $sumAbgel ? ' (' . $sumAbgel . ')' : '' ?></a>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=archiv&atab=<?= $atab ?>" class="<?= $oatab === 'archiv' ? 'on' : '' ?>">Archiv<?= ($sumBest + $sumAbgel) ? ' (' . ($sumBest + $sumAbgel) . ')' : '' ?></a>
   </div>
   <?php if (count($anfTabs) > 1): ?>
   <div class="pt-subtabs">
@@ -1649,13 +1649,12 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php endif; ?>
     <?php if (!$pending && !$anfPruefShow): ?><div class="bx-panel"><div class="muted">Aktuell nichts Offenes. Neue Anfragen stellen Sie über das Menü links.</div></div><?php endif; ?>
 
-  <?php elseif ($oatab === 'bestaetigt'): ?>
-    <?php if (!$best_ang && !$bestRows): ?><div class="bx-panel"><div class="muted">Keine bestätigten Vorgänge.</div></div><?php endif; ?>
+  <?php else: /* archiv: angenommen + abgelehnt zusammen */ ?>
+    <?php if (!$best_ang && !$bestRows && !$abgel_ang && !$abglRows): ?><div class="bx-panel"><div class="muted">Noch nichts im Archiv – hier sammeln sich Ihre angenommenen und abgelehnten Vorgänge.</div></div><?php endif; ?>
+    <?php if ($best_ang || $bestRows): ?><h2 style="margin:10px 0 8px">Angenommen</h2><?php endif; ?>
     <?php foreach ($best_ang as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
     <?php $anfrageTabelle($bestRows, 'Angenommene Rezepturen', 'Von Ihnen angenommen – die Rezeptur ist angelegt. Als nächstes können Sie sie als Produkt anfragen.'); ?>
-
-  <?php else: /* abgelehnt */ ?>
-    <?php if (!$abgel_ang && !$abglRows): ?><div class="bx-panel"><div class="muted">Nichts abgelehnt.</div></div><?php endif; ?>
+    <?php if ($abgel_ang || $abglRows): ?><h2 style="margin:22px 0 8px">Abgelehnt / nicht machbar</h2><?php endif; ?>
     <?php foreach ($abgel_ang as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
     <?php $anfrageTabelle($abglRows, 'Abgelehnte Anfragen', 'Vom Kunden abgelehnt oder von uns als nicht machbar zurückgemeldet.'); ?>
   <?php endif; ?>
@@ -2505,11 +2504,23 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
 
-<?php elseif ($view === 'angebote'): ?>
+<?php elseif ($view === 'angebote'):
+  // Offene (gesendete) Angebote zuerst; angenommene/abgelehnte kommen ins Archiv darunter.
+  $offenA  = array_values(array_filter($angebote, fn($x) => ($x['status'] ?? '') === 'gesendet'));
+  $archivA = array_values(array_filter($angebote, fn($x) => ($x['status'] ?? '') !== 'gesendet')); ?>
   <h1 style="margin-bottom:4px">Ihre Angebote</h1>
-  <p class="muted" style="margin:0 0 16px">Übersicht Ihrer Angebote. Offene Angebote können Sie hier direkt prüfen, eine Menge wählen und verbindlich annehmen.</p>
-  <?php if (!$angebote): ?><div class="bx-panel"><div class="muted">Aktuell liegen keine Angebote vor.</div></div><?php endif; ?>
-  <?php foreach ($angebote as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = ($a['status'] === 'gesendet'); include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+  <p class="muted" style="margin:0 0 16px">Offene Angebote können Sie hier direkt prüfen, eine Menge wählen und verbindlich annehmen. Angenommene und abgelehnte Angebote finden Sie im <strong>Archiv</strong> unten.</p>
+  <?php if (!$offenA): ?><div class="bx-panel"><div class="muted">Aktuell liegt kein offenes Angebot vor<?= $archivA ? ' – ältere finden Sie im Archiv unten' : '' ?>.</div></div><?php endif; ?>
+  <?php foreach ($offenA as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = true; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+
+  <?php if ($archivA): ?>
+  <details style="margin-top:18px">
+    <summary style="cursor:pointer;font-weight:600;color:var(--gruen);padding:6px 0">Archiv – angenommen &amp; abgelehnt (<?= count($archivA) ?>)</summary>
+    <div style="margin-top:12px">
+      <?php foreach ($archivA as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+    </div>
+  </details>
+  <?php endif; ?>
 
   <script>(function(){
     var h = location.hash; if (h && /^#a\d+$/.test(h)) { var d = document.querySelector(h); if (d && d.tagName === 'DETAILS') { d.open = true; d.scrollIntoView(); } }
