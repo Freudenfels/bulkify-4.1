@@ -5127,6 +5127,50 @@ function angebot_positionen_konfig_nachtragen(int $angebot_id): void {
       [(int)$an['rezeptur_id'], $stueck, $verp, (int)$erste['id']]);
 }
 
+// TEMPORÄR (v3-Migration): fehlende Preise/Stück je Packung an v3-importierten Angeboten aus
+// produkt_kundenpreis nachtragen. Nimmt ausschliesslich v3-eigene Kundenpreise (nichts erfunden).
+// $write=false => Trockenlauf (nur zählen). Nach Abschluss der Migration wieder entfernen.
+function v3_kundenpreis_treffer(int $kunde_id, int $produkt_id, int $menge, int $stueck): ?float {
+    $rows = all("SELECT menge_pro_vpe, anzahl_vpe, preis FROM produkt_kundenpreis
+                 WHERE kunde_id=? AND produkt_id=? AND preis IS NOT NULL AND preis>0", [$kunde_id, $produkt_id]);
+    if (!$rows) return null;
+    $rank = -1; $best = null;
+    foreach ($rows as $r) {
+        $mA = (int)($r['anzahl_vpe'] ?? 0); $mV = (int)($r['menge_pro_vpe'] ?? 0);
+        $r0 = ($menge > 0 && $mA === $menge && $stueck > 0 && $mV === $stueck) ? 4
+            : (($menge > 0 && $mA === $menge) ? 3 : (($stueck > 0 && $mV === $stueck) ? 2 : 1));
+        if ($r0 > $rank) { $rank = $r0; $best = (float)$r['preis']; }
+    }
+    return $best;
+}
+function v3_kundenpreis_stueck(int $kunde_id, int $produkt_id, int $menge): ?int {
+    $rows = all("SELECT menge_pro_vpe, anzahl_vpe FROM produkt_kundenpreis
+                 WHERE kunde_id=? AND produkt_id=? AND menge_pro_vpe IS NOT NULL AND menge_pro_vpe>0", [$kunde_id, $produkt_id]);
+    foreach ($rows as $r) if ((int)($r['anzahl_vpe'] ?? 0) === $menge) return (int)$r['menge_pro_vpe'];
+    return $rows ? (int)$rows[0]['menge_pro_vpe'] : null;
+}
+function v3_angebote_reparieren(?int $kunde_id, bool $write): array {
+    $where = "a.v3_id IS NOT NULL" . ($kunde_id ? " AND a.kunde_id=" . (int)$kunde_id : "");
+    $angebote = all("SELECT a.id, a.nummer, a.kunde_id, a.produkt_id, k.firma
+                     FROM angebot a LEFT JOIN kunden k ON k.id=a.kunde_id WHERE $where ORDER BY a.id");
+    $r = ['angebote'=>count($angebote), 'preis_staffel'=>0, 'preis_position'=>0, 'stueck_staffel'=>0, 'offen'=>[]];
+    foreach ($angebote as $a) {
+        $aid = (int)$a['id']; $kid = (int)$a['kunde_id']; $pid = (int)$a['produkt_id'];
+        foreach (all("SELECT id, menge, stueck, vk_stueck FROM angebot_staffel WHERE angebot_id=? ORDER BY sort,id", [$aid]) as $s) {
+            $sid = (int)$s['id']; $menge = (int)$s['menge']; $stueck = (int)$s['stueck']; $vk = (float)$s['vk_stueck'];
+            if ($stueck <= 0 && $pid) { $ns = v3_kundenpreis_stueck($kid, $pid, $menge); if ($ns) { if ($write) q("UPDATE angebot_staffel SET stueck=? WHERE id=?", [$ns, $sid]); $stueck = $ns; $r['stueck_staffel']++; } }
+            if ($vk <= 0 && $pid) { $np = v3_kundenpreis_treffer($kid, $pid, $menge, $stueck); if ($np !== null) { if ($write) q("UPDATE angebot_staffel SET vk_stueck=? WHERE id=?", [$np, $sid]); $vk = $np; $r['preis_staffel']++; } }
+            if ($vk <= 0) $r['offen'][] = ['nummer'=>(string)$a['nummer'], 'firma'=>(string)$a['firma'], 'menge'=>$menge];
+        }
+        foreach (all("SELECT id, menge, stueck FROM angebot_position WHERE angebot_id=? AND preis_cent<=0 AND menge>0", [$aid]) as $p) {
+            if (!$pid) continue;
+            $np = v3_kundenpreis_treffer($kid, $pid, (int)$p['menge'], (int)$p['stueck']);
+            if ($np !== null) { if ($write) q("UPDATE angebot_position SET preis_cent=? WHERE id=?", [(int) round($np * 100), (int)$p['id']]); $r['preis_position']++; }
+        }
+    }
+    return $r;
+}
+
 // Aus den wählbaren Optionen die Staffel „Preis je fertiges Produkt" bauen – dieselbe Struktur,
 // die das Angebots-PDF bei Matrix-Angeboten zeigt: Name, Stück je Packung, Zeilen je Bestellmenge.
 // Gleiche Konfiguration mit verschiedenen Bestellmengen wird zu einem Block zusammengefasst.
