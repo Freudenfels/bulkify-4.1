@@ -49,7 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $GLOBALS['cd_dublette'] = ['dupes'=>$dupes, 'admin'=>($rolle==='admin'), 'post'=>$_POST];
         } else {
             q("INSERT INTO crmdemo_kunde (firma,ansprechpartner,email,telefon,land,sprache,waehrung,adresse,plz,ort,ust_id,website,wechat,segment,kundennummer,betreuer,zahlungsziel,liefer_adresse,branche,notiz) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", $cols);
-            header('Location: ' . cd_url('kunden', ['id'=>insert_id()])); exit;
+            $neu = insert_id();
+            // Schnellanlage -> direkt ins Profil zum Fertig-Bearbeiten.
+            $extra = ($_POST['quick'] ?? '') === '1' ? ['id'=>$neu,'edit'=>1] : ['id'=>$neu];
+            header('Location: ' . cd_url('kunden', $extra)); exit;
         }
     }
     if ($akt === 'kunde_del') { $id=(int)($_POST['id']??0); q("DELETE FROM crmdemo_kunde WHERE id=?", [$id]); q("DELETE FROM crmdemo_mail WHERE kunde_id=?", [$id]); header('Location: ' . cd_url('kunden')); exit; }
@@ -482,20 +485,35 @@ elseif ($m === 'kunden'):
       <?php endif;
 
     else: /* Kundenliste */
-      $q = trim((string)($_GET['q'] ?? '')); ?>
-      <h1 style="margin-bottom:8px"><?= h(cd_t('kunden')) ?></h1>
+      $q = trim((string)($_GET['q'] ?? ''));
+      $letter = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/','',(string)($_GET['letter'] ?? '')),0,1));
+      if (isset($_GET['zug'])) cd_meta_set('kunden_filter', $_GET['zug']==='1' ? 'zugeordnet' : 'alle');
+      $nurZug = cd_meta_get('kunden_filter','alle') === 'zugeordnet';
+      $wo=[]; $pa=[];
+      if ($q!==''){ $like='%'.$q.'%'; $wo[]='(k.firma LIKE ? OR k.email LIKE ? OR k.telefon LIKE ? OR k.ansprechpartner LIKE ?)'; array_push($pa,$like,$like,$like,$like); }
+      if ($letter!==''){ $wo[]='k.firma LIKE ?'; $pa[]=$letter.'%'; }
+      if ($nurZug){ $wo[]='k.betreuer_id IS NOT NULL'; }
+      $ks = all("SELECT k.*, m.name AS betr FROM crmdemo_kunde k LEFT JOIN crmdemo_mitarbeiter m ON m.id=k.betreuer_id".($wo?' WHERE '.implode(' AND ',$wo):'').' ORDER BY k.firma', $pa); ?>
+      <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h1 style="margin:0"><?= h(cd_t('kunden')) ?></h1>
+        <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('cdneu').classList.add('on')"><?= h(cd_t('schnellanlage')) ?></button>
+      </div>
       <div class="bx-panel">
-        <form method="get" class="bx-row" style="gap:8px;flex-wrap:wrap"><input type="hidden" name="p" value="crmdemo"><input type="hidden" name="m" value="kunden">
-          <input type="text" name="q" value="<?= h($q) ?>" placeholder="<?= h(cd_t('suche_global')) ?>" style="min-width:300px">
-          <button class="btn btn-primary" type="submit"><?= h(cd_t('suchen')) ?></button>
-          <?php if ($q!==''): ?><a class="btn btn-ghost" href="<?= h(cd_url('kunden')) ?>"><?= h(cd_t('abbrechen')) ?></a><?php endif; ?>
-        </form>
+        <div class="bx-row" style="gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+          <form method="get" class="bx-row" style="gap:8px;flex-wrap:wrap"><input type="hidden" name="p" value="crmdemo"><input type="hidden" name="m" value="kunden">
+            <input type="text" name="q" value="<?= h($q) ?>" placeholder="<?= h(cd_t('suche_global')) ?>" style="min-width:240px">
+            <button class="btn btn-primary btn-sm" type="submit"><?= h(cd_t('suchen')) ?></button>
+            <?php if ($q!==''||$letter!==''): ?><a class="btn btn-ghost btn-sm" href="<?= h(cd_url('kunden')) ?>"><?= h(cd_t('abbrechen')) ?></a><?php endif; ?>
+          </form>
+          <div class="cd-rolchips"><a href="<?= h(cd_url('kunden',['zug'=>0])) ?>"<?= !$nurZug?' class="on"':'' ?>><?= h(cd_t('alle_zeigen')) ?></a><a href="<?= h(cd_url('kunden',['zug'=>1])) ?>"<?= $nurZug?' class="on"':'' ?>><?= h(cd_t('nur_zugeordnet')) ?></a></div>
+        </div>
+        <div class="cd-az" style="margin-top:10px">
+          <a href="<?= h(cd_url('kunden')) ?>"<?= $letter===''?' class="on"':'' ?>><?= h(cd_t('alle_zeigen')) ?></a>
+          <?php foreach (str_split('ABCDEFGHIJKLMNOPQRSTUVWXYZ') as $L): ?><a href="<?= h(cd_url('kunden',['letter'=>$L])) ?>"<?= $letter===$L?' class="on"':'' ?>><?= $L ?></a><?php endforeach; ?>
+        </div>
         <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
         <thead><tr><th><?= h(cd_t('firma_name')) ?></th><th><?= h(cd_t('ansprechpartner')) ?></th><th><?= h(cd_t('email')) ?></th><th><?= h(cd_t('zugeordnet')) ?></th><th><?= h(cd_t('land')) ?></th><th></th></tr></thead><tbody>
-        <?php
-          if ($q !== '') { $like='%'.$q.'%'; $ks = all("SELECT k.*, m.name AS betr FROM crmdemo_kunde k LEFT JOIN crmdemo_mitarbeiter m ON m.id=k.betreuer_id WHERE k.firma LIKE ? OR k.email LIKE ? OR k.telefon LIKE ? OR k.ansprechpartner LIKE ? ORDER BY k.firma", [$like,$like,$like,$like]); }
-          else { $ks = all("SELECT k.*, m.name AS betr FROM crmdemo_kunde k LEFT JOIN crmdemo_mitarbeiter m ON m.id=k.betreuer_id ORDER BY k.firma"); }
-          if (!$ks): ?><tr><td colspan="6" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
+        <?php if (!$ks): ?><tr><td colspan="6" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
         foreach ($ks as $k): ?>
           <tr><td><a href="<?= h(cd_url('kunden', ['id'=>(int)$k['id']])) ?>"><?= h($k['firma']) ?></a> <?= !empty($k['fraud'])?bx_badge(cd_t('fraud'),'warn'):'' ?><?= $k['segment']?'<div class="muted" style="font-size:12px">'.h((string)$k['segment']).'</div>':'' ?></td>
             <td><?= h((string)$k['ansprechpartner']) ?></td><td class="muted"><?= h((string)$k['email']) ?></td><td><?= h((string)($k['betr'] ?? '')) ?: '<span class="muted">–</span>' ?></td><td><?= h((string)$k['land']) ?></td>
@@ -503,7 +521,22 @@ elseif ($m === 'kunden'):
         <?php endforeach; ?>
         </tbody></table></div>
       </div>
-      <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('neu')) ?></h2><?php cd_kunde_form(null, $mnf); ?></div>
+      <div class="cd-modal" id="cdneu" onclick="if(event.target===this)this.classList.remove('on')">
+        <div class="box">
+          <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:6px"><h2 style="margin:0"><?= h(cd_t('schnellanlage_t')) ?></h2><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('cdneu').classList.remove('on')">×</button></div>
+          <p class="muted" style="margin:0 0 12px;font-size:12px"><?= h(cd_t('schnell_hint')) ?></p>
+          <form method="post"><input type="hidden" name="aktion" value="kunde_save"><input type="hidden" name="quick" value="1">
+            <div class="bx-field"><label><?= h(cd_t('firma_name')) ?></label><input type="text" name="firma" required></div>
+            <div class="bx-grid">
+              <div class="bx-field"><label><?= h(cd_t('ansprechpartner')) ?></label><input type="text" name="ansprechpartner"></div>
+              <div class="bx-field"><label><?= h(cd_t('email')) ?></label><input type="email" name="email"></div>
+              <div class="bx-field"><label><?= h(cd_t('telefon')) ?></label><input type="text" name="telefon"></div>
+            </div>
+            <div class="bx-row" style="margin-top:12px;gap:8px"><button class="btn btn-primary" type="submit"><?= h(cd_t('weiter_profil')) ?></button><button type="button" class="btn btn-ghost" onclick="document.getElementById('cdneu').classList.remove('on')"><?= h(cd_t('abbrechen')) ?></button></div>
+          </form>
+        </div>
+      </div>
+      <script>document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=document.getElementById('cdneu');if(m)m.classList.remove('on');}});</script>
     <?php endif;
 
 // ================= KATALOG (Rohstoffe + KI-Ähnlichkeit + Preishistorie) =================

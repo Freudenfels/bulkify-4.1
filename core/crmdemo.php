@@ -375,6 +375,12 @@ function crmdemo_i18n(): array {
         'dublette_titel' => ['de'=>'Kunde ist bereits im System','en'=>'Customer already exists','zh'=>'客户已存在'],
         'dublette_admin' => ['de'=>'Bitte Kontakt mit dem Vorgesetzten aufnehmen – dieser Kunde ist bereits angelegt.','en'=>'Please contact your supervisor – this customer already exists.','zh'=>'请联系主管 — 该客户已存在。'],
         'trotzdem_anlegen'=>['de'=>'Trotzdem anlegen (Admin)','en'=>'Create anyway (admin)','zh'=>'仍然创建（管理员）'],
+        'schnellanlage'  => ['de'=>'+ Schnellanlage','en'=>'+ Quick add','zh'=>'+ 快速创建'],
+        'schnellanlage_t'=> ['de'=>'Kunde schnell anlegen','en'=>'Quick-add customer','zh'=>'快速创建客户'],
+        'schnell_hint'   => ['de'=>'Nur das Nötigste – danach öffnet sich das Profil zum Fertig-Bearbeiten.','en'=>'Just the essentials – the full profile opens next to finish.','zh'=>'仅填必要项 — 随后打开完整资料继续编辑。'],
+        'alle_zeigen'    => ['de'=>'Alle','en'=>'All','zh'=>'全部'],
+        'nur_zugeordnet' => ['de'=>'Nur zugeordnete','en'=>'Assigned only','zh'=>'仅已分配'],
+        'weiter_profil'  => ['de'=>'Anlegen & Profil öffnen','en'=>'Create & open profile','zh'=>'创建并打开资料'],
         'frage'          => ['de'=>'Frage zum Rohstoff','en'=>'Material question','zh'=>'原料问题'],
         'senden'         => ['de'=>'Senden','en'=>'Send','zh'=>'发送'],
         'logo'           => ['de'=>'Logo','en'=>'Logo','zh'=>'标志'],
@@ -487,7 +493,11 @@ function cd_head(string $titel): void {
        . '.cd-a4 .cd-th{border-bottom:2px solid #222}.cd-a4 td,.cd-a4 th{padding:7px 6px;font-size:13px}'
        . '.cd-match{height:8px;border-radius:5px;background:var(--line);overflow:hidden}.cd-match>span{display:block;height:100%;background:var(--gruen,#2f8f5b)}'
        . '.cd-rolchips a{display:inline-block;padding:2px 9px;border:1px solid var(--line);border-radius:20px;font-size:12px;margin:2px 4px 0 0;color:var(--muted);text-decoration:none}'
-       . '.cd-rolchips a.on{background:var(--gruen,#2f8f5b);color:#fff;border-color:transparent}</style>'
+       . '.cd-rolchips a.on{background:var(--gruen,#2f8f5b);color:#fff;border-color:transparent}'
+       . '.cd-az{display:flex;flex-wrap:wrap;gap:3px}.cd-az a{padding:2px 7px;border-radius:6px;font-size:12px;color:var(--muted);text-decoration:none}'
+       . '.cd-az a.on{background:var(--gruen,#2f8f5b);color:#fff}'
+       . '.cd-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;z-index:60;padding:56px 16px}'
+       . '.cd-modal.on{display:flex}.cd-modal .box{background:var(--panel,#fff);color:var(--text,#111);border:1px solid var(--line);border-radius:12px;max-width:460px;width:100%;padding:22px;box-shadow:0 12px 44px rgba(0,0,0,.32)}</style>'
        . '<script>(function(){try{var t=localStorage.getItem("bx-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>'
        . '</head><body>';
 }

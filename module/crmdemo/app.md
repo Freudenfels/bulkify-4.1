@@ -13,6 +13,9 @@ Eigenständige App unter `?p=crmdemo&m=<modul>`. Nutzt nur `crmdemo_*`-Tabellen 
   (`cd_kunde_dupes()`): existiert der Kunde schon, Meldung „Kontakt mit Vorgesetzten aufnehmen"; nur
   Admin kann per „Trotzdem anlegen" übersteuern. **Fraud-Markierung** (Warnbanner) und **Zuordnung zu
   einem Mitarbeiter** – nur Admin ordnet zu (`crmdemo_mitarbeiter`, Spalte `kunde.betreuer_id`).
+  Liste mit **A–Z-Leiste** (`?letter=`), **Zuordnungs-Filter** „Alle / Nur zugeordnete" (persistiert in
+  `crmdemo_meta.kunden_filter`) und **Schnellanlage** als Popup (kleiner Button → Modal `#cdneu`, nur
+  Firma/Kontakt/E-Mail/Telefon; `quick=1` → nach dem Anlegen direkt ins Profil im Bearbeiten-Modus).
 - **coareader** – **KI-COA/Spec-Reader**: Lieferanten-COA/Spezifikation (auch chinesisch) einfügen →
   KI liest Werte aus (`cd_coa_extract`), legt den Rohstoff an, falls er fehlt, und erzeugt ein
   **Kunden-COA in DE/EN** (DIN-A4-Bildschirmansicht, `crmdemo_coa`). Ohne API-Schlüssel: Hinweis, läuft auf beta.
