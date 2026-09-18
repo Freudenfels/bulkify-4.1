@@ -182,6 +182,11 @@ function crmdemo_i18n(): array {
         'demo_hinweis'   => ['de'=>'Testumgebung mit eigenen Daten – jederzeit löschbar.','en'=>'Test environment with its own data – deletable any time.','zh'=>'带独立数据的测试环境 — 可随时删除。'],
         'dashboard'      => ['de'=>'Übersicht','en'=>'Overview','zh'=>'概览'],
         'kunden'         => ['de'=>'Kunden','en'=>'Customers','zh'=>'客户'],
+        'konversation'   => ['de'=>'Konversation','en'=>'Conversations','zh'=>'沟通记录'],
+        'konv_intro'     => ['de'=>'Alle Nachrichten mit den Kunden auf einen Blick.','en'=>'All customer messages at a glance.','zh'=>'一览所有客户沟通。'],
+        'eingehend'      => ['de'=>'Eingehend','en'=>'Incoming','zh'=>'接收'],
+        'ausgehend'      => ['de'=>'Ausgehend','en'=>'Outgoing','zh'=>'发送'],
+        'alle_kunden'    => ['de'=>'Alle Kunden','en'=>'All customers','zh'=>'所有客户'],
         'katalog'        => ['de'=>'Rohstoff-Katalog','en'=>'Material catalog','zh'=>'原料目录'],
         'rezepturen'     => ['de'=>'Rezeptur-Katalog','en'=>'Formulation catalog','zh'=>'配方目录'],
         'produktentwickler'=>['de'=>'Produktentwickler (KI)','en'=>'Product developer (AI)','zh'=>'产品开发（AI）'],
@@ -412,11 +417,11 @@ function cd_rolle(): string {
 // Welche Module darf eine Rolle sehen?
 function cd_rechte(string $rolle): array {
     $map = [
-        'verkauf'     => ['dashboard','kunden','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','chat'],
+        'verkauf'     => ['dashboard','kunden','konversation','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','chat'],
         'pricing'     => ['dashboard','katalog','rezepturen','coareader','angebote','chat'],
         'produktion'  => ['dashboard','produktion','katalog','rezepturen'],
-        'buchhaltung' => ['dashboard','rechnungen','finanzen','kunden'],
-        'admin'       => ['dashboard','kunden','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','produktion','chat','finanzen','einstellungen'],
+        'buchhaltung' => ['dashboard','rechnungen','finanzen','kunden','konversation'],
+        'admin'       => ['dashboard','kunden','konversation','katalog','rezepturen','produktentwickler','coareader','angebote','rechnungen','produktion','chat','finanzen','einstellungen'],
     ];
     return $map[$rolle] ?? $map['admin'];
 }
@@ -512,7 +517,7 @@ function cd_shell_start(string $aktiv): void {
     // Logisch gruppierte Navigation (Gruppen ohne sichtbare Punkte werden ausgeblendet).
     $gruppen = [
         [null,             ['dashboard']],
-        ['grp_vertrieb',   ['kunden','angebote']],
+        ['grp_vertrieb',   ['kunden','konversation','angebote']],
         ['grp_entwicklung',['rezepturen','katalog','produktentwickler','coareader','chat']],
         ['grp_fertigung',  ['produktion']],
         ['grp_finanzen',   ['rechnungen','finanzen']],
@@ -639,9 +644,15 @@ function crmdemo_seed(): void {
             q("UPDATE crmdemo_kunde SET betreuer_id=? WHERE id=?", [(int)$mit[0]['id'], (int)$ks[1]['id']]);
             q("UPDATE crmdemo_kunde SET betreuer_id=? WHERE id=?", [(int)$mit[2]['id'], $k3]);
         }
+        $k2 = (int)$ks[1]['id'];
         q("INSERT INTO crmdemo_mail (kunde_id,richtung,betreff,text) VALUES
             (?, 'ein','Anfrage Ashwagandha 350 mg','Hallo, könnt ihr Ashwagandha 350 mg mit 5% Withanoliden anbieten? Menge 500 kg.'),
-            (?, 'aus','Re: Anfrage Ashwagandha 350 mg','Gern – wir haben 360 mg / 5% im Katalog, das passt technisch. Angebot folgt.')", [$k3,$k3]);
+            (?, 'aus','Re: Anfrage Ashwagandha 350 mg','Gern – wir haben 360 mg / 5% im Katalog, das passt technisch. Angebot folgt.'),
+            (?, 'ein','Muster Magnesium Complex','Können wir vorab 3 Muster der Magnesium-Kapseln bekommen?'),
+            (?, 'aus','Re: Muster Magnesium Complex','Klar, Muster gehen morgen raus. Tracking folgt per Mail.'),
+            (?, 'ein','Frage zur Haltbarkeit','Wie lange ist das Vitamin D3+K2 haltbar und wie lagern wir es am besten?'),
+            (?, 'aus','Re: Frage zur Haltbarkeit','Mindestens 24 Monate, kühl und trocken lagern. Details im Produktinfoblatt.'),
+            (?, 'ein','Nachbestellung geplant','Wir planen eine Nachbestellung Magnesium Complex für Q3, bitte Angebot.')", [$k3,$k3,$k1,$k1,$k2,$k2,$k1]);
     }
     if ((int) scalar("SELECT COUNT(*) FROM crmdemo_produkt") === 0)
         q("INSERT INTO crmdemo_produkt (name,form,idee) VALUES ('Magnesium Complex','kapsel','Magnesium für Muskeln & Nerven, gut verträglich')");

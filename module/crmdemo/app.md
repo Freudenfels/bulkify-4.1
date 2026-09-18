@@ -16,6 +16,9 @@ Eigenständige App unter `?p=crmdemo&m=<modul>`. Nutzt nur `crmdemo_*`-Tabellen 
   Liste mit **A–Z-Leiste** (`?letter=`), **Zuordnungs-Filter** „Alle / Nur zugeordnete" (persistiert in
   `crmdemo_meta.kunden_filter`) und **Schnellanlage** als Popup (kleiner Button → Modal `#cdneu`, nur
   Firma/Kontakt/E-Mail/Telefon; `quick=1` → nach dem Anlegen direkt ins Profil im Bearbeiten-Modus).
+- **konversation** – **Übersicht aller Kunden-Nachrichten** (kundenübergreifend, aus `crmdemo_mail`):
+  Zeitleiste mit Ein-/Ausgehend-Kennzeichnung, Kundenfilter und Suche; Klick springt ins Kundenprofil.
+  Das Erfassen einzelner Nachrichten läuft weiter im Postfach des jeweiligen Kunden.
 - **coareader** – **KI-COA/Spec-Reader**: Lieferanten-COA/Spezifikation (auch chinesisch) einfügen →
   KI liest Werte aus (`cd_coa_extract`), legt den Rohstoff an, falls er fehlt, und erzeugt ein
   **Kunden-COA in DE/EN** (DIN-A4-Bildschirmansicht, `crmdemo_coa`). Ohne API-Schlüssel: Hinweis, läuft auf beta.

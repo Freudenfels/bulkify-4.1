@@ -539,7 +539,41 @@ elseif ($m === 'kunden'):
       <script>document.addEventListener('keydown',function(e){if(e.key==='Escape'){var m=document.getElementById('cdneu');if(m)m.classList.remove('on');}});</script>
     <?php endif;
 
-// ================= KATALOG (Rohstoffe + KI-Ähnlichkeit + Preishistorie) =================
+// ================= KONVERSATION (alle Kunden-Nachrichten im Überblick) =================
+elseif ($m === 'konversation'):
+    $q = trim((string)($_GET['q'] ?? '')); $fk = (int)($_GET['kunde'] ?? 0);
+    $wo=[]; $pa=[];
+    if ($fk) { $wo[]='ml.kunde_id=?'; $pa[]=$fk; }
+    if ($q!==''){ $like='%'.$q.'%'; $wo[]='(ml.betreff LIKE ? OR ml.text LIKE ? OR k.firma LIKE ?)'; array_push($pa,$like,$like,$like); }
+    $rows = all("SELECT ml.*, k.firma FROM crmdemo_mail ml LEFT JOIN crmdemo_kunde k ON k.id=ml.kunde_id".($wo?' WHERE '.implode(' AND ',$wo):'').' ORDER BY ml.id DESC', $pa); ?>
+    <h1 style="margin-bottom:4px"><?= h(cd_t('konversation')) ?></h1>
+    <p class="bx-sub"><?= h(cd_t('konv_intro')) ?></p>
+    <div class="bx-panel">
+      <form method="get" class="bx-row" style="gap:8px;flex-wrap:wrap;align-items:center"><input type="hidden" name="p" value="crmdemo"><input type="hidden" name="m" value="konversation">
+        <select name="kunde"><option value="0"><?= h(cd_t('alle_kunden')) ?></option>
+          <?php foreach (all("SELECT id,firma FROM crmdemo_kunde ORDER BY firma") as $kk): ?><option value="<?= (int)$kk['id'] ?>"<?= $fk===(int)$kk['id']?' selected':'' ?>><?= h($kk['firma']) ?></option><?php endforeach; ?>
+        </select>
+        <input type="text" name="q" value="<?= h($q) ?>" placeholder="<?= h(cd_t('suchen')) ?>" style="min-width:220px">
+        <button class="btn btn-primary btn-sm" type="submit"><?= h(cd_t('suchen')) ?></button>
+        <?php if ($q!==''||$fk): ?><a class="btn btn-ghost btn-sm" href="<?= h(cd_url('konversation')) ?>"><?= h(cd_t('abbrechen')) ?></a><?php endif; ?>
+      </form>
+      <div style="margin-top:12px">
+        <?php if (!$rows): ?><p class="muted"><?= h(cd_t('keine_daten')) ?></p><?php endif;
+        foreach ($rows as $ml): $ein = $ml['richtung']==='ein'; ?>
+          <div style="border-left:3px solid <?= $ein?'var(--gruen,#2f8f5b)':'var(--line)' ?>;padding:6px 0 8px 12px;margin:2px 0;border-bottom:1px solid var(--line)">
+            <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+              <div><?= bx_badge($ein?cd_t('eingehend'):cd_t('ausgehend'), $ein?'info':'') ?>
+                <a href="<?= h(cd_url('kunden',['id'=>(int)$ml['kunde_id']])) ?>" style="font-weight:600"><?= h((string)($ml['firma'] ?? '–')) ?></a>
+                · <?= h((string)$ml['betreff']) ?></div>
+              <span class="muted" style="font-size:12px"><?= h(substr((string)$ml['angelegt'],0,16)) ?></span>
+            </div>
+            <?php if ($ml['text']): ?><div class="muted" style="font-size:13px;margin-top:3px"><?= h(mb_strimwidth((string)$ml['text'],0,160,'…')) ?></div><?php endif; ?>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+
+<?php // ================= KATALOG (Rohstoffe + KI-Ähnlichkeit + Preishistorie) =================
 elseif ($m === 'katalog'):
     $rid = (int)($_GET['id'] ?? 0);
     if ($rid && ($r = one("SELECT * FROM crmdemo_rohstoff WHERE id=?", [$rid]))): ?>
