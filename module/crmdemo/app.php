@@ -42,14 +42,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q("UPDATE crmdemo_kunde SET $spalten WHERE id=?", array_merge($cols, [$id]));
             header('Location: ' . cd_url('kunden', ['id' => $id])); exit;
         }
-        q("INSERT INTO crmdemo_kunde (firma,ansprechpartner,email,telefon,land,sprache,waehrung,adresse,plz,ort,ust_id,website,wechat,segment,kundennummer,betreuer,zahlungsziel,liefer_adresse,branche,notiz) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", $cols);
-        header('Location: ' . cd_url('kunden')); exit;
+        // Dublettenpruefung beim Neuanlegen (Firma/E-Mail/Telefon). Admin kann uebersteuern.
+        $override = ($_POST['dublette_ok'] ?? '') === '1' && $rolle === 'admin';
+        $dupes = $override ? [] : cd_kunde_dupes($f('firma'), $f('email'), $f('telefon'));
+        if ($dupes) {
+            $GLOBALS['cd_dublette'] = ['dupes'=>$dupes, 'admin'=>($rolle==='admin'), 'post'=>$_POST];
+        } else {
+            q("INSERT INTO crmdemo_kunde (firma,ansprechpartner,email,telefon,land,sprache,waehrung,adresse,plz,ort,ust_id,website,wechat,segment,kundennummer,betreuer,zahlungsziel,liefer_adresse,branche,notiz) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", $cols);
+            header('Location: ' . cd_url('kunden', ['id'=>insert_id()])); exit;
+        }
     }
     if ($akt === 'kunde_del') { $id=(int)($_POST['id']??0); q("DELETE FROM crmdemo_kunde WHERE id=?", [$id]); q("DELETE FROM crmdemo_mail WHERE kunde_id=?", [$id]); header('Location: ' . cd_url('kunden')); exit; }
     if ($akt === 'mail_add') {
         $kid=(int)($_POST['kunde_id']??0); $ri=($_POST['richtung']??'ein')==='aus'?'aus':'ein';
         q("INSERT INTO crmdemo_mail (kunde_id,richtung,betreff,text) VALUES (?,?,?,?)", [$kid,$ri,trim($_POST['betreff']??'') ?: '(ohne Betreff)',trim($_POST['text']??'') ?: null]);
         header('Location: ' . cd_url('kunden', ['id'=>$kid])); exit;
+    }
+    if ($akt === 'kunde_fraud' && in_array($rolle,['admin','verkauf','buchhaltung'],true)) {
+        $kid=(int)($_POST['id']??0); q("UPDATE crmdemo_kunde SET fraud=? WHERE id=?", [($_POST['fraud']??'0')==='1'?1:0, $kid]);
+        header('Location: ' . cd_url('kunden', ['id'=>$kid])); exit;
+    }
+    if ($akt === 'kunde_zuordnen') {
+        // Nur Admin darf Kunden Mitarbeitern zuordnen.
+        if ($rolle !== 'admin') { header('Location: ' . cd_url('kunden', ['id'=>(int)($_POST['id']??0),'noassign'=>1])); exit; }
+        $kid=(int)($_POST['id']??0); $mid=(int)($_POST['betreuer_id']??0) ?: null;
+        q("UPDATE crmdemo_kunde SET betreuer_id=? WHERE id=?", [$mid, $kid]);
+        header('Location: ' . cd_url('kunden', ['id'=>$kid])); exit;
+    }
+    if ($akt === 'mitarbeiter_save' && $rolle === 'admin') {
+        $mid=(int)($_POST['id']??0); $name=trim($_POST['name']??'') ?: '(Mitarbeiter)';
+        $ro=in_array($_POST['rolle']??'',cd_rollen(),true)?$_POST['rolle']:'verkauf'; $mail=trim($_POST['email']??'') ?: null;
+        if ($mid) q("UPDATE crmdemo_mitarbeiter SET name=?,rolle=?,email=? WHERE id=?", [$name,$ro,$mail,$mid]);
+        else { q("INSERT INTO crmdemo_mitarbeiter (name,rolle,email) VALUES (?,?,?)", [$name,$ro,$mail]); $mid=insert_id(); }
+        // Unterschrift / Stempel als inline base64 (kein Datei-URL).
+        foreach (['signatur'=>'signatur_b64','stempel'=>'stempel_b64'] as $feld=>$col) {
+            if (!empty($_FILES[$feld]['tmp_name']) && is_uploaded_file($_FILES[$feld]['tmp_name'])) {
+                $sz=(int)($_FILES[$feld]['size']??0); $typ=(string)($_FILES[$feld]['type']??'');
+                if ($sz>0 && $sz<=800*1024 && preg_match('~^image/(png|jpe?g|webp|gif)$~',$typ)) {
+                    $bin=file_get_contents($_FILES[$feld]['tmp_name']);
+                    if ($bin!==false) q("UPDATE crmdemo_mitarbeiter SET $col=? WHERE id=?", ['data:'.$typ.';base64,'.base64_encode($bin), $mid]);
+                }
+            }
+            if (($_POST[$feld.'_entfernen']??'')==='1') q("UPDATE crmdemo_mitarbeiter SET $col=NULL WHERE id=?", [$mid]);
+        }
+        header('Location: ' . cd_url('einstellungen', ['tab'=>'mitarbeiter'])); exit;
+    }
+    if ($akt === 'mitarbeiter_del' && $rolle === 'admin') {
+        $mid=(int)($_POST['id']??0); q("UPDATE crmdemo_mitarbeiter SET aktiv=0 WHERE id=?", [$mid]); q("UPDATE crmdemo_kunde SET betreuer_id=NULL WHERE betreuer_id=?", [$mid]);
+        header('Location: ' . cd_url('einstellungen', ['tab'=>'mitarbeiter'])); exit;
     }
 
     // --- Rohstoff-Katalog ---
@@ -118,8 +158,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $kid = (int)($_POST['kunde_id'] ?? 0) ?: null;
         $wae = $kid ? (string) scalar("SELECT waehrung FROM crmdemo_kunde WHERE id=?", [$kid]) : 'EUR';
         if (!array_key_exists($wae, cd_waehrungen())) $wae = 'EUR';
-        q("INSERT INTO crmdemo_angebot (nummer,kunde_id,titel,waehrung,netto_cent,status) VALUES (?,?,?,?,0,'entwurf')",
-          [cd_nummer('AN'), $kid, trim($_POST['titel'] ?? '') ?: 'Angebot', $wae]);
+        q("INSERT INTO crmdemo_angebot (nummer,kunde_id,titel,waehrung,netto_cent,status,zahlungsbedingungen,versandart) VALUES (?,?,?,?,0,'entwurf',?,?)",
+          [cd_nummer('AN'), $kid, trim($_POST['titel'] ?? '') ?: 'Angebot', $wae, cd_std('std_zahlungsbed'), cd_std('std_versandart')]);
         $aid = insert_id(); $sort = 0;
         foreach ((array)($_POST['p_bez'] ?? []) as $i => $b) {
             $b = trim((string)$b); if ($b === '') continue;
@@ -163,12 +203,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         q("UPDATE crmdemo_angebot SET status='gesendet' WHERE id=? AND status='kalkuliert'", [(int)($_POST['id']??0)]);
         header('Location: ' . cd_url('angebote', ['id'=>(int)($_POST['id']??0)])); exit;
     }
+    if ($akt === 'angebot_ablehnen' && in_array($rolle,['verkauf','admin'],true)) {
+        $aid=(int)($_POST['id']??0); $grund=trim($_POST['ablehnungsgrund']??'');
+        if ($grund === '') { header('Location: ' . cd_url('angebote', ['id'=>$aid,'grund'=>1])); exit; } // Grund ist Pflicht
+        q("UPDATE crmdemo_angebot SET status='abgelehnt', ablehnungsgrund=? WHERE id=? AND status IN ('gesendet','kalkuliert')", [$grund, $aid]);
+        header('Location: ' . cd_url('angebote', ['id'=>$aid])); exit;
+    }
+    if ($akt === 'angebot_beleg_save' && in_array($rolle,['verkauf','admin'],true)) {
+        $aid=(int)($_POST['id']??0);
+        q("UPDATE crmdemo_angebot SET notiz=?, zahlungsbedingungen=?, versandart=? WHERE id=?",
+          [trim($_POST['notiz']??'') ?: null, trim($_POST['zahlungsbedingungen']??'') ?: null, trim($_POST['versandart']??'') ?: null, $aid]);
+        header('Location: ' . cd_url('angebote', ['id'=>$aid])); exit;
+    }
+    if ($akt === 'rechnung_beleg_save' && in_array($rolle,['buchhaltung','verkauf','admin'],true)) {
+        $rid=(int)($_POST['id']??0);
+        q("UPDATE crmdemo_rechnung SET notiz=?, zahlungsbedingungen=?, versandart=?, bankverbindung=? WHERE id=?",
+          [trim($_POST['notiz']??'') ?: null, trim($_POST['zahlungsbedingungen']??'') ?: null, trim($_POST['versandart']??'') ?: null, trim($_POST['bankverbindung']??'') ?: null, $rid]);
+        header('Location: ' . cd_url('rechnungen', ['id'=>$rid,'beleg'=>1])); exit;
+    }
     if ($akt === 'angebot_annehmen' && in_array($rolle,['verkauf','admin'],true)) {
         $a = one("SELECT * FROM crmdemo_angebot WHERE id=?", [(int)($_POST['id'] ?? 0)]);
         if ($a && $a['status'] === 'gesendet') {
             $ust = (float) cd_std('std_ust','19'); $netto = (int)$a['netto_cent']; $brutto = (int) round($netto * (1 + $ust / 100));
-            q("INSERT INTO crmdemo_rechnung (nummer,kunde_id,angebot_id,waehrung,netto_cent,ust_prozent,brutto_cent,status,datum) VALUES (?,?,?,?,?,?,?, 'offen', CURDATE())",
-              [cd_nummer('RE'), $a['kunde_id'], $a['id'], $a['waehrung'], $netto, $ust, $brutto]);
+            q("INSERT INTO crmdemo_rechnung (nummer,kunde_id,angebot_id,waehrung,netto_cent,ust_prozent,brutto_cent,status,datum,zahlungsbedingungen,versandart,bankverbindung) VALUES (?,?,?,?,?,?,?, 'offen', CURDATE(),?,?,?)",
+              [cd_nummer('RE'), $a['kunde_id'], $a['id'], $a['waehrung'], $netto, $ust, $brutto,
+               $a['zahlungsbedingungen'] ?: cd_std('std_zahlungsbed'), $a['versandart'] ?: cd_std('std_versandart'), cd_std('std_bank')]);
             q("UPDATE crmdemo_angebot SET status='angenommen' WHERE id=?", [(int)$a['id']]);
             header('Location: ' . cd_url('rechnungen')); exit;
         }
@@ -255,12 +314,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         cd_meta_set('std_zahlungsziel', (string)(int)($_POST['std_zahlungsziel']??14));
         header('Location: ' . cd_url('einstellungen', ['tab'=>'standard'])); exit;
     }
+    if ($akt === 'dok_save' && in_array($rolle,['admin'],true)) {
+        cd_meta_set('std_zahlungsbed', trim($_POST['std_zahlungsbed']??''));
+        cd_meta_set('std_versandart', trim($_POST['std_versandart']??''));
+        cd_meta_set('std_bank', trim($_POST['std_bank']??''));
+        header('Location: ' . cd_url('einstellungen', ['tab'=>'dokument'])); exit;
+    }
 }
 
 // ---------------- Render ----------------
 cd_head(cd_t($m));
 cd_shell_start($m);
 $eur = fn($c, $w='EUR') => cd_money((int)$c, $w);
+
+// Dublettenwarnung (aus kunde_save): Kunde existiert bereits.
+if (!empty($GLOBALS['cd_dublette'])):
+    $db = $GLOBALS['cd_dublette']; ?>
+    <div class="bx-panel" style="max-width:640px;border-color:#e6c4c0">
+      <h1 style="margin-top:0;color:#8f231b"><?= h(cd_t('dublette_titel')) ?></h1>
+      <p><?= h(cd_t('dublette_admin')) ?></p>
+      <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('firma_name')) ?></th><th><?= h(cd_t('email')) ?></th><th><?= h(cd_t('telefon')) ?></th></tr></thead><tbody>
+        <?php foreach ($db['dupes'] as $dp): ?><tr><td><a href="<?= h(cd_url('kunden',['id'=>(int)$dp['id']])) ?>"><?= h((string)$dp['firma']) ?></a></td><td><?= h((string)$dp['email']) ?></td><td><?= h((string)$dp['telefon']) ?></td></tr><?php endforeach; ?>
+      </tbody></table></div>
+      <div class="bx-row" style="gap:8px;margin-top:12px">
+        <a class="btn btn-ghost" href="<?= h(cd_url('kunden')) ?>">← <?= h(cd_t('kunden')) ?></a>
+        <?php if (!empty($db['admin'])): ?>
+        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="kunde_save"><input type="hidden" name="dublette_ok" value="1">
+          <?php foreach (['firma','ansprechpartner','email','telefon','land','sprache','waehrung','adresse','plz','ort','ust_id','website','wechat','segment','kundennummer','zahlungsziel','liefer_adresse','branche','notiz'] as $fk): ?>
+            <input type="hidden" name="<?= $fk ?>" value="<?= h((string)($db['post'][$fk] ?? '')) ?>">
+          <?php endforeach; ?>
+          <button class="btn btn-primary" type="submit"><?= h(cd_t('trotzdem_anlegen')) ?></button>
+        </form>
+        <?php endif; ?>
+      </div>
+    </div>
+    <?php cd_shell_ende(); exit;
+endif;
+
 cd_gate($m);
 
 // Status-Badge fuer Angebote (Workflow) + Rechnung/Produktion.
@@ -295,16 +385,17 @@ if ($m === 'dashboard'):
 <?php // ================= KUNDEN (Liste + tiefes Profil + Postfach) =================
 elseif ($m === 'kunden'):
     $kid = (int)($_GET['id'] ?? 0);
-    if ($kid && ($k = one("SELECT * FROM crmdemo_kunde WHERE id=?", [$kid]))):
+    if ($kid && ($k = one("SELECT k.*, m.name AS betreuer_name FROM crmdemo_kunde k LEFT JOIN crmdemo_mitarbeiter m ON m.id=k.betreuer_id WHERE k.id=?", [$kid]))):
         $edit = ($_GET['edit'] ?? '') === '1'; ?>
       <div class="bx-row" style="justify-content:space-between;align-items:center">
-        <h1 style="margin:0"><?= h($k['firma']) ?></h1>
+        <h1 style="margin:0"><?= h($k['firma']) ?> <?= !empty($k['fraud'])?bx_badge(cd_t('fraud'),'warn'):'' ?></h1>
         <div class="bx-row" style="gap:8px">
           <?php if (!$edit): ?><a class="btn btn-primary btn-sm" href="<?= h(cd_url('kunden', ['id'=>$kid,'edit'=>1])) ?>"><?= h(cd_t('bearbeiten')) ?></a><?php endif; ?>
           <a class="btn btn-ghost btn-sm" href="<?= h(cd_url('kunden')) ?>">← <?= h(cd_t('kunden')) ?></a>
         </div>
       </div>
-      <p class="bx-sub"><?= $k['kundennummer']?h((string)$k['kundennummer']).' · ':'' ?><?= h((string)$k['segment']) ?> · <?= h(strtoupper((string)$k['sprache'])) ?> · <?= h((string)$k['waehrung']) ?><?= $k['land']?' · '.h((string)$k['land']):'' ?><?= $k['betreuer']?' · '.h(cd_t('betreuer')).': '.h((string)$k['betreuer']):'' ?></p>
+      <p class="bx-sub"><?= $k['kundennummer']?h((string)$k['kundennummer']).' · ':'' ?><?= h((string)$k['segment']) ?> · <?= h(strtoupper((string)$k['sprache'])) ?> · <?= h((string)$k['waehrung']) ?><?= $k['land']?' · '.h((string)$k['land']):'' ?><?= $k['betreuer_name']?' · '.h(cd_t('zugeordnet')).': '.h((string)$k['betreuer_name']):'' ?></p>
+      <?php if (!empty($k['fraud'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px"><?= h(cd_t('fraud_warnung')) ?></div><?php endif; ?>
 
       <?php if (!$edit): ?>
       <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('stammdaten')) ?></h2>
@@ -314,7 +405,7 @@ elseif ($m === 'kunden'):
           <div><label class="muted"><?= h(cd_t('telefon')) ?></label><div><?= h((string)$k['telefon']) ?: '–' ?></div></div>
           <div><label class="muted"><?= h(cd_t('wechat')) ?></label><div><?= h((string)$k['wechat']) ?: '–' ?></div></div>
           <div><label class="muted"><?= h(cd_t('branche')) ?></label><div><?= h((string)$k['branche']) ?: '–' ?></div></div>
-          <div><label class="muted"><?= h(cd_t('betreuer')) ?></label><div><?= h((string)$k['betreuer']) ?: '–' ?></div></div>
+          <div><label class="muted"><?= h(cd_t('zugeordnet')) ?></label><div><?= h((string)$k['betreuer_name']) ?: '–' ?></div></div>
           <div><label class="muted"><?= h(cd_t('adresse')) ?></label><div><?= h(trim(($k['adresse']?:'').' '.($k['plz']?:'').' '.($k['ort']?:''))) ?: '–' ?></div></div>
           <div><label class="muted"><?= h(cd_t('liefer_adresse')) ?></label><div><?= h((string)$k['liefer_adresse']) ?: '–' ?></div></div>
           <div><label class="muted"><?= h(cd_t('zahlungsziel')) ?></label><div><?= $k['zahlungsziel']!==null ? (int)$k['zahlungsziel'].' d' : '–' ?></div></div>
@@ -322,8 +413,17 @@ elseif ($m === 'kunden'):
           <div><label class="muted"><?= h(cd_t('website')) ?></label><div><?= h((string)$k['website']) ?: '–' ?></div></div>
         </div>
         <?php if ($k['notiz']): ?><p style="margin-top:10px"><?= nl2br(h((string)$k['notiz'])) ?></p><?php endif; ?>
-        <div class="bx-row" style="gap:8px;margin-top:12px">
+        <div class="bx-row" style="gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap">
           <a class="btn btn-primary btn-sm" href="<?= h(cd_url('kunden', ['id'=>$kid,'edit'=>1])) ?>"><?= h(cd_t('bearbeiten')) ?></a>
+          <?php // Zuordnung: nur Admin ?>
+          <?php if ($rolle === 'admin'): $mits = cd_mitarbeiter_list(); ?>
+          <form method="post" class="bx-row" style="margin:0;gap:6px"><input type="hidden" name="aktion" value="kunde_zuordnen"><input type="hidden" name="id" value="<?= $kid ?>">
+            <select name="betreuer_id"><option value="">– <?= h(cd_t('zugeordnet')) ?> –</option><?php foreach ($mits as $mi): ?><option value="<?= (int)$mi['id'] ?>"<?= (int)$k['betreuer_id']===(int)$mi['id']?' selected':'' ?>><?= h($mi['name']) ?></option><?php endforeach; ?></select>
+            <button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('zuordnen')) ?></button>
+          </form>
+          <?php endif; ?>
+          <?php // Fraud-Markierung ?>
+          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="kunde_fraud"><input type="hidden" name="id" value="<?= $kid ?>"><input type="hidden" name="fraud" value="<?= !empty($k['fraud'])?'0':'1' ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= !empty($k['fraud'])?h(cd_t('fraud_aufheben')):h(cd_t('fraud_markieren')) ?></button></form>
           <form method="post" style="margin:0" onsubmit="return confirm('<?= h(cd_t('loeschen')) ?>?')"><input type="hidden" name="aktion" value="kunde_del"><input type="hidden" name="id" value="<?= $kid ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('loeschen')) ?></button></form>
         </div>
       </div>
@@ -368,17 +468,28 @@ elseif ($m === 'kunden'):
       </div>
       <?php endif;
 
-    else: /* Kundenliste */ ?>
-      <h1 style="margin-bottom:12px"><?= h(cd_t('kunden')) ?></h1>
-      <div class="bx-panel"><div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th><?= h(cd_t('firma_name')) ?></th><th><?= h(cd_t('ansprechpartner')) ?></th><th><?= h(cd_t('land')) ?></th><th><?= h(cd_t('sprache')) ?></th><th><?= h(cd_t('waehrung')) ?></th><th></th></tr></thead><tbody>
-        <?php $ks = all("SELECT * FROM crmdemo_kunde ORDER BY firma"); if (!$ks): ?><tr><td colspan="6" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
+    else: /* Kundenliste */
+      $q = trim((string)($_GET['q'] ?? '')); ?>
+      <h1 style="margin-bottom:8px"><?= h(cd_t('kunden')) ?></h1>
+      <div class="bx-panel">
+        <form method="get" class="bx-row" style="gap:8px;flex-wrap:wrap"><input type="hidden" name="p" value="crmdemo"><input type="hidden" name="m" value="kunden">
+          <input type="text" name="q" value="<?= h($q) ?>" placeholder="<?= h(cd_t('suche_global')) ?>" style="min-width:300px">
+          <button class="btn btn-primary" type="submit"><?= h(cd_t('suchen')) ?></button>
+          <?php if ($q!==''): ?><a class="btn btn-ghost" href="<?= h(cd_url('kunden')) ?>"><?= h(cd_t('abbrechen')) ?></a><?php endif; ?>
+        </form>
+        <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
+        <thead><tr><th><?= h(cd_t('firma_name')) ?></th><th><?= h(cd_t('ansprechpartner')) ?></th><th><?= h(cd_t('email')) ?></th><th><?= h(cd_t('zugeordnet')) ?></th><th><?= h(cd_t('land')) ?></th><th></th></tr></thead><tbody>
+        <?php
+          if ($q !== '') { $like='%'.$q.'%'; $ks = all("SELECT k.*, m.name AS betr FROM crmdemo_kunde k LEFT JOIN crmdemo_mitarbeiter m ON m.id=k.betreuer_id WHERE k.firma LIKE ? OR k.email LIKE ? OR k.telefon LIKE ? OR k.ansprechpartner LIKE ? ORDER BY k.firma", [$like,$like,$like,$like]); }
+          else { $ks = all("SELECT k.*, m.name AS betr FROM crmdemo_kunde k LEFT JOIN crmdemo_mitarbeiter m ON m.id=k.betreuer_id ORDER BY k.firma"); }
+          if (!$ks): ?><tr><td colspan="6" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
         foreach ($ks as $k): ?>
-          <tr><td><a href="<?= h(cd_url('kunden', ['id'=>(int)$k['id']])) ?>"><?= h($k['firma']) ?></a><?= $k['segment']?'<div class="muted" style="font-size:12px">'.h((string)$k['segment']).'</div>':'' ?></td>
-            <td><?= h((string)$k['ansprechpartner']) ?></td><td><?= h((string)$k['land']) ?></td><td><?= h(strtoupper((string)$k['sprache'])) ?></td><td><?= h((string)$k['waehrung']) ?></td>
+          <tr><td><a href="<?= h(cd_url('kunden', ['id'=>(int)$k['id']])) ?>"><?= h($k['firma']) ?></a> <?= !empty($k['fraud'])?bx_badge(cd_t('fraud'),'warn'):'' ?><?= $k['segment']?'<div class="muted" style="font-size:12px">'.h((string)$k['segment']).'</div>':'' ?></td>
+            <td><?= h((string)$k['ansprechpartner']) ?></td><td class="muted"><?= h((string)$k['email']) ?></td><td><?= h((string)($k['betr'] ?? '')) ?: '<span class="muted">–</span>' ?></td><td><?= h((string)$k['land']) ?></td>
             <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= h(cd_url('kunden', ['id'=>(int)$k['id']])) ?>"><?= h(cd_t('oeffnen')) ?></a></td></tr>
         <?php endforeach; ?>
-        </tbody></table></div></div>
+        </tbody></table></div>
+      </div>
       <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('neu')) ?></h2><?php cd_kunde_form(null, $mnf); ?></div>
     <?php endif;
 
@@ -638,7 +749,7 @@ elseif ($m === 'rezepturen'):
 // ================= ANGEBOTE (Liste + Detail mit Pricing-Workflow + A4) =================
 elseif ($m === 'angebote'):
     $detail = (int)($_GET['id'] ?? 0);
-    $a = $detail ? one("SELECT a.*, k.firma, k.sprache, k.adresse, k.plz, k.ort, k.land AS kland FROM crmdemo_angebot a LEFT JOIN crmdemo_kunde k ON k.id=a.kunde_id WHERE a.id=?", [$detail]) : null;
+    $a = $detail ? one("SELECT a.*, k.firma, k.sprache, k.adresse, k.plz, k.ort, k.land AS kland, k.betreuer_id FROM crmdemo_angebot a LEFT JOIN crmdemo_kunde k ON k.id=a.kunde_id WHERE a.id=?", [$detail]) : null;
     if ($a && ($_GET['beleg'] ?? '') === '1'):
         cd_beleg_a4('angebot', $a, all("SELECT * FROM crmdemo_angebot_pos WHERE angebot_id=? ORDER BY sort,id", [$detail]), $eur);
     elseif ($a):
@@ -647,7 +758,10 @@ elseif ($m === 'angebote'):
         <h1 style="margin:0"><?= h((string)$a['titel']) ?> <span class="muted" style="font-size:14px"><?= h((string)$a['nummer']) ?></span></h1>
         <a class="btn btn-ghost btn-sm" href="<?= h(cd_url('angebote')) ?>">← <?= h(cd_t('angebote')) ?></a>
       </div>
-      <p class="bx-sub"><?= h((string)($a['firma'] ?? '')) ?> · <?= $badgeA($a['status']) ?> · <?= h((string)$a['waehrung']) ?></p>
+      <p class="bx-sub"><?= h((string)($a['firma'] ?? '')) ?> · <?= $badgeA($a['status']) ?> · <?= h((string)$a['waehrung']) ?>
+        · <?= $a['status']==='angenommen' ? bx_badge(cd_t('bestaetigt'),'ok') : bx_badge(cd_t('nicht_bestaetigt'),'warn') ?></p>
+      <?php if (($_GET['grund'] ?? '')==='1'): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px"><?= h(cd_t('grund_pflicht')) ?></div><?php endif; ?>
+      <?php if ($a['status']==='abgelehnt' && $a['ablehnungsgrund']): ?><div class="bx-panel" style="border-color:#e6c4c0;margin-bottom:12px"><strong><?= h(cd_t('ablehnungsgrund')) ?></strong><p style="margin:6px 0 0"><?= nl2br(h((string)$a['ablehnungsgrund'])) ?></p></div><?php endif; ?>
 
       <div class="bx-panel"><div class="bx-tablewrap"><table class="bx-table">
         <thead><tr><th><?= h(cd_t('position')) ?></th><th class="bx-num"><?= h(cd_t('menge')) ?></th><th class="bx-num"><?= h(cd_t('preis')) ?></th><th class="bx-num"><?= h(cd_t('summe')) ?></th></tr></thead><tbody>
@@ -674,6 +788,13 @@ elseif ($m === 'angebote'):
         <?php endif; ?>
         <form method="post" style="margin:0" onsubmit="return confirm('<?= h(cd_t('loeschen')) ?>?')"><input type="hidden" name="aktion" value="angebot_del"><input type="hidden" name="id" value="<?= $detail ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('loeschen')) ?></button></form>
       </div>
+      <?php // Ablehnen mit Pflicht-Grund (warum hat der Kunde abgelehnt?)
+      if (in_array($st,['gesendet','kalkuliert'],true) && in_array($rolle,['verkauf','admin'],true)): ?>
+        <form method="post" class="bx-row" style="gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap"><input type="hidden" name="aktion" value="angebot_ablehnen"><input type="hidden" name="id" value="<?= $detail ?>">
+          <input type="text" name="ablehnungsgrund" placeholder="<?= h(cd_t('ablehnungsgrund')) ?>" style="min-width:280px">
+          <button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('ablehnen')) ?></button>
+        </form>
+      <?php endif; ?>
 
       <?php if (in_array($st,['kalkulation','kalkuliert'],true) && in_array($rolle,['pricing','admin'],true)): ?>
         <form method="post" style="margin-top:14px"><input type="hidden" name="aktion" value="angebot_kalk_speichern"><input type="hidden" name="id" value="<?= $detail ?>">
@@ -689,6 +810,19 @@ elseif ($m === 'angebote'):
         </form>
       <?php endif; ?>
       </div>
+
+      <?php if (in_array($rolle,['verkauf','admin'],true)): ?>
+      <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('set_dokument')) ?></h2>
+        <form method="post"><input type="hidden" name="aktion" value="angebot_beleg_save"><input type="hidden" name="id" value="<?= $detail ?>">
+          <div class="bx-field"><label><?= h(cd_t('beleg_notiz')) ?></label><textarea name="notiz" rows="2"><?= h((string)$a['notiz']) ?></textarea></div>
+          <div class="bx-grid">
+            <div class="bx-field"><label><?= h(cd_t('zahlungsbed')) ?></label><input type="text" name="zahlungsbedingungen" value="<?= h((string)$a['zahlungsbedingungen']) ?>"></div>
+            <div class="bx-field"><label><?= h(cd_t('versandart')) ?></label><input type="text" name="versandart" value="<?= h((string)$a['versandart']) ?>"></div>
+          </div>
+          <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary btn-sm" type="submit"><?= h(cd_t('beleg_speichern')) ?></button></div>
+        </form>
+      </div>
+      <?php endif; ?>
 
     <?php else: ?>
       <h1 style="margin-bottom:12px"><?= h(cd_t('angebote')) ?></h1>
@@ -756,10 +890,23 @@ elseif ($m === 'angebote'):
 // ================= RECHNUNGEN (Liste + A4) =================
 elseif ($m === 'rechnungen'):
     $detail = (int)($_GET['id'] ?? 0);
-    $r = $detail ? one("SELECT r.*, k.firma, k.sprache, k.adresse, k.plz, k.ort, k.land AS kland, k.ust_id FROM crmdemo_rechnung r LEFT JOIN crmdemo_kunde k ON k.id=r.kunde_id WHERE r.id=?", [$detail]) : null;
+    $r = $detail ? one("SELECT r.*, k.firma, k.sprache, k.adresse, k.plz, k.ort, k.land AS kland, k.ust_id, k.betreuer_id FROM crmdemo_rechnung r LEFT JOIN crmdemo_kunde k ON k.id=r.kunde_id WHERE r.id=?", [$detail]) : null;
     if ($r && ($_GET['beleg'] ?? '') === '1'):
         $pos = $r['angebot_id'] ? all("SELECT * FROM crmdemo_angebot_pos WHERE angebot_id=? ORDER BY sort,id", [(int)$r['angebot_id']]) : [];
         cd_beleg_a4('rechnung', $r, $pos, $eur);
+        if (in_array($rolle,['buchhaltung','verkauf','admin'],true)): ?>
+        <div class="bx-panel" style="max-width:820px;margin:12px auto 0"><h2 style="margin-top:0"><?= h(cd_t('set_dokument')) ?></h2>
+          <form method="post"><input type="hidden" name="aktion" value="rechnung_beleg_save"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+            <div class="bx-field"><label><?= h(cd_t('beleg_notiz')) ?></label><textarea name="notiz" rows="2"><?= h((string)$r['notiz']) ?></textarea></div>
+            <div class="bx-grid">
+              <div class="bx-field"><label><?= h(cd_t('zahlungsbed')) ?></label><input type="text" name="zahlungsbedingungen" value="<?= h((string)$r['zahlungsbedingungen']) ?>"></div>
+              <div class="bx-field"><label><?= h(cd_t('versandart')) ?></label><input type="text" name="versandart" value="<?= h((string)$r['versandart']) ?>"></div>
+            </div>
+            <div class="bx-field"><label><?= h(cd_t('bankverbindung')) ?></label><input type="text" name="bankverbindung" value="<?= h((string)$r['bankverbindung']) ?>"></div>
+            <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary btn-sm" type="submit"><?= h(cd_t('beleg_speichern')) ?></button></div>
+          </form>
+        </div>
+        <?php endif;
     else: ?>
       <h1 style="margin-bottom:12px"><?= h(cd_t('rechnungen')) ?></h1>
       <div class="bx-panel"><div class="bx-tablewrap"><table class="bx-table">
@@ -854,12 +1001,14 @@ elseif ($m === 'finanzen'):
 
 <?php // ================= EINSTELLUNGEN (Reiter: Briefkopf · Standardwerte, nur Admin) ===
 elseif ($m === 'einstellungen'):
-    $tab = in_array($_GET['tab'] ?? '', ['briefkopf','standard'], true) ? $_GET['tab'] : 'briefkopf';
+    $tab = in_array($_GET['tab'] ?? '', ['briefkopf','standard','mitarbeiter','dokument'], true) ? $_GET['tab'] : 'briefkopf';
     $abs = cd_absender(); $logo = cd_logo_datauri(); ?>
     <h1 style="margin-bottom:10px"><?= h(cd_t('einstellungen')) ?></h1>
     <div class="cd-rolchips" style="margin-bottom:14px">
       <a href="<?= h(cd_url('einstellungen',['tab'=>'briefkopf'])) ?>"<?= $tab==='briefkopf'?' class="on"':'' ?>><?= h(cd_t('set_briefkopf')) ?></a>
+      <a href="<?= h(cd_url('einstellungen',['tab'=>'mitarbeiter'])) ?>"<?= $tab==='mitarbeiter'?' class="on"':'' ?>><?= h(cd_t('set_mitarbeiter')) ?></a>
       <a href="<?= h(cd_url('einstellungen',['tab'=>'standard'])) ?>"<?= $tab==='standard'?' class="on"':'' ?>><?= h(cd_t('set_standard')) ?></a>
+      <a href="<?= h(cd_url('einstellungen',['tab'=>'dokument'])) ?>"<?= $tab==='dokument'?' class="on"':'' ?>><?= h(cd_t('set_dokument')) ?></a>
     </div>
     <?php if ($tab === 'briefkopf'): ?>
     <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('absender')) ?></h2>
@@ -880,7 +1029,7 @@ elseif ($m === 'einstellungen'):
         <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary" type="submit" data-busy="…"><?= h(cd_t('speichern')) ?></button></div>
       </form>
     </div>
-    <?php else: ?>
+    <?php elseif ($tab === 'standard'): ?>
     <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('set_standard')) ?></h2>
       <form method="post"><input type="hidden" name="aktion" value="std_save">
         <div class="bx-grid">
@@ -889,6 +1038,44 @@ elseif ($m === 'einstellungen'):
           <div class="bx-field"><label><?= h(cd_t('std_zahlungsziel')) ?></label><input type="number" name="std_zahlungsziel" value="<?= h(cd_std('std_zahlungsziel','14')) ?>"></div>
         </div>
         <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary" type="submit"><?= h(cd_t('speichern')) ?></button></div>
+      </form>
+    </div>
+    <?php elseif ($tab === 'dokument'): ?>
+    <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('set_dokument')) ?></h2>
+      <form method="post"><input type="hidden" name="aktion" value="dok_save">
+        <div class="bx-field"><label><?= h(cd_t('zahlungsbed')) ?></label><input type="text" name="std_zahlungsbed" value="<?= h(cd_std('std_zahlungsbed')) ?>"></div>
+        <div class="bx-field"><label><?= h(cd_t('versandart')) ?></label><input type="text" name="std_versandart" value="<?= h(cd_std('std_versandart')) ?>"></div>
+        <div class="bx-field"><label><?= h(cd_t('bankverbindung')) ?></label><input type="text" name="std_bank" value="<?= h(cd_std('std_bank')) ?>"></div>
+        <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary" type="submit"><?= h(cd_t('speichern')) ?></button></div>
+      </form>
+    </div>
+    <?php else: /* mitarbeiter */
+      $medit = (int)($_GET['mid'] ?? 0); $me = $medit ? cd_mitarbeiter($medit) : null; ?>
+    <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('set_mitarbeiter')) ?></h2>
+      <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('name')) ?></th><th><?= h(cd_t('rolle')) ?></th><th><?= h(cd_t('signatur')) ?></th><th><?= h(cd_t('stempel')) ?></th><th></th></tr></thead><tbody>
+        <?php $mm = all("SELECT * FROM crmdemo_mitarbeiter WHERE aktiv=1 ORDER BY name"); if (!$mm): ?><tr><td colspan="5" class="muted"><?= h(cd_t('keine_daten')) ?></td></tr><?php endif;
+        foreach ($mm as $mi): ?>
+          <tr><td><a href="<?= h(cd_url('einstellungen',['tab'=>'mitarbeiter','mid'=>(int)$mi['id']])) ?>"><?= h($mi['name']) ?></a></td><td><?= h(cd_t('r_'.($mi['rolle']?:'verkauf'))) ?></td>
+            <td><?= $mi['signatur_b64']?'<img src="'.h((string)$mi['signatur_b64']).'" style="max-height:26px">':'<span class="muted">–</span>' ?></td>
+            <td><?= $mi['stempel_b64']?'<img src="'.h((string)$mi['stempel_b64']).'" style="max-height:26px">':'<span class="muted">–</span>' ?></td>
+            <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('<?= h(cd_t('loeschen')) ?>?')"><input type="hidden" name="aktion" value="mitarbeiter_del"><input type="hidden" name="id" value="<?= (int)$mi['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form></td></tr>
+        <?php endforeach; ?>
+      </tbody></table></div>
+    </div>
+    <div class="bx-panel"><h2 style="margin-top:0"><?= $me?h($me['name']):h(cd_t('neu')) ?></h2>
+      <form method="post" enctype="multipart/form-data"><input type="hidden" name="aktion" value="mitarbeiter_save"><?php if ($me): ?><input type="hidden" name="id" value="<?= (int)$me['id'] ?>"><?php endif; ?>
+        <div class="bx-grid">
+          <div class="bx-field"><label><?= h(cd_t('name')) ?></label><input type="text" name="name" value="<?= $me?h((string)$me['name']):'' ?>" required></div>
+          <div class="bx-field"><label><?= h(cd_t('rolle')) ?></label><select name="rolle"><?php foreach (cd_rollen() as $rr): ?><option value="<?= $rr ?>"<?= $me&&$me['rolle']===$rr?' selected':'' ?>><?= h(cd_t('r_'.$rr)) ?></option><?php endforeach; ?></select></div>
+          <div class="bx-field"><label><?= h(cd_t('email')) ?></label><input type="email" name="email" value="<?= $me?h((string)$me['email']):'' ?>"></div>
+        </div>
+        <div class="bx-row" style="gap:24px;align-items:flex-end;margin-top:10px;flex-wrap:wrap">
+          <div><?php if ($me && $me['signatur_b64']): ?><div><img src="<?= h((string)$me['signatur_b64']) ?>" style="max-height:46px;background:#fff;padding:3px;border:1px solid var(--line)"></div><label class="muted" style="font-size:12px"><input type="checkbox" name="signatur_entfernen" value="1"> <?= h(cd_t('loeschen')) ?></label><?php endif; ?>
+            <div class="bx-field" style="margin:6px 0 0"><label><?= h(cd_t('signatur_hoch')) ?></label><input type="file" name="signatur" accept="image/*"></div></div>
+          <div><?php if ($me && $me['stempel_b64']): ?><div><img src="<?= h((string)$me['stempel_b64']) ?>" style="max-height:46px;background:#fff;padding:3px;border:1px solid var(--line)"></div><label class="muted" style="font-size:12px"><input type="checkbox" name="stempel_entfernen" value="1"> <?= h(cd_t('loeschen')) ?></label><?php endif; ?>
+            <div class="bx-field" style="margin:6px 0 0"><label><?= h(cd_t('stempel_hoch')) ?></label><input type="file" name="stempel" accept="image/*"></div></div>
+        </div>
+        <div class="bx-row" style="margin-top:12px;gap:8px"><button class="btn btn-primary" type="submit" data-busy="…"><?= h($me?cd_t('speichern'):cd_t('anlegen')) ?></button><?php if ($me): ?><a class="btn btn-ghost" href="<?= h(cd_url('einstellungen',['tab'=>'mitarbeiter'])) ?>"><?= h(cd_t('abbrechen')) ?></a><?php endif; ?></div>
       </form>
     </div>
     <?php endif; ?>
@@ -911,7 +1098,6 @@ function cd_kunde_form(?array $k, callable $mnf): void {
         <div class="bx-field"><label><?= h(cd_t('firma_name')) ?></label><input type="text" name="firma" value="<?= $v('firma') ?>" required></div>
         <div class="bx-field"><label><?= h(cd_t('kundennummer')) ?></label><input type="text" name="kundennummer" value="<?= $v('kundennummer') ?>"></div>
         <div class="bx-field"><label><?= h(cd_t('ansprechpartner')) ?></label><input type="text" name="ansprechpartner" value="<?= $v('ansprechpartner') ?>"></div>
-        <div class="bx-field"><label><?= h(cd_t('betreuer')) ?></label><input type="text" name="betreuer" value="<?= $v('betreuer') ?>"></div>
         <div class="bx-field"><label><?= h(cd_t('email')) ?></label><input type="email" name="email" value="<?= $v('email') ?>"></div>
         <div class="bx-field"><label><?= h(cd_t('telefon')) ?></label><input type="text" name="telefon" value="<?= $v('telefon') ?>"></div>
         <div class="bx-field"><label><?= h(cd_t('wechat')) ?></label><input type="text" name="wechat" value="<?= $v('wechat') ?>"></div>
@@ -937,6 +1123,7 @@ function cd_kunde_form(?array $k, callable $mnf): void {
 function cd_beleg_a4(string $typ, array $doc, array $pos, callable $eur): void {
     $lang = in_array($doc['sprache'] ?? 'de', ['de','en','zh'], true) ? $doc['sprache'] : 'de';
     $abs = cd_absender(); $logo = cd_logo_datauri();
+    $mit = cd_mitarbeiter((int)($doc['betreuer_id'] ?? 0));
     $wae = (string)($doc['waehrung'] ?? 'EUR');
     $titelKey = $typ === 'rechnung' ? 'beleg_rechnung' : 'beleg_angebot';
     $backM = $typ === 'rechnung' ? 'rechnungen' : 'angebote';
@@ -982,6 +1169,22 @@ function cd_beleg_a4(string $typ, array $doc, array $pos, callable $eur): void {
         <tr style="font-weight:700;border-top:2px solid #222"><td colspan="3" style="text-align:right"><?= h(cd_tl('brutto',$lang)) ?></td><td style="text-align:right"><?= $eur($brutto,$wae) ?></td></tr>
         <?php endif; ?>
       </tbody></table>
-      <p style="margin-top:26px;font-size:12px;color:#555"><?php if ($typ==='rechnung'): ?><?= h(cd_tl('zahlbar',$lang)) ?><br><?php endif; ?><?= h($abs['name']) ?> · <?= h(cd_tl('ust_id',$lang)) ?> <?= h($abs['ustid']) ?></p>
+      <?php $zb = (string)($doc['zahlungsbedingungen'] ?? '') ?: cd_tl('zahlbar',$lang); $va = (string)($doc['versandart'] ?? ''); $bk = (string)($doc['bankverbindung'] ?? ''); $nz = (string)($doc['notiz'] ?? ''); ?>
+      <?php if ($nz !== ''): ?><p style="margin-top:22px;font-size:12px;color:#333"><?= nl2br(h($nz)) ?></p><?php endif; ?>
+      <table style="margin-top:14px;font-size:12px;color:#444"><tbody>
+        <?php if ($zb !== ''): ?><tr><td style="width:150px;color:#888"><?= h(cd_tl('zahlungsbed',$lang)) ?></td><td><?= h($zb) ?></td></tr><?php endif; ?>
+        <?php if ($va !== ''): ?><tr><td style="color:#888"><?= h(cd_tl('versandart',$lang)) ?></td><td><?= h($va) ?></td></tr><?php endif; ?>
+        <?php if ($typ==='rechnung' && $bk !== ''): ?><tr><td style="color:#888"><?= h(cd_tl('bankverbindung',$lang)) ?></td><td><?= h($bk) ?></td></tr><?php endif; ?>
+      </tbody></table>
+      <table style="margin-top:30px"><tr>
+        <td style="width:55%;vertical-align:bottom">
+          <?php if ($mit && $mit['signatur_b64']): ?><img src="<?= h((string)$mit['signatur_b64']) ?>" alt="" style="max-height:56px;max-width:220px"><?php endif; ?>
+          <div style="border-top:1px solid #999;width:230px;padding-top:3px;font-size:11px;color:#666"><?= h($mit ? (string)$mit['name'] : $abs['name']) ?></div>
+        </td>
+        <td style="width:45%;text-align:right;vertical-align:bottom">
+          <?php if ($mit && $mit['stempel_b64']): ?><img src="<?= h((string)$mit['stempel_b64']) ?>" alt="" style="max-height:88px;max-width:180px;opacity:.9"><?php endif; ?>
+        </td>
+      </tr></table>
+      <p style="margin-top:20px;font-size:11px;color:#777"><?= h($abs['name']) ?> · <?= h($abs['ort']) ?> · <?= h(cd_tl('ust_id',$lang)) ?> <?= h($abs['ustid']) ?></p>
     </div>
 <?php }

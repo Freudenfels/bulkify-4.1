@@ -31,6 +31,7 @@ function crmdemo_schema(): void {
         adresse VARCHAR(190) NULL, plz VARCHAR(20) NULL, ort VARCHAR(120) NULL,
         ust_id VARCHAR(40) NULL, website VARCHAR(190) NULL, wechat VARCHAR(80) NULL,
         segment VARCHAR(40) NULL, kundennummer VARCHAR(30) NULL, betreuer VARCHAR(80) NULL,
+        betreuer_id INT NULL, fraud TINYINT NOT NULL DEFAULT 0,
         zahlungsziel INT NULL, liefer_adresse VARCHAR(190) NULL, branche VARCHAR(80) NULL,
         notiz TEXT NULL, angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_produkt (
@@ -60,7 +61,8 @@ function crmdemo_schema(): void {
         id INT AUTO_INCREMENT PRIMARY KEY, nummer VARCHAR(30) NULL, kunde_id INT NULL, titel VARCHAR(190) NULL,
         waehrung VARCHAR(3) NOT NULL DEFAULT 'EUR', netto_cent INT NOT NULL DEFAULT 0,
         status VARCHAR(24) NOT NULL DEFAULT 'entwurf', kalk_notiz TEXT NULL, gueltig_bis DATE NULL,
-        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
+        notiz TEXT NULL, zahlungsbedingungen VARCHAR(190) NULL, versandart VARCHAR(120) NULL,
+        ablehnungsgrund TEXT NULL, angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_angebot_pos (
         id INT AUTO_INCREMENT PRIMARY KEY, angebot_id INT NOT NULL, bezeichnung VARCHAR(190) NOT NULL,
         menge DECIMAL(12,2) NOT NULL DEFAULT 1, einheit VARCHAR(20) NULL, preis_cent INT NOT NULL DEFAULT 0,
@@ -70,7 +72,9 @@ function crmdemo_schema(): void {
         id INT AUTO_INCREMENT PRIMARY KEY, nummer VARCHAR(30) NULL, kunde_id INT NULL, angebot_id INT NULL,
         waehrung VARCHAR(3) NOT NULL DEFAULT 'EUR', netto_cent INT NOT NULL DEFAULT 0,
         ust_prozent DECIMAL(5,2) NOT NULL DEFAULT 19, brutto_cent INT NOT NULL DEFAULT 0,
-        status VARCHAR(20) NOT NULL DEFAULT 'offen', datum DATE NULL, angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
+        status VARCHAR(20) NOT NULL DEFAULT 'offen', datum DATE NULL,
+        notiz TEXT NULL, zahlungsbedingungen VARCHAR(190) NULL, versandart VARCHAR(120) NULL, bankverbindung TEXT NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
     // Produktion + Chargen (Rueckverfolgbarkeit) -------------------------------
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_produktion (
         id INT AUTO_INCREMENT PRIMARY KEY, kunde_id INT NULL, produkt_id INT NULL, titel VARCHAR(190) NULL,
@@ -88,6 +92,11 @@ function crmdemo_schema(): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_chat (
         id INT AUTO_INCREMENT PRIMARY KEY, rolle VARCHAR(20) NULL, frage TEXT NULL, antwort MEDIUMTEXT NULL,
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
+    // Mitarbeiter (Demo): Zuordnung von Kunden + eigene Unterschrift/Stempel fuer Angebote.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_mitarbeiter (
+        id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, rolle VARCHAR(20) NULL,
+        email VARCHAR(190) NULL, signatur_b64 MEDIUMTEXT NULL, stempel_b64 MEDIUMTEXT NULL,
+        aktiv TINYINT NOT NULL DEFAULT 1, angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
     // KI-COA/Spec-Reader: eingelesenes Lieferanten-Dokument -> Kunden-COA (DE/EN).
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_coa (
         id INT AUTO_INCREMENT PRIMARY KEY, rohstoff_id INT NULL, typ VARCHAR(10) NOT NULL DEFAULT 'coa',
@@ -114,8 +123,13 @@ function crmdemo_schema(): void {
         ensure_column('crmdemo_angebot_pos', 'typ', "VARCHAR(20) NOT NULL DEFAULT 'produkt'");
         ensure_column('crmdemo_angebot_pos', 'rohstoff_id', "INT NULL");
         foreach (['kundennummer'=>"VARCHAR(30) NULL",'betreuer'=>"VARCHAR(80) NULL",'zahlungsziel'=>"INT NULL",
-                  'liefer_adresse'=>"VARCHAR(190) NULL",'branche'=>"VARCHAR(80) NULL"] as $c=>$d)
+                  'liefer_adresse'=>"VARCHAR(190) NULL",'branche'=>"VARCHAR(80) NULL",
+                  'betreuer_id'=>"INT NULL",'fraud'=>"TINYINT NOT NULL DEFAULT 0"] as $c=>$d)
             ensure_column('crmdemo_kunde', $c, $d);
+        foreach (['notiz'=>"TEXT NULL",'zahlungsbedingungen'=>"VARCHAR(190) NULL",'versandart'=>"VARCHAR(120) NULL",
+                  'ablehnungsgrund'=>"TEXT NULL"] as $c=>$d) ensure_column('crmdemo_angebot', $c, $d);
+        foreach (['notiz'=>"TEXT NULL",'zahlungsbedingungen'=>"VARCHAR(190) NULL",'versandart'=>"VARCHAR(120) NULL",
+                  'bankverbindung'=>"TEXT NULL"] as $c=>$d) ensure_column('crmdemo_rechnung', $c, $d);
     }
 }
 
@@ -123,7 +137,7 @@ function crmdemo_schema(): void {
 function crmdemo_tabellen(): array {
     return ['crmdemo_charge_zutat','crmdemo_angebot_pos','crmdemo_angebot','crmdemo_rechnung',
             'crmdemo_produktion','crmdemo_produkt','crmdemo_rezeptur','crmdemo_coa','crmdemo_rohstoff_preis','crmdemo_rohstoff',
-            'crmdemo_mail','crmdemo_chat','crmdemo_kunde'];
+            'crmdemo_mail','crmdemo_chat','crmdemo_mitarbeiter','crmdemo_kunde'];
 }
 
 // --- Meta (Sprache, Rolle, Nummernkreise, Briefkopf). ------------------------
@@ -326,6 +340,39 @@ function crmdemo_i18n(): array {
         'std_waehrung'   => ['de'=>'Standard-Währung','en'=>'Default currency','zh'=>'默认货币'],
         'std_ust'        => ['de'=>'Standard-USt (%)','en'=>'Default VAT (%)','zh'=>'默认增值税 (%)'],
         'std_zahlungsziel'=>['de'=>'Standard-Zahlungsziel (Tage)','en'=>'Default payment terms (days)','zh'=>'默认付款期限（天）'],
+        'set_mitarbeiter'=> ['de'=>'Mitarbeiter','en'=>'Employees','zh'=>'员工'],
+        'set_dokument'   => ['de'=>'Beleg-Vorgaben','en'=>'Document defaults','zh'=>'单据默认'],
+        // Ablehnung / Bestaetigung
+        'ablehnen'       => ['de'=>'Ablehnen','en'=>'Reject','zh'=>'拒绝'],
+        'ablehnungsgrund'=> ['de'=>'Ablehnungsgrund (warum hat der Kunde abgelehnt?)','en'=>'Rejection reason (why did the customer decline?)','zh'=>'拒绝原因（客户为何拒绝？）'],
+        'grund_pflicht'  => ['de'=>'Bitte einen Grund angeben.','en'=>'Please provide a reason.','zh'=>'请填写原因。'],
+        'bestaetigt'     => ['de'=>'Vom Kunden bestätigt','en'=>'Confirmed by customer','zh'=>'客户已确认'],
+        'nicht_bestaetigt'=>['de'=>'Noch nicht bestätigt','en'=>'Not yet confirmed','zh'=>'尚未确认'],
+        // Fraud
+        'fraud'          => ['de'=>'Betrugsverdacht','en'=>'Fraud','zh'=>'欺诈嫌疑'],
+        'fraud_markieren'=> ['de'=>'Als Betrug markieren','en'=>'Flag as fraud','zh'=>'标记为欺诈'],
+        'fraud_aufheben' => ['de'=>'Markierung aufheben','en'=>'Remove flag','zh'=>'取消标记'],
+        'fraud_warnung'  => ['de'=>'Achtung: Dieser Kunde ist als Betrugsverdacht markiert.','en'=>'Warning: this customer is flagged as fraud.','zh'=>'警告：该客户被标记为欺诈嫌疑。'],
+        // Beleg-Felder
+        'beleg_notiz'    => ['de'=>'Notiz (erscheint auf dem Beleg)','en'=>'Note (shown on the document)','zh'=>'备注（显示在单据上）'],
+        'zahlungsbed'    => ['de'=>'Zahlungsbedingungen','en'=>'Payment terms','zh'=>'付款条件'],
+        'versandart'     => ['de'=>'Versandart','en'=>'Shipping method','zh'=>'运输方式'],
+        'bankverbindung' => ['de'=>'Bankverbindung','en'=>'Bank details','zh'=>'银行信息'],
+        'beleg_speichern'=> ['de'=>'Beleg-Angaben speichern','en'=>'Save document details','zh'=>'保存单据信息'],
+        // Mitarbeiter / Zuordnung
+        'mitarbeiter'    => ['de'=>'Mitarbeiter','en'=>'Employee','zh'=>'员工'],
+        'zugeordnet'     => ['de'=>'Zugeordnet','en'=>'Assigned to','zh'=>'负责人'],
+        'zuordnen'       => ['de'=>'Zuordnen','en'=>'Assign','zh'=>'分配'],
+        'nur_admin_zuordnen'=>['de'=>'Nur Admin kann Kunden zuordnen.','en'=>'Only admin can assign customers.','zh'=>'仅管理员可分配客户。'],
+        'signatur'       => ['de'=>'Unterschrift','en'=>'Signature','zh'=>'签名'],
+        'stempel'        => ['de'=>'Stempel','en'=>'Stamp','zh'=>'印章'],
+        'signatur_hoch'  => ['de'=>'Unterschrift hochladen (PNG/JPG)','en'=>'Upload signature (PNG/JPG)','zh'=>'上传签名（PNG/JPG）'],
+        'stempel_hoch'   => ['de'=>'Stempel hochladen (PNG/JPG)','en'=>'Upload stamp (PNG/JPG)','zh'=>'上传印章（PNG/JPG）'],
+        // Globale Suche / Dublette
+        'suche_global'   => ['de'=>'Suche: E-Mail, Firma, Telefon','en'=>'Search: email, company, phone','zh'=>'搜索：邮箱、公司、电话'],
+        'dublette_titel' => ['de'=>'Kunde ist bereits im System','en'=>'Customer already exists','zh'=>'客户已存在'],
+        'dublette_admin' => ['de'=>'Bitte Kontakt mit dem Vorgesetzten aufnehmen – dieser Kunde ist bereits angelegt.','en'=>'Please contact your supervisor – this customer already exists.','zh'=>'请联系主管 — 该客户已存在。'],
+        'trotzdem_anlegen'=>['de'=>'Trotzdem anlegen (Admin)','en'=>'Create anyway (admin)','zh'=>'仍然创建（管理员）'],
         'frage'          => ['de'=>'Frage zum Rohstoff','en'=>'Material question','zh'=>'原料问题'],
         'senden'         => ['de'=>'Senden','en'=>'Send','zh'=>'发送'],
         'logo'           => ['de'=>'Logo','en'=>'Logo','zh'=>'标志'],
@@ -384,8 +431,27 @@ function cd_absender(): array {
 
 // --- Standardwerte (einmalige Einstellungen). --------------------------------
 function cd_std(string $k, string $default = ''): string {
-    static $def = ['std_waehrung'=>'EUR','std_ust'=>'19','std_zahlungsziel'=>'14'];
+    static $def = ['std_waehrung'=>'EUR','std_ust'=>'19','std_zahlungsziel'=>'14',
+                   'std_zahlungsbed'=>'Zahlbar innerhalb 14 Tagen ohne Abzug.',
+                   'std_versandart'=>'Spedition / Kurier', 'std_bank'=>'Musterbank · IBAN DE00 0000 0000 0000 0000 00 · BIC XXXXDEXX'];
     return cd_meta_get($k, $default !== '' ? $default : ($def[$k] ?? ''));
+}
+
+// --- Mitarbeiter (Demo). -----------------------------------------------------
+function cd_mitarbeiter_list(): array { return all("SELECT * FROM crmdemo_mitarbeiter WHERE aktiv=1 ORDER BY name"); }
+function cd_mitarbeiter(int $id): ?array { return $id ? one("SELECT * FROM crmdemo_mitarbeiter WHERE id=?", [$id]) : null; }
+
+// --- Dublettenpruefung: existiert schon ein Kunde mit gleicher Firma/E-Mail/Tel? -
+function cd_kunde_dupes(string $firma, string $email, string $telefon, int $exceptId = 0): array {
+    $firma = trim($firma); $email = trim($email); $telefon = preg_replace('/\D+/', '', $telefon);
+    $wo = []; $pa = [];
+    if ($firma !== '')   { $wo[] = "firma = ?";                 $pa[] = $firma; }
+    if ($email !== '')   { $wo[] = "email = ?";                 $pa[] = $email; }
+    if ($telefon !== '') { $wo[] = "REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(telefon,''),' ',''),'-',''),'/',''),'+','') = ?"; $pa[] = $telefon; }
+    if (!$wo) return [];
+    $sql = "SELECT id, firma, email, telefon FROM crmdemo_kunde WHERE (" . implode(' OR ', $wo) . ")";
+    if ($exceptId) { $sql .= " AND id <> ?"; $pa[] = $exceptId; }
+    return all($sql, $pa);
 }
 
 // --- KI-COA/Spec-Reader: Lieferantentext -> strukturierte Werte in Zielsprache. -
@@ -523,6 +589,11 @@ function crmdemo_reset(): void {
 function crmdemo_seed(): void {
     crmdemo_schema();
     // Abschnittsweise idempotent: jede Sektion nur seeden, wenn ihre Tabelle leer ist.
+    if ((int) scalar("SELECT COUNT(*) FROM crmdemo_mitarbeiter") === 0)
+        q("INSERT INTO crmdemo_mitarbeiter (name,rolle,email) VALUES
+            ('Max Sales','verkauf','max@example.com'),
+            ('Julia Preis','pricing','julia@example.com'),
+            ('Chen Li','verkauf','chen@example.com')");
     $k1 = 0; $k3 = 0;
     if ((int) scalar("SELECT COUNT(*) FROM crmdemo_kunde") === 0) {
         // Kunden (mit Sprache/Waehrung fuer Belege) ---------------------------
@@ -532,6 +603,13 @@ function crmdemo_seed(): void {
             ('Sunrise Health Co., Ltd.','Li Wei','li.wei@sunrisehealth.cn','CN','zh','CNY','建国路 88 号','100022','北京','Distributor','Ashwagandha & Vitamin D3')");
         $ks = all("SELECT id FROM crmdemo_kunde ORDER BY id");
         $k1 = (int)$ks[0]['id']; $k3 = (int)$ks[2]['id'];
+        // Kunden den Mitarbeitern zuordnen (Demo).
+        $mit = all("SELECT id FROM crmdemo_mitarbeiter ORDER BY id");
+        if (count($mit) >= 3) {
+            q("UPDATE crmdemo_kunde SET betreuer_id=? WHERE id=?", [(int)$mit[0]['id'], $k1]);
+            q("UPDATE crmdemo_kunde SET betreuer_id=? WHERE id=?", [(int)$mit[0]['id'], (int)$ks[1]['id']]);
+            q("UPDATE crmdemo_kunde SET betreuer_id=? WHERE id=?", [(int)$mit[2]['id'], $k3]);
+        }
         q("INSERT INTO crmdemo_angebot (nummer,kunde_id,titel,waehrung,netto_cent,status) VALUES (?,?, 'Magnesium Complex – 60 Kapseln','EUR', 249000, 'kalkuliert')", [cd_nummer('AN'), $k1]);
         $a1 = insert_id();
         q("INSERT INTO crmdemo_angebot_pos (angebot_id,bezeichnung,menge,einheit,preis_cent,sort) VALUES

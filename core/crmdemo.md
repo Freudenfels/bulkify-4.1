@@ -41,6 +41,16 @@ werden nur am Bildschirm gezeigt.
 Positionen werden automatisch als Rezeptur angelegt – so entsteht bei vielen Sales ein großer, aber
 durchsuchbarer Katalog statt Wildwuchs.
 
+## Mitarbeiter, Zuordnung, Dubletten
+- `crmdemo_mitarbeiter` (Name, Rolle, `signatur_b64`, `stempel_b64`). `crmdemo_kunde.betreuer_id` ordnet
+  einen Kunden einem Mitarbeiter zu – nur Admin darf zuordnen. Auf dem A4-Beleg erscheinen Unterschrift
+  und Stempel des zugeordneten Mitarbeiters (`cd_mitarbeiter()`).
+- `cd_kunde_dupes($firma,$email,$telefon)` – findet bestehende Kunden (Dublettenprüfung beim Neuanlegen).
+- `crmdemo_kunde.fraud` – Betrugs-Markierung (Warnbanner im Profil/Liste).
+- Beleg-Felder: `angebot`/`rechnung` haben `notiz`, `zahlungsbedingungen`, `versandart`; `rechnung`
+  zusätzlich `bankverbindung`; `angebot.ablehnungsgrund` (Pflicht beim Ablehnen). Standardwerte dafür in
+  `cd_std()` (`std_zahlungsbed`, `std_versandart`, `std_bank`).
+
 ## Isolation – Merksatz
 Eine einzige Quelle für die Tabellenliste: `crmdemo_tabellen()`. Wer eine Tabelle hinzufügt, trägt sie
 dort ein – dann greifen Reset und Löschen automatisch. Kein Zugriff auf echte bulkify-Tabellen.
