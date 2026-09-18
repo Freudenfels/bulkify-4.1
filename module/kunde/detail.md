@@ -11,6 +11,7 @@
 
 **Die Reiter:**
 - **Übersicht** – Kontakt, Marken & Webseiten, letzte Vorgänge (Platzhalter bis Module stehen).
+- **Preise** – Schnellauskunft: Produkt wählen (`?pp=<id>`, GET-Neuladen), dann erscheint dessen Preismatrix als **kundenspezifischer** Netto-Preis je Packung (inkl. Behälter, mit Kundenrabatt). Berechnet über `angebot_zelle_netto_cent()` pro Zelle (identisch zur Angebotslogik), Matrix wird bei Bedarf per `produkt_matrix_generieren()` erzeugt. Darunter ein **Schnellrechner** (Größe/Behälter + Anzahl Packungen → VK/Packung × Anzahl = Gesamt netto), rein clientseitig aus der eingebetteten Matrix (`var M`, Staffel = größte Menge ≤ Anzahl). Auswahl = Katalogprodukte + exklusive Produkte dieses Kunden.
 - **Angebote / Bestellungen / Rezepturen** – zeigen die **echten Vorgänge** des Kunden (Angebote, Aufträge + Rechnungen, Produkte + Rezepturen), alle anklickbar zum jeweiligen Detail. **Dokumente** noch Platzhalter.
 - **Kennzahlen** sind real: Umsatz gesamt (Σ Rechnungs-Netto), Offene Posten (Σ Brutto offener Rechnungen), Bestellungen (Anzahl Aufträge).
 - **Verlauf** – der Chat (`bx_chat`): links wir, rechts Kunde, Einträge klickbar zum verknüpften Objekt.

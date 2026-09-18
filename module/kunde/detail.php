@@ -94,6 +94,38 @@ if (!$neu) {
     $umsatz = (float) scalar("SELECT COALESCE(SUM(netto),0) FROM beleg WHERE kunde_id=? AND typ='rechnung'", [$kid]);
     $offen  = (float) scalar("SELECT COALESCE(SUM(brutto),0) FROM beleg WHERE kunde_id=? AND typ='rechnung' AND status='offen'", [$kid]);
 }
+
+// ---- Reiter "Preise": Produkt + Menge -> kundenspezifischer Schnellpreis ----
+// Auswahlliste = Katalogprodukte + exklusive Produkte dieses Kunden. Preis = angebot_zelle_netto_cent()
+// (All-in netto je Packung inkl. Behälter, mit dem Kundenrabatt) – konsistent zur Angebotslogik.
+$preisPid = 0; $preisProdukte = []; $preisMatrix = []; $preisMengen = []; $preisProd = null; $preisForm = 'kapsel';
+$kundeRabatt = (float)($k['rabatt_marge'] ?? 0);
+if (!$neu) {
+    $preisPid = (int)($_GET['pp'] ?? 0);
+    $preisProdukte = all("SELECT p.id, p.name, p.kundenname, r.darreichungsform AS df
+                          FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                          WHERE (p.status IS NULL OR p.status<>'inaktiv') AND (p.kunde_id IS NULL OR p.kunde_id=?)
+                          ORDER BY p.name", [$kid]);
+    if ($preisPid) {
+        $preisProd = one("SELECT p.*, r.darreichungsform AS df FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$preisPid]);
+        if ($preisProd) {
+            $preisForm = $preisProd['df'] ?: 'kapsel';
+            if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$preisPid]) === 0) produkt_matrix_generieren($preisPid);
+            $rows = all("SELECT pp.*, i.name AS verp FROM produkt_preis pp JOIN item i ON i.id=pp.verpackung_id WHERE pp.produkt_id=? ORDER BY pp.stueck, i.name, pp.bestellmenge", [$preisPid]);
+            foreach ($rows as $r) {
+                $bm = max(1, (int)$r['bestellmenge']);
+                $cent = angebot_zelle_netto_cent($preisPid, (int)$r['stueck'], $bm, $kid, (int)$r['verpackung_id']);
+                if ($cent <= 0) continue;
+                $key = $r['stueck'] . '|' . $r['verp'];
+                $preisMatrix[$key]['stueck'] = (int)$r['stueck'];
+                $preisMatrix[$key]['verp']   = $r['verp'];
+                $preisMatrix[$key]['cells'][$bm] = round($cent / $bm / 100, 2);   // All-in netto je Packung
+                $preisMengen[$bm] = true;
+            }
+            ksort($preisMengen); $preisMengen = array_map('intval', array_keys($preisMengen));
+        }
+    }
+}
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 $angBadge = fn($s) => match ($s) { 'offen'=>bx_badge('offen','info'),'gesendet'=>bx_badge('gesendet'),'bestaetigt'=>bx_badge('bestätigt','ok'),'abgelehnt'=>bx_badge('abgelehnt','err'),default=>bx_badge($s) };
 $aufBadge = fn($s) => match ($s) { 'offen'=>bx_badge('offen','info'),'in_produktion'=>bx_badge('in Produktion','warn'),'erledigt'=>bx_badge('versandbereit','info'),'versendet'=>bx_badge('versendet','ok'),default=>bx_badge($s) };
@@ -164,6 +196,7 @@ if (!$neu) {
   <div class="settabs" id="kundtabs">
     <?php if (!$neu): ?>
     <a href="#" class="on" data-tab="ueber">Übersicht</a>
+    <a href="#" data-tab="preise">Preise</a>
     <a href="#" data-tab="angebote">Angebote</a>
     <a href="#" data-tab="bestell">Bestellungen</a>
     <a href="#" data-tab="rezept">Rezepturen</a>
@@ -243,6 +276,79 @@ if (!$neu) {
     <div class="bx-panel">
       <h2>Aktivitätsverlauf <?= bx_hint('links = wir (bulkify), rechts = Kunde. Jede Aktion wird automatisch protokolliert') ?></h2>
       <?php bx_chat($verlauf, $v('firma')); ?>
+    </div>
+  </section>
+  <section data-panel="preise" hidden>
+    <div class="bx-panel">
+      <h2>Schnellpreis <?= bx_hint('Produkt + Menge wählen, sofort ein kundenspezifischer Preis: netto je Packung, inkl. Behälter, mit dem Kundenrabatt. Basis ist die Preismatrix des Produkts.') ?></h2>
+      <div class="bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px">
+        <div class="bx-field" style="margin:0;min-width:300px">
+          <label>Produkt</label>
+          <select id="preisProdSel" onchange="if(this.value)location.href='?p=kunde&id=<?= $kid ?>&tab=preise&pp='+this.value">
+            <option value="">– Produkt wählen –</option>
+            <?php foreach ($preisProdukte as $pp): $lbl = $pp['kundenname'] ?: $pp['name']; ?>
+              <option value="<?= (int)$pp['id'] ?>" <?= $preisPid===(int)$pp['id']?'selected':'' ?>><?= h($lbl) ?><?= $pp['df']?' · '.h($pp['df']):'' ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <?php if ($kundeRabatt != 0.0): ?><div class="muted" style="padding-bottom:8px">Kundenrabatt <?= number_format($kundeRabatt,2,',','.') ?> % ist eingerechnet</div><?php endif; ?>
+      </div>
+
+      <?php if ($preisPid && $preisMatrix): ?>
+        <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
+          <thead><tr><th>Größe</th><th>Behälter</th><?php foreach ($preisMengen as $mn): ?><th class="bx-num"><?= number_format($mn,0,',','.') ?> Pkg.</th><?php endforeach; ?></tr></thead>
+          <tbody>
+          <?php foreach ($preisMatrix as $row): ?>
+            <tr>
+              <td><?= h(form_groessen_label($preisForm, (float)$row['stueck'])) ?></td>
+              <td><?= h($row['verp']) ?></td>
+              <?php foreach ($preisMengen as $mn): $c = $row['cells'][$mn] ?? null; ?>
+                <td class="bx-num"><?= $c!==null ? number_format((float)$c,2,',','.').' €' : '<span class="muted">–</span>' ?></td>
+              <?php endforeach; ?>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table></div>
+        <div class="muted" style="margin-top:6px;font-size:12px">VK je Packung netto, inkl. Behälter, mit Kundenrabatt. Der Staffelpreis gilt ab der jeweiligen Packungszahl.</div>
+
+        <div class="bx-panel" style="background:var(--panel-2);margin-top:14px">
+          <div style="font-weight:600;margin-bottom:8px">Schnellrechner</div>
+          <div class="bx-row" style="gap:16px;align-items:flex-end;flex-wrap:wrap">
+            <div class="bx-field" style="margin:0;min-width:220px"><label>Größe / Behälter</label>
+              <select id="preisRow"><?php foreach (array_values($preisMatrix) as $ix=>$row): ?><option value="<?= $ix ?>"><?= h(form_groessen_label($preisForm,(float)$row['stueck']).' · '.$row['verp']) ?></option><?php endforeach; ?></select>
+            </div>
+            <div class="bx-field" style="margin:0;width:150px"><label>Anzahl Packungen</label><input type="number" id="preisAnz" value="<?= (int)($preisMengen[0] ?? 1000) ?>" min="1"></div>
+            <div style="padding-bottom:6px"><div class="muted" style="font-size:12px">VK / Packung</div><div id="preisStk" style="font-weight:600;font-size:19px">–</div></div>
+            <div style="padding-bottom:6px"><div class="muted" style="font-size:12px">Gesamt netto</div><div id="preisGes" style="font-weight:600;font-size:19px">–</div></div>
+          </div>
+          <div class="muted" style="font-size:12px;margin-top:8px" id="preisStaffelInfo"></div>
+        </div>
+        <script>
+        (function(){
+          var M   = <?= json_encode(array_values($preisMatrix), JSON_UNESCAPED_UNICODE) ?>;
+          var MEN = <?= json_encode($preisMengen) ?>;
+          function nf(x){ return x.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+          var selR=document.getElementById('preisRow'), inA=document.getElementById('preisAnz');
+          var elStk=document.getElementById('preisStk'), elGes=document.getElementById('preisGes'), info=document.getElementById('preisStaffelInfo');
+          function calc(){
+            var row=M[+selR.value]; if(!row) return;
+            var anz=parseInt((inA.value||'0'),10)||0;
+            var st=null; for(var i=0;i<MEN.length;i++){ if(MEN[i]<=anz) st=MEN[i]; }
+            if(st===null) st=MEN[0];
+            var vk=row.cells[st];
+            if(vk===undefined||vk===null){ elStk.textContent='–'; elGes.textContent='–'; info.textContent='Für diese Größe kein Staffelpreis hinterlegt.'; return; }
+            elStk.textContent=nf(vk)+' €';
+            elGes.textContent=nf(vk*anz)+' €';
+            info.textContent='Staffelpreis ab '+st.toLocaleString('de-DE')+' Pkg.'+(anz<MEN[0]?' – Mindeststaffel (Eingabe kleiner als '+MEN[0].toLocaleString('de-DE')+' Pkg.)':'');
+          }
+          selR.addEventListener('change',calc); inA.addEventListener('input',calc); calc();
+        })();
+        </script>
+      <?php elseif ($preisPid): ?>
+        <div class="muted" style="margin-top:10px">Für dieses Produkt ließ sich keine Preismatrix erzeugen. Voraussetzung: hinterlegte Rezeptur und eine passende Behälter-Fassung (Kapseln je Größe bzw. Füllgewicht/Volumen).</div>
+      <?php else: ?>
+        <div class="muted" style="margin-top:10px">Produkt oben wählen – die Staffelpreise erscheinen sofort, darunter ein Schnellrechner für eine beliebige Packungszahl.</div>
+      <?php endif; ?>
     </div>
   </section>
   <?php endif; ?>
