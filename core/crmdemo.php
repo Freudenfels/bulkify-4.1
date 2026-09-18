@@ -502,6 +502,8 @@ function cd_head(string $titel): void {
        . '.cd-az{display:flex;flex-wrap:wrap;gap:3px}.cd-az a{padding:2px 7px;border-radius:6px;font-size:12px;color:var(--muted);text-decoration:none}'
        . '.cd-az a.on{background:var(--gruen,#2f8f5b);color:#fff}'
        . '.bx-side nav a.cd-sub{padding-left:30px;font-size:13px;opacity:.82}.bx-side nav a.cd-sub::before{content:"\\21B3";margin-right:6px;opacity:.6}'
+       . '.cd-konv{display:block;text-decoration:none;color:var(--text,inherit);border-left:3px solid var(--line);border-bottom:1px solid var(--line);border-radius:6px;padding:8px 12px;margin:2px 0;transition:background .12s}'
+       . '.cd-konv:hover{background:rgba(127,127,127,.14)}.cd-konv .cd-firma{color:var(--gruen,#2f8f5b);font-weight:600}'
        . '.cd-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;z-index:60;padding:56px 16px}'
        . '.cd-modal.on{display:flex}.cd-modal .box{background:var(--panel,#fff);color:var(--text,#111);border:1px solid var(--line);border-radius:12px;max-width:460px;width:100%;padding:22px;box-shadow:0 12px 44px rgba(0,0,0,.32)}</style>'
        . '<script>(function(){try{var t=localStorage.getItem("bx-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>'

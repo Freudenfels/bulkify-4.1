@@ -560,15 +560,15 @@ elseif ($m === 'konversation'):
       <div style="margin-top:12px">
         <?php if (!$rows): ?><p class="muted"><?= h(cd_t('keine_daten')) ?></p><?php endif;
         foreach ($rows as $ml): $ein = $ml['richtung']==='ein'; ?>
-          <div style="border-left:3px solid <?= $ein?'var(--gruen,#2f8f5b)':'var(--line)' ?>;padding:6px 0 8px 12px;margin:2px 0;border-bottom:1px solid var(--line)">
+          <a class="cd-konv" href="<?= h(cd_url('kunden',['id'=>(int)$ml['kunde_id']])) ?>"<?= $ein?' style="border-left-color:var(--gruen,#2f8f5b)"':'' ?>>
             <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
               <div><?= bx_badge($ein?cd_t('eingehend'):cd_t('ausgehend'), $ein?'info':'') ?>
-                <a href="<?= h(cd_url('kunden',['id'=>(int)$ml['kunde_id']])) ?>" style="font-weight:600"><?= h((string)($ml['firma'] ?? '–')) ?></a>
+                <span class="cd-firma"><?= h((string)($ml['firma'] ?? '–')) ?></span>
                 · <?= h((string)$ml['betreff']) ?></div>
               <span class="muted" style="font-size:12px"><?= h(substr((string)$ml['angelegt'],0,16)) ?></span>
             </div>
             <?php if ($ml['text']): ?><div class="muted" style="font-size:13px;margin-top:3px"><?= h(mb_strimwidth((string)$ml['text'],0,160,'…')) ?></div><?php endif; ?>
-          </div>
+          </a>
         <?php endforeach; ?>
       </div>
     </div>
