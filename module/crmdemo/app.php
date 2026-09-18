@@ -274,6 +274,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               [cd_nummer('RE'), $a['kunde_id'], $a['id'], $a['waehrung'], $netto, $ust, $brutto,
                $a['zahlungsbedingungen'] ?: cd_std('std_zahlungsbed'), $a['versandart'] ?: cd_std('std_versandart'), cd_std('std_bank')]);
             q("UPDATE crmdemo_angebot SET status='angenommen' WHERE id=?", [(int)$a['id']]);
+            // Aus dem angenommenen Angebot direkt eine Produktionscharge anlegen (Rueckverfolgung startet hier).
+            if (!(int) scalar("SELECT COUNT(*) FROM crmdemo_produktion WHERE angebot_id=?", [(int)$a['id']])) {
+                $pMenge = (int) scalar("SELECT COALESCE(SUM(menge),0) FROM crmdemo_angebot_pos WHERE angebot_id=? AND typ='produkt'", [(int)$a['id']]);
+                $pTitel = (string)($a['titel'] ?: scalar("SELECT bezeichnung FROM crmdemo_angebot_pos WHERE angebot_id=? ORDER BY sort,id LIMIT 1", [(int)$a['id']])) ?: 'Charge';
+                q("INSERT INTO crmdemo_produktion (kunde_id,angebot_id,titel,charge_nr,menge,status) VALUES (?,?,?,?,?, 'geplant')",
+                  [$a['kunde_id'], (int)$a['id'], mb_substr($pTitel,0,190), cd_nummer('CH'), $pMenge]);
+            }
             header('Location: ' . cd_url('rechnungen')); exit;
         }
         header('Location: ' . cd_url('angebote', ['id'=>(int)($_POST['id']??0)])); exit;
@@ -297,6 +304,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           [$pid,$rid,$name,trim($_POST['lot']??'') ?: null, ($_POST['menge_kg']??'')!=='' ? (float)str_replace(',','.',$_POST['menge_kg']) : null]);
         header('Location: ' . cd_url('produktion', ['id'=>$pid])); exit;
     }
+    if ($akt === 'prod_dok_add') {
+        $pid=(int)($_POST['produktion_id']??0); $art=($_POST['art']??'foto')==='analyse' ? 'analyse' : 'foto';
+        if ($pid && !empty($_FILES['datei']['tmp_name']) && is_uploaded_file($_FILES['datei']['tmp_name'])) {
+            $sz=(int)($_FILES['datei']['size']??0); $typ=(string)($_FILES['datei']['type']??''); $nm=(string)($_FILES['datei']['name']??'Datei');
+            // Fotos nur Bilder, Analysen auch PDF.
+            $ok = $art==='analyse' ? preg_match('~^(application/pdf|image/(png|jpe?g|webp|gif))$~',$typ) : preg_match('~^image/(png|jpe?g|webp|gif)$~',$typ);
+            if ($sz>0 && $sz<=4*1024*1024 && $ok) {
+                $bin=file_get_contents($_FILES['datei']['tmp_name']);
+                if ($bin!==false) q("INSERT INTO crmdemo_prod_dok (produktion_id,art,name,typ,groesse,daten) VALUES (?,?,?,?,?,?)",
+                    [$pid,$art,mb_substr($nm,0,190),$typ,$sz,'data:'.$typ.';base64,'.base64_encode($bin)]);
+            }
+        }
+        header('Location: ' . cd_url('produktion', ['id'=>$pid])); exit;
+    }
+    if ($akt === 'prod_dok_del') { $did=(int)($_POST['id']??0); $pid=(int)($_POST['produktion_id']??0); q("DELETE FROM crmdemo_prod_dok WHERE id=?", [$did]); header('Location: ' . cd_url('produktion', ['id'=>$pid])); exit; }
 
     // --- KI-Rohstoff-Chat ---
     if ($akt === 'chat_frage') {
@@ -1208,7 +1230,7 @@ elseif ($m === 'produktion'):
         <h1 style="margin:0"><?= h((string)$pr['titel']) ?> <span class="muted" style="font-size:14px"><?= h((string)$pr['charge_nr']) ?></span></h1>
         <a class="btn btn-ghost btn-sm" href="<?= h(cd_url('produktion')) ?>">← <?= h(cd_t('produktion')) ?></a>
       </div>
-      <p class="bx-sub"><?= h((string)($pr['firma'] ?? '')) ?> · <?= $badgeP($pr['status']) ?> · <?= (int)$pr['menge'] ?> · <?= h(cd_t('mhd')) ?> <?= h((string)$pr['mhd']) ?: '–' ?></p>
+      <p class="bx-sub"><?= h((string)($pr['firma'] ?? '')) ?> · <?= $badgeP($pr['status']) ?> · <?= (int)$pr['menge'] ?> · <?= h(cd_t('mhd')) ?> <?= h((string)$pr['mhd']) ?: '–' ?><?php if (!empty($pr['angebot_id'])): $anr=(string) scalar("SELECT nummer FROM crmdemo_angebot WHERE id=?", [(int)$pr['angebot_id']]); if ($anr): ?> · <?= h(cd_t('aus_angebot')) ?> <a href="<?= h(cd_url('angebote',['id'=>(int)$pr['angebot_id']])) ?>"><?= h($anr) ?></a><?php endif; endif; ?></p>
       <div class="bx-panel"><form method="post" style="margin:0"><input type="hidden" name="aktion" value="produktion_status"><input type="hidden" name="id" value="<?= $detail ?>"><input type="hidden" name="status" value="<?= $next ?>"><button class="btn btn-primary" type="submit">→ <?= h(cd_t($next==='in_produktion'?'in_produktion':($next==='fertig'?'fertig':'geplant'))) ?></button></form></div>
       <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('rueckverfolgung')) ?></h2>
         <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th><?= h(cd_t('name')) ?></th><th><?= h(cd_t('lot')) ?></th><th class="bx-num">kg</th></tr></thead><tbody>
@@ -1223,6 +1245,49 @@ elseif ($m === 'produktion'):
           </div>
           <button class="btn btn-ghost btn-sm" type="submit" style="margin-top:8px"><?= h(cd_t('zutat_hinzu')) ?></button>
         </form>
+      </div>
+      <?php $darfPD = in_array(cd_rolle(), ['produktion','admin'], true); ?>
+      <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('prod_fotos')) ?></h2>
+        <?php $fotos = all("SELECT * FROM crmdemo_prod_dok WHERE produktion_id=? AND art='foto' ORDER BY id DESC", [$detail]);
+        if (!$fotos): ?><p class="muted" style="margin-top:0"><?= h(cd_t('keine_fotos')) ?></p><?php else: ?>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <?php foreach ($fotos as $f): ?>
+            <div style="width:150px">
+              <a href="<?= h((string)$f['daten']) ?>" target="_blank"><img src="<?= h((string)$f['daten']) ?>" alt="<?= h((string)$f['name']) ?>" style="width:150px;height:110px;object-fit:cover;border-radius:8px;border:1px solid var(--line)"></a>
+              <div class="bx-row" style="justify-content:space-between;align-items:center;gap:4px;margin-top:2px">
+                <span class="muted" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= h((string)$f['name']) ?></span>
+                <?php if ($darfPD): ?><form method="post" style="margin:0" onsubmit="return confirm('<?= h(cd_t('loeschen')) ?>?')"><input type="hidden" name="aktion" value="prod_dok_del"><input type="hidden" name="id" value="<?= (int)$f['id'] ?>"><input type="hidden" name="produktion_id" value="<?= $detail ?>"><button class="btn btn-ghost btn-sm" type="submit" style="padding:0 6px">×</button></form><?php endif; ?>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+        <?php if ($darfPD): ?>
+        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin-top:12px">
+          <input type="hidden" name="aktion" value="prod_dok_add"><input type="hidden" name="art" value="foto"><input type="hidden" name="produktion_id" value="<?= $detail ?>">
+          <input type="file" name="datei" accept="image/*" required>
+          <button class="btn btn-ghost btn-sm" type="submit" data-busy="…"><?= h(cd_t('foto_hochladen')) ?></button>
+        </form>
+        <?php endif; ?>
+      </div>
+      <div class="bx-panel"><h2 style="margin-top:0"><?= h(cd_t('prod_analysen')) ?></h2>
+        <?php $ana = all("SELECT * FROM crmdemo_prod_dok WHERE produktion_id=? AND art='analyse' ORDER BY id DESC", [$detail]);
+        if (!$ana): ?><p class="muted" style="margin-top:0"><?= h(cd_t('keine_analysen')) ?></p><?php else: ?>
+        <div class="bx-tablewrap"><table class="bx-table"><tbody>
+          <?php foreach ($ana as $d): ?><tr>
+            <td><a href="<?= h((string)$d['daten']) ?>" target="_blank"><?= h((string)$d['name']) ?></a> <span class="muted" style="font-size:11px"><?= h((string)$d['typ']) ?></span></td>
+            <td style="text-align:right;white-space:nowrap"><a class="btn btn-ghost btn-sm" href="<?= h((string)$d['daten']) ?>" target="_blank"><?= h(cd_t('ansehen') ?: 'Ansehen') ?></a>
+              <?php if ($darfPD): ?><form method="post" style="display:inline;margin:0" onsubmit="return confirm('<?= h(cd_t('loeschen')) ?>?')"><input type="hidden" name="aktion" value="prod_dok_del"><input type="hidden" name="id" value="<?= (int)$d['id'] ?>"><input type="hidden" name="produktion_id" value="<?= $detail ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form><?php endif; ?></td>
+          </tr><?php endforeach; ?>
+        </tbody></table></div>
+        <?php endif; ?>
+        <?php if ($darfPD): ?>
+        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin-top:12px">
+          <input type="hidden" name="aktion" value="prod_dok_add"><input type="hidden" name="art" value="analyse"><input type="hidden" name="produktion_id" value="<?= $detail ?>">
+          <input type="file" name="datei" accept="application/pdf,image/*" required>
+          <button class="btn btn-ghost btn-sm" type="submit" data-busy="…"><?= h(cd_t('analyse_hochladen')) ?></button>
+        </form>
+        <?php endif; ?>
       </div>
     <?php else: ?>
       <h1 style="margin-bottom:12px"><?= h(cd_t('produktion')) ?></h1>

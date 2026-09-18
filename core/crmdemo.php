@@ -90,6 +90,11 @@ function crmdemo_schema(): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_charge_zutat (
         id INT AUTO_INCREMENT PRIMARY KEY, produktion_id INT NOT NULL, rohstoff_id INT NULL,
         name VARCHAR(190) NULL, lot VARCHAR(60) NULL, menge_kg DECIMAL(12,3) NULL)$eng");
+    // Produktionsdokumente je Charge: Fotos aus der Produktion + Endprodukt-Analysen/COA (art = foto|analyse).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_prod_dok (
+        id INT AUTO_INCREMENT PRIMARY KEY, produktion_id INT NOT NULL, art VARCHAR(12) NOT NULL DEFAULT 'foto',
+        name VARCHAR(190) NULL, typ VARCHAR(80) NULL, groesse INT NULL, daten MEDIUMTEXT NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
     // Simuliertes Kunden-Postfach ---------------------------------------------
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_mail (
         id INT AUTO_INCREMENT PRIMARY KEY, kunde_id INT NULL, richtung VARCHAR(4) NOT NULL DEFAULT 'ein',
@@ -126,6 +131,8 @@ function crmdemo_schema(): void {
         ensure_column('crmdemo_rechnung', 'waehrung', "VARCHAR(3) NOT NULL DEFAULT 'EUR'");
         ensure_column('crmdemo_produktion', 'charge_nr', "VARCHAR(40) NULL");
         ensure_column('crmdemo_produktion', 'mhd', "DATE NULL");
+        ensure_column('crmdemo_produktion', 'angebot_id', "INT NULL");   // Charge stammt aus diesem angenommenen Angebot
+        ensure_column('crmdemo_produktion', 'notiz', "TEXT NULL");
         ensure_column('crmdemo_angebot_pos', 'rezeptur_id', "INT NULL");
         ensure_column('crmdemo_angebot_pos', 'typ', "VARCHAR(20) NOT NULL DEFAULT 'produkt'");
         ensure_column('crmdemo_angebot_pos', 'rohstoff_id', "INT NULL");
@@ -146,7 +153,7 @@ function crmdemo_schema(): void {
 
 // --- Alle eigenen Tabellen (eine Quelle fuer Loeschen/Reset). ----------------
 function crmdemo_tabellen(): array {
-    return ['crmdemo_charge_zutat','crmdemo_angebot_pos','crmdemo_angebot','crmdemo_rechnung',
+    return ['crmdemo_prod_dok','crmdemo_charge_zutat','crmdemo_angebot_pos','crmdemo_angebot','crmdemo_rechnung',
             'crmdemo_produktion','crmdemo_produkt','crmdemo_rezeptur','crmdemo_coa','crmdemo_dokument','crmdemo_rohstoff_preis','crmdemo_rohstoff',
             'crmdemo_mail','crmdemo_chat','crmdemo_mitarbeiter','crmdemo_kunde'];
 }
@@ -315,6 +322,15 @@ function crmdemo_i18n(): array {
         'rueckverfolgung'=> ['de'=>'Rückverfolgbarkeit (eingesetzte Rohstoffe)','en'=>'Traceability (materials used)','zh'=>'可追溯性（所用原料）'],
         'lot'            => ['de'=>'Lot','en'=>'Lot','zh'=>'批次'],
         'zutat_hinzu'    => ['de'=>'Rohstoff-Lot hinzufügen','en'=>'Add material lot','zh'=>'添加原料批次'],
+        'prod_fotos'     => ['de'=>'Produktionsfotos','en'=>'Production photos','zh'=>'生产照片'],
+        'prod_analysen'  => ['de'=>'Analysen / Endprodukt-COA','en'=>'Analyses / finished-product COA','zh'=>'分析／成品COA'],
+        'foto_hochladen' => ['de'=>'Foto hochladen','en'=>'Upload photo','zh'=>'上传照片'],
+        'analyse_hochladen'=>['de'=>'Analyse / COA hochladen','en'=>'Upload analysis / COA','zh'=>'上传分析／COA'],
+        'aus_angebot'    => ['de'=>'Aus Angebot','en'=>'From offer','zh'=>'来自报价'],
+        'charge_angelegt'=> ['de'=>'Charge zur Produktion angelegt','en'=>'Batch created for production','zh'=>'已创建生产批次'],
+        'keine_fotos'    => ['de'=>'Noch keine Fotos.','en'=>'No photos yet.','zh'=>'暂无照片。'],
+        'keine_analysen' => ['de'=>'Noch keine Analysen.','en'=>'No analyses yet.','zh'=>'暂无分析。'],
+        'ansehen'        => ['de'=>'Ansehen','en'=>'View','zh'=>'查看'],
         'keine_daten'    => ['de'=>'Noch keine Einträge.','en'=>'No entries yet.','zh'=>'暂无记录。'],
         'anzahl_kunden'  => ['de'=>'Kunden','en'=>'Customers','zh'=>'客户数'],
         'anzahl_angebote'=> ['de'=>'Angebote','en'=>'Quotes','zh'=>'报价数'],

@@ -40,7 +40,9 @@ Eigenständige App unter `?p=crmdemo&m=<modul>`. Nutzt nur `crmdemo_*`-Tabellen 
   öffnet sie (Zutaten aus dem KI-Konzept, unbekannte werden im Rohstoff-Katalog neu angelegt).
 - **angebote** – Liste → Detail mit **Pricing-Workflow**: `entwurf → kalkulation → kalkuliert →
   gesendet → angenommen`. Verkauf fragt Kalkulation an / sendet / nimmt an; Pricing trägt Preise + Notiz ein.
-  Annahme erzeugt automatisch die Rechnung. **Positionen aus Rezeptur wählbar** („Aus Rezeptur
+  Annahme erzeugt automatisch die Rechnung **UND eine Produktionscharge** (`crmdemo_produktion`,
+  verknüpft über `angebot_id`, Menge = Σ der Fertigprodukt-Positionen, Status `geplant`) – so fließt ein
+  angenommenes Angebot direkt in die Produktion. **Positionen aus Rezeptur wählbar** („Aus Rezeptur
   übernehmen") oder neue Positionen per Haken **„In Katalog aufnehmen"** – so wächst der geteilte
   Rezeptur-Katalog, und jede Verwendung erhöht den Zähler der Rezeptur (`angebot_pos.rezeptur_id`).
   **Positionstyp** je Zeile: Fertigprodukt (nach Rezeptur, Einheit „Stk.") · Rohstoff (aus Katalog,
@@ -54,8 +56,11 @@ Eigenständige App unter `?p=crmdemo&m=<modul>`. Nutzt nur `crmdemo_*`-Tabellen 
   USt/Zahlungsziel) und **Beleg-Vorgaben** (Standard-Zahlungsbedingungen/Versandart/Bankverbindung),
   gespeichert in `crmdemo_meta` (`cd_std()`).
 - **rechnungen** – Liste + Status (offen/bezahlt); Nummer öffnet den **DIN-A4-Beleg**.
-- **produktion** – Chargen (Nr. + MHD) → Detail mit **Rückverfolgbarkeit** (eingesetzte Rohstoff-Lots
-  aus dem Katalog). Statuskette geplant → in Produktion → fertig.
+- **produktion** – Chargen (Nr. + MHD, teils **aus einem angenommenen Angebot** erzeugt, Link „Aus Angebot AN-…")
+  → Detail mit **Rückverfolgbarkeit** (eingesetzte Rohstoff-Lots aus dem Katalog: Name, Lot, kg),
+  **Produktionsfotos** (Bild-Upload, Galerie) und **Analysen / Endprodukt-COA** (Bild/PDF-Upload je Charge,
+  `crmdemo_prod_dok.art = foto|analyse`, Base64 wie beim Rohstoff-Dokument, ≤4 MB). Upload nur für Rolle
+  Produktion/Admin. Statuskette geplant → in Produktion → fertig.
 - **chat** – KI-Rohstoff-/Sourcing-Chat (graceful ohne Schlüssel), Verlauf gespeichert.
 - **finanzen** – Summen offen/bezahlt + Rechnungsliste.
 - **firma** – Briefkopf (Absender) + **Logo-Upload** (inline base64), nur Admin. Speist die A4-Belege.
