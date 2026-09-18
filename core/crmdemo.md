@@ -23,7 +23,10 @@ werden nur am Bildschirm gezeigt.
 - **KI-Ähnlichkeit lokal**: `cd_similarity($anfrage,$rohstoff)` – Wort-Overlap (70 %) + Zahlnähe (30 %).
   Löst das „Ashwagandha 350 mg vs. 360 mg"-Beispiel auch **ohne API-Schlüssel** (Extrakt 360 mg = Top-Treffer).
   Mit Schlüssel läuft zusätzlich der KI-Produktentwickler/-Chat über `core/ki.php`.
-- **Seed/Reset/Löschen**: `crmdemo_seed()` (abschnittsweise idempotent), `crmdemo_reset()` (Daten leeren),
+- **Seed/Reset/Löschen**: `crmdemo_seed()` (abschnittsweise idempotent) legt einen **kompletten
+  Demo-Satz** an – je ein Angebot pro Status (Entwurf · Kalkulation angefragt · kalkuliert · gesendet ·
+  angenommen · abgelehnt m. Grund), Rechnungen offen (CNY) und bezahlt (EUR) und Produktionen mit
+  Chargen-Rückverfolgung – damit jeder Prozessschritt durchklickbar ist. `crmdemo_reset()` (Daten leeren),
   `crmdemo_loeschen()` (alle Tabellen droppen). Steuerung über den versteckten Reiter
   `?p=einstellungen&tab=crmdemo`.
 

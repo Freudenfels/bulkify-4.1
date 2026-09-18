@@ -622,10 +622,6 @@ function crmdemo_seed(): void {
             q("UPDATE crmdemo_kunde SET betreuer_id=? WHERE id=?", [(int)$mit[0]['id'], (int)$ks[1]['id']]);
             q("UPDATE crmdemo_kunde SET betreuer_id=? WHERE id=?", [(int)$mit[2]['id'], $k3]);
         }
-        q("INSERT INTO crmdemo_angebot (nummer,kunde_id,titel,waehrung,netto_cent,status) VALUES (?,?, 'Magnesium Complex – 60 Kapseln','EUR', 249000, 'kalkuliert')", [cd_nummer('AN'), $k1]);
-        $a1 = insert_id();
-        q("INSERT INTO crmdemo_angebot_pos (angebot_id,bezeichnung,menge,einheit,preis_cent,sort) VALUES
-            (?,'Herstellung Magnesium Complex (60 Kaps.)',1000,'Pkg.',249,0)", [$a1]);
         q("INSERT INTO crmdemo_mail (kunde_id,richtung,betreff,text) VALUES
             (?, 'ein','Anfrage Ashwagandha 350 mg','Hallo, könnt ihr Ashwagandha 350 mg mit 5% Withanoliden anbieten? Menge 500 kg.'),
             (?, 'aus','Re: Anfrage Ashwagandha 350 mg','Gern – wir haben 360 mg / 5% im Katalog, das passt technisch. Angebot folgt.')", [$k3,$k3]);
@@ -642,17 +638,88 @@ function crmdemo_seed(): void {
             ('Vitamin D3 + K2','kapsel','Vitamine','Klassische Kombination für Knochen & Immunsystem',?, 'verkauf', 0)",
             [$z1,$z2,$z3]);
     }
-    if ((int) scalar("SELECT COUNT(*) FROM crmdemo_rohstoff") > 0) return;
-    // Rohstoff-Katalog --------------------------------------------------------
-    q("INSERT INTO crmdemo_rohstoff (name,kategorie,wirkstoff,gehalt,form,herkunft,moq_kg,notiz) VALUES
-        ('Ashwagandha-Extrakt 360 mg','Pflanzenextrakt','Withania somnifera','5% Withanolide','Pulver','IN',25,'KSM-artig, wasserlöslich'),
-        ('Ashwagandha-Wurzelpulver','Pflanzenpulver','Withania somnifera','roh, unstandardisiert','Pulver','IN',50,'günstige Variante'),
-        ('Magnesiumcitrat','Mineralstoff','Magnesium','16% elementar','Pulver','DE',100,NULL),
-        ('Vitamin D3 100.000 I.E./g','Vitamin','Cholecalciferol','100.000 I.E./g','Öl/Pulver','CH',5,NULL),
-        ('Kurkuma-Extrakt 95%','Pflanzenextrakt','Curcuma longa','95% Curcumin','Pulver','IN',25,NULL)");
-    $r1 = (int) scalar("SELECT id FROM crmdemo_rohstoff WHERE name LIKE 'Ashwagandha-Extrakt%' LIMIT 1");
-    q("INSERT INTO crmdemo_rohstoff_preis (rohstoff_id,datum,preis_cent,waehrung,lieferant) VALUES
-        (?, DATE_SUB(CURDATE(),INTERVAL 180 DAY), 4200,'EUR','Shandong'),
-        (?, DATE_SUB(CURDATE(),INTERVAL 90 DAY), 3900,'EUR','Shandong'),
-        (?, DATE_SUB(CURDATE(),INTERVAL 20 DAY), 3750,'EUR','Nutra Yunnan')", [$r1,$r1,$r1]);
+    if ((int) scalar("SELECT COUNT(*) FROM crmdemo_rohstoff") === 0) {
+        // Rohstoff-Katalog ----------------------------------------------------
+        q("INSERT INTO crmdemo_rohstoff (name,kategorie,wirkstoff,gehalt,form,herkunft,moq_kg,notiz) VALUES
+            ('Ashwagandha-Extrakt 360 mg','Pflanzenextrakt','Withania somnifera','5% Withanolide','Pulver','IN',25,'KSM-artig, wasserlöslich'),
+            ('Ashwagandha-Wurzelpulver','Pflanzenpulver','Withania somnifera','roh, unstandardisiert','Pulver','IN',50,'günstige Variante'),
+            ('Magnesiumcitrat','Mineralstoff','Magnesium','16% elementar','Pulver','DE',100,NULL),
+            ('Vitamin D3 100.000 I.E./g','Vitamin','Cholecalciferol','100.000 I.E./g','Öl/Pulver','CH',5,NULL),
+            ('Kurkuma-Extrakt 95%','Pflanzenextrakt','Curcuma longa','95% Curcumin','Pulver','IN',25,NULL)");
+        $r1 = (int) scalar("SELECT id FROM crmdemo_rohstoff WHERE name LIKE 'Ashwagandha-Extrakt%' LIMIT 1");
+        q("INSERT INTO crmdemo_rohstoff_preis (rohstoff_id,datum,preis_cent,waehrung,lieferant) VALUES
+            (?, DATE_SUB(CURDATE(),INTERVAL 180 DAY), 4200,'EUR','Shandong'),
+            (?, DATE_SUB(CURDATE(),INTERVAL 90 DAY), 3900,'EUR','Shandong'),
+            (?, DATE_SUB(CURDATE(),INTERVAL 20 DAY), 3750,'EUR','Nutra Yunnan')", [$r1,$r1,$r1]);
+    }
+
+    // --- Beleg-Demo: je ein Angebot pro Status + Rechnungen + Produktion. -----
+    // So laesst sich jeder Schritt der Prozesskette komplett durchklicken.
+    if ((int) scalar("SELECT COUNT(*) FROM crmdemo_angebot") > 0) return;
+    $cust = all("SELECT id, waehrung FROM crmdemo_kunde ORDER BY id");
+    if (count($cust) < 3) return;
+    $nordic = (int)$cust[0]['id']; $vita = (int)$cust[1]['id']; $sun = (int)$cust[2]['id'];
+    $rezMag = (int) scalar("SELECT id FROM crmdemo_rezeptur WHERE name='Magnesium Complex' LIMIT 1");
+    $rezAsh = (int) scalar("SELECT id FROM crmdemo_rezeptur WHERE name='Ashwagandha 360 mg' LIMIT 1");
+    $rezD3  = (int) scalar("SELECT id FROM crmdemo_rezeptur WHERE name='Vitamin D3 + K2' LIMIT 1");
+    $rohKur = (int) scalar("SELECT id FROM crmdemo_rohstoff WHERE name LIKE 'Kurkuma%' LIMIT 1");
+
+    // Angebot + Positionen anlegen; row = [bez, menge, preis_cent, typ, einheit, rezeptur_id, rohstoff_id].
+    $mkAng = function (int $kid, string $titel, string $wae, string $status, array $rows, array $opt = []) : int {
+        q("INSERT INTO crmdemo_angebot (nummer,kunde_id,titel,waehrung,status,zahlungsbedingungen,versandart,notiz,ablehnungsgrund,gueltig_bis) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          [cd_nummer('AN'), $kid, $titel, $wae, $status,
+           $opt['zb'] ?? cd_std('std_zahlungsbed'), $opt['va'] ?? cd_std('std_versandart'),
+           $opt['notiz'] ?? null, $opt['grund'] ?? null, $opt['gueltig'] ?? date('Y-m-d', strtotime('+30 days'))]);
+        $aid = insert_id(); $sort = 0; $netto = 0;
+        foreach ($rows as $r) {
+            q("INSERT INTO crmdemo_angebot_pos (angebot_id,bezeichnung,menge,einheit,preis_cent,typ,rezeptur_id,rohstoff_id,sort) VALUES (?,?,?,?,?,?,?,?,?)",
+              [$aid, $r[0], $r[1], $r[4], $r[2], $r[3], $r[5] ?: null, $r[6] ?: null, $sort++]);
+            $netto += (int) round($r[1] * $r[2]);
+        }
+        q("UPDATE crmdemo_angebot SET netto_cent=? WHERE id=?", [$netto, $aid]);
+        return $aid;
+    };
+    // Rechnung aus einem Angebot ableiten.
+    $mkRech = function (int $aid, string $status) : int {
+        $a = one("SELECT * FROM crmdemo_angebot WHERE id=?", [$aid]);
+        $ust = (float) cd_std('std_ust','19'); $netto = (int)$a['netto_cent']; $brutto = (int) round($netto * (1 + $ust/100));
+        $datum = $status === 'bezahlt' ? date('Y-m-d', strtotime('-18 days')) : date('Y-m-d', strtotime('-2 days'));
+        q("INSERT INTO crmdemo_rechnung (nummer,kunde_id,angebot_id,waehrung,netto_cent,ust_prozent,brutto_cent,status,datum,zahlungsbedingungen,versandart,bankverbindung) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+          [cd_nummer('RE'), $a['kunde_id'], $aid, $a['waehrung'], $netto, $ust, $brutto, $status, $datum,
+           $a['zahlungsbedingungen'], $a['versandart'], cd_std('std_bank')]);
+        return insert_id();
+    };
+
+    // Ein Angebot je Workflow-Status ------------------------------------------
+    $mkAng($vita, 'Vitamin D3 + K2 – 60 Kapseln', 'EUR', 'entwurf',
+        [['Vitamin D3 + K2 (60 Kaps.)', 2000, 0, 'produkt', 'Stk.', $rezD3, 0]]);
+    $mkAng($vita, 'Ashwagandha 360 – 90 Kapseln', 'EUR', 'kalkulation',
+        [['Ashwagandha 360 (90 Kaps.)', 1500, 0, 'produkt', 'Stk.', $rezAsh, 0]]);
+    $mkAng($nordic, 'Magnesium Complex – 60 Kapseln', 'EUR', 'kalkuliert',
+        [['Magnesium Complex (60 Kaps.)', 1000, 249, 'produkt', 'Stk.', $rezMag, 0]]);
+    $mkAng($nordic, 'Kurkuma-Extrakt 95% – Bulk', 'EUR', 'gesendet',
+        [['Kurkuma-Extrakt 95% (Rohware)', 25, 4200, 'rohstoff', 'kg', 0, $rohKur]],
+        ['notiz'=>'Muster vorab gewünscht.', 'zb'=>'50% Anzahlung, Rest vor Versand', 'va'=>'DAP Hamburg']);
+    $aAcc = $mkAng($sun, 'Ashwagandha 360 – Bulk 5.000 Stk.', 'CNY', 'angenommen',
+        [['Ashwagandha 360 Kapseln (Bulk)', 5000, 320, 'produkt', 'Stk.', $rezAsh, 0]]);
+    $mkAng($vita, 'Magnesium Tabletten – 120 Stk.', 'EUR', 'abgelehnt',
+        [['Magnesium Tabletten (120 Stk.)', 1000, 289, 'produkt', 'Stk.', $rezMag, 0]],
+        ['grund'=>'Preis zu hoch – Kunde hat sich für einen anderen Anbieter entschieden.']);
+    $aPaid = $mkAng($nordic, 'Magnesium Complex – Nachbestellung', 'EUR', 'angenommen',
+        [['Magnesium Complex (60 Kaps.)', 3000, 240, 'produkt', 'Stk.', $rezMag, 0]]);
+
+    // Rechnungen: eine offen (Sunrise/CNY), eine bezahlt (Nordic/EUR) ----------
+    $mkRech($aAcc, 'offen');
+    $mkRech($aPaid, 'bezahlt');
+
+    // Produktion + Chargen-Rueckverfolgung ------------------------------------
+    q("INSERT INTO crmdemo_produktion (kunde_id,produkt_id,titel,charge_nr,mhd,menge,status) VALUES (?,?,?,?,?,?,?)",
+      [$sun, null, 'Ashwagandha 360 – Charge', cd_nummer('CH'), date('Y-m-d', strtotime('+2 years')), 5000, 'in_produktion']);
+    $pid = insert_id();
+    $rohAsh = (int) scalar("SELECT id FROM crmdemo_rohstoff WHERE name LIKE 'Ashwagandha-Extrakt%' LIMIT 1");
+    q("INSERT INTO crmdemo_charge_zutat (produktion_id,rohstoff_id,name,lot,menge_kg) VALUES
+        (?,?, 'Ashwagandha-Extrakt 360 mg','LOT-ASH-2601', 90.000),
+        (?,NULL,'Leerkapsel HPMC Gr. 0','LOT-CAP-114', 3.500)", [$pid,$rohAsh,$pid]);
+    q("INSERT INTO crmdemo_produktion (kunde_id,produkt_id,titel,charge_nr,mhd,menge,status) VALUES (?,?,?,?,?,?,?)",
+      [$nordic, null, 'Magnesium Complex – Charge', cd_nummer('CH'), date('Y-m-d', strtotime('+2 years')), 3000, 'geplant']);
 }
