@@ -428,17 +428,17 @@ elseif ($m === 'kunden'):
           <div><label class="muted"><?= h(cd_t('ust_id')) ?></label><div><?= h((string)$k['ust_id']) ?: '–' ?></div></div>
           <div><label class="muted"><?= h(cd_t('website')) ?></label><div><?= h((string)$k['website']) ?: '–' ?></div></div>
         </div>
-        <?php if ($k['notiz']): ?><p style="margin-top:10px"><?= nl2br(h((string)$k['notiz'])) ?></p><?php endif; ?>
-        <div class="bx-row" style="gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap">
+        <?php if ($k['notiz']): ?><div style="margin-top:14px"><label class="muted" style="font-size:12px"><?= h(cd_t('notiz')) ?></label><div><?= nl2br(h((string)$k['notiz'])) ?></div></div><?php endif; ?>
+        <?php // Zuordnung: nur Admin, in eigener kompakter Zeile ?>
+        <?php if ($rolle === 'admin'): $mits = cd_mitarbeiter_list(); ?>
+        <form method="post" class="bx-row" style="margin:14px 0 0;gap:8px;align-items:center;flex-wrap:wrap"><input type="hidden" name="aktion" value="kunde_zuordnen"><input type="hidden" name="id" value="<?= $kid ?>">
+          <label class="muted" style="font-size:13px;margin:0"><?= h(cd_t('zuordnen')) ?></label>
+          <select name="betreuer_id" style="max-width:220px;padding:5px 10px;font-size:14px"><option value="">– <?= h(cd_t('zugeordnet')) ?> –</option><?php foreach ($mits as $mi): ?><option value="<?= (int)$mi['id'] ?>"<?= (int)$k['betreuer_id']===(int)$mi['id']?' selected':'' ?>><?= h($mi['name']) ?></option><?php endforeach; ?></select>
+          <button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('speichern')) ?></button>
+        </form>
+        <?php endif; ?>
+        <div class="bx-row" style="gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap">
           <a class="btn btn-primary btn-sm" href="<?= h(cd_url('kunden', ['id'=>$kid,'edit'=>1])) ?>"><?= h(cd_t('bearbeiten')) ?></a>
-          <?php // Zuordnung: nur Admin ?>
-          <?php if ($rolle === 'admin'): $mits = cd_mitarbeiter_list(); ?>
-          <form method="post" class="bx-row" style="margin:0;gap:6px"><input type="hidden" name="aktion" value="kunde_zuordnen"><input type="hidden" name="id" value="<?= $kid ?>">
-            <select name="betreuer_id"><option value="">– <?= h(cd_t('zugeordnet')) ?> –</option><?php foreach ($mits as $mi): ?><option value="<?= (int)$mi['id'] ?>"<?= (int)$k['betreuer_id']===(int)$mi['id']?' selected':'' ?>><?= h($mi['name']) ?></option><?php endforeach; ?></select>
-            <button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('zuordnen')) ?></button>
-          </form>
-          <?php endif; ?>
-          <?php // Fraud-Markierung ?>
           <form method="post" style="margin:0"><input type="hidden" name="aktion" value="kunde_fraud"><input type="hidden" name="id" value="<?= $kid ?>"><input type="hidden" name="fraud" value="<?= !empty($k['fraud'])?'0':'1' ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= !empty($k['fraud'])?h(cd_t('fraud_aufheben')):h(cd_t('fraud_markieren')) ?></button></form>
           <form method="post" style="margin:0" onsubmit="return confirm('<?= h(cd_t('loeschen')) ?>?')"><input type="hidden" name="aktion" value="kunde_del"><input type="hidden" name="id" value="<?= $kid ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= h(cd_t('loeschen')) ?></button></form>
         </div>
