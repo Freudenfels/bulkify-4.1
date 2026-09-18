@@ -10,8 +10,9 @@ Rezeptur** (Fremdfertigung) – keine Endprodukte, daher bewusst **keine Produkt
 
 ## Seite
 - Route `?p=rezept_preise` (Menü **Produkt → Rezeptur-Preise**). Rollen: production, einkauf, labor.
-- Spalten: Rezeptur (Link → `?p=rezeptur_detail&id=`), Form, Lieferant, Preis (4 Nachkommastellen €),
-  Einheit, Menge, Status (+ angenommen_am).
+- Spalten: Nr. (rezeptur.nummer), Rezeptur (Link → `?p=rezeptur_detail&id=`), Form, Lieferant,
+  Preis (4 Nachkommastellen €, nicht fett), Einheit, **Menge = Staffel** (Mengenstaffel je Preis).
+  Mehrere Zeilen je Rezeptur = die Staffeln; sortiert nach Rezeptur, dann Menge. Kein Status.
 - Suche über Rezeptur- oder Lieferantenname; Schalter **„nur mit Preis"** (blendet 0/leer aus).
 - Sortierung: Rezepturname, dann Angebote mit echtem Preis zuerst. Limit 2.000.
 

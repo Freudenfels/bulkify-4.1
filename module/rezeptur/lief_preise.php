@@ -13,12 +13,12 @@ if ($q !== '')  { $where[] = "(r.name LIKE ? OR l.firma LIKE ?)"; $args[] = '%'.
 if ($nurP)      { $where[] = "la.preis IS NOT NULL AND la.preis > 0"; }
 $wsql = $where ? 'WHERE '.implode(' AND ', $where) : '';
 
-$rows = all("SELECT la.*, r.name AS rez_name, r.darreichungsform AS df, r.kunde_id, l.firma
+$rows = all("SELECT la.*, r.nummer AS rez_nr, r.name AS rez_name, r.darreichungsform AS df, r.kunde_id, l.firma
              FROM rezeptur_lief_angebot la
              LEFT JOIN rezeptur r   ON r.id = la.rezeptur_id
              LEFT JOIN lieferanten l ON l.id = la.lieferant_id
              $wsql
-             ORDER BY r.name IS NULL, r.name, (la.preis IS NULL OR la.preis = 0), la.preis
+             ORDER BY r.name IS NULL, r.name, la.menge, (la.preis IS NULL OR la.preis = 0), la.preis
              LIMIT 2000", $args);
 
 $gesamt   = (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot");
@@ -44,19 +44,19 @@ bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · 
   <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr>
-      <th>Rezeptur</th><th>Form</th><th>Lieferant</th>
-      <th class="bx-num">Preis</th><th>Einheit</th><th class="bx-num">Menge</th><th>Status</th>
+      <th>Nr.</th><th>Rezeptur</th><th>Form</th><th>Lieferant</th>
+      <th class="bx-num">Preis</th><th>Einheit</th><th class="bx-num">Menge (Staffel)</th>
     </tr></thead>
     <tbody>
       <?php foreach ($rows as $r): $rid = (int)$r['rezeptur_id']; ?>
         <tr>
+          <td class="muted"><?= h((string)($r['rez_nr'] ?? '')) ?: '–' ?></td>
           <td><?php if ($rid): ?><a class="kundenlink" href="?p=rezeptur_detail&id=<?= $rid ?>"><?= h((string)($r['rez_name'] ?? '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
           <td class="muted"><?= h($dfLabel[(string)$r['df']] ?? (string)($r['df'] ?? '')) ?></td>
           <td><?= $r['firma'] ? h((string)$r['firma']) : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $r['preis'] !== null && (float)$r['preis'] > 0 ? '<strong>' . number_format((float)$r['preis'], 4, ',', '.') . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $r['preis'] !== null && (float)$r['preis'] > 0 ? number_format((float)$r['preis'], 4, ',', '.') . ' &euro;' : '<span class="muted">–</span>' ?></td>
           <td><?= $r['einheit'] ? h((string)$r['einheit']) : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $r['menge'] !== null && (float)$r['menge'] > 0 ? rtrim(rtrim(number_format((float)$r['menge'], 3, ',', '.'), '0'), ',') : '<span class="muted">–</span>' ?></td>
-          <td><?= ($r['status'] ?? '') === 'angenommen' ? bx_badge('angenommen', 'ok') : bx_badge($r['status'] ?: 'offen', 'info') ?><?= !empty($r['angenommen_am']) ? ' <span class="muted" style="font-size:11px">' . h(date('d.m.Y', strtotime((string)$r['angenommen_am']))) . '</span>' : '' ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>
