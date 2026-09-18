@@ -11,8 +11,11 @@ Rezeptur** (Fremdfertigung) – keine Endprodukte, daher bewusst **keine Produkt
 ## Seite
 - Route `?p=rezept_preise` (Menü **Produkt → Rezeptur-Preise**). Rollen: production, einkauf, labor.
 - Spalten: Nr. (rezeptur.nummer), Rezeptur (Link → `?p=rezeptur_detail&id=`), Form, Lieferant,
-  Preis (4 Nachkommastellen €, nicht fett), Einheit, **Menge = Staffel** (Mengenstaffel je Preis).
-  Mehrere Zeilen je Rezeptur = die Staffeln; sortiert nach Rezeptur, dann Menge. Kein Status.
+  **EK** (Herstellpreis des Lieferanten), **Empf. VK** (= EK × (1 + Marge); Stück-Formen: `max(marge_typ,
+  marge_min)`, sonst `aufschlag_rohstoff`), Einheit, **Menge = Staffel**. Mehrere Zeilen je Rezeptur =
+  die Staffeln; sortiert nach Rezeptur, dann Menge. Kein Status.
+- Der Fremdfertigungspreis wird auch in der Kalkulation genutzt: `rezeptur_kosten_pro_einheit()` fällt
+  auf `rezeptur_fremd_ek_pro_einheit()` (core/schema.php) zurück, wenn kein Rohstoff-EK bekannt ist.
 - Suche über Rezeptur- oder Lieferantenname; Schalter **„nur mit Preis"** (blendet 0/leer aus).
 - Sortierung: Rezepturname, dann Angebote mit echtem Preis zuerst. Limit 2.000.
 

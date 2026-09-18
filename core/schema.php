@@ -2513,7 +2513,34 @@ function rezeptur_kosten_pro_einheit(?int $rid, float $einheiten = 0): float {
         $perMg = $pb === 'kg' ? $ek/1e6 : ($pb === 'g' ? $ek/1e3 : ($pb === 'L' && $z['dichte'] ? ($ek/(1000*(float)$z['dichte']))/1e3 : 0));
         $c += $mg * $perMg;
     }
+    // Fallback: keine Rohstoff-EK bekannt -> Fremdfertigungspreis (Lohnherstellung) je Stück nutzen,
+    // falls fuer diese Rezeptur ein Lieferanten-Angebot mit Preis vorliegt (aus rezept_preise).
+    if ($c <= 0) {
+        $f = rezeptur_fremd_ek_pro_einheit((int)$rid, $einheiten);
+        if ($f !== null) return $f;
+    }
     return $c;
+}
+
+// Fremdfertigungspreis je Stueck aus rezeptur_lief_angebot (nur Stueck-Formen: Kapsel/Tablette/…).
+// Waehlt die guenstigste Zeile, deren Mengenstaffel fuer die gewuenschte Stueckzahl gilt.
+function rezeptur_fremd_ek_pro_einheit(int $rid, float $einheiten = 0): ?float {
+    if (!$rid) return null;
+    $df = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+    if (!in_array($df, ['kapsel','tablette','softgel','stick','gummi','gel'], true)) return null;
+    $rows = all("SELECT preis, menge FROM rezeptur_lief_angebot
+                 WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0
+                   AND (einheit IS NULL OR einheit='' OR LOWER(einheit) IN ('kapsel','tablette','softgel','stick','stueck','stück','stk','gummi','gel'))",
+                [$rid]);
+    if (!$rows) return null;
+    $best = null;                                  // guenstigste Zeile, deren Staffel <= gewuenschte Menge
+    foreach ($rows as $r) {
+        $m = (float)$r['menge']; $p = (float)$r['preis'];
+        if ($einheiten > 0 && $m > 0 && $m > $einheiten) continue;  // hoehere Staffel gilt noch nicht
+        if ($best === null || $p < $best) $best = $p;
+    }
+    if ($best === null) foreach ($rows as $r) { $p = (float)$r['preis']; if ($best === null || $p < $best) $best = $p; } // sonst Basis
+    return $best;
 }
 
 // EK-Kosten eines Produkts je Packung (Rezeptur × Einheiten + Verpackung-EK).

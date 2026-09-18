@@ -26,8 +26,15 @@ $mitPreis = (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot WHERE preis
 
 $dfLabel = ['kapsel'=>'Kapsel','tablette'=>'Tablette','pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','softgel'=>'Softgel'];
 
+// Empfohlener VK je Einheit = EK × (1 + Marge). Stueck-Formen: Form-Marge; sonst Rohstoff-Aufschlag.
+$vkMarge = function (string $df): float {
+    return in_array($df, ['kapsel','tablette','softgel','stick','gummi','gel'], true)
+        ? max(marge_typ_prozent($df), marge_min_prozent())            // nie unter der Mindestmarge
+        : (float) meta_get('aufschlag_rohstoff', 30);
+};
+
 render_header('rezept_preise', 'Rezeptur-Preise');
-bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · ' . $mitPreis . ' mit Preis – Kapsel-/Herstellpreise je Rezeptur (aus v3)');
+bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · ' . $mitPreis . ' mit Preis – EK (Herstellpreis) & empf. VK je Rezeptur');
 ?>
 <form method="get" class="bx-row" style="gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
   <input type="hidden" name="p" value="rezept_preise">
@@ -45,16 +52,17 @@ bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · 
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr>
       <th>Nr.</th><th>Rezeptur</th><th>Form</th><th>Lieferant</th>
-      <th class="bx-num">Preis</th><th>Einheit</th><th class="bx-num">Menge (Staffel)</th>
+      <th class="bx-num">EK</th><th class="bx-num">Empf. VK</th><th>Einheit</th><th class="bx-num">Menge (Staffel)</th>
     </tr></thead>
     <tbody>
-      <?php foreach ($rows as $r): $rid = (int)$r['rezeptur_id']; ?>
+      <?php foreach ($rows as $r): $rid = (int)$r['rezeptur_id']; $ek = ($r['preis'] !== null && (float)$r['preis'] > 0) ? (float)$r['preis'] : null; ?>
         <tr>
           <td class="muted"><?= h((string)($r['rez_nr'] ?? '')) ?: '–' ?></td>
           <td><?php if ($rid): ?><a class="kundenlink" href="?p=rezeptur_detail&id=<?= $rid ?>"><?= h((string)($r['rez_name'] ?? '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
           <td class="muted"><?= h($dfLabel[(string)$r['df']] ?? (string)($r['df'] ?? '')) ?></td>
           <td><?= $r['firma'] ? h((string)$r['firma']) : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $r['preis'] !== null && (float)$r['preis'] > 0 ? number_format((float)$r['preis'], 4, ',', '.') . ' &euro;' : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $ek !== null ? number_format($ek, 4, ',', '.') . ' &euro;' : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $ek !== null ? number_format($ek * (1 + $vkMarge((string)$r['df']) / 100), 4, ',', '.') . ' &euro;' : '<span class="muted">–</span>' ?></td>
           <td><?= $r['einheit'] ? h((string)$r['einheit']) : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $r['menge'] !== null && (float)$r['menge'] > 0 ? rtrim(rtrim(number_format((float)$r['menge'], 3, ',', '.'), '0'), ',') : '<span class="muted">–</span>' ?></td>
         </tr>
@@ -63,6 +71,6 @@ bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · 
   </table></div>
   <?php if (count($rows) >= 2000): ?><p class="muted" style="font-size:12px;margin-top:8px">Nur die ersten 2.000 Treffer – bitte die Suche eingrenzen.</p><?php endif; ?>
   <?php endif; ?>
-  <p class="muted" style="font-size:12px;margin-top:8px">Kapsel-/Herstellpreise der Lieferanten je Rezeptur (Fremdfertigung, v3-Übernahme) – keine Endprodukte. Klick auf die Rezeptur öffnet das Rezeptur-Detail; Details/Neuerfassung je Rezeptur im Panel „Lieferanten-Angebote (Fremdfertigung)".</p>
+  <p class="muted" style="font-size:12px;margin-top:8px"><strong>EK</strong> = Herstellpreis des Lieferanten (Fremdfertigung), <strong>Empf. VK</strong> = EK × (1 + Marge). Kapsel-/Herstellpreise je Rezeptur (v3-Übernahme), keine Endprodukte. Klick auf die Rezeptur öffnet das Detail; Erfassen je Rezeptur im Panel „Lieferanten-Angebote (Fremdfertigung)".</p>
 </div>
 <?php render_footer(); ?>
