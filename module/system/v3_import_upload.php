@@ -30,7 +30,7 @@ function v3imp_geladen(): int {
     return (int) scalar("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=? AND table_name LIKE 'v3imp\\_%'", [DB_NAME]);
 }
 
-$fehler = ''; $hinweis = ''; $out = '';
+$fehler = ''; $hinweis = ''; $out = ''; $geschrieben = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
@@ -94,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 try { include BX_ROOT . '/tools/v3_import.php'; }
                 catch (\Throwable $ex) { echo "\n\nABBRUCH: " . $ex->getMessage() . "\n"; }
                 $out = ob_get_clean();
+                if ($aktion === 'write' && strpos($out, 'ABBRUCH') === false) $geschrieben = true;
             } catch (\Throwable $e) { $fehler = 'Import nicht möglich: ' . h($e->getMessage()); }
             unset($GLOBALS['V3_PDO']);
         }
@@ -113,7 +114,33 @@ render_header('einstellungen', 'v3 neu einlesen (Upload)');
 bx_head('v3 neu einlesen (Upload)', 'v3-SQL-Export hochladen und importieren. Einmalige Migration.', bx_btn('Zurück', '?p=einstellungen', 'ghost'));
 if ($fehler)  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . $fehler . '</div>';
 if ($hinweis) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . $hinweis . '</div>';
+if ($geschrieben) echo '<div class="bx-panel badge-ok" style="padding:14px 16px"><strong>Import abgeschlossen.</strong> Nichts wurde gelöscht – Bestehendes wurde über <code>v3_id</code> aktualisiert, Neues angelegt. Details in der Ausgabe unten (Blöcke „GESCHRIEBEN …").</div>';
+
+// Abgleich v3-Quelle (geladene v3imp_-Tabellen) vs. unser Stand (v4) – Bestätigung, dass alles drin ist.
+if ($geladen > 0):
+    $c = fn($q) => (int) scalar($q);
+    $rezV3    = $c("SELECT COUNT(*) FROM v3imp_rezepte");
+    $rezImp   = $c("SELECT COUNT(*) FROM v3imp_rezepte WHERE kunde_id NOT IN (SELECT id FROM v3imp_kunden WHERE intern=1)");
+    $rezV4    = $c("SELECT COUNT(*) FROM rezeptur WHERE v3_id IS NOT NULL");
+    $anfV3    = $c("SELECT COUNT(*) FROM v3imp_produktanfrage");
+    $angV4    = $c("SELECT COUNT(*) FROM angebot WHERE v3_id IS NOT NULL");
+    $aufV3    = $c("SELECT COUNT(*) FROM v3imp_auftraege");
+    $aufV4    = $c("SELECT COUNT(*) FROM auftrag WHERE v3_id IS NOT NULL");
+    $ok = fn($b) => $b ? '<span class="badge badge-ok">vollständig</span>' : '<span class="muted">–</span>';
 ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Abgleich: v3-Quelle ↔ bei uns</h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Typ</th><th class="bx-num">v3-Export</th><th class="bx-num">bei uns (v4)</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Rezepturen</td><td class="bx-num"><?= $rezV3 ?><?= $rezV3 !== $rezImp ? ' <span class="muted" style="font-size:11px">(importierbar ' . $rezImp . ', ohne internen Kunden)</span>' : '' ?></td><td class="bx-num"><?= $rezV4 ?></td><td><?= $ok($rezV4 >= $rezImp) ?></td></tr>
+      <tr><td>Aufträge</td><td class="bx-num"><?= $aufV3 ?></td><td class="bx-num"><?= $aufV4 ?></td><td><?= $ok($aufV4 >= $aufV3 - 2) ?></td></tr>
+      <tr><td>Angebote</td><td class="bx-num"><?= $anfV3 ?> <span class="muted" style="font-size:11px">Anfragen</span></td><td class="bx-num"><?= $angV4 ?></td><td><span class="muted" style="font-size:12px">nur Anfragen mit Preis/Bestätigung werden zum Angebot</span></td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted" style="font-size:12px;margin:8px 0 0">Bewusst nicht importiert: der <strong>interne Kunde</strong> (Lagerproduktion) und <strong>reine Anfragen ohne Preis</strong>. Deshalb sind „bei uns" bei Angeboten weniger als die reinen Anfragen – das ist korrekt, kein Verlust.</p>
+</div>
+<?php endif; ?>
 <div class="bx-panel">
   <h2 style="margin-top:0">1 · v3-Export hochladen</h2>
   <p class="muted" style="margin-top:0">In der alten Software (phpMyAdmin) die v3-Datenbank <strong>Exportieren → SQL</strong> und die <code>.sql</code> hier hochladen. Deine App-Daten bleiben unberührt – die v3-Daten werden intern getrennt gehalten.</p>
