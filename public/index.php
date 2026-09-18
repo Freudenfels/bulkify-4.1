@@ -97,6 +97,7 @@ $routes = [
     'portal_anfragen'    => 'intern/portal_anfragen.php',
     'portal_anfrage'     => 'intern/portal_anfrage_detail.php',
     'v3_reparatur'       => 'intern/v3_reparatur.php',   // TEMPORÄR (v3-Migration) – nach Abschluss entfernen
+    'v3_reimport'        => 'intern/v3_reimport.php',    // TEMPORÄR (v3-Migration) – nach Abschluss entfernen
     'einkauf'            => 'einkauf/liste.php',
     'bestellung'         => 'einkauf/detail.php',
     'bestellung_pdf'     => 'einkauf/pdf.php',

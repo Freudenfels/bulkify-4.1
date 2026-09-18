@@ -97,6 +97,7 @@ function route_rollen_map(): array {
         'benutzer'           => ['admin'],
         'benutzer_detail'    => ['admin'],
         'v3_reparatur'       => ['admin'],   // TEMPORÄR (v3-Migration) – nach Abschluss entfernen
+        'v3_reimport'        => ['admin'],   // TEMPORÄR (v3-Migration) – nach Abschluss entfernen
     ];
 }
 
