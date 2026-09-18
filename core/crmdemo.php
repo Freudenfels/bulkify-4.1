@@ -35,6 +35,13 @@ function crmdemo_schema(): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_produkt (
         id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT NULL, form VARCHAR(30) NULL,
         idee TEXT NULL, konzept MEDIUMTEXT NULL, angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
+    // Rezeptur-Katalog: geteilte Bibliothek fertiger Rezepturen. Waechst, wenn Sales einem
+    // Kunden eine Rezeptur vorstellen -> im Angebot wieder waehlbar (kein Wildwuchs bei 25 Sales).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_rezeptur (
+        id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT NULL, form VARCHAR(30) NULL,
+        kategorie VARCHAR(80) NULL, beschreibung TEXT NULL, zutaten MEDIUMTEXT NULL,
+        erstellt_von VARCHAR(40) NULL, verwendet INT NOT NULL DEFAULT 0,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
     // Rohstoff-Katalog + Preishistorie (fuer KI-Aehnlichkeit + Sourcing) --------
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_rohstoff (
         id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT NULL, kategorie VARCHAR(80) NULL,
@@ -55,7 +62,8 @@ function crmdemo_schema(): void {
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)$eng");
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_angebot_pos (
         id INT AUTO_INCREMENT PRIMARY KEY, angebot_id INT NOT NULL, bezeichnung VARCHAR(190) NOT NULL,
-        menge DECIMAL(12,2) NOT NULL DEFAULT 1, einheit VARCHAR(20) NULL, preis_cent INT NOT NULL DEFAULT 0, sort INT NOT NULL DEFAULT 0)$eng");
+        menge DECIMAL(12,2) NOT NULL DEFAULT 1, einheit VARCHAR(20) NULL, preis_cent INT NOT NULL DEFAULT 0,
+        rezeptur_id INT NULL, sort INT NOT NULL DEFAULT 0)$eng");
     $pdo->exec("CREATE TABLE IF NOT EXISTS crmdemo_rechnung (
         id INT AUTO_INCREMENT PRIMARY KEY, nummer VARCHAR(30) NULL, kunde_id INT NULL, angebot_id INT NULL,
         waehrung VARCHAR(3) NOT NULL DEFAULT 'EUR', netto_cent INT NOT NULL DEFAULT 0,
@@ -95,13 +103,14 @@ function crmdemo_schema(): void {
         ensure_column('crmdemo_rechnung', 'waehrung', "VARCHAR(3) NOT NULL DEFAULT 'EUR'");
         ensure_column('crmdemo_produktion', 'charge_nr', "VARCHAR(40) NULL");
         ensure_column('crmdemo_produktion', 'mhd', "DATE NULL");
+        ensure_column('crmdemo_angebot_pos', 'rezeptur_id', "INT NULL");
     }
 }
 
 // --- Alle eigenen Tabellen (eine Quelle fuer Loeschen/Reset). ----------------
 function crmdemo_tabellen(): array {
     return ['crmdemo_charge_zutat','crmdemo_angebot_pos','crmdemo_angebot','crmdemo_rechnung',
-            'crmdemo_produktion','crmdemo_produkt','crmdemo_rohstoff_preis','crmdemo_rohstoff',
+            'crmdemo_produktion','crmdemo_produkt','crmdemo_rezeptur','crmdemo_rohstoff_preis','crmdemo_rohstoff',
             'crmdemo_mail','crmdemo_chat','crmdemo_kunde'];
 }
 
@@ -148,6 +157,7 @@ function crmdemo_i18n(): array {
         'dashboard'      => ['de'=>'Übersicht','en'=>'Overview','zh'=>'概览'],
         'kunden'         => ['de'=>'Kunden','en'=>'Customers','zh'=>'客户'],
         'katalog'        => ['de'=>'Rohstoff-Katalog','en'=>'Material catalog','zh'=>'原料目录'],
+        'rezepturen'     => ['de'=>'Rezeptur-Katalog','en'=>'Formulation catalog','zh'=>'配方目录'],
         'produktentwickler'=>['de'=>'Produktentwickler (KI)','en'=>'Product developer (AI)','zh'=>'产品开发（AI）'],
         'angebote'       => ['de'=>'Angebote','en'=>'Quotes','zh'=>'报价'],
         'rechnungen'     => ['de'=>'Rechnungen','en'=>'Invoices','zh'=>'发票'],
@@ -252,6 +262,18 @@ function crmdemo_i18n(): array {
         'ki_nicht_bereit'=> ['de'=>'Die KI ist nur auf dem Server (beta) aktiv. Lokal wird eine einfache Berechnung genutzt.','en'=>'AI runs only on the server (beta). Locally a simple calculation is used.','zh'=>'AI 仅在服务器（beta）上运行。本地使用简单计算。'],
         'willkommen'     => ['de'=>'Willkommen in der CRM-Demo','en'=>'Welcome to the CRM demo','zh'=>'欢迎使用 CRM 演示'],
         'position_hinzu' => ['de'=>'+ Position','en'=>'+ Item','zh'=>'+ 项目'],
+        'rezeptur'       => ['de'=>'Rezeptur','en'=>'Formulation','zh'=>'配方'],
+        'aus_rezeptur'   => ['de'=>'Aus Rezeptur übernehmen','en'=>'Add from formulation','zh'=>'从配方添加'],
+        'als_rezeptur'   => ['de'=>'In Katalog aufnehmen','en'=>'Add to catalog','zh'=>'加入目录'],
+        'als_rezeptur_hint'=>['de'=>'Neue Positionen, die hier angehakt sind, landen als Rezeptur im Katalog – beim nächsten Angebot direkt wählbar.','en'=>'New items ticked here are saved to the formulation catalog – selectable in the next quote.','zh'=>'勾选的新项目会保存到配方目录，下次报价可直接选择。'],
+        'beschreibung'   => ['de'=>'Beschreibung','en'=>'Description','zh'=>'说明'],
+        'zutaten'        => ['de'=>'Zutaten','en'=>'Ingredients','zh'=>'成分'],
+        'verwendet'      => ['de'=>'Verwendet','en'=>'Used','zh'=>'使用次数'],
+        'vorgestellt_bei'=> ['de'=>'Vorgestellt bei','en'=>'Presented to','zh'=>'已介绍给'],
+        'erstellt_von'   => ['de'=>'Erstellt von','en'=>'Created by','zh'=>'创建人'],
+        'katalog_suche'  => ['de'=>'Katalog durchsuchen (Name, Kategorie, Zutat)','en'=>'Search catalog (name, category, ingredient)','zh'=>'搜索目录（名称、类别、成分）'],
+        'in_katalog'     => ['de'=>'In den Rezeptur-Katalog speichern','en'=>'Save to formulation catalog','zh'=>'保存到配方目录'],
+        'gespeichert'    => ['de'=>'Im Katalog','en'=>'In catalog','zh'=>'已在目录'],
         'frage'          => ['de'=>'Frage zum Rohstoff','en'=>'Material question','zh'=>'原料问题'],
         'senden'         => ['de'=>'Senden','en'=>'Send','zh'=>'发送'],
         'logo'           => ['de'=>'Logo','en'=>'Logo','zh'=>'标志'],
@@ -277,11 +299,11 @@ function cd_rolle(): string {
 // Welche Module darf eine Rolle sehen?
 function cd_rechte(string $rolle): array {
     $map = [
-        'verkauf'     => ['dashboard','kunden','katalog','produktentwickler','angebote','rechnungen','chat'],
-        'pricing'     => ['dashboard','katalog','angebote','chat'],
-        'produktion'  => ['dashboard','produktion','katalog'],
+        'verkauf'     => ['dashboard','kunden','katalog','rezepturen','produktentwickler','angebote','rechnungen','chat'],
+        'pricing'     => ['dashboard','katalog','rezepturen','angebote','chat'],
+        'produktion'  => ['dashboard','produktion','katalog','rezepturen'],
         'buchhaltung' => ['dashboard','rechnungen','finanzen','kunden'],
-        'admin'       => ['dashboard','kunden','katalog','produktentwickler','angebote','rechnungen','produktion','chat','finanzen','firma'],
+        'admin'       => ['dashboard','kunden','katalog','rezepturen','produktentwickler','angebote','rechnungen','produktion','chat','finanzen','firma'],
     ];
     return $map[$rolle] ?? $map['admin'];
 }
@@ -330,7 +352,7 @@ function cd_head(string $titel): void {
 }
 function cd_shell_start(string $aktiv): void {
     $rolle = cd_rolle();
-    $menu = ['dashboard','kunden','katalog','produktentwickler','angebote','rechnungen','produktion','chat','finanzen','firma'];
+    $menu = ['dashboard','kunden','katalog','rezepturen','produktentwickler','angebote','rechnungen','produktion','chat','finanzen','firma'];
     $l = cd_lang();
     echo '<div class="bx-shell"><aside class="bx-side">'
        . '<div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="" class="bx-logo"><span class="bx-ver">' . h(cd_t('app')) . '</span></div>'
@@ -447,6 +469,16 @@ function crmdemo_seed(): void {
     }
     if ((int) scalar("SELECT COUNT(*) FROM crmdemo_produkt") === 0)
         q("INSERT INTO crmdemo_produkt (name,form,idee) VALUES ('Magnesium Complex','kapsel','Magnesium für Muskeln & Nerven, gut verträglich')");
+    if ((int) scalar("SELECT COUNT(*) FROM crmdemo_rezeptur") === 0) {
+        $z1 = json_encode([['name'=>'Magnesiumcitrat','menge_mg'=>375],['name'=>'Vitamin B6','menge_mg'=>1.4]], JSON_UNESCAPED_UNICODE);
+        $z2 = json_encode([['name'=>'Ashwagandha-Extrakt (5% Withanolide)','menge_mg'=>360],['name'=>'Schwarzer Pfeffer-Extrakt','menge_mg'=>5]], JSON_UNESCAPED_UNICODE);
+        $z3 = json_encode([['name'=>'Vitamin D3','menge_mg'=>0.025],['name'=>'Vitamin K2 (MK-7)','menge_mg'=>0.075]], JSON_UNESCAPED_UNICODE);
+        q("INSERT INTO crmdemo_rezeptur (name,form,kategorie,beschreibung,zutaten,erstellt_von,verwendet) VALUES
+            ('Magnesium Complex','kapsel','Mineralstoffe','Magnesium für Muskeln & Nerven, gut verträglich',?, 'verkauf', 1),
+            ('Ashwagandha 360 mg','kapsel','Pflanzenextrakte','Adaptogen, standardisiert auf 5% Withanolide',?, 'verkauf', 2),
+            ('Vitamin D3 + K2','kapsel','Vitamine','Klassische Kombination für Knochen & Immunsystem',?, 'verkauf', 0)",
+            [$z1,$z2,$z3]);
+    }
     if ((int) scalar("SELECT COUNT(*) FROM crmdemo_rohstoff") > 0) return;
     // Rohstoff-Katalog --------------------------------------------------------
     q("INSERT INTO crmdemo_rohstoff (name,kategorie,wirkstoff,gehalt,form,herkunft,moq_kg,notiz) VALUES

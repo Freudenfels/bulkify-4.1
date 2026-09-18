@@ -27,6 +27,12 @@ werden nur am Bildschirm gezeigt.
   `crmdemo_loeschen()` (alle Tabellen droppen). Steuerung über den versteckten Reiter
   `?p=einstellungen&tab=crmdemo`.
 
+## Rezeptur-Katalog
+`crmdemo_rezeptur` ist die geteilte Bibliothek fertiger Rezepturen. Positionen im Angebot verweisen per
+`crmdemo_angebot_pos.rezeptur_id` darauf; jede Verwendung erhöht `verwendet`. Neue, im Editor angehakte
+Positionen werden automatisch als Rezeptur angelegt – so entsteht bei vielen Sales ein großer, aber
+durchsuchbarer Katalog statt Wildwuchs.
+
 ## Isolation – Merksatz
 Eine einzige Quelle für die Tabellenliste: `crmdemo_tabellen()`. Wer eine Tabelle hinzufügt, trägt sie
 dort ein – dann greifen Reset und Löschen automatisch. Kein Zugriff auf echte bulkify-Tabellen.
