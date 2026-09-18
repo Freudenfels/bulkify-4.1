@@ -64,7 +64,9 @@ if ($a['status'] === 'bestaetigt') {
   </details>
   <?php endif; ?>
 
-  <?php if ($offen && $inf['matrix']): ?>
+  <?php // Hat das Angebot explizite Staffeln (vom Team gebaut), zeigen wir GENAU die – nicht die
+        // automatische Produkt-Matrix. Die Matrix greift nur, wenn keine Angebotsstaffel existiert. ?>
+  <?php if ($offen && !$st && $inf['matrix']): ?>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
     <thead><tr><th>Menge / Verpackung</th><th class="bx-num">Anzahl Verpackungen</th><th>Preis</th><th></th></tr></thead>
     <tbody>
