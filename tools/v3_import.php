@@ -60,6 +60,23 @@ function v4_item_by_name(string $name): ?int {
     $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND (name=? OR name_en=? OR synonym=?) LIMIT 1", [$name, $name, $name]);
     return $id ? (int)$id : null;
 }
+// Zutat -> v4-Rohstoff (item_id) VERBINDLICH auflösen, damit keine Zutat als Freitext (unsichtbar) endet:
+// 1) über die v3-eigene Verknüpfung rezept_zutaten.rohstoff_id -> v4-item (v3_id),
+// 2) sonst per Name, 3) sonst als Rohstoff anlegen (minimal, damit die Zutat echt verknüpft ist).
+function zutat_item_id($rohstoff_id_v3, string $bez): ?int {
+    $rid = (int)$rohstoff_id_v3;
+    if ($rid > 0) {
+        $id = scalar("SELECT id FROM item WHERE v3_id=? AND kategorie='rohstoff' LIMIT 1", [$rid]);
+        if ($id) return (int)$id;
+    }
+    $bez = trim($bez); if ($bez === '') return null;
+    $id = v4_item_by_name($bez);
+    if ($id) return $id;
+    q("INSERT INTO item (artikelnummer,name,kategorie,form,einheit,preis_bezug,ek_preis,notiz)
+       VALUES (?,?, 'rohstoff', '', 'kg','kg',0, 'Aus v3-Rezeptur angelegt (Zutat ohne Rohstoff-Stammdaten)')",
+      [naechste_nummer('R'), cut($bez)]);
+    return (int) insert_id();
+}
 
 // --- Kunden-Bündelung: mehrere v3-Firmen sind in Wahrheit EINE Firma (Marke separat) ---
 // Kanon: v3-Kunde-id => [firma (echte Firma), marke (Markenname)].
@@ -243,8 +260,8 @@ if ($WRITE) {
                   [naechste_nummer('RZ'), cut($r['name']), $v4kid, $form, $kaps, cut($frName), $frAm, cut($rnotiz,500), $v3rid]); $v4rid = (int)insert_id(); $w['rez_neu']++;
             }
             q("DELETE FROM rezeptur_zutat WHERE rezeptur_id=?", [$v4rid]);
-            foreach ($v3->query("SELECT bezeichnung,menge_mg,pos FROM rezept_zutaten WHERE rezept_id=$v3rid ORDER BY pos,id")->fetchAll(PDO::FETCH_ASSOC) as $z) {
-                $iid = v4_item_by_name((string)$z['bezeichnung']);
+            foreach ($v3->query("SELECT bezeichnung,menge_mg,pos,rohstoff_id FROM rezept_zutaten WHERE rezept_id=$v3rid ORDER BY pos,id")->fetchAll(PDO::FETCH_ASSOC) as $z) {
+                $iid = zutat_item_id($z['rohstoff_id'] ?? 0, (string)$z['bezeichnung']);
                 q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
                   [$v4rid, $iid, cut($z['bezeichnung']), (float)$z['menge_mg'], (int)$z['pos']]); $w['zutat']++;
             }
@@ -267,8 +284,8 @@ if ($WRITE) {
               [naechste_nummer('RZ'), cut($r['name']), $form, $kaps, cut($rnotiz,500), $v3rid]); $v4rid = (int)insert_id(); $w['rez_neu']++;
         }
         q("DELETE FROM rezeptur_zutat WHERE rezeptur_id=?", [$v4rid]);
-        foreach ($v3->query("SELECT bezeichnung,menge_mg,pos FROM rezept_zutaten WHERE rezept_id=$v3rid ORDER BY pos,id")->fetchAll(PDO::FETCH_ASSOC) as $z) {
-            $iid = v4_item_by_name((string)$z['bezeichnung']);
+        foreach ($v3->query("SELECT bezeichnung,menge_mg,pos,rohstoff_id FROM rezept_zutaten WHERE rezept_id=$v3rid ORDER BY pos,id")->fetchAll(PDO::FETCH_ASSOC) as $z) {
+            $iid = zutat_item_id($z['rohstoff_id'] ?? 0, (string)$z['bezeichnung']);
             q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
               [$v4rid, $iid, cut($z['bezeichnung']), (float)$z['menge_mg'], (int)$z['pos']]); $w['zutat']++;
         }
