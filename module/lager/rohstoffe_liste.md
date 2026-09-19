@@ -5,7 +5,7 @@
 **Was passiert hier:**
 1. `seed_item_if_empty()` – legt lokal Demo-Rohstoffe an, falls leer.
 2. **Kategorie-Filter** (`?kat=`): Standard „Rohstoffe (Wirkstoffe)"; dazu eigene Sicht **„Leerkapseln"** (`kat=leerkapsel` = Rohstoffe mit Form `kapselhuelle`), andere Kategorien und „Alle". Die normale Rohstoff-Sicht **blendet Leerkapseln aus**, damit Wirkstoffe und Kapseln getrennt bleiben. Die Leerkapsel-Sicht zeigt eigene Spalten: **Größe · Material · Farbe · Leergewicht · EK-Preis** und legt neue Kapseln direkt mit vorbelegter Form an.
-3. **Suche:** Name, englischer/lateinischer Name, Artikelnummer, Form.
+3. **Live-Suche** (clientseitig): filtert beim Tippen sofort (kein „Suchen"-Klick/Neuladen), über den gesamten Zeilentext (Name, engl./lat. Name, Art.-Nr, Form …), mit Live-Trefferzahl „N von M". Alle Zeilen werden gerendert, `?q=` befüllt nur vor. Die Filter **Kategorie** (`?kat=`) und **Lücken** (`?fehlt=`) bleiben serverseitig.
 4. **Sortierung:** Standard = Name A–Z.
 5. Tabelle über `bx_table()` mit Spalten:
    **Art.-Nr. · Name · Preis ab · Form · Wirkstoffe · Unterlagen/Lieferant · Status** (bei „Alle" zusätzlich Kategorie).
