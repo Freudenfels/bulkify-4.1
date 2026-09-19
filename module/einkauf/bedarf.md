@@ -13,3 +13,6 @@
 **Datenbasis (core/schema.php):** `auftrag_bedarf`/`auftrag_fehlbedarf` (Stückliste × Menge vs. Netto-Bestand), `produktion_ist_zukauf`, `bedarf_typ`. Sammelbestellung in `bestellung_sammel_anlegen()` (nur **gemeldete** Bedarfe).
 
 **Auch je Auftrag** (Produktionsauftrag-Detailseite): Panel „Einkaufsbedarf" (ganze Stückliste, Reservieren, direkt bestellen) + „Bestellungen für diesen Auftrag".
+
+## Artikel / Betriebsmittel melden (Mitarbeiter)
+Oben auf der Seite ein aufklappbares Panel **„+ Artikel / Betriebsmittel melden"** (`aktion=artikel_melden`): Bezeichnung · Menge · Einheit · Typ/Kategorie (`betriebsmittel_kategorien`) · Notiz. Für alles, was gekauft werden soll, aber **nichts mit der Produktion** zu tun hat (Handschuhe, Kartons, Werkzeug …). Die Meldung wird als **`freibedarf`** gespeichert (mit `gemeldet_von` = angemeldeter Mitarbeiter) und erscheint **direkt auf der Einkaufsliste** – kein Melden-Schritt nötig. Bewusst hier (Werk-Rollen), weil die Einkaufsliste selbst nur für Einkauf/Admin ist. Das ausführliche Formular („Neuen Bedarf eintragen", inkl. Lieferant/Elektro-Flag) bleibt zusätzlich auf der Einkaufsliste.

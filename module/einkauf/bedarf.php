@@ -19,6 +19,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($aktion === 'melden_zurueck' && $paId) {
         q("UPDATE produktionsauftrag SET bedarf_gemeldet=NULL WHERE id=?", [$paId]);
         header('Location: ?p=bedarf&zurueckgenommen=1'); exit;
+    } elseif ($aktion === 'artikel_melden') {
+        // Mitarbeiter meldet einen Artikel/Betriebsmittel ohne Produktionsbezug -> landet direkt auf der Einkaufsliste (freibedarf).
+        $bez = trim($_POST['bezeichnung'] ?? '');
+        if ($bez !== '') {
+            $kat = array_key_exists($_POST['kategorie'] ?? '', betriebsmittel_kategorien()) ? $_POST['kategorie'] : null;
+            $von = trim((string)(current_user()['name'] ?? '')) ?: null;
+            q("INSERT INTO freibedarf (bezeichnung,menge,einheit,kategorie,notiz,gemeldet_von) VALUES (?,?,?,?,?,?)",
+              [$bez,
+               (float)str_replace(',', '.', $_POST['menge'] ?? '1') ?: 1,
+               trim($_POST['einheit'] ?? '') ?: 'Stück',
+               $kat,
+               trim($_POST['notiz'] ?? '') ?: null,
+               $von]);
+            header('Location: ?p=bedarf&gemeldet_artikel=1'); exit;
+        }
+        header('Location: ?p=bedarf&meldefehler=1'); exit;
     }
     header('Location: ?p=bedarf'); exit;
 }
@@ -88,9 +104,28 @@ bx_head('Einkaufsbedarf', 'Prüfen (Eigen-/Fremdproduktion) und an den Einkauf m
 if (isset($_GET['zurueck'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Entwurf verworfen – der Bedarf steht wieder hier.</div>';
 if (isset($_GET['gemeldet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Bedarf für <strong>' . h($_GET['gemeldet']) . '</strong> an den Einkauf gemeldet – er erscheint jetzt in der <a href="?p=einkaufsliste">Einkaufsliste</a>.</div>';
 if (isset($_GET['zurueckgenommen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Meldung zurückgenommen.</div>';
+if (isset($_GET['gemeldet_artikel'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Danke – der Artikel wurde gemeldet und steht jetzt direkt auf der <a href="?p=einkaufsliste">Einkaufsliste</a>.</div>';
+if (isset($_GET['meldefehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Bitte eine Bezeichnung angeben.</div>';
 
 $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+$BM_KAT = betriebsmittel_kategorien();
 ?>
+<details class="bx-panel" style="margin-bottom:16px">
+  <summary style="cursor:pointer;font-weight:600;list-style:none">+ Artikel / Betriebsmittel melden <span class="muted" style="font-weight:400;font-size:13px">– etwas, das gekauft werden soll (z. B. Handschuhe, Kartons, Werkzeug); geht direkt auf die Einkaufsliste</span></summary>
+  <form method="post" class="bx-form" style="margin:14px 0 0">
+    <input type="hidden" name="aktion" value="artikel_melden">
+    <div class="bx-grid">
+      <div class="bx-field"><label>Bezeichnung</label><input type="text" name="bezeichnung" required placeholder="z. B. Nitril-Handschuhe Gr. L"></div>
+      <div class="bx-field"><label>Menge</label><input type="number" step="0.001" name="menge" value="1"></div>
+      <div class="bx-field"><label>Einheit</label><input type="text" name="einheit" value="Stück"></div>
+      <div class="bx-field"><label>Typ / Kategorie</label>
+        <select name="kategorie"><option value="">– Sonstiges –</option><?php foreach ($BM_KAT as $k => $lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select>
+      </div>
+      <div class="bx-field"><label>Notiz (optional)</label><input type="text" name="notiz" placeholder="z. B. wofür / Marke"></div>
+    </div>
+    <div class="bx-row" style="margin-top:var(--sp-2)"><button class="btn btn-primary" type="submit">Melden</button></div>
+  </form>
+</details>
 <?php if (!$pas): ?>
   <div class="bx-panel"><div class="muted"><?= $tab === 'uebergeben' ? 'Nichts an den Einkauf übergeben (bzw. schon alles bestellt).' : 'Kein offener Bedarf – alles gemeldet.' ?></div></div>
 <?php else: foreach ($pas as $pa):

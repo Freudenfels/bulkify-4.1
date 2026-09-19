@@ -902,6 +902,7 @@ function init_schema(): void {
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         KEY idx_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('freibedarf', 'gemeldet_von', "VARCHAR(120) NULL");   // wer den Bedarf gemeldet hat (z. B. Werk-Mitarbeiter)
 
     // lager2_bewegung: Bewegungs-Ledger für die Fulfillment-Kopplung (Idempotenz je ref+typ).
     $pdo->exec("CREATE TABLE IF NOT EXISTS lager2_bewegung (
@@ -4585,6 +4586,26 @@ function freibedarf_offen(): array {
     return all("SELECT f.*, l.firma AS lieferant_firma FROM freibedarf f
                 LEFT JOIN lieferanten l ON l.id=f.lieferant_id
                 WHERE f.status='offen' ORDER BY f.angelegt DESC");
+}
+
+// Meldebestand-Nachbestellung: Lagerartikel, deren freier Bestand + offen Bestelltes unter den
+// gepflegten Meldebestand (item.mindestbestand) gefallen ist -> Nachbestell-Vorschlag für die Einkaufsliste.
+function meldebestand_bedarf(): array {
+    $out = [];
+    foreach (all("SELECT id, name, einheit, mindestbestand, haupt_lieferant_id FROM item
+                  WHERE mindestbestand IS NOT NULL AND mindestbestand > 0 AND gesperrt=0 ORDER BY name") as $it) {
+        $iid = (int)$it['id'];
+        $bestand = item_bestand($iid, true);
+        $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                                 WHERE bp.item_id=? AND b.status<>'geliefert'", [$iid]);
+        $soll = (float)$it['mindestbestand'];
+        $verf = $bestand + $offen;
+        if ($verf + 1e-6 >= $soll) continue;   // genug (inkl. offener Bestellungen)
+        $out[] = ['item_id'=>$iid, 'name'=>(string)$it['name'], 'einheit'=>(string)($it['einheit'] ?: 'Stück'),
+                  'mindest'=>$soll, 'stock'=>$bestand, 'bestellt'=>$offen,
+                  'zu_bestellen'=>max(0.0, $soll - $verf), 'haupt_lieferant'=>(int)($it['haupt_lieferant_id'] ?? 0)];
+    }
+    return $out;
 }
 // Offener Fehlbedarf (nur bestellbare Positionen mit item_id, abzüglich schon offen bestellter Menge für diesen Auftrag).
 function auftrag_fehlbedarf(int $pa_id): array {

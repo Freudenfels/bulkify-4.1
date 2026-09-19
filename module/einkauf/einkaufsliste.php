@@ -46,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     }
     $bulkIds = []; foreach (bedarf_bulk(true) as $b) $bulkIds[(int)$b['produkt_id']] = true;
     $freiIds = []; foreach (freibedarf_offen() as $f) $freiIds[(int)$f['id']] = true;
+    $nachIds = []; foreach (meldebestand_bedarf() as $nb) $nachIds[(int)$nb['item_id']] = (float)$nb['zu_bestellen'];   // Meldebestand-Nachbestellung
     $groups = [];  // lieferant_id => ['pos'=>[{item_id,menge,auftrag_id}], 'bulk'=>[pid], 'frei'=>[fid]]
     $bulkMengeMap = [];  // produkt_id => angehobene Wunschmenge (global, da bestellung_erstellen nur die Gruppen-pids nutzt)
     foreach ($sel as $key) {
@@ -53,6 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         if (strncmp($key, 'bulk:', 5) === 0) {
             $pid = (int)substr($key, 5);
             if (isset($bulkIds[$pid])) { $groups[$sup]['bulk'][] = $pid; $ov = $ovMenge($key); if ($ov !== null) $bulkMengeMap[$pid] = $ov; }
+            continue;
+        }
+        if (strncmp($key, 'nach:', 5) === 0) {   // Meldebestand-Nachbestellung -> Lagerposition ohne Auftragsbezug
+            $iid = (int)substr($key, 5);
+            if (isset($nachIds[$iid])) $groups[$sup]['pos'][] = ['item_id'=>$iid, 'menge'=>($ovMenge($key) ?? $nachIds[$iid]), 'auftrag_id'=>0];
             continue;
         }
         if (strncmp($key, 'frei:', 5) === 0) { $fid = (int)substr($key, 5); if (isset($freiIds[$fid])) $groups[$sup]['frei'][] = $fid; continue; }
@@ -76,28 +82,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
 $aggBedarf = array_values(array_filter(bedarf_aggregiert(true), fn($a) => $a['zu_bestellen'] > 1e-6));
 $bulkBedarf = array_values(array_filter(bedarf_bulk(true), fn($b) => $b['zu_bestellen'] > 1e-6));
 $freiBedarf = freibedarf_offen();
+$nachBedarf = meldebestand_bedarf();   // Meldebestand-Nachbestellungen (Lagerartikel unter Mindestbestand)
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 $BM_KAT = betriebsmittel_kategorien();
 
 $aktTyp = $_GET['typ'] ?? '';
-// Produktions-Typen + freie Betriebsmittel-Typen (Kartons/Verbrauchsgüter/Inventar/Maschinen/Sonstiges) als eigene Reiter.
-$TYPEN = ['' => 'Alle', 'etikett' => 'Etiketten', 'verpackung' => 'Verpackung', 'rohstoff' => 'Rohstoffe', 'fertig' => 'Fertige Produkte'] + $BM_KAT;
+// Produktions-Typen + Nachbestellung (Meldebestand) + freie Betriebsmittel-Typen als eigene Reiter.
+$TYPEN = ['' => 'Alle', 'etikett' => 'Etiketten', 'verpackung' => 'Verpackung', 'rohstoff' => 'Rohstoffe', 'fertig' => 'Fertige Produkte', 'nachbestell' => 'Nachbestellung'] + $BM_KAT;
 // Ordnet eine freie Bedarfszeile einem Betriebsmittel-Reiter zu (ohne Kategorie = Sonstiges).
 $freiMatch = function($f, $t) {
     $k = (string)($f['kategorie'] ?? '');
     return $t === 'sonstiges' ? ($k === 'sonstiges' || $k === '') : ($k === $t);
 };
 $istFreiTyp = isset($BM_KAT[$aktTyp]);
-$anzahlTyp = function($t) use ($aggBedarf, $bulkBedarf, $freiBedarf, $BM_KAT, $freiMatch) {
+$anzahlTyp = function($t) use ($aggBedarf, $bulkBedarf, $freiBedarf, $nachBedarf, $BM_KAT, $freiMatch) {
     if ($t === 'fertig') return count($bulkBedarf);
-    if ($t === '') return count($aggBedarf) + count($bulkBedarf) + count($freiBedarf);
+    if ($t === 'nachbestell') return count($nachBedarf);
+    if ($t === '') return count($aggBedarf) + count($bulkBedarf) + count($freiBedarf) + count($nachBedarf);
     if (isset($BM_KAT[$t])) return count(array_filter($freiBedarf, fn($f) => $freiMatch($f, $t)));
     return count(array_filter($aggBedarf, fn($a) => $a['typ'] === $t));
 };
-$aggTab  = ($aktTyp === 'fertig' || $istFreiTyp) ? [] : array_values(array_filter($aggBedarf, fn($a) => $aktTyp === '' || $a['typ'] === $aktTyp));
+$aggTab  = ($aktTyp === 'fertig' || $aktTyp === 'nachbestell' || $istFreiTyp) ? [] : array_values(array_filter($aggBedarf, fn($a) => $aktTyp === '' || $a['typ'] === $aktTyp));
 $bulkTab = ($aktTyp === '' || $aktTyp === 'fertig') ? $bulkBedarf : [];
 $freiTab = ($aktTyp === '') ? $freiBedarf : ($istFreiTyp ? array_values(array_filter($freiBedarf, fn($f) => $freiMatch($f, $aktTyp))) : []);
-$hatWas  = $aggTab || $bulkTab || $freiTab;
+$nachTab = ($aktTyp === '' || $aktTyp === 'nachbestell') ? $nachBedarf : [];
+$hatWas  = $aggTab || $bulkTab || $freiTab || $nachTab;
 $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 // Wert fürs Eingabefeld: Komma-Dezimal, aber OHNE Tausenderpunkt (sonst würde die Rückgabe falsch geparst).
 $minput = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', ''), '0'), ',');
@@ -173,12 +182,23 @@ if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="pa
             <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a><?php endforeach; ?><span class="muted">· Fremdfertigung</span></td>
         </tr>
       <?php endforeach; ?>
+      <?php foreach ($nachTab as $nb): $key = 'nach:' . (int)$nb['item_id']; ?>
+        <tr>
+          <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
+          <td><a href="?p=rohstoff&id=<?= (int)$nb['item_id'] ?>" target="_blank" style="text-decoration:none"><?= h($nb['name']) ?></a></td>
+          <td><?= bx_badge('Nachbestellung','warn') ?></td>
+          <td class="bx-num"><?= $mengeInput($key, (float)$nb['zu_bestellen'], (string)$nb['einheit']) ?><div class="muted" style="font-size:11px">Meldebestand <?= $mfmt($nb['mindest']) ?> · Lager <?= $mfmt($nb['stock']) ?><?= $nb['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($nb['bestellt']) : '' ?></div></td>
+          <td><?= $liefSelect($key, (int)($nb['haupt_lieferant'] ?? 0)) ?></td>
+          <td style="font-size:12px"><span class="muted">unter Meldebestand</span></td>
+        </tr>
+      <?php endforeach; ?>
       <?php foreach ($freiTab as $f): $key = 'frei:' . (int)$f['id']; ?>
         <tr>
           <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
           <td><?= h($f['bezeichnung']) ?>
             <?php if (!empty($f['elektrisch'])): ?> <?= bx_badge('elektr. – jährl. Prüfung','info') ?><?php endif; ?>
             <?php if (!empty($f['notiz'])): ?><div class="muted" style="font-size:11px"><?= h($f['notiz']) ?></div><?php endif; ?>
+            <?php if (!empty($f['gemeldet_von'])): ?><div class="muted" style="font-size:11px">gemeldet von <?= h($f['gemeldet_von']) ?></div><?php endif; ?>
           </td>
           <td><?= $f['kategorie'] ? bx_badge($BM_KAT[$f['kategorie']] ?? $f['kategorie'], '') : bx_badge('Sonstiges','') ?></td>
           <td class="bx-num"><strong style="color:#8f231b"><?= $mfmt($f['menge']) ?> <?= h($f['einheit'] ?: 'Stück') ?></strong><div class="muted" style="font-size:11px">ohne Produktionsbezug</div></td>
