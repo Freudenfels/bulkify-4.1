@@ -196,15 +196,15 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     <table class="bx-table" style="margin-bottom:10px">
       <thead><tr><th style="width:55%">Rohstoff</th><th style="width:160px">Menge (mg)</th><th></th></tr></thead>
       <tbody id="zutatrows">
-        <?php $zr = $zutaten ?: [['item_id'=>'','menge_mg'=>'']]; foreach ($zr as $z): ?>
+        <?php
+        // Rohstoff-Feld: tippbar mit Filter (datalist). Anzeige = Label, gespeichert wird die id (verstecktes Feld).
+        $zlabel = fn($it) => implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']] ?? $it['form']), $it['artikelnummer'] ?? '']));
+        $itemById = []; foreach ($items as $it) $itemById[(int)$it['id']] = $it;
+        $zr = $zutaten ?: [['item_id'=>'','menge_mg'=>'']]; foreach ($zr as $z): ?>
         <tr class="zutatrow">
           <td>
-            <select name="z_item[]" class="zitem">
-              <option value="">– Rohstoff wählen –</option>
-              <?php foreach ($items as $it): ?>
-                <option value="<?= $it['id'] ?>" <?= (int)($z['item_id']??0)===(int)$it['id']?'selected':'' ?>><?= h($it['name']) ?> · <?= h($FORMLBL[$it['form']] ?? $it['form']) ?><?= $it['artikelnummer'] ? ' · '.h($it['artikelnummer']) : '' ?></option>
-              <?php endforeach; ?>
-            </select>
+            <input type="text" class="zitem-txt" list="zutat_dl" autocomplete="off" placeholder="Rohstoff tippen …" style="width:100%" value="<?= h(!empty($z['item_id']) && isset($itemById[(int)$z['item_id']]) ? $zlabel($itemById[(int)$z['item_id']]) : '') ?>">
+            <input type="hidden" name="z_item[]" class="zitem" value="<?= (int)($z['item_id'] ?? 0) ?: '' ?>">
           </td>
           <td><input type="number" step="0.001" name="z_menge[]" class="zmenge" value="<?= h($z['menge_mg']!==''&&$z['menge_mg']!==null ? rtrim(rtrim(number_format((float)$z['menge_mg'],3,'.',''),'0'),'.') : '') ?>"></td>
           <td><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.zutatrow').remove();recalc()">entfernen</button></td>
@@ -212,6 +212,7 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
         <?php endforeach; ?>
       </tbody>
     </table>
+    <datalist id="zutat_dl"><?php foreach ($items as $it): ?><option value="<?= h($zlabel($it)) ?>"></option><?php endforeach; ?></datalist>
     <button type="button" class="btn btn-ghost btn-sm" id="addZutat">+ Zutat</button>
   </div>
 
@@ -305,6 +306,9 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
 <script>
 var ITEMS = <?= json_encode($ITEMS, JSON_UNESCAPED_UNICODE) ?>;
 var KAPSELN = <?= json_encode($KAPSELN, JSON_UNESCAPED_UNICODE) ?>;
+// Rohstoff-Label -> id (für das tippbare Zutatenfeld mit datalist)
+var ZMAP = <?= json_encode((function($items,$FORMLBL){ $m=[]; foreach($items as $it){ $lbl=implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']]??$it['form']), $it['artikelnummer']??''])); $m[$lbl]=(int)$it['id']; } return $m; })($items,$FORMLBL), JSON_UNESCAPED_UNICODE) ?>;
+function zsync(row){ var t=row.querySelector('.zitem-txt'), h=row.querySelector('.zitem'); if(!t||!h) return; var id=ZMAP[(t.value||'').trim()]; h.value = id ? id : ''; }
 function nf(x, d){ return x.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d}); }
 function betragEinheit(mg, einheit){ return einheit === 'µg' ? nf(mg*1000,1)+' µg' : nf(mg,1)+' mg'; }
 function nrvProzent(mg, nrv, einheit){
@@ -364,20 +368,23 @@ function recalc(){
 }
 (function(){
   var add = document.getElementById('addZutat');
-  var optionsHTML = document.querySelector('.zitem') ? document.querySelector('.zitem').innerHTML : '';
-  add.addEventListener('click', function(){
+  function bind(tr){
+    var t = tr.querySelector('.zitem-txt');
+    if (t){ var on=function(){ zsync(tr); recalc(); }; t.addEventListener('input', on); t.addEventListener('change', on); }
+    var m = tr.querySelector('.zmenge'); if (m) m.addEventListener('input', recalc);
+    var b = tr.querySelector('button'); if (b) b.addEventListener('click', function(){ tr.remove(); recalc(); });
+  }
+  if (add) add.addEventListener('click', function(){
     var tr = document.createElement('tr');
     tr.className = 'zutatrow';
-    tr.innerHTML = '<td><select name="z_item[]" class="zitem">'+optionsHTML+'</select></td>'
+    tr.innerHTML = '<td><input type="text" class="zitem-txt" list="zutat_dl" autocomplete="off" placeholder="Rohstoff tippen …" style="width:100%"><input type="hidden" name="z_item[]" class="zitem"></td>'
       + '<td><input type="number" step="0.001" name="z_menge[]" class="zmenge"></td>'
       + '<td><button type="button" class="btn btn-ghost btn-sm">entfernen</button></td>';
-    tr.querySelector('button').addEventListener('click', function(){ tr.remove(); recalc(); });
-    tr.querySelector('.zitem').addEventListener('change', recalc);
-    tr.querySelector('.zmenge').addEventListener('input', recalc);
     document.getElementById('zutatrows').appendChild(tr);
+    bind(tr);
+    tr.querySelector('.zitem-txt').focus();
   });
-  document.querySelectorAll('.zitem').forEach(function(s){ s.addEventListener('change', recalc); });
-  document.querySelectorAll('.zmenge').forEach(function(i){ i.addEventListener('input', recalc); });
+  document.querySelectorAll('.zutatrow').forEach(bind);
   recalc();
 })();
 </script>

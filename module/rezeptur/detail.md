@@ -6,9 +6,9 @@
 - **Speichern (POST):** Kopf (Name, Kunde, Darreichungsform, Status, Notiz) in `rezeptur` (neu = INSERT + RZ-Nummer). Zutaten werden in `rezeptur_zutat` synchronisiert (item_id + Name-Snapshot + Menge mg).
 - **Anzeige (GET):** lädt Rezeptur, Zutaten, Kundenliste und alle Rohstoffe **inkl. ihrer Wirkstoffe** (für die Berechnung).
 
-**Kopf-Felder:** Name, Kunde (leer = Hausrezeptur), Darreichungsform (Kapsel/Tablette/Softgel/Stick/Pulver/Flüssig), Status, Notiz.
+**Kopf-Felder:** Name, Kunde, Darreichungsform (Kapsel/Tablette/Softgel/Stick/Pulver/Flüssig), Status, Notiz. **Kunde gewählt = eigene Rezeptur DIESES Kunden** (`kunde_id` + `exklusiv=1`, erscheint beim Kunden, nur für ihn). **Leer = Hausrezeptur** (Katalog, `exklusiv=0`).
 
-**Zutaten:** Zeilen aus Rohstoff-Auswahl + Menge (mg je Einheit). „+" fügt hinzu. Die Rohstoff-Auswahl ist **nach Form vorsortiert** – bei einer flüssigen Rezeptur stehen flüssige/öl-Rohstoffe oben.
+**Zutaten:** Zeilen aus Rohstoff + Menge (mg je Einheit). Das Rohstoff-Feld ist ein **Tippfeld mit Filter** (`<datalist>`): einfach lostippen, die Vorschläge grenzen sich auf das Getippte ein; die Auswahl setzt ein verstecktes `z_item[]` (die Rohstoff-id), Anzeige = Label „Name · Form · Art.-Nr". Beim Speichern zählt nur eine echte Auswahl (leere/unpassende Zeilen werden übersprungen). „+" fügt eine Zeile hinzu.
 
 **Live-Deklaration & Kalkulation (rechnet im Browser mit, pro Einheit):**
 - **Gesamtgewicht** (Summe der Mengen).
