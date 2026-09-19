@@ -168,6 +168,15 @@ if ($zeigeNeu):
                         FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                         ORDER BY (p.rezeptur_id IS NULL), p.name");
     $DFORMN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
+    // Einheit-Wort + Label je Produkt einmal bauen (datalist + JS-Map nutzen dasselbe -> müssen identisch sein).
+    $ehlWort = fn($form) => in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : 'Stück');
+    foreach ($produkteNeu as &$pn) {
+        $epp = (int)$pn['epp']; $ehl = $ehlWort($pn['form'] ?? '');
+        $mengeTeil = $epp > 0 ? number_format($epp, 0, ',', '.') . ' ' . $ehl : ($DFORMN[$pn['form'] ?? ''] ?? ($pn['form'] ?? ''));
+        $pn['_ehl'] = $ehl;
+        $pn['_lbl'] = trim($pn['name'] . ($pn['nummer'] ? ' · ' . $pn['nummer'] : '') . ($mengeTeil !== '' ? ' · ' . $mengeTeil : ''));
+    }
+    unset($pn);
 ?>
 <div class="bx-panel" style="margin-bottom:16px">
   <h2 style="margin-top:0">Neuer Produktionsauftrag <span class="muted" style="font-weight:400;font-size:13px">ohne Kundenbezug – z. B. Lager-/Vorratsproduktion</span></h2>
@@ -178,8 +187,8 @@ if ($zeigeNeu):
       <input type="text" class="prodpick-txt" list="prod_dl" autocomplete="off" placeholder="Produkt tippen … (Name oder Nummer)" style="width:100%">
       <input type="hidden" name="produkt_id" class="prodpick-id">
       <datalist id="prod_dl">
-        <?php foreach ($produkteNeu as $p): $lbl = trim($p['name'] . ($p['nummer'] ? ' · ' . $p['nummer'] : '') . (($p['form'] ?? '') ? ' · ' . ($DFORMN[$p['form']] ?? $p['form']) : '')); ?>
-          <option value="<?= h($lbl) ?>"></option>
+        <?php foreach ($produkteNeu as $p): ?>
+          <option value="<?= h($p['_lbl']) ?>"></option>
         <?php endforeach; ?>
       </datalist>
     </div>
@@ -206,11 +215,8 @@ if ($zeigeNeu):
   <script>
   (function(){
     var map = {};   // Label -> {id, epp, ehl}
-    <?php foreach ($produkteNeu as $p):
-        $lbl = trim($p['name'] . ($p['nummer'] ? ' · ' . $p['nummer'] : '') . (($p['form'] ?? '') ? ' · ' . ($DFORMN[$p['form']] ?? $p['form']) : ''));
-        $ehl = in_array($p['form'] ?? '', ['kapsel','softgel'], true) ? 'Kapseln'
-             : (($p['form'] ?? '') === 'tablette' ? 'Tabletten' : 'Einheiten'); ?>
-    map[<?= json_encode($lbl, JSON_UNESCAPED_UNICODE) ?>] = {id:<?= (int)$p['id'] ?>, epp:<?= (int)$p['epp'] ?>, ehl:<?= json_encode($ehl, JSON_UNESCAPED_UNICODE) ?>};
+    <?php foreach ($produkteNeu as $p): ?>
+    map[<?= json_encode($p['_lbl'], JSON_UNESCAPED_UNICODE) ?>] = {id:<?= (int)$p['id'] ?>, epp:<?= (int)$p['epp'] ?>, ehl:<?= json_encode($p['_ehl'], JSON_UNESCAPED_UNICODE) ?>};
     <?php endforeach; ?>
     var t = document.querySelector('.prodpick-txt'), h = document.querySelector('.prodpick-id');
     var m = document.getElementById('pmenge'), hint = document.getElementById('pmengeHint');
