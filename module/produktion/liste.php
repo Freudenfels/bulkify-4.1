@@ -164,7 +164,7 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:8px 12px">' . h(
 
 if ($zeigeNeu):
     // Produkte für die Auswahl (tippbar mit Live-Filter). Mit Rezeptur zuerst (dort ist die Darreichungsform bekannt).
-    $produkteNeu = all("SELECT p.id, p.name, p.nummer, r.darreichungsform AS form
+    $produkteNeu = all("SELECT p.id, p.name, p.nummer, p.einheiten_pro_packung AS epp, r.darreichungsform AS form
                         FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                         ORDER BY (p.rezeptur_id IS NULL), p.name");
     $DFORMN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
@@ -183,7 +183,7 @@ if ($zeigeNeu):
         <?php endforeach; ?>
       </datalist>
     </div>
-    <div class="bx-field" style="margin:0;width:150px"><label>Menge (Packungen)</label><input type="number" name="menge" min="1" step="1" value="1" style="width:100%"></div>
+    <div class="bx-field" style="margin:0;width:170px"><label>Menge (Packungen)</label><input type="number" name="menge" id="pmenge" min="1" step="1" value="1" style="width:100%"><div class="muted" id="pmengeHint" style="font-size:12px;margin-top:4px">&nbsp;</div></div>
     <div class="bx-field" style="margin:0;width:190px"><label>Produktionsart</label>
       <select name="produktionsart" style="width:100%">
         <option value="eigen" selected>Eigenproduktion</option>
@@ -205,13 +205,28 @@ if ($zeigeNeu):
   <div class="muted" style="font-size:12px;margin-top:8px">Menge = Anzahl Packungen; der Materialbedarf (Rohstoffe/Leerkapseln/Verpackung) skaliert automatisch über die Einheiten je Packung des Produkts. Kein Kunde, kein Auftrag – die Fertigware geht als eigener Lagerbestand ein.</div>
   <script>
   (function(){
-    var map = {};
-    <?php foreach ($produkteNeu as $p): $lbl = trim($p['name'] . ($p['nummer'] ? ' · ' . $p['nummer'] : '') . (($p['form'] ?? '') ? ' · ' . ($DFORMN[$p['form']] ?? $p['form']) : '')); ?>
-    map[<?= json_encode($lbl, JSON_UNESCAPED_UNICODE) ?>] = <?= (int)$p['id'] ?>;
+    var map = {};   // Label -> {id, epp, ehl}
+    <?php foreach ($produkteNeu as $p):
+        $lbl = trim($p['name'] . ($p['nummer'] ? ' · ' . $p['nummer'] : '') . (($p['form'] ?? '') ? ' · ' . ($DFORMN[$p['form']] ?? $p['form']) : ''));
+        $ehl = in_array($p['form'] ?? '', ['kapsel','softgel'], true) ? 'Kapseln'
+             : (($p['form'] ?? '') === 'tablette' ? 'Tabletten' : 'Einheiten'); ?>
+    map[<?= json_encode($lbl, JSON_UNESCAPED_UNICODE) ?>] = {id:<?= (int)$p['id'] ?>, epp:<?= (int)$p['epp'] ?>, ehl:<?= json_encode($ehl, JSON_UNESCAPED_UNICODE) ?>};
     <?php endforeach; ?>
     var t = document.querySelector('.prodpick-txt'), h = document.querySelector('.prodpick-id');
-    function sync(){ h.value = map[(t.value||'').trim()] || ''; }
-    if (t){ t.addEventListener('input', sync); t.addEventListener('change', sync); t.focus(); }
+    var m = document.getElementById('pmenge'), hint = document.getElementById('pmengeHint');
+    function cur(){ return map[(t.value||'').trim()] || null; }
+    function upd(){
+      var p = cur(); h.value = p ? p.id : '';
+      if (!p) { hint.innerHTML = '&nbsp;'; hint.style.color=''; return; }
+      if (!p.epp) { hint.textContent = 'Einheiten je Packung am Produkt nicht gepflegt – bitte am Produkt ergänzen.'; hint.style.color='var(--err)'; return; }
+      var pk = parseInt((m.value||'0'),10) || 0;
+      var ges = pk * p.epp;
+      hint.textContent = p.epp.toLocaleString('de-DE') + ' ' + p.ehl + ' je Packung · Gesamt: ' + ges.toLocaleString('de-DE') + ' ' + p.ehl;
+      hint.style.color='';
+    }
+    if (t){ t.addEventListener('input', upd); t.addEventListener('change', upd); t.focus(); }
+    if (m) m.addEventListener('input', upd);
+    upd();
   })();
   </script>
 </div>
