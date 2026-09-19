@@ -21,7 +21,7 @@
   - `angebot` + `angebot_staffel` – Angebot (einzige Preisquelle) mit Mengenstaffeln (Menge + VK/Stück, bestätigte Staffel).
   - `auftrag` – Auftragsbestätigung (AB-), entsteht automatisch aus der bestätigten Staffel.
   - `beleg` – Rechnung/Gutschrift/Lieferschein (typ); RE- entsteht automatisch mit dem Auftrag.
-  - `produktionsauftrag` (PR-) + `produktion_schritt` – Produktionsauftrag mit Stationen/Gates, entsteht automatisch mit dem Auftrag.
+  - `produktionsauftrag` (PR-) + `produktion_schritt` – Produktionsauftrag mit Stationen/Gates, entsteht automatisch mit dem Auftrag. Zusätzlich von Hand anlegbar (Produktions-Liste): **Lagerproduktion** ohne Kunde (`produktionsauftrag_lager_erstellen`) und **Bulk** „nur Kapseln" auf Basis einer Rezeptur (`produktionsauftrag_bulk_erstellen`; `produkt_id` NULL, `rezeptur_id` gesetzt, `pa_ist_bulk()`). Bulk: Stationen ohne Verpacken/Etikettieren (`produktionsschritte_fuer($form,false,true)`), Material nur Rohstoffe + Leerkapseln, Fertigware auf ein `fertig`-Bulk-Item der Rezeptur (`rezeptur_bulkitem`, Spalte `item.rezeptur_id`).
   - `lieferant_preis` – Staffelpreise je Rohstoff und Lieferant (menge_ab + Preis); günstigster wird im Rohstoff-Einkauf markiert.
   - `bestellung` + `bestellung_position` – Einkaufsbestellung beim Lieferanten (BE-) mit Positionen (Item+Menge+EK). Helfer `bestellung_wareneingang()` (Positionen → Chargen, Status geliefert).
   - `charge` – Bestand je Item als Chargen (Menge, MHD, Lieferant, Status quarantaene/frei/gesperrt). Helfer `item_bestand()`, `wareneingang_buchen()`, `item_braucht_quarantaene()`.

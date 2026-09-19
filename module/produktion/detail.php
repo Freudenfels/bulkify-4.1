@@ -108,9 +108,11 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?
 }
 
 $pa = $id ? one("SELECT pa.*, k.firma AS kunde_firma, p.name AS produkt_name, a.nummer AS auftrag_nr,
-                        a.produkt_bezeichnung AS auftrag_produkt_bez, a.produkt_form AS auftrag_produkt_form
+                        a.produkt_bezeichnung AS auftrag_produkt_bez, a.produkt_form AS auftrag_produkt_form,
+                        rz.name AS rezeptur_name, rz.darreichungsform AS rezeptur_form
                  FROM produktionsauftrag pa
                  LEFT JOIN kunden k ON k.id=pa.kunde_id LEFT JOIN produkt p ON p.id=pa.produkt_id
+                 LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
                  LEFT JOIN auftrag a ON a.id=pa.auftrag_id WHERE pa.id=?", [$id]) : null;
 if (!$pa) { render_header('produktion','Produktion'); bx_head('Produktionsauftrag nicht gefunden','', bx_btn('Zurück','?p=produktion','ghost')); render_footer(); exit; }
 
@@ -180,9 +182,11 @@ echo '<style>.bx-cards .v{font-size:15px;line-height:1.4}</style>';
 // Mengen-Aufschlüsselung: menge = Packungen, einheiten_pro_packung = Stück/Kapseln je Packung.
 $einhProP  = produktion_stueck_je_packung($pa);
 $formPa    = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$pa['produkt_id']]);
+if ($formPa === '') $formPa = (string)($pa['rezeptur_form'] ?? '');           // Bulk-PA: Form aus der Rezeptur
 if ($formPa === '') $formPa = (string)($pa['auftrag_produkt_form'] ?? '');   // Fallback: v3-Auftrag ohne Produkt
 $stkWort   = in_array($formPa, ['kapsel','softgel'], true) ? 'Kapseln' : ($formPa === 'tablette' ? 'Tabletten' : 'Stück');
 $produktName = (string)($pa['produkt_name'] ?? '') ?: (string)($pa['auftrag_produkt_bez'] ?? '');
+if ($produktName === '' && pa_ist_bulk($pa)) $produktName = (string)($pa['rezeptur_name'] ?? '') . ' · Bulk';   // Bulk-PA: Rezepturname
 $gesamtStk = $einhProP > 0 ? (int)$pa['menge'] * $einhProP : 0;
 // Eingabe-Kacheln vorbereiten (Priorität, Geplant am) und Größe.
 $prioSel = '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="prio"><select name="prio" onchange="this.form.submit()">';
@@ -197,8 +201,11 @@ echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $status
 echo '<div class="bx-card"><div class="k">Bereitschaft</div><div class="v">' . bereitschaft_badge($ber['status']) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Fortschritt</div><div class="v">' . $done . ' / ' . $total . '</div></div>';
 echo '<div class="bx-card"><div class="k">Priorität</div><div class="v">' . $prioSel . '</div></div>';
-// 2) Produkt
-echo '<div class="bx-card"><div class="k">Produkt</div><div class="v">' . h($produktName ?: '–') . ($produktName && empty($pa['produkt_id']) ? ' <span class="muted" style="font-size:12px">(aus v3)</span>' : '') . '</div></div>';
+// 2) Produkt (bei Bulk: Rezeptur)
+$istBulkPa = pa_ist_bulk($pa);
+$prodKarteLabel = $istBulkPa ? 'Rezeptur (Bulk)' : 'Produkt';
+$prodKarteZusatz = (!$istBulkPa && $produktName && empty($pa['produkt_id'])) ? ' <span class="muted" style="font-size:12px">(aus v3)</span>' : '';
+echo '<div class="bx-card"><div class="k">' . $prodKarteLabel . '</div><div class="v">' . h($produktName ?: '–') . $prodKarteZusatz . '</div></div>';
 if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablette</div><div class="v">' . h($groesseLbl) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Art</div><div class="v">' . $artBadge . '</div></div>';
 // 3) Menge

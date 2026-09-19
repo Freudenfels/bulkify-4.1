@@ -23,10 +23,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'art_b
 
 // Neuen Produktionsauftrag OHNE Kundenbezug anlegen (Lager-/Vorratsproduktion).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'neu') {
+    $modus = ($_POST['modus'] ?? 'produkt') === 'bulk' ? 'bulk' : 'produkt';
+    $prio  = max(1, min(3, (int)($_POST['prio'] ?? 2)));
+    if ($modus === 'bulk') {
+        // Nur Kapseln (Bulk) – auf Basis einer Rezeptur, Menge = Stück.
+        $rid    = (int)($_POST['rezeptur_id'] ?? 0);
+        $stueck = (int) str_replace(['.', ' '], '', (string)($_POST['stueck'] ?? '0'));
+        if ($rid <= 0)   { $_SESSION['prod_flash'] = 'Bitte eine Rezeptur wählen.'; header('Location: ?p=produktion&neu=1'); exit; }
+        $paid = produktionsauftrag_bulk_erstellen($rid, $stueck, $prio);
+        if ($paid) { header('Location: ?p=produktionsauftrag&id=' . $paid . '&ok=1'); exit; }
+        $_SESSION['prod_flash'] = 'Bulk-Produktionsauftrag konnte nicht angelegt werden (Rezeptur ungültig).';
+        header('Location: ?p=produktion&neu=1'); exit;
+    }
     $pid   = (int)($_POST['produkt_id'] ?? 0);
     $menge = (int) str_replace(['.', ' '], '', (string)($_POST['menge'] ?? '0'));
     $art   = ($_POST['produktionsart'] ?? 'eigen') === 'fremd' ? 'fremd' : 'eigen';
-    $prio  = max(1, min(3, (int)($_POST['prio'] ?? 2)));
     if ($pid <= 0) { $_SESSION['prod_flash'] = 'Bitte ein Produkt wählen.'; header('Location: ?p=produktion&neu=1'); exit; }
     $paid = produktionsauftrag_lager_erstellen($pid, $menge, $art, $prio);
     if ($paid) { header('Location: ?p=produktionsauftrag&id=' . $paid . '&ok=1'); exit; }
@@ -35,12 +46,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'neu')
 }
 
 // Alle Produktionsaufträge laden (inkl. Fortschritt + nächste Station), Bereitschaft je Auftrag bestimmen.
-$alle = all("SELECT pa.*, k.firma AS kunde_firma, COALESCE(NULLIF(p.name,''), a.produkt_bezeichnung) AS produkt_name,
+$alle = all("SELECT pa.*, k.firma AS kunde_firma,
+             COALESCE(NULLIF(p.name,''), a.produkt_bezeichnung, CONCAT(rz.name, ' · Bulk')) AS produkt_name,
              (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id) AS n_total,
              (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=1) AS n_done,
              (SELECT station FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=0 ORDER BY s.sort LIMIT 1) AS naechste_station
              FROM produktionsauftrag pa
              LEFT JOIN kunden k ON k.id=pa.kunde_id LEFT JOIN produkt p ON p.id=pa.produkt_id
+             LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
              LEFT JOIN auftrag a ON a.id=pa.auftrag_id");
 // Bereitschaft (Material da?) sparsam bestimmen – die volle Prüfung (produktion_bereitschaft ->
 // auftrag_bedarf) macht mehrere Abfragen je Auftrag. Sie ist NUR für noch nicht begonnene Aufträge
@@ -177,28 +190,53 @@ if ($zeigeNeu):
         $pn['_lbl'] = trim($pn['name'] . ($pn['nummer'] ? ' · ' . $pn['nummer'] : '') . ($mengeTeil !== '' ? ' · ' . $mengeTeil : ''));
     }
     unset($pn);
+    // Rezepturen für den Bulk-Modus (tippbar). Nur Kapsel/Softgel/Tablette sind als Bulk sinnvoll herstellbar,
+    // wir zeigen aber alle (die Form steht im Label).
+    $rezepteNeu = all("SELECT id, name, nummer, darreichungsform AS form FROM rezeptur ORDER BY name");
+    foreach ($rezepteNeu as &$rn) {
+        $rn['_ehl'] = $ehlWort($rn['form'] ?? '');
+        $rn['_lbl'] = trim($rn['name'] . ($rn['nummer'] ? ' · ' . $rn['nummer'] : '') . (($rn['form'] ?? '') ? ' · ' . ($DFORMN[$rn['form']] ?? $rn['form']) : ''));
+    }
+    unset($rn);
 ?>
 <div class="bx-panel" style="margin-bottom:16px">
   <h2 style="margin-top:0">Neuer Produktionsauftrag <span class="muted" style="font-weight:400;font-size:13px">ohne Kundenbezug – z. B. Lager-/Vorratsproduktion</span></h2>
+  <div class="bx-row" style="gap:18px;margin-bottom:14px">
+    <label style="cursor:pointer"><input type="radio" name="modus_ui" value="produkt" checked> Fertiges Produkt (mit Verpackung)</label>
+    <label style="cursor:pointer"><input type="radio" name="modus_ui" value="bulk"> Nur Kapseln (Bulk, ohne Verpackung)</label>
+  </div>
   <form method="post" class="bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap" data-busy="Lege an …">
     <input type="hidden" name="aktion" value="neu">
-    <div class="bx-field" style="margin:0;flex:1 1 320px">
-      <label>Produkt</label>
-      <input type="text" class="prodpick-txt" list="prod_dl" autocomplete="off" placeholder="Produkt tippen … (Name oder Nummer)" style="width:100%">
-      <input type="hidden" name="produkt_id" class="prodpick-id">
-      <datalist id="prod_dl">
-        <?php foreach ($produkteNeu as $p): ?>
-          <option value="<?= h($p['_lbl']) ?>"></option>
-        <?php endforeach; ?>
-      </datalist>
+    <input type="hidden" name="modus" id="modusField" value="produkt">
+
+    <!-- Modus: Fertiges Produkt -->
+    <div class="modus-produkt bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap;margin:0">
+      <div class="bx-field" style="margin:0;flex:1 1 320px">
+        <label>Produkt</label>
+        <input type="text" class="prodpick-txt" list="prod_dl" autocomplete="off" placeholder="Produkt tippen … (Name oder Nummer)" style="width:100%">
+        <input type="hidden" name="produkt_id" class="prodpick-id">
+        <datalist id="prod_dl"><?php foreach ($produkteNeu as $p): ?><option value="<?= h($p['_lbl']) ?>"></option><?php endforeach; ?></datalist>
+      </div>
+      <div class="bx-field" style="margin:0;width:170px"><label>Menge (Packungen)</label><input type="number" name="menge" id="pmenge" min="1" step="1" value="1" style="width:100%"><div class="muted" id="pmengeHint" style="font-size:12px;margin-top:4px">&nbsp;</div></div>
+      <div class="bx-field" style="margin:0;width:190px"><label>Produktionsart</label>
+        <select name="produktionsart" style="width:100%">
+          <option value="eigen" selected>Eigenproduktion</option>
+          <option value="fremd">Fremdproduktion (Zukauf)</option>
+        </select>
+      </div>
     </div>
-    <div class="bx-field" style="margin:0;width:170px"><label>Menge (Packungen)</label><input type="number" name="menge" id="pmenge" min="1" step="1" value="1" style="width:100%"><div class="muted" id="pmengeHint" style="font-size:12px;margin-top:4px">&nbsp;</div></div>
-    <div class="bx-field" style="margin:0;width:190px"><label>Produktionsart</label>
-      <select name="produktionsart" style="width:100%">
-        <option value="eigen" selected>Eigenproduktion</option>
-        <option value="fremd">Fremdproduktion (Zukauf)</option>
-      </select>
+
+    <!-- Modus: Nur Kapseln (Bulk) -->
+    <div class="modus-bulk bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap;margin:0;display:none">
+      <div class="bx-field" style="margin:0;flex:1 1 320px">
+        <label>Rezeptur</label>
+        <input type="text" class="rezpick-txt" list="rez_dl" autocomplete="off" placeholder="Rezeptur tippen … (Name oder Nummer)" style="width:100%">
+        <input type="hidden" name="rezeptur_id" class="rezpick-id">
+        <datalist id="rez_dl"><?php foreach ($rezepteNeu as $rz): ?><option value="<?= h($rz['_lbl']) ?>"></option><?php endforeach; ?></datalist>
+      </div>
+      <div class="bx-field" style="margin:0;width:170px"><label>Stückzahl (Kapseln)</label><input type="number" name="stueck" min="1" step="1" value="1000" style="width:100%"><div class="muted" id="bulkHint" style="font-size:12px;margin-top:4px">&nbsp;</div></div>
     </div>
+
     <div class="bx-field" style="margin:0;width:150px"><label>Priorität</label>
       <select name="prio" style="width:100%">
         <option value="2" selected>Normal</option>
@@ -211,28 +249,52 @@ if ($zeigeNeu):
       <a class="btn btn-ghost" href="?p=produktion&tab=<?= h($tab) ?>">Abbrechen</a>
     </div>
   </form>
-  <div class="muted" style="font-size:12px;margin-top:8px">Menge = Anzahl Packungen; der Materialbedarf (Rohstoffe/Leerkapseln/Verpackung) skaliert automatisch über die Einheiten je Packung des Produkts. Kein Kunde, kein Auftrag – die Fertigware geht als eigener Lagerbestand ein.</div>
+  <div class="muted" style="font-size:12px;margin-top:8px" id="modusHinweis"></div>
   <script>
   (function(){
-    var map = {};   // Label -> {id, epp, ehl}
+    // Produkt-Modus: Live-Gesamtstückzahl
+    var pmap = {};
     <?php foreach ($produkteNeu as $p): ?>
-    map[<?= json_encode($p['_lbl'], JSON_UNESCAPED_UNICODE) ?>] = {id:<?= (int)$p['id'] ?>, epp:<?= (int)$p['epp'] ?>, ehl:<?= json_encode($p['_ehl'], JSON_UNESCAPED_UNICODE) ?>};
+    pmap[<?= json_encode($p['_lbl'], JSON_UNESCAPED_UNICODE) ?>] = {id:<?= (int)$p['id'] ?>, epp:<?= (int)$p['epp'] ?>, ehl:<?= json_encode($p['_ehl'], JSON_UNESCAPED_UNICODE) ?>};
     <?php endforeach; ?>
-    var t = document.querySelector('.prodpick-txt'), h = document.querySelector('.prodpick-id');
-    var m = document.getElementById('pmenge'), hint = document.getElementById('pmengeHint');
-    function cur(){ return map[(t.value||'').trim()] || null; }
-    function upd(){
-      var p = cur(); h.value = p ? p.id : '';
-      if (!p) { hint.innerHTML = '&nbsp;'; hint.style.color=''; return; }
-      if (!p.epp) { hint.textContent = 'Einheiten je Packung am Produkt nicht gepflegt – bitte am Produkt ergänzen.'; hint.style.color='var(--err)'; return; }
-      var pk = parseInt((m.value||'0'),10) || 0;
-      var ges = pk * p.epp;
-      hint.textContent = p.epp.toLocaleString('de-DE') + ' ' + p.ehl + ' je Packung · Gesamt: ' + ges.toLocaleString('de-DE') + ' ' + p.ehl;
-      hint.style.color='';
+    var pt = document.querySelector('.prodpick-txt'), ph = document.querySelector('.prodpick-id');
+    var pm = document.getElementById('pmenge'), phint = document.getElementById('pmengeHint');
+    function pcur(){ return pmap[(pt.value||'').trim()] || null; }
+    function pupd(){
+      var p = pcur(); ph.value = p ? p.id : '';
+      if (!p) { phint.innerHTML = '&nbsp;'; phint.style.color=''; return; }
+      if (!p.epp) { phint.textContent = 'Einheiten je Packung am Produkt nicht gepflegt – bitte am Produkt ergänzen.'; phint.style.color='var(--err)'; return; }
+      var ges = (parseInt((pm.value||'0'),10)||0) * p.epp;
+      phint.textContent = p.epp.toLocaleString('de-DE') + ' ' + p.ehl + ' je Packung · Gesamt: ' + ges.toLocaleString('de-DE') + ' ' + p.ehl;
+      phint.style.color='';
     }
-    if (t){ t.addEventListener('input', upd); t.addEventListener('change', upd); t.focus(); }
-    if (m) m.addEventListener('input', upd);
-    upd();
+    if (pt){ pt.addEventListener('input', pupd); pt.addEventListener('change', pupd); }
+    if (pm) pm.addEventListener('input', pupd);
+
+    // Bulk-Modus: Rezeptur -> id
+    var rmap = {};
+    <?php foreach ($rezepteNeu as $rz): ?>
+    rmap[<?= json_encode($rz['_lbl'], JSON_UNESCAPED_UNICODE) ?>] = {id:<?= (int)$rz['id'] ?>, ehl:<?= json_encode($rz['_ehl'], JSON_UNESCAPED_UNICODE) ?>};
+    <?php endforeach; ?>
+    var rt = document.querySelector('.rezpick-txt'), rh = document.querySelector('.rezpick-id');
+    function rsync(){ var r = rmap[(rt.value||'').trim()]; rh.value = r ? r.id : ''; }
+    if (rt){ rt.addEventListener('input', rsync); rt.addEventListener('change', rsync); }
+
+    // Modus-Umschalter
+    var mf = document.getElementById('modusField');
+    var gp = document.querySelector('.modus-produkt'), gb = document.querySelector('.modus-bulk');
+    var hinweis = document.getElementById('modusHinweis');
+    function setModus(mo){
+      mf.value = mo;
+      gp.style.display = mo==='produkt' ? '' : 'none';
+      gb.style.display = mo==='bulk' ? '' : 'none';
+      hinweis.textContent = mo==='bulk'
+        ? 'Bulk = nur Kapseln herstellen (Rohstoffe + Leerkapseln), ohne Verpacken/Etikettieren. Die fertigen Kapseln gehen als eigene Bulk-Charge (Lagerbestand) ein und können später zu einem Produkt verpackt werden.'
+        : 'Menge = Anzahl Packungen; der Materialbedarf (Rohstoffe/Leerkapseln/Verpackung) skaliert über die Einheiten je Packung des Produkts. Fertigware geht als eigener Lagerbestand ein.';
+      (mo==='produkt' ? pt : rt).focus();
+    }
+    document.querySelectorAll('input[name="modus_ui"]').forEach(function(r){ r.addEventListener('change', function(){ setModus(this.value); }); });
+    setModus('produkt'); pupd();
   })();
   </script>
 </div>

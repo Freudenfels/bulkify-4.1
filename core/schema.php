@@ -557,6 +557,7 @@ function init_schema(): void {
     ensure_column('produktionsauftrag', 'geplant_am', "DATE NULL");               // Baustein 2: geplantes Produktionsdatum
     ensure_column('produktionsauftrag', 'produktionsart', "VARCHAR(10) NOT NULL DEFAULT 'fremd'");   // eigen|fremd (Make-or-Buy); Standard = fremd (90% der Kapseln extern gefüllt)
     ensure_column('produktionsauftrag', 'bedarf_gemeldet', "DATETIME NULL");      // wann der Bedarf ans Einkauf gemeldet wurde
+    ensure_column('produktionsauftrag', 'rezeptur_id', "INT NULL");               // Bulk-Produktion (nur Kapseln, ohne Verpackung): PA haengt an der Rezeptur statt am Produkt (produkt_id NULL)
 
     // produktion_schritt: die Stationen/Gates eines Produktionsauftrags, der Reihe nach abzuarbeiten.
     $pdo->exec("CREATE TABLE IF NOT EXISTS produktion_schritt (
@@ -929,6 +930,7 @@ function init_schema(): void {
     ensure_column('kunden', 'erstlogin_am', "DATETIME NULL");       // Zeitpunkt der Konto-Einrichtung (Erstzugang abgeschlossen)
     ensure_column('kunden', 'letzter_login', "DATETIME NULL");      // letzter erfolgreicher Kunden-Login
     ensure_column('item', 'produkt_id', "INT NULL");               // Verkaufsfertig-Item <-> Produkt (Fertigware-Bestand)
+    ensure_column('item', 'rezeptur_id', "INT NULL");              // Bulk-Item (Kategorie 'fertig') <-> Rezeptur (Bulk-Produktion ohne Verpackung)
     // Dokumente: erst nach ausdrücklicher Freigabe im Kundenportal sichtbar. Standard 0 – ein Lieferanten-Spec
     // darf nicht versehentlich beim Kunden landen, nur weil es am Rohstoff hängt.
     ensure_column('dokument', 'kunde_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0");
@@ -2129,20 +2131,27 @@ function produktion_rest(int $pa_id): float {
 // heute + 18 Monate. Es kann nie mehr gebucht werden, als vom Auftrag noch offen ist.
 // Rückgabe ['ok'=>bool, 'msg'=>string, 'charge_id'=>?int, 'charge_nr'=>string].
 function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd = null, string $notiz = ''): array {
-    $pa = one("SELECT nummer, produkt_id, menge, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = one("SELECT nummer, produkt_id, rezeptur_id, menge, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return ['ok'=>false, 'msg'=>'Produktionsauftrag nicht gefunden.'];
-    if (!$pa['produkt_id']) return ['ok'=>false, 'msg'=>'Dem Produktionsauftrag fehlt das Produkt – ohne Produkt gibt es keinen Lagerartikel.'];
+    $istBulk = pa_ist_bulk($pa);
+    if (!$pa['produkt_id'] && !$istBulk) return ['ok'=>false, 'msg'=>'Dem Produktionsauftrag fehlt das Produkt – ohne Produkt gibt es keinen Lagerartikel.'];
     $menge = round($menge);
     $rest  = produktion_rest($pa_id);
     if ($menge <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Menge größer 0 angeben.'];
     if ($menge > $rest + 1e-6) return ['ok'=>false, 'msg'=>'Es sind nur noch ' . number_format($rest, 0, ',', '.') . ' Stück offen – mehr kann nicht gebucht werden.'];
-    $item_id = produkt_lageritem((int)$pa['produkt_id']);
-    if (!$item_id) return ['ok'=>false, 'msg'=>'Lagerartikel zum Produkt konnte nicht angelegt werden.'];
-    // Fulfillment-Kunde? → Fertigware gehört ins Lager 2, BSKU (Brücke) sicherstellen. Wer der Kunde
-    // ist, sagt der Auftrag – das Produkt selbst ist kundenneutral (nur exklusive tragen einen Kunden).
-    if (auftrag_ist_fulfillment((int)$pa['auftrag_id'])
-        || (bool) scalar("SELECT k.nutzt_fulfillment FROM produkt p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [(int)$pa['produkt_id']]))
-        bsku_ensure($item_id);
+    if ($istBulk) {
+        // Bulk: als eigenen Bulk-Lagerartikel (Kategorie 'fertig') der Rezeptur einbuchen – kein Kunde/Fulfillment.
+        $item_id = rezeptur_bulkitem((int)$pa['rezeptur_id']);
+        if (!$item_id) return ['ok'=>false, 'msg'=>'Bulk-Lagerartikel zur Rezeptur konnte nicht angelegt werden.'];
+    } else {
+        $item_id = produkt_lageritem((int)$pa['produkt_id']);
+        if (!$item_id) return ['ok'=>false, 'msg'=>'Lagerartikel zum Produkt konnte nicht angelegt werden.'];
+        // Fulfillment-Kunde? → Fertigware gehört ins Lager 2, BSKU (Brücke) sicherstellen. Wer der Kunde
+        // ist, sagt der Auftrag – das Produkt selbst ist kundenneutral (nur exklusive tragen einen Kunden).
+        if (auftrag_ist_fulfillment((int)$pa['auftrag_id'])
+            || (bool) scalar("SELECT k.nutzt_fulfillment FROM produkt p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [(int)$pa['produkt_id']]))
+            bsku_ensure($item_id);
+    }
     $charge_nr = charge_naechste_nr($pa_id);
     $mhd = ($mhd && strtotime($mhd)) ? date('Y-m-d', strtotime($mhd)) : mhd_standard();
     $notiz = trim($notiz);
@@ -4099,7 +4108,7 @@ function angebot_matrix_fuer_gruppe(int $produkt_id, array $g, string $form, ?fl
 }
 
 // Stationen/Gates einer Produktion je Darreichungsform.
-function produktionsschritte_fuer(string $form, bool $zukauf = false): array {
+function produktionsschritte_fuer(string $form, bool $zukauf = false, bool $bulk = false): array {
     // Zugekaufte fertige Bulkware (fertige Kapseln/Tabletten vom Lieferanten):
     // kein Rohstoff-Bereitstellen/Mischen/Verkapseln – nur bereitstellen, verpacken, etikettieren, prüfen.
     if ($zukauf) {
@@ -4117,8 +4126,61 @@ function produktionsschritte_fuer(string $form, bool $zukauf = false): array {
         'gel'      => 'Gel-Abfüllung',
         default    => 'Herstellung',
     };
+    // Bulk-/Lagerproduktion (nur Kapseln, ohne Verpackung): ohne Verpacken/Etikettieren/Versand-Freigabe.
+    if ($bulk) {
+        return ['Rohstoffe bereitstellen', 'Mischen', $herstellung, 'Qualitätsprüfung', 'Einlagern (Bulk)'];
+    }
     return ['Rohstoffe bereitstellen', 'Mischen', $herstellung, 'Verpacken', 'Etikettieren',
             'Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe'];
+}
+
+// Bulk-PA? (nur Kapseln, ohne Verpackung – haengt an einer Rezeptur statt an einem Produkt)
+function pa_ist_bulk(array $pa): bool {
+    return empty($pa['produkt_id']) && !empty($pa['rezeptur_id']);
+}
+
+// Leerkapsel-Kandidaten einer Rezeptur (fuer Bulk-Produktion – analog produkt_leerkapsel_kandidaten, aber rezeptur-basiert).
+function rezeptur_leerkapsel_id(int $rezeptur_id): ?int {
+    if ($rezeptur_id <= 0) return null;
+    $rz = one("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    if (!$rz || $rz['darreichungsform'] !== 'kapsel') return null;
+    $kg = rezeptur_kapselgroesse($rezeptur_id);
+    if (!$kg) return null;
+    $k = all("SELECT id FROM item WHERE kategorie='rohstoff' AND form='kapselhuelle' AND kapselgroesse_id=? AND gesperrt=0 ORDER BY id", [(int)$kg['id']]);
+    return count($k) === 1 ? (int)$k[0]['id'] : null;   // nur bei Eindeutigkeit automatisch
+}
+
+// Bulk-Lagerartikel (Kategorie 'fertig') zu einer Rezeptur – finden oder anlegen. Hier landet die Bulk-Fertigware.
+function rezeptur_bulkitem(int $rezeptur_id): ?int {
+    if ($rezeptur_id <= 0) return null;
+    $id = scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' LIMIT 1", [$rezeptur_id]);
+    if ($id) return (int)$id;
+    $rz = one("SELECT name, darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    if (!$rz) return null;
+    $einheit = ($rz['darreichungsform'] === 'pulver') ? 'g' : (in_array($rz['darreichungsform'], ['fluessig','gel'], true) ? 'ml' : 'Stück');
+    q("INSERT INTO item (artikelnummer,name,kategorie,form,einheit,preis_bezug,rezeptur_id) VALUES (?,?,?,?,?,?,?)",
+      [naechste_nummer('BULK'), $rz['name'] . ' – Bulk', 'fertig', (string)$rz['darreichungsform'], $einheit, $einheit, $rezeptur_id]);
+    return insert_id();
+}
+
+// Bulk-Produktionsauftrag anlegen: nur Kapseln (o. Ä.) ohne Verpackung, auf Basis einer REZEPTUR.
+// Menge = Stueck (Kapseln). Gibt die neue pa-id zurueck (0 bei ungueltiger Rezeptur).
+function produktionsauftrag_bulk_erstellen(int $rezeptur_id, int $stueck, int $prio = 2): int {
+    $rezeptur_id = (int)$rezeptur_id;
+    if ($rezeptur_id <= 0) return 0;
+    $rz = one("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    if (!$rz) return 0;
+    $stueck = max(0, $stueck);
+    $prio   = max(1, min(3, $prio));
+    $form   = (string)($rz['darreichungsform'] ?: 'kapsel');
+    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,rezeptur_id,menge,produktionsart,status,prio)
+       VALUES (?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('PR'), null, null, null, $rezeptur_id, $stueck, 'eigen', 'offen', $prio]);
+    $paid = (int) insert_id();
+    foreach (produktionsschritte_fuer($form, false, true) as $i => $station)
+        q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
+    bedarf_bump();
+    return $paid;
 }
 
 // Produktionsbereitschaft: ist das Material komplett da, um den Auftrag zu produzieren?
@@ -4158,10 +4220,16 @@ function produktion_ist_zukauf(int $auftrag_id): bool {
 // Produktionsschritte neu erzeugen (Weg umstellen) – nur solange KEIN Schritt erledigt ist.
 function produktion_schritte_regenerieren(int $pa_id, bool $zukauf): bool {
     if ((int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]) > 0) return false;
-    $pid  = (int) scalar("SELECT produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
-    $form = (string) (scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel');
+    $pa = one("SELECT produkt_id, rezeptur_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return false;
+    $istBulk = pa_ist_bulk($pa);
+    if ($istBulk) {
+        $form = (string) (scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$pa['rezeptur_id']]) ?: 'kapsel');
+    } else {
+        $form = (string) (scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$pa['produkt_id']]) ?: 'kapsel');
+    }
     q("DELETE FROM produktion_schritt WHERE pa_id=?", [$pa_id]);
-    foreach (produktionsschritte_fuer($form, $zukauf) as $i => $station)
+    foreach (produktionsschritte_fuer($form, $zukauf && !$istBulk, $istBulk) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$pa_id, $station, $i]);
     q("UPDATE produktionsauftrag SET status='offen' WHERE id=?", [$pa_id]);
     return true;
@@ -4364,6 +4432,24 @@ function auftrag_bedarf(int $pa_id): array {
     if (!$pa) return [];
     $aid = (int)$pa['auftrag_id'];
     $menge = (int)$pa['menge'];
+    // Bulk-Produktion (nur Kapseln, ohne Verpackung): Menge = Stück, nur Rohstoffe + Leerkapseln, keine Verpackung.
+    if (pa_ist_bulk($pa)) {
+        $rows = [];
+        foreach (produktion_materialbedarf($pa_id) as $m)
+            $rows[] = ['rolle'=>'Rohstoff','item_id'=>$m['item_id'],'name'=>$m['name'],'benoetigt'=>$m['benoetigt'],'verfuegbar'=>$m['verfuegbar'],'fehlt'=>$m['fehlt'],'einheit'=>$m['einheit']];
+        $kapId = rezeptur_leerkapsel_id((int)$pa['rezeptur_id']);
+        if ($kapId && $menge > 0) {
+            $verfK = item_bestand($kapId, true);
+            $rows[] = ['rolle'=>'Leerkapsel','item_id'=>$kapId,'name'=>item_name_cached($kapId),'benoetigt'=>$menge,'verfuegbar'=>$verfK,'fehlt'=>max(0.0,$menge-$verfK),'einheit'=>'Stück'];
+        }
+        foreach ($rows as &$rb) {
+            $iid = (int)$rb['item_id'];
+            if ($iid > 0) { $rb['verfuegbar'] = item_verfuegbar_fuer($iid, 0); $rb['reserviert_eigen'] = 0.0; $rb['fehlt'] = max(0.0, (float)$rb['benoetigt'] - (float)$rb['verfuegbar']); }
+            else $rb['reserviert_eigen'] = 0.0;
+        }
+        unset($rb);
+        return $rows;
+    }
     $einh  = produktion_stueck_je_packung($pa);
     $einheiten = $menge * $einh;
     $rows = [];
@@ -4821,11 +4907,17 @@ function produktion_scan_pruefen(string $scan, ?string $kat): array {
 function produktion_materialbedarf(int $pa_id): array {
     $pa = pa_row_cached($pa_id);
     if (!$pa) return [];
-    $prod = produkt_row_cached((int)$pa['produkt_id']);
-    if (!$prod || !$prod['rezeptur_id']) return [];
-    $einheiten_total = (int)$pa['menge'] * (int)$prod['einheiten_pro_packung'];
+    if (pa_ist_bulk($pa)) {
+        // Bulk: Menge = Stück (Kapseln) direkt; kein Produkt/Packung dazwischen.
+        $rid = (int)$pa['rezeptur_id'];
+        $einheiten_total = (int)$pa['menge'];
+    } else {
+        $prod = produkt_row_cached((int)$pa['produkt_id']);
+        if (!$prod || !$prod['rezeptur_id']) return [];
+        $einheiten_total = (int)$pa['menge'] * (int)$prod['einheiten_pro_packung'];
+        $rid = (int)$prod['rezeptur_id'];
+    }
     // Zutaten der Rezeptur – in der Liste request-lokal gecacht (Rezepturen mehrerer Aufträge nur einmal holen).
-    $rid = (int)$prod['rezeptur_id'];
     if (isset($GLOBALS['bx_stock_cache'])) {
         $zk = 'rz:' . $rid;
         if (!array_key_exists($zk, $GLOBALS['bx_stock_cache']))
