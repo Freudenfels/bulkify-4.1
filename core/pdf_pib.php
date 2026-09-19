@@ -11,12 +11,14 @@ require_once __DIR__ . '/schema.php';
 function pib_naehr(int $rezeptur_id): array {
     if ($rezeptur_id <= 0) return [];
     $n = [];
-    foreach (all("SELECT z.menge_mg, iw.gehalt_prozent, na.name, na.nrv_wert, na.einheit
+    foreach (all("SELECT z.menge_mg, COALESCE(iw.gehalt_wert, iw.gehalt_prozent) AS gehalt_wert,
+                         COALESCE(iw.gehalt_einheit,'prozent') AS gehalt_einheit,
+                         na.name, na.nrv_wert, na.einheit, na.ie_mg, na.einheit_anzeige
                   FROM rezeptur_zutat z JOIN item_wirkstoff iw ON iw.item_id=z.item_id
                   JOIN naehrstoff na ON na.id=iw.naehrstoff_id
-                  WHERE z.rezeptur_id=? AND iw.gehalt_prozent IS NOT NULL", [$rezeptur_id]) as $w) {
-        $mgN = (float)$w['menge_mg'] * (float)$w['gehalt_prozent'] / 100;
-        if (!isset($n[$w['name']])) $n[$w['name']] = ['name'=>$w['name'], 'mg'=>0.0, 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit']];
+                  WHERE z.rezeptur_id=? AND COALESCE(iw.gehalt_wert, iw.gehalt_prozent) IS NOT NULL", [$rezeptur_id]) as $w) {
+        $mgN = (float)$w['menge_mg'] * wirkstoff_mg_je_mg($w['gehalt_wert'], $w['gehalt_einheit'], $w['ie_mg']);
+        if (!isset($n[$w['name']])) $n[$w['name']] = ['name'=>$w['name'], 'mg'=>0.0, 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit'], 'ie_mg'=>$w['ie_mg'], 'anzeige'=>$w['einheit_anzeige']];
         $n[$w['name']]['mg'] += $mgN;
     }
     return array_values($n);
@@ -191,7 +193,10 @@ function pib_pdf_bauen(int $produkt_id): ?string {
     if ($nutr) {
         $rows = [];
         foreach ($nutr as $n) {
-            $betr = ($n['einheit'] === 'µg') ? $mg($n['mg'] * 1000) . ' µg' : $mg($n['mg']) . ' mg';
+            $lbl  = ($n['anzeige'] ?? '') !== '' ? $n['anzeige'] : $n['einheit'];
+            $betr = ($n['einheit'] === 'µg') ? $mg($n['mg'] * 1000) . ' ' . $lbl : $mg($n['mg']) . ' ' . $lbl;
+            // Zusätzlich I.E. ausweisen, wenn der Nährstoff eine I.E.-Umrechnung hat (z. B. Vitamin D/A/E).
+            if (($n['ie_mg'] ?? null) !== null && (float)$n['ie_mg'] > 0) $betr .= ' (' . $mg($n['mg'] / (float)$n['ie_mg']) . ' I.E.)';
             $pct = '–';
             if ($n['nrv'] !== null && $n['nrv'] !== '') {
                 $nrvMg = $n['einheit'] === 'µg' ? (float)$n['nrv'] / 1000 : (float)$n['nrv'];

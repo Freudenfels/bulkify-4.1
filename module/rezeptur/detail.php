@@ -99,9 +99,13 @@ usort($items, function($a,$b) use ($prefForms) {
 
 // Wirkstoffe je Item -> für JS-Berechnung
 $wmap = [];
-foreach (all("SELECT iw.item_id, n.name, n.nrv_wert, n.einheit, iw.gehalt_prozent
+foreach (all("SELECT iw.item_id, n.name, n.nrv_wert, n.einheit, n.ie_mg, n.einheit_anzeige,
+                     COALESCE(iw.gehalt_wert, iw.gehalt_prozent) AS gehalt_wert, COALESCE(iw.gehalt_einheit,'prozent') AS gehalt_einheit
               FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id") as $w) {
-    $wmap[$w['item_id']][] = ['name'=>$w['name'], 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit'], 'gehalt'=>$w['gehalt_prozent']];
+    // basePerMg = mg Nährstoff je 1 mg Rohstoff (zentrale Umrechnung, deckt %, I.E./g, I.E./kg, mg/g, µg/g ab)
+    $wmap[$w['item_id']][] = ['name'=>$w['name'], 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit'],
+        'anzeige'=>$w['einheit_anzeige'], 'ie_mg'=>$w['ie_mg']!==null?(float)$w['ie_mg']:null,
+        'basePerMg'=>wirkstoff_mg_je_mg($w['gehalt_wert'], $w['gehalt_einheit'], $w['ie_mg'])];
 }
 $ITEMS = [];
 foreach ($items as $it) {
@@ -310,7 +314,12 @@ var KAPSELN = <?= json_encode($KAPSELN, JSON_UNESCAPED_UNICODE) ?>;
 var ZMAP = <?= json_encode((function($items,$FORMLBL){ $m=[]; foreach($items as $it){ $lbl=implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']]??$it['form']), $it['artikelnummer']??''])); $m[$lbl]=(int)$it['id']; } return $m; })($items,$FORMLBL), JSON_UNESCAPED_UNICODE) ?>;
 function zsync(row){ var t=row.querySelector('.zitem-txt'), h=row.querySelector('.zitem'); if(!t||!h) return; var id=ZMAP[(t.value||'').trim()]; h.value = id ? id : ''; }
 function nf(x, d){ return x.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d}); }
-function betragEinheit(mg, einheit){ return einheit === 'µg' ? nf(mg*1000,1)+' µg' : nf(mg,1)+' mg'; }
+function betragEinheit(mg, einheit, anzeige, ie_mg){
+  var lbl = (anzeige && anzeige!=='') ? anzeige : einheit;
+  var s = einheit === 'µg' ? nf(mg*1000,1)+' '+lbl : nf(mg,1)+' '+lbl;
+  if (ie_mg && ie_mg > 0) s += ' ('+nf(mg/ie_mg,0)+' I.E.)';   // zusätzlich I.E. (Vitamin D/A/E …)
+  return s;
+}
 function nrvProzent(mg, nrv, einheit){
   if (nrv === null || nrv === undefined) return '';
   var nrvMg = einheit === 'µg' ? parseFloat(nrv)/1000 : parseFloat(nrv);
@@ -333,14 +342,14 @@ function recalc(){
     // Etikett-Zeile: Inhaltsstoff
     etikett += '<tr><td><strong>'+it.name+'</strong></td><td class="bx-num">'+nf(mg,0)+' mg</td><td></td></tr>';
     (it.wirkstoffe||[]).forEach(function(w){
-      if (w.gehalt === null || w.gehalt === undefined || w.gehalt === '') return;
-      var mgN = mg * parseFloat(w.gehalt) / 100;
+      if (!w.basePerMg) return;
+      var mgN = mg * w.basePerMg;   // mg Nährstoff = mg Rohstoff × (mg Nährstoff je mg Rohstoff)
       // „– davon"-Zeile
       etikett += '<tr><td style="padding-left:28px;color:var(--muted)">– davon '+w.name+'</td>'
-               + '<td class="bx-num">'+betragEinheit(mgN, w.einheit)+'</td>'
+               + '<td class="bx-num">'+betragEinheit(mgN, w.einheit, w.anzeige, w.ie_mg)+'</td>'
                + '<td class="bx-num">'+(nrvProzent(mgN, w.nrv, w.einheit) || '<span class="muted">–</span>')+'</td></tr>';
       // Summe je Nährstoff
-      if (!nutr[w.name]) { nutr[w.name] = {mg:0, nrv:w.nrv, einheit:w.einheit}; order.push(w.name); }
+      if (!nutr[w.name]) { nutr[w.name] = {mg:0, nrv:w.nrv, einheit:w.einheit, anzeige:w.anzeige, ie_mg:w.ie_mg}; order.push(w.name); }
       nutr[w.name].mg += mgN;
     });
   });
@@ -363,7 +372,7 @@ function recalc(){
   tb.innerHTML = order.length ? order.map(function(name){
     var n = nutr[name];
     var pct = nrvProzent(n.mg, n.nrv, n.einheit) || '<span class="muted">keine NRV</span>';
-    return '<tr><td>'+name+'</td><td class="bx-num">'+betragEinheit(n.mg, n.einheit)+'</td><td class="bx-num">'+pct+'</td></tr>';
+    return '<tr><td>'+name+'</td><td class="bx-num">'+betragEinheit(n.mg, n.einheit, n.anzeige, n.ie_mg)+'</td><td class="bx-num">'+pct+'</td></tr>';
   }).join('') : '<tr><td colspan="3" class="muted">Zutaten wählen …</td></tr>';
 }
 (function(){

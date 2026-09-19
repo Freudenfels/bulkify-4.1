@@ -23,4 +23,6 @@
 
 **Wichtig:** Mengen gelten **pro Einheit** (Kapsel/Portion) – der Kunde bestimmt die Einnahme/Tag selbst.
 
-**Grenzen aktuell:** Wirkstoffe ohne Gehalt-% (z. B. IE-basiertes D3) fließen noch nicht in die mg-Rechnung ein; flüssige EK-Kosten werden über die Dichte angenähert.
+**I.E./Einheiten-Formen:** Rohstoffe, deren Wirkstärke in **Internationalen Einheiten** angegeben ist (z. B. Vitamin D3 100.000 I.E./g), fließen jetzt korrekt in die Deklaration ein. Am Rohstoff wählt man die Gehalt-Einheit `I.E./g` (bzw. `I.E./kg`), am Nährstoff steht der Umrechnungsfaktor `ie_mg` (mg je 1 I.E.). Die zentrale Funktion `wirkstoff_mg_je_mg()` normalisiert jeden Gehalt (%, mg/g, µg/g, I.E./g, I.E./kg) auf mg Nährstoff je mg Rohstoff; die Deklaration zeigt zusätzlich die I.E. und – wo hinterlegt – die Etiketteinheit (µg RE, mg α-TE, mg NE …).
+
+**Grenzen aktuell:** Vitamin E: der I.E.-Faktor unterscheidet sich zwischen natürlicher und synthetischer Form – Standard ist die natürliche (0,67 mg/I.E.), synthetisch am Nährstoff überschreiben. Flüssige EK-Kosten werden über die Dichte angenähert.

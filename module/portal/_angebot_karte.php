@@ -58,7 +58,7 @@ if ($a['status'] === 'bestaetigt') {
     <?php if ($inf['nutr']): ?>
     <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table">
       <thead><tr><th>Nährstoff</th><th class="bx-num">je Einheit</th><th class="bx-num">% NRV</th></tr></thead>
-      <tbody><?php foreach ($inf['nutr'] as $n): $betr = $n['einheit']==='µg' ? $mg($n['mg']*1000).' µg' : $mg($n['mg']).' mg'; $pct='–'; if($n['nrv']!==null&&$n['nrv']!==''){ $nrvMg=$n['einheit']==='µg'?(float)$n['nrv']/1000:(float)$n['nrv']; if($nrvMg>0) $pct=number_format($n['mg']/$nrvMg*100,0,',','.').' %'; } ?><tr><td><?= h($n['name']) ?></td><td class="bx-num"><?= $betr ?></td><td class="bx-num"><?= $pct ?></td></tr><?php endforeach; ?></tbody>
+      <tbody><?php foreach ($inf['nutr'] as $n): $lbl = ($n['anzeige']??'')!=='' ? $n['anzeige'] : $n['einheit']; $betr = $n['einheit']==='µg' ? $mg($n['mg']*1000).' '.$lbl : $mg($n['mg']).' '.$lbl; if(($n['ie_mg']??null)!==null && (float)$n['ie_mg']>0) $betr .= ' ('.$mg($n['mg']/(float)$n['ie_mg']).' I.E.)'; $pct='–'; if($n['nrv']!==null&&$n['nrv']!==''){ $nrvMg=$n['einheit']==='µg'?(float)$n['nrv']/1000:(float)$n['nrv']; if($nrvMg>0) $pct=number_format($n['mg']/$nrvMg*100,0,',','.').' %'; } ?><tr><td><?= h($n['name']) ?></td><td class="bx-num"><?= $betr ?></td><td class="bx-num"><?= $pct ?></td></tr><?php endforeach; ?></tbody>
     </table></div>
     <?php endif; ?>
   </details>

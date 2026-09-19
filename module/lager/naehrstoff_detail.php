@@ -37,12 +37,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $nrv = $f('nrv_wert') === '' ? null : $f('nrv_wert');
         $ist = isset($_POST['ist_nrv']) ? 1 : 0;
+        $ieMg = str_replace(',', '.', $f('ie_mg')); $ieMg = $ieMg === '' ? null : $ieMg;
+        $anz  = $f('einheit_anzeige') === '' ? null : $f('einheit_anzeige');
         if ($neu) {
-            q("INSERT INTO naehrstoff (name,kategorie,nrv_wert,einheit,ist_nrv) VALUES (?,?,?,?,?)",
-              [$f('name'),$f('kategorie'),$nrv,$f('einheit'),$ist]);
+            q("INSERT INTO naehrstoff (name,kategorie,nrv_wert,einheit,ist_nrv,ie_mg,einheit_anzeige) VALUES (?,?,?,?,?,?,?)",
+              [$f('name'),$f('kategorie'),$nrv,$f('einheit'),$ist,$ieMg,$anz]);
         } else {
-            q("UPDATE naehrstoff SET name=?,kategorie=?,nrv_wert=?,einheit=?,ist_nrv=? WHERE id=?",
-              [$f('name'),$f('kategorie'),$nrv,$f('einheit'),$ist,(int)$id]);
+            q("UPDATE naehrstoff SET name=?,kategorie=?,nrv_wert=?,einheit=?,ist_nrv=?,ie_mg=?,einheit_anzeige=? WHERE id=?",
+              [$f('name'),$f('kategorie'),$nrv,$f('einheit'),$ist,$ieMg,$anz,(int)$id]);
         }
         header('Location: ?p=naehrstoffe'); exit;
     }
@@ -71,6 +73,8 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
         <?php foreach (['mg'=>'mg','µg'=>'µg'] as $k=>$lbl): ?><option value="<?= $k ?>" <?= ($n['einheit']??'')===$k?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
       </select>
     </div>
+    <div class="bx-field"><label>I.E.-Umrechnung (mg je 1 I.E.) <?= bx_hint('Nur für Nährstoffe, die in Internationalen Einheiten geliefert/deklariert werden (Vitamin D/A/E). Beispiel Vitamin D: 1 I.E. = 0,025 µg = 0,000025 mg. Leer = keine I.E.-Umrechnung.') ?></label><input type="text" name="ie_mg" value="<?= $v('ie_mg') ?>" placeholder="z. B. 0,000025"></div>
+    <div class="bx-field"><label>Anzeige-Einheit (Etikett, optional) <?= bx_hint('Abweichende Etiketteinheit für die Deklaration, z. B. „µg RE" (Vitamin A), „mg α-TE" (Vitamin E), „mg NE" (Niacin). Leer = wie oben (mg/µg). Ändert nur die Anzeige, nicht die Rechnung.') ?></label><input type="text" name="einheit_anzeige" value="<?= $v('einheit_anzeige') ?>" placeholder="z. B. µg RE"></div>
     <div class="bx-field"><label>Offizieller NRV-Nährstoff</label>
       <div class="bx-check" style="padding-top:8px">
         <input type="checkbox" name="ist_nrv" id="f_ist" value="1" <?= (int)($n['ist_nrv']??0)===1?'checked':'' ?>>

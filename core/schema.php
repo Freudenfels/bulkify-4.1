@@ -256,6 +256,9 @@ function init_schema(): void {
         sort INT NOT NULL DEFAULT 0,
         UNIQUE KEY uniq_name (name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Zukunftssichere Einheiten-Formen (I.E./RE/α-TE/NE …):
+    ensure_column('naehrstoff', 'ie_mg', "DECIMAL(18,10) NULL");        // mg dieses Nährstoffs je 1 I.E. (Umrechnung I.E.->Masse); NULL = keine I.E.-Umrechnung
+    ensure_column('naehrstoff', 'einheit_anzeige', "VARCHAR(24) NULL"); // Anzeige-/Etiketteinheit (z. B. 'µg RE','mg α-TE','mg NE'); NULL = wie einheit
 
     // Health Claims (zugelassene Angaben, EU-VO 432/2012) je Naehrstoff. Wortlaut MUSS der offiziellen
     // Liste entsprechen; das Team pflegt/importiert die Texte. Fuers PIB werden sie je enthaltenem Naehrstoff gezeigt.
@@ -308,11 +311,17 @@ function init_schema(): void {
         id INT AUTO_INCREMENT PRIMARY KEY,
         item_id INT NOT NULL,
         naehrstoff_id INT NOT NULL,
-        gehalt_prozent DECIMAL(6,2) NULL,                 -- Gehalt dieses Wirkstoffs im Rohstoff (z. B. 95)
+        gehalt_prozent DECIMAL(6,2) NULL,                 -- Alt: Gehalt in % (m/m). Bleibt für Rückwärtskompat.; neuer Wert steht in gehalt_wert
         sort INT NOT NULL DEFAULT 0,
         KEY idx_item (item_id),
         KEY idx_naehrstoff (naehrstoff_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Gehalt zukunftssicher: Wert + Einheit statt starrem %. Einheiten: prozent (% m/m) | ie_g (I.E./g) | ie_kg (I.E./kg) | mg_g (mg/g) | ug_g (µg/g)
+    ensure_column('item_wirkstoff', 'gehalt_wert', "DECIMAL(18,6) NULL");
+    ensure_column('item_wirkstoff', 'gehalt_einheit', "VARCHAR(12) NOT NULL DEFAULT 'prozent'");
+    // Altbestand: bisheriger %-Gehalt einmalig in den generischen Wert übernehmen (idempotent)
+    q("UPDATE item_wirkstoff SET gehalt_wert = gehalt_prozent WHERE gehalt_wert IS NULL AND gehalt_prozent IS NOT NULL");
+    seed_naehrstoff_ie_faktoren();
 
     // rezeptur_anfrage: Kundenwunsch für eine Rezeptur (Laiensprache) -> von uns geprüft und in eine Rezeptur übersetzt.
     $pdo->exec("CREATE TABLE IF NOT EXISTS rezeptur_anfrage (
@@ -5503,6 +5512,42 @@ function seed_naehrstoff_if_empty(): void {
         q("INSERT INTO naehrstoff (name,kategorie,nrv_wert,einheit,ist_nrv,sort) VALUES (?,?,?,?,?,?)",
           [$n[0],$n[1],$n[2],$n[3],$n[4],$i++]);
     }
+    seed_naehrstoff_ie_faktoren();
+}
+
+// Standard-Einheitenformen stampfen: I.E.->Masse (mg je 1 I.E.) + Anzeige-/Etiketteinheit (RE/α-TE/NE …).
+// Idempotent, nur wo noch nichts hinterlegt ist -> Team-Overrides im Nährstoff-Editor bleiben erhalten.
+function seed_naehrstoff_ie_faktoren(): void {
+    if (!column_exists('naehrstoff', 'ie_mg')) return;   // vor der Migration nichts tun
+    // name-Präfix => [ie_mg (mg je I.E.) | null, einheit_anzeige | null]
+    $f = [
+        'Vitamin A' => [0.0003,   'µg RE'],    // 1 I.E. = 0,3 µg Retinol-Äquivalent
+        'Vitamin D' => [0.000025, null],       // 1 I.E. = 0,025 µg (Anzeige bleibt µg, I.E. zusätzlich)
+        'Vitamin E' => [0.67,     'mg α-TE'],  // 1 I.E. = 0,67 mg (natürl. RRR-α-Tocopherol); synth. abweichend -> ggf. am Nährstoff überschreiben
+        'Niacin'    => [null,     'mg NE'],    // Niacin-Äquivalent
+    ];
+    foreach ($f as $praefix => $vals) {
+        [$ie, $anz] = $vals;
+        if ($ie  !== null) q("UPDATE naehrstoff SET ie_mg=? WHERE name LIKE ? AND ie_mg IS NULL", [$ie, $praefix . '%']);
+        if ($anz !== null) q("UPDATE naehrstoff SET einheit_anzeige=? WHERE name LIKE ? AND (einheit_anzeige IS NULL OR einheit_anzeige='')", [$anz, $praefix . '%']);
+    }
+}
+
+// Zentrale Umrechnung: mg Nährstoff je 1 mg Rohstoff – aus Gehalt-Wert + dessen Einheit (+ I.E.-Faktor des Nährstoffs).
+// EINZIGE Wahrheit für die Deklaration; überall (PIB, Portal, Rezeptur-/Produkt-Live-Rechnung) genutzt.
+//   prozent = % (m/m) · mg_g = mg je g · ug_g = µg je g · ie_g = I.E. je g · ie_kg = I.E. je kg
+function wirkstoff_mg_je_mg($wert, ?string $einheit, $ie_mg): float {
+    if ($wert === null || $wert === '') return 0.0;
+    $w  = (float) $wert;
+    $ie = ($ie_mg === null || $ie_mg === '') ? null : (float) $ie_mg;
+    switch ($einheit ?: 'prozent') {
+        case 'prozent': return $w / 100;                              // 95 % -> 0,95 mg/mg
+        case 'mg_g':    return $w / 1000;                             // mg je g -> mg/mg
+        case 'ug_g':    return $w / 1e6;                              // µg je g -> mg/mg
+        case 'ie_g':    return $ie !== null ? $w * $ie / 1000 : 0.0;  // I.E. je g -> mg/mg (über I.E.-Faktor)
+        case 'ie_kg':   return $ie !== null ? $w * $ie / 1e6  : 0.0;  // I.E. je kg
+    }
+    return 0.0;
 }
 
 // Nährstoff per Name finden – oder neu anlegen (für „neuen Wirkstoff eintippen")

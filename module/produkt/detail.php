@@ -152,11 +152,12 @@ foreach ($rezepte as $rz) {
             $perMg = $pb === 'kg' ? $ek/1e6 : ($pb === 'g' ? $ek/1e3 : ($pb === 'L' && $it['dichte'] ? ($ek/(1000*(float)$it['dichte']))/1e3 : 0));
             $cost += $mg * $perMg;
         }
-        if ($z['item_id']) foreach (all("SELECT n.name,n.nrv_wert,n.einheit,iw.gehalt_prozent
+        if ($z['item_id']) foreach (all("SELECT n.name,n.nrv_wert,n.einheit,n.ie_mg,n.einheit_anzeige,
+                 COALESCE(iw.gehalt_wert, iw.gehalt_prozent) AS gehalt_wert, COALESCE(iw.gehalt_einheit,'prozent') AS gehalt_einheit
                  FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id WHERE iw.item_id=?", [$z['item_id']]) as $w) {
-            if ($w['gehalt_prozent'] === null) continue;
-            $mgN = $mg * (float)$w['gehalt_prozent'] / 100;
-            if (!isset($nutr[$w['name']])) $nutr[$w['name']] = ['name'=>$w['name'],'mg'=>0.0,'nrv'=>$w['nrv_wert'],'einheit'=>$w['einheit']];
+            if ($w['gehalt_wert'] === null) continue;
+            $mgN = $mg * wirkstoff_mg_je_mg($w['gehalt_wert'], $w['gehalt_einheit'], $w['ie_mg']);
+            if (!isset($nutr[$w['name']])) $nutr[$w['name']] = ['name'=>$w['name'],'mg'=>0.0,'nrv'=>$w['nrv_wert'],'einheit'=>$w['einheit'],'ie_mg'=>$w['ie_mg']!==null?(float)$w['ie_mg']:null,'anzeige'=>$w['einheit_anzeige']];
             $nutr[$w['name']]['mg'] += $mgN;
         }
     }
@@ -514,7 +515,9 @@ function recalc(){
   if (!rz.nutrients.length){ tb.innerHTML='<tr><td colspan="3" class="muted">Diese Rezeptur hat keine deklarierbaren Wirkstoffe.</td></tr>'; return; }
   tb.innerHTML = rz.nutrients.map(function(n){
     var mgDay = n.mg * intake;
-    var betrag = n.einheit==='µg' ? nf(mgDay*1000,1)+' µg' : nf(mgDay,1)+' mg';
+    var lbl = (n.anzeige && n.anzeige!=='') ? n.anzeige : n.einheit;
+    var betrag = n.einheit==='µg' ? nf(mgDay*1000,1)+' '+lbl : nf(mgDay,1)+' '+lbl;
+    if (n.ie_mg && n.ie_mg>0) betrag += ' ('+nf(mgDay/n.ie_mg,0)+' I.E.)';
     var pct = '<span class="muted">keine NRV</span>';
     if (n.nrv!==null && n.nrv!==undefined) { var nrvMg = n.einheit==='µg'?parseFloat(n.nrv)/1000:parseFloat(n.nrv); if (nrvMg>0) pct = nf(mgDay/nrvMg*100,0)+' %'; }
     return '<tr><td>'+n.name+'</td><td class="bx-num">'+betrag+'</td><td class="bx-num">'+pct+'</td></tr>';

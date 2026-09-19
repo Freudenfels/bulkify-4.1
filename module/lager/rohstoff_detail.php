@@ -237,12 +237,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
         }
         // Wirkstoffe synchronisieren (mehrere möglich; neuer Name -> Nährstoff wird angelegt)
         q("DELETE FROM item_wirkstoff WHERE item_id=?", [(int)$id]);
-        $wn = $_POST['wirk_name'] ?? []; $wg = $_POST['wirk_gehalt'] ?? [];
+        $wn = $_POST['wirk_name'] ?? []; $wg = $_POST['wirk_gehalt'] ?? []; $we = $_POST['wirk_einheit'] ?? [];
+        $einhOk = ['prozent','ie_g','ie_kg','mg_g','ug_g'];
         foreach ($wn as $i => $nm) {
             $nm = trim($nm); if ($nm === '') continue;
             $nid = naehrstoff_id_by_name($nm);
-            $g = trim($wg[$i] ?? ''); $g = $g === '' ? null : $g;
-            if ($nid) q("INSERT INTO item_wirkstoff (item_id,naehrstoff_id,gehalt_prozent,sort) VALUES (?,?,?,?)", [(int)$id, $nid, $g, $i]);
+            $g = str_replace(',', '.', trim($wg[$i] ?? '')); $g = $g === '' ? null : $g;
+            $eh = in_array($we[$i] ?? 'prozent', $einhOk, true) ? $we[$i] : 'prozent';
+            // gehalt_prozent nur bei % füllen (Rückwärtskompat.); der generische Wert steht immer in gehalt_wert
+            $gp = ($eh === 'prozent') ? $g : null;
+            if ($nid) q("INSERT INTO item_wirkstoff (item_id,naehrstoff_id,gehalt_prozent,gehalt_wert,gehalt_einheit,sort) VALUES (?,?,?,?,?,?)",
+                        [(int)$id, $nid, $gp, $g, $eh, $i]);
         }
         // Kennwerte (Parameter · Wert) synchronisieren
         q("DELETE FROM item_kennwert WHERE item_id=?", [(int)$id]);
@@ -526,11 +531,24 @@ if (!$neu) {
   <section data-panel="quali" hidden>
     <div class="bx-panel">
       <h2>Wirkstoffe <?= bx_hint('was im Rohstoff steckt – Basis für die Deklaration (davon … mg, % NRV). Auswahl aus der Nährstoffliste oder neuen Namen eintippen. Mehrere möglich.') ?></h2>
+      <?php
+        // Gehalt-Einheiten (zukunftssicher): % (m/m) + potenzbasierte Formen (I.E./g usw.) für Vitamine.
+        $GEINH = ['prozent'=>'% (m/m)','ie_g'=>'I.E./g','ie_kg'=>'I.E./kg','mg_g'=>'mg/g','ug_g'=>'µg/g'];
+        $einhSelect = function($sel) use ($GEINH) {
+            $o = '';
+            foreach ($GEINH as $k=>$lbl) $o .= '<option value="'.$k.'"'.($sel===$k?' selected':'').'>'.$lbl.'</option>';
+            return $o;
+        };
+      ?>
       <div id="wirkrows">
-        <?php $wrows = $wirkstoffe ?: [['n_name'=>'','gehalt_prozent'=>'']]; foreach ($wrows as $w): ?>
+        <?php $wrows = $wirkstoffe ?: [['n_name'=>'','gehalt_wert'=>'','gehalt_einheit'=>'prozent']];
+              foreach ($wrows as $w):
+                $gwert = $w['gehalt_wert'] ?? ($w['gehalt_prozent'] ?? '');
+                $geh   = $w['gehalt_einheit'] ?? 'prozent'; ?>
         <div class="bx-row wirkrow" style="flex-wrap:nowrap;margin-bottom:8px">
           <input type="text" name="wirk_name[]" value="<?= h($w['n_name']) ?>" list="naehrstoffliste" placeholder="Wirkstoff, z. B. Magnesium" style="flex:1">
-          <input type="number" step="0.01" name="wirk_gehalt[]" value="<?= h($w['gehalt_prozent']) ?>" placeholder="Gehalt %" style="width:130px">
+          <input type="number" step="any" name="wirk_gehalt[]" value="<?= h((string)$gwert) ?>" placeholder="Gehalt" style="width:110px">
+          <select name="wirk_einheit[]" style="width:110px"><?= $einhSelect($geh) ?></select>
           <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.wirkrow').remove()">entfernen</button>
         </div>
         <?php endforeach; ?>
@@ -539,7 +557,7 @@ if (!$neu) {
       <datalist id="naehrstoffliste">
         <?php foreach ($naehrstoffe as $n): ?><option value="<?= h($n['name']) ?>"><?php endforeach; ?>
       </datalist>
-      <div class="muted" style="margin-top:8px">Gehalt = Anteil dieses Wirkstoffs im Rohstoff (z. B. Kurkuma-Extrakt = 95 % Curcumin, Magnesiumcitrat = 16 % Magnesium).</div>
+      <div class="muted" style="margin-top:8px">Gehalt = Anteil bzw. Wirkstärke im Rohstoff. Meist <strong>% (m/m)</strong> (z. B. Magnesiumcitrat = 16 % Magnesium). Bei Vitaminen, die in Internationalen Einheiten geliefert werden, stattdessen <strong>I.E./g</strong> wählen (z. B. Vitamin D3 100.000 I.E./g) – das System rechnet die I.E. über den am Nährstoff hinterlegten Faktor automatisch in µg/mg für die Deklaration um.</div>
     </div>
 
     <div class="bx-panel"><div class="bx-grid">
@@ -982,7 +1000,8 @@ if (!$neu) {
     row.className = 'bx-row wirkrow';
     row.style.cssText = 'flex-wrap:nowrap;margin-bottom:8px';
     row.innerHTML = '<input type="text" name="wirk_name[]" list="naehrstoffliste" placeholder="Wirkstoff, z. B. Magnesium" style="flex:1">'
-      + '<input type="number" step="0.01" name="wirk_gehalt[]" placeholder="Gehalt %" style="width:130px">'
+      + '<input type="number" step="any" name="wirk_gehalt[]" placeholder="Gehalt" style="width:110px">'
+      + '<select name="wirk_einheit[]" style="width:110px"><option value="prozent">% (m/m)</option><option value="ie_g">I.E./g</option><option value="ie_kg">I.E./kg</option><option value="mg_g">mg/g</option><option value="ug_g">µg/g</option></select>'
       + '<button type="button" class="btn btn-ghost btn-sm">entfernen</button>';
     row.querySelector('button').addEventListener('click', function(){ row.remove(); });
     document.getElementById('wirkrows').appendChild(row);

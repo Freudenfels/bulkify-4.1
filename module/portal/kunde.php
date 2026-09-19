@@ -611,12 +611,14 @@ $kid = (int)$k['id'];
 if (!function_exists('pt_naehr')) {
     function pt_naehr(int $rid): array {
         $n = [];
-        foreach (all("SELECT z.menge_mg, iw.gehalt_prozent, na.name, na.nrv_wert, na.einheit
+        foreach (all("SELECT z.menge_mg, COALESCE(iw.gehalt_wert, iw.gehalt_prozent) AS gehalt_wert,
+                             COALESCE(iw.gehalt_einheit,'prozent') AS gehalt_einheit,
+                             na.name, na.nrv_wert, na.einheit, na.ie_mg, na.einheit_anzeige
                       FROM rezeptur_zutat z JOIN item_wirkstoff iw ON iw.item_id=z.item_id
                       JOIN naehrstoff na ON na.id=iw.naehrstoff_id
-                      WHERE z.rezeptur_id=? AND iw.gehalt_prozent IS NOT NULL", [$rid]) as $w) {
-            $mgN = (float)$w['menge_mg'] * (float)$w['gehalt_prozent'] / 100;
-            if (!isset($n[$w['name']])) $n[$w['name']] = ['name'=>$w['name'], 'mg'=>0.0, 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit']];
+                      WHERE z.rezeptur_id=? AND COALESCE(iw.gehalt_wert, iw.gehalt_prozent) IS NOT NULL", [$rid]) as $w) {
+            $mgN = (float)$w['menge_mg'] * wirkstoff_mg_je_mg($w['gehalt_wert'], $w['gehalt_einheit'], $w['ie_mg']);
+            if (!isset($n[$w['name']])) $n[$w['name']] = ['name'=>$w['name'], 'mg'=>0.0, 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit'], 'ie_mg'=>$w['ie_mg'], 'anzeige'=>$w['einheit_anzeige']];
             $n[$w['name']]['mg'] += $mgN;
         }
         return array_values($n);
@@ -673,13 +675,15 @@ if ($rezIds) foreach (all("SELECT rezeptur_id, bezeichnung, menge_mg FROM rezept
     $portionMap[$rz] = ($portionMap[$rz] ?? 0) + (float)$z['menge_mg'];
 }
 $nutrMap = [];   // rezeptur_id => Naehrwerte (gleiche Aggregation wie pt_naehr, gebuendelt)
-if ($rezIds) foreach (all("SELECT z.rezeptur_id, z.menge_mg, iw.gehalt_prozent, na.name, na.nrv_wert, na.einheit
+if ($rezIds) foreach (all("SELECT z.rezeptur_id, z.menge_mg, COALESCE(iw.gehalt_wert, iw.gehalt_prozent) AS gehalt_wert,
+                                  COALESCE(iw.gehalt_einheit,'prozent') AS gehalt_einheit,
+                                  na.name, na.nrv_wert, na.einheit, na.ie_mg, na.einheit_anzeige
                            FROM rezeptur_zutat z JOIN item_wirkstoff iw ON iw.item_id=z.item_id
                            JOIN naehrstoff na ON na.id=iw.naehrstoff_id
-                           WHERE z.rezeptur_id IN (" . $inList($rezIds) . ") AND iw.gehalt_prozent IS NOT NULL") as $w) {
+                           WHERE z.rezeptur_id IN (" . $inList($rezIds) . ") AND COALESCE(iw.gehalt_wert, iw.gehalt_prozent) IS NOT NULL") as $w) {
     $rz = (int)$w['rezeptur_id'];
-    $mgN = (float)$w['menge_mg'] * (float)$w['gehalt_prozent'] / 100;
-    if (!isset($nutrMap[$rz][$w['name']])) $nutrMap[$rz][$w['name']] = ['name'=>$w['name'], 'mg'=>0.0, 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit']];
+    $mgN = (float)$w['menge_mg'] * wirkstoff_mg_je_mg($w['gehalt_wert'], $w['gehalt_einheit'], $w['ie_mg']);
+    if (!isset($nutrMap[$rz][$w['name']])) $nutrMap[$rz][$w['name']] = ['name'=>$w['name'], 'mg'=>0.0, 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit'], 'ie_mg'=>$w['ie_mg'], 'anzeige'=>$w['einheit_anzeige']];
     $nutrMap[$rz][$w['name']]['mg'] += $mgN;
 }
 if ($angIds) foreach (all("SELECT * FROM angebot_staffel WHERE angebot_id IN (" . $inList($angIds) . ") ORDER BY sort, id") as $s) {
@@ -890,12 +894,14 @@ $abPreis = fn($pid) => (isset($abMap[(int)$pid]) && isset($preisFrei[(int)$pid])
 if (!function_exists('pt_naehr')) {
     function pt_naehr(int $rid): array {
         $n = [];
-        foreach (all("SELECT z.menge_mg, iw.gehalt_prozent, na.name, na.nrv_wert, na.einheit
+        foreach (all("SELECT z.menge_mg, COALESCE(iw.gehalt_wert, iw.gehalt_prozent) AS gehalt_wert,
+                             COALESCE(iw.gehalt_einheit,'prozent') AS gehalt_einheit,
+                             na.name, na.nrv_wert, na.einheit, na.ie_mg, na.einheit_anzeige
                       FROM rezeptur_zutat z JOIN item_wirkstoff iw ON iw.item_id=z.item_id
                       JOIN naehrstoff na ON na.id=iw.naehrstoff_id
-                      WHERE z.rezeptur_id=? AND iw.gehalt_prozent IS NOT NULL", [$rid]) as $w) {
-            $mgN = (float)$w['menge_mg'] * (float)$w['gehalt_prozent'] / 100;
-            if (!isset($n[$w['name']])) $n[$w['name']] = ['name'=>$w['name'], 'mg'=>0.0, 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit']];
+                      WHERE z.rezeptur_id=? AND COALESCE(iw.gehalt_wert, iw.gehalt_prozent) IS NOT NULL", [$rid]) as $w) {
+            $mgN = (float)$w['menge_mg'] * wirkstoff_mg_je_mg($w['gehalt_wert'], $w['gehalt_einheit'], $w['ie_mg']);
+            if (!isset($n[$w['name']])) $n[$w['name']] = ['name'=>$w['name'], 'mg'=>0.0, 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit'], 'ie_mg'=>$w['ie_mg'], 'anzeige'=>$w['einheit_anzeige']];
             $n[$w['name']]['mg'] += $mgN;
         }
         return array_values($n);

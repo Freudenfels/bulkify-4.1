@@ -17,7 +17,7 @@
   - **Pulver/Granulat/Stick** → Füllgewicht (g) gegen max. Füllgewicht der Verpackung.
   - **Tablette** → Tablettengewicht (Wirkstoffe + Presshilfsstoffe, % aus den Einstellungen) × Stückzahl gegen max. Füllgewicht.
   - **Flüssig** → Füllvolumen (ml, = Einheiten) gegen Volumen der Flasche.
-- **Nährwerte pro Tagesdosis:** je Nährstoff die Menge × Verzehr/Tag und **% NRV** (z. B. bei 2 Kapseln/Tag: Magnesium 240 mg = 64 %).
+- **Nährwerte pro Tagesdosis:** je Nährstoff die Menge × Verzehr/Tag und **% NRV** (z. B. bei 2 Kapseln/Tag: Magnesium 240 mg = 64 %). I.E.-basierte Wirkstoffe (Vitamin D/A/E) werden über `wirkstoff_mg_je_mg()` mitgerechnet und zusätzlich in **I.E.** ausgewiesen; abweichende Etiketteinheiten (µg RE, mg α-TE …) erscheinen automatisch.
 
 **Katalog / Exklusiv:** Ein Produkt liegt standardmäßig im **gemeinsamen Katalog** (Häkchen `exklusiv` aus) und gehört niemandem. Exklusiv = nur für den gewählten Kunden sichtbar. Das Feld „Kunde" gilt **nur bei exklusiv** als Besitzer – ohne Häkchen wird `kunde_id` beim Speichern auf NULL gesetzt, sonst stünde in der Produktliste ein Kundenname bei einem Produkt, das jeder Kunde bestellen kann. Kundenspezifisch ist der **Preis** (Angebot + `kunden.rabatt_marge`), nicht das Produkt.
 
