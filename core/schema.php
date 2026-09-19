@@ -4167,6 +4167,26 @@ function produktion_schritte_regenerieren(int $pa_id, bool $zukauf): bool {
     return true;
 }
 
+// Lagerproduktion: einen Produktionsauftrag OHNE Kunde/Auftrag anlegen (Vorrats-/Lagerproduktion).
+// Gibt die neue pa-id zurück (0 bei ungültigem Produkt). Menge = Packungen; Material skaliert über
+// die Einheiten je Packung des Produkts – genau wie bei einem Kundenauftrag.
+function produktionsauftrag_lager_erstellen(int $produkt_id, int $menge, string $art = 'eigen', int $prio = 2): int {
+    $produkt_id = (int)$produkt_id;
+    if ($produkt_id <= 0 || !scalar("SELECT id FROM produkt WHERE id=?", [$produkt_id])) return 0;
+    $art   = $art === 'fremd' ? 'fremd' : 'eigen';
+    $menge = max(0, $menge);
+    $prio  = max(1, min(3, $prio));
+    $form  = (string) (scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]) ?: 'kapsel');
+    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,produktionsart,status,prio)
+       VALUES (?,?,?,?,?,?,?,?)",
+      [naechste_nummer('PR'), null, null, $produkt_id, $menge, $art, 'offen', $prio]);
+    $paid = (int) insert_id();
+    foreach (produktionsschritte_fuer($form, $art === 'fremd') as $i => $station)
+        q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
+    bedarf_bump();
+    return $paid;
+}
+
 // Produktionsart eines Auftrags umstellen (eigen ↔ fremd) inkl. passender Schritte.
 // Gibt false zurück, wenn schon ein Schritt erledigt ist (dann nicht mehr umstellbar).
 function produktionsauftrag_art_setzen(int $pa_id, string $art): bool {

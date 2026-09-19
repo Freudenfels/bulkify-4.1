@@ -21,6 +21,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'art_b
     header('Location: ?p=produktion&tab=' . $tab . ($q !== '' ? '&q=' . urlencode($q) : '')); exit;
 }
 
+// Neuen Produktionsauftrag OHNE Kundenbezug anlegen (Lager-/Vorratsproduktion).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'neu') {
+    $pid   = (int)($_POST['produkt_id'] ?? 0);
+    $menge = (int) str_replace(['.', ' '], '', (string)($_POST['menge'] ?? '0'));
+    $art   = ($_POST['produktionsart'] ?? 'eigen') === 'fremd' ? 'fremd' : 'eigen';
+    $prio  = max(1, min(3, (int)($_POST['prio'] ?? 2)));
+    if ($pid <= 0) { $_SESSION['prod_flash'] = 'Bitte ein Produkt wählen.'; header('Location: ?p=produktion&neu=1'); exit; }
+    $paid = produktionsauftrag_lager_erstellen($pid, $menge, $art, $prio);
+    if ($paid) { header('Location: ?p=produktionsauftrag&id=' . $paid . '&ok=1'); exit; }
+    $_SESSION['prod_flash'] = 'Produktionsauftrag konnte nicht angelegt werden (Produkt ungültig).';
+    header('Location: ?p=produktion&neu=1'); exit;
+}
+
 // Alle Produktionsaufträge laden (inkl. Fortschritt + nächste Station), Bereitschaft je Auftrag bestimmen.
 $alle = all("SELECT pa.*, k.firma AS kunde_firma, COALESCE(NULLIF(p.name,''), a.produkt_bezeichnung) AS produkt_name,
              (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id) AS n_total,
@@ -144,10 +157,65 @@ $TABCOUNT = ['bereit' => $anzBereit, 'wartet' => $anzWartet, 'erledigt' => $anzE
 $sub = ['bereit' => 'produktionsbereite Aufträge (Material vollständig da)', 'wartet' => 'Aufträge, die auf Material warten', 'erledigt' => 'abgeschlossene Produktionsaufträge'];
 
 $flash = $_SESSION['prod_flash'] ?? null; unset($_SESSION['prod_flash']);
+$zeigeNeu = isset($_GET['neu']);
 render_header('produktion', 'Produktion');
-bx_head('Produktion', count($rows) . ' ' . $sub[$tab]);
+bx_head('Produktion', count($rows) . ' ' . $sub[$tab], bx_btn('+ Neuer Produktionsauftrag', '?p=produktion&neu=1', 'primary'));
 if ($flash) echo '<div class="bx-panel badge-ok" style="padding:8px 12px">' . h($flash) . '</div>';
+
+if ($zeigeNeu):
+    // Produkte für die Auswahl (tippbar mit Live-Filter). Mit Rezeptur zuerst (dort ist die Darreichungsform bekannt).
+    $produkteNeu = all("SELECT p.id, p.name, p.nummer, r.darreichungsform AS form
+                        FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                        ORDER BY (p.rezeptur_id IS NULL), p.name");
+    $DFORMN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 ?>
+<div class="bx-panel" style="margin-bottom:16px">
+  <h2 style="margin-top:0">Neuer Produktionsauftrag <span class="muted" style="font-weight:400;font-size:13px">ohne Kundenbezug – z. B. Lager-/Vorratsproduktion</span></h2>
+  <form method="post" class="bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap" data-busy="Lege an …">
+    <input type="hidden" name="aktion" value="neu">
+    <div class="bx-field" style="margin:0;flex:1 1 320px">
+      <label>Produkt</label>
+      <input type="text" class="prodpick-txt" list="prod_dl" autocomplete="off" placeholder="Produkt tippen … (Name oder Nummer)" style="width:100%">
+      <input type="hidden" name="produkt_id" class="prodpick-id">
+      <datalist id="prod_dl">
+        <?php foreach ($produkteNeu as $p): $lbl = trim($p['name'] . ($p['nummer'] ? ' · ' . $p['nummer'] : '') . (($p['form'] ?? '') ? ' · ' . ($DFORMN[$p['form']] ?? $p['form']) : '')); ?>
+          <option value="<?= h($lbl) ?>"></option>
+        <?php endforeach; ?>
+      </datalist>
+    </div>
+    <div class="bx-field" style="margin:0;width:150px"><label>Menge (Packungen)</label><input type="number" name="menge" min="1" step="1" value="1" style="width:100%"></div>
+    <div class="bx-field" style="margin:0;width:190px"><label>Produktionsart</label>
+      <select name="produktionsart" style="width:100%">
+        <option value="eigen" selected>Eigenproduktion</option>
+        <option value="fremd">Fremdproduktion (Zukauf)</option>
+      </select>
+    </div>
+    <div class="bx-field" style="margin:0;width:150px"><label>Priorität</label>
+      <select name="prio" style="width:100%">
+        <option value="2" selected>Normal</option>
+        <option value="1">Hoch</option>
+        <option value="3">Niedrig</option>
+      </select>
+    </div>
+    <div class="bx-row" style="gap:8px;margin:0">
+      <button class="btn btn-primary" type="submit">Anlegen</button>
+      <a class="btn btn-ghost" href="?p=produktion&tab=<?= h($tab) ?>">Abbrechen</a>
+    </div>
+  </form>
+  <div class="muted" style="font-size:12px;margin-top:8px">Menge = Anzahl Packungen; der Materialbedarf (Rohstoffe/Leerkapseln/Verpackung) skaliert automatisch über die Einheiten je Packung des Produkts. Kein Kunde, kein Auftrag – die Fertigware geht als eigener Lagerbestand ein.</div>
+  <script>
+  (function(){
+    var map = {};
+    <?php foreach ($produkteNeu as $p): $lbl = trim($p['name'] . ($p['nummer'] ? ' · ' . $p['nummer'] : '') . (($p['form'] ?? '') ? ' · ' . ($DFORMN[$p['form']] ?? $p['form']) : '')); ?>
+    map[<?= json_encode($lbl, JSON_UNESCAPED_UNICODE) ?>] = <?= (int)$p['id'] ?>;
+    <?php endforeach; ?>
+    var t = document.querySelector('.prodpick-txt'), h = document.querySelector('.prodpick-id');
+    function sync(){ h.value = map[(t.value||'').trim()] || ''; }
+    if (t){ t.addEventListener('input', sync); t.addEventListener('change', sync); t.focus(); }
+  })();
+  </script>
+</div>
+<?php endif; ?>
 <div class="settabs">
   <?php foreach ($TABS as $key => $lbl): ?>
     <a href="?p=produktion&tab=<?= $key ?>" class="<?= $tab===$key?'on':'' ?>"><?= h($lbl) ?><?= $TABCOUNT[$key] ? ' (' . $TABCOUNT[$key] . ')' : '' ?></a>

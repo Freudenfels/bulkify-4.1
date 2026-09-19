@@ -1,6 +1,9 @@
 # produktion/liste.php – Produktions-Liste
 
-**Zweck:** Übersicht aller Produktionsaufträge (PR-). Entstehen **automatisch** mit dem Auftrag – man legt sie nicht von Hand an.
+**Zweck:** Übersicht aller Produktionsaufträge (PR-). Entstehen normalerweise **automatisch** mit dem Auftrag; zusätzlich lassen sich jetzt **Produktionsaufträge ohne Kundenbezug** von Hand anlegen (Lager-/Vorratsproduktion).
+
+## Neuer Produktionsauftrag (Lagerproduktion)
+Button oben rechts **„+ Neuer Produktionsauftrag"** (`?p=produktion&neu=1`) blendet ein Formular ein: **Produkt** (tippbares Feld mit Live-Filter, Label „Name · Nummer · Form"; verstecktes `produkt_id`), **Menge (Packungen)**, **Produktionsart** (Eigen/Fremd, Standard Eigen), **Priorität**. `aktion=neu` legt über `produktionsauftrag_lager_erstellen()` (core/schema.php) einen PR **ohne Kunde/Auftrag** an (`kunde_id`/`auftrag_id` = NULL), erzeugt die passenden Stationen (`produktionsschritte_fuer` je Darreichungsform + Weg) und leitet zum PR-Detail. Der Materialbedarf skaliert wie bei Kundenaufträgen über die Einheiten je Packung des Produkts; die Kunde-Spalte zeigt „–". Die fertige Ware geht als eigener Lagerbestand ein.
 
 **Was passiert hier:**
 - Liest alle Produktionsaufträge inkl. Kunde, Produkt (Joins) und – per Unterabfrage – **Fortschritt** (erledigte / gesamte Stationen) und **nächste offene Station**.
