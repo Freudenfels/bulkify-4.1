@@ -201,100 +201,88 @@ if ($zeigeNeu):
 ?>
 <div class="bx-panel" style="margin-bottom:16px">
   <h2 style="margin-top:0">Neuer Produktionsauftrag <span class="muted" style="font-weight:400;font-size:13px">ohne Kundenbezug – z. B. Lager-/Vorratsproduktion</span></h2>
-  <div class="bx-row" style="gap:18px;margin-bottom:14px">
-    <label style="cursor:pointer"><input type="radio" name="modus_ui" value="produkt" checked> Fertiges Produkt (mit Verpackung)</label>
-    <label style="cursor:pointer"><input type="radio" name="modus_ui" value="bulk"> Nur Kapseln (Bulk, ohne Verpackung)</label>
+  <div class="bx-row" style="gap:24px;margin-bottom:var(--sp-4)">
+    <label style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;margin:0"><input type="radio" name="modus_ui" value="produkt" checked style="width:auto"> Fertiges Produkt (mit Verpackung)</label>
+    <label style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;margin:0"><input type="radio" name="modus_ui" value="bulk" style="width:auto"> Nur Kapseln (Bulk, ohne Verpackung)</label>
   </div>
-  <form method="post" class="bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap" data-busy="Lege an …">
+  <form method="post" class="bx-form" style="margin-bottom:0" data-busy="Lege an …">
     <input type="hidden" name="aktion" value="neu">
     <input type="hidden" name="modus" id="modusField" value="produkt">
-
-    <!-- Modus: Fertiges Produkt -->
-    <div class="modus-produkt bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap;margin:0">
-      <div class="bx-field" style="margin:0;flex:1 1 320px">
+    <div class="bx-grid">
+      <!-- Modus: Fertiges Produkt -->
+      <div class="bx-field modus-produkt">
         <label>Produkt</label>
-        <input type="text" class="prodpick-txt" list="prod_dl" autocomplete="off" placeholder="Produkt tippen … (Name oder Nummer)" style="width:100%">
+        <input type="text" class="prodpick-txt" list="prod_dl" autocomplete="off" placeholder="Produkt tippen …">
         <input type="hidden" name="produkt_id" class="prodpick-id">
         <datalist id="prod_dl"><?php foreach ($produkteNeu as $p): ?><option value="<?= h($p['_lbl']) ?>"></option><?php endforeach; ?></datalist>
       </div>
-      <div class="bx-field" style="margin:0;width:170px"><label>Menge (Packungen)</label><input type="number" name="menge" id="pmenge" min="1" step="1" value="1" style="width:100%"><div class="muted" id="pmengeHint" style="font-size:12px;margin-top:4px">&nbsp;</div></div>
-      <div class="bx-field" style="margin:0;width:190px"><label>Produktionsart</label>
-        <select name="produktionsart" style="width:100%">
+      <div class="bx-field modus-produkt"><label>Menge (Packungen)</label><input type="number" name="menge" id="pmenge" min="1" step="1" value="1"></div>
+      <div class="bx-field modus-produkt"><label>Produktionsart</label>
+        <select name="produktionsart">
           <option value="eigen" selected>Eigenproduktion</option>
           <option value="fremd">Fremdproduktion (Zukauf)</option>
         </select>
       </div>
-    </div>
-
-    <!-- Modus: Nur Kapseln (Bulk) -->
-    <div class="modus-bulk bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap;margin:0;display:none">
-      <div class="bx-field" style="margin:0;flex:1 1 320px">
+      <!-- Modus: Nur Kapseln (Bulk) -->
+      <div class="bx-field modus-bulk" style="display:none">
         <label>Rezeptur</label>
-        <input type="text" class="rezpick-txt" list="rez_dl" autocomplete="off" placeholder="Rezeptur tippen … (Name oder Nummer)" style="width:100%">
+        <input type="text" class="rezpick-txt" list="rez_dl" autocomplete="off" placeholder="Rezeptur tippen …">
         <input type="hidden" name="rezeptur_id" class="rezpick-id">
         <datalist id="rez_dl"><?php foreach ($rezepteNeu as $rz): ?><option value="<?= h($rz['_lbl']) ?>"></option><?php endforeach; ?></datalist>
       </div>
-      <div class="bx-field" style="margin:0;width:170px"><label>Stückzahl (Kapseln)</label><input type="number" name="stueck" min="1" step="1" value="1000" style="width:100%"><div class="muted" id="bulkHint" style="font-size:12px;margin-top:4px">&nbsp;</div></div>
+      <div class="bx-field modus-bulk" style="display:none"><label>Stückzahl (Kapseln)</label><input type="number" name="stueck" min="1" step="1" value="1000"></div>
+      <!-- gemeinsam -->
+      <div class="bx-field"><label>Priorität</label>
+        <select name="prio">
+          <option value="2" selected>Normal</option>
+          <option value="1">Hoch</option>
+          <option value="3">Niedrig</option>
+        </select>
+      </div>
     </div>
-
-    <div class="bx-field" style="margin:0;width:150px"><label>Priorität</label>
-      <select name="prio" style="width:100%">
-        <option value="2" selected>Normal</option>
-        <option value="1">Hoch</option>
-        <option value="3">Niedrig</option>
-      </select>
-    </div>
+    <div class="muted" style="font-size:12px;margin:2px 0 14px" id="modusHinweis">&nbsp;</div>
     <div class="bx-row" style="gap:8px;margin:0">
       <button class="btn btn-primary" type="submit">Anlegen</button>
       <a class="btn btn-ghost" href="?p=produktion&tab=<?= h($tab) ?>">Abbrechen</a>
     </div>
   </form>
-  <div class="muted" style="font-size:12px;margin-top:8px" id="modusHinweis"></div>
   <script>
   (function(){
-    // Produkt-Modus: Live-Gesamtstückzahl
-    var pmap = {};
+    var pmap = {};   // Produkt-Label -> {id, epp, ehl}
     <?php foreach ($produkteNeu as $p): ?>
     pmap[<?= json_encode($p['_lbl'], JSON_UNESCAPED_UNICODE) ?>] = {id:<?= (int)$p['id'] ?>, epp:<?= (int)$p['epp'] ?>, ehl:<?= json_encode($p['_ehl'], JSON_UNESCAPED_UNICODE) ?>};
     <?php endforeach; ?>
-    var pt = document.querySelector('.prodpick-txt'), ph = document.querySelector('.prodpick-id');
-    var pm = document.getElementById('pmenge'), phint = document.getElementById('pmengeHint');
-    function pcur(){ return pmap[(pt.value||'').trim()] || null; }
-    function pupd(){
-      var p = pcur(); ph.value = p ? p.id : '';
-      if (!p) { phint.innerHTML = '&nbsp;'; phint.style.color=''; return; }
-      if (!p.epp) { phint.textContent = 'Einheiten je Packung am Produkt nicht gepflegt – bitte am Produkt ergänzen.'; phint.style.color='var(--err)'; return; }
-      var ges = (parseInt((pm.value||'0'),10)||0) * p.epp;
-      phint.textContent = p.epp.toLocaleString('de-DE') + ' ' + p.ehl + ' je Packung · Gesamt: ' + ges.toLocaleString('de-DE') + ' ' + p.ehl;
-      phint.style.color='';
-    }
-    if (pt){ pt.addEventListener('input', pupd); pt.addEventListener('change', pupd); }
-    if (pm) pm.addEventListener('input', pupd);
-
-    // Bulk-Modus: Rezeptur -> id
-    var rmap = {};
+    var rmap = {};   // Rezeptur-Label -> {id, ehl}
     <?php foreach ($rezepteNeu as $rz): ?>
     rmap[<?= json_encode($rz['_lbl'], JSON_UNESCAPED_UNICODE) ?>] = {id:<?= (int)$rz['id'] ?>, ehl:<?= json_encode($rz['_ehl'], JSON_UNESCAPED_UNICODE) ?>};
     <?php endforeach; ?>
+    var pt = document.querySelector('.prodpick-txt'), ph = document.querySelector('.prodpick-id'), pm = document.getElementById('pmenge');
     var rt = document.querySelector('.rezpick-txt'), rh = document.querySelector('.rezpick-id');
+    var mf = document.getElementById('modusField'), hinweis = document.getElementById('modusHinweis');
+    var BASIS_P = 'Menge = Anzahl Packungen; der Materialbedarf skaliert über die Einheiten je Packung des Produkts. Fertigware geht als eigener Lagerbestand ein.';
+    var BASIS_B = 'Bulk = nur Kapseln herstellen (Rohstoffe + Leerkapseln), ohne Verpacken/Etikettieren. Die fertigen Kapseln gehen als eigene Bulk-Charge ins Lager und können später verpackt werden.';
+    function pupd(){
+      var p = pmap[(pt.value||'').trim()] || null; ph.value = p ? p.id : '';
+      if (mf.value !== 'produkt') return;
+      if (!p) { hinweis.textContent = BASIS_P; hinweis.style.color=''; return; }
+      if (!p.epp) { hinweis.textContent = 'Einheiten je Packung am Produkt nicht gepflegt – bitte am Produkt ergänzen.'; hinweis.style.color='var(--err)'; return; }
+      var ges = (parseInt((pm.value||'0'),10)||0) * p.epp;
+      hinweis.textContent = p.epp.toLocaleString('de-DE') + ' ' + p.ehl + ' je Packung · Gesamt: ' + ges.toLocaleString('de-DE') + ' ' + p.ehl;
+      hinweis.style.color='';
+    }
     function rsync(){ var r = rmap[(rt.value||'').trim()]; rh.value = r ? r.id : ''; }
+    if (pt){ pt.addEventListener('input', pupd); pt.addEventListener('change', pupd); }
+    if (pm) pm.addEventListener('input', pupd);
     if (rt){ rt.addEventListener('input', rsync); rt.addEventListener('change', rsync); }
-
-    // Modus-Umschalter
-    var mf = document.getElementById('modusField');
-    var gp = document.querySelector('.modus-produkt'), gb = document.querySelector('.modus-bulk');
-    var hinweis = document.getElementById('modusHinweis');
     function setModus(mo){
       mf.value = mo;
-      gp.style.display = mo==='produkt' ? '' : 'none';
-      gb.style.display = mo==='bulk' ? '' : 'none';
-      hinweis.textContent = mo==='bulk'
-        ? 'Bulk = nur Kapseln herstellen (Rohstoffe + Leerkapseln), ohne Verpacken/Etikettieren. Die fertigen Kapseln gehen als eigene Bulk-Charge (Lagerbestand) ein und können später zu einem Produkt verpackt werden.'
-        : 'Menge = Anzahl Packungen; der Materialbedarf (Rohstoffe/Leerkapseln/Verpackung) skaliert über die Einheiten je Packung des Produkts. Fertigware geht als eigener Lagerbestand ein.';
-      (mo==='produkt' ? pt : rt).focus();
+      document.querySelectorAll('.modus-produkt').forEach(function(e){ e.style.display = mo==='produkt' ? '' : 'none'; });
+      document.querySelectorAll('.modus-bulk').forEach(function(e){ e.style.display = mo==='bulk' ? '' : 'none'; });
+      if (mo==='bulk') { hinweis.textContent = BASIS_B; hinweis.style.color=''; rt.focus(); }
+      else { pt.focus(); pupd(); }
     }
     document.querySelectorAll('input[name="modus_ui"]').forEach(function(r){ r.addEventListener('change', function(){ setModus(this.value); }); });
-    setModus('produkt'); pupd();
+    setModus('produkt');
   })();
   </script>
 </div>
