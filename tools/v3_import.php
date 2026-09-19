@@ -449,35 +449,42 @@ if ($WRITE) {
         $v3aid = (int)$a['id'];
         $kid = $firmaMap[$normName($a['kunde'])] ?? null;
         if (!$kid) { $w5['ohne_kunde']++; continue; }   // z. B. interner „Kunde"
-        // Produkt-Anker über das Rezept
-        $pid = null;
+        // Produkt VERBINDLICH mit einer Rezeptur verknüpfen, damit das Produkt die Zutaten hat und die
+        // Produktion die Infos. Rezeptur zuerst über rezept_id, sonst über den v3-Produktnamen.
+        $pid = null; $rzId = null; $rzName = null;
         if (!empty($a['rezept_id'])) {
             $rz = one("SELECT id, name FROM rezeptur WHERE v3_id=?", [(int)$a['rezept_id']]);
-            if ($rz) {
-                $prow = one("SELECT id FROM produkt WHERE v3_id=?", [(int)$a['rezept_id']]);
-                if ($prow) $pid = (int)$prow['id'];
-                else {
-                    q("INSERT INTO produkt (nummer,name,rezeptur_id,exklusiv,einheiten_pro_packung,status,notiz,v3_id) VALUES (?,?,?,0,?, 'entwurf', ?, ?)",
-                      [naechste_nummer('P'), cut($rz['name']), (int)$rz['id'], (int)($a['menge_pro_vpe'] ?: 0), 'Aus v3 (Auftrag)', (int)$a['rezept_id']]);
-                    $pid = (int)insert_id();
-                }
-            }
+            if ($rz) { $rzId = (int)$rz['id']; $rzName = (string)$rz['name']; }
         }
-        // Kein Rezept-Produkt gefunden? Dann Produkt-Anker aus dem v3-Produktnamen (Text) anlegen/finden,
-        // damit der Auftrag NIEMALS ohne Namen dasteht. Deduplizierung über den Namen (idempotent).
-        if (!$pid) {
-            $pname = trim((string)($a['produkt'] ?? ''));
-            if ($pname !== '') {
-                $ex = scalar("SELECT id FROM produkt WHERE name=? LIMIT 1", [cut($pname)]);
-                if ($ex) { $pid = (int)$ex; }
-                else {
-                    q("INSERT INTO produkt (nummer,name,exklusiv,einheiten_pro_packung,status,notiz) VALUES (?,?,0,?, 'entwurf', ?)",
-                      [naechste_nummer('P'), cut($pname), (int)($a['menge_pro_vpe'] ?: 0), 'Aus v3 (Auftrag ohne Rezept)']);
-                    $pid = (int)insert_id();
-                }
+        $pname = trim((string)($a['produkt'] ?? ''));
+        if (!$rzId && $pname !== '') {   // Rezept gelöscht/fehlt -> Rezeptur per Produktname suchen
+            $rz = one("SELECT id, name FROM rezeptur WHERE name=? LIMIT 1", [cut($pname)]);
+            if ($rz) { $rzId = (int)$rz['id']; $rzName = (string)$rz['name']; }
+        }
+        if ($rzId) {
+            // Vorhandenes Produkt bevorzugen (v3-Anker -> per Rezeptur -> Namensanker upgraden -> neu).
+            $prow = (!empty($a['rezept_id']) ? one("SELECT id FROM produkt WHERE v3_id=?", [(int)$a['rezept_id']]) : null)
+                 ?: one("SELECT id FROM produkt WHERE rezeptur_id=? ORDER BY id LIMIT 1", [$rzId]);
+            if ($prow) { $pid = (int)$prow['id']; }
+            elseif ($pname !== '' && ($bare = one("SELECT id FROM produkt WHERE name=? AND (rezeptur_id IS NULL OR rezeptur_id=0) LIMIT 1", [cut($pname)]))) {
+                $pid = (int)$bare['id'];
+                q("UPDATE produkt SET rezeptur_id=? WHERE id=?", [$rzId, $pid]);   // Namensanker nachträglich verknüpfen
+            } else {
+                q("INSERT INTO produkt (nummer,name,rezeptur_id,exklusiv,einheiten_pro_packung,status,notiz,v3_id) VALUES (?,?,?,0,?, 'entwurf', ?, ?)",
+                  [naechste_nummer('P'), cut($rzName ?: $pname), $rzId, (int)($a['menge_pro_vpe'] ?: 0), 'Aus v3 (Auftrag)', !empty($a['rezept_id']) ? (int)$a['rezept_id'] : null]);
+                $pid = (int)insert_id();
+            }
+        } elseif ($pname !== '') {   // Keine Rezeptur auffindbar -> Namensanker (Nacharbeit), Auftrag nicht namenlos.
+            $ex = scalar("SELECT id FROM produkt WHERE name=? LIMIT 1", [cut($pname)]);
+            if ($ex) { $pid = (int)$ex; }
+            else {
+                q("INSERT INTO produkt (nummer,name,exklusiv,einheiten_pro_packung,status,notiz) VALUES (?,?,0,?, 'entwurf', ?)",
+                  [naechste_nummer('P'), cut($pname), (int)($a['menge_pro_vpe'] ?: 0), 'Aus v3 (Auftrag ohne Rezept)']);
+                $pid = (int)insert_id();
             }
         }
         if (!$pid) $w5['ohne_produkt']++;
+        elseif (!$rzId) $w5['produkt_ohne_rezeptur'] = ($w5['produkt_ohne_rezeptur'] ?? 0) + 1;
         // Status aus den v3-Stufen-Flags ableiten (v3 hat KEIN „versand"-Feld; „archiviert" = abgeschlossen/versendet).
         $flag = fn($v) => $v !== null && $v !== '' && (int)$v > 0;
         $st = $flag($a['archiviert'] ?? 0) ? 'versendet'
