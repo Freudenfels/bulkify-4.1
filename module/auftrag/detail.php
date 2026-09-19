@@ -125,10 +125,24 @@ render_header('auftraege', $a['nummer']);
 bx_head($a['nummer'], 'Auftragsbestätigung', bx_btn('Zurück zur Liste', '?p=auftraege', 'ghost'));
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 
-// Einheitliche, ruhige Wertgröße für alle Kennzahl-Karten (Badges behalten ihre eigene Größe).
-echo '<style>.bx-cards .v{font-size:15px;line-height:1.4}</style>';
+// Einheitliche, ruhige Wertgröße; Kacheln bleiben in EINER Reihe (bei Enge horizontal scrollen statt umbrechen).
+echo '<style>.bx-cards .v{font-size:15px;line-height:1.4}'
+   . '.bx-cards{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px}.bx-cards .bx-card{flex:0 0 auto}'
+   . '.bx-card-status{border-left:4px solid var(--stcol);background:var(--panel-2)}'
+   . '.bx-card-status .v{font-weight:600;font-size:16px;color:var(--stcol)}</style>';
+// Status-Kachel: eigene Farbe je Status, ohne das Wort „Status".
+$stCol = match ((string)$a['status']) {
+    'versendet'     => '#16a34a',
+    'in_produktion' => '#d97706',
+    'erledigt'      => '#2563eb',
+    'storniert'     => '#dc2626',
+    default         => '#6b7280',
+};
+$stText = match ((string)$a['status']) {
+    'offen'=>'offen','in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet','storniert'=>'storniert', default=>(string)$a['status']
+};
 echo '<div class="bx-cards">';
-echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $statusBadge . '</div></div>';
+echo '<div class="bx-card bx-card-status" style="--stcol:' . $stCol . '"><div class="v">' . h($stText) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . (int)$a['menge'] . '</div></div>';
 if ($einhProP > 0) echo '<div class="bx-card"><div class="k">Stück je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . '</div></div>';
 if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamtstückzahl</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
@@ -143,7 +157,7 @@ echo '</div>';
   <h2>Details</h2>
   <div class="bx-grid">
     <div><div class="k muted">Kunde</div><div><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
-    <div><div class="k muted">Produkt</div><div><?= $produktName ? h($produktName) . (empty($a['produkt_id']) ? ' <span class="muted" style="font-size:12px">(aus v3)</span>' : '') : '–' ?></div></div>
+    <div><div class="k muted">Produkt</div><div><?php if (!empty($a['produkt_id']) && $produktName): ?><a href="?p=produkt&id=<?= (int)$a['produkt_id'] ?>"><?= h($produktName) ?></a><?php elseif ($produktName): ?><?= h($produktName) ?> <span class="muted" style="font-size:12px">(aus v3)</span><?php else: ?>–<?php endif; ?></div></div>
     <div><div class="k muted">Rezeptur</div><div><?php if ($rezeptur): ?><a href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>"><?= h($rezeptur['nummer']) ?></a><?= $rezeptur['name'] ? ' · ' . h($rezeptur['name']) : '' ?><?php else: ?>–<?php endif; ?></div></div>
     <div><div class="k muted">Aus Angebot</div><div><?php if ($a['angebot_id']): ?><a href="?p=angebot&id=<?= (int)$a['angebot_id'] ?>"><?= h($a['angebot_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
     <?php if (!empty($a['kontingent_id'])): ?><div><div class="k muted">Herkunft</div><div><a href="?p=kontingente" title="Abruf aus einem Jahresabnahmevertrag"><?= bx_badge('aus Jahresvertrag','info') ?></a></div></div><?php endif; ?>
