@@ -446,10 +446,24 @@ if ($WRITE) {
                 }
             }
         }
+        // Kein Rezept-Produkt gefunden? Dann Produkt-Anker aus dem v3-Produktnamen (Text) anlegen/finden,
+        // damit der Auftrag NIEMALS ohne Namen dasteht. Deduplizierung über den Namen (idempotent).
+        if (!$pid) {
+            $pname = trim((string)($a['produkt'] ?? ''));
+            if ($pname !== '') {
+                $ex = scalar("SELECT id FROM produkt WHERE name=? LIMIT 1", [cut($pname)]);
+                if ($ex) { $pid = (int)$ex; }
+                else {
+                    q("INSERT INTO produkt (nummer,name,exklusiv,einheiten_pro_packung,status,notiz) VALUES (?,?,0,?, 'entwurf', ?)",
+                      [naechste_nummer('P'), cut($pname), (int)($a['menge_pro_vpe'] ?: 0), 'Aus v3 (Auftrag ohne Rezept)']);
+                    $pid = (int)insert_id();
+                }
+            }
+        }
         if (!$pid) $w5['ohne_produkt']++;
-        // Status aus den v3-Stufen-Flags ableiten
+        // Status aus den v3-Stufen-Flags ableiten (v3 hat KEIN „versand"-Feld; „archiviert" = abgeschlossen/versendet).
         $flag = fn($v) => $v !== null && $v !== '' && (int)$v > 0;
-        $st = $flag($a['versand'] ?? 0) ? 'versendet'
+        $st = $flag($a['archiviert'] ?? 0) ? 'versendet'
             : (($flag($a['verpackt'] ?? 0)) ? 'erledigt'
             : (($flag($a['produziert'] ?? 0)) ? 'in_produktion' : 'offen'));
         $menge  = (int)($a['anzahl_vpe'] ?: ($a['menge'] ?: 0));
