@@ -125,24 +125,26 @@ render_header('auftraege', $a['nummer']);
 bx_head($a['nummer'], 'Auftragsbestätigung', bx_btn('Zurück zur Liste', '?p=auftraege', 'ghost'));
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 
-// Einheitliche, ruhige Wertgröße; Kacheln bleiben in EINER Reihe (bei Enge horizontal scrollen statt umbrechen).
-echo '<style>.bx-cards .v{font-size:15px;line-height:1.4}'
-   . '.bx-cards{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px}.bx-cards .bx-card{flex:0 0 auto}'
-   . '.bx-card-status{border-left:4px solid var(--stcol);background:var(--panel-2)}'
-   . '.bx-card-status .v{font-weight:600;font-size:16px;color:var(--stcol)}</style>';
-// Status-Kachel: eigene Farbe je Status, ohne das Wort „Status".
-$stCol = match ((string)$a['status']) {
-    'versendet'     => '#16a34a',
-    'in_produktion' => '#d97706',
-    'erledigt'      => '#2563eb',
-    'storniert'     => '#dc2626',
-    default         => '#6b7280',
+// Kacheln bleiben in EINER Reihe und werden bei Enge KLEINER (kein Umbruch, kein Scroll).
+echo '<style>.bx-cards{flex-wrap:nowrap;gap:8px}'
+   . '.bx-cards .bx-card{flex:1 1 0;min-width:0;padding:10px 12px;overflow:hidden}'
+   . '.bx-cards .k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+   . '.bx-cards .v{font-size:15px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+   . '.bx-card-status .v{font-weight:600;font-size:16px}</style>';
+// Status-Ampel: weiß = Start (offen) -> rot -> gelb -> grün = fertig (versendet). Storniert = grau.
+[$stBg, $stFg] = match ((string)$a['status']) {
+    'offen'         => ['#ffffff', '#111827'],   // Start
+    'in_produktion' => ['#dc2626', '#ffffff'],   // rot
+    'erledigt'      => ['#f59e0b', '#111827'],   // gelb (versandbereit)
+    'versendet'     => ['#16a34a', '#ffffff'],   // grün (fertig)
+    'storniert'     => ['#6b7280', '#ffffff'],   // grau
+    default         => ['#ffffff', '#111827'],
 };
 $stText = match ((string)$a['status']) {
     'offen'=>'offen','in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet','storniert'=>'storniert', default=>(string)$a['status']
 };
 echo '<div class="bx-cards">';
-echo '<div class="bx-card bx-card-status" style="--stcol:' . $stCol . '"><div class="v">' . h($stText) . '</div></div>';
+echo '<div class="bx-card bx-card-status" title="Status" style="background:' . $stBg . ';color:' . $stFg . ';border:1px solid rgba(0,0,0,.15)"><div class="v" style="color:' . $stFg . '">' . h($stText) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . (int)$a['menge'] . '</div></div>';
 if ($einhProP > 0) echo '<div class="bx-card"><div class="k">Stück je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . '</div></div>';
 if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamtstückzahl</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
