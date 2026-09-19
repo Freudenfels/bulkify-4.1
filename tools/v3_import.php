@@ -558,12 +558,14 @@ if ($WRITE) {
         }
         if (!$hatAngebot) { $w6['anfrage_ohne_angebot']++; continue; }   // reine offene Anfrage -> kein Angebot
         $exG = one("SELECT id FROM angebot WHERE v3_id=?", [$v3paid]);
+        // Importierte Angebote waren in v3 dem Kunden bereits sichtbar (gesendet/bestaetigt/abgelehnt) ->
+        // Preise für den Kunden freigeben (preise_kunde=1), sonst blendet das Portal sie samt Staffeln aus.
         if ($exG) { $gid = (int)$exG['id'];
-            q("UPDATE angebot SET kunde_id=?,produkt_id=?,status=?,notiz=?,anfrage_id=? WHERE id=?", [$kid, $pid, $status, cut($notiz,500), $pafId, $gid]);
+            q("UPDATE angebot SET kunde_id=?,produkt_id=?,status=?,notiz=?,anfrage_id=?,preise_kunde=1 WHERE id=?", [$kid, $pid, $status, cut($notiz,500), $pafId, $gid]);
             q("DELETE FROM angebot_position WHERE angebot_id=?", [$gid]);
             q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$gid]); $w6['angebot_upd']++;
         } else {
-            q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,anfrage_id,v3_id) VALUES (?,?,?,?,?,?,?)",
+            q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,anfrage_id,v3_id,preise_kunde) VALUES (?,?,?,?,?,?,?,1)",
               [naechste_nummer('AN'), $kid, $pid, $status, cut($notiz,500), $pafId, $v3paid]); $gid = (int)insert_id(); $w6['angebot_neu']++;
         }
         // Eine Angebotsposition (Konfiguration + Preis)

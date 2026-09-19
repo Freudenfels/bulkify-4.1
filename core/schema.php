@@ -4,6 +4,15 @@
 // Nie Spalten loeschen. Alles UTF-8 (utf8mb4).
 require_once __DIR__ . '/db.php';
 
+// Master-/Test-Scan: in der Produktion überspringt dieser Code Charge-Prüfung und Bestandsabbuchung
+// und lässt zum nächsten Schritt durch (Durchklicken/Testen ohne echte Chargen).
+if (!defined('BX_MASTER_SCAN')) define('BX_MASTER_SCAN', '888888888');
+// Robust: JEDE reine 8er-Folge ab 6 Stellen zählt als Master-Scan (damit man sich nicht verzählt).
+function ist_master_scan(?string $s): bool {
+    $s = trim((string)$s);
+    return $s !== '' && preg_match('/^8{6,}$/', $s) === 1;
+}
+
 function table_exists(string $t): bool {
     return (bool) scalar(
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
@@ -1063,6 +1072,13 @@ function init_schema(): void {
     if (meta_get('init_preise_kunde', '') !== '1') {
         q("UPDATE angebot SET preise_kunde=1 WHERE status IN ('gesendet','bestaetigt','abgelehnt')");
         meta_set('init_preise_kunde', '1');
+    }
+    // Einmalig NACH dem v3-Import: importierte Angebote (gesendet/bestaetigt/abgelehnt) freigeben. Der obere
+    // Backfill lief einmalig VOR dem Import und lässt sich nicht wiederholen; die per Import neu angelegten
+    // Angebote blieben daher auf preise_kunde=0 und waren für den Kunden unsichtbar (inkl. Staffeln).
+    if (meta_get('init_preise_kunde_v3', '') !== '1') {
+        q("UPDATE angebot SET preise_kunde=1 WHERE v3_id IS NOT NULL AND status IN ('gesendet','bestaetigt','abgelehnt')");
+        meta_set('init_preise_kunde_v3', '1');
     }
     ensure_column('kontingent', 'angebot_id', "INT NULL");                     // Herkunft: aus welchem Jahresvertrags-Angebot entstanden
     ensure_column('kontingent', 'freigabe_name', "VARCHAR(190) NULL");         // Unterzeichner (Portal-Bestätigung)
@@ -4922,6 +4938,56 @@ function produktion_scan_pruefen(string $scan, ?string $kat): array {
         if (!$passt) return ['ok'=>false, 'msg'=>'Charge „' . $scan . '" passt nicht zu diesem Schritt (' . $c['item_name'] . ').', 'charge'=>$c];
     }
     return ['ok'=>true, 'msg'=>'', 'charge'=>$c];
+}
+
+// Eine Produktionsstation abschließen – ZENTRALE Logik des geführten Ablaufs.
+// Genutzt von der Admin-Detailseite UND der geführten Produktionsseite (später App/API).
+// Erzwingt die Reihenfolge (nur die erste offene Station), prüft Scan (bzw. Master-Scan),
+// bucht Material FEFO ab, markiert erledigt, aktualisiert den Status; beim letzten Schritt
+// wird die Fertigware eingebucht und der Auftrag auf 'erledigt' gesetzt.
+// Rückgabe: ['ok'=>bool, 'fehler'=>?('reihenfolge'|'scan'|'mangel'), 'msg'=>string, 'fertig'=>bool, 'station'=>string]
+function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan = ''): array {
+    $firstOpen = one("SELECT id, station FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort LIMIT 1", [$pa_id]);
+    if (!$firstOpen || (int)$firstOpen['id'] !== $schritt_id)
+        return ['ok'=>false, 'fehler'=>'reihenfolge', 'msg'=>'Dieser Schritt ist gerade nicht an der Reihe.', 'fertig'=>false, 'station'=>''];
+    $station = (string)$firstOpen['station'];
+    $anl  = station_anleitung($station);
+    $scan = trim($scan);
+    $master = ist_master_scan($scan);   // 8er-Folge: überspringt Scan-Prüfung + Bestandsabbuchung
+    if ($anl['scan']) {
+        if (!$master) {
+            $chk = produktion_scan_pruefen($scan, $anl['kat']);
+            if (!$chk['ok']) return ['ok'=>false, 'fehler'=>'scan', 'msg'=>$chk['msg'], 'fertig'=>false, 'station'=>$station];
+        }
+        q("UPDATE produktion_schritt SET scan_charge=? WHERE id=?", [$master ? 'Master-Freigabe' : $scan, $schritt_id]);
+    }
+    if (!$master) {
+        $entnahme = match ($station) {
+            'Rohstoffe bereitstellen'  => produktion_rohstoffe_entnehmen($pa_id),
+            'Verkapselung'             => produktion_kapseln_entnehmen($pa_id),
+            'Fertigware bereitstellen' => produktion_fertigware_entnehmen($pa_id),
+            'Verpacken'                => produktion_verpackung_entnehmen($pa_id),
+            default                    => ['ok'=>true],
+        };
+        if (!($entnahme['ok'] ?? true)) return ['ok'=>false, 'fehler'=>'mangel', 'msg'=>'Nicht genug Bestand für diesen Schritt.', 'fertig'=>false, 'station'=>$station];
+    }
+    q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $schritt_id]);
+    reservierung_abgleichen($pa_id);   // entnommene Items: Reservierung schließen
+    $total = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=?", [$pa_id]);
+    $done  = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]);
+    $status = $done === 0 ? 'offen' : ($done >= $total ? 'erledigt' : 'laufend');
+    q("UPDATE produktionsauftrag SET status=? WHERE id=?", [$status, $pa_id]);
+    $fertig = ($status === 'erledigt');
+    if ($fertig) {
+        auftrag_reservierung_freigeben($pa_id);     // Rest-Reservierungen freigeben
+        produktion_fertigware_einbuchen($pa_id);    // Fertigware als Charge einbuchen
+        $pa = one("SELECT auftrag_id, kunde_id, nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
+        if ($pa && $pa['auftrag_id']) {
+            q("UPDATE auftrag SET status='erledigt' WHERE id=?", [(int)$pa['auftrag_id']]);
+            if ($pa['kunde_id']) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Produktion ' . $pa['nummer'] . ' abgeschlossen, Fertigware eingebucht, versandfrei.', 'auftrag', 'auftrag', (int)$pa['auftrag_id']);
+        }
+    }
+    return ['ok'=>true, 'fehler'=>null, 'msg'=>'', 'fertig'=>$fertig, 'station'=>$station];
 }
 
 // Materialbedarf eines Produktionsauftrags: je Rohstoff benötigte vs. verfügbare Menge.

@@ -75,7 +75,13 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
       <input type="hidden" name="item_id" id="weArtId">
       <div id="weArtList" class="bx-combo-list" hidden></div>
     </div>
-    <div class="bx-field"><label>Menge</label><input type="number" step="0.001" name="menge" required></div>
+    <div class="bx-field"><label>Menge</label>
+      <div class="bx-row" style="gap:8px;align-items:center;margin:0">
+        <input type="number" step="0.001" name="menge" required style="flex:1;min-width:0">
+        <span id="weEinheit" style="min-width:44px;font-weight:600;color:var(--muted)">–</span>
+      </div>
+      <div class="muted" id="weEinheitHint" style="font-size:12px;margin-top:4px">Erst Artikel wählen – die Einheit erscheint hier.</div>
+    </div>
     <div class="bx-field"><label>Charge (Lieferant) <?= bx_hint('Chargennummer laut Lieferant/CoA') ?></label><input type="text" name="charge_nr"></div>
     <div class="bx-field"><label>MHD</label><input type="date" name="mhd"></div>
     <div class="bx-field"><label>Lieferant</label>
@@ -118,9 +124,14 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
     hl=-1; list.hidden=false; box.setAttribute('aria-expanded','true');
   }
   function paint(){ Array.prototype.forEach.call(list.querySelectorAll('.opt'),function(o){ o.classList.toggle('hl', +o.dataset.i===hl); }); var el=list.querySelector('.opt.hl'); if(el) el.scrollIntoView({block:'nearest'}); }
-  function choose(i){ var it=shown[i]; if(!it) return; hid.value=it.id; box.value=it.n; box.setCustomValidity(''); close(); }
+  var einhEl=document.getElementById('weEinheit'), einhHint=document.getElementById('weEinheitHint');
+  function setEinheit(e){
+    if(einhEl) einhEl.textContent = e || '–';
+    if(einhHint) einhHint.textContent = e ? ('Menge in ' + e + ' eingeben.') : 'Erst Artikel wählen – die Einheit erscheint hier.';
+  }
+  function choose(i){ var it=shown[i]; if(!it) return; hid.value=it.id; box.value=it.n; box.setCustomValidity(''); setEinheit(it.e); close(); }
   function close(){ list.hidden=true; box.setAttribute('aria-expanded','false'); }
-  box.addEventListener('input', function(){ hid.value=''; render(box.value); });
+  box.addEventListener('input', function(){ hid.value=''; setEinheit(''); render(box.value); });
   box.addEventListener('focus', function(){ render(box.value); });
   box.addEventListener('keydown', function(e){
     if(list.hidden){ if(e.key==='ArrowDown') render(box.value); return; }

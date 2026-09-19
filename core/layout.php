@@ -27,7 +27,7 @@ function bx_nav(): array {
             'paf_dienstleistung' => ['label'=>'Dienstleistungsanfragen', 'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=dienstleistung', 'typ'=>'dienstleistung'],
         ],
         'Produkt'      => ['rezeptur' => 'Rezepturen', 'rezept_preise' => 'Rezeptur-Preise', 'produkte' => 'Produkte', 'novelfood' => 'Novel Food'],
-        'Produktion'   => ['produktion' => 'Produktion', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
+        'Produktion'   => ['produktion' => 'Produktion', 'produktion_run' => 'Geführte Produktion', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
         'Lager'        => ['lager' => 'Warenlager', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'freigaben' => 'Freigaben', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
         'Einkauf'      => ['bedarf' => 'Einkaufsbedarf', 'einkaufsliste' => 'Einkaufsliste', 'einkauf' => 'Bestellungen', 'lieferanten' => 'Lieferanten', 'lieferant_preise' => 'Lieferanten-Preise', 'lief_preisliste' => 'EK-Preisliste', 'ek_import' => 'EK-Preise (Import)'],
         'Buchhaltung'  => ['rechnungen' => 'Rechnungen', 'buchhaltung' => 'Belege'],
@@ -54,7 +54,7 @@ function bx_anfrage_counts(): array {
 function bx_nav_werk(): array {
     return [
         'Start'            => ['werk' => 'Cockpit', 'aufgaben' => 'Aufgaben'],
-        'Produktion'       => ['produktion' => 'Produktionsaufträge', 'kalender' => 'Kalender'],
+        'Produktion'       => ['produktion_run' => 'Geführte Produktion', 'produktion' => 'Produktionsaufträge', 'kalender' => 'Kalender'],
         'Warenwirtschaft'  =>['bedarf' => 'Einkaufsbedarf', 'lager' => 'Bestand', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'chargen' => 'Chargen',
                                'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'freigaben' => 'Freigaben', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)',
                                'versand' => 'Versand'],

@@ -5,52 +5,11 @@ require_once BX_ROOT . '/core/schema.php';
 
 $id = (int)($_GET['id'] ?? 0);
 
-// Nächste offene Station als erledigt markieren
+// Nächste offene Station als erledigt markieren (zentrale Logik in core/schema.php)
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'erledigen') {
-    $sid = (int)($_POST['schritt'] ?? 0);
-    $firstOpen = one("SELECT id, station FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort LIMIT 1", [$id]);
-    if ($firstOpen && (int)$firstOpen['id'] === $sid) {
-        // Baustein 6: Scan-Pflicht je Station prüfen
-        $anl = station_anleitung($firstOpen['station']);
-        $scanWert = trim($_POST['scan'] ?? '');
-        if ($anl['scan']) {
-            $chk = produktion_scan_pruefen($scanWert, $anl['kat']);
-            if (!$chk['ok']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&scanfehler=' . urlencode($chk['msg'])); exit; }
-            q("UPDATE produktion_schritt SET scan_charge=? WHERE id=?", [$scanWert, $sid]);
-        }
-        // Rohstoffe bereitstellen -> Bestand nach FEFO entnehmen; blockiert bei zu wenig Bestand
-        if ($firstOpen['station'] === 'Rohstoffe bereitstellen') {
-            $res = produktion_rohstoffe_entnehmen($id);
-            if (!$res['ok']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&mangel=1'); exit; }
-        }
-        if ($firstOpen['station'] === 'Verkapselung') {
-            $res = produktion_kapseln_entnehmen($id);
-            if (!$res['ok']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&mangel=1'); exit; }
-        }
-        if ($firstOpen['station'] === 'Fertigware bereitstellen') {
-            $res = produktion_fertigware_entnehmen($id);
-            if (!$res['ok']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&mangel=1'); exit; }
-        }
-        if ($firstOpen['station'] === 'Verpacken') {
-            $res = produktion_verpackung_entnehmen($id);
-            if (!$res['ok']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&mangel=1'); exit; }
-        }
-        q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $sid]);
-        reservierung_abgleichen($id);   // entnommene Items: Reservierung schließen
-        $total = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=?", [$id]);
-        $done  = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$id]);
-        $status = $done === 0 ? 'offen' : ($done >= $total ? 'erledigt' : 'laufend');
-        q("UPDATE produktionsauftrag SET status=? WHERE id=?", [$status, $id]);
-        $pa = one("SELECT auftrag_id, kunde_id, nummer FROM produktionsauftrag WHERE id=?", [$id]);
-        if ($status === 'erledigt') {
-            auftrag_reservierung_freigeben($id);     // etwaige Rest-Reservierungen freigeben
-            produktion_fertigware_einbuchen($id);   // Fertigware als Bestand einbuchen
-            if ($pa && $pa['auftrag_id']) {
-                q("UPDATE auftrag SET status='erledigt' WHERE id=?", [$pa['auftrag_id']]);
-                if ($pa['kunde_id']) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Produktion ' . $pa['nummer'] . ' abgeschlossen, Fertigware eingebucht, versandfrei.', 'auftrag', 'auftrag', (int)$pa['auftrag_id']);
-            }
-        }
-    }
+    $r = produktion_schritt_erledigen($id, (int)($_POST['schritt'] ?? 0), (string)($_POST['scan'] ?? ''));
+    if (!$r['ok'] && $r['fehler'] === 'scan')   { header('Location: ?p=produktionsauftrag&id=' . $id . '&scanfehler=' . urlencode($r['msg'])); exit; }
+    if (!$r['ok'] && $r['fehler'] === 'mangel') { header('Location: ?p=produktionsauftrag&id=' . $id . '&mangel=1'); exit; }
     header('Location: ?p=produktionsauftrag&id=' . $id . '&ok=1'); exit;
 }
 
@@ -163,7 +122,9 @@ $statusBadge = match ($pa['status']) {
 };
 
 render_header('produktion', $pa['nummer']);
-bx_head($pa['nummer'], 'Produktionsauftrag', bx_btn('Zurück zur Liste', '?p=produktion', 'ghost'));
+bx_head($pa['nummer'], 'Produktionsauftrag',
+        ($pa['status'] !== 'erledigt' ? bx_btn('Geführt produzieren', '?p=produktion_run&id=' . $id, 'primary') . ' ' : '')
+        . bx_btn('Zurück zur Liste', '?p=produktion', 'ghost'));
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Station abgeschlossen.</div>';
 if (isset($_GET['mangel'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht genug Bestand für die Produktion – siehe Materialbedarf unten. Bitte erst Wareneingang buchen.</div>';
 if (isset($_GET['weg']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produktionsweg umgestellt.</div>';
