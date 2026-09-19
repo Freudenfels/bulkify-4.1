@@ -46,16 +46,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fehler = 'Name ist ein Pflichtfeld.';
     } else {
         $kunde_id = ($_POST['kunde_id'] ?? '') !== '' ? (int)$_POST['kunde_id'] : null;
+        // Kunde gewählt = die eigene Rezeptur DIESES Kunden (exklusiv, nicht für alle sichtbar);
+        // kein Kunde = Hausrezeptur (Katalog, für alle).
+        $exkl = $kunde_id ? 1 : 0;
         // Kapselgröße nur bei Kapsel/Softgel speichern, sonst leeren
         $kapsGr = in_array($f('darreichungsform'), ['kapsel','softgel'], true) && ($_POST['kapselgroesse_id'] ?? '') !== ''
                   ? (int)$_POST['kapselgroesse_id'] : null;
         if ($neu) {
-            q("INSERT INTO rezeptur (nummer,name,kunde_id,darreichungsform,kapselgroesse_id,status,notiz) VALUES (?,?,?,?,?,?,?)",
-              [naechste_nummer('RZ'), $f('name'), $kunde_id, $f('darreichungsform'), $kapsGr, $f('status') ?: 'entwurf', $f('notiz')]);
+            q("INSERT INTO rezeptur (nummer,name,kunde_id,darreichungsform,kapselgroesse_id,exklusiv,status,notiz) VALUES (?,?,?,?,?,?,?,?)",
+              [naechste_nummer('RZ'), $f('name'), $kunde_id, $f('darreichungsform'), $kapsGr, $exkl, $f('status') ?: 'entwurf', $f('notiz')]);
             $id = insert_id();
         } else {
-            q("UPDATE rezeptur SET name=?,kunde_id=?,darreichungsform=?,kapselgroesse_id=?,status=?,notiz=? WHERE id=?",
-              [$f('name'), $kunde_id, $f('darreichungsform'), $kapsGr, $f('status'), $f('notiz'), (int)$id]);
+            q("UPDATE rezeptur SET name=?,kunde_id=?,darreichungsform=?,kapselgroesse_id=?,exklusiv=?,status=?,notiz=? WHERE id=?",
+              [$f('name'), $kunde_id, $f('darreichungsform'), $kapsGr, $exkl, $f('status'), $f('notiz'), (int)$id]);
         }
         // Zutaten synchronisieren
         q("DELETE FROM rezeptur_zutat WHERE rezeptur_id=?", [(int)$id]);
@@ -159,7 +162,7 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   <fieldset <?= $locked ? 'disabled' : '' ?> style="border:0;padding:0;margin:0;min-width:0">
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Name</label><input type="text" name="name" value="<?= $v('name') ?>" required></div>
-    <div class="bx-field"><label>Kunde <?= bx_hint('leer = Hausrezeptur (im Rezepturkatalog, für alle sichtbar)') ?></label>
+    <div class="bx-field"><label>Kunde <?= bx_hint('Kunde gewählt = eigene Rezeptur DIESES Kunden (erscheint bei ihm, nur für ihn sichtbar). Leer = Hausrezeptur im Katalog (für alle).') ?></label>
       <select name="kunde_id">
         <option value="">– keiner (Hausrezeptur) –</option>
         <?php foreach ($kunden as $k): ?><option value="<?= $k['id'] ?>" <?= (int)($r['kunde_id']??0)===(int)$k['id']?'selected':'' ?>><?= h($k['firma']) ?></option><?php endforeach; ?>
