@@ -356,13 +356,24 @@ function recalc(){
   document.getElementById('k_gewicht').textContent = totalW ? nf(totalW,0)+' mg' : '–';
   var kk = document.getElementById('k_kapsel');
   if (kk) {
-    if (!totalW) { kk.textContent = '–'; kk.style.color=''; }
+    var sel = document.getElementById('kapselgroesse_id');
+    var fixId = sel ? sel.value : '';
+    if (fixId) {
+      // Feste Kapselgröße gewählt -> diese anzeigen (nicht selbst berechnen), nur auf Passung prüfen.
+      var gew = null;
+      for (var i=0;i<KAPSELN.length;i++){ if (String(KAPSELN[i].id) === String(fixId)) { gew = KAPSELN[i]; break; } }
+      if (gew) {
+        if (!totalW)                              { kk.textContent = gew.name; kk.style.color=''; }
+        else if (totalW <= gew.fuellmenge_mg)     { kk.textContent = gew.name; kk.style.color='var(--gruen)'; }
+        else { kk.innerHTML = gew.name + ' <span style="font-size:12px">(Inhalt zu groß)</span>'; kk.style.color='var(--err)'; }
+      } else { kk.textContent = '–'; kk.style.color=''; }
+    } else if (!totalW) { kk.textContent = '–'; kk.style.color=''; }
     else {
+      // Automatisch: kleinste passende Größe vorschlagen.
       var passend = null;
       for (var i=0;i<KAPSELN.length;i++){ if (totalW <= KAPSELN[i].fuellmenge_mg) { passend = KAPSELN[i]; break; } }
-      if (passend) { kk.textContent = passend.name; kk.style.color='var(--gruen)'; }
-      else { var groesste = KAPSELN.length ? KAPSELN[KAPSELN.length-1] : null;
-             kk.innerHTML = 'passt in keine <span style="font-size:12px">(aufteilen)</span>'; kk.style.color='var(--err)'; }
+      if (passend) { kk.innerHTML = passend.name + ' <span style="font-size:12px">(automatisch)</span>'; kk.style.color='var(--gruen)'; }
+      else { kk.innerHTML = 'passt in keine <span style="font-size:12px">(aufteilen)</span>'; kk.style.color='var(--err)'; }
     }
   }
   document.getElementById('k_kosten').textContent = cost ? nf(cost,4)+' €' : '–';
@@ -394,6 +405,8 @@ function recalc(){
     tr.querySelector('.zitem-txt').focus();
   });
   document.querySelectorAll('.zutatrow').forEach(bind);
+  var kgSel = document.getElementById('kapselgroesse_id');
+  if (kgSel) kgSel.addEventListener('change', recalc);   // gewählte Kapselgröße -> Karte sofort aktualisieren
   recalc();
 })();
 </script>
