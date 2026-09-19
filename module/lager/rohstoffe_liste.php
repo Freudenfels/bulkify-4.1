@@ -24,15 +24,8 @@ else                            $rows = all("SELECT * FROM item WHERE kategorie=
 $KGMAP = [];
 foreach (all("SELECT id, name FROM kapselgroesse") as $kg) $KGMAP[(int)$kg['id']] = $kg['name'];
 
-if ($q !== '') {
-    $needle = mb_strtolower($q);
-    $rows = array_filter($rows, function($r) use ($needle) {
-        foreach (['name','name_en','name_lat','artikelnummer'] as $f) {
-            if (mb_strpos(mb_strtolower((string)$r[$f]), $needle) !== false) return true;
-        }
-        return false;
-    });
-}
+// Textsuche ist LIVE (clientseitig, siehe Script unten): alle Zeilen werden gerendert und beim Tippen
+// sofort gefiltert. $q befüllt nur das Feld vor (Deep-Link). Die Filter kat/fehlt bleiben serverseitig.
 $rows = bx_sort_rows($rows, $sort, $dir);
 
 // Wirkstoffe je Item nachladen (mehrere möglich) -> Map item_id => ["95 % Curcumin", ...]
@@ -155,7 +148,8 @@ bx_head($titel, count($rows) . ' Einträge' . ($fehltLbl ? ' · Filter: ' . $feh
     <?php endif; ?>
     <option value="alle" <?= $kat==='alle'?'selected':'' ?>>Alle Kategorien</option>
   </select>
-  <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Name, lat. Name, Art.-Nr …">
+  <input class="bx-search" type="text" id="rohSuche" name="q" value="<?= h($q) ?>" placeholder="Suchen: Name, lat. Name, Art.-Nr …" autocomplete="off">
+  <span class="muted" id="rohCount" style="font-size:13px;white-space:nowrap"></span>
   <?php if (!$istKapsel): ?>
   <select name="fehlt" onchange="this.form.submit()" title="Nur Rohstoffe zeigen, bei denen etwas fehlt">
     <?php foreach (['' => 'alle', 'irgendwas' => 'etwas fehlt', 'lief' => 'ohne Lieferant', 'preis' => 'ohne Preis', 'spec' => 'ohne Spec', 'coa' => 'ohne CoA'] as $k => $lbl): ?>
@@ -174,4 +168,25 @@ bx_table($cols, array_values($rows), [
     'rowUrl'  => fn($r) => '?p=rohstoff&id=' . $r['id'],
     'empty'   => 'Keine Einträge gefunden.',
 ]);
+?>
+<script>
+(function(){
+  var box=document.getElementById('rohSuche'); if(!box) return;
+  var tbody=document.querySelector('.bx-table tbody'); if(!tbody) return;
+  var rows=Array.prototype.slice.call(tbody.querySelectorAll('tr')),
+      cnt=document.getElementById('rohCount'), total=rows.length;
+  var leer=document.createElement('tr'); leer.hidden=true;
+  leer.innerHTML='<td colspan="<?= count($cols) ?>" class="muted">Keine Einträge gefunden.</td>';
+  tbody.appendChild(leer);
+  function filter(){
+    var q=(box.value||'').trim().toLowerCase(), sichtbar=0;
+    rows.forEach(function(tr){ var m=!q||tr.textContent.toLowerCase().indexOf(q)>=0; tr.hidden=!m; if(m) sichtbar++; });
+    leer.hidden=sichtbar>0;
+    cnt.textContent = q ? (sichtbar+' von '+total) : (total+' Einträge');
+  }
+  box.addEventListener('input', filter); filter();
+  var v=box.value; box.value=''; box.value=v; box.focus();
+})();
+</script>
+<?php
 render_footer();
