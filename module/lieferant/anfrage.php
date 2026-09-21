@@ -72,13 +72,14 @@ if (!$a):
   <div class="bx-panel">
     <?php if (!$liste): ?><div class="muted"><?= h(lp_t('keine_anfragen')) ?></div><?php else: ?>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('artikel')) ?></th><th class="bx-num"><?= h(lp_t('gewuenscht')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
+      <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('artikel')) ?></th><th class="bx-num"><?= h(lp_t('gewuenscht')) ?></th><th class="bx-num"><?= h(lp_t('ihr_preis')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
       <tbody><?php foreach ($liste as $r): ?>
         <tr><td><?= h($r['nummer']) ?></td>
             <td><?= h(($r['item_name'] ?? '') !== '' ? $r['item_name'] : ($r['betreff'] ?? '–')) ?>
                 <?php $typL = anfrage_art_label((string)($r['art'] ?? ''), (string)($r['form'] ?? ''), lp_sprache()); ?>
                 <?php if ($typL !== ''): ?><div class="muted" style="font-size:12px"><?= h($typL) ?></div><?php endif; ?></td>
             <td class="bx-num"><?= $r['menge'] ? h(lp_num($r['menge'])) . ' ' . h(lp_einheit($r['einheit'] ?: ($r['item_einheit'] ?? ''), (float)$r['menge'])) : '–' ?></td>
+            <td class="bx-num"><?= ($r['preis'] !== null && $r['preis'] !== '') ? h(lp_num($r['preis'], 4)) . ($r['ang_einheit'] ? ' / ' . h($r['ang_einheit']) : '') : '<span class="muted">–</span>' ?></td>
             <td><?= $r['status'] === 'offen' ? h(lp_t('anfrage_offen')) : h(lp_t('anfrage_beant')) ?></td>
             <td class="bx-num"><a class="btn <?= $r['status'] === 'offen' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="?p=lieferant_anfrage&id=<?= (int)$r['id'] ?>"><?= h($r['status'] === 'offen' ? lp_t('angebot_abgeben') : lp_t('ansehen')) ?></a></td></tr>
       <?php endforeach; ?></tbody>

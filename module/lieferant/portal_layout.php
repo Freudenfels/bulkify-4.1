@@ -153,6 +153,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'btn_spec'        => ['de'=>'CoA/Spec hochladen',       'en'=>'Upload CoA/Spec', 'zh'=>'上传 CoA/规格书'],
         'btn_manuell'     => ['de'=>'Manuell hinzufügen',       'en'=>'Add manually', 'zh'=>'手动添加'],
         'best_neu_lbl'    => ['de'=>'neu (zu bestätigen)',      'en'=>'new (to confirm)', 'zh'=>'新（待确认）'],
+        'ihr_preis'       => ['de'=>'Ihr Preis',                'en'=>'Your price', 'zh'=>'您的报价'],
         'spec_hoch'       => ['de'=>'Spezifikation oder CoA hochladen (ein Rohstoff)', 'en'=>'Upload a specification or CoA (one raw material)', 'zh'=>'上传规格书或 CoA（单个原料）'],
         'spec_hoch_sub'   => ['de'=>'PDF oder Bild, auch als Scan – in jeder Sprache (z. B. Chinesisch). Wir lesen es aus, übersetzen es und legen daraus einen Rohstoff-Vorschlag an. Sie müssen nichts eintippen.',
                               'en'=>'PDF or image, scans too – in any language (e.g. Chinese). We read and translate it and create a raw-material proposal from it. No typing needed.',
