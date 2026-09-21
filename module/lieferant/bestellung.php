@@ -48,7 +48,7 @@ if (!$b):
       <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('datum')) ?></th><th><?= h(lp_t('termin')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
       <tbody><?php foreach ($liste as $r):
           $st = (string)$r['station'];
-          $lbl = $st === '' ? '–' : bestellung_stationen_fuer(lp_sprache())[$st]; ?>
+          $lbl = $st === '' ? lp_t('best_neu_lbl') : bestellung_stationen_fuer(lp_sprache())[$st]; ?>
         <tr><td><?= h($r['nummer']) ?></td>
             <td><?= h(date('d.m.Y', strtotime((string)$r['angelegt']))) ?></td>
             <td><?= $r['eta_geplant'] ? h(date('d.m.Y', strtotime((string)$r['eta_geplant']))) : '<span class="muted">–</span>' ?></td>

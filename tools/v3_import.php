@@ -400,14 +400,19 @@ if ($WRITE) {
         $angek    = $d10($b['angekommen_real'] ?? '') ?: $d10($b['angekommen_at'] ?? '');
         $vart     = cut($b['versandart'] ?? '', 40);
         $vanb     = cut($b['versandanbieter'] ?? '', 60);
+        // Workflow-Station des Lieferantenportals aus dem v3-Status ableiten (das treibt die Status-Anzeige,
+        // nicht das interne 'status'-Feld). So sieht der Lieferant seine Bestellung im richtigen Schritt wie in v3.
+        $stationMap = ['offen'=>'', 'versand_geplant'=>'versand', 'wartet_auf_zoll'=>'versendet', 'versendet'=>'versendet', 'rohstoff_erhalten'=>'versendet'];
+        $station = $stationMap[(string)$b['status']] ?? '';
+        if ($station === '' && $conf) $station = 'angenommen';   // bestätigt, aber (noch) keine spätere Station -> mindestens angenommen
         $exB = one("SELECT id FROM bestellung WHERE v3_id=?", [$v3bid]);
         if ($exB) { $bid = (int)$exB['id'];
-            q("UPDATE bestellung SET lieferant_id=?,status=?,notiz=?,bestelldatum=?,tracking=?,bestaetigt=?,bestaetigt_am=?,eta_geplant=?,produktion_geplant=?,versandart=?,versandanbieter=?,angekommen_am=? WHERE id=?",
-              [$v4lid, $st, cut($notiz,500), $bdatum, cut($b['tracking']), $conf, $confAt, $eta, $prodGepl, $vart, $vanb, $angek, $bid]);
+            q("UPDATE bestellung SET lieferant_id=?,status=?,station=?,notiz=?,bestelldatum=?,tracking=?,bestaetigt=?,bestaetigt_am=?,eta_geplant=?,produktion_geplant=?,versandart=?,versandanbieter=?,angekommen_am=? WHERE id=?",
+              [$v4lid, $st, $station, cut($notiz,500), $bdatum, cut($b['tracking']), $conf, $confAt, $eta, $prodGepl, $vart, $vanb, $angek, $bid]);
             q("DELETE FROM bestellung_position WHERE bestellung_id=?", [$bid]); $w3['best_upd']++;
         } else {
-            q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum,tracking,bestaetigt,bestaetigt_am,eta_geplant,produktion_geplant,versandart,versandanbieter,angekommen_am,v3_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('BE'), $v4lid, $st, cut($notiz,500), $bdatum, cut($b['tracking']), $conf, $confAt, $eta, $prodGepl, $vart, $vanb, $angek, $v3bid]);
+            q("INSERT INTO bestellung (nummer,lieferant_id,status,station,notiz,bestelldatum,tracking,bestaetigt,bestaetigt_am,eta_geplant,produktion_geplant,versandart,versandanbieter,angekommen_am,v3_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('BE'), $v4lid, $st, $station, cut($notiz,500), $bdatum, cut($b['tracking']), $conf, $confAt, $eta, $prodGepl, $vart, $vanb, $angek, $v3bid]);
             $bid = (int)insert_id(); $w3['best_neu']++;
         }
         $ekp = $b['einzelpreis'] !== null && $b['einzelpreis'] !== '' ? (float)str_replace(',', '.', (string)$b['einzelpreis']) : ($b['preis'] !== null && $b['preis'] !== '' ? (float)str_replace(',', '.', (string)$b['preis']) : 0.0);
