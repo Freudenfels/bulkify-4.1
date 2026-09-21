@@ -66,50 +66,52 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
     <h1 style="margin-bottom:4px"><?= h(lp_t('katalog')) ?></h1>
     <p class="bx-sub" style="margin:0"><?= h(lp_t('katalog_sub')) ?></p>
   </div>
-  <button type="button" class="btn btn-primary" onclick="document.getElementById('uploadDlg').showModal()"><?= h(lp_t('hochladen')) ?></button>
+  <div class="bx-row" style="gap:8px;flex-wrap:wrap">
+    <button type="button" class="btn btn-primary" onclick="document.getElementById('dlgKatalog').showModal()"><?= h(lp_t('btn_katalog')) ?></button>
+    <button type="button" class="btn btn-primary" onclick="document.getElementById('dlgSpec').showModal()"><?= h(lp_t('btn_spec')) ?></button>
+    <button type="button" class="btn btn-ghost" onclick="katNeu()"><?= h(lp_t('btn_manuell')) ?></button>
+  </div>
 </div>
 
-<dialog id="uploadDlg" class="bx-dialog">
+<dialog id="dlgKatalog" class="bx-dialog">
   <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px">
-    <h2 style="margin:0"><?= h(lp_t('hochladen')) ?></h2>
-    <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('uploadDlg').close()" aria-label="schließen">&#10005;</button>
+    <h2 style="margin:0"><?= h(lp_t('katalog_hoch')) ?></h2>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('dlgKatalog').close()" aria-label="schließen">&#10005;</button>
   </div>
+  <p class="muted" style="margin:8px 0 10px;font-size:13px"><?= h(lp_t('katalog_hoch_sub')) ?></p>
+  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="liste_hoch">
+    <input type="hidden" name="dok_typ" value="sonstiges">
+    <input type="hidden" name="dok_titel" value="Katalog">
+    <div class="bx-field" style="margin:0"><label><?= h(lp_t('datei')) ?></label>
+      <input type="file" name="dok" required accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.tsv,.txt,.xlsx,.xlsm"></div>
+    <button class="btn btn-primary" type="submit"><?= h(lp_t('katalog_lesen')) ?></button>
+  </form>
+  <p class="muted" style="font-size:12px;margin:12px 0 0"><?= h(lp_t('dauert')) ?></p>
+</dialog>
 
-  <div style="margin-top:16px">
-    <h3 style="margin:0 0 2px"><?= h(lp_t('katalog_hoch')) ?></h3>
-    <p class="muted" style="margin:0 0 8px;font-size:13px"><?= h(lp_t('katalog_hoch_sub')) ?></p>
-    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
-      <input type="hidden" name="aktion" value="liste_hoch">
-      <input type="hidden" name="dok_typ" value="sonstiges">
-      <input type="hidden" name="dok_titel" value="Katalog">
-      <div class="bx-field" style="margin:0"><label><?= h(lp_t('datei')) ?></label>
-        <input type="file" name="dok" required accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.tsv,.txt,.xlsx,.xlsm"></div>
-      <button class="btn btn-primary" type="submit"><?= h(lp_t('katalog_lesen')) ?></button>
-    </form>
+<dialog id="dlgSpec" class="bx-dialog">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px">
+    <h2 style="margin:0"><?= h(lp_t('spec_hoch')) ?></h2>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('dlgSpec').close()" aria-label="schließen">&#10005;</button>
   </div>
-
-  <hr style="border:none;border-top:1px solid var(--line,#e3e3e0);margin:18px 0">
-
-  <div>
-    <h3 style="margin:0 0 2px"><?= h(lp_t('spec_hoch')) ?></h3>
-    <p class="muted" style="margin:0 0 8px;font-size:13px"><?= h(lp_t('spec_hoch_sub')) ?></p>
-    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
-      <input type="hidden" name="aktion" value="spec_hoch">
-      <input type="hidden" name="dok_typ" value="spezifikation">
-      <input type="hidden" name="dok_titel" value="Spezifikation/CoA">
-      <div class="bx-field" style="margin:0"><label><?= h(lp_t('datei')) ?></label>
-        <input type="file" name="dok" required accept=".pdf,.png,.jpg,.jpeg,.webp"></div>
-      <button class="btn btn-primary" type="submit"><?= h(lp_t('spec_lesen')) ?></button>
-    </form>
-  </div>
-  <p class="muted" style="font-size:12px;margin:14px 0 0"><?= h(lp_t('dauert')) ?></p>
+  <p class="muted" style="margin:8px 0 10px;font-size:13px"><?= h(lp_t('spec_hoch_sub')) ?></p>
+  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="spec_hoch">
+    <input type="hidden" name="dok_typ" value="spezifikation">
+    <input type="hidden" name="dok_titel" value="Spezifikation/CoA">
+    <div class="bx-field" style="margin:0"><label><?= h(lp_t('datei')) ?></label>
+      <input type="file" name="dok" required accept=".pdf,.png,.jpg,.jpeg,.webp"></div>
+    <button class="btn btn-primary" type="submit"><?= h(lp_t('spec_lesen')) ?></button>
+  </form>
+  <p class="muted" style="font-size:12px;margin:12px 0 0"><?= h(lp_t('dauert')) ?></p>
 </dialog>
 <style>
   .bx-dialog{border:none;border-radius:14px;max-width:560px;width:calc(100% - 32px);padding:22px 24px;box-shadow:0 24px 70px rgba(0,0,0,.32)}
   .bx-dialog::backdrop{background:rgba(0,0,0,.45)}
 </style>
 <script>
-  (function(){ var d=document.getElementById('uploadDlg'); if(d) d.addEventListener('click', function(e){ if(e.target===d) d.close(); }); })();
+  document.querySelectorAll('.bx-dialog').forEach(function(d){ d.addEventListener('click', function(e){ if(e.target===d) d.close(); }); });
 </script>
 
 <div class="bx-panel">
@@ -153,9 +155,12 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
   <?php endif; ?>
 </div>
 
-<div class="bx-panel" id="katFormPanel">
-  <h2 style="margin-top:0" id="katFormTitle"><?= h(lp_t('katalog_zeile_neu')) ?></h2>
-  <form method="post" id="katForm">
+<dialog id="dlgManuell" class="bx-dialog" style="max-width:720px">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px">
+    <h2 style="margin:0" id="katFormTitle"><?= h(lp_t('katalog_zeile_neu')) ?></h2>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('dlgManuell').close()" aria-label="schließen">&#10005;</button>
+  </div>
+  <form method="post" id="katForm" style="margin-top:14px">
     <input type="hidden" name="aktion" value="zeile_neu" id="katAktion">
     <input type="hidden" name="zeile_id" value="" id="katZeileId">
     <div class="bx-grid">
@@ -172,23 +177,25 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
       <div class="bx-field" style="max-width:130px"><label><?= h(lp_t('ab_menge')) ?></label><input type="text" name="menge_ab" id="kf_menge"></div>
     </div>
     <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><input type="text" name="notiz" id="kf_notiz" maxlength="500"></div>
-    <button class="btn btn-primary" type="submit" id="katSubmit"><?= h(lp_t('katalog_zeile_add')) ?></button>
-    <button type="button" class="btn btn-ghost" id="katCancel" hidden><?= h(lp_t('abbrechen')) ?></button>
+    <div class="bx-row" style="gap:8px;margin-top:6px">
+      <button class="btn btn-primary" type="submit" id="katSubmit"><?= h(lp_t('katalog_zeile_add')) ?></button>
+      <button type="button" class="btn btn-ghost" id="katCancel"><?= h(lp_t('abbrechen')) ?></button>
+    </div>
   </form>
-</div>
+</dialog>
 <script>
 (function(){
   var form=document.getElementById('katForm'); if(!form) return;
+  var dlg=document.getElementById('dlgManuell');
   var titel=document.getElementById('katFormTitle'), aktion=document.getElementById('katAktion'),
       zeileId=document.getElementById('katZeileId'), submit=document.getElementById('katSubmit'),
-      cancel=document.getElementById('katCancel'), panel=document.getElementById('katFormPanel');
+      cancel=document.getElementById('katCancel');
   var T={neu:<?= json_encode(lp_t('katalog_zeile_neu'), JSON_UNESCAPED_UNICODE) ?>, edit:<?= json_encode(lp_t('katalog_zeile_edit'), JSON_UNESCAPED_UNICODE) ?>,
          add:<?= json_encode(lp_t('katalog_zeile_add'), JSON_UNESCAPED_UNICODE) ?>, save:<?= json_encode(lp_t('speichern'), JSON_UNESCAPED_UNICODE) ?>};
   var set=function(id,v){ var el=document.getElementById(id); if(el) el.value=(v==null?'':v); };
-  function neuModus(){
-    aktion.value='zeile_neu'; zeileId.value=''; titel.textContent=T.neu; submit.textContent=T.add; cancel.hidden=true;
-    form.reset(); set('kf_waehrung','EUR');
-  }
+  function neuModus(){ aktion.value='zeile_neu'; zeileId.value=''; titel.textContent=T.neu; submit.textContent=T.add; form.reset(); set('kf_waehrung','EUR'); }
+  // Button „Manuell hinzufügen" oben öffnet das Popup im Neu-Modus.
+  window.katNeu=function(){ neuModus(); if(dlg) dlg.showModal(); var n=document.getElementById('kf_name'); if(n) n.focus(); };
   document.querySelectorAll('.bx-kat-edit').forEach(function(b){
     b.addEventListener('click',function(){
       var d=b.dataset;
@@ -198,11 +205,11 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
       set('kf_menge',d.menge); set('kf_notiz',d.notiz);
       var art=document.getElementById('kf_art'); if(art) art.value=d.art||'rohstoff';
       var f=document.getElementById('kf_form'); if(f) f.value=d.form||'';
-      titel.textContent=T.edit; submit.textContent=T.save; cancel.hidden=false;
-      panel.scrollIntoView({behavior:'smooth',block:'start'}); document.getElementById('kf_name').focus();
+      titel.textContent=T.edit; submit.textContent=T.save;
+      if(dlg) dlg.showModal(); document.getElementById('kf_name').focus();
     });
   });
-  cancel.addEventListener('click',neuModus);
+  if(cancel) cancel.addEventListener('click',function(){ if(dlg) dlg.close(); });
 })();
 </script>
 <?php lp_shell_ende(); lp_foot();
