@@ -13,6 +13,9 @@ $ziel = '?p=lieferant_rezepturpreise';
 
 // Einheit-Label je Darreichungsform (der Preis gilt je Stueck/Kapsel …).
 $formEinheit = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapsel' : ($f === 'tablette' ? 'Tablette' : ($f === 'stick' ? 'Stick' : 'Stück'));
+// Welche Darreichungsformen hat das Team fuer diesen Lieferanten freigeschaltet? Nur diese darf er bepreisen.
+$fertigFormen = array_values(array_filter(array_map('trim', explode(',', (string) scalar("SELECT fertig_formen FROM lieferanten WHERE id=?", [$lid])))));
+$formLabel = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'Pulver','fluessig'=>'Flüssig','gummi'=>'Fruchtgummi','gel'=>'Gel'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
@@ -26,8 +29,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'preis_add') {
         $rid   = (int)($_POST['rezeptur_id'] ?? 0);
         $preis = zahl_lesen((string)($_POST['preis'] ?? ''), false, $spr);
-        if ($rid > 0 && !scalar("SELECT id FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=?", [$rid, $lid])) {
-            $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+        $form  = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+        // Nur freigeschaltete Formen + keine Dublette.
+        if ($rid > 0 && in_array($form, $fertigFormen, true) && !scalar("SELECT id FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=?", [$rid, $lid])) {
             q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,angelegt) VALUES (?,?,?,?, 'angeboten', CURDATE(), NOW())",
               [$rid, $lid, $preis > 0 ? $preis : null, $formEinheit($form)]);
         }
@@ -47,10 +51,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $rows = all("SELECT la.id, la.preis, la.einheit, la.stand, r.id AS rezeptur_id, r.nummer, r.name, r.darreichungsform AS form
              FROM rezeptur_lief_angebot la JOIN rezeptur r ON r.id=la.rezeptur_id
              WHERE la.lieferant_id=? ORDER BY r.name", [$lid]);
-// Rezepturen, die der Lieferant noch NICHT bepreist hat (für „weitere Rezeptur eintragen").
-$offen = all("SELECT r.id, r.nummer, r.name, r.darreichungsform AS form FROM rezeptur r
-              WHERE r.id NOT IN (SELECT rezeptur_id FROM rezeptur_lief_angebot WHERE lieferant_id=?)
-              ORDER BY r.name", [$lid]);
+// Rezepturen, die der Lieferant noch NICHT bepreist hat – NUR in den freigeschalteten Formen.
+$offen = [];
+if ($fertigFormen) {
+    $ph = implode(',', array_fill(0, count($fertigFormen), '?'));
+    $offen = all("SELECT r.id, r.nummer, r.name, r.darreichungsform AS form FROM rezeptur r
+                  WHERE r.id NOT IN (SELECT rezeptur_id FROM rezeptur_lief_angebot WHERE lieferant_id=?)
+                    AND r.darreichungsform IN ($ph)
+                  ORDER BY r.name", array_merge([$lid], $fertigFormen));
+}
 $intervall = lieferant_preis_intervall($lid);
 $standMax  = null; foreach ($rows as $r) if ($r['stand'] && (!$standMax || $r['stand'] > $standMax)) $standMax = $r['stand'];
 $alter     = $standMax ? (int) floor((time() - strtotime((string)$standMax)) / 86400) : null;
@@ -64,6 +73,11 @@ if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12
 ?>
 <h1 style="margin-bottom:4px"><?= h(lp_t('rez_preise_titel')) ?></h1>
 <p class="bx-sub"><?= h(lp_t('rez_preise_sub')) ?></p>
+<?php if ($fertigFormen): ?>
+  <p class="muted" style="font-size:13px;margin:-6px 0 12px"><?= h(lp_t('freigeschaltet_formen')) ?>: <strong><?= h(implode(', ', array_map(fn($f) => $formLabel[$f] ?? $f, $fertigFormen))) ?></strong></p>
+<?php else: ?>
+  <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h(lp_t('keine_formen')) ?></div>
+<?php endif; ?>
 
 <?php if ($veraltet): ?>
 <div class="bx-panel" style="border-color:#e6c4c0;background:rgba(230,196,192,.12)">
@@ -107,6 +121,7 @@ if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12
   </table></div>
   <?php endif; ?>
 
+  <?php if ($fertigFormen && $offen): ?>
   <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:16px">
     <input type="hidden" name="aktion" value="preis_add">
     <div class="bx-field" style="margin:0;flex:1 1 300px"><label><?= h(lp_t('rez_preise_add')) ?></label>
@@ -117,6 +132,7 @@ if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12
     <div class="bx-field" style="margin:0;width:140px"><label><?= h(lp_t('ihr_preis')) ?> (€)</label><input type="text" name="preis" inputmode="decimal"></div>
     <button class="btn btn-primary" type="submit"><?= h(lp_t('hinzufuegen')) ?></button>
   </form>
+  <?php endif; ?>
 </div>
 <script>
 (function(){
