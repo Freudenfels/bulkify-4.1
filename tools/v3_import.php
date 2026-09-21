@@ -384,24 +384,39 @@ if ($WRITE) {
     }
     // Bestellungen (alle) -> v4 bestellung + eine Position (Artikel als Text)
     $statusMap = ['offen'=>'offen','rohstoff_erhalten'=>'geliefert','versendet'=>'bestellt','versand_geplant'=>'bestellt','wartet_auf_zoll'=>'bestellt'];
+    $d10 = fn($v) => (!empty($v) ? substr((string)$v, 0, 10) : null);   // Datum
+    $d19 = fn($v) => (!empty($v) ? substr((string)$v, 0, 19) : null);   // Datum+Zeit
     foreach ($v3->query("SELECT * FROM bestellungen ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $b) {
         $v3bid = (int)$b['id'];
         $v4lid = $mapLief[(int)$b['lieferant_id']] ?? null;
         $st = $statusMap[(string)$b['status']] ?? 'offen';
         $notiz = 'Aus v3 (#' . $v3bid . ', Status v3: ' . $b['status'] . ')' . (!empty($b['lief_charge']) ? ' · Charge ' . $b['lief_charge'] : '');
+        // Status-/Datumsfelder aus v3 mitnehmen (soweit v4 sie kennt).
+        $bdatum   = $d10($b['bestellt_at'] ?? '') ?: $d10($b['created_at'] ?? '');
+        $conf     = !empty($b['bestaetigt']) ? 1 : 0;
+        $confAt   = $d19($b['bestaetigt_at'] ?? '');
+        $eta      = $d10($b['eta_geplant'] ?? '');
+        $prodGepl = $d10($b['produktion_geplant_datum'] ?? '');
+        $angek    = $d10($b['angekommen_real'] ?? '') ?: $d10($b['angekommen_at'] ?? '');
+        $vart     = cut($b['versandart'] ?? '', 40);
+        $vanb     = cut($b['versandanbieter'] ?? '', 60);
         $exB = one("SELECT id FROM bestellung WHERE v3_id=?", [$v3bid]);
         if ($exB) { $bid = (int)$exB['id'];
-            q("UPDATE bestellung SET lieferant_id=?,status=?,notiz=?,bestelldatum=?,tracking=? WHERE id=?",
-              [$v4lid, $st, cut($notiz,500), (!empty($b['created_at']) ? substr((string)$b['created_at'],0,10) : null), cut($b['tracking']), $bid]);
+            q("UPDATE bestellung SET lieferant_id=?,status=?,notiz=?,bestelldatum=?,tracking=?,bestaetigt=?,bestaetigt_am=?,eta_geplant=?,produktion_geplant=?,versandart=?,versandanbieter=?,angekommen_am=? WHERE id=?",
+              [$v4lid, $st, cut($notiz,500), $bdatum, cut($b['tracking']), $conf, $confAt, $eta, $prodGepl, $vart, $vanb, $angek, $bid]);
             q("DELETE FROM bestellung_position WHERE bestellung_id=?", [$bid]); $w3['best_upd']++;
         } else {
-            q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum,tracking,v3_id) VALUES (?,?,?,?,?,?,?)",
-              [naechste_nummer('BE'), $v4lid, $st, cut($notiz,500), (!empty($b['created_at']) ? substr((string)$b['created_at'],0,10) : null), cut($b['tracking']), $v3bid]);
+            q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum,tracking,bestaetigt,bestaetigt_am,eta_geplant,produktion_geplant,versandart,versandanbieter,angekommen_am,v3_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('BE'), $v4lid, $st, cut($notiz,500), $bdatum, cut($b['tracking']), $conf, $confAt, $eta, $prodGepl, $vart, $vanb, $angek, $v3bid]);
             $bid = (int)insert_id(); $w3['best_neu']++;
         }
         $ekp = $b['einzelpreis'] !== null && $b['einzelpreis'] !== '' ? (float)str_replace(',', '.', (string)$b['einzelpreis']) : ($b['preis'] !== null && $b['preis'] !== '' ? (float)str_replace(',', '.', (string)$b['preis']) : 0.0);
+        // Produkt verknüpfen: v3 rohstoff_id -> v4 item (item.v3_id). Name-Fallback: artikel-Text, sonst Item-Name.
+        $posItem = !empty($b['rohstoff_id']) ? scalar("SELECT id FROM item WHERE v3_id=?", [(int)$b['rohstoff_id']]) : null;
+        $bez = cut($b['artikel']);
+        if (trim((string)$bez) === '') $bez = $posItem ? cut((string) scalar("SELECT name FROM item WHERE id=?", [(int)$posItem])) : 'Position';
         q("INSERT INTO bestellung_position (bestellung_id,item_id,menge,ek_preis,einheit,sort,bezeichnung) VALUES (?,?,?,?,?,0,?)",
-          [$bid, null, (float)($b['menge'] ?: 0), $ekp, cut($b['einheit'], 20), cut($b['artikel'])]);
+          [$bid, $posItem ? (int)$posItem : null, (float)($b['menge'] ?: 0), $ekp, cut($b['einheit'], 20), $bez]);
     }
     echo "\nGESCHRIEBEN (Stufe 3):\n";
     foreach ($w3 as $k => $v) printf("  %-12s %d\n", $k, $v);
