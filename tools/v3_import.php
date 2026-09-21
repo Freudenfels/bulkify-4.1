@@ -442,7 +442,9 @@ if ($WRITE) {
     foreach ($w3 as $k => $v) printf("  %-12s %d\n", $k, $v);
 
     // ---- Stufe 4: Lieferanten-Angebote pro Rezeptur (Fremdfertigung) ----
-    $w4 = ['angebot_neu'=>0,'angebot_upd'=>0,'ohne_rezeptur'=>0];
+    $w4 = ['angebot_neu'=>0,'angebot_upd'=>0,'ohne_rezeptur'=>0,'staffel'=>0];
+    $hasAngStaffel = v3_hat_tabelle($v3, 'lieferant_angebot_staffel');
+    q("DELETE FROM rezeptur_lief_angebot_staffel WHERE angebot_id IN (SELECT id FROM rezeptur_lief_angebot WHERE v3_id IS NOT NULL)");
     foreach ($v3->query("SELECT * FROM lieferant_angebot ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $a) {
         $v3aid = (int)$a['id'];
         $rz = one("SELECT id FROM rezeptur WHERE v3_id=?", [(int)$a['rezept_id']]);
@@ -451,13 +453,25 @@ if ($WRITE) {
         $v4lid = $mapLief[(int)$a['lieferant_id']] ?? null;
         $preis = ($a['preis'] !== null && $a['preis'] !== '') ? (float)str_replace(',', '.', (string)$a['preis']) : null;
         $menge = ($a['menge'] !== null && $a['menge'] !== '') ? (float)str_replace(',', '.', (string)$a['menge']) : null;
+        // Stand = wann der Lieferant den Preis eingetragen hat (angebot_at/created_at) – für die 4-Wochen-Regel.
+        $stand = !empty($a['angebot_at']) ? substr((string)$a['angebot_at'], 0, 10) : (!empty($a['created_at']) ? substr((string)$a['created_at'], 0, 10) : null);
         $exA = one("SELECT id FROM rezeptur_lief_angebot WHERE v3_id=?", [$v3aid]);
-        if ($exA) {
-            q("UPDATE rezeptur_lief_angebot SET rezeptur_id=?,lieferant_id=?,preis=?,einheit=?,menge=?,status=?,notiz=?,angenommen_am=? WHERE id=?",
-              [$v4rid, $v4lid, $preis, cut($a['einheit'], 30), $menge, cut($a['status'], 20), cut($a['notiz'], 255), (!empty($a['angenommen_at']) ? $a['angenommen_at'] : null), (int)$exA['id']]); $w4['angebot_upd']++;
+        if ($exA) { $aid = (int)$exA['id'];
+            q("UPDATE rezeptur_lief_angebot SET rezeptur_id=?,lieferant_id=?,preis=?,einheit=?,menge=?,status=?,notiz=?,stand=? WHERE id=?",
+              [$v4rid, $v4lid, $preis, cut($a['einheit'], 30), $menge, cut($a['status'], 20), cut($a['notiz'], 255), $stand, $aid]); $w4['angebot_upd']++;
         } else {
-            q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,menge,status,notiz,angenommen_am,v3_id) VALUES (?,?,?,?,?,?,?,?,?)",
-              [$v4rid, $v4lid, $preis, cut($a['einheit'], 30), $menge, cut($a['status'], 20), cut($a['notiz'], 255), (!empty($a['angenommen_at']) ? $a['angenommen_at'] : null), $v3aid]); $w4['angebot_neu']++;
+            q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,menge,status,notiz,stand,v3_id) VALUES (?,?,?,?,?,?,?,?,?)",
+              [$v4rid, $v4lid, $preis, cut($a['einheit'], 30), $menge, cut($a['status'], 20), cut($a['notiz'], 255), $stand, $v3aid]); $aid = (int)insert_id(); $w4['angebot_neu']++;
+        }
+        // Mengenstaffeln übernehmen (ab_menge -> Preis)
+        if ($hasAngStaffel) {
+            $si = 0;
+            foreach ($v3->query("SELECT ab_menge, preis FROM lieferant_angebot_staffel WHERE angebot_id=$v3aid ORDER BY ab_menge")->fetchAll(PDO::FETCH_ASSOC) as $st) {
+                $sp = ($st['preis'] !== null && $st['preis'] !== '') ? (float)str_replace(',', '.', (string)$st['preis']) : null;
+                q("INSERT INTO rezeptur_lief_angebot_staffel (angebot_id,ab_menge,preis,sort) VALUES (?,?,?,?)",
+                  [$aid, (float)($st['ab_menge'] ?: 0), $sp, $si++]);
+                $w4['staffel']++;
+            }
         }
     }
     echo "\nGESCHRIEBEN (Stufe 4 – Lieferanten-Angebote):\n";

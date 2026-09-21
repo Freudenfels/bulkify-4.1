@@ -1320,6 +1320,16 @@ function init_schema(): void {
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         KEY idx_rezeptur (rezeptur_id), KEY idx_lieferant (lieferant_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('rezeptur_lief_angebot', 'stand', "DATE NULL");   // wann der Preis zuletzt eingetragen/aktualisiert wurde (4-Wochen-Regel)
+    // Mengenstaffeln je Fremdfertigungs-Angebot (ab_menge -> Preis je Einheit). Lieferanten unterbieten sich hierüber.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS rezeptur_lief_angebot_staffel (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        angebot_id INT NOT NULL,
+        ab_menge DECIMAL(14,3) NOT NULL DEFAULT 0,
+        preis DECIMAL(12,4) NULL,
+        sort INT NOT NULL DEFAULT 0,
+        KEY idx_ang (angebot_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     // lieferant_preisliste: Nachschlage-Liste der Rohstoff-Einkaufspreise (Name · Lieferant · EUR/kg),
     // aus v3 übernommen. Bewusst OHNE Verknüpfung zum v4-Lagerartikel (v4 hat einen eigenen Rohstoffstamm) –

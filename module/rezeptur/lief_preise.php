@@ -23,6 +23,10 @@ $rows = all("SELECT la.*, r.nummer AS rez_nr, r.name AS rez_name, r.darreichungs
 
 $gesamt   = (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot");
 $mitPreis = (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot WHERE preis IS NOT NULL AND preis > 0");
+// Günstigsten Preis je Rezeptur bestimmen (Lieferanten unterbieten sich – der niedrigste gewinnt).
+$minRez = [];
+foreach ($rows as $r) { $rid = (int)$r['rezeptur_id']; $p = ($r['preis'] !== null && (float)$r['preis'] > 0) ? (float)$r['preis'] : null;
+    if ($rid && $p !== null && (!isset($minRez[$rid]) || $p < $minRez[$rid])) $minRez[$rid] = $p; }
 
 $dfLabel = ['kapsel'=>'Kapsel','tablette'=>'Tablette','pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','softgel'=>'Softgel'];
 
@@ -61,7 +65,8 @@ bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · 
           <td><?php if ($rid): ?><a class="kundenlink" href="?p=rezeptur_detail&id=<?= $rid ?>"><?= h((string)($r['rez_name'] ?? '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
           <td class="muted"><?= h($dfLabel[(string)$r['df']] ?? (string)($r['df'] ?? '')) ?></td>
           <td><?= $r['firma'] ? h((string)$r['firma']) : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $ek !== null ? number_format($ek, 4, ',', '.') . ' &euro;' : '<span class="muted">–</span>' ?></td>
+          <?php $guenstigster = $ek !== null && $rid && isset($minRez[$rid]) && abs($ek - $minRez[$rid]) < 1e-9; ?>
+          <td class="bx-num"><?= $ek !== null ? number_format($ek, 4, ',', '.') . ' &euro;' . ($guenstigster ? ' ' . bx_badge('günstigster', 'ok') : '') : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $ek !== null ? number_format($ek * (1 + $vkMarge((string)$r['df']) / 100), 4, ',', '.') . ' &euro;' : '<span class="muted">–</span>' ?></td>
           <td><?= $r['einheit'] ? h((string)$r['einheit']) : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $r['menge'] !== null && (float)$r['menge'] > 0 ? rtrim(rtrim(number_format((float)$r['menge'], 3, ',', '.'), '0'), ',') : '<span class="muted">–</span>' ?></td>
