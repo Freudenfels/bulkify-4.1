@@ -1334,6 +1334,16 @@ function init_schema(): void {
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         KEY idx_name (rohstoff_name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('lieferant_preisliste', 'lieferant_id', "INT NULL");        // Zuordnung zum Lieferanten (die Preisliste GEHOERT diesem Lieferanten)
+    ensure_column('lieferant_preisliste', 'einheit', "VARCHAR(20) NULL");     // Bezug des Preises (Standard kg)
+    ensure_column('lieferanten', 'preis_intervall_tage', "INT NOT NULL DEFAULT 28");   // 4-Wochen-Regel: Preise muessen so oft aktualisiert werden
+    ensure_index('lieferant_preisliste', 'idx_lief', 'lieferant_id');
+    // Einmalig: importierte/vorhandene Preislisten-Zeilen dem Lieferanten per Namen zuordnen (firma == lieferant-Text).
+    if (meta_get('preisliste_lief_link', '') !== '1') {
+        q("UPDATE lieferant_preisliste pl JOIN lieferanten l ON l.firma = pl.lieferant
+           SET pl.lieferant_id = l.id WHERE pl.lieferant_id IS NULL AND pl.lieferant IS NOT NULL AND pl.lieferant<>''");
+        meta_set('preisliste_lief_link', '1');
+    }
 
     // portal_anfrage: Kundenanfragen aus dem Portal für Produkt / Rohstoff / Dienstleistung (Rezeptur läuft separat über rezeptur_anfrage).
     // AGB, versioniert: eine Fassung ist aktiv, alte bleiben als Beleg stehen. Beim verbindlichen
@@ -4624,6 +4634,39 @@ function meldebestand_bedarf(): array {
                   'zu_bestellen'=>max(0.0, $soll - $verf), 'haupt_lieferant'=>(int)($it['haupt_lieferant_id'] ?? 0)];
     }
     return $out;
+}
+
+// ===== Lieferanten-Preisliste (gehört EINEM Lieferanten) + 4-Wochen-Aktualisierungsregel =====
+function lieferant_preisliste_fuer(int $lieferant_id): array {
+    return all("SELECT * FROM lieferant_preisliste WHERE lieferant_id=? ORDER BY rohstoff_name", [$lieferant_id]);
+}
+// Neuester Preis-Stand des Lieferanten (Datum) oder null.
+function lieferant_preise_stand(int $lieferant_id): ?string {
+    $s = scalar("SELECT MAX(stand) FROM lieferant_preisliste WHERE lieferant_id=? AND stand IS NOT NULL", [$lieferant_id]);
+    return $s ? (string)$s : null;
+}
+// Aktualisierungs-Intervall des Lieferanten (Standard 28 Tage = 4 Wochen).
+function lieferant_preis_intervall(int $lieferant_id): int {
+    $t = (int) scalar("SELECT preis_intervall_tage FROM lieferanten WHERE id=?", [$lieferant_id]);
+    return $t > 0 ? $t : 28;
+}
+// Tage seit dem letzten Preis-Update (null = keine Preise / kein Stand).
+function lieferant_preise_alter_tage(int $lieferant_id): ?int {
+    $stand = lieferant_preise_stand($lieferant_id);
+    if (!$stand) return null;
+    return (int) floor((time() - strtotime($stand)) / 86400);
+}
+// Sind die Preise überfällig (älter als das Intervall)? Preise ohne Stand gelten als überfällig.
+function lieferant_preise_veraltet(int $lieferant_id): bool {
+    if ((int) scalar("SELECT COUNT(*) FROM lieferant_preisliste WHERE lieferant_id=?", [$lieferant_id]) === 0) return false;
+    $alter = lieferant_preise_alter_tage($lieferant_id);
+    if ($alter === null) return true;   // Preise vorhanden, aber ohne Stand-Datum
+    return $alter > lieferant_preis_intervall($lieferant_id);
+}
+// Alle Preise des Lieferanten als „heute aktuell" bestätigen (Stand = heute) – erfüllt die 4-Wochen-Regel in einem Klick.
+function lieferant_preise_bestaetigen(int $lieferant_id): int {
+    q("UPDATE lieferant_preisliste SET stand=CURDATE() WHERE lieferant_id=?", [$lieferant_id]);
+    return (int) scalar("SELECT COUNT(*) FROM lieferant_preisliste WHERE lieferant_id=?", [$lieferant_id]);
 }
 // Offener Fehlbedarf (nur bestellbare Positionen mit item_id, abzüglich schon offen bestellter Menge für diesen Auftrag).
 function auftrag_fehlbedarf(int $pa_id): array {

@@ -364,12 +364,13 @@ if ($WRITE) {
     foreach ($v3->query("SELECT * FROM lieferanten ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $l) {
         $v3lid = (int)$l['id'];
         $ex = one("SELECT id FROM lieferanten WHERE v3_id=?", [$v3lid]);
+        $intervall = (int)($l['preis_update_tage'] ?? 0); if ($intervall <= 0) $intervall = 28;   // 4-Wochen-Regel
         if ($ex) { $v4lid = (int)$ex['id'];
-            q("UPDATE lieferanten SET firma=?,ansprechpartner=?,email=?,land=?,kategorien=?,sprache=? WHERE id=?",
-              [cut($l['firma']), cut($l['ansprechpartner']), cut($l['email']), $land2($l["land"]), cut($l['kategorien']), cut($l['sprache'] ?: 'de', 5), $v4lid]); $w3['lief_upd']++;
+            q("UPDATE lieferanten SET firma=?,ansprechpartner=?,email=?,land=?,kategorien=?,sprache=?,preis_intervall_tage=? WHERE id=?",
+              [cut($l['firma']), cut($l['ansprechpartner']), cut($l['email']), $land2($l["land"]), cut($l['kategorien']), cut($l['sprache'] ?: 'de', 5), $intervall, $v4lid]); $w3['lief_upd']++;
         } else {
-            q("INSERT INTO lieferanten (lieferantennummer,firma,ansprechpartner,email,land,kategorien,sprache,notiz,v3_id) VALUES (?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('L'), cut($l['firma']), cut($l['ansprechpartner']), cut($l['email']), $land2($l["land"]), cut($l['kategorien']), cut($l['sprache'] ?: 'de', 5), 'Aus v3 übernommen (v3-Lieferant #' . $v3lid . ')', $v3lid]);
+            q("INSERT INTO lieferanten (lieferantennummer,firma,ansprechpartner,email,land,kategorien,sprache,preis_intervall_tage,notiz,v3_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('L'), cut($l['firma']), cut($l['ansprechpartner']), cut($l['email']), $land2($l["land"]), cut($l['kategorien']), cut($l['sprache'] ?: 'de', 5), $intervall, 'Aus v3 übernommen (v3-Lieferant #' . $v3lid . ')', $v3lid]);
             $v4lid = (int)insert_id(); $w3['lief_neu']++;
         }
         $mapLief[$v3lid] = $v4lid;
@@ -378,8 +379,11 @@ if ($WRITE) {
     q("DELETE FROM lieferant_preisliste WHERE v3_id IS NOT NULL");
     foreach ($v3->query("SELECT * FROM preisliste ORDER BY id")->fetchAll(PDO::FETCH_ASSOC) as $pl) {
         $eur = $pl['eur_kg'] !== null && $pl['eur_kg'] !== '' ? (float)str_replace(',', '.', (string)$pl['eur_kg']) : null;
-        q("INSERT INTO lieferant_preisliste (rohstoff_name,lieferant,eur_kg,stand,v3_id) VALUES (?,?,?,?,?)",
-          [cut($pl['name']), cut($pl['lieferant']), $eur, (!empty($pl['updated_at']) ? substr((string)$pl['updated_at'], 0, 10) : null), (int)$pl['id']]);
+        $liefName = cut($pl['lieferant']);
+        // Preisliste GEHOERT einem Lieferanten -> per Namen zuordnen (firma == v3-Lieferant-Text).
+        $liefId = ($liefName !== null && $liefName !== '') ? scalar("SELECT id FROM lieferanten WHERE firma=? LIMIT 1", [$liefName]) : null;
+        q("INSERT INTO lieferant_preisliste (rohstoff_name,lieferant,lieferant_id,eur_kg,einheit,stand,v3_id) VALUES (?,?,?,?, 'kg', ?,?)",
+          [cut($pl['name']), $liefName, $liefId ? (int)$liefId : null, $eur, (!empty($pl['updated_at']) ? substr((string)$pl['updated_at'], 0, 10) : null), (int)$pl['id']]);
         $w3['preisliste']++;
     }
     // Bestellungen (alle) -> v4 bestellung + eine Position (Artikel als Text)

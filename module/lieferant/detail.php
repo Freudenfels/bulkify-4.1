@@ -245,7 +245,22 @@ if (!$neu) {
   </section>
 
   <section data-panel="angebote" hidden><div class="bx-panel"><h2>Preise / Angebote (<?= count($l_angebote) ?>)</h2><?php $l_angTabelle($l_angebote); ?>
-    <p class="muted" style="font-size:12px;margin-top:8px">Neue Preise holen Sie unten im Bereich „Preisanfragen" ein; angenommene Angebote stehen als EK-Staffeln am Artikel.</p></div></section>
+    <p class="muted" style="font-size:12px;margin-top:8px">Neue Preise holen Sie unten im Bereich „Preisanfragen" ein; angenommene Angebote stehen als EK-Staffeln am Artikel.</p></div>
+    <?php $l_preisliste = $neu ? [] : lieferant_preisliste_fuer((int)$id); $l_veraltet = !$neu && lieferant_preise_veraltet((int)$id); $l_pAlter = $neu ? null : lieferant_preise_alter_tage((int)$id); ?>
+    <div class="bx-panel"<?= $l_veraltet ? ' style="border-color:#e6c4c0"' : '' ?>>
+      <h2 style="margin-top:0">Preisliste des Lieferanten (<?= count($l_preisliste) ?>)
+        <?= $l_preisliste ? ($l_veraltet ? bx_badge('überfällig – seit ' . (int)$l_pAlter . ' Tagen', 'warn') : bx_badge('aktuell' . ($l_pAlter !== null ? ' (vor ' . (int)$l_pAlter . ' Tagen)' : ''), 'ok')) : '' ?></h2>
+      <p class="muted" style="margin-top:0;font-size:13px">Der Lieferant pflegt diese Preise im Portal und aktualisiert sie alle <?= (int)(!$neu ? lieferant_preis_intervall((int)$id) : 28) ?> Tage (4-Wochen-Regel).</p>
+      <?php if ($l_preisliste): ?>
+      <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Rohstoff</th><th class="bx-num">Preis</th><th>Stand</th></tr></thead><tbody>
+        <?php foreach ($l_preisliste as $pr): ?>
+          <tr><td><?= h($pr['rohstoff_name']) ?></td>
+              <td class="bx-num"><?= $pr['eur_kg'] !== null ? h(rtrim(rtrim(number_format((float)$pr['eur_kg'], 4, ',', '.'), '0'), ',')) . ' € / ' . h($pr['einheit'] ?: 'kg') : '<span class="muted">–</span>' ?></td>
+              <td class="muted" style="font-size:12px"><?= $pr['stand'] ? h(date('d.m.Y', strtotime((string)$pr['stand']))) : '–' ?></td></tr>
+        <?php endforeach; ?>
+      </tbody></table></div>
+      <?php else: ?><p class="muted">Noch keine Preisliste hinterlegt.</p><?php endif; ?>
+    </div></section>
   <section data-panel="bestell" hidden><div class="bx-panel"><h2>Bestellungen (<?= count($l_bestellungen) ?>)</h2><?php $l_bestTabelle($l_bestellungen); ?></div></section>
 
   <section data-panel="rechnungen" hidden>
