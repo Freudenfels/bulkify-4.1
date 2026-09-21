@@ -39,17 +39,23 @@ if (isset($_GET['ok']))     echo '<div class="bx-panel badge-ok" style="padding:
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 
 if (!$b):
-    $liste = all("SELECT * FROM bestellung WHERE lieferant_id=? ORDER BY (status='geliefert'), angelegt DESC", [$lid]);
+    $liste = all("SELECT b.*,
+                    (SELECT COALESCE(NULLIF(i.name,''), bp.bezeichnung)
+                       FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
+                       WHERE bp.bestellung_id=b.id ORDER BY bp.sort, bp.id LIMIT 1) AS produkt,
+                    (SELECT COUNT(*) FROM bestellung_position bp WHERE bp.bestellung_id=b.id) AS n_pos
+                  FROM bestellung b WHERE b.lieferant_id=? ORDER BY (b.status='geliefert'), b.angelegt DESC", [$lid]);
 ?>
   <h1 style="margin-bottom:4px"><?= h(lp_t('bestellungen')) ?></h1>
   <div class="bx-panel">
     <?php if (!$liste): ?><div class="muted"><?= h(lp_t('keine_best')) ?></div><?php else: ?>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('datum')) ?></th><th><?= h(lp_t('termin')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
+      <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('artikel')) ?></th><th><?= h(lp_t('datum')) ?></th><th><?= h(lp_t('termin')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
       <tbody><?php foreach ($liste as $r):
           $st = (string)$r['station'];
           $lbl = $st === '' ? lp_t('best_neu_lbl') : bestellung_stationen_fuer(lp_sprache())[$st]; ?>
         <tr><td><?= h($r['nummer']) ?></td>
+            <td><?= ($r['produkt'] ?? '') !== '' ? h($r['produkt']) : '<span class="muted">–</span>' ?><?= (int)$r['n_pos'] > 1 ? ' <span class="muted" style="font-size:12px">+' . ((int)$r['n_pos'] - 1) . '</span>' : '' ?></td>
             <td><?= h(date('d.m.Y', strtotime((string)$r['angelegt']))) ?></td>
             <td><?= $r['eta_geplant'] ? h(date('d.m.Y', strtotime((string)$r['eta_geplant']))) : '<span class="muted">–</span>' ?></td>
             <td><?= h($lbl) ?></td>
