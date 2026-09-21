@@ -22,6 +22,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $r = $d ? katalog_einlesen($lid, BX_UPLOADS . '/' . basename((string)$d['datei']), (int)$d['id']) : ['ok'=>false, 'fehler'=>'Datei nicht gefunden.'];
         header('Location: ' . $ziel . ($r['ok'] ? '&gelesen=' . (int)$r['anzahl'] : '&fehler=' . urlencode($r['fehler']))); exit;
     }
+    if ($aktion === 'spec_hoch') {
+        // Ein CoA/Spezifikation (jede Sprache) -> EIN Rohstoff-Vorschlag fürs Team (mit Wirkstoffen/Kennwerten).
+        $f = lieferant_datei_upload($lid, 'lieferant', $spr);
+        if ($f !== '') { header('Location: ' . $ziel . '&fehler=' . urlencode($f)); exit; }
+        $d = one("SELECT id, datei FROM dokument WHERE objekt_typ='lieferant' AND objekt_id=? ORDER BY id DESC LIMIT 1", [$lid]);
+        $r = $d ? katalog_aus_spec($lid, BX_UPLOADS . '/' . basename((string)$d['datei']), (int)$d['id']) : ['ok'=>false, 'fehler'=>'Datei nicht gefunden.'];
+        header('Location: ' . $ziel . ($r['ok'] ? '&spec_ok=' . urlencode((string)$r['name']) : '&fehler=' . urlencode((string)($r['fehler'] ?? '')))); exit;
+    }
     if ($aktion === 'zeile_neu') {
         q("INSERT INTO lieferant_katalog (lieferant_id,name,art,form,spezifikation,herkunft,preis,waehrung,einheit,menge_ab,notiz,status,angelegt)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,'neu',?)",
@@ -49,6 +57,7 @@ lp_head('bulkify – ' . lp_t('katalog'));
 lp_shell_start('lieferant_katalog');
 if (isset($_GET['ok']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('gespeichert')) . '</div>';
 if (isset($_GET['gelesen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('katalog_gelesen')) . ' ' . (int)$_GET['gelesen'] . '</div>';
+if (isset($_GET['spec_ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('spec_ok')) . ' „' . h((string)$_GET['spec_ok']) . '"</div>';
 if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format((float)$x, $n, '.', ''), '0'), '.');
 ?>
@@ -70,6 +79,20 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
 </div>
 
 <div class="bx-panel">
+  <h2 style="margin-top:0"><?= h(lp_t('spec_hoch')) ?></h2>
+  <p class="muted" style="margin-top:0"><?= h(lp_t('spec_hoch_sub')) ?></p>
+  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="spec_hoch">
+    <input type="hidden" name="dok_typ" value="spezifikation">
+    <input type="hidden" name="dok_titel" value="Spezifikation/CoA">
+    <div class="bx-field" style="margin:0"><label><?= h(lp_t('datei')) ?></label>
+      <input type="file" name="dok" required accept=".pdf,.png,.jpg,.jpeg,.webp"></div>
+    <button class="btn btn-primary" type="submit"><?= h(lp_t('spec_lesen')) ?></button>
+    <span class="muted" style="font-size:12px;align-self:center"><?= h(lp_t('dauert')) ?></span>
+  </form>
+</div>
+
+<div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
     <h2 style="margin:0"><?= h(lp_t('katalog_liste')) ?> <span class="muted" style="font-weight:normal">(<?= count($zeilen) ?>)</span></h2>
     <?php if ($offen > 0): ?><span class="muted"><?= h(lp_t('katalog_wartet')) ?>: <?= $offen ?></span><?php endif; ?>
@@ -86,7 +109,7 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
     <tbody>
     <?php foreach ($zeilen as $z): $neu = $z['status'] === 'neu'; ?>
       <tr>
-        <td><?= h($z['name']) ?><?php if ($z['herkunft']): ?><div class="muted" style="font-size:12px"><?= h($z['herkunft']) ?></div><?php endif; ?></td>
+        <td><?= h($z['name']) ?><?php if (!empty($z['name_original']) && $z['name_original'] !== $z['name']): ?><div class="muted" style="font-size:12px">Original: <?= h($z['name_original']) ?></div><?php endif; ?><?php if ($z['herkunft']): ?><div class="muted" style="font-size:12px"><?= h($z['herkunft']) ?></div><?php endif; ?></td>
         <td><?= h(anfrage_art_label($z['art'] === 'fertigprodukt' ? 'fertigprodukt' : 'rohstoff', (string)$z['form'], $spr)) ?></td>
         <td><?= h((string)$z['spezifikation']) ?></td>
         <td class="bx-num"><?= $z['preis'] !== null ? h($zahl($z['preis'], 4) . ' ' . $z['waehrung'] . ($z['einheit'] ? ' / ' . $z['einheit'] : '')) : '–' ?></td>

@@ -159,6 +159,8 @@ function init_schema(): void {
         entschieden DATETIME NULL,
         KEY idx_lieferant (lieferant_id, status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('lieferant_katalog', 'name_original', "VARCHAR(190) NULL");   // Name wortgetreu wie beim Lieferanten (Originalsprache, z. B. Chinesisch); name = ins Deutsche übersetzt
+    ensure_column('lieferant_katalog', 'ki_json', "TEXT NULL");                  // volles KI-Ergebnis eines hochgeladenen CoA/Spec (Wirkstoffe/Kennwerte) -> beim Anlegen angereichert
 
     // nachricht: Rückfragen zwischen Team und Lieferant (core/nachricht.php). Hängt am Lieferanten,
     // optional zusätzlich an einer Bestellung oder Preisanfrage. Gelesen-Flags je Seite.

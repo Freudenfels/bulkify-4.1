@@ -419,7 +419,7 @@ if (!$neu) {
   <?php // Beim Anlegen: aus einer Spezifikation heraus starten. Spart das Abtippen und ist der
         // Weg, über den jeder Rohstoff von Anfang an Papiere hat.
         if ($neu): require_once BX_ROOT . '/core/spec_ki.php'; ?>
-  <div class="bx-panel" style="border-color:var(--gruen)"><h2 style="margin-top:0">Rohstoff aus einer Spezifikation anlegen</h2>
+  <div class="bx-panel" style="border-color:var(--gruen)"><h2 style="margin-top:0">Rohstoff aus Spezifikation oder CoA anlegen <span class="muted" style="font-weight:400;font-size:13px">– jede Sprache (z. B. Chinesisch), wird automatisch ins Deutsche übersetzt</span></h2>
     <?php if ($neuKiFehler !== ''): ?><div style="border:1px solid #e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px;border-radius:8px"><?= h($neuKiFehler) ?></div><?php endif; ?>
     <?php if ($neuKi): $anz = count((array)($neuKi['stamm'] ?? []));
           $anzW = count((array)($neuKi['wirkstoffe'] ?? [])); $anzK = count((array)($neuKi['kennwerte'] ?? [])); ?>

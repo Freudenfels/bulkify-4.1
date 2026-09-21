@@ -11,8 +11,9 @@ require_once __DIR__ . '/schema.php';
 // Was eine Katalogzeile beschreiben kann. Schlüssel = Spalte, Wert = Klartext für die KI.
 function katalog_felder(): array {
     return [
-        'name'          => 'Bezeichnung des Artikels, wie sie beim Lieferanten steht',
-        'name_en'       => 'Englische Bezeichnung, falls angegeben',
+        'name'          => 'Bezeichnung des Artikels auf DEUTSCH (bei fremdsprachigen Listen ins Deutsche übersetzen)',
+        'name_en'       => 'Englische Bezeichnung (übersetzen, falls die Liste nicht englisch ist)',
+        'name_original' => 'Der Name EXAKT wie in der Liste, in der Originalsprache (z. B. Chinesisch) – unverändert, nicht übersetzen',
         'name_lat'      => 'Lateinische/botanische Bezeichnung',
         'art'           => 'rohstoff oder fertigprodukt – Rohstoff ist Schüttware zum Verarbeiten, Fertigprodukt ist bereits Kapsel/Tablette/Pulver in Endform',
         'form'          => 'pulver, granulat, fluessig, oel, extrakt, kapsel, tablette, softgel oder stick',
@@ -33,6 +34,7 @@ function katalog_anweisung(): string {
     foreach (katalog_felder() as $k => $t) $f .= "  \"$k\": $t\n";
     return <<<TXT
 Dies ist die Preisliste oder das Produktblatt eines Lieferanten für Nahrungsergänzungsmittel.
+Die Liste kann in JEDER Sprache sein (z. B. Chinesisch, Englisch, Deutsch).
 Lies ALLE angebotenen Artikel heraus – auch wenn es viele sind.
 
 Gib NUR dieses JSON zurück:
@@ -44,8 +46,9 @@ Gib NUR dieses JSON zurück:
 Felder je Zeile:
 $f
 Regeln:
+- Sprache: "name" IMMER auf Deutsch, "name_en" auf Englisch (bei Bedarf übersetzen). "name_original" bleibt WORTGETREU wie in der Liste (Originalsprache, z. B. Chinesisch). Ist die Liste schon deutsch, ist "name" = "name_original".
 - Eine Zeile je angebotenem Artikel. Steht derselbe Artikel mit mehreren Staffelpreisen da, nimm den Preis der kleinsten Menge und schreibe die übrigen Staffeln in "notiz".
-- Übernimm nur, was dasteht. Fehlende Felder weglassen, nicht raten.
+- Übernimm nur, was dasteht (außer Übersetzung des Namens). Fehlende Felder weglassen, nicht raten.
 - "preis" und "menge_ab" als Zahl ohne Einheit, Punkt als Dezimaltrennzeichen.
 - "name" ist Pflicht. Zeilen ohne erkennbare Bezeichnung lässt du weg.
 - Überschriften, Seitenzahlen, Kontaktdaten und Fußnoten sind keine Artikel.
@@ -71,10 +74,11 @@ function katalog_einlesen(int $lieferant_id, string $pfad, ?int $dokument_id = n
         if ($name === '') continue;
         $art  = in_array(($z['art'] ?? ''), ['rohstoff', 'fertigprodukt'], true) ? $z['art'] : 'rohstoff';
         $form = array_key_exists((string)($z['form'] ?? ''), katalog_formen()) ? $z['form'] : null;
-        q("INSERT INTO lieferant_katalog (lieferant_id,dokument_id,name,name_en,name_lat,art,form,cas,spezifikation,herkunft,preis,waehrung,einheit,menge_ab,notiz,status,angelegt)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'neu',?)",
+        q("INSERT INTO lieferant_katalog (lieferant_id,dokument_id,name,name_en,name_original,name_lat,art,form,cas,spezifikation,herkunft,preis,waehrung,einheit,menge_ab,notiz,status,angelegt)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'neu',?)",
           [$lieferant_id, $dokument_id ?: null, mb_substr($name, 0, 190),
            mb_substr(trim((string)($z['name_en'] ?? '')), 0, 190) ?: null,
+           mb_substr(trim((string)($z['name_original'] ?? '')), 0, 190) ?: null,
            mb_substr(trim((string)($z['name_lat'] ?? '')), 0, 190) ?: null,
            $art, $form, mb_substr(trim((string)($z['cas'] ?? '')), 0, 30) ?: null,
            mb_substr(trim((string)($z['spezifikation'] ?? '')), 0, 190) ?: null,
@@ -89,6 +93,40 @@ function katalog_einlesen(int $lieferant_id, string $pfad, ?int $dokument_id = n
     }
     log_aktivitaet('lieferant', $lieferant_id, 'lieferant', $n . ' Katalogzeile(n) aus einer hochgeladenen Liste gelesen.', 'katalog');
     return ['ok'=>true, 'anzahl'=>$n, 'hinweise'=>(array)($r['daten']['hinweise'] ?? []), 'usage'=>$r['usage'] ?? []];
+}
+
+// Ein vom Lieferanten hochgeladenes CoA/Spezifikation (JEDE Sprache) auslesen und als EINE
+// Katalog-Vorschlagszeile (Rohstoff) fürs Team anlegen. Das volle KI-Ergebnis (Wirkstoffe/Kennwerte)
+// wird in ki_json gemerkt und beim Anlegen (katalog_uebernehmen) an den Rohstoff angereichert.
+function katalog_aus_spec(int $lieferant_id, string $pfad, ?int $dokument_id = null): array {
+    if (!ki_bereit()) return ['ok'=>false, 'fehler'=>'Die KI ist nicht eingerichtet.'];
+    require_once __DIR__ . '/spec_ki.php';
+    $r = spec_ki_lesen($pfad);
+    if (!($r['ok'] ?? false)) return ['ok'=>false, 'fehler'=>($r['fehler'] ?? 'Die Unterlage konnte nicht gelesen werden.')];
+    $stamm = (array)($r['stamm'] ?? []);
+    $name  = trim((string)($stamm['name'] ?? ''));
+    if ($name === '') return ['ok'=>false, 'fehler'=>'Im Dokument wurde keine Bezeichnung erkannt.'];
+    $cas = trim((string)($stamm['cas'] ?? '')) ?: trim((string)($r['cas_vorschlag'] ?? ''));
+    // Kurz-Spezifikation aus dem ersten Wirkstoff (z. B. "Curcumin 95 %").
+    $spez = '';
+    foreach ((array)($r['wirkstoffe'] ?? []) as $w) {
+        $g = $w['gehalt_prozent'] ?? null;
+        $spez = trim((string)$w['name'] . ($g !== null ? ' ' . rtrim(rtrim(number_format((float)$g, 2, '.', ''), '0'), '.') . ' %' : ''));
+        if ($spez !== '') break;
+    }
+    q("INSERT INTO lieferant_katalog (lieferant_id,dokument_id,name,name_en,name_lat,art,form,cas,spezifikation,herkunft,notiz,ki_json,status,angelegt)
+       VALUES (?,?,?,?,?, 'rohstoff', NULL, ?,?,?,?,?, 'neu', ?)",
+      [$lieferant_id, $dokument_id ?: null, mb_substr($name, 0, 190),
+       mb_substr(trim((string)($stamm['name_en'] ?? '')), 0, 190) ?: null,
+       mb_substr(trim((string)($stamm['name_lat'] ?? '')), 0, 190) ?: null,
+       $cas !== '' ? mb_substr($cas, 0, 30) : null,
+       mb_substr($spez, 0, 190) ?: null,
+       mb_substr(trim((string)($stamm['herkunftsland'] ?? '')), 0, 120) ?: null,
+       mb_substr('Aus ' . mb_strtoupper((string)$r['typ']) . ' des Lieferanten hochgeladen.', 0, 500),
+       json_encode($r, JSON_UNESCAPED_UNICODE),
+       gmdate('Y-m-d H:i:s')]);
+    log_aktivitaet('lieferant', $lieferant_id, 'lieferant', 'CoA/Spezifikation für „' . $name . '" hochgeladen – Rohstoff-Vorschlag fürs Team.', 'katalog');
+    return ['ok'=>true, 'name'=>$name, 'typ'=>$r['typ']];
 }
 
 // Formen, die eine Katalogzeile haben kann (deutsch beschriftet).
@@ -152,9 +190,33 @@ function katalog_uebernehmen(int $zeile_id, ?int $item_id = null, bool $preis_ue
            $z['form'] ?: ($kat === 'fertig' ? 'kapsel' : 'pulver'), $z['cas'], $z['herkunft'],
            $einheit, $einheit, $z['preis'] !== null ? (float)$z['preis'] : 0,
            (int)$z['lieferant_id'],
-           trim('Aus dem Lieferantenkatalog. ' . (string)$z['spezifikation'] . ' ' . (string)$z['notiz'])]);
+           trim('Aus dem Lieferantenkatalog. ' . (!empty($z['name_original']) && $z['name_original'] !== $z['name'] ? 'Original: ' . (string)$z['name_original'] . '. ' : '') . (string)$z['spezifikation'] . ' ' . (string)$z['notiz'])]);
         $item_id = (int) insert_id();
         log_aktivitaet('item', $item_id, 'team', 'Aus dem Katalog von ' . (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [(int)$z['lieferant_id']]) . ' angelegt.', 'katalog');
+        // Kam die Zeile aus einem hochgeladenen CoA/Spec? Dann Rohstoff anreichern: Wirkstoffe (mit Gehalt),
+        // Kennwerte, Dichte – und das Dokument an den Rohstoff hängen.
+        $ki = !empty($z['ki_json']) ? json_decode((string)$z['ki_json'], true) : null;
+        if (is_array($ki)) {
+            $si = 0;
+            foreach ((array)($ki['wirkstoffe'] ?? []) as $w) {
+                $nm = trim((string)($w['name'] ?? '')); if ($nm === '') continue;
+                $nid = naehrstoff_id_by_name($nm);
+                $g = $w['gehalt_prozent'] ?? null;
+                if ($nid) q("INSERT INTO item_wirkstoff (item_id,naehrstoff_id,gehalt_prozent,gehalt_wert,gehalt_einheit,sort) VALUES (?,?,?,?, 'prozent', ?)",
+                            [$item_id, $nid, ($g === null || $g === '') ? null : $g, ($g === null || $g === '') ? null : $g, $si++]);
+            }
+            $ki2 = 0;
+            foreach ((array)($ki['kennwerte'] ?? []) as $kw) {
+                $p = trim((string)($kw['parameter'] ?? '')); if ($p === '') continue;
+                q("INSERT INTO item_kennwert (item_id,parameter,wert,sort) VALUES (?,?,?,?)", [$item_id, $p, trim((string)($kw['wert'] ?? '')), $ki2++]);
+            }
+            if (!empty($ki['stamm']['dichte'])) q("UPDATE item SET dichte=? WHERE id=?", [(float)$ki['stamm']['dichte'], $item_id]);
+            if (!empty($z['dokument_id'])) {
+                $dok = one("SELECT datei, datei_orig FROM dokument WHERE id=?", [(int)$z['dokument_id']]);
+                if ($dok) q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,lieferant_id) VALUES ('item',?,?,?,?,?,?)",
+                            [$item_id, (($ki['typ'] ?? '') === 'coa' ? 'coa' : 'spezifikation'), 'Vom Lieferanten hochgeladen', $dok['datei'], $dok['datei_orig'], (int)$z['lieferant_id']]);
+            }
+        }
     }
 
     // Preis als EK-Staffel des Lieferanten – dort rechnet die Kalkulation damit.

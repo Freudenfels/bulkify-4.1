@@ -499,6 +499,7 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
               $treffer = $offen ? katalog_treffer($z) : null; ?>
         <tr>
           <td><?= h($z['name']) ?>
+            <?php if (!empty($z['name_original']) && $z['name_original'] !== $z['name']): ?><div class="muted" style="font-size:12px">Original: <?= h($z['name_original']) ?></div><?php endif; ?>
             <?php if ($z['herkunft'] || $z['notiz']): ?><div class="muted" style="font-size:12px"><?= h(trim((string)$z['herkunft'] . ' ' . (string)$z['notiz'])) ?></div><?php endif; ?>
             <?php if ($treffer): ?><div style="font-size:12px;color:#8a6d1f">gibt es vielleicht schon: <?= h($treffer['artikelnummer'] . ' ' . $treffer['name']) ?></div><?php endif; ?>
           </td>
