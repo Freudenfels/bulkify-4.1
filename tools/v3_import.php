@@ -415,13 +415,24 @@ if ($WRITE) {
               [naechste_nummer('BE'), $v4lid, $st, $station, cut($notiz,500), $bdatum, cut($b['tracking']), $conf, $confAt, $eta, $prodGepl, $vart, $vanb, $angek, $v3bid]);
             $bid = (int)insert_id(); $w3['best_neu']++;
         }
-        $ekp = $b['einzelpreis'] !== null && $b['einzelpreis'] !== '' ? (float)str_replace(',', '.', (string)$b['einzelpreis']) : ($b['preis'] !== null && $b['preis'] !== '' ? (float)str_replace(',', '.', (string)$b['preis']) : 0.0);
+        // Preis: v3 'preis' ist der GESAMTpreis der Bestellung; 'einzelpreis' (falls vorhanden) der STÜCKpreis
+        // als Freitext (z. B. "$0,0234 je Kapsel"). v4 speichert den Stückpreis (Summe = Menge × Stückpreis),
+        // deshalb: Stückpreis aus einzelpreis lesen, sonst Gesamtpreis / Menge.
+        $menge = (float)($b['menge'] ?: 0);
+        $ekp = 0.0;
+        if ($b['einzelpreis'] !== null && trim((string)$b['einzelpreis']) !== ''
+            && preg_match('/[0-9]+(?:[.,][0-9]+)?/', (string)$b['einzelpreis'], $mep)) {
+            $ekp = (float) str_replace(',', '.', $mep[0]);
+        } elseif ($b['preis'] !== null && trim((string)$b['preis']) !== '') {
+            $gesamt = (float) str_replace(',', '.', (string)$b['preis']);   // Gesamtpreis
+            $ekp = $menge > 0 ? $gesamt / $menge : $gesamt;                 // -> Stückpreis
+        }
         // Produkt verknüpfen: v3 rohstoff_id -> v4 item (item.v3_id). Name-Fallback: artikel-Text, sonst Item-Name.
         $posItem = !empty($b['rohstoff_id']) ? scalar("SELECT id FROM item WHERE v3_id=?", [(int)$b['rohstoff_id']]) : null;
         $bez = cut($b['artikel']);
         if (trim((string)$bez) === '') $bez = $posItem ? cut((string) scalar("SELECT name FROM item WHERE id=?", [(int)$posItem])) : 'Position';
         q("INSERT INTO bestellung_position (bestellung_id,item_id,menge,ek_preis,einheit,sort,bezeichnung) VALUES (?,?,?,?,?,0,?)",
-          [$bid, $posItem ? (int)$posItem : null, (float)($b['menge'] ?: 0), $ekp, cut($b['einheit'], 20), $bez]);
+          [$bid, $posItem ? (int)$posItem : null, $menge, $ekp, cut($b['einheit'], 20), $bez]);
     }
     echo "\nGESCHRIEBEN (Stufe 3):\n";
     foreach ($w3 as $k => $v) printf("  %-12s %d\n", $k, $v);
