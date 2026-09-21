@@ -61,36 +61,56 @@ if (isset($_GET['spec_ok'])) echo '<div class="bx-panel badge-ok" style="padding
 if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format((float)$x, $n, '.', ''), '0'), '.');
 ?>
-<h1 style="margin-bottom:4px"><?= h(lp_t('katalog')) ?></h1>
-<p class="bx-sub"><?= h(lp_t('katalog_sub')) ?></p>
-
-<div class="bx-panel">
-  <h2 style="margin-top:0"><?= h(lp_t('katalog_hoch')) ?></h2>
-  <p class="muted" style="margin-top:0"><?= h(lp_t('katalog_hoch_sub')) ?></p>
-  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="liste_hoch">
-    <input type="hidden" name="dok_typ" value="sonstiges">
-    <input type="hidden" name="dok_titel" value="Katalog">
-    <div class="bx-field" style="margin:0"><label><?= h(lp_t('datei')) ?></label>
-      <input type="file" name="dok" required accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.tsv,.txt,.xlsx,.xlsm"></div>
-    <button class="btn btn-primary" type="submit"><?= h(lp_t('katalog_lesen')) ?></button>
-    <span class="muted" style="font-size:12px;align-self:center"><?= h(lp_t('dauert')) ?></span>
-  </form>
+<div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+  <div>
+    <h1 style="margin-bottom:4px"><?= h(lp_t('katalog')) ?></h1>
+    <p class="bx-sub" style="margin:0"><?= h(lp_t('katalog_sub')) ?></p>
+  </div>
+  <button type="button" class="btn btn-primary" onclick="document.getElementById('uploadDlg').showModal()"><?= h(lp_t('hochladen')) ?></button>
 </div>
 
-<div class="bx-panel">
-  <h2 style="margin-top:0"><?= h(lp_t('spec_hoch')) ?></h2>
-  <p class="muted" style="margin-top:0"><?= h(lp_t('spec_hoch_sub')) ?></p>
-  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="spec_hoch">
-    <input type="hidden" name="dok_typ" value="spezifikation">
-    <input type="hidden" name="dok_titel" value="Spezifikation/CoA">
-    <div class="bx-field" style="margin:0"><label><?= h(lp_t('datei')) ?></label>
-      <input type="file" name="dok" required accept=".pdf,.png,.jpg,.jpeg,.webp"></div>
-    <button class="btn btn-primary" type="submit"><?= h(lp_t('spec_lesen')) ?></button>
-    <span class="muted" style="font-size:12px;align-self:center"><?= h(lp_t('dauert')) ?></span>
-  </form>
-</div>
+<dialog id="uploadDlg" class="bx-dialog">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px">
+    <h2 style="margin:0"><?= h(lp_t('hochladen')) ?></h2>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('uploadDlg').close()" aria-label="schließen">&#10005;</button>
+  </div>
+
+  <div style="margin-top:16px">
+    <h3 style="margin:0 0 2px"><?= h(lp_t('katalog_hoch')) ?></h3>
+    <p class="muted" style="margin:0 0 8px;font-size:13px"><?= h(lp_t('katalog_hoch_sub')) ?></p>
+    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <input type="hidden" name="aktion" value="liste_hoch">
+      <input type="hidden" name="dok_typ" value="sonstiges">
+      <input type="hidden" name="dok_titel" value="Katalog">
+      <div class="bx-field" style="margin:0"><label><?= h(lp_t('datei')) ?></label>
+        <input type="file" name="dok" required accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.tsv,.txt,.xlsx,.xlsm"></div>
+      <button class="btn btn-primary" type="submit"><?= h(lp_t('katalog_lesen')) ?></button>
+    </form>
+  </div>
+
+  <hr style="border:none;border-top:1px solid var(--line,#e3e3e0);margin:18px 0">
+
+  <div>
+    <h3 style="margin:0 0 2px"><?= h(lp_t('spec_hoch')) ?></h3>
+    <p class="muted" style="margin:0 0 8px;font-size:13px"><?= h(lp_t('spec_hoch_sub')) ?></p>
+    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <input type="hidden" name="aktion" value="spec_hoch">
+      <input type="hidden" name="dok_typ" value="spezifikation">
+      <input type="hidden" name="dok_titel" value="Spezifikation/CoA">
+      <div class="bx-field" style="margin:0"><label><?= h(lp_t('datei')) ?></label>
+        <input type="file" name="dok" required accept=".pdf,.png,.jpg,.jpeg,.webp"></div>
+      <button class="btn btn-primary" type="submit"><?= h(lp_t('spec_lesen')) ?></button>
+    </form>
+  </div>
+  <p class="muted" style="font-size:12px;margin:14px 0 0"><?= h(lp_t('dauert')) ?></p>
+</dialog>
+<style>
+  .bx-dialog{border:none;border-radius:14px;max-width:560px;width:calc(100% - 32px);padding:22px 24px;box-shadow:0 24px 70px rgba(0,0,0,.32)}
+  .bx-dialog::backdrop{background:rgba(0,0,0,.45)}
+</style>
+<script>
+  (function(){ var d=document.getElementById('uploadDlg'); if(d) d.addEventListener('click', function(e){ if(e.target===d) d.close(); }); })();
+</script>
 
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
