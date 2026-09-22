@@ -29,7 +29,7 @@ function bx_nav(): array {
         'Produkt'      => ['rezeptur' => 'Rezepturen', 'rezept_preise' => 'Rezeptur-Preise', 'produkte' => 'Produkte', 'novelfood' => 'Novel Food'],
         'Produktion'   => ['produktion' => 'Produktion', 'produktion_run' => 'Geführte Produktion', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
         'Lager'        => ['lager' => 'Warenlager', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'freigaben' => 'Freigaben', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
-        'Einkauf'      => ['bedarf' => 'Einkaufsbedarf', 'einkaufsliste' => 'Einkaufsliste', 'einkauf' => 'Bestellungen', 'lieferanten' => 'Lieferanten', 'lieferant_preise' => 'Lieferanten-Preise', 'lief_preisliste' => 'EK-Preisliste', 'ek_import' => 'EK-Preise (Import)'],
+        'Einkauf'      => ['bedarf' => 'Einkaufsbedarf', 'einkaufsliste' => 'Einkaufsliste', 'einkauf' => 'Bestellungen', 'lieferanten' => 'Lieferanten', 'katalog_freigaben' => 'Katalog-Freigaben', 'lieferant_preise' => 'Lieferanten-Preise', 'lief_preisliste' => 'EK-Preisliste', 'ek_import' => 'EK-Preise (Import)'],
         'Buchhaltung'  => ['rechnungen' => 'Rechnungen', 'buchhaltung' => 'Belege'],
         'System'       => ['einstellungen' => 'Einstellungen', 'benutzer' => 'Benutzer', 'v3_import_upload' => 'v3 neu einlesen (Upload)', 'app' => 'App aufs Handy'],
     ];
@@ -114,6 +114,8 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                        OR EXISTS (SELECT 1 FROM item_grenzwert g WHERE g.item_id=i.id)
                        OR (i.spec_pdf IS NOT NULL AND i.spec_pdf<>'') )")
               + (int) scalar("SELECT COUNT(*) FROM charge c WHERE COALESCE(c.coa_freigegeben,0)=0 AND EXISTS (SELECT 1 FROM charge_analyse a WHERE a.charge_id=c.id)");
+            // Offene Lieferanten-Uploads (Mein Katalog: Katalog/CoA/Spec/manuell), die auf unsere Prüfung warten.
+            $anfCount['katalog_freigaben'] = (int) scalar("SELECT COUNT(*) FROM lieferant_katalog WHERE status='neu'");
         } catch (Throwable $e) { /* Tabellen evtl. noch nicht da */ }
     }
     foreach ($navdef as $gruppe => $seiten) {
@@ -137,6 +139,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 'einkaufsliste' => "$n Positionen zu bestellen",
                 'auftraege'     => "$n Aufträge noch nicht fertig",
                 'freigaben'     => "$n offene Freigaben (Spezifikationen/CoA)",
+                'katalog_freigaben' => "$n Lieferanten-Uploads zu prüfen",
                 default         => "$n offene Anfragen",
             };
             $badge = $n > 0 ? "<span class=\"bx-navbadge\" title=\"$badgeTitel\">$n</span>" : '';

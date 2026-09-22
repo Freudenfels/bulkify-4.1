@@ -73,6 +73,7 @@ function route_rollen_map(): array {
         'naehrstoff'         => ['production'],
         'lieferanten'        => ['einkauf', 'finance'],
         'lieferant'          => ['einkauf', 'finance'],
+        'katalog_freigaben'  => ['einkauf', 'finance'],
         'einkauf'            => ['einkauf'],
         'bestellung'         => ['einkauf'],
         'bestellung_pdf'     => ['einkauf'],

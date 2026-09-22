@@ -26,6 +26,7 @@ $routes = [
     'kunde'       => 'kunde/detail.php',
     'lieferanten'    => 'lieferant/liste.php',
     'lieferant'      => 'lieferant/detail.php',
+    'katalog_freigaben' => 'einkauf/katalog_freigaben.php',
     // Lieferantenportal (eigener Zugang, kein interner Bereich)
     'lieferant_login'        => 'lieferant/login.php',
     'lieferant_einladung'    => 'lieferant/einladung.php',
