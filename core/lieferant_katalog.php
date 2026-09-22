@@ -170,6 +170,30 @@ function katalog_treffer(array $zeile): ?array {
         ?: one("SELECT id, artikelnummer, name FROM item WHERE name LIKE ? AND gesperrt=0 LIMIT 1", ['%' . $name . '%']);
 }
 
+// Mehrere mögliche Treffer im Bestand finden – gleiche CAS, gleicher Name, ähnliche Namensteile.
+// Damit wir nicht denselben Rohstoff doppelt anlegen. Rückgabe: Liste mit id, artikelnummer, name,
+// cas, kategorie und 'grund' (warum es als Treffer gilt).
+function katalog_aehnliche(array $z, int $limit = 6): array {
+    $name = trim((string)($z['name'] ?? ''));
+    $cas  = trim((string)($z['cas'] ?? ''));
+    $found = [];
+    $add = function(array $rows, string $grund) use (&$found) {
+        foreach ($rows as $r) { $id = (int)$r['id']; if (!isset($found[$id])) { $r['grund'] = $grund; $found[$id] = $r; } }
+    };
+    $lim = max(1, (int)$limit);
+    if ($cas !== '')  $add(all("SELECT id,artikelnummer,name,cas,kategorie FROM item WHERE cas=? AND gesperrt=0 LIMIT $lim", [$cas]), 'gleiche CAS');
+    if ($name !== '') {
+        $add(all("SELECT id,artikelnummer,name,cas,kategorie FROM item WHERE name=? AND gesperrt=0 LIMIT $lim", [$name]), 'gleicher Name');
+        // Aussagekräftige Wörter aus dem Namen (>=4 Zeichen), längste zuerst.
+        $worte = array_values(array_filter(preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($name)) ?: [], fn($w) => mb_strlen($w) >= 4));
+        usort($worte, fn($a, $b) => mb_strlen($b) - mb_strlen($a));
+        foreach (array_slice(array_unique($worte), 0, 2) as $w) {
+            $add(all("SELECT id,artikelnummer,name,cas,kategorie FROM item WHERE gesperrt=0 AND name LIKE ? LIMIT $lim", ['%' . $w . '%']), 'ähnlicher Name');
+        }
+    }
+    return array_slice(array_values($found), 0, $lim);
+}
+
 // Eine geprüfte Zeile übernehmen: Artikel anlegen (oder mit einem vorhandenen verknüpfen) und
 // den Preis des Lieferanten dazuschreiben. Rückgabe ['ok'=>bool, 'item_id'=>n, 'msg'=>'…'].
 function katalog_uebernehmen(int $zeile_id, ?int $item_id = null, bool $preis_uebernehmen = true): array {
