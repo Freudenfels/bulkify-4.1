@@ -11,3 +11,5 @@
 Offene Zeilen kann der Lieferant selbst **bearbeiten** (`aktion=zeile_save`) oder löschen (`aktion=zeile_weg`); übernommene nicht mehr. „Bearbeiten" füllt das untere Formular per JS mit den Werten der Zeile (setzt Titel/Knopf auf Bearbeiten, `zeile_id`), „Abbrechen" schaltet zurück auf Neuanlage. Der Status je Zeile zeigt ihm, ob wir sie schon geprüft haben.
 
 **Wichtig:** Aus einer Zeile wird **kein** Artikel bei uns. Das entscheidet das Team im Lieferantenkonto, Reiter Katalog. Zahlen werden in der Schreibweise des Lieferanten gelesen (`zahl_lesen()` mit seiner Sprache).
+
+**Popups (`.bx-dialog`):** Katalog hochladen, CoA/Spec hochladen und „Manuell" laufen als `<dialog>`. Die Klasse setzt `background:var(--panel)`, `color:var(--text)` und `border:var(--line)`, damit das Popup dem Theme folgt – vorher war es im **Dark-Mode** weiß (UA-Default), mit kaum lesbaren hellgrauen Labels über dunklen Feldern.

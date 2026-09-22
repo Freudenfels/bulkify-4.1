@@ -107,8 +107,11 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
   <p class="muted" style="font-size:12px;margin:12px 0 0"><?= h(lp_t('dauert')) ?></p>
 </dialog>
 <style>
-  .bx-dialog{border:none;border-radius:14px;max-width:560px;width:calc(100% - 32px);padding:22px 24px;box-shadow:0 24px 70px rgba(0,0,0,.32)}
-  .bx-dialog::backdrop{background:rgba(0,0,0,.45)}
+  /* Popup folgt dem Theme (im Dark-Mode war es sonst weiss – UA-Default). */
+  .bx-dialog{border:1px solid var(--line);border-radius:14px;max-width:560px;width:calc(100% - 32px);padding:22px 24px;
+             background:var(--panel);color:var(--text);box-shadow:0 24px 70px rgba(0,0,0,.45);color-scheme:light dark}
+  .bx-dialog h2{color:var(--text)}
+  .bx-dialog::backdrop{background:rgba(0,0,0,.55)}
 </style>
 <script>
   document.querySelectorAll('.bx-dialog').forEach(function(d){ d.addEventListener('click', function(e){ if(e.target===d) d.close(); }); });
