@@ -103,7 +103,7 @@ if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12
     <tbody>
     <?php foreach ($rows as $r): $alt = $r['stand'] ? (int) floor((time() - strtotime((string)$r['stand'])) / 86400) : null; ?>
       <tr>
-        <td><?= h($r['name']) ?> <span class="muted" style="font-size:12px"><?= h($r['nummer']) ?></span></td>
+        <td><a href="?p=lieferant_rezeptur&id=<?= (int)$r['rezeptur_id'] ?>"><?= h($r['name']) ?></a> <span class="muted" style="font-size:12px"><?= h($r['nummer']) ?></span></td>
         <td><?= h(anfrage_art_label('rohstoff', (string)$r['form'], $spr) ?: $formEinheit($r['form'])) ?></td>
         <td class="bx-num">
           <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;margin:0">
@@ -130,6 +130,7 @@ if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12
       <datalist id="rezDL"><?php foreach ($offen as $o): $lbl = trim($o['name'] . ($o['nummer'] ? ' · ' . $o['nummer'] : '')); ?><option value="<?= h($lbl) ?>"></option><?php endforeach; ?></datalist>
     </div>
     <div class="bx-field" style="margin:0;width:140px"><label><?= h(lp_t('ihr_preis')) ?> (€)</label><input type="text" name="preis" inputmode="decimal"></div>
+    <a id="rezAnsehen" class="btn btn-ghost" href="#" target="_blank" rel="noopener" hidden><?= h(lp_t('rez_ansehen')) ?></a>
     <button class="btn btn-primary" type="submit"><?= h(lp_t('hinzufuegen')) ?></button>
   </form>
   <?php endif; ?>
@@ -138,8 +139,9 @@ if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12
 (function(){
   var map = {};
   <?php foreach ($offen as $o): $lbl = trim($o['name'] . ($o['nummer'] ? ' · ' . $o['nummer'] : '')); ?>map[<?= json_encode($lbl, JSON_UNESCAPED_UNICODE) ?>]=<?= (int)$o['id'] ?>;<?php endforeach; ?>
-  var t=document.getElementById('rezSuche'), h=document.getElementById('rezId');
-  function s(){ h.value = map[(t.value||'').trim()] || ''; }
+  var t=document.getElementById('rezSuche'), h=document.getElementById('rezId'), a=document.getElementById('rezAnsehen');
+  function s(){ var id = map[(t.value||'').trim()] || ''; h.value = id;
+    if(a){ if(id){ a.href='?p=lieferant_rezeptur&id='+id; a.hidden=false; } else { a.hidden=true; } } }
   if(t){ t.addEventListener('input', s); t.addEventListener('change', s); }
 })();
 </script>
