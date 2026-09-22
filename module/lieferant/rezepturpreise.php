@@ -99,16 +99,16 @@ if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12
     <div class="muted"><?= h(lp_t('rez_preise_leer')) ?></div>
   <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?></th><th><?= h(lp_t('form_lbl')) ?></th><th class="bx-num" style="width:250px"><?= h(lp_t('ihr_preis')) ?></th><th style="width:120px"><?= h(lp_t('stand')) ?></th><th style="width:50px"></th></tr></thead>
+    <thead><tr><th><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?></th><th><?= h(lp_t('form_lbl')) ?></th><th class="bx-num" style="width:300px;white-space:nowrap"><?= h(lp_t('ihr_preis')) ?></th><th style="width:120px"><?= h(lp_t('stand')) ?></th><th style="width:50px"></th></tr></thead>
     <tbody>
     <?php foreach ($rows as $r): $alt = $r['stand'] ? (int) floor((time() - strtotime((string)$r['stand'])) / 86400) : null; ?>
       <tr>
         <td><a href="?p=lieferant_rezeptur&id=<?= (int)$r['rezeptur_id'] ?>"><?= h($r['name']) ?></a> <span class="muted" style="font-size:12px"><?= h($r['nummer']) ?></span></td>
         <td><?= h(anfrage_art_label('rohstoff', (string)$r['form'], $spr) ?: $formEinheit($r['form'])) ?></td>
         <td class="bx-num">
-          <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;margin:0">
+          <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;flex-wrap:nowrap;margin:0">
             <input type="hidden" name="aktion" value="preis_save"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-            <input type="text" name="preis" value="<?= h($num($r['preis'])) ?>" style="width:110px;text-align:right" inputmode="decimal">
+            <input type="text" name="preis" value="<?= h($num($r['preis'])) ?>" style="width:90px;text-align:right" inputmode="decimal">
             <span class="muted">€ / <?= h($r['einheit'] ?: $formEinheit($r['form'])) ?></span>
             <button class="btn btn-ghost btn-sm" type="submit"><?= h(lp_t('aktualisieren')) ?></button>
           </form>

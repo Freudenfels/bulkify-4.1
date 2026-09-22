@@ -75,15 +75,15 @@ if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12
     <div class="muted"><?= h(lp_t('preisliste_leer')) ?></div>
   <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th><?= h(lp_t('rohstoff')) ?></th><th class="bx-num" style="width:220px"><?= h(lp_t('preis')) ?></th><th style="width:120px"><?= h(lp_t('stand')) ?></th><th style="width:60px"></th></tr></thead>
+    <thead><tr><th><?= h(lp_t('rohstoff')) ?></th><th class="bx-num" style="width:300px;white-space:nowrap"><?= h(lp_t('preis')) ?></th><th style="width:120px"><?= h(lp_t('stand')) ?></th><th style="width:60px"></th></tr></thead>
     <tbody>
     <?php foreach ($rows as $r): $alt = $r['stand'] ? (int) floor((time() - strtotime((string)$r['stand'])) / 86400) : null; ?>
       <tr>
         <td><?= h($r['rohstoff_name']) ?></td>
         <td class="bx-num">
-          <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;margin:0">
+          <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;flex-wrap:nowrap;margin:0">
             <input type="hidden" name="aktion" value="preis_save"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-            <input type="text" name="eur_kg" value="<?= h($num($r['eur_kg'])) ?>" style="width:110px;text-align:right" inputmode="decimal">
+            <input type="text" name="eur_kg" value="<?= h($num($r['eur_kg'])) ?>" style="width:90px;text-align:right" inputmode="decimal">
             <span class="muted">€ / <?= h($r['einheit'] ?: 'kg') ?></span>
             <button class="btn btn-ghost btn-sm" type="submit"><?= h(lp_t('aktualisieren')) ?></button>
           </form>

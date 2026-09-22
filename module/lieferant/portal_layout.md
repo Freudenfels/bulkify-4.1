@@ -25,6 +25,13 @@ Die Sprache stellt man einmal ein, deshalb steht der Umschalter klein (11px, Kü
 ## Menüpunkt Mein Katalog
 `lieferant_katalog` – der Lieferant pflegt dort, was er anbietet. Siehe `core/lieferant_katalog.md`.
 
+## Preislisten je Lieferantentyp (Menü-Gating)
+Es gibt zwei getrennte, klar benannte Preislisten: **Rohstoff-Preise** (`lieferant_preisliste`, `preisliste`-Key) und **Fertigprodukt-Preise** (`lieferant_rezepturpreise`, `rez_preise_menu`-Key). Damit nicht zwei gleich aussehende „Preislisten" nebeneinander stehen, blendet `lp_shell_start()` je nach Typ nur die passende ein:
+- **Rohstoff-Preise** erscheint bei Materiallieferanten (`kategorien` enthält rohstoff/verpackung/verbrauch/maschine/labor).
+- **Fertigprodukt-Preise** erscheint bei Lohnherstellern (`fertig_formen` gesetzt).
+- Wer schon Preise gepflegt hat, behält die Liste (Prüfung auf vorhandene `rezeptur_lief_angebot` bzw. `lieferant_preisliste`), auch wenn Kategorien/Formen noch fehlen.
+- Ist gar nichts konfiguriert, werden beide gezeigt.
+
 ## Zähler-Badges im Menü
 `lp_shell_start()` zeigt am Menüpunkt **Anfragen** einen runden Zähler (Kreis mit Zahl), wenn offene Preisanfragen vorliegen (`lieferant_anfrage.status='offen'`), und an **Rückfragen** die Zahl ungelesener Nachrichten. Der Badge ist inline gestylt (lime, `border-radius:999px`, rechtsbündig), damit er ohne zusätzliches Portal-CSS funktioniert.
 

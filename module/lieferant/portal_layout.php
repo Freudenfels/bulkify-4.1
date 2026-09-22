@@ -154,7 +154,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'btn_manuell'     => ['de'=>'Manuell hinzufügen',       'en'=>'Add manually', 'zh'=>'手动添加'],
         'best_neu_lbl'    => ['de'=>'neu (zu bestätigen)',      'en'=>'new (to confirm)', 'zh'=>'新（待确认）'],
         'ihr_preis'       => ['de'=>'Ihr Preis',                'en'=>'Your price', 'zh'=>'您的报价'],
-        'preisliste'      => ['de'=>'Meine Preisliste',         'en'=>'My price list', 'zh'=>'我的价格表'],
+        'preisliste'      => ['de'=>'Rohstoff-Preise',          'en'=>'Raw-material prices', 'zh'=>'原料价格'],
         'preisliste_sub'  => ['de'=>'Ihre Rohstoffpreise. Bitte alle 4 Wochen aktualisieren – wir kalkulieren damit.',
                               'en'=>'Your raw-material prices. Please update every 4 weeks – we calculate with them.',
                               'zh'=>'您的原料价格。请每 4 周更新一次，我们据此报价。'],
@@ -171,8 +171,8 @@ function lp_t(string $key, string $sprache = ''): string {
         'stand'           => ['de'=>'Stand',                    'en'=>'As of', 'zh'=>'更新日期'],
         'hinzufuegen'     => ['de'=>'Hinzufügen',               'en'=>'Add', 'zh'=>'添加'],
         'rezeptur'        => ['de'=>'Rezeptur',                 'en'=>'Formula', 'zh'=>'配方'],
-        'rez_preise_menu' => ['de'=>'Rezeptur-Preise',          'en'=>'Formula prices', 'zh'=>'配方价格'],
-        'rez_preise_titel'=> ['de'=>'Ihre Rezeptur-Preise (Fremdfertigung)', 'en'=>'Your formula prices (contract manufacturing)', 'zh'=>'您的配方代工价格'],
+        'rez_preise_menu' => ['de'=>'Fertigprodukt-Preise',     'en'=>'Finished-product prices', 'zh'=>'成品价格'],
+        'rez_preise_titel'=> ['de'=>'Ihre Fertigprodukt-Preise (Fremdfertigung)', 'en'=>'Your finished-product prices (contract manufacturing)', 'zh'=>'您的成品代工价格'],
         'rez_preise_sub'  => ['de'=>'Tragen Sie je Rezeptur Ihren Preis ein (z. B. je Kapsel). Bitte alle 4 Wochen aktualisieren.',
                               'en'=>'Enter your price per formula (e.g. per capsule). Please update every 4 weeks.',
                               'zh'=>'请为每个配方填写您的价格（例如每粒）。请每 4 周更新一次。'],
@@ -294,6 +294,17 @@ function lp_foot(): void {
 // Menü + Rahmen. $aktiv = Routenname der aktuellen Seite.
 function lp_shell_start(string $aktiv): void {
     $lf = aktueller_lieferant();
+    // Welche Preisliste(n) passen zu diesem Lieferanten? Materiallieferant -> Rohstoff-Preise,
+    // Lohnhersteller (fertige Produkte freigeschaltet) -> Fertigprodukt-Preise. So sieht er nur die
+    // fuer ihn relevante Liste statt zweier gleich aussehender "Preislisten".
+    $lfId        = (int)($lf['id'] ?? 0);
+    $lfKat       = array_filter(array_map('trim', explode(',', (string)($lf['kategorien'] ?? ''))));
+    $hatFertig   = trim((string)($lf['fertig_formen'] ?? '')) !== '';
+    $hatMaterial = (bool) array_intersect($lfKat, ['rohstoff', 'verpackung', 'verbrauch', 'maschine', 'labor']);
+    // Wer schon Preise gepflegt hat, behaelt die Liste – auch wenn Formen/Kategorien (noch) nicht gesetzt sind.
+    if ($lfId && !$hatFertig)   $hatFertig   = (bool) scalar("SELECT 1 FROM rezeptur_lief_angebot WHERE lieferant_id=? LIMIT 1", [$lfId]);
+    if ($lfId && !$hatMaterial) $hatMaterial = (bool) scalar("SELECT 1 FROM lieferant_preisliste WHERE lieferant_id=? LIMIT 1", [$lfId]);
+    if (!$hatFertig && !$hatMaterial) { $hatFertig = $hatMaterial = true; } // nichts konfiguriert -> beide zeigen
     $menu = [
         'lieferant_portal'      => lp_t('uebersicht'),
         'lieferant_bestellung'  => lp_t('bestellungen'),
@@ -306,6 +317,8 @@ function lp_shell_start(string $aktiv): void {
         'lieferant_profil'      => lp_t('profil'),
         'lieferant_hilfe'       => lp_t('anleitung'),
     ];
+    if (!$hatMaterial) unset($menu['lieferant_preisliste']);
+    if (!$hatFertig)   unset($menu['lieferant_rezepturpreise']);
     // Zähler-Badges (Kreis mit Zahl): offene Preisanfragen und ungelesene Rückfragen.
     $lid = (int)($lf['id'] ?? 0);
     $badges = [];
