@@ -1,10 +1,11 @@
 # lieferant/detail.php – Lieferantenkonto (Cockpit) & Bearbeiten
 
-## Zugang zum Lieferantenportal
-Über den Knöpfen steht, **in welcher Sprache** Einladung und Portal laufen (aus `lieferanten.sprache`) – damit ein chinesischer Lieferant nicht versehentlich eine englische Einladung bekommt. Ändern lässt sich das im Reiter Stammdaten.
-Panel unten auf der Seite: **Einladungslink erzeugen** (`lieferant_einladung`, gilt einmal) und an den Lieferanten schicken – er legt Zugang und Passwort selbst an. Besteht schon ein Zugang, stehen dort Benutzer, E-Mail und letzter Login.
+## Reiter „Portalzugang" (Zugang + vom Lieferanten gepflegt)
+Der eigene Reiter **Portalzugang** bündelt: **Einladungslink erzeugen** (`lieferant_einladung`, gilt einmal) und an den Lieferanten schicken – er legt Zugang und Passwort selbst an; besteht schon ein Zugang, stehen dort Benutzer, E-Mail und letzter Login. Über den Knöpfen steht, **in welcher Sprache** Einladung und Portal laufen (aus `lieferanten.sprache`). Ebenfalls hier: was der Lieferant selbst gepflegt hat (Logo, WeChat, WhatsApp).
 
-## Preisanfragen
+> **Wichtig (Reiter-Struktur):** Diese Blöcke (Portalzugang) und der Block **Preisanfragen** lagen früher als nackte Panels **außerhalb** aller `data-panel`-Sections und erschienen dadurch auf **jedem** Reiter. Jetzt sind sie in Sections gekapselt: „Vom Lieferanten gepflegt" + „Zugang" → `data-panel="zugang"` (Reiter Portalzugang), „Preisanfragen" → `data-panel="angebote"` (Reiter Preise / Angebote). Beim Einfügen neuer Panels darauf achten, dass sie in einer `<section data-panel="…">` stehen.
+
+## Preisanfragen (im Reiter „Preise / Angebote")
 Das Formular fragt zuerst, **was** angefragt wird (Rohstoff, Fertigprodukt, Verpackung, Verbrauch, Sonstiges). Je nach Art kommt die Form dazu (Fertigprodukt: Darreichungsform; Rohstoff: Lieferform), beim Fertigprodukt zusätzlich Einheiten je Packung, Kapselgröße und optional eine Rezeptur als Vorlage. Die **Einheit füllt sich selbst** – aus dem gewählten Artikel oder der Darreichungsform (`anfrage_einheit()`); sie lässt sich überschreiben. Die Artikel-Auswahl enthält auch **Fertigprodukte** (`kategorie=fertig`), nicht nur Rohstoffe und Verpackungen.
 
 Anfrage an diesen Lieferanten stellen: **Artikel** (dann landen die Preise beim Annehmen automatisch als EK-Staffeln dort) oder Freitext, dazu Menge, Einheit, Notiz und ob CoA/Spezifikation mitkommen sollen. Darunter die Liste aller Anfragen mit der Antwort des Lieferanten (Preis, MOQ, Lieferzeit, Staffeln) und dem Knopf **Preise übernehmen** – der ersetzt die bisherigen EK-Staffeln dieses Lieferanten für den Artikel.
@@ -21,6 +22,7 @@ Anfrage an diesen Lieferanten stellen: **Artikel** (dann landen die Preise beim 
 - **Übersicht** – Kontakt, Liefer-Kategorien, letzte Preise/Bestellungen (Platzhalter bis Module stehen).
 - **Preise / Angebote · Bestellungen · Dokumente** – Gerüst (`bx_bald()`), docken an, sobald die Module stehen.
 - **Rechnungen** – Einkaufs-/Zahlungssicht: je Auftrag Betrag, Rechnung und Ampel-Status **bezahlt / offen / überfällig / keine Rechnung** (Auftrag ohne Rechnung). Aktuell beschriftete Vorschau mit Beispieldaten; echte Werte kommen aus Bestellungen + Buchhaltung.
+- **Portalzugang** – Einladung/Zugang zum Lieferantenportal + vom Lieferanten gepflegte Angaben (Logo, WeChat, WhatsApp).
 - **Verlauf** – Chat (`bx_chat`): links wir, rechts Lieferant, Einträge klickbar.
 - **Stammdaten** – Lief.-Nr., Firma, Ansprechpartner, E-Mail, Telefon, Sprache (DE/EN/ZH), Webseite, Sperr-Schalter, Liefer-Kategorien (Häkchen), Notiz.
   - **Liefer-Kategorien:** Rohstoff, Verpackung, Verbrauch, Maschine, Labor, **Fertige Produkte**. „Fertige Produkte" = fertig gefüllte Ware (Kapseln/Softgels/Sticks) – da kaufen wir das Endprodukt, keinen Rohstoff.

@@ -212,6 +212,7 @@ if (!$neu) {
     <a href="#" data-tab="dok">Dokumente</a>
     <a href="#" data-tab="katalog">Katalog<?= $katOffen > 0 ? ' (' . $katOffen . ')' : '' ?></a>
     <a href="#" data-tab="rueckfragen">Rückfragen<?= $ungelesen > 0 ? ' (' . $ungelesen . ' neu)' : '' ?></a>
+    <a href="#" data-tab="zugang">Portalzugang</a>
     <a href="#" data-tab="verlauf">Verlauf</a>
     <a href="#" data-tab="stamm">Stammdaten</a>
     <?php else: ?>
@@ -557,6 +558,7 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
   $offeneEinl = one("SELECT * FROM lieferant_einladung WHERE lieferant_id=? AND eingeloest=0 ORDER BY id DESC LIMIT 1", [(int)$id]);
   $basis = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 ?>
+<section data-panel="zugang" hidden>
 <?php // Was der Lieferant selbst gepflegt hat – Logo und die Kontaktwege, die im Asiengeschaeft zaehlen. ?>
 <?php if (!empty($l['logo']) || !empty($l['wechat']) || !empty($l['whatsapp'])): ?>
 <div class="bx-panel">
@@ -600,7 +602,9 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
     </div>
   <?php endif; ?>
 </div>
+</section>
 
+<section data-panel="angebote" hidden>
 <div class="bx-panel">
   <h2 style="margin-top:0">Preisanfragen</h2>
   <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Anfrage gestellt – der Lieferant sieht sie in seinem Portal.</div><?php endif; ?>
@@ -760,6 +764,7 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
   </table></div>
   <?php endif; ?>
 </div>
+</section>
 <?php endif; ?>
 <?php
 render_footer();
