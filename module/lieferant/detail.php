@@ -128,9 +128,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $l = $neu
-    ? ['gesperrt'=>0,'land'=>'DE','sprache'=>'de','waehrung'=>'EUR','zahlungsart'=>'rechnung','zahlungsziel_tage'=>0]
+    ? ['gesperrt'=>0,'land'=>'DE','sprache'=>'de','waehrung'=>'USD','zahlungsart'=>'rechnung','zahlungsziel_tage'=>0]
     : one("SELECT * FROM lieferanten WHERE id=?", [(int)$id]);
-if (!$l) { $neu = true; $l = ['gesperrt'=>0,'land'=>'DE','sprache'=>'de','waehrung'=>'EUR','zahlungsart'=>'rechnung']; }
+if (!$l) { $neu = true; $l = ['gesperrt'=>0,'land'=>'DE','sprache'=>'de','waehrung'=>'USD','zahlungsart'=>'rechnung']; }
 $v = fn($key) => h((string)($l[$key] ?? ''));
 $gesperrt = (int)($l['gesperrt'] ?? 0) === 1;
 $aktKats = array_filter(explode(',', (string)($l['kategorien'] ?? '')));
@@ -367,7 +367,7 @@ if (!$neu) {
     <div class="bx-panel"><div class="bx-grid">
       <div class="bx-field"><label>Währung <?= bx_hint('EK oft in Fremdwährung – hier die Standardwährung des Lieferanten') ?></label>
         <select name="waehrung">
-          <?php foreach (['EUR'=>'EUR €','USD'=>'USD $','CNY'=>'CNY ¥'] as $s=>$lbl): ?>
+          <?php foreach (['USD'=>'USD $','EUR'=>'EUR €','CNY'=>'CNY ¥'] as $s=>$lbl): ?>
             <option value="<?= $s ?>" <?= ($l['waehrung']??'')===$s?'selected':'' ?>><?= $lbl ?></option>
           <?php endforeach; ?>
         </select>

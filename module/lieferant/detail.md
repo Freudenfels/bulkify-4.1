@@ -28,7 +28,7 @@ Anfrage an diesen Lieferanten stellen: **Artikel** (dann landen die Preise beim 
   - **Liefer-Kategorien:** Rohstoff, Verpackung, Verbrauch, Maschine, Labor, **Fertige Produkte**. „Fertige Produkte" = fertig gefüllte Ware (Kapseln/Softgels/Sticks) – da kaufen wir das Endprodukt, keinen Rohstoff.
   - Ist „Fertige Produkte" angehakt, klappt eine **Formen-Auswahl** auf (Kapsel/Tablette/Softgel/Stick/Pulver/Flüssig) → so lassen sich spezialisierte Hersteller abbilden (z. B. reiner Softgel-Hersteller). Gespeichert in `fertig_formen` (CSV); wird geleert, wenn „Fertige Produkte" nicht gewählt ist.
 - **Adresse** – strukturiert (Straße, Hausnummer, PLZ, Ort, Land, USt-ID).
-- **Konditionen** – Währung (EUR/USD/CNY), Zahlungsart, Zahlungsziel, Standard-Lieferzeit, Mindestbestellwert.
+- **Konditionen** – Währung (**USD Standard**, EUR, CNY), Zahlungsart, Zahlungsziel, Standard-Lieferzeit, Mindestbestellwert. Die Währung wird bei der Anlage gesetzt; ein neuer Lieferant startet auf **USD** (die meisten Lieferanten rechnen in USD).
 
 **Kennzahlen-Kacheln:** Status, Bestellungen (folgt), Währung, Ø Lieferzeit.
 

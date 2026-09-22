@@ -197,7 +197,7 @@ function init_schema(): void {
         ort VARCHAR(120) NULL,
         land VARCHAR(2) NOT NULL DEFAULT 'DE',
         ust_id VARCHAR(40) NULL,
-        waehrung VARCHAR(3) NOT NULL DEFAULT 'EUR',       -- EUR | USD | CNY
+        waehrung VARCHAR(3) NOT NULL DEFAULT 'USD',       -- USD (Standard) | EUR | CNY
         zahlungsart VARCHAR(30) NOT NULL DEFAULT 'rechnung',
         zahlungsziel_tage INT NOT NULL DEFAULT 0,
         lieferzeit_tage INT NOT NULL DEFAULT 0,           -- Standard-Lieferzeit
