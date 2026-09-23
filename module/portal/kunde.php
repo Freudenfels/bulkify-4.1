@@ -1626,7 +1626,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if ($oatab === 'zubestaetigen'): ?>
     <?php if ($offen_ang): ?>
     <p class="muted" style="margin:0 0 12px">Klappen Sie ein Angebot auf, wählen Sie die gewünschte Menge und bestätigen Sie verbindlich.</p>
-    <?php foreach ($offen_ang as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = true; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+    <?php foreach ($offen_ang as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
     <?php else: ?><div class="bx-panel"><div class="muted">Aktuell liegt kein Angebot zum Bestätigen vor.</div></div><?php endif; ?>
 
   <?php elseif ($oatab === 'offen'): ?>
@@ -2543,7 +2543,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <p class="muted" style="margin:0 0 16px">Offene Angebote können Sie hier direkt prüfen, eine Menge wählen und verbindlich annehmen. Angenommene und abgelehnte Angebote finden Sie im <strong>Archiv</strong> unten.</p>
   <?php include __DIR__ . '/_collapse_all.php'; ?>
   <?php if (!$offenA): ?><div class="bx-panel"><div class="muted">Aktuell liegt kein offenes Angebot vor<?= $archivA ? ' – ältere finden Sie im Archiv unten' : '' ?>.</div></div><?php endif; ?>
-  <?php foreach ($offenA as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = true; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+  <?php foreach ($offenA as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
 
   <?php if ($archivA): ?>
   <details style="margin-top:18px">
