@@ -791,6 +791,15 @@ $land = $k['land'] ?? 'DE';
 $ustP = (meta_get('kleinunternehmer','0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
 $auftraege = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
                   WHERE a.kunde_id=? ORDER BY a.angelegt DESC", [$kid]);
+// Fertigware-Chargen je Bestellung (Charge-Nr steht auf dem Produkt, deshalb sichtbar fuer den Kunden).
+$auftragChargen = [];
+if ($auftraege) {
+    $aids = array_map(fn($a) => (int)$a['id'], $auftraege);
+    $inA  = implode(',', array_fill(0, count($aids), '?'));
+    foreach (all("SELECT pa.auftrag_id, c.charge_nr, c.mhd FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
+                  WHERE pa.auftrag_id IN ($inA) AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id", $aids) as $cr)
+        $auftragChargen[(int)$cr['auftrag_id']][] = ['nr' => (string)$cr['charge_nr'], 'mhd' => $cr['mhd']];
+}
 $rechnungen = all("SELECT * FROM beleg WHERE kunde_id=? AND typ='rechnung' ORDER BY angelegt DESC", [$kid]);
 $anfragen = all("SELECT a.*, r.name AS rezeptur_name, r.status AS rezeptur_status,
                  (SELECT COUNT(*) FROM rezeptur_anfrage_wunsch w WHERE w.anfrage_id=a.id) AS wunsch_anzahl
@@ -886,6 +895,7 @@ if ($k['portal_produkte']) $detailParent['produkt']  = 'produkte';
 if ($k['portal_rohstoffe']) $detailParent['rohstoff'] = 'rohstoffe';
 $detailParent['bestellung'] = 'bestellungen';   // Bestell-Detail (eigene Bestellung)
 $detailParent['produktionsbericht'] = 'bestellungen';   // freigegebener Produktionsbericht zur Bestellung (kein Menuepunkt)
+$detailParent['suche'] = 'start';   // globale Suche (kein Menuepunkt, Suchfeld ist ueberall oben)
 $detailParent['menge_aendern'] = 'meine_anfragen';   // Menge einer Produktanfrage aendern (kein Menuepunkt)
 if (!empty($k['portal_rezeptur_ableiten'])) $detailParent['rezeptur_ableiten'] = 'rezepturen';   // Katalog weiterentwickeln (kein Menuepunkt)
 $detailParent['agb'] = 'start';   // AGB: kein Menuepunkt, aber eine echte Seite (Fussleiste + Bestaetigungsdialog)
@@ -1402,6 +1412,10 @@ portal_head('Kundenportal · ' . $k['firma']);
   </aside>
   <?= bx_menue_scrim() ?>
   <main class="bx-main"><?= bx_mobilbar() ?>
+  <form method="get" action="?" class="no-print" style="margin:0 0 14px">
+    <input type="hidden" name="p" value="portal"><input type="hidden" name="token" value="<?= h($token) ?>"><input type="hidden" name="v" value="suche">
+    <input type="search" name="q" value="<?= h((string)($_GET['q'] ?? '')) ?>" placeholder="Suchen: Bestellung, Produkt, Charge, MHD, Angebot, Rechnung …" style="width:100%;max-width:560px;padding:9px 14px;border:1px solid var(--line);border-radius:999px;background:var(--panel)">
+  </form>
   <?php if (isset($_GET['ok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – Ihre Bestätigung ist eingegangen. Wir starten die Bearbeitung.</div><?php endif; ?>
   <?php if (isset($_GET['anfrage'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rezepturanfrage ist eingegangen – wir prüfen sie und melden uns.</div><?php endif; ?>
   <?php if (isset($_GET['angenommen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – die Rezeptur ist angenommen. Sie ist jetzt verbindlich festgelegt.</div><?php endif; ?>
@@ -2637,7 +2651,8 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php foreach ($aktBest as $a): $cur = $phaseCache[(int)$a['id']]['idx']; $complete = $a['status'] === 'versendet'; ?>
   <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?></div>
+      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
+        <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:12px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
       <div class="bx-row" style="gap:10px;align-items:center">
         <span class="muted" style="font-size:12px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : 'Schritt ' . ($cur + 1) . '/' . count($AUFSTEPS) . ': ' . h($AUFSTEPS[$cur]) ?></span>
         <?= $aufBadge($a['status']) ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
@@ -2783,6 +2798,63 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   </div>
 
+  <?php endif; ?>
+
+<?php elseif ($view === 'suche'):
+    // Globale Kundensuche ueber die EIGENEN Daten: Bestellungen (inkl. Charge/MHD), Angebote, Rechnungen, Anfragen.
+    $q = trim((string)($_GET['q'] ?? ''));
+    $ql = mb_strtolower($q);
+    $hits = [];
+    $add = function(string $typ, string $titel, string $sub, string $href, ?string $datum, string $bfarbe) use (&$hits) {
+        $hits[] = ['typ'=>$typ, 'titel'=>$titel, 'sub'=>$sub, 'href'=>$href, 'datum'=>$datum, 'bfarbe'=>$bfarbe];
+    };
+    $hit = fn(string $hay) => $ql !== '' && mb_strpos(mb_strtolower($hay), $ql) !== false;
+    if ($ql !== '') {
+        foreach ($auftraege as $a) {
+            $chg = $auftragChargen[(int)$a['id']] ?? [];
+            $chgTxt = ''; foreach ($chg as $c) $chgTxt .= ' ' . $c['nr'] . ' ' . ($c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) . ' ' . $c['mhd'] : '');
+            if ($hit($a['nummer'] . ' ' . $titelFuer($a) . $chgTxt)) {
+                $sub = (int)$a['menge'] . ' Packungen' . ($chg ? ' · Charge ' . implode(', ', array_map(fn($c) => $c['nr'], $chg)) . (($chg[0]['mhd'] ?? null) ? ' · MHD ' . date('d.m.Y', strtotime((string)$chg[0]['mhd'])) : '') : '');
+                $add('Bestellung', $a['nummer'] . ' – ' . $titelFuer($a), $sub, $portalLink('bestellung') . '&aid=' . (int)$a['id'], $a['angelegt'] ?? null, 'info');
+            }
+        }
+        foreach ($angebote as $a) {
+            if ($hit(($a['nummer'] ?? '') . ' ' . ($a['produkt_name'] ?? '')))
+                $add('Angebot', ($a['nummer'] ?? '') . ' – ' . ($a['produkt_name'] ?? '–'), 'Angebot', $portalLink('angebote') . '#a' . (int)$a['id'], $a['angelegt'] ?? null, 'ok');
+        }
+        foreach ($rechnungen as $r) {
+            if ($hit((string)($r['nummer'] ?? '')))
+                $add('Rechnung', (string)($r['nummer'] ?? '–'), !empty($r['brutto']) ? $eur($r['brutto']) : 'Rechnung', $portalLink('rechnungen'), $r['angelegt'] ?? null, 'warn');
+        }
+        foreach ($anfragen as $a) {
+            if ($hit(($a['nummer'] ?? '') . ' ' . ($a['produktname'] ?? '') . ' ' . ($a['rezeptur_name'] ?? '')))
+                $add('Anfrage', ($a['nummer'] ?? '') . ' – ' . (($a['produktname'] ?? '') ?: (($a['rezeptur_name'] ?? '') ?: 'Rezeptur')), 'Rezepturanfrage', $portalLink('meine_anfragen'), $a['angelegt'] ?? null, '');
+        }
+        foreach (all("SELECT id, nummer, typ, betreff, angelegt FROM portal_anfrage WHERE kunde_id=? ORDER BY angelegt DESC", [$kid]) as $p) {
+            if ($hit(($p['nummer'] ?? '') . ' ' . ($p['betreff'] ?? '')))
+                $add('Anfrage', ($p['nummer'] ?? '') . ' – ' . (($p['betreff'] ?? '') ?: ucfirst((string)$p['typ'])), 'Anfrage (' . h((string)$p['typ']) . ')', $portalLink('meine_anfragen'), $p['angelegt'] ?? null, '');
+        }
+        usort($hits, fn($x, $y) => strcmp((string)($y['datum'] ?? ''), (string)($x['datum'] ?? '')));
+    }
+?>
+  <h1 style="margin-bottom:4px">Suche</h1>
+  <?php if ($q === ''): ?>
+    <div class="bx-panel"><div class="muted">Tippen Sie oben einen Begriff ein – z. B. eine Bestellnummer, ein Produkt, eine <strong>Chargennummer</strong>, ein <strong>MHD</strong>, ein Angebot oder eine Rechnung.</div></div>
+  <?php elseif (!$hits): ?>
+    <div class="bx-panel"><div class="muted">Keine Treffer für „<?= h($q) ?>". Versuchen Sie eine Bestellnummer, ein Produkt, eine Charge oder ein Datum (z. B. 03.2028).</div></div>
+  <?php else: ?>
+    <p class="bx-sub" style="margin:0 0 12px"><?= count($hits) ?> Treffer für „<?= h($q) ?>"</p>
+    <?php foreach ($hits as $r): ?>
+      <a class="bx-panel" href="<?= h($r['href']) ?>" style="display:block;text-decoration:none;color:inherit;margin-bottom:10px">
+        <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div>
+            <?= bx_badge($r['typ'], $r['bfarbe']) ?> <strong style="margin-left:6px"><?= h($r['titel']) ?></strong>
+            <div class="muted" style="font-size:13px;margin-top:2px"><?= h($r['sub']) ?><?= $r['datum'] ? ' · ' . h(fmt_zeit($r['datum'], 'd.m.Y')) : '' ?></div>
+          </div>
+          <span class="muted" style="font-size:18px">&#8250;</span>
+        </div>
+      </a>
+    <?php endforeach; ?>
   <?php endif; ?>
 
 <?php elseif ($view === 'produktionsbericht'):
