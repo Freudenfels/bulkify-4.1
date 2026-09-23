@@ -2615,20 +2615,22 @@ portal_head('Kundenportal · ' . $k['firma']);
   <p class="muted" style="margin:0 0 16px">Klicken Sie auf eine Bestellung, um alle Schritte, Rechnung und Details zu sehen.</p>
   <?php if (!$auftraege): ?><div class="bx-panel"><div class="muted">Noch keine Bestellungen.</div></div>
   <?php else: ?>
-  <div class="settabs" style="margin:0 0 12px">
-    <a href="<?= $portalLink('bestellungen') ?>&btab=arbeit"        class="<?= $btab === 'arbeit' ? 'on' : '' ?>">In Bearbeitung<?= $inArbeit ? ' (' . count($inArbeit) . ')' : '' ?></a>
-    <a href="<?= $portalLink('bestellungen') ?>&btab=abgeschlossen" class="<?= $btab === 'abgeschlossen' ? 'on' : '' ?>">Abgeschlossene<?= $abgeschlBest ? ' (' . count($abgeschlBest) . ')' : '' ?></a>
+  <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 12px">
+    <div class="settabs" style="margin:0">
+      <a href="<?= $portalLink('bestellungen') ?>&btab=arbeit"        class="<?= $btab === 'arbeit' ? 'on' : '' ?>">In Bearbeitung<?= $inArbeit ? ' (' . count($inArbeit) . ')' : '' ?></a>
+      <a href="<?= $portalLink('bestellungen') ?>&btab=abgeschlossen" class="<?= $btab === 'abgeschlossen' ? 'on' : '' ?>">Abgeschlossene<?= $abgeschlBest ? ' (' . count($abgeschlBest) . ')' : '' ?></a>
+    </div>
+    <?php if ($btab === 'arbeit' && count($aktBest) > 1): $bl = $portalLink('bestellungen') . '&btab=arbeit&bsort='; ?>
+    <div class="bx-row" style="align-items:center;gap:8px;margin:0;flex-wrap:nowrap">
+      <label class="muted" style="font-size:13px;white-space:nowrap" for="bsortSel">Sortieren:</label>
+      <select id="bsortSel" onchange="location.href=this.value" style="max-width:220px">
+        <option value="<?= h($bl) ?>fortschritt"<?= $bsort === 'fortschritt' ? ' selected' : '' ?>>Nach Fortschritt</option>
+        <option value="<?= h($bl) ?>neu"<?= $bsort === 'neu' ? ' selected' : '' ?>>Neueste zuerst</option>
+        <option value="<?= h($bl) ?>alt"<?= $bsort === 'alt' ? ' selected' : '' ?>>Älteste zuerst</option>
+      </select>
+    </div>
+    <?php endif; ?>
   </div>
-  <?php if ($btab === 'arbeit' && count($aktBest) > 1): $bl = $portalLink('bestellungen') . '&btab=arbeit&bsort='; ?>
-  <div class="bx-row" style="justify-content:flex-end;align-items:center;gap:8px;margin:0 0 12px">
-    <label class="muted" style="font-size:13px" for="bsortSel">Sortieren:</label>
-    <select id="bsortSel" onchange="location.href=this.value" style="max-width:220px">
-      <option value="<?= h($bl) ?>fortschritt"<?= $bsort === 'fortschritt' ? ' selected' : '' ?>>Nach Fortschritt</option>
-      <option value="<?= h($bl) ?>neu"<?= $bsort === 'neu' ? ' selected' : '' ?>>Neueste zuerst</option>
-      <option value="<?= h($bl) ?>alt"<?= $bsort === 'alt' ? ' selected' : '' ?>>Älteste zuerst</option>
-    </select>
-  </div>
-  <?php endif; ?>
   <?php if (!$aktBest): ?><div class="bx-panel"><div class="muted"><?= $btab === 'abgeschlossen' ? 'Noch keine abgeschlossenen Bestellungen.' : 'Aktuell keine Bestellung in Bearbeitung.' ?></div></div><?php endif; ?>
   <?php endif; ?>
   <?php foreach ($aktBest as $a): $cur = $phaseCache[(int)$a['id']]['idx']; $complete = $a['status'] === 'versendet'; ?>
