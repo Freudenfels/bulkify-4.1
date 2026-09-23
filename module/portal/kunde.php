@@ -15,6 +15,12 @@ $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
 if (!$k && !empty($_SESSION['portal_kid'])) $k = one("SELECT * FROM kunden WHERE id=?", [(int)$_SESSION['portal_kid']]);
 if ($k) { $_SESSION['portal_kid'] = (int)$k['id']; if (!empty($k['portal_token'])) $token = (string)$k['portal_token']; }
 
+// Ein eingeloggtes Team-Mitglied, das das Kundenportal ueber den Token ansieht (kein echter Kunde,
+// kein Lieferant), darf mehr: Angebote/Anfragen endgueltig loeschen. Gleiche Bedingung wie die interne
+// Vorschau ($internVorschau weiter unten). Echte Kunden haben keine Team-Session.
+$adminImPortal = function_exists('is_logged_in') && is_logged_in()
+    && function_exists('ist_echter_lieferant') && !ist_echter_lieferant();
+
 // Erstzugang abschliessen: E-Mail + Passwort setzen und fehlende Stammdaten ergaenzen.
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'konto_einrichten') {
     $email = trim(mb_strtolower((string)($_POST['email'] ?? '')));
@@ -169,6 +175,27 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $aid = (int)($_POST['angebot_id'] ?? 0);
     if ($aid) q("UPDATE angebot SET kunde_ausgeblendet=1 WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]);
     header('Location: ?p=portal&token=' . $token . '&v=angebote&geloescht=1'); exit;
+}
+// ADMIN (Team im Kundenportal): Angebot ENDGUELTIG loeschen (inkl. Staffeln) und die zugehoerige Anfrage,
+// falls sie kein weiteres Angebot mehr hat. Gesperrt, wenn bereits ein Auftrag daraus entstanden ist.
+if ($k && $adminImPortal && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'admin_angebot_weg') {
+    $aid = (int)($_POST['angebot_id'] ?? 0);
+    $g   = $aid ? one("SELECT id, nummer, anfrage_id FROM angebot WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
+    $hatAuftrag = $g ? (int) scalar("SELECT COUNT(*) FROM auftrag WHERE angebot_id=?", [$aid]) : 0;
+    if ($g && $hatAuftrag === 0) {
+        q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$aid]);
+        q("DELETE FROM angebot WHERE id=?", [$aid]);
+        if (!empty($g['anfrage_id'])) {
+            $rest = (int) scalar("SELECT COUNT(*) FROM angebot WHERE anfrage_id=?", [(int)$g['anfrage_id']]);
+            if ($rest === 0) {
+                q("DELETE FROM portal_anfrage_pos WHERE anfrage_id=?", [(int)$g['anfrage_id']]);
+                q("DELETE FROM portal_anfrage WHERE id=?", [(int)$g['anfrage_id']]);
+            }
+        }
+        log_aktivitaet('kunde', (int)$k['id'], 'team', 'Angebot ' . $g['nummer'] . ' (und ggf. Anfrage) durch Team im Kundenportal geloescht.', 'angebot');
+        header('Location: ?p=portal&token=' . $token . '&v=angebote&admingeloescht=1'); exit;
+    }
+    header('Location: ?p=portal&token=' . $token . '&v=angebote&adminsperre=1'); exit;
 }
 
 // Pflichtprüfung für eine Rezepturanfrage: Produktname muss da sein UND entweder eine Idee (Text)
@@ -1381,6 +1408,8 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (isset($_GET['geaendert'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre geänderte Menge ist eingegangen – wir überarbeiten das Angebot und melden uns.</div><?php endif; ?>
   <?php if (isset($_GET['abgeleitet'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre eigene Rezeptur ist eingegangen – wir prüfen sie und melden uns mit einem Vorschlag.</div><?php endif; ?>
   <?php if (isset($_GET['geloescht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Anfrage gelöscht.</div><?php endif; ?>
+  <?php if (isset($_GET['admingeloescht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Angebot und zugehörige Anfrage gelöscht (Team).</div><?php endif; ?>
+  <?php if (isset($_GET['adminsperre'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht löschbar: zu diesem Angebot gibt es bereits einen Auftrag. Erst den Auftrag stornieren.</div><?php endif; ?>
   <?php if (isset($_GET['loeschfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Diese Anfrage lässt sich nicht mehr löschen – wir sind bereits dabei oder haben Ihnen schon ein Angebot gemacht. Melden Sie sich bei uns, dann klären wir das.</div><?php endif; ?>
 
 <?php if ($view === 'start'): ?>

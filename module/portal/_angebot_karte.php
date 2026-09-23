@@ -199,4 +199,14 @@ if ($a['status'] === 'bestaetigt') {
     </details>
   </div>
   <?php endif; ?>
+
+  <?php if (!empty($adminImPortal)): ?>
+  <div class="bx-row" style="justify-content:flex-end;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
+    <span class="muted" style="font-size:12px;align-self:center">Nur Team sichtbar</span>
+    <form method="post" style="margin:0" onsubmit="return confirm('ADMIN: Angebot <?= h($a['nummer']) ?> und die zugehörige Anfrage endgültig löschen? Das kann nicht rückgängig gemacht werden.');">
+      <input type="hidden" name="aktion" value="admin_angebot_weg"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>">
+      <button class="btn btn-danger btn-sm" type="submit">Löschen (Team)</button>
+    </form>
+  </div>
+  <?php endif; ?>
 </details>
