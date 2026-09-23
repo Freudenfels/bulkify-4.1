@@ -1598,6 +1598,8 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
 
+  <?php include __DIR__ . '/_collapse_all.php'; ?>
+
   <?php
   // Kleine Tabelle für Anfragen ohne Angebotskarte (Rezeptur angelegt / abgelehnt). Vor der if/elseif-Kette
   // definiert, damit sie in allen Reitern verfügbar ist.
@@ -2539,6 +2541,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   $archivA = array_values(array_filter($angebote, fn($x) => ($x['status'] ?? '') !== 'gesendet')); ?>
   <h1 style="margin-bottom:4px">Ihre Angebote</h1>
   <p class="muted" style="margin:0 0 16px">Offene Angebote können Sie hier direkt prüfen, eine Menge wählen und verbindlich annehmen. Angenommene und abgelehnte Angebote finden Sie im <strong>Archiv</strong> unten.</p>
+  <?php include __DIR__ . '/_collapse_all.php'; ?>
   <?php if (!$offenA): ?><div class="bx-panel"><div class="muted">Aktuell liegt kein offenes Angebot vor<?= $archivA ? ' – ältere finden Sie im Archiv unten' : '' ?>.</div></div><?php endif; ?>
   <?php foreach ($offenA as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = true; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
 
