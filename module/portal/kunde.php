@@ -2591,7 +2591,20 @@ portal_head('Kundenportal · ' . $k['firma']);
     $inArbeit    = array_values(array_filter($auftraege, fn($a) => $a['status'] !== 'versendet'));
     $abgeschlBest = array_values(array_filter($auftraege, fn($a) => $a['status'] === 'versendet'));
     $btab = ($_GET['btab'] ?? '') === 'abgeschlossen' ? 'abgeschlossen' : 'arbeit';
-    $aktBest = $btab === 'abgeschlossen' ? $abgeschlBest : $inArbeit; ?>
+    $aktBest = $btab === 'abgeschlossen' ? $abgeschlBest : $inArbeit;
+    // Phase je Auftrag EINMAL bestimmen (fuer Sortierung + Anzeige, statt sie im Loop erneut zu berechnen).
+    $phaseCache = [];
+    foreach ($aktBest as $a) $phaseCache[(int)$a['id']] = kunde_auftrag_phase($a);
+    // Sortierung: standardmaessig nach FORTSCHRITT (am weitesten zuerst -> was wird als naechstes fertig),
+    // alternativ nach Datum. Gilt fuer die "In Bearbeitung"-Liste; Abgeschlossene bleiben neueste zuerst.
+    $bsort = ($_GET['bsort'] ?? '') === 'neu' ? 'neu' : 'fortschritt';
+    if ($btab === 'arbeit' && $bsort === 'fortschritt') {
+        usort($aktBest, function ($x, $y) use ($phaseCache) {
+            $px = $phaseCache[(int)$x['id']]['idx']; $py = $phaseCache[(int)$y['id']]['idx'];
+            if ($px !== $py) return $py <=> $px;                                          // weiter fortgeschritten oben
+            return strcmp((string)($y['angelegt'] ?? ''), (string)($x['angelegt'] ?? '')); // gleich weit: neuere zuerst
+        });
+    } ?>
   <h1 style="margin-bottom:4px">Ihre Bestellungen</h1>
   <p class="muted" style="margin:0 0 16px">Klicken Sie auf eine Bestellung, um alle Schritte, Rechnung und Details zu sehen.</p>
   <?php if (!$auftraege): ?><div class="bx-panel"><div class="muted">Noch keine Bestellungen.</div></div>
@@ -2600,13 +2613,22 @@ portal_head('Kundenportal · ' . $k['firma']);
     <a href="<?= $portalLink('bestellungen') ?>&btab=arbeit"        class="<?= $btab === 'arbeit' ? 'on' : '' ?>">In Bearbeitung<?= $inArbeit ? ' (' . count($inArbeit) . ')' : '' ?></a>
     <a href="<?= $portalLink('bestellungen') ?>&btab=abgeschlossen" class="<?= $btab === 'abgeschlossen' ? 'on' : '' ?>">Abgeschlossene<?= $abgeschlBest ? ' (' . count($abgeschlBest) . ')' : '' ?></a>
   </div>
+  <?php if ($btab === 'arbeit' && count($aktBest) > 1): ?>
+  <div class="pt-subtabs" style="margin:0 0 12px">
+    <span class="muted" style="align-self:center;font-size:13px;margin-right:2px">Sortieren:</span>
+    <a href="<?= $portalLink('bestellungen') ?>&btab=arbeit&bsort=fortschritt" class="<?= $bsort === 'fortschritt' ? 'on' : '' ?>">Nach Fortschritt</a>
+    <a href="<?= $portalLink('bestellungen') ?>&btab=arbeit&bsort=neu" class="<?= $bsort === 'neu' ? 'on' : '' ?>">Neueste zuerst</a>
+  </div>
+  <?php endif; ?>
   <?php if (!$aktBest): ?><div class="bx-panel"><div class="muted"><?= $btab === 'abgeschlossen' ? 'Noch keine abgeschlossenen Bestellungen.' : 'Aktuell keine Bestellung in Bearbeitung.' ?></div></div><?php endif; ?>
   <?php endif; ?>
-  <?php foreach ($aktBest as $a): $cur = kunde_auftrag_phase($a)['idx']; $complete = $a['status'] === 'versendet'; ?>
+  <?php foreach ($aktBest as $a): $cur = $phaseCache[(int)$a['id']]['idx']; $complete = $a['status'] === 'versendet'; ?>
   <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?></div>
-      <div class="bx-row" style="gap:10px;align-items:center"><?= $aufBadge($a['status']) ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
+      <div class="bx-row" style="gap:10px;align-items:center">
+        <span class="muted" style="font-size:12px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : 'Schritt ' . ($cur + 1) . '/' . count($AUFSTEPS) . ': ' . h($AUFSTEPS[$cur]) ?></span>
+        <?= $aufBadge($a['status']) ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
     <ul class="bx-steps" style="margin-top:12px">
       <?php foreach ($AUFSTEPS as $i => $lbl):
