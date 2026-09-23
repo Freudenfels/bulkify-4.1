@@ -581,6 +581,7 @@ function init_schema(): void {
         KEY idx_pa (pa_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('produktion_schritt', 'scan_charge', "VARCHAR(60) NULL");   // Baustein 6: gescannte Charge
+    ensure_column('produktion_schritt', 'erledigt_von', "VARCHAR(190) NULL");  // wer den Schritt abgeschlossen hat (Produktionsbericht)
 
     // produktion_verbrauch: welche Charge in welcher Menge für einen Produktionsauftrag entnommen wurde (Rückverfolgung).
     $pdo->exec("CREATE TABLE IF NOT EXISTS produktion_verbrauch (
@@ -5026,7 +5027,8 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
         };
         if (!($entnahme['ok'] ?? true)) return ['ok'=>false, 'fehler'=>'mangel', 'msg'=>'Nicht genug Bestand für diesen Schritt.', 'fertig'=>false, 'station'=>$station];
     }
-    q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $schritt_id]);
+    $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
+    q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=?, erledigt_von=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $wer !== '' ? $wer : null, $schritt_id]);
     reservierung_abgleichen($pa_id);   // entnommene Items: Reservierung schließen
     $total = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=?", [$pa_id]);
     $done  = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]);

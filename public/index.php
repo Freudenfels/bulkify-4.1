@@ -87,6 +87,7 @@ $routes = [
     'produktion'         => 'produktion/liste.php',
     'produktionsauftrag' => 'produktion/detail.php',
     'produktion_run'     => 'produktion/run.php',
+    'produktion_bericht' => 'produktion/bericht.php',
     'kalender'           => 'produktion/kalender.php',
     'lager'              => 'lager/bestand_liste.php',
     'lager2'             => 'lager/lager2.php',

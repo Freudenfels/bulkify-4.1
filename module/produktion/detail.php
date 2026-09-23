@@ -124,6 +124,7 @@ $statusBadge = match ($pa['status']) {
 render_header('produktion', $pa['nummer']);
 bx_head($pa['nummer'], 'Produktionsauftrag',
         ($pa['status'] !== 'erledigt' ? bx_btn('Geführt produzieren', '?p=produktion_run&id=' . $id, 'primary') . ' ' : '')
+        . bx_btn('Produktionsbericht', '?p=produktion_bericht&id=' . $id, $pa['status'] === 'erledigt' ? 'primary' : 'ghost') . ' '
         . bx_btn('Zurück zur Liste', '?p=produktion', 'ghost'));
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Station abgeschlossen.</div>';
 if (isset($_GET['mangel'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht genug Bestand für die Produktion – siehe Materialbedarf unten. Bitte erst Wareneingang buchen.</div>';

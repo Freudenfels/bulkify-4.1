@@ -2,6 +2,8 @@
 
 **Zweck:** Ein Produktionsauftrag wird hier Station für Station abgearbeitet – bis zu den beiden Freigabe-Gates.
 
+**Produktionsbericht:** Kopf-Button **„Produktionsbericht"** (`?p=produktion_bericht`) öffnet das druckbare Herstellprotokoll mit allen Infos (Auftrag, Rezeptur/Zusammensetzung, Menge, Schritte mit Zeit + Bearbeiter + Scan, entnommene Materialien, Fertigware). Siehe [bericht.md](bericht.md). Wer einen Schritt abschließt, wird seit Neuem in `produktion_schritt.erledigt_von` festgehalten.
+
 **Stationen (je Darreichungsform):** Rohstoffe bereitstellen · Mischen · **Herstellung** (Verkapselung / Tablettierung / Abfüllung … je Form) · Verpacken · Etikettieren · Qualitätsprüfung · **Produktions-Freigabe** (Gate) · **Versand-Freigabe** (Gate). Definiert in `produktionsschritte_fuer()`.
 
 **Was passiert hier:**
