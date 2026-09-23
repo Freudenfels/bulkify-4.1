@@ -885,6 +885,7 @@ if ($k['portal_rezeptur']) $detailParent['rezeptur'] = 'rezepturen';
 if ($k['portal_produkte']) $detailParent['produkt']  = 'produkte';
 if ($k['portal_rohstoffe']) $detailParent['rohstoff'] = 'rohstoffe';
 $detailParent['bestellung'] = 'bestellungen';   // Bestell-Detail (eigene Bestellung)
+$detailParent['produktionsbericht'] = 'bestellungen';   // freigegebener Produktionsbericht zur Bestellung (kein Menuepunkt)
 $detailParent['menge_aendern'] = 'meine_anfragen';   // Menge einer Produktanfrage aendern (kein Menuepunkt)
 if (!empty($k['portal_rezeptur_ableiten'])) $detailParent['rezeptur_ableiten'] = 'rezepturen';   // Katalog weiterentwickeln (kein Menuepunkt)
 $detailParent['agb'] = 'start';   // AGB: kein Menuepunkt, aber eine echte Seite (Fussleiste + Bestaetigungsdialog)
@@ -2725,6 +2726,16 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
   </div>
 
+  <?php // Produktionsbericht – nur wenn das Team ihn fuer den Kunden freigegeben hat.
+        $pbFrei = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND bericht_freigegeben_am IS NOT NULL ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
+        if ($pbFrei): ?>
+  <div class="bx-panel">
+    <h2 style="margin:0 0 8px;font-size:16px">Produktionsbericht</h2>
+    <p class="muted" style="margin:0 0 10px">Der Bericht zu Ihrer Produktion – Zusammensetzung, Herstellung &amp; Prüfung, Charge und Mindesthaltbarkeit.</p>
+    <a class="btn btn-primary btn-sm" href="<?= $portalLink('produktionsbericht') ?>&aid=<?= (int)$a['id'] ?>">Produktionsbericht ansehen</a>
+  </div>
+  <?php endif; ?>
+
   <!-- Bestelldetails + Rechnung nebeneinander -->
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;align-items:start;margin-bottom:var(--sp-5)">
   <div class="bx-panel" style="margin:0">
@@ -2773,6 +2784,34 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
 
   <?php endif; ?>
+
+<?php elseif ($view === 'produktionsbericht'):
+    // Kundenversion des Produktionsberichts – nur fuer den eigenen Auftrag UND nur wenn freigegeben.
+    $aid = (int)($_GET['aid'] ?? 0);
+    $a = null; foreach ($auftraege as $x) if ((int)$x['id'] === $aid) { $a = $x; break; }
+    $paId = $a ? (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND bericht_freigegeben_am IS NOT NULL ORDER BY id DESC LIMIT 1", [$aid]) : 0;
+    $D = $paId ? produktion_bericht_daten($paId) : null;
+    if (!$D): ?>
+      <div class="bx-panel"><div class="muted">Für diese Bestellung liegt noch kein freigegebener Produktionsbericht vor.</div>
+        <div style="margin-top:12px"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= $aid ?>">Zurück zur Bestellung</a></div></div>
+    <?php else: $fuerKunde = true; ?>
+      <style>
+      @media print { .bx-side, .bx-mobilbar, .no-print { display:none !important; } .bx-shell, .bx-main { display:block !important; margin:0 !important; } .bx-panel { break-inside:avoid; box-shadow:none } body { background:#fff } }
+      .pb-sec h2 { margin:0 0 8px; font-size:15px } .pb-kv td:first-child { color:var(--muted); width:220px; white-space:nowrap }
+      </style>
+      <div class="bx-row no-print" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <div>
+          <h1 style="margin:0 0 2px">Produktionsbericht</h1>
+          <div class="muted" style="font-size:13px"><?= h($D['istBulk'] ? ($D['pa']['rezeptur_name'] ?? '') : ($D['pa']['produkt_name'] ?? '')) ?></div>
+        </div>
+        <div class="bx-row" style="gap:8px">
+          <button type="button" class="btn btn-primary" onclick="window.print()">Drucken / PDF</button>
+          <a class="btn btn-ghost" href="<?= $portalLink('bestellung') ?>&aid=<?= $aid ?>">Zurück zur Bestellung</a>
+        </div>
+      </div>
+      <?php include BX_ROOT . '/module/produktion/_bericht_inhalt.php'; ?>
+      <p class="muted no-print" style="font-size:12px;margin-top:10px">bulkify Produktionsbericht</p>
+    <?php endif; ?>
 
 <?php elseif ($view === 'kontingente'):
   $nf  = fn($x) => number_format((int)$x, 0, ',', '.');

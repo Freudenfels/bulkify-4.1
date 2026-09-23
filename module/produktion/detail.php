@@ -98,9 +98,14 @@ if ($kapId) {
     $verfK = item_bestand($kapId, true);
     $kapNeed = ['name'=>scalar("SELECT name FROM item WHERE id=?", [$kapId]), 'benoetigt'=>$needK, 'verfuegbar'=>$verfK, 'fehlt'=>max(0.0, $needK - $verfK)];
 }
-$verbrauch = all("SELECT v.*, c.charge_nr, i.name AS item_name FROM produktion_verbrauch v
+$verbrauch = all("SELECT v.*, c.charge_nr, i.name AS item_name, l.firma AS lieferant FROM produktion_verbrauch v
                   LEFT JOIN charge c ON c.id=v.charge_id LEFT JOIN item i ON i.id=v.item_id
+                  LEFT JOIN lieferanten l ON l.id=c.lieferant_id
                   WHERE v.pa_id=? ORDER BY v.id", [$id]);
+// Zusammensetzung (Rezeptur-Zutaten) fuer die Anzeige auf der Detailseite.
+$rezIdD = (int)($pa['rezeptur_id'] ?? 0);
+if (!$rezIdD && !empty($pa['produkt_id'])) $rezIdD = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+$zutatenD = $rezIdD ? all("SELECT z.menge_mg, COALESCE(NULLIF(z.bezeichnung,''), i.name) AS name FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rezIdD]) : [];
 $mng = fn($x,$e) => rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',') . ' ' . h($e ?: '');
 // Alle Fertigwaren-Chargen zu diesem Auftrag (.A, .B, .C …) – bei Teilproduktion mehrere.
 $fwChargen = all("SELECT c.id, c.charge_nr, c.menge, c.menge_verfuegbar, c.mhd, c.status, c.wareneingang, c.item_id, i.artikelnummer, i.name
@@ -382,10 +387,13 @@ if ($verbrauch || ($istVollerWeg && ($bedarf || $kapNeed))): ?>
   <?php if ($verbrauch): ?>
     <h2>Entnommene Materialien (FEFO)</h2>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Rohstoff</th><th>Charge</th><th class="bx-num">Entnommen</th></tr></thead>
+      <thead><tr><th>Rohstoff</th><th>Charge</th><th>Lieferant</th><th class="bx-num">Entnommen</th><th>Datum</th></tr></thead>
       <tbody>
       <?php foreach ($verbrauch as $vb): ?>
-        <tr><td><?= h($vb['item_name'] ?: '–') ?></td><td><?= h($vb['charge_nr'] ?: '–') ?></td><td class="bx-num"><?= $mng($vb['menge'], $vb['einheit']) ?></td></tr>
+        <tr><td><?= h($vb['item_name'] ?: '–') ?></td><td><?= h($vb['charge_nr'] ?: '–') ?></td>
+            <td class="muted"><?= h($vb['lieferant'] ?: '–') ?></td>
+            <td class="bx-num"><?= $mng($vb['menge'], $vb['einheit']) ?></td>
+            <td class="muted"><?= !empty($vb['angelegt']) ? h(date('d.m.Y', strtotime((string)$vb['angelegt']))) : '–' ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
@@ -418,6 +426,21 @@ if ($verbrauch || ($istVollerWeg && ($bedarf || $kapNeed))): ?>
 </div>
 <?php endif; ?>
 
+<?php if ($zutatenD): $sumMg = 0.0; foreach ($zutatenD as $zz) $sumMg += (float)$zz['menge_mg']; ?>
+<div class="bx-panel">
+  <h2>Zusammensetzung je Einheit</h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Bestandteil</th><th class="bx-num">mg je Einheit</th></tr></thead>
+    <tbody>
+      <?php foreach ($zutatenD as $zz): ?>
+      <tr><td><?= h((string)$zz['name']) ?></td><td class="bx-num"><?= (float)$zz['menge_mg'] > 0 ? rtrim(rtrim(number_format((float)$zz['menge_mg'],3,',','.'),'0'),',') . ' mg' : '<span class="muted">–</span>' ?></td></tr>
+      <?php endforeach; ?>
+      <tr><td><strong>Füllgewicht</strong></td><td class="bx-num"><strong><?= rtrim(rtrim(number_format($sumMg,3,',','.'),'0'),',') ?> mg</strong></td></tr>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
+
 <div class="bx-panel">
   <h2>Stationen &amp; Freigaben</h2>
   <div class="bx-tablewrap"><table class="bx-table">
@@ -435,7 +458,7 @@ if ($verbrauch || ($istVollerWeg && ($bedarf || $kapNeed))): ?>
           <strong<?= $isDone ? '' : ($isNext ? '' : ' class="muted"') ?>><?= h($s['station']) ?></strong>
           <?= $isGate ? ' ' . bx_badge('Gate','info') : '' ?>
         </td>
-        <td class="muted"><?= $isDone && $s['erledigt_at'] ? h(fmt_zeit($s['erledigt_at'])) : '' ?><?= $isDone && !empty($s['scan_charge']) ? ' · Charge ' . h($s['scan_charge']) : '' ?></td>
+        <td class="muted"><?= $isDone && $s['erledigt_at'] ? h(fmt_zeit($s['erledigt_at'])) : '' ?><?= $isDone && !empty($s['erledigt_von']) ? ' · ' . h($s['erledigt_von']) : '' ?><?= $isDone && !empty($s['scan_charge']) ? ' · Charge ' . h($s['scan_charge']) : '' ?></td>
         <td style="width:160px;text-align:right">
           <?php if ($isNext): ?>
             <span class="badge badge-info">jetzt dran</span>

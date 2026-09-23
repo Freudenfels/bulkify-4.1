@@ -582,6 +582,10 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('produktion_schritt', 'scan_charge', "VARCHAR(60) NULL");   // Baustein 6: gescannte Charge
     ensure_column('produktion_schritt', 'erledigt_von', "VARCHAR(190) NULL");  // wer den Schritt abgeschlossen hat (Produktionsbericht)
+    // Produktionsbericht: freigebbar/editierbar fuer den Kunden.
+    ensure_column('produktionsauftrag', 'bericht_notiz', "TEXT NULL");                    // Bemerkung, die der Kunde im Bericht sieht
+    ensure_column('produktionsauftrag', 'bericht_freigegeben_am', "DATETIME NULL");       // fuer Kunden freigegeben am
+    ensure_column('produktionsauftrag', 'bericht_freigegeben_von', "VARCHAR(190) NULL");  // durch wen freigegeben
 
     // produktion_verbrauch: welche Charge in welcher Menge für einen Produktionsauftrag entnommen wurde (Rückverfolgung).
     $pdo->exec("CREATE TABLE IF NOT EXISTS produktion_verbrauch (
@@ -4464,6 +4468,60 @@ function produktion_stueck_je_packung(array $pa): int {
     if (!empty($pa['produkt_id'])) { $pr = produkt_row_cached((int)$pa['produkt_id']); $e = (int)($pr['einheiten_pro_packung'] ?? 0); if ($e > 0) return $e; }
     if (!empty($pa['auftrag_id'])) { $s = (int) scalar("SELECT stueck FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]); if ($s > 0) return $s; }
     return 0;
+}
+
+// Alle Daten fuer den Produktionsbericht (Herstellprotokoll) sammeln – genutzt von der internen
+// Berichtseite UND der Kundenportal-Ansicht (gemeinsamer Render-Include _bericht_inhalt.php).
+function produktion_bericht_daten(int $pa_id): ?array {
+    $pa = one("SELECT pa.*, k.firma AS kunde_firma, p.name AS produkt_name, a.nummer AS auftrag_nr,
+                      a.produkt_bezeichnung AS auftrag_produkt_bez, a.produkt_form AS auftrag_produkt_form,
+                      rz.name AS rezeptur_name, rz.darreichungsform AS rezeptur_form
+               FROM produktionsauftrag pa
+               LEFT JOIN kunden k ON k.id=pa.kunde_id LEFT JOIN produkt p ON p.id=pa.produkt_id
+               LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
+               LEFT JOIN auftrag a ON a.id=pa.auftrag_id WHERE pa.id=?", [$pa_id]);
+    if (!$pa) return null;
+
+    $istBulk = pa_ist_bulk($pa);
+    $form    = (string)($pa['rezeptur_form'] ?: $pa['auftrag_produkt_form'] ?: '');
+    $wort    = in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : ($form === 'stick' ? 'Sticks' : 'Stück'));
+    $formLabel = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig','granulat'=>'Granulat'][$form] ?? ($form ?: '–');
+
+    $einh   = produktion_stueck_je_packung($pa);
+    $pack   = (int)$pa['menge'];
+    $gesamt = $einh > 0 ? $pack * $einh : 0;
+
+    $rezId = (int)($pa['rezeptur_id'] ?? 0);
+    if (!$rezId && !empty($pa['produkt_id'])) $rezId = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    $zutaten = $rezId ? all("SELECT z.menge_mg, COALESCE(NULLIF(z.bezeichnung,''), i.name) AS name
+                             FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
+                             WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rezId]) : [];
+
+    $schritte  = all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]);
+    // Entnommene Materialien inkl. Lieferant (intern) + Datum der Entnahme.
+    $verbrauch = all("SELECT v.*, c.charge_nr, c.mhd AS charge_mhd, i.name AS item_name, l.firma AS lieferant
+                      FROM produktion_verbrauch v
+                      LEFT JOIN charge c ON c.id=v.charge_id LEFT JOIN item i ON i.id=v.item_id
+                      LEFT JOIN lieferanten l ON l.id=c.lieferant_id
+                      WHERE v.pa_id=? ORDER BY v.id", [$pa_id]);
+    // Dem Auftrag zugeordnete Chargen (reserviert/eingegangen) – Charge-Vollstaendigkeit.
+    $zugeChargen = $pa['auftrag_id'] ? all(
+        "SELECT c.charge_nr, c.mhd, c.status, i.name AS item_name, i.kategorie, l.firma AS lieferant
+         FROM charge c LEFT JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id
+         WHERE c.auftrag_id=? ORDER BY i.kategorie, c.id", [(int)$pa['auftrag_id']]) : [];
+    $fwChargen = all("SELECT c.charge_nr, c.menge, c.menge_verfuegbar, c.mhd, c.status, i.artikelnummer, i.name
+                      FROM charge c JOIN item i ON i.id=c.item_id WHERE c.pa_id=? ORDER BY c.id", [$pa_id]);
+    $groesse = !empty($pa['produkt_id']) ? produktion_groesse_label((int)$pa['produkt_id']) : '';
+
+    $abg = null; foreach ($schritte as $s) if ((int)$s['erledigt'] === 1 && $s['erledigt_at'] && (!$abg || $s['erledigt_at'] > $abg)) $abg = $s['erledigt_at'];
+    $done = count(array_filter($schritte, fn($s) => (int)$s['erledigt'] === 1));
+
+    return [
+        'pa'=>$pa, 'istBulk'=>$istBulk, 'form'=>$form, 'wort'=>$wort, 'formLabel'=>$formLabel,
+        'einh'=>$einh, 'pack'=>$pack, 'gesamt'=>$gesamt, 'zutaten'=>$zutaten, 'schritte'=>$schritte,
+        'verbrauch'=>$verbrauch, 'zugeChargen'=>$zugeChargen, 'fwChargen'=>$fwChargen, 'groesse'=>$groesse,
+        'abg'=>$abg, 'done'=>$done, 'fertig'=>($pa['status']==='erledigt'),
+    ];
 }
 // Kompletter Einkaufsbedarf eines Auftrags (Stückliste × Menge vs. freier Bestand).
 // Rückgabe je Komponente: ['rolle','item_id','name','benoetigt','verfuegbar','fehlt','einheit']

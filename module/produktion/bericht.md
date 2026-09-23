@@ -1,19 +1,23 @@
 # produktion/bericht.php – Produktionsbericht (Herstellprotokoll)
 
-**Zweck:** Eine **druckbare Gesamtübersicht** eines Produktionsauftrags – alles an einem Ort, als Beleg/Herstellprotokoll. Route `?p=produktion_bericht&id=<pa_id>`. Erreichbar über den Button **„Produktionsbericht"** auf der Auftragsdetailseite (bei fertigen Aufträgen als Primär-Button).
+**Zweck:** Druckbare Gesamtübersicht eines Produktionsauftrags – als Beleg. Route `?p=produktion_bericht&id=<pa_id>`. Button **„Produktionsbericht"** auf der Auftragsdetailseite.
 
-**Inhalt (Abschnitte):**
-- **Auftrag:** PR-Nummer, Status + Fortschritt X/N, Kundenauftrag + Kunde (intern), Produktionsart (Eigen-/Fremdfertigung), angelegt, geplant, abgeschlossen (spätester erledigter Schritt).
-- **Produkt / Rezeptur (Bulk):** Bezeichnung, Darreichungsform, Kapsel-/Tablettengröße (`produktion_groesse_label`), Charge(n), MHD.
-- **Menge:** Packungen, Einheiten je Packung + gesamt (Wort je Form: Kapseln/Tabletten/Sticks/Stück).
-- **Zusammensetzung je Einheit:** Zutaten aus `rezeptur_zutat` (Name, mg je Einheit, Soll gesamt = mg × Gesamtstück) + Füllgewicht.
-- **Produktionsschritte:** je Station Status, **Zeitpunkt**, **Bearbeiter** (`produktion_schritt.erledigt_von`), **gescannte Charge** (`scan_charge`).
-- **Entnommene Materialien (chargengenau, FEFO):** aus `produktion_verbrauch` (Material, Charge, Menge) – erscheint nur, wenn Material abgebucht wurde (bei Master-Scan-Freigaben leer).
-- **Eingebuchte Fertigware:** alle Chargen zum Auftrag (Nummer, Artikel, Menge, verfügbar, MHD, Status).
-- Fußzeile: erstellt am/von.
+## Zwei Ansichten aus einer Quelle
+Die Daten sammelt `produktion_bericht_daten($pa_id)` (core/schema.php), gerendert wird über den gemeinsamen Include **`_bericht_inhalt.php`**. Denselben Include nutzt das **Kundenportal** (`module/portal/kunde.php`, View `produktionsbericht`), damit intern und beim Kunden alles identisch aussieht.
 
-**Druck:** Button „Drucken / PDF" (`window.print()`). Ein `@media print`-Block blendet Seitenleiste, Mobilbar und die Aktions-/Hinweiszeilen (`.no-print`) aus, sodass ein sauberes Dokument entsteht.
+- **Intern** (`?p=produktion_bericht&id=…`): ALLES – Produktionsauftrag-Nr, Kunde (intern), **Produktionsart (Eigen/Fremd)**, alle Schritte mit **Zeit + Bearbeiter (`erledigt_von`) + gescannter Charge**, **entnommene Materialien chargengenau mit Lieferant + Datum**, **zugeordnete Chargen** (mit Lieferant), eingebuchte Fertigware.
+- **Kundenansicht** (`?fuer=kunde`, Team-Vorschau; im Portal automatisch): **bereinigt** – ohne Lieferanten, ohne Mitarbeiternamen, ohne Rohstoff-/zugeordnete Chargen, **ohne Produktionsart**. Schritt-Bezeichnungen sind **kundenneutral** gemappt (`Fertigware bereitstellen` → „Material bereitgestellt", `Verkapselung` → „Herstellung" …), damit **nie ein Zukauf erkennbar** ist ([[kunde-kein-zukauf-verraten]]). Der Kunde sieht Produkt, Zusammensetzung, Herstellung & Prüfung mit Datum, seine Charge + MHD und die Bemerkung.
 
-**Bearbeiter-Erfassung:** `produktion_schritt.erledigt_von` (neu) wird in `produktion_schritt_erledigen()` (core/schema.php) beim Abschluss mit `current_user()['name']` gefüllt – gilt für die geführte Produktion und die Detailseite. Vor Einführung abgeschlossene Schritte haben keinen Eintrag (zeigen „–").
+## Bemerkung + Freigabe (nur intern)
+Ein Team-Panel (nicht im Druck/Kundenansicht):
+- **Bemerkung für den Kunden** (`produktionsauftrag.bericht_notiz`, editierbar) – erscheint als Abschnitt „Bemerkung" im Bericht.
+- **Für Kunden freigeben** (`aktion=bericht_freigeben`) setzt `bericht_freigegeben_am/_von`; erst dann erscheint der Bericht (Kundenansicht) im **Kundenportal** bei der Bestellung. „Freigabe zurücknehmen" macht ihn wieder unsichtbar. Freigeben ist erst möglich, wenn der Auftrag **abgeschlossen** ist. Es wird ein Verlaufseintrag am Kunden geschrieben.
 
-**Rechte/Route:** `production`, `labor`, `fulfillment` (core/auth.php); Route in `public/index.php`. Funktioniert für normale (Produkt-)Aufträge und Bulk-Aufträge (`pa_ist_bulk()` → „Rezeptur (Bulk)"). Der Bericht ist **intern** (keine Kundenansicht).
+## Druck
+Button „Drucken / PDF" (`window.print()`); `@media print` blendet Seitenleiste, Mobilbar und die `.no-print`-Bereiche (Aktionen, Freigabe-Panel, Hinweise) aus.
+
+## Bearbeiter-Erfassung
+`produktion_schritt.erledigt_von` wird in `produktion_schritt_erledigen()` beim Abschluss mit `current_user()['name']` gefüllt (geführte Produktion + Detailseite). Vor Einführung abgeschlossene Schritte zeigen „–".
+
+## Rechte/Route
+`production`, `labor`, `fulfillment` (core/auth.php); Route in `public/index.php`. Die **Kundenansicht im Portal** ist über den Magic-Link/Login des Kunden erreichbar, aber nur für den eigenen Auftrag UND nur wenn freigegeben (Prüfung in der Portal-View). Funktioniert für Produkt- und Bulk-Aufträge (`pa_ist_bulk()`).
