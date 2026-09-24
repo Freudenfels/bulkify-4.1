@@ -54,7 +54,7 @@ $cols = [
 render_header('einkauf', $archiv ? 'Bestellarchiv' : 'Bestellungen');
 bx_head($archiv ? 'Bestellarchiv' : 'Bestellungen',
         count($rows) . ($archiv ? ' gelieferte Bestellungen' : ' laufende Bestellungen (unterwegs / Entwurf)'),
-        bx_btn('Neue Bestellung', '?p=bestellung&id=neu', 'ghost'));
+        bx_btn('Schnell (mobil)', '?p=einkauf_mobil', 'ghost') . ' ' . bx_btn('Neue Bestellung', '?p=bestellung&id=neu', 'ghost'));
 ?>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="einkauf">

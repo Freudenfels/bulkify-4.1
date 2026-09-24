@@ -104,6 +104,7 @@ $routes = [
     'portal_anfragen'    => 'intern/portal_anfragen.php',
     'portal_anfrage'     => 'intern/portal_anfrage_detail.php',
     'einkauf'            => 'einkauf/liste.php',
+    'einkauf_mobil'      => 'einkauf/mobil.php',
     'bestellung'         => 'einkauf/detail.php',
     'bestellung_pdf'     => 'einkauf/pdf.php',
     'preis_anfragen'     => 'einkauf/preis_anfragen.php',

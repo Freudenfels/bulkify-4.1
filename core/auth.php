@@ -76,6 +76,7 @@ function route_rollen_map(): array {
         'lieferant'          => ['einkauf', 'finance'],
         'katalog_freigaben'  => ['einkauf', 'finance'],
         'einkauf'            => ['einkauf'],
+        'einkauf_mobil'      => ['einkauf'],
         'bestellung'         => ['einkauf'],
         'bestellung_pdf'     => ['einkauf'],
         'preis_anfragen'     => ['einkauf', 'sales'],
