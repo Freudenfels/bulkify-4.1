@@ -1052,6 +1052,17 @@ function init_schema(): void {
               [$name, $form, $nr]);
         meta_set('fix_auftrag_produkt_v3', '1');
     }
+    // Einmalige Preis-Reparatur: alte v3-Importe speicherten bei manchen Bestellpositionen den GESAMTpreis
+    // als Stueckpreis (ek_preis) -> Bestellwert (Menge x ek_preis) explodierte (z. B. 231 Mio. EUR). Der Import
+    // ist laengst gefixt (Stueckpreis = Gesamt / Menge); diese Migration raeumt bereits importierte Altzeilen auf.
+    // NUR eindeutig unmoegliche Faelle (Bestellwert je Position > 1 Mio. EUR – das erreicht hier keine echte
+    // Einzelbestellung; in den Daten klafft eine grosse Luecke: naechster echter Wert ~85 Tsd. EUR). Korrektur =
+    // ek_preis / Menge -> der Bestellwert wird wieder der urspruengliche, sinnvolle Gesamtpreis. Idempotent.
+    if (meta_get('fix_bestellpos_gesamtpreis_v1', '') !== '1') {
+        q("UPDATE bestellung_position SET ek_preis = ek_preis / menge
+           WHERE menge > 0 AND ek_preis > 0 AND (menge * ek_preis) > 1000000");
+        meta_set('fix_bestellpos_gesamtpreis_v1', '1');
+    }
     // Einmalig: 4 offene Annapurna-Auftraege ohne verknuepftes Produkt auf Wunsch loeschen
     // (AB-3213/3214/3215/3217 mit PR-2729..2732). Sicherung: nur solange sie wirklich KEIN Produkt haben.
     if (meta_get('del_auftrag_ohne_produkt_v3', '') !== '1') {
