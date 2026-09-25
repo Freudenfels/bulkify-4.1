@@ -1075,6 +1075,17 @@ function init_schema(): void {
     }
     ensure_column('produktionsauftrag', 'stueck', "INT NULL");
     ensure_column('produktionsauftrag', 'verpackung_id', "INT NULL");
+    // Einmalig: Alt-Auftraege aus dem v3-Import hatten keinen verknuepften Behaelter (verpackung_id leer),
+    // weil v3 "Weithalsglas 150 ml" schrieb und v4 "150 ml Weithalsglas" heisst -> der Namensvergleich im
+    // Import schlug fehl. Folge: Produktion zieht kein/falsches Glas und es wird das falsche Etikett bestellt.
+    // Fix aus der v3-Wahrheit (auftraege.verpackung = Material + ml), je v3_id fest hinterlegt; Zuordnung ueber
+    // Material + Volumen auf den v4-Behaelter (bevorzugt Weithalsglas). Setzt NUR wo leer, keine Ueberschreibung,
+    // keine Loeschung. Cascade auf produktionsauftrag (nur wo dort ebenfalls leer). Neu angelegte Produkte/
+    // Auftraege verknuepfen den Behaelter bereits korrekt -> das hier betrifft ausschliesslich die Alt-Importe.
+    if (meta_get('fix_auftrag_verpackung_v1', '') !== '1') {
+        fix_auftrag_verpackung_backfill();
+        meta_set('fix_auftrag_verpackung_v1', '1');
+    }
     ensure_column('angebot', 'kunde_ausgeblendet', "TINYINT(1) NOT NULL DEFAULT 0");  // Kunde hat es aus seiner Liste entfernt (Löschen)
     ensure_column('angebot', 'marge_override', "DECIMAL(6,2) NULL");          // je Angebot gesetzte Marge % (überschreibt Marge-je-Typ; VK = EK×(1+Marge))
     ensure_column('angebot', 'produktionszeit_wochen', "DECIMAL(5,1) NULL");  // je Angebot gesetzte Produktionszeit (Wochen); leer = globaler Wert
@@ -6532,4 +6543,33 @@ function produkt_novelfood_pruefen(int $pid): array {
     }
     $status = $problem ? 'novel_food' : ($pruef ? 'pruefung' : 'konform');
     return ['status' => $status, 'treffer' => $treffer, 'grund' => ''];
+}
+
+// Einmaliger Backfill: verpackung_id der Alt-Importe aus der v3-Wahrheit setzen (siehe Kommentar am Aufruf
+// in init_schema). Zuordnung v3-Auftrag (auftrag.v3_id) -> "Material|Volumen(ml)" -> v4-Behaelter. Idempotent:
+// wirkt nur auf Auftraege mit leerem verpackung_id; der Aufruf ist zusaetzlich per app_meta-Marker gegatet.
+function fix_auftrag_verpackung_backfill(): void {
+    // v3 auftraege.id => "Material|ml" (aus dem v3-Dump auftraege.verpackung geparst)
+    $map = [13=>'Glas|150',14=>'Glas|100',16=>'Glas|150',17=>'Glas|200',20=>'Glas|200',21=>'Glas|200',25=>'PET|150',
+            29=>'Glas|150',31=>'PET|100',33=>'Glas|200',34=>'Glas|150',35=>'Glas|150',38=>'Glas|200',39=>'Glas|150',
+            40=>'Glas|250',41=>'Glas|100',43=>'Glas|150',44=>'Glas|100',46=>'Glas|100',47=>'Glas|150',48=>'Glas|100',
+            49=>'Glas|150',50=>'Glas|150',51=>'Glas|150',52=>'Glas|250',53=>'Glas|150',54=>'Glas|150',55=>'PET|200',
+            56=>'PET|200',73=>'Glas|150',78=>'Glas|100',79=>'Glas|150',80=>'Glas|200',81=>'Glas|150',82=>'Glas|200',
+            86=>'Glas|100',87=>'Glas|100',88=>'Glas|100',89=>'Glas|100',90=>'Glas|100',92=>'Glas|150'];
+    $resolve = [];  // "Material|ml" -> v4-Behaelter-item-id (gecacht)
+    foreach ($map as $v3id => $mv) {
+        $a = one("SELECT id FROM auftrag WHERE v3_id=? AND (verpackung_id IS NULL OR verpackung_id=0)", [(int)$v3id]);
+        if (!$a) continue;
+        if (!isset($resolve[$mv])) {
+            [$mat, $ml] = explode('|', $mv);
+            $resolve[$mv] = (int) scalar(
+                "SELECT id FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer'
+                   AND gesperrt=0 AND material=? AND volumen_ml=?
+                 ORDER BY (name LIKE '%Weithals%') DESC, id ASC LIMIT 1", [$mat, (int)$ml]);
+        }
+        $vid = $resolve[$mv];
+        if ($vid <= 0) continue;
+        q("UPDATE auftrag SET verpackung_id=? WHERE id=? AND (verpackung_id IS NULL OR verpackung_id=0)", [$vid, (int)$a['id']]);
+        q("UPDATE produktionsauftrag SET verpackung_id=? WHERE auftrag_id=? AND (verpackung_id IS NULL OR verpackung_id=0)", [$vid, (int)$a['id']]);
+    }
 }
