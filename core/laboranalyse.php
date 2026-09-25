@@ -158,19 +158,24 @@ function laboranalysen_alle(string $suche = ''): array {
                COALESCE(d.dok_datum, DATE(d.angelegt)) AS datum, d.angelegt,
                CASE WHEN d.objekt_typ='produkt' THEN COALESCE(NULLIF(pp.kundenname,''), pp.name)
                     WHEN d.objekt_typ='auftrag' THEN COALESCE(NULLIF(pa.kundenname,''), pa.name, a.produkt_bezeichnung)
+                    WHEN d.objekt_typ='item'    THEN it.name
                     ELSE NULL END AS produkt,
                CASE WHEN d.objekt_typ='auftrag' THEN a.nummer ELSE NULL END AS auftrag_nr,
-               CASE WHEN d.objekt_typ='produkt' THEN kp.firma
-                    WHEN d.objekt_typ='auftrag' THEN ka.firma ELSE NULL END AS kunde
+               CASE WHEN d.objekt_typ='item' THEN it.kategorie ELSE NULL END AS item_kategorie,
+               COALESCE(CASE WHEN d.objekt_typ='produkt' THEN kp.firma
+                             WHEN d.objekt_typ='auftrag' THEN ka.firma ELSE NULL END, lf.firma) AS kunde
           FROM dokument d
           LEFT JOIN produkt pp ON d.objekt_typ='produkt' AND pp.id=d.objekt_id
           LEFT JOIN kunden  kp ON kp.id=pp.kunde_id
           LEFT JOIN auftrag a  ON d.objekt_typ='auftrag' AND a.id=d.objekt_id
           LEFT JOIN produkt pa ON pa.id=a.produkt_id
           LEFT JOIN kunden  ka ON ka.id=a.kunde_id
+          LEFT JOIN item    it ON d.objekt_typ='item' AND it.id=d.objekt_id
+          LEFT JOIN lieferanten lf ON lf.id=d.lieferant_id
          WHERE d.typ='analyse'
            AND (? = '' OR COALESCE(pp.name,'') LIKE ? OR COALESCE(pp.kundenname,'') LIKE ?
                        OR COALESCE(pa.name,'') LIKE ? OR COALESCE(a.nummer,'') LIKE ?
+                       OR COALESCE(it.name,'') LIKE ? OR COALESCE(lf.firma,'') LIKE ?
                        OR COALESCE(d.datei_orig,'') LIKE ?)
-         ORDER BY datum DESC, d.id DESC", [$suche, $like, $like, $like, $like, $like]);
+         ORDER BY datum DESC, d.id DESC", [$suche, $like, $like, $like, $like, $like, $like, $like]);
 }

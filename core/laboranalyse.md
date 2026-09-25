@@ -64,3 +64,12 @@ Kunde, Marke (kunde_marke) und Menge. Er matcht primär auf die eindeutige Beste
 Kunde/Marke + Produkt + Menge und ordnet zusätzlich das Produkt zu (bei gleichnamigen entscheidet die Menge,
 z. B. Astaxanthin 60 vs 90 Kapseln). Rückgabe zusätzlich: auftrag_id, kunde, menge. Die gematchte Bestellung
 wird in der Kaskade (Produkt->Auftrag->Charge) vorausgewählt.
+
+## Weitere Quellen + „ohne Zuordnung"
+Der Admin-Upload kennt jetzt zusätzlich:
+- **Rohstoff / Artikel (Lieferant)**: `objekt_typ='item'` (Rohstoffe + zugekaufte Fertigware), optional `lieferant_id`.
+  So lassen sich Laboranalysen/CoA von Lieferanten zu Rohstoffen und Fertigprodukten annehmen (erscheinen auch am
+  Rohstoff-Detail). Grosse Liste -> Live-Filter im Formular.
+- **keine Zuordnung**: `objekt_typ='offen'`, `objekt_id=0`, `kunde_sichtbar=0` (nie im Kundenportal). Beim Speichern
+  muss man das per Popup bestätigen; in der Liste erscheint das Badge „ohne Zuordnung" (Spalte Bezug) zum späteren Zuordnen.
+`laboranalysen_alle()` löst Rohstoff/Artikel (item) + Lieferant mit auf.

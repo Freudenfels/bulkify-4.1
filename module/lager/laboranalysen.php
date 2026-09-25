@@ -56,10 +56,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $befund = in_array($_POST['befund'] ?? '', ['bestanden','auffaellig','unklar'], true) ? $_POST['befund'] : 'unklar';
         $sicht = isset($_POST['kunde_sichtbar']) ? 1 : 0;
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) $datum = null;
-        // Zielobjekt bestimmen. Normalfall: Produkt gewählt, dann Auftrag (Bestellung) -> an DIE Bestellung
-        // koppeln; ohne Auftrag (= „alle Bestellungen") ans Produkt. Extern: Fremdlager-Produkt.
-        $objTyp = 'produkt'; $objId = 0; $bezug = '';
-        if ($quelle === 'extern') {
+        // Zielobjekt bestimmen. Normalfall: Produkt -> Auftrag (Bestellung); ohne Auftrag ans Produkt.
+        // extern: Fremdlager-Produkt. rohstoff: Rohstoff/Artikel (item) vom Lieferanten. offen: keine Zuordnung.
+        $objTyp = 'produkt'; $objId = 0; $bezug = ''; $lid = null;
+        if ($quelle === 'offen') {
+            $objTyp = 'offen'; $objId = 0; $sicht = 0; $bezug = '(ohne Zuordnung)';   // nicht im Kundenportal
+        } elseif ($quelle === 'rohstoff') {
+            $objTyp = 'item'; $objId = (int)($_POST['item_id'] ?? 0);
+            $lid = (int)($_POST['lieferant_id'] ?? 0) ?: null;
+            $bezug = 'dem Rohstoff/Artikel' . ($lid ? ' (Lieferant)' : '');
+        } elseif ($quelle === 'extern') {
             $objId = (int)($_POST['produkt_extern'] ?? 0); $bezug = 'dem Fremdlager-Produkt';
         } else {
             $aid = (int)($_POST['auftrag_id'] ?? 0);
@@ -70,13 +76,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $objId = (int)($_POST['produkt_id'] ?? 0); $bezug = 'dem Produkt (alle Bestellungen)';
             }
         }
-        if ($fn && $objId && is_file(BX_UPLOADS . '/' . $fn)) {
-            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,befund,kunde_sichtbar,hochgeladen_von)
-               VALUES (?,?,'analyse',?,?,?,?,?,?,?,'team')", [$objTyp, $objId, $titel, $fn, $orig ?: $fn, $datum, $charge, $befund, $sicht]);
-            $hinweis = ['ok', 'Laboranalyse gespeichert und mit ' . $bezug . ' verknüpft' . ($charge ? ' (Charge ' . $charge . ')' : '') . '.'];
+        $darfSpeichern = $fn && is_file(BX_UPLOADS . '/' . $fn) && ($objId > 0 || $quelle === 'offen');
+        if ($darfSpeichern) {
+            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,dok_datum,charge_nr,befund,kunde_sichtbar,hochgeladen_von)
+               VALUES (?,?,'analyse',?,?,?,?,?,?,?,?,'team')", [$objTyp, $objId, $lid, $titel, $fn, $orig ?: $fn, $datum, $charge, $befund, $sicht]);
+            $hinweis = ['ok', 'Laboranalyse gespeichert' . ($quelle === 'offen' ? ' – noch OHNE Zuordnung (später zuordnen).' : ' und mit ' . $bezug . ' verknüpft' . ($charge ? ' (Charge ' . $charge . ')' : '') . '.')];
         } else {
             @unlink(BX_UPLOADS . '/' . $fn);
-            $hinweis = ['err', $quelle === 'bestellung' ? 'Bitte eine Bestellung auswählen.' : ($quelle === 'extern' ? 'Bitte ein Fremdlager-Produkt auswählen.' : 'Bitte ein Produkt auswählen.')];
+            $hinweis = ['err', $quelle === 'rohstoff' ? 'Bitte einen Rohstoff/Artikel auswählen.' : ($quelle === 'extern' ? 'Bitte ein Fremdlager-Produkt auswählen.' : 'Bitte ein Produkt/eine Bestellung auswählen – oder „keine Zuordnung" bestätigen.')];
         }
     }
 
@@ -105,6 +112,9 @@ $labMenge = function (array $p) use ($labWort): string {
 };
 // Fremdlager-/Fulfillment-Ware (extern): Produkte, deren Fertigware im Fremdlager liegt (auch Drittanbieter-Ware).
 $ffProdukte = lager2_produkte();
+// Rohstoffe & (zugekaufte) Fertigware als Ziel fuer Lieferanten-Analysen. Grosse Liste -> im Formular live gefiltert.
+$rohItems   = all("SELECT id, name, kategorie, artikelnummer FROM item WHERE kategorie IN ('rohstoff','fertig','verkaufsfertig') ORDER BY (kategorie<>'rohstoff'), name");
+$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 $liste = laboranalysen_alle($suche);
 $kiBereit = ki_bereit();
 
@@ -145,13 +155,15 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
         <ul style="margin:6px 0 0;padding-left:18px"><?php foreach ($vorschlag['hinweise'] as $hw): ?><li><?= h($hw) ?></li><?php endforeach; ?></ul>
       </div>
     <?php endif; ?>
-    <form method="post" data-busy="Speichere Laboranalyse …">
+    <form method="post" data-busy="Speichere Laboranalyse …" onsubmit="return labCheck(this)">
       <input type="hidden" name="aktion" value="speichern">
       <input type="hidden" name="datei" value="<?= h($vorschlag['datei']) ?>">
       <input type="hidden" name="orig" value="<?= h($vorschlag['orig']) ?>">
       <div class="bx-row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
         <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="eigen" checked onclick="labQuelle('eigen')"> eigenes Produkt</label>
-        <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="extern" onclick="labQuelle('extern')"> extern (Fremdlager / Drittanbieter)</label>
+        <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="rohstoff" onclick="labQuelle('rohstoff')"> Rohstoff / Artikel (Lieferant)</label>
+        <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="extern" onclick="labQuelle('extern')"> extern (Fremdlager)</label>
+        <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="offen" onclick="labQuelle('offen')"> keine Zuordnung</label>
       </div>
       <div class="bx-grid" id="labBlockEigen">
         <div class="bx-field"><label>1. Produkt <?= bx_hint('Zu welchem Produkt gehört diese Analyse?') ?></label>
@@ -185,6 +197,24 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
           <?php if (!$ffProdukte): ?><div class="muted" style="font-size:12px;margin-top:4px">Noch keine Fremdlager-Ware eingebucht. Einbuchen unter <a href="?p=lager2">Fremdlager</a>.</div><?php endif; ?>
         </div>
       </div>
+      <div class="bx-grid" id="labBlockRohstoff" style="display:none">
+        <div class="bx-field"><label>Rohstoff / Artikel <?= bx_hint('Rohstoff oder zugekaufte Fertigware. Tippen zum Filtern.') ?></label>
+          <input type="text" id="labRohFilter" placeholder="Filtern – Name oder Artikelnr" oninput="labRohFilterFn(this.value)" style="margin-bottom:6px">
+          <select name="item_id" id="labRohSelect" size="6" style="width:100%">
+            <?php foreach ($rohItems as $it): $lbl = $it['name'] . ($it['artikelnummer'] ? ' · ' . $it['artikelnummer'] : '') . ($it['kategorie'] !== 'rohstoff' ? ' · ' . $it['kategorie'] : ''); ?>
+              <option value="<?= (int)$it['id'] ?>" data-s="<?= h(mb_strtolower($it['name'] . ' ' . $it['artikelnummer'])) ?>"><?= h($lbl) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="bx-field"><label>Lieferant (optional) <?= bx_hint('Von welchem Lieferanten stammt die Analyse?') ?></label>
+          <select name="lieferant_id"><option value="">– keiner –</option>
+            <?php foreach ($lieferanten as $lf): ?><option value="<?= (int)$lf['id'] ?>"><?= h($lf['firma']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+      </div>
+      <div class="bx-panel" id="labBlockOffen" style="display:none;border-color:#e6c4c0;background:#fbeae7;color:#8f231b;padding:10px 14px;margin:0 0 10px">
+        Diese Analyse wird <strong>keiner Bestellung/keinem Produkt zugeordnet</strong> und dem Kunden <strong>nicht</strong> angezeigt. Sie erscheint in der Liste als „ohne Zuordnung" und kann später zugeordnet werden. Beim Speichern wird das bestätigt.
+      </div>
       <div class="bx-grid" style="margin-top:12px">
         <div class="bx-field"><label>Befund <?= bx_hint('Ergebnis der im Bericht geprüften Parameter. KI-Vorschlag, bitte prüfen.') ?></label>
           <select name="befund">
@@ -201,8 +231,16 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
       var LAB_CHARGES = <?= json_encode($chargesByOrder, JSON_UNESCAPED_UNICODE) ?>;
       var LAB_KI = {auftrag: <?= (int)$kiAuftragId ?>, charge: <?= json_encode((string)$vorschlag['charge']) ?>};
       function labQuelle(q){
-        document.getElementById('labBlockEigen').style.display  = q==='extern' ? 'none' : '';
-        document.getElementById('labBlockExtern').style.display = q==='extern' ? '' : 'none';
+        document.getElementById('labBlockEigen').style.display    = q==='eigen'    ? '' : 'none';
+        document.getElementById('labBlockRohstoff').style.display = q==='rohstoff' ? '' : 'none';
+        document.getElementById('labBlockExtern').style.display   = q==='extern'   ? '' : 'none';
+        document.getElementById('labBlockOffen').style.display    = q==='offen'    ? '' : 'none';
+      }
+      function labRohFilterFn(v){
+        v=(v||'').toLowerCase();
+        document.querySelectorAll('#labRohSelect option').forEach(function(o){
+          o.style.display = (o.getAttribute('data-s')||'').indexOf(v)>=0 ? '' : 'none';
+        });
       }
       function labFillAuftraege(){
         var pid = document.getElementById('labProdukt').value;
@@ -227,6 +265,15 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
           cf.value = LAB_KI.charge && (LAB_CHARGES[aid].indexOf(LAB_KI.charge)>=0) ? LAB_KI.charge : LAB_CHARGES[aid][0];
       }
       labFillAuftraege();   // initial: Aufträge des (KI-)Produkts laden + KI-Bestellung/Charge vorwählen
+      // Vor dem Speichern: bei „keine Zuordnung" bestaetigen lassen; sonst pruefen, dass etwas gewaehlt ist.
+      function labCheck(f){
+        var q = (f.querySelector('input[name="quelle"]:checked')||{}).value || 'eigen';
+        if (q==='offen') return confirm('Diese Laboranalyse KEINER Bestellung/keinem Produkt zuordnen und nur ablegen? Sie erscheint als „ohne Zuordnung" in der Liste.');
+        if (q==='eigen'    && !f.produkt_id.value) return confirm('Kein Produkt gewählt. Ohne Zuordnung ablegen? (Dann bitte „keine Zuordnung" wählen.)') ? (function(){f.querySelector('input[name=quelle][value=offen]').checked=true; return true;})() : false;
+        if (q==='rohstoff' && !f.item_id.value)    { alert('Bitte einen Rohstoff/Artikel wählen.'); return false; }
+        if (q==='extern'   && !f.produkt_extern.value) { alert('Bitte ein Fremdlager-Produkt wählen.'); return false; }
+        return true;
+      }
       </script>
       <div class="bx-row" style="gap:8px;align-items:center;margin-top:var(--sp-3)">
         <input type="checkbox" name="kunde_sichtbar" id="ks" value="1" checked>
@@ -266,7 +313,12 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
         <td><?= $d['kunde'] ? h($d['kunde']) : '<span class="muted">–</span>' ?></td>
         <td><?= $d['charge_nr'] ? h($d['charge_nr']) : '<span class="muted">–</span>' ?></td>
         <td><?= $bf[0] !== '' ? bx_badge($bf[0], $bf[1]) : '<span class="muted">–</span>' ?></td>
-        <td><?= $d['auftrag_nr'] ? h($d['auftrag_nr']) . ' <span class="muted">(Bestellung)</span>' : '<span class="muted">Produkt</span>' ?></td>
+        <td><?php
+          if ($d['objekt_typ'] === 'auftrag')      echo h($d['auftrag_nr']) . ' <span class="muted">(Bestellung)</span>';
+          elseif ($d['objekt_typ'] === 'item')     echo '<span class="muted">Rohstoff/Artikel' . ($d['item_kategorie'] && $d['item_kategorie'] !== 'rohstoff' ? ' (' . h($d['item_kategorie']) . ')' : '') . '</span>';
+          elseif ($d['objekt_typ'] === 'offen')    echo bx_badge('ohne Zuordnung', 'warn');
+          else                                      echo '<span class="muted">Produkt</span>';
+        ?></td>
         <td><a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['datei_orig'] ?: 'Datei') ?></a></td>
         <td>
           <form method="post" style="margin:0"><input type="hidden" name="aktion" value="toggle"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>">
