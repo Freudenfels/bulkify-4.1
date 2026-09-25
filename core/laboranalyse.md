@@ -50,3 +50,10 @@ Im Admin-Upload wählt man 1. Produkt, 2. Bestellung (gefiltert auf das Produkt;
 Produkt hinterlegen), 3. Charge (Datalist der Chargen der Bestellung; die vom Bericht erkannte Charge ist
 vorausgewählt, Freitext möglich). Abhängige Dropdowns clientseitig (LAB_ORDERS/LAB_CHARGES, kein Nachladen).
 Bei gewähltem Auftrag -> `objekt_typ='auftrag'`, sonst `objekt_typ='produkt'`. KI füllt Produkt/Bestellung/Charge vor.
+
+## Befund (bestanden/auffällig) + Menge im Dropdown
+- KI beurteilt NUR die im Bericht geprüften Parameter: alle in Spezifikation -> `befund='bestanden'`, ein Wert
+  außerhalb -> `auffaellig`, sonst `unklar`. Kein Urteil darüber, ob „genug" getestet wurde (keine Belehrung).
+- `dokument.befund` speichert das (KI-Vorschlag, im Formular editierbar). Anzeige als Ampel-Badge (grün/rot,
+  `laboranalyse_befund_label()`) im Admin, im Auftrag und im Kunden-Reiter „Labortest". `unklar`/leer = kein Badge.
+- Produkt-Dropdown im Admin zeigt die Menge je Packung (z. B. „· 120 Kapseln"), außer die Variante hat sie schon im Namen.

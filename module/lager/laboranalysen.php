@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                               'produkt_name' => $ki['ok'] ? ($ki['produkt_name'] ?? '') : '',
                               'datum' => $ki['ok'] ? ($ki['datum'] ?? '') : '',
                               'charge' => $ki['ok'] ? ($ki['charge'] ?? '') : '',
+                              'befund' => $ki['ok'] ? ($ki['befund'] ?? 'unklar') : 'unklar',
                               'ki_ok' => $ki['ok'], 'ki_fehler' => $ki['ok'] ? '' : (string)($ki['fehler'] ?? ''),
                               // Abgleich Name/Charge mit dem System -> Hinweise bei Abweichung.
                               'hinweise' => $ki['ok'] ? laboranalyse_hinweise($ki) : [],
@@ -51,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $datum = trim((string)($_POST['datum'] ?? ''));
         $titel = trim((string)($_POST['titel'] ?? '')) ?: null;
         $charge = trim((string)($_POST['charge_nr'] ?? '')) ?: null;
+        $befund = in_array($_POST['befund'] ?? '', ['bestanden','auffaellig','unklar'], true) ? $_POST['befund'] : 'unklar';
         $sicht = isset($_POST['kunde_sichtbar']) ? 1 : 0;
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) $datum = null;
         // Zielobjekt bestimmen. Normalfall: Produkt gewählt, dann Auftrag (Bestellung) -> an DIE Bestellung
@@ -68,8 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         if ($fn && $objId && is_file(BX_UPLOADS . '/' . $fn)) {
-            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,kunde_sichtbar,hochgeladen_von)
-               VALUES (?,?,'analyse',?,?,?,?,?,?,'team')", [$objTyp, $objId, $titel, $fn, $orig ?: $fn, $datum, $charge, $sicht]);
+            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,befund,kunde_sichtbar,hochgeladen_von)
+               VALUES (?,?,'analyse',?,?,?,?,?,?,?,'team')", [$objTyp, $objId, $titel, $fn, $orig ?: $fn, $datum, $charge, $befund, $sicht]);
             $hinweis = ['ok', 'Laboranalyse gespeichert und mit ' . $bezug . ' verknüpft' . ($charge ? ' (Charge ' . $charge . ')' : '') . '.'];
         } else {
             @unlink(BX_UPLOADS . '/' . $fn);
@@ -89,9 +91,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$produkte = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, k.firma
-                 FROM produkt p LEFT JOIN kunden k ON k.id=p.kunde_id
+$produkte = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, k.firma,
+                        p.einheiten_pro_packung, r.darreichungsform AS form
+                 FROM produkt p LEFT JOIN kunden k ON k.id=p.kunde_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                  ORDER BY name");
+// Menge je Packung fuer die Dropdown-Beschriftung (nur wenn nicht schon im Namen als Variante enthalten).
+$labWort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : ($f === 'pulver' || $f === 'fluessig' ? '' : 'Stück')));
+$labMenge = function (array $p) use ($labWort): string {
+    if (mb_strpos((string)$p['name'], ' · ') !== false) return '';   // Variante hat die Menge schon im Namen
+    $stk = (int)($p['einheiten_pro_packung'] ?? 0); $w = $labWort((string)($p['form'] ?? ''));
+    return ($stk > 0 && $w !== '') ? ' · ' . $stk . ' ' . $w : '';
+};
 // Fremdlager-/Fulfillment-Ware (extern): Produkte, deren Fertigware im Fremdlager liegt (auch Drittanbieter-Ware).
 $ffProdukte = lager2_produkte();
 $liste = laboranalysen_alle($suche);
@@ -143,7 +153,7 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
             <option value="">– Produkt wählen –</option>
             <?php foreach ($produkte as $p): ?>
               <option value="<?= (int)$p['id'] ?>" <?= ((int)$p['id'] === (int)$vorschlag['produkt_id']) ? 'selected' : '' ?>>
-                <?= h($p['name']) ?><?= $p['firma'] ? ' — ' . h($p['firma']) : '' ?>
+                <?= h($p['name'] . $labMenge($p)) ?><?= $p['firma'] ? ' — ' . h($p['firma']) : '' ?>
               </option>
             <?php endforeach; ?>
           </select>
@@ -170,6 +180,13 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
         </div>
       </div>
       <div class="bx-grid" style="margin-top:12px">
+        <div class="bx-field"><label>Befund <?= bx_hint('Ergebnis der im Bericht geprüften Parameter. KI-Vorschlag, bitte prüfen.') ?></label>
+          <select name="befund">
+            <?php foreach (['bestanden'=>'bestanden (alle geprüften Werte in Spezifikation)','auffaellig'=>'auffällig (Wert außerhalb Spezifikation)','unklar'=>'unklar / kein Befund'] as $bk=>$bl): ?>
+              <option value="<?= $bk ?>" <?= ($vorschlag['befund'] === $bk) ? 'selected' : '' ?>><?= h($bl) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
         <div class="bx-field"><label>Analysendatum</label><input type="date" name="datum" value="<?= h($vorschlag['datum']) ?>"></div>
         <div class="bx-field"><label>Titel (optional)</label><input type="text" name="titel" placeholder="z. B. Laboranalyse Charge 2026-04"></div>
       </div>
@@ -234,14 +251,15 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
   </div>
   <?php if ($liste): ?>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table" id="labTab">
-    <thead><tr><th>Datum</th><th>Produkt</th><th>Kunde</th><th>Charge</th><th>Bezug</th><th>Datei</th><th>Kundenportal</th><th></th></tr></thead>
+    <thead><tr><th>Datum</th><th>Produkt</th><th>Kunde</th><th>Charge</th><th>Befund</th><th>Bezug</th><th>Datei</th><th>Kundenportal</th><th></th></tr></thead>
     <tbody>
-      <?php foreach ($liste as $d): ?>
+      <?php foreach ($liste as $d): $bf = laboranalyse_befund_label($d['befund'] ?? null); ?>
       <tr>
         <td><?= $d['datum'] ? h(fmt_zeit($d['datum'] . ' 00:00:00', 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
         <td><?= h($d['produkt'] ?: '–') ?></td>
         <td><?= $d['kunde'] ? h($d['kunde']) : '<span class="muted">–</span>' ?></td>
         <td><?= $d['charge_nr'] ? h($d['charge_nr']) : '<span class="muted">–</span>' ?></td>
+        <td><?= $bf[0] !== '' ? bx_badge($bf[0], $bf[1]) : '<span class="muted">–</span>' ?></td>
         <td><?= $d['auftrag_nr'] ? h($d['auftrag_nr']) . ' <span class="muted">(Bestellung)</span>' : '<span class="muted">Produkt</span>' ?></td>
         <td><a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['datei_orig'] ?: 'Datei') ?></a></td>
         <td>

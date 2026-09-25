@@ -961,6 +961,7 @@ function init_schema(): void {
     ensure_column('dokument', 'datei_hash', "VARCHAR(32) NULL");   // md5 der Datei – gleiche Etiketten ueber Auftraege gruppieren
     ensure_column('dokument', 'dok_datum', "DATE NULL");   // Datum DES Dokuments (z. B. Analysendatum auf dem Laborbericht) – fuer Sortierung; leer = angelegt
     ensure_column('dokument', 'charge_nr', "VARCHAR(60) NULL");   // auf dem Bericht genannte Chargennummer (Laboranalyse) – ausgeschrieben im System hinterlegt
+    ensure_column('dokument', 'befund', "VARCHAR(20) NULL");   // Laboranalyse-Befund fuer den Kunden: bestanden | auffaellig | unklar (KI-Vorschlag, editierbar)
     // Preisanfrage: was genau angefragt wird. Daraus ergibt sich die Einheit, in der der Lieferant seinen Preis nennt.
     ensure_column('lieferant_anfrage', 'art', "VARCHAR(20) NULL");               // rohstoff|fertigprodukt|verpackung|verbrauch|sonstiges
     ensure_column('lieferant_anfrage', 'form', "VARCHAR(20) NULL");              // bei Fertigprodukt: kapsel|tablette|softgel|stick|pulver|granulat|fluessig

@@ -58,10 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
         $fn   = 'analyse_' . $id . '_' . bin2hex(random_bytes(5)) . ($ext ? '.' . $ext : '');
         $datum = trim((string)($_POST['datum'] ?? '')); if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) $datum = null;
         $charge = trim((string)($_POST['charge_nr'] ?? '')) ?: null;
+        $befund = in_array($_POST['befund'] ?? '', ['bestanden','auffaellig','unklar'], true) ? $_POST['befund'] : 'unklar';
         if (move_uploaded_file($_FILES['dok']['tmp_name'], BX_UPLOADS . '/' . $fn)) {
-            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,kunde_sichtbar,hochgeladen_von)
-               VALUES ('auftrag',?,'analyse',?,?,?,?,?,?,'team')",
-              [$id, trim((string)($_POST['titel'] ?? '')) ?: null, $fn, $orig, $datum, $charge, isset($_POST['kunde_sichtbar']) ? 1 : 0]);
+            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,befund,kunde_sichtbar,hochgeladen_von)
+               VALUES ('auftrag',?,'analyse',?,?,?,?,?,?,?,'team')",
+              [$id, trim((string)($_POST['titel'] ?? '')) ?: null, $fn, $orig, $datum, $charge, $befund, isset($_POST['kunde_sichtbar']) ? 1 : 0]);
         }
     }
     header('Location: ?p=auftrag&id=' . $id . '&analyse=1'); exit;
@@ -338,8 +339,9 @@ echo '</div>';
 
 <?php
 // Laboranalysen dieser Bestellung (Charge). Admin laedt hier den Labortest/das CoA fuer genau diese Bestellung hoch.
-$analyseDocs = all("SELECT id, titel, datei_orig, dok_datum, charge_nr, kunde_sichtbar, angelegt FROM dokument
+$analyseDocs = all("SELECT id, titel, datei_orig, dok_datum, charge_nr, befund, kunde_sichtbar, angelegt FROM dokument
                     WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='analyse' ORDER BY COALESCE(dok_datum, DATE(angelegt)) DESC, id DESC", [$id]);
+$befundBadge = fn($b) => $b === 'bestanden' ? bx_badge('bestanden','ok') : ($b === 'auffaellig' ? bx_badge('auffällig','err') : '<span class="muted">–</span>');
 $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
                              WHERE pa.auftrag_id=? AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id LIMIT 1", [$id]);
 ?>
@@ -348,12 +350,13 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
   <p class="muted" style="margin-top:0">Labortest bzw. Analysenzertifikat (CoA) für <strong>diese Bestellung</strong>. Als „freigegeben" erscheint es im Kundenportal-Reiter „Labortest".</p>
   <?php if ($analyseDocs): ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Datum</th><th>Charge</th><th>Datei</th><th>Kundenportal</th><th></th></tr></thead>
+    <thead><tr><th>Datum</th><th>Charge</th><th>Befund</th><th>Datei</th><th>Kundenportal</th><th></th></tr></thead>
     <tbody>
       <?php foreach ($analyseDocs as $d): ?>
       <tr>
         <td><?= $d['dok_datum'] ? h(fmt_zeit($d['dok_datum'] . ' 00:00:00', 'd.m.Y')) : h(fmt_zeit($d['angelegt'], 'd.m.Y')) ?></td>
         <td><?= $d['charge_nr'] ? h($d['charge_nr']) : '<span class="muted">–</span>' ?></td>
+        <td><?= $befundBadge($d['befund'] ?? null) ?></td>
         <td><a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Analyse')) ?></a></td>
         <td><form method="post" style="margin:0"><input type="hidden" name="aktion" value="analyse_toggle"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= (int)$d['kunde_sichtbar'] === 1 ? bx_badge('freigegeben','ok') : bx_badge('intern') ?></button></form></td>
         <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Analyse löschen?');"><input type="hidden" name="aktion" value="analyse_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Löschen</button></form></td>
@@ -367,6 +370,13 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
     <div class="bx-grid">
       <div class="bx-field"><label>Datei (PDF/Bild)</label><input type="file" name="dok" required accept="application/pdf,image/*"></div>
       <div class="bx-field"><label>Chargennummer</label><input type="text" name="charge_nr" value="<?= h($chargeNr ?: '') ?>" placeholder="z. B. JN26P8"></div>
+      <div class="bx-field"><label>Befund</label>
+        <select name="befund">
+          <option value="bestanden">bestanden</option>
+          <option value="auffaellig">auffällig</option>
+          <option value="unklar" selected>unklar / kein Befund</option>
+        </select>
+      </div>
       <div class="bx-field"><label>Analysendatum</label><input type="date" name="datum"></div>
       <div class="bx-field"><label>Titel (optional)</label><input type="text" name="titel" placeholder="z. B. Labortest"></div>
     </div>

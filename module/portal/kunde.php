@@ -3088,13 +3088,14 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div class="bx-panel"><div class="muted">Es liegen noch keine freigegebenen Laboranalysen vor. Sobald wir für Ihre Produkte einen Labortest hinterlegen, erscheint er hier.</div></div>
     <?php else: ?>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Datum</th><th>Produkt</th><th>Bezug</th><th></th></tr></thead>
+        <thead><tr><th>Datum</th><th>Produkt</th><th>Charge</th><th>Befund</th><th></th></tr></thead>
         <tbody>
-          <?php foreach ($labs as $l): $url = $portalLink('analyse_datei') . '&id=' . (int)$l['id']; ?>
+          <?php foreach ($labs as $l): $url = $portalLink('analyse_datei') . '&id=' . (int)$l['id']; $bf = laboranalyse_befund_label($l['befund'] ?? null); ?>
           <tr>
             <td><?= $l['datum'] ? h(fmt_zeit($l['datum'] . ' 00:00:00', 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
-            <td><?= h($l['produkt'] ?: '–') ?></td>
-            <td><?php if ($l['auftrag_nr']): ?><?= h($l['auftrag_nr']) ?><?= $l['charge_nr'] ? ' <span class="muted">· Charge ' . h($l['charge_nr']) . '</span>' : '' ?><?php elseif ($l['charge_nr']): ?>Charge <?= h($l['charge_nr']) ?><?php else: ?><span class="muted">alle Bestellungen</span><?php endif; ?></td>
+            <td><?= h($l['produkt'] ?: '–') ?><?php if ($l['auftrag_nr']): ?> <span class="muted" style="font-size:12px">· <?= h($l['auftrag_nr']) ?></span><?php endif; ?></td>
+            <td><?= $l['charge_nr'] ? h($l['charge_nr']) : '<span class="muted">–</span>' ?></td>
+            <td><?= $bf[0] !== '' ? bx_badge($bf[0], $bf[1]) : '<span class="muted">–</span>' ?></td>
             <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= h($url) ?>" target="_blank" rel="noopener">Ansehen / Download</a></td>
           </tr>
           <?php endforeach; ?>
