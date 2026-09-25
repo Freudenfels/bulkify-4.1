@@ -57,3 +57,10 @@ Bei gewähltem Auftrag -> `objekt_typ='auftrag'`, sonst `objekt_typ='produkt'`. 
 - `dokument.befund` speichert das (KI-Vorschlag, im Formular editierbar). Anzeige als Ampel-Badge (grün/rot,
   `laboranalyse_befund_label()`) im Admin, im Auftrag und im Kunden-Reiter „Labortest". `unklar`/leer = kein Badge.
 - Produkt-Dropdown im Admin zeigt die Menge je Packung (z. B. „· 120 Kapseln"), außer die Variante hat sie schon im Namen.
+
+## KI-Zuordnung: Kunde/Marke + Menge + aktive Bestellungen
+Der KI-Vorschlag bekommt jetzt (a) die Produktliste MIT Menge je Packung und (b) die aktiven Bestellungen mit
+Kunde, Marke (kunde_marke) und Menge. Er matcht primär auf die eindeutige Bestellung (auftrag_id) über
+Kunde/Marke + Produkt + Menge und ordnet zusätzlich das Produkt zu (bei gleichnamigen entscheidet die Menge,
+z. B. Astaxanthin 60 vs 90 Kapseln). Rückgabe zusätzlich: auftrag_id, kunde, menge. Die gematchte Bestellung
+wird in der Kaskade (Produkt->Auftrag->Charge) vorausgewählt.

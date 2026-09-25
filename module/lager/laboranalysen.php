@@ -30,11 +30,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                               'datum' => $ki['ok'] ? ($ki['datum'] ?? '') : '',
                               'charge' => $ki['ok'] ? ($ki['charge'] ?? '') : '',
                               'befund' => $ki['ok'] ? ($ki['befund'] ?? 'unklar') : 'unklar',
+                              'kunde' => $ki['ok'] ? ($ki['kunde'] ?? '') : '',
                               'ki_ok' => $ki['ok'], 'ki_fehler' => $ki['ok'] ? '' : (string)($ki['fehler'] ?? ''),
                               // Abgleich Name/Charge mit dem System -> Hinweise bei Abweichung.
                               'hinweise' => $ki['ok'] ? laboranalyse_hinweise($ki) : [],
-                              // Charge -> konkrete Bestellung(en): direkt an die richtige Bestellung koppeln.
-                              'auftraege' => $ki['ok'] ? laboranalyse_auftraege_zu_charge((string)($ki['charge'] ?? '')) : []];
+                              // Bestellung: von der KI gematcht (Kunde/Marke+Produkt+Menge), sonst ueber die Charge.
+                              'auftrag_id' => $ki['ok'] ? (int)($ki['auftrag_id'] ?? 0) : 0];
             } else {
                 $hinweis = ['err', 'Datei konnte nicht gespeichert werden.'];
             }
@@ -117,7 +118,12 @@ $chargesByOrder = [];
 foreach (all("SELECT pa.auftrag_id, c.charge_nr FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
               WHERE c.charge_nr IS NOT NULL AND c.charge_nr<>'' AND pa.auftrag_id IS NOT NULL ORDER BY c.id") as $c)
     $chargesByOrder[(int)$c['auftrag_id']][] = (string)$c['charge_nr'];
-$kiAuftragId = (!empty($vorschlag['auftraege']) ? (int)$vorschlag['auftraege'][0]['id'] : 0);
+// Bevorzugt die von der KI gematchte Bestellung; sonst über die Charge auflösen.
+$kiAuftragId = (int)($vorschlag['auftrag_id'] ?? 0);
+if (!$kiAuftragId && !empty($vorschlag['charge'])) {
+    $tr = laboranalyse_auftraege_zu_charge((string)$vorschlag['charge']);
+    if ($tr) $kiAuftragId = (int)$tr[0]['id'];
+}
 
 render_header('laboranalysen', 'Laboranalysen');
 bx_head('Laboranalysen', 'Laborberichte / Analysenzertifikate hochladen und mit einem Produkt verknüpfen. Freigegebene erscheinen im Kundenportal-Reiter „Labortest".');
@@ -130,7 +136,7 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
   <div class="bx-panel">
     <h2 style="margin-top:0;font-size:16px">Vorschlag prüfen</h2>
     <p class="muted" style="margin-top:0">Datei: <strong><?= h($vorschlag['orig']) ?></strong>
-      <?php if ($vorschlag['ki_ok']): ?>· KI-Vorschlag<?php if ($vorschlag['charge']): ?>, erkannte Charge: <?= h($vorschlag['charge']) ?><?php endif; ?>
+      <?php if ($vorschlag['ki_ok']): ?>· KI-Vorschlag<?php if (!empty($vorschlag['kunde'])): ?>, Kunde/Marke: <?= h($vorschlag['kunde']) ?><?php endif; ?><?php if ($vorschlag['charge']): ?>, Charge: <?= h($vorschlag['charge']) ?><?php endif; ?>
       <?php else: ?>· <span style="color:#8f231b">KI nicht verfügbar (<?= h($vorschlag['ki_fehler']) ?>) – bitte manuell wählen</span><?php endif; ?>
     </p>
     <?php if (!empty($vorschlag['hinweise'])): ?>

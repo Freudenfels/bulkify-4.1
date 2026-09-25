@@ -13,29 +13,52 @@ require_once __DIR__ . '/dokument_ui.php';
 function laboranalyse_ki_vorschlag(string $pfad): array {
     require_once __DIR__ . '/ki.php';
     if (!ki_bereit()) return ['ok' => false, 'fehler' => 'KI-Vorschlag läuft nur auf beta (Schlüssel serverseitig).'];
-    // Produkt-Kandidaten kompakt mitgeben (id: Name). Begrenzt, damit die Anfrage nicht ausufert.
-    $prods = all("SELECT id, COALESCE(NULLIF(kundenname,''), name) AS name FROM produkt ORDER BY name LIMIT 400");
-    $liste = implode("\n", array_map(fn($p) => (int)$p['id'] . ': ' . $p['name'], $prods));
-    $anw = "Die Datei ist ein Laborbericht bzw. Analysenzertifikat (CoA) eines Nahrungsergänzungsmittels.\n"
-         . "Ordne ihn dem passenden Produkt aus der folgenden Liste zu – NUR wenn die Zuordnung eindeutig ist, sonst produkt_id=null.\n"
-         . "Lies ausserdem das Analysendatum (Datum des Berichts) und – falls vorhanden – die Chargennummer.\n"
-         . "Beurteile NUR die im Bericht TATSÄCHLICH geprüften Parameter: Liegen alle geprüften Werte innerhalb ihrer\n"
-         . "Spezifikation/Grenzwerte bzw. steht sinngemäss „entspricht/konform/bestanden/passed/complies\"? Dann befund=\"bestanden\".\n"
-         . "Liegt mindestens ein geprüfter Wert AUSSERHALB der Spezifikation (out of specification/failed/nicht konform)? Dann befund=\"auffaellig\".\n"
-         . "Lässt sich das nicht sicher erkennen: befund=\"unklar\". Beurteile NICHT, ob genug getestet wurde – nur das Ergebnis der vorhandenen Prüfungen.\n\n"
-         . "Produkte (id: Name):\n" . $liste . "\n\n"
-         . 'Antworte als JSON: {"produkt_id": <id oder null>, "produkt_name": "<erkannter Produktname>", "datum": "<YYYY-MM-DD oder null>", "charge": "<Charge oder null>", "befund": "bestanden|auffaellig|unklar", "begruendung": "<kurz>"}';
+    $wort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : 'Stück'));
+    // Produkt-Kandidaten MIT Menge je Packung (damit „60 Kapseln" 6mg/60 von 8mg/90 unterscheidet).
+    $prods = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, p.einheiten_pro_packung AS stk, r.darreichungsform AS form
+                  FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id ORDER BY name LIMIT 400");
+    $pListe = implode("\n", array_map(function ($p) use ($wort) {
+        $m = ((int)$p['stk'] > 0) ? ' · ' . (int)$p['stk'] . ' ' . $wort((string)$p['form']) : '';
+        return (int)$p['id'] . ': ' . $p['name'] . $m;
+    }, $prods));
+    // Aktive Bestellungen als PRIMAERES Matchziel: Kunde/Marke + Produkt + Menge stehen oft im Bericht.
+    $auftr = all("SELECT a.id, a.nummer, COALESCE(k.firma,'') AS kunde,
+                         (SELECT GROUP_CONCAT(m.name SEPARATOR ', ') FROM kunde_marke m WHERE m.kunde_id=a.kunde_id) AS marken,
+                         COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt,
+                         COALESCE(NULLIF(a.stueck,0), p.einheiten_pro_packung) AS stk, r.darreichungsform AS form
+                  FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                  LEFT JOIN kunden k ON k.id=a.kunde_id
+                  WHERE a.status NOT IN ('versendet','storniert') ORDER BY a.id DESC LIMIT 300");
+    $aListe = implode("\n", array_map(function ($a) use ($wort) {
+        $m = ((int)$a['stk'] > 0) ? (int)$a['stk'] . ' ' . $wort((string)$a['form']) : '';
+        $kd = ($a['kunde'] ?: '?') . ($a['marken'] ? ' [Marke: ' . $a['marken'] . ']' : '');
+        return 'A' . (int)$a['id'] . ': ' . $a['nummer'] . ' | Kunde: ' . $kd . ' | ' . $a['produkt'] . ($m ? ' | ' . $m : '');
+    }, $auftr));
+    $anw = "Die Datei ist ein Laborbericht / Analysenzertifikat (CoA) eines Nahrungsergänzungsmittels.\n"
+         . "Nutze ALLE Hinweise: Produktname/Probenart, Menge bzw. Kapselzahl (z. B. „60 Kapseln\") UND den Kunden-/Markennamen (oft als Probenkennung/Auftraggeber).\n"
+         . "1) Finde die passende AKTIVE Bestellung aus der Liste (Kunde/Marke + Produkt + Menge müssen zusammenpassen).\n"
+         . "   Passt genau eine eindeutig -> auftrag_id = die Zahl hinter dem 'A'. Sonst auftrag_id=null.\n"
+         . "2) Ordne zusätzlich das Produkt zu (produkt_id aus der Produktliste); bei mehreren gleichnamigen entscheidet die Menge.\n"
+         . "3) Lies Kunde/Marke, Analysendatum (Berichtsdatum) und die Chargennummer.\n"
+         . "4) Beurteile NUR die tatsächlich geprüften Parameter: alles in Spezifikation bzw. sinngemäss „keine Beanstandung/entspricht/konform/passed\" -> befund=\"bestanden\";\n"
+         . "   mindestens ein Wert außerhalb (out of specification/failed) -> \"auffaellig\"; sonst \"unklar\". Bewerte NICHT, ob genug getestet wurde.\n\n"
+         . "Aktive Bestellungen (A<id>: Nummer | Kunde [Marke] | Produkt | Menge):\n" . ($aListe ?: '(keine)') . "\n\n"
+         . "Produkte (id: Name · Menge):\n" . $pListe . "\n\n"
+         . 'Antworte als JSON: {"auftrag_id": <id oder null>, "produkt_id": <id oder null>, "produkt_name": "<Produkt laut Bericht>", "kunde": "<Kunde/Marke laut Bericht>", "menge": "<z. B. 60 Kapseln oder null>", "datum": "<YYYY-MM-DD oder null>", "charge": "<Charge oder null>", "befund": "bestanden|auffaellig|unklar", "begruendung": "<kurz>"}';
     $r = ki_datei_frage($pfad, $anw, ['json' => true]);
     if (!$r['ok']) return $r;
     $d = (array) ($r['daten'] ?? []);
+    $aid = isset($d['auftrag_id']) && $d['auftrag_id'] !== null && $d['auftrag_id'] !== '' ? (int) $d['auftrag_id'] : 0;
+    if ($aid && !scalar("SELECT id FROM auftrag WHERE id=? AND status NOT IN ('versendet','storniert')", [$aid])) $aid = 0;
     $pid = isset($d['produkt_id']) && $d['produkt_id'] !== null && $d['produkt_id'] !== '' ? (int) $d['produkt_id'] : null;
-    // Sicherheitsnetz: nur eine wirklich existierende Produkt-id uebernehmen.
     if ($pid && !scalar("SELECT id FROM produkt WHERE id=?", [$pid])) $pid = null;
+    if (!$pid && $aid) $pid = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$aid]) ?: null;   // Produkt aus dem Auftrag ableiten
     $datum = trim((string) ($d['datum'] ?? ''));
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) $datum = null;
     $befund = strtolower(trim((string) ($d['befund'] ?? '')));
     if (!in_array($befund, ['bestanden', 'auffaellig', 'unklar'], true)) $befund = 'unklar';
-    return ['ok' => true, 'produkt_id' => $pid, 'produkt_name' => trim((string) ($d['produkt_name'] ?? '')),
+    return ['ok' => true, 'auftrag_id' => $aid, 'produkt_id' => $pid,
+            'produkt_name' => trim((string) ($d['produkt_name'] ?? '')), 'kunde' => trim((string) ($d['kunde'] ?? '')),
             'datum' => $datum, 'charge' => trim((string) ($d['charge'] ?? '')) ?: null, 'befund' => $befund,
             'begruendung' => trim((string) ($d['begruendung'] ?? ''))];
 }
