@@ -2831,7 +2831,11 @@ portal_head('Kundenportal · ' . $k['firma']);
     $add = function(string $typ, string $titel, string $sub, string $href, ?string $datum, string $bfarbe) use (&$hits) {
         $hits[] = ['typ'=>$typ, 'titel'=>$titel, 'sub'=>$sub, 'href'=>$href, 'datum'=>$datum, 'bfarbe'=>$bfarbe];
     };
-    $hit = fn(string $hay) => $ql !== '' && mb_strpos(mb_strtolower($hay), $ql) !== false;
+    // Suche zusaetzlich „kompakt": alle Nicht-Alphanumerik raus, damit „ab1234" auch „AB-1234" findet
+    // (und umgekehrt), ohne die normale Textsuche zu veraendern.
+    $normKompakt = fn(string $s) => preg_replace('/[^a-z0-9]+/', '', mb_strtolower($s));
+    $qk = $normKompakt($q);
+    $hit = fn(string $hay) => $ql !== '' && (mb_strpos(mb_strtolower($hay), $ql) !== false || ($qk !== '' && strpos($normKompakt($hay), $qk) !== false));
     if ($ql !== '') {
         foreach ($auftraege as $a) {
             $chg = $auftragChargen[(int)$a['id']] ?? [];

@@ -31,3 +31,9 @@ Sichtbar im Kundenportal nur mit `dokument.kunde_sichtbar=1`.
 - `laboranalysen_fuer_kunde()` zeigt daher auch Produkte, die dem Kunden gehören (`produkt.kunde_id`) – nicht
   nur gekaufte –, damit externe Fremdlager-Ware ohne eigenen Auftrag beim Kunden erscheint.
 - Neue Drittanbieter-Ware zuerst im Fremdlager einbuchen (`?p=lager2`), dann steht sie im „extern"-Dropdown.
+
+## Abgleich mit dem System (Hinweise)
+`laboranalyse_hinweise($ki, $pid_gewaehlt=0)` vergleicht die vom Bericht gelesenen Daten mit dem System und
+gibt Hinweise (kein Blocker): kein eindeutiges Produkt erkannt; Produktname weicht ab; Chargennummer nicht im
+System gefunden; Charge gehört laut System zu einem anderen Produkt. Anzeige im Vorschlag-Schritt der
+Admin-Seite (gelber Kasten). Charge-Vergleich ist tolerant (Bindestrich/Leerzeichen/Gross-Klein egal).

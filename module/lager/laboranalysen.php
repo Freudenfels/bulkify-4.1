@@ -29,7 +29,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                               'produkt_name' => $ki['ok'] ? ($ki['produkt_name'] ?? '') : '',
                               'datum' => $ki['ok'] ? ($ki['datum'] ?? '') : '',
                               'charge' => $ki['ok'] ? ($ki['charge'] ?? '') : '',
-                              'ki_ok' => $ki['ok'], 'ki_fehler' => $ki['ok'] ? '' : (string)($ki['fehler'] ?? '')];
+                              'ki_ok' => $ki['ok'], 'ki_fehler' => $ki['ok'] ? '' : (string)($ki['fehler'] ?? ''),
+                              // Abgleich Name/Charge mit dem System -> Hinweise bei Abweichung.
+                              'hinweise' => $ki['ok'] ? laboranalyse_hinweise($ki) : []];
             } else {
                 $hinweis = ['err', 'Datei konnte nicht gespeichert werden.'];
             }
@@ -93,6 +95,12 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
       <?php if ($vorschlag['ki_ok']): ?>· KI-Vorschlag<?php if ($vorschlag['charge']): ?>, erkannte Charge: <?= h($vorschlag['charge']) ?><?php endif; ?>
       <?php else: ?>· <span style="color:#8f231b">KI nicht verfügbar (<?= h($vorschlag['ki_fehler']) ?>) – bitte manuell wählen</span><?php endif; ?>
     </p>
+    <?php if (!empty($vorschlag['hinweise'])): ?>
+      <div class="bx-panel" style="border-color:#e6c4c0;background:#fbeae7;color:#8f231b;padding:10px 14px;margin:0 0 12px">
+        <strong>Bitte prüfen – Abweichung:</strong>
+        <ul style="margin:6px 0 0;padding-left:18px"><?php foreach ($vorschlag['hinweise'] as $hw): ?><li><?= h($hw) ?></li><?php endforeach; ?></ul>
+      </div>
+    <?php endif; ?>
     <form method="post" data-busy="Speichere Laboranalyse …">
       <input type="hidden" name="aktion" value="speichern">
       <input type="hidden" name="datei" value="<?= h($vorschlag['datei']) ?>">

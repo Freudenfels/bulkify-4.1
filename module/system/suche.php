@@ -15,6 +15,9 @@ if (!has_role('admin')) {
 
 $q    = trim((string)($_GET['q'] ?? ''));
 $like = '%' . $q . '%';
+// Kompakter Nummern-Vergleich: alle Nicht-Alphanumerik raus, damit „ab1234" auch „AB-1234" findet.
+$qk    = mb_strtolower(preg_replace('/[^a-z0-9]+/i', '', $q));
+$likeK = '%' . $qk . '%';
 $LIMIT = 30;   // je Bereich; angezeigt werden max. 12, Rest als "und N weitere"
 
 // Eine Trefferliste je Bereich: [titel, rows[], hrefFn, labelFn, subFn]
@@ -54,32 +57,32 @@ if (mb_strlen($q) >= 2) {
 
     $add('Produkte',
         all("SELECT id, nummer, name, kundenname FROM produkt
-             WHERE name LIKE ? OR kundenname LIKE ? OR nummer LIKE ?
-             ORDER BY name LIMIT $LIMIT", array_fill(0, 3, $like)),
+             WHERE name LIKE ? OR kundenname LIKE ? OR nummer LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(nummer),'-',''),' ','') LIKE ?)
+             ORDER BY name LIMIT $LIMIT", [$like, $like, $like, $qk, $likeK]),
         fn($r) => '?p=produkt&id=' . $r['id'],
         fn($r) => $r['name'],
         fn($r) => trim(($r['nummer'] ? $r['nummer'] . ' · ' : '') . ($r['kundenname'] ? 'Kundenname: ' . $r['kundenname'] : '')));
 
     $add('Rezepturen',
         all("SELECT id, nummer, name, darreichungsform FROM rezeptur
-             WHERE name LIKE ? OR nummer LIKE ?
-             ORDER BY name LIMIT $LIMIT", array_fill(0, 2, $like)),
+             WHERE name LIKE ? OR nummer LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(nummer),'-',''),' ','') LIKE ?)
+             ORDER BY name LIMIT $LIMIT", [$like, $like, $qk, $likeK]),
         fn($r) => '?p=rezeptur_detail&id=' . $r['id'],
         fn($r) => $r['name'],
         fn($r) => trim(($r['nummer'] ? $r['nummer'] . ' · ' : '') . ($r['darreichungsform'] ?: '')));
 
     $add('Angebote',
         all("SELECT a.id, a.nummer, a.status, k.firma FROM angebot a LEFT JOIN kunden k ON k.id=a.kunde_id
-             WHERE a.nummer LIKE ? OR k.firma LIKE ?
-             ORDER BY a.id DESC LIMIT $LIMIT", [$like, $like]),
+             WHERE a.nummer LIKE ? OR k.firma LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(a.nummer),'-',''),' ','') LIKE ?)
+             ORDER BY a.id DESC LIMIT $LIMIT", [$like, $like, $qk, $likeK]),
         fn($r) => '?p=angebot&id=' . $r['id'],
         fn($r) => ($r['nummer'] ?: 'Angebot #' . $r['id']),
         fn($r) => trim(($r['firma'] ?: '') . ' · ' . ($r['status'] ?: '')));
 
     $add('Aufträge',
         all("SELECT t.id, t.nummer, t.status, k.firma FROM auftrag t LEFT JOIN kunden k ON k.id=t.kunde_id
-             WHERE t.nummer LIKE ? OR k.firma LIKE ?
-             ORDER BY t.id DESC LIMIT $LIMIT", [$like, $like]),
+             WHERE t.nummer LIKE ? OR k.firma LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(t.nummer),'-',''),' ','') LIKE ?)
+             ORDER BY t.id DESC LIMIT $LIMIT", [$like, $like, $qk, $likeK]),
         fn($r) => '?p=auftrag&id=' . $r['id'],
         fn($r) => ($r['nummer'] ?: 'Auftrag #' . $r['id']),
         fn($r) => trim(($r['firma'] ?: '') . ' · ' . ($r['status'] ?: '')));

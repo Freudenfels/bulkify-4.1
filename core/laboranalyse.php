@@ -33,6 +33,43 @@ function laboranalyse_ki_vorschlag(string $pfad): array {
             'datum' => $datum, 'charge' => trim((string) ($d['charge'] ?? '')) ?: null, 'begruendung' => trim((string) ($d['begruendung'] ?? ''))];
 }
 
+// Abgleich der vom Bericht gelesenen Daten mit dem System – gibt Hinweise (kein Blocker) zurueck.
+// Prueft: (1) wurde ein Produkt eindeutig erkannt, (2) existiert die Chargennummer im System und
+// gehoert sie zum erkannten Produkt, (3) passt der gelesene Produktname zum System-Namen.
+// $pid_gewaehlt (optional) = manuell gewaehltes Produkt, sonst wird das KI-Produkt genommen.
+function laboranalyse_hinweise(array $ki, int $pid_gewaehlt = 0): array {
+    $h = [];
+    $pid = $pid_gewaehlt ?: (int)($ki['produkt_id'] ?? 0);
+    $readName = trim((string)($ki['produkt_name'] ?? ''));
+    $charge = trim((string)($ki['charge'] ?? ''));
+
+    if (!$pid) {
+        if ($readName !== '') $h[] = 'Kein eindeutiges Produkt erkannt (Bericht nennt „' . $readName . '"). Bitte manuell wählen.';
+    } else {
+        // Namensabgleich (kompakt, ohne Sonderzeichen/Gross-Klein).
+        $sysName = (string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [$pid]);
+        $norm = fn($s) => preg_replace('/[^a-z0-9]+/', '', mb_strtolower((string)$s));
+        if ($readName !== '' && $sysName !== '' && $norm($readName) !== '' &&
+            strpos($norm($sysName), $norm($readName)) === false && strpos($norm($readName), $norm($sysName)) === false)
+            $h[] = 'Produktname weicht ab: Bericht „' . $readName . '" ↔ System „' . $sysName . '".';
+    }
+
+    if ($charge !== '') {
+        // Charge kompakt vergleichen (Bindestrich/Leerzeichen egal).
+        $treffer = all("SELECT DISTINCT COALESCE(pa.produkt_id, a.produkt_id) AS produkt_id
+                        FROM charge c LEFT JOIN produktionsauftrag pa ON pa.id=c.pa_id LEFT JOIN auftrag a ON a.id=pa.auftrag_id
+                        WHERE REPLACE(REPLACE(LOWER(c.charge_nr),'-',''),' ','') = REPLACE(REPLACE(LOWER(?),'-',''),' ','')", [$charge]);
+        $cPids = array_values(array_filter(array_map(fn($r) => (int)$r['produkt_id'], $treffer)));
+        if (!$treffer) {
+            $h[] = 'Charge „' . $charge . '" wurde im System nicht gefunden – bitte prüfen.';
+        } elseif ($pid && $cPids && !in_array($pid, $cPids, true)) {
+            $andere = (string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [$cPids[0]]);
+            $h[] = 'Charge „' . $charge . '" gehört laut System zu einem anderen Produkt' . ($andere ? ' („' . $andere . '")' : '') . '.';
+        }
+    }
+    return $h;
+}
+
 // Alle fuer EINEN Kunden sichtbaren Laboranalysen – Produkt-Ebene (fuer gekaufte Produkte) und Bestell-Ebene.
 // Rueckgabe je Zeile: id, datei_orig, titel, datum, produkt, produkt_id, auftrag_nr, charge_nr.
 function laboranalysen_fuer_kunde(int $kunde_id): array {
