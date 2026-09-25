@@ -38,22 +38,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // 2) Vorschlag bestaetigen -> dokument-Zeile anlegen (Produkt-Verknuepfung).
+    // 2) Vorschlag bestaetigen -> dokument-Zeile anlegen. Quelle: eigenes Produkt oder extern (Fremdlager).
     if ($aktion === 'speichern') {
         $fn   = basename((string)($_POST['datei'] ?? ''));
         $orig = (string)($_POST['orig'] ?? '');
-        $pid  = (int)($_POST['produkt_id'] ?? 0);
+        $quelle = ($_POST['quelle'] ?? 'eigen') === 'extern' ? 'extern' : 'eigen';
+        $pid  = $quelle === 'extern' ? (int)($_POST['produkt_extern'] ?? 0) : (int)($_POST['produkt_id'] ?? 0);
         $datum = trim((string)($_POST['datum'] ?? ''));
         $titel = trim((string)($_POST['titel'] ?? '')) ?: null;
+        $charge = trim((string)($_POST['charge_nr'] ?? '')) ?: null;
         $sicht = isset($_POST['kunde_sichtbar']) ? 1 : 0;
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) $datum = null;
         if ($fn && $pid && is_file(BX_UPLOADS . '/' . $fn)) {
-            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,kunde_sichtbar,hochgeladen_von)
-               VALUES ('produkt',?,'analyse',?,?,?,?,?,'team')", [$pid, $titel, $fn, $orig ?: $fn, $datum, $sicht]);
-            $hinweis = ['ok', 'Laboranalyse gespeichert und mit dem Produkt verknüpft.'];
+            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,kunde_sichtbar,hochgeladen_von)
+               VALUES ('produkt',?,'analyse',?,?,?,?,?,?,'team')", [$pid, $titel, $fn, $orig ?: $fn, $datum, $charge, $sicht]);
+            $hinweis = ['ok', 'Laboranalyse gespeichert und mit dem Produkt verknüpft' . ($charge ? ' (Charge ' . $charge . ')' : '') . '.'];
         } else {
             @unlink(BX_UPLOADS . '/' . $fn);
-            $hinweis = ['err', 'Bitte ein Produkt auswählen.'];
+            $hinweis = ['err', $quelle === 'extern' ? 'Bitte ein Fremdlager-Produkt auswählen.' : 'Bitte ein Produkt auswählen.'];
         }
     }
 
@@ -72,6 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $produkte = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, k.firma
                  FROM produkt p LEFT JOIN kunden k ON k.id=p.kunde_id
                  ORDER BY name");
+// Fremdlager-/Fulfillment-Ware (extern): Produkte, deren Fertigware im Fremdlager liegt (auch Drittanbieter-Ware).
+$ffProdukte = lager2_produkte();
 $liste = laboranalysen_alle($suche);
 $kiBereit = ki_bereit();
 
@@ -93,9 +97,13 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
       <input type="hidden" name="aktion" value="speichern">
       <input type="hidden" name="datei" value="<?= h($vorschlag['datei']) ?>">
       <input type="hidden" name="orig" value="<?= h($vorschlag['orig']) ?>">
+      <div class="bx-row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
+        <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="eigen" checked onclick="labQuelle('eigen')"> eigenes Produkt</label>
+        <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="extern" onclick="labQuelle('extern')"> extern (Fremdlager / Drittanbieter)</label>
+      </div>
       <div class="bx-grid">
-        <div class="bx-field"><label>Produkt <?= bx_hint('Zu welchem Produkt gehört diese Analyse?') ?></label>
-          <select name="produkt_id" required>
+        <div class="bx-field" id="labFeldEigen"><label>Produkt <?= bx_hint('Zu welchem Produkt gehört diese Analyse?') ?></label>
+          <select name="produkt_id">
             <option value="">– Produkt wählen –</option>
             <?php foreach ($produkte as $p): ?>
               <option value="<?= (int)$p['id'] ?>" <?= ((int)$p['id'] === (int)$vorschlag['produkt_id']) ? 'selected' : '' ?>>
@@ -104,9 +112,25 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
             <?php endforeach; ?>
           </select>
         </div>
+        <div class="bx-field" id="labFeldExtern" style="display:none"><label>Fremdlager-Produkt <?= bx_hint('Kundenware von Drittanbietern, die im Fremdlager liegt.') ?></label>
+          <select name="produkt_extern">
+            <option value="">– Fremdlager-Produkt wählen –</option>
+            <?php foreach ($ffProdukte as $p): ?>
+              <option value="<?= (int)$p['produkt_id'] ?>"><?= h($p['anzeigename']) ?> — <?= h($p['kunde']) ?><?= $p['produkt_nr'] ? ' (' . h($p['produkt_nr']) . ')' : '' ?></option>
+            <?php endforeach; ?>
+          </select>
+          <?php if (!$ffProdukte): ?><div class="muted" style="font-size:12px;margin-top:4px">Noch keine Fremdlager-Ware eingebucht. Einbuchen unter <a href="?p=lager2">Fremdlager</a>.</div><?php endif; ?>
+        </div>
+        <div class="bx-field"><label>Chargennummer <?= bx_hint('Steht auf dem Laborbericht; wird im System hinterlegt.') ?></label><input type="text" name="charge_nr" value="<?= h($vorschlag['charge']) ?>" placeholder="z. B. JN26P8"></div>
         <div class="bx-field"><label>Analysendatum</label><input type="date" name="datum" value="<?= h($vorschlag['datum']) ?>"></div>
         <div class="bx-field"><label>Titel (optional)</label><input type="text" name="titel" placeholder="z. B. Laboranalyse Charge 2026-04"></div>
       </div>
+      <script>
+      function labQuelle(q){
+        document.getElementById('labFeldEigen').style.display  = q==='extern' ? 'none' : '';
+        document.getElementById('labFeldExtern').style.display = q==='extern' ? '' : 'none';
+      }
+      </script>
       <div class="bx-row" style="gap:8px;align-items:center;margin-top:var(--sp-3)">
         <input type="checkbox" name="kunde_sichtbar" id="ks" value="1" checked>
         <label for="ks" style="margin:0">im Kundenportal sichtbar (Reiter „Labortest")</label>
@@ -136,13 +160,14 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
   </div>
   <?php if ($liste): ?>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table" id="labTab">
-    <thead><tr><th>Datum</th><th>Produkt</th><th>Kunde</th><th>Bezug</th><th>Datei</th><th>Kundenportal</th><th></th></tr></thead>
+    <thead><tr><th>Datum</th><th>Produkt</th><th>Kunde</th><th>Charge</th><th>Bezug</th><th>Datei</th><th>Kundenportal</th><th></th></tr></thead>
     <tbody>
       <?php foreach ($liste as $d): ?>
       <tr>
         <td><?= $d['datum'] ? h(fmt_zeit($d['datum'] . ' 00:00:00', 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
         <td><?= h($d['produkt'] ?: '–') ?></td>
         <td><?= $d['kunde'] ? h($d['kunde']) : '<span class="muted">–</span>' ?></td>
+        <td><?= $d['charge_nr'] ? h($d['charge_nr']) : '<span class="muted">–</span>' ?></td>
         <td><?= $d['auftrag_nr'] ? h($d['auftrag_nr']) . ' <span class="muted">(Bestellung)</span>' : '<span class="muted">Produkt</span>' ?></td>
         <td><a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['datei_orig'] ?: 'Datei') ?></a></td>
         <td>

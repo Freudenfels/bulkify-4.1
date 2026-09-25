@@ -22,3 +22,12 @@ Sichtbar im Kundenportal nur mit `dokument.kunde_sichtbar=1`.
 - `module/lager/laboranalysen.php` (Admin-Reiter: Upload + KI-Vorschlag + Verknüpfung + Liste)
 - `module/auftrag/detail.php` (Upload je Bestellung/Charge)
 - `module/portal/kunde.php` (Kunden-Reiter „Labortest" + Auslieferung `v=analyse_datei`, ownership-geprüft)
+
+## Charge + externe (Fremdlager-)Ware
+- `dokument.charge_nr` speichert die auf dem Bericht genannte Chargennummer ausgeschrieben (KI liest sie vor;
+  Mensch bestätigt). Wird im Admin, im Auftrag und im Kunden-Reiter „Labortest" angezeigt.
+- Upload-Quelle „extern (Fremdlager / Drittanbieter)": Dropdown aus `lager2_produkte()` (Fertigware im
+  Fremdlager, auch nicht von uns hergestellt). Verknüpfung wie sonst über `objekt_typ='produkt'`.
+- `laboranalysen_fuer_kunde()` zeigt daher auch Produkte, die dem Kunden gehören (`produkt.kunde_id`) – nicht
+  nur gekaufte –, damit externe Fremdlager-Ware ohne eigenen Auftrag beim Kunden erscheint.
+- Neue Drittanbieter-Ware zuerst im Fremdlager einbuchen (`?p=lager2`), dann steht sie im „extern"-Dropdown.

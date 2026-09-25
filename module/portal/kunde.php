@@ -3090,7 +3090,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <tr>
             <td><?= $l['datum'] ? h(fmt_zeit($l['datum'] . ' 00:00:00', 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
             <td><?= h($l['produkt'] ?: '–') ?></td>
-            <td><?php if ($l['auftrag_nr']): ?><?= h($l['auftrag_nr']) ?><?= $l['charge_nr'] ? ' <span class="muted">· Charge ' . h($l['charge_nr']) . '</span>' : '' ?><?php else: ?><span class="muted">alle Bestellungen</span><?php endif; ?></td>
+            <td><?php if ($l['auftrag_nr']): ?><?= h($l['auftrag_nr']) ?><?= $l['charge_nr'] ? ' <span class="muted">· Charge ' . h($l['charge_nr']) . '</span>' : '' ?><?php elseif ($l['charge_nr']): ?>Charge <?= h($l['charge_nr']) ?><?php else: ?><span class="muted">alle Bestellungen</span><?php endif; ?></td>
             <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= h($url) ?>" target="_blank" rel="noopener">Ansehen / Download</a></td>
           </tr>
           <?php endforeach; ?>

@@ -36,29 +36,32 @@ function laboranalyse_ki_vorschlag(string $pfad): array {
 // Alle fuer EINEN Kunden sichtbaren Laboranalysen – Produkt-Ebene (fuer gekaufte Produkte) und Bestell-Ebene.
 // Rueckgabe je Zeile: id, datei_orig, titel, datum, produkt, produkt_id, auftrag_nr, charge_nr.
 function laboranalysen_fuer_kunde(int $kunde_id): array {
+    // Produkt-Ebene: gekaufte Produkte (aus auftrag) ODER dem Kunden gehoerende Produkte (produkt.kunde_id –
+    // z. B. externe Fremdlager-/Fulfillment-Ware ohne eigenen Auftrag). Bestell-Ebene: Analysen einzelner Auftraege.
     return all("
         SELECT d.id, d.datei_orig, d.titel, COALESCE(d.dok_datum, DATE(d.angelegt)) AS datum,
                COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, p.id AS produkt_id,
-               NULL AS auftrag_nr, NULL AS charge_nr
+               NULL AS auftrag_nr, d.charge_nr AS charge_nr
           FROM dokument d JOIN produkt p ON p.id=d.objekt_id
          WHERE d.objekt_typ='produkt' AND d.typ='analyse' AND d.kunde_sichtbar=1
-           AND p.id IN (SELECT DISTINCT produkt_id FROM auftrag WHERE kunde_id=? AND produkt_id IS NOT NULL)
+           AND (p.kunde_id=? OR p.id IN (SELECT DISTINCT produkt_id FROM auftrag WHERE kunde_id=? AND produkt_id IS NOT NULL))
         UNION ALL
         SELECT d.id, d.datei_orig, d.titel, COALESCE(d.dok_datum, DATE(d.angelegt)) AS datum,
                COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt, p.id AS produkt_id,
                a.nummer AS auftrag_nr,
-               (SELECT c.charge_nr FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
-                 WHERE pa.auftrag_id=a.id AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id LIMIT 1) AS charge_nr
+               COALESCE(NULLIF(d.charge_nr,''),
+                        (SELECT c.charge_nr FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
+                          WHERE pa.auftrag_id=a.id AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id LIMIT 1)) AS charge_nr
           FROM dokument d JOIN auftrag a ON a.id=d.objekt_id LEFT JOIN produkt p ON p.id=a.produkt_id
          WHERE d.objekt_typ='auftrag' AND d.typ='analyse' AND d.kunde_sichtbar=1 AND a.kunde_id=?
-        ORDER BY datum DESC, produkt ASC, id DESC", [$kunde_id, $kunde_id]);
+        ORDER BY datum DESC, produkt ASC, id DESC", [$kunde_id, $kunde_id, $kunde_id]);
 }
 
 // Alle Laboranalysen fuer den Admin-Ueberblick (mit Ziel-Objekt aufgeloest).
 function laboranalysen_alle(string $suche = ''): array {
     $like = '%' . $suche . '%';
     return all("
-        SELECT d.id, d.objekt_typ, d.objekt_id, d.datei_orig, d.titel, d.kunde_sichtbar,
+        SELECT d.id, d.objekt_typ, d.objekt_id, d.datei_orig, d.titel, d.kunde_sichtbar, d.charge_nr,
                COALESCE(d.dok_datum, DATE(d.angelegt)) AS datum, d.angelegt,
                CASE WHEN d.objekt_typ='produkt' THEN COALESCE(NULLIF(pp.kundenname,''), pp.name)
                     WHEN d.objekt_typ='auftrag' THEN COALESCE(NULLIF(pa.kundenname,''), pa.name, a.produkt_bezeichnung)
