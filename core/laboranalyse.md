@@ -44,3 +44,9 @@ die konkrete(n) Bestellung(en) inkl. Kunde. Im Admin-Upload ist „Bestellung (a
 Zuordnung (`objekt_typ='auftrag'`), damit bei gleichem Produkt an mehrere Kunden nur die richtige Bestellung/der
 richtige Kunde gekoppelt wird. Findet die Charge keinen Auftrag (z. B. Lagerproduktion), greift „Produkt (alle
 Bestellungen)" oder „extern (Fremdlager)".
+
+## Manuelle Kaskade: Produkt -> Auftrag -> Charge
+Im Admin-Upload wählt man 1. Produkt, 2. Bestellung (gefiltert auf das Produkt; „alle Bestellungen" = am
+Produkt hinterlegen), 3. Charge (Datalist der Chargen der Bestellung; die vom Bericht erkannte Charge ist
+vorausgewählt, Freitext möglich). Abhängige Dropdowns clientseitig (LAB_ORDERS/LAB_CHARGES, kein Nachladen).
+Bei gewähltem Auftrag -> `objekt_typ='auftrag'`, sonst `objekt_typ='produkt'`. KI füllt Produkt/Bestellung/Charge vor.

@@ -53,15 +53,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $charge = trim((string)($_POST['charge_nr'] ?? '')) ?: null;
         $sicht = isset($_POST['kunde_sichtbar']) ? 1 : 0;
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) $datum = null;
-        // Zielobjekt bestimmen
+        // Zielobjekt bestimmen. Normalfall: Produkt gewählt, dann Auftrag (Bestellung) -> an DIE Bestellung
+        // koppeln; ohne Auftrag (= „alle Bestellungen") ans Produkt. Extern: Fremdlager-Produkt.
         $objTyp = 'produkt'; $objId = 0; $bezug = '';
-        if ($quelle === 'bestellung') {
-            $objTyp = 'auftrag'; $objId = (int)($_POST['auftrag_id'] ?? 0);
-            $bezug = 'der Bestellung ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$objId]);
-        } elseif ($quelle === 'extern') {
+        if ($quelle === 'extern') {
             $objId = (int)($_POST['produkt_extern'] ?? 0); $bezug = 'dem Fremdlager-Produkt';
         } else {
-            $objId = (int)($_POST['produkt_id'] ?? 0); $bezug = 'dem Produkt (alle Bestellungen)';
+            $aid = (int)($_POST['auftrag_id'] ?? 0);
+            if ($aid > 0) {
+                $objTyp = 'auftrag'; $objId = $aid;
+                $bezug = 'der Bestellung ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$aid]);
+            } else {
+                $objId = (int)($_POST['produkt_id'] ?? 0); $bezug = 'dem Produkt (alle Bestellungen)';
+            }
         }
         if ($fn && $objId && is_file(BX_UPLOADS . '/' . $fn)) {
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,kunde_sichtbar,hochgeladen_von)
@@ -93,6 +97,18 @@ $ffProdukte = lager2_produkte();
 $liste = laboranalysen_alle($suche);
 $kiBereit = ki_bereit();
 
+// Kaskade Produkt -> Auftrag -> Charge (clientseitig gefiltert, ohne Nachladen).
+$ordersByProduct = [];
+foreach (all("SELECT a.id, a.produkt_id, a.nummer, COALESCE(k.firma,'') AS kunde
+              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id
+              WHERE a.produkt_id IS NOT NULL AND a.status<>'storniert' ORDER BY a.id DESC") as $a)
+    $ordersByProduct[(int)$a['produkt_id']][] = ['id' => (int)$a['id'], 'nummer' => (string)$a['nummer'], 'kunde' => (string)$a['kunde']];
+$chargesByOrder = [];
+foreach (all("SELECT pa.auftrag_id, c.charge_nr FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
+              WHERE c.charge_nr IS NOT NULL AND c.charge_nr<>'' AND pa.auftrag_id IS NOT NULL ORDER BY c.id") as $c)
+    $chargesByOrder[(int)$c['auftrag_id']][] = (string)$c['charge_nr'];
+$kiAuftragId = (!empty($vorschlag['auftraege']) ? (int)$vorschlag['auftraege'][0]['id'] : 0);
+
 render_header('laboranalysen', 'Laboranalysen');
 bx_head('Laboranalysen', 'Laborberichte / Analysenzertifikate hochladen und mit einem Produkt verknüpfen. Freigegebene erscheinen im Kundenportal-Reiter „Labortest".');
 
@@ -117,26 +133,13 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
       <input type="hidden" name="aktion" value="speichern">
       <input type="hidden" name="datei" value="<?= h($vorschlag['datei']) ?>">
       <input type="hidden" name="orig" value="<?= h($vorschlag['orig']) ?>">
-      <?php $hatAuf = !empty($vorschlag['auftraege']); ?>
       <div class="bx-row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
-        <?php if ($hatAuf): ?><label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="bestellung" checked onclick="labQuelle('bestellung')"> Bestellung (aus Charge)</label><?php endif; ?>
-        <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="eigen" <?= $hatAuf ? '' : 'checked' ?> onclick="labQuelle('eigen')"> Produkt (alle Bestellungen)</label>
+        <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="eigen" checked onclick="labQuelle('eigen')"> eigenes Produkt</label>
         <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="extern" onclick="labQuelle('extern')"> extern (Fremdlager / Drittanbieter)</label>
       </div>
-      <?php if ($hatAuf): ?>
-      <div class="bx-field" id="labFeldBestellung">
-        <label>Bestellung <?= bx_hint('Über die Chargennummer eindeutig ermittelt – so wird nur die richtige Bestellung/der richtige Kunde gekoppelt.') ?></label>
-        <select name="auftrag_id">
-          <?php foreach ($vorschlag['auftraege'] as $a): ?>
-            <option value="<?= (int)$a['id'] ?>"><?= h($a['nummer']) ?> — <?= h($a['kunde'] ?: '–') ?> · <?= h($a['produkt'] ?: '') ?></option>
-          <?php endforeach; ?>
-        </select>
-        <div class="muted" style="font-size:12px;margin-top:4px">Charge <?= h((string)$vorschlag['charge']) ?> → <?= count($vorschlag['auftraege']) ?> Bestellung(en) gefunden.</div>
-      </div>
-      <?php endif; ?>
-      <div class="bx-grid">
-        <div class="bx-field" id="labFeldEigen" <?= $hatAuf ? 'style="display:none"' : '' ?>><label>Produkt <?= bx_hint('Zu welchem Produkt gehört diese Analyse?') ?></label>
-          <select name="produkt_id">
+      <div class="bx-grid" id="labBlockEigen">
+        <div class="bx-field"><label>1. Produkt <?= bx_hint('Zu welchem Produkt gehört diese Analyse?') ?></label>
+          <select name="produkt_id" id="labProdukt" onchange="labFillAuftraege()">
             <option value="">– Produkt wählen –</option>
             <?php foreach ($produkte as $p): ?>
               <option value="<?= (int)$p['id'] ?>" <?= ((int)$p['id'] === (int)$vorschlag['produkt_id']) ? 'selected' : '' ?>>
@@ -145,7 +148,18 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="bx-field" id="labFeldExtern" style="display:none"><label>Fremdlager-Produkt <?= bx_hint('Kundenware von Drittanbietern, die im Fremdlager liegt.') ?></label>
+        <div class="bx-field"><label>2. Bestellung <?= bx_hint('Bestellungen dieses Produkts. „alle Bestellungen" = am Produkt hinterlegen (für alle sichtbar).') ?></label>
+          <select name="auftrag_id" id="labAuftrag" onchange="labFillChargen()">
+            <option value="0">alle Bestellungen (am Produkt)</option>
+          </select>
+        </div>
+        <div class="bx-field"><label>3. Chargennummer <?= bx_hint('Chargen der gewählten Bestellung; die vom Bericht erkannte Charge ist vorausgewählt. Freitext möglich.') ?></label>
+          <input type="text" name="charge_nr" id="labCharge" list="labChargeList" value="<?= h($vorschlag['charge']) ?>" placeholder="z. B. JN26P8">
+          <datalist id="labChargeList"></datalist>
+        </div>
+      </div>
+      <div class="bx-grid" id="labBlockExtern" style="display:none">
+        <div class="bx-field"><label>Fremdlager-Produkt <?= bx_hint('Kundenware von Drittanbietern, die im Fremdlager liegt.') ?></label>
           <select name="produkt_extern">
             <option value="">– Fremdlager-Produkt wählen –</option>
             <?php foreach ($ffProdukte as $p): ?>
@@ -154,17 +168,42 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
           </select>
           <?php if (!$ffProdukte): ?><div class="muted" style="font-size:12px;margin-top:4px">Noch keine Fremdlager-Ware eingebucht. Einbuchen unter <a href="?p=lager2">Fremdlager</a>.</div><?php endif; ?>
         </div>
-        <div class="bx-field"><label>Chargennummer <?= bx_hint('Steht auf dem Laborbericht; wird im System hinterlegt.') ?></label><input type="text" name="charge_nr" value="<?= h($vorschlag['charge']) ?>" placeholder="z. B. JN26P8"></div>
+      </div>
+      <div class="bx-grid" style="margin-top:12px">
         <div class="bx-field"><label>Analysendatum</label><input type="date" name="datum" value="<?= h($vorschlag['datum']) ?>"></div>
         <div class="bx-field"><label>Titel (optional)</label><input type="text" name="titel" placeholder="z. B. Laboranalyse Charge 2026-04"></div>
       </div>
       <script>
+      var LAB_ORDERS  = <?= json_encode($ordersByProduct, JSON_UNESCAPED_UNICODE) ?>;
+      var LAB_CHARGES = <?= json_encode($chargesByOrder, JSON_UNESCAPED_UNICODE) ?>;
+      var LAB_KI = {auftrag: <?= (int)$kiAuftragId ?>, charge: <?= json_encode((string)$vorschlag['charge']) ?>};
       function labQuelle(q){
-        var b = document.getElementById('labFeldBestellung');
-        if (b) b.style.display = q==='bestellung' ? '' : 'none';
-        document.getElementById('labFeldEigen').style.display  = q==='eigen'  ? '' : 'none';
-        document.getElementById('labFeldExtern').style.display = q==='extern' ? '' : 'none';
+        document.getElementById('labBlockEigen').style.display  = q==='extern' ? 'none' : '';
+        document.getElementById('labBlockExtern').style.display = q==='extern' ? '' : 'none';
       }
+      function labFillAuftraege(){
+        var pid = document.getElementById('labProdukt').value;
+        var sel = document.getElementById('labAuftrag');
+        sel.innerHTML = '<option value="0">alle Bestellungen (am Produkt)</option>';
+        (LAB_ORDERS[pid]||[]).forEach(function(o){
+          var opt=document.createElement('option'); opt.value=o.id;
+          opt.textContent = o.nummer + (o.kunde? ' — '+o.kunde : '');
+          if (o.id === LAB_KI.auftrag) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        labFillChargen();
+      }
+      function labFillChargen(){
+        var aid = document.getElementById('labAuftrag').value;
+        var dl = document.getElementById('labChargeList');
+        dl.innerHTML = '';
+        (LAB_CHARGES[aid]||[]).forEach(function(c){ var o=document.createElement('option'); o.value=c; dl.appendChild(o); });
+        // Charge der Bestellung vorschlagen, wenn Feld leer oder KI keine Charge hatte
+        var cf = document.getElementById('labCharge');
+        if (aid !== '0' && (LAB_CHARGES[aid]||[]).length && (!cf.value || cf.value===LAB_KI.charge))
+          cf.value = LAB_KI.charge && (LAB_CHARGES[aid].indexOf(LAB_KI.charge)>=0) ? LAB_KI.charge : LAB_CHARGES[aid][0];
+      }
+      labFillAuftraege();   // initial: Aufträge des (KI-)Produkts laden + KI-Bestellung/Charge vorwählen
       </script>
       <div class="bx-row" style="gap:8px;align-items:center;margin-top:var(--sp-3)">
         <input type="checkbox" name="kunde_sichtbar" id="ks" value="1" checked>
