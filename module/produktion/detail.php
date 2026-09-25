@@ -25,6 +25,14 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode($r['msg'])); exit;
 }
 
+// Chargennummer einer eingebuchten Fertigware-Charge korrigieren (falls sie eine andere Nummer bekommen hat).
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'charge_edit') {
+    $cid = (int)($_POST['charge_id'] ?? 0);
+    $neu = trim((string)($_POST['charge_nr'] ?? ''));
+    if ($cid && $neu !== '') q("UPDATE charge SET charge_nr=? WHERE id=? AND pa_id=?", [$neu, $cid, $id]);   // nur Chargen DIESES Auftrags
+    header('Location: ?p=produktionsauftrag&id=' . $id . '&chok=1'); exit;
+}
+
 // Priorität setzen
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'prio') {
     q("UPDATE produktionsauftrag SET prio=? WHERE id=?", [max(1, min(3, (int)($_POST['prio'] ?? 2))), $id]);
@@ -508,7 +516,14 @@ if ($verbrauch || ($istVollerWeg && ($bedarf || $kapNeed))): ?>
     <tbody>
     <?php foreach ($fwChargen as $c): ?>
       <tr>
-        <td><a href="?p=chargen&id=<?= (int)$c['id'] ?>"><?= h($c['charge_nr']) ?></a></td>
+        <td>
+          <form method="post" style="margin:0;display:flex;gap:4px;align-items:center">
+            <input type="hidden" name="aktion" value="charge_edit"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
+            <input type="text" name="charge_nr" value="<?= h($c['charge_nr']) ?>" style="width:120px;padding:3px 6px" title="Chargennummer bearbeiten">
+            <button class="btn btn-ghost btn-sm" type="submit" title="Chargennummer speichern">✓</button>
+            <a class="btn btn-ghost btn-sm" href="?p=chargen&id=<?= (int)$c['id'] ?>" title="Charge öffnen">↗</a>
+          </form>
+        </td>
         <td><?= number_format((float)$c['menge'],0,',','.') ?></td>
         <td><?= number_format((float)$c['menge_verfuegbar'],0,',','.') ?></td>
         <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '–' ?></td>

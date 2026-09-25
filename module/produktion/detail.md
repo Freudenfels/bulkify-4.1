@@ -58,3 +58,8 @@ Die Kachel **„Kapsel/Tablette"** zeigt die Größe (`produktion_groesse_label(
 
 ## Kopf-Button: Fehlende Rohstoffe → Einkaufsliste
 Fehlen laut `auftrag_offener_bedarf()` wirklich noch Rohstoffe (nach Bestand UND bereits Bestelltem), erscheint oben der Knopf **„Fehlende Rohstoffe → Einkaufsliste"** (`aktion=auf_einkaufsliste`). Er meldet den Bedarf in einem Klick (setzt `bedarf_gemeldet`) und springt zur **Einkaufsliste** – der Umweg über die Bedarf-Seite entfällt. Es landen **nur die wirklich fehlenden** Rohstoffe dort; Bestand und bereits Bestelltes rechnet die Einkaufsliste (`zu_bestellen`) automatisch raus. Ist nichts offen (alles auf Lager/bestellt) oder der Auftrag fertig, erscheint der Knopf nicht (bzw. bei schon gemeldetem Bedarf steht „Auf der Einkaufsliste").
+
+## Chargennummer korrigieren
+Im Panel „Fertigware eingebucht" ist die Chargennummer je Charge inline editierbar (Feld + ✓). Aktion
+`charge_edit` aktualisiert `charge.charge_nr` – nur für Chargen DIESES Produktionsauftrags (WHERE pa_id).
+Für den Fall, dass eine Charge nachträglich eine andere Nummer bekommen hat. Der Pfeil ↗ öffnet die Charge.
