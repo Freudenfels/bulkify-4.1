@@ -142,6 +142,23 @@ if ($k && ($_GET['v'] ?? '') === 'analyse_datei') {
     readfile($pf); exit;
 }
 
+// Zum Auftrag hochgeladenes Dokument (z. B. nachgetragene Original-Rechnung) ausliefern – nur eigener Auftrag,
+// nur freigegeben (kunde_sichtbar=1). Deckt die per „Rechnungen nachtragen" hochgeladenen Belege ab.
+if ($k && ($_GET['v'] ?? '') === 'auftrag_dok') {
+    $did = (int)($_GET['id'] ?? 0);
+    $d = $did ? one("SELECT * FROM dokument WHERE id=? AND objekt_typ='auftrag' AND kunde_sichtbar=1", [$did]) : null;
+    $ok = $d && (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [(int)$d['objekt_id']]) === (int)$k['id'];
+    $pf = ($ok && $d) ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
+    if (!$ok || !$pf || !is_file($pf)) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
+    $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','gif'=>'image/gif'][$ext] ?? 'application/octet-stream';
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($d['datei_orig'] ?: 'dokument')) . '"');
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Length: ' . filesize($pf));
+    readfile($pf); exit;
+}
+
 // Produktinformationsblatt (PIB) zum eigenen Auftrag herunterladen – Grundlage für die Etikettengestaltung.
 if ($k && ($_GET['v'] ?? '') === 'pib') {
     $aid = (int)($_GET['aid'] ?? 0);
@@ -2803,6 +2820,22 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php if ($re): ?><a class="btn btn-ghost" target="_blank" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('rechnung_pdf') ?>&aid=<?= (int)$a['id'] ?>">Rechnung (RE)</a><?php endif; ?>
       <a class="btn btn-ghost" target="_blank" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('pib') ?>&aid=<?= (int)$a['id'] ?>" data-busy="PIB wird erstellt…">Produktinfo (PIB)</a>
     </div>
+    <?php
+      // Nachgetragene Original-Dokumente (z. B. alte Rechnungen), die das Team fuer den Kunden freigegeben hat.
+      $DOKLBL = ['rechnung'=>'Rechnung (Original)', 'angebot'=>'Angebot (Original)', 'ab'=>'Auftragsbestätigung (Original)', 'sonstiges'=>'Dokument'];
+      $auftragDocs = all("SELECT id, typ, titel, datei_orig, dok_datum FROM dokument
+                          WHERE objekt_typ='auftrag' AND objekt_id=? AND kunde_sichtbar=1 AND typ IN ('rechnung','angebot','ab','sonstiges')
+                          ORDER BY FIELD(typ,'rechnung','angebot','ab','sonstiges'), id DESC", [(int)$a['id']]);
+      if ($auftragDocs): ?>
+      <div class="muted" style="font-size:13px;margin:16px 0 8px">Hochgeladene Dokumente</div>
+      <div class="bx-row" style="gap:10px;flex-wrap:wrap">
+        <?php foreach ($auftragDocs as $ad): ?>
+          <a class="btn btn-ghost" target="_blank" rel="noopener" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('auftrag_dok') ?>&id=<?= (int)$ad['id'] ?>">
+            <?= h($ad['titel'] ?: ($DOKLBL[$ad['typ']] ?? 'Dokument')) ?><?= $ad['dok_datum'] ? ' <span class="muted" style="font-size:12px">· ' . h(fmt_zeit($ad['dok_datum'] . ' 00:00:00', 'd.m.Y')) . '</span>' : '' ?>
+          </a>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
 
     <?php // Etikett-Design: Status (da / nicht da) + Upload + optionale Druckvorlage.
       $etDok     = etikett_datei((int)$a['id']);

@@ -179,3 +179,9 @@ Dauerhafter Menüpunkt (Gruppe „Vorgänge"). Zeigt alle freigegebenen **Labora
 
 ## Etiketten: Glasgröße im Namen + Maße (Behälter-Resolver)
 `$etBehaelter($f)` löst je Bestellung den Behälter auf: `verpackung_id`, sonst berechnet aus Rezeptur + Stück + Material (`behaelter_aus_rezeptur_stueck()` in `core/schema.php`; Material aus dem Verpackungstext, „Weithalsglas"=Glas). Der Anzeigename (`$etName`) hängt den Behälternamen **mit Größe** an (z. B. „150 ml Weithalsglas"), die Maße (`$etMasse`) kommen aus demselben Behälter → beide zeigen dieselbe Größe. Fixierung der Daten: Migration `fix_auftrag_verpackung_v1` (aus v3-Wahrheit) und `fix_auftrag_verpackung_v2` (berechnet, nur bei eindeutigem Material) setzen `verpackung_id` auf Auftrag **und** Produktionsauftrag, damit auch die Produktion die richtige Glasgröße führt.
+
+## Hochgeladene Auftrags-Dokumente (nachgetragene Rechnungen)
+Im Bestell-Detail (`v=bestellung`, Panel „Dokumente") werden für den Kunden freigegebene, zum Auftrag
+hochgeladene Dokumente gezeigt (`dokument` objekt_typ='auftrag', typ rechnung/angebot/ab/sonstiges,
+`kunde_sichtbar=1`). Auslieferung `v=auftrag_dok&id=<dok>` (ownership-geprüft). Upload erfolgt im temporären
+Admin-Reiter `?p=alt_rechnungen` (originale Rechnungen alter Aufträge). Siehe `module/system/alt_rechnungen.md`.

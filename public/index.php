@@ -100,6 +100,7 @@ $routes = [
     'suche'              => 'system/suche.php',        // globale Suche (Admin) über alle Bereiche
     'db_import'          => 'system/db_import.php',   // einmalige DB-Übernahme (Admin) – Rohstoffe & Co. auf einen anderen Stand bringen
     'v3_import_upload'   => 'system/v3_import_upload.php',   // TEMPORÄR (v3-Migration): v3-Dump hochladen -> nach v4 importieren
+    'alt_rechnungen'     => 'system/alt_rechnungen.php',     // TEMPORÄR: originale Rechnungen/Dokumente zu alten Auftraegen nachtragen
     'anfragen'           => 'anfrage/liste.php',
     'anfrage'            => 'anfrage/detail.php',
     'portal_anfragen'    => 'intern/portal_anfragen.php',
