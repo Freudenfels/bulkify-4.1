@@ -67,6 +67,7 @@ function route_rollen_map(): array {
         'spec_bulkify'       => ['production', 'einkauf', 'labor'],
         'coa_bulkify'        => ['production', 'einkauf', 'labor'],
         'dokument'           => ['production', 'einkauf', 'labor', 'sales'],
+        'laboranalysen'      => ['production', 'einkauf', 'labor', 'sales'],
         'verpackungen'       => ['production', 'einkauf'],
         'verpackung'         => ['production', 'einkauf'],
         'verpackung_dok'     => ['production', 'einkauf'],

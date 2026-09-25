@@ -47,6 +47,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftraege&geloescht=1'); exit;
 }
 
+// Laboranalyse (Labortest / CoA) fuer GENAU diese Bestellung/Charge hochladen -> dokument(objekt_typ='auftrag').
+// Mit kunde_sichtbar=1 erscheint sie im Kundenportal-Reiter „Labortest" bei dieser Bestellung.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'analyse_upload') {
+    require_once BX_ROOT . '/core/schema.php';
+    if (!empty($_FILES['dok']['name']) && (int)($_FILES['dok']['error'] ?? 1) === UPLOAD_ERR_OK) {
+        if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+        $orig = (string)$_FILES['dok']['name'];
+        $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($orig, PATHINFO_EXTENSION)));
+        $fn   = 'analyse_' . $id . '_' . bin2hex(random_bytes(5)) . ($ext ? '.' . $ext : '');
+        $datum = trim((string)($_POST['datum'] ?? '')); if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) $datum = null;
+        if (move_uploaded_file($_FILES['dok']['tmp_name'], BX_UPLOADS . '/' . $fn)) {
+            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,kunde_sichtbar,hochgeladen_von)
+               VALUES ('auftrag',?,'analyse',?,?,?,?,?,'team')",
+              [$id, trim((string)($_POST['titel'] ?? '')) ?: null, $fn, $orig, $datum, isset($_POST['kunde_sichtbar']) ? 1 : 0]);
+        }
+    }
+    header('Location: ?p=auftrag&id=' . $id . '&analyse=1'); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'analyse_del' && ($did = (int)($_POST['dok_id'] ?? 0))) {
+    $d = one("SELECT datei FROM dokument WHERE id=? AND objekt_typ='auftrag' AND objekt_id=? AND typ='analyse'", [$did, $id]);
+    if ($d) { @unlink(BX_UPLOADS . '/' . basename((string)$d['datei'])); q("DELETE FROM dokument WHERE id=?", [$did]); }
+    header('Location: ?p=auftrag&id=' . $id . '&analyse=1'); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'analyse_toggle' && ($did = (int)($_POST['dok_id'] ?? 0))) {
+    q("UPDATE dokument SET kunde_sichtbar = 1 - kunde_sichtbar WHERE id=? AND objekt_typ='auftrag' AND objekt_id=? AND typ='analyse'", [$did, $id]);
+    header('Location: ?p=auftrag&id=' . $id . '&analyse=1'); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     // Preis nachpflegen: VK je Packung + Menge editierbar, Netto = Menge × VK automatisch.
     $menge = max(0, (int)($_POST['menge'] ?? 0));
@@ -306,6 +334,46 @@ echo '</div>';
   </form>
 </div>
 <?php endif; ?>
+
+<?php
+// Laboranalysen dieser Bestellung (Charge). Admin laedt hier den Labortest/das CoA fuer genau diese Bestellung hoch.
+$analyseDocs = all("SELECT id, titel, datei_orig, dok_datum, kunde_sichtbar, angelegt FROM dokument
+                    WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='analyse' ORDER BY COALESCE(dok_datum, DATE(angelegt)) DESC, id DESC", [$id]);
+$chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
+                             WHERE pa.auftrag_id=? AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id LIMIT 1", [$id]);
+?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Laboranalyse / Labortest<?= $chargeNr ? ' <span class="muted" style="font-weight:normal;font-size:13px">· Charge ' . h($chargeNr) . '</span>' : '' ?></h2>
+  <p class="muted" style="margin-top:0">Labortest bzw. Analysenzertifikat (CoA) für <strong>diese Bestellung</strong>. Als „freigegeben" erscheint es im Kundenportal-Reiter „Labortest".</p>
+  <?php if ($analyseDocs): ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Datum</th><th>Datei</th><th>Kundenportal</th><th></th></tr></thead>
+    <tbody>
+      <?php foreach ($analyseDocs as $d): ?>
+      <tr>
+        <td><?= $d['dok_datum'] ? h(fmt_zeit($d['dok_datum'] . ' 00:00:00', 'd.m.Y')) : h(fmt_zeit($d['angelegt'], 'd.m.Y')) ?></td>
+        <td><a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Analyse')) ?></a></td>
+        <td><form method="post" style="margin:0"><input type="hidden" name="aktion" value="analyse_toggle"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= (int)$d['kunde_sichtbar'] === 1 ? bx_badge('freigegeben','ok') : bx_badge('intern') ?></button></form></td>
+        <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Analyse löschen?');"><input type="hidden" name="aktion" value="analyse_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Löschen</button></form></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php endif; ?>
+  <form method="post" enctype="multipart/form-data" style="margin-top:12px" data-busy="Lade hoch…">
+    <input type="hidden" name="aktion" value="analyse_upload">
+    <div class="bx-grid">
+      <div class="bx-field"><label>Datei (PDF/Bild)</label><input type="file" name="dok" required accept="application/pdf,image/*"></div>
+      <div class="bx-field"><label>Analysendatum</label><input type="date" name="datum"></div>
+      <div class="bx-field"><label>Titel (optional)</label><input type="text" name="titel" placeholder="z. B. Labortest Charge <?= h($chargeNr ?: '') ?>"></div>
+    </div>
+    <div class="bx-row" style="gap:8px;align-items:center;margin-top:var(--sp-3)">
+      <input type="checkbox" name="kunde_sichtbar" id="ak_sicht" value="1" checked>
+      <label for="ak_sicht" style="margin:0">im Kundenportal sichtbar</label>
+    </div>
+    <div class="bx-row" style="margin-top:var(--sp-3)"><button class="btn btn-primary" type="submit">Analyse hochladen</button></div>
+  </form>
+</div>
 
 <form method="post" class="bx-form">
   <div class="bx-panel"><div class="bx-grid">

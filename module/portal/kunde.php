@@ -122,6 +122,26 @@ if ($k && ($_GET['v'] ?? '') === 'etikett_datei') {
     readfile($pf); exit;
 }
 
+// Laboranalyse (Labortest / CoA) ausliefern – nur freigegeben UND nur zu eigenen Produkten/Bestellungen.
+if ($k && ($_GET['v'] ?? '') === 'analyse_datei') {
+    $did = (int)($_GET['id'] ?? 0);
+    $d = $did ? one("SELECT * FROM dokument WHERE id=? AND typ='analyse' AND kunde_sichtbar=1", [$did]) : null;
+    $ok = false;
+    if ($d) {
+        if ($d['objekt_typ'] === 'auftrag')      $ok = (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [(int)$d['objekt_id']]) === (int)$k['id'];
+        elseif ($d['objekt_typ'] === 'produkt')  $ok = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE kunde_id=? AND produkt_id=?", [(int)$k['id'], (int)$d['objekt_id']]) > 0;
+    }
+    $pf = ($ok && $d) ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
+    if (!$ok || !$pf || !is_file($pf)) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
+    $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','gif'=>'image/gif'][$ext] ?? 'application/octet-stream';
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($d['datei_orig'] ?: 'laboranalyse')) . '"');
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Length: ' . filesize($pf));
+    readfile($pf); exit;
+}
+
 // Produktinformationsblatt (PIB) zum eigenen Auftrag herunterladen – Grundlage für die Etikettengestaltung.
 if ($k && ($_GET['v'] ?? '') === 'pib') {
     $aid = (int)($_GET['aid'] ?? 0);
@@ -888,11 +908,13 @@ if ($hatKontingente > 0) $L['kontingente'] = 'Jahresverträge';
 $L += ['angebote' => 'Angebote', 'bestellungen' => 'Bestellungen', 'rechnungen' => 'Rechnungen'];
 // Etiketten-Datenbank: dauerhafter Menüpunkt (auch ohne Etiketten – dann mit leerem Zustand + Erklärung).
 $L['etiketten'] = 'Etiketten';
+// Labortest: alle freigegebenen Laboranalysen zu gekauften Produkten/Bestellungen (dauerhafter Menüpunkt).
+$L['labortest'] = 'Labortest';
 $NAVGROUPS = [
     ''          => ['start'],
     'Katalog'   => ['rezepturen', 'produkte', 'rohstoffe'],
     'Anfragen'  => ['meine_anfragen', 'anfrage', 'prodanfrage', 'rohanfrage', 'dienstleistung'],
-    'Vorgänge'  => ['kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten'],
+    'Vorgänge'  => ['kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten', 'labortest'],
 ];
 // Detailansichten (kein Menüpunkt) – gültig je nach Freischaltung; hebt den Katalog-Punkt hervor
 $detailParent = [];
@@ -3032,6 +3054,44 @@ portal_head('Kundenportal · ' . $k['firma']);
   })();
   </script>
   <?php endif; ?>
+
+<?php elseif ($view === 'labortest'):
+    // Labortest: alle freigegebenen Laboranalysen (CoA) zu Produkten, die der Kunde gekauft hat, sowie zu
+    // einzelnen Bestellungen (Charge). Zwei Sortierungen: nach Datum (Standard) und nach Produkt (alphabetisch).
+    require_once BX_ROOT . '/core/laboranalyse.php';
+    $labs = laboranalysen_fuer_kunde((int)$k['id']);
+    $sort = ($_GET['sort'] ?? 'datum') === 'produkt' ? 'produkt' : 'datum';
+    if ($sort === 'produkt') usort($labs, fn($a,$b) => [strcasecmp((string)$a['produkt'], (string)$b['produkt']), strcmp((string)$b['datum'], (string)$a['datum'])] <=> [0,0]);
+    else usort($labs, fn($a,$b) => strcmp((string)$b['datum'], (string)$a['datum']) ?: strcasecmp((string)$a['produkt'], (string)$b['produkt']));
+    ?>
+    <style>
+      .lt-tabs { display:flex; gap:8px; margin:0 0 14px }
+      .lt-tabs a { padding:6px 14px; border:1px solid var(--line); border-radius:999px; text-decoration:none; color:inherit; font-size:13px }
+      .lt-tabs a.aktiv { background:var(--gruen,#2f6f4f); color:#fff; border-color:transparent }
+    </style>
+    <div class="bx-head-portal"><h1 style="margin:0">Labortest</h1></div>
+    <p class="muted" style="margin-top:0">Analysenzertifikate (CoA) und Labortests zu Ihren Produkten und Bestellungen.</p>
+    <div class="lt-tabs">
+      <a href="<?= $portalLink('labortest') ?>&sort=datum" class="<?= $sort==='datum'?'aktiv':'' ?>">nach Datum</a>
+      <a href="<?= $portalLink('labortest') ?>&sort=produkt" class="<?= $sort==='produkt'?'aktiv':'' ?>">nach Produkt</a>
+    </div>
+    <?php if (!$labs): ?>
+      <div class="bx-panel"><div class="muted">Es liegen noch keine freigegebenen Laboranalysen vor. Sobald wir für Ihre Produkte einen Labortest hinterlegen, erscheint er hier.</div></div>
+    <?php else: ?>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Datum</th><th>Produkt</th><th>Bezug</th><th></th></tr></thead>
+        <tbody>
+          <?php foreach ($labs as $l): $url = $portalLink('analyse_datei') . '&id=' . (int)$l['id']; ?>
+          <tr>
+            <td><?= $l['datum'] ? h(fmt_zeit($l['datum'] . ' 00:00:00', 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
+            <td><?= h($l['produkt'] ?: '–') ?></td>
+            <td><?php if ($l['auftrag_nr']): ?><?= h($l['auftrag_nr']) ?><?= $l['charge_nr'] ? ' <span class="muted">· Charge ' . h($l['charge_nr']) . '</span>' : '' ?><?php else: ?><span class="muted">alle Bestellungen</span><?php endif; ?></td>
+            <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= h($url) ?>" target="_blank" rel="noopener">Ansehen / Download</a></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    <?php endif; ?>
 
 <?php elseif ($view === 'produktionsbericht'):
     // Kundenversion des Produktionsberichts – nur fuer den eigenen Auftrag UND nur wenn freigegeben.

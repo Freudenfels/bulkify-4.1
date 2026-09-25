@@ -56,6 +56,7 @@ $routes = [
     'spec_bulkify'   => 'lager/spec_bulkify.php',   // unsere Spezifikation (bulkify-Layout)
     'coa_bulkify'    => 'lager/spec_bulkify.php',   // unser Analysenzertifikat zur Charge
     'dokument'       => 'lager/dokument_download.php',
+    'laboranalysen'  => 'lager/laboranalysen.php',   // Laborberichte/CoA hochladen + mit Produkt verknuepfen (KI-Vorschlag)
     'naehrstoffe'    => 'lager/naehrstoffe_liste.php',
     'naehrstoff'     => 'lager/naehrstoff_detail.php',
     'verpackungen'   => 'lager/verpackungen_liste.php',

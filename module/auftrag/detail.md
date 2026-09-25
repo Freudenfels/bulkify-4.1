@@ -27,3 +27,6 @@ löscht die Auftragsbestätigung samt Produktionsauftrag/Schritten und (unbezahl
 (`auftrag_komplett_loeschen`), setzt das zugehörige Angebot von `bestaetigt` zurück auf `gesendet`
 (Staffel-Haken zurück) und springt zur **Anfrage** (`?p=portal_anfrage&id=…`), um sie anzupassen oder
 neu zu senden. Blockiert bei bezahlter Rechnung oder bereits versendetem Auftrag.
+
+## Laboranalyse / Labortest (je Bestellung/Charge)
+Panel „Laboranalyse / Labortest" (zeigt ggf. die Fertigware-Charge). Admin lädt hier den Labortest/das CoA für **genau diese Bestellung** hoch → `dokument` (`objekt_typ='auftrag'`, `typ='analyse'`, optional `dok_datum`). „im Kundenportal sichtbar" = `kunde_sichtbar=1` → erscheint im Kunden-Reiter „Labortest". Aktionen: `analyse_upload`, `analyse_toggle`, `analyse_del`. Produkt-weite Analysen laufen über `?p=laboranalysen`.
