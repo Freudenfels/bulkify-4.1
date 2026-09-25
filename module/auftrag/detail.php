@@ -29,6 +29,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode($r['fehler'] ?? 'Umwandlung nicht möglich.')); exit;
 }
 
+// Produktionsauftrag nachtraeglich anlegen (Reparatur), wenn zum Auftrag noch keiner existiert.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'pa_anlegen') {
+    $art = ($_POST['produktionsart'] ?? 'eigen') === 'fremd' ? 'fremd' : 'eigen';
+    $paid = produktionsauftrag_aus_auftrag($id, $art);
+    if ($paid) { header('Location: ?p=produktionsauftrag&id=' . $paid . '&angelegt=1'); exit; }
+    header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Produktionsauftrag konnte nicht angelegt werden (kein Produkt am Auftrag?).')); exit;
+}
+
 // Auftragsbestaetigung loeschen und zurueck zur Anfrage (Angebot wird wieder offen) – nur Admin.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'auftrag_zurueck') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
@@ -180,7 +188,18 @@ echo '</div>';
       <?php if (($ber['status'] ?? '') === 'wartet'): ?> <a href="?p=produktionsauftrag&id=<?= (int)$pa['id'] ?>" style="font-size:12px">was fehlt?</a><?php endif; ?>
     </div></div>
     <?php else: ?>
-    <div><div class="k muted">Produktionsauftrag</div><div class="muted">noch keiner angelegt</div></div>
+    <div><div class="k muted">Produktionsauftrag</div>
+      <div class="muted" style="margin-bottom:6px">noch keiner angelegt</div>
+      <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0;flex-wrap:wrap">
+        <input type="hidden" name="aktion" value="pa_anlegen">
+        <select name="produktionsart" style="max-width:190px">
+          <option value="eigen">Eigenproduktion</option>
+          <option value="fremd">Fremdproduktion (zukaufen)</option>
+        </select>
+        <button class="btn btn-primary btn-sm" type="submit">Produktionsauftrag anlegen</button>
+      </form>
+      <div class="muted" style="font-size:12px;margin-top:4px">Danach erscheint der Materialbedarf (Rohstoffe) und der Auftrag ist produzierbar.</div>
+    </div>
     <?php endif; ?>
   </div>
 

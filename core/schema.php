@@ -5619,6 +5619,29 @@ function auftrag_aus_zelle(int $angebot_id, int $stueck, int $verp_id, int $best
     return $aid;
 }
 
+// Produktionsauftrag zu einem bestehenden Auftrag nachtraeglich anlegen (Reparatur/Recovery): manche
+// Auftraege haben – aus aelteren Import-/Fehlerlaeufen – keinen Produktionsauftrag und sind dadurch
+// blockiert (kein Materialbedarf, keine Produktion). Idempotent: existiert schon einer, wird er zurueck-
+// gegeben. $art = 'eigen' (voller Weg mit Rohstoffen) oder 'fremd' (Zukauf). Rueckgabe: pa_id oder null.
+function produktionsauftrag_aus_auftrag(int $auftrag_id, string $art = 'eigen'): ?int {
+    $a = one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a) return null;
+    $ex = (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=?", [$auftrag_id]);
+    if ($ex) return $ex;
+    $pid = (int)$a['produkt_id'];
+    if ($pid <= 0) return null;
+    $art  = $art === 'fremd' ? 'fremd' : 'eigen';
+    $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
+    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('PR'), $auftrag_id, $a['kunde_id'], $pid, (int)$a['menge'], (int)$a['stueck'], $a['verpackung_id'] ?: null, $art, 'offen']);
+    $paid = (int) insert_id();
+    foreach (produktionsschritte_fuer($form, $art === 'fremd') as $i => $station)
+        q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
+    if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team',
+        'Produktionsauftrag ' . (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id=?", [$paid]) . ' nachträglich angelegt (' . $art . ').', 'auftrag', 'auftrag', $auftrag_id);
+    return $paid;
+}
+
 // Zentrale Protokoll-Funktion – von jedem Modul aufrufbar, für jedes Objekt. Zeit als UTC.
 function log_aktivitaet(string $objekt_typ, int $objekt_id, string $akteur, string $text,
                         string $typ = '', string $ref_typ = '', int $ref_id = 0): void {
