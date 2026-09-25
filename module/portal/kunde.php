@@ -2862,8 +2862,12 @@ portal_head('Kundenportal · ' . $k['firma']);
     // Etiketten-Datenbank: alle Etikett-Designs des Kunden, gruppiert nach Datei-Inhalt (gleicher Upload in
     // mehreren Aufträgen = EIN Etikett) mit der Info, in welchen Aufträgen es genutzt wird/wurde.
     $etDocs = all("SELECT d.id, d.datei, d.datei_orig, d.datei_hash, a.id AS auftrag_id, a.nummer AS auftrag_nr, a.status, a.angelegt,
-                          COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
+                          a.stueck, p.einheiten_pro_packung, r.darreichungsform AS form, vi.name AS verp_name,
+                          COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt,
+                          (SELECT kp.verpackung FROM produkt_kundenpreis kp WHERE kp.produkt_id=a.produkt_id AND kp.kunde_id=a.kunde_id AND COALESCE(kp.verpackung,'')<>'' LIMIT 1) AS kp_verp
                    FROM dokument d JOIN auftrag a ON a.id=d.objekt_id LEFT JOIN produkt p ON p.id=a.produkt_id
+                   LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                   LEFT JOIN item vi ON vi.id=a.verpackung_id
                    WHERE d.objekt_typ='auftrag' AND d.typ='etikett' AND a.kunde_id=?
                    ORDER BY a.angelegt DESC, d.id DESC", [(int)$k['id']]);
     // Fehlende Datei-Hashes einmalig nachtragen -> gleiche Etiketten werden zusammengefasst.
@@ -2884,12 +2888,30 @@ portal_head('Kundenportal · ' . $k['firma']);
     // Wo FEHLT noch ein Etikett? JEDE aktive Bestellung (nicht versendet/storniert), zu der noch kein
     // Etikett-Design hochgeladen wurde. (Bewusst NICHT auf produkt.etikett_id begrenzt – das ist oft nicht
     // gepflegt; dann würde nichts angezeigt, obwohl Etiketten fehlen.)
-    $etFehlt = all("SELECT a.id, a.nummer, a.status, a.produkt_id, a.verpackung_id, p.etikett_id,
-                           COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt
+    $etFehlt = all("SELECT a.id, a.nummer, a.status, a.produkt_id, a.verpackung_id, a.stueck, p.etikett_id, p.einheiten_pro_packung,
+                           r.darreichungsform AS form, vi.name AS verp_name,
+                           COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt,
+                           (SELECT kp.verpackung FROM produkt_kundenpreis kp WHERE kp.produkt_id=a.produkt_id AND kp.kunde_id=a.kunde_id AND COALESCE(kp.verpackung,'')<>'' LIMIT 1) AS kp_verp
                     FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
+                    LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                    LEFT JOIN item vi ON vi.id=a.verpackung_id
                     WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert')
                       AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='auftrag' AND d.objekt_id=a.id AND d.typ='etikett')
                     ORDER BY (a.status='offen') DESC, a.angelegt DESC", [(int)$k['id']]);
+    // Konsistenter Anzeigename: Produkt · Menge pro VPE (Stück je Packung) · Verpackung. Varianten tragen das
+    // schon im Namen (enthalten „ · ") – die bleiben unveraendert, damit nichts doppelt steht.
+    $etFormWort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : ($f === 'pulver' || $f === 'fluessig' ? '' : 'Stück')));
+    $etName = function (array $f) use ($etFormWort): string {
+        $name = trim((string)($f['produkt'] ?? '')) ?: '–';
+        if (mb_strpos($name, ' · ') !== false) return $name;   // Variante: Menge/Verpackung schon enthalten
+        $teile = [];
+        $stk = (int)(($f['stueck'] ?? 0) ?: ($f['einheiten_pro_packung'] ?? 0));
+        $wort = $etFormWort((string)($f['form'] ?? ''));
+        if ($stk > 0 && $wort !== '') $teile[] = $stk . ' ' . $wort;   // Pulver/fluessig: keine Stueckzahl (misst man in g/ml)
+        $verp = trim((string)($f['verp_name'] ?? '')) ?: trim((string)($f['kp_verp'] ?? ''));
+        if ($verp !== '') $teile[] = $verp;
+        return $teile ? $name . ' · ' . implode(' · ', $teile) : $name;
+    };
     // Etikett-Maße je Bestellung: aus dem Produkt-Etikett, sonst aus dem gewählten Behälter (etikett_id_fuer_behaelter).
     $mmfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 1, ',', ''), '0'), ',');
     $etMasse = function (array $f) use ($mmfmt): string {
@@ -2932,7 +2954,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php foreach ($etFehlt as $f): $sb = $stLbl[$f['status']] ?? [$f['status'], '']; $masse = $etMasse($f); ?>
         <tr>
           <td><strong><?= h($f['nummer']) ?></strong></td>
-          <td><?= h($f['produkt'] ?: '–') ?></td>
+          <td><?= h($etName($f)) ?></td>
           <td><?= $masse !== '' ? h($masse) : '<span class="muted">–</span>' ?></td>
           <td><?= bx_badge($sb[0], $sb[1]) ?></td>
           <td class="bx-num" style="white-space:nowrap">
@@ -2954,7 +2976,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <div class="et-grid">
     <?php foreach ($gruppen as $g): $rep = $g['rep']; $purl = $portalLink('etikett_datei') . '&aid=' . (int)$rep['auftrag_id']; $isPdf = $g['ext'] === 'pdf'; ?>
       <div class="et-card">
-        <div class="et-name"><?= h($rep['produkt'] ?: ($rep['datei_orig'] ?: 'Etikett')) ?></div>
+        <div class="et-name"><?= h(($rep['produkt'] ?? '') !== '' ? $etName($rep) : ($rep['datei_orig'] ?: 'Etikett')) ?></div>
         <div class="muted" style="font-size:12px;word-break:break-all"><?= h($rep['datei_orig'] ?: '') ?></div>
         <a class="et-hint" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-etikett="<?= h($purl) ?>" data-pdf="<?= $isPdf ? '1' : '0' ?>">🔍 Vorschau <?= $isPdf ? '(PDF)' : '' ?></a>
         <div class="et-orders">
