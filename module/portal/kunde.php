@@ -2889,7 +2889,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     // Etikett-Design hochgeladen wurde. (Bewusst NICHT auf produkt.etikett_id begrenzt – das ist oft nicht
     // gepflegt; dann würde nichts angezeigt, obwohl Etiketten fehlen.)
     $etFehlt = all("SELECT a.id, a.nummer, a.status, a.produkt_id, a.verpackung_id, a.stueck, p.etikett_id, p.einheiten_pro_packung,
-                           r.darreichungsform AS form, vi.name AS verp_name,
+                           p.rezeptur_id, r.darreichungsform AS form, vi.name AS verp_name,
                            COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt,
                            (SELECT kp.verpackung FROM produkt_kundenpreis kp WHERE kp.produkt_id=a.produkt_id AND kp.kunde_id=a.kunde_id AND COALESCE(kp.verpackung,'')<>'' LIMIT 1) AS kp_verp
                     FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
@@ -2917,6 +2917,25 @@ portal_head('Kundenportal · ' . $k['firma']);
     $etMasse = function (array $f) use ($mmfmt): string {
         $eid = (int)($f['etikett_id'] ?? 0);
         if (!$eid && !empty($f['verpackung_id']) && function_exists('etikett_id_fuer_behaelter')) $eid = (int) etikett_id_fuer_behaelter((int)$f['verpackung_id']);
+        // Fallback ohne verknuepften Behaelter: passenden Behaelter aus Rezeptur + Stueckzahl berechnen
+        // (Kapselgroesse/Fuellmenge -> kleinster passender Behaelter je Material). Material aus dem
+        // Verpackungstext ableiten ("Weithalsglas" = Glas, nicht PET). So erscheinen die Masze auch bei
+        // Auftraegen, deren verpackung_id beim v3-Import nicht verknuepft wurde – ohne Daten zu aendern.
+        if (!$eid && function_exists('passende_behaelter_fuer')) {
+            $rid = (int)($f['rezeptur_id'] ?? 0); $stk = (int)($f['stueck'] ?? 0); $form = (string)($f['form'] ?? '') ?: 'kapsel';
+            if ($rid > 0 && $stk > 0) {
+                $vtext = mb_strtolower(trim((string)($f['verp_name'] ?? '')) ?: trim((string)($f['kp_verp'] ?? '')));
+                $wantMat = str_contains($vtext, 'glas') ? 'glas' : (str_contains($vtext, 'pet') ? 'pet' : (str_contains($vtext, 'pla') ? 'pla' : ''));
+                $cands = passende_behaelter_fuer($rid, $form, $stk);
+                $wahl = 0;
+                foreach ($cands as $vid) {
+                    $mat = mb_strtolower((string) scalar("SELECT material FROM item WHERE id=?", [(int)$vid]));
+                    if ($wantMat === '' || $mat === $wantMat) { $wahl = (int)$vid; break; }
+                }
+                if (!$wahl && $cands) $wahl = (int)$cands[0];   // Material nicht erkannt -> kleinster passender
+                if ($wahl && function_exists('etikett_id_fuer_behaelter')) $eid = (int) etikett_id_fuer_behaelter($wahl);
+            }
+        }
         if ($eid) {
             $it = one("SELECT breite_mm, hoehe_mm, etikett_format FROM item WHERE id=?", [$eid]);
             if ($it) {
