@@ -2884,11 +2884,26 @@ portal_head('Kundenportal · ' . $k['firma']);
     // Wo FEHLT noch ein Etikett? JEDE aktive Bestellung (nicht versendet/storniert), zu der noch kein
     // Etikett-Design hochgeladen wurde. (Bewusst NICHT auf produkt.etikett_id begrenzt – das ist oft nicht
     // gepflegt; dann würde nichts angezeigt, obwohl Etiketten fehlen.)
-    $etFehlt = all("SELECT a.id, a.nummer, a.status, COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt
+    $etFehlt = all("SELECT a.id, a.nummer, a.status, a.produkt_id, a.verpackung_id, p.etikett_id,
+                           COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt
                     FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
                     WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert')
                       AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='auftrag' AND d.objekt_id=a.id AND d.typ='etikett')
                     ORDER BY (a.status='offen') DESC, a.angelegt DESC", [(int)$k['id']]);
+    // Etikett-Maße je Bestellung: aus dem Produkt-Etikett, sonst aus dem gewählten Behälter (etikett_id_fuer_behaelter).
+    $mmfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 1, ',', ''), '0'), ',');
+    $etMasse = function (array $f) use ($mmfmt): string {
+        $eid = (int)($f['etikett_id'] ?? 0);
+        if (!$eid && !empty($f['verpackung_id']) && function_exists('etikett_id_fuer_behaelter')) $eid = (int) etikett_id_fuer_behaelter((int)$f['verpackung_id']);
+        if ($eid) {
+            $it = one("SELECT breite_mm, hoehe_mm, etikett_format FROM item WHERE id=?", [$eid]);
+            if ($it) {
+                if ((float)($it['breite_mm'] ?? 0) > 0 && (float)($it['hoehe_mm'] ?? 0) > 0) return $mmfmt($it['breite_mm']) . ' × ' . $mmfmt($it['hoehe_mm']) . ' mm';
+                if (trim((string)($it['etikett_format'] ?? '')) !== '') return trim((string)$it['etikett_format']);
+            }
+        }
+        return '';
+    };
 ?>
   <style>
     .et-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px }
@@ -2912,14 +2927,18 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <p class="muted" style="margin:6px 0 12px;font-size:13px">Für diese Bestellungen brauchen wir noch Ihr Etikett-Design – dann können wir die Etiketten bestellen und in Produktion gehen.</p>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Bestellung</th><th>Produkt</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Bestellung</th><th>Produkt</th><th>Etikett-Maße</th><th>Status</th><th></th></tr></thead>
       <tbody>
-        <?php foreach ($etFehlt as $f): $sb = $stLbl[$f['status']] ?? [$f['status'], '']; ?>
+        <?php foreach ($etFehlt as $f): $sb = $stLbl[$f['status']] ?? [$f['status'], '']; $masse = $etMasse($f); ?>
         <tr>
           <td><strong><?= h($f['nummer']) ?></strong></td>
           <td><?= h($f['produkt'] ?: '–') ?></td>
+          <td><?= $masse !== '' ? h($masse) : '<span class="muted">–</span>' ?></td>
           <td><?= bx_badge($sb[0], $sb[1]) ?></td>
-          <td class="bx-num" style="white-space:nowrap"><a class="btn btn-primary btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$f['id'] ?>">Etikett hochladen</a></td>
+          <td class="bx-num" style="white-space:nowrap">
+            <a class="btn btn-ghost btn-sm" href="<?= $portalLink('pib') ?>&aid=<?= (int)$f['id'] ?>" download="PIB-<?= h($f['nummer']) ?>.pdf" title="Produktinformationsblatt herunterladen">PIB</a>
+            <a class="btn btn-primary btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$f['id'] ?>">Etikett hochladen</a>
+          </td>
         </tr>
         <?php endforeach; ?>
       </tbody>
