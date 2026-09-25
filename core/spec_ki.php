@@ -195,6 +195,7 @@ function spec_ki_nach_upload(int $dokument_id): bool {
         $lief = !empty($d['lieferant_id']) ? (int)$d['lieferant_id'] : null;
         spec_ki_coa_charge((int)$d['objekt_id'], $r, $lief);
         spec_ki_grenzwerte((int)$d['objekt_id'], $r);
+        spec_ki_wirkstoffe((int)$d['objekt_id'], $r);   // erkannte Wirk-/Leitsubstanzen an den Rohstoff
     }
     return true;
 }
@@ -286,6 +287,31 @@ function spec_ki_grenzwerte(int $item_id, array $ergebnis, bool $ueberschreiben 
     foreach ($rows as $p => $g) {
         if (!$ueberschreiben && scalar("SELECT id FROM item_grenzwert WHERE item_id=? AND parameter=?", [$item_id, $p])) continue;
         q("INSERT INTO item_grenzwert (item_id,parameter,grenzwert,sort) VALUES (?,?,?,?)", [$item_id, mb_substr($p,0,120), mb_substr($g,0,120), $sort++]);
+        $n++;
+    }
+    return $n;
+}
+
+// Erkannte Wirk-/Leitsubstanzen dauerhaft AM ROHSTOFF speichern (item_wirkstoff), aus Spezifikation/CoA.
+// Analog zu spec_ki_grenzwerte: fehlende ergaenzen; mit $ueberschreiben=true die bisherigen ersetzen.
+// naehrstoff_id_by_name() legt einen fehlenden Naehrstoff automatisch an (kategorie 'sonstige'), sodass auch
+// Nicht-NRV-Wirkstoffe (z. B. Leitsubstanzen von Extrakten) verknuepft werden. Rueckgabe: Anzahl gespeicherter Zeilen.
+function spec_ki_wirkstoffe(int $item_id, array $ergebnis, bool $ueberschreiben = false): int {
+    if ($item_id <= 0) return 0;
+    $ws = (array)($ergebnis['wirkstoffe'] ?? []);
+    if (!$ws) return 0;
+    if ($ueberschreiben) q("DELETE FROM item_wirkstoff WHERE item_id=?", [$item_id]);
+    $n = 0; $sort = (int) scalar("SELECT COALESCE(MAX(sort),-1)+1 FROM item_wirkstoff WHERE item_id=?", [$item_id]);
+    foreach ($ws as $w) {
+        $nm = trim((string)($w['name'] ?? ''));
+        if ($nm === '') continue;
+        $nid = naehrstoff_id_by_name($nm);
+        if (!$nid) continue;
+        if (!$ueberschreiben && scalar("SELECT id FROM item_wirkstoff WHERE item_id=? AND naehrstoff_id=?", [$item_id, $nid])) continue;
+        $g = $w['gehalt_prozent'] ?? null;
+        $g = ($g === null || $g === '') ? null : (float) str_replace(',', '.', (string)$g);
+        q("INSERT INTO item_wirkstoff (item_id,naehrstoff_id,gehalt_prozent,gehalt_wert,gehalt_einheit,sort) VALUES (?,?,?,?, 'prozent', ?)",
+          [$item_id, $nid, $g, $g, $sort++]);
         $n++;
     }
     return $n;
