@@ -2899,30 +2899,39 @@ portal_head('Kundenportal · ' . $k['firma']);
     .et-orders a { text-decoration:none; color:inherit }
     .et-pop { position:fixed; z-index:9999; width:340px; height:460px; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 24px 70px rgba(0,0,0,.45); overflow:hidden; display:none }
     .et-pop iframe, .et-pop img { width:100%; height:100%; border:0; object-fit:contain; background:#fff }
+    .et-count { display:inline-block; min-width:22px; text-align:center; background:#f0d9d6; color:#8f231b; border-radius:999px; padding:1px 8px; font-size:13px; font-weight:700; margin-left:4px }
+    :root[data-theme="dark"] .et-count { background:#3a2320; color:#f0b8b0 }
   </style>
   <h1 style="margin-bottom:4px">Ihre Etiketten</h1>
-  <p class="bx-sub" style="margin:0 0 16px">Alle Ihre Etikett-Designs an einem Ort. <span class="muted">Mit der Maus über „Vorschau" fahren, um das Etikett live zu sehen.</span></p>
+  <p class="bx-sub" style="margin:0 0 18px">Ihre hochgeladenen Etikett-Designs und die Bestellungen, für die noch eins fehlt.</p>
 
   <?php if ($etFehlt): ?>
-  <div class="bx-panel" style="border-color:#e6c4c0;background:rgba(230,196,192,.12)">
-    <h2 style="margin:0 0 6px;font-size:16px;color:#8f231b">Etikett fehlt noch (<?= count($etFehlt) ?>)</h2>
-    <p class="muted" style="margin:0 0 10px;font-size:13px">Für diese Bestellungen brauchen wir noch Ihr Etikett-Design – erst dann können wir die Etiketten bestellen und in Produktion gehen. Klicken Sie auf die Bestellung, um es hochzuladen.</p>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <?php foreach ($etFehlt as $f): $sb = $stLbl[$f['status']] ?? [$f['status'], '']; ?>
-        <a href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$f['id'] ?>" style="text-decoration:none;color:inherit">
-          <strong><?= h($f['nummer']) ?></strong> · <?= h($f['produkt'] ?: '–') ?> <?= bx_badge($sb[0], $sb[1]) ?>
-          <span class="muted" style="font-size:12px"> · Etikett hochladen →</span>
-        </a>
-      <?php endforeach; ?>
+  <div class="bx-panel">
+    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <h2 style="margin:0;font-size:16px">Etikett fehlt noch <span class="et-count"><?= count($etFehlt) ?></span></h2>
     </div>
+    <p class="muted" style="margin:6px 0 12px;font-size:13px">Für diese Bestellungen brauchen wir noch Ihr Etikett-Design – dann können wir die Etiketten bestellen und in Produktion gehen.</p>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Bestellung</th><th>Produkt</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        <?php foreach ($etFehlt as $f): $sb = $stLbl[$f['status']] ?? [$f['status'], '']; ?>
+        <tr>
+          <td><strong><?= h($f['nummer']) ?></strong></td>
+          <td><?= h($f['produkt'] ?: '–') ?></td>
+          <td><?= bx_badge($sb[0], $sb[1]) ?></td>
+          <td class="bx-num" style="white-space:nowrap"><a class="btn btn-primary btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$f['id'] ?>">Etikett hochladen</a></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table></div>
   </div>
-  <?php elseif ($gruppen): ?>
-    <div class="bx-panel badge-ok" style="padding:10px 14px">Für alle laufenden Bestellungen liegt ein Etikett-Design vor.</div>
   <?php endif; ?>
 
+  <h2 style="margin:20px 0 4px;font-size:16px">Hochgeladene Etiketten <span class="muted" style="font-weight:normal">(<?= count($gruppen) ?>)</span></h2>
   <?php if (!$gruppen): ?>
-    <div class="bx-panel"><div class="muted">Noch keine Etiketten. Sie laden Ihr Etikett-Design bei einer Bestellung hoch – danach erscheint es hier.</div></div>
+    <div class="bx-panel"><div class="muted"><?= $etFehlt ? 'Noch nichts hochgeladen – nutzen Sie oben „Etikett hochladen".' : 'Noch keine Etiketten. Sie laden Ihr Etikett-Design bei einer Bestellung hoch – danach erscheint es hier.' ?></div></div>
   <?php else: ?>
+  <p class="muted" style="font-size:13px;margin:4px 0 12px">Mit der Maus über „Vorschau" fahren, um das Etikett live zu sehen.</p>
   <div class="et-grid">
     <?php foreach ($gruppen as $g): $rep = $g['rep']; $purl = $portalLink('etikett_datei') . '&aid=' . (int)$rep['auftrag_id']; $isPdf = $g['ext'] === 'pdf'; ?>
       <div class="et-card">
