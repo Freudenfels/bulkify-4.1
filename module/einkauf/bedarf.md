@@ -16,3 +16,8 @@
 
 ## Artikel / Betriebsmittel melden (Mitarbeiter)
 Oben auf der Seite ein aufklappbares Panel **„+ Artikel / Betriebsmittel melden"** (`aktion=artikel_melden`): Bezeichnung · Menge · Einheit · Typ/Kategorie (`betriebsmittel_kategorien`) · Notiz. Für alles, was gekauft werden soll, aber **nichts mit der Produktion** zu tun hat (Handschuhe, Kartons, Werkzeug …). Die Meldung wird als **`freibedarf`** gespeichert (mit `gemeldet_von` = angemeldeter Mitarbeiter) und erscheint **direkt auf der Einkaufsliste** – kein Melden-Schritt nötig. Bewusst hier (Werk-Rollen), weil die Einkaufsliste selbst nur für Einkauf/Admin ist. Das ausführliche Formular („Neuen Bedarf eintragen", inkl. Lieferant/Elektro-Flag) bleibt zusätzlich auf der Einkaufsliste.
+
+## Suche + unverknüpfte Zutaten
+Ein Suchfeld (`?q=`) filtert nach **Auftrag, Produkt, Kunde und Rohstoff/Komponente** – auch nach den unten genannten unverknüpften Zutaten. Mit Suchbegriff werden **beide Reiter** (offen + übergeben) durchsucht, damit man einen Rohstoff findet, egal in welchem Zustand der Auftrag ist.
+
+**Wichtig – unverknüpfte Zutaten:** `produktion_materialbedarf()` rechnet nur Zutaten mit **verknüpftem Lagerartikel** (`rezeptur_zutat.item_id`, INNER JOIN auf `item`). Eine Rezeptur-Zutat **ohne** Lagerartikel (Freitext, `item_id NULL`) fällt aus dem Materialbedarf heraus und ist damit nicht bestellbar. Damit so etwas nicht stillschweigend verschwindet (z. B. „SRI-81 …"), zeigt die Bedarfskarte solche Zutaten als **rote Warnung „Nicht bestellbar – kein Lagerartikel verknüpft"** mit dem Hinweis, den Rohstoff erst als Lagerartikel anzulegen und der Rezeptur zuzuordnen. `$unverknuepftFuer($pa)` liefert diese Liste (über die Rezeptur des Auftrags: `pa.rezeptur_id` bzw. `produkt.rezeptur_id`).

@@ -89,6 +89,35 @@ foreach ($alle as $pa) {
 }
 $pas = $tab === 'uebergeben' ? $uebergebenPas : $offenPas;
 
+// Rezeptur-ID eines Produktionsauftrags (Bulk: direkt, sonst über das Produkt).
+$rezIdFuerPa = function (array $pa): int {
+    if (!empty($pa['rezeptur_id'])) return (int)$pa['rezeptur_id'];
+    if (!empty($pa['produkt_id'])) return (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    return 0;
+};
+// Zutaten OHNE verknüpften Lagerartikel (Freitext) – die tauchen im Materialbedarf NICHT auf und sind so
+// auch nicht bestellbar. Hier sichtbar machen, damit nichts stillschweigend verschwindet (z. B. SRI-81).
+$unverknuepftFuer = function (array $pa) use ($rezIdFuerPa): array {
+    $rid = $rezIdFuerPa($pa);
+    return $rid ? all("SELECT bezeichnung FROM rezeptur_zutat WHERE rezeptur_id=? AND (item_id IS NULL OR item_id=0) AND COALESCE(bezeichnung,'')<>'' ORDER BY sort, id", [$rid]) : [];
+};
+
+// Suche: nach Auftrag/Produkt/Kunde ODER Komponenten-/Rohstoffname (auch unverknüpfte Zutaten). Mit Suchbegriff
+// werden BEIDE Reiter durchsucht (offen + übergeben), damit man einen Rohstoff findet, egal in welchem Zustand.
+$q = trim((string)($_GET['q'] ?? ''));
+if ($q !== '') {
+    $needle = mb_strtolower($q);
+    $pas = array_values(array_filter($alle, function ($pa) use ($needle, $unverknuepftFuer) {
+        $hay = mb_strtolower(($pa['auftrag_nr'] ?? '') . ' ' . ($pa['nummer'] ?? '') . ' ' . ($pa['produkt'] ?? '') . ' ' . ($pa['kunde'] ?? ''));
+        if (mb_strpos($hay, $needle) !== false) return true;
+        foreach (auftrag_bedarf_cached((int)$pa['id']) as $b)
+            if (mb_strpos(mb_strtolower((string)($b['name'] ?? '')), $needle) !== false) return true;
+        foreach ($unverknuepftFuer($pa) as $u)
+            if (mb_strpos(mb_strtolower((string)($u['bezeichnung'] ?? '')), $needle) !== false) return true;
+        return false;
+    }));
+}
+
 render_header('bedarf', 'Einkaufsbedarf');
 // Nach dem Umschalten Eigen-/Fremdproduktion (POST -> Redirect auf dieselbe URL) stellt der Browser
 // sonst die alte Scroll-Position wieder her. Manuell abschalten -> die Seite startet oben.
@@ -96,10 +125,17 @@ echo '<script>if("scrollRestoration" in history)history.scrollRestoration="manua
 bx_head('Einkaufsbedarf', 'Prüfen (Eigen-/Fremdproduktion) und an den Einkauf melden.',
         bx_btn('Zur Einkaufsliste' . (count($uebergebenPas) ? ' (' . count($uebergebenPas) . ')' : ''), '?p=einkaufsliste', 'ghost'));
 ?>
-<div class="settabs" style="margin:0 0 16px">
-  <a href="?p=bedarf" class="<?= $tab === 'offen' ? 'on' : '' ?>">Noch nicht gemeldet<?= $offenPas ? ' (' . count($offenPas) . ')' : '' ?></a>
-  <a href="?p=bedarf&tab=uebergeben" class="<?= $tab === 'uebergeben' ? 'on' : '' ?>">Übergeben<?= $uebergebenPas ? ' (' . count($uebergebenPas) . ')' : '' ?></a>
+<div class="settabs" style="margin:0 0 12px">
+  <a href="?p=bedarf" class="<?= $tab === 'offen' && $q === '' ? 'on' : '' ?>">Noch nicht gemeldet<?= $offenPas ? ' (' . count($offenPas) . ')' : '' ?></a>
+  <a href="?p=bedarf&tab=uebergeben" class="<?= $tab === 'uebergeben' && $q === '' ? 'on' : '' ?>">Übergeben<?= $uebergebenPas ? ' (' . count($uebergebenPas) . ')' : '' ?></a>
 </div>
+<form class="bx-listbar" method="get" style="margin:0 0 16px">
+  <input type="hidden" name="p" value="bedarf">
+  <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Auftrag, Produkt, Kunde oder Rohstoff (z. B. SRI) …">
+  <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
+  <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=bedarf">zurücksetzen</a><?php endif; ?>
+</form>
+<?php if ($q !== ''): ?><p class="bx-sub" style="margin:0 0 12px"><?= count($pas) ?> Treffer für „<?= h($q) ?>" (in beiden Reitern)</p><?php endif; ?>
 <?php
 if (isset($_GET['zurueck'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Entwurf verworfen – der Bedarf steht wieder hier.</div>';
 if (isset($_GET['gemeldet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Bedarf für <strong>' . h($_GET['gemeldet']) . '</strong> an den Einkauf gemeldet – er erscheint jetzt in der <a href="?p=einkaufsliste">Einkaufsliste</a>.</div>';
@@ -127,7 +163,7 @@ $BM_KAT = betriebsmittel_kategorien();
   </form>
 </details>
 <?php if (!$pas): ?>
-  <div class="bx-panel"><div class="muted"><?= $tab === 'uebergeben' ? 'Nichts an den Einkauf übergeben (bzw. schon alles bestellt).' : 'Kein offener Bedarf – alles gemeldet.' ?></div></div>
+  <div class="bx-panel"><div class="muted"><?= $q !== '' ? 'Keine Treffer für „' . h($q) . '". Tipp: Steht der Rohstoff nicht drin, ist er evtl. nicht mit einem Lagerartikel verknüpft, oder zum Auftrag gibt es noch keinen Produktionsauftrag.' : ($tab === 'uebergeben' ? 'Nichts an den Einkauf übergeben (bzw. schon alles bestellt).' : 'Kein offener Bedarf – alles gemeldet.') ?></div></div>
 <?php else: foreach ($pas as $pa):
     $gemeldet = !empty($pa['bedarf_gemeldet']);
     $fremd    = ($pa['produktionsart'] ?? 'eigen') === 'fremd';
@@ -180,6 +216,13 @@ $BM_KAT = betriebsmittel_kategorien();
         </tbody>
       </table></div>
       <?php if (!$hatFehl): ?><div class="muted" style="margin-top:8px"><span class="bx-ok">Material vollständig auf Lager</span> – nichts zu bestellen.</div><?php endif; ?>
+    <?php endif; ?>
+    <?php $unv = $unverknuepftFuer($pa); if ($unv): ?>
+      <div class="bx-panel" style="border-color:#e6c4c0;background:rgba(230,196,192,.12);padding:10px 14px;margin:10px 0 0">
+        <strong style="color:#8f231b">Nicht bestellbar – kein Lagerartikel verknüpft:</strong>
+        <?= h(implode(', ', array_map(fn($u) => (string)$u['bezeichnung'], $unv))) ?>.
+        <div class="muted" style="font-size:12px;margin-top:4px">Diese Zutat(en) tauchen nicht im Materialbedarf auf. Erst als <a href="?p=rohstoffe">Rohstoff anlegen</a> und der Rezeptur zuordnen – dann wird der Bedarf berechnet und der Rohstoff ist bestellbar.</div>
+      </div>
     <?php endif; ?>
   </div>
 <?php endforeach; endif; ?>
