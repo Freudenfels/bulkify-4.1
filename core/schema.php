@@ -1087,6 +1087,13 @@ function init_schema(): void {
         fix_auftrag_verpackung_backfill();
         meta_set('fix_auftrag_verpackung_v1', '1');
     }
+    // Einmalig, Ergaenzung zu v1: die RESTLICHEN aktiven Auftraege ohne verpackung_id (nicht in der v3-Zuordnung)
+    // aus Rezeptur + Stueck berechnen, damit auch die Produktion die richtige Glasgroesse fuehrt. Nur wenn das
+    // Material eindeutig ist (Glas/PET/PLA aus dem Verpackungstext) – sonst bleibt es leer (manuelle Auswahl).
+    if (meta_get('fix_auftrag_verpackung_v2', '') !== '1') {
+        fix_auftrag_verpackung_v2_berechnet();
+        meta_set('fix_auftrag_verpackung_v2', '1');
+    }
     ensure_column('angebot', 'kunde_ausgeblendet', "TINYINT(1) NOT NULL DEFAULT 0");  // Kunde hat es aus seiner Liste entfernt (Löschen)
     ensure_column('angebot', 'marge_override', "DECIMAL(6,2) NULL");          // je Angebot gesetzte Marge % (überschreibt Marge-je-Typ; VK = EK×(1+Marge))
     ensure_column('angebot', 'produktionszeit_wochen', "DECIMAL(5,1) NULL");  // je Angebot gesetzte Produktionszeit (Wochen); leer = globaler Wert
@@ -4046,6 +4053,23 @@ function etikett_id_fuer_behaelter(int $verp_id): ?int {
     $et = passende_etiketten_fuer($verp_id);
     return $et ? (int)$et[0]['id'] : null;
 }
+// Passenden PRIMAER-Behaelter aus Rezeptur + Stueckzahl bestimmen (Kapselgroesse/Fuellmenge -> kleinster
+// passender Behaelter je Material). $material_hint (Freitext wie "Weithalsglas"/"PET"/"PLA") waehlt das
+// Material. Wird der gewuenschte Werkstoff nicht gefunden, gibt es NULL (lieber nichts als das falsche
+// Material) – nur ohne Hinweis wird der kleinste passende Behaelter genommen. Genutzt von Etiketten-Anzeige,
+// verpackung_id-Backfill und Produktion. Rueckgabe: item-id des Behaelters oder null.
+function behaelter_aus_rezeptur_stueck(int $rezeptur_id, string $form, int $stueck, string $material_hint = ''): ?int {
+    if ($rezeptur_id <= 0 || $stueck <= 0) return null;
+    $cands = passende_behaelter_fuer($rezeptur_id, $form ?: 'kapsel', $stueck);
+    if (!$cands) return null;
+    $t = mb_strtolower($material_hint);
+    $want = str_contains($t, 'glas') ? 'glas' : (str_contains($t, 'pet') ? 'pet' : (str_contains($t, 'pla') ? 'pla' : ''));
+    foreach ($cands as $vid) {
+        $mat = mb_strtolower((string) scalar("SELECT material FROM item WHERE id=?", [(int)$vid]));
+        if ($want === '' || $mat === $want) return (int)$vid;
+    }
+    return $want === '' ? (int)$cands[0] : null;   // Material verlangt, aber nicht gefunden -> nicht raten
+}
 // Behälter -> passende Etiketten-IDs, für die Auswahl im Angebots-Editor (ohne Nachladen).
 // Gebündelt: statt je Primärbehälter ein "SELECT etikett_final" (waren dutzende Abfragen, auf der
 // Remote-DB der Haupt-Bremser im Editor) werden Etiketten UND Behälter je in EINER Abfrage geladen
@@ -6572,5 +6596,27 @@ function fix_auftrag_verpackung_backfill(): void {
         if ($vid <= 0) continue;
         q("UPDATE auftrag SET verpackung_id=? WHERE id=? AND (verpackung_id IS NULL OR verpackung_id=0)", [$vid, (int)$a['id']]);
         q("UPDATE produktionsauftrag SET verpackung_id=? WHERE auftrag_id=? AND (verpackung_id IS NULL OR verpackung_id=0)", [$vid, (int)$a['id']]);
+    }
+}
+
+// Ergaenzung zum v3-Backfill: verpackung_id der noch offenen Alt-Auftraege ueber die BERECHNUNG setzen
+// (Rezeptur + Stueck -> passender Behaelter je Material). Material eindeutig aus dem Verpackungstext
+// (produkt_kundenpreis.verpackung); ist es nicht eindeutig, bleibt der Auftrag leer (manuelle Auswahl in der
+// Produktion). Nur aktive Auftraege, nur wo verpackung_id leer ist; Cascade auf produktionsauftrag.
+function fix_auftrag_verpackung_v2_berechnet(): void {
+    $rows = all("SELECT a.id, p.rezeptur_id, r.darreichungsform AS form, a.stueck,
+                        (SELECT kp.verpackung FROM produkt_kundenpreis kp
+                          WHERE kp.produkt_id=a.produkt_id AND kp.kunde_id=a.kunde_id AND COALESCE(kp.verpackung,'')<>'' LIMIT 1) AS kp_verp
+                   FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                  WHERE (a.verpackung_id IS NULL OR a.verpackung_id=0) AND a.status NOT IN ('versendet','storniert')");
+    foreach ($rows as $a) {
+        $hint = trim((string)($a['kp_verp'] ?? ''));
+        $t = mb_strtolower($hint);
+        // Nur bei eindeutigem Material setzen – sonst nicht raten.
+        if (!str_contains($t, 'glas') && !str_contains($t, 'pet') && !str_contains($t, 'pla')) continue;
+        $vid = behaelter_aus_rezeptur_stueck((int)($a['rezeptur_id'] ?? 0), (string)($a['form'] ?? ''), (int)($a['stueck'] ?? 0), $hint);
+        if (!$vid) continue;
+        q("UPDATE auftrag SET verpackung_id=? WHERE id=? AND (verpackung_id IS NULL OR verpackung_id=0)", [(int)$vid, (int)$a['id']]);
+        q("UPDATE produktionsauftrag SET verpackung_id=? WHERE auftrag_id=? AND (verpackung_id IS NULL OR verpackung_id=0)", [(int)$vid, (int)$a['id']]);
     }
 }

@@ -2920,43 +2920,48 @@ portal_head('Kundenportal · ' . $k['firma']);
                     WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert')
                       AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='auftrag' AND d.objekt_id=a.id AND d.typ='etikett')
                     ORDER BY (a.status='offen') DESC, a.angelegt DESC", [(int)$k['id']]);
-    // Konsistenter Anzeigename: Produkt · Menge pro VPE (Stück je Packung) · Verpackung. Varianten tragen das
-    // schon im Namen (enthalten „ · ") – die bleiben unveraendert, damit nichts doppelt steht.
+    // Behaelter je Bestellung aufloesen: verknuepfter verpackung_id, sonst aus Rezeptur + Stueck berechnen
+    // (Material aus dem Verpackungstext: "Weithalsglas" = Glas). Einmal pro Zeile gecacht. Basis fuer
+    // Anzeigename (mit Glasgroesse) UND Etikett-Masze – beide zeigen so dieselbe Groesse.
+    $etBehCache = [];
+    $etBehaelter = function (array $f) use (&$etBehCache): ?array {
+        // Schluessel aus den bestimmenden Feldern (nicht aus 'id' – die bedeutet in Fehlt-Tabelle vs. Galerie
+        // Verschiedenes und wuerde kollidieren).
+        $key = (int)($f['verpackung_id'] ?? 0) . '/' . (int)($f['rezeptur_id'] ?? 0) . '/' . (int)($f['stueck'] ?? 0)
+             . '/' . (string)($f['form'] ?? '') . '/' . (trim((string)($f['verp_name'] ?? '')) ?: trim((string)($f['kp_verp'] ?? '')));
+        if (array_key_exists($key, $etBehCache)) return $etBehCache[$key];
+        $vid = (int)($f['verpackung_id'] ?? 0);
+        if (!$vid && function_exists('behaelter_aus_rezeptur_stueck')) {
+            $hint = trim((string)($f['verp_name'] ?? '')) ?: trim((string)($f['kp_verp'] ?? ''));
+            $vid = (int) (behaelter_aus_rezeptur_stueck((int)($f['rezeptur_id'] ?? 0), (string)($f['form'] ?? ''), (int)($f['stueck'] ?? 0), $hint) ?? 0);
+        }
+        $it = $vid ? one("SELECT id, name, breite_mm, hoehe_mm, etikett_format FROM item WHERE id=?", [$vid]) : null;
+        return $etBehCache[$key] = ($it ?: null);
+    };
+    // Konsistenter Anzeigename: Produkt · Menge pro VPE (Stück je Packung) · Verpackung (mit Glasgröße).
+    // Varianten tragen das schon im Namen (enthalten „ · ") – die bleiben unveraendert, damit nichts doppelt steht.
     $etFormWort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : ($f === 'pulver' || $f === 'fluessig' ? '' : 'Stück')));
-    $etName = function (array $f) use ($etFormWort): string {
+    $etName = function (array $f) use ($etFormWort, $etBehaelter): string {
         $name = trim((string)($f['produkt'] ?? '')) ?: '–';
         if (mb_strpos($name, ' · ') !== false) return $name;   // Variante: Menge/Verpackung schon enthalten
         $teile = [];
         $stk = (int)(($f['stueck'] ?? 0) ?: ($f['einheiten_pro_packung'] ?? 0));
         $wort = $etFormWort((string)($f['form'] ?? ''));
         if ($stk > 0 && $wort !== '') $teile[] = $stk . ' ' . $wort;   // Pulver/fluessig: keine Stueckzahl (misst man in g/ml)
-        $verp = trim((string)($f['verp_name'] ?? '')) ?: trim((string)($f['kp_verp'] ?? ''));
+        // Verpackung bevorzugt aus dem aufgeloesten Behaelter (enthaelt die Groesse, z. B. „150 ml Weithalsglas"),
+        // sonst der reine Text (evtl. ohne Groesse).
+        $beh = $etBehaelter($f);
+        $verp = $beh ? trim((string)$beh['name']) : (trim((string)($f['verp_name'] ?? '')) ?: trim((string)($f['kp_verp'] ?? '')));
         if ($verp !== '') $teile[] = $verp;
         return $teile ? $name . ' · ' . implode(' · ', $teile) : $name;
     };
-    // Etikett-Maße je Bestellung: aus dem Produkt-Etikett, sonst aus dem gewählten Behälter (etikett_id_fuer_behaelter).
+    // Etikett-Maße je Bestellung: aus dem Produkt-Etikett, sonst aus dem (ggf. berechneten) Behälter.
     $mmfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 1, ',', ''), '0'), ',');
-    $etMasse = function (array $f) use ($mmfmt): string {
+    $etMasse = function (array $f) use ($mmfmt, $etBehaelter): string {
         $eid = (int)($f['etikett_id'] ?? 0);
-        if (!$eid && !empty($f['verpackung_id']) && function_exists('etikett_id_fuer_behaelter')) $eid = (int) etikett_id_fuer_behaelter((int)$f['verpackung_id']);
-        // Fallback ohne verknuepften Behaelter: passenden Behaelter aus Rezeptur + Stueckzahl berechnen
-        // (Kapselgroesse/Fuellmenge -> kleinster passender Behaelter je Material). Material aus dem
-        // Verpackungstext ableiten ("Weithalsglas" = Glas, nicht PET). So erscheinen die Masze auch bei
-        // Auftraegen, deren verpackung_id beim v3-Import nicht verknuepft wurde – ohne Daten zu aendern.
-        if (!$eid && function_exists('passende_behaelter_fuer')) {
-            $rid = (int)($f['rezeptur_id'] ?? 0); $stk = (int)($f['stueck'] ?? 0); $form = (string)($f['form'] ?? '') ?: 'kapsel';
-            if ($rid > 0 && $stk > 0) {
-                $vtext = mb_strtolower(trim((string)($f['verp_name'] ?? '')) ?: trim((string)($f['kp_verp'] ?? '')));
-                $wantMat = str_contains($vtext, 'glas') ? 'glas' : (str_contains($vtext, 'pet') ? 'pet' : (str_contains($vtext, 'pla') ? 'pla' : ''));
-                $cands = passende_behaelter_fuer($rid, $form, $stk);
-                $wahl = 0;
-                foreach ($cands as $vid) {
-                    $mat = mb_strtolower((string) scalar("SELECT material FROM item WHERE id=?", [(int)$vid]));
-                    if ($wantMat === '' || $mat === $wantMat) { $wahl = (int)$vid; break; }
-                }
-                if (!$wahl && $cands) $wahl = (int)$cands[0];   // Material nicht erkannt -> kleinster passender
-                if ($wahl && function_exists('etikett_id_fuer_behaelter')) $eid = (int) etikett_id_fuer_behaelter($wahl);
-            }
+        if (!$eid && function_exists('etikett_id_fuer_behaelter')) {
+            $beh = $etBehaelter($f);
+            if ($beh) $eid = (int) etikett_id_fuer_behaelter((int)$beh['id']);
         }
         if ($eid) {
             $it = one("SELECT breite_mm, hoehe_mm, etikett_format FROM item WHERE id=?", [$eid]);
