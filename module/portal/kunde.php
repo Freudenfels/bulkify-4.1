@@ -112,8 +112,12 @@ if ($k && ($_GET['v'] ?? '') === 'etikett_datei') {
     $d = $ok ? etikett_datei($aid) : null;
     $pf = $d ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
     if (!$d || !is_file($pf)) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
-    header('Content-Type: application/octet-stream');
+    // Richtiger MIME-Typ, damit PDF/Bild im Browser INLINE angezeigt werden (Vorschau), statt herunterzuladen.
+    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
+    $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','gif'=>'image/gif','svg'=>'image/svg+xml'][$ext] ?? 'application/octet-stream';
+    header('Content-Type: ' . $mime);
     header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($d['datei_orig'] ?: 'etikett')) . '"');
+    header('X-Content-Type-Options: nosniff');
     header('Content-Length: ' . filesize($pf));
     readfile($pf); exit;
 }
@@ -882,11 +886,15 @@ $hatKontingente = (int) scalar("SELECT COUNT(*) FROM kontingent WHERE kunde_id=?
     + (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND jahresvertrag=1 AND status<>'offen' AND kunde_ausgeblendet=0", [(int)$k['id']]);
 if ($hatKontingente > 0) $L['kontingente'] = 'Jahresverträge';
 $L += ['angebote' => 'Angebote', 'bestellungen' => 'Bestellungen', 'rechnungen' => 'Rechnungen'];
+// Etiketten-Datenbank: nur zeigen, wenn der Kunde schon mindestens ein Etikett-Design hochgeladen hat.
+$hatEtiketten = (int) scalar("SELECT COUNT(*) FROM dokument d JOIN auftrag a ON a.id=d.objekt_id
+                              WHERE d.objekt_typ='auftrag' AND d.typ='etikett' AND a.kunde_id=?", [(int)$k['id']]);
+if ($hatEtiketten > 0) $L['etiketten'] = 'Etiketten';
 $NAVGROUPS = [
     ''          => ['start'],
     'Katalog'   => ['rezepturen', 'produkte', 'rohstoffe'],
     'Anfragen'  => ['meine_anfragen', 'anfrage', 'prodanfrage', 'rohanfrage', 'dienstleistung'],
-    'Vorgänge'  => ['kontingente', 'angebote', 'bestellungen', 'rechnungen'],
+    'Vorgänge'  => ['kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten'],
 ];
 // Detailansichten (kein Menüpunkt) – gültig je nach Freischaltung; hebt den Katalog-Punkt hervor
 $detailParent = [];
@@ -2855,6 +2863,86 @@ portal_head('Kundenportal · ' . $k['firma']);
         </div>
       </a>
     <?php endforeach; ?>
+  <?php endif; ?>
+
+<?php elseif ($view === 'etiketten'):
+    // Etiketten-Datenbank: alle Etikett-Designs des Kunden, gruppiert nach Datei-Inhalt (gleicher Upload in
+    // mehreren Aufträgen = EIN Etikett) mit der Info, in welchen Aufträgen es genutzt wird/wurde.
+    $etDocs = all("SELECT d.id, d.datei, d.datei_orig, d.datei_hash, a.id AS auftrag_id, a.nummer AS auftrag_nr, a.status, a.angelegt,
+                          COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
+                   FROM dokument d JOIN auftrag a ON a.id=d.objekt_id LEFT JOIN produkt p ON p.id=a.produkt_id
+                   WHERE d.objekt_typ='auftrag' AND d.typ='etikett' AND a.kunde_id=?
+                   ORDER BY a.angelegt DESC, d.id DESC", [(int)$k['id']]);
+    // Fehlende Datei-Hashes einmalig nachtragen -> gleiche Etiketten werden zusammengefasst.
+    foreach ($etDocs as &$ed) {
+        if (empty($ed['datei_hash'])) {
+            $pf = BX_UPLOADS . '/' . basename((string)$ed['datei']);
+            if (is_file($pf) && ($h = md5_file($pf))) { q("UPDATE dokument SET datei_hash=? WHERE id=?", [$h, (int)$ed['id']]); $ed['datei_hash'] = $h; }
+        }
+    }
+    unset($ed);
+    $gruppen = [];
+    foreach ($etDocs as $ed) {
+        $key = $ed['datei_hash'] ?: ('d' . $ed['id']);
+        if (!isset($gruppen[$key])) $gruppen[$key] = ['rep' => $ed, 'orders' => [], 'ext' => strtolower(pathinfo((string)$ed['datei'], PATHINFO_EXTENSION))];
+        $gruppen[$key]['orders'][] = $ed;
+    }
+    $stLbl = ['offen'=>['offen · neu','info'], 'in_produktion'=>['in Produktion','warn'], 'erledigt'=>['versandbereit','info'], 'versendet'=>['versendet','ok'], 'storniert'=>['storniert','']];
+?>
+  <style>
+    .et-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px }
+    .et-card { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; box-shadow:var(--shadow) }
+    .et-name { font-weight:600; word-break:break-word }
+    .et-hint { display:inline-block; margin-top:6px; font-size:12px; color:var(--gruen); cursor:zoom-in }
+    .et-orders { margin-top:10px; display:flex; flex-direction:column; gap:6px }
+    .et-orders a { text-decoration:none; color:inherit }
+    .et-pop { position:fixed; z-index:9999; width:340px; height:460px; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 24px 70px rgba(0,0,0,.45); overflow:hidden; display:none }
+    .et-pop iframe, .et-pop img { width:100%; height:100%; border:0; object-fit:contain; background:#fff }
+  </style>
+  <h1 style="margin-bottom:4px">Ihre Etiketten</h1>
+  <p class="bx-sub" style="margin:0 0 16px">Alle Ihre Etikett-Designs an einem Ort. <span class="muted">Mit der Maus über „Vorschau" fahren, um das Etikett live zu sehen.</span></p>
+  <?php if (!$gruppen): ?>
+    <div class="bx-panel"><div class="muted">Noch keine Etiketten. Sie laden Ihr Etikett-Design bei einer Bestellung hoch – danach erscheint es hier.</div></div>
+  <?php else: ?>
+  <div class="et-grid">
+    <?php foreach ($gruppen as $g): $rep = $g['rep']; $purl = $portalLink('etikett_datei') . '&aid=' . (int)$rep['auftrag_id']; $isPdf = $g['ext'] === 'pdf'; ?>
+      <div class="et-card">
+        <div class="et-name"><?= h($rep['produkt'] ?: ($rep['datei_orig'] ?: 'Etikett')) ?></div>
+        <div class="muted" style="font-size:12px;word-break:break-all"><?= h($rep['datei_orig'] ?: '') ?></div>
+        <a class="et-hint" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-etikett="<?= h($purl) ?>" data-pdf="<?= $isPdf ? '1' : '0' ?>">🔍 Vorschau <?= $isPdf ? '(PDF)' : '' ?></a>
+        <div class="et-orders">
+          <div class="muted" style="font-size:12px">Genutzt in <?= count($g['orders']) ?> Auftrag/Aufträgen:</div>
+          <?php foreach ($g['orders'] as $o): $sb = $stLbl[$o['status']] ?? [$o['status'], '']; ?>
+            <a href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$o['auftrag_id'] ?>"><strong><?= h($o['auftrag_nr']) ?></strong> <?= bx_badge($sb[0], $sb[1]) ?></a>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  <div class="et-pop" id="etPop"></div>
+  <script>
+  (function(){
+    var pop = document.getElementById('etPop'); if(!pop) return;
+    var cur = null;
+    function show(a){
+      var url = a.getAttribute('data-etikett'), pdf = a.getAttribute('data-pdf') === '1';
+      if (cur !== url) { pop.innerHTML = pdf ? '<iframe src="'+url+'#toolbar=0&navpanes=0&view=FitH" loading="lazy"></iframe>' : '<img src="'+url+'" alt="Etikett">'; cur = url; }
+      pop.style.display = 'block'; position(a);
+    }
+    function position(a){
+      var r = a.getBoundingClientRect(), pw = 340, ph = 460, gap = 12;
+      var left = r.right + gap; if (left + pw > window.innerWidth) left = Math.max(8, r.left - pw - gap);
+      var top = Math.min(Math.max(8, r.top), window.innerHeight - ph - 8);
+      pop.style.left = left + 'px'; pop.style.top = top + 'px';
+    }
+    document.querySelectorAll('.et-hint').forEach(function(a){
+      a.addEventListener('mouseenter', function(){ show(a); });
+      a.addEventListener('mousemove', function(){ position(a); });
+      a.addEventListener('mouseleave', function(){ pop.style.display='none'; });
+    });
+    // Auf Touch/Klick nicht die Vorschau, sondern den Link (neuer Tab) nutzen – Standardverhalten des <a>.
+  })();
+  </script>
   <?php endif; ?>
 
 <?php elseif ($view === 'produktionsbericht'):
