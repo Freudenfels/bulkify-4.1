@@ -117,6 +117,7 @@ $routes = [
     // Hintergrundarbeit der KI (kein Login, dafuer Schluessel) - siehe core/ki_job.php
     'ki_job'              => 'system/ki_job.php',
     'app'                => 'system/app.php',        // bulkify aufs Handy legen
+    'fastaction'         => 'system/fastaction.php', // KI-Schnell-Posteingang (Nachricht -> Aufgabe + Vorschläge)
 ];
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', $_GET['p']) : 'dashboard';

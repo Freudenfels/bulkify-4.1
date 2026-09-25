@@ -103,6 +103,7 @@ function route_rollen_map(): array {
         'einstellungen'      => ['admin', 'finance', 'production'],
         'benutzer'           => ['admin'],
         'benutzer_detail'    => ['admin'],
+        'fastaction'         => ['admin'],
     ];
 }
 

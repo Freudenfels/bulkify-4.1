@@ -32,6 +32,7 @@ function bx_nav(): array {
         'Einkauf'      => ['bedarf' => 'Einkaufsbedarf', 'einkaufsliste' => 'Einkaufsliste', 'einkauf' => 'Bestellungen', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'katalog_freigaben' => 'Katalog-Freigaben', 'lieferant_preise' => 'Lieferanten-Preise', 'lief_preisliste' => 'EK-Preisliste', 'ek_import' => 'EK-Preise (Import)'],
         'Buchhaltung'  => ['rechnungen' => 'Rechnungen', 'buchhaltung' => 'Belege'],
         'System'       => ['einstellungen' => 'Einstellungen', 'benutzer' => 'Benutzer', 'v3_import_upload' => 'v3 neu einlesen (Upload)', 'app' => 'App aufs Handy'],
+        'Assistent'    => ['fastaction' => 'Fastaction'],
     ];
 }
 
