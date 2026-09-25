@@ -2881,11 +2881,12 @@ portal_head('Kundenportal · ' . $k['firma']);
         $gruppen[$key]['orders'][] = $ed;
     }
     $stLbl = ['offen'=>['offen · neu','info'], 'in_produktion'=>['in Produktion','warn'], 'erledigt'=>['versandbereit','info'], 'versendet'=>['versendet','ok'], 'storniert'=>['storniert','']];
-    // Wo FEHLT noch ein Etikett? Aktive Bestellungen (nicht versendet/storniert), deren Produkt ein Etikett
-    // braucht (produkt.etikett_id gesetzt), zu denen aber noch kein Etikett-Design hochgeladen wurde.
-    $etFehlt = all("SELECT a.id, a.nummer, a.status, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
-                    FROM auftrag a JOIN produkt p ON p.id=a.produkt_id
-                    WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert') AND COALESCE(p.etikett_id,0) > 0
+    // Wo FEHLT noch ein Etikett? JEDE aktive Bestellung (nicht versendet/storniert), zu der noch kein
+    // Etikett-Design hochgeladen wurde. (Bewusst NICHT auf produkt.etikett_id begrenzt – das ist oft nicht
+    // gepflegt; dann würde nichts angezeigt, obwohl Etiketten fehlen.)
+    $etFehlt = all("SELECT a.id, a.nummer, a.status, COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt
+                    FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
+                    WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert')
                       AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='auftrag' AND d.objekt_id=a.id AND d.typ='etikett')
                     ORDER BY (a.status='offen') DESC, a.angelegt DESC", [(int)$k['id']]);
 ?>
