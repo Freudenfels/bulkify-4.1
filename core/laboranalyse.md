@@ -37,3 +37,10 @@ Sichtbar im Kundenportal nur mit `dokument.kunde_sichtbar=1`.
 gibt Hinweise (kein Blocker): kein eindeutiges Produkt erkannt; Produktname weicht ab; Chargennummer nicht im
 System gefunden; Charge gehört laut System zu einem anderen Produkt. Anzeige im Vorschlag-Schritt der
 Admin-Seite (gelber Kasten). Charge-Vergleich ist tolerant (Bindestrich/Leerzeichen/Gross-Klein egal).
+
+## Charge -> Bestellung (direkte Kopplung)
+`laboranalyse_auftraege_zu_charge($charge)` ermittelt über die Chargennummer (Produktionsauftrag -> Auftrag)
+die konkrete(n) Bestellung(en) inkl. Kunde. Im Admin-Upload ist „Bestellung (aus Charge)" die bevorzugte
+Zuordnung (`objekt_typ='auftrag'`), damit bei gleichem Produkt an mehrere Kunden nur die richtige Bestellung/der
+richtige Kunde gekoppelt wird. Findet die Charge keinen Auftrag (z. B. Lagerproduktion), greift „Produkt (alle
+Bestellungen)" oder „extern (Fremdlager)".

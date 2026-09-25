@@ -33,6 +33,23 @@ function laboranalyse_ki_vorschlag(string $pfad): array {
             'datum' => $datum, 'charge' => trim((string) ($d['charge'] ?? '')) ?: null, 'begruendung' => trim((string) ($d['begruendung'] ?? ''))];
 }
 
+// Charge -> konkrete Bestellung(en). Die Chargennummer ist eindeutig und zeigt ueber den Produktionsauftrag
+// auf den Kundenauftrag – so wird die Analyse mit der RICHTIGEN Bestellung/dem richtigen Kunden gekoppelt
+// (wichtig, wenn dasselbe Produkt an mehrere Kunden geht). Tolerant (Bindestrich/Leerzeichen/Gross-Klein egal).
+function laboranalyse_auftraege_zu_charge(string $charge): array {
+    $charge = trim($charge);
+    if ($charge === '') return [];
+    return all("SELECT DISTINCT a.id, a.nummer, a.kunde_id, k.firma AS kunde,
+                       COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt, c.charge_nr
+                FROM charge c
+                JOIN produktionsauftrag pa ON pa.id=c.pa_id
+                JOIN auftrag a ON a.id=pa.auftrag_id
+                LEFT JOIN produkt p ON p.id=a.produkt_id
+                LEFT JOIN kunden k ON k.id=a.kunde_id
+               WHERE REPLACE(REPLACE(LOWER(c.charge_nr),'-',''),' ','') = REPLACE(REPLACE(LOWER(?),'-',''),' ','')
+               ORDER BY a.id DESC", [$charge]);
+}
+
 // Abgleich der vom Bericht gelesenen Daten mit dem System – gibt Hinweise (kein Blocker) zurueck.
 // Prueft: (1) wurde ein Produkt eindeutig erkannt, (2) existiert die Chargennummer im System und
 // gehoert sie zum erkannten Produkt, (3) passt der gelesene Produktname zum System-Namen.

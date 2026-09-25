@@ -31,7 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                               'charge' => $ki['ok'] ? ($ki['charge'] ?? '') : '',
                               'ki_ok' => $ki['ok'], 'ki_fehler' => $ki['ok'] ? '' : (string)($ki['fehler'] ?? ''),
                               // Abgleich Name/Charge mit dem System -> Hinweise bei Abweichung.
-                              'hinweise' => $ki['ok'] ? laboranalyse_hinweise($ki) : []];
+                              'hinweise' => $ki['ok'] ? laboranalyse_hinweise($ki) : [],
+                              // Charge -> konkrete Bestellung(en): direkt an die richtige Bestellung koppeln.
+                              'auftraege' => $ki['ok'] ? laboranalyse_auftraege_zu_charge((string)($ki['charge'] ?? '')) : []];
             } else {
                 $hinweis = ['err', 'Datei konnte nicht gespeichert werden.'];
             }
@@ -40,24 +42,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // 2) Vorschlag bestaetigen -> dokument-Zeile anlegen. Quelle: eigenes Produkt oder extern (Fremdlager).
+    // 2) Vorschlag bestaetigen -> dokument-Zeile anlegen. Ziel: konkrete Bestellung (aus Charge),
+    //    eigenes Produkt (alle Bestellungen) oder extern (Fremdlager).
     if ($aktion === 'speichern') {
         $fn   = basename((string)($_POST['datei'] ?? ''));
         $orig = (string)($_POST['orig'] ?? '');
-        $quelle = ($_POST['quelle'] ?? 'eigen') === 'extern' ? 'extern' : 'eigen';
-        $pid  = $quelle === 'extern' ? (int)($_POST['produkt_extern'] ?? 0) : (int)($_POST['produkt_id'] ?? 0);
+        $quelle = (string)($_POST['quelle'] ?? 'eigen');
         $datum = trim((string)($_POST['datum'] ?? ''));
         $titel = trim((string)($_POST['titel'] ?? '')) ?: null;
         $charge = trim((string)($_POST['charge_nr'] ?? '')) ?: null;
         $sicht = isset($_POST['kunde_sichtbar']) ? 1 : 0;
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) $datum = null;
-        if ($fn && $pid && is_file(BX_UPLOADS . '/' . $fn)) {
+        // Zielobjekt bestimmen
+        $objTyp = 'produkt'; $objId = 0; $bezug = '';
+        if ($quelle === 'bestellung') {
+            $objTyp = 'auftrag'; $objId = (int)($_POST['auftrag_id'] ?? 0);
+            $bezug = 'der Bestellung ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$objId]);
+        } elseif ($quelle === 'extern') {
+            $objId = (int)($_POST['produkt_extern'] ?? 0); $bezug = 'dem Fremdlager-Produkt';
+        } else {
+            $objId = (int)($_POST['produkt_id'] ?? 0); $bezug = 'dem Produkt (alle Bestellungen)';
+        }
+        if ($fn && $objId && is_file(BX_UPLOADS . '/' . $fn)) {
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,kunde_sichtbar,hochgeladen_von)
-               VALUES ('produkt',?,'analyse',?,?,?,?,?,?,'team')", [$pid, $titel, $fn, $orig ?: $fn, $datum, $charge, $sicht]);
-            $hinweis = ['ok', 'Laboranalyse gespeichert und mit dem Produkt verknüpft' . ($charge ? ' (Charge ' . $charge . ')' : '') . '.'];
+               VALUES (?,?,'analyse',?,?,?,?,?,?,'team')", [$objTyp, $objId, $titel, $fn, $orig ?: $fn, $datum, $charge, $sicht]);
+            $hinweis = ['ok', 'Laboranalyse gespeichert und mit ' . $bezug . ' verknüpft' . ($charge ? ' (Charge ' . $charge . ')' : '') . '.'];
         } else {
             @unlink(BX_UPLOADS . '/' . $fn);
-            $hinweis = ['err', $quelle === 'extern' ? 'Bitte ein Fremdlager-Produkt auswählen.' : 'Bitte ein Produkt auswählen.'];
+            $hinweis = ['err', $quelle === 'bestellung' ? 'Bitte eine Bestellung auswählen.' : ($quelle === 'extern' ? 'Bitte ein Fremdlager-Produkt auswählen.' : 'Bitte ein Produkt auswählen.')];
         }
     }
 
@@ -105,12 +117,25 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
       <input type="hidden" name="aktion" value="speichern">
       <input type="hidden" name="datei" value="<?= h($vorschlag['datei']) ?>">
       <input type="hidden" name="orig" value="<?= h($vorschlag['orig']) ?>">
+      <?php $hatAuf = !empty($vorschlag['auftraege']); ?>
       <div class="bx-row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
-        <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="eigen" checked onclick="labQuelle('eigen')"> eigenes Produkt</label>
+        <?php if ($hatAuf): ?><label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="bestellung" checked onclick="labQuelle('bestellung')"> Bestellung (aus Charge)</label><?php endif; ?>
+        <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="eigen" <?= $hatAuf ? '' : 'checked' ?> onclick="labQuelle('eigen')"> Produkt (alle Bestellungen)</label>
         <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="radio" name="quelle" value="extern" onclick="labQuelle('extern')"> extern (Fremdlager / Drittanbieter)</label>
       </div>
+      <?php if ($hatAuf): ?>
+      <div class="bx-field" id="labFeldBestellung">
+        <label>Bestellung <?= bx_hint('Über die Chargennummer eindeutig ermittelt – so wird nur die richtige Bestellung/der richtige Kunde gekoppelt.') ?></label>
+        <select name="auftrag_id">
+          <?php foreach ($vorschlag['auftraege'] as $a): ?>
+            <option value="<?= (int)$a['id'] ?>"><?= h($a['nummer']) ?> — <?= h($a['kunde'] ?: '–') ?> · <?= h($a['produkt'] ?: '') ?></option>
+          <?php endforeach; ?>
+        </select>
+        <div class="muted" style="font-size:12px;margin-top:4px">Charge <?= h((string)$vorschlag['charge']) ?> → <?= count($vorschlag['auftraege']) ?> Bestellung(en) gefunden.</div>
+      </div>
+      <?php endif; ?>
       <div class="bx-grid">
-        <div class="bx-field" id="labFeldEigen"><label>Produkt <?= bx_hint('Zu welchem Produkt gehört diese Analyse?') ?></label>
+        <div class="bx-field" id="labFeldEigen" <?= $hatAuf ? 'style="display:none"' : '' ?>><label>Produkt <?= bx_hint('Zu welchem Produkt gehört diese Analyse?') ?></label>
           <select name="produkt_id">
             <option value="">– Produkt wählen –</option>
             <?php foreach ($produkte as $p): ?>
@@ -135,7 +160,9 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
       </div>
       <script>
       function labQuelle(q){
-        document.getElementById('labFeldEigen').style.display  = q==='extern' ? 'none' : '';
+        var b = document.getElementById('labFeldBestellung');
+        if (b) b.style.display = q==='bestellung' ? '' : 'none';
+        document.getElementById('labFeldEigen').style.display  = q==='eigen'  ? '' : 'none';
         document.getElementById('labFeldExtern').style.display = q==='extern' ? '' : 'none';
       }
       </script>
