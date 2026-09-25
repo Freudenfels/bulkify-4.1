@@ -17,6 +17,9 @@ Gib AUSSCHLIESSLICH dieses JSON zurueck:
   "aufgabe": "was das Team konkret tun muss, als Imperativ in 1 Satz",
   "dringlichkeit": "hoch|mittel|niedrig",
   "erkannt": { "kunde": null, "rezeptur": null, "produkt": null, "menge": null, "einheit": null },
+  "rezepturen": [
+    { "name": "Kurzname/Bezeichnung der Rezeptur", "darreichungsform": "kapsel|tablette|softgel|stick|pulver|granulat|fluessig", "zutaten_text": "Wirkstoffe mit Mengen, z. B. 'Bacopa Monnieri Extrakt 10:1 150mg, MCC 50mg'" }
+  ],
   "vorschlaege": [
     { "text": "konkreter Handlungsvorschlag als Frage, z. B. 'Fuer Kunde X und Rezeptur Y ein Angebot ueber 1.000 Dosen anlegen und an den Kunden senden?'", "typ": "angebot|anfrage|nachricht|bestellung|produktion|sonstiges" }
   ]
@@ -25,6 +28,8 @@ Gib AUSSCHLIESSLICH dieses JSON zurueck:
 Regeln:
 - Nichts erfinden. Erkannte Namen/Mengen NUR uebernehmen, wenn sie in der Nachricht/Datei stehen; sonst null.
 - "menge" als Zahl (ohne Tausenderpunkt), "einheit" z. B. "Dosen", "Stueck", "kg".
+- "rezepturen": NUR wenn in der Nachricht/Datei eine konkrete Rezeptur/Zusammensetzung steht (z. B. auf einer alten
+  Rechnung/Spezifikation). Je Rezeptur ein Eintrag mit Name + Darreichungsform + zutaten_text. Sonst leere Liste [].
 - 1 bis 3 Vorschlaege, der wichtigste zuerst. Alles auf Deutsch.
 - Wenn unklar, "dringlichkeit" auf "mittel" und einen Vorschlag "beim Kunden nachfragen".
 TXT;
@@ -63,4 +68,36 @@ function fastaction_aufloesen(array $erkannt): array {
 // Dringlichkeit -> Prioritaet (1=hoch,2=mittel,3=niedrig).
 function fastaction_prio(string $dringlichkeit): int {
     return ['hoch' => 1, 'mittel' => 2, 'niedrig' => 3][strtolower(trim($dringlichkeit))] ?? 2;
+}
+
+// Aus der KI-Auswertung eine persistente Fastaction-Notiz + abhakbare ToDo-Items (die Vorschlaege) anlegen.
+// So bleibt nach dem Auswerten alles erhalten und kann spaeter Punkt fuer Punkt abgearbeitet werden.
+function fastaction_notiz_anlegen(array $d, array $auf_e, string $eingabe, ?string $datei, string $origName, ?int $uid): int {
+    q("INSERT INTO fastaction_notiz (eingabe,zusammenfassung,aufgabe_text,dringlichkeit,kunde_id,rezeptur_id,produkt_id,datei,datei_orig,erstellt_von,angelegt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      [$eingabe ?: null, mb_substr((string)($d['zusammenfassung'] ?? ''), 0, 255) ?: null,
+       mb_substr((string)($d['aufgabe'] ?? ''), 0, 255) ?: null, (string)($d['dringlichkeit'] ?? 'mittel'),
+       $auf_e['kunde']['id'] ?? null, $auf_e['rezeptur']['id'] ?? null, $auf_e['produkt']['id'] ?? null,
+       $datei ? basename($datei) : null, $origName ?: null, $uid, gmdate('Y-m-d H:i:s')]);
+    $nid = (int) insert_id();
+    $sort = 0;
+    foreach ((array)($d['vorschlaege'] ?? []) as $v) {
+        $text = trim((string)($v['text'] ?? '')); if ($text === '') continue;
+        q("INSERT INTO fastaction_item (notiz_id,typ,text,sort) VALUES (?,?,?,?)",
+          [$nid, (string)($v['typ'] ?? 'sonstiges'), mb_substr($text, 0, 500), $sort++]);
+    }
+    return $nid;
+}
+
+// Rezeptur als ENTWURF anlegen (Name + Darreichungsform + Zutaten als Notiz-Text). Die Zutaten werden bewusst
+// NICHT automatisch als Zeilen gesetzt (Rohstoff-Zuordnung/Kapselgroesse muss ein Mensch pruefen) – der
+// zutaten_text steht in der Notiz, sodass man die Rezeptur schnell fertig baut. Rueckgabe: rezeptur_id.
+function fastaction_rezeptur_entwurf(string $name, string $form, string $zutaten_text): int {
+    $name = trim($name) ?: 'Neue Rezeptur';
+    $erlaubt = ['kapsel','tablette','softgel','stick','pulver','granulat','fluessig','gummi'];
+    $form = in_array($form, $erlaubt, true) ? $form : 'kapsel';
+    $notiz = 'Aus Fastaction angelegt.' . ($zutaten_text !== '' ? "\nZutaten laut Vorlage: " . $zutaten_text : '');
+    q("INSERT INTO rezeptur (nummer,name,darreichungsform,status,notiz) VALUES (?,?,?,?,?)",
+      [naechste_nummer('RZ'), mb_substr($name, 0, 190), $form, 'entwurf', $notiz]);
+    return (int) insert_id();
 }

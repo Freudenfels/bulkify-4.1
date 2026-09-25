@@ -1,16 +1,60 @@
 <?php
 // Fastaction – KI-gestuetzter Schnell-Posteingang. Kurze, wichtige Nachricht (oft Kundenanfrage) + optional
-// Datei/Bild reinwerfen. Das System (1) legt automatisch eine Aufgabe an (damit nichts verloren geht) und
-// (2) schlaegt konkrete naechste Schritte im ERP vor (mit erkanntem Kunde/Rezeptur/Produkt/Menge).
+// Datei/Bild reinwerfen. Das System (1) legt automatisch eine Aufgabe an, (2) schlaegt konkrete naechste
+// Schritte vor und (3) speichert alles als persistente Fastaction-Notiz mit abhakbaren ToDo-Items (Notepad),
+// damit nach dem Auswerten nichts verloren geht. Erkennt es eine unbekannte Rezeptur, kann man sie als
+// Entwurf anlegen.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/fastaction.php';
 
-$res = null; $aufgabeId = 0; $auf = null; $eingabe = '';
+$uid = (function_exists('current_user') && ($cu = current_user())) ? (int)$cu['id'] : null;
+
+// --- ToDo-/Notepad-Aktionen (Post-Redirect-Get) --------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'item_toggle' && ($iid = (int)($_POST['item_id'] ?? 0))) {
+    $cur = (int) scalar("SELECT erledigt FROM fastaction_item WHERE id=?", [$iid]);
+    q("UPDATE fastaction_item SET erledigt=?, erledigt_am=? WHERE id=?", [$cur ? 0 : 1, $cur ? null : gmdate('Y-m-d H:i:s'), $iid]);
+    // Notiz automatisch auf erledigt, wenn alle Items erledigt sind (und mind. eins existiert).
+    $nid = (int) scalar("SELECT notiz_id FROM fastaction_item WHERE id=?", [$iid]);
+    if ($nid) {
+        $offen = (int) scalar("SELECT COUNT(*) FROM fastaction_item WHERE notiz_id=? AND erledigt=0", [$nid]);
+        $ges   = (int) scalar("SELECT COUNT(*) FROM fastaction_item WHERE notiz_id=?", [$nid]);
+        q("UPDATE fastaction_notiz SET status=?, erledigt_am=? WHERE id=?",
+          [($ges > 0 && $offen === 0) ? 'erledigt' : 'offen', ($ges > 0 && $offen === 0) ? gmdate('Y-m-d H:i:s') : null, $nid]);
+    }
+    header('Location: ?p=fastaction#n' . (int)$nid); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'item_add' && ($nid = (int)($_POST['notiz_id'] ?? 0))) {
+    $t = trim((string)($_POST['text'] ?? ''));
+    if ($t !== '') {
+        $s = (int) scalar("SELECT COALESCE(MAX(sort),0)+1 FROM fastaction_item WHERE notiz_id=?", [$nid]);
+        q("INSERT INTO fastaction_item (notiz_id,typ,text,sort) VALUES (?,?,?,?)", [$nid, 'sonstiges', mb_substr($t, 0, 500), $s]);
+        q("UPDATE fastaction_notiz SET status='offen', erledigt_am=NULL WHERE id=?", [$nid]);
+    }
+    header('Location: ?p=fastaction#n' . (int)$nid); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'notiz_status' && ($nid = (int)($_POST['notiz_id'] ?? 0))) {
+    $neu = ((string)($_POST['status'] ?? '') === 'erledigt') ? 'erledigt' : 'offen';
+    q("UPDATE fastaction_notiz SET status=?, erledigt_am=? WHERE id=?", [$neu, $neu === 'erledigt' ? gmdate('Y-m-d H:i:s') : null, $nid]);
+    header('Location: ?p=fastaction' . ($neu === 'erledigt' ? '' : '#n' . (int)$nid)); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'notiz_del' && ($nid = (int)($_POST['notiz_id'] ?? 0))) {
+    q("DELETE FROM fastaction_item WHERE notiz_id=?", [$nid]);
+    q("DELETE FROM fastaction_notiz WHERE id=?", [$nid]);
+    header('Location: ?p=fastaction'); exit;
+}
+// Unbekannte Rezeptur als Entwurf anlegen und direkt oeffnen.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rezeptur_entwurf') {
+    $rid = fastaction_rezeptur_entwurf((string)($_POST['name'] ?? ''), (string)($_POST['form'] ?? 'kapsel'), (string)($_POST['zutaten'] ?? ''));
+    // Optional an die Notiz haengen, wenn noch keine Rezeptur verknuepft ist.
+    if (($nid = (int)($_POST['notiz_id'] ?? 0)) && $rid) q("UPDATE fastaction_notiz SET rezeptur_id=COALESCE(rezeptur_id,?) WHERE id=?", [$rid, $nid]);
+    header('Location: ?p=rezeptur_detail&id=' . $rid . '&neu=1'); exit;
+}
+
+$res = null; $auf = null; $eingabe = ''; $notizId = 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'analysieren') {
     $eingabe = trim((string)($_POST['text'] ?? ''));
-    // Optionale Datei speichern (fuer die KI und als Anhang der Aufgabe).
     $pfad = null; $origName = '';
     if (!empty($_FILES['datei']['name']) && (int)($_FILES['datei']['error'] ?? 1) === UPLOAD_ERR_OK) {
         if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
@@ -30,16 +74,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'analy
         $besch = ($eingabe !== '' ? "Eingang:\n" . $eingabe . "\n\n" : '')
                . ($res['ok'] ? ('Zusammenfassung: ' . (string)($d['zusammenfassung'] ?? '') . "\n") : ('Hinweis: KI-Auswertung nicht verfuegbar (' . (string)($res['fehler'] ?? '') . ")\n"))
                . ($origName !== '' ? "Datei: " . $origName . "\n" : '');
-        $uid = (function_exists('current_user') && ($cu = current_user())) ? (int)$cu['id'] : null;
         $aufgabeId = aufgabe_neu(mb_substr($titel, 0, 190), $besch, $prio, null, null, $uid, 'fastaction', 0);
-        // Datei an die Aufgabe haengen (nachvollziehbar).
         if ($pfad !== null && $aufgabeId) {
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig) VALUES ('aufgabe',?,?,?,?,?)",
               [$aufgabeId, 'sonstiges', 'Fastaction-Anhang', basename($pfad), $origName ?: basename($pfad)]);
         }
         $auf = one("SELECT id, titel, prio FROM aufgabe WHERE id=?", [$aufgabeId]);
+        // (3) Persistente Fastaction-Notiz + ToDo-Items (Notepad) – nur bei erfolgreicher Auswertung.
+        if ($res['ok']) {
+            $auf_e = fastaction_aufloesen((array)($d['erkannt'] ?? []));
+            $notizId = fastaction_notiz_anlegen($d, $auf_e, $eingabe, $pfad, $origName, $uid);
+        }
     }
 }
+
+// --- Notepad laden -------------------------------------------------------------------------------
+$alle = isset($_GET['alle']);
+$notizen = all("SELECT n.*, k.firma AS kunde, r.name AS rezeptur, p.name AS produkt
+                FROM fastaction_notiz n
+                LEFT JOIN kunden k ON k.id=n.kunde_id
+                LEFT JOIN rezeptur r ON r.id=n.rezeptur_id
+                LEFT JOIN produkt p ON p.id=n.produkt_id
+                " . ($alle ? '' : "WHERE n.status='offen'") . "
+                ORDER BY (n.status='offen') DESC, n.angelegt DESC LIMIT 100");
+$itemsByNotiz = [];
+if ($notizen) {
+    $ids = implode(',', array_map(fn($n) => (int)$n['id'], $notizen));
+    foreach (all("SELECT * FROM fastaction_item WHERE notiz_id IN ($ids) ORDER BY sort, id") as $it)
+        $itemsByNotiz[(int)$it['notiz_id']][] = $it;
+}
+$offenGes = (int) scalar("SELECT COUNT(*) FROM fastaction_notiz WHERE status='offen'");
 
 render_header('fastaction', 'Fastaction');
 bx_head('Fastaction', 'Kurze, wichtige Nachricht reinwerfen – die KI fasst zusammen, legt eine Aufgabe an und schlägt die nächsten Schritte vor.');
@@ -63,7 +127,7 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
   <?php if ($auf): ?>
     <div class="bx-panel badge-ok" style="padding:12px 16px">
       <strong>Aufgabe angelegt:</strong> „<?= h($auf['titel']) ?>" <?= prio_badge((int)$auf['prio']) ?>
-      &nbsp;<a href="?p=aufgaben">zu den Aufgaben</a>
+      &nbsp;<a href="?p=aufgaben">zu den Aufgaben</a><?php if ($notizId): ?> &middot; <a href="#n<?= (int)$notizId ?>">im Notepad ansehen</a><?php endif; ?>
     </div>
   <?php endif; ?>
 
@@ -89,6 +153,37 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
       <?php endif; ?>
     </div>
 
+    <?php // Unbekannte Rezeptur(en) aus der Vorlage -> als Entwurf anlegen anbieten.
+      $rezK = (array)($d['rezepturen'] ?? []);
+      $rezNeu = [];
+      foreach ($rezK as $rk) {
+        $nm = trim((string)($rk['name'] ?? '')); if ($nm === '') continue;
+        if (one("SELECT id FROM rezeptur WHERE name LIKE ? LIMIT 1", ['%' . $nm . '%'])) continue;   // schon vorhanden
+        $rezNeu[] = $rk;
+      }
+      if ($rezNeu): ?>
+    <div class="bx-panel" style="border-color:var(--gruen)">
+      <h2 style="margin-top:0;font-size:16px">Rezeptur anlegen</h2>
+      <p class="muted" style="margin-top:0">In der Vorlage erkannte Rezeptur(en), die es im System noch nicht gibt. Als Entwurf anlegen – die Zusammensetzung steht dann in der Notiz der Rezeptur zum Fertigbauen.</p>
+      <?php foreach ($rezNeu as $rk): ?>
+        <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)">
+          <div style="flex:1 1 320px">
+            <strong><?= h((string)$rk['name']) ?></strong> <span class="muted" style="font-size:12px"><?= h((string)($rk['darreichungsform'] ?? 'kapsel')) ?></span>
+            <?php if (!empty($rk['zutaten_text'])): ?><div class="muted" style="font-size:13px;margin-top:2px"><?= h((string)$rk['zutaten_text']) ?></div><?php endif; ?>
+          </div>
+          <form method="post" style="margin:0" data-busy="Lege an…">
+            <input type="hidden" name="aktion" value="rezeptur_entwurf">
+            <input type="hidden" name="name" value="<?= h((string)$rk['name']) ?>">
+            <input type="hidden" name="form" value="<?= h((string)($rk['darreichungsform'] ?? 'kapsel')) ?>">
+            <input type="hidden" name="zutaten" value="<?= h((string)($rk['zutaten_text'] ?? '')) ?>">
+            <?php if ($notizId): ?><input type="hidden" name="notiz_id" value="<?= (int)$notizId ?>"><?php endif; ?>
+            <button class="btn btn-primary btn-sm" type="submit">Als Entwurf anlegen</button>
+          </form>
+        </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+
     <?php $vs = (array)($d['vorschlaege'] ?? []); if ($vs): ?>
     <h2 style="margin:18px 0 8px;font-size:16px">Vorschläge</h2>
     <?php foreach ($vs as $v): $typ = (string)($v['typ'] ?? 'sonstiges'); ?>
@@ -96,7 +191,6 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
         <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
           <div style="flex:1 1 300px"><?= bx_badge($typ, 'info') ?> <span style="margin-left:6px"><?= h((string)($v['text'] ?? '')) ?></span></div>
           <div class="bx-row" style="gap:8px">
-            <?php // Hilfreiche Sprungziele je nach erkannter Entität – der Mensch entscheidet und legt an. ?>
             <?php if ($auf_e['kunde']): ?><a class="btn btn-ghost btn-sm" href="?p=kunde&id=<?= (int)$auf_e['kunde']['id'] ?>">Kunde öffnen</a><?php endif; ?>
             <?php if (in_array($typ, ['angebot','anfrage'], true) && $auf_e['rezeptur']): ?><a class="btn btn-ghost btn-sm" href="?p=rezeptur_detail&id=<?= (int)$auf_e['rezeptur']['id'] ?>">Rezeptur öffnen</a><?php endif; ?>
           </div>
@@ -106,4 +200,52 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
     <?php endif; ?>
   <?php endif; ?>
 <?php endif; ?>
+
+<!-- Notepad: persistente ToDo-Listen je Fastaction-Anfrage -->
+<div class="bx-row" style="justify-content:space-between;align-items:baseline;margin:22px 0 8px;flex-wrap:wrap;gap:8px">
+  <h2 style="margin:0;font-size:16px">Notepad <span class="muted" style="font-weight:normal">(<?= $offenGes ?> offen)</span></h2>
+  <a class="muted" style="font-size:13px" href="?p=fastaction<?= $alle ? '' : '&alle=1' ?>"><?= $alle ? 'nur offene zeigen' : 'auch erledigte zeigen' ?></a>
+</div>
+<?php if (!$notizen): ?>
+  <div class="bx-panel"><div class="muted">Noch keine Fastaction-Notizen. Wertest du oben eine Nachricht aus, entsteht hier eine ToDo-Liste, die erhalten bleibt.</div></div>
+<?php else: foreach ($notizen as $n): $items = $itemsByNotiz[(int)$n['id']] ?? [];
+  $offen = 0; foreach ($items as $it) if (!(int)$it['erledigt']) $offen++;
+  $erle = (string)$n['status'] === 'erledigt';
+  $dn = strtolower((string)$n['dringlichkeit']);
+  $dnB = $dn === 'hoch' ? bx_badge('dringend','err') : ($dn === 'niedrig' ? bx_badge('niedrig','') : bx_badge('mittel','warn'));
+?>
+  <div class="bx-panel" id="n<?= (int)$n['id'] ?>" style="margin-bottom:10px<?= $erle ? ';opacity:.6' : '' ?>">
+    <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div style="flex:1 1 320px">
+        <div><?= $dnB ?> <strong style="margin-left:6px"><?= h($n['zusammenfassung'] ?: ($n['aufgabe_text'] ?: 'Fastaction')) ?></strong> <?= $erle ? bx_badge('erledigt','ok') : '' ?></div>
+        <div class="muted" style="font-size:12px;margin-top:3px">
+          <?= h(fmt_zeit($n['angelegt'], 'd.m.Y H:i')) ?>
+          <?php if ($n['kunde']): ?> · Kunde: <a href="?p=kunde&id=<?= (int)$n['kunde_id'] ?>"><?= h($n['kunde']) ?></a><?php endif; ?>
+          <?php if ($n['rezeptur']): ?> · Rezeptur: <a href="?p=rezeptur_detail&id=<?= (int)$n['rezeptur_id'] ?>"><?= h($n['rezeptur']) ?></a><?php endif; ?>
+          <?php if ($n['produkt']): ?> · Produkt: <?= h($n['produkt']) ?><?php endif; ?>
+          <?php if ($n['datei']): ?> · <a href="?p=dokument&id=0" onclick="return false" title="Anhang"><?= h($n['datei_orig'] ?: 'Anhang') ?></a><?php endif; ?>
+        </div>
+      </div>
+      <div class="bx-row" style="gap:6px">
+        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="notiz_status"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><input type="hidden" name="status" value="<?= $erle ? 'offen' : 'erledigt' ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= $erle ? 'wieder offen' : 'alles erledigt' ?></button></form>
+        <form method="post" style="margin:0" onsubmit="return confirm('Diese Fastaction-Notiz löschen?');"><input type="hidden" name="aktion" value="notiz_del"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Löschen</button></form>
+      </div>
+    </div>
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+      <?php foreach ($items as $it): ?>
+        <form method="post" style="margin:0;display:flex;gap:8px;align-items:flex-start">
+          <input type="hidden" name="aktion" value="item_toggle"><input type="hidden" name="item_id" value="<?= (int)$it['id'] ?>">
+          <button type="submit" title="Abhaken" style="border:1px solid var(--line);background:<?= (int)$it['erledigt'] ? 'var(--gruen,#2f6f4f)' : 'transparent' ?>;color:#fff;width:22px;height:22px;border-radius:6px;flex:none;cursor:pointer;line-height:1"><?= (int)$it['erledigt'] ? '✓' : '&nbsp;' ?></button>
+          <span style="<?= (int)$it['erledigt'] ? 'text-decoration:line-through;color:var(--muted)' : '' ?>"><?= (int)$it['erledigt'] ? '' : bx_badge((string)$it['typ'], 'info') . ' ' ?><?= h((string)$it['text']) ?></span>
+        </form>
+      <?php endforeach; ?>
+      <?php if (!$items): ?><div class="muted" style="font-size:13px">Keine Punkte – unten einen hinzufügen.</div><?php endif; ?>
+    </div>
+    <form method="post" class="bx-row" style="gap:6px;margin-top:8px;align-items:center">
+      <input type="hidden" name="aktion" value="item_add"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>">
+      <input type="text" name="text" placeholder="ToDo hinzufügen…" style="flex:1;min-width:200px;padding:5px 8px">
+      <button class="btn btn-ghost btn-sm" type="submit">+ Punkt</button>
+    </form>
+  </div>
+<?php endforeach; endif; ?>
 <?php render_footer(); ?>

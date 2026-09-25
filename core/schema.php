@@ -540,6 +540,36 @@ function init_schema(): void {
         KEY idx_status (status), KEY idx_zuw (zugewiesen_an)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // Fastaction-Notepad: je Fastaction-Anfrage eine persistente Notiz mit einzelnen abhakbaren ToDo-Items
+    // (die Vorschlaege). So geht nach dem Auswerten nichts verloren; man arbeitet die Punkte spaeter ab.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS fastaction_notiz (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        eingabe TEXT NULL,
+        zusammenfassung VARCHAR(255) NULL,
+        aufgabe_text VARCHAR(255) NULL,
+        dringlichkeit VARCHAR(10) NULL,
+        kunde_id INT NULL,
+        rezeptur_id INT NULL,
+        produkt_id INT NULL,
+        datei VARCHAR(255) NULL,
+        datei_orig VARCHAR(255) NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'offen',       -- offen|erledigt
+        erstellt_von INT NULL,
+        erledigt_am DATETIME NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS fastaction_item (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        notiz_id INT NOT NULL,
+        typ VARCHAR(20) NULL,                              -- angebot|anfrage|nachricht|bestellung|produktion|rezeptur|sonstiges
+        text VARCHAR(500) NOT NULL,
+        erledigt TINYINT(1) NOT NULL DEFAULT 0,
+        erledigt_am DATETIME NULL,
+        sort INT NOT NULL DEFAULT 0,
+        KEY idx_notiz (notiz_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // beleg_status_log: Statusverlauf je Beleg (wer/wann/welcher Status) – wichtig für Zahlungsnachweis.
     $pdo->exec("CREATE TABLE IF NOT EXISTS beleg_status_log (
         id INT AUTO_INCREMENT PRIMARY KEY,

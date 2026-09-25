@@ -9,3 +9,14 @@
 4. Anzeige: Auswertung (Worum es geht / Zu tun + Dringlichkeit-Badge), **erkannte Entitäten** als Links (`fastaction_aufloesen` matcht Namen → Kunde/Rezeptur/Produkt) und die **Vorschläge** mit Sprungzielen (Kunde/Rezeptur öffnen). Der Mensch entscheidet und legt an – es wird nichts automatisch verschickt.
 
 **KI nur auf beta** (Anthropic-Schlüssel serverseitig): lokal erscheint ein Hinweis; die Aufgabe wird trotzdem erfasst. Kernlogik + Prompt in `core/fastaction.php`.
+
+## Notepad (persistente ToDo-Listen) + Rezeptur-Entwurf
+Jede ausgewertete Fastaction-Anfrage legt zusätzlich eine **Fastaction-Notiz** (`fastaction_notiz`) mit
+abhakbaren **ToDo-Items** (`fastaction_item`, je Vorschlag eins) an – so geht nach dem Auswerten nichts
+verloren. Der Bereich „Notepad" listet offene Notizen (mit `&alle=1` auch erledigte); Items einzeln abhaken
+(`item_toggle`, Notiz wird automatisch „erledigt", wenn alle Punkte erledigt sind), eigene Punkte hinzufügen
+(`item_add`), Notiz erledigen/wieder öffnen (`notiz_status`) oder löschen (`notiz_del`).
+
+Erkennt die KI eine **Rezeptur**, die es noch nicht gibt (`rezepturen[]` aus dem Prompt), bietet die Seite
+„Rezeptur anlegen" an: `rezeptur_entwurf` legt eine Rezeptur als **Entwurf** an (Name + Darreichungsform, die
+Zutaten stehen als Text in der Notiz) und öffnet sie – die Zutaten-Zeilen baut ein Mensch fertig.
