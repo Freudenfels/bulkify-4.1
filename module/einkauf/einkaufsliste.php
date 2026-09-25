@@ -128,6 +128,7 @@ bx_head('Einkaufsliste', 'Auswählen, Lieferant je Zeile prüfen, Datum wählen,
         bx_btn('Zu den Bestellungen', '?p=einkauf', 'ghost'));
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . ' Bestellung(en) angelegt (je Lieferant eine) – unter „Bestellungen" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . '</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
+if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Die fehlenden Rohstoffe des Produktionsauftrags stehen jetzt hier – Bestand und bereits Bestelltes wurden übersprungen.</div>';
 ?>
 <form method="post" class="bx-form">
 <div class="bx-panel">

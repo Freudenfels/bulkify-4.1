@@ -53,6 +53,15 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     $neu = bestellung_aus_bedarf($id);
     header('Location: ?p=produktionsauftrag&id=' . $id . '&bestellt=' . count($neu)); exit;
 }
+// Fehlende Rohstoffe direkt auf die Einkaufsliste setzen (Bedarf melden, ohne den Umweg über die Bedarf-Seite).
+// Nur was WIRKLICH fehlt landet dort – Bestand und bereits Bestelltes rechnet die Einkaufsliste automatisch raus.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'auf_einkaufsliste') {
+    if (auftrag_offener_bedarf($id)) {
+        q("UPDATE produktionsauftrag SET bedarf_gemeldet=COALESCE(bedarf_gemeldet, ?) WHERE id=?", [gmdate('Y-m-d H:i:s'), $id]);
+        header('Location: ?p=einkaufsliste&aufgesetzt=1'); exit;
+    }
+    header('Location: ?p=produktionsauftrag&id=' . $id . '&nichts_offen=1'); exit;
+}
 // Geplantes Produktionsdatum setzen
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'geplant') {
     q("UPDATE produktionsauftrag SET geplant_am=? WHERE id=?", [trim($_POST['geplant_am'] ?? '') ?: null, $id]);
@@ -127,10 +136,22 @@ $statusBadge = match ($pa['status']) {
 };
 
 render_header('produktion', $pa['nummer']);
+// Fehlen wirklich Rohstoffe (nach Bestand + bereits Bestelltem)? Dann Knopf: direkt auf die Einkaufsliste.
+$offenerBedarf  = ($pa['status'] !== 'erledigt') && auftrag_offener_bedarf($id);
+$bedarfGemeldet = !empty($pa['bedarf_gemeldet']);
+$btnEinkauf = $offenerBedarf
+    ? ($bedarfGemeldet
+        ? bx_btn('Auf der Einkaufsliste', '?p=einkaufsliste', 'ghost') . ' '
+        : '<form method="post" style="display:inline;margin:0" onsubmit="return confirm(\'Die noch fehlenden Rohstoffe direkt auf die Einkaufsliste setzen? Bestand und bereits Bestelltes bleiben außen vor.\');">'
+          . '<input type="hidden" name="aktion" value="auf_einkaufsliste">'
+          . '<button class="btn btn-accent btn-sm" type="submit">Fehlende Rohstoffe → Einkaufsliste</button></form> ')
+    : '';
 bx_head($pa['nummer'], 'Produktionsauftrag',
         ($pa['status'] !== 'erledigt' ? bx_btn('Geführt produzieren', '?p=produktion_run&id=' . $id, 'primary') . ' ' : '')
+        . $btnEinkauf
         . bx_btn('Produktionsbericht', '?p=produktion_bericht&id=' . $id, $pa['status'] === 'erledigt' ? 'primary' : 'ghost') . ' '
         . bx_btn('Zurück zur Liste', '?p=produktion', 'ghost'));
+if (isset($_GET['nichts_offen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Nichts zu bestellen – alle Rohstoffe sind auf Lager oder bereits bestellt.</div>';
 if (isset($_GET['angelegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produktionsauftrag angelegt – der Materialbedarf ist jetzt berechenbar (Rohstoffe bestellbar).</div>';
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Station abgeschlossen.</div>';
 if (isset($_GET['mangel'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht genug Bestand für die Produktion – siehe Materialbedarf unten. Bitte erst Wareneingang buchen.</div>';
