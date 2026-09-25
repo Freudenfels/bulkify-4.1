@@ -886,10 +886,8 @@ $hatKontingente = (int) scalar("SELECT COUNT(*) FROM kontingent WHERE kunde_id=?
     + (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND jahresvertrag=1 AND status<>'offen' AND kunde_ausgeblendet=0", [(int)$k['id']]);
 if ($hatKontingente > 0) $L['kontingente'] = 'Jahresverträge';
 $L += ['angebote' => 'Angebote', 'bestellungen' => 'Bestellungen', 'rechnungen' => 'Rechnungen'];
-// Etiketten-Datenbank: nur zeigen, wenn der Kunde schon mindestens ein Etikett-Design hochgeladen hat.
-$hatEtiketten = (int) scalar("SELECT COUNT(*) FROM dokument d JOIN auftrag a ON a.id=d.objekt_id
-                              WHERE d.objekt_typ='auftrag' AND d.typ='etikett' AND a.kunde_id=?", [(int)$k['id']]);
-if ($hatEtiketten > 0) $L['etiketten'] = 'Etiketten';
+// Etiketten-Datenbank: dauerhafter Menüpunkt (auch ohne Etiketten – dann mit leerem Zustand + Erklärung).
+$L['etiketten'] = 'Etiketten';
 $NAVGROUPS = [
     ''          => ['start'],
     'Katalog'   => ['rezepturen', 'produkte', 'rohstoffe'],
