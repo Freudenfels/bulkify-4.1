@@ -2881,6 +2881,13 @@ portal_head('Kundenportal · ' . $k['firma']);
         $gruppen[$key]['orders'][] = $ed;
     }
     $stLbl = ['offen'=>['offen · neu','info'], 'in_produktion'=>['in Produktion','warn'], 'erledigt'=>['versandbereit','info'], 'versendet'=>['versendet','ok'], 'storniert'=>['storniert','']];
+    // Wo FEHLT noch ein Etikett? Aktive Bestellungen (nicht versendet/storniert), deren Produkt ein Etikett
+    // braucht (produkt.etikett_id gesetzt), zu denen aber noch kein Etikett-Design hochgeladen wurde.
+    $etFehlt = all("SELECT a.id, a.nummer, a.status, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
+                    FROM auftrag a JOIN produkt p ON p.id=a.produkt_id
+                    WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert') AND COALESCE(p.etikett_id,0) > 0
+                      AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='auftrag' AND d.objekt_id=a.id AND d.typ='etikett')
+                    ORDER BY (a.status='offen') DESC, a.angelegt DESC", [(int)$k['id']]);
 ?>
   <style>
     .et-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px }
@@ -2894,6 +2901,24 @@ portal_head('Kundenportal · ' . $k['firma']);
   </style>
   <h1 style="margin-bottom:4px">Ihre Etiketten</h1>
   <p class="bx-sub" style="margin:0 0 16px">Alle Ihre Etikett-Designs an einem Ort. <span class="muted">Mit der Maus über „Vorschau" fahren, um das Etikett live zu sehen.</span></p>
+
+  <?php if ($etFehlt): ?>
+  <div class="bx-panel" style="border-color:#e6c4c0;background:rgba(230,196,192,.12)">
+    <h2 style="margin:0 0 6px;font-size:16px;color:#8f231b">Etikett fehlt noch (<?= count($etFehlt) ?>)</h2>
+    <p class="muted" style="margin:0 0 10px;font-size:13px">Für diese Bestellungen brauchen wir noch Ihr Etikett-Design – erst dann können wir die Etiketten bestellen und in Produktion gehen. Klicken Sie auf die Bestellung, um es hochzuladen.</p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <?php foreach ($etFehlt as $f): $sb = $stLbl[$f['status']] ?? [$f['status'], '']; ?>
+        <a href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$f['id'] ?>" style="text-decoration:none;color:inherit">
+          <strong><?= h($f['nummer']) ?></strong> · <?= h($f['produkt'] ?: '–') ?> <?= bx_badge($sb[0], $sb[1]) ?>
+          <span class="muted" style="font-size:12px"> · Etikett hochladen →</span>
+        </a>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php elseif ($gruppen): ?>
+    <div class="bx-panel badge-ok" style="padding:10px 14px">Für alle laufenden Bestellungen liegt ein Etikett-Design vor.</div>
+  <?php endif; ?>
+
   <?php if (!$gruppen): ?>
     <div class="bx-panel"><div class="muted">Noch keine Etiketten. Sie laden Ihr Etikett-Design bei einer Bestellung hoch – danach erscheint es hier.</div></div>
   <?php else: ?>
