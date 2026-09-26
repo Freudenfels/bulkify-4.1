@@ -18,7 +18,9 @@ Gib AUSSCHLIESSLICH dieses JSON zurueck:
   "dringlichkeit": "hoch|mittel|niedrig",
   "erkannt": { "kunde": null, "rezeptur": null, "produkt": null, "menge": null, "einheit": null },
   "rezepturen": [
-    { "name": "Kurzname/Bezeichnung der Rezeptur", "darreichungsform": "kapsel|tablette|softgel|stick|pulver|granulat|fluessig", "zutaten_text": "Wirkstoffe mit Mengen, z. B. 'Bacopa Monnieri Extrakt 10:1 150mg, MCC 50mg'" }
+    { "name": "Kurzname/Bezeichnung der Rezeptur", "darreichungsform": "kapsel|tablette|softgel|stick|pulver|granulat|fluessig",
+      "zutaten": [ { "bezeichnung": "Rohstoffname wie auf der Vorlage, z. B. 'Bacopa Monnieri Extrakt 10:1'", "menge_mg": 150 } ],
+      "zutaten_text": "dieselben Wirkstoffe als Fliesstext, z. B. 'Bacopa Monnieri Extrakt 10:1 150mg, MCC 50mg'" }
   ],
   "vorschlaege": [
     { "text": "konkreter Handlungsvorschlag als Frage, z. B. 'Fuer Kunde X und Rezeptur Y ein Angebot ueber 1.000 Dosen anlegen und an den Kunden senden?'", "typ": "angebot|anfrage|nachricht|bestellung|produktion|sonstiges" }
@@ -29,7 +31,8 @@ Regeln:
 - Nichts erfinden. Erkannte Namen/Mengen NUR uebernehmen, wenn sie in der Nachricht/Datei stehen; sonst null.
 - "menge" als Zahl (ohne Tausenderpunkt), "einheit" z. B. "Dosen", "Stueck", "kg".
 - "rezepturen": NUR wenn in der Nachricht/Datei eine konkrete Rezeptur/Zusammensetzung steht (z. B. auf einer alten
-  Rechnung/Spezifikation). Je Rezeptur ein Eintrag mit Name + Darreichungsform + zutaten_text. Sonst leere Liste [].
+  Rechnung/Spezifikation). Je Rezeptur: Name + Darreichungsform + die einzelnen Zutaten (bezeichnung + menge_mg als
+  Zahl in Milligramm) + zutaten_text. "menge_mg" nur wenn die Menge dasteht, sonst 0. Sonst leere Liste [].
 - 1 bis 3 Vorschlaege, der wichtigste zuerst. Alles auf Deutsch.
 - Wenn unklar, "dringlichkeit" auf "mittel" und einen Vorschlag "beim Kunden nachfragen".
 TXT;
@@ -89,15 +92,28 @@ function fastaction_notiz_anlegen(array $d, array $auf_e, string $eingabe, ?stri
     return $nid;
 }
 
-// Rezeptur als ENTWURF anlegen (Name + Darreichungsform + Zutaten als Notiz-Text). Die Zutaten werden bewusst
-// NICHT automatisch als Zeilen gesetzt (Rohstoff-Zuordnung/Kapselgroesse muss ein Mensch pruefen) – der
-// zutaten_text steht in der Notiz, sodass man die Rezeptur schnell fertig baut. Rueckgabe: rezeptur_id.
-function fastaction_rezeptur_entwurf(string $name, string $form, string $zutaten_text): int {
+// Rezeptur als ENTWURF anlegen – mit VORAUSGEFUELLTEN Zutaten-Zeilen. Je Zutat wird per Best-Match ein
+// Rohstoff vorgeschlagen (rezeptur_ki_item_finden); wo keiner passt, bleibt die Zeile mit Bezeichnung + Menge
+// stehen (item_id leer -> der Mensch waehlt den Rohstoff). Der zutaten_text bleibt zusaetzlich in der Notiz.
+// $zutaten: Liste [ ['bezeichnung'=>..., 'menge_mg'=>...], ... ]. Rueckgabe: [rezeptur_id, gematcht, gesamt].
+function fastaction_rezeptur_entwurf(string $name, string $form, array $zutaten, string $zutaten_text = ''): array {
+    require_once __DIR__ . '/rezeptur_ki.php';
     $name = trim($name) ?: 'Neue Rezeptur';
     $erlaubt = ['kapsel','tablette','softgel','stick','pulver','granulat','fluessig','gummi'];
     $form = in_array($form, $erlaubt, true) ? $form : 'kapsel';
     $notiz = 'Aus Fastaction angelegt.' . ($zutaten_text !== '' ? "\nZutaten laut Vorlage: " . $zutaten_text : '');
     q("INSERT INTO rezeptur (nummer,name,darreichungsform,status,notiz) VALUES (?,?,?,?,?)",
       [naechste_nummer('RZ'), mb_substr($name, 0, 190), $form, 'entwurf', $notiz]);
-    return (int) insert_id();
+    $rid = (int) insert_id();
+    $sort = 0; $match = 0; $ges = 0;
+    foreach ($zutaten as $z) {
+        $bez = trim((string)($z['bezeichnung'] ?? '')); if ($bez === '') continue;
+        $mg  = (float) str_replace(',', '.', (string)($z['menge_mg'] ?? 0));
+        $iid = rezeptur_ki_item_finden($bez);   // Best-Match Rohstoff (oder null)
+        if ($iid) $match++;
+        $ges++;
+        q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
+          [$rid, $iid, mb_substr($bez, 0, 190), $mg > 0 ? $mg : null, $sort++]);
+    }
+    return ['rezeptur_id' => $rid, 'gematcht' => $match, 'gesamt' => $ges];
 }

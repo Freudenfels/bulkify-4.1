@@ -132,6 +132,8 @@ if (!$neu && !empty($r['basis_rezeptur_id'])) {
     if ($bn) echo '<div class="bx-panel" style="padding:10px 14px;background:var(--panel-2);border-color:var(--gruen)"><strong>Vom Kunden weiterentwickelt</strong> aus Basis <a href="?p=rezeptur&id=' . (int)$bn['id'] . '">' . h($bn['nummer'] . ' ' . $bn['name']) . '</a>.</div>';
 }
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['fa_ges'])) { $fm = (int)($_GET['fa_match'] ?? 0); $fg = (int)$_GET['fa_ges'];
+  echo '<div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen)">Aus Fastaction angelegt: <strong>' . $fm . ' von ' . $fg . '</strong> Zutaten automatisch einem Rohstoff zugeordnet. <strong>Bitte jede Zeile prüfen</strong> (Rohstoff, Menge, Kapselgröße), dann speichern. Nicht zugeordnete Zeilen brauchen noch die Rohstoff-Auswahl.</div>'; }
 if (isset($_GET['gesendet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Vorschlag an den Kunden gesendet – er sieht ihn jetzt in seinem Portal. Änderungen hier speichern und ggf. „Erneut als Vorschlag senden".</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 ?>

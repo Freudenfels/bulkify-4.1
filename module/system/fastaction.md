@@ -20,3 +20,9 @@ verloren. Der Bereich „Notepad" listet offene Notizen (mit `&alle=1` auch erle
 Erkennt die KI eine **Rezeptur**, die es noch nicht gibt (`rezepturen[]` aus dem Prompt), bietet die Seite
 „Rezeptur anlegen" an: `rezeptur_entwurf` legt eine Rezeptur als **Entwurf** an (Name + Darreichungsform, die
 Zutaten stehen als Text in der Notiz) und öffnet sie – die Zutaten-Zeilen baut ein Mensch fertig.
+
+## Rezeptur-Entwurf: vorausgefüllte Zutaten-Zeilen (Update)
+`rezeptur_entwurf` legt die Rezeptur jetzt mit **echten Zutaten-Zeilen** an (nicht mehr nur Text): Die KI liefert
+je Rezeptur `zutaten[]` (bezeichnung + menge_mg); je Zeile wird per `rezeptur_ki_item_finden()` ein **Rohstoff
+vorgeschlagen** (item_id), sonst bleibt die Zeile mit Bezeichnung/Menge zum manuellen Zuordnen. Der Editor öffnet
+mit Banner „X von Y Zutaten automatisch zugeordnet – bitte prüfen". Zutaten-Fliesstext bleibt zusätzlich in der Notiz.

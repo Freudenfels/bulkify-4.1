@@ -43,12 +43,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'notiz
     q("DELETE FROM fastaction_notiz WHERE id=?", [$nid]);
     header('Location: ?p=fastaction'); exit;
 }
-// Unbekannte Rezeptur als Entwurf anlegen und direkt oeffnen.
+// Unbekannte Rezeptur als Entwurf anlegen (mit vorausgefuellten Zutaten-Zeilen) und direkt oeffnen.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rezeptur_entwurf') {
-    $rid = fastaction_rezeptur_entwurf((string)($_POST['name'] ?? ''), (string)($_POST['form'] ?? 'kapsel'), (string)($_POST['zutaten'] ?? ''));
+    $zut = json_decode((string)($_POST['zutaten_json'] ?? '[]'), true);
+    if (!is_array($zut)) $zut = [];
+    $r = fastaction_rezeptur_entwurf((string)($_POST['name'] ?? ''), (string)($_POST['form'] ?? 'kapsel'), $zut, (string)($_POST['zutaten_text'] ?? ''));
+    $rid = (int)$r['rezeptur_id'];
     // Optional an die Notiz haengen, wenn noch keine Rezeptur verknuepft ist.
     if (($nid = (int)($_POST['notiz_id'] ?? 0)) && $rid) q("UPDATE fastaction_notiz SET rezeptur_id=COALESCE(rezeptur_id,?) WHERE id=?", [$rid, $nid]);
-    header('Location: ?p=rezeptur_detail&id=' . $rid . '&neu=1'); exit;
+    header('Location: ?p=rezeptur_detail&id=' . $rid . '&neu=1&fa_match=' . (int)$r['gematcht'] . '&fa_ges=' . (int)$r['gesamt']); exit;
 }
 
 $res = null; $auf = null; $eingabe = ''; $notizId = 0;
@@ -167,15 +170,17 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
       <p class="muted" style="margin-top:0">In der Vorlage erkannte Rezeptur(en), die es im System noch nicht gibt. Als Entwurf anlegen – die Zusammensetzung steht dann in der Notiz der Rezeptur zum Fertigbauen.</p>
       <?php foreach ($rezNeu as $rk): ?>
         <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)">
+          <?php $zut = (array)($rk['zutaten'] ?? []); ?>
           <div style="flex:1 1 320px">
-            <strong><?= h((string)$rk['name']) ?></strong> <span class="muted" style="font-size:12px"><?= h((string)($rk['darreichungsform'] ?? 'kapsel')) ?></span>
+            <strong><?= h((string)$rk['name']) ?></strong> <span class="muted" style="font-size:12px"><?= h((string)($rk['darreichungsform'] ?? 'kapsel')) ?><?= $zut ? ' · ' . count($zut) . ' Zutat(en)' : '' ?></span>
             <?php if (!empty($rk['zutaten_text'])): ?><div class="muted" style="font-size:13px;margin-top:2px"><?= h((string)$rk['zutaten_text']) ?></div><?php endif; ?>
           </div>
           <form method="post" style="margin:0" data-busy="Lege an…">
             <input type="hidden" name="aktion" value="rezeptur_entwurf">
             <input type="hidden" name="name" value="<?= h((string)$rk['name']) ?>">
             <input type="hidden" name="form" value="<?= h((string)($rk['darreichungsform'] ?? 'kapsel')) ?>">
-            <input type="hidden" name="zutaten" value="<?= h((string)($rk['zutaten_text'] ?? '')) ?>">
+            <input type="hidden" name="zutaten_json" value="<?= h(json_encode($zut, JSON_UNESCAPED_UNICODE)) ?>">
+            <input type="hidden" name="zutaten_text" value="<?= h((string)($rk['zutaten_text'] ?? '')) ?>">
             <?php if ($notizId): ?><input type="hidden" name="notiz_id" value="<?= (int)$notizId ?>"><?php endif; ?>
             <button class="btn btn-primary btn-sm" type="submit">Als Entwurf anlegen</button>
           </form>
