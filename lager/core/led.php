@@ -189,6 +189,14 @@ function led_http(string $methode, string $url, array $kopf, ?string $body, int 
         CURLOPT_CUSTOMREQUEST => $methode, CURLOPT_HTTPHEADER => $kopf,
     ]);
     if ($body !== null) curl_setopt($c, CURLOPT_POSTFIELDS, $body);
+    // Geraete im eigenen Netz nie ueber einen Proxy ansprechen. Auf Entwickler-Rechnern ist oft
+    // ein Proxy gesetzt (VPN, Clash), der eine LAN-IP mit 502 quittiert. curl erbt den sonst aus
+    // http_proxy/HTTP_PROXY. Fuer private IPv4-Adressen also den Proxy hart abschalten.
+    $host = (string)parse_url($url, PHP_URL_HOST);
+    if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+        && !filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE)) {
+        curl_setopt($c, CURLOPT_PROXY, '');
+    }
     $antwort = curl_exec($c);
     $fehler = $antwort === false ? curl_error($c) : '';
     $status = (int)curl_getinfo($c, CURLINFO_HTTP_CODE);
