@@ -8,16 +8,23 @@ require_once __DIR__ . '/../../lager/core/auth.php';
 require_once __DIR__ . '/../../lager/core/layout.php';
 require_once __DIR__ . '/../../lager/core/led.php';
 require_once __DIR__ . '/../../lager/core/platz.php';
+require_once __DIR__ . '/../../lager/core/leiste.php';
 
 lg_session_start();
 lg_schema();
 
 $routen = [
     'login'          => 'auth/login.php',
+    // Grosses Lager (Chaos-Modell): Leiste an der Charge
+    'finden'         => 'leiste/finden.php',
+    'leisten'        => 'leiste/liste.php',
+    'klingeln'       => 'led/klingeln.php',
+    // Fulfillment (feste Plaetze)
     'plaetze'        => 'platz/liste.php',
     'platz'          => 'platz/detail.php',
     'zuordnen'       => 'platz/zuordnen.php',
     'leuchten'       => 'led/leuchten.php',
+    // System
     'sender'         => 'system/sender.php',
     'bruecke_skript' => 'system/bruecke_skript.php',
 ];
@@ -32,18 +39,18 @@ if ($p === 'logout') { lg_logout(); weiter('?p=login'); }
 if ($p === 'autologin') {
     if (ist_lokal()) {
         $u = erp_benutzer_per_token((string)($_GET['token'] ?? ''));
-        if ($u && lg_darf_rein($u)) { $_SESSION['uid'] = (int)$u['id']; weiter('?p=plaetze'); }
+        if ($u && lg_darf_rein($u)) { $_SESSION['uid'] = (int)$u['id']; weiter('?p=finden'); }
     }
     weiter('?p=login');
 }
 
 if ($p !== 'login' && !lg_angemeldet()) {
-    if ($p === 'leuchten') json_antwort(['ok' => false, 'meldung' => 'Bitte neu anmelden.'], 401);
+    if ($p === 'leuchten' || $p === 'klingeln') json_antwort(['ok' => false, 'meldung' => 'Bitte neu anmelden.'], 401);
     weiter('?p=login');
 }
-if ($p === 'login' && lg_angemeldet()) weiter('?p=plaetze');
+if ($p === 'login' && lg_angemeldet()) weiter('?p=finden');
 
-if (!isset($routen[$p])) $p = lg_angemeldet() ? 'plaetze' : 'login';
+if (!isset($routen[$p])) $p = lg_angemeldet() ? 'finden' : 'login';
 if (in_array($p, $nur_admin, true) && !lg_ist_admin()) weiter('?p=plaetze');
 
 require __DIR__ . '/../../lager/module/' . $routen[$p];

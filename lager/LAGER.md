@@ -33,10 +33,22 @@ Der Server kommt nicht an eine IP im Lager, deshalb gibt es die Brücke: ein Pow
 
 Die Leisten melden **nichts zurück**. Auch der Knopf an der Leiste beendet nur den Piepton. Eine Bestätigung wie „entnommen“ muss deshalb in bulkify passieren, per Scan oder Klick.
 
+## Zwei Modelle, ein Programm
+Die zwei Räume arbeiten unterschiedlich, deshalb gibt es zwei Modelle:
+- **Großes Lager (Chaos):** Leiste hängt an einer **Charge** (`lg_leiste.charge_id`), nicht am Platz. Finden per Klingeln. Kein festes Raster. Leisten sind im Umlauf: leer -> lösen -> neu binden.
+- **Fulfillment (feste Plätze):** Leiste am festen **Platz** (`lg_platz`), Pick-and-Pack. (Im Aufbau.)
+
 ## Was drin ist
-- **Lagerplätze** (`?p=plaetze`): Liste mit Leuchten-Knopf und Raster-Anlage für ganze Regale.
+**Großes Lager**
+- **Finden** (`?p=finden`): Rohstoff/Charge suchen, Leiste binden (Scan), Finden (klingeln), Aus, Lösen.
+- **Leisten** (`?p=leisten`): alle Leisten im Umlauf, frei oder belegt.
+
+**Fulfillment (feste Plätze)**
+- **Feste Plätze** (`?p=plaetze`): Liste mit Leuchten-Knopf und Raster-Anlage für ganze Regale.
 - **Platz** (`?p=platz&id=`): Angaben, Leiste, Sender, Leucht-Test mit Farbe und Dauer.
 - **Leisten zuordnen** (`?p=zuordnen`): Erstmontage per Scan, die Leiste leuchtet zur Bestätigung grün.
+
+**System**
 - **Sender und Brücke** (`?p=sender`, Admin): Sender, Status der Brücke, Download des Brückenprogramms, Protokoll.
 
 ## Nächste Schritte

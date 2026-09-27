@@ -73,6 +73,22 @@ function lg_schema(): void {
         KEY (platz_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    // --- Leiste (Chaos-Modell grosses Lager): die physische Lichtleiste, an eine CHARGE gebunden.
+    // Kein fester Platz: die Leiste haengt an der Palette und wandert mit. charge_id NULL = frei,
+    // liegt vorn und wartet auf die naechste Palette. code = 6-stellig vom Barcode der Leiste.
+    q("CREATE TABLE IF NOT EXISTS lg_leiste (
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        code         CHAR(6)      NOT NULL,
+        sender_id    INT          NULL,        -- welcher Raum/Sender; NULL = Standard
+        charge_id    INT          NULL,        -- gebundene Dashboard-Charge; NULL = frei
+        gebunden_am  DATETIME     NULL,
+        notiz        VARCHAR(190) NULL,
+        angelegt     DATETIME     NOT NULL,
+        aktualisiert DATETIME     NULL,
+        UNIQUE KEY code (code),
+        KEY charge (charge_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     // --- Einstellungen (Schluessel/Wert), damit nichts im Dashboard gespeichert wird. ---------
     q("CREATE TABLE IF NOT EXISTS lg_meta (
         schluessel VARCHAR(60) PRIMARY KEY,

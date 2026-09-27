@@ -25,3 +25,28 @@ function erp_benutzer(int $id): ?array {
 
 // Das Dashboard liegt auf derselben Domain unter "/".
 function erp_dashboard_url(): string { return '/'; }
+
+// --- Chargen des grossen Lagers (fuer das Chaos-Finden) ---------------------------------------
+// Nur EIGENER Bestand: Fremdlager-Chargen (charge.fremd_kunde_id gesetzt = Kundenware) bleiben aussen
+// vor, die gehoeren ins Fulfillment. Leere Chargen (status='leer' oder menge_verfuegbar<=0) auch nicht.
+function erp_charge_select(): string {
+    return "SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.einheit, c.mhd, c.status,
+                   i.name AS item_name, i.artikelnummer, i.kategorie
+            FROM charge c JOIN item i ON i.id = c.item_id";
+}
+function erp_charge(int $id): ?array {
+    if (!tabelle_da('charge')) return null;
+    return one(erp_charge_select() . " WHERE c.id=?", [$id]);
+}
+// Suche ueber Rohstoffname, Artikelnummer und Chargennummer. Leere/Fremdlager-Chargen raus.
+function erp_chargen_suche(string $q, int $limit = 30): array {
+    if (!tabelle_da('charge') || !tabelle_da('item')) return [];
+    $q = trim($q);
+    $like = '%' . $q . '%';
+    $sql = erp_charge_select() . "
+            WHERE c.fremd_kunde_id IS NULL
+              AND (c.status IS NULL OR c.status <> 'leer') AND c.menge_verfuegbar > 0 "
+        . ($q !== '' ? "AND (i.name LIKE ? OR i.artikelnummer LIKE ? OR c.charge_nr LIKE ?) " : "")
+        . "ORDER BY i.name, c.mhd LIMIT " . (int)$limit;
+    return all($sql, $q !== '' ? [$like, $like, $like] : []);
+}
