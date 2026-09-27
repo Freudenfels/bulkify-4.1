@@ -4,7 +4,9 @@
 $q = trim((string)($_GET['q'] ?? $_POST['q'] ?? ''));
 $out = [];
 foreach (erp_chargen_suche($q, 12) as $c) {
-    $l = leiste_fuer_charge((int)$c['id']);
+    // Aufloesen: eigener Blinker an der Charge ODER Blinker der Kiste, in der sie liegt.
+    $b = blinker_fuer_charge((int)$c['id']);
+    $l = $b['leiste'];
     $out[] = [
         'charge_id'    => (int)$c['id'],
         'name'         => (string)$c['item_name'],
@@ -14,6 +16,7 @@ foreach (erp_chargen_suche($q, 12) as $c) {
         'einheit'      => (string)($c['einheit'] ?? ''),
         'leiste_id'    => $l ? (int)$l['id'] : null,
         'leiste'       => $l ? (string)$l['code'] : null,
+        'ort'          => (string)$b['ort'],   // "" oder "Kiste X, Fach Y"
     ];
 }
 json_antwort(['q' => $q, 'treffer' => $out]);

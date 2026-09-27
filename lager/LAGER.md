@@ -40,8 +40,10 @@ Die zwei Räume arbeiten unterschiedlich, deshalb gibt es zwei Modelle:
 
 ## Was drin ist
 **Großes Lager**
-- **Finden** (`?p=finden`): Rohstoff/Charge suchen, Blinker binden (Scan), Finden (klingeln), Aus, Lösen.
-- **Blinker** (`?p=leisten`): alle Blinker im Umlauf, frei oder belegt.
+- **Bestand** (`?p=bestand`): alle eigenen Chargen nach Kategorie, MHD-Ampel, anklickbar → Charge-Detail (`?p=charge`, Produkt/Lieferung/Dokumente/weitere Chargen).
+- **Finden** (`?p=finden`): Such-Popup (Tippen oder Sprache), Treffer antippen lässt den Blinker blinken. Liegt die Charge in einer Kiste, blinkt die Kiste (Ort-Hinweis „Kiste X, Fach Y“).
+- **Kisten** (`?p=kisten`): ein Behälter mit einem Blinker fasst viele Chargen – nicht jedes Kleinteil braucht einen Blinker. Siehe `core/kiste.php`.
+- **Blinker** (`?p=leisten`): alle Blinker mit Nutzung und Akku-Ampel; Warnbalken → **Batterie prüfen** (`?p=batterie`).
 
 **Fulfillment (feste Plätze)**
 - **Feste Plätze** (`?p=plaetze`): Liste mit Leuchten-Knopf und Raster-Anlage für ganze Regale.

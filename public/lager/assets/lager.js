@@ -49,6 +49,49 @@
       .finally(function () { btn.disabled = false; btn.innerHTML = vorher; });
   });
 
+  // Charge-Combobox: Feld mit data-ziel="<hidden-id>" sucht Chargen live und setzt die charge_id.
+  document.querySelectorAll('[data-ziel]').forEach(function (inp) {
+    var ziel = document.getElementById(inp.getAttribute('data-ziel'));
+    var anz = document.getElementById(inp.getAttribute('data-anzeige'));
+    var box = document.createElement('div');
+    box.className = 'lg-combo';
+    inp.parentNode.insertBefore(box, inp.nextSibling);
+    var t;
+    function schliessen() { box.innerHTML = ''; box.style.display = 'none'; }
+    inp.addEventListener('input', function () {
+      if (ziel) ziel.value = '';
+      if (anz) anz.textContent = '';
+      clearTimeout(t);
+      var q = inp.value.trim();
+      if (!q) { schliessen(); return; }
+      t = setTimeout(function () {
+        fetch('?p=suche&q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            var tr = j.treffer || [];
+            if (!tr.length) { schliessen(); return; }
+            box.innerHTML = tr.map(function (x) {
+              return '<div class="lg-combo-z" data-id="' + x.charge_id + '" data-txt="' +
+                (x.name + (x.charge_nr ? ' · ' + x.charge_nr : '')).replace(/"/g, '&quot;') + '">' +
+                '<strong>' + escHtml(x.name) + '</strong>' + (x.charge_nr ? ' <span class="muted">Ch. ' + escHtml(x.charge_nr) + '</span>' : '') +
+                ' <span class="muted">' + escHtml(x.menge) + ' ' + escHtml(x.einheit) + '</span></div>';
+            }).join('');
+            box.style.display = 'block';
+            box.querySelectorAll('.lg-combo-z').forEach(function (z) {
+              z.addEventListener('click', function () {
+                if (ziel) ziel.value = z.getAttribute('data-id');
+                inp.value = z.getAttribute('data-txt');
+                if (anz) anz.textContent = 'Ausgewählt: ' + z.getAttribute('data-txt');
+                schliessen();
+              });
+            });
+          }).catch(schliessen);
+      }, 250);
+    });
+    document.addEventListener('click', function (e) { if (!box.contains(e.target) && e.target !== inp) schliessen(); });
+  });
+  function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
   // Live-Suche: Feld mit data-filter="<tabellen-id>" blendet Zeilen aus, die nicht passen.
   document.querySelectorAll('[data-filter]').forEach(function (inp) {
     var t = document.getElementById(inp.getAttribute('data-filter'));

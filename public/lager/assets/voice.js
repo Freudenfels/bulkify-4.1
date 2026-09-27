@@ -87,12 +87,13 @@
     statusZeile.innerHTML = 'Gesucht: <strong>' + esc(q) + '</strong>';
     if (!tr.length) { liste.innerHTML = '<div class="lgv-leer">Nichts gefunden für „' + esc(q) + '".</div>'; return; }
     liste.innerHTML = tr.map(function (t, i) {
+      var ort = t.ort ? '<span class="lgv-ort">' + esc(t.ort) + '</span> · ' : '';
       var leiste = t.leiste ? '<span class="lgv-leiste">Blinker ' + esc(t.leiste) + '</span>'
                             : '<span class="lgv-keine">kein Blinker</span>';
       return '<div class="lgv-zeile' + (i === 0 ? ' aktiv' : '') + '" data-i="' + i + '">' +
         '<div class="lgv-name"><a class="lg-namelink" href="?p=charge&id=' + t.charge_id + '">' + esc(t.name) + '</a></div>' +
         '<div class="lgv-sub">' + (t.charge_nr ? 'Ch. ' + esc(t.charge_nr) + ' · ' : '') +
-        esc(t.menge) + ' ' + esc(t.einheit) + ' · ' + leiste + '</div></div>';
+        esc(t.menge) + ' ' + esc(t.einheit) + ' · ' + ort + leiste + '</div></div>';
     }).join('');
     liste.querySelectorAll('.lgv-zeile').forEach(function (z) {
       // Klick schaltet um: blinkt dieser Blinker schon, geht er aus, sonst an.
@@ -125,9 +126,10 @@
     if (!t.leiste_id) { zeigeStatus('An „' + t.name + '" hängt noch kein Blinker.'); return; }
     if (anId && anId !== t.leiste_id) ausSenden(anId);   // anderen zuerst ausschalten
     anId = t.leiste_id; markiere();
-    zeigeStatus('Blinker ' + t.leiste + ' blinkt …');
+    var wo = t.ort ? ' – ' + t.ort : '';
+    zeigeStatus('Blinker ' + t.leiste + ' blinkt …' + wo);
     post('?p=klingeln', { leiste_id: t.leiste_id, farbe: 'gruen', sek: 180 })
-      .then(function (j) { zeigeStatus(j.meldung || 'Blinker ' + t.leiste + ' blinkt.'); })
+      .then(function (j) { zeigeStatus((j.meldung || 'Blinker ' + t.leiste + ' blinkt.') + wo); })
       .catch(function () { zeigeStatus('Keine Verbindung zum Server.'); });
   }
   function still() {

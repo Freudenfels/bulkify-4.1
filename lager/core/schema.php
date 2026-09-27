@@ -95,6 +95,30 @@ function lg_schema(): void {
     lg_spalte('lg_leiste', 'ausloesungen', 'INT NOT NULL DEFAULT 0');
     lg_spalte('lg_leiste', 'verbrauch_sek', 'INT NOT NULL DEFAULT 0');
     lg_spalte('lg_leiste', 'batterie_seit', 'DATETIME NULL');
+    // Ein Blinker haengt entweder an einer Charge (charge_id) ODER an einer Kiste (kiste_id).
+    lg_spalte('lg_leiste', 'kiste_id', 'INT NULL');
+
+    // --- Kiste: ein Behaelter mit EINEM Blinker, in dem viele verschiedene Chargen liegen. ------
+    // So muss nicht an jedes Kleinteil ein Blinker - man sucht ein Produkt, die Kiste blinkt.
+    q("CREATE TABLE IF NOT EXISTS lg_kiste (
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        name         VARCHAR(120) NOT NULL,
+        notiz        VARCHAR(190) NULL,
+        angelegt     DATETIME     NOT NULL,
+        aktualisiert DATETIME     NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // Inhalt einer Kiste: welche Charge liegt drin, optional mit Fach-Hinweis ("vorne links").
+    // Eine Charge liegt in hoechstens einer Kiste (UNIQUE charge_id).
+    q("CREATE TABLE IF NOT EXISTS lg_kiste_inhalt (
+        id        INT AUTO_INCREMENT PRIMARY KEY,
+        kiste_id  INT         NOT NULL,
+        charge_id INT         NOT NULL,
+        fach      VARCHAR(60) NULL,
+        angelegt  DATETIME    NOT NULL,
+        UNIQUE KEY charge (charge_id),
+        KEY kiste (kiste_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
     // --- Einstellungen (Schluessel/Wert), damit nichts im Dashboard gespeichert wird. ---------
     q("CREATE TABLE IF NOT EXISTS lg_meta (

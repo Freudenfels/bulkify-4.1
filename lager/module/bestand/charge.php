@@ -24,9 +24,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Blinker gelöst.');
         weiter('?p=charge&id=' . $id);
     }
+    if ($aktion === 'in_kiste') {
+        $fehler = kiste_charge_zuordnen((int)($_POST['kiste_id'] ?? 0), $id, trim((string)($_POST['fach'] ?? '')));
+        flash($fehler ?: 'In die Kiste gelegt.', $fehler ? 'warn' : 'ok');
+        weiter('?p=charge&id=' . $id);
+    }
+    if ($aktion === 'aus_kiste') {
+        kiste_charge_entfernen($id);
+        flash('Aus der Kiste genommen.');
+        weiter('?p=charge&id=' . $id);
+    }
 }
 
 $bl = leiste_fuer_charge($id);
+$in_kiste = kiste_fuer_charge($id);
 $item = erp_item_voll((int)$c['item_id']);
 $produkt_id = $item['produkt_id'] ?? null;
 $produkt = $produkt_id ? erp_produkt((int)$produkt_id) : null;
@@ -48,7 +59,19 @@ flash_zeigen();
 
 <div class="bx-panel">
   <h2>Blinker</h2>
-  <?php if ($bl): ?>
+  <?php if ($in_kiste): ?>
+    <p>Diese Charge liegt in <a class="lg-namelink" href="?p=kiste&id=<?= (int)$in_kiste['kiste_id'] ?>">Kiste <?= h((string)$in_kiste['kiste_name']) ?></a><?= $in_kiste['fach'] ? ', Fach ' . h((string)$in_kiste['fach']) : '' ?>. Beim Suchen blinkt die Kiste.</p>
+    <?php $kb = kiste_blinker((int)$in_kiste['kiste_id']); if ($kb): ?>
+      <div class="bx-row" style="gap:var(--sp-3)">
+        <button type="button" class="btn btn-primary" data-klingeln="<?= (int)$kb['id'] ?>">Kiste finden</button>
+        <button type="button" class="btn btn-ghost" data-klingeln="<?= (int)$kb['id'] ?>" data-aktion="aus">Aus</button>
+      </div>
+    <?php else: ?><p class="muted">An der Kiste hängt noch kein Blinker.</p><?php endif; ?>
+    <form method="post" style="margin-top:var(--sp-3)" onsubmit="return confirm('Charge aus der Kiste nehmen?')">
+      <input type="hidden" name="aktion" value="aus_kiste">
+      <button class="btn btn-ghost btn-sm" type="submit">Aus der Kiste nehmen</button>
+    </form>
+  <?php elseif ($bl): ?>
     <p>Am Blinker <span class="lg-code"><strong><?= h((string)$bl['code']) ?></strong></span> seit <?= h(fmt_zeit((string)$bl['gebunden_am'])) ?>.</p>
     <div class="bx-row" style="gap:var(--sp-3)">
       <button type="button" class="btn btn-primary" data-klingeln="<?= (int)$bl['id'] ?>">Finden</button>
@@ -59,12 +82,23 @@ flash_zeigen();
       </form>
     </div>
   <?php else: ?>
-    <p class="muted">Kein Blinker an dieser Charge.</p>
-    <form method="post" class="bx-row" style="gap:6px" data-no-busy>
+    <p class="muted">Kein Blinker an dieser Charge. Entweder einen eigenen Blinker anhängen – oder die Charge in eine Kiste legen, die schon einen hat.</p>
+    <form method="post" class="bx-row" style="gap:6px;margin-bottom:var(--sp-3)" data-no-busy>
       <input type="hidden" name="aktion" value="binden">
-      <input name="code" class="lg-code" style="max-width:200px" placeholder="Blinker scannen (CF64B6XD)" autocomplete="off" autofocus>
-      <button class="btn btn-primary" type="submit">Binden</button>
+      <input name="code" class="lg-code" style="max-width:200px" placeholder="Blinker scannen (CF64B6XD)" autocomplete="off">
+      <button class="btn btn-primary" type="submit">Eigener Blinker</button>
     </form>
+    <?php $kisten = kiste_alle(); if ($kisten): ?>
+    <form method="post" class="bx-row" style="gap:6px;flex-wrap:wrap;align-items:flex-end" data-no-busy>
+      <input type="hidden" name="aktion" value="in_kiste">
+      <div class="bx-field" style="margin:0"><label>In eine Kiste</label>
+        <select name="kiste_id">
+          <?php foreach ($kisten as $k): ?><option value="<?= (int)$k['id'] ?>"><?= h((string)$k['name']) ?><?= $k['blinker'] ? '' : ' (ohne Blinker)' ?></option><?php endforeach; ?>
+        </select></div>
+      <div class="bx-field" style="margin:0"><label>Fach (optional)</label><input name="fach" placeholder="z. B. vorne links" style="max-width:160px"></div>
+      <button class="btn btn-ghost" type="submit">In die Kiste</button>
+    </form>
+    <?php endif; ?>
   <?php endif; ?>
 </div>
 

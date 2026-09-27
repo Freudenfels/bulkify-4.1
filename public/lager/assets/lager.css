@@ -104,3 +104,13 @@
   animation:lgvpuls 1.2s ease-in-out infinite}
 :root[data-theme="dark"] .lg-warnbalken{background:#2a1615;border-color:#5a2b27;color:#f0a49b}
 :root[data-theme="dark"] .lg-warnbalken:hover{background:#331b19}
+
+/* Ort-Hinweis im Such-Popup (Kiste X, Fach Y) */
+.lgv-ort{color:var(--gruen);font-weight:600}
+
+/* Charge-Combobox (Kiste: Charge hinzufuegen) */
+.lg-combo{position:relative;display:none;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px;box-shadow:var(--shadow);max-height:260px;overflow:auto;z-index:50;margin-top:2px}
+.lg-combo-z{padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--line-2)}
+.lg-combo-z:last-child{border-bottom:none}
+.lg-combo-z:hover{background:var(--panel-2)}

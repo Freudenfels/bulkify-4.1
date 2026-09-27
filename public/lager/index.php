@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../lager/core/layout.php';
 require_once __DIR__ . '/../../lager/core/led.php';
 require_once __DIR__ . '/../../lager/core/platz.php';
 require_once __DIR__ . '/../../lager/core/leiste.php';
+require_once __DIR__ . '/../../lager/core/kiste.php';
 
 lg_session_start();
 lg_schema();
@@ -22,6 +23,8 @@ $routen = [
     'finden'         => 'leiste/finden.php',
     'leisten'        => 'leiste/liste.php',
     'batterie'       => 'leiste/batterie.php',
+    'kisten'         => 'kiste/liste.php',
+    'kiste'          => 'kiste/detail.php',
     'klingeln'       => 'led/klingeln.php',
     'suche'          => 'leiste/suche.php',
     // Fulfillment (feste Plaetze)

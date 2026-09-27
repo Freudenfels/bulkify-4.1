@@ -8,10 +8,13 @@ require_once __DIR__ . '/led.php';
 function leiste_per_code(string $code): ?array { return one("SELECT * FROM lg_leiste WHERE code=?", [$code]); }
 function leiste(int $id): ?array               { return one("SELECT * FROM lg_leiste WHERE id=?", [$id]); }
 
-// Alle Blinker mit dem, was dranhaengt (Charge + Rohstoffname aus dem Dashboard).
+// Alle Blinker mit dem, was dranhaengt (Charge ODER Kiste).
 function leiste_alle(): array {
-    $leisten = all("SELECT l.*, s.name AS sender_name FROM lg_leiste l
-                    LEFT JOIN lg_sender s ON s.id = l.sender_id ORDER BY l.charge_id IS NULL, l.code");
+    $leisten = all("SELECT l.*, s.name AS sender_name, k.name AS kiste_name
+                    FROM lg_leiste l
+                    LEFT JOIN lg_sender s ON s.id = l.sender_id
+                    LEFT JOIN lg_kiste k ON k.id = l.kiste_id
+                    ORDER BY (l.charge_id IS NULL AND l.kiste_id IS NULL), l.code");
     foreach ($leisten as &$l) {
         $l['charge'] = $l['charge_id'] ? erp_charge((int)$l['charge_id']) : null;
     }
@@ -54,7 +57,7 @@ function leiste_binden(string $code, int $charge_id, ?int $sender_id = null): st
 
 // Blinker lösen (Charge leer/raus) -> Blinker wird frei und kann neu vergeben werden.
 function leiste_loesen(int $leiste_id): void {
-    q("UPDATE lg_leiste SET charge_id=NULL, gebunden_am=NULL, aktualisiert=? WHERE id=?", [jetzt_utc(), $leiste_id]);
+    q("UPDATE lg_leiste SET charge_id=NULL, kiste_id=NULL, gebunden_am=NULL, aktualisiert=? WHERE id=?", [jetzt_utc(), $leiste_id]);
 }
 
 // Blinker klingeln lassen, um die Palette zu finden. $piep=false = still (nur Licht).
