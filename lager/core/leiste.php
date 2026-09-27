@@ -57,12 +57,12 @@ function leiste_loesen(int $leiste_id): void {
     q("UPDATE lg_leiste SET charge_id=NULL, gebunden_am=NULL, aktualisiert=? WHERE id=?", [jetzt_utc(), $leiste_id]);
 }
 
-// Blinker klingeln lassen (Licht + Ton), um die Palette zu finden.
-function leiste_finden(int $leiste_id, string $farbe = 'gruen', int $sekunden = 40): array {
+// Blinker klingeln lassen, um die Palette zu finden. $piep=false = still (nur Licht).
+function leiste_finden(int $leiste_id, string $farbe = 'gruen', int $sekunden = 40, bool $piep = true): array {
     $l = leiste($leiste_id);
     if (!$l) return ['ok' => false, 'meldung' => 'Blinker nicht gefunden.'];
     return led_befehl((string)$l['code'], $l['sender_id'] ? (int)$l['sender_id'] : null,
-                      led_code((string)$l['code'], $farbe, true, $sekunden), $farbe, led_sekunden($sekunden), true);
+                      led_code((string)$l['code'], $farbe, $piep, $sekunden), $farbe, led_sekunden($sekunden), $piep);
 }
 function leiste_aus(int $leiste_id): array {
     $l = leiste($leiste_id);

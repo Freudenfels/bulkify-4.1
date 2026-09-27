@@ -14,11 +14,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fehler = leiste_binden($code, $charge_id);
             if ($fehler !== '') { flash($fehler, 'warn'); }
             else {
-                // Kurze Bestaetigung: einmal blau mit Piep (3 s ist die kuerzeste Stufe der Hardware).
-                $r = leiste_finden((int)leiste_per_code($code)['id'], 'blau', 3);
+                // Kurze Bestaetigung: einmal blau, OHNE Ton (3 s ist die kuerzeste Stufe der Hardware).
+                $r = leiste_finden((int)leiste_per_code($code)['id'], 'blau', 3, false);
                 $c = erp_charge($charge_id);
                 flash('Blinker ' . $code . ' hängt jetzt an ' . ($c ? charge_text($c) : 'der Charge') . '. '
-                    . ($r['ok'] ? 'Er piept kurz blau.' : $r['meldung']), $r['ok'] ? 'ok' : 'warn');
+                    . ($r['ok'] ? 'Er leuchtet kurz blau.' : $r['meldung']), $r['ok'] ? 'ok' : 'warn');
             }
         }
         weiter('?p=finden&q=' . urlencode((string)($_POST['q'] ?? '')));
@@ -26,10 +26,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($aktion === 'loesen') {
         $lid = (int)($_POST['leiste_id'] ?? 0);
-        // Beim Entkoppeln kurz rot blinken (3 s, mit Piep) - Gegenstueck zum blauen Binden.
-        leiste_finden($lid, 'rot', 3);
+        // Beim Entkoppeln kurz rot, OHNE Ton - Gegenstueck zum blauen Binden.
+        leiste_finden($lid, 'rot', 3, false);
         leiste_loesen($lid);
-        flash('Blinker gelöst, er blinkt kurz rot und ist wieder frei.');
+        flash('Blinker gelöst, er leuchtet kurz rot und ist wieder frei.');
         weiter('?p=finden&q=' . urlencode((string)($_POST['q'] ?? '')));
     }
 }
@@ -75,9 +75,9 @@ if (!$hat_charge) {
           <?php if ($l): ?>
             <button type="button" class="btn btn-primary btn-sm" data-klingeln="<?= (int)$l['id'] ?>">Finden</button>
             <button type="button" class="btn btn-ghost btn-sm" data-klingeln="<?= (int)$l['id'] ?>" data-aktion="aus">Aus</button>
-            <form method="post" style="display:inline" onsubmit="return confirm('Blinker <?= h((string)$l['code']) ?> lösen? Sie wird wieder frei.')">
+            <form method="post" style="display:inline" onsubmit="return confirm('Blinker <?= h((string)$l['code']) ?> vom Rohstoff lösen? Er wird wieder frei.')">
               <input type="hidden" name="aktion" value="loesen"><input type="hidden" name="leiste_id" value="<?= (int)$l['id'] ?>"><input type="hidden" name="q" value="<?= h($q) ?>">
-              <button class="btn btn-ghost btn-sm" type="submit">Lösen</button>
+              <button class="btn btn-ghost btn-sm lg-x" type="submit" title="Blinker lösen" aria-label="Blinker lösen">×</button>
             </form>
           <?php else: ?>
             <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end" data-no-busy>

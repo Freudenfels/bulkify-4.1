@@ -38,7 +38,7 @@
   function zeigeStatus(t) { baue(); statusZeile.textContent = t; }
 
   function zeigeTreffer(q, tr) {
-    baue(); treffer = tr; aktiv = 0; anIndex = -1;
+    baue(); treffer = tr; aktiv = 0; anId = null;
     statusZeile.innerHTML = 'Gesucht: <strong>' + esc(q) + '</strong>';
     if (!tr.length) { liste.innerHTML = '<div class="lgv-leer">Nichts gefunden. Noch einmal antippen und sprechen.</div>'; return; }
     liste.innerHTML = tr.map(function (t, i) {
@@ -50,11 +50,12 @@
         esc(t.menge) + ' ' + esc(t.einheit) + ' · ' + leiste + '</div></div>';
     }).join('');
     liste.querySelectorAll('.lgv-zeile').forEach(function (z) {
-      // Klick schaltet um: blinkt die Zeile schon, geht sie aus, sonst an.
+      // Klick schaltet um: blinkt dieser Blinker schon, geht er aus, sonst an.
       z.addEventListener('click', function () {
         var i = +z.getAttribute('data-i');
         aktiv = i;
-        (anIndex === i) ? still() : blinke();
+        var t = treffer[i];
+        (t && t.leiste_id && anId === t.leiste_id) ? still() : blinke();
       });
     });
   }
@@ -62,31 +63,31 @@
   function markiere() {
     liste.querySelectorAll('.lgv-zeile').forEach(function (z, i) {
       z.classList.toggle('aktiv', i === aktiv);
-      z.classList.toggle('an', i === anIndex);   // 'an' = blinkt gerade (grün)
+      z.classList.toggle('an', !!(treffer[i] && treffer[i].leiste_id && treffer[i].leiste_id === anId));
     });
   }
 
   // ---- Blinker ansteuern --------------------------------------------------------------------
-  var anIndex = -1;   // welche Zeile blinkt gerade
+  var anId = null;   // leiste_id, die gerade blinkt (null = keiner)
   function post(ziel, daten) {
     var d = new FormData(); Object.keys(daten).forEach(function (k) { d.append(k, daten[k]); });
     return fetch(ziel, { method: 'POST', body: d, credentials: 'same-origin' }).then(function (r) { return r.json(); });
   }
+  function ausSenden(id) { if (id) post('?p=klingeln', { leiste_id: id, aktion: 'aus' }); }
   function blinke() {
     var t = treffer[aktiv]; if (!t) return;
-    if (!t.leiste_id) { anIndex = -1; markiere(); zeigeStatus('An „' + t.name + '" hängt noch kein Blinker.'); return; }
-    // Blinkt schon ein anderer, den erst ausschalten.
-    if (anIndex >= 0 && anIndex !== aktiv) { var a = treffer[anIndex]; if (a && a.leiste_id) post('?p=klingeln', { leiste_id: a.leiste_id, aktion: 'aus' }); }
-    anIndex = aktiv; markiere();
+    if (!t.leiste_id) { zeigeStatus('An „' + t.name + '" hängt noch kein Blinker.'); return; }
+    if (anId && anId !== t.leiste_id) ausSenden(anId);   // anderen zuerst ausschalten
+    anId = t.leiste_id; markiere();
     zeigeStatus('Blinker ' + t.leiste + ' blinkt …');
     post('?p=klingeln', { leiste_id: t.leiste_id, farbe: 'gruen', sek: 180 })
       .then(function (j) { zeigeStatus(j.meldung || 'Blinker ' + t.leiste + ' blinkt.'); })
       .catch(function () { zeigeStatus('Keine Verbindung zum Server.'); });
   }
   function still() {
-    var t = treffer[anIndex >= 0 ? anIndex : aktiv];
-    anIndex = -1; markiere();
-    if (t && t.leiste_id) { zeigeStatus('Aus.'); post('?p=klingeln', { leiste_id: t.leiste_id, aktion: 'aus' }); }
+    var id = anId;
+    anId = null; markiere();
+    if (id) { zeigeStatus('Aus.'); ausSenden(id); }
   }
 
   // ---- Sprache -----------------------------------------------------------------------------
