@@ -14,10 +14,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fehler = leiste_binden($code, $charge_id);
             if ($fehler !== '') { flash($fehler, 'warn'); }
             else {
-                $r = leiste_finden((int)leiste_per_code($code)['id'], 'gruen', 6);
+                // Kurze Bestaetigung: einmal blau mit Piep (3 s ist die kuerzeste Stufe der Hardware).
+                $r = leiste_finden((int)leiste_per_code($code)['id'], 'blau', 3);
                 $c = erp_charge($charge_id);
                 flash('Blinker ' . $code . ' hängt jetzt an ' . ($c ? charge_text($c) : 'der Charge') . '. '
-                    . ($r['ok'] ? 'Er leuchtet kurz grün.' : $r['meldung']), $r['ok'] ? 'ok' : 'warn');
+                    . ($r['ok'] ? 'Er piept kurz blau.' : $r['meldung']), $r['ok'] ? 'ok' : 'warn');
             }
         }
         weiter('?p=finden&q=' . urlencode((string)($_POST['q'] ?? '')));
