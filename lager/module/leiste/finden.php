@@ -47,18 +47,16 @@ if (!$hat_charge) {
     fuss(); return;
 }
 ?>
-<form method="get" class="bx-listbar" data-no-busy>
-  <input type="hidden" name="p" value="finden">
-  <input type="search" name="q" class="bx-search" value="<?= h($q) ?>" placeholder="Rohstoff, Artikelnummer oder Chargennummer" autofocus>
-  <button class="btn btn-primary" type="submit">Suchen</button>
+<div class="bx-listbar">
+  <button class="btn btn-primary" type="button" data-suche>Suchen</button>
   <button class="btn btn-ghost" type="button" data-mic title="Per Sprache suchen und blinken lassen (Strg+D)">
     <svg class="lg-mic-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><line x1="12" y1="18" x2="12" y2="22"></line></svg>
     Sprache
   </button>
-</form>
+</div>
 
 <?php if (!$treffer): ?>
-  <div class="bx-panel muted"><?= $q === '' ? 'Tippe oben ein, wonach du suchst.' : 'Nichts gefunden für „' . h($q) . '".' ?></div>
+  <div class="bx-panel muted"><?= $q === '' ? 'Auf „Suchen“ oder „Sprache“ tippen. Das Suchfenster geht auf, dann tippst oder sagst du, was du suchst – der Blinker an der Palette blinkt.' : 'Nichts gefunden für „' . h($q) . '".' ?></div>
 <?php else: ?>
 <div class="bx-tablewrap" style="margin-bottom:var(--sp-6)">
   <table class="bx-table">

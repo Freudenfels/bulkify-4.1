@@ -10,26 +10,40 @@
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   // ---- Popup -------------------------------------------------------------------------------
-  var pop, liste, kopf, statusZeile, aktiv = 0, treffer = [];
+  var pop, liste, kopf, statusZeile, feld, hilfe, aktiv = 0, treffer = [], suchTimer;
 
   function baue() {
     if (pop) return;
     pop = document.createElement('div');
     pop.id = 'lgVoice';
     pop.innerHTML =
-      '<div class="lgv-box" role="dialog" aria-label="Sprachsuche">' +
-      '<div class="lgv-kopf"><span class="lgv-mic">Zuhören …</span>' +
+      '<div class="lgv-box" role="dialog" aria-label="Suche">' +
+      '<div class="lgv-kopf"><span class="lgv-mic">Suche</span>' +
       '<button type="button" class="lgv-zu" aria-label="Schließen">×</button></div>' +
+      '<div class="lgv-suchzeile">' +
+      '<input type="search" class="lgv-feld" placeholder="Rohstoff, Artikelnummer oder Charge" autocomplete="off">' +
+      '<button type="button" class="lgv-micbtn" aria-label="Per Sprache suchen" title="Sprache (Strg+D)">' +
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><line x1="12" y1="18" x2="12" y2="22"></line></svg>' +
+      '</button></div>' +
       '<div class="lgv-status"></div>' +
       '<div class="lgv-liste"></div>' +
-      '<div class="lgv-hilfe">Sag „blinke“, „aus“, „weiter“ oder „schließen“. Mikrofon: Strg+D.</div>' +
+      '<div class="lgv-hilfe"></div>' +
       '</div>';
     document.body.appendChild(pop);
     kopf = pop.querySelector('.lgv-mic');
     statusZeile = pop.querySelector('.lgv-status');
     liste = pop.querySelector('.lgv-liste');
+    feld = pop.querySelector('.lgv-feld');
+    hilfe = pop.querySelector('.lgv-hilfe');
     pop.querySelector('.lgv-zu').addEventListener('click', zu);
+    pop.querySelector('.lgv-micbtn').addEventListener('click', frischStarten);
     pop.addEventListener('click', function (e) { if (e.target === pop) zu(); });
+    // Tippen sucht live (kurz entprellt).
+    feld.addEventListener('input', function () {
+      clearTimeout(suchTimer);
+      var t = feld.value.trim();
+      suchTimer = setTimeout(function () { t ? sucheLaufen(t) : leereListe(); }, 250);
+    });
   }
 
   function auf() { baue(); pop.classList.add('an'); }
@@ -43,15 +57,35 @@
     treffer = []; aktiv = 0; anId = null;
     statusZeile.textContent = '';
     liste.innerHTML = '';
-    kopf.textContent = 'Zuhören …'; kopf.classList.remove('live');
+    feld.value = '';
+    kopf.textContent = 'Suche'; kopf.classList.remove('live');
+    hilfe.textContent = 'Tippen zum Suchen, Eintrag antippen lässt den Blinker blinken.';
   }
+  function leereListe() { treffer = []; anId = null; statusZeile.textContent = ''; liste.innerHTML = ''; }
 
   function zeigeStatus(t) { baue(); statusZeile.textContent = t; }
+
+  // Reine Suche (Tippen ODER Sprache): holt Treffer und zeigt sie, ohne Spracherkennung.
+  function sucheLaufen(text) {
+    if (!text) { leereListe(); return; }
+    zeigeStatus('Suche „' + text + '" …');
+    return fetch('?p=suche&q=' + encodeURIComponent(text), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { zeigeTreffer(text, j.treffer || []); return treffer.length; })
+      .catch(function () { zeigeStatus('Suche fehlgeschlagen.'); return 0; });
+  }
+
+  // Popup im Tipp-Modus oeffnen (kein Mikrofon). Optional mit Startwort.
+  function oeffneText(start) {
+    auf(); leere();
+    if (start) { feld.value = start; sucheLaufen(start); }
+    setTimeout(function () { feld.focus(); }, 60);
+  }
 
   function zeigeTreffer(q, tr) {
     baue(); treffer = tr; aktiv = 0; anId = null;
     statusZeile.innerHTML = 'Gesucht: <strong>' + esc(q) + '</strong>';
-    if (!tr.length) { liste.innerHTML = '<div class="lgv-leer">Nichts gefunden. Noch einmal antippen und sprechen.</div>'; return; }
+    if (!tr.length) { liste.innerHTML = '<div class="lgv-leer">Nichts gefunden für „' + esc(q) + '".</div>'; return; }
     liste.innerHTML = tr.map(function (t, i) {
       var leiste = t.leiste ? '<span class="lgv-leiste">Blinker ' + esc(t.leiste) + '</span>'
                             : '<span class="lgv-keine">kein Blinker</span>';
@@ -109,7 +143,8 @@
     modus = m; stopHoeren();
     erk = new SR();
     erk.lang = 'de-DE'; erk.interimResults = false; erk.maxAlternatives = 3;
-    erk.onstart = function () { auf(); kopf.textContent = 'Zuhören …'; kopf.classList.add('live'); };
+    erk.onstart = function () { auf(); kopf.textContent = 'Zuhören …'; kopf.classList.add('live');
+      hilfe.textContent = 'Sag „blinke“, „aus“, „weiter“ oder „schließen“.'; };
     erk.onerror = function (e) { kopf.classList.remove('live'); if (e.error === 'not-allowed') zeigeStatus('Kein Zugriff aufs Mikrofon. Bitte im Browser erlauben.'); };
     erk.onend = function () { kopf.classList.remove('live'); if (modus === 'befehl' && pop.classList.contains('an')) starte('befehl'); };
     erk.onresult = function (ev) {
@@ -122,11 +157,8 @@
 
   function verarbeiteSuche(text) {
     if (!text) { starte('befehl'); return; }
-    zeigeStatus('Gesucht: „' + text + '" …');
-    fetch('?p=suche&q=' + encodeURIComponent(text), { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (j) { zeigeTreffer(text, j.treffer || []); if (treffer.length) starte('befehl'); else starte('suche'); })
-      .catch(function () { zeigeStatus('Suche fehlgeschlagen.'); });
+    if (feld) feld.value = text;
+    sucheLaufen(text).then(function (n) { n ? starte('befehl') : starte('suche'); });
   }
 
   function verarbeiteBefehl(texte) {
@@ -146,9 +178,16 @@
   function frischStarten() { auf(); leere(); starte('suche'); }
 
   document.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-mic]'); if (!b) return;
-    e.preventDefault();
-    frischStarten();
+    var b = e.target.closest('[data-mic]');
+    if (b) { e.preventDefault(); frischStarten(); return; }
+    // Tipp-Suche: oeffnet dasselbe Popup, aber ohne Mikrofon.
+    var s = e.target.closest('[data-suche]');
+    if (s) { e.preventDefault(); oeffneText(s.getAttribute('data-suche-start') || ''); }
+  });
+  // Fokus auf ein data-suche-Feld oeffnet ebenfalls das Popup.
+  document.addEventListener('focusin', function (e) {
+    var s = e.target.closest('[data-suche-feld]');
+    if (s && !(pop && pop.classList.contains('an'))) { s.blur(); oeffneText(''); }
   });
 
   // Strg+D (bzw. Cmd+D) startet das Mikrofon. Ueberschreibt das Lesezeichen-Kuerzel des Browsers.

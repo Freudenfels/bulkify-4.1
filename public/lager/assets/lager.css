@@ -79,3 +79,12 @@
 
 /* Kennzahl-Karten ruhig halten (seitenlokal im Lager, wie im Dashboard gewuenscht) */
 .bx-card .v{font-size:var(--fs-md);color:var(--text)}
+
+/* Suchzeile im Popup (Tippen + Mikrofon) */
+.lgv-suchzeile{display:flex;gap:8px;margin-bottom:var(--sp-3)}
+.lgv-feld{flex:1;font-size:var(--fs-md);padding:12px 14px;border:1px solid var(--line);border-radius:10px;
+  background:var(--panel);color:var(--text)}
+.lgv-feld:focus{outline:2px solid var(--gruen);outline-offset:-1px;border-color:var(--gruen)}
+.lgv-micbtn{flex:none;width:46px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);
+  color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.lgv-micbtn:hover{border-color:var(--gruen);color:var(--gruen)}

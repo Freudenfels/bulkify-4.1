@@ -1,12 +1,12 @@
 # leiste/finden.php – Finden im großen Lager (`?p=finden`)
 
-Startseite des Lager-Programms. Man sucht nach Rohstoff, Artikelnummer oder Chargennummer. Zu jedem Treffer:
+Schnell eine Palette finden. Zwei Knöpfe öffnen dasselbe **Suchfenster** (Popup):
 
-- **Hängt schon eine Blinker dran:** Knopf **Finden** lässt sie klingeln (grün, 40 s, mit Piepton), **Aus** schaltet sie ab, **Lösen** macht die Blinker wieder frei.
-- **Noch keine Blinker:** kleines Feld zum **Scannen** einer Blinker und **Binden**. Nach dem Binden leuchtet die Blinker kurz grün zur Bestätigung.
+- **Suchen** – tippen. Das Popup geht auf, im Feld tippst du Rohstoff, Artikelnummer oder Charge, die Treffer erscheinen live. Ein Treffer angetippt lässt den Blinker grün blinken, nochmal antippen schaltet ihn aus. Das X schließt und leert alles.
+- **Sprache** (auch Strg+D) – dasselbe Popup, zusätzlich mit Mikrofon: Rohstoff sagen, dann Befehle „blinke/aus/weiter/zurück/schließen“. Braucht Chrome und HTTPS.
+
+Das Popup und die ganze Logik stecken in `public/lager/assets/voice.js`; die Treffer kommen als JSON über `?p=suche`, das Blinken über `?p=klingeln`.
+
+Wird die Seite mit `?q=` aufgerufen (Deep-Link), zeigt sie zusätzlich eine server-gerenderte Trefferliste mit **Binden/Lösen** – zum Anhängen eines Blinkers an eine Charge, die noch keinen hat (sonst passiert das im Bestand-Detail).
 
 Die Suche liest nur eigenen Bestand (kein Fremdlager, keine leeren Chargen).
-
-## Sprache
-Der Knopf **Sprache** startet die Sprachbedienung (`public/lager/assets/voice.js`): Rohstoff sagen, ein Popup zeigt die Treffer, dann per Sprache steuern – „blinke/finden/leuchte“ (aktive Blinker klingeln), „aus“, „weiter“, „zurück“, „schließen“. Braucht Chrome (Android/Desktop) und HTTPS. Die Treffer holt es über `?p=suche` (JSON), das Klingeln über `?p=klingeln`.
-
