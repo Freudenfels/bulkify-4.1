@@ -21,6 +21,7 @@ $routen = [
     'dok'            => 'bestand/dok.php',
     'finden'         => 'leiste/finden.php',
     'leisten'        => 'leiste/liste.php',
+    'batterie'       => 'leiste/batterie.php',
     'klingeln'       => 'led/klingeln.php',
     'suche'          => 'leiste/suche.php',
     // Fulfillment (feste Plaetze)

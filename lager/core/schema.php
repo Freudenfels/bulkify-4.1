@@ -82,12 +82,19 @@ function lg_schema(): void {
         sender_id    INT          NULL,        -- welcher Raum/Sender; NULL = Standard
         charge_id    INT          NULL,        -- gebundene Dashboard-Charge; NULL = frei
         gebunden_am  DATETIME     NULL,
+        ausloesungen INT          NOT NULL DEFAULT 0,   -- wie oft angesteuert (Akku-Schaetzung)
+        verbrauch_sek INT         NOT NULL DEFAULT 0,   -- Summe der Leuchtsekunden (genauer fuer Akku)
+        batterie_seit DATETIME    NULL,                 -- seit wann die aktuelle Batterie drin ist
         notiz        VARCHAR(190) NULL,
         angelegt     DATETIME     NOT NULL,
         aktualisiert DATETIME     NULL,
         UNIQUE KEY code (code),
         KEY charge (charge_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // Fuer bestehende Datenbanken nachziehen.
+    lg_spalte('lg_leiste', 'ausloesungen', 'INT NOT NULL DEFAULT 0');
+    lg_spalte('lg_leiste', 'verbrauch_sek', 'INT NOT NULL DEFAULT 0');
+    lg_spalte('lg_leiste', 'batterie_seit', 'DATETIME NULL');
 
     // --- Einstellungen (Schluessel/Wert), damit nichts im Dashboard gespeichert wird. ---------
     q("CREATE TABLE IF NOT EXISTS lg_meta (

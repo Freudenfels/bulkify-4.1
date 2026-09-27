@@ -71,6 +71,31 @@ function leiste_aus(int $leiste_id): array {
                       led_code_aus((string)$l['code']), 'aus', 0, false);
 }
 
+// --- Akku-Schaetzung (ohne echte Hardware-Rueckmeldung, siehe config LG_BATT_*) --------------
+// Stufe eines Blinkers: 'ok' | 'hoch' | 'tausch' - anhand der Leuchtsekunden seit Batteriewechsel.
+function leiste_batterie_stufe(array $l): string {
+    $v = (int)($l['verbrauch_sek'] ?? 0);
+    if ($v >= LG_BATT_TAUSCH) return 'tausch';
+    if ($v >= LG_BATT_HOCH)   return 'hoch';
+    return 'ok';
+}
+// Prozent "verbraucht" (0..100+), rein zur Anzeige.
+function leiste_batterie_prozent(array $l): int {
+    return (int)round(min(120, (int)($l['verbrauch_sek'] ?? 0) / LG_BATT_TAUSCH * 100));
+}
+// Alle Blinker, die eine neue Batterie bekommen sollten (Stufe 'tausch'), am meisten genutzt zuerst.
+function leiste_batterie_liste(): array {
+    return all("SELECT * FROM lg_leiste WHERE verbrauch_sek >= ? ORDER BY verbrauch_sek DESC", [LG_BATT_TAUSCH]);
+}
+function leiste_batterie_zahl(): int {
+    return (int)scalar("SELECT COUNT(*) FROM lg_leiste WHERE verbrauch_sek >= ?", [LG_BATT_TAUSCH]);
+}
+// Batterie gewechselt: Zaehler zuruecksetzen.
+function leiste_batterie_neu(int $leiste_id): void {
+    q("UPDATE lg_leiste SET ausloesungen=0, verbrauch_sek=0, batterie_seit=?, aktualisiert=? WHERE id=?",
+      [jetzt_utc(), jetzt_utc(), $leiste_id]);
+}
+
 // Kurztext einer Charge fuer die Anzeige: Rohstoff + Chargennummer + Restmenge.
 function charge_text(array $c): string {
     $t = (string)$c['item_name'];

@@ -93,3 +93,14 @@
 .lg-namelink{color:var(--text);font-weight:600}
 .lg-namelink:hover{color:var(--gruen);text-decoration:underline}
 .lgv-name .lg-namelink{color:var(--text)}
+
+/* ---------- Warnbalken Batterie ---------- */
+.lg-warnbalken{display:flex;align-items:center;gap:10px;margin-bottom:var(--sp-4);
+  padding:10px 16px;border-radius:10px;background:#fbeceb;border:1px solid #e6c4c0;color:#8f231b}
+.lg-warnbalken:hover{text-decoration:none;background:#f8e0de}
+.lg-warnbalken strong{font-weight:600}
+.lg-warnmehr{margin-left:auto;font-weight:600}
+.lg-warnpunkt{flex:none;width:10px;height:10px;border-radius:50%;background:var(--err);
+  animation:lgvpuls 1.2s ease-in-out infinite}
+:root[data-theme="dark"] .lg-warnbalken{background:#2a1615;border-color:#5a2b27;color:#f0a49b}
+:root[data-theme="dark"] .lg-warnbalken:hover{background:#331b19}

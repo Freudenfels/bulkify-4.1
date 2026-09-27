@@ -58,6 +58,13 @@ define('BX_SESSION', 'BXLAGER');
 // Sonst leuchtet nach einem Ausfall der Bruecke ploetzlich ein ganzes Regal auf.
 define('LG_BEFEHL_VERFALL_SEK', 30);
 
+// Akku-Schaetzung je Blinker (SCHAETZWERTE, ohne echte Rueckmeldung der Hardware - anpassbar).
+// Grundlage: Summe der Leuchtsekunden seit letztem Batteriewechsel.
+//   >= LG_BATT_HOCH   -> viel genutzt (orange)
+//   >= LG_BATT_TAUSCH -> Batterie tauschen (rot, Warnbalken)
+define('LG_BATT_HOCH', 10800);    // ~3 Stunden Gesamt-Leuchtzeit
+define('LG_BATT_TAUSCH', 18000);  // ~5 Stunden Gesamt-Leuchtzeit
+
 // Laeuft das hier auf dem eigenen Rechner? Nur dann sind Testhilfen erlaubt.
 function ist_lokal(): bool {
     $h = (string)($_SERVER['HTTP_HOST'] ?? '');

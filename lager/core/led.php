@@ -104,6 +104,12 @@ function led_befehl(string $leiste, ?int $sender_id, string $code, string $farbe
        function_exists('lg_uid') ? (lg_uid() ?: null) : null, jetzt_utc()]);
     $id = insert_id();
 
+    // Nutzung je Blinker mitzaehlen (Akku-Schaetzung). Nur echtes Leuchten, kein Ausschalten.
+    if ($farbe !== 'aus') {
+        q("UPDATE lg_leiste SET ausloesungen = ausloesungen + 1, verbrauch_sek = verbrauch_sek + ? WHERE code = ?",
+          [max(0, $sekunden), $leiste]);
+    }
+
     if ($s['weg'] === 'bruecke') {
         $zuletzt = lg_meta_lesen('bruecke_zuletzt', '');
         $wach = $zuletzt !== '' && (time() - strtotime($zuletzt . ' UTC')) < 15;

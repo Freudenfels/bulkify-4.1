@@ -62,7 +62,19 @@ function kopf(string $titel, string $aktiv = ''): void {
            . '<span></span><span></span><span></span></button>'
            . '<img src="/assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo">'
            . '</div>';
+        warnbalken();
     }
+}
+
+// Warnbalken oben: wie viele Blinker (geschaetzt) eine neue Batterie brauchen. Klick -> Batterie-Runde.
+function warnbalken(): void {
+    if (!function_exists('leiste_batterie_zahl')) return;
+    try { $n = leiste_batterie_zahl(); } catch (Throwable $e) { return; }
+    if ($n < 1) return;
+    echo '<a class="lg-warnbalken" href="?p=batterie">'
+       . '<span class="lg-warnpunkt"></span>'
+       . '<strong>' . $n . '</strong>&nbsp;' . ($n === 1 ? 'Blinker sollte' : 'Blinker sollten') . ' eine neue Batterie bekommen'
+       . '<span class="lg-warnmehr">prüfen →</span></a>';
 }
 
 function fuss(): void {
