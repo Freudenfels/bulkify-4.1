@@ -53,3 +53,8 @@
 .lgv-keine{color:var(--muted)}
 .lgv-leer{color:var(--muted);padding:12px 0}
 .lgv-hilfe{color:var(--muted);font-size:var(--fs-sm);margin-top:var(--sp-4);text-align:center}
+
+/* Zeile blinkt gerade (Umschalter im Sprach-Popup): grün gefüllt mit Punkt. */
+.lgv-zeile.an{border-color:var(--gruen);background:rgba(31,157,85,.12)}
+.lgv-zeile.an .lgv-name::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;
+  background:var(--gruen);margin-right:8px;vertical-align:1px;animation:lgvpuls 1s ease-in-out infinite}
