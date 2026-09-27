@@ -62,3 +62,20 @@
 /* X-Knopf zum Loesen eines Blinkers */
 .lg-x{color:var(--err);font-size:16px;line-height:1;font-weight:600;padding:6px 10px}
 .lg-x:hover{background:#fdf2f1;border-color:#e6c4c0}
+
+/* ---------- Bestand ---------- */
+/* Reiter je Kategorie (wie settabs, als Links) */
+.lg-reiter{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:var(--sp-4);flex-wrap:wrap}
+.lg-reiter a{padding:8px 14px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.lg-reiter a:hover{text-decoration:none;color:var(--text)}
+.lg-reiter a.an{color:var(--gruen);border-bottom-color:var(--gruen);font-weight:600}
+.lg-reiter-z{display:inline-block;font-size:var(--fs-xs);color:var(--muted);background:var(--panel-2);
+  border:1px solid var(--line);border-radius:10px;padding:0 6px;margin-left:4px}
+
+/* MHD-Ampel */
+.mhd-rot{color:var(--err);font-weight:600}
+.mhd-orange{color:#a5641a;font-weight:600}
+:root[data-theme="dark"] .mhd-orange{color:#e0a45f}
+
+/* Kennzahl-Karten ruhig halten (seitenlokal im Lager, wie im Dashboard gewuenscht) */
+.bx-card .v{font-size:var(--fs-md);color:var(--text)}

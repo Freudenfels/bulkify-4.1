@@ -58,3 +58,84 @@ function erp_chargen_suche(string $q, int $limit = 30): array {
          . ' ORDER BY i.name, c.mhd LIMIT ' . (int)$limit;
     return all($sql, $params);
 }
+
+// --- Bestandsansicht (alle eigenen Chargen, nach Kategorie) -----------------------------------
+// Die Kategorien, wie sie im Lager gedacht werden. "kapsel" ist im Dashboard kein eigener Wert,
+// sondern kategorie=rohstoff + form=kapselhuelle.
+function erp_kategorien(): array {
+    return [
+        'rohstoff'  => 'Rohstoffe',
+        'kapsel'    => 'Kapseln',
+        'verpackung'=> 'Verpackung',
+        'verbrauch' => 'Verbrauch',
+        'fertig'    => 'Fertigware',
+    ];
+}
+
+// SQL-Bedingung fuer eine Lager-Kategorie (auf item i).
+function erp_kategorie_bedingung(string $kat): string {
+    return match ($kat) {
+        'rohstoff'  => "i.kategorie='rohstoff' AND (i.form IS NULL OR i.form<>'kapselhuelle')",
+        'kapsel'    => "i.form='kapselhuelle'",
+        'verpackung'=> "i.kategorie='verpackung'",
+        'verbrauch' => "i.kategorie='verbrauch'",
+        'fertig'    => "i.kategorie IN ('fertig','verkaufsfertig')",
+        default     => '1',
+    };
+}
+
+// Bestand auflisten. $kat = '' fuer alle, sonst ein Schluessel aus erp_kategorien().
+// $mit_leer = auch leere/ausgebuchte Chargen zeigen.
+function erp_bestand(string $kat = '', string $q = '', bool $mit_leer = false, int $limit = 500): array {
+    if (!tabelle_da('charge') || !tabelle_da('item')) return [];
+    $lief = tabelle_da('lieferanten');
+    $where = ['c.fremd_kunde_id IS NULL'];
+    $params = [];
+    if (!$mit_leer) $where[] = "(c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0";
+    if ($kat !== '' && isset(erp_kategorien()[$kat])) $where[] = '(' . erp_kategorie_bedingung($kat) . ')';
+    foreach (preg_split('/\s+/', trim($q), -1, PREG_SPLIT_NO_EMPTY) as $w) {
+        $where[] = '(i.name LIKE ? OR i.artikelnummer LIKE ? OR c.charge_nr LIKE ?)';
+        $like = '%' . $w . '%'; array_push($params, $like, $like, $like);
+    }
+    $sql = "SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.menge, c.einheit, c.mhd, c.status, c.wareneingang,
+                   i.id AS item_id, i.name AS item_name, i.artikelnummer, i.kategorie, i.form"
+         . ($lief ? ", l.firma AS lieferant" : ", NULL AS lieferant") . "
+            FROM charge c JOIN item i ON i.id=c.item_id"
+         . ($lief ? " LEFT JOIN lieferanten l ON l.id=c.lieferant_id" : "") . "
+            WHERE " . implode(' AND ', $where) . "
+            ORDER BY i.name, c.mhd IS NULL, c.mhd LIMIT " . (int)$limit;
+    return all($sql, $params);
+}
+
+// Anzahl je Kategorie (fuer die Reiter). Zaehlt nur nicht-leere eigene Chargen.
+function erp_bestand_zaehlung(): array {
+    $out = [];
+    foreach (array_keys(erp_kategorien()) as $k) {
+        $out[$k] = (int)scalar("SELECT COUNT(*) FROM charge c JOIN item i ON i.id=c.item_id
+                                WHERE c.fremd_kunde_id IS NULL AND (c.status IS NULL OR c.status<>'leer')
+                                  AND c.menge_verfuegbar>0 AND (" . erp_kategorie_bedingung($k) . ")");
+    }
+    return $out;
+}
+
+// Eine Charge mit ALLEN Feldern fuer die Detailansicht (inkl. Lieferant, Wareneingang, Tracking).
+function erp_charge_voll(int $id): ?array {
+    if (!tabelle_da('charge')) return null;
+    $lief = tabelle_da('lieferanten');
+    $sql = "SELECT c.*, i.name AS item_name, i.artikelnummer, i.kategorie, i.form, i.notiz AS item_notiz"
+         . ($lief ? ", l.firma AS lieferant, l.id AS lieferant_id2" : "") . "
+            FROM charge c JOIN item i ON i.id=c.item_id"
+         . ($lief ? " LEFT JOIN lieferanten l ON l.id=c.lieferant_id" : "") . "
+            WHERE c.id=?";
+    return one($sql, [$id]);
+}
+
+// Kategorie-Label fuer eine Charge/Item-Zeile (aus kategorie + form).
+function erp_kategorie_label(array $c): string {
+    if (($c['form'] ?? '') === 'kapselhuelle') return 'Kapseln';
+    return match ((string)($c['kategorie'] ?? '')) {
+        'rohstoff' => 'Rohstoff', 'verpackung' => 'Verpackung', 'verbrauch' => 'Verbrauch',
+        'fertig', 'verkaufsfertig' => 'Fertigware', 'maschine' => 'Maschine',
+        default => (string)($c['kategorie'] ?? ''),
+    };
+}

@@ -23,6 +23,34 @@ function vor_wann(?string $utc): string {
     return fmt_zeit($utc);
 }
 
+// Menge huebsch: 3.500 -> "3.500", 250.000 -> "250". Ohne ueberfluessige Nullen.
+function menge_txt($m): string {
+    if ($m === null || $m === '') return '';
+    return rtrim(rtrim(number_format((float)$m, 3, ',', '.'), '0'), ',');
+}
+
+// MHD-Datum (Y-m-d) als d.m.Y mit Ampel: rot = abgelaufen, orange = < 60 Tage.
+function mhd_html(?string $mhd): string {
+    if (!$mhd) return '<span class="muted">–</span>';
+    $tage = (int)floor((strtotime($mhd) - strtotime('today')) / 86400);
+    $klasse = $tage < 0 ? 'mhd-rot' : ($tage < 60 ? 'mhd-orange' : '');
+    $txt = date('d.m.Y', strtotime($mhd));
+    if ($tage < 0)      $txt .= ' (abgelaufen)';
+    elseif ($tage < 60) $txt .= ' (' . $tage . ' T)';
+    return '<span class="' . $klasse . '">' . h($txt) . '</span>';
+}
+
+// Status einer Charge als Badge.
+function status_badge(?string $s): string {
+    return match ((string)$s) {
+        'frei'       => '<span class="badge badge-ok">frei</span>',
+        'quarantaene'=> '<span class="badge badge-warn">Quarantäne</span>',
+        'gesperrt'   => '<span class="badge badge-err">gesperrt</span>',
+        'leer'       => '<span class="badge">leer</span>',
+        default      => '<span class="badge">' . h((string)$s) . '</span>',
+    };
+}
+
 // Kurze Rueckmeldung nach einer Aktion - ueberlebt genau eine Weiterleitung.
 function flash(string $text, string $art = 'ok'): void { $_SESSION['lg_flash'] = [$text, $art]; }
 function flash_zeigen(): void {

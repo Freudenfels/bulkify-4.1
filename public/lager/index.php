@@ -15,7 +15,9 @@ lg_schema();
 
 $routen = [
     'login'          => 'auth/login.php',
-    // Grosses Lager (Chaos-Modell): Blinker an der Charge
+    // Grosses Lager
+    'bestand'        => 'bestand/liste.php',
+    'charge'         => 'bestand/charge.php',
     'finden'         => 'leiste/finden.php',
     'leisten'        => 'leiste/liste.php',
     'klingeln'       => 'led/klingeln.php',
@@ -32,7 +34,7 @@ $routen = [
 // Nur fuer Admins.
 $nur_admin = ['sender', 'bruecke_skript'];
 
-$p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'plaetze';
+$p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'bestand';
 
 if ($p === 'logout') { lg_logout(); weiter('?p=login'); }
 
@@ -40,7 +42,7 @@ if ($p === 'logout') { lg_logout(); weiter('?p=login'); }
 if ($p === 'autologin') {
     if (ist_lokal()) {
         $u = erp_benutzer_per_token((string)($_GET['token'] ?? ''));
-        if ($u && lg_darf_rein($u)) { $_SESSION['uid'] = (int)$u['id']; weiter('?p=finden'); }
+        if ($u && lg_darf_rein($u)) { $_SESSION['uid'] = (int)$u['id']; weiter('?p=bestand'); }
     }
     weiter('?p=login');
 }
@@ -49,9 +51,9 @@ if ($p !== 'login' && !lg_angemeldet()) {
     if ($p === 'leuchten' || $p === 'klingeln' || $p === 'suche') json_antwort(['ok' => false, 'meldung' => 'Bitte neu anmelden.'], 401);
     weiter('?p=login');
 }
-if ($p === 'login' && lg_angemeldet()) weiter('?p=finden');
+if ($p === 'login' && lg_angemeldet()) weiter('?p=bestand');
 
-if (!isset($routen[$p])) $p = lg_angemeldet() ? 'finden' : 'login';
-if (in_array($p, $nur_admin, true) && !lg_ist_admin()) weiter('?p=plaetze');
+if (!isset($routen[$p])) $p = lg_angemeldet() ? 'bestand' : 'login';
+if (in_array($p, $nur_admin, true) && !lg_ist_admin()) weiter('?p=bestand');
 
 require __DIR__ . '/../../lager/module/' . $routen[$p];
