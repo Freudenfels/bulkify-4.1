@@ -22,7 +22,7 @@
       '<button type="button" class="lgv-zu" aria-label="Schließen">×</button></div>' +
       '<div class="lgv-status"></div>' +
       '<div class="lgv-liste"></div>' +
-      '<div class="lgv-hilfe">Sag „blinke“, „aus“, „weiter“ oder „schließen“.</div>' +
+      '<div class="lgv-hilfe">Sag „blinke“, „aus“, „weiter“ oder „schließen“. Mikrofon: Strg+D.</div>' +
       '</div>';
     document.body.appendChild(pop);
     kopf = pop.querySelector('.lgv-mic');
@@ -116,10 +116,18 @@
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
-  // ---- Knopf -------------------------------------------------------------------------------
+  // ---- Knopf + Tastenkuerzel ---------------------------------------------------------------
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-mic]'); if (!b) return;
     e.preventDefault();
     starte('suche');
+  });
+
+  // Strg+D (bzw. Cmd+D) startet das Mikrofon. Ueberschreibt das Lesezeichen-Kuerzel des Browsers.
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      starte('suche');
+    }
   });
 })();

@@ -39,14 +39,22 @@ function erp_charge(int $id): ?array {
     return one(erp_charge_select() . " WHERE c.id=?", [$id]);
 }
 // Suche ueber Rohstoffname, Artikelnummer und Chargennummer. Leere/Fremdlager-Chargen raus.
+//
+// Tolerant fuer die Sprache: die Eingabe wird in einzelne WOERTER zerlegt, und JEDES Wort muss
+// irgendwo vorkommen (Name, Artikelnummer oder Chargennummer). So findet "Detox bitter Pulver"
+// auch "Detox Bitterpulver", und "Ashwagandha KSM 66" trifft trotz Leerzeichen/Aussprache.
 function erp_chargen_suche(string $q, int $limit = 30): array {
     if (!tabelle_da('charge') || !tabelle_da('item')) return [];
-    $q = trim($q);
-    $like = '%' . $q . '%';
-    $sql = erp_charge_select() . "
-            WHERE c.fremd_kunde_id IS NULL
-              AND (c.status IS NULL OR c.status <> 'leer') AND c.menge_verfuegbar > 0 "
-        . ($q !== '' ? "AND (i.name LIKE ? OR i.artikelnummer LIKE ? OR c.charge_nr LIKE ?) " : "")
-        . "ORDER BY i.name, c.mhd LIMIT " . (int)$limit;
-    return all($sql, $q !== '' ? [$like, $like, $like] : []);
+    $woerter = preg_split('/\s+/', trim($q), -1, PREG_SPLIT_NO_EMPTY);
+
+    $where = ['c.fremd_kunde_id IS NULL', "(c.status IS NULL OR c.status <> 'leer')", 'c.menge_verfuegbar > 0'];
+    $params = [];
+    foreach ($woerter as $w) {
+        $where[] = '(i.name LIKE ? OR i.artikelnummer LIKE ? OR c.charge_nr LIKE ?)';
+        $like = '%' . $w . '%';
+        array_push($params, $like, $like, $like);
+    }
+    $sql = erp_charge_select() . ' WHERE ' . implode(' AND ', $where)
+         . ' ORDER BY i.name, c.mhd LIMIT ' . (int)$limit;
+    return all($sql, $params);
 }
