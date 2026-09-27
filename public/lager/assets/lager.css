@@ -1,0 +1,27 @@
+/* Ergaenzungen des Lager-Programms zum Stylesheet des Dashboards.
+   Wird NACH /assets/app.css geladen. Alles hier beginnt mit lg-. */
+
+.lg-hinweis{padding:12px 16px}
+.lg-hinweis.ok{border-color:var(--gruen)}
+.lg-hinweis.warn{border-color:#e6c4c0;color:#8f231b}
+:root[data-theme="dark"] .lg-hinweis.warn{color:#f0a49b}
+
+/* Platz-Kurzform (A-01-2-03) - gleich breit, damit die Liste ruhig wirkt. */
+.lg-code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.02em}
+
+/* Rueckmeldung neben einem Leucht-Knopf. */
+.lg-meldung{font-size:var(--fs-sm); color:var(--muted); margin-left:8px}
+.lg-meldung.ok{color:var(--gruen)}
+.lg-meldung.fehler{color:var(--err)}
+
+/* Farbpunkt in Auswahl und Protokoll. */
+.lg-punkt{display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:0; margin-right:6px;
+  border:1px solid rgba(0,0,0,.15)}
+
+/* Zuordnen: grosser Platz, grosses Scanfeld - wird am Regal mit Tablet oder Handscanner benutzt. */
+.lg-gross{font-size:44px; font-weight:600; letter-spacing:.03em; margin:4px 0 2px; color:var(--text)}
+.lg-scan{font-size:22px !important; padding:14px 16px !important; width:100%; max-width:420px;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace; text-transform:uppercase}
+
+.lg-schritte{margin:0; padding-left:20px; line-height:1.7}
+.lg-schritte code{font-size:var(--fs-sm)}

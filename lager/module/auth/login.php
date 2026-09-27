@@ -1,0 +1,38 @@
+<?php
+// Anmeldung mit denselben Zugangsdaten wie im Dashboard (Tabelle `benutzer`).
+$fehler = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email = trim((string)($_POST['email'] ?? ''));
+    $pass  = (string)($_POST['pass'] ?? '');
+    if ($email === '' || $pass === '') {
+        $fehler = 'Bitte E-Mail und Passwort eingeben.';
+    } elseif (lg_login($email, $pass)) {
+        weiter('?p=plaetze');
+    } else {
+        $fehler = 'E-Mail oder Passwort stimmt nicht.';
+    }
+}
+
+kopf('Anmeldung');
+?>
+<div class="bx-panel" style="max-width:380px;margin:32px auto 0">
+  <h1 style="margin-bottom:4px">Anmelden</h1>
+  <p class="muted" style="margin-bottom:18px">Mit deinem Zugang aus dem bulkify Dashboard.</p>
+
+  <?php if ($fehler !== '') hinweis($fehler, 'warn'); ?>
+
+  <form method="post">
+    <div class="bx-field">
+      <label for="email">E-Mail</label>
+      <input type="email" id="email" name="email" autocomplete="username"
+             value="<?= h((string)($_POST['email'] ?? '')) ?>" required autofocus>
+    </div>
+    <div class="bx-field">
+      <label for="pass">Passwort</label>
+      <input type="password" id="pass" name="pass" autocomplete="current-password" required>
+    </div>
+    <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">Anmelden</button>
+  </form>
+</div>
+<?php
+fuss();

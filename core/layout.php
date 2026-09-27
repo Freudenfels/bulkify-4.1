@@ -147,10 +147,14 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
             echo "<a href=\"" . h($href) . "\"$cls><span>" . h($label) . "</span>$badge</a>";
         }
     }
-    // CRM ganz unten (eigene App unter /crm/, nur Admin). Kein ?p=-Route, daher außerhalb des Menü-Loops.
-    if (function_exists('has_role') && has_role('admin')) {
+    // CRM und Lager ganz unten (eigene Apps unter /crm/ und /lager/). Kein ?p=-Route, daher außerhalb des Menü-Loops.
+    // CRM nur Admin; das Lager (Lagerplätze, Pick-to-Light) auch für Produktion, Versand, Einkauf und Labor.
+    $crm = function_exists('has_role') && has_role('admin');
+    $lager = $crm || (function_exists('user_rollen') && array_intersect(user_rollen(), ['production', 'fulfillment', 'einkauf', 'labor']));
+    if ($crm || $lager) {
         echo "<div class=\"bx-navgroup\">Weiteres</div>";
-        echo "<a href=\"crm/\"><span>CRM</span></a>";
+        if ($lager) echo "<a href=\"lager/\"><span>Lager</span></a>";
+        if ($crm)   echo "<a href=\"crm/\"><span>CRM</span></a>";
     }
     // Benutzer-Fuß: Name + Rollen + Abmelden
     if (function_exists('current_user') && ($u = current_user())) {
