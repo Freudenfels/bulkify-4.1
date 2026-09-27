@@ -25,8 +25,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($aktion === 'loesen') {
-        leiste_loesen((int)($_POST['leiste_id'] ?? 0));
-        flash('Blinker gelöst, er ist wieder frei.');
+        $lid = (int)($_POST['leiste_id'] ?? 0);
+        // Beim Entkoppeln kurz rot blinken (3 s, mit Piep) - Gegenstueck zum blauen Binden.
+        leiste_finden($lid, 'rot', 3);
+        leiste_loesen($lid);
+        flash('Blinker gelöst, er blinkt kurz rot und ist wieder frei.');
         weiter('?p=finden&q=' . urlencode((string)($_POST['q'] ?? '')));
     }
 }
