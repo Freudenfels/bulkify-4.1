@@ -130,6 +130,45 @@ function erp_charge_voll(int $id): ?array {
     return one($sql, [$id]);
 }
 
+// --- Produkt/Item-Stammdaten und Umfeld (fuer die ausfuehrliche Detailseite) -------------------
+function erp_item_voll(int $id): ?array {
+    if (!tabelle_da('item')) return null;
+    return one("SELECT * FROM item WHERE id=?", [$id]);
+}
+// Zugehoeriges Fertigprodukt (nur wenn item ein verkaufsfertiges Produkt ist).
+function erp_produkt(int $id): ?array {
+    if (!tabelle_da('produkt')) return null;
+    return one("SELECT id, nummer, name, kundenname, haltbarkeit, allergene, status FROM produkt WHERE id=?", [$id]);
+}
+// Wirkstoffe/Naehrstoffe eines Rohstoffs.
+function erp_item_wirkstoffe(int $item_id): array {
+    if (!tabelle_da('item_wirkstoff') || !tabelle_da('naehrstoff')) return [];
+    return all("SELECT n.name, w.gehalt_wert, w.gehalt_einheit, w.gehalt_prozent
+                FROM item_wirkstoff w JOIN naehrstoff n ON n.id = w.naehrstoff_id
+                WHERE w.item_id=? ORDER BY w.sort, n.name", [$item_id]);
+}
+// Dokumente (Lieferschein, CoA, Spec ...) zum Item ODER zum Fertigprodukt.
+function erp_item_dokumente(int $item_id, ?int $produkt_id = null): array {
+    if (!tabelle_da('dokument')) return [];
+    $sql = "SELECT id, typ, titel, datei_orig, dok_datum, charge_nr FROM dokument
+            WHERE (objekt_typ='item' AND objekt_id=?)";
+    $p = [$item_id];
+    if ($produkt_id) { $sql .= " OR (objekt_typ='produkt' AND objekt_id=?)"; $p[] = $produkt_id; }
+    $sql .= " ORDER BY COALESCE(dok_datum, angelegt) DESC, id DESC";
+    return all($sql, $p);
+}
+function erp_dokument(int $id): ?array {
+    if (!tabelle_da('dokument')) return null;
+    return one("SELECT datei, datei_orig FROM dokument WHERE id=?", [$id]);
+}
+// Andere Chargen desselben Produkts/Rohstoffs (fuer die Uebersicht auf der Detailseite).
+function erp_item_chargen(int $item_id, int $ausser_charge = 0): array {
+    if (!tabelle_da('charge')) return [];
+    return all("SELECT id, charge_nr, menge_verfuegbar, einheit, mhd, status
+                FROM charge WHERE item_id=? AND fremd_kunde_id IS NULL AND id<>?
+                ORDER BY mhd IS NULL, mhd", [$item_id, $ausser_charge]);
+}
+
 // Kategorie-Label fuer eine Charge/Item-Zeile (aus kategorie + form).
 function erp_kategorie_label(array $c): string {
     if (($c['form'] ?? '') === 'kapselhuelle') return 'Kapseln';

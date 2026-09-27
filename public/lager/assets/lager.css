@@ -88,3 +88,8 @@
 .lgv-micbtn{flex:none;width:46px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);
   color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center}
 .lgv-micbtn:hover{border-color:var(--gruen);color:var(--gruen)}
+
+/* Produktname als Link (ueberall gleich) */
+.lg-namelink{color:var(--text);font-weight:600}
+.lg-namelink:hover{color:var(--gruen);text-decoration:underline}
+.lgv-name .lg-namelink{color:var(--text)}

@@ -40,7 +40,7 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
     <tbody>
     <?php foreach ($zeilen as $z): ?>
       <tr onclick="location.href='?p=charge&id=<?= (int)$z['id'] ?>'" style="cursor:pointer">
-        <td><?= h((string)$z['item_name']) ?><?= $z['artikelnummer'] ? ' <span class="muted">' . h((string)$z['artikelnummer']) . '</span>' : '' ?></td>
+        <td><a href="?p=charge&id=<?= (int)$z['id'] ?>" class="lg-namelink" onclick="event.stopPropagation()"><?= h((string)$z['item_name']) ?></a><?= $z['artikelnummer'] ? ' <span class="muted">' . h((string)$z['artikelnummer']) . '</span>' : '' ?></td>
         <?= $kat === '' ? '<td class="muted">' . h(erp_kategorie_label($z)) . '</td>' : '' ?>
         <td class="lg-code"><?= h((string)$z['charge_nr']) ?></td>
         <td><?= mhd_html($z['mhd']) ?></td>

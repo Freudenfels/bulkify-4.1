@@ -18,6 +18,7 @@ $routen = [
     // Grosses Lager
     'bestand'        => 'bestand/liste.php',
     'charge'         => 'bestand/charge.php',
+    'dok'            => 'bestand/dok.php',
     'finden'         => 'leiste/finden.php',
     'leisten'        => 'leiste/liste.php',
     'klingeln'       => 'led/klingeln.php',

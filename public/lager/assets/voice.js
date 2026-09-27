@@ -90,13 +90,14 @@
       var leiste = t.leiste ? '<span class="lgv-leiste">Blinker ' + esc(t.leiste) + '</span>'
                             : '<span class="lgv-keine">kein Blinker</span>';
       return '<div class="lgv-zeile' + (i === 0 ? ' aktiv' : '') + '" data-i="' + i + '">' +
-        '<div class="lgv-name">' + esc(t.name) + '</div>' +
+        '<div class="lgv-name"><a class="lg-namelink" href="?p=charge&id=' + t.charge_id + '">' + esc(t.name) + '</a></div>' +
         '<div class="lgv-sub">' + (t.charge_nr ? 'Ch. ' + esc(t.charge_nr) + ' · ' : '') +
         esc(t.menge) + ' ' + esc(t.einheit) + ' · ' + leiste + '</div></div>';
     }).join('');
     liste.querySelectorAll('.lgv-zeile').forEach(function (z) {
       // Klick schaltet um: blinkt dieser Blinker schon, geht er aus, sonst an.
-      z.addEventListener('click', function () {
+      z.addEventListener('click', function (e) {
+        if (e.target.closest('a')) return;   // Klick auf den Produktnamen -> zur Produktseite
         var i = +z.getAttribute('data-i');
         aktiv = i;
         var t = treffer[i];

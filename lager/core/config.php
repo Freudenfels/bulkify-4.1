@@ -14,6 +14,9 @@
 define('BX_ROOT', dirname(__DIR__));
 define('BX_MARKE', 'bulkify');
 define('BX_TITEL', 'Lager');
+// Dokumentenablage des Dashboards (Lieferscheine, CoA ...). Das Lager liegt im Dashboard-Projekt,
+// die Uploads liegen also eine Ebene hoeher unter data/uploads.
+define('BX_UPLOADS', dirname(BX_ROOT) . '/data/uploads');
 
 $GLOBALS['lg_secrets_quelle'] = '';
 

@@ -27,6 +27,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $bl = leiste_fuer_charge($id);
+$item = erp_item_voll((int)$c['item_id']);
+$produkt_id = $item['produkt_id'] ?? null;
+$produkt = $produkt_id ? erp_produkt((int)$produkt_id) : null;
+$wirkstoffe = erp_item_wirkstoffe((int)$c['item_id']);
+$dokumente = erp_item_dokumente((int)$c['item_id'], $produkt_id ? (int)$produkt_id : null);
+$andere = erp_item_chargen((int)$c['item_id'], $id);
 
 kopf('Charge ' . (string)$c['charge_nr'], 'bestand');
 seitenkopf((string)$c['item_name'], erp_kategorie_label($c) . ($c['artikelnummer'] ? ' · ' . $c['artikelnummer'] : ''),
@@ -63,20 +69,79 @@ flash_zeigen();
 </div>
 
 <div class="bx-panel">
-  <h2>Angaben</h2>
+  <h2>Charge und Lieferung</h2>
   <table class="bx-table"><tbody>
-    <tr><td class="muted" style="width:200px">Rohstoff / Produkt</td><td><?= h((string)$c['item_name']) ?></td></tr>
-    <tr><td class="muted">Kategorie</td><td><?= h(erp_kategorie_label($c)) ?></td></tr>
-    <tr><td class="muted">Artikelnummer</td><td><?= h((string)$c['artikelnummer']) ?: '–' ?></td></tr>
-    <tr><td class="muted">Chargennummer</td><td class="lg-code"><?= h((string)$c['charge_nr']) ?: '–' ?></td></tr>
+    <tr><td class="muted" style="width:200px">Chargennummer</td><td class="lg-code"><?= h((string)$c['charge_nr']) ?: '–' ?></td></tr>
     <tr><td class="muted">Eingegangene Menge</td><td><?= h(menge_txt($c['menge'] ?? null)) ?> <?= h((string)$c['einheit']) ?></td></tr>
     <tr><td class="muted">Verfügbar</td><td><?= h(menge_txt($c['menge_verfuegbar'])) ?> <?= h((string)$c['einheit']) ?></td></tr>
     <tr><td class="muted">MHD</td><td><?= mhd_html($c['mhd']) ?></td></tr>
+    <tr><td class="muted">Status</td><td><?= status_badge($c['status']) ?></td></tr>
     <tr><td class="muted">Lieferant</td><td><?= h((string)($c['lieferant'] ?? '')) ?: '–' ?></td></tr>
     <tr><td class="muted">Wareneingang</td><td><?= $c['wareneingang'] ? h(date('d.m.Y', strtotime((string)$c['wareneingang']))) : '–' ?></td></tr>
     <?php if (!empty($c['tracking'])): ?><tr><td class="muted">Sendungsnummer(n)</td><td><?= nl2br(h((string)$c['tracking'])) ?></td></tr><?php endif; ?>
     <?php if (!empty($c['notiz'])): ?><tr><td class="muted">Notiz</td><td><?= nl2br(h((string)$c['notiz'])) ?></td></tr><?php endif; ?>
   </tbody></table>
+
+  <?php if ($dokumente): ?>
+  <h3 style="margin:var(--sp-4) 0 var(--sp-2)">Dokumente</h3>
+  <div class="bx-row" style="gap:8px;flex-wrap:wrap">
+    <?php foreach ($dokumente as $d): ?>
+      <a class="btn btn-ghost btn-sm" href="?p=dok&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener">
+        <?= h(ucfirst((string)$d['typ'])) ?><?= $d['charge_nr'] ? ' · ' . h((string)$d['charge_nr']) : '' ?>
+        <?= $d['datei_orig'] ? ' <span class="muted">' . h((string)$d['datei_orig']) . '</span>' : '' ?>
+      </a>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
 </div>
+
+<div class="bx-panel">
+  <h2>Produkt</h2>
+  <table class="bx-table"><tbody>
+    <tr><td class="muted" style="width:200px">Name</td><td><?= h((string)$c['item_name']) ?></td></tr>
+    <?php if (!empty($item['name_en'])): ?><tr><td class="muted">Englisch</td><td><?= h((string)$item['name_en']) ?></td></tr><?php endif; ?>
+    <?php if (!empty($item['name_lat'])): ?><tr><td class="muted">Botanisch/Latein</td><td><?= h((string)$item['name_lat']) ?></td></tr><?php endif; ?>
+    <?php if (!empty($item['cas'])): ?><tr><td class="muted">CAS</td><td><?= h((string)$item['cas']) ?></td></tr><?php endif; ?>
+    <tr><td class="muted">Kategorie</td><td><?= h(erp_kategorie_label($c)) ?></td></tr>
+    <tr><td class="muted">Artikelnummer</td><td><?= h((string)$c['artikelnummer']) ?: '–' ?></td></tr>
+    <?php if (!empty($item['form'])): ?><tr><td class="muted">Form</td><td><?= h((string)$item['form']) ?></td></tr><?php endif; ?>
+    <?php if (!empty($item['dichte'])): ?><tr><td class="muted">Dichte</td><td><?= h(menge_txt($item['dichte'])) ?> g/ml</td></tr><?php endif; ?>
+    <?php if (!empty($item['allergene'])): ?><tr><td class="muted">Allergene</td><td><?= h((string)$item['allergene']) ?></td></tr><?php endif; ?>
+    <?php if (!empty($item['herkunft'])): ?><tr><td class="muted">Herkunft</td><td><?= h((string)$item['herkunft']) ?></td></tr><?php endif; ?>
+    <?php if ($produkt && !empty($produkt['kundenname'])): ?><tr><td class="muted">Kunde</td><td><?= h((string)$produkt['kundenname']) ?></td></tr><?php endif; ?>
+    <?php if (!empty($item['notiz'])): ?><tr><td class="muted">Notiz</td><td><?= nl2br(h((string)$item['notiz'])) ?></td></tr><?php endif; ?>
+  </tbody></table>
+
+  <?php if ($wirkstoffe): ?>
+  <h3 style="margin:var(--sp-4) 0 var(--sp-2)">Wirkstoffe</h3>
+  <table class="bx-table"><tbody>
+    <?php foreach ($wirkstoffe as $w): ?>
+      <tr><td><?= h((string)$w['name']) ?></td>
+        <td style="text-align:right"><?= $w['gehalt_wert'] !== null && $w['gehalt_wert'] !== '' ? h(menge_txt($w['gehalt_wert']) . ' ' . (string)$w['gehalt_einheit']) : ($w['gehalt_prozent'] !== null ? h(menge_txt($w['gehalt_prozent']) . ' %') : '') ?></td></tr>
+    <?php endforeach; ?>
+  </tbody></table>
+  <?php endif; ?>
+</div>
+
+<?php if ($andere): ?>
+<div class="bx-panel">
+  <h2>Weitere Chargen dieses Produkts</h2>
+  <div class="bx-tablewrap">
+    <table class="bx-table">
+      <thead><tr><th>Charge</th><th>MHD</th><th>Bestand</th><th>Status</th></tr></thead>
+      <tbody>
+      <?php foreach ($andere as $a): ?>
+        <tr onclick="location.href='?p=charge&id=<?= (int)$a['id'] ?>'" style="cursor:pointer">
+          <td class="lg-code"><?= h((string)$a['charge_nr']) ?: '–' ?></td>
+          <td><?= mhd_html($a['mhd']) ?></td>
+          <td><?= h(menge_txt($a['menge_verfuegbar'])) ?> <?= h((string)$a['einheit']) ?></td>
+          <td><?= status_badge($a['status']) ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+<?php endif; ?>
 <?php
 fuss();
