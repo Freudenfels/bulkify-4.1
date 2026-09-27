@@ -2,7 +2,7 @@
 //
 // Ablauf: Mikrofon-Knopf antippen -> Rohstoff sagen ("Ashwagandha KSM 66") -> die Suche laeuft
 // per fetch (?p=suche), ein Popup zeigt die Treffer, der beste oben und aktiv. Danach hoert es
-// weiter zu und versteht Befehle: "blinke/finden/leuchte" (aktive Leiste klingeln), "aus",
+// weiter zu und versteht Befehle: "blinke/finden/leuchte" (aktive Blinker klingeln), "aus",
 // "weiter/naechste", "schliessen/fertig".
 //
 // Nutzt die Web Speech API (Chrome/Android, Deutsch). Auf iPhone/Safari eingeschraenkt.
@@ -42,8 +42,8 @@
     statusZeile.innerHTML = 'Gesucht: <strong>' + esc(q) + '</strong>';
     if (!tr.length) { liste.innerHTML = '<div class="lgv-leer">Nichts gefunden. Noch einmal antippen und sprechen.</div>'; return; }
     liste.innerHTML = tr.map(function (t, i) {
-      var leiste = t.leiste ? '<span class="lgv-leiste">Leiste ' + esc(t.leiste) + '</span>'
-                            : '<span class="lgv-keine">keine Leiste</span>';
+      var leiste = t.leiste ? '<span class="lgv-leiste">Blinker ' + esc(t.leiste) + '</span>'
+                            : '<span class="lgv-keine">kein Blinker</span>';
       return '<div class="lgv-zeile' + (i === 0 ? ' aktiv' : '') + '" data-i="' + i + '">' +
         '<div class="lgv-name">' + esc(t.name) + '</div>' +
         '<div class="lgv-sub">' + (t.charge_nr ? 'Ch. ' + esc(t.charge_nr) + ' · ' : '') +
@@ -58,17 +58,17 @@
     liste.querySelectorAll('.lgv-zeile').forEach(function (z, i) { z.classList.toggle('aktiv', i === aktiv); });
   }
 
-  // ---- Leiste ansteuern --------------------------------------------------------------------
+  // ---- Blinker ansteuern --------------------------------------------------------------------
   function post(ziel, daten) {
     var d = new FormData(); Object.keys(daten).forEach(function (k) { d.append(k, daten[k]); });
     return fetch(ziel, { method: 'POST', body: d, credentials: 'same-origin' }).then(function (r) { return r.json(); });
   }
   function blinke() {
     var t = treffer[aktiv]; if (!t) return;
-    if (!t.leiste_id) { zeigeStatus('An „' + t.name + '" hängt noch keine Leiste.'); return; }
-    zeigeStatus('Leiste ' + t.leiste + ' blinkt …');
+    if (!t.leiste_id) { zeigeStatus('An „' + t.name + '" hängt noch kein Blinker.'); return; }
+    zeigeStatus('Blinker ' + t.leiste + ' blinkt …');
     post('?p=klingeln', { leiste_id: t.leiste_id, farbe: 'gruen', sek: 40 })
-      .then(function (j) { zeigeStatus(j.meldung || 'Leiste ' + t.leiste + ' blinkt.'); })
+      .then(function (j) { zeigeStatus(j.meldung || 'Blinker ' + t.leiste + ' blinkt.'); })
       .catch(function () { zeigeStatus('Keine Verbindung zum Server.'); });
   }
   function still() {

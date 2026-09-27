@@ -38,18 +38,18 @@ function platz_raster_anlegen(string $bereich, int $regal_von, int $regal_bis, i
     return [$neu, $da];
 }
 
-// Leiste einem Platz zuordnen. Rueckgabe: Fehlertext oder '' bei Erfolg.
-// Haengt die Leiste schon an einem anderen Platz, wird NICHT still umgehaengt.
+// Blinker einem Platz zuordnen. Rueckgabe: Fehlertext oder '' bei Erfolg.
+// Haengt die Blinker schon an einem anderen Platz, wird NICHT still umgehaengt.
 function platz_leiste_setzen(int $platz_id, ?string $leiste): string {
     if ($leiste !== null) {
         $woanders = one("SELECT * FROM lg_platz WHERE leiste=? AND id<>?", [$leiste, $platz_id]);
-        if ($woanders) return 'Die Leiste ' . $leiste . ' hängt schon an Platz ' . platz_code($woanders) . '.';
+        if ($woanders) return 'Die Blinker ' . $leiste . ' hängt schon an Platz ' . platz_code($woanders) . '.';
     }
     q("UPDATE lg_platz SET leiste=?, aktualisiert=? WHERE id=?", [$leiste, jetzt_utc(), $platz_id]);
     return '';
 }
 
-// Naechster Platz ohne Leiste - optional erst NACH einem bestimmten Platz (zum Ueberspringen).
+// Naechster Platz ohne Blinker - optional erst NACH einem bestimmten Platz (zum Ueberspringen).
 function platz_naechster_ohne_leiste(?int $nach_id = null): ?array {
     $plaetze = all("SELECT * FROM lg_platz WHERE leiste IS NULL ORDER BY bereich, regal, ebene, fach");
     if (!$plaetze) return null;

@@ -53,7 +53,7 @@ $protokoll = all("SELECT b.*, p.bereich, p.regal, p.ebene, p.fach FROM lg_befehl
                   LEFT JOIN lg_platz p ON p.id = b.platz_id ORDER BY b.id DESC LIMIT 30");
 
 kopf('Sender und Brücke', 'sender');
-seitenkopf('Sender und Brücke', 'Wie die Leuchtbefehle zu den Leisten kommen');
+seitenkopf('Sender und Brücke', 'Wie die Leuchtbefehle zu den Blinker kommen');
 flash_zeigen();
 ?>
 
@@ -144,7 +144,7 @@ flash_zeigen();
 <h2>Protokoll</h2>
 <div class="bx-tablewrap" style="margin-bottom:var(--sp-6)">
   <table class="bx-table">
-    <thead><tr><th>Zeit</th><th>Platz</th><th>Leiste</th><th>Farbe</th><th>Status</th><th>Antwort</th></tr></thead>
+    <thead><tr><th>Zeit</th><th>Platz</th><th>Blinker</th><th>Farbe</th><th>Status</th><th>Antwort</th></tr></thead>
     <tbody>
     <?php foreach ($protokoll as $b): $f = led_farben()[$b['farbe']] ?? null; ?>
       <tr>

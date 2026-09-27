@@ -21,8 +21,8 @@ $sender = led_sender_standard();
 
 kopf('Lagerplätze', 'plaetze');
 seitenkopf('Lagerplätze',
-    count($plaetze) . ' Plätze, davon ' . $mit . ' mit Leiste',
-    $plaetze ? '<a class="btn btn-primary" href="?p=zuordnen">Leisten zuordnen</a>' : '');
+    count($plaetze) . ' Plätze, davon ' . $mit . ' mit Blinker',
+    $plaetze ? '<a class="btn btn-primary" href="?p=zuordnen">Blinker zuordnen</a>' : '');
 flash_zeigen();
 
 if (!$sender) {
@@ -33,11 +33,11 @@ if (!$sender) {
 
 <?php if ($plaetze): ?>
 <div class="bx-listbar">
-  <input type="search" class="bx-search" placeholder="Suchen: Platz, Bezeichnung, Leiste" data-filter="lg-plaetze" autofocus>
+  <input type="search" class="bx-search" placeholder="Suchen: Platz, Bezeichnung, Blinker" data-filter="lg-plaetze" autofocus>
 </div>
 <div class="bx-tablewrap" style="margin-bottom:var(--sp-6)">
   <table class="bx-table" id="lg-plaetze">
-    <thead><tr><th>Platz</th><th>Bezeichnung</th><th>Leiste</th><th>Sender</th><th></th></tr></thead>
+    <thead><tr><th>Platz</th><th>Bezeichnung</th><th>Blinker</th><th>Sender</th><th></th></tr></thead>
     <tbody>
     <?php foreach ($plaetze as $p): ?>
       <tr>

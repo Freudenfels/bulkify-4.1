@@ -1,5 +1,5 @@
 <?php
-// Ein Lagerplatz: Lage, Bezeichnung, Leiste (per Scan), Sender - dazu Leucht-Test mit Farbe und Dauer.
+// Ein Lagerplatz: Lage, Bezeichnung, Blinker (per Scan), Sender - dazu Leucht-Test mit Farbe und Dauer.
 $id = (int)($_GET['id'] ?? 0);
 $p = platz($id);
 if (!$p) { flash('Diesen Lagerplatz gibt es nicht.', 'warn'); weiter('?p=plaetze'); }
@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($gleich) {
             flash('Den Platz ' . platz_code($neu) . ' gibt es schon.', 'warn');
         } elseif ($scan !== '' && $leiste === null) {
-            flash('"' . $scan . '" ist kein Leisten-Code. Erwartet wird der Barcode der Leiste, z. B. D73CE3XD.', 'warn');
+            flash('"' . $scan . '" ist kein Blinker-Code. Erwartet wird der Barcode des Blinkers, z. B. D73CE3XD.', 'warn');
         } elseif (($f = platz_leiste_setzen($id, $leiste)) !== '') {
             flash($f, 'warn');
         } else {
@@ -82,7 +82,7 @@ flash_zeigen();
   </div>
   <div class="bx-grid">
     <div class="bx-field"><label>Bezeichnung</label><input name="bezeichnung" value="<?= h((string)$p['bezeichnung']) ?>" placeholder="z. B. Kapseln Größe 0"></div>
-    <div class="bx-field"><label>Leiste (Barcode scannen)</label>
+    <div class="bx-field"><label>Blinker (Barcode scannen)</label>
       <input name="leiste" class="lg-code" value="<?= h((string)$p['leiste']) ?>" placeholder="z. B. D73CE3XD" autocomplete="off"></div>
     <div class="bx-field"><label>Sender</label>
       <select name="sender_id">

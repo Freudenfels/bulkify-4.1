@@ -1,5 +1,5 @@
 <?php
-// Leiste klingeln lassen per fetch (assets/lager.js), fuer das Chaos-Finden. Antwort: JSON {ok, meldung}.
+// Blinker klingeln lassen per fetch (assets/lager.js), fuer das Chaos-Finden. Antwort: JSON {ok, meldung}.
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_antwort(['ok' => false, 'meldung' => 'Nur per POST.'], 405);
 
 $leiste_id = (int)($_POST['leiste_id'] ?? 0);

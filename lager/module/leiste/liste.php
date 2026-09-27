@@ -1,23 +1,23 @@
 <?php
-// Übersicht aller Leisten im grossen Lager: welche haengt an welcher Charge, welche sind frei.
+// Übersicht aller Blinker im grossen Lager: welche haengt an welcher Charge, welche sind frei.
 $leisten = leiste_alle();
 $frei = count(array_filter($leisten, fn($l) => !$l['charge_id']));
 
-kopf('Leisten', 'leisten');
-seitenkopf('Leisten', count($leisten) . ' im Umlauf, davon ' . $frei . ' frei');
+kopf('Blinker', 'leisten');
+seitenkopf('Blinker', count($leisten) . ' im Umlauf, davon ' . $frei . ' frei');
 flash_zeigen();
 
 if (!$leisten) {
-    hinweis('Noch keine Leisten aufgenommen. Eine Leiste wird beim ersten Binden unter „Finden" automatisch aufgenommen.');
+    hinweis('Noch kein Blinker aufgenommen. Ein Blinker wird beim ersten Binden unter „Finden" automatisch aufgenommen.');
     fuss(); return;
 }
 ?>
 <div class="bx-listbar">
-  <input type="search" class="bx-search" placeholder="Suchen: Leiste, Rohstoff, Charge" data-filter="lg-leisten" autofocus>
+  <input type="search" class="bx-search" placeholder="Suchen: Blinker, Rohstoff, Charge" data-filter="lg-leisten" autofocus>
 </div>
 <div class="bx-tablewrap" style="margin-bottom:var(--sp-6)">
   <table class="bx-table" id="lg-leisten">
-    <thead><tr><th>Leiste</th><th>Status</th><th>Hängt an</th><th>Seit</th><th></th></tr></thead>
+    <thead><tr><th>Blinker</th><th>Status</th><th>Hängt an</th><th>Seit</th><th></th></tr></thead>
     <tbody>
     <?php foreach ($leisten as $l): ?>
       <tr>

@@ -22,7 +22,7 @@ function lg_schema(): void {
     try { if (lg_meta_lesen('schema_build') === $build) return; } catch (Throwable $e) {}
 
     // --- Lagerplatz: ein Fach im Regal. Bereich - Regal - Ebene - Fach. ------------------------
-    // An einem Platz haengt hoechstens eine Lichtleiste (6-stelliger Code vom Barcode der Leiste).
+    // An einem Platz haengt hoechstens einen Blinker (6-stelliger Code vom Barcode des Blinkers).
     q("CREATE TABLE IF NOT EXISTS lg_platz (
         id           INT AUTO_INCREMENT PRIMARY KEY,
         bereich      VARCHAR(10)  NOT NULL DEFAULT 'A',
@@ -39,7 +39,7 @@ function lg_schema(): void {
         UNIQUE KEY leiste (leiste)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-    // --- Sender (Basisstation): schickt den Funkbefehl an die Leisten. -------------------------
+    // --- Sender (Basisstation): schickt den Funkbefehl an die Blinker. -------------------------
     // weg: bruecke = Befehl wird von der Bruecke im Lager abgeholt (Normalfall auf dem Server)
     //      direkt  = der Server ruft die IP selbst auf (nur, wenn er im selben Netz steht)
     //      cloud   = ueber die Open-API des Herstellers (Sender mit 4G)
@@ -73,9 +73,9 @@ function lg_schema(): void {
         KEY (platz_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-    // --- Leiste (Chaos-Modell grosses Lager): die physische Lichtleiste, an eine CHARGE gebunden.
-    // Kein fester Platz: die Leiste haengt an der Palette und wandert mit. charge_id NULL = frei,
-    // liegt vorn und wartet auf die naechste Palette. code = 6-stellig vom Barcode der Leiste.
+    // --- Blinker (Chaos-Modell grosses Lager): die physische Blinker, an eine CHARGE gebunden.
+    // Kein fester Platz: der Blinker haengt an der Palette und wandert mit. charge_id NULL = frei,
+    // liegt vorn und wartet auf die naechste Palette. code = 6-stellig vom Barcode des Blinkers.
     q("CREATE TABLE IF NOT EXISTS lg_leiste (
         id           INT AUTO_INCREMENT PRIMARY KEY,
         code         CHAR(6)      NOT NULL,

@@ -15,7 +15,7 @@ lg_schema();
 
 $routen = [
     'login'          => 'auth/login.php',
-    // Grosses Lager (Chaos-Modell): Leiste an der Charge
+    // Grosses Lager (Chaos-Modell): Blinker an der Charge
     'finden'         => 'leiste/finden.php',
     'leisten'        => 'leiste/liste.php',
     'klingeln'       => 'led/klingeln.php',

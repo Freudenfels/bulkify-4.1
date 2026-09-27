@@ -1,9 +1,9 @@
 <?php
-// LED-Treiber fuer die Lichtleisten (Jinzhishi / 金之识). Alles, was die Hardware betrifft, steht HIER.
+// LED-Treiber fuer die Blinker (Jinzhishi / 金之识). Alles, was die Hardware betrifft, steht HIER.
 //
-// Der Befehl an eine Leiste ist ein 16-stelliger Hex-Code:
-//   FD10 + Leiste (6) + Farbe (1) + Dauer (1) + 50DF
-//   Beispiel: FD10 D73CE3 A 8 50DF = Leiste D73CE3, rot mit Piepton, 60 Sekunden
+// Der Befehl an einen Blinker ist ein 16-stelliger Hex-Code:
+//   FD10 + Blinker (6) + Farbe (1) + Dauer (1) + 50DF
+//   Beispiel: FD10 D73CE3 A 8 50DF = Blinker D73CE3, rot mit Piepton, 60 Sekunden
 //   Ausschalten: Farbe und Dauer beide 0.
 // Der Sender nimmt ihn im Lager-Netz entgegen: GET http://{ip}/light?code=...  -> {"ok":true,...}
 //
@@ -41,7 +41,7 @@ function led_sekunden(int $wunsch): int {
     return $ok;
 }
 
-// Aus dem Barcode auf der Leiste (z. B. "D73CE3XD") den 6-stelligen Code machen.
+// Aus dem Barcode auf dem Blinker (z. B. "D73CE3XD") den 6-stelligen Code machen.
 // Nimmt auch den nackten Code ("d73ce3") an. null, wenn es kein gueltiger Code ist.
 function led_leiste_normalisieren(string $scan): ?string {
     $s = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', $scan));
@@ -77,7 +77,7 @@ function led_wege(): array {
 function led_platz_an(int $platz_id, string $farbe = 'gruen', int $sekunden = 20, bool $piep = true): array {
     $p = one("SELECT id, leiste, sender_id FROM lg_platz WHERE id=?", [$platz_id]);
     if (!$p) return ['ok' => false, 'meldung' => 'Lagerplatz nicht gefunden.'];
-    if (!$p['leiste']) return ['ok' => false, 'meldung' => 'An diesem Platz hängt noch keine Leiste.'];
+    if (!$p['leiste']) return ['ok' => false, 'meldung' => 'An diesem Platz hängt noch kein Blinker.'];
     return led_befehl((string)$p['leiste'], $p['sender_id'] ? (int)$p['sender_id'] : null,
                       led_code((string)$p['leiste'], $farbe, $piep, $sekunden),
                       $farbe, led_sekunden($sekunden), $piep, $platz_id);
@@ -85,7 +85,7 @@ function led_platz_an(int $platz_id, string $farbe = 'gruen', int $sekunden = 20
 
 function led_platz_aus(int $platz_id): array {
     $p = one("SELECT id, leiste, sender_id FROM lg_platz WHERE id=?", [$platz_id]);
-    if (!$p || !$p['leiste']) return ['ok' => false, 'meldung' => 'An diesem Platz hängt keine Leiste.'];
+    if (!$p || !$p['leiste']) return ['ok' => false, 'meldung' => 'An diesem Platz hängt kein Blinker.'];
     return led_befehl((string)$p['leiste'], $p['sender_id'] ? (int)$p['sender_id'] : null,
                       led_code_aus((string)$p['leiste']), 'aus', 0, false, $platz_id);
 }

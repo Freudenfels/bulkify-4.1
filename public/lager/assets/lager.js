@@ -21,7 +21,7 @@
   }
 
   document.addEventListener('click', function (e) {
-    // Zwei Knopf-Arten: data-leuchten (fester Platz) und data-klingeln (Leiste an einer Charge).
+    // Zwei Knopf-Arten: data-leuchten (fester Platz) und data-klingeln (Blinker an einer Charge).
     var btn = e.target.closest('[data-leuchten],[data-klingeln]');
     if (!btn || btn.disabled) return;
     e.preventDefault();

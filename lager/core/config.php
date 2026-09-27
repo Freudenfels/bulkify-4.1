@@ -9,7 +9,7 @@
 //   3. eine Ebene hoeher - dort liegt sie, solange das Lager im Dashboard-Projekt steckt.
 // Erst danach greifen die lokalen Vorgaben.
 //
-// Fuer die Hersteller-Cloud der Lichtleisten koennen in der secrets.php zusaetzlich stehen:
+// Fuer die Hersteller-Cloud der Blinker koennen in der secrets.php zusaetzlich stehen:
 //   LG_CLOUD_URL, LG_CLOUD_APP_ID, LG_CLOUD_SECRET   (siehe core/led.php)
 define('BX_ROOT', dirname(__DIR__));
 define('BX_MARKE', 'bulkify');
