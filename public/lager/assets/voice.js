@@ -33,7 +33,18 @@
   }
 
   function auf() { baue(); pop.classList.add('an'); }
-  function zu() { if (pop) pop.classList.remove('an'); stopHoeren(); still(); }
+  function zu() { if (pop) pop.classList.remove('an'); stopHoeren(); still(); leere(); }
+
+  // Popup komplett zuruecksetzen, damit beim naechsten Oeffnen nichts Altes stehen bleibt.
+  // NUR beim frischen Start (Mikrofon-Klick) und beim Schliessen aufrufen - nicht in der
+  // Befehlsphase, sonst verschwinden die gerade gezeigten Treffer.
+  function leere() {
+    baue();
+    treffer = []; aktiv = 0; anId = null;
+    statusZeile.textContent = '';
+    liste.innerHTML = '';
+    kopf.textContent = 'Zuhören …'; kopf.classList.remove('live');
+  }
 
   function zeigeStatus(t) { baue(); statusZeile.textContent = t; }
 
@@ -132,17 +143,19 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   // ---- Knopf + Tastenkuerzel ---------------------------------------------------------------
+  function frischStarten() { auf(); leere(); starte('suche'); }
+
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-mic]'); if (!b) return;
     e.preventDefault();
-    starte('suche');
+    frischStarten();
   });
 
   // Strg+D (bzw. Cmd+D) startet das Mikrofon. Ueberschreibt das Lesezeichen-Kuerzel des Browsers.
   document.addEventListener('keydown', function (e) {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'd' || e.key === 'D')) {
       e.preventDefault();
-      starte('suche');
+      frischStarten();
     }
   });
 })();
