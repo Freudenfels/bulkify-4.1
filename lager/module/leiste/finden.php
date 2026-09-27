@@ -47,6 +47,9 @@ if (!$hat_charge) {
   <input type="hidden" name="p" value="finden">
   <input type="search" name="q" class="bx-search" value="<?= h($q) ?>" placeholder="Rohstoff, Artikelnummer oder Chargennummer" autofocus>
   <button class="btn btn-primary" type="submit">Suchen</button>
+  <button class="btn btn-ghost" type="button" data-mic title="Per Sprache suchen und blinken lassen">
+    <span class="lg-mic-icon" aria-hidden="true"></span> Sprache
+  </button>
 </form>
 
 <?php if (!$treffer): ?>

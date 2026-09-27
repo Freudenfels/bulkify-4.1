@@ -25,3 +25,33 @@
 
 .lg-schritte{margin:0; padding-left:20px; line-height:1.7}
 .lg-schritte code{font-size:var(--fs-sm)}
+
+/* ---------- Sprachbedienung (voice.js) ---------- */
+.lg-mic-icon{display:inline-block;width:11px;height:16px;vertical-align:-3px;position:relative}
+.lg-mic-icon::before{content:"";position:absolute;left:2px;top:0;width:7px;height:10px;border-radius:4px;background:currentColor}
+.lg-mic-icon::after{content:"";position:absolute;left:0;top:8px;width:11px;height:6px;border:2px solid currentColor;border-top:none;border-radius:0 0 6px 6px}
+
+#lgVoice{position:fixed;inset:0;z-index:100000;background:rgba(16,18,20,.5);display:none;
+  align-items:flex-end;justify-content:center;padding:0}
+#lgVoice.an{display:flex}
+@media(min-width:700px){#lgVoice{align-items:center}}
+.lgv-box{background:var(--panel);color:var(--text);width:100%;max-width:560px;border-radius:16px 16px 0 0;
+  box-shadow:0 -8px 40px rgba(0,0,0,.35);padding:var(--sp-5);max-height:85vh;overflow:auto}
+@media(min-width:700px){.lgv-box{border-radius:16px}}
+.lgv-kopf{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-3)}
+.lgv-mic{font-weight:600;color:var(--muted)}
+.lgv-mic.live{color:var(--gruen)}
+.lgv-mic.live::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--gruen);
+  margin-right:8px;vertical-align:1px;animation:lgvpuls 1s ease-in-out infinite}
+@keyframes lgvpuls{0%,100%{opacity:.3}50%{opacity:1}}
+.lgv-zu{background:none;border:none;font-size:28px;line-height:1;color:var(--muted);cursor:pointer;padding:0 4px}
+.lgv-status{font-size:var(--fs-md);margin-bottom:var(--sp-3);min-height:1.4em}
+.lgv-liste{display:flex;flex-direction:column;gap:8px}
+.lgv-zeile{border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer}
+.lgv-zeile.aktiv{border-color:var(--gruen);outline:2px solid var(--gruen);outline-offset:-2px;background:var(--panel-2)}
+.lgv-name{font-weight:600;font-size:var(--fs-md)}
+.lgv-sub{color:var(--muted);font-size:var(--fs-sm);margin-top:2px}
+.lgv-leiste{color:var(--gruen)}
+.lgv-keine{color:var(--muted)}
+.lgv-leer{color:var(--muted);padding:12px 0}
+.lgv-hilfe{color:var(--muted);font-size:var(--fs-sm);margin-top:var(--sp-4);text-align:center}

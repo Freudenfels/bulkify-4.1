@@ -87,6 +87,7 @@ function fuss(): void {
     // Lade-Rueckmeldung fuer Formulare (Spinner + Ladebalken) und die Leucht-Knoepfe.
     echo '<script src="assets/busy.js" defer></script>';
     echo '<script src="assets/lager.js" defer></script>';
+    echo '<script src="assets/voice.js" defer></script>';
     echo '</body></html>';
 }
 

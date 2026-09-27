@@ -19,6 +19,7 @@ $routen = [
     'finden'         => 'leiste/finden.php',
     'leisten'        => 'leiste/liste.php',
     'klingeln'       => 'led/klingeln.php',
+    'suche'          => 'leiste/suche.php',
     // Fulfillment (feste Plaetze)
     'plaetze'        => 'platz/liste.php',
     'platz'          => 'platz/detail.php',
@@ -45,7 +46,7 @@ if ($p === 'autologin') {
 }
 
 if ($p !== 'login' && !lg_angemeldet()) {
-    if ($p === 'leuchten' || $p === 'klingeln') json_antwort(['ok' => false, 'meldung' => 'Bitte neu anmelden.'], 401);
+    if ($p === 'leuchten' || $p === 'klingeln' || $p === 'suche') json_antwort(['ok' => false, 'meldung' => 'Bitte neu anmelden.'], 401);
     weiter('?p=login');
 }
 if ($p === 'login' && lg_angemeldet()) weiter('?p=finden');
