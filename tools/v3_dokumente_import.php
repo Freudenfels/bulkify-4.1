@@ -39,6 +39,34 @@ function v3_dok_insert(string $objTyp, int $objId, string $typ, ?string $titel, 
       [$objTyp, $objId, $typ, $lieferant_id, $titel ? mb_substr($titel, 0, 190) : null, $datei, mb_substr($origName, 0, 255), $dd, $hash, $sicht, $v3ref]);
 }
 
+// Findet moegliche v3-Datenordner automatisch (enthaelt board.sqlite + uploads/). Prueft feste Kandidaten
+// relativ zur v4-Installation und scannt die Nachbarordner. Rueckgabe: [['pfad'=>..., 'ok'=>bool], ...].
+function v3_dok_kandidaten(): array {
+    $roh = [];
+    $eltern = dirname(BX_ROOT);          // Ordner, in dem /bulkify4.1 liegt
+    $grosseltern = dirname($eltern);
+    foreach ([
+        $eltern . '/bulkifyv2/bulkify-data',
+        $grosseltern . '/bulkifyv2/bulkify-data',
+        $eltern . '/bulkify-data',
+        $eltern . '/bulkifyv2/bulkify/data',
+        '/bulkifyv2/bulkify-data',
+    ] as $p) $roh[] = $p;
+    // Nachbarordner absuchen: */board.sqlite und */*/board.sqlite (nur eine Ebene tief, robust).
+    foreach ([$eltern, $grosseltern] as $basis) {
+        foreach ((@glob($basis . '/*/board.sqlite') ?: []) as $hit) $roh[] = dirname($hit);
+        foreach ((@glob($basis . '/*/*/board.sqlite') ?: []) as $hit) $roh[] = dirname($hit);
+    }
+    $seen = []; $out = [];
+    foreach ($roh as $p) {
+        $p = rtrim($p, '/\\'); if ($p === '' || isset($seen[$p])) continue; $seen[$p] = 1;
+        $out[] = ['pfad' => $p, 'ok' => is_file($p . '/board.sqlite') && is_dir($p . '/uploads')];
+    }
+    // Treffer zuerst.
+    usort($out, fn($a, $b) => ($b['ok'] <=> $a['ok']));
+    return $out;
+}
+
 function v3_dok_import(string $v3dir, bool $commit = false): array {
     $v3dir = rtrim($v3dir, '/\\');
     $db = $v3dir . '/board.sqlite';

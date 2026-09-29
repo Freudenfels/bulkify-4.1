@@ -7,8 +7,10 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/tools/v3_dokumente_import.php';
 
-// Standard-Pfad raten: /bulkify4.1 und /bulkifyv2 liegen meist als Nachbarn unter demselben Elternordner.
-$standard = dirname(BX_ROOT) . '/bulkifyv2/bulkify-data';
+// Kandidaten automatisch finden (enthalten board.sqlite + uploads/). Erster Treffer = Vorschlag.
+$kandidaten = v3_dok_kandidaten();
+$treffer = null; foreach ($kandidaten as $k) if ($k['ok']) { $treffer = $k['pfad']; break; }
+$standard = $treffer ?: (dirname(BX_ROOT) . '/bulkifyv2/bulkify-data');
 $pfad = trim((string)($_POST['pfad'] ?? $_GET['pfad'] ?? $standard));
 $ergebnis = null; $aktion = (string)($_POST['aktion'] ?? '');
 
@@ -22,9 +24,19 @@ bx_head('v3-Dokumente übernehmen', 'Temporär: die hochgeladenen Dateien aus v3
 <div class="bx-panel" style="border-color:#e6c4c0;padding:10px 14px;font-size:13px">Erst <strong>Trockenlauf</strong> (zählt nur, ändert nichts), dann <strong>Import</strong>. Idempotent – schon übernommene Dateien werden übersprungen. Kopiert die Dateien in <code>data/uploads</code>. Rechnungen werden für den Kunden sichtbar, der Rest bleibt intern (später freigeben).</div>
 
 <form method="post" class="bx-panel" data-busy="Verarbeite … (kann bei vielen Dateien etwas dauern)">
-  <div class="bx-field"><label>Pfad zum v3-Datenordner (enthält <code>board.sqlite</code> + <code>uploads/</code>)</label>
-    <input type="text" name="pfad" value="<?= h($pfad) ?>" style="min-width:420px">
-    <div class="muted" style="font-size:12px;margin-top:4px">Standard geraten: <code><?= h($standard) ?></code>. Falls falsch, absoluten Serverpfad eintragen (z. B. <code>/bulkifyv2/bulkify-data</code>).</div>
+  <div class="bx-field"><label>Ordner auf dem Server (kein Web-Link!) – enthält <code>board.sqlite</code> + <code>uploads/</code></label>
+    <input type="text" name="pfad" value="<?= h($pfad) ?>" style="min-width:460px">
+    <div class="muted" style="font-size:12px;margin-top:4px">Das ist ein <strong>Verzeichnis auf dem Server</strong> (wie im Hosting neben der Domain), keine Internet-Adresse.</div>
+    <?php if ($kandidaten): ?>
+      <div class="muted" style="font-size:12px;margin-top:8px">Automatisch gefunden – klicken zum Übernehmen:</div>
+      <div class="bx-row" style="gap:6px;flex-wrap:wrap;margin-top:4px">
+        <?php foreach ($kandidaten as $k): ?>
+          <a class="btn btn-ghost btn-sm" href="?p=v3_dok_import&pfad=<?= rawurlencode($k['pfad']) ?>" title="<?= h($k['pfad']) ?>">
+            <?= $k['ok'] ? '✓ ' : '' ?><?= h($k['pfad']) ?><?= $k['ok'] ? '' : ' (nicht gefunden)' ?>
+          </a>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
   </div>
   <div class="bx-row" style="gap:8px;margin-top:var(--sp-3)">
     <button class="btn btn-ghost" type="submit" name="aktion" value="trocken">Trockenlauf</button>
