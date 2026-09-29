@@ -23,3 +23,10 @@ Der Server läuft im (minimierten) Fenster **„bulkify-server"**. Lässt du es 
   Sobald wieder Internet da ist, funktioniert die KI wieder.
 - **Voraussetzungen** (auf diesem Laptop bereits eingerichtet): PHP unter `C:\php`, MariaDB-Dienst „MariaDB",
   Datenbank `bulkify41`.
+
+## Lager/Produktion zum Durchspielen füllen
+Damit du auch **Lager, Bestand, Produktion** durchspielen kannst (nicht nur Kunden/Angebote):
+**System → „Testdaten (lokal)" → „Lager füllen"**. Das legt für die in Rezepturen verwendeten Rohstoffe und
+alle Verpackungen/Etiketten je einen großen freien Bestand an – dann „fehlt" nichts, Produktion/Reservierung
+laufen. Mit „Testbestände entfernen" wieder weg (dann kannst du auch Einkauf/Fehlmengen testen).
+Dieses Werkzeug ist **nur lokal** (127.0.0.1) nutzbar – auf beta/live ist es gesperrt.
