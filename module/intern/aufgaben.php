@@ -38,76 +38,81 @@ render_header('aufgaben', 'Aufgaben');
 bx_head('Aufgaben', $zeigeErledigt ? 'Erledigte Aufgaben' : $offenGesamt . ' offene Aufgaben',
         $zeigeErledigt ? bx_btn('Offene anzeigen', '?p=aufgaben', 'ghost') : bx_btn('Erledigte anzeigen', '?p=aufgaben&zeige=erledigt', 'ghost'));
 ?>
+<style>
+  /* Kompakte Liste – bricht immer um, nie seitliches Scrollen. Klick auf die Karte öffnet die Detailseite. */
+  .auf-list{ display:flex; flex-direction:column; gap:8px }
+  .auf-item{ display:flex; gap:12px; align-items:flex-start; background:var(--panel); border:1px solid var(--line); border-left-width:4px; border-radius:10px; padding:10px 12px }
+  .auf-item.prio1{ border-left-color:#c0392b }
+  .auf-item.prio2{ border-left-color:#3b82f6 }
+  .auf-item.prio3{ border-left-color:#9aa3ad }
+  .auf-main{ flex:1; min-width:0; text-decoration:none; color:inherit; display:block }
+  .auf-main:hover .auf-t{ text-decoration:underline }
+  .auf-t{ font-weight:600; word-break:break-word; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
+  .auf-d{ color:var(--muted); font-size:12px; margin-top:2px; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word }
+  .auf-m{ color:var(--muted); font-size:12px; margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+  .auf-act{ display:flex; gap:6px; flex:none; flex-wrap:wrap }
+  #newAufDlg{ width:min(560px,calc(100% - 32px)); border:1px solid var(--line); border-radius:14px; padding:0 }
+  #newAufDlg::backdrop{ background:rgba(0,0,0,.45) }
+  @media (max-width:560px){ .auf-item{ flex-wrap:wrap } .auf-act{ width:100% } .auf-act form,.auf-act .btn{ flex:1 } }
+</style>
+
 <?php if (!$zeigeErledigt): ?>
-<form method="post" class="bx-form">
-  <input type="hidden" name="aktion" value="neu">
-  <div class="bx-panel">
-    <h2 style="margin-top:0">Neue Aufgabe</h2>
+<div class="bx-row" style="margin-bottom:12px">
+  <button type="button" class="btn" style="background:var(--gruen,#2f6f4f);border-color:transparent;color:#fff" onclick="document.getElementById('newAufDlg').showModal()">+ Neue Aufgabe</button>
+</div>
+<dialog id="newAufDlg">
+  <form method="post" style="margin:0;padding:18px 20px">
+    <input type="hidden" name="aktion" value="neu">
+    <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h2 style="margin:0;font-size:17px">Neue Aufgabe</h2>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('newAufDlg').close()">Schließen</button>
+    </div>
     <div class="bx-grid">
-      <div class="bx-field" style="grid-column:1/-1"><label>Aufgabe</label><input type="text" name="titel" required placeholder="Was ist zu tun?"></div>
+      <div class="bx-field" style="grid-column:1/-1"><label>Aufgabe</label><input type="text" name="titel" required placeholder="Was ist zu tun?" autofocus></div>
       <div class="bx-field" style="grid-column:1/-1"><label>Details (optional)</label><textarea name="beschreibung" placeholder="Genauere Beschreibung, Hinweise …"></textarea></div>
       <div class="bx-field"><label>Priorität</label>
         <select name="prio"><?php foreach (prio_liste() as $k=>$lbl): ?><option value="<?= $k ?>" <?= $k===2?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?></select>
       </div>
       <div class="bx-field"><label>Zuweisen an</label>
-        <select name="zugewiesen_an">
-          <option value="">Team (alle)</option>
+        <select name="zugewiesen_an"><option value="">Team (alle)</option>
           <?php foreach ($mitarbeiter as $m): ?><option value="<?= (int)$m['id'] ?>"><?= h($m['name']) ?></option><?php endforeach; ?>
         </select>
       </div>
       <div class="bx-field"><label>Fällig bis (optional)</label><input type="date" name="faellig"></div>
     </div>
-  </div>
-  <button class="btn btn-primary" type="submit">Aufgabe erstellen</button>
-</form>
+    <div class="bx-row" style="margin-top:var(--sp-3)"><button class="btn" style="background:var(--gruen,#2f6f4f);border-color:transparent;color:#fff" type="submit">Aufgabe erstellen</button></div>
+  </form>
+</dialog>
 <?php endif; ?>
 
-<style>
-  /* Beschreibung kurz halten (max. 2 Zeilen), kein seitliches Scrollen. */
-  .auf-desc{ color:var(--muted); font-size:11px; line-height:1.35; margin-top:2px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word }
-  .auf-title{ text-decoration:none; color:inherit }
-  .auf-title:hover{ text-decoration:underline }
-  /* Zeilen farblich unterscheidbar: Zebra + linker Akzent je Priorität. */
-  #aufTab tbody tr{ border-left:4px solid transparent }
-  #aufTab tbody tr:nth-child(even){ background:rgba(127,127,127,.06) }
-  #aufTab tbody tr.prio1{ border-left-color:#c0392b }
-  #aufTab tbody tr.prio2{ border-left-color:#3b82f6 }
-  #aufTab tbody tr.prio3{ border-left-color:#9aa3ad }
-  #aufTab td{ vertical-align:top }
-</style>
-<div class="bx-panel">
-  <div class="bx-tablewrap"><table class="bx-table" id="aufTab">
-    <thead><tr><th>Prio</th><th>Aufgabe</th><th>Zugewiesen</th><th>Fällig</th><th><?= $zeigeErledigt ? 'Erledigt' : 'Erstellt von' ?></th><th></th></tr></thead>
-    <tbody>
-      <?php if (!$aufgaben): ?><tr><td colspan="6" class="muted"><?= $zeigeErledigt ? 'Keine erledigten Aufgaben.' : 'Keine offenen Aufgaben.' ?></td></tr><?php endif; ?>
-      <?php foreach ($aufgaben as $a):
-          $ueberfaellig = !$zeigeErledigt && $a['faellig'] && $a['faellig'] < gmdate('Y-m-d');
-          $besch = trim(preg_replace('/\s+/', ' ', (string)$a['beschreibung'])); ?>
-        <tr class="prio<?= (int)$a['prio'] ?>">
-          <td><?= prio_badge((int)$a['prio']) ?></td>
-          <td>
-            <div><a class="auf-title" href="?p=aufgabe&id=<?= (int)$a['id'] ?>"><strong><?= h($a['titel']) ?></strong></a></div>
-            <?php if ($besch !== ''): ?><div class="auf-desc" title="<?= h($besch) ?>"><?= h($besch) ?></div><?php endif; ?>
-          </td>
-          <td><?= $a['zuw_name'] ? h($a['zuw_name']) : bx_badge('Team','info') ?></td>
-          <td><?= $a['faellig'] ? '<span'.($ueberfaellig?' class="bx-err"':'').'>'.h(date('d.m.Y', strtotime($a['faellig']))).'</span>' : '<span class="muted">–</span>' ?></td>
-          <td class="muted">
-            <?php if ($zeigeErledigt): ?><?= h($a['erledigt_name'] ?: '–') ?><?= $a['erledigt_am'] ? ' · '.h(fmt_zeit($a['erledigt_am'],'d.m.Y')) : '' ?>
-            <?php else: ?><?= h($a['ersteller_name'] ?: 'System') ?><?php endif; ?>
-          </td>
-          <td class="bx-num" style="white-space:nowrap">
-            <?php if ($zeigeErledigt): ?>
-              <form method="post" style="display:inline"><input type="hidden" name="aktion" value="offen"><input type="hidden" name="id" value="<?= (int)$a['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Wieder öffnen</button></form>
-            <?php else: ?>
-              <?php if ($a['zugewiesen_an'] === null && $uid): ?>
-                <form method="post" style="display:inline"><input type="hidden" name="aktion" value="uebernehmen"><input type="hidden" name="id" value="<?= (int)$a['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Übernehmen</button></form>
-              <?php endif; ?>
-              <form method="post" style="display:inline"><input type="hidden" name="aktion" value="erledigt"><input type="hidden" name="id" value="<?= (int)$a['id'] ?>"><button class="btn btn-primary btn-sm" type="submit">Erledigt</button></form>
-            <?php endif; ?>
-          </td>
-        </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table></div>
+<?php if (!$aufgaben): ?>
+  <div class="bx-panel"><div class="muted"><?= $zeigeErledigt ? 'Keine erledigten Aufgaben.' : 'Keine offenen Aufgaben.' ?></div></div>
+<?php else: ?>
+<div class="auf-list">
+  <?php foreach ($aufgaben as $a):
+      $ueberfaellig = !$zeigeErledigt && $a['faellig'] && $a['faellig'] < gmdate('Y-m-d');
+      $besch = trim(preg_replace('/\s+/', ' ', (string)$a['beschreibung'])); ?>
+    <div class="auf-item prio<?= (int)$a['prio'] ?>">
+      <a class="auf-main" href="?p=aufgabe&id=<?= (int)$a['id'] ?>">
+        <div class="auf-t"><?= h($a['titel']) ?></div>
+        <?php if ($besch !== ''): ?><div class="auf-d"><?= h($besch) ?></div><?php endif; ?>
+        <div class="auf-m">
+          <?= prio_badge((int)$a['prio']) ?>
+          <span>· <?= $a['zuw_name'] ? h($a['zuw_name']) : 'Team' ?></span>
+          <?php if ($a['faellig']): ?><span>· fällig <?= $ueberfaellig ? '<span class="bx-err">'.h(date('d.m.Y', strtotime($a['faellig']))).'</span>' : h(date('d.m.Y', strtotime($a['faellig']))) ?></span><?php endif; ?>
+          <?php if ($zeigeErledigt && $a['erledigt_am']): ?><span>· erledigt <?= h(fmt_zeit($a['erledigt_am'],'d.m.Y')) ?></span><?php endif; ?>
+        </div>
+      </a>
+      <div class="auf-act">
+        <?php if ($zeigeErledigt): ?>
+          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="offen"><input type="hidden" name="id" value="<?= (int)$a['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Wieder öffnen</button></form>
+        <?php else: ?>
+          <?php if ($a['zugewiesen_an'] === null && $uid): ?><form method="post" style="margin:0"><input type="hidden" name="aktion" value="uebernehmen"><input type="hidden" name="id" value="<?= (int)$a['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Übernehmen</button></form><?php endif; ?>
+          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="erledigt"><input type="hidden" name="id" value="<?= (int)$a['id'] ?>"><button class="btn btn-primary btn-sm" type="submit">Erledigt</button></form>
+        <?php endif; ?>
+      </div>
+    </div>
+  <?php endforeach; ?>
 </div>
+<?php endif; ?>
 <?php render_footer(); ?>
