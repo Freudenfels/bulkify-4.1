@@ -23,6 +23,7 @@ function route_rollen_map(): array {
         'app'                => ['*'],   // Anleitung: bulkify aufs Handy legen - fuer jeden
         'werk'               => ['production', 'labor', 'fulfillment'],
         'aufgaben'           => ['production', 'labor', 'fulfillment'],
+        'aufgabe'            => ['production', 'labor', 'fulfillment'],
         'kalender'           => ['production', 'labor', 'fulfillment'],
         'bedarf'             => ['production', 'labor', 'fulfillment', 'einkauf'],
         'einkaufsliste'      => ['einkauf'],

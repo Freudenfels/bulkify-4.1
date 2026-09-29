@@ -62,21 +62,32 @@ bx_head('Aufgaben', $zeigeErledigt ? 'Erledigte Aufgaben' : $offenGesamt . ' off
 </form>
 <?php endif; ?>
 
+<style>
+  /* Beschreibung kurz halten (max. 2 Zeilen), kein seitliches Scrollen. */
+  .auf-desc{ color:var(--muted); font-size:11px; line-height:1.35; margin-top:2px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word }
+  .auf-title{ text-decoration:none; color:inherit }
+  .auf-title:hover{ text-decoration:underline }
+  /* Zeilen farblich unterscheidbar: Zebra + linker Akzent je Priorität. */
+  #aufTab tbody tr{ border-left:4px solid transparent }
+  #aufTab tbody tr:nth-child(even){ background:rgba(127,127,127,.06) }
+  #aufTab tbody tr.prio1{ border-left-color:#c0392b }
+  #aufTab tbody tr.prio2{ border-left-color:#3b82f6 }
+  #aufTab tbody tr.prio3{ border-left-color:#9aa3ad }
+  #aufTab td{ vertical-align:top }
+</style>
 <div class="bx-panel">
-  <div class="bx-tablewrap"><table class="bx-table">
+  <div class="bx-tablewrap"><table class="bx-table" id="aufTab">
     <thead><tr><th>Prio</th><th>Aufgabe</th><th>Zugewiesen</th><th>Fällig</th><th><?= $zeigeErledigt ? 'Erledigt' : 'Erstellt von' ?></th><th></th></tr></thead>
     <tbody>
       <?php if (!$aufgaben): ?><tr><td colspan="6" class="muted"><?= $zeigeErledigt ? 'Keine erledigten Aufgaben.' : 'Keine offenen Aufgaben.' ?></td></tr><?php endif; ?>
       <?php foreach ($aufgaben as $a):
-          $ueberfaellig = !$zeigeErledigt && $a['faellig'] && $a['faellig'] < gmdate('Y-m-d'); ?>
-        <tr>
+          $ueberfaellig = !$zeigeErledigt && $a['faellig'] && $a['faellig'] < gmdate('Y-m-d');
+          $besch = trim(preg_replace('/\s+/', ' ', (string)$a['beschreibung'])); ?>
+        <tr class="prio<?= (int)$a['prio'] ?>">
           <td><?= prio_badge((int)$a['prio']) ?></td>
           <td>
-            <div><strong><?= h($a['titel']) ?></strong></div>
-            <?php if ($a['beschreibung']): ?><div class="muted" style="font-size:12px;white-space:pre-line"><?= h($a['beschreibung']) ?></div><?php endif; ?>
-            <?php if (($a['ref_typ'] ?? '') === 'fastaction' && (int)($a['ref_id'] ?? 0) > 0): ?>
-              <div style="margin-top:4px"><a class="btn btn-ghost btn-sm" href="?p=fastaction&notiz=<?= (int)$a['ref_id'] ?>">Fastaction ansehen</a></div>
-            <?php endif; ?>
+            <div><a class="auf-title" href="?p=aufgabe&id=<?= (int)$a['id'] ?>"><strong><?= h($a['titel']) ?></strong></a></div>
+            <?php if ($besch !== ''): ?><div class="auf-desc" title="<?= h($besch) ?>"><?= h($besch) ?></div><?php endif; ?>
           </td>
           <td><?= $a['zuw_name'] ? h($a['zuw_name']) : bx_badge('Team','info') ?></td>
           <td><?= $a['faellig'] ? '<span'.($ueberfaellig?' class="bx-err"':'').'>'.h(date('d.m.Y', strtotime($a['faellig']))).'</span>' : '<span class="muted">–</span>' ?></td>

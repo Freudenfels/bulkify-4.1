@@ -85,6 +85,7 @@ $routes = [
     'portal_dok'     => 'portal/dokument_download.php',
     'werk'               => 'intern/werk_cockpit.php',
     'aufgaben'           => 'intern/aufgaben.php',
+    'aufgabe'            => 'intern/aufgabe_detail.php',
     'produktion'         => 'produktion/liste.php',
     'produktionsauftrag' => 'produktion/detail.php',
     'produktion_run'     => 'produktion/run.php',
