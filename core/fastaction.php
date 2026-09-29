@@ -23,7 +23,9 @@ Gib AUSSCHLIESSLICH dieses JSON zurueck:
       "zutaten_text": "dieselben Wirkstoffe als Fliesstext, z. B. 'Bacopa Monnieri Extrakt 10:1 150mg, MCC 50mg'" }
   ],
   "vorschlaege": [
-    { "text": "konkreter Handlungsvorschlag als Frage, z. B. 'Fuer Kunde X und Rezeptur Y ein Angebot ueber 1.000 Dosen anlegen und an den Kunden senden?'", "typ": "angebot|anfrage|nachricht|bestellung|produktion|sonstiges" }
+    { "text": "konkreter Handlungsvorschlag als Frage, z. B. 'Fuer Kunde X und Rezeptur Y ein Angebot ueber 1.000 Dosen anlegen?'",
+      "typ": "angebot|anfrage|nachricht|bestellung|produktion|sonstiges",
+      "rezeptur": null, "produkt": null, "menge": null, "einheit": null }
   ]
 }
 
@@ -33,7 +35,9 @@ Regeln:
 - "rezepturen": NUR wenn in der Nachricht/Datei eine konkrete Rezeptur/Zusammensetzung steht (z. B. auf einer alten
   Rechnung/Spezifikation). Je Rezeptur: Name + Darreichungsform + die einzelnen Zutaten (bezeichnung + menge_mg als
   Zahl in Milligramm) + zutaten_text. "menge_mg" nur wenn die Menge dasteht, sonst 0. Sonst leere Liste [].
-- 1 bis 3 Vorschlaege, der wichtigste zuerst. Alles auf Deutsch.
+- Pro Vorschlag, wenn es um ein KONKRETES Produkt/Rezeptur mit Menge geht (z. B. mehrere Positionen einer Bestellung),
+  je EINEN Vorschlag mit rezeptur/produkt-Name (wie in der Nachricht) + menge (Zahl) + einheit. Sonst diese Felder null.
+- 1 bis 5 Vorschlaege, der wichtigste zuerst. Alles auf Deutsch.
 - Wenn unklar, "dringlichkeit" auf "mittel" und einen Vorschlag "beim Kunden nachfragen".
 TXT;
 }
@@ -86,10 +90,52 @@ function fastaction_notiz_anlegen(array $d, array $auf_e, string $eingabe, ?stri
     $sort = 0;
     foreach ((array)($d['vorschlaege'] ?? []) as $v) {
         $text = trim((string)($v['text'] ?? '')); if ($text === '') continue;
-        q("INSERT INTO fastaction_item (notiz_id,typ,text,sort) VALUES (?,?,?,?)",
-          [$nid, (string)($v['typ'] ?? 'sonstiges'), mb_substr($text, 0, 500), $sort++]);
+        $typ = (string)($v['typ'] ?? 'sonstiges');
+        // Rezeptur/Produkt aus dem Vorschlag aufloesen (fuer die Ein-Klick-Aktion). Fallback: die erkannten
+        // Haupt-Entitaeten der Nachricht.
+        $rn = trim((string)($v['rezeptur'] ?? ''));
+        $pn = trim((string)($v['produkt'] ?? ''));
+        $rid = $rn !== '' ? (int) scalar("SELECT id FROM rezeptur WHERE name LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $rn . '%', $rn]) : 0;
+        $pid = $pn !== '' ? (int) scalar("SELECT id FROM produkt WHERE COALESCE(NULLIF(kundenname,''),name) LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $pn . '%', $pn]) : 0;
+        if (!$rid && !$pid) { $rid = $auf_e['rezeptur']['id'] ?? 0; $pid = $auf_e['produkt']['id'] ?? 0; }
+        if (!$pid && $rid) { }   // Rezeptur reicht fuer Angebot/Preisanfrage
+        $menge = ($v['menge'] ?? null) !== null && $v['menge'] !== '' ? (float) str_replace(',', '.', (string)$v['menge']) : null;
+        $aktion = in_array($typ, ['angebot','bestellung'], true) ? 'angebot'
+                : ($typ === 'anfrage' ? 'lieferantenpreise'
+                : ($typ === 'nachricht' ? 'kunde' : ($typ === 'produktion' ? 'produktion' : 'sonstiges')));
+        q("INSERT INTO fastaction_item (notiz_id,typ,text,rezeptur_id,produkt_id,menge,einheit,aktion,sort)
+           VALUES (?,?,?,?,?,?,?,?,?)",
+          [$nid, $typ, mb_substr($text, 0, 500), $rid ?: null, $pid ?: null, $menge,
+           mb_substr(trim((string)($v['einheit'] ?? '')), 0, 20) ?: null, $aktion, $sort++]);
     }
     return $nid;
+}
+
+// Primaere Ein-Klick-Aktion je ToDo-Punkt: [label, href, primary]. Nutzt das strukturierte Ziel des Items
+// (Rezeptur/Produkt/Menge) und den Kunden der Notiz. Leerer href = keine sinnvolle Direktaktion.
+function fastaction_item_link(array $item, ?int $kunde_id): array {
+    $rid = (int)($item['rezeptur_id'] ?? 0);
+    $pid = (int)($item['produkt_id'] ?? 0);
+    $menge = ($item['menge'] ?? null) !== null ? (int) round((float)$item['menge']) : 0;
+    $aktion = (string)($item['aktion'] ?? '');
+    $notizTxt = trim((($rid ? (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$rid]) : ($pid ? (string) scalar("SELECT COALESCE(NULLIF(kundenname,''),name) FROM produkt WHERE id=?", [$pid]) : '')))
+              . ($menge > 0 ? ' · ' . number_format($menge, 0, ',', '.') . ' ' . ((string)($item['einheit'] ?? '') ?: 'Stück') : ''));
+    $notizTxt = $notizTxt !== '' ? 'Aus Fastaction: ' . $notizTxt : 'Aus Fastaction';
+    if ($aktion === 'angebot') {
+        $q = '?p=angebot&id=neu' . ($kunde_id ? '&kunde_id=' . $kunde_id : '') . '&fa_notiz=' . rawurlencode($notizTxt);
+        return ['Angebot anlegen', $q, true];
+    }
+    if ($aktion === 'lieferantenpreise') {
+        if ($rid) return ['Lieferantenpreise', '?p=rezeptur_detail&id=' . $rid, true];
+        return ['Einkauf öffnen', '?p=preis_anfragen', true];
+    }
+    if ($aktion === 'kunde' && $kunde_id) return ['Kunde öffnen', '?p=kunde&id=' . $kunde_id, false];
+    if ($aktion === 'produktion') return ['Produktion', '?p=produktion', false];
+    // Fallback: das konkreteste vorhandene Ziel öffnen.
+    if ($rid) return ['Rezeptur öffnen', '?p=rezeptur_detail&id=' . $rid, false];
+    if ($pid) return ['Produkt öffnen', '?p=produkt&id=' . $pid, false];
+    if ($kunde_id) return ['Kunde öffnen', '?p=kunde&id=' . $kunde_id, false];
+    return ['', '', false];
 }
 
 // Rezeptur als ENTWURF anlegen – mit VORAUSGEFUELLTEN Zutaten-Zeilen. Je Zutat wird per Best-Match ein

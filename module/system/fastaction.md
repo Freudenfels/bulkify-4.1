@@ -26,3 +26,13 @@ Zutaten stehen als Text in der Notiz) und öffnet sie – die Zutaten-Zeilen bau
 je Rezeptur `zutaten[]` (bezeichnung + menge_mg); je Zeile wird per `rezeptur_ki_item_finden()` ein **Rohstoff
 vorgeschlagen** (item_id), sonst bleibt die Zeile mit Bezeichnung/Menge zum manuellen Zuordnen. Der Editor öffnet
 mit Banner „X von Y Zutaten automatisch zugeordnet – bitte prüfen". Zutaten-Fliesstext bleibt zusätzlich in der Notiz.
+
+## Notepad überarbeitet: mobil + Direkt-Aktionen (Update)
+Die Vorschläge stehen jetzt nur noch im Notepad (keine doppelte „Vorschläge"-Liste). Jeder ToDo-Punkt trägt
+strukturiert Rezeptur/Produkt/Menge/Einheit + `aktion` (`fastaction_item`-Spalten) und zeigt einen **Direkt-Button**:
+- angebot/bestellung → „Angebot anlegen" → `?p=angebot&id=neu&kunde_id=…&fa_notiz=…` (Kunde + Notiz vorbelegt;
+  der Angebots-Editor liest `kunde_id`/`fa_notiz` bei neuem Angebot).
+- anfrage → „Lieferantenpreise" → Rezeptur-Detail (dort Preisanfrage) bzw. Einkauf.
+- nachricht → „Kunde öffnen"; sonst das konkreteste Ziel (Rezeptur/Produkt/Kunde).
+`fastaction_item_link($item,$kunde_id)` liefert [label, href, primary]. Layout mobil-first (Klasse `.fa-*`),
+große Tap-Ziele, klare Checkbox. Es wird nichts automatisch ausgeführt/verschickt – nur vorbereitet.

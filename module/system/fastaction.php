@@ -182,74 +182,91 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
             <input type="hidden" name="zutaten_json" value="<?= h(json_encode($zut, JSON_UNESCAPED_UNICODE)) ?>">
             <input type="hidden" name="zutaten_text" value="<?= h((string)($rk['zutaten_text'] ?? '')) ?>">
             <?php if ($notizId): ?><input type="hidden" name="notiz_id" value="<?= (int)$notizId ?>"><?php endif; ?>
-            <button class="btn btn-primary btn-sm" type="submit">Als Entwurf anlegen</button>
+            <button class="btn btn-primary btn-sm" type="submit">Rezeptur als Entwurf anlegen</button>
           </form>
         </div>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>
 
-    <?php $vs = (array)($d['vorschlaege'] ?? []); if ($vs): ?>
-    <h2 style="margin:18px 0 8px;font-size:16px">Vorschläge</h2>
-    <?php foreach ($vs as $v): $typ = (string)($v['typ'] ?? 'sonstiges'); ?>
-      <div class="bx-panel" style="margin-bottom:10px">
-        <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-          <div style="flex:1 1 300px"><?= bx_badge($typ, 'info') ?> <span style="margin-left:6px"><?= h((string)($v['text'] ?? '')) ?></span></div>
-          <div class="bx-row" style="gap:8px">
-            <?php if ($auf_e['kunde']): ?><a class="btn btn-ghost btn-sm" href="?p=kunde&id=<?= (int)$auf_e['kunde']['id'] ?>">Kunde öffnen</a><?php endif; ?>
-            <?php if (in_array($typ, ['angebot','anfrage'], true) && $auf_e['rezeptur']): ?><a class="btn btn-ghost btn-sm" href="?p=rezeptur_detail&id=<?= (int)$auf_e['rezeptur']['id'] ?>">Rezeptur öffnen</a><?php endif; ?>
-          </div>
-        </div>
+    <?php if (!empty($d['vorschlaege'])): ?>
+      <div class="bx-panel" style="border-color:var(--gruen);background:rgba(29,158,117,.06);padding:12px 16px">
+        <strong>Die nächsten Schritte stehen unten im Notepad</strong> – als abhakbare Punkte, jeweils mit direkter Aktion (Angebot anlegen, Lieferantenpreise …).
+        <?php if ($notizId): ?> <a href="#n<?= (int)$notizId ?>">dorthin springen</a><?php endif; ?>
       </div>
-    <?php endforeach; ?>
     <?php endif; ?>
   <?php endif; ?>
 <?php endif; ?>
 
-<!-- Notepad: persistente ToDo-Listen je Fastaction-Anfrage -->
-<div class="bx-row" style="justify-content:space-between;align-items:baseline;margin:22px 0 8px;flex-wrap:wrap;gap:8px">
+<!-- Notepad: persistente ToDo-Listen je Fastaction-Anfrage (mobil-tauglich, mit Direkt-Aktionen) -->
+<style>
+  .fa-note{ margin-bottom:12px }
+  .fa-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap }
+  .fa-head-btns{ display:flex; gap:6px; flex-wrap:wrap }
+  .fa-meta{ color:var(--muted); font-size:12px; margin-top:4px; line-height:1.5 }
+  .fa-items{ margin-top:12px; display:flex; flex-direction:column; gap:2px }
+  .fa-item{ display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-top:1px solid var(--line) }
+  .fa-check{ width:32px; height:32px; flex:none; border:1px solid var(--line); border-radius:8px; background:transparent; color:#fff; cursor:pointer; font-size:16px; line-height:1; display:flex; align-items:center; justify-content:center }
+  .fa-check.on{ background:var(--gruen,#2f6f4f); border-color:transparent }
+  .fa-item-main{ flex:1; min-width:0 }
+  .fa-item-text{ word-break:break-word }
+  .fa-item-text.done{ text-decoration:line-through; color:var(--muted) }
+  .fa-item-acts{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px }
+  .fa-item-acts .btn{ min-height:40px; display:inline-flex; align-items:center }
+  .fa-add{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap }
+  .fa-add input{ flex:1; min-width:180px; padding:8px 10px }
+  @media (max-width:560px){ .fa-head-btns{ width:100% } .fa-head-btns form,.fa-head-btns .btn{ flex:1 } }
+</style>
+<div class="bx-row" style="justify-content:space-between;align-items:baseline;margin:22px 0 6px;flex-wrap:wrap;gap:8px">
   <h2 style="margin:0;font-size:16px">Notepad <span class="muted" style="font-weight:normal">(<?= $offenGes ?> offen)</span></h2>
   <a class="muted" style="font-size:13px" href="?p=fastaction<?= $alle ? '' : '&alle=1' ?>"><?= $alle ? 'nur offene zeigen' : 'auch erledigte zeigen' ?></a>
 </div>
+<p class="muted" style="margin:0 0 10px;font-size:13px">Jeder Punkt ist eine Aufgabe: <strong>abhaken</strong>, wenn erledigt – oder direkt die <strong>Aktion starten</strong> (Angebot anlegen, Lieferantenpreise …). Es wird nichts automatisch verschickt.</p>
 <?php if (!$notizen): ?>
   <div class="bx-panel"><div class="muted">Noch keine Fastaction-Notizen. Wertest du oben eine Nachricht aus, entsteht hier eine ToDo-Liste, die erhalten bleibt.</div></div>
 <?php else: foreach ($notizen as $n): $items = $itemsByNotiz[(int)$n['id']] ?? [];
-  $offen = 0; foreach ($items as $it) if (!(int)$it['erledigt']) $offen++;
   $erle = (string)$n['status'] === 'erledigt';
   $dn = strtolower((string)$n['dringlichkeit']);
   $dnB = $dn === 'hoch' ? bx_badge('dringend','err') : ($dn === 'niedrig' ? bx_badge('niedrig','') : bx_badge('mittel','warn'));
 ?>
-  <div class="bx-panel" id="n<?= (int)$n['id'] ?>" style="margin-bottom:10px<?= $erle ? ';opacity:.6' : '' ?>">
-    <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-      <div style="flex:1 1 320px">
+  <div class="bx-panel fa-note" id="n<?= (int)$n['id'] ?>" style="<?= $erle ? 'opacity:.6' : '' ?>">
+    <div class="fa-head">
+      <div style="min-width:0">
         <div><?= $dnB ?> <strong style="margin-left:6px"><?= h($n['zusammenfassung'] ?: ($n['aufgabe_text'] ?: 'Fastaction')) ?></strong> <?= $erle ? bx_badge('erledigt','ok') : '' ?></div>
-        <div class="muted" style="font-size:12px;margin-top:3px">
+        <div class="fa-meta">
           <?= h(fmt_zeit($n['angelegt'], 'd.m.Y H:i')) ?>
           <?php if ($n['kunde']): ?> · Kunde: <a href="?p=kunde&id=<?= (int)$n['kunde_id'] ?>"><?= h($n['kunde']) ?></a><?php endif; ?>
           <?php if ($n['rezeptur']): ?> · Rezeptur: <a href="?p=rezeptur_detail&id=<?= (int)$n['rezeptur_id'] ?>"><?= h($n['rezeptur']) ?></a><?php endif; ?>
-          <?php if ($n['produkt']): ?> · Produkt: <?= h($n['produkt']) ?><?php endif; ?>
-          <?php if ($n['datei']): ?> · <a href="?p=dokument&id=0" onclick="return false" title="Anhang"><?= h($n['datei_orig'] ?: 'Anhang') ?></a><?php endif; ?>
+          <?php if ($n['datei']): ?> · Anhang: <?= h($n['datei_orig'] ?: 'Datei') ?><?php endif; ?>
         </div>
       </div>
-      <div class="bx-row" style="gap:6px">
-        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="notiz_status"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><input type="hidden" name="status" value="<?= $erle ? 'offen' : 'erledigt' ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= $erle ? 'wieder offen' : 'alles erledigt' ?></button></form>
-        <form method="post" style="margin:0" onsubmit="return confirm('Diese Fastaction-Notiz löschen?');"><input type="hidden" name="aktion" value="notiz_del"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Löschen</button></form>
+      <div class="fa-head-btns">
+        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="notiz_status"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><input type="hidden" name="status" value="<?= $erle ? 'offen' : 'erledigt' ?>"><button class="btn btn-ghost btn-sm" type="submit" style="width:100%"><?= $erle ? 'wieder offen' : 'alles erledigt' ?></button></form>
+        <form method="post" style="margin:0" onsubmit="return confirm('Diese Notiz löschen?');"><input type="hidden" name="aktion" value="notiz_del"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit" style="width:100%">Löschen</button></form>
       </div>
     </div>
-    <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
-      <?php foreach ($items as $it): ?>
-        <form method="post" style="margin:0;display:flex;gap:8px;align-items:flex-start">
-          <input type="hidden" name="aktion" value="item_toggle"><input type="hidden" name="item_id" value="<?= (int)$it['id'] ?>">
-          <button type="submit" title="Abhaken" style="border:1px solid var(--line);background:<?= (int)$it['erledigt'] ? 'var(--gruen,#2f6f4f)' : 'transparent' ?>;color:#fff;width:22px;height:22px;border-radius:6px;flex:none;cursor:pointer;line-height:1"><?= (int)$it['erledigt'] ? '✓' : '&nbsp;' ?></button>
-          <span style="<?= (int)$it['erledigt'] ? 'text-decoration:line-through;color:var(--muted)' : '' ?>"><?= (int)$it['erledigt'] ? '' : bx_badge((string)$it['typ'], 'info') . ' ' ?><?= h((string)$it['text']) ?></span>
-        </form>
+    <div class="fa-items">
+      <?php foreach ($items as $it): $done = (int)$it['erledigt']; [$alabel, $ahref, $aprim] = fastaction_item_link($it, (int)($n['kunde_id'] ?? 0)); ?>
+        <div class="fa-item">
+          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="item_toggle"><input type="hidden" name="item_id" value="<?= (int)$it['id'] ?>">
+            <button class="fa-check <?= $done ? 'on' : '' ?>" type="submit" title="<?= $done ? 'wieder offen' : 'erledigt' ?>"><?= $done ? '✓' : '' ?></button>
+          </form>
+          <div class="fa-item-main">
+            <div class="fa-item-text <?= $done ? 'done' : '' ?>"><?= h((string)$it['text']) ?></div>
+            <?php if (!$done && $ahref !== ''): ?>
+              <div class="fa-item-acts">
+                <a class="btn <?= $aprim ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="<?= h($ahref) ?>"><?= h($alabel) ?></a>
+              </div>
+            <?php endif; ?>
+          </div>
+        </div>
       <?php endforeach; ?>
-      <?php if (!$items): ?><div class="muted" style="font-size:13px">Keine Punkte – unten einen hinzufügen.</div><?php endif; ?>
+      <?php if (!$items): ?><div class="muted" style="font-size:13px;padding:8px 0">Keine Punkte – unten einen hinzufügen.</div><?php endif; ?>
     </div>
-    <form method="post" class="bx-row" style="gap:6px;margin-top:8px;align-items:center">
+    <form method="post" class="fa-add">
       <input type="hidden" name="aktion" value="item_add"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>">
-      <input type="text" name="text" placeholder="ToDo hinzufügen…" style="flex:1;min-width:200px;padding:5px 8px">
-      <button class="btn btn-ghost btn-sm" type="submit">+ Punkt</button>
+      <input type="text" name="text" placeholder="Eigenen Punkt hinzufügen…">
+      <button class="btn btn-ghost btn-sm" type="submit" style="min-height:40px">+ Punkt</button>
     </form>
   </div>
 <?php endforeach; endif; ?>

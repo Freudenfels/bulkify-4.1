@@ -569,6 +569,12 @@ function init_schema(): void {
         sort INT NOT NULL DEFAULT 0,
         KEY idx_notiz (notiz_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Strukturierte Aktion je ToDo-Punkt: konkretes Produkt/Rezeptur + Menge -> ein-Klick-Aktion (Angebot/Lieferantenpreise).
+    ensure_column('fastaction_item', 'rezeptur_id', "INT NULL");
+    ensure_column('fastaction_item', 'produkt_id', "INT NULL");
+    ensure_column('fastaction_item', 'menge', "DECIMAL(14,2) NULL");
+    ensure_column('fastaction_item', 'einheit', "VARCHAR(20) NULL");
+    ensure_column('fastaction_item', 'aktion', "VARCHAR(20) NULL");   // angebot|lieferantenpreise|kunde|rezeptur|nachricht|sonstiges
 
     // beleg_status_log: Statusverlauf je Beleg (wer/wann/welcher Status) – wichtig für Zahlungsnachweis.
     $pdo->exec("CREATE TABLE IF NOT EXISTS beleg_status_log (

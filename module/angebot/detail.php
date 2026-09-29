@@ -283,6 +283,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $a = $neu ? ['status'=>'offen'] : one("SELECT * FROM angebot WHERE id=?", [(int)$id]);
+// Vorbefuellung per Link (z. B. aus Fastaction): neues Angebot mit Kunde + Notiz vorbelegen.
+if ($neu) {
+    if (($_GET['kunde_id'] ?? '') !== '') $a['kunde_id'] = (int)$_GET['kunde_id'];
+    if (($_GET['fa_notiz'] ?? '') !== '') $a['notiz'] = mb_substr((string)$_GET['fa_notiz'], 0, 500);
+}
 if (!$a) { $neu = true; $a = ['status'=>'offen']; }
 $v = fn($k) => h((string)($a[$k] ?? ''));
 
