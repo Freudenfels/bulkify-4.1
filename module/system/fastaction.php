@@ -77,29 +77,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'analy
         $besch = ($eingabe !== '' ? "Eingang:\n" . $eingabe . "\n\n" : '')
                . ($res['ok'] ? ('Zusammenfassung: ' . (string)($d['zusammenfassung'] ?? '') . "\n") : ('Hinweis: KI-Auswertung nicht verfuegbar (' . (string)($res['fehler'] ?? '') . ")\n"))
                . ($origName !== '' ? "Datei: " . $origName . "\n" : '');
-        $aufgabeId = aufgabe_neu(mb_substr($titel, 0, 190), $besch, $prio, null, null, $uid, 'fastaction', 0);
+        // (3) Zuerst die persistente Notiz (Notepad) anlegen, damit die Aufgabe darauf verweisen kann.
+        if ($res['ok']) {
+            $auf_e = fastaction_aufloesen((array)($d['erkannt'] ?? []));
+            $notizId = fastaction_notiz_anlegen($d, $auf_e, $eingabe, $pfad, $origName, $uid);
+        }
+        // (1) Aufgabe automatisch anlegen – verweist per ref auf die Notiz (in der Aufgabenliste „Ansehen").
+        $aufgabeId = aufgabe_neu(mb_substr($titel, 0, 190), $besch, $prio, null, null, $uid, 'fastaction', $notizId);
         if ($pfad !== null && $aufgabeId) {
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig) VALUES ('aufgabe',?,?,?,?,?)",
               [$aufgabeId, 'sonstiges', 'Fastaction-Anhang', basename($pfad), $origName ?: basename($pfad)]);
         }
         $auf = one("SELECT id, titel, prio FROM aufgabe WHERE id=?", [$aufgabeId]);
-        // (3) Persistente Fastaction-Notiz + ToDo-Items (Notepad) – nur bei erfolgreicher Auswertung.
-        if ($res['ok']) {
-            $auf_e = fastaction_aufloesen((array)($d['erkannt'] ?? []));
-            $notizId = fastaction_notiz_anlegen($d, $auf_e, $eingabe, $pfad, $origName, $uid);
-        }
     }
 }
 
 // --- Notepad laden -------------------------------------------------------------------------------
 $alle = isset($_GET['alle']);
+$fokus = (int)($_GET['notiz'] ?? 0);   // eine bestimmte Notiz gezielt ansehen (z. B. aus der Aufgabenliste)
+// Ohne "alle": nur offene – aber die gezielt angefragte Notiz IMMER (auch wenn erledigt).
+$wo = $alle ? '' : ($fokus ? "WHERE (n.status='offen' OR n.id=" . $fokus . ")" : "WHERE n.status='offen'");
 $notizen = all("SELECT n.*, k.firma AS kunde, r.name AS rezeptur, p.name AS produkt
                 FROM fastaction_notiz n
                 LEFT JOIN kunden k ON k.id=n.kunde_id
                 LEFT JOIN rezeptur r ON r.id=n.rezeptur_id
                 LEFT JOIN produkt p ON p.id=n.produkt_id
-                " . ($alle ? '' : "WHERE n.status='offen'") . "
-                ORDER BY (n.status='offen') DESC, n.angelegt DESC LIMIT 100");
+                $wo
+                ORDER BY (n.id=" . $fokus . ") DESC, (n.status='offen') DESC, n.angelegt DESC LIMIT 100");
 $itemsByNotiz = [];
 if ($notizen) {
     $ids = implode(',', array_map(fn($n) => (int)$n['id'], $notizen));
@@ -229,7 +233,7 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
   $dn = strtolower((string)$n['dringlichkeit']);
   $dnB = $dn === 'hoch' ? bx_badge('dringend','err') : ($dn === 'niedrig' ? bx_badge('niedrig','') : bx_badge('mittel','warn'));
 ?>
-  <div class="bx-panel fa-note" id="n<?= (int)$n['id'] ?>" style="<?= $erle ? 'opacity:.6' : '' ?>">
+  <div class="bx-panel fa-note" id="n<?= (int)$n['id'] ?>" style="<?= $erle ? 'opacity:.6;' : '' ?><?= (int)$n['id'] === $fokus ? 'border-color:var(--gruen);box-shadow:0 0 0 2px rgba(29,158,117,.25)' : '' ?>">
     <div class="fa-head">
       <div style="min-width:0">
         <div><?= $dnB ?> <strong style="margin-left:6px"><?= h($n['zusammenfassung'] ?: ($n['aufgabe_text'] ?: 'Fastaction')) ?></strong> <?= $erle ? bx_badge('erledigt','ok') : '' ?></div>
@@ -270,4 +274,5 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
     </form>
   </div>
 <?php endforeach; endif; ?>
+<?php if ($fokus): ?><script>(function(){ var el=document.getElementById('n<?= $fokus ?>'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); })();</script><?php endif; ?>
 <?php render_footer(); ?>

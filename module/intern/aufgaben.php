@@ -74,6 +74,9 @@ bx_head('Aufgaben', $zeigeErledigt ? 'Erledigte Aufgaben' : $offenGesamt . ' off
           <td>
             <div><strong><?= h($a['titel']) ?></strong></div>
             <?php if ($a['beschreibung']): ?><div class="muted" style="font-size:12px;white-space:pre-line"><?= h($a['beschreibung']) ?></div><?php endif; ?>
+            <?php if (($a['ref_typ'] ?? '') === 'fastaction' && (int)($a['ref_id'] ?? 0) > 0): ?>
+              <div style="margin-top:4px"><a class="btn btn-ghost btn-sm" href="?p=fastaction&notiz=<?= (int)$a['ref_id'] ?>">Fastaction ansehen</a></div>
+            <?php endif; ?>
           </td>
           <td><?= $a['zuw_name'] ? h($a['zuw_name']) : bx_badge('Team','info') ?></td>
           <td><?= $a['faellig'] ? '<span'.($ueberfaellig?' class="bx-err"':'').'>'.h(date('d.m.Y', strtotime($a['faellig']))).'</span>' : '<span class="muted">–</span>' ?></td>

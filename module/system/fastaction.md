@@ -36,3 +36,9 @@ strukturiert Rezeptur/Produkt/Menge/Einheit + `aktion` (`fastaction_item`-Spalte
 - nachricht → „Kunde öffnen"; sonst das konkreteste Ziel (Rezeptur/Produkt/Kunde).
 `fastaction_item_link($item,$kunde_id)` liefert [label, href, primary]. Layout mobil-first (Klasse `.fa-*`),
 große Tap-Ziele, klare Checkbox. Es wird nichts automatisch ausgeführt/verschickt – nur vorbereitet.
+
+## Notiz wiederfinden nach einer Aktion
+Die automatisch angelegte Aufgabe verweist per `ref` (`ref_typ='fastaction'`, `ref_id`=Notiz-id) auf die Notiz.
+In der Aufgabenliste (`?p=aufgaben`) gibt es dazu den Button **„Fastaction ansehen"** → `?p=fastaction&notiz=<id>`.
+Diese Einzel-Ansicht zeigt die Notiz **auch wenn sie erledigt ist** (sonst nur offene), hebt sie hervor und scrollt hin.
+So kann man nach „Angebot anlegen" o. ä. jederzeit zur ToDo-Liste zurück und weiter abarbeiten.
