@@ -111,13 +111,49 @@ function fastaction_notiz_anlegen(array $d, array $auf_e, string $eingabe, ?stri
     return $nid;
 }
 
+// Nachbestell-Angebot: das juengste Angebot des Kunden als ENTWURF klonen (gleiche Positionen, Preise,
+// Verpackung) – Grundlage fuer die Nachbestellung; Mengen prueft/aendert der Mensch, dann senden. Rueckgabe:
+// [neues_angebot_id, quelle_id] oder [0,0] wenn es kein fruederes Angebot gibt.
+function fastaction_nachbestell_angebot(int $kunde_id): array {
+    if ($kunde_id <= 0) return [0, 0];
+    $src = one("SELECT * FROM angebot WHERE kunde_id=? AND (SELECT COUNT(*) FROM angebot_position WHERE angebot_id=angebot.id) > 0 ORDER BY id DESC LIMIT 1", [$kunde_id]);
+    if (!$src) return [0, 0];
+    q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,marge_override,produktionszeit_wochen) VALUES (?,?,?,?,?,?,?)",
+      [naechste_nummer('AN'), $kunde_id, $src['produkt_id'] ?: null, 'offen',
+       'Nachbestellung (aus Fastaction) – geklont aus ' . (string)$src['nummer'] . '. Mengen prüfen, dann senden.',
+       $src['marge_override'] ?? null, $src['produktionszeit_wochen'] ?? null]);
+    $nid = (int) insert_id();
+    $sort = 0;
+    foreach (all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [(int)$src['id']]) as $p) {
+        q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          [$nid, $sort++, $p['artikelnr'], $p['bezeichnung'], $p['beschreibung'], $p['menge'], $p['einheit'],
+           $p['preis_cent'], $p['ek_cent'], $p['mwst_satz'], $p['quelle'], $p['gruppe'], $p['rezeptur_id'], $p['stueck'], $p['verpackung_id']]);
+    }
+    return [$nid, (int)$src['id']];
+}
+
 // Primaere Ein-Klick-Aktion je ToDo-Punkt: [label, href, primary]. Nutzt das strukturierte Ziel des Items
 // (Rezeptur/Produkt/Menge) und den Kunden der Notiz. Leerer href = keine sinnvolle Direktaktion.
 function fastaction_item_link(array $item, ?int $kunde_id): array {
     $rid = (int)($item['rezeptur_id'] ?? 0);
     $pid = (int)($item['produkt_id'] ?? 0);
     $menge = ($item['menge'] ?? null) !== null ? (int) round((float)$item['menge']) : 0;
+    // Wirksame Aktion: gespeicherte Aktion, sonst aus dem Typ, sonst aus dem Text erkennen (robust, falls die
+    // KI den Punkt nicht klar klassifiziert hat).
     $aktion = (string)($item['aktion'] ?? '');
+    $typ = (string)($item['typ'] ?? '');
+    $txt = mb_strtolower((string)($item['text'] ?? ''));
+    if ($aktion === '' || $aktion === 'sonstiges') {
+        if (in_array($typ, ['angebot','bestellung'], true)) $aktion = 'angebot';
+        elseif ($typ === 'anfrage') $aktion = 'lieferantenpreise';
+        elseif ($typ === 'nachricht') $aktion = 'kunde';
+    }
+    if ($aktion === '' || $aktion === 'sonstiges') {
+        if (preg_match('/angebot|nachbestell|anlegen und versenden|dosen|packung/u', $txt)) $aktion = 'angebot';
+        elseif (preg_match('/lieferantenpreis|beschaffung|rohstoff|karton|einkauf|bestand/u', $txt)) $aktion = 'lieferantenpreise';
+        elseif (preg_match('/anrufen|nachfrage|nachfragen|kontakt|melden|best[äa]tigen/u', $txt)) $aktion = 'kunde';
+    }
     $notizTxt = trim((($rid ? (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$rid]) : ($pid ? (string) scalar("SELECT COALESCE(NULLIF(kundenname,''),name) FROM produkt WHERE id=?", [$pid]) : '')))
               . ($menge > 0 ? ' · ' . number_format($menge, 0, ',', '.') . ' ' . ((string)($item['einheit'] ?? '') ?: 'Stück') : ''));
     $notizTxt = $notizTxt !== '' ? 'Aus Fastaction: ' . $notizTxt : 'Aus Fastaction';

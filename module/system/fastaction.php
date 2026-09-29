@@ -43,6 +43,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'notiz
     q("DELETE FROM fastaction_notiz WHERE id=?", [$nid]);
     header('Location: ?p=fastaction'); exit;
 }
+// Nachbestell-Angebot: letztes Angebot des Kunden als Entwurf klonen und oeffnen.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachbestell' && ($nid = (int)($_POST['notiz_id'] ?? 0))) {
+    $kid = (int) scalar("SELECT kunde_id FROM fastaction_notiz WHERE id=?", [$nid]);
+    [$aid] = fastaction_nachbestell_angebot($kid);
+    if ($aid) { header('Location: ?p=angebot&id=' . $aid . '&nachbestellung=1'); exit; }
+    header('Location: ?p=fastaction&notiz=' . $nid . '&keinvorher=1'); exit;
+}
+
 // Unbekannte Rezeptur als Entwurf anlegen (mit vorausgefuellten Zutaten-Zeilen) und direkt oeffnen.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rezeptur_entwurf') {
     $zut = json_decode((string)($_POST['zutaten_json'] ?? '[]'), true);
@@ -117,6 +125,7 @@ bx_head('Fastaction', 'Kurze, wichtige Nachricht reinwerfen – die KI fasst zus
 
 $kiBereit = ki_bereit();
 if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:10px 14px;font-size:13px;color:#8f231b">Hinweis: Die <strong>KI-Auswertung läuft nur auf beta</strong> (Schlüssel serverseitig). Lokal wird die Nachricht nur als Aufgabe erfasst, ohne Vorschläge.</div>';
+if (isset($_GET['keinvorher'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:10px 14px;color:#8f231b">Für diesen Kunden gibt es noch kein früheres Angebot zum Klonen. Lege das Angebot über „Angebot anlegen" an (Kunde ist vorbelegt).</div>';
 ?>
 <form method="post" enctype="multipart/form-data" class="bx-panel" data-busy="Nachricht wird ausgewertet …">
   <input type="hidden" name="aktion" value="analysieren">
@@ -245,6 +254,9 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
         </div>
       </div>
       <div class="fa-head-btns">
+        <?php if ((int)($n['kunde_id'] ?? 0) > 0): ?>
+        <form method="post" style="margin:0" data-busy="Erstelle Angebot…"><input type="hidden" name="aktion" value="nachbestell"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><button class="btn btn-primary btn-sm" type="submit" style="width:100%" title="Letztes Angebot des Kunden als Entwurf klonen">Nachbestell-Angebot</button></form>
+        <?php endif; ?>
         <form method="post" style="margin:0"><input type="hidden" name="aktion" value="notiz_status"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><input type="hidden" name="status" value="<?= $erle ? 'offen' : 'erledigt' ?>"><button class="btn btn-ghost btn-sm" type="submit" style="width:100%"><?= $erle ? 'wieder offen' : 'alles erledigt' ?></button></form>
         <form method="post" style="margin:0" onsubmit="return confirm('Diese Notiz löschen?');"><input type="hidden" name="aktion" value="notiz_del"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit" style="width:100%">Löschen</button></form>
       </div>

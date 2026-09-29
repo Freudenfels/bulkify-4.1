@@ -42,3 +42,10 @@ Die automatisch angelegte Aufgabe verweist per `ref` (`ref_typ='fastaction'`, `r
 In der Aufgabenliste (`?p=aufgaben`) gibt es dazu den Button **„Fastaction ansehen"** → `?p=fastaction&notiz=<id>`.
 Diese Einzel-Ansicht zeigt die Notiz **auch wenn sie erledigt ist** (sonst nur offene), hebt sie hervor und scrollt hin.
 So kann man nach „Angebot anlegen" o. ä. jederzeit zur ToDo-Liste zurück und weiter abarbeiten.
+
+## Nachbestell-Angebot + robuste Aktionen (Update)
+- Notiz-Button **„Nachbestell-Angebot"** (wenn Kunde erkannt): klont das JÜNGSTE Angebot des Kunden (Positionen,
+  Preise, Verpackung) als **Entwurf** und öffnet es (`fastaction_nachbestell_angebot()` → `?p=angebot&id=…&nachbestellung=1`).
+  Mengen prüfen/anpassen, dann senden. Gibt es kein früheres Angebot: Hinweis + „Angebot anlegen" (Kunde vorbelegt).
+- `fastaction_item_link()` erkennt die Aktion jetzt robuster: gespeicherte Aktion → Typ → **Textschlüsselwörter**
+  (angebot/nachbestell/dosen → „Angebot anlegen"; rohstoff/karton/beschaffung → „Einkauf/Lieferantenpreise").
