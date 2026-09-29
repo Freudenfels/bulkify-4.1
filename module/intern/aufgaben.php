@@ -92,8 +92,11 @@ bx_head('Aufgaben', $zeigeErledigt ? 'Erledigte Aufgaben' : $offenGesamt . ' off
   <?php foreach ($aufgaben as $a):
       $ueberfaellig = !$zeigeErledigt && $a['faellig'] && $a['faellig'] < gmdate('Y-m-d');
       $besch = trim(preg_replace('/\s+/', ' ', (string)$a['beschreibung'])); ?>
+    <?php // Fastaction-Aufgaben oeffnen direkt die volle Notiz (alle Infos + Aktionen); sonst die Aufgaben-Detailseite.
+      $ziel = (($a['ref_typ'] ?? '') === 'fastaction' && (int)($a['ref_id'] ?? 0) > 0)
+            ? '?p=fastaction&notiz=' . (int)$a['ref_id'] : '?p=aufgabe&id=' . (int)$a['id']; ?>
     <div class="auf-item prio<?= (int)$a['prio'] ?>">
-      <a class="auf-main" href="?p=aufgabe&id=<?= (int)$a['id'] ?>">
+      <a class="auf-main" href="<?= $ziel ?>">
         <div class="auf-t"><?= h($a['titel']) ?></div>
         <?php if ($besch !== ''): ?><div class="auf-d"><?= h($besch) ?></div><?php endif; ?>
         <div class="auf-m">

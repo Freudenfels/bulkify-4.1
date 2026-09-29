@@ -22,7 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'item_
         q("UPDATE fastaction_notiz SET status=?, erledigt_am=? WHERE id=?",
           [($ges > 0 && $offen === 0) ? 'erledigt' : 'offen', ($ges > 0 && $offen === 0) ? gmdate('Y-m-d H:i:s') : null, $nid]);
     }
-    header('Location: ?p=fastaction#n' . (int)$nid); exit;
+    $fk = (int)($_POST['fokus'] ?? 0);
+    header('Location: ?p=fastaction' . ($fk ? '&notiz=' . $fk : '#n' . (int)$nid)); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'item_add' && ($nid = (int)($_POST['notiz_id'] ?? 0))) {
     $t = trim((string)($_POST['text'] ?? ''));
@@ -31,12 +32,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'item_
         q("INSERT INTO fastaction_item (notiz_id,typ,text,sort) VALUES (?,?,?,?)", [$nid, 'sonstiges', mb_substr($t, 0, 500), $s]);
         q("UPDATE fastaction_notiz SET status='offen', erledigt_am=NULL WHERE id=?", [$nid]);
     }
-    header('Location: ?p=fastaction#n' . (int)$nid); exit;
+    $fk = (int)($_POST['fokus'] ?? 0);
+    header('Location: ?p=fastaction' . ($fk ? '&notiz=' . $fk : '#n' . (int)$nid)); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'notiz_status' && ($nid = (int)($_POST['notiz_id'] ?? 0))) {
     $neu = ((string)($_POST['status'] ?? '') === 'erledigt') ? 'erledigt' : 'offen';
     q("UPDATE fastaction_notiz SET status=?, erledigt_am=? WHERE id=?", [$neu, $neu === 'erledigt' ? gmdate('Y-m-d H:i:s') : null, $nid]);
-    header('Location: ?p=fastaction' . ($neu === 'erledigt' ? '' : '#n' . (int)$nid)); exit;
+    $fk = (int)($_POST['fokus'] ?? 0);
+    // In der Einzelansicht dort bleiben; sonst: erledigt -> Liste, wieder offen -> zur Notiz.
+    header('Location: ?p=fastaction' . ($fk ? '&notiz=' . $fk : ($neu === 'erledigt' ? '' : '#n' . (int)$nid))); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'notiz_del' && ($nid = (int)($_POST['notiz_id'] ?? 0))) {
     q("DELETE FROM fastaction_item WHERE notiz_id=?", [$nid]);
@@ -101,9 +105,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'analy
 
 // --- Notepad laden -------------------------------------------------------------------------------
 $alle = isset($_GET['alle']);
-$fokus = (int)($_GET['notiz'] ?? 0);   // eine bestimmte Notiz gezielt ansehen (z. B. aus der Aufgabenliste)
-// Ohne "alle": nur offene – aber die gezielt angefragte Notiz IMMER (auch wenn erledigt).
-$wo = $alle ? '' : ($fokus ? "WHERE (n.status='offen' OR n.id=" . $fokus . ")" : "WHERE n.status='offen'");
+$fokus = (int)($_GET['notiz'] ?? 0);   // eine bestimmte Notiz als EINZELANSICHT (z. B. aus der Aufgabenliste)
+// Einzelansicht: nur diese Notiz. Sonst: alle oder nur offene.
+$wo = $fokus ? "WHERE n.id=" . $fokus : ($alle ? '' : "WHERE n.status='offen'");
 $notizen = all("SELECT n.*, k.firma AS kunde, r.name AS rezeptur, p.name AS produkt
                 FROM fastaction_notiz n
                 LEFT JOIN kunden k ON k.id=n.kunde_id
@@ -126,6 +130,12 @@ $kiBereit = ki_bereit();
 if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:10px 14px;font-size:13px;color:#8f231b">Hinweis: Die <strong>KI-Auswertung läuft nur auf beta</strong> (Schlüssel serverseitig). Lokal wird die Nachricht nur als Aufgabe erfasst, ohne Vorschläge.</div>';
 if (isset($_GET['keinvorher'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:10px 14px;color:#8f231b">Für diesen Kunden gibt es noch kein früheres Angebot zum Klonen. Lege das Angebot über „Angebot anlegen" an (Kunde ist vorbelegt).</div>';
 ?>
+<?php if ($fokus): ?>
+  <div class="bx-row" style="margin-bottom:12px;gap:8px;flex-wrap:wrap">
+    <a class="btn btn-ghost btn-sm" href="?p=aufgaben">← zu Aufgaben</a>
+    <a class="btn btn-ghost btn-sm" href="?p=fastaction">alle Fastaction-Notizen</a>
+  </div>
+<?php else: ?>
 <form method="post" enctype="multipart/form-data" class="bx-panel" data-busy="Nachricht wird ausgewertet …">
   <input type="hidden" name="aktion" value="analysieren">
   <div class="bx-field"><label>Nachricht / Notiz</label>
@@ -137,6 +147,7 @@ if (isset($_GET['keinvorher'])) echo '<div class="bx-panel" style="border-color:
   </div>
   <div class="bx-row" style="margin-top:var(--sp-2)"><button class="btn btn-primary" type="submit">Auswerten</button></div>
 </form>
+<?php endif; ?>
 
 <?php if ($res !== null): ?>
   <?php if ($auf): ?>
@@ -230,8 +241,8 @@ if (isset($_GET['keinvorher'])) echo '<div class="bx-panel" style="border-color:
   @media (max-width:560px){ .fa-head-btns{ width:100% } .fa-head-btns form,.fa-head-btns .btn{ flex:1 } }
 </style>
 <div class="bx-row" style="justify-content:space-between;align-items:baseline;margin:22px 0 6px;flex-wrap:wrap;gap:8px">
-  <h2 style="margin:0;font-size:16px">Notepad <span class="muted" style="font-weight:normal">(<?= $offenGes ?> offen)</span></h2>
-  <a class="muted" style="font-size:13px" href="?p=fastaction<?= $alle ? '' : '&alle=1' ?>"><?= $alle ? 'nur offene zeigen' : 'auch erledigte zeigen' ?></a>
+  <h2 style="margin:0;font-size:16px"><?= $fokus ? 'Fastaction-Aufgabe' : 'Notepad' ?> <?php if (!$fokus): ?><span class="muted" style="font-weight:normal">(<?= $offenGes ?> offen)</span><?php endif; ?></h2>
+  <?php if (!$fokus): ?><a class="muted" style="font-size:13px" href="?p=fastaction<?= $alle ? '' : '&alle=1' ?>"><?= $alle ? 'nur offene zeigen' : 'auch erledigte zeigen' ?></a><?php endif; ?>
 </div>
 <p class="muted" style="margin:0 0 10px;font-size:13px">Jeder Punkt ist eine Aufgabe: <strong>abhaken</strong>, wenn erledigt – oder direkt die <strong>Aktion starten</strong> (Angebot anlegen, Lieferantenpreise …). Es wird nichts automatisch verschickt.</p>
 <?php if (!$notizen): ?>
@@ -256,14 +267,14 @@ if (isset($_GET['keinvorher'])) echo '<div class="bx-panel" style="border-color:
         <?php if ((int)($n['kunde_id'] ?? 0) > 0): ?>
         <form method="post" style="margin:0" data-busy="Erstelle Angebot…"><input type="hidden" name="aktion" value="nachbestell"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><button class="btn btn-primary btn-sm" type="submit" style="width:100%" title="Letztes Angebot des Kunden als Entwurf klonen">Nachbestell-Angebot</button></form>
         <?php endif; ?>
-        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="notiz_status"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><input type="hidden" name="status" value="<?= $erle ? 'offen' : 'erledigt' ?>"><button class="btn btn-ghost btn-sm" type="submit" style="width:100%"><?= $erle ? 'wieder offen' : 'alles erledigt' ?></button></form>
+        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="notiz_status"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><input type="hidden" name="status" value="<?= $erle ? 'offen' : 'erledigt' ?>"><input type="hidden" name="fokus" value="<?= (int)$fokus ?>"><button class="btn btn-ghost btn-sm" type="submit" style="width:100%"><?= $erle ? 'wieder offen' : 'alles erledigt' ?></button></form>
         <form method="post" style="margin:0" onsubmit="return confirm('Diese Notiz löschen?');"><input type="hidden" name="aktion" value="notiz_del"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit" style="width:100%">Löschen</button></form>
       </div>
     </div>
     <div class="fa-items">
       <?php foreach ($items as $it): $done = (int)$it['erledigt']; [$alabel, $ahref, $aprim] = fastaction_item_link($it, (int)($n['kunde_id'] ?? 0)); ?>
         <div class="fa-item">
-          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="item_toggle"><input type="hidden" name="item_id" value="<?= (int)$it['id'] ?>">
+          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="item_toggle"><input type="hidden" name="item_id" value="<?= (int)$it['id'] ?>"><input type="hidden" name="fokus" value="<?= (int)$fokus ?>">
             <button class="fa-check <?= $done ? 'on' : '' ?>" type="submit" title="<?= $done ? 'wieder offen' : 'erledigt' ?>"><?= $done ? '✓' : '' ?></button>
           </form>
           <div class="fa-item-main">
@@ -279,7 +290,7 @@ if (isset($_GET['keinvorher'])) echo '<div class="bx-panel" style="border-color:
       <?php if (!$items): ?><div class="muted" style="font-size:13px;padding:8px 0">Keine Punkte – unten einen hinzufügen.</div><?php endif; ?>
     </div>
     <form method="post" class="fa-add">
-      <input type="hidden" name="aktion" value="item_add"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>">
+      <input type="hidden" name="aktion" value="item_add"><input type="hidden" name="notiz_id" value="<?= (int)$n['id'] ?>"><input type="hidden" name="fokus" value="<?= (int)$fokus ?>">
       <input type="text" name="text" placeholder="Eigenen Punkt hinzufügen…">
       <button class="btn btn-ghost btn-sm" type="submit" style="min-height:40px">+ Punkt</button>
     </form>
