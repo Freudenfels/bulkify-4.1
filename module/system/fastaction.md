@@ -49,3 +49,11 @@ So kann man nach „Angebot anlegen" o. ä. jederzeit zur ToDo-Liste zurück und
   Mengen prüfen/anpassen, dann senden. Gibt es kein früheres Angebot: Hinweis + „Angebot anlegen" (Kunde vorbelegt).
 - `fastaction_item_link()` erkennt die Aktion jetzt robuster: gespeicherte Aktion → Typ → **Textschlüsselwörter**
   (angebot/nachbestell/dosen → „Angebot anlegen"; rohstoff/karton/beschaffung → „Einkauf/Lieferantenpreise").
+
+## Nachbestell-Angebot: Vollversion (je Produkt, aktuelle Preise)
+Die KI liefert `positionen[]` (Produkt + Menge + Einheit) getrennt von den Vorschlägen; daraus entstehen
+aktionsfähige Punkte (`aktion='angebot'`, mit produkt_id/menge). Der Button **„Nachbestell-Angebot"** legt daraus
+automatisch einen **Angebots-Entwurf** an: je Produkt eine Gruppe über `angebot_rezeptur_zeilen()` (Rezeptur +
+einheiten_pro_packung + Produkt-Verpackung, sonst berechneter Glas-Behälter) mit **aktuellen Preisen aus der
+Matrix** und der erkannten Menge. Immer Entwurf – Mengen/Preise prüfen, dann senden. Kein Treffer -> Fallback:
+letztes Angebot des Kunden klonen; gar nichts -> leeres Angebot wird verworfen + Hinweis „Angebot anlegen".

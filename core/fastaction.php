@@ -22,8 +22,11 @@ Gib AUSSCHLIESSLICH dieses JSON zurueck:
       "zutaten": [ { "bezeichnung": "Rohstoffname wie auf der Vorlage, z. B. 'Bacopa Monnieri Extrakt 10:1'", "menge_mg": 150 } ],
       "zutaten_text": "dieselben Wirkstoffe als Fliesstext, z. B. 'Bacopa Monnieri Extrakt 10:1 150mg, MCC 50mg'" }
   ],
+  "positionen": [
+    { "produkt": "Produktname wie in der Nachricht (falls es ein bestehendes Kundenprodukt ist)", "rezeptur": null, "menge": 1000, "einheit": "Dosen" }
+  ],
   "vorschlaege": [
-    { "text": "konkreter Handlungsvorschlag als Frage, z. B. 'Fuer Kunde X und Rezeptur Y ein Angebot ueber 1.000 Dosen anlegen?'",
+    { "text": "konkreter Handlungsvorschlag als Frage, z. B. 'Beim Kunden die genauen Stueckzahlen bestaetigen lassen?'",
       "typ": "angebot|anfrage|nachricht|bestellung|produktion|sonstiges",
       "rezeptur": null, "produkt": null, "menge": null, "einheit": null }
   ]
@@ -35,8 +38,10 @@ Regeln:
 - "rezepturen": NUR wenn in der Nachricht/Datei eine konkrete Rezeptur/Zusammensetzung steht (z. B. auf einer alten
   Rechnung/Spezifikation). Je Rezeptur: Name + Darreichungsform + die einzelnen Zutaten (bezeichnung + menge_mg als
   Zahl in Milligramm) + zutaten_text. "menge_mg" nur wenn die Menge dasteht, sonst 0. Sonst leere Liste [].
-- Pro Vorschlag, wenn es um ein KONKRETES Produkt/Rezeptur mit Menge geht (z. B. mehrere Positionen einer Bestellung),
-  je EINEN Vorschlag mit rezeptur/produkt-Name (wie in der Nachricht) + menge (Zahl) + einheit. Sonst diese Felder null.
+- "positionen": Bei einer Bestellung/Nachbestellung je genanntem Produkt EINE Position mit produkt-Name (wie in der
+  Nachricht) + menge (Zahl) + einheit (z. B. "Dosen"). Rezeptur nur, wenn kein Produktname genannt ist. Sonst [].
+  Konkrete Produkt-Positionen gehoeren HIER hin, NICHT zusaetzlich als Vorschlag.
+- "vorschlaege": die UEBRIGEN Schritte (z. B. Kunde anrufen/Stueckzahlen bestaetigen, Rohstoff-/Kartonbestand pruefen).
 - 1 bis 5 Vorschlaege, der wichtigste zuerst. Alles auf Deutsch.
 - Wenn unklar, "dringlichkeit" auf "mittel" und einen Vorschlag "beim Kunden nachfragen".
 TXT;
@@ -108,29 +113,81 @@ function fastaction_notiz_anlegen(array $d, array $auf_e, string $eingabe, ?stri
           [$nid, $typ, mb_substr($text, 0, 500), $rid ?: null, $pid ?: null, $menge,
            mb_substr(trim((string)($v['einheit'] ?? '')), 0, 20) ?: null, $aktion, $sort++]);
     }
+    // Konkrete Produkt-Positionen (Bestellung/Nachbestellung) als eigene, aktionsfaehige Punkte anlegen.
+    foreach ((array)($d['positionen'] ?? []) as $p) {
+        $pn = trim((string)($p['produkt'] ?? ''));
+        $rn = trim((string)($p['rezeptur'] ?? ''));
+        if ($pn === '' && $rn === '') continue;
+        $pid = $pn !== '' ? (int) scalar("SELECT id FROM produkt WHERE COALESCE(NULLIF(kundenname,''),name) LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $pn . '%', $pn]) : 0;
+        $rid = (!$pid && $rn !== '') ? (int) scalar("SELECT id FROM rezeptur WHERE name LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $rn . '%', $rn]) : 0;
+        if (!$pid && $rid) { }   // Rezeptur reicht
+        $menge = ($p['menge'] ?? null) !== null && $p['menge'] !== '' ? (float) str_replace(['.', ','], ['', '.'], (string)$p['menge']) : null;
+        $einheit = mb_substr(trim((string)($p['einheit'] ?? '')), 0, 20) ?: 'Stück';
+        $name = $pn !== '' ? $pn : $rn;
+        $text = 'Angebot: ' . $name . ($menge ? ' · ' . number_format($menge, 0, ',', '.') . ' ' . $einheit : '');
+        q("INSERT INTO fastaction_item (notiz_id,typ,text,rezeptur_id,produkt_id,menge,einheit,aktion,sort)
+           VALUES (?,?,?,?,?,?,?,?,?)",
+          [$nid, 'angebot', mb_substr($text, 0, 500), $rid ?: null, $pid ?: null, $menge, $einheit, 'angebot', $sort++]);
+    }
     return $nid;
 }
 
-// Nachbestell-Angebot: das juengste Angebot des Kunden als ENTWURF klonen (gleiche Positionen, Preise,
-// Verpackung) – Grundlage fuer die Nachbestellung; Mengen prueft/aendert der Mensch, dann senden. Rueckgabe:
-// [neues_angebot_id, quelle_id] oder [0,0] wenn es kein fruederes Angebot gibt.
-function fastaction_nachbestell_angebot(int $kunde_id): array {
-    if ($kunde_id <= 0) return [0, 0];
-    $src = one("SELECT * FROM angebot WHERE kunde_id=? AND (SELECT COUNT(*) FROM angebot_position WHERE angebot_id=angebot.id) > 0 ORDER BY id DESC LIMIT 1", [$kunde_id]);
-    if (!$src) return [0, 0];
-    q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,marge_override,produktionszeit_wochen) VALUES (?,?,?,?,?,?,?)",
-      [naechste_nummer('AN'), $kunde_id, $src['produkt_id'] ?: null, 'offen',
-       'Nachbestellung (aus Fastaction) – geklont aus ' . (string)$src['nummer'] . '. Mengen prüfen, dann senden.',
-       $src['marge_override'] ?? null, $src['produktionszeit_wochen'] ?? null]);
-    $nid = (int) insert_id();
-    $sort = 0;
-    foreach (all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [(int)$src['id']]) as $p) {
-        q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-          [$nid, $sort++, $p['artikelnr'], $p['bezeichnung'], $p['beschreibung'], $p['menge'], $p['einheit'],
-           $p['preis_cent'], $p['ek_cent'], $p['mwst_satz'], $p['quelle'], $p['gruppe'], $p['rezeptur_id'], $p['stueck'], $p['verpackung_id']]);
+// Nachbestell-Angebot als ENTWURF automatisch anlegen. Bevorzugt aus den erkannten Produkt-Positionen der Notiz
+// (je Produkt eine Gruppe, Preise NEU aus der aktuellen Matrix via angebot_rezeptur_zeilen). Gibt es keine
+// Positionen, wird das juengste Angebot des Kunden geklont. Immer Entwurf – Mengen/Preise prueft der Mensch.
+// Rueckgabe: ['angebot_id'=>int, 'anzahl'=>int, 'quelle'=>'positionen'|'klon'|''].
+function fastaction_nachbestell_angebot(int $notiz_id): array {
+    $n = $notiz_id ? one("SELECT * FROM fastaction_notiz WHERE id=?", [$notiz_id]) : null;
+    $kid = (int)($n['kunde_id'] ?? 0);
+    if (!$kid) return ['angebot_id' => 0, 'anzahl' => 0, 'quelle' => ''];
+
+    // Produkt-Positionen der Notiz (aktionsfaehige Punkte mit Produkt/Rezeptur + Menge).
+    $pos = all("SELECT produkt_id, rezeptur_id, menge, einheit FROM fastaction_item
+                WHERE notiz_id=? AND aktion='angebot' AND (produkt_id IS NOT NULL OR rezeptur_id IS NOT NULL) ORDER BY sort, id", [$notiz_id]);
+
+    $angId = (int) (q("INSERT INTO angebot (nummer,kunde_id,status,notiz) VALUES (?,?,?,?)",
+        [naechste_nummer('AN'), $kid, 'offen', 'Nachbestellung (aus Fastaction) – Entwurf, Mengen/Preise prüfen, dann senden.']) ? insert_id() : 0);
+    if (!$angId) return ['angebot_id' => 0, 'anzahl' => 0, 'quelle' => ''];
+
+    $anz = 0;
+    foreach ($pos as $p) {
+        $pid = (int)($p['produkt_id'] ?? 0);
+        $rid = (int)($p['rezeptur_id'] ?? 0);
+        $stk = 0; $verp = 0;
+        if ($pid) {
+            $pr = one("SELECT rezeptur_id, einheiten_pro_packung, verpackung_id FROM produkt WHERE id=?", [$pid]);
+            if ($pr) { $rid = (int)$pr['rezeptur_id']; $stk = (int)$pr['einheiten_pro_packung']; $verp = (int)$pr['verpackung_id']; }
+        }
+        if (!$rid) continue;
+        if (!$stk) $stk = 60;   // Rueckfall, falls am Produkt keine Stueckzahl steht
+        $menge = (int) round((float)($p['menge'] ?? 0)) ?: 1000;
+        // Verpackung: die am Produkt hinterlegte, sonst passenden Glas-Behaelter berechnen.
+        if (!$verp && function_exists('behaelter_aus_rezeptur_stueck')) {
+            $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+            $verp = (int) (behaelter_aus_rezeptur_stueck($rid, $form, $stk, 'glas') ?? 0);
+        }
+        $verps = array_values(array_filter([$verp]));
+        $zeilen = angebot_rezeptur_zeilen($rid, $stk, $verps, $menge, null, $kid);
+        if ($zeilen) { angebot_gruppe_anhaengen($angId, $zeilen); $anz++; }
     }
-    return [$nid, (int)$src['id']];
+    if ($anz > 0) return ['angebot_id' => $angId, 'anzahl' => $anz, 'quelle' => 'positionen'];
+
+    // Fallback: juengstes Angebot des Kunden klonen.
+    $src = one("SELECT * FROM angebot WHERE kunde_id=? AND (SELECT COUNT(*) FROM angebot_position WHERE angebot_id=angebot.id) > 0 ORDER BY id DESC LIMIT 1", [$kid]);
+    if ($src) {
+        $sort = 0;
+        foreach (all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [(int)$src['id']]) as $p) {
+            q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [$angId, $sort++, $p['artikelnr'], $p['bezeichnung'], $p['beschreibung'], $p['menge'], $p['einheit'],
+               $p['preis_cent'], $p['ek_cent'], $p['mwst_satz'], $p['quelle'], $p['gruppe'], $p['rezeptur_id'], $p['stueck'], $p['verpackung_id']]);
+        }
+        q("UPDATE angebot SET produkt_id=?, notiz=? WHERE id=?", [$src['produkt_id'] ?: null, 'Nachbestellung (aus Fastaction) – geklont aus ' . (string)$src['nummer'] . '. Mengen prüfen, dann senden.', $angId]);
+        return ['angebot_id' => $angId, 'anzahl' => 1, 'quelle' => 'klon'];
+    }
+    // Nichts zum Bauen -> leeres Angebot wieder entfernen, damit kein Muell entsteht.
+    q("DELETE FROM angebot WHERE id=? AND (SELECT COUNT(*) FROM angebot_position WHERE angebot_id=?)=0", [$angId, $angId]);
+    return ['angebot_id' => 0, 'anzahl' => 0, 'quelle' => ''];
 }
 
 // Primaere Ein-Klick-Aktion je ToDo-Punkt: [label, href, primary]. Nutzt das strukturierte Ziel des Items

@@ -45,9 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'notiz
 }
 // Nachbestell-Angebot: letztes Angebot des Kunden als Entwurf klonen und oeffnen.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachbestell' && ($nid = (int)($_POST['notiz_id'] ?? 0))) {
-    $kid = (int) scalar("SELECT kunde_id FROM fastaction_notiz WHERE id=?", [$nid]);
-    [$aid] = fastaction_nachbestell_angebot($kid);
-    if ($aid) { header('Location: ?p=angebot&id=' . $aid . '&nachbestellung=1'); exit; }
+    $r = fastaction_nachbestell_angebot($nid);
+    if (!empty($r['angebot_id'])) { header('Location: ?p=angebot&id=' . (int)$r['angebot_id'] . '&nachbestellung=' . rawurlencode($r['quelle'])); exit; }
     header('Location: ?p=fastaction&notiz=' . $nid . '&keinvorher=1'); exit;
 }
 
