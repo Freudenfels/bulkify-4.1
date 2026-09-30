@@ -13,3 +13,11 @@ Aufklappbereich „Positionen aus Text einfügen": Text aus altem Angebot/Rechnu
 Der Parser (JS) erkennt je Position eine Kopfzeile `Pos Artikel-Nr Bezeichnung Menge Einheit Einzelpreis Gesamt`
 (dt. Zahlen 1.000,00 / 7,54); Zeilen darunter werden zur Beschreibung. Artikel-Nr = Kürzel + Nummer (z. B. „VCB 1.32.8").
 Füllt die Positionszeilen zum Prüfen/Anpassen; leere Vorlagezeilen werden ersetzt.
+
+## Update: robustes Einfügen + Ursprungsrechnung
+- Feld **„Storno zu Rechnung (Nummer)"** (`storno_nr`): Nummer der Ursprungsrechnung -> wird über `beleg.typ='rechnung'`
+  aufgelöst und als `storno_von_id` verknüpft (Beleg zeigt „Storno zu Rechnung …"); Kunde/Bezug werden übernommen,
+  falls leer. Unbekannte Nummer wird trotzdem als Bezug-Text gesetzt.
+- Text einfügen: „Positionen übernehmen" versucht das Spaltenformat; klappt das nicht, wird **automatisch roh**
+  übernommen. Zusätzlicher Button **„Roh übernehmen"**: jede nicht-leere Zeile = eine Position, Betrag am
+  Zeilenende wird Preis (Menge 1). So geht nichts mehr verloren – nur noch Beträge/Mengen prüfen.

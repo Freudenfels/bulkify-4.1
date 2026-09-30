@@ -9,6 +9,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'gutsc
     $kid   = (int)($_POST['kunde_id'] ?? 0);
     $datum = trim($_POST['datum'] ?? '') !== '' ? $_POST['datum'] : date('Y-m-d');
     $grund = trim($_POST['grund'] ?? '');
+    // Nummer der Ursprungsrechnung: verknuepft die Storno-Rechnung (storno_von_id) und befuellt Kunde/Bezug.
+    $stornoNr  = trim($_POST['storno_nr'] ?? '');
+    $stornoVon = null;
+    if ($stornoNr !== '') {
+        $rb = one("SELECT id, kunde_id, nummer FROM beleg WHERE nummer=? AND typ='rechnung' LIMIT 1", [$stornoNr]);
+        if ($rb) { $stornoVon = (int)$rb['id']; if (!$kid) $kid = (int)$rb['kunde_id']; if ($grund === '') $grund = 'Storno zu Rechnung ' . $rb['nummer']; }
+        elseif ($grund === '') { $grund = 'Storno zu Rechnung ' . $stornoNr; }   // Nummer trotzdem als Bezug uebernehmen
+    }
     $positionen = [];
     foreach (($_POST['p_bez'] ?? []) as $i => $bez) {
         $bez = trim((string)$bez);
@@ -30,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'gutsc
     if (!$kid)            $fehler = 'Bitte einen Kunden wählen.';
     elseif (!$positionen) $fehler = 'Bitte mindestens eine Position mit Bezeichnung angeben.';
     else {
-        $bid = gutschrift_erstellen($kid, $datum, $positionen, $grund);
+        $bid = gutschrift_erstellen($kid, $datum, $positionen, $grund, $stornoVon);
         header('Location: ?p=rechnung&id=' . $bid . '&gespeichert=1'); exit;
     }
 }
@@ -56,7 +64,8 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
         </select>
       </div>
       <div class="bx-field"><label>Datum</label><input type="date" name="datum" value="<?= h(date('Y-m-d')) ?>"></div>
-      <div class="bx-field"><label>Grund / Bezug <?= bx_hint('z. B. „Storno zu Bestellung/Rechnung X" – erscheint auf dem Beleg') ?></label><input type="text" name="grund" placeholder="z. B. Teilstorno Bestellung März 2026"></div>
+      <div class="bx-field"><label>Storno zu Rechnung (Nummer) <?= bx_hint('Nummer der Ursprungsrechnung, z. B. RE-2026-0123. Wird verknüpft und auf dem Beleg als „Storno zu Rechnung …" ausgewiesen; Kunde wird übernommen, falls leer.') ?></label><input type="text" name="storno_nr" value="<?= h((string)($_POST['storno_nr'] ?? '')) ?>" placeholder="z. B. RE-2026-0123"></div>
+      <div class="bx-field"><label>Grund / Bezug (optional) <?= bx_hint('Erscheint zusätzlich auf dem Beleg. Leer = automatisch „Storno zu Rechnung <Nummer>".') ?></label><input type="text" name="grund" placeholder="z. B. Teilstorno / falsche Menge"></div>
     </div>
   </div>
 
@@ -66,10 +75,11 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
 
     <details style="margin-bottom:12px">
       <summary style="cursor:pointer;color:var(--gruen)">Positionen aus Text einfügen (aus altem Angebot / alter Rechnung)</summary>
-      <p class="muted" style="font-size:12px;margin:8px 0 4px">Text kopieren und einfügen. Erkennt je Position eine Kopfzeile <em>Pos · Artikel-Nr. · Bezeichnung · Menge · Einheit · Einzelpreis · Gesamt</em>, die Zeilen darunter werden zur Beschreibung.</p>
+      <p class="muted" style="font-size:12px;margin:8px 0 4px">Text aus dem alten Angebot / der alten Rechnung kopieren und einfügen. „Positionen übernehmen" erkennt das Spaltenformat (Pos · Artikel-Nr. · Bezeichnung · Menge · Einheit · Einzelpreis · Gesamt). Klappt das nicht, nimmt <strong>„Roh übernehmen"</strong> einfach <strong>jede Zeile als eigene Position</strong> (Betrag am Zeilenende wird als Preis übernommen) – dann nur noch prüfen.</p>
       <textarea id="gsPaste" rows="6" style="width:100%;font-family:monospace;font-size:12px" placeholder="14 VCB 1.32.8 V Collagen Booster 1.000,00 Stk. 7,54 7.540,00&#10;V-COL® – 6 928 mg&#10;8g pro Tag, 30 Portionen&#10;15 STB 500g Standbodenbeutel 1.000,00 Stk. 0,75 750,00"></textarea>
-      <div class="bx-row" style="margin-top:6px;gap:8px;align-items:center">
+      <div class="bx-row" style="margin-top:6px;gap:8px;align-items:center;flex-wrap:wrap">
         <button type="button" class="btn btn-primary btn-sm" id="gsPasteBtn">Positionen übernehmen</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="gsRawBtn">Roh übernehmen (1 Zeile = 1 Position)</button>
         <span class="muted" id="gsPasteInfo" style="font-size:12px"></span>
       </div>
     </details>
@@ -133,10 +143,10 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   }
   document.getElementById('gsAdd').addEventListener('click', function(){ addRow(); });
 
-  // Text-Parser: Kopfzeile "Pos Artikelnr Bezeichnung Menge Einheit Einzelpreis Gesamt" + Beschreibungszeilen darunter.
-  function deNum(s){ if(s==null) return ''; s=String(s).trim().replace(/\./g,'').replace(',','.'); var n=parseFloat(s); return isNaN(n)?'':n; }
+  function deNum(s){ if(s==null) return ''; s=String(s).trim().replace(/\s/g,'').replace(/\./g,'').replace(',','.'); var n=parseFloat(s); return isNaN(n)?'':n; }
   function fmtDe(n){ return n===''?'':String(n).replace('.',','); }
-  function parse(text){
+  // STRICT: Kopfzeile "Pos Artikelnr Bezeichnung Menge Einheit Einzelpreis Gesamt" + Beschreibungszeilen darunter.
+  function parseStrict(text){
     var lines=text.split(/\r?\n/), out=[], cur=null;
     var hdr=/^\s*\d+\s+(.+?)\s+([\d.]+,\d{2})\s+(\S+)\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})\s*$/;
     lines.forEach(function(ln){
@@ -144,7 +154,7 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       if(m){
         if(cur) out.push(cur);
         var mid=m[1].trim(), art='', bez=mid;
-        var am=mid.match(/^([A-Za-zÄÖÜäöü]{2,6}\s+[\w.\-]+)\s+(.+)$/);   // Artikel-Nr = Kürzel + Nummer
+        var am=mid.match(/^([A-Za-zÄÖÜäöü]{2,6}\s+[\w.\-]+)\s+(.+)$/);
         if(am){ art=am[1]; bez=am[2]; }
         cur={artikelnr:art, bez:bez, besch:[], menge:m[2], einheit:m[3], preis:m[4]};
       } else if(cur && ln.trim()!==''){ cur.besch.push(ln.trim()); }
@@ -152,18 +162,41 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     if(cur) out.push(cur);
     return out;
   }
-  document.getElementById('gsPasteBtn').addEventListener('click', function(){
-    var items=parse(document.getElementById('gsPaste').value||'');
-    var info=document.getElementById('gsPasteInfo');
-    if(!items.length){ info.textContent='Keine Positionen erkannt – bitte Format prüfen.'; return; }
+  // ROH: jede nicht-leere Zeile = eine Position. Betrag am Zeilenende (z. B. 7.540,00 oder 12,00 €) wird als
+  // Preis uebernommen (Menge 1 -> Positionssumme = dieser Betrag), der Rest der Zeile wird die Bezeichnung.
+  function parseRaw(text){
+    return text.split(/\r?\n/).map(function(l){return l.replace(/\t/g,' ').trim();}).filter(Boolean).map(function(l){
+      var m=l.match(/(\d{1,3}(?:[.\s]\d{3})*,\d{2}|\d+[.,]\d{2})\s*(?:€|EUR)?\s*$/);
+      var preis='', bez=l;
+      if(m){ preis=m[1]; bez=l.slice(0,m.index).trim() || l; }
+      return {artikelnr:'', bez:bez, besch:[], menge:'1', einheit:'Stk.', preis:preis};
+    });
+  }
+  function clearEmptyRows(){
     Array.prototype.slice.call(tbody.querySelectorAll('tr')).forEach(function(tr){
-      var b=tr.querySelector('[name="p_bez[]"]'); if(b && b.value.trim()==='') tr.remove();   // leere Zeilen weg
+      var b=tr.querySelector('[name="p_bez[]"]'); if(b && b.value.trim()==='') tr.remove();
     });
+  }
+  function fill(items){
+    clearEmptyRows();
     items.forEach(function(it){
-      addRow({artikelnr:it.artikelnr, bez:it.bez, besch:it.besch.join('\n'),
-              menge:fmtDe(deNum(it.menge)), einheit:it.einheit, preis:fmtDe(deNum(it.preis)), mwst:UST});
+      addRow({artikelnr:it.artikelnr||'', bez:it.bez, besch:(it.besch||[]).join('\n'),
+              menge:fmtDe(deNum(it.menge)), einheit:it.einheit||'Stk.', preis:fmtDe(deNum(it.preis)), mwst:UST});
     });
-    info.textContent=items.length+' Position(en) übernommen – bitte prüfen/anpassen.';
+  }
+  document.getElementById('gsPasteBtn').addEventListener('click', function(){
+    var txt=document.getElementById('gsPaste').value||'', info=document.getElementById('gsPasteInfo');
+    var items=parseStrict(txt);
+    if(items.length){ fill(items); info.textContent=items.length+' Position(en) übernommen – bitte prüfen/anpassen.'; return; }
+    // Format nicht erkannt -> automatisch roh uebernehmen (nichts geht verloren).
+    items=parseRaw(txt);
+    if(!items.length){ info.textContent='Kein Text zum Übernehmen.'; return; }
+    fill(items); info.textContent='Spaltenformat nicht erkannt – '+items.length+' Zeile(n) roh übernommen. Bitte Beträge/Mengen prüfen.';
+  });
+  document.getElementById('gsRawBtn').addEventListener('click', function(){
+    var items=parseRaw(document.getElementById('gsPaste').value||''), info=document.getElementById('gsPasteInfo');
+    if(!items.length){ info.textContent='Kein Text zum Übernehmen.'; return; }
+    fill(items); info.textContent=items.length+' Zeile(n) roh übernommen – bitte Beträge/Mengen prüfen.';
   });
 })();
 </script>
