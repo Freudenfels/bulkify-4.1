@@ -42,15 +42,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'gutsc
         header('Location: ?p=rechnung&id=' . $bid . '&gespeichert=1'); exit;
     }
 }
+// Schnellweg: ausgewählte offene Rechnungen des Kunden stornieren & verrechnen (je Rechnung eine Gutschrift).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'storno_offene') {
+    $akteur = (function_exists('current_user') && ($u = current_user())) ? $u['name'] : 'team';
+    $grund  = trim($_POST['grund'] ?? '') ?: 'Verrechnung offener Rechnung';
+    $n = 0;
+    foreach (array_map('intval', $_POST['re_ids'] ?? []) as $rid)
+        if ($rid && gutschrift_aus_rechnung($rid, $grund, $akteur)) $n++;
+    header('Location: ?p=rechnungen&verrechnet=' . $n); exit;
+}
 
 $kunden  = all("SELECT id, firma, kundennummer FROM kunden ORDER BY firma");
 $ustStd  = rtrim(rtrim(number_format((float) meta_get('ust_inland', 19), 2, '.', ''), '0'), '.');
 $vorKid  = (int)($_GET['kunde_id'] ?? ($_POST['kunde_id'] ?? 0));
 
+// Offene Rechnungen des gewählten Kunden (für den Schnellweg „verrechnen").
+$offeneRe = [];
+if ($vorKid) {
+    foreach (all("SELECT * FROM beleg WHERE kunde_id=? AND typ='rechnung' AND status<>'storniert' ORDER BY datum, id", [$vorKid]) as $b) {
+        $zs = beleg_zahlstatus($b);
+        if ($zs['rest'] > 0.005) $offeneRe[] = $b + ['_rest' => $zs['rest']];
+    }
+}
+
 render_header('rechnungen', 'Storno-Rechnung');
 bx_head('Storno-Rechnung / Gutschrift', 'Kunde, Datum und Positionen angeben – wie beim Angebot', bx_btn('Zurück zu Rechnungen', '?p=rechnungen', 'ghost'));
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($fehler) . '</div>';
+$eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 ?>
+<!-- Schnellweg: offene Rechnungen des Kunden stornieren & verrechnen -->
+<div class="bx-panel" style="border-color:var(--gruen)">
+  <h2 style="margin-top:0">Offene Rechnungen stornieren &amp; verrechnen</h2>
+  <p class="muted" style="margin-top:0">1. Kunde wählen &middot; 2. offene Rechnungen anhaken &middot; 3. „Stornieren &amp; verrechnen". Je gewählte Rechnung entsteht eine Storno-Rechnung (Gutschrift), die sie ausgleicht.</p>
+  <form method="get" class="bx-row" style="gap:8px;align-items:flex-end;margin-bottom:6px">
+    <input type="hidden" name="p" value="gutschrift_neu">
+    <div class="bx-field" style="margin:0;min-width:320px"><label>Kunde</label>
+      <select name="kunde_id" onchange="this.form.submit()">
+        <option value="">– Kunde wählen –</option>
+        <?php foreach ($kunden as $k): ?><option value="<?= (int)$k['id'] ?>" <?= $vorKid===(int)$k['id']?'selected':'' ?>><?= h($k['firma']) ?><?= $k['kundennummer'] ? ' · '.h($k['kundennummer']) : '' ?></option><?php endforeach; ?>
+      </select>
+    </div>
+    <noscript><button class="btn btn-ghost btn-sm" type="submit">Offene Rechnungen laden</button></noscript>
+  </form>
+  <?php if ($vorKid && !$offeneRe): ?>
+    <div class="muted">Keine offenen Rechnungen für diesen Kunden.</div>
+  <?php elseif ($offeneRe): ?>
+  <form method="post" onsubmit="return confirm('Ausgewählte Rechnungen stornieren und verrechnen? Je Rechnung entsteht eine Gutschrift.');">
+    <input type="hidden" name="aktion" value="storno_offene">
+    <input type="hidden" name="kunde_id" value="<?= (int)$vorKid ?>">
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th style="width:34px"><input type="checkbox" id="reAll" checked></th><th>Rechnung</th><th>Datum</th><th class="bx-num">Brutto</th><th class="bx-num">Offener Rest</th></tr></thead>
+      <tbody>
+        <?php foreach ($offeneRe as $b): ?>
+        <tr>
+          <td><input type="checkbox" class="reChk" name="re_ids[]" value="<?= (int)$b['id'] ?>" checked></td>
+          <td><a href="?p=rechnung&id=<?= (int)$b['id'] ?>" target="_blank"><?= h($b['nummer']) ?></a></td>
+          <td><?= $b['datum'] ? h(date('d.m.Y', strtotime($b['datum']))) : '–' ?></td>
+          <td class="bx-num"><?= $eur($b['brutto']) ?></td>
+          <td class="bx-num"><strong><?= $eur($b['_rest']) ?></strong></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <div class="bx-field" style="max-width:420px;margin-top:8px"><label>Grund (optional)</label><input type="text" name="grund" placeholder="z. B. Storno / Verrechnung"></div>
+    <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Ausgewählte stornieren &amp; verrechnen</button></div>
+  </form>
+  <script>var _reAll=document.getElementById('reAll'); if(_reAll)_reAll.addEventListener('change',function(){var c=this.checked;document.querySelectorAll('.reChk').forEach(function(x){x.checked=c;});});</script>
+  <?php endif; ?>
+</div>
+
+<h2 style="margin:24px 0 8px">Oder: freie Storno-Rechnung (Positionen / Text einfügen)</h2>
 <form method="post" class="bx-form">
   <input type="hidden" name="aktion" value="gutschrift_save">
   <div class="bx-panel">

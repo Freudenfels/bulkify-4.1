@@ -46,6 +46,7 @@ $cols = [
 
 render_header('rechnungen', 'Rechnungen');
 bx_head('Rechnungen', count($rows) . ' Einträge · offene Posten: ' . $eur($offen));
+if (isset($_GET['verrechnet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['verrechnet'] . ' Rechnung(en) storniert &amp; verrechnet (Gutschrift erzeugt).</div>';
 ?>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="rechnungen">
