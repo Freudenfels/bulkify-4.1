@@ -25,12 +25,25 @@ Zeigt v3-Quelle ↔ v4 (Rezepturen/Aufträge/Angebote), damit man sieht, dass al
 Bewusst NICHT importiert: der interne Kunde (Lagerproduktion) und reine Anfragen ohne Preis —
 darum sind es bei „Angebote" weniger als „Anfragen", das ist korrekt.
 
-## Stolperfalle (gelöst)
-`V3PrefixPDO` schreibt v3-Tabellennamen per Regex auf `v3imp_` um. Die Namensliste MUSS jede
-v3-Tabelle enthalten, die `tools/v3_import.php` liest — **auch die `_staffel`-Kindtabellen**
-(z. B. `lieferant_angebot_staffel`, `produktanfrage_staffel`). Fehlt eine, liest der Importer die
-falsche (v4-)Tabelle → Absturz mitten im Lauf → unvollständiger Import. Längere Namen stehen in
-der Liste vor kürzeren (`lieferant_angebot_staffel` vor `lieferant_angebot`).
+## Stolperfallen (beide gelöst)
+`V3PrefixPDO` schreibt v3-Tabellennamen per Regex auf `v3imp_` um. Zwei Fallen, die dazu führten,
+dass Angebote **preislos** ankamen bzw. der Import **abstürzte**:
+
+1. **Namensliste unvollständig:** Sie MUSS jede v3-Tabelle enthalten, die `tools/v3_import.php`
+   liest — **auch die `_staffel`-Kindtabellen** (`lieferant_angebot_staffel`,
+   `produktanfrage_staffel`). Fehlt eine, liest der Importer die falsche (v4-)Tabelle → Absturz
+   mitten im Lauf → unvollständiger Import. Längere Namen vor kürzeren
+   (`lieferant_angebot_staffel` vor `lieferant_angebot`).
+2. **Backtick-Form:** `v3_hat_tabelle()` prüft mit Backticks (``SELECT 1 FROM `produktanfrage_staffel```).
+   Die frühere kombinierte Regex ``` `?…`?\b ``` ließ dabei einen verwaisten Backtick stehen →
+   Syntaxfehler → `v3_hat_tabelle()` false → `$hasPaStaffel` false → **die ganze Staffel-Schleife
+   übersprungen**. Angebote, deren Preis NUR in `produktanfrage_staffel` steht (nicht in
+   `produktanfrage.angebot_preis`), kamen dadurch ohne Preis rüber. Lösung: Backtick- und
+   Bare-Form getrennt umschreiben.
+
+Merke: In v3 hängt die Mehrfach-Preis-Staffel an der **Produktanfrage** (`produktanfrage_staffel`:
+`anzahl_vpe` → `preis`), oft mit leerem `produktanfrage.anzahl_vpe/angebot_preis`. Diese Staffel ist
+die eigentliche Preisquelle und wird in v4 zu `angebot_staffel`.
 
 ## Nach der Migration
 Tool wieder entfernen (temporär). „v3-Zwischenstand entfernen" räumt `v3imp_*`-Tabellen und die
