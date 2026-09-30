@@ -26,6 +26,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
         header('Location: ?p=rechnung&id=' . ($gid ?: $id) . '&storniert=1'); exit;
     }
 
+    // Guthaben auf diese Rechnung anrechnen (verrechnen)
+    if ($aktion === 'guthaben_anrechnen') {
+        $wunsch = (float) str_replace(',', '.', trim($_POST['betrag'] ?? '0'));
+        $an = guthaben_anrechnen($id, $wunsch, $akteur);
+        header('Location: ?p=rechnung&id=' . $id . '&angerechnet=' . number_format($an, 2, '.', '')); exit;
+    }
+    // Guthaben (dieses Gutschrift-Kunden) auszahlen
+    if ($aktion === 'guthaben_auszahlen') {
+        $kid    = (int)($_POST['kunde_id'] ?? 0);
+        $wunsch = (float) str_replace(',', '.', trim($_POST['betrag'] ?? '0'));
+        $aus = guthaben_auszahlen($kid, $wunsch, trim($_POST['notiz'] ?? ''), $akteur);
+        header('Location: ?p=rechnung&id=' . $id . '&ausgezahlt=' . number_format($aus, 2, '.', '')); exit;
+    }
+
     // Status manuell setzen (Override, z. B. storniert)
     $status = trim($_POST['status'] ?? 'offen');
     $notiz  = trim($_POST['status_notiz'] ?? '');
@@ -48,6 +62,7 @@ $b = $id ? one("SELECT b.*, k.firma AS kunde_firma, a.nummer AS auftrag_nr
 if (!$b) { render_header('rechnungen','Rechnung'); bx_head('Rechnung nicht gefunden','', bx_btn('Zurück','?p=rechnungen','ghost')); render_footer(); exit; }
 
 $istGut     = ($b['typ'] === 'gutschrift');
+$guthaben   = $b['kunde_id'] ? kunde_guthaben((int)$b['kunde_id']) : 0.0;   // verfügbares Kunden-Guthaben
 $positionen = all("SELECT * FROM beleg_position WHERE beleg_id=? ORDER BY sort, id", [$id]);
 $stornoVon  = !empty($b['storno_von_id']) ? one("SELECT id,nummer FROM beleg WHERE id=?", [(int)$b['storno_von_id']]) : null;   // diese Gutschrift storniert ...
 $stornoDurch= one("SELECT id,nummer FROM beleg WHERE storno_von_id=? AND typ='gutschrift'", [$id]);                            // ... diese Rechnung wurde storniert durch
@@ -68,6 +83,8 @@ bx_head($b['nummer'], ($istGut ? 'Storno-Rechnung / Gutschrift' : 'Rechnung') . 
         ($istGut ? bx_btn('PDF ansehen', '?p=gutschrift_pdf&id=' . $id, 'ghost') . ' ' : '') . bx_btn('Zurück zur Liste', '?p=rechnungen', 'ghost'));
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnung storniert – Gutschrift wurde erstellt.</div>';
+if (isset($_GET['angerechnet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((float)$_GET['angerechnet'] > 0 ? $eur((float)$_GET['angerechnet']) . ' Guthaben angerechnet.' : 'Kein Guthaben angerechnet (nichts verfügbar/offen).') . '</div>';
+if (isset($_GET['ausgezahlt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((float)$_GET['ausgezahlt'] > 0 ? $eur((float)$_GET['ausgezahlt']) . ' Guthaben als ausgezahlt verbucht.' : 'Kein Guthaben ausgezahlt.') . '</div>';
 // Bezug-Hinweise
 if ($stornoVon)  echo '<div class="bx-panel" style="padding:10px 14px">Storno zu Rechnung <a href="?p=rechnung&id=' . (int)$stornoVon['id'] . '">' . h($stornoVon['nummer']) . '</a>.</div>';
 if ($stornoDurch) echo '<div class="bx-panel" style="padding:10px 14px;border-color:#e6c4c0">Diese Rechnung wurde storniert – Gutschrift <a href="?p=rechnung&id=' . (int)$stornoDurch['id'] . '">' . h($stornoDurch['nummer']) . '</a>.</div>';
@@ -131,6 +148,38 @@ $zahlungen = zahlungen_fuer($id);
 $konten = bank_konten();
 $artLbl = ['ueberweisung'=>'Überweisung','lastschrift'=>'Lastschrift','paypal'=>'PayPal','bar'=>'Bar','sonstiges'=>'Sonstiges'];
 ?>
+<!-- Guthaben anrechnen (Rechnung) -->
+<?php if (!$istGut && $b['status'] !== 'storniert' && $guthaben > 0.005 && $zs['rest'] > 0.005): $anrMax = min($guthaben, $zs['rest']); ?>
+<form method="post" class="bx-form">
+  <input type="hidden" name="aktion" value="guthaben_anrechnen">
+  <div class="bx-panel" style="border-color:var(--gruen)">
+    <h2 style="margin-top:0">Guthaben anrechnen</h2>
+    <p class="muted" style="margin-top:0">Verfügbares Guthaben von <?= h($b['kunde_firma'] ?: 'Kunde') ?>: <strong><?= $eur($guthaben) ?></strong> · offener Rest dieser Rechnung: <strong><?= $eur($zs['rest']) ?></strong>.</p>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Betrag anrechnen</label><input type="text" inputmode="decimal" name="betrag" value="<?= number_format($anrMax, 2, ',', '') ?>"></div>
+    </div>
+    <button class="btn btn-primary" type="submit">Guthaben anrechnen</button>
+  </div>
+</form>
+<?php endif; ?>
+
+<!-- Guthaben auszahlen (Gutschrift) -->
+<?php if ($istGut && $guthaben > 0.005): ?>
+<form method="post" class="bx-form" onsubmit="return confirm('Guthaben auszahlen und als Erstattung verbuchen?');">
+  <input type="hidden" name="aktion" value="guthaben_auszahlen">
+  <input type="hidden" name="kunde_id" value="<?= (int)$b['kunde_id'] ?>">
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Guthaben auszahlen</h2>
+    <p class="muted" style="margin-top:0">Verfügbares Guthaben von <?= h($b['kunde_firma'] ?: 'Kunde') ?>: <strong><?= $eur($guthaben) ?></strong>. Die Auszahlung wird als Verbrauch (Erstattung) verbucht.</p>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Betrag auszahlen</label><input type="text" inputmode="decimal" name="betrag" value="<?= number_format($guthaben, 2, ',', '') ?>"></div>
+      <div class="bx-field"><label>Notiz (optional)</label><input type="text" name="notiz" placeholder="z. B. Überweisung an Kunde"></div>
+    </div>
+    <button class="btn btn-primary" type="submit">Guthaben auszahlen</button>
+  </div>
+</form>
+<?php endif; ?>
+
 <!-- Zahlung erfassen -->
 <?php if ($b['typ'] === 'rechnung' && $b['status'] !== 'storniert'): ?>
 <form method="post" class="bx-form">

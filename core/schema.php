@@ -513,6 +513,20 @@ function init_schema(): void {
     ensure_column('beleg', 'storno_von_id', "INT NULL");     // Gutschrift/Storno -> Original-Rechnung
     ensure_column('beleg', 'grund', "VARCHAR(255) NULL");    // Grund des Stornos / der Gutschrift
 
+    // guthaben_bewegung: Verbrauch des Kunden-Guthabens (aus Gutschriften) – angerechnet auf Rechnung oder ausgezahlt.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS guthaben_bewegung (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        kunde_id INT NOT NULL,
+        gutschrift_id INT NULL,
+        betrag DECIMAL(14,2) NOT NULL DEFAULT 0,        -- verbrauchtes Guthaben (positiv)
+        typ VARCHAR(20) NOT NULL DEFAULT 'anrechnung',  -- anrechnung|auszahlung
+        ref_beleg_id INT NULL,                          -- angerechnet auf diese Rechnung
+        notiz VARCHAR(255) NULL,
+        datum DATE NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_kunde (kunde_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // zahlung: einzelne Zahlungseingänge je Beleg. datum = echtes Überweisungsdatum (Valuta), angelegt = Erfassungszeit (UTC).
     $pdo->exec("CREATE TABLE IF NOT EXISTS zahlung (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -5930,6 +5944,39 @@ function auftrag_rechnungen_stornieren(int $auftrag_id, string $grund = 'Auftrag
     foreach (all("SELECT id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert'", [$auftrag_id]) as $r)
         if (gutschrift_aus_rechnung((int)$r['id'], $grund, $akteur)) $n++;
     return $n;
+}
+
+// ===== Guthaben (aus Gutschriften) =====
+// Verfügbares Guthaben eines Kunden = Summe der Gutschrift-Beträge − bereits verbrauchtes (angerechnet/ausgezahlt).
+function kunde_guthaben(int $kunde_id): float {
+    if (!$kunde_id) return 0.0;
+    $gut = (float) scalar("SELECT COALESCE(SUM(ABS(brutto)),0) FROM beleg WHERE kunde_id=? AND typ='gutschrift'", [$kunde_id]);
+    $ver = (float) scalar("SELECT COALESCE(SUM(betrag),0) FROM guthaben_bewegung WHERE kunde_id=?", [$kunde_id]);
+    return round($gut - $ver, 2);
+}
+function guthaben_bewegung_add(int $kunde_id, float $betrag, string $typ, ?int $ref_beleg_id = null, string $notiz = '', ?int $gutschrift_id = null): void {
+    q("INSERT INTO guthaben_bewegung (kunde_id,gutschrift_id,betrag,typ,ref_beleg_id,notiz,datum) VALUES (?,?,?,?,?,?,CURDATE())",
+      [$kunde_id, $gutschrift_id ?: null, round($betrag, 2), $typ, $ref_beleg_id ?: null, $notiz ?: null]);
+}
+// Guthaben auf eine Rechnung anrechnen: als Zahlung (art=guthaben) verbuchen + Verbrauch protokollieren. Gibt den angerechneten Betrag.
+function guthaben_anrechnen(int $rechnung_id, float $wunsch, string $akteur = 'team'): float {
+    $b = one("SELECT * FROM beleg WHERE id=? AND typ='rechnung' AND status<>'storniert'", [$rechnung_id]);
+    if (!$b || !$b['kunde_id']) return 0.0;
+    $rest = (float) beleg_zahlstatus($b)['rest'];
+    $frei = kunde_guthaben((int)$b['kunde_id']);
+    $betrag = round(min($wunsch > 0 ? $wunsch : $frei, $frei, $rest), 2);
+    if ($betrag <= 0.005) return 0.0;
+    zahlung_erfassen($rechnung_id, $betrag, date('Y-m-d'), 'guthaben', 'guthaben', 'Guthaben angerechnet', $akteur);
+    guthaben_bewegung_add((int)$b['kunde_id'], $betrag, 'anrechnung', $rechnung_id, 'Angerechnet auf ' . $b['nummer']);
+    return $betrag;
+}
+// Guthaben auszahlen (Erstattung): protokolliert den Verbrauch. Gibt den ausgezahlten Betrag.
+function guthaben_auszahlen(int $kunde_id, float $wunsch, string $notiz = '', string $akteur = 'team'): float {
+    $frei = kunde_guthaben($kunde_id);
+    $betrag = round(min($wunsch > 0 ? $wunsch : $frei, $frei), 2);
+    if ($betrag <= 0.005) return 0.0;
+    guthaben_bewegung_add($kunde_id, $betrag, 'auszahlung', null, $notiz ?: 'Guthaben ausgezahlt');
+    return $betrag;
 }
 
 // Demo-Verlauf (nur lokal, damit die Chat-Ansicht etwas zeigt)
