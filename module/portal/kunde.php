@@ -793,7 +793,11 @@ $angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $prod
     // SICHERUNG (v3-Import): Angebote aus der v3-Migration ohne v4-Preisstaffeln würden sonst die (cost-basierte,
     // oft viel zu niedrige) Auto-Matrix aus produkt_preis zeigen – falsche Preise. Solche Angebote werden gesperrt:
     // keine Matrix, keine Annahme; der Kunde sieht "Preis wird finalisiert". Freischaltung durch Pflege echter Staffeln.
-    $gesperrt = (stripos((string)($a['notiz'] ?? ''), 'Aus v3') !== false) && empty($staffelMap[$id]);
+    // Gesperrt nur, wenn es KEINEN echten Kundenpreis gibt: weder eine Preis-Staffel NOCH bepreiste
+    // Positions-Optionen (gruppierte Herstellungszeilen, $posRezCount). Ein v3-Angebot mit übernommenen
+    // Beleg-Positionen (Herstellung + Glas + Etikett je Gruppe) hat einen Preis -> nicht sperren.
+    $gesperrt = (stripos((string)($a['notiz'] ?? ''), 'Aus v3') !== false)
+                && empty($staffelMap[$id]) && empty($posRezCount[$id]);
     if ($gesperrt) $matrix = [];
     // Positionen/Optionen liest die Karte ausschliesslich im Zweig "gesendet UND keine Matrix UND keine Staffel"
     // (positionsbasiertes Angebot). Fuer Matrix-/Staffel-Angebote NIE laden. Gesperrte NIE.
