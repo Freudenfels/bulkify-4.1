@@ -568,6 +568,9 @@ if ($WRITE) {
     ensure_column('portal_anfrage', 'v3_id', "INT NULL");   // je v3-produktanfrage eine Kunden-Anfrage (idempotent)
     // Gibt es in dieser v3-DB die Staffel-Tabelle (neuere Exporte)?
     $hasPaStaffel = v3_hat_tabelle($v3, 'produktanfrage_staffel');
+    // Gibt es die Buchhaltungs-Belege? Dann übernehmen wir die ECHTEN Angebotspositionen
+    // (Herstellung + Glas/Verpackung + Etikett je Staffelstufe) statt einer Bündelzeile – so wie in v3.
+    $hasBhBeleg = v3_hat_tabelle($v3, 'bh_beleg') && v3_hat_tabelle($v3, 'bh_beleg_position');
     $v3kMap = [];
     foreach (all("SELECT id, v3_id FROM kunden WHERE v3_id IS NOT NULL") as $kk) $v3kMap[(int)$kk['v3_id']] = (int)$kk['id'];
     $w6 = ['angebot_neu'=>0,'angebot_upd'=>0,'position'=>0,'verknuepft'=>0,'ohne_produkt'=>0,'anfrage_neu'=>0,'anfrage_upd'=>0,'anfrage_ohne_angebot'=>0];
@@ -617,11 +620,36 @@ if ($WRITE) {
             q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,anfrage_id,v3_id,preise_kunde) VALUES (?,?,?,?,?,?,?,1)",
               [naechste_nummer('AN'), $kid, $pid, $status, cut($notiz,500), $pafId, $v3paid]); $gid = (int)insert_id(); $w6['angebot_neu']++;
         }
-        // Eine Angebotsposition (Konfiguration + Preis)
-        q("INSERT INTO angebot_position (angebot_id,sort,bezeichnung,menge,einheit,preis_cent,stueck,rezeptur_id,verpackung_id,quelle)
-           VALUES (?,0,?,?, 'Pkg.', ?, ?, ?, ?, 'v3import')",
-          [$gid, cut($rezName), $menge, (int) round($preis * 100), $stueck, ($rz ? (int)$rz['id'] : null), $vid]);
-        $w6['position']++;
+        // Angebotspositionen: möglichst die ECHTEN Beleg-Positionen aus v3 übernehmen
+        // (Herstellung + Glas/Verpackung + Etikett je Staffelstufe A/B/C…). Nur wenn es keinen
+        // Beleg gibt, eine einzelne Bündelzeile als Fallback.
+        $posN = 0;
+        if ($hasBhBeleg) {
+            $beleg = $v3->query("SELECT id FROM bh_beleg WHERE pa_id=$v3paid AND belegart='angebot' AND COALESCE(storno_von,0)=0 ORDER BY version DESC, id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+            if ($beleg) {
+                $bid = (int)$beleg['id'];
+                $sortP = 0;
+                foreach ($v3->query("SELECT * FROM bh_beleg_position WHERE beleg_id=$bid ORDER BY pos")->fetchAll(PDO::FETCH_ASSOC) as $bp) {
+                    $istHerst = ((int)($bp['menge_pro_pack'] ?? 0) > 0);   // Herstellungszeile (Kapseln je Packung) vs. Verpackung/Etikett
+                    $grpLetter = ((int)($bp['gruppe'] ?? 0) > 0) ? chr(64 + (int)$bp['gruppe']) : null;
+                    q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      [$gid, $sortP++, cut((string)($bp['artikelnr'] ?? ''), 60), cut((string)($bp['bezeichnung'] ?? $rezName)), (string)($bp['beschreibung'] ?? ''),
+                       (float)($bp['menge'] ?? 0), (string)($bp['einheit'] ?? 'Stk.'), (int)($bp['preis_cent'] ?? 0), (int)($bp['ek_cent'] ?? 0), (float)($bp['mwst_satz'] ?? 0),
+                       ($istHerst ? 'herstellung' : 'verpackung'), $grpLetter,
+                       ($istHerst && $rz ? (int)$rz['id'] : null), ($istHerst ? (int)($bp['menge_pro_pack'] ?? 0) : null), null]);
+                    $posN++;
+                }
+            }
+        }
+        if ($posN === 0) {
+            // Fallback: eine Bündelposition (Konfiguration + Preis)
+            q("INSERT INTO angebot_position (angebot_id,sort,bezeichnung,menge,einheit,preis_cent,stueck,rezeptur_id,verpackung_id,quelle)
+               VALUES (?,0,?,?, 'Pkg.', ?, ?, ?, ?, 'v3import')",
+              [$gid, cut($rezName), $menge, (int) round($preis * 100), $stueck, ($rz ? (int)$rz['id'] : null), $vid]);
+            $posN = 1;
+        }
+        $w6['position'] += $posN;
         // Preis-Staffeln (Menge + VK je Packung) – das sieht der Kunde als wählbare Angebotsmengen.
         // Neuere v3: alle Stufen aus produktanfrage_staffel; alte Exporte: die eine Konfiguration.
         $staffeln = [];

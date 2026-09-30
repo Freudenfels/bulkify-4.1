@@ -13,8 +13,8 @@ class V3PrefixPDO extends PDO {
     // Reihenfolge: längere Namen zuerst, damit z. B. „lieferant_angebot_staffel" vor „lieferant_angebot"
     // greift und nicht fälschlich auf die kürzere (v4-)Tabelle umgeschrieben wird.
     private array $tabs = ['produktanfrage_staffel','produktanfrage','lieferant_angebot_staffel','lieferant_angebot',
-                           'rezept_zutaten','rezept_kunde','rezepte','auftraege','bestellungen','lieferanten',
-                           'preisliste','rohstoffe','kunden'];
+                           'bh_beleg_position','bh_beleg','rezept_zutaten','rezept_kunde','rezepte','auftraege',
+                           'bestellungen','lieferanten','preisliste','rohstoffe','kunden'];
     private function rw(string $sql): string {
         foreach ($this->tabs as $t) {
             // Backtick-Form zuerst: FROM `tabelle` -> FROM `v3imp_tabelle`
