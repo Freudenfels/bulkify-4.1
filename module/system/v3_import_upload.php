@@ -16,7 +16,14 @@ class V3PrefixPDO extends PDO {
                            'rezept_zutaten','rezept_kunde','rezepte','auftraege','bestellungen','lieferanten',
                            'preisliste','rohstoffe','kunden'];
     private function rw(string $sql): string {
-        foreach ($this->tabs as $t) $sql = preg_replace('/\b(FROM|JOIN)\s+`?' . $t . '`?\b/i', '$1 v3imp_' . $t, $sql);
+        foreach ($this->tabs as $t) {
+            // Backtick-Form zuerst: FROM `tabelle` -> FROM `v3imp_tabelle`
+            // (die alte kombinierte Regex „`?…`?\b" liess bei Backticks einen verwaisten ` stehen ->
+            //  Syntaxfehler -> v3_hat_tabelle() lieferte faelschlich false -> Staffeln wurden uebersprungen).
+            $sql = preg_replace('/\b(FROM|JOIN)\s+`' . $t . '`/i', '$1 `v3imp_' . $t . '`', $sql);
+            // Ohne Backticks: FROM tabelle -> FROM v3imp_tabelle
+            $sql = preg_replace('/\b(FROM|JOIN)\s+' . $t . '\b/i', '$1 v3imp_' . $t, $sql);
+        }
         return $sql;
     }
     public function query(string $query, ?int $fetchMode = null, mixed ...$args): PDOStatement|false { return parent::query($this->rw($query), $fetchMode, ...$args); }
