@@ -86,6 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     $altStatus = (string) scalar("SELECT status FROM auftrag WHERE id=?", [$id]);
     q("UPDATE auftrag SET status=?, menge=?, vk_stueck=?, gesamt_netto=? WHERE id=?",
       [$neuStatus, $menge, $vk, $netto, $id]);
+    if ($neuStatus !== $altStatus) q("UPDATE auftrag SET status_datum=CURDATE() WHERE id=?", [$id]);   // Datum für Kundensicht
     // Auftrag storniert -> offene Rechnung(en) automatisch per Gutschrift stornieren
     $stn = 0;
     if ($neuStatus === 'storniert' && $altStatus !== 'storniert') {

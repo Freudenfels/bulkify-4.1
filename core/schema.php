@@ -512,6 +512,7 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('beleg', 'storno_von_id', "INT NULL");     // Gutschrift/Storno -> Original-Rechnung
     ensure_column('beleg', 'grund', "VARCHAR(255) NULL");    // Grund des Stornos / der Gutschrift
+    ensure_column('auftrag', 'status_datum', "DATE NULL");   // Datum des aktuellen Status (Kunde sieht es); Fast-Track/v3-Style
 
     // guthaben_bewegung: Verbrauch des Kunden-Guthabens (aus Gutschriften) – angerechnet auf Rechnung oder ausgezahlt.
     $pdo->exec("CREATE TABLE IF NOT EXISTS guthaben_bewegung (
@@ -5944,6 +5945,24 @@ function auftrag_rechnungen_stornieren(int $auftrag_id, string $grund = 'Auftrag
     foreach (all("SELECT id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert'", [$auftrag_id]) as $r)
         if (gutschrift_aus_rechnung((int)$r['id'], $grund, $akteur)) $n++;
     return $n;
+}
+
+// Auftrags-Status schnell setzen (Fast-Track / v3-Style): Status + Datum (leer = heute), Kundensicht + Protokoll.
+// Bei 'storniert' werden offene Rechnungen automatisch per Gutschrift storniert.
+function auftrag_status_setzen(int $auftrag_id, string $status, ?string $datum = null, string $notiz = '', string $akteur = 'team'): bool {
+    $labels = ['offen'=>'offen','in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet','storniert'=>'storniert'];
+    if (!isset($labels[$status])) return false;
+    $a = one("SELECT nummer, kunde_id, status FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a) return false;
+    $d = ($datum && preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) ? $datum : date('Y-m-d');
+    $alt = (string)($a['status'] ?? '');
+    q("UPDATE auftrag SET status=?, status_datum=? WHERE id=?", [$status, $d, $auftrag_id]);
+    if ($status === 'storniert' && $alt !== 'storniert') auftrag_rechnungen_stornieren($auftrag_id, 'Auftrag storniert', $akteur);
+    if (!empty($a['kunde_id']))
+        log_aktivitaet('kunde', (int)$a['kunde_id'], $akteur,
+            'Auftrag ' . $a['nummer'] . ': Status → ' . $labels[$status] . ' (' . date('d.m.Y', strtotime($d)) . ')' . ($notiz !== '' ? ' – ' . $notiz : ''),
+            'auftrag', 'auftrag', $auftrag_id);
+    return true;
 }
 
 // ===== Guthaben (aus Gutschriften) =====

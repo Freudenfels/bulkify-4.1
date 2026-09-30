@@ -2742,7 +2742,7 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <!-- Status-Kacheln -->
   <div class="bx-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
-    <div class="bx-panel" style="margin:0"><div class="muted">Status</div><div style="margin-top:6px"><?= $aufBadge($a['status']) ?></div></div>
+    <div class="bx-panel" style="margin:0"><div class="muted">Status</div><div style="margin-top:6px"><?= $aufBadge($a['status']) ?><?php if (!empty($a['status_datum'])): ?> <span class="muted" style="font-size:13px">seit <?= h(date('d.m.Y', strtotime($a['status_datum']))) ?></span><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Menge</div><div style="margin-top:6px"><?= (int)$a['menge'] ?> Packungen<?php if ((int)$a['stueck']): ?> &middot; <?= (int)$a['stueck'] ?> je Packung<?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Gesamtbetrag</div><div style="margin-top:6px"><strong><?= $eur($re ? $re['brutto'] : $a['gesamt_netto']) ?></strong><?php if ($re): ?> <span class="muted">brutto</span><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Zahlung</div><div style="margin-top:6px"><?= $re ? $reBadge($re['status']) : '<span class="muted">–</span>' ?></div></div>
