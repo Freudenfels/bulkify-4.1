@@ -66,7 +66,12 @@ if ($a['status'] === 'bestaetigt') {
 
   <?php // Hat das Angebot explizite Staffeln (vom Team gebaut), zeigen wir GENAU die – nicht die
         // automatische Produkt-Matrix. Die Matrix greift nur, wenn keine Angebotsstaffel existiert. ?>
-  <?php if ($offen && !$st && $inf['matrix']): ?>
+  <?php if ($offen && !empty($inf['gesperrt'])): ?>
+  <div class="bx-panel" style="margin-top:12px;border-color:var(--gold)">
+    <strong>Preis wird gerade finalisiert.</strong>
+    <div class="muted" style="font-size:13px;margin-top:4px">Wir stellen die Konditionen für dieses Angebot gerade fertig und melden uns kurzfristig bei Ihnen. Eine Annahme ist erst danach möglich.</div>
+  </div>
+  <?php elseif ($offen && !$st && $inf['matrix']): ?>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
     <thead><tr><th>Menge / Verpackung</th><th class="bx-num">Anzahl Verpackungen</th><th>Preis</th><th></th></tr></thead>
     <tbody>

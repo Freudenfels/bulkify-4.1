@@ -196,6 +196,11 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zelle_annehmen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT * FROM angebot WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
+    // SICHERUNG: v3-Import ohne v4-Preisstaffeln – Annahme der (falschen) Auto-Matrix serverseitig blocken.
+    if ($ang && stripos((string)($ang['notiz'] ?? ''), 'Aus v3') !== false
+        && (int) scalar("SELECT COUNT(*) FROM angebot_staffel WHERE angebot_id=?", [$aid]) === 0) {
+        header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&preisfehlt=1'); exit;
+    }
     $name = $freigabeName();
     if ($ang && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&freigabefehlt=1'); exit; }
     if ($ang && $ang['status'] === 'gesendet') {
@@ -785,9 +790,14 @@ $angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $prod
         $vk = $mo !== null ? (float)$mr['ek_preis'] * (1 + $mo/100) : (float)$mr['vk_preis'];
         if (!isset($matrix[$s][$bm])) $matrix[$s][$bm] = ['vk'=>$vk, 'verp'=>(int)$mr['verpackung_id']];
     }
+    // SICHERUNG (v3-Import): Angebote aus der v3-Migration ohne v4-Preisstaffeln würden sonst die (cost-basierte,
+    // oft viel zu niedrige) Auto-Matrix aus produkt_preis zeigen – falsche Preise. Solche Angebote werden gesperrt:
+    // keine Matrix, keine Annahme; der Kunde sieht "Preis wird finalisiert". Freischaltung durch Pflege echter Staffeln.
+    $gesperrt = (stripos((string)($a['notiz'] ?? ''), 'Aus v3') !== false) && empty($staffelMap[$id]);
+    if ($gesperrt) $matrix = [];
     // Positionen/Optionen liest die Karte ausschliesslich im Zweig "gesendet UND keine Matrix UND keine Staffel"
-    // (positionsbasiertes Angebot). Fuer Matrix-/Staffel-Angebote NIE laden.
-    $brauchtPos = $a['status'] === 'gesendet' && empty($matrix) && empty($staffelMap[$id]);
+    // (positionsbasiertes Angebot). Fuer Matrix-/Staffel-Angebote NIE laden. Gesperrte NIE.
+    $brauchtPos = !$gesperrt && $a['status'] === 'gesendet' && empty($matrix) && empty($staffelMap[$id]);
     // WICHTIG: im Kundenportal NUR die GESPEICHERTEN Positionen lesen – niemals die Live-Preis-Engine
     // (angebot_positionen()) anstossen. Der Kunde hat seinen Preis bereits; eine erneute EK-/Lieferanten-
     // Kalkulation je Zutat kostete auf der Remote-DB ~100 Abfragen JE KARTE (=> 127 s / ERR_SSL beim Laden).
@@ -823,6 +833,7 @@ $angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $prod
            || !empty($anfRezOk[(int)($a['anfrage_id'] ?? 0)])
         ),
         'prodzeit'=> ($a['produktionszeit_wochen'] ?? '') !== '' && $a['produktionszeit_wochen'] !== null ? (float)$a['produktionszeit_wochen'] : $produktionszeit,
+        'gesperrt' => $gesperrt,   // v3-Import ohne v4-Preise: Preis wird finalisiert, keine Annahme
     ];
 };
 $std_stueck_ang = std_stueckzahlen();
