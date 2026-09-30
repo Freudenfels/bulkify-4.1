@@ -52,6 +52,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'storn
     header('Location: ?p=rechnungen&verrechnet=' . $n); exit;
 }
 
+// KI: hochgeladene Original-Rechnung (PDF/Bild) in Positionen zerlegen -> Formular wird damit vorbefüllt.
+$prefill = []; $kiInfo = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_extract') {
+    require_once BX_ROOT . '/core/ki.php';
+    $vorKidPost = (int)($_POST['kunde_id'] ?? 0);
+    if (!ki_bereit()) {
+        $fehler = 'KI ist nicht verfügbar (kein Schlüssel hinterlegt). Bitte Positionen manuell erfassen.';
+    } elseif (empty($_FILES['rechnung']['name']) || (int)($_FILES['rechnung']['error'] ?? 1) !== UPLOAD_ERR_OK) {
+        $fehler = 'Bitte eine Datei (PDF oder Bild) hochladen.';
+    } else {
+        $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo((string)$_FILES['rechnung']['name'], PATHINFO_EXTENSION)));
+        $save = rtrim(sys_get_temp_dir(), '/\\') . '/re_' . bin2hex(random_bytes(5)) . ($ext ? '.' . $ext : '');
+        if (!@move_uploaded_file($_FILES['rechnung']['tmp_name'], $save)) $save = (string)$_FILES['rechnung']['tmp_name'];
+        $prompt = "Dies ist eine Rechnung oder ein Angebot. Extrahiere ALLE Positionen (Zeilenartikel) als JSON-Array.\n"
+            . "Jede Position: {\"artikelnr\":\"\",\"bezeichnung\":\"\",\"beschreibung\":\"\",\"menge\":0,\"einheit\":\"\",\"einzelpreis\":0,\"ust\":19}.\n"
+            . "einzelpreis = Netto-Einzelpreis je Einheit (NICHT die Zeilensumme). beschreibung = die Detailzeilen unter der Position, mehrzeilig mit \\n getrennt.\n"
+            . "ust = USt-Satz in Prozent (falls nicht erkennbar 19). Zahlen mit Punkt als Dezimaltrennzeichen. Antworte nur mit dem JSON-Array.";
+        $r = ki_datei_frage($save, $prompt, ['json' => true, 'max_tokens' => 4000]);
+        if (@is_file($save) && strpos($save, sys_get_temp_dir()) === 0) @unlink($save);
+        if (empty($r['ok'])) {
+            $fehler = 'Die Rechnung konnte nicht gelesen werden: ' . ($r['fehler'] ?? 'unbekannter Fehler');
+        } else {
+            $d = $r['daten'] ?? [];
+            $list = (isset($d['positionen']) && is_array($d['positionen'])) ? $d['positionen'] : (array_is_list($d) ? $d : []);
+            $ustStdV = (float) meta_get('ust_inland', 19);
+            foreach ($list as $p) {
+                if (!is_array($p)) continue;
+                $bez = trim((string)($p['bezeichnung'] ?? $p['name'] ?? '')); if ($bez === '') continue;
+                $prefill[] = [
+                    'artikelnr' => trim((string)($p['artikelnr'] ?? $p['artikelnummer'] ?? '')),
+                    'bez'       => $bez,
+                    'besch'     => trim((string)($p['beschreibung'] ?? '')),
+                    'menge'     => (float) str_replace(',', '.', (string)($p['menge'] ?? 1)) ?: 1,
+                    'einheit'   => trim((string)($p['einheit'] ?? 'Stk.')) ?: 'Stk.',
+                    'preis'     => (float) str_replace(',', '.', (string)($p['einzelpreis'] ?? $p['preis'] ?? 0)),
+                    'ust'       => (float) str_replace(',', '.', (string)($p['ust'] ?? $ustStdV)),
+                ];
+            }
+            if ($prefill) $kiInfo = count($prefill) . ' Position(en) erkannt – prüfe die Werte und entferne, was NICHT storniert werden soll.';
+            else $fehler = 'Es konnten keine Positionen erkannt werden. Bitte manuell erfassen.';
+        }
+    }
+    if ($vorKidPost) $_GET['kunde_id'] = $vorKidPost;   // Kunde-Auswahl beibehalten
+}
+
 $kunden  = all("SELECT id, firma, kundennummer FROM kunden ORDER BY firma");
 $ustStd  = rtrim(rtrim(number_format((float) meta_get('ust_inland', 19), 2, '.', ''), '0'), '.');
 $vorKid  = (int)($_GET['kunde_id'] ?? ($_POST['kunde_id'] ?? 0));
@@ -111,7 +156,19 @@ $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
   <?php endif; ?>
 </div>
 
-<h2 style="margin:24px 0 8px">Oder: freie Storno-Rechnung (Positionen / Text einfügen)</h2>
+<?php if ($kiInfo) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h($kiInfo) . '</div>'; ?>
+<div class="bx-panel" style="border-color:var(--gruen)">
+  <h2 style="margin-top:0">Original-Rechnung hochladen (KI liest die Positionen)</h2>
+  <p class="muted" style="margin-top:0">PDF oder Bild der Original-Rechnung hochladen – die KI zerlegt sie in Positionen und füllt das Formular unten. Dann nur noch entfernen, was <strong>nicht</strong> storniert werden soll, und erstellen.</p>
+  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="ki_extract">
+    <input type="hidden" name="kunde_id" value="<?= (int)$vorKid ?>">
+    <div class="bx-field" style="margin:0"><label>Rechnung (PDF / Bild)</label><input type="file" name="rechnung" accept="application/pdf,image/*" required></div>
+    <button class="btn btn-primary" type="submit">Hochladen &amp; auslesen</button>
+  </form>
+</div>
+
+<h2 style="margin:24px 0 8px">Storno-Rechnung – Positionen prüfen &amp; erstellen</h2>
 <form method="post" class="bx-form">
   <input type="hidden" name="aktion" value="gutschrift_save">
   <div class="bx-panel">
@@ -146,23 +203,30 @@ $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
     </details>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr>
+        <th style="width:32px"></th>
         <th>Artikel-Nr.</th><th>Bezeichnung / Beschreibung</th>
         <th class="bx-num">Menge</th><th>Einheit</th><th class="bx-num">Einzelpreis (€)</th><th class="bx-num">USt %</th>
       </tr></thead>
       <tbody id="gsrows">
-        <?php for ($i = 0; $i < 3; $i++): ?>
+        <?php
+        $rows = $prefill ?: [];
+        if (!$rows) for ($i = 0; $i < 3; $i++) $rows[] = ['artikelnr'=>'','bez'=>'','besch'=>'','menge'=>'1','einheit'=>'Stk.','preis'=>'','ust'=>$ustStd];
+        foreach ($rows as $r):
+            $pv = ($r['preis'] ?? '') !== '' && $r['preis'] !== null ? rtrim(rtrim(number_format((float)$r['preis'], 2, ',', ''), '0'), ',') : '';
+        ?>
         <tr>
-          <td><input type="text" name="p_artikelnr[]" style="max-width:110px"></td>
+          <td><button type="button" class="btn btn-ghost btn-sm gsDel" title="Zeile entfernen" style="padding:2px 9px;line-height:1">&times;</button></td>
+          <td><input type="text" name="p_artikelnr[]" value="<?= h((string)($r['artikelnr'] ?? '')) ?>" style="max-width:110px"></td>
           <td>
-            <input type="text" name="p_bez[]" placeholder="Bezeichnung" style="width:100%">
-            <textarea name="p_besch[]" rows="2" placeholder="Beschreibung (optional, mehrzeilig)" style="width:100%;margin-top:4px"></textarea>
+            <input type="text" name="p_bez[]" value="<?= h((string)($r['bez'] ?? '')) ?>" placeholder="Bezeichnung" style="width:100%">
+            <textarea name="p_besch[]" rows="2" placeholder="Beschreibung (optional, mehrzeilig)" style="width:100%;margin-top:4px"><?= h((string)($r['besch'] ?? '')) ?></textarea>
           </td>
-          <td class="bx-num"><input type="text" inputmode="decimal" name="p_menge[]" value="1" style="max-width:90px;text-align:right"></td>
-          <td><input type="text" name="p_einheit[]" value="Stk." style="max-width:80px"></td>
-          <td class="bx-num"><input type="text" inputmode="decimal" name="p_preis[]" placeholder="0,00" style="max-width:120px;text-align:right"></td>
-          <td class="bx-num"><input type="text" inputmode="decimal" name="p_mwst[]" value="<?= h($ustStd) ?>" style="max-width:70px;text-align:right"></td>
+          <td class="bx-num"><input type="text" inputmode="decimal" name="p_menge[]" value="<?= h((string)($r['menge'] ?? '1')) ?>" style="max-width:90px;text-align:right"></td>
+          <td><input type="text" name="p_einheit[]" value="<?= h((string)($r['einheit'] ?? 'Stk.')) ?>" style="max-width:80px"></td>
+          <td class="bx-num"><input type="text" inputmode="decimal" name="p_preis[]" value="<?= h($pv) ?>" placeholder="0,00" style="max-width:120px;text-align:right"></td>
+          <td class="bx-num"><input type="text" inputmode="decimal" name="p_mwst[]" value="<?= h((string)($r['ust'] ?? $ustStd)) ?>" style="max-width:70px;text-align:right"></td>
         </tr>
-        <?php endfor; ?>
+        <?php endforeach; ?>
       </tbody>
     </table></div>
     <div class="bx-row" style="margin-top:var(--sp-4)">
@@ -181,7 +245,8 @@ $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
   var UST = <?= json_encode($ustStd) ?>;
   var tbody = document.getElementById('gsrows');
   function rowHTML(){
-    return '<td><input type="text" name="p_artikelnr[]" style="max-width:110px"></td>'
+    return '<td><button type="button" class="btn btn-ghost btn-sm gsDel" title="Zeile entfernen" style="padding:2px 9px;line-height:1">&times;</button></td>'
+      + '<td><input type="text" name="p_artikelnr[]" style="max-width:110px"></td>'
       + '<td><input type="text" name="p_bez[]" placeholder="Bezeichnung" style="width:100%">'
       + '<textarea name="p_besch[]" rows="2" placeholder="Beschreibung (optional, mehrzeilig)" style="width:100%;margin-top:4px"></textarea></td>'
       + '<td class="bx-num"><input type="text" inputmode="decimal" name="p_menge[]" value="1" style="max-width:90px;text-align:right"></td>'
@@ -203,6 +268,8 @@ $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
     return tr;
   }
   document.getElementById('gsAdd').addEventListener('click', function(){ addRow(); });
+  // Zeile entfernen (× je Zeile) – auswählen, was NICHT storniert werden soll
+  tbody.addEventListener('click', function(e){ var b=e.target.closest('.gsDel'); if(b){ var tr=b.closest('tr'); if(tr) tr.remove(); } });
 
   function deNum(s){ if(s==null) return ''; s=String(s).trim().replace(/\s/g,'').replace(/\./g,'').replace(',','.'); var n=parseFloat(s); return isNaN(n)?'':n; }
   function fmtDe(n){ return n===''?'':String(n).replace('.',','); }
