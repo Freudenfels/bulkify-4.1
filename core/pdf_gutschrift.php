@@ -22,6 +22,8 @@ function gutschrift_pdf_bauen(int $beleg_id): ?string {
     if (!$istInland && $land !== '') $adr .= "\n" . $land;
 
     $bezug = $b['storno_von_id'] ? ('Storno zu Rechnung ' . (string)(scalar("SELECT nummer FROM beleg WHERE id=?", [(int)$b['storno_von_id']]) ?: '')) : '';
+    // Externe/alte Rechnung (nicht im System): Bezug aus dem Grund übernehmen, wenn er auf eine Rechnung verweist.
+    if ($bezug === '' && !empty($b['grund']) && stripos((string)$b['grund'], 'Storno zu Rechnung') !== false) $bezug = (string)$b['grund'];
     $kopf = 'Hiermit erteilen wir Ihnen folgende Gutschrift / Storno:' . (!empty($b['grund']) ? "\n" . $b['grund'] : '');
     $klein = $istInland ? (meta_get('kleinunternehmer', '0') === '1' ? 1 : 0) : 1;
 
