@@ -201,9 +201,13 @@ $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
         <span class="muted" id="gsPasteInfo" style="font-size:12px"></span>
       </div>
     </details>
-    <div class="bx-tablewrap"><table class="bx-table">
+    <div class="bx-tablewrap"><table class="bx-table" style="table-layout:fixed;width:100%">
+      <colgroup>
+        <col style="width:38px"><col style="width:130px"><col>
+        <col style="width:90px"><col style="width:80px"><col style="width:120px"><col style="width:78px">
+      </colgroup>
       <thead><tr>
-        <th style="width:32px"></th>
+        <th></th>
         <th>Artikel-Nr.</th><th>Bezeichnung / Beschreibung</th>
         <th class="bx-num">Menge</th><th>Einheit</th><th class="bx-num">Einzelpreis (€)</th><th class="bx-num">USt %</th>
       </tr></thead>
@@ -215,16 +219,16 @@ $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
             $pv = ($r['preis'] ?? '') !== '' && $r['preis'] !== null ? rtrim(rtrim(number_format((float)$r['preis'], 2, ',', ''), '0'), ',') : '';
         ?>
         <tr>
-          <td><button type="button" class="btn btn-ghost btn-sm gsDel" title="Zeile entfernen" style="padding:2px 9px;line-height:1">&times;</button></td>
-          <td><input type="text" name="p_artikelnr[]" value="<?= h((string)($r['artikelnr'] ?? '')) ?>" style="max-width:110px"></td>
-          <td>
-            <input type="text" name="p_bez[]" value="<?= h((string)($r['bez'] ?? '')) ?>" placeholder="Bezeichnung" style="width:100%">
-            <textarea name="p_besch[]" rows="2" placeholder="Beschreibung (optional, mehrzeilig)" style="width:100%;margin-top:4px"><?= h((string)($r['besch'] ?? '')) ?></textarea>
+          <td style="vertical-align:top"><button type="button" class="btn btn-ghost btn-sm gsDel" title="Zeile entfernen" style="padding:2px 9px;line-height:1">&times;</button></td>
+          <td style="vertical-align:top"><input type="text" name="p_artikelnr[]" value="<?= h((string)($r['artikelnr'] ?? '')) ?>" style="width:100%;box-sizing:border-box"></td>
+          <td style="vertical-align:top">
+            <input type="text" name="p_bez[]" value="<?= h((string)($r['bez'] ?? '')) ?>" placeholder="Bezeichnung" style="display:block;width:100%;box-sizing:border-box">
+            <textarea name="p_besch[]" rows="2" placeholder="Beschreibung (optional, mehrzeilig)" style="display:block;width:100%;box-sizing:border-box;margin-top:4px"><?= h((string)($r['besch'] ?? '')) ?></textarea>
           </td>
-          <td class="bx-num"><input type="text" inputmode="decimal" name="p_menge[]" value="<?= h((string)($r['menge'] ?? '1')) ?>" style="max-width:90px;text-align:right"></td>
-          <td><input type="text" name="p_einheit[]" value="<?= h((string)($r['einheit'] ?? 'Stk.')) ?>" style="max-width:80px"></td>
-          <td class="bx-num"><input type="text" inputmode="decimal" name="p_preis[]" value="<?= h($pv) ?>" placeholder="0,00" style="max-width:120px;text-align:right"></td>
-          <td class="bx-num"><input type="text" inputmode="decimal" name="p_mwst[]" value="<?= h((string)($r['ust'] ?? $ustStd)) ?>" style="max-width:70px;text-align:right"></td>
+          <td style="vertical-align:top"><input type="text" inputmode="decimal" name="p_menge[]" value="<?= h((string)($r['menge'] ?? '1')) ?>" style="width:100%;box-sizing:border-box;text-align:right"></td>
+          <td style="vertical-align:top"><input type="text" name="p_einheit[]" value="<?= h((string)($r['einheit'] ?? 'Stk.')) ?>" style="width:100%;box-sizing:border-box"></td>
+          <td style="vertical-align:top"><input type="text" inputmode="decimal" name="p_preis[]" value="<?= h($pv) ?>" placeholder="0,00" style="width:100%;box-sizing:border-box;text-align:right"></td>
+          <td style="vertical-align:top"><input type="text" inputmode="decimal" name="p_mwst[]" value="<?= h((string)($r['ust'] ?? $ustStd)) ?>" style="width:100%;box-sizing:border-box;text-align:right"></td>
         </tr>
         <?php endforeach; ?>
       </tbody>
@@ -245,14 +249,15 @@ $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
   var UST = <?= json_encode($ustStd) ?>;
   var tbody = document.getElementById('gsrows');
   function rowHTML(){
-    return '<td><button type="button" class="btn btn-ghost btn-sm gsDel" title="Zeile entfernen" style="padding:2px 9px;line-height:1">&times;</button></td>'
-      + '<td><input type="text" name="p_artikelnr[]" style="max-width:110px"></td>'
-      + '<td><input type="text" name="p_bez[]" placeholder="Bezeichnung" style="width:100%">'
-      + '<textarea name="p_besch[]" rows="2" placeholder="Beschreibung (optional, mehrzeilig)" style="width:100%;margin-top:4px"></textarea></td>'
-      + '<td class="bx-num"><input type="text" inputmode="decimal" name="p_menge[]" value="1" style="max-width:90px;text-align:right"></td>'
-      + '<td><input type="text" name="p_einheit[]" value="Stk." style="max-width:80px"></td>'
-      + '<td class="bx-num"><input type="text" inputmode="decimal" name="p_preis[]" placeholder="0,00" style="max-width:120px;text-align:right"></td>'
-      + '<td class="bx-num"><input type="text" inputmode="decimal" name="p_mwst[]" value="'+UST+'" style="max-width:70px;text-align:right"></td>';
+    var vt = 'vertical-align:top';
+    return '<td style="'+vt+'"><button type="button" class="btn btn-ghost btn-sm gsDel" title="Zeile entfernen" style="padding:2px 9px;line-height:1">&times;</button></td>'
+      + '<td style="'+vt+'"><input type="text" name="p_artikelnr[]" style="width:100%;box-sizing:border-box"></td>'
+      + '<td style="'+vt+'"><input type="text" name="p_bez[]" placeholder="Bezeichnung" style="display:block;width:100%;box-sizing:border-box">'
+      + '<textarea name="p_besch[]" rows="2" placeholder="Beschreibung (optional, mehrzeilig)" style="display:block;width:100%;box-sizing:border-box;margin-top:4px"></textarea></td>'
+      + '<td style="'+vt+'"><input type="text" inputmode="decimal" name="p_menge[]" value="1" style="width:100%;box-sizing:border-box;text-align:right"></td>'
+      + '<td style="'+vt+'"><input type="text" name="p_einheit[]" value="Stk." style="width:100%;box-sizing:border-box"></td>'
+      + '<td style="'+vt+'"><input type="text" inputmode="decimal" name="p_preis[]" placeholder="0,00" style="width:100%;box-sizing:border-box;text-align:right"></td>'
+      + '<td style="'+vt+'"><input type="text" inputmode="decimal" name="p_mwst[]" value="'+UST+'" style="width:100%;box-sizing:border-box;text-align:right"></td>';
   }
   function addRow(d){
     var tr=document.createElement('tr'); tr.innerHTML=rowHTML(); tbody.appendChild(tr);
