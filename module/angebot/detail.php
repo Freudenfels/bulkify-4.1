@@ -407,10 +407,16 @@ if (!$neu && !$editMode) {
         <thead><tr><th style="width:34px">#</th><th style="width:90px">Art.-Nr.</th><th>Bezeichnung</th><th class="bx-num">Menge</th><th>Einheit</th><th class="bx-num">Preis/Einh</th><th class="bx-num">Gesamt</th></tr></thead>
         <tbody>
         <?php if (!$posU): ?><tr><td colspan="7" class="muted">Noch keine Positionen.</td></tr><?php endif; ?>
-        <?php foreach ($posU as $i => $pp): $g = (float)$pp['menge'] * (int)$pp['preis_cent']; ?>
+        <?php // Ohne eigene Artikelnummer (Produkt-SKU entsteht erst bei Auftragsannahme) die Rezepturnummer als
+              // Referenz zeigen – so steht nie nur „–" an einer Herstellungsposition.
+              $rezNrMap = [];
+              foreach ($posU as $pp2) { $rid2 = (int)($pp2['rezeptur_id'] ?? 0);
+                  if ($rid2 && !isset($rezNrMap[$rid2])) $rezNrMap[$rid2] = (string) scalar("SELECT nummer FROM rezeptur WHERE id=?", [$rid2]); } ?>
+        <?php foreach ($posU as $i => $pp): $g = (float)$pp['menge'] * (int)$pp['preis_cent'];
+              $artnr = $pp['artikelnr'] !== '' ? (string)$pp['artikelnr'] : ($rezNrMap[(int)($pp['rezeptur_id'] ?? 0)] ?? ''); ?>
           <tr>
             <td class="muted"><?= $i + 1 ?></td>
-            <td><?= $pp['artikelnr'] !== '' ? h($pp['artikelnr']) : '<span class="muted">–</span>' ?></td>
+            <td><?= $artnr !== '' ? h($artnr) . ($pp['artikelnr'] === '' ? ' <span class="muted" style="font-size:11px" title="Rezepturnummer – die Produkt-Artikelnummer entsteht bei der Auftragsannahme">(Rez.)</span>' : '') : '<span class="muted">–</span>' ?></td>
             <td>
               <strong style="font-weight:600"><?= h($pp['bezeichnung']) ?></strong>
               <?php if (trim((string)($pp['beschreibung'] ?? '')) !== ''): ?><div class="muted" style="font-size:13px;white-space:pre-line;margin-top:2px"><?= h((string)$pp['beschreibung']) ?></div><?php endif; ?>
