@@ -10,8 +10,11 @@ if (!has_role('admin')) { render_header('einstellungen', 'v3 neu einlesen'); ech
 
 // PDO, die v3-Quelltabellen automatisch auf den Prefix „v3imp_" umschreibt (nur Lesezugriffe des Importers).
 class V3PrefixPDO extends PDO {
-    private array $tabs = ['produktanfrage_staffel','produktanfrage','rezept_zutaten','rezept_kunde','rezepte',
-                           'auftraege','bestellungen','lieferanten','preisliste','rohstoffe','lieferant_angebot','kunden'];
+    // Reihenfolge: längere Namen zuerst, damit z. B. „lieferant_angebot_staffel" vor „lieferant_angebot"
+    // greift und nicht fälschlich auf die kürzere (v4-)Tabelle umgeschrieben wird.
+    private array $tabs = ['produktanfrage_staffel','produktanfrage','lieferant_angebot_staffel','lieferant_angebot',
+                           'rezept_zutaten','rezept_kunde','rezepte','auftraege','bestellungen','lieferanten',
+                           'preisliste','rohstoffe','kunden'];
     private function rw(string $sql): string {
         foreach ($this->tabs as $t) $sql = preg_replace('/\b(FROM|JOIN)\s+`?' . $t . '`?\b/i', '$1 v3imp_' . $t, $sql);
         return $sql;
@@ -29,6 +32,26 @@ function v3imp_pdo(): PDO {
 function v3imp_geladen(): int {
     return (int) scalar("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=? AND table_name LIKE 'v3imp\\_%'", [DB_NAME]);
 }
+// v3 läuft selbst auf SQLite (board.sqlite). Deshalb kann die Datei DIREKT hochgeladen werden –
+// der Importer (tools/v3_import.php) liest SQLite nativ. Kein MySQL-Dump, keine Konvertierung nötig.
+function v3imp_sqlite_pfad(): string {
+    $dir = BX_ROOT . '/data';
+    if (!is_dir($dir)) @mkdir($dir, 0775, true);
+    return $dir . '/v3import.sqlite';
+}
+// Aktuell hinterlegte v3-SQLite (falls per Direktupload gespeichert), sonst ''.
+function v3imp_sqlite_aktiv(): string {
+    $p = (string) meta_get('v3imp_sqlite', '');
+    return ($p !== '' && is_file($p)) ? $p : '';
+}
+// Zählwerte der v3-Quelle (SQLite) für den Abgleich.
+function v3imp_sqlite_counts(string $pfad): array {
+    $c = ['rezepte'=>0,'produktanfrage'=>0,'auftraege'=>0];
+    try { $db = new PDO('sqlite:' . $pfad); $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        foreach ($c as $t => $_) { try { $c[$t] = (int)$db->query("SELECT COUNT(*) FROM \"$t\"")->fetchColumn(); } catch (Throwable $e) {} }
+    } catch (Throwable $e) {}
+    return $c;
+}
 
 $fehler = ''; $hinweis = ''; $out = ''; $geschrieben = false;
 
@@ -36,7 +59,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
 
     if ($aktion === 'upload') {
-        if (empty($_FILES['sql']['tmp_name']) || !is_uploaded_file($_FILES['sql']['tmp_name'])) $fehler = 'Keine .sql-Datei erhalten (oder größer als das Upload-Limit des Servers).';
+        if (empty($_FILES['sql']['tmp_name']) || !is_uploaded_file($_FILES['sql']['tmp_name'])) $fehler = 'Keine Datei erhalten (oder größer als das Upload-Limit des Servers).';
+        // v3-SQLite-Datei direkt erkannt (Magic „SQLite format 3" oder Endung .sqlite/.db) -> nativ ablegen.
+        elseif ((strncmp((string)@file_get_contents($_FILES['sql']['tmp_name'], false, null, 0, 16), "SQLite format 3\0", 16) === 0)
+                || preg_match('/\.(sqlite3?|db)$/i', (string)($_FILES['sql']['name'] ?? ''))) {
+            if (!extension_loaded('pdo_sqlite')) {
+                $fehler = 'Diese v3-Datei ist eine SQLite-Datenbank, aber die Server-Erweiterung „pdo_sqlite" fehlt. Bitte pdo_sqlite aktivieren (v3 lief darauf) – dann klappt der Direkt-Import.';
+            } else {
+                $ziel = v3imp_sqlite_pfad();
+                if (!@move_uploaded_file($_FILES['sql']['tmp_name'], $ziel) && !@copy($_FILES['sql']['tmp_name'], $ziel)) {
+                    $fehler = 'Konnte die hochgeladene v3-Datei nicht speichern (Schreibrechte im data-Ordner?).';
+                } else {
+                    // evtl. alten MySQL-Zwischenstand wegräumen, damit eindeutig die SQLite-Quelle gilt
+                    foreach (all("SELECT table_name FROM information_schema.tables WHERE table_schema=? AND table_name LIKE 'v3imp\\_%'", [DB_NAME]) as $t) {
+                        try { db()->exec('DROP TABLE IF EXISTS `' . $t['table_name'] . '`'); } catch (\Throwable $e) {}
+                    }
+                    meta_set('v3imp_sqlite', $ziel);
+                    $cc = v3imp_sqlite_counts($ziel);
+                    $hinweis = 'v3-Datenbank (SQLite) geladen: ' . $cc['produktanfrage'] . ' Anfragen, ' . $cc['rezepte'] . ' Rezepturen, ' . $cc['auftraege'] . ' Aufträge. Jetzt unten den Trockenlauf prüfen.';
+                }
+            }
+        }
         else {
             $sql = file_get_contents($_FILES['sql']['tmp_name']);
             // .sql.gz automatisch entpacken (praktisch bei kleinem Upload-Limit: 3 MB -> ~0,5 MB).
@@ -83,13 +126,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (in_array($aktion, ['dry', 'write'], true)) {
-        if (v3imp_geladen() === 0 || (int) scalar("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=? AND table_name='v3imp_kunden'", [DB_NAME]) === 0) {
-            $fehler = 'Es ist noch kein v3-Stand geladen – erst oben den Export hochladen.';
+        $sqliteQuelle = v3imp_sqlite_aktiv();
+        $hatMysql = v3imp_geladen() > 0 && (int) scalar("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=? AND table_name='v3imp_kunden'", [DB_NAME]) > 0;
+        if ($sqliteQuelle === '' && !$hatMysql) {
+            $fehler = 'Es ist noch kein v3-Stand geladen – erst oben die v3-Datei (board.sqlite) hochladen.';
         } else {
             @set_time_limit(0);
             try {
-                $GLOBALS['V3_PDO'] = new V3PrefixPDO('mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4', DB_USER, DB_PASS);
-                $argv = ['v3_import.php', DB_NAME]; if ($aktion === 'write') $argv[] = '--write'; $argc = count($argv);
+                if ($sqliteQuelle !== '') {
+                    // v3 nativ als SQLite lesen (Direktupload) – kein Prefix-PDO nötig.
+                    $argv = ['v3_import.php', $sqliteQuelle];
+                } else {
+                    $GLOBALS['V3_PDO'] = new V3PrefixPDO('mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4', DB_USER, DB_PASS);
+                    $argv = ['v3_import.php', DB_NAME];
+                }
+                if ($aktion === 'write') $argv[] = '--write'; $argc = count($argv);
                 ob_start();
                 try { include BX_ROOT . '/tools/v3_import.php'; }
                 catch (\Throwable $ex) { echo "\n\nABBRUCH: " . $ex->getMessage() . "\n"; }
@@ -104,11 +155,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach (all("SELECT table_name FROM information_schema.tables WHERE table_schema=? AND table_name LIKE 'v3imp\\_%'", [DB_NAME]) as $t) {
             try { db()->exec('DROP TABLE IF EXISTS `' . $t['table_name'] . '`'); } catch (\Throwable $e) {}
         }
-        $hinweis = 'Geladener v3-Zwischenstand (v3imp_-Tabellen) entfernt.';
+        if ($sp = v3imp_sqlite_aktiv()) { @unlink($sp); meta_set('v3imp_sqlite', ''); }
+        $hinweis = 'Geladener v3-Zwischenstand entfernt.';
     }
 }
 
-$geladen = v3imp_geladen();
+$geladen  = v3imp_geladen();
+$sqlitePf = v3imp_sqlite_aktiv();
+$sqliteCnt = $sqlitePf ? v3imp_sqlite_counts($sqlitePf) : null;
 
 render_header('einstellungen', 'v3 neu einlesen (Upload)');
 bx_head('v3 neu einlesen (Upload)', 'v3-SQL-Export hochladen und importieren. Einmalige Migration.', bx_btn('Zurück', '?p=einstellungen', 'ghost'));
@@ -116,16 +170,23 @@ if ($fehler)  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f2
 if ($hinweis) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . $hinweis . '</div>';
 if ($geschrieben) echo '<div class="bx-panel badge-ok" style="padding:14px 16px"><strong>Import abgeschlossen.</strong> Nichts wurde gelöscht – Bestehendes wurde über <code>v3_id</code> aktualisiert, Neues angelegt. Details in der Ausgabe unten (Blöcke „GESCHRIEBEN …").</div>';
 
-// Abgleich v3-Quelle (geladene v3imp_-Tabellen) vs. unser Stand (v4) – Bestätigung, dass alles drin ist.
-if ($geladen > 0):
+// Abgleich v3-Quelle (MySQL-Zwischenstand ODER SQLite-Direktupload) vs. unser Stand (v4).
+if ($geladen > 0 || $sqlitePf):
     $c = fn($q) => (int) scalar($q);
-    $rezV3    = $c("SELECT COUNT(*) FROM v3imp_rezepte");
-    $rezImp   = $c("SELECT COUNT(*) FROM v3imp_rezepte WHERE kunde_id NOT IN (SELECT id FROM v3imp_kunden WHERE intern=1)");
-    $rezV4    = $c("SELECT COUNT(*) FROM rezeptur WHERE v3_id IS NOT NULL");
-    $anfV3    = $c("SELECT COUNT(*) FROM v3imp_produktanfrage");
-    $angV4    = $c("SELECT COUNT(*) FROM angebot WHERE v3_id IS NOT NULL");
-    $aufV3    = $c("SELECT COUNT(*) FROM v3imp_auftraege");
-    $aufV4    = $c("SELECT COUNT(*) FROM auftrag WHERE v3_id IS NOT NULL");
+    if ($sqlitePf) {
+        // v3-Zahlen direkt aus der hochgeladenen SQLite (rezepte hat keine intern-Kennzeichnung wie v3imp).
+        $rezV3 = $rezImp = $sqliteCnt['rezepte'];
+        $anfV3 = $sqliteCnt['produktanfrage'];
+        $aufV3 = $sqliteCnt['auftraege'];
+    } else {
+        $rezV3  = $c("SELECT COUNT(*) FROM v3imp_rezepte");
+        $rezImp = $c("SELECT COUNT(*) FROM v3imp_rezepte WHERE kunde_id NOT IN (SELECT id FROM v3imp_kunden WHERE intern=1)");
+        $anfV3  = $c("SELECT COUNT(*) FROM v3imp_produktanfrage");
+        $aufV3  = $c("SELECT COUNT(*) FROM v3imp_auftraege");
+    }
+    $rezV4 = $c("SELECT COUNT(*) FROM rezeptur WHERE v3_id IS NOT NULL");
+    $angV4 = $c("SELECT COUNT(*) FROM angebot WHERE v3_id IS NOT NULL");
+    $aufV4 = $c("SELECT COUNT(*) FROM auftrag WHERE v3_id IS NOT NULL");
     $ok = fn($b) => $b ? '<span class="badge badge-ok">vollständig</span>' : '<span class="muted">–</span>';
 ?>
 <div class="bx-panel">
@@ -142,20 +203,22 @@ if ($geladen > 0):
 </div>
 <?php endif; ?>
 <div class="bx-panel">
-  <h2 style="margin-top:0">1 · v3-Export hochladen</h2>
-  <p class="muted" style="margin-top:0">In der alten Software (phpMyAdmin) die v3-Datenbank <strong>Exportieren → SQL</strong> und die <code>.sql</code> hier hochladen. Deine App-Daten bleiben unberührt – die v3-Daten werden intern getrennt gehalten.</p>
+  <h2 style="margin-top:0">1 · v3-Datei hochladen</h2>
+  <p class="muted" style="margin-top:0">Zwei Wege – beide sicher, deine App-Daten bleiben unberührt (die v3-Daten werden getrennt gehalten):<br>
+    <strong>a) v3 läuft auf SQLite:</strong> die Datei <code>board.sqlite</code> direkt hochladen (kein Umweg, wird nativ gelesen).<br>
+    <strong>b) v3 läuft auf MySQL:</strong> in phpMyAdmin die v3-DB <strong>Exportieren → SQL</strong> und die <code>.sql</code> hochladen.</p>
   <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
     <input type="hidden" name="aktion" value="upload">
-    <div class="bx-field" style="margin:0"><label>SQL-Datei <?= bx_hint('.sql oder .sql.gz (gepackt, falls das Upload-Limit klein ist)') ?></label><input type="file" name="sql" accept=".sql,.gz,.sql.gz,text/plain,application/gzip" required></div>
+    <div class="bx-field" style="margin:0"><label>Datei <?= bx_hint('board.sqlite ODER .sql / .sql.gz (gepackt, falls das Upload-Limit klein ist)') ?></label><input type="file" name="sql" accept=".sql,.gz,.sql.gz,.sqlite,.sqlite3,.db,text/plain,application/gzip,application/octet-stream" required></div>
     <button class="btn btn-primary" type="submit" data-busy="Lade …">Hochladen</button>
   </form>
-  <div class="muted" style="font-size:12px;margin-top:8px">Status: <?= $geladen > 0 ? '<strong>v3-Stand geladen</strong> (' . $geladen . ' Tabellen)' : 'noch kein v3-Stand geladen' ?> · Upload-Limit: <?= h((string)ini_get('upload_max_filesize')) ?>.</div>
+  <div class="muted" style="font-size:12px;margin-top:8px">Status: <?= $sqlitePf ? '<strong>v3-SQLite geladen</strong> (' . (int)$sqliteCnt['produktanfrage'] . ' Anfragen)' : ($geladen > 0 ? '<strong>v3-Stand geladen</strong> (' . $geladen . ' Tabellen)' : 'noch kein v3-Stand geladen') ?> · Upload-Limit: <?= h((string)ini_get('upload_max_filesize')) ?>.</div>
 </div>
 
 <div class="bx-panel">
   <h2 style="margin-top:0">2 · Trockenlauf &amp; Import</h2>
-  <?php if ($geladen === 0): ?>
-    <div class="muted">Erst oben den v3-Export hochladen.</div>
+  <?php if ($geladen === 0 && !$sqlitePf): ?>
+    <div class="muted">Erst oben die v3-Datei hochladen.</div>
   <?php else: ?>
     <div class="bx-row" style="gap:10px;flex-wrap:wrap">
       <form method="post" style="margin:0"><input type="hidden" name="aktion" value="dry"><button class="btn btn-ghost" type="submit" data-busy="Prüfe …">Trockenlauf (nur anzeigen)</button></form>
