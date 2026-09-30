@@ -172,6 +172,32 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       return {artikelnr:'', bez:bez, besch:[], menge:'1', einheit:'Stk.', preis:preis};
     });
   }
+  // SMART: erkennt Positionen und behält Beschreibungen. Zeile mit Betrag am Ende = Position;
+  // Zeile OHNE Betrag = Beschreibung der aktuellen Position (nichts geht verloren, egal welches Format).
+  function parseSmart(text){
+    var lines=text.split(/\r?\n/).map(function(l){return l.replace(/\t/g,' ').trim();});
+    var out=[], cur=null;
+    var full=/^\s*\d+\s+(.+?)\s+([\d.]+,\d{2})\s+(\S+)\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})\s*$/;   // Pos Artnr Bez Menge Einheit Preis Gesamt
+    var tail=/(\d{1,3}(?:[.\s]\d{3})*,\d{2}|\d+[.,]\d{2})\s*(?:€|EUR)?\s*$/;                       // Betrag am Zeilenende
+    lines.forEach(function(l){
+      if(l==='') return;
+      var m=l.match(full);
+      if(m){
+        var mid=m[1].trim(), art='', bez=mid;
+        var am=mid.match(/^([A-Za-zÄÖÜäöü]{2,6}\s+[\w.\-]+)\s+(.+)$/);
+        if(am){ art=am[1]; bez=am[2]; }
+        cur={artikelnr:art, bez:bez, besch:[], menge:m[2], einheit:m[3], preis:m[4]}; out.push(cur); return;
+      }
+      var t=l.match(tail);
+      if(t){   // Betrag am Ende, aber kein volles Spaltenformat -> Position (Bez = Zeile ohne Betrag)
+        var bez2=l.slice(0,t.index).trim().replace(/^\d+\s+/,'') || l;
+        cur={artikelnr:'', bez:bez2, besch:[], menge:'1', einheit:'Stk.', preis:t[1]}; out.push(cur); return;
+      }
+      if(cur){ cur.besch.push(l); }   // keine Zahl am Ende -> Beschreibung der laufenden Position
+      else { cur={artikelnr:'', bez:l, besch:[], menge:'1', einheit:'Stk.', preis:''}; out.push(cur); }
+    });
+    return out;
+  }
   function clearEmptyRows(){
     Array.prototype.slice.call(tbody.querySelectorAll('tr')).forEach(function(tr){
       var b=tr.querySelector('[name="p_bez[]"]'); if(b && b.value.trim()==='') tr.remove();
@@ -186,12 +212,11 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   }
   document.getElementById('gsPasteBtn').addEventListener('click', function(){
     var txt=document.getElementById('gsPaste').value||'', info=document.getElementById('gsPasteInfo');
-    var items=parseStrict(txt);
-    if(items.length){ fill(items); info.textContent=items.length+' Position(en) übernommen – bitte prüfen/anpassen.'; return; }
-    // Format nicht erkannt -> automatisch roh uebernehmen (nichts geht verloren).
-    items=parseRaw(txt);
+    var items=parseSmart(txt);   // behält Beschreibungen (Zeilen ohne Betrag) an der Position
     if(!items.length){ info.textContent='Kein Text zum Übernehmen.'; return; }
-    fill(items); info.textContent='Spaltenformat nicht erkannt – '+items.length+' Zeile(n) roh übernommen. Bitte Beträge/Mengen prüfen.';
+    fill(items);
+    var mitBesch=items.filter(function(it){return it.besch && it.besch.length;}).length;
+    info.textContent=items.length+' Position(en) übernommen'+(mitBesch?' (inkl. Beschreibungen)':'')+' – bitte prüfen/anpassen.';
   });
   document.getElementById('gsRawBtn').addEventListener('click', function(){
     var items=parseRaw(document.getElementById('gsPaste').value||''), info=document.getElementById('gsPasteInfo');
