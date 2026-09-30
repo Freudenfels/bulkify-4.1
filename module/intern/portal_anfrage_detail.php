@@ -148,6 +148,36 @@ $angebote = $pa['typ'] === 'produkt' ? all("SELECT id, nummer, status, marge_ove
 // Zurückgezogene zählen nicht als „schon abgegeben" – danach darf ein neues Angebot gebaut werden.
 $angeboteAktiv = array_values(array_filter($angebote, fn($x) => $x['status'] !== 'zurueckgezogen'));
 
+// Was hat der Kunde als Preise gesehen? Kompakte Tabelle je Angebot (Staffel bevorzugt, sonst
+// gruppierte Positions-Optionen). Genau die Zeilen, die der Kunde im Portal zur Auswahl bekam.
+$kidPreis = (int)($pa['kunde_id'] ?? 0);
+$eurP = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
+$angPreiseHtml = function(int $agId) use ($kidPreis, $eurP) {
+    $st = all("SELECT menge, stueck, vk_stueck FROM angebot_staffel WHERE angebot_id=? ORDER BY sort, id", [$agId]);
+    $zeilen = [];
+    if ($st) {
+        foreach ($st as $s) {
+            $vk = vk_fuer_kunde((float)$s['vk_stueck'], $kidPreis);
+            $zeilen[] = ['menge'=>(int)$s['menge'], 'stueck'=>(int)$s['stueck'], 'pro_pkg'=>$vk, 'netto'=>$vk * (int)$s['menge']];
+        }
+    } else {
+        foreach (angebot_optionen($agId)['optionen'] as $o) {
+            $zeilen[] = ['menge'=>(int)$o['pakete'], 'stueck'=>(int)$o['stueck'], 'pro_pkg'=>(float)$o['pro_pkg'], 'netto'=>(float)$o['netto']];
+        }
+    }
+    if (!$zeilen) return '<div class="muted" style="font-size:12px;margin:4px 0 0">Noch keine Preise hinterlegt – der Kunde sieht „Preis wird finalisiert".</div>';
+    $h = '<div class="bx-tablewrap" style="margin:6px 0 2px"><table class="bx-table" style="margin:0">'
+       . '<thead><tr><th class="bx-num">Packungen</th><th class="bx-num">Stück/Pkg</th><th class="bx-num">Preis / Packung</th><th class="bx-num">Gesamt netto</th></tr></thead><tbody>';
+    foreach ($zeilen as $z) {
+        $h .= '<tr><td class="bx-num">' . number_format($z['menge'], 0, ',', '.') . '</td>'
+            . '<td class="bx-num">' . ($z['stueck'] > 0 ? number_format($z['stueck'], 0, ',', '.') : '–') . '</td>'
+            . '<td class="bx-num"><strong>' . $eurP($z['pro_pkg']) . '</strong></td>'
+            . '<td class="bx-num">' . $eurP($z['netto']) . '</td></tr>';
+    }
+    $h .= '</tbody></table></div>';
+    return $h;
+};
+
 render_header('portal_anfragen', $pa['nummer']);
 bx_head($pa['nummer'], $TYP[$pa['typ']] ?? $pa['typ'], bx_btn('Zurück zur Liste', '?p=portal_anfragen', 'ghost'));
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
@@ -365,6 +395,8 @@ if ($darfAbsage && in_array($pa['typ'], ['rohstoff','dienstleistung'], true)): ?
           </form>
         <?php endif; ?>
       </div>
+      <div class="muted" style="font-size:12px;margin:2px 0 2px">So hat es der Kunde gesehen:</div>
+      <?= $angPreiseHtml((int)$ag['id']) ?>
     <?php endforeach; ?>
     <div class="muted" style="margin-top:8px">Der Kunde sieht die Preismatrix im Portal und wählt eine Menge.</div>
   <?php endif; ?>
@@ -430,6 +462,8 @@ if ($darfAbsage && in_array($pa['typ'], ['rohstoff','dienstleistung'], true)): ?
           </form>
         <?php endif; ?>
       </div>
+      <div class="muted" style="font-size:12px;margin:2px 0 2px">So hat es der Kunde gesehen:</div>
+      <?= $angPreiseHtml((int)$ag['id']) ?>
     <?php endforeach; ?>
   <?php endif; ?>
   <?php if (!$angeboteAktiv): ?>
