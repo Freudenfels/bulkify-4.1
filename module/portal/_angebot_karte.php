@@ -38,7 +38,10 @@ if ($a['status'] === 'bestaetigt') {
   <summary>
     <span style="font-size:var(--fs-md);flex:1;min-width:0"><span style="color:var(--gold)"><?= h($a['nummer']) ?></span> <strong><?= h($titelFuer($a)) ?></strong></span>
     <span class="bx-row" style="gap:10px;align-items:center">
-      <?= $offen ? bx_badge($canAccept ? 'Angebot liegt vor – bitte wählen' : 'Angebot liegt vor','info')
+      <?= $offen
+           ? (!empty($inf['gesperrt'])
+                ? bx_badge('Preis in Arbeit','info')
+                : bx_badge($canAccept ? 'Angebot liegt vor – bitte wählen' : 'Angebot liegt vor','info'))
            : ($a['status']==='bestaetigt' ? bx_badge($bestStatusLbl, $bestStatusKind) : bx_badge('abgelehnt','err')) ?>
       <?= pdf_btn($portalLink('angebot_pdf') . '&aid=' . (int)$a['id'], 'PDF', true, 'Angebot als PDF herunterladen') ?>
     </span>
