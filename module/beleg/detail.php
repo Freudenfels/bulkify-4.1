@@ -19,6 +19,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
         header('Location: ?p=rechnung&id=' . $id . '&gespeichert=1'); exit;
     }
 
+    // Rechnung stornieren -> Gutschrift (negativ) erzeugen + Original auf 'storniert'
+    if ($aktion === 'storno') {
+        $grund = trim($_POST['grund'] ?? '');
+        $gid = gutschrift_aus_rechnung($id, $grund, $akteur);
+        header('Location: ?p=rechnung&id=' . ($gid ?: $id) . '&storniert=1'); exit;
+    }
+
     // Status manuell setzen (Override, z. B. storniert)
     $status = trim($_POST['status'] ?? 'offen');
     $notiz  = trim($_POST['status_notiz'] ?? '');
@@ -40,6 +47,11 @@ $b = $id ? one("SELECT b.*, k.firma AS kunde_firma, a.nummer AS auftrag_nr
                 WHERE b.id=?", [$id]) : null;
 if (!$b) { render_header('rechnungen','Rechnung'); bx_head('Rechnung nicht gefunden','', bx_btn('Zurück','?p=rechnungen','ghost')); render_footer(); exit; }
 
+$istGut     = ($b['typ'] === 'gutschrift');
+$positionen = all("SELECT * FROM beleg_position WHERE beleg_id=? ORDER BY sort, id", [$id]);
+$stornoVon  = !empty($b['storno_von_id']) ? one("SELECT id,nummer FROM beleg WHERE id=?", [(int)$b['storno_von_id']]) : null;   // diese Gutschrift storniert ...
+$stornoDurch= one("SELECT id,nummer FROM beleg WHERE storno_von_id=? AND typ='gutschrift'", [$id]);                            // ... diese Rechnung wurde storniert durch
+
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 $zBadge = fn($s) => match ($s) {
     'bezahlt'     => bx_badge('bezahlt','ok'),
@@ -52,8 +64,13 @@ $zBadge = fn($s) => match ($s) {
 $zs = beleg_zahlstatus($b);   // abgeleiteter Zahlstatus + bezahlt/rest
 
 render_header('rechnungen', $b['nummer']);
-bx_head($b['nummer'], 'Rechnung' . ($b['datum'] ? ' vom ' . date('d.m.Y', strtotime($b['datum'])) : ''), bx_btn('Zurück zur Liste', '?p=rechnungen', 'ghost'));
+bx_head($b['nummer'], ($istGut ? 'Storno-Rechnung / Gutschrift' : 'Rechnung') . ($b['datum'] ? ' vom ' . date('d.m.Y', strtotime($b['datum'])) : ''),
+        ($istGut ? bx_btn('PDF ansehen', '?p=gutschrift_pdf&id=' . $id, 'ghost') . ' ' : '') . bx_btn('Zurück zur Liste', '?p=rechnungen', 'ghost'));
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnung storniert – Gutschrift wurde erstellt.</div>';
+// Bezug-Hinweise
+if ($stornoVon)  echo '<div class="bx-panel" style="padding:10px 14px">Storno zu Rechnung <a href="?p=rechnung&id=' . (int)$stornoVon['id'] . '">' . h($stornoVon['nummer']) . '</a>.</div>';
+if ($stornoDurch) echo '<div class="bx-panel" style="padding:10px 14px;border-color:#e6c4c0">Diese Rechnung wurde storniert – Gutschrift <a href="?p=rechnung&id=' . (int)$stornoDurch['id'] . '">' . h($stornoDurch['nummer']) . '</a>.</div>';
 
 echo '<div class="bx-cards">';
 echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $zBadge($zs['status']) . '</div></div>';
@@ -72,6 +89,42 @@ echo '</div>';
     <div><div class="k muted">USt (<?= rtrim(rtrim(number_format((float)$b['ust_prozent'],2,',','.'),'0'),',') ?> %)</div><div><?= $eur($b['ust_betrag']) ?></div></div>
   </div>
 </div>
+
+<?php if ($positionen): ?>
+<div class="bx-panel">
+  <h2>Positionen</h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Pos.</th><th>Artikel-Nr.</th><th>Bezeichnung</th><th class="bx-num">Menge</th><th>Einheit</th><th class="bx-num">Einzelpreis</th><th class="bx-num">Gesamt</th></tr></thead>
+    <tbody>
+      <?php $i=0; foreach ($positionen as $p): $ep=(int)$p['preis_cent']/100; $ge=$ep*(float)$p['menge']; $i++; ?>
+      <tr>
+        <td><?= $i ?></td>
+        <td><?= h($p['artikelnr'] ?: '–') ?></td>
+        <td><?= h($p['bezeichnung']) ?><?php if ($p['beschreibung']): ?><div class="muted" style="font-size:12px;white-space:pre-line"><?= h($p['beschreibung']) ?></div><?php endif; ?></td>
+        <td class="bx-num"><?= rtrim(rtrim(number_format((float)$p['menge'],2,',','.'),'0'),',') ?></td>
+        <td><?= h($p['einheit'] ?: '') ?></td>
+        <td class="bx-num"><?= $eur($ep) ?></td>
+        <td class="bx-num"><?= $eur($ge) ?></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
+
+<?php if ($b['typ'] === 'rechnung' && $b['status'] !== 'storniert' && !$stornoDurch): ?>
+<details class="bx-form">
+  <summary class="btn btn-ghost btn-sm" style="list-style:none">Rechnung stornieren</summary>
+  <form method="post" style="margin-top:12px" onsubmit="return confirm('Rechnung <?= h($b['nummer']) ?> stornieren? Es wird eine Gutschrift erzeugt und die Rechnung auf „storniert“ gesetzt.');">
+    <input type="hidden" name="aktion" value="storno">
+    <div class="bx-panel">
+      <p class="muted" style="margin-top:0">Erzeugt eine <strong>Storno-Rechnung (Gutschrift)</strong> mit negativen Beträgen als Ausgleich zu dieser Rechnung.<?php if ($zs['bezahlt'] > 0.005): ?> <strong>Achtung:</strong> Es wurden bereits <?= $eur($zs['bezahlt']) ?> gezahlt – ggf. Rückzahlung/Verrechnung beachten.<?php endif; ?></p>
+      <div class="bx-field"><label>Grund (optional)</label><input type="text" name="grund" placeholder="z. B. falsche Menge, Kunde storniert"></div>
+    </div>
+    <button class="btn btn-primary" type="submit">Storno-Rechnung erstellen</button>
+  </form>
+</details>
+<?php endif; ?>
 
 <?php
 $zahlungen = zahlungen_fuer($id);

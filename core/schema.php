@@ -496,6 +496,23 @@ function init_schema(): void {
         KEY idx_kunde (kunde_id), KEY idx_auftrag (auftrag_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // beleg_position: Positionen eines Belegs (v. a. Gutschrift/Storno-Rechnung) – wie beim Angebot.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS beleg_position (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        beleg_id INT NOT NULL,
+        sort INT NOT NULL DEFAULT 0,
+        artikelnr VARCHAR(60) NULL,
+        bezeichnung VARCHAR(255) NOT NULL,
+        beschreibung VARCHAR(1000) NULL,
+        menge DECIMAL(14,3) NOT NULL DEFAULT 0,
+        einheit VARCHAR(20) NULL,
+        preis_cent INT NOT NULL DEFAULT 0,          -- Einzelpreis in Cent (bei Gutschrift negativ)
+        mwst_satz DECIMAL(5,2) NOT NULL DEFAULT 0,
+        KEY idx_beleg (beleg_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('beleg', 'storno_von_id', "INT NULL");     // Gutschrift/Storno -> Original-Rechnung
+    ensure_column('beleg', 'grund', "VARCHAR(255) NULL");    // Grund des Stornos / der Gutschrift
+
     // zahlung: einzelne Zahlungseingänge je Beleg. datum = echtes Überweisungsdatum (Valuta), angelegt = Erfassungszeit (UTC).
     $pdo->exec("CREATE TABLE IF NOT EXISTS zahlung (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1154,7 +1171,9 @@ function init_schema(): void {
     // Backfill lief einmalig VOR dem Import und lässt sich nicht wiederholen; die per Import neu angelegten
     // Angebote blieben daher auf preise_kunde=0 und waren für den Kunden unsichtbar (inkl. Staffeln).
     if (meta_get('init_preise_kunde_v3', '') !== '1') {
-        q("UPDATE angebot SET preise_kunde=1 WHERE v3_id IS NOT NULL AND status IN ('gesendet','bestaetigt','abgelehnt')");
+        // Nur relevant nach v3-Import (Spalte angebot.v3_id). Ohne die Spalte nichts zu tun – verhindert init_schema-Crash.
+        if (scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='angebot' AND column_name='v3_id'"))
+            q("UPDATE angebot SET preise_kunde=1 WHERE v3_id IS NOT NULL AND status IN ('gesendet','bestaetigt','abgelehnt')");
         meta_set('init_preise_kunde_v3', '1');
     }
     ensure_column('kontingent', 'angebot_id', "INT NULL");                     // Herkunft: aus welchem Jahresvertrags-Angebot entstanden
@@ -5837,6 +5856,82 @@ function beleg_status_verlauf(int $beleg_id): array {
     return $rows;
 }
 
+// ===== Gutschrift / Storno-Rechnung =====
+// Positionen eines Belegs im build_beleg_pdf-Format.
+function beleg_positionen(int $beleg_id): array {
+    $out = [];
+    foreach (all("SELECT * FROM beleg_position WHERE beleg_id=? ORDER BY sort, id", [$beleg_id]) as $p) {
+        $out[] = [
+            'artikelnr'   => (string)($p['artikelnr'] ?? ''),
+            'bezeichnung' => (string)$p['bezeichnung'],
+            'beschreibung'=> (string)($p['beschreibung'] ?? ''),
+            'menge'       => (float)$p['menge'],
+            'einheit'     => (string)($p['einheit'] ?? ''),
+            'preis_cent'  => (int)$p['preis_cent'],
+            'ek_cent'     => 0,
+            'mwst_satz'   => (float)$p['mwst_satz'],
+        ];
+    }
+    return $out;
+}
+// Summen (netto/ust/brutto in EUR) aus Positionen – je Position belegkonform auf Cent gerundet.
+function beleg_summen_aus_positionen(array $positionen): array {
+    $nettoCent = 0; $ustCent = 0;
+    foreach ($positionen as $p) {
+        $zeileCent = (int) round((float)$p['menge'] * (int)$p['preis_cent']);
+        $nettoCent += $zeileCent;
+        $ustCent   += (int) round($zeileCent * (float)($p['mwst_satz'] ?? 0) / 100);
+    }
+    return ['netto'=>$nettoCent/100, 'ust'=>$ustCent/100, 'brutto'=>($nettoCent+$ustCent)/100];
+}
+// Generische Gutschrift/Storno-Rechnung anlegen. Positionen wie beim Angebot (preis_cent bei Gutschrift negativ). Gibt Beleg-ID.
+function gutschrift_erstellen(int $kunde_id, ?string $datum, array $positionen, string $grund = '', ?int $storno_von = null, ?int $auftrag_id = null): int {
+    $s = beleg_summen_aus_positionen($positionen);
+    $ustP = 0.0;
+    foreach ($positionen as $p) if ((float)($p['mwst_satz'] ?? 0) > 0) { $ustP = (float)$p['mwst_satz']; break; }
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,storno_von_id,grund)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('GS'), 'gutschrift', $auftrag_id ?: null, $kunde_id ?: null,
+       $s['netto'], $ustP, $s['ust'], $s['brutto'], 'erstellt', $datum ?: date('Y-m-d'), $storno_von ?: null, ($grund !== '' ? $grund : null)]);
+    $bid = insert_id();
+    $sort = 0;
+    foreach ($positionen as $p) {
+        if (trim((string)($p['bezeichnung'] ?? '')) === '') continue;
+        q("INSERT INTO beleg_position (beleg_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz) VALUES (?,?,?,?,?,?,?,?,?)",
+          [$bid, $sort++, trim((string)($p['artikelnr'] ?? '')) ?: null, (string)$p['bezeichnung'], trim((string)($p['beschreibung'] ?? '')) ?: null,
+           (float)$p['menge'], trim((string)($p['einheit'] ?? '')) ?: null, (int)$p['preis_cent'], (float)($p['mwst_satz'] ?? 0)]);
+    }
+    beleg_status_log_add($bid, 'erstellt', $grund !== '' ? $grund : 'Gutschrift erstellt', 'team');
+    if ($kunde_id) log_aktivitaet('kunde', $kunde_id, 'team', 'Gutschrift ' . scalar("SELECT nummer FROM beleg WHERE id=?", [$bid]) . ' erstellt.', 'beleg', 'beleg', $bid);
+    return $bid;
+}
+// Bestehende Rechnung stornieren: Gutschrift (negativ) erzeugen + Original auf 'storniert'. Idempotent.
+function gutschrift_aus_rechnung(int $rechnung_id, string $grund = '', string $akteur = 'team'): ?int {
+    $b = one("SELECT * FROM beleg WHERE id=? AND typ='rechnung'", [$rechnung_id]);
+    if (!$b) return null;
+    if (($v = scalar("SELECT id FROM beleg WHERE storno_von_id=? AND typ='gutschrift'", [$rechnung_id]))) return (int)$v;   // schon storniert
+    $orig = beleg_positionen($rechnung_id);
+    $pos = [];
+    if ($orig) {
+        foreach ($orig as $p) { $p['preis_cent'] = -abs((int)$p['preis_cent']); $pos[] = $p; }
+    } else {
+        $nettoCent = (int) round((float)$b['netto'] * 100);
+        $pos[] = ['artikelnr'=>'', 'bezeichnung'=>'Storno der Rechnung ' . $b['nummer'], 'beschreibung'=>$grund,
+                  'menge'=>1, 'einheit'=>'', 'preis_cent'=>-abs($nettoCent), 'mwst_satz'=>(float)$b['ust_prozent']];
+    }
+    $gid = gutschrift_erstellen((int)$b['kunde_id'], date('Y-m-d'), $pos, $grund !== '' ? $grund : ('Storno zu ' . $b['nummer']), $rechnung_id, $b['auftrag_id'] ? (int)$b['auftrag_id'] : null);
+    q("UPDATE beleg SET status='storniert' WHERE id=?", [$rechnung_id]);
+    beleg_status_log_add($rechnung_id, 'storniert', 'Storniert per Gutschrift ' . scalar("SELECT nummer FROM beleg WHERE id=?", [$gid]) . ($grund !== '' ? ' – ' . $grund : ''), $akteur);
+    return $gid;
+}
+// Alle offenen Rechnungen eines Auftrags stornieren (bei Auftrags-Storno). Gibt Anzahl erzeugter Gutschriften.
+function auftrag_rechnungen_stornieren(int $auftrag_id, string $grund = 'Auftrag storniert', string $akteur = 'team'): int {
+    $n = 0;
+    foreach (all("SELECT id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert'", [$auftrag_id]) as $r)
+        if (gutschrift_aus_rechnung((int)$r['id'], $grund, $akteur)) $n++;
+    return $n;
+}
+
 // Demo-Verlauf (nur lokal, damit die Chat-Ansicht etwas zeigt)
 function seed_aktivitaet_if_empty(): void {
     if (meta_get('seed_demo_off','') === '1') return;   // Demo-Seeding nach Reset deaktiviert
@@ -6613,6 +6708,9 @@ function produkt_novelfood_pruefen(int $pid): array {
 // in init_schema). Zuordnung v3-Auftrag (auftrag.v3_id) -> "Material|Volumen(ml)" -> v4-Behaelter. Idempotent:
 // wirkt nur auf Auftraege mit leerem verpackung_id; der Aufruf ist zusaetzlich per app_meta-Marker gegatet.
 function fix_auftrag_verpackung_backfill(): void {
+    // Nur relevant fuer v3-Alt-Importe: braucht die Spalte auftrag.v3_id (wird erst vom v3-Import angelegt).
+    // Ohne diese Spalte (DB ohne v3-Import / frische Installation) nichts zu tun – verhindert init_schema-Crash.
+    if (!scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='auftrag' AND column_name='v3_id'")) return;
     // v3 auftraege.id => "Material|ml" (aus dem v3-Dump auftraege.verpackung geparst)
     $map = [13=>'Glas|150',14=>'Glas|100',16=>'Glas|150',17=>'Glas|200',20=>'Glas|200',21=>'Glas|200',25=>'PET|150',
             29=>'Glas|150',31=>'PET|100',33=>'Glas|200',34=>'Glas|150',35=>'Glas|150',38=>'Glas|200',39=>'Glas|150',
@@ -6643,6 +6741,8 @@ function fix_auftrag_verpackung_backfill(): void {
 // (produkt_kundenpreis.verpackung); ist es nicht eindeutig, bleibt der Auftrag leer (manuelle Auswahl in der
 // Produktion). Nur aktive Auftraege, nur wo verpackung_id leer ist; Cascade auf produktionsauftrag.
 function fix_auftrag_verpackung_v2_berechnet(): void {
+    // Braucht die v3-Import-Tabelle produkt_kundenpreis. Fehlt sie (Nicht-v3-DB), nichts zu tun – verhindert init_schema-Crash.
+    if (!scalar("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='produkt_kundenpreis'")) return;
     $rows = all("SELECT a.id, p.rezeptur_id, r.darreichungsform AS form, a.stueck,
                         (SELECT kp.verpackung FROM produkt_kundenpreis kp
                           WHERE kp.produkt_id=a.produkt_id AND kp.kunde_id=a.kunde_id AND COALESCE(kp.verpackung,'')<>'' LIMIT 1) AS kp_verp

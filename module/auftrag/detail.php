@@ -82,9 +82,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     $menge = max(0, (int)($_POST['menge'] ?? 0));
     $vk    = round(zahl_lesen((string)($_POST['vk_stueck'] ?? '0')), 4);
     $netto = round($menge * $vk, 2);
+    $neuStatus = trim($_POST['status'] ?? 'offen');
+    $altStatus = (string) scalar("SELECT status FROM auftrag WHERE id=?", [$id]);
     q("UPDATE auftrag SET status=?, menge=?, vk_stueck=?, gesamt_netto=? WHERE id=?",
-      [trim($_POST['status'] ?? 'offen'), $menge, $vk, $netto, $id]);
-    header('Location: ?p=auftrag&id=' . $id . '&gespeichert=1'); exit;
+      [$neuStatus, $menge, $vk, $netto, $id]);
+    // Auftrag storniert -> offene Rechnung(en) automatisch per Gutschrift stornieren
+    $stn = 0;
+    if ($neuStatus === 'storniert' && $altStatus !== 'storniert') {
+        $akteur = (function_exists('current_user') && ($u = current_user())) ? $u['name'] : 'team';
+        $stn = auftrag_rechnungen_stornieren($id, 'Auftrag ' . ((string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$id])) . ' storniert', $akteur);
+    }
+    header('Location: ?p=auftrag&id=' . $id . '&gespeichert=1' . ($stn ? '&storno=' . $stn : '')); exit;
 }
 
 $a = $id ? one("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name, ang.nummer AS angebot_nr

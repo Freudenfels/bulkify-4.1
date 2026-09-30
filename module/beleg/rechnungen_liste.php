@@ -9,7 +9,7 @@ $dir  = $_GET['dir']  ?? 'desc';
 
 $rows = all("SELECT b.*, k.firma AS kunde_firma
              FROM beleg b LEFT JOIN kunden k ON k.id=b.kunde_id
-             WHERE b.typ='rechnung'");
+             WHERE b.typ IN ('rechnung','gutschrift')");
 if ($q !== '') {
     $needle = mb_strtolower($q);
     $rows = array_filter($rows, function($r) use ($needle) {
@@ -36,6 +36,7 @@ $statusBadge = fn($r) => match ($r['status']) {
 
 $cols = [
     'nummer'      => ['label' => 'Nummer', 'sort' => true],
+    'art'         => ['label' => 'Art', 'render' => fn($r)=> ($r['typ'] ?? '')==='gutschrift' ? bx_badge('Gutschrift','info') : 'Rechnung'],
     'datum'       => ['label' => 'Datum', 'sort' => true, 'render' => $datum],
     'kunde_firma' => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
     'netto'       => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['netto'])],
@@ -51,6 +52,8 @@ bx_head('Rechnungen', count($rows) . ' Einträge · offene Posten: ' . $eur($off
   <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Nummer, Kunde …">
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
   <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=rechnungen">zurücksetzen</a><?php endif; ?>
+  <span style="flex:1"></span>
+  <a class="btn btn-primary btn-sm" href="?p=gutschrift_neu">+ Storno-Rechnung</a>
 </form>
 <?php
 bx_table($cols, array_values($rows), [
