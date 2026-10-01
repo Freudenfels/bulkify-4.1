@@ -5,9 +5,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $item_id = (int)($_POST['item_id'] ?? 0);
     $menge   = (float) str_replace(',', '.', trim((string)($_POST['menge'] ?? '0')));
     $lief    = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
+    $pakete  = max(1, (int)($_POST['pakete'] ?? 1));
     $cid = erp_wareneingang_buchen($item_id, $menge, trim((string)($_POST['charge_nr'] ?? '')),
         trim((string)($_POST['mhd'] ?? '')) ?: null, $lief, trim((string)($_POST['notiz'] ?? '')));
     if (!$cid) { flash('Bitte Artikel und eine Menge größer 0 angeben.', 'warn'); weiter('?p=eingang'); }
+    lg_pakete_set((int)$cid, $pakete);
     $c = erp_charge((int)$cid);
     lg_bewegung_log((int)$cid, 'ein', $menge, $c['einheit'] ?? null, (string)($c['item_name'] ?? ''), 'Wareneingang');
     // Direkt zum Einlagern: die Charge-Detailseite hat die Blinker-/Kisten-Zuweisung.
@@ -54,6 +56,9 @@ if (!$items) { hinweis('Noch keine buchbaren Artikel im Dashboard (Rohstoffe/Ver
       <div class="bx-field"><label>Charge-Nr. (Lieferant)</label>
         <input type="text" name="charge_nr" class="lg-code" placeholder="laut Lieferant / CoA (optional)"></div>
       <div class="bx-field"><label>MHD</label><input type="date" name="mhd"></div>
+      <div class="bx-field"><label>Anzahl Pakete / Kartons</label>
+        <input type="number" name="pakete" min="1" step="1" value="1">
+        <div class="muted" style="font-size:12px;margin-top:4px">Je Karton wird ein Etikett gedruckt („Karton 1 / N").</div></div>
       <div class="bx-field"><label>Lieferant</label>
         <select name="lieferant_id">
           <option value="">– keiner –</option>

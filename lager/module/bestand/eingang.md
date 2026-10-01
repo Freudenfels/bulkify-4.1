@@ -1,6 +1,6 @@
 # bestand/eingang.php – Wareneingang (Warenlager-Manager)
 
-**Was kommt rein.** Artikel (Suchfeld über alle buchbaren Dashboard-Items: Rohstoff/Verpackung/Verbrauch/Fertigware, gesperrte raus) + Menge + optional Charge-Nr (Lieferant/CoA), MHD, Lieferant, Notiz. Route `?p=eingang`.
+**Was kommt rein.** Artikel (Suchfeld über alle buchbaren Dashboard-Items: Rohstoff/Verpackung/Verbrauch/Fertigware, gesperrte raus) + Menge + optional Charge-Nr (Lieferant/CoA), MHD, Lieferant, **Anzahl Pakete/Kartons**, Notiz. Route `?p=eingang`. Die Paketzahl wird Lager-eigen gespeichert (`lg_pakete_set`) und steuert, wie viele Karton-Etiketten gedruckt werden (je Karton eines, „Karton X / N").
 
 **Ablauf (reibungslos):** Buchen → `erp_wareneingang_buchen()` legt die Charge an (Rohstoff/Fertigware → Quarantäne, sonst frei; gleicht eine vorab aus einer CoA angelegte Charge gleicher Nummer ab statt Dublette) → Bewegung in `lg_bewegung` (`lg_bewegung_log`, Typ `ein`) → **Weiterleitung direkt auf die Charge-Detailseite** (`?p=charge&id=…&neu=1`), wo man **sofort einen Blinker anhängt oder in eine Kiste legt**. So sind Einbuchen und Einlagern ein Fluss.
 

@@ -143,7 +143,26 @@ function lg_schema(): void {
         KEY charge (charge_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    // --- Zusatzinfo je Charge (Lager-eigen): Anzahl Pakete/Kartons der Lieferung. ---------------
+    // Fuers Karton-Etikett (eine Charge kam in N Kartons) – Dashboard-Charge bleibt unberuehrt.
+    q("CREATE TABLE IF NOT EXISTS lg_charge_info (
+        charge_id INT PRIMARY KEY,
+        pakete    INT      NOT NULL DEFAULT 1,
+        angelegt  DATETIME NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     lg_meta_schreiben('schema_build', $build);
+}
+
+// Anzahl Pakete/Kartons einer Charge (Standard 1).
+function lg_pakete(int $charge_id): int {
+    $n = (int) scalar("SELECT pakete FROM lg_charge_info WHERE charge_id=?", [$charge_id]);
+    return $n > 0 ? $n : 1;
+}
+function lg_pakete_set(int $charge_id, int $pakete): void {
+    $pakete = max(1, $pakete);
+    q("INSERT INTO lg_charge_info (charge_id,pakete,angelegt) VALUES (?,?,?)
+       ON DUPLICATE KEY UPDATE pakete=VALUES(pakete)", [$charge_id, $pakete, jetzt_utc()]);
 }
 
 // Eine Lagerbewegung protokollieren (Wareneingang/-ausgang aus dem Lager-Programm).

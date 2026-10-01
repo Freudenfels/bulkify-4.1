@@ -44,7 +44,7 @@ Die zwei Räume arbeiten unterschiedlich, deshalb gibt es zwei Modelle:
 - **Warenausgang** (`?p=ausgang`): Charge suchen, Menge abbuchen; leer → Blinker löst sich automatisch. Siehe [module/bestand/ausgang.md](module/bestand/ausgang.md).
 - **Bewegungen** (`?p=bewegungen`): Historie rein/raus aus `lg_bewegung`. Siehe [module/bestand/bewegungen.md](module/bestand/bewegungen.md).
 - **Bestand** (`?p=bestand`): alle eigenen Chargen nach Kategorie, MHD-Ampel, Spalte **Ort** (Kiste oder Blinker), je Zeile **Etikett**-Link, anklickbar → Charge-Detail (`?p=charge`, Produkt/Lieferung/Dokumente/weitere Chargen).
-- **Etikett** (`?p=etikett&id=` / `&ids=`): Charge-Aufkleber als **PDF 100×70 mm** mit **QR-Code** (führt auf die Charge im Lager). Eigener abhängigkeitsfreier QR-Encoder `core/qr.php`, gezeichnet mit MiniPDF. Siehe [module/bestand/etikett.md](module/bestand/etikett.md).
+- **Karton-Etikett** (`?p=etikett&id=` / `&ids=`): Aufkleber für die Kartons als **PDF 100×70 mm** mit Name (Rohstoff/Rezeptur), Lieferant, Lieferanten-Charge, MHD, Menge, **„Karton X / N"** (Paketzahl aus dem Wareneingang) und **QR-Code** (führt auf die Charge im Lager). Eigener abhängigkeitsfreier QR-Encoder `core/qr.php`, gezeichnet mit MiniPDF. Siehe [module/bestand/etikett.md](module/bestand/etikett.md).
 - **Finden** (`?p=finden`): Such-Popup (Tippen oder Sprache), Treffer antippen lässt den Blinker blinken. Liegt die Charge in einer Kiste, blinkt die Kiste (Ort-Hinweis „Kiste X, Fach Y“).
 - **Kisten** (`?p=kisten`): ein Behälter mit einem Blinker fasst viele Chargen – nicht jedes Kleinteil braucht einen Blinker. Siehe `core/kiste.php`.
 - **Blinker** (`?p=leisten`): alle Blinker mit Nutzung und Akku-Ampel; Warnbalken → **Batterie prüfen** (`?p=batterie`).
