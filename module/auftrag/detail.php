@@ -49,6 +49,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&energok=1'); exit;
 }
 
+// Alt-Auftrag: einfach „bezahlt am" (+ optional Betrag) setzen – für alles aus dem alten System,
+// das noch keine echte v4-Rechnung hat. Der Kunde sieht den Zahlstatus im Portal.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'bezahlt_setzen') {
+    $d = trim((string)($_POST['bezahlt_am'] ?? '')); $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) ? $d : date('Y-m-d');
+    $betr = trim((string)($_POST['bezahlt_betrag'] ?? '')); $betr = $betr !== '' ? (float) str_replace(['.', ','], ['', '.'], $betr) : null;
+    q("UPDATE auftrag SET bezahlt_am=?, bezahlt_betrag=? WHERE id=?", [$d, $betr, $id]);
+    header('Location: ?p=auftrag&id=' . $id . '&bezahltok=1'); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'bezahlt_reset') {
+    q("UPDATE auftrag SET bezahlt_am=NULL, bezahlt_betrag=NULL WHERE id=?", [$id]);
+    header('Location: ?p=auftrag&id=' . $id . '&bezahltreset=1'); exit;
+}
+// Alte Rechnung (PDF) am Auftrag hochladen -> als Dokument (typ='rechnung', kunde_sichtbar) -> Portal-Download.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'altrechnung_upload') {
+    if (!empty($_FILES['dok']['name']) && (int)($_FILES['dok']['error'] ?? 1) === UPLOAD_ERR_OK) {
+        if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+        $orig = (string)$_FILES['dok']['name'];
+        $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($orig, PATHINFO_EXTENSION)));
+        $fn   = 'altrechnung_' . $id . '_' . bin2hex(random_bytes(5)) . ($ext ? '.' . $ext : '');
+        $datum = trim((string)($_POST['dok_datum'] ?? '')); if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) $datum = null;
+        if (move_uploaded_file($_FILES['dok']['tmp_name'], BX_UPLOADS . '/' . $fn)) {
+            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,kunde_sichtbar,hochgeladen_von)
+               VALUES ('auftrag',?, 'rechnung', ?,?,?,?,1,'team')",
+              [$id, 'Rechnung (Altsystem)', $fn, $orig, $datum]);
+        }
+    }
+    header('Location: ?p=auftrag&id=' . $id . '&altre=1'); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'altrechnung_del') {
+    $did = (int)($_POST['dok_id'] ?? 0);
+    $d = one("SELECT datei FROM dokument WHERE id=? AND objekt_typ='auftrag' AND objekt_id=? AND typ='rechnung'", [$did, $id]);
+    if ($d) { @unlink(BX_UPLOADS . '/' . basename((string)$d['datei'])); q("DELETE FROM dokument WHERE id=?", [$did]); }
+    header('Location: ?p=auftrag&id=' . $id . '&altredel=1'); exit;
+}
+
 // Auftragsbestaetigung loeschen und zurueck zur Anfrage (Angebot wird wieder offen) – nur Admin.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'auftrag_zurueck') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
@@ -118,6 +153,8 @@ if (!$a) { render_header('auftraege','Auftrag'); bx_head('Auftrag nicht gefunden
 
 $rechnung = one("SELECT id, nummer, brutto, status FROM beleg WHERE auftrag_id=? AND typ='rechnung' LIMIT 1", [$id]);
 $rechnungZs = $rechnung ? beleg_zahlstatus($rechnung) : null;   // abgeleiteter Zahlstatus (bezahlt/teilbezahlt/offen + Rest)
+// Hochgeladene Alt-Rechnungen (Altsystem) zu diesem Auftrag.
+$altRechnungen = all("SELECT id, datei, datei_orig, dok_datum FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC", [$id]);
 $rezeptur = !empty($a['produkt_id'])
     ? one("SELECT r.id, r.nummer, r.name FROM produkt p JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$a['produkt_id']])
     : null;
@@ -334,6 +371,55 @@ if (kunde_zeigt_energetisierung((int)($a['kunde_id'] ?? 0))):
   <div class="muted" style="font-size:12px;margin-top:8px">Der Kunde sieht im Portal „Energetisierung läuft · noch X Tage" bzw. „abgeschlossen". Dauer global einstellbar (<?= energ_tage() ?> Tage).</div>
 </div>
 <?php endif; ?>
+
+<?php // Zahlung / Alt-Rechnung – für alles aus dem alten System (noch keine echte v4-Rechnung).
+      $hatV4Rechnung = (bool)$rechnung; ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Zahlung / Alt-Rechnung <span class="muted" style="font-weight:normal;font-size:13px">· Altsystem</span></h2>
+  <?php if (isset($_GET['bezahltok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Gespeichert.</div><?php endif; ?>
+  <?php if (isset($_GET['bezahltreset'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Zurückgesetzt.</div><?php endif; ?>
+  <?php if (isset($_GET['altre'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Rechnung hochgeladen.</div><?php endif; ?>
+  <?php if (isset($_GET['altredel'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Rechnung gelöscht.</div><?php endif; ?>
+  <?php if ($hatV4Rechnung): ?>
+    <p class="muted" style="margin-top:0">Für diesen Auftrag gibt es bereits eine v4-Rechnung (<a href="?p=rechnung&id=<?= (int)$rechnung['id'] ?>"><?= h($rechnung['nummer']) ?></a>) – Zahlungen bitte dort erfassen. Das manuelle „bezahlt am" unten ist nur für Alt-Aufträge ohne echte Rechnung gedacht.</p>
+  <?php endif; ?>
+  <?php if (!empty($a['bezahlt_am'])): ?>
+    <div style="margin-bottom:10px"><?= bx_badge('bezahlt','ok') ?> <span class="muted">am <?= h(date('d.m.Y', strtotime((string)$a['bezahlt_am']))) ?><?= ($a['bezahlt_betrag'] ?? null) !== null ? ' · ' . $eur($a['bezahlt_betrag']) : '' ?></span></div>
+  <?php endif; ?>
+  <div class="bx-row" style="gap:16px;flex-wrap:wrap;align-items:flex-start">
+    <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
+      <input type="hidden" name="aktion" value="bezahlt_setzen">
+      <div class="bx-field" style="margin:0"><label>Bezahlt am</label><input type="date" name="bezahlt_am" value="<?= h((string)($a['bezahlt_am'] ?? date('Y-m-d'))) ?>"></div>
+      <div class="bx-field" style="margin:0"><label>Betrag (optional)</label><input type="text" inputmode="decimal" name="bezahlt_betrag" value="<?= ($a['bezahlt_betrag'] ?? null) !== null ? h(number_format((float)$a['bezahlt_betrag'],2,',','')) : '' ?>" placeholder="z. B. 5.560,00" style="width:120px"></div>
+      <button class="btn btn-primary btn-sm" type="submit">Als bezahlt speichern</button>
+      <?php if (!empty($a['bezahlt_am'])): ?>
+      <button class="btn btn-ghost btn-sm" type="submit" form="bezReset">zurücksetzen</button>
+      <?php endif; ?>
+    </form>
+    <?php if (!empty($a['bezahlt_am'])): ?><form id="bezReset" method="post" style="display:none"><input type="hidden" name="aktion" value="bezahlt_reset"></form><?php endif; ?>
+  </div>
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line,#e5e5e5)">
+    <div style="font-weight:600;margin-bottom:6px">Alte Rechnung (PDF) hochladen</div>
+    <p class="muted" style="font-size:12px;margin-top:0">Die Original-Rechnung aus dem alten System – sie erscheint beim Kunden im Portal als Rechnung zum Download.</p>
+    <?php if ($altRechnungen): ?>
+    <div class="bx-tablewrap" style="margin-bottom:10px"><table class="bx-table"><tbody>
+      <?php foreach ($altRechnungen as $d): ?>
+      <tr>
+        <td><a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['datei_orig'] ?: 'Rechnung.pdf') ?></a></td>
+        <td class="bx-num"><?= $d['dok_datum'] ? h(date('d.m.Y', strtotime((string)$d['dok_datum']))) : '' ?></td>
+        <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Rechnung löschen?');"><input type="hidden" name="aktion" value="altrechnung_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Löschen</button></form></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody></table></div>
+    <?php endif; ?>
+    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap" data-busy="Lade hoch…">
+      <input type="hidden" name="aktion" value="altrechnung_upload">
+      <div class="bx-field" style="margin:0"><label>Datei (PDF)</label><input type="file" name="dok" required accept="application/pdf,image/*"></div>
+      <div class="bx-field" style="margin:0"><label>Rechnungsdatum</label><input type="date" name="dok_datum"></div>
+      <button class="btn btn-ghost btn-sm" type="submit">Hochladen</button>
+    </form>
+  </div>
+</div>
 
 <?php if ($istAdmin): ?>
 <?php if (isset($_GET['expressfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['expressfehler']) ?></div><?php endif; ?>

@@ -2780,7 +2780,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:12px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
       <div class="bx-row" style="gap:10px;align-items:center">
         <span class="muted" style="font-size:12px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : 'Schritt ' . ($cur + 1) . '/' . count($AUFSTEPS) . ': ' . h($AUFSTEPS[$cur]) ?></span>
-        <?= $aufBadge($a['status']) ?><?php if (!empty($zahlMapBest[(int)$a['id']])): ?> <?= $reBadge($zahlMapBest[(int)$a['id']]) ?><?php endif; ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
+        <?= $aufBadge($a['status']) ?><?php $zst = $zahlMapBest[(int)$a['id']] ?? (!empty($a['bezahlt_am']) ? 'bezahlt' : ''); if ($zst): ?> <?= $reBadge($zst) ?><?php endif; ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
     <ul class="bx-steps" style="margin-top:12px">
       <?php foreach (kunde_auftrag_track($a) as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : '');
@@ -2806,6 +2806,9 @@ portal_head('Kundenportal · ' . $k['firma']);
       // Abgeleiteter Zahlstatus (aus den Zahlungseingängen) + die einzelnen Zahlungen (wann/wie viel).
       $zs = $re ? beleg_zahlstatus($re) : null;
       $zahlungen = $re ? zahlungen_fuer((int)$re['id']) : [];
+      // Alt-Auftrag: hochgeladene Alt-Rechnung (Download) + manuelles „bezahlt am" (ohne v4-Rechnung).
+      $altRe = one("SELECT id, datei_orig FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='rechnung' AND kunde_sichtbar=1 ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
+      $manBezahlt = empty($re) && !empty($a['bezahlt_am']);   // nur relevant, wenn keine echte v4-Rechnung da ist
       $vName = $a['verpackung_id'] ? scalar("SELECT name FROM item WHERE id=?", [(int)$a['verpackung_id']]) : '';
       // Feste Kunden-Phasen (wie v3) – KEINE internen Produktionsschritte. Identisch für Rohstoff-
       // und Fertigprodukt-Bestellung, verrät also nie einen Zukauf.
@@ -2823,7 +2826,11 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-panel" style="margin:0"><div class="muted">Status</div><div style="margin-top:6px"><?= $aufBadge($a['status']) ?><?php if (!empty($a['status_datum'])): ?> <span class="muted" style="font-size:13px">seit <?= h(date('d.m.Y', strtotime($a['status_datum']))) ?></span><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Menge</div><div style="margin-top:6px"><?= (int)$a['menge'] ?> Packungen<?php if ((int)$a['stueck']): ?> &middot; <?= (int)$a['stueck'] ?> je Packung<?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Gesamtbetrag</div><div style="margin-top:6px"><strong><?= $eur($re ? $re['brutto'] : $a['gesamt_netto']) ?></strong><?php if ($re): ?> <span class="muted">brutto</span><?php endif; ?></div></div>
-    <div class="bx-panel" style="margin:0"><div class="muted">Zahlung</div><div style="margin-top:6px"><?= $re ? $reBadge($zs['status']) : '<span class="muted">–</span>' ?><?php if ($re && $zs['status'] === 'teilbezahlt'): ?> <span class="muted" style="font-size:12px">offen <?= $eur($zs['rest']) ?></span><?php endif; ?></div></div>
+    <div class="bx-panel" style="margin:0"><div class="muted">Zahlung</div><div style="margin-top:6px"><?php
+        if ($re) { echo $reBadge($zs['status']); if ($zs['status'] === 'teilbezahlt') echo ' <span class="muted" style="font-size:12px">offen ' . $eur($zs['rest']) . '</span>'; }
+        elseif ($manBezahlt) { echo $reBadge('bezahlt') . ' <span class="muted" style="font-size:12px">am ' . h(date('d.m.Y', strtotime((string)$a['bezahlt_am']))) . '</span>'; }
+        else { echo '<span class="muted">–</span>'; }
+      ?></div></div>
   </div>
 
   <!-- Fortschritt mit Datum (horizontal, wie Ladebalken) -->
@@ -2875,7 +2882,16 @@ portal_head('Kundenportal · ' . $k['firma']);
     <h2 style="margin:0 0 14px;font-size:16px">Dokumente</h2>
     <div class="muted" style="font-size:13px;margin:-6px 0 10px">Rechnung</div>
     <?php if (!$re): ?>
-      <div class="muted">Für diese Bestellung liegt noch keine Rechnung vor.</div>
+      <?php if ($altRe || $manBezahlt): ?>
+        <div class="bx-tablewrap"><table class="bx-table"><tbody>
+          <?php if ($altRe): ?><tr><td class="muted" style="width:150px">Rechnung</td><td><a href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$altRe['id'] ?>" target="_blank" rel="noopener"><?= h($altRe['datei_orig'] ?: 'Rechnung.pdf') ?></a></td></tr><?php endif; ?>
+          <?php if (!empty($a['bezahlt_betrag'])): ?><tr><td class="muted">Betrag</td><td class="bx-num"><strong><?= $eur($a['bezahlt_betrag']) ?></strong></td></tr><?php endif; ?>
+          <tr><td class="muted">Zahlungsstatus</td><td><?= $manBezahlt ? $reBadge('bezahlt') : $reBadge('offen') ?></td></tr>
+          <?php if ($manBezahlt): ?><tr><td class="muted">Bezahlt am</td><td><?= h(date('d.m.Y', strtotime((string)$a['bezahlt_am']))) ?></td></tr><?php endif; ?>
+        </tbody></table></div>
+      <?php else: ?>
+        <div class="muted">Für diese Bestellung liegt noch keine Rechnung vor.</div>
+      <?php endif; ?>
     <?php else: ?>
       <div class="bx-tablewrap"><table class="bx-table">
         <tbody>

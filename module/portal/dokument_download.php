@@ -18,7 +18,10 @@ if (!$d) { http_response_code(404); echo 'Dokument nicht verfügbar.'; exit; }
 // Produkt-Dokumente den Produkt-Bereich.
 $erlaubt = $d['objekt_typ'] === 'item'
     ? (!empty($k['portal_rohstoffe']) || !empty($k['portal_rezeptur']) || !empty($k['portal_produkte']))
-    : !empty($k['portal_produkte']);
+    : ($d['objekt_typ'] === 'auftrag'
+        // Auftrags-Dokumente (Rechnung, Labortest …): nur fuer den EIGENTUemer des Auftrags – ohne Bereichs-Flag.
+        ? (int) scalar("SELECT COUNT(*) FROM auftrag WHERE id=? AND kunde_id=?", [(int)$d['objekt_id'], (int)$k['id']]) > 0
+        : !empty($k['portal_produkte']));
 if (!$erlaubt) { http_response_code(403); echo 'Kein Zugriff.'; exit; }
 
 $path = BX_UPLOADS . '/' . basename((string)$d['datei']);
