@@ -7,8 +7,9 @@ $id = (int)($_GET['id'] ?? 0);
 
 // Nächste offene Station als erledigt markieren (zentrale Logik in core/schema.php)
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'erledigen') {
-    $r = produktion_schritt_erledigen($id, (int)($_POST['schritt'] ?? 0), (string)($_POST['scan'] ?? ''));
-    if (!$r['ok'] && $r['fehler'] === 'scan')   { header('Location: ?p=produktionsauftrag&id=' . $id . '&scanfehler=' . urlencode($r['msg'])); exit; }
+    // Einfacher Abhak-Modus: Schritt ohne Charge-Scan abschließen (es gibt noch keine Etiketten zum Scannen).
+    // Material wird trotzdem nach FEFO abgebucht.
+    $r = produktion_schritt_erledigen($id, (int)($_POST['schritt'] ?? 0), '', true);
     if (!$r['ok'] && $r['fehler'] === 'mangel') { header('Location: ?p=produktionsauftrag&id=' . $id . '&mangel=1'); exit; }
     header('Location: ?p=produktionsauftrag&id=' . $id . '&ok=1'); exit;
 }
@@ -177,7 +178,6 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
 if (isset($_GET['mangel'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht genug Bestand für die Produktion – siehe Material unten. Bitte erst Wareneingang buchen.</div>';
 if (isset($_GET['weg']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produktionsweg umgestellt.</div>';
 if (isset($_GET['wegfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Weg kann nicht mehr geändert werden – es wurde bereits ein Schritt erledigt.</div>';
-if (isset($_GET['scanfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Scan abgelehnt: ' . h($_GET['scanfehler']) . '</div>';
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] > 0 ? (int)$_GET['bestellt'] . ' Bestellung(en) als Entwurf angelegt – im Einkauf prüfen und absenden.' : 'Kein offener Fehlbedarf – nichts zu bestellen.') . '</div>';
 if (isset($_GET['etikett'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Etikett-Design aktualisiert.</div>';
 if (isset($_GET['reserviert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['reserviert'] > 0 ? 'Bestand für ' . (int)$_GET['reserviert'] . ' Komponente(n) reserviert.' : 'Nichts zu reservieren (kein freier Bestand verfügbar).') . '</div>';
@@ -285,21 +285,17 @@ ob_start(); ?>
     $curStep = null; foreach ($schritte as $s) if ((int)$s['id'] === $firstOpenId) { $curStep = $s; break; }
     $anl = station_anleitung($curStep['station']);
     $isGate = str_contains($curStep['station'], 'Freigabe');
+    // Anleitungstext ohne den Scan-Satz anzeigen (es gibt noch keine Etiketten/Barcodes zum Scannen).
+    $anlText = trim(preg_replace('/\s*[A-ZÄÖÜ]?[Ss]canne[^.]*\.\s*/u', ' ', $anl['text']));
 ?>
 <div class="bx-panel" style="border-color:var(--gruen);background:rgba(29,158,117,.05)">
   <div class="muted">Jetzt dran – Schritt <?= $done + 1 ?> von <?= $total ?></div>
   <h2 style="margin:4px 0 8px"><?= h($curStep['station']) ?> <?= $isGate ? bx_badge('Gate','info') : '' ?></h2>
-  <p style="margin:0 0 12px;font-size:15px"><?= h($anl['text']) ?></p>
-  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+  <?php if ($anlText !== ''): ?><p style="margin:0 0 12px;font-size:15px"><?= h($anlText) ?></p><?php endif; ?>
+  <form method="post" style="margin:0">
     <input type="hidden" name="aktion" value="erledigen">
     <input type="hidden" name="schritt" value="<?= (int)$firstOpenId ?>">
-    <?php if ($anl['scan']): ?>
-      <div class="bx-field" style="margin:0;max-width:300px">
-        <label>Charge scannen oder eingeben</label>
-        <input type="text" name="scan" autofocus autocomplete="off" placeholder="Charge-Nr. scannen …">
-      </div>
-    <?php endif; ?>
-    <button class="btn btn-primary" type="submit"><?= $isGate ? 'Freigeben' : ($anl['scan'] ? 'Scannen &amp; erledigen' : 'Erledigt') ?></button>
+    <button class="btn btn-primary" type="submit"><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
   </form>
 </div>
 <?php endif; ?>
@@ -327,7 +323,11 @@ ob_start(); ?>
         <td class="muted"><?= $isDone && $s['erledigt_at'] ? h(fmt_zeit($s['erledigt_at'])) : '' ?><?= $isDone && !empty($s['erledigt_von']) ? ' · ' . h($s['erledigt_von']) : '' ?><?= $isDone && !empty($s['scan_charge']) ? ' · Charge ' . h($s['scan_charge']) : '' ?></td>
         <td style="width:160px;text-align:right">
           <?php if ($isNext): ?>
-            <span class="badge badge-info">jetzt dran</span>
+            <form method="post" style="margin:0">
+              <input type="hidden" name="aktion" value="erledigen">
+              <input type="hidden" name="schritt" value="<?= (int)$s['id'] ?>">
+              <button class="btn btn-primary btn-sm" type="submit"><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
+            </form>
           <?php elseif ($isDone): ?>
             <span class="badge badge-ok">erledigt</span>
           <?php else: ?>

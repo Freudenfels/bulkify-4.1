@@ -50,9 +50,15 @@ Auf der PA-Detailseite erscheint bei erkanntem Zukauf ein **Banner „Fertige Bu
 
 `produktion_bereitschaft($pa_id)` prüft, ob das Material komplett da ist: bereit | wartet | laeuft | fertig. Rohstoffe (`produktion_materialbedarf`) + Leerkapseln, bei Zukauf stattdessen die freie fertig-Charge. Kachel „Bereitschaft" + Panel „Wartet auf Material" (Fehlliste benötigt/verfügbar/fehlt). Auch in Liste/Cockpit als Badge (`bereitschaft_badge()`) + Filter „Nur produktionsbereite".
 
-## Geführte Produktion mit Scan (Baustein 6)
+## Einfacher Abhak-Modus (ohne Scan) – Detailseite
 
-Oben ein Panel **„Jetzt dran – Schritt x von n"** mit Klartext-Anweisung (`station_anleitung()`) und – bei Material-Schritten – einem **Scan-Feld** (Charge scannen/eingeben). Beim Erledigen prüft `produktion_scan_pruefen($scan,$kat)` die Charge (existiert, frei, richtige Kategorie/Form: Rohstoffe→rohstoff, Verkapselung→kapselhuelle, Verpacken→verpackung, Fertigware bereitstellen→fertig). Gescannte Charge wird an `produktion_schritt.scan_charge` gespeichert und in der Stationsliste angezeigt. Falsche Charge → Meldung „Scan abgelehnt". Die Stationsliste selbst ist nur noch Übersicht (Aktion läuft über das geführte Panel).
+Die Detailseite läuft bewusst **ohne Charge-Scan** (es gibt noch keine Etiketten/Barcodes zum Scannen). Zwei Wege, einen Schritt abzuschließen – beide gleich:
+- Panel **„Jetzt dran – Schritt x von n"** mit Klartext-Anweisung (`station_anleitung()`, der Scan-Satz wird für die Anzeige herausgefiltert) und einem Knopf **„Erledigt"** (bzw. **„Freigeben"** an den Gates).
+- In der **Ablauf**-Liste hat der aktuell fällige Schritt direkt in der Zeile einen **„Erledigt"/„Freigeben"**-Knopf – so hakt man wie in v3 einfach ab, was fertig ist.
+
+Beide senden `aktion=erledigen` und rufen `produktion_schritt_erledigen($id,$schritt,'',ohneScan=true)`. Der Parameter **`$ohneScan`** überspringt nur die Scan-PRÜFUNG; **Material wird weiterhin nach FEFO abgebucht** und der **Mangel-Guard** bleibt aktiv (fehlt Bestand, meldet die Seite „Nicht genug Bestand"). Die Reihenfolge bleibt erzwungen (nur der erste offene Schritt hat einen Knopf).
+
+Die **geführte Produktion** (`run.php`, Touch/App) nutzt dieselbe Funktion **mit** Scan (Default `$ohneScan=false`) – dort bleibt das Scannen erhalten. Siehe [run.md](run.md).
 
 ## Zukauf-Entnahme (Feinschliff Baustein 5)
 

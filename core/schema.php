@@ -5207,7 +5207,7 @@ function produktion_scan_pruefen(string $scan, ?string $kat): array {
 // bucht Material FEFO ab, markiert erledigt, aktualisiert den Status; beim letzten Schritt
 // wird die Fertigware eingebucht und der Auftrag auf 'erledigt' gesetzt.
 // Rückgabe: ['ok'=>bool, 'fehler'=>?('reihenfolge'|'scan'|'mangel'), 'msg'=>string, 'fertig'=>bool, 'station'=>string]
-function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan = ''): array {
+function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan = '', bool $ohneScan = false): array {
     $firstOpen = one("SELECT id, station FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort LIMIT 1", [$pa_id]);
     if (!$firstOpen || (int)$firstOpen['id'] !== $schritt_id)
         return ['ok'=>false, 'fehler'=>'reihenfolge', 'msg'=>'Dieser Schritt ist gerade nicht an der Reihe.', 'fertig'=>false, 'station'=>''];
@@ -5215,7 +5215,9 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
     $anl  = station_anleitung($station);
     $scan = trim($scan);
     $master = ist_master_scan($scan);   // 8er-Folge: überspringt Scan-Prüfung + Bestandsabbuchung
-    if ($anl['scan']) {
+    // $ohneScan = einfacher Abhak-Modus (Detailseite): Schritt ohne Charge-Scan abschließen.
+    // Material wird trotzdem nach FEFO abgebucht; nur die Scan-PRÜFUNG entfällt (es gibt noch keine Etiketten zum Scannen).
+    if ($anl['scan'] && !$ohneScan) {
         if (!$master) {
             $chk = produktion_scan_pruefen($scan, $anl['kat']);
             if (!$chk['ok']) return ['ok'=>false, 'fehler'=>'scan', 'msg'=>$chk['msg'], 'fertig'=>false, 'station'=>$station];
