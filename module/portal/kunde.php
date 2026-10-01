@@ -884,6 +884,14 @@ $vorschlagZutaten = [];
 foreach ($vorschlaege as $vs) $vorschlagZutaten[$vs['id']] = all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort,id", [$vs['id']]);
 
 $aufBadge = fn($s) => match ($s) { 'offen'=>bx_badge('in Bearbeitung','info'),'in_produktion'=>bx_badge('in Produktion','warn'),'erledigt'=>bx_badge('versandbereit','info'),'versendet'=>bx_badge('versendet','ok'),default=>bx_badge($s) };
+// Einheitliches Status-Icon für alle Verlaufs-Schritte (Haupt- UND Parallel-Schritte):
+//   erledigt -> Haken, läuft/aktuell -> Sanduhr (sauberes SVG, kein Emoji), geplant/offen -> leer.
+$hourglassSvg = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px"><path d="M6 2h12M6 22h12M6 2c0 4 3 6 6 10 3-4 6-6 6-10M6 22c0-4 3-6 6-10 3 4 6 6 6 10"/></svg>';
+$statusIcon = function (string $state) use ($hourglassSvg) {
+    if ($state === 'done' || $state === 'abgeschlossen') return '&#10003;';            // Haken
+    if ($state === 'current' || $state === 'laeuft')      return $hourglassSvg;         // Sanduhr = läuft
+    return '';                                                                          // geplant/offen
+};
 $reBadge  = fn($s) => match ($s) { 'bezahlt'=>bx_badge('bezahlt','ok'),'teilbezahlt'=>bx_badge('teilbezahlt','info'),'offen'=>bx_badge('offen','warn'),'storniert'=>bx_badge('storniert','err'),default=>bx_badge($s) };
 // Feste Kunden-Phasen (wie v3) – der Kunde sieht KEINE internen Produktionsschritte, immer dieselben
 // Phasen, egal ob eigene Rohstoff-Produktion oder zugekauftes Fertigprodukt (kein Zukauf-Verräter).
@@ -2777,7 +2785,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php foreach (kunde_auftrag_track($a) as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : '');
           $sub = $t['date'] ? fmt_zeit($t['date'], 'd.m.Y') : ($t['sub'] ?? ''); ?>
         <li class="bx-step <?= $cls ?>">
-          <span class="dot"><?= ($cls === 'done' || $cls === 'current') ? '&#10003;' : '' ?></span>
+          <span class="dot"><?= $statusIcon($cls) ?></span>
           <span class="lbl"><?= h($t['label']) ?><?php if ($sub !== ''): ?><br><span class="muted" style="font-size:11px"><?= h($sub) ?></span><?php endif; ?></span>
         </li>
       <?php endforeach; ?>
@@ -2788,7 +2796,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           $done = $pz['status'] === 'abgeschlossen'; $laeuft = $pz['status'] === 'laeuft';
           $farbe = $done ? 'var(--gruen)' : ($laeuft ? '#b8860b' : 'var(--muted,#8a867d)'); ?>
       <span class="muted" style="font-size:12px;display:inline-flex;align-items:center;gap:5px">
-        <span style="color:<?= $farbe ?>"><?= $done ? '&#10003;' : ($laeuft ? '&#9679;' : '&#9675;') ?></span>
+        <span style="color:<?= $farbe ?>"><?= $statusIcon($pz['status']) ?: '&#9675;' ?></span>
         <?= h($pz['label']) ?> <span style="color:<?= $farbe ?>">· <?= $done ? 'abgeschlossen' : ($laeuft ? 'läuft' : 'geplant') ?></span>
       </span>
       <?php endforeach; ?>
@@ -2843,7 +2851,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <ul class="bx-htrack">
         <?php foreach ($track as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : ''); ?>
           <li class="bx-hstep <?= $cls ?>">
-            <span class="dot"><?= ($t['done'] || $t['current']) ? '&#10003;' : '' ?></span>
+            <span class="dot"><?= $statusIcon($t['done'] ? 'done' : ($t['current'] ? 'current' : '')) ?></span>
             <span class="lbl"><?= h($t['label']) ?></span>
             <span class="date"><?= $t['date'] ? h(fmt_zeit($t['date'], 'd.m.Y')) : h($t['sub'] ?? '') ?></span>
           </li>
@@ -2864,7 +2872,7 @@ portal_head('Kundenportal · ' . $k['firma']);
             $statusTxt = $done ? 'abgeschlossen' : ($laeuft ? 'läuft' : 'geplant');
         ?>
         <div class="bx-panel" style="margin:0;display:flex;gap:10px;align-items:flex-start;border-color:<?= $farbe ?>;background:<?= $bg ?>;padding:12px 14px;min-width:220px">
-          <span style="color:<?= $farbe ?>;font-size:16px;line-height:1.3"><?= $done ? '&#10003;' : ($laeuft ? '&#9679;' : '&#9675;') ?></span>
+          <span style="color:<?= $farbe ?>;font-size:15px;line-height:1.4"><?= $statusIcon($pz['status']) ?: '&#9675;' ?></span>
           <div>
             <div><strong><?= h($pz['label']) ?></strong> <span class="muted" style="font-size:12px">· <?= $statusTxt ?></span></div>
             <?php if (!empty($pz['sub'])): ?><div class="muted" style="font-size:12px;margin-top:2px"><?= h($pz['sub']) ?></div><?php endif; ?>
