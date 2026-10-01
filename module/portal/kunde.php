@@ -884,42 +884,51 @@ $aufBadge = fn($s) => match ($s) { 'offen'=>bx_badge('in Bearbeitung','info'),'i
 $reBadge  = fn($s) => match ($s) { 'bezahlt'=>bx_badge('bezahlt','ok'),'teilbezahlt'=>bx_badge('teilbezahlt','info'),'offen'=>bx_badge('offen','warn'),'storniert'=>bx_badge('storniert','err'),default=>bx_badge($s) };
 // Feste Kunden-Phasen (wie v3) – der Kunde sieht KEINE internen Produktionsschritte, immer dieselben
 // Phasen, egal ob eigene Rohstoff-Produktion oder zugekauftes Fertigprodukt (kein Zukauf-Verräter).
-$AUFSTEPS = ['Bestätigt', 'Rohstoff bestellt', 'In Produktion', 'Qualitätsprüfung', 'Versandbereit', 'Versendet'];
-// Aktuelle Phase (0..5) + Datum je Phase aus den vorhandenen Signalen ableiten.
+$AUFSTEPS = ['Bestätigt', 'Rohstoff bestellt', 'Rohstoff angekommen', 'In Produktion', 'Qualitätsprüfung', 'Versandbereit', 'Versendet'];
+// Aktuelle Phase (0..6) + Datum je Phase aus den vorhandenen Signalen ableiten.
 if (!function_exists('kunde_auftrag_phase')) {
     function kunde_auftrag_phase(array $a): array {
         $aid = (int)$a['id']; $st = (string)$a['status'];
-        $dates = array_fill(0, 6, null);
+        $dates = array_fill(0, 7, null);
         $dates[0] = $a['angelegt'] ?? null;                                  // Bestätigt
-        // Rohstoff bestellt: erste Bestellung, die auf diesen Auftrag zeigt (Rohstoffe ODER zugekaufter Bulk).
+        // Rohstoff bestellt (1): erste Bestellung, die auf diesen Auftrag zeigt (Rohstoffe ODER zugekaufter Bulk).
         $best = one("SELECT COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d FROM bestellung b
                      JOIN bestellung_position bp ON bp.bestellung_id=b.id WHERE bp.auftrag_id=?", [$aid]);
         $bestellt = $best && !empty($best['d']);
         if ($bestellt) $dates[1] = $best['d'];
-        // Auch ein gebuchter Wareneingang (Charge am Auftrag) zählt als „Rohstoff bestellt/angekommen" –
-        // z. B. extern bestellte, direkt eingebuchte Fremdproduktions-Bulkware ohne System-Bestellung.
-        if (!$bestellt) {
-            $we = one("SELECT COALESCE(MIN(wareneingang), MIN(angelegt)) d FROM charge WHERE auftrag_id=?", [$aid]);
-            if ($we && !empty($we['d'])) { $bestellt = true; $dates[1] = $we['d']; }
+        // Rohstoff angekommen (2): eine Charge wurde am Auftrag eingebucht (Wareneingang) ODER eine
+        // Bestellung ist als angekommen markiert. Deckt auch extern bestellte, direkt eingebuchte Bulkware ab.
+        $angDate = null;
+        $we = one("SELECT COALESCE(MIN(wareneingang), MIN(angelegt)) d FROM charge WHERE auftrag_id=?", [$aid]);
+        if ($we && !empty($we['d'])) $angDate = $we['d'];
+        if (!$angDate) {
+            $ba = one("SELECT MIN(b.angekommen_am) d FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
+                       WHERE bp.auftrag_id=? AND b.angekommen_am IS NOT NULL", [$aid]);
+            if ($ba && !empty($ba['d'])) $angDate = $ba['d'];
         }
-        // Produktion + Qualitätsprüfung aus den echten Schritten (nur intern; hier nur zur Phasenableitung).
+        $angekommen = $angDate !== null;
+        if ($angekommen) {
+            $dates[2] = $angDate;
+            if (!$bestellt) { $bestellt = true; $dates[1] = $dates[1] ?: $angDate; }   // angekommen impliziert bestellt
+        }
+        // Produktion (3) + Qualitätsprüfung (4) aus den echten Schritten (nur intern; hier nur zur Phasenableitung).
         $pa = one("SELECT id, angelegt FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$aid]);
         $qcDate = null;
         if ($pa) {
-            $dates[2] = $pa['angelegt'];
+            $dates[3] = $pa['angelegt'];
             foreach (all("SELECT station, erledigt, erledigt_at FROM produktion_schritt WHERE pa_id=? ORDER BY sort,id", [(int)$pa['id']]) as $s) {
                 if ((int)$s['erledigt'] === 1 && stripos((string)$s['station'], 'Qualität') !== false) $qcDate = $s['erledigt_at'];
             }
         }
         $qcDone = $qcDate !== null;
-        $dates[3] = $qcDate;
-        if ($st === 'erledigt')  $dates[4] = $a['aktualisiert'] ?? null;
-        if ($st === 'versendet') { $dates[5] = $a['aktualisiert'] ?? null; $dates[4] = $dates[4] ?? ($a['aktualisiert'] ?? null); }
+        $dates[4] = $qcDate;
+        if ($st === 'erledigt')  $dates[5] = $a['aktualisiert'] ?? null;
+        if ($st === 'versendet') { $dates[6] = $a['aktualisiert'] ?? null; $dates[5] = $dates[5] ?? ($a['aktualisiert'] ?? null); }
         // Index der aktuellen Phase.
-        if ($st === 'versendet')          $idx = 5;
-        elseif ($st === 'erledigt')       $idx = 4;
-        elseif ($st === 'in_produktion')  $idx = $qcDone ? 3 : 2;
-        else                              $idx = $bestellt ? 1 : 0;   // offen = bestätigt / rohstoff bestellt
+        if ($st === 'versendet')          $idx = 6;
+        elseif ($st === 'erledigt')       $idx = 5;
+        elseif ($st === 'in_produktion')  $idx = $qcDone ? 4 : 3;
+        else                              $idx = $angekommen ? 2 : ($bestellt ? 1 : 0);
         return ['idx' => $idx, 'dates' => $dates];
     }
 }
