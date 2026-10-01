@@ -37,6 +37,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Produktionsauftrag konnte nicht angelegt werden (kein Produkt am Auftrag?).')); exit;
 }
 
+// Energetisierung-Startdatum setzen (nur wenn der Kunde dafuer freigeschaltet ist). Status laeuft/abgeschlossen
+// wird daraus abgeleitet (energ_status/energ_rest_tage) – kein manuelles Klicken.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'energ_start') {
+    $kid = (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$id]);
+    if (kunde_zeigt_energetisierung($kid)) {
+        $d = trim((string)($_POST['energ_start'] ?? ''));
+        $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) ? $d : null;
+        q("UPDATE auftrag SET energ_start=? WHERE id=?", [$d, $id]);
+    }
+    header('Location: ?p=auftrag&id=' . $id . '&energok=1'); exit;
+}
+
 // Auftragsbestaetigung loeschen und zurueck zur Anfrage (Angebot wird wieder offen) – nur Admin.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'auftrag_zurueck') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
@@ -283,6 +295,38 @@ echo '</div>';
   </table></div>
   <?php endif; ?>
 </div>
+
+<?php // Energetisierung – nur fuer freigeschaltete Kunden (z. B. Annapurna/Pure Health). Startdatum setzen;
+      // Status laeuft/abgeschlossen + Fertig-Datum werden daraus abgeleitet. Der Kunde sieht es im Portal.
+if (kunde_zeigt_energetisierung((int)($a['kunde_id'] ?? 0))):
+    $eStart = (string)($a['energ_start'] ?? '');
+    $eStat  = energ_status($eStart); $eRest = energ_rest_tage($eStart); $eFertig = energ_fertig_am($eStart); ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Energetisierung</h2>
+  <?php if (isset($_GET['energok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Gespeichert.</div><?php endif; ?>
+  <?php if ($eStat === 'laeuft'): ?>
+    <div style="margin-bottom:10px"><?= bx_badge('läuft', 'warn') ?> <span class="muted">noch <?= max(0, (int)$eRest) ?> Tage · fertig am <?= h(date('d.m.Y', strtotime((string)$eFertig))) ?></span></div>
+  <?php elseif ($eStat === 'abgeschlossen'): ?>
+    <div style="margin-bottom:10px"><?= bx_badge('abgeschlossen', 'ok') ?> <span class="muted">seit <?= h(date('d.m.Y', strtotime((string)$eFertig))) ?></span></div>
+  <?php else: ?>
+    <div class="muted" style="margin-bottom:10px">Noch kein Startdatum gesetzt. Nach dem Setzen läuft die Energetisierung <?= energ_tage() ?> Tage, dann „abgeschlossen".</div>
+  <?php endif; ?>
+  <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0">
+    <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0">
+      <input type="hidden" name="aktion" value="energ_start">
+      <div class="bx-field" style="margin:0"><label>Startdatum</label><input type="date" name="energ_start" value="<?= h($eStart) ?>"></div>
+      <button class="btn btn-primary btn-sm" type="submit">Speichern</button>
+    </form>
+    <?php if ($eStart !== ''): ?>
+    <form method="post" style="margin:0" onsubmit="return confirm('Energetisierungs-Startdatum löschen?');">
+      <input type="hidden" name="aktion" value="energ_start"><input type="hidden" name="energ_start" value="">
+      <button class="btn btn-ghost btn-sm" type="submit">Startdatum löschen</button>
+    </form>
+    <?php endif; ?>
+  </div>
+  <div class="muted" style="font-size:12px;margin-top:8px">Der Kunde sieht im Portal „Energetisierung läuft · noch X Tage" bzw. „abgeschlossen". Dauer global einstellbar (<?= energ_tage() ?> Tage).</div>
+</div>
+<?php endif; ?>
 
 <?php if ($istAdmin): ?>
 <?php if (isset($_GET['expressfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['expressfehler']) ?></div><?php endif; ?>

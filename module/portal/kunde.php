@@ -2785,6 +2785,21 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
   </div>
 
+  <?php // Energetisierung – nur fuer freigeschaltete Kunden und nur wenn ein Startdatum gesetzt ist.
+        if (!empty($k['zeige_energetisierung']) && !empty($a['energ_start'])):
+            $eStat = energ_status((string)$a['energ_start']); $eRest = energ_rest_tage((string)$a['energ_start']); $eFertig = energ_fertig_am((string)$a['energ_start']); ?>
+  <div class="bx-panel">
+    <h2 style="margin:0 0 8px;font-size:16px">Energetisierung</h2>
+    <?php if ($eStat === 'laeuft'): ?>
+      <div><strong>Energetisierung läuft</strong> · noch <?= max(0, (int)$eRest) ?> Tage</div>
+      <div class="muted" style="font-size:13px;margin-top:4px">Voraussichtlich fertig am <?= h(date('d.m.Y', strtotime((string)$eFertig))) ?>.</div>
+    <?php elseif ($eStat === 'abgeschlossen'): ?>
+      <div><strong>Energetisierung abgeschlossen</strong></div>
+      <div class="muted" style="font-size:13px;margin-top:4px">Fertig am <?= h(date('d.m.Y', strtotime((string)$eFertig))) ?>.</div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
+
   <?php // Produktionsbericht – nur wenn das Team ihn fuer den Kunden freigegeben hat.
         $pbFrei = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND bericht_freigegeben_am IS NOT NULL ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
         if ($pbFrei): ?>

@@ -230,11 +230,12 @@ if ($WRITE) {
             $firma = $KUNDE_KANON[$v3kid]['firma'] ?? $k['firma'];   // echte Firma (Kanon override)
             $marke = $KUNDE_KANON[$v3kid]['marke'] ?? null;          // Markenname -> kunde_marke (White-Label)
             $notiz = 'Aus v3 übernommen (v3-Kunde #' . $v3kid . ')' . ($adr !== '' ? ' · Adresse laut v3: ' . $adr : '');
+            $zeigeEnerg = (int)($k['zeige_energetisierung'] ?? 0) === 1 ? 1 : 0;   // Energetisierung im Portal (Spezialkunde)
             $ex = one("SELECT id FROM kunden WHERE v3_id=?", [$v3kid]);
-            if ($ex) { $v4kid = (int)$ex['id']; q("UPDATE kunden SET firma=?, email=?, notiz=? WHERE id=?", [cut($firma), cut($k["email"] ?: null), cut($notiz,500), $v4kid]); $w['kunde_upd']++; }
+            if ($ex) { $v4kid = (int)$ex['id']; q("UPDATE kunden SET firma=?, email=?, notiz=?, zeige_energetisierung=? WHERE id=?", [cut($firma), cut($k["email"] ?: null), cut($notiz,500), $zeigeEnerg, $v4kid]); $w['kunde_upd']++; }
             else {
-                q("INSERT INTO kunden (kundennummer,firma,email,notiz,portal_token,portal_rezeptur,portal_produkte,v3_id) VALUES (?,?,?,?,?,1,1,?)",
-                  [naechste_nummer('K'), cut($firma), cut($k["email"] ?: null), cut($notiz,500), bin2hex(random_bytes(16)), $v3kid]);
+                q("INSERT INTO kunden (kundennummer,firma,email,notiz,portal_token,portal_rezeptur,portal_produkte,zeige_energetisierung,v3_id) VALUES (?,?,?,?,?,1,1,?,?)",
+                  [naechste_nummer('K'), cut($firma), cut($k["email"] ?: null), cut($notiz,500), bin2hex(random_bytes(16)), $zeigeEnerg, $v3kid]);
                 $v4kid = (int)insert_id(); $w['kunde_neu']++;
             }
             // Markenname als White-Label-Marke pflegen (kunde_marke), idempotent (kein Duplikat).
@@ -551,13 +552,15 @@ if ($WRITE) {
                 if ($p > 0) { $vkStueck = $p; $netto = $p * $menge; }
             }
         }
+        // Energetisierung-Startdatum (Spezialkunde) 1:1 uebernehmen -> v4 leitet Status laeuft/abgeschlossen daraus ab.
+        $eStart = preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($a['energ_start'] ?? '')) ? substr((string)$a['energ_start'], 0, 10) : null;
         $exA = one("SELECT id FROM auftrag WHERE v3_id=?", [$v3aid]);
         if ($exA) {
-            q("UPDATE auftrag SET kunde_id=?,produkt_id=?,menge=?,stueck=?,verpackung_id=?,status=?,vk_stueck=?,gesamt_netto=? WHERE id=?",
-              [$kid, $pid, $menge, $stueck, $vid, $st, $vkStueck, $netto, (int)$exA['id']]); $w5['auftrag_upd']++;
+            q("UPDATE auftrag SET kunde_id=?,produkt_id=?,menge=?,stueck=?,verpackung_id=?,status=?,vk_stueck=?,gesamt_netto=?,energ_start=? WHERE id=?",
+              [$kid, $pid, $menge, $stueck, $vid, $st, $vkStueck, $netto, $eStart, (int)$exA['id']]); $w5['auftrag_upd']++;
         } else {
-            q("INSERT INTO auftrag (nummer,kunde_id,produkt_id,menge,stueck,verpackung_id,status,vk_stueck,gesamt_netto,v3_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('AB'), $kid, $pid, $menge, $stueck, $vid, $st, $vkStueck, $netto, $v3aid]); $w5['auftrag_neu']++;
+            q("INSERT INTO auftrag (nummer,kunde_id,produkt_id,menge,stueck,verpackung_id,status,vk_stueck,gesamt_netto,energ_start,v3_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('AB'), $kid, $pid, $menge, $stueck, $vid, $st, $vkStueck, $netto, $eStart, $v3aid]); $w5['auftrag_neu']++;
         }
     }
     echo "\nGESCHRIEBEN (Stufe 5 – Aufträge):\n";

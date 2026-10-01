@@ -513,6 +513,7 @@ function init_schema(): void {
     ensure_column('beleg', 'storno_von_id', "INT NULL");     // Gutschrift/Storno -> Original-Rechnung
     ensure_column('beleg', 'grund', "VARCHAR(255) NULL");    // Grund des Stornos / der Gutschrift
     ensure_column('auftrag', 'status_datum', "DATE NULL");   // Datum des aktuellen Status (Kunde sieht es); Fast-Track/v3-Style
+    ensure_column('auftrag', 'energ_start', "DATE NULL");     // Energetisierung: Startdatum (aus v3); Status laeuft/abgeschlossen wird daraus abgeleitet
 
     // guthaben_bewegung: Verbrauch des Kunden-Guthabens (aus Gutschriften) – angerechnet auf Rechnung oder ausgezahlt.
     $pdo->exec("CREATE TABLE IF NOT EXISTS guthaben_bewegung (
@@ -1010,6 +1011,7 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     // --- additive Migrationen ab hier (Beispielmuster) ---
+    ensure_column('kunden', 'zeige_energetisierung', "TINYINT(1) NOT NULL DEFAULT 0");   // Energetisierung im Kundenportal zeigen (Spezialkunde, z. B. Annapurna/Pure Health)
     ensure_column('kunden', 'portal_token', "VARCHAR(64) NULL");   // Magic-Link-Zugang zum Kundenportal (Backup/Erstzugang)
     ensure_column('kunden', 'passwort', "VARCHAR(255) NULL");       // Passwort-Hash fuers Kunden-Login (password_hash); leer = noch nicht eingerichtet
     ensure_column('kunden', 'erstlogin_am', "DATETIME NULL");       // Zeitpunkt der Konto-Einrichtung (Erstzugang abgeschlossen)
@@ -3464,6 +3466,28 @@ function angebot_positionen_aus_staffel(array $a, array $staffeln): array {
     }
     return $out;
 }
+// ---- Energetisierung (aus v3): nur für freigeschaltete Kunden (kunden.zeige_energetisierung). ----
+// Zeit-/Info-Phase am Auftrag: Startdatum (auftrag.energ_start) -> ab Start „läuft", nach N Tagen „abgeschlossen".
+// Dauer global über app_meta['energ_tage'] (Standard 14). Nichts wird persistiert – immer aus dem Datum gerechnet.
+function energ_tage(): int { return max(1, (int) meta_get('energ_tage', 14)); }
+function kunde_zeigt_energetisierung(int $kunde_id): bool {
+    return $kunde_id > 0 && (int) scalar("SELECT zeige_energetisierung FROM kunden WHERE id=?", [$kunde_id]) === 1;
+}
+// Status aus dem Startdatum: '' = kein Start | 'laeuft' | 'abgeschlossen'.
+function energ_status(?string $start): string {
+    $start = trim((string)$start); if ($start === '') return '';
+    $ts = strtotime($start); if (!$ts) return '';
+    return (time() >= $ts + energ_tage() * 86400) ? 'abgeschlossen' : 'laeuft';
+}
+function energ_rest_tage(?string $start): ?int {
+    $ts = trim((string)$start) !== '' ? strtotime((string)$start) : false; if (!$ts) return null;
+    return (int) ceil((($ts + energ_tage() * 86400) - time()) / 86400);
+}
+function energ_fertig_am(?string $start): ?string {
+    $ts = trim((string)$start) !== '' ? strtotime((string)$start) : false; if (!$ts) return null;
+    return date('Y-m-d', $ts + energ_tage() * 86400);
+}
+
 // Pro Angebot innerhalb eines Requests mehrfach aufgerufen (Übersicht + Karte) – request-lokal cachen.
 function angebot_positionen(int $angebot_id): array {
     static $cache = [];
