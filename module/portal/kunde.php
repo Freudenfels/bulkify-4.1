@@ -942,6 +942,31 @@ if (!function_exists('kunde_auftrag_phase')) {
         return ['idx' => $idx, 'dates' => $dates];
     }
 }
+// Fortschritts-Schritte je Auftrag für die Anzeige. Basis = feste Phasen; bei freigeschalteten Kunden
+// (kunden.zeige_energetisierung) mit gesetztem Startdatum wird „Energetisierung" als eigener Schritt
+// NACH „Qualitätsprüfung" eingefügt – mit kleinem „bis TT.MM.JJJJ" (Fertig-Datum) als Unterzeile.
+if (!function_exists('kunde_auftrag_track')) {
+    function kunde_auftrag_track(array $a): array {
+        global $AUFSTEPS;
+        $ph = kunde_auftrag_phase($a); $cur = (int)$ph['idx']; $complete = ($a['status'] ?? '') === 'versendet';
+        $track = [];
+        foreach ($AUFSTEPS as $i => $lbl) {
+            $track[] = ['label'=>$lbl, 'date'=>$ph['dates'][$i] ?? null, 'sub'=>null,
+                        'done'=>($complete || $i < $cur), 'current'=>(!$complete && $i === $cur)];
+        }
+        if (!empty($a['kunde_id']) && !empty($a['energ_start']) && kunde_zeigt_energetisierung((int)$a['kunde_id'])) {
+            $stat = energ_status((string)$a['energ_start']); $fertig = energ_fertig_am((string)$a['energ_start']);
+            array_splice($track, 5, 0, [[
+                'label'   => 'Energetisierung',
+                'date'    => null,
+                'sub'     => $fertig ? 'bis ' . date('d.m.Y', strtotime((string)$fertig)) : null,
+                'done'    => ($stat === 'abgeschlossen'),
+                'current' => ($stat === 'laeuft'),
+            ]]);
+        }
+        return $track;
+    }
+}
 
 // Menüpunkte (nur freigeschaltete) + Gruppierung
 $L = ['start' => 'Übersicht'];
@@ -2743,11 +2768,10 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?= $aufBadge($a['status']) ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
     <ul class="bx-steps" style="margin-top:12px">
-      <?php foreach ($AUFSTEPS as $i => $lbl):
-          $cls = $i < $cur ? 'done' : ($i === $cur ? ($complete ? 'done' : 'current') : ''); ?>
+      <?php foreach (kunde_auftrag_track($a) as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : ''); ?>
         <li class="bx-step <?= $cls ?>">
           <span class="dot"><?= ($cls === 'done' || $cls === 'current') ? '&#10003;' : '' ?></span>
-          <span class="lbl"><?= h($lbl) ?></span>
+          <span class="lbl"><?= h($t['label']) ?><?php if (!empty($t['sub'])): ?><br><span class="muted" style="font-size:11px"><?= h($t['sub']) ?></span><?php endif; ?></span>
         </li>
       <?php endforeach; ?>
     </ul>
@@ -2767,12 +2791,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       // Feste Kunden-Phasen (wie v3) – KEINE internen Produktionsschritte. Identisch für Rohstoff-
       // und Fertigprodukt-Bestellung, verrät also nie einen Zukauf.
       $ph = kunde_auftrag_phase($a); $cur = $ph['idx'];
-      $track = [];
-      foreach ($AUFSTEPS as $i => $lbl) {
-          $done  = $complete || $i < $cur;
-          $isCur = !$complete && $i === $cur;
-          $track[] = ['label'=>$lbl, 'done'=>$done, 'current'=>$isCur, 'date'=>$ph['dates'][$i] ?? null];
-      }
+      $track = kunde_auftrag_track($a);   // inkl. „Energetisierung" (nur freigeschaltete Kunden)
     ?>
   <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:4px">
     <h1 style="margin:0"><?= h($a['nummer']) ?></h1>
@@ -2797,27 +2816,12 @@ portal_head('Kundenportal · ' . $k['firma']);
           <li class="bx-hstep <?= $cls ?>">
             <span class="dot"><?= ($t['done'] || $t['current']) ? '&#10003;' : '' ?></span>
             <span class="lbl"><?= h($t['label']) ?></span>
-            <span class="date"><?= $t['date'] ? h(fmt_zeit($t['date'], 'd.m.Y')) : '' ?></span>
+            <span class="date"><?= $t['date'] ? h(fmt_zeit($t['date'], 'd.m.Y')) : h($t['sub'] ?? '') ?></span>
           </li>
         <?php endforeach; ?>
       </ul>
     </div>
   </div>
-
-  <?php // Energetisierung – nur fuer freigeschaltete Kunden und nur wenn ein Startdatum gesetzt ist.
-        if (!empty($k['zeige_energetisierung']) && !empty($a['energ_start'])):
-            $eStat = energ_status((string)$a['energ_start']); $eRest = energ_rest_tage((string)$a['energ_start']); $eFertig = energ_fertig_am((string)$a['energ_start']); ?>
-  <div class="bx-panel">
-    <h2 style="margin:0 0 8px;font-size:16px">Energetisierung</h2>
-    <?php if ($eStat === 'laeuft'): ?>
-      <div><strong>Energetisierung läuft</strong> · noch <?= max(0, (int)$eRest) ?> Tage</div>
-      <div class="muted" style="font-size:13px;margin-top:4px">Voraussichtlich fertig am <?= h(date('d.m.Y', strtotime((string)$eFertig))) ?>.</div>
-    <?php elseif ($eStat === 'abgeschlossen'): ?>
-      <div><strong>Energetisierung abgeschlossen</strong></div>
-      <div class="muted" style="font-size:13px;margin-top:4px">Fertig am <?= h(date('d.m.Y', strtotime((string)$eFertig))) ?>.</div>
-    <?php endif; ?>
-  </div>
-  <?php endif; ?>
 
   <?php // Produktionsbericht – nur wenn das Team ihn fuer den Kunden freigegeben hat.
         $pbFrei = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND bericht_freigegeben_am IS NOT NULL ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
