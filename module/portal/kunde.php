@@ -2723,6 +2723,18 @@ portal_head('Kundenportal · ' . $k['firma']);
     // Phase je Auftrag EINMAL bestimmen (fuer Sortierung + Anzeige, statt sie im Loop erneut zu berechnen).
     $phaseCache = [];
     foreach ($aktBest as $a) $phaseCache[(int)$a['id']] = kunde_auftrag_phase($a);
+    // Zahlstatus je Auftrag vorladen (eine Abfrage) – für den „bezahlt/offen"-Badge in der Liste.
+    $zahlMapBest = [];
+    $bestIds = array_map(fn($a) => (int)$a['id'], $aktBest);
+    if ($bestIds) foreach (all("SELECT b.auftrag_id, b.brutto, b.status, COALESCE(SUM(z.betrag),0) AS bezahlt
+                                FROM beleg b LEFT JOIN zahlung z ON z.beleg_id=b.id
+                                WHERE b.typ='rechnung' AND b.auftrag_id IN (" . $inList($bestIds) . ")
+                                GROUP BY b.id ORDER BY b.id") as $r) {
+        $brutto = (float)$r['brutto']; $bez = (float)$r['bezahlt'];
+        $st = ($r['status'] ?? '') === 'storniert' ? 'storniert'
+            : ($bez <= 0.005 ? 'offen' : (round($brutto - $bez, 2) > 0.005 ? 'teilbezahlt' : 'bezahlt'));
+        $zahlMapBest[(int)$r['auftrag_id']] = $st;   // spätere (neuere) Rechnung überschreibt
+    }
     // Sortierung: standardmaessig nach FORTSCHRITT (am weitesten zuerst -> was wird als naechstes fertig),
     // alternativ neueste bzw. aelteste zuerst. Gilt fuer die "In Bearbeitung"-Liste; Abgeschlossene bleiben unberuehrt.
     $bsort = in_array($_GET['bsort'] ?? '', ['fortschritt', 'neu', 'alt'], true) ? (string)$_GET['bsort'] : 'fortschritt';
@@ -2768,7 +2780,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:12px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
       <div class="bx-row" style="gap:10px;align-items:center">
         <span class="muted" style="font-size:12px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : 'Schritt ' . ($cur + 1) . '/' . count($AUFSTEPS) . ': ' . h($AUFSTEPS[$cur]) ?></span>
-        <?= $aufBadge($a['status']) ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
+        <?= $aufBadge($a['status']) ?><?php if (!empty($zahlMapBest[(int)$a['id']])): ?> <?= $reBadge($zahlMapBest[(int)$a['id']]) ?><?php endif; ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
     <ul class="bx-steps" style="margin-top:12px">
       <?php foreach (kunde_auftrag_track($a) as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : '');
@@ -2791,6 +2803,9 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php else:
       $complete = $a['status'] === 'versendet';
       $re  = one("SELECT * FROM beleg WHERE auftrag_id=? AND typ='rechnung' ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
+      // Abgeleiteter Zahlstatus (aus den Zahlungseingängen) + die einzelnen Zahlungen (wann/wie viel).
+      $zs = $re ? beleg_zahlstatus($re) : null;
+      $zahlungen = $re ? zahlungen_fuer((int)$re['id']) : [];
       $vName = $a['verpackung_id'] ? scalar("SELECT name FROM item WHERE id=?", [(int)$a['verpackung_id']]) : '';
       // Feste Kunden-Phasen (wie v3) – KEINE internen Produktionsschritte. Identisch für Rohstoff-
       // und Fertigprodukt-Bestellung, verrät also nie einen Zukauf.
@@ -2808,7 +2823,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-panel" style="margin:0"><div class="muted">Status</div><div style="margin-top:6px"><?= $aufBadge($a['status']) ?><?php if (!empty($a['status_datum'])): ?> <span class="muted" style="font-size:13px">seit <?= h(date('d.m.Y', strtotime($a['status_datum']))) ?></span><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Menge</div><div style="margin-top:6px"><?= (int)$a['menge'] ?> Packungen<?php if ((int)$a['stueck']): ?> &middot; <?= (int)$a['stueck'] ?> je Packung<?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Gesamtbetrag</div><div style="margin-top:6px"><strong><?= $eur($re ? $re['brutto'] : $a['gesamt_netto']) ?></strong><?php if ($re): ?> <span class="muted">brutto</span><?php endif; ?></div></div>
-    <div class="bx-panel" style="margin:0"><div class="muted">Zahlung</div><div style="margin-top:6px"><?= $re ? $reBadge($re['status']) : '<span class="muted">–</span>' ?></div></div>
+    <div class="bx-panel" style="margin:0"><div class="muted">Zahlung</div><div style="margin-top:6px"><?= $re ? $reBadge($zs['status']) : '<span class="muted">–</span>' ?><?php if ($re && $zs['status'] === 'teilbezahlt'): ?> <span class="muted" style="font-size:12px">offen <?= $eur($zs['rest']) ?></span><?php endif; ?></div></div>
   </div>
 
   <!-- Fortschritt mit Datum (horizontal, wie Ladebalken) -->
@@ -2869,7 +2884,13 @@ portal_head('Kundenportal · ' . $k['firma']);
           <tr><td class="muted">Netto</td><td class="bx-num"><?= $eur($re['netto']) ?></td></tr>
           <tr><td class="muted">USt (<?= rtrim(rtrim(number_format((float)$re['ust_prozent'],2,',','.'),'0'),',') ?> %)</td><td class="bx-num"><?= $eur($re['ust_betrag']) ?></td></tr>
           <tr><td class="muted">Brutto</td><td class="bx-num"><strong><?= $eur($re['brutto']) ?></strong></td></tr>
-          <tr><td class="muted">Zahlungsstatus</td><td><?= $reBadge($re['status']) ?></td></tr>
+          <tr><td class="muted">Zahlungsstatus</td><td><?= $reBadge($zs['status']) ?></td></tr>
+          <?php foreach ($zahlungen as $z): ?>
+          <tr><td class="muted">Bezahlt am <?= $z['datum'] ? h(fmt_zeit($z['datum'], 'd.m.Y')) : h(fmt_zeit($z['angelegt'], 'd.m.Y')) ?></td><td class="bx-num"><?= $eur($z['betrag']) ?></td></tr>
+          <?php endforeach; ?>
+          <?php if ($zs['status'] === 'teilbezahlt' && $zs['rest'] > 0.005): ?>
+          <tr><td class="muted">Noch offen</td><td class="bx-num"><strong><?= $eur($zs['rest']) ?></strong></td></tr>
+          <?php endif; ?>
         </tbody>
       </table></div>
     <?php endif; ?>
