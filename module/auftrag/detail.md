@@ -29,4 +29,8 @@ löscht die Auftragsbestätigung samt Produktionsauftrag/Schritten und (unbezahl
 neu zu senden. Blockiert bei bezahlter Rechnung oder bereits versendetem Auftrag.
 
 ## Laboranalyse / Labortest (je Bestellung/Charge)
+**Energetisierung (nur freigeschalteter Kunde):** Panel erscheint, wenn `kunde_zeigt_energetisierung(kunde_id)` wahr ist. **Startdatum setzen/löschen** (`aktion=energ_start`, `auftrag.energ_start`); Status **läuft/abgeschlossen** + „fertig am" werden aus Start + `energ_tage()` abgeleitet (nichts persistiert). Der Kunde sieht dieselbe Info im Portal (`module/portal/kunde.php`).
+
+**Wareneingänge zu diesem Auftrag:** Liste der direkt gebuchten Chargen (`charge.auftrag_id`) mit Status „angekommen · frei/Quarantäne" – zeigt zugekaufte Fremdproduktions-Bulkware auch **ohne** System-Bestellung an.
+
 Panel „Laboranalyse / Labortest" (zeigt ggf. die Fertigware-Charge). Admin lädt hier den Labortest/das CoA für **genau diese Bestellung** hoch → `dokument` (`objekt_typ='auftrag'`, `typ='analyse'`, optional `dok_datum`). „im Kundenportal sichtbar" = `kunde_sichtbar=1` → erscheint im Kunden-Reiter „Labortest". Aktionen: `analyse_upload`, `analyse_toggle`, `analyse_del`. Produkt-weite Analysen laufen über `?p=laboranalysen`.

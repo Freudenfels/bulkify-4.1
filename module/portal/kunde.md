@@ -185,3 +185,5 @@ Im Bestell-Detail (`v=bestellung`, Panel „Dokumente") werden für den Kunden f
 hochgeladene Dokumente gezeigt (`dokument` objekt_typ='auftrag', typ rechnung/angebot/ab/sonstiges,
 `kunde_sichtbar=1`). Auslieferung `v=auftrag_dok&id=<dok>` (ownership-geprüft). Upload erfolgt im temporären
 Admin-Reiter `?p=alt_rechnungen` (originale Rechnungen alter Aufträge). Siehe `module/system/alt_rechnungen.md`.
+
+**Energetisierung (aus v3):** Im Auftragsdetail (`view=bestellung`) erscheint – **nur** wenn `kunden.zeige_energetisierung=1` und `auftrag.energ_start` gesetzt – ein Panel „Energetisierung läuft · noch X Tage" bzw. „abgeschlossen" + Fertig-Datum. Für andere Kunden unsichtbar. Status aus `core/schema.php` (`energ_status()`/`energ_rest_tage()`/`energ_fertig_am()`, Dauer `energ_tage()`). Die feste Phasen-Timeline (`$AUFSTEPS`) bleibt unverändert; ein gebuchter Wareneingang am Auftrag zählt dort als „Rohstoff bestellt".
