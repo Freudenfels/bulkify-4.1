@@ -14,9 +14,10 @@
 function pwa_head(): string {
     return '<link rel="manifest" href="/manifest.webmanifest">'
          . '<meta name="theme-color" content="#10210F">'
-         . '<link rel="icon" type="image/png" sizes="192x192" href="/assets/app-icon-192.png">'
-         . '<link rel="icon" type="image/png" sizes="512x512" href="/assets/app-icon-512.png">'
-         . '<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">'
+         . '<link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml">'
+         . '<link rel="icon" href="/assets/icons/favicon.ico" sizes="any">'
+         . '<link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png">'
+         . '<link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">'
          . '<meta name="apple-mobile-web-app-capable" content="yes">'
          . '<meta name="apple-mobile-web-app-title" content="bulkify">'
          . '<meta name="mobile-web-app-capable" content="yes">';

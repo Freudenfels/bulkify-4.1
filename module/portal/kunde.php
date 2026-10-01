@@ -623,7 +623,7 @@ function portal_head(string $titel): void {
     echo "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\">";
     echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
     echo "<title>" . h($titel) . "</title><link rel=\"stylesheet\" href=\"assets/app.css?v=" . (int) @filemtime(BX_ROOT . '/public/assets/app.css') . "\">";
-    echo '<link rel="icon" type="image/png" sizes="192x192" href="/assets/app-icon-192.png"><link rel="icon" type="image/png" sizes="512x512" href="/assets/app-icon-512.png"><link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">';
+    echo '<link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/icons/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png"><link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">';
     echo "<style>"
        . ".pt-badge{display:inline-block;background:var(--lime);color:#10210f;border-radius:10px;padding:0 7px;font-size:12px;font-weight:600}"
        . ".pt-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0;max-width:760px}"

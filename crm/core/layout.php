@@ -30,8 +30,9 @@ function kopf(string $titel, string $aktiv = ''): void {
        . '<title>' . h($titel !== '' ? $titel . ' – ' . BX_MARKE . ' ' . BX_TITEL : BX_MARKE . ' ' . BX_TITEL) . '</title>'
        // Erst das Stylesheet des Dashboards, danach die wenigen Ergaenzungen des CRM.
        . '<link rel="stylesheet" href="/assets/app.css">'
-       . '<link rel="icon" type="image/png" sizes="192x192" href="/assets/app-icon-192.png">'
-       . '<link rel="icon" type="image/png" sizes="512x512" href="/assets/app-icon-512.png">'
+       . '<link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml">'
+       . '<link rel="icon" href="/assets/icons/favicon.ico" sizes="any">'
+       . '<link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png">'
        . '<link rel="stylesheet" href="assets/crm.css">'
        . '<link rel="manifest" href="manifest.webmanifest">'
        . '<meta name="theme-color" content="#10210F">'
