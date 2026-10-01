@@ -18,6 +18,9 @@ $routen = [
     'login'          => 'auth/login.php',
     // Grosses Lager
     'bestand'        => 'bestand/liste.php',
+    'eingang'        => 'bestand/eingang.php',
+    'ausgang'        => 'bestand/ausgang.php',
+    'bewegungen'     => 'bestand/bewegungen.php',
     'charge'         => 'bestand/charge.php',
     'dok'            => 'bestand/dok.php',
     'finden'         => 'leiste/finden.php',

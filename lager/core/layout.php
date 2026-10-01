@@ -9,7 +9,8 @@ require_once __DIR__ . '/auth.php';
 
 function lg_nav(): array {
     $nav = [
-        'Großes Lager' => ['bestand' => 'Bestand', 'finden' => 'Finden', 'kisten' => 'Kisten', 'leisten' => 'Blinker'],
+        'Warenlager'  => ['bestand' => 'Bestand', 'eingang' => 'Wareneingang', 'ausgang' => 'Warenausgang',
+                          'finden' => 'Finden', 'kisten' => 'Kisten', 'leisten' => 'Blinker', 'bewegungen' => 'Bewegungen'],
         'Fulfillment'  => ['plaetze' => 'Feste Plätze', 'zuordnen' => 'Blinker zuordnen'],
     ];
     if (lg_ist_admin()) $nav['System'] = ['sender' => 'Sender und Brücke'];

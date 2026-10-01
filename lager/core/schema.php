@@ -126,7 +126,34 @@ function lg_schema(): void {
         wert       TEXT NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    // --- Bewegungs-Historie (Warenlager-Manager): was kam rein, was ging raus. -----------------
+    // Eigene Lager-Historie (lg_), unabhaengig vom Dashboard. item_name wird als Momentaufnahme
+    // mitgespeichert, damit die Liste auch ohne Join lesbar bleibt (Charge kann spaeter leer/weg sein).
+    q("CREATE TABLE IF NOT EXISTS lg_bewegung (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        charge_id   INT          NULL,
+        item_name   VARCHAR(190) NULL,
+        typ         VARCHAR(10)  NOT NULL,          -- 'ein' | 'aus'
+        menge       DECIMAL(14,3) NOT NULL DEFAULT 0,
+        einheit     VARCHAR(20)  NULL,
+        grund       VARCHAR(190) NULL,
+        benutzer_id INT          NULL,
+        angelegt    DATETIME     NOT NULL,
+        KEY zeit (angelegt),
+        KEY charge (charge_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     lg_meta_schreiben('schema_build', $build);
+}
+
+// Eine Lagerbewegung protokollieren (Wareneingang/-ausgang aus dem Lager-Programm).
+function lg_bewegung_log(?int $charge_id, string $typ, float $menge, ?string $einheit, string $item_name, string $grund = ''): void {
+    q("INSERT INTO lg_bewegung (charge_id,item_name,typ,menge,einheit,grund,benutzer_id,angelegt) VALUES (?,?,?,?,?,?,?,?)",
+      [$charge_id ?: null, $item_name ?: null, $typ, $menge, $einheit ?: null, $grund ?: null,
+       (function_exists('lg_uid') ? (lg_uid() ?: null) : null), jetzt_utc()]);
+}
+function lg_bewegungen(int $limit = 40): array {
+    return all("SELECT * FROM lg_bewegung ORDER BY id DESC LIMIT " . max(1, (int)$limit));
 }
 
 function lg_meta_lesen(string $schluessel, string $standard = ''): string {

@@ -3,7 +3,7 @@
 > Eigener Bereich, gleiches Repo, nach dem Muster des CRM. Wer am Dashboard arbeitet, fasst diesen Ordner normalerweise nicht an – und umgekehrt.
 
 ## Was ist das?
-Ein drittes Programm neben Dashboard und CRM. Es verwaltet die **Lagerplätze** und steuert die **Blinker** (Pick-to-Light, 100 Blinker von Jinzhishi/金之识). Zielgerät ist ein Tablet oder ein PC mit Handscanner am Regal.
+Ein drittes Programm neben Dashboard und CRM – der **Warenlager-Manager**: **was kommt rein (Wareneingang), was geht raus (Warenausgang), wo liegt es (Bestand/Einlagern/Finden)**. Dazu steuert es die **Blinker** (Pick-to-Light, 100 Blinker von Jinzhishi/金之识) und verwaltet **Lagerplätze/Kisten**. Zielgerät ist ein Tablet oder ein PC mit Handscanner am Regal; bedienbar auch vom Admin. Siehe Memory „Lager Warenlager-Manager".
 
 Warum getrennt: Das Lager soll sich ändern lassen, ohne das Dashboard anzufassen, und beim Umstieg auf v5 stehen bleiben. Nur `core/erp.php` wird dann angepasst.
 
@@ -22,7 +22,7 @@ Erreichbar unter **`/lager/`**, also `beta.bulkify.pro/lager/`. Im Dashboard-Men
 - Dasselbe Aussehen (`/assets/app.css`), dazu `public/lager/assets/lager.css` mit Klassen `lg-...`.
 
 ## Die wichtigste Regel: eine einzige Naht
-**Alle** Zugriffe auf Dashboard-Tabellen stehen ausschließlich in **`lager/core/erp.php`**. Eigene Daten liegen in Tabellen mit Präfix `lg_`. Stand heute wird ins Dashboard nichts geschrieben.
+**Alle** Zugriffe auf Dashboard-Tabellen stehen ausschließlich in **`lager/core/erp.php`**. Eigene Daten liegen in Tabellen mit Präfix `lg_`. Seit dem Warenlager-Manager wird dort auch **geschrieben** – aber nur in genau benannten Funktionen: `erp_wareneingang_buchen()` (legt eine `charge` an), `erp_charge_entnehmen()` (bucht Bestand ab), `erp_bedarf_bump()` (macht den Dashboard-Bedarfs-Cache ungültig). Sie spiegeln die Dashboard-Logik (`wareneingang_buchen`/Quarantäne). Die Lager-eigene Bewegungs-Historie liegt in `lg_bewegung`.
 
 ## Wie ein Befehl zur Blinker kommt
 ```
@@ -39,8 +39,11 @@ Die zwei Räume arbeiten unterschiedlich, deshalb gibt es zwei Modelle:
 - **Fulfillment (feste Plätze):** Blinker am festen **Platz** (`lg_platz`), Pick-and-Pack. (Im Aufbau.)
 
 ## Was drin ist
-**Großes Lager**
-- **Bestand** (`?p=bestand`): alle eigenen Chargen nach Kategorie, MHD-Ampel, anklickbar → Charge-Detail (`?p=charge`, Produkt/Lieferung/Dokumente/weitere Chargen).
+**Warenlager**
+- **Wareneingang** (`?p=eingang`): Artikel + Menge buchen → Charge wird angelegt → direkt zum Einlagern (Blinker/Kiste). Siehe [module/bestand/eingang.md](module/bestand/eingang.md).
+- **Warenausgang** (`?p=ausgang`): Charge suchen, Menge abbuchen; leer → Blinker löst sich automatisch. Siehe [module/bestand/ausgang.md](module/bestand/ausgang.md).
+- **Bewegungen** (`?p=bewegungen`): Historie rein/raus aus `lg_bewegung`. Siehe [module/bestand/bewegungen.md](module/bestand/bewegungen.md).
+- **Bestand** (`?p=bestand`): alle eigenen Chargen nach Kategorie, MHD-Ampel, Spalte **Ort** (Kiste oder Blinker), anklickbar → Charge-Detail (`?p=charge`, Produkt/Lieferung/Dokumente/weitere Chargen).
 - **Finden** (`?p=finden`): Such-Popup (Tippen oder Sprache), Treffer antippen lässt den Blinker blinken. Liegt die Charge in einer Kiste, blinkt die Kiste (Ort-Hinweis „Kiste X, Fach Y“).
 - **Kisten** (`?p=kisten`): ein Behälter mit einem Blinker fasst viele Chargen – nicht jedes Kleinteil braucht einen Blinker. Siehe `core/kiste.php`.
 - **Blinker** (`?p=leisten`): alle Blinker mit Nutzung und Akku-Ampel; Warnbalken → **Batterie prüfen** (`?p=batterie`).

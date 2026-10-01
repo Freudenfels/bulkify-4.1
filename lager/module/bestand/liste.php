@@ -35,7 +35,7 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
   <table class="bx-table" id="lg-bestand">
     <thead><tr>
       <th>Rohstoff / Produkt</th><?= $kat === '' ? '<th>Kategorie</th>' : '' ?>
-      <th>Charge</th><th>MHD</th><th>Bestand</th><th>Status</th><th>Blinker</th>
+      <th>Charge</th><th>MHD</th><th>Bestand</th><th>Status</th><th>Ort</th>
     </tr></thead>
     <tbody>
     <?php foreach ($zeilen as $z): ?>
@@ -46,7 +46,8 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
         <td><?= mhd_html($z['mhd']) ?></td>
         <td><?= h(menge_txt($z['menge_verfuegbar'])) ?> <?= h((string)$z['einheit']) ?></td>
         <td><?= status_badge($z['status']) ?></td>
-        <td class="lg-code"><?php $bl = leiste_fuer_charge((int)$z['id']); ?><?= $bl ? h((string)$bl['code']) : '<span class="muted">–</span>' ?></td>
+        <td><?php $ik = kiste_fuer_charge((int)$z['id']); $bl = leiste_fuer_charge((int)$z['id']);
+          if ($ik): ?>Kiste <?= h((string)$ik['kiste_name']) ?><?php elseif ($bl): ?><span class="lg-code"><?= h((string)$bl['code']) ?></span><?php else: ?><span class="muted">–</span><?php endif; ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>

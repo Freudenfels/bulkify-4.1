@@ -178,3 +178,92 @@ function erp_kategorie_label(array $c): string {
         default => (string)($c['kategorie'] ?? ''),
     };
 }
+
+// ==============================================================================================
+// SCHREIBEND ins Dashboard (Warenlager-Manager). Bewusst HIER, weil es Dashboard-Tabellen anfasst.
+// Wareneingang legt eine Charge an, Warenausgang bucht Bestand ab. Beides spiegelt die Dashboard-
+// Logik (wareneingang_buchen / Quarantaene-Regel). Eigene Bewegungs-Historie steht in lg_bewegung.
+// ==============================================================================================
+
+// Dashboard-Bedarfs-Cache ungueltig machen (wie bedarf_bump() im Dashboard), damit Einkauf/Bedarf
+// nach einer Lager-Buchung sofort stimmen. app_meta ist eine Dashboard-Tabelle -> nur hier.
+function erp_bedarf_bump(): void {
+    if (!tabelle_da('app_meta')) return;
+    $v = (int) scalar("SELECT v FROM app_meta WHERE k='bedarf_version'");
+    q("INSERT INTO app_meta (k,v) VALUES ('bedarf_version', ?) ON DUPLICATE KEY UPDATE v=VALUES(v)", [(string)($v + 1)]);
+}
+
+// Buchbare Artikel fuer den Wareneingang (Rohstoff/Verpackung/Verbrauch/Fertigware), gesperrte raus.
+function erp_items_eingang(): array {
+    if (!tabelle_da('item')) return [];
+    $hatGesperrt = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME='gesperrt'");
+    $w = $hatGesperrt ? ' AND gesperrt=0' : '';
+    return all("SELECT id, name, kategorie, einheit, form FROM item
+                WHERE kategorie IN ('rohstoff','verpackung','verbrauch','fertig','verkaufsfertig')$w
+                ORDER BY name");
+}
+
+function erp_lieferanten(): array {
+    if (!tabelle_da('lieferanten')) return [];
+    return all("SELECT id, firma FROM lieferanten ORDER BY firma");
+}
+
+// Ein Item knapp (Name/Einheit/Kategorie/Form) – fuer Anzeige nach der Auswahl.
+function erp_item_basis(int $id): ?array {
+    if (!tabelle_da('item')) return null;
+    return one("SELECT id, name, einheit, kategorie, form FROM item WHERE id=?", [$id]);
+}
+
+// Wareneingang buchen: legt eine Charge an (oder fuellt eine vorab aus einer CoA angelegte Charge).
+// Rohstoff/Fertigware -> Quarantaene, sonst sofort frei. Rueckgabe: neue/aktualisierte charge.id oder null.
+function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?string $mhd,
+                                 ?int $lieferant_id, string $notiz = ''): ?int {
+    if (!tabelle_da('charge') || !tabelle_da('item')) return null;
+    $it = one("SELECT kategorie, einheit FROM item WHERE id=?", [$item_id]);
+    if (!$it || $menge <= 0) return null;
+    $status = in_array((string)$it['kategorie'], ['rohstoff', 'fertig', 'verkaufsfertig'], true) ? 'quarantaene' : 'frei';
+    $charge_nr = trim($charge_nr);
+    $lief = (tabelle_da('lieferanten') && $lieferant_id) ? $lieferant_id : null;
+
+    // Vorab aus CoA angelegte Charge (gleiche Nummer, noch keine Ware) auffuellen statt Dublette.
+    if ($charge_nr !== '') {
+        $vorab = one("SELECT id, notiz FROM charge WHERE item_id=? AND wareneingang IS NULL AND menge<=0.0001 AND charge_nr=? ORDER BY id LIMIT 1",
+                     [$item_id, $charge_nr]);
+        if ($vorab) {
+            $alt = trim((string)$vorab['notiz']);
+            q("UPDATE charge SET menge=?, menge_verfuegbar=?, einheit=?, lieferant_id=COALESCE(?,lieferant_id),
+                      mhd=COALESCE(?,mhd), wareneingang=CURDATE(), status=?, notiz=? WHERE id=?",
+              [$menge, $menge, $it['einheit'], $lief, $mhd ?: null, $status,
+               trim(($alt !== '' ? $alt . ' | ' : '') . ($notiz ?: 'Ware eingegangen, mit CoA-Charge abgeglichen')),
+               (int)$vorab['id']]);
+            erp_bedarf_bump();
+            return (int)$vorab['id'];
+        }
+    }
+    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,angelegt)
+       VALUES (?,?,?,?,?,?,?,CURDATE(),?,?,?)",
+      [$charge_nr ?: null, $item_id, $menge, $menge, $it['einheit'], $lief, $mhd ?: null, $status, $notiz ?: null, jetzt_utc()]);
+    $neu = (int) insert_id();
+    erp_bedarf_bump();
+    return $neu;
+}
+
+// Warenausgang: Menge von einer Charge abbuchen. Leer -> Status 'leer'. Fremdlager-Chargen sind tabu.
+// Rueckgabe: ['ok'=>bool, 'meldung'=>?, 'leer'=>bool, 'rest'=>float, 'item_name'=>?, 'einheit'=>?].
+function erp_charge_entnehmen(int $charge_id, float $menge): array {
+    if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Chargen vorhanden.'];
+    $c = one("SELECT c.*, i.name AS item_name FROM charge c JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
+    if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
+    if (!empty($c['fremd_kunde_id'])) return ['ok' => false, 'meldung' => 'Fremdlager-Charge – Entnahme läuft über das Fulfillment.'];
+    if ($menge <= 0) return ['ok' => false, 'meldung' => 'Bitte eine Menge größer 0 angeben.'];
+    $verf = (float)$c['menge_verfuegbar'];
+    if ($menge > $verf + 1e-9) return ['ok' => false, 'meldung' => 'Nur noch ' . menge_txt($verf) . ' ' . (string)$c['einheit'] . ' verfügbar.'];
+    $rest = $verf - $menge;
+    $leer = $rest <= 1e-9;
+    q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?",
+      [$leer ? 0 : $rest, $leer ? 'leer' : (string)$c['status'], $charge_id]);
+    erp_bedarf_bump();
+    return ['ok' => true, 'meldung' => '', 'leer' => $leer, 'rest' => $leer ? 0.0 : $rest,
+            'item_name' => (string)$c['item_name'], 'einheit' => (string)$c['einheit']];
+}
