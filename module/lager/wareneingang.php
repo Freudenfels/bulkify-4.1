@@ -86,8 +86,8 @@ if (isset($_GET['zkok']))   echo '<div class="bx-panel badge-ok" style="padding:
 if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">Zukauf nicht gebucht – Auftrag ohne Rezeptur/Produkt oder Menge fehlt.</div>';
 ?>
 <form method="post" class="bx-form">
-  <input type="hidden" name="aktion" value="buchen">
-  <div class="bx-panel"><div class="bx-grid">
+  <input type="hidden" name="aktion" id="weAktion" value="buchen">
+  <div class="bx-panel">
     <style>
       .bx-combo{position:relative}
       .bx-combo-list{position:absolute;left:0;right:0;top:100%;z-index:30;max-height:300px;overflow:auto;
@@ -97,40 +97,60 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
       .bx-combo-list .opt .muted{font-size:12px}
       .bx-combo-empty{padding:8px 12px;color:var(--muted);font-size:13px}
     </style>
-    <div class="bx-field bx-combo"><label>Artikel</label>
-      <input type="text" id="weArtSuche" autocomplete="off" placeholder="Artikel suchen oder wählen…" required aria-expanded="false">
-      <input type="hidden" name="item_id" id="weArtId">
-      <div id="weArtList" class="bx-combo-list" hidden></div>
+    <!-- 1) Typ zuerst – er steuert, was danach eingegeben wird -->
+    <div class="bx-field" style="max-width:360px"><label>Was kommt rein? (Typ)</label>
+      <select id="weTyp">
+        <option value="rohstoff">Rohstoff</option>
+        <option value="verpackung">Verpackung / Etikett</option>
+        <option value="fertig">Fertigware (Bulk) – vorhandener Artikel</option>
+        <option value="zukauf">Fertigware zum Auftrag (Fremdproduktion, Kapseln vom Lieferant)</option>
+      </select>
     </div>
-    <div class="bx-field"><label>Menge</label>
-      <div class="bx-row" style="gap:8px;align-items:center;margin:0">
-        <input type="number" step="0.001" name="menge" required style="flex:1;min-width:0">
-        <span id="weEinheit" style="min-width:44px;font-weight:600;color:var(--muted)">–</span>
+    <div class="bx-grid">
+      <!-- 2a) Artikel-Feld (Rohstoff/Verpackung/Fertigware) -->
+      <div class="bx-field bx-combo" id="weBlockArt"><label>Artikel</label>
+        <input type="text" id="weArtSuche" autocomplete="off" placeholder="Artikel suchen oder wählen…" required aria-expanded="false">
+        <input type="hidden" name="item_id" id="weArtId">
+        <div id="weArtList" class="bx-combo-list" hidden></div>
       </div>
-      <div class="muted" id="weEinheitHint" style="font-size:12px;margin-top:4px">Erst Artikel wählen – die Einheit erscheint hier.</div>
+      <!-- 2b) Auftrag (nur Zukauf) – Fertigware-Artikel der Rezeptur wird automatisch angelegt -->
+      <div class="bx-field" id="weBlockAuf" style="display:none"><label>Auftrag (Fremdproduktion)</label>
+        <select name="auftrag_id" id="weZukaufAuf" disabled>
+          <option value="">– Auftrag wählen –</option>
+          <?php foreach ($zukaufAuftraege as $a): ?><option value="<?= (int)$a['id'] ?>"><?= h($a['nummer'] . ' · ' . $a['produkt'] . ($a['firma'] ? ' · ' . $a['firma'] : '')) ?></option><?php endforeach; ?>
+        </select>
+        <div class="muted" style="font-size:12px;margin-top:4px">Der Fertigware-Artikel der Rezeptur wird automatisch angelegt und die Charge dem Auftrag zugeordnet.</div>
+      </div>
+      <div class="bx-field"><label>Menge</label>
+        <div class="bx-row" style="gap:8px;align-items:center;margin:0">
+          <input type="number" step="0.001" name="menge" required style="flex:1;min-width:0">
+          <span id="weEinheit" style="min-width:44px;font-weight:600;color:var(--muted)">–</span>
+        </div>
+        <div class="muted" id="weEinheitHint" style="font-size:12px;margin-top:4px">Erst Artikel wählen – die Einheit erscheint hier.</div>
+      </div>
+      <div class="bx-field"><label>Charge (Lieferant) <?= bx_hint('Chargennummer laut Lieferant/CoA') ?></label><input type="text" name="charge_nr"></div>
+      <div class="bx-field"><label>MHD</label><input type="date" name="mhd"></div>
+      <div class="bx-field"><label>Lieferant</label>
+        <select name="lieferant_id">
+          <option value="">– keiner –</option>
+          <?php foreach ($lieferanten as $lf): ?><option value="<?= $lf['id'] ?>"><?= h($lf['firma']) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+      <!-- 2c) „Für Auftrag" (optional) – nur bei Rohstoff/Verpackung/Fertigware -->
+      <div class="bx-field" id="weBlockFuerAuf"><label>Für Auftrag <?= bx_hint('Optional: gehört diese Lieferung zu einem Kundenauftrag? Dann wird die Charge dem Auftrag zugeordnet. Sonst „Lager / allgemein".') ?></label>
+        <select name="auftrag_id" id="weNormalAuf">
+          <option value="">Lager / allgemein</option>
+          <?php foreach ($offeneAuftraege as $a): ?><option value="<?= (int)$a['id'] ?>"><?= h($a['nummer'] . ($a['produkt'] ? ' · ' . $a['produkt'] : '') . ($a['firma'] ? ' · ' . $a['firma'] : '')) ?></option><?php endforeach; ?>
+        </select>
+      </div>
     </div>
-    <div class="bx-field"><label>Charge (Lieferant) <?= bx_hint('Chargennummer laut Lieferant/CoA') ?></label><input type="text" name="charge_nr"></div>
-    <div class="bx-field"><label>MHD</label><input type="date" name="mhd"></div>
-    <div class="bx-field"><label>Lieferant</label>
-      <select name="lieferant_id">
-        <option value="">– keiner –</option>
-        <?php foreach ($lieferanten as $lf): ?><option value="<?= $lf['id'] ?>"><?= h($lf['firma']) ?></option><?php endforeach; ?>
-      </select>
+    <div class="bx-field"><label>Tracking-Code(s) Paket / Palette <?= bx_hint('Barcode/Sendungsnummer vom Paket- oder Palettenetikett scannen. Mehrere Pakete: einfach nacheinander scannen – jeder Scan landet automatisch in einer eigenen Zeile.') ?></label>
+      <textarea name="tracking" id="weTracking" rows="2" placeholder="Etikett scannen … (je Paket eine Zeile)" style="font-variant-numeric:tabular-nums"></textarea>
+      <div class="muted" id="weTrackCount" style="font-size:12px;margin-top:4px"></div>
     </div>
-    <div class="bx-field"><label>Für Auftrag <?= bx_hint('Optional: gehört diese Lieferung zu einem Kundenauftrag? Dann wird die Charge dem Auftrag zugeordnet. Sonst „Lager / allgemein".') ?></label>
-      <select name="auftrag_id">
-        <option value="">Lager / allgemein</option>
-        <?php foreach ($offeneAuftraege as $a): ?><option value="<?= (int)$a['id'] ?>"><?= h($a['nummer'] . ($a['produkt'] ? ' · ' . $a['produkt'] : '') . ($a['firma'] ? ' · ' . $a['firma'] : '')) ?></option><?php endforeach; ?>
-      </select>
-    </div>
-  </div>
-  <div class="bx-field"><label>Tracking-Code(s) Paket / Palette <?= bx_hint('Barcode/Sendungsnummer vom Paket- oder Palettenetikett scannen. Mehrere Pakete: einfach nacheinander scannen – jeder Scan landet automatisch in einer eigenen Zeile.') ?></label>
-    <textarea name="tracking" id="weTracking" rows="2" placeholder="Etikett scannen … (je Paket eine Zeile)" style="font-variant-numeric:tabular-nums"></textarea>
-    <div class="muted" id="weTrackCount" style="font-size:12px;margin-top:4px"></div>
-  </div>
-  <div class="bx-field"><label>Notiz</label><input type="text" name="notiz"></div>
-  <div class="muted" style="margin-bottom:8px">Rohstoffe gehen zunächst in <strong>Quarantäne</strong> und müssen unten freigegeben werden. Verpackungen sind sofort frei.</div>
-  <button class="btn btn-primary" type="submit">Wareneingang buchen</button>
+    <div class="bx-field"><label>Notiz</label><input type="text" name="notiz"></div>
+    <div class="muted" style="margin-bottom:8px">Rohstoffe und Fertigware gehen zunächst in <strong>Quarantäne</strong> und müssen unten freigegeben werden. Verpackungen sind sofort frei.</div>
+    <button class="btn btn-primary" type="submit">Wareneingang buchen</button>
   </div>
 </form>
 <script>
@@ -139,11 +159,11 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
   var box=document.getElementById('weArtSuche'), hid=document.getElementById('weArtId'), list=document.getElementById('weArtList');
   if(!box||!hid||!list) return;
   var katLbl={rohstoff:'Rohstoff',verpackung:'Verpackung',fertig:'Fertigware',verkaufsfertig:'Verkaufsfertig'};
-  var hl=-1, shown=[];
+  var hl=-1, shown=[], curKat='rohstoff';   // aktive Typ-Kategorie fuers Filtern
   function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function render(q){
     q=(q||'').trim().toLowerCase();
-    shown = items.filter(function(it){ return !q || it.n.toLowerCase().indexOf(q)>=0; }).slice(0,50);
+    shown = items.filter(function(it){ return (!curKat || it.k===curKat) && (!q || it.n.toLowerCase().indexOf(q)>=0); }).slice(0,50);
     if(!shown.length){ list.innerHTML='<div class="bx-combo-empty">Kein Artikel gefunden.</div>'; }
     else list.innerHTML = shown.map(function(it,i){
       return '<div class="opt" data-i="'+i+'">'+esc(it.n)+' <span class="muted">('+esc(it.e||'')+(it.k&&katLbl[it.k]?' · '+katLbl[it.k]:'')+')</span></div>';
@@ -169,45 +189,43 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
   });
   list.addEventListener('mousedown', function(e){ var o=e.target.closest('.opt'); if(o){ e.preventDefault(); choose(+o.dataset.i); } });
   document.addEventListener('click', function(e){ if(!e.target.closest('#weArtSuche')&&!e.target.closest('#weArtList')) close(); });
+
+  // ---- Typ-Steuerung: Typ zuerst -> passende Eingabe (Artikel ODER Auftrag) ----
+  var typSel=document.getElementById('weTyp'), aktionEl=document.getElementById('weAktion');
+  var blockArt=document.getElementById('weBlockArt'), blockAuf=document.getElementById('weBlockAuf'), blockFuerAuf=document.getElementById('weBlockFuerAuf');
+  var normalAuf=document.getElementById('weNormalAuf'), zukaufAuf=document.getElementById('weZukaufAuf');
+  var platzhalter={rohstoff:'Rohstoff suchen…',verpackung:'Verpackung / Etikett suchen…',fertig:'Fertigware (Bulk) suchen…'};
+  function applyTyp(){
+    var t=typSel.value;
+    if(t==='zukauf'){
+      curKat='';
+      blockArt.style.display='none'; blockFuerAuf.style.display='none'; blockAuf.style.display='';
+      box.required=false; box.disabled=true; hid.disabled=true;
+      if(normalAuf) normalAuf.disabled=true;
+      if(zukaufAuf){ zukaufAuf.disabled=false; zukaufAuf.required=true; }
+      aktionEl.value='zukauf_buchen';
+      setEinheit(''); if(einhHint) einhHint.textContent='Menge in Stück (Bulk / Kapseln) eingeben.';
+    } else {
+      curKat=t;
+      blockArt.style.display=''; blockFuerAuf.style.display=''; blockAuf.style.display='none';
+      box.disabled=false; box.required=true; hid.disabled=false;
+      if(normalAuf) normalAuf.disabled=false;
+      if(zukaufAuf){ zukaufAuf.disabled=true; zukaufAuf.required=false; }
+      aktionEl.value='buchen';
+      box.placeholder=platzhalter[t]||'Artikel suchen…';
+      // Auswahl zuruecksetzen, damit kein Artikel der falschen Kategorie haengen bleibt
+      box.value=''; hid.value=''; setEinheit('');
+    }
+  }
+  if(typSel){ typSel.addEventListener('change', applyTyp); applyTyp(); }
+
   if(box.form) box.form.addEventListener('submit', function(e){
+    if(typSel && typSel.value==='zukauf') return;   // Zukauf: Auftrag-Select greift (required)
     if((box.value||'').trim()==='') return;   // leer -> HTML5 required greift
     if(!hid.value){ e.preventDefault(); box.setCustomValidity('Bitte einen Artikel aus der Liste wählen.'); box.reportValidity(); }
   });
 })();
 </script>
-
-<div class="bx-panel">
-  <h2 style="margin-top:0">Zukauf-Fertigware zu einem Auftrag buchen</h2>
-  <p class="muted" style="margin-top:0">Für <strong>Fremdproduktion</strong>: die fertig gelieferte Bulkware (z. B. „Mikrozirkulationskomplex") gibt es noch nicht als Katalog-Artikel. Hier wählst du den <strong>Auftrag</strong> – der passende Bulk-Artikel der Rezeptur wird automatisch angelegt und die Charge dem Auftrag zugeordnet. Danach unten <strong>freigeben</strong>; der Produktionsauftrag erkennt den Zukauf dann selbst und verkürzt den Weg.</p>
-  <?php if (!$zukaufAuftraege): ?>
-    <div class="muted">Kein offener Auftrag mit Rezeptur vorhanden.</div>
-  <?php else: ?>
-  <form method="post"><input type="hidden" name="aktion" value="zukauf_buchen">
-    <div class="bx-grid">
-      <div class="bx-field" style="grid-column:1/-1"><label>Auftrag</label>
-        <select name="auftrag_id" required>
-          <option value="">– Auftrag wählen –</option>
-          <?php foreach ($zukaufAuftraege as $a): ?>
-            <option value="<?= (int)$a['id'] ?>"><?= h($a['nummer'] . ' · ' . $a['produkt'] . ($a['firma'] ? ' · ' . $a['firma'] : '')) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <div class="bx-field"><label>Menge (Stück Bulk)</label><input type="number" step="0.001" name="menge" required></div>
-      <div class="bx-field"><label>Charge (Lieferant)</label><input type="text" name="charge_nr"></div>
-      <div class="bx-field"><label>MHD</label><input type="date" name="mhd"></div>
-      <div class="bx-field"><label>Lieferant</label>
-        <select name="lieferant_id"><option value="">– keiner –</option>
-          <?php foreach ($lieferanten as $lf): ?><option value="<?= $lf['id'] ?>"><?= h($lf['firma']) ?></option><?php endforeach; ?>
-        </select>
-      </div>
-    </div>
-    <div class="bx-field"><label>Tracking-Code(s) Paket / Palette</label>
-      <textarea name="tracking" rows="2" placeholder="Etikett scannen … (je Paket eine Zeile)"></textarea></div>
-    <div class="bx-field"><label>Notiz</label><input type="text" name="notiz"></div>
-    <button class="btn btn-primary" type="submit">Zukauf-Fertigware buchen</button>
-  </form>
-  <?php endif; ?>
-</div>
 
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
