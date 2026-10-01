@@ -2768,10 +2768,11 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?= $aufBadge($a['status']) ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
     <ul class="bx-steps" style="margin-top:12px">
-      <?php foreach (kunde_auftrag_track($a) as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : ''); ?>
+      <?php foreach (kunde_auftrag_track($a) as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : '');
+          $sub = $t['date'] ? fmt_zeit($t['date'], 'd.m.Y') : ($t['sub'] ?? ''); ?>
         <li class="bx-step <?= $cls ?>">
           <span class="dot"><?= ($cls === 'done' || $cls === 'current') ? '&#10003;' : '' ?></span>
-          <span class="lbl"><?= h($t['label']) ?><?php if (!empty($t['sub'])): ?><br><span class="muted" style="font-size:11px"><?= h($t['sub']) ?></span><?php endif; ?></span>
+          <span class="lbl"><?= h($t['label']) ?><?php if ($sub !== ''): ?><br><span class="muted" style="font-size:11px"><?= h($sub) ?></span><?php endif; ?></span>
         </li>
       <?php endforeach; ?>
     </ul>
