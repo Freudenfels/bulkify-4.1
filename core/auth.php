@@ -53,6 +53,7 @@ function route_rollen_map(): array {
 
         'produktion'         => ['production', 'labor', 'fulfillment'],
         'produktionsauftrag' => ['production', 'labor', 'fulfillment'],
+        'produktionsauftrag_pdf' => ['production', 'labor', 'fulfillment'],
         'produktion_run'     => ['production', 'labor', 'fulfillment'],   // geführte Mitarbeiter-Produktion
         'produktion_bericht' => ['production', 'labor', 'fulfillment'],   // Produktionsbericht (Herstellprotokoll)
         'versand'            => ['fulfillment', 'production', 'labor'],

@@ -157,6 +157,7 @@ $btnEinkauf = $offenerBedarf
 bx_head($pa['nummer'], 'Produktionsauftrag',
         ($pa['status'] !== 'erledigt' ? bx_btn('Geführt produzieren', '?p=produktion_run&id=' . $id, 'primary') . ' ' : '')
         . $btnEinkauf
+        . pdf_btn('?p=produktionsauftrag_pdf&id=' . $id, 'Laufzettel drucken', false, 'Produktionsauftrag / Laufzettel als PDF') . ' '
         . bx_btn('Produktionsbericht', '?p=produktion_bericht&id=' . $id, $pa['status'] === 'erledigt' ? 'primary' : 'ghost') . ' '
         . bx_btn('Zurück zur Liste', '?p=produktion', 'ghost'));
 if (isset($_GET['nichts_offen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Nichts zu bestellen – alle Rohstoffe sind auf Lager oder bereits bestellt.</div>';

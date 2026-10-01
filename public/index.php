@@ -92,6 +92,7 @@ $routes = [
     'aufgabe'            => 'intern/aufgabe_detail.php',
     'produktion'         => 'produktion/liste.php',
     'produktionsauftrag' => 'produktion/detail.php',
+    'produktionsauftrag_pdf' => 'produktion/pdf.php',   // Laufzettel fürs Werk (Druck/Download)
     'produktion_run'     => 'produktion/run.php',
     'produktion_bericht' => 'produktion/bericht.php',
     'kalender'           => 'produktion/kalender.php',
