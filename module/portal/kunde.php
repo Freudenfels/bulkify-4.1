@@ -953,18 +953,27 @@ if (!function_exists('kunde_auftrag_phase')) {
         return ['idx' => $idx, 'dates' => $dates];
     }
 }
-// Fortschritts-Schritte je Auftrag für die Anzeige: die festen Kunden-Phasen (linear).
-// Kundenspezifische Zusatz-Schritte (Energetisierung, externer Labortest) laufen PARALLEL zum Hauptablauf
-// und können früher beginnen / gleichzeitig zur Prüfung laufen – sie stehen deshalb NICHT in dieser Kette,
-// sondern als eigene Punkte (kunde_auftrag_parallel()).
+// Fortschritts-Schritte je Auftrag: feste Kunden-Phasen + kundenspezifische Zusatz-Schritte
+// (Energetisierung, externer Labortest) direkt IN der Spur – nach „Qualitätsprüfung", vor „Versandbereit".
+// Ihr Status ist UNABHÄNGIG von der Hauptphase (sie laufen parallel): läuft=Sanduhr, abgeschlossen=Haken,
+// geplant=leer. So stehen sie als normale Schritte in der Timeline, nicht als separater Block.
 if (!function_exists('kunde_auftrag_track')) {
     function kunde_auftrag_track(array $a): array {
         global $AUFSTEPS;
         $ph = kunde_auftrag_phase($a); $cur = (int)$ph['idx']; $complete = ($a['status'] ?? '') === 'versendet';
         $track = [];
         foreach ($AUFSTEPS as $i => $lbl) {
-            $track[] = ['label'=>$lbl, 'date'=>$ph['dates'][$i] ?? null, 'sub'=>null,
+            $track[] = ['label'=>$lbl, 'date'=>$ph['dates'][$i] ?? null, 'sub'=>null, 'dok_id'=>null,
                         'done'=>($complete || $i < $cur), 'current'=>(!$complete && $i === $cur)];
+        }
+        $zusatz = kunde_auftrag_parallel($a);
+        if ($zusatz) {
+            $ins = [];
+            foreach ($zusatz as $pz) {
+                $ins[] = ['label'=>$pz['label'], 'date'=>null, 'sub'=>$pz['sub'], 'dok_id'=>$pz['dok_id'] ?? null,
+                          'done'=>($pz['status']==='abgeschlossen'), 'current'=>($pz['status']==='laeuft')];
+            }
+            array_splice($track, 5, 0, $ins);   // nach Qualitätsprüfung (Index 4), vor Versandbereit
         }
         return $track;
     }
@@ -2790,18 +2799,6 @@ portal_head('Kundenportal · ' . $k['firma']);
         </li>
       <?php endforeach; ?>
     </ul>
-    <?php $parallelL = kunde_auftrag_parallel($a); if ($parallelL): ?>
-    <div class="bx-row" style="gap:8px;flex-wrap:wrap;margin-top:4px">
-      <?php foreach ($parallelL as $pz):
-          $done = $pz['status'] === 'abgeschlossen'; $laeuft = $pz['status'] === 'laeuft';
-          $farbe = $done ? 'var(--gruen)' : ($laeuft ? '#b8860b' : 'var(--muted,#8a867d)'); ?>
-      <span class="muted" style="font-size:12px;display:inline-flex;align-items:center;gap:5px">
-        <span style="color:<?= $farbe ?>"><?= $statusIcon($pz['status']) ?: '&#9675;' ?></span>
-        <?= h($pz['label']) ?> <span style="color:<?= $farbe ?>">· <?= $done ? 'abgeschlossen' : ($laeuft ? 'läuft' : 'geplant') ?></span>
-      </span>
-      <?php endforeach; ?>
-    </div>
-    <?php endif; ?>
   </a>
   <?php endforeach; ?>
 
@@ -2858,29 +2855,13 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php endforeach; ?>
       </ul>
     </div>
-    <?php // Parallel laufende Zusatz-Schritte (Energetisierung, externer Labortest) – nur bei freigeschalteten Kunden.
-          $parallel = kunde_auftrag_parallel($a);
-          if ($parallel): ?>
-    <div style="margin-top:18px;border-top:1px solid var(--linie,#e7e4dd);padding-top:14px">
-      <div class="muted" style="font-size:13px;margin-bottom:10px">Läuft parallel</div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px">
-        <?php foreach ($parallel as $pz):
-            $done = $pz['status'] === 'abgeschlossen';
-            $laeuft = $pz['status'] === 'laeuft';
-            $farbe = $done ? 'var(--gruen)' : ($laeuft ? '#b8860b' : 'var(--muted,#8a867d)');
-            $bg    = $done ? 'rgba(29,158,117,.08)' : ($laeuft ? 'rgba(184,134,11,.08)' : 'transparent');
-            $statusTxt = $done ? 'abgeschlossen' : ($laeuft ? 'läuft' : 'geplant');
-        ?>
-        <div class="bx-panel" style="margin:0;display:flex;gap:10px;align-items:flex-start;border-color:<?= $farbe ?>;background:<?= $bg ?>;padding:12px 14px;min-width:220px">
-          <span style="color:<?= $farbe ?>;font-size:15px;line-height:1.4"><?= $statusIcon($pz['status']) ?: '&#9675;' ?></span>
-          <div>
-            <div><strong><?= h($pz['label']) ?></strong> <span class="muted" style="font-size:12px">· <?= $statusTxt ?></span></div>
-            <?php if (!empty($pz['sub'])): ?><div class="muted" style="font-size:12px;margin-top:2px"><?= h($pz['sub']) ?></div><?php endif; ?>
-            <?php if ($done && !empty($pz['dok_id'])): ?><div style="margin-top:6px"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('analyse_datei') ?>&id=<?= (int)$pz['dok_id'] ?>" target="_blank">Laborbericht ansehen</a></div><?php endif; ?>
-          </div>
-        </div>
-        <?php endforeach; ?>
-      </div>
+    <?php // Laborbericht(e) zum Download, wenn der Labortest-Schritt in der Spur abgeschlossen ist.
+          $labDocs = array_filter($track, fn($t) => !empty($t['dok_id']) && !empty($t['done']));
+          if ($labDocs): ?>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--linie,#e7e4dd)">
+      <?php foreach ($labDocs as $t): ?>
+      <a class="btn btn-ghost btn-sm" href="<?= $portalLink('analyse_datei') ?>&id=<?= (int)$t['dok_id'] ?>" target="_blank"><?= h($t['label']) ?> ansehen</a>
+      <?php endforeach; ?>
     </div>
     <?php endif; ?>
   </div>
