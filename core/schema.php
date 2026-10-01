@@ -3455,7 +3455,7 @@ function angebot_positionen_aus_staffel(array $a, array $staffeln): array {
     $mwst  = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
     $mehrere = count($staffeln) > 1; $out = []; $i = 0;
     foreach ($staffeln as $s) {
-        $besch = ((int)$s['stueck'] > 0 ? (int)$s['stueck'] . ' je Packung · ' : '') . 'Pauschalpreis je Packung (aus v3-Angebot, inkl. Verpackung/Etikett)';
+        $besch = ((int)$s['stueck'] > 0 ? (int)$s['stueck'] . ' je Packung · ' : '') . 'Preis je Packung inkl. Verpackung & Etikett';
         $out[] = ['artikelnr'=>'', 'bezeichnung'=>$bez, 'beschreibung'=>$besch,
             'menge'=>(float)$s['menge'], 'einheit'=>'Pkg.', 'preis_cent'=>(int) round((float)$s['vk_stueck'] * 100),
             'ek_cent'=>0, 'mwst_satz'=>$mwst, 'quelle'=>'staffel', 'gruppe'=>($mehrere ? chr(65 + $i) : null),

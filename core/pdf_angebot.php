@@ -34,6 +34,19 @@ function angebot_pdf_bauen(int $angebot_id): ?string {
 
     // Positionen: gespeicherte haben Vorrang, sonst die automatische Kalkulation.
     $positionen = angebot_positionen($angebot_id);
+    // Rezeptur(en) zum Angebot – Zusammensetzung unten im PDF aufschlüsseln (nur Inhaltsstoffe, keine Kosten).
+    // Quellen: rezeptur_id der Positionen + Rezeptur des Produkts. Mehrere Positionen gleicher Rezeptur -> einmal.
+    $rezIds = [];
+    foreach ($positionen as $pp) if (!empty($pp['rezeptur_id'])) $rezIds[(int)$pp['rezeptur_id']] = true;
+    if (!empty($a['rezeptur_id'])) $rezIds[(int)$a['rezeptur_id']] = true;
+    $rezepturen = [];
+    foreach (array_keys($rezIds) as $rzid) {
+        $rz = one("SELECT nummer, name, darreichungsform FROM rezeptur WHERE id=?", [$rzid]);
+        if (!$rz) continue;
+        $zut = all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rzid]);
+        if (!$zut) continue;
+        $rezepturen[] = ['nummer'=>(string)$rz['nummer'], 'name'=>(string)$rz['name'], 'form'=>(string)$rz['darreichungsform'], 'zutaten'=>$zut];
+    }
     // Staffel „Preis je fertiges Produkt" – bei Matrix-Angeboten aus dem Produkt, sonst aus den Optionen.
     $produktStaffel = angebot_hat_positionen($angebot_id) ? [] : angebot_staffel_gruppen($a);
     // Angebot aus Optionen (aus einer Rezeptur gebaut): jede Gruppe ist eine WAHL, keine Bestellzeile.
@@ -75,6 +88,7 @@ function angebot_pdf_bauen(int $angebot_id): ?string {
         'hinweis'          => '',
         'ohne_summen'      => $ohneSummen,   // mehrere Varianten -> keine Gesamtsumme, Preise je Variante unten
         'staffel_ust'      => (meta_get('kleinunternehmer', '0') === '1' || !$istInland) ? 0.0 : (float) meta_get('ust_inland', 19),
+        'rezepturen'       => $rezepturen,   // Zusammensetzung unten aufschlüsseln
     ], $positionen, $produktStaffel);
 }
 

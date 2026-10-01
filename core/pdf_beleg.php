@@ -259,6 +259,33 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $y += 8;
     }
 
+    // ---- Zusammensetzung (Rezeptur) ---- Inhaltsstoffe je Einheit, keine Kosten. Kundengeeignet.
+    if (!empty($b['rezepturen'])) {
+        foreach ((array) $b['rezepturen'] as $rz) {
+            $zut = $rz['zutaten'] ?? [];
+            if (!$zut) continue;
+            if ($y > 660) { $p->addPage(); $y = 54; }
+            $y += 10;
+            $formLbl = ucfirst(trim((string) ($rz['form'] ?? '')));
+            $titel = 'Zusammensetzung · ' . (string) ($rz['name'] ?? '') . ($formLbl !== '' ? ' (' . $formLbl . ')' : '');
+            $p->text($L, $y, $p->fit($titel, $R - $L, 10, true), 10, true, $INK); $y += 6;
+            $p->text($L, $y + 9, 'Inhaltsstoff', 8, true, $INK);
+            $p->textRight($R, $y + 9, 'Menge je Einheit', 8, true, $INK);
+            $p->line($L, $y + 13, $R, $y + 13, 0.6, $INK); $y += 17;
+            $sum = 0.0;
+            foreach ($zut as $z) {
+                if ($y > 790) { $p->addPage(); $y = 54; }
+                $p->text($L, $y + 8, $p->fit((string) ($z['bezeichnung'] ?? ''), 410, 9, false), 9, false, $INK);
+                $p->textRight($R, $y + 8, beleg_num((float) ($z['menge_mg'] ?? 0)) . ' mg', 9, false, $INK);
+                $sum += (float) ($z['menge_mg'] ?? 0);
+                $y += 12; $p->line($L, $y, $R, $y, 0.3, $LINE);
+            }
+            $p->text($L, $y + 9, 'Gesamt je Einheit', 8, true, $INK);
+            $p->textRight($R, $y + 9, beleg_num($sum) . ' mg', 8, true, $INK);
+            $y += 18;
+        }
+    }
+
     // ---- Zahlung ----
     if ($y > 720) { $p->addPage(); $y = 54; }
     $zb = (string) ($b['zahlungsbedingung'] ?? '') ?: (string) meta_get('bh_zahlungsbedingung', 'Sofort zahlbar ohne Abzug');
