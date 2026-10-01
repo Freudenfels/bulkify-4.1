@@ -102,7 +102,18 @@ $ber = produktion_bereitschaft($id);
 $istZukauf = produktion_ist_zukauf((int)$pa['auftrag_id']);
 $stationen = array_map(fn($s)=> $s['station'], $schritte);
 $istVollerWeg = in_array('Mischen', $stationen, true);   // enthält Herstellungsschritte
+// Fertige Bulkware am Auftrag (Zukauf) + noch nichts erledigt -> automatisch auf den kurzen Weg.
+// So zeigt die Seite bei zugekaufter Ware KEINE Rohstoff-/Misch-Schritte mehr (kein Widerspruch).
+if ($istZukauf && $istVollerWeg && $done === 0 && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    if (produktion_schritte_regenerieren($id, true)) {
+        $schritte = all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$id]);
+        $stationen = array_map(fn($s)=> $s['station'], $schritte);
+        $istVollerWeg = in_array('Mischen', $stationen, true);
+        $done = count(array_filter($schritte, fn($s)=> (int)$s['erledigt'] === 1));
+    }
+}
 $wegUmstellbar = $done === 0;                            // nur solange nichts erledigt
+$firstOpenId = null;
 foreach ($schritte as $s) if ((int)$s['erledigt'] === 0) { $firstOpenId = (int)$s['id']; break; }
 
 $bedarf = produktion_materialbedarf($id);
@@ -263,7 +274,7 @@ if ($zugeChargen):
           <td><?= h($katLbl[$c['kategorie']] ?? $c['kategorie']) ?><?= $c['form'] ? ' · ' . h($c['form']) : '' ?></td>
           <td class="bx-num"><?= $mng($c['menge_verfuegbar'], $c['einheit']) ?></td>
           <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '–' ?></td>
-          <td><?= match($c['status']){'frei'=>bx_badge('frei','ok'),'quarantaene'=>bx_badge('Quarantäne','warn'),'leer'=>bx_badge('leer'),default=>bx_badge(status_text($c['status']))} ?></td>
+          <td><?= match($c['status']){'frei'=>bx_badge('freigegeben','ok'),'quarantaene'=>bx_badge('Quarantäne (Prüfung)','warn'),'leer'=>bx_badge('verbraucht'),default=>bx_badge(status_text($c['status']))} ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>
