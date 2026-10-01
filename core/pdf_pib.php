@@ -77,7 +77,7 @@ function pib_table(MiniPDF $p, float $y, array $colDefs, array $rows): float {
 }
 
 // Auto-PIB als PDF-Bytes aus den vorhandenen Produktdaten. Null, wenn das Produkt fehlt.
-function pib_pdf_bauen(int $produkt_id): ?string {
+function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null): ?string {
     $prod = one("SELECT p.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS anzeige, r.darreichungsform, r.id AS rez_id
                  FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]);
     if (!$prod) return null;
@@ -85,7 +85,10 @@ function pib_pdf_bauen(int $produkt_id): ?string {
     $mg = fn($x) => rtrim(rtrim(number_format((float)$x, 2, ',', '.'), '0'), ',');
     $formLbl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks',
                 'pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','gel'=>'Gel','gummi'=>'Fruchtgummi'][$prod['darreichungsform'] ?? ''] ?? (string)($prod['darreichungsform'] ?? '');
+    // Einheiten je Packung: aus dem Produkt; fehlt das (z. B. v3-Import, Stückzahl steht am Auftrag),
+    // die vom Aufrufer durchgereichte Auftrags-Stückzahl als Fallback nehmen.
     $einh = (int)($prod['einheiten_pro_packung'] ?? 0);
+    if ($einh <= 0 && $einheitenOverride && $einheitenOverride > 0) $einh = (int)$einheitenOverride;
 
     $p = new MiniPDF();
     $y = spec_kopf($p, 'PRODUKTINFORMATIONSBLATT', 'Grundlage für Ihre Etikettengestaltung · ' . (string)$prod['anzeige']);
@@ -294,7 +297,7 @@ function pib_pdf_bauen(int $produkt_id): ?string {
 }
 
 // PIB ausliefern: hochgeladenes PIB (Vorrang) sonst Auto-PIB. Setzt Header + gibt Body aus. false = nichts da.
-function pib_ausliefern(int $produkt_id, string $dateiname = 'Produktinformationsblatt'): bool {
+function pib_ausliefern(int $produkt_id, string $dateiname = 'Produktinformationsblatt', ?int $einheitenOverride = null): bool {
     $safe = preg_replace('/[^A-Za-z0-9._-]+/', '_', $dateiname) ?: 'Produktinformationsblatt';
     $d = pib_datei($produkt_id);
     if ($d) {
@@ -308,7 +311,7 @@ function pib_ausliefern(int $produkt_id, string $dateiname = 'Produktinformation
             return true;
         }
     }
-    $pdf = pib_pdf_bauen($produkt_id);
+    $pdf = pib_pdf_bauen($produkt_id, $einheitenOverride);
     if ($pdf === null) return false;
     header('Content-Type: application/pdf');
     header('Content-Disposition: inline; filename="' . $safe . '.pdf"');

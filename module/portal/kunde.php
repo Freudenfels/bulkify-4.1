@@ -162,9 +162,11 @@ if ($k && ($_GET['v'] ?? '') === 'auftrag_dok') {
 // Produktinformationsblatt (PIB) zum eigenen Auftrag herunterladen – Grundlage für die Etikettengestaltung.
 if ($k && ($_GET['v'] ?? '') === 'pib') {
     $aid = (int)($_GET['aid'] ?? 0);
-    $pid = $aid ? (int) scalar("SELECT produkt_id FROM auftrag WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : 0;
+    $auPib = $aid ? one("SELECT produkt_id, stueck FROM auftrag WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
+    $pid = (int)($auPib['produkt_id'] ?? 0);
     require_once BX_ROOT . '/core/pdf_pib.php';
-    if (!$pid || !pib_ausliefern($pid, 'Produktinfo-' . $aid)) { http_response_code(404); echo 'Produktinformationsblatt nicht verfügbar.'; }
+    // Stückzahl je Packung aus dem Auftrag als Fallback (falls am Produkt nicht gepflegt).
+    if (!$pid || !pib_ausliefern($pid, 'Produktinfo-' . $aid, (int)($auPib['stueck'] ?? 0) ?: null)) { http_response_code(404); echo 'Produktinformationsblatt nicht verfügbar.'; }
     exit;
 }
 // Etikett-Druckvorlage (fertige Vorlage mit Maßen/Stanzkontur) zum eigenen Auftrag herunterladen.
