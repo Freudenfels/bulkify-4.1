@@ -271,10 +271,15 @@ if ($zugeChargen):
 </div>
 <?php endif; ?>
 
-<?php if ($istZukauf && $istVollerWeg && $wegUmstellbar): ?>
+<?php if ($istVollerWeg && $wegUmstellbar): ?>
 <div class="bx-panel" style="border-color:var(--gruen);background:rgba(29,158,117,.06)">
+  <?php if ($istZukauf): ?>
   <h2 style="margin-top:0">Fertige Bulkware erkannt – verkürzter Weg möglich</h2>
   <p style="margin-top:0">Für diesen Auftrag ist bereits <strong>fertige Bulkware</strong> (z. B. fertige Kapseln vom Lieferanten) eingegangen. Damit entfallen <strong>Rohstoffe bereitstellen, Mischen und Verkapseln</strong> – es bleibt nur Bereitstellen, Verpacken, Etikettieren und die Prüfung/Freigabe.</p>
+  <?php else: ?>
+  <h2 style="margin-top:0">Verkürzter Weg (Zukauf)</h2>
+  <p style="margin-top:0">Hast du die <strong>Kapseln/Bulkware schon fertig</strong> (zugekauft, bereits im Lager)? Dann brauchst du keine Rohstoffe/Mischen/Verkapseln – der Weg verkürzt sich auf <strong>Fertigware bereitstellen · Verpacken · Etikettieren · Qualitätsprüfung · Freigaben</strong>.</p>
+  <?php endif; ?>
   <form method="post" style="margin:0"><input type="hidden" name="aktion" value="weg_zukauf"><button class="btn btn-primary" type="submit">Verkürzten Weg anwenden</button></form>
 </div>
 <?php elseif (!$istVollerWeg && $wegUmstellbar): ?>
