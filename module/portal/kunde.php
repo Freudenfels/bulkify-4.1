@@ -945,9 +945,10 @@ if (!function_exists('kunde_auftrag_phase')) {
         return ['idx' => $idx, 'dates' => $dates];
     }
 }
-// Fortschritts-Schritte je Auftrag für die Anzeige. Basis = feste Phasen; bei freigeschalteten Kunden
-// (kunden.zeige_energetisierung) mit gesetztem Startdatum wird „Energetisierung" als eigener Schritt
-// NACH „Qualitätsprüfung" eingefügt – mit kleinem „bis TT.MM.JJJJ" (Fertig-Datum) als Unterzeile.
+// Fortschritts-Schritte je Auftrag für die Anzeige: die festen Kunden-Phasen (linear).
+// Kundenspezifische Zusatz-Schritte (Energetisierung, externer Labortest) laufen PARALLEL zum Hauptablauf
+// und können früher beginnen / gleichzeitig zur Prüfung laufen – sie stehen deshalb NICHT in dieser Kette,
+// sondern als eigene Punkte (kunde_auftrag_parallel()).
 if (!function_exists('kunde_auftrag_track')) {
     function kunde_auftrag_track(array $a): array {
         global $AUFSTEPS;
@@ -956,18 +957,6 @@ if (!function_exists('kunde_auftrag_track')) {
         foreach ($AUFSTEPS as $i => $lbl) {
             $track[] = ['label'=>$lbl, 'date'=>$ph['dates'][$i] ?? null, 'sub'=>null,
                         'done'=>($complete || $i < $cur), 'current'=>(!$complete && $i === $cur)];
-        }
-        if (!empty($a['kunde_id']) && kunde_zeigt_energetisierung((int)$a['kunde_id'])) {
-            $start  = (string)($a['energ_start'] ?? '');
-            $stat   = $start !== '' ? energ_status($start) : '';            // '' = noch kein Startdatum
-            $fertig = $start !== '' ? energ_fertig_am($start) : null;
-            array_splice($track, 5, 0, [[
-                'label'   => 'Energetisierung',
-                'date'    => null,
-                'sub'     => $fertig ? 'bis ' . date('d.m.Y', strtotime((string)$fertig)) : null,
-                'done'    => ($stat === 'abgeschlossen'),
-                'current' => ($stat === 'laeuft'),
-            ]]);
         }
         return $track;
     }
@@ -2793,6 +2782,18 @@ portal_head('Kundenportal · ' . $k['firma']);
         </li>
       <?php endforeach; ?>
     </ul>
+    <?php $parallelL = kunde_auftrag_parallel($a); if ($parallelL): ?>
+    <div class="bx-row" style="gap:8px;flex-wrap:wrap;margin-top:4px">
+      <?php foreach ($parallelL as $pz):
+          $done = $pz['status'] === 'abgeschlossen'; $laeuft = $pz['status'] === 'laeuft';
+          $farbe = $done ? 'var(--gruen)' : ($laeuft ? '#b8860b' : 'var(--muted,#8a867d)'); ?>
+      <span class="muted" style="font-size:12px;display:inline-flex;align-items:center;gap:5px">
+        <span style="color:<?= $farbe ?>"><?= $done ? '&#10003;' : ($laeuft ? '&#9679;' : '&#9675;') ?></span>
+        <?= h($pz['label']) ?> <span style="color:<?= $farbe ?>">· <?= $done ? 'abgeschlossen' : ($laeuft ? 'läuft' : 'geplant') ?></span>
+      </span>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
   </a>
   <?php endforeach; ?>
 
@@ -2849,6 +2850,31 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php endforeach; ?>
       </ul>
     </div>
+    <?php // Parallel laufende Zusatz-Schritte (Energetisierung, externer Labortest) – nur bei freigeschalteten Kunden.
+          $parallel = kunde_auftrag_parallel($a);
+          if ($parallel): ?>
+    <div style="margin-top:18px;border-top:1px solid var(--linie,#e7e4dd);padding-top:14px">
+      <div class="muted" style="font-size:13px;margin-bottom:10px">Läuft parallel</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">
+        <?php foreach ($parallel as $pz):
+            $done = $pz['status'] === 'abgeschlossen';
+            $laeuft = $pz['status'] === 'laeuft';
+            $farbe = $done ? 'var(--gruen)' : ($laeuft ? '#b8860b' : 'var(--muted,#8a867d)');
+            $bg    = $done ? 'rgba(29,158,117,.08)' : ($laeuft ? 'rgba(184,134,11,.08)' : 'transparent');
+            $statusTxt = $done ? 'abgeschlossen' : ($laeuft ? 'läuft' : 'geplant');
+        ?>
+        <div class="bx-panel" style="margin:0;display:flex;gap:10px;align-items:flex-start;border-color:<?= $farbe ?>;background:<?= $bg ?>;padding:12px 14px;min-width:220px">
+          <span style="color:<?= $farbe ?>;font-size:16px;line-height:1.3"><?= $done ? '&#10003;' : ($laeuft ? '&#9679;' : '&#9675;') ?></span>
+          <div>
+            <div><strong><?= h($pz['label']) ?></strong> <span class="muted" style="font-size:12px">· <?= $statusTxt ?></span></div>
+            <?php if (!empty($pz['sub'])): ?><div class="muted" style="font-size:12px;margin-top:2px"><?= h($pz['sub']) ?></div><?php endif; ?>
+            <?php if ($done && !empty($pz['dok_id'])): ?><div style="margin-top:6px"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('analyse_datei') ?>&id=<?= (int)$pz['dok_id'] ?>" target="_blank">Laborbericht ansehen</a></div><?php endif; ?>
+          </div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <?php endif; ?>
   </div>
 
   <?php // Produktionsbericht – nur wenn das Team ihn fuer den Kunden freigegeben hat.

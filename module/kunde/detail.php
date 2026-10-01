@@ -32,10 +32,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    'rechnung_firma','rechnung_strasse','rechnung_hausnummer','rechnung_plz','rechnung_ort','rechnung_land',
                    'liefer_strasse','liefer_hausnummer','liefer_plz','liefer_ort','liefer_land',
                    'zahlungsart','zahlungsziel_tage','rabatt_marge','aufschlag_marge',
-                   'portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','zeige_energetisierung','notiz'];
+                   'portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','zeige_energetisierung','labortest_extern','notiz'];
         $vals = array_map($f, $felder);
         $vals[array_search('gesperrt', $felder)] = isset($_POST['gesperrt']) ? 1 : 0;
-        foreach (['portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','zeige_energetisierung'] as $pf)
+        foreach (['portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','zeige_energetisierung','labortest_extern'] as $pf)
             $vals[array_search($pf, $felder)] = isset($_POST[$pf]) ? 1 : 0;
         foreach (['zahlungsziel_tage','rabatt_marge','aufschlag_marge'] as $nf) { $ix = array_search($nf, $felder); if (trim((string)$vals[$ix]) === '') $vals[$ix] = 0; }
         if ($neu) {
@@ -494,6 +494,13 @@ if (!$neu) {
           <label for="f_zeige_energetisierung" style="margin:0">Energetisierung im Kundenportal anzeigen</label>
         </div>
         <div class="muted" style="font-size:12px;margin-top:4px">Nur für diesen Kunden: am Auftrag kann ein Energetisierungs-Startdatum gesetzt werden; der Kunde sieht im Portal „Energetisierung läuft · noch X Tage" und das Fertig-Datum (Dauer <?= (int) meta_get('energ_tage', 14) ?> Tage, einstellbar). Ohne Haken bleibt alles unsichtbar.</div>
+      </div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line,#e5e5e5)">
+        <div class="bx-check">
+          <input type="checkbox" name="labortest_extern" id="f_labortest_extern" value="1" <?= (int)($k['labortest_extern'] ?? 0)===1?'checked':'' ?>>
+          <label for="f_labortest_extern" style="margin:0">Externen Labortest (Drittlabor) im Verlauf anzeigen</label>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:4px">Nur für diesen Kunden: im Fortschritt jeder Bestellung erscheint der Punkt „Externer Labortest" als parallel laufender Schritt. Er wird automatisch „abgeschlossen", sobald zu diesem Auftrag (oder dessen Produkt) ein Laborbericht hochgeladen und für den Kunden freigegeben ist; vorher „läuft" (Probe beim Drittlabor). Ohne Haken bleibt der Punkt unsichtbar.</div>
       </div>
       <?php if (!$neu):
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';

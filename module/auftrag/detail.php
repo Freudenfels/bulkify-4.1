@@ -372,6 +372,22 @@ if (kunde_zeigt_energetisierung((int)($a['kunde_id'] ?? 0))):
 </div>
 <?php endif; ?>
 
+<?php // Externer Labortest (Drittlabor) – nur fuer freigeschaltete Kunden. Status kommt automatisch aus dem
+      // freigegebenen Laborbericht (dokument typ='analyse', kunde_sichtbar=1) zum Auftrag/Produkt. Kein manuelles Setzen.
+if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
+    $lt = auftrag_labortest_status((int)$a['id'], isset($a['produkt_id']) ? (int)$a['produkt_id'] : null); ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Externer Labortest</h2>
+  <?php if ($lt['status'] === 'abgeschlossen'): ?>
+    <div style="margin-bottom:10px"><?= bx_badge('abgeschlossen', 'ok') ?> <span class="muted"><?= $lt['datum'] ? 'Bericht vom ' . h(date('d.m.Y', strtotime((string)$lt['datum']))) : 'Bericht liegt vor' ?></span>
+      <?php if (!empty($lt['dok_id'])): ?> · <a href="?p=dokument&id=<?= (int)$lt['dok_id'] ?>" target="_blank">Bericht ansehen</a><?php endif; ?></div>
+  <?php else: ?>
+    <div style="margin-bottom:10px"><?= bx_badge('läuft', 'warn') ?> <span class="muted">Probe beim Drittlabor – wird automatisch „abgeschlossen", sobald ein freigegebener Laborbericht vorliegt.</span></div>
+  <?php endif; ?>
+  <div class="muted" style="font-size:12px">Laborbericht hochladen &amp; für den Kunden freigeben unter <a href="?p=laboranalysen">Labortests</a> (oder direkt an diesem Auftrag). Der Kunde sieht den Punkt „Externer Labortest" im Bestell-Verlauf.</div>
+</div>
+<?php endif; ?>
+
 <?php // Zahlung / Alt-Rechnung – für alles aus dem alten System (noch keine echte v4-Rechnung).
       $hatV4Rechnung = (bool)$rechnung; ?>
 <div class="bx-panel">

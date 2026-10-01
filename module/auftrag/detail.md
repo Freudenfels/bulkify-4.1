@@ -31,6 +31,8 @@ neu zu senden. Blockiert bei bezahlter Rechnung oder bereits versendetem Auftrag
 ## Laboranalyse / Labortest (je Bestellung/Charge)
 **Energetisierung (nur freigeschalteter Kunde):** Panel erscheint, wenn `kunde_zeigt_energetisierung(kunde_id)` wahr ist. **Startdatum setzen/löschen** (`aktion=energ_start`, `auftrag.energ_start`); Status **läuft/abgeschlossen** + „fertig am" werden aus Start + `energ_tage()` abgeleitet (nichts persistiert). Der Kunde sieht dieselbe Info im Portal (`module/portal/kunde.php`).
 
+**Externer Labortest (nur freigeschalteter Kunde):** Read-only-Panel, wenn `kunde_will_labortest(kunde_id)` wahr ist (`kunden.labortest_extern=1`). Status kommt **automatisch** aus `auftrag_labortest_status()`: „abgeschlossen" (mit Datum + Link „Bericht ansehen"), sobald ein **freigegebener** Laborbericht zum Auftrag oder dessen Produkt vorliegt (`dokument typ='analyse', kunde_sichtbar=1`); sonst „läuft" (Probe beim Drittlabor). Kein manuelles Setzen – Bericht hochladen/freigeben im Labortest-Panel unten bzw. unter `?p=laboranalysen`. Der Kunde sieht den Punkt parallel im Bestell-Verlauf.
+
 **Wareneingänge zu diesem Auftrag:** Liste der direkt gebuchten Chargen (`charge.auftrag_id`) mit Status „angekommen · frei/Quarantäne" – zeigt zugekaufte Fremdproduktions-Bulkware auch **ohne** System-Bestellung an.
 
 Panel „Laboranalyse / Labortest" (zeigt ggf. die Fertigware-Charge). Admin lädt hier den Labortest/das CoA für **genau diese Bestellung** hoch → `dokument` (`objekt_typ='auftrag'`, `typ='analyse'`, optional `dok_datum`). „im Kundenportal sichtbar" = `kunde_sichtbar=1` → erscheint im Kunden-Reiter „Labortest". Aktionen: `analyse_upload`, `analyse_toggle`, `analyse_del`. Produkt-weite Analysen laufen über `?p=laboranalysen`.

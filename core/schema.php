@@ -1014,6 +1014,7 @@ function init_schema(): void {
 
     // --- additive Migrationen ab hier (Beispielmuster) ---
     ensure_column('kunden', 'zeige_energetisierung', "TINYINT(1) NOT NULL DEFAULT 0");   // Energetisierung im Kundenportal zeigen (Spezialkunde, z. B. Annapurna/Pure Health)
+    ensure_column('kunden', 'labortest_extern', "TINYINT(1) NOT NULL DEFAULT 0");        // Externer Labortest (Drittlabor) als paralleler Verlaufs-Punkt im Portal (Spezialkunde, will immer eine Drittlabor-Analyse)
     ensure_column('kunden', 'portal_token', "VARCHAR(64) NULL");   // Magic-Link-Zugang zum Kundenportal (Backup/Erstzugang)
     ensure_column('kunden', 'passwort', "VARCHAR(255) NULL");       // Passwort-Hash fuers Kunden-Login (password_hash); leer = noch nicht eingerichtet
     ensure_column('kunden', 'erstlogin_am', "DATETIME NULL");       // Zeitpunkt der Konto-Einrichtung (Erstzugang abgeschlossen)
@@ -3488,6 +3489,54 @@ function energ_rest_tage(?string $start): ?int {
 function energ_fertig_am(?string $start): ?string {
     $ts = trim((string)$start) !== '' ? strtotime((string)$start) : false; if (!$ts) return null;
     return date('Y-m-d', $ts + energ_tage() * 86400);
+}
+
+// ---- Externer Labortest (Drittlabor): paralleler Verlaufs-Punkt, nur für freigeschaltete Kunden. ----
+// „Erledigt" automatisch, sobald für den Auftrag (oder dessen Produkt) ein Laborbericht hochgeladen UND
+// für den Kunden freigegeben ist (dokument typ='analyse', kunde_sichtbar=1). Vorher „läuft" (Proben beim Labor).
+function kunde_will_labortest(int $kunde_id): bool {
+    return $kunde_id > 0 && (int) scalar("SELECT labortest_extern FROM kunden WHERE id=?", [$kunde_id]) === 1;
+}
+// Status des externen Labortests für EINEN Auftrag. Rückgabe: ['status'=>'laeuft'|'abgeschlossen', 'datum'=>?string, 'dok_id'=>?int].
+function auftrag_labortest_status(int $auftrag_id, ?int $produkt_id = null): array {
+    if ($auftrag_id <= 0) return ['status' => 'laeuft', 'datum' => null, 'dok_id' => null];
+    if ($produkt_id === null) $produkt_id = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    $pid = (int)$produkt_id;
+    // Laborbericht zu genau diesem Auftrag ODER (falls vorhanden) zum Produkt des Auftrags, nur wenn freigegeben.
+    $d = one("SELECT id, COALESCE(dok_datum, DATE(angelegt)) AS datum FROM dokument
+              WHERE typ='analyse' AND kunde_sichtbar=1
+                AND ((objekt_typ='auftrag' AND objekt_id=?) OR (objekt_typ='produkt' AND objekt_id=? AND ?>0))
+              ORDER BY datum DESC, id DESC LIMIT 1", [$auftrag_id, $pid, $pid]);
+    if ($d) return ['status' => 'abgeschlossen', 'datum' => $d['datum'], 'dok_id' => (int)$d['id']];
+    return ['status' => 'laeuft', 'datum' => null, 'dok_id' => null];
+}
+// Parallel laufende Zusatz-Schritte eines Auftrags (Energetisierung, externer Labortest) – nur für
+// freigeschaltete Kunden. Laufen NEBEN dem Hauptablauf (können früher beginnen / parallel zur Prüfung),
+// deshalb nicht in die lineare Phasenkette eingereiht, sondern als eigene Punkte mit eigenem Status.
+// Rückgabe je Eintrag: ['label','status'('geplant'|'laeuft'|'abgeschlossen'),'sub','dok_id'?].
+function kunde_auftrag_parallel(array $a): array {
+    $kid = (int)($a['kunde_id'] ?? 0);
+    if ($kid <= 0) return [];
+    $out = [];
+    if (kunde_zeigt_energetisierung($kid)) {
+        $start  = (string)($a['energ_start'] ?? '');
+        $stat   = $start !== '' ? energ_status($start) : '';
+        $fertig = $start !== '' ? energ_fertig_am($start) : null;
+        $out[] = ['label' => 'Energetisierung',
+                  'status' => $stat === 'abgeschlossen' ? 'abgeschlossen' : ($stat === 'laeuft' ? 'laeuft' : 'geplant'),
+                  'sub'    => $fertig ? 'bis ' . date('d.m.Y', strtotime((string)$fertig)) : null,
+                  'dok_id' => null];
+    }
+    if (kunde_will_labortest($kid)) {
+        $lt = auftrag_labortest_status((int)($a['id'] ?? 0), isset($a['produkt_id']) ? (int)$a['produkt_id'] : null);
+        $out[] = ['label' => 'Externer Labortest',
+                  'status' => $lt['status'],
+                  'sub'    => $lt['status'] === 'abgeschlossen'
+                                ? ($lt['datum'] ? 'Bericht vom ' . date('d.m.Y', strtotime((string)$lt['datum'])) : 'Bericht liegt vor')
+                                : 'Probe beim Drittlabor',
+                  'dok_id' => $lt['dok_id']];
+    }
+    return $out;
 }
 
 // Pro Angebot innerhalb eines Requests mehrfach aufgerufen (Übersicht + Karte) – request-lokal cachen.
