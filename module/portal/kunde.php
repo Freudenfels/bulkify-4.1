@@ -955,8 +955,10 @@ if (!function_exists('kunde_auftrag_track')) {
             $track[] = ['label'=>$lbl, 'date'=>$ph['dates'][$i] ?? null, 'sub'=>null,
                         'done'=>($complete || $i < $cur), 'current'=>(!$complete && $i === $cur)];
         }
-        if (!empty($a['kunde_id']) && !empty($a['energ_start']) && kunde_zeigt_energetisierung((int)$a['kunde_id'])) {
-            $stat = energ_status((string)$a['energ_start']); $fertig = energ_fertig_am((string)$a['energ_start']);
+        if (!empty($a['kunde_id']) && kunde_zeigt_energetisierung((int)$a['kunde_id'])) {
+            $start  = (string)($a['energ_start'] ?? '');
+            $stat   = $start !== '' ? energ_status($start) : '';            // '' = noch kein Startdatum
+            $fertig = $start !== '' ? energ_fertig_am($start) : null;
             array_splice($track, 5, 0, [[
                 'label'   => 'Energetisierung',
                 'date'    => null,
