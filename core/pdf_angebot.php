@@ -39,6 +39,11 @@ function angebot_pdf_bauen(int $angebot_id): ?string {
     $rezIds = [];
     foreach ($positionen as $pp) if (!empty($pp['rezeptur_id'])) $rezIds[(int)$pp['rezeptur_id']] = true;
     if (!empty($a['rezeptur_id'])) $rezIds[(int)$a['rezeptur_id']] = true;
+    // Fallback (v3-Import, Staffel-only ohne rezeptur_id in den Positionen): Rezeptur der verknüpften Anfrage.
+    if (!$rezIds && !empty($a['anfrage_id'])) {
+        $arid = (int) scalar("SELECT rezeptur_id FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']]);
+        if ($arid) $rezIds[$arid] = true;
+    }
     $rezepturen = [];
     foreach (array_keys($rezIds) as $rzid) {
         $rz = one("SELECT nummer, name, darreichungsform FROM rezeptur WHERE id=?", [$rzid]);
