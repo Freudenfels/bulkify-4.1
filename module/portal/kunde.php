@@ -913,16 +913,24 @@ if (!function_exists('kunde_auftrag_phase')) {
             // ein Bestelldatum steht nur, wenn es eine echte Bestellung gibt ($dates[1] oben gesetzt).
             $bestellt = true;
         }
-        // Produktion (3) + Qualitätsprüfung (4) aus den echten Schritten (nur intern; hier nur zur Phasenableitung).
-        $pa = one("SELECT id, angelegt FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$aid]);
-        $qcDate = null;
+        // Produktion (3) + Qualitätsprüfung (4) aus den ECHTEN Schritten. Der Produktionsauftrag entsteht
+        // automatisch mit dem Auftrag – sein Anlegedatum ist NICHT der Produktionsstart. Deshalb das
+        // „In Produktion"-Datum nur setzen, wenn die Produktion wirklich lief (ein Schritt erledigt) bzw.
+        // der Status es sagt – sonst stünde an einem noch nicht erreichten Schritt ein (falsches) Datum.
+        $pa = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$aid]);
+        $qcDate = null; $prodStart = null;
         if ($pa) {
-            $dates[3] = $pa['angelegt'];
             foreach (all("SELECT station, erledigt, erledigt_at FROM produktion_schritt WHERE pa_id=? ORDER BY sort,id", [(int)$pa['id']]) as $s) {
-                if ((int)$s['erledigt'] === 1 && stripos((string)$s['station'], 'Qualität') !== false) $qcDate = $s['erledigt_at'];
+                if ((int)$s['erledigt'] === 1 && !empty($s['erledigt_at'])) {
+                    if ($prodStart === null || $s['erledigt_at'] < $prodStart) $prodStart = $s['erledigt_at'];
+                    if (stripos((string)$s['station'], 'Qualität') !== false) $qcDate = $s['erledigt_at'];
+                }
             }
         }
         $qcDone = $qcDate !== null;
+        if ($prodStart !== null || in_array($st, ['in_produktion','erledigt','versendet'], true)) {
+            $dates[3] = $prodStart ?: ($st === 'in_produktion' ? ($a['status_datum'] ?? null) : null);
+        }
         $dates[4] = $qcDate;
         if ($st === 'erledigt')  $dates[5] = $a['aktualisiert'] ?? null;
         if ($st === 'versendet') { $dates[6] = $a['aktualisiert'] ?? null; $dates[5] = $dates[5] ?? ($a['aktualisiert'] ?? null); }
