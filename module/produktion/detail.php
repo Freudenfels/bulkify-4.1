@@ -174,7 +174,7 @@ bx_head($pa['nummer'], 'Produktionsauftrag',
 if (isset($_GET['nichts_offen'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Nichts zu bestellen – alle Rohstoffe sind auf Lager oder bereits bestellt.</div>';
 if (isset($_GET['angelegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produktionsauftrag angelegt – der Materialbedarf ist jetzt berechenbar (Rohstoffe bestellbar).</div>';
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Station abgeschlossen.</div>';
-if (isset($_GET['mangel'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht genug Bestand für die Produktion – siehe Materialbedarf unten. Bitte erst Wareneingang buchen.</div>';
+if (isset($_GET['mangel'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht genug Bestand für die Produktion – siehe Material unten. Bitte erst Wareneingang buchen.</div>';
 if (isset($_GET['weg']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produktionsweg umgestellt.</div>';
 if (isset($_GET['wegfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Weg kann nicht mehr geändert werden – es wurde bereits ein Schritt erledigt.</div>';
 if (isset($_GET['scanfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Scan abgelehnt: ' . h($_GET['scanfehler']) . '</div>';
@@ -185,9 +185,8 @@ if (isset($_GET['resfrei'])) echo '<div class="bx-panel badge-ok" style="padding
 if (isset($_GET['teil'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Teilmenge als Charge ' . h((string)$_GET['teil']) . ' eingebucht.</div>';
 if (isset($_GET['teilfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Teilmenge nicht gebucht: ' . h((string)$_GET['teilfehler']) . '</div>';
 
-// Einheitliche, ruhige Wertgröße für alle Kennzahl-Karten dieser Seite (wie „Produkt").
-// Badges bringen ihre eigene Größe mit und bleiben unberührt; nur Text/Zahlen werden angeglichen.
-echo '<style>.bx-cards .v{font-size:15px;line-height:1.4}</style>';
+// Einheitliche, ruhige Wertgröße für alle Kennzahl-Karten dieser Seite.
+echo '<style>.bx-cards .v{font-size:15px;line-height:1.4} details.bx-sek>summary{cursor:pointer;list-style:none;font-weight:600;font-size:15px;color:var(--gruen);padding:12px 2px}details.bx-sek>summary::-webkit-details-marker{display:none}details.bx-sek>summary::before{content:"\\25B8 ";color:var(--gruen)}details.bx-sek[open]>summary::before{content:"\\25BE "}</style>';
 // Mengen-Aufschlüsselung: menge = Packungen, einheiten_pro_packung = Stück/Kapseln je Packung.
 $einhProP  = produktion_stueck_je_packung($pa);
 $formPa    = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$pa['produkt_id']]);
@@ -229,59 +228,12 @@ if (!empty($pa['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt<
 echo '</div>';
 if (!$chargeGeb) echo '<div class="bx-panel" style="padding:10px 14px;font-size:13px;color:var(--muted)">Chargennummer <strong>' . h($chargeNr) . '</strong> und MHD <strong>' . h(date('d.m.Y', strtotime($chargeMhd))) . '</strong> in die Produktionsgeräte eintragen. Teilproduktionen an weiteren Tagen erhalten dieselbe Basis mit <strong>.B</strong>, <strong>.C</strong> …</div>';
 
-if ($ber['status'] === 'wartet' && $ber['fehlend']):
-    $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
-?>
-<div class="bx-panel" style="border-color:#e6c4c0">
-  <h2 style="margin-top:0">Wartet auf Material</h2>
-  <p class="muted" style="margin-top:0">Für die Produktion fehlt noch Bestand. Sobald alles da ist, wird der Auftrag „produktionsbereit".</p>
-  <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Material</th><th class="bx-num">Benötigt</th><th class="bx-num">Verfügbar</th><th class="bx-num">Fehlt</th></tr></thead>
-    <tbody>
-      <?php foreach ($ber['fehlend'] as $f): $fehlt = (float)$f['benoetigt'] - (float)$f['verfuegbar']; ?>
-        <tr>
-          <td><?= h($f['name']) ?></td>
-          <td class="bx-num"><?= $mfmt($f['benoetigt']) ?> <?= h($f['einheit']) ?></td>
-          <td class="bx-num"><?= $mfmt($f['verfuegbar']) ?> <?= h($f['einheit']) ?></td>
-          <td class="bx-num" style="color:#8f231b"><?= $mfmt(max(0,$fehlt)) ?> <?= h($f['einheit']) ?></td>
-        </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table></div>
-  <div style="margin-top:12px"><a class="btn btn-ghost btn-sm" href="?p=wareneingang">Zum Wareneingang</a></div>
-</div>
-<?php endif; ?>
-<?php
+$mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 
-// Baustein 4: Wareneingänge, die diesem Auftrag zugeordnet wurden (Beschaffungskette)
-$zugeChargen = $pa['auftrag_id'] ? all(
-    "SELECT c.*, i.name AS item_name, i.kategorie AS kategorie, i.form AS form
-     FROM charge c LEFT JOIN item i ON i.id=c.item_id
-     WHERE c.auftrag_id=? ORDER BY c.angelegt DESC", [(int)$pa['auftrag_id']]) : [];
-if ($zugeChargen):
-    $katLbl = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','fertig'=>'Fertigware (Bulk)','verkaufsfertig'=>'Fertigware'];
-?>
-<div class="bx-panel" style="border-color:var(--gruen)">
-  <h2 style="margin-top:0">Wareneingänge für diesen Auftrag</h2>
-  <p class="muted" style="margin-top:0">Diese Lieferungen wurden gezielt für diesen Auftrag bestellt/eingebucht.</p>
-  <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Charge</th><th>Artikel</th><th>Art</th><th class="bx-num">Menge</th><th>MHD</th><th>Status</th></tr></thead>
-    <tbody>
-      <?php foreach ($zugeChargen as $c): ?>
-        <tr onclick="location.href='?p=chargen&id=<?= (int)$c['id'] ?>'" style="cursor:pointer">
-          <td><?= h($c['charge_nr'] ?: ('#'.$c['id'])) ?></td>
-          <td><?= h($c['item_name'] ?: '–') ?></td>
-          <td><?= h($katLbl[$c['kategorie']] ?? $c['kategorie']) ?><?= $c['form'] ? ' · ' . h($c['form']) : '' ?></td>
-          <td class="bx-num"><?= $mng($c['menge_verfuegbar'], $c['einheit']) ?></td>
-          <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '–' ?></td>
-          <td><?= match($c['status']){'frei'=>bx_badge('freigegeben','ok'),'quarantaene'=>bx_badge('Quarantäne (Prüfung)','warn'),'leer'=>bx_badge('verbraucht'),default=>bx_badge(status_text($c['status']))} ?></td>
-        </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table></div>
-</div>
-<?php endif; ?>
+// ============ Panels in Puffer sammeln, danach in klarer Reihenfolge ausgeben ============
 
+// --- Weg-Hinweis (verkürzt/voll) ---
+ob_start(); ?>
 <?php if ($istVollerWeg && $wegUmstellbar): ?>
 <div class="bx-panel" style="border-color:var(--gruen);background:rgba(29,158,117,.06)">
   <?php if ($istZukauf): ?>
@@ -301,34 +253,220 @@ if ($zugeChargen):
   </div>
 </div>
 <?php endif; ?>
+<?php $panWeg = ob_get_clean();
 
-<?php
-$etHatSlot = (int) scalar("SELECT etikett_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) > 0;
-$etDok = $pa['auftrag_id'] ? etikett_datei((int)$pa['auftrag_id']) : null;
-if ($etHatSlot):
+// --- Wartet auf Material ---
+ob_start(); ?>
+<?php if ($ber['status'] === 'wartet' && $ber['fehlend']): ?>
+<div class="bx-panel" style="border-color:#e6c4c0">
+  <h2 style="margin-top:0">Wartet auf Material</h2>
+  <p class="muted" style="margin-top:0">Für die Produktion fehlt noch Bestand. Sobald alles da ist, wird der Auftrag „produktionsbereit".</p>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Material</th><th class="bx-num">Benötigt</th><th class="bx-num">Verfügbar</th><th class="bx-num">Fehlt</th></tr></thead>
+    <tbody>
+      <?php foreach ($ber['fehlend'] as $f): $fehlt = (float)$f['benoetigt'] - (float)$f['verfuegbar']; ?>
+        <tr>
+          <td><?= h($f['name']) ?></td>
+          <td class="bx-num"><?= $mfmt($f['benoetigt']) ?> <?= h($f['einheit']) ?></td>
+          <td class="bx-num"><?= $mfmt($f['verfuegbar']) ?> <?= h($f['einheit']) ?></td>
+          <td class="bx-num" style="color:#8f231b"><?= $mfmt(max(0,$fehlt)) ?> <?= h($f['einheit']) ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <div style="margin-top:12px"><a class="btn btn-ghost btn-sm" href="?p=wareneingang">Zum Wareneingang</a></div>
+</div>
+<?php endif; ?>
+<?php $panWartet = ob_get_clean();
+
+// --- Jetzt dran (aktueller Schritt) ---
+ob_start(); ?>
+<?php if ($firstOpenId && $pa['status'] !== 'erledigt'):
+    $curStep = null; foreach ($schritte as $s) if ((int)$s['id'] === $firstOpenId) { $curStep = $s; break; }
+    $anl = station_anleitung($curStep['station']);
+    $isGate = str_contains($curStep['station'], 'Freigabe');
 ?>
-<div class="bx-panel"<?= $etDok ? '' : ' style="border-color:#e6c4c0"' ?>>
-  <h2 style="margin-top:0">Etikett-Design <?= $etDok ? bx_badge('vorhanden','ok') : bx_badge('fehlt – Etikett nicht bestellbar','warn') ?></h2>
-  <?php if ($etDok): ?>
-    <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <div><a href="?p=dokument&id=<?= (int)$etDok['id'] ?>" target="_blank"><?= h($etDok['datei_orig'] ?: 'Etikett-Design') ?></a> <span class="muted">· hochgeladen <?= h(fmt_zeit($etDok['angelegt'], 'd.m.Y')) ?></span></div>
-      <div class="bx-row" style="gap:8px">
-        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:6px;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-ghost btn-sm" type="submit">Ersetzen</button></form>
-        <form method="post" style="margin:0" onsubmit="return confirm('Etikett-Design löschen?');"><input type="hidden" name="aktion" value="etikett_del"><button class="btn btn-ghost btn-sm" type="submit">Löschen</button></form>
+<div class="bx-panel" style="border-color:var(--gruen);background:rgba(29,158,117,.05)">
+  <div class="muted">Jetzt dran – Schritt <?= $done + 1 ?> von <?= $total ?></div>
+  <h2 style="margin:4px 0 8px"><?= h($curStep['station']) ?> <?= $isGate ? bx_badge('Gate','info') : '' ?></h2>
+  <p style="margin:0 0 12px;font-size:15px"><?= h($anl['text']) ?></p>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="erledigen">
+    <input type="hidden" name="schritt" value="<?= (int)$firstOpenId ?>">
+    <?php if ($anl['scan']): ?>
+      <div class="bx-field" style="margin:0;max-width:300px">
+        <label>Charge scannen oder eingeben</label>
+        <input type="text" name="scan" autofocus autocomplete="off" placeholder="Charge-Nr. scannen …">
       </div>
-    </div>
+    <?php endif; ?>
+    <button class="btn btn-primary" type="submit"><?= $isGate ? 'Freigeben' : ($anl['scan'] ? 'Scannen &amp; erledigen' : 'Erledigt') ?></button>
+  </form>
+</div>
+<?php endif; ?>
+<?php $panJetzt = ob_get_clean();
+
+// --- Ablauf: Stationen & Freigaben ---
+ob_start(); ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Ablauf</h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <tbody>
+    <?php foreach ($schritte as $s):
+        $isDone = (int)$s['erledigt'] === 1;
+        $isNext = (int)$s['id'] === $firstOpenId;
+        $isGate = str_contains($s['station'], 'Freigabe');
+    ?>
+      <tr<?= $isNext ? ' style="background:var(--panel-2)"' : '' ?>>
+        <td style="width:44px;text-align:center;font-size:18px">
+          <?= $isDone ? '<span class="bx-ok">&#10003;</span>' : ($isNext ? '&#9654;' : '<span class="muted">&#9675;</span>') ?>
+        </td>
+        <td>
+          <strong<?= $isDone ? '' : ($isNext ? '' : ' class="muted"') ?>><?= h($s['station']) ?></strong>
+          <?= $isGate ? ' ' . bx_badge('Gate','info') : '' ?>
+        </td>
+        <td class="muted"><?= $isDone && $s['erledigt_at'] ? h(fmt_zeit($s['erledigt_at'])) : '' ?><?= $isDone && !empty($s['erledigt_von']) ? ' · ' . h($s['erledigt_von']) : '' ?><?= $isDone && !empty($s['scan_charge']) ? ' · Charge ' . h($s['scan_charge']) : '' ?></td>
+        <td style="width:160px;text-align:right">
+          <?php if ($isNext): ?>
+            <span class="badge badge-info">jetzt dran</span>
+          <?php elseif ($isDone): ?>
+            <span class="badge badge-ok">erledigt</span>
+          <?php else: ?>
+            <span class="muted">wartet</span>
+          <?php endif; ?>
+        </td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php $panStationen = ob_get_clean();
+
+// --- Fertigware eingebucht ---
+ob_start(); ?>
+<?php if ($fertigware): ?>
+<div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2)">
+  <h2>Fertigware eingebucht</h2>
+  <div class="bx-row" style="justify-content:space-between;margin-bottom:10px">
+    <div><strong><?= h($fertigware['name']) ?></strong> · <?= h($fertigware['artikelnummer']) ?></div>
+    <div><?= bx_badge(number_format($fwGebucht,0,',','.') . ' von ' . number_format((float)$pa['menge'],0,',','.') . ' Stück gebucht', $fwRest > 0 ? 'warn' : 'ok') ?> <a class="btn btn-ghost btn-sm" href="?p=lager&kat=verkaufsfertig">zum Lager</a></div>
+  </div>
+  <div style="overflow-x:auto"><table class="bx-table">
+    <thead><tr><th>Charge</th><th>Gebucht</th><th>Im Lager</th><th>MHD</th><th>Eingebucht am</th><th>Status</th></tr></thead>
+    <tbody>
+    <?php foreach ($fwChargen as $c): ?>
+      <tr>
+        <td>
+          <form method="post" style="margin:0;display:flex;gap:4px;align-items:center">
+            <input type="hidden" name="aktion" value="charge_edit"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
+            <input type="text" name="charge_nr" value="<?= h($c['charge_nr']) ?>" style="width:120px;padding:3px 6px" title="Chargennummer bearbeiten">
+            <button class="btn btn-ghost btn-sm" type="submit" title="Chargennummer speichern">✓</button>
+            <a class="btn btn-ghost btn-sm" href="?p=chargen&id=<?= (int)$c['id'] ?>" title="Charge öffnen">↗</a>
+          </form>
+        </td>
+        <td><?= number_format((float)$c['menge'],0,',','.') ?></td>
+        <td><?= number_format((float)$c['menge_verfuegbar'],0,',','.') ?></td>
+        <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '–' ?></td>
+        <td><?= $c['wareneingang'] ? h(date('d.m.Y', strtotime($c['wareneingang']))) : '–' ?></td>
+        <td><?= h(status_text($c['status'])) ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
+<?php $panFertig = ob_get_clean();
+
+// --- Teilmenge einbuchen ---
+ob_start(); ?>
+<?php if ($pa['produkt_id'] && $fwRest > 0): ?>
+<div class="bx-panel">
+  <h2>Teilmenge einbuchen</h2>
+  <p class="muted" style="margin-top:0">Wird an mehreren Tagen produziert, kann jede fertige Teilmenge sofort als eigene Charge ins Lager
+    (<?= h(charge_naechste_nr($id)) ?> ist die nächste Nummer). Beim Abschluss des Auftrags wird nur noch der Rest gebucht.
+    Noch offen: <strong><?= number_format($fwRest,0,',','.') ?> Stück</strong>.</p>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="teilmenge">
+    <div class="bx-field" style="margin:0;max-width:160px"><label>Menge (Stück)</label>
+      <input type="number" name="menge" min="1" max="<?= (int)$fwRest ?>" step="1" required></div>
+    <div class="bx-field" style="margin:0;max-width:180px"><label>MHD <?= bx_hint('Leer = heute + Standardmonate aus den Einstellungen.') ?></label>
+      <input type="date" name="mhd" value="<?= h(mhd_standard()) ?>"></div>
+    <div class="bx-field" style="margin:0;flex:1;min-width:200px"><label>Notiz (optional)</label>
+      <input type="text" name="notiz" maxlength="200" placeholder="z. B. Tag 1 von 3"></div>
+    <button class="btn btn-primary" type="submit">Teilmenge einbuchen</button>
+  </form>
+</div>
+<?php endif; ?>
+<?php $panTeil = ob_get_clean();
+
+// --- Zusammensetzung (Rezeptur) ---
+ob_start(); ?>
+<?php if ($zutatenD): $sumMg = 0.0; foreach ($zutatenD as $zz) $sumMg += (float)$zz['menge_mg']; ?>
+<div class="bx-panel">
+  <h2>Zusammensetzung je Einheit</h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Bestandteil</th><th class="bx-num">mg je Einheit</th></tr></thead>
+    <tbody>
+      <?php foreach ($zutatenD as $zz): ?>
+      <tr><td><?= h((string)$zz['name']) ?></td><td class="bx-num"><?= (float)$zz['menge_mg'] > 0 ? rtrim(rtrim(number_format((float)$zz['menge_mg'],3,',','.'),'0'),',') . ' mg' : '<span class="muted">–</span>' ?></td></tr>
+      <?php endforeach; ?>
+      <tr><td><strong>Füllgewicht</strong></td><td class="bx-num"><strong><?= rtrim(rtrim(number_format($sumMg,3,',','.'),'0'),',') ?> mg</strong></td></tr>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
+<?php $panZus = ob_get_clean();
+
+// --- Material (entnommen / Bedarf) – nur Eigenproduktion/Historie ---
+ob_start(); ?>
+<?php if ($verbrauch || ($istVollerWeg && ($bedarf || $kapNeed))): ?>
+<div class="bx-panel">
+  <?php if ($verbrauch): ?>
+    <h2 style="margin-top:0">Entnommene Materialien (FEFO)</h2>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Rohstoff</th><th>Charge</th><th>Lieferant</th><th class="bx-num">Entnommen</th><th>Datum</th></tr></thead>
+      <tbody>
+      <?php foreach ($verbrauch as $vb): ?>
+        <tr><td><?= h($vb['item_name'] ?: '–') ?></td><td><?= h($vb['charge_nr'] ?: '–') ?></td>
+            <td class="muted"><?= h($vb['lieferant'] ?: '–') ?></td>
+            <td class="bx-num"><?= $mng($vb['menge'], $vb['einheit']) ?></td>
+            <td class="muted"><?= !empty($vb['angelegt']) ? h(date('d.m.Y', strtotime((string)$vb['angelegt']))) : '–' ?></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <div class="muted" style="margin-top:8px">Bestand wurde beim Bereitstellen abgebucht.</div>
   <?php else: ?>
-    <p class="muted" style="margin-top:0">Das Etikett ist kundenspezifisch und kann erst bestellt werden, wenn das Design vorliegt. Der Kunde kann es im Portal hochladen – oder lade die vom Kunden erhaltene Datei hier hoch.</p>
-    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-primary btn-sm" type="submit">Etikett-Design hochladen</button></form>
+    <h2 style="margin-top:0">Materialbedarf</h2>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Rohstoff</th><th class="bx-num">Benötigt</th><th class="bx-num">Verfügbar</th><th>Status</th></tr></thead>
+      <tbody>
+      <?php foreach ($bedarf as $b): $ok = $b['fehlt'] <= 0.0001; ?>
+        <tr>
+          <td><?= h($b['name']) ?></td>
+          <td class="bx-num"><?= $mng($b['benoetigt'], $b['einheit']) ?></td>
+          <td class="bx-num"><?= $mng($b['verfuegbar'], $b['einheit']) ?></td>
+          <td><?= $ok ? bx_badge('genug','ok') : bx_badge('fehlt ' . $mng($b['fehlt'], $b['einheit']), 'err') ?></td>
+        </tr>
+      <?php endforeach; ?>
+      <?php if ($kapNeed): $okK = $kapNeed['fehlt'] <= 0.0001; ?>
+        <tr>
+          <td><?= h($kapNeed['name']) ?> <?= bx_badge('Kapselhülle','info') ?></td>
+          <td class="bx-num"><?= number_format($kapNeed['benoetigt'],0,',','.') ?> Stück</td>
+          <td class="bx-num"><?= number_format($kapNeed['verfuegbar'],0,',','.') ?> Stück</td>
+          <td><?= $okK ? bx_badge('genug','ok') : bx_badge('fehlt ' . number_format($kapNeed['fehlt'],0,',','.') . ' Stück','err') ?></td>
+        </tr>
+      <?php endif; ?>
+      </tbody>
+    </table></div>
+    <div class="muted" style="margin-top:8px">Beim Abschluss von „Rohstoffe bereitstellen" werden die Chargen nach FEFO (älteste MHD zuerst) abgebucht.</div>
   <?php endif; ?>
 </div>
 <?php endif; ?>
+<?php $panMaterial = ob_get_clean();
 
-<?php
-// Einkaufsbedarf (Stückliste vs. Bestand) – was muss bestellt werden?
+// --- Einkaufsbedarf (Stückliste vs. Bestand) ---
+ob_start();
 $bedarfListe = auftrag_bedarf($id);
 $fehlListe   = auftrag_fehlbedarf($id);
-$mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 if ($bedarfListe):
     $rolleBadge = fn($r) => match ($r) {
         'Rohstoff'=>bx_badge('Rohstoff'), 'Leerkapsel'=>bx_badge('Leerkapsel'), 'Fertigware'=>bx_badge('Fertigware','info'),
@@ -369,12 +507,12 @@ if ($bedarfListe):
       <?php endforeach; ?>
     </tbody>
   </table></div>
-  <p class="muted" style="font-size:12px;margin:10px 0 0">„Verfügbar (netto)" = freier Bestand minus Reservierungen anderer Aufträge. „Bestand reservieren" sichert den aktuell freien Bestand für diesen Auftrag – andere Aufträge sehen ihn dann nicht mehr als verfügbar.<?= $fehlListe ? ' „Bestellung(en) anlegen" erzeugt je Hauptlieferant einen Entwurf (mit Auftragsbezug, Netting gegen offene Bestellungen).' : '' ?></p>
+  <p class="muted" style="font-size:12px;margin:10px 0 0">„Verfügbar (netto)" = freier Bestand minus Reservierungen anderer Aufträge. „Bestand reservieren" sichert den aktuell freien Bestand für diesen Auftrag.<?= $fehlListe ? ' „Bestellung(en) anlegen" erzeugt je Hauptlieferant einen Entwurf (mit Auftragsbezug, Netting gegen offene Bestellungen).' : '' ?></p>
 </div>
-<?php endif; ?>
+<?php endif; $panEinkauf = ob_get_clean();
 
-<?php
-// Bestellungen, die für diesen Auftrag angelegt wurden (Rückverfolgung / „wohin ist der Bedarf gewandert")
+// --- Bestellungen für diesen Auftrag ---
+ob_start();
 $auftBestellungen = $pa['auftrag_id'] ? all(
     "SELECT DISTINCT b.id, b.nummer, b.status, l.firma AS lieferant
      FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
@@ -398,185 +536,90 @@ if ($auftBestellungen):
       <?php endforeach; ?>
     </tbody>
   </table></div>
-  <p class="muted" style="font-size:12px;margin:10px 0 0">Diese Bestellungen liegen im Bereich <strong>Einkauf → Bestellungen</strong>. Dort Lieferant setzen und absenden; der Wareneingang bucht die Ware dann automatisch auf diesen Auftrag.</p>
 </div>
-<?php endif; ?>
+<?php endif; $panBestellungen = ob_get_clean();
 
-<?php if ($firstOpenId && $pa['status'] !== 'erledigt'):
-    $curStep = null; foreach ($schritte as $s) if ((int)$s['id'] === $firstOpenId) { $curStep = $s; break; }
-    $anl = station_anleitung($curStep['station']);
-    $isGate = str_contains($curStep['station'], 'Freigabe');
+// --- Wareneingänge für diesen Auftrag ---
+ob_start();
+$zugeChargen = $pa['auftrag_id'] ? all(
+    "SELECT c.*, i.name AS item_name, i.kategorie AS kategorie, i.form AS form
+     FROM charge c LEFT JOIN item i ON i.id=c.item_id
+     WHERE c.auftrag_id=? ORDER BY c.angelegt DESC", [(int)$pa['auftrag_id']]) : [];
+if ($zugeChargen):
+    $katLbl = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','fertig'=>'Fertigware (Bulk)','verkaufsfertig'=>'Fertigware'];
 ?>
-<div class="bx-panel" style="border-color:var(--gruen);background:rgba(29,158,117,.05)">
-  <div class="muted">Jetzt dran – Schritt <?= $done + 1 ?> von <?= $total ?></div>
-  <h2 style="margin:4px 0 8px"><?= h($curStep['station']) ?> <?= $isGate ? bx_badge('Gate','info') : '' ?></h2>
-  <p style="margin:0 0 12px;font-size:15px"><?= h($anl['text']) ?></p>
-  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="erledigen">
-    <input type="hidden" name="schritt" value="<?= (int)$firstOpenId ?>">
-    <?php if ($anl['scan']): ?>
-      <div class="bx-field" style="margin:0;max-width:300px">
-        <label>Charge scannen oder eingeben</label>
-        <input type="text" name="scan" autofocus autocomplete="off" placeholder="Charge-Nr. scannen …">
-      </div>
-    <?php endif; ?>
-    <button class="btn btn-primary" type="submit"><?= $isGate ? 'Freigeben' : ($anl['scan'] ? 'Scannen &amp; erledigen' : 'Erledigt') ?></button>
-  </form>
-</div>
-<?php endif; ?>
-
-<?php
-// Rohstoffbedarf nur auf dem VOLLEN Weg zeigen. Bei Fremdproduktion (zugekaufte Bulkware) werden die
-// Rezeptur-Rohstoffe nie angefasst – sie hier als „fehlt" auszuweisen führt zu unnötigen Bestellungen.
-// Bereits entnommene Chargen bleiben immer sichtbar (Rückverfolgung), auch wenn der Weg später umgestellt wurde.
-if ($verbrauch || ($istVollerWeg && ($bedarf || $kapNeed))): ?>
 <div class="bx-panel">
-  <?php if ($verbrauch): ?>
-    <h2>Entnommene Materialien (FEFO)</h2>
-    <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Rohstoff</th><th>Charge</th><th>Lieferant</th><th class="bx-num">Entnommen</th><th>Datum</th></tr></thead>
-      <tbody>
-      <?php foreach ($verbrauch as $vb): ?>
-        <tr><td><?= h($vb['item_name'] ?: '–') ?></td><td><?= h($vb['charge_nr'] ?: '–') ?></td>
-            <td class="muted"><?= h($vb['lieferant'] ?: '–') ?></td>
-            <td class="bx-num"><?= $mng($vb['menge'], $vb['einheit']) ?></td>
-            <td class="muted"><?= !empty($vb['angelegt']) ? h(date('d.m.Y', strtotime((string)$vb['angelegt']))) : '–' ?></td></tr>
+  <h2 style="margin-top:0">Wareneingänge für diesen Auftrag</h2>
+  <p class="muted" style="margin-top:0">Diese Lieferungen wurden gezielt für diesen Auftrag bestellt/eingebucht.</p>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Charge</th><th>Artikel</th><th>Art</th><th class="bx-num">Menge</th><th>MHD</th><th>Status</th></tr></thead>
+    <tbody>
+      <?php foreach ($zugeChargen as $c): ?>
+        <tr onclick="location.href='?p=chargen&id=<?= (int)$c['id'] ?>'" style="cursor:pointer">
+          <td><?= h($c['charge_nr'] ?: ('#'.$c['id'])) ?></td>
+          <td><?= h($c['item_name'] ?: '–') ?></td>
+          <td><?= h($katLbl[$c['kategorie']] ?? $c['kategorie']) ?><?= $c['form'] ? ' · ' . h($c['form']) : '' ?></td>
+          <td class="bx-num"><?= $mng($c['menge_verfuegbar'], $c['einheit']) ?></td>
+          <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '–' ?></td>
+          <td><?= match($c['status']){'frei'=>bx_badge('freigegeben','ok'),'quarantaene'=>bx_badge('Quarantäne (Prüfung)','warn'),'leer'=>bx_badge('verbraucht'),default=>bx_badge(status_text($c['status']))} ?></td>
+        </tr>
       <?php endforeach; ?>
-      </tbody>
-    </table></div>
-    <div class="muted" style="margin-top:8px">Bestand wurde beim Bereitstellen abgebucht.</div>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; $panWareneingaenge = ob_get_clean();
+
+// --- Etikett-Design ---
+ob_start();
+$etHatSlot = (int) scalar("SELECT etikett_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) > 0;
+$etDok = $pa['auftrag_id'] ? etikett_datei((int)$pa['auftrag_id']) : null;
+if ($etHatSlot):
+?>
+<div class="bx-panel"<?= $etDok ? '' : ' style="border-color:#e6c4c0"' ?>>
+  <h2 style="margin-top:0">Etikett-Design <?= $etDok ? bx_badge('vorhanden','ok') : bx_badge('fehlt – Etikett nicht bestellbar','warn') ?></h2>
+  <?php if ($etDok): ?>
+    <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div><a href="?p=dokument&id=<?= (int)$etDok['id'] ?>" target="_blank"><?= h($etDok['datei_orig'] ?: 'Etikett-Design') ?></a> <span class="muted">· hochgeladen <?= h(fmt_zeit($etDok['angelegt'], 'd.m.Y')) ?></span></div>
+      <div class="bx-row" style="gap:8px">
+        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:6px;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-ghost btn-sm" type="submit">Ersetzen</button></form>
+        <form method="post" style="margin:0" onsubmit="return confirm('Etikett-Design löschen?');"><input type="hidden" name="aktion" value="etikett_del"><button class="btn btn-ghost btn-sm" type="submit">Löschen</button></form>
+      </div>
+    </div>
   <?php else: ?>
-    <h2>Materialbedarf</h2>
-    <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Rohstoff</th><th class="bx-num">Benötigt</th><th class="bx-num">Verfügbar</th><th>Status</th></tr></thead>
-      <tbody>
-      <?php foreach ($bedarf as $b): $ok = $b['fehlt'] <= 0.0001; ?>
-        <tr>
-          <td><?= h($b['name']) ?></td>
-          <td class="bx-num"><?= $mng($b['benoetigt'], $b['einheit']) ?></td>
-          <td class="bx-num"><?= $mng($b['verfuegbar'], $b['einheit']) ?></td>
-          <td><?= $ok ? bx_badge('genug','ok') : bx_badge('fehlt ' . $mng($b['fehlt'], $b['einheit']), 'err') ?></td>
-        </tr>
-      <?php endforeach; ?>
-      <?php if ($kapNeed): $okK = $kapNeed['fehlt'] <= 0.0001; ?>
-        <tr>
-          <td><?= h($kapNeed['name']) ?> <?= bx_badge('Kapselhülle','info') ?></td>
-          <td class="bx-num"><?= number_format($kapNeed['benoetigt'],0,',','.') ?> Stück</td>
-          <td class="bx-num"><?= number_format($kapNeed['verfuegbar'],0,',','.') ?> Stück</td>
-          <td><?= $okK ? bx_badge('genug','ok') : bx_badge('fehlt ' . number_format($kapNeed['fehlt'],0,',','.') . ' Stück','err') ?></td>
-        </tr>
-      <?php endif; ?>
-      </tbody>
-    </table></div>
-    <div class="muted" style="margin-top:8px">Beim Abschluss von „Rohstoffe bereitstellen" werden die Chargen nach FEFO (älteste MHD zuerst) abgebucht.</div>
+    <p class="muted" style="margin-top:0">Das Etikett ist kundenspezifisch und kann erst bestellt werden, wenn das Design vorliegt. Der Kunde kann es im Portal hochladen – oder lade die vom Kunden erhaltene Datei hier hoch.</p>
+    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-primary btn-sm" type="submit">Etikett-Design hochladen</button></form>
   <?php endif; ?>
 </div>
-<?php endif; ?>
+<?php endif; $panEtikett = ob_get_clean();
 
-<?php if ($zutatenD): $sumMg = 0.0; foreach ($zutatenD as $zz) $sumMg += (float)$zz['menge_mg']; ?>
+// --- Details ---
+ob_start(); ?>
 <div class="bx-panel">
-  <h2>Zusammensetzung je Einheit</h2>
-  <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Bestandteil</th><th class="bx-num">mg je Einheit</th></tr></thead>
-    <tbody>
-      <?php foreach ($zutatenD as $zz): ?>
-      <tr><td><?= h((string)$zz['name']) ?></td><td class="bx-num"><?= (float)$zz['menge_mg'] > 0 ? rtrim(rtrim(number_format((float)$zz['menge_mg'],3,',','.'),'0'),',') . ' mg' : '<span class="muted">–</span>' ?></td></tr>
-      <?php endforeach; ?>
-      <tr><td><strong>Füllgewicht</strong></td><td class="bx-num"><strong><?= rtrim(rtrim(number_format($sumMg,3,',','.'),'0'),',') ?> mg</strong></td></tr>
-    </tbody>
-  </table></div>
-</div>
-<?php endif; ?>
-
-<div class="bx-panel">
-  <h2>Stationen &amp; Freigaben</h2>
-  <div class="bx-tablewrap"><table class="bx-table">
-    <tbody>
-    <?php foreach ($schritte as $s):
-        $isDone = (int)$s['erledigt'] === 1;
-        $isNext = (int)$s['id'] === $firstOpenId;
-        $isGate = str_contains($s['station'], 'Freigabe');
-    ?>
-      <tr<?= $isNext ? ' style="background:var(--panel-2)"' : '' ?>>
-        <td style="width:44px;text-align:center;font-size:18px">
-          <?= $isDone ? '<span class="bx-ok">&#10003;</span>' : ($isNext ? '&#9654;' : '<span class="muted">&#9675;</span>') ?>
-        </td>
-        <td>
-          <strong<?= $isDone ? '' : ($isNext ? '' : ' class="muted"') ?>><?= h($s['station']) ?></strong>
-          <?= $isGate ? ' ' . bx_badge('Gate','info') : '' ?>
-        </td>
-        <td class="muted"><?= $isDone && $s['erledigt_at'] ? h(fmt_zeit($s['erledigt_at'])) : '' ?><?= $isDone && !empty($s['erledigt_von']) ? ' · ' . h($s['erledigt_von']) : '' ?><?= $isDone && !empty($s['scan_charge']) ? ' · Charge ' . h($s['scan_charge']) : '' ?></td>
-        <td style="width:160px;text-align:right">
-          <?php if ($isNext): ?>
-            <span class="badge badge-info">jetzt dran</span>
-          <?php elseif ($isDone): ?>
-            <span class="badge badge-ok">erledigt</span>
-          <?php else: ?>
-            <span class="muted">wartet</span>
-          <?php endif; ?>
-        </td>
-      </tr>
-    <?php endforeach; ?>
-    </tbody>
-  </table></div>
-</div>
-
-<?php if ($fertigware): ?>
-<div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2)">
-  <h2>Fertigware eingebucht</h2>
-  <div class="bx-row" style="justify-content:space-between;margin-bottom:10px">
-    <div><strong><?= h($fertigware['name']) ?></strong> · <?= h($fertigware['artikelnummer']) ?></div>
-    <div><?= bx_badge(number_format($fwGebucht,0,',','.') . ' von ' . number_format((float)$pa['menge'],0,',','.') . ' Stück gebucht', $fwRest > 0 ? 'warn' : 'ok') ?> <a class="btn btn-ghost btn-sm" href="?p=lager&kat=verkaufsfertig">zum Lager</a></div>
-  </div>
-  <div style="overflow-x:auto"><table class="bx-table">
-    <thead><tr><th>Charge</th><th>Gebucht</th><th>Im Lager</th><th>MHD</th><th>Eingebucht am</th><th>Status</th></tr></thead>
-    <tbody>
-    <?php foreach ($fwChargen as $c): ?>
-      <tr>
-        <td>
-          <form method="post" style="margin:0;display:flex;gap:4px;align-items:center">
-            <input type="hidden" name="aktion" value="charge_edit"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
-            <input type="text" name="charge_nr" value="<?= h($c['charge_nr']) ?>" style="width:120px;padding:3px 6px" title="Chargennummer bearbeiten">
-            <button class="btn btn-ghost btn-sm" type="submit" title="Chargennummer speichern">✓</button>
-            <a class="btn btn-ghost btn-sm" href="?p=chargen&id=<?= (int)$c['id'] ?>" title="Charge öffnen">↗</a>
-          </form>
-        </td>
-        <td><?= number_format((float)$c['menge'],0,',','.') ?></td>
-        <td><?= number_format((float)$c['menge_verfuegbar'],0,',','.') ?></td>
-        <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '–' ?></td>
-        <td><?= $c['wareneingang'] ? h(date('d.m.Y', strtotime($c['wareneingang']))) : '–' ?></td>
-        <td><?= h(status_text($c['status'])) ?></td>
-      </tr>
-    <?php endforeach; ?>
-    </tbody>
-  </table></div>
-</div>
-<?php endif; ?>
-
-<?php if ($pa['produkt_id'] && $fwRest > 0): ?>
-<div class="bx-panel">
-  <h2>Teilmenge einbuchen</h2>
-  <p class="muted" style="margin-top:0">Wird an mehreren Tagen produziert, kann jede fertige Teilmenge sofort als eigene Charge ins Lager
-    (<?= h(charge_naechste_nr($id)) ?> ist die nächste Nummer). Beim Abschluss des Auftrags wird nur noch der Rest gebucht.
-    Noch offen: <strong><?= number_format($fwRest,0,',','.') ?> Stück</strong>.</p>
-  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="teilmenge">
-    <div class="bx-field" style="margin:0;max-width:160px"><label>Menge (Stück)</label>
-      <input type="number" name="menge" min="1" max="<?= (int)$fwRest ?>" step="1" required></div>
-    <div class="bx-field" style="margin:0;max-width:180px"><label>MHD <?= bx_hint('Leer = heute + Standardmonate aus den Einstellungen.') ?></label>
-      <input type="date" name="mhd" value="<?= h(mhd_standard()) ?>"></div>
-    <div class="bx-field" style="margin:0;flex:1;min-width:200px"><label>Notiz (optional)</label>
-      <input type="text" name="notiz" maxlength="200" placeholder="z. B. Tag 1 von 3"></div>
-    <button class="btn btn-primary" type="submit">Teilmenge einbuchen</button>
-  </form>
-</div>
-<?php endif; ?>
-
-<div class="bx-panel">
-  <h2>Details</h2>
+  <h2 style="margin-top:0">Details</h2>
   <div class="bx-grid">
     <div><div class="k muted">Kunde</div><div><?= kunde_link($pa['kunde_id'] ?? null, $pa['kunde_firma']) ?></div></div>
     <div><div class="k muted">Aus Auftrag</div><div><?php if ($pa['auftrag_id']): ?><a href="?p=auftrag&id=<?= (int)$pa['auftrag_id'] ?>"><?= h($pa['auftrag_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
   </div>
 </div>
-<?php render_footer(); ?>
+<?php $panDetails = ob_get_clean();
+
+// ============ Ausgabe in klarer Reihenfolge ============
+echo $panWeg;            // Weg-Hinweis (verkürzt/voll)
+echo $panWartet;         // Wartet auf Material (Alarm)
+echo $panJetzt;          // JETZT dran – die eine Aktion
+echo $panStationen;      // Ablauf (Checkliste)
+echo $panFertig;         // Fertigware eingebucht
+echo $panTeil;           // Teilmenge einbuchen
+echo $panZus;            // Zusammensetzung
+
+// Einklappbar: Material, Einkauf & Beschaffung (bei Zukauf meist leer/kurz)
+$grpMatEinkauf = trim($panMaterial . $panEinkauf . $panBestellungen);
+if ($grpMatEinkauf !== '') {
+    echo '<details class="bx-sek"><summary>Material, Einkauf &amp; Beschaffung</summary>' . $grpMatEinkauf . '</details>';
+}
+// Einklappbar: Wareneingänge, Etikett & Details
+$grpRest = trim($panWareneingaenge . $panEtikett . $panDetails);
+if ($grpRest !== '') {
+    echo '<details class="bx-sek"><summary>Wareneingänge, Etikett &amp; Details</summary>' . $grpRest . '</details>';
+}
+render_footer();

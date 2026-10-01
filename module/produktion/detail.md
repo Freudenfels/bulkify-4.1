@@ -4,6 +4,20 @@
 
 **Produktionsbericht:** Kopf-Button **„Produktionsbericht"** (`?p=produktion_bericht`) öffnet das druckbare Herstellprotokoll mit allen Infos, das sich auch für den Kunden freigeben lässt (siehe [bericht.md](bericht.md)). Wer einen Schritt abschließt, wird in `produktion_schritt.erledigt_von` festgehalten.
 
+## Seitenaufbau (Reihenfolge – „erst das Wichtige")
+Die Seite ist bewusst **von oben nach unten nach Relevanz** sortiert, damit ein Mitarbeiter nicht durch Einkaufs-/Material-Panels scrollen muss, bevor er sieht, was zu tun ist. Alle Panels werden im Code in Puffer (`ob_start`/`ob_get_clean`) gesammelt und dann geordnet ausgegeben:
+1. **Kennzahl-Kacheln** (Zustand · Produkt · Menge · Planung/Charge) + Charge/MHD-Hinweis.
+2. **Weg-Hinweis** (verkürzter Weg bei Zukauf / voller Weg) – nur solange nichts erledigt.
+3. **Wartet auf Material** – Alarm-Panel, nur wenn Bestand fehlt.
+4. **Jetzt dran** – der eine aktuelle Schritt groß mit Button (und Scan-Feld).
+5. **Ablauf** – die komplette Stationsliste als Checkliste (erledigt/jetzt/wartet).
+6. **Fertigware eingebucht** + **Teilmenge einbuchen** (wenn relevant).
+7. **Zusammensetzung je Einheit** (Rezeptur).
+8. Einklappbar `<details class="bx-sek">` **„Material, Einkauf & Beschaffung"** (Materialbedarf/entnommen · Einkaufsbedarf · Bestellungen) – bei Zukauf meist leer, deshalb zugeklappt und aus dem Weg.
+9. Einklappbar `<details class="bx-sek">` **„Wareneingänge, Etikett & Details"**.
+
+Die eingeklappten Sektionen (`.bx-sek`) haben einen eigenen seitenlokalen `<style>` (Dreieck-Marker, grüne Zusammenfassung). So bleibt die Seite ruhig, ohne dass Funktionen verloren gehen – jedes alte Panel (inkl. aller POST-Handler) steckt weiterhin drin, nur neu angeordnet.
+
 **Alle Infos direkt auf der Detailseite:** Die Seite zeigt zusätzlich zur Ablaufliste ein **Zusammensetzung**-Panel (Rezeptur-Zutaten je Einheit + Füllgewicht), bei **Entnommene Materialien** je Zeile **Lieferant + Datum**, und in der Stationsliste je erledigtem Schritt **Zeit · Bearbeiter · gescannte Charge**. So sieht man beim Klick auf den Auftrag alles, nicht nur im Bericht.
 
 **Stationen (je Darreichungsform):** Rohstoffe bereitstellen · Mischen · **Herstellung** (Verkapselung / Tablettierung / Abfüllung … je Form) · Verpacken · Etikettieren · Qualitätsprüfung · **Produktions-Freigabe** (Gate) · **Versand-Freigabe** (Gate). Definiert in `produktionsschritte_fuer()`.
