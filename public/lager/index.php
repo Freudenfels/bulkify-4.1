@@ -21,6 +21,7 @@ $routen = [
     'eingang'        => 'bestand/eingang.php',
     'ausgang'        => 'bestand/ausgang.php',
     'bewegungen'     => 'bestand/bewegungen.php',
+    'etikett'        => 'bestand/etikett.php',
     'charge'         => 'bestand/charge.php',
     'dok'            => 'bestand/dok.php',
     'finden'         => 'leiste/finden.php',

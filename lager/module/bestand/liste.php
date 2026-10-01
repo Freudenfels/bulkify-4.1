@@ -35,7 +35,7 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
   <table class="bx-table" id="lg-bestand">
     <thead><tr>
       <th>Rohstoff / Produkt</th><?= $kat === '' ? '<th>Kategorie</th>' : '' ?>
-      <th>Charge</th><th>MHD</th><th>Bestand</th><th>Status</th><th>Ort</th>
+      <th>Charge</th><th>MHD</th><th>Bestand</th><th>Status</th><th>Ort</th><th></th>
     </tr></thead>
     <tbody>
     <?php foreach ($zeilen as $z): ?>
@@ -48,6 +48,7 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
         <td><?= status_badge($z['status']) ?></td>
         <td><?php $ik = kiste_fuer_charge((int)$z['id']); $bl = leiste_fuer_charge((int)$z['id']);
           if ($ik): ?>Kiste <?= h((string)$ik['kiste_name']) ?><?php elseif ($bl): ?><span class="lg-code"><?= h((string)$bl['code']) ?></span><?php else: ?><span class="muted">–</span><?php endif; ?></td>
+        <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=etikett&id=<?= (int)$z['id'] ?>" target="_blank" onclick="event.stopPropagation()" title="QR-Etikett als PDF">Etikett</a></td>
       </tr>
     <?php endforeach; ?>
     </tbody>

@@ -46,7 +46,8 @@ $dokumente = erp_item_dokumente((int)$c['item_id'], $produkt_id ? (int)$produkt_
 $andere = erp_item_chargen((int)$c['item_id'], $id);
 
 kopf('Charge ' . (string)$c['charge_nr'], 'bestand');
-$kopfAktion = (isset($_GET['neu']) ? '<a class="btn btn-ghost" href="?p=eingang">Nächster Wareneingang</a> ' : '')
+$kopfAktion = '<a class="btn btn-' . (isset($_GET['neu']) ? 'primary' : 'ghost') . '" href="?p=etikett&id=' . $id . '" target="_blank">Etikett drucken</a> '
+    . (isset($_GET['neu']) ? '<a class="btn btn-ghost" href="?p=eingang">Nächster Wareneingang</a> ' : '')
     . '<a class="btn btn-ghost" href="?p=bestand">Zum Bestand</a>';
 seitenkopf((string)$c['item_name'], erp_kategorie_label($c) . ($c['artikelnummer'] ? ' · ' . $c['artikelnummer'] : ''), $kopfAktion);
 flash_zeigen();
