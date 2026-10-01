@@ -896,6 +896,12 @@ if (!function_exists('kunde_auftrag_phase')) {
                      JOIN bestellung_position bp ON bp.bestellung_id=b.id WHERE bp.auftrag_id=?", [$aid]);
         $bestellt = $best && !empty($best['d']);
         if ($bestellt) $dates[1] = $best['d'];
+        // Auch ein gebuchter Wareneingang (Charge am Auftrag) zählt als „Rohstoff bestellt/angekommen" –
+        // z. B. extern bestellte, direkt eingebuchte Fremdproduktions-Bulkware ohne System-Bestellung.
+        if (!$bestellt) {
+            $we = one("SELECT COALESCE(MIN(wareneingang), MIN(angelegt)) d FROM charge WHERE auftrag_id=?", [$aid]);
+            if ($we && !empty($we['d'])) { $bestellt = true; $dates[1] = $we['d']; }
+        }
         // Produktion + Qualitätsprüfung aus den echten Schritten (nur intern; hier nur zur Phasenableitung).
         $pa = one("SELECT id, angelegt FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$aid]);
         $qcDate = null;

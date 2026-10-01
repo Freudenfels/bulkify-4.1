@@ -135,6 +135,11 @@ $best = all("SELECT DISTINCT b.id, b.nummer, b.status, b.bestaetigt, b.angekomme
              FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
              LEFT JOIN lieferanten l ON l.id=b.lieferant_id
              WHERE bp.auftrag_id=? ORDER BY b.angelegt DESC", [$id]);
+// Direkt gebuchte Wareneingänge (Chargen) zu diesem Auftrag – z. B. extern bestellte, direkt
+// eingebuchte Fremdproduktions-Bulkware ohne System-Bestellung. Zeigt „angekommen" auch ohne Bestellung.
+$wareneingaenge = all("SELECT c.charge_nr, c.menge_verfuegbar, c.status, c.wareneingang, c.mhd, i.name AS item_name, i.einheit
+                       FROM charge c LEFT JOIN item i ON i.id=c.item_id
+                       WHERE c.auftrag_id=? ORDER BY c.angelegt DESC", [$id]);
 $bStatus = function($b) {
     if (!empty($b['angekommen_am']))        return bx_badge('angekommen','ok');
     if ((int)($b['bestaetigt'] ?? 0) === 1) return bx_badge('bestätigt','warn');
@@ -257,6 +262,25 @@ echo '</div>';
       <?php endforeach; ?>
       </tbody>
     </table></div>
+  <?php endif; ?>
+
+  <?php if ($wareneingaenge): ?>
+  <h3 style="margin:18px 0 6px;font-size:14px;font-weight:600">Wareneingänge zu diesem Auftrag</h3>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Charge</th><th>Artikel</th><th class="bx-num">Menge</th><th>MHD</th><th>Eingang</th><th>Status</th></tr></thead>
+    <tbody>
+      <?php foreach ($wareneingaenge as $w): ?>
+        <tr>
+          <td><?= h($w['charge_nr'] ?: '–') ?></td>
+          <td><?= h($w['item_name'] ?: '–') ?></td>
+          <td class="bx-num"><?= rtrim(rtrim(number_format((float)$w['menge_verfuegbar'],3,',','.'),'0'),',') ?> <?= h($w['einheit'] ?: '') ?></td>
+          <td><?= $w['mhd'] ? h(date('d.m.Y', strtotime((string)$w['mhd']))) : '<span class="muted">–</span>' ?></td>
+          <td><?= $w['wareneingang'] ? h(date('d.m.Y', strtotime((string)$w['wareneingang']))) : '<span class="muted">–</span>' ?></td>
+          <td><?= match ((string)$w['status']) { 'frei'=>bx_badge('angekommen · frei','ok'), 'quarantaene'=>bx_badge('angekommen · Quarantäne','warn'), 'gesperrt'=>bx_badge('gesperrt','err'), default=>bx_badge((string)$w['status']) } ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
   <?php endif; ?>
 </div>
 
