@@ -38,6 +38,7 @@ function route_rollen_map(): array {
         'vertrag_pdf'        => ['sales', 'finance'],
         'auftraege'          => ['sales', 'finance', 'production', 'fulfillment'],
         'auftrag'            => ['sales', 'finance', 'production', 'fulfillment'],
+        'auftrag_pdf'        => ['sales', 'finance', 'production', 'fulfillment'],
         'fasttrack'          => ['sales', 'finance', 'production', 'fulfillment'],
         'anfragen'           => ['sales', 'production'],
         'anfrage'            => ['sales', 'production'],

@@ -78,6 +78,7 @@ $routes = [
     'auftraege'       => 'auftrag/liste.php',
     'kontingente'     => 'kontingent/liste.php',
     'auftrag'         => 'auftrag/detail.php',
+    'auftrag_pdf'     => 'auftrag/pdf.php',   // Auftragsbestätigung als PDF (Download/Druck)
     'rechnungen'      => 'beleg/rechnungen_liste.php',
     'rechnung'        => 'beleg/detail.php',
     'fasttrack'       => 'produktion/fasttrack.php',   // Schnelles Nachtragen: Auftrag-Status + Datum + Sprach-Notiz
