@@ -1592,6 +1592,10 @@ function init_schema(): void {
     ensure_index('beleg', 'idx_auftrag', 'auftrag_id');                // Rechnung je Auftrag
     ensure_index('beleg', 'idx_kunde_typ', 'kunde_id, typ');           // Rechnungen je Kunde
 
+    // Bedarf-Cache nach jedem Deploy einmal invalidieren – so greifen Änderungen an der Bedarfsrechnung
+    // (z. B. Fallback produkt.einheiten_pro_packung -> auftrag.stueck) sofort und nicht erst nach TTL.
+    bedarf_bump();
+
     // Migrationen durch -> Marker setzen, damit der nächste Request den Block überspringt.
     if ($schemaBuild !== '') meta_set('schema_build', $schemaBuild);
 }
@@ -2148,12 +2152,12 @@ function kunde_komplett_loeschen(int $kid): array {
 
 // Station Verkapselung: Leerkapseln nach FEFO abbuchen (menge × einheiten je Packung). Blockiert bei zu wenig Bestand.
 function produktion_kapseln_entnehmen(int $pa_id): array {
-    $pa = one("SELECT menge, produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return ['ok'=>true, 'fehlt'=>[]];
     $kid = produkt_leerkapsel_id((int)$pa['produkt_id']);
     if (!$kid) return ['ok'=>true, 'fehlt'=>[]];                       // kein Kapselprodukt / nicht bestimmbar -> nichts abbuchen
     if ((int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, $kid]) > 0) return ['ok'=>true, 'fehlt'=>[]];
-    $einh = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [$pa['produkt_id']]);
+    $einh = produktion_stueck_je_packung($pa);                         // mit Fallback auf auftrag.stueck (v3-Import)
     $benoetigt = (float)$pa['menge'] * $einh;                          // Gesamt-Kapseln
     $verf = item_bestand($kid, true);
     if ($verf + 0.0001 < $benoetigt) {
@@ -2176,7 +2180,7 @@ function produktion_kapseln_entnehmen(int $pa_id): array {
 function produktion_fertigware_entnehmen(int $pa_id): array {
     $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa || !$pa['auftrag_id']) return ['ok'=>true, 'fehlt'=>[]];
-    $einh = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    $einh = produktion_stueck_je_packung($pa);                         // mit Fallback auf auftrag.stueck (v3-Import)
     $benoetigt = (float)$pa['menge'] * $einh;
     if ($benoetigt <= 0) return ['ok'=>true, 'fehlt'=>[]];
     $chargen = all("SELECT c.* FROM charge c JOIN item i ON i.id=c.item_id
@@ -5059,11 +5063,11 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
     // Gleiches Produkt (= gleiche Kapsel/Bulk) über mehrere Aufträge zusammenfassen.
     $grp = [];
     foreach (all("SELECT pa.id, pa.auftrag_id, pa.menge, pa.produkt_id, a.nummer AS auftrag_nr,
-                         p.name AS produkt, p.einheiten_pro_packung AS ep
+                         p.name AS produkt, COALESCE(NULLIF(p.einheiten_pro_packung,0), a.stueck, 0) AS ep
                   FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id
                   LEFT JOIN produkt p ON p.id=pa.produkt_id
                   WHERE $wo ORDER BY pa.prio, pa.angelegt") as $pa) {
-        $need = (int)$pa['menge'] * (int)$pa['ep'];
+        $need = (int)$pa['menge'] * (int)$pa['ep'];   // ep mit Fallback auf auftrag.stueck (v3-Import)
         if ($need <= 0) continue;
         $pid = (int)$pa['produkt_id'];
         if (!isset($grp[$pid])) $grp[$pid] = ['produkt_id'=>$pid, 'produkt'=>$pa['produkt'], 'need'=>0.0, 'orders'=>[], 'pa_ids'=>[], 'auftrag_ids'=>[]];
@@ -5178,8 +5182,7 @@ function auftrag_offener_bedarf(int $pa_id): bool {
     if (auftrag_fehlbedarf($pa_id)) return true;
     $pa = pa_row_cached($pa_id);
     if ($pa && ($pa['produktionsart'] ?? 'eigen') === 'fremd') {
-        $prd = produkt_row_cached((int)$pa['produkt_id']);
-        $einh = (int)($prd['einheiten_pro_packung'] ?? 0);
+        $einh = produktion_stueck_je_packung($pa);   // Fallback auf auftrag.stueck (v3-Import, produkt.einheiten_pro_packung=0)
         $need = (int)$pa['menge'] * $einh;
         $ordered = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                    WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status<>'geliefert'", [(int)$pa['auftrag_id']]);
@@ -5314,7 +5317,10 @@ function produktion_materialbedarf(int $pa_id): array {
     } else {
         $prod = produkt_row_cached((int)$pa['produkt_id']);
         if (!$prod || !$prod['rezeptur_id']) return [];
-        $einheiten_total = (int)$pa['menge'] * (int)$prod['einheiten_pro_packung'];
+        // Stück je Packung MIT Fallback auf auftrag.stueck (v3-Importe tragen die Zahl oft nur am Auftrag,
+        // produkt.einheiten_pro_packung=0). Sonst käme einheiten_total=0 -> Rohstoffbedarf 0 -> nichts bestellbar,
+        // obwohl die Rezeptur eine Dosis hat (deckt sich mit der Anzeige „Kapseln je Packung" auf der PA-Seite).
+        $einheiten_total = (int)$pa['menge'] * produktion_stueck_je_packung($pa);
         $rid = (int)$prod['rezeptur_id'];
     }
     // Zutaten der Rezeptur – in der Liste request-lokal gecacht (Rezepturen mehrerer Aufträge nur einmal holen).
