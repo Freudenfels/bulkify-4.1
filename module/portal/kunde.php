@@ -909,7 +909,9 @@ if (!function_exists('kunde_auftrag_phase')) {
         $angekommen = $angDate !== null;
         if ($angekommen) {
             $dates[2] = $angDate;
-            if (!$bestellt) { $bestellt = true; $dates[1] = $dates[1] ?: $angDate; }   // angekommen impliziert bestellt
+            // „angekommen" impliziert „bestellt" (Schritt gilt als erreicht), aber OHNE erfundenes Datum:
+            // ein Bestelldatum steht nur, wenn es eine echte Bestellung gibt ($dates[1] oben gesetzt).
+            $bestellt = true;
         }
         // Produktion (3) + Qualitätsprüfung (4) aus den echten Schritten (nur intern; hier nur zur Phasenableitung).
         $pa = one("SELECT id, angelegt FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$aid]);
