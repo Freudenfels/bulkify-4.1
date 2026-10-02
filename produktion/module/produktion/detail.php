@@ -36,47 +36,73 @@ $gesamt = $vpe > 0 ? (int)$pa['menge'] * $vpe : 0;        // Gesamtstückzahl
 $form   = (string)($pa['form'] ?? '');
 $stkWort = in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : 'Stück');
 $eingang = $pa['auftrag_eingang'] ?? ($pa['angelegt'] ?? null);
-// Verpackung lesbar zusammensetzen (Name · Typ · Volumen · Material)
-$vpTeile = array_filter([
-    (string)($pa['verpackung_name'] ?? ''),
-    (string)($pa['verpackung_art'] ?? ''),
-    !empty($pa['verpackung_volumen']) ? rtrim(rtrim(number_format((float)$pa['verpackung_volumen'], 2, ',', '.'), '0'), ',') . ' ml' : '',
-    (string)($pa['verpackung_material'] ?? ''),
-]);
-$verpackungTxt = $vpTeile ? implode(' · ', $vpTeile) : '';
+// Verpackung lesbar zusammensetzen (Name · Typ · Volumen · Material), ohne Dopplungen zum Namen.
+$vpName = trim((string)($pa['verpackung_name'] ?? ''));
+$vpArt  = ucfirst(trim((string)($pa['verpackung_art'] ?? '')));
+$vpVol  = !empty($pa['verpackung_volumen']) ? rtrim(rtrim(number_format((float)$pa['verpackung_volumen'], 2, ',', '.'), '0'), ',') . ' ml' : '';
+$vpMat  = trim((string)($pa['verpackung_material'] ?? ''));
+$vpTeile = [$vpName];
+foreach ([$vpArt, $vpVol, $vpMat] as $t)   // nur ergänzen, was nicht schon im Namen steht
+    if ($t !== '' && stripos($vpName, $t) === false) $vpTeile[] = $t;
+$verpackungTxt = implode(' · ', array_filter($vpTeile));
 
 kopf($pa['nummer'] . ' – Produktion', 'liste');
 seitenkopf((string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''), '<a class="btn btn-ghost btn-sm" href="?p=liste">Zurück zur Liste</a>');
 ?>
+<style>
+.bx-ovsek{margin-top:20px}
+.bx-ovsek:first-child{margin-top:0}
+.bx-ovsek-t{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--gruen);margin-bottom:4px}
+.bx-ovrow{display:grid;grid-template-columns:200px 1fr;gap:16px;padding:9px 0;border-bottom:1px solid var(--line-2)}
+.bx-ovrow:last-child{border-bottom:none}
+.bx-ovk{color:var(--muted)}
+.bx-ovv{color:var(--text)}
+@media(max-width:600px){.bx-ovrow{grid-template-columns:1fr;gap:2px;padding:7px 0}}
+</style>
 <?php
-// Eine Übersichtskarte: Label/Wert-Zeilen (nur Zeilen mit Wert werden gezeigt).
-$zeile = function (string $label, string $wertHtml, string $roh = '') {
-    if ($roh === '' && trim(strip_tags($wertHtml)) === '') return;
-    echo '<div class="muted">' . h($label) . '</div><div>' . $wertHtml . '</div>';
+// Sammelt Label/Wert-Zeilen einer Gruppe; leere Werte fallen raus. Rückgabe: HTML (oder '').
+$zeilen = function (array $paare): string {
+    $out = '';
+    foreach ($paare as $p) {
+        [$label, $html, $force] = [$p[0], $p[1], $p[2] ?? false];
+        if (!$force && trim(strip_tags($html)) === '') continue;
+        $out .= '<div class="bx-ovrow"><div class="bx-ovk">' . h($label) . '</div><div class="bx-ovv">' . $html . '</div></div>';
+    }
+    return $out;
 };
+// Gruppe nur ausgeben, wenn sie Zeilen hat.
+$sektion = function (string $titel, string $zeilenHtml) {
+    if (trim($zeilenHtml) === '') return;
+    echo '<div class="bx-ovsek"><div class="bx-ovsek-t">' . h($titel) . '</div>' . $zeilenHtml . '</div>';
+};
+$muted = fn(string $s) => $s !== '' ? h($s) : '<span class="muted">–</span>';
 ?>
 <div class="bx-panel" style="margin-bottom:16px">
   <h2 style="margin-top:0">Übersicht</h2>
-  <div style="display:grid;grid-template-columns:max-content 1fr;gap:10px 24px;align-items:baseline">
   <?php
-  $zeile('Status', pa_badge((string)$pa['status']), 'x');
-  $zeile('Produzierbar?', bereit_badge($ber['status']), 'x');
-  $zeile('Auftragseingang', $eingang ? h(fmt_zeit($eingang, 'd.m.Y')) : '<span class="muted">–</span>', 'x');
-  $zeile('Kunde', h((string)($pa['kunde'] ?: '–')), 'x');
-  $zeile('Produkt', h((string)($pa['produkt_name'] ?: '–')), 'x');
-  $zeile('Rezeptur', h((string)($pa['rezeptur_name'] ?? '')));
-  $zeile('Kapselgröße', h((string)($pa['kapselgroesse'] ?? '')));
-  $zeile('Menge', number_format((int)$pa['menge'], 0, ',', '.') . ' <span class="muted" style="font-size:13px">Packungen</span>', 'x');
-  if ($vpe > 0)    $zeile($stkWort . ' je VPE', number_format($vpe, 0, ',', '.'));
-  if ($gesamt > 0) $zeile($stkWort . ' gesamt', number_format($gesamt, 0, ',', '.'));
-  $zeile('Charge' . ($charge['gebucht'] ? ($charge['anzahl'] > 1 ? ' (' . $charge['anzahl'] . ')' : '') : ' (geplant)'),
-         h($charge['nr']), 'x');
-  $zeile('MHD' . ($charge['gebucht'] ? '' : ' (+18 Mon.)'),
-         $charge['mhd'] ? h(date('d.m.Y', strtotime($charge['mhd']))) : '<span class="muted">–</span>', 'x');
-  $zeile('Verpackung', h($verpackungTxt));
-  $zeile('Herstellung', h((string)$pa['produktionsart'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion'), 'x');
+  $sektion('Auftrag', $zeilen([
+      ['Status', pa_badge((string)$pa['status']), true],
+      ['Produzierbar?', bereit_badge($ber['status']), true],
+      ['Auftragseingang', $muted($eingang ? fmt_zeit($eingang, 'd.m.Y') : ''), true],
+      ['Kunde', $muted((string)($pa['kunde'] ?? '')), true],
+      ['Herstellung', h((string)$pa['produktionsart'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion'), true],
+  ]));
+  $sektion('Produkt', $zeilen([
+      ['Produkt', $muted((string)($pa['produkt_name'] ?? '')), true],
+      ['Rezeptur', h((string)($pa['rezeptur_name'] ?? ''))],
+      ['Kapselgröße', h((string)($pa['kapselgroesse'] ?? ''))],
+      ['Verpackung', h($verpackungTxt)],
+  ]));
+  $sektion('Menge', $zeilen([
+      ['Packungen', number_format((int)$pa['menge'], 0, ',', '.'), true],
+      [$stkWort . ' je VPE', $vpe > 0 ? number_format($vpe, 0, ',', '.') : ''],
+      [$stkWort . ' gesamt', $gesamt > 0 ? number_format($gesamt, 0, ',', '.') : ''],
+  ]));
+  $sektion('Charge', $zeilen([
+      ['Chargennummer' . ($charge['gebucht'] ? ($charge['anzahl'] > 1 ? ' (' . $charge['anzahl'] . ')' : '') : ' (geplant)'), h($charge['nr']), true],
+      ['MHD' . ($charge['gebucht'] ? '' : ' (+18 Mon.)'), $muted($charge['mhd'] ? date('d.m.Y', strtotime($charge['mhd'])) : ''), true],
+  ]));
   ?>
-  </div>
 </div>
 
 <?php if ($ber['status'] === 'wartet' && $ber['fehlend']): ?>
