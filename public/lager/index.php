@@ -25,6 +25,10 @@ $routen = [
     'etikett'        => 'bestand/etikett.php',
     'charge'         => 'bestand/charge.php',
     'dok'            => 'bestand/dok.php',
+    // Lager 2 (Fremdlager): Kundenware (charge.fremd_kunde_id)
+    'l2_bestand'     => 'bestand/l2_bestand.php',
+    'l2_eingang'     => 'bestand/l2_eingang.php',
+    'l2_finden'      => 'bestand/l2_finden.php',
     'finden'         => 'leiste/finden.php',
     'leisten'        => 'leiste/liste.php',
     'batterie'       => 'leiste/batterie.php',
