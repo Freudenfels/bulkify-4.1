@@ -1,7 +1,7 @@
 # produktion/module/produktion/detail.php
 Übersicht + Schrittliste eines Produktionsauftrags über `erp_pa()`/`erp_pa_schritte()`.
 
-**Eine Übersichtskarte**, in ruhige Gruppen gegliedert (feine Trennlinien, grüne Gruppentitel, leere Felder fallen raus):
+**Eine Übersichtskarte**, in ruhige Gruppen gegliedert (feine Trennlinien, grüne Gruppentitel, leere Felder fallen raus). Die Felder jeder Gruppe fließen in einem mehrspaltigen Raster (`auto-fit`, nutzt die volle Kartenbreite), Label über Wert – keine Kacheln:
 - **Auftrag:** Status, Produzierbar? (`erp_pa_bereitschaft`), Auftragseingang, Kunde, Herstellung (eigen/fremd).
 - **Produkt:** Produkt, Rezeptur, Kapselgröße, Verpackung (Name · Typ · Volumen · Material, ohne Dopplung zum Namen).
 - **Menge:** Packungen, Stück/Kapseln je VPE + gesamt.

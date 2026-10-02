@@ -50,30 +50,28 @@ kopf($pa['nummer'] . ' – Produktion', 'liste');
 seitenkopf((string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''), '<a class="btn btn-ghost btn-sm" href="?p=liste">Zurück zur Liste</a>');
 ?>
 <style>
-.bx-ovsek{margin-top:20px}
-.bx-ovsek:first-child{margin-top:0}
-.bx-ovsek-t{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--gruen);margin-bottom:4px}
-.bx-ovrow{display:grid;grid-template-columns:200px 1fr;gap:16px;padding:9px 0;border-bottom:1px solid var(--line-2)}
-.bx-ovrow:last-child{border-bottom:none}
-.bx-ovk{color:var(--muted)}
+.bx-ovsek{margin-top:20px;padding-top:16px;border-top:1px solid var(--line-2)}
+.bx-ovsek:first-child{margin-top:0;padding-top:0;border-top:none}
+.bx-ovsek-t{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--gruen);margin-bottom:10px}
+.bx-ovgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 32px}
+.bx-ovk{color:var(--muted);font-size:13px;margin-bottom:2px}
 .bx-ovv{color:var(--text)}
-@media(max-width:600px){.bx-ovrow{grid-template-columns:1fr;gap:2px;padding:7px 0}}
 </style>
 <?php
-// Sammelt Label/Wert-Zeilen einer Gruppe; leere Werte fallen raus. Rückgabe: HTML (oder '').
+// Sammelt Label/Wert-Felder einer Gruppe; leere Werte fallen raus. Rückgabe: HTML (oder '').
 $zeilen = function (array $paare): string {
     $out = '';
     foreach ($paare as $p) {
         [$label, $html, $force] = [$p[0], $p[1], $p[2] ?? false];
         if (!$force && trim(strip_tags($html)) === '') continue;
-        $out .= '<div class="bx-ovrow"><div class="bx-ovk">' . h($label) . '</div><div class="bx-ovv">' . $html . '</div></div>';
+        $out .= '<div><div class="bx-ovk">' . h($label) . '</div><div class="bx-ovv">' . $html . '</div></div>';
     }
     return $out;
 };
-// Gruppe nur ausgeben, wenn sie Zeilen hat.
+// Gruppe nur ausgeben, wenn sie Felder hat – Felder fließen in ein mehrspaltiges Raster (füllt die Breite).
 $sektion = function (string $titel, string $zeilenHtml) {
     if (trim($zeilenHtml) === '') return;
-    echo '<div class="bx-ovsek"><div class="bx-ovsek-t">' . h($titel) . '</div>' . $zeilenHtml . '</div>';
+    echo '<div class="bx-ovsek"><div class="bx-ovsek-t">' . h($titel) . '</div><div class="bx-ovgrid">' . $zeilenHtml . '</div></div>';
 };
 $muted = fn(string $s) => $s !== '' ? h($s) : '<span class="muted">–</span>';
 ?>
