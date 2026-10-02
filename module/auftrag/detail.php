@@ -234,7 +234,9 @@ echo '<style>.bx-cards{flex-wrap:nowrap;gap:8px}'
    . '.bx-cards .bx-card{flex:1 1 0;min-width:0;padding:10px 12px;overflow:hidden}'
    . '.bx-cards .k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
    . '.bx-cards .v{font-size:15px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
-   . '.bx-card-status .v{font-weight:600;font-size:16px}</style>';
+   . '.bx-card-status .v{font-weight:600;font-size:16px}'
+   . 'details.bx-sek{margin:0 0 var(--sp-4,16px)}details.bx-sek>summary{cursor:pointer;list-style:none;font-weight:600;font-size:16px;color:var(--gruen);padding:12px 2px}'
+   . 'details.bx-sek>summary::-webkit-details-marker{display:none}details.bx-sek>summary::before{content:"\\25B8 ";color:var(--gruen)}details.bx-sek[open]>summary::before{content:"\\25BE "}</style>';
 // Status-Ampel: weiß = Start (offen) -> rot -> gelb -> grün = fertig (versendet). Storniert = grau.
 [$stBg, $stFg] = match ((string)$a['status']) {
     'offen'         => ['#ffffff', '#111827'],   // Start
@@ -287,8 +289,9 @@ echo '</div>';
       <?= bereitschaft_badge($ber['status'] ?? '') ?>
       <?php if (($ber['status'] ?? '') === 'wartet'): ?> <a href="?p=produktionsauftrag&id=<?= (int)$pa['id'] ?>" style="font-size:12px">was fehlt?</a><?php endif; ?>
     </div></div>
-    <?php else: ?>
+    <?php else: $aktivPA = in_array((string)$a['status'], ['offen', 'in_produktion'], true); ?>
     <div><div class="k muted">Produktionsauftrag</div>
+      <?php if ($aktivPA): ?>
       <div class="muted" style="margin-bottom:6px">noch keiner angelegt</div>
       <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0;flex-wrap:wrap">
         <input type="hidden" name="aktion" value="pa_anlegen">
@@ -299,6 +302,9 @@ echo '</div>';
         <button class="btn btn-primary btn-sm" type="submit">Produktionsauftrag anlegen</button>
       </form>
       <div class="muted" style="font-size:12px;margin-top:4px">Danach erscheint der Materialbedarf (Rohstoffe) und der Auftrag ist produzierbar.</div>
+      <?php else: ?>
+      <div class="muted">Kein Produktionsauftrag – der Auftrag ist bereits <strong><?= h($stText) ?></strong> (z. B. Altauftrag ohne eigenen Produktionsauftrag). Nichts mehr anzulegen.</div>
+      <?php endif; ?>
     </div>
     <?php endif; ?>
   </div>
@@ -355,7 +361,8 @@ if (kunde_zeigt_energetisierung((int)($a['kunde_id'] ?? 0))):
   <?php else: ?>
     <div class="muted" style="margin-bottom:10px">Noch kein Startdatum gesetzt. Nach dem Setzen läuft die Energetisierung <?= energ_tage() ?> Tage, dann „abgeschlossen".</div>
   <?php endif; ?>
-  <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0">
+  <?php if ($eStat === 'abgeschlossen'): ?><details class="bx-sek"><summary>Startdatum korrigieren</summary><?php endif; ?>
+  <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin:<?= $eStat === 'abgeschlossen' ? '10px 0 0' : '0' ?>">
     <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0">
       <input type="hidden" name="aktion" value="energ_start">
       <div class="bx-field" style="margin:0"><label>Startdatum</label><input type="date" name="energ_start" value="<?= h($eStart) ?>"></div>
@@ -368,6 +375,7 @@ if (kunde_zeigt_energetisierung((int)($a['kunde_id'] ?? 0))):
     </form>
     <?php endif; ?>
   </div>
+  <?php if ($eStat === 'abgeschlossen'): ?></details><?php endif; ?>
   <div class="muted" style="font-size:12px;margin-top:8px">Der Kunde sieht im Portal „Energetisierung läuft · noch X Tage" bzw. „abgeschlossen". Dauer global einstellbar (<?= energ_tage() ?> Tage).</div>
 </div>
 <?php endif; ?>
@@ -390,8 +398,8 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
 
 <?php // Zahlung / Alt-Rechnung – für alles aus dem alten System (noch keine echte v4-Rechnung).
       $hatV4Rechnung = (bool)$rechnung; ?>
+<details class="bx-sek"><summary>Zahlung / Alt-Rechnung <span class="muted" style="font-weight:normal;font-size:13px">· Altsystem</span></summary>
 <div class="bx-panel">
-  <h2 style="margin-top:0">Zahlung / Alt-Rechnung <span class="muted" style="font-weight:normal;font-size:13px">· Altsystem</span></h2>
   <?php if (isset($_GET['bezahltok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Gespeichert.</div><?php endif; ?>
   <?php if (isset($_GET['bezahltreset'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Zurückgesetzt.</div><?php endif; ?>
   <?php if (isset($_GET['altre'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Rechnung hochgeladen.</div><?php endif; ?>
@@ -436,11 +444,12 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
     </form>
   </div>
 </div>
+</details>
 
 <?php if ($istAdmin): ?>
 <?php if (isset($_GET['expressfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['expressfehler']) ?></div><?php endif; ?>
+<details class="bx-sek"><summary>EK-Preise &amp; Express-Bestellung <span class="muted" style="font-weight:normal;font-size:13px">· nur intern (Admin)</span></summary>
 <div class="bx-panel">
-  <h2 style="margin-top:0">EK-Preise &amp; Express-Bestellung <span class="muted" style="font-weight:normal;font-size:13px">· nur intern (Admin)</span></h2>
   <?php if (!$pa): ?>
     <div class="muted">Kein Produktionsauftrag – Materialbedarf nicht berechenbar.</div>
   <?php elseif (!$ekBedarf): ?>
@@ -509,18 +518,20 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
   <p class="muted" style="font-size:12px;margin:8px 0 0">Zukauf des fertigen Produkts als Bulk (Kunde sieht das nie). „Anfragen" holt Preise bei Lieferanten ein; „Express" legt direkt eine Bulk-Bestellung an.</p>
   <?php endif; ?>
 </div>
+</details>
 <?php anfrage_modal($anfrageLieferanten, '?p=auftrag&id=' . $id); ?>
 <?php endif; ?>
 
 <?php if (has_role('admin') && empty($a['kontingent_id']) && (string)$a['status'] !== 'storniert' && (int)$a['menge'] > 0 && (float)$a['vk_stueck'] > 0): ?>
+<details class="bx-sek"><summary>Zu Kontingent machen</summary>
 <div class="bx-panel">
-  <h2 style="margin-top:0">Zu Kontingent machen</h2>
   <p class="muted" style="margin-top:0">Wandelt die angenommene Menge (<?= number_format((int)$a['menge'],0,',','.') ?> × <?= $eur((float)$a['vk_stueck']) ?>) in ein <strong>Kontingent</strong> (Rahmen/Abruf) um: Der Kunde ruft daraus Teilmengen zum Festpreis ab – je Abruf entsteht ein Auftrag. Der jetzige Auftrag wird dabei storniert (produziert wird über die Abrufe).</p>
   <form method="post" style="margin:0" onsubmit="return confirm('Auftrag <?= h($a['nummer']) ?> in ein Kontingent umwandeln? Der Auftrag wird storniert; produziert wird über die Abrufe.');">
     <input type="hidden" name="aktion" value="zu_kontingent">
     <button class="btn btn-primary" type="submit" data-busy="Wandle um…">Zu Kontingent machen</button>
   </form>
 </div>
+</details>
 <?php endif; ?>
 
 <?php
@@ -531,8 +542,8 @@ $befundBadge = fn($b) => $b === 'bestanden' ? bx_badge('bestanden','ok') : ($b =
 $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
                              WHERE pa.auftrag_id=? AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id LIMIT 1", [$id]);
 ?>
+<details class="bx-sek"<?= ($analyseDocs || isset($_GET['analyse'])) ? ' open' : '' ?>><summary>Laboranalyse / Labortest<?= $chargeNr ? ' <span class="muted" style="font-weight:normal;font-size:13px">· Charge ' . h($chargeNr) . '</span>' : '' ?><?= $analyseDocs ? ' <span class="muted" style="font-weight:normal;font-size:13px">· ' . count($analyseDocs) . '</span>' : '' ?></summary>
 <div class="bx-panel">
-  <h2 style="margin-top:0">Laboranalyse / Labortest<?= $chargeNr ? ' <span class="muted" style="font-weight:normal;font-size:13px">· Charge ' . h($chargeNr) . '</span>' : '' ?></h2>
   <p class="muted" style="margin-top:0">Labortest bzw. Analysenzertifikat (CoA) für <strong>diese Bestellung</strong>. Als „freigegeben" erscheint es im Kundenportal-Reiter „Labortest".</p>
   <?php if ($analyseDocs): ?>
   <div class="bx-tablewrap"><table class="bx-table">
@@ -573,6 +584,7 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
     <div class="bx-row" style="margin-top:var(--sp-3)"><button class="btn btn-primary" type="submit">Analyse hochladen</button></div>
   </form>
 </div>
+</details>
 
 <form method="post" class="bx-form">
   <div class="bx-panel"><div class="bx-grid">
@@ -593,14 +605,15 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
 </form>
 
 <?php if (has_role('admin') && (string)$a['status'] !== 'versendet'): ?>
+<details class="bx-sek"><summary>Löschen &amp; zurück zur Anfrage</summary>
 <div class="bx-panel" style="border-color:#e6c4c0">
-  <h2 style="margin-top:0">Löschen &amp; zurück zur Anfrage</h2>
   <p class="muted" style="margin-top:0">Löscht diese Auftragsbestätigung samt Produktionsauftrag und (unbezahlter) Rechnung. Das zugehörige Angebot wird wieder <strong>offen</strong>, und Sie springen zurück zur Anfrage, um es anzupassen oder neu zu senden.</p>
   <form method="post" style="margin:0" onsubmit="return confirm('Auftragsbestätigung <?= h($a['nummer']) ?> löschen? Produktionsauftrag und unbezahlte Rechnung werden entfernt; das Angebot wird wieder offen.');">
     <input type="hidden" name="aktion" value="auftrag_zurueck">
     <button class="btn btn-danger" type="submit" data-busy="Lösche…">Löschen &amp; zurück zur Anfrage</button>
   </form>
 </div>
+</details>
 <?php endif; ?>
 <script>
 (function(){
