@@ -42,6 +42,24 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
         // Antwort da -> aus einer Rezepturanfrage angelegten Rohstoff-Entwurf in den Katalog heben.
         if ($fehler === '' && $a['item_id']) rohstoff_entwurf_aktivieren((int)$a['item_id']);
         if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);
+        // Optional mit dem Preisangebot mitgeschickte CoA/Spezifikation am Rohstoff ablegen.
+        // Die KI-Auswertung (mehrsprachig -> bulkify-Format) läuft NACH der Antwort (dauert).
+        if ($fehler === '' && $a['item_id']) {
+            require_once BX_ROOT . '/core/lieferant_dateien.php';
+            $unterlagen = [];
+            foreach (['spec_datei' => 'spec', 'coa_datei' => 'coa'] as $fk => $typ) {
+                $did = lieferant_item_unterlage((int)$a['item_id'], $lid, $fk, $typ);
+                if ($did) $unterlagen[] = $did;
+            }
+            if ($unterlagen) {
+                header('Location: ?p=lieferant_anfrage&id=' . $id . '&ok=1&unterlagen=' . count($unterlagen));
+                if (function_exists('ki_antwort_abschliessen')) ki_antwort_abschliessen();
+                require_once BX_ROOT . '/core/spec_ki.php';
+                foreach ($unterlagen as $did) { spec_ki_nach_upload($did); }
+                rohstoff_entwurf_aktivieren((int)$a['item_id']);
+                exit;
+            }
+        }
     } elseif ($aktion === 'nachricht') {
         $fehler = nachricht_post_verarbeiten($lid, 'lieferant', (string)(current_user()['name'] ?? 'Lieferant'), 'lieferant_anfrage', $id, lp_sprache());
     } elseif ($aktion === 'dokument' && $a['item_id']) {
@@ -59,7 +77,7 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 lp_head('bulkify – ' . lp_t('anfragen'));
 lp_shell_start('lieferant_anfrage');
-if (isset($_GET['ok']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('gespeichert')) . (isset($_GET['gelesen']) ? ' ' . h(lp_t('datei_gelesen')) : '') . '</div>';
+if (isset($_GET['ok']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('gespeichert')) . (isset($_GET['gelesen']) ? ' ' . h(lp_t('datei_gelesen')) : '') . (isset($_GET['unterlagen']) ? ' ' . h(lp_t('coa_empfangen')) : '') . '</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 
 if (!$a):
@@ -151,7 +169,7 @@ if (!$a):
         <?php if (trim((string)($ang['notiz'] ?? '')) !== ''): ?><tr><td><?= h(lp_t('notiz')) ?></td><td style="white-space:pre-line"><?= h($ang['notiz']) ?></td></tr><?php endif; ?>
       </tbody></table></div>
     <?php else: ?>
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
       <input type="hidden" name="aktion" value="angebot">
       <?php // Eine Zeile: links die Preisspalte, rechts daneben Basis, Mindestmenge und Lieferzeit.
             // Die Staffelzeilen stehen IN der Preisspalte, damit sie exakt gleich breit sind. ?>
@@ -222,6 +240,16 @@ if (!$a):
       })();
       </script>
       <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><textarea name="notiz" rows="3"><?= h($ang['notiz'] ?? '') ?></textarea></div>
+      <?php if (!empty($a['item_id'])): $coaReq = (int)($a['coa_gewuenscht'] ?? 0) === 1; ?>
+      <div class="bx-panel" style="margin:4px 0 14px;padding:12px 14px;<?= $coaReq ? 'border-color:var(--gruen)' : '' ?>">
+        <div style="font-weight:600;margin-bottom:2px"><?= h(lp_t('coa_spec_titel')) ?><?php if ($coaReq): ?> · <span style="color:var(--gruen)"><?= h(lp_t('coa_angefordert')) ?></span><?php endif; ?></div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px"><?= h(lp_t('coa_spec_hinweis')) ?></div>
+        <div class="bx-row" style="gap:16px;flex-wrap:wrap">
+          <div class="bx-field" style="margin:0"><label>CoA</label><input type="file" name="coa_datei" accept="application/pdf,image/*"></div>
+          <div class="bx-field" style="margin:0"><label><?= h(lp_t('spezifikation')) ?></label><input type="file" name="spec_datei" accept="application/pdf,image/*"></div>
+        </div>
+      </div>
+      <?php endif; ?>
       <button class="btn btn-primary" type="submit"><?= h(lp_t('angebot_abgeben')) ?></button>
     </form>
     <?php endif; ?>

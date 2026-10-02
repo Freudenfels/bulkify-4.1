@@ -6,6 +6,8 @@ Der Lieferant sieht seine Anfragen (offen zuerst) und gibt ein **Angebot** ab: P
 
 Hängt die Anfrage an einem Artikel, kann der Lieferant hier auch **CoA und Spezifikation hochladen**; die Dateien landen über `dokument_upload()` direkt am Artikel (`objekt_typ='item'`) mit ihm als Lieferant – dort sucht sie das Team.
 
+**CoA/Spec direkt beim Preisangebot (optional):** Im Angebotsformular selbst stehen (wenn die Anfrage an einem Artikel hängt) zwei optionale Upload-Felder **CoA** und **Spezifikation** – so kann der Lieferant die Unterlagen gleich mit den Preisen mitschicken (ist CoA angefordert, `lieferant_anfrage.coa_gewuenscht=1`, wird das Feld grün hervorgehoben). Beim Absenden legt `lieferant_item_unterlage()` (in `core/lieferant_dateien.php`) die Dateien als Dokument am Rohstoff ab (`typ='coa'`/`'spec'`, Lieferant, nicht kundensichtbar); die **KI-Auswertung läuft NACH der Antwort** (`ki_antwort_abschliessen()` + `spec_ki_nach_upload()`), damit der Lieferant nicht wartet. Die KI liest **jede Sprache** (auch Chinesisch), legt aus einem CoA eine Vorab-Charge an und ergänzt Grenzwerte/Wirkstoffe am Rohstoff – daraus erzeugt bulkify eine **eigene Spec/CoA** (`core/pdf_spec.php`), die ans Kunden weitergegeben wird; das Original des Lieferanten bleibt intern (nicht kundensichtbar).
+
 Nimmt das Team das Angebot an, werden die Staffeln zu EK-Staffeln am Artikel (siehe `core/schema.md`, `lieferant_angebot_annehmen()`).
 ## E-Mail ans Team
 Speichert der Lieferant sein Angebot zur Preisanfrage, bekommen alle Admins eine Mail mit Preis, Mindestmenge und Lieferzeit (`mail_team_preisanfrage()`), sofern der Versand eingerichtet ist.
