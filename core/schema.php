@@ -5533,6 +5533,35 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     return $aid;
 }
 
+// Rechnung (Beleg) aus einem BESTEHENDEN Auftrag erzeugen – fuer Auftraege ohne (automatische)
+// Rechnung, z. B. v3-Importe oder von Hand angelegte. Idempotent: gibt es schon eine nicht stornierte
+// Rechnung zum Auftrag, wird deren ID zurueckgegeben. USt wie bei auftrag_aus_angebot (Kleinunternehmer
+// 0 %, EU-Ausland 0 %, sonst Inlands-USt). Rueckgabe: beleg.id oder null (kein Preis am Auftrag).
+function rechnung_aus_auftrag(int $auftrag_id): ?int {
+    $a = one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a) return null;
+    $ex = scalar("SELECT id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert' ORDER BY id LIMIT 1", [$auftrag_id]);
+    if ($ex) return (int)$ex;                                   // schon da -> nicht doppelt
+    $menge = (int)($a['menge'] ?? 0);
+    $vk    = (float)($a['vk_stueck'] ?? 0);
+    $netto = round((float)($a['gesamt_netto'] ?? 0), 2);
+    if ($netto <= 0) $netto = round($menge * $vk, 2);
+    if ($netto <= 0) return null;                               // ohne Preis keine Rechnung
+    $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
+    $ustInland = (float) meta_get('ust_inland', 19);
+    $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : $ustInland;
+    $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum)
+       VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
+      [naechste_nummer('RE'), 'rechnung', $auftrag_id, ($a['kunde_id'] ?: null), $netto, $ustP, $ust, $brutto, 'offen']);
+    $bid = (int) insert_id();
+    if (!empty($a['kunde_id'])) {
+        $re = (string) scalar("SELECT nummer FROM beleg WHERE id=?", [$bid]);
+        log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Rechnung ' . $re . ' aus Auftrag ' . (string)$a['nummer'] . ' erstellt.', 'beleg', 'auftrag', $auftrag_id);
+    }
+    return $bid;
+}
+
 // Jahresvertrag aus einem Angebot: erzeugt (einmalig) das Kontingent im Status 'wartet_vertrag'.
 // Aktiv (abrufbar) wird es erst, wenn der unterschriebene Vertrag hochgeladen UND vom Team
 // freigegeben ist. Rueckgabe: ['ok'=>true,'kontingent_id'=>…] oder ['ok'=>false,'fehler'=>…].
