@@ -39,13 +39,14 @@ function seitenkopf(string $titel, string $unter = '', string $aktion = ''): voi
     if ($aktion !== '') echo '<div class="bx-row">' . $aktion . '</div>';
     echo '</div>';
 }
-// Status eines Produktionsauftrags als Badge.
+// Status eines Produktionsauftrags als Badge. Werte wie im Dashboard: offen/laufend/erledigt
+// (ältere Varianten in_arbeit/fertig bleiben der Robustheit halber abgedeckt).
 function pa_badge(?string $s): string {
     return match ((string)$s) {
-        'offen'        => '<span class="badge badge-warn">offen</span>',
-        'in_arbeit'    => '<span class="badge badge-info">in Arbeit</span>',
-        'fertig'       => '<span class="badge badge-ok">fertig</span>',
-        'abgebrochen'  => '<span class="badge badge-err">abgebrochen</span>',
-        default        => '<span class="badge">' . h((string)$s) . '</span>',
+        'offen'               => '<span class="badge badge-warn">offen</span>',
+        'laufend', 'in_arbeit' => '<span class="badge badge-info">in Arbeit</span>',
+        'erledigt', 'fertig'   => '<span class="badge badge-ok">erledigt</span>',
+        'abgebrochen'         => '<span class="badge badge-err">abgebrochen</span>',
+        default               => '<span class="badge">' . h((string)$s) . '</span>',
     };
 }

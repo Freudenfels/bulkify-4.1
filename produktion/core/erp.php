@@ -46,7 +46,7 @@ function erp_produktionsauftraege(string $status = ''): array {
             LEFT JOIN kunden k    ON k.id=pa.kunde_id";
     $params = [];
     if ($status !== '') { $sql .= " WHERE pa.status=?"; $params[] = $status; }
-    else                { $sql .= " WHERE pa.status IN ('offen','in_arbeit')"; }
+    else                { $sql .= " WHERE pa.status IN ('offen','laufend')"; }   // aktive Aufträge (Dashboard-Status)
     $sql .= " ORDER BY COALESCE(pa.prio,2), (pa.geplant_am IS NULL), pa.geplant_am, pa.id DESC";
     return all($sql, $params);
 }
@@ -69,8 +69,334 @@ function erp_pa_schritte(int $pa_id): array {
     return all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]);
 }
 
-// --- Schreiben ins Dashboard: NOCH NICHT. ----------------------------------------------------
-// Beispiel-Signaturen für den dedizierten Produktions-Chat (hier umsetzen, nirgends sonst):
-//   function erp_schritt_abschliessen(int $schritt_id, string $akteur): array { ... }
-//   function erp_pa_status(int $pa_id, string $status): bool { ... }
-// Bis dahin bleibt das Programm rein lesend.
+// =============================================================================================
+// SCHREIBEN INS DASHBOARD – Produktionsschritt abschließen (FEFO-Entnahme + Mangel-Guard).
+//
+// BEWUSSTE DOPPELUNG: Diese Lager-/Chargen-Logik spiegelt das Dashboard
+// (core/schema.php: produktion_schritt_erledigen() und Helfer). Beide Programme schreiben in
+// DIESELBEN Tabellen (charge, produktion_verbrauch, produktion_schritt, produktionsauftrag,
+// reservierung, aktivitaet, nummernkreis, app_meta, item). Ändert sich im Dashboard eine Regel
+// (FEFO-Reihenfolge, Mangel-Schwelle 0.0001, Chargennummer .A/.B, MHD +18M, Fertigware-Einbuchung),
+// MUSS sie hier mitgezogen werden. Die Naht bleibt: Dashboard-Tabellen nur in dieser Datei.
+// Einzige bewusste Abweichung: erp_produkt_leerkapsel_id() nutzt nur die gepflegte Kapselgröße
+// (rezeptur.kapselgroesse_id), nicht die gewichtsbasierte Auto-Berechnung des Dashboards – siehe erp.md.
+// =============================================================================================
+
+// Standort je Schritt: braucht die Station eine Material-Entnahme? (Scan-Prüfung bleibt vorerst
+// außen vor – es gibt noch keine Etiketten zum Scannen; FEFO-Abbuchung läuft trotzdem.)
+function erp_station_entnahme(int $pa_id, string $station): array {
+    return match ($station) {
+        'Rohstoffe bereitstellen'  => erp_rohstoffe_entnehmen($pa_id),
+        'Verkapselung'             => erp_kapseln_entnehmen($pa_id),
+        'Fertigware bereitstellen' => erp_fertigware_entnehmen($pa_id),
+        'Verpacken'                => erp_verpackung_entnehmen($pa_id),
+        default                    => ['ok'=>true, 'fehlt'=>[]],
+    };
+}
+
+// Einen Produktionsschritt abschließen. Erzwingt die Reihenfolge (nur der erste offene Schritt),
+// bucht Material nach FEFO ab (Mangel-Guard), markiert erledigt, aktualisiert den Auftragsstatus;
+// beim letzten Schritt wird die Fertigware als Charge eingebucht und der Auftrag auf 'erledigt' gesetzt.
+// Rückgabe: ['ok'=>bool,'fehler'=>?('nicht_gefunden'|'reihenfolge'|'mangel'),'msg'=>string,'fertig'=>bool,'station'=>string,'fehlt'=>array].
+function erp_schritt_abschliessen(int $schritt_id, string $akteur): array {
+    if ($schritt_id <= 0 || !tabelle_da('produktion_schritt'))
+        return ['ok'=>false, 'fehler'=>'nicht_gefunden', 'msg'=>'Schritt nicht gefunden.', 'fertig'=>false, 'station'=>'', 'fehlt'=>[]];
+    $schritt = one("SELECT id, pa_id, station, erledigt FROM produktion_schritt WHERE id=?", [$schritt_id]);
+    if (!$schritt)
+        return ['ok'=>false, 'fehler'=>'nicht_gefunden', 'msg'=>'Schritt nicht gefunden.', 'fertig'=>false, 'station'=>'', 'fehlt'=>[]];
+    $pa_id = (int)$schritt['pa_id'];
+    $station = (string)$schritt['station'];
+
+    // Reihenfolge: nur der erste noch offene Schritt des Auftrags darf abgeschlossen werden.
+    $firstOpen = one("SELECT id FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort, id LIMIT 1", [$pa_id]);
+    if (!$firstOpen || (int)$firstOpen['id'] !== $schritt_id)
+        return ['ok'=>false, 'fehler'=>'reihenfolge', 'msg'=>'Dieser Schritt ist gerade nicht an der Reihe.', 'fertig'=>false, 'station'=>$station, 'fehlt'=>[]];
+
+    // Material nach FEFO abbuchen (idempotent je Auftrag/Item). Reicht der Bestand nicht: abbrechen.
+    $entnahme = erp_station_entnahme($pa_id, $station);
+    if (!($entnahme['ok'] ?? true)) {
+        $fehlt = $entnahme['fehlt'] ?? [];
+        $teile = [];
+        foreach ($fehlt as $f) {
+            $fehlbetrag = rtrim(rtrim(number_format((float)($f['fehlt'] ?? 0), 3, ',', '.'), '0'), ',');
+            $teile[] = (string)($f['name'] ?? 'Material') . ' (fehlt ' . $fehlbetrag . ' ' . (string)($f['einheit'] ?? '') . ')';
+        }
+        $msg = 'Nicht genug Bestand für diesen Schritt' . ($teile ? ': ' . implode(', ', $teile) . '.' : '.');
+        return ['ok'=>false, 'fehler'=>'mangel', 'msg'=>$msg, 'fertig'=>false, 'station'=>$station, 'fehlt'=>$fehlt];
+    }
+
+    // Schritt erledigt markieren.
+    q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=?, erledigt_von=? WHERE id=?",
+      [gmdate('Y-m-d H:i:s'), $akteur !== '' ? $akteur : null, $schritt_id]);
+    erp_reservierung_abgleichen($pa_id);   // entnommene Items: Reservierung schließen
+
+    // Auftragsstatus neu bestimmen (gleiche Werte wie das Dashboard: offen/laufend/erledigt).
+    $total = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=?", [$pa_id]);
+    $done  = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]);
+    $status = $done === 0 ? 'offen' : ($done >= $total ? 'erledigt' : 'laufend');
+    q("UPDATE produktionsauftrag SET status=? WHERE id=?", [$status, $pa_id]);
+
+    $fertig = ($status === 'erledigt');
+    if ($fertig) {
+        erp_auftrag_reservierung_freigeben($pa_id);     // Rest-Reservierungen freigeben
+        erp_fertigware_einbuchen($pa_id);               // Fertigware als Charge einbuchen
+        $pa = one("SELECT auftrag_id, kunde_id, nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
+        if ($pa && $pa['auftrag_id'] && tabelle_da('auftrag')) {
+            q("UPDATE auftrag SET status='erledigt' WHERE id=?", [(int)$pa['auftrag_id']]);
+            if ($pa['kunde_id'])
+                erp_log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team',
+                    'Produktion ' . $pa['nummer'] . ' abgeschlossen, Fertigware eingebucht, versandfrei.',
+                    'auftrag', 'auftrag', (int)$pa['auftrag_id']);
+        }
+    }
+    return ['ok'=>true, 'fehler'=>null, 'msg'=>'', 'fertig'=>$fertig, 'station'=>$station, 'fehlt'=>[]];
+}
+
+// --- Bestand / Bedarf (gespiegelt aus dem Dashboard) -----------------------------------------
+// Freier eigener Bestand eines Artikels (Fremdlager-Chargen gehören dem Kunden -> zählen nicht).
+function erp_item_bestand(int $item_id): float {
+    return (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge
+                           WHERE item_id=? AND status='frei' AND fremd_kunde_id IS NULL", [$item_id]);
+}
+// Stück/Kapseln je Packung: Produkt (einheiten_pro_packung), sonst Auftrag (stueck), sonst 0.
+function erp_stueck_je_packung(array $pa): int {
+    if (!empty($pa['produkt_id'])) { $e = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$pa['produkt_id']]); if ($e > 0) return $e; }
+    if (!empty($pa['auftrag_id'])) { $s = (int) scalar("SELECT stueck FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]); if ($s > 0) return $s; }
+    return 0;
+}
+// Bulk-Auftrag = ohne Produkt, aber mit Rezeptur.
+function erp_pa_ist_bulk(array $pa): bool { return empty($pa['produkt_id']) && !empty($pa['rezeptur_id']); }
+
+// Materialbedarf (Rohstoffe) eines Auftrags: je Zutat benötigte vs. verfügbare Menge.
+function erp_materialbedarf(int $pa_id): array {
+    $pa = one("SELECT menge, produkt_id, rezeptur_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return [];
+    if (erp_pa_ist_bulk($pa)) {
+        $rid = (int)$pa['rezeptur_id'];
+        $einheiten_total = (int)$pa['menge'];
+    } else {
+        $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+        if (!$rid) return [];
+        $einheiten_total = (int)$pa['menge'] * erp_stueck_je_packung($pa);
+    }
+    $out = [];
+    foreach (all("SELECT z.item_id, z.menge_mg, i.name, i.einheit
+                  FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]) as $z) {
+        $mg = (float)$z['menge_mg'] * $einheiten_total;
+        $faktor = $z['einheit'] === 'g' ? 1e3 : 1e6;          // mg -> Basiseinheit (kg-Standard)
+        $benoetigt = $mg / $faktor;
+        $verf = erp_item_bestand((int)$z['item_id']);
+        $out[] = ['item_id'=>(int)$z['item_id'], 'name'=>$z['name'], 'einheit'=>$z['einheit'],
+                  'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>max(0.0, $benoetigt - $verf)];
+    }
+    return $out;
+}
+
+// --- FEFO-Entnahme je Station (idempotent; blockiert bei zu wenig Bestand) -------------------
+// Eine Menge eines Artikels nach FEFO aus freien eigenen Chargen abbuchen und als Verbrauch buchen.
+function erp_fefo_abbuchen(int $pa_id, int $item_id, float $menge, string $einheit): void {
+    $rest = $menge;
+    foreach (all("SELECT id, menge_verfuegbar FROM charge
+                  WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL
+                  ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$item_id]) as $c) {
+        if ($rest <= 0.0001) break;
+        $nimm = min($rest, (float)$c['menge_verfuegbar']);
+        $neu  = (float)$c['menge_verfuegbar'] - $nimm;
+        q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
+        q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
+          [$pa_id, $item_id, $c['id'], $nimm, $einheit, gmdate('Y-m-d H:i:s')]);
+        $rest -= $nimm;
+    }
+}
+function erp_rohstoffe_entnehmen(int $pa_id): array {
+    if ((int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=?", [$pa_id]) > 0) return ['ok'=>true, 'fehlt'=>[]];
+    $bedarf = erp_materialbedarf($pa_id);
+    $fehlt = array_values(array_filter($bedarf, fn($b) => $b['fehlt'] > 0.0001));
+    if ($fehlt) return ['ok'=>false, 'fehlt'=>$fehlt];
+    foreach ($bedarf as $b) erp_fefo_abbuchen($pa_id, (int)$b['item_id'], (float)$b['benoetigt'], (string)$b['einheit']);
+    return ['ok'=>true, 'fehlt'=>[]];
+}
+function erp_kapseln_entnehmen(int $pa_id): array {
+    $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['ok'=>true, 'fehlt'=>[]];
+    $kid = erp_produkt_leerkapsel_id((int)$pa['produkt_id']);
+    if (!$kid) return ['ok'=>true, 'fehlt'=>[]];                       // kein/uneindeutiges Kapselprodukt -> nichts abbuchen
+    if ((int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, $kid]) > 0) return ['ok'=>true, 'fehlt'=>[]];
+    $benoetigt = (float)$pa['menge'] * erp_stueck_je_packung($pa);
+    if ($benoetigt <= 0) return ['ok'=>true, 'fehlt'=>[]];
+    $verf = erp_item_bestand($kid);
+    if ($verf + 0.0001 < $benoetigt)
+        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
+    erp_fefo_abbuchen($pa_id, $kid, $benoetigt, 'Stück');
+    return ['ok'=>true, 'fehlt'=>[]];
+}
+// Zugekaufte fertige Bulkware (Kategorie 'fertig') des Auftrags FEFO abbuchen.
+function erp_fertigware_entnehmen(int $pa_id): array {
+    $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa || !$pa['auftrag_id']) return ['ok'=>true, 'fehlt'=>[]];
+    $benoetigt = (float)$pa['menge'] * erp_stueck_je_packung($pa);
+    if ($benoetigt <= 0) return ['ok'=>true, 'fehlt'=>[]];
+    $chargen = all("SELECT c.id, c.menge_verfuegbar, c.item_id FROM charge c JOIN item i ON i.id=c.item_id
+                    WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0
+                    ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [(int)$pa['auftrag_id']]);
+    $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], $chargen));
+    if ($verf + 0.0001 < $benoetigt)
+        return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
+    $rest = $benoetigt;
+    foreach ($chargen as $c) {
+        if ($rest <= 0.0001) break;
+        $nimm = min($rest, (float)$c['menge_verfuegbar']);
+        $neu  = (float)$c['menge_verfuegbar'] - $nimm;
+        q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
+        q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
+          [$pa_id, (int)$c['item_id'], $c['id'], $nimm, 'Stück', gmdate('Y-m-d H:i:s')]);
+        $rest -= $nimm;
+    }
+    return ['ok'=>true, 'fehlt'=>[]];
+}
+function erp_verpackung_entnehmen(int $pa_id): array {
+    $pa = one("SELECT menge, produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['ok'=>true, 'fehlt'=>[]];
+    $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
+    if (!$vid) return ['ok'=>true, 'fehlt'=>[]];                       // kein Gebinde definiert -> nichts zu tun
+    if ((int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, $vid]) > 0) return ['ok'=>true, 'fehlt'=>[]];
+    $benoetigt = (float)$pa['menge'];
+    $verf = erp_item_bestand($vid);
+    if ($verf + 0.0001 < $benoetigt)
+        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$vid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
+    erp_fefo_abbuchen($pa_id, $vid, $benoetigt, 'Stück');
+    return ['ok'=>true, 'fehlt'=>[]];
+}
+
+// Effektive Leerkapsel eines Produkts: manuelle Wahl hat Vorrang, sonst eindeutiger Treffer über
+// die gepflegte Kapselgröße der Rezeptur. (Keine gewichtsbasierte Auto-Berechnung wie im Dashboard.)
+function erp_produkt_leerkapsel_id(int $produkt_id): ?int {
+    if ($produkt_id <= 0) return null;
+    $manuell = scalar("SELECT leerkapsel_id FROM produkt WHERE id=?", [$produkt_id]);
+    if ($manuell) return (int)$manuell;
+    $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$produkt_id]);
+    if (!$rid) return null;
+    $gid = (int) scalar("SELECT kapselgroesse_id FROM rezeptur WHERE id=? AND darreichungsform='kapsel'", [$rid]);
+    if (!$gid) return null;
+    $k = all("SELECT id FROM item WHERE kategorie='rohstoff' AND form='kapselhuelle' AND kapselgroesse_id=? AND gesperrt=0 ORDER BY id", [$gid]);
+    return count($k) === 1 ? (int)$k[0]['id'] : null;   // nur bei Eindeutigkeit automatisch
+}
+
+// --- Reservierungen (gespiegelt) -------------------------------------------------------------
+function erp_bedarf_bump(): void {
+    if (!tabelle_da('app_meta')) return;
+    $v = (int) scalar("SELECT v FROM app_meta WHERE k='bedarf_version'") + 1;
+    q("INSERT INTO app_meta (k,v) VALUES ('bedarf_version',?) ON DUPLICATE KEY UPDATE v=VALUES(v)", [(string)$v]);
+}
+function erp_reservierung_abgleichen(int $pa_id): void {
+    if (!tabelle_da('reservierung')) return;
+    $aid = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$aid) return;
+    q("UPDATE reservierung SET status='verbraucht'
+       WHERE auftrag_id=? AND status='aktiv' AND item_id IN (SELECT item_id FROM produktion_verbrauch WHERE pa_id=?)", [$aid, $pa_id]);
+    erp_bedarf_bump();
+}
+function erp_auftrag_reservierung_freigeben(int $pa_id): void {
+    if (!tabelle_da('reservierung')) return;
+    q("UPDATE reservierung SET status='storniert' WHERE pa_id=? AND status='aktiv'", [$pa_id]);
+    erp_bedarf_bump();
+}
+
+// --- Fertigware einbuchen (gespiegelt) -------------------------------------------------------
+function erp_produktion_gebucht(int $pa_id): float {
+    return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
+}
+function erp_produktion_rest(int $pa_id): float {
+    $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    return max(0.0, $menge - erp_produktion_gebucht($pa_id));
+}
+// Den noch offenen Rest der Produktionsmenge als eigene Charge (.A/.B/.C …, MHD +18M) einbuchen.
+function erp_fertigware_einbuchen(int $pa_id): ?int {
+    $rest = erp_produktion_rest($pa_id);
+    if ($rest <= 0) return null;
+    $pa = one("SELECT nummer, produkt_id, rezeptur_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return null;
+    $istBulk = erp_pa_ist_bulk($pa);
+    if (!$pa['produkt_id'] && !$istBulk) return null;   // ohne Produkt/Rezeptur kein Lagerartikel
+    if ($istBulk) {
+        $item_id = erp_rezeptur_bulkitem((int)$pa['rezeptur_id']);
+    } else {
+        $item_id = erp_produkt_lageritem((int)$pa['produkt_id']);
+        if ($item_id && (erp_auftrag_ist_fulfillment((int)$pa['auftrag_id'])
+            || (bool) scalar("SELECT k.nutzt_fulfillment FROM produkt p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [(int)$pa['produkt_id']])))
+            erp_bsku_ensure($item_id);
+    }
+    if (!$item_id) return null;
+    $charge_nr = erp_charge_naechste_nr($pa_id);
+    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
+       VALUES (?,?,?,?, 'Stück', ?, CURDATE(), 'frei', ?, ?, ?)",
+      [$charge_nr, $item_id, $rest, $rest, erp_mhd_standard(), 'Aus Produktion ' . $pa['nummer'], $pa_id, gmdate('Y-m-d H:i:s')]);
+    return insert_id();
+}
+// Basis-Chargennummer = PR-Nummer ohne Präfix; nächste Teilcharge mit Tagesbuchstabe .A/.B/.C …
+function erp_charge_naechste_nr(int $pa_id): string {
+    $nummer = (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $basis  = trim(preg_replace('/^PR[-\s]*/i', '', $nummer));
+    if ($basis === '') $basis = 'PR' . $pa_id;
+    $n = (int) scalar("SELECT COUNT(*) FROM charge WHERE pa_id=?", [$pa_id]);
+    $buchstabe = ($n >= 0 && $n < 26) ? chr(ord('A') + $n) : ('X' . ($n + 1));
+    return $basis . '.' . $buchstabe;
+}
+function erp_mhd_standard(): string {
+    $monate = (int) (scalar("SELECT v FROM app_meta WHERE k='mhd_monate_standard'") ?: 18);
+    if ($monate <= 0) $monate = 18;
+    return date('Y-m-d', strtotime(date('Y-m-d') . ' +' . $monate . ' months'));
+}
+function erp_produkt_lageritem(int $produkt_id): ?int {
+    $id = scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$produkt_id]);
+    if ($id) return (int)$id;
+    $name = scalar("SELECT name FROM produkt WHERE id=?", [$produkt_id]);
+    if ($name === null) return null;
+    q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug,produkt_id) VALUES (?,?,?,?,?,?)",
+      [erp_naechste_nummer('VF'), $name, 'verkaufsfertig', 'Stück', 'Stück', $produkt_id]);
+    return insert_id();
+}
+function erp_rezeptur_bulkitem(int $rezeptur_id): ?int {
+    if ($rezeptur_id <= 0) return null;
+    $id = scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' LIMIT 1", [$rezeptur_id]);
+    if ($id) return (int)$id;
+    $rz = one("SELECT name, darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    if (!$rz) return null;
+    $einheit = ($rz['darreichungsform'] === 'pulver') ? 'g' : (in_array($rz['darreichungsform'], ['fluessig','gel'], true) ? 'ml' : 'Stück');
+    q("INSERT INTO item (artikelnummer,name,kategorie,form,einheit,preis_bezug,rezeptur_id) VALUES (?,?,?,?,?,?,?)",
+      [erp_naechste_nummer('BULK'), $rz['name'] . ' – Bulk', 'fertig', (string)$rz['darreichungsform'], $einheit, $einheit, $rezeptur_id]);
+    return insert_id();
+}
+function erp_auftrag_ist_fulfillment(int $auftrag_id): bool {
+    if ($auftrag_id <= 0) return false;
+    return (bool) scalar("SELECT k.nutzt_fulfillment FROM auftrag a JOIN kunden k ON k.id=a.kunde_id WHERE a.id=?", [$auftrag_id]);
+}
+function erp_bsku_ensure(int $item_id): string {
+    $b = (string) scalar("SELECT bsku FROM item WHERE id=?", [$item_id]);
+    if ($b !== '') return $b;
+    $seq = (int) (scalar("SELECT v FROM app_meta WHERE k='bsku_seq'") ?: 10000);
+    if ($seq < 10000) $seq = 10000;
+    for ($i = 0; $i < 100000; $i++) {
+        $kand = (string)($seq + $i);
+        if (!scalar("SELECT COUNT(*) FROM item WHERE bsku=?", [$kand])) {
+            q("INSERT INTO app_meta (k,v) VALUES ('bsku_seq',?) ON DUPLICATE KEY UPDATE v=VALUES(v)", [(string)($seq + $i + 1)]);
+            q("UPDATE item SET bsku=? WHERE id=?", [$kand, $item_id]);
+            return $kand;
+        }
+    }
+    return '';
+}
+// Nächste fortlaufende Nummer aus dem gemeinsamen Nummernkreis (identisch zum Dashboard).
+function erp_naechste_nummer(string $prefix): string {
+    $prefix = strtoupper(trim($prefix));
+    q("INSERT IGNORE INTO nummernkreis (prefix, naechste, stellen) VALUES (?, 2690, 4)", [$prefix]);
+    q("UPDATE nummernkreis SET naechste = naechste + 1 WHERE prefix = ?", [$prefix]);
+    $r = one("SELECT naechste - 1 AS nr, stellen FROM nummernkreis WHERE prefix = ?", [$prefix]);
+    return $prefix . '-' . str_pad((string)$r['nr'], (int)$r['stellen'], '0', STR_PAD_LEFT);
+}
+function erp_log_aktivitaet(string $objekt_typ, int $objekt_id, string $akteur, string $text,
+                            string $typ = '', string $ref_typ = '', int $ref_id = 0): void {
+    if (!tabelle_da('aktivitaet')) return;
+    q("INSERT INTO aktivitaet (objekt_typ,objekt_id,akteur,typ,text,ref_typ,ref_id,erstellt) VALUES (?,?,?,?,?,?,?,?)",
+      [$objekt_typ, $objekt_id, $akteur, $typ ?: null, $text, $ref_typ ?: null, $ref_id ?: null, gmdate('Y-m-d H:i:s')]);
+}

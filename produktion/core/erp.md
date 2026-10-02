@@ -1,2 +1,24 @@
 # produktion/core/erp.php — DIE NAHT
-Einzige Datei mit Zugriff auf Dashboard-Tabellen. Auth-Reads (`erp_benutzer_per_mail/token`, `erp_benutzer`), `erp_dashboard_url()` und Produktions-Reads: `erp_produktionsauftraege($status)`, `erp_pa($id)`, `erp_pa_schritte($pa_id)`. **Schreiben ins Dashboard ist noch nicht umgesetzt** – Schritt-Abschluss (inkl. Chargen-Entnahme) kommt hier als benannte Funktion rein. Nie `core/schema.php` des Dashboards einbinden. Siehe [PRODUKTION.md](../PRODUKTION.md).
+Einzige Datei mit Zugriff auf Dashboard-Tabellen. Nie `core/schema.php` des Dashboards einbinden (siehe [PRODUKTION.md](../PRODUKTION.md)).
+
+## Lesen
+- Auth: `erp_benutzer_per_mail/token`, `erp_benutzer`, `erp_dashboard_url()`.
+- Produktion: `erp_produktionsauftraege($status)` (ohne Status = aktive Aufträge `offen`/`laufend`), `erp_pa($id)`, `erp_pa_schritte($pa_id)`.
+
+## Schreiben: `erp_schritt_abschliessen($schritt_id, $akteur)`
+Schließt den jeweils **ersten offenen** Schritt eines Auftrags ab (feste Reihenfolge):
+1. Reihenfolge-Guard (nur der nächste offene Schritt).
+2. FEFO-Materialentnahme je Station mit Mangel-Guard (`erp_station_entnahme`):
+   `Rohstoffe bereitstellen` → Rohstoffe, `Verkapselung` → Leerkapseln, `Fertigware bereitstellen` → zugekaufte Bulkware, `Verpacken` → Gebinde. Reicht der Bestand nicht, wird **nicht** abgeschlossen und `fehler='mangel'` mit `fehlt`-Liste zurückgegeben. Entnahme ist idempotent (prüft `produktion_verbrauch`).
+3. Schritt `erledigt=1` + `erledigt_von/at`, Reservierungen abgleichen.
+4. Auftragsstatus neu: `offen` / `laufend` / `erledigt` (gleiche Werte wie das Dashboard).
+5. Letzter Schritt: Rest-Reservierungen frei, **Fertigware als Charge einbuchen** (`.A/.B/.C`, MHD heute+18 M), Auftrag auf `erledigt`, Aktivität protokolliert.
+
+Rückgabe: `['ok','fehler'(null|nicht_gefunden|reihenfolge|mangel),'msg','fertig','station','fehlt']`.
+
+## BEWUSSTE DOPPELUNG (wichtig)
+Die Lager-/Chargen-Logik spiegelt das Dashboard (`core/schema.php`: `produktion_schritt_erledigen()` + Helfer `produktion_materialbedarf`, `produktion_*_entnehmen`, `produktion_fertigware_einbuchen`, `charge_naechste_nr`, `reservierung_abgleichen` …). Beide Programme schreiben in **dieselben** Tabellen: `charge`, `produktion_verbrauch`, `produktion_schritt`, `produktionsauftrag`, `reservierung`, `aktivitaet`, `nummernkreis`, `app_meta`, `item`.
+**Ändert sich im Dashboard eine Regel (FEFO-Reihenfolge, Mangel-Schwelle `0.0001`, Chargennummer, MHD, Fertigware-Einbuchung), MUSS sie hier mitgezogen werden.** Begründung der Doppelung statt gemeinsamer Bibliothek: die Naht verbietet das Einbinden von `core/schema.php` (zieht die zweite `core/db.php` + das ganze Dashboard herein). Eine gemeinsame Library wäre der Alternativweg, berührt aber `core/schema.php` → nur abgestimmt umsetzen.
+
+### Einzige bewusste Abweichung
+`erp_produkt_leerkapsel_id()` nutzt die **manuell gepflegte** `produkt.leerkapsel_id` bzw. die eindeutige Leerkapsel über die **gepflegte** `rezeptur.kapselgroesse_id`. Die gewichtsbasierte Auto-Berechnung der Kapselgröße (Dashboard: `rezeptur_kapselgroesse()` via Füllgewicht/Dichte) ist hier **nicht** nachgebaut. Ist die Kapselgröße nicht gepflegt, wird – wie im Dashboard bei Uneindeutigkeit – nichts abgebucht.

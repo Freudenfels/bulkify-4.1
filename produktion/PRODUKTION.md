@@ -17,13 +17,16 @@ kommen.
 Überall sonst im Programm nur eigene `pr_`-Tabellen (falls welche dazukommen). Ändert sich im
 Dashboard eine Spalte, darf genau diese eine Datei kaputtgehen – sonst nichts.
 
-**Abgrenzung / offener Punkt:** Die eigentliche Produktionslogik (Schritt abschließen inkl.
-FEFO-/Chargen-Entnahme, Mangel-Guard, Bereitschaft) lebt bisher im Dashboard in `core/schema.php`
-(`produktion_schritt_erledigen()` etc.). Dieses Programm **liest** aktuell nur. Soll es selbst
-Schritte abschließen, kommt die Schreib-Logik als benannte Funktion in `erp.php` – entweder eigene
-Umsetzung oder (sauberer) nachdem die Dashboard-Funktionen in eine gemeinsam nutzbare Bibliothek
-ausgelagert wurden. **Niemals** `core/schema.php` des Dashboards hier einbinden (zieht das ganze
-Dashboard herein).
+**Schreib-Logik (umgesetzt):** `erp_schritt_abschliessen($schritt_id, $akteur)` in `erp.php` schließt
+den jeweils nächsten offenen Schritt ab – inkl. FEFO-/Chargen-Entnahme, Mangel-Guard, Statusfortschritt
+und Fertigware-Einbuchung beim letzten Schritt. Entschieden wurde die **eigene Umsetzung im Seam**
+(volle Isolation), nicht die gemeinsame Bibliothek. Das ist eine **bewusste Doppelung** der Dashboard-
+Regeln (`core/schema.php`: `produktion_schritt_erledigen()` etc.) – Änderungen dort müssen hier
+mitgezogen werden (Details in [core/erp.md](core/erp.md)). **Niemals** `core/schema.php` des Dashboards
+hier einbinden (zieht die zweite `core/db.php` + das ganze Dashboard herein).
+
+**Offener Punkt:** optionaler späterer Umbau auf eine gemeinsame Bibliothek (berührt `core/schema.php`
+→ nur abgestimmt). Bereitschaft/Material-Vorschau auf der Detailseite noch nicht angezeigt.
 
 ## Kern-Dateien
 - `core/config.php` – DB-Zugang (dieselbe secrets.php wie Dashboard/Lager), Sitzung `BXPROD`, UTC.
@@ -33,9 +36,10 @@ Dashboard herein).
 - `core/ui.php` – `h/fmt_zeit/menge_txt/flash/seitenkopf/pa_badge`.
 - `core/layout.php` – `kopf()/fuss()/pr_nav()`.
 
-## Seiten (Stand Gerüst)
-- `?p=login` – Anmeldung. `?p=liste` – Produktionsaufträge (offen/in Arbeit) mit Fortschritt.
-  `?p=pa&id=…` – Detail (Kopf + Schritte, read-only).
+## Seiten
+- `?p=login` – Anmeldung. `?p=liste` – aktive Produktionsaufträge (`offen`/`laufend`) mit Fortschritt.
+  `?p=pa&id=…` – Detail (Kopf + Schritte). Der nächste offene Schritt lässt sich dort **abschließen**
+  (Button → POST → FEFO-Entnahme/Mangel-Guard über die Naht; letzter Schritt bucht die Fertigware ein).
 
 ## Arbeiten im eigenen Chat
 Ein Chat, der **nur** im Ordner `produktion/` (+ `public/produktion/`) arbeitet, kollidiert praktisch
