@@ -245,7 +245,7 @@ if ($gebucht):
         '<div class="bx-field f-charge"><label class="lbl-charge">Charge-Nr.</label><input type="text" name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'"></div>'+
         '<div class="bx-field f-mhd"><label class="lbl-mhd">MHD</label><input type="date" name="p_mhd[]" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
         '<div class="bx-field f-pakete"><label>Pakete</label><input type="number" name="p_pakete[]" min="1" step="1" value="1"></div>'+
-        '<div class="bx-field f-blinker"><label>Blinker (Pflicht)</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
+        '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
       '</div>';
     rows.appendChild(card);
     // Artikel-Name -> item_id, Einheit, Warenart aus Treffer uebernehmen.
@@ -265,8 +265,8 @@ if ($gebucht):
     var art=tr.querySelector('.we-art').value, reg=MATRIX[art]||{mhd:0,charge:0};
     var mhd=tr.querySelector('.we-mhd'), ch=tr.querySelector('.we-charge');
     mhd.required=!!reg.mhd; ch.required=!!reg.charge;
-    tr.querySelector('.lbl-mhd').textContent    = reg.mhd    ? 'MHD (Pflicht)' : 'MHD';
-    tr.querySelector('.lbl-charge').textContent = reg.charge ? 'Charge-Nr. (Pflicht)' : 'Charge-Nr.';
+    tr.querySelector('.lbl-mhd').textContent    = reg.mhd    ? 'MHD *' : 'MHD';
+    tr.querySelector('.lbl-charge').textContent = reg.charge ? 'Charge-Nr. *' : 'Charge-Nr.';
   }
   document.getElementById('weAdd').addEventListener('click',function(){addRow();});
   rows.addEventListener('input',function(e){ var tr=e.target.closest('.we-pos'); if(tr)pflicht(tr); });
