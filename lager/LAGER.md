@@ -39,7 +39,7 @@ Die zwei Räume arbeiten unterschiedlich, deshalb gibt es zwei Modelle:
 - **Fulfillment (feste Plätze):** Blinker am festen **Platz** (`lg_platz`), Pick-and-Pack. (Im Aufbau.)
 
 ## Menü-Reihenfolge
-Nach dem täglichen Ablauf, **wichtigste Aktion oben**: **Erwartete Lieferungen · Wareneingang · Finden · Warenausgang · Bestand**, dann Gruppe **Verwaltung** (Bewegungen · Kisten · Blinker), dann **System** (nur Admin: Sender und Brücke). **Keine festen Plätze** (Fulfillment-Gruppe entfernt) – alles läuft im „fliegenden Modus" (Blinker an der Charge). Definition in `core/layout.php` (`lg_nav()`).
+Zwei Lager, eine App. **Lager 1** (eigener Bestand, `charge.fremd_kunde_id IS NULL`): Erwartete Lieferungen · Wareneingang · Finden · Warenausgang · Bestand. **Lager 2 (Fremdlager)** – Kundenware (`charge.fremd_kunde_id` gesetzt): Kundenware einbuchen · Finden · Fremdlager-Bestand. Dann Gruppe **Verwaltung** (Bewegungen · Kisten · Blinker), dann **System** (nur Admin: Sender und Brücke). **Keine festen Plätze** – alles läuft im „fliegenden Modus" (Blinker an der Charge). Lager 2 ist das EINZIGE Fremdlager-Modell (Charge gehört einem Kunden über `fremd_kunde_id`); das Kundenportal „Mein Lager" wird darauf angeglichen. Definition in `core/layout.php` (`lg_nav()`).
 
 ## Was drin ist
 **Warenlager**
