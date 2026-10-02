@@ -405,6 +405,26 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     header('Location: ?p=portal&token=' . $token . '&v=kontingente&jvupload=1'); exit;
 }
 
+// Fremdprodukt anmelden (nur Fulfillment-Kunden): legt ein kundeneigenes Produkt + Lager-2-Item an.
+// Bestand entsteht erst, wenn wir die Ware physisch ins Lager 2 einbuchen.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'fremdprodukt_anlegen') {
+    if (empty($k['nutzt_fulfillment'])) { header('Location: ?p=portal&token=' . $token . '&v=start'); exit; }
+    $name = trim((string)($_POST['name'] ?? ''));
+    $artnr = trim((string)($_POST['artikelnummer'] ?? ''));
+    $ean  = trim((string)($_POST['ean'] ?? ''));
+    $vpe  = (int)($_POST['einheiten_pro_packung'] ?? 0);
+    if ($name === '') { header('Location: ?p=portal&token=' . $token . '&v=fremdprodukte&fpfehler=' . urlencode('Bitte einen Produktnamen angeben.')); exit; }
+    $notiz = 'Vom Kunden im Portal als Fremdprodukt angemeldet.' . ($ean !== '' ? ' EAN/GTIN: ' . $ean : '');
+    q("INSERT INTO produkt (nummer,name,kunde_id,exklusiv,einheiten_pro_packung,status,notiz) VALUES (?,?,?,1,?,?,?)",
+      [naechste_nummer('P'), $name, (int)$k['id'], ($vpe > 0 ? $vpe : null), 'aktiv', $notiz]);
+    $pid = (int) insert_id();
+    produkt_lageritem($pid);   // Verkaufsfertig-Item fürs Lager 2 anlegen
+    if ($artnr !== '' || $ean !== '')   // Artikel-Nr./EAN aufs Lager-Item übernehmen (robust über produkt_id)
+        q("UPDATE item SET artikelnummer=COALESCE(NULLIF(?,''),artikelnummer), bsku=NULLIF(?,'') WHERE produkt_id=? AND kategorie='verkaufsfertig'", [$artnr, $ean, $pid]);
+    log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Fremdprodukt „' . $name . '" im Portal angemeldet.', 'produkt', 'produkt', $pid);
+    header('Location: ?p=portal&token=' . $token . '&v=fremdprodukte&fpok=1'); exit;
+}
+
 // Rezeptur-Vorschlag ablehnen (Pflicht-Grund) -> Status abgelehnt, Team überarbeitet
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rezeptur_ablehnen') {
     $rid   = (int)($_POST['rezeptur_id'] ?? 0);
@@ -1003,11 +1023,13 @@ $L += ['angebote' => 'Angebote', 'bestellungen' => 'Bestellungen', 'rechnungen' 
 $L['etiketten'] = 'Etiketten';
 // Labortest: alle freigegebenen Laboranalysen zu gekauften Produkten/Bestellungen (dauerhafter Menüpunkt).
 $L['labortest'] = 'Labortest';
+// Fremdprodukte / Mein Lager: nur für Fulfillment-Kunden (Ware liegt im Fremdlager Lager 2).
+if (!empty($k['nutzt_fulfillment'])) $L['fremdprodukte'] = 'Fremdprodukte';
 $NAVGROUPS = [
     ''          => ['start'],
     'Katalog'   => ['rezepturen', 'produkte', 'rohstoffe'],
     'Anfragen'  => ['meine_anfragen', 'anfrage', 'prodanfrage', 'rohanfrage', 'dienstleistung'],
-    'Vorgänge'  => ['kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten', 'labortest'],
+    'Vorgänge'  => ['kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten', 'labortest', 'fremdprodukte'],
 ];
 // Detailansichten (kein Menüpunkt) – gültig je nach Freischaltung; hebt den Katalog-Punkt hervor
 $detailParent = [];
@@ -3325,6 +3347,60 @@ portal_head('Kundenportal · ' . $k['firma']);
           <?php endforeach; ?>
         </tbody>
       </table></div>
+    <?php endif; ?>
+
+<?php elseif ($view === 'fremdprodukte'):
+    // Fremdprodukte / Mein Lager (nur Fulfillment-Kunden): eigene Produkte anmelden + Bestand aus Lager 2.
+    if (empty($k['nutzt_fulfillment'])): ?>
+      <div class="bx-panel"><div class="muted">Für dieses Konto ist kein Fremdlager eingerichtet.</div></div>
+    <?php else:
+      $fp = lager2_produkte((int)$k['id']);
+      $fpChg = [];
+      foreach ($fp as $r) $fpChg[(int)$r['item_id']] = all("SELECT charge_nr, menge_verfuegbar, mhd FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 ORDER BY (mhd IS NULL), mhd, id", [(int)$r['item_id']]);
+      $fpNf = fn($x) => number_format((float)$x, (floor((float)$x) == (float)$x ? 0 : 2), ',', '.');
+      $fpGesamt = array_sum(array_map(fn($r) => (float)$r['bestand'], $fp));
+    ?>
+  <h1 style="margin-bottom:4px">Fremdprodukte &amp; Mein Lager</h1>
+  <p class="bx-sub" style="margin:0 0 14px">Ihre bei uns im Fremdlager (Lager 2) eingelagerten Produkte und der aktuelle Bestand. Melden Sie hier neue Fremdprodukte an – den Bestand buchen wir beim Wareneingang ein.</p>
+  <?php if (isset($_GET['fpok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Fremdprodukt angelegt. Wir buchen den Bestand ein, sobald die Ware bei uns eingeht.</div><?php endif; ?>
+  <?php if (isset($_GET['fpfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['fpfehler']) ?></div><?php endif; ?>
+
+  <details class="bx-panel" style="border-color:var(--gruen)"<?= isset($_GET['fpfehler']) ? ' open' : '' ?>>
+    <summary style="cursor:pointer;font-weight:600;color:var(--gruen)">+ Fremdprodukt anmelden</summary>
+    <p class="muted" style="margin:8px 0 10px;font-size:13px">Geben Sie Ihr Produkt an, das bei uns gelagert/fulfillt werden soll. Den Bestand ergänzen wir beim Wareneingang.</p>
+    <form method="post" class="bx-grid">
+      <input type="hidden" name="aktion" value="fremdprodukt_anlegen">
+      <div class="bx-field" style="grid-column:1/-1"><label>Produktname</label><input type="text" name="name" required placeholder="z. B. Vitamin D3 2000 I.E. – 90 Kapseln"></div>
+      <div class="bx-field"><label>Artikelnummer (optional)</label><input type="text" name="artikelnummer" placeholder="Ihre Art.-Nr."></div>
+      <div class="bx-field"><label>EAN / GTIN (optional)</label><input type="text" name="ean" placeholder="z. B. 4260…"></div>
+      <div class="bx-field"><label>Einheiten je Packung (optional)</label><input type="number" min="1" name="einheiten_pro_packung" placeholder="z. B. 90"></div>
+      <div class="bx-row" style="grid-column:1/-1;margin-top:4px"><button class="btn btn-primary" type="submit">Fremdprodukt anmelden</button></div>
+    </form>
+  </details>
+
+  <h2 style="margin:20px 0 4px;font-size:16px">Mein Lager (Lager 2) <span class="muted" style="font-weight:normal">· Gesamtbestand <?= $fpNf($fpGesamt) ?> Stück</span></h2>
+  <?php if (!$fp): ?>
+    <div class="bx-panel"><div class="muted">Noch keine Fremdprodukte im Lager. Melden Sie oben ein Produkt an – nach dem Wareneingang erscheint hier der Bestand.</div></div>
+  <?php else: ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Produkt</th><th>Artikel-Nr.</th><th class="bx-num">Bestand</th><th>Chargen / MHD</th></tr></thead>
+    <tbody>
+      <?php foreach ($fp as $r): $cs = $fpChg[(int)$r['item_id']] ?? []; ?>
+      <tr>
+        <td><strong><?= h($r['anzeigename'] ?: $r['name']) ?></strong><?php if (!empty($r['produkt_nr'])): ?> <span class="muted" style="font-size:12px">· <?= h($r['produkt_nr']) ?></span><?php endif; ?></td>
+        <td><?= $r['artikelnummer'] ? h($r['artikelnummer']) : '<span class="muted">–</span>' ?></td>
+        <td class="bx-num"><strong><?= $fpNf($r['bestand']) ?></strong> <span class="muted" style="font-size:12px">Stück</span></td>
+        <td>
+          <?php if (!$cs): ?><span class="muted">–</span>
+          <?php else: foreach ($cs as $c): ?>
+            <div style="font-size:13px"><?= $c['charge_nr'] ? h($c['charge_nr']) : '<span class="muted">ohne Charge</span>' ?> · <?= $fpNf($c['menge_verfuegbar']) ?> Stück<?= $c['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$c['mhd']))) : '' ?></div>
+          <?php endforeach; endif; ?>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php endif; ?>
     <?php endif; ?>
 
 <?php elseif ($view === 'produktionsbericht'):
