@@ -29,8 +29,10 @@ DB-Zugang: `core/config.php` (lokal `bulkify41`, User/Pass `bulkify`/`bulkify`).
 5. **Verifizieren:** `php -l` + kurzer curl-Test (Admin-Autologin nur localhost). **Nie pauschale DELETEs in der DB** (es wird parallel gearbeitet).
 6. **Demo-Seeding ist AUS** (`app_meta seed_demo_off=1`) – die Demo-Seeds legen sonst beim Seitenaufruf wieder Daten an.
 
-## Git-Rhythmus (Multi-PC)
-Pull am Start, commit+push nach jedem fertigen Schritt. Immer nur an EINEM PC gleichzeitig am selben Branch. Einzige gemeinsame Wahrheit = GitHub.
+## Git-Rhythmus (Multi-PC & parallele Code-Chats)
+Pull am Start, commit+push nach jedem **fertigen, getesteten** Schritt. Einzige gemeinsame Wahrheit = GitHub.
+
+**Parallel arbeiten erlaubt** – am besten **ein Chat pro Bereich** (Lager `lager/`, CRM `crm/`, Dashboard `core/`+`module/`+`public/`; getrennte Ordner → verschiedene Dateien → kein Konflikt). Koordination = **Rebase-Ampel**: **vor jedem Push `git pull --rebase`, dann `git push`.** Wird der Push abgelehnt (anderer Chat war schneller = rot), einfach nochmal `git pull --rebase` und pushen (grün). **Niemals `git push --force`.** Echte Merge-Konflikte entstehen nur bei **gemeinsamen Dateien** – v. a. `core/schema.php` und die Nähte `*/core/erp.php`; dort anhalten und sauber lösen. Alle pushen nach `main` (Auto-Deploy), deshalb nur Fertiges committen.
 
 ## Wer
 Ansprechpartner: **Nico** (thomalla@freudenfels.de). Stil: direkt, knapp, umsetzungsorientiert.
