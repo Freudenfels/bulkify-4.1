@@ -39,6 +39,28 @@ function seitenkopf(string $titel, string $unter = '', string $aktion = ''): voi
     if ($aktion !== '') echo '<div class="bx-row">' . $aktion . '</div>';
     echo '</div>';
 }
+// Kurze Arbeitsanweisung je Station (für den Produktionsmodus). Scan-Hinweise bewusst weggelassen –
+// es gibt noch keine Etiketten/Barcodes; Material wird beim Abschließen nach FEFO abgebucht.
+function station_anleitung_text(string $station): string {
+    return match ($station) {
+        'Rohstoffe bereitstellen'  => 'Benötigte Rohstoffe nach FEFO aus dem Lager holen und bereitstellen.',
+        'Fertigware bereitstellen' => 'Zugekaufte fertige Bulkware bereitstellen.',
+        'Mischen'                  => 'Rohstoffe gemäß Rezeptur gründlich und homogen mischen.',
+        'Verkapselung'             => 'Kapseln befüllen.',
+        'Tablettierung'            => 'Tabletten gemäß Vorgabe pressen.',
+        'Softgel-Herstellung'      => 'Softgels herstellen.',
+        'Stick-Abfüllung'          => 'Sticks abfüllen.',
+        'Pulver-Abfüllung'         => 'Pulver abfüllen.',
+        'Abfüllung'                => 'Produkt abfüllen.',
+        'Verpacken'                => 'Produkt in die Verpackung füllen.',
+        'Etikettieren'             => 'Alle Gebinde korrekt etikettieren (Charge, MHD, Kennzeichnung).',
+        'Qualitätsprüfung'         => 'Aussehen, Füllmenge, Dichtigkeit und Kennzeichnung prüfen.',
+        'Produktions-Freigabe'     => 'Produktion kontrollieren und freigeben.',
+        'Versand-Freigabe'         => 'Auftrag zum Versand freigeben.',
+        default                    => '',
+    };
+}
+
 // Produktionsbereitschaft als Badge: ist der Auftrag produzierbar? (aus erp_pa_bereitschaft()['status']).
 function bereit_badge(string $s): string {
     return match ($s) {

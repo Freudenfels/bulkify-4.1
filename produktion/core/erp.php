@@ -221,6 +221,26 @@ function erp_schritt_abschliessen(int $schritt_id, string $akteur): array {
     return ['ok'=>true, 'fehler'=>null, 'msg'=>'', 'fertig'=>$fertig, 'station'=>$station, 'fehlt'=>[]];
 }
 
+// Admin-Override: einen Schritt direkt auf erledigt/offen setzen – auch außer der Reihe.
+// REINE Statuskorrektur: KEINE FEFO-Entnahme, KEINE Fertigware-Einbuchung (dafür ist das normale
+// Abschließen da). Aktualisiert nur erledigt-Flag/Bediener/Zeit und den Auftragsstatus.
+function erp_schritt_status_setzen(int $schritt_id, bool $erledigt, string $akteur): array {
+    if ($schritt_id <= 0 || !tabelle_da('produktion_schritt')) return ['ok'=>false, 'msg'=>'Schritt nicht gefunden.'];
+    $s = one("SELECT pa_id FROM produktion_schritt WHERE id=?", [$schritt_id]);
+    if (!$s) return ['ok'=>false, 'msg'=>'Schritt nicht gefunden.'];
+    $pa_id = (int)$s['pa_id'];
+    if ($erledigt)
+        q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=?, erledigt_von=? WHERE id=?",
+          [gmdate('Y-m-d H:i:s'), $akteur !== '' ? $akteur : null, $schritt_id]);
+    else
+        q("UPDATE produktion_schritt SET erledigt=0, erledigt_at=NULL, erledigt_von=NULL WHERE id=?", [$schritt_id]);
+    $total = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=?", [$pa_id]);
+    $done  = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]);
+    $status = $done === 0 ? 'offen' : ($done >= $total ? 'erledigt' : 'laufend');
+    q("UPDATE produktionsauftrag SET status=? WHERE id=?", [$status, $pa_id]);
+    return ['ok'=>true, 'fertig'=>($status === 'erledigt')];
+}
+
 // --- Bestand / Bedarf (gespiegelt aus dem Dashboard) -----------------------------------------
 // Freier eigener Bestand eines Artikels (Fremdlager-Chargen gehören dem Kunden -> zählen nicht).
 function erp_item_bestand(int $item_id): float {

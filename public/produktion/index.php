@@ -12,6 +12,7 @@ $routen = [
     'login' => 'auth/login.php',
     'liste' => 'produktion/liste.php',
     'pa'    => 'produktion/detail.php',
+    'run'   => 'produktion/run.php',
 ];
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'liste';

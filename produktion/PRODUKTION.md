@@ -37,9 +37,13 @@ hier einbinden (zieht die zweite `core/db.php` + das ganze Dashboard herein).
 - `core/layout.php` – `kopf()/fuss()/pr_nav()`.
 
 ## Seiten
-- `?p=login` – Anmeldung. `?p=liste` – aktive Produktionsaufträge (`offen`/`laufend`) mit Fortschritt.
-  `?p=pa&id=…` – Detail (Kopf + Schritte). Der nächste offene Schritt lässt sich dort **abschließen**
-  (Button → POST → FEFO-Entnahme/Mangel-Guard über die Naht; letzter Schritt bucht die Fertigware ein).
+- `?p=login` – Anmeldung. `?p=liste` – Produktionsaufträge in Reitern (Alle/Laufend/Abgeschlossen)
+  mit „Produzierbar?" + Auftragseingang.
+- `?p=pa&id=…` – Detail-Übersicht (ein Spaltenraster) + Rezeptur/Rohstoffbedarf + Schrittliste.
+  Button **„In den Produktionsmodus"**.
+- `?p=run&id=…` – **Produktionsmodus** (tablettauglich): nächster Schritt groß, „Erledigt"/„Freigeben"
+  (FEFO-Entnahme/Mangel-Guard, letzter Schritt bucht Fertigware ein, protokolliert wer/wann).
+  Admin kann Schritte direkt abhaken/zurücksetzen (reine Statuskorrektur, ohne Lagerbewegung).
 
 ## Arbeiten im eigenen Chat
 Ein Chat, der **nur** im Ordner `produktion/` (+ `public/produktion/`) arbeitet, kollidiert praktisch

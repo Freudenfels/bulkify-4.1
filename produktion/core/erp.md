@@ -17,6 +17,9 @@ Schließt den jeweils **ersten offenen** Schritt eines Auftrags ab (feste Reihen
 
 Rückgabe: `['ok','fehler'(null|nicht_gefunden|reihenfolge|mangel),'msg','fertig','station','fehlt']`.
 
+## Schreiben: `erp_schritt_status_setzen($schritt_id, $erledigt, $akteur)` (Admin-Override)
+Setzt einen Schritt direkt auf erledigt/offen – **auch außer der Reihe**. REINE Statuskorrektur: markiert `erledigt` + `erledigt_von/at` (bzw. löscht sie) und rechnet den Auftragsstatus neu. **Keine** FEFO-Entnahme, **keine** Fertigware-Einbuchung (dafür ist `erp_schritt_abschliessen()` da). Nur für Admins aufrufen (Guard in der Seite).
+
 ## BEWUSSTE DOPPELUNG (wichtig)
 Die Lager-/Chargen-Logik spiegelt das Dashboard (`core/schema.php`: `produktion_schritt_erledigen()` + Helfer `produktion_materialbedarf`, `produktion_*_entnehmen`, `produktion_fertigware_einbuchen`, `charge_naechste_nr`, `reservierung_abgleichen` …). Beide Programme schreiben in **dieselben** Tabellen: `charge`, `produktion_verbrauch`, `produktion_schritt`, `produktionsauftrag`, `reservierung`, `aktivitaet`, `nummernkreis`, `app_meta`, `item`.
 **Ändert sich im Dashboard eine Regel (FEFO-Reihenfolge, Mangel-Schwelle `0.0001`, Chargennummer, MHD, Fertigware-Einbuchung), MUSS sie hier mitgezogen werden.** Begründung der Doppelung statt gemeinsamer Bibliothek: die Naht verbietet das Einbinden von `core/schema.php` (zieht die zweite `core/db.php` + das ganze Dashboard herein). Eine gemeinsame Library wäre der Alternativweg, berührt aber `core/schema.php` → nur abgestimmt umsetzen.
