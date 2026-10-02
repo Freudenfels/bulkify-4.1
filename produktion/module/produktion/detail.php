@@ -50,57 +50,38 @@ kopf($pa['nummer'] . ' – Produktion', 'liste');
 seitenkopf((string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''), '<a class="btn btn-ghost btn-sm" href="?p=liste">Zurück zur Liste</a>');
 ?>
 <style>
-.bx-ovsek{margin-top:20px;padding-top:16px;border-top:1px solid var(--line-2)}
-.bx-ovsek:first-child{margin-top:0;padding-top:0;border-top:none}
-.bx-ovsek-t{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--gruen);margin-bottom:10px}
-.bx-ovgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 32px}
-.bx-ovk{color:var(--muted);font-size:13px;margin-bottom:2px}
+.bx-ovgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px 28px;margin-top:4px}
+.bx-ovk{color:var(--muted);font-size:13px;margin-bottom:3px}
 .bx-ovv{color:var(--text)}
 </style>
 <?php
-// Sammelt Label/Wert-Felder einer Gruppe; leere Werte fallen raus. Rückgabe: HTML (oder '').
-$zeilen = function (array $paare): string {
-    $out = '';
-    foreach ($paare as $p) {
-        [$label, $html, $force] = [$p[0], $p[1], $p[2] ?? false];
-        if (!$force && trim(strip_tags($html)) === '') continue;
-        $out .= '<div><div class="bx-ovk">' . h($label) . '</div><div class="bx-ovv">' . $html . '</div></div>';
-    }
-    return $out;
-};
-// Gruppe nur ausgeben, wenn sie Felder hat – Felder fließen in ein mehrspaltiges Raster (füllt die Breite).
-$sektion = function (string $titel, string $zeilenHtml) {
-    if (trim($zeilenHtml) === '') return;
-    echo '<div class="bx-ovsek"><div class="bx-ovsek-t">' . h($titel) . '</div><div class="bx-ovgrid">' . $zeilenHtml . '</div></div>';
-};
 $muted = fn(string $s) => $s !== '' ? h($s) : '<span class="muted">–</span>';
+// Alle Felder in EINEM gleichmäßigen Raster – leere Werte (force=false) fallen raus.
+$felder = [
+    ['Status', pa_badge((string)$pa['status']), true],
+    ['Produzierbar?', bereit_badge($ber['status']), true],
+    ['Auftragseingang', $muted($eingang ? fmt_zeit($eingang, 'd.m.Y') : ''), true],
+    ['Kunde', $muted((string)($pa['kunde'] ?? '')), true],
+    ['Herstellung', h((string)$pa['produktionsart'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion'), true],
+    ['Produkt', $muted((string)($pa['produkt_name'] ?? '')), true],
+    ['Rezeptur', h((string)($pa['rezeptur_name'] ?? ''))],
+    ['Kapselgröße', h((string)($pa['kapselgroesse'] ?? ''))],
+    ['Verpackung', h($verpackungTxt)],
+    ['Packungen', number_format((int)$pa['menge'], 0, ',', '.'), true],
+    [$stkWort . ' je VPE', $vpe > 0 ? number_format($vpe, 0, ',', '.') : ''],
+    [$stkWort . ' gesamt', $gesamt > 0 ? number_format($gesamt, 0, ',', '.') : ''],
+    ['Chargennummer' . ($charge['gebucht'] ? ($charge['anzahl'] > 1 ? ' (' . $charge['anzahl'] . ')' : '') : ' (geplant)'), h($charge['nr']), true],
+    ['MHD' . ($charge['gebucht'] ? '' : ' (+18 Mon.)'), $muted($charge['mhd'] ? date('d.m.Y', strtotime($charge['mhd'])) : ''), true],
+];
 ?>
 <div class="bx-panel" style="margin-bottom:16px">
   <h2 style="margin-top:0">Übersicht</h2>
-  <?php
-  $sektion('Auftrag', $zeilen([
-      ['Status', pa_badge((string)$pa['status']), true],
-      ['Produzierbar?', bereit_badge($ber['status']), true],
-      ['Auftragseingang', $muted($eingang ? fmt_zeit($eingang, 'd.m.Y') : ''), true],
-      ['Kunde', $muted((string)($pa['kunde'] ?? '')), true],
-      ['Herstellung', h((string)$pa['produktionsart'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion'), true],
-  ]));
-  $sektion('Produkt', $zeilen([
-      ['Produkt', $muted((string)($pa['produkt_name'] ?? '')), true],
-      ['Rezeptur', h((string)($pa['rezeptur_name'] ?? ''))],
-      ['Kapselgröße', h((string)($pa['kapselgroesse'] ?? ''))],
-      ['Verpackung', h($verpackungTxt)],
-  ]));
-  $sektion('Menge', $zeilen([
-      ['Packungen', number_format((int)$pa['menge'], 0, ',', '.'), true],
-      [$stkWort . ' je VPE', $vpe > 0 ? number_format($vpe, 0, ',', '.') : ''],
-      [$stkWort . ' gesamt', $gesamt > 0 ? number_format($gesamt, 0, ',', '.') : ''],
-  ]));
-  $sektion('Charge', $zeilen([
-      ['Chargennummer' . ($charge['gebucht'] ? ($charge['anzahl'] > 1 ? ' (' . $charge['anzahl'] . ')' : '') : ' (geplant)'), h($charge['nr']), true],
-      ['MHD' . ($charge['gebucht'] ? '' : ' (+18 Mon.)'), $muted($charge['mhd'] ? date('d.m.Y', strtotime($charge['mhd'])) : ''), true],
-  ]));
-  ?>
+  <div class="bx-ovgrid">
+  <?php foreach ($felder as $f):
+      if (!($f[2] ?? false) && trim(strip_tags($f[1])) === '') continue; ?>
+    <div><div class="bx-ovk"><?= h($f[0]) ?></div><div class="bx-ovv"><?= $f[1] ?></div></div>
+  <?php endforeach; ?>
+  </div>
 </div>
 
 <?php if ($ber['status'] === 'wartet' && $ber['fehlend']): ?>
