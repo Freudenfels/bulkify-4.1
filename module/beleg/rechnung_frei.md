@@ -11,10 +11,11 @@ Sonderposten). Rechnungen **aus einem Auftrag** laufen weiter über [rechnung_ne
    Pure Health GmbH: 500 Dosen Vitamin D3 à 4,20 €, Zahlungsziel 14 Tage, Leistung September 2026"*),
    optional zusätzlich eine **Datei** (PDF/Bild eines Angebots/Lieferscheins). Knopf **„Rechnung bauen (KI)"**
    (`aktion=ki_bauen`) schickt alles an Claude (`core/ki.php`, `ki_json()` bzw. `ki_datei_frage()`).
-   Die KI bekommt die **Kundenliste** als Kontext und gibt JSON zurück: `kunde`, `zahlungsziel_tage`,
-   `leistung_datum`, `text`, `positionen[]` (artikelnr, bezeichnung, beschreibung, menge, einheit,
+   Die KI bekommt die **Kundenliste** als Kontext und gibt JSON zurück: `kunde`, `datum` (=**Rechnungsdatum**),
+   `zahlungsziel_tage`, `leistung_datum`, `text`, `positionen[]` (artikelnr, bezeichnung, beschreibung, menge, einheit,
    **einzelpreis = Netto je Einheit**, ust). Damit wird das Formular unten vorbefüllt; der Kunde wird
-   über Namensabgleich (exakt, sonst „enthält") vorausgewählt.
+   über Namensabgleich (exakt, sonst „enthält") vorausgewählt. **Ein genanntes Datum gilt als Rechnungsdatum**
+   (nicht als Leistungsdatum) – letzteres nur, wenn der Nutzer ausdrücklich „Leistung/Lieferung am …" sagt.
    Ohne KI-Schlüssel entfällt nur dieser Schritt – das Formular lässt sich direkt manuell ausfüllen.
 2. **Prüfen & erstellen:** Kopf (Kunde · Rechnungsdatum · Leistungs-/Lieferdatum · Zahlungsziel in
    Tagen → Fälligkeit · Rechnungstext) und **Positions-Tabelle** (Artikel-Nr., Bezeichnung/Beschreibung,
@@ -27,7 +28,8 @@ Sonderposten). Rechnungen **aus einem Auftrag** laufen weiter über [rechnung_ne
 `rechnung_frei_erstellen(array $positionen, array $opt): ?int` – legt einen Beleg `typ='rechnung'`
 (ohne `auftrag_id`) an. Summen aus den Positionen (`beleg_summen_aus_positionen()`), USt-Satz = erster
 Positions-Satz > 0. `$opt`: `kunde_id`, `datum` (Standard heute), `zahlungsziel_tage` (→ `faellig`),
-`leistung_datum`, `text`, `freigeben` (bool → `kunde_sichtbar`), `ersteller` (Bearbeiter im Verlauf).
+`leistung_datum`, `text`, `freigeben` (bool → `kunde_sichtbar`), `ersteller` (Name im Verlauf),
+`bearbeiter_id` (Benutzer-ID → `beleg.bearbeiter_id`, erscheint als Bearbeiter auf der PDF).
 Nummer aus `naechste_nummer('RE')`. Schreibt `beleg_position`-Zeilen (Preise **positiv**, in Cent),
 einen Status-Log-Eintrag (`beleg_status_log_add`) und eine Kunden-Aktivität. Gibt die Beleg-ID zurück,
 oder `null` wenn keine Position mit Betrag vorliegt.

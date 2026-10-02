@@ -50,6 +50,22 @@ function rechnung_pdf_bauen(int $beleg_id): ?string {
     $zaMap = ['vorkasse'=>'Vorkasse','rechnung'=>'Rechnung','lastschrift'=>'Lastschrift','paypal'=>'PayPal'];
     $zaKey = (string)($k['zahlungsart'] ?? 'vorkasse');
     $za = $zaMap[$zaKey] ?? ucfirst($zaKey);
+
+    // Bearbeiter: aus bearbeiter_id (Benutzer), sonst Ersteller aus dem Beleg-Verlauf.
+    $bearbName = ''; $bearbMail = '';
+    if (!empty($b['bearbeiter_id'])) {
+        $bu = one("SELECT name, email FROM benutzer WHERE id=?", [(int)$b['bearbeiter_id']]);
+        if ($bu) { $bearbName = (string)$bu['name']; $bearbMail = (string)$bu['email']; }
+    }
+    if ($bearbName === '') {
+        $akteur = (string) scalar("SELECT akteur FROM beleg_status_log WHERE beleg_id=? AND akteur NOT IN ('','System','team') ORDER BY id LIMIT 1", [$beleg_id]);
+        if ($akteur !== '') {
+            $bearbName = $akteur;
+            $bu = one("SELECT email FROM benutzer WHERE name=? LIMIT 1", [$akteur]);
+            if ($bu) $bearbMail = (string)$bu['email'];
+        }
+    }
+
     return build_beleg_pdf([
         'belegart_label'    => 'Rechnung',
         'nummer'            => (string)$b['nummer'],
@@ -59,8 +75,8 @@ function rechnung_pdf_bauen(int $beleg_id): ?string {
         'faellig_bis'       => $faellig,
         'kundennummer'      => (string)($k['kundennummer'] ?? ''),
         'bezug'             => $bezug,
-        'bearbeiter'        => '',
-        'bearbeiter_email'  => '',
+        'bearbeiter'        => $bearbName,
+        'bearbeiter_email'  => $bearbMail,
         'ust_id'            => (string)($k['ust_id'] ?? ''),
         'kopf_text'         => $kopf,
         'zahlungsbedingung' => $zahlbed,

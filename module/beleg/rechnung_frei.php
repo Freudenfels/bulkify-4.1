@@ -10,7 +10,9 @@ $ustStdV = (float) meta_get('ust_inland', 19);
 $ustStd  = rtrim(rtrim(number_format($ustStdV, 2, '.', ''), '0'), '.');
 
 // Aktuell eingeloggter Nutzer = Bearbeiter/Ersteller.
-$akteur = (function_exists('current_user') && ($u = current_user())) ? ($u['name'] ?: 'team') : 'team';
+$akteurU  = (function_exists('current_user')) ? current_user() : null;
+$akteur   = $akteurU ? ($akteurU['name'] ?: 'team') : 'team';
+$akteurId = $akteurU ? (int)$akteurU['id'] : 0;
 
 // --- Rechnung speichern -----------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rechnung_save') {
@@ -40,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rechn
             'text'              => trim($_POST['text'] ?? ''),
             'freigeben'         => !empty($_POST['freigeben']),
             'ersteller'         => $akteur,
+            'bearbeiter_id'     => $akteurId,
         ]);
         if ($bid) { header('Location: ?p=rechnung&id=' . $bid . '&gespeichert=1'); exit; }
         $fehler = 'Rechnung konnte nicht erstellt werden – fehlt ein Preis? Bitte Positionen prüfen.';
@@ -48,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rechn
 
 // --- KI: Freitext (+ optionale Datei) -> Vorbefüllung ----------------------
 $prefill = [];
-$kiKunde = ''; $kiZiel = ''; $kiLeist = ''; $kiText = '';
+$kiKunde = ''; $kiZiel = ''; $kiLeist = ''; $kiText = ''; $kiDatum = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_bauen') {
     require_once BX_ROOT . '/core/ki.php';
     $text = trim((string)($_POST['frei'] ?? ''));
@@ -64,11 +67,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ba
         $system = "Du bist die Rechnungs-Assistenz eines Lohnherstellers für Nahrungsergänzungsmittel (Marke bulkify). "
             . "Aus der Beschreibung des Nutzers baust du die Daten für EINE Ausgangsrechnung. "
             . "Gib NUR JSON zurück, exakt in dieser Form:\n"
-            . '{"kunde":"","zahlungsziel_tage":null,"leistung_datum":"","text":"","positionen":[{"artikelnr":"","bezeichnung":"","beschreibung":"","menge":1,"einheit":"Stk.","einzelpreis":0,"ust":' . $ustStd . "}]}\n"
+            . '{"kunde":"","datum":"","zahlungsziel_tage":null,"leistung_datum":"","text":"","positionen":[{"artikelnr":"","bezeichnung":"","beschreibung":"","menge":1,"einheit":"Stk.","einzelpreis":0,"ust":' . $ustStd . "}]}\n"
             . "Regeln: einzelpreis = NETTO-Einzelpreis je Einheit (nicht die Zeilensumme), Zahl mit Punkt als Dezimaltrennzeichen. "
             . "Nennt der Nutzer nur eine Zeilensumme und eine Menge, rechne den Einzelpreis aus. "
             . "ust = USt-Satz in Prozent; wenn nicht genannt, nutze " . $ustStd . ". "
-            . "zahlungsziel_tage = Zahl der Tage (z. B. 14), sonst null. leistung_datum im Format YYYY-MM-DD, sonst \"\". "
+            . "datum = RECHNUNGSDATUM im Format YYYY-MM-DD. Nennt der Nutzer ein Datum, ist das das Rechnungsdatum (datum) – NICHT das Leistungsdatum, außer er sagt ausdrücklich \"Leistung/Lieferung am\". Gibt er kein Datum an, lass datum leer (\"\"). "
+            . "leistung_datum = NUR wenn der Nutzer ausdrücklich ein separates Leistungs-/Lieferdatum nennt, im Format YYYY-MM-DD, sonst \"\". "
+            . "zahlungsziel_tage = Zahl der Tage (z. B. 14), sonst null. "
             . "text = kurzer Rechnungs-/Einleitungstext nur wenn der Nutzer einen wünscht, sonst \"\". "
             . "kunde = passender Firmenname. Wenn er zu einer dieser bekannten Firmen passt, gib EXAKT diese Schreibweise zurück:\n"
             . implode("\n", $firmen);
@@ -88,6 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ba
             $d = $r['daten'] ?? [];
             $kiKunde = trim((string)($d['kunde'] ?? ''));
             $kiZiel  = ($d['zahlungsziel_tage'] ?? null) !== null && $d['zahlungsziel_tage'] !== '' ? (string)(int)$d['zahlungsziel_tage'] : '';
+            $kiDatum = (is_string($d['datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d['datum'])) ? $d['datum'] : '';
             $kiLeist = (is_string($d['leistung_datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d['leistung_datum'])) ? $d['leistung_datum'] : '';
             $kiText  = trim((string)($d['text'] ?? ''));
             $list = (isset($d['positionen']) && is_array($d['positionen'])) ? $d['positionen'] : (array_is_list($d) ? $d : []);
@@ -160,7 +166,7 @@ if ($kiInfo) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . 
         </select>
         <?php if ($kiKunde !== '' && !$vorKid): ?><span class="muted" style="font-size:12px">KI-Vorschlag „<?= h($kiKunde) ?>" – kein passender Kunde gefunden, bitte wählen.</span><?php endif; ?>
       </div>
-      <div class="bx-field"><label>Rechnungsdatum</label><input type="date" name="datum" value="<?= h(date('Y-m-d')) ?>"></div>
+      <div class="bx-field"><label>Rechnungsdatum</label><input type="date" name="datum" value="<?= h($kiDatum ?: date('Y-m-d')) ?>"></div>
       <div class="bx-field"><label>Leistungs-/Lieferdatum <?= bx_hint('Wann die Leistung erbracht wurde. Leer = kein gesondertes Leistungsdatum (dann gilt das Rechnungsdatum).') ?></label><input type="date" name="leistung_datum" value="<?= h($kiLeist) ?>"></div>
       <div class="bx-field"><label>Zahlungsziel (Tage) <?= bx_hint('Fälligkeit = Rechnungsdatum + Tage. Leer = kein gesondertes Zahlungsziel.') ?></label><input type="text" inputmode="numeric" name="zahlungsziel_tage" value="<?= h($kiZiel) ?>" placeholder="z. B. 14" style="max-width:140px"></div>
     </div>

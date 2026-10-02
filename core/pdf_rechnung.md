@@ -9,7 +9,8 @@ genauso wie für **aus einem Auftrag** erzeugte Rechnungen – beide haben echte
   baut den Beleg-Kopf (Empfänger = Rechnungsadresse, sonst Hauptadresse; Datum, Fälligkeit aus
   `faellig` bzw. `datum + zahlungsziel_tage`; Bezug = „Auftrag …" falls verknüpft; Kopftext „Wir
   berechnen Ihnen wie folgt" + Leistungsdatum + optionaler Rechnungstext; Zahlungsbedingung aus dem
-  Zahlungsziel; USt-Befreiung bei Ausland/Kleinunternehmer) und ruft den gemeinsamen Renderer
+  Zahlungsziel; **Bearbeiter** = Name + E-Mail aus `beleg.bearbeiter_id` (Benutzer), Fallback = Ersteller
+  aus dem Beleg-Verlauf `beleg_status_log`; USt-Befreiung bei Ausland/Kleinunternehmer) und ruft den gemeinsamen Renderer
   `build_beleg_pdf()` aus [pdf_beleg.php](pdf_beleg.md) auf. Gibt die PDF-Bytes zurück oder `null`
   (Beleg fehlt oder hat keine Positionen).
 - `rechnung_pdf_ausliefern(int $beleg_id, string $nummer): bool` – setzt die PDF-Header und gibt die

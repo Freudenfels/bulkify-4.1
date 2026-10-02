@@ -516,6 +516,7 @@ function init_schema(): void {
     ensure_column('beleg', 'faellig', "DATE NULL");          // Faelligkeit = datum + zahlungsziel_tage
     ensure_column('beleg', 'leistung_datum', "DATE NULL");   // Leistungs-/Lieferdatum
     ensure_column('beleg', 'text', "TEXT NULL");             // optionaler Rechnungstext/Hinweis
+    ensure_column('beleg', 'bearbeiter_id', "INT NULL");     // Bearbeiter (Benutzer-ID) – erscheint auf der Rechnung
     ensure_column('beleg', 'kunde_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0");  // fuer den Kunden im Portal freigegeben?
     // Einmalig: bestehende Belege waren im Portal immer sichtbar -> freigeben, damit nichts verschwindet.
     if (meta_get('beleg_sichtbar_backfill', '') !== '1') {
@@ -5651,10 +5652,11 @@ function rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     $leist = $gilt($opt['leistung_datum'] ?? null);
     $text  = trim((string)($opt['text'] ?? '')) ?: null;
     $sicht = !empty($opt['freigeben']) ? 1 : 0;                  // standardmaessig NICHT fuer den Kunden freigegeben
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,leistung_datum,text,kunde_sichtbar)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    $bearb = (int)($opt['bearbeiter_id'] ?? 0) ?: null;
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,leistung_datum,text,bearbeiter_id,kunde_sichtbar)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('RE'), 'rechnung', $auftrag_id, ($a['kunde_id'] ?: null), $netto, $ustP, $ust, $brutto, 'offen',
-       $datum, $ziel, $faellig, $leist, $text, $sicht]);
+       $datum, $ziel, $faellig, $leist, $text, $bearb, $sicht]);
     $bid = (int) insert_id();
     // Ersteller als Bearbeiter im Verlauf festhalten.
     $ersteller = trim((string)($opt['ersteller'] ?? '')) ?: 'team';
@@ -5707,11 +5709,12 @@ function rechnung_frei_erstellen(array $positionen, array $opt = []): ?int {
     $leist = $gilt($opt['leistung_datum'] ?? null);
     $text  = trim((string)($opt['text'] ?? '')) ?: null;
     $kid   = (int)($opt['kunde_id'] ?? 0) ?: null;
+    $bearb = (int)($opt['bearbeiter_id'] ?? 0) ?: null;
     $sicht = !empty($opt['freigeben']) ? 1 : 0;                  // standardmäßig NICHT für den Kunden freigegeben
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,leistung_datum,text,kunde_sichtbar)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,leistung_datum,text,bearbeiter_id,kunde_sichtbar)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('RE'), 'rechnung', null, $kid, $s['netto'], $ustP, $s['ust'], $s['brutto'], 'offen',
-       $datum, $ziel, $faellig, $leist, $text, $sicht]);
+       $datum, $ziel, $faellig, $leist, $text, $bearb, $sicht]);
     $bid = (int) insert_id();
     $sort = 0;
     foreach ($pos as $p)
