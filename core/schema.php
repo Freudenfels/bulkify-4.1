@@ -5676,6 +5676,54 @@ function rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     return $bid;
 }
 
+// Freie Rechnung (ohne Auftrag) anlegen – Kopf + eigene Positionen. Für die KI-gestützte und die
+// manuelle Rechnungserstellung im Rechnungen-Menü. Positionen: [{artikelnr,bezeichnung,beschreibung,
+// menge,einheit,preis (€, positiv),mwst_satz}]. $opt: kunde_id, datum, zahlungsziel_tage,
+// leistung_datum, text, freigeben (bool → im Kundenportal sichtbar), ersteller. Gibt Beleg-ID oder null.
+function rechnung_frei_erstellen(array $positionen, array $opt = []): ?int {
+    $pos = [];
+    foreach ($positionen as $p) {
+        if (trim((string)($p['bezeichnung'] ?? '')) === '') continue;
+        $menge = (float) str_replace(',', '.', (string)($p['menge'] ?? 1)); if ($menge <= 0) $menge = 1;
+        $pos[] = [
+            'artikelnr'   => trim((string)($p['artikelnr'] ?? '')),
+            'bezeichnung' => (string)$p['bezeichnung'],
+            'beschreibung'=> trim((string)($p['beschreibung'] ?? '')),
+            'menge'       => $menge,
+            'einheit'     => trim((string)($p['einheit'] ?? '')),
+            'preis_cent'  => abs((int) round((float) str_replace(',', '.', (string)($p['preis'] ?? 0)) * 100)),
+            'mwst_satz'   => (float) str_replace(',', '.', (string)($p['mwst_satz'] ?? $p['ust'] ?? 0)),
+        ];
+    }
+    if (!$pos) return null;
+    $s = beleg_summen_aus_positionen($pos);
+    if ($s['netto'] <= 0) return null;                           // ohne Betrag keine Rechnung
+    $ustP = 0.0;
+    foreach ($pos as $p) if ((float)$p['mwst_satz'] > 0) { $ustP = (float)$p['mwst_satz']; break; }
+    $gilt  = fn($d) => (is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) ? $d : null;
+    $datum = $gilt($opt['datum'] ?? null) ?? gmdate('Y-m-d');
+    $ziel  = (isset($opt['zahlungsziel_tage']) && $opt['zahlungsziel_tage'] !== '') ? max(0, (int)$opt['zahlungsziel_tage']) : null;
+    $faellig = ($ziel !== null) ? date('Y-m-d', strtotime($datum . ' +' . $ziel . ' days')) : null;
+    $leist = $gilt($opt['leistung_datum'] ?? null);
+    $text  = trim((string)($opt['text'] ?? '')) ?: null;
+    $kid   = (int)($opt['kunde_id'] ?? 0) ?: null;
+    $sicht = !empty($opt['freigeben']) ? 1 : 0;                  // standardmäßig NICHT für den Kunden freigegeben
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,leistung_datum,text,kunde_sichtbar)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('RE'), 'rechnung', null, $kid, $s['netto'], $ustP, $s['ust'], $s['brutto'], 'offen',
+       $datum, $ziel, $faellig, $leist, $text, $sicht]);
+    $bid = (int) insert_id();
+    $sort = 0;
+    foreach ($pos as $p)
+        q("INSERT INTO beleg_position (beleg_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz) VALUES (?,?,?,?,?,?,?,?,?)",
+          [$bid, $sort++, $p['artikelnr'] ?: null, $p['bezeichnung'], $p['beschreibung'] ?: null,
+           $p['menge'], $p['einheit'] ?: null, $p['preis_cent'], $p['mwst_satz']]);
+    $ersteller = trim((string)($opt['ersteller'] ?? '')) ?: 'team';
+    if (function_exists('beleg_status_log_add')) beleg_status_log_add($bid, 'offen', 'Rechnung manuell erstellt' . ($sicht ? ', für Kunde freigegeben' : ''), $ersteller);
+    if ($kid) log_aktivitaet('kunde', $kid, 'team', 'Rechnung ' . scalar("SELECT nummer FROM beleg WHERE id=?", [$bid]) . ' erstellt.', 'beleg', 'beleg', $bid);
+    return $bid;
+}
+
 // Jahresvertrag aus einem Angebot: erzeugt (einmalig) das Kontingent im Status 'wartet_vertrag'.
 // Aktiv (abrufbar) wird es erst, wenn der unterschriebene Vertrag hochgeladen UND vom Team
 // freigegeben ist. Rueckgabe: ['ok'=>true,'kontingent_id'=>…] oder ['ok'=>false,'fehler'=>…].

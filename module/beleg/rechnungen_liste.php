@@ -54,7 +54,8 @@ if (isset($_GET['verrechnet'])) echo '<div class="bx-panel badge-ok" style="padd
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
   <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=rechnungen">zurücksetzen</a><?php endif; ?>
   <span style="flex:1"></span>
-  <a class="btn btn-primary btn-sm" href="?p=gutschrift_neu">+ Storno-Rechnung</a>
+  <a class="btn btn-ghost btn-sm" href="?p=gutschrift_neu">Storno-Rechnung</a>
+  <a class="btn btn-primary btn-sm" href="?p=rechnung_frei">+ Rechnung erstellen</a>
 </form>
 <?php
 bx_table($cols, array_values($rows), [
@@ -62,6 +63,6 @@ bx_table($cols, array_values($rows), [
     'sort'    => $sort,
     'dir'     => $dir,
     'rowUrl'  => fn($r) => '?p=rechnung&id=' . $r['id'],
-    'empty'   => 'Noch keine Rechnungen – entstehen automatisch mit dem Auftrag.',
+    'empty'   => 'Noch keine Rechnungen – mit „+ Rechnung erstellen" (KI-gestützt) oder automatisch aus einem Auftrag.',
 ]);
 render_footer();

@@ -82,6 +82,7 @@ $routes = [
     'rechnungen'      => 'beleg/rechnungen_liste.php',
     'rechnung'        => 'beleg/detail.php',
     'rechnung_neu'    => 'beleg/rechnung_neu.php',   // Rechnung aus Auftrag: Vorschau + Eingaben, dann erstellen
+    'rechnung_frei'   => 'beleg/rechnung_frei.php',  // Rechnung frei/KI-gestützt erstellen (ohne Auftrag)
     'fasttrack'       => 'produktion/fasttrack.php',   // Schnelles Nachtragen: Auftrag-Status + Datum + Sprach-Notiz
     'gutschrift_neu'  => 'beleg/gutschrift_neu.php',   // Storno-Rechnung / Gutschrift manuell erstellen
     'gutschrift_pdf'  => 'beleg/gutschrift_pdf.php',   // Gutschrift/Storno als PDF
