@@ -41,13 +41,15 @@ foreach ($lieferungen as $l):
   </div>
 
   <?php if (!empty($l['positionen'])): ?>
-  <div class="bx-tablewrap"><table class="bx-table">
+  <div class="bx-tablewrap"><table class="bx-table" style="table-layout:fixed;width:100%">
+    <colgroup><col><col style="width:200px"><col style="width:130px"></colgroup>
     <thead><tr><th>Artikel</th><th class="bx-num">Erwartete Menge</th><th></th></tr></thead>
     <tbody>
       <?php foreach ($l['positionen'] as $p):
         $name = (string)($p['name'] ?? '');
         $menge = (float)($p['menge'] ?? 0);
         $einh = (string)($p['einheit'] ?? '');
+        $kg = (string)($p['kapselgroesse'] ?? '');
         $buchUrl = '?p=eingang'
           . '&item=' . (int)($p['item_id'] ?? 0)
           . '&menge=' . rawurlencode(menge_txt($menge))
@@ -55,7 +57,8 @@ foreach ($lieferungen as $l):
           . (!empty($l['nummer']) ? '&charge=' . rawurlencode((string)$l['nummer']) : '');
       ?>
       <tr>
-        <td><?= $name !== '' ? h($name) : '<span class="muted">Artikel beim Einbuchen wählen</span>' ?></td>
+        <td><?= $name !== '' ? h($name) : '<span class="muted">Artikel beim Einbuchen wählen</span>' ?><?php
+            if ($kg !== ''): ?> <span class="badge" style="margin-left:4px"><?= h($kg) ?></span><?php endif; ?></td>
         <td class="bx-num"><?= h(menge_txt($menge)) ?> <?= h($einh) ?></td>
         <td style="text-align:right">
           <a class="btn btn-primary btn-sm" href="<?= h($buchUrl) ?>">Einbuchen</a>

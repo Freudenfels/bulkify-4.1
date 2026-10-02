@@ -304,6 +304,27 @@ function erp_item_anlegen(string $name, string $kategorie, string $einheit): ?in
 // „Waren, auf die wir warten" – beim Lieferanten bestellt, aber noch nicht angekommen (status='bestellt',
 // kein Wareneingang). Mit erwartetem Termin (eta_geplant), Sendungsnummer (tracking) und Positionen,
 // damit der Mitarbeiter sie bei Ankunft direkt einbuchen kann.
+// Kapselgröße (z. B. "Größe 0") zu einer Position bestimmen – wenn es Kapseln sind.
+// 1) direkt am Artikel (Leerkapsel: item.kapselgroesse_id), 2) über Auftrag -> Produkt -> Rezeptur.
+// Leerer String, wenn keine Kapselgröße hinterlegt/bestimmbar ist.
+function erp_kapselgroesse_label(?int $item_id, ?int $auftrag_id): string {
+    if (!tabelle_da('kapselgroesse')) return '';
+    if ($item_id) {
+        $n = scalar("SELECT kg.name FROM item i JOIN kapselgroesse kg ON kg.id=i.kapselgroesse_id
+                     WHERE i.id=? AND i.kapselgroesse_id IS NOT NULL", [$item_id]);
+        if ($n) return (string)$n;
+    }
+    if ($auftrag_id && tabelle_da('auftrag') && tabelle_da('produkt') && tabelle_da('rezeptur')) {
+        $n = scalar("SELECT kg.name FROM auftrag a
+                     JOIN produkt p ON p.id = a.produkt_id
+                     JOIN rezeptur r ON r.id = p.rezeptur_id
+                     JOIN kapselgroesse kg ON kg.id = r.kapselgroesse_id
+                     WHERE a.id=?", [$auftrag_id]);
+        if ($n) return (string)$n;
+    }
+    return '';
+}
+
 function erp_erwartete_lieferungen(): array {
     if (!tabelle_da('bestellung')) return [];
     $rows = all("SELECT b.id, b.nummer, b.bestelldatum, b.eta_geplant, b.tracking, b.versandanbieter,
@@ -312,12 +333,16 @@ function erp_erwartete_lieferungen(): array {
                  WHERE b.status = 'bestellt' AND b.angekommen_am IS NULL
                  ORDER BY (b.eta_geplant IS NULL), b.eta_geplant, b.bestelldatum DESC, b.id DESC");
     foreach ($rows as &$r) {
-        $r['positionen'] = tabelle_da('bestellung_position')
-            ? all("SELECT bp.item_id, bp.menge, bp.einheit,
-                          COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie
+        $pos = tabelle_da('bestellung_position')
+            ? all("SELECT bp.item_id, bp.auftrag_id, bp.menge, bp.einheit,
+                          COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie, i.form
                    FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
                    WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id", [(int)$r['id']])
             : [];
+        foreach ($pos as &$p)
+            $p['kapselgroesse'] = erp_kapselgroesse_label((int)($p['item_id'] ?? 0), (int)($p['auftrag_id'] ?? 0));
+        unset($p);
+        $r['positionen'] = $pos;
     }
     unset($r);
     return $rows;
