@@ -5,7 +5,7 @@
 ## Was ist das?
 Clean-Slate-Neuaufbau des bulkify-ERP (Nahrungsergänzungs-Lohnhersteller, Marke **bulkify**). PHP 8.3 + **MariaDB/MySQL**, kein Framework, serverseitig gerendertes HTML. Front-Controller `public/index.php` (Whitelist `?p=<route>`). Ziel: Prozesse/Seiten vereinfachen, Doppelungen killen. Ablauf: Anfrage → Rezeptur/Vorschlag → Angebot → Auftrag → Produktion → Lager → Versand.
 
-## Drei Programme in diesem Repo
+## Programme in diesem Repo
 - **Dashboard** unter `/` - Werkzeug fuer den Rechner (`core/`, `module/`, `public/`).
 - **CRM** unter `/crm/` - Werkzeug fuers Handy (`crm/core/`, `crm/module/`, `public/crm/`).
   Beantwortet eine Frage: wer wartet auf mich. Details: `crm/CRM.md`.
@@ -14,6 +14,9 @@ Clean-Slate-Neuaufbau des bulkify-ERP (Nahrungsergänzungs-Lohnhersteller, Marke
 - **Lager** unter `/lager/` - Lagerplaetze + Pick-to-Light (LED-Leisten) fuers Tablet am Regal
   (`lager/core/`, `lager/module/`, `public/lager/`). Gleiches Muster wie das CRM: eigene Tabellen `lg_`,
   **alle** Dashboard-Zugriffe nur in `lager/core/erp.php`. Details: `lager/LAGER.md`.
+- **Produktion** unter `/produktion/` - Produktions-Arbeitsplatz (Werk/Shop-Floor), eigener Code-Chat.
+  Gleiches Muster: eigene Sitzung `BXPROD`, **alle** Dashboard-Zugriffe nur in `produktion/core/erp.php`
+  (Stand: liest nur; Schritt-Abschluss ist offener Ausbaupunkt). Details: `produktion/PRODUKTION.md`.
 
 ## Lokal starten
 ```

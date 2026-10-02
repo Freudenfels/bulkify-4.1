@@ -1,0 +1,2 @@
+# produktion/core/erp.php — DIE NAHT
+Einzige Datei mit Zugriff auf Dashboard-Tabellen. Auth-Reads (`erp_benutzer_per_mail/token`, `erp_benutzer`), `erp_dashboard_url()` und Produktions-Reads: `erp_produktionsauftraege($status)`, `erp_pa($id)`, `erp_pa_schritte($pa_id)`. **Schreiben ins Dashboard ist noch nicht umgesetzt** – Schritt-Abschluss (inkl. Chargen-Entnahme) kommt hier als benannte Funktion rein. Nie `core/schema.php` des Dashboards einbinden. Siehe [PRODUKTION.md](../PRODUKTION.md).
