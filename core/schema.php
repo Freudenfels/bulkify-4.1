@@ -5734,9 +5734,34 @@ function kontingent_aus_angebot(int $angebot_id, string $unterzeichner = ''): ar
     $a = one("SELECT * FROM angebot WHERE id=?", [$angebot_id]);
     if (!$a) return ['ok' => false, 'fehler' => 'Angebot nicht gefunden.'];
     if ((int)($a['jahresvertrag'] ?? 0) !== 1) return ['ok' => false, 'fehler' => 'Dieses Angebot ist kein Jahresvertrag.'];
-    if (empty($a['kunde_id']) || empty($a['produkt_id'])) return ['ok' => false, 'fehler' => 'Jahresvertrag braucht Kunde und Produkt.'];
+    if (empty($a['kunde_id'])) return ['ok' => false, 'fehler' => 'Jahresvertrag braucht einen Kunden.'];
     $menge = (int)($a['jahresmenge'] ?? 0);
     $vk    = (float)($a['jahres_vk'] ?? 0);
+    // Produkt + Festpreis bestimmen: bei einem positionsbasierten Angebot (kein Produkt im Kopf) werden sie
+    // – wie beim normalen Auftrag – ERST HIER aus der Herstellungsposition (Rezeptur x Menge je Packung +
+    // Verpackung) abgeleitet/angelegt, damit der Abruf später einen Auftrag erzeugen kann.
+    $produktId = (int)($a['produkt_id'] ?? 0);
+    if (!$produktId || $vk <= 0) {
+        angebot_positionen_konfig_nachtragen($angebot_id);
+        $hposs = array_values(array_filter(
+            all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]),
+            fn($p) => !empty($p['rezeptur_id']) && (int)$p['stueck'] > 0));
+        // Mehrere Optionen (Gruppen A/B …) -> keine eindeutige Jahresvertrags-Konfiguration: nicht raten.
+        $gruppen = array_values(array_unique(array_filter(array_map(fn($p) => trim((string)$p['gruppe']), $hposs), fn($g) => $g !== '')));
+        if (count($hposs) > 1 && count($gruppen) > 1)
+            return ['ok' => false, 'fehler' => 'Dieses Jahresvertrags-Angebot enthält mehrere Optionen (A/B …). Ein Jahresvertrag braucht genau eine Konfiguration mit Festpreis – bitte das Angebot auf eine Option mit Jahrespreis anpassen.'];
+        $herst = $hposs[0] ?? null;
+        if ($herst) {
+            if (!$produktId) {
+                $produktId = (int) produkt_aus_rezeptur((int)$herst['rezeptur_id'], (int)$herst['stueck'],
+                                $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null, null);
+                if ($produktId) q("UPDATE angebot SET produkt_id=? WHERE id=?", [$produktId, $angebot_id]);
+            }
+            // Festpreis je Packung aus der Position übernehmen, wenn am Jahresvertrag keiner gesetzt ist.
+            if ($vk <= 0) { $vk = round((int)$herst['preis_cent'] / 100, 4); if ($vk > 0) q("UPDATE angebot SET jahres_vk=? WHERE id=?", [$vk, $angebot_id]); }
+        }
+    }
+    if (!$produktId) return ['ok' => false, 'fehler' => 'Jahresvertrag braucht ein Produkt – dem Angebot fehlt eine Rezeptur/Konfiguration. Bitte beim Team melden.'];
     if ($menge < 1 || $vk <= 0) return ['ok' => false, 'fehler' => 'Jahresmenge und Festpreis müssen gesetzt sein.'];
     // Schon vorhanden? (idempotent je Angebot)
     $ex = one("SELECT id FROM kontingent WHERE angebot_id=?", [$angebot_id]);
@@ -5744,7 +5769,7 @@ function kontingent_aus_angebot(int $angebot_id, string $unterzeichner = ''): ar
     $mon = (int)($a['jahres_laufzeit_monate'] ?? 12) ?: 12;
     q("INSERT INTO kontingent (kunde_id,produkt_id,angebot_id,gesamt_menge,abgerufen,vk_stueck,gueltig_von,gueltig_bis,status,freigabe_name,freigabe_am,notiz)
        VALUES (?,?,?,?,0,?,CURDATE(),DATE_ADD(CURDATE(), INTERVAL ? MONTH),'wartet_vertrag',?,UTC_TIMESTAMP(),?)",
-      [(int)$a['kunde_id'], (int)$a['produkt_id'], $angebot_id, $menge, $vk, $mon, ($unterzeichner ?: null),
+      [(int)$a['kunde_id'], $produktId, $angebot_id, $menge, $vk, $mon, ($unterzeichner ?: null),
        'Aus Angebot ' . (string)$a['nummer'] . ' (Jahresvertrag).']);
     $kid = insert_id();
     q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$angebot_id]);
