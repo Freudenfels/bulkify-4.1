@@ -25,17 +25,76 @@ $schritte = erp_pa_schritte($id);
 
 // Erster noch offener Schritt (nur der darf abgeschlossen werden – Reihenfolge).
 $erster_offen = 0;
-foreach ($schritte as $s) { if ((int)($s['erledigt'] ?? 0) === 0) { $erster_offen = (int)$s['id']; break; } }
+$fertig_cnt = 0;
+foreach ($schritte as $s) { if ((int)($s['erledigt'] ?? 0) === 1) $fertig_cnt++; elseif ($erster_offen === 0) $erster_offen = (int)$s['id']; }
+
+// Übersichtsdaten
+$ber    = erp_pa_bereitschaft($id, (string)$pa['status'], $fertig_cnt);
+$charge = erp_pa_charge_info($id);
+$vpe    = erp_stueck_je_packung($pa);                     // Stück/Kapseln je Packung (VPE)
+$gesamt = $vpe > 0 ? (int)$pa['menge'] * $vpe : 0;        // Gesamtstückzahl
+$form   = (string)($pa['form'] ?? '');
+$stkWort = in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : 'Stück');
+$eingang = $pa['auftrag_eingang'] ?? ($pa['angelegt'] ?? null);
+// Verpackung lesbar zusammensetzen (Name · Typ · Volumen · Material)
+$vpTeile = array_filter([
+    (string)($pa['verpackung_name'] ?? ''),
+    (string)($pa['verpackung_art'] ?? ''),
+    !empty($pa['verpackung_volumen']) ? rtrim(rtrim(number_format((float)$pa['verpackung_volumen'], 2, ',', '.'), '0'), ',') . ' ml' : '',
+    (string)($pa['verpackung_material'] ?? ''),
+]);
+$verpackungTxt = $vpTeile ? implode(' · ', $vpTeile) : '';
 
 kopf($pa['nummer'] . ' – Produktion', 'liste');
 seitenkopf((string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''), '<a class="btn btn-ghost btn-sm" href="?p=liste">Zurück zur Liste</a>');
 ?>
+<?php
+// Kennzahl-Karte (nur rendern, wenn ein Wert da ist).
+$karte = function (string $label, string $wertHtml, string $roh = '') {
+    if ($roh === '' && trim(strip_tags($wertHtml)) === '') return;
+    echo '<div class="bx-panel" style="margin:0"><div class="muted">' . h($label) . '</div><div style="margin-top:6px">' . $wertHtml . '</div></div>';
+};
+?>
 <div class="bx-cards" style="margin-bottom:16px">
-  <div class="bx-panel" style="margin:0"><div class="muted">Status</div><div style="margin-top:6px"><?= pa_badge((string)$pa['status']) ?></div></div>
-  <div class="bx-panel" style="margin:0"><div class="muted">Menge</div><div style="margin-top:6px"><?= menge_txt($pa['menge']) ?><?php if (!empty($pa['stueck'])): ?> · <?= (int)$pa['stueck'] ?>/Pkg.<?php endif; ?></div></div>
-  <div class="bx-panel" style="margin:0"><div class="muted">Kunde</div><div style="margin-top:6px"><?= h((string)($pa['kunde'] ?: '–')) ?></div></div>
-  <div class="bx-panel" style="margin:0"><div class="muted">Herstellung</div><div style="margin-top:6px"><?= h((string)$pa['produktionsart'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion') ?></div></div>
+  <?php
+  $karte('Status', pa_badge((string)$pa['status']), 'x');
+  $karte('Produzierbar?', bereit_badge($ber['status']), 'x');
+  $karte('Auftragseingang', $eingang ? h(fmt_zeit($eingang, 'd.m.Y')) : '<span class="muted">–</span>', 'x');
+  $karte('Kunde', h((string)($pa['kunde'] ?: '–')), 'x');
+  $karte('Produkt', h((string)($pa['produkt_name'] ?: '–')), 'x');
+  $karte('Rezeptur', h((string)($pa['rezeptur_name'] ?? '')));
+  $karte('Kapselgröße', h((string)($pa['kapselgroesse'] ?? '')));
+  $karte('Menge', number_format((int)$pa['menge'], 0, ',', '.') . ' <span class="muted" style="font-size:13px">Packungen</span>', 'x');
+  if ($vpe > 0)    $karte($stkWort . ' je VPE', number_format($vpe, 0, ',', '.'));
+  if ($gesamt > 0) $karte($stkWort . ' gesamt', number_format($gesamt, 0, ',', '.'));
+  $karte('Charge' . ($charge['gebucht'] ? ($charge['anzahl'] > 1 ? ' (' . $charge['anzahl'] . ')' : '') : ' (geplant)'),
+         h($charge['nr']), 'x');
+  $karte('MHD' . ($charge['gebucht'] ? '' : ' (+18 Mon.)'),
+         $charge['mhd'] ? h(date('d.m.Y', strtotime($charge['mhd']))) : '<span class="muted">–</span>', 'x');
+  $karte('Verpackung', h($verpackungTxt));
+  $karte('Herstellung', h((string)$pa['produktionsart'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion'), 'x');
+  ?>
 </div>
+
+<?php if ($ber['status'] === 'wartet' && $ber['fehlend']): ?>
+<div class="bx-panel warn" style="margin-bottom:16px">
+  <h2 style="margin-top:0">Wartet auf Material</h2>
+  <p class="muted" style="margin-top:0">Für die Produktion fehlt noch Bestand. Sobald alles da ist, wird der Auftrag „produzierbar".</p>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Material</th><th class="bx-num">Benötigt</th><th class="bx-num">Verfügbar</th><th class="bx-num">Fehlt</th></tr></thead>
+    <tbody>
+      <?php foreach ($ber['fehlend'] as $fdd): ?>
+        <tr>
+          <td><?= h((string)$fdd['name']) ?></td>
+          <td class="bx-num"><?= menge_txt($fdd['benoetigt']) ?> <?= h((string)$fdd['einheit']) ?></td>
+          <td class="bx-num"><?= menge_txt($fdd['verfuegbar']) ?> <?= h((string)$fdd['einheit']) ?></td>
+          <td class="bx-num" style="color:#8f231b"><?= menge_txt($fdd['fehlt']) ?> <?= h((string)$fdd['einheit']) ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
 
 <div class="bx-panel">
   <h2 style="margin-top:0">Schritte</h2>

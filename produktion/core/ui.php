@@ -39,6 +39,17 @@ function seitenkopf(string $titel, string $unter = '', string $aktion = ''): voi
     if ($aktion !== '') echo '<div class="bx-row">' . $aktion . '</div>';
     echo '</div>';
 }
+// Produktionsbereitschaft als Badge: ist der Auftrag produzierbar? (aus erp_pa_bereitschaft()['status']).
+function bereit_badge(string $s): string {
+    return match ($s) {
+        'bereit' => '<span class="badge badge-ok">produzierbar</span>',
+        'wartet' => '<span class="badge badge-warn">wartet auf Material</span>',
+        'laeuft' => '<span class="badge badge-info">in Produktion</span>',
+        'fertig' => '<span class="badge badge-ok">abgeschlossen</span>',
+        default  => '<span class="badge">' . h($s) . '</span>',
+    };
+}
+
 // Status eines Produktionsauftrags als Badge. Werte wie im Dashboard: offen/laufend/erledigt
 // (ältere Varianten in_arbeit/fertig bleiben der Robustheit halber abgedeckt).
 function pa_badge(?string $s): string {

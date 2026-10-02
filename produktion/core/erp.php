@@ -31,10 +31,11 @@ function erp_benutzer(int $id): ?array {
 function erp_dashboard_url(): string { return '/'; }
 
 // --- Produktionsaufträge (nur lesen) ---------------------------------------------------------
-// Liste der Produktionsaufträge mit Produkt/Kunde/Fortschritt. $status: '' = alle offenen/aktiven.
+// Liste der Produktionsaufträge mit Produkt/Kunde/Fortschritt + Auftragseingang.
+// $status: '' = aktive (offen+laufend), 'alle' = alle, sonst genau dieser Status (offen|laufend|erledigt).
 function erp_produktionsauftraege(string $status = ''): array {
     if (!tabelle_da('produktionsauftrag')) return [];
-    $sql = "SELECT pa.*, a.nummer AS auftrag_nr,
+    $sql = "SELECT pa.*, a.nummer AS auftrag_nr, a.angelegt AS auftrag_eingang,
                    COALESCE(NULLIF(p.kundenname,''), p.name, r.name) AS produkt_name,
                    r.darreichungsform AS form, k.firma AS kunde,
                    (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id) AS schritte_gesamt,
@@ -45,21 +46,30 @@ function erp_produktionsauftraege(string $status = ''): array {
             LEFT JOIN rezeptur r  ON r.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
             LEFT JOIN kunden k    ON k.id=pa.kunde_id";
     $params = [];
-    if ($status !== '') { $sql .= " WHERE pa.status=?"; $params[] = $status; }
-    else                { $sql .= " WHERE pa.status IN ('offen','laufend')"; }   // aktive Aufträge (Dashboard-Status)
-    $sql .= " ORDER BY COALESCE(pa.prio,2), (pa.geplant_am IS NULL), pa.geplant_am, pa.id DESC";
+    if ($status === 'alle')  { /* kein Filter */ }
+    elseif ($status !== '')  { $sql .= " WHERE pa.status=?"; $params[] = $status; }
+    else                     { $sql .= " WHERE pa.status IN ('offen','laufend')"; }   // aktive (Dashboard-Status)
+    if ($status === 'erledigt') $sql .= " ORDER BY pa.aktualisiert DESC, pa.id DESC";  // zuletzt fertig zuerst
+    else                        $sql .= " ORDER BY COALESCE(pa.prio,2), (pa.geplant_am IS NULL), pa.geplant_am, pa.id DESC";
     return all($sql, $params);
 }
-// Ein Produktionsauftrag.
+// Ein Produktionsauftrag – mit allen Übersichtsfeldern (Rezeptur, Kapselgröße, VPE, Verpackung, Kunde, Eingang).
 function erp_pa(int $id): ?array {
     if ($id <= 0 || !tabelle_da('produktionsauftrag')) return null;
-    return one("SELECT pa.*, a.nummer AS auftrag_nr,
+    return one("SELECT pa.*, a.nummer AS auftrag_nr, a.angelegt AS auftrag_eingang, a.stueck AS auftrag_stueck,
                        COALESCE(NULLIF(p.kundenname,''), p.name, r.name) AS produkt_name,
-                       r.darreichungsform AS form, k.firma AS kunde
+                       p.einheiten_pro_packung AS produkt_vpe,
+                       r.name AS rezeptur_name, r.darreichungsform AS form, r.kapselgroesse_id,
+                       kg.name AS kapselgroesse,
+                       vp.name AS verpackung_name, vp.verpackungsart AS verpackung_art,
+                       vp.volumen_ml AS verpackung_volumen, vp.material AS verpackung_material,
+                       k.firma AS kunde
                 FROM produktionsauftrag pa
                 LEFT JOIN auftrag a  ON a.id=pa.auftrag_id
                 LEFT JOIN produkt p  ON p.id=pa.produkt_id
                 LEFT JOIN rezeptur r ON r.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
+                LEFT JOIN kapselgroesse kg ON kg.id=r.kapselgroesse_id
+                LEFT JOIN item vp    ON vp.id=COALESCE(pa.verpackung_id, p.verpackung_id, a.verpackung_id)
                 LEFT JOIN kunden k   ON k.id=pa.kunde_id
                 WHERE pa.id=?", [$id]);
 }
@@ -67,6 +77,53 @@ function erp_pa(int $id): ?array {
 function erp_pa_schritte(int $pa_id): array {
     if ($pa_id <= 0 || !tabelle_da('produktion_schritt')) return [];
     return all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]);
+}
+
+// Chargennummer + MHD eines Auftrags: schon gebucht (aus charge) oder geplant (.A + heute+18 M).
+function erp_pa_charge_info(int $pa_id): array {
+    $c = one("SELECT charge_nr, mhd FROM charge WHERE pa_id=? ORDER BY id LIMIT 1", [$pa_id]);
+    if ($c) return ['nr'=>(string)$c['charge_nr'], 'mhd'=>(string)($c['mhd'] ?? ''), 'gebucht'=>true,
+                    'anzahl'=>(int) scalar("SELECT COUNT(*) FROM charge WHERE pa_id=?", [$pa_id])];
+    return ['nr'=>erp_charge_naechste_nr($pa_id), 'mhd'=>erp_mhd_standard(), 'gebucht'=>false, 'anzahl'=>0];
+}
+
+// Produktionsbereitschaft: ist das Material komplett da? (Mangel vor Produktionsstart sichtbar machen.)
+// Rückgabe ['status'=>'fertig'|'laeuft'|'bereit'|'wartet', 'fehlend'=>[...]]. Mirror von produktion_bereitschaft().
+function erp_pa_bereitschaft(int $pa_id, ?string $status = null, ?int $schritte_fertig = null): array {
+    if ($status === null) $status = (string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if ($status === 'erledigt') return ['status'=>'fertig', 'fehlend'=>[]];
+    if ($schritte_fertig === null) $schritte_fertig = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]);
+    if ($schritte_fertig > 0) return ['status'=>'laeuft', 'fehlend'=>[]];
+    $fehlend = erp_pa_fehlbedarf($pa_id);
+    return ['status'=>$fehlend ? 'wartet' : 'bereit', 'fehlend'=>$fehlend];
+}
+
+// Fehlender Bestand für den Produktionsstart: Rohstoffe + ggf. Leerkapseln + ggf. Verpackung.
+// (Hauptsächliche Material-Gates; Etiketten/Beipack bleiben außen vor.)
+function erp_pa_fehlbedarf(int $pa_id): array {
+    $fehlend = [];
+    foreach (erp_materialbedarf($pa_id) as $b)
+        if ((float)$b['fehlt'] > 0.0001)
+            $fehlend[] = ['name'=>$b['name'], 'benoetigt'=>$b['benoetigt'], 'verfuegbar'=>$b['verfuegbar'], 'fehlt'=>$b['fehlt'], 'einheit'=>$b['einheit']];
+    $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return $fehlend;
+    // Leerkapseln (nur Kapselprodukte, eindeutig bestimmbar)
+    $kid = erp_produkt_leerkapsel_id((int)$pa['produkt_id']);
+    if ($kid) {
+        $need = (float)$pa['menge'] * erp_stueck_je_packung($pa);
+        $verf = erp_item_bestand($kid);
+        if ($need > 0 && $verf + 0.0001 < $need)
+            $fehlend[] = ['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>$need-$verf, 'einheit'=>'Stück'];
+    }
+    // Verpackung (1 je Packung)
+    $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
+    if ($vid) {
+        $need = (float)$pa['menge'];
+        $verf = erp_item_bestand($vid);
+        if ($verf + 0.0001 < $need)
+            $fehlend[] = ['name'=> scalar("SELECT name FROM item WHERE id=?", [$vid]), 'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>$need-$verf, 'einheit'=>'Stück'];
+    }
+    return $fehlend;
 }
 
 // =============================================================================================

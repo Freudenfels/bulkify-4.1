@@ -3,7 +3,8 @@ Einzige Datei mit Zugriff auf Dashboard-Tabellen. Nie `core/schema.php` des Dash
 
 ## Lesen
 - Auth: `erp_benutzer_per_mail/token`, `erp_benutzer`, `erp_dashboard_url()`.
-- Produktion: `erp_produktionsauftraege($status)` (ohne Status = aktive Aufträge `offen`/`laufend`), `erp_pa($id)`, `erp_pa_schritte($pa_id)`.
+- Produktion: `erp_produktionsauftraege($status)` (`''`=aktive `offen`/`laufend`, `'alle'`=alle, sonst genau dieser Status; liefert auch `auftrag_eingang`), `erp_pa($id)` (mit Rezeptur, Kapselgröße, VPE, Verpackung, Kunde, Eingang), `erp_pa_schritte($pa_id)`.
+- Übersicht: `erp_pa_charge_info($pa_id)` (Charge/MHD gebucht oder geplant), `erp_pa_bereitschaft($pa_id[,status,fertig])` → `bereit`/`wartet`/`laeuft`/`fertig`, `erp_pa_fehlbedarf($pa_id)` (fehlende Rohstoffe + Leerkapseln + Verpackung).
 
 ## Schreiben: `erp_schritt_abschliessen($schritt_id, $akteur)`
 Schließt den jeweils **ersten offenen** Schritt eines Auftrags ab (feste Reihenfolge):
