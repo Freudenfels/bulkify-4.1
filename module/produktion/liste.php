@@ -137,18 +137,15 @@ if ($grlIds) { $in = implode(',', array_fill(0, count($grlIds), '?'));
         $GLOBALS['bx_stock_cache']['grl:' . (int)$row['id']] = $row;
 }
 
-$statusBadge = function ($r) {
-    return match ($r['status']) {
-        'offen'    => bx_badge('offen', 'info'),
-        'laufend'  => bx_badge('läuft', 'warn'),
-        'erledigt' => bx_badge('fertig', 'ok'),
-        default    => bx_badge(status_text($r['status'])),
-    };
-};
-
 $cols = [
     '_sel'         => ['label' => '', 'render' => fn($r)=> '<input type="checkbox" name="pa[]" form="prodBulk" value="'.(int)$r['id'].'" onclick="event.stopPropagation()">'],
-    'prio'         => ['label' => 'Prio', 'sort' => true, 'render' => fn($r)=> prio_badge((int)($r['prio'] ?? 2))],
+    // Prio kompakt: nur ein farbiger Punkt (Tooltip = Klartext), damit die Spalte schmal bleibt.
+    'prio'         => ['label' => 'Prio', 'sort' => true, 'render' => function($r){
+                        $p = (int)($r['prio'] ?? 2);
+                        $farbe = $p === 1 ? '#d64545' : ($p === 3 ? '#9aa0a6' : '#2b6cd4');
+                        $txt   = $p === 1 ? 'Hoch' : ($p === 3 ? 'Niedrig' : 'Normal');
+                        return '<span title="Priorität: ' . $txt . '" aria-label="Priorität: ' . $txt . '" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' . $farbe . '"></span>';
+                     }],
     'bereit'       => ['label' => 'Bereit', 'render' => fn($r)=> bereitschaft_badge($r['_bereit'] ?? '')],
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
     'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, firma_kurz($r['kunde_firma']))],
@@ -157,8 +154,6 @@ $cols = [
     'produktionsart' => ['label' => 'Art', 'render' => fn($r)=> ($r['produktionsart'] ?? 'fremd')==='eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info')],
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
     'fortschritt'  => ['label' => 'Fortschritt', 'render' => fn($r)=> (int)$r['n_done'].' / '.(int)$r['n_total']],
-    'naechste_station' => ['label' => 'Nächste Station', 'render' => fn($r)=> $r['naechste_station']?h($r['naechste_station']):'<span class="bx-ok">abgeschlossen</span>'],
-    'status'       => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
 ];
 
 $TABS = [

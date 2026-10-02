@@ -12,7 +12,7 @@ Button oben rechts **„+ Neuer Produktionsauftrag"** (`?p=produktion&neu=1`) bl
 **Was passiert hier:**
 - Liest alle Produktionsaufträge inkl. Kunde, Produkt (Joins) und – per Unterabfrage – **Fortschritt** (erledigte / gesamte Stationen) und **nächste offene Station**.
 - **Suche** nach Nummer, Kunde, Produkt. **Sortierung** Standard = neueste zuerst.
-- Tabelle: **Nummer · Kunde · Produkt · Menge · Fortschritt · Nächste Station · Status** (offen / läuft / fertig).
+- Tabelle (bewusst schmal gehalten, läuft auch auf kleinen Bildschirmen): **Prio · Bereit · Nummer · Kunde · Produkt · Kapsel/Tablette · Art · Menge · Fortschritt**. **Prio** ist nur ein farbiger Punkt (rot=Hoch, blau=Normal, grau=Niedrig; Klartext im Tooltip), weiter sortierbar. Die früheren Spalten **„Nächste Station"** und **„Status"** sind entfernt (redundant zu „Bereit"/Fortschritt bzw. zum Reiter); der Reiter sagt bereits offen/läuft/abgeschlossen.
 - Klick öffnet den Produktionsauftrag (`?p=produktionsauftrag&id=...`).
 
 ## Sammel-Umstellung Eigen-/Fremdproduktion
