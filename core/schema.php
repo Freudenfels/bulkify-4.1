@@ -5777,7 +5777,26 @@ function jahresvertrag_konditionen(array $a): array {
     return ['produkt_id' => $pid, 'menge' => $menge, 'vk' => $vk, 'name' => $name, 'mehrfach' => $mehrfach];
 }
 
-function kontingent_aus_angebot(int $angebot_id, string $unterzeichner = ''): array {
+// Wählbare Optionen eines Jahresvertrags-Angebots (je Konfigurations-Gruppe A/B … eine Zeile) – für die
+// Options-Auswahl im Portal. Jede Option: gruppe, name, stueck, vk (Festpreis je Packung), form.
+function jahresvertrag_optionen(array $a): array {
+    $opts = [];
+    foreach (all("SELECT ap.*, r.name AS rez_name, r.darreichungsform AS form FROM angebot_position ap LEFT JOIN rezeptur r ON r.id=ap.rezeptur_id WHERE ap.angebot_id=? ORDER BY ap.sort, ap.id", [(int)($a['id'] ?? 0)]) as $p) {
+        if (empty($p['rezeptur_id']) || (int)$p['stueck'] <= 0) continue;
+        $g = trim((string)($p['gruppe'] ?? ''));
+        if (isset($opts[$g])) continue;   // nur die erste Herstellungsposition je Gruppe
+        $opts[$g] = [
+            'gruppe' => $g,
+            'name'   => trim((string)(($p['bezeichnung'] ?? '') ?: ($p['rez_name'] ?? '') ?: 'Option')),
+            'stueck' => (int)$p['stueck'],
+            'vk'     => round((int)$p['preis_cent'] / 100, 4),
+            'form'   => (string)($p['form'] ?? ''),
+        ];
+    }
+    return array_values($opts);
+}
+
+function kontingent_aus_angebot(int $angebot_id, string $unterzeichner = '', ?string $gruppe = null): array {
     $a = one("SELECT * FROM angebot WHERE id=?", [$angebot_id]);
     if (!$a) return ['ok' => false, 'fehler' => 'Angebot nicht gefunden.'];
     if ((int)($a['jahresvertrag'] ?? 0) !== 1) return ['ok' => false, 'fehler' => 'Dieses Angebot ist kein Jahresvertrag.'];
@@ -5786,26 +5805,36 @@ function kontingent_aus_angebot(int $angebot_id, string $unterzeichner = ''): ar
     $vk    = (float)($a['jahres_vk'] ?? 0);
     // Produkt + Festpreis bestimmen: bei einem positionsbasierten Angebot (kein Produkt im Kopf) werden sie
     // – wie beim normalen Auftrag – ERST HIER aus der Herstellungsposition (Rezeptur x Menge je Packung +
-    // Verpackung) abgeleitet/angelegt, damit der Abruf später einen Auftrag erzeugen kann.
+    // Verpackung) abgeleitet/angelegt. Bei mehreren Optionen (Gruppen A/B …) bestimmt die vom Kunden
+    // gewählte $gruppe, welche Konfiguration der Vertrag wird (Produkt + Festpreis).
+    $gruppe = ($gruppe !== null && trim($gruppe) !== '') ? trim($gruppe) : null;
     $produktId = (int)($a['produkt_id'] ?? 0);
-    if (!$produktId || $vk <= 0) {
+    if (!$produktId || $vk <= 0 || $gruppe !== null) {
         angebot_positionen_konfig_nachtragen($angebot_id);
         $hposs = array_values(array_filter(
             all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]),
             fn($p) => !empty($p['rezeptur_id']) && (int)$p['stueck'] > 0));
-        // Mehrere Optionen (Gruppen A/B …) -> keine eindeutige Jahresvertrags-Konfiguration: nicht raten.
         $gruppen = array_values(array_unique(array_filter(array_map(fn($p) => trim((string)$p['gruppe']), $hposs), fn($g) => $g !== '')));
-        if (count($hposs) > 1 && count($gruppen) > 1)
-            return ['ok' => false, 'fehler' => 'Dieses Jahresvertrags-Angebot enthält mehrere Optionen (A/B …). Ein Jahresvertrag braucht genau eine Konfiguration mit Festpreis – bitte das Angebot auf eine Option mit Jahrespreis anpassen.'];
-        $herst = $hposs[0] ?? null;
-        if ($herst) {
+        if ($gruppe !== null) {
+            // Nur die Positionen der gewählten Option (Gruppe) – wie bei auftrag_aus_positionen.
+            $gpos = array_values(array_filter($hposs, fn($p) => trim((string)$p['gruppe']) === $gruppe));
+            if (!$gpos) return ['ok' => false, 'fehler' => 'Die gewählte Option wurde nicht gefunden. Bitte erneut wählen.'];
+            $herst = $gpos[0];
+            $produktId = 0;   // für die gewählte Option immer das passende Produkt bestimmen
+        } elseif (count($hposs) > 1 && count($gruppen) > 1) {
+            // Mehrere Optionen, aber keine gewählt -> der Kunde muss eine auswählen.
+            return ['ok' => false, 'fehler' => 'Dieses Jahresvertrags-Angebot enthält mehrere Optionen – bitte wählen Sie eine Option aus.', 'optionen' => true];
+        } else {
+            $herst = $hposs[0] ?? null;
+        }
+        if (isset($herst) && $herst) {
             if (!$produktId) {
                 $produktId = (int) produkt_aus_rezeptur((int)$herst['rezeptur_id'], (int)$herst['stueck'],
                                 $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null, null);
                 if ($produktId) q("UPDATE angebot SET produkt_id=? WHERE id=?", [$produktId, $angebot_id]);
             }
-            // Festpreis je Packung aus der Position übernehmen, wenn am Jahresvertrag keiner gesetzt ist.
-            if ($vk <= 0) { $vk = round((int)$herst['preis_cent'] / 100, 4); if ($vk > 0) q("UPDATE angebot SET jahres_vk=? WHERE id=?", [$vk, $angebot_id]); }
+            // Festpreis je Packung aus der (gewählten) Position – überschreibt bei Options-Wahl den Kopf.
+            if ($vk <= 0 || $gruppe !== null) { $vk = round((int)$herst['preis_cent'] / 100, 4); if ($vk > 0) q("UPDATE angebot SET jahres_vk=? WHERE id=?", [$vk, $angebot_id]); }
         }
     }
     if (!$produktId) return ['ok' => false, 'fehler' => 'Jahresvertrag braucht ein Produkt – dem Angebot fehlt eine Rezeptur/Konfiguration. Bitte beim Team melden.'];

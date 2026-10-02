@@ -381,7 +381,9 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         header('Location: ?p=portal&token=' . $token . '&v=kontingente&kfehler=' . urlencode('Für den verbindlichen Abschluss fehlen Bestätigung und Name.')); exit;
     }
     q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $aid]);
-    $r = kontingent_aus_angebot($aid, $name);
+    // Bei mehreren Optionen (A/B …) wählt der Kunde eine aus – diese Gruppe bestimmt Produkt + Festpreis.
+    $gruppe = preg_replace('/[^A-Za-z0-9]/', '', (string)($_POST['gruppe'] ?? '')) ?: null;
+    $r = kontingent_aus_angebot($aid, $name, $gruppe);
     if (!empty($r['ok'])) { header('Location: ?p=portal&token=' . $token . '&v=kontingente&jvok=1'); exit; }
     header('Location: ?p=portal&token=' . $token . '&v=kontingente&kfehler=' . urlencode((string)($r['fehler'] ?? 'Abschluss fehlgeschlagen.'))); exit;
 }
@@ -3469,29 +3471,44 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php // 1) Offene Jahresvertrags-Angebote – verbindlich abschließen (alle Konditionen sichtbar).
   foreach ($jvOffers as $o):
       $kond = jahresvertrag_konditionen($o);                 // Produkt/Preis ggf. aus der Position ableiten
-      $jm = (int)$kond['menge']; $jvk = (float)$kond['vk']; $jmon = (int)($o['jahres_laufzeit_monate'] ?? 12) ?: 12;
-      $jvName = $o['produkt'] ?: ($kond['name'] ?: 'Produkt'); ?>
+      $jm = (int)$kond['menge']; $jmon = (int)($o['jahres_laufzeit_monate'] ?? 12) ?: 12;
+      $jvName = $o['produkt'] ?: ($kond['name'] ?: 'Produkt');
+      $jvOpt = jahresvertrag_optionen($o);                   // mehrere Optionen (A/B …)?
+      $mehrfach = count($jvOpt) > 1;
+      $jvk = $mehrfach ? (float)$jvOpt[0]['vk'] : (float)$kond['vk'];   // Startpreis = erste Option
+      $formWort = fn($f,$n) => in_array($f,['kapsel','softgel'],true) ? $n.' Kapseln' : ($f==='tablette'?$n.' Tabletten':($f==='stick'?$n.' Sticks':($f==='pulver'||$f==='fluessig'?'':$n.' Stück'))); ?>
     <div class="bx-panel" style="border-color:var(--gruen)">
       <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
-        <h2 style="margin:0">Jahresabnahmevertrag: <?= h($jvName) ?></h2>
+        <h2 style="margin:0">Jahresabnahmevertrag: <?= h($mehrfach ? ($kond['name'] ?: $jvName) : $jvName) ?></h2>
         <span class="badge" style="background:var(--gruen);color:#fff;padding:2px 10px;border-radius:999px;font-size:12px">zum Abschluss</span>
       </div>
       <div class="bx-row" style="gap:24px;flex-wrap:wrap;margin:12px 0">
         <div><div class="k muted">Gesamtmenge</div><div><strong><?= $nf($jm) ?></strong> Packungen</div></div>
-        <div><div class="k muted">Festpreis</div><div><?= $eur($jvk) ?> / Packung</div></div>
-        <div><div class="k muted">Gesamtwert (netto)</div><div><?= $eur($jm * $jvk) ?></div></div>
+        <div><div class="k muted">Festpreis</div><div><span data-jvprice="<?= (int)$o['id'] ?>"><?= $eur($jvk) ?></span> / Packung</div></div>
+        <div><div class="k muted">Gesamtwert (netto)</div><div><span data-jvtotal="<?= (int)$o['id'] ?>"><?= $eur($jm * $jvk) ?></span></div></div>
         <div><div class="k muted">Laufzeit</div><div><?= $jmon ?> Monate</div></div>
       </div>
-      <?php if (!empty($kond['mehrfach'])): ?>
-        <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin:0 0 6px">Dieses Angebot enthält <strong>mehrere Optionen</strong>. Ein Jahresvertrag braucht genau eine Konfiguration mit Festpreis – bitte melden Sie sich bei uns, wir passen das Angebot an.</div>
-      <?php else: ?>
       <p class="muted" style="margin:0 0 10px;font-size:13px">Mit dem Abschluss verpflichten Sie sich, die Gesamtmenge innerhalb der Laufzeit abzunehmen. Sie rufen die Mengen später nach Bedarf hier ab – zum festen Preis. <a href="<?= $portalLink('vertrag_pdf') ?>&aid=<?= (int)$o['id'] ?>" target="_blank"><strong>Vertrag als PDF ansehen</strong></a>.</p>
       <form method="post" onsubmit="return confirm('Jahresabnahmevertrag über <?= $nf($jm) ?> Packungen verbindlich abschließen?');">
         <input type="hidden" name="aktion" value="jahresvertrag_abschliessen">
         <input type="hidden" name="angebot_id" value="<?= (int)$o['id'] ?>">
+        <?php if ($mehrfach): ?>
+        <div class="bx-field" style="margin:0 0 10px">
+          <label>Bitte Option wählen</label>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <?php foreach ($jvOpt as $i => $op): $lbl = trim(($op['name'] ?: 'Option') . ($formWort($op['form'],$op['stueck']) ? ' · ' . $formWort($op['form'],$op['stueck']) : '')); ?>
+            <label style="display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer">
+              <input type="radio" name="gruppe" value="<?= h($op['gruppe']) ?>" <?= $i===0?'checked':'' ?> data-vk="<?= h((string)$op['vk']) ?>" data-off="<?= (int)$o['id'] ?>" data-menge="<?= (int)$jm ?>" style="flex:none">
+              <span style="flex:1"><?= h($lbl) ?></span>
+              <strong><?= $eur($op['vk']) ?> / Packung</strong>
+            </label>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        <?php endif; ?>
         <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.45;margin-bottom:10px">
           <input type="checkbox" name="bestaetigt" value="1" required style="margin-top:3px;flex:none">
-          <span>Ich schließe diesen Jahresabnahmevertrag über <strong><?= $nf($jm) ?> Packungen</strong> zum Festpreis <strong><?= $eur($jvk) ?>/Packung</strong> verbindlich ab und verpflichte mich zur Abnahme der Gesamtmenge innerhalb der Laufzeit.</span>
+          <span>Ich schließe diesen Jahresabnahmevertrag über <strong><?= $nf($jm) ?> Packungen</strong> zum <?= $mehrfach ? 'gewählten Festpreis' : 'Festpreis <strong>' . $eur($jvk) . '/Packung</strong>' ?> verbindlich ab und verpflichte mich zur Abnahme der Gesamtmenge innerhalb der Laufzeit.</span>
         </label>
         <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
           <div class="bx-field" style="margin:0;max-width:280px"><label>Ihr Name <span class="muted">(gilt als verbindliche Bestätigung)</span></label>
@@ -3499,9 +3516,22 @@ portal_head('Kundenportal · ' . $k['firma']);
           <button class="btn btn-primary" type="submit">Jahresvertrag verbindlich abschließen</button>
         </div>
       </form>
-      <?php endif; ?>
     </div>
   <?php endforeach; ?>
+  <?php if (array_filter($jvOffers, fn($o) => count(jahresvertrag_optionen($o)) > 1)): ?>
+  <script>
+  (function(){
+    function eur(x){ return x.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+    document.querySelectorAll('input[type=radio][name=gruppe]').forEach(function(r){
+      r.addEventListener('change',function(){
+        var off=r.getAttribute('data-off'), vk=parseFloat(r.getAttribute('data-vk'))||0, m=parseInt(r.getAttribute('data-menge'),10)||0;
+        var p=document.querySelector('[data-jvprice="'+off+'"]'), t=document.querySelector('[data-jvtotal="'+off+'"]');
+        if(p)p.textContent=eur(vk); if(t)t.textContent=eur(vk*m);
+      });
+    });
+  })();
+  </script>
+  <?php endif; ?>
 
   <?php // 2) In Abwicklung: Vertrag hochladen / wird geprüft.
   foreach ($konsPend as $kp): $wartetVertrag = ($kp['status'] === 'wartet_vertrag'); ?>
