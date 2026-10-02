@@ -291,7 +291,8 @@ function erp_item_anlegen(string $name, string $kategorie, string $einheit): ?in
     if ($name === '') return null;
     $erlaubt = ['rohstoff', 'verpackung', 'verbrauch', 'fertig'];
     if (!in_array($kategorie, $erlaubt, true)) $kategorie = 'rohstoff';
-    $einheit = trim($einheit) !== '' ? trim($einheit) : ($kategorie === 'rohstoff' ? 'kg' : 'Stück');
+    $einheit = erp_einheit_norm($einheit);
+    if ($einheit === '') $einheit = $kategorie === 'rohstoff' ? 'kg' : 'Stk';
     $ex = scalar("SELECT id FROM item WHERE name=? AND kategorie=? LIMIT 1", [$name, $kategorie]);
     if ($ex) return (int)$ex;
     q("INSERT INTO item (artikelnummer, name, kategorie, einheit, preis_bezug, gesperrt, notiz)
@@ -376,6 +377,31 @@ function erp_charge_entnehmen(int $charge_id, float $menge): array {
 
 // --- Vollwertiger Wareneingang: Artikel-Matching + Warenart-Regeln ----------------------------
 
+// Einheit auf einen einheitlichen Namen bringen, damit nicht "Stück", "stueck", "pcs", "Stk."
+// alle nebeneinander im System stehen. Unbekanntes bleibt unveraendert (nur getrimmt).
+function erp_einheit_norm(string $s): string {
+    $s = trim($s);
+    if ($s === '') return '';
+    $k = mb_strtolower(str_replace(['.', ' '], '', $s));
+    static $map = [
+        'stück'=>'Stk','stueck'=>'Stk','stk'=>'Stk','stck'=>'Stk','st'=>'Stk','stueck'=>'Stk',
+        'pcs'=>'Stk','pc'=>'Stk','pce'=>'Stk','piece'=>'Stk','pieces'=>'Stk','ea'=>'Stk','each'=>'Stk','x'=>'Stk',
+        'kg'=>'kg','kilogramm'=>'kg','kilo'=>'kg','kgs'=>'kg',
+        'g'=>'g','gramm'=>'g','gramme'=>'g','gr'=>'g','grams'=>'g',
+        'mg'=>'mg',
+        'l'=>'L','liter'=>'L','litre'=>'L','ltr'=>'L','liters'=>'L',
+        'ml'=>'ml',
+        'rolle'=>'Rolle','rollen'=>'Rolle','roll'=>'Rolle','rolls'=>'Rolle',
+        'karton'=>'Karton','kartons'=>'Karton','ktn'=>'Karton','carton'=>'Karton','cartons'=>'Karton',
+        'palette'=>'Palette','paletten'=>'Palette','pal'=>'Palette','pallet'=>'Palette',
+        'beutel'=>'Beutel','sack'=>'Sack','säcke'=>'Sack','saecke'=>'Sack','bag'=>'Beutel','bags'=>'Beutel',
+        'packung'=>'Pack','packungen'=>'Pack','pack'=>'Pack','packs'=>'Pack','pkg'=>'Pack','pck'=>'Pack',
+        'dose'=>'Dose','dosen'=>'Dose','can'=>'Dose',
+        'flasche'=>'Flasche','flaschen'=>'Flasche','bottle'=>'Flasche','bottles'=>'Flasche',
+    ];
+    return $map[$k] ?? $s;
+}
+
 // Artikel per (Teil-)Name suchen – fuer das Zuordnen einer Lieferschein-Position zu einem
 // bestehenden Artikel. Reihenfolge: exakter Name, dann "faengt an mit", dann kuerzester Treffer.
 // LIKE mit ESCAPE '=' (Projektregel: Backslash als Escape crasht MySQL live).
@@ -428,6 +454,7 @@ function erp_position_zuordnen(array $pos): array {
     $pos['kategorie']  = $kat;
     $pos['form']       = $form;
     if (($pos['einheit'] ?? '') === '' && $exakt) $pos['einheit'] = (string)$treffer['einheit'];
+    $pos['einheit']    = erp_einheit_norm((string)($pos['einheit'] ?? ''));   // einheitliche Einheit (Stk, kg, …)
     $pos['kandidaten'] = $kandidaten;
     $pos['regeln']     = erp_warenart_regeln($kat, $form);
     return $pos;

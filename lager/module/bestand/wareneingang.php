@@ -191,17 +191,13 @@ if ($gebucht):
 </form>
 
 <style>
-  .we-ziel{border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer;line-height:1.3}
+  .we-ziel{border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 14px;cursor:pointer;line-height:1.3}
   .we-ziel.on{border-color:var(--gruen);box-shadow:inset 0 0 0 1px var(--gruen)}
-  .we-pos{position:relative;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:var(--panel-2)}
-  .we-pos-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 14px}
-  .we-pos .f{min-width:0}
+  .we-pos{position:relative;border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--sp-4);padding-top:var(--sp-5);margin-bottom:var(--sp-3);background:var(--panel-2)}
+  .we-pos .bx-grid{grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:var(--sp-3) var(--sp-4)}
+  .we-pos .bx-field{margin-bottom:0}
   .we-pos .f-art{grid-column:1/-1}
-  .we-pos label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:400}
-  .we-pos input,.we-pos select{width:100%;box-sizing:border-box}
-  .we-pos .we-del{position:absolute;top:8px;right:10px}
-  .we-pos .pflicht{outline:1px solid #d98a00}
-  .we-pos .f-blinker input{border-color:var(--gruen)}
+  .we-pos .we-del{position:absolute;top:var(--sp-2);right:var(--sp-2)}
   .we-thumb{position:relative;width:84px;height:84px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel-2)}
   .we-thumb img{width:100%;height:100%;object-fit:cover}
   .we-thumb .x{position:absolute;top:2px;right:2px;background:#000a;color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;line-height:1}
@@ -237,15 +233,15 @@ if ($gebucht):
     var card=document.createElement('div'); card.className='we-pos';
     card.innerHTML=
       '<button type="button" class="btn btn-ghost btn-sm we-del" title="Zeile entfernen">×</button>'+
-      '<div class="we-pos-grid">'+
-        '<div class="f f-art"><label>Artikel</label><input class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"></div>'+
-        '<div class="f"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
-        '<div class="f"><label>Menge</label><input name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+
-        '<div class="f"><label>Einheit</label><input name="p_einheit[]" value="'+esc(p.einheit||'')+'" placeholder="Stk"></div>'+
-        '<div class="f"><label>Charge-Nr.</label><input name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'" placeholder="–"></div>'+
-        '<div class="f"><label>MHD</label><input name="p_mhd[]" type="date" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
-        '<div class="f f-blinker"><label>Blinker (Pflicht)</label><input name="p_blinker[]" class="we-blinker" value="" placeholder="Blinker-Code" required></div>'+
-        '<div class="f"><label>Pakete</label><input name="p_pakete[]" type="number" min="1" step="1" value="1"></div>'+
+      '<div class="bx-grid">'+
+        '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"></div>'+
+        '<div class="bx-field"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
+        '<div class="bx-field"><label>Menge</label><input type="text" name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+
+        '<div class="bx-field"><label>Einheit</label><input type="text" name="p_einheit[]" value="'+esc(p.einheit||'')+'" placeholder="Stk"></div>'+
+        '<div class="bx-field"><label class="lbl-charge">Charge-Nr.</label><input type="text" name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'"></div>'+
+        '<div class="bx-field"><label class="lbl-mhd">MHD</label><input type="date" name="p_mhd[]" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
+        '<div class="bx-field"><label>Blinker (Pflicht)</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
+        '<div class="bx-field"><label>Pakete</label><input type="number" name="p_pakete[]" min="1" step="1" value="1"></div>'+
       '</div>';
     rows.appendChild(card);
     // Artikel-Name -> item_id, Einheit, Warenart aus Treffer uebernehmen.
@@ -265,9 +261,8 @@ if ($gebucht):
     var art=tr.querySelector('.we-art').value, reg=MATRIX[art]||{mhd:0,charge:0};
     var mhd=tr.querySelector('.we-mhd'), ch=tr.querySelector('.we-charge');
     mhd.required=!!reg.mhd; ch.required=!!reg.charge;
-    mhd.classList.toggle('pflicht', !!reg.mhd && !mhd.value);
-    ch.classList.toggle('pflicht', !!reg.charge && !ch.value);
-    mhd.placeholder=reg.mhd?'Pflicht':''; ch.placeholder=reg.charge?'Pflicht':'–';
+    tr.querySelector('.lbl-mhd').textContent    = reg.mhd    ? 'MHD (Pflicht)' : 'MHD';
+    tr.querySelector('.lbl-charge').textContent = reg.charge ? 'Charge-Nr. (Pflicht)' : 'Charge-Nr.';
   }
   document.getElementById('weAdd').addEventListener('click',function(){addRow();});
   rows.addEventListener('input',function(e){ var tr=e.target.closest('.we-pos'); if(tr)pflicht(tr); });
