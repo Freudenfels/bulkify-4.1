@@ -24,6 +24,7 @@ $routes = [
     'dashboard' => 'intern/dashboard.php',
     'kunden'      => 'kunde/liste.php',
     'kunde'       => 'kunde/detail.php',
+    'kunde_ki'    => 'kunde/ki_anlegen.php',   // Neuer Kunde aus eingefügtem Text (KI) -> Formular vorbefüllen
     'lieferanten'    => 'lieferant/liste.php',
     'lieferant'      => 'lieferant/detail.php',
     'katalog_freigaben' => 'einkauf/katalog_freigaben.php',

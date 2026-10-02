@@ -8,6 +8,9 @@
   - Bei neuem Kunden wird ein Verlaufseintrag „Kunde angelegt" geschrieben (`log_aktivitaet`).
   - Leitet zurück zur Seite mit Bestätigung.
 - **Anzeige (GET):** lädt den Kunden, seine Marken und den Verlauf (`verlauf_fuer('kunde', id)`).
+- **KI-Vorbefüllung (neu):** Kommt man über „Kunde aus Text (KI)" (`?p=kunde&id=neu&ki=1`), werden die
+  in `$_SESSION['kunde_ki']` vorbereiteten Felder **einmalig** ins Formular übernommen (Session danach
+  geleert) und ein Hinweis-Banner gezeigt. Gespeichert wird ganz normal. Siehe [ki_anlegen.md](ki_anlegen.md).
 
 **Die Reiter:**
 - **Übersicht** – Kontakt, Marken & Webseiten, letzte Vorgänge (Platzhalter bis Module stehen).

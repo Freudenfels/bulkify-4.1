@@ -67,6 +67,15 @@ $k = $neu
     ? ['gesperrt' => 0, 'land' => 'DE', 'zahlungsart' => 'vorkasse', 'zahlungsziel_tage' => 0]
     : one("SELECT * FROM kunden WHERE id=?", [(int)$id]);
 if (!$k) { $neu = true; $k = ['gesperrt'=>0,'land'=>'DE','zahlungsart'=>'vorkasse']; }
+
+// Neuanlage per KI: vom Text-Analyse-Schritt (?p=kunde_ki) vorbefüllte Felder übernehmen.
+$kiHinweis = '';
+if ($neu && isset($_GET['ki']) && !empty($_SESSION['kunde_ki']) && is_array($_SESSION['kunde_ki'])) {
+    $pre = $_SESSION['kunde_ki']; unset($_SESSION['kunde_ki']);   // nur einmal verwenden
+    $kiHinweis = (string)($pre['_hinweis'] ?? ''); unset($pre['_hinweis']);
+    foreach ($pre as $kk => $vv) if ($vv !== '' && $vv !== null) $k[$kk] = $vv;
+    if (($k['land'] ?? '') === '') $k['land'] = 'DE';
+}
 $v = fn($key) => h((string)($k[$key] ?? ''));
 $gesperrt = (int)($k['gesperrt'] ?? 0) === 1;
 $marken = $neu ? [] : all("SELECT * FROM kunde_marke WHERE kunde_id=? ORDER BY sort,id", [(int)$id]);
@@ -177,6 +186,7 @@ bx_head($neu ? 'Neuer Kunde' : $v('firma'),
         $actions);
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if ($kiHinweis) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h($kiHinweis) . '</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 
 // ---- Kennzahlen-Kacheln (real, wo Daten da sind; sonst Platzhalter) ----

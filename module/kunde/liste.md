@@ -11,6 +11,9 @@
    **Kundennr. · Firma · Ort · Ansprechpartner · Status · zuletzt geändert.**
    - Status = Badge **aktiv** oder **gesperrt**.
    - Klick auf eine Zeile öffnet das Kundenkonto (`?p=kunde&id=...`).
-6. Button „Neuer Kunde" oben rechts.
+6. Buttons oben rechts: **„Neuer Kunde"** (leeres Formular) und **„Kunde aus Text (KI)"** – öffnet ein
+   Popup (`<dialog id="kundeKiDlg">`), in das man einen Adressblock/Impressum/Signatur einfügt; die KI
+   füllt daraus das Neuanlage-Formular vor ([ki_anlegen.md](ki_anlegen.md)). Fehler aus dem KI-Schritt
+   erscheinen als Banner (`?kifehler=`).
 
 **Regel / Muster:** Diese Datei ist die **Vorlage** für alle weiteren Listen (Lieferanten, Partner …): Daten holen → suchen → sortieren → `bx_table()`. Keine eigene Tabellen-Optik.
