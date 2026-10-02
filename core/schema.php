@@ -3553,6 +3553,81 @@ function kunde_auftrag_parallel(array $a): array {
     return $out;
 }
 
+// Feste Kunden-Phasen (wie v3) – gleiche Spur im Kundenportal UND in der internen Auftragsansicht.
+function auftrag_phasen(): array {
+    return ['Bestätigt', 'Rohstoff bestellt', 'Rohstoff angekommen', 'In Produktion', 'Qualitätsprüfung', 'Versandbereit', 'Versendet'];
+}
+// Aktuelle Phase (0..6) + Datum je Phase aus den vorhandenen Signalen ableiten.
+function kunde_auftrag_phase(array $a): array {
+    $aid = (int)$a['id']; $st = (string)$a['status'];
+    $dates = array_fill(0, 7, null);
+    $dates[0] = $a['angelegt'] ?? null;                                  // Bestätigt
+    $best = one("SELECT COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d FROM bestellung b
+                 JOIN bestellung_position bp ON bp.bestellung_id=b.id WHERE bp.auftrag_id=?", [$aid]);
+    $bestellt = $best && !empty($best['d']);
+    if ($bestellt) $dates[1] = $best['d'];
+    $angDate = null;
+    $we = one("SELECT COALESCE(MIN(wareneingang), MIN(angelegt)) d FROM charge WHERE auftrag_id=?", [$aid]);
+    if ($we && !empty($we['d'])) $angDate = $we['d'];
+    if (!$angDate) {
+        $ba = one("SELECT MIN(b.angekommen_am) d FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
+                   WHERE bp.auftrag_id=? AND b.angekommen_am IS NOT NULL", [$aid]);
+        if ($ba && !empty($ba['d'])) $angDate = $ba['d'];
+    }
+    $angekommen = $angDate !== null;
+    if ($angekommen) { $dates[2] = $angDate; $bestellt = true; }
+    $pa = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$aid]);
+    $qcDate = null; $prodStart = null;
+    if ($pa) {
+        foreach (all("SELECT station, erledigt, erledigt_at FROM produktion_schritt WHERE pa_id=? ORDER BY sort,id", [(int)$pa['id']]) as $s) {
+            if ((int)$s['erledigt'] === 1 && !empty($s['erledigt_at'])) {
+                if ($prodStart === null || $s['erledigt_at'] < $prodStart) $prodStart = $s['erledigt_at'];
+                if (stripos((string)$s['station'], 'Qualität') !== false) $qcDate = $s['erledigt_at'];
+            }
+        }
+    }
+    $qcDone = $qcDate !== null;
+    if ($prodStart !== null || in_array($st, ['in_produktion','erledigt','versendet'], true)) {
+        $dates[3] = $prodStart ?: ($st === 'in_produktion' ? ($a['status_datum'] ?? null) : null);
+    }
+    $dates[4] = $qcDate;
+    if ($st === 'erledigt')  $dates[5] = $a['aktualisiert'] ?? null;
+    if ($st === 'versendet') { $dates[6] = $a['aktualisiert'] ?? null; $dates[5] = $dates[5] ?? ($a['aktualisiert'] ?? null); }
+    if ($st === 'versendet')          $idx = 6;
+    elseif ($st === 'erledigt')       $idx = 5;
+    elseif ($st === 'in_produktion')  $idx = $qcDone ? 4 : 3;
+    else                              $idx = $angekommen ? 2 : ($bestellt ? 1 : 0);
+    return ['idx' => $idx, 'dates' => $dates];
+}
+// Fortschritts-Schritte je Auftrag: feste Phasen + kundenspezifische Zusatz-Schritte (Energetisierung,
+// Labortest) nach „Qualitätsprüfung". done=Haken, current=läuft (Sanduhr), sonst leer.
+function kunde_auftrag_track(array $a): array {
+    $AUFSTEPS = auftrag_phasen();
+    $ph = kunde_auftrag_phase($a); $cur = (int)$ph['idx']; $complete = ($a['status'] ?? '') === 'versendet';
+    $track = [];
+    foreach ($AUFSTEPS as $i => $lbl) {
+        $track[] = ['label'=>$lbl, 'date'=>$ph['dates'][$i] ?? null, 'sub'=>null, 'dok_id'=>null,
+                    'done'=>($complete || $i < $cur), 'current'=>(!$complete && $i === $cur)];
+    }
+    $zusatz = kunde_auftrag_parallel($a);
+    if ($zusatz) {
+        $ins = [];
+        foreach ($zusatz as $pz) {
+            $ins[] = ['label'=>$pz['label'], 'date'=>null, 'sub'=>$pz['sub'], 'dok_id'=>$pz['dok_id'] ?? null,
+                      'done'=>($pz['status']==='abgeschlossen'), 'current'=>($pz['status']==='laeuft')];
+        }
+        array_splice($track, 5, 0, $ins);
+    }
+    return $track;
+}
+// Einheitliches Status-Icon fuer die Fortschritts-Punkte: Haken (erledigt), Sanduhr (laeuft), sonst leer.
+function auftrag_track_icon(string $state): string {
+    static $sand = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px"><path d="M6 2h12M6 22h12M6 2c0 4 3 6 6 10 3-4 6-6 6-10M6 22c0-4 3-6 6-10 3 4 6 6 6 10"/></svg>';
+    if ($state === 'done' || $state === 'abgeschlossen') return '&#10003;';
+    if ($state === 'current' || $state === 'laeuft')      return $sand;
+    return '';
+}
+
 // Pro Angebot innerhalb eines Requests mehrfach aufgerufen (Übersicht + Karte) – request-lokal cachen.
 function angebot_positionen(int $angebot_id): array {
     static $cache = [];

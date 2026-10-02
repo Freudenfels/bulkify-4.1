@@ -283,6 +283,22 @@ echo '</div>';
   </div>
 </div>
 
+<?php $track = kunde_auftrag_track($a); ?>
+<div class="bx-panel" data-panel="produktion">
+  <h2 style="margin:0 0 18px;font-size:16px">Fortschritt</h2>
+  <div style="overflow-x:auto">
+    <ul class="bx-htrack">
+      <?php foreach ($track as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : ''); ?>
+        <li class="bx-hstep <?= $cls ?>">
+          <span class="dot"><?= auftrag_track_icon($cls) ?></span>
+          <span class="lbl"><?= h($t['label']) ?></span>
+          <span class="date"><?= $t['date'] ? h(fmt_zeit($t['date'], 'd.m.Y')) : h($t['sub'] ?? '') ?></span>
+        </li>
+      <?php endforeach; ?>
+    </ul>
+  </div>
+</div>
+
 <div class="bx-panel" data-panel="produktion">
   <h2>Produktion &amp; Beschaffung</h2>
   <div class="bx-grid">
