@@ -313,7 +313,8 @@ function erp_erwartete_lieferungen(): array {
                  ORDER BY (b.eta_geplant IS NULL), b.eta_geplant, b.bestelldatum DESC, b.id DESC");
     foreach ($rows as &$r) {
         $r['positionen'] = tabelle_da('bestellung_position')
-            ? all("SELECT bp.item_id, bp.menge, bp.einheit, i.name, i.kategorie
+            ? all("SELECT bp.item_id, bp.menge, bp.einheit,
+                          COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie
                    FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
                    WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id", [(int)$r['id']])
             : [];
