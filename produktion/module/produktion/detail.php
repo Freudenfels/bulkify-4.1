@@ -49,31 +49,34 @@ kopf($pa['nummer'] . ' – Produktion', 'liste');
 seitenkopf((string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''), '<a class="btn btn-ghost btn-sm" href="?p=liste">Zurück zur Liste</a>');
 ?>
 <?php
-// Kennzahl-Karte (nur rendern, wenn ein Wert da ist).
-$karte = function (string $label, string $wertHtml, string $roh = '') {
+// Eine Übersichtskarte: Label/Wert-Zeilen (nur Zeilen mit Wert werden gezeigt).
+$zeile = function (string $label, string $wertHtml, string $roh = '') {
     if ($roh === '' && trim(strip_tags($wertHtml)) === '') return;
-    echo '<div class="bx-panel" style="margin:0"><div class="muted">' . h($label) . '</div><div style="margin-top:6px">' . $wertHtml . '</div></div>';
+    echo '<div class="muted">' . h($label) . '</div><div>' . $wertHtml . '</div>';
 };
 ?>
-<div class="bx-cards" style="margin-bottom:16px">
+<div class="bx-panel" style="margin-bottom:16px">
+  <h2 style="margin-top:0">Übersicht</h2>
+  <div style="display:grid;grid-template-columns:max-content 1fr;gap:10px 24px;align-items:baseline">
   <?php
-  $karte('Status', pa_badge((string)$pa['status']), 'x');
-  $karte('Produzierbar?', bereit_badge($ber['status']), 'x');
-  $karte('Auftragseingang', $eingang ? h(fmt_zeit($eingang, 'd.m.Y')) : '<span class="muted">–</span>', 'x');
-  $karte('Kunde', h((string)($pa['kunde'] ?: '–')), 'x');
-  $karte('Produkt', h((string)($pa['produkt_name'] ?: '–')), 'x');
-  $karte('Rezeptur', h((string)($pa['rezeptur_name'] ?? '')));
-  $karte('Kapselgröße', h((string)($pa['kapselgroesse'] ?? '')));
-  $karte('Menge', number_format((int)$pa['menge'], 0, ',', '.') . ' <span class="muted" style="font-size:13px">Packungen</span>', 'x');
-  if ($vpe > 0)    $karte($stkWort . ' je VPE', number_format($vpe, 0, ',', '.'));
-  if ($gesamt > 0) $karte($stkWort . ' gesamt', number_format($gesamt, 0, ',', '.'));
-  $karte('Charge' . ($charge['gebucht'] ? ($charge['anzahl'] > 1 ? ' (' . $charge['anzahl'] . ')' : '') : ' (geplant)'),
+  $zeile('Status', pa_badge((string)$pa['status']), 'x');
+  $zeile('Produzierbar?', bereit_badge($ber['status']), 'x');
+  $zeile('Auftragseingang', $eingang ? h(fmt_zeit($eingang, 'd.m.Y')) : '<span class="muted">–</span>', 'x');
+  $zeile('Kunde', h((string)($pa['kunde'] ?: '–')), 'x');
+  $zeile('Produkt', h((string)($pa['produkt_name'] ?: '–')), 'x');
+  $zeile('Rezeptur', h((string)($pa['rezeptur_name'] ?? '')));
+  $zeile('Kapselgröße', h((string)($pa['kapselgroesse'] ?? '')));
+  $zeile('Menge', number_format((int)$pa['menge'], 0, ',', '.') . ' <span class="muted" style="font-size:13px">Packungen</span>', 'x');
+  if ($vpe > 0)    $zeile($stkWort . ' je VPE', number_format($vpe, 0, ',', '.'));
+  if ($gesamt > 0) $zeile($stkWort . ' gesamt', number_format($gesamt, 0, ',', '.'));
+  $zeile('Charge' . ($charge['gebucht'] ? ($charge['anzahl'] > 1 ? ' (' . $charge['anzahl'] . ')' : '') : ' (geplant)'),
          h($charge['nr']), 'x');
-  $karte('MHD' . ($charge['gebucht'] ? '' : ' (+18 Mon.)'),
+  $zeile('MHD' . ($charge['gebucht'] ? '' : ' (+18 Mon.)'),
          $charge['mhd'] ? h(date('d.m.Y', strtotime($charge['mhd']))) : '<span class="muted">–</span>', 'x');
-  $karte('Verpackung', h($verpackungTxt));
-  $karte('Herstellung', h((string)$pa['produktionsart'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion'), 'x');
+  $zeile('Verpackung', h($verpackungTxt));
+  $zeile('Herstellung', h((string)$pa['produktionsart'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion'), 'x');
   ?>
+  </div>
 </div>
 
 <?php if ($ber['status'] === 'wartet' && $ber['fehlend']): ?>
