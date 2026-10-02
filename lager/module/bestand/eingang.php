@@ -84,18 +84,15 @@ flash_zeigen();
           <input type="text" inputmode="decimal" name="menge" required style="flex:1;min-width:0" placeholder="z. B. 25" value="<?= h($vorMenge) ?>">
           <span id="weEinheit" style="min-width:44px;font-weight:600;color:var(--muted)"><?= h((string)($vorBasis['einheit'] ?? '–')) ?></span>
         </div>
-        <div class="muted" id="weEinheitHint" style="font-size:12px;margin-top:4px"><?= $vorBasis ? 'Menge in ' . h((string)$vorBasis['einheit']) . ' eingeben.' : 'Erst Artikel wählen – die Einheit erscheint hier.' ?></div>
       </div>
       <div class="bx-field"><label>Blinker <span class="muted">(Pflicht)</span></label>
         <input type="text" name="blinker" id="weBlinker" class="lg-code" required placeholder="Blinker-Code scannen oder eingeben (z. B. AFC709)">
-        <div class="muted" style="font-size:12px;margin-top:4px">Der Blinker wird an diese Charge gehängt und leuchtet kurz grün.</div>
       </div>
       <div class="bx-field"><label>MHD</label><input type="date" name="mhd"></div>
       <div class="bx-field"><label>Charge-Nr. (Lieferant)</label>
         <input type="text" name="charge_nr" class="lg-code" placeholder="laut Lieferant / CoA (optional)" value="<?= h($vorCharge) ?>"></div>
       <div class="bx-field"><label>Anzahl Pakete / Kartons</label>
-        <input type="number" name="pakete" min="1" step="1" value="1">
-        <div class="muted" style="font-size:12px;margin-top:4px">Je Karton wird ein Etikett gedruckt („Karton 1 / N").</div></div>
+        <input type="number" name="pakete" min="1" step="1" value="1"></div>
       <div class="bx-field"><label>Lieferant</label>
         <select name="lieferant_id">
           <option value="">– keiner –</option>
@@ -152,7 +149,7 @@ flash_zeigen();
 (function(){
   var items = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'f'=>(string)($it['form']??'')], $items), JSON_UNESCAPED_UNICODE) ?>;
   var box=document.getElementById('weArtSuche'), hid=document.getElementById('weArtId'), list=document.getElementById('weArtList');
-  var einhEl=document.getElementById('weEinheit'), einhHint=document.getElementById('weEinheitHint');
+  var einhEl=document.getElementById('weEinheit');
   var neuBox=document.getElementById('weNeu'), neuName=document.getElementById('weNeuName'),
       neuKat=document.getElementById('weNeuKat'), neuEinheit=document.getElementById('weNeuEinheit');
   if(!box||!hid||!list) return;
@@ -160,7 +157,7 @@ flash_zeigen();
   function lbl(it){ return it.f==='kapselhuelle' ? 'Kapseln' : (katLbl[it.k]||it.k); }
   var hl=-1, shown=[];
   function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
-  function setEinheit(e){ einhEl.textContent=e||'–'; einhHint.textContent=e?('Menge in '+e+' eingeben.'):'Erst Artikel wählen – die Einheit erscheint hier.'; }
+  function setEinheit(e){ einhEl.textContent=e||'–'; }
   function exakt(q){ q=(q||'').trim().toLowerCase(); return items.some(function(it){ return it.n.toLowerCase()===q; }); }
   function neuToggle(){
     var q=(box.value||'').trim();

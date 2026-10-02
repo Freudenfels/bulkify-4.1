@@ -52,6 +52,12 @@ $kopfAktion = '<a class="btn btn-' . (isset($_GET['neu']) ? 'primary' : 'ghost')
 seitenkopf((string)$c['item_name'], erp_kategorie_label($c) . ($c['artikelnummer'] ? ' · ' . $c['artikelnummer'] : ''), $kopfAktion);
 flash_zeigen();
 ?>
+<?php if (isset($_GET['neu'])): ?>
+<div class="bx-panel" style="border:1px solid var(--gruen);margin-bottom:var(--sp-5)">
+  <h2 style="margin-top:0">Eingebucht – Etikett für die Kartons</h2>
+  <embed src="?p=etikett&id=<?= $id ?>" type="application/pdf" style="width:100%;height:360px;border:1px solid var(--line);border-radius:8px;background:#fff">
+</div>
+<?php endif; ?>
 <div class="bx-grid" style="margin-bottom:var(--sp-5)">
   <div class="bx-card"><div class="k">Bestand</div><div class="v"><?= h(menge_txt($c['menge_verfuegbar'])) ?> <?= h((string)$c['einheit']) ?></div></div>
   <div class="bx-card"><div class="k">MHD</div><div class="v" style="font-size:var(--fs-lg)"><?= mhd_html($c['mhd']) ?></div></div>
