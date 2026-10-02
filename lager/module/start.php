@@ -66,10 +66,15 @@ flash_zeigen();
     <div class="num"><?= (int)$k['mhd_ablauf'] ?></div>
     <div class="sub">bitte prüfen</div>
   </a>
-  <a class="lgd-card<?= $erw_ueber > 0 ? ' warn' : '' ?>" href="?p=erwartet">
+  <a class="lgd-card" href="?p=erwartet">
     <div class="lab">Erwartete Lieferungen</div>
     <div class="num"><?= (int)$erw_zahl ?></div>
-    <div class="sub"><?= $erw_ueber > 0 ? (int)$erw_ueber . ' überfällig' : 'unterwegs' ?></div>
+    <div class="sub">unterwegs</div>
+  </a>
+  <a class="lgd-card<?= $erw_ueber > 0 ? ' warn' : '' ?>" href="?p=erwartet">
+    <div class="lab">Überfällig</div>
+    <div class="num"><?= (int)$erw_ueber ?></div>
+    <div class="sub">über Termin</div>
   </a>
   <?php if ($batt > 0): ?>
   <a class="lgd-card warn" href="?p=batterie">
