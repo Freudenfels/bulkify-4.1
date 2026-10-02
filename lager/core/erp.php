@@ -215,6 +215,25 @@ function erp_item_basis(int $id): ?array {
     return one("SELECT id, name, einheit, kategorie, form FROM item WHERE id=?", [$id]);
 }
 
+// Neuen Artikel direkt aus dem Lager anlegen (Wareneingang „neue Sache einpflegen"). Minimal: Name,
+// Kategorie, Einheit. Keine Artikelnummer (die Nummernkreise des Dashboards sind hier nicht geladen) –
+// das Team ergaenzt Details spaeter im Dashboard. Doppelte (gleicher Name + Kategorie) werden
+// wiederverwendet. Gibt die item-id oder null.
+function erp_item_anlegen(string $name, string $kategorie, string $einheit): ?int {
+    if (!tabelle_da('item')) return null;
+    $name = trim($name);
+    if ($name === '') return null;
+    $erlaubt = ['rohstoff', 'verpackung', 'verbrauch', 'fertig'];
+    if (!in_array($kategorie, $erlaubt, true)) $kategorie = 'rohstoff';
+    $einheit = trim($einheit) !== '' ? trim($einheit) : ($kategorie === 'rohstoff' ? 'kg' : 'Stück');
+    $ex = scalar("SELECT id FROM item WHERE name=? AND kategorie=? LIMIT 1", [$name, $kategorie]);
+    if ($ex) return (int)$ex;
+    q("INSERT INTO item (artikelnummer, name, kategorie, einheit, preis_bezug, gesperrt, notiz)
+       VALUES (NULL, ?, ?, ?, ?, 0, ?)",
+      [$name, $kategorie, $einheit, $einheit, 'Im Lager beim Wareneingang angelegt.']);
+    return (int) insert_id();
+}
+
 // „Waren, auf die wir warten" – beim Lieferanten bestellt, aber noch nicht angekommen (status='bestellt',
 // kein Wareneingang). Mit erwartetem Termin (eta_geplant), Sendungsnummer (tracking) und Positionen,
 // damit der Mitarbeiter sie bei Ankunft direkt einbuchen kann.
