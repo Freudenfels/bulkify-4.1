@@ -67,7 +67,9 @@ function portal_labortest_upsell(array $kunde, int $angebotId): void {
 }
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_annehmen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
-    $ang = $aid ? one("SELECT id FROM angebot WHERE id=? AND kunde_id=? AND status='gesendet'", [$aid, (int)$k['id']]) : null;
+    $ang = $aid ? one("SELECT id, jahresvertrag FROM angebot WHERE id=? AND kunde_id=? AND status='gesendet'", [$aid, (int)$k['id']]) : null;
+    // Jahresvertrags-Angebot wird NICHT als Einmalbestellung angenommen -> zum Jahresvertrags-Abschluss.
+    if ($ang && !empty($ang['jahresvertrag'])) { header('Location: ?p=portal&token=' . $token . '&v=kontingente'); exit; }
     $name = $freigabeName();
     if ($ang && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&freigabefehlt=1'); exit; }
     if ($ang) {
@@ -81,6 +83,8 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bestaetigen') {
     $aid = (int)($_POST['angebot_id'] ?? 0); $sid = (int)($_POST['staffel'] ?? 0);
     $ang = $aid ? one("SELECT * FROM angebot WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
+    // Jahresvertrags-Angebot wird NICHT als Einmalbestellung angenommen -> zum Jahresvertrags-Abschluss.
+    if ($ang && !empty($ang['jahresvertrag'])) { header('Location: ?p=portal&token=' . $token . '&v=kontingente'); exit; }
     $name = $freigabeName();
     if ($ang && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&freigabefehlt=1'); exit; }
     if ($ang && $ang['status'] === 'gesendet' && $sid > 0) {
@@ -198,6 +202,8 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zelle_annehmen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT * FROM angebot WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
+    // Jahresvertrags-Angebot wird NICHT als Einmalbestellung angenommen -> zum Jahresvertrags-Abschluss.
+    if ($ang && !empty($ang['jahresvertrag'])) { header('Location: ?p=portal&token=' . $token . '&v=kontingente'); exit; }
     // SICHERUNG: v3-Import ohne v4-Preisstaffeln – Annahme der (falschen) Auto-Matrix serverseitig blocken.
     if ($ang && stripos((string)($ang['notiz'] ?? ''), 'Aus v3') !== false
         && (int) scalar("SELECT COUNT(*) FROM angebot_staffel WHERE angebot_id=?", [$aid]) === 0) {
@@ -1716,9 +1722,11 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php else:
     // Reiter Offen · Bestätigt · Abgelehnt. $pending (in Prüfung) und $erledigtRows stehen global (oben berechnet).
-    $offen_ang = array_values(array_filter($angebote, fn($x) => $x['status'] === 'gesendet'));
-    $best_ang  = array_values(array_filter($angebote, fn($x) => $x['status'] === 'bestaetigt')); // in Arbeit + versendet
-    $abgel_ang = array_values(array_filter($angebote, fn($x) => $x['status'] === 'abgelehnt'));
+    // Jahresvertrags-Angebote (jahresvertrag=1) gehören NICHT in die normale Mengen-Annahme – sie laufen
+    // ausschließlich über „Jahresverträge" (Kontingente). Hier also überall herausfiltern.
+    $offen_ang = array_values(array_filter($angebote, fn($x) => $x['status'] === 'gesendet'   && empty($x['jahresvertrag'])));
+    $best_ang  = array_values(array_filter($angebote, fn($x) => $x['status'] === 'bestaetigt' && empty($x['jahresvertrag']))); // in Arbeit + versendet
+    $abgel_ang = array_values(array_filter($angebote, fn($x) => $x['status'] === 'abgelehnt'  && empty($x['jahresvertrag'])));
     // Angenommene Rezepturen (eingefroren = „Rezeptur angelegt") -> BESTÄTIGT; abgelehnte Anfragen -> ABGELEHNT.
     $bestRows = array_values(array_filter($erledigtRows, fn($r) => ($r['stufe'] ?? '') === 'erledigt'));
     $abglRows = array_values(array_filter($erledigtRows, fn($r) => in_array($r['stufe'] ?? '', ['abgelehnt','abgeschlossen'], true)));
@@ -2742,10 +2750,13 @@ portal_head('Kundenportal · ' . $k['firma']);
 
 <?php elseif ($view === 'angebote'):
   // Offene (gesendete) Angebote zuerst; angenommene/abgelehnte kommen ins Archiv darunter.
-  $offenA  = array_values(array_filter($angebote, fn($x) => ($x['status'] ?? '') === 'gesendet'));
-  $archivA = array_values(array_filter($angebote, fn($x) => ($x['status'] ?? '') !== 'gesendet')); ?>
+  // Jahresvertrags-Angebote laufen separat über „Jahresverträge" (Kontingente) – hier ausblenden.
+  $offenA  = array_values(array_filter($angebote, fn($x) => ($x['status'] ?? '') === 'gesendet' && empty($x['jahresvertrag'])));
+  $archivA = array_values(array_filter($angebote, fn($x) => ($x['status'] ?? '') !== 'gesendet' && empty($x['jahresvertrag'])));
+  $jvHinweis = (bool) array_filter($angebote, fn($x) => !empty($x['jahresvertrag'])); ?>
   <h1 style="margin-bottom:4px">Ihre Angebote</h1>
   <p class="muted" style="margin:0 0 16px">Offene Angebote können Sie hier direkt prüfen, eine Menge wählen und verbindlich annehmen. Angenommene und abgelehnte Angebote finden Sie im <strong>Archiv</strong> unten.</p>
+  <?php if (!empty($jvHinweis)): ?><div class="bx-panel" style="padding:12px 16px">Sie haben ein <strong>Jahresabnahmevertrags-Angebot</strong> – das schließen Sie unter <a href="<?= $portalLink('kontingente') ?>"><strong>Jahresverträge</strong></a> ab (danach rufen Sie Ihre Mengen nach Bedarf ab).</div><?php endif; ?>
   <?php include __DIR__ . '/_collapse_all.php'; ?>
   <?php if (!$offenA): ?><div class="bx-panel"><div class="muted">Aktuell liegt kein offenes Angebot vor<?= $archivA ? ' – ältere finden Sie im Archiv unten' : '' ?>.</div></div><?php endif; ?>
   <?php foreach ($offenA as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
@@ -3457,10 +3468,12 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <?php // 1) Offene Jahresvertrags-Angebote – verbindlich abschließen (alle Konditionen sichtbar).
   foreach ($jvOffers as $o):
-      $jm = (int)($o['jahresmenge'] ?? 0); $jvk = (float)($o['jahres_vk'] ?? 0); $jmon = (int)($o['jahres_laufzeit_monate'] ?? 12) ?: 12; ?>
+      $kond = jahresvertrag_konditionen($o);                 // Produkt/Preis ggf. aus der Position ableiten
+      $jm = (int)$kond['menge']; $jvk = (float)$kond['vk']; $jmon = (int)($o['jahres_laufzeit_monate'] ?? 12) ?: 12;
+      $jvName = $o['produkt'] ?: ($kond['name'] ?: 'Produkt'); ?>
     <div class="bx-panel" style="border-color:var(--gruen)">
       <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
-        <h2 style="margin:0">Jahresabnahmevertrag: <?= h($o['produkt'] ?: 'Produkt') ?></h2>
+        <h2 style="margin:0">Jahresabnahmevertrag: <?= h($jvName) ?></h2>
         <span class="badge" style="background:var(--gruen);color:#fff;padding:2px 10px;border-radius:999px;font-size:12px">zum Abschluss</span>
       </div>
       <div class="bx-row" style="gap:24px;flex-wrap:wrap;margin:12px 0">
@@ -3469,6 +3482,9 @@ portal_head('Kundenportal · ' . $k['firma']);
         <div><div class="k muted">Gesamtwert (netto)</div><div><?= $eur($jm * $jvk) ?></div></div>
         <div><div class="k muted">Laufzeit</div><div><?= $jmon ?> Monate</div></div>
       </div>
+      <?php if (!empty($kond['mehrfach'])): ?>
+        <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin:0 0 6px">Dieses Angebot enthält <strong>mehrere Optionen</strong>. Ein Jahresvertrag braucht genau eine Konfiguration mit Festpreis – bitte melden Sie sich bei uns, wir passen das Angebot an.</div>
+      <?php else: ?>
       <p class="muted" style="margin:0 0 10px;font-size:13px">Mit dem Abschluss verpflichten Sie sich, die Gesamtmenge innerhalb der Laufzeit abzunehmen. Sie rufen die Mengen später nach Bedarf hier ab – zum festen Preis. <a href="<?= $portalLink('vertrag_pdf') ?>&aid=<?= (int)$o['id'] ?>" target="_blank"><strong>Vertrag als PDF ansehen</strong></a>.</p>
       <form method="post" onsubmit="return confirm('Jahresabnahmevertrag über <?= $nf($jm) ?> Packungen verbindlich abschließen?');">
         <input type="hidden" name="aktion" value="jahresvertrag_abschliessen">
@@ -3483,6 +3499,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <button class="btn btn-primary" type="submit">Jahresvertrag verbindlich abschließen</button>
         </div>
       </form>
+      <?php endif; ?>
     </div>
   <?php endforeach; ?>
 

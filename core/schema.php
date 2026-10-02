@@ -5754,6 +5754,29 @@ function rechnung_frei_erstellen(array $positionen, array $opt = []): ?int {
 // Jahresvertrag aus einem Angebot: erzeugt (einmalig) das Kontingent im Status 'wartet_vertrag'.
 // Aktiv (abrufbar) wird es erst, wenn der unterschriebene Vertrag hochgeladen UND vom Team
 // freigegeben ist. Rueckgabe: ['ok'=>true,'kontingent_id'=>…] oder ['ok'=>false,'fehler'=>…].
+// Nur-Lese-Ableitung der Jahresvertrags-Konditionen eines Angebots für die ANZEIGE (persistiert nichts).
+// Produktname + Festpreis je Packung aus der Herstellungsposition, wenn der Angebotskopf sie nicht trägt.
+function jahresvertrag_konditionen(array $a): array {
+    $pid   = (int)($a['produkt_id'] ?? 0);
+    $menge = (int)($a['jahresmenge'] ?? 0);
+    $vk    = (float)($a['jahres_vk'] ?? 0);
+    $name  = ''; $mehrfach = false;
+    if (!$pid || $vk <= 0) {
+        $herst = null; $gruppen = [];
+        foreach (all("SELECT ap.*, r.name AS rez_name FROM angebot_position ap LEFT JOIN rezeptur r ON r.id=ap.rezeptur_id WHERE ap.angebot_id=? ORDER BY ap.sort, ap.id", [(int)($a['id'] ?? 0)]) as $p) {
+            if (empty($p['rezeptur_id']) || (int)$p['stueck'] <= 0) continue;
+            if (!$herst) $herst = $p;
+            $g = trim((string)($p['gruppe'] ?? '')); if ($g !== '') $gruppen[$g] = true;
+        }
+        $mehrfach = count($gruppen) > 1;
+        if ($herst) {
+            if ($vk <= 0) $vk = round((int)$herst['preis_cent'] / 100, 4);
+            $name = trim((string)(($herst['bezeichnung'] ?? '') ?: ($herst['rez_name'] ?? '')));
+        }
+    }
+    return ['produkt_id' => $pid, 'menge' => $menge, 'vk' => $vk, 'name' => $name, 'mehrfach' => $mehrfach];
+}
+
 function kontingent_aus_angebot(int $angebot_id, string $unterzeichner = ''): array {
     $a = one("SELECT * FROM angebot WHERE id=?", [$angebot_id]);
     if (!$a) return ['ok' => false, 'fehler' => 'Angebot nicht gefunden.'];
