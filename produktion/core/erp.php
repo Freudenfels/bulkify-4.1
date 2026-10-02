@@ -79,6 +79,18 @@ function erp_pa_schritte(int $pa_id): array {
     return all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]);
 }
 
+// Zutaten der Rezeptur eines Auftrags (Zusammensetzung je Einheit). Rezeptur = pa.rezeptur_id oder produkt.rezeptur_id.
+function erp_pa_zutaten(int $pa_id): array {
+    $pa = one("SELECT produkt_id, rezeptur_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return [];
+    $rid = (int)($pa['rezeptur_id'] ?: 0);
+    if (!$rid && !empty($pa['produkt_id'])) $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    if (!$rid) return [];
+    return all("SELECT z.menge_mg, COALESCE(NULLIF(z.bezeichnung,''), i.name) AS name
+                FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
+                WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rid]);
+}
+
 // Chargennummer + MHD eines Auftrags: schon gebucht (aus charge) oder geplant (.A + heute+18 M).
 function erp_pa_charge_info(int $pa_id): array {
     $c = one("SELECT charge_nr, mhd FROM charge WHERE pa_id=? ORDER BY id LIMIT 1", [$pa_id]);

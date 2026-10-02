@@ -7,6 +7,6 @@
 - **Menge:** Packungen, Stück/Kapseln je VPE + gesamt.
 - **Charge:** Chargennummer (gebucht oder geplant `.A`) + MHD (`erp_pa_charge_info`).
 
-Fehlt Material, erscheint zusätzlich das Panel **„Wartet auf Material"** mit benötigt/verfügbar/fehlt.
+Verpackung wird immer gezeigt (bei fehlender Angabe „–"). Darunter die **Rezeptur**-Tabelle (Zutaten je Einheit + Füllgewicht, über `erp_pa_zutaten()`). Fehlt Material, erscheint zusätzlich das Panel **„Wartet auf Material"** mit benötigt/verfügbar/fehlt.
 
 **Schritte:** der jeweils erste offene Schritt ist „als Nächstes" und trägt den **Abschließen**-Button. Der POST (`aktion=schritt_ab`, `schritt_id`) ruft `erp_schritt_abschliessen()` auf (FEFO-Entnahme, Mangel-Guard; letzter Schritt bucht Fertigware ein) und leitet danach um (PRG, Flash). Zeiten via `fmt_zeit()`.

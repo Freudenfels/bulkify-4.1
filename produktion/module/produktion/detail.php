@@ -45,6 +45,7 @@ $vpTeile = [$vpName];
 foreach ([$vpArt, $vpVol, $vpMat] as $t)   // nur ergänzen, was nicht schon im Namen steht
     if ($t !== '' && stripos($vpName, $t) === false) $vpTeile[] = $t;
 $verpackungTxt = implode(' · ', array_filter($vpTeile));
+$zutaten = erp_pa_zutaten($id);
 
 kopf($pa['nummer'] . ' – Produktion', 'liste');
 seitenkopf((string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''), '<a class="btn btn-ghost btn-sm" href="?p=liste">Zurück zur Liste</a>');
@@ -66,7 +67,7 @@ $felder = [
     ['Produkt', $muted((string)($pa['produkt_name'] ?? '')), true],
     ['Rezeptur', h((string)($pa['rezeptur_name'] ?? ''))],
     ['Kapselgröße', h((string)($pa['kapselgroesse'] ?? ''))],
-    ['Verpackung', h($verpackungTxt)],
+    ['Verpackung', $muted($verpackungTxt), true],
     ['Packungen', number_format((int)$pa['menge'], 0, ',', '.'), true],
     [$stkWort . ' je VPE', $vpe > 0 ? number_format($vpe, 0, ',', '.') : ''],
     [$stkWort . ' gesamt', $gesamt > 0 ? number_format($gesamt, 0, ',', '.') : ''],
@@ -83,6 +84,24 @@ $felder = [
   <?php endforeach; ?>
   </div>
 </div>
+
+<?php if ($zutaten): $sumMg = 0.0; foreach ($zutaten as $z) $sumMg += (float)$z['menge_mg']; ?>
+<div class="bx-panel" style="margin-bottom:16px">
+  <h2 style="margin-top:0">Rezeptur<?= !empty($pa['rezeptur_name']) ? ' · ' . h((string)$pa['rezeptur_name']) : '' ?></h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Bestandteil</th><th class="bx-num">mg je Einheit</th></tr></thead>
+    <tbody>
+      <?php foreach ($zutaten as $z): ?>
+      <tr>
+        <td><?= h((string)$z['name']) ?></td>
+        <td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? menge_txt($z['menge_mg']) . ' mg' : '<span class="muted">–</span>' ?></td>
+      </tr>
+      <?php endforeach; ?>
+      <tr><td class="muted">Füllgewicht je Einheit</td><td class="bx-num"><?= menge_txt($sumMg) ?> mg</td></tr>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
 
 <?php if ($ber['status'] === 'wartet' && $ber['fehlend']): ?>
 <div class="bx-panel warn" style="margin-bottom:16px">
