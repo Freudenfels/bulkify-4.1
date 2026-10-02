@@ -255,7 +255,7 @@ function erp_materialbedarf(int $pa_id): array {
         $faktor = $z['einheit'] === 'g' ? 1e3 : 1e6;          // mg -> Basiseinheit (kg-Standard)
         $benoetigt = $mg / $faktor;
         $verf = erp_item_bestand((int)$z['item_id']);
-        $out[] = ['item_id'=>(int)$z['item_id'], 'name'=>$z['name'], 'einheit'=>$z['einheit'],
+        $out[] = ['item_id'=>(int)$z['item_id'], 'name'=>$z['name'], 'einheit'=>$z['einheit'], 'menge_mg'=>(float)$z['menge_mg'],
                   'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>max(0.0, $benoetigt - $verf)];
     }
     return $out;

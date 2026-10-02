@@ -46,6 +46,7 @@ foreach ([$vpArt, $vpVol, $vpMat] as $t)   // nur ergänzen, was nicht schon im 
     if ($t !== '' && stripos($vpName, $t) === false) $vpTeile[] = $t;
 $verpackungTxt = implode(' · ', array_filter($vpTeile));
 $zutaten = erp_pa_zutaten($id);
+$bedarf  = erp_materialbedarf($id);   // Rohstoffe mit Mengen (benötigt gesamt / verfügbar)
 
 kopf($pa['nummer'] . ' – Produktion', 'liste');
 seitenkopf((string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''), '<a class="btn btn-ghost btn-sm" href="?p=liste">Zurück zur Liste</a>');
@@ -63,7 +64,7 @@ $felder = [
     ['Produzierbar?', bereit_badge($ber['status']), true],
     ['Auftragseingang', $muted($eingang ? fmt_zeit($eingang, 'd.m.Y') : ''), true],
     ['Kunde', $muted((string)($pa['kunde'] ?? '')), true],
-    ['Herstellung', h((string)$pa['produktionsart'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion'), true],
+    ['Produktionstyp', h((string)$pa['produktionsart'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion'), true],
     ['Produkt', $muted((string)($pa['produkt_name'] ?? '')), true],
     ['Rezeptur', h((string)($pa['rezeptur_name'] ?? ''))],
     ['Kapselgröße', h((string)($pa['kapselgroesse'] ?? ''))],
@@ -85,17 +86,34 @@ $felder = [
   </div>
 </div>
 
-<?php if ($zutaten): $sumMg = 0.0; foreach ($zutaten as $z) $sumMg += (float)$z['menge_mg']; ?>
+<?php if ($bedarf): $sumMg = 0.0; foreach ($bedarf as $b) $sumMg += (float)$b['menge_mg']; ?>
+<div class="bx-panel" style="margin-bottom:16px">
+  <h2 style="margin-top:0">Rezeptur &amp; Rohstoffbedarf<?= !empty($pa['rezeptur_name']) ? ' · ' . h((string)$pa['rezeptur_name']) : '' ?></h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Rohstoff</th><th class="bx-num">mg je Einheit</th><th class="bx-num">Benötigt gesamt</th><th class="bx-num">Verfügbar</th><th>Status</th></tr></thead>
+    <tbody>
+      <?php foreach ($bedarf as $b): $ok = (float)$b['fehlt'] <= 0.0001; ?>
+      <tr>
+        <td><?= h((string)$b['name']) ?></td>
+        <td class="bx-num"><?= (float)$b['menge_mg'] > 0 ? menge_txt($b['menge_mg']) . ' mg' : '<span class="muted">–</span>' ?></td>
+        <td class="bx-num"><?= menge_txt($b['benoetigt']) ?> <?= h((string)$b['einheit']) ?></td>
+        <td class="bx-num"><?= menge_txt($b['verfuegbar']) ?> <?= h((string)$b['einheit']) ?></td>
+        <td><?= $ok ? '<span class="badge badge-ok">genug</span>' : '<span class="badge badge-warn">fehlt ' . menge_txt($b['fehlt']) . ' ' . h((string)$b['einheit']) . '</span>' ?></td>
+      </tr>
+      <?php endforeach; ?>
+      <tr><td class="muted">Füllgewicht je Einheit</td><td class="bx-num"><?= menge_txt($sumMg) ?> mg</td><td colspan="3"></td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted" style="font-size:12px;margin:10px 0 0">Benötigt gesamt = Rezepturmenge je Einheit × Gesamtstückzahl. Abgebucht wird nach FEFO (älteste MHD zuerst) beim Schritt „Rohstoffe bereitstellen".</p>
+</div>
+<?php elseif ($zutaten): $sumMg = 0.0; foreach ($zutaten as $z) $sumMg += (float)$z['menge_mg']; ?>
 <div class="bx-panel" style="margin-bottom:16px">
   <h2 style="margin-top:0">Rezeptur<?= !empty($pa['rezeptur_name']) ? ' · ' . h((string)$pa['rezeptur_name']) : '' ?></h2>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th>Bestandteil</th><th class="bx-num">mg je Einheit</th></tr></thead>
     <tbody>
       <?php foreach ($zutaten as $z): ?>
-      <tr>
-        <td><?= h((string)$z['name']) ?></td>
-        <td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? menge_txt($z['menge_mg']) . ' mg' : '<span class="muted">–</span>' ?></td>
-      </tr>
+      <tr><td><?= h((string)$z['name']) ?></td><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? menge_txt($z['menge_mg']) . ' mg' : '<span class="muted">–</span>' ?></td></tr>
       <?php endforeach; ?>
       <tr><td class="muted">Füllgewicht je Einheit</td><td class="bx-num"><?= menge_txt($sumMg) ?> mg</td></tr>
     </tbody>
