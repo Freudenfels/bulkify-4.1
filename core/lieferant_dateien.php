@@ -45,11 +45,12 @@ function lieferant_datei_upload(int $lieferant_id, string $von, string $sprache 
     return '';
 }
 
-// Eine Unterlage (CoA/Spezifikation) aus einem bestimmten Datei-Feld am ARTIKEL (Rohstoff) ablegen –
-// für den Upload direkt im Preisangebot. Gibt die neue Dokument-ID zurück (0 = nichts/Fehler).
-// Die KI-Auswertung (spec_ki_nach_upload) ruft der Aufrufer danach auf.
-function lieferant_item_unterlage(int $item_id, int $lieferant_id, string $file_key, string $typ): int {
-    if ($item_id <= 0 || $lieferant_id <= 0) return 0;
+// Eine Unterlage (CoA/Spezifikation) aus einem bestimmten Datei-Feld ablegen – für den Upload direkt
+// im Preisangebot. Ziel ist der ROHSTOFF (objekt_typ='item'), wenn die Anfrage an einem Artikel hängt;
+// sonst (z. B. Fertigprodukt-Anfrage) wird sie am LIEFERANTEN abgelegt, mit $titel als Bezug zur Anfrage.
+// Gibt die neue Dokument-ID zurück (0 = nichts/Fehler). Die KI-Auswertung ruft der Aufrufer danach auf.
+function lieferant_unterlage_speichern(int $lieferant_id, string $file_key, string $typ, string $objekt_typ = 'lieferant', int $objekt_id = 0, string $titel = ''): int {
+    if ($lieferant_id <= 0) return 0;
     if (empty($_FILES[$file_key]['name']) || ($_FILES[$file_key]['error'] ?? 1) !== UPLOAD_ERR_OK) return 0;
     $orig = (string)$_FILES[$file_key]['name'];
     $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($orig, PATHINFO_EXTENSION)));
@@ -59,10 +60,12 @@ function lieferant_item_unterlage(int $item_id, int $lieferant_id, string $file_
     $fn = 'lief_' . $lieferant_id . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
     if (!move_uploaded_file($_FILES[$file_key]['tmp_name'], BX_UPLOADS . '/' . $fn)) return 0;
     $typ = in_array($typ, ['coa', 'spec'], true) ? $typ : 'spec';
-    q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,datei,datei_orig,kunde_sichtbar,hochgeladen_von) VALUES ('item',?,?,?,?,?,0,'lieferant')",
-      [$item_id, $typ, $lieferant_id, $fn, mb_substr($orig, 0, 255)]);
+    $objekt_typ = $objekt_typ === 'item' ? 'item' : 'lieferant';
+    $oid = $objekt_typ === 'item' ? $objekt_id : $lieferant_id;
+    q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von) VALUES (?,?,?,?,?,?,?,0,'lieferant')",
+      [$objekt_typ, $oid, $typ, $lieferant_id, ($titel !== '' ? mb_substr($titel, 0, 190) : null), $fn, mb_substr($orig, 0, 255)]);
     $did = (int) insert_id();
-    log_aktivitaet('item', $item_id, 'lieferant', strtoupper($typ) . ' vom Lieferanten mit dem Preisangebot hochgeladen.', 'dokument', 'dokument', $did);
+    log_aktivitaet($objekt_typ === 'item' ? 'item' : 'lieferant', $oid, 'lieferant', strtoupper($typ) . ' vom Lieferanten mit dem Preisangebot hochgeladen.', 'dokument', 'dokument', $did);
     return $did;
 }
 

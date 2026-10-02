@@ -118,6 +118,72 @@ function erp_bestand_zaehlung(): array {
     return $out;
 }
 
+// ===== Lager 2 (Fremdlager): Chargen, die einem Kunden gehoeren (charge.fremd_kunde_id gesetzt) =====
+// Einheitliches Modell: "die Charge gehoert einem Kunden" = Lager 2. Gegenstueck zu erp_bestand (Lager 1).
+
+// Fulfillment-Kunden fuer die Auswahl beim Fremdlager-Wareneingang.
+function erp_fulfillment_kunden(): array {
+    if (!tabelle_da('kunden')) return [];
+    $hat = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='kunden' AND COLUMN_NAME='nutzt_fulfillment'");
+    $w = $hat ? 'WHERE nutzt_fulfillment=1' : '';
+    return all("SELECT id, firma FROM kunden $w ORDER BY firma");
+}
+
+// Kunden, die aktuell Fremdbestand liegen haben (fuer Filter), mit Chargen-Anzahl.
+function erp_bestand_fremd_kunden(): array {
+    if (!tabelle_da('charge') || !tabelle_da('kunden')) return [];
+    return all("SELECT k.id, k.firma, COUNT(*) AS chargen
+                FROM charge c JOIN kunden k ON k.id=c.fremd_kunde_id
+                WHERE c.fremd_kunde_id IS NOT NULL AND (c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0
+                GROUP BY k.id, k.firma ORDER BY k.firma");
+}
+
+// Fremdlager-Bestand (Lager 2), optional nach Kunde gefiltert.
+function erp_bestand_fremd(int $kunde_id = 0, string $q = '', bool $mit_leer = false, int $limit = 500): array {
+    if (!tabelle_da('charge') || !tabelle_da('item')) return [];
+    $where = ['c.fremd_kunde_id IS NOT NULL'];
+    $params = [];
+    if ($kunde_id > 0) { $where[] = 'c.fremd_kunde_id = ?'; $params[] = $kunde_id; }
+    if (!$mit_leer) $where[] = "(c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0";
+    foreach (preg_split('/\s+/', trim($q), -1, PREG_SPLIT_NO_EMPTY) as $w) {
+        $where[] = '(i.name LIKE ? OR i.artikelnummer LIKE ? OR c.charge_nr LIKE ? OR k.firma LIKE ?)';
+        $like = '%' . $w . '%'; array_push($params, $like, $like, $like, $like);
+    }
+    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.menge, c.einheit, c.mhd, c.status, c.wareneingang,
+                       c.fremd_kunde_id, i.id AS item_id, i.name AS item_name, i.artikelnummer, i.kategorie, i.form,
+                       k.firma AS kunde
+                FROM charge c JOIN item i ON i.id=c.item_id
+                LEFT JOIN kunden k ON k.id=c.fremd_kunde_id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY k.firma, i.name, c.mhd IS NULL, c.mhd LIMIT " . (int)$limit, $params);
+}
+
+// Suche im Fremdlager (fuer Finden).
+function erp_chargen_suche_fremd(string $q, int $kunde_id = 0, int $limit = 30): array {
+    if (!tabelle_da('charge')) return [];
+    $where = ['c.fremd_kunde_id IS NOT NULL', "(c.status IS NULL OR c.status<>'leer')", 'c.menge_verfuegbar>0'];
+    $params = [];
+    if ($kunde_id > 0) { $where[] = 'c.fremd_kunde_id = ?'; $params[] = $kunde_id; }
+    foreach (preg_split('/\s+/', trim($q), -1, PREG_SPLIT_NO_EMPTY) as $w) {
+        $where[] = '(i.name LIKE ? OR i.artikelnummer LIKE ? OR c.charge_nr LIKE ? OR k.firma LIKE ?)';
+        $like = '%' . $w . '%'; array_push($params, $like, $like, $like, $like);
+    }
+    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.einheit, c.mhd, i.name AS item_name, k.firma AS kunde
+                FROM charge c JOIN item i ON i.id=c.item_id LEFT JOIN kunden k ON k.id=c.fremd_kunde_id
+                WHERE " . implode(' AND ', $where) . " ORDER BY i.name LIMIT " . (int)$limit, $params);
+}
+
+// Fremdlager-Wareneingang: Kundenware einbuchen -> neue Charge, die dem Kunden gehoert (status 'frei').
+function erp_wareneingang_buchen_fremd(int $item_id, float $menge, string $charge_nr, ?string $mhd, int $kunde_id, string $notiz = ''): ?int {
+    if ($item_id <= 0 || $menge <= 0 || $kunde_id <= 0 || !tabelle_da('charge')) return null;
+    $einheit = (string) scalar("SELECT einheit FROM item WHERE id=?", [$item_id]) ?: 'Stück';
+    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,fremd_kunde_id,notiz,angelegt)
+       VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,?,?)",
+      [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $mhd ?: null, $kunde_id, $notiz ?: 'Fremdlager-Wareneingang', gmdate('Y-m-d H:i:s')]);
+    return (int) insert_id();
+}
+
 // Eine Charge mit ALLEN Feldern fuer die Detailansicht (inkl. Lieferant, Wareneingang, Tracking).
 function erp_charge_voll(int $id): ?array {
     if (!tabelle_da('charge')) return null;

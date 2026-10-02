@@ -42,21 +42,26 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
         // Antwort da -> aus einer Rezepturanfrage angelegten Rohstoff-Entwurf in den Katalog heben.
         if ($fehler === '' && $a['item_id']) rohstoff_entwurf_aktivieren((int)$a['item_id']);
         if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);
-        // Optional mit dem Preisangebot mitgeschickte CoA/Spezifikation am Rohstoff ablegen.
-        // Die KI-Auswertung (mehrsprachig -> bulkify-Format) läuft NACH der Antwort (dauert).
-        if ($fehler === '' && $a['item_id']) {
+        // Optional mit dem Preisangebot mitgeschickte CoA/Spezifikation ablegen – bei Rohstoff-Anfragen
+        // am Artikel (volle KI-Auswertung), sonst am Lieferanten mit Bezug zur Anfrage. Die KI läuft
+        // NACH der Antwort (mehrsprachig -> bulkify-Format), damit der Lieferant nicht wartet.
+        if ($fehler === '') {
             require_once BX_ROOT . '/core/lieferant_dateien.php';
+            $hatItem = !empty($a['item_id']);
+            $bezug   = (string)($a['nummer'] ?? ('LA-' . $id)) . (!empty($a['item_name']) ? ' · ' . $a['item_name'] : '');
             $unterlagen = [];
             foreach (['spec_datei' => 'spec', 'coa_datei' => 'coa'] as $fk => $typ) {
-                $did = lieferant_item_unterlage((int)$a['item_id'], $lid, $fk, $typ);
+                $did = $hatItem
+                    ? lieferant_unterlage_speichern($lid, $fk, $typ, 'item', (int)$a['item_id'])
+                    : lieferant_unterlage_speichern($lid, $fk, $typ, 'lieferant', 0, strtoupper($typ) . ' zu ' . $bezug);
                 if ($did) $unterlagen[] = $did;
             }
             if ($unterlagen) {
                 header('Location: ?p=lieferant_anfrage&id=' . $id . '&ok=1&unterlagen=' . count($unterlagen));
                 if (function_exists('ki_antwort_abschliessen')) ki_antwort_abschliessen();
                 require_once BX_ROOT . '/core/spec_ki.php';
-                foreach ($unterlagen as $did) { spec_ki_nach_upload($did); }
-                rohstoff_entwurf_aktivieren((int)$a['item_id']);
+                foreach ($unterlagen as $did) spec_ki_nach_upload($did);
+                if ($hatItem) rohstoff_entwurf_aktivieren((int)$a['item_id']);
                 exit;
             }
         }
@@ -240,7 +245,7 @@ if (!$a):
       })();
       </script>
       <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><textarea name="notiz" rows="3"><?= h($ang['notiz'] ?? '') ?></textarea></div>
-      <?php if (!empty($a['item_id'])): $coaReq = (int)($a['coa_gewuenscht'] ?? 0) === 1; ?>
+      <?php $coaReq = (int)($a['coa_gewuenscht'] ?? 0) === 1; ?>
       <div class="bx-panel" style="margin:4px 0 14px;padding:12px 14px;<?= $coaReq ? 'border-color:var(--gruen)' : '' ?>">
         <div style="font-weight:600;margin-bottom:2px"><?= h(lp_t('coa_spec_titel')) ?><?php if ($coaReq): ?> · <span style="color:var(--gruen)"><?= h(lp_t('coa_angefordert')) ?></span><?php endif; ?></div>
         <div class="muted" style="font-size:12px;margin-bottom:10px"><?= h(lp_t('coa_spec_hinweis')) ?></div>
@@ -249,7 +254,6 @@ if (!$a):
           <div class="bx-field" style="margin:0"><label><?= h(lp_t('spezifikation')) ?></label><input type="file" name="spec_datei" accept="application/pdf,image/*"></div>
         </div>
       </div>
-      <?php endif; ?>
       <button class="btn btn-primary" type="submit"><?= h(lp_t('angebot_abgeben')) ?></button>
     </form>
     <?php endif; ?>
