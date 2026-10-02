@@ -109,6 +109,7 @@ function route_rollen_map(): array {
         'rechnung_frei'      => ['finance'],
         'gutschrift_neu'     => ['finance'],
         'gutschrift_pdf'     => ['finance'],
+        'rechnung_pdf'       => ['finance'],
         'buchhaltung'        => ['finance'],
         'einstellungen'      => ['admin', 'finance', 'production'],
         'benutzer'           => ['admin'],

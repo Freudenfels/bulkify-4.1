@@ -87,6 +87,7 @@ $routes = [
     'fasttrack'       => 'produktion/fasttrack.php',   // Schnelles Nachtragen: Auftrag-Status + Datum + Sprach-Notiz
     'gutschrift_neu'  => 'beleg/gutschrift_neu.php',   // Storno-Rechnung / Gutschrift manuell erstellen
     'gutschrift_pdf'  => 'beleg/gutschrift_pdf.php',   // Gutschrift/Storno als PDF
+    'rechnung_pdf'    => 'beleg/rechnung_pdf.php',      // Rechnung als PDF (intern, Ansehen/Download)
     'portal'          => 'portal/kunde.php',
     'portal_login'    => 'portal/login.php',   // Kunden-Login (E-Mail + Passwort)
     'portal_dok'     => 'portal/dokument_download.php',
