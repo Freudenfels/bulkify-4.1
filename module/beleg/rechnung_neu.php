@@ -25,12 +25,15 @@ if ($netto <= 0) $netto = round($menge * $vk, 2);
 // Erstellen (POST).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'erstellen') {
     if ($netto <= 0) { header('Location: ?p=rechnung_neu&auftrag=' . $aid . '&kinpreis=1'); exit; }
+    $akteur = (function_exists('current_user') && ($u = current_user())) ? (string)($u['name'] ?? 'team') : 'team';
     $bid = rechnung_aus_auftrag($aid, [
         'datum'            => trim((string)($_POST['datum'] ?? '')),
         'leistung_datum'   => trim((string)($_POST['leistung_datum'] ?? '')),
         'zahlungsziel_tage'=> ($_POST['zahlungsziel_tage'] ?? '') !== '' ? (int)$_POST['zahlungsziel_tage'] : '',
         'ust_prozent'      => ($_POST['ust_prozent'] ?? '') !== '' ? (float) str_replace(',', '.', (string)$_POST['ust_prozent']) : '',
         'text'             => (string)($_POST['text'] ?? ''),
+        'freigeben'        => !empty($_POST['freigeben']),
+        'ersteller'        => $akteur,
     ]);
     if ($bid) { header('Location: ?p=rechnung&id=' . $bid . '&erstellt=1'); exit; }
     header('Location: ?p=rechnung_neu&auftrag=' . $aid . '&kinpreis=1'); exit;
@@ -71,6 +74,8 @@ if ($netto <= 0) {
         <div class="muted" style="font-size:12px;margin-top:4px"><?= $ustStd == 0.0 ? 'Standard 0 % (Kleinunternehmer/EU-Ausland)' : 'Standard ' . rtrim(rtrim(number_format($ustStd,2,',','.'),'0'),',') . ' %' ?></div></div>
     </div>
     <div class="bx-field"><label>Rechnungstext / Hinweis (optional)</label><textarea name="text" id="f_text" rows="2" placeholder="z. B. Zahlbar ohne Abzug innerhalb des Zahlungsziels. Vielen Dank."></textarea></div>
+    <div class="bx-check" style="margin-top:4px"><input type="checkbox" name="freigeben" id="f_frei" value="1"><label for="f_frei" style="margin:0">Dem Kunden direkt freigeben (sofort im Portal sichtbar)</label></div>
+    <div class="muted" style="font-size:12px;margin-top:4px">Ohne Haken wird die Rechnung erstellt, ist aber für den Kunden noch nicht sichtbar – du kannst sie später auf der Rechnung freigeben und auch wieder zurückziehen.</div>
   </div>
 
   <!-- Vorschau -->

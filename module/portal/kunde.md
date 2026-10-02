@@ -122,6 +122,7 @@ Schickt der Kunde eine Rezepturanfrage, entwickelt die KI sofort einen internen 
 
 ## Rechnungen und Rezeptur-Freigabe
 - **Ansicht „Rechnungen"** listet je Beleg Nummer/Datum/Betrag/Status und bietet pro Zeile einen **PDF-Download** (`v=rechnung_pdf&aid=<auftrag_id>`, prüft Eigentum über die Auftragsliste des Kunden). Ohne verknüpften Auftrag kein Link.
+- **Nur freigegebene Rechnungen:** Das Portal zeigt ausschließlich Belege mit `beleg.kunde_sichtbar=1` – in der Rechnungsliste, bei den Zahl-Badges der Bestellliste, in der Bestell-Detailansicht und beim RE-PDF. Freigabe/Rücknahme steuert das Team auf der Rechnung (`module/beleg/detail.php`, „Für Kunde freigeben"/„Zurückziehen"), analog zu Angeboten.
 - **Rezeptur annehmen:** Nach der Freigabe (`rezeptur_annehmen`) führt der Weg immer zu `v=prodanfrage&rid=…&freigegeben=1` (Menge/Verpackung). Das ist keine Sackgasse mehr: die gerade angenommene eigene Rezeptur macht `$kannProduktAnfrage` wahr, also ist die Ansicht erreichbar – auch ohne Katalog-Recht `portal_produkte`.
 
 ## Jahresverträge / Kontingente (Abruf)

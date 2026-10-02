@@ -516,6 +516,12 @@ function init_schema(): void {
     ensure_column('beleg', 'faellig', "DATE NULL");          // Faelligkeit = datum + zahlungsziel_tage
     ensure_column('beleg', 'leistung_datum', "DATE NULL");   // Leistungs-/Lieferdatum
     ensure_column('beleg', 'text', "TEXT NULL");             // optionaler Rechnungstext/Hinweis
+    ensure_column('beleg', 'kunde_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0");  // fuer den Kunden im Portal freigegeben?
+    // Einmalig: bestehende Belege waren im Portal immer sichtbar -> freigeben, damit nichts verschwindet.
+    if (meta_get('beleg_sichtbar_backfill', '') !== '1') {
+        q("UPDATE beleg SET kunde_sichtbar=1 WHERE typ IN ('rechnung','gutschrift')");
+        meta_set('beleg_sichtbar_backfill', '1');
+    }
     ensure_column('auftrag', 'status_datum', "DATE NULL");   // Datum des aktuellen Status (Kunde sieht es); Fast-Track/v3-Style
     ensure_column('auftrag', 'energ_start', "DATE NULL");     // Energetisierung: Startdatum (aus v3); Status laeuft/abgeschlossen wird daraus abgeleitet
     ensure_column('auftrag', 'bezahlt_am', "DATE NULL");          // manuelles „bezahlt am" fuer Alt-Auftraege (altes System, ohne v4-Rechnung)
@@ -5521,8 +5527,8 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     $ustInland = (float) meta_get('ust_inland', 19);
     $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : $ustInland;
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum)
-       VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,kunde_sichtbar)
+       VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),1)",
       [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen']);
     // Produktionsauftrag (PR) + Stationen automatisch anlegen
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$a['produkt_id']]) ?: 'kapsel';
@@ -5569,11 +5575,15 @@ function rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     $faellig = ($ziel !== null) ? date('Y-m-d', strtotime($datum . ' +' . $ziel . ' days')) : null;
     $leist = $gilt($opt['leistung_datum'] ?? null);
     $text  = trim((string)($opt['text'] ?? '')) ?: null;
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,leistung_datum,text)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    $sicht = !empty($opt['freigeben']) ? 1 : 0;                  // standardmaessig NICHT fuer den Kunden freigegeben
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,leistung_datum,text,kunde_sichtbar)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('RE'), 'rechnung', $auftrag_id, ($a['kunde_id'] ?: null), $netto, $ustP, $ust, $brutto, 'offen',
-       $datum, $ziel, $faellig, $leist, $text]);
+       $datum, $ziel, $faellig, $leist, $text, $sicht]);
     $bid = (int) insert_id();
+    // Ersteller als Bearbeiter im Verlauf festhalten.
+    $ersteller = trim((string)($opt['ersteller'] ?? '')) ?: 'team';
+    if (function_exists('beleg_status_log_add')) beleg_status_log_add($bid, 'offen', 'Rechnung aus Auftrag ' . (string)$a['nummer'] . ' erstellt' . ($sicht ? ', für Kunde freigegeben' : ''), $ersteller);
     // Eine Positionszeile aus dem Auftrag (Produkt × Menge × VK). Passt die Zeilensumme nicht exakt
     // zum Netto (z. B. Sub-Cent-Preise), wird eine Pauschal-Zeile (Menge 1 = Netto) gesetzt.
     $prodName = (string) (scalar("SELECT COALESCE(NULLIF(p.kundenname,''), p.name) FROM produkt p WHERE p.id=?", [(int)($a['produkt_id'] ?? 0)])

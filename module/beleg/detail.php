@@ -9,6 +9,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     $aktion = $_POST['aktion'] ?? 'status';
     $akteur = (function_exists('current_user') && ($u = current_user())) ? $u['name'] : 'team';
 
+    // Fuer den Kunden freigeben / Freigabe zurueckziehen (wie bei Angeboten).
+    if ($aktion === 'freigeben' || $aktion === 'zurueckziehen') {
+        $frei = $aktion === 'freigeben' ? 1 : 0;
+        q("UPDATE beleg SET kunde_sichtbar=? WHERE id=?", [$frei, $id]);
+        $bx = one("SELECT kunde_id, nummer, status FROM beleg WHERE id=?", [$id]);
+        beleg_status_log_add($id, (string)($bx['status'] ?? 'offen'), $frei ? 'Für Kunde freigegeben' : 'Freigabe zurückgezogen', $akteur);
+        if ($bx && $bx['kunde_id']) log_aktivitaet('kunde', (int)$bx['kunde_id'], 'team', 'Rechnung ' . $bx['nummer'] . ($frei ? ' für den Kunden freigegeben.' : ' – Freigabe zurückgezogen.'), 'beleg', 'beleg', $id);
+        header('Location: ?p=rechnung&id=' . $id . '&freigabe=' . $frei); exit;
+    }
+
     if ($aktion === 'zahlung') {
         $betrag = (float) str_replace(',', '.', trim($_POST['betrag'] ?? '0'));
         if ($betrag > 0) {
@@ -78,9 +88,18 @@ $zBadge = fn($s) => match ($s) {
 };
 $zs = beleg_zahlstatus($b);   // abgeleiteter Zahlstatus + bezahlt/rest
 
+$istFrei = (int)($b['kunde_sichtbar'] ?? 0) === 1;
+// Freigeben/Zurueckziehen (wie bei Angeboten) – nur fuer Rechnungen, nicht bei Storno.
+$freiBtn = '';
+if (!$istGut && $b['status'] !== 'storniert') {
+    $freiBtn = $istFrei
+        ? '<form method="post" style="display:inline;margin:0"><input type="hidden" name="aktion" value="zurueckziehen"><button class="btn btn-ghost" type="submit">Freigabe zurückziehen</button></form> '
+        : '<form method="post" style="display:inline;margin:0"><input type="hidden" name="aktion" value="freigeben"><button class="btn btn-primary" type="submit">Für Kunde freigeben</button></form> ';
+}
 render_header('rechnungen', $b['nummer']);
 bx_head($b['nummer'], ($istGut ? 'Storno-Rechnung / Gutschrift' : 'Rechnung') . ($b['datum'] ? ' vom ' . date('d.m.Y', strtotime($b['datum'])) : ''),
-        ($istGut ? bx_btn('PDF ansehen', '?p=gutschrift_pdf&id=' . $id, 'ghost') . ' ' : '') . bx_btn('Zurück zur Liste', '?p=rechnungen', 'ghost'));
+        $freiBtn . ($istGut ? bx_btn('PDF ansehen', '?p=gutschrift_pdf&id=' . $id, 'ghost') . ' ' : '') . bx_btn('Zurück zur Liste', '?p=rechnungen', 'ghost'));
+if (isset($_GET['freigabe'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ($_GET['freigabe'] === '1' ? 'Rechnung für den Kunden freigegeben – jetzt im Portal sichtbar.' : 'Freigabe zurückgezogen – nicht mehr im Kundenportal sichtbar.') . '</div>';
 if (isset($_GET['erstellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnung aus dem Auftrag erstellt. Beträge/USt stammen aus dem Auftrag – bei Bedarf unten Zahlungen erfassen oder stornieren.</div>';
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnung storniert – Gutschrift wurde erstellt.</div>';
@@ -95,6 +114,7 @@ echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $zBadge
 echo '<div class="bx-card"><div class="k">Brutto</div><div class="v">' . $eur($b['brutto']) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Bezahlt</div><div class="v">' . $eur($zs['bezahlt']) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Offener Rest</div><div class="v">' . ($zs['rest'] > 0.005 ? '<strong>' . $eur($zs['rest']) . '</strong>' : $eur(0)) . '</div></div>';
+if (!$istGut) echo '<div class="bx-card"><div class="k">Kundenportal</div><div class="v">' . ($istFrei ? bx_badge('freigegeben', 'ok') : bx_badge('nicht freigegeben', 'warn')) . '</div></div>';
 echo '</div>';
 ?>
 <div class="bx-panel">

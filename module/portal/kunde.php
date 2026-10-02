@@ -859,7 +859,7 @@ if ($auftraege) {
                   WHERE pa.auftrag_id IN ($inA) AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id", $aids) as $cr)
         $auftragChargen[(int)$cr['auftrag_id']][] = ['nr' => (string)$cr['charge_nr'], 'mhd' => $cr['mhd']];
 }
-$rechnungen = all("SELECT * FROM beleg WHERE kunde_id=? AND typ='rechnung' ORDER BY angelegt DESC", [$kid]);
+$rechnungen = all("SELECT * FROM beleg WHERE kunde_id=? AND typ='rechnung' AND kunde_sichtbar=1 ORDER BY angelegt DESC", [$kid]);
 $anfragen = all("SELECT a.*, r.name AS rezeptur_name, r.status AS rezeptur_status,
                  (SELECT COUNT(*) FROM rezeptur_anfrage_wunsch w WHERE w.anfrage_id=a.id) AS wunsch_anzahl
                  FROM rezeptur_anfrage a LEFT JOIN rezeptur r ON r.id=a.rezeptur_id WHERE a.kunde_id=? ORDER BY a.angelegt DESC", [$kid]);
@@ -1421,7 +1421,7 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
     $aid = (int)($_GET['aid'] ?? 0);
     $auf = null; foreach ($auftraege as $x) if ((int)$x['id'] === $aid) { $auf = $x; break; }
     if (!$auf) { http_response_code(404); echo 'Bestellung nicht gefunden.'; exit; }
-    $re = one("SELECT * FROM beleg WHERE auftrag_id=? AND typ='rechnung' ORDER BY id DESC LIMIT 1", [(int)$auf['id']]);
+    $re = one("SELECT * FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND kunde_sichtbar=1 ORDER BY id DESC LIMIT 1", [(int)$auf['id']]);
     if ($art === 're' && !$re) { http_response_code(404); echo 'Für diese Bestellung liegt noch keine Rechnung vor.'; exit; }
     require_once BX_ROOT . '/core/pdf_beleg.php';
 
@@ -2736,7 +2736,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     $bestIds = array_map(fn($a) => (int)$a['id'], $aktBest);
     if ($bestIds) foreach (all("SELECT b.auftrag_id, b.brutto, b.status, COALESCE(SUM(z.betrag),0) AS bezahlt
                                 FROM beleg b LEFT JOIN zahlung z ON z.beleg_id=b.id
-                                WHERE b.typ='rechnung' AND b.auftrag_id IN (" . $inList($bestIds) . ")
+                                WHERE b.typ='rechnung' AND b.kunde_sichtbar=1 AND b.auftrag_id IN (" . $inList($bestIds) . ")
                                 GROUP BY b.id ORDER BY b.id") as $r) {
         $brutto = (float)$r['brutto']; $bez = (float)$r['bezahlt'];
         $st = ($r['status'] ?? '') === 'storniert' ? 'storniert'
@@ -2810,7 +2810,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <div style="margin-top:12px"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellungen') ?>">Zurück zu den Bestellungen</a></div></div>
     <?php else:
       $complete = $a['status'] === 'versendet';
-      $re  = one("SELECT * FROM beleg WHERE auftrag_id=? AND typ='rechnung' ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
+      $re  = one("SELECT * FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND kunde_sichtbar=1 ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
       // Abgeleiteter Zahlstatus (aus den Zahlungseingängen) + die einzelnen Zahlungen (wann/wie viel).
       $zs = $re ? beleg_zahlstatus($re) : null;
       $zahlungen = $re ? zahlungen_fuer((int)$re['id']) : [];
