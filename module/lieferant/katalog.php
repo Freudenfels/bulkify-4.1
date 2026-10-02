@@ -146,7 +146,7 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
                   data-form="<?= h((string)$z['form']) ?>" data-spez="<?= h((string)$z['spezifikation']) ?>"
                   data-herkunft="<?= h((string)$z['herkunft']) ?>" data-preis="<?= h($zahl($z['preis'], 4)) ?>"
                   data-waehrung="<?= h((string)$z['waehrung'] ?: 'EUR') ?>" data-einheit="<?= h((string)$z['einheit']) ?>"
-                  data-menge="<?= h($zahl($z['menge_ab'], 3)) ?>" data-notiz="<?= h((string)$z['notiz']) ?>"><?= h(lp_t('bearbeiten')) ?></button>
+                  data-menge="<?= h(lp_num($z['menge_ab'], 3)) ?>" data-notiz="<?= h((string)$z['notiz']) ?>"><?= h(lp_t('bearbeiten')) ?></button>
           <form method="post" style="display:inline" onsubmit="return confirm('<?= h(lp_t('loeschen')) ?>?');">
             <input type="hidden" name="aktion" value="zeile_weg"><input type="hidden" name="zeile_id" value="<?= (int)$z['id'] ?>">
             <button class="btn btn-ghost btn-sm" type="submit">&times;</button></form>
@@ -177,7 +177,7 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
       <div class="bx-field" style="max-width:130px"><label><?= h(lp_t('preis')) ?></label><input type="text" name="preis" id="kf_preis"></div>
       <div class="bx-field" style="max-width:90px"><label><?= h(lp_t('waehrung')) ?></label><input type="text" name="waehrung" id="kf_waehrung" value="EUR" maxlength="3"></div>
       <div class="bx-field" style="max-width:110px"><label><?= h(lp_t('einheit')) ?></label><input type="text" name="einheit" id="kf_einheit" placeholder="kg" maxlength="20"></div>
-      <div class="bx-field" style="max-width:130px"><label><?= h(lp_t('ab_menge')) ?></label><input type="text" name="menge_ab" id="kf_menge"></div>
+      <div class="bx-field" style="max-width:130px"><label><?= h(lp_t('ab_menge')) ?></label><input type="text" name="menge_ab" id="kf_menge" class="lp-menge"></div>
     </div>
     <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><input type="text" name="notiz" id="kf_notiz" maxlength="500"></div>
     <div class="bx-row" style="gap:8px;margin-top:6px">

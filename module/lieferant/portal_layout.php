@@ -288,7 +288,28 @@ function lp_head(string $titel): void {
 
 function lp_foot(): void {
     echo (function_exists('bx_theme_script') ? bx_theme_script() : '') . bx_menue_script()
-       . (function_exists('bx_busy_script') ? bx_busy_script() : '') . pwa_script() . '</body></html>';
+       . (function_exists('bx_busy_script') ? bx_busy_script() : '') . pwa_script()
+       . lp_menge_script() . '</body></html>';
+}
+
+// Mengen-Eingabefelder (Klasse "lp-menge") live mit Tausendertrennung formatieren – überall im Portal.
+// Lesbar: 100.000 statt 100000. Beim Speichern parst zahl_lesen() die Trenner wieder korrekt.
+function lp_menge_script(): string {
+    $de  = lp_sprache() === 'de';
+    $grp = json_encode($de ? '.' : ',');   // Tausender
+    $dec = json_encode($de ? ',' : '.');   // Dezimal
+    return '<script>(function(){var GRP=' . $grp . ',DEC=' . $dec . ';'
+        . 'function fmt(el){var v=el.value,caret=el.selectionStart;'
+        . 'var digitsBefore=v.slice(0,caret).replace(/[^0-9]/g,"").length;'
+        . 'var neg=v.trim().charAt(0)==="-";var parts=v.split(DEC);'
+        . 'var intp=parts[0].replace(/[^0-9]/g,"");'
+        . 'var grouped=intp.replace(/\\B(?=(\\d{3})+(?!\\d))/g,GRP);'
+        . 'var out=(neg?"-":"")+grouped+(parts.length>1?DEC+parts.slice(1).join("").replace(/[^0-9]/g,""):"");'
+        . 'if(out===el.value)return;el.value=out;'
+        . 'var pos=0,seen=0;while(pos<out.length&&seen<digitsBefore){if(/[0-9]/.test(out[pos]))seen++;pos++;}'
+        . 'try{el.setSelectionRange(pos,pos);}catch(e){}}'
+        . 'document.addEventListener("input",function(e){var t=e.target;if(t&&t.classList&&t.classList.contains("lp-menge"))fmt(t);});'
+        . '})();</script>';
 }
 
 // Menü + Rahmen. $aktiv = Routenname der aktuellen Seite.

@@ -165,7 +165,7 @@ if (!$a):
           </div>
           <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:2px">
             <input type="text" name="preis" required value="<?= h($ang ? $zahl($ang['preis'], 4) : '') ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
-            <input type="text" name="menge_haupt" value="<?= h($hauptMenge > 0 ? $zahl($hauptMenge, 3) : '') ?>" placeholder="<?= h(lp_t('menge_beispiel')) ?>" style="flex:1">
+            <input type="text" name="menge_haupt" class="lp-menge" value="<?= h($hauptMenge > 0 ? lp_num($hauptMenge, 3) : '') ?>" placeholder="<?= h(lp_t('menge_beispiel')) ?>" style="flex:1">
           </div>
           <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:8px">
             <div style="flex:1"></div>
@@ -178,7 +178,7 @@ if (!$a):
             <?php foreach ($staffeln as $s): ?>
               <div class="bx-row" style="gap:10px;flex-wrap:nowrap;margin-bottom:8px">
                 <input type="text" name="s_preis[]" value="<?= h($zahl($s['preis'], 4)) ?>" placeholder="<?= h(lp_t('preis')) ?>" style="flex:1">
-                <input type="text" name="s_menge[]" value="<?= h($zahl($s['menge_ab'], 3)) ?>" placeholder="<?= h($mengePh) ?>" style="flex:1">
+                <input type="text" name="s_menge[]" class="lp-menge" value="<?= h(lp_num($s['menge_ab'], 3)) ?>" placeholder="<?= h($mengePh) ?>" style="flex:1">
               </div>
             <?php endforeach; ?>
           </div>
@@ -192,7 +192,7 @@ if (!$a):
             <option value="1000"<?= $pb === 1000 ? ' selected' : '' ?>><?= h(lp_t('je_1000')) ?> <?= h(lp_einheit($einheit, 1000)) ?></option>
           </select></div>
         <div class="bx-field" style="margin:0;max-width:150px"><label><?= h(lp_t('moq')) ?></label>
-          <input type="text" name="mindestmenge" value="<?= h($ang ? $zahl($ang['mindestmenge'], 3) : '') ?>"></div>
+          <input type="text" name="mindestmenge" class="lp-menge" value="<?= h($ang ? lp_num($ang['mindestmenge'], 3) : '') ?>"></div>
         <div class="bx-field" style="margin:0;max-width:110px"><label><?= h(lp_t('lieferzeit')) ?></label>
           <input type="number" name="lieferzeit" value="<?= h((string)($ang['lieferzeit_tage'] ?? '')) ?>"></div>
         <?php $curInco = (string)($ang['incoterm'] ?? '') ?: (string)($a['incoterm'] ?? ''); $curVers = (string)($ang['versandart'] ?? '') ?: (string)($a['versandart'] ?? ''); ?>
@@ -213,6 +213,7 @@ if (!$a):
           [['s_preis[]', knopf.dataset.preis], ['s_menge[]', knopf.dataset.menge]].forEach(function(p){
             var f = document.createElement('input');
             f.type = 'text'; f.name = p[0]; f.placeholder = p[1] || ''; f.style.flex = '1';
+            if (p[0] === 's_menge[]') f.className = 'lp-menge';
             zeile.appendChild(f);
           });
           raster.appendChild(zeile);
