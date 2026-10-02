@@ -3557,8 +3557,13 @@ function kunde_auftrag_parallel(array $a): array {
 }
 
 // Feste Kunden-Phasen (wie v3) – gleiche Spur im Kundenportal UND in der internen Auftragsansicht.
-function auftrag_phasen(): array {
-    return ['Bestätigt', 'Rohstoff bestellt', 'Rohstoff angekommen', 'In Produktion', 'Qualitätsprüfung', 'Versandbereit', 'Versendet'];
+// Bei Fulfillment-Kunden wird nichts versendet, sondern ins Fremdlager (Lager 2) eingelagert – die
+// letzten beiden Phasen heißen dann „Bereit zur Einlagerung" / „Eingelagert" (= abgeschlossen).
+function auftrag_phasen(bool $fulfillment = false): array {
+    $base = ['Bestätigt', 'Rohstoff bestellt', 'Rohstoff angekommen', 'In Produktion', 'Qualitätsprüfung'];
+    return $fulfillment
+        ? array_merge($base, ['Bereit zur Einlagerung', 'Eingelagert'])
+        : array_merge($base, ['Versandbereit', 'Versendet']);
 }
 // Aktuelle Phase (0..6) + Datum je Phase aus den vorhandenen Signalen ableiten.
 function kunde_auftrag_phase(array $a): array {
@@ -3605,7 +3610,9 @@ function kunde_auftrag_phase(array $a): array {
 // Fortschritts-Schritte je Auftrag: feste Phasen + kundenspezifische Zusatz-Schritte (Energetisierung,
 // Labortest) nach „Qualitätsprüfung". done=Haken, current=läuft (Sanduhr), sonst leer.
 function kunde_auftrag_track(array $a): array {
-    $AUFSTEPS = auftrag_phasen();
+    $ff = array_key_exists('nutzt_fulfillment', $a) ? !empty($a['nutzt_fulfillment'])
+        : (!empty($a['id']) ? auftrag_ist_fulfillment((int)$a['id']) : false);
+    $AUFSTEPS = auftrag_phasen($ff);
     $ph = kunde_auftrag_phase($a); $cur = (int)$ph['idx']; $complete = ($a['status'] ?? '') === 'versendet';
     $track = [];
     foreach ($AUFSTEPS as $i => $lbl) {

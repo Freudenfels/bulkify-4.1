@@ -2894,6 +2894,38 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
 
+  <?php // Laborprüfung zu DIESER Bestellung – Laboranalysen (CoA) nach Auftrag/Produkt gefiltert.
+        require_once BX_ROOT . '/core/laboranalyse.php';
+        $ordLabs = array_values(array_filter(laboranalysen_fuer_kunde((int)$k['id']), fn($l) =>
+            ((string)($l['auftrag_nr'] ?? '') === (string)$a['nummer'])
+            || (!empty($a['produkt_id']) && (int)($l['produkt_id'] ?? 0) === (int)($a['produkt_id'] ?? 0))));
+        // Panel zeigen, wenn Analysen vorliegen ODER der Kunde immer eine Laborprüfung hat (Annapurna etc.).
+        $zeigeLabor = $ordLabs || !empty($k['labortest_extern']) || !empty($k['zeige_energetisierung']);
+        if ($zeigeLabor): ?>
+  <div class="bx-panel">
+    <h2 style="margin:0 0 8px;font-size:16px">Laborprüfung</h2>
+    <?php if ($ordLabs): ?>
+    <p class="muted" style="margin:0 0 10px;font-size:13px">Analysenzertifikate (CoA) / Labortests zu dieser Bestellung.</p>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Datum</th><th>Titel</th><th>Charge</th><th>Befund</th><th></th></tr></thead>
+      <tbody>
+        <?php foreach ($ordLabs as $l): $url = $portalLink('analyse_datei') . '&id=' . (int)$l['id']; $bf = laboranalyse_befund_label($l['befund'] ?? null); ?>
+        <tr>
+          <td style="white-space:nowrap"><?= $l['datum'] ? h(fmt_zeit($l['datum'] . ' 00:00:00', 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
+          <td><?= h($l['titel'] ?: ($l['produkt'] ?: 'Laboranalyse')) ?></td>
+          <td><?= $l['charge_nr'] ? h($l['charge_nr']) : '<span class="muted">–</span>' ?></td>
+          <td><?= $bf[0] !== '' ? bx_badge($bf[0], $bf[1]) : '<span class="muted">–</span>' ?></td>
+          <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= h($url) ?>" target="_blank" rel="noopener">Ansehen / Download</a></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <?php else: ?>
+    <p class="muted" style="margin:0">Die Laboranalyse zu dieser Bestellung stellen wir Ihnen hier bereit, sobald sie vorliegt.</p>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
+
   <!-- Bestelldetails + Rechnung nebeneinander -->
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;align-items:start;margin-bottom:var(--sp-5)">
   <div class="bx-panel" style="margin:0">
