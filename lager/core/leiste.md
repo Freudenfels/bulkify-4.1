@@ -2,7 +2,7 @@
 
 Im großen Lager hängt eine Blinker an einer **Charge** (Palette), nicht an einem festen Platz. Die Palette darf frei umgestellt werden, die Blinker wandert mit. Gefunden wird sie, indem man sie klingeln lässt.
 
-- `leiste_binden($code, $charge_id)` – Blinker an eine Charge binden. Hängt die Blinker schon an einer anderen Charge oder die Charge schon an einer anderen Blinker, gibt es eine Fehlermeldung statt eines stillen Umhängens.
+- `leiste_binden($code, $charge_id)` – Blinker an eine Charge binden. **Mischpalette:** Ist der Blinker schon belegt, entsteht automatisch eine Kiste (= Palette „Palette &lt;code&gt;"), in die die bestehende und die neue Charge wandern; der Blinker hängt dann an der Kiste. So führt EIN Blinker mehrere Chargen. Hängt die Charge bereits an einem anderen Blinker/einer anderen Kiste, gibt es eine Fehlermeldung. Kisten-Mechanik in [kiste.md](kiste.md).
 - `leiste_loesen($id)` – Charge leer oder raus: Blinker wird frei, wandert nach vorn und kann neu vergeben werden.
 - `leiste_finden($id)` / `leiste_aus($id)` – Blinker klingeln lassen (Licht + Ton) bzw. ausschalten. Nutzt `led_befehl()` aus `led.php`.
 - `leiste_fuer_charge($charge_id)` – welche Blinker hängt an dieser Charge.

@@ -35,21 +35,43 @@ function leiste_sicherstellen(string $code, ?int $sender_id = null): array {
 }
 
 // Blinker an eine Charge binden. Rueckgabe: Fehlertext oder '' bei Erfolg.
+// Blinker an eine Charge haengen. Ist der Blinker schon belegt, entsteht automatisch eine
+// MISCHPALETTE: die bestehende und die neue Charge wandern in eine Kiste (= Palette), an der der
+// Blinker haengt. So fuehrt EIN Blinker mehrere Chargen. Rueckgabe: Fehlertext oder ''.
 function leiste_binden(string $code, int $charge_id, ?int $sender_id = null): string {
     if (!erp_charge($charge_id)) return 'Diese Charge gibt es nicht (mehr).';
     $l = leiste_sicherstellen($code, $sender_id);
 
-    // Haengt die Blinker schon an einer ANDEREN Charge? Nicht still umhaengen.
-    if ($l['charge_id'] && (int)$l['charge_id'] !== $charge_id) {
-        $alt = erp_charge((int)$l['charge_id']);
-        return 'Blinker ' . $code . ' hängt schon an ' . ($alt ? charge_text($alt) : 'einer anderen Charge')
-             . '. Erst dort lösen.';
-    }
-    // Hat die Charge schon eine ANDERE Blinker?
+    // Haengt die Charge schon an einem ANDEREN eigenen Blinker?
     $andere = leiste_fuer_charge($charge_id);
-    if ($andere && (int)$andere['id'] !== (int)$l['id']) {
+    if ($andere && (int)$andere['id'] !== (int)$l['id'])
         return 'An dieser Charge hängt schon Blinker ' . $andere['code'] . '.';
+
+    // Liegt die Charge schon in einer Kiste?
+    $k_charge = kiste_fuer_charge($charge_id);
+    if ($k_charge) {
+        $kb = kiste_blinker((int)$k_charge['kiste_id']);
+        if ($kb && (int)$kb['id'] === (int)$l['id']) return '';   // schon an genau diesem Blinker (Palette)
+        return 'Diese Charge liegt schon in Kiste „' . $k_charge['kiste_name'] . '". Erst dort entfernen.';
     }
+
+    // Fall B: Blinker haengt bereits an einer Kiste (Mischpalette) -> Charge dazulegen.
+    if (!empty($l['kiste_id']))
+        return kiste_charge_zuordnen((int)$l['kiste_id'], $charge_id);
+
+    // Fall C: Blinker haengt schon an einer ANDEREN Einzel-Charge -> Mischpalette (Kiste) bilden.
+    if (!empty($l['charge_id']) && (int)$l['charge_id'] !== $charge_id) {
+        $alt = (int)$l['charge_id'];
+        $kid = kiste_anlegen('Palette ' . $code);
+        // Blinker von der Einzel-Charge loesen, dann beide in die Kiste, Blinker an die Kiste.
+        q("UPDATE lg_leiste SET charge_id=NULL, aktualisiert=? WHERE id=?", [jetzt_utc(), (int)$l['id']]);
+        $f = trim(kiste_charge_zuordnen($kid, $alt) . ' ' . kiste_charge_zuordnen($kid, $charge_id)
+                . ' ' . leiste_binden_kiste($code, $kid));
+        return $f;
+    }
+
+    // Fall A: Blinker frei (oder schon genau an dieser Charge) -> direkt binden.
+    if ((int)($l['charge_id'] ?? 0) === $charge_id) return '';
     q("UPDATE lg_leiste SET charge_id=?, gebunden_am=?, sender_id=COALESCE(?, sender_id), aktualisiert=? WHERE id=?",
       [$charge_id, jetzt_utc(), $sender_id, jetzt_utc(), (int)$l['id']]);
     return '';

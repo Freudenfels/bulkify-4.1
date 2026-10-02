@@ -32,6 +32,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Blinker gelöst, er leuchtet kurz rot und ist wieder frei.');
         weiter('?p=finden&q=' . urlencode((string)($_POST['q'] ?? '')));
     }
+
+    if ($aktion === 'entfernen') {
+        // Eine einzelne Charge aus ihrer Mischpalette (Kiste) nehmen – die Palette bleibt bestehen.
+        $cid = (int)($_POST['charge_id'] ?? 0);
+        kiste_charge_entfernen($cid);
+        flash('Charge aus der Palette genommen.');
+        weiter('?p=finden&q=' . urlencode((string)($_POST['q'] ?? '')));
+    }
 }
 
 $q = trim((string)($_GET['q'] ?? ''));
@@ -62,9 +70,10 @@ if (!$hat_charge) {
   <table class="bx-table">
     <thead><tr><th>Rohstoff</th><th>Charge</th><th>Bestand</th><th>MHD</th><th>Blinker</th><th></th></tr></thead>
     <tbody>
-    <?php foreach ($treffer as $c): $l = leiste_fuer_charge((int)$c['id']); ?>
+    <?php foreach ($treffer as $c): $bf = blinker_fuer_charge((int)$c['id']); $l = $bf['leiste']; $palette = $bf['kiste']; ?>
       <tr>
-        <td><?= h((string)$c['item_name']) ?><?= $c['artikelnummer'] ? ' <span class="muted">' . h((string)$c['artikelnummer']) . '</span>' : '' ?></td>
+        <td><?= h((string)$c['item_name']) ?><?= $c['artikelnummer'] ? ' <span class="muted">' . h((string)$c['artikelnummer']) . '</span>' : '' ?>
+          <?php if ($palette): ?> <span class="badge" title="Mischpalette"><?= h((string)$palette['kiste_name']) ?></span><?php endif; ?></td>
         <td class="lg-code"><?= h((string)$c['charge_nr']) ?></td>
         <td><?= h(rtrim(rtrim(number_format((float)$c['menge_verfuegbar'], 3, ',', '.'), '0'), ',')) ?> <?= h((string)$c['einheit']) ?></td>
         <td class="muted"><?= $c['mhd'] ? h(fmt_zeit((string)$c['mhd'] . ' 00:00:00', 'd.m.Y')) : '' ?></td>
@@ -73,10 +82,17 @@ if (!$hat_charge) {
           <?php if ($l): ?>
             <button type="button" class="btn btn-primary btn-sm" data-klingeln="<?= (int)$l['id'] ?>">Finden</button>
             <button type="button" class="btn btn-ghost btn-sm" data-klingeln="<?= (int)$l['id'] ?>" data-aktion="aus">Aus</button>
+            <?php if ($palette): ?>
+            <form method="post" style="display:inline" onsubmit="return confirm('Diese Charge aus der Palette „<?= h((string)$palette['kiste_name']) ?>" nehmen?')">
+              <input type="hidden" name="aktion" value="entfernen"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>"><input type="hidden" name="q" value="<?= h($q) ?>">
+              <button class="btn btn-ghost btn-sm lg-x" type="submit" title="Aus Palette nehmen" aria-label="Aus Palette nehmen">×</button>
+            </form>
+            <?php else: ?>
             <form method="post" style="display:inline" onsubmit="return confirm('Blinker <?= h((string)$l['code']) ?> vom Rohstoff lösen? Er wird wieder frei.')">
               <input type="hidden" name="aktion" value="loesen"><input type="hidden" name="leiste_id" value="<?= (int)$l['id'] ?>"><input type="hidden" name="q" value="<?= h($q) ?>">
               <button class="btn btn-ghost btn-sm lg-x" type="submit" title="Blinker lösen" aria-label="Blinker lösen">×</button>
             </form>
+            <?php endif; ?>
           <?php else: ?>
             <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end" data-no-busy>
               <input type="hidden" name="aktion" value="binden"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>"><input type="hidden" name="q" value="<?= h($q) ?>">
