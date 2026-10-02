@@ -194,9 +194,13 @@ if ($gebucht):
   .we-ziel{border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 14px;cursor:pointer;line-height:1.3}
   .we-ziel.on{border-color:var(--gruen);box-shadow:inset 0 0 0 1px var(--gruen)}
   .we-pos{position:relative;border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--sp-4);padding-top:var(--sp-5);margin-bottom:var(--sp-3);background:var(--panel-2)}
-  .we-pos .bx-grid{grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:var(--sp-3) var(--sp-4)}
-  .we-pos .bx-field{margin-bottom:0}
-  .we-pos .f-art{grid-column:span 2}
+  .we-pos .we-row{display:flex;flex-wrap:wrap;gap:var(--sp-3) var(--sp-4)}
+  .we-pos .bx-field{margin-bottom:0;flex:1 1 150px;min-width:0}
+  .we-pos .f-art{flex:2 1 240px}
+  .we-pos .f-menge{flex:0 1 110px}
+  .we-pos .f-einheit{flex:0 1 90px}
+  .we-pos .f-pakete{flex:0 1 80px}
+  .we-pos .f-blinker{flex:1 1 160px}
   .we-pos .we-del{position:absolute;top:var(--sp-2);right:var(--sp-2)}
   .we-thumb{position:relative;width:84px;height:84px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel-2)}
   .we-thumb img{width:100%;height:100%;object-fit:cover}
@@ -233,15 +237,15 @@ if ($gebucht):
     var card=document.createElement('div'); card.className='we-pos';
     card.innerHTML=
       '<button type="button" class="btn btn-ghost btn-sm we-del" title="Zeile entfernen">×</button>'+
-      '<div class="bx-grid">'+
+      '<div class="we-row">'+
         '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"></div>'+
-        '<div class="bx-field"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
-        '<div class="bx-field"><label>Menge</label><input type="text" name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+
-        '<div class="bx-field"><label>Einheit</label><input type="text" name="p_einheit[]" value="'+esc(p.einheit||'')+'" placeholder="Stk"></div>'+
-        '<div class="bx-field"><label class="lbl-charge">Charge-Nr.</label><input type="text" name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'"></div>'+
-        '<div class="bx-field"><label class="lbl-mhd">MHD</label><input type="date" name="p_mhd[]" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
-        '<div class="bx-field"><label>Blinker (Pflicht)</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
-        '<div class="bx-field"><label>Pakete</label><input type="number" name="p_pakete[]" min="1" step="1" value="1"></div>'+
+        '<div class="bx-field f-warenart"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
+        '<div class="bx-field f-menge"><label>Menge</label><input type="text" name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+
+        '<div class="bx-field f-einheit"><label>Einheit</label><input type="text" name="p_einheit[]" value="'+esc(p.einheit||'')+'" placeholder="Stk"></div>'+
+        '<div class="bx-field f-charge"><label class="lbl-charge">Charge-Nr.</label><input type="text" name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'"></div>'+
+        '<div class="bx-field f-mhd"><label class="lbl-mhd">MHD</label><input type="date" name="p_mhd[]" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
+        '<div class="bx-field f-pakete"><label>Pakete</label><input type="number" name="p_pakete[]" min="1" step="1" value="1"></div>'+
+        '<div class="bx-field f-blinker"><label>Blinker (Pflicht)</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
       '</div>';
     rows.appendChild(card);
     // Artikel-Name -> item_id, Einheit, Warenart aus Treffer uebernehmen.
