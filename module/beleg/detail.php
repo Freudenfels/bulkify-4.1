@@ -19,6 +19,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
         header('Location: ?p=rechnung&id=' . $id . '&freigabe=' . $frei); exit;
     }
 
+    // Rechnungskopf nachträglich anpassen (Datum, Leistungsdatum, Zahlungsziel, Bearbeiter, Text).
+    // Nur für Rechnungen und solange nicht storniert – Beträge/Positionen bleiben unberührt (dafür: Storno + neu).
+    if ($aktion === 'kopf_speichern') {
+        $bk = one("SELECT typ, status, datum FROM beleg WHERE id=?", [$id]);
+        if ($bk && $bk['typ'] === 'rechnung' && $bk['status'] !== 'storniert') {
+            $gilt  = fn($d) => (is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) ? $d : null;
+            $datum = $gilt(trim($_POST['datum'] ?? '')) ?? ($bk['datum'] ?: gmdate('Y-m-d'));
+            $leist = $gilt(trim($_POST['leistung_datum'] ?? ''));
+            $zielR = trim($_POST['zahlungsziel_tage'] ?? '');
+            $ziel  = ($zielR !== '') ? max(0, (int)$zielR) : null;
+            $faellig = ($ziel !== null) ? date('Y-m-d', strtotime($datum . ' +' . $ziel . ' days')) : null;
+            $bearb = (int)($_POST['bearbeiter_id'] ?? 0) ?: null;
+            $text  = trim($_POST['text'] ?? '') ?: null;
+            q("UPDATE beleg SET datum=?, leistung_datum=?, zahlungsziel_tage=?, faellig=?, bearbeiter_id=?, text=? WHERE id=?",
+              [$datum, $leist, $ziel, $faellig, $bearb, $text, $id]);
+            beleg_status_log_add($id, (string)$bk['status'], 'Rechnungskopf angepasst (Datum/Zahlungsziel/Bearbeiter/Text)', $akteur);
+        }
+        header('Location: ?p=rechnung&id=' . $id . '&kopf=1'); exit;
+    }
+
     if ($aktion === 'zahlung') {
         $betrag = (float) str_replace(',', '.', trim($_POST['betrag'] ?? '0'));
         if ($betrag > 0) {
@@ -102,6 +122,7 @@ bx_head($b['nummer'], ($istGut ? 'Storno-Rechnung / Gutschrift' : 'Rechnung') . 
 if (isset($_GET['freigabe'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ($_GET['freigabe'] === '1' ? 'Rechnung für den Kunden freigegeben – jetzt im Portal sichtbar.' : 'Freigabe zurückgezogen – nicht mehr im Kundenportal sichtbar.') . '</div>';
 if (isset($_GET['erstellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnung aus dem Auftrag erstellt. Beträge/USt stammen aus dem Auftrag – bei Bedarf unten Zahlungen erfassen oder stornieren.</div>';
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['kopf'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnungskopf aktualisiert.</div>';
 if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnung storniert – Gutschrift wurde erstellt.</div>';
 if (isset($_GET['angerechnet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((float)$_GET['angerechnet'] > 0 ? $eur((float)$_GET['angerechnet']) . ' Guthaben angerechnet.' : 'Kein Guthaben angerechnet (nichts verfügbar/offen).') . '</div>';
 if (isset($_GET['ausgezahlt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((float)$_GET['ausgezahlt'] > 0 ? $eur((float)$_GET['ausgezahlt']) . ' Guthaben als ausgezahlt verbucht.' : 'Kein Guthaben ausgezahlt.') . '</div>';
@@ -130,6 +151,32 @@ echo '</div>';
   </div>
   <?php if (!empty($b['text'])): ?><div class="muted" style="margin-top:10px;white-space:pre-line;font-size:13px"><?= h((string)$b['text']) ?></div><?php endif; ?>
 </div>
+
+<?php if (!$istGut && $b['status'] !== 'storniert'):
+    $benutzer = all("SELECT id, name FROM benutzer WHERE aktiv=1 ORDER BY name");
+    $curBearb = (int)($b['bearbeiter_id'] ?? 0);
+?>
+<details class="bx-panel"<?= isset($_GET['kopf']) ? ' open' : '' ?>>
+  <summary style="cursor:pointer;font-weight:600">Rechnungskopf bearbeiten</summary>
+  <p class="muted" style="margin:8px 0 0">Datum, Zahlungsziel, Bearbeiter und Rechnungstext lassen sich nachträglich korrigieren. <strong>Beträge/Positionen</strong> bleiben unberührt – falsche Beträge über „Stornieren" rückgängig machen und neu erstellen.</p>
+  <form method="post" style="margin-top:12px">
+    <input type="hidden" name="aktion" value="kopf_speichern">
+    <div class="bx-grid">
+      <div class="bx-field"><label>Rechnungsdatum</label><input type="date" name="datum" value="<?= h($b['datum'] ? date('Y-m-d', strtotime((string)$b['datum'])) : date('Y-m-d')) ?>"></div>
+      <div class="bx-field"><label>Leistungs-/Lieferdatum</label><input type="date" name="leistung_datum" value="<?= h($b['leistung_datum'] ? date('Y-m-d', strtotime((string)$b['leistung_datum'])) : '') ?>"></div>
+      <div class="bx-field"><label>Zahlungsziel (Tage)</label><input type="text" inputmode="numeric" name="zahlungsziel_tage" value="<?= h((string)($b['zahlungsziel_tage'] ?? '')) ?>" placeholder="z. B. 14" style="max-width:140px"></div>
+      <div class="bx-field"><label>Bearbeiter</label>
+        <select name="bearbeiter_id">
+          <option value="">– keiner –</option>
+          <?php foreach ($benutzer as $bu): ?><option value="<?= (int)$bu['id'] ?>" <?= $curBearb===(int)$bu['id']?'selected':'' ?>><?= h($bu['name']) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+    </div>
+    <div class="bx-field"><label>Rechnungstext / Hinweis</label><textarea name="text" rows="2" style="width:100%;box-sizing:border-box"><?= h((string)($b['text'] ?? '')) ?></textarea></div>
+    <div class="bx-row" style="margin-top:var(--sp-3)"><button class="btn btn-primary" type="submit">Kopf speichern</button></div>
+  </form>
+</details>
+<?php endif; ?>
 
 <?php if ($positionen): ?>
 <div class="bx-panel">
