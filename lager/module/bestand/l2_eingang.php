@@ -52,13 +52,13 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
   <input type="hidden" name="aktion" value="buchen">
   <div class="bx-panel">
     <style>
-      .lg-combo{position:relative}
-      .lg-combo-list{position:absolute;left:0;right:0;top:100%;z-index:30;max-height:300px;overflow:auto;
+      .lg-acombo{position:relative}
+      .lg-acombo-list{position:absolute;left:0;right:0;top:100%;z-index:30;max-height:300px;overflow:auto;
         background:var(--panel,#fff);border:1px solid var(--line,#ddd);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);margin-top:3px}
-      .lg-combo-list .opt{padding:9px 12px;cursor:pointer;font-size:15px}
-      .lg-combo-list .opt:hover,.lg-combo-list .opt.hl{background:var(--panel-2,#f2f2f0)}
-      .lg-combo-list .opt.neu{color:var(--gruen,#1D9E75);font-weight:600}
-      .lg-combo-empty{padding:9px 12px;color:var(--muted);font-size:13px}
+      .lg-acombo-list .opt{padding:9px 12px;cursor:pointer;font-size:15px}
+      .lg-acombo-list .opt:hover,.lg-acombo-list .opt.hl{background:var(--panel-2,#f2f2f0)}
+      .lg-acombo-list .opt.neu{color:var(--gruen,#1D9E75);font-weight:600}
+      .lg-acombo-empty{padding:9px 12px;color:var(--muted);font-size:13px}
       #l2Neu{border:1px dashed var(--gruen,#1D9E75);border-radius:10px;padding:12px;margin:6px 0 2px}
     </style>
     <div class="bx-grid">
@@ -68,10 +68,10 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
           <?php foreach ($kunden as $k): ?><option value="<?= (int)$k['id'] ?>"><?= h((string)$k['firma']) ?></option><?php endforeach; ?>
         </select>
       </div>
-      <div class="bx-field lg-combo" id="l2ArtWrap"><label>Artikel / Produkt</label>
+      <div class="bx-field lg-acombo" id="l2ArtWrap"><label>Artikel / Produkt</label>
         <input type="text" id="l2ArtSuche" name="art_text" autocomplete="off" placeholder="Produkt suchen – oder neuen Namen eingeben…" required aria-expanded="false">
         <input type="hidden" name="item_id" id="l2ArtId">
-        <div id="l2ArtList" class="lg-combo-list" hidden></div>
+        <div id="l2ArtList" class="lg-acombo-list" hidden></div>
       </div>
       <div class="bx-field"><label>Menge</label>
         <div class="bx-row" style="gap:8px;align-items:center;margin:0">
@@ -127,7 +127,7 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
     shown=items.filter(function(it){ return !q || it.n.toLowerCase().indexOf(q)>=0; }).slice(0,60);
     var html = shown.map(function(it,i){ return '<div class="opt" data-i="'+i+'">'+esc(it.n)+' <span class="muted">('+esc(it.e||'')+')</span></div>'; }).join('');
     if(q!=='' && !exakt(q)) html += '<div class="opt neu" data-neu="1">+ Neues Produkt „'+esc(box.value.trim())+'" anlegen</div>';
-    list.innerHTML = html || '<div class="lg-combo-empty">Tippen, um zu suchen …</div>';
+    list.innerHTML = html || '<div class="lg-acombo-empty">Tippen, um zu suchen …</div>';
     hl=-1; list.hidden=false;
   }
   function paint(){ Array.prototype.forEach.call(list.querySelectorAll('.opt'),function(o){o.classList.toggle('hl',+o.dataset.i===hl);}); }
