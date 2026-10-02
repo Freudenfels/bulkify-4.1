@@ -1749,7 +1749,6 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
 
   <?php // Drei Reiter: Offen · Bestätigt (angenommen/bestellt/versendet + Rezeptur angelegt) · Abgelehnt. ($oatab oben gesetzt.) ?>
-  <h2 style="margin:8px 0 6px">Ihre Vorgänge</h2>
   <div class="settabs" style="margin:0 0 8px">
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen&atab=<?= $atab ?>"      class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=zubestaetigen&atab=<?= $atab ?>" class="<?= $oatab === 'zubestaetigen' ? 'on' : '' ?>">Zu bestätigen<?= $nZuBest ? ' (' . $nZuBest . ')' : '' ?></a>
