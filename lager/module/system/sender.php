@@ -117,9 +117,9 @@ flash_zeigen();
     und gibt es an den Sender weiter.<?= $braucht_bruecke ? '' : ' Wird nur für Sender mit dem Weg „Über die Brücke“ gebraucht.' ?></p>
   <ol class="lg-schritte">
     <li>Sender per USB-Stick auf eine feste IP stellen (Datei <code>network.conf</code>, siehe Hersteller-Doku) und die IP oben eintragen.</li>
-    <li>Auf dem Lager-PC das Brückenprogramm herunterladen. Schlüssel und Adresse sind schon eingetragen.</li>
-    <li>Rechtsklick auf die Datei, „Mit PowerShell ausführen“. Das Fenster offen lassen.</li>
-    <li>Damit sie nach einem Neustart von selbst läuft: eine Verknüpfung in den Autostart-Ordner legen (<code>shell:startup</code>).</li>
+    <li>Auf dem Lager-PC das Brückenprogramm herunterladen (eine <code>.bat</code>). Schlüssel und Adresse sind schon eingetragen.</li>
+    <li><strong>Doppelklick</strong> auf die heruntergeladene <code>bulkify-lager-bruecke.bat</code>. Fragt Windows „Ausführen?“, auf <strong>Ausführen</strong> klicken. Das Fenster offen lassen – es zeigt die abgeholten Befehle.</li>
+    <li>Damit sie nach einem Neustart von selbst läuft: eine Verknüpfung der <code>.bat</code> in den Autostart-Ordner legen (<code>shell:startup</code>).</li>
   </ol>
   <div class="bx-row" style="gap:var(--sp-3);margin-top:var(--sp-4)">
     <a class="btn btn-primary" href="?p=bruecke_skript">Brückenprogramm herunterladen</a>
