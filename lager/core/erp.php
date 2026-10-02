@@ -373,3 +373,62 @@ function erp_charge_entnehmen(int $charge_id, float $menge): array {
     return ['ok' => true, 'meldung' => '', 'leer' => $leer, 'rest' => $leer ? 0.0 : $rest,
             'item_name' => (string)$c['item_name'], 'einheit' => (string)$c['einheit']];
 }
+
+// --- Vollwertiger Wareneingang: Artikel-Matching + Warenart-Regeln ----------------------------
+
+// Artikel per (Teil-)Name suchen – fuer das Zuordnen einer Lieferschein-Position zu einem
+// bestehenden Artikel. Reihenfolge: exakter Name, dann "faengt an mit", dann kuerzester Treffer.
+// LIKE mit ESCAPE '=' (Projektregel: Backslash als Escape crasht MySQL live).
+function erp_item_suchen(string $name, int $limit = 6): array {
+    if (!tabelle_da('item')) return [];
+    $name = trim($name);
+    if ($name === '') return [];
+    $hatGesperrt = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME='gesperrt'");
+    $w   = $hatGesperrt ? ' AND gesperrt=0' : '';
+    $esc = fn(string $s): string => str_replace(['=', '%', '_'], ['==', '=%', '=_'], $s);
+    $enth = '%' . $esc($name) . '%';
+    $anf  = $esc($name) . '%';
+    return all("SELECT id, name, kategorie, einheit, form FROM item
+                WHERE kategorie IN ('rohstoff','verpackung','verbrauch','fertig','verkaufsfertig')$w
+                  AND name LIKE ? ESCAPE '='
+                ORDER BY (name=?) DESC, (name LIKE ? ESCAPE '=') DESC, CHAR_LENGTH(name), name
+                LIMIT " . (int)$limit, [$enth, $name, $anf]);
+}
+
+// Welche Felder sind je Warenart Pflicht und geht die Ware in Quarantaene?
+// $kategorie = item.kategorie, $form = item.form ('kapselhuelle' = Leerkapseln).
+// Rueckgabe: ['mhd_pflicht'=>bool, 'charge_pflicht'=>bool, 'quarantaene'=>bool].
+// (Die vom Nutzer gewuenschte Matrix. Ein Schalter je Artikel als Ausnahme kommt spaeter.)
+function erp_warenart_regeln(string $kategorie, string $form = ''): array {
+    if ($form === 'kapselhuelle')
+        return ['mhd_pflicht' => true, 'charge_pflicht' => true, 'quarantaene' => true];
+    return match ($kategorie) {
+        'rohstoff'              => ['mhd_pflicht' => true,  'charge_pflicht' => true,  'quarantaene' => true],
+        'fertig', 'verkaufsfertig' => ['mhd_pflicht' => true,  'charge_pflicht' => true,  'quarantaene' => true],
+        'kapsel'               => ['mhd_pflicht' => true,  'charge_pflicht' => true,  'quarantaene' => true],
+        'verpackung'           => ['mhd_pflicht' => false, 'charge_pflicht' => false, 'quarantaene' => false],
+        'verbrauch'            => ['mhd_pflicht' => false, 'charge_pflicht' => false, 'quarantaene' => false],
+        default                => ['mhd_pflicht' => false, 'charge_pflicht' => false, 'quarantaene' => false],
+    };
+}
+
+// Eine Lieferschein-Position einem bestehenden Artikel zuordnen (oder als "neu" markieren).
+// Rueckgabe reichert die Position an: item_id (0 = neu), item_name, kategorie, einheit, form,
+// kandidaten[] (fuer die Auswahl), regeln[] (Pflichtfelder der erkannten/vermuteten Warenart).
+function erp_position_zuordnen(array $pos): array {
+    $kandidaten = erp_item_suchen((string)($pos['name'] ?? ''));
+    $treffer = $kandidaten[0] ?? null;
+    // Als sichere Zuordnung nur werten, wenn der Name exakt passt (sonst nur Vorschlag).
+    $exakt = $treffer && mb_strtolower(trim((string)$treffer['name'])) === mb_strtolower(trim((string)($pos['name'] ?? '')));
+    $kat = $exakt ? (string)$treffer['kategorie'] : ((string)($pos['warenart'] ?? '') ?: 'rohstoff');
+    $form = $exakt ? (string)($treffer['form'] ?? '') : '';
+    $pos['item_id']    = $exakt ? (int)$treffer['id'] : 0;
+    $pos['item_name']  = $exakt ? (string)$treffer['name'] : (string)($pos['name'] ?? '');
+    $pos['kategorie']  = $kat;
+    $pos['form']       = $form;
+    if (($pos['einheit'] ?? '') === '' && $exakt) $pos['einheit'] = (string)$treffer['einheit'];
+    $pos['kandidaten'] = $kandidaten;
+    $pos['regeln']     = erp_warenart_regeln($kat, $form);
+    return $pos;
+}

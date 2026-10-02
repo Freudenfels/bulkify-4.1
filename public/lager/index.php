@@ -18,6 +18,7 @@ $routen = [
     'login'          => 'auth/login.php',
     // Grosses Lager
     'erwartet'       => 'bestand/erwartet.php',
+    'we'             => 'bestand/wareneingang.php',   // vollwertiger Wareneingang (L1/L2 + KI-Scan)
     'bestand'        => 'bestand/liste.php',
     'eingang'        => 'bestand/eingang.php',
     'ausgang'        => 'bestand/ausgang.php',

@@ -11,10 +11,9 @@ function lg_nav(): array {
     // Reihenfolge nach dem taeglichen Ablauf: erst was reinkommt (erwartet/einbuchen), dann finden,
     // dann raus, dann Nachschlagen. Keine festen Plaetze (alles fliegender Modus) -> kein Fulfillment.
     $nav = [
-        'Lager 1'     => ['erwartet' => 'Erwartete Lieferungen', 'eingang' => 'Wareneingang',
+        'Lager 1'     => ['erwartet' => 'Erwartete Lieferungen', 'we' => 'Wareneingang',
                           'finden' => 'Finden', 'ausgang' => 'Warenausgang', 'bestand' => 'Bestand'],
-        'Lager 2 (Fremdlager)' => ['l2_eingang' => 'Kundenware einbuchen', 'l2_finden' => 'Finden',
-                          'l2_bestand' => 'Fremdlager-Bestand'],
+        'Lager 2 (Fremdlager)' => ['l2_finden' => 'Finden', 'l2_bestand' => 'Fremdlager-Bestand'],
         'Verwaltung'  => ['bewegungen' => 'Bewegungen', 'kisten' => 'Kisten', 'leisten' => 'Blinker'],
     ];
     if (lg_ist_admin()) $nav['System'] = ['sender' => 'Sender und Brücke'];
