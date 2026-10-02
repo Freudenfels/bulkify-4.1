@@ -21,6 +21,14 @@ $items       = erp_items_eingang();
 $lieferanten = erp_lieferanten();
 $letzte      = lg_bewegungen(12);
 
+// Vorbefuellung (z. B. aus "Erwartete Lieferungen" -> Einbuchen): Artikel/Menge/Lieferant/Charge.
+$vorItem   = (int)($_GET['item'] ?? 0);
+$vorBasis  = $vorItem ? erp_item_basis($vorItem) : null;
+if (!$vorBasis) $vorItem = 0;
+$vorMenge  = trim((string)($_GET['menge'] ?? ''));
+$vorCharge = trim((string)($_GET['charge'] ?? ''));
+$vorLief   = (int)($_GET['lieferant'] ?? 0);
+
 kopf('Wareneingang', 'eingang');
 seitenkopf('Wareneingang', 'Was kommt rein? Artikel und Menge buchen – danach gleich einlagern.',
     '<a class="btn btn-ghost" href="?p=bestand">Zum Bestand</a>');
@@ -42,19 +50,19 @@ if (!$items) { hinweis('Noch keine buchbaren Artikel im Dashboard (Rohstoffe/Ver
     </style>
     <div class="bx-grid">
       <div class="bx-field lg-combo" id="weArtWrap"><label>Artikel</label>
-        <input type="text" id="weArtSuche" autocomplete="off" placeholder="Artikel suchen oder wählen…" required aria-expanded="false">
-        <input type="hidden" name="item_id" id="weArtId">
+        <input type="text" id="weArtSuche" autocomplete="off" placeholder="Artikel suchen oder wählen…" required aria-expanded="false" value="<?= h((string)($vorBasis['name'] ?? '')) ?>">
+        <input type="hidden" name="item_id" id="weArtId" value="<?= $vorItem ?: '' ?>">
         <div id="weArtList" class="lg-combo-list" hidden></div>
       </div>
       <div class="bx-field"><label>Menge</label>
         <div class="bx-row" style="gap:8px;align-items:center;margin:0">
-          <input type="text" inputmode="decimal" name="menge" required style="flex:1;min-width:0" placeholder="z. B. 25">
-          <span id="weEinheit" style="min-width:44px;font-weight:600;color:var(--muted)">–</span>
+          <input type="text" inputmode="decimal" name="menge" required style="flex:1;min-width:0" placeholder="z. B. 25" value="<?= h($vorMenge) ?>">
+          <span id="weEinheit" style="min-width:44px;font-weight:600;color:var(--muted)"><?= h((string)($vorBasis['einheit'] ?? '–')) ?></span>
         </div>
-        <div class="muted" id="weEinheitHint" style="font-size:12px;margin-top:4px">Erst Artikel wählen – die Einheit erscheint hier.</div>
+        <div class="muted" id="weEinheitHint" style="font-size:12px;margin-top:4px"><?= $vorBasis ? 'Menge in ' . h((string)$vorBasis['einheit']) . ' eingeben.' : 'Erst Artikel wählen – die Einheit erscheint hier.' ?></div>
       </div>
       <div class="bx-field"><label>Charge-Nr. (Lieferant)</label>
-        <input type="text" name="charge_nr" class="lg-code" placeholder="laut Lieferant / CoA (optional)"></div>
+        <input type="text" name="charge_nr" class="lg-code" placeholder="laut Lieferant / CoA (optional)" value="<?= h($vorCharge) ?>"></div>
       <div class="bx-field"><label>MHD</label><input type="date" name="mhd"></div>
       <div class="bx-field"><label>Anzahl Pakete / Kartons</label>
         <input type="number" name="pakete" min="1" step="1" value="1">
@@ -62,7 +70,7 @@ if (!$items) { hinweis('Noch keine buchbaren Artikel im Dashboard (Rohstoffe/Ver
       <div class="bx-field"><label>Lieferant</label>
         <select name="lieferant_id">
           <option value="">– keiner –</option>
-          <?php foreach ($lieferanten as $lf): ?><option value="<?= (int)$lf['id'] ?>"><?= h((string)$lf['firma']) ?></option><?php endforeach; ?>
+          <?php foreach ($lieferanten as $lf): ?><option value="<?= (int)$lf['id'] ?>" <?= $vorLief === (int)$lf['id'] ? 'selected' : '' ?>><?= h((string)$lf['firma']) ?></option><?php endforeach; ?>
         </select>
       </div>
       <div class="bx-field"><label>Notiz (optional)</label><input type="text" name="notiz" placeholder="z. B. Teillieferung"></div>

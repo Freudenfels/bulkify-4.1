@@ -38,9 +38,13 @@ Die zwei Räume arbeiten unterschiedlich, deshalb gibt es zwei Modelle:
 - **Großes Lager (Chaos):** Blinker hängt an einer **Charge** (`lg_leiste.charge_id`), nicht am Platz. Finden per Klingeln. Kein festes Raster. Blinker sind im Umlauf: leer -> lösen -> neu binden.
 - **Fulfillment (feste Plätze):** Blinker am festen **Platz** (`lg_platz`), Pick-and-Pack. (Im Aufbau.)
 
+## Menü-Reihenfolge
+Nach dem täglichen Ablauf, **wichtigste Aktion oben**: **Erwartete Lieferungen · Wareneingang · Finden · Warenausgang · Bestand**, dann Gruppe **Verwaltung** (Bewegungen · Kisten · Blinker), dann **System** (nur Admin: Sender und Brücke). **Keine festen Plätze** (Fulfillment-Gruppe entfernt) – alles läuft im „fliegenden Modus" (Blinker an der Charge). Definition in `core/layout.php` (`lg_nav()`).
+
 ## Was drin ist
 **Warenlager**
-- **Wareneingang** (`?p=eingang`): Artikel + Menge buchen → Charge wird angelegt → direkt zum Einlagern (Blinker/Kiste). Siehe [module/bestand/eingang.md](module/bestand/eingang.md).
+- **Erwartete Lieferungen** (`?p=erwartet`): „Waren, auf die wir warten" – beim Lieferanten bestellt, noch nicht angekommen (ETA + Sendungsnummer), je Position „Einbuchen" → Wareneingang vorbefüllt. Siehe [module/bestand/erwartet.md](module/bestand/erwartet.md).
+- **Wareneingang** (`?p=eingang`): Artikel + Menge buchen → Charge wird angelegt → direkt zum Einlagern (Blinker/Kiste). Vorbefüllbar per `&item=&menge=&lieferant=&charge=`. Siehe [module/bestand/eingang.md](module/bestand/eingang.md).
 - **Warenausgang** (`?p=ausgang`): Charge suchen, Menge abbuchen; leer → Blinker löst sich automatisch. Siehe [module/bestand/ausgang.md](module/bestand/ausgang.md).
 - **Bewegungen** (`?p=bewegungen`): Historie rein/raus aus `lg_bewegung`. Siehe [module/bestand/bewegungen.md](module/bestand/bewegungen.md).
 - **Bestand** (`?p=bestand`): alle eigenen Chargen nach Kategorie, MHD-Ampel, Spalte **Ort** (Kiste oder Blinker), je Zeile **Etikett**-Link, anklickbar → Charge-Detail (`?p=charge`, Produkt/Lieferung/Dokumente/weitere Chargen).

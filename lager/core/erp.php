@@ -215,6 +215,27 @@ function erp_item_basis(int $id): ?array {
     return one("SELECT id, name, einheit, kategorie, form FROM item WHERE id=?", [$id]);
 }
 
+// „Waren, auf die wir warten" – beim Lieferanten bestellt, aber noch nicht angekommen (status='bestellt',
+// kein Wareneingang). Mit erwartetem Termin (eta_geplant), Sendungsnummer (tracking) und Positionen,
+// damit der Mitarbeiter sie bei Ankunft direkt einbuchen kann.
+function erp_erwartete_lieferungen(): array {
+    if (!tabelle_da('bestellung')) return [];
+    $rows = all("SELECT b.id, b.nummer, b.bestelldatum, b.eta_geplant, b.tracking, b.versandanbieter,
+                        b.notiz, b.lieferant_id, lf.firma AS lieferant
+                 FROM bestellung b LEFT JOIN lieferanten lf ON lf.id = b.lieferant_id
+                 WHERE b.status = 'bestellt' AND b.angekommen_am IS NULL
+                 ORDER BY (b.eta_geplant IS NULL), b.eta_geplant, b.bestelldatum DESC, b.id DESC");
+    foreach ($rows as &$r) {
+        $r['positionen'] = tabelle_da('bestellung_position')
+            ? all("SELECT bp.item_id, bp.menge, bp.einheit, i.name, i.kategorie
+                   FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
+                   WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id", [(int)$r['id']])
+            : [];
+    }
+    unset($r);
+    return $rows;
+}
+
 // Wareneingang buchen: legt eine Charge an (oder fuellt eine vorab aus einer CoA angelegte Charge).
 // Rohstoff/Fertigware -> Quarantaene, sonst sofort frei. Rueckgabe: neue/aktualisierte charge.id oder null.
 function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?string $mhd,

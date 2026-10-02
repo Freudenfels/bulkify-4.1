@@ -17,6 +17,7 @@ lg_schema();
 $routen = [
     'login'          => 'auth/login.php',
     // Grosses Lager
+    'erwartet'       => 'bestand/erwartet.php',
     'bestand'        => 'bestand/liste.php',
     'eingang'        => 'bestand/eingang.php',
     'ausgang'        => 'bestand/ausgang.php',

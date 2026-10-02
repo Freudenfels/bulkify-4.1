@@ -8,10 +8,12 @@ require_once __DIR__ . '/ui.php';
 require_once __DIR__ . '/auth.php';
 
 function lg_nav(): array {
+    // Reihenfolge nach dem taeglichen Ablauf: erst was reinkommt (erwartet/einbuchen), dann finden,
+    // dann raus, dann Nachschlagen. Keine festen Plaetze (alles fliegender Modus) -> kein Fulfillment.
     $nav = [
-        'Warenlager'  => ['bestand' => 'Bestand', 'eingang' => 'Wareneingang', 'ausgang' => 'Warenausgang',
-                          'finden' => 'Finden', 'kisten' => 'Kisten', 'leisten' => 'Blinker', 'bewegungen' => 'Bewegungen'],
-        'Fulfillment'  => ['plaetze' => 'Feste Plätze', 'zuordnen' => 'Blinker zuordnen'],
+        'Warenlager'  => ['erwartet' => 'Erwartete Lieferungen', 'eingang' => 'Wareneingang',
+                          'finden' => 'Finden', 'ausgang' => 'Warenausgang', 'bestand' => 'Bestand'],
+        'Verwaltung'  => ['bewegungen' => 'Bewegungen', 'kisten' => 'Kisten', 'leisten' => 'Blinker'],
     ];
     if (lg_ist_admin()) $nav['System'] = ['sender' => 'Sender und Brücke'];
     return $nav;
