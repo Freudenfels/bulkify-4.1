@@ -55,14 +55,10 @@ foreach ($lieferungen as $l):
           . (!empty($l['nummer']) ? '&charge=' . rawurlencode((string)$l['nummer']) : '');
       ?>
       <tr>
-        <td><?= $name !== '' ? h($name) : '<span class="muted">(unbekannter Artikel)</span>' ?></td>
+        <td><?= $name !== '' ? h($name) : '<span class="muted">Artikel beim Einbuchen wählen</span>' ?></td>
         <td class="bx-num"><?= h(menge_txt($menge)) ?> <?= h($einh) ?></td>
         <td style="text-align:right">
-          <?php if (!empty($p['item_id'])): ?>
-            <a class="btn btn-primary btn-sm" href="<?= h($buchUrl) ?>">Einbuchen</a>
-          <?php else: ?>
-            <span class="muted" style="font-size:12px">kein Artikel hinterlegt</span>
-          <?php endif; ?>
+          <a class="btn btn-primary btn-sm" href="<?= h($buchUrl) ?>">Einbuchen</a>
         </td>
       </tr>
       <?php endforeach; ?>
