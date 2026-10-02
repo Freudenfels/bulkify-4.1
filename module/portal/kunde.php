@@ -3009,7 +3009,7 @@ portal_head('Kundenportal · ' . $k['firma']);
             $chg = $auftragChargen[(int)$a['id']] ?? [];
             $chgTxt = ''; foreach ($chg as $c) $chgTxt .= ' ' . $c['nr'] . ' ' . ($c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) . ' ' . $c['mhd'] : '');
             if ($hit($a['nummer'] . ' ' . $titelFuer($a) . $chgTxt)) {
-                $sub = (int)$a['menge'] . ' Packungen' . ($chg ? ' · Charge ' . implode(', ', array_map(fn($c) => $c['nr'], $chg)) . (($chg[0]['mhd'] ?? null) ? ' · MHD ' . date('d.m.Y', strtotime((string)$chg[0]['mhd'])) : '') : '');
+                $sub = kunde_bestell_status_label($a, $k) . ' · ' . (int)$a['menge'] . ' Packungen' . ($chg ? ' · Charge ' . implode(', ', array_map(fn($c) => $c['nr'], $chg)) . (($chg[0]['mhd'] ?? null) ? ' · MHD ' . date('d.m.Y', strtotime((string)$chg[0]['mhd'])) : '') : '');
                 $add('Bestellung', $a['nummer'] . ' – ' . $titelFuer($a), $sub, $portalLink('bestellung') . '&aid=' . (int)$a['id'], $a['angelegt'] ?? null, 'info');
             }
         }
@@ -3158,7 +3158,12 @@ portal_head('Kundenportal · ' . $k['firma']);
     :root[data-theme="dark"] .et-count { background:#3a2320; color:#f0b8b0 }
   </style>
   <h1 style="margin-bottom:4px">Ihre Etiketten</h1>
-  <p class="bx-sub" style="margin:0 0 18px">Ihre hochgeladenen Etikett-Designs und die Bestellungen, für die noch eins fehlt.</p>
+  <p class="bx-sub" style="margin:0 0 12px">Ihre hochgeladenen Etikett-Designs und die Bestellungen, für die noch eins fehlt.</p>
+  <div class="bx-row" style="margin:0 0 16px">
+    <input type="search" id="etSearch" placeholder="Etikett suchen: Produkt, Bestellnummer, Dateiname …" autocomplete="off"
+           style="width:100%;max-width:520px;padding:9px 14px;border:1px solid var(--line);border-radius:999px;background:var(--panel)">
+  </div>
+  <div id="etNix" class="bx-panel" style="display:none"><div class="muted">Kein Etikett gefunden. Suchbegriff anpassen.</div></div>
 
   <?php if ($etFehlt): ?>
   <div class="bx-panel">
@@ -3168,7 +3173,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <p class="muted" style="margin:6px 0 12px;font-size:13px">Für diese Bestellungen brauchen wir noch Ihr Etikett-Design – dann können wir die Etiketten bestellen und in Produktion gehen.</p>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Bestellung</th><th>Produkt</th><th>Etikett-Maße</th><th>Status</th><th></th></tr></thead>
-      <tbody>
+      <tbody id="etFehltRows">
         <?php foreach ($etFehlt as $f): $sb = $stLbl[$f['status']] ?? [$f['status'], '']; $masse = $etMasse($f); ?>
         <tr>
           <td><strong><?= h($f['nummer']) ?></strong></td>
@@ -3231,6 +3236,25 @@ portal_head('Kundenportal · ' . $k['firma']);
   })();
   </script>
   <?php endif; ?>
+
+  <script>
+  (function(){
+    var inp = document.getElementById('etSearch'); if(!inp) return;
+    var cards = [].slice.call(document.querySelectorAll('.et-card'));
+    var fehlt = document.getElementById('etFehltRows');
+    var rows  = fehlt ? [].slice.call(fehlt.querySelectorAll('tr')) : [];
+    var nix   = document.getElementById('etNix');
+    function norm(s){ return (s||'').toString().toLowerCase(); }
+    function run(){
+      var q = norm(inp.value).trim();
+      var sichtbar = 0;
+      cards.forEach(function(c){ var ok = q==='' || norm(c.textContent).indexOf(q)>=0; c.style.display = ok?'':'none'; if(ok) sichtbar++; });
+      rows.forEach(function(r){ var ok = q==='' || norm(r.textContent).indexOf(q)>=0; r.style.display = ok?'':'none'; if(ok) sichtbar++; });
+      if(nix) nix.style.display = (q!=='' && sichtbar===0) ? '' : 'none';
+    }
+    inp.addEventListener('input', run);
+  })();
+  </script>
 
 <?php elseif ($view === 'labortest'):
     // Labortest: alle freigegebenen Laboranalysen (CoA) zu Produkten, die der Kunde gekauft hat, sowie zu

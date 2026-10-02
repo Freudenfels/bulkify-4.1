@@ -3539,7 +3539,9 @@ function kunde_auftrag_parallel(array $a): array {
         $fertig = $start !== '' ? energ_fertig_am($start) : null;
         $out[] = ['label' => 'Energetisierung',
                   'status' => $stat === 'abgeschlossen' ? 'abgeschlossen' : ($stat === 'laeuft' ? 'laeuft' : 'geplant'),
-                  'sub'    => $fertig ? 'bis ' . date('d.m.Y', strtotime((string)$fertig)) : null,
+                  // Abgeschlossen: nicht das (vergangene) Fertig-Datum zeigen, sondern „abgeschlossen".
+                  'sub'    => $stat === 'abgeschlossen' ? 'abgeschlossen'
+                              : ($fertig ? 'bis ' . date('d.m.Y', strtotime((string)$fertig)) : null),
                   'dok_id' => null];
     }
     if (kunde_will_labortest($kid)) {
@@ -3627,6 +3629,21 @@ function auftrag_track_icon(string $state): string {
     if ($state === 'done' || $state === 'abgeschlossen') return '&#10003;';
     if ($state === 'current' || $state === 'laeuft')      return $sand;
     return '';
+}
+
+// Kundenseitiger Status-Text einer Bestellung (für Suche/Listen). Bei Fulfillment-Kunden
+// (kunden.nutzt_fulfillment) endet die Bestellung mit „eingelagert" (Lager 2) statt „versendet".
+function kunde_bestell_status_label(array $a, ?array $k = null): string {
+    $st = (string)($a['status'] ?? '');
+    $ff = !empty($k['nutzt_fulfillment']);
+    return match ($st) {
+        'storniert'     => 'storniert',
+        'versendet'     => $ff ? 'eingelagert (abgeschlossen)' : 'versendet (abgeschlossen)',
+        'erledigt'      => $ff ? 'wird eingelagert' : 'versandbereit',
+        'in_produktion' => 'in Produktion',
+        'offen'         => 'in Bearbeitung',
+        default         => $st !== '' ? $st : 'in Bearbeitung',
+    };
 }
 
 // Pro Angebot innerhalb eines Requests mehrfach aufgerufen (Übersicht + Karte) – request-lokal cachen.
