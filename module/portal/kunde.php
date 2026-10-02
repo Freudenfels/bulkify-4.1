@@ -1246,8 +1246,15 @@ foreach ($anfragen as $a) {
            : ($rs === 'vorschlag' ? 'wartet'
            : (($rs === 'abgelehnt' || $as2 === 'abgelehnt' || $as2 === 'ueberarbeiten') ? 'abgelehnt' : 'offen'));
     $rezLink = $akt['href'] ?? ((int)($a['rezeptur_id'] ?? 0) ? $portalLink('rezeptur') . '&rid=' . (int)$a['rezeptur_id'] : null);
-    $meineAnfRows[] = ['typ'=>'rezeptur','nummer'=>$a['nummer'],'bez'=>($a['produktname'] ?: '(Rezeptur)'),'datum'=>$a['angelegt'],'status'=>$anfStatus($a),'aktion'=>$akt, 'loeschbar'=>empty($a['rezeptur_id']), 'del_typ'=>'rezeptur', 'del_id'=>(int)$a['id'],
-        'link'=>$rezLink, 'stufe'=>$stufe];
+    // Detail: Form · Anzahl Wunsch-Zutaten · Notiz-Auszug – damit der Kunde erkennt, was er angefragt hat.
+    $rezDetailParts = [];
+    $formLbl = $DFORM_P[$a['darreichungsform']] ?? ($a['darreichungsform'] ?? '');
+    if ($formLbl !== '') $rezDetailParts[] = $formLbl;
+    $wz = (int)($a['wunsch_anzahl'] ?? 0);
+    if ($wz > 0) $rezDetailParts[] = $wz . ' Wunsch-Zutat' . ($wz === 1 ? '' : 'en');
+    $nz = trim((string)($a['notiz'] ?? '')); if ($nz !== '') $rezDetailParts[] = mb_strimwidth($nz, 0, 160, '…');
+    $meineAnfRows[] = ['typ'=>'rezeptur','nummer'=>$a['nummer'],'bez'=>($a['produktname'] ?: 'Rezepturanfrage'),'datum'=>$a['angelegt'],'status'=>$anfStatus($a),'aktion'=>$akt, 'loeschbar'=>empty($a['rezeptur_id']), 'del_typ'=>'rezeptur', 'del_id'=>(int)$a['id'],
+        'link'=>$rezLink, 'stufe'=>$stufe, 'detail'=>implode(' · ', $rezDetailParts)];
 }
 foreach ($portalAnfragen as $p) {
     // Bei einer Rezeptur-Anfrage gibt es noch kein Produkt – dann den Rezepturnamen zeigen statt „Produkt".
@@ -1276,8 +1283,16 @@ foreach ($portalAnfragen as $p) {
     // Stufe: erledigt (bestellt) bzw. abgeschlossen (versendet) · abgelehnt (nicht machbar) · offen (in Prüfung/Angebot erhalten).
     $stufe = $erledigt ? ($aufSt === 'versendet' ? 'abgeschlossen' : 'erledigt')
            : (($p['status'] === 'abgelehnt') ? 'abgelehnt' : 'offen');
+    // Detail: bei Produkt Menge/Stück/Verpackung, sonst Notiz-Auszug – zeigt, was angefragt wurde.
+    $detailParts = [];
+    if ($p['typ'] === 'produkt') {
+        if ((int)($p['menge'] ?? 0))  $detailParts[] = (int)$p['menge'] . ' Packungen';
+        if ((int)($p['stueck'] ?? 0)) $detailParts[] = (int)$p['stueck'] . ' Stück/Pkg.';
+        if (!empty($p['verp_name']))  $detailParts[] = (string)$p['verp_name'];
+    }
+    $nzP = trim((string)($p['notiz'] ?? '')); if ($nzP !== '') $detailParts[] = mb_strimwidth($nzP, 0, 160, '…');
     $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt, 'loeschbar'=>empty($p['angebot_id']), 'del_typ'=>'portal', 'del_id'=>(int)$p['id'],
-        'link'=>$zeilenLink, 'angebot_id'=>(int)($p['angebot_id'] ?? 0), 'erledigt'=>$erledigt, 'auftrag_id'=>(int)($p['auftrag_id'] ?? 0), 'stufe'=>$stufe];
+        'link'=>$zeilenLink, 'angebot_id'=>(int)($p['angebot_id'] ?? 0), 'erledigt'=>$erledigt, 'auftrag_id'=>(int)($p['auftrag_id'] ?? 0), 'stufe'=>$stufe, 'detail'=>implode(' · ', $detailParts)];
 }
 usort($meineAnfRows, fn($x,$y) => strcmp((string)$y['datum'], (string)$x['datum']));
 // Wirklich offene Anfragen (in Prüfung, noch kein Angebot) – für Zähler & Menü-Badge.
@@ -1799,13 +1814,17 @@ portal_head('Kundenportal · ' . $k['firma']);
       <h2 style="margin:0 0 4px">In Prüfung</h2>
       <p class="muted" style="margin:0 0 12px;font-size:13px">Anfragen, zu denen wir uns mit einem Angebot melden.</p>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Nummer</th><th>Typ</th><th>Bezeichnung</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Nummer</th><th>Datum</th><th>Typ</th><th>Was Sie angefragt haben</th><th>Status</th><th></th></tr></thead>
         <tbody>
         <?php foreach ($pending as $r): ?>
           <tr>
-            <td><?= h($r['nummer']) ?></td>
+            <td style="white-space:nowrap"><?= h($r['nummer']) ?></td>
+            <td style="white-space:nowrap"><?= !empty($r['datum']) ? h(fmt_zeit($r['datum'], 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
             <td><?= h($typLabelP[$r['typ']] ?? $r['typ']) ?></td>
-            <td><?= $r['bez'] ? h($r['bez']) : '<span class="muted">–</span>' ?></td>
+            <td>
+              <div><?= $r['bez'] ? h($r['bez']) : '<span class="muted">–</span>' ?></div>
+              <?php if (!empty($r['detail'])): ?><div class="muted" style="font-size:12px;white-space:normal;margin-top:2px"><?= h($r['detail']) ?></div><?php endif; ?>
+            </td>
             <td><?= $r['status'] ?></td>
             <td style="text-align:right">
               <div class="bx-row" style="gap:8px;justify-content:flex-end">
