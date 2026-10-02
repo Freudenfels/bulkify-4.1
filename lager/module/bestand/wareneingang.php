@@ -196,7 +196,7 @@ if ($gebucht):
   .we-pos{position:relative;border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--sp-4);padding-top:var(--sp-5);margin-bottom:var(--sp-3);background:var(--panel-2)}
   .we-pos .bx-grid{grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:var(--sp-3) var(--sp-4)}
   .we-pos .bx-field{margin-bottom:0}
-  .we-pos .f-art{grid-column:1/-1}
+  .we-pos .f-art{grid-column:span 2}
   .we-pos .we-del{position:absolute;top:var(--sp-2);right:var(--sp-2)}
   .we-thumb{position:relative;width:84px;height:84px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel-2)}
   .we-thumb img{width:100%;height:100%;object-fit:cover}
