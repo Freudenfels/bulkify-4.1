@@ -118,6 +118,34 @@ function erp_bestand_zaehlung(): array {
     return $out;
 }
 
+// Kennzahlen fuer die Lager-Startseite (Uebersicht). Ein kompakter Satz Zahlen.
+function erp_lager_kennzahlen(): array {
+    $o = ['l1_chargen'=>0,'l1_artikel'=>0,'l2_chargen'=>0,'l2_kunden'=>0,'quarantaene'=>0,'mhd_bald'=>0,'mhd_ablauf'=>0];
+    if (!tabelle_da('charge')) return $o;
+    $aktiv = "(c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0";
+    $o['l1_chargen'] = (int) scalar("SELECT COUNT(*) FROM charge c WHERE c.fremd_kunde_id IS NULL AND $aktiv");
+    $o['l1_artikel'] = (int) scalar("SELECT COUNT(DISTINCT c.item_id) FROM charge c WHERE c.fremd_kunde_id IS NULL AND $aktiv");
+    $o['l2_chargen'] = (int) scalar("SELECT COUNT(*) FROM charge c WHERE c.fremd_kunde_id IS NOT NULL AND $aktiv");
+    $o['l2_kunden']  = (int) scalar("SELECT COUNT(DISTINCT c.fremd_kunde_id) FROM charge c WHERE c.fremd_kunde_id IS NOT NULL AND $aktiv");
+    $o['quarantaene']= (int) scalar("SELECT COUNT(*) FROM charge c WHERE c.status='quarantaene' AND $aktiv");
+    $o['mhd_bald']   = (int) scalar("SELECT COUNT(*) FROM charge c WHERE $aktiv AND c.mhd IS NOT NULL AND c.mhd>=CURDATE() AND c.mhd<=DATE_ADD(CURDATE(), INTERVAL 90 DAY)");
+    $o['mhd_ablauf'] = (int) scalar("SELECT COUNT(*) FROM charge c WHERE $aktiv AND c.mhd IS NOT NULL AND c.mhd<CURDATE()");
+    return $o;
+}
+
+// MHD-kritische Chargen (abgelaufen zuerst, dann bald ablaufend) – fuer die Startseite.
+function erp_mhd_kritisch(int $tage = 90, int $limit = 10): array {
+    if (!tabelle_da('charge') || !tabelle_da('item')) return [];
+    $tage = max(0, $tage); $limit = max(1, $limit);
+    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.einheit, c.mhd, c.status, c.fremd_kunde_id,
+                       i.name AS item_name, k.firma AS kunde
+                FROM charge c JOIN item i ON i.id=c.item_id
+                LEFT JOIN kunden k ON k.id=c.fremd_kunde_id
+                WHERE (c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0
+                  AND c.mhd IS NOT NULL AND c.mhd <= DATE_ADD(CURDATE(), INTERVAL $tage DAY)
+                ORDER BY c.mhd ASC LIMIT $limit");
+}
+
 // ===== Lager 2 (Fremdlager): Chargen, die einem Kunden gehoeren (charge.fremd_kunde_id gesetzt) =====
 // Einheitliches Modell: "die Charge gehoert einem Kunden" = Lager 2. Gegenstueck zu erp_bestand (Lager 1).
 
