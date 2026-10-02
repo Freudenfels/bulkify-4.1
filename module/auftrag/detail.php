@@ -84,13 +84,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&altredel=1'); exit;
 }
 
-// Rechnung aus diesem Auftrag erstellen (fuer Auftraege ohne automatische Rechnung, z. B. v3-Importe).
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'rechnung_erstellen') {
-    $bid = rechnung_aus_auftrag($id);
-    if ($bid) { header('Location: ?p=rechnung&id=' . $bid . '&erstellt=1'); exit; }
-    header('Location: ?p=auftrag&id=' . $id . '&refehler=1'); exit;
-}
-
 // Auftragsbestaetigung loeschen und zurueck zur Anfrage (Angebot wird wieder offen) – nur Admin.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'auftrag_zurueck') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
@@ -235,7 +228,6 @@ bx_head($a['nummer'], 'Auftragsbestätigung',
     pdf_btn('?p=auftrag_pdf&id=' . (int)$a['id'], 'PDF / Drucken', false, 'Auftragsbestätigung als PDF öffnen/drucken')
     . ' ' . bx_btn('Zurück zur Liste', '?p=auftraege', 'ghost'));
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
-if (isset($_GET['refehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Rechnung konnte nicht erstellt werden – am Auftrag ist kein Preis hinterlegt (Menge × Stückpreis bzw. Netto fehlt).</div>';
 
 // Kacheln bleiben in EINER Reihe und werden bei Enge KLEINER (kein Umbruch, kein Scroll).
 echo '<style>.bx-cards{flex-wrap:nowrap;gap:8px}'
@@ -279,7 +271,7 @@ echo '</div>';
         $rst = $rechnungZs['status'] ?? $rechnung['status'];
         echo match ($rst) { 'bezahlt'=>bx_badge('bezahlt','ok'), 'teilbezahlt'=>bx_badge('teilbezahlt','info'), 'storniert'=>bx_badge('storniert','err'), default=>bx_badge('offen','warn') };
         if ($rst === 'teilbezahlt') echo ' <span class="muted" style="font-size:12px">offen ' . $eur($rechnungZs['rest']) . '</span>';
-      ?> · <a href="?p=rechnung&id=<?= (int)$rechnung['id'] ?>" style="font-size:12px">Zahlung erfassen</a><?php else: ?><form method="post" style="margin:0"><input type="hidden" name="aktion" value="rechnung_erstellen"><button class="btn btn-primary btn-sm" type="submit">Rechnung erstellen</button></form><?php endif; ?></div></div>
+      ?> · <a href="?p=rechnung&id=<?= (int)$rechnung['id'] ?>" style="font-size:12px">Zahlung erfassen</a><?php else: ?><a class="btn btn-primary btn-sm" href="?p=rechnung_neu&auftrag=<?= (int)$id ?>">Rechnung erstellen</a><?php endif; ?></div></div>
   </div>
 </div>
 

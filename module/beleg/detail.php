@@ -105,7 +105,10 @@ echo '</div>';
     <div><div class="k muted">Art</div><div><?= h(ucfirst($b['typ'])) ?></div></div>
     <div><div class="k muted">Netto</div><div><?= $eur($b['netto']) ?></div></div>
     <div><div class="k muted">USt (<?= rtrim(rtrim(number_format((float)$b['ust_prozent'],2,',','.'),'0'),',') ?> %)</div><div><?= $eur($b['ust_betrag']) ?></div></div>
+    <?php if (!empty($b['leistung_datum'])): ?><div><div class="k muted">Leistungsdatum</div><div><?= h(date('d.m.Y', strtotime((string)$b['leistung_datum']))) ?></div></div><?php endif; ?>
+    <?php if (!empty($b['faellig'])): ?><div><div class="k muted">Fällig bis</div><div><?= h(date('d.m.Y', strtotime((string)$b['faellig']))) ?><?php if (!empty($b['zahlungsziel_tage'])): ?> <span class="muted" style="font-size:12px">(<?= (int)$b['zahlungsziel_tage'] ?> Tage)</span><?php endif; ?></div></div><?php endif; ?>
   </div>
+  <?php if (!empty($b['text'])): ?><div class="muted" style="margin-top:10px;white-space:pre-line;font-size:13px"><?= h((string)$b['text']) ?></div><?php endif; ?>
 </div>
 
 <?php if ($positionen): ?>

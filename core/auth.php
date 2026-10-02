@@ -104,6 +104,7 @@ function route_rollen_map(): array {
         'lieferant_dokument'      => ['*'],
         'rechnungen'         => ['finance'],
         'rechnung'           => ['finance'],
+        'rechnung_neu'       => ['finance'],
         'gutschrift_neu'     => ['finance'],
         'gutschrift_pdf'     => ['finance'],
         'buchhaltung'        => ['finance'],

@@ -512,6 +512,10 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('beleg', 'storno_von_id', "INT NULL");     // Gutschrift/Storno -> Original-Rechnung
     ensure_column('beleg', 'grund', "VARCHAR(255) NULL");    // Grund des Stornos / der Gutschrift
+    ensure_column('beleg', 'zahlungsziel_tage', "INT NULL");  // Zahlungsziel in Tagen (Rechnung)
+    ensure_column('beleg', 'faellig', "DATE NULL");          // Faelligkeit = datum + zahlungsziel_tage
+    ensure_column('beleg', 'leistung_datum', "DATE NULL");   // Leistungs-/Lieferdatum
+    ensure_column('beleg', 'text', "TEXT NULL");             // optionaler Rechnungstext/Hinweis
     ensure_column('auftrag', 'status_datum', "DATE NULL");   // Datum des aktuellen Status (Kunde sieht es); Fast-Track/v3-Style
     ensure_column('auftrag', 'energ_start', "DATE NULL");     // Energetisierung: Startdatum (aus v3); Status laeuft/abgeschlossen wird daraus abgeleitet
     ensure_column('auftrag', 'bezahlt_am', "DATE NULL");          // manuelles „bezahlt am" fuer Alt-Auftraege (altes System, ohne v4-Rechnung)
@@ -5537,7 +5541,9 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
 // Rechnung, z. B. v3-Importe oder von Hand angelegte. Idempotent: gibt es schon eine nicht stornierte
 // Rechnung zum Auftrag, wird deren ID zurueckgegeben. USt wie bei auftrag_aus_angebot (Kleinunternehmer
 // 0 %, EU-Ausland 0 %, sonst Inlands-USt). Rueckgabe: beleg.id oder null (kein Preis am Auftrag).
-function rechnung_aus_auftrag(int $auftrag_id): ?int {
+// $opt (optional): datum (Y-m-d), leistung_datum (Y-m-d), zahlungsziel_tage (int),
+//   ust_prozent (float; sonst automatisch), text (Rechnungshinweis).
+function rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     $a = one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]);
     if (!$a) return null;
     $ex = scalar("SELECT id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert' ORDER BY id LIMIT 1", [$auftrag_id]);
@@ -5547,14 +5553,37 @@ function rechnung_aus_auftrag(int $auftrag_id): ?int {
     $netto = round((float)($a['gesamt_netto'] ?? 0), 2);
     if ($netto <= 0) $netto = round($menge * $vk, 2);
     if ($netto <= 0) return null;                               // ohne Preis keine Rechnung
-    $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
-    $ustInland = (float) meta_get('ust_inland', 19);
-    $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : $ustInland;
+    // USt: explizit vorgegeben? sonst Kleinunternehmer/EU-Ausland 0 %, sonst Inland.
+    if (isset($opt['ust_prozent']) && $opt['ust_prozent'] !== '' && $opt['ust_prozent'] !== null) {
+        $ustP = max(0.0, (float)$opt['ust_prozent']);
+    } else {
+        $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
+        $ustInland = (float) meta_get('ust_inland', 19);
+        $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : $ustInland;
+    }
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum)
-       VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
-      [naechste_nummer('RE'), 'rechnung', $auftrag_id, ($a['kunde_id'] ?: null), $netto, $ustP, $ust, $brutto, 'offen']);
+    // Datum / Fälligkeit / Leistungsdatum.
+    $gilt = fn($d) => (is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) ? $d : null;
+    $datum = $gilt($opt['datum'] ?? null) ?? gmdate('Y-m-d');
+    $ziel  = (isset($opt['zahlungsziel_tage']) && $opt['zahlungsziel_tage'] !== '') ? max(0, (int)$opt['zahlungsziel_tage']) : null;
+    $faellig = ($ziel !== null) ? date('Y-m-d', strtotime($datum . ' +' . $ziel . ' days')) : null;
+    $leist = $gilt($opt['leistung_datum'] ?? null);
+    $text  = trim((string)($opt['text'] ?? '')) ?: null;
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,leistung_datum,text)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('RE'), 'rechnung', $auftrag_id, ($a['kunde_id'] ?: null), $netto, $ustP, $ust, $brutto, 'offen',
+       $datum, $ziel, $faellig, $leist, $text]);
     $bid = (int) insert_id();
+    // Eine Positionszeile aus dem Auftrag (Produkt × Menge × VK). Passt die Zeilensumme nicht exakt
+    // zum Netto (z. B. Sub-Cent-Preise), wird eine Pauschal-Zeile (Menge 1 = Netto) gesetzt.
+    $prodName = (string) (scalar("SELECT COALESCE(NULLIF(p.kundenname,''), p.name) FROM produkt p WHERE p.id=?", [(int)($a['produkt_id'] ?? 0)])
+        ?: ($a['produkt_bezeichnung'] ?? '')) ?: ('Leistung laut Auftrag ' . (string)$a['nummer']);
+    $preisCent = (int) round($vk * 100);
+    $nettoCent = (int) round($netto * 100);
+    if ($menge > 0 && $preisCent * $menge === $nettoCent) { $pMenge = $menge; $pEinheit = 'Stk.'; }
+    else { $pMenge = 1; $preisCent = $nettoCent; $pEinheit = ''; }
+    q("INSERT INTO beleg_position (beleg_id,sort,bezeichnung,menge,einheit,preis_cent,mwst_satz) VALUES (?,0,?,?,?,?,?)",
+      [$bid, $prodName, $pMenge, $pEinheit, $preisCent, $ustP]);
     if (!empty($a['kunde_id'])) {
         $re = (string) scalar("SELECT nummer FROM beleg WHERE id=?", [$bid]);
         log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Rechnung ' . $re . ' aus Auftrag ' . (string)$a['nummer'] . ' erstellt.', 'beleg', 'auftrag', $auftrag_id);
