@@ -15,32 +15,32 @@ $skript  = strtr($vorlage, ['{{URL}}' => $basis, '{{TOKEN}}' => lg_bruecke_token
 $skript  = str_replace(["\r\n", "\n"], ["\n", "\r\n"], $skript);   // saubere Windows-Zeilenenden
 $b64     = base64_encode($skript);                                 // UTF-8-Bytes des PS1
 
-// Hintergrund-Variante: eine ganz normale .bat (keine .vbs -> wird von Chrome/Defender nicht
-// als "Virus" blockiert). Sie legt das PS1 dauerhaft nach %LOCALAPPDATA%\bulkify-bruecke ab und
-// richtet eine Windows-Aufgabe ein, die es bei JEDER Anmeldung UNSICHTBAR startet (kein Fenster,
-// Autostart inklusive). Register-ScheduledTask baut den Argument-String selbst -> keine Zitat-
-// Probleme bei Pfaden mit Leerzeichen. Entfernen: Aufgabenplanung -> "bulkify Lager Bruecke".
+// Hintergrund-Variante: eine ganz normale .bat (keine .vbs -> kein Chrome-Virusblock).
+// OHNE Admin-Rechte: legt das PS1 dauerhaft nach %LOCALAPPDATA%\bulkify-bruecke ab, traegt den
+// Autostart in den HKCU-Run-Key ein (nur dieser Benutzer, kein Admin noetig) und startet die
+// Bruecke sofort versteckt. Register-ScheduledTask faellt hier aus, weil das Admin braucht.
 if (($_GET['art'] ?? '') === 'hintergrund') {
-    $psWrite = '$d=$env:LOCALAPPDATA+' . "'\\bulkify-bruecke'; " .
+    // Ein einziger PowerShell-Aufruf: Ordner anlegen, PS1 schreiben, Autostart in HKCU setzen.
+    // [char]34 statt \" -> keine Zitat-Probleme bei Pfaden mit Leerzeichen.
+    $psSetup = '$d=$env:LOCALAPPDATA+' . "'\\bulkify-bruecke'; " .
         '$null=New-Item -ItemType Directory -Force -Path $d; ' .
-        "[IO.File]::WriteAllBytes(\$d+'\\bruecke.ps1',[Convert]::FromBase64String('" . $b64 . "'))";
-    $psTask = '$d=$env:LOCALAPPDATA+' . "'\\bulkify-bruecke'; \$p=\$d+'\\bruecke.ps1'; " .
-        "\$a=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File '+[char]34+\$p+[char]34); " .
-        '$t=New-ScheduledTaskTrigger -AtLogOn; ' .
-        "\$null=Register-ScheduledTask -TaskName 'bulkify Lager Bruecke' -Action \$a -Trigger \$t -Force; " .
-        "Start-ScheduledTask -TaskName 'bulkify Lager Bruecke'";
+        "[IO.File]::WriteAllBytes(\$d+'\\bruecke.ps1',[Convert]::FromBase64String('" . $b64 . "')); " .
+        "\$cmd='powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File '+[char]34+\$d+'\\bruecke.ps1'+[char]34; " .
+        "Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'bulkify-lager-bruecke' -Value \$cmd";
     $zeilenBg = [
         '@echo off',
         'title bulkify Lager-Bruecke einrichten',
         'echo bulkify Lager-Bruecke wird eingerichtet - einen Moment bitte...',
         'echo.',
-        'powershell -NoProfile -Command "' . $psWrite . '"',
-        'powershell -NoProfile -ExecutionPolicy Bypass -Command "' . $psTask . '"',
+        'powershell -NoProfile -Command "' . $psSetup . '"',
+        'echo Starte Bruecke...',
+        'start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%LOCALAPPDATA%\\bulkify-bruecke\\bruecke.ps1"',
         'echo.',
         'echo Fertig. Die Bruecke laeuft jetzt unsichtbar im Hintergrund',
-        'echo und startet kuenftig automatisch mit Windows.',
+        'echo und startet kuenftig automatisch mit Windows - ohne Admin-Rechte.',
         'echo.',
-        'echo Entfernen: Aufgabenplanung oeffnen -^> "bulkify Lager Bruecke" -^> loeschen.',
+        'echo Beenden: Task-Manager -^> Tab "Details" -^> powershell.exe beenden.',
+        'echo Autostart aus: Task-Manager -^> Tab "Autostart" -^> "bulkify-lager-bruecke" deaktivieren.',
         'echo.',
         'pause',
     ];

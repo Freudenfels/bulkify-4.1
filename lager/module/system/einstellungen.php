@@ -82,9 +82,9 @@ flash_zeigen();
   </div>
   <ol class="muted" style="margin:var(--sp-4) 0 0;padding-left:1.2em;line-height:1.7">
     <li><strong>SumatraPDF</strong> auf dem Lager-PC installieren (kostenlos, für lautlosen Druck).</li>
-    <li><strong>Brücke einrichten (Hintergrund)</strong> herunterladen und per Doppelklick starten. Das kurze schwarze Fenster richtet alles ein und schließt sich – danach läuft die Brücke <strong>unsichtbar im Hintergrund</strong> und startet <strong>automatisch mit Windows</strong>. Oben erscheint dann „läuft".</li>
+    <li><strong>Brücke einrichten (Hintergrund)</strong> herunterladen und per Doppelklick starten (kein Admin nötig). Das kurze schwarze Fenster richtet alles ein und startet die Brücke sofort – danach läuft sie <strong>unsichtbar im Hintergrund</strong> und startet <strong>automatisch mit Windows</strong>. Oben erscheint dann „läuft".</li>
     <li><strong>Drucker</strong> oben auswählen (die Liste erscheint, sobald die Brücke einmal lief). Unter <a href="?p=sender">Sender &amp; Blinker</a> die Sender-IP eintragen und testen. Fertig – „Direkt drucken" am Etikett druckt sofort.</li>
-    <li><strong>Entfernen/Beenden:</strong> Windows-<em>Aufgabenplanung</em> öffnen → Aufgabe <code>bulkify Lager Bruecke</code> → löschen.</li>
+    <li><strong>Beenden:</strong> Task-Manager → Tab <em>Details</em> → <code>powershell.exe</code> beenden. <strong>Autostart aus:</strong> Task-Manager → Tab <em>Autostart</em> → <code>bulkify-lager-bruecke</code> deaktivieren.</li>
   </ol>
   <p class="muted" style="font-size:12px;margin:var(--sp-3) 0 0">Falls der Browser beim Herunterladen warnt: Es ist kein Virus – nur eine ganz normale Windows-Datei (.bat). Im Download-Pfeil auf „Behalten" klicken.</p>
 </div>
