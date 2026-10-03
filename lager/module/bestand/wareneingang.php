@@ -40,6 +40,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'scan'
     exit;
 }
 
+// --- AJAX: Versandlabel/Tracking scannen -> passende Lieferung + Positionen ------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'tracking') {
+    header('Content-Type: application/json; charset=utf-8');
+    $r = erp_lieferung_per_tracking((string)($_POST['code'] ?? ''));
+    if (!$r['ok']) { echo json_encode(['ok' => false, 'fehler' => 'Keine erwartete Lieferung zu dieser Sendungsnummer gefunden.']); exit; }
+    $pos = [];
+    foreach ($r['positionen'] as $p) $pos[] = erp_position_zuordnen($p);
+    echo json_encode([
+        'ok'  => true,
+        'kopf' => ['lieferant' => $r['lieferant'], 'lieferant_id' => $r['lieferant_id'], 'nummer' => $r['nummer']],
+        'positionen' => $pos,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // --- Buchen: alle Positionen ------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buchen') {
     $ziel     = ($_POST['ziel'] ?? 'l1') === 'l2' ? 'l2' : 'l1';
@@ -132,9 +147,21 @@ if ($gebucht):
 <form method="post" id="weForm" class="bx-form">
   <input type="hidden" name="aktion" value="buchen">
 
-  <!-- Schritt 0: Ziel -->
+  <!-- Schritt 1: Versandlabel scannen (Handscanner) -->
   <div class="bx-panel">
-    <h2 style="margin-top:0">1 · Wohin?</h2>
+    <h2 style="margin-top:0">1 · Versandlabel scannen <span class="muted" style="font-weight:400">(Handscanner – optional)</span></h2>
+    <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap;align-items:flex-end">
+      <div class="bx-field" style="margin:0;min-width:300px;flex:1">
+        <label>Sendungsnummer vom Paketlabel scannen</label>
+        <input type="text" id="weTrack" class="lg-code" autocomplete="off" autofocus placeholder="Barcode scannen – die Lieferung wird automatisch geladen">
+      </div>
+      <span id="weTrackInfo" class="muted" style="align-self:center"></span>
+    </div>
+  </div>
+
+  <!-- Schritt 2: Ziel -->
+  <div class="bx-panel">
+    <h2 style="margin-top:0">2 · Wohin?</h2>
     <div class="bx-row" style="gap:var(--sp-4);flex-wrap:wrap;align-items:flex-end">
       <label class="we-ziel on"><input type="radio" name="ziel" value="l1" checked> <strong>Lager 1</strong><br><span class="muted">eigener Bestand</span></label>
       <label class="we-ziel"><input type="radio" name="ziel" value="l2"> <strong>Lager 2</strong><br><span class="muted">Kundenware (Fremdlager)</span></label>
@@ -155,7 +182,7 @@ if ($gebucht):
 
   <!-- Schritt 1: Lieferschein scannen -->
   <div class="bx-panel">
-    <h2 style="margin-top:0">2 · Lieferschein scannen <span class="muted" style="font-weight:400">(optional – geht auch von Hand)</span></h2>
+    <h2 style="margin-top:0">3 · Lieferschein scannen <span class="muted" style="font-weight:400">(optional – geht auch von Hand)</span></h2>
     <?php if (!$ki): ?>
       <div class="bx-panel warn" style="margin:0 0 var(--sp-3)">KI-Scan ist nicht eingerichtet (kein Anthropic-Schlüssel). Du kannst Positionen von Hand erfassen.</div>
     <?php endif; ?>
@@ -181,7 +208,7 @@ if ($gebucht):
   <!-- Schritt 2: Positionen -->
   <div class="bx-panel">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--sp-2)">
-      <h2 style="margin:0">3 · Positionen</h2>
+      <h2 style="margin:0">4 · Positionen</h2>
       <button type="button" class="btn btn-ghost btn-sm" id="weAdd">+ Zeile</button>
     </div>
     <div id="weRows" style="margin-top:var(--sp-3)"></div>
@@ -324,6 +351,25 @@ if ($gebucht):
       else j.positionen.forEach(function(p){ addRow(p); });
     }).catch(function(){ scanBtn.disabled=false; info.textContent='Netzwerk-/Serverfehler beim Auslesen.'; });
   });
+  // Versandlabel/Tracking scannen (Handscanner tippt Nummer + Enter) -> passende Lieferung laden.
+  var track=document.getElementById('weTrack'), trackInfo=document.getElementById('weTrackInfo');
+  function trackSuchen(){
+    var code=(track.value||'').trim(); if(code==='')return;
+    trackInfo.textContent='Suche Lieferung …';
+    var fd=new FormData(); fd.append('aktion','tracking'); fd.append('code',code);
+    fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
+      if(!j.ok){ trackInfo.textContent=(j.fehler||'Keine Lieferung gefunden.'); return; }
+      trackInfo.textContent='Lieferung geladen: '+(j.kopf.lieferant||'')+(j.kopf.nummer?(' · '+j.kopf.nummer):'')+' ('+j.positionen.length+' Position(en))';
+      if(j.kopf.lieferant_id){ var ls=document.getElementById('weLief'); if(ls) ls.value=String(j.kopf.lieferant_id); }
+      rows.innerHTML='';
+      if(!j.positionen.length){ addRow(); } else j.positionen.forEach(function(p){ addRow(p); });
+      var b=rows.querySelector('.we-blinker'); if(b) b.focus();   // direkt weiter scannen (Blinker)
+    }).catch(function(){ trackInfo.textContent='Netzwerk-/Serverfehler.'; });
+  }
+  if(track){
+    track.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); trackSuchen(); } });
+    track.addEventListener('change',trackSuchen);
+  }
   window.addEventListener('beforeunload',camStop);
 })();
 </script>

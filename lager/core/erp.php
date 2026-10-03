@@ -415,6 +415,39 @@ function erp_kapselgroesse_label(?int $item_id, ?int $auftrag_id): string {
     return '';
 }
 
+// Erwartete Lieferung per Versandlabel/Tracking finden (für "Scan-to-Einbuchen").
+// Scanner liefern die Nummer teils mit Leerzeichen/Prefix – deshalb über Leerzeichen-normalisiert
+// exakt vergleichen. Rückgabe: ['ok'=>bool, 'lieferant','lieferant_id','nummer','positionen'=>[...]].
+function erp_lieferung_per_tracking(string $tracking): array {
+    $tc = preg_replace('/\s+/', '', trim($tracking));
+    if ($tc === '' || !tabelle_da('bestellung')) return ['ok' => false];
+    $b = one("SELECT b.id, b.nummer, b.lieferant_id, lf.firma AS lieferant
+              FROM bestellung b LEFT JOIN lieferanten lf ON lf.id = b.lieferant_id
+              WHERE b.tracking IS NOT NULL AND b.tracking<>'' AND REPLACE(b.tracking,' ','') = ?
+                AND b.angekommen_am IS NULL
+              ORDER BY b.id DESC LIMIT 1", [$tc]);
+    if (!$b) return ['ok' => false];
+    $pos = [];
+    if (tabelle_da('bestellung_position')) {
+        foreach (all("SELECT bp.item_id, bp.menge, bp.einheit,
+                             COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie
+                      FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
+                      WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id", [(int)$b['id']]) as $p) {
+            if (trim((string)($p['name'] ?? '')) === '') continue;
+            $pos[] = [
+                'name'      => (string)$p['name'],
+                'menge'     => (float)$p['menge'],
+                'einheit'   => erp_einheit_norm((string)($p['einheit'] ?? '')),
+                'charge_nr' => '',
+                'mhd'       => '',
+                'warenart'  => (string)($p['kategorie'] ?? ''),
+            ];
+        }
+    }
+    return ['ok' => true, 'lieferant' => (string)$b['lieferant'], 'lieferant_id' => (int)$b['lieferant_id'],
+            'nummer' => (string)$b['nummer'], 'positionen' => $pos];
+}
+
 function erp_erwartete_lieferungen(): array {
     if (!tabelle_da('bestellung')) return [];
     $rows = all("SELECT b.id, b.nummer, b.bestelldatum, b.eta_geplant, b.tracking, b.versandanbieter,
