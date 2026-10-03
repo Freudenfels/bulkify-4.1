@@ -17,6 +17,9 @@ Schließt den jeweils **ersten offenen** Schritt eines Auftrags ab (feste Reihen
 
 Rückgabe: `['ok','fehler'(null|nicht_gefunden|reihenfolge|mangel),'msg','fertig','station','fehlt']`.
 
+## Produktionsweg (Ausbaustufen) je Auftrag
+`erp_weg_lesen($pa_id)` (Grundweg zukauf/eigen/bulk + Schalter abfuellen/etikettieren/beipack/karton + aenderbar), `erp_weg_stationen($pa_id,$f)`, `erp_weg_anwenden($pa_id,$f)` – erzeugt die `produktion_schritt`-Zeilen neu (nur solange kein Schritt erledigt; Bulk hat festen Weg). Der Weg ist in den Schritten abgebildet, keine Extra-Tabelle. Optionale Stationen: `Verpacken`, `Etikettieren`, `Beipackzettel beilegen`, `Umkarton`.
+
 ## Schreiben: `erp_schritt_status_setzen($schritt_id, $erledigt, $akteur)` (Admin-Override)
 Setzt einen Schritt direkt auf erledigt/offen – **auch außer der Reihe**. REINE Statuskorrektur: markiert `erledigt` + `erledigt_von/at` (bzw. löscht sie) und rechnet den Auftragsstatus neu. **Keine** FEFO-Entnahme, **keine** Fertigware-Einbuchung (dafür ist `erp_schritt_abschliessen()` da). Nur für Admins aufrufen (Guard in der Seite).
 

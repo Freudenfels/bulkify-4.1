@@ -19,6 +19,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') ==
     weiter('?p=pa&id=' . $id);
 }
 
+// Produktionsweg (Ausbaustufen) speichern – nur Admin, nur solange nichts erledigt ist.
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') === 'weg' && pr_ist_admin()) {
+    $r = erp_weg_anwenden($id, [
+        'abfuellen'    => !empty($_POST['abfuellen']),
+        'etikettieren' => !empty($_POST['etikettieren']),
+        'beipack'      => !empty($_POST['beipack']),
+        'karton'       => !empty($_POST['karton']),
+    ]);
+    flash($r['msg'], $r['ok'] ? 'ok' : 'warn');
+    weiter('?p=pa&id=' . $id);
+}
+
 $pa = erp_pa($id);
 if (!$pa) { kopf('Produktionsauftrag'); seitenkopf('Nicht gefunden'); echo '<div class="bx-panel"><a class="btn btn-ghost" href="?p=liste">Zurück</a></div>'; fuss(); return; }
 $schritte = erp_pa_schritte($id);
@@ -27,6 +39,8 @@ $schritte = erp_pa_schritte($id);
 $erster_offen = 0;
 $fertig_cnt = 0;
 foreach ($schritte as $s) { if ((int)($s['erledigt'] ?? 0) === 1) $fertig_cnt++; elseif ($erster_offen === 0) $erster_offen = (int)$s['id']; }
+$weg = erp_weg_lesen($id);
+$istAdmin = pr_ist_admin();
 
 // Übersichtsdaten
 $ber    = erp_pa_bereitschaft($id, (string)$pa['status'], $fertig_cnt);
@@ -146,6 +160,25 @@ $felder = [
       <?php endforeach; ?>
     </tbody>
   </table></div>
+</div>
+<?php endif; ?>
+
+<?php if ($istAdmin && $weg['basis'] !== 'bulk'): ?>
+<div class="bx-panel" style="margin-bottom:16px">
+  <h2 style="margin-top:0">Produktionsweg</h2>
+  <p class="muted" style="margin-top:0">Welche Ausbaustufen durchlaufen werden. Grundweg: <strong><?= $weg['basis'] === 'zukauf' ? 'Zugekaufte Fertigware' : 'Eigenproduktion' ?></strong>. Alles aus = nur Bulkware (bereitstellen, Prüfung, Freigaben).</p>
+  <form method="post" class="bx-row" style="gap:18px;align-items:center;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="weg">
+    <label style="display:flex;gap:7px;align-items:center"><input type="checkbox" name="abfuellen" value="1" <?= $weg['abfuellen'] ? 'checked' : '' ?> <?= $weg['aenderbar'] ? '' : 'disabled' ?>> Abfüllen/Verpacken</label>
+    <label style="display:flex;gap:7px;align-items:center"><input type="checkbox" name="etikettieren" value="1" <?= $weg['etikettieren'] ? 'checked' : '' ?> <?= $weg['aenderbar'] ? '' : 'disabled' ?>> Etikettieren</label>
+    <label style="display:flex;gap:7px;align-items:center"><input type="checkbox" name="karton" value="1" <?= $weg['karton'] ? 'checked' : '' ?> <?= $weg['aenderbar'] ? '' : 'disabled' ?>> Karton/Umverpackung</label>
+    <label style="display:flex;gap:7px;align-items:center"><input type="checkbox" name="beipack" value="1" <?= $weg['beipack'] ? 'checked' : '' ?> <?= $weg['aenderbar'] ? '' : 'disabled' ?>> Beipackzettel</label>
+    <?php if ($weg['aenderbar']): ?>
+      <button type="submit" class="btn btn-primary btn-sm">Weg speichern</button>
+    <?php else: ?>
+      <span class="muted" style="font-size:12px">Nicht mehr änderbar – Produktion wurde schon begonnen.</span>
+    <?php endif; ?>
+  </form>
 </div>
 <?php endif; ?>
 

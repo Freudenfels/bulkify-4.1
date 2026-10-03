@@ -79,6 +79,67 @@ function erp_pa_schritte(int $pa_id): array {
     return all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]);
 }
 
+// --- Produktionsweg je Auftrag (Ausbaustufen) ------------------------------------------------
+// Der Weg ist in den produktion_schritt-Zeilen abgebildet (keine Extra-Tabelle). Grundweg
+// (zukauf/eigen/bulk) bleibt, optionale Stufen (Verpacken/Etikettieren/Beipack/Umkarton) sind schaltbar.
+
+// Grundweg eines Auftrags – anhand der vorhandenen Schritte bzw. Produkt/Rezeptur.
+function erp_weg_basis(int $pa_id): string {
+    $stationen = array_map(fn($s) => (string)$s['station'], erp_pa_schritte($pa_id));
+    if (in_array('Fertigware bereitstellen', $stationen, true)) return 'zukauf';
+    if (in_array('Einlagern (Bulk)', $stationen, true)) return 'bulk';
+    $pa = one("SELECT produkt_id, rezeptur_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    return ($pa && erp_pa_ist_bulk($pa)) ? 'bulk' : 'eigen';
+}
+// Herstellungsschritt je Darreichungsform (Eigenproduktion).
+function erp_weg_herstellung(int $pa_id): string {
+    $pa = one("SELECT produkt_id, rezeptur_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $form = $pa && erp_pa_ist_bulk($pa)
+        ? (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$pa['rezeptur_id']])
+        : (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)($pa['produkt_id'] ?? 0)]);
+    return match ($form) {
+        'kapsel'=>'Verkapselung', 'tablette'=>'Tablettierung', 'softgel'=>'Softgel-Herstellung',
+        'stick'=>'Stick-Abfüllung', 'pulver'=>'Pulver-Abfüllung', 'fluessig'=>'Abfüllung',
+        'gummi'=>'Gummi-Herstellung (Gießen)', 'gel'=>'Gel-Abfüllung', default=>'Herstellung',
+    };
+}
+// Aktuelle Weg-Schalter (abgeleitet aus den Schritten) + Grundweg + ob noch änderbar.
+function erp_weg_lesen(int $pa_id): array {
+    $stationen = array_map(fn($s) => (string)$s['station'], erp_pa_schritte($pa_id));
+    return [
+        'basis'      => erp_weg_basis($pa_id),
+        'abfuellen'  => in_array('Verpacken', $stationen, true),
+        'etikettieren'=> in_array('Etikettieren', $stationen, true),
+        'beipack'    => in_array('Beipackzettel beilegen', $stationen, true),
+        'karton'     => in_array('Umkarton', $stationen, true),
+        'aenderbar'  => (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]) === 0,
+    ];
+}
+// Stationsfolge aus Grundweg + Schaltern bauen.
+function erp_weg_stationen(int $pa_id, array $f): array {
+    $basis = erp_weg_basis($pa_id);
+    if ($basis === 'bulk') return ['Rohstoffe bereitstellen', 'Mischen', erp_weg_herstellung($pa_id), 'Qualitätsprüfung', 'Einlagern (Bulk)'];
+    $steps = $basis === 'zukauf' ? ['Fertigware bereitstellen'] : ['Rohstoffe bereitstellen', 'Mischen', erp_weg_herstellung($pa_id)];
+    if (!empty($f['abfuellen']))    $steps[] = 'Verpacken';
+    if (!empty($f['etikettieren'])) $steps[] = 'Etikettieren';
+    if (!empty($f['beipack']))      $steps[] = 'Beipackzettel beilegen';
+    if (!empty($f['karton']))       $steps[] = 'Umkarton';
+    return array_merge($steps, ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']);
+}
+// Weg anwenden: Schritte neu erzeugen (nur solange KEIN Schritt erledigt ist). Rückgabe ['ok','msg'].
+function erp_weg_anwenden(int $pa_id, array $f): array {
+    if ($pa_id <= 0 || !tabelle_da('produktion_schritt')) return ['ok'=>false, 'msg'=>'Auftrag nicht gefunden.'];
+    if ((int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]) > 0)
+        return ['ok'=>false, 'msg'=>'Der Weg lässt sich nicht mehr ändern – es wurde bereits ein Schritt erledigt.'];
+    if (erp_weg_basis($pa_id) === 'bulk') return ['ok'=>false, 'msg'=>'Bulk-Produktion hat einen festen Weg (ohne Abfüllen/Verpacken).'];
+    $stationen = erp_weg_stationen($pa_id, $f);
+    q("DELETE FROM produktion_schritt WHERE pa_id=?", [$pa_id]);
+    foreach ($stationen as $i => $station)
+        q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$pa_id, $station, $i]);
+    q("UPDATE produktionsauftrag SET status='offen' WHERE id=?", [$pa_id]);
+    return ['ok'=>true, 'msg'=>'Produktionsweg gespeichert.'];
+}
+
 // Anzahl Produktionsaufträge je Status (für Dashboard-Kennzahlen).
 function erp_pa_count(string $status): int {
     if (!tabelle_da('produktionsauftrag')) return 0;

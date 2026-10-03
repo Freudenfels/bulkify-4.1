@@ -9,6 +9,8 @@
 
 Verpackung wird immer gezeigt (bei fehlender Angabe „–"); Produktionstyp = Eigen-/Fremdproduktion. Darunter die Tabelle **„Rezeptur & Rohstoffbedarf"** (`erp_materialbedarf()`): je Rohstoff mg je Einheit, benötigte Gesamtmenge, Verfügbar, Status + Füllgewicht; ohne Rohstoff-Items fällt sie auf eine reine Zutatenliste zurück (`erp_pa_zutaten()`). Fehlt Material, erscheint zusätzlich das Panel **„Wartet auf Material"**.
 
+**Produktionsweg (nur Admin):** Panel mit vier Schaltern – Abfüllen/Verpacken, Etikettieren, Karton/Umverpackung, Beipackzettel. `aktion=weg` → `erp_weg_anwenden()` erzeugt die Schrittfolge für diesen Auftrag neu (Grundweg Zukauf/Eigen bleibt automatisch; alles aus = nur Bulkware). Nur änderbar, solange kein Schritt erledigt ist; Bulk-Aufträge haben einen festen Weg (kein Panel).
+
 Oben rechts der Button in den Produktionsmodus (`?p=run&id=…`); Beschriftung je Status: „Produktion starten" (offen), „Produktion fortsetzen" (laufend), „Produktionsmodus" (erledigt).
 
 **Schritte:** der jeweils erste offene Schritt ist „als Nächstes" und trägt den **Abschließen**-Button. Der POST (`aktion=schritt_ab`, `schritt_id`) ruft `erp_schritt_abschliessen()` auf (FEFO-Entnahme, Mangel-Guard; letzter Schritt bucht Fertigware ein) und leitet danach um (PRG, Flash). Zeiten via `fmt_zeit()`.
