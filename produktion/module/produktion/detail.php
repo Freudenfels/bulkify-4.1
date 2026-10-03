@@ -49,7 +49,13 @@ $zutaten = erp_pa_zutaten($id);
 $bedarf  = erp_materialbedarf($id);   // Rohstoffe mit Mengen (benötigt gesamt / verfügbar)
 
 kopf($pa['nummer'] . ' – Produktion', 'liste');
-$aktionen = '<a class="btn btn-sm" href="?p=run&id=' . $id . '">In den Produktionsmodus</a>'
+$runLabel = match ((string)$pa['status']) {
+    'offen'    => 'Produktion starten',
+    'laufend'  => 'Produktion fortsetzen',
+    'erledigt' => 'Produktionsmodus',
+    default    => 'In den Produktionsmodus',
+};
+$aktionen = '<a class="btn btn-sm" href="?p=run&id=' . $id . '">' . h($runLabel) . '</a>'
           . ' <a class="btn btn-ghost btn-sm" href="?p=liste">Zurück zur Liste</a>';
 seitenkopf((string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''), $aktionen);
 ?>
