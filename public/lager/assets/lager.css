@@ -167,3 +167,16 @@
   /* Elemente, die auf dem Handy nicht nötig sind (z. B. "Zum Bestand") */
   .lg-nurdesktop { display: none !important; }
 }
+
+/* Tabellen mit .lg-karten werden auf dem Handy zu Karten (mobile-friendly, große Tap-Ziele). */
+@media (max-width: 860px) {
+  .lg-karten thead { display: none; }
+  .lg-karten, .lg-karten tbody, .lg-karten tr, .lg-karten td { display: block; width: auto; }
+  .lg-karten tr { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; padding: 10px 12px; background: var(--panel-2); }
+  .lg-karten td { display: flex; justify-content: space-between; gap: 14px; align-items: center; border: none !important; padding: 7px 0; text-align: right; }
+  .lg-karten td::before { content: attr(data-label); color: var(--muted); font-weight: 400; text-align: left; flex: 0 0 auto; }
+  .lg-karten td[data-label=""]::before { content: ""; }
+  .lg-karten td[data-label=""]:first-child { font-size: var(--fs-lg); font-weight: 600; }
+  .lg-karten .lg-td-finden { justify-content: stretch; }
+  .lg-karten .lg-td-finden .btn { width: 100%; }
+}

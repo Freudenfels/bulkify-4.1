@@ -71,16 +71,23 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
 
   // --- Sprache (Web Speech API, Chrome/Android) ---
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ mic.style.display='none'; }
+  if(!SR){ mic.style.display='none'; }   // Gerät/Browser kann keine Spracherkennung
   else mic.addEventListener('click',function(){
     try{
       var r=new SR(); r.lang='de-DE'; r.interimResults=false; r.maxAlternatives=1;
       status.textContent='Sprich jetzt …'; mic.disabled=true;
       r.onresult=function(e){ q.value=e.results[0][0].transcript; suchen(); };
-      r.onerror=function(){ status.textContent='Spracherkennung nicht möglich.'; };
+      r.onerror=function(e){
+        var m={'not-allowed':'Mikrofon nicht erlaubt – bitte in den App-/Browser-Rechten freigeben.',
+               'service-not-allowed':'Mikrofon nicht erlaubt (Geräte-Einstellungen).',
+               'no-speech':'Nichts verstanden – nochmal tippen auf „Sprechen".',
+               'network':'Spracherkennung braucht Internet – gerade nicht erreichbar.',
+               'audio-capture':'Kein Mikrofon gefunden.'};
+        status.textContent = m[e.error] || ('Spracherkennung nicht möglich ('+(e.error||'Fehler')+'). Bitte tippen.');
+      };
       r.onend=function(){ mic.disabled=false; };
       r.start();
-    }catch(err){ mic.disabled=false; status.textContent='Spracherkennung nicht möglich.'; }
+    }catch(err){ mic.disabled=false; status.textContent='Spracherkennung auf diesem Gerät nicht möglich – bitte tippen.'; }
   });
 })();
 </script>

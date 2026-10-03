@@ -8,6 +8,16 @@
 require_once __DIR__ . '/qr.php';
 require_once __DIR__ . '/../../core/lib/minipdf.php';
 
+// Zusatzzeile fuers Etikett: Warenart · Rezepturnummer · Kapselgröße (nur was zutrifft).
+function lg_etikett_info(array $c): string {
+    $teile = [];
+    if (function_exists('erp_kategorie_label')) { $wa = erp_kategorie_label($c); if ($wa !== '') $teile[] = $wa; }
+    $iid = (int)($c['item_id'] ?? 0); $aid = (int)($c['auftrag_id'] ?? 0);
+    if (function_exists('erp_rezeptur_nr'))      { $rz = erp_rezeptur_nr($iid, $aid); if ($rz !== '') $teile[] = $rz; }
+    if (function_exists('erp_kapselgroesse_label')) { $kg = erp_kapselgroesse_label($iid, $aid); if ($kg !== '') $teile[] = $kg; }
+    return implode(' · ', $teile);
+}
+
 function lg_etikett_pdf(array $ids, string $format = 'klein', int $override = 0): ?string {
     $format = $format === 'gross' ? 'gross' : 'klein';
     $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn($x) => $x > 0)));
@@ -66,7 +76,9 @@ function lg_karton_etikett(MiniPDF $pdf, callable $mm, array $c, string $url, in
     $zeilen = array_slice($nl, 0, 2);
     if (count($nl) > 2) $zeilen[1] = $pdf->fit($zeilen[1] . ' ' . $nl[2], $tw, 12, true);
     foreach ($zeilen as $ln) { $pdf->text($lx, $yy, $ln, 12, true, $dark); $yy += $mm(5.2); }
-    if (!empty($c['artikelnummer'])) { $pdf->text($lx, $yy, (string)$c['artikelnummer'], 7.5, false, $muted); $yy += $mm(5); }
+    if (!empty($c['artikelnummer'])) { $pdf->text($lx, $yy, (string)$c['artikelnummer'], 7.5, false, $muted); $yy += $mm(4.6); }
+    $info = lg_etikett_info($c);
+    if ($info !== '') { $pdf->text($lx, $yy, $pdf->fit($info, $tw, 7.5, false), 7.5, false, $muted); $yy += $mm(4.6); }
     $yy += $mm(1);
 
     $feld = function (string $l, string $v) use ($pdf, $lx, &$yy, $muted, $dark, $mm, $tw): void {
@@ -113,6 +125,8 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
     $zeilen = array_slice($pdf->wrap($name, $tw, 15, true), 0, 3);
     foreach ($zeilen as $ln) { $pdf->text($lx, $yy, $ln, 15, true, $dark); $yy += $mm(6.3); }
     if (!empty($c['artikelnummer'])) { $pdf->text($lx, $yy, (string)$c['artikelnummer'], 9, false, $muted); $yy += $mm(5.5); }
+    $info = lg_etikett_info($c);
+    if ($info !== '') { $pdf->text($lx, $yy, $pdf->fit($info, $tw, 9, false), 9, false, $muted); $yy += $mm(6); }
     $yy += $mm(3);
 
     $midx = $lx + $tw / 2;

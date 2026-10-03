@@ -501,6 +501,24 @@ function erp_lieferung_positionen(int $id): array {
             'nummer' => (string)$b['nummer'], 'positionen' => $pos];
 }
 
+// Rezepturnummer (RZ-...) einer Charge – über Artikel->Produkt->Rezeptur, sonst Auftrag->Produkt->Rezeptur.
+function erp_rezeptur_nr(?int $item_id, ?int $auftrag_id): string {
+    if (!tabelle_da('rezeptur') || !tabelle_da('produkt')) return '';
+    try {
+        if ($item_id && tabelle_da('item')) {
+            $n = scalar("SELECT r.nummer FROM item i JOIN produkt p ON p.id=i.produkt_id JOIN rezeptur r ON r.id=p.rezeptur_id
+                         WHERE i.id=? AND r.nummer IS NOT NULL AND r.nummer<>''", [$item_id]);
+            if ($n) return (string)$n;
+        }
+        if ($auftrag_id && tabelle_da('auftrag')) {
+            $n = scalar("SELECT r.nummer FROM auftrag a JOIN produkt p ON p.id=a.produkt_id JOIN rezeptur r ON r.id=p.rezeptur_id
+                         WHERE a.id=? AND r.nummer IS NOT NULL AND r.nummer<>''", [$auftrag_id]);
+            if ($n) return (string)$n;
+        }
+    } catch (Throwable $e) { return ''; }
+    return '';
+}
+
 function erp_erwartete_lieferungen(): array {
     if (!tabelle_da('bestellung')) return [];
     $rows = all("SELECT b.id, b.nummer, b.bestelldatum, b.eta_geplant, b.tracking, b.versandanbieter,

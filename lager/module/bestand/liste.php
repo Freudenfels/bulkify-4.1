@@ -41,24 +41,27 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
   <div class="bx-panel muted">Nichts im Bestand<?= $q ? ' für „' . h($q) . '"' : '' ?>.</div>
 <?php else: ?>
 <div class="bx-tablewrap" style="margin-bottom:var(--sp-6)">
-  <table class="bx-table" id="lg-bestand">
+  <table class="bx-table lg-karten" id="lg-bestand">
     <thead><tr>
       <th>Rohstoff / Produkt</th><?= $kat === '' ? '<th>Kategorie</th>' : '' ?>
-      <th>Charge</th><th>Eingang</th><th>MHD</th><th>Bestand</th><th>Status</th><th>Ort</th><th></th>
+      <th>Charge</th><th>Eingang</th><th>MHD</th><th>Bestand</th><th>Status</th><th>Ort</th><th>Finden</th><th></th>
     </tr></thead>
     <tbody>
-    <?php foreach ($zeilen as $z): ?>
+    <?php foreach ($zeilen as $z):
+      $bf = blinker_fuer_charge((int)$z['id']); $lid = (int)($bf['leiste']['id'] ?? 0);
+      $ort = $bf['kiste'] ? 'Kiste ' . (string)$bf['kiste']['kiste_name'] : ($bf['leiste'] ? (string)$bf['leiste']['code'] : '');
+    ?>
       <tr onclick="location.href='?p=charge&id=<?= (int)$z['id'] ?>'" style="cursor:pointer">
-        <td><a href="?p=charge&id=<?= (int)$z['id'] ?>" class="lg-namelink" onclick="event.stopPropagation()"><?= h((string)$z['item_name']) ?></a><?= $z['artikelnummer'] ? ' <span class="muted">' . h((string)$z['artikelnummer']) . '</span>' : '' ?></td>
-        <?= $kat === '' ? '<td class="muted">' . h(erp_kategorie_label($z)) . '</td>' : '' ?>
-        <td class="lg-code"><?= h((string)$z['charge_nr']) ?></td>
-        <td class="muted"><?= !empty($z['wareneingang']) ? h(date('d.m.Y', strtotime((string)$z['wareneingang']))) : '–' ?></td>
-        <td><?= mhd_html($z['mhd']) ?></td>
-        <td><?= h(menge_txt($z['menge_verfuegbar'])) ?> <?= h((string)$z['einheit']) ?></td>
-        <td><?= status_badge($z['status']) ?></td>
-        <td><?php $ik = kiste_fuer_charge((int)$z['id']); $bl = leiste_fuer_charge((int)$z['id']);
-          if ($ik): ?>Kiste <?= h((string)$ik['kiste_name']) ?><?php elseif ($bl): ?><span class="lg-code"><?= h((string)$bl['code']) ?></span><?php else: ?><span class="muted">–</span><?php endif; ?></td>
-        <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=etikett_ansicht&id=<?= (int)$z['id'] ?>&zurueck=<?= rawurlencode('?p=bestand' . $qs . '&sort=' . $sort) ?>" onclick="event.stopPropagation()" title="Etikett ansehen / drucken">Etikett</a></td>
+        <td data-label=""><a href="?p=charge&id=<?= (int)$z['id'] ?>" class="lg-namelink" onclick="event.stopPropagation()"><?= h((string)$z['item_name']) ?></a><?= $z['artikelnummer'] ? ' <span class="muted">' . h((string)$z['artikelnummer']) . '</span>' : '' ?></td>
+        <?= $kat === '' ? '<td data-label="Kategorie" class="muted">' . h(erp_kategorie_label($z)) . '</td>' : '' ?>
+        <td data-label="Charge" class="lg-code"><?= h((string)$z['charge_nr']) ?></td>
+        <td data-label="Eingang" class="muted"><?= !empty($z['wareneingang']) ? h(date('d.m.Y', strtotime((string)$z['wareneingang']))) : '–' ?></td>
+        <td data-label="MHD"><?= mhd_html($z['mhd']) ?></td>
+        <td data-label="Bestand"><?= h(menge_txt($z['menge_verfuegbar'])) ?> <?= h((string)$z['einheit']) ?></td>
+        <td data-label="Status"><?= status_badge($z['status']) ?></td>
+        <td data-label="Ort"><?= $ort !== '' ? '<span class="lg-code">' . h($ort) . '</span>' : '<span class="muted">–</span>' ?></td>
+        <td data-label="Finden" class="lg-td-finden"><?php if ($lid): ?><button type="button" class="btn btn-primary btn-sm" data-klingeln="<?= $lid ?>" data-farbe="gruen" data-sek="40" onclick="event.stopPropagation()">Finden</button><?php else: ?><span class="muted" style="font-size:12px">kein Blinker</span><?php endif; ?></td>
+        <td data-label="" style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=etikett_ansicht&id=<?= (int)$z['id'] ?>&zurueck=<?= rawurlencode('?p=bestand' . $qs . '&sort=' . $sort) ?>" onclick="event.stopPropagation()" title="Etikett ansehen / drucken">Etikett</a></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
