@@ -395,6 +395,22 @@ function erp_lieferanten(): array {
     return all("SELECT id, firma FROM lieferanten ORDER BY firma");
 }
 
+// Lieferant per Firmenname finden oder (wenn neu) anlegen -> id. Fuer den Lieferschein-Scan,
+// damit jede Lieferung einem nachverfolgbaren Lieferanten zugeordnet ist. 0 = nicht moeglich.
+function erp_lieferant_finden_oder_anlegen(string $name): int {
+    $name = trim($name);
+    if ($name === '' || !tabelle_da('lieferanten')) return 0;
+    $row = one("SELECT id FROM lieferanten WHERE firma=? LIMIT 1", [$name]);
+    if ($row) return (int)$row['id'];
+    try {
+        q("INSERT INTO lieferanten (firma) VALUES (?)", [$name]);
+        $id = (int) insert_id();
+        if ($id) return $id;
+    } catch (Throwable $e) { /* Unique-Race -> unten nochmal lesen */ }
+    $row = one("SELECT id FROM lieferanten WHERE firma=? LIMIT 1", [$name]);
+    return $row ? (int)$row['id'] : 0;
+}
+
 // Ein Item knapp (Name/Einheit/Kategorie/Form) – fuer Anzeige nach der Auswahl.
 function erp_item_basis(int $id): ?array {
     if (!tabelle_da('item')) return null;

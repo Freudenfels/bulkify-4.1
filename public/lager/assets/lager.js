@@ -30,7 +30,10 @@
     var ziel = '?p=klingeln';
     var d = new FormData();
     d.append('leiste_id', btn.getAttribute('data-klingeln'));
-    d.append('aktion', btn.getAttribute('data-aktion') || 'an');
+    // Ohne festes data-aktion: Umschalter – erster Klick an, nächster Klick aus (usw.).
+    var festAkt = btn.getAttribute('data-aktion');
+    var akt = festAkt || (btn.getAttribute('data-an') === '1' ? 'aus' : 'an');
+    d.append('aktion', akt);
     var quelle = btn.getAttribute('data-aus-feldern');
     var f = quelle ? document.getElementById(quelle) : null;
     d.append('farbe', f ? f.elements.farbe.value : (btn.getAttribute('data-farbe') || 'gruen'));
@@ -43,7 +46,11 @@
 
     fetch(ziel, { method: 'POST', body: d, credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
-      .then(function (j) { meldung(btn, j.meldung || (j.ok ? 'OK.' : 'Fehler'), j.ok ? 'ok' : 'fehler'); })
+      .then(function (j) {
+        meldung(btn, j.meldung || (j.ok ? (akt === 'an' ? 'Blinker an.' : 'Blinker aus.') : 'Fehler'), j.ok ? 'ok' : 'fehler');
+        // Umschalt-Zustand merken (nur bei Knoepfen ohne festes data-aktion).
+        if (j.ok && !festAkt) { btn.setAttribute('data-an', akt === 'an' ? '1' : '0'); btn.classList.toggle('lg-an', akt === 'an'); }
+      })
       .catch(function () { meldung(btn, 'Keine Verbindung zum Server.', 'fehler'); })
       .finally(function () { btn.disabled = false; btn.innerHTML = vorher; });
   }, true);

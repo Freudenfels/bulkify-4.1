@@ -32,9 +32,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'scan'
     if (!$r['ok']) { echo json_encode($r); exit; }
     $pos = [];
     foreach ($r['positionen'] as $p) $pos[] = erp_position_zuordnen($p);
+    // Lieferant direkt finden oder anlegen -> wird im Formular vorausgewählt und beim Buchen verknüpft.
+    $lid = erp_lieferant_finden_oder_anlegen((string)($r['lieferant'] ?? ''));
     echo json_encode([
         'ok'  => true,
-        'kopf' => ['lieferant' => $r['lieferant'], 'ls_nr' => $r['ls_nr'], 'datum' => $r['datum']],
+        'kopf' => ['lieferant' => $r['lieferant'], 'lieferant_id' => $lid, 'ls_nr' => $r['ls_nr'], 'datum' => $r['datum']],
         'positionen' => $pos,
     ], JSON_UNESCAPED_UNICODE);
     exit;
@@ -75,6 +77,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $ziel     = ($_POST['ziel'] ?? 'l1') === 'l2' ? 'l2' : 'l1';
     $kunde_id = (int)($_POST['kunde_id'] ?? 0);
     $lief     = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
+    // Kein Lieferant gewählt, aber beim Scan einer erkannt -> finden oder neu anlegen (Nachverfolgbarkeit).
+    if (!$lief && trim((string)($_POST['lieferant_name'] ?? '')) !== '') {
+        $lief = erp_lieferant_finden_oder_anlegen((string)$_POST['lieferant_name']) ?: null;
+    }
     if ($ziel === 'l2' && $kunde_id <= 0) { flash('Lager 2: bitte den Kunden wählen, dem die Ware gehört.', 'warn'); weiter('?p=we'); }
 
     $names   = (array)($_POST['p_name'] ?? []);
@@ -287,6 +293,7 @@ if ($gebucht):
             <option value="">– keiner –</option>
             <?php foreach ($liefers as $lf): ?><option value="<?= (int)$lf['id'] ?>"><?= h((string)$lf['firma']) ?></option><?php endforeach; ?>
           </select>
+          <input type="hidden" name="lieferant_name" id="weLiefName" value="">
         </div>
         <div class="bx-field" style="margin:0;min-width:240px;flex:1 1 240px"><label>Sendungs-/Paketnummer <span class="muted">(optional, scannen)</span></label>
           <input type="text" name="tracking" class="lg-code" autocomplete="off" placeholder="Paketlabel scannen – welches Paket ist gekommen">
@@ -451,7 +458,17 @@ if ($gebucht):
     fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
       scanBtn.disabled=false;
       if(!j.ok){ info.textContent='Fehler: '+(j.fehler||'unbekannt'); return; }
-      // Lieferant/LS vorbelegen (Text) + Positionen in die Tabelle.
+      // Lieferant vorbelegen: im Dropdown auswählen (neu angelegten ergänzen) + Namen für den Fallback merken.
+      if(j.kopf.lieferant){
+        var lsel=document.getElementById('weLief'), lid=String(j.kopf.lieferant_id||'');
+        if(lsel){
+          if(lid && !lsel.querySelector('option[value="'+lid+'"]')){
+            var o=document.createElement('option'); o.value=lid; o.textContent=j.kopf.lieferant; lsel.appendChild(o);
+          }
+          if(lid) lsel.value=lid;
+        }
+        var lname=document.getElementById('weLiefName'); if(lname) lname.value=j.kopf.lieferant;
+      }
       info.textContent = (j.kopf.lieferant?('Lieferant: '+j.kopf.lieferant+'  '):'') + (j.positionen.length+' Position(en) erkannt');
       rows.innerHTML='';
       if(!j.positionen.length){ addRow(); }
