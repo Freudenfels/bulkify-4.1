@@ -27,6 +27,12 @@ lg_meta_schreiben('bruecke_zuletzt', jetzt_utc());
 if (!empty($_SERVER['HTTP_USER_AGENT'])) lg_meta_schreiben('bruecke_programm', mb_substr((string)$_SERVER['HTTP_USER_AGENT'], 0, 120));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Die Bruecke meldet beim Start die installierten Drucker -> fuer die Auswahl in den Einstellungen.
+    if (isset($_POST['printers'])) {
+        lg_meta_schreiben('drucker_liste', mb_substr((string)$_POST['printers'], 0, 3000));
+        lg_meta_schreiben('drucker_standard', mb_substr((string)($_POST['standard'] ?? ''), 0, 190));
+        json_antwort(['ok' => true]);
+    }
     $ok = (string)($_POST['ok'] ?? '') === '1';
     $antwort = mb_substr((string)($_POST['antwort'] ?? ''), 0, 500);
     if (isset($_POST['druck_id'])) {                 // Rueckmeldung eines Druckjobs

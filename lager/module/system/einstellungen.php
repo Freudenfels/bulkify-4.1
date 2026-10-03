@@ -10,6 +10,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speic
 
 $etikettFormat = lg_meta_lesen('etikett_format', 'klein');
 $drucker       = lg_meta_lesen('drucker_name', '');
+$druckerListe  = array_values(array_filter(array_map('trim', explode('|', lg_meta_lesen('drucker_liste', '')))));
+$druckerStd    = lg_meta_lesen('drucker_standard', '');
 $zuletzt       = lg_meta_lesen('bruecke_zuletzt', '');
 $wach          = $zuletzt !== '' && (time() - strtotime($zuletzt . ' UTC')) < 15;
 $sender        = function_exists('led_sender_alle') ? led_sender_alle() : [];
@@ -32,9 +34,20 @@ flash_zeigen();
         </select>
         <div class="muted" style="font-size:12px;margin-top:4px">Gilt für alle „Etikett drucken"-Knöpfe. Je Druck kann man trotzdem umschalten.</div>
       </div>
-      <div class="bx-field"><label>Drucker-Name <span class="muted">(leer = Standarddrucker)</span></label>
-        <input type="text" name="drucker_name" value="<?= h($drucker) ?>" placeholder="z. B. Zebra ZD420">
-        <div class="muted" style="font-size:12px;margin-top:4px">Name genau wie in Windows unter „Drucker &amp; Scanner".</div>
+      <div class="bx-field"><label>Drucker</label>
+        <?php if ($druckerListe): ?>
+          <select name="drucker_name">
+            <option value="">Standarddrucker<?= $druckerStd !== '' ? ' (' . h($druckerStd) . ')' : '' ?></option>
+            <?php $gefunden = false; foreach ($druckerListe as $p): $gefunden = $gefunden || ($p === $drucker); ?>
+              <option value="<?= h($p) ?>" <?= $drucker === $p ? 'selected' : '' ?>><?= h($p) ?></option>
+            <?php endforeach; ?>
+            <?php if ($drucker !== '' && !$gefunden): ?><option value="<?= h($drucker) ?>" selected><?= h($drucker) ?> (nicht gefunden)</option><?php endif; ?>
+          </select>
+          <div class="muted" style="font-size:12px;margin-top:4px">Liste von der Brücke auf dem Lager-PC. Leer = Standarddrucker.</div>
+        <?php else: ?>
+          <input type="text" name="drucker_name" value="<?= h($drucker) ?>" placeholder="z. B. Zebra ZD420">
+          <div class="muted" style="font-size:12px;margin-top:4px">Die Drucker-Auswahl erscheint hier, sobald die Brücke einmal lief. Solange Name von Hand eintragen (leer = Standarddrucker).</div>
+        <?php endif; ?>
       </div>
     </div>
     <div style="margin-top:var(--sp-3)"><button type="submit" class="btn btn-primary">Speichern</button></div>
@@ -46,15 +59,16 @@ flash_zeigen();
   <h2 style="margin-top:0">Brücke auf dem Lager-PC <span class="badge <?= $wach ? 'badge-ok' : 'badge-warn' ?>" style="margin-left:6px"><?= $wach ? 'läuft' : 'nicht aktiv' ?></span></h2>
   <p class="muted" style="margin:0 0 var(--sp-3)">Ein Programm auf einem PC im Lager. Es lässt die <strong>Blinker</strong> leuchten (an den Sender im Netz) und <strong>druckt Etiketten</strong> lautlos (SumatraPDF). Fenster offen lassen – am besten in den Autostart legen.</p>
   <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap">
-    <a class="btn btn-primary" href="?p=bruecke_skript">Brücke herunterladen (.bat)</a>
+    <a class="btn btn-primary" href="?p=bruecke_skript&art=vbs">Brücke herunterladen (Hintergrund)</a>
+    <a class="btn btn-ghost" href="?p=bruecke_skript">mit Fenster (zum Testen)</a>
     <a class="btn btn-ghost" href="https://www.sumatrapdfreader.org/download-free-pdf-viewer" target="_blank" rel="noopener">SumatraPDF herunterladen</a>
     <a class="btn btn-ghost" href="?p=sender">Sender &amp; Blinker einrichten</a>
   </div>
   <ol class="muted" style="margin:var(--sp-4) 0 0;padding-left:1.2em;line-height:1.7">
     <li><strong>SumatraPDF</strong> auf dem Lager-PC installieren (kostenlos, für lautlosen Druck).</li>
-    <li><strong>Brücke (.bat)</strong> herunterladen und per Doppelklick starten – Fenster offen lassen.</li>
-    <li>Oben erscheint dann „läuft". Unter <a href="?p=sender">Sender &amp; Blinker</a> die Sender-IP eintragen und testen.</li>
-    <li>Drucker-Name oben eintragen (oder leer = Standarddrucker). Fertig – „Drucken" am Etikett druckt direkt.</li>
+    <li><strong>Brücke (Hintergrund)</strong> herunterladen und per Doppelklick starten – läuft <strong>ohne Fenster</strong> still im Hintergrund. Oben erscheint dann „läuft".</li>
+    <li><strong>Autostart:</strong> Taste <em>Win + R</em> → <code>shell:startup</code> → die .vbs dort hineinlegen (startet dann automatisch mit Windows). Beenden: Task-Manager → <code>powershell.exe</code>.</li>
+    <li><strong>Drucker</strong> oben auswählen (die Liste erscheint, sobald die Brücke einmal lief). Unter <a href="?p=sender">Sender &amp; Blinker</a> die Sender-IP eintragen und testen. Fertig – „Direkt drucken" am Etikett druckt sofort.</li>
   </ol>
 </div>
 

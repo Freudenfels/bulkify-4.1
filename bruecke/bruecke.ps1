@@ -35,6 +35,16 @@ Write-Host (" Server: " + $Url)
 Write-Host " Fenster offen lassen. Beenden mit Strg+C."
 Write-Host ("=" * 54)
 
+# Installierte Drucker einmal an den Server melden (fuer die Drucker-Auswahl in den Einstellungen).
+try {
+  $prn = Get-CimInstance Win32_Printer -ErrorAction Stop
+  $namen = ($prn | ForEach-Object { $_.Name }) -join "|"
+  $std = ($prn | Where-Object { $_.Default } | Select-Object -First 1 -ExpandProperty Name)
+  Invoke-RestMethod -Uri ($Url + "?token=" + $Token) -Method Post -TimeoutSec 10 -UserAgent $UA `
+    -Body @{ printers = $namen; standard = $std } | Out-Null
+  Write-Host (" Drucker gemeldet: " + $namen)
+} catch {}
+
 $offline = $false
 while ($true) {
   try {
