@@ -64,6 +64,10 @@ a:hover{text-decoration:underline}
 .bx-side nav a.on .bx-navbadge{background:#fff;color:var(--gruen)}
 .bx-side nav a:hover{background:rgba(192,242,78,.12);text-decoration:none}
 .bx-side nav a.on{background:var(--gruen);color:#fff}
+/* Bereiche (eigene Programme) – oben, klar abgesetzt von der Dashboard-Übersicht */
+.bx-bereiche{display:flex;flex-direction:column;gap:4px;padding:0 var(--sp-4) var(--sp-3);margin-bottom:var(--sp-2);border-bottom:1px solid rgba(255,255,255,.1)}
+.bx-side nav .bx-bereich{background:rgba(192,242,78,.1);border:1px solid rgba(192,242,78,.22);border-radius:8px;padding:9px var(--sp-4);font-weight:600;color:#eef5ea}
+.bx-side nav .bx-bereich:hover{background:rgba(192,242,78,.2)}
 .bx-main{flex:1;padding:var(--sp-6);min-width:0}
 
 /* ---------- Seitenkopf ---------- */

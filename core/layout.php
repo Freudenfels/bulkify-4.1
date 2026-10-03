@@ -93,6 +93,18 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
            . "<input type=\"search\" name=\"q\" value=\"$sq\" placeholder=\"Suche (alles)…\" aria-label=\"Globale Suche\">"
            . "</form>";
     }
+    // Bereiche (eigene Programme unter /produktion/, /lager/, /crm/) – ganz oben, klar abgesetzt von der
+    // Dashboard-Übersicht. CRM nur Admin; Lager auch Produktion/Versand/Einkauf/Labor; Produktion für Produktion+Admin.
+    $crm = function_exists('has_role') && has_role('admin');
+    $lager = $crm || (function_exists('user_rollen') && array_intersect(user_rollen(), ['production', 'fulfillment', 'einkauf', 'labor']));
+    $produktion = $crm || (function_exists('user_rollen') && array_intersect(user_rollen(), ['production']));
+    if ($crm || $lager || $produktion) {
+        echo "<div class=\"bx-navgroup\">Bereiche</div><div class=\"bx-bereiche\">";
+        if ($produktion) echo "<a href=\"produktion/\" class=\"bx-bereich\"><span>Produktion</span></a>";
+        if ($lager)      echo "<a href=\"lager/\" class=\"bx-bereich\"><span>Lager</span></a>";
+        if ($crm)        echo "<a href=\"crm/\" class=\"bx-bereich\"><span>CRM</span></a>";
+        echo "</div>";
+    }
     $curTyp = $_GET['typ'] ?? null;
     $anfCount = bx_anfrage_counts();
     if (function_exists('aufgabe_offen_zahl') && function_exists('current_user') && ($cu = current_user()))
@@ -147,19 +159,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
             echo "<a href=\"" . h($href) . "\"$cls><span>" . h($label) . "</span>$badge</a>";
         }
     }
-    // CRM, Lager und Produktion ganz unten (eigene Apps unter /crm/, /lager/, /produktion/).
-    // Kein ?p=-Route, daher außerhalb des Menü-Loops.
-    // CRM nur Admin; Lager (Lagerplätze, Pick-to-Light) auch für Produktion, Versand, Einkauf, Labor;
-    // Produktion (eigenes Programm) für Produktion + Admin.
-    $crm = function_exists('has_role') && has_role('admin');
-    $lager = $crm || (function_exists('user_rollen') && array_intersect(user_rollen(), ['production', 'fulfillment', 'einkauf', 'labor']));
-    $produktion = $crm || (function_exists('user_rollen') && array_intersect(user_rollen(), ['production']));
-    if ($crm || $lager || $produktion) {
-        echo "<div class=\"bx-navgroup\">Weiteres</div>";
-        if ($produktion) echo "<a href=\"produktion/\"><span>Produktion</span></a>";
-        if ($lager) echo "<a href=\"lager/\"><span>Lager</span></a>";
-        if ($crm)   echo "<a href=\"crm/\"><span>CRM</span></a>";
-    }
+    // (Bereiche Produktion/Lager/CRM stehen jetzt oben, klar abgesetzt von der Dashboard-Übersicht.)
     // Benutzer-Fuß: Name + Rollen + Abmelden
     if (function_exists('current_user') && ($u = current_user())) {
         $rollen = function_exists('rollen_liste') ? rollen_liste() : [];
