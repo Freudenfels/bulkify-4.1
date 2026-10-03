@@ -123,11 +123,3 @@ function seitenkopf(string $titel, string $unter = '', string $aktion = ''): voi
 function hinweis(string $text, string $art = 'ok'): void {
     echo '<div class="bx-panel lg-hinweis ' . ($art === 'warn' ? 'warn' : 'ok') . '">' . h($text) . '</div>';
 }
-
-// Knopf "Leuchten" - arbeitet per fetch() (assets/lager.js), die Seite bleibt stehen.
-function leucht_knopf(int $platz_id, string $text = 'Leuchten', string $farbe = 'gruen', int $sek = 20,
-                      bool $piep = true, string $klasse = 'btn btn-ghost btn-sm'): string {
-    return '<button type="button" class="' . h($klasse) . '" data-leuchten="' . $platz_id . '"'
-         . ' data-farbe="' . h($farbe) . '" data-sek="' . $sek . '" data-piep="' . ($piep ? 1 : 0) . '">'
-         . h($text) . '</button>';
-}

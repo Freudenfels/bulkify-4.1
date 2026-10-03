@@ -71,25 +71,6 @@ function led_wege(): array {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Leuchten
-
-// Einen Lagerplatz leuchten lassen. Rueckgabe: ['ok' => bool, 'meldung' => string]
-function led_platz_an(int $platz_id, string $farbe = 'gruen', int $sekunden = 20, bool $piep = true): array {
-    $p = one("SELECT id, leiste, sender_id FROM lg_platz WHERE id=?", [$platz_id]);
-    if (!$p) return ['ok' => false, 'meldung' => 'Lagerplatz nicht gefunden.'];
-    if (!$p['leiste']) return ['ok' => false, 'meldung' => 'An diesem Platz hängt noch kein Blinker.'];
-    return led_befehl((string)$p['leiste'], $p['sender_id'] ? (int)$p['sender_id'] : null,
-                      led_code((string)$p['leiste'], $farbe, $piep, $sekunden),
-                      $farbe, led_sekunden($sekunden), $piep, $platz_id);
-}
-
-function led_platz_aus(int $platz_id): array {
-    $p = one("SELECT id, leiste, sender_id FROM lg_platz WHERE id=?", [$platz_id]);
-    if (!$p || !$p['leiste']) return ['ok' => false, 'meldung' => 'An diesem Platz hängt kein Blinker.'];
-    return led_befehl((string)$p['leiste'], $p['sender_id'] ? (int)$p['sender_id'] : null,
-                      led_code_aus((string)$p['leiste']), 'aus', 0, false, $platz_id);
-}
-
 // Kern: Befehl protokollieren und je nach Weg des Senders zustellen.
 function led_befehl(string $leiste, ?int $sender_id, string $code, string $farbe, int $sekunden,
                     bool $piep, ?int $platz_id = null): array {

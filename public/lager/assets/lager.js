@@ -1,11 +1,10 @@
-// Leucht-Knoepfe im Lager-Programm.
+// Finden-Knoepfe im Lager-Programm.
 //
-// Jeder Knopf mit data-leuchten="<platz_id>" schickt den Befehl per fetch() - die Seite bleibt
-// stehen, man kann gleich den naechsten Platz antippen. Waehrend der Anfrage dreht sich ein
-// Spinner im Knopf (Pflicht: sonst wird doppelt geklickt), danach steht daneben kurz das Ergebnis.
+// Jeder Knopf mit data-klingeln="<leiste_id>" laesst den Blinker an einer Charge/Palette per fetch()
+// klingeln - die Seite bleibt stehen. Waehrend der Anfrage dreht sich ein Spinner im Knopf (Pflicht:
+// sonst wird doppelt geklickt), danach steht daneben kurz das Ergebnis.
 //
 // Optionale Attribute: data-farbe, data-sek, data-piep, data-aktion="aus".
-// Steht data-aus-feldern="<form-id>", werden Farbe/Dauer/Piep aus diesem Formular genommen.
 (function () {
   function meldung(btn, text, art) {
     var m = btn.nextElementSibling;
@@ -21,21 +20,19 @@
   }
 
   document.addEventListener('click', function (e) {
-    // Zwei Knopf-Arten: data-leuchten (fester Platz) und data-klingeln (Blinker an einer Charge).
-    var btn = e.target.closest('[data-leuchten],[data-klingeln]');
+    // Blinker an einer Charge/Palette klingeln lassen.
+    var btn = e.target.closest('[data-klingeln]');
     if (!btn || btn.disabled) return;
     e.preventDefault();
 
-    var istPlatz = btn.hasAttribute('data-leuchten');
-    var ziel = istPlatz ? '?p=leuchten' : '?p=klingeln';
+    var ziel = '?p=klingeln';
     var d = new FormData();
-    if (istPlatz) d.append('platz_id', btn.getAttribute('data-leuchten'));
-    else d.append('leiste_id', btn.getAttribute('data-klingeln'));
+    d.append('leiste_id', btn.getAttribute('data-klingeln'));
     d.append('aktion', btn.getAttribute('data-aktion') || 'an');
     var quelle = btn.getAttribute('data-aus-feldern');
     var f = quelle ? document.getElementById(quelle) : null;
     d.append('farbe', f ? f.elements.farbe.value : (btn.getAttribute('data-farbe') || 'gruen'));
-    d.append('sek', f ? f.elements.sek.value : (btn.getAttribute('data-sek') || (istPlatz ? '20' : '40')));
+    d.append('sek', f ? f.elements.sek.value : (btn.getAttribute('data-sek') || '40'));
     d.append('piep', f ? (f.elements.piep.checked ? '1' : '0') : (btn.getAttribute('data-piep') || '1'));
 
     var vorher = btn.innerHTML;

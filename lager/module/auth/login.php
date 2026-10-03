@@ -7,7 +7,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($email === '' || $pass === '') {
         $fehler = 'Bitte E-Mail und Passwort eingeben.';
     } elseif (lg_login($email, $pass)) {
-        weiter('?p=plaetze');
+        weiter('?p=uebersicht');
     } else {
         $fehler = 'E-Mail oder Passwort stimmt nicht.';
     }

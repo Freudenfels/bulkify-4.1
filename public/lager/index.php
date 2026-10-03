@@ -7,7 +7,6 @@ require_once __DIR__ . '/../../lager/core/schema.php';
 require_once __DIR__ . '/../../lager/core/auth.php';
 require_once __DIR__ . '/../../lager/core/layout.php';
 require_once __DIR__ . '/../../lager/core/led.php';
-require_once __DIR__ . '/../../lager/core/platz.php';
 require_once __DIR__ . '/../../lager/core/leiste.php';
 require_once __DIR__ . '/../../lager/core/kiste.php';
 
@@ -38,11 +37,6 @@ $routen = [
     'kiste'          => 'kiste/detail.php',
     'klingeln'       => 'led/klingeln.php',
     'suche'          => 'leiste/suche.php',
-    // Fulfillment (feste Plaetze)
-    'plaetze'        => 'platz/liste.php',
-    'platz'          => 'platz/detail.php',
-    'zuordnen'       => 'platz/zuordnen.php',
-    'leuchten'       => 'led/leuchten.php',
     // System
     'sender'         => 'system/sender.php',
     'bruecke_skript' => 'system/bruecke_skript.php',
@@ -64,7 +58,7 @@ if ($p === 'autologin') {
 }
 
 if ($p !== 'login' && !lg_angemeldet()) {
-    if ($p === 'leuchten' || $p === 'klingeln' || $p === 'suche') json_antwort(['ok' => false, 'meldung' => 'Bitte neu anmelden.'], 401);
+    if ($p === 'klingeln' || $p === 'suche') json_antwort(['ok' => false, 'meldung' => 'Bitte neu anmelden.'], 401);
     weiter('?p=login');
 }
 if ($p === 'login' && lg_angemeldet()) weiter('?p=uebersicht');
