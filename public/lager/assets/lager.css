@@ -114,3 +114,46 @@
 .lg-combo-z{padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--line-2)}
 .lg-combo-z:last-child{border-bottom:none}
 .lg-combo-z:hover{background:var(--panel-2)}
+
+/* =====================================================================
+   Große Ansicht fürs Handgerät / Handy (einfache Bedienung, große Ziele).
+   Greift nur auf schmalen Schirmen – Desktop bleibt unverändert.
+   ===================================================================== */
+@media (max-width: 860px) {
+  :root { --fs: 16px; --fs-sm: 14px; --fs-md: 18px; --fs-lg: 24px; }
+  body { font-size: 16px; }
+  h1 { font-size: 26px !important; }
+  h2 { font-size: 21px !important; }
+
+  /* Knöpfe groß und gut tippbar */
+  .btn { min-height: 54px !important; padding: 14px 20px !important; font-size: 17px !important; border-radius: 12px !important; }
+  .btn-sm { min-height: 46px !important; padding: 11px 16px !important; font-size: 16px !important; }
+
+  /* Eingabefelder groß (auch fürs Scannen bequem) */
+  input[type=text], input[type=search], input[type=number], input[type=date],
+  input[type=email], input[type=password], input[type=tel], select, textarea {
+    font-size: 18px !important; padding: 14px 14px !important; border-radius: 10px !important;
+  }
+  .bx-field > label, .we-pos label { font-size: 15px !important; }
+
+  /* Menü-Schublade: große Einträge */
+  .bx-side nav a { padding: 15px 18px !important; font-size: 18px !important; }
+  .bx-side nav a.lg-einbuchen-btn { font-size: 19px !important; }
+  .bx-navgroup { font-size: 13px !important; padding-top: 10px; }
+
+  /* Seitenkopf: Titel oben, Aktionsknöpfe darunter in voller Breite */
+  .bx-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .bx-head .bx-row { flex-wrap: wrap; gap: 10px; }
+  .bx-head .bx-row .btn { flex: 1 1 auto; }
+
+  /* Übersicht: große Schnellzugriff-Knöpfe + Kacheln */
+  .lgd-akt .btn { flex: 1 1 45%; }
+  .lgd-kpi { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+  /* Einbuchen-Positionen: eine Spalte, alles untereinander und groß */
+  .we-pos .we-row { flex-direction: column; }
+  .we-pos .bx-field { flex: 1 1 auto !important; width: 100%; }
+
+  /* Burger-Knopf größer */
+  .bx-burger { transform: scale(1.15); }
+}
