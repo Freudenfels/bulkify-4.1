@@ -34,6 +34,10 @@ function kopf(string $titel, string $aktiv = ''): void {
        . '<link rel="icon" href="/assets/icons/favicon.ico" sizes="any">'
        . '<link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png">'
        . '<link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">'
+       . '<link rel="manifest" href="manifest.webmanifest">'
+       . '<meta name="mobile-web-app-capable" content="yes">'
+       . '<meta name="apple-mobile-web-app-capable" content="yes">'
+       . '<meta name="apple-mobile-web-app-title" content="Lager">'
        . '<link rel="stylesheet" href="assets/lager.css">'
        . '<meta name="theme-color" content="#10210F">'
        . '<script>(function(){try{var t=localStorage.getItem("bx-theme");'
@@ -112,6 +116,9 @@ function fuss(): void {
     echo '<script src="assets/busy.js" defer></script>';
     echo '<script src="assets/lager.js" defer></script>';
     echo '<script src="assets/voice.js" defer></script>';
+    // Service Worker nur fuer die Installierbarkeit als App (Handscanner). Cacht keine Seiten.
+    echo '<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){'
+       . 'navigator.serviceWorker.register("sw.js").catch(function(){});});}</script>';
     echo '</body></html>';
 }
 

@@ -1,0 +1,23 @@
+{
+    "id": "/lager/",
+    "name": "bulkify Lager",
+    "short_name": "Lager",
+    "description": "Einbuchen, Finden und Bestand – Warenlager mit Pick-to-Light, für Handscanner.",
+    "lang": "de",
+    "start_url": "/lager/?p=uebersicht",
+    "scope": "/lager/",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#10210F",
+    "theme_color": "#10210F",
+    "icons": [
+        { "src": "/assets/icons/favicon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+        { "src": "/assets/icons/favicon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+        { "src": "/assets/icons/favicon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    ],
+    "shortcuts": [
+        { "name": "Einbuchen", "short_name": "Einbuchen", "url": "/lager/?p=we" },
+        { "name": "Finden", "short_name": "Finden", "url": "/lager/?p=finden" },
+        { "name": "Übersicht", "short_name": "Übersicht", "url": "/lager/?p=uebersicht" }
+    ]
+}
