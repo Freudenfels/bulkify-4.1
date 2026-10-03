@@ -188,21 +188,34 @@ function pr_lager_blink_leiste(string $code, string $aktion = 'an'): array {
     if ($code === '') return ['ok'=>false, 'meldung'=>'Kein Blinker-Code.'];
     return pr_lager_blink_call('p=api_blink&leiste=' . rawurlencode($code) . '&aktion=' . rawurlencode($aktion));
 }
-// Gemeinsamer Aufruf des Lager-Blink-Endpunkts: erst Loopback (kein Token), dann Host (+Token).
+// Gemeinsamer Aufruf des Lager-Blink-Endpunkts auf DERSELBEN Maschine.
+// Problem auf dem Server: der eigene öffentliche HTTPS-Name lässt sich oft nicht aufrufen
+// (Hairpin/TLS-Alert). Deshalb lenken wir den Aufruf per CURLOPT_RESOLVE fest auf 127.0.0.1
+// (richtiger Host-Header/SNI, Verbindung aber lokal → echtes Loopback, Auth ohne Token).
+// Fallback: direkter Aufruf über den Host (mit Token, falls gesetzt).
 function pr_lager_blink_call(string $qs): array {
     $hatToken = defined('LG_BLINK_TOKEN') && LG_BLINK_TOKEN !== '';
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host = (string)($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
-    // Reihenfolge: erst Loopback (kein Token nötig), dann Host (+Token). Erste gültige Antwort zählt;
-    // ein 403 (Auth) wird übersprungen, damit der nächste Weg greift.
-    $urls = [];
-    $urls[] = 'http://127.0.0.1/lager/?' . $qs;                                   // gleiche Maschine, serverseitig
-    if ($host !== '' && $host !== '127.0.0.1') $urls[] = $scheme . '://' . $host . '/lager/?' . $qs
-        . ($hatToken ? '&token=' . rawurlencode((string)LG_BLINK_TOKEN) : '');
+    $hostName = parse_url('//' . $host, PHP_URL_HOST) ?: $host;
+    $port = parse_url('//' . $host, PHP_URL_PORT);
+    $url = $scheme . '://' . $host . '/lager/?' . $qs;
+
+    $versuche = [];
+    // 1) Loopback erzwingen: Host/SNI bleiben echt, Verbindung geht auf 127.0.0.1 (kein Token nötig).
+    $resolve = $port ? [$hostName . ':' . $port . ':127.0.0.1'] : [$hostName . ':443:127.0.0.1', $hostName . ':80:127.0.0.1'];
+    $versuche[] = ['url'=>$url, 'resolve'=>$resolve, 'verify'=>false];
+    // 2) Direkt über den Host (Hairpin), mit Token falls vorhanden.
+    $versuche[] = ['url'=>$url . ($hatToken ? '&token=' . rawurlencode((string)LG_BLINK_TOKEN) : ''), 'resolve'=>null, 'verify'=>true];
+
     $letzte = 'Lager nicht erreichbar.';
-    foreach ($urls as $url) {
-        $c = curl_init($url);
-        curl_setopt_array($c, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>3, CURLOPT_TIMEOUT=>6, CURLOPT_PROXY=>'']);
+    foreach ($versuche as $v) {
+        $c = curl_init($v['url']);
+        $opt = [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>3, CURLOPT_TIMEOUT=>6, CURLOPT_PROXY=>'',
+                CURLOPT_FOLLOWLOCATION=>true, CURLOPT_MAXREDIRS=>2];
+        if ($v['resolve']) $opt[CURLOPT_RESOLVE] = $v['resolve'];
+        if (!$v['verify']) { $opt[CURLOPT_SSL_VERIFYPEER] = false; $opt[CURLOPT_SSL_VERIFYHOST] = 0; }
+        curl_setopt_array($c, $opt);
         $body = curl_exec($c);
         $err  = $body === false ? curl_error($c) : '';
         $code = (int) curl_getinfo($c, CURLINFO_HTTP_CODE);
