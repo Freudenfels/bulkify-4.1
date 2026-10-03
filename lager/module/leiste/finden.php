@@ -75,7 +75,16 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
   // In dem Fall merken wir uns das und blenden den Knopf künftig aus – Tippen bleibt der Hauptweg.
   function sttFlag(set){ try{ if(set){localStorage.setItem('lg_stt_aus','1');} return localStorage.getItem('lg_stt_aus')==='1'; }catch(e){ return false; } }
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR || sttFlag(false)){ mic.style.display='none'; }   // Gerät kann keine Spracherkennung
+  if(!SR){ mic.style.display='none'; }           // Gerät kennt die Sprach-API gar nicht
+  else if(sttFlag(false)){                        // früher fehlgeschlagen -> aus, aber Reaktivieren anbieten
+    mic.style.display='none';
+    var re=document.createElement('button');
+    re.type='button'; re.className='btn btn-ghost fnd-mic';
+    re.textContent='Sprachsuche aktivieren';
+    re.title='Nur möglich, wenn das Gerät Google-Spracherkennung hat';
+    re.addEventListener('click',function(){ try{localStorage.removeItem('lg_stt_aus');}catch(e){} location.reload(); });
+    mic.parentNode.appendChild(re);
+  }
   else mic.addEventListener('click',function(){
     try{
       var r=new SR(); r.lang='de-DE'; r.interimResults=false; r.maxAlternatives=1;
