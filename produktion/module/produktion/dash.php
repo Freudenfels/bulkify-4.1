@@ -4,13 +4,22 @@
 // Zusätzlich (nur Admin): Blinker-Test – eine Chargennummer direkt im Lager leuchten lassen,
 // um die Pick-to-Light-Kette end-to-end zu prüfen.
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') === 'blinktest' && pr_ist_admin()) {
-    $nr = trim((string)($_POST['charge_nr'] ?? ''));
-    $cid = erp_charge_id_per_nr($nr);
-    if (!$cid) {
-        flash('Charge „' . $nr . '" nicht gefunden.', 'warn');
-    } else {
-        $r = pr_lager_blink($cid, ($_POST['aus'] ?? '') === '1' ? 'aus' : 'an');
+    $eingabe = trim((string)($_POST['charge_nr'] ?? ''));
+    $aktion  = ($_POST['aus'] ?? '') === '1' ? 'aus' : 'an';
+    // Blinker-Code (z. B. C2EC08 oder Barcode C2EC08XD) direkt? Sonst als Chargennummer behandeln.
+    $norm = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', $eingabe));
+    if (strlen($norm) === 8 && str_ends_with($norm, 'XD')) $norm = substr($norm, 0, 6);
+    $istCode = (bool) preg_match('/^[0-9A-F]{6}$/', $norm);
+    if ($eingabe === '') {
+        flash('Bitte eine Chargennummer oder einen Blinker-Code eingeben.', 'warn');
+    } elseif ($istCode) {
+        $r = pr_lager_blink_leiste($norm, $aktion);
         flash(($r['ok'] ? 'Blinker-Test ok: ' : 'Blinker-Test: ') . ($r['meldung'] ?: ($r['ok'] ? 'ausgelöst.' : 'nicht ausgelöst.')), $r['ok'] ? 'ok' : 'warn');
+    } elseif (($cid = erp_charge_id_per_nr($eingabe))) {
+        $r = pr_lager_blink($cid, $aktion);
+        flash(($r['ok'] ? 'Blinker-Test ok: ' : 'Blinker-Test: ') . ($r['meldung'] ?: ($r['ok'] ? 'ausgelöst.' : 'nicht ausgelöst.')), $r['ok'] ? 'ok' : 'warn');
+    } else {
+        flash('„' . $eingabe . '" ist weder eine bekannte Charge noch ein Blinker-Code.', 'warn');
     }
     weiter('?p=dash');
 }
@@ -91,11 +100,11 @@ $liste('Offen · zu planen', $zuPlanen, 'alle', 'offen');
 if (pr_ist_admin()): ?>
 <div class="bx-panel" style="margin-bottom:16px">
   <h2 style="margin-top:0">Blinker-Test (Lager)</h2>
-  <p class="muted" style="margin-top:0">Prüft die Pick-to-Light-Kette: Chargennummer eingeben, der zugehörige Blinker im Lager leuchtet kurz grün. Nur zum Testen.</p>
+  <p class="muted" style="margin-top:0">Prüft die Pick-to-Light-Kette: Chargennummer <strong>oder</strong> Blinker-Code eingeben (Barcode mit „XD" geht auch) – der Blinker im Lager leuchtet kurz grün. Nur zum Testen.</p>
   <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
     <input type="hidden" name="aktion" value="blinktest">
-    <div class="bx-field" style="margin:0;max-width:260px"><label>Chargennummer</label>
-      <input type="text" name="charge_nr" required placeholder="z. B. MBG-2609A"></div>
+    <div class="bx-field" style="margin:0;max-width:300px"><label>Chargennummer oder Blinker-Code</label>
+      <input type="text" name="charge_nr" required placeholder="z. B. MBG-2609A oder C2EC08XD"></div>
     <button type="submit" class="btn btn-primary">Blinken</button>
     <button type="submit" name="aus" value="1" class="btn btn-ghost">Aus</button>
   </form>

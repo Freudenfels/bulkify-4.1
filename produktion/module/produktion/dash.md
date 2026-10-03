@@ -9,4 +9,4 @@ Dashboard / Startseite (`?p=dash`, Standard nach Login). Zeigt auf einen Blick d
 
 Aufteilung offen → „zu planen"/„in Planung" anhand `produktionsauftrag.geplant_am`. Alles lesend über die Naht (`erp_produktionsauftraege`, `erp_pa_count`, `erp_pa_bereitschaft`, Zeit-Schnitte).
 
-**Blinker-Test (nur Admin):** Panel unten – Chargennummer eingeben, `aktion=blinktest` → `erp_charge_id_per_nr()` + `pr_lager_blink()` lassen den zugehörigen Blinker im Lager leuchten („Aus" schaltet ab). Dient dem End-to-End-Test der Pick-to-Light-Kette unabhängig vom Auftragstyp.
+**Blinker-Test (nur Admin):** Panel unten – **Chargennummer oder Blinker-Code** eingeben (Barcode mit „XD" wird normalisiert). `aktion=blinktest`: Blinker-Code → `pr_lager_blink_leiste()` (direkter Hardware-Test), sonst Chargennummer → `erp_charge_id_per_nr()` + `pr_lager_blink()`. „Aus" schaltet ab. Dient dem End-to-End-Test der Pick-to-Light-Kette unabhängig vom Auftragstyp.

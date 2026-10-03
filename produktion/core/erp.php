@@ -180,7 +180,16 @@ function erp_fefo_charge_id(int $item_id): ?int {
 // Wir fassen KEINE lg_-Tabellen an. Rückgabe ['ok'=>bool,'meldung'=>string].
 function pr_lager_blink(int $charge_id, string $aktion = 'an'): array {
     if ($charge_id <= 0) return ['ok'=>false, 'meldung'=>'Keine Charge angegeben.'];
-    $qs = 'p=api_blink&charge_id=' . $charge_id . '&aktion=' . rawurlencode($aktion);
+    return pr_lager_blink_call('p=api_blink&charge_id=' . $charge_id . '&aktion=' . rawurlencode($aktion));
+}
+// Direkt einen Blinker per Code leuchten lassen (Hardware-Test, auch Barcode mit „XD").
+function pr_lager_blink_leiste(string $code, string $aktion = 'an'): array {
+    $code = trim($code);
+    if ($code === '') return ['ok'=>false, 'meldung'=>'Kein Blinker-Code.'];
+    return pr_lager_blink_call('p=api_blink&leiste=' . rawurlencode($code) . '&aktion=' . rawurlencode($aktion));
+}
+// Gemeinsamer Aufruf des Lager-Blink-Endpunkts: erst Loopback (kein Token), dann Host (+Token).
+function pr_lager_blink_call(string $qs): array {
     $hatToken = defined('LG_BLINK_TOKEN') && LG_BLINK_TOKEN !== '';
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host = (string)($_SERVER['HTTP_HOST'] ?? '127.0.0.1');

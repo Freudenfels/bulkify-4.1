@@ -18,15 +18,23 @@ if (!$tokenOk && !$loopback) {
     exit;
 }
 
-$charge_id = (int)($_REQUEST['charge_id'] ?? 0);
-if ($charge_id <= 0 && trim((string)($_REQUEST['charge_nr'] ?? '')) !== '')
-    $charge_id = (int) scalar("SELECT id FROM charge WHERE charge_nr=? ORDER BY id DESC LIMIT 1", [trim((string)$_REQUEST['charge_nr'])]);
-if ($charge_id <= 0) { echo json_encode(['ok' => false, 'meldung' => 'Keine Charge angegeben.'], JSON_UNESCAPED_UNICODE); exit; }
-
-// Leiste der Charge finden – erst direkt gebunden, sonst über die Kiste.
-$l = leiste_fuer_charge($charge_id);
-if (!$l) { $k = kiste_fuer_charge($charge_id); if ($k) $l = kiste_blinker((int)$k['kiste_id']); }
-if (!$l) { echo json_encode(['ok' => false, 'meldung' => 'Für diese Charge ist kein Blinker hinterlegt.'], JSON_UNESCAPED_UNICODE); exit; }
+// Weg A: Blinker-Code direkt (z. B. zum Hardware-Test). Nimmt auch den Barcode mit Endung „XD".
+$l = null;
+if (trim((string)($_REQUEST['leiste'] ?? '')) !== '') {
+    $code = led_leiste_normalisieren((string)$_REQUEST['leiste']);
+    if ($code === null) { echo json_encode(['ok' => false, 'meldung' => 'Kein gültiger Blinker-Code.'], JSON_UNESCAPED_UNICODE); exit; }
+    $l = leiste_per_code($code);
+    if (!$l) { echo json_encode(['ok' => false, 'meldung' => 'Blinker ' . $code . ' ist dem Lager nicht bekannt.'], JSON_UNESCAPED_UNICODE); exit; }
+} else {
+    // Weg B: über die Charge (gebundener Blinker bzw. Kisten-Blinker).
+    $charge_id = (int)($_REQUEST['charge_id'] ?? 0);
+    if ($charge_id <= 0 && trim((string)($_REQUEST['charge_nr'] ?? '')) !== '')
+        $charge_id = (int) scalar("SELECT id FROM charge WHERE charge_nr=? ORDER BY id DESC LIMIT 1", [trim((string)$_REQUEST['charge_nr'])]);
+    if ($charge_id <= 0) { echo json_encode(['ok' => false, 'meldung' => 'Keine Charge/kein Blinker angegeben.'], JSON_UNESCAPED_UNICODE); exit; }
+    $l = leiste_fuer_charge($charge_id);
+    if (!$l) { $k = kiste_fuer_charge($charge_id); if ($k) $l = kiste_blinker((int)$k['kiste_id']); }
+    if (!$l) { echo json_encode(['ok' => false, 'meldung' => 'Für diese Charge ist kein Blinker hinterlegt.'], JSON_UNESCAPED_UNICODE); exit; }
+}
 
 $farbe = (string)($_REQUEST['farbe'] ?? 'gruen');
 if (!isset(led_farben()[$farbe])) $farbe = 'gruen';
