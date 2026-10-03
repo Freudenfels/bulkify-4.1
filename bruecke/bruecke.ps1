@@ -95,6 +95,7 @@ while ($true) {
           if ($sumatra) {
             $a = @("-silent")
             if ($d.drucker) { $a += @("-print-to", [string]$d.drucker) } else { $a += @("-print-to-default") }
+            $a += @("-print-settings", "noscale")   # 1:1, nicht auf Papiergroesse skalieren (Etikett!)
             $a += $tmp
             $p = Start-Process -FilePath $sumatra -ArgumentList $a -PassThru -Wait -WindowStyle Hidden
             if ($p.ExitCode -eq 0) { $ok = "1"; $antwort = "gedruckt (SumatraPDF)" } else { $antwort = "SumatraPDF ExitCode " + $p.ExitCode }

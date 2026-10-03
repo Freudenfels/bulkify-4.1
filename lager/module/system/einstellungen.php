@@ -18,6 +18,17 @@ $programm      = lg_meta_lesen('bruecke_programm', '');
 $zuletztTxt    = $zuletzt !== '' ? (function_exists('fmt_zeit') ? fmt_zeit($zuletzt) : $zuletzt) : '';
 $sender        = function_exists('led_sender_alle') ? led_sender_alle() : [];
 
+// Letzter Druckauftrag – zeigt, ob SumatraPDF wirklich gedruckt hat oder wo es klemmt.
+$letztDruck = null;
+try { $letztDruck = one("SELECT id, format, status, antwort, angelegt, erledigt FROM lg_druckjob ORDER BY id DESC LIMIT 1"); } catch (Throwable $e) {}
+$druckStatusTxt = [
+    'offen'     => 'wartet auf die Brücke …',
+    'abgeholt'  => 'von der Brücke geholt, druckt …',
+    'ok'        => 'gedruckt',
+    'fehler'    => 'Fehler',
+    'verfallen' => 'abgelaufen (Brücke war offline)',
+];
+
 kopf('Einstellungen', 'einstellungen');
 seitenkopf('Einstellungen', 'Etikett, Drucker, Brücke und Blinker');
 flash_zeigen();
@@ -69,6 +80,15 @@ flash_zeigen();
     </div>
     <div style="margin-top:var(--sp-2)"><span class="muted" style="font-size:12px">Gemeldete Drucker</span><br>
       <?= $druckerListe ? h(implode(', ', $druckerListe)) : '<span class="muted">keine gemeldet – Brücke lief nicht ODER der PC hat keinen installierten Windows-Drucker</span>' ?>
+    </div>
+    <div style="margin-top:var(--sp-2)"><span class="muted" style="font-size:12px">Letzter Druckauftrag</span><br>
+      <?php if ($letztDruck): ?>
+        #<?= (int)$letztDruck['id'] ?> (<?= h((string)$letztDruck['format']) ?>) · <strong><?= h($druckStatusTxt[$letztDruck['status']] ?? (string)$letztDruck['status']) ?></strong>
+        <?= !empty($letztDruck['antwort']) ? '· ' . h((string)$letztDruck['antwort']) : '' ?>
+        <?= !empty($letztDruck['angelegt']) ? '<span class="muted" style="font-size:12px"> · ' . h(function_exists('fmt_zeit') ? fmt_zeit((string)$letztDruck['angelegt']) : (string)$letztDruck['angelegt']) . '</span>' : '' ?>
+      <?php else: ?>
+        <span class="muted">noch kein Druckauftrag</span>
+      <?php endif; ?>
     </div>
     <?php if ($zuletzt === ''): ?>
       <p class="muted" style="font-size:12px;margin:var(--sp-2) 0 0">Tipp: Lade unten „mit Fenster (zum Testen)" und starte es per Doppelklick. Das Fenster zeigt sofort, ob Drucker gefunden und der Server erreicht wird.</p>
