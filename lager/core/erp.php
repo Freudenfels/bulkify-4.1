@@ -120,18 +120,37 @@ function erp_bestand_zaehlung(): array {
 
 // Eine Charge zwischen Lager 1 (eigener Bestand) und Lager 2 (Fremdlager eines Kunden) umbuchen.
 // $kunde_id > 0 -> gehoert dem Kunden (Lager 2); null/0 -> zurueck in den eigenen Bestand (Lager 1).
-function erp_charge_umbuchen(int $charge_id, ?int $kunde_id): array {
+// $menge: Teilmenge. null oder >= verfuegbar -> ganze Charge. Sonst wird die Charge GESPLITTET:
+//   eine neue Charge (gleiche Chargennummer/MHD) mit der Teilmenge geht ins Ziel, der Rest bleibt.
+function erp_charge_umbuchen(int $charge_id, ?int $kunde_id, ?float $menge = null): array {
     if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Charge-Tabelle.'];
-    $c = one("SELECT id FROM charge WHERE id=?", [$charge_id]);
+    $c = one("SELECT * FROM charge WHERE id=?", [$charge_id]);
     if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
-    if ($kunde_id && $kunde_id > 0) {
-        if (tabelle_da('kunden') && !scalar("SELECT id FROM kunden WHERE id=?", [$kunde_id]))
-            return ['ok' => false, 'meldung' => 'Kunde nicht gefunden.'];
-        q("UPDATE charge SET fremd_kunde_id=? WHERE id=?", [$kunde_id, $charge_id]);
-        return ['ok' => true, 'meldung' => 'Ins Fremdlager (Lager 2) umgebucht.'];
+    if ($kunde_id && $kunde_id > 0 && tabelle_da('kunden') && !scalar("SELECT id FROM kunden WHERE id=?", [$kunde_id]))
+        return ['ok' => false, 'meldung' => 'Kunde nicht gefunden.'];
+    $ziel     = ($kunde_id && $kunde_id > 0) ? (int)$kunde_id : null;
+    $zielname = $ziel ? 'Fremdlager (Lager 2)' : 'eigenen Bestand (Lager 1)';
+    $verf     = (float)$c['menge_verfuegbar'];
+    $fmt = fn(float $v): string => rtrim(rtrim(number_format($v, 3, ',', '.'), '0'), ',');
+
+    // Ganze Charge umbuchen (keine/zu grosse Teilmenge).
+    if ($menge === null || $menge <= 0 || $menge + 1e-9 >= $verf) {
+        q("UPDATE charge SET fremd_kunde_id=? WHERE id=?", [$ziel, $charge_id]);
+        return ['ok' => true, 'meldung' => 'Komplett in den ' . $zielname . ' umgebucht.'];
     }
-    q("UPDATE charge SET fremd_kunde_id=NULL WHERE id=?", [$charge_id]);
-    return ['ok' => true, 'meldung' => 'Zurück in den eigenen Bestand (Lager 1).'];
+
+    // Teilmenge: neue Charge mit der Teilmenge anlegen, Rest bleibt an der alten.
+    $moved = $menge;
+    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,fremd_kunde_id,notiz,lieferant_id,auftrag_id,pa_id,bestellung_position_id,coa_freigegeben,angelegt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [$c['charge_nr'], (int)$c['item_id'], $moved, $moved, $c['einheit'], $c['mhd'], $c['wareneingang'], $c['status'],
+       $ziel, $c['notiz'], $c['lieferant_id'], $c['auftrag_id'], $c['pa_id'], $c['bestellung_position_id'] ?? null,
+       $c['coa_freigegeben'] ?? 0, gmdate('Y-m-d H:i:s')]);
+    $neu = (int) insert_id();
+    q("UPDATE charge SET menge=GREATEST(menge-?,0), menge_verfuegbar=GREATEST(menge_verfuegbar-?,0) WHERE id=?",
+      [$moved, $moved, $charge_id]);
+    return ['ok' => true, 'meldung' => $fmt($moved) . ' ' . (string)$c['einheit'] . ' in den ' . $zielname
+                         . ' umgebucht, ' . $fmt($verf - $moved) . ' bleiben.', 'neu_id' => $neu];
 }
 
 // Wahrscheinlicher Kunde einer (Fertigwaren-)Charge: aus Auftrag, sonst Produktionsauftrag, sonst Produkt.

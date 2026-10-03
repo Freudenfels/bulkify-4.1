@@ -35,8 +35,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         weiter('?p=charge&id=' . $id);
     }
     if ($aktion === 'umbuchen') {
-        $ziel = (int)($_POST['kunde_id'] ?? 0);
-        $r = erp_charge_umbuchen($id, $ziel > 0 ? $ziel : null);
+        $ziel  = (int)($_POST['kunde_id'] ?? 0);
+        $menge = ($_POST['menge'] ?? '') !== '' ? (float) str_replace(',', '.', (string)$_POST['menge']) : null;
+        $r = erp_charge_umbuchen($id, $ziel > 0 ? $ziel : null, $menge);
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
     }
@@ -63,7 +64,7 @@ if ($umb_vorschlag && !array_filter($umb_kunden, fn($k) => (int)$k['id'] === $um
 
 $kopfAktion = '<a class="btn btn-' . (isset($_GET['neu']) ? 'primary' : 'ghost') . '" href="?p=etikett&id=' . $id . '" target="_blank">Etikett drucken</a> '
     . (isset($_GET['neu']) ? '<a class="btn btn-ghost" href="?p=eingang">Nächster Wareneingang</a> ' : '')
-    . '<a class="btn btn-ghost" href="#umbuchen">Umbuchen</a> '
+    . '<button type="button" class="btn btn-ghost" data-umb-open>Umbuchen</button> '
     . '<a class="btn btn-ghost" href="?p=bestand">Zum Bestand</a>';
 seitenkopf((string)$c['item_name'], erp_kategorie_label($c) . ($c['artikelnummer'] ? ' · ' . $c['artikelnummer'] : ''), $kopfAktion);
 flash_zeigen();
@@ -82,32 +83,60 @@ flash_zeigen();
   <div class="bx-card"><div class="k">Lager</div><div class="v" style="font-size:var(--fs-lg)"><?= $fremd_kunde ? 'Lager 2 · ' . h(erp_kunde_name($fremd_kunde)) : 'Lager 1 · eigener Bestand' ?></div></div>
 </div>
 
-<div class="bx-panel" id="umbuchen">
-  <h2>Umbuchen</h2>
-  <?php if ($fremd_kunde): ?>
-    <p>Diese Charge gehört aktuell zu <strong>Lager 2 (Fremdlager)</strong> von <strong><?= h(erp_kunde_name($fremd_kunde)) ?></strong>.</p>
-    <form method="post" onsubmit="return confirm('Charge zurück in den eigenen Bestand (Lager 1) buchen?')">
-      <input type="hidden" name="aktion" value="umbuchen"><input type="hidden" name="kunde_id" value="0">
-      <button class="btn btn-ghost" type="submit">Zurück in den eigenen Bestand (Lager 1)</button>
-    </form>
-  <?php else: ?>
-    <p>Diese Charge liegt im <strong>eigenen Bestand (Lager 1)</strong>. Fertige Ware kannst du ins <strong>Fremdlager (Lager 2)</strong> des Kunden buchen.</p>
-    <?php if (!$umb_kunden): ?>
-      <p class="muted" style="margin:0">Noch keine Fulfillment-Kunden hinterlegt. Setze beim Kunden im Dashboard den Haken „nutzt Fulfillment".</p>
+<div class="umb-overlay" id="umbModal" hidden>
+  <div class="umb-box bx-panel">
+    <h2 style="margin-top:0">Umbuchen</h2>
+    <?php if ($fremd_kunde): ?>
+      <p>Aktuell: <strong>Lager 2</strong> (<?= h(erp_kunde_name($fremd_kunde)) ?>). Menge zurück in den eigenen Bestand (Lager 1):</p>
+      <form method="post">
+        <input type="hidden" name="aktion" value="umbuchen"><input type="hidden" name="kunde_id" value="0">
+        <div class="bx-field"><label>Menge <span class="muted">(von <?= h(menge_txt($c['menge_verfuegbar'])) ?> <?= h((string)$c['einheit']) ?>)</span></label>
+          <input type="text" inputmode="decimal" name="menge" value="<?= h(menge_txt($c['menge_verfuegbar'])) ?>" autofocus>
+          <div class="muted" style="font-size:12px;margin-top:4px">Weniger = Teilmenge; der Rest bleibt in Lager 2.</div></div>
+        <div class="bx-row" style="justify-content:flex-end;gap:var(--sp-2)">
+          <button type="button" class="btn btn-ghost" data-umb-close>Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Zurück nach Lager 1</button>
+        </div>
+      </form>
     <?php else: ?>
-    <form method="post" class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap">
-      <input type="hidden" name="aktion" value="umbuchen">
-      <div class="bx-field" style="margin:0;min-width:240px"><label>Kunde (Fremdlager)</label>
-        <select name="kunde_id" required>
-          <option value="">– Kunde wählen –</option>
-          <?php foreach ($umb_kunden as $k): ?><option value="<?= (int)$k['id'] ?>" <?= $umb_vorschlag === (int)$k['id'] ? 'selected' : '' ?>><?= h((string)$k['firma']) ?></option><?php endforeach; ?>
-        </select>
-      </div>
-      <button class="btn btn-primary" type="submit">Ins Fremdlager buchen (Lager 2)</button>
-    </form>
+      <p>Fertige Ware ins <strong>Fremdlager (Lager 2)</strong> des Kunden buchen. Teilmenge möglich – der Rest bleibt in Lager 1.</p>
+      <?php if (!$umb_kunden): ?>
+        <p class="muted">Noch keine Fulfillment-Kunden hinterlegt (Haken „nutzt Fulfillment" im Dashboard).</p>
+        <div class="bx-row" style="justify-content:flex-end"><button type="button" class="btn btn-ghost" data-umb-close>Schließen</button></div>
+      <?php else: ?>
+      <form method="post">
+        <input type="hidden" name="aktion" value="umbuchen">
+        <div class="bx-field"><label>Kunde (Fremdlager)</label>
+          <select name="kunde_id" required>
+            <option value="">– Kunde wählen –</option>
+            <?php foreach ($umb_kunden as $k): ?><option value="<?= (int)$k['id'] ?>" <?= $umb_vorschlag === (int)$k['id'] ? 'selected' : '' ?>><?= h((string)$k['firma']) ?></option><?php endforeach; ?>
+          </select></div>
+        <div class="bx-field"><label>Menge <span class="muted">(von <?= h(menge_txt($c['menge_verfuegbar'])) ?> <?= h((string)$c['einheit']) ?>)</span></label>
+          <input type="text" inputmode="decimal" name="menge" value="<?= h(menge_txt($c['menge_verfuegbar'])) ?>">
+          <div class="muted" style="font-size:12px;margin-top:4px">Weniger als verfügbar = Teilmenge; der Rest bleibt in Lager 1.</div></div>
+        <div class="bx-row" style="justify-content:flex-end;gap:var(--sp-2)">
+          <button type="button" class="btn btn-ghost" data-umb-close>Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Umbuchen</button>
+        </div>
+      </form>
+      <?php endif; ?>
     <?php endif; ?>
-  <?php endif; ?>
+  </div>
 </div>
+<style>
+  .umb-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:200;padding:16px}
+  .umb-overlay[hidden]{display:none}
+  .umb-box{max-width:460px;width:100%;margin:0}
+</style>
+<script>
+(function(){var m=document.getElementById('umbModal'); if(!m)return;
+  function zu(){m.hidden=true;} function auf(){m.hidden=false; var f=m.querySelector('input[name=menge],select'); if(f)f.focus();}
+  document.querySelectorAll('[data-umb-open]').forEach(function(b){b.addEventListener('click',auf);});
+  document.querySelectorAll('[data-umb-close]').forEach(function(b){b.addEventListener('click',zu);});
+  m.addEventListener('click',function(e){if(e.target===m)zu();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')zu();});
+})();
+</script>
 
 <div class="bx-panel">
   <h2>Blinker</h2>
