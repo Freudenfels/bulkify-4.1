@@ -109,8 +109,8 @@ $ki      = lg_ki_bereit();
 $gebucht = [];
 if (isset($_GET['gebucht'])) foreach (explode(',', (string)$_GET['gebucht']) as $x) { $x = (int)$x; if ($x > 0) $gebucht[] = $x; }
 
-kopf('Wareneingang', 'we');
-seitenkopf('Wareneingang', 'Ziel wählen · Lieferschein scannen · prüfen · buchen.',
+kopf('Einbuchen', 'we');
+seitenkopf('Einbuchen', 'Ziel wählen · Lieferschein scannen · prüfen · buchen.',
     '<a class="btn btn-ghost" href="?p=bestand">Zum Bestand</a>');
 flash_zeigen();
 
@@ -122,7 +122,7 @@ if ($gebucht):
     <h2 style="margin:0"><?= count($gebucht) ?> Position(en) eingebucht – Etiketten für die Kartons</h2>
     <span class="bx-row" style="gap:var(--sp-2)">
       <a class="btn btn-primary btn-sm" href="?p=etikett&ids=<?= h($ids) ?>" target="_blank">Alle Etiketten drucken</a>
-      <a class="btn btn-ghost btn-sm" href="?p=we">Nächster Wareneingang</a>
+      <a class="btn btn-ghost btn-sm" href="?p=we">Nächstes Einbuchen</a>
     </span>
   </div>
   <embed src="?p=etikett&ids=<?= h($ids) ?>" type="application/pdf" style="width:100%;height:340px;border:1px solid var(--line);border-radius:8px;background:#fff;margin-top:var(--sp-3)">

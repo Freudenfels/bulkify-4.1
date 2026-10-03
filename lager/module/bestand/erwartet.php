@@ -5,7 +5,7 @@ $lieferungen = erp_erwartete_lieferungen();
 
 kopf('Erwartete Lieferungen', 'erwartet');
 seitenkopf('Erwartete Lieferungen', 'Waren, auf die wir warten – beim Lieferanten bestellt, noch nicht angekommen.',
-    '<a class="btn btn-ghost" href="?p=eingang">Freier Wareneingang</a>');
+    '<a class="btn btn-ghost" href="?p=we">Freies Einbuchen</a>');
 flash_zeigen();
 
 if (!$lieferungen) {
@@ -68,7 +68,7 @@ foreach ($lieferungen as $l):
     </tbody>
   </table></div>
   <?php else: ?>
-    <p class="muted" style="margin:0">Keine Positionen hinterlegt. <a href="?p=eingang">Freier Wareneingang</a>.</p>
+    <p class="muted" style="margin:0">Keine Positionen hinterlegt. <a href="?p=we">Freies Einbuchen</a>.</p>
   <?php endif; ?>
 </div>
 <?php endforeach; ?>

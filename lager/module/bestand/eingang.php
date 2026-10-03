@@ -35,9 +35,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     if ($bfehler === '') {
         $lr = leiste_per_code($blinker);
         if ($lr) leiste_finden((int)$lr['id'], 'gruen', 3, false);
-        flash('Wareneingang gebucht. Blinker ' . $blinker . ' hängt dran und leuchtet kurz grün.');
+        flash('Eingebucht. Blinker ' . $blinker . ' hängt dran und leuchtet kurz grün.');
     } else {
-        flash('Wareneingang gebucht – aber der Blinker konnte nicht angehängt werden: ' . $bfehler, 'warn');
+        flash('Eingebucht – aber der Blinker konnte nicht angehängt werden: ' . $bfehler, 'warn');
     }
     weiter('?p=charge&id=' . (int)$cid . '&neu=1');
 }
@@ -54,8 +54,8 @@ $vorMenge  = trim((string)($_GET['menge'] ?? ''));
 $vorCharge = trim((string)($_GET['charge'] ?? ''));
 $vorLief   = (int)($_GET['lieferant'] ?? 0);
 
-kopf('Wareneingang', 'eingang');
-seitenkopf('Wareneingang', 'Was kommt rein? Artikel wählen oder neu anlegen, Menge + MHD + Blinker – fertig.',
+kopf('Einbuchen', 'eingang');
+seitenkopf('Einbuchen', 'Was kommt rein? Artikel wählen oder neu anlegen, Menge + MHD + Blinker – fertig.',
     '<a class="btn btn-ghost" href="?p=bestand">Zum Bestand</a>');
 flash_zeigen();
 ?>

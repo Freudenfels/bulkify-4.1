@@ -1,6 +1,12 @@
 /* Ergaenzungen des Lager-Programms zum Stylesheet des Dashboards.
    Wird NACH /assets/app.css geladen. Alles hier beginnt mit lg-. */
 
+/* "Einbuchen"-Knopf oben in der Seitenleiste (kein Menüpunkt, auf jeder Seite). */
+.bx-side nav a.lg-einbuchen-btn{display:block;margin:2px 12px 12px;padding:10px 12px;border-radius:8px;
+  background:var(--gruen);color:#fff;font-weight:600;text-align:center;letter-spacing:.01em}
+.bx-side nav a.lg-einbuchen-btn:hover{background:var(--gruen);filter:brightness(1.08);text-decoration:none}
+.bx-side nav a.lg-einbuchen-btn.on{background:var(--gruen)}
+
 .lg-hinweis{padding:12px 16px}
 .lg-hinweis.ok{border-color:var(--gruen)}
 .lg-hinweis.warn{border-color:#e6c4c0;color:#8f231b}

@@ -9,7 +9,7 @@ foreach (lg_bewegungen(300) as $b) { if ($b['typ'] === 'ein') $ein++; else $aus+
 
 kopf('Bewegungen', 'bewegungen');
 seitenkopf('Bewegungen', 'Was kam rein, was ging raus.',
-    '<a class="btn btn-ghost" href="?p=eingang">Wareneingang</a> <a class="btn btn-ghost" href="?p=ausgang">Warenausgang</a>');
+    '<a class="btn btn-ghost" href="?p=we">Einbuchen</a> <a class="btn btn-ghost" href="?p=ausgang">Warenausgang</a>');
 flash_zeigen();
 ?>
 <div class="lg-reiter">
@@ -19,7 +19,7 @@ flash_zeigen();
 </div>
 
 <?php if (!$alle): ?>
-  <div class="bx-panel muted">Noch keine Bewegungen erfasst. Buche einen <a href="?p=eingang">Wareneingang</a> oder <a href="?p=ausgang">Warenausgang</a>.</div>
+  <div class="bx-panel muted">Noch keine Bewegungen erfasst. Buche eine <a href="?p=we">Einbuchung</a> oder <a href="?p=ausgang">Warenausgang</a>.</div>
 <?php else: ?>
 <div class="bx-tablewrap" style="margin-bottom:var(--sp-6)">
   <table class="bx-table">

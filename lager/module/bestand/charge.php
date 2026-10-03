@@ -63,7 +63,7 @@ if ($umb_vorschlag && !array_filter($umb_kunden, fn($k) => (int)$k['id'] === $um
 }
 
 $kopfAktion = '<a class="btn btn-' . (isset($_GET['neu']) ? 'primary' : 'ghost') . '" href="?p=etikett&id=' . $id . '" target="_blank">Etikett drucken</a> '
-    . (isset($_GET['neu']) ? '<a class="btn btn-ghost" href="?p=eingang">Nächster Wareneingang</a> ' : '')
+    . (isset($_GET['neu']) ? '<a class="btn btn-ghost" href="?p=eingang">Nächstes Einbuchen</a> ' : '')
     . '<button type="button" class="btn btn-ghost" data-umb-open>Umbuchen</button> '
     . '<a class="btn btn-ghost" href="?p=bestand">Zum Bestand</a>';
 seitenkopf((string)$c['item_name'], erp_kategorie_label($c) . ($c['artikelnummer'] ? ' · ' . $c['artikelnummer'] : ''), $kopfAktion);

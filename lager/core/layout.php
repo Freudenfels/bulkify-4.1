@@ -10,8 +10,11 @@ require_once __DIR__ . '/auth.php';
 function lg_nav(): array {
     // Reihenfolge nach dem taeglichen Ablauf: erst was reinkommt (erwartet/einbuchen), dann finden,
     // dann raus, dann Nachschlagen. Keine festen Plaetze (alles fliegender Modus) -> kein Fulfillment.
+    // Übersicht steht als eigener Punkt OBEN, über der Gruppe "Lager 1" (Gruppenschlüssel '' = ohne Überschrift).
+    // Einbuchen ist KEIN Menüpunkt mehr, sondern ein Knopf oben in der Seitenleiste (auf jeder Seite).
     $nav = [
-        'Lager 1'     => ['uebersicht' => 'Übersicht', 'erwartet' => 'Erwartete Lieferungen', 'we' => 'Wareneingang',
+        ''            => ['uebersicht' => 'Übersicht'],
+        'Lager 1'     => ['erwartet' => 'Erwartete Lieferungen',
                           'finden' => 'Finden', 'ausgang' => 'Warenausgang', 'bestand' => 'Bestand'],
         'Lager 2 (Fremdlager)' => ['l2_finden' => 'Finden', 'l2_bestand' => 'Fremdlager-Bestand'],
         'Verwaltung'  => ['bewegungen' => 'Bewegungen', 'kisten' => 'Kisten', 'leisten' => 'Blinker'],
@@ -44,8 +47,10 @@ function kopf(string $titel, string $aktiv = ''): void {
         echo '<aside class="bx-side">'
            . '<div class="bx-brand"><img src="/assets/bulkify-logo-white.png" alt="' . h(BX_MARKE) . '" class="bx-logo">'
            . '<span class="bx-ver">' . h(BX_TITEL) . '</span></div><nav>';
+        // Einbuchen als eigener Knopf oben (kein Menüpunkt) – auf jeder Lager-Seite erreichbar.
+        echo '<a href="?p=we" class="lg-einbuchen-btn"><span>+ Einbuchen</span></a>';
         foreach (lg_nav() as $gruppe => $seiten) {
-            echo '<div class="bx-navgroup">' . h($gruppe) . '</div>';
+            if ($gruppe !== '') echo '<div class="bx-navgroup">' . h($gruppe) . '</div>';
             foreach ($seiten as $route => $label) {
                 echo '<a href="?p=' . h($route) . '"' . ($aktiv === $route ? ' class="on"' : '') . '>'
                    . '<span>' . h($label) . '</span></a>';
