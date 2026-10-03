@@ -10,10 +10,10 @@ require_once __DIR__ . '/auth.php';
 function lg_nav(): array {
     // Reihenfolge nach dem taeglichen Ablauf: erst was reinkommt (erwartet/einbuchen), dann finden,
     // dann raus, dann Nachschlagen. Keine festen Plaetze (alles fliegender Modus) -> kein Fulfillment.
-    // Übersicht steht als eigener Punkt OBEN, über der Gruppe "Lager 1" (Gruppenschlüssel '' = ohne Überschrift).
-    // Einbuchen ist KEIN Menüpunkt mehr, sondern ein Knopf oben in der Seitenleiste (auf jeder Seite).
+    // Übersicht + Einbuchen stehen OBEN als eigene Punkte (Gruppenschlüssel '' = ohne Überschrift),
+    // über der Gruppe "Lager 1". Einbuchen gibt es zusätzlich als Knopf oben auf jeder Seite.
     $nav = [
-        ''            => ['uebersicht' => 'Übersicht'],
+        ''            => ['uebersicht' => 'Übersicht', 'we' => 'Einbuchen'],
         'Lager 1'     => ['erwartet' => 'Erwartete Lieferungen',
                           'finden' => 'Finden', 'ausgang' => 'Warenausgang', 'bestand' => 'Bestand'],
         'Lager 2 (Fremdlager)' => ['l2_finden' => 'Finden', 'l2_bestand' => 'Fremdlager-Bestand'],

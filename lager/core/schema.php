@@ -152,6 +152,8 @@ function lg_schema(): void {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     // Menge auf dem Etikett auf die Kartons aufteilen (statt Gesamtmenge je Karton)?
     lg_spalte('lg_charge_info', 'aufteilen', 'TINYINT NOT NULL DEFAULT 0');
+    // Sendungs-/Tracking-Nummer(n) des gelieferten Pakets (welches Paket ist gekommen).
+    lg_spalte('lg_charge_info', 'tracking', 'VARCHAR(255) NULL');
 
     // --- Papierkorb: im Lager "geloeschte" Chargen. Nur AUSGEBLENDET (Dashboard-Charge bleibt!),
     //     damit nichts kaputtgeht und man 30 Tage lang wiederherstellen kann. --------------------
@@ -200,6 +202,17 @@ function lg_aufteilen(int $charge_id): bool {
 function lg_aufteilen_set(int $charge_id, bool $an): void {
     q("INSERT INTO lg_charge_info (charge_id,pakete,aufteilen,angelegt) VALUES (?,1,?,?)
        ON DUPLICATE KEY UPDATE aufteilen=VALUES(aufteilen)", [$charge_id, $an ? 1 : 0, jetzt_utc()]);
+}
+
+// Sendungs-/Tracking-Nummer(n) der Lieferung (welches Paket kam).
+function lg_tracking(int $charge_id): string {
+    return (string) scalar("SELECT tracking FROM lg_charge_info WHERE charge_id=?", [$charge_id]);
+}
+function lg_tracking_set(int $charge_id, string $tracking): void {
+    $tracking = mb_substr(trim($tracking), 0, 255);
+    if ($tracking === '') return;
+    q("INSERT INTO lg_charge_info (charge_id,pakete,tracking,angelegt) VALUES (?,1,?,?)
+       ON DUPLICATE KEY UPDATE tracking=VALUES(tracking)", [$charge_id, $tracking, jetzt_utc()]);
 }
 
 // --- Papierkorb (im Lager ausgeblendete Chargen; Dashboard-Charge bleibt erhalten) -----------

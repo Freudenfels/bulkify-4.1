@@ -19,6 +19,8 @@
     m.__t = setTimeout(function () { m.textContent = ''; }, 6000);
   }
 
+  // Capture-Phase (true): feuert BEVOR ein onclick="event.stopPropagation()" am Knopf greift
+  // (z. B. „Finden" in Listenzeilen, die stopPropagation nutzen, damit die Zeile nicht navigiert).
   document.addEventListener('click', function (e) {
     // Blinker an einer Charge/Palette klingeln lassen.
     var btn = e.target.closest('[data-klingeln]');
@@ -44,7 +46,7 @@
       .then(function (j) { meldung(btn, j.meldung || (j.ok ? 'OK.' : 'Fehler'), j.ok ? 'ok' : 'fehler'); })
       .catch(function () { meldung(btn, 'Keine Verbindung zum Server.', 'fehler'); })
       .finally(function () { btn.disabled = false; btn.innerHTML = vorher; });
-  });
+  }, true);
 
   // Charge-Combobox: Feld mit data-ziel="<hidden-id>" sucht Chargen live und setzt die charge_id.
   document.querySelectorAll('[data-ziel]').forEach(function (inp) {

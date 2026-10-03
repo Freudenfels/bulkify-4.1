@@ -115,6 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
 
         lg_pakete_set((int)$cid, $pakete);
         lg_aufteilen_set((int)$cid, !empty($_POST['aufteilen']) && $pakete > 1);
+        lg_tracking_set((int)$cid, (string)($_POST['tracking'] ?? ''));
         $c = erp_charge((int)$cid);
         lg_bewegung_log((int)$cid, 'ein', $menge, $c['einheit'] ?? null, (string)($c['item_name'] ?? ''), $notiz);
         if (leiste_binden($blinker, (int)$cid) === '') {
@@ -286,6 +287,9 @@ if ($gebucht):
             <option value="">– keiner –</option>
             <?php foreach ($liefers as $lf): ?><option value="<?= (int)$lf['id'] ?>"><?= h((string)$lf['firma']) ?></option><?php endforeach; ?>
           </select>
+        </div>
+        <div class="bx-field" style="margin:0;min-width:240px;flex:1 1 240px"><label>Sendungs-/Paketnummer <span class="muted">(optional, scannen)</span></label>
+          <input type="text" name="tracking" class="lg-code" autocomplete="off" placeholder="Paketlabel scannen – welches Paket ist gekommen">
         </div>
       </div>
     </div>

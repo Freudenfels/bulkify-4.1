@@ -118,6 +118,9 @@ flash_zeigen();
   <div class="bx-card"><div class="k">Status</div><div class="v" style="font-size:var(--fs-lg)"><?= status_badge($c['status']) ?></div></div>
   <div class="bx-card"><div class="k">Charge</div><div class="v lg-code" style="font-size:var(--fs-lg)"><?= h((string)$c['charge_nr']) ?: '–' ?></div></div>
   <div class="bx-card"><div class="k">Lager</div><div class="v" style="font-size:var(--fs-lg)"><?= $fremd_kunde ? 'Lager 2 · ' . h(erp_kunde_name($fremd_kunde)) : 'Lager 1 · eigener Bestand' ?></div></div>
+  <?php $trk = function_exists('lg_tracking') ? lg_tracking($id) : ''; if ($trk !== ''): ?>
+  <div class="bx-card"><div class="k">Sendung / Paket</div><div class="v lg-code" style="font-size:var(--fs-lg)"><?= h($trk) ?></div></div>
+  <?php endif; ?>
 </div>
 
 <div class="umb-overlay" id="umbModal" hidden>
