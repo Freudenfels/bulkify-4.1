@@ -137,12 +137,24 @@ function erp_schritt_material(int $pa_id, string $station): array {
         case 'Fertigware bereitstellen':
             $soll_menge = (float)$pa['menge'] * erp_stueck_je_packung($pa);
             $soll_einheit = 'Stück';
-            foreach (all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.item_id, i.name
-                          FROM charge c JOIN item i ON i.id=c.item_id
-                          WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0
-                          ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [(int)$pa['auftrag_id']]) as $c)
+            $chargen = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.item_id, i.name
+                            FROM charge c JOIN item i ON i.id=c.item_id
+                            WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0
+                            ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [(int)$pa['auftrag_id']]);
+            foreach ($chargen as $c)
                 $zeilen[] = ['name'=>$c['name'], 'detail'=>'Charge ' . $c['charge_nr'], 'menge'=>(float)$c['menge_verfuegbar'],
                              'einheit'=>'Stück', 'verfuegbar'=>(float)$c['menge_verfuegbar'], 'item_id'=>(int)$c['item_id'], 'charge_id'=>(int)$c['id']];
+            // Noch keine Fertigware im Lager: trotzdem klar ansagen, WAS und WIE VIEL bereitzustellen ist.
+            if (!$chargen) {
+                $pname = (string) scalar("SELECT COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung, r.name)
+                                          FROM produktionsauftrag pa
+                                          LEFT JOIN produkt p  ON p.id=pa.produkt_id
+                                          LEFT JOIN auftrag a  ON a.id=pa.auftrag_id
+                                          LEFT JOIN rezeptur r ON r.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
+                                          WHERE pa.id=?", [$pa_id]);
+                $zeilen[] = ['name'=>($pname !== '' ? $pname : 'Fertigware') . ' (zugekaufte Fertigware)', 'detail'=>'noch nicht im Lager gebucht',
+                             'menge'=>$soll_menge, 'einheit'=>'Stück', 'verfuegbar'=>0.0, 'item_id'=>0];
+            }
             break;
         case 'Verpacken':
             $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
