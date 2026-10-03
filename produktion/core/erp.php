@@ -158,6 +158,14 @@ function erp_schritt_material(int $pa_id, string $station): array {
     return ['soll_menge'=>$soll_menge, 'soll_einheit'=>$soll_einheit, 'zeilen'=>$zeilen];
 }
 
+// Charge-ID zu einer Chargennummer (für den Blinker-Test). Jüngste bei Dubletten.
+function erp_charge_id_per_nr(string $nr): ?int {
+    $nr = trim($nr);
+    if ($nr === '' || !tabelle_da('charge')) return null;
+    $id = scalar("SELECT id FROM charge WHERE charge_nr=? ORDER BY id DESC LIMIT 1", [$nr]);
+    return $id ? (int)$id : null;
+}
+
 // Älteste frei verfügbare Charge eines Artikels (FEFO) – die, die als Nächstes entnommen würde.
 function erp_fefo_charge_id(int $item_id): ?int {
     if ($item_id <= 0) return null;

@@ -8,3 +8,5 @@ Dashboard / Startseite (`?p=dash`, Standard nach Login). Zeigt auf einen Blick d
   - *Offen · zu planen* = offene Aufträge ohne Termin, mit „Produzierbar?".
 
 Aufteilung offen → „zu planen"/„in Planung" anhand `produktionsauftrag.geplant_am`. Alles lesend über die Naht (`erp_produktionsauftraege`, `erp_pa_count`, `erp_pa_bereitschaft`, Zeit-Schnitte).
+
+**Blinker-Test (nur Admin):** Panel unten – Chargennummer eingeben, `aktion=blinktest` → `erp_charge_id_per_nr()` + `pr_lager_blink()` lassen den zugehörigen Blinker im Lager leuchten („Aus" schaltet ab). Dient dem End-to-End-Test der Pick-to-Light-Kette unabhängig vom Auftragstyp.
