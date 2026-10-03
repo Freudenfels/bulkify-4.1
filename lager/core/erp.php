@@ -575,3 +575,12 @@ function erp_position_zuordnen(array $pos): array {
     $pos['regeln']     = erp_warenart_regeln($kat, $form);
     return $pos;
 }
+
+// Scan-Endpunkt-Token (Smartglass). Liegt im Dashboard unter app_meta['lager_scan_token'];
+// erzeugt + angezeigt wird er in den Dashboard-Einstellungen (Reiter "Lager-Scan").
+// Hier nur GELESEN - der Lager-Scan-Endpunkt prueft damit die Berechtigung.
+function erp_scan_token(): string {
+    if (!tabelle_da('app_meta')) return '';
+    $t = scalar("SELECT v FROM app_meta WHERE k='lager_scan_token'");
+    return (string) ($t ?? '');
+}

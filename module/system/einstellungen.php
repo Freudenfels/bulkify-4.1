@@ -19,6 +19,7 @@ $TABS = [
     'produktion' => 'Produktion & Rezeptur',
     'nummern'    => 'Nummernkreise',
     'fulfillment'=> 'Fulfillment-Schnittstelle',
+    'lagerscan'  => 'Lager-Scan (Brille)',
     'mail'       => 'E-Mail',
     'ki'         => 'KI (Claude)',
     'agb'        => 'AGB',
@@ -229,6 +230,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'nummern_save') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'fftoken_neu') {
     meta_set('ds_api_token', bin2hex(random_bytes(24)));
     header('Location: ?p=einstellungen&tab=fulfillment&ok=1'); exit;
+}
+// --- Lager-Scan-Token (Brille) neu erzeugen ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'scantoken_neu') {
+    meta_set('lager_scan_token', bin2hex(random_bytes(24)));
+    header('Location: ?p=einstellungen&tab=lagerscan&ok=1'); exit;
 }
 // --- Fulfillment-Basis-URL speichern (für den Artikel-Abruf Richtung B) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'ffurl_save') {
@@ -487,6 +493,24 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Speichern</button></div>
   </form>
   <p class="muted" style="font-size:12px;margin-top:8px">Abgerufen und verknüpft wird dann direkt im <a href="?p=lager2">Fremdlager</a> („Fulfillment-Artikel abrufen").</p>
+</div>
+
+<?php elseif ($tab === 'lagerscan'):
+    $scanToken = lager_scan_token();
+    $scanUrl   = (($_SERVER['REQUEST_SCHEME'] ?? 'https') . '://' . ($_SERVER['HTTP_HOST'] ?? 'DEINE-DOMAIN')) . '/lager/scan.php';
+?>
+<div class="bx-panel">
+  <h2>Lager-Scan (Smartglass / Handscanner) <?= bx_hint('read-only Scan-Endpunkt: Brille scannt den Karton-Etikett-QR und zeigt Charge, Produkt, Menge, MHD und Ort an') ?></h2>
+  <p class="muted" style="margin-top:0">Diese zwei Werte trägst du einmal in die Brillen-App (bzw. den Handscanner) ein. Der Endpunkt liest nur – er verändert keinen Bestand.</p>
+  <div class="bx-grid">
+    <div class="bx-field"><label>API-URL</label><input type="text" value="<?= h($scanUrl) ?>" readonly onclick="this.select()"></div>
+    <div class="bx-field"><label>Token</label><input type="text" value="<?= h($scanToken) ?>" readonly onclick="this.select()"></div>
+  </div>
+  <p class="muted" style="font-size:12px;margin-top:6px">Aufruf: <code>GET /lager/scan.php?token=…&amp;id=&lt;charge_id&gt;</code> (oder <code>&amp;code=&lt;gescannte URL&gt;</code>). Die Charge-ID steckt im QR der Karton-Etiketten (<code>…/lager/?p=charge&amp;id=…</code>). Antwort: Produkt, Menge, Einheit, MHD, Charge-Nr, Status, Lieferant, Ort.</p>
+  <form method="post" style="margin-top:12px" onsubmit="return confirm('Neuen Token erzeugen? Der alte gilt dann nicht mehr – in der Brillen-App neu eintragen.');">
+    <input type="hidden" name="aktion" value="scantoken_neu">
+    <button class="btn btn-ghost btn-sm" type="submit">Neuen Token erzeugen</button>
+  </form>
 </div>
 <?php endif; ?>
 
