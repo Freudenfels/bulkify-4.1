@@ -15,10 +15,135 @@ $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
 $basis = ($https ? 'https' : 'http') . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'localhost') . '/lager/bruecke.php';
 
 // EINE Quelle fuer die Version: steht im Dateinamen, in der Fenster-Startmeldung und im UA.
-// Bei jeder Aenderung an bruecke.ps1 hier hochzaehlen.
-$version = '1.4';
+// Bei jeder Aenderung HIER hochzaehlen.
+$version = '1.5';
 
-$vorlage = (string)file_get_contents(BX_ROOT . '/bruecke/bruecke.ps1');
+// WICHTIG: Das PS1 ist INLINE eingebettet (nicht mehr aus bruecke/bruecke.ps1 geladen). Grund:
+// die separate Datei wurde vom inkrementellen SFTP-Deploy offenbar nicht aktualisiert, wodurch
+// immer eine uralte Bruecke ausgeliefert wurde. So steckt garantiert der aktuelle Code im Download.
+// (bruecke/bruecke.ps1 bleibt als Referenz im Repo - bei Aenderungen BEIDE pflegen.)
+$vorlage = <<<'PS1'
+# bulkify Lager - Bruecke (Pick-to-Light)
+# ========================================
+# Holt Leuchtbefehle vom Server ab und gibt sie an den Sender im Lager-Netz weiter.
+
+$Url   = "{{URL}}"
+$Token = "{{TOKEN}}"
+
+# Nur EINE Bruecke gleichzeitig. Starten mehrere, beenden sich alle weiteren sofort selbst.
+try {
+  $global:bxMutex = New-Object System.Threading.Mutex($false, "Global\bulkify-lager-bruecke")
+  if (-not $global:bxMutex.WaitOne(0)) {
+    Write-Host " Es laeuft bereits eine andere bulkify-Bruecke - dieses Fenster kann zu." -ForegroundColor Yellow
+    Start-Sleep -Seconds 4
+    exit
+  }
+} catch {}
+
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
+$UA = "bulkify-lager-bruecke/{{VERSION}}"
+
+function Send-Printers {
+  try {
+    $prn = @(Get-CimInstance Win32_Printer -ErrorAction Stop)
+    $namen = ($prn | ForEach-Object { $_.Name }) -join "|"
+    $std = ($prn | Where-Object { $_.Default } | Select-Object -First 1 -ExpandProperty Name)
+    if (-not $std) { $std = "" }
+    Invoke-RestMethod -Uri ($Url + "?token=" + $Token) -Method Post -TimeoutSec 10 -UserAgent $UA -Body @{ printers = $namen; standard = $std } | Out-Null
+    Write-Host ((Get-Date -Format "HH:mm:ss") + "  Drucker gemeldet: " + $namen) -ForegroundColor Green
+  } catch {
+    Write-Host ((Get-Date -Format "HH:mm:ss") + "  Drucker konnten nicht gemeldet werden: " + $_.Exception.Message) -ForegroundColor Yellow
+  }
+}
+
+function Get-SumatraPath {
+  $cands = @(
+    (Join-Path $env:LOCALAPPDATA "SumatraPDF\SumatraPDF.exe"),
+    "C:\Program Files\SumatraPDF\SumatraPDF.exe",
+    "C:\Program Files (x86)\SumatraPDF\SumatraPDF.exe",
+    (Join-Path (Split-Path -Parent $PSCommandPath) "SumatraPDF.exe")
+  )
+  foreach ($c in $cands) { if ($c -and (Test-Path $c)) { return $c } }
+  $cmd = Get-Command SumatraPDF.exe -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+  return $null
+}
+
+Write-Host ("=" * 54)
+Write-Host " bulkify Lager-Bruecke laeuft"
+Write-Host (" Version: " + $UA) -ForegroundColor Cyan
+Write-Host (" Server: " + $Url)
+Write-Host " Fenster offen lassen. Beenden mit Strg+C."
+Write-Host ("=" * 54)
+
+$spStart = Get-SumatraPath
+if ($spStart) { Write-Host (" SumatraPDF gefunden: " + $spStart) -ForegroundColor Green }
+else { Write-Host " SumatraPDF NICHT gefunden - lautloser Druck geht erst nach Installation." -ForegroundColor Yellow }
+
+Send-Printers
+
+$offline = $false
+$tick = 0
+while ($true) {
+  if ((++$tick) % 120 -eq 0) { Send-Printers }
+  try {
+    $poll = Invoke-RestMethod -Uri ($Url + "?token=" + $Token) -Method Get -TimeoutSec 10 -UserAgent $UA
+    if ($offline) { Write-Host ((Get-Date -Format "HH:mm:ss") + "  Server wieder erreichbar.") -ForegroundColor Green; $offline = $false }
+
+    if ($poll.befehle) {
+      foreach ($b in $poll.befehle) {
+        $ok = "0"; $antwort = ""
+        try {
+          $r = Invoke-WebRequest -Uri $b.url -Method Get -TimeoutSec 5 -UseBasicParsing
+          $antwort = ([string]$r.StatusCode + " " + $r.Content)
+          if ([int]$r.StatusCode -eq 200) { $ok = "1" }
+        } catch { $antwort = "Sender nicht erreichbar: " + $_.Exception.Message }
+        try { Invoke-RestMethod -Uri ($Url + "?token=" + $Token) -Method Post -TimeoutSec 10 -UserAgent $UA -Body @{ id = $b.id; ok = $ok; antwort = $antwort } | Out-Null } catch {}
+        if ($ok -eq "1") { $st = "OK"; $farbe = "Green" } else { $st = "FEHLER"; $farbe = "Red" }
+        Write-Host ((Get-Date -Format "HH:mm:ss") + "  Befehl " + $b.id + " -> " + $st + "  " + $antwort) -ForegroundColor $farbe
+      }
+    }
+
+    if ($poll.druck) {
+      foreach ($d in $poll.druck) {
+        $ok = "0"; $antwort = ""
+        try {
+          $bytes = [Convert]::FromBase64String($d.pdf_b64)
+          $tmp = Join-Path $env:TEMP ("bulkify-etikett-" + $d.id + ".pdf")
+          [IO.File]::WriteAllBytes($tmp, $bytes)
+          $sumatra = Get-SumatraPath
+          if ($sumatra) {
+            $a = @("-silent")
+            if ($d.drucker) { $a += @("-print-to", [string]$d.drucker) } else { $a += @("-print-to-default") }
+            $a += @("-print-settings", "noscale")
+            $a += $tmp
+            $p = Start-Process -FilePath $sumatra -ArgumentList $a -PassThru -WindowStyle Hidden
+            if (-not $p.WaitForExit(45000)) {
+              try { $p.Kill() } catch {}
+              $antwort = "SumatraPDF reagierte nicht (45s) - Drucker eingeschaltet/erreichbar?"
+            } elseif ($p.ExitCode -eq 0) {
+              $ok = "1"; $antwort = "gedruckt -> " + ($(if ($d.drucker) { [string]$d.drucker } else { "Standarddrucker" }))
+            } else {
+              $antwort = "SumatraPDF ExitCode " + $p.ExitCode + " - Druckername korrekt? (" + [string]$d.drucker + ")"
+            }
+          } else {
+            $antwort = "SumatraPDF nicht gefunden - bitte auf dem Lager-PC installieren (Einstellungen -> SumatraPDF herunterladen)"
+          }
+        } catch { $antwort = "Druckfehler: " + $_.Exception.Message }
+        try { Invoke-RestMethod -Uri ($Url + "?token=" + $Token) -Method Post -TimeoutSec 10 -UserAgent $UA -Body @{ druck_id = $d.id; ok = $ok; antwort = $antwort } | Out-Null } catch {}
+        if ($ok -eq "1") { $st = "OK"; $farbe = "Green" } else { $st = "FEHLER"; $farbe = "Red" }
+        Write-Host ((Get-Date -Format "HH:mm:ss") + "  Druck " + $d.id + " -> " + $st + "  " + $antwort) -ForegroundColor $farbe
+      }
+    }
+  } catch {
+    if (-not $offline) {
+      Write-Host ((Get-Date -Format "HH:mm:ss") + "  Kein Kontakt zum Server: " + $_.Exception.Message) -ForegroundColor Yellow
+      $offline = $true
+    }
+  }
+  Start-Sleep -Seconds 1
+}
+PS1;
 $skript  = strtr($vorlage, ['{{URL}}' => $basis, '{{TOKEN}}' => lg_bruecke_token(), '{{VERSION}}' => $version]);
 $skript  = str_replace(["\r\n", "\n"], ["\n", "\r\n"], $skript);   // saubere Windows-Zeilenenden
 $b64     = base64_encode($skript);                                 // UTF-8-Bytes des PS1
