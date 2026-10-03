@@ -157,3 +157,13 @@
   /* Burger-Knopf größer */
   .bx-burger { transform: scale(1.15); }
 }
+
+/* Seitentitel in der mobilen Kopfleiste (spart den großen Titelblock im Inhalt) */
+.bx-mobil-titel{flex:1;min-width:0;font-weight:600;font-size:18px;color:#fff;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width: 860px) {
+  /* Großer Titel + Untertitel oben weg – steht jetzt in der Kopfleiste */
+  .bx-main > .bx-head > div:first-child { display: none; }
+  /* Elemente, die auf dem Handy nicht nötig sind (z. B. "Zum Bestand") */
+  .lg-nurdesktop { display: none !important; }
+}

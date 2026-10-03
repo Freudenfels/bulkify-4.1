@@ -76,6 +76,7 @@ function kopf(string $titel, string $aktiv = ''): void {
         echo '<div class="bx-mobilbar">'
            . '<button type="button" class="bx-burger" id="bx-burger" aria-label="Menü" aria-expanded="false">'
            . '<span></span><span></span><span></span></button>'
+           . ($titel !== '' ? '<span class="bx-mobil-titel">' . h($titel) . '</span>' : '')
            . '<img src="/assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo">'
            . '</div>';
         warnbalken();
