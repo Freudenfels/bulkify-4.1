@@ -1130,6 +1130,7 @@ function init_schema(): void {
     ensure_column('auftrag', 'kontingent_id', "INT NULL");   // Abruf aus einem Rahmenvertrag/Kontingent
     ensure_column('auftrag', 'produkt_bezeichnung', "VARCHAR(190) NULL");  // Fallback-Produktname, wenn kein produkt_id (v3-Import ohne verknuepftes Produkt)
     ensure_column('auftrag', 'produkt_form', "VARCHAR(20) NULL");          // Fallback-Darreichungsform dazu (kapsel|tablette|pulver|…)
+    ensure_column('auftrag', 'import_ref', "VARCHAR(60) NULL");            // Referenz der importierten Alt-Rechnung/-AB (Dedup beim PDF-Import)
     // Einmalige Reparatur: 4 v3-importierte Zukauf-Auftraege (Annapurna) kamen ohne verknuepftes Produkt an.
     // Name/Form aus der v3-Datenbank (board.sqlite) hier fest hinterlegt – gezielt per Auftragsnummer, idempotent.
     if (meta_get('fix_auftrag_produkt_v3', '') !== '1') {
@@ -2456,6 +2457,12 @@ function lager2_defekt(int $item_id, float $menge, string $ref, string $zustand)
 function ds_api_token(): string {
     $t = (string) meta_get('ds_api_token', '');
     if ($t === '') { $t = bin2hex(random_bytes(24)); meta_set('ds_api_token', $t); }
+    return $t;
+}
+// Token für den Lager-Scan-Endpunkt (Smartglass/Handscanner, read-only) – bei Bedarf erzeugen.
+function lager_scan_token(): string {
+    $t = (string) meta_get('lager_scan_token', '');
+    if ($t === '') { $t = bin2hex(random_bytes(24)); meta_set('lager_scan_token', $t); }
     return $t;
 }
 // Richtung B: Dashboard zieht die Artikelliste aus dem Fulfillment (fulfillment-web/bulkify_feed.php),
@@ -5785,7 +5792,7 @@ function rechnung_import_ki(string $pfad): array {
 // Eine Alt-Rechnung als Beleg anlegen (ohne Auftrag), mit hochgeladenem Original-PDF. Für den
 // Rechnungs-Import: erscheint danach im Kundenportal (Liste + Original-Download) mit Betrag + Status.
 // $f: nummer, datum, netto, ust_prozent, brutto, bezahlt(bool). Gibt die Beleg-ID zurück.
-function rechnung_alt_anlegen(int $kunde_id, array $f, string $datei, string $orig): ?int {
+function rechnung_alt_anlegen(int $kunde_id, array $f, string $datei, string $orig, ?int $auftrag_id = null): ?int {
     if ($kunde_id <= 0) return null;
     $brutto = round((float)($f['brutto'] ?? 0), 2);
     $netto  = round((float)($f['netto'] ?? 0), 2);
@@ -5798,12 +5805,119 @@ function rechnung_alt_anlegen(int $kunde_id, array $f, string $datei, string $or
     $datum  = (is_string($f['datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $f['datum'])) ? $f['datum'] : gmdate('Y-m-d');
     $status = !empty($f['bezahlt']) ? 'bezahlt' : 'offen';
     q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,original_datei,original_orig,kunde_sichtbar)
-       VALUES (?,?,NULL,?,?,?,?,?,?,?,?,?,1)",
-      [$nummer, 'rechnung', $kunde_id, $netto, $ustP, $ust, $brutto, $status, $datum, $datei, mb_substr($orig, 0, 255)]);
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)",
+      [$nummer, 'rechnung', ($auftrag_id ?: null), $kunde_id, $netto, $ustP, $ust, $brutto, $status, $datum, $datei, mb_substr($orig, 0, 255)]);
     $bid = (int) insert_id();
     if (function_exists('beleg_status_log_add')) beleg_status_log_add($bid, $status, 'Alt-Rechnung importiert (Original hochgeladen)' . ($status === 'bezahlt' ? ', als bezahlt übernommen' : ''), 'team');
     log_aktivitaet('kunde', $kunde_id, 'team', 'Alt-Rechnung ' . $nummer . ' importiert (' . number_format($brutto, 2, ',', '.') . ' €).', 'beleg', 'beleg', $bid);
     return $bid;
+}
+
+// Ein hochgeladenes Angebot / eine Auftragsbestätigung (auch v3, jede Sprache) per KI auslesen –
+// für den Auftrag-Import. Liest Kopf + die EINE Hauptposition (Produkt, Rezeptur, Verpackung, Menge,
+// Preis). Rückgabe ['ok'=>true, 'daten'=>[...]] oder ['ok'=>false,'fehler'=>…]. Wirft nie.
+function auftrag_import_ki(string $pfad): array {
+    require_once __DIR__ . '/ki.php';
+    if (!ki_bereit()) return ['ok' => false, 'fehler' => 'KI ist nicht eingerichtet (Einstellungen → KI).'];
+    $prompt = "Dies ist ein Angebot oder eine Auftragsbestätigung eines Lohnherstellers für Nahrungsergänzung. "
+        . "Lies die Daten aus und gib NUR JSON zurück:\n"
+        . '{"kunde_nr":"","kunde_name":"","ab_nummer":"","datum":"","produkt_name":"","darreichungsform":"kapsel",'
+        . '"verpackung":"","stueck_je_packung":0,"menge":0,"vk_stueck":0,"gesamt_netto":0,"ust_prozent":19,'
+        . '"zutaten":[{"name":"","menge_mg":0}]}' . "\n"
+        . "Regeln: produkt_name = Name der Hauptposition (ohne die Rezeptur-Aufzählung). "
+        . "zutaten = die in der Positionsbezeichnung aufgeführten Wirkstoffe mit mg je Einheit (z. B. 'NAC 300 mg'). "
+        . "darreichungsform eines von kapsel|tablette|softgel|stick|pulver|fluessig. "
+        . "verpackung = Behälter-Text, falls genannt (z. B. '150 ml Weithalsglas'), sonst ''. "
+        . "stueck_je_packung = Kapseln/Stück je Packung (z. B. 120). menge = Anzahl Packungen (Bestellmenge). "
+        . "vk_stueck = Preis je Packung (netto), gesamt_netto = Positionen-Netto gesamt. "
+        . "Zahlen mit Punkt als Dezimaltrennzeichen, keine Tausenderpunkte. Nichts erfinden – Unbekanntes leer/0.";
+    $r = ki_datei_frage($pfad, $prompt, ['json' => true, 'denken' => true, 'max_tokens' => 4000, 'timeout' => 240, 'zweck' => 'auftrag-import']);
+    if (empty($r['ok'])) return ['ok' => false, 'fehler' => (string)($r['fehler'] ?? 'Das Dokument konnte nicht gelesen werden.')];
+    $d = is_array($r['daten'] ?? null) ? $r['daten'] : [];
+    $num = fn($x) => (float) str_replace(',', '.', (string)$x);
+    $zut = [];
+    foreach ((array)($d['zutaten'] ?? []) as $z) {
+        if (!is_array($z)) continue;
+        $n = trim((string)($z['name'] ?? '')); if ($n === '') continue;
+        $zut[] = ['name' => mb_substr($n, 0, 190), 'menge_mg' => $num($z['menge_mg'] ?? 0)];
+    }
+    $formen = ['kapsel','tablette','softgel','stick','pulver','fluessig'];
+    $form = strtolower(trim((string)($d['darreichungsform'] ?? 'kapsel')));
+    return ['ok' => true, 'daten' => [
+        'kunde_nr'   => trim((string)($d['kunde_nr'] ?? '')),
+        'kunde_name' => trim((string)($d['kunde_name'] ?? '')),
+        'ab_nummer'  => trim((string)($d['ab_nummer'] ?? '')),
+        'datum'      => (is_string($d['datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d['datum'])) ? $d['datum'] : null,
+        'produkt_name' => mb_substr(trim((string)($d['produkt_name'] ?? '')), 0, 190),
+        'darreichungsform' => in_array($form, $formen, true) ? $form : 'kapsel',
+        'verpackung' => trim((string)($d['verpackung'] ?? '')),
+        'stueck_je_packung' => (int) round($num($d['stueck_je_packung'] ?? 0)),
+        'menge'      => (int) round($num($d['menge'] ?? 0)),
+        'vk_stueck'  => round($num($d['vk_stueck'] ?? 0), 4),
+        'gesamt_netto' => round($num($d['gesamt_netto'] ?? 0), 2),
+        'ust_prozent' => $num($d['ust_prozent'] ?? 0),
+        'zutaten'    => $zut,
+    ]];
+}
+
+// Eine Verpackung (Behälter) anhand eines Freitexts finden (z. B. "150 ml Weithalsglas"). Grobmatch
+// über Volumen (ml) + Typwort. Rückgabe item.id oder null.
+function verpackung_finden(string $text): ?int {
+    $text = trim($text); if ($text === '') return null;
+    $mlV = null; if (preg_match('/(\d+(?:[.,]\d+)?)\s*ml/i', $text, $m)) $mlV = (float) str_replace(',', '.', $m[1]);
+    foreach (all("SELECT id, name, volumen_ml FROM item WHERE kategorie='verpackung'") as $it) {
+        $nameTreffer = mb_stripos($text, (string)$it['name']) !== false || mb_stripos((string)$it['name'], $text) !== false;
+        $volTreffer  = $mlV !== null && abs((float)($it['volumen_ml'] ?? 0) - $mlV) < 0.5;
+        if ($nameTreffer || ($volTreffer && (mb_stripos($text, 'glas') !== false) === (mb_stripos((string)$it['name'], 'glas') !== false))) return (int)$it['id'];
+    }
+    return null;
+}
+
+// Rezeptur zu Name (+ Zutaten) finden oder neu anlegen. Rückgabe ['id'=>…, 'neu'=>bool].
+function rezeptur_finden_oder_anlegen(string $name, string $form, array $zutaten, ?int $kunde_id): array {
+    $name = trim($name) !== '' ? mb_substr(trim($name), 0, 190) : 'Rezeptur-Import';
+    $treffer = one("SELECT id FROM rezeptur WHERE name=? ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$name, $kunde_id]);
+    if ($treffer) return ['id' => (int)$treffer['id'], 'neu' => false];
+    q("INSERT INTO rezeptur (nummer,name,kunde_id,darreichungsform,status,notiz) VALUES (?,?,?,?,?,?)",
+      [naechste_nummer('RZ'), $name, $kunde_id ?: null, $form ?: 'kapsel', 'eingefroren', 'Aus Angebot/AB importiert (KI).']);
+    $rid = (int) insert_id();
+    $sort = 0;
+    foreach ($zutaten as $z) {
+        $bez = trim((string)($z['name'] ?? '')); if ($bez === '') continue;
+        $iid = scalar("SELECT id FROM item WHERE name=? AND kategorie='rohstoff' LIMIT 1", [$bez]);
+        q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
+          [$rid, $iid ?: null, mb_substr($bez, 0, 190), (float)($z['menge_mg'] ?? 0), $sort++]);
+    }
+    return ['id' => $rid, 'neu' => true];
+}
+
+// Aus den ausgelesenen Import-Daten einen Auftrag anlegen (inkl. Rezeptur/Produkt, falls neu).
+// $status: offen|in_produktion|erledigt (erledigt = abgeschlossen/versendet-Sicht). Idempotent über
+// import_ref (AB-Nummer + Kunde). Rückgabe ['ok','auftrag_id','produkt_id','rezeptur_id','rezeptur_neu','schon_da'].
+function auftrag_aus_import(int $kunde_id, array $d, string $status): array {
+    if ($kunde_id <= 0) return ['ok' => false, 'fehler' => 'Kein Kunde gewählt.'];
+    $status = in_array($status, ['offen','in_produktion','erledigt'], true) ? $status : 'erledigt';
+    $ref = trim((string)($d['ab_nummer'] ?? ''));
+    if ($ref !== '') {
+        $ex = scalar("SELECT id FROM auftrag WHERE kunde_id=? AND import_ref=? LIMIT 1", [$kunde_id, $ref]);
+        if ($ex) return ['ok' => true, 'auftrag_id' => (int)$ex, 'schon_da' => true];
+    }
+    $rez = rezeptur_finden_oder_anlegen((string)($d['produkt_name'] ?? ''), (string)($d['darreichungsform'] ?? 'kapsel'), (array)($d['zutaten'] ?? []), $kunde_id);
+    $stueck = max(0, (int)($d['stueck_je_packung'] ?? 0));
+    $verpId = !empty($d['verpackung']) ? verpackung_finden((string)$d['verpackung']) : null;
+    $pid = produkt_aus_rezeptur($rez['id'], $stueck > 0 ? $stueck : 1, $verpId, null);
+    $menge = max(0, (int)($d['menge'] ?? 0));
+    $vk    = round((float)($d['vk_stueck'] ?? 0), 4);
+    $netto = round((float)($d['gesamt_netto'] ?? 0), 2);
+    if ($netto <= 0 && $vk > 0 && $menge > 0) $netto = round($vk * $menge, 2);
+    $datum = (is_string($d['datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d['datum'])) ? $d['datum'] : gmdate('Y-m-d');
+    q("INSERT INTO auftrag (nummer,kunde_id,produkt_id,menge,stueck,verpackung_id,vk_stueck,gesamt_netto,status,status_datum,produkt_bezeichnung,produkt_form,import_ref)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('AB'), $kunde_id, $pid ?: null, $menge, $stueck ?: null, $verpId ?: null, $vk, $netto, $status, $datum,
+       mb_substr((string)($d['produkt_name'] ?? ''), 0, 190) ?: null, (string)($d['darreichungsform'] ?? 'kapsel'), ($ref !== '' ? mb_substr($ref, 0, 60) : null)]);
+    $aid = (int) insert_id();
+    log_aktivitaet('kunde', $kunde_id, 'team', 'Auftrag aus Angebot/AB importiert' . ($ref !== '' ? ' (' . $ref . ')' : '') . '.', 'auftrag', 'auftrag', $aid);
+    return ['ok' => true, 'auftrag_id' => $aid, 'produkt_id' => (int)$pid, 'rezeptur_id' => $rez['id'], 'rezeptur_neu' => $rez['neu'], 'schon_da' => false];
 }
 
 // Jahresvertrag aus einem Angebot: erzeugt (einmalig) das Kontingent im Status 'wartet_vertrag'.
