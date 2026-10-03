@@ -1,12 +1,12 @@
-# leiste/finden.php – Finden im großen Lager (`?p=finden`)
+# leiste/finden.php – Finden (einfach, handyfreundlich)
 
-Schnell eine Palette finden. Zwei Knöpfe öffnen dasselbe **Suchfenster** (Popup):
+Ein großes Suchfeld: **tippen ODER sprechen** (Web Speech API, Knopf „Sprechen"). Treffer erscheinen
+**live** beim Tippen (entprellt, über `?p=suche` JSON). Jeder Treffer ist eine große Kachel
+(Name groß, darunter Charge · Menge · Ort/Blinker). **Antippen löst sofort das Klingeln aus**
+(`data-klingeln` → `?p=klingeln` via assets/lager.js, grün 40 s). Treffer ohne Blinker werden grau
+„kein Blinker" gezeigt.
 
-- **Suchen** – tippen. Das Popup geht auf, im Feld tippst du Rohstoff, Artikelnummer oder Charge, die Treffer erscheinen live. Ein Treffer angetippt lässt den Blinker grün blinken, nochmal antippen schaltet ihn aus. Das X schließt und leert alles.
-- **Sprache** (auch Strg+D) – dasselbe Popup, zusätzlich mit Mikrofon: Rohstoff sagen, dann Befehle „blinke/aus/weiter/zurück/schließen“. Braucht Chrome und HTTPS.
-
-Das Popup und die ganze Logik stecken in `public/lager/assets/voice.js`; die Treffer kommen als JSON über `?p=suche`, das Blinken über `?p=klingeln`.
-
-Wird die Seite mit `?q=` aufgerufen (Deep-Link), zeigt sie zusätzlich eine server-gerenderte Trefferliste mit **Binden/Lösen** – zum Anhängen eines Blinkers an eine Charge, die noch keinen hat (sonst passiert das im Bestand-Detail).
-
-Die Suche liest nur eigenen Bestand (kein Fremdlager, keine leeren Chargen).
+Bewusst reduziert: keine Tabelle, kein Binden/Lösen hier – Blinker werden beim **Einbuchen** vergeben,
+Verwalten geht auf der **Charge-Seite** ([../bestand/charge.md](../bestand/charge.md)). Suche über
+`erp_chargen_suche` (eigener Bestand / Lager 1); Auflösung Blinker/Kiste über `blinker_fuer_charge`.
+Lager 2 hat sein eigenes Finden ([../bestand/l2_finden.md](../bestand/l2_finden.md)).

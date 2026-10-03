@@ -1,111 +1,88 @@
 <?php
-// Finden im grossen Lager (Chaos-Modell): Rohstoff/Charge suchen, an der gefundenen Charge haengt
-// einen Blinker -> "Finden" laesst sie klingeln. Neue Ware: Blinker-Code scannen und binden.
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $aktion = (string)($_POST['aktion'] ?? '');
-
-    if ($aktion === 'binden') {
-        $charge_id = (int)($_POST['charge_id'] ?? 0);
-        $scan = trim((string)($_POST['code'] ?? ''));
-        $code = led_leiste_normalisieren($scan);
-        if ($code === null) {
-            flash('"' . $scan . '" ist kein Blinker-Code. Bitte den Barcode des Blinkers scannen (z. B. CF64B6XD).', 'warn');
-        } else {
-            $fehler = leiste_binden($code, $charge_id);
-            if ($fehler !== '') { flash($fehler, 'warn'); }
-            else {
-                // Kurze Bestaetigung: einmal blau, OHNE Ton (3 s ist die kuerzeste Stufe der Hardware).
-                $r = leiste_finden((int)leiste_per_code($code)['id'], 'blau', 3, false);
-                $c = erp_charge($charge_id);
-                flash('Blinker ' . $code . ' hängt jetzt an ' . ($c ? charge_text($c) : 'der Charge') . '. '
-                    . ($r['ok'] ? 'Er leuchtet kurz blau.' : $r['meldung']), $r['ok'] ? 'ok' : 'warn');
-            }
-        }
-        weiter('?p=finden&q=' . urlencode((string)($_POST['q'] ?? '')));
-    }
-
-    if ($aktion === 'loesen') {
-        $lid = (int)($_POST['leiste_id'] ?? 0);
-        // Beim Entkoppeln kurz rot, OHNE Ton - Gegenstueck zum blauen Binden.
-        leiste_finden($lid, 'rot', 3, false);
-        leiste_loesen($lid);
-        flash('Blinker gelöst, er leuchtet kurz rot und ist wieder frei.');
-        weiter('?p=finden&q=' . urlencode((string)($_POST['q'] ?? '')));
-    }
-
-    if ($aktion === 'entfernen') {
-        // Eine einzelne Charge aus ihrer Mischpalette (Kiste) nehmen – die Palette bleibt bestehen.
-        $cid = (int)($_POST['charge_id'] ?? 0);
-        kiste_charge_entfernen($cid);
-        flash('Charge aus der Palette genommen.');
-        weiter('?p=finden&q=' . urlencode((string)($_POST['q'] ?? '')));
-    }
-}
-
+// Finden – ganz einfach (handyfreundlich): tippen ODER sprechen, Treffer erscheinen live,
+// Antippen eines Treffers lässt den Blinker an der Palette sofort klingeln.
+// Suche läuft über ?p=suche (JSON), Klingeln über ?p=klingeln (assets/lager.js, data-klingeln).
 $q = trim((string)($_GET['q'] ?? ''));
-$treffer = erp_chargen_suche($q);
-$hat_charge = tabelle_da('charge');
 
 kopf('Finden', 'finden');
-seitenkopf('Finden im großen Lager', 'Rohstoff oder Charge suchen, die Blinker an der Palette klingelt');
+seitenkopf('Finden', 'Tippen oder sprechen – Treffer antippen, der Blinker blinkt.');
 flash_zeigen();
 
-if (!$hat_charge) {
-    hinweis('Es sind noch keine Chargen im Dashboard vorhanden.', 'warn');
-    fuss(); return;
-}
+if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vorhanden.', 'warn'); fuss(); return; }
 ?>
-<div class="bx-listbar">
-  <button class="btn btn-primary" type="button" data-suche>Suchen</button>
-  <button class="btn btn-ghost" type="button" data-mic title="Per Sprache suchen und blinken lassen (Strg+D)">
-    <svg class="lg-mic-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><line x1="12" y1="18" x2="12" y2="22"></line></svg>
-    Sprache
+<div class="bx-panel fnd-suche">
+  <input type="search" id="fndQ" class="fnd-input lg-code" autocomplete="off" autofocus
+         placeholder="Was suchst du? (Rohstoff, Charge …)" value="<?= h($q) ?>">
+  <button type="button" id="fndMic" class="btn btn-ghost fnd-mic" title="Per Sprache suchen" aria-label="Per Sprache suchen">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><line x1="12" y1="18" x2="12" y2="22"></line></svg>
+    <span>Sprechen</span>
   </button>
 </div>
+<div id="fndStatus" class="muted" style="margin:var(--sp-3) 0"></div>
+<div id="fndListe" class="fnd-liste"></div>
 
-<?php if (!$treffer): ?>
-  <div class="bx-panel muted"><?= $q === '' ? 'Auf „Suchen“ oder „Sprache“ tippen. Das Suchfenster geht auf, dann tippst oder sagst du, was du suchst – der Blinker an der Palette blinkt.' : 'Nichts gefunden für „' . h($q) . '".' ?></div>
-<?php else: ?>
-<div class="bx-tablewrap" style="margin-bottom:var(--sp-6)">
-  <table class="bx-table">
-    <thead><tr><th>Rohstoff</th><th>Charge</th><th>Bestand</th><th>MHD</th><th>Blinker</th><th></th></tr></thead>
-    <tbody>
-    <?php foreach ($treffer as $c): $bf = blinker_fuer_charge((int)$c['id']); $l = $bf['leiste']; $palette = $bf['kiste']; ?>
-      <tr>
-        <td><?= h((string)$c['item_name']) ?><?= $c['artikelnummer'] ? ' <span class="muted">' . h((string)$c['artikelnummer']) . '</span>' : '' ?>
-          <?php if ($palette): ?> <span class="badge" title="Mischpalette"><?= h((string)$palette['kiste_name']) ?></span><?php endif; ?></td>
-        <td class="lg-code"><?= h((string)$c['charge_nr']) ?></td>
-        <td><?= h(rtrim(rtrim(number_format((float)$c['menge_verfuegbar'], 3, ',', '.'), '0'), ',')) ?> <?= h((string)$c['einheit']) ?></td>
-        <td class="muted"><?= $c['mhd'] ? h(fmt_zeit((string)$c['mhd'] . ' 00:00:00', 'd.m.Y')) : '' ?></td>
-        <td class="lg-code"><?= $l ? h((string)$l['code']) : '<span class="muted">keine</span>' ?></td>
-        <td style="text-align:right;white-space:nowrap">
-          <?php if ($l): ?>
-            <button type="button" class="btn btn-primary btn-sm" data-klingeln="<?= (int)$l['id'] ?>">Finden</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-klingeln="<?= (int)$l['id'] ?>" data-aktion="aus">Aus</button>
-            <?php if ($palette): ?>
-            <form method="post" style="display:inline" onsubmit="return confirm('Diese Charge aus der Palette „<?= h((string)$palette['kiste_name']) ?>" nehmen?')">
-              <input type="hidden" name="aktion" value="entfernen"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>"><input type="hidden" name="q" value="<?= h($q) ?>">
-              <button class="btn btn-ghost btn-sm lg-x" type="submit" title="Aus Palette nehmen" aria-label="Aus Palette nehmen">×</button>
-            </form>
-            <?php else: ?>
-            <form method="post" style="display:inline" onsubmit="return confirm('Blinker <?= h((string)$l['code']) ?> vom Rohstoff lösen? Er wird wieder frei.')">
-              <input type="hidden" name="aktion" value="loesen"><input type="hidden" name="leiste_id" value="<?= (int)$l['id'] ?>"><input type="hidden" name="q" value="<?= h($q) ?>">
-              <button class="btn btn-ghost btn-sm lg-x" type="submit" title="Blinker lösen" aria-label="Blinker lösen">×</button>
-            </form>
-            <?php endif; ?>
-          <?php else: ?>
-            <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end" data-no-busy>
-              <input type="hidden" name="aktion" value="binden"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>"><input type="hidden" name="q" value="<?= h($q) ?>">
-              <input name="code" class="lg-code" style="width:130px" placeholder="Blinker scannen" autocomplete="off">
-              <button class="btn btn-primary btn-sm" type="submit">Binden</button>
-            </form>
-          <?php endif; ?>
-        </td>
-      </tr>
-    <?php endforeach; ?>
-    </tbody>
-  </table>
-</div>
-<?php endif; ?>
+<style>
+  .fnd-suche{display:flex;gap:var(--sp-3);align-items:center}
+  .fnd-input{flex:1;min-width:0;font-size:20px;padding:16px 16px}
+  .fnd-mic{min-height:56px;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+  .fnd-liste{display:flex;flex-direction:column;gap:12px}
+  .fnd-item{display:block;width:100%;text-align:left;border:1px solid var(--line);border-radius:14px;
+    padding:18px 20px;background:var(--panel-2);cursor:pointer;line-height:1.3}
+  .fnd-item:hover{border-color:var(--gruen);text-decoration:none}
+  .fnd-item .n{display:block;font-size:var(--fs-lg);font-weight:600}
+  .fnd-item .s{display:block;color:var(--muted);margin-top:4px}
+  .fnd-item.kein{opacity:.65;cursor:default}
+  .fnd-item .lg-meldung{display:block;margin-top:6px;font-weight:600}
+</style>
+
+<script>
+(function(){
+  var q=document.getElementById('fndQ'), liste=document.getElementById('fndListe'),
+      status=document.getElementById('fndStatus'), mic=document.getElementById('fndMic'), timer;
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+  function render(treffer){
+    if(!treffer.length){ liste.innerHTML=''; status.textContent='Nichts gefunden.'; return; }
+    status.textContent=treffer.length+' Treffer – zum Finden antippen.';
+    liste.innerHTML = treffer.map(function(t){
+      var teile=[]; if(t.charge_nr) teile.push('Charge '+t.charge_nr);
+      if(t.menge) teile.push(t.menge+(t.einheit?(' '+t.einheit):''));
+      if(t.ort) teile.push(t.ort); else if(t.leiste) teile.push('Blinker '+t.leiste);
+      var sub=teile.join(' · ');
+      if(t.leiste_id){
+        return '<button type="button" class="fnd-item" data-klingeln="'+t.leiste_id+'" data-farbe="gruen" data-sek="40">'
+             + '<span class="n">'+esc(t.name)+'</span><span class="s">'+esc(sub)+'</span></button>';
+      }
+      return '<div class="fnd-item kein"><span class="n">'+esc(t.name)+'</span>'
+           + '<span class="s">'+esc(sub)+(sub?' · ':'')+'kein Blinker</span></div>';
+    }).join('');
+  }
+  function suchen(){
+    var s=q.value.trim();
+    if(s===''){ liste.innerHTML=''; status.textContent=''; return; }
+    status.textContent='Suche …';
+    fetch('?p=suche&q='+encodeURIComponent(s),{credentials:'same-origin'})
+      .then(function(r){return r.json();})
+      .then(function(j){ render(j.treffer||[]); })
+      .catch(function(){ status.textContent='Suche fehlgeschlagen.'; });
+  }
+  q.addEventListener('input',function(){ clearTimeout(timer); timer=setTimeout(suchen,250); });
+  if(q.value.trim()) suchen();
+
+  // --- Sprache (Web Speech API, Chrome/Android) ---
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ mic.style.display='none'; }
+  else mic.addEventListener('click',function(){
+    try{
+      var r=new SR(); r.lang='de-DE'; r.interimResults=false; r.maxAlternatives=1;
+      status.textContent='Sprich jetzt …'; mic.disabled=true;
+      r.onresult=function(e){ q.value=e.results[0][0].transcript; suchen(); };
+      r.onerror=function(){ status.textContent='Spracherkennung nicht möglich.'; };
+      r.onend=function(){ mic.disabled=false; };
+      r.start();
+    }catch(err){ mic.disabled=false; status.textContent='Spracherkennung nicht möglich.'; }
+  });
+})();
+</script>
 <?php
 fuss();
