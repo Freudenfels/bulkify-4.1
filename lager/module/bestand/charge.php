@@ -34,6 +34,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Aus der Kiste genommen.');
         weiter('?p=charge&id=' . $id);
     }
+    if ($aktion === 'umbuchen') {
+        $ziel = (int)($_POST['kunde_id'] ?? 0);
+        $r = erp_charge_umbuchen($id, $ziel > 0 ? $ziel : null);
+        flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+        weiter('?p=charge&id=' . $id);
+    }
 }
 
 $bl = leiste_fuer_charge($id);
@@ -46,8 +52,18 @@ $dokumente = erp_item_dokumente((int)$c['item_id'], $produkt_id ? (int)$produkt_
 $andere = erp_item_chargen((int)$c['item_id'], $id);
 
 kopf('Charge ' . (string)$c['charge_nr'], 'bestand');
+$fremd_kunde  = (int)($c['fremd_kunde_id'] ?? 0);
+$umb_vorschlag = $fremd_kunde ?: (int)(erp_charge_kunde_vorschlag($id) ?? 0);
+$umb_kunden   = erp_fulfillment_kunden();
+// Vorgeschlagenen Kunden sicher in die Auswahl aufnehmen (falls nicht als Fulfillment-Kunde markiert).
+if ($umb_vorschlag && !array_filter($umb_kunden, fn($k) => (int)$k['id'] === $umb_vorschlag)) {
+    $nm = erp_kunde_name($umb_vorschlag);
+    if ($nm !== '') array_unshift($umb_kunden, ['id' => $umb_vorschlag, 'firma' => $nm]);
+}
+
 $kopfAktion = '<a class="btn btn-' . (isset($_GET['neu']) ? 'primary' : 'ghost') . '" href="?p=etikett&id=' . $id . '" target="_blank">Etikett drucken</a> '
     . (isset($_GET['neu']) ? '<a class="btn btn-ghost" href="?p=eingang">Nächster Wareneingang</a> ' : '')
+    . '<a class="btn btn-ghost" href="#umbuchen">Umbuchen</a> '
     . '<a class="btn btn-ghost" href="?p=bestand">Zum Bestand</a>';
 seitenkopf((string)$c['item_name'], erp_kategorie_label($c) . ($c['artikelnummer'] ? ' · ' . $c['artikelnummer'] : ''), $kopfAktion);
 flash_zeigen();
@@ -63,6 +79,34 @@ flash_zeigen();
   <div class="bx-card"><div class="k">MHD</div><div class="v" style="font-size:var(--fs-lg)"><?= mhd_html($c['mhd']) ?></div></div>
   <div class="bx-card"><div class="k">Status</div><div class="v" style="font-size:var(--fs-lg)"><?= status_badge($c['status']) ?></div></div>
   <div class="bx-card"><div class="k">Charge</div><div class="v lg-code" style="font-size:var(--fs-lg)"><?= h((string)$c['charge_nr']) ?: '–' ?></div></div>
+  <div class="bx-card"><div class="k">Lager</div><div class="v" style="font-size:var(--fs-lg)"><?= $fremd_kunde ? 'Lager 2 · ' . h(erp_kunde_name($fremd_kunde)) : 'Lager 1 · eigener Bestand' ?></div></div>
+</div>
+
+<div class="bx-panel" id="umbuchen">
+  <h2>Umbuchen</h2>
+  <?php if ($fremd_kunde): ?>
+    <p>Diese Charge gehört aktuell zu <strong>Lager 2 (Fremdlager)</strong> von <strong><?= h(erp_kunde_name($fremd_kunde)) ?></strong>.</p>
+    <form method="post" onsubmit="return confirm('Charge zurück in den eigenen Bestand (Lager 1) buchen?')">
+      <input type="hidden" name="aktion" value="umbuchen"><input type="hidden" name="kunde_id" value="0">
+      <button class="btn btn-ghost" type="submit">Zurück in den eigenen Bestand (Lager 1)</button>
+    </form>
+  <?php else: ?>
+    <p>Diese Charge liegt im <strong>eigenen Bestand (Lager 1)</strong>. Fertige Ware kannst du ins <strong>Fremdlager (Lager 2)</strong> des Kunden buchen.</p>
+    <?php if (!$umb_kunden): ?>
+      <p class="muted" style="margin:0">Noch keine Fulfillment-Kunden hinterlegt. Setze beim Kunden im Dashboard den Haken „nutzt Fulfillment".</p>
+    <?php else: ?>
+    <form method="post" class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap">
+      <input type="hidden" name="aktion" value="umbuchen">
+      <div class="bx-field" style="margin:0;min-width:240px"><label>Kunde (Fremdlager)</label>
+        <select name="kunde_id" required>
+          <option value="">– Kunde wählen –</option>
+          <?php foreach ($umb_kunden as $k): ?><option value="<?= (int)$k['id'] ?>" <?= $umb_vorschlag === (int)$k['id'] ? 'selected' : '' ?>><?= h((string)$k['firma']) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit">Ins Fremdlager buchen (Lager 2)</button>
+    </form>
+    <?php endif; ?>
+  <?php endif; ?>
 </div>
 
 <div class="bx-panel">

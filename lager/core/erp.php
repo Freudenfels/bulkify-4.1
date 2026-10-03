@@ -118,6 +118,49 @@ function erp_bestand_zaehlung(): array {
     return $out;
 }
 
+// Eine Charge zwischen Lager 1 (eigener Bestand) und Lager 2 (Fremdlager eines Kunden) umbuchen.
+// $kunde_id > 0 -> gehoert dem Kunden (Lager 2); null/0 -> zurueck in den eigenen Bestand (Lager 1).
+function erp_charge_umbuchen(int $charge_id, ?int $kunde_id): array {
+    if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Charge-Tabelle.'];
+    $c = one("SELECT id FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
+    if ($kunde_id && $kunde_id > 0) {
+        if (tabelle_da('kunden') && !scalar("SELECT id FROM kunden WHERE id=?", [$kunde_id]))
+            return ['ok' => false, 'meldung' => 'Kunde nicht gefunden.'];
+        q("UPDATE charge SET fremd_kunde_id=? WHERE id=?", [$kunde_id, $charge_id]);
+        return ['ok' => true, 'meldung' => 'Ins Fremdlager (Lager 2) umgebucht.'];
+    }
+    q("UPDATE charge SET fremd_kunde_id=NULL WHERE id=?", [$charge_id]);
+    return ['ok' => true, 'meldung' => 'Zurück in den eigenen Bestand (Lager 1).'];
+}
+
+// Wahrscheinlicher Kunde einer (Fertigwaren-)Charge: aus Auftrag, sonst Produktionsauftrag, sonst Produkt.
+function erp_charge_kunde_vorschlag(int $charge_id): ?int {
+    if (!tabelle_da('charge')) return null;
+    try {
+        $c = one("SELECT auftrag_id, pa_id, item_id FROM charge WHERE id=?", [$charge_id]);
+        if (!$c) return null;
+        if (!empty($c['auftrag_id']) && tabelle_da('auftrag')) {
+            $k = (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [(int)$c['auftrag_id']]);
+            if ($k > 0) return $k;
+        }
+        if (!empty($c['pa_id']) && tabelle_da('produktionsauftrag') && tabelle_da('auftrag')) {
+            $k = (int) scalar("SELECT a.kunde_id FROM produktionsauftrag pa JOIN auftrag a ON a.id=pa.auftrag_id WHERE pa.id=?", [(int)$c['pa_id']]);
+            if ($k > 0) return $k;
+        }
+        if (!empty($c['item_id']) && tabelle_da('item') && tabelle_da('produkt')) {
+            $k = (int) scalar("SELECT p.kunde_id FROM item i JOIN produkt p ON p.id=i.produkt_id WHERE i.id=?", [(int)$c['item_id']]);
+            if ($k > 0) return $k;
+        }
+    } catch (Throwable $e) { return null; }
+    return null;
+}
+
+function erp_kunde_name(int $id): string {
+    if ($id <= 0 || !tabelle_da('kunden')) return '';
+    return (string) scalar("SELECT firma FROM kunden WHERE id=?", [$id]);
+}
+
 // Kennzahlen fuer die Lager-Startseite (Uebersicht). Ein kompakter Satz Zahlen.
 function erp_lager_kennzahlen(): array {
     $o = ['l1_chargen'=>0,'l1_artikel'=>0,'l2_chargen'=>0,'l2_kunden'=>0,'quarantaene'=>0,'mhd_bald'=>0,'mhd_ablauf'=>0];
