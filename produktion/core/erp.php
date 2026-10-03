@@ -172,20 +172,31 @@ function erp_fefo_charge_id(int $item_id): ?int {
 // Wir fassen KEINE lg_-Tabellen an. Rückgabe ['ok'=>bool,'meldung'=>string].
 function pr_lager_blink(int $charge_id, string $aktion = 'an'): array {
     if ($charge_id <= 0) return ['ok'=>false, 'meldung'=>'Keine Charge angegeben.'];
+    $qs = 'p=api_blink&charge_id=' . $charge_id . '&aktion=' . rawurlencode($aktion);
+    $hatToken = defined('LG_BLINK_TOKEN') && LG_BLINK_TOKEN !== '';
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host = (string)($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
-    $url = $scheme . '://' . $host . '/lager/?p=api_blink&charge_id=' . $charge_id . '&aktion=' . rawurlencode($aktion);
-    if (defined('LG_BLINK_TOKEN') && LG_BLINK_TOKEN !== '') $url .= '&token=' . rawurlencode((string)LG_BLINK_TOKEN);
-    $c = curl_init($url);
-    curl_setopt_array($c, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>3, CURLOPT_TIMEOUT=>6]);
-    $body = curl_exec($c);
-    $err  = $body === false ? curl_error($c) : '';
-    $code = (int) curl_getinfo($c, CURLINFO_HTTP_CODE);
-    curl_close($c);
-    if ($err !== '') return ['ok'=>false, 'meldung'=>'Lager nicht erreichbar: ' . $err];
-    $j = json_decode((string)$body, true);
-    if (!is_array($j)) return ['ok'=>false, 'meldung'=>'Unerwartete Antwort vom Lager (HTTP ' . $code . ').'];
-    return ['ok'=>!empty($j['ok']), 'meldung'=>(string)($j['meldung'] ?? '')];
+    // Reihenfolge: erst Loopback (kein Token nötig), dann Host (+Token). Erste gültige Antwort zählt;
+    // ein 403 (Auth) wird übersprungen, damit der nächste Weg greift.
+    $urls = [];
+    $urls[] = 'http://127.0.0.1/lager/?' . $qs;                                   // gleiche Maschine, serverseitig
+    if ($host !== '' && $host !== '127.0.0.1') $urls[] = $scheme . '://' . $host . '/lager/?' . $qs
+        . ($hatToken ? '&token=' . rawurlencode((string)LG_BLINK_TOKEN) : '');
+    $letzte = 'Lager nicht erreichbar.';
+    foreach ($urls as $url) {
+        $c = curl_init($url);
+        curl_setopt_array($c, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>3, CURLOPT_TIMEOUT=>6, CURLOPT_PROXY=>'']);
+        $body = curl_exec($c);
+        $err  = $body === false ? curl_error($c) : '';
+        $code = (int) curl_getinfo($c, CURLINFO_HTTP_CODE);
+        curl_close($c);
+        if ($err !== '') { $letzte = 'Lager nicht erreichbar: ' . $err; continue; }
+        if ($code === 403) { $letzte = 'Lager verweigert (Token nötig). In secrets.php LG_BLINK_TOKEN setzen.'; continue; }
+        $j = json_decode((string)$body, true);
+        if (!is_array($j)) { $letzte = 'Unerwartete Antwort vom Lager (HTTP ' . $code . ').'; continue; }
+        return ['ok'=>!empty($j['ok']), 'meldung'=>(string)($j['meldung'] ?? '')];
+    }
+    return ['ok'=>false, 'meldung'=>$letzte];
 }
 
 // Zutaten der Rezeptur eines Auftrags (Zusammensetzung je Einheit). Rezeptur = pa.rezeptur_id oder produkt.rezeptur_id.
