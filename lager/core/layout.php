@@ -24,6 +24,7 @@ function lg_nav(): array {
 }
 
 function kopf(string $titel, string $aktiv = ''): void {
+    $GLOBALS['lg_aktiv'] = $aktiv;   // fuer seitenkopf(): auf welcher Seite sind wir (Einbuchen-Knopf)
     $u = lg_benutzer();
     echo '<!doctype html><html lang="de"><head><meta charset="utf-8">'
        . '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
@@ -47,8 +48,6 @@ function kopf(string $titel, string $aktiv = ''): void {
         echo '<aside class="bx-side">'
            . '<div class="bx-brand"><img src="/assets/bulkify-logo-white.png" alt="' . h(BX_MARKE) . '" class="bx-logo">'
            . '<span class="bx-ver">' . h(BX_TITEL) . '</span></div><nav>';
-        // Einbuchen als eigener Knopf oben (kein Menüpunkt) – auf jeder Lager-Seite erreichbar.
-        echo '<a href="?p=we" class="lg-einbuchen-btn"><span>+ Einbuchen</span></a>';
         foreach (lg_nav() as $gruppe => $seiten) {
             if ($gruppe !== '') echo '<div class="bx-navgroup">' . h($gruppe) . '</div>';
             foreach ($seiten as $route => $label) {
@@ -117,7 +116,10 @@ function fuss(): void {
 }
 
 // Ueberschrift einer Seite, optional mit Knoepfen rechts - wie bx_head() im Dashboard.
+// Rechts steht auf jeder Seite ein "Einbuchen"-Knopf (ausser auf der Einbuch-Seite selbst).
 function seitenkopf(string $titel, string $unter = '', string $aktion = ''): void {
+    if (($GLOBALS['lg_aktiv'] ?? '') !== 'we')
+        $aktion = '<a class="btn btn-primary" href="?p=we">Einbuchen</a> ' . $aktion;
     echo '<div class="bx-head"><div><h1>' . h($titel) . '</h1>';
     if ($unter !== '') echo '<p class="bx-sub">' . h($unter) . '</p>';
     echo '</div>';

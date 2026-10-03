@@ -14,12 +14,21 @@ if (!$lieferungen) {
     return;
 }
 
+?>
+<div class="bx-listbar">
+  <input type="search" id="erwSuche" class="bx-search" placeholder="Suchen: Lieferant, Bestellnr., Artikel …" autofocus>
+</div>
+<div id="erwLeer" class="bx-panel muted" hidden>Nichts gefunden.</div>
+<?php
 $heute = date('Y-m-d');
 foreach ($lieferungen as $l):
     $eta = (string)($l['eta_geplant'] ?? '');
     $ueberfaellig = $eta !== '' && $eta < $heute;
+    $suchteile = [(string)($l['lieferant'] ?? ''), (string)($l['nummer'] ?? ''), (string)($l['tracking'] ?? '')];
+    foreach (($l['positionen'] ?? []) as $sp) $suchteile[] = (string)($sp['name'] ?? '');
+    $such = mb_strtolower(implode(' ', array_filter($suchteile)));
 ?>
-<div class="bx-panel">
+<div class="bx-panel erw-karte" data-such="<?= h($such) ?>">
   <div class="bx-head" style="margin:0 0 10px">
     <div>
       <h2 style="margin:0"><?= h((string)($l['lieferant'] ?: 'Ohne Lieferant')) ?>
@@ -72,5 +81,21 @@ foreach ($lieferungen as $l):
   <?php endif; ?>
 </div>
 <?php endforeach; ?>
+<script>
+(function(){
+  var q = document.getElementById('erwSuche'); if (!q) return;
+  var karten = document.querySelectorAll('.erw-karte'), leer = document.getElementById('erwLeer');
+  function filter(){
+    var words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean), treffer = 0;
+    karten.forEach(function(k){
+      var hay = k.getAttribute('data-such') || '';
+      var hit = words.every(function(w){ return hay.indexOf(w) >= 0; });
+      k.style.display = hit ? '' : 'none'; if (hit) treffer++;
+    });
+    if (leer) leer.hidden = treffer > 0;
+  }
+  q.addEventListener('input', filter);
+})();
+</script>
 <?php
 fuss();
