@@ -216,17 +216,24 @@ if ($gebucht):
         <label class="btn btn-ghost" style="margin:0">Datei / PDF wählen
           <input type="file" id="weFile" accept="image/*,application/pdf" capture="environment" multiple hidden <?= $ki ? '' : 'disabled' ?>>
         </label>
-        <button type="button" class="btn btn-primary" id="weScan" disabled>Lieferschein auslesen</button>
-        <span id="weScanInfo" class="muted" style="align-self:center"></span>
       </div>
-      <div id="weCamBox" style="display:none;margin-top:var(--sp-3)">
-        <video id="weVideo" playsinline style="width:100%;max-width:520px;border-radius:10px;background:#000"></video>
-        <div class="bx-row" style="gap:var(--sp-2);margin-top:var(--sp-2)">
-          <button type="button" class="btn btn-primary btn-sm" id="weShot">Foto aufnehmen</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="weCamStop">Kamera aus</button>
+      <div class="we-scan-grid">
+        <div class="we-scan-cam" id="weCamBox" style="display:none">
+          <video id="weVideo" playsinline style="width:100%;border-radius:10px;background:#000"></video>
+          <div class="bx-row" style="gap:var(--sp-2);margin-top:var(--sp-2)">
+            <button type="button" class="btn btn-primary btn-sm" id="weShot">Foto aufnehmen</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="weCamStop">Kamera aus</button>
+          </div>
+        </div>
+        <div class="we-scan-side">
+          <div class="muted" id="weScanHint">Noch keine Seiten. Kamera öffnen und fotografieren, oder Datei/PDF wählen.</div>
+          <div id="weThumbs" class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap"></div>
+          <div style="margin-top:var(--sp-3)">
+            <button type="button" class="btn btn-primary" id="weScan" disabled>Lieferschein auslesen</button>
+            <span id="weScanInfo" class="muted" style="margin-left:var(--sp-2)"></span>
+          </div>
         </div>
       </div>
-      <div id="weThumbs" class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap;margin-top:var(--sp-3)"></div>
       <canvas id="weCanvas" hidden></canvas>
     </div>
 
@@ -325,6 +332,9 @@ if ($gebucht):
   .we-thumb img{width:100%;height:100%;object-fit:cover}
   .we-thumb .x{position:absolute;top:2px;right:2px;background:#000a;color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;line-height:1}
   .we-thumb .pdf{display:flex;align-items:center;justify-content:center;height:100%;font-weight:600;color:var(--muted)}
+  .we-scan-grid{display:flex;gap:var(--sp-4);flex-wrap:wrap;align-items:flex-start;margin-top:var(--sp-3)}
+  .we-scan-cam{flex:1 1 340px;max-width:560px}
+  .we-scan-side{flex:1 1 300px;min-width:240px}
 </style>
 
 <script>
@@ -406,6 +416,7 @@ if ($gebucht):
     });
     scanBtn.disabled = dateien.length===0;
     info.textContent = dateien.length ? dateien.length+' Seite(n) bereit' : '';
+    var hint=document.getElementById('weScanHint'); if(hint) hint.style.display = dateien.length ? 'none' : '';
   }
   document.getElementById('weFile').addEventListener('change',function(e){
     [].forEach.call(e.target.files,function(f){ dateien.push({blob:f,name:f.name,isPdf:/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name)}); });

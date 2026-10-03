@@ -14,6 +14,8 @@ require_once __DIR__ . '/../../lager/core/db.php';
 require_once __DIR__ . '/../../lager/core/schema.php';
 require_once __DIR__ . '/../../lager/core/ui.php';
 require_once __DIR__ . '/../../lager/core/led.php';
+require_once __DIR__ . '/../../lager/core/leiste.php';       // leiste_fuer_charge (Blinker aufs Etikett)
+require_once __DIR__ . '/../../lager/core/kiste.php';        // blinker_fuer_charge (Blinker aufs Etikett)
 require_once __DIR__ . '/../../lager/core/erp.php';          // erp_charge_voll fuers Etikett
 require_once __DIR__ . '/../../lager/core/etikett_pdf.php';  // lg_etikett_pdf fuer Druckjobs
 

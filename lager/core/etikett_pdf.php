@@ -36,6 +36,13 @@ function lg_etikett_pdf(array $ids, string $format = 'klein', int $override = 0)
         $c = erp_charge_voll($cid);
         if (!$c) continue;
         $n = $override ?: lg_pakete($cid);
+        // Blinker/Ort fuers Etikett (Kiste = Mischpalette, sonst Leisten-Code).
+        $c['blinker_code'] = '';
+        if (function_exists('blinker_fuer_charge')) {
+            $bf = blinker_fuer_charge($cid);
+            if (!empty($bf['kiste'])) $c['blinker_code'] = 'Kiste ' . (string)($bf['kiste']['kiste_name'] ?? '');
+            elseif (!empty($bf['leiste'])) $c['blinker_code'] = (string)($bf['leiste']['code'] ?? '');
+        }
         $split = $n > 1 && function_exists('lg_aufteilen') && lg_aufteilen($cid);
         $total = (float)($c['menge_verfuegbar'] ?? 0);
         // Bei Aufteilung: gleiche Basismenge je Karton, der LETZTE bekommt den Rest (Summe = Gesamt).
@@ -109,7 +116,7 @@ function lg_karton_etikett(MiniPDF $pdf, callable $mm, array $c, string $url, in
         $yy += $mm(8.4);
     };
     $halb('Lieferant', $lieferantTxt, 'Eingang', $eingangTxt);
-    $feld('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));
+    $halb('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''), 'Blinker / Ort', (string)($c['blinker_code'] ?? ''));
     $halb('MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–',
           (string)($c['menge_label'] ?? 'Menge'), menge_txt($c['menge_anzeige'] ?? $c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
 }
@@ -157,7 +164,7 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
         $yy += $mm(10.5);
     };
     $halb('Lieferant', $lieferantTxt, 'Eingang', $eingangTxt);
-    $feld('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));
+    $halb('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''), 'Blinker / Ort', (string)($c['blinker_code'] ?? ''));
     $halb('MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–',
           (string)($c['menge_label'] ?? 'Menge'), menge_txt($c['menge_anzeige'] ?? $c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
 }
