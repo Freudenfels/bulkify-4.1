@@ -55,7 +55,7 @@ $runLabel = match ((string)$pa['status']) {
     'erledigt' => 'Produktionsmodus',
     default    => 'In den Produktionsmodus',
 };
-$aktionen = '<a class="btn btn-sm" href="?p=run&id=' . $id . '">' . h($runLabel) . '</a>'
+$aktionen = '<a class="btn btn-primary btn-sm" href="?p=run&id=' . $id . '">' . h($runLabel) . '</a>'
           . ' <a class="btn btn-ghost btn-sm" href="?p=liste">Zurück zur Liste</a>';
 seitenkopf((string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''), $aktionen);
 ?>
@@ -171,7 +171,7 @@ $felder = [
           <form method="post" style="margin:0" onsubmit="return confirm('Schritt &quot;<?= h((string)$s['station']) ?>&quot; abschließen? Material wird nach FEFO abgebucht.');">
             <input type="hidden" name="aktion" value="schritt_ab">
             <input type="hidden" name="schritt_id" value="<?= (int)$s['id'] ?>">
-            <button type="submit" class="btn btn-sm">Abschließen</button>
+            <button type="submit" class="btn btn-primary btn-sm">Abschließen</button>
           </form>
           <?php endif; ?>
         </td>

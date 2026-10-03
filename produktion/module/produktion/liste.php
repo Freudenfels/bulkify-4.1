@@ -15,7 +15,7 @@ seitenkopf('Produktionsaufträge', count($pas) . ' ' . (count($pas) === 1 ? 'Auf
 ?>
 <div class="bx-row" style="gap:8px;margin-bottom:16px;flex-wrap:wrap">
   <?php foreach ($tabs as $key => $label): ?>
-    <a class="btn btn-sm <?= $tab === $key ? '' : 'btn-ghost' ?>" href="?p=liste&tab=<?= h($key) ?>"><?= h($label) ?></a>
+    <a class="btn btn-sm <?= $tab === $key ? 'btn-primary' : 'btn-ghost' ?>" href="?p=liste&tab=<?= h($key) ?>"><?= h($label) ?></a>
   <?php endforeach; ?>
 </div>
 <?php if (!$pas): ?>

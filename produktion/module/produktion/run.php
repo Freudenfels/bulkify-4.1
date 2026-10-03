@@ -56,7 +56,7 @@ seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt
   <form method="post" style="margin:0" onsubmit="return confirm('Schritt &quot;<?= h((string)$cur['station']) ?>&quot; jetzt abschließen?');">
     <input type="hidden" name="aktion" value="erledigen">
     <input type="hidden" name="schritt_id" value="<?= (int)$cur['id'] ?>">
-    <button type="submit" class="btn" style="font-size:16px;padding:12px 28px"><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
+    <button type="submit" class="btn btn-primary" style="font-size:16px;padding:12px 28px"><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
   </form>
 </div>
 <?php else: ?>
