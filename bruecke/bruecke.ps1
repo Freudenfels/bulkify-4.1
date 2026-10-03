@@ -20,7 +20,7 @@ try {
 
 # PowerShell 5.1 nutzt sonst teils TLS 1.0 -> HTTPS zum Server schlaegt fehl.
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
-$UA = "bulkify-lager-bruecke/1.2"
+$UA = "bulkify-lager-bruecke/1.3"
 
 # Installierte Drucker an den Server melden (fuer die Drucker-Auswahl in den Einstellungen).
 # Robust: $std kann $null sein (wenn "Windows verwaltet Standarddrucker" an ist) -> leeren String
@@ -58,6 +58,10 @@ Write-Host " bulkify Lager-Bruecke laeuft"
 Write-Host (" Server: " + $Url)
 Write-Host " Fenster offen lassen. Beenden mit Strg+C."
 Write-Host ("=" * 54)
+
+$spStart = Get-SumatraPath
+if ($spStart) { Write-Host (" SumatraPDF gefunden: " + $spStart) -ForegroundColor Green }
+else { Write-Host " SumatraPDF NICHT gefunden - lautloser Druck geht erst nach Installation." -ForegroundColor Yellow }
 
 Send-Printers   # einmal beim Start
 
@@ -104,11 +108,17 @@ while ($true) {
             if ($d.drucker) { $a += @("-print-to", [string]$d.drucker) } else { $a += @("-print-to-default") }
             $a += @("-print-settings", "noscale")   # 1:1, nicht auf Papiergroesse skalieren (Etikett!)
             $a += $tmp
-            $p = Start-Process -FilePath $sumatra -ArgumentList $a -PassThru -Wait -WindowStyle Hidden
-            if ($p.ExitCode -eq 0) { $ok = "1"; $antwort = "gedruckt (SumatraPDF)" } else { $antwort = "SumatraPDF ExitCode " + $p.ExitCode }
+            $p = Start-Process -FilePath $sumatra -ArgumentList $a -PassThru -WindowStyle Hidden
+            if (-not $p.WaitForExit(45000)) {        # nicht ewig warten -> sonst haengt "abgeholt"
+              try { $p.Kill() } catch {}
+              $antwort = "SumatraPDF reagierte nicht (45s) - Drucker eingeschaltet/erreichbar?"
+            } elseif ($p.ExitCode -eq 0) {
+              $ok = "1"; $antwort = "gedruckt -> " + ($(if ($d.drucker) { [string]$d.drucker } else { "Standarddrucker" }))
+            } else {
+              $antwort = "SumatraPDF ExitCode " + $p.ExitCode + " - Druckername korrekt? (" + [string]$d.drucker + ")"
+            }
           } else {
-            Start-Process -FilePath $tmp -Verb Print -ErrorAction Stop
-            $ok = "1"; $antwort = "an Standard-PDF-Programm uebergeben (SumatraPDF nicht gefunden)"
+            $antwort = "SumatraPDF nicht gefunden - bitte auf dem Lager-PC installieren (Einstellungen -> SumatraPDF herunterladen)"
           }
         } catch { $antwort = "Druckfehler: " + $_.Exception.Message }
         try {
