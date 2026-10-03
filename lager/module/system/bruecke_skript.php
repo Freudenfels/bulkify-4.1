@@ -10,10 +10,15 @@ $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
       || strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
 $basis = ($https ? 'https' : 'http') . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'localhost') . '/lager/bruecke.php';
 
+// EINE Quelle fuer die Version: steht im Dateinamen, in der Fenster-Startmeldung und im UA.
+// Bei jeder Aenderung an bruecke.ps1 hier hochzaehlen.
+$version = '1.3';
+
 $vorlage = (string)file_get_contents(BX_ROOT . '/bruecke/bruecke.ps1');
-$skript  = strtr($vorlage, ['{{URL}}' => $basis, '{{TOKEN}}' => lg_bruecke_token()]);
+$skript  = strtr($vorlage, ['{{URL}}' => $basis, '{{TOKEN}}' => lg_bruecke_token(), '{{VERSION}}' => $version]);
 $skript  = str_replace(["\r\n", "\n"], ["\n", "\r\n"], $skript);   // saubere Windows-Zeilenenden
 $b64     = base64_encode($skript);                                 // UTF-8-Bytes des PS1
+$dateiBasis = 'bulkify-lager-bruecke-v' . str_replace('.', '-', $version);
 
 // Hintergrund-Variante: eine ganz normale .bat (keine .vbs -> kein Chrome-Virusblock).
 // OHNE Admin-Rechte: legt das PS1 dauerhaft nach %LOCALAPPDATA%\bulkify-bruecke ab, traegt den
@@ -46,7 +51,7 @@ if (($_GET['art'] ?? '') === 'hintergrund') {
     ];
     $batBg = implode("\r\n", $zeilenBg) . "\r\n";
     header('Content-Type: application/octet-stream');
-    header('Content-Disposition: attachment; filename="bulkify-lager-bruecke-einrichten.bat"');
+    header('Content-Disposition: attachment; filename="' . $dateiBasis . '-einrichten.bat"');
     header('Cache-Control: no-store');
     echo $batBg;
     exit;
@@ -67,7 +72,7 @@ $zeilen = [
 $bat = implode("\r\n", $zeilen) . "\r\n";
 
 header('Content-Type: application/octet-stream');
-header('Content-Disposition: attachment; filename="bulkify-lager-bruecke.bat"');
+header('Content-Disposition: attachment; filename="' . $dateiBasis . '-test.bat"');
 header('Cache-Control: no-store');
 echo $bat;
 exit;

@@ -1,6 +1,8 @@
 # system/bruecke_skript.php – Brückenprogramm herunterladen
 
-Liefert die Lager-Brücke (`bruecke/bruecke.ps1`) als Download zum Doppelklicken. Server-Adresse und Schlüssel sind schon eingetragen, Zeilenenden im Windows-Format.
+Liefert die Lager-Brücke (`bruecke/bruecke.ps1`) als Download zum Doppelklicken. Server-Adresse, Schlüssel und Version sind schon eingetragen, Zeilenenden im Windows-Format.
+
+**Version:** `$version` in dieser Datei ist die EINE Quelle. Sie wird in die `.ps1` eingesetzt (`{{VERSION}}` → UA + Fenster-Startmeldung „Version: …") UND in den Dateinamen des Downloads (`bulkify-lager-bruecke-v1-3-einrichten.bat` bzw. `-test.bat`). So erkennt man am Dateinamen und im Fenster sofort, welche Version läuft. Bei jeder Änderung an `bruecke.ps1` die `$version` hochzählen.
 
 Zwei Varianten:
 

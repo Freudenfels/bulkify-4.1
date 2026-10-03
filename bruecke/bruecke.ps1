@@ -20,7 +20,7 @@ try {
 
 # PowerShell 5.1 nutzt sonst teils TLS 1.0 -> HTTPS zum Server schlaegt fehl.
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
-$UA = "bulkify-lager-bruecke/1.3"
+$UA = "bulkify-lager-bruecke/{{VERSION}}"
 
 # Installierte Drucker an den Server melden (fuer die Drucker-Auswahl in den Einstellungen).
 # Robust: $std kann $null sein (wenn "Windows verwaltet Standarddrucker" an ist) -> leeren String
@@ -55,6 +55,7 @@ function Get-SumatraPath {
 
 Write-Host ("=" * 54)
 Write-Host " bulkify Lager-Bruecke laeuft"
+Write-Host (" Version: " + $UA) -ForegroundColor Cyan
 Write-Host (" Server: " + $Url)
 Write-Host " Fenster offen lassen. Beenden mit Strg+C."
 Write-Host ("=" * 54)
