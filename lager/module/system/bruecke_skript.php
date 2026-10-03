@@ -16,7 +16,7 @@ $basis = ($https ? 'https' : 'http') . '://' . (string)($_SERVER['HTTP_HOST'] ??
 
 // EINE Quelle fuer die Version: steht im Dateinamen, in der Fenster-Startmeldung und im UA.
 // Bei jeder Aenderung HIER hochzaehlen.
-$version = '1.5';
+$version = '1.6';
 
 // WICHTIG: Das PS1 ist INLINE eingebettet (nicht mehr aus bruecke/bruecke.ps1 geladen). Grund:
 // die separate Datei wurde vom inkrementellen SFTP-Deploy offenbar nicht aktualisiert, wodurch
@@ -113,21 +113,29 @@ while ($true) {
           [IO.File]::WriteAllBytes($tmp, $bytes)
           $sumatra = Get-SumatraPath
           if ($sumatra) {
-            $a = @("-silent")
-            if ($d.drucker) { $a += @("-print-to", [string]$d.drucker) } else { $a += @("-print-to-default") }
-            $a += @("-print-settings", "noscale")
-            $a += $tmp
-            $p = Start-Process -FilePath $sumatra -ArgumentList $a -PassThru -WindowStyle Hidden
-            if (-not $p.WaitForExit(45000)) {
-              try { $p.Kill() } catch {}
-              $antwort = "SumatraPDF reagierte nicht (45s) - Drucker eingeschaltet/erreichbar?"
-            } elseif ($p.ExitCode -eq 0) {
-              $ok = "1"; $antwort = "gedruckt -> " + ($(if ($d.drucker) { [string]$d.drucker } else { "Standarddrucker" }))
+            $zielName = if ($d.drucker) { [string]$d.drucker } else { "" }
+            # Mehrere Druckweisen der Reihe nach - erste mit ExitCode 0 gewinnt. Zuerst SCHLICHT
+            # (wie der GUI-Druck); -print-settings macht per CLI je nach Version Aerger (ExitCode 2).
+            $versuche = @()
+            if ($zielName -ne "") {
+              $versuche += ,@("-silent", "-print-to", $zielName, $tmp)
+              $versuche += ,@("-silent", "-print-to", $zielName, "-print-settings", "fit", $tmp)
+              $versuche += ,@("-print-to", $zielName, $tmp)
             } else {
-              $antwort = "SumatraPDF ExitCode " + $p.ExitCode + " - Druckername korrekt? (" + [string]$d.drucker + ")"
+              $versuche += ,@("-silent", "-print-to-default", $tmp)
+              $versuche += ,@("-silent", "-print-to-default", "-print-settings", "fit", $tmp)
             }
+            $letzter = ""
+            foreach ($va in $versuche) {
+              $p = Start-Process -FilePath $sumatra -ArgumentList $va -PassThru -WindowStyle Hidden
+              if (-not $p.WaitForExit(45000)) { try { $p.Kill() } catch {}; $letzter = "Timeout"; continue }
+              if ($p.ExitCode -eq 0) { $ok = "1"; break }
+              $letzter = "ExitCode " + $p.ExitCode
+            }
+            if ($ok -eq "1") { $antwort = "gedruckt -> " + ($(if ($zielName -ne "") { $zielName } else { "Standarddrucker" })) }
+            else { $antwort = "SumatraPDF druckte nicht (" + $letzter + ") - Drucker: " + ($(if ($zielName -ne "") { $zielName } else { "Standard" })) }
           } else {
-            $antwort = "SumatraPDF nicht gefunden - bitte auf dem Lager-PC installieren (Einstellungen -> SumatraPDF herunterladen)"
+            $antwort = "SumatraPDF nicht gefunden - bitte auf dem Lager-PC installieren"
           }
         } catch { $antwort = "Druckfehler: " + $_.Exception.Message }
         try { Invoke-RestMethod -Uri ($Url + "?token=" + $Token) -Method Post -TimeoutSec 10 -UserAgent $UA -Body @{ druck_id = $d.id; ok = $ok; antwort = $antwort } | Out-Null } catch {}
