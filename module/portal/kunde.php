@@ -1570,6 +1570,12 @@ portal_head('Kundenportal · ' . $k['firma']);
   <aside class="bx-side">
     <div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo"><span class="bx-ver">Portal</span></div>
     <nav>
+      <form class="bx-sidesuche" method="get" action="?" role="search">
+        <input type="hidden" name="p" value="portal">
+        <input type="hidden" name="token" value="<?= h($token) ?>">
+        <input type="hidden" name="v" value="suche">
+        <input type="search" name="q" value="<?= h((string)($_GET['q'] ?? '')) ?>" placeholder="Suchen (alles)…" aria-label="Suche">
+      </form>
       <div class="bx-navgroup"><?= h($k['firma']) ?></div>
       <?php foreach ($NAVGROUPS as $gruppe => $keys):
           $sichtbar = array_values(array_filter($keys, fn($key) => isset($L[$key])));
@@ -1592,10 +1598,6 @@ portal_head('Kundenportal · ' . $k['firma']);
   </aside>
   <?= bx_menue_scrim() ?>
   <main class="bx-main"><?= bx_mobilbar() ?>
-  <form method="get" action="?" class="no-print" style="margin:0 0 14px">
-    <input type="hidden" name="p" value="portal"><input type="hidden" name="token" value="<?= h($token) ?>"><input type="hidden" name="v" value="suche">
-    <input type="search" name="q" value="<?= h((string)($_GET['q'] ?? '')) ?>" placeholder="Suchen: Bestellung, Produkt, Charge, MHD, Angebot, Rechnung …" style="width:100%;max-width:560px;padding:9px 14px;border:1px solid var(--line);border-radius:999px;background:var(--panel)">
-  </form>
   <?php if (isset($_GET['ok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – Ihre Bestätigung ist eingegangen. Wir starten die Bearbeitung.</div><?php endif; ?>
   <?php if (isset($_GET['anfrage'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rezepturanfrage ist eingegangen – wir prüfen sie und melden uns.</div><?php endif; ?>
   <?php if (isset($_GET['angenommen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – die Rezeptur ist angenommen. Sie ist jetzt verbindlich festgelegt.</div><?php endif; ?>
