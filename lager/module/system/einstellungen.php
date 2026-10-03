@@ -7,6 +7,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speic
     flash('Einstellungen gespeichert.');
     weiter('?p=einstellungen');
 }
+// Neuer Brücken-Schlüssel: meldet ALLE alten Brücken ab (falscher Schlüssel -> kein Zugriff mehr).
+// Danach muss die Brücke auf dem Lager-PC einmal neu heruntergeladen/gestartet werden.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'token_neu') {
+    lg_bruecke_token(true);
+    lg_meta_schreiben('drucker_liste', '');     // alte Druckermeldung verwerfen
+    lg_meta_schreiben('drucker_standard', '');
+    flash('Neuer Schlüssel erzeugt. Alle alten Brücken sind abgemeldet. Jetzt die Brücke NUR auf dem Lager-PC neu herunterladen und starten.');
+    weiter('?p=einstellungen');
+}
 
 $etikettFormat = lg_meta_lesen('etikett_format', 'klein');
 $drucker       = lg_meta_lesen('drucker_name', '');
@@ -108,6 +117,14 @@ flash_zeigen();
     <li><strong>Beenden:</strong> Task-Manager → Tab <em>Details</em> → <code>powershell.exe</code> beenden. <strong>Autostart aus:</strong> Task-Manager → Tab <em>Autostart</em> → <code>bulkify-lager-bruecke</code> deaktivieren.</li>
   </ol>
   <p class="muted" style="font-size:12px;margin:var(--sp-3) 0 0">Falls der Browser beim Herunterladen warnt: Es ist kein Virus – nur eine ganz normale Windows-Datei (.bat). Im Download-Pfeil auf „Behalten" klicken.</p>
+
+  <div style="margin-top:var(--sp-4);padding-top:var(--sp-3);border-top:1px solid var(--line)">
+    <form method="post" onsubmit="return confirm('Neuen Schlüssel erzeugen? Damit werden ALLE laufenden Brücken abgemeldet – auch versteckte auf anderen PCs. Danach die Brücke nur auf dem Lager-PC neu herunterladen und starten.');" style="display:inline">
+      <input type="hidden" name="aktion" value="token_neu">
+      <button type="submit" class="btn btn-ghost">Schlüssel neu erzeugen</button>
+    </form>
+    <span class="muted" style="font-size:12px;margin-left:var(--sp-2)">Meldet alle alten/versteckten Brücken ab. Danach die Brücke nur auf dem richtigen Lager-PC neu einrichten.</span>
+  </div>
 </div>
 
 <!-- Blinker/Sender Kurzüberblick -->
