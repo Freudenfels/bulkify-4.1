@@ -4,8 +4,7 @@
 $lieferungen = erp_erwartete_lieferungen();
 
 kopf('Erwartete Lieferungen', 'erwartet');
-seitenkopf('Erwartete Lieferungen', 'Waren, auf die wir warten – beim Lieferanten bestellt, noch nicht angekommen.',
-    '<a class="btn btn-ghost" href="?p=we">Freies Einbuchen</a>');
+seitenkopf('Erwartete Lieferungen', 'Waren, auf die wir warten – beim Lieferanten bestellt, noch nicht angekommen.');
 flash_zeigen();
 
 if (!$lieferungen) {
