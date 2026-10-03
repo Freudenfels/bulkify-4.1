@@ -75,8 +75,8 @@ flash_zeigen();
     <?php endif; ?>
   </div>
   <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap">
-    <a class="btn btn-primary" href="?p=bruecke_skript&art=hintergrund">Brücke einrichten (Hintergrund)</a>
-    <a class="btn btn-ghost" href="?p=bruecke_skript">mit Fenster (zum Testen)</a>
+    <a class="btn btn-primary" href="?p=bruecke_skript&art=hintergrund" download>Brücke einrichten (Hintergrund)</a>
+    <a class="btn btn-ghost" href="?p=bruecke_skript" download>mit Fenster (zum Testen)</a>
     <a class="btn btn-ghost" href="https://www.sumatrapdfreader.org/download-free-pdf-viewer" target="_blank" rel="noopener">SumatraPDF herunterladen</a>
     <a class="btn btn-ghost" href="?p=sender">Sender &amp; Blinker einrichten</a>
   </div>

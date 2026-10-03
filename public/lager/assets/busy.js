@@ -74,7 +74,18 @@
     }
   }, true);
 
-  window.addEventListener('beforeunload', function () { overlay(); balken(); });
+  // Downloads / neue Tabs navigieren NICHT weg -> kein Busy-Balken (sonst haengt er ewig).
+  // Klick auf so einen Link setzt kurz ein Flag, das beforeunload ueberspringt.
+  var skip = false;
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a') : null;
+    if (a && (a.hasAttribute('download') || a.getAttribute('target') === '_blank' || a.hasAttribute('data-no-busy'))) {
+      skip = true;
+      setTimeout(function () { skip = false; }, 1500);
+    }
+  }, true);
+
+  window.addEventListener('beforeunload', function () { if (skip) return; overlay(); balken(); });
 
   // Zurueck-Navigation: alles zuruecksetzen, sonst haengt der Spinner.
   window.addEventListener('pageshow', function (ev) {
