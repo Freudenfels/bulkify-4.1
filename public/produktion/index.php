@@ -10,12 +10,13 @@ pr_session_start();
 
 $routen = [
     'login' => 'auth/login.php',
+    'dash'  => 'produktion/dash.php',
     'liste' => 'produktion/liste.php',
     'pa'    => 'produktion/detail.php',
     'run'   => 'produktion/run.php',
 ];
 
-$p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'liste';
+$p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'dash';
 
 if ($p === 'logout') { pr_logout(); weiter('?p=login'); }
 
@@ -23,13 +24,13 @@ if ($p === 'logout') { pr_logout(); weiter('?p=login'); }
 if ($p === 'autologin') {
     if (ist_lokal()) {
         $u = erp_benutzer_per_token((string)($_GET['token'] ?? ''));
-        if ($u && pr_darf_rein($u)) { $_SESSION['uid'] = (int)$u['id']; weiter('?p=liste'); }
+        if ($u && pr_darf_rein($u)) { $_SESSION['uid'] = (int)$u['id']; weiter('?p=dash'); }
     }
     weiter('?p=login');
 }
 
 if ($p !== 'login' && !pr_angemeldet()) weiter('?p=login');
-if ($p === 'login' && pr_angemeldet()) weiter('?p=liste');
-if (!isset($routen[$p])) $p = pr_angemeldet() ? 'liste' : 'login';
+if ($p === 'login' && pr_angemeldet()) weiter('?p=dash');
+if (!isset($routen[$p])) $p = pr_angemeldet() ? 'dash' : 'login';
 
 require __DIR__ . '/../../produktion/module/' . $routen[$p];

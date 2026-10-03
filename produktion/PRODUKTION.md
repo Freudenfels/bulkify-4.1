@@ -37,7 +37,10 @@ hier einbinden (zieht die zweite `core/db.php` + das ganze Dashboard herein).
 - `core/layout.php` – `kopf()/fuss()/pr_nav()`.
 
 ## Seiten
-- `?p=login` – Anmeldung. `?p=liste` – Produktionsaufträge in Reitern (Alle/Laufend/Abgeschlossen)
+- `?p=login` – Anmeldung.
+- `?p=dash` – **Dashboard/Startseite** (Standard nach Login): KPIs (Offen zu planen, In Planung,
+  Laufend, Abgeschlossen, Ø Produktionszeit, Ø Durchlaufzeit) + Kurzlisten laufend/in Planung/offen.
+- `?p=liste` – Produktionsaufträge in Reitern (Alle/Laufend/Abgeschlossen)
   mit „Produzierbar?" + Auftragseingang.
 - `?p=pa&id=…` – Detail-Übersicht (ein Spaltenraster) + Rezeptur/Rohstoffbedarf + Schrittliste.
   Button **„In den Produktionsmodus"**.

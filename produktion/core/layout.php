@@ -5,7 +5,7 @@ require_once __DIR__ . '/auth.php';
 
 function pr_nav(): array {
     $nav = [
-        'Produktion' => ['liste' => 'Produktionsaufträge'],
+        'Produktion' => ['dash' => 'Dashboard', 'liste' => 'Produktionsaufträge'],
     ];
     // Weitere Punkte (Geführte Produktion, Chargen, Bericht …) ergänzt der Produktions-Chat hier.
     return $nav;

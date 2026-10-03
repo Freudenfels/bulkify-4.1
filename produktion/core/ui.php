@@ -15,6 +15,15 @@ function menge_txt($m): string {
     return rtrim(rtrim(number_format((float)$m, 3, ',', '.'), '0'), ',');
 }
 function weiter(string $ziel): never { header('Location: ' . $ziel); exit; }
+// Eine Dauer in Sekunden menschenlesbar machen (Sek/Min/Std/Tage). null -> „–".
+function dauer_txt(?float $sek): string {
+    if ($sek === null) return '–';
+    $nz = fn(float $x) => rtrim(rtrim(number_format($x, 1, ',', '.'), '0'), ',');
+    if ($sek < 60)        return round($sek) . ' Sek';
+    if ($sek < 3600)      return $nz($sek / 60) . ' Min';
+    if ($sek < 48 * 3600) return $nz($sek / 3600) . ' Std';
+    return $nz($sek / 86400) . ' Tage';
+}
 function json_antwort(array $daten, int $status = 200): never {
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');

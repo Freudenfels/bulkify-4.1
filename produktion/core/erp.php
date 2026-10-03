@@ -79,6 +79,39 @@ function erp_pa_schritte(int $pa_id): array {
     return all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]);
 }
 
+// Anzahl Produktionsaufträge je Status (für Dashboard-Kennzahlen).
+function erp_pa_count(string $status): int {
+    if (!tabelle_da('produktionsauftrag')) return 0;
+    if ($status === 'alle') return (int) scalar("SELECT COUNT(*) FROM produktionsauftrag");
+    return (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE status=?", [$status]);
+}
+
+// Ø Produktionszeit = Dauer vom ersten bis zum letzten erledigten Schritt, gemittelt über abgeschlossene Aufträge.
+// Rückgabe ['sekunden'=>?float, 'n'=>int Aufträge in der Messung].
+function erp_produktionszeit_schnitt(): array {
+    if (!tabelle_da('produktion_schritt')) return ['sekunden'=>null, 'n'=>0];
+    $r = one("SELECT AVG(dur) AS avg_s, COUNT(*) AS n FROM (
+                SELECT TIMESTAMPDIFF(SECOND, MIN(s.erledigt_at), MAX(s.erledigt_at)) AS dur
+                FROM produktion_schritt s JOIN produktionsauftrag pa ON pa.id=s.pa_id
+                WHERE pa.status='erledigt' AND s.erledigt=1 AND s.erledigt_at IS NOT NULL
+                GROUP BY s.pa_id HAVING COUNT(*) >= 2 AND MAX(s.erledigt_at) > MIN(s.erledigt_at)
+              ) t");
+    return ['sekunden'=> ($r && $r['avg_s'] !== null) ? (float)$r['avg_s'] : null, 'n'=> $r ? (int)$r['n'] : 0];
+}
+// Ø Durchlaufzeit = vom Auftragseingang (auftrag.angelegt) bis zum letzten erledigten Schritt.
+function erp_durchlaufzeit_schnitt(): array {
+    if (!tabelle_da('produktionsauftrag') || !tabelle_da('auftrag')) return ['sekunden'=>null, 'n'=>0];
+    $r = one("SELECT AVG(dur) AS avg_s, COUNT(*) AS n FROM (
+                SELECT TIMESTAMPDIFF(SECOND, a.angelegt, MAX(s.erledigt_at)) AS dur
+                FROM produktionsauftrag pa
+                JOIN auftrag a ON a.id=pa.auftrag_id
+                JOIN produktion_schritt s ON s.pa_id=pa.id AND s.erledigt=1 AND s.erledigt_at IS NOT NULL
+                WHERE pa.status='erledigt'
+                GROUP BY pa.id, a.angelegt
+              ) t WHERE t.dur >= 0");
+    return ['sekunden'=> ($r && $r['avg_s'] !== null) ? (float)$r['avg_s'] : null, 'n'=> $r ? (int)$r['n'] : 0];
+}
+
 // Zutaten der Rezeptur eines Auftrags (Zusammensetzung je Einheit). Rezeptur = pa.rezeptur_id oder produkt.rezeptur_id.
 function erp_pa_zutaten(int $pa_id): array {
     $pa = one("SELECT produkt_id, rezeptur_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
