@@ -74,12 +74,24 @@ flash_zeigen();
   <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--sp-2)">
     <h2 style="margin:0">Eingebucht – Etikett für die Kartons</h2>
     <span class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap">
-      <a class="btn btn-primary btn-sm" href="?p=etikett&id=<?= $id ?>&format=klein&merken=1" target="_blank">100×70</a>
-      <a class="btn btn-primary btn-sm" href="?p=etikett&id=<?= $id ?>&format=gross&merken=1" target="_blank">100×150</a>
+      <button type="button" class="btn btn-ghost btn-sm" data-etk-fmt="klein">100×70</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-etk-fmt="gross">100×150</button>
+      <a class="btn btn-primary btn-sm" id="etkOeffnen" href="?p=etikett&id=<?= $id ?>" target="_blank">Öffnen / Drucken</a>
     </span>
   </div>
-  <embed src="?p=etikett&id=<?= $id ?>" type="application/pdf" style="width:100%;height:360px;border:1px solid var(--line);border-radius:8px;background:#fff;margin-top:var(--sp-3)">
+  <embed id="etkEmbed" src="?p=etikett&id=<?= $id ?>" type="application/pdf" style="width:100%;height:360px;border:1px solid var(--line);border-radius:8px;background:#fff;margin-top:var(--sp-3)">
 </div>
+<script>
+(function(){
+  var emb=document.getElementById('etkEmbed'), auf=document.getElementById('etkOeffnen'), base='?p=etikett&id=<?= $id ?>';
+  document.querySelectorAll('[data-etk-fmt]').forEach(function(b){ b.addEventListener('click',function(){
+    var f=b.getAttribute('data-etk-fmt');
+    emb.src = base+'&format='+f+'&merken=1';   // Vorschau in-place + Größe als Standard merken
+    auf.href = base+'&format='+f;
+    document.querySelectorAll('[data-etk-fmt]').forEach(function(x){ x.classList.toggle('btn-primary', x===b); x.classList.toggle('btn-ghost', x!==b); });
+  }); });
+})();
+</script>
 <?php endif; ?>
 <div class="bx-grid" style="margin-bottom:var(--sp-5)">
   <div class="bx-card"><div class="k">Bestand</div><div class="v"><?= h(menge_txt($c['menge_verfuegbar'])) ?> <?= h((string)$c['einheit']) ?></div></div>
