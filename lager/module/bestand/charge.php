@@ -41,6 +41,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
     }
+    if ($aktion === 'menge_korr') {
+        $neu   = (float) str_replace(',', '.', (string)($_POST['menge'] ?? ''));
+        $grund = trim((string)($_POST['grund'] ?? ''));
+        $r = erp_charge_menge_setzen($id, $neu, $grund);
+        if ($r['ok']) {
+            $delta = (float)$r['delta'];
+            if (abs($delta) > 1e-9) lg_bewegung_log($id, $delta > 0 ? 'ein' : 'aus', abs($delta), (string)$r['einheit'], (string)$c['item_name'], 'Korrektur' . ($grund ? ': ' . $grund : ''));
+        }
+        flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+        weiter('?p=charge&id=' . $id);
+    }
+    if ($aktion === 'loeschen') {
+        $grund = trim((string)($_POST['grund'] ?? ''));
+        lg_papierkorb_rein($id, (string)$c['item_name'], (string)$c['charge_nr'],
+            menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit'], $grund, (int)(lg_benutzer()['id'] ?? 0) ?: null);
+        flash('In den Mülleimer gelegt – 30 Tage wiederherstellbar.', 'ok');
+        weiter('?p=bestand');
+    }
 }
 
 $bl = leiste_fuer_charge($id);
@@ -286,5 +304,24 @@ flash_zeigen();
   </div>
 </div>
 <?php endif; ?>
+
+<div class="bx-panel">
+  <h2>Bestand korrigieren / löschen</h2>
+  <form method="post" class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap;margin-bottom:var(--sp-3)">
+    <input type="hidden" name="aktion" value="menge_korr">
+    <div class="bx-field" style="margin:0;max-width:170px"><label>Neue Menge (<?= h((string)$c['einheit']) ?>)</label>
+      <input type="text" inputmode="decimal" name="menge" value="<?= h(menge_txt($c['menge_verfuegbar'])) ?>"></div>
+    <div class="bx-field" style="margin:0;min-width:200px;flex:1"><label>Grund (optional)</label>
+      <input type="text" name="grund" placeholder="z. B. Zählkorrektur, Bruch"></div>
+    <button type="submit" class="btn btn-primary">Bestand setzen</button>
+  </form>
+  <form method="post" class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap" onsubmit="return confirm('Diese Charge in den Mülleimer legen? 30 Tage wiederherstellbar.')">
+    <input type="hidden" name="aktion" value="loeschen">
+    <div class="bx-field" style="margin:0;min-width:200px;flex:1"><label>Grund (optional)</label>
+      <input type="text" name="grund" placeholder="z. B. Fehlbuchung"></div>
+    <button type="submit" class="btn btn-ghost" style="color:#8f231b;border-color:#e6c4c0">In den Mülleimer</button>
+  </form>
+  <div class="muted" style="font-size:12px;margin-top:var(--sp-2)">Löschen blendet die Charge nur aus (das Dashboard behält sie). Wiederherstellen im <a href="?p=papierkorb">Mülleimer</a>.</div>
+</div>
 <?php
 fuss();

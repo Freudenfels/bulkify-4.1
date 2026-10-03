@@ -23,6 +23,7 @@ $routen = [
     'eingang'        => 'bestand/eingang.php',
     'ausgang'        => 'bestand/ausgang.php',
     'bewegungen'     => 'bestand/bewegungen.php',
+    'papierkorb'     => 'bestand/papierkorb.php',
     'etikett'        => 'bestand/etikett.php',
     'etikett_ansicht'=> 'bestand/etikett_ansicht.php',   // In-App-Ansicht mit Zurück-Button
     'charge'         => 'bestand/charge.php',

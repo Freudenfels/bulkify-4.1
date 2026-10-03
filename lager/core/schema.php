@@ -151,6 +151,19 @@ function lg_schema(): void {
         angelegt  DATETIME NOT NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    // --- Papierkorb: im Lager "geloeschte" Chargen. Nur AUSGEBLENDET (Dashboard-Charge bleibt!),
+    //     damit nichts kaputtgeht und man 30 Tage lang wiederherstellen kann. --------------------
+    q("CREATE TABLE IF NOT EXISTS lg_papierkorb (
+        charge_id   INT PRIMARY KEY,
+        item_name   VARCHAR(190) NULL,     -- Momentaufnahme fuer die Liste
+        charge_nr   VARCHAR(80)  NULL,
+        menge       VARCHAR(40)  NULL,
+        grund       VARCHAR(190) NULL,
+        benutzer_id INT          NULL,
+        geloescht_am DATETIME    NOT NULL,
+        KEY zeit (geloescht_am)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     // --- Druckauftraege (Etiketten): von der kombinierten Bruecke auf dem Lager-PC gedruckt. -----
     q("CREATE TABLE IF NOT EXISTS lg_druckjob (
         id        INT AUTO_INCREMENT PRIMARY KEY,
@@ -176,6 +189,24 @@ function lg_pakete_set(int $charge_id, int $pakete): void {
     $pakete = max(1, $pakete);
     q("INSERT INTO lg_charge_info (charge_id,pakete,angelegt) VALUES (?,?,?)
        ON DUPLICATE KEY UPDATE pakete=VALUES(pakete)", [$charge_id, $pakete, jetzt_utc()]);
+}
+
+// --- Papierkorb (im Lager ausgeblendete Chargen; Dashboard-Charge bleibt erhalten) -----------
+function lg_papierkorb_ist_drin(int $charge_id): bool {
+    return tabelle_da('lg_papierkorb') && (int) scalar("SELECT COUNT(*) FROM lg_papierkorb WHERE charge_id=?", [$charge_id]) > 0;
+}
+function lg_papierkorb_rein(int $charge_id, string $item_name, string $charge_nr, string $menge, string $grund, ?int $uid): void {
+    q("INSERT INTO lg_papierkorb (charge_id,item_name,charge_nr,menge,grund,benutzer_id,geloescht_am) VALUES (?,?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE grund=VALUES(grund), geloescht_am=VALUES(geloescht_am)",
+      [$charge_id, $item_name ?: null, $charge_nr ?: null, $menge ?: null, $grund ?: null, $uid ?: null, jetzt_utc()]);
+}
+function lg_papierkorb_raus(int $charge_id): void {
+    q("DELETE FROM lg_papierkorb WHERE charge_id=?", [$charge_id]);
+}
+// Liste fuer die Papierkorb-Seite (neuste zuerst). tage_max: Wiederherstellung nur so lange moeglich.
+function lg_papierkorb_liste(): array {
+    if (!tabelle_da('lg_papierkorb')) return [];
+    return all("SELECT * FROM lg_papierkorb ORDER BY geloescht_am DESC LIMIT 500");
 }
 
 // Eine Lagerbewegung protokollieren (Wareneingang/-ausgang aus dem Lager-Programm).

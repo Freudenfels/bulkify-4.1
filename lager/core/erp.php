@@ -47,7 +47,7 @@ function erp_chargen_suche(string $q, int $limit = 30): array {
     if (!tabelle_da('charge') || !tabelle_da('item')) return [];
     $woerter = preg_split('/\s+/', trim($q), -1, PREG_SPLIT_NO_EMPTY);
 
-    $where = ['c.fremd_kunde_id IS NULL', "(c.status IS NULL OR c.status <> 'leer')", 'c.menge_verfuegbar > 0'];
+    $where = ['c.fremd_kunde_id IS NULL', erp_pk_wo(), "(c.status IS NULL OR c.status <> 'leer')", 'c.menge_verfuegbar > 0'];
     $params = [];
     foreach ($woerter as $w) {
         $where[] = '(i.name LIKE ? OR i.artikelnummer LIKE ? OR c.charge_nr LIKE ?)';
@@ -84,13 +84,19 @@ function erp_kategorie_bedingung(string $kat): string {
     };
 }
 
+// WHERE-Bedingung, die im Papierkorb liegende (lager-seitig "geloeschte") Chargen ausblendet.
+// $alias = Alias der charge-Tabelle in der jeweiligen Query.
+function erp_pk_wo(string $alias = 'c'): string {
+    return tabelle_da('lg_papierkorb') ? "$alias.id NOT IN (SELECT charge_id FROM lg_papierkorb)" : '1=1';
+}
+
 // Bestand auflisten. $kat = '' fuer alle, sonst ein Schluessel aus erp_kategorien().
 // $mit_leer = auch leere/ausgebuchte Chargen zeigen.
 // $sort: neu (Standard, neuste zuerst) | alt | name | mhd | menge
 function erp_bestand(string $kat = '', string $q = '', bool $mit_leer = false, int $limit = 500, string $sort = 'neu'): array {
     if (!tabelle_da('charge') || !tabelle_da('item')) return [];
     $lief = tabelle_da('lieferanten');
-    $where = ['c.fremd_kunde_id IS NULL'];
+    $where = ['c.fremd_kunde_id IS NULL', erp_pk_wo()];
     $params = [];
     if (!$mit_leer) $where[] = "(c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0";
     if ($kat !== '' && isset(erp_kategorien()[$kat])) $where[] = '(' . erp_kategorie_bedingung($kat) . ')';
@@ -121,7 +127,7 @@ function erp_bestand_zaehlung(): array {
     foreach (array_keys(erp_kategorien()) as $k) {
         $out[$k] = (int)scalar("SELECT COUNT(*) FROM charge c JOIN item i ON i.id=c.item_id
                                 WHERE c.fremd_kunde_id IS NULL AND (c.status IS NULL OR c.status<>'leer')
-                                  AND c.menge_verfuegbar>0 AND (" . erp_kategorie_bedingung($k) . ")");
+                                  AND c.menge_verfuegbar>0 AND " . erp_pk_wo() . " AND (" . erp_kategorie_bedingung($k) . ")");
     }
     return $out;
 }
@@ -188,11 +194,27 @@ function erp_kunde_name(int $id): string {
     return (string) scalar("SELECT firma FROM kunden WHERE id=?", [$id]);
 }
 
+// Bestand einer Charge manuell auf einen neuen Wert setzen (Korrektur). Rueckgabe ['ok','meldung',...].
+function erp_charge_menge_setzen(int $charge_id, float $neu, string $grund = ''): array {
+    if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Charge-Tabelle.'];
+    if ($neu < 0) return ['ok' => false, 'meldung' => 'Menge darf nicht negativ sein.'];
+    $c = one("SELECT menge_verfuegbar, status, einheit FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
+    $alt = (float)$c['menge_verfuegbar'];
+    $status = (string)$c['status'];
+    if ($neu <= 1e-9) $status = 'leer';
+    elseif ($status === 'leer') $status = 'frei';   // wieder Bestand -> aus "leer" zurueck auf frei
+    q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $status, $charge_id]);
+    $fmt = rtrim(rtrim(number_format($neu, 3, ',', '.'), '0'), ',');
+    return ['ok' => true, 'meldung' => 'Bestand auf ' . $fmt . ' ' . (string)$c['einheit'] . ' gesetzt.',
+            'delta' => $neu - $alt, 'einheit' => (string)$c['einheit']];
+}
+
 // Kennzahlen fuer die Lager-Startseite (Uebersicht). Ein kompakter Satz Zahlen.
 function erp_lager_kennzahlen(): array {
     $o = ['l1_chargen'=>0,'l1_artikel'=>0,'l2_chargen'=>0,'l2_kunden'=>0,'quarantaene'=>0,'mhd_bald'=>0,'mhd_ablauf'=>0];
     if (!tabelle_da('charge')) return $o;
-    $aktiv = "(c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0";
+    $aktiv = "(c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0 AND " . erp_pk_wo();
     $o['l1_chargen'] = (int) scalar("SELECT COUNT(*) FROM charge c WHERE c.fremd_kunde_id IS NULL AND $aktiv");
     $o['l1_artikel'] = (int) scalar("SELECT COUNT(DISTINCT c.item_id) FROM charge c WHERE c.fremd_kunde_id IS NULL AND $aktiv");
     $o['l2_chargen'] = (int) scalar("SELECT COUNT(*) FROM charge c WHERE c.fremd_kunde_id IS NOT NULL AND $aktiv");
@@ -211,7 +233,7 @@ function erp_mhd_kritisch(int $tage = 90, int $limit = 10): array {
                        i.name AS item_name, k.firma AS kunde
                 FROM charge c JOIN item i ON i.id=c.item_id
                 LEFT JOIN kunden k ON k.id=c.fremd_kunde_id
-                WHERE (c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0
+                WHERE (c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0 AND " . erp_pk_wo() . "
                   AND c.mhd IS NOT NULL AND c.mhd <= DATE_ADD(CURDATE(), INTERVAL $tage DAY)
                 ORDER BY c.mhd ASC LIMIT $limit");
 }
@@ -233,14 +255,14 @@ function erp_bestand_fremd_kunden(): array {
     if (!tabelle_da('charge') || !tabelle_da('kunden')) return [];
     return all("SELECT k.id, k.firma, COUNT(*) AS chargen
                 FROM charge c JOIN kunden k ON k.id=c.fremd_kunde_id
-                WHERE c.fremd_kunde_id IS NOT NULL AND (c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0
+                WHERE c.fremd_kunde_id IS NOT NULL AND (c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0 AND " . erp_pk_wo() . "
                 GROUP BY k.id, k.firma ORDER BY k.firma");
 }
 
 // Fremdlager-Bestand (Lager 2), optional nach Kunde gefiltert.
 function erp_bestand_fremd(int $kunde_id = 0, string $q = '', bool $mit_leer = false, int $limit = 500): array {
     if (!tabelle_da('charge') || !tabelle_da('item')) return [];
-    $where = ['c.fremd_kunde_id IS NOT NULL'];
+    $where = ['c.fremd_kunde_id IS NOT NULL', erp_pk_wo()];
     $params = [];
     if ($kunde_id > 0) { $where[] = 'c.fremd_kunde_id = ?'; $params[] = $kunde_id; }
     if (!$mit_leer) $where[] = "(c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0";
@@ -260,7 +282,7 @@ function erp_bestand_fremd(int $kunde_id = 0, string $q = '', bool $mit_leer = f
 // Suche im Fremdlager (fuer Finden).
 function erp_chargen_suche_fremd(string $q, int $kunde_id = 0, int $limit = 30): array {
     if (!tabelle_da('charge')) return [];
-    $where = ['c.fremd_kunde_id IS NOT NULL', "(c.status IS NULL OR c.status<>'leer')", 'c.menge_verfuegbar>0'];
+    $where = ['c.fremd_kunde_id IS NOT NULL', erp_pk_wo(), "(c.status IS NULL OR c.status<>'leer')", 'c.menge_verfuegbar>0'];
     $params = [];
     if ($kunde_id > 0) { $where[] = 'c.fremd_kunde_id = ?'; $params[] = $kunde_id; }
     foreach (preg_split('/\s+/', trim($q), -1, PREG_SPLIT_NO_EMPTY) as $w) {
