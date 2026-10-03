@@ -11,6 +11,13 @@
 $Url   = "{{URL}}"
 $Token = "{{TOKEN}}"
 
+# Nur EINE Bruecke gleichzeitig. Starten mehrere (z. B. Aufgabe + Autostart-Eintrag), beenden sich
+# alle weiteren sofort selbst - so laeuft nie etwas doppelt.
+try {
+  $global:bxMutex = New-Object System.Threading.Mutex($false, "Global\bulkify-lager-bruecke")
+  if (-not $global:bxMutex.WaitOne(0)) { exit }
+} catch {}
+
 # PowerShell 5.1 nutzt sonst teils TLS 1.0 -> HTTPS zum Server schlaegt fehl.
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
 $UA = "bulkify-lager-bruecke/1.2"
