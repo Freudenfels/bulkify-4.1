@@ -284,13 +284,13 @@ if ($gebucht):
 <style>
   .we-kacheln{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:var(--sp-4);margin-bottom:var(--sp-5)}
   .we-kachel{text-align:left;border:1px solid var(--line);border-radius:14px;padding:22px 20px;background:var(--panel);
-    cursor:pointer;min-height:120px;display:flex;flex-direction:column;gap:6px;justify-content:center}
+    color:var(--text);cursor:pointer;min-height:120px;display:flex;flex-direction:column;gap:6px;justify-content:center}
   .we-kachel:hover{border-color:var(--gruen);box-shadow:inset 0 0 0 1px var(--gruen);text-decoration:none}
   .we-kachel-t{font-size:var(--fs-lg);font-weight:600;line-height:1.2}
   .we-kachel-s{color:var(--muted)}
   .we-seg{display:inline-flex;gap:8px;flex-wrap:wrap}
   .we-liste{display:flex;flex-direction:column;gap:8px;margin-top:var(--sp-3)}
-  .we-listitem{text-align:left;border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--panel-2);cursor:pointer;line-height:1.35}
+  .we-listitem{text-align:left;border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--panel-2);color:var(--text);cursor:pointer;line-height:1.35}
   .we-listitem:hover{border-color:var(--gruen);text-decoration:none}
   .we-ziel{border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 14px;cursor:pointer;line-height:1.3}
   .we-ziel.on{border-color:var(--gruen);box-shadow:inset 0 0 0 1px var(--gruen)}

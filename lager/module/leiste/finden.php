@@ -27,7 +27,7 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
   .fnd-mic{min-height:56px;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
   .fnd-liste{display:flex;flex-direction:column;gap:12px}
   .fnd-item{display:block;width:100%;text-align:left;border:1px solid var(--line);border-radius:14px;
-    padding:18px 20px;background:var(--panel-2);cursor:pointer;line-height:1.3}
+    padding:18px 20px;background:var(--panel-2);color:var(--text);cursor:pointer;line-height:1.3}
   .fnd-item:hover{border-color:var(--gruen);text-decoration:none}
   .fnd-item .n{display:block;font-size:var(--fs-lg);font-weight:600}
   .fnd-item .s{display:block;color:var(--muted);margin-top:4px}
