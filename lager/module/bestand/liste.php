@@ -58,7 +58,7 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
         <td><?= status_badge($z['status']) ?></td>
         <td><?php $ik = kiste_fuer_charge((int)$z['id']); $bl = leiste_fuer_charge((int)$z['id']);
           if ($ik): ?>Kiste <?= h((string)$ik['kiste_name']) ?><?php elseif ($bl): ?><span class="lg-code"><?= h((string)$bl['code']) ?></span><?php else: ?><span class="muted">–</span><?php endif; ?></td>
-        <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=etikett&id=<?= (int)$z['id'] ?>" target="_blank" onclick="event.stopPropagation()" title="QR-Etikett als PDF">Etikett</a></td>
+        <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=etikett_ansicht&id=<?= (int)$z['id'] ?>&zurueck=<?= rawurlencode('?p=bestand' . $qs . '&sort=' . $sort) ?>" onclick="event.stopPropagation()" title="Etikett ansehen / drucken">Etikett</a></td>
       </tr>
     <?php endforeach; ?>
     </tbody>

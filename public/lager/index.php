@@ -24,6 +24,7 @@ $routen = [
     'ausgang'        => 'bestand/ausgang.php',
     'bewegungen'     => 'bestand/bewegungen.php',
     'etikett'        => 'bestand/etikett.php',
+    'etikett_ansicht'=> 'bestand/etikett_ansicht.php',   // In-App-Ansicht mit Zurück-Button
     'charge'         => 'bestand/charge.php',
     'dok'            => 'bestand/dok.php',
     // Lager 2 (Fremdlager): Kundenware (charge.fremd_kunde_id)
