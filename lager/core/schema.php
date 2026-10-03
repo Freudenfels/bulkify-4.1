@@ -151,6 +151,19 @@ function lg_schema(): void {
         angelegt  DATETIME NOT NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    // --- Druckauftraege (Etiketten): von der kombinierten Bruecke auf dem Lager-PC gedruckt. -----
+    q("CREATE TABLE IF NOT EXISTS lg_druckjob (
+        id        INT AUTO_INCREMENT PRIMARY KEY,
+        ids       VARCHAR(255) NOT NULL,            -- Charge-IDs, Komma-getrennt
+        format    VARCHAR(10)  NOT NULL DEFAULT 'klein',
+        status    VARCHAR(12)  NOT NULL DEFAULT 'offen',  -- offen|abgeholt|ok|fehler|verfallen
+        antwort   VARCHAR(255) NULL,
+        benutzer_id INT        NULL,
+        angelegt  DATETIME     NOT NULL,
+        erledigt  DATETIME     NULL,
+        KEY st (status, id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     lg_meta_schreiben('schema_build', $build);
 }
 

@@ -14,6 +14,8 @@ require_once __DIR__ . '/../../lager/core/db.php';
 require_once __DIR__ . '/../../lager/core/schema.php';
 require_once __DIR__ . '/../../lager/core/ui.php';
 require_once __DIR__ . '/../../lager/core/led.php';
+require_once __DIR__ . '/../../lager/core/erp.php';          // erp_charge_voll fuers Etikett
+require_once __DIR__ . '/../../lager/core/etikett_pdf.php';  // lg_etikett_pdf fuer Druckjobs
 
 lg_schema();
 
@@ -25,10 +27,15 @@ lg_meta_schreiben('bruecke_zuletzt', jetzt_utc());
 if (!empty($_SERVER['HTTP_USER_AGENT'])) lg_meta_schreiben('bruecke_programm', mb_substr((string)$_SERVER['HTTP_USER_AGENT'], 0, 120));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $id = (int)($_POST['id'] ?? 0);
     $ok = (string)($_POST['ok'] ?? '') === '1';
-    q("UPDATE lg_befehl SET status=?, antwort=?, erledigt=? WHERE id=? AND status='abgeholt'",
-      [$ok ? 'ok' : 'fehler', mb_substr((string)($_POST['antwort'] ?? ''), 0, 500), jetzt_utc(), $id]);
+    $antwort = mb_substr((string)($_POST['antwort'] ?? ''), 0, 500);
+    if (isset($_POST['druck_id'])) {                 // Rueckmeldung eines Druckjobs
+        q("UPDATE lg_druckjob SET status=?, antwort=?, erledigt=? WHERE id=? AND status='abgeholt'",
+          [$ok ? 'ok' : 'fehler', $antwort, jetzt_utc(), (int)$_POST['druck_id']]);
+    } else {                                          // Rueckmeldung eines Blinker-Befehls
+        q("UPDATE lg_befehl SET status=?, antwort=?, erledigt=? WHERE id=? AND status='abgeholt'",
+          [$ok ? 'ok' : 'fehler', $antwort, jetzt_utc(), (int)($_POST['id'] ?? 0)]);
+    }
     json_antwort(['ok' => true]);
 }
 
@@ -49,4 +56,17 @@ foreach (all("SELECT b.id, b.code, s.ip FROM lg_befehl b JOIN lg_sender s ON s.i
     }
     $befehle[] = ['id' => (int)$b['id'], 'url' => led_lan_url((string)$b['ip'], (string)$b['code'])];
 }
-json_antwort(['befehle' => $befehle]);
+
+// --- Druckjobs: Etiketten, die der Lager-PC lautlos drucken soll (SumatraPDF) ----------------
+q("UPDATE lg_druckjob SET status='verfallen', erledigt=? WHERE status='offen' AND angelegt < ?",
+  [jetzt_utc(), gmdate('Y-m-d H:i:s', time() - 600)]);   // nach 10 min nicht mehr drucken
+$druck = [];
+$drucker = lg_meta_lesen('drucker_name', '');            // leer = Standarddrucker
+foreach (all("SELECT id, ids, format FROM lg_druckjob WHERE status='offen' ORDER BY id LIMIT 10") as $j) {
+    if (q("UPDATE lg_druckjob SET status='abgeholt' WHERE id=? AND status='offen'", [(int)$j['id']])->rowCount() === 0) continue;
+    $pdf = lg_etikett_pdf(explode(',', (string)$j['ids']), (string)$j['format']);
+    if ($pdf === null) { q("UPDATE lg_druckjob SET status='fehler', antwort='Charge nicht gefunden', erledigt=? WHERE id=?", [jetzt_utc(), (int)$j['id']]); continue; }
+    $druck[] = ['id' => (int)$j['id'], 'pdf_b64' => base64_encode($pdf), 'drucker' => $drucker];
+}
+
+json_antwort(['befehle' => $befehle, 'druck' => $druck]);

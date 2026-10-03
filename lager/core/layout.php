@@ -19,7 +19,7 @@ function lg_nav(): array {
         'Lager 2 (Fremdlager)' => ['l2_finden' => 'Finden', 'l2_bestand' => 'Fremdlager-Bestand'],
         'Verwaltung'  => ['bewegungen' => 'Bewegungen', 'kisten' => 'Kisten', 'leisten' => 'Blinker'],
     ];
-    if (lg_ist_admin()) $nav['System'] = ['sender' => 'Sender und Brücke'];
+    if (lg_ist_admin()) $nav['System'] = ['einstellungen' => 'Einstellungen'];
     return $nav;
 }
 

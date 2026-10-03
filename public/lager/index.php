@@ -39,11 +39,13 @@ $routen = [
     'api_blink'      => 'led/api_blink.php',   // interner Blink-Auslöser für andere Programme (Token/Loopback)
     'suche'          => 'leiste/suche.php',
     // System
+    'einstellungen'  => 'system/einstellungen.php',
     'sender'         => 'system/sender.php',
     'bruecke_skript' => 'system/bruecke_skript.php',
+    'druck_job'      => 'system/druck_job.php',   // Etikett-Druckauftrag in die Warteschlange (kein Admin)
 ];
 // Nur fuer Admins.
-$nur_admin = ['sender', 'bruecke_skript'];
+$nur_admin = ['einstellungen', 'sender', 'bruecke_skript'];
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'uebersicht';
 

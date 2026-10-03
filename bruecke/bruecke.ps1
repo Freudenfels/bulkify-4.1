@@ -13,7 +13,21 @@ $Token = "{{TOKEN}}"
 
 # PowerShell 5.1 nutzt sonst teils TLS 1.0 -> HTTPS zum Server schlaegt fehl.
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
-$UA = "bulkify-lager-bruecke/1.0"
+$UA = "bulkify-lager-bruecke/1.1"
+
+# SumatraPDF finden (fuer lautlosen Etikettendruck). Kostenlos: https://www.sumatrapdfreader.org
+function Get-SumatraPath {
+  $cands = @(
+    (Join-Path $env:LOCALAPPDATA "SumatraPDF\SumatraPDF.exe"),
+    "C:\Program Files\SumatraPDF\SumatraPDF.exe",
+    "C:\Program Files (x86)\SumatraPDF\SumatraPDF.exe",
+    (Join-Path (Split-Path -Parent $PSCommandPath) "SumatraPDF.exe")
+  )
+  foreach ($c in $cands) { if ($c -and (Test-Path $c)) { return $c } }
+  $cmd = Get-Command SumatraPDF.exe -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+  return $null
+}
 
 Write-Host ("=" * 54)
 Write-Host " bulkify Lager-Bruecke laeuft"
@@ -45,6 +59,35 @@ while ($true) {
         } catch {}
         if ($ok -eq "1") { $st = "OK"; $farbe = "Green" } else { $st = "FEHLER"; $farbe = "Red" }
         Write-Host ((Get-Date -Format "HH:mm:ss") + "  Befehl " + $b.id + " -> " + $st + "  " + $antwort) -ForegroundColor $farbe
+      }
+    }
+
+    # 3) Etiketten drucken (lautlos per SumatraPDF auf Standard-/Etikettendrucker).
+    if ($poll.druck) {
+      foreach ($d in $poll.druck) {
+        $ok = "0"; $antwort = ""
+        try {
+          $bytes = [Convert]::FromBase64String($d.pdf_b64)
+          $tmp = Join-Path $env:TEMP ("bulkify-etikett-" + $d.id + ".pdf")
+          [IO.File]::WriteAllBytes($tmp, $bytes)
+          $sumatra = Get-SumatraPath
+          if ($sumatra) {
+            $a = @("-silent")
+            if ($d.drucker) { $a += @("-print-to", [string]$d.drucker) } else { $a += @("-print-to-default") }
+            $a += $tmp
+            $p = Start-Process -FilePath $sumatra -ArgumentList $a -PassThru -Wait -WindowStyle Hidden
+            if ($p.ExitCode -eq 0) { $ok = "1"; $antwort = "gedruckt (SumatraPDF)" } else { $antwort = "SumatraPDF ExitCode " + $p.ExitCode }
+          } else {
+            Start-Process -FilePath $tmp -Verb Print -ErrorAction Stop
+            $ok = "1"; $antwort = "an Standard-PDF-Programm uebergeben (SumatraPDF nicht gefunden)"
+          }
+        } catch { $antwort = "Druckfehler: " + $_.Exception.Message }
+        try {
+          Invoke-RestMethod -Uri ($Url + "?token=" + $Token) -Method Post -TimeoutSec 10 -UserAgent $UA `
+            -Body @{ druck_id = $d.id; ok = $ok; antwort = $antwort } | Out-Null
+        } catch {}
+        if ($ok -eq "1") { $st = "OK"; $farbe = "Green" } else { $st = "FEHLER"; $farbe = "Red" }
+        Write-Host ((Get-Date -Format "HH:mm:ss") + "  Druck " + $d.id + " -> " + $st + "  " + $antwort) -ForegroundColor $farbe
       }
     }
   } catch {

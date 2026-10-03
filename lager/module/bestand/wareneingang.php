@@ -152,22 +152,33 @@ if ($gebucht):
 <div class="bx-panel" style="border:1px solid var(--gruen);margin-bottom:var(--sp-5)">
   <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--sp-3)">
     <h2 style="margin:0"><?= count($gebucht) ?> Position(en) eingebucht – Etiketten für die Kartons</h2>
-    <span class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap">
+    <span class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap;align-items:center">
       <button type="button" class="btn btn-ghost btn-sm" data-etk-fmt="klein">100×70</button>
       <button type="button" class="btn btn-ghost btn-sm" data-etk-fmt="gross">100×150</button>
-      <a class="btn btn-primary btn-sm" id="etkOeffnen" href="?p=etikett&ids=<?= h($ids) ?>" target="_blank">Öffnen / Drucken</a>
+      <button type="button" class="btn btn-primary btn-sm" id="etkDruck">Direkt drucken</button>
+      <a class="btn btn-ghost btn-sm" id="etkOeffnen" href="?p=etikett&ids=<?= h($ids) ?>" target="_blank">Öffnen</a>
       <a class="btn btn-ghost btn-sm" href="?p=we">Nächstes Einbuchen</a>
+      <span id="etkDruckInfo" class="muted"></span>
     </span>
   </div>
   <embed id="etkEmbed" src="?p=etikett&ids=<?= h($ids) ?>" type="application/pdf" style="width:100%;height:340px;border:1px solid var(--line);border-radius:8px;background:#fff;margin-top:var(--sp-3)">
   <script>
   (function(){
-    var emb=document.getElementById('etkEmbed'), auf=document.getElementById('etkOeffnen'), base='?p=etikett&ids=<?= h($ids) ?>';
+    var emb=document.getElementById('etkEmbed'), auf=document.getElementById('etkOeffnen'),
+        druck=document.getElementById('etkDruck'), dinfo=document.getElementById('etkDruckInfo'),
+        base='?p=etikett&ids=<?= h($ids) ?>', ids='<?= h($ids) ?>', fmt='';
     document.querySelectorAll('[data-etk-fmt]').forEach(function(b){ b.addEventListener('click',function(){
-      var f=b.getAttribute('data-etk-fmt');
-      emb.src = base+'&format='+f+'&merken=1'; auf.href = base+'&format='+f;
+      fmt=b.getAttribute('data-etk-fmt');
+      emb.src = base+'&format='+fmt+'&merken=1'; auf.href = base+'&format='+fmt;
       document.querySelectorAll('[data-etk-fmt]').forEach(function(x){ x.classList.toggle('btn-primary', x===b); x.classList.toggle('btn-ghost', x!==b); });
     }); });
+    druck.addEventListener('click',function(){
+      dinfo.textContent='…';
+      var fd=new FormData(); fd.append('ids',ids); if(fmt) fd.append('format',fmt);
+      fetch('?p=druck_job',{method:'POST',body:fd}).then(function(r){return r.json();})
+        .then(function(j){ dinfo.textContent=j.ok?(j.meldung||'An den Drucker geschickt.'):('Fehler: '+(j.fehler||'')); })
+        .catch(function(){ dinfo.textContent='Serverfehler.'; });
+    });
   })();
   </script>
 </div>
