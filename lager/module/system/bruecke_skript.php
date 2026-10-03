@@ -16,7 +16,7 @@ $basis = ($https ? 'https' : 'http') . '://' . (string)($_SERVER['HTTP_HOST'] ??
 
 // EINE Quelle fuer die Version: steht im Dateinamen, in der Fenster-Startmeldung und im UA.
 // Bei jeder Aenderung HIER hochzaehlen.
-$version = '1.6';
+$version = '1.7';
 
 // WICHTIG: Das PS1 ist INLINE eingebettet (nicht mehr aus bruecke/bruecke.ps1 geladen). Grund:
 // die separate Datei wurde vom inkrementellen SFTP-Deploy offenbar nicht aktualisiert, wodurch
@@ -114,16 +114,19 @@ while ($true) {
           $sumatra = Get-SumatraPath
           if ($sumatra) {
             $zielName = if ($d.drucker) { [string]$d.drucker } else { "" }
-            # Mehrere Druckweisen der Reihe nach - erste mit ExitCode 0 gewinnt. Zuerst SCHLICHT
-            # (wie der GUI-Druck); -print-settings macht per CLI je nach Version Aerger (ExitCode 2).
+            # WICHTIG: Argumente als EIN String mit eigenen Anfuehrungszeichen bauen. Ein Array an
+            # Start-Process -ArgumentList setzt unter PowerShell 5.1 KEINE Quotes um Elemente mit
+            # Leerzeichen -> "PM-344-WF (WIFI)" wurde zerrissen, "(WIFI)" als Datei interpretiert.
+            $qf = '"' + $tmp + '"'
             $versuche = @()
             if ($zielName -ne "") {
-              $versuche += ,@("-silent", "-print-to", $zielName, $tmp)
-              $versuche += ,@("-silent", "-print-to", $zielName, "-print-settings", "fit", $tmp)
-              $versuche += ,@("-print-to", $zielName, $tmp)
+              $qp = '"' + $zielName + '"'
+              $versuche += "-silent -print-to $qp $qf"
+              $versuche += "-silent -print-to $qp -print-settings fit $qf"
+              $versuche += "-print-to $qp $qf"
             } else {
-              $versuche += ,@("-silent", "-print-to-default", $tmp)
-              $versuche += ,@("-silent", "-print-to-default", "-print-settings", "fit", $tmp)
+              $versuche += "-silent -print-to-default $qf"
+              $versuche += "-silent -print-to-default -print-settings fit $qf"
             }
             $letzter = ""
             foreach ($va in $versuche) {
