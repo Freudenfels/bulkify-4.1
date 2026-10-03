@@ -151,7 +151,41 @@ function erp_schritt_material(int $pa_id, string $station): array {
                              'menge'=>(float)$pa['menge'], 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($vid), 'item_id'=>$vid];
             break;
     }
+    // Je Zeile die zu entnehmende FEFO-Charge bestimmen (für den Pick-to-Light-Blinker im Lager).
+    foreach ($zeilen as &$z)
+        if (!isset($z['charge_id']) && !empty($z['item_id'])) $z['charge_id'] = erp_fefo_charge_id((int)$z['item_id']);
+    unset($z);
     return ['soll_menge'=>$soll_menge, 'soll_einheit'=>$soll_einheit, 'zeilen'=>$zeilen];
+}
+
+// Älteste frei verfügbare Charge eines Artikels (FEFO) – die, die als Nächstes entnommen würde.
+function erp_fefo_charge_id(int $item_id): ?int {
+    if ($item_id <= 0) return null;
+    $c = one("SELECT id FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL
+              ORDER BY (mhd IS NULL), mhd ASC, id ASC LIMIT 1", [$item_id]);
+    return $c ? (int)$c['id'] : null;
+}
+
+// Pick-to-Light: den Blinker der angegebenen (Dashboard-)Charge im LAGER-Programm leuchten lassen.
+// Die Blinker-Hardware/-Logik gehört dem Lager; wir rufen nur dessen internen Endpunkt auf
+// (/lager/?p=api_blink), serverseitig, auth per Loopback oder gemeinsamem Token LG_BLINK_TOKEN.
+// Wir fassen KEINE lg_-Tabellen an. Rückgabe ['ok'=>bool,'meldung'=>string].
+function pr_lager_blink(int $charge_id, string $aktion = 'an'): array {
+    if ($charge_id <= 0) return ['ok'=>false, 'meldung'=>'Keine Charge angegeben.'];
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = (string)($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
+    $url = $scheme . '://' . $host . '/lager/?p=api_blink&charge_id=' . $charge_id . '&aktion=' . rawurlencode($aktion);
+    if (defined('LG_BLINK_TOKEN') && LG_BLINK_TOKEN !== '') $url .= '&token=' . rawurlencode((string)LG_BLINK_TOKEN);
+    $c = curl_init($url);
+    curl_setopt_array($c, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>3, CURLOPT_TIMEOUT=>6]);
+    $body = curl_exec($c);
+    $err  = $body === false ? curl_error($c) : '';
+    $code = (int) curl_getinfo($c, CURLINFO_HTTP_CODE);
+    curl_close($c);
+    if ($err !== '') return ['ok'=>false, 'meldung'=>'Lager nicht erreichbar: ' . $err];
+    $j = json_decode((string)$body, true);
+    if (!is_array($j)) return ['ok'=>false, 'meldung'=>'Unerwartete Antwort vom Lager (HTTP ' . $code . ').'];
+    return ['ok'=>!empty($j['ok']), 'meldung'=>(string)($j['meldung'] ?? '')];
 }
 
 // Zutaten der Rezeptur eines Auftrags (Zusammensetzung je Einheit). Rezeptur = pa.rezeptur_id oder produkt.rezeptur_id.
