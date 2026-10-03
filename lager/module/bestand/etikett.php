@@ -101,14 +101,22 @@ function lg_karton_etikett(MiniPDF $pdf, callable $mm, array $c, string $url, in
         $pdf->text($lx, $yy + $mm(3.4), $pdf->fit($v !== '' ? $v : '–', $tw, 10.5, true), 10.5, true, $dark);
         $yy += $mm(8.4);
     };
-    $feld('Lieferant', (string)($c['lieferant'] ?? ''));
-    $feld('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));
-    // MHD + Menge nebeneinander, um Platz zu sparen.
-    $pdf->text($lx, $yy, 'MHD', 7, false, $muted);
-    $pdf->text($lx, $yy + $mm(3.4), $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–', 10.5, true, $dark);
+    // Lieferant = Lieferantennummer (falls vorhanden, sonst Firma). Eingang = Wareneingangsdatum.
     $midx = $lx + $tw / 2;
-    $pdf->text($midx, $yy, 'Menge', 7, false, $muted);
-    $pdf->text($midx, $yy + $mm(3.4), menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit'], 10.5, true, $dark);
+    $lieferantTxt = ((string)($c['lieferant_nr'] ?? '') !== '') ? (string)$c['lieferant_nr'] : (string)($c['lieferant'] ?? '');
+    $eingangTxt   = !empty($c['wareneingang']) ? date('d.m.Y', strtotime((string)$c['wareneingang'])) : '–';
+    $halb = function (string $l1, string $v1, string $l2, string $v2) use ($pdf, $lx, $midx, &$yy, $muted, $dark, $mm, $tw): void {
+        $hw = $tw / 2 - $mm(2);
+        $pdf->text($lx, $yy, $l1, 7, false, $muted);
+        $pdf->text($lx, $yy + $mm(3.4), $pdf->fit($v1 !== '' ? $v1 : '–', $hw, 10.5, true), 10.5, true, $dark);
+        $pdf->text($midx, $yy, $l2, 7, false, $muted);
+        $pdf->text($midx, $yy + $mm(3.4), $pdf->fit($v2 !== '' ? $v2 : '–', $hw, 10.5, true), 10.5, true, $dark);
+        $yy += $mm(8.4);
+    };
+    $halb('Lieferant', $lieferantTxt, 'Eingang', $eingangTxt);
+    $feld('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));
+    $halb('MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–',
+          'Menge', menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
 }
 
 // Großes Karton-Etikett 100 x 150 mm (hoch) – für Etikettendrucker-Rollen. Großer QR oben,
@@ -137,13 +145,24 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
     if (!empty($c['artikelnummer'])) { $pdf->text($lx, $yy, (string)$c['artikelnummer'], 9, false, $muted); $yy += $mm(5.5); }
     $yy += $mm(3);
 
+    $midx = $lx + $tw / 2;
+    $lieferantTxt = ((string)($c['lieferant_nr'] ?? '') !== '') ? (string)$c['lieferant_nr'] : (string)($c['lieferant'] ?? '');
+    $eingangTxt   = !empty($c['wareneingang']) ? date('d.m.Y', strtotime((string)$c['wareneingang'])) : '–';
     $feld = function (string $l, string $v) use ($pdf, $lx, &$yy, $muted, $dark, $mm, $tw): void {
         $pdf->text($lx, $yy, $l, 8.5, false, $muted);
         $pdf->text($lx, $yy + $mm(4.2), $pdf->fit($v !== '' ? $v : '–', $tw, 13, true), 13, true, $dark);
         $yy += $mm(10.5);
     };
-    $feld('Lieferant', (string)($c['lieferant'] ?? ''));
+    $halb = function (string $l1, string $v1, string $l2, string $v2) use ($pdf, $lx, $midx, &$yy, $muted, $dark, $mm, $tw): void {
+        $hw = $tw / 2 - $mm(3);
+        $pdf->text($lx, $yy, $l1, 8.5, false, $muted);
+        $pdf->text($lx, $yy + $mm(4.2), $pdf->fit($v1 !== '' ? $v1 : '–', $hw, 13, true), 13, true, $dark);
+        $pdf->text($midx, $yy, $l2, 8.5, false, $muted);
+        $pdf->text($midx, $yy + $mm(4.2), $pdf->fit($v2 !== '' ? $v2 : '–', $hw, 13, true), 13, true, $dark);
+        $yy += $mm(10.5);
+    };
+    $halb('Lieferant', $lieferantTxt, 'Eingang', $eingangTxt);
     $feld('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));
-    $feld('MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–');
-    $feld('Menge', menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
+    $halb('MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–',
+          'Menge', menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
 }

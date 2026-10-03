@@ -279,7 +279,7 @@ function erp_charge_voll(int $id): ?array {
     if (!tabelle_da('charge')) return null;
     $lief = tabelle_da('lieferanten');
     $sql = "SELECT c.*, i.name AS item_name, i.artikelnummer, i.kategorie, i.form, i.notiz AS item_notiz"
-         . ($lief ? ", l.firma AS lieferant, l.id AS lieferant_id2" : "") . "
+         . ($lief ? ", l.firma AS lieferant, l.lieferantennummer AS lieferant_nr, l.id AS lieferant_id2" : "") . "
             FROM charge c JOIN item i ON i.id=c.item_id"
          . ($lief ? " LEFT JOIN lieferanten l ON l.id=c.lieferant_id" : "") . "
             WHERE c.id=?";
