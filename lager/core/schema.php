@@ -150,6 +150,8 @@ function lg_schema(): void {
         pakete    INT      NOT NULL DEFAULT 1,
         angelegt  DATETIME NOT NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // Menge auf dem Etikett auf die Kartons aufteilen (statt Gesamtmenge je Karton)?
+    lg_spalte('lg_charge_info', 'aufteilen', 'TINYINT NOT NULL DEFAULT 0');
 
     // --- Papierkorb: im Lager "geloeschte" Chargen. Nur AUSGEBLENDET (Dashboard-Charge bleibt!),
     //     damit nichts kaputtgeht und man 30 Tage lang wiederherstellen kann. --------------------
@@ -189,6 +191,15 @@ function lg_pakete_set(int $charge_id, int $pakete): void {
     $pakete = max(1, $pakete);
     q("INSERT INTO lg_charge_info (charge_id,pakete,angelegt) VALUES (?,?,?)
        ON DUPLICATE KEY UPDATE pakete=VALUES(pakete)", [$charge_id, $pakete, jetzt_utc()]);
+}
+
+// Soll die Menge auf dem Etikett auf die Kartons aufgeteilt werden? (0/1)
+function lg_aufteilen(int $charge_id): bool {
+    return (int) scalar("SELECT aufteilen FROM lg_charge_info WHERE charge_id=?", [$charge_id]) === 1;
+}
+function lg_aufteilen_set(int $charge_id, bool $an): void {
+    q("INSERT INTO lg_charge_info (charge_id,pakete,aufteilen,angelegt) VALUES (?,1,?,?)
+       ON DUPLICATE KEY UPDATE aufteilen=VALUES(aufteilen)", [$charge_id, $an ? 1 : 0, jetzt_utc()]);
 }
 
 // --- Papierkorb (im Lager ausgeblendete Chargen; Dashboard-Charge bleibt erhalten) -----------

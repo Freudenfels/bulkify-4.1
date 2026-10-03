@@ -114,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         if (!$cid) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Buchen fehlgeschlagen.'; continue; }
 
         lg_pakete_set((int)$cid, $pakete);
+        lg_aufteilen_set((int)$cid, !empty($_POST['aufteilen']) && $pakete > 1);
         $c = erp_charge((int)$cid);
         lg_bewegung_log((int)$cid, 'ein', $menge, $c['einheit'] ?? null, (string)($c['item_name'] ?? ''), $notiz);
         if (leiste_binden($blinker, (int)$cid) === '') {
@@ -290,6 +291,9 @@ if ($gebucht):
       </div>
       <div id="weRows" style="margin-top:var(--sp-3)"></div>
       <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Fertigware/Kapseln → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist immer Pflicht.</div>
+      <label class="bx-check" style="margin-top:var(--sp-3);display:inline-flex;gap:8px;align-items:center">
+        <input type="checkbox" name="aufteilen" value="1"> Menge auf die Kartons aufteilen (statt Gesamtmenge je Karton)
+      </label>
       <div style="margin-top:var(--sp-4)"><button type="submit" class="btn btn-primary" id="weBuchen">Alle buchen &amp; Blinker anhängen</button></div>
     </div>
   </div>

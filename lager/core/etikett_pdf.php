@@ -36,10 +36,21 @@ function lg_etikett_pdf(array $ids, string $format = 'klein', int $override = 0)
         $c = erp_charge_voll($cid);
         if (!$c) continue;
         $n = $override ?: lg_pakete($cid);
+        $split = $n > 1 && function_exists('lg_aufteilen') && lg_aufteilen($cid);
+        $total = (float)($c['menge_verfuegbar'] ?? 0);
+        // Bei Aufteilung: gleiche Basismenge je Karton, der LETZTE bekommt den Rest (Summe = Gesamt).
+        $basis = $split ? floor(($total / $n) * 1000) / 1000 : 0.0;
         $url = $scheme . '://' . $host . '/lager/?p=charge&id=' . $cid;
         for ($k = 1; $k <= $n; $k++) {
             if (!$erste) $pdf->addPage();
             $erste = false;
+            if ($split) {
+                $c['menge_anzeige'] = ($k < $n) ? $basis : ($total - $basis * ($n - 1));
+                $c['menge_label']   = 'Menge/Karton';
+            } else {
+                $c['menge_anzeige'] = $total;
+                $c['menge_label']   = 'Menge';
+            }
             $format === 'gross'
                 ? lg_karton_etikett_hoch($pdf, $mm, $c, $url, $k, $n)
                 : lg_karton_etikett($pdf, $mm, $c, $url, $k, $n);
@@ -100,7 +111,7 @@ function lg_karton_etikett(MiniPDF $pdf, callable $mm, array $c, string $url, in
     $halb('Lieferant', $lieferantTxt, 'Eingang', $eingangTxt);
     $feld('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));
     $halb('MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–',
-          'Menge', menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
+          (string)($c['menge_label'] ?? 'Menge'), menge_txt($c['menge_anzeige'] ?? $c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
 }
 
 // Großes Karton-Etikett 100 x 150 mm (hoch) für Etikettendrucker-Rollen.
@@ -148,5 +159,5 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
     $halb('Lieferant', $lieferantTxt, 'Eingang', $eingangTxt);
     $feld('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));
     $halb('MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–',
-          'Menge', menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
+          (string)($c['menge_label'] ?? 'Menge'), menge_txt($c['menge_anzeige'] ?? $c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
 }
