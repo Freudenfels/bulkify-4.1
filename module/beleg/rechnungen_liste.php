@@ -55,6 +55,7 @@ if (isset($_GET['verrechnet'])) echo '<div class="bx-panel badge-ok" style="padd
   <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=rechnungen">zurücksetzen</a><?php endif; ?>
   <span style="flex:1"></span>
   <a class="btn btn-ghost btn-sm" href="?p=gutschrift_neu">Storno-Rechnung</a>
+  <a class="btn btn-ghost btn-sm" href="?p=rechnung_import">Alt-Rechnungen importieren</a>
   <a class="btn btn-primary btn-sm" href="?p=rechnung_frei">+ Rechnung erstellen</a>
 </form>
 <?php

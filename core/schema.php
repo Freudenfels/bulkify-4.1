@@ -517,6 +517,8 @@ function init_schema(): void {
     ensure_column('beleg', 'leistung_datum', "DATE NULL");   // Leistungs-/Lieferdatum
     ensure_column('beleg', 'text', "TEXT NULL");             // optionaler Rechnungstext/Hinweis
     ensure_column('beleg', 'bearbeiter_id', "INT NULL");     // Bearbeiter (Benutzer-ID) – erscheint auf der Rechnung
+    ensure_column('beleg', 'original_datei', "VARCHAR(255) NULL");  // hochgeladene Original-Rechnung (Alt-Import) im Uploads-Ordner
+    ensure_column('beleg', 'original_orig', "VARCHAR(255) NULL");   // Original-Dateiname der hochgeladenen Rechnung
     ensure_column('beleg', 'kunde_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0");  // fuer den Kunden im Portal freigegeben?
     // Einmalig: bestehende Belege waren im Portal immer sichtbar -> freigeben, damit nichts verschwindet.
     if (meta_get('beleg_sichtbar_backfill', '') !== '1') {
@@ -5748,6 +5750,59 @@ function rechnung_frei_erstellen(array $positionen, array $opt = []): ?int {
     $ersteller = trim((string)($opt['ersteller'] ?? '')) ?: 'team';
     if (function_exists('beleg_status_log_add')) beleg_status_log_add($bid, 'offen', 'Rechnung manuell erstellt' . ($sicht ? ', für Kunde freigegeben' : ''), $ersteller);
     if ($kid) log_aktivitaet('kunde', $kid, 'team', 'Rechnung ' . scalar("SELECT nummer FROM beleg WHERE id=?", [$bid]) . ' erstellt.', 'beleg', 'beleg', $bid);
+    return $bid;
+}
+
+// Eine hochgeladene (ältere) Original-Rechnung per KI auslesen. Rückgabe (immer, wirft nie):
+//   ['ok'=>true,'nummer','datum'(Y-m-d|null),'netto','ust_prozent','brutto','bezahlt'(bool),'bezahlt_am']
+//   ['ok'=>false,'fehler'=>'…']
+function rechnung_import_ki(string $pfad): array {
+    require_once __DIR__ . '/ki.php';
+    if (!ki_bereit()) return ['ok' => false, 'fehler' => 'KI ist nicht eingerichtet (Einstellungen → KI).'];
+    $prompt = "Dies ist eine (ältere) Ausgangsrechnung. Lies die Kopfdaten aus und gib NUR JSON zurück:\n"
+        . '{"nummer":"","datum":"","netto":0,"ust_prozent":19,"brutto":0,"bezahlt":false,"bezahlt_am":""}' . "\n"
+        . "datum und bezahlt_am im Format YYYY-MM-DD. brutto = Gesamt-/Rechnungsbetrag inkl. USt (Endsumme). "
+        . "netto = Nettosumme, ust_prozent = USt-Satz in Prozent (0 wenn keiner ausgewiesen). "
+        . "bezahlt = true NUR wenn die Rechnung klar als bezahlt gekennzeichnet ist (z. B. 'bezahlt', "
+        . "'Betrag erhalten', 'Zahlungseingang', Quittung), sonst false. Zahlen mit Punkt als Dezimaltrennzeichen, "
+        . "keine Tausenderpunkte. Nichts erfinden – unbekannte Felder leer/0.";
+    $r = ki_datei_frage($pfad, $prompt, ['json' => true, 'max_tokens' => 1500, 'zweck' => 'rechnung-import']);
+    if (empty($r['ok'])) return ['ok' => false, 'fehler' => (string)($r['fehler'] ?? 'Die Rechnung konnte nicht gelesen werden.')];
+    $d = is_array($r['daten'] ?? null) ? $r['daten'] : [];
+    $num  = fn($x) => (float) str_replace(',', '.', (string)$x);
+    $gilt = fn($s) => (is_string($s) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $s)) ? $s : null;
+    $brutto = $num($d['brutto'] ?? 0); $netto = $num($d['netto'] ?? 0); $ustP = $num($d['ust_prozent'] ?? 0);
+    if ($brutto <= 0 && $netto > 0) $brutto = round($netto * (1 + $ustP / 100), 2);
+    if ($netto <= 0 && $brutto > 0) $netto = $ustP > 0 ? round($brutto / (1 + $ustP / 100), 2) : $brutto;
+    return ['ok' => true,
+        'nummer'      => trim((string)($d['nummer'] ?? '')),
+        'datum'       => $gilt($d['datum'] ?? null),
+        'netto'       => round($netto, 2), 'ust_prozent' => $ustP, 'brutto' => round($brutto, 2),
+        'bezahlt'     => !empty($d['bezahlt']),
+        'bezahlt_am'  => $gilt($d['bezahlt_am'] ?? null)];
+}
+
+// Eine Alt-Rechnung als Beleg anlegen (ohne Auftrag), mit hochgeladenem Original-PDF. Für den
+// Rechnungs-Import: erscheint danach im Kundenportal (Liste + Original-Download) mit Betrag + Status.
+// $f: nummer, datum, netto, ust_prozent, brutto, bezahlt(bool). Gibt die Beleg-ID zurück.
+function rechnung_alt_anlegen(int $kunde_id, array $f, string $datei, string $orig): ?int {
+    if ($kunde_id <= 0) return null;
+    $brutto = round((float)($f['brutto'] ?? 0), 2);
+    $netto  = round((float)($f['netto'] ?? 0), 2);
+    $ustP   = (float)($f['ust_prozent'] ?? 0);
+    if ($netto <= 0 && $brutto > 0) $netto = $ustP > 0 ? round($brutto / (1 + $ustP / 100), 2) : $brutto;
+    $ust = round($netto * $ustP / 100, 2);
+    if ($brutto <= 0) $brutto = round($netto + $ust, 2);
+    if ($brutto <= 0) return null;   // ohne Betrag keine sinnvolle Rechnung
+    $nummer = trim((string)($f['nummer'] ?? '')) ?: naechste_nummer('RE');
+    $datum  = (is_string($f['datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $f['datum'])) ? $f['datum'] : gmdate('Y-m-d');
+    $status = !empty($f['bezahlt']) ? 'bezahlt' : 'offen';
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,original_datei,original_orig,kunde_sichtbar)
+       VALUES (?,?,NULL,?,?,?,?,?,?,?,?,?,1)",
+      [$nummer, 'rechnung', $kunde_id, $netto, $ustP, $ust, $brutto, $status, $datum, $datei, mb_substr($orig, 0, 255)]);
+    $bid = (int) insert_id();
+    if (function_exists('beleg_status_log_add')) beleg_status_log_add($bid, $status, 'Alt-Rechnung importiert (Original hochgeladen)' . ($status === 'bezahlt' ? ', als bezahlt übernommen' : ''), 'team');
+    log_aktivitaet('kunde', $kunde_id, 'team', 'Alt-Rechnung ' . $nummer . ' importiert (' . number_format($brutto, 2, ',', '.') . ' €).', 'beleg', 'beleg', $bid);
     return $bid;
 }
 

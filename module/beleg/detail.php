@@ -5,6 +5,19 @@ require_once BX_ROOT . '/core/schema.php';
 
 $id = (int)($_GET['id'] ?? 0);
 
+// Hochgeladene Original-Rechnung (Alt-Import) im Team-Bereich ansehen.
+if ($id && isset($_GET['original'])) {
+    $bo = one("SELECT original_datei, original_orig FROM beleg WHERE id=?", [$id]);
+    $pf = $bo && !empty($bo['original_datei']) ? BX_UPLOADS . '/' . basename((string)$bo['original_datei']) : '';
+    if (!$pf || !is_file($pf)) { http_response_code(404); echo 'Keine Original-Datei.'; exit; }
+    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
+    $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','gif'=>'image/gif'][$ext] ?? 'application/octet-stream';
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($bo['original_orig'] ?: 'Rechnung')) . '"');
+    header('Content-Length: ' . filesize($pf));
+    readfile($pf); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     $aktion = $_POST['aktion'] ?? 'status';
     $akteur = (function_exists('current_user') && ($u = current_user())) ? $u['name'] : 'team';
@@ -117,8 +130,12 @@ if (!$istGut && $b['status'] !== 'storniert') {
         : '<form method="post" style="display:inline;margin:0"><input type="hidden" name="aktion" value="freigeben"><button class="btn btn-primary" type="submit">Für Kunde freigeben</button></form> ';
 }
 render_header('rechnungen', $b['nummer']);
+// Bei importierter Alt-Rechnung das hochgeladene Original zeigen, sonst die bulkify-PDF.
+$pdfBtn = !empty($b['original_datei'])
+    ? bx_btn('Original-Rechnung', '?p=rechnung&id=' . $id . '&original=1', 'ghost')
+    : bx_btn('PDF ansehen', '?p=' . ($istGut ? 'gutschrift_pdf' : 'rechnung_pdf') . '&id=' . $id, 'ghost');
 bx_head($b['nummer'], ($istGut ? 'Storno-Rechnung / Gutschrift' : 'Rechnung') . ($b['datum'] ? ' vom ' . date('d.m.Y', strtotime($b['datum'])) : ''),
-        $freiBtn . bx_btn('PDF ansehen', '?p=' . ($istGut ? 'gutschrift_pdf' : 'rechnung_pdf') . '&id=' . $id, 'ghost') . ' ' . bx_btn('Zurück zur Liste', '?p=rechnungen', 'ghost'));
+        $freiBtn . $pdfBtn . ' ' . bx_btn('Zurück zur Liste', '?p=rechnungen', 'ghost'));
 if (isset($_GET['freigabe'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ($_GET['freigabe'] === '1' ? 'Rechnung für den Kunden freigegeben – jetzt im Portal sichtbar.' : 'Freigabe zurückgezogen – nicht mehr im Kundenportal sichtbar.') . '</div>';
 if (isset($_GET['erstellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnung aus dem Auftrag erstellt. Beträge/USt stammen aus dem Auftrag – bei Bedarf unten Zahlungen erfassen oder stornieren.</div>';
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';

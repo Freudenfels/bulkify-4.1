@@ -145,6 +145,20 @@ if ($k && ($_GET['v'] ?? '') === 'analyse_datei') {
     header('Content-Length: ' . filesize($pf));
     readfile($pf); exit;
 }
+// Hochgeladene Original-Rechnung (Alt-Import) ausliefern: nur eigene, freigegebene Rechnung.
+if ($k && ($_GET['v'] ?? '') === 'rechnung_datei') {
+    $bid = (int)($_GET['id'] ?? 0);
+    $b = $bid ? one("SELECT original_datei, original_orig FROM beleg WHERE id=? AND kunde_id=? AND typ='rechnung' AND kunde_sichtbar=1 AND original_datei IS NOT NULL", [$bid, (int)$k['id']]) : null;
+    $pf = $b ? BX_UPLOADS . '/' . basename((string)$b['original_datei']) : '';
+    if (!$b || !$pf || !is_file($pf)) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
+    $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','gif'=>'image/gif'][$ext] ?? 'application/octet-stream';
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($b['original_orig'] ?: 'Rechnung')) . '"');
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Length: ' . filesize($pf));
+    readfile($pf); exit;
+}
 
 // Zum Auftrag hochgeladenes Dokument (z. B. nachgetragene Original-Rechnung) ausliefern – nur eigener Auftrag,
 // nur freigegeben (kunde_sichtbar=1). Deckt die per „Rechnungen nachtragen" hochgeladenen Belege ab.
@@ -3608,7 +3622,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php if (!$rechnungen): ?><tr><td colspan="5" class="muted">Noch keine Rechnungen.</td></tr><?php endif; ?>
       <?php foreach ($rechnungen as $r): ?>
         <tr><td><?= h($r['nummer']) ?></td><td><?= $r['datum']?h(date('d.m.Y',strtotime($r['datum']))):'' ?></td><td class="bx-num"><?= $eur($r['brutto']) ?></td><td><?= $reBadge($r['status']) ?></td>
-          <td class="bx-num" style="white-space:nowrap"><?php if (!empty($r['auftrag_id'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_pdf') ?>&aid=<?= (int)$r['auftrag_id'] ?>">Rechnung (PDF)</a><?php endif; ?></td></tr>
+          <td class="bx-num" style="white-space:nowrap"><?php if (!empty($r['original_datei'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_datei') ?>&id=<?= (int)$r['id'] ?>">Rechnung (PDF)</a><?php elseif (!empty($r['auftrag_id'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_pdf') ?>&aid=<?= (int)$r['auftrag_id'] ?>">Rechnung (PDF)</a><?php endif; ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
