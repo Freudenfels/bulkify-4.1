@@ -73,6 +73,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,kunde_sichtbar,hochgeladen_von)
                VALUES ('auftrag',?, 'rechnung', ?,?,?,?,1,'team')",
               [$id, 'Rechnung (Altsystem)', $fn, $orig, $datum]);
+            // Optional: Betrag per KI auslesen und den (fehlenden) Auftragspreis übernehmen.
+            if (!empty($_POST['betrag_uebernehmen'])) {
+                @set_time_limit(240);
+                $af = one("SELECT menge, gesamt_netto, vk_stueck FROM auftrag WHERE id=?", [$id]);
+                $ki = rechnung_import_ki(BX_UPLOADS . '/' . $fn);
+                if (!empty($ki['ok']) && (float)($af['gesamt_netto'] ?? 0) <= 0 && (float)($ki['netto'] ?? 0) > 0) {
+                    $netto = round((float)$ki['netto'], 2);
+                    $menge = (int)($af['menge'] ?? 0);
+                    $vk = $menge > 0 ? round($netto / $menge, 4) : (float)($af['vk_stueck'] ?? 0);
+                    q("UPDATE auftrag SET gesamt_netto=?, vk_stueck=? WHERE id=?", [$netto, $vk, $id]);
+                    header('Location: ?p=auftrag&id=' . $id . '&altre=1&betrag=' . rawurlencode(number_format($netto, 2, ',', '.'))); exit;
+                }
+                header('Location: ?p=auftrag&id=' . $id . '&altre=1&betragn=1'); exit;
+            }
         }
     }
     header('Location: ?p=auftrag&id=' . $id . '&altre=1'); exit;
@@ -425,7 +439,7 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
   <h2 style="margin-top:0">Zahlung / Alt-Rechnung <span class="muted" style="font-weight:normal;font-size:13px">· Altsystem</span></h2>
   <?php if (isset($_GET['bezahltok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Gespeichert.</div><?php endif; ?>
   <?php if (isset($_GET['bezahltreset'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Zurückgesetzt.</div><?php endif; ?>
-  <?php if (isset($_GET['altre'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Rechnung hochgeladen.</div><?php endif; ?>
+  <?php if (isset($_GET['altre'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Rechnung hochgeladen.<?php if (isset($_GET['betrag'])): ?> Betrag <strong><?= h((string)$_GET['betrag']) ?> €</strong> aus der Rechnung übernommen.<?php elseif (isset($_GET['betragn'])): ?> <span class="muted">Kein Betrag erkannt oder Preis bereits gesetzt – Preis ggf. unten von Hand eintragen.</span><?php endif; ?></div><?php endif; ?>
   <?php if (isset($_GET['altredel'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Rechnung gelöscht.</div><?php endif; ?>
   <?php if ($hatV4Rechnung): ?>
     <p class="muted" style="margin-top:0">Für diesen Auftrag gibt es bereits eine v4-Rechnung (<a href="?p=rechnung&id=<?= (int)$rechnung['id'] ?>"><?= h($rechnung['nummer']) ?></a>) – Zahlungen bitte dort erfassen. Das manuelle „bezahlt am" unten ist nur für Alt-Aufträge ohne echte Rechnung gedacht.</p>
@@ -464,6 +478,7 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
       <div class="bx-field" style="margin:0"><label>Datei (PDF)</label><input type="file" name="dok" required accept="application/pdf,image/*"></div>
       <div class="bx-field" style="margin:0"><label>Rechnungsdatum</label><input type="date" name="dok_datum"></div>
       <button class="btn btn-ghost btn-sm" type="submit">Hochladen</button>
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:0 0 6px"><input type="checkbox" name="betrag_uebernehmen" value="1" <?= (float)$a['gesamt_netto'] <= 0 ? 'checked' : '' ?>> Betrag per KI auslesen und Preis übernehmen <?= bx_hint('Liest den Rechnungsbetrag und trägt ihn als Netto + VK/Stück ein – nur wenn der Auftrag noch keinen Preis hat. Kann einen Moment dauern.') ?></label>
     </form>
   </div>
 </div>
