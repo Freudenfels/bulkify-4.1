@@ -25,7 +25,11 @@ foreach ($lieferungen as $l):
     $eta = (string)($l['eta_geplant'] ?? '');
     $ueberfaellig = $eta !== '' && $eta < $heute;
     $suchteile = [(string)($l['lieferant'] ?? ''), (string)($l['nummer'] ?? ''), (string)($l['tracking'] ?? '')];
-    foreach (($l['positionen'] ?? []) as $sp) $suchteile[] = (string)($sp['name'] ?? '');
+    foreach (($l['positionen'] ?? []) as $sp) {
+        $suchteile[] = (string)($sp['name'] ?? '');
+        $suchteile[] = (string)($sp['einheit'] ?? '');
+        $suchteile[] = (string)($sp['kapselgroesse'] ?? '');
+    }
     $such = mb_strtolower(implode(' ', array_filter($suchteile)));
 ?>
 <div class="bx-panel erw-karte" data-such="<?= h($such) ?>">
