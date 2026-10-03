@@ -2,6 +2,8 @@
 
 Liefert die Lager-Brücke (`bruecke/bruecke.ps1`) als Download zum Doppelklicken. Server-Adresse, Schlüssel und Version sind schon eingetragen, Zeilenenden im Windows-Format.
 
+**Bugfix (v1.4):** Das PS1 wird NICHT mehr in einer einzigen cmd-Zeile geschrieben. Der Base64-Code ist > 8191 Zeichen (cmd-Zeilenlimit) → die Zeile wurde abgeschnitten, das PS1 war kaputt und die .bat startete eine alte Datei aus `%TEMP%` (alter Banner, kein Druck). Jetzt: Base64 in Stücken (`str_split 3000`) per `echo` in eine `.b64`-Datei schreiben, dann per PowerShell entpacken (`-replace '\s',''` entfernt die Chunk-Zeilenumbrüche). Beide Varianten beenden vorher evtl. laufende Brücken (`Get-CimInstance Win32_Process`, ohne sich selbst).
+
 **Version:** `$version` in dieser Datei ist die EINE Quelle. Sie wird in die `.ps1` eingesetzt (`{{VERSION}}` → UA + Fenster-Startmeldung „Version: …") UND in den Dateinamen des Downloads (`bulkify-lager-bruecke-v1-3-einrichten.bat` bzw. `-test.bat`). So erkennt man am Dateinamen und im Fenster sofort, welche Version läuft. Bei jeder Änderung an `bruecke.ps1` die `$version` hochzählen.
 
 Zwei Varianten:
