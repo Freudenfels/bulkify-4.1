@@ -19,13 +19,20 @@ $ids = array_values(array_unique($ids));
 if (!$ids) { http_response_code(404); echo 'Keine Charge angegeben.'; exit; }
 $override = isset($_GET['pakete']) ? max(1, (int)$_GET['pakete']) : 0;
 
+// Format: klein = 100x70 quer (Standard), gross = 100x150 hoch (Etikettendrucker-Rolle).
+// Ohne Parameter gilt der gespeicherte Standard (lg_meta 'etikett_format').
+$format = ($_GET['format'] ?? '') !== '' ? (string)$_GET['format'] : lg_meta_lesen('etikett_format', 'klein');
+$format = $format === 'gross' ? 'gross' : 'klein';
+// Gewählte Größe als Standard merken (dann folgen alle "Etikett drucken"-Knöpfe automatisch).
+if (($_GET['merken'] ?? '') === '1') lg_meta_schreiben('etikett_format', $format);
+
 $host   = (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 
-$pdf = new MiniPDF();
-$pdf->w = 100 / 25.4 * 72;   // 283.46 pt = 100 mm
-$pdf->h = 70 / 25.4 * 72;    //  198.43 pt = 70 mm
 $mm = fn(float $v): float => $v / 25.4 * 72;
+$pdf = new MiniPDF();
+$pdf->w = $mm(100);
+$pdf->h = $format === 'gross' ? $mm(150) : $mm(70);
 
 $erste = true;
 foreach ($ids as $cid) {
@@ -36,7 +43,9 @@ foreach ($ids as $cid) {
     for ($k = 1; $k <= $n; $k++) {
         if (!$erste) $pdf->addPage();
         $erste = false;
-        lg_karton_etikett($pdf, $mm, $c, $url, $k, $n);
+        $format === 'gross'
+            ? lg_karton_etikett_hoch($pdf, $mm, $c, $url, $k, $n)
+            : lg_karton_etikett($pdf, $mm, $c, $url, $k, $n);
     }
 }
 if ($erste) { http_response_code(404); echo 'Charge nicht gefunden.'; exit; }
@@ -100,4 +109,41 @@ function lg_karton_etikett(MiniPDF $pdf, callable $mm, array $c, string $url, in
     $midx = $lx + $tw / 2;
     $pdf->text($midx, $yy, 'Menge', 7, false, $muted);
     $pdf->text($midx, $yy + $mm(3.4), menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit'], 10.5, true, $dark);
+}
+
+// Großes Karton-Etikett 100 x 150 mm (hoch) – für Etikettendrucker-Rollen. Großer QR oben,
+// darunter Karton X/N, Name und die Felder gestapelt.
+function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $url, int $karton, int $gesamt): void {
+    $W = $pdf->w; $dark = [20, 20, 20]; $muted = [120, 120, 120]; $line = [205, 205, 205];
+    $pdf->rectStroke($mm(2), $mm(2), $W - $mm(4), $pdf->h - $mm(4), 0.6, $line);
+    $pdf->text($mm(6), $mm(9), 'bulkify · Wareneingang', 9, false, $muted);
+
+    // QR groß, zentriert.
+    $qrArea = $mm(52); $qx = ($W - $qrArea) / 2; $qy = $mm(12);
+    $m = qr_matrix($url);
+    if ($m) {
+        $n = count($m); $quiet = 2; $mod = $qrArea / ($n + 2 * $quiet);
+        $pdf->rect($qx, $qy, $qrArea, $qrArea, [255, 255, 255]);
+        for ($y = 0; $y < $n; $y++) for ($x = 0; $x < $n; $x++) {
+            if ($m[$y][$x]) $pdf->rect($qx + ($x + $quiet) * $mod, $qy + ($y + $quiet) * $mod, $mod + 0.3, $mod + 0.3, $dark);
+        }
+    }
+    $pdf->textCenter($W / 2, $qy + $qrArea + $mm(9), 'Karton ' . $karton . ' / ' . $gesamt, 14, true, $dark);
+
+    $lx = $mm(6); $tw = $W - $mm(12); $yy = $qy + $qrArea + $mm(17);
+    $name = (string)($c['item_name'] ?? '');
+    $zeilen = array_slice($pdf->wrap($name, $tw, 15, true), 0, 3);
+    foreach ($zeilen as $ln) { $pdf->text($lx, $yy, $ln, 15, true, $dark); $yy += $mm(6.3); }
+    if (!empty($c['artikelnummer'])) { $pdf->text($lx, $yy, (string)$c['artikelnummer'], 9, false, $muted); $yy += $mm(5.5); }
+    $yy += $mm(3);
+
+    $feld = function (string $l, string $v) use ($pdf, $lx, &$yy, $muted, $dark, $mm, $tw): void {
+        $pdf->text($lx, $yy, $l, 8.5, false, $muted);
+        $pdf->text($lx, $yy + $mm(4.2), $pdf->fit($v !== '' ? $v : '–', $tw, 13, true), 13, true, $dark);
+        $yy += $mm(10.5);
+    };
+    $feld('Lieferant', (string)($c['lieferant'] ?? ''));
+    $feld('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));
+    $feld('MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–');
+    $feld('Menge', menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
 }

@@ -152,8 +152,9 @@ if ($gebucht):
 <div class="bx-panel" style="border:1px solid var(--gruen);margin-bottom:var(--sp-5)">
   <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--sp-3)">
     <h2 style="margin:0"><?= count($gebucht) ?> Position(en) eingebucht – Etiketten für die Kartons</h2>
-    <span class="bx-row" style="gap:var(--sp-2)">
-      <a class="btn btn-primary btn-sm" href="?p=etikett&ids=<?= h($ids) ?>" target="_blank">Alle Etiketten drucken</a>
+    <span class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap">
+      <a class="btn btn-primary btn-sm" href="?p=etikett&ids=<?= h($ids) ?>&format=klein&merken=1" target="_blank">Etiketten 100×70</a>
+      <a class="btn btn-primary btn-sm" href="?p=etikett&ids=<?= h($ids) ?>&format=gross&merken=1" target="_blank">Etiketten 100×150</a>
       <a class="btn btn-ghost btn-sm" href="?p=we">Nächstes Einbuchen</a>
     </span>
   </div>

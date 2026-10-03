@@ -71,8 +71,14 @@ flash_zeigen();
 ?>
 <?php if (isset($_GET['neu'])): ?>
 <div class="bx-panel" style="border:1px solid var(--gruen);margin-bottom:var(--sp-5)">
-  <h2 style="margin-top:0">Eingebucht – Etikett für die Kartons</h2>
-  <embed src="?p=etikett&id=<?= $id ?>" type="application/pdf" style="width:100%;height:360px;border:1px solid var(--line);border-radius:8px;background:#fff">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--sp-2)">
+    <h2 style="margin:0">Eingebucht – Etikett für die Kartons</h2>
+    <span class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap">
+      <a class="btn btn-primary btn-sm" href="?p=etikett&id=<?= $id ?>&format=klein&merken=1" target="_blank">100×70</a>
+      <a class="btn btn-primary btn-sm" href="?p=etikett&id=<?= $id ?>&format=gross&merken=1" target="_blank">100×150</a>
+    </span>
+  </div>
+  <embed src="?p=etikett&id=<?= $id ?>" type="application/pdf" style="width:100%;height:360px;border:1px solid var(--line);border-radius:8px;background:#fff;margin-top:var(--sp-3)">
 </div>
 <?php endif; ?>
 <div class="bx-grid" style="margin-bottom:var(--sp-5)">
