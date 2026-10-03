@@ -448,6 +448,29 @@ function erp_lieferung_per_tracking(string $tracking): array {
             'nummer' => (string)$b['nummer'], 'positionen' => $pos];
 }
 
+// Positionen einer bestimmten erwarteten Lieferung (Bestell-ID) – für "aus Liste wählen".
+function erp_lieferung_positionen(int $id): array {
+    if ($id <= 0 || !tabelle_da('bestellung')) return ['ok' => false];
+    $b = one("SELECT b.id, b.nummer, b.lieferant_id, lf.firma AS lieferant
+              FROM bestellung b LEFT JOIN lieferanten lf ON lf.id = b.lieferant_id
+              WHERE b.id = ? AND b.angekommen_am IS NULL", [$id]);
+    if (!$b) return ['ok' => false];
+    $pos = [];
+    if (tabelle_da('bestellung_position')) {
+        foreach (all("SELECT bp.item_id, bp.menge, bp.einheit,
+                             COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie
+                      FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
+                      WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id", [$id]) as $p) {
+            if (trim((string)($p['name'] ?? '')) === '') continue;
+            $pos[] = ['name' => (string)$p['name'], 'menge' => (float)$p['menge'],
+                      'einheit' => erp_einheit_norm((string)($p['einheit'] ?? '')),
+                      'charge_nr' => '', 'mhd' => '', 'warenart' => (string)($p['kategorie'] ?? '')];
+        }
+    }
+    return ['ok' => true, 'lieferant' => (string)$b['lieferant'], 'lieferant_id' => (int)$b['lieferant_id'],
+            'nummer' => (string)$b['nummer'], 'positionen' => $pos];
+}
+
 function erp_erwartete_lieferungen(): array {
     if (!tabelle_da('bestellung')) return [];
     $rows = all("SELECT b.id, b.nummer, b.bestelldatum, b.eta_geplant, b.tracking, b.versandanbieter,

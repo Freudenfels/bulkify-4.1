@@ -55,6 +55,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'track
     exit;
 }
 
+// --- AJAX: eine erwartete Lieferung aus der Liste wählen -> Positionen -----------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'lieferung') {
+    header('Content-Type: application/json; charset=utf-8');
+    $r = erp_lieferung_positionen((int)($_POST['id'] ?? 0));
+    if (!$r['ok']) { echo json_encode(['ok' => false, 'fehler' => 'Lieferung nicht gefunden.']); exit; }
+    $pos = [];
+    foreach ($r['positionen'] as $p) $pos[] = erp_position_zuordnen($p);
+    echo json_encode([
+        'ok'  => true,
+        'kopf' => ['lieferant' => $r['lieferant'], 'lieferant_id' => $r['lieferant_id'], 'nummer' => $r['nummer']],
+        'positionen' => $pos,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // --- Buchen: alle Positionen ------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buchen') {
     $ziel     = ($_POST['ziel'] ?? 'l1') === 'l2' ? 'l2' : 'l1';
@@ -119,13 +134,15 @@ $kunden  = erp_fulfillment_kunden();
 $liefers = erp_lieferanten();
 $items   = erp_items_eingang();
 $ki      = lg_ki_bereit();
+$erwartet = erp_erwartete_lieferungen();   // für Kachel "aus Liste wählen"
+$heute    = date('Y-m-d');
 
 // Nach dem Buchen: Erfolgspanel mit Sammel-Etikett.
 $gebucht = [];
 if (isset($_GET['gebucht'])) foreach (explode(',', (string)$_GET['gebucht']) as $x) { $x = (int)$x; if ($x > 0) $gebucht[] = $x; }
 
 kopf('Einbuchen', 'we');
-seitenkopf('Einbuchen', 'Ziel wählen · Lieferschein scannen · prüfen · buchen.',
+seitenkopf('Einbuchen', 'Wähle, wie du einbuchen möchtest.',
     '<a class="btn btn-ghost" href="?p=bestand">Zum Bestand</a>');
 flash_zeigen();
 
@@ -147,77 +164,134 @@ if ($gebucht):
 <form method="post" id="weForm" class="bx-form">
   <input type="hidden" name="aktion" value="buchen">
 
-  <!-- Schritt 1: Versandlabel scannen (Handscanner) -->
-  <div class="bx-panel">
-    <h2 style="margin-top:0">1 · Versandlabel scannen <span class="muted" style="font-weight:400">(Handscanner – optional)</span></h2>
-    <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap;align-items:flex-end">
-      <div class="bx-field" style="margin:0;min-width:300px;flex:1">
-        <label>Sendungsnummer vom Paketlabel scannen</label>
-        <input type="text" id="weTrack" class="lg-code" autocomplete="off" autofocus placeholder="Barcode scannen – die Lieferung wird automatisch geladen">
-      </div>
-      <span id="weTrackInfo" class="muted" style="align-self:center"></span>
-    </div>
+  <!-- Start: 4 Kacheln – wie einbuchen? -->
+  <div id="weStart" class="we-kacheln">
+    <button type="button" class="we-kachel" data-weg="schein">
+      <div class="we-kachel-t">Lieferschein scannen / fotografieren</div>
+      <div class="we-kachel-s">Foto oder PDF – die KI liest alles aus</div>
+    </button>
+    <button type="button" class="we-kachel" data-weg="tracking">
+      <div class="we-kachel-t">Sendungsnummer</div>
+      <div class="we-kachel-s">Paketlabel scannen – Lieferung wird geladen</div>
+    </button>
+    <button type="button" class="we-kachel" data-weg="regulaer">
+      <div class="we-kachel-t">Regulär</div>
+      <div class="we-kachel-s">Von Hand erfassen</div>
+    </button>
+    <button type="button" class="we-kachel" data-weg="liste">
+      <div class="we-kachel-t">Aus Liste wählen</div>
+      <div class="we-kachel-s"><?= count($erwartet) ?> ankommende Sendung(en)</div>
+    </button>
   </div>
 
-  <!-- Schritt 2: Ziel -->
-  <div class="bx-panel">
-    <h2 style="margin-top:0">2 · Wohin?</h2>
-    <div class="bx-row" style="gap:var(--sp-4);flex-wrap:wrap;align-items:flex-end">
-      <label class="we-ziel on"><input type="radio" name="ziel" value="l1" checked> <strong>Lager 1</strong><br><span class="muted">eigener Bestand</span></label>
-      <label class="we-ziel"><input type="radio" name="ziel" value="l2"> <strong>Lager 2</strong><br><span class="muted">Kundenware (Fremdlager)</span></label>
-      <div class="bx-field" id="weKundeWrap" style="margin:0;min-width:240px;display:none"><label>Kunde <span class="muted">(wem gehört die Ware)</span></label>
-        <select name="kunde_id" id="weKunde">
-          <option value="">– Kunde wählen –</option>
-          <?php foreach ($kunden as $k): ?><option value="<?= (int)$k['id'] ?>"><?= h((string)$k['firma']) ?></option><?php endforeach; ?>
-        </select>
-      </div>
-      <div class="bx-field" id="weLiefWrap" style="margin:0;min-width:240px"><label>Lieferant <span class="muted">(optional)</span></label>
-        <select name="lieferant_id" id="weLief">
-          <option value="">– keiner –</option>
-          <?php foreach ($liefers as $lf): ?><option value="<?= (int)$lf['id'] ?>"><?= h((string)$lf['firma']) ?></option><?php endforeach; ?>
-        </select>
-      </div>
+  <!-- Arbeitsbereich nach Kachel-Wahl -->
+  <div id="weArbeit" hidden>
+    <div style="margin-bottom:var(--sp-3)">
+      <button type="button" class="btn btn-ghost btn-sm" id="weBack">← Andere Methode</button>
     </div>
-  </div>
 
-  <!-- Schritt 1: Lieferschein scannen -->
-  <div class="bx-panel">
-    <h2 style="margin-top:0">3 · Lieferschein scannen <span class="muted" style="font-weight:400">(optional – geht auch von Hand)</span></h2>
-    <?php if (!$ki): ?>
-      <div class="bx-panel warn" style="margin:0 0 var(--sp-3)">KI-Scan ist nicht eingerichtet (kein Anthropic-Schlüssel). Du kannst Positionen von Hand erfassen.</div>
-    <?php endif; ?>
-    <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap">
-      <button type="button" class="btn btn-ghost" id="weCamStart" <?= $ki ? '' : 'disabled' ?>>Kamera starten</button>
-      <label class="btn btn-ghost" style="margin:0">Datei/Foto/PDF wählen
-        <input type="file" id="weFile" accept="image/*,application/pdf" capture="environment" multiple hidden <?= $ki ? '' : 'disabled' ?>>
-      </label>
-      <button type="button" class="btn btn-primary" id="weScan" disabled>Lieferschein auslesen</button>
-      <span id="weScanInfo" class="muted" style="align-self:center"></span>
+    <!-- Methode: Lieferschein scannen/fotografieren -->
+    <div class="bx-panel we-weg" data-w="schein" hidden>
+      <h2 style="margin-top:0">Lieferschein scannen / fotografieren</h2>
+      <?php if (!$ki): ?>
+        <div class="bx-panel warn" style="margin:0 0 var(--sp-3)">KI-Scan ist nicht eingerichtet (kein Anthropic-Schlüssel). Du kannst Positionen von Hand erfassen.</div>
+      <?php endif; ?>
+      <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap">
+        <button type="button" class="btn btn-ghost" id="weCamStart" <?= $ki ? '' : 'disabled' ?>>Kamera / Foto</button>
+        <label class="btn btn-ghost" style="margin:0">Datei / PDF wählen
+          <input type="file" id="weFile" accept="image/*,application/pdf" capture="environment" multiple hidden <?= $ki ? '' : 'disabled' ?>>
+        </label>
+        <button type="button" class="btn btn-primary" id="weScan" disabled>Lieferschein auslesen</button>
+        <span id="weScanInfo" class="muted" style="align-self:center"></span>
+      </div>
+      <div id="weCamBox" style="display:none;margin-top:var(--sp-3)">
+        <video id="weVideo" playsinline style="width:100%;max-width:520px;border-radius:10px;background:#000"></video>
+        <div class="bx-row" style="gap:var(--sp-2);margin-top:var(--sp-2)">
+          <button type="button" class="btn btn-primary btn-sm" id="weShot">Foto aufnehmen</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="weCamStop">Kamera aus</button>
+        </div>
+      </div>
+      <div id="weThumbs" class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap;margin-top:var(--sp-3)"></div>
+      <canvas id="weCanvas" hidden></canvas>
     </div>
-    <div id="weCamBox" style="display:none;margin-top:var(--sp-3)">
-      <video id="weVideo" playsinline style="width:100%;max-width:520px;border-radius:10px;background:#000"></video>
-      <div class="bx-row" style="gap:var(--sp-2);margin-top:var(--sp-2)">
-        <button type="button" class="btn btn-primary btn-sm" id="weShot">Foto aufnehmen</button>
-        <button type="button" class="btn btn-ghost btn-sm" id="weCamStop">Kamera aus</button>
+
+    <!-- Methode: Sendungsnummer scannen -->
+    <div class="bx-panel we-weg" data-w="tracking" hidden>
+      <h2 style="margin-top:0">Sendungsnummer scannen</h2>
+      <div class="bx-field" style="margin:0;max-width:460px">
+        <label>Sendungsnummer vom Paketlabel</label>
+        <input type="text" id="weTrack" class="lg-code" autocomplete="off" placeholder="Barcode scannen – die Lieferung wird geladen">
+      </div>
+      <div id="weTrackInfo" class="muted" style="margin-top:var(--sp-2)"></div>
+    </div>
+
+    <!-- Methode: aus Liste wählen -->
+    <div class="bx-panel we-weg" data-w="liste" hidden>
+      <h2 style="margin-top:0">Ankommende Sendung wählen</h2>
+      <div id="weListeInfo" class="muted"></div>
+      <?php if (!$erwartet): ?>
+        <p class="muted" style="margin:var(--sp-2) 0 0">Aktuell keine Lieferungen unterwegs.</p>
+      <?php else: ?>
+      <div class="we-liste">
+        <?php foreach ($erwartet as $l): $eta = (string)($l['eta_geplant'] ?? ''); $anz = count($l['positionen'] ?? []); ?>
+        <button type="button" class="we-listitem" data-id="<?= (int)$l['id'] ?>">
+          <div><strong><?= h((string)($l['lieferant'] ?: 'Ohne Lieferant')) ?></strong><?= !empty($l['nummer']) ? ' <span class="muted">· ' . h((string)$l['nummer']) . '</span>' : '' ?></div>
+          <div class="muted"><?= $eta !== '' ? 'erwartet ' . h(date('d.m.Y', strtotime($eta))) : '' ?><?= $anz ? ' · ' . $anz . ' Position(en)' : '' ?></div>
+        </button>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
+    </div>
+
+    <!-- Ziel (Default Lager 1) + Lieferant, kompakt nebeneinander -->
+    <div class="bx-panel">
+      <div class="bx-row" style="gap:var(--sp-4);flex-wrap:wrap;align-items:flex-end">
+        <div class="bx-field" style="margin:0">
+          <label>Ziel-Lager</label>
+          <div class="we-seg">
+            <label class="we-ziel on"><input type="radio" name="ziel" value="l1" checked> Lager 1</label>
+            <label class="we-ziel"><input type="radio" name="ziel" value="l2"> Lager 2 <span class="muted">(Kunde)</span></label>
+          </div>
+        </div>
+        <div class="bx-field" id="weKundeWrap" style="margin:0;min-width:220px;display:none"><label>Kunde (Fremdlager)</label>
+          <select name="kunde_id" id="weKunde">
+            <option value="">– Kunde wählen –</option>
+            <?php foreach ($kunden as $k): ?><option value="<?= (int)$k['id'] ?>"><?= h((string)$k['firma']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <div class="bx-field" style="margin:0;min-width:220px"><label>Lieferant <span class="muted">(optional)</span></label>
+          <select name="lieferant_id" id="weLief">
+            <option value="">– keiner –</option>
+            <?php foreach ($liefers as $lf): ?><option value="<?= (int)$lf['id'] ?>"><?= h((string)$lf['firma']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
       </div>
     </div>
-    <div id="weThumbs" class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap;margin-top:var(--sp-3)"></div>
-    <canvas id="weCanvas" hidden></canvas>
-  </div>
 
-  <!-- Schritt 2: Positionen -->
-  <div class="bx-panel">
-    <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--sp-2)">
-      <h2 style="margin:0">4 · Positionen</h2>
-      <button type="button" class="btn btn-ghost btn-sm" id="weAdd">+ Zeile</button>
+    <!-- Positionen -->
+    <div class="bx-panel">
+      <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--sp-2)">
+        <h2 style="margin:0">Positionen</h2>
+        <button type="button" class="btn btn-ghost btn-sm" id="weAdd">+ Zeile</button>
+      </div>
+      <div id="weRows" style="margin-top:var(--sp-3)"></div>
+      <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Fertigware/Kapseln → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist immer Pflicht.</div>
+      <div style="margin-top:var(--sp-4)"><button type="submit" class="btn btn-primary" id="weBuchen">Alle buchen &amp; Blinker anhängen</button></div>
     </div>
-    <div id="weRows" style="margin-top:var(--sp-3)"></div>
-    <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Fertigware/Kapseln → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist immer Pflicht.</div>
-    <div style="margin-top:var(--sp-4)"><button type="submit" class="btn btn-primary" id="weBuchen">Alle buchen &amp; Blinker anhängen</button></div>
   </div>
 </form>
 
 <style>
+  .we-kacheln{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:var(--sp-4);margin-bottom:var(--sp-5)}
+  .we-kachel{text-align:left;border:1px solid var(--line);border-radius:14px;padding:22px 20px;background:var(--panel);
+    cursor:pointer;min-height:120px;display:flex;flex-direction:column;gap:6px;justify-content:center}
+  .we-kachel:hover{border-color:var(--gruen);box-shadow:inset 0 0 0 1px var(--gruen);text-decoration:none}
+  .we-kachel-t{font-size:var(--fs-lg);font-weight:600;line-height:1.2}
+  .we-kachel-s{color:var(--muted)}
+  .we-seg{display:inline-flex;gap:8px;flex-wrap:wrap}
+  .we-liste{display:flex;flex-direction:column;gap:8px;margin-top:var(--sp-3)}
+  .we-listitem{text-align:left;border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--panel-2);cursor:pointer;line-height:1.35}
+  .we-listitem:hover{border-color:var(--gruen);text-decoration:none}
   .we-ziel{border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 14px;cursor:pointer;line-height:1.3}
   .we-ziel.on{border-color:var(--gruen);box-shadow:inset 0 0 0 1px var(--gruen)}
   .we-pos{position:relative;border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--sp-4);padding-top:var(--sp-5);margin-bottom:var(--sp-3);background:var(--panel-2)}
@@ -370,6 +444,35 @@ if ($gebucht):
     track.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); trackSuchen(); } });
     track.addEventListener('change',trackSuchen);
   }
+
+  // --- 4 Kacheln: Methode wählen -> passender Weg öffnet sich ---
+  var startBox=document.getElementById('weStart'), arbeit=document.getElementById('weArbeit');
+  function zeigeWeg(w){
+    startBox.hidden=true; arbeit.hidden=false;
+    document.querySelectorAll('.we-weg').forEach(function(p){ p.hidden = p.getAttribute('data-w')!==w; });
+    rows.innerHTML=''; addRow();   // frische, leere Position
+    if(w==='tracking'){ var t=document.getElementById('weTrack'); if(t) setTimeout(function(){t.focus();},60); }
+    arbeit.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  document.querySelectorAll('.we-kachel').forEach(function(b){ b.addEventListener('click',function(){ zeigeWeg(b.getAttribute('data-weg')); }); });
+  document.getElementById('weBack').addEventListener('click',function(){ arbeit.hidden=true; startBox.hidden=false; window.scrollTo({top:0,behavior:'smooth'}); });
+
+  // Liste: ankommende Sendung wählen -> Positionen laden
+  document.querySelectorAll('.we-listitem').forEach(function(b){
+    b.addEventListener('click',function(){
+      var id=b.getAttribute('data-id'), linfo=document.getElementById('weListeInfo');
+      if(linfo) linfo.textContent='Lade Lieferung …';
+      var fd=new FormData(); fd.append('aktion','lieferung'); fd.append('id',id);
+      fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
+        if(!j.ok){ if(linfo) linfo.textContent=(j.fehler||'Nicht gefunden.'); return; }
+        if(linfo) linfo.textContent='Geladen: '+(j.kopf.lieferant||'')+' ('+j.positionen.length+' Position(en))';
+        if(j.kopf.lieferant_id){ var ls=document.getElementById('weLief'); if(ls) ls.value=String(j.kopf.lieferant_id); }
+        rows.innerHTML=''; if(!j.positionen.length){ addRow(); } else j.positionen.forEach(function(p){ addRow(p); });
+        var blk=rows.querySelector('.we-blinker'); if(blk) blk.focus();
+      }).catch(function(){ if(linfo) linfo.textContent='Serverfehler.'; });
+    });
+  });
+
   window.addEventListener('beforeunload',camStop);
 })();
 </script>
