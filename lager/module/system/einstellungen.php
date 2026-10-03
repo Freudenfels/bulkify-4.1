@@ -14,6 +14,8 @@ $druckerListe  = array_values(array_filter(array_map('trim', explode('|', lg_met
 $druckerStd    = lg_meta_lesen('drucker_standard', '');
 $zuletzt       = lg_meta_lesen('bruecke_zuletzt', '');
 $wach          = $zuletzt !== '' && (time() - strtotime($zuletzt . ' UTC')) < 15;
+$programm      = lg_meta_lesen('bruecke_programm', '');
+$zuletztTxt    = $zuletzt !== '' ? (function_exists('fmt_zeit') ? fmt_zeit($zuletzt) : $zuletzt) : '';
 $sender        = function_exists('led_sender_alle') ? led_sender_alle() : [];
 
 kopf('Einstellungen', 'einstellungen');
@@ -57,7 +59,21 @@ flash_zeigen();
 <!-- Brücke + Downloads -->
 <div class="bx-panel">
   <h2 style="margin-top:0">Brücke auf dem Lager-PC <span class="badge <?= $wach ? 'badge-ok' : 'badge-warn' ?>" style="margin-left:6px"><?= $wach ? 'läuft' : 'nicht aktiv' ?></span></h2>
-  <p class="muted" style="margin:0 0 var(--sp-3)">Ein Programm auf einem PC im Lager. Es lässt die <strong>Blinker</strong> leuchten (an den Sender im Netz) und <strong>druckt Etiketten</strong> lautlos (SumatraPDF). Fenster offen lassen – am besten in den Autostart legen.</p>
+  <p class="muted" style="margin:0 0 var(--sp-3)">Ein Programm auf einem PC im Lager. Es lässt die <strong>Blinker</strong> leuchten (an den Sender im Netz) und <strong>druckt Etiketten</strong> lautlos (SumatraPDF).</p>
+
+  <div class="bx-panel" style="background:var(--panel-2);margin:0 0 var(--sp-4)">
+    <div style="font-weight:600;margin-bottom:6px">Diagnose</div>
+    <div class="bx-grid" style="gap:var(--sp-2)">
+      <div><span class="muted" style="font-size:12px">Letzter Kontakt</span><br><?= $zuletztTxt !== '' ? h($zuletztTxt) . ($wach ? ' (gerade eben)' : '') : '<span class="muted">noch nie – Brücke hat sich nie gemeldet</span>' ?></div>
+      <div><span class="muted" style="font-size:12px">Gemeldetes Programm</span><br><?= $programm !== '' ? h($programm) : '<span class="muted">–</span>' ?></div>
+    </div>
+    <div style="margin-top:var(--sp-2)"><span class="muted" style="font-size:12px">Gemeldete Drucker</span><br>
+      <?= $druckerListe ? h(implode(', ', $druckerListe)) : '<span class="muted">keine gemeldet – Brücke lief nicht ODER der PC hat keinen installierten Windows-Drucker</span>' ?>
+    </div>
+    <?php if ($zuletzt === ''): ?>
+      <p class="muted" style="font-size:12px;margin:var(--sp-2) 0 0">Tipp: Lade unten „mit Fenster (zum Testen)" und starte es per Doppelklick. Das Fenster zeigt sofort, ob Drucker gefunden und der Server erreicht wird.</p>
+    <?php endif; ?>
+  </div>
   <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap">
     <a class="btn btn-primary" href="?p=bruecke_skript&art=hintergrund">Brücke einrichten (Hintergrund)</a>
     <a class="btn btn-ghost" href="?p=bruecke_skript">mit Fenster (zum Testen)</a>
