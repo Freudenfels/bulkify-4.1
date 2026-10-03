@@ -59,17 +59,18 @@ flash_zeigen();
   <h2 style="margin-top:0">Brücke auf dem Lager-PC <span class="badge <?= $wach ? 'badge-ok' : 'badge-warn' ?>" style="margin-left:6px"><?= $wach ? 'läuft' : 'nicht aktiv' ?></span></h2>
   <p class="muted" style="margin:0 0 var(--sp-3)">Ein Programm auf einem PC im Lager. Es lässt die <strong>Blinker</strong> leuchten (an den Sender im Netz) und <strong>druckt Etiketten</strong> lautlos (SumatraPDF). Fenster offen lassen – am besten in den Autostart legen.</p>
   <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap">
-    <a class="btn btn-primary" href="?p=bruecke_skript&art=vbs">Brücke herunterladen (Hintergrund)</a>
+    <a class="btn btn-primary" href="?p=bruecke_skript&art=hintergrund">Brücke einrichten (Hintergrund)</a>
     <a class="btn btn-ghost" href="?p=bruecke_skript">mit Fenster (zum Testen)</a>
     <a class="btn btn-ghost" href="https://www.sumatrapdfreader.org/download-free-pdf-viewer" target="_blank" rel="noopener">SumatraPDF herunterladen</a>
     <a class="btn btn-ghost" href="?p=sender">Sender &amp; Blinker einrichten</a>
   </div>
   <ol class="muted" style="margin:var(--sp-4) 0 0;padding-left:1.2em;line-height:1.7">
     <li><strong>SumatraPDF</strong> auf dem Lager-PC installieren (kostenlos, für lautlosen Druck).</li>
-    <li><strong>Brücke (Hintergrund)</strong> herunterladen und per Doppelklick starten – läuft <strong>ohne Fenster</strong> still im Hintergrund. Oben erscheint dann „läuft".</li>
-    <li><strong>Autostart:</strong> Taste <em>Win + R</em> → <code>shell:startup</code> → die .vbs dort hineinlegen (startet dann automatisch mit Windows). Beenden: Task-Manager → <code>powershell.exe</code>.</li>
+    <li><strong>Brücke einrichten (Hintergrund)</strong> herunterladen und per Doppelklick starten. Das kurze schwarze Fenster richtet alles ein und schließt sich – danach läuft die Brücke <strong>unsichtbar im Hintergrund</strong> und startet <strong>automatisch mit Windows</strong>. Oben erscheint dann „läuft".</li>
     <li><strong>Drucker</strong> oben auswählen (die Liste erscheint, sobald die Brücke einmal lief). Unter <a href="?p=sender">Sender &amp; Blinker</a> die Sender-IP eintragen und testen. Fertig – „Direkt drucken" am Etikett druckt sofort.</li>
+    <li><strong>Entfernen/Beenden:</strong> Windows-<em>Aufgabenplanung</em> öffnen → Aufgabe <code>bulkify Lager Bruecke</code> → löschen.</li>
   </ol>
+  <p class="muted" style="font-size:12px;margin:var(--sp-3) 0 0">Falls der Browser beim Herunterladen warnt: Es ist kein Virus – nur eine ganz normale Windows-Datei (.bat). Im Download-Pfeil auf „Behalten" klicken.</p>
 </div>
 
 <!-- Blinker/Sender Kurzüberblick -->

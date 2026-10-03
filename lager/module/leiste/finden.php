@@ -70,24 +70,29 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
   if(q.value.trim()) suchen();
 
   // --- Sprache (Web Speech API, Chrome/Android) ---
+  // Viele Handscanner/PDAs haben ein Mikrofon, aber KEINE Sprache-zu-Text-Maschine im System
+  // (kein Google-Sprachdienst). Dann schlägt die Erkennung fehl ('network'/'service-not-allowed').
+  // In dem Fall merken wir uns das und blenden den Knopf künftig aus – Tippen bleibt der Hauptweg.
+  function sttFlag(set){ try{ if(set){localStorage.setItem('lg_stt_aus','1');} return localStorage.getItem('lg_stt_aus')==='1'; }catch(e){ return false; } }
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ mic.style.display='none'; }   // Gerät/Browser kann keine Spracherkennung
+  if(!SR || sttFlag(false)){ mic.style.display='none'; }   // Gerät kann keine Spracherkennung
   else mic.addEventListener('click',function(){
     try{
       var r=new SR(); r.lang='de-DE'; r.interimResults=false; r.maxAlternatives=1;
       status.textContent='Sprich jetzt …'; mic.disabled=true;
       r.onresult=function(e){ q.value=e.results[0][0].transcript; suchen(); };
       r.onerror=function(e){
+        var weg={'service-not-allowed':1,'network':1,'language-not-supported':1}; // Maschine fehlt → dauerhaft
+        if(weg[e.error]){ sttFlag(true); mic.style.display='none';
+          status.textContent='Dieses Gerät hat keine Sprache-zu-Text – bitte tippen.'; return; }
         var m={'not-allowed':'Mikrofon nicht erlaubt – bitte in den App-/Browser-Rechten freigeben.',
-               'service-not-allowed':'Mikrofon nicht erlaubt (Geräte-Einstellungen).',
-               'no-speech':'Nichts verstanden – nochmal tippen auf „Sprechen".',
-               'network':'Spracherkennung braucht Internet – gerade nicht erreichbar.',
+               'no-speech':'Nichts verstanden – nochmal auf „Sprechen" tippen.',
                'audio-capture':'Kein Mikrofon gefunden.'};
         status.textContent = m[e.error] || ('Spracherkennung nicht möglich ('+(e.error||'Fehler')+'). Bitte tippen.');
       };
       r.onend=function(){ mic.disabled=false; };
       r.start();
-    }catch(err){ mic.disabled=false; status.textContent='Spracherkennung auf diesem Gerät nicht möglich – bitte tippen.'; }
+    }catch(err){ sttFlag(true); mic.style.display='none'; status.textContent='Spracherkennung auf diesem Gerät nicht möglich – bitte tippen.'; }
   });
 })();
 </script>

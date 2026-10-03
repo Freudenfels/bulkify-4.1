@@ -15,20 +15,40 @@ $skript  = strtr($vorlage, ['{{URL}}' => $basis, '{{TOKEN}}' => lg_bruecke_token
 $skript  = str_replace(["\r\n", "\n"], ["\n", "\r\n"], $skript);   // saubere Windows-Zeilenenden
 $b64     = base64_encode($skript);                                 // UTF-8-Bytes des PS1
 
-// Hintergrund-Variante (.vbs): startet die Bruecke OHNE Fenster (laeuft still im Hintergrund).
-// Beenden: Task-Manager -> powershell.exe. Autostart: Verknuepfung in shell:startup legen.
-if (($_GET['art'] ?? '') === 'vbs') {
-    $vorlageVbs = <<<'VBS'
-' bulkify Lager-Bruecke - Hintergrund (kein Fenster). Beenden: Task-Manager -> powershell.exe.
-Set sh = CreateObject("WScript.Shell")
-sh.Run "powershell -NoProfile -Command ""[IO.File]::WriteAllBytes($env:TEMP+'\bulkify-lager-bruecke.ps1',[Convert]::FromBase64String('__B64__'))""", 0, True
-sh.Run "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""%TEMP%\bulkify-lager-bruecke.ps1""", 0, False
-VBS;
-    $vbs = str_replace(["\n", '__B64__'], ["\r\n", $b64], $vorlageVbs) . "\r\n";
+// Hintergrund-Variante: eine ganz normale .bat (keine .vbs -> wird von Chrome/Defender nicht
+// als "Virus" blockiert). Sie legt das PS1 dauerhaft nach %LOCALAPPDATA%\bulkify-bruecke ab und
+// richtet eine Windows-Aufgabe ein, die es bei JEDER Anmeldung UNSICHTBAR startet (kein Fenster,
+// Autostart inklusive). Register-ScheduledTask baut den Argument-String selbst -> keine Zitat-
+// Probleme bei Pfaden mit Leerzeichen. Entfernen: Aufgabenplanung -> "bulkify Lager Bruecke".
+if (($_GET['art'] ?? '') === 'hintergrund') {
+    $psWrite = '$d=$env:LOCALAPPDATA+' . "'\\bulkify-bruecke'; " .
+        '$null=New-Item -ItemType Directory -Force -Path $d; ' .
+        "[IO.File]::WriteAllBytes(\$d+'\\bruecke.ps1',[Convert]::FromBase64String('" . $b64 . "'))";
+    $psTask = '$d=$env:LOCALAPPDATA+' . "'\\bulkify-bruecke'; \$p=\$d+'\\bruecke.ps1'; " .
+        "\$a=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File '+[char]34+\$p+[char]34); " .
+        '$t=New-ScheduledTaskTrigger -AtLogOn; ' .
+        "\$null=Register-ScheduledTask -TaskName 'bulkify Lager Bruecke' -Action \$a -Trigger \$t -Force; " .
+        "Start-ScheduledTask -TaskName 'bulkify Lager Bruecke'";
+    $zeilenBg = [
+        '@echo off',
+        'title bulkify Lager-Bruecke einrichten',
+        'echo bulkify Lager-Bruecke wird eingerichtet - einen Moment bitte...',
+        'echo.',
+        'powershell -NoProfile -Command "' . $psWrite . '"',
+        'powershell -NoProfile -ExecutionPolicy Bypass -Command "' . $psTask . '"',
+        'echo.',
+        'echo Fertig. Die Bruecke laeuft jetzt unsichtbar im Hintergrund',
+        'echo und startet kuenftig automatisch mit Windows.',
+        'echo.',
+        'echo Entfernen: Aufgabenplanung oeffnen -^> "bulkify Lager Bruecke" -^> loeschen.',
+        'echo.',
+        'pause',
+    ];
+    $batBg = implode("\r\n", $zeilenBg) . "\r\n";
     header('Content-Type: application/octet-stream');
-    header('Content-Disposition: attachment; filename="bulkify-lager-bruecke.vbs"');
+    header('Content-Disposition: attachment; filename="bulkify-lager-bruecke-einrichten.bat"');
     header('Cache-Control: no-store');
-    echo $vbs;
+    echo $batBg;
     exit;
 }
 
