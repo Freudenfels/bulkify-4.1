@@ -112,6 +112,48 @@ function erp_durchlaufzeit_schnitt(): array {
     return ['sekunden'=> ($r && $r['avg_s'] !== null) ? (float)$r['avg_s'] : null, 'n'=> $r ? (int)$r['n'] : 0];
 }
 
+// Was muss für den aktuellen Schritt konkret aus dem Lager geholt werden? Material + Menge + Bestand.
+// Rückgabe ['soll_menge'=>?float,'soll_einheit'=>?string,'zeilen'=>[['name','detail','menge','einheit','verfuegbar','item_id','charge_id'?], …]].
+// Leer für Stationen ohne Materialbezug (Mischen, Etikettieren, Freigaben …).
+function erp_schritt_material(int $pa_id, string $station): array {
+    $leer = ['soll_menge'=>null, 'soll_einheit'=>null, 'zeilen'=>[]];
+    $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return $leer;
+    $zeilen = []; $soll_menge = null; $soll_einheit = null;
+    switch ($station) {
+        case 'Rohstoffe bereitstellen':
+            foreach (erp_materialbedarf($pa_id) as $b)
+                $zeilen[] = ['name'=>$b['name'], 'detail'=>'', 'menge'=>$b['benoetigt'], 'einheit'=>$b['einheit'],
+                             'verfuegbar'=>$b['verfuegbar'], 'item_id'=>(int)$b['item_id']];
+            break;
+        case 'Verkapselung':
+            $kid = erp_produkt_leerkapsel_id((int)$pa['produkt_id']);
+            if ($kid) {
+                $need = (float)$pa['menge'] * erp_stueck_je_packung($pa);
+                $zeilen[] = ['name'=> (string) scalar("SELECT name FROM item WHERE id=?", [$kid]), 'detail'=>'Leerkapseln',
+                             'menge'=>$need, 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($kid), 'item_id'=>$kid];
+            }
+            break;
+        case 'Fertigware bereitstellen':
+            $soll_menge = (float)$pa['menge'] * erp_stueck_je_packung($pa);
+            $soll_einheit = 'Stück';
+            foreach (all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.item_id, i.name
+                          FROM charge c JOIN item i ON i.id=c.item_id
+                          WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0
+                          ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [(int)$pa['auftrag_id']]) as $c)
+                $zeilen[] = ['name'=>$c['name'], 'detail'=>'Charge ' . $c['charge_nr'], 'menge'=>(float)$c['menge_verfuegbar'],
+                             'einheit'=>'Stück', 'verfuegbar'=>(float)$c['menge_verfuegbar'], 'item_id'=>(int)$c['item_id'], 'charge_id'=>(int)$c['id']];
+            break;
+        case 'Verpacken':
+            $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
+            if ($vid)
+                $zeilen[] = ['name'=> (string) scalar("SELECT name FROM item WHERE id=?", [$vid]), 'detail'=>'Verpackung',
+                             'menge'=>(float)$pa['menge'], 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($vid), 'item_id'=>$vid];
+            break;
+    }
+    return ['soll_menge'=>$soll_menge, 'soll_einheit'=>$soll_einheit, 'zeilen'=>$zeilen];
+}
+
 // Zutaten der Rezeptur eines Auftrags (Zusammensetzung je Einheit). Rezeptur = pa.rezeptur_id oder produkt.rezeptur_id.
 function erp_pa_zutaten(int $pa_id): array {
     $pa = one("SELECT produkt_id, rezeptur_id FROM produktionsauftrag WHERE id=?", [$pa_id]);

@@ -48,11 +48,35 @@ seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt
   <p class="muted" style="font-size:12px;margin:10px 0 0">Chargennummer und MHD vergibt das System automatisch.</p>
 </div>
 
-<?php if ($cur): $isGate = str_contains((string)$cur['station'], 'Freigabe'); $anl = station_anleitung_text((string)$cur['station']); ?>
+<?php if ($cur):
+    $isGate = str_contains((string)$cur['station'], 'Freigabe');
+    $anl = station_anleitung_text((string)$cur['station']);
+    $mat = erp_schritt_material($id, (string)$cur['station']); ?>
 <div class="bx-panel" style="margin-bottom:16px;border-color:var(--gruen);background:rgba(29,158,117,.06)">
   <div class="muted">Jetzt dran · Schritt <?= $fertig_cnt + 1 ?> von <?= $total ?></div>
   <h2 style="margin:4px 0 8px;font-size:22px"><?= h((string)$cur['station']) ?></h2>
-  <?php if ($anl !== ''): ?><p style="margin:0 0 14px;font-size:15px"><?= h($anl) ?></p><?php endif; ?>
+  <?php if ($anl !== ''): ?><p style="margin:0 0 12px;font-size:15px"><?= h($anl) ?></p><?php endif; ?>
+
+  <?php if ($mat['zeilen']): ?>
+  <div style="margin:0 0 14px">
+    <div class="muted" style="font-size:13px;margin-bottom:6px">Aus dem Lager holen<?php if ($mat['soll_menge'] !== null): ?> · benötigt <strong><?= menge_txt($mat['soll_menge']) ?> <?= h((string)$mat['soll_einheit']) ?></strong><?php endif; ?>:</div>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Material</th><th class="bx-num">Menge</th><th class="bx-num">Bestand</th><th></th></tr></thead>
+      <tbody>
+        <?php foreach ($mat['zeilen'] as $z):
+            $knapp = isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']; ?>
+        <tr>
+          <td><?= h((string)$z['name']) ?><?php if (!empty($z['detail'])): ?> <span class="muted" style="font-size:12px">· <?= h((string)$z['detail']) ?></span><?php endif; ?></td>
+          <td class="bx-num"><?= menge_txt($z['menge']) ?> <?= h((string)$z['einheit']) ?></td>
+          <td class="bx-num"<?= $knapp ? ' style="color:#8f231b"' : '' ?>><?= isset($z['verfuegbar']) ? menge_txt($z['verfuegbar']) . ' ' . h((string)$z['einheit']) : '' ?></td>
+          <td class="bx-num"><span class="muted" style="font-size:12px" title="Pick-to-Light folgt">Blinker folgt</span></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; ?>
+
   <form method="post" style="margin:0" onsubmit="return confirm('Schritt &quot;<?= h((string)$cur['station']) ?>&quot; jetzt abschließen?');">
     <input type="hidden" name="aktion" value="erledigen">
     <input type="hidden" name="schritt_id" value="<?= (int)$cur['id'] ?>">
