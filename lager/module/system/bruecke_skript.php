@@ -36,8 +36,37 @@ $chunkLines = function (string $b64, string $cmdPfad): array {
 };
 
 // Alte, evtl. noch laufende Bruecken beenden (nicht sich selbst) - damit die neue sicher uebernimmt.
-$killZeile = 'powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq '
-    . "'powershell.exe' -and \$_.ProcessId -ne \$PID -and (\$_.CommandLine -like '*bulkify-lager-bruecke.ps1*' -or \$_.CommandLine -like '*bulkify-bruecke*') } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }\"";
+// Nur powershell/wscript treffen (NICHT cmd.exe - das waere die .bat selbst).
+$killZeile = 'powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq '
+    . "'powershell.exe' -or \$_.Name -eq 'wscript.exe') -and \$_.ProcessId -ne \$PID -and (\$_.CommandLine -like '*bulkify-lager-bruecke*' -or \$_.CommandLine -like '*bulkify-bruecke*') } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }\"";
+
+// ---- Reset-Variante: entfernt ALLE Bruecken restlos (Prozesse, Autostarts, Dateien) --------------
+// Am besten als Administrator ausfuehren, damit auch die geplante Aufgabe weg ist.
+if (($_GET['art'] ?? '') === 'reset') {
+    $zeilenR = [
+        '@echo off',
+        'title bulkify Lager-Bruecke ENTFERNEN',
+        'echo Entferne alle bulkify-Bruecken (Prozesse, Autostart, Dateien)...',
+        'echo.',
+        $killZeile,
+        'reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "bulkify-lager-bruecke" /f >nul 2>&1',
+        'schtasks /delete /tn "bulkify Lager Bruecke" /f >nul 2>&1',
+        'del /q "%TEMP%\\bulkify-lager-bruecke.ps1" >nul 2>&1',
+        'del /q "%TEMP%\\bulkify-lager-bruecke.b64" >nul 2>&1',
+        'rmdir /s /q "%LOCALAPPDATA%\\bulkify-bruecke" >nul 2>&1',
+        'echo.',
+        'echo Fertig. Es laeuft jetzt KEINE Bruecke mehr und nichts startet automatisch.',
+        'echo Tipp: Lager-PC einmal neu starten - dann ist alles garantiert sauber.',
+        'echo.',
+        'pause',
+    ];
+    $batR = implode("\r\n", $zeilenR) . "\r\n";
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="' . $dateiBasis . '-ENTFERNEN.bat"');
+    header('Cache-Control: no-store');
+    echo $batR;
+    exit;
+}
 
 // ---- Hintergrund-Variante: unsichtbar + Autostart (HKCU-Run-Key, KEIN Admin noetig) -------------
 if (($_GET['art'] ?? '') === 'hintergrund') {

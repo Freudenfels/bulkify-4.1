@@ -109,6 +109,7 @@ flash_zeigen();
     <a class="btn btn-ghost" href="?p=bruecke_skript" download>mit Fenster (zum Testen)</a>
     <a class="btn btn-ghost" href="https://www.sumatrapdfreader.org/download-free-pdf-viewer" target="_blank" rel="noopener">SumatraPDF herunterladen</a>
     <a class="btn btn-ghost" href="?p=sender">Sender &amp; Blinker einrichten</a>
+    <a class="btn btn-ghost" href="?p=bruecke_skript&art=reset" download title="Entfernt alle Brücken restlos – danach sauber neu einrichten">Brücke entfernen (Reset)</a>
   </div>
   <ol class="muted" style="margin:var(--sp-4) 0 0;padding-left:1.2em;line-height:1.7">
     <li><strong>SumatraPDF</strong> auf dem Lager-PC installieren (kostenlos, für lautlosen Druck).</li>
