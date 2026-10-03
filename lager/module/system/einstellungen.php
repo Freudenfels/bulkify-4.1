@@ -15,6 +15,7 @@ $druckerStd    = lg_meta_lesen('drucker_standard', '');
 $zuletzt       = lg_meta_lesen('bruecke_zuletzt', '');
 $wach          = $zuletzt !== '' && (time() - strtotime($zuletzt . ' UTC')) < 15;
 $programm      = lg_meta_lesen('bruecke_programm', '');
+$brueckeIp     = lg_meta_lesen('bruecke_ip', '');
 $zuletztTxt    = $zuletzt !== '' ? (function_exists('fmt_zeit') ? fmt_zeit($zuletzt) : $zuletzt) : '';
 $sender        = function_exists('led_sender_alle') ? led_sender_alle() : [];
 
@@ -76,7 +77,7 @@ flash_zeigen();
     <div style="font-weight:600;margin-bottom:6px">Diagnose</div>
     <div class="bx-grid" style="gap:var(--sp-2)">
       <div><span class="muted" style="font-size:12px">Letzter Kontakt</span><br><?= $zuletztTxt !== '' ? h($zuletztTxt) . ($wach ? ' (gerade eben)' : '') : '<span class="muted">noch nie – Brücke hat sich nie gemeldet</span>' ?></div>
-      <div><span class="muted" style="font-size:12px">Gemeldetes Programm</span><br><?= $programm !== '' ? h($programm) : '<span class="muted">–</span>' ?></div>
+      <div><span class="muted" style="font-size:12px">Gemeldetes Programm</span><br><?= $programm !== '' ? h($programm) : '<span class="muted">–</span>' ?><?= $brueckeIp !== '' ? ' <span class="muted" style="font-size:12px">· von ' . h($brueckeIp) . '</span>' : '' ?></div>
     </div>
     <div style="margin-top:var(--sp-2)"><span class="muted" style="font-size:12px">Gemeldete Drucker</span><br>
       <?= $druckerListe ? h(implode(', ', $druckerListe)) : '<span class="muted">keine gemeldet – Brücke lief nicht ODER der PC hat keinen installierten Windows-Drucker</span>' ?>

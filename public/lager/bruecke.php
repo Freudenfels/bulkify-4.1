@@ -25,6 +25,9 @@ if ($token === '' || !hash_equals(lg_bruecke_token(), $token)) json_antwort(['ok
 // Lebenszeichen - daran sieht man im Lager-Programm, ob die Bruecke laeuft.
 lg_meta_schreiben('bruecke_zuletzt', jetzt_utc());
 if (!empty($_SERVER['HTTP_USER_AGENT'])) lg_meta_schreiben('bruecke_programm', mb_substr((string)$_SERVER['HTTP_USER_AGENT'], 0, 120));
+// Woher kommt der Kontakt? (Damit man erkennt, falls eine fremde/andere Maschine pollt.)
+$bip = (string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '');
+if ($bip !== '') lg_meta_schreiben('bruecke_ip', mb_substr(trim(explode(',', $bip)[0]), 0, 60));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Die Bruecke meldet beim Start die installierten Drucker -> fuer die Auswahl in den Einstellungen.
