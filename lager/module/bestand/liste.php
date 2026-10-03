@@ -4,8 +4,11 @@ $kat = (string)($_GET['kat'] ?? '');
 if ($kat !== '' && !isset(erp_kategorien()[$kat])) $kat = '';
 $q = trim((string)($_GET['q'] ?? ''));
 $mit_leer = ($_GET['leer'] ?? '') === '1';
+$sortOpt = ['neu' => 'Neuste zuerst', 'alt' => 'Älteste zuerst', 'mhd' => 'MHD (zuerst ablaufend)', 'name' => 'Name (A–Z)', 'menge' => 'Menge (viel zuerst)'];
+$sort = (string)($_GET['sort'] ?? 'neu');
+if (!isset($sortOpt[$sort])) $sort = 'neu';
 
-$zeilen = erp_bestand($kat, $q, $mit_leer);
+$zeilen = erp_bestand($kat, $q, $mit_leer, 500, $sort);
 $zaehl = erp_bestand_zaehlung();
 
 kopf('Bestand', 'bestand');
@@ -23,9 +26,15 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
   <?php endforeach; ?>
 </div>
 
+<?php $qs = ($kat ? '&kat=' . h($kat) : '') . ($q ? '&q=' . urlencode($q) : '') . ($mit_leer ? '&leer=1' : ''); ?>
 <div class="bx-listbar">
   <input type="search" class="bx-search" placeholder="Suchen: Rohstoff, Artikelnummer, Charge" data-filter="lg-bestand" value="<?= h($q) ?>" autofocus>
-  <label class="bx-check" style="margin:0"><input type="checkbox" onchange="location.href='?p=bestand<?= $kat ? '&kat=' . h($kat) : '' ?><?= $q ? '&q=' . urlencode($q) : '' ?>' + (this.checked ? '&leer=1' : '')" <?= $mit_leer ? 'checked' : '' ?>> auch leere zeigen</label>
+  <label class="bx-check" style="margin:0;white-space:nowrap">Sortierung
+    <select onchange="location.href='?p=bestand<?= $qs ?>&sort=' + this.value" style="margin-left:6px">
+      <?php foreach ($sortOpt as $sv => $sl): ?><option value="<?= h($sv) ?>" <?= $sort === $sv ? 'selected' : '' ?>><?= h($sl) ?></option><?php endforeach; ?>
+    </select>
+  </label>
+  <label class="bx-check" style="margin:0"><input type="checkbox" onchange="location.href='?p=bestand<?= ($kat ? '&kat=' . h($kat) : '') . ($q ? '&q=' . urlencode($q) : '') ?>&sort=<?= h($sort) ?>' + (this.checked ? '&leer=1' : '')" <?= $mit_leer ? 'checked' : '' ?>> auch leere zeigen</label>
 </div>
 
 <?php if (!$zeilen): ?>
@@ -35,7 +44,7 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
   <table class="bx-table" id="lg-bestand">
     <thead><tr>
       <th>Rohstoff / Produkt</th><?= $kat === '' ? '<th>Kategorie</th>' : '' ?>
-      <th>Charge</th><th>MHD</th><th>Bestand</th><th>Status</th><th>Ort</th><th></th>
+      <th>Charge</th><th>Eingang</th><th>MHD</th><th>Bestand</th><th>Status</th><th>Ort</th><th></th>
     </tr></thead>
     <tbody>
     <?php foreach ($zeilen as $z): ?>
@@ -43,6 +52,7 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
         <td><a href="?p=charge&id=<?= (int)$z['id'] ?>" class="lg-namelink" onclick="event.stopPropagation()"><?= h((string)$z['item_name']) ?></a><?= $z['artikelnummer'] ? ' <span class="muted">' . h((string)$z['artikelnummer']) . '</span>' : '' ?></td>
         <?= $kat === '' ? '<td class="muted">' . h(erp_kategorie_label($z)) . '</td>' : '' ?>
         <td class="lg-code"><?= h((string)$z['charge_nr']) ?></td>
+        <td class="muted"><?= !empty($z['wareneingang']) ? h(date('d.m.Y', strtotime((string)$z['wareneingang']))) : '–' ?></td>
         <td><?= mhd_html($z['mhd']) ?></td>
         <td><?= h(menge_txt($z['menge_verfuegbar'])) ?> <?= h((string)$z['einheit']) ?></td>
         <td><?= status_badge($z['status']) ?></td>

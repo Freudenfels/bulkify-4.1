@@ -86,7 +86,8 @@ function erp_kategorie_bedingung(string $kat): string {
 
 // Bestand auflisten. $kat = '' fuer alle, sonst ein Schluessel aus erp_kategorien().
 // $mit_leer = auch leere/ausgebuchte Chargen zeigen.
-function erp_bestand(string $kat = '', string $q = '', bool $mit_leer = false, int $limit = 500): array {
+// $sort: neu (Standard, neuste zuerst) | alt | name | mhd | menge
+function erp_bestand(string $kat = '', string $q = '', bool $mit_leer = false, int $limit = 500, string $sort = 'neu'): array {
     if (!tabelle_da('charge') || !tabelle_da('item')) return [];
     $lief = tabelle_da('lieferanten');
     $where = ['c.fremd_kunde_id IS NULL'];
@@ -97,13 +98,20 @@ function erp_bestand(string $kat = '', string $q = '', bool $mit_leer = false, i
         $where[] = '(i.name LIKE ? OR i.artikelnummer LIKE ? OR c.charge_nr LIKE ?)';
         $like = '%' . $w . '%'; array_push($params, $like, $like, $like);
     }
+    $order = match ($sort) {
+        'alt'   => 'c.wareneingang IS NULL, c.wareneingang ASC, c.id ASC',
+        'name'  => 'i.name, c.mhd IS NULL, c.mhd',
+        'mhd'   => 'c.mhd IS NULL, c.mhd ASC, i.name',
+        'menge' => 'c.menge_verfuegbar DESC, i.name',
+        default => 'c.wareneingang IS NULL, c.wareneingang DESC, c.id DESC',   // neu
+    };
     $sql = "SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.menge, c.einheit, c.mhd, c.status, c.wareneingang,
                    i.id AS item_id, i.name AS item_name, i.artikelnummer, i.kategorie, i.form"
          . ($lief ? ", l.firma AS lieferant" : ", NULL AS lieferant") . "
             FROM charge c JOIN item i ON i.id=c.item_id"
          . ($lief ? " LEFT JOIN lieferanten l ON l.id=c.lieferant_id" : "") . "
             WHERE " . implode(' AND ', $where) . "
-            ORDER BY i.name, c.mhd IS NULL, c.mhd LIMIT " . (int)$limit;
+            ORDER BY $order LIMIT " . (int)$limit;
     return all($sql, $params);
 }
 
