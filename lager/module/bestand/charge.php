@@ -92,10 +92,8 @@ flash_zeigen();
   <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--sp-2)">
     <h2 style="margin:0">Eingebucht – Etikett für die Kartons</h2>
     <span class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap;align-items:center">
-      <button type="button" class="btn btn-ghost btn-sm" data-etk-fmt="klein">100×70</button>
-      <button type="button" class="btn btn-ghost btn-sm" data-etk-fmt="gross">100×150</button>
       <button type="button" class="btn btn-primary btn-sm" id="etkDruck">Direkt drucken</button>
-      <a class="btn btn-ghost btn-sm" id="etkOeffnen" href="?p=etikett&id=<?= $id ?>" target="_blank">Öffnen</a>
+      <a class="btn btn-ghost btn-sm" href="?p=etikett&id=<?= $id ?>" target="_blank">Öffnen</a>
       <span id="etkDruckInfo" class="muted"></span>
     </span>
   </div>
@@ -103,17 +101,10 @@ flash_zeigen();
 </div>
 <script>
 (function(){
-  var emb=document.getElementById('etkEmbed'), auf=document.getElementById('etkOeffnen'),
-      druck=document.getElementById('etkDruck'), dinfo=document.getElementById('etkDruckInfo'),
-      base='?p=etikett&id=<?= $id ?>', fmt='';
-  document.querySelectorAll('[data-etk-fmt]').forEach(function(b){ b.addEventListener('click',function(){
-    fmt=b.getAttribute('data-etk-fmt');
-    emb.src = base+'&format='+fmt+'&merken=1'; auf.href = base+'&format='+fmt;
-    document.querySelectorAll('[data-etk-fmt]').forEach(function(x){ x.classList.toggle('btn-primary', x===b); x.classList.toggle('btn-ghost', x!==b); });
-  }); });
+  var druck=document.getElementById('etkDruck'), dinfo=document.getElementById('etkDruckInfo');
   druck.addEventListener('click',function(){
     dinfo.textContent='…';
-    var fd=new FormData(); fd.append('ids','<?= $id ?>'); if(fmt) fd.append('format',fmt);
+    var fd=new FormData(); fd.append('ids','<?= $id ?>');
     fetch('?p=druck_job',{method:'POST',body:fd}).then(function(r){return r.json();})
       .then(function(j){ dinfo.textContent=j.ok?(j.meldung||'An den Drucker geschickt.'):('Fehler: '+(j.fehler||'')); })
       .catch(function(){ dinfo.textContent='Serverfehler.'; });

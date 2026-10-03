@@ -6,7 +6,7 @@ header('Content-Type: application/json; charset=utf-8');
 $roh = (string)($_POST['ids'] ?? '');
 $ids = array_values(array_filter(array_map('intval', explode(',', $roh)), fn($x) => $x > 0));
 if (!$ids) { echo json_encode(['ok' => false, 'fehler' => 'Keine Charge angegeben.']); exit; }
-$format = ($_POST['format'] ?? '') === 'gross' ? 'gross' : 'klein';
+$format = 'gross';   // 100x70 entfernt - nur noch 100x150 (hoch)
 
 $uid = (int)(lg_benutzer()['id'] ?? 0);
 q("INSERT INTO lg_druckjob (ids, format, status, benutzer_id, angelegt) VALUES (?,?,'offen',?,?)",

@@ -4,8 +4,7 @@
 //
 // Einzeln:  ?p=etikett&id=<charge_id>
 // Stapel:   ?p=etikett&ids=1,2,3
-// Format:   &format=klein (100x70 quer) | gross (100x150 hoch); ohne -> gespeicherter Standard
-// Merken:   &merken=1  -> gewählte Größe als Standard speichern
+// Format:   nur noch 100x150 hoch (100x70 wurde entfernt)
 // Override: &pakete=<n>
 require_once __DIR__ . '/../../core/etikett_pdf.php';
 
@@ -17,9 +16,7 @@ if (isset($_GET['ids'])) {
 }
 if (!$ids) { http_response_code(404); echo 'Keine Charge angegeben.'; exit; }
 
-$format = ($_GET['format'] ?? '') !== '' ? (string)$_GET['format'] : lg_meta_lesen('etikett_format', 'klein');
-$format = $format === 'gross' ? 'gross' : 'klein';
-if (($_GET['merken'] ?? '') === '1') lg_meta_schreiben('etikett_format', $format);
+$format = 'gross';   // 100x70 entfernt - nur noch 100x150 (hoch)
 $override = isset($_GET['pakete']) ? max(1, (int)$_GET['pakete']) : 0;
 
 $out = lg_etikett_pdf($ids, $format, $override);

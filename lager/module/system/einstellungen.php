@@ -2,7 +2,7 @@
 // Lager-Einstellungen (nur Admin): Etikett-Format, Drucker, kombinierte Brücke + Downloads,
 // und der Zugang zum Blinker/Sender-Setup. Ein Ort für alles rund ums Lager.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speichern') {
-    lg_meta_schreiben('etikett_format', ($_POST['etikett_format'] ?? '') === 'gross' ? 'gross' : 'klein');
+    lg_meta_schreiben('etikett_format', 'gross');   // nur noch 100x150 (100x70 entfernt)
     lg_meta_schreiben('drucker_name', trim((string)($_POST['drucker_name'] ?? '')));
     flash('Einstellungen gespeichert.');
     weiter('?p=einstellungen');
@@ -50,12 +50,9 @@ flash_zeigen();
   <div class="bx-panel">
     <h2 style="margin-top:0">Etikett &amp; Drucker</h2>
     <div class="bx-grid">
-      <div class="bx-field"><label>Standard-Etikettengröße</label>
-        <select name="etikett_format">
-          <option value="klein" <?= $etikettFormat !== 'gross' ? 'selected' : '' ?>>Klein – 100 × 70 mm (quer)</option>
-          <option value="gross" <?= $etikettFormat === 'gross' ? 'selected' : '' ?>>Groß – 100 × 150 mm (hoch)</option>
-        </select>
-        <div class="muted" style="font-size:12px;margin-top:4px">Gilt für alle „Etikett drucken"-Knöpfe. Je Druck kann man trotzdem umschalten.</div>
+      <div class="bx-field"><label>Etikettengröße</label>
+        <input type="text" value="100 × 150 mm (hoch)" readonly>
+        <div class="muted" style="font-size:12px;margin-top:4px">Feste Größe für alle Karton-Etiketten.</div>
       </div>
       <div class="bx-field"><label>Drucker</label>
         <?php if ($druckerListe): ?>

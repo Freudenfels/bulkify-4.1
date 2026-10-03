@@ -19,7 +19,9 @@ seitenkopf('Übersicht', 'Lager auf einen Blick.');
 flash_zeigen();
 ?>
 <style>
-  .lgd-akt{display:flex;flex-wrap:wrap;gap:var(--sp-3);margin-bottom:var(--sp-5)}
+  .lgd-akt{display:flex;flex-wrap:wrap;gap:var(--sp-3);margin-bottom:var(--sp-5);align-items:center}
+  .lgd-einbuchen{font-size:var(--fs-lg);padding:14px 26px}
+  @media(max-width:860px){.lgd-einbuchen{width:100%;padding:18px;font-size:var(--fs-lg)}}
   .lgd-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:var(--sp-4);margin-bottom:var(--sp-6)}
   .lgd-card{display:block;border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--sp-4);background:var(--panel);color:var(--text)}
   .lgd-card:hover{text-decoration:none;border-color:var(--gruen)}
@@ -34,6 +36,7 @@ flash_zeigen();
 </style>
 
 <div class="lgd-akt">
+  <a class="btn btn-primary lgd-einbuchen" href="?p=we">Einbuchen</a>
   <a class="btn btn-ghost" href="?p=finden">Finden</a>
   <a class="btn btn-ghost" href="?p=ausgang">Warenausgang</a>
   <a class="btn btn-ghost" href="?p=erwartet">Erwartete Lieferungen</a>
