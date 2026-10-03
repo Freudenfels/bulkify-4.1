@@ -107,13 +107,15 @@ Gib JSON in genau dieser Form zurueck:
 {
   "lieferant": "Firmenname des Absenders/Lieferanten oder \"\"",
   "ls_nr": "Lieferschein- oder Rechnungsnummer oder \"\"",
+  "auftrag_nr": "Auftrags-/Bestellnummer oder \"\"",
   "datum": "Lieferdatum als YYYY-MM-DD oder \"\"",
   "positionen": [
     {
       "name": "Artikel-/Produktbezeichnung wie auf dem Beleg",
       "menge": 0,
       "einheit": "kg | g | Stueck | L | ... (wie auf dem Beleg)",
-      "charge_nr": "Chargen-/Los-/Batch-Nummer oder \"\"",
+      "artikelnummer": "Artikelnummer des Lieferanten (Art.-Nr.) oder \"\"",
+      "charge_nr": "NUR echte Chargen-/Los-/Batch-Nummer, sonst \"\"",
       "mhd": "Mindesthaltbarkeit/Verfall als YYYY-MM-DD oder \"\"",
       "warenart": "rohstoff | verpackung | verbrauch | fertig | kapsel | \"\""
     }
@@ -122,7 +124,11 @@ Gib JSON in genau dieser Form zurueck:
 
 Regeln:
 - menge ist eine Zahl (Punkt als Dezimaltrennzeichen), ohne Einheit.
-- warenart ist deine beste Vermutung aus dem Kontext: Pulver/Extrakt/Vitamin = rohstoff; Glas/Dose/Flasche/Deckel = verpackung; Etikett/Karton/Beutel = verbrauch; fertige Kapseln/Tabletten als Endprodukt = fertig; Leerkapseln = kapsel. Unsicher = "".
+- warenart ist deine beste Vermutung aus dem Kontext: Pulver/Extrakt/Vitamin = rohstoff; Glas/Dose/Flasche/Deckel = verpackung; Etikett/Karton/Beutel/Faltkarton = verbrauch; fertige Kapseln/Tabletten als Endprodukt = fertig; Leerkapseln = kapsel. Unsicher = "".
+- WICHTIG zur charge_nr: Setze sie NUR, wenn ausdruecklich eine Chargen-/Los-/Batch-Nummer ausgewiesen ist.
+  Positionsnummer, Artikelnummer und Auftragsnummer sind KEINE Chargennummer! Verpackung/Kartons/Faltkartons
+  haben in der Regel KEINE Charge -> charge_nr = "". Im Zweifel charge_nr = "".
+- Die Artikelnummer des Lieferanten (Art.-Nr.) gehoert in "artikelnummer", NICHT in charge_nr.
 - Felder, die nicht auf dem Beleg stehen, als "" bzw. 0 lassen. Keine Positionen erfinden.
 TXT;
 
@@ -137,18 +143,20 @@ TXT;
         $name = trim((string)($p['name'] ?? ''));
         if ($name === '') continue;
         $positionen[] = [
-            'name'      => $name,
-            'menge'     => (float) str_replace(',', '.', (string)($p['menge'] ?? 0)),
-            'einheit'   => trim((string)($p['einheit'] ?? '')),
-            'charge_nr' => trim((string)($p['charge_nr'] ?? '')),
-            'mhd'       => lg_ki_datum((string)($p['mhd'] ?? '')),
-            'warenart'  => lg_ki_warenart((string)($p['warenart'] ?? '')),
+            'name'          => $name,
+            'menge'         => (float) str_replace(',', '.', (string)($p['menge'] ?? 0)),
+            'einheit'       => trim((string)($p['einheit'] ?? '')),
+            'artikelnummer' => trim((string)($p['artikelnummer'] ?? '')),
+            'charge_nr'     => trim((string)($p['charge_nr'] ?? '')),
+            'mhd'           => lg_ki_datum((string)($p['mhd'] ?? '')),
+            'warenart'      => lg_ki_warenart((string)($p['warenart'] ?? '')),
         ];
     }
     return [
         'ok'         => true,
         'lieferant'  => trim((string)($d['lieferant'] ?? '')),
         'ls_nr'      => trim((string)($d['ls_nr'] ?? '')),
+        'auftrag_nr' => trim((string)($d['auftrag_nr'] ?? '')),
         'datum'      => lg_ki_datum((string)($d['datum'] ?? '')),
         'positionen' => $positionen,
     ];

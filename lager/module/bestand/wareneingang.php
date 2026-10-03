@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'scan'
     $lid = erp_lieferant_finden_oder_anlegen((string)($r['lieferant'] ?? ''));
     echo json_encode([
         'ok'  => true,
-        'kopf' => ['lieferant' => $r['lieferant'], 'lieferant_id' => $lid, 'ls_nr' => $r['ls_nr'], 'datum' => $r['datum']],
+        'kopf' => ['lieferant' => $r['lieferant'], 'lieferant_id' => $lid, 'ls_nr' => $r['ls_nr'], 'auftrag_nr' => ($r['auftrag_nr'] ?? ''), 'datum' => $r['datum']],
         'positionen' => $pos,
     ], JSON_UNESCAPED_UNICODE);
     exit;
@@ -82,6 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $lief = erp_lieferant_finden_oder_anlegen((string)$_POST['lieferant_name']) ?: null;
     }
     if ($ziel === 'l2' && $kunde_id <= 0) { flash('Lager 2: bitte den Kunden wählen, dem die Ware gehört.', 'warn'); weiter('?p=we'); }
+    $auftragNr = trim((string)($_POST['auftrag_nr'] ?? ''));
 
     $names   = (array)($_POST['p_name'] ?? []);
     $gebucht = [];
@@ -93,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $menge    = (float) str_replace(',', '.', trim((string)($_POST['p_menge'][$i] ?? '0')));
         $einheit  = trim((string)($_POST['p_einheit'][$i] ?? ''));
         $charge   = trim((string)($_POST['p_charge'][$i] ?? ''));
+        $artnr    = trim((string)($_POST['p_artnr'][$i] ?? ''));
         $mhd      = trim((string)($_POST['p_mhd'][$i] ?? ''));
         $blinker  = led_leiste_normalisieren((string)($_POST['p_blinker'][$i] ?? ''));
         $pakete   = max(1, (int)($_POST['p_pakete'][$i] ?? 1));
@@ -114,6 +116,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         if ($regeln['charge_pflicht'] && $charge === '') { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Charge-Nr. ist Pflicht.'; continue; }
 
         $notiz = 'Wareneingang' . ($ziel === 'l2' ? ' (Kundenware)' : '');
+        $zusatz = [];
+        if ($artnr !== '')    $zusatz[] = 'Art.-Nr. ' . $artnr;
+        if ($auftragNr !== '') $zusatz[] = 'Auftrag ' . $auftragNr;
+        if ($zusatz) $notiz .= ' · ' . implode(' · ', $zusatz);
         $cid = $ziel === 'l2'
             ? erp_wareneingang_buchen_fremd($item_id, $menge, $charge, $mhd ?: null, $kunde_id, $notiz)
             : erp_wareneingang_buchen($item_id, $menge, $charge, $mhd ?: null, $lief, $notiz);
@@ -294,6 +300,7 @@ if ($gebucht):
             <?php foreach ($liefers as $lf): ?><option value="<?= (int)$lf['id'] ?>"><?= h((string)$lf['firma']) ?></option><?php endforeach; ?>
           </select>
           <input type="hidden" name="lieferant_name" id="weLiefName" value="">
+          <input type="hidden" name="auftrag_nr" id="weAuftragNr" value="">
         </div>
         <div class="bx-field" style="margin:0;min-width:240px;flex:1 1 240px"><label>Sendungs-/Paketnummer <span class="muted">(optional, scannen)</span></label>
           <input type="text" name="tracking" class="lg-code" autocomplete="off" placeholder="Paketlabel scannen – welches Paket ist gekommen">
@@ -336,6 +343,7 @@ if ($gebucht):
   .we-pos .f-art{flex:2 1 240px}
   .we-pos .f-menge{flex:0 1 110px}
   .we-pos .f-einheit{flex:0 1 90px}
+  .we-pos .f-artnr{flex:0 1 120px}
   .we-pos .f-pakete{flex:0 1 80px}
   .we-pos .f-blinker{flex:1 1 160px}
   .we-pos .we-del{position:absolute;top:var(--sp-2);right:var(--sp-2)}
@@ -382,6 +390,7 @@ if ($gebucht):
         '<div class="bx-field f-warenart"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
         '<div class="bx-field f-menge"><label>Menge</label><input type="text" name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+
         '<div class="bx-field f-einheit"><label>Einheit</label><input type="text" name="p_einheit[]" value="'+esc(p.einheit||'')+'" placeholder="Stk"></div>'+
+        '<div class="bx-field f-artnr"><label>Art.-Nr. <span class="muted">(Lief.)</span></label><input type="text" name="p_artnr[]" value="'+esc(p.artikelnummer||'')+'" placeholder="Art.-Nr."></div>'+
         '<div class="bx-field f-charge"><label class="lbl-charge">Charge-Nr.</label><input type="text" name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'"></div>'+
         '<div class="bx-field f-mhd"><label class="lbl-mhd">MHD</label><input type="date" name="p_mhd[]" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
         '<div class="bx-field f-pakete"><label>Pakete</label><input type="number" name="p_pakete[]" min="1" step="1" value="1"></div>'+
@@ -469,6 +478,7 @@ if ($gebucht):
         }
         var lname=document.getElementById('weLiefName'); if(lname) lname.value=j.kopf.lieferant;
       }
+      var an=document.getElementById('weAuftragNr'); if(an) an.value=j.kopf.auftrag_nr||'';
       info.textContent = (j.kopf.lieferant?('Lieferant: '+j.kopf.lieferant+'  '):'') + (j.positionen.length+' Position(en) erkannt');
       rows.innerHTML='';
       if(!j.positionen.length){ addRow(); }
