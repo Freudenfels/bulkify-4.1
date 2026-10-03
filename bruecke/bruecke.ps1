@@ -13,7 +13,24 @@ $Token = "{{TOKEN}}"
 
 # PowerShell 5.1 nutzt sonst teils TLS 1.0 -> HTTPS zum Server schlaegt fehl.
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
-$UA = "bulkify-lager-bruecke/1.1"
+$UA = "bulkify-lager-bruecke/1.2"
+
+# Installierte Drucker an den Server melden (fuer die Drucker-Auswahl in den Einstellungen).
+# Robust: $std kann $null sein (wenn "Windows verwaltet Standarddrucker" an ist) -> leeren String
+# senden, sonst bricht Invoke-RestMethod ab und es kommt nie eine Liste an.
+function Send-Printers {
+  try {
+    $prn = @(Get-CimInstance Win32_Printer -ErrorAction Stop)
+    $namen = ($prn | ForEach-Object { $_.Name }) -join "|"
+    $std = ($prn | Where-Object { $_.Default } | Select-Object -First 1 -ExpandProperty Name)
+    if (-not $std) { $std = "" }
+    Invoke-RestMethod -Uri ($Url + "?token=" + $Token) -Method Post -TimeoutSec 10 -UserAgent $UA `
+      -Body @{ printers = $namen; standard = $std } | Out-Null
+    Write-Host ((Get-Date -Format "HH:mm:ss") + "  Drucker gemeldet: " + $namen) -ForegroundColor Green
+  } catch {
+    Write-Host ((Get-Date -Format "HH:mm:ss") + "  Drucker konnten nicht gemeldet werden: " + $_.Exception.Message) -ForegroundColor Yellow
+  }
+}
 
 # SumatraPDF finden (fuer lautlosen Etikettendruck). Kostenlos: https://www.sumatrapdfreader.org
 function Get-SumatraPath {
@@ -35,18 +52,12 @@ Write-Host (" Server: " + $Url)
 Write-Host " Fenster offen lassen. Beenden mit Strg+C."
 Write-Host ("=" * 54)
 
-# Installierte Drucker einmal an den Server melden (fuer die Drucker-Auswahl in den Einstellungen).
-try {
-  $prn = Get-CimInstance Win32_Printer -ErrorAction Stop
-  $namen = ($prn | ForEach-Object { $_.Name }) -join "|"
-  $std = ($prn | Where-Object { $_.Default } | Select-Object -First 1 -ExpandProperty Name)
-  Invoke-RestMethod -Uri ($Url + "?token=" + $Token) -Method Post -TimeoutSec 10 -UserAgent $UA `
-    -Body @{ printers = $namen; standard = $std } | Out-Null
-  Write-Host (" Drucker gemeldet: " + $namen)
-} catch {}
+Send-Printers   # einmal beim Start
 
 $offline = $false
+$tick = 0
 while ($true) {
+  if ((++$tick) % 120 -eq 0) { Send-Printers }   # alle ~2 min erneut (selbstheilend)
   try {
     # 1) Nachfragen, ob etwas leuchten soll (das meldet die Bruecke zugleich als "online").
     $poll = Invoke-RestMethod -Uri ($Url + "?token=" + $Token) -Method Get -TimeoutSec 10 -UserAgent $UA
