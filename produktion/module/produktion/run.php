@@ -54,7 +54,11 @@ seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt
 <?php if ($cur):
     $isGate = str_contains((string)$cur['station'], 'Freigabe');
     $anl = station_anleitung_text((string)$cur['station']);
-    $mat = erp_schritt_material($id, (string)$cur['station']); ?>
+    $mat = erp_schritt_material($id, (string)$cur['station']);
+    // Fehlt Material für diesen Schritt? Dann ist er (noch) nicht erledigbar.
+    $materialFehlt = false;
+    foreach ($mat['zeilen'] as $z)
+        if (isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']) { $materialFehlt = true; break; } ?>
 <div class="bx-panel" style="margin-bottom:16px;border-color:var(--gruen);background:rgba(29,158,117,.06)">
   <div class="muted">Jetzt dran · Schritt <?= $fertig_cnt + 1 ?> von <?= $total ?></div>
   <h2 style="margin:4px 0 8px;font-size:22px"><?= h((string)$cur['station']) ?></h2>
@@ -88,11 +92,17 @@ seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt
   </div>
   <?php endif; ?>
 
+  <?php if ($materialFehlt): ?>
+    <div class="bx-panel warn" style="margin:0 0 12px;padding:10px 14px">Noch nicht möglich: Das benötigte Material ist nicht vollständig im Lager. Bitte erst bereitstellen bzw. im Wareneingang buchen.</div>
+    <button type="button" class="btn btn-primary" style="font-size:16px;padding:12px 28px" disabled><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
+    <?php if ($istAdmin): ?><div class="muted" style="font-size:12px;margin-top:8px">Admin: über „Abhaken" in der Ablaufliste lässt sich der Schritt notfalls trotzdem setzen (ohne Lagerabbuchung).</div><?php endif; ?>
+  <?php else: ?>
   <form method="post" style="margin:0" onsubmit="return confirm('Schritt &quot;<?= h((string)$cur['station']) ?>&quot; jetzt abschließen?');">
     <input type="hidden" name="aktion" value="erledigen">
     <input type="hidden" name="schritt_id" value="<?= (int)$cur['id'] ?>">
     <button type="submit" class="btn btn-primary" style="font-size:16px;padding:12px 28px"><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
   </form>
+  <?php endif; ?>
 </div>
 <?php else: ?>
 <div class="bx-panel badge-ok" style="margin-bottom:16px;padding:14px 18px">Alle Schritte erledigt – die Produktion ist abgeschlossen.</div>
