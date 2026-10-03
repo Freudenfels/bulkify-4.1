@@ -54,7 +54,10 @@ $TABS = ['offen' => 'Offen', 'abgeschlossen' => 'Abgeschlossen'];
 $TABCOUNT = ['offen' => $anzOffen, 'abgeschlossen' => $anzAbg];
 
 render_header('auftraege', 'Aufträge');
-bx_head('Aufträge', count($rows) . ' ' . ($tab === 'abgeschlossen' ? 'abgeschlossene (versendet)' : 'offene'));
+$ohnePreis = (function_exists('has_role') && (has_role('admin') || has_role('finance') || has_role('sales')))
+    ? (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status<>'storniert' AND COALESCE(gesamt_netto,0) <= 0") : 0;
+$kopfAktion = $ohnePreis > 0 ? bx_btn('Aufträge ohne Preis (' . $ohnePreis . ')', '?p=auftrag_preise', 'ghost') : '';
+bx_head('Aufträge', count($rows) . ' ' . ($tab === 'abgeschlossen' ? 'abgeschlossene (versendet)' : 'offene'), $kopfAktion);
 ?>
 <div class="settabs">
   <?php foreach ($TABS as $key => $lbl): ?>

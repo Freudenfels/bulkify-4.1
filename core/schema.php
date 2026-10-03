@@ -5813,6 +5813,87 @@ function rechnung_alt_anlegen(int $kunde_id, array $f, string $datei, string $or
     return $bid;
 }
 
+// Eine hochgeladene Rechnung/AB per KI in EINZELNE POSITIONEN auslesen (Herstellung/Kapseln, Glas/Dose,
+// Etiketten …) – für die aufgeschlüsselte Preisübernahme am Auftrag. Rückgabe (wirft nie):
+//   ['ok'=>true,'nummer','datum','bezahlt'(bool),'positionen'=>[{bezeichnung,menge,einheit,einzelpreis,ust}]]
+function rechnung_import_positionen_ki(string $pfad): array {
+    require_once __DIR__ . '/ki.php';
+    if (!ki_bereit()) return ['ok' => false, 'fehler' => 'KI ist nicht eingerichtet (Einstellungen → KI).'];
+    $prompt = "Dies ist eine Rechnung oder Auftragsbestätigung eines Lohnherstellers für Nahrungsergänzung. "
+        . "Lies den Kopf und ALLE Positionszeilen aus und gib NUR JSON zurück:\n"
+        . '{"nummer":"","datum":"","bezahlt":false,"positionen":[{"bezeichnung":"","menge":0,"einheit":"","einzelpreis":0,"ust":19}]}' . "\n"
+        . "einzelpreis = NETTO-Einzelpreis je Einheit (NICHT die Zeilensumme). Typische Zeilen: die Herstellung "
+        . "(Kapseln/Tabletten je Packung), die Verpackung (Dose/Glas), die Etiketten – jede als eigene Position "
+        . "mit ihrem Preis. bezeichnung kurz (z. B. 'Herstellung 120 Kapseln', 'Weithalsglas 150 ml', 'Etiketten'). "
+        . "datum im Format YYYY-MM-DD. bezahlt nur true, wenn klar als bezahlt gekennzeichnet. "
+        . "Zahlen mit Punkt als Dezimaltrennzeichen, keine Tausenderpunkte. Nichts erfinden.";
+    $r = ki_datei_frage($pfad, $prompt, ['json' => true, 'denken' => true, 'max_tokens' => 4000, 'timeout' => 240, 'zweck' => 'rechnung-positionen']);
+    if (empty($r['ok'])) return ['ok' => false, 'fehler' => (string)($r['fehler'] ?? 'Die Rechnung konnte nicht gelesen werden.')];
+    $d = is_array($r['daten'] ?? null) ? $r['daten'] : [];
+    $num = fn($x) => (float) str_replace(',', '.', (string)$x);
+    $list = (isset($d['positionen']) && is_array($d['positionen'])) ? $d['positionen'] : [];
+    $pos = [];
+    foreach ($list as $p) {
+        if (!is_array($p)) continue;
+        $bez = trim((string)($p['bezeichnung'] ?? '')); if ($bez === '') continue;
+        $menge = $num($p['menge'] ?? 1); if ($menge <= 0) $menge = 1;
+        $pos[] = ['bezeichnung' => mb_substr($bez, 0, 255), 'menge' => $menge,
+                  'einheit' => mb_substr(trim((string)($p['einheit'] ?? '')), 0, 20),
+                  'einzelpreis' => $num($p['einzelpreis'] ?? $p['preis'] ?? 0),
+                  'ust' => $num($p['ust'] ?? 0)];
+    }
+    return ['ok' => true,
+        'nummer'  => trim((string)($d['nummer'] ?? '')),
+        'datum'   => (is_string($d['datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d['datum'])) ? $d['datum'] : null,
+        'bezahlt' => !empty($d['bezahlt']),
+        'positionen' => $pos];
+}
+
+// Aus ausgelesenen Positionen eine Rechnung (Beleg) ANLEGEN und mit einem bestehenden Auftrag
+// verknüpfen; Original-PDF anhängen; den (fehlenden) Auftragspreis aus der Positions-Summe füllen.
+// So sind die Preise aufgeschlüsselt (Etikett/Glas/Kapsel …) beim Kunden hinterlegt. Rückgabe:
+//   ['ok'=>true,'beleg_id','netto'] oder ['ok'=>false,'fehler'=>…].
+function auftrag_rechnung_aus_positionen(int $auftrag_id, array $positionen, array $opt, string $datei, string $orig): array {
+    $a = one("SELECT id, kunde_id, menge, gesamt_netto FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a) return ['ok' => false, 'fehler' => 'Auftrag nicht gefunden.'];
+    $kid = (int)($a['kunde_id'] ?? 0);
+    // Positionen in das beleg_position-Format (preis_cent) bringen.
+    $pp = [];
+    foreach ($positionen as $p) {
+        $bez = trim((string)($p['bezeichnung'] ?? '')); if ($bez === '') continue;
+        $menge = (float) str_replace(',', '.', (string)($p['menge'] ?? 1)); if ($menge <= 0) $menge = 1;
+        $pp[] = ['bezeichnung' => $bez, 'menge' => $menge,
+                 'einheit' => trim((string)($p['einheit'] ?? '')),
+                 'preis_cent' => (int) round((float) str_replace(',', '.', (string)($p['einzelpreis'] ?? 0)) * 100),
+                 'mwst_satz' => (float) str_replace(',', '.', (string)($p['ust'] ?? 0))];
+    }
+    if (!$pp) return ['ok' => false, 'fehler' => 'Keine Positionen erkannt.'];
+    $s = beleg_summen_aus_positionen($pp);
+    if ($s['netto'] <= 0) return ['ok' => false, 'fehler' => 'Kein Betrag in den Positionen erkannt.'];
+    $ustP = 0.0; foreach ($pp as $p) if ((float)$p['mwst_satz'] > 0) { $ustP = (float)$p['mwst_satz']; break; }
+    $datum = (is_string($opt['datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $opt['datum'])) ? $opt['datum'] : gmdate('Y-m-d');
+    $nummer = trim((string)($opt['nummer'] ?? '')) ?: naechste_nummer('RE');
+    $status = !empty($opt['bezahlt']) ? 'bezahlt' : 'offen';
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,original_datei,original_orig,kunde_sichtbar)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)",
+      [$nummer, 'rechnung', $auftrag_id, ($kid ?: null), $s['netto'], $ustP, $s['ust'], $s['brutto'], $status, $datum,
+       ($datei !== '' ? $datei : null), ($orig !== '' ? mb_substr($orig, 0, 255) : null)]);
+    $bid = (int) insert_id();
+    $sort = 0;
+    foreach ($pp as $p)
+        q("INSERT INTO beleg_position (beleg_id,sort,bezeichnung,menge,einheit,preis_cent,mwst_satz) VALUES (?,?,?,?,?,?,?)",
+          [$bid, $sort++, $p['bezeichnung'], $p['menge'], $p['einheit'] ?: null, $p['preis_cent'], $p['mwst_satz']]);
+    if (function_exists('beleg_status_log_add')) beleg_status_log_add($bid, $status, 'Rechnung aus Positionen importiert (aufgeschlüsselt)' . ($status === 'bezahlt' ? ', als bezahlt' : ''), 'team');
+    // Auftragspreis füllen, wenn noch keiner da ist (nicht überschreiben).
+    if ((float)($a['gesamt_netto'] ?? 0) <= 0) {
+        $menge = (int)($a['menge'] ?? 0);
+        $vk = $menge > 0 ? round($s['netto'] / $menge, 4) : 0;
+        q("UPDATE auftrag SET gesamt_netto=?, vk_stueck=? WHERE id=?", [round($s['netto'], 2), $vk, $auftrag_id]);
+    }
+    if ($kid) log_aktivitaet('kunde', $kid, 'team', 'Aufgeschlüsselte Rechnung ' . $nummer . ' zu Auftrag importiert (' . number_format($s['netto'], 2, ',', '.') . ' € netto).', 'beleg', 'auftrag', $auftrag_id);
+    return ['ok' => true, 'beleg_id' => $bid, 'netto' => round($s['netto'], 2)];
+}
+
 // Ein hochgeladenes Angebot / eine Auftragsbestätigung (auch v3, jede Sprache) per KI auslesen –
 // für den Auftrag-Import. Liest Kopf + die EINE Hauptposition (Produkt, Rezeptur, Verpackung, Menge,
 // Preis). Rückgabe ['ok'=>true, 'daten'=>[...]] oder ['ok'=>false,'fehler'=>…]. Wirft nie.
