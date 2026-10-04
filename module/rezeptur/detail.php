@@ -229,11 +229,28 @@ if (!empty($_SESSION['rez_del_fehler'])) { echo '<div class="bx-panel" style="bo
         // Rohstoff-Feld: tippbar mit Filter (datalist). Anzeige = Label, gespeichert wird die id (verstecktes Feld).
         $zlabel = fn($it) => implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']] ?? $it['form']), $it['artikelnummer'] ?? '']));
         $itemById = []; foreach ($items as $it) $itemById[(int)$it['id']] = $it;
+        // R-Nummer + CoA/Spec je Rohstoff – als Link/Popup direkt an der Zutat (auch bei festgesetzter, nicht editierbarer Rezeptur: Anchor-Links wirken trotz disabled fieldset).
+        $ZNR = []; foreach (all("SELECT id, artikelnummer FROM item WHERE kategorie='rohstoff'") as $it) $ZNR[(int)$it['id']] = (string)($it['artikelnummer'] ?? '');
+        $ITEMDOCS = [];
+        foreach (all("SELECT objekt_id AS item_id, id, typ FROM dokument WHERE objekt_typ='item' AND typ IN ('spec','coa','analyse') ORDER BY id DESC") as $d)
+            $ITEMDOCS[(int)$d['item_id']][] = ['id'=>(int)$d['id'], 'typ'=>(string)$d['typ']];
+        $docTypLblZ = ['spec'=>'Spec','coa'=>'CoA','analyse'=>'Analyse'];
+        $zActionsHtml = function($iid) use ($ZNR, $ITEMDOCS, $docTypLblZ) {
+            $iid = (int)$iid; if (!$iid) return '';
+            $nr = $ZNR[$iid] ?? '';
+            $out = '<a href="?p=rohstoff&id=' . $iid . '" style="font-size:12px">↗ Rohstoff' . ($nr !== '' ? ' ' . h($nr) : '') . '</a>';
+            foreach ($ITEMDOCS[$iid] ?? [] as $d) {
+                $lbl = $docTypLblZ[$d['typ']] ?? $d['typ'];
+                $out .= ' <span class="muted">·</span> <a href="#" style="font-size:12px" onclick="bxDocOeffnen(\'?p=dokument&id=' . (int)$d['id'] . '\',\'' . h(addslashes($lbl)) . '\');return false">' . h($lbl) . '</a>';
+            }
+            return $out;
+        };
         $zr = $zutaten ?: [['item_id'=>'','menge_mg'=>'']]; foreach ($zr as $z): ?>
         <tr class="zutatrow">
           <td>
             <input type="text" class="zitem-txt" list="zutat_dl" autocomplete="off" placeholder="Rohstoff tippen …" style="width:100%" value="<?= h(!empty($z['item_id']) && isset($itemById[(int)$z['item_id']]) ? $zlabel($itemById[(int)$z['item_id']]) : '') ?>">
             <input type="hidden" name="z_item[]" class="zitem" value="<?= (int)($z['item_id'] ?? 0) ?: '' ?>">
+            <div class="zactions" style="margin-top:4px"><?= $zActionsHtml($z['item_id'] ?? 0) ?></div>
           </td>
           <td><input type="number" step="0.001" name="z_menge[]" class="zmenge" value="<?= h($z['menge_mg']!==''&&$z['menge_mg']!==null ? rtrim(rtrim(number_format((float)$z['menge_mg'],3,'.',''),'0'),'.') : '') ?>"></td>
           <td><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.zutatrow').remove();recalc()">entfernen</button></td>
@@ -426,6 +443,18 @@ var KAPSELN = <?= json_encode($KAPSELN, JSON_UNESCAPED_UNICODE) ?>;
 // Rohstoff-Label -> id (für das tippbare Zutatenfeld mit datalist)
 var ZMAP = <?= json_encode((function($items,$FORMLBL){ $m=[]; foreach($items as $it){ $lbl=implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']]??$it['form']), $it['artikelnummer']??''])); $m[$lbl]=(int)$it['id']; } return $m; })($items,$FORMLBL), JSON_UNESCAPED_UNICODE) ?>;
 function zsync(row){ var t=row.querySelector('.zitem-txt'), h=row.querySelector('.zitem'); if(!t||!h) return; var id=ZMAP[(t.value||'').trim()]; h.value = id ? id : ''; }
+// R-Nummer-Link + CoA/Spec je Zutat (Anchor -> funktioniert auch bei festgesetzter/disabled Rezeptur).
+var ZNR = <?= json_encode($ZNR) ?>;
+var ITEMDOCS = <?= json_encode($ITEMDOCS, JSON_UNESCAPED_UNICODE) ?>;
+var DOCLBLZ = {spec:'Spec', coa:'CoA', analyse:'Analyse'};
+function zactions(row){
+  var box = row.querySelector('.zactions'); if(!box) return;
+  var id = row.querySelector('.zitem').value;
+  if(!id){ box.innerHTML=''; return; }
+  var html = '<a href="?p=rohstoff&id='+id+'" style="font-size:12px">↗ Rohstoff'+(ZNR[id]?' '+ZNR[id]:'')+'</a>';
+  (ITEMDOCS[id]||[]).forEach(function(d){ var l=DOCLBLZ[d.typ]||d.typ; html+=' <span class="muted">·</span> <a href="#" style="font-size:12px" onclick="bxDocOeffnen(\'?p=dokument&id='+d.id+'\',\''+l+'\');return false">'+l+'</a>'; });
+  box.innerHTML = html;
+}
 function nf(x, d){ return x.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d}); }
 function betragEinheit(mg, einheit, anzeige, ie_mg){
   var lbl = (anzeige && anzeige!=='') ? anzeige : einheit;
@@ -503,14 +532,15 @@ function recalc(){
   var add = document.getElementById('addZutat');
   function bind(tr){
     var t = tr.querySelector('.zitem-txt');
-    if (t){ var on=function(){ zsync(tr); recalc(); }; t.addEventListener('input', on); t.addEventListener('change', on); }
+    if (t){ var on=function(){ zsync(tr); zactions(tr); recalc(); }; t.addEventListener('input', on); t.addEventListener('change', on); }
     var m = tr.querySelector('.zmenge'); if (m) m.addEventListener('input', recalc);
     var b = tr.querySelector('button'); if (b) b.addEventListener('click', function(){ tr.remove(); recalc(); });
+    zactions(tr);
   }
   if (add) add.addEventListener('click', function(){
     var tr = document.createElement('tr');
     tr.className = 'zutatrow';
-    tr.innerHTML = '<td><input type="text" class="zitem-txt" list="zutat_dl" autocomplete="off" placeholder="Rohstoff tippen …" style="width:100%"><input type="hidden" name="z_item[]" class="zitem"></td>'
+    tr.innerHTML = '<td><input type="text" class="zitem-txt" list="zutat_dl" autocomplete="off" placeholder="Rohstoff tippen …" style="width:100%"><input type="hidden" name="z_item[]" class="zitem"><div class="zactions" style="margin-top:4px"></div></td>'
       + '<td><input type="number" step="0.001" name="z_menge[]" class="zmenge"></td>'
       + '<td><button type="button" class="btn btn-ghost btn-sm">entfernen</button></td>';
     document.getElementById('zutatrows').appendChild(tr);

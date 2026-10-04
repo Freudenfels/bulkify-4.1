@@ -34,3 +34,11 @@ Je Rohstoff: Name **und die Artikelnummer (R-xxxx)** verlinken auf den Rohstoff 
 Spalte **CoA / Spec** zeigt je vorhandenem Dokument (dokument objekt_typ='item', typ spec/coa/analyse)
 einen Knopf → öffnet eine **Popup-Vorschau** (Overlay mit iframe auf `?p=dokument&id=`, inline) samt
 **Download**-Link (`bxDocOeffnen()/bxDocZu()`). Originale bleiben teamintern (Route `dokument`).
+
+## Zutaten-Zeilen: R-Nummer-Link + CoA/Spec (auch bei festgesetzter Rezeptur)
+Unter jeder Zutat steht eine Aktionszeile (`.zactions`): „↗ Rohstoff R-xxxx" (Link zum Rohstoff) und je
+Dokument ein CoA/Spec-Anchor, der die Popup-Vorschau (`bxDocOeffnen`) öffnet. Bewusst **Anchor-Links**
+(`<a>`), damit sie auch in einer **festgesetzten (eingefrorenen/freigegebenen) Rezeptur** funktionieren –
+dort ist das `<fieldset disabled>`, was nur Formularfelder sperrt, Anchors nicht. Daten: `$ZNR`
+(id→Artikelnummer), `$ITEMDOCS` (id→spec/coa/analyse) + JS `zactions(row)` (aktualisiert beim
+Rohstoff-Wechsel und für neue Zeilen).
