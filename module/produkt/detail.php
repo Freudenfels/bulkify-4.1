@@ -102,6 +102,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             q("UPDATE produkt SET name=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,novelfood_status=?,haltbarkeit=?,allergene=?,notiz=? WHERE id=?",
               [$name, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $nf, $halt, $allerg, $f('notiz'), (int)$id]);
         }
+        // Standard-Produktionsweg (Ausbaustufen) – nur Admin darf das setzen.
+        if (has_role('admin')) {
+            foreach (['abfuellen', 'etikettieren', 'karton', 'beipack'] as $wf)
+                q("UPDATE produkt SET weg_$wf=? WHERE id=?", [isset($_POST['weg_' . $wf]) ? 1 : 0, (int)$id]);
+        }
         header('Location: ?p=produkt&id=' . $id . '&gespeichert=1'); exit;
     }
 }
@@ -276,6 +281,30 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       </div>
     </div>
   </div>
+
+  <?php if (has_role('admin')):
+    $weg = ['abfuellen' => $neu ? 1 : (int)($p['weg_abfuellen'] ?? 1),
+            'etikettieren' => $neu ? 1 : (int)($p['weg_etikettieren'] ?? 1),
+            'karton' => $neu ? 0 : (int)($p['weg_karton'] ?? 0),
+            'beipack' => $neu ? 0 : (int)($p['weg_beipack'] ?? 0)]; ?>
+  <div class="bx-panel">
+    <div style="font-weight:600;margin-bottom:4px">Standard-Produktionsweg <?= bx_hint('Welche Ausbaustufen beim Anlegen eines Produktionsauftrags für dieses Produkt gesetzt werden. Reihenfolge: Verpacken → Etikettieren → Beipackzettel → Umkarton (vor der Qualitätsprüfung). Nur der Startzustand – im Produktions-Programm je Auftrag überschreibbar. Setzt nur Admin.') ?></div>
+    <div class="muted" style="font-size:12px;margin-bottom:10px">Gilt für neue Produktionsaufträge. Bestehende bleiben unverändert.</div>
+    <div class="bx-grid">
+      <?php foreach ([
+        'abfuellen'    => 'Abfüllen / Verpacken',
+        'etikettieren' => 'Etikettieren',
+        'beipack'      => 'Beipackzettel beilegen',
+        'karton'       => 'Umkarton / Umverpackung',
+      ] as $wk => $wl): ?>
+      <div class="bx-check" style="padding-top:4px">
+        <input type="checkbox" name="weg_<?= $wk ?>" id="weg_<?= $wk ?>" value="1" <?= $weg[$wk] ? 'checked' : '' ?>>
+        <label for="weg_<?= $wk ?>" style="margin:0"><?= h($wl) ?></label>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <div class="bx-panel" id="ergebnis">
     <h2>Kalkulation &amp; Tages-Deklaration</h2>

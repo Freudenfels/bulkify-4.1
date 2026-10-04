@@ -1079,6 +1079,16 @@ function init_schema(): void {
     ensure_column('kunden', 'passwort', "VARCHAR(255) NULL");       // Passwort-Hash fuers Kunden-Login (password_hash); leer = noch nicht eingerichtet
     ensure_column('kunden', 'erstlogin_am', "DATETIME NULL");       // Zeitpunkt der Konto-Einrichtung (Erstzugang abgeschlossen)
     ensure_column('kunden', 'letzter_login', "DATETIME NULL");      // letzter erfolgreicher Kunden-Login
+    // Standard-Produktionsweg (Ausbaustufen). Am Produkt = Standard; am Kunden = optionaler Override (NULL = erbt vom Produkt).
+    // Nur Admin pflegt diese Schalter; sie setzen beim PA-Anlegen den Startzustand (im Produktions-Programm je Auftrag überschreibbar).
+    ensure_column('produkt', 'weg_abfuellen',    "TINYINT(1) NOT NULL DEFAULT 1");   // Abfüllen/Verpacken (Primärgebinde)
+    ensure_column('produkt', 'weg_etikettieren', "TINYINT(1) NOT NULL DEFAULT 1");   // Etikettieren
+    ensure_column('produkt', 'weg_karton',       "TINYINT(1) NOT NULL DEFAULT 0");   // Umkarton/Umverpackung
+    ensure_column('produkt', 'weg_beipack',      "TINYINT(1) NOT NULL DEFAULT 0");   // Beipackzettel beilegen
+    ensure_column('kunden',  'weg_abfuellen',    "TINYINT NULL");                     // Override je Kunde (NULL = erbt vom Produkt)
+    ensure_column('kunden',  'weg_etikettieren', "TINYINT NULL");
+    ensure_column('kunden',  'weg_karton',       "TINYINT NULL");
+    ensure_column('kunden',  'weg_beipack',      "TINYINT NULL");
     ensure_column('item', 'produkt_id', "INT NULL");               // Verkaufsfertig-Item <-> Produkt (Fertigware-Bestand)
     ensure_column('item', 'rezeptur_id', "INT NULL");              // Bulk-Item (Kategorie 'fertig') <-> Rezeptur (Bulk-Produktion ohne Verpackung)
     // Dokumente: erst nach ausdrücklicher Freigabe im Kundenportal sichtbar. Standard 0 – ein Lieferanten-Spec
@@ -4518,12 +4528,28 @@ function angebot_matrix_fuer_gruppe(int $produkt_id, array $g, string $form, ?fl
 }
 
 // Stationen/Gates einer Produktion je Darreichungsform.
-function produktionsschritte_fuer(string $form, bool $zukauf = false, bool $bulk = false): array {
+// $wege (optional) = Ausbaustufen ['abfuellen'=>bool,'etikettieren'=>bool,'beipack'=>bool,'karton'=>bool].
+// null = bisheriges Standardverhalten (Verpacken + Etikettieren an, Beipack/Karton aus). Die optionalen
+// Stationen liegen – in dieser Reihenfolge – zwischen dem Bereitstellen/Herstellen-Block und der
+// Qualitätsprüfung. Reihenfolge/Namen sind der „Vertrag" mit dem Produktions-Programm (/produktion/).
+function produktionsschritte_fuer(string $form, bool $zukauf = false, bool $bulk = false, ?array $wege = null): array {
+    $w = [
+        'abfuellen'    => $wege === null ? true  : !empty($wege['abfuellen']),
+        'etikettieren' => $wege === null ? true  : !empty($wege['etikettieren']),
+        'beipack'      => $wege === null ? false : !empty($wege['beipack']),
+        'karton'       => $wege === null ? false : !empty($wege['karton']),
+    ];
+    $ausbau = [];
+    if ($w['abfuellen'])    $ausbau[] = 'Verpacken';
+    if ($w['etikettieren']) $ausbau[] = 'Etikettieren';
+    if ($w['beipack'])      $ausbau[] = 'Beipackzettel beilegen';
+    if ($w['karton'])       $ausbau[] = 'Umkarton';
+
     // Zugekaufte fertige Bulkware (fertige Kapseln/Tabletten vom Lieferanten):
-    // kein Rohstoff-Bereitstellen/Mischen/Verkapseln – nur bereitstellen, verpacken, etikettieren, prüfen.
+    // kein Rohstoff-Bereitstellen/Mischen/Verkapseln – nur bereitstellen, Ausbaustufen, prüfen.
     if ($zukauf) {
-        return ['Fertigware bereitstellen', 'Verpacken', 'Etikettieren',
-                'Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe'];
+        return array_merge(['Fertigware bereitstellen'], $ausbau,
+                ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']);
     }
     $herstellung = match ($form) {
         'kapsel'   => 'Verkapselung',
@@ -4536,12 +4562,29 @@ function produktionsschritte_fuer(string $form, bool $zukauf = false, bool $bulk
         'gel'      => 'Gel-Abfüllung',
         default    => 'Herstellung',
     };
-    // Bulk-/Lagerproduktion (nur Kapseln, ohne Verpackung): ohne Verpacken/Etikettieren/Versand-Freigabe.
+    // Bulk-/Lagerproduktion (nur Kapseln, ohne Verpackung): ohne Ausbaustufen/Versand-Freigabe.
     if ($bulk) {
         return ['Rohstoffe bereitstellen', 'Mischen', $herstellung, 'Qualitätsprüfung', 'Einlagern (Bulk)'];
     }
-    return ['Rohstoffe bereitstellen', 'Mischen', $herstellung, 'Verpacken', 'Etikettieren',
-            'Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe'];
+    return array_merge(['Rohstoffe bereitstellen', 'Mischen', $herstellung], $ausbau,
+            ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']);
+}
+
+// Ausbaustufen-Wege für einen Produktionsauftrag auflösen. Priorität je Stufe:
+// Kunde-Override (wenn gesetzt, NULL = erbt) → Produkt-Standard → global (abfuellen=1, etikettieren=1, karton=0, beipack=0).
+// Nur Admin pflegt diese Schalter (Produkt- bzw. – später – Kundenseite); der Kunde selbst stellt nichts ein.
+function produktion_wege_aufloesen(?int $produkt_id, ?int $kunde_id = null): array {
+    $def = ['abfuellen' => 1, 'etikettieren' => 1, 'karton' => 0, 'beipack' => 0];
+    $p = ($produkt_id && table_exists('produkt')) ? one("SELECT weg_abfuellen,weg_etikettieren,weg_karton,weg_beipack FROM produkt WHERE id=?", [(int)$produkt_id]) : null;
+    $k = ($kunde_id && table_exists('kunden')) ? one("SELECT weg_abfuellen,weg_etikettieren,weg_karton,weg_beipack FROM kunden WHERE id=?", [(int)$kunde_id]) : null;
+    $out = [];
+    foreach (['abfuellen', 'etikettieren', 'karton', 'beipack'] as $f) {
+        $col = 'weg_' . $f;
+        if ($k && isset($k[$col]) && $k[$col] !== null && $k[$col] !== '') $out[$f] = (int)$k[$col];
+        elseif ($p && isset($p[$col]) && $p[$col] !== null)                $out[$f] = (int)$p[$col];
+        else                                                              $out[$f] = $def[$f];
+    }
+    return $out;
 }
 
 // Bulk-PA? (nur Kapseln, ohne Verpackung – haengt an einer Rezeptur statt an einem Produkt)
@@ -4630,7 +4673,7 @@ function produktion_ist_zukauf(int $auftrag_id): bool {
 // Produktionsschritte neu erzeugen (Weg umstellen) – nur solange KEIN Schritt erledigt ist.
 function produktion_schritte_regenerieren(int $pa_id, bool $zukauf): bool {
     if ((int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]) > 0) return false;
-    $pa = one("SELECT produkt_id, rezeptur_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = one("SELECT produkt_id, rezeptur_id, kunde_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return false;
     $istBulk = pa_ist_bulk($pa);
     if ($istBulk) {
@@ -4639,7 +4682,8 @@ function produktion_schritte_regenerieren(int $pa_id, bool $zukauf): bool {
         $form = (string) (scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$pa['produkt_id']]) ?: 'kapsel');
     }
     q("DELETE FROM produktion_schritt WHERE pa_id=?", [$pa_id]);
-    foreach (produktionsschritte_fuer($form, $zukauf && !$istBulk, $istBulk) as $i => $station)
+    $wege = $istBulk ? null : produktion_wege_aufloesen((int)$pa['produkt_id'], (int)($pa['kunde_id'] ?? 0));
+    foreach (produktionsschritte_fuer($form, $zukauf && !$istBulk, $istBulk, $wege) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$pa_id, $station, $i]);
     q("UPDATE produktionsauftrag SET status='offen' WHERE id=?", [$pa_id]);
     return true;
@@ -4659,7 +4703,7 @@ function produktionsauftrag_lager_erstellen(int $produkt_id, int $menge, string 
        VALUES (?,?,?,?,?,?,?,?)",
       [naechste_nummer('PR'), null, null, $produkt_id, $menge, $art, 'offen', $prio]);
     $paid = (int) insert_id();
-    foreach (produktionsschritte_fuer($form, $art === 'fremd') as $i => $station)
+    foreach (produktionsschritte_fuer($form, $art === 'fremd', false, produktion_wege_aufloesen($produkt_id, null)) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
     bedarf_bump();
     return $paid;
@@ -5397,6 +5441,8 @@ function station_anleitung(string $station): array {
         'Abfüllung'                => ['Fülle das Produkt ab.', false, null],
         'Verpacken'                => ['Fülle das Produkt in die Verpackung. Scanne die verwendete Verpackungs-Charge.', true, 'verpackung'],
         'Etikettieren'             => ['Etikettiere alle Gebinde korrekt (Charge, MHD, Kennzeichnung).', false, null],
+        'Beipackzettel beilegen'   => ['Beipackzettel/Booklet beilegen.', false, null],
+        'Umkarton'                 => ['Produkt in den Karton/die Umverpackung legen.', false, null],
         'Qualitätsprüfung'         => ['Prüfe Aussehen, Füllmenge, Dichtigkeit und Kennzeichnung.', false, null],
         'Produktions-Freigabe'     => ['Kontrolliere und gib die Produktion frei.', false, null],
         'Versand-Freigabe'         => ['Gib den Auftrag zum Versand frei.', false, null],
@@ -5692,7 +5738,7 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,produktionsart,status) VALUES (?,?,?,?,?,?,?)",
       [naechste_nummer('PR'), $aid, $a['kunde_id'], $a['produkt_id'], $menge, 'fremd', 'offen']);
     $paid = insert_id();
-    foreach (produktionsschritte_fuer($form, true) as $i => $station) {
+    foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$a['produkt_id'], (int)($a['kunde_id'] ?? 0))) as $i => $station) {
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
     }
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftragsbestätigung, Rechnung & Produktionsauftrag automatisch erzeugt.', 'auftrag', 'auftrag', $aid);
@@ -6376,7 +6422,7 @@ function kontingent_abruf(int $kontingent_id, int $menge): array {
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,produktionsart,status) VALUES (?,?,?,?,?,?,?)",
       [naechste_nummer('PR'), $aid, $kid, $pid, $menge, 'fremd', 'offen']);
     $paid = insert_id();
-    foreach (produktionsschritte_fuer($form, true) as $i => $station)
+    foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$pid, (int)$kid)) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
     q("UPDATE kontingent SET abgerufen = abgerufen + ? WHERE id=?", [$menge, $kontingent_id]);
     log_aktivitaet('kunde', $kid, 'kunde', 'Abruf ' . $menge . ' aus Jahresvertrag/Kontingent – Auftrag, Rechnung & Produktionsauftrag erzeugt.', 'auftrag', 'auftrag', $aid);
@@ -6520,7 +6566,7 @@ function auftrag_aus_positionen(int $angebot_id, ?string $gruppe = null): ?int {
       [naechste_nummer('PR'), $aid, $a['kunde_id'], $pid, $menge, (int)$herst['stueck'],
        $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null, 'fremd', 'offen']);
     $paid = insert_id();
-    foreach (produktionsschritte_fuer($form, true) as $i => $station)
+    foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$pid, (int)($a['kunde_id'] ?? 0))) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
 
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'kunde',
@@ -6562,7 +6608,7 @@ function auftrag_aus_zelle(int $angebot_id, int $stueck, int $verp_id, int $best
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('PR'), $aid, $a['kunde_id'], $bestellt, $menge, $stueck, $verp_id, 'fremd', 'offen']);
     $paid = insert_id();
-    foreach (produktionsschritte_fuer($form, true) as $i => $station) q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
+    foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$bestellt, (int)($a['kunde_id'] ?? 0))) as $i => $station) q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Angebot bestätigt (' . $stueck . ' Stück/Pkg × ' . $menge . '), Auftrag + Rechnung + Produktion erzeugt.', 'auftrag', 'auftrag', $aid);
     return $aid;
 }
@@ -6583,7 +6629,7 @@ function produktionsauftrag_aus_auftrag(int $auftrag_id, string $art = 'eigen'):
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('PR'), $auftrag_id, $a['kunde_id'], $pid, (int)$a['menge'], (int)$a['stueck'], $a['verpackung_id'] ?: null, $art, 'offen']);
     $paid = (int) insert_id();
-    foreach (produktionsschritte_fuer($form, $art === 'fremd') as $i => $station)
+    foreach (produktionsschritte_fuer($form, $art === 'fremd', false, produktion_wege_aufloesen((int)$pid, (int)($a['kunde_id'] ?? 0))) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team',
         'Produktionsauftrag ' . (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id=?", [$paid]) . ' nachträglich angelegt (' . $art . ').', 'auftrag', 'auftrag', $auftrag_id);
