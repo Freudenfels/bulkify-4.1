@@ -64,6 +64,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
     }
+    if ($aktion === 'lieferant') {
+        $r = erp_charge_lieferant_setzen($id, (string)($_POST['lieferant_name'] ?? ''));
+        flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+        weiter('?p=charge&id=' . $id);
+    }
+    if ($aktion === 'einheit') {
+        $r = erp_charge_einheit_setzen($id, (string)($_POST['einheit'] ?? ''));
+        flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+        weiter('?p=charge&id=' . $id);
+    }
     if ($aktion === 'loeschen') {
         $grund = trim((string)($_POST['grund'] ?? ''));
         lg_papierkorb_rein($id, (string)$c['item_name'], (string)$c['charge_nr'],
@@ -84,6 +94,7 @@ $andere = erp_item_chargen((int)$c['item_id'], $id);
 
 kopf('Charge ' . (string)$c['charge_nr'], 'bestand');
 $fremd_kunde  = (int)($c['fremd_kunde_id'] ?? 0);
+$liefers = function_exists('erp_lieferanten') ? erp_lieferanten() : [];
 $umb_vorschlag = $fremd_kunde ?: (int)(erp_charge_kunde_vorschlag($id) ?? 0);
 $umb_kunden   = erp_fulfillment_kunden();
 // Vorgeschlagenen Kunden sicher in die Auswahl aufnehmen (falls nicht als Fulfillment-Kunde markiert).
@@ -149,6 +160,30 @@ flash_zeigen();
   </div>
 </div>
 <?php endif; ?>
+
+<div class="bx-panel" style="margin-bottom:var(--sp-5)">
+  <div class="bx-row" style="gap:var(--sp-5);flex-wrap:wrap;align-items:flex-end">
+    <?php if (!$fremd_kunde): ?>
+    <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:0">
+      <input type="hidden" name="aktion" value="lieferant">
+      <div class="bx-field" style="margin:0;min-width:200px"><label>Lieferant <span class="muted">(tippen, neue werden angelegt)</span></label>
+        <input type="text" name="lieferant_name" list="chgLiefList" autocomplete="off" value="<?= h((string)($c['lieferant'] ?? '')) ?>" placeholder="Lieferant suchen oder neu">
+      </div>
+      <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
+    </form>
+    <datalist id="chgLiefList"><?php foreach ($liefers as $lf): ?><option value="<?= h((string)$lf['firma']) ?>"></option><?php endforeach; ?></datalist>
+    <?php endif; ?>
+    <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:0">
+      <input type="hidden" name="aktion" value="einheit">
+      <div class="bx-field" style="margin:0;max-width:150px"><label>Einheit <span class="muted">(z. B. kg)</span></label>
+        <input type="text" name="einheit" list="chgEinhList" autocomplete="off" value="<?= h((string)$c['einheit']) ?>">
+      </div>
+      <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
+    </form>
+    <datalist id="chgEinhList"><option value="kg"></option><option value="g"></option><option value="L"></option><option value="ml"></option><option value="Stk"></option></datalist>
+  </div>
+  <div class="muted" style="font-size:12px;margin-top:var(--sp-2)">MHD und Menge änderst du oben per „MHD/Bestand korrigieren".</div>
+</div>
 
 <div class="umb-overlay" id="umbModal" hidden>
   <div class="umb-box bx-panel">

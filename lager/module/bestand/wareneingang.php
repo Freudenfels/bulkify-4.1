@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $name     = trim((string)$nm);
         $item_id  = (int)($_POST['p_item'][$i] ?? 0);
         $warenart = (string)($_POST['p_warenart'][$i] ?? 'rohstoff');
-        $menge    = (float) str_replace(',', '.', trim((string)($_POST['p_menge'][$i] ?? '0')));
+        $menge    = erp_menge_parse((string)($_POST['p_menge'][$i] ?? '0'));
         $einheit  = trim((string)($_POST['p_einheit'][$i] ?? ''));
         $charge   = trim((string)($_POST['p_charge'][$i] ?? ''));
         $artnr    = trim((string)($_POST['p_artnr'][$i] ?? ''));
@@ -111,9 +111,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         }
         if (!$item_id) { $fehler[] = 'Zeile ' . ($i + 1) . ': kein Artikel.'; continue; }
 
-        // Warenart/Regeln der tatsaechlichen Ware.
+        // Warenart/Regeln: die EINGEGEBENE Warenart hat Vorrang vor den Stammdaten.
         $basis = erp_item_basis($item_id);
-        $regeln = erp_warenart_regeln((string)($basis['kategorie'] ?? $warenart), (string)($basis['form'] ?? ''));
+        $regeln = erp_warenart_regeln($warenart ?: (string)($basis['kategorie'] ?? 'rohstoff'), (string)($basis['form'] ?? ''));
         if ($menge <= 0)                           { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Menge fehlt.'; continue; }
         if ($kisteId <= 0 && $blinker === null)    { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Blinker oder Kiste wählen.'; continue; }
         if ($regeln['mhd_pflicht'] && $mhd === '')    { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): MHD ist Pflicht.'; continue; }
@@ -125,8 +125,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         if ($auftragNr !== '') $zusatz[] = 'Auftrag ' . $auftragNr;
         if ($zusatz) $notiz .= ' · ' . implode(' · ', $zusatz);
         $cid = $ziel === 'l2'
-            ? erp_wareneingang_buchen_fremd($item_id, $menge, $charge, $mhd ?: null, $kunde_id, $notiz)
-            : erp_wareneingang_buchen($item_id, $menge, $charge, $mhd ?: null, $lief, $notiz, $statusG);
+            ? erp_wareneingang_buchen_fremd($item_id, $menge, $charge, $mhd ?: null, $kunde_id, $notiz, $einheit)
+            : erp_wareneingang_buchen($item_id, $menge, $charge, $mhd ?: null, $lief, $notiz, $statusG, $einheit);
         if (!$cid) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Buchen fehlgeschlagen.'; continue; }
 
         lg_pakete_set((int)$cid, $pakete);
@@ -446,7 +446,11 @@ if ($gebucht):
       else { hid.value=0; }
       zeigeAehnlich(card);
     });
-    art2.addEventListener('change',function(){pflicht(card);});
+    art2.addEventListener('change',function(){
+      // Kapseln zählt man in Stück, nicht in kg -> Einheit vorschlagen (nur wenn leer/Gewicht).
+      if(art2.value==='kapsel'){ var e=einh.value.trim().toLowerCase(); if(e===''||['kg','g','l','ml','t'].indexOf(e)>=0) einh.value='Stk'; }
+      pflicht(card);
+    });
     card.querySelector('.we-del').addEventListener('click',function(){card.remove(); if(!rows.children.length)addRow();});
     // Aufteilen-Haken je Position -> in das versteckte Feld schreiben (Index bleibt so ausgerichtet).
     var cb=card.querySelector('.we-split'), cbh=card.querySelector('.we-split-h');

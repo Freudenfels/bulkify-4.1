@@ -295,9 +295,10 @@ function erp_chargen_suche_fremd(string $q, int $kunde_id = 0, int $limit = 30):
 }
 
 // Fremdlager-Wareneingang: Kundenware einbuchen -> neue Charge, die dem Kunden gehoert (status 'frei').
-function erp_wareneingang_buchen_fremd(int $item_id, float $menge, string $charge_nr, ?string $mhd, int $kunde_id, string $notiz = ''): ?int {
+function erp_wareneingang_buchen_fremd(int $item_id, float $menge, string $charge_nr, ?string $mhd, int $kunde_id, string $notiz = '', string $einheit = ''): ?int {
     if ($item_id <= 0 || $menge <= 0 || $kunde_id <= 0 || !tabelle_da('charge')) return null;
-    $einheit = (string) scalar("SELECT einheit FROM item WHERE id=?", [$item_id]) ?: 'Stück';
+    $einheit = erp_einheit_norm(trim($einheit));   // Eingabe hat Vorrang
+    if ($einheit === '') $einheit = (string) scalar("SELECT einheit FROM item WHERE id=?", [$item_id]) ?: 'Stk';
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,fremd_kunde_id,notiz,angelegt)
        VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,?,?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $mhd ?: null, $kunde_id, $notiz ?: 'Fremdlager-Wareneingang', gmdate('Y-m-d H:i:s')]);
@@ -610,10 +611,13 @@ function erp_erwartete_lieferungen(): array {
 // Wareneingang buchen: legt eine Charge an (oder fuellt eine vorab aus einer CoA angelegte Charge).
 // Rohstoff/Fertigware -> Quarantaene, sonst sofort frei. Rueckgabe: neue/aktualisierte charge.id oder null.
 function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?string $mhd,
-                                 ?int $lieferant_id, string $notiz = '', string $status = 'frei'): ?int {
+                                 ?int $lieferant_id, string $notiz = '', string $status = 'frei', string $einheit = ''): ?int {
     if (!tabelle_da('charge') || !tabelle_da('item')) return null;
     $it = one("SELECT kategorie, einheit FROM item WHERE id=?", [$item_id]);
     if (!$it || $menge <= 0) return null;
+    // Eingegebene Einheit hat VORRANG vor den Stammdaten (z. B. Kapseln = Stk, nicht kg).
+    $einheit = erp_einheit_norm(trim($einheit));
+    if ($einheit === '') $einheit = (string)$it['einheit'];
     // Status wird beim Einbuchen gewaehlt (Standard: freigegeben). Quarantaene nur im Sonderfall.
     $status = in_array($status, ['frei', 'quarantaene', 'gesperrt'], true) ? $status : 'frei';
     $charge_nr = trim($charge_nr);
@@ -627,7 +631,7 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
             $alt = trim((string)$vorab['notiz']);
             q("UPDATE charge SET menge=?, menge_verfuegbar=?, einheit=?, lieferant_id=COALESCE(?,lieferant_id),
                       mhd=COALESCE(?,mhd), wareneingang=CURDATE(), status=?, notiz=? WHERE id=?",
-              [$menge, $menge, $it['einheit'], $lief, $mhd ?: null, $status,
+              [$menge, $menge, $einheit, $lief, $mhd ?: null, $status,
                trim(($alt !== '' ? $alt . ' | ' : '') . ($notiz ?: 'Ware eingegangen, mit CoA-Charge abgeglichen')),
                (int)$vorab['id']]);
             erp_bedarf_bump();
@@ -636,10 +640,34 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
     }
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,angelegt)
        VALUES (?,?,?,?,?,?,?,CURDATE(),?,?,?)",
-      [$charge_nr ?: null, $item_id, $menge, $menge, $it['einheit'], $lief, $mhd ?: null, $status, $notiz ?: null, jetzt_utc()]);
+      [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $lief, $mhd ?: null, $status, $notiz ?: null, jetzt_utc()]);
     $neu = (int) insert_id();
     erp_bedarf_bump();
     return $neu;
+}
+
+// Lieferant einer Charge setzen/aendern (per Name: finden oder neu anlegen). Nur eigener Bestand.
+function erp_charge_lieferant_setzen(int $charge_id, string $name): array {
+    if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Chargen vorhanden.'];
+    $c = one("SELECT fremd_kunde_id FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
+    if (!empty($c['fremd_kunde_id'])) return ['ok' => false, 'meldung' => 'Fremdlager-Charge – hat keinen Lieferanten.'];
+    $name = trim($name);
+    if ($name === '') { q("UPDATE charge SET lieferant_id=NULL WHERE id=?", [$charge_id]); return ['ok' => true, 'meldung' => 'Lieferant entfernt.']; }
+    $lid = erp_lieferant_finden_oder_anlegen($name);
+    if (!$lid) return ['ok' => false, 'meldung' => 'Lieferant konnte nicht gesetzt werden.'];
+    q("UPDATE charge SET lieferant_id=? WHERE id=?", [$lid, $charge_id]);
+    return ['ok' => true, 'meldung' => 'Lieferant gesetzt: ' . $name];
+}
+
+// Einheit einer Charge korrigieren (z. B. Pulver faelschlich "Stk" -> "kg"). Normalisiert.
+function erp_charge_einheit_setzen(int $charge_id, string $einheit): array {
+    if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Chargen vorhanden.'];
+    if (!one("SELECT id FROM charge WHERE id=?", [$charge_id])) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
+    $einheit = erp_einheit_norm(trim($einheit));
+    if ($einheit === '') return ['ok' => false, 'meldung' => 'Bitte eine Einheit angeben.'];
+    q("UPDATE charge SET einheit=? WHERE id=?", [$einheit, $charge_id]);
+    return ['ok' => true, 'meldung' => 'Einheit: ' . $einheit];
 }
 
 // Status einer Charge aendern (Freigeben / Quarantaene / Sperren). Leere Chargen bleiben 'leer'.
@@ -678,6 +706,19 @@ function erp_charge_entnehmen(int $charge_id, float $menge): array {
 
 // Einheit auf einen einheitlichen Namen bringen, damit nicht "Stück", "stueck", "pcs", "Stk."
 // alle nebeneinander im System stehen. Unbekanntes bleibt unveraendert (nur getrimmt).
+// Deutsche Mengen-Eingabe robust in float: "25.000" = 25000 (Tausenderpunkt), "25,5" = 25.5,
+// "1.234,5" = 1234.5. Ein einzelner Punkt mit genau 3er-Gruppen gilt als Tausender.
+function erp_menge_parse(string $s): float {
+    $s = preg_replace('/[^0-9.,\-]/', '', trim($s));
+    if ($s === '' || $s === null) return 0.0;
+    $hatK = strpos($s, ',') !== false;
+    $hatP = strpos($s, '.') !== false;
+    if ($hatK && $hatP)      { $s = str_replace('.', '', $s); $s = str_replace(',', '.', $s); }
+    elseif ($hatK)           { $s = str_replace(',', '.', $s); }
+    elseif ($hatP && preg_match('/^\d{1,3}(\.\d{3})+$/', $s)) { $s = str_replace('.', '', $s); }
+    return (float)$s;
+}
+
 function erp_einheit_norm(string $s): string {
     $s = trim($s);
     if ($s === '') return '';
