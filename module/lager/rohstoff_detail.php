@@ -320,7 +320,10 @@ $naehrstoffe = all("SELECT * FROM naehrstoff ORDER BY ist_nrv DESC, kategorie, s
 $wirkstoffe = $neu ? [] : all("SELECT iw.*, n.name AS n_name, n.nrv_wert, n.einheit AS n_einheit, n.ist_nrv
                                FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id
                                WHERE iw.item_id=? ORDER BY iw.sort, iw.id", [(int)$id]);
-$kennwerte = $neu ? [] : all("SELECT * FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [(int)$id]);
+require_once BX_ROOT . '/core/spec_ki.php';   // spec_kennwert_relevant / item_kennwerte_relevant
+// Nur echte charakteristische Kennwerte zeigen (Schwermetalle/Mikro/Mineralien raus); beim Speichern
+// werden die ausgefilterten Alt-Zeilen dann automatisch mit entfernt – Bestand heilt sich ohne Neu-Upload.
+$kennwerte = $neu ? [] : item_kennwerte_relevant((int)$id);
 $grenzwerte = $neu ? [] : all("SELECT * FROM item_grenzwert WHERE item_id=? ORDER BY sort, id", [(int)$id]);
 // Neuanlage aus einer Spezifikation: Wirkstoffe (Assay), Kennwerte und Grenzwerte aus dem KI-Vorschlag
 // vorbelegen, damit z. B. Eisen-Gehalt und Keim-/Metallgrenzwerte nicht verloren gehen. Werden im

@@ -193,8 +193,9 @@ function build_spec_pdf(int $item_id): ?string {
         rtrim(rtrim(number_format((float)$w['gehalt_prozent'], 2, ',', '.'), '0'), ',') . ' %'], $wirk);
     if ($wrows) { $y = spec_h($p, $y, 'Gehalt (Assay)'); $y = spec_table($p, $y, [[$L, 'Wirkstoff'], [320, 'Gehalt']], $wrows); }
 
-    // Charakteristische Kennwerte
-    $kw = all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$item_id]);
+    // Charakteristische Kennwerte – nur echte (Schwermetalle/Mikro/Mineralien raus, siehe spec_kennwert_relevant)
+    require_once __DIR__ . '/spec_ki.php';
+    $kw = item_kennwerte_relevant($item_id);
     $krows = array_map(fn($k) => [(string)$k['parameter'], (string)$k['wert']], $kw);
     if ($krows) { $y = spec_h($p, $y, 'Charakteristische Kennwerte'); $y = spec_table($p, $y, [[$L, 'Parameter'], [300, 'Wert']], $krows); }
 

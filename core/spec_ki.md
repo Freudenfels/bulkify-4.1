@@ -22,6 +22,21 @@ Liest eine **Spezifikation** oder ein **Analysenzertifikat (CoA)** eines Liefera
 ## Felder
 `spec_ki_felder()` bildet die Stammdatenspalten von `item` auf Klartext-Beschreibungen für die KI ab (Name, botanische Quelle, CAS/EC, Herkunft, Haltbarkeit, Lagerung, Zusätze, Allergene, Zertifikate, Spec-Nr./Version/gültig-ab, vegan/GVO/bestrahlt/TSE-BSE, Dichte) mit Typ (text/datum/janein/zahl). `spec_ki_wert()` bringt einen Rohwert in die Form, die die Spalte erwartet.
 
+## Charakteristische Kennwerte sauber halten
+Der ENTSCHEIDENDE Wert eines Extrakts ist der Gehalt/Assay der Leitsubstanz (z. B. Withanolide bei
+Ashwagandha) – der steht bei den **Wirkstoffen**. In die **Kennwerte** gehören nur identifizierende/
+standardisierende Größen (Assay-Spanne, DEV/Extraktverhältnis, pH, Mesh, LOD, Löslichkeit, Aussehen).
+Schwermetalle, Mikrobiologie, Mykotoxine, Pestizide, Lösungsmittel und Nährstoff-/Mineralgehalte
+(Magnesium, Calcium, Eisen …) sind **keine** Kennwerte.
+
+- `spec_kennwert_relevant($parameter)` – zentraler Filter (Blocklist). `false` = kein Kennwert.
+- Wirkt im **Writer** (`spec_ki_kennwerte` speichert solche gar nicht erst) und beim **Anzeigen** über
+  `item_kennwerte_relevant($item_id)` – genutzt in `core/pdf_spec.php` (Kunden-Spec), `module/lager/rohstoff_detail.php`
+  und `module/portal/kunde.php`. So wird der **Altbestand live gefiltert, ohne etwas zu löschen** (kein
+  Neu-Upload nötig); beim Speichern eines Rohstoffs fallen ausgefilterte Alt-Zeilen automatisch weg.
+- Die KI-Anweisung (`spec_ki_anweisung`) weist zusätzlich an: Kennwerte knapp halten, Assay → Wirkstoffe,
+  Mineralien/Sicherheitswerte raus.
+
 ## Verwandt
 - `core/ki.md` – die API-Anbindung und die KI-Einstellungen.
 - `core/coa_lesen.md` – die textbasierte Variante ohne KI (Fallback, kostenlos, aber nur bei echtem PDF-Text).

@@ -1245,7 +1245,8 @@ $iid = (int)($_GET['iid'] ?? 0);
 $rohDetail = ($iid && $k['portal_rohstoffe']) ? one("SELECT id, name, name_lat, form, cas, herkunft, synonym, bot_quelle, herkunftsland,
     haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben
     FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
-$rohKennwerte = $rohDetail ? all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$iid]) : [];
+require_once BX_ROOT . '/core/spec_ki.php';   // item_kennwerte_relevant: nur echte Kennwerte (kein Schwermetall/Mikro/Mineral)
+$rohKennwerte = $rohDetail ? item_kennwerte_relevant($iid) : [];
 // Freigegebene Analysenzertifikate (bulkify-Layout) zu diesem Rohstoff – nur was das Team freigegeben hat.
 $rohCoas = $rohDetail ? all("SELECT id, charge_nr, mhd FROM charge WHERE item_id=? AND coa_freigegeben=1 ORDER BY (wareneingang IS NULL), wareneingang DESC, id DESC", [$iid]) : [];
 $jaNein = fn($v) => $v === null || $v === '' ? null : ((int)$v === 1);
@@ -1450,7 +1451,7 @@ if (($_GET['v'] ?? '') === 'rohstoff_info') {
     $add('Bestrahlt', $jn($it['bestrahlt'])); $add('TSE/BSE-frei', $jn($it['tse_bse_frei']));
     $add('Zertifikate', $it['zertifikate']); $add('Zusätze', $it['zusaetze']);
     $add('Haltbarkeit', $it['haltbarkeit']); $add('Lagerbedingungen', $it['lagerbedingungen']);
-    foreach (all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$iid]) as $kw) $add((string)$kw['parameter'], $kw['wert']);
+    foreach (item_kennwerte_relevant($iid) as $kw) $add((string)$kw['parameter'], $kw['wert']);
     // Freigegebene Dokumente: Spezifikation (falls spec_freigegeben) + CoAs freigegebener Chargen.
     $coaList = [];
     foreach (all("SELECT id, charge_nr, mhd FROM charge WHERE item_id=? AND coa_freigegeben=1 ORDER BY (wareneingang IS NULL), wareneingang DESC, id DESC", [$iid]) as $c)
