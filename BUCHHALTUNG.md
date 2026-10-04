@@ -12,8 +12,11 @@ fast nur **eigene Dateien** anfasst (`module/beleg/*`, die PDF-Bauer) – siehe 
 
 ## Deine Dateien (gehören dem Buchhaltungs-Chat)
 - `module/beleg/` – alle Beleg-/Rechnungs-Seiten (siehe „Seiten").
-- `module/buchhaltung/` – Finanz-Hub (`hub.php`) + Export-/E-Rechnung-Endpunkte (`export.php`, `rechnung_xml.php`).
+- `module/buchhaltung/` – Finanz-Hub (`hub.php`), Export-/E-Rechnung-Endpunkte (`export.php`, `rechnung_xml.php`),
+  Eingangsrechnungen (`lief_rechnung_neu.php`, `lief_rechnung.php`).
 - `core/buchhaltung.php` – Auswertungen, GoBD-Nummernkreis-Prüfung, CSV-/DATEV-Export (reine Leselogik).
+- `core/kreditor.php` – Kreditoren/Verbindlichkeiten: eigene Tabellen `lieferant_rechnung`/`lieferant_zahlung`
+  (per `kreditor_init()`, kein Eingriff in `core/schema.php`), Zahlungen, Kennzahlen, Kreditoren-Exporte.
 - `core/erechnung.php` – E-Rechnung (CII/EN16931-XML, ZUGFeRD-Profil).
 - `core/pdf_beleg.php` – Beleg-PDF-Layout (`beleg_firma()`, Grundlayout; auch von anderen PDFs genutzt – **vorsichtig** ändern).
 - `core/pdf_rechnung.php` – Rechnungs-PDF.
@@ -29,12 +32,19 @@ fast nur **eigene Dateien** anfasst (`module/beleg/*`, die PDF-Bauer) – siehe 
 Rollen-Gate: alles unter `finance`.
 
 ### Finanz-Hub (`?p=buchhaltung` → `module/buchhaltung/hub.php`)
-Reiter: Übersicht (Kennzahlen), Offene Posten (je Kunde), Auswertung (Umsatz je Monat/Steuersatz, Jahr-Auswahl),
-Prüfung (GoBD: Nummernkreis-Lücken/Dubletten/Chronologie/Storno), Export.
-Exporte: `?p=beleg_export&art=op|belege|datev` – OP-Liste/Belege als CSV (UTF-8+BOM), DATEV-EXTF-Buchungsstapel
-(Format 700, SKR03-Default, per `app_meta` konfigurierbar; vor Produktiv-Import prüfen).
-E-Rechnung: `?p=rechnung_xml&id=…` – CII/EN16931-XML (ZUGFeRD-Profil), Button in der Rechnungs-Detailansicht.
-Factur-X-Einbettung (XML in PDF/A-3) steht noch aus (braucht PDF/A-3-fähige Lib).
+Reiter: Übersicht (Forderungen/Verbindlichkeiten/Saldo), Offene Posten (Debitoren je Kunde),
+**Verbindlichkeiten (Kreditoren je Lieferant + offene Eingangsrechnungen)**, Auswertung
+(Umsatz je Monat/Steuersatz, Jahr-Auswahl), Prüfung (GoBD: Nummernkreis-Lücken/Dubletten/Chronologie/Storno), Export.
+
+**Debitoren (die schulden uns):** Belege/Rechnungen (`module/beleg/*`), Zahlstatus via `beleg.status`/`zahlung`.
+**Kreditoren (wir schulden denen):** Eingangsrechnungen `?p=lief_rechnung_neu` erfassen → Detail `?p=lief_rechnung&id=…`
+(Zahlungen buchen, Status offen→teilbezahlt→bezahlt, stornieren). Tabellen `lieferant_rechnung`/`lieferant_zahlung`
+in `core/kreditor.php`. Quelle für Vorbefüllung: `bestellung`/`bestellung_position` (EK-Wert).
+
+Exporte `?p=beleg_export&art=…`: `op`/`belege`/`datev` (Debitoren), `vop`/`lief_belege`/`datev_ek` (Kreditoren).
+CSV UTF-8+BOM; DATEV-EXTF-Buchungsstapel (Format 700, 125 Felder, SKR03-Default, per `app_meta` konfigurierbar;
+vor Produktiv-Import prüfen). E-Rechnung `?p=rechnung_xml&id=…` – CII/EN16931-XML (ZUGFeRD-Profil),
+Button in der Rechnungs-Detailansicht. Factur-X-Einbettung (XML in PDF/A-3) steht noch aus.
 
 ### Seiten (`?p=…` → `module/beleg/…`)
 - `rechnungen` → `rechnungen_liste.php` – Rechnungsliste (Übersicht/Filter).

@@ -204,40 +204,9 @@ function bh_export_belege_csv(string $von = '', string $bis = ''): string {
     return $csv;
 }
 
-// DATEV-EXTF-Buchungsstapel (Format 700). Rechnungsausgang je Beleg eine Buchung.
-// Konten per Einstellungen überschreibbar (SKR03-Defaults). Rückgabe: CSV-String in CP1252.
-// WICHTIG: Kontenrahmen/Konten vor Produktiv-Import mit dem Steuerberater abstimmen.
-function bh_export_datev(string $von = '', string $bis = ''): string {
-    $firma = beleg_firma();
-    $berater = (int) meta_get('datev_berater', '0');
-    $mandant = (int) meta_get('datev_mandant', '0');
-    $debitor = (int) meta_get('datev_debitor_sammel', '1400'); // SKR03 Forderungen aLuL
-    $erloes19 = (int) meta_get('datev_erloes_19', '8400');     // SKR03 Erlöse 19% USt (Automatikkonto)
-    $erloesEU = (int) meta_get('datev_erloes_eu', '8125');     // SKR03 steuerfreie innergem. Lieferung
-    $erloes0  = (int) meta_get('datev_erloes_0', '8200');      // SKR03 Erlöse (ohne USt / Kleinunternehmer)
-    $sachkl   = (int) meta_get('datev_sachkontenlaenge', '4');
-
-    $where = "b.typ IN ('rechnung','gutschrift') AND b.status<>'storniert'";
-    $args = [];
-    if ($von !== '') { $where .= " AND b.datum >= ?"; $args[] = $von; }
-    if ($bis !== '') { $where .= " AND b.datum <= ?"; $args[] = $bis; }
-    $rows = all(
-        "SELECT b.*, k.firma, k.ust_id AS kunde_ustid, k.land AS kunde_land
-           FROM beleg b LEFT JOIN kunden k ON k.id=b.kunde_id
-          WHERE $where ORDER BY b.datum ASC, b.nummer ASC", $args);
-
-    // Zeitraum für den Header
-    $datVon = $von !== '' ? date('Ymd', strtotime($von)) : ($rows ? date('Ymd', strtotime($rows[0]['datum'] ?: 'now')) : date('Ymd'));
-    $datBis = $bis !== '' ? date('Ymd', strtotime($bis)) : ($rows ? date('Ymd', strtotime(end($rows)['datum'] ?: 'now')) : date('Ymd'));
-    $wjBeginn = date('Y') . '0101';
-    $erzeugt = date('YmdHis') . '000';
-
-    // --- EXTF-Kopfzeile (Zeile 1) ---
-    $kopf = ['EXTF', 700, 21, 'Buchungsstapel', 13, $erzeugt, '', 'bulkify', $firma['name'] ?: 'bulkify',
-             $berater, $mandant, $wjBeginn, $sachkl, $datVon, $datBis, 'Rechnungsausgang', '', 1, 0, 'EUR',
-             '', '', '', '', 0, '', 1, '', '', ''];
-    // --- Feldnamen-Kopf (Zeile 2), Format 700 Buchungsstapel: 125 Felder ---
-    $felder = [
+// Feldnamen-Kopf des DATEV-EXTF-Buchungsstapels (Format 700): genau 125 Felder, feste Reihenfolge.
+function bh_datev_felder(): array {
+    return [
         'Umsatz (ohne Soll/Haben-Kz)','Soll/Haben-Kennzeichen','WKZ Umsatz','Kurs','Basis-Umsatz','WKZ Basis-Umsatz',
         'Konto','Gegenkonto (ohne BU-Schlüssel)','BU-Schlüssel','Belegdatum','Belegfeld 1','Belegfeld 2','Skonto','Buchungstext',
         'Postensperre','Diverse Adressnummer','Geschäftspartnerbank','Sachverhalt','Zinssperre','Beleglink',
@@ -263,9 +232,43 @@ function bh_export_datev(string $von = '', string $bis = ''): string {
         'Festschreibung','Leistungsdatum','Datum Zuord. Steuerperiode','Fälligkeit','Generalumkehr (GU)','Steuersatz','Land',
         'Abrechnungsreferenz','BVV-Position','EU-Land u. UStID (Ursprung)','EU-Steuersatz (Ursprung)','Abw. Skontokonto',
     ];
+}
+
+// EXTF-Kopfzeile (Zeile 1) des DATEV-Buchungsstapels. $bez = Stapel-Bezeichnung (z. B. Rechnungsausgang).
+function bh_datev_kopf(string $bez, string $datVon, string $datBis): array {
+    $firma = beleg_firma();
+    $berater = (int) meta_get('datev_berater', '0');
+    $mandant = (int) meta_get('datev_mandant', '0');
+    $sachkl  = (int) meta_get('datev_sachkontenlaenge', '4');
+    return ['EXTF', 700, 21, 'Buchungsstapel', 13, date('YmdHis') . '000', '', 'bulkify', $firma['name'] ?: 'bulkify',
+            $berater, $mandant, date('Y') . '0101', $sachkl, $datVon, $datBis, $bez, '', 1, 0, 'EUR',
+            '', '', '', '', 0, '', 1, '', '', ''];
+}
+
+// DATEV-EXTF-Buchungsstapel (Format 700). Rechnungsausgang je Beleg eine Buchung.
+// Konten per Einstellungen überschreibbar (SKR03-Defaults). Rückgabe: CSV-String in CP1252.
+// WICHTIG: Kontenrahmen/Konten vor Produktiv-Import mit dem Steuerberater abstimmen.
+function bh_export_datev(string $von = '', string $bis = ''): string {
+    $debitor = (int) meta_get('datev_debitor_sammel', '1400'); // SKR03 Forderungen aLuL
+    $erloes19 = (int) meta_get('datev_erloes_19', '8400');     // SKR03 Erlöse 19% USt (Automatikkonto)
+    $erloesEU = (int) meta_get('datev_erloes_eu', '8125');     // SKR03 steuerfreie innergem. Lieferung
+    $erloes0  = (int) meta_get('datev_erloes_0', '8200');      // SKR03 Erlöse (ohne USt / Kleinunternehmer)
+
+    $where = "b.typ IN ('rechnung','gutschrift') AND b.status<>'storniert'";
+    $args = [];
+    if ($von !== '') { $where .= " AND b.datum >= ?"; $args[] = $von; }
+    if ($bis !== '') { $where .= " AND b.datum <= ?"; $args[] = $bis; }
+    $rows = all(
+        "SELECT b.*, k.firma, k.ust_id AS kunde_ustid, k.land AS kunde_land
+           FROM beleg b LEFT JOIN kunden k ON k.id=b.kunde_id
+          WHERE $where ORDER BY b.datum ASC, b.nummer ASC", $args);
+
+    $datVon = $von !== '' ? date('Ymd', strtotime($von)) : ($rows ? date('Ymd', strtotime($rows[0]['datum'] ?: 'now')) : date('Ymd'));
+    $datBis = $bis !== '' ? date('Ymd', strtotime($bis)) : ($rows ? date('Ymd', strtotime(end($rows)['datum'] ?: 'now')) : date('Ymd'));
+    $felder = bh_datev_felder();
     $spalten = count($felder); // 125
 
-    $csv  = bh_csv_zeile($kopf);
+    $csv  = bh_csv_zeile(bh_datev_kopf('Rechnungsausgang', $datVon, $datBis));
     $csv .= bh_csv_zeile($felder);
 
     foreach ($rows as $r) {

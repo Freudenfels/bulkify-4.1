@@ -1,0 +1,107 @@
+<?php
+// Eingangsrechnung (Lieferanten-Rechnung) erfassen. Route: lief_rechnung_neu (Rolle finance).
+// Optional vorbefüllt aus einer Bestellung (?bestellung=ID) oder für einen Lieferanten (?lieferant=ID).
+require_once BX_ROOT . '/core/ui.php';
+require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/kreditor.php';
+kreditor_init();
+
+$fehler = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'er_save') {
+    $lid = (int)($_POST['lieferant_id'] ?? 0);
+    $netto = (float) str_replace(',', '.', (string)($_POST['netto'] ?? '0'));
+    if (!$lid)           $fehler = 'Bitte einen Lieferanten wählen.';
+    elseif ($netto <= 0) $fehler = 'Bitte einen Netto-Betrag größer 0 eingeben.';
+    else {
+        $u = current_user();
+        $id = kr_rechnung_anlegen([
+            'lieferant_id'      => $lid,
+            'bestellung_id'     => (int)($_POST['bestellung_id'] ?? 0) ?: null,
+            'lief_nummer'       => $_POST['lief_nummer'] ?? '',
+            'datum'             => $_POST['datum'] ?? date('Y-m-d'),
+            'eingang_am'        => $_POST['eingang_am'] ?? date('Y-m-d'),
+            'netto'             => $netto,
+            'ust_prozent'       => (float) str_replace(',', '.', (string)($_POST['ust_prozent'] ?? '0')),
+            'zahlungsziel_tage' => (int)($_POST['zahlungsziel_tage'] ?? 0),
+            'notiz'             => $_POST['notiz'] ?? '',
+            'erfasst_von'       => $u['id'] ?? null,
+        ]);
+        header('Location: ?p=lief_rechnung&id=' . $id . '&erfasst=1'); exit;
+    }
+}
+
+// Vorbefüllung
+$vorBestellung = (int)($_GET['bestellung'] ?? 0);
+$vorLieferant  = (int)($_GET['lieferant'] ?? 0);
+$preNetto = ''; $preZiel = 0;
+if ($vorBestellung) {
+    $bst = one("SELECT lieferant_id FROM bestellung WHERE id=?", [$vorBestellung]);
+    if ($bst) { $vorLieferant = (int)$bst['lieferant_id']; $preNetto = number_format(kr_bestellung_netto($vorBestellung), 2, '.', ''); }
+}
+if ($vorLieferant) {
+    $lf = one("SELECT zahlungsziel_lief FROM lieferanten WHERE id=?", [$vorLieferant]);
+    if ($lf) $preZiel = (int)$lf['zahlungsziel_lief'];
+}
+$ustDefault = (float) meta_get('ust_inland', 19);
+
+$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+$bestellungen = all("SELECT b.id, b.nummer, l.firma FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id ORDER BY b.id DESC LIMIT 100");
+
+render_header('buchhaltung', 'Eingangsrechnung erfassen');
+bx_head('Eingangsrechnung erfassen', 'Rechnung eines Lieferanten als Verbindlichkeit erfassen',
+        bx_btn('Zurück', '?p=buchhaltung&tab=verbindlichkeiten', 'ghost'));
+if ($fehler) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#e6c4c0;color:var(--err)">' . h($fehler) . '</div>';
+?>
+<form method="post" class="bx-form bx-panel" style="max-width:720px">
+  <input type="hidden" name="aktion" value="er_save">
+  <div class="bx-row">
+    <label>Lieferant
+      <select name="lieferant_id" required>
+        <option value="">– wählen –</option>
+        <?php foreach ($lieferanten as $l): ?>
+          <option value="<?= (int)$l['id'] ?>" <?= $vorLieferant === (int)$l['id'] ? 'selected' : '' ?>><?= h($l['firma']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label>Bestellung (optional)
+      <select name="bestellung_id">
+        <option value="">– keine –</option>
+        <?php foreach ($bestellungen as $b): ?>
+          <option value="<?= (int)$b['id'] ?>" <?= $vorBestellung === (int)$b['id'] ? 'selected' : '' ?>><?= h($b['nummer'] . ' · ' . $b['firma']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+  </div>
+  <div class="bx-row">
+    <label>Rechnungsnummer des Lieferanten
+      <input type="text" name="lief_nummer" placeholder="z. B. 2026-00123">
+    </label>
+    <label>Rechnungsdatum
+      <input type="date" name="datum" value="<?= date('Y-m-d') ?>">
+    </label>
+    <label>Eingang bei uns
+      <input type="date" name="eingang_am" value="<?= date('Y-m-d') ?>">
+    </label>
+  </div>
+  <div class="bx-row">
+    <label>Netto (EUR)
+      <input type="text" inputmode="decimal" name="netto" value="<?= h($preNetto) ?>" placeholder="0,00" required>
+    </label>
+    <label>Vorsteuer %
+      <input type="text" inputmode="decimal" name="ust_prozent" value="<?= h(number_format($ustDefault, 0)) ?>">
+    </label>
+    <label>Zahlungsziel (Tage)
+      <input type="number" name="zahlungsziel_tage" value="<?= (int)$preZiel ?>" min="0">
+    </label>
+  </div>
+  <label>Notiz
+    <textarea name="notiz" rows="2" placeholder="optional"></textarea>
+  </label>
+  <p class="muted" style="margin:4px 0 0">USt-Betrag und Brutto werden aus Netto × Vorsteuer berechnet. Die Fälligkeit ergibt sich aus Rechnungsdatum + Zahlungsziel.</p>
+  <div class="bx-row" style="margin-top:var(--sp-4)">
+    <button class="btn btn-primary" type="submit">Eingangsrechnung speichern</button>
+    <a class="btn btn-ghost" href="?p=buchhaltung&tab=verbindlichkeiten">Abbrechen</a>
+  </div>
+</form>
+<?php
+render_footer();

@@ -117,6 +117,8 @@ function route_rollen_map(): array {
         'buchhaltung'        => ['finance'],
         'beleg_export'       => ['finance'],
         'rechnung_xml'       => ['finance'],
+        'lief_rechnung_neu'  => ['finance'],
+        'lief_rechnung'      => ['finance'],
         'einstellungen'      => ['admin', 'finance', 'production'],
         'angebotsscan'       => ['admin', 'finance', 'sales'],
         'benutzer'           => ['admin'],

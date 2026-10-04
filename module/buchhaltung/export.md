@@ -1,7 +1,11 @@
 # Buchhaltung – Export-Endpunkt (`export.php`)
 
 Route `beleg_export` (Rolle `finance`). Liefert Dateien als Download, kein HTML.
-Parameter: `art=op|belege|datev`, optional `von`/`bis` (`YYYY-MM-DD`).
+Parameter: `art=op|belege|datev|vop|lief_belege|datev_ek`, optional `von`/`bis` (`YYYY-MM-DD`).
+
+Debitoren: `op`, `belege`, `datev`. Kreditoren: `vop` (offene Verbindlichkeiten),
+`lief_belege` (Eingangsrechnungen), `datev_ek` (DATEV-Rechnungseingang). Kreditoren-Builder
+in `core/kreditor.php`.
 
 - `art=op` – Offene-Posten-Liste als CSV (UTF-8 mit BOM, Semikolon). Alle offenen/teilbezahlten
   Rechnungen mit Brutto, bereits bezahlt, Restbetrag, Tage überfällig.

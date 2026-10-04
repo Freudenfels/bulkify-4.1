@@ -4,18 +4,21 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/buchhaltung.php';
+require_once BX_ROOT . '/core/kreditor.php';
+kreditor_init();
 
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 $tab = preg_replace('/[^a-z]/', '', $_GET['tab'] ?? 'uebersicht') ?: 'uebersicht';
 
 render_header('buchhaltung', 'Buchhaltung');
-bx_head('Buchhaltung', 'Finanzübersicht · offene Posten, Umsatz, Export');
+bx_head('Buchhaltung', 'Finanzübersicht · Forderungen, Verbindlichkeiten, Export');
 bx_tabs([
-    'uebersicht' => 'Übersicht',
-    'op'         => 'Offene Posten',
-    'auswertung' => 'Auswertung',
-    'pruefung'   => 'Prüfung',
-    'export'     => 'Export',
+    'uebersicht'       => 'Übersicht',
+    'op'               => 'Offene Posten',
+    'verbindlichkeiten'=> 'Verbindlichkeiten',
+    'auswertung'       => 'Auswertung',
+    'pruefung'         => 'Prüfung',
+    'export'           => 'Export',
 ], $tab, '?p=buchhaltung');
 
 // Kennzahl-Kachel
@@ -43,6 +46,9 @@ $umsatz_monat = (float) scalar(
     "SELECT COALESCE(SUM(CASE WHEN typ='gutschrift' THEN -netto ELSE netto END),0) FROM beleg
       WHERE typ IN ('rechnung','gutschrift') AND status<>'storniert' AND datum IS NOT NULL AND YEAR(datum)=YEAR(CURDATE()) AND MONTH(datum)=MONTH(CURDATE())");
 $anz_gutschrift = (int) scalar("SELECT COUNT(*) FROM beleg WHERE typ='gutschrift'");
+$verb = kr_op_summe();                 // offene Verbindlichkeiten (wir schulden Lieferanten)
+$verb_ue = kr_op_ueberfaellig_summe();
+$saldo = $op - $verb;                  // Forderungen minus Verbindlichkeiten
 
 $ueberfaellig = all(
     "SELECT b.*, k.firma, (b.brutto - COALESCE(z.bez,0)) AS rest, DATEDIFF(CURDATE(), b.faellig) AS tage
@@ -56,12 +62,12 @@ $zuletzt_bezahlt = all(
 $jahr = (int) date('Y');
 
 echo '<div class="bx-cards">';
-fkachel('Offene Posten', $op > 0 ? $eur($op) : '<span class="muted">0 €</span>', '?p=buchhaltung&tab=op', $op > 0 ? 'color:var(--warn)' : '');
-fkachel('Davon überfällig', $op_ueberfaellig > 0 ? $eur($op_ueberfaellig) : '<span class="muted">0 €</span>', '?p=buchhaltung&tab=op', $op_ueberfaellig > 0 ? 'color:var(--err)' : '');
-fkachel('Offene Rechnungen', $anz_offen ?: '<span class="muted">0</span>', '?p=rechnungen');
+fkachel('Forderungen (offen)', $op > 0 ? $eur($op) : '<span class="muted">0 €</span>', '?p=buchhaltung&tab=op', $op > 0 ? 'color:var(--warn)' : '');
+fkachel('davon überfällig', $op_ueberfaellig > 0 ? $eur($op_ueberfaellig) : '<span class="muted">0 €</span>', '?p=buchhaltung&tab=op', $op_ueberfaellig > 0 ? 'color:var(--err)' : '');
+fkachel('Verbindlichkeiten (offen)', $verb > 0 ? $eur($verb) : '<span class="muted">0 €</span>', '?p=buchhaltung&tab=verbindlichkeiten', $verb > 0 ? 'color:var(--warn)' : '');
+fkachel('davon überfällig', $verb_ue > 0 ? $eur($verb_ue) : '<span class="muted">0 €</span>', '?p=buchhaltung&tab=verbindlichkeiten', $verb_ue > 0 ? 'color:var(--err)' : '');
+fkachel('Saldo (Ford. − Verb.)', $eur($saldo), '?p=buchhaltung&tab=verbindlichkeiten', $saldo >= 0 ? 'color:var(--gruen)' : 'color:var(--err)');
 fkachel('Umsatz ' . $jahr, $eur($umsatz_jahr), '?p=buchhaltung&tab=auswertung', $umsatz_jahr > 0 ? 'color:var(--gruen)' : '');
-fkachel('Umsatz ' . date('M'), $eur($umsatz_monat), '?p=buchhaltung&tab=auswertung');
-fkachel('Gutschriften', $anz_gutschrift ?: '<span class="muted">0</span>', '?p=rechnungen');
 echo '</div>';
 ?>
 <form class="bx-listbar" method="get">
@@ -141,6 +147,61 @@ foreach ($rows as $r) { $sumOffen += (float)$r['offen']; $sumUe += (float)$r['ue
     <?php endforeach; ?>
   </tbody>
 </table></div>
+<?php
+// ===========================================================================
+elseif ($tab === 'verbindlichkeiten'):
+// ===========================================================================
+$jeLief = kr_op_je_lieferant();
+$offeneRg = kr_liste('offen');
+$verb = kr_op_summe(); $verbUe = kr_op_ueberfaellig_summe();
+?>
+<div class="bx-cards">
+  <?php fkachel('Verbindlichkeiten gesamt', $eur($verb), '#', $verb > 0 ? 'color:var(--warn)' : ''); ?>
+  <?php fkachel('Davon überfällig', $eur($verbUe), '#', $verbUe > 0 ? 'color:var(--err)' : ''); ?>
+  <?php fkachel('Lieferanten mit OP', count($jeLief) ?: '<span class="muted">0</span>', '#'); ?>
+</div>
+<form class="bx-listbar" method="get">
+  <span class="muted" style="align-self:center">Wir schulden Lieferanten</span>
+  <span style="flex:1"></span>
+  <a class="btn btn-ghost btn-sm" href="?p=beleg_export&art=vop">Verbindlichkeiten als CSV</a>
+  <a class="btn btn-primary btn-sm" href="?p=lief_rechnung_neu">+ Eingangsrechnung erfassen</a>
+</form>
+<div class="bx-cards" style="align-items:flex-start">
+  <div class="bx-panel" style="flex:1;min-width:340px">
+    <h2>Offene Beträge je Lieferant</h2>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Lieferant</th><th class="bx-num">Rechnungen</th><th class="bx-num">Offen</th><th class="bx-num">Überfällig</th></tr></thead>
+      <tbody>
+        <?php if (!$jeLief): ?><tr><td colspan="4" class="muted">Keine offenen Verbindlichkeiten.</td></tr><?php endif; ?>
+        <?php foreach ($jeLief as $l): ?>
+          <tr>
+            <td><?= h($l['firma'] ?: '(ohne Lieferant)') ?></td>
+            <td class="bx-num"><?= (int)$l['anz'] ?></td>
+            <td class="bx-num"><?= $eur($l['offen']) ?></td>
+            <td class="bx-num"><?= (float)$l['ueberfaellig'] > 0 ? '<span style="color:var(--err)">' . h($eur($l['ueberfaellig'])) . '</span>' : '<span class="muted">–</span>' ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="bx-panel" style="flex:1;min-width:340px">
+    <h2>Offene Eingangsrechnungen</h2>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Nummer</th><th>Lieferant</th><th>Fällig</th><th class="bx-num">Offen</th></tr></thead>
+      <tbody>
+        <?php if (!$offeneRg): ?><tr><td colspan="4" class="muted">Nichts offen.</td></tr><?php endif; ?>
+        <?php foreach ($offeneRg as $r): $ue = $r['faellig'] && strtotime($r['faellig']) < strtotime(date('Y-m-d')); ?>
+          <tr style="cursor:pointer" onclick="location.href='?p=lief_rechnung&id=<?= (int)$r['id'] ?>'">
+            <td><strong><?= h($r['nummer']) ?></strong><?= $r['lief_nummer'] ? ' <span class="muted">· ' . h($r['lief_nummer']) . '</span>' : '' ?></td>
+            <td><?= h($r['firma'] ?? '') ?></td>
+            <td><?= $r['faellig'] ? ('<span' . ($ue ? ' style="color:var(--err)"' : '') . '>' . h(date('d.m.Y', strtotime($r['faellig']))) . '</span>') : '<span class="muted">–</span>' ?></td>
+            <td class="bx-num"><?= $eur($r['rest']) ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+</div>
 <?php
 // ===========================================================================
 elseif ($tab === 'auswertung'):
@@ -283,6 +344,34 @@ $jahr = (int) date('Y');
     <p class="muted">DATEV-EXTF-Buchungsstapel (Format 700) für den Steuerberater. Konten SKR03-Standard (Einstellungen), <strong>vor Produktiv-Import prüfen</strong>.</p>
     <form class="bx-listbar" method="get" style="margin:0" action="">
       <input type="hidden" name="p" value="beleg_export"><input type="hidden" name="art" value="datev">
+      <label class="muted" style="align-self:center">von</label><input type="date" name="von" value="<?= $jahr ?>-01-01">
+      <label class="muted" style="align-self:center">bis</label><input type="date" name="bis" value="<?= $jahr ?>-12-31">
+      <button class="btn btn-primary btn-sm" type="submit">DATEV-CSV</button>
+    </form>
+  </div>
+</div>
+<h2 style="margin:20px 0 8px">Lieferanten / Verbindlichkeiten</h2>
+<div class="bx-cards" style="align-items:flex-start">
+  <div class="bx-panel" style="flex:1;min-width:320px">
+    <h2>Offene Verbindlichkeiten</h2>
+    <p class="muted">Alle offenen/teilbezahlten Eingangsrechnungen mit Restbetrag und Fälligkeit. CSV (Excel, UTF-8).</p>
+    <a class="btn btn-primary btn-sm" href="?p=beleg_export&art=vop">Verbindlichkeiten herunterladen</a>
+  </div>
+  <div class="bx-panel" style="flex:1;min-width:320px">
+    <h2>Eingangsrechnungen</h2>
+    <p class="muted">Erfasste Lieferanten-Rechnungen eines Zeitraums als CSV (Netto, VSt, Brutto, Lieferant).</p>
+    <form class="bx-listbar" method="get" style="margin:0" action="">
+      <input type="hidden" name="p" value="beleg_export"><input type="hidden" name="art" value="lief_belege">
+      <label class="muted" style="align-self:center">von</label><input type="date" name="von" value="<?= $jahr ?>-01-01">
+      <label class="muted" style="align-self:center">bis</label><input type="date" name="bis" value="<?= $jahr ?>-12-31">
+      <button class="btn btn-primary btn-sm" type="submit">CSV</button>
+    </form>
+  </div>
+  <div class="bx-panel" style="flex:1;min-width:320px">
+    <h2>DATEV (Rechnungseingang)</h2>
+    <p class="muted">DATEV-EXTF-Stapel der Eingangsrechnungen (Wareneingang an Kreditor). Konten SKR03-Standard, <strong>vor Produktiv-Import prüfen</strong>.</p>
+    <form class="bx-listbar" method="get" style="margin:0" action="">
+      <input type="hidden" name="p" value="beleg_export"><input type="hidden" name="art" value="datev_ek">
       <label class="muted" style="align-self:center">von</label><input type="date" name="von" value="<?= $jahr ?>-01-01">
       <label class="muted" style="align-self:center">bis</label><input type="date" name="bis" value="<?= $jahr ?>-12-31">
       <button class="btn btn-primary btn-sm" type="submit">DATEV-CSV</button>
