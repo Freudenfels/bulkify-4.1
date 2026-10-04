@@ -28,6 +28,14 @@ if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
             mb_substr(trim((string)($_POST['versandanbieter'] ?? '')), 0, 60) ?: null,
             array_key_exists((string)($_POST['versandart'] ?? ''), versandart_liste()) ? $_POST['versandart'] : null,
             mb_substr(trim((string)($_POST['tracking'] ?? '')), 0, 120) ?: null, $id, $lid]);
+    } elseif ($aktion === 'pakete_add') {
+        // Mehrere Tracking-Nummern (eine pro Zeile) + optional Anzahl Pakete (falls noch keine Nummern).
+        $r = lieferung_pakete_hinzufuegen($id, (string)($_POST['trackings'] ?? ''), (string)($_POST['spediteur'] ?? ''));
+        $anz = trim((string)($_POST['pakete_angekuendigt'] ?? ''));
+        if ($anz !== '' && ctype_digit($anz)) q("UPDATE bestellung SET pakete_angekuendigt=? WHERE id=? AND lieferant_id=?", [(int)$anz, $id, $lid]);
+        if (($r['neu'] ?? 0) > 0 && mail_bereit()) mail_team_bestellung($id, 'Versand-Pakete gemeldet');
+    } elseif ($aktion === 'paket_del') {
+        lieferung_paket_loeschen((int)($_POST['paket_id'] ?? 0), $id);
     }
     header('Location: ?p=lieferant_bestellung&id=' . $id . ($fehler === '' ? '&ok=1' : '&fehler=' . urlencode($fehler))); exit;
 }
@@ -96,6 +104,47 @@ if (!$b):
       </tbody>
     </table></div>
     <?php if (!empty($b['notiz'])): ?><div class="muted" style="margin-top:10px;white-space:pre-line"><?= h($b['notiz']) ?></div><?php endif; ?>
+  </div>
+
+  <?php // Versand / Pakete: wie viele Kartons schickt der Lieferant und welche Tracking-Nummern.
+    $pakete = lieferung_pakete($id);
+    $pGesamt = count($pakete);
+    $pAngek  = count(array_filter($pakete, fn($p) => (int)$p['angekommen'] === 1));
+    $angekuendigt = (int)($b['pakete_angekuendigt'] ?? 0);
+  ?>
+  <div class="bx-panel">
+    <h2 style="margin:0 0 4px">Versand / Pakete</h2>
+    <p class="muted" style="margin:0 0 12px">Geben Sie an, wie viele Pakete/Kartons Sie schicken und die zugehörigen Tracking-Nummern (eine pro Zeile oder nacheinander scannen). Das Lager gleicht die Pakete beim Eingang damit ab.</p>
+    <?php if ($pGesamt > 0): ?>
+      <p style="margin:0 0 8px"><strong><?= $pAngek ?> / <?= $pGesamt ?></strong> angekommen<?= $angekuendigt > $pGesamt ? ' · angekündigt: ' . $angekuendigt : '' ?></p>
+      <div class="bx-tablewrap" style="margin-bottom:12px"><table class="bx-table">
+        <thead><tr><th>Tracking-Nr.</th><th>Spediteur</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <?php foreach ($pakete as $p): ?>
+            <tr>
+              <td><?= h($p['tracking']) ?></td>
+              <td><?= $p['spediteur'] ? h($p['spediteur']) : '<span class="muted">–</span>' ?></td>
+              <td><?= (int)$p['angekommen'] === 1
+                    ? '<span class="bx-ok">✓ angekommen</span>' . (!empty($p['angekommen_am']) ? ' <span class="muted" style="font-size:12px">· ' . h(fmt_zeit($p['angekommen_am'], 'd.m.Y')) . '</span>' : '')
+                    : '<span class="muted">unterwegs</span>' ?></td>
+              <td style="text-align:right"><?php if ((int)$p['angekommen'] !== 1): ?><form method="post" style="margin:0" onsubmit="return confirm('Diese Tracking-Nummer entfernen?');"><input type="hidden" name="aktion" value="paket_del"><input type="hidden" name="paket_id" value="<?= (int)$p['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">entfernen</button></form><?php endif; ?></td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    <?php elseif ($angekuendigt > 0): ?>
+      <p style="margin:0 0 8px"><strong><?= $angekuendigt ?> Paket(e)</strong> angekündigt – Tracking-Nummern können Sie unten ergänzen.</p>
+    <?php endif; ?>
+    <form method="post" class="bx-form" style="margin:0">
+      <input type="hidden" name="aktion" value="pakete_add">
+      <div class="bx-grid">
+        <div class="bx-field" style="grid-column:1/-1"><label>Tracking-/Sendungsnummern <span class="muted" style="font-weight:400">(eine pro Zeile)</span></label>
+          <textarea name="trackings" rows="4" placeholder="z. B.&#10;1Z999AA10123456784&#10;1Z999AA10123456785"></textarea></div>
+        <div class="bx-field"><label>Spediteur <span class="muted" style="font-weight:400">(optional)</span></label><input type="text" name="spediteur" placeholder="z. B. UPS, DHL, DPD"></div>
+        <div class="bx-field"><label>Anzahl Pakete <span class="muted" style="font-weight:400">(optional, falls Nummern noch fehlen)</span></label><input type="number" name="pakete_angekuendigt" min="0" value="<?= $angekuendigt ?: '' ?>" style="max-width:140px"></div>
+      </div>
+      <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" type="submit">Pakete speichern</button></div>
+    </form>
   </div>
 <?php endif;
 lp_shell_ende(); lp_foot();

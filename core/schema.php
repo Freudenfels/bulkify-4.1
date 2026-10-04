@@ -915,6 +915,22 @@ function init_schema(): void {
     ensure_column('bestellung', 'versandart', "VARCHAR(40) NULL");      // luft | see | kurier | spedition | post
     ensure_column('bestellung', 'tracking', "VARCHAR(120) NULL");
     ensure_column('bestellung', 'angekommen_am', "DATE NULL");          // tatsaechlicher Wareneingang (Team)
+    ensure_column('bestellung', 'pakete_angekuendigt', "INT NULL");     // vom Lieferanten angekuendigte Kartons-/Paketanzahl (falls noch keine Nummern)
+
+    // lieferung_paket: ein Datensatz je Karton/Sendung einer Bestellung. Der Lieferant gibt an, wie
+    // viele Pakete er schickt und welche Tracking-/Sendungsnummern dazugehoeren; das Lager hakt sie
+    // beim Wareneingang per Scan ab (angekommen). „Anzahl Kartons" = Zeilenanzahl je Bestellung.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS lieferung_paket (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        bestellung_id INT          NOT NULL,
+        tracking      VARCHAR(80)  NOT NULL,
+        spediteur     VARCHAR(40)  NULL,
+        angekommen    TINYINT      NOT NULL DEFAULT 0,
+        angekommen_am DATETIME     NULL,
+        angelegt      DATETIME     NOT NULL,
+        UNIQUE KEY uniq_tracking (tracking),
+        KEY best (bestellung_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     // --- Lieferantenzugang ---
     // Kein Magic-Link wie beim Kunden: Lieferanten arbeiten laufend im Tool, deshalb ein echter
@@ -4346,6 +4362,42 @@ function bestellung_bestaetigen(int $bestellung_id, string $eta, string $wer, st
         'Bestellung ' . $b['nummer'] . ' bestätigt für ' . date('d.m.Y', strtotime($eta)) . ' durch ' . trim($wer) . '.', 'bestellung', 'bestellung', $bestellung_id);
     return '';
 }
+// --- Versand-Pakete einer Lieferung (Lieferant meldet Kartons + Tracking-Nummern) ---
+// Alle Pakete einer Bestellung (neueste zuerst). Rückgabe inkl. angekommen/angekommen_am.
+function lieferung_pakete(int $bestellung_id): array {
+    if (!table_exists('lieferung_paket')) return [];
+    return all("SELECT * FROM lieferung_paket WHERE bestellung_id=? ORDER BY (angekommen=1), id", [$bestellung_id]);
+}
+// Mehrere Tracking-Nummern (eine pro Zeile) zu einer Bestellung erfassen. Duplikate (global eindeutig
+// über uniq_tracking) werden übersprungen. Rückgabe ['neu'=>int, 'doppelt'=>int].
+function lieferung_pakete_hinzufuegen(int $bestellung_id, string $trackingBlock, ?string $spediteur = null): array {
+    if (!table_exists('lieferung_paket') || $bestellung_id <= 0) return ['neu' => 0, 'doppelt' => 0];
+    $sp = $spediteur !== null ? (mb_substr(trim($spediteur), 0, 40) ?: null) : null;
+    $neu = 0; $dop = 0; $gesehen = [];
+    foreach (preg_split('/[\r\n]+/', $trackingBlock) as $zeile) {
+        $t = trim($zeile);
+        $t = preg_replace('/\s+/', '', $t);          // Tracking ohne Leerzeichen
+        if ($t === '') continue;
+        $t = mb_substr($t, 0, 80);
+        $key = mb_strtolower($t);
+        if (isset($gesehen[$key])) { $dop++; continue; }
+        $gesehen[$key] = true;
+        if (scalar("SELECT id FROM lieferung_paket WHERE tracking=? LIMIT 1", [$t])) { $dop++; continue; }
+        q("INSERT INTO lieferung_paket (bestellung_id,tracking,spediteur,angelegt) VALUES (?,?,?,?)",
+          [$bestellung_id, $t, $sp, gmdate('Y-m-d H:i:s')]);
+        $neu++;
+    }
+    return ['neu' => $neu, 'doppelt' => $dop];
+}
+// Ein Paket löschen – nur solange es noch nicht angekommen ist und zur Bestellung gehört.
+function lieferung_paket_loeschen(int $paket_id, int $bestellung_id): bool {
+    if (!table_exists('lieferung_paket')) return false;
+    $p = one("SELECT id, angekommen FROM lieferung_paket WHERE id=? AND bestellung_id=?", [$paket_id, $bestellung_id]);
+    if (!$p || (int)$p['angekommen'] === 1) return false;
+    q("DELETE FROM lieferung_paket WHERE id=?", [$paket_id]);
+    return true;
+}
+
 // Angebote gelten standardmäßig 14 Tage (Einstellungen: angebot_gueltig_tage) – ab heute gerechnet.
 function angebot_gueltig_bis_default(): string {
     return date('Y-m-d', strtotime('+' . max(1, (int) meta_get('angebot_gueltig_tage', 14)) . ' days'));
