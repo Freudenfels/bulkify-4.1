@@ -14,7 +14,7 @@ Die Seite ist bewusst **von oben nach unten nach Relevanz** sortiert, damit ein 
 6. **Fertigware eingebucht** + **Teilmenge einbuchen** (wenn relevant).
 7. **Zusammensetzung je Einheit** (Rezeptur).
 8. Einklappbar `<details class="bx-sek">` **„Material, Einkauf & Beschaffung"** (Materialbedarf/entnommen · Einkaufsbedarf · Bestellungen) – bei Zukauf meist leer, deshalb zugeklappt und aus dem Weg.
-9. Einklappbar `<details class="bx-sek">` **„Wareneingänge, Etikett & Details"**.
+9. Einklappbar `<details class="bx-sek">` **„Wareneingänge, Etikett & Details"**. Das **Etikett-Panel** zeigt die **Kundenfreigabe**-Pflicht: freigegeben (ok) bzw. „nicht freigegeben – gesperrt" / „Design fehlt – gesperrt". Ohne Freigabe sind Etiketten nicht bestellbar und die Produktion nicht machbar. Team kann eine extern (Mail/Telefon) erteilte Freigabe manuell bestätigen (`aktion=etikett_freigeben_team` → `etikett_freigabe_setzen(..., 'team')`). Upload/Löschen eines Designs setzt die Freigabe zurück.
 
 Die eingeklappten Sektionen (`.bx-sek`) haben einen eigenen seitenlokalen `<style>` (Dreieck-Marker, grüne Zusammenfassung). So bleibt die Seite ruhig, ohne dass Funktionen verloren gehen – jedes alte Panel (inkl. aller POST-Handler) steckt weiterhin drin, nur neu angeordnet.
 

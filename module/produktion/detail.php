@@ -57,6 +57,13 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?
     }
     header('Location: ?p=produktionsauftrag&id=' . $id . '&etikett=1'); exit;
 }
+// Team bestätigt die Etikettenfreigabe manuell (Freigabe kam z. B. per Mail/Telefon statt übers Portal).
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_freigeben_team') {
+    $aid = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$id]);
+    $name = trim((string)($_POST['freigabe_name'] ?? ''));
+    if ($aid) etikett_freigabe_setzen($aid, $name !== '' ? $name : 'Kunde (Team bestätigt)', 'team');
+    header('Location: ?p=produktionsauftrag&id=' . $id . '&etikett=1'); exit;
+}
 // 1-Klick: Bestellungen aus dem Fehlbedarf anlegen
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bedarf_bestellen') {
     $neu = bestellung_aus_bedarf($id);
@@ -573,10 +580,18 @@ if ($zugeChargen):
 ob_start();
 $etHatSlot = (int) scalar("SELECT etikett_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) > 0;
 $etDok = $pa['auftrag_id'] ? etikett_datei((int)$pa['auftrag_id']) : null;
+$etFrei = $pa['auftrag_id'] ? etikett_freigegeben((int)$pa['auftrag_id']) : false;
+$etFa   = $etFrei ? one("SELECT etikett_freigabe_am, etikett_freigabe_von FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]) : null;
 if ($etHatSlot):
+  $etStatusBadge = $etFrei ? bx_badge('freigegeben','ok') : ($etDok ? bx_badge('nicht freigegeben – gesperrt','warn') : bx_badge('Design fehlt – gesperrt','warn'));
 ?>
-<div class="bx-panel"<?= $etDok ? '' : ' style="border-color:#e6c4c0"' ?>>
-  <h2 style="margin-top:0">Etikett-Design <?= $etDok ? bx_badge('vorhanden','ok') : bx_badge('fehlt – Etikett nicht bestellbar','warn') ?></h2>
+<div class="bx-panel"<?= $etFrei ? '' : ' style="border-color:#e6c4c0"' ?>>
+  <h2 style="margin-top:0">Etikett <?= $etStatusBadge ?></h2>
+  <?php if ($etFrei): ?>
+    <p style="margin:0 0 8px"><strong>Vom Kunden freigegeben</strong><?= !empty($etFa['etikett_freigabe_am']) ? ' am ' . h(fmt_zeit($etFa['etikett_freigabe_am'], 'd.m.Y')) : '' ?><?= !empty($etFa['etikett_freigabe_von']) ? ' durch ' . h($etFa['etikett_freigabe_von']) : '' ?>.</p>
+  <?php else: ?>
+    <p style="margin-top:0;color:#8f231b">Ohne <strong>Freigabe des Kunden</strong> können die Etiketten nicht bestellt und die Produktion nicht gestartet werden. Der Kunde gibt das Etikett im Portal frei – oder bestätige hier eine Freigabe, die anderweitig (Mail/Telefon) erteilt wurde.</p>
+  <?php endif; ?>
   <?php if ($etDok): ?>
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><a href="?p=dokument&id=<?= (int)$etDok['id'] ?>" target="_blank"><?= h($etDok['datei_orig'] ?: 'Etikett-Design') ?></a> <span class="muted">· hochgeladen <?= h(fmt_zeit($etDok['angelegt'], 'd.m.Y')) ?></span></div>
@@ -586,8 +601,15 @@ if ($etHatSlot):
       </div>
     </div>
   <?php else: ?>
-    <p class="muted" style="margin-top:0">Das Etikett ist kundenspezifisch und kann erst bestellt werden, wenn das Design vorliegt. Der Kunde kann es im Portal hochladen – oder lade die vom Kunden erhaltene Datei hier hoch.</p>
+    <p class="muted" style="margin:0 0 8px">Der Kunde kann das Etikett im Portal hochladen – oder lade die vom Kunden erhaltene Datei hier hoch.</p>
     <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-primary btn-sm" type="submit">Etikett-Design hochladen</button></form>
+  <?php endif; ?>
+  <?php if (!$etFrei): ?>
+    <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:10px 0 0;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:10px">
+      <input type="hidden" name="aktion" value="etikett_freigeben_team">
+      <input type="text" name="freigabe_name" placeholder="Name der freigebenden Person (Kunde)" style="padding:7px 10px;border:1px solid var(--line);border-radius:8px;min-width:230px">
+      <button class="btn btn-ghost btn-sm" type="submit">Freigabe des Kunden bestätigen</button>
+    </form>
   <?php endif; ?>
 </div>
 <?php endif; $panEtikett = ob_get_clean();

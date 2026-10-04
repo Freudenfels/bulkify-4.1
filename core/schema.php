@@ -1188,6 +1188,11 @@ function init_schema(): void {
     ensure_column('auftrag', 'produkt_bezeichnung', "VARCHAR(190) NULL");  // Fallback-Produktname, wenn kein produkt_id (v3-Import ohne verknuepftes Produkt)
     ensure_column('auftrag', 'produkt_form', "VARCHAR(20) NULL");          // Fallback-Darreichungsform dazu (kapsel|tablette|pulver|…)
     ensure_column('auftrag', 'import_ref', "VARCHAR(60) NULL");            // Referenz der importierten Alt-Rechnung/-AB (Dedup beim PDF-Import)
+    // Etikettenfreigabe durch den Kunden – PFLICHT je Auftrag, auch bei Nachbestellung mit altem Etikett.
+    // Ohne Freigabe: Etiketten nicht bestellbar + Produktion nicht machbar (harte Sperre).
+    ensure_column('auftrag', 'etikett_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('auftrag', 'etikett_freigabe_am', "DATETIME NULL");
+    ensure_column('auftrag', 'etikett_freigabe_von', "VARCHAR(190) NULL");
     // Einmalige Reparatur: 4 v3-importierte Zukauf-Auftraege (Annapurna) kamen ohne verknuepftes Produkt an.
     // Name/Form aus der v3-Datenbank (board.sqlite) hier fest hinterlegt – gezielt per Auftragsnummer, idempotent.
     if (meta_get('fix_auftrag_produkt_v3', '') !== '1') {
@@ -5180,11 +5185,68 @@ function etikett_upload(int $auftrag_id, string $feld = 'etikett'): bool {
     if (!move_uploaded_file($_FILES[$feld]['tmp_name'], BX_UPLOADS . '/' . $fn)) return false;
     q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig) VALUES ('auftrag',?,?,?,?,?)",
       [$auftrag_id, 'etikett', 'Etikett-Design', $fn, $orig]);
+    // Neues Design → bisherige Freigabe gilt nicht mehr, das neue muss erneut freigegeben werden.
+    etikett_freigabe_zuruecksetzen($auftrag_id);
     return true;
 }
 function etikett_del(int $auftrag_id): void {
     $d = etikett_datei($auftrag_id);
     if ($d) { @unlink(BX_UPLOADS . '/' . basename((string)$d['datei'])); q("DELETE FROM dokument WHERE id=?", [(int)$d['id']]); }
+    etikett_freigabe_zuruecksetzen($auftrag_id);
+}
+
+// --- Etikettenfreigabe (Kunde) -------------------------------------------------
+// Braucht dieser Auftrag überhaupt ein Etikett? (nur Produkte mit Etikett-Slot). Ohne Produkt/Slot = nein.
+function auftrag_braucht_etikett(int $auftrag_id): bool {
+    $eid = scalar("SELECT p.etikett_id FROM auftrag a JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    return $eid !== null && (int)$eid > 0;
+}
+// Hat der Kunde das Etikett für DIESEN Auftrag freigegeben?
+function etikett_freigegeben(int $auftrag_id): bool {
+    return (int) scalar("SELECT etikett_freigegeben FROM auftrag WHERE id=?", [$auftrag_id]) === 1;
+}
+// Das für die Freigabe relevante Etikett-Design: eigenes des Auftrags – sonst (Nachbestellung) das
+// zuletzt verwendete Etikett eines FRÜHEREN Auftrags desselben Kunden+Produkts. Rückgabe dokument-Zeile
+// plus 'alt' (bool: stammt aus einem früheren Auftrag) und 'quell_auftrag_id'.
+function etikett_quelle(int $auftrag_id): ?array {
+    $own = etikett_datei($auftrag_id);
+    if ($own) { $own['alt'] = false; $own['quell_auftrag_id'] = $auftrag_id; return $own; }
+    $a = one("SELECT kunde_id, produkt_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a || empty($a['produkt_id'])) return null;
+    $alt = one("SELECT d.* FROM dokument d JOIN auftrag a2 ON a2.id=d.objekt_id
+                WHERE d.objekt_typ='auftrag' AND d.typ='etikett' AND a2.produkt_id=? AND a2.kunde_id=? AND a2.id<>?
+                ORDER BY d.id DESC LIMIT 1", [(int)$a['produkt_id'], (int)$a['kunde_id'], $auftrag_id]);
+    if (!$alt) return null;
+    $alt['alt'] = true; $alt['quell_auftrag_id'] = (int)$alt['objekt_id'];
+    return $alt;
+}
+// Freigabe setzen (durch den Kunden bzw. vom Team manuell bestätigt). Übernimmt bei einer
+// Nachbestellung ohne eigenes Design das alte Etikett auf diesen Auftrag (als dessen freigegebenes
+// Design). Rückgabe ['ok'=>bool, 'fehler'=>?].
+function etikett_freigabe_setzen(int $auftrag_id, string $name, string $akteur = 'kunde'): array {
+    $name = trim($name);
+    if ($name === '') return ['ok' => false, 'fehler' => 'Bitte einen Namen für die Freigabe angeben.'];
+    if (!auftrag_braucht_etikett($auftrag_id)) return ['ok' => false, 'fehler' => 'Für diesen Auftrag ist kein Etikett nötig.'];
+    if (!etikett_datei($auftrag_id)) {
+        $alt = etikett_quelle($auftrag_id);
+        if (!$alt) return ['ok' => false, 'fehler' => 'Kein Etikett-Design vorhanden – bitte zuerst hochladen.'];
+        // Altes Etikett als Design DIESES Auftrags übernehmen (Datei kopieren, neue dokument-Zeile).
+        $src = BX_UPLOADS . '/' . basename((string)$alt['datei']);
+        $ext = strtolower(pathinfo((string)$alt['datei'], PATHINFO_EXTENSION));
+        $fn  = 'auftrag_' . $auftrag_id . '_etikett_' . bin2hex(random_bytes(6)) . ($ext ? '.' . $ext : '');
+        if (is_file($src)) @copy($src, BX_UPLOADS . '/' . $fn);
+        q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig) VALUES ('auftrag',?,'etikett',?,?,?)",
+          [$auftrag_id, 'Etikett-Design (aus Vorbestellung übernommen)', $fn, (string)($alt['datei_orig'] ?: 'Etikett-Design')]);
+    }
+    q("UPDATE auftrag SET etikett_freigegeben=1, etikett_freigabe_am=UTC_TIMESTAMP(), etikett_freigabe_von=? WHERE id=?",
+      [mb_substr($name, 0, 190), $auftrag_id]);
+    $kid = (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    log_aktivitaet('kunde', $kid, $akteur, 'Etikett zur Produktion freigegeben durch ' . $name . ($akteur === 'team' ? ' (vom Team bestätigt)' : '') . '.', 'auftrag', 'auftrag', $auftrag_id);
+    return ['ok' => true];
+}
+// Freigabe zurücknehmen (z. B. wenn ein neues Design hochgeladen wird → muss erneut freigegeben werden).
+function etikett_freigabe_zuruecksetzen(int $auftrag_id): void {
+    q("UPDATE auftrag SET etikett_freigegeben=0, etikett_freigabe_am=NULL, etikett_freigabe_von=NULL WHERE id=?", [$auftrag_id]);
 }
 // Liest die Seitenmaße einer Druckdatei. PDF → aus /MediaBox in mm ('210 × 297 mm'); Bild → Pixel. Sonst null.
 function pdf_masse(string $pfad): ?array {
@@ -5251,7 +5313,8 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
             $a['stock'] = 0.0;
             $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status<>'geliefert'", [$a['item_id'], $aid]);
             $a['zu_bestellen'] = max(0.0, $a['need'] - $a['bestellt']);
-            $a['etikett_ok'] = etikett_vorhanden($aid);
+            // Etiketten erst bestellbar, wenn der Kunde das Etikett freigegeben hat (nicht nur hochgeladen).
+            $a['etikett_ok'] = etikett_freigegeben($aid);
         } else {
             $a['stock'] = item_bestand($a['item_id'], true);
             $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND b.status<>'geliefert'", [$a['item_id']]);

@@ -154,11 +154,11 @@ if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padd
           $ei = $istEtikett ? etikett_info((int)$a['auftrag_id']) : null;
       ?>
         <tr<?= $gesperrt ? ' style="opacity:.75"' : '' ?>>
-          <td><?php if ($gesperrt): ?><span title="Etikett-Design fehlt – erst hochladen">&#128274;</span><?php else: ?><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"><?php endif; ?></td>
+          <td><?php if ($gesperrt): ?><span title="Etikett noch nicht vom Kunden freigegeben">&#128274;</span><?php else: ?><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"><?php endif; ?></td>
           <td><?= h($a['name']) ?>
             <?php if ($istEtikett): ?>
-              <?php if ($gesperrt): ?> <?= bx_badge('wartet auf Etikett-Design','warn') ?>
-              <?php else: ?> <?= bx_badge('Design ✓','ok') ?>
+              <?php if ($gesperrt): ?> <?= bx_badge('wartet auf Kunden-Freigabe','warn') ?>
+              <?php else: ?> <?= bx_badge('freigegeben ✓','ok') ?>
                 <?php if (!empty($ei['dok'])): ?> <a href="?p=dokument&id=<?= (int)$ei['dok']['id'] ?>" target="_blank" title="Etikett-Design herunterladen" style="white-space:nowrap;text-decoration:none">&#11015;&#65039; Etikett</a><?php endif; ?>
               <?php endif; ?>
               <?php if (!empty($ei['produkt'])): ?><div class="muted" style="font-size:11px">Produkt: <?= h($ei['produkt']) ?></div><?php endif; ?>

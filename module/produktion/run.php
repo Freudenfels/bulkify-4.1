@@ -52,11 +52,14 @@ if (!$id) {
       <?php foreach ($offene as $o):
           $done = (int)$o['n_done']; $tot = max(1, (int)$o['n_total']);
           $ber  = produktion_bereitschaft((int)$o['id'])['status'];   // bereit|wartet|laeuft|fertig
-          // Etikett-Design: Produkt mit Etikett-Slot braucht die Kundendatei, sonst nicht etikettierbar.
-          $etFehlt = !empty($o['etikett_id']) && !empty($o['auftrag_id']) && !etikett_vorhanden((int)$o['auftrag_id']);
+          // Etikett: Produkt mit Etikett-Slot braucht die KUNDENFREIGABE (nicht nur ein Design), sonst gesperrt.
+          $etNoetig  = !empty($o['etikett_id']) && !empty($o['auftrag_id']);
+          $etFrei    = $etNoetig && etikett_freigegeben((int)$o['auftrag_id']);
+          $etFehlt   = $etNoetig && !$etFrei;
+          $etDesignDa = $etNoetig && etikett_vorhanden((int)$o['auftrag_id']);
           $machbar = ($ber !== 'wartet') && !$etFehlt;
           if ($ber === 'wartet')      { $mLbl = bx_badge('wartet auf Material','warn'); }
-          elseif ($etFehlt)           { $mLbl = bx_badge('Etikett-Design fehlt','warn'); }
+          elseif ($etFehlt)           { $mLbl = bx_badge($etDesignDa ? 'Etikett nicht freigegeben' : 'Etikett fehlt','warn'); }
           elseif ($ber === 'laeuft')  { $mLbl = bx_badge('in Produktion','info'); }
           else                        { $mLbl = bx_badge('produzierbar','ok'); }
           $statusLbl = $done > 0 ? bx_badge('läuft','warn') : bx_badge('offen','info');
@@ -79,7 +82,7 @@ if (!$id) {
       </tbody>
     </table></div>
     </div>
-    <p class="muted" style="font-size:12px;margin-top:10px">Sortiert nach <strong>Priorität</strong>, dann <strong>Eingangsdatum (FIFO)</strong>. Ausgegraut = <strong>noch nicht machbar</strong> (fehlendes Material – inkl. Leerkapseln/Etiketten – oder fehlendes Etikett-Design). Im Auftrag steht, was fehlt.</p>
+    <p class="muted" style="font-size:12px;margin-top:10px">Sortiert nach <strong>Priorität</strong>, dann <strong>Eingangsdatum (FIFO)</strong>. Ausgegraut = <strong>noch nicht machbar</strong> (fehlendes Material – inkl. Leerkapseln/Etiketten – oder <strong>Etikett vom Kunden noch nicht freigegeben</strong>). Im Auftrag steht, was fehlt.</p>
     <?php
     unset($GLOBALS['bx_stock_cache']);
     render_footer();

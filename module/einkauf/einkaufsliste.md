@@ -4,6 +4,8 @@ Die ans Einkauf **gemeldeten** Bedarfe (`produktionsauftrag.bedarf_gemeldet`), g
 
 **Typ-Reiter** (`.settabs`, `?typ=`): Alle · Etiketten · Verpackung · Rohstoffe · Fertige Produkte · **Nachbestellung** · Betriebsmittel-Kategorien. Tabelle mit Auswahl-Checkbox je Artikel + Σ benötigt / auf Lager / offen bestellt / zu bestellen / Aufträge. Quelle `bedarf_aggregiert(true)` (nur gemeldet + Eigenproduktion).
 
+**Etikett-Sperre:** Etiketten-Positionen sind erst bestellbar, wenn der Kunde das Etikett des Auftrags **freigegeben** hat (`etikett_ok = etikett_freigegeben($auftrag_id)`). Ohne Freigabe: Schloss-Symbol + Badge „wartet auf Kunden-Freigabe", keine Auswahl-Checkbox.
+
 **Nachbestellung (Meldebestand):** `meldebestand_bedarf()` listet Lagerartikel, deren **freier Bestand + offen Bestelltes** unter den gepflegten **Meldebestand** (`item.mindestbestand`) gefallen ist. Zeilen-Key `nach:<item_id>`, editierbare Menge (Vorschlag = Meldebestand − (Lager+offen)), Lieferant vorbelegt mit Hauptlieferant. Beim Bestellen als normale **Lagerposition ohne Auftragsbezug** (`bestellung_erstellen`, `auftrag_id` NULL). Von Mitarbeitern gemeldete freie Artikel (`freibedarf`, u. a. über `?p=bedarf`) erscheinen im passenden Typ-Reiter und zeigen „gemeldet von …".
 
 **Bestellen:** Artikel auswählen, **Lieferant + Bestelldatum** wählen → `bestellung_aus_positionen($mengen,$lieferant,$datum)`: EINE gebündelte Bestellung (mit Datum = Status „bestellt", ohne = Entwurf), in jeden betroffenen Auftrag wird der Bestellvermerk geschrieben (`log_aktivitaet`).
