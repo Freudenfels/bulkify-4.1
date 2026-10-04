@@ -306,14 +306,13 @@ if ($gebucht):
             <?php foreach ($kunden as $k): ?><option value="<?= (int)$k['id'] ?>"><?= h((string)$k['firma']) ?></option><?php endforeach; ?>
           </select>
         </div>
-        <div class="bx-field" style="margin:0;min-width:220px"><label>Lieferant <span class="muted">(optional)</span></label>
-          <select name="lieferant_id" id="weLief">
-            <option value="">– keiner –</option>
-            <?php foreach ($liefers as $lf): ?><option value="<?= (int)$lf['id'] ?>"><?= h((string)$lf['firma']) ?></option><?php endforeach; ?>
-          </select>
-          <input type="hidden" name="lieferant_name" id="weLiefName" value="">
+        <div class="bx-field" style="margin:0;min-width:220px"><label>Lieferant <span class="muted">(optional – tippen, neue werden angelegt)</span></label>
+          <input type="text" name="lieferant_name" id="weLiefName" list="weLiefList" autocomplete="off" placeholder="Lieferant suchen oder neu eingeben">
           <input type="hidden" name="auftrag_nr" id="weAuftragNr" value="">
         </div>
+        <datalist id="weLiefList">
+          <?php foreach ($liefers as $lf): ?><option value="<?= h((string)$lf['firma']) ?>"></option><?php endforeach; ?>
+        </datalist>
         <?php if ($kisten): ?>
         <div class="bx-field" style="margin:0;min-width:240px;flex:1 1 240px"><label>Kiste <span class="muted">(optional – tippen oder Barcode scannen)</span></label>
           <input type="text" id="weKisteSuche" list="weKisteList" autocomplete="off" placeholder="Kiste suchen oder Barcode scannen">
@@ -567,17 +566,8 @@ if ($gebucht):
     fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
       scanBtn.disabled=false;
       if(!j.ok){ info.textContent='Fehler: '+(j.fehler||'unbekannt'); return; }
-      // Lieferant vorbelegen: im Dropdown auswählen (neu angelegten ergänzen) + Namen für den Fallback merken.
-      if(j.kopf.lieferant){
-        var lsel=document.getElementById('weLief'), lid=String(j.kopf.lieferant_id||'');
-        if(lsel){
-          if(lid && !lsel.querySelector('option[value="'+lid+'"]')){
-            var o=document.createElement('option'); o.value=lid; o.textContent=j.kopf.lieferant; lsel.appendChild(o);
-          }
-          if(lid) lsel.value=lid;
-        }
-        var lname=document.getElementById('weLiefName'); if(lname) lname.value=j.kopf.lieferant;
-      }
+      // Lieferant vorbelegen: Namen ins Feld (wird beim Buchen gefunden oder neu angelegt).
+      if(j.kopf.lieferant){ var lname=document.getElementById('weLiefName'); if(lname) lname.value=j.kopf.lieferant; }
       var an=document.getElementById('weAuftragNr'); if(an) an.value=j.kopf.auftrag_nr||'';
       info.textContent = (j.kopf.lieferant?('Lieferant: '+j.kopf.lieferant+'  '):'') + (j.positionen.length+' Position(en) erkannt');
       rows.innerHTML='';

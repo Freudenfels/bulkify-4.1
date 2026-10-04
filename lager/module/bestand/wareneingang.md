@@ -22,7 +22,9 @@ Ist eine Kiste gewählt, wird jede gebuchte Charge per `kiste_charge_zuordnen()`
 **Blinker je Position ist optional** (die Kiste blinkt beim Finden). Ohne Kiste bleibt der Blinker Pflicht.
 
 **Lieferschein-Scan** erfasst zusätzlich Lieferanten-**Art.-Nr.** je Position und die **Auftragsnummer**
-(beides in die Charge-Notiz), legt den **Lieferanten** an/verknüpft ihn und erfindet **keine Charge** mehr.
+(beides in die Charge-Notiz), legt den **Lieferanten** an/verknüpft ihn und erfindet **keine Charge** mehr. Das Lieferant-Feld ist eine
+Eingabe mit Vorschlagsliste (datalist): bestehende wählen ODER **neuen Namen tippen** → wird beim Buchen über
+`erp_lieferant_finden_oder_anlegen()` gefunden (exakt/fuzzy) oder **neu angelegt** (mit Lieferantennummer).
 **Sendungs-/Paketnummer** (Tracking) wird je Charge gespeichert (`lg_tracking_set`).
 
 **Status** wird beim Einbuchen gewählt (`status`: Freigegeben = Standard / Quarantäne / Gesperrt) und an
