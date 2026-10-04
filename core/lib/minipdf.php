@@ -10,6 +10,7 @@ class MiniPDF
     private $pages = [];
     private $buf = '';
     private $images = [];
+    private $watermark = null;   // ['text','opacity','size','color'] – über jede Seite gelegt
 
     public function __construct()
     {
@@ -156,6 +157,41 @@ class MiniPDF
         );
     }
 
+    // Legt ein diagonal gekacheltes, halbtransparentes Text-Wasserzeichen ueber JEDE Seite.
+    // Wird in output() auf jede Seite angewendet (zuletzt gezeichnet = sichtbar "ueber" dem Inhalt).
+    public function watermark(string $text, float $opacity = 0.09, float $size = 24, array $color = [150, 150, 150]): void
+    {
+        $this->watermark = [
+            'text'    => $text,
+            'opacity' => max(0.01, min(1.0, $opacity)),
+            'size'    => $size,
+            'color'   => $color,
+        ];
+    }
+
+    // Baut den Content-Stream des Wasserzeichens (gedreht, gekachelt).
+    private function watermarkStream(): string
+    {
+        if (!$this->watermark) {
+            return '';
+        }
+        $wm  = $this->watermark;
+        $txt = $this->esc($this->enc($wm['text']));
+        $ang = 32 * M_PI / 180;            // Diagonal von links-unten nach rechts-oben
+        $c   = cos($ang);
+        $s   = sin($ang);
+        $out = "q /GSwm gs " . $this->col($wm['color']) . " rg BT " . sprintf('/F2 %.2F Tf', $wm['size']) . "\n";
+        // Raster ueber die ganze Seite (y von unten gemessen, dekorativ – keine py()-Umrechnung noetig).
+        for ($y = 40; $y < $this->h - 10; $y += 140) {
+            $offset = ((int)(($y - 40) / 140) % 2) ? 95 : 0;   // versetzte Reihen
+            for ($x = -40 + $offset; $x < $this->w; $x += 200) {
+                $out .= sprintf("%.4F %.4F %.4F %.4F %.2F %.2F Tm (%s) Tj\n", $c, $s, -$s, $c, $x, $y, $txt);
+            }
+        }
+        $out .= "ET Q\n";
+        return $out;
+    }
+
     // Registriert ein JPEG-Bild (Bytes + Pixelmaße) und liefert seine ID.
     public function registerJpeg(string $data, int $w, int $h): int
     {
@@ -195,6 +231,10 @@ class MiniPDF
         if ($xobjRes !== '') {
             $resources .= " /XObject << " . trim($xobjRes) . " >>";
         }
+        if ($this->watermark) {
+            $op = sprintf('%.3F', $this->watermark['opacity']);
+            $resources .= " /ExtGState << /GSwm << /ca $op /CA $op >> >>";
+        }
 
         $num = 5 + count($this->images);
         $contentNums = [];
@@ -208,8 +248,10 @@ class MiniPDF
         foreach ($pageNums as $pn) { $kids[] = $pn . ' 0 R'; }
         $objs[2] = "<< /Type /Pages /Kids [" . implode(' ', $kids) . "] /Count $n >>";
 
-        $mb = sprintf("[0 0 %.2F %.2F]", $this->w, $this->h);
+        $mb  = sprintf("[0 0 %.2F %.2F]", $this->w, $this->h);
+        $wmS = $this->watermarkStream();   // leer, wenn kein Wasserzeichen gesetzt
         foreach ($this->pages as $i => $content) {
+            $content .= $wmS;              // zuletzt gezeichnet -> liegt sichtbar ueber dem Inhalt
             $len = strlen($content);
             $objs[$contentNums[$i]] = "<< /Length $len >>\nstream\n" . $content . "endstream";
             $objs[$pageNums[$i]] = "<< /Type /Page /Parent 2 0 R /MediaBox $mb "

@@ -151,6 +151,7 @@ function build_spec_pdf(int $item_id): ?string {
     if (!$it) return null;
     $L = 40; $R = 555;
     $p = new MiniPDF();
+    $p->watermark('bulkify');
     $y = spec_kopf($p, 'PRODUKTSPEZIFIKATION', 'Product Specification · ' . (string)$it['name']);
     $fmtD = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '';
 
@@ -225,6 +226,7 @@ function build_coa_pdf(int $charge_id): ?string {
     if (!$c) return null;
     $L = 40; $R = 555;
     $p = new MiniPDF();
+    $p->watermark('bulkify');
     $y = spec_kopf($p, 'ANALYSENZERTIFIKAT', 'Certificate of Analysis · ' . (string)$c['item_name']);
     $fmtD = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '–';
     $num  = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
