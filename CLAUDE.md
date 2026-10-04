@@ -17,10 +17,12 @@ Clean-Slate-Neuaufbau des bulkify-ERP (Nahrungsergänzungs-Lohnhersteller, Marke
 - **Produktion** unter `/produktion/` - Produktions-Arbeitsplatz (Werk/Shop-Floor), eigener Code-Chat.
   Gleiches Muster: eigene Sitzung `BXPROD`, **alle** Dashboard-Zugriffe nur in `produktion/core/erp.php`
   (Stand: liest nur; Schritt-Abschluss ist offener Ausbaupunkt). Details: `produktion/PRODUKTION.md`.
-- **Buchhaltung** - **wird eigenes Programm** `/buchhaltung/` (eigene Sitzung/Login, Naht
-  `buchhaltung/core/erp.php`), wie CRM/Lager/Produktion – Entscheidung Nico 2026-10-04. Liegt aktuell noch
-  im Dashboard (Rolle `finance`, `module/beleg/*` + `module/buchhaltung/*` + `core/buchhaltung|kreditor|erechnung|pdf_beleg|pdf_rechnung`);
-  Migration + Zielarchitektur in `BUCHHALTUNG.md`. `beleg_firma()` bleibt im Dashboard-`core` (quer genutzt).
+- **Buchhaltung** unter `/buchhaltung/` - **eigenes Programm** (eigene Sitzung `BXBUCH`, eigener Login,
+  Rolle `finance`/`admin`), wie CRM/Lager/Produktion. Code in `buchhaltung/core/` + `buchhaltung/module/`,
+  Front Controller `public/buchhaltung/index.php`. **Alle** Zugriffe auf geteilte Dashboard-Tabellen nur in
+  `buchhaltung/core/erp.php`. Finanz-eigene Tabellen (beleg*, zahlung, lieferant_rechnung/_zahlung, guthaben_bewegung)
+  verwaltet die Buchhaltung; das Dashboard **liest** sie weiter. `beleg_firma()`/PDF-Helfer + `ki.php` bleiben im
+  Dashboard-`core` (quer genutzt) und liegen als Kopie in `buchhaltung/core`. Details: `BUCHHALTUNG.md`.
 
 ## Lokal starten
 ```

@@ -1,0 +1,2 @@
+# erp.php — DIE NAHT der Buchhaltung
+Alle Zugriffe auf GETEILTE Dashboard-Tabellen gebündelt: benutzer (Login, nur Lesen: erp_benutzer*_), app_meta (meta_get/meta_set), nummernkreis (naechste_nummer/nummer_zurueckgeben — EINE Quelle), aktivitaet (log_aktivitaet). Finanz-eigene Tabellen stehen NICHT hier (schema.php/finanz.php). Wer eine geteilte Spalte umbenennt, prüft genau diese Datei. Muster wie produktion/core/erp.php.

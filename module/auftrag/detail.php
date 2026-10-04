@@ -290,11 +290,11 @@ echo '</div>';
     <div><div class="k muted">Rezeptur</div><div><?php if ($rezeptur): ?><a href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>"><?= h($rezeptur['nummer']) ?></a><?= $rezeptur['name'] ? ' · ' . h($rezeptur['name']) : '' ?><?php else: ?>–<?php endif; ?></div></div>
     <div><div class="k muted">Aus Angebot</div><div><?php if ($a['angebot_id']): ?><a href="?p=angebot&id=<?= (int)$a['angebot_id'] ?>"><?= h($a['angebot_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
     <?php if (!empty($a['kontingent_id'])): ?><div><div class="k muted">Herkunft</div><div><a href="?p=kontingente" title="Abruf aus einem Jahresabnahmevertrag"><?= bx_badge('aus Jahresvertrag','info') ?></a></div></div><?php endif; ?>
-    <div><div class="k muted">Rechnung</div><div><?php if ($rechnung): ?><a href="?p=rechnung&id=<?= (int)$rechnung['id'] ?>"><?= h($rechnung['nummer']) ?></a> · <?= $eur($rechnung['brutto']) ?> · <?php
+    <div><div class="k muted">Rechnung</div><div><?php if ($rechnung): ?><a href="/buchhaltung/?p=rechnung&id=<?= (int)$rechnung['id'] ?>"><?= h($rechnung['nummer']) ?></a> · <?= $eur($rechnung['brutto']) ?> · <?php
         $rst = $rechnungZs['status'] ?? $rechnung['status'];
         echo match ($rst) { 'bezahlt'=>bx_badge('bezahlt','ok'), 'teilbezahlt'=>bx_badge('teilbezahlt','info'), 'storniert'=>bx_badge('storniert','err'), default=>bx_badge('offen','warn') };
         if ($rst === 'teilbezahlt') echo ' <span class="muted" style="font-size:12px">offen ' . $eur($rechnungZs['rest']) . '</span>';
-      ?> · <a href="?p=rechnung&id=<?= (int)$rechnung['id'] ?>" style="font-size:12px">Zahlung erfassen</a><?php else: ?><a class="btn btn-primary btn-sm" href="?p=rechnung_neu&auftrag=<?= (int)$id ?>">Rechnung erstellen</a><?php endif; ?></div></div>
+      ?> · <a href="/buchhaltung/?p=rechnung&id=<?= (int)$rechnung['id'] ?>" style="font-size:12px">Zahlung erfassen</a><?php else: ?><a class="btn btn-primary btn-sm" href="/buchhaltung/?p=rechnung_neu&auftrag=<?= (int)$id ?>">Rechnung erstellen</a><?php endif; ?></div></div>
   </div>
 </div>
 
@@ -442,7 +442,7 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
   <?php if (isset($_GET['altre'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Rechnung hochgeladen.<?php if (isset($_GET['betrag'])): ?> Betrag <strong><?= h((string)$_GET['betrag']) ?> €</strong> aus der Rechnung übernommen.<?php elseif (isset($_GET['betragn'])): ?> <span class="muted">Kein Betrag erkannt oder Preis bereits gesetzt – Preis ggf. unten von Hand eintragen.</span><?php endif; ?></div><?php endif; ?>
   <?php if (isset($_GET['altredel'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Rechnung gelöscht.</div><?php endif; ?>
   <?php if ($hatV4Rechnung): ?>
-    <p class="muted" style="margin-top:0">Für diesen Auftrag gibt es bereits eine v4-Rechnung (<a href="?p=rechnung&id=<?= (int)$rechnung['id'] ?>"><?= h($rechnung['nummer']) ?></a>) – Zahlungen bitte dort erfassen. Das manuelle „bezahlt am" unten ist nur für Alt-Aufträge ohne echte Rechnung gedacht.</p>
+    <p class="muted" style="margin-top:0">Für diesen Auftrag gibt es bereits eine v4-Rechnung (<a href="/buchhaltung/?p=rechnung&id=<?= (int)$rechnung['id'] ?>"><?= h($rechnung['nummer']) ?></a>) – Zahlungen bitte dort erfassen. Das manuelle „bezahlt am" unten ist nur für Alt-Aufträge ohne echte Rechnung gedacht.</p>
   <?php endif; ?>
   <?php if (!empty($a['bezahlt_am'])): ?>
     <div style="margin-bottom:10px"><?= bx_badge('bezahlt','ok') ?> <span class="muted">am <?= h(date('d.m.Y', strtotime((string)$a['bezahlt_am']))) ?><?= ($a['bezahlt_betrag'] ?? null) !== null ? ' · ' . $eur($a['bezahlt_betrag']) : '' ?></span></div>

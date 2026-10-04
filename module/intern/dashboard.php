@@ -33,7 +33,7 @@ kachel('Neue Anfragen', $anfragen_neu ?: '<span class="muted">0</span>', '?p=anf
 kachel('Offene Angebote', $angebote_offen ?: '<span class="muted">0</span>', '?p=angebote');
 kachel('In Produktion', $prod_offen ?: '<span class="muted">0</span>', '?p=produktion');
 kachel('Versandbereit', $versandbereit ?: '<span class="muted">0</span>', '?p=versand', $versandbereit ? 'color:var(--gruen)' : '');
-kachel('Offene Posten', $offene_posten > 0 ? number_format($offene_posten,2,',','.').' €' : '<span class="muted">0 €</span>', '?p=rechnungen', $offene_posten > 0 ? 'color:var(--warn)' : '');
+kachel('Offene Posten', $offene_posten > 0 ? number_format($offene_posten,2,',','.').' €' : '<span class="muted">0 €</span>', '/buchhaltung/?p=rechnungen', $offene_posten > 0 ? 'color:var(--warn)' : '');
 kachel('Rohstoffe leer', $rohstoff_leer ?: '<span class="muted">0</span>', '?p=lager', $rohstoff_leer ? 'color:var(--err)' : '');
 echo '</div>';
 ?>
@@ -65,7 +65,7 @@ echo '</div>';
     <div class="bx-tablewrap"><table class="bx-table"><tbody>
       <?php if (!$offene_rechn): ?><tr><td class="muted">Keine offenen Rechnungen.</td></tr><?php endif; ?>
       <?php foreach ($offene_rechn as $b): ?>
-        <tr style="cursor:pointer" onclick="location.href='?p=rechnung&id=<?= (int)$b['id'] ?>'">
+        <tr style="cursor:pointer" onclick="location.href='/buchhaltung/?p=rechnung&id=<?= (int)$b['id'] ?>'">
           <td><strong><?= h($b['nummer']) ?></strong></td><td><?= kunde_link($b['kunde_id'] ?? null, $b['firma']) ?></td><td class="bx-num"><?= $eur($b['brutto']) ?></td>
         </tr>
       <?php endforeach; ?>

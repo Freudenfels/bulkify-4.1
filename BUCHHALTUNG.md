@@ -3,10 +3,28 @@
 Kontext- und Arbeitsdatei für den **Buchhaltungs-Chat**. Zuerst lesen, dann loslegen.
 Gilt zusätzlich zu `CLAUDE.md` (Projektregeln) – die Regeln dort bleiben.
 
-## ZIEL (Entscheidung Nico, 2026-10-04): Buchhaltung wird ein EIGENES Programm
-Die Finanzen sollen **getrennt** laufen, **wie CRM/Lager/Produktion** – eigener Pfad `/buchhaltung/`,
-eigener Login/eigene Sitzung, eigene Naht. Aktuell liegt die Buchhaltung noch **im Dashboard** (unten als
-„Ist-Stand" dokumentiert); das ist die **Migrationsquelle**, nicht das Ziel.
+## ZIEL (Entscheidung Nico, 2026-10-04): Buchhaltung ist ein EIGENES Programm — UMGESETZT
+Die Finanzen laufen **getrennt**, **wie CRM/Lager/Produktion** – eigener Pfad `/buchhaltung/`,
+eigener Login/eigene Sitzung (BXBUCH), eigene Naht. Die Migration aus dem Dashboard ist erfolgt
+(2026-10-04): Front Controller `public/buchhaltung/index.php`, Code in `buchhaltung/core/` +
+`buchhaltung/module/`, Naht `buchhaltung/core/erp.php`. Der „Ist-Stand" unten beschreibt weiterhin die
+Funktionen/Routen (identische Seiten, jetzt unter `/buchhaltung/?p=…`) und bleibt als Referenz.
+
+**Erledigt (Migrations-Checkliste):**
+1. Skelett: `public/buchhaltung/index.php` + `buchhaltung/core/{config,db,auth,ui,layout,erp,schema,finanz}.php`
+   (+ Kopien ki/tabelle_lesen/pdf_beleg/pdf_rechnung/pdf_gutschrift/minipdf, + `buchhaltung.php`/`kreditor.php`/`erechnung.php` verschoben).
+2. Seiten umgezogen: `module/beleg/*` + `module/buchhaltung/*` → `buchhaltung/module/*`. Finanz-Funktionen
+   verbatim in `buchhaltung/core/finanz.php`; Finanz-DDL in `buchhaltung/core/schema.php` (CREATE IF NOT EXISTS,
+   Dashboard liest weiter).
+3. Dashboard entkoppelt: Finanz-Routen aus `core/auth.php` + `public/index.php` raus (alte Links → 302 auf
+   `/buchhaltung/`); „Rechnung erstellen"/Rechnungs-Links in Auftrag/Start/Kundenkonto zeigen auf `/buchhaltung/`;
+   Buchhaltungs-Menügruppe entfernt, stattdessen `buchhaltung/` unter „Unterseiten" (Rolle finance/admin).
+4. Getestet (`php -l` alle Dateien + curl aller Routen via BXBUCH-Autologin; Dashboard-Entkopplung geprüft).
+
+**Bewusste Doppelung (wie im Spec vorgesehen):** `beleg_firma()`/PDF-Helfer + `ki.php`/`tabelle_lesen.php`
+bleiben im Dashboard-`core` (quer genutzt von Spec/Angebot/Portal) UND als Kopie in `buchhaltung/core` (die
+Sub-App darf Dashboard-`core/schema.php` nicht einbinden → db()-Kollision). Die Beleg-Lese-Funktionen bleiben
+zusätzlich im Dashboard-`core/schema.php` (Auftrag-Detail/Kundenkonto/Portal lesen Belege weiter).
 
 **Zielarchitektur (Muster wie `produktion/`, siehe `PRODUKTION.md`):**
 - **Web-Einstieg:** `public/buchhaltung/index.php` (Front Controller, Whitelist `?p=<route>`).

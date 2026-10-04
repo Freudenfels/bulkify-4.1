@@ -262,7 +262,7 @@ if (!$neu) {
       <?php bx_table($colsAuf, $k_auftraege, ['rowUrl'=>fn($r)=>'?p=auftrag&id='.$r['id'], 'empty'=>'Noch keine Aufträge.']); ?>
     </div>
     <div class="bx-panel"><h2>Rechnungen (<?= count($k_rechnungen) ?>) · offene Posten: <?= $eur($offen) ?></h2>
-      <?php bx_table($colsRe, $k_rechnungen, ['rowUrl'=>fn($r)=>'?p=rechnung&id='.$r['id'], 'empty'=>'Noch keine Rechnungen.']); ?>
+      <?php bx_table($colsRe, $k_rechnungen, ['rowUrl'=>fn($r)=>'/buchhaltung/?p=rechnung&id='.$r['id'], 'empty'=>'Noch keine Rechnungen.']); ?>
     </div>
   </section>
   <section data-panel="rezept" hidden>

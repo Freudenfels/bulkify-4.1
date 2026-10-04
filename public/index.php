@@ -81,21 +81,9 @@ $routes = [
     'auftrag'         => 'auftrag/detail.php',
     'auftrag_pdf'     => 'auftrag/pdf.php',   // Auftragsbestätigung als PDF (Download/Druck)
     'auftrag_preise'  => 'auftrag/preisliste.php',   // Arbeitsliste: Aufträge ohne Preis -> Rechnung-Upload füllt Preis (aufgeschlüsselt)
-    'buchhaltung'     => 'buchhaltung/hub.php',       // Finanz-Hub (Reiter: Übersicht/OP/Auswertung/Prüfung/Export)
-    'beleg_export'    => 'buchhaltung/export.php',     // CSV-/DATEV-Export (op|belege|datev)
-    'rechnung_xml'    => 'buchhaltung/rechnung_xml.php', // E-Rechnung CII/EN16931-XML zu einem Beleg
-    'lief_rechnung_neu' => 'buchhaltung/lief_rechnung_neu.php', // Eingangsrechnung (Verbindlichkeit) erfassen
-    'lief_rechnung'   => 'buchhaltung/lief_rechnung.php', // Eingangsrechnung Detail (Zahlungen, Storno)
-    'rechnungen'      => 'beleg/rechnungen_liste.php',
-    'rechnung'        => 'beleg/detail.php',
-    'rechnung_neu'    => 'beleg/rechnung_neu.php',   // Rechnung aus Auftrag: Vorschau + Eingaben, dann erstellen
-    'rechnung_frei'   => 'beleg/rechnung_frei.php',  // Rechnung frei/KI-gestützt erstellen (ohne Auftrag)
-    'rechnung_import' => 'beleg/rechnung_import.php', // Alt-Rechnungen (Original-PDF) per KI importieren
-    'auftrag_import'  => 'beleg/auftrag_import.php',  // Auftrag aus Angebot/AB (+Rechnung) per KI importieren
+    // Buchhaltung/Belege sind ein EIGENES Programm unter /buchhaltung/ (public/buchhaltung/index.php).
+    // Hier bewusst KEINE Finanz-Routen mehr – Links zeigen auf /buchhaltung/?p=… (siehe BUCHHALTUNG.md).
     'fasttrack'       => 'produktion/fasttrack.php',   // Schnelles Nachtragen: Auftrag-Status + Datum + Sprach-Notiz
-    'gutschrift_neu'  => 'beleg/gutschrift_neu.php',   // Storno-Rechnung / Gutschrift manuell erstellen
-    'gutschrift_pdf'  => 'beleg/gutschrift_pdf.php',   // Gutschrift/Storno als PDF
-    'rechnung_pdf'    => 'beleg/rechnung_pdf.php',      // Rechnung als PDF (intern, Ansehen/Download)
     'portal'          => 'portal/kunde.php',
     'portal_login'    => 'portal/login.php',   // Kunden-Login (E-Mail + Passwort)
     'portal_dok'     => 'portal/dokument_download.php',
@@ -187,6 +175,16 @@ if ($istLieferant && !in_array($p, $LIEF_ROUTEN, true) && !in_array($p, ['liefer
 
 // Bereits angemeldet und ruft Login auf -> ins passende Dashboard
 if ($p === 'login' && is_logged_in()) { header('Location: ?p=' . ($istLieferant ? 'lieferant_portal' : ($istWerk ? 'werk' : 'dashboard'))); exit; }
+
+// Buchhaltung/Belege sind ein eigenes Programm (/buchhaltung/): alte Finanz-Routen dorthin umleiten
+// (Bookmarks/alte Links behalten so ihr Ziel, inkl. id/auftrag/tab/art).
+$FINANZ_ROUTEN = ['buchhaltung','rechnungen','rechnung','rechnung_neu','rechnung_frei','rechnung_import',
+                  'auftrag_import','gutschrift_neu','gutschrift_pdf','rechnung_pdf','rechnung_xml',
+                  'beleg_export','lief_rechnung_neu','lief_rechnung'];
+if (in_array($p, $FINANZ_ROUTEN, true)) {
+    $qs = $_GET; unset($qs['p']);
+    header('Location: /buchhaltung/?p=' . $p . ($qs ? '&' . http_build_query($qs) : '')); exit;
+}
 
 if (!isset($routes[$p])) $p = is_logged_in() ? ($istLieferant ? 'lieferant_portal' : ($istWerk ? 'werk' : 'dashboard')) : 'login';
 

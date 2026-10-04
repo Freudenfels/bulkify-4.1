@@ -1,0 +1,2 @@
+# schema.php — Buchhaltungs-Programm
+Finanz-EIGENE Tabellen (CREATE IF NOT EXISTS, idempotent): beleg, beleg_position, beleg_status_log, zahlung, guthaben_bewegung. bu_schema() legt sie an; bu_ensure_column() + Kompat-Alias ensure_column(). Lädt am Ende finanz.php. Kreditoren-Tabellen (lieferant_rechnung/_zahlung) legt kreditor.php per kreditor_init() an. Das Dashboard liest dieselben Tabellen weiter.
