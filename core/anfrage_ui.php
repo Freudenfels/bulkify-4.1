@@ -53,6 +53,17 @@ function anfrage_produkt_badge(int $rezeptur_id): string {
         default:          return bx_badge('nicht angefragt', 'err');
     }
 }
+// Wo wurde diese Rezeptur als Fertigprodukt (Fremdfertigung) angefragt? Liste je Lieferant mit Status,
+// Datum und – falls schon beantwortet – dem angebotenen Preis. Für den Überblick „schon angefragt?".
+function anfrage_produkt_anfragen(int $rezeptur_id): array {
+    return all("SELECT la.id, la.status, la.angelegt, COALESCE(l.firma, '–') AS firma,
+                       ag.preis AS ang_preis, ag.einheit AS ang_einheit
+                FROM lieferant_anfrage la
+                LEFT JOIN lieferanten l ON l.id=la.lieferant_id
+                LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=la.id
+                WHERE la.rezeptur_id=? AND la.art='fertigprodukt'
+                ORDER BY la.angelegt DESC", [$rezeptur_id]);
+}
 
 // Knopf „Fertigprodukt anfragen" – öffnet dasselbe Popup, aber im Rezeptur-Modus.
 function anfrage_produkt_button(int $rezeptur_id, string $name, string $form = '', string $label = 'Fertigprodukt anfragen', string $klasse = 'btn btn-ghost btn-sm'): string {

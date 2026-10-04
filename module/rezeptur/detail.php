@@ -306,6 +306,27 @@ if (!empty($_SESSION['rez_del_fehler'])) { echo '<div class="bx-panel" style="bo
 <?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=rezeptur_detail&id=' . (int)$id); ?>
 <?php endif; ?>
 
+<?php // Wo wurde diese Rezeptur als Fertigprodukt (Fremdfertigung) angefragt? Schnell sehen, ob schon angefragt.
+  $prodAnfragen = $neu ? [] : anfrage_produkt_anfragen((int)$id);
+  if ($prodAnfragen): $eurRz = fn($x) => rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',') . ' €'; ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Fremdfertigung angefragt bei <?= bx_hint('Bei welchen Lohnherstellern diese Rezeptur als Fertigprodukt angefragt wurde – mit Status und (falls vorhanden) dem angebotenen Preis. So siehst du sofort, ob schon angefragt wurde.') ?></h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Lieferant</th><th>Status</th><th class="bx-num">Angebot</th><th>Angefragt</th></tr></thead>
+    <tbody>
+      <?php foreach ($prodAnfragen as $pa): ?>
+        <tr>
+          <td><?= h($pa['firma']) ?></td>
+          <td><?= $pa['status'] === 'beantwortet' ? bx_badge('beantwortet', 'ok') : bx_badge('offen', 'warn') ?></td>
+          <td class="bx-num"><?= ($pa['ang_preis'] !== null && $pa['ang_preis'] !== '') ? $eurRz($pa['ang_preis']) . ($pa['ang_einheit'] ? ' / ' . h($pa['ang_einheit']) : '') : '<span class="muted">–</span>' ?></td>
+          <td class="muted" style="font-size:12px"><?= $pa['angelegt'] ? h(fmt_zeit($pa['angelegt'], 'd.m.Y')) : '–' ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
+
 <?php if (!$neu && $kundenpreise): ?>
 <div class="bx-panel">
   <h2 style="margin-top:0">Kundenpreise <?= bx_hint('Welcher Kunde zu welchem Datum welchen VK je Packung für diese Rezeptur hatte – u. a. aus dem Angebotsscan (System → Angebotsscan).') ?></h2>
