@@ -39,8 +39,9 @@ function dokimport_dateien_hinzufuegen(int $job_id, array $dateien): int {
     $dateien = array_values(array_filter($dateien, fn($d) => !empty($d['pfad'])));
     if ($job_id <= 0 || !$dateien) return 0;
     foreach ($dateien as $d) {
-        q("INSERT INTO dok_import_datei (job_id, dateiname, pfad, status, erstellt_am) VALUES (?,?,?, 'offen', ?)",
-          [$job_id, mb_substr((string)$d['orig'], 0, 255), mb_substr((string)$d['pfad'], 0, 255), gmdate('Y-m-d H:i:s')]);
+        $hash = $d['hash'] ?? (@hash_file('md5', BX_UPLOADS . '/' . basename((string)$d['pfad'])) ?: null);
+        q("INSERT INTO dok_import_datei (job_id, dateiname, pfad, status, dok_hash, erstellt_am) VALUES (?,?,?, 'offen', ?, ?)",
+          [$job_id, mb_substr((string)$d['orig'], 0, 255), mb_substr((string)$d['pfad'], 0, 255), $hash, gmdate('Y-m-d H:i:s')]);
     }
     q("UPDATE dok_import_job SET anzahl=(SELECT COUNT(*) FROM dok_import_datei WHERE job_id=?), status='offen' WHERE id=?", [$job_id, $job_id]);
     dokimport_worker_starten($job_id);
@@ -124,15 +125,44 @@ function dokimport_aktiver_job(): ?array {
     return one("SELECT * FROM dok_import_job WHERE status IN ('offen','bereit') ORDER BY id DESC LIMIT 1");
 }
 
-// Zeilen eines Jobs (fuer die Vorschau) inkl. zugeordnetem Rohstoff-Namen.
+// Zeilen eines Jobs (fuer die Vorschau) inkl. zugeordnetem Rohstoff-Namen und Duplikat-Kennzeichen:
+//  dup_dok   > 0: Datei-Inhalt liegt schon als Dokument an einem Rohstoff (frueher importiert / anderer Stapel)
+//  dup_vorher> 0: dieselbe Datei kam in DIESEM Stapel bereits frueher vor (Dublette im Upload)
 function dokimport_zeilen(int $job_id): array {
     return all(
-        "SELECT di.*, it.name AS item_name, it.artikelnummer AS item_nr
+        "SELECT di.*, it.name AS item_name, it.artikelnummer AS item_nr,
+                (SELECT COUNT(*) FROM dokument dk
+                   WHERE di.dok_hash IS NOT NULL AND dk.datei_hash = di.dok_hash) AS dup_dok,
+                (SELECT COUNT(*) FROM dok_import_datei d2
+                   WHERE di.dok_hash IS NOT NULL AND d2.dok_hash = di.dok_hash
+                     AND d2.job_id = di.job_id AND d2.id < di.id) AS dup_vorher
          FROM dok_import_datei di
          LEFT JOIN item it ON it.id = di.item_id
          WHERE di.job_id=? ORDER BY di.id",
         [$job_id]
     );
+}
+
+// Fehlende Inhalts-Hashes nachtragen (fuer Jobs, die vor der Duplikat-Erkennung angelegt wurden).
+function dokimport_hashes_nachtragen(int $job_id): void {
+    foreach (all("SELECT id, pfad FROM dok_import_datei WHERE job_id=? AND (dok_hash IS NULL OR dok_hash='')", [$job_id]) as $z) {
+        $pfad = BX_UPLOADS . '/' . basename((string)$z['pfad']);
+        if (is_file($pfad)) { $h = @hash_file('md5', $pfad); if ($h) q("UPDATE dok_import_datei SET dok_hash=? WHERE id=?", [$h, (int)$z['id']]); }
+    }
+}
+
+// Alle gelesenen Zeilen ueberspringen, die Duplikate sind (Inhalt schon als Dokument vorhanden ODER
+// im Stapel schon frueher vorgekommen). Rueckgabe: Anzahl uebersprungener Zeilen.
+function dokimport_duplikate_ueberspringen(int $job_id): int {
+    $n = 0;
+    foreach (dokimport_zeilen($job_id) as $z) {
+        if ((string)$z['status'] !== 'gelesen') continue;
+        if ((int)$z['dup_dok'] > 0 || (int)$z['dup_vorher'] > 0) {
+            q("UPDATE dok_import_datei SET status='uebersprungen' WHERE id=? AND status='gelesen'", [(int)$z['id']]);
+            $n++;
+        }
+    }
+    return $n;
 }
 
 // Eine Zeile manuell einem Rohstoff zuordnen (Name oder Artikelnummer). Rueckgabe: true bei Treffer.
@@ -241,8 +271,9 @@ function dokimport_import(int $job_id): array {
         $typ = in_array((string)$z['typ'], ['coa', 'beides'], true) ? 'coa' : 'spec';
         $datei = basename((string)$z['pfad']);               // liegt bereits in data/uploads
         $titel = ($typ === 'coa' ? 'CoA' : 'Spezifikation') . ' (Import)';
-        q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar) VALUES ('item',?,?,?,?,?,0)",
-          [$item_id, $typ, $titel, $datei, mb_substr((string)$z['dateiname'], 0, 255)]);
+        $hash  = (string)($z['dok_hash'] ?? '') ?: null;   // damit der Inhalt kuenftig als Duplikat erkannt wird
+        q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar,datei_hash) VALUES ('item',?,?,?,?,?,0,?)",
+          [$item_id, $typ, $titel, $datei, mb_substr((string)$z['dateiname'], 0, 255), $hash]);
         $dok_id = (int) insert_id();
 
         spec_ki_merken($dok_id, $ki);          // Rohvorschlag am Dokument (nachvollziehbar)

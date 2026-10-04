@@ -32,6 +32,15 @@ Rohstoffen (kein Treffer = bleibt offen stehen).
    (`kunde_sichtbar=0`, nie an Kunde) + `spec_ki_anwenden()` (Charge/Grenzwerte/Kennwerte/Wirkstoffe, additiv).
 5. `dokimport_abbrechen($job_id)` – nicht übernommene Dateien aus data/uploads entfernen, Job schließen.
 
+## Duplikate
+Beim Upload wird ein Inhalts-Hash (md5) je Datei gespeichert (`dok_import_datei.dok_hash`); beim Import
+landet er als `dokument.datei_hash`. `dokimport_zeilen()` liefert pro Zeile `dup_dok` (Inhalt liegt schon
+als Dokument an einem Rohstoff = schon früher eingelesen) und `dup_vorher` (dieselbe Datei kam im selben
+Stapel bereits vor). In der Vorschau: Kennzeichen „schon eingelesen"/„doppelt im Stapel" + Sammelknopf
+„Duplikate überspringen" (`dokimport_duplikate_ueberspringen`). `dokimport_hashes_nachtragen()` füllt
+fehlende Hashes älterer Jobs nach. Erkennt nur **inhaltsgleiche** Dateien (nicht verschiedene CoAs
+derselben Charge).
+
 ## Matching (spec_ki_match_item, in core/spec_ki.php)
 Reihenfolge: CAS exakt → Artikelnummer/Name exakt → Name/Synonym-Teiltreffer (kürzester Name gewinnt).
 

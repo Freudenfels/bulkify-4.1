@@ -45,7 +45,7 @@ $dim_dateien_einlesen = function (): array {
         if (!in_array($ext, $erlaubt, true)) continue;
         $fn = 'imp_' . bin2hex(random_bytes(6)) . '.' . $ext;
         if (move_uploaded_file($_FILES['dateien']['tmp_name'][$i], BX_UPLOADS . '/' . $fn)) {
-            $dateien[] = ['orig' => (string)$orig, 'pfad' => $fn];
+            $dateien[] = ['orig' => (string)$orig, 'pfad' => $fn, 'hash' => @hash_file('md5', BX_UPLOADS . '/' . $fn) ?: null];
         }
     }
     return [$angekommen, $dateien];
@@ -108,6 +108,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($akt === 'neu_alle') {
         $n = dokimport_neu_anlegen_alle((int)($_POST['job_id'] ?? 0));
         $_SESSION['dim_flash'] = ['ok', $n . ' neue(r) Rohstoff(e) aus den Zeilen ohne Treffer angelegt und zugeordnet.'];
+        header('Location: ' . $ret); exit;
+    }
+    if ($akt === 'dup_skip') {
+        $n = dokimport_duplikate_ueberspringen((int)($_POST['job_id'] ?? 0));
+        $_SESSION['dim_flash'] = ['ok', $n . ' Duplikat(e) übersprungen (Datei schon eingelesen oder doppelt im Stapel).'];
         header('Location: ' . $ret); exit;
     }
 
@@ -215,19 +220,27 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
 
   <?php else:
     /* ---------- Zustand 3: Match-Vorschau ---------- */
+    dokimport_hashes_nachtragen($jobId);        // Inhalts-Hashes nachtragen (aeltere Jobs)
     $zeilen = dokimport_zeilen($jobId);
-    $importierbar = 0; $ohneTreffer = 0;
+    $importierbar = 0; $ohneTreffer = 0; $dubletten = 0;
     foreach ($zeilen as $z) {
         if ($z['status'] === 'gelesen' && (int)$z['item_id'] > 0) $importierbar++;
         if ($z['status'] === 'gelesen' && (int)$z['item_id'] <= 0) $ohneTreffer++;
+        if ($z['status'] === 'gelesen' && ((int)$z['dup_dok'] > 0 || (int)$z['dup_vorher'] > 0)) $dubletten++;
     }
   ?>
     <div class="bx-panel" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
       <div class="muted" style="font-size:13px">
-        <?= count($zeilen) ?> Datei(en) gelesen · <strong style="font-weight:600"><?= $importierbar ?></strong> bereit zum Übernehmen<?= $ohneTreffer > 0 ? ' · ' . $ohneTreffer . ' ohne Treffer' : '' ?>.
+        <?= count($zeilen) ?> Datei(en) gelesen · <strong style="font-weight:600"><?= $importierbar ?></strong> bereit zum Übernehmen<?= $ohneTreffer > 0 ? ' · ' . $ohneTreffer . ' ohne Treffer' : '' ?><?= $dubletten > 0 ? ' · ' . $dubletten . ' Duplikat(e)' : '' ?>.
         Prüfe die Zuordnung – ohne Treffer kannst du zuordnen, überspringen oder einen neuen Rohstoff anlegen.
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <?php if ($dubletten > 0): ?>
+          <form method="post" style="margin:0" onsubmit="return confirm('<?= $dubletten ?> erkannte Duplikat(e) überspringen?');">
+            <input type="hidden" name="aktion" value="dup_skip"><input type="hidden" name="job_id" value="<?= $jobId ?>">
+            <button class="btn btn-ghost" type="submit" data-busy="…"><?= $dubletten ?> Duplikat(e) überspringen</button>
+          </form>
+        <?php endif; ?>
         <?php if ($ohneTreffer > 0): ?>
           <form method="post" style="margin:0" onsubmit="return confirm('Für alle <?= $ohneTreffer ?> Zeile(n) ohne Treffer je einen neuen Rohstoff aus den KI-Stammdaten anlegen?');">
             <input type="hidden" name="aktion" value="neu_alle"><input type="hidden" name="job_id" value="<?= $jobId ?>">
@@ -258,7 +271,11 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
           <tr<?= in_array($st, ['uebersprungen', 'importiert'], true) ? ' style="opacity:.55"' : '' ?>>
             <td style="width:280px;max-width:280px">
               <div title="<?= h((string)$z['dateiname']) ?>" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px"><?= h((string)$z['dateiname']) ?></div>
-              <div><a href="#" style="font-size:11px" onclick="dimView(<?= (int)$z['id'] ?>, this.getAttribute('data-n')); return false;" data-n="<?= h((string)$z['dateiname']) ?>">Ansehen</a></div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <a href="#" style="font-size:11px" onclick="dimView(<?= (int)$z['id'] ?>, this.getAttribute('data-n')); return false;" data-n="<?= h((string)$z['dateiname']) ?>">Ansehen</a>
+                <?php if ((int)$z['dup_dok'] > 0): ?><span class="badge-warn" style="padding:1px 7px;border-radius:9px;font-size:11px" title="Dieser Datei-Inhalt liegt schon als Dokument an einem Rohstoff">schon eingelesen</span>
+                <?php elseif ((int)$z['dup_vorher'] > 0): ?><span class="badge-warn" style="padding:1px 7px;border-radius:9px;font-size:11px" title="Dieselbe Datei kam in diesem Stapel bereits vor">doppelt im Stapel</span><?php endif; ?>
+              </div>
             </td>
             <td><?php
                 if ($st === 'fehler') { echo bx_badge('Fehler', 'warn'); }

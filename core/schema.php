@@ -842,6 +842,7 @@ function init_schema(): void {
         pfad VARCHAR(255) NOT NULL,                         -- gespeicherter Dateiname in data/uploads
         status VARCHAR(16) NOT NULL DEFAULT 'offen',       -- offen | liest | gelesen | fehler | importiert | uebersprungen
         liest_seit DATETIME NULL,                           -- seit wann ein Worker diese Datei liest (Stale-Reclaim)
+        dok_hash CHAR(64) NULL,                             -- SHA-256 des Datei-Inhalts (Duplikat-Erkennung)
         typ VARCHAR(10) NULL,                               -- spec | coa | beides | unklar (KI)
         sicherheit VARCHAR(10) NULL,                        -- hoch | mittel | niedrig (KI)
         item_id INT NULL,                                   -- zugeordneter Rohstoff (Vorschlag/bestaetigt)
@@ -849,9 +850,10 @@ function init_schema(): void {
         ki_json LONGTEXT NULL,                              -- vollstaendiges spec_ki_lesen-Ergebnis (Wiederverwendung beim Import)
         fehler VARCHAR(255) NULL,
         erstellt_am DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        KEY idx_job (job_id), KEY idx_status (status)
+        KEY idx_job (job_id), KEY idx_status (status), KEY idx_hash (dok_hash)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('dok_import_datei', 'liest_seit', "DATETIME NULL");   // additiv (beta)
+    ensure_column('dok_import_datei', 'dok_hash', "CHAR(64) NULL");     // additiv (beta)
 
     // lieferant_alias: viele Lieferantennamen aus den Preislisten sind Kontakt-/Agenten-Namen
     // (Maggi, Diane, Amy ...), die in Wahrheit fuer eine Firma stehen (z. B. Maggi = Wellgreen).
