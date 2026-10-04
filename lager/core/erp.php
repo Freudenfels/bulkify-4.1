@@ -670,6 +670,21 @@ function erp_charge_einheit_setzen(int $charge_id, string $einheit): array {
     return ['ok' => true, 'meldung' => 'Einheit: ' . $einheit];
 }
 
+// Warenart (Kategorie) am ARTIKEL setzen – z. B. ein als Rohstoff angelegtes Kapsel-Produkt richtigstellen.
+function erp_item_kategorie_setzen(int $item_id, string $kategorie): bool {
+    if (!tabelle_da('item') || $item_id <= 0 || !array_key_exists($kategorie, erp_kategorien())) return false;
+    q("UPDATE item SET kategorie=? WHERE id=?", [$kategorie, $item_id]);
+    return true;
+}
+// Warenart einer Charge ändern = Kategorie ihres Artikels setzen (Lager-Eingabe hat Vorrang).
+function erp_charge_warenart_setzen(int $charge_id, string $kategorie): array {
+    if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Chargen vorhanden.'];
+    $c = one("SELECT item_id FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
+    if (!erp_item_kategorie_setzen((int)$c['item_id'], $kategorie)) return ['ok' => false, 'meldung' => 'Unbekannte Warenart.'];
+    return ['ok' => true, 'meldung' => 'Warenart: ' . (erp_kategorien()[$kategorie] ?? $kategorie)];
+}
+
 // Status einer Charge aendern (Freigeben / Quarantaene / Sperren). Leere Chargen bleiben 'leer'.
 // Rueckgabe: ['ok'=>bool, 'meldung'=>string].
 function erp_charge_status_setzen(int $charge_id, string $status): array {
@@ -756,7 +771,7 @@ function erp_item_suchen(string $name, int $limit = 6): array {
     $enth = '%' . $esc($name) . '%';
     $anf  = $esc($name) . '%';
     return all("SELECT id, name, kategorie, einheit, form FROM item
-                WHERE kategorie IN ('rohstoff','verpackung','verbrauch','fertig','verkaufsfertig')$w
+                WHERE kategorie IN ('rohstoff','kapsel','verpackung','verbrauch','fertig','verkaufsfertig')$w
                   AND name LIKE ? ESCAPE '='
                 ORDER BY (name=?) DESC, (name LIKE ? ESCAPE '=') DESC, CHAR_LENGTH(name), name
                 LIMIT " . (int)$limit, [$enth, $name, $anf]);

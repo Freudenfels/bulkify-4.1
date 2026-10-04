@@ -74,6 +74,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
     }
+    if ($aktion === 'warenart') {
+        $r = erp_charge_warenart_setzen($id, (string)($_POST['warenart'] ?? ''));
+        flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+        weiter('?p=charge&id=' . $id);
+    }
     if ($aktion === 'loeschen') {
         $grund = trim((string)($_POST['grund'] ?? ''));
         lg_papierkorb_rein($id, (string)$c['item_name'], (string)$c['charge_nr'],
@@ -177,6 +182,15 @@ flash_zeigen();
       <input type="hidden" name="aktion" value="einheit">
       <div class="bx-field" style="margin:0;max-width:150px"><label>Einheit <span class="muted">(z. B. kg)</span></label>
         <input type="text" name="einheit" list="chgEinhList" autocomplete="off" value="<?= h((string)$c['einheit']) ?>">
+      </div>
+      <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
+    </form>
+    <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:0">
+      <input type="hidden" name="aktion" value="warenart">
+      <div class="bx-field" style="margin:0;min-width:160px"><label>Warenart</label>
+        <select name="warenart">
+          <?php foreach (erp_kategorien() as $kk => $kl): ?><option value="<?= h($kk) ?>" <?= (string)($c['kategorie'] ?? '') === $kk ? 'selected' : '' ?>><?= h($kl) ?></option><?php endforeach; ?>
+        </select>
       </div>
       <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
     </form>

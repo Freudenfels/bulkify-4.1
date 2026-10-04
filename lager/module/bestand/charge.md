@@ -15,6 +15,6 @@ Zusätzlich, wie im Dashboard, aber auf diese Charge bezogen:
 
 Der **Produktname ist überall ein Link** (Bestand-Liste, Such-Popup) und führt hierher.
 
-**Bearbeiten an der Charge:** Status (Freigeben/Quarantäne/Sperren → `erp_charge_status_setzen`), **Lieferant** (tippen, neue werden angelegt → `erp_charge_lieferant_setzen`), **Einheit** (`erp_charge_einheit_setzen`, z. B. Pulver „Stk" → „kg" korrigieren), sowie MHD/Bestand korrigieren (`mhd_korr`/`menge_korr`).
+**Bearbeiten an der Charge:** Status (Freigeben/Quarantäne/Sperren → `erp_charge_status_setzen`; deckt den „Aus Quarantäne freigeben"-Fall ab), **Warenart/Kategorie** (`erp_charge_warenart_setzen` → setzt die Kategorie des Artikels, z. B. fälschlich „Rohstoff" → „Kapseln"), **Lieferant** (tippen, neue werden angelegt → `erp_charge_lieferant_setzen`), **Einheit** (`erp_charge_einheit_setzen`, z. B. Pulver „Stk" → „kg"), sowie MHD/Bestand korrigieren (`mhd_korr`/`menge_korr`).
 
 Liest über `erp_charge_voll()`, `erp_item_voll()`, `erp_item_wirkstoffe()`, `erp_item_dokumente()`, `erp_item_chargen()` aus dem geteilten Dashboard-Bestand. Bindet/löst Blinker über `core/leiste.php`.

@@ -104,15 +104,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $pakete   = max(1, (int)($_POST['p_pakete'][$i] ?? 1));
         if ($name === '' && $menge <= 0) continue;   // leere Zeile
 
-        // Artikel bestimmen (bestehend oder neu anlegen).
+        // Artikel bestimmen (bestehend oder neu anlegen). Warenart 'kapsel' jetzt erlaubt (war ein Bug:
+        // als Kapseln gebucht -> trotzdem als Rohstoff angelegt).
+        $gueltigeKat = function_exists('erp_kategorien') ? array_keys(erp_kategorien()) : ['rohstoff', 'kapsel', 'verpackung', 'verbrauch', 'fertig'];
         if (!$item_id && $name !== '') {
-            $kat = in_array($warenart, ['rohstoff', 'verpackung', 'verbrauch', 'fertig'], true) ? $warenart : 'rohstoff';
+            $kat = in_array($warenart, $gueltigeKat, true) ? $warenart : 'rohstoff';
             $item_id = (int) erp_item_anlegen($name, $kat, $einheit);
         }
         if (!$item_id) { $fehler[] = 'Zeile ' . ($i + 1) . ': kein Artikel.'; continue; }
 
-        // Warenart/Regeln: die EINGEGEBENE Warenart hat Vorrang vor den Stammdaten.
+        // Warenart/Regeln: die EINGEGEBENE Warenart hat Vorrang – auch am Artikel (Kategorie anpassen).
         $basis = erp_item_basis($item_id);
+        if ($warenart !== '' && in_array($warenart, $gueltigeKat, true) && (string)($basis['kategorie'] ?? '') !== $warenart) {
+            if (function_exists('erp_item_kategorie_setzen') && erp_item_kategorie_setzen($item_id, $warenart)) $basis['kategorie'] = $warenart;
+        }
         $regeln = erp_warenart_regeln($warenart ?: (string)($basis['kategorie'] ?? 'rohstoff'), (string)($basis['form'] ?? ''));
         if ($menge <= 0)                           { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Menge fehlt.'; continue; }
         if ($kisteId <= 0 && $blinker === null)    { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Blinker oder Kiste wählen.'; continue; }
