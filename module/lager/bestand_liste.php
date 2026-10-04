@@ -29,18 +29,25 @@ $rows = all("SELECT i.id,i.artikelnummer,i.name,i.kategorie,i.einheit,i.bestand_
              i.elektrisch,i.pruef_intervall_monate,i.letzte_pruefung,
              (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='frei') AS frei_charge,
              (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='quarantaene') AS quarantaene,
-             (SELECT COUNT(*) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene')) AS n_chargen
+             (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='gesperrt') AS gesperrt,
+             (SELECT COUNT(*) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt')) AS n_chargen
              FROM item i WHERE $where", $params);
 
 // Bestand vereinheitlichen: Betriebsmittel = manueller Bestand, sonst Chargen-Bestand.
-foreach ($rows as &$r) $r['frei'] = ist_betriebsmittel_kat($r['kategorie']) ? (float)$r['bestand_menge'] : (float)$r['frei_charge'];
+// 'frei' = frei verfügbar (Anzeige), 'gesamt' = physisch vorhanden (frei + Quarantäne + gesperrt).
+foreach ($rows as &$r) {
+    $bm = ist_betriebsmittel_kat($r['kategorie']);
+    $r['frei']   = $bm ? (float)$r['bestand_menge'] : (float)$r['frei_charge'];
+    $r['gesamt'] = $bm ? (float)$r['bestand_menge'] : ((float)$r['frei_charge'] + (float)$r['quarantaene'] + (float)$r['gesperrt']);
+}
 unset($r);
 
-// Nullbestände ausblenden (Standard): nur ECHTE Ware (Rohstoff/Verpackung/Fertigware/Verkaufsfertig),
-// nicht Betriebsmittel (Maschinen/Inventar sind Anlagegüter – auch bei Bestand 0 sichtbar). ?leer=1 zeigt alles.
+// Nullbestände ausblenden (Standard): „leer" = physisch NICHTS da (auch keine Quarantäne/gesperrt).
+// Ware in Quarantäne/gesperrt ist vorhanden (und wartet auf Freigabe) → bleibt sichtbar, auch wenn frei=0.
+// Betriebsmittel (Maschinen/Inventar) sind Anlagegüter – immer sichtbar. ?leer=1 zeigt alles.
 $anzahlLeer = 0;
-foreach ($rows as $r) if (!ist_betriebsmittel_kat($r['kategorie']) && (float)$r['frei'] <= 0) $anzahlLeer++;
-if (!$zeigeLeer) $rows = array_values(array_filter($rows, fn($r) => ist_betriebsmittel_kat($r['kategorie']) || (float)$r['frei'] > 0));
+foreach ($rows as $r) if (!ist_betriebsmittel_kat($r['kategorie']) && (float)$r['gesamt'] <= 0) $anzahlLeer++;
+if (!$zeigeLeer) $rows = array_values(array_filter($rows, fn($r) => ist_betriebsmittel_kat($r['kategorie']) || (float)$r['gesamt'] > 0));
 
 if ($q !== '') {
     $needle = mb_strtolower($q);
@@ -52,6 +59,15 @@ if ($q !== '') {
 $rows = bx_sort_rows(array_values($rows), $sort, $dir);
 
 $mng = fn($x,$e) => $x > 0 ? rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',') . ' ' . h($e) : '<span class="muted">0</span>';
+// Bestand-Zelle: frei verfügbar + Hinweis-Badges für Quarantäne/gesperrt (damit Ware, die nur in
+// Quarantäne liegt, nicht fälschlich als „0/leer" wirkt).
+$bestandCell = function($r) use ($mng) {
+    $e = $r['einheit'] ?: 'Stück';
+    $out = $mng($r['frei'], $e);
+    if ((float)($r['quarantaene'] ?? 0) > 0) $out .= ' <span class="badge badge-warn">' . $mng($r['quarantaene'], $e) . ' Quar.</span>';
+    if ((float)($r['gesperrt'] ?? 0) > 0)    $out .= ' <span class="badge">' . $mng($r['gesperrt'], $e) . ' gesperrt</span>';
+    return $out;
+};
 $detailUrl = function($r) {
     if (ist_betriebsmittel_kat($r['kategorie'])) return '?p=betriebsmittel&id=' . $r['id'];
     return $r['kategorie'] === 'verpackung' ? '?p=verpackung&id=' . $r['id'] : '?p=rohstoff&id=' . $r['id'];
@@ -71,7 +87,7 @@ if ($istBM) {
     $cols = [
         'artikelnummer' => ['label'=>'Art.-Nr.', 'sort'=>true],
         'name'          => ['label'=>'Name', 'sort'=>true],
-        'frei'          => ['label'=>'Bestand', 'sort'=>true, 'num'=>true, 'render'=>fn($r)=> $mng($r['frei'],$r['einheit'] ?: 'Stück')],
+        'frei'          => ['label'=>'Bestand', 'sort'=>true, 'num'=>true, 'render'=>$bestandCell],
     ];
     if ($zeigePruef) $cols['pruefung'] = ['label'=>'Geräteprüfung', 'render'=>$pruefRender];
 } elseif ($kat === 'alle') {
@@ -79,7 +95,7 @@ if ($istBM) {
         'artikelnummer' => ['label'=>'Art.-Nr.', 'sort'=>true],
         'name'          => ['label'=>'Name', 'sort'=>true],
         'kategorie'     => ['label'=>'Typ', 'sort'=>true, 'render'=>fn($r)=> h($ALLE_KAT[$r['kategorie']] ?? $r['kategorie'])],
-        'frei'          => ['label'=>'Bestand', 'sort'=>true, 'num'=>true, 'render'=>fn($r)=> $mng($r['frei'],$r['einheit'] ?: 'Stück')],
+        'frei'          => ['label'=>'Bestand', 'sort'=>true, 'num'=>true, 'render'=>$bestandCell],
         'pruefung'      => ['label'=>'Prüfung', 'render'=>$pruefRender],
     ];
 } else {
