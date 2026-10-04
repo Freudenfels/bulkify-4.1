@@ -235,9 +235,12 @@ function erp_schritt_material(int $pa_id, string $station): array {
                              'menge'=>(float)$pa['menge'], 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($eid), 'item_id'=>$eid, 'pflicht'=>false];
             break;
     }
-    // Je Zeile die zu entnehmende FEFO-Charge bestimmen (für den Pick-to-Light-Blinker im Lager).
+    // Je Zeile die FEFO-Charge (für den Blinker) und die Quarantäne-Menge (Hinweis) bestimmen.
     foreach ($zeilen as &$z)
-        if (!isset($z['charge_id']) && !empty($z['item_id'])) $z['charge_id'] = erp_fefo_charge_id((int)$z['item_id']);
+        if (!empty($z['item_id'])) {
+            if (!isset($z['charge_id'])) $z['charge_id'] = erp_fefo_charge_id((int)$z['item_id']);
+            $z['quarantaene'] = erp_item_quarantaene((int)$z['item_id']);
+        }
     unset($z);
     return ['soll_menge'=>$soll_menge, 'soll_einheit'=>$soll_einheit, 'zeilen'=>$zeilen];
 }
@@ -481,6 +484,12 @@ function erp_item_bestand(int $item_id): float {
     return (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge
                            WHERE item_id=? AND status='frei' AND fremd_kunde_id IS NULL", [$item_id]);
 }
+// Menge in Quarantäne (eingebucht, aber noch nicht freigegeben) – zählt NICHT als verfügbar.
+function erp_item_quarantaene(int $item_id): float {
+    if ($item_id <= 0) return 0.0;
+    return (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge
+                           WHERE item_id=? AND status='quarantaene' AND fremd_kunde_id IS NULL", [$item_id]);
+}
 // Stück/Kapseln je Packung: Produkt (einheiten_pro_packung), sonst Auftrag (stueck), sonst 0.
 function erp_stueck_je_packung(array $pa): int {
     if (!empty($pa['produkt_id'])) { $e = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$pa['produkt_id']]); if ($e > 0) return $e; }
@@ -510,7 +519,7 @@ function erp_materialbedarf(int $pa_id): array {
         $benoetigt = $mg / $faktor;
         $verf = erp_item_bestand((int)$z['item_id']);
         $out[] = ['item_id'=>(int)$z['item_id'], 'name'=>$z['name'], 'einheit'=>$z['einheit'], 'menge_mg'=>(float)$z['menge_mg'],
-                  'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>max(0.0, $benoetigt - $verf)];
+                  'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'quarantaene'=>erp_item_quarantaene((int)$z['item_id']), 'fehlt'=>max(0.0, $benoetigt - $verf)];
     }
     return $out;
 }

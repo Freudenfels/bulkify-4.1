@@ -119,7 +119,7 @@ $felder = [
         <td><?= h((string)$b['name']) ?></td>
         <td class="bx-num"><?= (float)$b['menge_mg'] > 0 ? menge_txt($b['menge_mg']) . ' mg' : '<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= menge_txt($b['benoetigt']) ?> <?= h((string)$b['einheit']) ?></td>
-        <td class="bx-num"><?= menge_txt($b['verfuegbar']) ?> <?= h((string)$b['einheit']) ?></td>
+        <td class="bx-num"><?= menge_txt($b['verfuegbar']) ?> <?= h((string)$b['einheit']) ?><?php if (!empty($b['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($b['quarantaene']) ?> in Quarantäne – erst freigeben</span><?php endif; ?></td>
         <td><?= $ok ? '<span class="badge badge-ok">genug</span>' : '<span class="badge badge-warn">fehlt ' . menge_txt($b['fehlt']) . ' ' . h((string)$b['einheit']) . '</span>' ?></td>
       </tr>
       <?php endforeach; ?>

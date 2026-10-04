@@ -15,8 +15,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         flash($r['ok'] ? ($r['fertig'] ? 'Letzter Schritt erledigt – Produktion fertig, Fertigware eingebucht.' : 'Schritt „' . $r['station'] . '" erledigt.')
                        : ($r['msg'] ?: 'Schritt konnte nicht abgeschlossen werden.'), $r['ok'] ? 'ok' : 'warn');
     } elseif ($aktion === 'blink') {
-        $r = pr_lager_blink((int)($_POST['charge_id'] ?? 0));
-        flash($r['ok'] ? ('Blinker im Lager: ' . ($r['meldung'] ?: 'leuchtet.')) : ('Blinker: ' . ($r['meldung'] ?: 'nicht ausgelöst.')), $r['ok'] ? 'ok' : 'warn');
+        $modus = ($_POST['modus'] ?? 'an') === 'aus' ? 'aus' : 'an';
+        $r = pr_lager_blink((int)($_POST['charge_id'] ?? 0), $modus);
+        flash($r['ok'] ? ('Blinker im Lager: ' . ($r['meldung'] ?: ($modus === 'aus' ? 'aus.' : 'leuchtet.'))) : ('Blinker: ' . ($r['meldung'] ?: 'nicht ausgelöst.')), $r['ok'] ? 'ok' : 'warn');
     } elseif (($aktion === 'admin_done' || $aktion === 'admin_undo') && pr_ist_admin()) {
         $r = erp_schritt_status_setzen($schritt_id, $aktion === 'admin_done', $akteur);
         flash($r['ok'] ? ($aktion === 'admin_done' ? 'Schritt als erledigt markiert (Admin).' : 'Schritt zurückgesetzt (Admin).')
@@ -77,13 +78,17 @@ seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt
         <tr>
           <td><?= h((string)$z['name']) ?><?php if (!empty($z['detail'])): ?> <span class="muted" style="font-size:12px">· <?= h((string)$z['detail']) ?><?= $pflicht ? '' : ' (zur Info)' ?></span><?php endif; ?></td>
           <td class="bx-num"><?= menge_txt($z['menge']) ?> <?= h((string)$z['einheit']) ?></td>
-          <td class="bx-num"<?= $knapp ? ' style="color:#8f231b"' : '' ?>><?= isset($z['verfuegbar']) ? menge_txt($z['verfuegbar']) . ' ' . h((string)$z['einheit']) : '' ?></td>
+          <td class="bx-num"<?= $knapp ? ' style="color:#8f231b"' : '' ?>>
+            <?= isset($z['verfuegbar']) ? menge_txt($z['verfuegbar']) . ' ' . h((string)$z['einheit']) : '' ?>
+            <?php if (!empty($z['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($z['quarantaene']) ?> in Quarantäne – erst freigeben</span><?php endif; ?>
+          </td>
           <td class="bx-num">
             <?php if (!empty($z['charge_id'])): ?>
-            <form method="post" style="margin:0;display:inline">
-              <input type="hidden" name="aktion" value="blink">
+            <form method="post" style="margin:0;display:inline-flex;gap:4px">
               <input type="hidden" name="charge_id" value="<?= (int)$z['charge_id'] ?>">
-              <button type="submit" class="btn btn-ghost btn-sm" title="Blinker am Lagerplatz leuchten lassen">Im Lager blinken</button>
+              <button type="submit" name="aktion" value="blink" class="btn btn-ghost btn-sm" title="Blinker am Lagerplatz leuchten lassen">Im Lager blinken</button>
+              <button type="submit" name="aktion" value="blink" class="btn btn-ghost btn-sm" title="Blinker ausschalten" onclick="this.form.querySelector('[name=modus]').value='aus'">Aus</button>
+              <input type="hidden" name="modus" value="an">
             </form>
             <?php else: ?><span class="muted" style="font-size:12px">kein Blinker</span><?php endif; ?>
           </td>
