@@ -315,14 +315,14 @@ if ($gebucht):
           <input type="hidden" name="auftrag_nr" id="weAuftragNr" value="">
         </div>
         <?php if ($kisten): ?>
-        <div class="bx-field" style="margin:0;min-width:200px"><label>Kiste <span class="muted">(optional)</span></label>
-          <select name="kiste_id" id="weKiste">
-            <option value="">— keine Kiste —</option>
-            <?php foreach ($kisten as $kk): ?><option value="<?= (int)$kk['id'] ?>" data-barcode="<?= h((string)($kk['barcode'] ?? '')) ?>"><?= h((string)$kk['name']) ?><?= $kk['blinker'] ? ' · Blinker ' . h((string)$kk['blinker']) : ' · kein Blinker' ?></option><?php endforeach; ?>
-          </select>
-          <input type="text" id="weKisteScan" class="lg-code" autocomplete="off" placeholder="…oder Kisten-Barcode scannen" style="margin-top:6px">
-          <div id="weKisteScanInfo" class="muted" style="font-size:12px;margin-top:4px"></div>
+        <div class="bx-field" style="margin:0;min-width:240px;flex:1 1 240px"><label>Kiste <span class="muted">(optional – tippen oder Barcode scannen)</span></label>
+          <input type="text" id="weKisteSuche" list="weKisteList" autocomplete="off" placeholder="Kiste suchen oder Barcode scannen">
+          <input type="hidden" name="kiste_id" id="weKiste" value="">
+          <div id="weKisteInfo" class="muted" style="font-size:12px;margin-top:4px"></div>
         </div>
+        <datalist id="weKisteList">
+          <?php foreach ($kisten as $kk): ?><option value="<?= h((string)$kk['name']) ?>"><?= $kk['blinker'] ? 'Blinker ' . h((string)$kk['blinker']) : 'kein Blinker' ?></option><?php endforeach; ?>
+        </datalist>
         <?php endif; ?>
         <div class="bx-field" style="margin:0;min-width:180px"><label>Status</label>
           <select name="status">
@@ -392,6 +392,7 @@ if ($gebucht):
 <script>
 (function(){
   var ITEMS = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'f'=>(string)($it['form']??'')], $items), JSON_UNESCAPED_UNICODE) ?>;
+  var KISTEN = <?= json_encode(array_map(fn($k)=>['id'=>(int)$k['id'],'n'=>(string)$k['name'],'b'=>(string)($k['barcode']??'')], $kisten), JSON_UNESCAPED_UNICODE) ?>;
   var MATRIX = {rohstoff:{mhd:1,charge:1},kapsel:{mhd:1,charge:1},fertig:{mhd:1,charge:1},verkaufsfertig:{mhd:1,charge:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
   var ARTEN = [['rohstoff','Rohstoff'],['kapsel','Kapseln'],['fertig','Fertigware'],['verpackung','Verpackung'],['verbrauch','Verbrauch']];
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
@@ -485,22 +486,23 @@ if ($gebucht):
     document.querySelectorAll('.we-blinker').forEach(function(b){ b.required=!frei; });
     document.querySelectorAll('.f-blinker label').forEach(function(l){ l.innerHTML = frei ? 'Blinker <span class="muted">(optional)</span>' : 'Blinker *'; });
   }
+  // Kiste: EIN Feld – tippen (Vorschläge via datalist) ODER Barcode scannen. Setzt die versteckte kiste_id.
   (function(){
-    var s=document.getElementById('weKiste'); if(s) s.addEventListener('change', blinkerPflicht);
-    // Kisten-Barcode scannen -> passende Kiste im Dropdown wählen.
-    var scan=document.getElementById('weKisteScan'), info=document.getElementById('weKisteScanInfo');
-    if(scan && s){
-      function treffer(){
-        var code=(scan.value||'').trim(); if(code===''){ info.textContent=''; return; }
-        var opt=null;
-        for(var i=0;i<s.options.length;i++){ var b=(s.options[i].getAttribute('data-barcode')||'').trim();
-          if(b!=='' && b.toLowerCase()===code.toLowerCase()){ opt=s.options[i]; break; } }
-        if(opt){ s.value=opt.value; blinkerPflicht(); info.textContent='Kiste: '+opt.textContent.replace(/ · .*/,''); info.style.color='var(--gruen)'; scan.value=''; }
-        else { info.textContent='Kein Kisten-Barcode „'+code+'" gefunden.'; info.style.color=''; }
-      }
-      scan.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); treffer(); } });
-      scan.addEventListener('input',function(){ if(scan.value.length>=4) treffer(); });
+    var inp=document.getElementById('weKisteSuche'), hid=document.getElementById('weKiste'),
+        info=document.getElementById('weKisteInfo');
+    if(!inp||!hid) return;
+    function pick(){
+      var v=(inp.value||'').trim();
+      if(v===''){ hid.value=''; info.textContent=''; blinkerPflicht(); return; }
+      var m=KISTEN.filter(function(k){return k.n.toLowerCase()===v.toLowerCase();})[0]            // exakt per Name
+          || KISTEN.filter(function(k){return k.b && k.b.toLowerCase()===v.toLowerCase();})[0];   // oder per Barcode
+      if(m){ hid.value=m.id; inp.value=m.n; info.textContent='Kiste: '+m.n; info.style.color='var(--gruen)'; }
+      else { hid.value=''; info.textContent='Keine Kiste erkannt – weiter tippen oder Barcode scannen.'; info.style.color=''; }
+      blinkerPflicht();
     }
+    inp.addEventListener('input', pick);
+    inp.addEventListener('change', pick);
+    inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); pick(); } });
   })();
   function pflicht(tr){
     var art=tr.querySelector('.we-art').value, reg=MATRIX[art]||{mhd:0,charge:0};
