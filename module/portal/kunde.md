@@ -204,3 +204,6 @@ Admin-Reiter `?p=alt_rechnungen` (originale Rechnungen alter Aufträge). Siehe `
 - **Bestell-Suche zeigt Status:** Treffer vom Typ „Bestellung" (`v=suche`) zeigen den kundenseitigen Status (in Produktion / versandbereit / abgeschlossen; fulfillment: eingelagert) via `kunde_bestell_status_label()`.
 - **Fremdprodukte / Mein Lager (`v=fremdprodukte`, nur Fulfillment-Kunden):** Menüpunkt in „Vorgänge". Zeigt den Fremdlager-Bestand (Lager 2) je Produkt **inkl. Chargen/MHD** (`lager2_produkte($kid)` + `charge`) und erlaubt das **Anmelden neuer Fremdprodukte** (Name/Artikelnummer/EAN/Einheiten; `aktion=fremdprodukt_anlegen` → kundeneigenes `produkt` (exklusiv) + Verkaufsfertig-`item` via `produkt_lageritem()`). Bestand folgt beim Wareneingang.
 - **Meine-Anfragen „In Prüfung":** Spalte **Datum** + Detailzeile „Was Sie angefragt haben" (Form · Wunsch-Zutaten · Notiz bzw. Menge/Verpackung); die Zwischenüberschrift „Ihre Vorgänge" wurde entfernt.
+
+## Rohstoff-Infoblatt in der eigenen Rezeptur
+Zutaten in der Rezeptur-Ansicht verlinken auf das Rohstoff-Infoblatt (`?view=rohstoff&iid=`). Das Infoblatt ist jetzt auch ohne Katalog-Zugang (`portal_rohstoffe`) sichtbar, WENN der Rohstoff in einer eigenen, sichtbaren Rezeptur des Kunden steckt (via `portal_rezeptur`). Nur bulkify-Dokumente/Werte, nie Lieferanten-Originale.

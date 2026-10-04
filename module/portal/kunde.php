@@ -1242,7 +1242,15 @@ $prodFuellEinheit = form_groessen_einheit($prodForm) ?: 'g';
 $prodPortionG = ($prodDetail && $prodDetail['rezeptur_id']) ? (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [(int)$prodDetail['rezeptur_id']]) / 1000 : 0;
 // Rohstoff-Detail (kundenfreundlich: Kennwerte + Deklaration, keine internen Daten)
 $iid = (int)($_GET['iid'] ?? 0);
-$rohDetail = ($iid && $k['portal_rohstoffe']) ? one("SELECT id, name, name_lat, form, cas, herkunft, synonym, bot_quelle, herkunftsland,
+// Rohstoff-Infoblatt sichtbar, wenn der Kunde den Rohstoffkatalog frei hat ODER der Rohstoff in einer
+// seiner EIGENEN (sichtbaren) Rezepturen steckt – dann darf er die Infos zu seiner Rezeptur-Zutat sehen.
+$darfRohInfo = !empty($k['portal_rohstoffe']);
+if (!$darfRohInfo && $iid && !empty($k['portal_rezeptur'])) {
+    $darfRohInfo = (bool) scalar("SELECT 1 FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id
+        WHERE z.item_id=? AND ((r.kunde_id=? AND r.status IN ('vorschlag','eingefroren','freigegeben','abgelehnt'))
+                               OR (r.kunde_id IS NULL AND r.status='freigegeben')) LIMIT 1", [$iid, $kid]);
+}
+$rohDetail = ($iid && $darfRohInfo) ? one("SELECT id, name, name_lat, form, cas, herkunft, synonym, bot_quelle, herkunftsland,
     haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben
     FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
 require_once BX_ROOT . '/core/spec_ki.php';   // item_kennwerte_relevant: nur echte Kennwerte (kein Schwermetall/Mikro/Mineral)
@@ -2000,7 +2008,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php else: ?>
       <table class="bx-table"><thead><tr><th>Zutat</th><th class="bx-num">Menge je <?= $dfP ?></th><th>Dokumente</th></tr></thead><tbody>
         <?php $sum = 0; foreach ($rezZutaten as $z): $sum += (float)$z['menge_mg']; $dk = $rezDoks[(int)($z['item_id'] ?? 0)] ?? []; ?>
-          <tr><td><?= h($z['bezeichnung']) ?></td><td class="bx-num"><?= rtrim(rtrim(number_format((float)$z['menge_mg'],2,',','.'),'0'),',') ?> mg</td>
+          <tr><td><?php if (!empty($z['item_id'])): ?><a href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$z['item_id'] ?>" title="Rohstoff-Infoblatt ansehen"><?= h($z['bezeichnung']) ?></a><?php else: ?><?= h($z['bezeichnung']) ?><?php endif; ?></td><td class="bx-num"><?= rtrim(rtrim(number_format((float)$z['menge_mg'],2,',','.'),'0'),',') ?> mg</td>
             <td><?php if ($dk): foreach ($dk as $d): ?>
                   <a href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener" style="margin-right:10px"><?= h($DOKTYP[$d['typ']] ?? $d['typ']) ?></a>
                 <?php endforeach; else: ?><span class="muted">–</span><?php endif; ?></td></tr>
