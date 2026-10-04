@@ -62,6 +62,21 @@ Datei zu prüfen – dann weiß man auch, wo man sucht.
   füllen nur vor – gespeichert und verschickt wird nie automatisch.
 - **Dublettenprüfung** beim Erfassen (rein rechnerisch, ohne KI).
 
+## Website-Eingang (lead_intake)
+`public/crm/lead_intake.php` ist der **öffentliche** Anfrage-Eingang der Website (bulkify.pro) →
+CRM-Lead. **Kein Login, token-gesichert** (Token in `crm_meta` `lead_intake_token`, via
+`lead_intake_token()`; still-quittierend: interne Fehler → `200 ok:false`, nur falscher Token → `403`).
+Nimmt JSON **oder** form-encoded POST (Felder u. a. `name, firma, email, telefon, whatsapp, anliegen,
+ziel, produktform, menge, wirkstoffe, rezeptur, nachricht`). Erreichbar unter `<host>/crm/lead_intake.php`.
+Die Website (eigenes Repo `bulkifyv2`, siehe dortige `WEBSITE.md`) wird ihre Formulare serverseitig
+hierher umbiegen – damit landen Anfragen direkt im CRM statt per Mail im alten v3-Dashboard.
+
+## Ausbauziel (Backend-Chat)
+Dieser CRM-/Backend-Chat soll perspektivisch die verstreuten **KI-/Tool-Backends** der Website/v3
+(z. B. Etikett-Check, PIB-/Analyse-Generator, Rechner) in **ein** v4-Backend ziehen – ein gepflegter
+Anthropic-Schlüssel, eine Stelle. Vor dem Portieren jeweils prüfen, ob v4 die Funktion schon hat
+(viel KI liegt bereits in `core/spec_ki.php`, `core/rezeptur_ki.php`, Angebots-/Beleg-Import).
+
 ## Noch nicht gebaut
 Morgenmail, E-Mail-Eingang, WhatsApp Cloud API.
 
