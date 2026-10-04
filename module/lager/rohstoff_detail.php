@@ -118,6 +118,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ue
     $did = (int)($_POST['dok_id'] ?? 0);
     $vor = spec_ki_vorschlag($did);
     $n = $vor ? spec_ki_uebernehmen((int)$id, (array)($vor['stamm'] ?? []), (array)($_POST['feld'] ?? []), true) : 0;
+    // Charakteristische Kennwerte (OPC-Gehalt …), Wirkstoffe und Grenzwerte gleich mitübernehmen (additiv,
+    // bestehende bleiben) – so landet die vollständige Standardisierung am Rohstoff, nicht nur die Stammfelder.
+    if ($vor) { spec_ki_kennwerte((int)$id, $vor); spec_ki_wirkstoffe((int)$id, $vor); spec_ki_grenzwerte((int)$id, $vor); }
     header('Location: ?p=rohstoff&id=' . (int)$id . '&kiueb=' . $n . '#spec'); exit;
 }
 // Analysewerte aus dem Vorschlag an einer Charge speichern.

@@ -195,6 +195,7 @@ function spec_ki_nach_upload(int $dokument_id): bool {
         $lief = !empty($d['lieferant_id']) ? (int)$d['lieferant_id'] : null;
         spec_ki_coa_charge((int)$d['objekt_id'], $r, $lief);
         spec_ki_grenzwerte((int)$d['objekt_id'], $r);
+        spec_ki_kennwerte((int)$d['objekt_id'], $r);    // charakteristische Kennwerte (OPC-Gehalt, DEV, pH …)
         spec_ki_wirkstoffe((int)$d['objekt_id'], $r);   // erkannte Wirk-/Leitsubstanzen an den Rohstoff
     }
     return true;
@@ -271,6 +272,27 @@ function spec_ki_coa_charge(int $item_id, array $ergebnis, ?int $lieferant_id = 
 // Reinheits-/Sicherheits-Grenzwerte dauerhaft AM ROHSTOFF speichern (item_grenzwert), aus der
 // Spezifikation/CoA. Nimmt alle Werte mit einem Grenzwert (spezifikation). Ersetzt bestehende nur,
 // wenn $ueberschreiben=true; sonst werden fehlende ergänzt. Rückgabe: Anzahl gespeicherter Zeilen.
+// Charakteristische Kennwerte (OPC-Gehalt, Extraktverhältnis/DEV, pH, Mesh …) aus dem KI-Ergebnis an den
+// Rohstoff schreiben (item_kennwert). Analog zu den Grenzwerten – additiv, bestehende bleiben.
+function spec_ki_kennwerte(int $item_id, array $ergebnis, bool $ueberschreiben = false): int {
+    if ($item_id <= 0 || !table_exists('item_kennwert')) return 0;
+    $rows = [];
+    foreach ((array)($ergebnis['kennwerte'] ?? []) as $z) {
+        $p = trim((string)($z['parameter'] ?? ''));
+        $w = trim((string)($z['wert'] ?? ''));
+        if ($p === '' || $w === '') continue;
+        $rows[$p] = $w;   // je Parameter der letzte Wert
+    }
+    if (!$rows) return 0;
+    if ($ueberschreiben) q("DELETE FROM item_kennwert WHERE item_id=?", [$item_id]);
+    $n = 0; $sort = (int) scalar("SELECT COALESCE(MAX(sort),-1)+1 FROM item_kennwert WHERE item_id=?", [$item_id]);
+    foreach ($rows as $p => $w) {
+        if (!$ueberschreiben && scalar("SELECT id FROM item_kennwert WHERE item_id=? AND parameter=?", [$item_id, $p])) continue;
+        q("INSERT INTO item_kennwert (item_id,parameter,wert,sort) VALUES (?,?,?,?)", [$item_id, mb_substr($p, 0, 120), mb_substr($w, 0, 120), $sort++]);
+        $n++;
+    }
+    return $n;
+}
 function spec_ki_grenzwerte(int $item_id, array $ergebnis, bool $ueberschreiben = false): int {
     if ($item_id <= 0) return 0;
     $werte = (array)($ergebnis['werte'] ?? []);
