@@ -102,11 +102,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $mhd      = trim((string)($_POST['p_mhd'][$i] ?? ''));
         $blinker  = led_leiste_normalisieren((string)($_POST['p_blinker'][$i] ?? ''));
         $pakete   = max(1, (int)($_POST['p_pakete'][$i] ?? 1));
-        if ($name === '' && $menge <= 0) continue;   // leere Zeile
+        $rezeptur_id = (int)($_POST['p_rezeptur'][$i] ?? 0);   // nur bei Warenart 'fertig' relevant
+        if ($name === '' && $menge <= 0 && $rezeptur_id <= 0) continue;   // leere Zeile
 
         // Warenart -> echte Zuordnung (kategorie + form). Leerkapseln=rohstoff/kapselhuelle, fertige Kapseln=fertig.
         $defs = function_exists('erp_warenart_defs') ? erp_warenart_defs() : [];
         $def  = $defs[$warenart] ?? ['kategorie' => 'rohstoff', 'form' => ''];
+        // Fertige Kapseln (Bulk): aufs kanonische Bulk-Item der gewählten Rezeptur buchen
+        // (statt einen losen Artikel per Name anzulegen). Fehlt das Bulk-Item -> sauber abbrechen.
+        if ($warenart === 'fertig' && $rezeptur_id > 0) {
+            $bulk = function_exists('erp_rezeptur_bulkitem') ? erp_rezeptur_bulkitem($rezeptur_id) : null;
+            if (!$bulk) { $fehler[] = 'Zeile ' . ($i + 1) . ': Für diese Rezeptur gibt es noch kein Bulk-Lagerartikel – bitte erst im Dashboard anlegen.'; continue; }
+            $item_id = (int)$bulk;
+        }
         // Artikel bestimmen (bestehend oder neu anlegen).
         if (!$item_id && $name !== '') {
             $item_id = (int) erp_item_anlegen($name, $def['kategorie'], $einheit);
@@ -161,6 +169,7 @@ $kunden  = erp_fulfillment_kunden();
 $liefers = erp_lieferanten();
 $kisten  = function_exists('kiste_alle') ? kiste_alle() : [];
 $items   = erp_items_eingang();
+$rezepturen = function_exists('erp_rezeptur_liste') ? erp_rezeptur_liste() : [];   // für Fertigware/Bulk: Rezeptur-Picker
 $ki      = lg_ki_bereit();
 $erwartet = erp_erwartete_lieferungen();   // für Kachel "aus Liste wählen"
 $heute    = date('Y-m-d');
@@ -369,6 +378,8 @@ if ($gebucht):
   .we-pos .we-row{display:flex;flex-wrap:wrap;gap:var(--sp-3) var(--sp-4)}
   .we-pos .bx-field{margin-bottom:0;flex:1 1 150px;min-width:0}
   .we-pos .f-art{flex:2 1 240px}
+  .we-pos .f-rez{flex:2 1 240px}
+  .we-pos .we-rez-info{font-size:12px;margin-top:4px}
   .we-pos .f-menge{flex:0 1 110px}
   .we-pos .f-einheit{flex:0 1 90px}
   .we-pos .f-artnr{flex:0 1 120px}
@@ -395,6 +406,12 @@ if ($gebucht):
 (function(){
   var ITEMS = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'f'=>(string)($it['form']??'')], $items), JSON_UNESCAPED_UNICODE) ?>;
   var KISTEN = <?= json_encode(array_map(fn($k)=>['id'=>(int)$k['id'],'n'=>(string)$k['name'],'b'=>(string)($k['barcode']??'')], $kisten), JSON_UNESCAPED_UNICODE) ?>;
+  var REZ = <?= json_encode(array_map(fn($r)=>[
+        'id'=>(int)$r['id'],
+        'n'=>trim((($r['nummer']??'')!==''? $r['nummer'].' · ':'').$r['name']),
+        'bi'=>(int)($r['bulk_item_id']??0),
+        'e'=>(string)($r['bulk_einheit']??'')
+      ], $rezepturen), JSON_UNESCAPED_UNICODE) ?>;
   var MATRIX = {rohstoff:{mhd:1,charge:1},leerkapsel:{mhd:1,charge:1},fertig:{mhd:1,charge:1},verkaufsfertig:{mhd:1,charge:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
   var ARTEN = [['rohstoff','Rohstoff'],['leerkapsel','Leerkapseln'],['fertig','Fertigware / Bulk'],['verkaufsfertig','Verkaufsfertig (verpackt)'],['verpackung','Verpackung'],['verbrauch','Verbrauch']];
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
@@ -419,6 +436,9 @@ if ($gebucht):
   }
   function datalistItems(){ return ITEMS.map(function(it){ var l=katLabel(it); return '<option value="'+esc(it.n)+'">'+(l?esc(l):'')+'</option>'; }).join(''); }
   var dl=document.createElement('datalist'); dl.id='weItemList'; dl.innerHTML=datalistItems(); document.body.appendChild(dl);
+  var dlR=document.createElement('datalist'); dlR.id='weRezList';
+  dlR.innerHTML=REZ.map(function(r){ return '<option value="'+esc(r.n)+'">'+(r.bi?'':'noch kein Bulk-Artikel')+'</option>'; }).join('');
+  document.body.appendChild(dlR);
 
   function addRow(p){
     p=p||{};
@@ -429,6 +449,7 @@ if ($gebucht):
       '<div class="we-row">'+
         '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" title="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><div class="we-aehnlich"></div></div>'+
         '<div class="bx-field f-warenart"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
+        '<div class="bx-field f-rez" style="display:none"><label>Rezeptur <span class="muted">(Bulk)</span></label><input type="text" class="we-rez" name="p_rezeptur_name[]" list="weRezList" autocomplete="off" value="" placeholder="Rezeptur wählen"><input type="hidden" name="p_rezeptur[]" class="we-rez-id" value="0"><div class="we-rez-info muted"></div></div>'+
         '<div class="bx-field f-menge"><label>Menge</label><input type="text" name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+
         '<div class="bx-field f-einheit"><label>Einheit</label><input type="text" name="p_einheit[]" value="'+esc(p.einheit||'')+'" placeholder="Stk"></div>'+
         '<div class="bx-field f-artnr"><label>Art.-Nr. <span class="muted">(Lief.)</span></label><input type="text" name="p_artnr[]" value="'+esc(p.artikelnummer||'')+'" placeholder="Art.-Nr."></div>'+
@@ -449,11 +470,35 @@ if ($gebucht):
       else { hid.value=0; }
       zeigeAehnlich(card);
     });
+    // Rezeptur-Picker (nur bei Warenart "Fertigware / Bulk"): fertige Kapseln aufs Bulk-Item der Rezeptur buchen.
+    var rez=card.querySelector('.we-rez'), rezId=card.querySelector('.we-rez-id'),
+        rezWrap=card.querySelector('.f-rez'), rezInfo=card.querySelector('.we-rez-info');
+    function toggleRez(){
+      var an = art2.value==='fertig';
+      if(rezWrap) rezWrap.style.display = an ? '' : 'none';
+      if(!an && rez){ rez.value=''; rezId.value='0'; if(rezInfo){rezInfo.textContent='';} }
+    }
+    function pickRez(){
+      if(!rez) return;
+      var v=(rez.value||'').trim().toLowerCase();
+      var m=REZ.filter(function(r){return r.n.toLowerCase()===v;})[0];
+      if(m){
+        rezId.value=m.id;
+        if(hid) hid.value=m.bi||0;                 // bekanntes Bulk-Item direkt übernehmen
+        if(name && name.value.trim()==='') name.value=m.n;
+        if(einh && einh.value.trim()==='') einh.value=m.e||'Stück';
+        if(rezInfo){ rezInfo.textContent = m.bi ? '' : 'Noch kein Bulk-Artikel – bitte erst im Dashboard anlegen.'; rezInfo.style.color = m.bi ? '' : 'var(--err)'; }
+        var box=card.querySelector('.we-aehnlich'); if(box) box.innerHTML='';
+      } else { rezId.value='0'; if(rezInfo){rezInfo.textContent='';} }
+    }
+    if(rez){ rez.addEventListener('input',pickRez); rez.addEventListener('change',pickRez); }
     art2.addEventListener('change',function(){
       // Leerkapseln zählt man in Stück, nicht in kg -> Einheit vorschlagen (nur wenn leer/Gewicht).
       if(art2.value==='leerkapsel'){ var e=einh.value.trim().toLowerCase(); if(e===''||['kg','g','l','ml','t'].indexOf(e)>=0) einh.value='Stk'; }
+      toggleRez();
       pflicht(card);
     });
+    toggleRez();
     card.querySelector('.we-del').addEventListener('click',function(){card.remove(); if(!rows.children.length)addRow();});
     // Aufteilen-Haken je Position -> in das versteckte Feld schreiben (Index bleibt so ausgerichtet).
     var cb=card.querySelector('.we-split'), cbh=card.querySelector('.we-split-h');

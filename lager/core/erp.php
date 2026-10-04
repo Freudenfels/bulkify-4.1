@@ -585,6 +585,31 @@ function erp_rezeptur_nr(?int $item_id, ?int $auftrag_id): string {
     return '';
 }
 
+// Rezepturen für den Picker beim Einbuchen fertiger Kapseln (Bulk). Read-only.
+// Liefert je Rezeptur das kanonische Bulk-Item (item.rezeptur_id + kategorie='fertig'), falls schon da.
+// Anlage des Bulk-Items bleibt kanonisch im Dashboard (rezeptur_bulkitem()); das Lager löst nur auf.
+function erp_rezeptur_liste(): array {
+    if (!tabelle_da('rezeptur')) return [];
+    try {
+        return all("SELECT r.id, r.nummer, r.name, r.darreichungsform,
+                           bi.id AS bulk_item_id, bi.einheit AS bulk_einheit
+                      FROM rezeptur r
+                      LEFT JOIN item bi ON bi.rezeptur_id = r.id AND bi.kategorie='fertig'
+                     WHERE r.status <> 'entwurf'
+                     ORDER BY r.name, r.id");
+    } catch (Throwable $e) { return []; }
+}
+
+// Kanonisches Bulk-Item einer Rezeptur auflösen (read-only). Null, wenn es noch keines gibt
+// (dann im Dashboard anlegen lassen – siehe ANTWORT-DASHBOARD-REZEPTUR-BULKITEM.md, Variante A).
+function erp_rezeptur_bulkitem(int $rezeptur_id): ?int {
+    if ($rezeptur_id <= 0 || !tabelle_da('item')) return null;
+    try {
+        $id = scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' LIMIT 1", [$rezeptur_id]);
+        return $id ? (int)$id : null;
+    } catch (Throwable $e) { return null; }
+}
+
 function erp_erwartete_lieferungen(): array {
     if (!tabelle_da('bestellung')) return [];
     $rows = all("SELECT b.id, b.nummer, b.bestelldatum, b.eta_geplant, b.tracking, b.versandanbieter,

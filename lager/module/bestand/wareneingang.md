@@ -9,6 +9,13 @@ Ein Bereich für alles, was reinkommt. Ablauf:
 3. **Positionen prüfen**: je Zeile Artikel (bestehend/neu), Warenart, Menge, Einheit, Charge, MHD,
    **Blinker (immer Pflicht)**, Pakete. Pflichtfelder je Warenart aus `erp_warenart_regeln()`:
    Rohstoff/Fertig/Kapsel → MHD+Charge Pflicht + Quarantäne; Verpackung/Verbrauch → frei.
+
+   **Fertige Kapseln (Warenart „Fertigware / Bulk"):** Dann erscheint zusätzlich ein **Rezeptur-Picker**
+   (Textsuche, `erp_rezeptur_liste()`, nur Rezepturen ≠ Entwurf). Beim Buchen wird die Position aufs
+   **kanonische Bulk-Item der Rezeptur** gebucht (`item.rezeptur_id` + `kategorie='fertig'`), aufgelöst per
+   `erp_rezeptur_bulkitem()` (read-only). Gibt es noch kein Bulk-Item, wird die Zeile **nicht** gebucht,
+   sondern gemeldet („bitte erst im Dashboard anlegen") – die Anlage bleibt kanonisch im Dashboard
+   (`rezeptur_bulkitem()`); siehe `ANTWORT-DASHBOARD-REZEPTUR-BULKITEM.md`, Variante A.
 4. **Alle buchen** (`POST aktion=buchen`): je Position eine Charge (`erp_wareneingang_buchen` für L1,
    `erp_wareneingang_buchen_fremd` für L2), Blinker anhängen (grün), Pakete + Bewegungslog. Unbekannte
    Artikel werden via `erp_item_anlegen` angelegt. Ungültige Zeilen werden übersprungen und gemeldet
