@@ -307,9 +307,15 @@ function spec_ki_wirkstoffe(int $item_id, array $ergebnis, bool $ueberschreiben 
         if ($nm === '') continue;
         $nid = naehrstoff_id_by_name($nm);
         if (!$nid) continue;
-        if (!$ueberschreiben && scalar("SELECT id FROM item_wirkstoff WHERE item_id=? AND naehrstoff_id=?", [$item_id, $nid])) continue;
         $g = $w['gehalt_prozent'] ?? null;
         $g = ($g === null || $g === '') ? null : (float) str_replace(',', '.', (string)$g);
+        $vorhanden = one("SELECT id, gehalt_wert, gehalt_prozent FROM item_wirkstoff WHERE item_id=? AND naehrstoff_id=? LIMIT 1", [$item_id, $nid]);
+        if ($vorhanden && !$ueberschreiben) {
+            // Existiert schon: nur FEHLENDEN Wert auffüllen (sonst nichts anfassen – keine geprüften Werte überschreiben).
+            $hatWert = ($vorhanden['gehalt_wert'] !== null && $vorhanden['gehalt_wert'] !== '') || ($vorhanden['gehalt_prozent'] !== null && $vorhanden['gehalt_prozent'] !== '');
+            if (!$hatWert && $g !== null) { q("UPDATE item_wirkstoff SET gehalt_prozent=?, gehalt_wert=?, gehalt_einheit='prozent' WHERE id=?", [$g, $g, (int)$vorhanden['id']]); $n++; }
+            continue;
+        }
         q("INSERT INTO item_wirkstoff (item_id,naehrstoff_id,gehalt_prozent,gehalt_wert,gehalt_einheit,sort) VALUES (?,?,?,?, 'prozent', ?)",
           [$item_id, $nid, $g, $g, $sort++]);
         $n++;
