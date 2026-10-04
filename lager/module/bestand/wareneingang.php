@@ -410,7 +410,12 @@ if ($gebucht):
   // --- Positionen-Tabelle ---
   var rows=document.getElementById('weRows');
   function artOptions(sel){ return ARTEN.map(function(a){return '<option value="'+a[0]+'"'+(a[0]===sel?' selected':'')+'>'+a[1]+'</option>';}).join(''); }
-  function datalistItems(){ return ITEMS.map(function(it){return '<option value="'+esc(it.n)+'">';}).join(''); }
+  function katLabel(it){
+    if(it.f==='kapselhuelle') return 'Leerkapseln';
+    var m={rohstoff:'Rohstoff',fertig:'Fertigware',verkaufsfertig:'Verkaufsfertig',verpackung:'Verpackung',verbrauch:'Verbrauch',kapsel:'Kapseln'};
+    return m[it.k]||it.k||'';
+  }
+  function datalistItems(){ return ITEMS.map(function(it){ var l=katLabel(it); return '<option value="'+esc(it.n)+'">'+(l?esc(l):'')+'</option>'; }).join(''); }
   var dl=document.createElement('datalist'); dl.id='weItemList'; dl.innerHTML=datalistItems(); document.body.appendChild(dl);
 
   function addRow(p){
@@ -420,7 +425,7 @@ if ($gebucht):
     card.innerHTML=
       '<button type="button" class="btn btn-ghost btn-sm we-del" title="Zeile entfernen">×</button>'+
       '<div class="we-row">'+
-        '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><div class="we-aehnlich"></div></div>'+
+        '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" title="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><div class="we-aehnlich"></div></div>'+
         '<div class="bx-field f-warenart"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
         '<div class="bx-field f-menge"><label>Menge</label><input type="text" name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+
         '<div class="bx-field f-einheit"><label>Einheit</label><input type="text" name="p_einheit[]" value="'+esc(p.einheit||'')+'" placeholder="Stk"></div>'+
@@ -436,6 +441,7 @@ if ($gebucht):
     var name=card.querySelector('.we-name'), hid=card.querySelector('input[name="p_item[]"]'),
         art2=card.querySelector('.we-art'), einh=card.querySelector('input[name="p_einheit[]"]');
     name.addEventListener('input',function(){
+      name.title=name.value;   // voller Text als Tooltip beim Drüberfahren
       var m=ITEMS.filter(function(it){return it.n.toLowerCase()===name.value.trim().toLowerCase();})[0];
       if(m){ hid.value=m.id; if(!einh.value)einh.value=m.e||''; var a=m.f==='kapselhuelle'?'kapsel':m.k; if(MATRIX[a]){art2.value=a;} pflicht(card); }
       else { hid.value=0; }
