@@ -4,6 +4,7 @@ $kat = (string)($_GET['kat'] ?? '');
 if ($kat !== '' && !isset(erp_kategorien()[$kat])) $kat = '';
 $q = trim((string)($_GET['q'] ?? ''));
 $mit_leer = ($_GET['leer'] ?? '') === '1';
+$nur_kisten = ($_GET['nur_kisten'] ?? '') === '1';
 $sortOpt = ['neu' => 'Neuste zuerst', 'alt' => 'Älteste zuerst', 'mhd' => 'MHD (zuerst ablaufend)', 'name' => 'Name (A–Z)', 'menge' => 'Menge (viel zuerst)'];
 $sort = (string)($_GET['sort'] ?? 'neu');
 if (!isset($sortOpt[$sort])) $sort = 'neu';
@@ -35,7 +36,50 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
     </select>
   </label>
   <label class="bx-check" style="margin:0"><input type="checkbox" onchange="location.href='?p=bestand<?= ($kat ? '&kat=' . h($kat) : '') . ($q ? '&q=' . urlencode($q) : '') ?>&sort=<?= h($sort) ?>' + (this.checked ? '&leer=1' : '')" <?= $mit_leer ? 'checked' : '' ?>> auch leere zeigen</label>
+  <a class="btn btn-ghost btn-sm" href="?p=bestand<?= $nur_kisten ? '' : '&nur_kisten=1' ?>" style="margin-left:auto"><?= $nur_kisten ? 'Alle Chargen' : 'Nur Kisten' ?></a>
 </div>
+
+<?php
+// --- Kisten-Ansicht: ausklappbare Blöcke mit Inhalt. Bei ?nur_kisten=1 statt der Chargenliste. ---
+if ($nur_kisten):
+    $kisten = function_exists('kiste_alle') ? kiste_alle() : [];
+    if (!$kisten): ?>
+      <div class="bx-panel muted">Noch keine Kisten angelegt. Unter „Kisten" anlegen, dann beim Einbuchen zuweisen.</div>
+    <?php else: foreach ($kisten as $kk):
+        $inh = kiste_inhalt((int)$kk['id']);
+    ?>
+      <details class="bx-panel lg-kiste" style="margin-bottom:var(--sp-3)">
+        <summary style="cursor:pointer;display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap">
+          <strong><?= h((string)$kk['name']) ?></strong>
+          <span class="muted"><?= count($inh) ?> Posten</span>
+          <?php if (!empty($kk['blinker'])): ?>
+            <span class="lg-code"><?= h((string)$kk['blinker']) ?></span>
+            <button type="button" class="btn btn-primary btn-sm" data-klingeln="<?= (int)$kk['leiste_id'] ?>" data-farbe="gruen" data-sek="40">Kiste finden</button>
+          <?php else: ?><span class="muted" style="font-size:12px">kein Blinker</span><?php endif; ?>
+        </summary>
+        <?php if (!$inh): ?>
+          <div class="muted" style="margin-top:var(--sp-3)">Kiste ist leer.</div>
+        <?php else: ?>
+        <div class="bx-tablewrap" style="margin-top:var(--sp-3)">
+          <table class="bx-table lg-karten">
+            <thead><tr><th>Rohstoff / Produkt</th><th>Charge</th><th>MHD</th><th>Menge</th><th>Fach</th></tr></thead>
+            <tbody>
+            <?php foreach ($inh as $it): $c = $it['charge']; if (!$c) continue; ?>
+              <tr onclick="location.href='?p=charge&id=<?= (int)$it['charge_id'] ?>'" style="cursor:pointer">
+                <td data-label=""><a href="?p=charge&id=<?= (int)$it['charge_id'] ?>" class="lg-namelink" onclick="event.stopPropagation()"><?= h((string)($c['item_name'] ?? '')) ?></a></td>
+                <td data-label="Charge" class="lg-code"><?= h((string)($c['charge_nr'] ?? '')) ?></td>
+                <td data-label="MHD"><?= mhd_html($c['mhd'] ?? null) ?></td>
+                <td data-label="Menge"><?= h(menge_txt($c['menge_verfuegbar'] ?? 0)) ?> <?= h((string)($c['einheit'] ?? '')) ?></td>
+                <td data-label="Fach"><?= !empty($it['fach']) ? h((string)$it['fach']) : '<span class="muted">–</span>' ?></td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+        <?php endif; ?>
+      </details>
+    <?php endforeach; endif; ?>
+<?php fuss(); return; endif; ?>
 
 <?php if (!$zeilen): ?>
   <div class="bx-panel muted">Nichts im Bestand<?= $q ? ' für „' . h($q) . '"' : '' ?>.</div>

@@ -16,3 +16,11 @@ Ein Bereich für alles, was reinkommt. Ablauf:
 
 Ersetzt im Menü die alten getrennten Seiten `eingang.php` (L1) und `l2_eingang.php` (L2); deren Routen
 bleiben für Altlinks (z. B. Erwartete Lieferungen → Einbuchen) bestehen.
+
+**Kiste (optional):** Oben lässt sich eine **Kiste** (`kiste_id`) + **Fach** wählen (aus `kiste_alle()`).
+Ist eine Kiste gewählt, wird jede gebuchte Charge per `kiste_charge_zuordnen()` hineingelegt und der
+**Blinker je Position ist optional** (die Kiste blinkt beim Finden). Ohne Kiste bleibt der Blinker Pflicht.
+
+**Lieferschein-Scan** erfasst zusätzlich Lieferanten-**Art.-Nr.** je Position und die **Auftragsnummer**
+(beides in die Charge-Notiz), legt den **Lieferanten** an/verknüpft ihn und erfindet **keine Charge** mehr.
+**Sendungs-/Paketnummer** (Tracking) wird je Charge gespeichert (`lg_tracking_set`).

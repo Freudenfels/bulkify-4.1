@@ -9,3 +9,7 @@ Startseite des Lagers. Zeigt alle eigenen Chargen (kein Fremdlager), nach Katego
 - **Jede Zeile ist anklickbar** und führt zur Detailansicht (`?p=charge&id=`).
 
 Der Bestand kommt über `erp_bestand()` aus dem geteilten Dashboard-Bestand (`charge`/`item`).
+
+**Kisten-Ansicht:** Umschalter **„Nur Kisten"** (`?p=bestand&nur_kisten=1`) zeigt statt der Chargenliste
+die **Kisten** (`kiste_alle()`) als ausklappbare `<details>`-Blöcke mit Inhalt (`kiste_inhalt()`:
+Produkt · Charge · MHD · Menge · Fach) und je Kiste einen **„Kiste finden"**-Knopf (`data-klingeln`).

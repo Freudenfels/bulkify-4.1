@@ -83,6 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     }
     if ($ziel === 'l2' && $kunde_id <= 0) { flash('Lager 2: bitte den Kunden wählen, dem die Ware gehört.', 'warn'); weiter('?p=we'); }
     $auftragNr = trim((string)($_POST['auftrag_nr'] ?? ''));
+    $kisteId   = (int)($_POST['kiste_id'] ?? 0);   // optional: alle Positionen in diese Kiste
+    $fachG     = trim((string)($_POST['fach'] ?? ''));
 
     $names   = (array)($_POST['p_name'] ?? []);
     $gebucht = [];
@@ -111,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $basis = erp_item_basis($item_id);
         $regeln = erp_warenart_regeln((string)($basis['kategorie'] ?? $warenart), (string)($basis['form'] ?? ''));
         if ($menge <= 0)                           { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Menge fehlt.'; continue; }
-        if ($blinker === null)                     { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Blinker fehlt.'; continue; }
+        if ($kisteId <= 0 && $blinker === null)    { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Blinker oder Kiste wählen.'; continue; }
         if ($regeln['mhd_pflicht'] && $mhd === '')    { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): MHD ist Pflicht.'; continue; }
         if ($regeln['charge_pflicht'] && $charge === '') { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Charge-Nr. ist Pflicht.'; continue; }
 
@@ -130,14 +132,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         lg_tracking_set((int)$cid, (string)($_POST['tracking'] ?? ''));
         $c = erp_charge((int)$cid);
         lg_bewegung_log((int)$cid, 'ein', $menge, $c['einheit'] ?? null, (string)($c['item_name'] ?? ''), $notiz);
-        if (leiste_binden($blinker, (int)$cid) === '') {
+        if ($kisteId > 0) {
+            // In die Kiste legen (deren Blinker dient zum Finden). Kein Einzel-Blinker binden,
+            // sonst verweigert kiste_charge_zuordnen die Zuordnung.
+            $kf = kiste_charge_zuordnen($kisteId, (int)$cid, $fachG);
+            if ($kf !== '') $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): ' . $kf;
+        } elseif ($blinker !== null && leiste_binden($blinker, (int)$cid) === '') {
             $lr = leiste_per_code($blinker);
             if ($lr) leiste_finden((int)$lr['id'], 'gruen', 3, false);
         }
         $gebucht[] = (int)$cid;
     }
 
-    if ($gebucht) flash(count($gebucht) . ' Position(en) eingebucht, Blinker angehängt.' . ($fehler ? ' ' . count($fehler) . ' übersprungen.' : ''));
+    if ($gebucht) flash(count($gebucht) . ' Position(en) eingebucht' . ($kisteId > 0 ? ' (in Kiste gelegt).' : ', Blinker angehängt.') . ($fehler ? ' ' . count($fehler) . ' Hinweis(e).' : ''));
     if ($fehler)  flash(implode(' · ', $fehler), $gebucht ? 'warn' : 'warn');
     if (!$gebucht && !$fehler) flash('Nichts zu buchen – keine Position erfasst.', 'warn');
     weiter('?p=we' . ($gebucht ? '&gebucht=' . implode(',', $gebucht) : ''));
@@ -146,6 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
 // --- Anzeige ----------------------------------------------------------------------------------
 $kunden  = erp_fulfillment_kunden();
 $liefers = erp_lieferanten();
+$kisten  = function_exists('kiste_alle') ? kiste_alle() : [];
 $items   = erp_items_eingang();
 $ki      = lg_ki_bereit();
 $erwartet = erp_erwartete_lieferungen();   // für Kachel "aus Liste wählen"
@@ -302,6 +310,18 @@ if ($gebucht):
           <input type="hidden" name="lieferant_name" id="weLiefName" value="">
           <input type="hidden" name="auftrag_nr" id="weAuftragNr" value="">
         </div>
+        <?php if ($kisten): ?>
+        <div class="bx-field" style="margin:0;min-width:200px"><label>Kiste <span class="muted">(optional)</span></label>
+          <select name="kiste_id" id="weKiste">
+            <option value="">— keine Kiste —</option>
+            <?php foreach ($kisten as $kk): ?><option value="<?= (int)$kk['id'] ?>"><?= h((string)$kk['name']) ?><?= $kk['blinker'] ? ' · Blinker ' . h((string)$kk['blinker']) : ' · kein Blinker' ?></option><?php endforeach; ?>
+          </select>
+          <div class="muted" style="font-size:12px;margin-top:4px">Kiste gewählt? Dann blinkt die Kiste – der Blinker je Position ist dann optional.</div>
+        </div>
+        <div class="bx-field" style="margin:0;max-width:120px"><label>Fach <span class="muted">(optional)</span></label>
+          <input type="text" name="fach" id="weFach" autocomplete="off" placeholder="z. B. A3">
+        </div>
+        <?php endif; ?>
         <div class="bx-field" style="margin:0;min-width:240px;flex:1 1 240px"><label>Sendungs-/Paketnummer <span class="muted">(optional, scannen)</span></label>
           <input type="text" name="tracking" class="lg-code" autocomplete="off" placeholder="Paketlabel scannen – welches Paket ist gekommen">
         </div>
@@ -408,8 +428,16 @@ if ($gebucht):
     art2.addEventListener('change',function(){pflicht(card);});
     card.querySelector('.we-del').addEventListener('click',function(){card.remove(); if(!rows.children.length)addRow();});
     pflicht(card);
+    blinkerPflicht();
     return card;
   }
+  // Kiste gewählt -> Blinker je Position optional (die Kiste blinkt beim Finden).
+  function blinkerPflicht(){
+    var sel=document.getElementById('weKiste'), frei = sel && sel.value!=='';
+    document.querySelectorAll('.we-blinker').forEach(function(b){ b.required=!frei; });
+    document.querySelectorAll('.f-blinker label').forEach(function(l){ l.innerHTML = frei ? 'Blinker <span class="muted">(optional)</span>' : 'Blinker *'; });
+  }
+  (function(){ var s=document.getElementById('weKiste'); if(s) s.addEventListener('change', blinkerPflicht); })();
   function pflicht(tr){
     var art=tr.querySelector('.we-art').value, reg=MATRIX[art]||{mhd:0,charge:0};
     var mhd=tr.querySelector('.we-mhd'), ch=tr.querySelector('.we-charge');
