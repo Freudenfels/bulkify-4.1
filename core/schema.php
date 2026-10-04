@@ -822,6 +822,35 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('ek_import', 'notiz', "VARCHAR(500) NULL");   // additiv fuer bereits bestehende Tabellen (beta)
 
+    // dok_import_job / dok_import_datei: Massen-Upload von Specs/CoAs. Viele PDFs auf einmal hochladen,
+    // die KI liest JEDE Datei (nacheinander im Hintergrund, art='dokimport'), ordnet sie einem vorhandenen
+    // Rohstoff zu und merkt sich den Vorschlag. Danach prueft der Mensch die Zuordnung (Match-Vorschau) und
+    // uebernimmt mit einem Klick alle bestaetigten Zeilen (Original als internes Dokument + KI-Daten am Rohstoff).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS dok_import_job (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        status VARCHAR(16) NOT NULL DEFAULT 'offen',       -- offen (KI laeuft) | bereit (Vorschau) | fertig | abgebrochen
+        anzahl INT NOT NULL DEFAULT 0,                      -- hochgeladene Dateien
+        gelesen INT NOT NULL DEFAULT 0,                     -- davon KI-gelesen (inkl. Fehler)
+        erstellt_von INT NULL,
+        erstellt_am DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS dok_import_datei (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        job_id INT NOT NULL,
+        dateiname VARCHAR(255) NOT NULL,                   -- Original-Dateiname (Anzeige)
+        pfad VARCHAR(255) NOT NULL,                         -- gespeicherter Dateiname in data/uploads
+        status VARCHAR(16) NOT NULL DEFAULT 'offen',       -- offen | gelesen | fehler | importiert | uebersprungen
+        typ VARCHAR(10) NULL,                               -- spec | coa | beides | unklar (KI)
+        sicherheit VARCHAR(10) NULL,                        -- hoch | mittel | niedrig (KI)
+        item_id INT NULL,                                   -- zugeordneter Rohstoff (Vorschlag/bestaetigt)
+        quelle VARCHAR(16) NULL,                            -- cas | name | fuzzy | manuell | '' (kein Treffer)
+        ki_json LONGTEXT NULL,                              -- vollstaendiges spec_ki_lesen-Ergebnis (Wiederverwendung beim Import)
+        fehler VARCHAR(255) NULL,
+        erstellt_am DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_job (job_id), KEY idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // lieferant_alias: viele Lieferantennamen aus den Preislisten sind Kontakt-/Agenten-Namen
     // (Maggi, Diane, Amy ...), die in Wahrheit fuer eine Firma stehen (z. B. Maggi = Wellgreen).
     // Alias -> Firma (+ optional Kontakt). Wird auf ek_import angewendet, damit dort die echte Firma steht.

@@ -20,3 +20,9 @@ Die Route ist **ohne Login** erreichbar (sie kommt vom Server selbst). Dafür br
 
 ## Erweitern
 Neue Art in `ki_job_ausfuehren()` ergänzen und mit `ki_job_starten('…', $id)` anstoßen. Mehr ist nicht nötig.
+
+## Bekannte Arten
+- `rezeptur` – Rezepturvorschlag aus einer Kundenanfrage entwickeln.
+- `dokimport` – Massen-Import von Specs/CoAs: liest **eine** PDF (`id` = dok_import_datei.id), ordnet sie
+  einem Rohstoff zu und **kettet die nächste offene Datei** per `ki_job_starten('dokimport', …)` an.
+  So laufen beliebig viele PDFs sequentiell durch, ohne Cron. Siehe `core/dokimport.php`.

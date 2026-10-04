@@ -132,8 +132,9 @@ if ($kat === 'alle') {
 }
 
 $titel   = $istKapsel ? 'Leerkapseln' : 'Rohstoffe';
-$neuBtn  = $istKapsel ? bx_btn('Neue Leerkapsel', '?p=rohstoff&id=neu&form=kapselhuelle', 'primary')
-                      : bx_btn('Neuer Rohstoff', '?p=rohstoff&id=neu', 'primary');
+$neuBtn  = ($istKapsel ? bx_btn('Neue Leerkapsel', '?p=rohstoff&id=neu&form=kapselhuelle', 'primary')
+                      : bx_btn('Neuer Rohstoff', '?p=rohstoff&id=neu', 'primary'))
+         . ' ' . bx_btn('Specs/CoAs Massen-Import', '?p=dok_massenimport', 'ghost');
 $fehltLbl = ['irgendwas'=>'etwas fehlt','lief'=>'ohne Lieferant','preis'=>'ohne Preis','spec'=>'ohne Spec','coa'=>'ohne CoA'][$fehlt] ?? '';
 render_header('rohstoffe', $titel);
 bx_head($titel, count($rows) . ' Einträge' . ($fehltLbl ? ' · Filter: ' . $fehltLbl : ''), $neuBtn);

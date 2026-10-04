@@ -46,5 +46,9 @@ function ki_job_ausfuehren(string $art, int $id): void {
         require_once __DIR__ . '/rezeptur_ki.php';
         $r = rezeptur_ki_entwickeln($id);
         if ($r['ok']) rezeptur_ki_merken($id, $r);
+    } elseif ($art === 'dokimport') {
+        // Massen-Import: eine Spec/CoA-Datei lesen + zuordnen; die naechste kettet sich selbst an.
+        require_once __DIR__ . '/dokimport.php';
+        dokimport_datei_lesen($id);
     }
 }

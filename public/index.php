@@ -127,6 +127,7 @@ $routes = [
     'bestellung_pdf'     => 'einkauf/pdf.php',
     'preis_anfragen'     => 'einkauf/preis_anfragen.php',
     'ek_import'          => 'einkauf/ek_import.php',   // eingelesene EK-Preislisten (CSV) + Zuordnung
+    'dok_massenimport'   => 'system/dok_massenimport.php', // Specs/CoAs (PDF) massenweise -> Rohstoffe zuordnen
     'ek_lieferanten'     => 'einkauf/ek_lieferanten.php',   // Text-Lieferanten der EK-Preise zuordnen/anlegen
     'bedarf'             => 'einkauf/bedarf.php',
     'einkaufsliste'      => 'einkauf/einkaufsliste.php',

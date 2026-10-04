@@ -66,6 +66,7 @@ function route_rollen_map(): array {
         'rohstoffe'          => ['production', 'einkauf', 'labor'],
         'rohstoff'           => ['production', 'einkauf', 'labor'],
         'rohstoff_split'     => ['production', 'einkauf', 'labor'],
+        'dok_massenimport'   => ['production', 'einkauf', 'labor'],   // Specs/CoAs als PDF massenweise hochladen + zuordnen
         'freigaben'          => ['production', 'einkauf', 'labor'],
         'lief_preisliste'    => ['production', 'einkauf', 'labor'],
         'rezept_preise'      => ['production', 'einkauf', 'labor'],

@@ -193,12 +193,48 @@ function spec_ki_nach_upload(int $dokument_id): bool {
     // falls bekannt) und die Grenzwerte am Rohstoff ergänzen. Idempotent über die Chargennummer.
     if ((string)$d['objekt_typ'] === 'item' && (int)$d['objekt_id'] > 0) {
         $lief = !empty($d['lieferant_id']) ? (int)$d['lieferant_id'] : null;
-        spec_ki_coa_charge((int)$d['objekt_id'], $r, $lief);
-        spec_ki_grenzwerte((int)$d['objekt_id'], $r);
-        spec_ki_kennwerte((int)$d['objekt_id'], $r);    // charakteristische Kennwerte (OPC-Gehalt, DEV, pH …)
-        spec_ki_wirkstoffe((int)$d['objekt_id'], $r);   // erkannte Wirk-/Leitsubstanzen an den Rohstoff
+        spec_ki_anwenden((int)$d['objekt_id'], $r, $lief);
     }
     return true;
+}
+
+// Ein bereits gelesenes KI-Ergebnis an einem Rohstoff verwerten: (Vorab-)Charge bei CoA, Grenzwerte,
+// charakteristische Kennwerte und Wirk-/Leitsubstanzen – alles additiv (bestehende Werte bleiben).
+// Zentral, damit Einzel-Upload (spec_ki_nach_upload) und Massen-Import dieselbe Logik nutzen.
+function spec_ki_anwenden(int $item_id, array $ergebnis, ?int $lieferant_id = null): void {
+    if ($item_id <= 0 || empty($ergebnis['ok'])) return;
+    spec_ki_coa_charge($item_id, $ergebnis, $lieferant_id);
+    spec_ki_grenzwerte($item_id, $ergebnis);
+    spec_ki_kennwerte($item_id, $ergebnis);    // charakteristische Kennwerte (OPC-Gehalt, DEV, pH …)
+    spec_ki_wirkstoffe($item_id, $ergebnis);   // erkannte Wirk-/Leitsubstanzen an den Rohstoff
+}
+
+// Aus dem KI-Ergebnis den passenden VORHANDENEN Rohstoff finden (kein Neuanlegen). Reihenfolge:
+// 1) CAS exakt  2) Artikelnummer/Name exakt  3) Name-Teiltreffer (kuerzester Name gewinnt).
+// Rueckgabe: ['item_id'=>int|null, 'quelle'=>'cas'|'name'|'fuzzy'|''].
+function spec_ki_match_item(array $ergebnis): array {
+    $stamm = (array)($ergebnis['stamm'] ?? []);
+    $name  = trim((string)($stamm['name'] ?? ''));
+    $cas   = trim((string)($stamm['cas'] ?? ($ergebnis['cas_vorschlag'] ?? '')));
+    $syn   = trim((string)($stamm['synonym'] ?? ''));
+
+    if ($cas !== '') {
+        $id = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND cas=? ORDER BY id LIMIT 1", [$cas]);
+        if ($id) return ['item_id' => $id, 'quelle' => 'cas'];
+    }
+    if ($name !== '') {
+        $id = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND (artikelnummer=? OR name=?) ORDER BY id LIMIT 1", [$name, $name]);
+        if ($id) return ['item_id' => $id, 'quelle' => 'name'];
+    }
+    // Teiltreffer ueber Name oder Synonym-Feld; kuerzester Treffer ist am spezifischsten.
+    foreach (array_filter([$name, $syn]) as $such) {
+        $id = (int) scalar(
+            "SELECT id FROM item WHERE kategorie='rohstoff' AND (name LIKE ? OR synonym LIKE ?) ORDER BY CHAR_LENGTH(name) LIMIT 1",
+            ['%' . $such . '%', '%' . $such . '%']
+        );
+        if ($id) return ['item_id' => $id, 'quelle' => 'fuzzy'];
+    }
+    return ['item_id' => null, 'quelle' => ''];
 }
 
 // Vorschlag am Dokument merken, damit ihn das Team später prüfen kann (auch wenn der Lieferant

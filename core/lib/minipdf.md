@@ -16,6 +16,11 @@ Koordinaten sind „von oben" (y=0 = Seitenoberkante), A4 (595×842 pt).
 - `fit($s,$maxw,$size,$bold)` – kürzt mit „…" / `wrap(...)` – Umbruch in Zeilen-Array
 - `strwidth($s,$size,$bold)` – Textbreite in pt
 - `registerJpeg($data,$w,$h)` + `drawImage($id,$x,$topY,$w,$h)` – Bilder (nur JPEG)
+- `watermark($text,$opacity=0.09,$size=24,$color)` – legt ein **diagonal gekacheltes, halbtransparentes
+  Text-Wasserzeichen** über **jede** Seite (einmal setzen genügt). Umgesetzt mit einem ExtGState
+  (`/ca`,`/CA` = Transparenz) + gedrehter Textmatrix. Genutzt in den bulkify-Dokumenten (Spec/CoA) zur
+  Abschreckung gegen Weiterverarbeitung. **Hinweis:** echte Unveränderbarkeit gibt es bei PDF nicht –
+  ein Wasserzeichen ist ein sichtbarer Schutz, kein technischer Kopierschutz.
 - `addPage()` – neue Seite / `output()` – liefert die PDF-Bytes
 
 Farben als `[r,g,b]` (0–255). Sonderzeichen werden nach Windows-1252 übersetzt
