@@ -968,7 +968,35 @@ if (!$neu) {
     </form>
   </div>
 </section>
-<section data-panel="dok" hidden><?php dokument_panel('item', (int)$id, $lieferanten); ?></section>
+<section data-panel="dok" hidden><?php dokument_panel('item', (int)$id, $lieferanten); ?>
+  <?php // Unser CoA im bulkify-Layout – je Charge mit Analysewerten. Liegt bewusst AUCH hier im
+        // Dokumente-Reiter (nicht nur unter „Chargen"). Das Original des Lieferanten geht nie an den Kunden.
+    $coaCharges = $neu ? [] : all("SELECT c.id, c.charge_nr, c.mhd, c.coa_freigegeben
+        FROM charge c WHERE c.item_id=? AND EXISTS (SELECT 1 FROM charge_analyse a WHERE a.charge_id=c.id)
+        ORDER BY c.id DESC", [(int)$id]);
+    if ($coaCharges): ?>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Unser CoA (bulkify-Layout) <?= bx_hint('Analysenzertifikat im bulkify-Layout je Charge – aus den erfassten Analysenwerten erzeugt. Das ist unser Dokument für den Kunden (erst nach Freigabe sichtbar); das Original des Lieferanten bleibt intern.') ?></h2>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Charge</th><th>MHD</th><th>Kundenfreigabe</th><th></th></tr></thead>
+      <tbody>
+        <?php foreach ($coaCharges as $cc): $u = '?p=coa_bulkify&id=' . (int)$cc['id']; ?>
+          <tr>
+            <td><?= h($cc['charge_nr'] ?: ('Charge ' . (int)$cc['id'])) ?></td>
+            <td><?= $cc['mhd'] ? h(date('d.m.Y', strtotime((string)$cc['mhd']))) : '<span class="muted">–</span>' ?></td>
+            <td><?= (int)$cc['coa_freigegeben'] === 1 ? bx_badge('freigegeben','ok') : bx_badge('intern','warn') ?></td>
+            <td class="bx-num" style="white-space:nowrap">
+              <a class="btn btn-ghost btn-sm" target="_blank" href="<?= h($u) ?>">Ansehen</a>
+              <a class="btn btn-ghost btn-sm" href="<?= h($u) ?>" download>Download</a>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <p class="muted" style="font-size:12px;margin-top:8px">Freigabe für den Kunden erfolgt im Reiter „Chargen".</p>
+  </div>
+  <?php endif; ?>
+</section>
 <?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=rohstoff&id=' . (int)$id . '&tab=ek'); ?>
 <?php endif; ?>
 
