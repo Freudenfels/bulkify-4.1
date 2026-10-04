@@ -316,10 +316,6 @@ if ($gebucht):
             <option value="">— keine Kiste —</option>
             <?php foreach ($kisten as $kk): ?><option value="<?= (int)$kk['id'] ?>"><?= h((string)$kk['name']) ?><?= $kk['blinker'] ? ' · Blinker ' . h((string)$kk['blinker']) : ' · kein Blinker' ?></option><?php endforeach; ?>
           </select>
-          <div class="muted" style="font-size:12px;margin-top:4px">Kiste gewählt? Dann blinkt die Kiste – der Blinker je Position ist dann optional.</div>
-        </div>
-        <div class="bx-field" style="margin:0;max-width:120px"><label>Fach <span class="muted">(optional)</span></label>
-          <input type="text" name="fach" id="weFach" autocomplete="off" placeholder="z. B. A3">
         </div>
         <?php endif; ?>
         <div class="bx-field" style="margin:0;min-width:240px;flex:1 1 240px"><label>Sendungs-/Paketnummer <span class="muted">(optional, scannen)</span></label>
