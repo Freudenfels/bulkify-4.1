@@ -3,7 +3,7 @@
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anlegen') {
     $name = trim((string)($_POST['name'] ?? ''));
     if ($name === '') { flash('Bitte einen Namen für die Kiste angeben.', 'warn'); weiter('?p=kisten'); }
-    $id = kiste_anlegen($name, trim((string)($_POST['notiz'] ?? '')));
+    $id = kiste_anlegen($name, trim((string)($_POST['notiz'] ?? '')), trim((string)($_POST['barcode'] ?? '')));
     flash('Kiste angelegt.');
     weiter('?p=kiste&id=' . $id);
 }
@@ -40,6 +40,7 @@ flash_zeigen();
     <input type="hidden" name="aktion" value="anlegen">
     <div class="bx-grid">
       <div class="bx-field"><label>Name</label><input name="name" placeholder="z. B. Kiste 3 oder Kleinteile A" required></div>
+      <div class="bx-field"><label>Barcode <span class="muted">(aufgeklebt, scannen)</span></label><input name="barcode" class="lg-code" placeholder="Barcode scannen oder eingeben" autocomplete="off"></div>
       <div class="bx-field"><label>Notiz</label><input name="notiz" placeholder="optional"></div>
     </div>
     <button class="btn btn-primary" type="submit">Anlegen</button>

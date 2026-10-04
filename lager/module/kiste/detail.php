@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'speichern') {
         $name = trim((string)($_POST['name'] ?? ''));
         if ($name === '') flash('Bitte einen Namen angeben.', 'warn');
-        else { kiste_speichern($id, $name, trim((string)($_POST['notiz'] ?? ''))); flash('Gespeichert.'); }
+        else { kiste_speichern($id, $name, trim((string)($_POST['notiz'] ?? '')), trim((string)($_POST['barcode'] ?? ''))); flash('Gespeichert.'); }
         weiter('?p=kiste&id=' . $id);
     }
     if ($aktion === 'blinker_binden') {
@@ -52,6 +52,19 @@ kopf('Kiste ' . (string)$k['name'], 'kisten');
 seitenkopf('Kiste ' . (string)$k['name'], (string)($k['notiz'] ?? ''), '<a class="btn btn-ghost" href="?p=kisten">Zu den Kisten</a>');
 flash_zeigen();
 ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Kiste</h2>
+  <form method="post" class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap;align-items:flex-end">
+    <input type="hidden" name="aktion" value="speichern">
+    <div class="bx-field" style="margin:0;min-width:180px"><label>Name</label><input name="name" value="<?= h((string)$k['name']) ?>"></div>
+    <div class="bx-field" style="margin:0;min-width:220px"><label>Barcode <span class="muted">(aufgeklebt, scannen)</span></label>
+      <input name="barcode" class="lg-code" value="<?= h((string)($k['barcode'] ?? '')) ?>" placeholder="Barcode scannen oder eingeben" autocomplete="off">
+    </div>
+    <div class="bx-field" style="margin:0;flex:1;min-width:180px"><label>Notiz</label><input name="notiz" value="<?= h((string)($k['notiz'] ?? '')) ?>"></div>
+    <button class="btn btn-primary" type="submit">Speichern</button>
+  </form>
+</div>
+
 <div class="bx-panel">
   <h2>Blinker</h2>
   <?php if ($blinker): ?>

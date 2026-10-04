@@ -107,6 +107,8 @@ function lg_schema(): void {
         angelegt     DATETIME     NOT NULL,
         aktualisiert DATETIME     NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // Aufgeklebter Barcode je Kiste (zum Scannen beim Einbuchen -> Kiste wählen).
+    lg_spalte('lg_kiste', 'barcode', 'VARCHAR(64) NULL');
 
     // Inhalt einer Kiste: welche Charge liegt drin, optional mit Fach-Hinweis ("vorne links").
     // Eine Charge liegt in hoechstens einer Kiste (UNIQUE charge_id).

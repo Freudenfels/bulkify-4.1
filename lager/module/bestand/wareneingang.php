@@ -318,8 +318,10 @@ if ($gebucht):
         <div class="bx-field" style="margin:0;min-width:200px"><label>Kiste <span class="muted">(optional)</span></label>
           <select name="kiste_id" id="weKiste">
             <option value="">— keine Kiste —</option>
-            <?php foreach ($kisten as $kk): ?><option value="<?= (int)$kk['id'] ?>"><?= h((string)$kk['name']) ?><?= $kk['blinker'] ? ' · Blinker ' . h((string)$kk['blinker']) : ' · kein Blinker' ?></option><?php endforeach; ?>
+            <?php foreach ($kisten as $kk): ?><option value="<?= (int)$kk['id'] ?>" data-barcode="<?= h((string)($kk['barcode'] ?? '')) ?>"><?= h((string)$kk['name']) ?><?= $kk['blinker'] ? ' · Blinker ' . h((string)$kk['blinker']) : ' · kein Blinker' ?></option><?php endforeach; ?>
           </select>
+          <input type="text" id="weKisteScan" class="lg-code" autocomplete="off" placeholder="…oder Kisten-Barcode scannen" style="margin-top:6px">
+          <div id="weKisteScanInfo" class="muted" style="font-size:12px;margin-top:4px"></div>
         </div>
         <?php endif; ?>
         <div class="bx-field" style="margin:0;min-width:180px"><label>Status</label>
@@ -483,7 +485,23 @@ if ($gebucht):
     document.querySelectorAll('.we-blinker').forEach(function(b){ b.required=!frei; });
     document.querySelectorAll('.f-blinker label').forEach(function(l){ l.innerHTML = frei ? 'Blinker <span class="muted">(optional)</span>' : 'Blinker *'; });
   }
-  (function(){ var s=document.getElementById('weKiste'); if(s) s.addEventListener('change', blinkerPflicht); })();
+  (function(){
+    var s=document.getElementById('weKiste'); if(s) s.addEventListener('change', blinkerPflicht);
+    // Kisten-Barcode scannen -> passende Kiste im Dropdown wählen.
+    var scan=document.getElementById('weKisteScan'), info=document.getElementById('weKisteScanInfo');
+    if(scan && s){
+      function treffer(){
+        var code=(scan.value||'').trim(); if(code===''){ info.textContent=''; return; }
+        var opt=null;
+        for(var i=0;i<s.options.length;i++){ var b=(s.options[i].getAttribute('data-barcode')||'').trim();
+          if(b!=='' && b.toLowerCase()===code.toLowerCase()){ opt=s.options[i]; break; } }
+        if(opt){ s.value=opt.value; blinkerPflicht(); info.textContent='Kiste: '+opt.textContent.replace(/ · .*/,''); info.style.color='var(--gruen)'; scan.value=''; }
+        else { info.textContent='Kein Kisten-Barcode „'+code+'" gefunden.'; info.style.color=''; }
+      }
+      scan.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); treffer(); } });
+      scan.addEventListener('input',function(){ if(scan.value.length>=4) treffer(); });
+    }
+  })();
   function pflicht(tr){
     var art=tr.querySelector('.we-art').value, reg=MATRIX[art]||{mhd:0,charge:0};
     var mhd=tr.querySelector('.we-mhd'), ch=tr.querySelector('.we-charge');

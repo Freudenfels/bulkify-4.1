@@ -14,12 +14,20 @@ function kiste_alle(): array {
                 FROM lg_kiste k LEFT JOIN lg_leiste l ON l.kiste_id = k.id
                 ORDER BY k.name");
 }
-function kiste_anlegen(string $name, string $notiz = ''): int {
-    q("INSERT INTO lg_kiste (name, notiz, angelegt) VALUES (?,?,?)", [$name, $notiz ?: null, jetzt_utc()]);
+function kiste_anlegen(string $name, string $notiz = '', string $barcode = ''): int {
+    q("INSERT INTO lg_kiste (name, notiz, barcode, angelegt) VALUES (?,?,?,?)",
+      [$name, $notiz ?: null, ($barcode = trim($barcode)) !== '' ? $barcode : null, jetzt_utc()]);
     return insert_id();
 }
-function kiste_speichern(int $id, string $name, string $notiz = ''): void {
-    q("UPDATE lg_kiste SET name=?, notiz=?, aktualisiert=? WHERE id=?", [$name, $notiz ?: null, jetzt_utc(), $id]);
+function kiste_speichern(int $id, string $name, string $notiz = '', string $barcode = ''): void {
+    q("UPDATE lg_kiste SET name=?, notiz=?, barcode=?, aktualisiert=? WHERE id=?",
+      [$name, $notiz ?: null, ($barcode = trim($barcode)) !== '' ? $barcode : null, jetzt_utc(), $id]);
+}
+// Kiste anhand ihres aufgeklebten Barcodes finden (zum Scannen beim Einbuchen).
+function kiste_per_barcode(string $barcode): ?array {
+    $barcode = trim($barcode);
+    if ($barcode === '') return null;
+    return one("SELECT * FROM lg_kiste WHERE barcode=? LIMIT 1", [$barcode]);
 }
 function kiste_loeschen(int $id): void {
     q("UPDATE lg_leiste SET kiste_id=NULL, aktualisiert=? WHERE kiste_id=?", [jetzt_utc(), $id]);
