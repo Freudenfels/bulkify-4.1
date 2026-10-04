@@ -32,7 +32,8 @@ if ($art === 'fertigprodukt' && $rez_id > 0) {
     $betreff = 'Fertigprodukt (Bulk): ' . (string)$rez['name'];
     // Fertigprodukt: mehrere Mengen (Staffel) kommagetrennt möglich – der Lieferant bekommt sie vorausgefüllt.
     $mengen  = array_values(array_filter(array_map(fn($x) => (int) str_replace('.', '', (string)$x), preg_split('/[,;\s]+/', (string)($_POST['anf_menge'] ?? ''))), fn($m) => $m > 0));
-    $opt     = ['art' => 'fertigprodukt', 'form' => $form, 'rezeptur_id' => $rez_id, 'menge_staffel' => $mengen] + $lieferOpt;
+    $kgId    = (int) scalar("SELECT kapselgroesse_id FROM rezeptur WHERE id=?", [$rez_id]);   // Kapselgröße gibt die Rezeptur vor
+    $opt     = ['art' => 'fertigprodukt', 'form' => $form, 'rezeptur_id' => $rez_id, 'kapselgroesse_id' => $kgId, 'menge_staffel' => $mengen] + $lieferOpt;
     $einh    = anfrage_einheit_fuer_form($form);
     $n = 0; $gemailt = 0;
     foreach ($lids as $lid) {
