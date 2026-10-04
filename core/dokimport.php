@@ -149,13 +149,57 @@ function dokimport_zuordnen(int $datei_id, string $eingabe): bool {
 // Aus einer Zeile OHNE Treffer einen NEUEN Rohstoff aus den KI-Stammdaten anlegen und zuordnen.
 // Rueckgabe: neue item_id (0 = nichts angelegt). Stammdaten (CAS, Synonyme, botan. Quelle …) werden
 // uebernommen; Charge/Grenzwerte/Kennwerte/Wirkstoffe kommen dann beim eigentlichen Import dazu.
+// Namen fuer einen neu anzulegenden Rohstoff moeglichst UNTERSCHEIDBAR machen. Gleichnamige Extrakte
+// (z. B. "Hagebuttenextrakt") unterscheiden sich durch die Standardisierung – die haengen wir an:
+//  1) hoechster Wirkstoff-Gehalt (z. B. "50% Vitamin C"), sonst
+//  2) Extraktverhaeltnis/DEV aus den Kennwerten (z. B. "10:1"), sonst
+//  3) der Dateiname (ohne Endung/COA-/Spec-Floskeln) – denn dort steht der Unterschied oft schon.
+function dokimport_name_spezifisch(array $ki, string $dateiname): string {
+    $base = trim((string)($ki['stamm']['name'] ?? ''));
+    if ($base === '') {
+        $base = (string) preg_replace('/\.(pdf|jpe?g|png|webp)$/i', '', $dateiname);
+        $base = (string) preg_replace('/\b(coa|certificate of analysis|spec(ification)?|spezifikation|datenblatt|tds)\b/i', ' ', $base);
+        $base = trim((string) preg_replace('/\s{2,}/', ' ', $base));
+    }
+    if ($base === '') return 'Neuer Rohstoff (Import)';
+
+    $suffix = '';
+    // 1) staerkster standardisierter Wirkstoff
+    $best = null;
+    foreach ((array)($ki['wirkstoffe'] ?? []) as $w) {
+        $g = $w['gehalt_prozent'] ?? null;
+        if ($g === null || $g === '') continue;
+        if ($best === null || (float)$g > (float)($best['gehalt_prozent'] ?? 0)) $best = $w;
+    }
+    if ($best) {
+        $pct = rtrim(rtrim(number_format((float)$best['gehalt_prozent'], 2, ',', '.'), '0'), ',');
+        $suffix = trim($pct . '% ' . trim((string)($best['name'] ?? '')));
+    }
+    // 2) Extraktverhaeltnis / DEV aus den Kennwerten
+    if ($suffix === '') {
+        foreach ((array)($ki['kennwerte'] ?? []) as $k) {
+            $p = mb_strtolower((string)($k['parameter'] ?? ''));
+            if (preg_match('/verh[\x{00e4}a]ltnis|dev|ratio|extrakt/u', $p)) { $suffix = trim((string)($k['wert'] ?? '')); break; }
+        }
+    }
+    // 3) Dateiname als Unterscheidung (Endung + COA/Spec-Floskeln raus)
+    if ($suffix === '') {
+        $fn = preg_replace('/\.(pdf|jpe?g|png|webp)$/i', '', $dateiname);
+        $fn = preg_replace('/\b(coa|certificate of analysis|spec(ification)?|spezifikation|datenblatt|tds)\b/i', ' ', (string)$fn);
+        $suffix = trim((string) preg_replace('/\s{2,}/', ' ', (string)$fn));
+    }
+
+    $suffix = mb_substr($suffix, 0, 70);
+    if ($suffix !== '' && mb_stripos($base, $suffix) === false) $base .= ' ' . $suffix;
+    return mb_substr($base, 0, 190);
+}
+
 function dokimport_neu_anlegen(int $datei_id): int {
     $d = one("SELECT * FROM dok_import_datei WHERE id=? AND status='gelesen'", [$datei_id]);
     if (!$d || (int)$d['item_id'] > 0) return 0;   // nur gelesene Zeilen ohne Treffer
     $ki    = json_decode((string)($d['ki_json'] ?? ''), true);
     $stamm = is_array($ki) ? (array)($ki['stamm'] ?? []) : [];
-    $name  = trim((string)($stamm['name'] ?? ''));
-    if ($name === '') $name = 'Neuer Rohstoff (Import)';
+    $name  = dokimport_name_spezifisch(is_array($ki) ? $ki : [], (string)$d['dateiname']);
     q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug,ek_preis,notiz) VALUES (?,?, 'rohstoff','kg','kg',0,?)",
       [naechste_nummer(item_prefix('rohstoff')), mb_substr($name, 0, 190), 'Aus Spec/CoA-Massenimport angelegt']);
     $iid = (int) insert_id();
