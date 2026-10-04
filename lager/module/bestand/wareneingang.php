@@ -508,6 +508,8 @@ if ($gebucht):
       rows.innerHTML='';
       if(!j.positionen.length){ addRow(); }
       else j.positionen.forEach(function(p){ addRow(p); });
+      // Sichtbar machen, dass etwas passiert ist: sanft runter zu den Positionen.
+      setTimeout(function(){ var ziel=(rows.closest('.bx-panel')||rows); ziel.scrollIntoView({behavior:'smooth',block:'start'}); }, 60);
     }).catch(function(){ scanBtn.disabled=false; info.textContent='Netzwerk-/Serverfehler beim Auslesen.'; });
   });
   // Versandlabel/Tracking scannen (Handscanner tippt Nummer + Enter) -> passende Lieferung laden.
