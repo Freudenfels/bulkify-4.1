@@ -276,9 +276,17 @@ if (!empty($_SESSION['rez_del_fehler'])) { echo '<div class="bx-panel" style="bo
 <?php // Rohstoffpreise je Zutat – damit man schon an der Rezeptur sieht, was der Einkauf kostet
       // und wo noch ein Preis fehlt. Anfrage per Popup (Lieferanten auswählen). Nur für gespeicherte
       // Rezepturen mit Zutaten, die einen Lagerartikel haben. ?>
-<?php $rzZutaten = $neu ? [] : all("SELECT DISTINCT z.item_id, i.name, i.preis_bezug, i.einheit
+<?php $rzZutaten = $neu ? [] : all("SELECT DISTINCT z.item_id, i.name, i.artikelnummer, i.preis_bezug, i.einheit
         FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? AND z.item_id IS NOT NULL ORDER BY i.name", [(int)$id]);
-   if ($rzZutaten): $mitPreis = 0; foreach ($rzZutaten as $rz) if (anfrage_status((int)$rz['item_id']) === 'preise') $mitPreis++; ?>
+   if ($rzZutaten): $mitPreis = 0; foreach ($rzZutaten as $rz) if (anfrage_status((int)$rz['item_id']) === 'preise') $mitPreis++;
+   // CoA/Spec-Unterlagen je Rohstoff (Original, nur fürs Team) – für Vorschau + Download.
+   $rzDocs = []; $rzItemIds = array_values(array_unique(array_map(fn($z) => (int)$z['item_id'], $rzZutaten)));
+   if ($rzItemIds) { $inItems = implode(',', $rzItemIds);
+       foreach (all("SELECT objekt_id AS item_id, id, typ, titel, datei_orig FROM dokument
+                     WHERE objekt_typ='item' AND objekt_id IN ($inItems) AND typ IN ('spec','coa','analyse') ORDER BY id DESC") as $d)
+           $rzDocs[(int)$d['item_id']][] = $d;
+   }
+   $docTypLbl = ['spec' => 'Spec', 'coa' => 'CoA', 'analyse' => 'Analyse']; ?>
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
     <h2 style="margin:0">Rohstoffpreise</h2>
@@ -298,12 +306,20 @@ if (!empty($_SESSION['rez_del_fehler'])) { echo '<div class="bx-panel" style="bo
     </div>
   </div>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Rohstoff</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Rohstoff</th><th>Status</th><th>CoA / Spec</th><th></th></tr></thead>
     <tbody>
     <?php foreach ($rzZutaten as $rz): ?>
       <tr>
-        <td><a href="?p=rohstoff&id=<?= (int)$rz['item_id'] ?>"><?= h($rz['name']) ?></a></td>
+        <td>
+          <a href="?p=rohstoff&id=<?= (int)$rz['item_id'] ?>"><?= h($rz['name']) ?></a>
+          <?php if (!empty($rz['artikelnummer'])): ?><a href="?p=rohstoff&id=<?= (int)$rz['item_id'] ?>" class="muted" style="display:block;font-size:12px;text-decoration:none"><?= h($rz['artikelnummer']) ?></a><?php endif; ?>
+        </td>
         <td><?= anfrage_badge((int)$rz['item_id']) ?></td>
+        <td>
+          <?php $docs = $rzDocs[(int)$rz['item_id']] ?? []; if ($docs): foreach ($docs as $d): $u = '?p=dokument&id=' . (int)$d['id']; ?>
+            <button type="button" class="btn btn-ghost btn-sm" style="margin:0 4px 4px 0" onclick="bxDocOeffnen('<?= h($u) ?>', '<?= h(addslashes(($docTypLbl[$d['typ']] ?? $d['typ']) . ' · ' . $rz['name'])) ?>')"><?= h($docTypLbl[$d['typ']] ?? $d['typ']) ?></button>
+          <?php endforeach; else: ?><span class="muted" style="font-size:12px">–</span><?php endif; ?>
+        </td>
         <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" data-name="<?= h($rz['name']) ?>" onclick="bxAnfrageOeffnen(<?= (int)$rz['item_id'] ?>,this)">Preis anfragen</button></td>
       </tr>
     <?php endforeach; ?>
@@ -311,6 +327,26 @@ if (!empty($_SESSION['rez_del_fehler'])) { echo '<div class="bx-panel" style="bo
   </table></div>
 </div>
 <?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=rezeptur_detail&id=' . (int)$id); ?>
+
+<?php // Dokument-Vorschau (CoA/Spec) als Popup: Inline-Ansicht im iframe + Download. ?>
+<div id="bxDocOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;align-items:center;justify-content:center;padding:16px">
+  <div class="bx-panel" style="max-width:920px;width:100%;max-height:92vh;display:flex;flex-direction:column;margin:0">
+    <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+      <strong id="bxDocTitel">Dokument</strong>
+      <div class="bx-row" style="gap:8px">
+        <a id="bxDocDl" class="btn btn-ghost btn-sm" href="#" download>Download</a>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="bxDocZu()">Schließen</button>
+      </div>
+    </div>
+    <iframe id="bxDocFrame" src="" style="flex:1;width:100%;height:72vh;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>
+  </div>
+</div>
+<script>
+function bxDocOeffnen(url, titel){ var o=document.getElementById('bxDocOverlay'); document.getElementById('bxDocFrame').src=url; document.getElementById('bxDocDl').href=url; document.getElementById('bxDocTitel').textContent=titel||'Dokument'; o.style.display='flex'; }
+function bxDocZu(){ var o=document.getElementById('bxDocOverlay'); o.style.display='none'; document.getElementById('bxDocFrame').src=''; }
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') bxDocZu(); });
+document.getElementById('bxDocOverlay').addEventListener('click', function(e){ if(e.target===this) bxDocZu(); });
+</script>
 <?php endif; ?>
 
 <?php // Wo wurde diese Rezeptur als Fertigprodukt (Fremdfertigung) angefragt? Schnell sehen, ob schon angefragt.
