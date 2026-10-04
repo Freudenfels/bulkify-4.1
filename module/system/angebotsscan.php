@@ -50,10 +50,11 @@ if ($detailId) {
     $preise  = json_decode((string)$s['preise_json'], true) ?: [];
     $zutaten = json_decode((string)$s['zutaten_json'], true) ?: [];
     $rez = $s['rezeptur_id'] ? one("SELECT id, nummer, name FROM rezeptur WHERE id=?", [(int)$s['rezeptur_id']]) : null;
+    $kunde = $s['kunde_id'] ? one("SELECT id, firma, kundennummer FROM kunden WHERE id=?", [(int)$s['kunde_id']]) : null;
     $sumMg = 0.0; foreach ($zutaten as $z) $sumMg += (float)($z['menge_mg'] ?? 0);
 
     bx_head('Angebotsscan: ' . ($s['produkt_name'] ?: 'ohne Namen'), 'Erfasst ' . h(fmt_zeit($s['angelegt'], 'd.m.Y H:i')) . ($s['original_orig'] ? ' · ' . h($s['original_orig']) : ''), bx_btn('Zur Übersicht', '?p=angebotsscan', 'ghost'));
-    if (!empty($_GET['neu'])) echo '<div class="bx-panel" style="border-color:#bfe3cf;color:#1a6c3f;padding:12px 16px">Angebot gescannt. Rezeptur ' . ($s['rezeptur_neu'] ? 'neu angelegt' : 'vorhanden zugeordnet') . '.</div>';
+    if (!empty($_GET['neu'])) echo '<div class="bx-panel" style="border-color:#bfe3cf;color:#1a6c3f;padding:12px 16px">Angebot gescannt. Rezeptur ' . ($s['rezeptur_neu'] ? 'neu angelegt' : 'vorhanden zugeordnet') . ($kunde ? ', Kunde <strong>' . h($kunde['firma']) . '</strong> ' . ($s['kunde_neu'] ? 'neu angelegt' : 'zugeordnet') . ', Preis hinterlegt' : ', kein Kunde erkannt') . '.</div>';
     ?>
     <div class="bx-panel">
       <h2 style="margin-top:0">Produkt &amp; Rezeptur</h2>
@@ -62,9 +63,15 @@ if ($detailId) {
         <div class="bx-field"><label>Form</label><div><?= h($s['darreichungsform']) ?></div></div>
         <div class="bx-field"><label>Stück je Packung</label><div><?= (int)$s['stueck_je_packung'] > 0 ? (int)$s['stueck_je_packung'] : '<span class="muted">–</span>' ?></div></div>
         <div class="bx-field"><label>Rezeptur</label><div>
-          <?php if ($rez): ?><a href="?p=rezeptur&id=<?= (int)$rez['id'] ?>"><?= h($rez['nummer']) ?> · <?= h($rez['name']) ?></a> <?= $s['rezeptur_neu'] ? '<span class="badge badge-warn">neu angelegt</span>' : '<span class="badge badge-ok">zugeordnet</span>' ?>
+          <?php if ($rez): ?><a href="?p=rezeptur_detail&id=<?= (int)$rez['id'] ?>"><?= h($rez['nummer']) ?> · <?= h($rez['name']) ?></a> <?= $s['rezeptur_neu'] ? '<span class="badge badge-warn">neu angelegt</span>' : '<span class="badge badge-ok">zugeordnet</span>' ?>
           <?php else: ?><span class="muted">–</span><?php endif; ?>
         </div></div>
+        <div class="bx-field"><label>Kunde</label><div>
+          <?php if ($kunde): ?><a href="?p=kunde&id=<?= (int)$kunde['id'] ?>"><?= h($kunde['firma']) ?></a><?= $kunde['kundennummer'] ? ' · ' . h($kunde['kundennummer']) : '' ?> <?= $s['kunde_neu'] ? '<span class="badge badge-warn">neu angelegt</span>' : '' ?>
+          <?php else: ?><span class="muted">nicht erkannt</span><?php endif; ?>
+        </div></div>
+        <div class="bx-field"><label>Angebotsdatum</label><div><?= $s['angebot_datum'] ? h(date('d.m.Y', strtotime((string)$s['angebot_datum']))) : '<span class="muted">–</span>' ?></div></div>
+        <div class="bx-field"><label>VK je Packung (für Kunde)</label><div><?= (float)$s['vk'] > 0 ? '<strong>' . $eur($s['vk']) . '</strong>' : '<span class="muted">–</span>' ?></div></div>
       </div>
     </div>
 
@@ -108,8 +115,10 @@ if ($detailId) {
 }
 
 // ===================== ÜBERSICHT =====================
-$rows = all("SELECT s.*, r.nummer AS rez_nummer
-             FROM angebot_scan s LEFT JOIN rezeptur r ON r.id=s.rezeptur_id
+$rows = all("SELECT s.*, r.nummer AS rez_nummer, k.firma AS kunde_firma
+             FROM angebot_scan s
+             LEFT JOIN rezeptur r ON r.id=s.rezeptur_id
+             LEFT JOIN kunden k ON k.id=s.kunde_id
              ORDER BY s.angelegt DESC, s.id DESC");
 
 bx_head('Angebotsscan', count($rows) . ' gescannte Angebote', '');
@@ -134,7 +143,8 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8
 <?php
 $cols = [
     'produkt_name' => ['label'=>'Produkt', 'render'=>fn($r)=> $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">ohne Namen</span>'],
-    'darreichungsform' => ['label'=>'Form', 'render'=>fn($r)=> h($r['darreichungsform'])],
+    'kunde_firma' => ['label'=>'Kunde', 'render'=>fn($r)=> $r['kunde_firma'] ? h($r['kunde_firma']) . ($r['kunde_neu'] ? ' <span class="badge badge-warn">neu</span>' : '') : '<span class="muted">–</span>'],
+    'vk'         => ['label'=>'VK/Packung', 'num'=>true, 'render'=>fn($r)=> (float)$r['vk'] > 0 ? $eur($r['vk']) : '<span class="muted">–</span>'],
     'rez_nummer' => ['label'=>'Rezeptur', 'render'=>fn($r)=> $r['rez_nummer'] ? h($r['rez_nummer']) . ($r['rezeptur_neu'] ? ' <span class="badge badge-warn">neu</span>' : '') : '<span class="muted">–</span>'],
     'angelegt'   => ['label'=>'Gescannt', 'render'=>fn($r)=> h(fmt_zeit($r['angelegt'], 'd.m.Y H:i'))],
 ];

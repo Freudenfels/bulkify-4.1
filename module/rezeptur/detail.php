@@ -87,6 +87,10 @@ $zutaten = $neu ? [] : all("SELECT * FROM rezeptur_zutat WHERE rezeptur_id=? ORD
 // Lieferanten-Angebote für die Fremdfertigung dieser Rezeptur (u. a. aus dem v3-Import).
 $liefAngebote = $neu ? [] : all("SELECT la.*, l.firma FROM rezeptur_lief_angebot la LEFT JOIN lieferanten l ON l.id=la.lieferant_id
                                  WHERE la.rezeptur_id=? ORDER BY (la.preis IS NULL), la.preis", [(int)$id]);
+// Kundenpreise (u. a. aus dem Angebotsscan): welcher Kunde zu welchem Datum welchen VK hatte.
+$kundenpreise = ($neu || !table_exists('rezeptur_kundenpreis')) ? [] : all(
+    "SELECT kp.*, k.firma, k.kundennummer FROM rezeptur_kundenpreis kp LEFT JOIN kunden k ON k.id=kp.kunde_id
+     WHERE kp.rezeptur_id=? ORDER BY k.firma, (kp.datum IS NULL), kp.datum DESC", [(int)$id]);
 
 // Rohstoffe für die Auswahl – nach passender Form für die Darreichungsform sortiert (flüssig zuerst bei flüssig)
 $prefForms = in_array($df, ['fluessig','softgel'], true) ? ['fluessig','oel'] : ['pulver','granulat','kristallin'];
@@ -288,6 +292,27 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   </table></div>
 </div>
 <?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=rezeptur_detail&id=' . (int)$id); ?>
+<?php endif; ?>
+
+<?php if (!$neu && $kundenpreise): ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Kundenpreise <?= bx_hint('Welcher Kunde zu welchem Datum welchen VK je Packung für diese Rezeptur hatte – u. a. aus dem Angebotsscan (System → Angebotsscan).') ?></h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Kunde</th><th class="bx-num">VK je Packung</th><th class="bx-num">Stück/Pck.</th><th class="bx-num">Menge</th><th>Datum</th><th>Quelle</th></tr></thead>
+    <tbody>
+      <?php foreach ($kundenpreise as $kp): ?>
+        <tr>
+          <td><?= $kp['firma'] ? kunde_link((int)$kp['kunde_id'], $kp['firma']) : '<span class="muted">–</span>' ?><?= $kp['kundennummer'] ? ' <span class="muted" style="font-size:11px">' . h($kp['kundennummer']) . '</span>' : '' ?></td>
+          <td class="bx-num"><?= (float)$kp['vk'] > 0 ? '<strong>' . number_format((float)$kp['vk'], 4, ',', '.') . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= (int)$kp['stueck_je_packung'] > 0 ? (int)$kp['stueck_je_packung'] : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= (int)$kp['menge'] > 0 ? number_format((int)$kp['menge'], 0, ',', '.') : '<span class="muted">–</span>' ?></td>
+          <td><?= $kp['datum'] ? h(date('d.m.Y', strtotime((string)$kp['datum']))) : '<span class="muted">–</span>' ?></td>
+          <td><span class="muted" style="font-size:11px"><?= h($kp['quelle']) ?></span></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
 <?php endif; ?>
 
 <?php if (!$neu && $liefAngebote): ?>

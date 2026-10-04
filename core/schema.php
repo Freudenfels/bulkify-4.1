@@ -474,6 +474,10 @@ function init_schema(): void {
         stueck_je_packung INT NULL,
         rezeptur_id INT NULL,
         rezeptur_neu TINYINT(1) NOT NULL DEFAULT 0,
+        kunde_id INT NULL,                    -- zugeordneter/angelegter Kunde (aus dem Angebot gelesen)
+        kunde_neu TINYINT(1) NOT NULL DEFAULT 0,
+        angebot_datum DATE NULL,              -- Datum des Angebots
+        vk DECIMAL(12,4) NULL,                -- VK je Packung für diesen Kunden (netto)
         preise_json MEDIUMTEXT NULL,          -- Preis-Aufschlüsselung (Positionen) als JSON
         zutaten_json MEDIUMTEXT NULL,         -- ausgelesene Wirkstoffe als JSON (Beleg/Nachvollzug)
         datei VARCHAR(255) NULL,              -- gespeicherte Datei (data/uploads)
@@ -481,6 +485,28 @@ function init_schema(): void {
         bemerkung VARCHAR(500) NULL,
         angelegt_von INT NULL,
         KEY idx_rezeptur (rezeptur_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('angebot_scan', 'kunde_id', "INT NULL");
+    ensure_column('angebot_scan', 'kunde_neu', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('angebot_scan', 'angebot_datum', "DATE NULL");
+    ensure_column('angebot_scan', 'vk', "DECIMAL(12,4) NULL");
+
+    // rezeptur_kundenpreis: welcher Kunde zu welchem Datum welchen Preis für eine Rezeptur hatte.
+    // Quelle u. a. der Angebotsscan. So sind auf der Rezeptur die Preise ALLER Kunden sichtbar.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS rezeptur_kundenpreis (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        rezeptur_id INT NOT NULL,
+        kunde_id INT NOT NULL,
+        datum DATE NULL,
+        vk DECIMAL(12,4) NULL,                -- VK je Packung (netto)
+        stueck_je_packung INT NULL,
+        menge INT NULL,                       -- Bestellmenge Packungen (falls genannt)
+        preise_json MEDIUMTEXT NULL,          -- Preis-Aufschlüsselung als JSON
+        quelle VARCHAR(20) NOT NULL DEFAULT 'angebotsscan',
+        scan_id INT NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_rezeptur (rezeptur_id),
+        KEY idx_kunde (kunde_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     // auftrag: Auftragsbestätigung (AB-) – entsteht automatisch aus der bestätigten Angebots-Staffel.
@@ -5992,21 +6018,52 @@ function rezeptur_finden_oder_anlegen(string $name, string $form, array $zutaten
     return ['id' => $rid, 'neu' => true];
 }
 
+// Kunde per Name (und optional Kundennummer) finden oder neu anlegen. Rückgabe ['id'=>…, 'neu'=>bool].
+// Für den Angebotsscan: ist der Kunde im Angebot noch nicht im System, wird er angelegt.
+function kunde_finden_oder_anlegen(string $firma, string $nr = ''): array {
+    $firma = trim($firma); $nr = trim($nr);
+    if ($nr !== '') {
+        $k = scalar("SELECT id FROM kunden WHERE kundennummer=? LIMIT 1", [$nr]);
+        if ($k) return ['id' => (int)$k, 'neu' => false];
+    }
+    if ($firma !== '') {
+        $k = scalar("SELECT id FROM kunden WHERE LOWER(firma)=LOWER(?) LIMIT 1", [$firma]);
+        if ($k) return ['id' => (int)$k, 'neu' => false];
+    }
+    if ($firma === '') return ['id' => 0, 'neu' => false];   // ohne Firmennamen keinen Kunden anlegen
+    q("INSERT INTO kunden (kundennummer,firma,land,zahlungsart,notiz) VALUES (?,?,?,?,?)",
+      [$nr !== '' ? mb_substr($nr, 0, 40) : naechste_nummer('K'), mb_substr($firma, 0, 190), 'DE', 'rechnung', 'Aus Angebotsscan angelegt.']);
+    return ['id' => (int) insert_id(), 'neu' => true];
+}
+
+// Führendes "AP"-Kürzel (Annapurna-Zuordnung) aus einem Produktnamen entfernen – soll ignoriert werden.
+function angebotsscan_name_bereinigen(string $name): string {
+    $name = trim($name);
+    // "AP ", "AP-", "AP_" oder "AP" direkt vor dem Namen am Anfang entfernen (nur als eigenständiges Präfix).
+    $name = preg_replace('/^AP[\s\-_]+/u', '', $name);
+    return trim($name);
+}
+
 // --- Angebotsscan (System) -------------------------------------------------
-// Liest ein (fremdes/altes) Angebot per KI: Produkt/Rezeptur + Preis-Aufschlüsselung. Der Kunde ist
-// bewusst uninteressant und wird NICHT ausgewertet – es geht nur um Rezeptur und Preise.
-// Rückgabe ['ok'=>true,'daten'=>[produkt_name,darreichungsform,stueck_je_packung,zutaten[],preise[]]] oder ['ok'=>false,'fehler'=>…].
+// Liest ein (fremdes/altes) Angebot per KI: Produkt/Rezeptur, Preis-Aufschlüsselung UND den Kunden
+// (Firma/Kundennummer, Datum, VK je Packung für diesen Kunden). Das führende "AP"-Kürzel im
+// Produktnamen (Annapurna-Zuordnung) wird ignoriert/entfernt.
+// Rückgabe ['ok'=>true,'daten'=>[produkt_name,darreichungsform,stueck_je_packung,kunde_name,kunde_nr,datum,vk_stueck,menge,zutaten[],preise[]]] oder ['ok'=>false,'fehler'=>…].
 function angebotsscan_ki(string $pfad): array {
     require_once __DIR__ . '/ki.php';
     if (!ki_bereit()) return ['ok' => false, 'fehler' => 'KI ist nicht eingerichtet (Einstellungen → KI).'];
     $prompt = "Dies ist ein Angebot für ein Nahrungsergänzungsmittel (eigenes oder fremdes). "
-        . "Erfasse NUR Rezeptur und Preise – der Kunde ist egal und soll NICHT ausgegeben werden. Gib NUR JSON zurück:\n"
+        . "Erfasse Rezeptur, Preise UND den Kunden. Gib NUR JSON zurück:\n"
         . '{"produkt_name":"","darreichungsform":"kapsel","stueck_je_packung":0,'
+        . '"kunde_name":"","kunde_nr":"","datum":"","vk_stueck":0,"menge":0,'
         . '"zutaten":[{"name":"","menge_mg":0}],'
         . '"preise":[{"bezeichnung":"","typ":"herstellung","einzelpreis":0,"menge":0,"einheit":""}]}' . "\n"
-        . "Regeln: produkt_name = Name des Produkts (ohne die Wirkstoff-Aufzählung). "
+        . "Regeln: produkt_name = Name des Produkts OHNE die Wirkstoff-Aufzählung. "
+        . "Ein führendes 'AP' vor dem Produktnamen ist eine interne Kürzel-Zuordnung und soll WEGGELASSEN werden. "
         . "darreichungsform eines von kapsel|tablette|softgel|stick|pulver|fluessig. "
         . "stueck_je_packung = Kapseln/Stück je Packung (z. B. 120), sonst 0. "
+        . "kunde_name = Firmenname des Angebotsempfängers, kunde_nr = dessen Kundennummer falls genannt. "
+        . "datum = Angebotsdatum als YYYY-MM-DD. vk_stueck = Preis je Packung (netto) für den Kunden, menge = Anzahl Packungen. "
         . "zutaten = alle aufgeführten Wirkstoffe mit mg je Einheit (z. B. 'NAC 300 mg'). "
         . "preise = JEDE Preiszeile des Angebots einzeln (Aufschlüsselung): typ eines von "
         . "herstellung|kapsel|verpackung|etikett|zusatz|gesamt. bezeichnung = Originaltext der Zeile. "
@@ -6040,29 +6097,58 @@ function angebotsscan_ki(string $pfad): array {
     $formen = ['kapsel','tablette','softgel','stick','pulver','fluessig'];
     $form = strtolower(trim((string)($d['darreichungsform'] ?? 'kapsel')));
     return ['ok' => true, 'daten' => [
-        'produkt_name'      => mb_substr(trim((string)($d['produkt_name'] ?? '')), 0, 190),
+        'produkt_name'      => mb_substr(angebotsscan_name_bereinigen((string)($d['produkt_name'] ?? '')), 0, 190),
         'darreichungsform'  => in_array($form, $formen, true) ? $form : 'kapsel',
         'stueck_je_packung' => (int) round($num($d['stueck_je_packung'] ?? 0)),
+        'kunde_name'        => mb_substr(trim((string)($d['kunde_name'] ?? '')), 0, 190),
+        'kunde_nr'          => mb_substr(trim((string)($d['kunde_nr'] ?? '')), 0, 40),
+        'datum'             => (is_string($d['datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d['datum'])) ? $d['datum'] : null,
+        'vk_stueck'         => round($num($d['vk_stueck'] ?? 0), 4),
+        'menge'             => (int) round($num($d['menge'] ?? 0)),
         'zutaten'           => $zut,
         'preise'            => $preise,
     ]];
 }
 
-// Angebotsscan verarbeiten: Datei per KI lesen, Rezeptur finden/anlegen (kundenunabhängig) und den
-// Scan mit Preis-Aufschlüsselung speichern. Rückgabe ['ok','scan_id','rezeptur_id','rezeptur_neu','daten'] oder ['ok'=>false,'fehler'].
+// Angebotsscan verarbeiten: Datei per KI lesen, Rezeptur finden/anlegen und – wenn ein Kunde erkannt
+// wurde – diesen finden/anlegen und seinen Preis (Datum + VK + Aufschlüsselung) an der Rezeptur
+// hinterlegen (rezeptur_kundenpreis). So sind auf der Rezeptur die Preise aller Kunden sichtbar.
+// Rückgabe ['ok','scan_id','rezeptur_id','rezeptur_neu','kunde_id','kunde_neu','daten'] oder ['ok'=>false,'fehler'].
 function angebotsscan_verarbeiten(string $pfad, string $orig, ?int $benutzer_id = null, string $bemerkung = ''): array {
     $r = angebotsscan_ki($pfad);
     if (empty($r['ok'])) return $r;
     $d = $r['daten'];
     $rez = rezeptur_finden_oder_anlegen($d['produkt_name'], $d['darreichungsform'], $d['zutaten'], null);
-    q("INSERT INTO angebot_scan (produkt_name,darreichungsform,stueck_je_packung,rezeptur_id,rezeptur_neu,preise_json,zutaten_json,datei,original_orig,bemerkung,angelegt_von)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+
+    // Kunde finden/anlegen (optional – ohne Firmenname kein Kunde).
+    $ku = ['id' => 0, 'neu' => false];
+    if ($d['kunde_name'] !== '') $ku = kunde_finden_oder_anlegen($d['kunde_name'], $d['kunde_nr']);
+
+    // Kundenpreis an die Rezeptur hängen (nur wenn Kunde erkannt). Dublette je (Rezeptur,Kunde,Datum)
+    // ersetzen, damit ein erneuter Scan desselben Angebots keine Doppel-Einträge erzeugt.
+    if ($ku['id'] > 0) {
+        q("DELETE FROM rezeptur_kundenpreis WHERE rezeptur_id=? AND kunde_id=? AND (datum<=>?)",
+          [$rez['id'], $ku['id'], $d['datum']]);
+        q("INSERT INTO rezeptur_kundenpreis (rezeptur_id,kunde_id,datum,vk,stueck_je_packung,menge,preise_json,quelle,scan_id)
+           VALUES (?,?,?,?,?,?,?,'angebotsscan',NULL)",
+          [$rez['id'], $ku['id'], $d['datum'], $d['vk_stueck'] > 0 ? $d['vk_stueck'] : null,
+           $d['stueck_je_packung'] ?: null, $d['menge'] ?: null, json_encode($d['preise'], JSON_UNESCAPED_UNICODE)]);
+        log_aktivitaet('kunde', $ku['id'], 'team', 'Preis aus Angebotsscan erfasst (Rezeptur ' . (int)$rez['id'] . ').', 'rezeptur', 'rezeptur', (int)$rez['id']);
+    }
+
+    q("INSERT INTO angebot_scan (produkt_name,darreichungsform,stueck_je_packung,rezeptur_id,rezeptur_neu,kunde_id,kunde_neu,angebot_datum,vk,preise_json,zutaten_json,datei,original_orig,bemerkung,angelegt_von)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [$d['produkt_name'], $d['darreichungsform'], $d['stueck_je_packung'] ?: null, $rez['id'], $rez['neu'] ? 1 : 0,
+       $ku['id'] ?: null, $ku['neu'] ? 1 : 0, $d['datum'], $d['vk_stueck'] > 0 ? $d['vk_stueck'] : null,
        json_encode($d['preise'], JSON_UNESCAPED_UNICODE), json_encode($d['zutaten'], JSON_UNESCAPED_UNICODE),
        $orig ? mb_substr(basename($pfad), 0, 255) : null, mb_substr($orig, 0, 255) ?: null,
        mb_substr($bemerkung, 0, 500) ?: null, $benutzer_id ?: null]);
     $sid = (int) insert_id();
-    return ['ok' => true, 'scan_id' => $sid, 'rezeptur_id' => $rez['id'], 'rezeptur_neu' => $rez['neu'], 'daten' => $d];
+    // scan_id am Kundenpreis nachtragen (für die Rückverfolgung).
+    if ($ku['id'] > 0) q("UPDATE rezeptur_kundenpreis SET scan_id=? WHERE rezeptur_id=? AND kunde_id=? AND (datum<=>?) AND scan_id IS NULL",
+                         [$sid, $rez['id'], $ku['id'], $d['datum']]);
+    return ['ok' => true, 'scan_id' => $sid, 'rezeptur_id' => $rez['id'], 'rezeptur_neu' => $rez['neu'],
+            'kunde_id' => $ku['id'], 'kunde_neu' => $ku['neu'], 'daten' => $d];
 }
 
 // Aus den ausgelesenen Import-Daten einen Auftrag anlegen (inkl. Rezeptur/Produkt, falls neu).
