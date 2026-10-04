@@ -74,6 +74,7 @@ $routes = [
     'novelfood'       => 'produkt/novelfood.php',   // Schnell-Nachschlage: ist ein Stoff Novel Food?
     'angebote'        => 'angebot/liste.php',
     'angebot'         => 'angebot/detail.php',
+    'rechnungen_ansicht' => 'intern/belege_ansicht.php',  // Nur-Lese-Rechnungsliste im Dashboard (Buchhaltung bleibt abgeschottet)
     'angebot_pdf'     => 'angebot/pdf.php',
     'vertrag_pdf'     => 'angebot/vertrag_pdf.php',   // Jahresabnahmevertrag (PDF) zum Angebot
     'auftraege'       => 'auftrag/liste.php',
