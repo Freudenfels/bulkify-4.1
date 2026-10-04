@@ -47,7 +47,7 @@ $fertigN = (int) scalar("SELECT COUNT(*) FROM rohstoff_variante_vorschlag WHERE 
 $flash = $_SESSION['rs_flash'] ?? null; unset($_SESSION['rs_flash']);
 $kiDa = ki_bereit();
 
-render_header('rohstoffe', 'Rohstoffe aufschlüsseln');
+render_header('rohstoff_split', 'Rohstoffe aufschlüsseln');
 bx_head('Rohstoffe aufschlüsseln', 'zu lange Namen (mehrere Varianten) in einzelne Rohstoffe zerlegen', bx_btn('Zurück', '?p=rohstoffe', 'ghost'));
 if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h($flash) . '</div>';
 ?>

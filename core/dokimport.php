@@ -20,30 +20,74 @@ require_once __DIR__ . '/ki_job.php';
 
 // Neuen Job aus bereits in data/uploads abgelegten Dateien anlegen. $dateien = [['orig'=>Anzeigename,'pfad'=>Dateiname], ...].
 // Rueckgabe: job_id (0 = nichts angelegt).
+const DOKIMPORT_WORKER    = 4;    // so viele Dateien werden parallel im Hintergrund gelesen
+const DOKIMPORT_STALE_MIN = 10;   // nach so vielen Minuten gilt ein haengendes 'liest' als abgestuerzt -> zurueck auf offen
+
 function dokimport_job_neu(array $dateien, ?int $user): int {
     $dateien = array_values(array_filter($dateien, fn($d) => !empty($d['pfad'])));
     if (!$dateien) return 0;
-    q("INSERT INTO dok_import_job (status, anzahl, gelesen, erstellt_von, erstellt_am) VALUES ('offen', ?, 0, ?, ?)",
-      [count($dateien), $user ?: null, gmdate('Y-m-d H:i:s')]);
+    q("INSERT INTO dok_import_job (status, anzahl, gelesen, erstellt_von, erstellt_am) VALUES ('offen', 0, 0, ?, ?)",
+      [$user ?: null, gmdate('Y-m-d H:i:s')]);
     $job_id = (int) insert_id();
+    dokimport_dateien_hinzufuegen($job_id, $dateien);
+    return $job_id;
+}
+
+// Weitere Dateien an einen bestehenden Job anhaengen – fuer Upload in Schueben (PHP begrenzt die Zahl je
+// Upload, Standard max_file_uploads=20). Setzt den Job wieder auf 'offen' und stoesst die Worker an.
+function dokimport_dateien_hinzufuegen(int $job_id, array $dateien): int {
+    $dateien = array_values(array_filter($dateien, fn($d) => !empty($d['pfad'])));
+    if ($job_id <= 0 || !$dateien) return 0;
     foreach ($dateien as $d) {
         q("INSERT INTO dok_import_datei (job_id, dateiname, pfad, status, erstellt_am) VALUES (?,?,?, 'offen', ?)",
           [$job_id, mb_substr((string)$d['orig'], 0, 255), mb_substr((string)$d['pfad'], 0, 255), gmdate('Y-m-d H:i:s')]);
     }
-    // Ersten Lauf anstossen (die KI liest dann Datei fuer Datei und kettet jeweils die naechste an).
-    $erste = (int) scalar("SELECT id FROM dok_import_datei WHERE job_id=? AND status='offen' ORDER BY id LIMIT 1", [$job_id]);
-    if ($erste) ki_job_starten('dokimport', $erste);
-    return $job_id;
+    q("UPDATE dok_import_job SET anzahl=(SELECT COUNT(*) FROM dok_import_datei WHERE job_id=?), status='offen' WHERE id=?", [$job_id, $job_id]);
+    dokimport_worker_starten($job_id);
+    return count($dateien);
 }
 
-// Eine einzelne Datei lesen, zuordnen und das Ergebnis merken. Danach die naechste offene Datei anstossen.
-// Laeuft im Hintergrund (core/ki_job.php, art='dokimport').
-function dokimport_datei_lesen(int $datei_id): void {
-    $d = one("SELECT * FROM dok_import_datei WHERE id=? AND status='offen'", [$datei_id]);
-    if (!$d) return;
-    $job_id = (int) $d['job_id'];
-    $pfad   = BX_UPLOADS . '/' . basename((string) $d['pfad']);
+// Mehrere parallele Worker anstossen. Jeder Worker liest je Aufruf EINE Datei (kurzer Request) und ruft
+// sich danach selbst erneut – so laufen DOKIMPORT_WORKER Ketten gleichzeitig, ohne lange Einzel-Requests.
+function dokimport_worker_starten(int $job_id): void {
+    for ($i = 0; $i < DOKIMPORT_WORKER; $i++) ki_job_starten('dokimport', $job_id);
+}
 
+// Ein Worker-Durchlauf: genau EINE Datei beanspruchen, lesen, zuordnen; danach sich selbst weiterreichen.
+// Laeuft im Hintergrund (core/ki_job.php, art='dokimport', id=job_id).
+function dokimport_worker(int $job_id): void {
+    @set_time_limit(0);
+    if ($job_id <= 0) return;
+
+    // Haengengebliebene 'liest' (abgestuerzter Worker) wieder freigeben.
+    q("UPDATE dok_import_datei SET status='offen' WHERE job_id=? AND status='liest' AND liest_seit < ?",
+      [$job_id, gmdate('Y-m-d H:i:s', time() - DOKIMPORT_STALE_MIN * 60)]);
+
+    // Eine offene Datei ATOMAR beanspruchen (damit nicht zwei Worker dieselbe nehmen).
+    $datei_id = 0;
+    try {
+        db()->beginTransaction();
+        $row = one("SELECT id FROM dok_import_datei WHERE job_id=? AND status='offen' ORDER BY id LIMIT 1 FOR UPDATE", [$job_id]);
+        if ($row) {
+            $datei_id = (int)$row['id'];
+            q("UPDATE dok_import_datei SET status='liest', liest_seit=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $datei_id]);
+        }
+        db()->commit();
+    } catch (\Throwable $e) {
+        if (db()->inTransaction()) db()->rollBack();
+        return;
+    }
+
+    if (!$datei_id) {
+        // Nichts mehr offen: wenn auch nichts mehr 'liest', ist der Job fertig -> Vorschau.
+        $rest = (int) scalar("SELECT COUNT(*) FROM dok_import_datei WHERE job_id=? AND status IN ('offen','liest')", [$job_id]);
+        if ($rest === 0) q("UPDATE dok_import_job SET status='bereit' WHERE id=? AND status='offen'", [$job_id]);
+        return;
+    }
+
+    // Lesen + zuordnen.
+    $d    = one("SELECT * FROM dok_import_datei WHERE id=?", [$datei_id]);
+    $pfad = BX_UPLOADS . '/' . basename((string)$d['pfad']);
     if (!is_file($pfad)) {
         q("UPDATE dok_import_datei SET status='fehler', fehler=? WHERE id=?", ['Datei nicht gefunden', $datei_id]);
     } else {
@@ -54,33 +98,25 @@ function dokimport_datei_lesen(int $datei_id): void {
         } else {
             $m = spec_ki_match_item($r);
             q("UPDATE dok_import_datei SET status='gelesen', typ=?, sicherheit=?, item_id=?, quelle=?, ki_json=?, fehler=NULL WHERE id=?",
-              [
-                  (string)($r['typ'] ?? 'unklar'),
-                  (string)($r['sicherheit'] ?? 'mittel'),
-                  $m['item_id'] ?: null,
-                  $m['quelle'],
-                  json_encode($r, JSON_UNESCAPED_UNICODE),
-                  $datei_id,
-              ]);
+              [(string)($r['typ'] ?? 'unklar'), (string)($r['sicherheit'] ?? 'mittel'),
+               $m['item_id'] ?: null, $m['quelle'], json_encode($r, JSON_UNESCAPED_UNICODE), $datei_id]);
         }
     }
-
-    // Fortschritt zaehlen und – wenn fertig – den Job auf 'bereit' setzen.
-    q("UPDATE dok_import_job SET gelesen = (SELECT COUNT(*) FROM dok_import_datei WHERE job_id=? AND status<>'offen') WHERE id=?",
-      [$job_id, $job_id]);
-    $naechste = (int) scalar("SELECT id FROM dok_import_datei WHERE job_id=? AND status='offen' ORDER BY id LIMIT 1", [$job_id]);
-    if ($naechste) {
-        ki_job_starten('dokimport', $naechste);
-    } else {
-        q("UPDATE dok_import_job SET status='bereit' WHERE id=? AND status='offen'", [$job_id]);
-    }
+    // Fortschritt zaehlen.
+    q("UPDATE dok_import_job SET gelesen=(SELECT COUNT(*) FROM dok_import_datei WHERE job_id=? AND status NOT IN ('offen','liest')) WHERE id=?", [$job_id, $job_id]);
+    // Diesen Worker fortsetzen (naechste Datei, neuer kurzer Request).
+    ki_job_starten('dokimport', $job_id);
 }
 
-// Fortschritt/Status eines Jobs fuer die Anzeige.
+// Fortschritt/Status eines Jobs fuer die Anzeige (inkl. Aufschluesselung).
 function dokimport_fortschritt(int $job_id): array {
     $j = one("SELECT * FROM dok_import_job WHERE id=?", [$job_id]);
-    if (!$j) return ['status' => 'weg', 'anzahl' => 0, 'gelesen' => 0];
-    return ['status' => (string)$j['status'], 'anzahl' => (int)$j['anzahl'], 'gelesen' => (int)$j['gelesen']];
+    if (!$j) return ['status' => 'weg', 'anzahl' => 0, 'gelesen' => 0, 'offen' => 0, 'liest' => 0, 'fehler' => 0];
+    $offen  = (int) scalar("SELECT COUNT(*) FROM dok_import_datei WHERE job_id=? AND status='offen'", [$job_id]);
+    $liest  = (int) scalar("SELECT COUNT(*) FROM dok_import_datei WHERE job_id=? AND status='liest'", [$job_id]);
+    $fehler = (int) scalar("SELECT COUNT(*) FROM dok_import_datei WHERE job_id=? AND status='fehler'", [$job_id]);
+    return ['status' => (string)$j['status'], 'anzahl' => (int)$j['anzahl'], 'gelesen' => (int)$j['gelesen'],
+            'offen' => $offen, 'liest' => $liest, 'fehler' => $fehler];
 }
 
 // Neuesten offenen/bereiten Job holen (laufende Session). Fertige/abgebrochene zeigen wir nicht mehr.

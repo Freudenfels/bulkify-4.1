@@ -14,10 +14,16 @@ Rohstoffen (kein Treffer = bleibt offen stehen).
   und das vollständige KI-Ergebnis als `ki_json` (wird beim Import **wiederverwendet** – keine zweite KI-Analyse).
 
 ## Ablauf
-1. `dokimport_job_neu($dateien, $user)` – Job + Zeilen anlegen, ersten Hintergrund-Lauf anstoßen.
-2. `dokimport_datei_lesen($datei_id)` – läuft im Hintergrund (core/ki_job.php, art `dokimport`):
-   `spec_ki_lesen()` + `spec_ki_match_item()`, Ergebnis speichern, **nächste** offene Datei anketten.
-   Ist keine mehr offen → Job auf `bereit`.
+1. `dokimport_job_neu($dateien, $user)` – Job + Zeilen anlegen, Worker anstoßen.
+   `dokimport_dateien_hinzufuegen($job, $dateien)` hängt weitere Dateien an (Upload in Schüben,
+   PHP `max_file_uploads` begrenzt die Zahl je Upload, Standard 20) und stößt die Worker erneut an.
+2. **Parallele Worker** (core/ki_job.php, art `dokimport`, id = **job_id**): `dokimport_worker_starten()`
+   feuert `DOKIMPORT_WORKER` (4) Hintergrund-Ketten. Jeder `dokimport_worker($job)`:
+   beansprucht **atomar** (Transaktion + `FOR UPDATE`) eine `offen`-Datei → `liest`, liest sie
+   (`spec_ki_lesen()` + `spec_ki_match_item()`), setzt `gelesen`/`fehler`, und ruft sich selbst erneut
+   (nächste Datei, neuer kurzer Request). Hängende `liest` (abgestürzter Worker) werden nach
+   `DOKIMPORT_STALE_MIN` (10 min) wieder freigegeben. Keine `offen`/`liest` mehr → Job `bereit`.
+   `dokimport_fortschritt()` liefert gelesen/offen/liest/fehler für die Anzeige.
 3. Vorschau: `dokimport_zeilen()`, manuell zuordnen `dokimport_zuordnen()`, überspringen `dokimport_ueberspringen()`.
 4. `dokimport_import($job_id)` – je bestätigter Zeile: Original als **internes** Dokument am Rohstoff
    (`kunde_sichtbar=0`, nie an Kunde) + `spec_ki_anwenden()` (Charge/Grenzwerte/Kennwerte/Wirkstoffe, additiv).
@@ -27,8 +33,11 @@ Rohstoffen (kein Treffer = bleibt offen stehen).
 Reihenfolge: CAS exakt → Artikelnummer/Name exakt → Name/Synonym-Teiltreffer (kürzester Name gewinnt).
 
 ## Hintergrund
-Nutzt die vorhandene KI-Job-Mechanik (core/ki_job.php): kein Cron, keine Warteschlange – jede Datei
-stößt per kurzem HTTP-Aufruf die nächste an. Jede KI-Analyse dauert bis ~4 Min, darum sequentiell.
+Nutzt die vorhandene KI-Job-Mechanik (core/ki_job.php): kein Cron, keine Warteschlange – jeder Worker
+stößt per kurzem HTTP-Aufruf den nächsten Schritt an. 4 Worker laufen parallel; jeder Request liest nur
+EINE Datei (keine langen Requests, die der Server abbricht). Jede KI-Analyse dauert bis ~4 Min.
+Stockt es (z. B. Worker-Trigger verloren), gibt es auf der Seite den Knopf „Verarbeitung anstoßen"
+(`dokimport_worker_starten`).
 
 ## UI
 `module/system/dok_massenimport.php`, Route `?p=dok_massenimport` (Rollen production/einkauf/labor),

@@ -47,8 +47,9 @@ function ki_job_ausfuehren(string $art, int $id): void {
         $r = rezeptur_ki_entwickeln($id);
         if ($r['ok']) rezeptur_ki_merken($id, $r);
     } elseif ($art === 'dokimport') {
-        // Massen-Import: eine Spec/CoA-Datei lesen + zuordnen; die naechste kettet sich selbst an.
+        // Massen-Import: ein Worker-Durchlauf (eine Datei lesen+zuordnen, dann sich selbst fortsetzen).
+        // id = job_id. Mehrere Worker laufen parallel (dokimport_worker_starten).
         require_once __DIR__ . '/dokimport.php';
-        dokimport_datei_lesen($id);
+        dokimport_worker($id);
     }
 }

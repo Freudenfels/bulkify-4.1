@@ -10,36 +10,64 @@ require_once BX_ROOT . '/core/dokimport.php';
 
 $ret = '?p=dok_massenimport';
 
+// Hochgeladene Dateien (Feld dateien[]) nach data/uploads schieben. Rueckgabe: [angekommen, [dateien]].
+$dim_dateien_einlesen = function (): array {
+    if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+    $erlaubt = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
+    $namen = (array)($_FILES['dateien']['name'] ?? []);
+    $angekommen = 0; $dateien = [];
+    foreach ($namen as $i => $orig) {
+        if (($_FILES['dateien']['error'][$i] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;
+        $angekommen++;
+        if (($_FILES['dateien']['error'][$i] ?? 1) !== UPLOAD_ERR_OK) continue;
+        $ext = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo((string)$orig, PATHINFO_EXTENSION)));
+        if (!in_array($ext, $erlaubt, true)) continue;
+        $fn = 'imp_' . bin2hex(random_bytes(6)) . '.' . $ext;
+        if (move_uploaded_file($_FILES['dateien']['tmp_name'][$i], BX_UPLOADS . '/' . $fn)) {
+            $dateien[] = ['orig' => (string)$orig, 'pfad' => $fn];
+        }
+    }
+    return [$angekommen, $dateien];
+};
+
 // --- Aktionen (PRG) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $akt = (string)($_POST['aktion'] ?? '');
 
-    if ($akt === 'upload') {
+    // POST kam leer an, obwohl Daten geschickt wurden = post_max_size ueberschritten (zu viele/zu grosse Dateien).
+    if ($akt === '' && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+        $max = ini_get('post_max_size');
+        $_SESSION['dim_flash'] = ['fehler', 'Der Upload war zu groß (Server-Grenze post_max_size=' . $max . '). Bitte in kleineren Schüben hochladen (z. B. 20 Dateien).'];
+        header('Location: ' . $ret); exit;
+    }
+
+    if ($akt === 'upload' || $akt === 'append') {
         if (!ki_bereit()) {
             $_SESSION['dim_flash'] = ['fehler', 'Die KI ist nicht eingerichtet (Einstellungen → KI). Der Massen-Import braucht sie.'];
             header('Location: ' . $ret); exit;
         }
-        if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
-        $erlaubt = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
-        $namen = (array)($_FILES['dateien']['name'] ?? []);
-        $dateien = [];
-        foreach ($namen as $i => $orig) {
-            if (($_FILES['dateien']['error'][$i] ?? 1) !== UPLOAD_ERR_OK) continue;
-            $ext = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo((string)$orig, PATHINFO_EXTENSION)));
-            if (!in_array($ext, $erlaubt, true)) continue;
-            $fn = 'imp_' . bin2hex(random_bytes(6)) . '.' . $ext;
-            if (move_uploaded_file($_FILES['dateien']['tmp_name'][$i], BX_UPLOADS . '/' . $fn)) {
-                $dateien[] = ['orig' => (string)$orig, 'pfad' => $fn];
-            }
-            if (count($dateien) >= 150) break;   // Obergrenze je Lauf
-        }
+        [$angekommen, $dateien] = $dim_dateien_einlesen();
+        $maxUp = (int) ini_get('max_file_uploads');
         if (!$dateien) {
-            $_SESSION['dim_flash'] = ['fehler', 'Keine gültige Datei hochgeladen (erlaubt: PDF, JPG, PNG, WEBP).'];
+            $_SESSION['dim_flash'] = ['fehler', 'Keine gültige Datei angekommen (erlaubt: PDF, JPG, PNG, WEBP).'];
         } else {
             $uid = (int)((current_user()['id'] ?? 0));
-            dokimport_job_neu($dateien, $uid ?: null);
-            $_SESSION['dim_flash'] = ['ok', count($dateien) . ' Datei(en) hochgeladen. Die KI liest sie jetzt nacheinander ein.'];
+            $jobAktiv = dokimport_aktiver_job();
+            if ($akt === 'append' && $jobAktiv) dokimport_dateien_hinzufuegen((int)$jobAktiv['id'], $dateien);
+            else                                dokimport_job_neu($dateien, $uid ?: null);
+            $msg = count($dateien) . ' Datei(en) übernommen. Die KI liest sie jetzt im Hintergrund ein.';
+            // Hinweis, wenn der Browser offenbar mehr schicken wollte, als der Server je Upload annimmt.
+            if ($maxUp > 0 && $angekommen >= $maxUp) {
+                $msg .= ' Hinweis: Der Server nimmt pro Upload höchstens ' . $maxUp . ' Dateien an – lade weitere einfach mit „Weitere Dateien hinzufügen" nach.';
+            }
+            $_SESSION['dim_flash'] = ['ok', $msg];
         }
+        header('Location: ' . $ret); exit;
+    }
+
+    if ($akt === 'kick') {
+        dokimport_worker_starten((int)($_POST['job_id'] ?? 0));
+        $_SESSION['dim_flash'] = ['ok', 'Verarbeitung angestoßen – die Seite aktualisiert sich gleich.'];
         header('Location: ' . $ret); exit;
     }
 
@@ -102,7 +130,12 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
         <input type="file" name="dateien[]" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple required>
       </div>
       <button class="btn btn-primary" type="submit" data-busy="lade hoch…" <?= $kiDa ? '' : 'disabled' ?>>Hochladen &amp; einlesen</button>
-      <div class="muted" style="font-size:12px">Bis zu 150 Dateien je Durchlauf. Das Einlesen läuft im Hintergrund – du kannst die Seite offen lassen.</div>
+      <div class="muted" style="font-size:12px">
+        Das Einlesen läuft im Hintergrund (mehrere Dateien parallel) – du kannst die Seite offen lassen.
+        <?php $maxUp = (int) ini_get('max_file_uploads'); if ($maxUp > 0): ?>
+          Der Server nimmt pro Upload höchstens <strong><?= $maxUp ?></strong> Dateien an; weitere lädst du danach einfach nach.
+        <?php endif; ?>
+      </div>
     </form>
   </div>
 
@@ -119,10 +152,28 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
       <div style="background:#eee;border-radius:6px;height:14px;overflow:hidden;max-width:560px">
         <div style="background:var(--gruen,#1D9E75);height:100%;width:<?= $proz ?>%"></div>
       </div>
-      <p class="muted" style="margin:8px 0 0"><?= (int)$fort['gelesen'] ?> von <?= (int)$fort['anzahl'] ?> gelesen (<?= $proz ?> %). Jede PDF dauert bis zu ~1–4 Minuten – die Seite lädt sich selbst neu.</p>
-      <form method="post" style="margin-top:12px" onsubmit="return confirm('Import wirklich abbrechen? Noch nicht übernommene Dateien werden verworfen.');">
-        <input type="hidden" name="aktion" value="abbrechen"><input type="hidden" name="job_id" value="<?= $jobId ?>">
-        <button class="btn btn-ghost btn-sm" type="submit">Abbrechen</button>
+      <p class="muted" style="margin:8px 0 2px">
+        <strong style="font-weight:600"><?= (int)$fort['gelesen'] ?> von <?= (int)$fort['anzahl'] ?></strong> gelesen (<?= $proz ?> %)
+        · gerade in Arbeit: <?= (int)$fort['liest'] ?> · wartend: <?= (int)$fort['offen'] ?><?= $fort['fehler'] > 0 ? ' · Fehler: ' . (int)$fort['fehler'] : '' ?>
+      </p>
+      <p class="muted" style="font-size:12px;margin:0">Läuft im Hintergrund (bis zu <?= DOKIMPORT_WORKER ?> Dateien gleichzeitig). Jede PDF dauert ~1–4 Min – die Seite lädt sich selbst neu.</p>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <?php if ($fort['liest'] === 0 && $fort['offen'] > 0): ?>
+          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="kick"><input type="hidden" name="job_id" value="<?= $jobId ?>">
+            <button class="btn btn-primary btn-sm" type="submit" data-busy="…">Verarbeitung anstoßen</button></form>
+        <?php endif; ?>
+        <form method="post" style="margin:0" onsubmit="return confirm('Import wirklich abbrechen? Noch nicht übernommene Dateien werden verworfen.');">
+          <input type="hidden" name="aktion" value="abbrechen"><input type="hidden" name="job_id" value="<?= $jobId ?>">
+          <button class="btn btn-ghost btn-sm" type="submit">Abbrechen</button>
+        </form>
+      </div>
+    </div>
+    <div class="bx-panel">
+      <form method="post" enctype="multipart/form-data" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <input type="hidden" name="aktion" value="append">
+        <div class="bx-field" style="margin:0;max-width:420px"><label>Weitere Dateien hinzufügen</label>
+          <input type="file" name="dateien[]" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple required></div>
+        <button class="btn btn-ghost btn-sm" type="submit" data-busy="lade hoch…">Hinzufügen</button>
       </form>
     </div>
     <script>setTimeout(function(){ location.reload(); }, 5000);</script>
