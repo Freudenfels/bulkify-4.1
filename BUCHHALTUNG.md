@@ -40,6 +40,9 @@ Reiter: Übersicht (Forderungen/Verbindlichkeiten/Saldo), Offene Posten (Debitor
 **Kreditoren (wir schulden denen):** Eingangsrechnungen `?p=lief_rechnung_neu` erfassen → Detail `?p=lief_rechnung&id=…`
 (Zahlungen buchen, Status offen→teilbezahlt→bezahlt, stornieren). Tabellen `lieferant_rechnung`/`lieferant_zahlung`
 in `core/kreditor.php`. Quelle für Vorbefüllung: `bestellung`/`bestellung_position` (EK-Wert).
+**Fremdwährung:** China-Lieferanten rechnen in USD, der Rest in EUR. Je Eingangsrechnung `waehrung` + `fx_kurs`
+(1 Währung = X EUR) + `fw_netto`; die Bücher speichern `netto/ust/brutto` in **EUR** (OP, Saldo, DATEV, CSV
+durchgängig EUR). Währung aus `lieferanten.waehrung` vorbelegt, Kurs je Rechnung änderbar (Standard `app_meta kurs_<cur>`).
 
 **Bankverbindung des Lieferanten (für Zahlungen):** liegt an `lieferanten.bank_*` – **formatoffen**, NICHT
 IBAN-fix (China zahlt oft über Drittland-Banken: SWIFT/BIC + Kontonummer statt IBAN, ggf. Zwischenbank).

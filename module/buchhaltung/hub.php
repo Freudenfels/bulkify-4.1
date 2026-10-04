@@ -191,8 +191,9 @@ $verb = kr_op_summe(); $verbUe = kr_op_ueberfaellig_summe();
       <tbody>
         <?php if (!$offeneRg): ?><tr><td colspan="4" class="muted">Nichts offen.</td></tr><?php endif; ?>
         <?php foreach ($offeneRg as $r): $ue = $r['faellig'] && strtotime($r['faellig']) < strtotime(date('Y-m-d')); ?>
+          <?php $cur = strtoupper((string)($r['waehrung'] ?: 'EUR')); ?>
           <tr style="cursor:pointer" onclick="location.href='?p=lief_rechnung&id=<?= (int)$r['id'] ?>'">
-            <td><strong><?= h($r['nummer']) ?></strong><?= $r['lief_nummer'] ? ' <span class="muted">· ' . h($r['lief_nummer']) . '</span>' : '' ?></td>
+            <td><strong><?= h($r['nummer']) ?></strong><?= $r['lief_nummer'] ? ' <span class="muted">· ' . h($r['lief_nummer']) . '</span>' : '' ?><?= $cur !== 'EUR' ? ' <span class="muted">· ' . h(number_format((float)($r['fw_netto'] ?? 0), 2, ',', '.') . ' ' . $cur) . '</span>' : '' ?></td>
             <td><?= h($r['firma'] ?? '') ?></td>
             <td><?= $r['faellig'] ? ('<span' . ($ue ? ' style="color:var(--err)"' : '') . '>' . h(date('d.m.Y', strtotime($r['faellig']))) . '</span>') : '<span class="muted">–</span>' ?></td>
             <td class="bx-num"><?= $eur($r['rest']) ?></td>

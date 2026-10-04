@@ -45,6 +45,20 @@ function kreditor_init(): void {
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         KEY idx_rechnung (lief_rechnung_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Fremdwährung (z. B. USD bei China-Lieferanten): Originalbetrag + Kurs; netto/ust/brutto bleiben in EUR.
+    ensure_column('lieferant_rechnung', 'fx_kurs', "DECIMAL(14,6) NULL");  // 1 Fremdwährung = X EUR (NULL/1 bei EUR)
+    ensure_column('lieferant_rechnung', 'fw_netto', "DECIMAL(14,2) NULL"); // Netto in Rechnungswährung
+}
+
+// Verfügbare Währungen + Symbole.
+function kr_waehrungen(): array { return ['EUR' => '€', 'USD' => '$', 'CNY' => '¥', 'GBP' => '£', 'CHF' => 'CHF']; }
+
+// Hinterlegter Standard-Kurs je Währung (1 Fremdwährung = X EUR), in den Einstellungen pflegbar (app_meta kurs_<cur>).
+function kr_kurs_default(string $waehrung): float {
+    $waehrung = strtoupper($waehrung);
+    if ($waehrung === 'EUR') return 1.0;
+    $vor = ['USD' => '0.92', 'CNY' => '0.127', 'GBP' => '1.17', 'CHF' => '1.05'];
+    return (float) str_replace(',', '.', (string) meta_get('kurs_' . strtolower($waehrung), $vor[$waehrung] ?? '0'));
 }
 
 // --- Zahlstatus -----------------------------------------------------------
@@ -86,20 +100,24 @@ function kr_faellig(?string $datum, $ziel): ?string {
 // netto, ust_prozent, brutto? (sonst berechnet), zahlungsziel_tage?, notiz?, erfasst_von?.
 function kr_rechnung_anlegen(array $d): int {
     kreditor_init();
-    $netto = round((float)($d['netto'] ?? 0), 2);
-    $ustP  = (float)($d['ust_prozent'] ?? 0);
+    $waehrung = strtoupper(trim((string)($d['waehrung'] ?? 'EUR'))) ?: 'EUR';
+    $kurs = ($waehrung === 'EUR') ? 1.0 : (float) str_replace(',', '.', (string)($d['fx_kurs'] ?? 0));
+    if ($kurs <= 0) $kurs = 1.0;
+    $fwNetto = round((float) str_replace(',', '.', (string)($d['netto'] ?? 0)), 2); // Betrag in Rechnungswährung
+    $netto = round($fwNetto * $kurs, 2);                                            // in EUR
+    $ustP  = (float) str_replace(',', '.', (string)($d['ust_prozent'] ?? 0));
     $ust   = round($netto * $ustP / 100, 2);
-    $brutto = isset($d['brutto']) && $d['brutto'] !== '' ? round((float)$d['brutto'], 2) : round($netto + $ust, 2);
+    $brutto = round($netto + $ust, 2);
     $datum = $d['datum'] ?? date('Y-m-d');
     $ziel  = isset($d['zahlungsziel_tage']) ? (int)$d['zahlungsziel_tage'] : null;
     $faellig = $ziel !== null ? kr_faellig($datum, $ziel) : ($d['faellig'] ?? null);
     q("INSERT INTO lieferant_rechnung
-         (nummer, lieferant_id, bestellung_id, lief_nummer, datum, eingang_am, waehrung,
+         (nummer, lieferant_id, bestellung_id, lief_nummer, datum, eingang_am, waehrung, fx_kurs, fw_netto,
           netto, ust_prozent, ust_betrag, brutto, status, zahlungsziel_tage, faellig, notiz, erfasst_von)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('ER'), $d['lieferant_id'] ?: null, $d['bestellung_id'] ?? null,
        trim((string)($d['lief_nummer'] ?? '')) ?: null, $datum ?: null, $d['eingang_am'] ?? date('Y-m-d'),
-       (string)($d['waehrung'] ?? 'EUR'), $netto, $ustP, $ust, $brutto, 'offen', $ziel, $faellig,
+       $waehrung, $kurs, $fwNetto, $netto, $ustP, $ust, $brutto, 'offen', $ziel, $faellig,
        trim((string)($d['notiz'] ?? '')) ?: null, $d['erfasst_von'] ?? null]);
     return insert_id();
 }
@@ -108,18 +126,22 @@ function kr_rechnung_anlegen(array $d): int {
 function kr_rechnung_update(int $id, array $d): void {
     $r = one("SELECT * FROM lieferant_rechnung WHERE id=?", [$id]);
     if (!$r || $r['status'] === 'storniert') return;
-    $netto = round((float)($d['netto'] ?? $r['netto']), 2);
-    $ustP  = (float)($d['ust_prozent'] ?? $r['ust_prozent']);
+    $waehrung = strtoupper(trim((string)($d['waehrung'] ?? $r['waehrung'] ?? 'EUR'))) ?: 'EUR';
+    $kurs = ($waehrung === 'EUR') ? 1.0 : (float) str_replace(',', '.', (string)($d['fx_kurs'] ?? $r['fx_kurs'] ?? 0));
+    if ($kurs <= 0) $kurs = 1.0;
+    $fwNetto = round((float) str_replace(',', '.', (string)($d['netto'] ?? $r['fw_netto'] ?? $r['netto'])), 2);
+    $netto = round($fwNetto * $kurs, 2);
+    $ustP  = (float) str_replace(',', '.', (string)($d['ust_prozent'] ?? $r['ust_prozent']));
     $ust   = round($netto * $ustP / 100, 2);
-    $brutto = isset($d['brutto']) && $d['brutto'] !== '' ? round((float)$d['brutto'], 2) : round($netto + $ust, 2);
+    $brutto = round($netto + $ust, 2);
     $datum = $d['datum'] ?? $r['datum'];
     $ziel  = array_key_exists('zahlungsziel_tage', $d) ? (int)$d['zahlungsziel_tage'] : $r['zahlungsziel_tage'];
     $faellig = $ziel !== null ? kr_faellig($datum, $ziel) : ($d['faellig'] ?? $r['faellig']);
     q("UPDATE lieferant_rechnung SET lieferant_id=?, bestellung_id=?, lief_nummer=?, datum=?, eingang_am=?,
-          netto=?, ust_prozent=?, ust_betrag=?, brutto=?, zahlungsziel_tage=?, faellig=?, notiz=? WHERE id=?",
+          waehrung=?, fx_kurs=?, fw_netto=?, netto=?, ust_prozent=?, ust_betrag=?, brutto=?, zahlungsziel_tage=?, faellig=?, notiz=? WHERE id=?",
       [$d['lieferant_id'] ?? $r['lieferant_id'], $d['bestellung_id'] ?? $r['bestellung_id'],
        trim((string)($d['lief_nummer'] ?? $r['lief_nummer'])) ?: null, $datum ?: null, $d['eingang_am'] ?? $r['eingang_am'],
-       $netto, $ustP, $ust, $brutto, $ziel, $faellig, trim((string)($d['notiz'] ?? $r['notiz'])) ?: null, $id]);
+       $waehrung, $kurs, $fwNetto, $netto, $ustP, $ust, $brutto, $ziel, $faellig, trim((string)($d['notiz'] ?? $r['notiz'])) ?: null, $id]);
     kr_status_fortschreiben($id);
 }
 
@@ -235,11 +257,17 @@ function kr_export_belege_csv(string $von = '', string $bis = ''): string {
                    FROM lieferant_rechnung r LEFT JOIN lieferanten l ON l.id=r.lieferant_id
                   WHERE $where ORDER BY r.datum ASC, r.id ASC", $args);
     $csv  = "\xEF\xBB\xBF";
-    $csv .= bh_csv_zeile(['Erfassungsnr', 'Lieferanten-Nr', 'Lieferant', 'USt-IdNr', 'Land', 'Datum', 'Netto', 'VSt-Satz', 'VSt-Betrag', 'Brutto', 'Status']);
+    $csv .= bh_csv_zeile(['Erfassungsnr', 'Lieferanten-Nr', 'Lieferant', 'USt-IdNr', 'Land', 'Datum',
+                          'Waehrung', 'Netto (Waehrung)', 'Kurs (EUR je Einheit)',
+                          'Netto EUR', 'VSt-Satz', 'VSt-Betrag EUR', 'Brutto EUR', 'Status']);
     foreach ($rows as $r) {
+        $cur = (string)($r['waehrung'] ?: 'EUR');
         $csv .= bh_csv_zeile([
             $r['nummer'], $r['lief_nummer'], $r['firma'], $r['lief_ustid'] ?? '', $r['lief_land'] ?? '',
             $r['datum'] ? date('d.m.Y', strtotime($r['datum'])) : '',
+            $cur,
+            bh_csv_betrag((float)($r['fw_netto'] ?? $r['netto'])),
+            $cur === 'EUR' ? '1' : number_format((float)($r['fx_kurs'] ?: 1), 6, ',', ''),
             bh_csv_betrag((float)$r['netto']), number_format((float)$r['ust_prozent'], 0) . '%',
             bh_csv_betrag((float)$r['ust_betrag']), bh_csv_betrag((float)$r['brutto']), status_text((string)$r['status']),
         ]);

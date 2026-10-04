@@ -23,6 +23,14 @@ Eigene Tabellen, **kein Eingriff in `core/schema.php`** (kollisionsarm). Geld in
 `datev_kreditor_sammel` (1600), `datev_aufwand_19` (3400), `datev_aufwand_eu` (3425), `datev_aufwand_0` (3300).
 Vor Produktiv-Import mit dem Steuerberater abstimmen.
 
+## Fremdwährung (z. B. USD bei China-Lieferanten)
+Je Eingangsrechnung `waehrung` + `fx_kurs` (1 Fremdwährung = X EUR) + `fw_netto` (Originalbetrag).
+`netto/ust_betrag/brutto` werden daraus in **EUR** gespeichert (`netto = fw_netto × fx_kurs`), damit OP, Saldo,
+DATEV und CSV durchgängig in EUR laufen. `kr_waehrungen()` listet EUR/USD/CNY/GBP/CHF; `kr_kurs_default($cur)`
+liefert den hinterlegten Standardkurs (`app_meta kurs_usd`, `kurs_cny` … – editierbar). Im Formular wird die
+Währung aus `lieferanten.waehrung` vorbelegt (China = USD), der Rest bleibt EUR; der Kurs ist je Rechnung
+überschreibbar. Originalbetrag + Kurs erscheinen in Detail, Liste und CSV.
+
 ## Grenzen / Ausbau
-Fremdwährung wird als Feld geführt (`waehrung`), aber nicht umgerechnet (EUR angenommen). Kein PDF-Upload
-der Original-Eingangsrechnung, keine Auto-Verknüpfung Wareneingang→Rechnung. Siehe `BUCHHALTUNG.md`.
+Kurs wird je Rechnung fest gespeichert (keine automatische Tageskurs-Abfrage). Kein PDF-Upload der
+Original-Eingangsrechnung, keine Auto-Verknüpfung Wareneingang→Rechnung. Siehe `BUCHHALTUNG.md`.

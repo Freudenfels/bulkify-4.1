@@ -20,8 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'er_sa
             'lief_nummer'       => $_POST['lief_nummer'] ?? '',
             'datum'             => $_POST['datum'] ?? date('Y-m-d'),
             'eingang_am'        => $_POST['eingang_am'] ?? date('Y-m-d'),
-            'netto'             => $netto,
-            'ust_prozent'       => (float) str_replace(',', '.', (string)($_POST['ust_prozent'] ?? '0')),
+            'waehrung'          => $_POST['waehrung'] ?? 'EUR',
+            'fx_kurs'           => $_POST['fx_kurs'] ?? null,
+            'netto'             => $_POST['netto'] ?? '0', // in Rechnungswährung
+            'ust_prozent'       => $_POST['ust_prozent'] ?? '0',
             'zahlungsziel_tage' => (int)($_POST['zahlungsziel_tage'] ?? 0),
             'notiz'             => $_POST['notiz'] ?? '',
             'erfasst_von'       => $u['id'] ?? null,
@@ -33,19 +35,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'er_sa
 // Vorbefüllung
 $vorBestellung = (int)($_GET['bestellung'] ?? 0);
 $vorLieferant  = (int)($_GET['lieferant'] ?? 0);
-$preNetto = ''; $preZiel = 0;
+$preNetto = ''; $preZiel = 0; $preWaehrung = 'EUR'; $preLand = 'DE';
 if ($vorBestellung) {
     $bst = one("SELECT lieferant_id FROM bestellung WHERE id=?", [$vorBestellung]);
     if ($bst) { $vorLieferant = (int)$bst['lieferant_id']; $preNetto = number_format(kr_bestellung_netto($vorBestellung), 2, '.', ''); }
 }
 if ($vorLieferant) {
-    $lf = one("SELECT zahlungsziel_lief FROM lieferanten WHERE id=?", [$vorLieferant]);
-    if ($lf) $preZiel = (int)$lf['zahlungsziel_lief'];
+    $lf = one("SELECT zahlungsziel_lief, waehrung, land FROM lieferanten WHERE id=?", [$vorLieferant]);
+    if ($lf) { $preZiel = (int)$lf['zahlungsziel_lief']; $preWaehrung = strtoupper((string)($lf['waehrung'] ?: 'EUR')); $preLand = strtoupper((string)($lf['land'] ?: 'DE')); }
 }
-$ustDefault = (float) meta_get('ust_inland', 19);
+// Vorsteuer: Inland EUR -> ust_inland; Ausland/Fremdwährung -> 0 (China-Import hat keine dt. USt auf der Rechnung).
+$ustDefault = ($preWaehrung !== 'EUR' || $preLand !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
+$preKurs = $preWaehrung === 'EUR' ? '' : number_format(kr_kurs_default($preWaehrung), 6, ',', '');
 
-$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+$waehrungen = kr_waehrungen();
+$lieferanten = all("SELECT id, firma, waehrung, land FROM lieferanten ORDER BY firma");
 $bestellungen = all("SELECT b.id, b.nummer, l.firma FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id ORDER BY b.id DESC LIMIT 100");
+// JS-Karten: Lieferant -> Währung und Währung -> Standardkurs
+$mapWaehrung = [];
+foreach ($lieferanten as $l) $mapWaehrung[(int)$l['id']] = strtoupper((string)($l['waehrung'] ?: 'EUR'));
+$mapKurs = [];
+foreach (array_keys($waehrungen) as $cur) $mapKurs[$cur] = $cur === 'EUR' ? 1 : kr_kurs_default($cur);
 
 render_header('buchhaltung', 'Eingangsrechnung erfassen');
 bx_head('Eingangsrechnung erfassen', 'Rechnung eines Lieferanten als Verbindlichkeit erfassen',
@@ -56,7 +66,7 @@ if ($fehler) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#
   <input type="hidden" name="aktion" value="er_save">
   <div class="bx-row">
     <label>Lieferant
-      <select name="lieferant_id" required>
+      <select name="lieferant_id" id="erLieferant" required>
         <option value="">– wählen –</option>
         <?php foreach ($lieferanten as $l): ?>
           <option value="<?= (int)$l['id'] ?>" <?= $vorLieferant === (int)$l['id'] ? 'selected' : '' ?>><?= h($l['firma']) ?></option>
@@ -84,11 +94,23 @@ if ($fehler) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#
     </label>
   </div>
   <div class="bx-row">
-    <label>Netto (EUR)
+    <label>Währung
+      <select name="waehrung" id="erWaehrung">
+        <?php foreach ($waehrungen as $cur => $sym): ?>
+          <option value="<?= h($cur) ?>" <?= $preWaehrung === $cur ? 'selected' : '' ?>><?= h($cur) ?><?= $cur !== 'EUR' ? ' (' . h($sym) . ')' : '' ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label>Netto (<span id="erCurLabel"><?= h($preWaehrung) ?></span>)
       <input type="text" inputmode="decimal" name="netto" value="<?= h($preNetto) ?>" placeholder="0,00" required>
     </label>
+    <label id="erKursRow" style="<?= $preWaehrung === 'EUR' ? 'display:none' : '' ?>">Kurs (1&nbsp;<span id="erCurLabel2"><?= h($preWaehrung) ?></span> = ? EUR)
+      <input type="text" inputmode="decimal" name="fx_kurs" id="erKurs" value="<?= h($preKurs) ?>" placeholder="z. B. 0,92">
+    </label>
+  </div>
+  <div class="bx-row">
     <label>Vorsteuer %
-      <input type="text" inputmode="decimal" name="ust_prozent" value="<?= h(number_format($ustDefault, 0)) ?>">
+      <input type="text" inputmode="decimal" name="ust_prozent" id="erUst" value="<?= h(number_format($ustDefault, 0)) ?>">
     </label>
     <label>Zahlungsziel (Tage)
       <input type="number" name="zahlungsziel_tage" value="<?= (int)$preZiel ?>" min="0">
@@ -97,11 +119,30 @@ if ($fehler) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#
   <label>Notiz
     <textarea name="notiz" rows="2" placeholder="optional"></textarea>
   </label>
-  <p class="muted" style="margin:4px 0 0">USt-Betrag und Brutto werden aus Netto × Vorsteuer berechnet. Die Fälligkeit ergibt sich aus Rechnungsdatum + Zahlungsziel.</p>
+  <p class="muted" style="margin:4px 0 0">Bei Fremdwährung (z. B. USD) wird mit dem Kurs in EUR umgerechnet; Buchhaltung, offene Posten und DATEV laufen in EUR. USt/Brutto = Netto × Vorsteuer, Fälligkeit = Rechnungsdatum + Zahlungsziel.</p>
   <div class="bx-row" style="margin-top:var(--sp-4)">
     <button class="btn btn-primary" type="submit">Eingangsrechnung speichern</button>
     <a class="btn btn-ghost" href="?p=buchhaltung&tab=verbindlichkeiten">Abbrechen</a>
   </div>
 </form>
+<script>
+(function () {
+  var mapW = <?= json_encode($mapWaehrung) ?>, mapK = <?= json_encode($mapKurs) ?>;
+  var lief = document.getElementById('erLieferant'), cur = document.getElementById('erWaehrung');
+  var kursRow = document.getElementById('erKursRow'), kurs = document.getElementById('erKurs');
+  var lab = document.getElementById('erCurLabel'), lab2 = document.getElementById('erCurLabel2'), ust = document.getElementById('erUst');
+  function applyCur(setKurs) {
+    var c = cur.value || 'EUR';
+    lab.textContent = c; lab2.textContent = c;
+    if (c === 'EUR') { kursRow.style.display = 'none'; }
+    else { kursRow.style.display = ''; if (setKurs && (!kurs.value || kurs.value === '1')) kurs.value = (mapK[c] || '').toString().replace('.', ','); }
+  }
+  lief.addEventListener('change', function () {
+    var w = mapW[this.value]; if (w) { cur.value = w; applyCur(true); if (w !== 'EUR') ust.value = '0'; }
+  });
+  cur.addEventListener('change', function () { applyCur(true); if (cur.value !== 'EUR') ust.value = '0'; });
+  applyCur(false);
+})();
+</script>
 <?php
 render_footer();
