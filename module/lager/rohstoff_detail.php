@@ -972,19 +972,30 @@ if (!$neu) {
   </div>
 </section>
 <section data-panel="dok" hidden><?php dokument_panel('item', (int)$id, $lieferanten); ?>
-  <?php // Unser CoA im bulkify-Layout – je Charge mit Analysewerten. Liegt bewusst AUCH hier im
-        // Dokumente-Reiter (nicht nur unter „Chargen"). Das Original des Lieferanten geht nie an den Kunden.
+  <?php // Unsere bulkify-Dokumente: Spezifikation (immer, allgemein) + CoA je Charge mit Analysewerten.
+        // Liegt bewusst AUCH hier im Dokumente-Reiter. Das Original des Lieferanten geht nie an den Kunden.
     $coaCharges = $neu ? [] : all("SELECT c.id, c.charge_nr, c.mhd, c.coa_freigegeben
         FROM charge c WHERE c.item_id=? AND EXISTS (SELECT 1 FROM charge_analyse a WHERE a.charge_id=c.id)
         ORDER BY c.id DESC", [(int)$id]);
-    if ($coaCharges): ?>
+    if (!$neu): $specFreiDok = (int)($it['spec_freigegeben'] ?? 0) === 1; $su = '?p=spec_bulkify&id=' . (int)$id; ?>
   <div class="bx-panel">
-    <h2 style="margin-top:0">Unser CoA (bulkify-Layout) <?= bx_hint('Analysenzertifikat im bulkify-Layout je Charge – aus den erfassten Analysenwerten erzeugt. Das ist unser Dokument für den Kunden (erst nach Freigabe sichtbar); das Original des Lieferanten bleibt intern.') ?></h2>
+    <h2 style="margin-top:0">Unsere Dokumente (bulkify-Layout) <?= bx_hint('Unsere eigenen Kundendokumente aus den erfassten Daten: Spezifikation (allgemein, immer verfügbar) und – je Charge mit Analysewerten – das CoA. Das Original des Lieferanten bleibt intern.') ?></h2>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Charge</th><th>MHD</th><th>Kundenfreigabe</th><th></th></tr></thead>
+      <thead><tr><th>Dokument</th><th>Charge</th><th>MHD</th><th>Kundenfreigabe</th><th></th></tr></thead>
       <tbody>
+        <tr>
+          <td><strong>Spezifikation</strong></td>
+          <td class="muted">allgemein</td>
+          <td class="muted">–</td>
+          <td><?= $specFreiDok ? bx_badge('freigegeben','ok') : bx_badge('intern','warn') ?></td>
+          <td class="bx-num" style="white-space:nowrap">
+            <a class="btn btn-ghost btn-sm" target="_blank" href="<?= h($su) ?>">Ansehen</a>
+            <a class="btn btn-ghost btn-sm" href="<?= h($su) ?>" download>Download</a>
+          </td>
+        </tr>
         <?php foreach ($coaCharges as $cc): $u = '?p=coa_bulkify&id=' . (int)$cc['id']; ?>
           <tr>
+            <td><strong>CoA</strong></td>
             <td><?= h($cc['charge_nr'] ?: ('Charge ' . (int)$cc['id'])) ?></td>
             <td><?= $cc['mhd'] ? h(date('d.m.Y', strtotime((string)$cc['mhd']))) : '<span class="muted">–</span>' ?></td>
             <td><?= (int)$cc['coa_freigegeben'] === 1 ? bx_badge('freigegeben','ok') : bx_badge('intern','warn') ?></td>
@@ -994,9 +1005,10 @@ if (!$neu) {
             </td>
           </tr>
         <?php endforeach; ?>
+        <?php if (!$coaCharges): ?><tr><td><span class="muted">CoA</span></td><td colspan="4" class="muted" style="font-size:12px">Noch kein CoA – entsteht je Charge, sobald Analysenwerte erfasst sind (Reiter „Chargen").</td></tr><?php endif; ?>
       </tbody>
     </table></div>
-    <p class="muted" style="font-size:12px;margin-top:8px">Freigabe für den Kunden erfolgt im Reiter „Chargen".</p>
+    <p class="muted" style="font-size:12px;margin-top:8px">Spezifikation-Freigabe im Reiter „Spezifikation", CoA-Freigabe im Reiter „Chargen". Lieferanten-Originale bleiben intern.</p>
   </div>
   <?php endif; ?>
 </section>

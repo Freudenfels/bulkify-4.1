@@ -69,10 +69,15 @@ intern) angelegt, sodass Spec/CoA im Reiter **Dokumente** stehen (dort ist ihr P
 Lieferanten-Originale sind **immer intern** – der Kunde bekommt nur das generierte **bulkify-Specsheet**
 (`?p=spec_bulkify&id=`) bzw. bulkify-CoA. Siehe `core/dokument_ui.md`.
 
-## bulkify-CoA auch im Dokumente-Reiter
+## bulkify-Dokumente im Dokumente-Reiter
 Das **bulkify-CoA** wird je **Charge** aus den Analysenwerten erzeugt (`?p=coa_bulkify&id=<charge>`),
 nicht als Datei gespeichert. Es erscheint nicht nur im Reiter „Chargen" (Spalte „⇩ CoA"), sondern **auch
 im Reiter „Dokumente"**: Block „Unser CoA (bulkify-Layout)" listet je Charge **mit Analysenwerten**
 (`charge_analyse` vorhanden) Ansehen + Download sowie den Kundenfreigabe-Status. Hat eine Charge noch keine
 Analysenwerte (z. B. CoA war ein Scan), erst im Reiter „Chargen" → „Analysenwerte je Charge" eintragen,
 dann erscheint das bulkify-CoA. Original des Lieferanten bleibt intern.
+
+**Update:** Der Block heißt „Unsere Dokumente (bulkify-Layout)" und zeigt IMMER die **Spezifikation**
+(`?p=spec_bulkify&id=<item>`, allgemein, kundentauglich) – plus das **CoA je Charge** mit Analysewerten
+(`coa_bulkify`). Ohne Analyse-Charge erscheint ein Hinweis statt leerer Liste. So ist auch bei Rohstoffen
+ohne CoA-Charge mindestens die bulkify-Spezifikation da.
