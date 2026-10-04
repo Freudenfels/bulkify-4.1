@@ -176,6 +176,11 @@ function dokimport_zuordnen(int $datei_id, string $eingabe): bool {
     return true;
 }
 
+// Zuordnung einer Zeile wieder entfernen (Treffer abwaehlen) -> Zeile steht dann auf "kein Treffer".
+function dokimport_zuordnung_loeschen(int $datei_id): void {
+    q("UPDATE dok_import_datei SET item_id=NULL, quelle='' WHERE id=? AND status='gelesen'", [$datei_id]);
+}
+
 // Aus einer Zeile OHNE Treffer einen NEUEN Rohstoff aus den KI-Stammdaten anlegen und zuordnen.
 // Rueckgabe: neue item_id (0 = nichts angelegt). Stammdaten (CAS, Synonyme, botan. Quelle …) werden
 // uebernommen; Charge/Grenzwerte/Kennwerte/Wirkstoffe kommen dann beim eigentlichen Import dazu.
@@ -226,7 +231,7 @@ function dokimport_name_spezifisch(array $ki, string $dateiname): string {
 
 function dokimport_neu_anlegen(int $datei_id): int {
     $d = one("SELECT * FROM dok_import_datei WHERE id=? AND status='gelesen'", [$datei_id]);
-    if (!$d || (int)$d['item_id'] > 0) return 0;   // nur gelesene Zeilen ohne Treffer
+    if (!$d) return 0;   // auch bei bestehendem (falschem) Treffer erlaubt -> ersetzt die Zuordnung
     $ki    = json_decode((string)($d['ki_json'] ?? ''), true);
     $stamm = is_array($ki) ? (array)($ki['stamm'] ?? []) : [];
     $name  = dokimport_name_spezifisch(is_array($ki) ? $ki : [], (string)$d['dateiname']);

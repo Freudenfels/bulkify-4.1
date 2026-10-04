@@ -99,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($akt === 'skip')   { dokimport_ueberspringen((int)($_POST['datei_id'] ?? 0), true);  header('Location: ' . $ret); exit; }
     if ($akt === 'unskip') { dokimport_ueberspringen((int)($_POST['datei_id'] ?? 0), false); header('Location: ' . $ret); exit; }
+    if ($akt === 'clear')  { dokimport_zuordnung_loeschen((int)($_POST['datei_id'] ?? 0)); $_SESSION['dim_flash'] = ['ok', 'Zuordnung entfernt – du kannst jetzt neu zuordnen oder einen neuen Rohstoff anlegen.']; header('Location: ' . $ret); exit; }
 
     if ($akt === 'neu_anlegen') {
         $iid = dokimport_neu_anlegen((int)($_POST['datei_id'] ?? 0));
@@ -144,7 +145,7 @@ if ($flash) {
 
 // Label-Helfer
 $typLbl = ['spec' => 'Spezifikation', 'coa' => 'CoA', 'beides' => 'Spec + CoA', 'unklar' => 'unklar'];
-$quelleLbl = ['cas' => 'über CAS', 'name' => 'über Name', 'fuzzy' => 'namensähnlich', 'manuell' => 'manuell', 'neu' => 'neu angelegt', '' => 'kein Treffer'];
+$quelleLbl = ['cas' => 'über CAS', 'latein' => 'über lat. Namen', 'name' => 'über Name', 'fuzzy' => 'namensähnlich', 'manuell' => 'manuell', 'neu' => 'neu angelegt', '' => 'kein Treffer'];
 $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
 ?>
 
@@ -303,12 +304,16 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
                     <input type="text" name="eingabe" list="roh_dl" placeholder="Rohstoff-Name / R-Nr." style="min-width:170px;font-size:12px">
                     <button class="btn btn-ghost btn-sm" type="submit" data-busy="…"><?= $iid ? 'ändern' : 'zuordnen' ?></button>
                   </form>
-                  <?php if (!$iid): ?>
-                    <form method="post" style="margin:0" onsubmit="return confirm('Neuen Rohstoff aus den KI-Stammdaten dieser Datei anlegen?');">
-                      <input type="hidden" name="aktion" value="neu_anlegen"><input type="hidden" name="datei_id" value="<?= (int)$z['id'] ?>">
-                      <button class="btn btn-ghost btn-sm" type="submit" data-busy="…" title="Neuen Rohstoff aus den erkannten Stammdaten anlegen">+ Neuer Rohstoff</button>
+                  <?php if ($iid): ?>
+                    <form method="post" style="margin:0" onsubmit="return confirm('Zuordnung zu diesem Rohstoff entfernen?');">
+                      <input type="hidden" name="aktion" value="clear"><input type="hidden" name="datei_id" value="<?= (int)$z['id'] ?>">
+                      <button class="btn btn-ghost btn-sm" type="submit" data-busy="…" title="Treffer abwählen">Zuordnung entfernen</button>
                     </form>
                   <?php endif; ?>
+                  <form method="post" style="margin:0" onsubmit="return confirm('<?= $iid ? 'Statt der aktuellen Zuordnung einen NEUEN Rohstoff aus den KI-Stammdaten anlegen?' : 'Neuen Rohstoff aus den KI-Stammdaten dieser Datei anlegen?' ?>');">
+                    <input type="hidden" name="aktion" value="neu_anlegen"><input type="hidden" name="datei_id" value="<?= (int)$z['id'] ?>">
+                    <button class="btn btn-ghost btn-sm" type="submit" data-busy="…" title="Neuen Rohstoff aus den erkannten Stammdaten anlegen">+ Neuer Rohstoff</button>
+                  </form>
                 </div>
               <?php endif; ?>
             </td>

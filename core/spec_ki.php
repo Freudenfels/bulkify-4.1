@@ -209,28 +209,58 @@ function spec_ki_anwenden(int $item_id, array $ergebnis, ?int $lieferant_id = nu
     spec_ki_wirkstoffe($item_id, $ergebnis);   // erkannte Wirk-/Leitsubstanzen an den Rohstoff
 }
 
-// Aus dem KI-Ergebnis den passenden VORHANDENEN Rohstoff finden (kein Neuanlegen). Reihenfolge:
-// 1) CAS exakt  2) Artikelnummer/Name exakt  3) Name-Teiltreffer (kuerzester Name gewinnt).
-// Rueckgabe: ['item_id'=>int|null, 'quelle'=>'cas'|'name'|'fuzzy'|''].
+// Aus dem KI-Ergebnis den passenden VORHANDENEN Rohstoff finden (kein Neuanlegen).
+// SPRACHUNABHAENGIG: Rohstoffe sind oft deutsch angelegt, die Datei ist englisch (oder umgekehrt).
+// Darum werden ALLE Namensvarianten der Datei (name / name_en / Synonym) gegen ALLE Namensfelder des
+// Rohstoffs (name / name_en / synonym / artikelnummer) geprueft, und der lateinische/botanische Name
+// dient als sprachneutrale Bruecke. Reihenfolge (spezifisch -> unscharf):
+//   1) CAS  2) EG-/EC-Nr  3) lateinischer/botanischer Name  4) Name exakt (DE/EN/Synonym)  5) Teiltreffer.
+// Rueckgabe: ['item_id'=>int|null, 'quelle'=>'cas'|'latein'|'name'|'fuzzy'|''].
 function spec_ki_match_item(array $ergebnis): array {
     $stamm = (array)($ergebnis['stamm'] ?? []);
-    $name  = trim((string)($stamm['name'] ?? ''));
-    $cas   = trim((string)($stamm['cas'] ?? ($ergebnis['cas_vorschlag'] ?? '')));
-    $syn   = trim((string)($stamm['synonym'] ?? ''));
+    $g = fn(string $k) => trim((string)($stamm[$k] ?? ''));
+    // LIKE-sicher machen: Backslash raus (crasht MariaDB live, siehe Memory), Wildcards neutralisieren.
+    $like = fn(string $s) => '%' . addcslashes(str_replace('\\', '', $s), '%_') . '%';
 
+    $cas   = $g('cas') ?: trim((string)($ergebnis['cas_vorschlag'] ?? ''));
+    $ec    = $g('ec_nr');
+    $lat   = array_values(array_unique(array_filter([$g('name_lat'), $g('bot_quelle')])));
+    $namen = array_values(array_unique(array_filter([$g('name'), $g('name_en'), $g('synonym')])));
+
+    // 1) CAS exakt
     if ($cas !== '') {
         $id = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND cas=? ORDER BY id LIMIT 1", [$cas]);
         if ($id) return ['item_id' => $id, 'quelle' => 'cas'];
     }
-    if ($name !== '') {
-        $id = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND (artikelnummer=? OR name=?) ORDER BY id LIMIT 1", [$name, $name]);
+    // 2) EG-/EC-Nummer exakt
+    if ($ec !== '') {
+        $id = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND ec_nr=? ORDER BY id LIMIT 1", [$ec]);
+        if ($id) return ['item_id' => $id, 'quelle' => 'cas'];
+    }
+    // 3) Lateinischer/botanischer Name – sprachneutrale Bruecke (dt. Rohstoff <-> engl. Datei)
+    foreach ($lat as $l) {
+        $id = (int) scalar(
+            "SELECT id FROM item WHERE kategorie='rohstoff' AND (name_lat=? OR bot_quelle=? OR name_lat LIKE ? OR bot_quelle LIKE ?)
+             ORDER BY CHAR_LENGTH(COALESCE(name_lat, bot_quelle)) LIMIT 1",
+            [$l, $l, $like($l), $like($l)]
+        );
+        if ($id) return ['item_id' => $id, 'quelle' => 'latein'];
+    }
+    // 4) Name exakt – ueber DE-, EN-, Synonym- und Artikelnummer-Feld
+    foreach ($namen as $n) {
+        $id = (int) scalar(
+            "SELECT id FROM item WHERE kategorie='rohstoff' AND (name=? OR name_en=? OR synonym=? OR artikelnummer=?) ORDER BY id LIMIT 1",
+            [$n, $n, $n, $n]
+        );
         if ($id) return ['item_id' => $id, 'quelle' => 'name'];
     }
-    // Teiltreffer ueber Name oder Synonym-Feld; kuerzester Treffer ist am spezifischsten.
-    foreach (array_filter([$name, $syn]) as $such) {
+    // 5) Teiltreffer ueber alle Namensfelder; kuerzester Name ist am spezifischsten.
+    foreach ($namen as $n) {
+        $lk = $like($n);
         $id = (int) scalar(
-            "SELECT id FROM item WHERE kategorie='rohstoff' AND (name LIKE ? OR synonym LIKE ?) ORDER BY CHAR_LENGTH(name) LIMIT 1",
-            ['%' . $such . '%', '%' . $such . '%']
+            "SELECT id FROM item WHERE kategorie='rohstoff' AND (name LIKE ? OR name_en LIKE ? OR synonym LIKE ? OR name_lat LIKE ?)
+             ORDER BY CHAR_LENGTH(name) LIMIT 1",
+            [$lk, $lk, $lk, $lk]
         );
         if ($id) return ['item_id' => $id, 'quelle' => 'fuzzy'];
     }

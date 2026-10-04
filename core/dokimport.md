@@ -42,7 +42,17 @@ fehlende Hashes älterer Jobs nach. Erkennt nur **inhaltsgleiche** Dateien (nich
 derselben Charge).
 
 ## Matching (spec_ki_match_item, in core/spec_ki.php)
-Reihenfolge: CAS exakt → Artikelnummer/Name exakt → Name/Synonym-Teiltreffer (kürzester Name gewinnt).
+**Sprachunabhängig** (Rohstoff oft deutsch, Datei englisch): alle Namensvarianten der Datei
+(name/name_en/synonym) werden gegen alle Namensfelder des Rohstoffs (name/name_en/synonym/artikelnummer)
+geprüft; der **lateinische/botanische Name** (name_lat/bot_quelle) ist die sprachneutrale Brücke.
+Reihenfolge: CAS → EG-/EC-Nr → lat. Name → Name exakt → Teiltreffer (kürzester Name gewinnt).
+Grenze: hat ein dt. Rohstoff weder name_en noch name_lat gefüllt und die Datei ist englisch, trifft nur
+der lat. Name (falls im Dokument) – sonst bleibt es „kein Treffer" (dann manuell zuordnen/neu anlegen).
+
+## Vorschau-Korrekturen
+Treffer falsch? „Zuordnung entfernen" (`dokimport_zuordnung_loeschen`) macht die Zeile wieder zu „kein
+Treffer". „+ Neuer Rohstoff" (`dokimport_neu_anlegen`) geht jetzt auch bei bestehendem Treffer und
+**ersetzt** die Zuordnung durch einen neu angelegten Rohstoff.
 
 ## Hintergrund
 Nutzt die vorhandene KI-Job-Mechanik (core/ki_job.php): kein Cron, keine Warteschlange – jeder Worker
