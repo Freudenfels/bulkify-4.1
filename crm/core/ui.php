@@ -62,6 +62,33 @@ function crm_verlauf_typen(): array {
             'treffen' => 'Treffen', 'angebot' => 'Angebot'];
 }
 
+// Farbe je Phase - fuer die Spaltenkoepfe und Karten-Badges der Pipeline. Aus dem v3-CRM uebernommen,
+// an die bulkify-Farben angelehnt. Faellt eine unbekannte Phase an, kommt ein ruhiges Grau.
+function crm_phase_farbe(string $phase): string {
+    return [
+        'neu'       => '#7a7a72',   // grau - frisch, noch nichts passiert
+        'gespraech' => '#2d7dd2',   // blau - im Austausch
+        'angebot'   => '#e08a1e',   // gold/orange - Angebot draussen
+        'gewonnen'  => '#1D9E75',   // bulkify-gruen - gewonnen
+        'verloren'  => '#c0392b',   // rot - verloren
+    ][$phase] ?? '#7a7a72';
+}
+
+// Segmentierungs-/Qualifizierungsfelder am Kontakt (fuer Verkaeufer-Workflow, aus v3 uebernommen).
+// Feldname => [Label, Optionen]. Reine Dropdown-Felder; Freitextfelder (land, website, ...) stehen
+// direkt im Formular. Bewusst ohne Emojis (UI-Regel).
+function crm_segfelder(): array {
+    return [
+        'kontaktart' => ['Bevorzugte Kontaktart', ['whatsapp' => 'WhatsApp', 'email' => 'E-Mail', 'telefon' => 'Telefon', 'persoenlich' => 'Persönlich', 'social' => 'Social Media', 'sonstiges' => 'Sonstiges']],
+        'erfahrung'  => ['Erfahrung', ['neu' => 'Neueinsteiger', 'etwas' => 'Etwas Erfahrung', 'erfahren' => 'Erfahren', 'profi' => 'Profi / etablierte Marke']],
+        'zielmarkt'  => ['Zielmarkt / Vertriebskanal', ['amazon' => 'Amazon', 'shop' => 'Eigener Onlineshop', 'einzelhandel' => 'Einzelhandel / Apotheke', 'grosshandel' => 'Großhandel / B2B', 'social' => 'Social Media / Influencer', 'export' => 'Export / International', 'sonstiges' => 'Sonstiges']],
+        'nische'     => ['Nische / Produktbereich', ['sport' => 'Sport & Fitness', 'beauty' => 'Beauty & Anti-Aging', 'gesundheit' => 'Gesundheit & Immun', 'abnehmen' => 'Abnehmen / Diät', 'vegan' => 'Vegan & Bio', 'longevity' => 'Longevity', 'tier' => 'Tiergesundheit', 'sonstiges' => 'Sonstiges']],
+        'firmentyp'  => ['Firmentyp', ['einzel' => 'Einzelperson / Startup', 'kmu' => 'KMU', 'marke' => 'Etablierte Marke', 'agentur' => 'Agentur / Reseller']],
+        'volumen'    => ['Geschätztes Volumen', ['klein' => 'Klein (< 1.000 Stk.)', 'mittel' => 'Mittel (1.000–10.000)', 'gross' => 'Groß (> 10.000)']],
+        'prioritaet' => ['Priorität', ['hoch' => 'Hoch', 'mittel' => 'Mittel', 'niedrig' => 'Niedrig']],
+    ];
+}
+
 // Kurzes Wort fuer die Art einer Wartezeile - steht klein unter der Wartezeit.
 function zeilen_art(string $typ): string {
     return [

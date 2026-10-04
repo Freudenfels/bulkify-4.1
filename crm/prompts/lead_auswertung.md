@@ -6,9 +6,11 @@ die Anfrage sofort einzuordnen und zu wissen, was als Naechstes zu tun ist.
 Antworte AUSSCHLIESSLICH mit diesem JSON, ohne Text drumherum:
 {
   "zusammenfassung": "",   // ein bis zwei Saetze auf Deutsch: was will der Kunde? Produkt und Menge nennen.
+  "produkt": "",           // Produkt-/Rezepturname, z. B. "Multivitamin fuer Haare" - sonst ""
   "produktform": "",       // Kapsel|Pulver|Tablette|Fluessig|Gummibaerchen|Sonstiges, wenn ableitbar - sonst ""
   "wirkstoffe": "",        // kurz die genannten Wirkstoffe/Zutaten, kommagetrennt - sonst ""
   "menge": "",             // Wunschmenge als Text, z. B. "5.000 Dosen" oder "10 kg" - sonst ""
+  "vorhaben": "",          // was hat der Kunde vor? z. B. "Neue Rezeptur entwickeln", "Bestehende herstellen" - sonst ""
   "wert_eur": null,        // grober Auftragswert in Euro als Zahl, wenn ableitbar - sonst null
   "dringlichkeit": "mittel", // niedrig|mittel|hoch - hoch z. B. bei genannter Frist oder Eile
   "naechster_schritt": "",  // ein Satz: was sollte der Vertrieb als Naechstes tun?

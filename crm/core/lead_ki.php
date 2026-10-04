@@ -66,6 +66,17 @@ function lead_ki_auswerten(int $kontakt_id, int $uid = 0, string $text = ''): ar
               [$d['wert_eur'], gmdate('Y-m-d H:i:s'), $kontakt_id]);
         }
 
+        // 2b) Strukturierte Anfrage-Felder fuellen - nur leere, damit manuelle Eintraege erhalten bleiben.
+        $setze = [];
+        if ($d['produkt'] !== ''     && trim((string)($k['anfrage_rezeptur'] ?? '')) === '') $setze['anfrage_rezeptur'] = $d['produkt'];
+        if ($d['produktform'] !== ''  && trim((string)($k['anfrage_form'] ?? '')) === '')     $setze['anfrage_form'] = $d['produktform'];
+        if ($d['menge'] !== ''        && trim((string)($k['anfrage_inhalt'] ?? '')) === '')    $setze['anfrage_inhalt'] = $d['menge'];
+        if ($d['vorhaben'] !== ''     && trim((string)($k['anfrage_vorhaben'] ?? '')) === '')  $setze['anfrage_vorhaben'] = $d['vorhaben'];
+        if ($setze) {
+            $sql = 'UPDATE crm_kontakt SET ' . implode(', ', array_map(fn($f) => "$f=?", array_keys($setze))) . ', aktualisiert=? WHERE id=?';
+            q($sql, array_merge(array_values($setze), [gmdate('Y-m-d H:i:s'), $kontakt_id]));
+        }
+
         // 3) Wiedervorlage setzen, damit die Anfrage in "Wer wartet" auftaucht - aber nur, wenn noch
         //    keine offene Wiedervorlage haengt (sonst entstehen beim erneuten Auswerten Dubletten).
         if (!kontakt_wiedervorlagen($kontakt_id)) {
@@ -89,9 +100,11 @@ function lead_ki_saeubern(array $d): array {
     if (!in_array($dring, ['niedrig', 'mittel', 'hoch'], true)) $dring = 'mittel';
     return [
         'zusammenfassung'   => trim((string)($d['zusammenfassung'] ?? '')),
+        'produkt'           => mb_substr(trim((string)($d['produkt'] ?? '')), 0, 255),
         'produktform'       => mb_substr(trim((string)($d['produktform'] ?? '')), 0, 60),
         'wirkstoffe'        => trim((string)($d['wirkstoffe'] ?? '')),
         'menge'             => mb_substr(trim((string)($d['menge'] ?? '')), 0, 120),
+        'vorhaben'          => mb_substr(trim((string)($d['vorhaben'] ?? '')), 0, 190),
         'wert_eur'          => is_numeric($d['wert_eur'] ?? null) ? (float)$d['wert_eur'] : null,
         'dringlichkeit'     => $dring,
         'naechster_schritt' => trim((string)($d['naechster_schritt'] ?? '')),

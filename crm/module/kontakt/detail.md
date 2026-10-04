@@ -8,4 +8,6 @@ Die Reihenfolge ist Absicht: Beim Öffnen will man zuerst wissen, was zuletzt wa
 
 **Antwort vorschlagen** erzeugt über `core/antwort_ki.php` einen Entwurf aus Notiz und Verlauf. Er steht in der Sitzung, nicht in der Datenbank; verschickt wird nichts. Wer ihn wirklich abgeschickt hat, drückt auf „Als gesendet im Verlauf vermerken“.
 
-**Zum Kunden machen** ist die einzige Stelle im ganzen CRM, die ins Dashboard schreibt. Deshalb steht eine Rückfrage davor.
+**Verkäufer-Workflow:** Die „Daten"-Karte pflegt zusätzlich **Zuständig**, die **Segmentierung** (Qualifizierung, aufklappbar) und die **strukturierten Anfrage-Felder**. Die Karte **Verkauf** legt per Knopf ein Angebot oder eine Rezeptur im Dashboard an (Kunde wird – falls nötig – zuvor über die `erp.php`-Naht angelegt, dann Sprung ins Dashboard; `erp_dashboard_link()`) und zeigt die bestehenden Angebote/Rezepturen des Kunden (nur gelesen). Die Karte **Dokumente** legt Angebote/Abschlüsse/Rechnungen am Kontakt ab (`crm_kontakt_datei`, Download über `kontakt_doc.php`).
+
+**Zum Kunden machen** ist – neben dem Kunden-Anlegen hinter „Angebot/Rezeptur" – die Stelle, die ins Dashboard schreibt. Beides geht ausschließlich über `core/erp.php` (`erp_kunde_anlegen()`); Angebot/Rezeptur selbst erstellt das Dashboard. Deshalb steht eine Rückfrage davor.

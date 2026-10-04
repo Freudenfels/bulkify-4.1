@@ -199,3 +199,47 @@ function erp_dashboard_url(): string {
     require_once __DIR__ . '/schema.php';
     return rtrim(crm_meta_lesen('dashboard_url', ''), '/');
 }
+
+// Ein Link in eine Dashboard-Route (z. B. 'angebot&id=neu&kunde_id=5'). Ist die Dashboard-Adresse
+// gesetzt, wird sie verwendet; sonst der Site-Root ('/'), weil Dashboard und CRM auf derselben
+// Domain liegen (Dashboard unter '/', CRM unter '/crm/'). So funktioniert der Sprung lokal wie live.
+function erp_dashboard_link(string $route): string {
+    $dash = erp_dashboard_url();
+    return ($dash !== '' ? $dash : '') . '/?p=' . $route;
+}
+
+// --- Mitarbeiter (fuer "Zustaendig" im Lead) ---------------------------------------------------
+// Aktive Benutzer, die keine reinen Lieferanten/Kunden sind. Nur gelesen.
+function erp_mitarbeiter(): array {
+    if (!tabelle_da('benutzer')) return [];
+    $alle = all("SELECT id, name, email, rollen FROM benutzer WHERE aktiv=1 ORDER BY name");
+    $raus = [];
+    foreach ($alle as $u) {
+        $r = strtolower((string)($u['rollen'] ?? ''));
+        // Reine Portal-Rollen (Lieferant/Kunde) sind keine Vertriebs-Mitarbeiter.
+        if ($r === 'lieferant' || $r === 'kunde') continue;
+        $raus[] = $u;
+    }
+    return $raus;
+}
+
+// --- Angebote eines Kunden (Lese-Ansicht am Lead) ----------------------------------------------
+// Nur zur Anzeige + Verlinkung ins Dashboard. Summe kommt aus den Positionen (wie erp_angebot_summe).
+function erp_angebote_fuer_kunde(int $kunde_id): array {
+    if ($kunde_id <= 0 || !tabelle_da('angebot')) return [];
+    try {
+        $rows = all("SELECT id, nummer, status, angelegt, aktualisiert FROM angebot
+                     WHERE kunde_id=? ORDER BY id DESC LIMIT 50", [$kunde_id]);
+    } catch (Throwable $e) { return []; }
+    foreach ($rows as &$r) { $r['summe'] = erp_angebot_summe((int)$r['id']); }
+    return $rows;
+}
+
+// --- Rezepturen eines Kunden (Lese-Ansicht am Lead) --------------------------------------------
+function erp_rezepturen_fuer_kunde(int $kunde_id): array {
+    if ($kunde_id <= 0 || !tabelle_da('rezeptur')) return [];
+    try {
+        return all("SELECT id, nummer, name, status FROM rezeptur
+                    WHERE kunde_id=? ORDER BY id DESC LIMIT 50", [$kunde_id]);
+    } catch (Throwable $e) { return []; }
+}

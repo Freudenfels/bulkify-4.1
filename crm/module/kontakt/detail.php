@@ -40,6 +40,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $r = lead_ki_auswerten($id, crm_uid());
         header('Location: ?p=kontakt&id=' . $id . ($r['ok'] ? '&ok=ausgewertet' : '&ok=kifehler')); exit;
     }
+    if ($tun === 'angebot') {
+        // Angebot erstellen: erst Kunde sicherstellen, dann in den Angebots-Flow des Dashboards springen.
+        $kid = (int)($k['kunde_id'] ?? 0);
+        if ($kid <= 0) $kid = kontakt_zu_kunde($id, crm_uid());
+        if ($kid > 0) {
+            kontakt_verlauf($id, 'angebot', 'Angebot im Dashboard angestoßen.', crm_uid());
+            header('Location: ' . erp_dashboard_link('angebot&id=neu&kunde_id=' . $kid)); exit;
+        }
+        header('Location: ?p=kontakt&id=' . $id . '&ok=fehler'); exit;
+    }
+    if ($tun === 'rezept') {
+        // Rezeptur anlegen: Kunde sicherstellen, dann in den Rezeptur-Flow des Dashboards springen.
+        $kid = (int)($k['kunde_id'] ?? 0);
+        if ($kid <= 0) $kid = kontakt_zu_kunde($id, crm_uid());
+        kontakt_verlauf($id, 'notiz', 'Rezeptur im Dashboard angestoßen.', crm_uid());
+        header('Location: ' . erp_dashboard_link('rezeptur_detail&id=neu')); exit;
+    }
+    if ($tun === 'datei_upload') {
+        $r = kontakt_datei_speichern($id, $_FILES['datei'] ?? [], (string)($_POST['kategorie'] ?? 'sonstiges'), crm_uid());
+        header('Location: ?p=kontakt&id=' . $id . ($r['ok'] ? '&ok=hochgeladen' : '&ok=uploadfehler')); exit;
+    }
+    if ($tun === 'datei_del') {
+        kontakt_datei_loeschen((int)($_POST['did'] ?? 0), $id);
+        header('Location: ?p=kontakt&id=' . $id . '&ok=geloescht'); exit;
+    }
     if ($tun === 'antwort') {
         // Entwurf erzeugen und im Formular stehen lassen - verschickt wird nichts.
         $_SESSION['antwort'] = antwort_ki_entwurf(
@@ -67,6 +92,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $verlauf = kontakt_verlauf_liste($id);
 $wv      = kontakt_wiedervorlagen($id);
 $dash    = erp_dashboard_url();
+$dateien     = kontakt_dateien($id);
+$mitarbeiter = erp_mitarbeiter();
+$kundeId     = (int)($k['kunde_id'] ?? 0);
+$angebote    = $kundeId > 0 ? erp_angebote_fuer_kunde($kundeId) : [];
+$rezepturen  = $kundeId > 0 ? erp_rezepturen_fuer_kunde($kundeId) : [];
+$hatAnfrage  = trim((string)($k['anfrage_rezeptur'] ?? '') . ($k['anfrage_form'] ?? '') . ($k['anfrage_inhalt'] ?? '') . ($k['anfrage_vorhaben'] ?? '')) !== '';
+$segFilled   = false;
+foreach (array_keys(crm_segfelder()) as $sf) { if (trim((string)($k[$sf] ?? '')) !== '') { $segFilled = true; break; } }
+foreach (['land', 'website', 'moeglichkeiten', 'besonderheiten'] as $sf) { if (trim((string)($k[$sf] ?? '')) !== '') { $segFilled = true; break; } }
 
 kopf($k['name'], 'kontakte');
 seitenkopf(trim(((string)($k['firma'] ?? '') !== '' ? $k['firma'] . ' – ' : '') . $k['name']),
@@ -77,8 +111,10 @@ $m = (string)($_GET['ok'] ?? '');
 if ($m === 'kunde')       hinweis('Als Kunde im Dashboard angelegt.');
 elseif ($m === 'fehler')  hinweis('Der Kunde konnte nicht angelegt werden.', 'warn');
 elseif ($m === 'kifehler') hinweis('Die KI-Auswertung hat nicht geklappt. Bitte später erneut versuchen.', 'warn');
+elseif ($m === 'uploadfehler') hinweis('Der Upload hat nicht geklappt.', 'warn');
 elseif ($m !== '')        hinweis(['gespeichert' => 'Gespeichert.', 'notiert' => 'Notiert.',
                                    'erinnert' => 'Wiedervorlage gesetzt.', 'ausgewertet' => 'Anfrage ausgewertet – siehe Verlauf.',
+                                   'hochgeladen' => 'Dokument hochgeladen.', 'geloescht' => 'Dokument gelöscht.',
                                    '1' => 'Kontakt angelegt.'][$m] ?? 'Erledigt.');
 ?>
 
@@ -253,10 +289,128 @@ $fk = fragenkatalog('kontakt', $id); ?>
         <input type="text" id="wert_eur" name="wert_eur" inputmode="decimal"
                value="<?= $k['wert_eur'] !== null ? h(number_format((float)$k['wert_eur'], 2, ',', '.')) : '' ?>"></div>
     </div>
+    <div class="bx-grid">
+      <div class="bx-field"><label for="besitzer_id">Zuständig</label>
+        <select id="besitzer_id" name="besitzer_id">
+          <option value="0">– niemand –</option>
+          <?php $curB = (int)($k['besitzer_id'] ?? 0); foreach ($mitarbeiter as $u): ?>
+            <option value="<?= (int)$u['id'] ?>" <?= $curB === (int)$u['id'] ? 'selected' : '' ?>><?= h((string)$u['name']) ?></option>
+          <?php endforeach; ?>
+        </select></div>
+      <div class="bx-field"><label for="land">Land / Region</label>
+        <input type="text" id="land" name="land" value="<?= h((string)($k['land'] ?? '')) ?>" placeholder="z. B. Deutschland"></div>
+    </div>
     <div class="bx-field"><label for="notiz">Notiz</label>
       <textarea id="notiz" name="notiz"><?= h((string)($k['notiz'] ?? '')) ?></textarea></div>
+
+    <details class="crm-details" <?= $segFilled ? 'open' : '' ?> style="margin:4px 0 10px">
+      <summary style="cursor:pointer">Qualifizierung &amp; Segmentierung</summary>
+      <div style="margin-top:12px">
+        <div class="bx-grid">
+          <?php foreach (crm_segfelder() as $f => $def): [$lbl, $opts] = $def; ?>
+            <div class="bx-field"><label for="seg_<?= h($f) ?>"><?= h($lbl) ?></label>
+              <select id="seg_<?= h($f) ?>" name="<?= h($f) ?>">
+                <option value="">– wählen –</option>
+                <?php foreach ($opts as $ok => $ol): ?><option value="<?= h($ok) ?>" <?= ($k[$f] ?? '') === $ok ? 'selected' : '' ?>><?= h($ol) ?></option><?php endforeach; ?>
+              </select></div>
+          <?php endforeach; ?>
+          <div class="bx-field"><label for="website">Website / Social</label>
+            <input type="text" id="website" name="website" value="<?= h((string)($k['website'] ?? '')) ?>" placeholder="z. B. instagram.com/marke"></div>
+        </div>
+        <div class="bx-field"><label for="moeglichkeiten">Möglichkeiten / Potenzial</label>
+          <input type="text" id="moeglichkeiten" name="moeglichkeiten" value="<?= h((string)($k['moeglichkeiten'] ?? '')) ?>" placeholder="z. B. plant eigene Marke, sucht Hersteller für 3 Produkte"></div>
+        <div class="bx-field"><label for="besonderheiten">Besonderheiten</label>
+          <input type="text" id="besonderheiten" name="besonderheiten" value="<?= h((string)($k['besonderheiten'] ?? '')) ?>" placeholder="z. B. nur vegan, Bio-Zertifikat wichtig, kleines Budget"></div>
+      </div>
+    </details>
+
+    <details class="crm-details" <?= $hatAnfrage ? 'open' : '' ?> style="margin:4px 0 10px">
+      <summary style="cursor:pointer">Anfrage (strukturiert)</summary>
+      <div style="margin-top:12px">
+        <div class="bx-field"><label for="anfrage_rezeptur">Rezeptur / Produkt</label>
+          <input type="text" id="anfrage_rezeptur" name="anfrage_rezeptur" value="<?= h((string)($k['anfrage_rezeptur'] ?? '')) ?>"></div>
+        <div class="bx-grid">
+          <div class="bx-field"><label for="anfrage_form">Form</label>
+            <input type="text" id="anfrage_form" name="anfrage_form" value="<?= h((string)($k['anfrage_form'] ?? '')) ?>" placeholder="z. B. Kapsel"></div>
+          <div class="bx-field"><label for="anfrage_inhalt">Menge / Inhalt</label>
+            <input type="text" id="anfrage_inhalt" name="anfrage_inhalt" value="<?= h((string)($k['anfrage_inhalt'] ?? '')) ?>" placeholder="z. B. 5.000 Dosen"></div>
+        </div>
+        <div class="bx-field"><label for="anfrage_vorhaben">Vorhaben</label>
+          <input type="text" id="anfrage_vorhaben" name="anfrage_vorhaben" value="<?= h((string)($k['anfrage_vorhaben'] ?? '')) ?>" placeholder="z. B. bestehende Rezeptur herstellen"></div>
+      </div>
+    </details>
+
     <button class="btn btn-primary" type="submit">Speichern</button>
   </form>
+</div></div>
+
+<div class="karte"><div class="rumpf">
+  <h2 style="margin-top:0">Verkauf</h2>
+  <p class="muted" style="margin:0 0 12px">Angebot oder Rezeptur im Dashboard anlegen. Falls noch kein Kundenkonto besteht, wird es zuerst angelegt.</p>
+  <div class="bx-row" style="gap:8px;flex-wrap:wrap">
+    <form method="post" style="margin:0"><input type="hidden" name="tun" value="angebot">
+      <button class="btn btn-primary btn-sm" type="submit">Angebot erstellen</button></form>
+    <form method="post" style="margin:0"><input type="hidden" name="tun" value="rezept">
+      <button class="btn btn-ghost btn-sm" type="submit">Rezeptur anlegen</button></form>
+  </div>
+  <?php if ($angebote): ?>
+    <h3 style="margin:16px 0 6px;font-size:var(--fs-sm)">Angebote</h3>
+    <?php foreach ($angebote as $a): ?>
+      <div class="crm-zeile">
+        <div class="crm-mitte">
+          <?php if ($dash !== ''): ?><a class="titel" href="<?= h($dash . '/?p=angebot&id=' . (int)$a['id']) ?>" target="_blank" rel="noopener"><?= h((string)($a['nummer'] ?: 'Angebot #' . $a['id'])) ?></a>
+          <?php else: ?><span class="titel"><?= h((string)($a['nummer'] ?: 'Angebot #' . $a['id'])) ?></span><?php endif; ?>
+          <span class="unter"><?= h((string)$a['status']) ?><?= $a['summe'] !== null ? ' · ' . h(eur((float)$a['summe'])) : '' ?></span>
+        </div>
+      </div>
+    <?php endforeach; ?>
+  <?php endif; ?>
+  <?php if ($rezepturen): ?>
+    <h3 style="margin:16px 0 6px;font-size:var(--fs-sm)">Rezepturen</h3>
+    <?php foreach ($rezepturen as $rz): ?>
+      <div class="crm-zeile">
+        <div class="crm-mitte">
+          <?php if ($dash !== ''): ?><a class="titel" href="<?= h($dash . '/?p=rezeptur_detail&id=' . (int)$rz['id']) ?>" target="_blank" rel="noopener"><?= h(trim((string)($rz['nummer'] ?? '') . ' ' . (string)($rz['name'] ?? ''))) ?></a>
+          <?php else: ?><span class="titel"><?= h(trim((string)($rz['nummer'] ?? '') . ' ' . (string)($rz['name'] ?? ''))) ?></span><?php endif; ?>
+          <span class="unter"><?= h((string)$rz['status']) ?></span>
+        </div>
+      </div>
+    <?php endforeach; ?>
+  <?php endif; ?>
+</div></div>
+
+<div class="karte"><div class="rumpf">
+  <h2 style="margin-top:0">Dokumente</h2>
+  <p class="muted" style="margin:0 0 12px">Angebot, Abschluss, Rechnung oder Sonstiges am Kontakt ablegen.</p>
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="tun" value="datei_upload">
+    <div class="bx-grid">
+      <div class="bx-field"><label for="kategorie">Kategorie</label>
+        <select id="kategorie" name="kategorie">
+          <?php foreach (kontakt_datei_kategorien() as $kk => $kv): ?><option value="<?= h($kk) ?>"><?= h($kv) ?></option><?php endforeach; ?>
+        </select></div>
+      <div class="bx-field"><label for="datei">Datei</label>
+        <input type="file" id="datei" name="datei" required></div>
+    </div>
+    <button class="btn btn-ghost btn-sm" type="submit">Hochladen</button>
+  </form>
+  <?php if ($dateien): $katLbl = kontakt_datei_kategorien(); ?>
+    <div style="margin-top:14px">
+      <?php foreach ($dateien as $d): ?>
+        <div class="crm-zeile">
+          <div class="crm-alter ruhig"><?= h(fmt_zeit((string)$d['angelegt'], 'd.m.')) ?>
+            <span class="art"><?= h($katLbl[$d['kategorie']] ?? (string)$d['kategorie']) ?></span></div>
+          <div class="crm-mitte">
+            <a class="titel" href="kontakt_doc.php?id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener"><?= h((string)$d['original']) ?></a>
+          </div>
+          <form method="post" style="margin:0" onsubmit="return confirm('Dokument löschen?');">
+            <input type="hidden" name="tun" value="datei_del"><input type="hidden" name="did" value="<?= (int)$d['id'] ?>">
+            <button class="btn btn-ghost btn-sm" type="submit" title="Löschen">×</button>
+          </form>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
 </div></div>
 
 <div class="karte"><div class="rumpf">

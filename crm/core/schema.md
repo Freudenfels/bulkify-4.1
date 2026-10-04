@@ -8,7 +8,8 @@ Läuft wie im Dashboard bei jedem Aufruf und ist idempotent (`CREATE TABLE IF NO
 ## Die Tabellen
 | Tabelle | Wofür |
 |---|---|
-| `crm_kontakt` | Menschen und Firmen ohne Kundenkonto (Spalte `ki_ausgewertet`: wann die KI die Anfrage ausgewertet hat, siehe `lead_ki.md`) |
+| `crm_kontakt` | Menschen und Firmen ohne Kundenkonto. Spalten u. a. `phase`/`phase_at` (Pipeline), `besitzer_id` (Zuständig), Segmentierung (`nische`, `volumen`, `prioritaet`, `kontaktart`, `erfahrung`, `zielmarkt`, `firmentyp`, `land`, `website`, `moeglichkeiten`, `besonderheiten`), strukturierte Anfrage (`anfrage_rezeptur/form/inhalt/vorhaben`) und `ki_ausgewertet` (siehe `lead_ki.md`) |
+| `crm_kontakt_datei` | Dokumente am Kontakt (Angebot/Abschluss/Rechnung/Sonstiges); Datei in `data/kontakt_datei`, Download über `public/crm/kontakt_doc.php` |
 | `crm_verlauf` | jede Berührung eine Zeile |
 | `crm_wiedervorlage` | „erinnere mich am …“ – hängt an einem Kontakt oder an einem Dashboard-Vorgang |
 | `crm_termin` | Rückruf, Messe, Besuch – mit Uhrzeit |

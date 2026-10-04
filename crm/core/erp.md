@@ -10,6 +10,11 @@ Der Grund: Am Dashboard wird weiterentwickelt, teilweise parallel in anderen Sit
 - **Schreiben:** an genau einer Stelle – `erp_kunde_anlegen()`, wenn aus einem Kontakt ein Kunde wird.
 - **Nie:** UPDATE oder DELETE auf Dashboard-Daten. Auch kein `letzter_login` beim Anmelden – das würde die Anzeige dort verfälschen.
 
+## Verkäufer-Workflow (nur lesen + verlinken)
+- `erp_mitarbeiter()` – aktive Benutzer (ohne reine Lieferanten/Kunden) für das „Zuständig"-Feld am Lead.
+- `erp_angebote_fuer_kunde()` / `erp_rezepturen_fuer_kunde()` – Angebote bzw. Rezepturen eines Kunden, nur zur Anzeige am Kontakt.
+- `erp_dashboard_link('angebot&id=neu&kunde_id=5')` – baut einen Sprung in einen Dashboard-Flow (Angebot/Rezeptur anlegen). Angebot/Rezeptur werden **nicht** vom CRM geschrieben – der Kunde wird (falls nötig) über `erp_kunde_anlegen()` angelegt, dann übernimmt das Dashboard.
+
 ## Die wichtigste Funktion
 `erp_offene_vorgaenge()` liefert alle Vorgänge, auf die jemand wartet. Je Zeile: `typ`, `id`, `titel`, `unter`, `seit`, `link`, `betrag`, `richtung`.
 

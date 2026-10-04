@@ -46,6 +46,13 @@ Datei zu prüfen – dann weiß man auch, wo man sucht.
 ## Was drin ist
 - **Wer wartet auf mich** (`/crm/?p=wartet`) – zwei Reiter, sortiert nach Wartezeit, mit den
   Knöpfen „in 3 Tagen“ und „erledigt“.
+- **Pipeline** (`/crm/?p=pipeline`) – alle Kontakte als Board nach Phase, Drag & Drop (Desktop) bzw.
+  Dropdown (Handy), Filter/Suche, Wert + Zuständiger je Karte, „nachfassen"-Warnung. Der zentrale
+  Verkäufer-Blick. Details: `crm/module/kontakt/pipeline.md`.
+- **Verkäufer-Workflow am Kontakt** – Zuständiger, Qualifizierung/Segmentierung (Nische, Volumen,
+  Priorität …), strukturierte Anfrage-Felder, **Verkauf** (Angebot/Rezeptur im Dashboard anlegen über
+  die `erp.php`-Naht + bestehende Angebote/Rezepturen anzeigen) und **Dokumente** (Angebot/Abschluss/
+  Rechnung am Kontakt, `crm_kontakt_datei`). Aus dem v3-CRM (`crm_lead.php`) übernommen.
 - **Automatische Wiedervorlage** nach dem Angebotsversand (`wartet_automatik()`), fällig ab
   Versand + `CRM_ANGEBOT_NACHFASSEN` Tagen.
 - **Kontakte** mit Verlauf, Wiedervorlage und „Zum Kunden machen“.

@@ -118,9 +118,38 @@ function crm_schema(): void {
         wert       TEXT NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    // --- Dokumente am Kontakt (Angebot/Abschluss/Rechnung/Sonstiges) - Verkaeufer-Workflow. ------
+    // Datei liegt in data/ (gitignored), heruntergeladen wird ueber public/crm/kontakt_doc.php.
+    q("CREATE TABLE IF NOT EXISTS crm_kontakt_datei (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        kontakt_id  INT NOT NULL,
+        kategorie   VARCHAR(20) NOT NULL DEFAULT 'sonstiges',   -- angebot|abschluss|rechnung|sonstiges
+        original    VARCHAR(255) NOT NULL,
+        stored      VARCHAR(190) NOT NULL,
+        groesse     INT NOT NULL DEFAULT 0,
+        benutzer_id INT NULL,
+        angelegt    DATETIME NOT NULL,
+        KEY (kontakt_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     // --- Nachtraeglich ergaenzte Spalten (additiv, idempotent). --------------------------------
     // Wann die KI die Anfrage dieses Kontakts ausgewertet hat (core/lead_ki.php). Leer = noch nie.
     crm_spalte('crm_kontakt', 'ki_ausgewertet', 'DATETIME NULL');
+    // Wann die Phase zuletzt gewechselt hat - fuer "seit X Tagen in dieser Phase" + Nachfass-Warnung.
+    crm_spalte('crm_kontakt', 'phase_at', 'DATETIME NULL');
+    // Qualifizierung/Segmentierung (Verkaeufer-Workflow, aus v3). Dropdown-Werte siehe crm_segfelder().
+    foreach (['kontaktart', 'erfahrung', 'zielmarkt', 'nische', 'firmentyp', 'volumen', 'prioritaet'] as $sp) {
+        crm_spalte('crm_kontakt', $sp, 'VARCHAR(30) NULL');
+    }
+    crm_spalte('crm_kontakt', 'land', 'VARCHAR(120) NULL');
+    crm_spalte('crm_kontakt', 'website', 'VARCHAR(190) NULL');
+    crm_spalte('crm_kontakt', 'moeglichkeiten', 'TEXT NULL');
+    crm_spalte('crm_kontakt', 'besonderheiten', 'TEXT NULL');
+    // Strukturierte Anfrage-Daten (von der KI gefuellt oder von Hand) - fuer den Anfrage-Block.
+    crm_spalte('crm_kontakt', 'anfrage_rezeptur', 'VARCHAR(255) NULL');
+    crm_spalte('crm_kontakt', 'anfrage_form', 'VARCHAR(120) NULL');
+    crm_spalte('crm_kontakt', 'anfrage_inhalt', 'VARCHAR(120) NULL');
+    crm_spalte('crm_kontakt', 'anfrage_vorhaben', 'VARCHAR(190) NULL');
 }
 
 function crm_meta_lesen(string $schluessel, string $standard = ''): string {

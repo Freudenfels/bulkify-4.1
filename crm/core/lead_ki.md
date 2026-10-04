@@ -17,6 +17,7 @@ einordnen lassen – damit eine Website-Anfrage sofort nutzbar ist, ohne dass je
 3. **Wiedervorlage** (`kontakt_wiedervorlage`), damit die Anfrage in „Wer wartet auf mich" auftaucht –
    nur, wenn noch keine offene hängt (kein Dublettenaufbau beim erneuten Auswerten).
 4. Zeitstempel **`crm_kontakt.ki_ausgewertet`** – damit die automatische Auswertung nicht doppelt läuft.
+5. **Strukturierte Anfrage-Felder** (`anfrage_rezeptur/form/inhalt/vorhaben`) – aber nur leere, damit manuelle Einträge erhalten bleiben. Diese erscheinen im Anfrage-Block der Kontaktseite.
 
 Stammdaten (Name, Firma, E-Mail …) werden **nicht** angefasst – die KI fasst nur zusammen und schlägt
 einen nächsten Schritt vor.

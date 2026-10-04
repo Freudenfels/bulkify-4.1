@@ -14,7 +14,7 @@ require_once __DIR__ . '/auth.php';
 // Die Bereiche des CRM - Aufbau wie das Menue im Dashboard: Gruppe, darunter die Punkte.
 function crm_nav(): array {
     return [
-        'Start'    => ['wartet' => 'Wer wartet auf mich'],
+        'Start'    => ['wartet' => 'Wer wartet auf mich', 'pipeline' => 'Pipeline'],
         'Kontakte' => ['kontakte' => 'Kontakte', 'erfassen' => 'Schnell erfassen',
                        'mail' => 'E-Mail einlesen'],
         'Kalender' => ['kalender' => 'Kalender', 'termine' => 'Termine'],
