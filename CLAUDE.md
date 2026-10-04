@@ -17,6 +17,9 @@ Clean-Slate-Neuaufbau des bulkify-ERP (Nahrungsergänzungs-Lohnhersteller, Marke
 - **Produktion** unter `/produktion/` - Produktions-Arbeitsplatz (Werk/Shop-Floor), eigener Code-Chat.
   Gleiches Muster: eigene Sitzung `BXPROD`, **alle** Dashboard-Zugriffe nur in `produktion/core/erp.php`
   (Stand: liest nur; Schritt-Abschluss ist offener Ausbaupunkt). Details: `produktion/PRODUKTION.md`.
+- **Buchhaltung** - Finanzbereich **IM** Dashboard (kein eigener Ordner, keine `erp.php`-Naht), Rolle
+  `finance`, Dateien v. a. `module/beleg/*` + `core/pdf_beleg.php`/`pdf_rechnung.php`. Eigener Code-Chat
+  möglich. Details + Datei-Grenzen: `BUCHHALTUNG.md`.
 
 ## Lokal starten
 ```
