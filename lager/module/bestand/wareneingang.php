@@ -128,7 +128,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         if (!$cid) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Buchen fehlgeschlagen.'; continue; }
 
         lg_pakete_set((int)$cid, $pakete);
-        lg_aufteilen_set((int)$cid, !empty($_POST['aufteilen']) && $pakete > 1);
+        $aufteilenPos = (string)($_POST['p_aufteilen'][$i] ?? '0') === '1';
+        lg_aufteilen_set((int)$cid, $aufteilenPos && $pakete > 1);
         lg_tracking_set((int)$cid, (string)($_POST['tracking'] ?? ''));
         $c = erp_charge((int)$cid);
         lg_bewegung_log((int)$cid, 'ein', $menge, $c['einheit'] ?? null, (string)($c['item_name'] ?? ''), $notiz);
@@ -332,10 +333,7 @@ if ($gebucht):
         <button type="button" class="btn btn-ghost btn-sm" id="weAdd">+ Zeile</button>
       </div>
       <div id="weRows" style="margin-top:var(--sp-3)"></div>
-      <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Fertigware/Kapseln → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist immer Pflicht.</div>
-      <label class="bx-check" style="margin-top:var(--sp-3);display:inline-flex;gap:8px;align-items:center">
-        <input type="checkbox" name="aufteilen" value="1"> Menge auf die Kartons aufteilen (statt Gesamtmenge je Karton)
-      </label>
+      <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Fertigware/Kapseln → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist immer Pflicht. „Aufteilen" je Position: verteilt die Menge gleichmäßig auf die Kartons (z. B. 50 kg / 2 = 25 kg je Karton).</div>
       <div style="margin-top:var(--sp-4)"><button type="submit" class="btn btn-primary" id="weBuchen">Alle buchen &amp; Blinker anhängen</button></div>
     </div>
   </div>
@@ -362,6 +360,8 @@ if ($gebucht):
   .we-pos .f-einheit{flex:0 1 90px}
   .we-pos .f-artnr{flex:0 1 120px}
   .we-pos .f-pakete{flex:0 1 80px}
+  .we-pos .f-split{flex:0 1 80px}
+  .we-pos .f-split input[type=checkbox]{width:22px;height:22px;margin-top:6px}
   .we-pos .f-blinker{flex:1 1 160px}
   .we-pos .we-del{position:absolute;top:var(--sp-2);right:var(--sp-2)}
   .we-thumb{position:relative;width:84px;height:84px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel-2)}
@@ -410,7 +410,8 @@ if ($gebucht):
         '<div class="bx-field f-artnr"><label>Art.-Nr. <span class="muted">(Lief.)</span></label><input type="text" name="p_artnr[]" value="'+esc(p.artikelnummer||'')+'" placeholder="Art.-Nr."></div>'+
         '<div class="bx-field f-charge"><label class="lbl-charge">Charge-Nr.</label><input type="text" name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'"></div>'+
         '<div class="bx-field f-mhd"><label class="lbl-mhd">MHD</label><input type="date" name="p_mhd[]" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
-        '<div class="bx-field f-pakete"><label>Pakete</label><input type="number" name="p_pakete[]" min="1" step="1" value="1"></div>'+
+        '<div class="bx-field f-pakete"><label>Pakete</label><input type="number" name="p_pakete[]" class="we-pakete" min="1" step="1" value="1"></div>'+
+        '<div class="bx-field f-split"><label>Aufteilen</label><input type="checkbox" class="we-split" title="Menge gleichmäßig auf die Kartons verteilen"><input type="hidden" name="p_aufteilen[]" class="we-split-h" value="0"></div>'+
         '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
       '</div>';
     rows.appendChild(card);
@@ -424,6 +425,9 @@ if ($gebucht):
     });
     art2.addEventListener('change',function(){pflicht(card);});
     card.querySelector('.we-del').addEventListener('click',function(){card.remove(); if(!rows.children.length)addRow();});
+    // Aufteilen-Haken je Position -> in das versteckte Feld schreiben (Index bleibt so ausgerichtet).
+    var cb=card.querySelector('.we-split'), cbh=card.querySelector('.we-split-h');
+    if(cb&&cbh) cb.addEventListener('change',function(){ cbh.value=cb.checked?'1':'0'; });
     pflicht(card);
     blinkerPflicht();
     return card;
