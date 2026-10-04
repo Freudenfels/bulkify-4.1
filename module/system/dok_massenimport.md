@@ -10,6 +10,17 @@ Oberfläche zum Massen-Import von Spezifikationen/CoAs. Route `?p=dok_massenimpo
    (mit R-Nummer-Link + Trefferquelle) · Aktion. Pro Zeile manuell zuordnen/ändern (Datalist über
    Rohstoff-Namen) oder überspringen. „Alle N übernehmen" importiert die bestätigten Zeilen.
 
+## Vorschau & Nachladen
+- Jede Zeile hat „Ansehen" → Popup (Overlay mit iframe) der hochgeladenen Datei. Ausgeliefert inline über
+  `?p=dok_massenimport&vorschau=<datei_id>` (PDF/Bild, rollengeschützt).
+- „Weitere Dateien nachladen" gibt es im Fortschritt UND in der Vorschau (hängt an denselben Job an).
+
+## Weggehen ist sicher
+Das Einlesen läuft serverseitig (Worker stoßen sich selbst an, unabhängig vom Browser). Seite verlassen/Tab
+schließen stoppt nichts; der Stand steht in der DB. Beim Zurückkommen zeigt die Seite Fortschritt/Vorschau,
+und falls die Kette abgerissen ist (z. B. Server-Neustart), stößt das Öffnen der Fortschrittsseite die Worker
+automatisch wieder an (nur wenn nichts „in Arbeit", aber noch „wartend" ist).
+
 ## Wichtig
 - Es wird immer nur **intern** abgelegt (`kunde_sichtbar=0`) – Originale gehen nie an Kunden.
 - Kein Treffer = Zeile bleibt offen (kein automatisches Neuanlegen von Rohstoffen).

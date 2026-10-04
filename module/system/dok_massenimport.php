@@ -10,6 +10,27 @@ require_once BX_ROOT . '/core/dokimport.php';
 
 $ret = '?p=dok_massenimport';
 
+// Vorschau: die hochgeladene Datei einer Zeile INLINE ausliefern (fuer das Popup). Route ist bereits
+// rollengeschuetzt (public/index.php), daher kein weiterer Login-Check noetig.
+if (($_GET['vorschau'] ?? '') !== '') {
+    $d = one("SELECT pfad, dateiname FROM dok_import_datei WHERE id=?", [(int)$_GET['vorschau']]);
+    if ($d) {
+        $pfad = BX_UPLOADS . '/' . basename((string)$d['pfad']);
+        if (is_file($pfad)) {
+            $ext = strtolower(pathinfo($pfad, PATHINFO_EXTENSION));
+            $ct  = $ext === 'pdf' ? 'application/pdf'
+                 : ($ext === 'png' ? 'image/png' : ($ext === 'webp' ? 'image/webp' : 'image/jpeg'));
+            header('Content-Type: ' . $ct);
+            header('Content-Disposition: inline; filename="' . rawurlencode((string)$d['dateiname']) . '"');
+            header('Content-Length: ' . filesize($pfad));
+            header('X-Content-Type-Options: nosniff');
+            readfile($pfad);
+            exit;
+        }
+    }
+    http_response_code(404); echo 'nicht gefunden'; exit;
+}
+
 // Hochgeladene Dateien (Feld dateien[]) nach data/uploads schieben. Rueckgabe: [angekommen, [dateien]].
 $dim_dateien_einlesen = function (): array {
     if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
@@ -156,7 +177,10 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
 ?>
 
   <?php if ($fort['status'] === 'offen'): ?>
-    <?php /* ---------- Zustand 2: Fortschritt ---------- */ ?>
+    <?php /* ---------- Zustand 2: Fortschritt ---------- */
+      // Auto-Weiterlaufen: reagiert niemand mehr (nichts in Arbeit, aber noch wartend), Worker neu anstossen.
+      if ($fort['liest'] === 0 && $fort['offen'] > 0) dokimport_worker_starten($jobId);
+    ?>
     <div class="bx-panel">
       <h3 style="margin:0 0 8px;font-weight:600">Die KI liest die Dateien ein …</h3>
       <?php $proz = $fort['anzahl'] > 0 ? round($fort['gelesen'] / $fort['anzahl'] * 100) : 0; ?>
@@ -232,7 +256,10 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
             $iid = (int)$z['item_id'];
         ?>
           <tr<?= in_array($st, ['uebersprungen', 'importiert'], true) ? ' style="opacity:.55"' : '' ?>>
-            <td style="max-width:260px;overflow-wrap:anywhere"><?= h((string)$z['dateiname']) ?></td>
+            <td style="max-width:260px;overflow-wrap:anywhere">
+              <?= h((string)$z['dateiname']) ?>
+              <div><a href="#" style="font-size:11px" onclick="dimView(<?= (int)$z['id'] ?>, this.getAttribute('data-n')); return false;" data-n="<?= h((string)$z['dateiname']) ?>">Ansehen</a></div>
+            </td>
             <td><?php
                 if ($st === 'fehler') { echo bx_badge('Fehler', 'warn'); }
                 else { echo h($typLbl[(string)$z['typ']] ?? (string)$z['typ']); }
@@ -285,12 +312,42 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
       </table></div>
     </div>
 
+    <div class="bx-panel">
+      <form method="post" enctype="multipart/form-data" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <input type="hidden" name="aktion" value="append">
+        <div class="bx-field" style="margin:0;max-width:420px"><label>Weitere Dateien nachladen</label>
+          <input type="file" name="dateien[]" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple required></div>
+        <button class="btn btn-ghost btn-sm" type="submit" data-busy="lade hoch…">Hinzufügen</button>
+        <span class="muted" style="font-size:12px">Die neuen Dateien werden eingelesen; danach landest du wieder hier in der Vorschau.</span>
+      </form>
+    </div>
+
     <?php
     // Datalist fuer die manuelle Zuordnung (Autovervollstaendigung ueber Rohstoff-Namen).
     echo '<datalist id="roh_dl">';
     foreach (all("SELECT name FROM item WHERE kategorie='rohstoff' ORDER BY name LIMIT 1500") as $r) echo '<option value="' . h((string)$r['name']) . '">';
     echo '</datalist>';
     ?>
+
+    <!-- Popup-Vorschau des Dokuments -->
+    <div id="dimOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center" onclick="if(event.target===this)dimClose()">
+      <div style="background:#fff;width:92%;max-width:900px;height:88%;border-radius:8px;display:flex;flex-direction:column;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #e5e5e5">
+          <strong id="dimTitle" style="font-weight:600">Vorschau</strong>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="dimClose()">Schließen</button>
+        </div>
+        <iframe id="dimFrame" title="Dokumentvorschau" style="flex:1;border:0;width:100%"></iframe>
+      </div>
+    </div>
+    <script>
+      function dimView(id, name){ var o=document.getElementById('dimOverlay');
+        document.getElementById('dimTitle').textContent = name || 'Vorschau';
+        document.getElementById('dimFrame').src = '?p=dok_massenimport&vorschau=' + id;
+        o.style.display = 'flex'; }
+      function dimClose(){ document.getElementById('dimOverlay').style.display='none';
+        document.getElementById('dimFrame').src = 'about:blank'; }
+      document.addEventListener('keydown', function(e){ if(e.key==='Escape') dimClose(); });
+    </script>
   <?php endif; ?>
 
 <?php endif; ?>
