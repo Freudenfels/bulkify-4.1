@@ -14,7 +14,8 @@ $dir  = $_GET['dir']  ?? 'desc';
 // Kundenvorschläge (Entwurf/Vorschlag/abgelehnt) sind noch keine Rezeptur → werden an der Anfrage geführt.
 // Je Rezeptur zusätzlich: Anzahl Rohstoffe, davon mit freiem Lagerbestand, und wie viele noch kein
 // Spec/CoA-Dokument haben (Rohstoff-Doku = dokument objekt_typ='item', typ spec|coa|analyse).
-$rows = all("SELECT r.*, k.firma AS kunde_firma,
+$rows = all("SELECT r.*, k.firma AS kunde_firma, kg.name AS kaps_name,
+             (SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id) AS fuellgewicht_mg,
              (SELECT COUNT(*) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id) AS zutat_anzahl,
              (SELECT COUNT(DISTINCT z.item_id) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id AND z.item_id IS NOT NULL) AS roh_anzahl,
              (SELECT COUNT(DISTINCT z.item_id) FROM rezeptur_zutat z
@@ -23,11 +24,27 @@ $rows = all("SELECT r.*, k.firma AS kunde_firma,
              (SELECT COUNT(DISTINCT z.item_id) FROM rezeptur_zutat z
                 WHERE z.rezeptur_id=r.id AND z.item_id IS NOT NULL
                   AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=z.item_id AND d.typ IN ('spec','coa','analyse'))) AS dok_fehlen
-             FROM rezeptur r LEFT JOIN kunden k ON k.id=r.kunde_id
+             FROM rezeptur r LEFT JOIN kunden k ON k.id=r.kunde_id LEFT JOIN kapselgroesse kg ON kg.id=r.kapselgroesse_id
              WHERE r.kunde_id IS NULL OR r.status IN ('eingefroren','freigegeben')");
 // Suche ist LIVE (clientseitig, siehe Script unten) – es werden immer alle Zeilen gerendert und beim
 // Tippen sofort gefiltert. $q dient nur zum Vorbefüllen (z. B. per Deep-Link).
 $rows = bx_sort_rows($rows, $sort, $dir);
+
+// Formulierung (Zutaten) je Rezeptur in EINER Abfrage – als Unterscheidungshilfe bei gleichnamigen Rezepturen.
+$formuMap = [];
+$rezIds = array_values(array_filter(array_map(fn($r) => (int)$r['id'], $rows)));
+if ($rezIds) {
+    $in = implode(',', $rezIds);
+    foreach (all("SELECT z.rezeptur_id, COALESCE(NULLIF(z.bezeichnung,''), i.name) AS bez, z.menge_mg
+                  FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
+                  WHERE z.rezeptur_id IN ($in) ORDER BY z.rezeptur_id, z.sort, z.id") as $z) {
+        $formuMap[(int)$z['rezeptur_id']][] = ['bez' => (string)$z['bez'], 'mg' => (float)$z['menge_mg']];
+    }
+}
+// Kapselgrößen einmal laden (für die automatische Größe nach Füllgewicht, wenn keine fest gewählt ist).
+seed_kapselgroesse_if_empty();
+$KAPS = all("SELECT name, fuellmenge_mg FROM kapselgroesse ORDER BY fuellmenge_mg ASC");
+$kapsFmt = fn($name) => $name ? '#' . trim(str_ireplace(['Größe', 'Gr.', 'Gr'], '', (string)$name)) : '';
 
 $statusBadge = function($r) {
     return match ($r['status']) {
@@ -69,10 +86,36 @@ $statusCell = function($r) use ($statusBadge) {
     return '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' . implode(' ', $chips) . '</div>';
 };
 
+// Name + Formulierung (erste Zutaten mit mg) als Unterzeile – unterscheidet gleichnamige Rezepturen.
+$mgTxt = fn($x) => rtrim(rtrim(number_format((float)$x, 1, ',', '.'), '0'), ',');
+$nameCell = function($r) use ($formuMap, $mgTxt) {
+    $out = '<strong>' . h($r['name']) . '</strong>';
+    $z = $formuMap[(int)$r['id']] ?? [];
+    if ($z) {
+        $teile = [];
+        foreach (array_slice($z, 0, 3) as $zz) {
+            $teile[] = h($zz['bez']) . ((float)$zz['mg'] > 0 ? ' ' . $mgTxt($zz['mg']) . ' mg' : '');
+        }
+        $rest = count($z) - 3;
+        $out .= '<div class="muted" style="font-size:12px;margin-top:2px">' . implode(' · ', $teile) . ($rest > 0 ? ' +' . $rest : '') . '</div>';
+    }
+    return $out;
+};
+// Kapselgröße: fest gewählt, sonst automatisch (kleinste passende nach Füllgewicht; Näherung ohne Dichte).
+$kapsCell = function($r) use ($kapsFmt, $KAPS) {
+    if (!in_array($r['darreichungsform'], ['kapsel', 'softgel'], true)) return '<span class="muted">–</span>';
+    if (!empty($r['kaps_name'])) return h($kapsFmt($r['kaps_name']));
+    $w = (float)($r['fuellgewicht_mg'] ?? 0);
+    if ($w <= 0) return '<span class="muted">–</span>';
+    foreach ($KAPS as $kg) if ((float)$kg['fuellmenge_mg'] + 0.001 >= $w) return h($kapsFmt($kg['name'])) . ' <span class="muted" style="font-size:11px">(auto)</span>';
+    return '<span class="muted">zu groß</span>';
+};
+
 $cols = [
     'nummer'           => ['label' => 'Nr.', 'sort' => true],
-    'name'             => ['label' => 'Rezeptur', 'sort' => true, 'render' => fn($r)=> '<strong>' . h($r['name']) . '</strong>'],
+    'name'             => ['label' => 'Rezeptur', 'sort' => true, 'render' => $nameCell],
     'darreichungsform' => ['label' => 'Form', 'sort' => true, 'render' => fn($r)=> h($DFORM[$r['darreichungsform']] ?? $r['darreichungsform'])],
+    'kaps_name'        => ['label' => 'Kapselgröße', 'sort' => true, 'render' => $kapsCell],
     'kunde_firma'      => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> $r['kunde_firma'] ? h($r['kunde_firma']) : '<span class="muted">–</span>'],
     'roh_anzahl'       => ['label' => 'Rohstoffe', 'sort' => true, 'num' => true, 'render' => $rohCell],
     'status'           => ['label' => 'Status', 'sort' => true, 'render' => $statusCell],
