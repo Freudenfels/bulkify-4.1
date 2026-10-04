@@ -96,6 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anleg
 
 $kunden = all("SELECT id, firma, kundennummer FROM kunden ORDER BY firma");
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
+$mg  = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 
 render_header('rechnungen', 'Auftrag aus Angebot importieren');
 bx_head('Auftrag aus Angebot importieren', 'Angebot/AB (und optional Rechnung) hochladen – die KI liest Rezeptur, Mengen und Preise', bx_btn('Zurück zu Rechnungen', '?p=rechnungen', 'ghost'));
@@ -145,8 +146,8 @@ if ($schritt === 'vorschau' && !empty($_SESSION['auftrag_import'])):
       <div class="bx-tablewrap"><table class="bx-table">
         <thead><tr><th>Zutat</th><th class="bx-num">mg je Einheit</th></tr></thead>
         <tbody>
-          <?php foreach ($d['zutaten'] as $z): ?><tr><td><?= h((string)$z['name']) ?></td><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? menge_txt($z['menge_mg']) . ' mg' : '<span class="muted">–</span>' ?></td></tr><?php endforeach; ?>
-          <tr><td class="muted">Füllgewicht je Einheit</td><td class="bx-num"><?= menge_txt($sumMg) ?> mg</td></tr>
+          <?php foreach ($d['zutaten'] as $z): ?><tr><td><?= h((string)$z['name']) ?></td><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? $mg($z['menge_mg']) . ' mg' : '<span class="muted">–</span>' ?></td></tr><?php endforeach; ?>
+          <tr><td class="muted">Füllgewicht je Einheit</td><td class="bx-num"><?= $mg($sumMg) ?> mg</td></tr>
         </tbody>
       </table></div>
       <?php else: ?><div class="muted">Keine Zutaten erkannt – die Rezeptur wird (falls neu) ohne Zutaten angelegt; bitte später ergänzen.</div><?php endif; ?>
