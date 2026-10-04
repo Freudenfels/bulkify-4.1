@@ -147,11 +147,16 @@ if (!$a):
         else { echo $a['menge'] ? h(lp_num($a['menge'])) . ' ' . h(lp_einheit($einheit, (float)$a['menge'])) : '–'; }
       ?></td></tr>
       <?php if ($a['stueck_je_packung']): ?><tr><td><?= h(lp_t('je_packung')) ?></td><td><?= h(lp_num($a['stueck_je_packung'], 0)) ?> <?= h(lp_einheit($einheit, (float)$a['stueck_je_packung'])) ?></td></tr><?php endif; ?>
-      <?php // Kapselgröße gibt bei uns die Rezeptur vor. Ist sie nicht direkt an der Anfrage gespeichert
-            // (Fremdfertigung), aus der Rezeptur ableiten.
-            $kgId = (int)($a['kapselgroesse_id'] ?? 0);
-            if (!$kgId && (int)($a['rezeptur_id'] ?? 0) > 0) $kgId = (int) scalar("SELECT kapselgroesse_id FROM rezeptur WHERE id=?", [(int)$a['rezeptur_id']]);
-            if ($kgId): $kgN = (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [$kgId]);
+      <?php // Kapselgröße gibt bei uns die Rezeptur vor – entweder fest gewählt ODER AUTOMATISCH
+            // (kleinste passende Kapsel nach Füllgewicht). rezeptur_kapselgroesse() deckt beides ab.
+            $kgRow = null;
+            if ((int)($a['kapselgroesse_id'] ?? 0) > 0) {
+                $kgRow = one("SELECT * FROM kapselgroesse WHERE id=?", [(int)$a['kapselgroesse_id']]);
+            } elseif ((int)($a['rezeptur_id'] ?? 0) > 0) {
+                $kgForm = (string)($a['form'] ?? '') ?: (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$a['rezeptur_id']]);
+                if (in_array($kgForm, ['kapsel', 'softgel'], true)) $kgRow = rezeptur_kapselgroesse((int)$a['rezeptur_id']);
+            }
+            if ($kgRow): $kgN = (string)($kgRow['name'] ?? '');
               // Die Größe steht deutsch in den Stammdaten („Größe 0"); international ist „#0" verständlich.
               $kgN = $kgN !== '' ? '#' . trim(str_ireplace(['Größe', 'Gr.', 'Gr'], '', $kgN)) : ''; ?>
         <?php if ($kgN !== ''): ?><tr><td><?= h(lp_t('kapselgroesse')) ?></td><td><?= h($kgN) ?> <span class="muted">(<?= h(lp_t('gewuenscht_von_uns')) ?>)</span></td></tr><?php endif; ?>
