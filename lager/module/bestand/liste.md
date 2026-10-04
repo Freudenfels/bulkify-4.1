@@ -2,7 +2,7 @@
 
 Startseite des Lagers. Zeigt alle eigenen Chargen (kein Fremdlager), nach Kategorie getrennt:
 
-- **Reiter:** Alle · Rohstoffe · Kapseln · Verpackung · Verbrauch · Fertigware, jeweils mit Anzahl. Kapseln = Rohstoff mit Form `kapselhuelle`.
+- **Reiter:** Alle · Rohstoffe · Verpackung · Verbrauch · Bulk / lose · Fertige Produkte, jeweils mit Anzahl. **Leerkapseln** haben keinen eigenen Reiter – sie sind ein Rohstoff (Form `kapselhuelle`, nur in Stück) und laufen unter „Rohstoffe". **Bulk / lose** = lose fertige Kapseln/Tabletten (`kategorie=fertig`, auch zugekauft); **Fertige Produkte** = fertig verpackt (`kategorie=verkaufsfertig`).
 - **Spalten:** Rohstoff/Produkt (+ Artikelnummer), Kategorie (nur im Reiter „Alle“), Charge, **MHD** (Ampel: rot abgelaufen, orange unter 60 Tagen), Bestand, Status (frei/Quarantäne/gesperrt), Blinker.
 - **Live-Suche** über Rohstoff, Artikelnummer, Charge.
 - Häkchen **auch leere zeigen** blendet ausgebuchte Chargen ein.

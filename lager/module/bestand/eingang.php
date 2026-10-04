@@ -111,7 +111,8 @@ flash_zeigen();
             <option value="rohstoff">Rohstoff</option>
             <option value="verpackung">Verpackung</option>
             <option value="verbrauch">Verbrauch</option>
-            <option value="fertig">Fertigware</option>
+            <option value="fertig">Bulk / lose</option>
+            <option value="verkaufsfertig">Fertiges Produkt</option>
           </select>
         </div>
         <div class="bx-field" style="margin:0"><label>Einheit</label>
@@ -120,7 +121,7 @@ flash_zeigen();
       </div>
     </div>
 
-    <div class="muted" style="margin:10px 0 12px">Rohstoffe und Fertigware gehen zunächst in <strong>Quarantäne</strong> (auf der Charge-Seite freigeben). Verpackung/Verbrauch sind sofort frei.</div>
+    <div class="muted" style="margin:10px 0 12px">Rohstoffe, Bulk und fertige Produkte gehen zunächst in <strong>Quarantäne</strong> (auf der Charge-Seite freigeben). Verpackung/Verbrauch sind sofort frei.</div>
     <button class="btn btn-primary" type="submit">Buchen &amp; einlagern</button>
   </div>
 </form>
@@ -153,7 +154,7 @@ flash_zeigen();
   var neuBox=document.getElementById('weNeu'), neuName=document.getElementById('weNeuName'),
       neuKat=document.getElementById('weNeuKat'), neuEinheit=document.getElementById('weNeuEinheit');
   if(!box||!hid||!list) return;
-  var katLbl={rohstoff:'Rohstoff',verpackung:'Verpackung',verbrauch:'Verbrauch',fertig:'Fertigware',verkaufsfertig:'Fertigware'};
+  var katLbl={rohstoff:'Rohstoff',verpackung:'Verpackung',verbrauch:'Verbrauch',fertig:'Bulk / lose',verkaufsfertig:'Fertiges Produkt'};
   function lbl(it){ return it.f==='kapselhuelle' ? 'Kapseln' : (katLbl[it.k]||it.k); }
   var hl=-1, shown=[];
   function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }

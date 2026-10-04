@@ -169,8 +169,9 @@ function lg_ki_datum(string $s): string {
     $t = strtotime($s);
     return $t ? date('Y-m-d', $t) : '';
 }
-// Warenart auf einen erlaubten Schluessel begrenzen.
+// Warenart auf einen erlaubten Schluessel begrenzen (wie erp_warenart_defs()).
 function lg_ki_warenart(string $s): string {
     $s = strtolower(trim($s));
-    return in_array($s, ['rohstoff', 'verpackung', 'verbrauch', 'fertig', 'kapsel'], true) ? $s : '';
+    if ($s === 'kapsel') $s = 'leerkapsel';   // Alt-Begriff: Leerkapseln sind ein Rohstoff (Stück)
+    return in_array($s, ['rohstoff', 'leerkapsel', 'verpackung', 'verbrauch', 'fertig', 'verkaufsfertig'], true) ? $s : '';
 }

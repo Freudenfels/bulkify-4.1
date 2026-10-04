@@ -60,27 +60,29 @@ function erp_chargen_suche(string $q, int $limit = 30): array {
 }
 
 // --- Bestandsansicht (alle eigenen Chargen, nach Kategorie) -----------------------------------
-// Die Kategorien, wie sie im Lager gedacht werden. "kapsel" ist im Dashboard kein eigener Wert,
-// sondern kategorie=rohstoff + form=kapselhuelle.
+// Die Reiter im Bestand. Leerkapseln sind KEIN eigener Reiter – sie sind ein Rohstoff
+// (kategorie=rohstoff + form=kapselhuelle, nur in Stück statt kg) und laufen unter "Rohstoffe".
+// "Bulk / lose" = lose fertige Kapseln/Tabletten (kategorie=fertig, auch zugekauft),
+// "Fertige Produkte" = fertig verpackt (kategorie=verkaufsfertig).
 function erp_kategorien(): array {
     return [
-        'rohstoff'  => 'Rohstoffe',
-        'kapsel'    => 'Kapseln',
-        'verpackung'=> 'Verpackung',
-        'verbrauch' => 'Verbrauch',
-        'fertig'    => 'Fertigware',
+        'rohstoff'       => 'Rohstoffe',
+        'verpackung'     => 'Verpackung',
+        'verbrauch'      => 'Verbrauch',
+        'fertig'         => 'Bulk / lose',
+        'verkaufsfertig' => 'Fertige Produkte',
     ];
 }
 
 // SQL-Bedingung fuer eine Lager-Kategorie (auf item i).
 function erp_kategorie_bedingung(string $kat): string {
     return match ($kat) {
-        'rohstoff'  => "i.kategorie='rohstoff' AND (i.form IS NULL OR i.form<>'kapselhuelle')",
-        'kapsel'    => "i.form='kapselhuelle'",
-        'verpackung'=> "i.kategorie='verpackung'",
-        'verbrauch' => "i.kategorie='verbrauch'",
-        'fertig'    => "i.kategorie IN ('fertig','verkaufsfertig')",
-        default     => '1',
+        'rohstoff'       => "i.kategorie='rohstoff'",          // inkl. Leerkapseln (form=kapselhuelle)
+        'verpackung'     => "i.kategorie='verpackung'",
+        'verbrauch'      => "i.kategorie='verbrauch'",
+        'fertig'         => "i.kategorie='fertig'",            // Bulk / lose
+        'verkaufsfertig' => "i.kategorie='verkaufsfertig'",    // fertig verpackt
+        default          => '1',
     };
 }
 
@@ -358,10 +360,10 @@ function erp_item_chargen(int $item_id, int $ausser_charge = 0): array {
 
 // Kategorie-Label fuer eine Charge/Item-Zeile (aus kategorie + form).
 function erp_kategorie_label(array $c): string {
-    if (($c['form'] ?? '') === 'kapselhuelle') return 'Kapseln';
+    if (($c['form'] ?? '') === 'kapselhuelle') return 'Leerkapseln';
     return match ((string)($c['kategorie'] ?? '')) {
         'rohstoff' => 'Rohstoff', 'verpackung' => 'Verpackung', 'verbrauch' => 'Verbrauch',
-        'fertig', 'verkaufsfertig' => 'Fertigware', 'maschine' => 'Maschine',
+        'fertig' => 'Bulk / lose', 'verkaufsfertig' => 'Fertiges Produkt', 'maschine' => 'Maschine',
         default => (string)($c['kategorie'] ?? ''),
     };
 }
@@ -702,8 +704,8 @@ function erp_warenart_defs(): array {
     return [
         'rohstoff'       => ['label' => 'Rohstoff',                 'kategorie' => 'rohstoff',       'form' => ''],
         'leerkapsel'     => ['label' => 'Leerkapseln',             'kategorie' => 'rohstoff',       'form' => 'kapselhuelle'],
-        'fertig'         => ['label' => 'Fertigware / Bulk',       'kategorie' => 'fertig',         'form' => ''],
-        'verkaufsfertig' => ['label' => 'Verkaufsfertig (verpackt)', 'kategorie' => 'verkaufsfertig', 'form' => ''],
+        'fertig'         => ['label' => 'Bulk / lose (Kapseln/Tabletten)', 'kategorie' => 'fertig',   'form' => ''],
+        'verkaufsfertig' => ['label' => 'Fertiges Produkt (verpackt)', 'kategorie' => 'verkaufsfertig', 'form' => ''],
         'verpackung'     => ['label' => 'Verpackung',              'kategorie' => 'verpackung',     'form' => ''],
         'verbrauch'      => ['label' => 'Verbrauch / Betriebsmittel', 'kategorie' => 'verbrauch',   'form' => ''],
     ];

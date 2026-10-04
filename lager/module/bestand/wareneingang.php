@@ -347,7 +347,7 @@ if ($gebucht):
         <button type="button" class="btn btn-ghost btn-sm" id="weAdd">+ Zeile</button>
       </div>
       <div id="weRows" style="margin-top:var(--sp-3)"></div>
-      <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Fertigware/Kapseln → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist immer Pflicht. „Aufteilen" je Position: verteilt die Menge gleichmäßig auf die Kartons (z. B. 50 kg / 2 = 25 kg je Karton).</div>
+      <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Leerkapseln/Bulk/Fertige Produkte → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist immer Pflicht. „Aufteilen" je Position: verteilt die Menge gleichmäßig auf die Kartons (z. B. 50 kg / 2 = 25 kg je Karton).</div>
       <div style="margin-top:var(--sp-4)"><button type="submit" class="btn btn-primary" id="weBuchen">Alle buchen &amp; Blinker anhängen</button></div>
     </div>
   </div>
@@ -407,7 +407,7 @@ if ($gebucht):
         'e'=>(string)($r['bulk_einheit']??'')
       ], $rezepturen), JSON_UNESCAPED_UNICODE) ?>;
   var MATRIX = {rohstoff:{mhd:1,charge:1},leerkapsel:{mhd:1,charge:1},fertig:{mhd:1,charge:1},verkaufsfertig:{mhd:1,charge:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
-  var ARTEN = [['rohstoff','Rohstoff'],['leerkapsel','Leerkapseln'],['fertig','Fertigware / Bulk'],['verkaufsfertig','Verkaufsfertig (verpackt)'],['verpackung','Verpackung'],['verbrauch','Verbrauch']];
+  var ARTEN = [['rohstoff','Rohstoff'],['leerkapsel','Leerkapseln'],['fertig','Bulk / lose (Kapseln/Tabletten)'],['verkaufsfertig','Fertiges Produkt (verpackt)'],['verpackung','Verpackung'],['verbrauch','Verbrauch']];
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
   // --- Ziel L1/L2 ---
@@ -425,7 +425,7 @@ if ($gebucht):
   function artOptions(sel){ return ARTEN.map(function(a){return '<option value="'+a[0]+'"'+(a[0]===sel?' selected':'')+'>'+a[1]+'</option>';}).join(''); }
   function katLabel(it){
     if(it.f==='kapselhuelle') return 'Leerkapseln';
-    var m={rohstoff:'Rohstoff',fertig:'Fertigware',verkaufsfertig:'Verkaufsfertig',verpackung:'Verpackung',verbrauch:'Verbrauch',kapsel:'Kapseln'};
+    var m={rohstoff:'Rohstoff',fertig:'Bulk / lose',verkaufsfertig:'Fertiges Produkt',verpackung:'Verpackung',verbrauch:'Verbrauch'};
     return m[it.k]||it.k||'';
   }
   function datalistItems(){ return ITEMS.map(function(it){ var l=katLabel(it); return '<option value="'+esc(it.n)+'">'+(l?esc(l):'')+'</option>'; }).join(''); }
