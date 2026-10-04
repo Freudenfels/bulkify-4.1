@@ -185,11 +185,12 @@ flash_zeigen();
       </div>
       <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
     </form>
+    <?php $aktWarenart = function_exists('erp_item_warenart') ? erp_item_warenart($c) : (string)($c['kategorie'] ?? ''); ?>
     <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:0">
       <input type="hidden" name="aktion" value="warenart">
-      <div class="bx-field" style="margin:0;min-width:160px"><label>Warenart</label>
+      <div class="bx-field" style="margin:0;min-width:180px"><label>Warenart</label>
         <select name="warenart">
-          <?php foreach (erp_kategorien() as $kk => $kl): ?><option value="<?= h($kk) ?>" <?= (string)($c['kategorie'] ?? '') === $kk ? 'selected' : '' ?>><?= h($kl) ?></option><?php endforeach; ?>
+          <?php foreach (erp_warenart_defs() as $wk => $wd): ?><option value="<?= h($wk) ?>" <?= $aktWarenart === $wk ? 'selected' : '' ?>><?= h($wd['label']) ?></option><?php endforeach; ?>
         </select>
       </div>
       <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>

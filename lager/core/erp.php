@@ -670,19 +670,47 @@ function erp_charge_einheit_setzen(int $charge_id, string $einheit): array {
     return ['ok' => true, 'meldung' => 'Einheit: ' . $einheit];
 }
 
-// Warenart (Kategorie) am ARTIKEL setzen – z. B. ein als Rohstoff angelegtes Kapsel-Produkt richtigstellen.
-function erp_item_kategorie_setzen(int $item_id, string $kategorie): bool {
-    if (!tabelle_da('item') || $item_id <= 0 || !array_key_exists($kategorie, erp_kategorien())) return false;
-    q("UPDATE item SET kategorie=? WHERE id=?", [$kategorie, $item_id]);
+// Warenarten beim Wareneingang -> echte Zuordnung auf item.kategorie + item.form.
+// (Siehe INFO-LAGER-DATENMODELL-WARENEINGANG.md: KEINE Kategorie 'kapsel'.
+//  Leerkapseln = rohstoff + Form kapselhuelle; fertige Kapseln/Bulk = fertig; verpackt = verkaufsfertig.)
+function erp_warenart_defs(): array {
+    return [
+        'rohstoff'       => ['label' => 'Rohstoff',                 'kategorie' => 'rohstoff',       'form' => ''],
+        'leerkapsel'     => ['label' => 'Leerkapseln',             'kategorie' => 'rohstoff',       'form' => 'kapselhuelle'],
+        'fertig'         => ['label' => 'Fertigware / Bulk',       'kategorie' => 'fertig',         'form' => ''],
+        'verkaufsfertig' => ['label' => 'Verkaufsfertig (verpackt)', 'kategorie' => 'verkaufsfertig', 'form' => ''],
+        'verpackung'     => ['label' => 'Verpackung',              'kategorie' => 'verpackung',     'form' => ''],
+        'verbrauch'      => ['label' => 'Verbrauch / Betriebsmittel', 'kategorie' => 'verbrauch',   'form' => ''],
+    ];
+}
+
+// Warenart am ARTIKEL setzen (Kategorie + Form). Leere Form nur ueberschreiben, wenn die Warenart eine
+// feste Form vorgibt (kapselhuelle) – sonst eine evtl. vorhandene Form (pulver/tablette/…) nicht loeschen.
+function erp_item_warenart_setzen(int $item_id, string $warenart): bool {
+    if (!tabelle_da('item') || $item_id <= 0) return false;
+    $def = erp_warenart_defs()[$warenart] ?? null;
+    if (!$def) return false;
+    if ($def['form'] !== '') {
+        q("UPDATE item SET kategorie=?, form=? WHERE id=?", [$def['kategorie'], $def['form'], $item_id]);
+    } else {
+        // Wechsel weg von Leerkapseln: nur die kapselhuelle-Form leeren, andere Formen (pulver …) behalten.
+        q("UPDATE item SET kategorie=?, form=IF(form='kapselhuelle','',form) WHERE id=?", [$def['kategorie'], $item_id]);
+    }
     return true;
 }
-// Warenart einer Charge ändern = Kategorie ihres Artikels setzen (Lager-Eingabe hat Vorrang).
-function erp_charge_warenart_setzen(int $charge_id, string $kategorie): array {
+// Warenart einer Charge ändern = Warenart ihres Artikels setzen (Lager-Eingabe hat Vorrang).
+function erp_charge_warenart_setzen(int $charge_id, string $warenart): array {
     if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Chargen vorhanden.'];
     $c = one("SELECT item_id FROM charge WHERE id=?", [$charge_id]);
     if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
-    if (!erp_item_kategorie_setzen((int)$c['item_id'], $kategorie)) return ['ok' => false, 'meldung' => 'Unbekannte Warenart.'];
-    return ['ok' => true, 'meldung' => 'Warenart: ' . (erp_kategorien()[$kategorie] ?? $kategorie)];
+    if (!erp_item_warenart_setzen((int)$c['item_id'], $warenart)) return ['ok' => false, 'meldung' => 'Unbekannte Warenart.'];
+    return ['ok' => true, 'meldung' => 'Warenart: ' . (erp_warenart_defs()[$warenart]['label'] ?? $warenart)];
+}
+// Aktuelle Warenart eines Artikels (fuer die Vorauswahl) aus kategorie/form ableiten.
+function erp_item_warenart(array $itemrow): string {
+    if (((string)($itemrow['form'] ?? '')) === 'kapselhuelle') return 'leerkapsel';
+    $k = (string)($itemrow['kategorie'] ?? '');
+    return isset(erp_warenart_defs()[$k]) ? $k : ($k === 'verkaufsfertig' ? 'verkaufsfertig' : 'rohstoff');
 }
 
 // Status einer Charge aendern (Freigeben / Quarantaene / Sperren). Leere Chargen bleiben 'leer'.
@@ -771,7 +799,7 @@ function erp_item_suchen(string $name, int $limit = 6): array {
     $enth = '%' . $esc($name) . '%';
     $anf  = $esc($name) . '%';
     return all("SELECT id, name, kategorie, einheit, form FROM item
-                WHERE kategorie IN ('rohstoff','kapsel','verpackung','verbrauch','fertig','verkaufsfertig')$w
+                WHERE kategorie IN ('rohstoff','verpackung','verbrauch','fertig','verkaufsfertig')$w
                   AND name LIKE ? ESCAPE '='
                 ORDER BY (name=?) DESC, (name LIKE ? ESCAPE '=') DESC, CHAR_LENGTH(name), name
                 LIMIT " . (int)$limit, [$enth, $name, $anf]);

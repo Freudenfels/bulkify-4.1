@@ -104,21 +104,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $pakete   = max(1, (int)($_POST['p_pakete'][$i] ?? 1));
         if ($name === '' && $menge <= 0) continue;   // leere Zeile
 
-        // Artikel bestimmen (bestehend oder neu anlegen). Warenart 'kapsel' jetzt erlaubt (war ein Bug:
-        // als Kapseln gebucht -> trotzdem als Rohstoff angelegt).
-        $gueltigeKat = function_exists('erp_kategorien') ? array_keys(erp_kategorien()) : ['rohstoff', 'kapsel', 'verpackung', 'verbrauch', 'fertig'];
+        // Warenart -> echte Zuordnung (kategorie + form). Leerkapseln=rohstoff/kapselhuelle, fertige Kapseln=fertig.
+        $defs = function_exists('erp_warenart_defs') ? erp_warenart_defs() : [];
+        $def  = $defs[$warenart] ?? ['kategorie' => 'rohstoff', 'form' => ''];
+        // Artikel bestimmen (bestehend oder neu anlegen).
         if (!$item_id && $name !== '') {
-            $kat = in_array($warenart, $gueltigeKat, true) ? $warenart : 'rohstoff';
-            $item_id = (int) erp_item_anlegen($name, $kat, $einheit);
+            $item_id = (int) erp_item_anlegen($name, $def['kategorie'], $einheit);
         }
         if (!$item_id) { $fehler[] = 'Zeile ' . ($i + 1) . ': kein Artikel.'; continue; }
 
-        // Warenart/Regeln: die EINGEGEBENE Warenart hat Vorrang – auch am Artikel (Kategorie anpassen).
+        // Eingegebene Warenart hat VORRANG: ans Item schreiben (Kategorie + ggf. Form).
+        if (isset($defs[$warenart]) && function_exists('erp_item_warenart_setzen')) erp_item_warenart_setzen($item_id, $warenart);
         $basis = erp_item_basis($item_id);
-        if ($warenart !== '' && in_array($warenart, $gueltigeKat, true) && (string)($basis['kategorie'] ?? '') !== $warenart) {
-            if (function_exists('erp_item_kategorie_setzen') && erp_item_kategorie_setzen($item_id, $warenart)) $basis['kategorie'] = $warenart;
-        }
-        $regeln = erp_warenart_regeln($warenart ?: (string)($basis['kategorie'] ?? 'rohstoff'), (string)($basis['form'] ?? ''));
+        $regeln = erp_warenart_regeln($def['kategorie'], $def['form'] ?: (string)($basis['form'] ?? ''));
         if ($menge <= 0)                           { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Menge fehlt.'; continue; }
         if ($kisteId <= 0 && $blinker === null)    { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Blinker oder Kiste wählen.'; continue; }
         if ($regeln['mhd_pflicht'] && $mhd === '')    { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): MHD ist Pflicht.'; continue; }
@@ -397,8 +395,8 @@ if ($gebucht):
 (function(){
   var ITEMS = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'f'=>(string)($it['form']??'')], $items), JSON_UNESCAPED_UNICODE) ?>;
   var KISTEN = <?= json_encode(array_map(fn($k)=>['id'=>(int)$k['id'],'n'=>(string)$k['name'],'b'=>(string)($k['barcode']??'')], $kisten), JSON_UNESCAPED_UNICODE) ?>;
-  var MATRIX = {rohstoff:{mhd:1,charge:1},kapsel:{mhd:1,charge:1},fertig:{mhd:1,charge:1},verkaufsfertig:{mhd:1,charge:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
-  var ARTEN = [['rohstoff','Rohstoff'],['kapsel','Kapseln'],['fertig','Fertigware'],['verpackung','Verpackung'],['verbrauch','Verbrauch']];
+  var MATRIX = {rohstoff:{mhd:1,charge:1},leerkapsel:{mhd:1,charge:1},fertig:{mhd:1,charge:1},verkaufsfertig:{mhd:1,charge:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
+  var ARTEN = [['rohstoff','Rohstoff'],['leerkapsel','Leerkapseln'],['fertig','Fertigware / Bulk'],['verkaufsfertig','Verkaufsfertig (verpackt)'],['verpackung','Verpackung'],['verbrauch','Verbrauch']];
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
   // --- Ziel L1/L2 ---
@@ -424,7 +422,7 @@ if ($gebucht):
 
   function addRow(p){
     p=p||{};
-    var art=p.kategorie||p.warenart||'rohstoff'; if(!MATRIX[art])art='rohstoff';
+    var art=(p.form==='kapselhuelle')?'leerkapsel':(p.kategorie||p.warenart||'rohstoff'); if(!MATRIX[art])art='rohstoff';
     var card=document.createElement('div'); card.className='we-pos';
     card.innerHTML=
       '<button type="button" class="btn btn-ghost btn-sm we-del" title="Zeile entfernen">×</button>'+
@@ -447,13 +445,13 @@ if ($gebucht):
     name.addEventListener('input',function(){
       name.title=name.value;   // voller Text als Tooltip beim Drüberfahren
       var m=ITEMS.filter(function(it){return it.n.toLowerCase()===name.value.trim().toLowerCase();})[0];
-      if(m){ hid.value=m.id; if(!einh.value)einh.value=m.e||''; var a=m.f==='kapselhuelle'?'kapsel':m.k; if(MATRIX[a]){art2.value=a;} pflicht(card); }
+      if(m){ hid.value=m.id; if(!einh.value)einh.value=m.e||''; var a=m.f==='kapselhuelle'?'leerkapsel':m.k; if(MATRIX[a]){art2.value=a;} pflicht(card); }
       else { hid.value=0; }
       zeigeAehnlich(card);
     });
     art2.addEventListener('change',function(){
-      // Kapseln zählt man in Stück, nicht in kg -> Einheit vorschlagen (nur wenn leer/Gewicht).
-      if(art2.value==='kapsel'){ var e=einh.value.trim().toLowerCase(); if(e===''||['kg','g','l','ml','t'].indexOf(e)>=0) einh.value='Stk'; }
+      // Leerkapseln zählt man in Stück, nicht in kg -> Einheit vorschlagen (nur wenn leer/Gewicht).
+      if(art2.value==='leerkapsel'){ var e=einh.value.trim().toLowerCase(); if(e===''||['kg','g','l','ml','t'].indexOf(e)>=0) einh.value='Stk'; }
       pflicht(card);
     });
     card.querySelector('.we-del').addEventListener('click',function(){card.remove(); if(!rows.children.length)addRow();});
