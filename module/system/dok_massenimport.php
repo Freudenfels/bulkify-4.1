@@ -256,8 +256,8 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
             $iid = (int)$z['item_id'];
         ?>
           <tr<?= in_array($st, ['uebersprungen', 'importiert'], true) ? ' style="opacity:.55"' : '' ?>>
-            <td style="max-width:260px;overflow-wrap:anywhere">
-              <?= h((string)$z['dateiname']) ?>
+            <td style="width:280px;max-width:280px">
+              <div title="<?= h((string)$z['dateiname']) ?>" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px"><?= h((string)$z['dateiname']) ?></div>
               <div><a href="#" style="font-size:11px" onclick="dimView(<?= (int)$z['id'] ?>, this.getAttribute('data-n')); return false;" data-n="<?= h((string)$z['dateiname']) ?>">Ansehen</a></div>
             </td>
             <td><?php
