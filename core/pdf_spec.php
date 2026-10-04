@@ -26,6 +26,14 @@ function spec_jn($v, string $ja = 'ja', string $nein = 'nein'): string {
 }
 
 // Kopf: Logo links, Firmenblock rechts, Trennlinie, zentrierter Titel + Untertitel.
+// Original-Logo als diagonales, zartes Wasserzeichen ueber jede Seite legen (sichtbarer Schutz).
+function spec_wasserzeichen(MiniPDF $p): void {
+    $lp = BX_ROOT . '/assets/bulkify-logo.jpg';
+    if (!is_file($lp)) return;
+    $d = @file_get_contents($lp); $s = @getimagesize($lp);
+    if ($d && $s) $p->watermarkLogo($d, (int)$s[0], (int)$s[1], 0.07, 150);
+}
+
 function spec_kopf(MiniPDF $p, string $titel, string $untertitel): float {
     $fa = beleg_firma(); $L = 40; $R = 555;
     // Logo (links oben)
@@ -134,6 +142,14 @@ function spec_fuss(MiniPDF $p, float $y, bool $maschHinweis = true): void {
     $fa = beleg_firma(); $L = 40; $R = 555;
     if ($y > 748) { $p->addPage(); $y = 54; }
     if ($maschHinweis) $p->text($L, $y, 'Dieses Dokument wurde maschinell erstellt und ist ohne Unterschrift gültig.', 8, false, SPEC_GRAU);
+    // Rechtlicher Hinweis (Haftungsausschluss) – unverbindliche Angaben, Nutzung auf eigenes Risiko.
+    $disc = 'Die in diesem Dokument enthaltenen Angaben beruhen auf unserem derzeitigen Wissen und unserer Erfahrung, '
+          . 'jedoch ohne jede Verbindlichkeit und ohne Übernahme einer Haftung unsererseits. Die Angaben dürfen nach '
+          . 'eigenem Ermessen und auf eigenes Risiko verwendet werden. Sie entbinden nicht von eigenen '
+          . 'Vorsichtsmaßnahmen und Prüfungen. Alle geltenden Gesetze, Vorschriften und Bestimmungen sind einzuhalten '
+          . 'und sämtliche Rechte Dritter zu beachten.';
+    $dy = 770;
+    foreach ($p->wrap($disc, $R - $L, 7, false) as $wl) { $p->text($L, $dy, $wl, 7, false, SPEC_GRAU); $dy += 9; }
     $foot = $fa['name'] . ' · ' . $fa['strasse'] . ' · ' . $fa['plz_ort']
           . ($fa['land'] !== '' ? ' · ' . $fa['land'] : '')
           . ($fa['ust_id'] !== '' ? ' · USt-IdNr. ' . $fa['ust_id'] : '')
@@ -151,7 +167,7 @@ function build_spec_pdf(int $item_id): ?string {
     if (!$it) return null;
     $L = 40; $R = 555;
     $p = new MiniPDF();
-    $p->watermark('bulkify');
+    spec_wasserzeichen($p);
     $y = spec_kopf($p, 'PRODUKTSPEZIFIKATION', 'Product Specification · ' . (string)$it['name']);
     $fmtD = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '';
 
@@ -226,7 +242,7 @@ function build_coa_pdf(int $charge_id): ?string {
     if (!$c) return null;
     $L = 40; $R = 555;
     $p = new MiniPDF();
-    $p->watermark('bulkify');
+    spec_wasserzeichen($p);
     $y = spec_kopf($p, 'ANALYSENZERTIFIKAT', 'Certificate of Analysis · ' . (string)$c['item_name']);
     $fmtD = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '–';
     $num  = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');

@@ -16,11 +16,14 @@ Koordinaten sind „von oben" (y=0 = Seitenoberkante), A4 (595×842 pt).
 - `fit($s,$maxw,$size,$bold)` – kürzt mit „…" / `wrap(...)` – Umbruch in Zeilen-Array
 - `strwidth($s,$size,$bold)` – Textbreite in pt
 - `registerJpeg($data,$w,$h)` + `drawImage($id,$x,$topY,$w,$h)` – Bilder (nur JPEG)
-- `watermark($text,$opacity=0.09,$size=24,$color)` – legt ein **diagonal gekacheltes, halbtransparentes
-  Text-Wasserzeichen** über **jede** Seite (einmal setzen genügt). Umgesetzt mit einem ExtGState
-  (`/ca`,`/CA` = Transparenz) + gedrehter Textmatrix. Genutzt in den bulkify-Dokumenten (Spec/CoA) zur
-  Abschreckung gegen Weiterverarbeitung. **Hinweis:** echte Unveränderbarkeit gibt es bei PDF nicht –
-  ein Wasserzeichen ist ein sichtbarer Schutz, kein technischer Kopierschutz.
+- `watermark($text,$opacity=0.09,$size=24,$color)` – **Text-Wasserzeichen** (diagonal gekachelt, halbtransparent)
+  über **jede** Seite (einmal setzen genügt).
+- `watermarkLogo($jpegData,$pw,$ph,$opacity=0.07,$breite=150)` – **Logo-Wasserzeichen**: das JPEG wird diagonal
+  gekachelt und halbtransparent über jede Seite gelegt. In den bulkify-Dokumenten (Spec/CoA) wird so das
+  Original-Logo (BX_ROOT/assets/bulkify-logo.jpg) verwendet – dunkle Marke auf Weiß, bei niedriger Deckkraft
+  verschwindet das Weiß. Setzen über `spec_wasserzeichen()` in core/pdf_spec.php.
+  Beides nutzt einen ExtGState (`/ca`,`/CA` = Transparenz) + gedrehte Matrix. **Hinweis:** echte
+  Unveränderbarkeit gibt es bei PDF nicht – ein Wasserzeichen ist ein sichtbarer Schutz, kein Kopierschutz.
 - `addPage()` – neue Seite / `output()` – liefert die PDF-Bytes
 
 Farben als `[r,g,b]` (0–255). Sonderzeichen werden nach Windows-1252 übersetzt

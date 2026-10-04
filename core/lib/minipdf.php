@@ -10,7 +10,7 @@ class MiniPDF
     private $pages = [];
     private $buf = '';
     private $images = [];
-    private $watermark = null;   // ['text','opacity','size','color'] – über jede Seite gelegt
+    private $watermark = null;   // Wasserzeichen über jede Seite: kind 'text' oder 'image'
 
     public function __construct()
     {
@@ -162,10 +162,26 @@ class MiniPDF
     public function watermark(string $text, float $opacity = 0.09, float $size = 24, array $color = [150, 150, 150]): void
     {
         $this->watermark = [
+            'kind'    => 'text',
             'text'    => $text,
             'opacity' => max(0.01, min(1.0, $opacity)),
             'size'    => $size,
             'color'   => $color,
+        ];
+    }
+
+    // Logo als Wasserzeichen: das (JPEG-)Bild wird diagonal gekachelt und halbtransparent ueber JEDE Seite
+    // gelegt. $breite = Breite einer Kachel in pt (Hoehe aus dem Seitenverhaeltnis). Das Logo liegt dunkel
+    // auf weissem Grund – bei niedriger Deckkraft verschwindet das Weiss, die Marke bleibt zart sichtbar.
+    public function watermarkLogo(string $jpegData, int $pw, int $ph, float $opacity = 0.07, float $breite = 150.0): void
+    {
+        $id = $this->registerJpeg($jpegData, $pw, $ph);
+        $this->watermark = [
+            'kind'    => 'image',
+            'img'     => $id,
+            'opacity' => max(0.01, min(1.0, $opacity)),
+            'w'       => $breite,
+            'h'       => $breite * $ph / max(1, $pw),
         ];
     }
 
@@ -176,10 +192,27 @@ class MiniPDF
             return '';
         }
         $wm  = $this->watermark;
-        $txt = $this->esc($this->enc($wm['text']));
         $ang = 32 * M_PI / 180;            // Diagonal von links-unten nach rechts-oben
         $c   = cos($ang);
         $s   = sin($ang);
+
+        if (($wm['kind'] ?? 'text') === 'image') {
+            // Aussen einmal die Transparenz setzen; jede Kachel in eigenem q/Q (eigene Bild-Matrix).
+            $W = $wm['w']; $H = $wm['h']; $id = (int)$wm['img'];
+            $out = "q /GSwm gs\n";
+            for ($y = 20; $y < $this->h; $y += 215) {
+                $offset = ((int)(($y - 20) / 215) % 2) ? 135 : 0;   // versetzte Reihen
+                for ($x = -30 + $offset; $x < $this->w; $x += 270) {
+                    // cm = Translation * Rotation * Skalierung (Einheitsquadrat -> W x H, gedreht, verschoben)
+                    $out .= sprintf("q %.4F %.4F %.4F %.4F %.2F %.2F cm /Im%d Do Q\n",
+                        $W * $c, $W * $s, -$H * $s, $H * $c, $x, $y, $id);
+                }
+            }
+            $out .= "Q\n";
+            return $out;
+        }
+
+        $txt = $this->esc($this->enc($wm['text']));
         $out = "q /GSwm gs " . $this->col($wm['color']) . " rg BT " . sprintf('/F2 %.2F Tf', $wm['size']) . "\n";
         // Raster ueber die ganze Seite (y von unten gemessen, dekorativ – keine py()-Umrechnung noetig).
         for ($y = 40; $y < $this->h - 10; $y += 140) {
