@@ -157,6 +157,19 @@ function lg_schema(): void {
     // Sendungs-/Tracking-Nummer(n) des gelieferten Pakets (welches Paket ist gekommen).
     lg_spalte('lg_charge_info', 'tracking', 'VARCHAR(255) NULL');
 
+    // Änderungs-Historie je Charge (wer hat wann was geändert) – fürs Lager-Protokoll.
+    q("CREATE TABLE IF NOT EXISTS lg_charge_log (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        charge_id     INT          NOT NULL,
+        feld          VARCHAR(40)  NOT NULL,
+        alt           VARCHAR(190) NULL,
+        neu           VARCHAR(190) NULL,
+        benutzer_id   INT          NULL,
+        benutzer_name VARCHAR(120) NULL,
+        angelegt      DATETIME     NOT NULL,
+        KEY c (charge_id, id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     // --- Papierkorb: im Lager "geloeschte" Chargen. Nur AUSGEBLENDET (Dashboard-Charge bleibt!),
     //     damit nichts kaputtgeht und man 30 Tage lang wiederherstellen kann. --------------------
     q("CREATE TABLE IF NOT EXISTS lg_papierkorb (
@@ -195,6 +208,20 @@ function lg_pakete_set(int $charge_id, int $pakete): void {
     $pakete = max(1, $pakete);
     q("INSERT INTO lg_charge_info (charge_id,pakete,angelegt) VALUES (?,?,?)
        ON DUPLICATE KEY UPDATE pakete=VALUES(pakete)", [$charge_id, $pakete, jetzt_utc()]);
+}
+
+// Änderung an einer Charge protokollieren (nur wenn sich etwas geändert hat). Zeigt "wer/wann/was".
+function lg_charge_log_add(int $charge_id, string $feld, ?string $alt, ?string $neu): void {
+    if ((string)$alt === (string)$neu) return;
+    $u = function_exists('lg_benutzer') ? lg_benutzer() : null;
+    q("INSERT INTO lg_charge_log (charge_id,feld,alt,neu,benutzer_id,benutzer_name,angelegt) VALUES (?,?,?,?,?,?,?)",
+      [$charge_id, mb_substr($feld, 0, 40),
+       $alt === null ? null : mb_substr((string)$alt, 0, 190),
+       $neu === null ? null : mb_substr((string)$neu, 0, 190),
+       (int)($u['id'] ?? 0) ?: null, mb_substr((string)($u['name'] ?? ''), 0, 120), jetzt_utc()]);
+}
+function lg_charge_log_liste(int $charge_id, int $limit = 50): array {
+    return all("SELECT * FROM lg_charge_log WHERE charge_id=? ORDER BY id DESC LIMIT " . max(1, $limit), [$charge_id]);
 }
 
 // Soll die Menge auf dem Etikett auf die Kartons aufgeteilt werden? (0/1)

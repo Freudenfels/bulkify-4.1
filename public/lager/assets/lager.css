@@ -83,6 +83,20 @@
 /* Kennzahl-Karten ruhig halten (seitenlokal im Lager, wie im Dashboard gewuenscht) */
 .bx-card .v{font-size:var(--fs-md);color:var(--text)}
 
+/* Kachel mit Inline-Bearbeitung (Stift oben rechts) */
+.lg-ecard{position:relative}
+.lg-ebtn{position:absolute;top:10px;right:10px;width:30px;height:30px;line-height:28px;
+  padding:0;text-align:center;border:1px solid var(--line);border-radius:8px;
+  background:var(--panel-2);color:var(--text);cursor:pointer;font-size:15px}
+.lg-ebtn:hover{border-color:var(--gruen);color:var(--gruen)}
+.lg-ecard .k{padding-right:36px}
+.lg-eform{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.lg-eform[hidden]{display:none}
+.lg-eform input,.lg-eform select{width:100%;font-size:var(--fs-md);padding:10px 12px;
+  border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text)}
+.lg-eform input:focus,.lg-eform select:focus{outline:2px solid var(--gruen);outline-offset:-1px;border-color:var(--gruen)}
+.lg-erow{display:flex;gap:8px;flex-wrap:wrap}
+
 /* Suchzeile im Popup (Tippen + Mikrofon) */
 .lgv-suchzeile{display:flex;gap:8px;margin-bottom:var(--sp-3)}
 .lgv-feld{flex:1;font-size:var(--fs-md);padding:12px 14px;border:1px solid var(--line);border-radius:10px;

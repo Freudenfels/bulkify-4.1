@@ -4,6 +4,12 @@ $id = (int)($_GET['id'] ?? 0);
 $c = erp_charge_voll($id);
 if (!$c) { flash('Diese Charge gibt es nicht.', 'warn'); weiter('?p=bestand'); }
 
+if (!function_exists('status_text')) {
+    function status_text(string $s): string {
+        return ['frei' => 'Freigegeben', 'quarantaene' => 'Quarantäne', 'gesperrt' => 'Gesperrt', 'leer' => 'Leer'][$s] ?? $s;
+    }
+}
+
 // Blinker binden/lösen direkt hier.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
@@ -48,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($r['ok']) {
             $delta = (float)$r['delta'];
             if (abs($delta) > 1e-9) lg_bewegung_log($id, $delta > 0 ? 'ein' : 'aus', abs($delta), (string)$r['einheit'], (string)$c['item_name'], 'Korrektur' . ($grund ? ': ' . $grund : ''));
+            lg_charge_log_add($id, 'Bestand', menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit'], menge_txt($neu) . ' ' . (string)($r['einheit'] ?? $c['einheit']));
         }
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
@@ -56,27 +63,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $roh = trim((string)($_POST['mhd'] ?? ''));
         $mhd = ($roh !== '' && strtotime($roh)) ? date('Y-m-d', strtotime($roh)) : null;
         q("UPDATE charge SET mhd=? WHERE id=?", [$mhd, $id]);
+        lg_charge_log_add($id, 'MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '', $mhd ? date('d.m.Y', strtotime($mhd)) : '');
         flash($mhd ? ('MHD korrigiert: ' . date('d.m.Y', strtotime($mhd))) : 'MHD geleert.', 'ok');
         weiter('?p=charge&id=' . $id);
     }
     if ($aktion === 'status') {
         $r = erp_charge_status_setzen($id, (string)($_POST['status'] ?? ''));
+        if ($r['ok']) lg_charge_log_add($id, 'Status', status_text((string)$c['status']), status_text((string)($_POST['status'] ?? '')));
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
     }
     if ($aktion === 'lieferant') {
         $r = erp_charge_lieferant_setzen($id, (string)($_POST['lieferant_name'] ?? ''));
+        if ($r['ok']) lg_charge_log_add($id, 'Lieferant', (string)($c['lieferant'] ?? ''), trim((string)($_POST['lieferant_name'] ?? '')));
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
     }
     if ($aktion === 'einheit') {
         $r = erp_charge_einheit_setzen($id, (string)($_POST['einheit'] ?? ''));
+        if ($r['ok']) lg_charge_log_add($id, 'Einheit', (string)$c['einheit'], erp_einheit_norm(trim((string)($_POST['einheit'] ?? ''))));
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
     }
     if ($aktion === 'warenart') {
+        $defs0 = function_exists('erp_warenart_defs') ? erp_warenart_defs() : [];
+        $altWa = function_exists('erp_item_warenart') ? ($defs0[erp_item_warenart($c)]['label'] ?? '') : '';
         $r = erp_charge_warenart_setzen($id, (string)($_POST['warenart'] ?? ''));
+        if ($r['ok']) lg_charge_log_add($id, 'Warenart', $altWa, $defs0[(string)($_POST['warenart'] ?? '')]['label'] ?? (string)($_POST['warenart'] ?? ''));
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+        weiter('?p=charge&id=' . $id);
+    }
+    if ($aktion === 'tracking') {
+        $neuT = trim((string)($_POST['tracking'] ?? ''));
+        $altT = function_exists('lg_tracking') ? lg_tracking($id) : '';
+        if (function_exists('lg_tracking_set')) lg_tracking_set($id, $neuT);
+        lg_charge_log_add($id, 'Sendung/Paket', $altT, $neuT);
+        flash('Sendungs-/Paketnummer gespeichert.');
         weiter('?p=charge&id=' . $id);
     }
     if ($aktion === 'loeschen') {
@@ -140,65 +162,124 @@ flash_zeigen();
 })();
 </script>
 <?php endif; ?>
-<div class="bx-grid" style="margin-bottom:var(--sp-5)">
-  <div class="bx-card"><div class="k">Bestand</div><div class="v"><?= h(menge_txt($c['menge_verfuegbar'])) ?> <?= h((string)$c['einheit']) ?></div></div>
-  <div class="bx-card"><div class="k">MHD</div><div class="v" style="font-size:var(--fs-lg)"><?= mhd_html($c['mhd']) ?></div></div>
-  <div class="bx-card"><div class="k">Status</div><div class="v" style="font-size:var(--fs-lg)"><?= status_badge($c['status']) ?></div></div>
+<?php
+$trk = function_exists('lg_tracking') ? lg_tracking($id) : '';
+$aktWarenart = function_exists('erp_item_warenart') ? erp_item_warenart($c) : (string)($c['kategorie'] ?? '');
+$warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$aktWarenart]['label'] ?? '') : '') ?: erp_kategorie_label($c);
+?>
+<div class="bx-grid lg-cards" style="margin-bottom:var(--sp-5)">
+
+  <!-- Bestand -->
+  <div class="bx-card lg-ecard">
+    <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>
+    <div class="k">Bestand</div>
+    <div class="v lg-eview"><?= h(menge_txt($c['menge_verfuegbar'])) ?> <?= h((string)$c['einheit']) ?></div>
+    <form method="post" class="lg-eform" hidden>
+      <input type="hidden" name="aktion" value="menge_korr">
+      <input type="text" inputmode="decimal" name="menge" value="<?= h(menge_txt($c['menge_verfuegbar'])) ?>">
+      <input type="text" name="grund" placeholder="Grund (optional)">
+      <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
+    </form>
+  </div>
+
+  <!-- MHD -->
+  <div class="bx-card lg-ecard">
+    <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>
+    <div class="k">MHD</div>
+    <div class="v lg-eview" style="font-size:var(--fs-lg)"><?= mhd_html($c['mhd']) ?></div>
+    <form method="post" class="lg-eform" hidden>
+      <input type="hidden" name="aktion" value="mhd_korr">
+      <input type="date" name="mhd" value="<?= h($c['mhd'] ? date('Y-m-d', strtotime((string)$c['mhd'])) : '') ?>">
+      <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
+    </form>
+  </div>
+
+  <!-- Status -->
+  <div class="bx-card lg-ecard">
+    <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>
+    <div class="k">Status</div>
+    <div class="v lg-eview" style="font-size:var(--fs-lg)"><?= status_badge($c['status']) ?></div>
+    <form method="post" class="lg-eform" hidden>
+      <input type="hidden" name="aktion" value="status">
+      <select name="status">
+        <?php foreach (['frei' => 'Freigegeben', 'quarantaene' => 'Quarantäne', 'gesperrt' => 'Gesperrt'] as $sv => $sl): ?>
+          <option value="<?= $sv ?>" <?= (string)$c['status'] === $sv ? 'selected' : '' ?>><?= $sl ?></option>
+        <?php endforeach; ?>
+      </select>
+      <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
+    </form>
+  </div>
+
+  <!-- Warenart -->
+  <div class="bx-card lg-ecard">
+    <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>
+    <div class="k">Warenart</div>
+    <div class="v lg-eview" style="font-size:var(--fs-lg)"><?= h($warenartLabel) ?></div>
+    <form method="post" class="lg-eform" hidden>
+      <input type="hidden" name="aktion" value="warenart">
+      <select name="warenart">
+        <?php foreach (erp_warenart_defs() as $wk => $wd): ?><option value="<?= h($wk) ?>" <?= $aktWarenart === $wk ? 'selected' : '' ?>><?= h($wd['label']) ?></option><?php endforeach; ?>
+      </select>
+      <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
+    </form>
+  </div>
+
+  <!-- Einheit -->
+  <div class="bx-card lg-ecard">
+    <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>
+    <div class="k">Einheit</div>
+    <div class="v lg-eview" style="font-size:var(--fs-lg)"><?= h((string)$c['einheit']) ?: '–' ?></div>
+    <form method="post" class="lg-eform" hidden>
+      <input type="hidden" name="aktion" value="einheit">
+      <input type="text" name="einheit" list="chgEinhList" autocomplete="off" value="<?= h((string)$c['einheit']) ?>">
+      <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
+    </form>
+  </div>
+
+  <?php if (!$fremd_kunde): ?>
+  <!-- Lieferant -->
+  <div class="bx-card lg-ecard">
+    <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>
+    <div class="k">Lieferant</div>
+    <div class="v lg-eview" style="font-size:var(--fs-lg)"><?= h((string)($c['lieferant'] ?? '')) ?: '–' ?></div>
+    <form method="post" class="lg-eform" hidden>
+      <input type="hidden" name="aktion" value="lieferant">
+      <input type="text" name="lieferant_name" list="chgLiefList" autocomplete="off" value="<?= h((string)($c['lieferant'] ?? '')) ?>" placeholder="suchen oder neu">
+      <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
+    </form>
+  </div>
+  <?php endif; ?>
+
+  <!-- Sendung / Paket -->
+  <div class="bx-card lg-ecard">
+    <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>
+    <div class="k">Sendung / Paket</div>
+    <div class="v lg-eview lg-code" style="font-size:var(--fs-lg)"><?= h($trk) ?: '–' ?></div>
+    <form method="post" class="lg-eform" hidden>
+      <input type="hidden" name="aktion" value="tracking">
+      <input type="text" name="tracking" class="lg-code" autocomplete="off" value="<?= h($trk) ?>" placeholder="Paketlabel scannen">
+      <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
+    </form>
+  </div>
+
+  <!-- Nicht bearbeitbar -->
   <div class="bx-card"><div class="k">Charge</div><div class="v lg-code" style="font-size:var(--fs-lg)"><?= h((string)$c['charge_nr']) ?: '–' ?></div></div>
   <div class="bx-card"><div class="k">Lager</div><div class="v" style="font-size:var(--fs-lg)"><?= $fremd_kunde ? 'Lager 2 · ' . h(erp_kunde_name($fremd_kunde)) : 'Lager 1 · eigener Bestand' ?></div></div>
-  <?php $trk = function_exists('lg_tracking') ? lg_tracking($id) : ''; if ($trk !== ''): ?>
-  <div class="bx-card"><div class="k">Sendung / Paket</div><div class="v lg-code" style="font-size:var(--fs-lg)"><?= h($trk) ?></div></div>
-  <?php endif; ?>
 </div>
-
-<?php if ((string)$c['status'] !== 'leer' && (float)$c['menge_verfuegbar'] > 0): ?>
-<div class="bx-panel" style="margin-bottom:var(--sp-5)">
-  <div class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap;align-items:center">
-    <span class="muted" style="margin-right:var(--sp-2)">Status ändern:</span>
-    <?php foreach (['frei' => 'Freigeben', 'quarantaene' => 'In Quarantäne', 'gesperrt' => 'Sperren'] as $sv => $sl):
-      $aktiv = (string)$c['status'] === $sv; ?>
-      <form method="post" style="display:inline">
-        <input type="hidden" name="aktion" value="status"><input type="hidden" name="status" value="<?= $sv ?>">
-        <button type="submit" class="btn <?= $aktiv ? 'btn-primary' : 'btn-ghost' ?> btn-sm" <?= $aktiv ? 'disabled' : '' ?>><?= $sl ?></button>
-      </form>
-    <?php endforeach; ?>
-  </div>
-</div>
-<?php endif; ?>
-
-<div class="bx-panel" style="margin-bottom:var(--sp-5)">
-  <div class="bx-row" style="gap:var(--sp-5);flex-wrap:wrap;align-items:flex-end">
-    <?php if (!$fremd_kunde): ?>
-    <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:0">
-      <input type="hidden" name="aktion" value="lieferant">
-      <div class="bx-field" style="margin:0;min-width:200px"><label>Lieferant <span class="muted">(tippen, neue werden angelegt)</span></label>
-        <input type="text" name="lieferant_name" list="chgLiefList" autocomplete="off" value="<?= h((string)($c['lieferant'] ?? '')) ?>" placeholder="Lieferant suchen oder neu">
-      </div>
-      <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
-    </form>
-    <datalist id="chgLiefList"><?php foreach ($liefers as $lf): ?><option value="<?= h((string)$lf['firma']) ?>"></option><?php endforeach; ?></datalist>
-    <?php endif; ?>
-    <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:0">
-      <input type="hidden" name="aktion" value="einheit">
-      <div class="bx-field" style="margin:0;max-width:150px"><label>Einheit <span class="muted">(z. B. kg)</span></label>
-        <input type="text" name="einheit" list="chgEinhList" autocomplete="off" value="<?= h((string)$c['einheit']) ?>">
-      </div>
-      <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
-    </form>
-    <?php $aktWarenart = function_exists('erp_item_warenart') ? erp_item_warenart($c) : (string)($c['kategorie'] ?? ''); ?>
-    <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:0">
-      <input type="hidden" name="aktion" value="warenart">
-      <div class="bx-field" style="margin:0;min-width:180px"><label>Warenart</label>
-        <select name="warenart">
-          <?php foreach (erp_warenart_defs() as $wk => $wd): ?><option value="<?= h($wk) ?>" <?= $aktWarenart === $wk ? 'selected' : '' ?>><?= h($wd['label']) ?></option><?php endforeach; ?>
-        </select>
-      </div>
-      <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
-    </form>
-    <datalist id="chgEinhList"><option value="kg"></option><option value="g"></option><option value="L"></option><option value="ml"></option><option value="Stk"></option></datalist>
-  </div>
-  <div class="muted" style="font-size:12px;margin-top:var(--sp-2)">MHD und Menge änderst du oben per „MHD/Bestand korrigieren".</div>
-</div>
+<datalist id="chgLiefList"><?php foreach ($liefers as $lf): ?><option value="<?= h((string)$lf['firma']) ?>"></option><?php endforeach; ?></datalist>
+<datalist id="chgEinhList"><option value="kg"></option><option value="g"></option><option value="L"></option><option value="ml"></option><option value="Stk"></option></datalist>
+<script>
+(function(){
+  document.querySelectorAll('.lg-ecard').forEach(function(card){
+    var btn=card.querySelector('.lg-ebtn'), view=card.querySelector('.lg-eview'), form=card.querySelector('.lg-eform'),
+        k=card.querySelector('.k'), cancel=card.querySelector('.lg-ecancel');
+    if(!btn||!form) return;
+    function edit(on){ form.hidden=!on; if(view)view.style.display=on?'none':''; btn.style.display=on?'none':''; if(on){var f=form.querySelector('input,select,textarea'); if(f)f.focus();} }
+    btn.addEventListener('click',function(){ edit(true); });
+    if(cancel) cancel.addEventListener('click',function(){ edit(false); });
+  });
+})();
+</script>
 
 <div class="umb-overlay" id="umbModal" hidden>
   <div class="umb-box bx-panel">
@@ -376,23 +457,33 @@ flash_zeigen();
 </div>
 <?php endif; ?>
 
+<?php $logrows = function_exists('lg_charge_log_liste') ? lg_charge_log_liste($id) : []; ?>
+<div class="bx-panel" style="margin-bottom:var(--sp-5)">
+  <h2>Änderungen</h2>
+  <?php if (!$logrows): ?>
+    <div class="muted">Noch keine Änderungen an dieser Charge.</div>
+  <?php else: ?>
+  <div class="lg-karten">
+  <table class="bx-table">
+    <thead><tr><th>Zeitpunkt</th><th>Benutzer</th><th>Feld</th><th>vorher</th><th>nachher</th></tr></thead>
+    <tbody>
+      <?php foreach ($logrows as $lr): ?>
+      <tr>
+        <td data-l="Zeitpunkt"><?= h(fmt_zeit($lr['angelegt'])) ?></td>
+        <td data-l="Benutzer"><?= h((string)($lr['benutzer_name'] ?? '')) ?: '–' ?></td>
+        <td data-l="Feld"><?= h((string)$lr['feld']) ?></td>
+        <td data-l="vorher" class="muted"><?= h((string)($lr['alt'] ?? '')) ?: '–' ?></td>
+        <td data-l="nachher"><?= h((string)($lr['neu'] ?? '')) ?: '–' ?></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+  <?php endif; ?>
+</div>
+
 <div class="bx-panel">
-  <h2>Charge korrigieren / löschen</h2>
-  <form method="post" class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap;margin-bottom:var(--sp-3)">
-    <input type="hidden" name="aktion" value="mhd_korr">
-    <div class="bx-field" style="margin:0;max-width:200px"><label>MHD korrigieren</label>
-      <input type="date" name="mhd" value="<?= h($c['mhd'] ? date('Y-m-d', strtotime((string)$c['mhd'])) : '') ?>"></div>
-    <button type="submit" class="btn btn-primary">MHD speichern</button>
-    <span class="muted" style="font-size:12px">Leer lassen = kein MHD.</span>
-  </form>
-  <form method="post" class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap;margin-bottom:var(--sp-3)">
-    <input type="hidden" name="aktion" value="menge_korr">
-    <div class="bx-field" style="margin:0;max-width:170px"><label>Neue Menge (<?= h((string)$c['einheit']) ?>)</label>
-      <input type="text" inputmode="decimal" name="menge" value="<?= h(menge_txt($c['menge_verfuegbar'])) ?>"></div>
-    <div class="bx-field" style="margin:0;min-width:200px;flex:1"><label>Grund (optional)</label>
-      <input type="text" name="grund" placeholder="z. B. Zählkorrektur, Bruch"></div>
-    <button type="submit" class="btn btn-primary">Bestand setzen</button>
-  </form>
+  <h2>Charge löschen</h2>
   <form method="post" class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap" onsubmit="return confirm('Diese Charge in den Mülleimer legen? 30 Tage wiederherstellbar.')">
     <input type="hidden" name="aktion" value="loeschen">
     <div class="bx-field" style="margin:0;min-width:200px;flex:1"><label>Grund (optional)</label>

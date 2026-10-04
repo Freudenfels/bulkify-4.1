@@ -11,10 +11,21 @@ Zusätzlich, wie im Dashboard, aber auf diese Charge bezogen:
 - **Produkt:** Stammdaten (Name, Englisch/Botanisch, CAS, Form, Dichte, Allergene, Herkunft, Kunde) und **Wirkstoffe**.
 - **Weitere Chargen dieses Produkts:** anklickbar.
 
-**Charge korrigieren / löschen:** MHD korrigieren (Datumsfeld, leer = kein MHD → `aktion=mhd_korr`, direktes `UPDATE charge SET mhd`), Mengenkorrektur (`menge_korr`), in den Mülleimer (`loeschen`).
+**Bearbeiten direkt an der Kachel:** Jede Kennzahl-Kachel hat oben rechts einen Stift. Ein Klick klappt ein kleines Formular in der Kachel auf (Abbrechen schließt wieder). Bearbeitbar sind:
+- **Bestand** (`menge_korr`, neue Menge + optional Grund; schreibt eine Lagerbewegung über die Differenz),
+- **MHD** (`mhd_korr`, Datumsfeld, leer = kein MHD),
+- **Status** (`status` → `erp_charge_status_setzen`; Freigegeben/Quarantäne/Gesperrt; deckt „Aus Quarantäne freigeben" ab),
+- **Warenart** (`warenart` → `erp_charge_warenart_setzen`, setzt die Kategorie/Form des Artikels, z. B. fälschlich „Rohstoff" → „Fertigware"),
+- **Einheit** (`einheit` → `erp_charge_einheit_setzen`, z. B. Pulver „Stk" → „kg"),
+- **Lieferant** (`lieferant` → `erp_charge_lieferant_setzen`, tippen, neue werden angelegt; nur Lager 1),
+- **Sendung / Paket** (`tracking` → `lg_tracking_set`, Paketlabel scannen/eintippen).
+
+Charge und Lager sind nicht bearbeitbar (reine Anzeige).
+
+**Änderungen (Protokoll):** Unter den Kacheln steht eine Tabelle „Änderungen" (Zeitpunkt via `fmt_zeit()`, Benutzer, Feld, vorher → nachher). Jeder der obigen Edits schreibt über `lg_charge_log_add()` einen Eintrag; gelesen wird mit `lg_charge_log_liste($id)`. Unveränderte Werte werden nicht protokolliert.
+
+**Charge löschen:** eigenes Panel ganz unten – in den Mülleimer (`loeschen`), 30 Tage wiederherstellbar; blendet die Charge nur aus (das Dashboard behält sie).
 
 Der **Produktname ist überall ein Link** (Bestand-Liste, Such-Popup) und führt hierher.
-
-**Bearbeiten an der Charge:** Status (Freigeben/Quarantäne/Sperren → `erp_charge_status_setzen`; deckt den „Aus Quarantäne freigeben"-Fall ab), **Warenart/Kategorie** (`erp_charge_warenart_setzen` → setzt die Kategorie des Artikels, z. B. fälschlich „Rohstoff" → „Kapseln"), **Lieferant** (tippen, neue werden angelegt → `erp_charge_lieferant_setzen`), **Einheit** (`erp_charge_einheit_setzen`, z. B. Pulver „Stk" → „kg"), sowie MHD/Bestand korrigieren (`mhd_korr`/`menge_korr`).
 
 Liest über `erp_charge_voll()`, `erp_item_voll()`, `erp_item_wirkstoffe()`, `erp_item_dokumente()`, `erp_item_chargen()` aus dem geteilten Dashboard-Bestand. Bindet/löst Blinker über `core/leiste.php`.
