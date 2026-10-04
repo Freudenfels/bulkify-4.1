@@ -257,12 +257,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
         q("DELETE FROM item_grenzwert WHERE item_id=?", [(int)$id]);
         $gp = $_POST['gw_param'] ?? []; $gw = $_POST['gw_wert'] ?? [];
         foreach ($gp as $i => $pn) { $pn = trim($pn); if ($pn === '') continue; q("INSERT INTO item_grenzwert (item_id,parameter,grenzwert,sort) VALUES (?,?,?,?)", [(int)$id, $pn, trim($gw[$i] ?? ''), (int)$i]); }
-        // Spec-PDF hochladen (in data/uploads, außerhalb public)
+        // Spec-PDF hochladen (in data/uploads, außerhalb public). Gehört in den Reiter „Dokumente":
+        // zusätzlich zur schnellen Verknüpfung am Item als Dokument (typ spec, intern) ablegen.
         if (!empty($_FILES['spec_pdf']['name']) && is_uploaded_file($_FILES['spec_pdf']['tmp_name'] ?? '')) {
             if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
-            $fn = 'spec_' . (int)$id . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $_FILES['spec_pdf']['name']);
-            if (move_uploaded_file($_FILES['spec_pdf']['tmp_name'], BX_UPLOADS . '/' . $fn))
+            $orig = (string)$_FILES['spec_pdf']['name'];
+            $fn = 'spec_' . (int)$id . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $orig);
+            if (move_uploaded_file($_FILES['spec_pdf']['tmp_name'], BX_UPLOADS . '/' . $fn)) {
                 q("UPDATE item SET spec_pdf=? WHERE id=?", [$fn, (int)$id]);
+                // Als Dokument im Reiter „Dokumente" führen (intern – Lieferanten-Original, nie an den Kunden).
+                q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar) VALUES ('item',?,?,?,?,?,0)",
+                  [(int)$id, 'spec', 'Spezifikation (Lieferant)', $fn, mb_substr($orig, 0, 190)]);
+            }
         }
         // Kam der Rohstoff aus einer hochgeladenen Spezifikation? Dann gehört die Datei jetzt an ihn.
         $coaChargeNeu = 0;

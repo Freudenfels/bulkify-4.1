@@ -5,6 +5,7 @@
 //   3. Kunde hat den passenden Portal-Bereich freigeschaltet.
 // Ohne alle drei gibt es die Datei nicht. Interne Unterlagen (Lieferanten-Specs) bleiben so draußen.
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/dokument_ui.php';   // dokument_ist_lieferant_original()
 
 $token = preg_replace('/[^a-f0-9]/', '', $_GET['token'] ?? '');
 $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
@@ -13,6 +14,10 @@ if (!$k) { http_response_code(403); echo 'Zugang ungültig.'; exit; }
 $id = (int)($_GET['id'] ?? 0);
 $d  = $id ? one("SELECT * FROM dokument WHERE id=? AND kunde_sichtbar=1", [$id]) : null;
 if (!$d) { http_response_code(404); echo 'Dokument nicht verfügbar.'; exit; }
+
+// Harte Sperre: Original-Unterlagen des Lieferanten (Rohstoff-Spec/CoA/Analyse) gehen NIE an den Kunden –
+// der Kunde bekommt ausschließlich unser bulkify-Dokument (spec_pdf/coa_pdf). Gilt unabhängig von kunde_sichtbar.
+if (dokument_ist_lieferant_original((string)$d['objekt_typ'], (string)$d['typ'])) { http_response_code(404); echo 'Dokument nicht verfügbar.'; exit; }
 
 // Bereichs-Freischaltung des Kunden prüfen: Rohstoff-Dokumente brauchen den Rohstoff- oder Rezeptur-Bereich,
 // Produkt-Dokumente den Produkt-Bereich.

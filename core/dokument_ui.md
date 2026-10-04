@@ -21,3 +21,13 @@
 
 ## Rückgabe von `dokument_upload()`
 Die Funktion gibt seit der KI-Anbindung die **id der neuen Zeile** zurück (0 bei Fehlschlag). Wer die Datei gleich weiterverarbeiten will – etwa `spec_ki_nach_upload()` –, braucht sie. Bestehende Aufrufer ignorieren den Rückgabewert.
+
+## Lieferanten-Originale gehen NIE an den Kunden
+Original-Unterlagen eines **Rohstoffs** (`objekt_typ='item'`, `typ` = `spec`/`coa`/`analyse`) sind
+Lieferanten-Dokumente und dürfen **niemals** in die Kundensicht. Der Kunde bekommt ausschließlich **unser
+bulkify-Dokument** (`build_spec_pdf()` / `build_coa_pdf()`, Routen `spec_pdf`/`coa_pdf` im Portal).
+- `dokument_ist_lieferant_original($objekt_typ,$typ)` erkennt diese Dokumente.
+- `dokument_freigabe_toggle()` verweigert bei ihnen das Freigeben (erzwingt `kunde_sichtbar=0`).
+- `dokumente_fuer_kunde()` schließt sie immer aus (egal wie `kunde_sichtbar` steht).
+- Im `dokument_panel()` erscheinen sie als „intern · nie an Kunde" (kein Freigabe-Schalter).
+- Zusätzliche harte Sperre in `module/portal/dokument_download.php` (liefert sie nie aus).

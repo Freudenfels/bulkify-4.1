@@ -11,3 +11,8 @@
 Die Datei selbst liegt in `data/uploads`, also außerhalb des Web-Ordners; ausgeliefert wird sie mit erkanntem MIME-Typ und Originalnamen.
 
 **Verwandt:** `core/dokument_ui.php` (Freigabe setzen), `module/portal/kunde.php` (zeigt die Links im Rohstoff- und Rezeptur-Detail).
+
+## Harte Sperre: Lieferanten-Originale
+Rohstoff-Originale (`objekt_typ='item'`, `typ` spec/coa/analyse) werden **nie** ausgeliefert – auch dann
+nicht, wenn `kunde_sichtbar=1` (Altdaten). Prüfung über `dokument_ist_lieferant_original()`. Der Kunde
+erhält stattdessen das bulkify-Dokument (`spec_pdf`/`coa_pdf`).

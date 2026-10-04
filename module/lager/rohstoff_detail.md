@@ -62,3 +62,9 @@ zählt aber NICHT zu unserem Bestand. Umgesetzt über `charge.fremd_kunde_id` (N
 `item_bestand()` schließt Fremd-Chargen aus → sie gehen NICHT in Berechnungen/Angebote/Produktion/Reservierung/Versand ein.
 Button "Ins Fremdlager umbuchen" (`fremdlager_umbuchen()`): reduziert unsere freien Chargen FEFO und legt eine
 Fremd-Charge (dem Kunden gehörend) an. Anzeige je Kunde via `item_fremdbestand_je_kunde()`.
+
+## Spec/CoA gehören in den Reiter „Dokumente"
+Das „Spec-PDF" aus dem Reiter *Spezifikation* wird beim Speichern **zusätzlich als Dokument** (typ `spec`,
+intern) angelegt, sodass Spec/CoA im Reiter **Dokumente** stehen (dort ist ihr Platz). Diese
+Lieferanten-Originale sind **immer intern** – der Kunde bekommt nur das generierte **bulkify-Specsheet**
+(`?p=spec_bulkify&id=`) bzw. bulkify-CoA. Siehe `core/dokument_ui.md`.

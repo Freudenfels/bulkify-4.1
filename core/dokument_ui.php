@@ -32,14 +32,29 @@ function dokument_upload(string $objekt_typ, int $objekt_id): int {
 // (auf dessen Briefpapier). Fuer den Kunden gibt es die eigene Spezifikation und das eigene CoA
 // im bulkify-Layout (core/pdf_spec.php) – die Freigabe hier ist nur fuer Ausnahmefaelle gedacht.
 // am Rohstoff hängen auch Lieferanten-Unterlagen, die nicht weitergegeben werden dürfen.
+// Original-Unterlagen des Lieferanten (Spec/CoA/Analyse an einem Rohstoff = item) dürfen NIE an den
+// Kunden – der Kunde bekommt immer nur UNSER bulkify-Dokument (build_spec_pdf/build_coa_pdf). Diese
+// Dokumente lassen sich daher nicht für den Kunden freigeben und erscheinen nie in der Kundensicht.
+function dokument_ist_lieferant_original(string $objekt_typ, string $typ): bool {
+    return $objekt_typ === 'item' && in_array($typ, ['spec', 'coa', 'analyse'], true);
+}
 function dokument_freigabe_toggle(string $objekt_typ, int $objekt_id, int $dok_id): void {
+    $typ = (string) scalar("SELECT typ FROM dokument WHERE id=? AND objekt_typ=? AND objekt_id=?", [$dok_id, $objekt_typ, $objekt_id]);
+    if (dokument_ist_lieferant_original($objekt_typ, $typ)) {
+        // Sicherheitshalber erzwingen: bleibt intern.
+        q("UPDATE dokument SET kunde_sichtbar=0 WHERE id=? AND objekt_typ=? AND objekt_id=?", [$dok_id, $objekt_typ, $objekt_id]);
+        return;
+    }
     q("UPDATE dokument SET kunde_sichtbar = 1 - kunde_sichtbar WHERE id=? AND objekt_typ=? AND objekt_id=?",
       [$dok_id, $objekt_typ, $objekt_id]);
 }
-// Für Kunden freigegebene Dokumente eines Objekts (Portal).
+// Für Kunden freigegebene Dokumente eines Objekts (Portal). Lieferanten-Originale (item spec/coa/analyse)
+// sind hier IMMER ausgeschlossen – egal wie kunde_sichtbar steht.
 function dokumente_fuer_kunde(string $objekt_typ, int $objekt_id): array {
     return all("SELECT id, typ, titel, datei_orig FROM dokument
-                WHERE objekt_typ=? AND objekt_id=? AND kunde_sichtbar=1 ORDER BY typ, id DESC", [$objekt_typ, $objekt_id]);
+                WHERE objekt_typ=? AND objekt_id=? AND kunde_sichtbar=1
+                  AND NOT (objekt_typ='item' AND typ IN ('spec','coa','analyse'))
+                ORDER BY typ, id DESC", [$objekt_typ, $objekt_id]);
 }
 
 function dokument_delete(string $objekt_typ, int $objekt_id, int $dok_id): void {
@@ -70,12 +85,17 @@ function dokument_panel(string $objekt_typ, int $objekt_id, array $lieferanten):
             <td><a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument')) ?></a><?php if ($d['titel'] && $d['datei_orig']): ?><div class="muted" style="font-size:12px"><?= h($d['datei_orig']) ?></div><?php endif; ?></td>
             <td><?= $d['lieferant_firma'] ? h($d['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
             <td>
+              <?php if (dokument_ist_lieferant_original($objekt_typ, (string)$d['typ'])): ?>
+                <?= bx_badge('intern · nie an Kunde','warn') ?>
+                <div class="muted" style="font-size:11px">Kunde bekommt das bulkify-Dokument</div>
+              <?php else: ?>
               <form method="post" style="margin:0">
                 <input type="hidden" name="aktion" value="dok_frei"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>">
                 <button class="btn btn-ghost btn-sm" type="submit" title="Sichtbarkeit im Kundenportal umschalten">
                   <?= (int)($d['kunde_sichtbar'] ?? 0) === 1 ? bx_badge('freigegeben','ok') : bx_badge('intern') ?>
                 </button>
               </form>
+              <?php endif; ?>
             </td>
             <td class="muted"><?= h(fmt_zeit($d['angelegt'], 'd.m.Y')) ?></td>
             <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Dokument löschen?');"><input type="hidden" name="aktion" value="dok_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Löschen</button></form></td>
