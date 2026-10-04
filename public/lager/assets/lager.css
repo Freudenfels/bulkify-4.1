@@ -11,6 +11,9 @@
 
 /* Rueckmeldung neben einem Leucht-Knopf. */
 .lg-meldung{font-size:var(--fs-sm); color:var(--muted); margin-left:8px}
+
+/* Blinker-Knopf, der gerade AN ist (lager.js setzt .lg-an): hellgrün = blinkt. Nochmal = aus. */
+.btn.lg-an{background:#C0F24E !important; border-color:#1D9E75 !important; color:#10210f !important}
 .lg-meldung.ok{color:var(--gruen)}
 .lg-meldung.fehler{color:var(--err)}
 

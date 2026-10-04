@@ -31,6 +31,10 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
   .fnd-item:hover{border-color:var(--gruen);text-decoration:none}
   .fnd-item .n{display:block;font-size:var(--fs-lg);font-weight:600}
   .fnd-item .s{display:block;color:var(--muted);margin-top:4px}
+  /* Aktiv = blinkt gerade: hellgrün. Nochmal antippen -> wieder dunkel. */
+  .fnd-item.lg-an{background:#C0F24E;border-color:#1D9E75;color:#10210f;box-shadow:0 0 0 2px #C0F24E inset}
+  .fnd-item.lg-an .n, .fnd-item.lg-an .s{color:#10210f}
+  .fnd-item.lg-an::after{content:"● blinkt – zum Stoppen antippen";display:block;margin-top:6px;font-size:13px;font-weight:600;color:#10210f}
   .fnd-item.kein{opacity:.65;cursor:default}
   .fnd-item .lg-meldung{display:block;margin-top:6px;font-weight:600}
 </style>
@@ -57,28 +61,21 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
            + '<span class="s">'+esc(sub)+(sub?' · ':'')+'kein Blinker</span></div>';
     }).join('');
   }
-  // Sieht die Eingabe nach einem gescannten QR-Code vom Etikett aus? (URL mit id=…)
+  // Sieht die Eingabe nach einem gescannten QR-Code vom Etikett aus? (URL mit id=…) -> sofort suchen.
   function istScan(s){ return /[?&]id=\d+/.test(s) || /^https?:\/\//i.test(s); }
-  function suchen(auto){
+  function suchen(){
     var s=q.value.trim();
     if(s===''){ liste.innerHTML=''; status.textContent=''; return; }
     status.textContent='Suche …';
     fetch('?p=suche&q='+encodeURIComponent(s),{credentials:'same-origin'})
       .then(function(r){return r.json();})
-      .then(function(j){
-        var tr=j.treffer||[]; render(tr);
-        // Nach einem Scan (oder Enter) mit genau EINEM Treffer: Blinker sofort auslösen.
-        if(auto && tr.length===1 && tr[0].leiste_id){
-          var el=liste.querySelector('[data-klingeln]');
-          if(el){ status.textContent='Blinker ausgelöst – '+(tr[0].name||''); el.click(); q.value=''; }
-        }
-      })
+      .then(function(j){ render(j.treffer||[]); })   // nur anzeigen – Klingeln erst beim Antippen
       .catch(function(){ status.textContent='Suche fehlgeschlagen.'; });
   }
-  q.addEventListener('input',function(){ clearTimeout(timer); var auto=istScan(q.value.trim()); timer=setTimeout(function(){ suchen(auto); }, auto?0:250); });
-  // Handscanner schließt mit Enter ab -> sofort suchen und (bei 1 Treffer) klingeln.
-  q.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(timer); suchen(true); } });
-  if(q.value.trim()) suchen(istScan(q.value.trim()));
+  q.addEventListener('input',function(){ clearTimeout(timer); var sofort=istScan(q.value.trim()); timer=setTimeout(suchen, sofort?0:250); });
+  // Handscanner schließt mit Enter ab -> sofort suchen (aber NICHT automatisch klingeln).
+  q.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(timer); suchen(); } });
+  if(q.value.trim()) suchen();
 
   // --- Sprache (Web Speech API, Chrome/Android) ---
   // Viele Handscanner/PDAs haben ein Mikrofon, aber KEINE Sprache-zu-Text-Maschine im System
