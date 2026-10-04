@@ -37,7 +37,7 @@ flash_zeigen();
 
 <div class="lgd-akt">
   <a class="btn btn-primary lgd-einbuchen" href="?p=we">Einbuchen</a>
-  <a class="btn btn-ghost" href="?p=finden">Finden</a>
+  <a class="btn btn-ghost" href="?p=finden">Suche</a>
   <a class="btn btn-ghost" href="?p=ausgang">Warenausgang</a>
   <a class="btn btn-ghost" href="?p=erwartet">Erwartete Lieferungen</a>
 </div>

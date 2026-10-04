@@ -5,8 +5,8 @@ $kunde_id = (int)($_GET['kunde'] ?? 0);
 $kunden = erp_bestand_fremd_kunden();
 $treffer = ($q !== '' || $kunde_id > 0) ? erp_chargen_suche_fremd($q, $kunde_id, 60) : [];
 
-kopf('Lager 2 – Finden', 'l2_finden');
-seitenkopf('Lager 2 (Fremdlager) – Finden', 'Kundenware suchen – der Blinker an der Palette blinkt.');
+kopf('Lager 2 – Suche', 'l2_finden');
+seitenkopf('Lager 2 (Fremdlager) – Suche', 'Kundenware suchen – der Blinker an der Palette blinkt.');
 flash_zeigen();
 ?>
 <form method="get" class="bx-listbar">

@@ -4,15 +4,15 @@
 // Suche läuft über ?p=suche (JSON), Klingeln über ?p=klingeln (assets/lager.js, data-klingeln).
 $q = trim((string)($_GET['q'] ?? ''));
 
-kopf('Finden', 'finden');
-seitenkopf('Finden', 'Tippen oder sprechen – Treffer antippen, der Blinker blinkt.');
+kopf('Suche', 'finden');
+seitenkopf('Suche', 'Tippen, sprechen oder Blinker-Code scannen – Treffer antippen, der Blinker blinkt.');
 flash_zeigen();
 
 if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vorhanden.', 'warn'); fuss(); return; }
 ?>
 <div class="bx-panel fnd-suche">
   <input type="search" id="fndQ" class="fnd-input lg-code" autocomplete="off" autofocus
-         placeholder="Was suchst du? (Rohstoff, Charge …)" value="<?= h($q) ?>">
+         placeholder="Suchen: Rohstoff, Charge, Blinker-Code …" value="<?= h($q) ?>">
   <button type="button" id="fndMic" class="btn btn-ghost fnd-mic" title="Per Sprache suchen" aria-label="Per Sprache suchen">
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><line x1="12" y1="18" x2="12" y2="22"></line></svg>
     <span>Sprechen</span>
