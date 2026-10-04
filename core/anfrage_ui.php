@@ -64,6 +64,17 @@ function anfrage_produkt_anfragen(int $rezeptur_id): array {
                 WHERE la.rezeptur_id=? AND la.art='fertigprodukt'
                 ORDER BY la.angelegt DESC", [$rezeptur_id]);
 }
+// Eine Preisanfrage zurückziehen – nur solange noch KEIN Preis abgegeben wurde (status 'offen', kein
+// beantwortetes/angenommenes Angebot). Löscht Anfrage + ein evtl. leeres Angebot. Rückgabe true bei Erfolg.
+function lieferant_anfrage_zuruckziehen(int $anfrage_id): bool {
+    $a = one("SELECT id, status FROM lieferant_anfrage WHERE id=?", [$anfrage_id]);
+    if (!$a || ($a['status'] ?? '') !== 'offen') return false;
+    $ang = one("SELECT id, status, preis FROM lieferant_angebot WHERE anfrage_id=?", [$anfrage_id]);
+    if ($ang && (($ang['status'] ?? '') === 'angenommen' || ($ang['preis'] !== null && (float)$ang['preis'] > 0))) return false;
+    if ($ang) { q("DELETE FROM lieferant_angebot_staffel WHERE angebot_id=?", [(int)$ang['id']]); q("DELETE FROM lieferant_angebot WHERE id=?", [(int)$ang['id']]); }
+    q("DELETE FROM lieferant_anfrage WHERE id=?", [$anfrage_id]);
+    return true;
+}
 
 // Knopf „Fertigprodukt anfragen" – öffnet dasselbe Popup, aber im Rezeptur-Modus.
 function anfrage_produkt_button(int $rezeptur_id, string $name, string $form = '', string $label = 'Fertigprodukt anfragen', string $klasse = 'btn btn-ghost btn-sm'): string {

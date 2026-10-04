@@ -38,6 +38,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)", [$nid, $z['item_id'], $z['bezeichnung'], $z['menge_mg'], $z['sort']]);
         header('Location: ?p=rezeptur_detail&id=' . $nid . '&gespeichert=1'); exit;
     }
+    // Lieferanten-Preisanfrage (Fremdfertigung) zurückziehen – nur solange kein Preis abgegeben wurde.
+    if (!$neu && $aktion === 'anfrage_zurueck') {
+        $aid = (int)($_POST['anfrage_id'] ?? 0);
+        $gehoert = $aid && (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE id=? AND rezeptur_id=? AND art='fertigprodukt'", [$aid, (int)$id]) > 0;
+        $ok = $gehoert && lieferant_anfrage_zuruckziehen($aid);
+        header('Location: ?p=rezeptur_detail&id=' . $id . ($ok ? '&anfzurueck=1' : '&anffehler=1')); exit;
+    }
     // Rezeptur löschen (nur Admin) – geht in jedem Status, solange sie nicht verwendet wird.
     if (!$neu && $aktion === 'loeschen') {
         if (!has_role('admin')) { header('Location: ?p=rezeptur_detail&id=' . $id); exit; }
@@ -310,9 +317,11 @@ if (!empty($_SESSION['rez_del_fehler'])) { echo '<div class="bx-panel" style="bo
   $prodAnfragen = $neu ? [] : anfrage_produkt_anfragen((int)$id);
   if ($prodAnfragen): $eurRz = fn($x) => rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',') . ' €'; ?>
 <div class="bx-panel">
-  <h2 style="margin-top:0">Fremdfertigung angefragt bei <?= bx_hint('Bei welchen Lohnherstellern diese Rezeptur als Fertigprodukt angefragt wurde – mit Status und (falls vorhanden) dem angebotenen Preis. So siehst du sofort, ob schon angefragt wurde.') ?></h2>
+  <h2 style="margin-top:0">Fremdfertigung angefragt bei <?= bx_hint('Bei welchen Lohnherstellern diese Rezeptur als Fertigprodukt angefragt wurde – mit Status und (falls vorhanden) dem angebotenen Preis. Solange noch kein Preis abgegeben wurde, kannst du die Anfrage hier zurückziehen.') ?></h2>
+  <?php if (isset($_GET['anfzurueck'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Anfrage zurückgezogen.</div><?php endif; ?>
+  <?php if (isset($_GET['anffehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:8px 12px;margin-bottom:10px">Anfrage konnte nicht zurückgezogen werden (evtl. schon beantwortet).</div><?php endif; ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Lieferant</th><th>Status</th><th class="bx-num">Angebot</th><th>Angefragt</th></tr></thead>
+    <thead><tr><th>Lieferant</th><th>Status</th><th class="bx-num">Angebot</th><th>Angefragt</th><th></th></tr></thead>
     <tbody>
       <?php foreach ($prodAnfragen as $pa): ?>
         <tr>
@@ -320,6 +329,14 @@ if (!empty($_SESSION['rez_del_fehler'])) { echo '<div class="bx-panel" style="bo
           <td><?= $pa['status'] === 'beantwortet' ? bx_badge('beantwortet', 'ok') : bx_badge('offen', 'warn') ?></td>
           <td class="bx-num"><?= ($pa['ang_preis'] !== null && $pa['ang_preis'] !== '') ? $eurRz($pa['ang_preis']) . ($pa['ang_einheit'] ? ' / ' . h($pa['ang_einheit']) : '') : '<span class="muted">–</span>' ?></td>
           <td class="muted" style="font-size:12px"><?= $pa['angelegt'] ? h(fmt_zeit($pa['angelegt'], 'd.m.Y')) : '–' ?></td>
+          <td style="text-align:right">
+            <?php if ($pa['status'] === 'offen'): ?>
+              <form method="post" style="margin:0" onsubmit="return confirm('Anfrage bei <?= h(addslashes($pa['firma'])) ?> zurückziehen? Sie verschwindet dann auch aus dem Lieferantenportal.');">
+                <input type="hidden" name="aktion" value="anfrage_zurueck"><input type="hidden" name="anfrage_id" value="<?= (int)$pa['id'] ?>">
+                <button class="btn btn-ghost btn-sm" type="submit">Zurückziehen</button>
+              </form>
+            <?php else: ?><span class="muted" style="font-size:12px">–</span><?php endif; ?>
+          </td>
         </tr>
       <?php endforeach; ?>
     </tbody>
