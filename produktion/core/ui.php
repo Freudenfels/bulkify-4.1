@@ -65,10 +65,24 @@ function station_anleitung_text(string $station): string {
         'Etikettieren'             => 'Alle Gebinde korrekt etikettieren (Charge, MHD, Kennzeichnung).',
         'Beipackzettel beilegen'   => 'Beipackzettel/Booklet beilegen.',
         'Umkarton'                 => 'Produkt in den Karton/die Umverpackung legen.',
+        'Zwischenkontrolle'        => 'Zwischenkontrolle durchführen und das Kontrollgewicht erfassen.',
+        'Rückstellmuster ziehen'   => 'Rückstellmuster und Labormuster ziehen und die Mengen erfassen.',
         'Qualitätsprüfung'         => 'Aussehen, Füllmenge, Dichtigkeit und Kennzeichnung prüfen.',
         'Produktions-Freigabe'     => 'Produktion kontrollieren und freigeben.',
         'Versand-Freigabe'         => 'Auftrag zum Versand freigeben.',
         default                    => '',
+    };
+}
+
+// Welche Werte werden an einer Station erfasst? (Eigenproduktion-Datenerfassung.)
+// Rückgabe: Liste [['feld','label','einheit'], …].
+function pr_station_felder(string $station): array {
+    return match ($station) {
+        'Mischen'                => [['feld'=>'mischmenge', 'label'=>'Gemischte Menge', 'einheit'=>'kg']],
+        'Zwischenkontrolle'      => [['feld'=>'kontrolle_gewicht', 'label'=>'Kontrollgewicht', 'einheit'=>'g']],
+        'Rückstellmuster ziehen' => [['feld'=>'rueckstellmuster', 'label'=>'Rückstellmuster', 'einheit'=>''],
+                                      ['feld'=>'labormuster', 'label'=>'Labormuster', 'einheit'=>'']],
+        default                  => [],
     };
 }
 

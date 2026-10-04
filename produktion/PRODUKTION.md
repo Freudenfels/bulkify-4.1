@@ -48,6 +48,14 @@ hier einbinden (zieht die zweite `core/db.php` + das ganze Dashboard herein).
   (FEFO-Entnahme/Mangel-Guard, letzter Schritt bucht Fertigware ein, protokolliert wer/wann).
   Admin kann Schritte direkt abhaken/zurücksetzen (reine Statuskorrektur, ohne Lagerbewegung).
 
+## Eigenproduktion – Werks-Ablauf (Zielbild)
+Schrittfolge bei Eigenproduktion (über den Produktionsweg erzeugt, `erp_weg_stationen`):
+Rohstoffe bereitstellen → Mischen → ‹Herstellung› → Zwischenkontrolle → [Verpacken/Etikettieren/Beipack/Umkarton] → Rückstellmuster ziehen → Qualitätsprüfung → Produktions-Freigabe → Versand-Freigabe.
+
+**Datenerfassung je Schritt** (Phase 1, fertig): im Produktionsmodus werden beim Abschließen Werte erfasst und in `pr_pa_daten` gespeichert (`pr_station_felder()`): Mischen = gemischte Menge (kg), Zwischenkontrolle = Kontrollgewicht (g), Rückstellmuster ziehen = Rückstell-/Labormuster-Mengen. Angezeigt in der Ablaufliste.
+
+**Noch offen (Phasen):** Phase 2 = Auto-Buchungen (Fertigstellen → Lager 1, Abfüllen → Abbuchung) + Lager 1 → Lager 2/Versand-Routing (berührt Lager/ds_api). Phase 3 = Barcode-/Etikettendruck für gemischte Eimer (mit Mischmenge). Hinweis: Die neue Eigen-Schrittfolge entsteht beim Speichern des Produktionswegs; für Neuanlagen muss der Dashboard-Stationen-Vertrag (Zwischenkontrolle, Rückstellmuster ziehen) nachgezogen werden.
+
 ## Arbeiten im eigenen Chat
 Ein Chat, der **nur** im Ordner `produktion/` (+ `public/produktion/`) arbeitet, kollidiert praktisch
 nie mit anderen Chats. Geteilte Risiko-Dateien bleiben nur `core/schema.php` (DB-Schema) und

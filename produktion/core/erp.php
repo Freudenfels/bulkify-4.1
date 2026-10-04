@@ -119,11 +119,15 @@ function erp_weg_lesen(int $pa_id): array {
 function erp_weg_stationen(int $pa_id, array $f): array {
     $basis = erp_weg_basis($pa_id);
     if ($basis === 'bulk') return ['Rohstoffe bereitstellen', 'Mischen', erp_weg_herstellung($pa_id), 'Qualitätsprüfung', 'Einlagern (Bulk)'];
-    $steps = $basis === 'zukauf' ? ['Fertigware bereitstellen'] : ['Rohstoffe bereitstellen', 'Mischen', erp_weg_herstellung($pa_id)];
+    // Eigenproduktion mit Werks-Ablauf (Mischen, Herstellung, Zwischenkontrolle, …, Muster ziehen).
+    $steps = $basis === 'zukauf'
+        ? ['Fertigware bereitstellen']
+        : ['Rohstoffe bereitstellen', 'Mischen', erp_weg_herstellung($pa_id), 'Zwischenkontrolle'];
     if (!empty($f['abfuellen']))    $steps[] = 'Verpacken';
     if (!empty($f['etikettieren'])) $steps[] = 'Etikettieren';
     if (!empty($f['beipack']))      $steps[] = 'Beipackzettel beilegen';
     if (!empty($f['karton']))       $steps[] = 'Umkarton';
+    if ($basis !== 'zukauf')        $steps[] = 'Rückstellmuster ziehen';
     return array_merge($steps, ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']);
 }
 // Weg anwenden: Schritte neu erzeugen (nur solange KEIN Schritt erledigt ist). Rückgabe ['ok','msg'].

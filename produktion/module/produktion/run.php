@@ -12,6 +12,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $schritt_id = (int)($_POST['schritt_id'] ?? 0);
     if ($aktion === 'erledigen') {
         $r = erp_schritt_abschliessen($schritt_id, $akteur);
+        if ($r['ok']) {
+            foreach (pr_station_felder((string)$r['station']) as $feld) {
+                $v = trim((string)($_POST['daten'][$feld['feld']] ?? ''));
+                if ($v !== '') pr_daten_setzen($id, $feld['feld'], $v, $akteur);
+            }
+        }
         flash($r['ok'] ? ($r['fertig'] ? 'Letzter Schritt erledigt – Produktion fertig, Fertigware eingebucht.' : 'Schritt „' . $r['station'] . '" erledigt.')
                        : ($r['msg'] ?: 'Schritt konnte nicht abgeschlossen werden.'), $r['ok'] ? 'ok' : 'warn');
     } elseif ($aktion === 'teilmenge') {
@@ -45,6 +51,7 @@ $produziert = erp_produktion_gebucht($id);
 $benoetigt  = (int)$pa['menge'];
 $prod_rest  = max(0, $benoetigt - (int)round($produziert));
 $prod_proz  = $benoetigt > 0 ? min(100, (int)round($produziert * 100 / $benoetigt)) : 0;
+$daten      = pr_daten($id);   // erfasste Werte (Mischmenge, Gewichte, Muster)
 $cur = null;
 foreach ($schritte as $s) if ((int)$s['id'] === $erster_offen) { $cur = $s; break; }
 
@@ -136,6 +143,16 @@ seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt
   <form method="post" style="margin:0" onsubmit="return confirm('Schritt &quot;<?= h((string)$cur['station']) ?>&quot; jetzt abschließen?');">
     <input type="hidden" name="aktion" value="erledigen">
     <input type="hidden" name="schritt_id" value="<?= (int)$cur['id'] ?>">
+    <?php $felder = pr_station_felder((string)$cur['station']); if ($felder): ?>
+    <div class="bx-row" style="gap:12px;flex-wrap:wrap;margin:0 0 14px">
+      <?php foreach ($felder as $feld): ?>
+      <div class="bx-field" style="margin:0;max-width:220px">
+        <label><?= h($feld['label']) ?><?= $feld['einheit'] !== '' ? ' (' . h($feld['einheit']) . ')' : '' ?></label>
+        <input type="text" name="daten[<?= h($feld['feld']) ?>]" value="<?= h((string)($daten[$feld['feld']]['wert'] ?? '')) ?>">
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
     <button type="submit" class="btn btn-primary" style="font-size:16px;padding:12px 28px"><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
   </form>
   <?php endif; ?>
@@ -154,7 +171,11 @@ seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt
           $dran = (int)$s['id'] === $erster_offen; ?>
       <tr<?= $dran ? ' style="background:var(--panel-2)"' : '' ?>>
         <td class="bx-num"><?= (int)$i + 1 ?></td>
-        <td><?= h((string)$s['station']) ?></td>
+        <td><?= h((string)$s['station']) ?>
+          <?php foreach (pr_station_felder((string)$s['station']) as $feld): if (!empty($daten[$feld['feld']]['wert'])): ?>
+            <br><span class="muted" style="font-size:12px"><?= h($feld['label']) ?>: <?= h((string)$daten[$feld['feld']]['wert']) ?><?= $feld['einheit'] !== '' ? ' ' . h($feld['einheit']) : '' ?></span>
+          <?php endif; endforeach; ?>
+        </td>
         <td><?= $done ? '<span class="badge badge-ok">erledigt</span>' : ($dran ? '<span class="badge badge-info">als Nächstes</span>' : '<span class="badge badge-warn">offen</span>') ?></td>
         <td class="muted"><?= h((string)($s['erledigt_von'] ?? '')) ?></td>
         <td class="muted"><?= h(fmt_zeit($s['erledigt_at'] ?? null)) ?></td>
