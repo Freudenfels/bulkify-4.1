@@ -159,6 +159,27 @@ if (!$a):
     </tbody></table></div>
   </div>
 
+  <?php // Rezeptur zeigen, wenn es um die Fertigung eines Produkts geht (Fremdfertigung) – der
+        // Lohnhersteller muss wissen, was er herstellen soll. Nur bei Anfragen mit rezeptur_id.
+    $rezId = (int)($a['rezeptur_id'] ?? 0);
+    $rezZutaten = $rezId ? all("SELECT COALESCE(NULLIF(z.bezeichnung,''), i.name) AS bezeichnung, z.menge_mg
+                                FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
+                                WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rezId]) : [];
+    if ($rezZutaten): $sumMg = 0.0; foreach ($rezZutaten as $z) $sumMg += (float)$z['menge_mg']; ?>
+  <div class="bx-panel">
+    <h2 style="margin-top:0"><?= h(lp_t('rezeptur')) ?></h2>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th><?= h(lp_t('wirkstoff')) ?></th><th class="bx-num"><?= h(lp_t('mg_je_einheit')) ?></th></tr></thead>
+      <tbody>
+        <?php foreach ($rezZutaten as $z): ?>
+          <tr><td><?= h((string)$z['bezeichnung']) ?></td><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? h(lp_num($z['menge_mg'], 3)) . ' mg' : '–' ?></td></tr>
+        <?php endforeach; ?>
+        <tr><td class="muted"><?= h(lp_t('fuellgewicht')) ?></td><td class="bx-num"><?= h(lp_num($sumMg, 3)) ?> mg</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; ?>
+
   <div class="bx-panel">
     <h2 style="margin-top:0"><?= h(lp_t('angebot_abgeben')) ?></h2>
     <?php if ($ang): ?><div class="muted" style="margin-bottom:10px"><?= h(lp_t('abgegeben_am')) ?> <?= h(date('d.m.Y', strtotime((string)$ang['angelegt']))) ?><?= $ang['status'] === 'angenommen' ? ' · ' . h(lp_t('angenommen')) : '' ?></div><?php endif; ?>

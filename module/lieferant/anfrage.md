@@ -34,3 +34,10 @@ Die Anfrage nennt die von uns gewünschte Lieferbedingung (Incoterm + Versandart
 
 ## Angenommenes Angebot ist gesperrt
 Hat das Team ein Angebot übernommen (`lieferant_angebot.status='angenommen'`), sind die Preise bereits als EK-Staffeln kopiert. Der Lieferant kann es dann **nicht mehr überschreiben**: das Formular weicht einer schreibgeschützten Übersicht (Preis, Staffeln, MOQ, Lieferzeit, Lieferbedingung) mit Hinweis (`lp_t('angebot_gesperrt')`); der POST-Weg lehnt ein erneutes Speichern zusätzlich ab. So laufen Angebot und übernommener EK-Preis nicht auseinander.
+
+## Rezeptur bei Fremdfertigung
+Geht es um die **Fertigung eines Produkts** (Anfrage mit `rezeptur_id`, art `fertigprodukt`), zeigt die
+Detailseite dem Lieferanten die **Rezeptur** (Panel „Rezeptur") – Inhaltsstoffe aus `rezeptur_zutat`
+(`bezeichnung`, sonst Item-Name) mit **mg je Einheit** plus Füllgewicht. Ohne das wüsste der
+Lohnhersteller nicht, was er herstellen soll. Bei reinen **Rohstoff**-Anfragen (kein `rezeptur_id`)
+erscheint kein Rezeptur-Panel. Labels: `lp_t('rezeptur'|'wirkstoff'|'mg_je_einheit'|'fuellgewicht')`.
