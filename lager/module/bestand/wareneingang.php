@@ -165,7 +165,8 @@ if (isset($_GET['gebucht'])) foreach (explode(',', (string)$_GET['gebucht']) as 
 
 kopf('Einbuchen', 'we');
 seitenkopf('Einbuchen', 'Wähle, wie du einbuchen möchtest.',
-    '<a class="btn btn-ghost lg-nurdesktop" href="?p=bestand">Zum Bestand</a>');
+    ($gebucht ? '<a class="btn btn-primary" href="?p=we">Weiteren Artikel einbuchen</a> ' : '')
+    . '<a class="btn btn-ghost lg-nurdesktop" href="?p=bestand">Zum Bestand</a>');
 flash_zeigen();
 
 if ($gebucht):
