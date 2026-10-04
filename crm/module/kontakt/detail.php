@@ -3,6 +3,7 @@
 require_once BX_ROOT . '/core/kontakt.php';
 require_once BX_ROOT . '/core/antwort_ki.php';
 require_once BX_ROOT . '/core/fragenkatalog_ki.php';
+require_once BX_ROOT . '/core/lead_ki.php';
 require_once BX_ROOT . '/core/markdown.php';
 
 $id = (int)($_GET['id'] ?? 0);
@@ -34,7 +35,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($tun === 'fragenkatalog_weg') {
         fragenkatalog_loeschen('kontakt', $id);
         header('Location: ?p=kontakt&id=' . $id); exit;
-    }    if ($tun === 'antwort') {
+    }
+    if ($tun === 'ki_auswerten') {
+        $r = lead_ki_auswerten($id, crm_uid());
+        header('Location: ?p=kontakt&id=' . $id . ($r['ok'] ? '&ok=ausgewertet' : '&ok=kifehler')); exit;
+    }
+    if ($tun === 'antwort') {
         // Entwurf erzeugen und im Formular stehen lassen - verschickt wird nichts.
         $_SESSION['antwort'] = antwort_ki_entwurf(
             trim(((string)($k['firma'] ?? '') !== '' ? $k['firma'] . ' – ' : '') . $k['name']),
@@ -70,8 +76,10 @@ seitenkopf(trim(((string)($k['firma'] ?? '') !== '' ? $k['firma'] . ' – ' : ''
 $m = (string)($_GET['ok'] ?? '');
 if ($m === 'kunde')       hinweis('Als Kunde im Dashboard angelegt.');
 elseif ($m === 'fehler')  hinweis('Der Kunde konnte nicht angelegt werden.', 'warn');
+elseif ($m === 'kifehler') hinweis('Die KI-Auswertung hat nicht geklappt. Bitte später erneut versuchen.', 'warn');
 elseif ($m !== '')        hinweis(['gespeichert' => 'Gespeichert.', 'notiert' => 'Notiert.',
-                                   'erinnert' => 'Wiedervorlage gesetzt.', '1' => 'Kontakt angelegt.'][$m] ?? 'Erledigt.');
+                                   'erinnert' => 'Wiedervorlage gesetzt.', 'ausgewertet' => 'Anfrage ausgewertet – siehe Verlauf.',
+                                   '1' => 'Kontakt angelegt.'][$m] ?? 'Erledigt.');
 ?>
 
 <?php if ($wv): ?>
@@ -116,6 +124,28 @@ elseif ($m !== '')        hinweis(['gespeichert' => 'Gespeichert.', 'notiert' =>
     <button class="btn btn-ghost" type="submit">Setzen</button>
   </form>
 </div></div>
+
+<?php // --- KI-Auswertung der Anfrage -----------------------------------------------------------
+// Website-Leads werden beim Eingang automatisch ausgewertet. Hier kann man es anstossen bzw.
+// wiederholen - z. B. nach einer neuen Notiz oder fuer Kontakte, die ohne KI hereinkamen. ?>
+<?php if (ki_bereit() && trim((string)($k['notiz'] ?? '')) !== ''): ?>
+<div class="karte"><div class="rumpf">
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:12px">
+    <h2 style="margin:0">KI-Auswertung der Anfrage</h2>
+    <?php if (!empty($k['ki_ausgewertet'])): ?>
+      <span class="muted" style="font-size:var(--fs-sm)">zuletzt <?= h(fmt_zeit((string)$k['ki_ausgewertet'], 'd.m.Y H:i')) ?></span>
+    <?php endif; ?>
+  </div>
+  <p class="muted" style="margin:8px 0 12px">Liest die Anfrage aus der Notiz: kurze Zusammenfassung,
+    Produktform, Menge, grober Wert und der nächste Schritt. Setzt den geschätzten Wert (falls leer)
+    und eine Wiedervorlage. Das Ergebnis steht danach im Verlauf.</p>
+  <form method="post" style="margin:0">
+    <input type="hidden" name="tun" value="ki_auswerten">
+    <button class="btn <?= !empty($k['ki_ausgewertet']) ? 'btn-ghost btn-sm' : 'btn-primary' ?>" type="submit"
+            data-busy="Die KI liest die Anfrage …"><?= !empty($k['ki_ausgewertet']) ? 'Neu auswerten' : 'Anfrage auswerten' ?></button>
+  </form>
+</div></div>
+<?php endif; ?>
 
 <?php // --- Fragenkatalog fuers Erstgespraech (aus dem v3-CRM uebernommen) ---
 $fk = fragenkatalog('kontakt', $id); ?>

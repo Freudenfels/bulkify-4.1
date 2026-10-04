@@ -8,7 +8,7 @@ Läuft wie im Dashboard bei jedem Aufruf und ist idempotent (`CREATE TABLE IF NO
 ## Die Tabellen
 | Tabelle | Wofür |
 |---|---|
-| `crm_kontakt` | Menschen und Firmen ohne Kundenkonto |
+| `crm_kontakt` | Menschen und Firmen ohne Kundenkonto (Spalte `ki_ausgewertet`: wann die KI die Anfrage ausgewertet hat, siehe `lead_ki.md`) |
 | `crm_verlauf` | jede Berührung eine Zeile |
 | `crm_wiedervorlage` | „erinnere mich am …“ – hängt an einem Kontakt oder an einem Dashboard-Vorgang |
 | `crm_termin` | Rückruf, Messe, Besuch – mit Uhrzeit |

@@ -117,6 +117,10 @@ function crm_schema(): void {
         schluessel VARCHAR(60) PRIMARY KEY,
         wert       TEXT NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // --- Nachtraeglich ergaenzte Spalten (additiv, idempotent). --------------------------------
+    // Wann die KI die Anfrage dieses Kontakts ausgewertet hat (core/lead_ki.php). Leer = noch nie.
+    crm_spalte('crm_kontakt', 'ki_ausgewertet', 'DATETIME NULL');
 }
 
 function crm_meta_lesen(string $schluessel, string $standard = ''): string {

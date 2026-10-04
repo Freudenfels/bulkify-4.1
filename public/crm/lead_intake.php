@@ -8,10 +8,22 @@ require_once __DIR__ . '/../../crm/core/db.php';
 require_once __DIR__ . '/../../crm/core/schema.php';
 require_once __DIR__ . '/../../crm/core/ui.php';        // crm_quellen()
 require_once __DIR__ . '/../../crm/core/kontakt.php';   // kontakt_anlegen(), kontakt_verlauf()
+require_once __DIR__ . '/../../crm/core/lead_ki.php';   // lead_ki_auswerten()
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 function li_out(int $code, array $a): void { http_response_code($code); echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; }
+
+// Erfolg quittieren UND danach die Anfrage von der KI auswerten lassen. Die Website bekommt ihre
+// Antwort sofort (ok:true); die KI-Auswertung laeuft erst, nachdem die Verbindung geschlossen ist -
+// so wartet der Absender nie auf die KI, und ein KI-Fehler kann den Eingang nicht stoeren.
+function li_ok_ki(array $a, int $kontakt_id, string $text): void {
+    http_response_code(200);
+    echo json_encode($a, JSON_UNESCAPED_UNICODE);
+    ki_antwort_abschliessen();            // Antwort rausschicken, dann im Hintergrund weiterarbeiten
+    if (ki_bereit()) { try { lead_ki_auswerten($kontakt_id, 0, $text); } catch (Throwable $e) {} }
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') li_out(405, ['ok' => false, 'error' => 'method', 'message' => 'POST erwartet.']);
 
@@ -72,13 +84,13 @@ try {
     if ($dup) {
         $kid = (int)$dup['id'];
         kontakt_verlauf($kid, 'notiz', "Neue Anfrage über die Website:\n" . $text, 0);
-        li_out(200, ['ok' => true, 'kontakt_id' => $kid, 'duplicate' => true]);
+        li_ok_ki(['ok' => true, 'kontakt_id' => $kid, 'duplicate' => true], $kid, $text);
     }
     $kid = kontakt_anlegen([
         'name' => $name, 'firma' => $firma, 'email' => $email, 'telefon' => $telefon,
         'whatsapp' => $whatsapp, 'quelle' => 'website', 'notiz' => $text,
     ], 0);
-    li_out(200, ['ok' => true, 'kontakt_id' => $kid, 'duplicate' => false]);
+    li_ok_ki(['ok' => true, 'kontakt_id' => $kid, 'duplicate' => false], $kid, $text);
 } catch (Throwable $e) {
     // Nie den Absender stoeren (die Website-Mail ist fuehrend). Fehler still quittieren.
     li_out(200, ['ok' => false, 'error' => 'intern', 'message' => 'Nicht gespeichert.']);

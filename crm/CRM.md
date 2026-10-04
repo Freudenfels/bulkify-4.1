@@ -71,6 +71,13 @@ ziel, produktform, menge, wirkstoffe, rezeptur, nachricht`). Erreichbar unter `<
 Die Website (eigenes Repo `bulkifyv2`, siehe dortige `WEBSITE.md`) wird ihre Formulare serverseitig
 hierher umbiegen – damit landen Anfragen direkt im CRM statt per Mail im alten v3-Dashboard.
 
+**KI-Auswertung der Anfrage (automatisch):** Jede eingehende Anfrage wird nach dem Quittieren im
+Hintergrund von der KI ausgewertet (`crm/core/lead_ki.php`, Prompt pflegbar in
+`crm/prompts/lead_auswertung.md`): kurze Zusammenfassung, Produktform, Menge, grober Wert,
+Dringlichkeit und nächster Schritt → als Verlaufseintrag am Kontakt, plus geschätzter Wert (falls
+leer) und eine Wiedervorlage, damit die Anfrage in „Wer wartet auf mich" auftaucht. Auf der
+Kontaktseite manuell wiederhol-/anstoßbar. Ersetzt das manuelle Copy-Paste des v3-`crm_anfrage.php`.
+
 ## Ausbauziel (Backend-Chat)
 Dieser CRM-/Backend-Chat soll perspektivisch die verstreuten **KI-/Tool-Backends** der Website/v3
 (z. B. Etikett-Check, PIB-/Analyse-Generator, Rechner) in **ein** v4-Backend ziehen – ein gepflegter

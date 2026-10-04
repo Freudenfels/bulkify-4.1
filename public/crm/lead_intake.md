@@ -20,6 +20,12 @@ an den bestehenden Kontakt statt einen zweiten anzulegen. Mehrfaches Absenden er
 
 **Antwort:** `{"ok":true,"kontakt_id":<id>,"duplicate":true|false}` bzw. `{"ok":false,"error":...}`.
 
+**KI-Auswertung (automatisch):** Nach dem Quittieren wird die Anfrage im Hintergrund von der KI
+ausgewertet (`li_ok_ki()` → `ki_antwort_abschliessen()` → `lead_ki_auswerten()`, `crm/core/lead_ki.php`).
+Der Absender wartet **nie** auf die KI, und ein KI-Fehler kann den Eingang nicht stören (fällt still aus,
+wenn kein Schlüssel hinterlegt ist). Ergebnis: Zusammenfassung als Verlaufseintrag, geschätzter Wert
+(falls leer) und eine Wiedervorlage am Kontakt. Manuell wiederholbar auf der Kontaktseite.
+
 **Verwendet:** `kontakt_anlegen()` / `kontakt_verlauf()` (`crm/core/kontakt.php`), `crm_quellen()`
 (`crm/core/ui.php`), `crm_schema()` + `lead_intake_token()` (`crm/core/schema.php`). Bewusst **ohne**
 `dublette_suchen`/`erp.php`, damit der öffentliche Endpunkt schlank bleibt und die DB nur crm_-Tabellen berührt.
