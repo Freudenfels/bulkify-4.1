@@ -218,10 +218,21 @@ function erp_schritt_material(int $pa_id, string $station): array {
             }
             break;
         case 'Verpacken':
+            // Primärgebinde wird beim Abschließen abgebucht (pflicht). Deckel nur zur Info (kein Entnahme-Zwang).
             $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
             if ($vid)
                 $zeilen[] = ['name'=> (string) scalar("SELECT name FROM item WHERE id=?", [$vid]), 'detail'=>'Verpackung',
                              'menge'=>(float)$pa['menge'], 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($vid), 'item_id'=>$vid];
+            $did = (int) (scalar("SELECT verschluss_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
+            if ($did)
+                $zeilen[] = ['name'=> (string) scalar("SELECT name FROM item WHERE id=?", [$did]), 'detail'=>'Deckel',
+                             'menge'=>(float)$pa['menge'], 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($did), 'item_id'=>$did, 'pflicht'=>false];
+            break;
+        case 'Etikettieren':
+            $eid = (int) (scalar("SELECT etikett_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
+            if ($eid)
+                $zeilen[] = ['name'=> (string) scalar("SELECT name FROM item WHERE id=?", [$eid]), 'detail'=>'Etikett',
+                             'menge'=>(float)$pa['menge'], 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($eid), 'item_id'=>$eid, 'pflicht'=>false];
             break;
     }
     // Je Zeile die zu entnehmende FEFO-Charge bestimmen (für den Pick-to-Light-Blinker im Lager).

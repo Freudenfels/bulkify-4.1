@@ -55,10 +55,11 @@ seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt
     $isGate = str_contains((string)$cur['station'], 'Freigabe');
     $anl = station_anleitung_text((string)$cur['station']);
     $mat = erp_schritt_material($id, (string)$cur['station']);
-    // Fehlt Material für diesen Schritt? Dann ist er (noch) nicht erledigbar.
+    // Fehlt PFLICHT-Material für diesen Schritt? Dann ist er (noch) nicht erledigbar.
+    // Info-Zeilen (pflicht=false, z. B. Deckel/Etikett) sperren nicht – sie werden nicht abgebucht.
     $materialFehlt = false;
     foreach ($mat['zeilen'] as $z)
-        if (isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']) { $materialFehlt = true; break; } ?>
+        if (($z['pflicht'] ?? true) && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']) { $materialFehlt = true; break; } ?>
 <div class="bx-panel" style="margin-bottom:16px;border-color:var(--gruen);background:rgba(29,158,117,.06)">
   <div class="muted">Jetzt dran · Schritt <?= $fertig_cnt + 1 ?> von <?= $total ?></div>
   <h2 style="margin:4px 0 8px;font-size:22px"><?= h((string)$cur['station']) ?></h2>
@@ -71,9 +72,10 @@ seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt
       <thead><tr><th>Material</th><th class="bx-num">Menge</th><th class="bx-num">Bestand</th><th></th></tr></thead>
       <tbody>
         <?php foreach ($mat['zeilen'] as $z):
-            $knapp = isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']; ?>
+            $pflicht = $z['pflicht'] ?? true;
+            $knapp = $pflicht && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']; ?>
         <tr>
-          <td><?= h((string)$z['name']) ?><?php if (!empty($z['detail'])): ?> <span class="muted" style="font-size:12px">· <?= h((string)$z['detail']) ?></span><?php endif; ?></td>
+          <td><?= h((string)$z['name']) ?><?php if (!empty($z['detail'])): ?> <span class="muted" style="font-size:12px">· <?= h((string)$z['detail']) ?><?= $pflicht ? '' : ' (zur Info)' ?></span><?php endif; ?></td>
           <td class="bx-num"><?= menge_txt($z['menge']) ?> <?= h((string)$z['einheit']) ?></td>
           <td class="bx-num"<?= $knapp ? ' style="color:#8f231b"' : '' ?>><?= isset($z['verfuegbar']) ? menge_txt($z['verfuegbar']) . ' ' . h((string)$z['einheit']) : '' ?></td>
           <td class="bx-num">
