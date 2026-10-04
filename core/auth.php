@@ -65,6 +65,7 @@ function route_rollen_map(): array {
         'betriebsmittel'     => ['production', 'fulfillment', 'einkauf', 'labor'],
         'wareneingang'       => ['einkauf', 'labor', 'production'],
         'rohstoffe'          => ['production', 'einkauf', 'labor'],
+        'rohstoff_website'   => ['production', 'einkauf', 'labor'],   // Massen-Freigabe für die öffentliche Rohstoff-DB
         'rohstoff'           => ['production', 'einkauf', 'labor'],
         'rohstoff_split'     => ['production', 'einkauf', 'labor'],
         'dok_massenimport'   => ['production', 'einkauf', 'labor'],   // Specs/CoAs als PDF massenweise hochladen + zuordnen
