@@ -395,15 +395,64 @@ function erp_lieferanten(): array {
     return all("SELECT id, firma FROM lieferanten ORDER BY firma");
 }
 
-// Lieferant per Firmenname finden oder (wenn neu) anlegen -> id. Fuer den Lieferschein-Scan,
-// damit jede Lieferung einem nachverfolgbaren Lieferanten zugeordnet ist. 0 = nicht moeglich.
+// Firmennamen in bedeutende Wort-Tokens zerlegen (Rechtsform-/Fuellwoerter weg), damit
+// "Vita Actives" und "Vita Actives Limited" als gleich erkannt werden.
+function erp_name_tokens(string $s): array {
+    $teile = preg_split('/[^a-z0-9äöüß]+/u', mb_strtolower(trim($s))) ?: [];
+    $stop = ['gmbh','mbh','ag','kg','ohg','ug','gbr','se','ltd','limited','co','company','inc','corp',
+             'bv','srl','sa','sl','sarl','und','and','the'];
+    $out = [];
+    foreach ($teile as $t) if ($t !== '' && mb_strlen($t) >= 2 && !in_array($t, $stop, true)) $out[] = $t;
+    return array_values(array_unique($out));
+}
+
+// Naechste Nummer aus dem gemeinsamen Nummernkreis (gleiche Logik/Tabelle wie das Dashboard).
+function erp_naechste_nummer(string $prefix): string {
+    if (function_exists('naechste_nummer')) return naechste_nummer($prefix);
+    $prefix = strtoupper(trim($prefix));
+    if (!tabelle_da('nummernkreis')) return $prefix . '-' . date('ymdHis');
+    q("INSERT IGNORE INTO nummernkreis (prefix, naechste, stellen) VALUES (?, 2690, 4)", [$prefix]);
+    q("UPDATE nummernkreis SET naechste = naechste + 1 WHERE prefix = ?", [$prefix]);
+    $r = one("SELECT naechste - 1 AS nr, stellen FROM nummernkreis WHERE prefix = ?", [$prefix]);
+    return $r ? $prefix . '-' . str_pad((string)$r['nr'], (int)$r['stellen'], '0', STR_PAD_LEFT) : $prefix . '-' . date('ymdHis');
+}
+
+// Lieferant per Firmenname finden (exakt ODER aehnlich) oder neu anlegen -> id. Stellt sicher,
+// dass der Lieferant eine Lieferantennummer hat (fuers Etikett). 0 = nicht moeglich.
 function erp_lieferant_finden_oder_anlegen(string $name): int {
     $name = trim($name);
     if ($name === '' || !tabelle_da('lieferanten')) return 0;
-    $row = one("SELECT id FROM lieferanten WHERE firma=? LIMIT 1", [$name]);
-    if ($row) return (int)$row['id'];
+
+    // 1) exakt
+    $row = one("SELECT id, lieferantennummer FROM lieferanten WHERE firma=? LIMIT 1", [$name]);
+
+    // 2) aehnlich (Token-Ueberschneidung) – z. B. "Vita Actives Limited" -> "Vita Actives"
+    if (!$row) {
+        $nt = erp_name_tokens($name);
+        if ($nt) {
+            $best = null; $bestScore = 0;
+            foreach (all("SELECT id, firma, lieferantennummer FROM lieferanten") as $lf) {
+                $ft = erp_name_tokens((string)$lf['firma']); if (!$ft) continue;
+                $gem = count(array_intersect($nt, $ft)); $klein = min(count($nt), count($ft));
+                if ($gem >= $klein && $gem > $bestScore) { $bestScore = $gem; $best = $lf; }  // kuerzere ganz enthalten
+            }
+            if ($best) $row = $best;
+        }
+    }
+
+    // 3) gefunden -> Nummer nachtragen, falls keine da
+    if ($row) {
+        $id = (int)$row['id'];
+        if (trim((string)($row['lieferantennummer'] ?? '')) === '') {
+            q("UPDATE lieferanten SET lieferantennummer=? WHERE id=? AND (lieferantennummer IS NULL OR lieferantennummer='')",
+              [erp_naechste_nummer('L'), $id]);
+        }
+        return $id;
+    }
+
+    // 4) neu anlegen – MIT Lieferantennummer
     try {
-        q("INSERT INTO lieferanten (firma) VALUES (?)", [$name]);
+        q("INSERT INTO lieferanten (lieferantennummer, firma) VALUES (?, ?)", [erp_naechste_nummer('L'), $name]);
         $id = (int) insert_id();
         if ($id) return $id;
     } catch (Throwable $e) { /* Unique-Race -> unten nochmal lesen */ }
