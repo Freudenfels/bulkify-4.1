@@ -362,6 +362,11 @@ if ($gebucht):
   .we-pos .f-pakete{flex:0 1 80px}
   .we-pos .f-split{flex:0 1 80px}
   .we-pos .f-split input[type=checkbox]{width:22px;height:22px;margin-top:6px}
+  .we-aehnlich{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .we-aehnlich:empty{display:none}
+  .we-ae-t{font-size:12px;color:var(--muted)}
+  .we-ae-chip{font-size:12px;border:1px solid var(--gold,#c7a24a);background:var(--panel);color:var(--text);border-radius:999px;padding:3px 10px;cursor:pointer}
+  .we-ae-chip:hover{border-color:var(--gruen);background:var(--panel-2)}
   .we-pos .f-blinker{flex:1 1 160px}
   .we-pos .we-del{position:absolute;top:var(--sp-2);right:var(--sp-2)}
   .we-thumb{position:relative;width:84px;height:84px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel-2)}
@@ -403,7 +408,7 @@ if ($gebucht):
     card.innerHTML=
       '<button type="button" class="btn btn-ghost btn-sm we-del" title="Zeile entfernen">×</button>'+
       '<div class="we-row">'+
-        '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"></div>'+
+        '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><div class="we-aehnlich"></div></div>'+
         '<div class="bx-field f-warenart"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
         '<div class="bx-field f-menge"><label>Menge</label><input type="text" name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+
         '<div class="bx-field f-einheit"><label>Einheit</label><input type="text" name="p_einheit[]" value="'+esc(p.einheit||'')+'" placeholder="Stk"></div>'+
@@ -422,6 +427,7 @@ if ($gebucht):
       var m=ITEMS.filter(function(it){return it.n.toLowerCase()===name.value.trim().toLowerCase();})[0];
       if(m){ hid.value=m.id; if(!einh.value)einh.value=m.e||''; var a=m.f==='kapselhuelle'?'kapsel':m.k; if(MATRIX[a]){art2.value=a;} pflicht(card); }
       else { hid.value=0; }
+      zeigeAehnlich(card);
     });
     art2.addEventListener('change',function(){pflicht(card);});
     card.querySelector('.we-del').addEventListener('click',function(){card.remove(); if(!rows.children.length)addRow();});
@@ -430,7 +436,37 @@ if ($gebucht):
     if(cb&&cbh) cb.addEventListener('change',function(){ cbh.value=cb.checked?'1':'0'; });
     pflicht(card);
     blinkerPflicht();
+    zeigeAehnlich(card);
     return card;
+  }
+  // Ähnlichkeits-Check: warnt vor Fast-Dubletten (z. B. "Gummi Arabicum 25 kg" vs "… - 25 kg").
+  // Vergleicht per Wort-Überschneidung gegen vorhandene Artikel; ein Klick übernimmt den bestehenden.
+  function wtoks(s){ return String(s||'').toLowerCase().split(/[^a-zäöüß0-9]+/).filter(function(w){return w.length>=3 && !/^\d+$/.test(w);}); }
+  function aehnlichItems(nm){
+    var nt=wtoks(nm); if(!nt.length) return [];
+    var min = nt.length===1 ? 1 : 2;
+    return ITEMS.map(function(it){ var itt=wtoks(it.n);
+        var sh=nt.filter(function(w){return itt.indexOf(w)!==-1;}).length; return {it:it,s:sh}; })
+      .filter(function(x){ return x.s>=min && x.it.n.toLowerCase()!==nm.trim().toLowerCase(); })
+      .sort(function(a,b){return b.s-a.s;}).slice(0,3).map(function(x){return x.it;});
+  }
+  function zeigeAehnlich(card){
+    var box=card.querySelector('.we-aehnlich'), nm=card.querySelector('.we-name'),
+        hid=card.querySelector('input[name="p_item[]"]'), einh=card.querySelector('input[name="p_einheit[]"]'),
+        art2=card.querySelector('.we-art');
+    if(!box) return;
+    if(hid.value && hid.value!=='0'){ box.innerHTML=''; return; }   // schon ein bestehender Artikel gewählt
+    var tr=aehnlichItems(nm.value);
+    if(!tr.length){ box.innerHTML=''; return; }
+    box.innerHTML='<span class="we-ae-t">Das meintest du?</span> '+tr.map(function(it){
+      return '<button type="button" class="we-ae-chip" data-id="'+it.id+'" data-n="'+esc(it.n)+'" data-e="'+esc(it.e||'')+'" data-k="'+esc(it.f==='kapselhuelle'?'kapsel':it.k)+'">'+esc(it.n)+'</button>';
+    }).join(' ');
+    box.querySelectorAll('.we-ae-chip').forEach(function(b){ b.addEventListener('click',function(){
+      nm.value=b.getAttribute('data-n'); hid.value=b.getAttribute('data-id');
+      if(einh && !einh.value) einh.value=b.getAttribute('data-e')||'';
+      var a=b.getAttribute('data-k'); if(art2 && MATRIX[a]){art2.value=a; pflicht(card);}
+      box.innerHTML='';
+    }); });
   }
   // Kiste gewählt -> Blinker je Position optional (die Kiste blinkt beim Finden).
   function blinkerPflicht(){
