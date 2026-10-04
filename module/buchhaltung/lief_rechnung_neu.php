@@ -41,21 +41,30 @@ if ($vorBestellung) {
     if ($bst) { $vorLieferant = (int)$bst['lieferant_id']; $preNetto = number_format(kr_bestellung_netto($vorBestellung), 2, '.', ''); }
 }
 if ($vorLieferant) {
-    $lf = one("SELECT zahlungsziel_lief, waehrung, land FROM lieferanten WHERE id=?", [$vorLieferant]);
-    if ($lf) { $preZiel = (int)$lf['zahlungsziel_lief']; $preWaehrung = strtoupper((string)($lf['waehrung'] ?: 'EUR')); $preLand = strtoupper((string)($lf['land'] ?: 'DE')); }
+    $lf = one("SELECT * FROM lieferanten WHERE id=?", [$vorLieferant]);
+    if ($lf) {
+        $preZiel = (int)($lf['zahlungsziel_tage'] ?? 0);
+        $preWaehrung = strtoupper((string)($lf['waehrung'] ?? 'EUR')) ?: 'EUR';
+        $preLand = strtoupper((string)($lf['land'] ?? 'DE')) ?: 'DE';
+    }
 }
 // Vorsteuer: Inland EUR -> ust_inland; Ausland/Fremdwährung -> 0 (China-Import hat keine dt. USt auf der Rechnung).
 $ustDefault = ($preWaehrung !== 'EUR' || $preLand !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
-$preKurs = $preWaehrung === 'EUR' ? '' : number_format(kr_kurs_default($preWaehrung), 6, ',', '');
+// Vorschlags-Kurs für die Lieferanten-Währung live ziehen (30-Tage-Ø, gecacht); Stand für den Hinweis.
+$preKurs = ''; $kursStand = ''; $kursQuelle = '';
+if ($preWaehrung !== 'EUR') {
+    $preKurs = number_format(kr_kurs_aktuell($preWaehrung), 6, ',', '');
+    $ci = kr_kurs_cached($preWaehrung); $kursStand = $ci['stand']; $kursQuelle = $ci['quelle'];
+}
 
 $waehrungen = kr_waehrungen();
 $lieferanten = all("SELECT id, firma, waehrung, land FROM lieferanten ORDER BY firma");
 $bestellungen = all("SELECT b.id, b.nummer, l.firma FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id ORDER BY b.id DESC LIMIT 100");
-// JS-Karten: Lieferant -> Währung und Währung -> Standardkurs
+// JS-Karten: Lieferant -> Währung und Währung -> Vorschlagskurs (aus Cache, ohne Netz).
 $mapWaehrung = [];
 foreach ($lieferanten as $l) $mapWaehrung[(int)$l['id']] = strtoupper((string)($l['waehrung'] ?: 'EUR'));
 $mapKurs = [];
-foreach (array_keys($waehrungen) as $cur) $mapKurs[$cur] = $cur === 'EUR' ? 1 : kr_kurs_default($cur);
+foreach (array_keys($waehrungen) as $cur) $mapKurs[$cur] = $cur === 'EUR' ? 1 : round(kr_kurs_cached($cur)['wert'], 6);
 
 render_header('buchhaltung', 'Eingangsrechnung erfassen');
 bx_head('Eingangsrechnung erfassen', 'Rechnung eines Lieferanten als Verbindlichkeit erfassen',
@@ -106,6 +115,7 @@ if ($fehler) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#
     </label>
     <label id="erKursRow" style="<?= $preWaehrung === 'EUR' ? 'display:none' : '' ?>">Kurs (1&nbsp;<span id="erCurLabel2"><?= h($preWaehrung) ?></span> = ? EUR)
       <input type="text" inputmode="decimal" name="fx_kurs" id="erKurs" value="<?= h($preKurs) ?>" placeholder="z. B. 0,92">
+      <span class="muted" id="erKursHint" style="font-size:12px"><?= $kursQuelle === 'auto' ? 'Ø 30 Tage (EZB)' . ($kursStand ? ', Stand ' . h($kursStand) : '') : ($kursQuelle === 'manuell' ? 'fester Kurs (Einstellungen)' : ($preWaehrung !== 'EUR' ? 'Standardwert – Live-Kurs nicht erreichbar' : '')) ?></span>
     </label>
   </div>
   <div class="bx-row">
@@ -119,7 +129,7 @@ if ($fehler) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#
   <label>Notiz
     <textarea name="notiz" rows="2" placeholder="optional"></textarea>
   </label>
-  <p class="muted" style="margin:4px 0 0">Bei Fremdwährung (z. B. USD) wird mit dem Kurs in EUR umgerechnet; Buchhaltung, offene Posten und DATEV laufen in EUR. USt/Brutto = Netto × Vorsteuer, Fälligkeit = Rechnungsdatum + Zahlungsziel.</p>
+  <p class="muted" style="margin:4px 0 0">Währung kommt vom Lieferanten. Bei Fremdwährung wird der Kurs automatisch als 30-Tage-Durchschnitt (EZB) vorgeschlagen und in EUR umgerechnet – pro Rechnung überschreibbar. Buchhaltung, offene Posten und DATEV laufen in EUR. USt/Brutto = Netto × Vorsteuer, Fälligkeit = Rechnungsdatum + Zahlungsziel.</p>
   <div class="bx-row" style="margin-top:var(--sp-4)">
     <button class="btn btn-primary" type="submit">Eingangsrechnung speichern</button>
     <a class="btn btn-ghost" href="?p=buchhaltung&tab=verbindlichkeiten">Abbrechen</a>
@@ -131,11 +141,18 @@ if ($fehler) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#
   var lief = document.getElementById('erLieferant'), cur = document.getElementById('erWaehrung');
   var kursRow = document.getElementById('erKursRow'), kurs = document.getElementById('erKurs');
   var lab = document.getElementById('erCurLabel'), lab2 = document.getElementById('erCurLabel2'), ust = document.getElementById('erUst');
+  var hint = document.getElementById('erKursHint');
   function applyCur(setKurs) {
     var c = cur.value || 'EUR';
     lab.textContent = c; lab2.textContent = c;
     if (c === 'EUR') { kursRow.style.display = 'none'; }
-    else { kursRow.style.display = ''; if (setKurs && (!kurs.value || kurs.value === '1')) kurs.value = (mapK[c] || '').toString().replace('.', ','); }
+    else {
+      kursRow.style.display = '';
+      if (setKurs) {
+        kurs.value = (mapK[c] || '').toString().replace('.', ',');
+        if (hint) hint.textContent = 'Vorschlag (EZB-Ø) – bei Bedarf anpassen';
+      }
+    }
   }
   lief.addEventListener('change', function () {
     var w = mapW[this.value]; if (w) { cur.value = w; applyCur(true); if (w !== 'EUR') ust.value = '0'; }

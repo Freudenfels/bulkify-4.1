@@ -53,12 +53,67 @@ function kreditor_init(): void {
 // Verfügbare Währungen + Symbole.
 function kr_waehrungen(): array { return ['EUR' => '€', 'USD' => '$', 'CNY' => '¥', 'GBP' => '£', 'CHF' => 'CHF']; }
 
-// Hinterlegter Standard-Kurs je Währung (1 Fremdwährung = X EUR), in den Einstellungen pflegbar (app_meta kurs_<cur>).
-function kr_kurs_default(string $waehrung): float {
-    $waehrung = strtoupper($waehrung);
-    if ($waehrung === 'EUR') return 1.0;
-    $vor = ['USD' => '0.92', 'CNY' => '0.127', 'GBP' => '1.17', 'CHF' => '1.05'];
-    return (float) str_replace(',', '.', (string) meta_get('kurs_' . strtolower($waehrung), $vor[$waehrung] ?? '0'));
+// Statischer Offline-Fallback (1 Fremdwährung = X EUR), falls kein Live-Kurs verfügbar.
+function kr_kurs_fallback(string $cur): float {
+    $cur = strtoupper($cur);
+    if ($cur === 'EUR') return 1.0;
+    $vor = ['USD' => 0.92, 'CNY' => 0.127, 'GBP' => 1.17, 'CHF' => 1.05];
+    return $vor[$cur] ?? 0.0;
+}
+
+// Holt den 30-Tage-Durchschnittskurs (EUR je 1 Fremdwährung) von der EZB über die Frankfurter-API
+// (kein API-Key). Tagesweise 1/Kurs gemittelt. Rückgabe null bei jedem Fehler (Aufrufer fällt zurück).
+function kr_kurs_fetch_avg(string $cur): ?float {
+    $cur = strtoupper($cur);
+    if ($cur === 'EUR') return 1.0;
+    $start = date('Y-m-d', strtotime('-30 days'));
+    $end   = date('Y-m-d');
+    $url = "https://api.frankfurter.app/$start..$end?from=EUR&to=$cur";
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5, CURLOPT_CONNECTTIMEOUT => 3,
+        CURLOPT_USERAGENT => 'bulkify-dashboard']);
+    $resp = curl_exec($ch); $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+    if ($resp === false || $http !== 200) return null;
+    $j = json_decode($resp, true);
+    if (!is_array($j) || empty($j['rates'])) return null;
+    $sum = 0.0; $n = 0;
+    foreach ($j['rates'] as $tag) {
+        $r = (float)($tag[$cur] ?? 0); // Fremdwährung je 1 EUR
+        if ($r > 0) { $sum += 1.0 / $r; $n++; }  // EUR je 1 Fremdwährung
+    }
+    return $n > 0 ? round($sum / $n, 6) : null;
+}
+
+// Vorschlags-Kurs (1 Fremdwährung = X EUR). Reihenfolge: manueller Fixkurs (app_meta kurs_<cur>_fix)
+// > Live-Ø der letzten 30 Tage (gecacht 24 h) > alter Cache > Offline-Fallback. Darf Netz nutzen.
+function kr_kurs_aktuell(string $cur): float {
+    $cur = strtoupper($cur);
+    if ($cur === 'EUR') return 1.0;
+    $fix = meta_get('kurs_' . strtolower($cur) . '_fix', null);
+    if ($fix !== null && (float) str_replace(',', '.', (string)$fix) > 0) return (float) str_replace(',', '.', (string)$fix);
+    $key = 'kurs_' . strtolower($cur) . '_auto';
+    $ts  = (int) meta_get($key . '_ts', '0');
+    $val = (float) meta_get($key, '0');
+    if ($val > 0 && (time() - $ts) < 86400) return $val; // frisch (< 24 h)
+    $neu = kr_kurs_fetch_avg($cur);
+    if ($neu !== null && $neu > 0) {
+        meta_set($key, (string)$neu);
+        meta_set($key . '_ts', (string)time());
+        meta_set($key . '_stand', date('d.m.Y'));
+        return $neu;
+    }
+    return $val > 0 ? $val : kr_kurs_fallback($cur);
+}
+
+// Nur-Cache-Lesen (kein Netz) – für Anzeige/JS-Vorbelegung. Gibt wert + Stand + Quelle.
+function kr_kurs_cached(string $cur): array {
+    $cur = strtoupper($cur);
+    if ($cur === 'EUR') return ['wert' => 1.0, 'stand' => '', 'quelle' => 'eur'];
+    $fix = meta_get('kurs_' . strtolower($cur) . '_fix', null);
+    if ($fix !== null && (float) str_replace(',', '.', (string)$fix) > 0) return ['wert' => (float) str_replace(',', '.', (string)$fix), 'stand' => '', 'quelle' => 'manuell'];
+    $val = (float) meta_get('kurs_' . strtolower($cur) . '_auto', '0');
+    if ($val > 0) return ['wert' => $val, 'stand' => (string) meta_get('kurs_' . strtolower($cur) . '_auto_stand', ''), 'quelle' => 'auto'];
+    return ['wert' => kr_kurs_fallback($cur), 'stand' => '', 'quelle' => 'standard'];
 }
 
 // --- Zahlstatus -----------------------------------------------------------

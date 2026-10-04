@@ -26,11 +26,21 @@ Vor Produktiv-Import mit dem Steuerberater abstimmen.
 ## Fremdwährung (z. B. USD bei China-Lieferanten)
 Je Eingangsrechnung `waehrung` + `fx_kurs` (1 Fremdwährung = X EUR) + `fw_netto` (Originalbetrag).
 `netto/ust_betrag/brutto` werden daraus in **EUR** gespeichert (`netto = fw_netto × fx_kurs`), damit OP, Saldo,
-DATEV und CSV durchgängig in EUR laufen. `kr_waehrungen()` listet EUR/USD/CNY/GBP/CHF; `kr_kurs_default($cur)`
-liefert den hinterlegten Standardkurs (`app_meta kurs_usd`, `kurs_cny` … – editierbar). Im Formular wird die
-Währung aus `lieferanten.waehrung` vorbelegt (China = USD), der Rest bleibt EUR; der Kurs ist je Rechnung
-überschreibbar. Originalbetrag + Kurs erscheinen in Detail, Liste und CSV.
+DATEV und CSV durchgängig in EUR laufen. Währung kommt vom Lieferanten (`lieferanten.waehrung`, im Formular
+vorbelegt – China = USD, Rest EUR), Kurs je Rechnung überschreibbar. Originalbetrag + Kurs in Detail, Liste, CSV.
+
+### Automatische Wechselkurse
+- `kr_kurs_fetch_avg($cur)` – holt den **30-Tage-Durchschnitt** (EUR je 1 Fremdwährung) von der EZB über die
+  Frankfurter-API (`api.frankfurter.app`, kein Key); tagesweise 1/Kurs gemittelt. `null` bei jedem Fehler.
+- `kr_kurs_aktuell($cur)` – Vorschlagskurs mit Reihenfolge: **manueller Fixkurs** (`app_meta kurs_<cur>_fix`) >
+  **Live-Ø** (gecacht 24 h in `app_meta kurs_<cur>_auto` + `_ts` + `_stand`) > alter Cache > **Offline-Fallback**
+  (`kr_kurs_fallback`). Darf Netz nutzen (nur beim Prefill der Lieferanten-Währung).
+- `kr_kurs_cached($cur)` – reiner Cache-Read (kein Netz), für Anzeige/JS; gibt `wert`/`stand`/`quelle`
+  (`auto|manuell|standard|eur`). `kr_waehrungen()` listet EUR/USD/CNY/GBP/CHF.
+- Lazy: der Live-Kurs wird beim Öffnen der Erfassung für die Lieferanten-Währung gezogen und 24 h gecacht –
+  kein Cron nötig. Fallback-Kurse (USD 0,92 / CNY 0,127 …) greifen, falls das Netz mal nicht erreichbar ist.
 
 ## Grenzen / Ausbau
-Kurs wird je Rechnung fest gespeichert (keine automatische Tageskurs-Abfrage). Kein PDF-Upload der
-Original-Eingangsrechnung, keine Auto-Verknüpfung Wareneingang→Rechnung. Siehe `BUCHHALTUNG.md`.
+Kurs wird je Rechnung fest gespeichert (Snapshot). Kein BMF-Monatsdurchschnitt (steuerlich alternativ), keine
+Settings-UI für Fixkurse, kein PDF-Upload der Original-Eingangsrechnung, keine Auto-Verknüpfung
+Wareneingang→Rechnung. Robust gegen Schema-Drift: Lieferanten-Prefill liest per `SELECT *` + Coalescing. Siehe `BUCHHALTUNG.md`.
