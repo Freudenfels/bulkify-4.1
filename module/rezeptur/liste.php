@@ -55,7 +55,7 @@ $rohCell = function($r) {
     $out = '<strong>' . $n . '</strong> · <span style="color:' . $freiCol . '">frei ' . $frei . '/' . $n . '</span>';
     if ($zut > $n) $out .= ' <span class="muted" style="font-size:12px">(+' . ($zut - $n) . ' ohne Rohstoff)</span>';
     $out .= $dok > 0
-        ? '<div style="color:var(--err);font-size:12px;margin-top:2px">' . $dok . ' Dokument' . ($dok === 1 ? '' : 'e') . ' fehlen – hochladen</div>'
+        ? '<div style="color:var(--err);font-size:12px;margin-top:2px">' . $dok . ' Dokument' . ($dok === 1 ? ' fehlt' : 'e fehlen') . ' – hochladen</div>'
         : '<div style="color:var(--gruen);font-size:12px;margin-top:2px">Dokumente vollständig</div>';
     return $out;
 };
