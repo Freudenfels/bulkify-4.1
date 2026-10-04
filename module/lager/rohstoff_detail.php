@@ -487,6 +487,7 @@ if (!$neu) {
     <a href="#" data-tab="quali">Wirkstoff &amp; Qualität</a>
     <a href="#" data-tab="spec">Spezifikation</a>
     <a href="#" data-tab="dok">Dokumente (CoA/Spec)</a>
+    <a href="#" data-tab="web">Website</a>
     <a href="#" data-tab="ek">Einkauf</a>
     <?php if (!$neu): ?>
     <a href="#" data-tab="lager">Lager</a>
@@ -667,9 +668,12 @@ if (!$neu) {
       <div><a class="btn btn-ghost" target="_blank" href="?p=spec_bulkify&id=<?= (int)$id ?>">bulkify-Spezifikation ansehen</a></div>
     <?php endif; ?>
     </div>
+  </section>
 
+  <section data-panel="web" hidden>
     <div class="bx-panel">
       <h2 style="margin-top:0">Öffentliche Rohstoff-Datenbank (Website) <?= bx_hint('Wenn aktiv, erscheint dieser Rohstoff auf bulkify.pro (SEO). Es gehen NUR öffentliche Felder online: Name, CAS, botanische Quelle, charakteristische Kennwerte, Wirkstoffe, Beschreibung – NIE Preise, Lieferanten, Bestand oder Originaldokumente.') ?></h2>
+      <p class="muted" style="margin-top:0;font-size:13px">Freigabe für viele Rohstoffe auf einmal: <a href="?p=rohstoff_website">Website-Freigabe</a>.</p>
       <label class="bx-check" style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
         <input type="checkbox" name="website_sichtbar" value="1" <?= (int)($it['website_sichtbar'] ?? 0) === 1 ? 'checked' : '' ?>>
         <span>Für die öffentliche Rohstoff-Datenbank auf bulkify.pro freigeben</span>
