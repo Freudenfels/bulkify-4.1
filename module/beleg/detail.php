@@ -134,8 +134,9 @@ render_header('rechnungen', $b['nummer']);
 $pdfBtn = !empty($b['original_datei'])
     ? bx_btn('Original-Rechnung', '?p=rechnung&id=' . $id . '&original=1', 'ghost')
     : bx_btn('PDF ansehen', '?p=' . ($istGut ? 'gutschrift_pdf' : 'rechnung_pdf') . '&id=' . $id, 'ghost');
+$xmlBtn = bx_btn('E-Rechnung (XML)', '?p=rechnung_xml&id=' . $id, 'ghost');
 bx_head($b['nummer'], ($istGut ? 'Storno-Rechnung / Gutschrift' : 'Rechnung') . ($b['datum'] ? ' vom ' . date('d.m.Y', strtotime($b['datum'])) : ''),
-        $freiBtn . $pdfBtn . ' ' . bx_btn('Zurück zur Liste', '?p=rechnungen', 'ghost'));
+        $freiBtn . $pdfBtn . ' ' . $xmlBtn . ' ' . bx_btn('Zurück zur Liste', '?p=rechnungen', 'ghost'));
 if (isset($_GET['freigabe'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ($_GET['freigabe'] === '1' ? 'Rechnung für den Kunden freigegeben – jetzt im Portal sichtbar.' : 'Freigabe zurückgezogen – nicht mehr im Kundenportal sichtbar.') . '</div>';
 if (isset($_GET['erstellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnung aus dem Auftrag erstellt. Beträge/USt stammen aus dem Auftrag – bei Bedarf unten Zahlungen erfassen oder stornieren.</div>';
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';

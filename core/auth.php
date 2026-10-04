@@ -115,6 +115,8 @@ function route_rollen_map(): array {
         'gutschrift_pdf'     => ['finance'],
         'rechnung_pdf'       => ['finance'],
         'buchhaltung'        => ['finance'],
+        'beleg_export'       => ['finance'],
+        'rechnung_xml'       => ['finance'],
         'einstellungen'      => ['admin', 'finance', 'production'],
         'angebotsscan'       => ['admin', 'finance', 'sales'],
         'benutzer'           => ['admin'],

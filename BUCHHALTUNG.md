@@ -12,11 +12,11 @@ fast nur **eigene Dateien** anfasst (`module/beleg/*`, die PDF-Bauer) – siehe 
 
 ## Deine Dateien (gehören dem Buchhaltungs-Chat)
 - `module/beleg/` – alle Beleg-/Rechnungs-Seiten (siehe „Seiten").
+- `module/buchhaltung/` – Finanz-Hub (`hub.php`) + Export-/E-Rechnung-Endpunkte (`export.php`, `rechnung_xml.php`).
+- `core/buchhaltung.php` – Auswertungen, GoBD-Nummernkreis-Prüfung, CSV-/DATEV-Export (reine Leselogik).
+- `core/erechnung.php` – E-Rechnung (CII/EN16931-XML, ZUGFeRD-Profil).
 - `core/pdf_beleg.php` – Beleg-PDF-Layout (`beleg_firma()`, Grundlayout; auch von anderen PDFs genutzt – **vorsichtig** ändern).
 - `core/pdf_rechnung.php` – Rechnungs-PDF.
-- Später: ein eigener Finanz-Hub unter der **reservierten Route `buchhaltung`** (in `core/auth.php` schon
-  für `finance` freigegeben, aber in `public/index.php` **noch nicht gemappt** = zu bauen), optional als
-  `module/buchhaltung/*`.
 
 ## Geteilte Risiko-Dateien (gehören dem Dashboard – nur abgestimmt anfassen)
 - `core/schema.php` – DB-Schema **und** die meisten Belog-/Rechnungs-Funktionen (siehe „Funktionen").
@@ -26,7 +26,15 @@ fast nur **eigene Dateien** anfasst (`module/beleg/*`, die PDF-Bauer) – siehe 
 Änderungen hier **anhalten und sauber mergen** (Rebase-Ampel), nicht blind überschreiben.
 
 ## Ist-Stand (gebaut): Belege & Rechnungen
-Rollen-Gate: alles unter `finance`. Route `buchhaltung` ist reserviert, aber noch ohne Seite.
+Rollen-Gate: alles unter `finance`.
+
+### Finanz-Hub (`?p=buchhaltung` → `module/buchhaltung/hub.php`)
+Reiter: Übersicht (Kennzahlen), Offene Posten (je Kunde), Auswertung (Umsatz je Monat/Steuersatz, Jahr-Auswahl),
+Prüfung (GoBD: Nummernkreis-Lücken/Dubletten/Chronologie/Storno), Export.
+Exporte: `?p=beleg_export&art=op|belege|datev` – OP-Liste/Belege als CSV (UTF-8+BOM), DATEV-EXTF-Buchungsstapel
+(Format 700, SKR03-Default, per `app_meta` konfigurierbar; vor Produktiv-Import prüfen).
+E-Rechnung: `?p=rechnung_xml&id=…` – CII/EN16931-XML (ZUGFeRD-Profil), Button in der Rechnungs-Detailansicht.
+Factur-X-Einbettung (XML in PDF/A-3) steht noch aus (braucht PDF/A-3-fähige Lib).
 
 ### Seiten (`?p=…` → `module/beleg/…`)
 - `rechnungen` → `rechnungen_liste.php` – Rechnungsliste (Übersicht/Filter).
@@ -54,13 +62,14 @@ Rollen-Gate: alles unter `finance`. Route `buchhaltung` ist reserviert, aber noc
 
 ## Zielbild / Ausbau (eigener Chat baut das)
 Langfristig soll die Buchhaltung das externe Rechnungssystem ersetzen (Vorbild v3-Unterprogramm):
-- **Finanz-Hub** unter Route `buchhaltung` (Reiter z. B. Katalog/Kunden/Belege/Finanz).
+- **Finanz-Hub** unter Route `buchhaltung` – gebaut (Reiter Übersicht/OP/Auswertung/Prüfung/Export).
 - **GoBD**: festgeschriebene Belege sind **unveränderbar**; Korrektur nur über Storno/Gutschrift
   (`storno_von_id`), lückenlose Nummernkreise, Status-/Änderungs-Protokoll (`beleg_status_log`).
-- **Nummernkreise** zentral (keine Lücken, kein Rückdatieren); neue Kreise ab Stichtag.
-- **E-Rechnung** (EN16931 / ZUGFeRD-CII-XML) aus `beleg` – geplant, in v4 noch nicht umgesetzt.
-- **DATEV-/Export** + Finanz-Auswertung (offene Posten, Umsatz) – geplant.
-- **Automatik** (siehe Memory): Rechnung bei Lieferung, Auto-Lieferantenbestellung, Fremdlager-Verrechnung.
+- **Nummernkreise** zentral (keine Lücken, kein Rückdatieren): Kurzprüfung im Reiter „Prüfung" gebaut.
+- **E-Rechnung** (EN16931 / ZUGFeRD-CII-XML) aus `beleg` – XML gebaut; Factur-X (PDF/A-3-Einbettung) offen.
+- **DATEV-/Export** + Finanz-Auswertung (offene Posten, Umsatz) – gebaut (CSV + DATEV-EXTF, Auswertung-Reiter).
+- **Automatik** (siehe Memory): Rechnung bei Lieferung, Auto-Lieferantenbestellung, Fremdlager-Verrechnung – offen.
+- **Noch offen:** Factur-X-PDF, DATEV-Konten-Einstellungen in der Settings-UI, Debitoren je Kunde, XSD-Validierung.
 (Prüfe vor dem Bau jeweils, ob Teile schon existieren – nichts doppelt bauen.)
 
 ## Regeln (zusätzlich zu CLAUDE.md)
