@@ -11,6 +11,8 @@ Zusätzlich, wie im Dashboard, aber auf diese Charge bezogen:
 - **Produkt:** Stammdaten (Name, Englisch/Botanisch, CAS, Form, Dichte, Allergene, Herkunft, Kunde) und **Wirkstoffe**.
 - **Weitere Chargen dieses Produkts:** anklickbar.
 
+**Charge korrigieren / löschen:** MHD korrigieren (Datumsfeld, leer = kein MHD → `aktion=mhd_korr`, direktes `UPDATE charge SET mhd`), Mengenkorrektur (`menge_korr`), in den Mülleimer (`loeschen`).
+
 Der **Produktname ist überall ein Link** (Bestand-Liste, Such-Popup) und führt hierher.
 
 Liest über `erp_charge_voll()`, `erp_item_voll()`, `erp_item_wirkstoffe()`, `erp_item_dokumente()`, `erp_item_chargen()` aus dem geteilten Dashboard-Bestand. Bindet/löst Blinker über `core/leiste.php`.

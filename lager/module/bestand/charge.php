@@ -52,6 +52,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
     }
+    if ($aktion === 'mhd_korr') {
+        $roh = trim((string)($_POST['mhd'] ?? ''));
+        $mhd = ($roh !== '' && strtotime($roh)) ? date('Y-m-d', strtotime($roh)) : null;
+        q("UPDATE charge SET mhd=? WHERE id=?", [$mhd, $id]);
+        flash($mhd ? ('MHD korrigiert: ' . date('d.m.Y', strtotime($mhd))) : 'MHD geleert.', 'ok');
+        weiter('?p=charge&id=' . $id);
+    }
     if ($aktion === 'loeschen') {
         $grund = trim((string)($_POST['grund'] ?? ''));
         lg_papierkorb_rein($id, (string)$c['item_name'], (string)$c['charge_nr'],
@@ -300,7 +307,14 @@ flash_zeigen();
 <?php endif; ?>
 
 <div class="bx-panel">
-  <h2>Bestand korrigieren / löschen</h2>
+  <h2>Charge korrigieren / löschen</h2>
+  <form method="post" class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap;margin-bottom:var(--sp-3)">
+    <input type="hidden" name="aktion" value="mhd_korr">
+    <div class="bx-field" style="margin:0;max-width:200px"><label>MHD korrigieren</label>
+      <input type="date" name="mhd" value="<?= h($c['mhd'] ? date('Y-m-d', strtotime((string)$c['mhd'])) : '') ?>"></div>
+    <button type="submit" class="btn btn-primary">MHD speichern</button>
+    <span class="muted" style="font-size:12px">Leer lassen = kein MHD.</span>
+  </form>
   <form method="post" class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap;margin-bottom:var(--sp-3)">
     <input type="hidden" name="aktion" value="menge_korr">
     <div class="bx-field" style="margin:0;max-width:170px"><label>Neue Menge (<?= h((string)$c['einheit']) ?>)</label>
