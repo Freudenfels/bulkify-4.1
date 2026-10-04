@@ -25,6 +25,7 @@ $routen = [
     'beleg_export'      => 'buchhaltung/export.php',
     'lief_rechnung_neu' => 'buchhaltung/lief_rechnung_neu.php',
     'lief_rechnung'     => 'buchhaltung/lief_rechnung.php',
+    'angebote_ansicht'  => 'buchhaltung/angebote_ansicht.php',   // Nur-Lese-Angebote + Abgleich Angebot/Auftrag/Rechnung
     'login'             => 'auth/login.php',
 ];
 

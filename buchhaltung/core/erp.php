@@ -49,6 +49,49 @@ function nummer_zurueckgeben(string $nummer): void {
     q("UPDATE nummernkreis SET naechste = naechste - 1 WHERE prefix = ? AND naechste = ?", [$m[1], (int)$m[2] + 1]);
 }
 
+// ---- angebot / auftrag (geteilt, NUR LESEN; für die Buchhaltungs-Ansicht + Abgleich) --------------
+// Angebote mit Kundenname + Produkt + repräsentativer Summe (bestätigte, sonst erste Staffel: menge×VK).
+// $kunde_id filtert auf einen Kunden; $suche filtert (Nummer/Kunde) serverseitig im Aufrufer.
+function erp_angebote(?int $kunde_id = null, string $suche = ''): array {
+    if (!tabelle_da('angebot')) return [];
+    $where = '1=1'; $args = [];
+    if ($kunde_id) { $where .= ' AND a.kunde_id=?'; $args[] = $kunde_id; }
+    $rows = all(
+        "SELECT a.id, a.nummer, a.status, a.angelegt, a.gueltig_bis, a.kunde_id,
+                k.firma AS kunde_firma, p.name AS produkt_name,
+                (SELECT s.menge * s.vk_stueck FROM angebot_staffel s WHERE s.angebot_id=a.id
+                   ORDER BY s.bestaetigt DESC, s.sort ASC, s.id ASC LIMIT 1) AS summe_netto,
+                (SELECT COUNT(*) FROM angebot_staffel s WHERE s.angebot_id=a.id) AS staffel_anzahl
+           FROM angebot a
+           LEFT JOIN kunden k ON k.id=a.kunde_id
+           LEFT JOIN produkt p ON p.id=a.produkt_id
+          WHERE $where
+          ORDER BY a.angelegt DESC, a.id DESC", $args);
+    if ($suche !== '') {
+        $n = mb_strtolower($suche);
+        $rows = array_values(array_filter($rows, fn($r) =>
+            mb_strpos(mb_strtolower((string)$r['nummer']), $n) !== false
+            || mb_strpos(mb_strtolower((string)$r['kunde_firma']), $n) !== false
+            || mb_strpos(mb_strtolower((string)$r['produkt_name']), $n) !== false));
+    }
+    return $rows;
+}
+
+// Aufträge mit Kundenname (für den Abgleich Angebot→Auftrag→Rechnung). Nur Lesen.
+function erp_auftraege(?int $kunde_id = null): array {
+    if (!tabelle_da('auftrag')) return [];
+    $where = '1=1'; $args = [];
+    if ($kunde_id) { $where .= ' AND a.kunde_id=?'; $args[] = $kunde_id; }
+    return all(
+        "SELECT a.id, a.nummer, a.status, a.angebot_id, a.kunde_id, a.gesamt_netto, a.status_datum,
+                k.firma AS kunde_firma, p.name AS produkt_name
+           FROM auftrag a
+           LEFT JOIN kunden k ON k.id=a.kunde_id
+           LEFT JOIN produkt p ON p.id=a.produkt_id
+          WHERE $where
+          ORDER BY a.id DESC", $args);
+}
+
 // ---- aktivitaet (Kunden-Verlauf, geteilt) – verbatim ----------------------------------------------
 function log_aktivitaet(string $objekt_typ, int $objekt_id, string $akteur, string $text,
                         string $typ = '', string $ref_typ = '', int $ref_id = 0): void {

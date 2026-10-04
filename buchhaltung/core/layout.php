@@ -21,6 +21,7 @@ function bu_nav(): array {
         'Buchhaltung' => [
             'buchhaltung'       => ['label' => 'Übersicht',           'href' => '?p=buchhaltung'],
             'rechnungen'        => ['label' => 'Rechnungen',          'href' => '?p=rechnungen'],
+            'angebote_ansicht'  => ['label' => 'Angebote (Ansicht)',  'href' => '?p=angebote_ansicht'],
             'rechnung_frei'     => ['label' => 'Rechnung erstellen',  'href' => '?p=rechnung_frei'],
             'lief_rechnung_neu' => ['label' => 'Eingangsrechnung',    'href' => '?p=lief_rechnung_neu'],
             'rechnung_import'   => ['label' => 'Alt-Rechnungen',      'href' => '?p=rechnung_import'],
