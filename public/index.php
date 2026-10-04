@@ -81,6 +81,7 @@ $routes = [
     'auftrag'         => 'auftrag/detail.php',
     'auftrag_pdf'     => 'auftrag/pdf.php',   // Auftragsbestätigung als PDF (Download/Druck)
     'auftrag_preise'  => 'auftrag/preisliste.php',   // Arbeitsliste: Aufträge ohne Preis -> Rechnung-Upload füllt Preis (aufgeschlüsselt)
+    'buchhaltung'     => 'buchhaltung/hub.php',       // Finanz-Hub / Übersicht (offene Posten, Umsatz, überfällig)
     'rechnungen'      => 'beleg/rechnungen_liste.php',
     'rechnung'        => 'beleg/detail.php',
     'rechnung_neu'    => 'beleg/rechnung_neu.php',   // Rechnung aus Auftrag: Vorschau + Eingaben, dann erstellen
