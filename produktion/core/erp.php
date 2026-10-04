@@ -235,11 +235,12 @@ function erp_schritt_material(int $pa_id, string $station): array {
                              'menge'=>(float)$pa['menge'], 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($eid), 'item_id'=>$eid, 'pflicht'=>false];
             break;
     }
-    // Je Zeile die FEFO-Charge (für den Blinker) und die Quarantäne-Menge (Hinweis) bestimmen.
+    // Je Zeile die FEFO-Charge (für den Blinker), Quarantäne-Menge (Hinweis) und ob schon entnommen.
     foreach ($zeilen as &$z)
         if (!empty($z['item_id'])) {
             if (!isset($z['charge_id'])) $z['charge_id'] = erp_fefo_charge_id((int)$z['item_id']);
             $z['quarantaene'] = erp_item_quarantaene((int)$z['item_id']);
+            $z['entnommen'] = (int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, (int)$z['item_id']]) > 0;
         }
     unset($z);
     return ['soll_menge'=>$soll_menge, 'soll_einheit'=>$soll_einheit, 'zeilen'=>$zeilen];
@@ -417,6 +418,18 @@ function erp_schritt_abschliessen(int $schritt_id, string $akteur): array {
     $firstOpen = one("SELECT id FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort, id LIMIT 1", [$pa_id]);
     if (!$firstOpen || (int)$firstOpen['id'] !== $schritt_id)
         return ['ok'=>false, 'fehler'=>'reihenfolge', 'msg'=>'Dieser Schritt ist gerade nicht an der Reihe.', 'fertig'=>false, 'station'=>$station, 'fehlt'=>[]];
+
+    // Teilmengen-Schutz: Wenn schon Teilmengen gebucht wurden, darf der ABSCHLIESSENDE Schritt erst
+    // erledigt werden, wenn die volle Menge produziert ist – sonst würde Restmenge ohne echte Produktion
+    // als Fertigware eingebucht.
+    $totalCnt = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=?", [$pa_id]);
+    $doneCnt  = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]);
+    if ($doneCnt + 1 >= $totalCnt && erp_produktion_gebucht($pa_id) > 0 && erp_produktion_rest($pa_id) > 0.0001) {
+        $geb = number_format(erp_produktion_gebucht($pa_id), 0, ',', '.');
+        $ges = (int) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+        return ['ok'=>false, 'fehler'=>'teilmenge', 'fertig'=>false, 'station'=>$station, 'fehlt'=>[],
+                'msg'=>'Erst ' . $geb . ' von ' . $ges . ' produziert. Bitte zuerst die Restmenge produzieren, bevor der Auftrag abgeschlossen wird.'];
+    }
 
     // Material nach FEFO abbuchen (idempotent je Auftrag/Item). Reicht der Bestand nicht: abbrechen.
     $entnahme = erp_station_entnahme($pa_id, $station);
@@ -642,10 +655,14 @@ function erp_produktion_rest(int $pa_id): float {
     $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
     return max(0.0, $menge - erp_produktion_gebucht($pa_id));
 }
-// Den noch offenen Rest der Produktionsmenge als eigene Charge (.A/.B/.C …, MHD +18M) einbuchen.
+// Den noch offenen Rest der Produktionsmenge als eigene Charge einbuchen (Abschluss normaler Aufträge).
 function erp_fertigware_einbuchen(int $pa_id): ?int {
-    $rest = erp_produktion_rest($pa_id);
-    if ($rest <= 0) return null;
+    return erp_teilmenge_einbuchen($pa_id, erp_produktion_rest($pa_id));
+}
+// Eine (Teil-)Menge Fertigware als eigene Charge (.A/.B/.C …, MHD +18M) einbuchen. Nie mehr als der offene Rest.
+function erp_teilmenge_einbuchen(int $pa_id, float $menge): ?int {
+    $menge = round($menge);
+    if ($menge <= 0 || $menge > erp_produktion_rest($pa_id) + 1e-6) return null;
     $pa = one("SELECT nummer, produkt_id, rezeptur_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return null;
     $istBulk = erp_pa_ist_bulk($pa);
@@ -662,8 +679,60 @@ function erp_fertigware_einbuchen(int $pa_id): ?int {
     $charge_nr = erp_charge_naechste_nr($pa_id);
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
        VALUES (?,?,?,?, 'Stück', ?, CURDATE(), 'frei', ?, ?, ?)",
-      [$charge_nr, $item_id, $rest, $rest, erp_mhd_standard(), 'Aus Produktion ' . $pa['nummer'], $pa_id, gmdate('Y-m-d H:i:s')]);
+      [$charge_nr, $item_id, $menge, $menge, erp_mhd_standard(), 'Aus Produktion ' . $pa['nummer'], $pa_id, gmdate('Y-m-d H:i:s')]);
     return insert_id();
+}
+
+// --- Teilmenge produzieren -------------------------------------------------------------------
+// Rohstoffbedarf (+Leerkapseln) für eine Teilmenge von M Einheiten (proportional zur vollen Menge).
+function erp_teilmenge_bedarf(int $pa_id, float $m): array {
+    $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if ($menge <= 0 || $m <= 0) return [];
+    $faktor = $m / $menge;   // Anteil der Gesamtmenge
+    $out = [];
+    foreach (erp_materialbedarf($pa_id) as $b) {
+        $need = (float)$b['benoetigt'] * $faktor;
+        $out[] = ['item_id'=>(int)$b['item_id'], 'name'=>$b['name'], 'einheit'=>$b['einheit'],
+                  'benoetigt'=>$need, 'verfuegbar'=>$b['verfuegbar'], 'fehlt'=>max(0.0, $need - (float)$b['verfuegbar'])];
+    }
+    // Leerkapseln (nur Kapselprodukte) anteilig
+    $pa = one("SELECT produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $kid = $pa ? erp_produkt_leerkapsel_id((int)$pa['produkt_id']) : null;
+    if ($kid) {
+        $vpe = erp_stueck_je_packung(['produkt_id'=>(int)$pa['produkt_id'], 'auftrag_id'=>(int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id])]);
+        $need = $m * $vpe;   // M Packungen × Kapseln je Packung (bei Bulk ist vpe über Auftrag/0 -> dann M direkt)
+        if ($vpe <= 0) $need = $m;
+        $verf = erp_item_bestand($kid);
+        $out[] = ['item_id'=>$kid, 'name'=>(string) scalar("SELECT name FROM item WHERE id=?", [$kid]), 'einheit'=>'Stück',
+                  'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>max(0.0, $need - $verf), 'kapsel'=>true];
+    }
+    return $out;
+}
+// Eine Teilmenge produzieren: Rohstoffe (+Leerkapseln) anteilig nach FEFO verbrauchen und M als Fertigware-Charge
+// einbuchen. Der Auftrag bleibt offen, bis die volle Menge produziert ist. Rückgabe ['ok','msg','fehlt','charge_nr'].
+function erp_teilmenge_produzieren(int $pa_id, float $m, string $akteur): array {
+    $m = round($m);
+    $rest = erp_produktion_rest($pa_id);
+    if ($m <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Menge größer 0 angeben.', 'fehlt'=>[]];
+    if ($m > $rest + 1e-6) return ['ok'=>false, 'msg'=>'Es sind nur noch ' . number_format($rest, 0, ',', '.') . ' offen – mehr kann nicht produziert werden.', 'fehlt'=>[]];
+    $bedarf = erp_teilmenge_bedarf($pa_id, $m);
+    $fehlt = array_values(array_filter($bedarf, fn($b) => (float)$b['fehlt'] > 0.0001));
+    if ($fehlt) return ['ok'=>false, 'fehler'=>'mangel', 'msg'=>'Nicht genug Material für diese Teilmenge.', 'fehlt'=>$fehlt];
+    // Material anteilig nach FEFO verbrauchen (additiv – die Schritt-Entnahme ist dadurch idempotent).
+    foreach ($bedarf as $b) erp_fefo_abbuchen($pa_id, (int)$b['item_id'], (float)$b['benoetigt'], (string)$b['einheit']);
+    $cid = erp_teilmenge_einbuchen($pa_id, $m);
+    if (!$cid) return ['ok'=>false, 'msg'=>'Teilmenge konnte nicht eingebucht werden (Lagerartikel fehlt?).', 'fehlt'=>[]];
+    $nr = (string) scalar("SELECT charge_nr FROM charge WHERE id=?", [$cid]);
+    // Status auf laufend (falls noch offen), Reservierungen abgleichen.
+    if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'offen')
+        q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$pa_id]);
+    erp_reservierung_abgleichen($pa_id);
+    $pa = one("SELECT kunde_id, auftrag_id, nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if ($pa && $pa['kunde_id'])
+        erp_log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team',
+            'Teilmenge ' . number_format($m, 0, ',', '.') . ' Stück produziert (Charge ' . $nr . ', Produktion ' . $pa['nummer'] . ').',
+            'auftrag', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
+    return ['ok'=>true, 'msg'=>'Teilmenge eingebucht (Charge ' . $nr . ').', 'charge_nr'=>$nr, 'fehlt'=>[]];
 }
 // Basis-Chargennummer = PR-Nummer ohne Präfix; nächste Teilcharge mit Tagesbuchstabe .A/.B/.C …
 function erp_charge_naechste_nr(int $pa_id): string {

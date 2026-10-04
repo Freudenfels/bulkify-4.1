@@ -14,6 +14,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $r = erp_schritt_abschliessen($schritt_id, $akteur);
         flash($r['ok'] ? ($r['fertig'] ? 'Letzter Schritt erledigt – Produktion fertig, Fertigware eingebucht.' : 'Schritt „' . $r['station'] . '" erledigt.')
                        : ($r['msg'] ?: 'Schritt konnte nicht abgeschlossen werden.'), $r['ok'] ? 'ok' : 'warn');
+    } elseif ($aktion === 'teilmenge') {
+        $r = erp_teilmenge_produzieren($id, (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0')), $akteur);
+        if (!$r['ok'] && !empty($r['fehlt'])) {
+            $t = []; foreach ($r['fehlt'] as $f) $t[] = (string)$f['name'] . ' (fehlt ' . menge_txt($f['fehlt']) . ' ' . (string)$f['einheit'] . ')';
+            flash('Nicht genug Material: ' . implode(', ', $t) . '.', 'warn');
+        } else flash($r['msg'], $r['ok'] ? 'ok' : 'warn');
     } elseif ($aktion === 'blink') {
         $modus = ($_POST['modus'] ?? 'an') === 'aus' ? 'aus' : 'an';
         $r = pr_lager_blink((int)($_POST['charge_id'] ?? 0), $modus);
@@ -35,6 +41,10 @@ $istAdmin = pr_ist_admin();
 $total = count($schritte);
 $fertig_cnt = 0; $erster_offen = 0;
 foreach ($schritte as $s) { if ((int)($s['erledigt'] ?? 0) === 1) $fertig_cnt++; elseif ($erster_offen === 0) $erster_offen = (int)$s['id']; }
+$produziert = erp_produktion_gebucht($id);
+$benoetigt  = (int)$pa['menge'];
+$prod_rest  = max(0, $benoetigt - (int)round($produziert));
+$prod_proz  = $benoetigt > 0 ? min(100, (int)round($produziert * 100 / $benoetigt)) : 0;
 $cur = null;
 foreach ($schritte as $s) if ((int)$s['id'] === $erster_offen) { $cur = $s; break; }
 
@@ -52,6 +62,25 @@ seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt
   <p class="muted" style="font-size:12px;margin:10px 0 0">Chargennummer und MHD vergibt das System automatisch.</p>
 </div>
 
+<div class="bx-panel" style="margin-bottom:16px">
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+    <div>Produziert <strong><?= number_format($produziert, 0, ',', '.') ?></strong> von <?= number_format($benoetigt, 0, ',', '.') ?>
+      <?php if ($produziert > 0 && $prod_rest > 0): ?> <span class="badge badge-info">teilweise</span><?php elseif ($benoetigt > 0 && $prod_rest <= 0): ?> <span class="badge badge-ok">vollständig</span><?php endif; ?></div>
+    <div class="muted"><?= $prod_proz ?>%</div>
+  </div>
+  <div style="height:12px;border-radius:6px;background:var(--line-2);overflow:hidden;margin-top:8px">
+    <div style="height:100%;width:<?= $prod_proz ?>%;background:var(--gruen)"></div>
+  </div>
+  <?php if ($prod_rest > 0): ?>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:14px" onsubmit="return confirm('Teilmenge jetzt produzieren? Rohstoffe werden anteilig abgebucht und als Fertigware-Charge eingebucht.');">
+    <input type="hidden" name="aktion" value="teilmenge">
+    <div class="bx-field" style="margin:0;max-width:200px"><label>Teilmenge produzieren</label>
+      <input type="number" name="menge" min="1" max="<?= (int)$prod_rest ?>" step="1" required placeholder="max. <?= (int)$prod_rest ?>"></div>
+    <button type="submit" class="btn btn-primary">Produzieren &amp; einbuchen</button>
+  </form>
+  <?php endif; ?>
+</div>
+
 <?php if ($cur):
     $isGate = str_contains((string)$cur['station'], 'Freigabe');
     $anl = station_anleitung_text((string)$cur['station']);
@@ -60,7 +89,7 @@ seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt
     // Info-Zeilen (pflicht=false, z. B. Deckel/Etikett) sperren nicht – sie werden nicht abgebucht.
     $materialFehlt = false;
     foreach ($mat['zeilen'] as $z)
-        if (($z['pflicht'] ?? true) && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']) { $materialFehlt = true; break; } ?>
+        if (($z['pflicht'] ?? true) && empty($z['entnommen']) && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']) { $materialFehlt = true; break; } ?>
 <div class="bx-panel" style="margin-bottom:16px;border-color:var(--gruen);background:rgba(29,158,117,.06)">
   <div class="muted">Jetzt dran · Schritt <?= $fertig_cnt + 1 ?> von <?= $total ?></div>
   <h2 style="margin:4px 0 8px;font-size:22px"><?= h((string)$cur['station']) ?></h2>

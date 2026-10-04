@@ -11,6 +11,8 @@ Verpackung wird immer gezeigt (bei fehlender Angabe „–"); Produktionstyp = E
 
 **Produktionsweg (nur Admin):** Panel mit vier Schaltern – Abfüllen/Verpacken, Etikettieren, Karton/Umverpackung, Beipackzettel. `aktion=weg` → `erp_weg_anwenden()` erzeugt die Schrittfolge für diesen Auftrag neu (Grundweg Zukauf/Eigen bleibt automatisch; alles aus = nur Bulkware). Nur änderbar, solange kein Schritt erledigt ist; Bulk-Aufträge haben einen festen Weg (kein Panel).
 
+**Produktionsfortschritt:** Balken „produziert X von Y" (+ Badge teilweise/vollständig) und ein Feld **„Teilmenge produzieren"** (`aktion=teilmenge` → `erp_teilmenge_produzieren()`): bucht eine Teilmenge sofort ein (Rohstoffe anteilig abgebucht), Auftrag bleibt offen bis voll.
+
 Oben rechts der Button in den Produktionsmodus (`?p=run&id=…`); Beschriftung je Status: „Produktion starten" (offen), „Produktion fortsetzen" (laufend), „Produktionsmodus" (erledigt).
 
 **Schritte:** der jeweils erste offene Schritt ist „als Nächstes" und trägt den **Abschließen**-Button. Der POST (`aktion=schritt_ab`, `schritt_id`) ruft `erp_schritt_abschliessen()` auf (FEFO-Entnahme, Mangel-Guard; letzter Schritt bucht Fertigware ein) und leitet danach um (PRG, Flash). Zeiten via `fmt_zeit()`.

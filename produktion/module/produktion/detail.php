@@ -31,6 +31,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') ==
     weiter('?p=pa&id=' . $id);
 }
 
+// Teilmenge produzieren (anteilig Rohstoffe verbrauchen + als Charge einbuchen).
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') === 'teilmenge') {
+    $m = (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0'));
+    $r = erp_teilmenge_produzieren($id, $m, (string)(pr_benutzer()['name'] ?? ''));
+    if (!$r['ok'] && !empty($r['fehlt'])) {
+        $t = [];
+        foreach ($r['fehlt'] as $f) $t[] = (string)$f['name'] . ' (fehlt ' . menge_txt($f['fehlt']) . ' ' . (string)$f['einheit'] . ')';
+        flash('Nicht genug Material für diese Teilmenge: ' . implode(', ', $t) . '.', 'warn');
+    } else {
+        flash($r['msg'], $r['ok'] ? 'ok' : 'warn');
+    }
+    weiter('?p=pa&id=' . $id);
+}
+
 $pa = erp_pa($id);
 if (!$pa) { kopf('Produktionsauftrag'); seitenkopf('Nicht gefunden'); echo '<div class="bx-panel"><a class="btn btn-ghost" href="?p=liste">Zurück</a></div>'; fuss(); return; }
 $schritte = erp_pa_schritte($id);
@@ -41,6 +55,10 @@ $fertig_cnt = 0;
 foreach ($schritte as $s) { if ((int)($s['erledigt'] ?? 0) === 1) $fertig_cnt++; elseif ($erster_offen === 0) $erster_offen = (int)$s['id']; }
 $weg = erp_weg_lesen($id);
 $istAdmin = pr_ist_admin();
+$produziert = erp_produktion_gebucht($id);
+$benoetigt  = (int)$pa['menge'];
+$prod_rest  = max(0, $benoetigt - (int)round($produziert));
+$prod_proz  = $benoetigt > 0 ? min(100, (int)round($produziert * 100 / $benoetigt)) : 0;
 
 // Übersichtsdaten
 $ber    = erp_pa_bereitschaft($id, (string)$pa['status'], $fertig_cnt);
@@ -162,6 +180,29 @@ $felder = [
   </table></div>
 </div>
 <?php endif; ?>
+
+<div class="bx-panel" style="margin-bottom:16px">
+  <h2 style="margin-top:0">Produktionsfortschritt</h2>
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+    <div>produziert <strong><?= number_format($produziert, 0, ',', '.') ?></strong> von <?= number_format($benoetigt, 0, ',', '.') ?>
+      <?php if ($produziert > 0 && $prod_rest > 0): ?> <span class="badge badge-info">teilweise</span><?php elseif ($benoetigt > 0 && $prod_rest <= 0): ?> <span class="badge badge-ok">vollständig</span><?php endif; ?></div>
+    <div class="muted"><?= $prod_proz ?>%</div>
+  </div>
+  <div style="height:12px;border-radius:6px;background:var(--line-2);overflow:hidden;margin-top:8px">
+    <div style="height:100%;width:<?= $prod_proz ?>%;background:var(--gruen)"></div>
+  </div>
+  <?php if ($prod_rest > 0): ?>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:14px" onsubmit="return confirm('Teilmenge jetzt produzieren? Rohstoffe werden anteilig abgebucht und als Fertigware-Charge eingebucht.');">
+    <input type="hidden" name="aktion" value="teilmenge">
+    <div class="bx-field" style="margin:0;max-width:200px"><label>Teilmenge produzieren</label>
+      <input type="number" name="menge" min="1" max="<?= (int)$prod_rest ?>" step="1" required placeholder="max. <?= (int)$prod_rest ?>"></div>
+    <button type="submit" class="btn btn-primary">Produzieren &amp; einbuchen</button>
+    <span class="muted" style="font-size:12px">Verbraucht Rohstoffe anteilig (muss reichen) und bucht die Menge als Fertigware-Charge.</span>
+  </form>
+  <?php else: ?>
+  <div class="muted" style="margin-top:10px">Vollständig produziert.</div>
+  <?php endif; ?>
+</div>
 
 <?php if ($istAdmin && $weg['basis'] !== 'bulk'): ?>
 <div class="bx-panel" style="margin-bottom:16px">

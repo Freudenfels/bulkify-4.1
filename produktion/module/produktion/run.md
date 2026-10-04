@@ -1,7 +1,8 @@
 # produktion/module/produktion/run.php
 Produktionsmodus (`?p=run&id=…`) – tablettauglich, zum Schritt-für-Schritt-Abarbeiten eines Auftrags. Button dorthin steht auf der Detailseite („In den Produktionsmodus").
 
-- **Kopf:** Menge, Charge + MHD (vom System vergeben, nur Anzeige), Fortschritt.
+- **Kopf:** Menge, Charge + MHD (vom System vergeben, nur Anzeige), Schritt-Fortschritt.
+- **Produktionsfortschritt:** Balken „produziert X von Y" + Feld „Teilmenge produzieren" (`aktion=teilmenge` → `erp_teilmenge_produzieren()`), damit schon eine Teilmenge fertig gegeben werden kann, bevor der ganze Auftrag abgeschlossen ist.
 - **Jetzt dran:** der nächste offene Schritt groß mit Arbeitsanweisung (`station_anleitung_text`), der konkreten Material-/Produktliste **„Aus dem Lager holen"** (was + Menge + Bestand, via `erp_schritt_material()`; bei Fertigware mit Charge und „benötigt gesamt") und einem großen Button „Erledigt"/„Freigeben". Material je Station (`erp_schritt_material`): Rohstoffe bereitstellen → Rohstoffe (Pflicht), Verkapselung → Leerkapseln, Fertigware bereitstellen → zugekaufte Bulkware (bzw. Soll-Hinweis), Verpacken → Gebinde (Pflicht) + Deckel (Info), Etikettieren → Etikett (Info). Info-Zeilen (`pflicht=false`, Deckel/Etikett) sperren „Erledigt" nicht und werden nicht rot markiert. Karton/Beipackzettel sind reine Abhak-Schritte (am Produkt gibt es dafür keinen Artikel-Slot). Fehlt Pflicht-Material, ist der Schritt gesperrt.
 
 Je Materialzeile ein Button **„Im Lager blinken"** (Pick-to-Light): `aktion=blink` → `pr_lager_blink(charge_id)` ruft serverseitig den Lager-Endpunkt `/lager/?p=api_blink` auf (Loopback/Token), der den Blinker der FEFO-Charge leuchten lässt. Zeile ohne bekannte Charge: „kein Blinker". Der POST (`aktion=erledigen`) ruft `erp_schritt_abschliessen()` – protokolliert WER (angemeldeter Benutzer) WANN, bucht Material nach FEFO ab, letzter Schritt bucht Fertigware ein. Danach Redirect (PRG) + Flash.

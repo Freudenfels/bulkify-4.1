@@ -20,6 +20,10 @@ Rückgabe: `['ok','fehler'(null|nicht_gefunden|reihenfolge|mangel),'msg','fertig
 ## Produktionsweg (Ausbaustufen) je Auftrag
 `erp_weg_lesen($pa_id)` (Grundweg zukauf/eigen/bulk + Schalter abfuellen/etikettieren/beipack/karton + aenderbar), `erp_weg_stationen($pa_id,$f)`, `erp_weg_anwenden($pa_id,$f)` – erzeugt die `produktion_schritt`-Zeilen neu (nur solange kein Schritt erledigt; Bulk hat festen Weg). Der Weg ist in den Schritten abgebildet, keine Extra-Tabelle. Optionale Stationen: `Verpacken`, `Etikettieren`, `Beipackzettel beilegen`, `Umkarton`.
 
+## Teilmengen produzieren
+`erp_teilmenge_bedarf($pa_id,$m)` (Rohstoff-+Leerkapsel-Bedarf anteilig für M Einheiten), `erp_teilmenge_produzieren($pa_id,$m,$akteur)` – verbraucht Rohstoffe (+Leerkapseln) **anteilig** nach FEFO (Mangel-Guard für M) und bucht M als Fertigware-Charge (`erp_teilmenge_einbuchen`); Auftrag bleibt offen (`laufend`) bis `erp_produktion_gebucht` = Menge. `erp_fertigware_einbuchen` bucht nur noch den Rest beim Abschluss normaler Aufträge.
+**Abschluss-Schutz:** Wurden Teilmengen gebucht und ist noch Rest offen, lässt `erp_schritt_abschliessen()` den letzten Schritt nicht zu (`fehler='teilmenge'`). Die Schritt-Entnahme ist idempotent (prüft `produktion_verbrauch`), daher kein Doppelverbrauch nach Teilmengen; `erp_schritt_material()` liefert je Zeile `entnommen`, damit „Erledigt" trotz Teil-Bestand nicht fälschlich sperrt.
+
 ## Schreiben: `erp_schritt_status_setzen($schritt_id, $erledigt, $akteur)` (Admin-Override)
 Setzt einen Schritt direkt auf erledigt/offen – **auch außer der Reihe**. REINE Statuskorrektur: markiert `erledigt` + `erledigt_von/at` (bzw. löscht sie) und rechnet den Auftragsstatus neu. **Keine** FEFO-Entnahme, **keine** Fertigware-Einbuchung (dafür ist `erp_schritt_abschliessen()` da). Nur für Admins aufrufen (Guard in der Seite).
 
