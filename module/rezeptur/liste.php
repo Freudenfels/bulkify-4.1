@@ -80,6 +80,7 @@ $cols = [
 
 render_header('rezeptur', 'Rezepturen');
 bx_head('Rezepturen', count($rows) . ' Einträge', bx_btn('Neue Rezeptur', '?p=rezeptur_detail&id=neu', 'primary'));
+if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rezeptur gelöscht.</div>';
 ?>
 <form class="bx-listbar" method="get" onsubmit="return false">
   <input type="hidden" name="p" value="rezeptur">

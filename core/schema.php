@@ -6005,6 +6005,42 @@ function rechnung_import_positionen_ki(string $pfad): array {
         'positionen' => $pos];
 }
 
+// Rezeptur löschen (nur Admin). Blockiert, wenn die Rezeptur noch aktiv VERWENDET wird
+// (Produkt, Angebotsposition, Produktionsauftrag, Bulk-/Fertig-Lagerartikel) – dann erst dort lösen.
+// Sonst: eigene Nebendaten löschen (Zutaten, Kundenpreise, Lieferanten-Angebote) und Verweise aus
+// Anfragen/Scans lösen (rezeptur_id = NULL, die Anfrage bleibt bestehen). Rückgabe ['ok'=>bool,'fehler'?].
+function rezeptur_loeschen(int $id): array {
+    $id = (int)$id;
+    if ($id <= 0) return ['ok' => false, 'fehler' => 'Ungültige Rezeptur.'];
+    if (!scalar("SELECT id FROM rezeptur WHERE id=?", [$id])) return ['ok' => false, 'fehler' => 'Rezeptur nicht gefunden.'];
+
+    $blocker = [];
+    $nP  = (int) scalar("SELECT COUNT(*) FROM produkt WHERE rezeptur_id=?", [$id]);              if ($nP)  $blocker[] = $nP . ' Produkt(e)';
+    $nAp = (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE rezeptur_id=?", [$id]);     if ($nAp) $blocker[] = $nAp . ' Angebotsposition(en)';
+    $nPa = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE rezeptur_id=?", [$id]);   if ($nPa) $blocker[] = $nPa . ' Produktionsauftrag/-aufträge';
+    $nIt = (int) scalar("SELECT COUNT(*) FROM item WHERE rezeptur_id=?", [$id]);                 if ($nIt) $blocker[] = $nIt . ' Lagerartikel (Bulk/Fertigware)';
+    if ($blocker) return ['ok' => false, 'fehler' => 'Rezeptur wird noch verwendet: ' . implode(', ', $blocker) . '. Bitte dort zuerst entfernen/ersetzen.'];
+
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        // Eigene Nebendaten der Rezeptur
+        q("DELETE FROM rezeptur_zutat WHERE rezeptur_id=?", [$id]);
+        foreach (['rezeptur_kundenpreis', 'rezeptur_lief_angebot'] as $t)
+            if (table_exists($t)) q("DELETE FROM $t WHERE rezeptur_id=?", [$id]);
+        // Verweise aus Anfragen/Scans lösen – die Datensätze selbst bleiben erhalten.
+        foreach (['rezeptur_anfrage', 'angebot_scan', 'portal_anfrage', 'portal_anfrage_pos',
+                  'lieferant_anfrage', 'fastaction_item', 'fastaction_notiz'] as $t)
+            if (table_exists($t)) q("UPDATE $t SET rezeptur_id=NULL WHERE rezeptur_id=?", [$id]);
+        q("DELETE FROM rezeptur WHERE id=?", [$id]);
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        $pdo->rollBack();
+        return ['ok' => false, 'fehler' => 'Löschen abgebrochen: ' . $e->getMessage()];
+    }
+    return ['ok' => true];
+}
+
 // Aus ausgelesenen Positionen eine Rechnung (Beleg) ANLEGEN und mit einem bestehenden Auftrag
 // verknüpfen; Original-PDF anhängen; den (fehlenden) Auftragspreis aus der Positions-Summe füllen.
 // So sind die Preise aufgeschlüsselt (Etikett/Glas/Kapsel …) beim Kunden hinterlegt. Rückgabe:

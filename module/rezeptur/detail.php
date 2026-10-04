@@ -38,6 +38,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)", [$nid, $z['item_id'], $z['bezeichnung'], $z['menge_mg'], $z['sort']]);
         header('Location: ?p=rezeptur_detail&id=' . $nid . '&gespeichert=1'); exit;
     }
+    // Rezeptur löschen (nur Admin) – geht in jedem Status, solange sie nicht verwendet wird.
+    if (!$neu && $aktion === 'loeschen') {
+        if (!has_role('admin')) { header('Location: ?p=rezeptur_detail&id=' . $id); exit; }
+        $r = rezeptur_loeschen((int)$id);
+        if (!empty($r['ok'])) { header('Location: ?p=rezeptur&geloescht=1'); exit; }
+        $_SESSION['rez_del_fehler'] = $r['fehler'] ?? 'Löschen fehlgeschlagen.';
+        header('Location: ?p=rezeptur_detail&id=' . $id); exit;
+    }
     // Bearbeitung gesperrt, wenn eingefroren/freigegeben
     if (!$neu && in_array((string) scalar("SELECT status FROM rezeptur WHERE id=?", [(int)$id]), ['freigegeben','eingefroren'], true)) {
         header('Location: ?p=rezeptur_detail&id=' . $id); exit;
@@ -140,6 +148,7 @@ if (isset($_GET['fa_ges'])) { $fm = (int)($_GET['fa_match'] ?? 0); $fg = (int)$_
   echo '<div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen)">Aus Fastaction angelegt: <strong>' . $fm . ' von ' . $fg . '</strong> Zutaten automatisch einem Rohstoff zugeordnet. <strong>Bitte jede Zeile prüfen</strong> (Rohstoff, Menge, Kapselgröße), dann speichern. Nicht zugeordnete Zeilen brauchen noch die Rohstoff-Auswahl.</div>'; }
 if (isset($_GET['gesendet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Vorschlag an den Kunden gesendet – er sieht ihn jetzt in seinem Portal. Änderungen hier speichern und ggf. „Erneut als Vorschlag senden".</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
+if (!empty($_SESSION['rez_del_fehler'])) { echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($_SESSION['rez_del_fehler']) . '</div>'; unset($_SESSION['rez_del_fehler']); }
 ?>
 <?php if (!$neu): ?>
 <div class="bx-panel">
@@ -158,6 +167,9 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       <?php else: ?>
         <form method="post" style="display:inline"><input type="hidden" name="aktion" value="neue_version"><button class="btn btn-ghost btn-sm" type="submit">Neue Version</button></form>
         <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="entwurf"><button class="btn btn-danger btn-sm" type="submit">Bearbeitung öffnen</button></form>
+      <?php endif; ?>
+      <?php if (has_role('admin')): ?>
+        <form method="post" style="display:inline" onsubmit="return confirm('Diese Rezeptur endgültig löschen? Das geht nur, wenn sie nicht mehr verwendet wird (Produkt/Angebot/Produktion).');"><input type="hidden" name="aktion" value="loeschen"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Löschen</button></form>
       <?php endif; ?>
     </div>
   </div>
