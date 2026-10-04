@@ -85,8 +85,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $auftragNr = trim((string)($_POST['auftrag_nr'] ?? ''));
     $kisteId   = (int)($_POST['kiste_id'] ?? 0);   // optional: alle Positionen in diese Kiste
     $fachG     = trim((string)($_POST['fach'] ?? ''));
-    $statusG   = (string)($_POST['status'] ?? 'frei');   // Standard: freigegeben
-    if (!in_array($statusG, ['frei', 'quarantaene', 'gesperrt'], true)) $statusG = 'frei';
 
     $names   = (array)($_POST['p_name'] ?? []);
     $gebucht = [];
@@ -102,6 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $mhd      = trim((string)($_POST['p_mhd'][$i] ?? ''));
         $blinker  = led_leiste_normalisieren((string)($_POST['p_blinker'][$i] ?? ''));
         $pakete   = max(1, (int)($_POST['p_pakete'][$i] ?? 1));
+        $statusP  = (string)($_POST['p_frei'][$i] ?? '1') === '1' ? 'frei' : 'quarantaene';   // Haken je Position
         $rezeptur_id = (int)($_POST['p_rezeptur'][$i] ?? 0);   // nur bei Warenart 'fertig' relevant
         if ($name === '' && $menge <= 0 && $rezeptur_id <= 0) continue;   // leere Zeile
 
@@ -137,7 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         if ($zusatz) $notiz .= ' · ' . implode(' · ', $zusatz);
         $cid = $ziel === 'l2'
             ? erp_wareneingang_buchen_fremd($item_id, $menge, $charge, $mhd ?: null, $kunde_id, $notiz, $einheit)
-            : erp_wareneingang_buchen($item_id, $menge, $charge, $mhd ?: null, $lief, $notiz, $statusG, $einheit);
+            : erp_wareneingang_buchen($item_id, $menge, $charge, $mhd ?: null, $lief, $notiz, $statusP, $einheit);
         if (!$cid) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Buchen fehlgeschlagen.'; continue; }
 
         lg_pakete_set((int)$cid, $pakete);
@@ -335,13 +334,6 @@ if ($gebucht):
           <?php foreach ($kisten as $kk): ?><option value="<?= h((string)$kk['name']) ?>"><?= $kk['blinker'] ? 'Blinker ' . h((string)$kk['blinker']) : 'kein Blinker' ?></option><?php endforeach; ?>
         </datalist>
         <?php endif; ?>
-        <div class="bx-field" style="margin:0;min-width:180px"><label>Status</label>
-          <select name="status">
-            <option value="frei" selected>Freigegeben</option>
-            <option value="quarantaene">Quarantäne</option>
-            <option value="gesperrt">Gesperrt</option>
-          </select>
-        </div>
         <div class="bx-field" style="margin:0;min-width:240px;flex:1 1 240px"><label>Sendungs-/Paketnummer <span class="muted">(optional, scannen)</span></label>
           <input type="text" name="tracking" class="lg-code" autocomplete="off" placeholder="Paketlabel scannen – welches Paket ist gekommen">
         </div>
@@ -385,7 +377,9 @@ if ($gebucht):
   .we-pos .f-artnr{flex:0 1 120px}
   .we-pos .f-pakete{flex:0 1 80px}
   .we-pos .f-split{flex:0 1 80px}
-  .we-pos .f-split input[type=checkbox]{width:22px;height:22px;margin-top:6px}
+  .we-pos .f-frei{flex:0 1 100px}
+  .we-pos .f-split input[type=checkbox],
+  .we-pos .f-frei input[type=checkbox]{width:22px;height:22px;margin-top:6px}
   .we-aehnlich{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .we-aehnlich:empty{display:none}
   .we-ae-t{font-size:12px;color:var(--muted)}
@@ -456,6 +450,7 @@ if ($gebucht):
         '<div class="bx-field f-charge"><label class="lbl-charge">Charge-Nr.</label><input type="text" name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'"></div>'+
         '<div class="bx-field f-mhd"><label class="lbl-mhd">MHD</label><input type="date" name="p_mhd[]" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
         '<div class="bx-field f-pakete"><label>Pakete</label><input type="number" name="p_pakete[]" class="we-pakete" min="1" step="1" value="1"></div>'+
+        '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked title="Angehakt = freigegeben, nicht angehakt = Quarantäne"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
         '<div class="bx-field f-split"><label>Aufteilen</label><input type="checkbox" class="we-split" title="Menge gleichmäßig auf die Kartons verteilen"><input type="hidden" name="p_aufteilen[]" class="we-split-h" value="0"></div>'+
         '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
       '</div>';
@@ -503,6 +498,9 @@ if ($gebucht):
     // Aufteilen-Haken je Position -> in das versteckte Feld schreiben (Index bleibt so ausgerichtet).
     var cb=card.querySelector('.we-split'), cbh=card.querySelector('.we-split-h');
     if(cb&&cbh) cb.addEventListener('change',function(){ cbh.value=cb.checked?'1':'0'; });
+    // Freigegeben-Haken je Position -> verstecktes Feld (angehakt = frei, sonst Quarantäne).
+    var fb=card.querySelector('.we-frei'), fbh=card.querySelector('.we-frei-h');
+    if(fb&&fbh) fb.addEventListener('change',function(){ fbh.value=fb.checked?'1':'0'; });
     pflicht(card);
     blinkerPflicht();
     zeigeAehnlich(card);

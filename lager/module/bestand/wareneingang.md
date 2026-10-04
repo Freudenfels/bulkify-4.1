@@ -7,8 +7,8 @@ Ein Bereich für alles, was reinkommt. Ablauf:
    Positionen werden per `erp_position_zuordnen()` einem bestehenden Artikel zugeordnet (exakter
    Name = sichere Zuordnung, sonst Vorschlag + Warenart-Vermutung). Antwort als JSON, Tabelle füllt sich.
 3. **Positionen prüfen**: je Zeile Artikel (bestehend/neu), Warenart, Menge, Einheit, Charge, MHD,
-   **Blinker (immer Pflicht)**, Pakete. Pflichtfelder je Warenart aus `erp_warenart_regeln()`:
-   Rohstoff/Fertig/Kapsel → MHD+Charge Pflicht + Quarantäne; Verpackung/Verbrauch → frei.
+   **Blinker (immer Pflicht)**, Pakete, **Freigegeben-Haken**. Pflichtfelder je Warenart aus
+   `erp_warenart_regeln()`: Rohstoff/Fertig/Kapsel → MHD+Charge Pflicht; Verpackung/Verbrauch → frei.
 
    **Fertige Kapseln (Warenart „Fertigware / Bulk"):** Dann erscheint zusätzlich ein **Rezeptur-Picker**
    (Textsuche, `erp_rezeptur_liste()`, nur Rezepturen ≠ Entwurf). Beim Buchen wird die Position aufs
@@ -34,6 +34,8 @@ Eingabe mit Vorschlagsliste (datalist): bestehende wählen ODER **neuen Namen ti
 `erp_lieferant_finden_oder_anlegen()` gefunden (exakt/fuzzy) oder **neu angelegt** (mit Lieferantennummer).
 **Sendungs-/Paketnummer** (Tracking) wird je Charge gespeichert (`lg_tracking_set`).
 
-**Status** wird beim Einbuchen gewählt (`status`: Freigegeben = Standard / Quarantäne / Gesperrt) und an
-`erp_wareneingang_buchen(..., $status)` übergeben – Quarantäne ist nur noch der Sonderfall. Nachträglich
-änderbar auf der Charge-Detailseite (`?p=charge`, Aktion `status` → `erp_charge_status_setzen()`).
+**Status je Position** über den **Freigegeben-Haken** (`p_frei[]`): angehakt (Standard) = `frei`,
+nicht angehakt = `quarantaene`. So lassen sich in einer Lieferung Produkte mischen, ohne getrennt
+einzubuchen. Wird an `erp_wareneingang_buchen(..., $status)` übergeben. „Gesperrt" gibt es hier nicht –
+der volle Status (inkl. Gesperrt) ist nachträglich auf der Charge-Detailseite änderbar
+(`?p=charge`, Aktion `status` → `erp_charge_status_setzen()`).
