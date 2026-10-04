@@ -54,3 +54,6 @@ Der Reiter **Preise / Angebote** (und das Übersichts-Panel) zeigt jetzt die **e
 ## Keine Anfragen + Shop-Zugang
 - **Haken „Keine Anfragen senden"** (`lieferanten.keine_anfragen`): z. B. Onlineshops (Buxtrade), bei denen direkt gekauft wird. Solche Lieferanten erscheinen NICHT mehr im Preisanfrage-Popup (alle `anfrage_modal`-Listen + `preis_anfragen`-Validierung filtern `COALESCE(keine_anfragen,0)=0`).
 - **Shop-Zugang** (`shop_login`, `shop_passwort`, + `webseite`): gemeinsamer Team-Login für den Shop, damit jeder Mitarbeiter bestellen kann. „anzeigen"-Knopf blendet das Passwort ein, „Zum Shop" öffnet die Webseite. Klartext-Speicherung (nur intern sichtbar) – Hinweis im Formular.
+
+## Bankverbindung
+Panel „Bankverbindung" – **formatoffen** (nicht IBAN-fix). Felder `bank_inhaber/bank_name/bank_land/bank_iban/bank_swift/bank_konto/bank_adresse/bank_waehrung/bank_zwischenbank/bank_notiz` an `lieferanten`. Chinesische Lieferanten zahlen oft über Drittland-Banken → SWIFT/BIC + Kontonummer statt IBAN, ggf. Zwischen-/Korrespondenzbank. Der Lieferant kann dieselben Felder selbst im Portal (`lieferant_profil`) pflegen; die **Buchhaltung** liest sie für die Zahlung.

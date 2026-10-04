@@ -100,7 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $felder = ['lieferantennummer','firma','ansprechpartner','email','telefon','gesperrt','sprache','kategorien','fertig_formen','webseite',
                    'strasse','hausnummer','plz','ort','land','ust_id',
                    'waehrung','zahlungsart','zahlungsziel_tage','lieferzeit_tage','mindestbestellwert','notiz',
-                   'keine_anfragen','shop_login','shop_passwort'];
+                   'keine_anfragen','shop_login','shop_passwort',
+                   'bank_inhaber','bank_name','bank_land','bank_iban','bank_swift','bank_konto','bank_adresse','bank_waehrung','bank_zwischenbank','bank_notiz'];
         $vals = array_map($f, $felder);
         $vals[array_search('gesperrt', $felder)]        = isset($_POST['gesperrt']) ? 1 : 0;
         $vals[array_search('keine_anfragen', $felder)]  = isset($_POST['keine_anfragen']) ? 1 : 0;
@@ -383,6 +384,22 @@ if (!$neu) {
       <div class="bx-field"><label>Standard-Lieferzeit (Tage)</label><input type="number" name="lieferzeit_tage" value="<?= $v('lieferzeit_tage') ?>"></div>
       <div class="bx-field"><label>Mindestbestellwert</label><input type="number" step="0.01" name="mindestbestellwert" value="<?= $v('mindestbestellwert') ?>"></div>
     </div></div>
+
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Bankverbindung <?= bx_hint('Zahlungsdaten des Lieferanten – formatoffen. Keine IBAN (z. B. Bank außerhalb der EU)? Dann SWIFT/BIC + Kontonummer. Die Buchhaltung liest diese Felder für die Zahlung. Der Lieferant kann sie auch selbst im Portal pflegen.') ?></h2>
+      <div class="bx-grid">
+        <div class="bx-field" style="grid-column:1/-1"><label>Kontoinhaber / Begünstigter</label><input type="text" name="bank_inhaber" value="<?= $v('bank_inhaber') ?>"></div>
+        <div class="bx-field"><label>Name der Bank</label><input type="text" name="bank_name" value="<?= $v('bank_name') ?>"></div>
+        <div class="bx-field"><label>Land der Bank</label><input type="text" name="bank_land" value="<?= $v('bank_land') ?>"></div>
+        <div class="bx-field"><label>IBAN (falls vorhanden)</label><input type="text" name="bank_iban" value="<?= $v('bank_iban') ?>"></div>
+        <div class="bx-field"><label>SWIFT / BIC</label><input type="text" name="bank_swift" value="<?= $v('bank_swift') ?>"></div>
+        <div class="bx-field"><label>Kontonummer (ohne IBAN)</label><input type="text" name="bank_konto" value="<?= $v('bank_konto') ?>"></div>
+        <div class="bx-field"><label>Währung <span class="muted">(USD, EUR, CNY …)</span></label><input type="text" name="bank_waehrung" maxlength="10" value="<?= $v('bank_waehrung') ?>"></div>
+        <div class="bx-field" style="grid-column:1/-1"><label>Adresse der Bank</label><input type="text" name="bank_adresse" value="<?= $v('bank_adresse') ?>"></div>
+        <div class="bx-field" style="grid-column:1/-1"><label>Zwischenbank (SWIFT + Konto)</label><input type="text" name="bank_zwischenbank" value="<?= $v('bank_zwischenbank') ?>"></div>
+        <div class="bx-field" style="grid-column:1/-1"><label>Weitere Angaben <?= bx_hint('Routing/ABA, CNAPS, Branch-Code, Verwendungszweck …') ?></label><input type="text" name="bank_notiz" value="<?= $v('bank_notiz') ?>"></div>
+      </div>
+    </div>
   </section>
 
   <div class="bx-row" style="margin-top:var(--sp-4)">

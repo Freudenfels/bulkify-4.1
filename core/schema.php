@@ -1042,6 +1042,20 @@ function init_schema(): void {
     ensure_column('lieferanten', 'keine_anfragen', "TINYINT(1) NOT NULL DEFAULT 0");  // Onlineshop o. Ä. – keine Preisanfragen senden
     ensure_column('lieferanten', 'shop_login', "VARCHAR(190) NULL");     // gemeinsamer Shop-Login (Benutzer/E-Mail)
     ensure_column('lieferanten', 'shop_passwort', "VARCHAR(190) NULL");  // gemeinsames Shop-Passwort (intern, Team-Zugang)
+    // Bankverbindung des Lieferanten – FORMATOFFEN (nicht IBAN-fix!). Chinesische Lieferanten zahlen oft
+    // ueber Banken in Drittlaendern (HK/Singapur): dann SWIFT/BIC + Kontonummer statt IBAN, oft mit
+    // Beguenstigtem, Bankadresse und ggf. Zwischen-/Korrespondenzbank. Jedes Feld optional; der Lieferant
+    // fuellt, was zutrifft. Die Buchhaltung liest diese Felder spaeter fuer die Zahlung.
+    ensure_column('lieferanten', 'bank_inhaber',     "VARCHAR(190) NULL");  // Kontoinhaber / Beguenstigter (kann von Firma abweichen)
+    ensure_column('lieferanten', 'bank_name',        "VARCHAR(190) NULL");  // Name der Bank
+    ensure_column('lieferanten', 'bank_land',        "VARCHAR(100) NULL");  // Land der Bank (z. B. Hongkong, Singapur)
+    ensure_column('lieferanten', 'bank_iban',        "VARCHAR(60) NULL");   // IBAN (EU) – optional
+    ensure_column('lieferanten', 'bank_swift',       "VARCHAR(30) NULL");   // SWIFT/BIC – international fuehrend
+    ensure_column('lieferanten', 'bank_konto',       "VARCHAR(60) NULL");   // Kontonummer (wenn keine IBAN)
+    ensure_column('lieferanten', 'bank_adresse',     "VARCHAR(255) NULL");  // Bankadresse (oft fuer Auslandsueberweisung noetig)
+    ensure_column('lieferanten', 'bank_waehrung',    "VARCHAR(10) NULL");   // Zielwaehrung (USD/EUR/CNY …)
+    ensure_column('lieferanten', 'bank_zwischenbank',"VARCHAR(255) NULL");  // Zwischen-/Korrespondenzbank (SWIFT + Konto), oft fuer USD/China
+    ensure_column('lieferanten', 'bank_notiz',       "VARCHAR(500) NULL");  // Freitext: Routing/ABA, CNAPS, Branch-Code, Verwendungszweck …
     $pdo->exec("CREATE TABLE IF NOT EXISTS lieferant_einladung (
         id INT AUTO_INCREMENT PRIMARY KEY,
         lieferant_id INT NOT NULL,

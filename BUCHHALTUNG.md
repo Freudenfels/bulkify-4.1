@@ -41,6 +41,13 @@ Reiter: Übersicht (Forderungen/Verbindlichkeiten/Saldo), Offene Posten (Debitor
 (Zahlungen buchen, Status offen→teilbezahlt→bezahlt, stornieren). Tabellen `lieferant_rechnung`/`lieferant_zahlung`
 in `core/kreditor.php`. Quelle für Vorbefüllung: `bestellung`/`bestellung_position` (EK-Wert).
 
+**Bankverbindung des Lieferanten (für Zahlungen):** liegt an `lieferanten.bank_*` – **formatoffen**, NICHT
+IBAN-fix (China zahlt oft über Drittland-Banken: SWIFT/BIC + Kontonummer statt IBAN, ggf. Zwischenbank).
+Felder: `bank_inhaber, bank_name, bank_land, bank_iban, bank_swift, bank_konto, bank_adresse,
+bank_waehrung, bank_zwischenbank, bank_notiz`. Der Lieferant pflegt sie selbst im Portal
+(`lieferant_profil`) oder das Team im Lieferant-Detail. Beim Zahlung-Buchen/Export diese Felder lesen
+(nicht auf IBAN validieren; leere Felder sind normal).
+
 Exporte `?p=beleg_export&art=…`: `op`/`belege`/`datev` (Debitoren), `vop`/`lief_belege`/`datev_ek` (Kreditoren).
 CSV UTF-8+BOM; DATEV-EXTF-Buchungsstapel (Format 700, 125 Felder, SKR03-Default, per `app_meta` konfigurierbar;
 vor Produktiv-Import prüfen). E-Rechnung `?p=rechnung_xml&id=…` – CII/EN16931-XML (ZUGFeRD-Profil),

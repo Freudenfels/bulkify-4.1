@@ -8,6 +8,8 @@ Route: `?p=lieferant_profil`
 - **Sprache:** Deutsch oder English; wirkt sofort auf das ganze Portal.
 - **Firmenlogo:** PNG, JPG oder WebP, höchstens 2 MB. Der Dateityp wird über den Bildinhalt geprüft, nicht über die Endung; das alte Logo wird ersetzt statt angesammelt. Ausgeliefert wird es über `?p=lieferant_logo` (die Datei liegt außerhalb von `public`).
 
+**Bankverbindung** (neu): der Lieferant pflegt sie selbst, **formatoffen** (nicht IBAN-fix – China zahlt oft über Drittland-Banken: SWIFT/BIC + Kontonummer). Felder `bank_inhaber/bank_name/bank_land/bank_iban/bank_swift/bank_konto/bank_adresse/bank_waehrung/bank_zwischenbank/bank_notiz` an `lieferanten`, alle optional, mehrsprachig (lp_t). Die Buchhaltung liest sie später für Zahlungen.
+
 **Nicht** pflegbar: Konditionen, Zahlungsziele, Preise, Sperrung – das bleibt beim Team.
 
 ## Intern

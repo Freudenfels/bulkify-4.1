@@ -16,10 +16,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fehler = lp_t('firma') . ' – ' . lp_t('pflichtfeld');
     } else {
         q("UPDATE lieferanten SET firma=?, ansprechpartner=?, email=?, telefon=?, wechat=?, whatsapp=?,
-                  strasse=?, hausnummer=?, plz=?, ort=?, land=?, webseite=?, ust_id=?, sprache=? WHERE id=?",
+                  strasse=?, hausnummer=?, plz=?, ort=?, land=?, webseite=?, ust_id=?, sprache=?,
+                  bank_inhaber=?, bank_name=?, bank_land=?, bank_iban=?, bank_swift=?, bank_konto=?,
+                  bank_adresse=?, bank_waehrung=?, bank_zwischenbank=?, bank_notiz=? WHERE id=?",
           [$firma, $t('ansprechpartner', 190), $t('email', 190), $t('telefon', 60), $t('wechat', 80), $t('whatsapp', 40),
            $t('strasse', 190), $t('hausnummer', 20), $t('plz', 20), $t('ort', 120), mb_strtoupper($t('land', 5)),
-           $t('webseite', 190), $t('ust_id', 40), $spr, $lid]);
+           $t('webseite', 190), $t('ust_id', 40), $spr,
+           $t('bank_inhaber', 190), $t('bank_name', 190), $t('bank_land', 100), $t('bank_iban', 60),
+           mb_strtoupper($t('bank_swift', 30)), $t('bank_konto', 60), $t('bank_adresse', 255),
+           mb_strtoupper($t('bank_waehrung', 10)), $t('bank_zwischenbank', 255), $t('bank_notiz', 500), $lid]);
         $_SESSION['lp_lang'] = $spr; $_SESSION['lp_lang_uid'] = (int)($_SESSION['uid'] ?? 0);
 
         // Logo: nur Bilder, höchstens 2 MB. Das alte wird ersetzt, nicht angesammelt.
@@ -99,6 +104,33 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
           <option value="en"<?= $sp === 'en' ? ' selected' : '' ?>>English</option>
           <option value="zh"<?= $sp === 'zh' ? ' selected' : '' ?>>中文</option>
         </select></div>
+    </div>
+  </div>
+
+  <div class="bx-panel">
+    <h2 style="margin-top:0"><?= h(lp_t('bankverbindung')) ?></h2>
+    <p class="muted" style="margin-top:0;font-size:13px"><?= h(lp_t('bank_hinweis')) ?></p>
+    <div class="bx-grid">
+      <div class="bx-field" style="grid-column:1/-1"><label><?= h(lp_t('bank_inhaber')) ?></label>
+        <input type="text" name="bank_inhaber" value="<?= $v('bank_inhaber') ?>"></div>
+      <div class="bx-field"><label><?= h(lp_t('bank_name')) ?></label>
+        <input type="text" name="bank_name" value="<?= $v('bank_name') ?>"></div>
+      <div class="bx-field"><label><?= h(lp_t('bank_land')) ?></label>
+        <input type="text" name="bank_land" value="<?= $v('bank_land') ?>"></div>
+      <div class="bx-field"><label><?= h(lp_t('bank_iban')) ?></label>
+        <input type="text" name="bank_iban" value="<?= $v('bank_iban') ?>"></div>
+      <div class="bx-field"><label><?= h(lp_t('bank_swift')) ?></label>
+        <input type="text" name="bank_swift" value="<?= $v('bank_swift') ?>"></div>
+      <div class="bx-field"><label><?= h(lp_t('bank_konto')) ?></label>
+        <input type="text" name="bank_konto" value="<?= $v('bank_konto') ?>"></div>
+      <div class="bx-field"><label><?= h(lp_t('bank_waehrung')) ?> <span class="muted">(USD, EUR, CNY …)</span></label>
+        <input type="text" name="bank_waehrung" maxlength="10" value="<?= $v('bank_waehrung') ?>"></div>
+      <div class="bx-field" style="grid-column:1/-1"><label><?= h(lp_t('bank_adresse')) ?></label>
+        <input type="text" name="bank_adresse" value="<?= $v('bank_adresse') ?>"></div>
+      <div class="bx-field" style="grid-column:1/-1"><label><?= h(lp_t('bank_zwischenbank')) ?></label>
+        <input type="text" name="bank_zwischenbank" value="<?= $v('bank_zwischenbank') ?>"></div>
+      <div class="bx-field" style="grid-column:1/-1"><label><?= h(lp_t('bank_notiz')) ?></label>
+        <input type="text" name="bank_notiz" value="<?= $v('bank_notiz') ?>"></div>
     </div>
   </div>
 
