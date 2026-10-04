@@ -610,11 +610,12 @@ function erp_erwartete_lieferungen(): array {
 // Wareneingang buchen: legt eine Charge an (oder fuellt eine vorab aus einer CoA angelegte Charge).
 // Rohstoff/Fertigware -> Quarantaene, sonst sofort frei. Rueckgabe: neue/aktualisierte charge.id oder null.
 function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?string $mhd,
-                                 ?int $lieferant_id, string $notiz = ''): ?int {
+                                 ?int $lieferant_id, string $notiz = '', string $status = 'frei'): ?int {
     if (!tabelle_da('charge') || !tabelle_da('item')) return null;
     $it = one("SELECT kategorie, einheit FROM item WHERE id=?", [$item_id]);
     if (!$it || $menge <= 0) return null;
-    $status = in_array((string)$it['kategorie'], ['rohstoff', 'fertig', 'verkaufsfertig'], true) ? 'quarantaene' : 'frei';
+    // Status wird beim Einbuchen gewaehlt (Standard: freigegeben). Quarantaene nur im Sonderfall.
+    $status = in_array($status, ['frei', 'quarantaene', 'gesperrt'], true) ? $status : 'frei';
     $charge_nr = trim($charge_nr);
     $lief = (tabelle_da('lieferanten') && $lieferant_id) ? $lieferant_id : null;
 
@@ -639,6 +640,19 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
     $neu = (int) insert_id();
     erp_bedarf_bump();
     return $neu;
+}
+
+// Status einer Charge aendern (Freigeben / Quarantaene / Sperren). Leere Chargen bleiben 'leer'.
+// Rueckgabe: ['ok'=>bool, 'meldung'=>string].
+function erp_charge_status_setzen(int $charge_id, string $status): array {
+    if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Chargen vorhanden.'];
+    if (!in_array($status, ['frei', 'quarantaene', 'gesperrt'], true)) return ['ok' => false, 'meldung' => 'Unbekannter Status.'];
+    $c = one("SELECT status, menge_verfuegbar FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
+    if ((string)$c['status'] === 'leer' || (float)$c['menge_verfuegbar'] <= 0) return ['ok' => false, 'meldung' => 'Leere Charge – Status bleibt.'];
+    q("UPDATE charge SET status=? WHERE id=?", [$status, $charge_id]);
+    $txt = ['frei' => 'Freigegeben', 'quarantaene' => 'In Quarantäne', 'gesperrt' => 'Gesperrt'];
+    return ['ok' => true, 'meldung' => 'Status: ' . $txt[$status]];
 }
 
 // Warenausgang: Menge von einer Charge abbuchen. Leer -> Status 'leer'. Fremdlager-Chargen sind tabu.

@@ -59,6 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash($mhd ? ('MHD korrigiert: ' . date('d.m.Y', strtotime($mhd))) : 'MHD geleert.', 'ok');
         weiter('?p=charge&id=' . $id);
     }
+    if ($aktion === 'status') {
+        $r = erp_charge_status_setzen($id, (string)($_POST['status'] ?? ''));
+        flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+        weiter('?p=charge&id=' . $id);
+    }
     if ($aktion === 'loeschen') {
         $grund = trim((string)($_POST['grund'] ?? ''));
         lg_papierkorb_rein($id, (string)$c['item_name'], (string)$c['charge_nr'],
@@ -129,6 +134,21 @@ flash_zeigen();
   <div class="bx-card"><div class="k">Sendung / Paket</div><div class="v lg-code" style="font-size:var(--fs-lg)"><?= h($trk) ?></div></div>
   <?php endif; ?>
 </div>
+
+<?php if ((string)$c['status'] !== 'leer' && (float)$c['menge_verfuegbar'] > 0): ?>
+<div class="bx-panel" style="margin-bottom:var(--sp-5)">
+  <div class="bx-row" style="gap:var(--sp-2);flex-wrap:wrap;align-items:center">
+    <span class="muted" style="margin-right:var(--sp-2)">Status ändern:</span>
+    <?php foreach (['frei' => 'Freigeben', 'quarantaene' => 'In Quarantäne', 'gesperrt' => 'Sperren'] as $sv => $sl):
+      $aktiv = (string)$c['status'] === $sv; ?>
+      <form method="post" style="display:inline">
+        <input type="hidden" name="aktion" value="status"><input type="hidden" name="status" value="<?= $sv ?>">
+        <button type="submit" class="btn <?= $aktiv ? 'btn-primary' : 'btn-ghost' ?> btn-sm" <?= $aktiv ? 'disabled' : '' ?>><?= $sl ?></button>
+      </form>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
 
 <div class="umb-overlay" id="umbModal" hidden>
   <div class="umb-box bx-panel">

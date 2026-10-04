@@ -85,6 +85,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $auftragNr = trim((string)($_POST['auftrag_nr'] ?? ''));
     $kisteId   = (int)($_POST['kiste_id'] ?? 0);   // optional: alle Positionen in diese Kiste
     $fachG     = trim((string)($_POST['fach'] ?? ''));
+    $statusG   = (string)($_POST['status'] ?? 'frei');   // Standard: freigegeben
+    if (!in_array($statusG, ['frei', 'quarantaene', 'gesperrt'], true)) $statusG = 'frei';
 
     $names   = (array)($_POST['p_name'] ?? []);
     $gebucht = [];
@@ -124,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         if ($zusatz) $notiz .= ' · ' . implode(' · ', $zusatz);
         $cid = $ziel === 'l2'
             ? erp_wareneingang_buchen_fremd($item_id, $menge, $charge, $mhd ?: null, $kunde_id, $notiz)
-            : erp_wareneingang_buchen($item_id, $menge, $charge, $mhd ?: null, $lief, $notiz);
+            : erp_wareneingang_buchen($item_id, $menge, $charge, $mhd ?: null, $lief, $notiz, $statusG);
         if (!$cid) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Buchen fehlgeschlagen.'; continue; }
 
         lg_pakete_set((int)$cid, $pakete);
@@ -320,6 +322,13 @@ if ($gebucht):
           </select>
         </div>
         <?php endif; ?>
+        <div class="bx-field" style="margin:0;min-width:180px"><label>Status</label>
+          <select name="status">
+            <option value="frei" selected>Freigegeben</option>
+            <option value="quarantaene">Quarantäne</option>
+            <option value="gesperrt">Gesperrt</option>
+          </select>
+        </div>
         <div class="bx-field" style="margin:0;min-width:240px;flex:1 1 240px"><label>Sendungs-/Paketnummer <span class="muted">(optional, scannen)</span></label>
           <input type="text" name="tracking" class="lg-code" autocomplete="off" placeholder="Paketlabel scannen – welches Paket ist gekommen">
         </div>

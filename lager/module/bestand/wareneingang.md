@@ -24,3 +24,7 @@ Ist eine Kiste gewählt, wird jede gebuchte Charge per `kiste_charge_zuordnen()`
 **Lieferschein-Scan** erfasst zusätzlich Lieferanten-**Art.-Nr.** je Position und die **Auftragsnummer**
 (beides in die Charge-Notiz), legt den **Lieferanten** an/verknüpft ihn und erfindet **keine Charge** mehr.
 **Sendungs-/Paketnummer** (Tracking) wird je Charge gespeichert (`lg_tracking_set`).
+
+**Status** wird beim Einbuchen gewählt (`status`: Freigegeben = Standard / Quarantäne / Gesperrt) und an
+`erp_wareneingang_buchen(..., $status)` übergeben – Quarantäne ist nur noch der Sonderfall. Nachträglich
+änderbar auf der Charge-Detailseite (`?p=charge`, Aktion `status` → `erp_charge_status_setzen()`).
