@@ -20,6 +20,7 @@ function bu_nav(): array {
     return [
         'Buchhaltung' => [
             'buchhaltung'       => ['label' => 'Übersicht',           'href' => '?p=buchhaltung'],
+            'beleg_eingang'     => ['label' => 'Belege (KI)',         'href' => '?p=beleg_eingang'],
             'rechnungen'        => ['label' => 'Rechnungen',          'href' => '?p=rechnungen'],
             'angebote_ansicht'  => ['label' => 'Angebote (Ansicht)',  'href' => '?p=angebote_ansicht'],
             'rechnung_frei'     => ['label' => 'Rechnung erstellen',  'href' => '?p=rechnung_frei'],

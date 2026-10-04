@@ -18,3 +18,7 @@ in `core/kreditor.php`.
   Vor Produktiv-Import mit dem Steuerberater abstimmen.
 
 Logik in `core/buchhaltung.php` (`bh_export_op_csv`, `bh_export_belege_csv`, `bh_export_datev`).
+
+## Steuerberater-Paket (neu)
+- `art=stb_csv` – Beleg-Posteingang als Excel-CSV (UTF-8+BOM).
+- `art=stb_zip` – ZIP mit `belege.csv` + allen Belegdateien (eigener ZIP-Writer `bu_zip`, da ZipArchive hier fehlt). Logik in `core/belegeingang.php`.

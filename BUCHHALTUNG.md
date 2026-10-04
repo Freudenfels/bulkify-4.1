@@ -117,6 +117,16 @@ CSV UTF-8+BOM; DATEV-EXTF-Buchungsstapel (Format 700, 125 Felder, SKR03-Default,
 vor Produktiv-Import prüfen). E-Rechnung `?p=rechnung_xml&id=…` – CII/EN16931-XML (ZUGFeRD-Profil),
 Button in der Rechnungs-Detailansicht. Factur-X-Einbettung (XML in PDF/A-3) steht noch aus.
 
+### Beleg-Posteingang mit KI (`?p=beleg_eingang`, Tabelle `bu_beleg_eingang`)
+Belege (Eingangsrechnungen/Quittungen/Kassenbons) hochladen → **KI liest aus** (`be_ki_auslesen` via `ki_datei_frage`:
+Belegart, Lieferant, Datum, Netto/USt/Brutto, Währung, Ausgabenkategorie) → prüfen/erfassen → Datei gespeichert
+(`BX_UPLOADS/belege/JJJJ-MM/`). Kanäle: Online-Upload (`beleg_upload`), **Handy-Foto per Token-Link ohne Login**
+(`beleg_foto`, public, Token in `app_meta belege_upload_token`), **E-Mail als Gerüst** (`be_mail_abholen`, braucht
+php-imap + `app_meta belege_imap_*` – noch nicht aktiv). **Steuerberater-Paket**: `?p=beleg_export&art=stb_zip`
+(ZIP = Excel-CSV `belege.csv` + alle Belegdateien; eigener ZIP-Writer `bu_zip`, da ZipArchive fehlen kann) bzw.
+`art=stb_csv`. Engine: `core/belegeingang.php`; Seiten `beleg_eingang/beleg_upload/beleg_detail/beleg_datei/beleg_foto`.
+Eigenes Register, unabhängig von den Kreditoren – optionaler „als Eingangsrechnung übernehmen"-Schritt ist noch offen.
+
 ### Seiten (`?p=…` → `module/beleg/…`)
 - `rechnungen` → `rechnungen_liste.php` – Rechnungsliste (Übersicht/Filter).
 - `rechnung&id=…` → `detail.php` – Beleg-Detail (Status, Positionen, Zahlstatus, Verlauf).

@@ -3,6 +3,7 @@
 // Route: beleg_export (Rolle finance). ?art=op|belege|datev [&von=Y-m-d&bis=Y-m-d]
 require_once BX_ROOT . '/core/buchhaltung.php';
 require_once BX_ROOT . '/core/kreditor.php';
+require_once BX_ROOT . '/core/belegeingang.php';
 
 $art = preg_replace('/[^a-z_]/', '', $_GET['art'] ?? '');
 $von = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['von'] ?? '') ? $_GET['von'] : '';
@@ -40,6 +41,17 @@ switch ($art) {
         $data = kr_export_datev($von, $bis);
         $name = "EXTF_Rechnungseingang_" . date('Ymd_His') . ".csv";
         $ct = 'text/csv; charset=windows-1252';
+        break;
+    case 'stb_csv': // Steuerberater: Beleg-Posteingang als Excel-CSV
+        $data = be_export_csv($von, $bis);
+        $name = "steuerberater_belege_" . ($von ?: 'alle') . "_" . ($bis ?: $heute) . ".csv";
+        $ct = 'text/csv; charset=utf-8';
+        break;
+    case 'stb_zip': // Steuerberater: ZIP mit Excel-CSV + allen Belegdateien
+        $zip = be_export_zip($von, $bis);
+        $data = $zip['data'];
+        $name = $zip['name'];
+        $ct = 'application/zip';
         break;
     default:
         http_response_code(400);

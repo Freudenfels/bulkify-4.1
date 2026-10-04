@@ -26,8 +26,16 @@ $routen = [
     'lief_rechnung_neu' => 'buchhaltung/lief_rechnung_neu.php',
     'lief_rechnung'     => 'buchhaltung/lief_rechnung.php',
     'angebote_ansicht'  => 'buchhaltung/angebote_ansicht.php',   // Nur-Lese-Angebote + Abgleich Angebot/Auftrag/Rechnung
+    'beleg_eingang'     => 'buchhaltung/beleg_eingang.php',       // Beleg-Posteingang (KI-Upload)
+    'beleg_upload'      => 'buchhaltung/beleg_upload.php',        // Beleg hochladen (nach Login)
+    'beleg_detail'      => 'buchhaltung/beleg_detail.php',        // Beleg prüfen/erfassen
+    'beleg_datei'       => 'buchhaltung/beleg_datei.php',         // Beleg-Datei ausliefern
+    'beleg_foto'        => 'buchhaltung/beleg_foto.php',          // öffentliche Handy-Foto-Seite (Token)
     'login'             => 'auth/login.php',
 ];
+
+// Öffentliche Routen (ohne Buchhaltungs-Login): Login + token-geschützter Handy-Foto-Upload.
+$PUBLIC = ['login', 'beleg_foto'];
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'buchhaltung';
 
@@ -44,7 +52,7 @@ if ($p === 'autologin') {
     weiter('?p=login');
 }
 
-if ($p !== 'login' && !bu_angemeldet()) weiter('?p=login');
+if (!in_array($p, $PUBLIC, true) && !bu_angemeldet()) weiter('?p=login');
 if ($p === 'login' && bu_angemeldet()) weiter('?p=buchhaltung');
 if (!isset($routen[$p])) $p = bu_angemeldet() ? 'buchhaltung' : 'login';
 
