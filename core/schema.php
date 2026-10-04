@@ -1413,6 +1413,10 @@ function init_schema(): void {
     ensure_column('item', 'synonym', "VARCHAR(60) NULL");            // z. B. RM940
     ensure_column('item', 'ec_nr', "VARCHAR(30) NULL");
     ensure_column('item', 'bot_quelle', "VARCHAR(190) NULL");        // botanische Quelle / Pflanzenteil
+    // Öffentliche Rohstoff-Datenbank (Website/SEO): je Rohstoff einzeln freigeben; nichts geht automatisch online.
+    ensure_column('item', 'website_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0"); // 1 = auf bulkify.pro-Rohstoff-DB zeigen
+    ensure_column('item', 'web_slug', "VARCHAR(190) NULL");          // stabile URL (z. B. ashwagandha-wurzelextrakt)
+    ensure_column('item', 'web_beschreibung', "TEXT NULL");          // neutrale, claims-sichere Beschreibung für die Website
     ensure_column('item', 'herkunftsland', "VARCHAR(120) NULL");
     ensure_column('item', 'haltbarkeit', "VARCHAR(120) NULL");
     ensure_column('item', 'lagerbedingungen', "TEXT NULL");

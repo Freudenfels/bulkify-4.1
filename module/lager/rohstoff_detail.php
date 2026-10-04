@@ -209,9 +209,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
                    'ek_preis','preis_bezug','vk_aufschlag_prozent','haupt_lieferant_id','gesperrt','notiz',
                    // Spezifikation
                    'synonym','ec_nr','bot_quelle','herkunftsland','haltbarkeit','lagerbedingungen','zusaetze',
-                   'vegan','gvo_frei','bestrahlt','tse_bse_frei','zertifikate','spec_nr','spec_version','spec_gueltig_ab'];
+                   'vegan','gvo_frei','bestrahlt','tse_bse_frei','zertifikate','spec_nr','spec_version','spec_gueltig_ab',
+                   // Öffentliche Rohstoff-DB (Website)
+                   'website_sichtbar','web_beschreibung'];
         $vals = array_map($f, $felder);
         $vals[array_search('gesperrt', $felder)] = isset($_POST['gesperrt']) ? 1 : 0;
+        $vals[array_search('website_sichtbar', $felder)] = isset($_POST['website_sichtbar']) ? 1 : 0;
         $vals[array_search('haupt_lieferant_id', $felder)] = ($_POST['haupt_lieferant_id'] ?? '') !== '' ? (int)$_POST['haupt_lieferant_id'] : null;
         $vals[array_search('kapselgroesse_id', $felder)] = ($_POST['kapselgroesse_id'] ?? '') !== '' ? (int)$_POST['kapselgroesse_id'] : null;
         if (trim($_POST['leergewicht_mg'] ?? '') === '') $vals[array_search('leergewicht_mg', $felder)] = null;
@@ -237,6 +240,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             $set = implode(',', array_map(fn($c) => "$c=?", $felder));
             $vals[] = (int)$id;
             q("UPDATE item SET $set WHERE id=?", $vals);
+        }
+        // Für die Website freigegeben? Dann einen stabilen URL-Slug sicherstellen (einmalig).
+        if (isset($_POST['website_sichtbar'])) {
+            require_once BX_ROOT . '/core/rohstoff_public.php';
+            rohstoff_web_slug_sicherstellen((int)$id);
         }
         // Wirkstoffe synchronisieren (mehrere möglich; neuer Name -> Nährstoff wird angelegt)
         q("DELETE FROM item_wirkstoff WHERE item_id=?", [(int)$id]);
@@ -658,6 +666,19 @@ if (!$neu) {
       <p class="muted" style="margin:14px 0 6px;font-size:13px">Aus den Feldern oben entsteht <strong>unsere eigene</strong> Spezifikation im bulkify-Layout. Sie geht an den Kunden – das Dokument des Vorlieferanten bleibt intern.</p>
       <div><a class="btn btn-ghost" target="_blank" href="?p=spec_bulkify&id=<?= (int)$id ?>">bulkify-Spezifikation ansehen</a></div>
     <?php endif; ?>
+    </div>
+
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Öffentliche Rohstoff-Datenbank (Website) <?= bx_hint('Wenn aktiv, erscheint dieser Rohstoff auf bulkify.pro (SEO). Es gehen NUR öffentliche Felder online: Name, CAS, botanische Quelle, charakteristische Kennwerte, Wirkstoffe, Beschreibung – NIE Preise, Lieferanten, Bestand oder Originaldokumente.') ?></h2>
+      <label class="bx-check" style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <input type="checkbox" name="website_sichtbar" value="1" <?= (int)($it['website_sichtbar'] ?? 0) === 1 ? 'checked' : '' ?>>
+        <span>Für die öffentliche Rohstoff-Datenbank auf bulkify.pro freigeben</span>
+      </label>
+      <div class="bx-field" style="margin:0"><label>Öffentliche Beschreibung <?= bx_hint('neutral/sachlich – KEINE gesundheitsbezogenen Aussagen (EU-VO 1924/2006). Botanische Herkunft, Form, Standardisierung, allgemeines Einsatzgebiet.') ?></label>
+        <textarea name="web_beschreibung" rows="3" placeholder="z. B. Wässriger Wurzelextrakt aus Withania somnifera, standardisiert auf 5 % Withanolide, hellbraunes feines Pulver."><?= $v('web_beschreibung') ?></textarea></div>
+      <?php if (!$neu && (int)($it['website_sichtbar'] ?? 0) === 1 && trim((string)($it['web_slug'] ?? '')) !== ''): ?>
+        <p class="muted" style="font-size:12px;margin:10px 0 0">Öffentliche URL (sobald die Website-Rubrik steht): <strong>bulkify.pro/rohstoffe/<?= h((string)$it['web_slug']) ?>/</strong></p>
+      <?php endif; ?>
     </div>
   </section>
 
