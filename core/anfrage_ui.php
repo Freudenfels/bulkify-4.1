@@ -159,7 +159,7 @@ function bxAnfrageOeffnen(itemId, btn){
   var mEl = document.getElementById('bxAnfMenge');
   var mv = btn && btn.getAttribute('data-menge');
   var meinh = btn && btn.getAttribute('data-einheit');
-  if (mEl) mEl.value = (mv && parseFloat(mv) > 0) ? mv : '';
+  if (mEl) mEl.value = (mv && parseFloat(mv) > 0) ? Math.round(parseFloat(mv)).toLocaleString('de-DE') : '';
   var mLbl = document.getElementById('bxAnfMengeLbl');
   if (mLbl) mLbl.textContent = (mv && parseFloat(mv) > 0 && meinh) ? ('Menge (' + meinh + ')') : 'Menge (optional)';
   var name = btn && btn.getAttribute('data-name');
@@ -196,6 +196,23 @@ function bxAnfrageProduktOeffnen(rezId, btn){
     'Fertigprodukt „' + (name || '') + '"' + (form ? ' (' + form + ')' : '') + ' – bei welchen Lieferanten fertigen lassen?';
   document.getElementById('bxAnfrageOverlay').style.display='flex';
 }
+// Mengenfeld mit Tausenderpunkt (10.000 statt 10000). Komma bleibt der Staffel-Trenner;
+// je kommagetrennte Menge einzeln formatiert. Cursor wird über die Ziffernposition erhalten.
+(function(){
+  var el = document.getElementById('bxAnfMenge'); if (!el) return;
+  el.addEventListener('input', function(){
+    var start = el.selectionStart || 0, val = el.value;
+    var ziffernVorCursor = (val.slice(0, start).match(/[0-9]/g) || []).length;
+    var out = val.split(',').map(function(teil){
+      var d = teil.replace(/[^0-9]/g, '');
+      return d === '' ? '' : parseInt(d, 10).toLocaleString('de-DE');
+    }).join(', ');
+    el.value = out;
+    var pos = 0, gesehen = 0;
+    while (pos < out.length && gesehen < ziffernVorCursor) { if (/[0-9]/.test(out[pos])) gesehen++; pos++; }
+    try { el.setSelectionRange(pos, pos); } catch(e){}
+  });
+})();
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape') bxAnfrageZu(); });
 document.getElementById('bxAnfrageOverlay').addEventListener('click', function(e){ if (e.target === this) bxAnfrageZu(); });
 </script>

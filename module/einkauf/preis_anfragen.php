@@ -14,7 +14,8 @@ $item_id = (int)($_POST['item_id'] ?? 0);
 $rez_id  = (int)($_POST['rezeptur_id'] ?? 0);
 $art     = (string)($_POST['art'] ?? '');
 $lids  = array_values(array_filter(array_map('intval', (array)($_POST['anf_lieferant'] ?? [])), fn($x) => $x > 0));
-$menge = (float) str_replace(',', '.', (string)($_POST['anf_menge'] ?? '0'));
+// Tausenderpunkt (10.000) entfernen, Komma bleibt Dezimaltrenner.
+$menge = (float) str_replace(',', '.', str_replace('.', '', (string)($_POST['anf_menge'] ?? '0')));
 $notiz = trim((string)($_POST['anf_notiz'] ?? ''));
 $coa   = isset($_POST['anf_coa']);
 $incoterm   = (string)($_POST['anf_incoterm'] ?? '');
@@ -30,7 +31,7 @@ if ($art === 'fertigprodukt' && $rez_id > 0) {
     $form    = (string)($rez['darreichungsform'] ?: 'kapsel');
     $betreff = 'Fertigprodukt (Bulk): ' . (string)$rez['name'];
     // Fertigprodukt: mehrere Mengen (Staffel) kommagetrennt möglich – der Lieferant bekommt sie vorausgefüllt.
-    $mengen  = array_values(array_filter(array_map('intval', preg_split('/[,;\s]+/', (string)($_POST['anf_menge'] ?? ''))), fn($m) => $m > 0));
+    $mengen  = array_values(array_filter(array_map(fn($x) => (int) str_replace('.', '', (string)$x), preg_split('/[,;\s]+/', (string)($_POST['anf_menge'] ?? ''))), fn($m) => $m > 0));
     $opt     = ['art' => 'fertigprodukt', 'form' => $form, 'rezeptur_id' => $rez_id, 'menge_staffel' => $mengen] + $lieferOpt;
     $einh    = anfrage_einheit_fuer_form($form);
     $n = 0; $gemailt = 0;
