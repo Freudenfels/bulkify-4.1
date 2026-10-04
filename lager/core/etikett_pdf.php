@@ -155,6 +155,15 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
         $pdf->text($lx, $yy + $mm(4.2), $pdf->fit($v !== '' ? $v : '–', $tw, 13, true), 13, true, $dark);
         $yy += $mm(10.5);
     };
+    // Volle Breite, aber Schrift schrumpft bis die GANZE Zahl passt (z. B. Chargennummer – nie abgeschnitten).
+    $feldAuto = function (string $l, string $v) use ($pdf, $lx, &$yy, $muted, $dark, $mm, $tw): void {
+        $v = $v !== '' ? $v : '–';
+        $size = 13.0;
+        while ($size > 7.5 && $pdf->strwidth($v, $size, true) > $tw) $size -= 0.5;
+        $pdf->text($lx, $yy, $l, 8.5, false, $muted);
+        $pdf->text($lx, $yy + $mm(4.2), $v, $size, true, $dark);
+        $yy += $mm(10.5);
+    };
     $halb = function (string $l1, string $v1, string $l2, string $v2) use ($pdf, $lx, $midx, &$yy, $muted, $dark, $mm, $tw): void {
         $hw = $tw / 2 - $mm(3);
         $pdf->text($lx, $yy, $l1, 8.5, false, $muted);
@@ -164,7 +173,8 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
         $yy += $mm(10.5);
     };
     $halb('Lieferant', $lieferantTxt, 'Eingang', $eingangTxt);
-    $halb('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''), 'Blinker / Ort', (string)($c['blinker_code'] ?? ''));
+    $feldAuto('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));   // volle Breite, nie abgeschnitten
     $halb('MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–',
           (string)($c['menge_label'] ?? 'Menge'), menge_txt($c['menge_anzeige'] ?? $c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
+    $feld('Blinker / Ort', (string)($c['blinker_code'] ?? ''));
 }
