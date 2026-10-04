@@ -20,6 +20,7 @@ if ($kat !== 'alle' && !array_key_exists($kat, $ALLE_KAT)) $kat = 'alle';
 $sort = $_GET['sort'] ?? 'name';
 $dir  = $_GET['dir']  ?? 'asc';
 $istBM = ist_betriebsmittel_kat($kat);
+$zeigeLeer = isset($_GET['leer']);   // Standard: nur Artikel mit Bestand > 0. ?leer=1 zeigt auch leere.
 
 if ($kat === 'alle') { $where = "i.kategorie IN ('" . implode("','", array_keys($ALLE_KAT)) . "')"; $params = []; }
 else                 { $where = "i.kategorie=?"; $params = [$kat]; }
@@ -34,6 +35,12 @@ $rows = all("SELECT i.id,i.artikelnummer,i.name,i.kategorie,i.einheit,i.bestand_
 // Bestand vereinheitlichen: Betriebsmittel = manueller Bestand, sonst Chargen-Bestand.
 foreach ($rows as &$r) $r['frei'] = ist_betriebsmittel_kat($r['kategorie']) ? (float)$r['bestand_menge'] : (float)$r['frei_charge'];
 unset($r);
+
+// Nullbestände ausblenden (Standard): nur ECHTE Ware (Rohstoff/Verpackung/Fertigware/Verkaufsfertig),
+// nicht Betriebsmittel (Maschinen/Inventar sind Anlagegüter – auch bei Bestand 0 sichtbar). ?leer=1 zeigt alles.
+$anzahlLeer = 0;
+foreach ($rows as $r) if (!ist_betriebsmittel_kat($r['kategorie']) && (float)$r['frei'] <= 0) $anzahlLeer++;
+if (!$zeigeLeer) $rows = array_values(array_filter($rows, fn($r) => ist_betriebsmittel_kat($r['kategorie']) || (float)$r['frei'] > 0));
 
 if ($q !== '') {
     $needle = mb_strtolower($q);
@@ -96,25 +103,29 @@ bx_head('Warenlager', count($rows) . ' Artikel', $aktion);
 ?>
 <div class="settabs" style="margin:0 0 14px">
   <?php foreach ($TABS as $k => $lbl): ?>
-    <a href="?p=lager&kat=<?= $k ?><?= $q !== '' ? '&q=' . urlencode($q) : '' ?>" class="<?= $kat === $k ? 'on' : '' ?>"><?= h($lbl) ?></a>
+    <a href="?p=lager&kat=<?= $k ?><?= $q !== '' ? '&q=' . urlencode($q) : '' ?><?= $zeigeLeer ? '&leer=1' : '' ?>" class="<?= $kat === $k ? 'on' : '' ?>"><?= h($lbl) ?></a>
   <?php endforeach; ?>
 </div>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="lager">
   <input type="hidden" name="kat" value="<?= h($kat) ?>">
+  <?php if ($zeigeLeer): ?><input type="hidden" name="leer" value="1"><?php endif; ?>
   <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Name, Art.-Nr …">
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
+  <span style="flex:1"></span>
+  <?php $umschaltUrl = '?p=lager&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : '') . ($zeigeLeer ? '' : '&leer=1'); ?>
+  <a class="btn btn-ghost btn-sm" href="<?= $umschaltUrl ?>"><?= $zeigeLeer ? 'nur mit Bestand' : 'auch leere anzeigen' . ($anzahlLeer > 0 ? ' (' . $anzahlLeer . ')' : '') ?></a>
 </form>
 <?php
 if ($istBM && !$rows && $q === '') {
     echo '<div class="bx-panel"><div class="muted">Noch keine ' . h($BM_KAT[$kat]) . ' angelegt. Über „Neu: ' . h($BM_KAT[$kat]) . '" oben rechts hinzufügen.</div></div>';
 } else {
     bx_table($cols, $rows, [
-        'baseUrl' => '?p=lager&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : ''),
+        'baseUrl' => '?p=lager&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : '') . ($zeigeLeer ? '&leer=1' : ''),
         'sort'    => $sort,
         'dir'     => $dir,
         'rowUrl'  => $detailUrl,
-        'empty'   => 'Keine Artikel gefunden.',
+        'empty'   => (!$zeigeLeer && $anzahlLeer > 0 && $q === '') ? 'Nichts auf Lager. ' . $anzahlLeer . ' Artikel ohne Bestand sind ausgeblendet – „auch leere anzeigen".' : 'Keine Artikel gefunden.',
     ]);
 }
 render_footer();
