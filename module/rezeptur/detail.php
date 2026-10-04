@@ -239,8 +239,11 @@ if (!empty($_SESSION['rez_del_fehler'])) { echo '<div class="bx-panel" style="bo
             $iid = (int)$iid; if (!$iid) return '';
             $nr = $ZNR[$iid] ?? '';
             $out = '<a href="?p=rohstoff&id=' . $iid . '" style="font-size:12px">↗ Rohstoff' . ($nr !== '' ? ' ' . h($nr) : '') . '</a>';
+            // Unsere bulkify-Spezifikation (kundentauglich, allgemein – immer verfügbar).
+            $out .= ' <span class="muted">·</span> <a href="#" style="font-size:12px" onclick="bxDocOeffnen(\'?p=spec_bulkify&id=' . $iid . '\',\'bulkify-Spezifikation\');return false">Spez. (bulkify)</a>';
+            // Original-Unterlagen des Lieferanten (teamintern) zur Kontrolle.
             foreach ($ITEMDOCS[$iid] ?? [] as $d) {
-                $lbl = $docTypLblZ[$d['typ']] ?? $d['typ'];
+                $lbl = ($docTypLblZ[$d['typ']] ?? $d['typ']) . ' (Lief.)';
                 $out .= ' <span class="muted">·</span> <a href="#" style="font-size:12px" onclick="bxDocOeffnen(\'?p=dokument&id=' . (int)$d['id'] . '\',\'' . h(addslashes($lbl)) . '\');return false">' . h($lbl) . '</a>';
             }
             return $out;
@@ -452,7 +455,8 @@ function zactions(row){
   var id = row.querySelector('.zitem').value;
   if(!id){ box.innerHTML=''; return; }
   var html = '<a href="?p=rohstoff&id='+id+'" style="font-size:12px">↗ Rohstoff'+(ZNR[id]?' '+ZNR[id]:'')+'</a>';
-  (ITEMDOCS[id]||[]).forEach(function(d){ var l=DOCLBLZ[d.typ]||d.typ; html+=' <span class="muted">·</span> <a href="#" style="font-size:12px" onclick="bxDocOeffnen(\'?p=dokument&id='+d.id+'\',\''+l+'\');return false">'+l+'</a>'; });
+  html += ' <span class="muted">·</span> <a href="#" style="font-size:12px" onclick="bxDocOeffnen(\'?p=spec_bulkify&id='+id+'\',\'bulkify-Spezifikation\');return false">Spez. (bulkify)</a>';
+  (ITEMDOCS[id]||[]).forEach(function(d){ var l=(DOCLBLZ[d.typ]||d.typ)+' (Lief.)'; html+=' <span class="muted">·</span> <a href="#" style="font-size:12px" onclick="bxDocOeffnen(\'?p=dokument&id='+d.id+'\',\''+l+'\');return false">'+l+'</a>'; });
   box.innerHTML = html;
 }
 function nf(x, d){ return x.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d}); }

@@ -229,11 +229,10 @@ function build_coa_pdf(int $charge_id): ?string {
     $fmtD = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '–';
     $num  = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 
+    // Kundendokument: KEINE internen Logistikdaten (Menge, Wareneingang, Quarantäne-Status).
     $kopf = [
         ['Rohstoff', (string)$c['item_name']],
         ['Charge', (string)($c['charge_nr'] ?: '–')],
-        ['Menge', $num($c['menge']) . ' ' . (string)($c['einheit'] ?? '')],
-        ['Wareneingang', $fmtD($c['wareneingang'] ?? '')],
         ['Mindesthaltbar bis', $fmtD($c['mhd'] ?? '')],
     ];
     if (!empty($c['herkunftsland'])) $kopf[] = ['Herkunft', (string)$c['herkunftsland']];
@@ -254,11 +253,10 @@ function build_coa_pdf(int $charge_id): ?string {
     if (!empty($c['allergene'])) { $y = spec_h($p, $y, 'Allergene'); $y = spec_grid($p, $y, [['Allergene', (string)$c['allergene']]]); }
 
     $y += 16;
-    $freigabe = (string)$c['status'] === 'frei'
-        ? 'Die Charge wurde geprüft und für die Verarbeitung freigegeben.'
-        : 'Die Charge befindet sich in Quarantäne; die Freigabe steht noch aus.';
+    // Neutrale Konformitätsaussage – KEIN interner Quarantäne-/Freigabestatus auf dem Kundendokument.
+    $freigabe = 'Die aufgeführten Analysenwerte entsprechen der Spezifikation.';
     foreach ($p->wrap($freigabe, $R - $L, 9, false) as $wl) { if ($y > 780) { $p->addPage(); $y = 48; } $p->text($L, $y, $wl, 9, false, SPEC_INK); $y += 12; }
-    $y = spec_release($p, $y, $fmtD($c['wareneingang'] ?? '') !== '–' ? $fmtD($c['wareneingang'] ?? '') : date('d.m.Y'));
+    $y = spec_release($p, $y, date('d.m.Y'));
     spec_fuss($p, $y + 18);
     return $p->output();
 }
