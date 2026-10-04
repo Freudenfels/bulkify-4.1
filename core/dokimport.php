@@ -146,6 +146,33 @@ function dokimport_zuordnen(int $datei_id, string $eingabe): bool {
     return true;
 }
 
+// Aus einer Zeile OHNE Treffer einen NEUEN Rohstoff aus den KI-Stammdaten anlegen und zuordnen.
+// Rueckgabe: neue item_id (0 = nichts angelegt). Stammdaten (CAS, Synonyme, botan. Quelle …) werden
+// uebernommen; Charge/Grenzwerte/Kennwerte/Wirkstoffe kommen dann beim eigentlichen Import dazu.
+function dokimport_neu_anlegen(int $datei_id): int {
+    $d = one("SELECT * FROM dok_import_datei WHERE id=? AND status='gelesen'", [$datei_id]);
+    if (!$d || (int)$d['item_id'] > 0) return 0;   // nur gelesene Zeilen ohne Treffer
+    $ki    = json_decode((string)($d['ki_json'] ?? ''), true);
+    $stamm = is_array($ki) ? (array)($ki['stamm'] ?? []) : [];
+    $name  = trim((string)($stamm['name'] ?? ''));
+    if ($name === '') $name = 'Neuer Rohstoff (Import)';
+    q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug,ek_preis,notiz) VALUES (?,?, 'rohstoff','kg','kg',0,?)",
+      [naechste_nummer(item_prefix('rohstoff')), mb_substr($name, 0, 190), 'Aus Spec/CoA-Massenimport angelegt']);
+    $iid = (int) insert_id();
+    if ($stamm) spec_ki_uebernehmen($iid, $stamm, array_keys($stamm));   // alle Felder leer -> werden gefuellt
+    q("UPDATE dok_import_datei SET item_id=?, quelle='neu' WHERE id=?", [$iid, $datei_id]);
+    return $iid;
+}
+
+// Fuer ALLE Zeilen ohne Treffer je einen neuen Rohstoff anlegen. Rueckgabe: Anzahl.
+function dokimport_neu_anlegen_alle(int $job_id): int {
+    $n = 0;
+    foreach (all("SELECT id FROM dok_import_datei WHERE job_id=? AND status='gelesen' AND (item_id IS NULL OR item_id=0)", [$job_id]) as $z) {
+        if (dokimport_neu_anlegen((int)$z['id'])) $n++;
+    }
+    return $n;
+}
+
 // Eine Zeile vom Import ausnehmen / wieder aufnehmen.
 function dokimport_ueberspringen(int $datei_id, bool $skip = true): void {
     if ($skip) {

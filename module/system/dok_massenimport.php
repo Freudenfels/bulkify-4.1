@@ -79,6 +79,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($akt === 'skip')   { dokimport_ueberspringen((int)($_POST['datei_id'] ?? 0), true);  header('Location: ' . $ret); exit; }
     if ($akt === 'unskip') { dokimport_ueberspringen((int)($_POST['datei_id'] ?? 0), false); header('Location: ' . $ret); exit; }
 
+    if ($akt === 'neu_anlegen') {
+        $iid = dokimport_neu_anlegen((int)($_POST['datei_id'] ?? 0));
+        $_SESSION['dim_flash'] = $iid ? ['ok', 'Neuer Rohstoff angelegt und zugeordnet.'] : ['fehler', 'Konnte keinen Rohstoff anlegen.'];
+        header('Location: ' . $ret); exit;
+    }
+    if ($akt === 'neu_alle') {
+        $n = dokimport_neu_anlegen_alle((int)($_POST['job_id'] ?? 0));
+        $_SESSION['dim_flash'] = ['ok', $n . ' neue(r) Rohstoff(e) aus den Zeilen ohne Treffer angelegt und zugeordnet.'];
+        header('Location: ' . $ret); exit;
+    }
+
     if ($akt === 'import') {
         $r = dokimport_import((int)($_POST['job_id'] ?? 0));
         $msg = $r['importiert'] . ' Dokument(e) übernommen und am jeweiligen Rohstoff hinterlegt (intern).';
@@ -107,7 +118,7 @@ if ($flash) {
 
 // Label-Helfer
 $typLbl = ['spec' => 'Spezifikation', 'coa' => 'CoA', 'beides' => 'Spec + CoA', 'unklar' => 'unklar'];
-$quelleLbl = ['cas' => 'über CAS', 'name' => 'über Name', 'fuzzy' => 'namensähnlich', 'manuell' => 'manuell', '' => 'kein Treffer'];
+$quelleLbl = ['cas' => 'über CAS', 'name' => 'über Name', 'fuzzy' => 'namensähnlich', 'manuell' => 'manuell', 'neu' => 'neu angelegt', '' => 'kein Treffer'];
 $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
 ?>
 
@@ -181,15 +192,24 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
   <?php else:
     /* ---------- Zustand 3: Match-Vorschau ---------- */
     $zeilen = dokimport_zeilen($jobId);
-    $importierbar = 0;
-    foreach ($zeilen as $z) { if ($z['status'] === 'gelesen' && (int)$z['item_id'] > 0) $importierbar++; }
+    $importierbar = 0; $ohneTreffer = 0;
+    foreach ($zeilen as $z) {
+        if ($z['status'] === 'gelesen' && (int)$z['item_id'] > 0) $importierbar++;
+        if ($z['status'] === 'gelesen' && (int)$z['item_id'] <= 0) $ohneTreffer++;
+    }
   ?>
     <div class="bx-panel" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
       <div class="muted" style="font-size:13px">
-        <?= count($zeilen) ?> Datei(en) gelesen · <strong style="font-weight:600"><?= $importierbar ?></strong> bereit zum Übernehmen.
-        Prüfe die Zuordnung – ohne Treffer bleibt eine Zeile offen (kein automatisches Neuanlegen).
+        <?= count($zeilen) ?> Datei(en) gelesen · <strong style="font-weight:600"><?= $importierbar ?></strong> bereit zum Übernehmen<?= $ohneTreffer > 0 ? ' · ' . $ohneTreffer . ' ohne Treffer' : '' ?>.
+        Prüfe die Zuordnung – ohne Treffer kannst du zuordnen, überspringen oder einen neuen Rohstoff anlegen.
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <?php if ($ohneTreffer > 0): ?>
+          <form method="post" style="margin:0" onsubmit="return confirm('Für alle <?= $ohneTreffer ?> Zeile(n) ohne Treffer je einen neuen Rohstoff aus den KI-Stammdaten anlegen?');">
+            <input type="hidden" name="aktion" value="neu_alle"><input type="hidden" name="job_id" value="<?= $jobId ?>">
+            <button class="btn btn-ghost" type="submit" data-busy="lege an…">Alle <?= $ohneTreffer ?> ohne Treffer neu anlegen</button>
+          </form>
+        <?php endif; ?>
         <form method="post" style="margin:0" onsubmit="return confirm('<?= $importierbar ?> Dokument(e) übernehmen und an den zugeordneten Rohstoffen hinterlegen?');">
           <input type="hidden" name="aktion" value="import"><input type="hidden" name="job_id" value="<?= $jobId ?>">
           <button class="btn btn-primary" type="submit" data-busy="übernehme…" <?= $importierbar > 0 ? '' : 'disabled' ?>>Alle <?= $importierbar ?> übernehmen</button>
@@ -233,11 +253,19 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
                 <span class="badge-warn" style="padding:1px 7px;border-radius:9px;font-size:12px"><?= $quelleLbl[''] ?></span>
               <?php endif; ?>
               <?php if (in_array($st, ['gelesen', 'uebersprungen'], true)): ?>
-                <form method="post" style="margin:6px 0 0;display:flex;gap:6px;align-items:center">
-                  <input type="hidden" name="aktion" value="zuordnen"><input type="hidden" name="datei_id" value="<?= (int)$z['id'] ?>">
-                  <input type="text" name="eingabe" list="roh_dl" placeholder="Rohstoff-Name / R-Nr." style="min-width:170px;font-size:12px">
-                  <button class="btn btn-ghost btn-sm" type="submit" data-busy="…"><?= $iid ? 'ändern' : 'zuordnen' ?></button>
-                </form>
+                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">
+                  <form method="post" style="margin:0;display:flex;gap:6px;align-items:center">
+                    <input type="hidden" name="aktion" value="zuordnen"><input type="hidden" name="datei_id" value="<?= (int)$z['id'] ?>">
+                    <input type="text" name="eingabe" list="roh_dl" placeholder="Rohstoff-Name / R-Nr." style="min-width:170px;font-size:12px">
+                    <button class="btn btn-ghost btn-sm" type="submit" data-busy="…"><?= $iid ? 'ändern' : 'zuordnen' ?></button>
+                  </form>
+                  <?php if (!$iid): ?>
+                    <form method="post" style="margin:0" onsubmit="return confirm('Neuen Rohstoff aus den KI-Stammdaten dieser Datei anlegen?');">
+                      <input type="hidden" name="aktion" value="neu_anlegen"><input type="hidden" name="datei_id" value="<?= (int)$z['id'] ?>">
+                      <button class="btn btn-ghost btn-sm" type="submit" data-busy="…" title="Neuen Rohstoff aus den erkannten Stammdaten anlegen">+ Neuer Rohstoff</button>
+                    </form>
+                  <?php endif; ?>
+                </div>
               <?php endif; ?>
             </td>
             <td style="white-space:nowrap">

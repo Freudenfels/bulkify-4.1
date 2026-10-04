@@ -25,6 +25,9 @@ Rohstoffen (kein Treffer = bleibt offen stehen).
    `DOKIMPORT_STALE_MIN` (10 min) wieder freigegeben. Keine `offen`/`liest` mehr → Job `bereit`.
    `dokimport_fortschritt()` liefert gelesen/offen/liest/fehler für die Anzeige.
 3. Vorschau: `dokimport_zeilen()`, manuell zuordnen `dokimport_zuordnen()`, überspringen `dokimport_ueberspringen()`.
+   Kein Treffer? `dokimport_neu_anlegen($datei_id)` legt einen **neuen** Rohstoff aus den KI-Stammdaten an
+   (Name/CAS/Synonyme/botan. Quelle …) und ordnet ihn zu; `dokimport_neu_anlegen_alle($job)` macht das für
+   alle Zeilen ohne Treffer. (Ursprünglich match-only; Neuanlage ist jetzt eine ausdrückliche Aktion.)
 4. `dokimport_import($job_id)` – je bestätigter Zeile: Original als **internes** Dokument am Rohstoff
    (`kunde_sichtbar=0`, nie an Kunde) + `spec_ki_anwenden()` (Charge/Grenzwerte/Kennwerte/Wirkstoffe, additiv).
 5. `dokimport_abbrechen($job_id)` – nicht übernommene Dateien aus data/uploads entfernen, Job schließen.
