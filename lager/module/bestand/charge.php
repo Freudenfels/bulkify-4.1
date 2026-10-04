@@ -469,11 +469,11 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
     <tbody>
       <?php foreach ($logrows as $lr): ?>
       <tr>
-        <td data-l="Zeitpunkt"><?= h(fmt_zeit($lr['angelegt'])) ?></td>
-        <td data-l="Benutzer"><?= h((string)($lr['benutzer_name'] ?? '')) ?: '–' ?></td>
-        <td data-l="Feld"><?= h((string)$lr['feld']) ?></td>
-        <td data-l="vorher" class="muted"><?= h((string)($lr['alt'] ?? '')) ?: '–' ?></td>
-        <td data-l="nachher"><?= h((string)($lr['neu'] ?? '')) ?: '–' ?></td>
+        <td data-label="Zeitpunkt"><?= h(fmt_zeit($lr['angelegt'])) ?></td>
+        <td data-label="Benutzer"><?= h((string)($lr['benutzer_name'] ?? '')) ?: '–' ?></td>
+        <td data-label="Feld"><?= h((string)$lr['feld']) ?></td>
+        <td data-label="vorher" class="muted"><?= h((string)($lr['alt'] ?? '')) ?: '–' ?></td>
+        <td data-label="nachher"><?= h((string)($lr['neu'] ?? '')) ?: '–' ?></td>
       </tr>
       <?php endforeach; ?>
     </tbody>
