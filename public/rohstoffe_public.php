@@ -12,7 +12,13 @@ header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');          // reine Lese-Daten, öffentlich
 header('Cache-Control: public, max-age=3600');     // 1 h cachebar
 function rp_out(array $a, int $code = 200): void { http_response_code($code); echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; }
-set_exception_handler(function ($e) { rp_out(['ok' => false, 'message' => 'Serverfehler'], 500); });
+set_exception_handler(function ($e) {
+    error_log('rohstoffe_public: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    $diag = ((string)($_GET['diag'] ?? '') === 'rzdiag9');   // temporär: echte Fehlermeldung nur mit Geheim-Param
+    rp_out($diag
+        ? ['ok' => false, 'message' => 'Serverfehler', 'fehler' => $e->getMessage(), 'wo' => basename($e->getFile()) . ':' . $e->getLine()]
+        : ['ok' => false, 'message' => 'Serverfehler'], 500);
+});
 
 $slug = isset($_GET['slug']) ? preg_replace('/[^a-z0-9-]/', '', (string)$_GET['slug']) : null;
 $liste = rohstoff_public_liste($slug !== '' ? $slug : null);
