@@ -110,6 +110,7 @@ $routes = [
     'chargen'            => 'lager/chargen.php',
     'versand'            => 'versand/liste.php',
     'einstellungen'      => 'system/einstellungen.php',
+    'angebotsscan'       => 'system/angebotsscan.php',  // KI liest Angebote (Fremd/Alt) ein: Rezepturen + Preise erfassen (kundenunabhängig)
     'suche'              => 'system/suche.php',        // globale Suche (Admin) über alle Bereiche
     'db_import'          => 'system/db_import.php',   // einmalige DB-Übernahme (Admin) – Rohstoffe & Co. auf einen anderen Stand bringen
     'v3_import_upload'   => 'system/v3_import_upload.php',   // TEMPORÄR (v3-Migration): v3-Dump hochladen -> nach v4 importieren

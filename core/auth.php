@@ -115,6 +115,7 @@ function route_rollen_map(): array {
         'rechnung_pdf'       => ['finance'],
         'buchhaltung'        => ['finance'],
         'einstellungen'      => ['admin', 'finance', 'production'],
+        'angebotsscan'       => ['admin', 'finance', 'sales'],
         'benutzer'           => ['admin'],
         'benutzer_detail'    => ['admin'],
         'fastaction'         => ['admin'],

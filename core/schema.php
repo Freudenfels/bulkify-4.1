@@ -463,6 +463,26 @@ function init_schema(): void {
     ensure_column('angebot_position', 'stueck', "INT NULL");
     ensure_column('angebot_position', 'verpackung_id', "INT NULL");
 
+    // angebot_scan: per KI eingelesene (fremde/alte) Angebote – rein zur Erfassung von Rezeptur + Preisen.
+    // Kundenunabhängig (System-Werkzeug). Preise werden als JSON-Aufschlüsselung mitgeführt (Herstellung,
+    // Behälter, Etikett …). Die angelegte/zugeordnete Rezeptur steht in rezeptur_id.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS angebot_scan (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        produkt_name VARCHAR(190) NOT NULL DEFAULT '',
+        darreichungsform VARCHAR(20) NOT NULL DEFAULT 'kapsel',
+        stueck_je_packung INT NULL,
+        rezeptur_id INT NULL,
+        rezeptur_neu TINYINT(1) NOT NULL DEFAULT 0,
+        preise_json MEDIUMTEXT NULL,          -- Preis-Aufschlüsselung (Positionen) als JSON
+        zutaten_json MEDIUMTEXT NULL,         -- ausgelesene Wirkstoffe als JSON (Beleg/Nachvollzug)
+        datei VARCHAR(255) NULL,              -- gespeicherte Datei (data/uploads)
+        original_orig VARCHAR(255) NULL,      -- Originaldateiname
+        bemerkung VARCHAR(500) NULL,
+        angelegt_von INT NULL,
+        KEY idx_rezeptur (rezeptur_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // auftrag: Auftragsbestätigung (AB-) – entsteht automatisch aus der bestätigten Angebots-Staffel.
     $pdo->exec("CREATE TABLE IF NOT EXISTS auftrag (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -5970,6 +5990,79 @@ function rezeptur_finden_oder_anlegen(string $name, string $form, array $zutaten
           [$rid, $iid ?: null, mb_substr($bez, 0, 190), (float)($z['menge_mg'] ?? 0), $sort++]);
     }
     return ['id' => $rid, 'neu' => true];
+}
+
+// --- Angebotsscan (System) -------------------------------------------------
+// Liest ein (fremdes/altes) Angebot per KI: Produkt/Rezeptur + Preis-Aufschlüsselung. Der Kunde ist
+// bewusst uninteressant und wird NICHT ausgewertet – es geht nur um Rezeptur und Preise.
+// Rückgabe ['ok'=>true,'daten'=>[produkt_name,darreichungsform,stueck_je_packung,zutaten[],preise[]]] oder ['ok'=>false,'fehler'=>…].
+function angebotsscan_ki(string $pfad): array {
+    require_once __DIR__ . '/ki.php';
+    if (!ki_bereit()) return ['ok' => false, 'fehler' => 'KI ist nicht eingerichtet (Einstellungen → KI).'];
+    $prompt = "Dies ist ein Angebot für ein Nahrungsergänzungsmittel (eigenes oder fremdes). "
+        . "Erfasse NUR Rezeptur und Preise – der Kunde ist egal und soll NICHT ausgegeben werden. Gib NUR JSON zurück:\n"
+        . '{"produkt_name":"","darreichungsform":"kapsel","stueck_je_packung":0,'
+        . '"zutaten":[{"name":"","menge_mg":0}],'
+        . '"preise":[{"bezeichnung":"","typ":"herstellung","einzelpreis":0,"menge":0,"einheit":""}]}' . "\n"
+        . "Regeln: produkt_name = Name des Produkts (ohne die Wirkstoff-Aufzählung). "
+        . "darreichungsform eines von kapsel|tablette|softgel|stick|pulver|fluessig. "
+        . "stueck_je_packung = Kapseln/Stück je Packung (z. B. 120), sonst 0. "
+        . "zutaten = alle aufgeführten Wirkstoffe mit mg je Einheit (z. B. 'NAC 300 mg'). "
+        . "preise = JEDE Preiszeile des Angebots einzeln (Aufschlüsselung): typ eines von "
+        . "herstellung|kapsel|verpackung|etikett|zusatz|gesamt. bezeichnung = Originaltext der Zeile. "
+        . "einzelpreis = Preis je Einheit (netto), menge = Stück/Packungen, einheit = Text (z. B. 'Packung','Stück'). "
+        . "Zahlen mit Punkt als Dezimaltrennzeichen, keine Tausenderpunkte. Nichts erfinden – Unbekanntes leer/0.";
+    $r = ki_datei_frage($pfad, $prompt, ['json' => true, 'denken' => true, 'max_tokens' => 4000, 'timeout' => 240, 'zweck' => 'angebotsscan']);
+    if (empty($r['ok'])) return ['ok' => false, 'fehler' => (string)($r['fehler'] ?? 'Das Dokument konnte nicht gelesen werden.')];
+    $d = is_array($r['daten'] ?? null) ? $r['daten'] : [];
+    $num = fn($x) => (float) str_replace(',', '.', (string)$x);
+    $zut = [];
+    foreach ((array)($d['zutaten'] ?? []) as $z) {
+        if (!is_array($z)) continue;
+        $n = trim((string)($z['name'] ?? '')); if ($n === '') continue;
+        $zut[] = ['name' => mb_substr($n, 0, 190), 'menge_mg' => $num($z['menge_mg'] ?? 0)];
+    }
+    $typen = ['herstellung','kapsel','verpackung','etikett','zusatz','gesamt'];
+    $preise = [];
+    foreach ((array)($d['preise'] ?? []) as $p) {
+        if (!is_array($p)) continue;
+        $bez = trim((string)($p['bezeichnung'] ?? '')); $ep = $num($p['einzelpreis'] ?? 0);
+        if ($bez === '' && $ep <= 0) continue;
+        $typ = strtolower(trim((string)($p['typ'] ?? '')));
+        $preise[] = [
+            'bezeichnung' => mb_substr($bez, 0, 190),
+            'typ'         => in_array($typ, $typen, true) ? $typ : 'zusatz',
+            'einzelpreis' => round($ep, 4),
+            'menge'       => $num($p['menge'] ?? 0),
+            'einheit'     => mb_substr(trim((string)($p['einheit'] ?? '')), 0, 20),
+        ];
+    }
+    $formen = ['kapsel','tablette','softgel','stick','pulver','fluessig'];
+    $form = strtolower(trim((string)($d['darreichungsform'] ?? 'kapsel')));
+    return ['ok' => true, 'daten' => [
+        'produkt_name'      => mb_substr(trim((string)($d['produkt_name'] ?? '')), 0, 190),
+        'darreichungsform'  => in_array($form, $formen, true) ? $form : 'kapsel',
+        'stueck_je_packung' => (int) round($num($d['stueck_je_packung'] ?? 0)),
+        'zutaten'           => $zut,
+        'preise'            => $preise,
+    ]];
+}
+
+// Angebotsscan verarbeiten: Datei per KI lesen, Rezeptur finden/anlegen (kundenunabhängig) und den
+// Scan mit Preis-Aufschlüsselung speichern. Rückgabe ['ok','scan_id','rezeptur_id','rezeptur_neu','daten'] oder ['ok'=>false,'fehler'].
+function angebotsscan_verarbeiten(string $pfad, string $orig, ?int $benutzer_id = null, string $bemerkung = ''): array {
+    $r = angebotsscan_ki($pfad);
+    if (empty($r['ok'])) return $r;
+    $d = $r['daten'];
+    $rez = rezeptur_finden_oder_anlegen($d['produkt_name'], $d['darreichungsform'], $d['zutaten'], null);
+    q("INSERT INTO angebot_scan (produkt_name,darreichungsform,stueck_je_packung,rezeptur_id,rezeptur_neu,preise_json,zutaten_json,datei,original_orig,bemerkung,angelegt_von)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      [$d['produkt_name'], $d['darreichungsform'], $d['stueck_je_packung'] ?: null, $rez['id'], $rez['neu'] ? 1 : 0,
+       json_encode($d['preise'], JSON_UNESCAPED_UNICODE), json_encode($d['zutaten'], JSON_UNESCAPED_UNICODE),
+       $orig ? mb_substr(basename($pfad), 0, 255) : null, mb_substr($orig, 0, 255) ?: null,
+       mb_substr($bemerkung, 0, 500) ?: null, $benutzer_id ?: null]);
+    $sid = (int) insert_id();
+    return ['ok' => true, 'scan_id' => $sid, 'rezeptur_id' => $rez['id'], 'rezeptur_neu' => $rez['neu'], 'daten' => $d];
 }
 
 // Aus den ausgelesenen Import-Daten einen Auftrag anlegen (inkl. Rezeptur/Produkt, falls neu).
