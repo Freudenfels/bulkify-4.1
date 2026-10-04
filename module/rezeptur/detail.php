@@ -90,7 +90,7 @@ $liefAngebote = $neu ? [] : all("SELECT la.*, l.firma FROM rezeptur_lief_angebot
 // Kundenpreise (u. a. aus dem Angebotsscan): welcher Kunde zu welchem Datum welchen VK hatte.
 $kundenpreise = ($neu || !table_exists('rezeptur_kundenpreis')) ? [] : all(
     "SELECT kp.*, k.firma, k.kundennummer FROM rezeptur_kundenpreis kp LEFT JOIN kunden k ON k.id=kp.kunde_id
-     WHERE kp.rezeptur_id=? ORDER BY k.firma, (kp.datum IS NULL), kp.datum DESC", [(int)$id]);
+     WHERE kp.rezeptur_id=? ORDER BY k.firma, (kp.datum IS NULL), kp.datum DESC, kp.menge", [(int)$id]);
 
 // Rohstoffe für die Auswahl – nach passender Form für die Darreichungsform sortiert (flüssig zuerst bei flüssig)
 $prefForms = in_array($df, ['fluessig','softgel'], true) ? ['fluessig','oel'] : ['pulver','granulat','kristallin'];
