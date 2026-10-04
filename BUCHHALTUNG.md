@@ -1,14 +1,57 @@
-# Buchhaltung – Finanzbereich im Dashboard
+# Buchhaltung – eigenes Programm (`/buchhaltung/`)
 
-Kontext- und Arbeitsdatei für einen **eigenen Buchhaltungs-Chat** (wie `LAGER.md` / `PRODUKTION.md`).
-Zuerst lesen, dann loslegen. Gilt zusätzlich zu `CLAUDE.md` (Projektregeln) – die Regeln dort bleiben.
+Kontext- und Arbeitsdatei für den **Buchhaltungs-Chat**. Zuerst lesen, dann loslegen.
+Gilt zusätzlich zu `CLAUDE.md` (Projektregeln) – die Regeln dort bleiben.
 
-## Wichtiger Unterschied zu Lager/Produktion
-Lager und Produktion sind **eigene Programme** in eigenen Ordnern (`lager/`, `produktion/`) mit einer
-Naht (`*/core/erp.php`) zum Dashboard. **Buchhaltung ist das NICHT.** Belege/Rechnungen sind Kern-Daten
-des Dashboards (Rechnung hängt an Auftrag, Kunde, USt), darum lebt die Buchhaltung **direkt im Dashboard**
-(Rolle `finance`), ohne eigene DB-Naht. Ein eigener Chat ist trotzdem sinnvoll und kollisionsarm, weil er
-fast nur **eigene Dateien** anfasst (`module/beleg/*`, die PDF-Bauer) – siehe „Deine Dateien".
+## ZIEL (Entscheidung Nico, 2026-10-04): Buchhaltung wird ein EIGENES Programm
+Die Finanzen sollen **getrennt** laufen, **wie CRM/Lager/Produktion** – eigener Pfad `/buchhaltung/`,
+eigener Login/eigene Sitzung, eigene Naht. Aktuell liegt die Buchhaltung noch **im Dashboard** (unten als
+„Ist-Stand" dokumentiert); das ist die **Migrationsquelle**, nicht das Ziel.
+
+**Zielarchitektur (Muster wie `produktion/`, siehe `PRODUKTION.md`):**
+- **Web-Einstieg:** `public/buchhaltung/index.php` (Front Controller, Whitelist `?p=<route>`).
+- **Code:** `buchhaltung/core/` + `buchhaltung/module/` (nichts in `public/`). Erreichbar unter `/buchhaltung/`.
+- **Eigene Sitzung:** z. B. `BXBUCH` (eigener Login mit den `benutzer`-Logins, Rolle `finance`/`admin`).
+- **Aussehen:** lädt `/assets/app.css` wie das Dashboard (gleiche `bx-`-Klassen).
+- **DIE NAHT:** `buchhaltung/core/erp.php` – **alle** Lese-Zugriffe auf Dashboard-Tabellen
+  (`kunden`, `auftrag`, `lieferant(en)`, `bestellung`, `benutzer`, `app_meta`) laufen ausschließlich hier.
+- **Finanz-eigene Tabellen** (werden hier verwaltet/geschrieben): `beleg`, `beleg_position`,
+  `beleg_status_log`, `zahlung`, `lieferant_rechnung`, `lieferant_zahlung`.
+
+**Drei Kopplungen, die die Migration sauber lösen muss:**
+1. **Ausgangsrechnung aus Auftrag:** entsteht künftig IM Buchhaltungs-Programm. Das Dashboard (Vertrieb/
+   Auftrag) bekommt statt „Rechnung erstellen" einen **Link** nach `/buchhaltung/?p=rechnung_neu&auftrag=…`
+   (wie es heute auf `produktion/` verlinkt). Die Erzeugungs-Logik (`rechnung_aus_auftrag()` u. a.) wandert
+   in die Buchhaltung bzw. hinter deren Naht.
+2. **Dashboard liest `beleg`** (Kundenkonto/Auftrag zeigen Rechnungsstatus). Die `beleg*`-Tabellen bleiben
+   in **derselben DB** – gemeinsames **Lesen** ist ok; nur das **Schreiben** zieht komplett in die
+   Buchhaltung. Wo das Dashboard `beleg` schreibt, wird auf Links/Weiterleitung umgestellt.
+3. **`beleg_firma()` + PDF-Helfer** in `core/pdf_beleg.php` werden quer genutzt (Spec/Angebot/…). Die
+   **bleiben im Dashboard-`core`**; die Buchhaltung bekommt eine **eigene** PDF-/Firmenstamm-Funktion
+   (kleine bewusste Doppelung – die Sub-App darf Dashboard-`core/schema.php` NICHT einbinden, sonst zweite
+   `db()`-Kollision; siehe `PRODUKTION.md`-Naht-Regel).
+
+**Migrations-Checkliste (durch DIESEN Chat, nicht aufteilen):**
+1. Skelett anlegen: `public/buchhaltung/index.php`, `buchhaltung/core/{config,db,auth,ui,layout,erp,schema}.php`
+   (abschauen von `produktion/core/`). Eigene Sitzung `BXBUCH`, eigene Login-Seite.
+2. Seiten umziehen: `module/beleg/*` + `module/buchhaltung/*` → `buchhaltung/module/*`; Dashboard-Reads auf
+   `buchhaltung/core/erp.php` umstellen. Finanz-Logik (`core/buchhaltung.php`, `kreditor.php`, `erechnung.php`)
+   nach `buchhaltung/core/` ziehen; `beleg*`-/`zahlung`-/`lieferant_rechnung/_zahlung`-DDL nach
+   `buchhaltung/core/schema.php` (CREATE IF NOT EXISTS bleibt idempotent; Dashboard liest weiter).
+3. Dashboard entkoppeln: Finanz-Routen aus `core/auth.php` + `public/index.php` entfernen; „Rechnung
+   erstellen" & Rechnungs-Links auf `/buchhaltung/` umbiegen; Buchhaltungs-Gruppe aus dem Dashboard-Menü
+   raus, stattdessen unter „Unterseiten" ein Link `buchhaltung/` (in `core/layout.php`, dort wo schon
+   `crm/`/`lager/`/`produktion/` stehen).
+4. Testen (`php -l` + curl, eigener Autologin), dann in EINEM Rutsch committen (viele Dateien bewegen sich).
+
+> Bis die Migration läuft, gilt unten der **Ist-Stand** als Referenz/Quelle. Danach wird dieser Abschnitt
+> zum Haupt-Teil und der Ist-Stand entfernt.
+
+---
+
+## Ist-Stand (Migrationsquelle): Buchhaltung liegt noch im Dashboard
+Aktuell leben Belege/Rechnungen **im Dashboard** (Rolle `finance`), ohne eigene Naht – das wird nach
+obiger Zielarchitektur herausgelöst. Dateien/Routen/Tabellen des Ist-Stands:
 
 ## Deine Dateien (gehören dem Buchhaltungs-Chat)
 - `module/beleg/` – alle Beleg-/Rechnungs-Seiten (siehe „Seiten").
