@@ -25,6 +25,7 @@ function route_rollen_map(): array {
         'aufgaben'           => ['production', 'labor', 'fulfillment'],
         'aufgabe'            => ['production', 'labor', 'fulfillment'],
         'kalender'           => ['production', 'labor', 'fulfillment'],
+        'produktion_planung' => ['production'],   // Terminplanung – Admin (immer) + Produktionsleitung
         'bedarf'             => ['production', 'labor', 'fulfillment', 'einkauf'],
         'einkaufsliste'      => ['einkauf'],
         'chargen'            => ['production', 'labor', 'fulfillment', 'einkauf'],

@@ -107,6 +107,7 @@ $routes = [
     'produktion_run'     => 'produktion/run.php',
     'produktion_bericht' => 'produktion/bericht.php',
     'kalender'           => 'produktion/kalender.php',
+    'produktion_planung' => 'produktion/planung.php',   // Termin (geplant_am) je Auftrag im Sammel-Setzen
     'lager'              => 'lager/bestand_liste.php',
     'lager2'             => 'lager/lager2.php',
     'betriebsmittel'     => 'lager/betriebsmittel_detail.php',
