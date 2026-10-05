@@ -211,6 +211,12 @@ function beleg_status_log_add(int $beleg_id, string $status, string $notiz = '',
 }
 
 // Hinterlegte Bankkonten (aus Einstellungen). Liefert nur befüllte Konten: [['key'=>'de','label'=>'…'], …].
+// Frei angelegte Zusatzkonten (app_meta bank_konten_extra, JSON [{id,name,iban,bic}]). Vom Dashboard gepflegt
+// (Einstellungen → Firma); die Buchhaltung liest sie nur. Verbatim wie im Dashboard-core/schema.php.
+function bank_konten_extra(): array {
+    $d = json_decode((string) meta_get('bank_konten_extra', ''), true);
+    return is_array($d) ? array_values(array_filter($d, fn($b) => is_array($b) && !empty($b['id']))) : [];
+}
 function bank_konten(): array {
     $out = [];
     foreach ([['de','bank_de_name','bank_de_iban'], ['int','bank_int_name','bank_int_iban']] as $kf) {
@@ -220,7 +226,23 @@ function bank_konten(): array {
         $tail = $iban !== '' ? ' · …' . substr(preg_replace('/\s+/', '', $iban), -4) : '';
         $out[] = ['key' => $key, 'label' => ($name ?: strtoupper($key)) . $tail];
     }
+    // Weitere, frei angelegte Konten (beliebig viele) – wichtig: wohin hat der Kunde überwiesen.
+    foreach (bank_konten_extra() as $b) {
+        $name = trim((string)($b['name'] ?? '')); $iban = trim((string)($b['iban'] ?? ''));
+        if ($name === '' && $iban === '') continue;
+        $tail = $iban !== '' ? ' · …' . substr(preg_replace('/\s+/', '', $iban), -4) : '';
+        $out[] = ['key' => (string)$b['id'], 'label' => ($name ?: 'Bank') . $tail];
+    }
     return $out;
+}
+// Volle Bankdaten zu einem Konto-Key (de/int oder Extra-id): ['name','iban','bic'] oder null.
+function bank_konto_details(?string $key): ?array {
+    if (!$key) return null;
+    if ($key === 'de')  return ['name'=>trim((string)meta_get('bank_de_name','')),  'iban'=>trim((string)meta_get('bank_de_iban','')),  'bic'=>trim((string)meta_get('bank_de_bic',''))];
+    if ($key === 'int') return ['name'=>trim((string)meta_get('bank_int_name','')), 'iban'=>trim((string)meta_get('bank_int_iban','')), 'bic'=>trim((string)meta_get('bank_int_bic',''))];
+    foreach (bank_konten_extra() as $b) if ((string)($b['id'] ?? '') === $key)
+        return ['name'=>trim((string)($b['name'] ?? '')), 'iban'=>trim((string)($b['iban'] ?? '')), 'bic'=>trim((string)($b['bic'] ?? ''))];
+    return null;
 }
 // Anzeigename eines gespeicherten Kontos anhand des key/Werts (Fallback: der gespeicherte Wert selbst).
 function bank_konto_label(?string $konto): string {
