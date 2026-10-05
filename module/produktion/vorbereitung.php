@@ -29,24 +29,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $vid = ($_POST['verpackung_id'] ?? '') !== '' ? (int)$_POST['verpackung_id'] : null;
         if ($aid) q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vid, $aid]);
         if (($_POST['verp_scope'] ?? '') === 'standard' && $vid && $pid) q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$vid, $pid]);
-        bedarf_bump(); header('Location: ' . $back . '&saved=1'); exit;
+        bedarf_bump(); header('Location: ' . $back . '&saved=1#glas'); exit;
     }
     if ($aktion === 'kapsel_setzen' && $paId) {
         [, , $rid] = vp_ids($paId);
         if ($rid) { $kg = ($_POST['kapselgroesse_id'] ?? '') !== '' ? (int)$_POST['kapselgroesse_id'] : null;
                     q("UPDATE rezeptur SET kapselgroesse_id=? WHERE id=?", [$kg, $rid]); bedarf_bump(); }
-        header('Location: ' . $back . '&saved=1'); exit;
+        header('Location: ' . $back . '&saved=1#glas'); exit;
     }
     if ($aktion === 'etikett_upload' && $paId) {
         [$aid] = vp_ids($paId);
         if ($aid && etikett_upload($aid)) log_aktivitaet('kunde', (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]), 'team', 'Etikett vom Team hochgeladen.', 'auftrag', 'auftrag', $aid);
-        header('Location: ' . $back . '&saved=1'); exit;
+        header('Location: ' . $back . '&saved=1#etikett'); exit;
     }
     if ($aktion === 'etikett_freigeben' && $paId) {
         [$aid] = vp_ids($paId);
         $name = trim((string)($_POST['freigabe_name'] ?? ''));
-        if ($aid && $name !== '') { $r = etikett_freigabe_setzen($aid, $name, 'team'); header('Location: ' . $back . (!empty($r['ok']) ? '&saved=1' : '&fehler=' . urlencode($r['fehler'] ?? 'Freigabe nicht möglich.'))); }
-        else header('Location: ' . $back . '&fehler=' . urlencode('Bitte einen Namen für die Freigabe angeben.'));
+        if ($aid && $name !== '') { $r = etikett_freigabe_setzen($aid, $name, 'team'); header('Location: ' . $back . (!empty($r['ok']) ? '&saved=1#etikett' : '&fehler=' . urlencode($r['fehler'] ?? 'Freigabe nicht möglich.') . '#etikett')); }
+        else header('Location: ' . $back . '&fehler=' . urlencode('Bitte einen Namen für die Freigabe angeben.') . '#etikett');
         exit;
     }
     if ($aktion === 'freigeben' && $paId) {
@@ -114,7 +114,7 @@ if ($pa):
 
     <div class="bx-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
       <!-- Verpackung / Glas -->
-      <div class="bx-panel" style="padding:16px">
+      <div class="bx-panel" id="glas" style="padding:16px;scroll-margin-top:80px">
         <div style="font-weight:600;margin-bottom:8px">Verpackung / Glas</div>
         <form method="post">
           <input type="hidden" name="aktion" value="glas_setzen"><input type="hidden" name="pa_id" value="<?= $paId ?>">
@@ -145,7 +145,7 @@ if ($pa):
       </div>
 
       <!-- Etikett -->
-      <div class="bx-panel" style="padding:16px">
+      <div class="bx-panel" id="etikett" style="padding:16px;scroll-margin-top:80px">
         <div style="font-weight:600;margin-bottom:8px">Etikett</div>
         <div style="font-size:13px;margin-bottom:10px">
           <?php if (!$brauchtEt): ?><span class="muted">Kein Etikett nötig (kein Glas gesetzt).</span>
@@ -199,15 +199,29 @@ if ($pa):
 <?php
 /* ============================== TABELLE (Übersicht) ============================== */
 $rows = vorbereitung_liste();
+$q = trim((string)($_GET['q'] ?? ''));
+if ($q !== '') {
+    $rows = array_values(array_filter($rows, function($r) use ($q) {
+        foreach (['produkt','rezeptur','kunde','nummer','auftrag_nr'] as $f)
+            if (mb_stripos((string)($r[$f] ?? ''), $q) !== false) return true;
+        return false;
+    }));
+}
 render_header('produktion_vorbereitung', 'Vor-Produktion');
-bx_head('Vor-Produktion / Freigabe', count($rows) . ' Auftrag(e) in Vorbereitung – zum Bearbeiten anklicken.',
+bx_head('Vor-Produktion / Freigabe', count($rows) . ' Auftrag(e) in Vorbereitung' . ($q !== '' ? ' (gefiltert)' : '') . ' – zum Bearbeiten anklicken.',
         '<form method="post" style="display:inline" onsubmit="return confirm(\'Alle noch nicht gestarteten Aufträge in die Vor-Produktion holen?\');"><input type="hidden" name="aktion" value="alle_vorbereitung"><button class="btn btn-ghost" type="submit">Alle offenen Aufträge holen</button></form> '
         . bx_btn('Zu den Produktionsaufträgen', '?p=produktion', 'ghost'));
 if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag zur Produktion freigegeben – jetzt im Produktionsmodul startbar.</div>';
 if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['geholt'] . ' Auftrag(e) in die Vor-Produktion geholt.</div>';
 ?>
+<form method="get" class="bx-row" style="gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+  <input type="hidden" name="p" value="produktion_vorbereitung">
+  <input type="text" name="q" value="<?= h($q) ?>" placeholder="Suche: Produkt, Rezeptur, Kunde, Nummer …" style="padding:8px 12px;border:1px solid var(--line);border-radius:8px;min-width:300px;flex:1;max-width:460px">
+  <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
+  <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=produktion_vorbereitung">×</a><?php endif; ?>
+</form>
 <?php if (!$rows): ?>
-  <div class="bx-panel"><div class="muted">Aktuell nichts in Vorbereitung.</div></div>
+  <div class="bx-panel"><div class="muted"><?= $q !== '' ? 'Keine Treffer für „' . h($q) . '".' : 'Aktuell nichts in Vorbereitung.' ?></div></div>
 <?php else: ?>
 <div class="bx-panel" style="padding:0;overflow:hidden">
   <div class="bx-tablewrap"><table class="bx-table">

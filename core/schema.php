@@ -5046,7 +5046,7 @@ function vorbereitung_liste(): array {
     return all("SELECT pa.id AS pa_id, pa.nummer, pa.auftrag_id, pa.produktionsart, pa.menge, pa.prio,
                        a.nummer AS auftrag_nr, a.angelegt AS auftrag_eingang,
                        COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, rz.name) AS produkt,
-                       k.firma AS kunde
+                       rz.name AS rezeptur, k.firma AS kunde
                 FROM produktionsauftrag pa
                 LEFT JOIN auftrag a   ON a.id=pa.auftrag_id
                 LEFT JOIN produkt p   ON p.id=pa.produkt_id
