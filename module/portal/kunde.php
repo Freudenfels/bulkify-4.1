@@ -474,6 +474,23 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     header('Location: ?p=portal&token=' . $token . '&v=rezeptur&rid=' . $rid . '&ablehngrund=1'); exit;
 }
 
+// Eigene Rezeptur löschen (z. B. Dubletten aufräumen). Nur EIGENE (kunde_id) und nur wenn nicht in Verwendung.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rezeptur_loeschen') {
+    $rid = (int)($_POST['rezeptur_id'] ?? 0);
+    $rez = $rid ? one("SELECT * FROM rezeptur WHERE id=? AND kunde_id=?", [$rid, (int)$k['id']]) : null;
+    if (!$rez) { header('Location: ?p=portal&token=' . $token . '&v=rezepturen'); exit; }
+    // In Verwendung? Dann nicht löschen (Produkt / Produktionsauftrag / als Basis weiterentwickelt).
+    $inUse = scalar("SELECT 1 FROM produkt WHERE rezeptur_id=? LIMIT 1", [$rid])
+          || scalar("SELECT 1 FROM produktionsauftrag WHERE rezeptur_id=? LIMIT 1", [$rid])
+          || scalar("SELECT 1 FROM rezeptur WHERE basis_rezeptur_id=? LIMIT 1", [$rid]);
+    if ($inUse) { header('Location: ?p=portal&token=' . $token . '&v=rezeptur&rid=' . $rid . '&delblock=1'); exit; }
+    q("UPDATE rezeptur_anfrage SET rezeptur_id=NULL WHERE rezeptur_id=? AND kunde_id=?", [$rid, (int)$k['id']]);
+    q("DELETE FROM rezeptur_zutat WHERE rezeptur_id=?", [$rid]);
+    q("DELETE FROM rezeptur WHERE id=? AND kunde_id=?", [$rid, (int)$k['id']]);
+    log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Eigene Rezeptur ' . $rez['nummer'] . ' im Portal gelöscht.', 'rezeptur', 'rezeptur', $rid);
+    header('Location: ?p=portal&token=' . $token . '&v=rezepturen&rezgeloescht=1'); exit;
+}
+
 // Produktanfrage (aus dem Katalog): Stück/Verpackung/Menge
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'produkt_anfrage') {
     // Der Kunde wählt entweder ein fertiges Produkt („p<id>") ODER eine eigene Rezeptur („r<id>"),
@@ -1183,6 +1200,28 @@ $meineRezepturen = $k['portal_rezeptur'] ? all("SELECT * FROM rezeptur
            OR EXISTS (SELECT 1 FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                       WHERE z.rezeptur_id=rezeptur.id AND (z.bezeichnung LIKE ? OR i.name LIKE ?)))
     ORDER BY (kunde_id IS NULL), name", [$kid, $q, $qLike, $qLike, $qLike]) : [];
+// Kurz-Formulierung (erste Zutaten) + Kapselgröße je Rezeptur – für mehr Infos in der Liste.
+$rezFormuMap = []; $rezKapselMap = [];
+if ($meineRezepturen) {
+    $rzIds = array_column($meineRezepturen, 'id');
+    $in = implode(',', array_fill(0, count($rzIds), '?'));
+    foreach (all("SELECT rezeptur_id, bezeichnung FROM rezeptur_zutat WHERE rezeptur_id IN ($in) ORDER BY rezeptur_id, sort, id", $rzIds) as $z) {
+        $rezFormuMap[(int)$z['rezeptur_id']][] = trim((string)$z['bezeichnung']);
+    }
+    foreach ($meineRezepturen as $rz) {
+        if (!empty($rz['kapselgroesse_id'])) {
+            $kgn = (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$rz['kapselgroesse_id']]);
+            if ($kgn !== '') $rezKapselMap[(int)$rz['id']] = $kgn;
+        }
+    }
+}
+// Kurze Formulierungs-Zeile (max. 3 Zutaten + „…") für die Liste.
+$rezFormuKurz = function (int $rid) use ($rezFormuMap): string {
+    $z = $rezFormuMap[$rid] ?? [];
+    if (!$z) return '';
+    $kurz = array_slice($z, 0, 3);
+    return implode(', ', $kurz) . (count($z) > 3 ? ' …' : '');
+};
 $rezBadge = fn($s) => match ($s) { 'vorschlag'=>bx_badge('Vorschlag','info'),'eingefroren'=>bx_badge('angenommen','ok'),'freigegeben'=>bx_badge('freigegeben','ok'),'abgelehnt'=>bx_badge('abgelehnt','err'),default=>bx_badge($s) };
 $rid = (int)($_GET['rid'] ?? 0);
 $DOKTYP = dokument_typen();   // CoA / Spezifikation / Laboranalyse – Beschriftung der Download-Links
@@ -1930,15 +1969,19 @@ portal_head('Kundenportal · ' . $k['firma']);
     // Eigene = Rezepturen DIESES Kunden (kunde_id == kid); Katalog = alle übrigen freigegebenen (kunde_id NULL/andere).
     $eigeneRez  = array_values(array_filter($meineRezepturen, fn($r) => (int)($r['kunde_id'] ?? 0) === $kid));
     $katalogRez = array_values(array_filter($meineRezepturen, fn($r) => (int)($r['kunde_id'] ?? 0) !== $kid));
-    $rezTabelle = function(array $liste) use ($DFORM_P, $rezBadge, $portalLink) { ?>
+    $rezTabelle = function(array $liste) use ($DFORM_P, $rezBadge, $portalLink, $rezFormuKurz, $rezKapselMap) { ?>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Nummer</th><th>Name</th><th>Form</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Nummer</th><th>Name</th><th>Form</th><th>Kapselgröße</th><th>Status</th><th></th></tr></thead>
         <tbody>
-        <?php foreach ($liste as $rz): ?>
+        <?php foreach ($liste as $rz): $fk = $rezFormuKurz((int)$rz['id']); ?>
           <tr>
-            <td><?= h($rz['nummer']) ?></td>
-            <td><?= h($rz['name']) ?></td>
+            <td style="white-space:nowrap"><?= h($rz['nummer']) ?></td>
+            <td style="max-width:360px">
+              <div><?= h($rz['name']) ?></div>
+              <?php if ($fk !== ''): ?><div class="muted" style="font-size:12px;white-space:normal;overflow-wrap:anywhere"><?= h($fk) ?></div><?php endif; ?>
+            </td>
             <td><?= h($DFORM_P[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></td>
+            <td><?= isset($rezKapselMap[(int)$rz['id']]) ? h($rezKapselMap[(int)$rz['id']]) : '<span class="muted">–</span>' ?></td>
             <td><?= $rezBadge($rz['status']) ?></td>
             <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezeptur') ?>&rid=<?= (int)$rz['id'] ?>">ansehen</a></td>
           </tr>
@@ -1947,6 +1990,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       </table></div>
     <?php }; ?>
   <h1 style="margin-bottom:4px">Rezepturen</h1>
+  <?php if (isset($_GET['rezgeloescht'])): ?><div class="bx-panel badge-ok" style="padding:10px 14px">Rezeptur gelöscht.</div><?php endif; ?>
   <p class="bx-sub">Ihre eigenen Rezepturen und unsere freigegebenen Katalog-Rezepturen. Wählen Sie eine für Details – oder stellen Sie eine neue Rezepturanfrage.</p>
 
   <div class="bx-panel">
@@ -1977,6 +2021,9 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
 
 <?php elseif ($view === 'rezeptur'): ?>
+  <?php if (isset($_GET['delblock'])): ?>
+  <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Diese Rezeptur ist in Verwendung (Produkt/Produktion oder als Basis weiterentwickelt) und kann nicht gelöscht werden.</div>
+  <?php endif; ?>
   <?php if (isset($_GET['freigegeben']) && $rezDetail): ?>
   <div class="bx-panel badge-ok" style="padding:14px 18px">
     <strong>Rezeptur freigegeben<?= ' – ' . h($rezDetail['nummer'] . ' ' . $rezDetail['name']) ?>.</strong>
@@ -1999,6 +2046,12 @@ portal_head('Kundenportal · ' . $k['firma']);
           <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezeptur_ableiten') ?>&basis=<?= (int)$rezDetail['id'] ?>">Als Basis weiterentwickeln</a>
         <?php endif; ?>
         <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezepturen') ?>">Zurück zur Liste</a>
+        <?php if ((int)($rezDetail['kunde_id'] ?? 0) === $kid): ?>
+          <form method="post" style="margin:0" onsubmit="return confirm('Diese eigene Rezeptur wirklich löschen? Das kann nicht rückgängig gemacht werden.');">
+            <input type="hidden" name="aktion" value="rezeptur_loeschen"><input type="hidden" name="rezeptur_id" value="<?= (int)$rezDetail['id'] ?>">
+            <button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Eigene Rezeptur löschen">Löschen</button>
+          </form>
+        <?php endif; ?>
       </div>
     </div>
     <p class="bx-sub"><?= h($rezDetail['nummer']) ?> · <?= h($DFORM_P[$rezDetail['darreichungsform']] ?? $rezDetail['darreichungsform']) ?> · <?= $rezBadge($rezDetail['status']) ?></p>

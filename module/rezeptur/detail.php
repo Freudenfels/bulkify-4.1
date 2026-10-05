@@ -145,6 +145,15 @@ bx_head($neu ? 'Neue Rezeptur' : $v('name'),
         $neu ? 'Formulierung anlegen' : trim($v('nummer') . ' · ' . ($DFORM[$df] ?? $df)),
         bx_btn('Zurück zur Liste', '?p=rezeptur', 'ghost'));
 if (!$neu && !empty($r['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angelegt am ' . h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) . (!empty($r['aktualisiert']) && $r['aktualisiert'] !== $r['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($r['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
+// Dubletten-Hinweis bei der Prüfung: hat DERSELBE Kunde schon eine Rezeptur mit demselben Namen?
+if (!$neu && !empty($r['kunde_id'])) {
+    $dupN = all("SELECT id, nummer FROM rezeptur WHERE kunde_id=? AND id<>? AND LOWER(TRIM(name))=LOWER(TRIM(?)) ORDER BY id",
+                [(int)$r['kunde_id'], (int)$id, (string)$r['name']]);
+    if ($dupN) {
+        $links = implode(', ', array_map(fn($d) => '<a href="?p=rezeptur&id=' . (int)$d['id'] . '">' . h($d['nummer']) . '</a>', $dupN));
+        echo '<div class="bx-panel badge-warn" style="padding:10px 14px"><strong style="font-weight:600">Mögliche Dublette:</strong> Dieser Kunde hat bereits ' . count($dupN) . ' Rezeptur(en) mit dem Namen „' . h($r['name']) . '": ' . $links . '. Bitte Namen eindeutig machen, damit der Kunde nicht zwei gleichnamige Rezepturen hat.</div>';
+    }
+}
 // Vom Kunden aus einer Katalog-/Haus-Rezeptur weiterentwickelt: interne Basis-Herkunft anzeigen.
 if (!$neu && !empty($r['basis_rezeptur_id'])) {
     $bn = one("SELECT id, nummer, name FROM rezeptur WHERE id=?", [(int)$r['basis_rezeptur_id']]);
