@@ -160,7 +160,7 @@ echo '</div>';
   <h2>Details</h2>
   <div class="bx-grid">
     <div><div class="k muted">Kunde</div><div><?= kunde_link($b['kunde_id'] ?? null, $b['kunde_firma']) ?></div></div>
-    <div><div class="k muted">Zu Auftrag</div><div><?php if ($b['auftrag_id']): ?><a href="?p=auftrag&id=<?= (int)$b['auftrag_id'] ?>"><?= h($b['auftrag_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
+    <div><div class="k muted">Zu Auftrag</div><div><?php if ($b['auftrag_id']): ?><a href="/?p=auftrag&id=<?= (int)$b['auftrag_id'] ?>" target="_blank" title="Auftrag im Dashboard öffnen"><?= h($b['auftrag_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
     <div><div class="k muted">Art</div><div><?= h(ucfirst($b['typ'])) ?></div></div>
     <div><div class="k muted">Netto</div><div><?= $eur($b['netto']) ?></div></div>
     <div><div class="k muted">USt (<?= rtrim(rtrim(number_format((float)$b['ust_prozent'],2,',','.'),'0'),',') ?> %)</div><div><?= $eur($b['ust_betrag']) ?></div></div>

@@ -65,7 +65,7 @@ foreach (['erfasst'=>'Eingangsrechnung erfasst.','gebucht'=>'Zahlung gebucht.','
       <tr><td>Lieferant</td><td><?= $r['firma'] ? h($r['firma']) : '<span class="muted">–</span>' ?></td></tr>
       <tr><td>Rechnungsdatum</td><td><?= $r['datum'] ? h(date('d.m.Y', strtotime($r['datum']))) : '<span class="muted">–</span>' ?></td></tr>
       <tr><td>Fällig</td><td><?= $r['faellig'] ? h(date('d.m.Y', strtotime($r['faellig']))) . ($ueberfaellig ? ' <span style="color:var(--err)">überfällig</span>' : '') : '<span class="muted">–</span>' ?></td></tr>
-      <?php if ($r['bestell_nummer']): ?><tr><td>Bestellung</td><td><a href="?p=einkauf"><?= h($r['bestell_nummer']) ?></a></td></tr><?php endif; ?>
+      <?php if ($r['bestell_nummer']): ?><tr><td>Bestellung</td><td><a href="/?p=einkauf" target="_blank" title="Einkauf im Dashboard öffnen"><?= h($r['bestell_nummer']) ?></a></td></tr><?php endif; ?>
       <?php $cur = strtoupper((string)($r['waehrung'] ?: 'EUR')); if ($cur !== 'EUR'): ?>
         <tr><td>Rechnungsbetrag (<?= h($cur) ?>)</td><td class="bx-num"><?= number_format((float)($r['fw_netto'] ?? 0), 2, ',', '.') . ' ' . h($cur) ?></td></tr>
         <tr><td>Umrechnungskurs</td><td class="bx-num">1 <?= h($cur) ?> = <?= number_format((float)($r['fx_kurs'] ?: 1), 4, ',', '.') ?> €</td></tr>
