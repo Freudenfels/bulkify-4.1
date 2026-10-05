@@ -60,6 +60,7 @@ render_header('dienstleistungen', $neu ? 'Neue Dienstleistung' : (string)$d['nam
 bx_head($neu ? 'Neue Dienstleistung' : (string)$d['name'],
         $neu ? 'Dienstleistung anlegen' : trim((($d['nummer'] ?? '') ? $d['nummer'] . ' · ' : '') . dienstleistung_label($KAT, $d['kategorie'])),
         bx_btn('Zurück zur Liste', '?p=dienstleistungen', 'ghost'));
+dl_subtabs('dienstleistungen');
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($fehler) . '</div>';

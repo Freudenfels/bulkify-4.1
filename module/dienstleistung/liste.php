@@ -22,6 +22,7 @@ $PM   = dienstleistung_preismodelle();
 render_header('dienstleistungen', 'Dienstleistungen');
 bx_head('Dienstleistungen', count($rows) . ' im Katalog',
         bx_btn('+ Neue Dienstleistung', '?p=dienstleistung&id=neu', 'primary'));
+dl_subtabs('dienstleistungen');
 echo bx_hint('Service-Katalog: alles Verkaufbare, das nicht „Produkt herstellen+ausliefern" ist – eigenständig oder als Zusatz zum Produkt. Der Katalog ist die einzige Preisquelle.');
 
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['ok']) . '</div>';
