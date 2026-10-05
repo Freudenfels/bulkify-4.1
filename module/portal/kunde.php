@@ -3570,10 +3570,28 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div class="bx-panel"><div class="muted">Für dieses Konto ist kein Fremdlager eingerichtet.</div></div>
     <?php else:
       $fp = lager2_produkte((int)$k['id']);
-      $fpChg = [];
-      foreach ($fp as $r) $fpChg[(int)$r['item_id']] = all("SELECT charge_nr, menge_verfuegbar, mhd FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 ORDER BY (mhd IS NULL), mhd, id", [(int)$r['item_id']]);
+      $fpChg = []; $fpStat = [];
+      foreach ($fp as $r) {
+          $iid = (int)$r['item_id'];
+          $fpChg[$iid] = all("SELECT charge_nr, menge_verfuegbar, mhd FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 ORDER BY (mhd IS NULL), mhd, id", [$iid]);
+          $fpStat[$iid] = lager2_verkaufsstatistik($iid, 8);   // Verkaufsgeschwindigkeit + Reichweite (letzte 8 Wochen)
+      }
       $fpNf = fn($x) => number_format((float)$x, (floor((float)$x) == (float)$x ? 0 : 2), ',', '.');
       $fpGesamt = array_sum(array_map(fn($r) => (float)$r['bestand'], $fp));
+      // kleine Sparkline aus dem Wochen-Verlauf (SVG-Balken)
+      $fpSpark = function(array $verlauf) {
+          $max = max(1.0, max($verlauf ?: [0]));
+          $n = count($verlauf); if ($n === 0) return '';
+          $bw = 6; $gap = 2; $h = 22; $w = $n * ($bw + $gap);
+          $bars = '';
+          foreach (array_values($verlauf) as $i => $v) {
+              $bh = $max > 0 ? max(1, (int)round(($v / $max) * $h)) : 1;
+              $x = $i * ($bw + $gap); $y = $h - $bh;
+              $bars .= '<rect x="' . $x . '" y="' . $y . '" width="' . $bw . '" height="' . $bh . '" rx="1" fill="var(--gruen,#1D9E75)" opacity="' . ($v > 0 ? '0.85' : '0.25') . '"></rect>';
+          }
+          return '<svg width="' . $w . '" height="' . $h . '" viewBox="0 0 ' . $w . ' ' . $h . '" style="vertical-align:middle">' . $bars . '</svg>';
+      };
+      $ampelBadge = fn($a) => match ($a) { 'rot'=>bx_badge('bald leer','err'), 'gelb'=>bx_badge('knapp','warn'), 'gruen'=>bx_badge('ausreichend','ok'), default=>'<span class="muted">–</span>' };
     ?>
   <h1 style="margin-bottom:4px">Fremdprodukte &amp; Mein Lager</h1>
   <p class="bx-sub" style="margin:0 0 14px">Ihre bei uns im Fremdlager (Lager 2) eingelagerten Produkte und der aktuelle Bestand. Melden Sie hier neue Fremdprodukte an – den Bestand buchen wir beim Wareneingang ein.</p>
@@ -3597,18 +3615,31 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (!$fp): ?>
     <div class="bx-panel"><div class="muted">Noch keine Fremdprodukte im Lager. Melden Sie oben ein Produkt an – nach dem Wareneingang erscheint hier der Bestand.</div></div>
   <?php else: ?>
+  <p class="muted" style="font-size:13px;margin:0 0 10px">Verkaufsgeschwindigkeit &amp; Reichweite basieren auf den Lagerabgängen der letzten 8 Wochen.</p>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Produkt</th><th>Artikel-Nr.</th><th class="bx-num">Bestand</th><th>Chargen / MHD</th></tr></thead>
+    <thead><tr><th>Produkt</th><th class="bx-num">Bestand</th><th>Verkauf / Woche</th><th>Reichweite</th><th>Status</th><th>Chargen / MHD</th></tr></thead>
     <tbody>
-      <?php foreach ($fp as $r): $cs = $fpChg[(int)$r['item_id']] ?? []; ?>
+      <?php foreach ($fp as $r): $iid=(int)$r['item_id']; $cs = $fpChg[$iid] ?? []; $st = $fpStat[$iid] ?? null; ?>
       <tr>
         <td><strong><?= h($r['anzeigename'] ?: $r['name']) ?></strong><?php if (!empty($r['produkt_nr'])): ?> <span class="muted" style="font-size:12px">· <?= h($r['produkt_nr']) ?></span><?php endif; ?></td>
-        <td><?= $r['artikelnummer'] ? h($r['artikelnummer']) : '<span class="muted">–</span>' ?></td>
-        <td class="bx-num"><strong><?= $fpNf($r['bestand']) ?></strong> <span class="muted" style="font-size:12px">Stück</span></td>
+        <td class="bx-num"><strong><?= $fpNf($r['bestand']) ?></strong> <span class="muted" style="font-size:12px">Stk</span></td>
+        <td>
+          <?php if ($st && $st['pro_woche'] > 0): ?>
+            <strong><?= $fpNf(round($st['pro_woche'])) ?></strong> <span class="muted" style="font-size:12px">Stk/Wo</span>
+            <div style="margin-top:2px"><?= $fpSpark($st['verlauf']) ?></div>
+          <?php else: ?><span class="muted">keine Verkäufe</span><?php endif; ?>
+        </td>
+        <td>
+          <?php if ($st && $st['reichweite_tage'] !== null): ?>
+            <strong>~<?= (int)$st['reichweite_tage'] ?> Tage</strong>
+            <?php if ($st['leer_am']): ?><div class="muted" style="font-size:12px">leer ab <?= h(date('d.m.Y', strtotime((string)$st['leer_am']))) ?></div><?php endif; ?>
+          <?php else: ?><span class="muted">–</span><?php endif; ?>
+        </td>
+        <td><?= $ampelBadge($st['ampel'] ?? 'keine') ?></td>
         <td>
           <?php if (!$cs): ?><span class="muted">–</span>
           <?php else: foreach ($cs as $c): ?>
-            <div style="font-size:13px"><?= $c['charge_nr'] ? h($c['charge_nr']) : '<span class="muted">ohne Charge</span>' ?> · <?= $fpNf($c['menge_verfuegbar']) ?> Stück<?= $c['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$c['mhd']))) : '' ?></div>
+            <div style="font-size:13px"><?= $c['charge_nr'] ? h($c['charge_nr']) : '<span class="muted">ohne Charge</span>' ?> · <?= $fpNf($c['menge_verfuegbar']) ?> Stk<?= $c['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$c['mhd']))) : '' ?></div>
           <?php endforeach; endif; ?>
         </td>
       </tr>

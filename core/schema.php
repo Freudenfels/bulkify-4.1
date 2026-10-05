@@ -2521,6 +2521,40 @@ function bsku_ensure(int $item_id): string {
 function lager2_bestand(int $item_id): float {
     return (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei'", [$item_id]);
 }
+// Verkaufs-Statistik eines Lager-2-Artikels über die letzten $wochen (Default 8): netto verkauft
+// (Verbrauch − Retoure), Rate pro Woche/Tag, Reichweite in Tagen + voraussichtliches Leer-Datum,
+// Ampel (rot <14, gelb <30, sonst grün), Wochen-Verlauf (älteste zuerst). Quelle: lager2_bewegung.
+function lager2_verkaufsstatistik(int $item_id, int $wochen = 8): array {
+    $out = ['verkauf'=>0.0,'pro_woche'=>0.0,'pro_tag'=>0.0,'reichweite_tage'=>null,'leer_am'=>null,
+            'bestand'=>0.0,'ampel'=>'keine','verlauf'=>array_fill(0, max(1,$wochen), 0.0)];
+    if ($item_id <= 0 || !table_exists('lager2_bewegung')) return $out;
+    $out['bestand'] = lager2_bestand($item_id);
+    $tage = max(7, $wochen * 7);
+    $cut  = date('Y-m-d H:i:s', time() - $tage * 86400);
+    $verkauf = max(0.0, (float) scalar(
+        "SELECT COALESCE(SUM(CASE typ WHEN 'verbrauch' THEN menge WHEN 'retoure' THEN -menge ELSE 0 END),0)
+         FROM lager2_bewegung WHERE item_id=? AND angelegt >= ?", [$item_id, $cut]));
+    // Effektiver Zeitraum: höchstens seit der ersten Bewegung im Fenster (sonst unterschätzt die Rate die Reichweite).
+    $erste = scalar("SELECT MIN(angelegt) FROM lager2_bewegung WHERE item_id=? AND angelegt >= ?", [$item_id, $cut]);
+    $spanTage = $tage;
+    if ($erste) { $d = (int) floor((time() - strtotime((string)$erste)) / 86400); $spanTage = max(7, min($tage, $d > 0 ? $d : 7)); }
+    $proTag = $verkauf > 0 ? $verkauf / $spanTage : 0.0;
+    $out['verkauf'] = $verkauf; $out['pro_tag'] = $proTag; $out['pro_woche'] = $proTag * 7;
+    if ($proTag > 0 && $out['bestand'] > 0) {
+        $rt = (int) floor($out['bestand'] / $proTag);
+        $out['reichweite_tage'] = $rt;
+        $out['leer_am'] = date('Y-m-d', time() + $rt * 86400);
+        $out['ampel'] = $rt < 14 ? 'rot' : ($rt < 30 ? 'gelb' : 'gruen');
+    } elseif ($proTag > 0) {
+        $out['reichweite_tage'] = 0; $out['leer_am'] = date('Y-m-d'); $out['ampel'] = 'rot';
+    }
+    foreach (all("SELECT FLOOR(DATEDIFF(NOW(), angelegt)/7) AS w,
+                         SUM(CASE typ WHEN 'verbrauch' THEN menge WHEN 'retoure' THEN -menge ELSE 0 END) AS m
+                  FROM lager2_bewegung WHERE item_id=? AND angelegt >= ? GROUP BY w", [$item_id, $cut]) as $row) {
+        $w = (int)$row['w']; if ($w >= 0 && $w < $wochen) $out['verlauf'][$wochen - 1 - $w] = max(0.0, (float)$row['m']);
+    }
+    return $out;
+}
 // Alle Lager-2-Produkte (Verkaufsfertig-Items von Fulfillment-Kunden) mit Bestand + Brücken-Feldern.
 function lager2_produkte(?int $kunde_id = null): array {
     // Wem gehört die Fertigware? Steht am Produkt ein Kunde (exklusives Produkt), gilt der.
