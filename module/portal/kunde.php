@@ -3013,15 +3013,19 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php if (!$aktBest): ?><div class="bx-panel"><div class="muted"><?= $btab === 'abgeschlossen' ? 'Noch keine abgeschlossenen Bestellungen.' : 'Aktuell keine Bestellung in Bearbeitung.' ?></div></div><?php endif; ?>
   <?php endif; ?>
-  <?php foreach ($aktBest as $a): $cur = $phaseCache[(int)$a['id']]['idx']; $complete = $a['status'] === 'versendet'; ?>
-  <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
+  <?php foreach ($aktBest as $a): $cur = $phaseCache[(int)$a['id']]['idx']; $complete = $a['status'] === 'versendet';
+        // Etikett offen? (Produkt braucht Etikett, aber noch nicht freigegeben) – in der Übersicht sichtbar machen.
+        $etMiss = !$complete && auftrag_braucht_etikett((int)$a['id']) && !etikett_freigegeben((int)$a['id']); ?>
+  <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit<?= $etMiss ? ';border-color:#e6c4c0' : '' ?>">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:12px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
       <div class="bx-row" style="gap:10px;align-items:center">
         <span class="muted" style="font-size:12px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : 'Schritt ' . ($cur + 1) . '/' . count($AUFSTEPS) . ': ' . h($AUFSTEPS[$cur]) ?></span>
+        <?php if ($etMiss): ?><?= bx_badge('Etikett fehlt', 'err') ?><?php endif; ?>
         <?= $aufBadge($a['status']) ?><?php $zst = $zahlMapBest[(int)$a['id']] ?? (!empty($a['bezahlt_am']) ? 'bezahlt' : ''); if ($zst): ?> <?= $reBadge($zst) ?><?php endif; ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
+    <?php if ($etMiss): ?><div style="margin-top:8px;color:#8f231b;font-size:13px;font-weight:600">Etikett fehlt – bitte Etikett-Design hochladen und freigeben (Bestellung öffnen).</div><?php endif; ?>
     <ul class="bx-steps" style="margin-top:12px">
       <?php foreach (kunde_auftrag_track($a) as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : '');
           $sub = $t['date'] ? fmt_zeit($t['date'], 'd.m.Y') : ($t['sub'] ?? ''); ?>
