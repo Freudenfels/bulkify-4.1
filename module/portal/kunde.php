@@ -3227,6 +3227,10 @@ portal_head('Kundenportal · ' . $k['firma']);
     ?>
     <?php if ($etBraucht): ?>
     <div class="muted" style="font-size:13px;margin:18px 0 8px">Ihr Etikett</div>
+    <?php $__etbK = etikett_bestand_info((int)($a['produkt_id'] ?? 0), (int)$k['id']);
+          if (!empty($__etbK['hat_etikett']) && $__etbK['bezahlt'] > 0): ?>
+      <p class="muted" style="font-size:12px;margin:0 0 8px">Ihre Etiketten im Lager: <strong><?= number_format($__etbK['kunde_sichtbar'], 0, ',', '.') ?></strong> von <?= number_format($__etbK['bezahlt'], 0, ',', '.') ?> bestellten</p>
+    <?php endif; ?>
     <?php if (isset($_GET['etikett'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Etikett-Design gespeichert – bitte unten noch freigeben.</div><?php endif; ?>
     <?php if (isset($_GET['etikettfrei'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Danke! Etikett ist freigegeben – die Produktion kann starten.</div><?php endif; ?>
     <?php if (isset($_GET['etikettfehlt'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:#e6c4c0;color:#8f231b">Bitte Ihren Namen für die Freigabe angeben.</div><?php endif; ?>

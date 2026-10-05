@@ -271,6 +271,17 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     <div class="bx-grid">
       <?= verp_slot('Verschluss/Deckel', 'verschluss_id', $VERP_ROLLE['verschluss'], $p['verschluss_id'] ?? '') ?>
       <?= verp_slot('Etikett', 'etikett_id', $VERP_ROLLE['etikett'], $p['etikett_id'] ?? '') ?>
+      <?php if (!$neu && ($__etb = etikett_bestand_info((int)$id))['hat_etikett']): ?>
+      <div class="bx-field">
+        <label>Etiketten-Bestand <?= bx_hint('Physisch = unser Lagerbestand (inkl. Puffer, den wir oft zusätzlich ordern). Bezahlt = die vom Kunden gekauften Etiketten. Dem Kunden wird NIE mehr als „bezahlt" angezeigt. Beim Bestellen von Etiketten einfach die (höhere) physische Menge erfassen.') ?></label>
+        <div style="font-size:13px;padding-top:6px">
+          physisch <strong><?= number_format($__etb['physisch'], 0, ',', '.') ?></strong>
+          · bezahlt <strong><?= number_format($__etb['bezahlt'], 0, ',', '.') ?></strong>
+          <?php if ($__etb['puffer'] > 0): ?> · <span class="muted">Puffer <?= number_format($__etb['puffer'], 0, ',', '.') ?></span><?php endif; ?>
+          <?php if ($__etb['physisch'] < $__etb['kunde_rest']): ?><br><span style="color:var(--warn)">Zu wenig Etiketten für offene Aufträge (fehlen <?= number_format($__etb['kunde_rest'] - $__etb['physisch'], 0, ',', '.') ?>).</span><?php endif; ?>
+        </div>
+      </div>
+      <?php endif; ?>
       <?= verp_slot('Faltschachtel/Karton', 'karton_id', $VERP_ROLLE['karton'], $p['karton_id'] ?? '') ?>
       <?= verp_slot('Beipackzettel', 'beipack_id', $VERP_ROLLE['beipack'], $p['beipack_id'] ?? '') ?>
       <div class="bx-field"><label>Leerkapsel <?= bx_hint('nur Kapselprodukte. Leer = automatisch nach Kapselgröße; nur wählen, wenn mehrere Kapseln gleicher Größe existieren (Material/Farbe).') ?></label>

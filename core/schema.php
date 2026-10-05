@@ -5639,6 +5639,45 @@ function etikett_haftung_text(): string {
     $t = trim((string) meta_get('etikett_haftung_text', ''));
     return $t !== '' ? $t : $def;
 }
+
+// ===== Etikett-Bestand (physisch vs. bezahlt) =====================================================
+// Etiketten sind an ein Produkt gebunden. Der Lager-/Etikett-Artikel ist produkt.etikett_id, sonst aus
+// dem Behälter abgeleitet. Rückgabe 0, wenn das Produkt kein Etikett hat.
+function etikett_item_fuer_produkt(int $produkt_id): int {
+    if ($produkt_id <= 0) return 0;
+    $eid = (int) scalar("SELECT etikett_id FROM produkt WHERE id=?", [$produkt_id]);
+    if ($eid > 0) return $eid;
+    $vid = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$produkt_id]);
+    return $vid ? (int) (etikett_id_fuer_behaelter($vid) ?? 0) : 0;
+}
+// Etikett-Bestand eines Produkts – mit strikter Trennung PHYSISCH (unser Lager, inkl. Puffer) vs.
+// BEZAHLT (was der Kunde gekauft hat). Dem Kunden darf NIE mehr gezeigt werden als bezahlt.
+//   physisch   = freier Lagerbestand des Etikett-Artikels (inkl. der Reserve, die wir oft zusätzlich ordern)
+//   bezahlt    = Summe der vom Kunden bestellten Etiketten (1 je Packung), nicht stornierte Aufträge
+//   verbraucht = davon in abgeschlossenen Aufträgen produziert (Etiketten verbraucht)
+//   kunde_rest = bezahlt − verbraucht (dem Kunden noch gehörende Etiketten)
+//   kunde_sichtbar = min(physisch, kunde_rest)  -> gedeckelt, nie mehr als bezahlt
+//   puffer     = physisch − kunde_rest (unsere zusätzliche Menge; dem Kunden NICHT zeigen)
+// $kunde_id=null aggregiert über alle Kunden (interne Produktsicht). Für die Kundensicht die kunde_id setzen.
+function etikett_bestand_info(int $produkt_id, ?int $kunde_id = null): array {
+    $eid = etikett_item_fuer_produkt($produkt_id);
+    $physisch = $eid ? (float) item_bestand($eid, true) : 0.0;
+    $wo = "produkt_id=? AND status<>'storniert'"; $p = [$produkt_id];
+    if ($kunde_id) { $wo .= " AND kunde_id=?"; $p[] = $kunde_id; }
+    $bezahlt    = (int) scalar("SELECT COALESCE(SUM(menge),0) FROM auftrag WHERE $wo", $p);
+    $verbraucht = (int) scalar("SELECT COALESCE(SUM(menge),0) FROM auftrag WHERE $wo AND status='erledigt'", $p);
+    $kundeRest  = max(0, $bezahlt - $verbraucht);
+    return [
+        'etikett_item_id' => $eid,
+        'hat_etikett'     => $eid > 0,
+        'physisch'        => $physisch,
+        'bezahlt'         => $bezahlt,
+        'verbraucht'      => $verbraucht,
+        'kunde_rest'      => $kundeRest,
+        'kunde_sichtbar'  => (int) min($physisch, $kundeRest),   // NIE mehr als bezahlt
+        'puffer'          => max(0.0, $physisch - $kundeRest),    // interner Überschuss (nicht an Kunden zeigen)
+    ];
+}
 // Liest die Seitenmaße einer Druckdatei. PDF → aus /MediaBox in mm ('210 × 297 mm'); Bild → Pixel. Sonst null.
 function pdf_masse(string $pfad): ?array {
     if (!is_file($pfad)) return null;
