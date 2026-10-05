@@ -57,9 +57,6 @@ function dhl_build_shipment(array $v, array $abs, array $cfg, ?string &$fehler =
     $groesse = ((string)($v['dhl_groesse'] ?? 'gross') === 'klein') ? 'klein' : 'gross';
     $product = dhl_produkt($land, $groesse);
 
-    // Nicht-EU braucht eine Zollinhaltserklärung (CN23) mit HS-Code/Warenwert – im Lager noch nicht erfasst.
-    if (!dhl_ist_eu($land)) { $fehler = 'Nicht-EU-Sendung (' . $land . ') braucht Zolldaten (HS-Code/Warenwert) – kommt als nächster Schritt. Bitte vorerst EU/DE oder Zollpapier manuell.'; return null; }
-
     $gewicht_g = (int) round(((float)($v['gewicht_kg'] ?? 0) ?: 0.5) * 1000);
     if ($gewicht_g < 1) $gewicht_g = 500;
 
@@ -96,7 +93,62 @@ function dhl_build_shipment(array $v, array $abs, array $cfg, ?string &$fehler =
     if (in_array($product, ['V01PAK', 'V53WPAK'], true)) $services['endorsement'] = 'RETURN';
     if (in_array($product, ['V53WPAK', 'V66WPI'], true)) $services['premium'] = true;
     if ($services) $ship['services'] = $services;
+
+    // Nicht-EU: Zollinhaltserklärung (CN23) aus den Positionen. Fehlen HS-Code/Warenwert -> klare Meldung.
+    if (!dhl_ist_eu($land)) {
+        $cz = dhl_customs_block($v, $gewicht_g);
+        if (!empty($cz['fehlend'])) {
+            $fehler = 'Zolldaten fehlen für: ' . implode(', ', array_slice($cz['fehlend'], 0, 6))
+                . ' – HS-Code + Warenwert je Position unter „Zoll (CN23)" eintragen.';
+            return null;
+        }
+        if (empty($cz['block'])) { $fehler = 'Keine Positionen für die Zollerklärung (CN23).'; return null; }
+        $ship['customs'] = $cz['block'];
+        // DHL lehnt ab, wenn das Paketgewicht kleiner ist als die Summe im CN23 -> ggf. anheben.
+        $sum = 0;
+        foreach ($cz['block']['items'] as $it) $sum += (int)$it['itemWeight']['value'] * (int)$it['packagedQuantity'];
+        if ($sum > (int)$ship['details']['weight']['value']) $ship['details']['weight']['value'] = $sum;
+    }
     return $ship;
+}
+
+// CN23-Zollblock aus den Sendungspositionen (lg_versand_pos). Rueckgabe ['block'=>?array,'fehlend'=>[Namen]].
+// Pflicht je Position: HS-Code + Warenwert (je Stueck). Ursprungsland default DE, Gewicht-Fallback = Paket/Stueck.
+function dhl_customs_block(array $v, int $shipWeightG): array {
+    $vid = (int)($v['id'] ?? 0);
+    if ($vid <= 0 || !function_exists('lg_versand_pos_liste')) return ['block' => null, 'fehlend' => []];
+    $pos = lg_versand_pos_liste($vid);
+    $totalQty = 0;
+    foreach ($pos as $p) $totalQty += max(0, (int) round((float)$p['menge']));
+    $fallbackW = $totalQty > 0 ? max(1, (int) round($shipWeightG / $totalQty)) : 500;
+
+    $items = []; $fehlend = [];
+    foreach ($pos as $p) {
+        $qty = max(0, (int) round((float)$p['menge']));
+        if ($qty <= 0) continue;
+        $name = (string)($p['bezeichnung'] ?? 'Ware');
+        $hs   = preg_replace('/\D/', '', (string)($p['zoll_hs'] ?? ''));
+        $wert = ($p['zoll_wert'] ?? null) !== null && $p['zoll_wert'] !== '' ? (float)$p['zoll_wert'] : null;
+        if ($hs === '' || $wert === null || $wert <= 0) { $fehlend[] = $name; continue; }
+        $g = ($p['zoll_gewicht_g'] ?? null) ? (int)$p['zoll_gewicht_g'] : $fallbackW;
+        $items[] = [
+            'itemDescription'  => mb_substr(trim($name), 0, 50),
+            'countryOfOrigin'  => dhl_land3(strtoupper((string)($p['zoll_ursprung'] ?? '') ?: 'DE')),
+            'hsCode'           => $hs,
+            'packagedQuantity' => $qty,
+            'itemValue'        => ['currency' => 'EUR', 'value' => round($wert, 2)],
+            'itemWeight'       => ['uom' => 'g', 'value' => max(1, $g)],
+        ];
+    }
+    if ($fehlend) return ['block' => null, 'fehlend' => $fehlend];
+    if (!$items)  return ['block' => null, 'fehlend' => []];
+    return ['block' => [
+        'exportType'         => 'COMMERCIAL_GOODS',
+        'exportDescription'  => 'Warensendung',
+        'shippingConditions' => 'DDU',
+        'postalCharges'      => ['currency' => 'EUR', 'value' => 0],
+        'items'              => $items,
+    ], 'fehlend' => []];
 }
 
 // Haupt-Einstieg (vom Dispatcher aufgerufen). Rueckgabe ['ok','tracking','pdf','format','fehler'].
@@ -117,7 +169,9 @@ function dhl_label_erstellen(array $v, array $abs, array $cfg): array {
         $sno = (string)($item['shipmentNo'] ?? $item['shipmentNumber'] ?? '');
         $b64 = (string)($item['label']['b64'] ?? $item['label']['content'] ?? '');
         $pdf = $b64 !== '' ? (string) base64_decode($b64) : '';
-        if ($sno !== '' && $pdf !== '') return ['ok' => true, 'tracking' => $sno, 'pdf' => $pdf, 'format' => $printFormat];
+        $zb64 = (string)($item['customsDoc']['b64'] ?? $item['customsDoc']['content'] ?? '');
+        $zoll = $zb64 !== '' ? (string) base64_decode($zb64) : '';
+        if ($sno !== '' && $pdf !== '') return ['ok' => true, 'tracking' => $sno, 'pdf' => $pdf, 'zoll_pdf' => $zoll, 'format' => $printFormat];
     }
     $msg = '';
     if (is_array($j)) {

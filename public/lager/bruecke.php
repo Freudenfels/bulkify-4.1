@@ -89,6 +89,11 @@ foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' 
         $lab = function_exists('lg_versand_label') ? lg_versand_label((int)$j['ids']) : null;
         $pdf = $lab && (string)($lab['pdf'] ?? '') !== '' ? (string)$lab['pdf'] : null;
         $fehlt = 'Kein Versand-Label';
+    } elseif ($typ === 'zoll') {
+        $drucker = $druckerLieferschein ?: $druckerEtikett;   // A4-Zollpapier auf den A4-/Lieferschein-Drucker
+        $lab = function_exists('lg_versand_label') ? lg_versand_label((int)$j['ids']) : null;
+        $pdf = $lab && (string)($lab['zoll_pdf'] ?? '') !== '' ? (string)$lab['zoll_pdf'] : null;
+        $fehlt = 'Kein Zollpapier';
     } else {
         $pdf = lg_etikett_pdf(explode(',', (string)$j['ids']), (string)$j['format']);
     }

@@ -253,6 +253,13 @@ function lg_schema(): void {
     // DHL-Paketgröße: gross = Paket (V01PAK/V53WPAK), klein = Kleinpaket/Warenpost (V62KP/V66WPI).
     lg_spalte('lg_versand', 'dhl_groesse', "VARCHAR(8) NOT NULL DEFAULT 'gross'");
 
+    // Zoll (CN23) je Position – nur für Nicht-EU-Sendungen. HS-Code, Ursprungsland (ISO2),
+    // Warenwert je Stück (EUR), Gewicht je Stück (g, optional).
+    lg_spalte('lg_versand_pos', 'zoll_hs', 'VARCHAR(20) NULL');
+    lg_spalte('lg_versand_pos', 'zoll_ursprung', 'VARCHAR(2) NULL');
+    lg_spalte('lg_versand_pos', 'zoll_wert', 'DECIMAL(10,2) NULL');
+    lg_spalte('lg_versand_pos', 'zoll_gewicht_g', 'INT NULL');
+
     // Vom Carrier erzeugtes Versand-Label (PDF) je Sendung.
     q("CREATE TABLE IF NOT EXISTS lg_versand_label (
         versand_id INT PRIMARY KEY,
@@ -261,6 +268,7 @@ function lg_schema(): void {
         pdf LONGBLOB NULL,
         angelegt DATETIME NOT NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    lg_spalte('lg_versand_label', 'zoll_pdf', 'LONGBLOB NULL');   // CN23-Zollpapier (A4), Nicht-EU
 
     lg_meta_schreiben('schema_build', $build);
 }
@@ -333,10 +341,10 @@ function lg_versand_kopf_speichern(int $id, array $d): void {
        (($d['dhl_groesse'] ?? 'gross') === 'klein' ? 'klein' : 'gross'), $id]);
 }
 // Vom Carrier erzeugtes Label speichern/lesen.
-function lg_versand_label_set(int $versand_id, string $carrier, string $format, string $pdf): void {
-    q("INSERT INTO lg_versand_label (versand_id,carrier,format,pdf,angelegt) VALUES (?,?,?,?,?)
-       ON DUPLICATE KEY UPDATE carrier=VALUES(carrier), format=VALUES(format), pdf=VALUES(pdf), angelegt=VALUES(angelegt)",
-      [$versand_id, $carrier, $format, $pdf, jetzt_utc()]);
+function lg_versand_label_set(int $versand_id, string $carrier, string $format, string $pdf, string $zoll_pdf = ''): void {
+    q("INSERT INTO lg_versand_label (versand_id,carrier,format,pdf,zoll_pdf,angelegt) VALUES (?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE carrier=VALUES(carrier), format=VALUES(format), pdf=VALUES(pdf), zoll_pdf=VALUES(zoll_pdf), angelegt=VALUES(angelegt)",
+      [$versand_id, $carrier, $format, $pdf, $zoll_pdf, jetzt_utc()]);
 }
 function lg_versand_label(int $versand_id): ?array { return one("SELECT * FROM lg_versand_label WHERE versand_id=?", [$versand_id]); }
 function lg_versand_hat_label(int $versand_id): bool { return (int) scalar("SELECT COUNT(*) FROM lg_versand_label WHERE versand_id=?", [$versand_id]) > 0; }
@@ -362,6 +370,12 @@ function lg_versand_pos_liste(int $versand_id): array {
 }
 function lg_versand_pos_del(int $pos_id): void { q("DELETE FROM lg_versand_pos WHERE id=?", [$pos_id]); }
 function lg_versand_pos_abgebucht(int $pos_id): void { q("UPDATE lg_versand_pos SET abgebucht=1 WHERE id=?", [$pos_id]); }
+// Zolldaten (CN23) einer Position setzen.
+function lg_versand_pos_zoll_set(int $pos_id, string $hs, string $ursprung, ?float $wert, ?int $gewicht_g): void {
+    q("UPDATE lg_versand_pos SET zoll_hs=?, zoll_ursprung=?, zoll_wert=?, zoll_gewicht_g=? WHERE id=?",
+      [mb_substr(preg_replace('/\s+/', '', $hs), 0, 20), strtoupper(mb_substr($ursprung, 0, 2)) ?: null,
+       $wert, $gewicht_g, $pos_id]);
+}
 
 // Soll die Menge auf dem Etikett auf die Kartons aufgeteilt werden? (0/1)
 function lg_aufteilen(int $charge_id): bool {

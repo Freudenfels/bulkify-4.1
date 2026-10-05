@@ -7,6 +7,7 @@ Parameter `typ`:
 - **etikett** (Standard): `ids=<charge-ids>` → Karton-Etikett (100×150), Drucker `drucker_name`.
 - **lieferschein**: `id=<versand-id>` → Lieferschein A4, Drucker `drucker_lieferschein`.
 - **label**: `id=<versand-id>` → vom Carrier erzeugtes Versand-Label, Drucker `drucker_versandlabel`.
+- **zoll**: `id=<versand-id>` → CN23-Zollpapier (A4, Nicht-EU), Drucker `drucker_lieferschein`.
 
 Antwort JSON `{ok,id,meldung}` (meldet, ob die Brücke gerade läuft). Die PDF-Erzeugung + Druckerwahl je
 Typ passiert in `public/lager/bruecke.php`.

@@ -7,7 +7,7 @@
 header('Content-Type: application/json; charset=utf-8');
 
 $typ = (string)($_POST['typ'] ?? 'etikett');
-if (!in_array($typ, ['etikett', 'lieferschein', 'label'], true)) $typ = 'etikett';
+if (!in_array($typ, ['etikett', 'lieferschein', 'label', 'zoll'], true)) $typ = 'etikett';
 
 if ($typ === 'etikett') {
     $roh = (string)($_POST['ids'] ?? '');
@@ -20,6 +20,10 @@ if ($typ === 'etikett') {
     if ($vid <= 0) { echo json_encode(['ok' => false, 'fehler' => 'Keine Sendung angegeben.']); exit; }
     if ($typ === 'label' && function_exists('lg_versand_hat_label') && !lg_versand_hat_label($vid)) {
         echo json_encode(['ok' => false, 'fehler' => 'Für diese Sendung gibt es noch kein Versand-Label.']); exit;
+    }
+    if ($typ === 'zoll') {
+        $l = function_exists('lg_versand_label') ? lg_versand_label($vid) : null;
+        if (!$l || (string)($l['zoll_pdf'] ?? '') === '') { echo json_encode(['ok' => false, 'fehler' => 'Für diese Sendung gibt es kein Zollpapier.']); exit; }
     }
     $refs = (string)$vid;
     $format = $typ === 'label' ? 'label' : 'a4';

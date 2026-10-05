@@ -19,6 +19,11 @@ gespeichert (`lg_versand_kopf_speichern`), bleibt also stabil, auch wenn der Kun
 **Versandart Paket:** Auswahl **DHL-Größe** (groß = Paket, klein = Kleinpaket/Warenpost; `dhl_groesse`) →
 Produkt + Label-Format je national/international automatisch.
 
+**Zoll (CN23, nur Nicht-EU-Paket):** Panel mit HS-Code, Ursprungsland (aus dem Artikel vorbelegt,
+`erp_item_herkunft_iso2`) und Warenwert je Stück pro Position (`aktion=zoll_speichern` →
+`lg_versand_pos_zoll_set`). Ohne diese Daten lehnt DHL die Sendung ab (klare Meldung). Nach der
+Label-Erstellung gibt es zusätzlich **Zollpapier drucken/öffnen** (A4).
+
 **Versand-Label & Tracking:** Aktion „label" (`versand_label_erstellen()`): **Paket → DHL**,
 **Palette → Cargoboard**. Erzeugt Label (PDF, `?p=versand_label`) + Sendungsnummer, speichert den Carrier.
 **Storno** (`aktion=storno` → `versand_storno()`, nur DHL, solange nicht übergeben) löscht Label + Tracking.

@@ -77,7 +77,7 @@ function versand_label_erstellen(int $versand_id): array {
     }
     if (empty($r['ok'])) return ['ok' => false, 'fehler' => (string)($r['fehler'] ?? 'Unbekannter Fehler.')];
 
-    lg_versand_label_set($versand_id, $carrier, (string)($r['format'] ?? 'A4'), (string)($r['pdf'] ?? ''));
+    lg_versand_label_set($versand_id, $carrier, (string)($r['format'] ?? 'A4'), (string)($r['pdf'] ?? ''), (string)($r['zoll_pdf'] ?? ''));
     lg_versand_tracking_setzen($versand_id, (string)($r['tracking'] ?? ''), $carrier);
     return ['ok' => true, 'tracking' => (string)($r['tracking'] ?? ''), 'carrier' => $carrier];
 }

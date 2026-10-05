@@ -15,8 +15,11 @@ Portiert aus `fulfillment-web/src/dhl.php` (siehe `ANLEITUNG-DHL-VERSAND.md`). E
 - Shipper = strukturierter Absender (Einstellungen → Formate); consignee = Empfänger-Snapshot; Land als
   3-stelliger ISO (`dhl_land3`); Gewicht in Gramm. `services`: `endorsement=RETURN` (V01PAK/V53WPAK),
   `premium` (international). refNo = Versand-Nr. (+ Firma), max 35 Zeichen.
-- **Nicht-EU** (`!dhl_ist_eu`): braucht CN23-Zolldaten (HS-Code/Warenwert) – **im Lager noch nicht erfasst**,
-  deshalb aktuell klare Meldung (Follow-up). EU/DE läuft voll.
+- **Nicht-EU** (`!dhl_ist_eu`): **Zollinhaltserklärung CN23** über `dhl_customs_block($v,$gewichtG)` aus den
+  Positionen (`lg_versand_pos.zoll_hs/_ursprung/_wert/_gewicht_g`). Fehlt HS-Code/Warenwert einer Position →
+  klare Meldung (welche). DHL liefert dann das A4-**Zollpapier** (`customsDoc.b64`) mit zurück; es wird als
+  `lg_versand_label.zoll_pdf` gespeichert (öffnen `?p=versand_label&id=&zoll=1`, drucken Typ `zoll`).
+  Paketgewicht wird ggf. auf die CN23-Summe angehoben.
 
 Funktionen: `dhl_label_erstellen($v,$abs,$cfg)` (Einstieg, vom Dispatcher), `dhl_validate($cfg)`
 (Verbindung testen, `?validate=true`, ohne echte Sendung), `dhl_cancel($cfg,$sendungsnr)`

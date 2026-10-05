@@ -61,6 +61,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Position entfernt.');
         weiter('?p=versand_detail&id=' . $id);
     }
+    if ($aktion === 'zoll_speichern') {
+        foreach ((array)($_POST['z_hs'] ?? []) as $pid => $hs) {
+            $pid = (int)$pid;
+            $wert = ($_POST['z_wert'][$pid] ?? '') !== '' ? (float) str_replace(',', '.', (string)$_POST['z_wert'][$pid]) : null;
+            $gew  = ($_POST['z_gewicht'][$pid] ?? '') !== '' ? (int)$_POST['z_gewicht'][$pid] : null;
+            lg_versand_pos_zoll_set($pid, (string)$hs, (string)($_POST['z_ursprung'][$pid] ?? ''), $wert, $gew);
+        }
+        flash('Zolldaten gespeichert.');
+        weiter('?p=versand_detail&id=' . $id);
+    }
     if ($aktion === 'stornieren') {
         lg_versand_status_setzen($id, 'storniert');
         flash('Sendung storniert.');
@@ -101,7 +111,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pos    = lg_versand_pos_liste($id);
-$hatLabel = function_exists('lg_versand_hat_label') && lg_versand_hat_label($id);
+$labelRow = function_exists('lg_versand_label') ? lg_versand_label($id) : null;
+$hatLabel = $labelRow && (string)($labelRow['pdf'] ?? '') !== '';
+$hatZoll  = $labelRow && (string)($labelRow['zoll_pdf'] ?? '') !== '';
+$EU = ['DE','AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE'];
+$istNichtEu = (string)$v['typ'] === 'paket' && !in_array(strtoupper(trim((string)$v['empf_land'])), $EU, true) && trim((string)$v['empf_land']) !== '';
 $kunden = function_exists('erp_kunden_liste') ? erp_kunden_liste() : [];
 $q      = trim((string)($_GET['q'] ?? ''));
 $treffer = $q !== '' ? erp_bestand('', $q, false, 30) : [];
@@ -233,6 +247,38 @@ flash_zeigen();
   <?php endif; ?>
 </div>
 
+<?php if ($istNichtEu): ?>
+<div class="bx-panel" style="margin-bottom:var(--sp-5)">
+  <h2 style="margin-top:0">Zoll (CN23) <span class="muted" style="font-weight:400;font-size:var(--fs-sm)">– Nicht-EU-Sendung</span></h2>
+  <p class="muted" style="margin:0 0 var(--sp-3)">Für <?= h(strtoupper((string)$v['empf_land'])) ?> braucht DHL je Position HS-Code (Zolltarifnummer) und Warenwert je Stück. Ursprungsland aus dem Artikel vorbelegt.</p>
+  <?php if (!$pos): ?>
+    <div class="muted">Erst Positionen hinzufügen.</div>
+  <?php else: ?>
+  <form method="post">
+    <input type="hidden" name="aktion" value="zoll_speichern"><input type="hidden" name="id" value="<?= $id ?>">
+    <div class="bx-tablewrap" style="margin-bottom:var(--sp-3)">
+      <table class="bx-table lg-karten">
+        <thead><tr><th>Position</th><th>HS-Code</th><th>Ursprung</th><th>Wert/Stk (€)</th><th>Gew./Stk (g)</th></tr></thead>
+        <tbody>
+        <?php foreach ($pos as $p): $pid = (int)$p['id'];
+          $urs = (string)($p['zoll_ursprung'] ?? '') ?: (function_exists('erp_item_herkunft_iso2') ? erp_item_herkunft_iso2((int)($p['item_id'] ?? 0)) : ''); ?>
+          <tr>
+            <td data-label=""><?= h((string)$p['bezeichnung']) ?: '–' ?> <span class="muted">· <?= h(menge_txt($p['menge'])) ?> <?= h((string)$p['einheit']) ?></span></td>
+            <td data-label="HS-Code"><input type="text" name="z_hs[<?= $pid ?>]" value="<?= h((string)($p['zoll_hs'] ?? '')) ?>" placeholder="z. B. 21069092" style="max-width:140px"></td>
+            <td data-label="Ursprung"><input type="text" name="z_ursprung[<?= $pid ?>]" maxlength="2" style="text-transform:uppercase;max-width:70px" value="<?= h($urs) ?>" placeholder="DE"></td>
+            <td data-label="Wert/Stk (€)"><input type="text" name="z_wert[<?= $pid ?>]" inputmode="decimal" value="<?= $p['zoll_wert'] !== null ? h(rtrim(rtrim(number_format((float)$p['zoll_wert'],2,',','.'),'0'),',')) : '' ?>" style="max-width:110px"></td>
+            <td data-label="Gew./Stk (g)"><input type="text" name="z_gewicht[<?= $pid ?>]" inputmode="numeric" value="<?= $p['zoll_gewicht_g'] !== null ? (int)$p['zoll_gewicht_g'] : '' ?>" placeholder="auto" style="max-width:90px"></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <button class="btn btn-primary" type="submit">Zolldaten speichern</button>
+  </form>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <div class="bx-panel" style="margin-bottom:var(--sp-5)">
   <h2 style="margin-top:0">Dokumente &amp; Versand</h2>
   <div class="bx-grid" style="margin-bottom:var(--sp-3)">
@@ -265,6 +311,13 @@ flash_zeigen();
     </form>
     <?php endif; ?>
   </div>
+  <?php if ($hatZoll): ?>
+  <div style="font-weight:600;margin:var(--sp-4) 0 6px">Zollpapier (CN23)</div>
+  <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap">
+    <button type="button" class="btn btn-primary" data-druck="zoll" data-id="<?= $id ?>">Zollpapier drucken</button>
+    <a class="btn btn-ghost" href="?p=versand_label&id=<?= $id ?>&zoll=1" target="_blank" data-no-busy>Öffnen (A4)</a>
+  </div>
+  <?php endif; ?>
   <div id="vsDruckInfo" class="muted" style="font-size:12px;margin-top:var(--sp-2)">Druckt lautlos über die Brücke auf den in den Einstellungen → Drucker gewählten Drucker. „Öffnen" zeigt das PDF.</div>
 </div>
 

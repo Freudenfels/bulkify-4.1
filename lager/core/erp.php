@@ -202,6 +202,21 @@ function erp_kunden_liste(): array {
     return all("SELECT id, firma FROM kunden ORDER BY firma");
 }
 
+// Ursprungsland eines Artikels als ISO2 (für die Zollerklärung) – aus item.herkunftsland (Freitext).
+function erp_item_herkunft_iso2(int $item_id): string {
+    if ($item_id <= 0 || !tabelle_da('item')) return '';
+    $h = trim((string) scalar("SELECT herkunftsland FROM item WHERE id=?", [$item_id]));
+    if ($h === '') return '';
+    if (strlen($h) === 2 && ctype_alpha($h)) return strtoupper($h);
+    $m = ['deutschland'=>'DE','germany'=>'DE','österreich'=>'AT','oesterreich'=>'AT','schweiz'=>'CH','switzerland'=>'CH',
+        'frankreich'=>'FR','france'=>'FR','italien'=>'IT','italy'=>'IT','spanien'=>'ES','spain'=>'ES','niederlande'=>'NL',
+        'belgien'=>'BE','indien'=>'IN','india'=>'IN','china'=>'CN','usa'=>'US','vereinigte staaten'=>'US','polen'=>'PL',
+        'tschechien'=>'CZ','türkei'=>'TR','tuerkei'=>'TR','turkey'=>'TR','vietnam'=>'VN','marokko'=>'MA','ägypten'=>'EG',
+        'aegypten'=>'EG','peru'=>'PE','brasilien'=>'BR','brazil'=>'BR','uk'=>'GB','england'=>'GB','grossbritannien'=>'GB',
+        'großbritannien'=>'GB'];
+    return $m[mb_strtolower($h)] ?? '';
+}
+
 // Adressen eines Kunden als Auswahl: Lieferadresse (bevorzugt) + Hauptadresse + Rechnungsadresse.
 // Nur Adressen mit Inhalt. Jede: quelle/label/firma/name/strasse/hausnummer/plz/ort/land/email/telefon/bevorzugt.
 // Weltweit: land ist ein 2-Buchstaben-Laendercode (Default DE).
