@@ -99,6 +99,10 @@ $nameCell = function($r) use ($formuMap, $mgTxt) {
         $rest = count($z) - 3;
         $out .= '<div class="muted" style="font-size:12px;margin-top:2px">' . implode(' · ', $teile) . ($rest > 0 ? ' +' . $rest : '') . '</div>';
     }
+    // frühere Namen/Synonyme: unsichtbar mitgerendert, damit die Live-Suche sie findet
+    if (trim((string)($r['synonyme'] ?? '')) !== '') {
+        $out .= '<span style="display:none">' . h($r['synonyme']) . '</span>';
+    }
     return $out;
 };
 // Kapselgröße: fest gewählt, sonst automatisch (kleinste passende nach Füllgewicht; Näherung ohne Dichte).

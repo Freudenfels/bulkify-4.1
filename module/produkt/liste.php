@@ -17,7 +17,7 @@ $rows = all("SELECT p.*, k.firma AS kunde_firma, r.name AS rezeptur_name, v.name
 if ($q !== '') {
     $needle = mb_strtolower($q);
     $rows = array_filter($rows, function($r) use ($needle) {
-        foreach (['nummer','name','kunde_firma','rezeptur_name'] as $f) {
+        foreach (['nummer','name','kundenname','synonyme','kunde_firma','rezeptur_name'] as $f) {
             if (mb_strpos(mb_strtolower((string)$r[$f]), $needle) !== false) return true;
         }
         return false;
