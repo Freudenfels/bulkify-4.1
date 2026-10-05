@@ -55,6 +55,10 @@ $alle = all("SELECT pa.*, k.firma AS kunde_firma, a.etikett_freigegeben AS etike
              LEFT JOIN kunden k ON k.id=pa.kunde_id LEFT JOIN produkt p ON p.id=pa.produkt_id
              LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
              LEFT JOIN auftrag a ON a.id=pa.auftrag_id");
+// PreProduktionsauftrag: Vor-PAs (Status 'vorbereitung') gehören NICHT in die Produktionsliste – sie werden
+// zuerst im Dashboard unter „Vor-Produktion" geprüft und freigegeben. Hier nur ein Hinweis-Banner mit Link.
+$vorbereitungN = count(array_filter($alle, fn($r) => ($r['status'] ?? '') === 'vorbereitung'));
+$alle = array_values(array_filter($alle, fn($r) => ($r['status'] ?? '') !== 'vorbereitung'));
 // Bereitschaft (Material da?) sparsam bestimmen – die volle Prüfung (produktion_bereitschaft ->
 // auftrag_bedarf) macht mehrere Abfragen je Auftrag. Sie ist NUR für noch nicht begonnene Aufträge
 // nötig: 'erledigt' wird nie ausgewertet, und wer schon einen Schritt erledigt hat, „läuft" bereits
@@ -189,6 +193,10 @@ $zeigeNeu = isset($_GET['neu']);
 render_header('produktion', 'Produktion');
 bx_head('Produktion', count($rows) . ' ' . $sub[$tab], bx_btn('+ Neuer Produktionsauftrag', '?p=produktion&neu=1', 'primary'));
 if ($flash) echo '<div class="bx-panel badge-ok" style="padding:8px 12px">' . h($flash) . '</div>';
+if (!empty($vorbereitungN) && has_role('admin'))
+    echo '<div class="bx-panel badge-warn" style="padding:10px 14px">' . (int)$vorbereitungN
+       . ' Auftrag(e) in <strong>Vorbereitung</strong> – erst prüfen und freigeben: '
+       . bx_btn('Zur Vor-Produktion', '?p=produktion_vorbereitung', 'ghost') . '</div>';
 
 if ($zeigeNeu):
     // Produkte für die Auswahl (tippbar mit Live-Filter). Mit Rezeptur zuerst (dort ist die Darreichungsform bekannt).

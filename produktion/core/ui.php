@@ -92,6 +92,7 @@ function bereit_badge(string $s): string {
         'wartet' => '<span class="badge badge-warn">wartet auf Material</span>',
         'laeuft' => '<span class="badge badge-info">in Produktion</span>',
         'fertig' => '<span class="badge badge-ok">abgeschlossen</span>',
+        'vorbereitung' => '<span class="badge badge-err" title="Noch nicht zur Produktion freigegeben (Vor-Produktion im Dashboard)">gesperrt</span>',
         default  => '<span class="badge">' . h($s) . '</span>',
     };
 }
@@ -100,6 +101,7 @@ function bereit_badge(string $s): string {
 // (ältere Varianten in_arbeit/fertig bleiben der Robustheit halber abgedeckt).
 function pa_badge(?string $s): string {
     return match ((string)$s) {
+        'vorbereitung'        => '<span class="badge badge-err">in Vorbereitung</span>',
         'offen'               => '<span class="badge badge-warn">offen</span>',
         'laufend', 'in_arbeit' => '<span class="badge badge-info">in Arbeit</span>',
         'erledigt', 'fertig'   => '<span class="badge badge-ok">erledigt</span>',

@@ -58,6 +58,11 @@ foreach ($schritte as $s) if ((int)$s['id'] === $erster_offen) { $cur = $s; brea
 kopf($pa['nummer'] . ' – Produktionsmodus', 'liste');
 seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''),
     '<a class="btn btn-ghost btn-sm" href="?p=pa&id=' . $id . '">Zur Übersicht</a>');
+if (($pa['status'] ?? '') === 'vorbereitung') {
+    echo '<div class="bx-panel badge-err" style="padding:14px 18px">Dieser Auftrag ist noch in <strong>Vorbereitung</strong> und nicht zur Produktion freigegeben. '
+       . 'Die Freigabe erfolgt im Dashboard unter „Vor-Produktion". Starten ist erst danach möglich.</div>';
+    fuss(); return;
+}
 ?>
 <div class="bx-panel" style="margin-bottom:16px">
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 28px">

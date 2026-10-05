@@ -396,6 +396,7 @@ function erp_pa_charge_info(int $pa_id): array {
 // Rückgabe ['status'=>'fertig'|'laeuft'|'bereit'|'wartet', 'fehlend'=>[...]]. Mirror von produktion_bereitschaft().
 function erp_pa_bereitschaft(int $pa_id, ?string $status = null, ?int $schritte_fertig = null): array {
     if ($status === null) $status = (string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if ($status === 'vorbereitung') return ['status'=>'vorbereitung', 'fehlend'=>[]];   // noch nicht freigegeben -> gesperrt
     if ($status === 'erledigt') return ['status'=>'fertig', 'fehlend'=>[]];
     if ($schritte_fertig === null) $schritte_fertig = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]);
     if ($schritte_fertig > 0) return ['status'=>'laeuft', 'fehlend'=>[]];
@@ -485,6 +486,10 @@ function erp_schritt_abschliessen(int $schritt_id, string $akteur): array {
     $pa_id = (int)$schritt['pa_id'];
     $station = (string)$schritt['station'];
 
+    // PreProduktionsauftrag: ein noch in Vorbereitung stehender Auftrag ist gesperrt (noch nicht freigegeben).
+    if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')
+        return ['ok'=>false, 'fehler'=>'vorbereitung', 'msg'=>'Dieser Auftrag ist noch in Vorbereitung und nicht zur Produktion freigegeben.', 'fertig'=>false, 'station'=>$station, 'fehlt'=>[]];
+
     // Reihenfolge: nur der erste noch offene Schritt des Auftrags darf abgeschlossen werden.
     $firstOpen = one("SELECT id FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort, id LIMIT 1", [$pa_id]);
     if (!$firstOpen || (int)$firstOpen['id'] !== $schritt_id)
@@ -550,6 +555,8 @@ function erp_schritt_status_setzen(int $schritt_id, bool $erledigt, string $akte
     $s = one("SELECT pa_id FROM produktion_schritt WHERE id=?", [$schritt_id]);
     if (!$s) return ['ok'=>false, 'msg'=>'Schritt nicht gefunden.'];
     $pa_id = (int)$s['pa_id'];
+    if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')
+        return ['ok'=>false, 'msg'=>'Auftrag ist noch in Vorbereitung und nicht zur Produktion freigegeben.'];
     if ($erledigt)
         q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=?, erledigt_von=? WHERE id=?",
           [gmdate('Y-m-d H:i:s'), $akteur !== '' ? $akteur : null, $schritt_id]);
