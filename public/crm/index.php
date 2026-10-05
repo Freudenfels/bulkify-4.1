@@ -23,7 +23,8 @@ $routen = [
     'kalender' => 'termin/kalender.php',
     'kunden'   => 'kunde/liste.php',
     'kunde'    => 'kunde/detail.php',
-    'mehr'     => 'system/mehr.php',
+    'einstellungen' => 'system/einstellungen.php',
+    'mehr'     => 'system/einstellungen.php',   // Alt-Link: zeigt weiterhin auf die Einstellungen
 ];
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'wartet';

@@ -19,7 +19,7 @@ function crm_nav(): array {
                        'erfassen' => 'Schnell erfassen', 'mail' => 'E-Mail einlesen'],
         'Kalender' => ['kalender' => 'Kalender', 'termine' => 'Termine'],
         'Kunden'   => ['kunden' => 'Kunden'],
-        'System'   => ['mehr' => 'Einstellungen'],
+        'System'   => ['einstellungen' => 'Einstellungen'],
     ];
 }
 

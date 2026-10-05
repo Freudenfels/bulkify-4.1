@@ -102,7 +102,7 @@ if (isset($_GET['ok'])) hinweis($_GET['ok'] === 'spaeter' ? 'Auf Wiedervorlage g
   </div>
 
   <?php if ($dash === ''): ?>
-    <p class="muted">Die Vorgänge liegen im Dashboard. Hinterlege dessen Adresse unter <a href="?p=mehr">Mehr</a>,
+    <p class="muted">Die Vorgänge liegen im Dashboard. Hinterlege dessen Adresse unter <a href="?p=einstellungen">Einstellungen</a>,
        dann führt jede Zeile direkt dorthin.</p>
   <?php endif; ?>
 <?php endif; ?>
