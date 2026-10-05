@@ -85,6 +85,7 @@ $aggBedarf = array_values(array_filter(bedarf_aggregiert(false), fn($a) => $a['z
 $bulkBedarf = array_values(array_filter(bedarf_bulk(false), fn($b) => $b['zu_bestellen'] > 1e-6));
 $freiBedarf = freibedarf_offen();
 $nachBedarf = meldebestand_bedarf();   // Meldebestand-Nachbestellungen (Lagerartikel unter Mindestbestand)
+$ohneFestlegung = auftraege_ohne_festlegung();   // Aufträge ohne Eigen/Fremd-Festlegung -> noch kein Bedarf, nur Hinweis
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 $BM_KAT = betriebsmittel_kategorien();
 
@@ -140,7 +141,22 @@ bx_head('Bedarf', 'Was bestellt werden muss. Auswählen und entweder beim Liefer
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['extern']) ? ' Position(en) als „extern bestellt" markiert' : ' Bestellung(en) angelegt (je Lieferant eine)') . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . '</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
 if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Die fehlenden Rohstoffe des Produktionsauftrags stehen jetzt hier – Bestand und bereits Bestelltes wurden übersprungen.</div>';
-?>
+
+// Aufträge ohne Eigen/Fremd-Festlegung: NOCH KEIN Bedarf anzeigen (Stückliste steht nicht fest),
+// nur der Hinweis „erst festlegen" mit direktem Link in die Produktion.
+if ($ohneFestlegung): ?>
+<div class="bx-panel" style="border-color:#e6c4c0;background:#fff8f7;padding:12px 16px;margin-bottom:12px">
+  <strong><?= count($ohneFestlegung) ?> Auftrag/Aufträge warten auf die Festlegung „Eigen- oder Fremdproduktion".</strong>
+  <div class="muted" style="font-size:13px;margin:4px 0 8px">Erst festlegen – danach erscheint der passende Einkaufsbedarf (Rohstoffe bei Eigen-, Bulk-Zukauf bei Fremdproduktion). Die Festlegung erfolgt im Produktionsauftrag.</div>
+  <div class="bx-row" style="flex-wrap:wrap;gap:8px">
+    <?php foreach ($ohneFestlegung as $o): ?>
+      <a class="btn btn-ghost btn-sm" href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" title="Im Produktionsauftrag Eigen/Fremd festlegen">
+        <?= h($o['auftrag_nr'] ?: ('#' . (int)$o['auftrag_id'])) ?><?= $o['produkt'] ? ' · ' . h($o['produkt']) : '' ?><?= $o['kunde'] ? ' · ' . h(firma_kurz($o['kunde'])) : '' ?> → festlegen
+      </a>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
 <form method="post" class="bx-form">
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">

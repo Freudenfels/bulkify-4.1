@@ -4937,6 +4937,10 @@ function produktionsauftrag_lager_erstellen(int $produkt_id, int $menge, string 
 // Gibt false zurück, wenn schon ein Schritt erledigt ist (dann nicht mehr umstellbar).
 function produktionsauftrag_art_setzen(int $pa_id, string $art): bool {
     $art = $art === 'eigen' ? 'eigen' : 'fremd';
+    // Gesperrt, sobald für den Auftrag bestellt wurde – Eigen/Fremd ist dann nicht mehr änderbar.
+    $aidA = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if ($aidA && (int) scalar("SELECT COUNT(*) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                               WHERE bp.auftrag_id=? AND b.status<>'storniert'", [$aidA]) > 0) return false;
     if (!produktion_schritte_regenerieren($pa_id, $art === 'fremd')) return false;   // fremd = verkürzter (Zukauf-)Weg
     // Festlegen = Freigabe an die Produktion: produktionsart + Zeitstempel. Erst jetzt erscheint der Auftrag im Werk.
     q("UPDATE produktionsauftrag SET produktionsart=?, art_festgelegt_am=NOW() WHERE id=?", [$art, $pa_id]);
@@ -5536,7 +5540,8 @@ function bedarf_typ_label(string $typ): string {
 function bedarf_aggregiert(bool $nur_gemeldet = false): array {
     $agg = [];
     // Alle offenen Aufträge – auch Fremdproduktion braucht Verpackung/Etiketten. Der Bulk-Zukauf (item_id 0) fällt unten raus.
-    $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL"
+    // Nur FESTGELEGTE Aufträge (Eigen/Fremd entschieden) – sonst steht die Stückliste noch nicht fest (Rohstoffe vs. Bulk).
+    $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.art_festgelegt_am IS NOT NULL"
         . ($nur_gemeldet ? " AND pa.bedarf_gemeldet IS NOT NULL" : "");
     foreach (all("SELECT pa.id, pa.auftrag_id, a.nummer AS auftrag_nr FROM produktionsauftrag pa
                   LEFT JOIN auftrag a ON a.id=pa.auftrag_id WHERE $wo") as $pa) {
@@ -5574,8 +5579,22 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
 }
 // Bulk-Zukauf-Bedarf (Fremdproduktion): je Auftrag der fertige Bulk (Kapseln/Tabletten/Pulver), der extern beschafft wird.
 // Erscheint im Reiter „Fertige Produkte". Netting gegen offene Freitext-Positionen (item_id NULL) dieses Auftrags.
+// Offene Aufträge, bei denen Eigen/Fremd noch NICHT festgelegt ist – für den Hinweis im Einkaufsbedarf
+// („erst festlegen", mit Link in die Produktion). Ihre Bedarfspositionen erscheinen bewusst noch nicht.
+function auftraege_ohne_festlegung(): array {
+    if (!table_exists('produktionsauftrag')) return [];
+    return all("SELECT pa.id AS pa_id, pa.auftrag_id, a.nummer AS auftrag_nr,
+                       COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, rz.name) AS produkt, k.firma AS kunde
+                FROM produktionsauftrag pa
+                LEFT JOIN auftrag a   ON a.id=pa.auftrag_id
+                LEFT JOIN produkt p   ON p.id=pa.produkt_id
+                LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
+                LEFT JOIN kunden k    ON k.id=pa.kunde_id
+                WHERE pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.art_festgelegt_am IS NULL
+                ORDER BY pa.id DESC");
+}
 function bedarf_bulk(bool $nur_gemeldet = false): array {
-    $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.produktionsart='fremd'"
+    $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.produktionsart='fremd' AND pa.art_festgelegt_am IS NOT NULL"
         . ($nur_gemeldet ? " AND pa.bedarf_gemeldet IS NOT NULL" : "");
     // Gleiches Produkt (= gleiche Kapsel/Bulk) über mehrere Aufträge zusammenfassen.
     $grp = [];

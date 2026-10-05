@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'art_b
     $n = 0; $skip = 0;
     foreach ($ids as $pid) { if (produktionsauftrag_art_setzen($pid, $art)) $n++; else $skip++; }
     $_SESSION['prod_flash'] = $n . ' auf ' . ($art === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion') . ' gesetzt'
-        . ($skip ? ', ' . $skip . ' übersprungen (schon begonnen)' : '') . '.';
+        . ($skip ? ', ' . $skip . ' übersprungen (schon begonnen oder bereits bestellt)' : '') . '.';
     header('Location: ?p=produktion&tab=' . $tab . ($q !== '' ? '&q=' . urlencode($q) : '')); exit;
 }
 
