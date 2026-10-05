@@ -183,24 +183,33 @@ function dhl_label_erstellen(array $v, array $abs, array $cfg): array {
 
 // Zugangsdaten prüfen (erzeugt KEINE Sendung). Rueckgabe ['ok','meldung'].
 function dhl_validate(array $cfg): array {
+    $env = !empty($cfg['sandbox']) ? 'Sandbox' : 'Produktion';
+    $userUsed = ($cfg['user'] ?? '') !== '' ? (string)$cfg['user'] : (!empty($cfg['sandbox']) ? 'user-valid (Test)' : '(leer)');
+    $ctx = ' · Umgebung: ' . $env . ' · GK-User: ' . $userUsed . ' · API-Key: ' . (($cfg['key'] ?? '') !== '' ? 'gesetzt' : 'FEHLT');
+    if (trim((string)($cfg['key'] ?? '')) === '')
+        return ['ok' => false, 'meldung' => 'API-Key fehlt (oder nicht gespeichert). Erst „Zugänge speichern", dann testen.' . $ctx];
+    if (!empty($cfg['sandbox']) && ($cfg['user'] ?? '') === '' && ($cfg['secret'] ?? '') === '') { /* ok: Test-Login wird genutzt */ }
+    elseif (!$cfg['sandbox'] && (($cfg['user'] ?? '') === '' || ($cfg['secret'] ?? '') === ''))
+        return ['ok' => false, 'meldung' => 'GK-Benutzer/Passwort fehlt (oder nicht gespeichert).' . $ctx];
+
     $testV = ['nummer' => 'PRUEF', 'empf_firma' => 'Test Empfänger', 'empf_name' => '', 'empf_strasse' => 'Charles-de-Gaulle-Strasse',
         'empf_hausnummer' => '20', 'empf_plz' => '53113', 'empf_ort' => 'Bonn', 'empf_land' => 'DE', 'empf_email' => '',
         'gewicht_kg' => 0.5, 'dhl_groesse' => 'gross'];
     $abs = function_exists('versand_absender_struktur') ? versand_absender_struktur() : [];
-    if (trim(($abs['name'] ?? '') . ($abs['ort'] ?? '')) === '') return ['ok' => false, 'meldung' => 'Bitte zuerst den Absender unter Formate eintragen.'];
+    if (trim(($abs['name'] ?? '') . ($abs['ort'] ?? '')) === '') return ['ok' => false, 'meldung' => 'Bitte zuerst den Absender unter Formate eintragen und speichern.' . $ctx];
     $fehler = null;
     $ship = dhl_build_shipment($testV, $abs, $cfg, $fehler);
     if (!$ship) return ['ok' => false, 'meldung' => (string)$fehler];
     $r = dhl_request($cfg, 'POST', '/orders?validate=true', ['profile' => 'STANDARD_GRUPPENPROFIL', 'shipments' => [$ship]]);
-    if ($r['err'] !== '') return ['ok' => false, 'meldung' => 'Verbindungsfehler: ' . $r['err']];
-    if ($r['http'] === 200) return ['ok' => true, 'meldung' => 'Zugang ok – DHL hat die Testsendung akzeptiert.'];
+    if ($r['err'] !== '') return ['ok' => false, 'meldung' => 'Verbindungsfehler: ' . $r['err'] . $ctx];
+    if ($r['http'] === 200) return ['ok' => true, 'meldung' => 'Zugang ok – DHL hat die Testsendung akzeptiert.' . $ctx];
     $j = $r['json']; $msg = '';
     if (is_array($j)) {
         if (!empty($j['status']['detail'])) $msg = (string)$j['status']['detail'];
         foreach (($j['items'][0]['validationMessages'] ?? []) as $m) $msg .= ' — ' . (is_array($m) ? ($m['validationMessage'] ?? json_encode($m)) : (string)$m);
     }
-    $hint = in_array($r['http'], [401, 403], true) ? ' (Login/API-Key prüfen)' : '';
-    return ['ok' => false, 'meldung' => ($msg !== '' ? $msg : ('HTTP ' . $r['http'])) . $hint];
+    $hint = in_array($r['http'], [401, 403], true) ? ' – Login/API-Key abgelehnt. Prüfen: Key passend zur Umgebung? Im Sandbox GK-Felder leer lassen (Test-Login). App im DHL-Portal für „Parcel DE Shipping" freigeschaltet?' : '';
+    return ['ok' => false, 'meldung' => ('HTTP ' . $r['http'] . ($msg !== '' ? ' – ' . $msg : '')) . $hint . $ctx];
 }
 
 // Sendung stornieren (nur solange DHL sie noch nicht übergeben hat). Rueckgabe ['ok','meldung'].
