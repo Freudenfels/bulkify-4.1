@@ -37,6 +37,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Produktionsauftrag konnte nicht angelegt werden (kein Produkt am Auftrag?).')); exit;
 }
 
+// Etikett (Team/Admin): Datei hochladen/ersetzen (z. B. Last-Minute-Änderung des Kunden), Freigabe im
+// Namen des Kunden bestätigen, Datei entfernen. Nur Admin/Vertrieb.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['etikett_upload_team','etikett_freigeben_team','etikett_del_team'], true)) {
+    if (!(has_role('admin') || has_role('sales'))) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Keine Berechtigung.')); exit; }
+    $akt = (string)$_POST['aktion'];
+    if ($akt === 'etikett_upload_team') {
+        if (etikett_upload($id)) log_aktivitaet('kunde', (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$id]), 'team', 'Etikett vom Team hochgeladen.', 'auftrag', 'auftrag', $id);
+        header('Location: ?p=auftrag&id=' . $id . '&etikettok=1'); exit;
+    }
+    if ($akt === 'etikett_del_team') { etikett_del($id); header('Location: ?p=auftrag&id=' . $id . '&etikettok=1'); exit; }
+    // Freigabe im Namen des Kunden (extern erteilt) – mit Name, als Akteur 'team'.
+    $name = trim((string)($_POST['freigabe_name'] ?? ''));
+    if ($name === '') { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Bitte einen Namen für die Freigabe angeben.')); exit; }
+    $r = etikett_freigabe_setzen($id, $name, 'team');
+    header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&etikettok=1' : '&expressfehler=' . urlencode($r['fehler'] ?? 'Freigabe nicht möglich.'))); exit;
+}
+
 // Energetisierung-Startdatum setzen (nur wenn der Kunde dafuer freigeschaltet ist). Status laeuft/abgeschlossen
 // wird daraus abgeleitet (energ_status/energ_rest_tage) – kein manuelles Klicken.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'energ_start') {
@@ -313,7 +330,42 @@ echo '<div class="bx-card"><div class="k">VK / Stück</div><div class="v">' . $e
 echo '<div class="bx-card"><div class="k">Netto gesamt</div><div class="v">' . $eur($a['gesamt_netto']) . '</div></div>';
 if (!empty($a['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . '</div></div>';
 echo '</div>';
+
+// Etikett-Verwaltung (Team/Admin): hochladen/ersetzen (Last-Minute), Freigabe im Namen des Kunden, entfernen.
+if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))):
+    $etDokA = etikett_datei($id);
 ?>
+<div class="bx-panel" style="margin-top:14px">
+  <h2 style="margin-top:0">Etikett (Team)</h2>
+  <?php if (isset($_GET['etikettok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Etikett aktualisiert.</div><?php endif; ?>
+  <p class="muted" style="margin-top:0">Admin/Vertrieb kann hier ein Etikett für den Kunden hochladen (z.&nbsp;B. Last-Minute-Änderung) und die Freigabe im Namen des Kunden bestätigen.</p>
+  <p style="margin:0 0 10px">
+    <?php if ($etDokA): ?>Hinterlegt: <strong><?= h((string)($etDokA['datei_orig'] ?: 'Etikett-Design')) ?></strong>
+      <?= $etikettFrei ? bx_badge('freigegeben', 'ok') : bx_badge('nicht freigegeben', 'warn') ?>
+    <?php else: ?><span class="muted">Noch kein Etikett hinterlegt.</span><?php endif; ?>
+  </p>
+  <div class="bx-row" style="gap:16px;flex-wrap:wrap;align-items:flex-end">
+    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0">
+      <input type="hidden" name="aktion" value="etikett_upload_team">
+      <input type="file" name="etikett" required accept="application/pdf,image/*">
+      <button class="btn btn-ghost btn-sm" type="submit"><?= $etDokA ? 'Etikett ersetzen' : 'Etikett hochladen' ?></button>
+    </form>
+    <?php if ($etDokA && !$etikettFrei): ?>
+    <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:0">
+      <input type="hidden" name="aktion" value="etikett_freigeben_team">
+      <input type="text" name="freigabe_name" required placeholder="Name (Freigabe im Namen des Kunden)" style="padding:7px 10px;border:1px solid var(--line);border-radius:8px;min-width:230px">
+      <button class="btn btn-primary btn-sm" type="submit">Freigabe bestätigen</button>
+    </form>
+    <?php endif; ?>
+    <?php if ($etDokA): ?>
+    <form method="post" style="margin:0" onsubmit="return confirm('Etikett wirklich entfernen? Die Freigabe wird zurückgesetzt.');">
+      <input type="hidden" name="aktion" value="etikett_del_team">
+      <button class="btn btn-ghost btn-sm" type="submit">Entfernen</button>
+    </form>
+    <?php endif; ?>
+  </div>
+</div>
+<?php endif; ?>
 <?php
 // Admin-Override „Rohstoff/Bulk angekommen" – damit die Kunden-Statusleiste auch bei Alt-Aufträgen /
 // Zukauf ohne verknüpfte Charge auf „Rohstoff angekommen" springt.
