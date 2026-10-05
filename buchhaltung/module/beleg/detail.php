@@ -69,6 +69,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
         header('Location: ?p=rechnung&id=' . ($gid ?: $id) . '&storniert=1'); exit;
     }
 
+    // Positionen aus dem verknüpften Angebot übernehmen (aufgeschlüsselt).
+    if ($aktion === 'pos_aus_angebot') {
+        $res = beleg_positionen_aus_angebot($id);
+        if ($res['ok']) beleg_status_log_add($id, (string)(scalar("SELECT status FROM beleg WHERE id=?", [$id]) ?: 'offen'), 'Positionen aus Angebot übernommen (' . (int)$res['anzahl'] . ')', $akteur);
+        $url = '?p=rechnung&id=' . $id . '&pos=' . ($res['ok'] ? (int)$res['anzahl'] : '0');
+        if (!$res['ok']) $url .= '&posgrund=' . urlencode($res['grund']);
+        header('Location: ' . $url); exit;
+    }
+    // Positionen manuell setzen (ersetzt alle).
+    if ($aktion === 'pos_speichern') {
+        $zeilen = [];
+        foreach (($_POST['p_bez'] ?? []) as $i => $bez) {
+            $zeilen[] = ['artikelnr'=>$_POST['p_art'][$i] ?? '', 'bezeichnung'=>$bez, 'beschreibung'=>$_POST['p_besch'][$i] ?? '',
+                         'menge'=>$_POST['p_menge'][$i] ?? '1', 'einheit'=>$_POST['p_einheit'][$i] ?? '',
+                         'preis'=>$_POST['p_preis'][$i] ?? '0', 'ust'=>$_POST['p_ust'][$i] ?? '0'];
+        }
+        $n = beleg_positionen_manuell_setzen($id, $zeilen);
+        beleg_status_log_add($id, (string)(scalar("SELECT status FROM beleg WHERE id=?", [$id]) ?: 'offen'), 'Positionen manuell gesetzt (' . $n . ')', $akteur);
+        header('Location: ?p=rechnung&id=' . $id . '&posman=' . $n); exit;
+    }
+
     // Guthaben auf diese Rechnung anrechnen (verrechnen)
     if ($aktion === 'guthaben_anrechnen') {
         $wunsch = (float) str_replace(',', '.', trim($_POST['betrag'] ?? '0'));
@@ -144,6 +165,8 @@ if (isset($_GET['kopf'])) echo '<div class="bx-panel badge-ok" style="padding:12
 if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnung storniert – Gutschrift wurde erstellt.</div>';
 if (isset($_GET['angerechnet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((float)$_GET['angerechnet'] > 0 ? $eur((float)$_GET['angerechnet']) . ' Guthaben angerechnet.' : 'Kein Guthaben angerechnet (nichts verfügbar/offen).') . '</div>';
 if (isset($_GET['ausgezahlt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((float)$_GET['ausgezahlt'] > 0 ? $eur((float)$_GET['ausgezahlt']) . ' Guthaben als ausgezahlt verbucht.' : 'Kein Guthaben ausgezahlt.') . '</div>';
+if (isset($_GET['pos'])) echo '<div class="bx-panel ' . ((int)$_GET['pos'] > 0 ? 'badge-ok' : '') . '" style="padding:12px 16px' . ((int)$_GET['pos'] > 0 ? '' : ';border-color:#e6c4c0') . '">' . ((int)$_GET['pos'] > 0 ? (int)$_GET['pos'] . ' Position(en) aus dem Angebot übernommen.' : 'Positionen konnten nicht aus dem Angebot übernommen werden: ' . h((string)($_GET['posgrund'] ?? ''))) . '</div>';
+if (isset($_GET['posman'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Positionen gespeichert (' . (int)$_GET['posman'] . ').</div>';
 // Bezug-Hinweise
 if ($stornoVon)  echo '<div class="bx-panel" style="padding:10px 14px">Storno zu Rechnung <a href="?p=rechnung&id=' . (int)$stornoVon['id'] . '">' . h($stornoVon['nummer']) . '</a>.</div>';
 if ($stornoDurch) echo '<div class="bx-panel" style="padding:10px 14px;border-color:#e6c4c0">Diese Rechnung wurde storniert – Gutschrift <a href="?p=rechnung&id=' . (int)$stornoDurch['id'] . '">' . h($stornoDurch['nummer']) . '</a>.</div>';
@@ -198,6 +221,17 @@ echo '</div>';
 
 <div class="bx-panel">
   <h2>Positionen<?= $positionen ? ' <span class="muted" style="font-weight:400;font-size:14px">(' . count($positionen) . ')</span>' : '' ?></h2>
+  <?php if (!$istGut && $b['status'] !== 'storniert'): ?>
+  <div class="bx-row" style="margin:0 0 12px;gap:8px;flex-wrap:wrap">
+    <?php if ($b['auftrag_id']): ?>
+    <form method="post" style="margin:0">
+      <input type="hidden" name="aktion" value="pos_aus_angebot">
+      <button class="btn btn-ghost btn-sm" type="submit" data-busy="Übernehme …" <?= $positionen ? "onclick=\"return confirm('Positionen neu aus dem Angebot übernehmen? Vorhandene Positionen werden ersetzt.');\"" : '' ?>>Positionen aus Angebot übernehmen</button>
+    </form>
+    <?php endif; ?>
+    <button class="btn btn-ghost btn-sm" type="button" onclick="document.getElementById('posEdit').open=true;document.getElementById('posEdit').scrollIntoView({behavior:'smooth'})">Positionen manuell bearbeiten</button>
+  </div>
+  <?php endif; ?>
   <?php if ($positionen): $sumNetto = 0.0; ?>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th>Pos.</th><th>Artikel-Nr.</th><th>Bezeichnung</th><th class="bx-num">Menge</th><th>Einheit</th><th class="bx-num">Einzelpreis</th><th class="bx-num">USt</th><th class="bx-num">Gesamt</th></tr></thead>
@@ -231,6 +265,42 @@ echo '</div>';
     <tr><td>USt (<?= number_format((float)$b['ust_prozent'],0) ?> %)</td><td class="bx-num"><?= $eur($b['ust_betrag']) ?></td></tr>
     <tr><td><strong>Brutto</strong></td><td class="bx-num"><strong><?= $eur($b['brutto']) ?></strong></td></tr>
   </tbody></table></div>
+  <?php endif; ?>
+
+  <?php if (!$istGut && $b['status'] !== 'storniert'): ?>
+  <details id="posEdit" class="bx-panel" style="margin-top:16px"<?= isset($_GET['posman']) ? ' open' : '' ?>>
+    <summary class="btn btn-ghost btn-sm" style="list-style:none">Positionen manuell bearbeiten</summary>
+    <p class="muted" style="margin:10px 0 0">Positionen sind die Aufschlüsselung des Rechnungsbetrags. Das Speichern ändert <strong>nicht</strong> die Beleg-Summen (Netto/USt/Brutto) – stimmen Positionen und Betrag nicht überein, erscheint oben ein Hinweis. Für eine Betragsänderung: Stornieren und neu erstellen.</p>
+    <form method="post" style="margin-top:10px">
+      <input type="hidden" name="aktion" value="pos_speichern">
+      <div class="bx-tablewrap"><table class="bx-table" id="posTab">
+        <thead><tr><th>Artikel-Nr.</th><th>Bezeichnung</th><th class="bx-num" style="width:90px">Menge</th><th style="width:90px">Einheit</th><th class="bx-num" style="width:120px">Einzelpreis €</th><th class="bx-num" style="width:80px">USt %</th><th style="width:40px"></th></tr></thead>
+        <tbody>
+          <?php
+          $editRows = $positionen ?: [['artikelnr'=>'','bezeichnung'=>'','menge'=>1,'einheit'=>'Stk.','preis_cent'=>0,'mwst_satz'=>(float)$b['ust_prozent']]];
+          foreach ($editRows as $p): ?>
+          <tr>
+            <td><input type="text" name="p_art[]" value="<?= h((string)($p['artikelnr'] ?? '')) ?>"></td>
+            <td><input type="text" name="p_bez[]" value="<?= h((string)($p['bezeichnung'] ?? '')) ?>" style="width:100%"><input type="hidden" name="p_besch[]" value="<?= h((string)($p['beschreibung'] ?? '')) ?>"></td>
+            <td class="bx-num"><input type="text" inputmode="decimal" name="p_menge[]" value="<?= h(rtrim(rtrim(number_format((float)($p['menge'] ?? 1),2,',',''),'0'),',')) ?>" style="width:80px;text-align:right"></td>
+            <td><input type="text" name="p_einheit[]" value="<?= h((string)($p['einheit'] ?? '')) ?>" style="width:80px"></td>
+            <td class="bx-num"><input type="text" inputmode="decimal" name="p_preis[]" value="<?= h(number_format((int)($p['preis_cent'] ?? 0)/100,2,',','')) ?>" style="width:110px;text-align:right"></td>
+            <td class="bx-num"><input type="text" inputmode="decimal" name="p_ust[]" value="<?= h(number_format((float)($p['mwst_satz'] ?? $b['ust_prozent']),0)) ?>" style="width:70px;text-align:right"></td>
+            <td><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('tr').remove()" title="Zeile entfernen">×</button></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <div class="bx-row" style="margin-top:10px;gap:8px">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="posAddRow()">+ Zeile</button>
+        <span style="flex:1"></span>
+        <button class="btn btn-primary" type="submit">Positionen speichern</button>
+      </div>
+    </form>
+    <script>
+    function posAddRow(){var t=document.querySelector('#posTab tbody');var tr=t.rows[0];var n=tr?tr.cloneNode(true):null;if(!n)return;n.querySelectorAll('input').forEach(function(i){if(i.name==='p_menge[]')i.value='1';else if(i.name==='p_ust[]'){}else i.value='';});t.appendChild(n);}
+    </script>
+  </details>
   <?php endif; ?>
 </div>
 

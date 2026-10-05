@@ -20,3 +20,6 @@
 
 ## Positionen-Ansicht
 Der Positionen-Panel wird IMMER gezeigt. Mit Einzelpositionen: Tabelle inkl. USt-Spalte + Summenzeile (Summe Positionen netto, zzgl. USt, Brutto) und ein Warnhinweis, falls die Positionssumme vom Beleg-Netto abweicht (Prüfhilfe). Ohne Positionen (Alt-Import/Sammelposition): Hinweis + Netto/USt/Brutto des Belegs.
+
+## Positionen anpassen (neu)
+Panel „Positionen": Button „Positionen aus Angebot übernehmen" (bei Auftrags-Rechnungen; aufgeschlüsselte Positionen aus dem verknüpften Angebot) und ein manueller Editor (Zeilen hinzufügen/entfernen, Artikel-Nr/Bezeichnung/Menge/Einheit/Einzelpreis/USt). Beides ändert nur die Positionen, nicht die Kopfsummen (GoBD) – Abweichung Positionssumme vs. Beleg-Netto wird oben gewarnt. Logik in core/beleg_positionen.php.

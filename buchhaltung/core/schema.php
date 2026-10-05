@@ -98,4 +98,5 @@ function bu_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
 
-require_once __DIR__ . '/finanz.php';   // Beleg-/Rechnungs-/Gutschrift-Funktionen (aus dem Dashboard übernommen)
+require_once __DIR__ . '/finanz.php';          // Beleg-/Rechnungs-/Gutschrift-Funktionen (aus dem Dashboard übernommen)
+require_once __DIR__ . '/beleg_positionen.php'; // Positionen aus Angebot übernehmen / manuell setzen

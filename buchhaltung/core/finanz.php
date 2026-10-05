@@ -59,6 +59,9 @@ function rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
         $re = (string) scalar("SELECT nummer FROM beleg WHERE id=?", [$bid]);
         log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Rechnung ' . $re . ' aus Auftrag ' . (string)$a['nummer'] . ' erstellt.', 'beleg', 'auftrag', $auftrag_id);
     }
+    // Automatisch die aufgeschlüsselten Positionen aus dem Angebot übernehmen (ersetzt die Sammelposition,
+    // falls das Angebot Einzelpositionen hat). Schlägt das fehl/gibt es keine, bleibt die Sammelposition stehen.
+    if (function_exists('beleg_positionen_aus_angebot')) { try { beleg_positionen_aus_angebot($bid); } catch (Throwable $e) {} }
     return $bid;
 }
 

@@ -77,6 +77,20 @@ function erp_angebote(?int $kunde_id = null, string $suche = ''): array {
     return $rows;
 }
 
+// Einzelner Auftrag (voll) + Produktname. Für die Positionsübernahme in die Rechnung. Nur Lesen.
+function erp_auftrag(int $id): ?array {
+    if (!$id || !tabelle_da('auftrag')) return null;
+    return one("SELECT a.*, p.name AS produkt_name FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$id]);
+}
+
+// Echte (hinterlegte) Angebotspositionen – Rohzeilen aus angebot_position (leere v3-Null-Zeilen raus).
+// Für die aufgeschlüsselte Rechnungsposition. Nur Lesen. (Staffel-/Auto-Ableitung liegt im Dashboard.)
+function erp_angebot_positionen(int $angebot_id): array {
+    if (!$angebot_id || !tabelle_da('angebot_position')) return [];
+    $rows = all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]);
+    return array_values(array_filter($rows, fn($r) => (float)$r['menge'] > 1e-9 || (int)$r['preis_cent'] > 0));
+}
+
 // Aufträge mit Kundenname (für den Abgleich Angebot→Auftrag→Rechnung). Nur Lesen.
 function erp_auftraege(?int $kunde_id = null): array {
     if (!tabelle_da('auftrag')) return [];
