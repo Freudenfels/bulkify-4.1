@@ -92,6 +92,7 @@ $runLabel = match ((string)$pa['status']) {
     default    => 'In den Produktionsmodus',
 };
 $aktionen = '<a class="btn btn-primary btn-sm" href="?p=run&id=' . $id . '">' . h($runLabel) . '</a>'
+          . ' <a class="btn btn-ghost btn-sm" href="?p=qs&id=' . $id . '">QS &amp; Labor</a>'
           . ' <a class="btn btn-ghost btn-sm" href="?p=liste">Zurück zur Liste</a>';
 seitenkopf((string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''), $aktionen);
 ?>

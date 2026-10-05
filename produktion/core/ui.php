@@ -80,8 +80,7 @@ function pr_station_felder(string $station): array {
     return match ($station) {
         'Mischen'                => [['feld'=>'mischmenge', 'label'=>'Gemischte Menge', 'einheit'=>'kg']],
         'Zwischenkontrolle'      => [['feld'=>'kontrolle_gewicht', 'label'=>'Kontrollgewicht', 'einheit'=>'g']],
-        'Rückstellmuster ziehen' => [['feld'=>'rueckstellmuster', 'label'=>'Rückstellmuster', 'einheit'=>''],
-                                      ['feld'=>'labormuster', 'label'=>'Labormuster', 'einheit'=>'']],
+        // Rückstellmuster/Laborprobe werden auf der QS-Seite (?p=qs) erfasst, nicht als Schnellfeld.
         default                  => [],
     };
 }
