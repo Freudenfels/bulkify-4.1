@@ -54,7 +54,7 @@ try {
 } catch (Throwable $e) {
     $dbg = (string)($_GET['dbg'] ?? '');
     if ($dbg !== '' && hash_equals(lead_intake_token(), $dbg)) {
-        http_response_code(500);
+        http_response_code(200);   // 200, damit der Browser den Text zeigt (statt 500-Fehlerseite)
         while (ob_get_level() > 0) ob_end_clean();
         header('Content-Type: text/plain; charset=utf-8');
         echo "FEHLER: " . $e->getMessage() . "\n@ " . $e->getFile() . ':' . $e->getLine() . "\n\n" . $e->getTraceAsString();
