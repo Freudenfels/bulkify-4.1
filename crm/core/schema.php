@@ -134,7 +134,7 @@ function crm_schema(): void {
             kontakt_id  INT NOT NULL,
             kategorie   VARCHAR(20) NOT NULL DEFAULT 'sonstiges',
             original    VARCHAR(255) NOT NULL,
-            stored      VARCHAR(190) NOT NULL,
+            `stored`    VARCHAR(190) NOT NULL,
             groesse     INT NOT NULL DEFAULT 0,
             benutzer_id INT NULL,
             angelegt    DATETIME NOT NULL,

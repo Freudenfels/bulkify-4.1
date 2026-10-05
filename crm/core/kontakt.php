@@ -205,7 +205,7 @@ function kontakt_datei_speichern(int $kontakt_id, array $f, string $kategorie, i
     $store = 'k' . $kontakt_id . '_' . bin2hex(random_bytes(8)) . ($ext ? '.' . $ext : '');
     if (!move_uploaded_file($f['tmp_name'], kontakt_datei_dir() . '/' . $store))
         return ['ok' => false, 'fehler' => 'Upload fehlgeschlagen.'];
-    q("INSERT INTO crm_kontakt_datei (kontakt_id, kategorie, original, stored, groesse, benutzer_id, angelegt)
+    q("INSERT INTO crm_kontakt_datei (kontakt_id, kategorie, original, `stored`, groesse, benutzer_id, angelegt)
        VALUES (?,?,?,?,?,?,?)",
       [$kontakt_id, $kategorie, mb_substr($orig, 0, 255), $store, (int)($f['size'] ?? 0), $uid ?: null, gmdate('Y-m-d H:i:s')]);
     return ['ok' => true, 'fehler' => ''];
