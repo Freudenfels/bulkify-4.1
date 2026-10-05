@@ -135,6 +135,11 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     $navdef   = $istWerk ? bx_nav_werk() : bx_nav();
     // Sidebar
     echo "<aside class=\"bx-side\"><div class=\"bx-brand\"><img src=\"assets/bulkify-logo-white.png\" alt=\"$marke\" class=\"bx-logo\"><span class=\"bx-ver\">" . h($verLabel) . "</span></div><nav>";
+    // Einklappbare Menü-Gruppen: Kopf = Umschalter, Items im Wrapper; Zustand je Gruppe in localStorage.
+    echo "<style>.bx-navgroup{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}"
+       . ".bx-navchev{font-size:11px;opacity:.55;transition:transform .15s;margin-left:8px}"
+       . ".bx-navgroup.collapsed .bx-navchev{transform:rotate(-90deg)}"
+       . ".bx-navitems.collapsed{display:none}</style>";
     $darf = function_exists('route_erlaubt');   // Auth aktiv?
     // Globale Suche (nur Admin): ein Feld ganz oben, sucht über alle Bereiche.
     if (function_exists('has_role') && has_role('admin')) {
@@ -178,11 +183,13 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
             if (!$darf || route_erlaubt($route)) $sichtbar[$key] = $val;
         }
         if (!$sichtbar) continue;   // leere Gruppe überspringen
-        echo "<div class=\"bx-navgroup\">" . h($gruppe) . "</div>";
+        $gid = 'g_' . substr(md5($gruppe), 0, 8);
+        $grpHtml = ''; $grpOn = false;
         foreach ($sichtbar as $key => $val) {
             if (is_array($val)) { $route = $val['route']; $label = $val['label']; $href = $val['href']; $typ = $val['typ'] ?? null; }
             else               { $route = $key; $label = $val; $href = '?p=' . $key; $typ = null; }
             $on = ($route === $aktiv) && ($typ === null || $curTyp === $typ);
+            if ($on) $grpOn = true;
             $cls = $on ? ' class="on"' : '';
             $n = $anfCount[$key] ?? 0;
             $badgeTitel = match ($key) {
@@ -195,8 +202,10 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 default         => "$n offene Anfragen",
             };
             $badge = $n > 0 ? "<span class=\"bx-navbadge\" title=\"$badgeTitel\">$n</span>" : '';
-            echo "<a href=\"" . h($href) . "\"$cls><span>" . h($label) . "</span>$badge</a>";
+            $grpHtml .= "<a href=\"" . h($href) . "\"$cls><span>" . h($label) . "</span>$badge</a>";
         }
+        echo "<div class=\"bx-navgroup\" data-g=\"$gid\" role=\"button\" tabindex=\"0\"><span>" . h($gruppe) . "</span><span class=\"bx-navchev\">▾</span></div>";
+        echo "<div class=\"bx-navitems" . ($grpOn ? ' open-forced' : '') . "\" data-g=\"$gid\">" . $grpHtml . "</div>";
     }
     // Unterseiten (eigene Programme unter /produktion/, /lager/, /crm/, /buchhaltung/) – unten als eigene
     // Gruppe, normale Menü-Links. CRM nur Admin; Lager auch Produktion/Versand/Einkauf/Labor; Produktion für
@@ -206,11 +215,13 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     $produktion = $crm || (function_exists('user_rollen') && array_intersect(user_rollen(), ['production']));
     $buchhaltung = $crm || (function_exists('has_role') && has_role('finance'));
     if ($crm || $lager || $produktion || $buchhaltung) {
-        echo "<div class=\"bx-navgroup\">Unterseiten</div>";
-        if ($buchhaltung) echo "<a href=\"buchhaltung/\"><span>Buchhaltung</span></a>";
-        if ($produktion) echo "<a href=\"produktion/\"><span>Produktion</span></a>";
-        if ($lager)      echo "<a href=\"lager/\"><span>Lager</span></a>";
-        if ($crm)        echo "<a href=\"crm/\"><span>CRM</span></a>";
+        $sub = '';
+        if ($buchhaltung) $sub .= "<a href=\"buchhaltung/\"><span>Buchhaltung</span></a>";
+        if ($produktion) $sub .= "<a href=\"produktion/\"><span>Produktion</span></a>";
+        if ($lager)      $sub .= "<a href=\"lager/\"><span>Lager</span></a>";
+        if ($crm)        $sub .= "<a href=\"crm/\"><span>CRM</span></a>";
+        echo "<div class=\"bx-navgroup\" data-g=\"g_subpages\" role=\"button\" tabindex=\"0\"><span>Unterseiten</span><span class=\"bx-navchev\">▾</span></div>";
+        echo "<div class=\"bx-navitems\" data-g=\"g_subpages\">" . $sub . "</div>";
     }
     // Benutzer-Fuß: Name + Rollen + Abmelden
     if (function_exists('current_user') && ($u = current_user())) {
@@ -226,6 +237,14 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         echo "<div class=\"bx-userbox\"><button type=\"button\" class=\"bx-themebtn\">Dunkler Modus</button>"
            . "<button type=\"button\" class=\"bx-sidebtn\">Menü einklappen</button></div>";
     }
+    // Einklapp-Logik: Zustand je Gruppe merken; die Gruppe mit der aktiven Seite immer offen lassen.
+    echo "<script>(function(){function setC(g,c){document.querySelectorAll('[data-g=\"'+g+'\"]').forEach(function(el){el.classList.toggle('collapsed',c);});}"
+       . "var s={};try{s=JSON.parse(localStorage.getItem('bx-nav-collapsed')||'{}');}catch(e){}"
+       . "document.querySelectorAll('.bx-navgroup[data-g]').forEach(function(h){var g=h.getAttribute('data-g');"
+       . "var it=document.querySelector('.bx-navitems[data-g=\"'+g+'\"]');var forced=it&&it.classList.contains('open-forced');"
+       . "if(s[g]&&!forced)setC(g,true);"
+       . "h.addEventListener('click',function(){var c=!h.classList.contains('collapsed');setC(g,c);s[g]=c;try{localStorage.setItem('bx-nav-collapsed',JSON.stringify(s));}catch(e){}});"
+       . "h.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();h.click();}});});})();</script>";
     echo "</nav></aside>";
     // Ziehgriff an der Kante (Breite) + Knopf zum Wiederaufklappen (nur sichtbar, wenn die Leiste zu ist).
     echo "<div class=\"bx-sidegriff\" tabindex=\"0\" role=\"separator\" aria-orientation=\"vertical\""
