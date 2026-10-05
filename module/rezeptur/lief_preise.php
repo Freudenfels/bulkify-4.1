@@ -13,9 +13,11 @@ if ($q !== '')  { $where[] = "(r.name LIKE ? OR r.synonyme LIKE ? OR l.firma LIK
 if ($nurP)      { $where[] = "la.preis IS NOT NULL AND la.preis > 0"; }
 $wsql = $where ? 'WHERE '.implode(' AND ', $where) : '';
 
-$rows = all("SELECT la.*, r.nummer AS rez_nr, r.name AS rez_name, r.darreichungsform AS df, r.kunde_id, l.firma
+$rows = all("SELECT la.*, r.nummer AS rez_nr, r.name AS rez_name, r.darreichungsform AS df, r.kunde_id, l.firma,
+                    kg.name AS kapselgroesse
              FROM rezeptur_lief_angebot la
              LEFT JOIN rezeptur r   ON r.id = la.rezeptur_id
+             LEFT JOIN kapselgroesse kg ON kg.id = r.kapselgroesse_id
              LEFT JOIN lieferanten l ON l.id = la.lieferant_id
              $wsql
              ORDER BY r.name IS NULL, r.name, la.menge, (la.preis IS NULL OR la.preis = 0), la.preis
@@ -24,10 +26,11 @@ $rows = all("SELECT la.*, r.nummer AS rez_nr, r.name AS rez_name, r.darreichungs
 // NEU: aktuelle Lieferanten-Angebote aus dem v4-Anfrage-System (lieferant_anfrage/-angebot) mit einbeziehen –
 // sonst tauchen Preise, die ein Lieferant heute auf eine Fremdfertigungs-Anfrage abgibt, hier nicht auf.
 $neuRows = all("SELECT la.rezeptur_id, r.nummer AS rez_nr, r.name AS rez_name, r.darreichungsform AS df, r.kunde_id,
-                       l.firma, ag.id AS ag_id, ag.preis AS preis, ag.einheit AS einheit, la.menge AS menge
+                       kg.name AS kapselgroesse, l.firma, ag.id AS ag_id, ag.preis AS preis, ag.einheit AS einheit, la.menge AS menge
                 FROM lieferant_anfrage la
                 JOIN lieferant_angebot ag ON ag.anfrage_id = la.id
                 LEFT JOIN rezeptur r    ON r.id = la.rezeptur_id
+                LEFT JOIN kapselgroesse kg ON kg.id = r.kapselgroesse_id
                 LEFT JOIN lieferanten l ON l.id = la.lieferant_id
                 WHERE la.rezeptur_id IS NOT NULL AND la.art='fertigprodukt'");
 // Staffeln je Angebot -> je Preisstufe eine Zeile; ohne Staffel die Basiszeile.
@@ -40,7 +43,7 @@ if ($neuRows) {
 }
 foreach ($neuRows as $nr) {
     $mk = fn($preis, $menge) => ['rezeptur_id'=>$nr['rezeptur_id'], 'rez_nr'=>$nr['rez_nr'], 'rez_name'=>$nr['rez_name'],
-        'df'=>$nr['df'], 'kunde_id'=>$nr['kunde_id'], 'firma'=>$nr['firma'], 'preis'=>$preis, 'einheit'=>$nr['einheit'], 'menge'=>$menge];
+        'df'=>$nr['df'], 'kapselgroesse'=>$nr['kapselgroesse'], 'kunde_id'=>$nr['kunde_id'], 'firma'=>$nr['firma'], 'preis'=>$preis, 'einheit'=>$nr['einheit'], 'menge'=>$menge];
     $kandidaten = !empty($staffeln[(int)$nr['ag_id']])
         ? array_map(fn($s) => $mk($s['preis'], $s['menge_ab']), $staffeln[(int)$nr['ag_id']])
         : [$mk($nr['preis'], $nr['menge'])];
@@ -91,7 +94,7 @@ bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · 
   <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr>
-      <th>Nr.</th><th>Rezeptur</th><th>Form</th><th>Lieferant</th>
+      <th>Nr.</th><th>Rezeptur</th><th>Form</th><th>Kapselgröße</th><th>Lieferant</th>
       <th class="bx-num">EK</th><th class="bx-num">Empf. VK</th><th>Einheit</th><th class="bx-num">Menge (Staffel)</th>
     </tr></thead>
     <tbody>
@@ -100,6 +103,7 @@ bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · 
           <td class="muted"><?= h((string)($r['rez_nr'] ?? '')) ?: '–' ?></td>
           <td><?php if ($rid): ?><a class="kundenlink" href="?p=rezeptur_detail&id=<?= $rid ?>"><?= h((string)($r['rez_name'] ?? '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
           <td class="muted"><?= h($dfLabel[(string)$r['df']] ?? (string)($r['df'] ?? '')) ?></td>
+          <td><?= !empty($r['kapselgroesse']) ? h((string)$r['kapselgroesse']) : '<span class="muted">–</span>' ?></td>
           <td><?= $r['firma'] ? h((string)$r['firma']) : '<span class="muted">–</span>' ?></td>
           <?php $guenstigster = $ek !== null && $rid && isset($minRez[$rid]) && abs($ek - $minRez[$rid]) < 1e-9; ?>
           <td class="bx-num"><?= $ek !== null ? number_format($ek, 4, ',', '.') . ' &euro;' . ($guenstigster ? ' ' . bx_badge('günstigster', 'ok') : '') : '<span class="muted">–</span>' ?></td>
