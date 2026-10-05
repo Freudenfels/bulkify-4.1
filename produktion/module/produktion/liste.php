@@ -26,8 +26,9 @@ seitenkopf('Produktionsaufträge', count($pas) . ' aktive ' . (count($pas) === 1
       $g = (int)$pa['schritte_gesamt']; $f = (int)$pa['schritte_fertig'];
       $proz = $g > 0 ? round($f * 100 / $g) : 0;
       $ber = erp_pa_bereitschaft((int)$pa['id'], (string)$pa['status'], $f);
-      $eingang = $pa['auftrag_eingang'] ?? ($pa['angelegt'] ?? null); ?>
-    <tr onclick="location.href='?p=pa&id=<?= (int)$pa['id'] ?>'" style="cursor:pointer">
+      $eingang = $pa['auftrag_eingang'] ?? ($pa['angelegt'] ?? null);
+      $gesperrt = (string)$pa['status'] === 'vorbereitung'; ?>
+    <tr onclick="location.href='?p=pa&id=<?= (int)$pa['id'] ?>'" style="cursor:pointer<?= $gesperrt ? ';opacity:.6' : '' ?>" title="<?= $gesperrt ? 'In Vorbereitung – noch nicht zur Produktion freigegeben' : '' ?>">
       <td><strong><?= h((string)$pa['nummer']) ?></strong><?php if (!empty($pa['auftrag_nr'])): ?><br><span class="muted" style="font-size:12px"><?= h((string)$pa['auftrag_nr']) ?></span><?php endif; ?></td>
       <td><?= h((string)($pa['produkt_name'] ?: '–')) ?><?php if (!empty($pa['form'])): ?> <span class="muted" style="font-size:12px">· <?= h((string)$pa['form']) ?></span><?php endif; ?></td>
       <td><?= h((string)($pa['kunde'] ?: '–')) ?></td>

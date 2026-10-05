@@ -30,6 +30,7 @@ $laufend   = erp_produktionsauftraege('laufend');   // status laufend
 $zuPlanen = array_values(array_filter($offenAlle, fn($p) => empty($p['geplant_am'])));
 $inPlanung = array_values(array_filter($offenAlle, fn($p) => !empty($p['geplant_am'])));
 
+$vorbereitung = erp_produktionsauftraege('vorbereitung');   // warten auf Admin-Freigabe
 $erledigtN = erp_pa_count('erledigt');
 $prodzeit  = erp_produktionszeit_schnitt();
 $durchlauf = erp_durchlaufzeit_schnitt();
@@ -48,6 +49,7 @@ $kpi = function (string $label, string $wert, string $sub = '') {
 ?>
 <div class="bx-cards" style="margin-bottom:20px">
   <?php
+  $kpi('In Vorbereitung', (string)count($vorbereitung), 'warten auf Freigabe');
   $kpi('Offen (zu planen)', (string)count($zuPlanen));
   $kpi('In Planung', (string)count($inPlanung));
   $kpi('Laufend', (string)count($laufend));
@@ -92,6 +94,7 @@ $liste = function (string $titel, array $rows, string $alleTab, string $art) {
     echo '</tbody></table></div></div>';
 };
 
+$liste('In Vorbereitung · warten auf Freigabe', $vorbereitung, 'alle', 'offen');
 $liste('Laufende Produktionen', $laufend, 'laufend', 'laufend');
 $liste('In Planung', $inPlanung, 'alle', 'planung');
 $liste('Offen · zu planen', $zuPlanen, 'alle', 'offen');
