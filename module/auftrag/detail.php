@@ -197,6 +197,13 @@ $produktName = (string)($a['produkt_bezeichnung'] ?? '') ?: (string)($a['produkt
 // Erstauftrag vs. Nachbestellung (neue Rezeptur / neues Produkt / Nachbestellung).
 $artKey = auftrag_art((int)$a['id']);
 [$artLabel, $artStil, $artHint] = auftrag_art_meta($artKey);
+// Etikett-Status je Auftrag: freigegeben (Kunde) / hinterlegt (Datei da) / fehlt.
+$etikettFrei = (int)($a['etikett_freigegeben'] ?? 0) === 1;
+$etikettBadge = $etikettFrei
+    ? '<span title="Kunde hat das Etikett freigegeben">' . bx_badge('freigegeben', 'ok') . '</span>'
+    : (etikett_vorhanden((int)$a['id'])
+        ? '<span title="Etikett-Datei hinterlegt, Kundenfreigabe fehlt noch">' . bx_badge('nicht freigegeben', 'warn') . '</span>'
+        : '<span title="Kunde hat noch kein Etikett hinterlegt">' . bx_badge('fehlt', 'err') . '</span>');
 $groesseLbl = produktion_groesse_label((int)$a['produkt_id']);
 // Bestellungen (bei welchem Lieferanten, welcher Status) – verknüpft über die Position.
 $best = all("SELECT DISTINCT b.id, b.nummer, b.status, b.bestaetigt, b.angekommen_am, l.firma AS lieferant
@@ -274,6 +281,7 @@ if ($einhProP > 0) echo '<div class="bx-card"><div class="k">Stück je Packung</
 if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamtstückzahl</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
 if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablette</div><div class="v">' . h($groesseLbl) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Herstellung</div><div class="v">' . ($istFremd ? bx_badge('Zukauf','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
+echo '<div class="bx-card"><div class="k">Etikett</div><div class="v">' . $etikettBadge . '</div></div>';
 echo '<div class="bx-card"><div class="k">VK / Stück</div><div class="v">' . $eur($a['vk_stueck']) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Netto gesamt</div><div class="v">' . $eur($a['gesamt_netto']) . '</div></div>';
 if (!empty($a['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . '</div></div>';
