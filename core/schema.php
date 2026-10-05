@@ -704,6 +704,8 @@ function init_schema(): void {
     // Eigen/Fremd wird im Backend FESTGELEGT, bevor der Auftrag in die Produktion geht. NULL = noch offen
     // -> erscheint NICHT im Produktions-Arbeitsplatz. Entscheidung trifft Admin/Backend, nicht die Produktion.
     ensure_column('produktionsauftrag', 'art_festgelegt_am', "DATETIME NULL");
+    // Produktionsplanung: zugeteilter Mitarbeiter (FK benutzer) – wer den Auftrag produziert.
+    ensure_column('produktionsauftrag', 'mitarbeiter_id', "INT NULL");
     ensure_column('produktionsauftrag', 'bedarf_gemeldet', "DATETIME NULL");      // wann der Bedarf ans Einkauf gemeldet wurde
     ensure_column('produktionsauftrag', 'rezeptur_id', "INT NULL");               // Bulk-Produktion (nur Kapseln, ohne Verpackung): PA haengt an der Rezeptur statt am Produkt (produkt_id NULL)
 
