@@ -28,8 +28,8 @@ if ($filterTyp !== 'alle' && isset($TYP[$filterTyp])) { $w[] = "pa.typ=?"; $args
 if ($suche !== '') {
     // LIKE mit ESCAPE '=' (Backslash bringt MySQL live zum Absturz – siehe Projektregel).
     $like = '%' . str_replace(['=','%','_'], ['==','=%','=_'], $suche) . '%';
-    $w[] = "(pa.nummer LIKE ? ESCAPE '=' OR k.firma LIKE ? ESCAPE '=' OR p.name LIKE ? ESCAPE '=' OR rz.name LIKE ? ESCAPE '=' OR pa.betreff LIKE ? ESCAPE '=' OR pa.notiz LIKE ? ESCAPE '=')";
-    array_push($args, $like, $like, $like, $like, $like, $like);
+    $w[] = "(pa.nummer LIKE ? ESCAPE '=' OR k.firma LIKE ? ESCAPE '=' OR p.name LIKE ? ESCAPE '=' OR p.synonyme LIKE ? ESCAPE '=' OR rz.name LIKE ? ESCAPE '=' OR rz.synonyme LIKE ? ESCAPE '=' OR pa.betreff LIKE ? ESCAPE '=' OR pa.notiz LIKE ? ESCAPE '=')";
+    array_push($args, $like, $like, $like, $like, $like, $like, $like, $like);
 } elseif ($ansicht === 'offen') {
     $w[] = "pa.status IN ('neu','in_bearbeitung')";
 } elseif ($ansicht === 'beantwortet') {

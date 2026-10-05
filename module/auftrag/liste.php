@@ -9,7 +9,7 @@ $dir  = $_GET['dir']  ?? 'desc';
 $tab  = $_GET['tab']  ?? 'offen';
 if (!in_array($tab, ['offen', 'abgeschlossen'], true)) $tab = 'offen';
 
-$alle = all("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name,
+$alle = all("SELECT a.*, k.firma AS kunde_firma, COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name,
              (SELECT nummer FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='rechnung' LIMIT 1) AS rechnung_nr
              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id");
 // Abgeschlossen = versendet; offen = alles andere (offen, in Produktion, versandbereit).

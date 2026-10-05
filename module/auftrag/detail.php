@@ -192,7 +192,8 @@ $ber = $pa ? produktion_bereitschaft((int)$pa['id']) : ['status'=>''];
 $einhProP  = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
 if ($einhProP <= 0) $einhProP = (int)($a['stueck'] ?? 0);   // Fallback: Stück je Packung liegt am Auftrag (v3-Import)
 $gesamtStk = $einhProP > 0 ? (int)$a['menge'] * $einhProP : 0;
-$produktName = (string)($a['produkt_name'] ?? '') ?: (string)($a['produkt_bezeichnung'] ?? '');
+// Namens-Snapshot zuerst: der zur Auftragszeit festgehaltene Name gilt, damit eine spätere Produkt-Umbenennung den Auftrag nicht ändert.
+$produktName = (string)($a['produkt_bezeichnung'] ?? '') ?: (string)($a['produkt_name'] ?? '');
 $groesseLbl = produktion_groesse_label((int)$a['produkt_id']);
 // Bestellungen (bei welchem Lieferanten, welcher Status) – verknüpft über die Position.
 $best = all("SELECT DISTINCT b.id, b.nummer, b.status, b.bestaetigt, b.angekommen_am, l.firma AS lieferant

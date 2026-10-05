@@ -9,7 +9,7 @@ $q       = trim((string)($_GET['q'] ?? ''));
 $nurP    = ($_GET['preis'] ?? '') === '1';   // nur Zeilen mit echtem Preis
 
 $where = []; $args = [];
-if ($q !== '')  { $where[] = "(r.name LIKE ? OR l.firma LIKE ?)"; $args[] = '%'.$q.'%'; $args[] = '%'.$q.'%'; }
+if ($q !== '')  { $where[] = "(r.name LIKE ? OR r.synonyme LIKE ? OR l.firma LIKE ?)"; $args[] = '%'.$q.'%'; $args[] = '%'.$q.'%'; $args[] = '%'.$q.'%'; }
 if ($nurP)      { $where[] = "la.preis IS NOT NULL AND la.preis > 0"; }
 $wsql = $where ? 'WHERE '.implode(' AND ', $where) : '';
 

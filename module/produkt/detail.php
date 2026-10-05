@@ -92,15 +92,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
         $name = produkt_name_versioniert($f('name'), $neu ? 0 : (int)$id);   // interner Name eindeutig (v2, v3 …)
         $nf = in_array($f('novelfood_status'), ['unklar','konform','novel_food','pruefung'], true) ? $f('novelfood_status') : 'unklar';
         $halt = mb_substr($f('haltbarkeit'), 0, 60) ?: null; $allerg = mb_substr($f('allergene'), 0, 255) ?: null;
+        $synonyme = $f('synonyme');
         if ($neu) {
-            q("INSERT INTO produkt (nummer,name,kundenname,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,novelfood_status,haltbarkeit,allergene,notiz)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('P'), $name, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status') ?: 'entwurf', $nf, $halt, $allerg, $f('notiz')]);
+            q("INSERT INTO produkt (nummer,name,synonyme,kundenname,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,novelfood_status,haltbarkeit,allergene,notiz)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('P'), $name, $synonyme ?: null, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status') ?: 'entwurf', $nf, $halt, $allerg, $f('notiz')]);
             $id = insert_id();
             log_aktivitaet('kunde', (int)($kunde_id ?: 0), 'team', 'Produkt „' . $name . '" angelegt.', 'produkt', (int)$id);
         } else {
-            q("UPDATE produkt SET name=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,novelfood_status=?,haltbarkeit=?,allergene=?,notiz=? WHERE id=?",
-              [$name, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $nf, $halt, $allerg, $f('notiz'), (int)$id]);
+            // Umbenennung: den bisherigen Anzeigenamen (Kundenname bevorzugt) automatisch als Synonym merken.
+            $alt = one("SELECT name, kundenname FROM produkt WHERE id=?", [(int)$id]);
+            $altAnzeige = trim((string)($alt['kundenname'] ?? '')) !== '' ? (string)$alt['kundenname'] : (string)($alt['name'] ?? '');
+            $neuAnzeige = $kdname ?: $name;
+            if ($altAnzeige !== '' && $altAnzeige !== $neuAnzeige && mb_stripos($synonyme, $altAnzeige) === false) {
+                $synonyme = trim(($synonyme !== '' ? $synonyme . "\n" : '') . $altAnzeige);
+            }
+            q("UPDATE produkt SET name=?,synonyme=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,novelfood_status=?,haltbarkeit=?,allergene=?,notiz=? WHERE id=?",
+              [$name, $synonyme ?: null, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $nf, $halt, $allerg, $f('notiz'), (int)$id]);
         }
         // Standard-Produktionsweg (Ausbaustufen) – nur Admin darf das setzen.
         if (has_role('admin')) {
@@ -201,6 +209,7 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Produktname (intern) <?= bx_hint('unser Arbeitsname, z. B. „Zink". Gleiche Namen werden automatisch mit v2, v3 … fortlaufend nummeriert.') ?></label><input type="text" name="name" value="<?= $v('name') ?>" required placeholder="z. B. Zink"></div>
     <div class="bx-field"><label>Name für den Kunden <?= bx_hint('so heißt es beim Kunden im Portal / auf Belegen, z. B. „Super Zink". Leer = interner Name.') ?></label><input type="text" name="kundenname" value="<?= $v('kundenname') ?>" placeholder="z. B. Super Zink"></div>
+    <div class="bx-field" style="grid-column:1/-1"><label>Synonyme / frühere Namen <?= bx_hint('Alternative oder alte Namen (z. B. wenn der Kunde umbenennt). Intern bekannt und überall mitsuchbar; laufende/abgeschlossene Aufträge behalten ihren Namen. Beim Umbenennen wird der alte Name automatisch ergänzt. Eine Zeile oder Komma je Name.') ?></label><textarea name="synonyme" rows="2" placeholder="z. B. alter Produktname"><?= $v('synonyme') ?></textarea></div>
     <div class="bx-field"><label>Kunde <?= bx_hint('nur bei exklusiven Produkten der Besitzer. Ohne Häkchen „exklusiv" bleibt das Produkt ein Katalogprodukt und der Kunde wird beim Speichern entfernt.') ?></label>
       <select name="kunde_id">
         <option value="">– Katalogprodukt –</option>

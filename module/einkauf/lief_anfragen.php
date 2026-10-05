@@ -17,8 +17,8 @@ if ($f === 'offen')        $where .= " AND ag.id IS NULL";             // noch k
 elseif ($f === 'beantwortet') $where .= " AND ag.id IS NOT NULL";      // Preis liegt vor
 if ($q !== '') {
     $like = '%' . str_replace('\\', '', $q) . '%';
-    $where .= " AND (l.firma LIKE ? OR la.nummer LIKE ? OR la.betreff LIKE ? OR i.name LIKE ? OR rz.name LIKE ?)";
-    array_push($args, $like, $like, $like, $like, $like);
+    $where .= " AND (l.firma LIKE ? OR la.nummer LIKE ? OR la.betreff LIKE ? OR i.name LIKE ? OR rz.name LIKE ? OR rz.synonyme LIKE ?)";
+    array_push($args, $like, $like, $like, $like, $like, $like);
 }
 
 $rows = all("SELECT la.id, la.nummer, la.art, la.betreff, la.menge, la.einheit, la.status, la.angelegt,

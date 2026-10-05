@@ -1107,10 +1107,10 @@ $qLike = '%' . $q . '%';
 $katalog = $k['portal_produkte'] ? all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, p.nummer, p.rezeptur_id, p.kunde_id, r.darreichungsform
     FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
     WHERE p.status='aktiv' AND (p.exklusiv=0 OR p.kunde_id=?)
-      AND (? = '' OR COALESCE(NULLIF(p.kundenname,''), p.name) LIKE ? OR r.name LIKE ?
+      AND (? = '' OR COALESCE(NULLIF(p.kundenname,''), p.name) LIKE ? OR r.name LIKE ? OR p.synonyme LIKE ? OR r.synonyme LIKE ?
            OR EXISTS (SELECT 1 FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                       WHERE z.rezeptur_id=r.id AND (z.bezeichnung LIKE ? OR i.name LIKE ?)))
-    ORDER BY name", [$kid, $q, $qLike, $qLike, $qLike, $qLike]) : [];
+    ORDER BY name", [$kid, $q, $qLike, $qLike, $qLike, $qLike, $qLike, $qLike]) : [];
 $primVerp  = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name");
 $stdStueck = std_stueckzahlen();
 // Kundenseitige Verpackungstypen – wir wählen intern den perfekt passenden Behälter
@@ -1196,10 +1196,10 @@ $pafBadge = fn($s) => match ($s) { 'neu'=>bx_badge('eingegangen','info'),'in_bea
 $meineRezepturen = $k['portal_rezeptur'] ? all("SELECT * FROM rezeptur
     WHERE ((kunde_id=? AND status IN ('eingefroren','freigegeben'))
        OR (kunde_id IS NULL AND status='freigegeben'))
-      AND (? = '' OR name LIKE ?
+      AND (? = '' OR name LIKE ? OR synonyme LIKE ?
            OR EXISTS (SELECT 1 FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                       WHERE z.rezeptur_id=rezeptur.id AND (z.bezeichnung LIKE ? OR i.name LIKE ?)))
-    ORDER BY (kunde_id IS NULL), name", [$kid, $q, $qLike, $qLike, $qLike]) : [];
+    ORDER BY (kunde_id IS NULL), name", [$kid, $q, $qLike, $qLike, $qLike, $qLike]) : [];
 // Kurz-Formulierung (erste Zutaten) + Kapselgröße je Rezeptur – für mehr Infos in der Liste.
 $rezFormuMap = []; $rezKapselMap = [];
 if ($meineRezepturen) {
@@ -2137,10 +2137,10 @@ portal_head('Kundenportal · ' . $k['firma']);
     $fehlIds = array_values(array_filter(array_keys($meineProdIds), fn($pid) => !isset($eigeneIds[$pid])));
     if ($fehlIds) {
         $ph = implode(',', array_fill(0, count($fehlIds), '?'));
-        $args = array_merge($fehlIds, [$q, $qLike, $qLike]);
+        $args = array_merge($fehlIds, [$q, $qLike, $qLike, $qLike, $qLike]);
         foreach (all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''),p.name) AS name, p.nummer, p.rezeptur_id, p.kunde_id, r.darreichungsform
                       FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
-                      WHERE p.id IN ($ph) AND (?='' OR COALESCE(NULLIF(p.kundenname,''),p.name) LIKE ? OR r.name LIKE ?) ORDER BY name", $args) as $p)
+                      WHERE p.id IN ($ph) AND (?='' OR COALESCE(NULLIF(p.kundenname,''),p.name) LIKE ? OR r.name LIKE ? OR p.synonyme LIKE ? OR r.synonyme LIKE ?) ORDER BY name", $args) as $p)
             $eigeneProd[] = $p;
         usort($eigeneProd, fn($a,$b) => strcasecmp((string)$a['name'], (string)$b['name']));
     }

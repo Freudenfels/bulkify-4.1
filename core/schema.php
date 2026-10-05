@@ -377,6 +377,7 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('rezeptur', 'ablehnung_grund', "TEXT NULL");   // Kunde lehnt Vorschlag ab (Pflicht-Grund), Team überarbeitet
     ensure_column('rezeptur', 'kapselgroesse_id', "INT NULL");   // gewählte Kapselgröße (nur Kapsel-Form) → vererbt ins Produkt + Packungsrechnung
+    ensure_column('rezeptur', 'synonyme', "TEXT NULL");          // frühere/alternative Namen (Kunde benennt um) – intern bekannt, überall mitsuchbar
 
     // rezeptur_zutat: die Zutaten (Rohstoffe) einer Rezeptur, Menge in mg je Einheit.
     $pdo->exec("CREATE TABLE IF NOT EXISTS rezeptur_zutat (
@@ -1144,6 +1145,7 @@ function init_schema(): void {
     ensure_column('kunden', 'letzter_login', "DATETIME NULL");      // letzter erfolgreicher Kunden-Login
     // Standard-Produktionsweg (Ausbaustufen). Am Produkt = Standard; am Kunden = optionaler Override (NULL = erbt vom Produkt).
     // Nur Admin pflegt diese Schalter; sie setzen beim PA-Anlegen den Startzustand (im Produktions-Programm je Auftrag überschreibbar).
+    ensure_column('produkt', 'synonyme', "TEXT NULL");          // frühere/alternative Produktnamen (Kunde benennt um) – intern bekannt, überall mitsuchbar
     ensure_column('produkt', 'weg_abfuellen',    "TINYINT(1) NOT NULL DEFAULT 1");   // Abfüllen/Verpacken (Primärgebinde)
     ensure_column('produkt', 'weg_etikettieren', "TINYINT(1) NOT NULL DEFAULT 1");   // Etikettieren
     ensure_column('produkt', 'weg_karton',       "TINYINT(1) NOT NULL DEFAULT 0");   // Umkarton/Umverpackung
@@ -1248,8 +1250,13 @@ function init_schema(): void {
     ensure_column('auftrag', 'stueck', "INT NULL");
     ensure_column('auftrag', 'verpackung_id', "INT NULL");
     ensure_column('auftrag', 'kontingent_id', "INT NULL");   // Abruf aus einem Rahmenvertrag/Kontingent
-    ensure_column('auftrag', 'produkt_bezeichnung', "VARCHAR(190) NULL");  // Fallback-Produktname, wenn kein produkt_id (v3-Import ohne verknuepftes Produkt)
+    ensure_column('auftrag', 'produkt_bezeichnung', "VARCHAR(190) NULL");  // Namens-SNAPSHOT: friert den (internen) Produktnamen zur Auftragszeit ein -> spaetere Umbenennung aendert Auftraege nicht
     ensure_column('auftrag', 'produkt_form', "VARCHAR(20) NULL");          // Fallback-Darreichungsform dazu (kapsel|tablette|pulver|…)
+    // Altbestand einfrieren: wo noch kein Snapshot steht, den AKTUELLEN internen Produktnamen einsetzen.
+    // Danach bekommt eine Produkt-Umbenennung laufende/abgeschlossene Auftraege NICHT mehr mit.
+    q("UPDATE auftrag a JOIN produkt p ON p.id=a.produkt_id
+       SET a.produkt_bezeichnung = p.name
+       WHERE a.produkt_id IS NOT NULL AND (a.produkt_bezeichnung IS NULL OR a.produkt_bezeichnung='')");
     ensure_column('auftrag', 'import_ref', "VARCHAR(60) NULL");            // Referenz der importierten Alt-Rechnung/-AB (Dedup beim PDF-Import)
     // Etikettenfreigabe durch den Kunden – PFLICHT je Auftrag, auch bei Nachbestellung mit altem Etikett.
     // Ohne Freigabe: Etiketten nicht bestellbar + Produktion nicht machbar (harte Sperre).
@@ -5878,6 +5885,14 @@ function auftrag_versenden(int $auftrag_id): array {
 }
 
 // Auto-Kette: bestätigtes Angebot -> Auftragsbestätigung (AB) + Rechnung (RE) + Produktionsauftrag (PR). Idempotent.
+// Namens-Snapshot bei Auftrags-Erstellung: friert den aktuellen internen Produktnamen am Auftrag ein,
+// damit eine spaetere Produkt-Umbenennung laufende/abgeschlossene Auftraege NICHT umbenennt.
+function auftrag_name_snapshot(int $auftrag_id): void {
+    if ($auftrag_id <= 0) return;
+    q("UPDATE auftrag a JOIN produkt p ON p.id=a.produkt_id SET a.produkt_bezeichnung=p.name
+       WHERE a.id=? AND a.produkt_id IS NOT NULL AND (a.produkt_bezeichnung IS NULL OR a.produkt_bezeichnung='')", [$auftrag_id]);
+}
+
 function auftrag_aus_angebot(int $angebot_id): ?int {
     $a = one("SELECT * FROM angebot WHERE id=? AND status='bestaetigt'", [$angebot_id]);
     if (!$a) return null;
@@ -5890,6 +5905,7 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
        VALUES (?,?,?,?,?,?,?,?)",
       [naechste_nummer('AB'), $angebot_id, $a['kunde_id'], $a['produkt_id'], $menge, $vk, $netto, 'offen']);
     $aid = insert_id();
+    auftrag_name_snapshot((int)$aid);
     // Rechnung: Kleinunternehmer 0 %, EU-Ausland 0 %, sonst Inlands-USt aus den Einstellungen (Standard 19 %)
     $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
     $ustInland = (float) meta_get('ust_inland', 19);
@@ -6615,6 +6631,7 @@ function kontingent_abruf(int $kontingent_id, int $menge): array {
     q("INSERT INTO auftrag (nummer,kunde_id,produkt_id,menge,vk_stueck,gesamt_netto,status,kontingent_id) VALUES (?,?,?,?,?,?,?,?)",
       [naechste_nummer('AB'), $kid, $pid, $menge, $vk, $netto, 'offen', $kontingent_id]);
     $aid = insert_id();
+    auftrag_name_snapshot((int)$aid);
     $land = scalar("SELECT land FROM kunden WHERE id=?", [$kid]) ?: 'DE';
     $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
@@ -6752,6 +6769,7 @@ function auftrag_aus_positionen(int $angebot_id, ?string $gruppe = null): ?int {
       [naechste_nummer('AB'), $angebot_id, $a['kunde_id'], $pid, $menge, (int)$herst['stueck'],
        $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null, $vkStk, round($netto, 2), 'offen']);
     $aid = insert_id();
+    auftrag_name_snapshot((int)$aid);
     q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$angebot_id]);
     q("INSERT IGNORE INTO angebot_produkt (angebot_id,produkt_id,stueck,verpackung_id) VALUES (?,?,?,?)",
       [$angebot_id, $pid, (int)$herst['stueck'], $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null]);
@@ -6797,6 +6815,7 @@ function auftrag_aus_zelle(int $angebot_id, int $stueck, int $verp_id, int $best
        VALUES (?,?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('AB'), $angebot_id, $a['kunde_id'], $bestellt, $menge, $stueck, $verp_id, $vk, $netto, 'offen']);
     $aid = insert_id();
+    auftrag_name_snapshot((int)$aid);
     q("INSERT IGNORE INTO angebot_produkt (angebot_id,produkt_id,stueck,verpackung_id) VALUES (?,?,?,?)",
       [$angebot_id, $bestellt, $stueck, $verp_id]);   // Preis dieses Produkts ist für diesen Kunden freigegeben
     $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';

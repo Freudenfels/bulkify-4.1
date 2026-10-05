@@ -16,7 +16,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=produktion_run&id=' . $id . '&ok=1'); exit;
 }
 
-$name_expr = "COALESCE(NULLIF(p.name,''), a.produkt_bezeichnung, CONCAT(rz.name,' · Bulk'))";
+$name_expr = "COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.name,''), CONCAT(rz.name,' · Bulk'))";
 
 // ---------- Auswahl (keine id): Tabelle nach Priorität, dann Datum (FIFO) ----------
 if (!$id) {
@@ -91,7 +91,7 @@ if (!$id) {
 
 // ---------- Geführter Ablauf (mit id) ----------
 $pa = one("SELECT pa.*, a.nummer AS auftrag_nr, k.firma AS kunde,
-                  COALESCE(NULLIF(p.name,''), a.produkt_bezeichnung, CONCAT(rz.name,' · Bulk')) AS produkt
+                  COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.name,''), CONCAT(rz.name,' · Bulk')) AS produkt
            FROM produktionsauftrag pa
            LEFT JOIN auftrag a ON a.id=pa.auftrag_id
            LEFT JOIN produkt p ON p.id=pa.produkt_id

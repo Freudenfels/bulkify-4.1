@@ -57,16 +57,16 @@ if (mb_strlen($q) >= 2) {
 
     $add('Produkte',
         all("SELECT id, nummer, name, kundenname FROM produkt
-             WHERE name LIKE ? OR kundenname LIKE ? OR nummer LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(nummer),'-',''),' ','') LIKE ?)
-             ORDER BY name LIMIT $LIMIT", [$like, $like, $like, $qk, $likeK]),
+             WHERE name LIKE ? OR kundenname LIKE ? OR synonyme LIKE ? OR nummer LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(nummer),'-',''),' ','') LIKE ?)
+             ORDER BY name LIMIT $LIMIT", [$like, $like, $like, $like, $qk, $likeK]),
         fn($r) => '?p=produkt&id=' . $r['id'],
         fn($r) => $r['name'],
         fn($r) => trim(($r['nummer'] ? $r['nummer'] . ' · ' : '') . ($r['kundenname'] ? 'Kundenname: ' . $r['kundenname'] : '')));
 
     $add('Rezepturen',
         all("SELECT id, nummer, name, darreichungsform FROM rezeptur
-             WHERE name LIKE ? OR nummer LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(nummer),'-',''),' ','') LIKE ?)
-             ORDER BY name LIMIT $LIMIT", [$like, $like, $qk, $likeK]),
+             WHERE name LIKE ? OR synonyme LIKE ? OR nummer LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(nummer),'-',''),' ','') LIKE ?)
+             ORDER BY name LIMIT $LIMIT", [$like, $like, $like, $qk, $likeK]),
         fn($r) => '?p=rezeptur_detail&id=' . $r['id'],
         fn($r) => $r['name'],
         fn($r) => trim(($r['nummer'] ? $r['nummer'] . ' · ' : '') . ($r['darreichungsform'] ?: '')));
