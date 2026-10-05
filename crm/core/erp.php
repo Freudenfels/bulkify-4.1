@@ -244,6 +244,24 @@ function erp_rezepturen_fuer_kunde(int $kunde_id): array {
     } catch (Throwable $e) { return []; }
 }
 
+// --- Auftraege eines Kunden (Lese-Ansicht/Timeline am Kunden) ----------------------------------
+function erp_auftraege_fuer_kunde(int $kunde_id): array {
+    if ($kunde_id <= 0 || !tabelle_da('auftrag')) return [];
+    try {
+        return all("SELECT id, nummer, status, angelegt, gesamt_netto, produkt_bezeichnung
+                    FROM auftrag WHERE kunde_id=? ORDER BY id DESC LIMIT 50", [$kunde_id]);
+    } catch (Throwable $e) { return []; }
+}
+
+// --- Rechnungen/Gutschriften eines Kunden (Buchhaltung, nur lesen) -----------------------------
+function erp_rechnungen_fuer_kunde(int $kunde_id): array {
+    if ($kunde_id <= 0 || !tabelle_da('beleg')) return [];
+    try {
+        return all("SELECT id, nummer, typ, status, brutto, datum, angelegt, auftrag_id
+                    FROM beleg WHERE kunde_id=? AND typ IN ('rechnung','gutschrift') ORDER BY id DESC LIMIT 50", [$kunde_id]);
+    } catch (Throwable $e) { return []; }
+}
+
 // --- Rohstoffe + Kapselgroessen (fuer die Rezeptur-KI im CRM) ----------------------------------
 // Unser Rohstoffkatalog als [id => "Name (lat)"] - die KI soll bevorzugt vorschlagen, was wir
 // einkaufen koennen. Nur gelesen.

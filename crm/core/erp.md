@@ -12,7 +12,7 @@ Der Grund: Am Dashboard wird weiterentwickelt, teilweise parallel in anderen Sit
 
 ## Verkäufer-Workflow (nur lesen + verlinken)
 - `erp_mitarbeiter()` – aktive Benutzer (ohne reine Lieferanten/Kunden) für das „Zuständig"-Feld am Lead.
-- `erp_angebote_fuer_kunde()` / `erp_rezepturen_fuer_kunde()` – Angebote bzw. Rezepturen eines Kunden, nur zur Anzeige am Kontakt.
+- `erp_angebote_fuer_kunde()` / `erp_auftraege_fuer_kunde()` / `erp_rechnungen_fuer_kunde()` / `erp_rezepturen_fuer_kunde()` – Angebote, Aufträge (`auftrag`), Rechnungen/Gutschriften (`beleg`) bzw. Rezepturen eines Kunden, nur zur Anzeige/Timeline (`kunde_timeline()`).
 - `erp_dashboard_link('angebot&id=neu&kunde_id=5')` – baut einen Sprung in einen Dashboard-Flow (Angebot/Rezeptur anlegen). Angebot/Rezeptur werden **nicht** vom CRM geschrieben – der Kunde wird (falls nötig) über `erp_kunde_anlegen()` angelegt, dann übernimmt das Dashboard.
 
 ## Für die Rezeptur-KI im CRM (nur lesen)

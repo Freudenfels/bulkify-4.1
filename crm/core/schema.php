@@ -171,6 +171,29 @@ function crm_schema(): void {
         error_log('crm_schema: crm_mail_eingang konnte nicht angelegt werden: ' . $e->getMessage());
     }
 
+    // --- Kundenprofil (CRM-Sicht auf einen Dashboard-Kunden): Qualifizierung + freie Infos. ------
+    // Die kunden-Tabelle gehoert dem Dashboard; CRM-eigene Infos stehen hier, je kunde_id.
+    try {
+        q("CREATE TABLE IF NOT EXISTS crm_kunde_profil (
+            kunde_id      INT PRIMARY KEY,
+            kontaktart    VARCHAR(30) NULL,
+            erfahrung     VARCHAR(30) NULL,
+            zielmarkt     VARCHAR(30) NULL,
+            nische        VARCHAR(30) NULL,
+            firmentyp     VARCHAR(30) NULL,
+            volumen       VARCHAR(30) NULL,
+            prioritaet    VARCHAR(30) NULL,
+            land          VARCHAR(120) NULL,
+            website       VARCHAR(190) NULL,
+            moeglichkeiten TEXT NULL,
+            besonderheiten TEXT NULL,
+            infos         TEXT NULL,
+            aktualisiert  DATETIME NULL
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Throwable $e) {
+        error_log('crm_schema: crm_kunde_profil konnte nicht angelegt werden: ' . $e->getMessage());
+    }
+
     // --- To-Dos: abhakbare Aufgaben, nach Kunde/Kontakt + Kategorie. ---------------------------
     // Neue, strukturierte Aufgaben. Offene Wiedervorlagen (crm_wiedervorlage) erscheinen in der
     // To-Do-Liste zusaetzlich - der Umbau laesst die bestehende "Wer wartet"-Engine unangetastet.

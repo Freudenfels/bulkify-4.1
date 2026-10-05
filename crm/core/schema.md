@@ -14,6 +14,7 @@ Läuft wie im Dashboard bei jedem Aufruf und ist idempotent (`CREATE TABLE IF NO
 | `crm_rezeptur_ki` | KI-Rezepturvorschlag je Kontakt/Kunde (JSON), wie `crm_briefing`. Siehe `rezeptur_ki.md` |
 | `crm_todo` | abhakbare Aufgaben (Kategorie, optional Bezug kontakt/kunde, Fälligkeit, quelle manuell/ki/mail). Siehe `todo.md` |
 | `crm_mitarbeiter` | eigenes Mailkonto je Benutzer (SMTP + Signatur), für den Versand aus dem CRM. Siehe `mail_senden.md` |
+| `crm_kunde_profil` | CRM-Sicht auf einen Dashboard-Kunden: Qualifizierung + freie Infos. Siehe `kunde_profil.md` |
 | `crm_verlauf` | jede Berührung eine Zeile |
 | `crm_wiedervorlage` | „erinnere mich am …“ – hängt an einem Kontakt oder an einem Dashboard-Vorgang |
 | `crm_termin` | Rückruf, Messe, Besuch – mit Uhrzeit |

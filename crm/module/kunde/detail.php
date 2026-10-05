@@ -7,6 +7,7 @@ require_once BX_ROOT . '/core/fragenkatalog_ki.php';
 require_once BX_ROOT . '/core/rezeptur_ki.php';
 require_once BX_ROOT . '/core/mail_senden.php';
 require_once BX_ROOT . '/core/todo.php';
+require_once BX_ROOT . '/core/kunde_profil.php';
 require_once BX_ROOT . '/core/markdown.php';
 
 $id = (int)($_GET['id'] ?? 0);
@@ -79,8 +80,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['sendefehler'] = $fehler;
         header('Location: ?p=kunde&id=' . $id . '#antwort'); exit;
     }
+    if ($tun === 'profil_speichern') {
+        kunde_profil_speichern($id, $_POST);
+        header('Location: ?p=kunde&id=' . $id . '&tab=profil&ok=gespeichert'); exit;
+    }
     header('Location: ?p=kunde&id=' . $id); exit;
 }
+
+$tab = ($_GET['tab'] ?? '') === 'profil' ? 'profil' : 'uebersicht';
 
 $verlauf = kunde_verlauf_liste($id);
 $wv      = kunde_wiedervorlagen($id);
@@ -95,10 +102,78 @@ $m = (string)($_GET['ok'] ?? '');
 if ($m === 'kifehler')  hinweis('Die KI hat nicht geklappt. Bitte später erneut versuchen.', 'warn');
 elseif ($m === 'gesendet') hinweis('Antwort gesendet.');
 elseif ($m === 'todo')  hinweis('To-Do angelegt.');
+elseif ($m === 'gespeichert') hinweis('Gespeichert.');
 elseif ($m !== '')      hinweis($m === 'erinnert' ? 'Wiedervorlage gesetzt.' : 'Notiert.');
 $sendefehler = (string)($_SESSION['sendefehler'] ?? ''); unset($_SESSION['sendefehler']);
 if ($sendefehler !== '') hinweis('Senden fehlgeschlagen: ' . $sendefehler, 'warn');
 ?>
+
+<div class="crm-reiter" style="margin-bottom:12px">
+  <a href="?p=kunde&id=<?= $id ?>"<?= $tab === 'uebersicht' ? ' class="an"' : '' ?>>Übersicht</a>
+  <a href="?p=kunde&id=<?= $id ?>&tab=profil"<?= $tab === 'profil' ? ' class="an"' : '' ?>>Profil</a>
+</div>
+
+<?php if ($tab === 'profil'): $pf = kunde_profil_lesen($id); ?>
+  <div class="karte"><div class="rumpf">
+    <h2 style="margin-top:0">Stammdaten</h2>
+    <div class="muted">
+      <?php foreach ([['Kundennummer', $k['kundennummer'] ?? ''], ['Ansprechpartner', $k['ansprechpartner'] ?? ''],
+                      ['E-Mail', $k['email'] ?? ''], ['Telefon', $k['telefon'] ?? ''],
+                      ['Ort', trim(((string)($k['plz'] ?? '')) . ' ' . ((string)($k['ort'] ?? '')))],
+                      ['USt-IdNr.', $k['ust_id'] ?? '']] as [$l, $v]): if (trim((string)$v) === '') continue; ?>
+        <div><?= h($l) ?>: <?= h((string)$v) ?></div>
+      <?php endforeach; ?>
+    </div>
+    <?php if ($dash !== ''): ?><p style="margin:10px 0 0"><a href="<?= h($dash . '/?p=kunde&id=' . $id) ?>" target="_blank" rel="noopener">Stammdaten im Dashboard bearbeiten</a></p><?php endif; ?>
+  </div></div>
+
+  <div class="karte"><div class="rumpf">
+    <h2 style="margin-top:0">Profil</h2>
+    <p class="muted" style="margin-top:0">Die CRM-Sicht auf den Kunden – Qualifizierung und freie Infos. Nur im CRM, nicht im Dashboard.</p>
+    <form method="post">
+      <input type="hidden" name="tun" value="profil_speichern">
+      <div class="bx-grid">
+        <?php foreach (crm_segfelder() as $f => $def): [$lbl, $opts] = $def; ?>
+          <div class="bx-field"><label for="pf_<?= h($f) ?>"><?= h($lbl) ?></label>
+            <select id="pf_<?= h($f) ?>" name="<?= h($f) ?>">
+              <option value="">– wählen –</option>
+              <?php foreach ($opts as $ok => $ol): ?><option value="<?= h($ok) ?>" <?= ($pf[$f] ?? '') === $ok ? 'selected' : '' ?>><?= h($ol) ?></option><?php endforeach; ?>
+            </select></div>
+        <?php endforeach; ?>
+        <div class="bx-field"><label for="pf_land">Land / Region</label>
+          <input type="text" id="pf_land" name="land" value="<?= h((string)($pf['land'] ?? '')) ?>"></div>
+        <div class="bx-field"><label for="pf_website">Website / Social</label>
+          <input type="text" id="pf_website" name="website" value="<?= h((string)($pf['website'] ?? '')) ?>"></div>
+      </div>
+      <div class="bx-field"><label for="pf_moeglichkeiten">Möglichkeiten / Potenzial</label>
+        <input type="text" id="pf_moeglichkeiten" name="moeglichkeiten" value="<?= h((string)($pf['moeglichkeiten'] ?? '')) ?>"></div>
+      <div class="bx-field"><label for="pf_besonderheiten">Besonderheiten</label>
+        <input type="text" id="pf_besonderheiten" name="besonderheiten" value="<?= h((string)($pf['besonderheiten'] ?? '')) ?>"></div>
+      <div class="bx-field"><label for="pf_infos">Infos zum Kunden</label>
+        <textarea id="pf_infos" name="infos" style="min-height:120px"><?= h((string)($pf['infos'] ?? '')) ?></textarea></div>
+      <button class="btn btn-primary" type="submit">Profil speichern</button>
+    </form>
+  </div></div>
+
+<?php else: ?>
+
+<?php $timeline = kunde_timeline($id); ?>
+<div class="karte">
+  <div class="rumpf" style="padding-bottom:4px"><h2 style="margin-top:0">Vorgänge</h2></div>
+  <?php if (!$timeline): ?>
+    <div class="rumpf" style="padding-top:0"><p class="muted" style="margin:0">Noch keine Angebote, Aufträge oder Rechnungen.</p></div>
+  <?php else: foreach ($timeline as $e): ?>
+    <div class="crm-zeile">
+      <div class="crm-alter ruhig"><?= $e['datum'] ? h(fmt_zeit((string)$e['datum'], 'd.m.y')) : '–' ?>
+        <span class="art"><?= h((string)$e['art']) ?></span></div>
+      <div class="crm-mitte">
+        <?php if ($e['link'] !== ''): ?><a class="titel" href="<?= h((string)$e['link']) ?>" target="_blank" rel="noopener"><?= h((string)$e['titel']) ?></a>
+        <?php else: ?><span class="titel"><?= h((string)$e['titel']) ?></span><?php endif; ?>
+        <span class="unter"><?= h((string)$e['status']) ?><?= $e['betrag'] !== null ? ' · ' . h(eur((float)$e['betrag'])) : '' ?></span>
+      </div>
+    </div>
+  <?php endforeach; endif; ?>
+</div>
 
 <?php if ($wv): ?>
   <div class="karte"><div class="rumpf">
@@ -292,4 +367,5 @@ $rv = rezeptur_ki_vorschlag('kunde', $id); ?>
     <?php endforeach; ?>
   </div>
 </div></div>
+<?php endif; // Ende Reiter "Übersicht" ?>
 <?php fuss('mehr');

@@ -68,7 +68,10 @@ Datei zu prüfen – dann weiß man auch, wo man sucht.
   (`public/crm/mail_cron.php`). Details: `crm/core/mail_abruf.md`.
 - **Kalender** (`/crm/?p=kalender`) – Termine und Wiedervorlagen im Monat, im Aufbau des
   Produktions-Kalenders. Höchstens vier Einträge je Tag, danach „+N weitere".
-- **Termine**, **Kunden mit Verlauf**, **Mehr**.
+- **Termine**, **Mehr**.
+- **Kunden-Cockpit** (`/crm/?p=kunde&id=`) – zwei Reiter: **Übersicht** mit Vorgangs-Timeline (Angebote/
+  Aufträge/Rechnungen/Rezepturen, Direkt-Sprung ins Dashboard) + allen CRM-Werkzeugen, und **Profil**
+  (Stammdaten lesend + CRM-Profil `crm_kunde_profil`: Qualifizierung + freie Infos). Details: `crm/core/kunde_profil.md`.
 - **Fragenkatalog fürs Erstgespräch** (aus dem v3-CRM) – an Kontakt und Kunde: Kurzbriefing,
   fachlicher Knackpunkt mit Zahlen, Fragen an den Kunden, was wir aktiv sagen müssen,
   Hausaufgaben beidseitig. Das Wissen steht in `crm/prompts/fragenkatalog.md` – von Hand pflegbar.
