@@ -158,6 +158,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     q("UPDATE auftrag SET status=?, menge=?, vk_stueck=?, gesamt_netto=? WHERE id=?",
       [$neuStatus, $menge, $vk, $netto, $id]);
     if ($neuStatus !== $altStatus) q("UPDATE auftrag SET status_datum=CURDATE() WHERE id=?", [$id]);   // Datum für Kundensicht
+    // Verpackung (Behälter) am Auftrag setzen/ändern – nur wenn das Feld mitgesendet wurde (kein Leeren
+    // durch andere POSTs). Wirkt auf Etikettmaß/PIB; Kunde sieht es ohne Bestätigung.
+    if (array_key_exists('verpackung_id', $_POST)) {
+        $verpId = $_POST['verpackung_id'] !== '' ? (int)$_POST['verpackung_id'] : null;
+        q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$verpId, $id]);
+    }
     // Auftrag storniert -> offene Rechnung(en) automatisch per Gutschrift stornieren
     $stn = 0;
     if ($neuStatus === 'storniert' && $altStatus !== 'storniert') {
@@ -678,6 +684,14 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
       <input type="number" name="menge" min="0" value="<?= (int)$a['menge'] ?>"></div>
     <div class="bx-field"><label>VK je Packung (netto)</label>
       <input type="text" name="vk_stueck" id="vkFeld" value="<?= h((float)$a['vk_stueck'] > 0 ? rtrim(rtrim(number_format((float)$a['vk_stueck'], 4, ',', ''), '0'), ',') : '') ?>" placeholder="z. B. 0,84"></div>
+    <div class="bx-field"><label>Verpackung (Behälter) <?= bx_hint('Primärverpackung dieses Auftrags. Fehlt sie (z. B. durch die Systemumstellung), hier setzen. Wirkt auf Etikettmaß & PIB – der Kunde sieht das aktualisierte Infoblatt automatisch (keine Freigabe/Bestätigung nötig).') ?></label>
+      <select name="verpackung_id" class="rscombo">
+        <option value="">– keine –</option>
+        <?php foreach (all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name") as $vp): ?>
+          <option value="<?= (int)$vp['id'] ?>" <?= (int)($a['verpackung_id'] ?? 0) === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
   </div>
   <div class="muted" style="font-size:12px;margin-top:2px">Netto gesamt = Menge × VK je Packung – wird beim Speichern automatisch berechnet<span id="vkVorschau"></span>.</div>
   </div>
