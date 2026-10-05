@@ -3864,9 +3864,25 @@ portal_head('Kundenportal · ' . $k['firma']);
       <thead><tr><th>Nummer</th><th>Datum</th><th class="bx-num">Betrag</th><th>Status</th><th></th></tr></thead>
       <tbody>
       <?php if (!$rechnungen): ?><tr><td colspan="5" class="muted">Noch keine Rechnungen.</td></tr><?php endif; ?>
-      <?php foreach ($rechnungen as $r): ?>
+      <?php foreach ($rechnungen as $r):
+        // Verknüpftes (archiviertes) Angebot aus dem Bulk-Import -> Leistungsumfang je Produkt anzeigen.
+        $impPos = [];
+        if (!empty($r['imp_angebot_id'])) { try { $impPos = all("SELECT typ,gruppe,bezeichnung,menge,einheit FROM bu_imp_angebot_pos WHERE angebot_id=? ORDER BY sort,id", [(int)$r['imp_angebot_id']]); } catch (Throwable $e) { $impPos = []; } }
+      ?>
         <tr><td><?= h($r['nummer']) ?></td><td><?= $r['datum']?h(date('d.m.Y',strtotime($r['datum']))):'' ?></td><td class="bx-num"><?= $eur($r['brutto']) ?></td><td><?= $reBadge($r['status']) ?></td>
           <td class="bx-num" style="white-space:nowrap"><?php if (!empty($r['original_datei'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_datei') ?>&id=<?= (int)$r['id'] ?>">Rechnung (PDF)</a><?php elseif (!empty($r['auftrag_id'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_pdf') ?>&aid=<?= (int)$r['auftrag_id'] ?>">Rechnung (PDF)</a><?php endif; ?></td></tr>
+        <?php if ($impPos): $tl=['produkt'=>'Produkt','verpackung'=>'Verpackung','etikett'=>'Etikett']; ?>
+        <tr><td colspan="5" style="padding-top:0">
+          <details><summary class="muted" style="cursor:pointer;font-size:13px">Leistungsumfang anzeigen</summary>
+            <div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table">
+              <thead><tr><th>Produkt</th><th>Art</th><th>Position</th><th class="bx-num">Menge</th><th>Einheit</th></tr></thead><tbody>
+              <?php $gp=null; foreach ($impPos as $p): $g=(int)$p['gruppe']; ?>
+                <tr<?= $g!==$gp?' style="border-top:2px solid var(--line)"':'' ?>><td><?= $g!==$gp?'<strong>#'.$g.'</strong>':'' ?></td><td><?= h($tl[$p['typ']]??$p['typ']) ?></td><td><?= h((string)$p['bezeichnung']) ?></td><td class="bx-num"><?= $p['menge']!==null?h(rtrim(rtrim(number_format((float)$p['menge'],2,',','.'),'0'),',')):'' ?></td><td><?= h((string)$p['einheit']) ?></td></tr>
+              <?php $gp=$g; endforeach; ?>
+              </tbody></table></div>
+          </details>
+        </td></tr>
+        <?php endif; ?>
       <?php endforeach; ?>
       </tbody>
     </table></div>

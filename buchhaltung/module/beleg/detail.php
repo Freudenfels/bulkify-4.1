@@ -2,6 +2,7 @@
 // Rechnung (Beleg) – Ansicht + Status (offen/bezahlt)
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/importer.php';   // verknüpftes (archiviertes) Angebot + Positionen
 
 $id = (int)($_GET['id'] ?? 0);
 
@@ -303,6 +304,35 @@ echo '</div>';
   </details>
   <?php endif; ?>
 </div>
+
+<?php
+// Verknüpftes (archiviertes) Angebot aus dem Bulk-Import – Leistungsumfang je Produkt.
+$impAng = !empty($b['imp_angebot_id']) ? imp_angebot((int)$b['imp_angebot_id']) : null;
+if ($impAng): $impPos = imp_angebot_pos((int)$impAng['id']);
+$typLbl = ['produkt'=>'Produkt','verpackung'=>'Verpackung','etikett'=>'Etikett'];
+?>
+<div class="bx-panel">
+  <h2>Verknüpftes Angebot<?= $impAng['nummer'] ? ' · ' . h($impAng['nummer']) : '' ?></h2>
+  <?php if (!$impPos): ?><p class="muted" style="margin:0">Keine Positionen im archivierten Angebot.</p><?php else: ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Produkt</th><th>Art</th><th>Position</th><th class="bx-num">Menge</th><th>Einheit</th><th class="bx-num">Preis</th></tr></thead>
+    <tbody>
+      <?php $gPrev = null; foreach ($impPos as $p): $g=(int)$p['gruppe']; ?>
+      <tr<?= $g !== $gPrev ? ' style="border-top:2px solid var(--line)"' : '' ?>>
+        <td><?= $g !== $gPrev ? '<strong>#' . $g . '</strong>' : '' ?></td>
+        <td><?= h($typLbl[$p['typ']] ?? $p['typ']) ?></td>
+        <td><?= h((string)$p['bezeichnung']) ?></td>
+        <td class="bx-num"><?= $p['menge'] !== null ? h(rtrim(rtrim(number_format((float)$p['menge'],2,',','.'),'0'),',')) : '' ?></td>
+        <td><?= h((string)$p['einheit']) ?></td>
+        <td class="bx-num"><?= $p['preis'] !== null && (float)$p['preis'] != 0 ? $eur($p['preis']) : '' ?></td>
+      </tr>
+      <?php $gPrev=$g; endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php endif; ?>
+  <p class="muted" style="margin:8px 0 0">Aus dem Bulk-Import archiviert (nur hinterlegt). Diese Positionen sieht auch der Kunde im Portal.</p>
+</div>
+<?php endif; ?>
 
 <?php if ($b['typ'] === 'rechnung' && $b['status'] !== 'storniert' && !$stornoDurch): ?>
 <details class="bx-form">
