@@ -196,13 +196,13 @@ echo '</div>';
 </details>
 <?php endif; ?>
 
-<?php if ($positionen): ?>
 <div class="bx-panel">
-  <h2>Positionen</h2>
+  <h2>Positionen<?= $positionen ? ' <span class="muted" style="font-weight:400;font-size:14px">(' . count($positionen) . ')</span>' : '' ?></h2>
+  <?php if ($positionen): $sumNetto = 0.0; ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Pos.</th><th>Artikel-Nr.</th><th>Bezeichnung</th><th class="bx-num">Menge</th><th>Einheit</th><th class="bx-num">Einzelpreis</th><th class="bx-num">Gesamt</th></tr></thead>
+    <thead><tr><th>Pos.</th><th>Artikel-Nr.</th><th>Bezeichnung</th><th class="bx-num">Menge</th><th>Einheit</th><th class="bx-num">Einzelpreis</th><th class="bx-num">USt</th><th class="bx-num">Gesamt</th></tr></thead>
     <tbody>
-      <?php $i=0; foreach ($positionen as $p): $ep=(int)$p['preis_cent']/100; $ge=$ep*(float)$p['menge']; $i++; ?>
+      <?php $i=0; foreach ($positionen as $p): $ep=(int)$p['preis_cent']/100; $ge=$ep*(float)$p['menge']; $sumNetto+=$ge; $i++; ?>
       <tr>
         <td><?= $i ?></td>
         <td><?= h($p['artikelnr'] ?: '–') ?></td>
@@ -210,13 +210,29 @@ echo '</div>';
         <td class="bx-num"><?= rtrim(rtrim(number_format((float)$p['menge'],2,',','.'),'0'),',') ?></td>
         <td><?= h($p['einheit'] ?: '') ?></td>
         <td class="bx-num"><?= $eur($ep) ?></td>
+        <td class="bx-num"><?= number_format((float)$p['mwst_satz'],0) ?> %</td>
         <td class="bx-num"><?= $eur($ge) ?></td>
       </tr>
       <?php endforeach; ?>
     </tbody>
+    <tfoot>
+      <tr><td colspan="7" class="bx-num">Summe Positionen (netto)</td><td class="bx-num"><strong><?= $eur($sumNetto) ?></strong></td></tr>
+      <tr><td colspan="7" class="bx-num">zzgl. USt (<?= number_format((float)$b['ust_prozent'],0) ?> %)</td><td class="bx-num"><?= $eur($b['ust_betrag']) ?></td></tr>
+      <tr><td colspan="7" class="bx-num"><strong>Brutto</strong></td><td class="bx-num"><strong><?= $eur($b['brutto']) ?></strong></td></tr>
+    </tfoot>
   </table></div>
+  <?php if (abs($sumNetto - (float)$b['netto']) > 0.01): ?>
+    <p style="margin:8px 0 0;color:var(--warn)">Hinweis: Summe der Positionen (<?= $eur($sumNetto) ?>) weicht vom Beleg-Netto (<?= $eur($b['netto']) ?>) ab – bitte prüfen.</p>
+  <?php endif; ?>
+  <?php else: ?>
+  <p class="muted" style="margin:0 0 8px">Keine Einzelpositionen hinterlegt – diese Rechnung trägt nur einen Gesamtbetrag (z. B. Alt-Import oder Sammelposition aus dem Auftrag).</p>
+  <div class="bx-tablewrap"><table class="bx-table"><tbody>
+    <tr><td>Netto</td><td class="bx-num"><?= $eur($b['netto']) ?></td></tr>
+    <tr><td>USt (<?= number_format((float)$b['ust_prozent'],0) ?> %)</td><td class="bx-num"><?= $eur($b['ust_betrag']) ?></td></tr>
+    <tr><td><strong>Brutto</strong></td><td class="bx-num"><strong><?= $eur($b['brutto']) ?></strong></td></tr>
+  </tbody></table></div>
+  <?php endif; ?>
 </div>
-<?php endif; ?>
 
 <?php if ($b['typ'] === 'rechnung' && $b['status'] !== 'storniert' && !$stornoDurch): ?>
 <details class="bx-form">

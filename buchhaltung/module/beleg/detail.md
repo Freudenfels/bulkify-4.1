@@ -17,3 +17,6 @@
 - **Statusverlauf:** eigene Tabelle `beleg_status_log` (beleg_id, status, notiz, akteur, angelegt UTC). `beleg_status_verlauf()` liest den Verlauf und legt bei Altbelegen einmalig einen **„erstellt"-Eintrag** aus `beleg.angelegt` an (Backfill). Zeitanzeige immer via `fmt_zeit()` (Europe/Berlin).
 
 **Herkunft:** Wird zusammen mit dem Auftrag von `auftrag_aus_angebot()` erzeugt. USt: 19 % (DE) bzw. 0 % (EU-Ausland). GoBD-Ausbau (Jahresnummern, Storno nur per Gutschrift) folgt später.
+
+## Positionen-Ansicht
+Der Positionen-Panel wird IMMER gezeigt. Mit Einzelpositionen: Tabelle inkl. USt-Spalte + Summenzeile (Summe Positionen netto, zzgl. USt, Brutto) und ein Warnhinweis, falls die Positionssumme vom Beleg-Netto abweicht (Prüfhilfe). Ohne Positionen (Alt-Import/Sammelposition): Hinweis + Netto/USt/Brutto des Belegs.

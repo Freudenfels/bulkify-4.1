@@ -15,19 +15,24 @@ function fmt_zeit(?string $utc, string $fmt = 'd.m.Y H:i'): string {
     } catch (Exception $e) { return $utc; }
 }
 
-// Eigene Navigation der Buchhaltung. Schlüssel = $aktiv-Wert, den die Seiten an render_header() geben.
+// Eigene Navigation der Buchhaltung, gruppiert nach Ausgang (Debitoren) und Eingang (Kreditoren).
+// Schlüssel = $aktiv-Wert, den die Seiten an render_header() geben.
 function bu_nav(): array {
     return [
-        'Buchhaltung' => [
+        'Start' => [
             'buchhaltung'       => ['label' => 'Übersicht',           'href' => '?p=buchhaltung'],
-            'beleg_eingang'     => ['label' => 'Belege (KI)',         'href' => '?p=beleg_eingang'],
+        ],
+        'Ausgang (Debitoren)' => [
             'rechnungen'        => ['label' => 'Rechnungen',          'href' => '?p=rechnungen'],
-            'angebote_ansicht'  => ['label' => 'Angebote (Ansicht)',  'href' => '?p=angebote_ansicht'],
             'rechnung_frei'     => ['label' => 'Rechnung erstellen',  'href' => '?p=rechnung_frei'],
-            'lief_rechnung_neu' => ['label' => 'Eingangsrechnung',    'href' => '?p=lief_rechnung_neu'],
-            'rechnung_import'   => ['label' => 'Alt-Rechnungen',      'href' => '?p=rechnung_import'],
+            'gutschrift_neu'    => ['label' => 'Storno / Gutschrift', 'href' => '?p=gutschrift_neu'],
+            'angebote_ansicht'  => ['label' => 'Angebote (Ansicht)',  'href' => '?p=angebote_ansicht'],
             'auftrag_import'    => ['label' => 'Auftrag importieren', 'href' => '?p=auftrag_import'],
-            'gutschrift_neu'    => ['label' => 'Storno/Gutschrift',   'href' => '?p=gutschrift_neu'],
+            'rechnung_import'   => ['label' => 'Alt-Rechnungen',      'href' => '?p=rechnung_import'],
+        ],
+        'Eingang (Kreditoren)' => [
+            'beleg_eingang'     => ['label' => 'Belege (KI)',         'href' => '?p=beleg_eingang'],
+            'lief_rechnung_neu' => ['label' => 'Eingangsrechnung',    'href' => '?p=lief_rechnung_neu'],
         ],
     ];
 }
