@@ -171,6 +171,25 @@ function crm_schema(): void {
         error_log('crm_schema: crm_mail_eingang konnte nicht angelegt werden: ' . $e->getMessage());
     }
 
+    // --- Eigenes Mailkonto je Mitarbeiter (benutzer-Tabelle gehoert dem Dashboard, daher hier). --
+    // Damit jeder Mitarbeiter direkt aus dem CRM unter seiner eigenen Adresse antworten kann.
+    try {
+        q("CREATE TABLE IF NOT EXISTS crm_mitarbeiter (
+            benutzer_id    INT PRIMARY KEY,
+            absender_name  VARCHAR(190) NULL,
+            absender_email VARCHAR(190) NULL,
+            smtp_host      VARCHAR(190) NULL,
+            smtp_port      INT NULL,
+            smtp_secure    VARCHAR(8) NOT NULL DEFAULT 'tls',   -- tls|ssl|''
+            smtp_user      VARCHAR(190) NULL,
+            smtp_pass      VARCHAR(255) NULL,
+            signatur       TEXT NULL,
+            aktualisiert   DATETIME NULL
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Throwable $e) {
+        error_log('crm_schema: crm_mitarbeiter konnte nicht angelegt werden: ' . $e->getMessage());
+    }
+
     // --- KI-Rezepturvorschlag am Kontakt/Kunden (Verkaeufer-Workflow im CRM). ------------------
     // Wie crm_briefing (Fragenkatalog): ein Vorschlag je Kontakt ODER Kunde, als JSON gespeichert.
     // Best-effort (try/catch): scheitert das CREATE, laeuft der Rest des CRM trotzdem.

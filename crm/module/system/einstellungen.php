@@ -3,10 +3,12 @@
 // Loest das alte "Mehr" ab (die Route 'mehr' zeigt weiterhin hierher).
 require_once BX_ROOT . '/core/wartet.php';
 require_once BX_ROOT . '/core/mail_abruf.php';
+require_once BX_ROOT . '/core/mail_senden.php';
 require_once BX_ROOT . '/core/ki.php';
 
 $TABS = [
     'allgemein'  => 'Allgemein',
+    'mailkonto'  => 'Mein Mailkonto',
     'website'    => 'Website-Eingang',
     'eingang'    => 'E-Mail-Eingang',
     'darstellung'=> 'Darstellung',
@@ -34,6 +36,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($tun === 'mail_cron_token_neu') {
         crm_meta_schreiben('mail_cron_token', bin2hex(random_bytes(24)));
         header('Location: ?p=einstellungen&tab=eingang&ok=1'); exit;
+    }
+    if ($tun === 'mailkonto') {
+        mitarbeiter_mail_speichern(crm_uid(), $_POST);
+        header('Location: ?p=einstellungen&tab=mailkonto&ok=1'); exit;
     }
 }
 
@@ -69,6 +75,46 @@ if (isset($_GET['ok'])) hinweis('Gespeichert.');
     <a class="crm-zeile" href="?p=kunden" style="text-decoration:none">
       <div class="crm-mitte"><span class="titel">Kunden</span><span class="unter">Verlauf an bestehenden Kunden des Dashboards</span></div></a>
   </div>
+
+<?php elseif ($tab === 'mailkonto'): ?>
+  <?php $mk = mitarbeiter_mail_konfig(crm_uid()); ?>
+  <div class="karte"><div class="rumpf">
+    <h2 style="margin-top:0">Mein Mailkonto</h2>
+    <p class="muted" style="margin-top:0">Dein eigener Mailzugang, damit du direkt aus dem CRM unter deiner
+       Adresse antworten kannst. Gilt nur für dich. Das gemeinsame Eingangspostfach steht unter „E-Mail-Eingang“.</p>
+    <form method="post">
+      <input type="hidden" name="tun" value="mailkonto">
+      <div class="bx-grid">
+        <div class="bx-field"><label for="absender_name">Absender-Name</label>
+          <input type="text" id="absender_name" name="absender_name" value="<?= h($mk['absender_name']) ?>" placeholder="z. B. Nico Thomalla"></div>
+        <div class="bx-field"><label for="absender_email">Absender-Adresse</label>
+          <input type="email" id="absender_email" name="absender_email" value="<?= h($mk['absender_email']) ?>" placeholder="du@bulkify.pro"></div>
+      </div>
+      <div class="bx-grid">
+        <div class="bx-field"><label for="smtp_host">SMTP-Server</label>
+          <input type="text" id="smtp_host" name="smtp_host" value="<?= h($mk['host']) ?>" placeholder="z. B. smtp.ionos.de"></div>
+        <div class="bx-field"><label for="smtp_port">Port</label>
+          <input type="number" id="smtp_port" name="smtp_port" value="<?= (int)$mk['port'] ?>" placeholder="587"></div>
+      </div>
+      <div class="bx-grid">
+        <div class="bx-field"><label for="smtp_user">SMTP-Benutzer</label>
+          <input type="text" id="smtp_user" name="smtp_user" value="<?= h($mk['user']) ?>" placeholder="meist die volle Adresse"></div>
+        <div class="bx-field"><label for="smtp_pass">SMTP-Passwort</label>
+          <input type="password" id="smtp_pass" name="smtp_pass" autocomplete="new-password"
+                 placeholder="<?= $mk['pass'] !== '' ? '• gesetzt – leer lassen zum Behalten' : 'Passwort' ?>"></div>
+      </div>
+      <div class="bx-field" style="max-width:260px"><label for="smtp_secure">Verschlüsselung</label>
+        <select id="smtp_secure" name="smtp_secure">
+          <option value="tls" <?= $mk['secure'] === 'tls' ? 'selected' : '' ?>>STARTTLS (Port 587)</option>
+          <option value="ssl" <?= $mk['secure'] === 'ssl' ? 'selected' : '' ?>>SSL/TLS (Port 465)</option>
+          <option value="" <?= $mk['secure'] === '' ? 'selected' : '' ?>>ohne</option>
+        </select></div>
+      <div class="bx-field"><label for="signatur">Signatur</label>
+        <textarea id="signatur" name="signatur" placeholder="Viele Grüße&#10;…"><?= h($mk['signatur']) ?></textarea></div>
+      <button class="btn btn-primary" type="submit">Speichern</button>
+      <span class="muted" style="margin-left:10px;font-size:var(--fs-sm)"><?= $mk['bereit'] ? 'Konto ist aktiv – du kannst aus dem CRM senden.' : 'Noch nicht vollständig – Host und Absender-Adresse fehlen.' ?></span>
+    </form>
+  </div></div>
 
 <?php elseif ($tab === 'website'): ?>
   <?php $intakeUrl = $scheme . '://' . $host . '/crm/lead_intake.php'; ?>

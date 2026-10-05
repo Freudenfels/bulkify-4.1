@@ -5,6 +5,7 @@ require_once BX_ROOT . '/core/kontakt.php';
 require_once BX_ROOT . '/core/antwort_ki.php';
 require_once BX_ROOT . '/core/fragenkatalog_ki.php';
 require_once BX_ROOT . '/core/rezeptur_ki.php';
+require_once BX_ROOT . '/core/mail_senden.php';
 require_once BX_ROOT . '/core/markdown.php';
 
 $id = (int)($_GET['id'] ?? 0);
@@ -56,6 +57,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         unset($_SESSION['antwort']);
         header('Location: ?p=kunde&id=' . $id . '&ok=notiert'); exit;
     }
+    if ($tun === 'antwort_senden') {
+        $text = (string)($_POST['text'] ?? '');
+        $betreff = trim((string)($_POST['betreff'] ?? '')) ?: 'Ihre Anfrage bei bulkify';
+        $fehler = crm_mail_senden(crm_uid(), (string)($k['email'] ?? ''), $betreff, $text);
+        if ($fehler === '') {
+            kunde_verlauf($id, 'mail', "Antwort gesendet an " . (string)($k['email'] ?? '') . " (Betreff: " . $betreff . "):\n" . $text, crm_uid());
+            unset($_SESSION['antwort']);
+            header('Location: ?p=kunde&id=' . $id . '&ok=gesendet'); exit;
+        }
+        $_SESSION['sendefehler'] = $fehler;
+        header('Location: ?p=kunde&id=' . $id . '#antwort'); exit;
+    }
     header('Location: ?p=kunde&id=' . $id); exit;
 }
 
@@ -70,7 +83,10 @@ seitenkopf((string)$k['firma'],
 
 $m = (string)($_GET['ok'] ?? '');
 if ($m === 'kifehler')  hinweis('Die KI hat nicht geklappt. Bitte später erneut versuchen.', 'warn');
+elseif ($m === 'gesendet') hinweis('Antwort gesendet.');
 elseif ($m !== '')      hinweis($m === 'erinnert' ? 'Wiedervorlage gesetzt.' : 'Notiert.');
+$sendefehler = (string)($_SESSION['sendefehler'] ?? ''); unset($_SESSION['sendefehler']);
+if ($sendefehler !== '') hinweis('Senden fehlgeschlagen: ' . $sendefehler, 'warn');
 ?>
 
 <?php if ($wv): ?>
@@ -189,12 +205,21 @@ $rv = rezeptur_ki_vorschlag('kunde', $id); ?>
   <?php if ($ant && !$ant['ok']): ?>
     <div class="hinweis warn"><?= h((string)$ant['fehler']) ?></div>
   <?php endif; ?>
-  <?php if ($ant && $ant['ok']): ?>
-    <p class="muted" style="margin:0 0 10px">Entwurf – lies drüber, ändere ihn, kopiere ihn. Verschickt wird hier nichts.</p>
+  <?php if ($ant && $ant['ok']): $mailBereit = mitarbeiter_mail_konfig(crm_uid())['bereit']; $hatEmail = trim((string)($k['email'] ?? '')) !== ''; ?>
+    <p class="muted" style="margin:0 0 10px">Entwurf – lies drüber, ändere ihn. „Senden" verschickt ihn unter deinem Mailkonto.</p>
     <form method="post">
-      <input type="hidden" name="tun" value="antwort_verlauf">
+      <div class="bx-field"><label for="betreff">Betreff</label>
+        <input type="text" id="betreff" name="betreff" value="Ihre Anfrage bei bulkify"></div>
       <div class="bx-field"><textarea name="text" style="min-height:190px"><?= h((string)$ant['text']) ?></textarea></div>
-      <button class="btn btn-ghost" type="submit">Als gesendet im Verlauf vermerken</button>
+      <div class="bx-row" style="gap:8px;flex-wrap:wrap">
+        <?php if ($mailBereit && $hatEmail): ?>
+          <button class="btn btn-primary" type="submit" name="tun" value="antwort_senden"
+                  onclick="return confirm('Antwort jetzt an <?= h((string)$k['email']) ?> senden?');"
+                  data-busy="Wird gesendet …">Senden an <?= h((string)$k['email']) ?></button>
+        <?php endif; ?>
+        <button class="btn btn-ghost" type="submit" name="tun" value="antwort_verlauf">Als gesendet vermerken</button>
+      </div>
+      <?php if (!$mailBereit): ?><p class="muted" style="margin:8px 0 0;font-size:var(--fs-sm)">Zum direkten Senden ein Mailkonto unter Einstellungen → Mein Mailkonto hinterlegen.</p><?php endif; ?>
     </form>
   <?php else: ?>
     <p class="muted" style="margin:0 0 10px">Schreibt aus dem Verlauf einen kurzen Entwurf.</p>

@@ -76,6 +76,9 @@ Datei zu prüfen – dann weiß man auch, wo man sucht.
   Details: `crm/core/rezeptur_ki.md`.
 - **KI:** Visitenkarte fotografieren, Text auslesen, Antwortvorschlag, Tagesbriefing. Alle vier
   füllen nur vor – gespeichert und verschickt wird nie automatisch.
+- **Antworten senden** – jeder Mitarbeiter hinterlegt sein eigenes Mailkonto (Einstellungen → Mein
+  Mailkonto, Tabelle `crm_mitarbeiter`); der KI-Antwortentwurf bekommt dann einen „Senden"-Knopf
+  (unter der eigenen Adresse, mit Rückfrage, landet im Verlauf). Details: `crm/core/mail_senden.md`.
 - **Dublettenprüfung** beim Erfassen (rein rechnerisch, ohne KI).
 
 ## Website-Eingang (lead_intake)

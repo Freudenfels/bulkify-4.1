@@ -6,6 +6,7 @@ zeigt weiterhin hierher (Alt-Links). Aufbau wie die Dashboard-Einstellungen: obe
 
 Reiter:
 - **Allgemein** – Adresse des Dashboards (`crm_meta.dashboard_url`) + Schnelllinks zu Termine/Kunden.
+- **Mein Mailkonto** – eigener SMTP-Zugang des angemeldeten Mitarbeiters (Tabelle `crm_mitarbeiter`), um direkt aus dem CRM zu antworten. Siehe `crm/core/mail_senden.md`.
 - **Website-Eingang** – Endpunkt-URL + Token für das bulkify.pro-Formular, „Neuen Token erzeugen". Siehe `public/crm/lead_intake.md`.
 - **E-Mail-Eingang** – IMAP-Zugang (`imap_*` in `crm_meta`, Passwort nur bei Eingabe überschrieben) + Cron-URL. Siehe `crm/core/mail_abruf.md`.
 - **Darstellung** – dunkler Modus (im Browser gemerkt), „Aufs Handy legen".
