@@ -1,0 +1,2 @@
+# produktion/module/produktion/modus.php
+Produktionsmodus-Auswahl (`?p=modus`): listet nur **startbare** Aufträge – laufende (`status=laufend`) und **produzierbare** (`erp_pa_bereitschaft`='bereit'); wartende/abgeschlossene erscheinen nicht. Sortiert nach geplantem Datum (dann Prio). Klick auf eine Zeile öffnet den geführten Produktionsmodus (`?p=run`). Spalte „Wann dran" = `geplant_am` (Planung aus dem Dashboard).

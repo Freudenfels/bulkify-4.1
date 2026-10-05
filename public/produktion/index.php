@@ -12,7 +12,9 @@ pr_session_start();
 $routen = [
     'login' => 'auth/login.php',
     'dash'  => 'produktion/dash.php',
-    'liste' => 'produktion/liste.php',
+    'modus' => 'produktion/modus.php',       // Auswahl: produzierbare + laufende Aufträge -> Produktionsmodus
+    'liste' => 'produktion/liste.php',       // aktive Aufträge (ohne abgeschlossene)
+    'archiv'=> 'produktion/archiv.php',       // abgeschlossene Aufträge
     'pa'    => 'produktion/detail.php',
     'run'   => 'produktion/run.php',
     'etikett' => 'produktion/etikett.php',   // Kunden-Etikett-Datei ausliefern (inline)
