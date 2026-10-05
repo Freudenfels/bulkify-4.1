@@ -101,7 +101,7 @@ $treffer = $q !== '' ? erp_bestand('', $q, false, 30) : [];
 $geplant = (string)$v['status'] === 'geplant';
 
 kopf('Sendung ' . (string)$v['nummer'], 'versand');
-$kopfAktion = '<a class="btn btn-primary" href="?p=lieferschein&id=' . $id . '" target="_blank">Lieferschein drucken</a> '
+$kopfAktion = '<a class="btn btn-ghost" href="?p=lieferschein&id=' . $id . '" target="_blank">Lieferschein öffnen</a> '
     . '<a class="btn btn-ghost" href="?p=versand">Zur Übersicht</a>';
 seitenkopf('Sendung ' . (string)$v['nummer'],
     ((string)$v['status'] === 'versendet' ? 'Versendet' : ((string)$v['status'] === 'storniert' ? 'Storniert' : 'In Planung')), $kopfAktion);
@@ -221,21 +221,32 @@ flash_zeigen();
 </div>
 
 <div class="bx-panel" style="margin-bottom:var(--sp-5)">
-  <h2 style="margin-top:0">Versand-Label &amp; Tracking</h2>
+  <h2 style="margin-top:0">Dokumente &amp; Versand</h2>
   <div class="bx-grid" style="margin-bottom:var(--sp-3)">
     <div class="bx-card"><div class="k">Carrier</div><div class="v"><?= (string)$v['carrier'] === 'dhl' ? 'DHL (Paket)' : ((string)$v['carrier'] === 'cargoboard' ? 'Cargoboard (Fracht)' : '<span class="muted">noch keiner</span>') ?></div></div>
     <div class="bx-card"><div class="k">Sendungsnummer</div><div class="v lg-code"><?= h((string)($v['tracking'] ?? '')) ?: '<span class="muted">–</span>' ?></div></div>
   </div>
+
+  <div style="font-weight:600;margin-bottom:6px">Lieferschein</div>
+  <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap;margin-bottom:var(--sp-4)">
+    <button type="button" class="btn btn-primary" data-druck="lieferschein" data-id="<?= $id ?>">Lieferschein drucken</button>
+    <a class="btn btn-ghost" href="?p=lieferschein&id=<?= $id ?>" target="_blank" data-no-busy>Öffnen (PDF)</a>
+  </div>
+
+  <div style="font-weight:600;margin-bottom:6px">Versand-Label</div>
   <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap">
     <?php if ($geplant): ?>
-    <form method="post" onsubmit="return confirm('Jetzt beim Carrier ein Versand-Label erzeugen? (<?= (string)$v['typ'] === 'palette' ? 'Cargoboard' : 'DHL' ?>)')">
+    <form method="post" style="margin:0" onsubmit="return confirm('Jetzt beim Carrier ein Versand-Label erzeugen? (<?= (string)$v['typ'] === 'palette' ? 'Cargoboard' : 'DHL' ?>)')">
       <input type="hidden" name="aktion" value="label"><input type="hidden" name="id" value="<?= $id ?>">
-      <button class="btn btn-primary" type="submit"><?= $hatLabel ? 'Label neu erstellen' : 'Versand-Label erstellen' ?></button>
+      <button class="btn btn-ghost" type="submit"><?= $hatLabel ? 'Label neu erstellen' : 'Versand-Label erstellen' ?></button>
     </form>
     <?php endif; ?>
-    <?php if ($hatLabel): ?><a class="btn btn-ghost" href="?p=versand_label&id=<?= $id ?>" target="_blank">Label öffnen (PDF)</a><?php endif; ?>
+    <?php if ($hatLabel): ?>
+      <button type="button" class="btn btn-primary" data-druck="label" data-id="<?= $id ?>">Label drucken</button>
+      <a class="btn btn-ghost" href="?p=versand_label&id=<?= $id ?>" target="_blank" data-no-busy>Öffnen (PDF)</a>
+    <?php endif; ?>
   </div>
-  <div class="muted" style="font-size:12px;margin-top:var(--sp-2)">Paket → DHL, Palette → Cargoboard. Zugänge unter Einstellungen → Zugänge. Ohne Zugang kommt eine klare Meldung.</div>
+  <div id="vsDruckInfo" class="muted" style="font-size:12px;margin-top:var(--sp-2)">Druckt lautlos über die Brücke auf den in den Einstellungen → Drucker gewählten Drucker. „Öffnen" zeigt das PDF.</div>
 </div>
 
 <?php if ($geplant): ?>
@@ -290,6 +301,19 @@ flash_zeigen();
   var typ=document.querySelector('[name="typ"]');
   function masseToggle(){ var pal=typ&&typ.value==='palette'; document.querySelectorAll('.vs-masse').forEach(function(el){ el.style.display=pal?'':'none'; }); }
   if(typ){ typ.addEventListener('change',masseToggle); masseToggle(); }
+
+  // Direkt drucken (Lieferschein / Versand-Label) -> Druckjob fuer die Bruecke.
+  var dinfo=document.getElementById('vsDruckInfo');
+  document.querySelectorAll('[data-druck]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var fd=new FormData(); fd.append('typ',btn.getAttribute('data-druck')); fd.append('id',btn.getAttribute('data-id'));
+      if(dinfo) dinfo.textContent='Sende an den Drucker …';
+      fetch('?p=druck_job',{method:'POST',body:fd,credentials:'same-origin'})
+        .then(function(r){return r.json();})
+        .then(function(j){ if(dinfo) dinfo.textContent=j.ok?(j.meldung||'An den Drucker geschickt.'):('Fehler: '+(j.fehler||'')); })
+        .catch(function(){ if(dinfo) dinfo.textContent='Serverfehler beim Drucken.'; });
+    });
+  });
 })();
 </script>
 <?php fuss();

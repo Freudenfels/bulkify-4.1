@@ -1,6 +1,12 @@
-# system/druck_job.php – Etikett-Druckauftrag in die Warteschlange (`?p=druck_job`)
+# system/druck_job.php – Druckauftrag in die Warteschlange (`?p=druck_job`)
 
-POST (eingeloggt, auch PDA): `ids` (Charge-IDs, komma), `format` (klein|gross) → legt einen Eintrag in
-`lg_druckjob` (Status offen). Die kombinierte Brücke auf dem Lager-PC holt den Job über
-`bruecke.php` ab und druckt lautlos (SumatraPDF). Antwort JSON `{ok,id,meldung}` – meldet auch, ob die
-Brücke gerade läuft (lg_meta `bruecke_zuletzt`). Drucker-Name in lg_meta `drucker_name`.
+Legt einen Druckjob in `lg_druckjob` ab; die Brücke auf dem Lager-PC holt ihn und druckt lautlos
+(SumatraPDF) auf den je Dokument eingestellten Drucker. Per `fetch` (POST) aufgerufen.
+
+Parameter `typ`:
+- **etikett** (Standard): `ids=<charge-ids>` → Karton-Etikett (100×150), Drucker `drucker_name`.
+- **lieferschein**: `id=<versand-id>` → Lieferschein A4, Drucker `drucker_lieferschein`.
+- **label**: `id=<versand-id>` → vom Carrier erzeugtes Versand-Label, Drucker `drucker_versandlabel`.
+
+Antwort JSON `{ok,id,meldung}` (meldet, ob die Brücke gerade läuft). Die PDF-Erzeugung + Druckerwahl je
+Typ passiert in `public/lager/bruecke.php`.

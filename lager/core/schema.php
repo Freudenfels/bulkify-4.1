@@ -243,6 +243,9 @@ function lg_schema(): void {
         KEY v (versand_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // Druckjob kann jetzt verschiedene Dokumente drucken (Etikett/Lieferschein/Versand-Label). Additiv.
+    lg_spalte('lg_druckjob', 'typ', "VARCHAR(16) NOT NULL DEFAULT 'etikett'");
+
     // Maße je Packstück (cm) – fuer Fracht/Palette (Cargoboard). Additiv.
     lg_spalte('lg_versand', 'masse_l', 'DECIMAL(6,1) NULL');
     lg_spalte('lg_versand', 'masse_b', 'DECIMAL(6,1) NULL');

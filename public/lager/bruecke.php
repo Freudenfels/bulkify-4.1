@@ -18,6 +18,7 @@ require_once __DIR__ . '/../../lager/core/leiste.php';       // leiste_fuer_char
 require_once __DIR__ . '/../../lager/core/kiste.php';        // blinker_fuer_charge (Blinker aufs Etikett)
 require_once __DIR__ . '/../../lager/core/erp.php';          // erp_charge_voll fuers Etikett
 require_once __DIR__ . '/../../lager/core/etikett_pdf.php';  // lg_etikett_pdf fuer Druckjobs
+require_once __DIR__ . '/../../lager/core/lieferschein_pdf.php';  // lg_lieferschein_pdf fuer Druckjobs
 
 lg_schema();
 
@@ -72,11 +73,26 @@ foreach (all("SELECT b.id, b.code, s.ip FROM lg_befehl b JOIN lg_sender s ON s.i
 q("UPDATE lg_druckjob SET status='verfallen', erledigt=? WHERE status='offen' AND angelegt < ?",
   [jetzt_utc(), gmdate('Y-m-d H:i:s', time() - 600)]);   // nach 10 min nicht mehr drucken
 $druck = [];
-$drucker = lg_meta_lesen('drucker_name', '');            // leer = Standarddrucker
-foreach (all("SELECT id, ids, format FROM lg_druckjob WHERE status='offen' ORDER BY id LIMIT 10") as $j) {
+$druckerEtikett     = lg_meta_lesen('drucker_name', '');          // leer = Standarddrucker
+$druckerLieferschein = lg_meta_lesen('drucker_lieferschein', '');
+$druckerLabel       = lg_meta_lesen('drucker_versandlabel', '');
+foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' ORDER BY id LIMIT 10") as $j) {
     if (q("UPDATE lg_druckjob SET status='abgeholt' WHERE id=? AND status='offen'", [(int)$j['id']])->rowCount() === 0) continue;
-    $pdf = lg_etikett_pdf(explode(',', (string)$j['ids']), (string)$j['format']);
-    if ($pdf === null) { q("UPDATE lg_druckjob SET status='fehler', antwort='Charge nicht gefunden', erledigt=? WHERE id=?", [jetzt_utc(), (int)$j['id']]); continue; }
+    $typ = (string)($j['typ'] ?? 'etikett');
+    $pdf = null; $drucker = $druckerEtikett; $fehlt = 'nicht gefunden';
+    if ($typ === 'lieferschein') {
+        $drucker = $druckerLieferschein ?: $druckerEtikett;
+        $pdf = function_exists('lg_lieferschein_pdf') ? lg_lieferschein_pdf((int)$j['ids']) : null;
+        $fehlt = 'Sendung nicht gefunden';
+    } elseif ($typ === 'label') {
+        $drucker = $druckerLabel ?: $druckerEtikett;
+        $lab = function_exists('lg_versand_label') ? lg_versand_label((int)$j['ids']) : null;
+        $pdf = $lab && (string)($lab['pdf'] ?? '') !== '' ? (string)$lab['pdf'] : null;
+        $fehlt = 'Kein Versand-Label';
+    } else {
+        $pdf = lg_etikett_pdf(explode(',', (string)$j['ids']), (string)$j['format']);
+    }
+    if ($pdf === null || $pdf === '') { q("UPDATE lg_druckjob SET status='fehler', antwort=?, erledigt=? WHERE id=?", [$fehlt, jetzt_utc(), (int)$j['id']]); continue; }
     $druck[] = ['id' => (int)$j['id'], 'pdf_b64' => base64_encode($pdf), 'drucker' => $drucker];
 }
 
