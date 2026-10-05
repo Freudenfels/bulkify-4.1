@@ -172,7 +172,7 @@ $felder = [
         <tr>
           <td><?= h((string)$fdd['name']) ?></td>
           <td class="bx-num"><?= menge_txt($fdd['benoetigt']) ?> <?= h((string)$fdd['einheit']) ?></td>
-          <td class="bx-num"><?= menge_txt($fdd['verfuegbar']) ?> <?= h((string)$fdd['einheit']) ?></td>
+          <td class="bx-num"><?= menge_txt($fdd['verfuegbar']) ?> <?= h((string)$fdd['einheit']) ?><?php if (!empty($fdd['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($fdd['quarantaene']) ?> in Quarantäne – erst freigeben</span><?php endif; ?></td>
           <td class="bx-num" style="color:#8f231b"><?= menge_txt($fdd['fehlt']) ?> <?= h((string)$fdd['einheit']) ?></td>
         </tr>
       <?php endforeach; ?>

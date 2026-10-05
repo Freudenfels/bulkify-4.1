@@ -352,10 +352,30 @@ function erp_pa_bereitschaft(int $pa_id, ?string $status = null, ?int $schritte_
     return ['status'=>$fehlend ? 'wartet' : 'bereit', 'fehlend'=>$fehlend];
 }
 
-// Fehlender Bestand für den Produktionsstart: Rohstoffe + ggf. Leerkapseln + ggf. Verpackung.
-// (Hauptsächliche Material-Gates; Etiketten/Beipack bleiben außen vor.)
+// Fehlender Bestand für den Produktionsstart.
+// Zukauf (fertige Bulkware): es zählt die zugekaufte Fertigware (frei) des Auftrags, NICHT die Rohstoffe.
+// Eigen/Bulk: Rohstoffe + ggf. Leerkapseln + ggf. Verpackung.
 function erp_pa_fehlbedarf(int $pa_id): array {
     $fehlend = [];
+    $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return $fehlend;
+    // Zukauf erkennen: formaler Zukauf-Weg ODER es liegt schon zugekaufte fertige Bulkware am Auftrag
+    // (frei oder Quarantäne) – dann zählt die Fertigware, nicht die Rohstoffe.
+    $hatFertigware = $pa['auftrag_id'] && (int) scalar("SELECT COUNT(*) FROM charge c JOIN item i ON i.id=c.item_id
+        WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status IN ('frei','quarantaene')", [(int)$pa['auftrag_id']]) > 0;
+    if (erp_weg_basis($pa_id) === 'zukauf' || $hatFertigware) {
+        if (!$pa['auftrag_id']) return $fehlend;
+        $benoetigt = (float)$pa['menge'] * erp_stueck_je_packung($pa);
+        if ($benoetigt <= 0) return $fehlend;
+        $verf = (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
+                                WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0", [(int)$pa['auftrag_id']]);
+        if ($verf + 0.0001 < $benoetigt) {
+            $quar = (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
+                                    WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='quarantaene'", [(int)$pa['auftrag_id']]);
+            $fehlend[] = ['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt - $verf, 'einheit'=>'Stück', 'quarantaene'=>$quar];
+        }
+        return $fehlend;
+    }
     foreach (erp_materialbedarf($pa_id) as $b)
         if ((float)$b['fehlt'] > 0.0001)
             $fehlend[] = ['name'=>$b['name'], 'benoetigt'=>$b['benoetigt'], 'verfuegbar'=>$b['verfuegbar'], 'fehlt'=>$b['fehlt'], 'einheit'=>$b['einheit']];
