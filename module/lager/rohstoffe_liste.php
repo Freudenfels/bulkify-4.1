@@ -117,9 +117,9 @@ $cols = [
     'name'          => ['label' => 'Name', 'sort' => true, 'render' => fn($r)=> '<span style="white-space:normal">' . h($r['name']) . '</span>'],
     'ek_preis'      => ['label' => 'Preis ab', 'sort' => true, 'num' => true, 'render' => $preisAb],
     'form'          => ['label' => 'Form', 'sort' => true, 'render' => fn($r)=> h($FORM[$r['form']] ?? $r['form'])],
-    'wirkstoffe' => ['label' => 'Wirkstoffe', 'render' => function($r) use ($wmap) {
+    'wirkstoffe' => ['label' => 'Wirkstoffe', 'th' => 'width:160px', 'render' => function($r) use ($wmap) {
         $list = $wmap[$r['id']] ?? [];
-        return $list ? h(implode(' · ', $list)) : '<span class="muted">–</span>';
+        return $list ? '<span style="white-space:normal;display:inline-block">' . h(implode(' · ', $list)) . '</span>' : '<span class="muted">–</span>';
     }],
     'unterlagen'    => ['label' => 'Unterlagen / Lieferant', 'render' => $verf],
     'gesperrt'      => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
