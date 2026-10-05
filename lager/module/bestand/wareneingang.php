@@ -464,48 +464,56 @@ if ($gebucht):
         '<div class="bx-field f-charge"><label class="lbl-charge">Charge-Nr.</label><input type="text" name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'"></div>'+
         '<div class="bx-field f-mhd"><label class="lbl-mhd">MHD</label><input type="date" name="p_mhd[]" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
         '<div class="bx-field f-pakete"><label>Pakete</label><input type="number" name="p_pakete[]" class="we-pakete" min="1" step="1" value="1"></div>'+
-        '<div class="bx-field f-paketnrn"><label>Paketnummern <span class="muted">(je Karton scannen)</span></label>'+
+        '<div class="bx-field f-paketnrn"><label>Paketnummern <span class="muted">(ein Feld je Paket – Anzahl folgt „Pakete")</span></label>'+
           '<input type="hidden" name="p_paketnummern[]" class="we-pak-h">'+
-          '<div class="we-pakscan"><input type="text" class="we-pak lg-code" autocomplete="off" placeholder="Paket scannen + Enter"></div>'+
-          '<button type="button" class="btn btn-ghost btn-sm we-pak-add">+ weiteres Paket</button>'+
+          '<div class="we-pakscan"></div>'+
         '</div>'+
         '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked title="Angehakt = freigegeben, nicht angehakt = Quarantäne"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
         '<div class="bx-field f-split"><label>Aufteilen</label><input type="checkbox" class="we-split" title="Menge gleichmäßig auf die Kartons verteilen"><input type="hidden" name="p_aufteilen[]" class="we-split-h" value="0"></div>'+
         '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
       '</div>';
     rows.appendChild(card);
-    // Paketnummern: viele Scan-Felder untereinander. Scan+Enter springt zum naechsten Feld;
-    // die Kartonanzahl folgt automatisch der Zahl gefuellter Felder. Ein Blinker, viele Pakete.
+    // Paketnummern: die ANZAHL der Scan-Felder folgt der Zahl im Feld "Pakete".
+    // Tippst du 11, erscheinen sofort 11 Felder (kein Zählen/Nachklicken). Scan+Enter springt zum nächsten.
     var pakWrap=card.querySelector('.we-pakscan'), pakH=card.querySelector('.we-pak-h'),
         pkt=card.querySelector('.we-pakete');
     function pakSync(){
+      if(!pakH) return;
       var vals=[].map.call(pakWrap.querySelectorAll('.we-pak'), function(i){return i.value.trim();})
                  .filter(function(v){return v!=='';});
-      if(pakH) pakH.value=vals.join('\n');
-      if(pkt && vals.length>0) pkt.value=vals.length;
-    }
-    function pakAdd(fokus){
-      var i=document.createElement('input');
-      i.type='text'; i.className='we-pak lg-code'; i.autocomplete='off'; i.placeholder='Paket scannen + Enter';
-      pakWrap.appendChild(i); wirePak(i); if(fokus) i.focus();
-      return i;
+      pakH.value=vals.join('\n');   // nur die Nummern sammeln; die Anzahl steuert "Pakete"
     }
     function wirePak(inp){
       inp.addEventListener('input', pakSync);
       inp.addEventListener('keydown', function(e){
-        if(e.key==='Enter'){
-          e.preventDefault(); pakSync();
-          if(inp.value.trim()!==''){
-            var next=inp.nextElementSibling;
-            if(!next || !next.classList.contains('we-pak')) next=pakAdd(false);
-            next.focus();
-          }
+        if(e.key!=='Enter') return;
+        e.preventDefault(); pakSync();
+        var next=inp.nextElementSibling;
+        if(next && next.classList.contains('we-pak')){ next.focus(); return; }
+        if(inp.value.trim()!==''){                 // mehr Pakete als angegeben -> Anzahl wächst mit
+          var n=(parseInt(pkt&&pkt.value,10)||0)+1;
+          if(pkt) pkt.value=n;
+          renderPakFields(n, n-1);
         }
       });
     }
-    if(pakWrap){ [].forEach.call(pakWrap.querySelectorAll('.we-pak'), wirePak); }
-    var pakAddBtn=card.querySelector('.we-pak-add');
-    if(pakAddBtn) pakAddBtn.addEventListener('click', function(){ pakAdd(true); });
+    function renderPakFields(n, fokusIdx){
+      if(!pakWrap) return;
+      n=Math.max(1, n|0);
+      var cur=[].map.call(pakWrap.querySelectorAll('.we-pak'), function(i){return i.value;});
+      pakWrap.innerHTML='';
+      for(var k=0;k<n;k++){
+        var i=document.createElement('input');
+        i.type='text'; i.className='we-pak lg-code'; i.autocomplete='off';
+        i.placeholder='Paket '+(k+1)+' scannen + Enter';
+        if(cur[k]!==undefined) i.value=cur[k];
+        pakWrap.appendChild(i); wirePak(i);
+      }
+      pakSync();
+      if(fokusIdx!=null){ var f=pakWrap.querySelectorAll('.we-pak')[fokusIdx]; if(f) f.focus(); }
+    }
+    if(pkt) pkt.addEventListener('input', function(){ renderPakFields(parseInt(pkt.value,10)||1); });
+    renderPakFields(parseInt(pkt&&pkt.value,10)||1);
     // Artikel-Name -> item_id, Einheit, Warenart aus Treffer uebernehmen.
     var name=card.querySelector('.we-name'), hid=card.querySelector('input[name="p_item[]"]'),
         art2=card.querySelector('.we-art'), einh=card.querySelector('input[name="p_einheit[]"]');

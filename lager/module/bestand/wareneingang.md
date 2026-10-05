@@ -34,6 +34,13 @@ Eingabe mit Vorschlagsliste (datalist): bestehende wählen ODER **neuen Namen ti
 `erp_lieferant_finden_oder_anlegen()` gefunden (exakt/fuzzy) oder **neu angelegt** (mit Lieferantennummer).
 **Sendungs-/Paketnummer** (Tracking) wird je Charge gespeichert (`lg_tracking_set`).
 
+**Paketnummern je Position** (`p_paketnummern[]`): Die **Anzahl der Scan-Felder folgt dem Feld „Pakete"** –
+tippt man z. B. 11, erscheinen sofort 11 nummerierte Felder (Paket 1…11), kein „+ weiteres Paket"-Klicken,
+kein Zählen. Vorhandene Scans bleiben beim Ändern der Anzahl erhalten; Scan+Enter springt ins nächste Feld,
+und ein Scan im letzten Feld lässt die Paketzahl mitwachsen. Die gefüllten Nummern landen zeilenweise im
+versteckten `p_paketnummern[]`; beim Buchen gilt `pakete = max(Pakete-Zahl, Anzahl Nummern)` und die Nummern
+werden je Charge als Tracking gespeichert.
+
 **Status je Position** über den **Freigegeben-Haken** (`p_frei[]`): angehakt (Standard) = `frei`,
 nicht angehakt = `quarantaene`. So lassen sich in einer Lieferung Produkte mischen, ohne getrennt
 einzubuchen. Wird an `erp_wareneingang_buchen(..., $status)` übergeben. „Gesperrt" gibt es hier nicht –
