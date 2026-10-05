@@ -128,7 +128,8 @@ function bx_table(array $cols, array $rows, array $opts = []): void {
     echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr>';
     foreach ($cols as $key => $c) {
         $numcls = !empty($c['num']) ? ' class="bx-num"' : '';
-        echo '<th' . $numcls . '>';
+        $thsty  = !empty($c['th']) ? ' style="' . h($c['th']) . '"' : '';   // optionale Spaltenbreite/-stil
+        echo '<th' . $numcls . $thsty . '>';
         if (!empty($c['sort']) && $baseUrl !== '') {
             $ndir = ($sort === $key && $dir === 'asc') ? 'desc' : 'asc';
             $sep = strpos($baseUrl, '?') === false ? '?' : '&';
