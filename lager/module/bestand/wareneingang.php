@@ -545,6 +545,12 @@ if ($gebucht):
       pflicht(card);
     });
     toggleRez();
+    // Aus einer ankommenden Lieferung abgeleitete Rezeptur direkt als "Fertigware/Bulk" vorauswählen.
+    if(p.rezeptur_name && art2){
+      art2.value='fertig'; toggleRez();
+      if(rez){ rez.value=p.rezeptur_name; pickRez(); }
+      pflicht(card);
+    }
     card.querySelector('.we-del').addEventListener('click',function(){card.remove(); if(!rows.children.length)addRow();});
     // Aufteilen-Haken je Position -> in das versteckte Feld schreiben (Index bleibt so ausgerichtet).
     var cb=card.querySelector('.we-split'), cbh=card.querySelector('.we-split-h');

@@ -555,18 +555,59 @@ function erp_lieferung_positionen(int $id): array {
     if (!$b) return ['ok' => false];
     $pos = [];
     if (tabelle_da('bestellung_position')) {
-        foreach (all("SELECT bp.item_id, bp.menge, bp.einheit,
-                             COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie
-                      FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
-                      WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id", [$id]) as $p) {
+        $sel = "SELECT bp.item_id, bp.auftrag_id, bp.menge, bp.einheit,
+                       COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie
+                FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
+                WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id";
+        foreach (all($sel, [$id]) as $p) {
             if (trim((string)($p['name'] ?? '')) === '') continue;
-            $pos[] = ['name' => (string)$p['name'], 'menge' => (float)$p['menge'],
-                      'einheit' => erp_einheit_norm((string)($p['einheit'] ?? '')),
-                      'charge_nr' => '', 'mhd' => '', 'warenart' => (string)($p['kategorie'] ?? '')];
+            // Rezeptur der Position ableiten -> beim Einbuchen direkt als "Fertigware/Bulk" vorauswählen.
+            $rz = erp_rezeptur_zu_position((int)($p['item_id'] ?? 0), (int)($p['auftrag_id'] ?? 0), (string)$p['name']);
+            $pos[] = [
+                'name'          => (string)$p['name'],
+                'menge'         => (float)$p['menge'],
+                'einheit'       => erp_einheit_norm((string)($p['einheit'] ?? '')),
+                'charge_nr'     => '', 'mhd' => '',
+                'warenart'      => $rz['rezeptur_id'] ? 'fertig' : (string)($p['kategorie'] ?? ''),
+                'rezeptur_id'   => $rz['rezeptur_id'],
+                'rezeptur_name' => $rz['rezeptur_name'],
+                // bei Rezeptur-Treffer: das koppelbare Bulk-Item schon mitgeben
+                'item_id'       => $rz['rezeptur_id'] ? $rz['bulk_item_id'] : 0,
+                'item_name'     => $rz['rezeptur_id'] ? $rz['bulk_item_name'] : '',
+            ];
         }
     }
     return ['ok' => true, 'lieferant' => (string)$b['lieferant'], 'lieferant_id' => (int)$b['lieferant_id'],
             'nummer' => (string)$b['nummer'], 'positionen' => $pos];
+}
+
+// Rezeptur zu einer ankommenden Position bestimmen (read-only): 1) über das bestellte Bulk-Item,
+// 2) über den Auftrag -> Produkt -> Rezeptur, 3) über exakten Rezepturnamen. Liefert zusätzlich das
+// koppelbare Bulk-Item der Rezeptur (für die Vorauswahl beim Wareneingang).
+function erp_rezeptur_zu_position(int $item_id, int $auftrag_id, string $name): array {
+    $leer = ['rezeptur_id' => 0, 'rezeptur_name' => '', 'bulk_item_id' => 0, 'bulk_item_name' => ''];
+    if (!tabelle_da('rezeptur') || !tabelle_da('item')) return $leer;
+    $rid = 0;
+    if ($item_id > 0) {
+        $rid = (int) scalar("SELECT rezeptur_id FROM item WHERE id=? AND kategorie='fertig' AND rezeptur_id IS NOT NULL", [$item_id]);
+    }
+    if ($rid <= 0 && $auftrag_id > 0 && tabelle_da('auftrag') && tabelle_da('produkt')) {
+        $rid = (int) scalar("SELECT p.rezeptur_id FROM auftrag a JOIN produkt p ON p.id=a.produkt_id
+                             WHERE a.id=? AND p.rezeptur_id IS NOT NULL", [$auftrag_id]);
+    }
+    if ($rid <= 0) {
+        $n = trim($name);
+        if ($n !== '') $rid = (int) scalar("SELECT id FROM rezeptur WHERE LOWER(TRIM(name))=LOWER(TRIM(?)) ORDER BY id LIMIT 1", [$n]);
+    }
+    if ($rid <= 0) return $leer;
+    $rz = one("SELECT name FROM rezeptur WHERE id=?", [$rid]);
+    $bi = one("SELECT id, name FROM item WHERE rezeptur_id=? AND kategorie='fertig' ORDER BY id LIMIT 1", [$rid]);
+    return [
+        'rezeptur_id'    => $rid,
+        'rezeptur_name'  => (string)($rz['name'] ?? ''),
+        'bulk_item_id'   => (int)($bi['id'] ?? 0),
+        'bulk_item_name' => (string)($bi['name'] ?? ''),
+    ];
 }
 
 // Rezepturnummer (RZ-...) einer Charge – über Artikel->Produkt->Rezeptur, sonst Auftrag->Produkt->Rezeptur.
@@ -853,6 +894,18 @@ function erp_warenart_regeln(string $kategorie, string $form = ''): array {
 // Rueckgabe reichert die Position an: item_id (0 = neu), item_name, kategorie, einheit, form,
 // kandidaten[] (fuer die Auswahl), regeln[] (Pflichtfelder der erkannten/vermuteten Warenart).
 function erp_position_zuordnen(array $pos): array {
+    // Bereits einer Rezeptur zugeordnet (aus erp_lieferung_positionen) -> als "Fertigware/Bulk"
+    // mit koppelbarem Bulk-Item übernehmen, Namenssuche überspringen.
+    if (!empty($pos['rezeptur_id'])) {
+        $pos['item_id']    = (int)($pos['item_id'] ?? 0);
+        $pos['item_name']  = (string)($pos['item_name'] ?? $pos['name'] ?? '');
+        $pos['kategorie']  = 'fertig';
+        $pos['form']       = (string)($pos['form'] ?? '');
+        $pos['einheit']    = erp_einheit_norm((string)($pos['einheit'] ?? ''));
+        $pos['kandidaten'] = [];
+        $pos['regeln']     = erp_warenart_regeln('fertig', '');
+        return $pos;
+    }
     $kandidaten = erp_item_suchen((string)($pos['name'] ?? ''));
     $treffer = $kandidaten[0] ?? null;
     // Als sichere Zuordnung nur werten, wenn der Name exakt passt (sonst nur Vorschlag).
