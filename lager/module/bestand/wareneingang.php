@@ -143,6 +143,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             : erp_wareneingang_buchen($item_id, $menge, $charge, $mhd ?: null, $lief, $notiz, $statusP, $einheit);
         if (!$cid) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Buchen fehlgeschlagen.'; continue; }
 
+        // Charge mit dem Auftrag verknüpfen (nur Lager 1) -> Produktion erkennt „Ware da" UND die
+        // Kunden-Statusleiste springt auf „Rohstoff angekommen". Quelle: die gewählte Lieferung.
+        $pAuftragId = (int)($_POST['p_auftrag_id'][$i] ?? 0);
+        if ($ziel !== 'l2' && $pAuftragId > 0 && function_exists('erp_charge_auftrag_setzen'))
+            erp_charge_auftrag_setzen((int)$cid, $pAuftragId);
+
         lg_pakete_set((int)$cid, $pakete);
         $aufteilenPos = (string)($_POST['p_aufteilen'][$i] ?? '0') === '1';
         lg_aufteilen_set((int)$cid, $aufteilenPos && $pakete > 1);
@@ -466,7 +472,7 @@ if ($gebucht):
     card.innerHTML=
       '<button type="button" class="btn btn-ghost btn-sm we-del" title="Zeile entfernen">×</button>'+
       '<div class="we-row">'+
-        '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" title="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><div class="we-aehnlich"></div></div>'+
+        '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" title="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><input type="hidden" name="p_auftrag_id[]" value="'+(p.auftrag_id||0)+'"><div class="we-aehnlich"></div></div>'+
         '<div class="bx-field f-warenart"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
         '<div class="bx-field f-rez" style="display:none"><label>Rezeptur <span class="muted">(Bulk)</span></label><input type="text" class="we-rez" name="p_rezeptur_name[]" list="weRezList" autocomplete="off" value="" placeholder="Rezeptur wählen"><input type="hidden" name="p_rezeptur[]" class="we-rez-id" value="0"><div class="we-rez-info muted"></div></div>'+
         '<div class="bx-field f-menge"><label>Menge</label><input type="text" name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+

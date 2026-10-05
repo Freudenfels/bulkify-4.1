@@ -553,6 +553,14 @@ function erp_bestellung_angekommen(int $bestellung_id): void {
     q("UPDATE bestellung SET angekommen_am=CURDATE() WHERE id=? AND angekommen_am IS NULL", [$bestellung_id]);
 }
 
+// Eine frisch eingebuchte Charge mit dem Auftrag verknüpfen. Das ist der EINE Schlüssel, an dem
+// sowohl die Produktion „Ware da" erkennt ALS AUCH die Kunden-Statusleiste „Rohstoff angekommen"
+// (mit Datum) auslöst – sonst sieht der Kunde bei Zukauf/Fremdproduktion nichts.
+function erp_charge_auftrag_setzen(int $charge_id, int $auftrag_id): void {
+    if ($charge_id <= 0 || $auftrag_id <= 0 || !tabelle_da('charge')) return;
+    q("UPDATE charge SET auftrag_id=? WHERE id=? AND auftrag_id IS NULL", [$auftrag_id, $charge_id]);
+}
+
 // Positionen einer bestimmten erwarteten Lieferung (Bestell-ID) – für "aus Liste wählen".
 function erp_lieferung_positionen(int $id): array {
     if ($id <= 0 || !tabelle_da('bestellung')) return ['ok' => false];
@@ -578,6 +586,7 @@ function erp_lieferung_positionen(int $id): array {
                 'warenart'      => $rz['rezeptur_id'] ? 'fertig' : (string)($p['kategorie'] ?? ''),
                 'rezeptur_id'   => $rz['rezeptur_id'],
                 'rezeptur_name' => $rz['rezeptur_name'],
+                'auftrag_id'    => (int)($p['auftrag_id'] ?? 0),   // Charge beim Buchen mit dem Auftrag verknüpfen
                 // bei Rezeptur-Treffer: das koppelbare Bulk-Item schon mitgeben
                 'item_id'       => $rz['rezeptur_id'] ? $rz['bulk_item_id'] : 0,
                 'item_name'     => $rz['rezeptur_id'] ? $rz['bulk_item_name'] : '',
