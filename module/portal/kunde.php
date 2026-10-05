@@ -1091,6 +1091,7 @@ $detailParent['bestellung'] = 'bestellungen';   // Bestell-Detail (eigene Bestel
 $detailParent['produktionsbericht'] = 'bestellungen';   // freigegebener Produktionsbericht zur Bestellung (kein Menuepunkt)
 $detailParent['suche'] = 'start';   // globale Suche (kein Menuepunkt, Suchfeld ist ueberall oben)
 $detailParent['menge_aendern'] = 'meine_anfragen';   // Menge einer Produktanfrage aendern (kein Menuepunkt)
+$detailParent['anfrage_ansehen'] = 'meine_anfragen';   // eigene Rezepturanfrage read-only ansehen (kein Menuepunkt)
 if (!empty($k['portal_rezeptur_ableiten'])) $detailParent['rezeptur_ableiten'] = 'rezepturen';   // Katalog weiterentwickeln (kein Menuepunkt)
 $detailParent['agb'] = 'start';   // AGB: kein Menuepunkt, aber eine echte Seite (Fussleiste + Bestaetigungsdialog)
 $view = $_GET['v'] ?? 'start';
@@ -1343,6 +1344,8 @@ foreach ($anfragen as $a) {
     $akt = null;
     if (($a['rezeptur_status'] ?? '') === 'vorschlag' && $a['rezeptur_id']) $akt = ['label'=>'Prüfen & entscheiden','href'=>$portalLink('rezeptur').'&rid='.(int)$a['rezeptur_id'],'primary'=>true];
     elseif (($a['status'] ?? '') === 'neu') $akt = ['label'=>'Bearbeiten','href'=>$portalLink('anfrage').'&edit='.(int)$a['id'],'primary'=>false];
+    // Immer ansehbar: auch „in Prüfung"/abgelehnt – der Kunde muss sehen, was er angefragt hat.
+    if (!$akt) $akt = ['label'=>'Ansehen','href'=>$portalLink('anfrage_ansehen').'&aid='.(int)$a['id'],'primary'=>false];
     // Stufe (fuer Zaehlung/Reiter): wartet = Vorschlag zum Pruefen · erledigt = Rezeptur angelegt (eingefroren) ·
     // abgelehnt = abgelehnt/ueberarbeiten · offen = in Pruefung (neu/in Bearbeitung).
     $rs = $a['rezeptur_status'] ?? ''; $as2 = $a['status'] ?? '';
@@ -1768,6 +1771,39 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
 
   <div class="bx-panel"><div class="muted">Alle Ihre Anfragen und deren Stand finden Sie unter <a href="<?= $portalLink('meine_anfragen') ?>">Meine Anfragen</a>.</div></div>
+
+<?php elseif ($view === 'anfrage_ansehen'):
+    $aid = (int)($_GET['aid'] ?? 0);
+    $an  = $aid ? one("SELECT * FROM rezeptur_anfrage WHERE id=? AND kunde_id=?", [$aid, $kid]) : null;
+    if (!$an): ?>
+      <div class="bx-panel">Anfrage nicht gefunden. <a href="<?= $portalLink('meine_anfragen') ?>">Zurück zu Meine Anfragen</a></div>
+    <?php else:
+      $wunsch  = all("SELECT bezeichnung, wunsch_menge, einheit FROM rezeptur_anfrage_wunsch WHERE anfrage_id=? ORDER BY sort,id", [$aid]);
+      $formLbl = $DFORM_P[$an['darreichungsform']] ?? ($an['darreichungsform'] ?? '');
+    ?>
+  <h1 style="margin-bottom:2px"><?= h($an['produktname'] ?: 'Rezepturanfrage') ?></h1>
+  <p class="muted" style="margin-top:0">Anfrage <?= h($an['nummer']) ?> · <?= $anfStatus($an) ?></p>
+  <div class="bx-panel">
+    <div style="display:flex;flex-wrap:wrap;gap:24px">
+      <div><div class="muted" style="font-size:13px">Wunsch-Produktname</div><div><?= h($an['produktname'] ?: '–') ?></div></div>
+      <div><div class="muted" style="font-size:13px">Darreichungsform</div><div><?= h($formLbl ?: '–') ?></div></div>
+    </div>
+    <?php if (trim((string)($an['notiz'] ?? '')) !== ''): ?>
+      <div style="margin-top:14px"><div class="muted" style="font-size:13px">Ihre Notiz / Wünsche</div><div style="white-space:pre-wrap"><?= h($an['notiz']) ?></div></div>
+    <?php endif; ?>
+  </div>
+  <?php if ($wunsch): ?>
+  <h2 style="font-size:16px;margin:18px 0 6px">Gewünschte Inhaltsstoffe</h2>
+  <div class="bx-panel" style="padding:0;overflow:hidden">
+    <table class="bx-table" style="width:100%"><thead><tr><th>Inhaltsstoff</th><th>Wunschmenge</th></tr></thead><tbody>
+      <?php foreach ($wunsch as $w): ?>
+        <tr><td><?= h($w['bezeichnung']) ?></td><td><?= ($w['wunsch_menge'] !== null && $w['wunsch_menge'] !== '') ? h($w['wunsch_menge']) . ' ' . h($w['einheit'] ?: '') : '<span class="muted">–</span>' ?></td></tr>
+      <?php endforeach; ?>
+    </tbody></table>
+  </div>
+  <?php endif; ?>
+  <p style="margin-top:16px"><a class="btn btn-ghost" href="<?= $portalLink('meine_anfragen') ?>">Zurück zu Meine Anfragen</a></p>
+    <?php endif; ?>
 
 <?php elseif ($view === 'meine_anfragen'): ?>
   <h1 style="margin-bottom:4px">Meine Anfragen</h1>
