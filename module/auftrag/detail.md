@@ -39,3 +39,6 @@ neu zu senden. Blockiert bei bezahlter Rechnung oder bereits versendetem Auftrag
 **Wareneingänge zu diesem Auftrag:** Liste der direkt gebuchten Chargen (`charge.auftrag_id`) mit Status „angekommen · frei/Quarantäne" – zeigt zugekaufte Fremdproduktions-Bulkware auch **ohne** System-Bestellung an.
 
 Panel „Laboranalyse / Labortest" (zeigt ggf. die Fertigware-Charge). Admin lädt hier den Labortest/das CoA für **genau diese Bestellung** hoch → `dokument` (`objekt_typ='auftrag'`, `typ='analyse'`, optional `dok_datum`). „im Kundenportal sichtbar" = `kunde_sichtbar=1` → erscheint im Kunden-Reiter „Labortest". Aktionen: `analyse_upload`, `analyse_toggle`, `analyse_del`. Produkt-weite Analysen laufen über `?p=laboranalysen`.
+
+## Externer Labortest – Zwischenstand (2026-10-05)
+Das Labortest-Panel zeigt jetzt drei Stufen: freigegebener Bericht = „abgeschlossen"; sonst, wenn `auftrag.labor_versendet_am` gesetzt (von der Produktion über die Naht geschrieben) = „Probe beim Labor · versendet am …"; sonst „läuft". Quelle: `auftrag_labortest_status()` (Feld `versendet_am`). Nur für Kunden mit `kunden.labortest_extern=1`. Dashboard liest nur, schreibt nicht.

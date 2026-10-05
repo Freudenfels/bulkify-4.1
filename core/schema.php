@@ -1265,6 +1265,9 @@ function init_schema(): void {
     // Ohne Freigabe: Etiketten nicht bestellbar + Produktion nicht machbar (harte Sperre).
     // Admin-Override „Rohstoff/Bulk angekommen" (für Alt-Aufträge / Zukauf ohne verknüpfte Charge).
     ensure_column('auftrag', 'rohstoff_angekommen_am', "DATETIME NULL");
+    // Externer Labortest: Datum, an dem die Produktion die Probe ans Labor versendet hat (Zwischenstand).
+    // Geschrieben wird es von der Produktion über die Naht; das Dashboard liest/zeigt es nur.
+    ensure_column('auftrag', 'labor_versendet_am', "DATE NULL");
     ensure_column('auftrag', 'etikett_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('auftrag', 'etikett_freigabe_am', "DATETIME NULL");
     ensure_column('auftrag', 'etikett_freigabe_von', "VARCHAR(190) NULL");
@@ -3720,7 +3723,7 @@ function kunde_will_labortest(int $kunde_id): bool {
 }
 // Status des externen Labortests für EINEN Auftrag. Rückgabe: ['status'=>'laeuft'|'abgeschlossen', 'datum'=>?string, 'dok_id'=>?int].
 function auftrag_labortest_status(int $auftrag_id, ?int $produkt_id = null): array {
-    if ($auftrag_id <= 0) return ['status' => 'laeuft', 'datum' => null, 'dok_id' => null];
+    if ($auftrag_id <= 0) return ['status' => 'laeuft', 'datum' => null, 'dok_id' => null, 'versendet_am' => null];
     if ($produkt_id === null) $produkt_id = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$auftrag_id]);
     $pid = (int)$produkt_id;
     // Laborbericht zu genau diesem Auftrag ODER (falls vorhanden) zum Produkt des Auftrags, nur wenn freigegeben.
@@ -3728,8 +3731,10 @@ function auftrag_labortest_status(int $auftrag_id, ?int $produkt_id = null): arr
               WHERE typ='analyse' AND kunde_sichtbar=1
                 AND ((objekt_typ='auftrag' AND objekt_id=?) OR (objekt_typ='produkt' AND objekt_id=? AND ?>0))
               ORDER BY datum DESC, id DESC LIMIT 1", [$auftrag_id, $pid, $pid]);
-    if ($d) return ['status' => 'abgeschlossen', 'datum' => $d['datum'], 'dok_id' => (int)$d['id']];
-    return ['status' => 'laeuft', 'datum' => null, 'dok_id' => null];
+    if ($d) return ['status' => 'abgeschlossen', 'datum' => $d['datum'], 'dok_id' => (int)$d['id'], 'versendet_am' => null];
+    // Zwischenstand: Probe ist beim Labor (von der Produktion versendet), Bericht liegt noch nicht vor.
+    $vers = scalar("SELECT labor_versendet_am FROM auftrag WHERE id=?", [$auftrag_id]) ?: null;
+    return ['status' => 'laeuft', 'datum' => null, 'dok_id' => null, 'versendet_am' => $vers];
 }
 // Parallel laufende Zusatz-Schritte eines Auftrags (Energetisierung, externer Labortest) – nur für
 // freigeschaltete Kunden. Laufen NEBEN dem Hauptablauf (können früher beginnen / parallel zur Prüfung),
@@ -3756,7 +3761,7 @@ function kunde_auftrag_parallel(array $a): array {
                   'status' => $lt['status'],
                   'sub'    => $lt['status'] === 'abgeschlossen'
                                 ? ($lt['datum'] ? 'Bericht vom ' . date('d.m.Y', strtotime((string)$lt['datum'])) : 'Bericht liegt vor')
-                                : 'Probe beim Drittlabor',
+                                : (!empty($lt['versendet_am']) ? 'Probe beim Labor · versendet am ' . date('d.m.Y', strtotime((string)$lt['versendet_am'])) : 'Probe beim Drittlabor'),
                   'dok_id' => $lt['dok_id']];
     }
     return $out;

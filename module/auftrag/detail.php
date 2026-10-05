@@ -489,6 +489,8 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
   <?php if ($lt['status'] === 'abgeschlossen'): ?>
     <div style="margin-bottom:10px"><?= bx_badge('abgeschlossen', 'ok') ?> <span class="muted"><?= $lt['datum'] ? 'Bericht vom ' . h(date('d.m.Y', strtotime((string)$lt['datum']))) : 'Bericht liegt vor' ?></span>
       <?php if (!empty($lt['dok_id'])): ?> · <a href="?p=dokument&id=<?= (int)$lt['dok_id'] ?>" target="_blank">Bericht ansehen</a><?php endif; ?></div>
+  <?php elseif (!empty($lt['versendet_am'])): ?>
+    <div style="margin-bottom:10px"><?= bx_badge('Probe beim Labor', 'warn') ?> <span class="muted">versendet am <?= h(date('d.m.Y', strtotime((string)$lt['versendet_am']))) ?> – wird automatisch „abgeschlossen", sobald ein freigegebener Laborbericht vorliegt.</span></div>
   <?php else: ?>
     <div style="margin-bottom:10px"><?= bx_badge('läuft', 'warn') ?> <span class="muted">Probe beim Drittlabor – wird automatisch „abgeschlossen", sobald ein freigegebener Laborbericht vorliegt.</span></div>
   <?php endif; ?>
