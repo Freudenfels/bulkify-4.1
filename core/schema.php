@@ -708,6 +708,15 @@ function init_schema(): void {
     ensure_column('produktionsauftrag', 'mitarbeiter_id', "INT NULL");
     ensure_column('produktionsauftrag', 'bedarf_gemeldet', "DATETIME NULL");      // wann der Bedarf ans Einkauf gemeldet wurde
     ensure_column('produktionsauftrag', 'rezeptur_id', "INT NULL");               // Bulk-Produktion (nur Kapseln, ohne Verpackung): PA haengt an der Rezeptur statt am Produkt (produkt_id NULL)
+    // PreProduktionsauftrag (Vor-Produktion): Kundenaufträge entstehen künftig im Status 'vorbereitung'.
+    // Erst wenn der Admin im Dashboard freigibt (Glas/Eigen-Fremd/Etikett/Kartons/Rohstoffe/Gläser geprüft),
+    // wird daraus ein echter, startbarer Produktionsauftrag ('offen'). Im Produktionsmodul ist der Vor-PA
+    // sichtbar, aber GESPERRT (nicht startbar). Die Freigabe ist die harte Weiche – der Admin kann IMMER freigeben.
+    ensure_column('produktionsauftrag', 'freigegeben_am', "DATETIME NULL");       // Vor-Produktion -> Produktion freigegeben am (UTC)
+    ensure_column('produktionsauftrag', 'freigegeben_von', "VARCHAR(190) NULL");  // wer freigegeben hat
+    // Geplante Produktionsmenge in EINHEITEN/Stück (Kapseln). NULL = genau der Auftragsbedarf. Höher = Überproduktion;
+    // der Überschuss wird als Bestand auf den Rezeptur-Bulk gebucht und beim nächsten Auftrag gleicher Rezeptur verrechnet.
+    ensure_column('produktionsauftrag', 'menge_produktion', "INT NULL");
 
     // produktion_schritt: die Stationen/Gates eines Produktionsauftrags, der Reihe nach abzuarbeiten.
     $pdo->exec("CREATE TABLE IF NOT EXISTS produktion_schritt (
@@ -1770,6 +1779,26 @@ function init_schema(): void {
     if (table_exists('produktionsauftrag') && meta_get('pa_art_festgelegt_backfill', '') !== '1') {
         try { q("UPDATE produktionsauftrag SET art_festgelegt_am=COALESCE(angelegt, NOW()) WHERE art_festgelegt_am IS NULL"); } catch (\Throwable $e) {}
         meta_set('pa_art_festgelegt_backfill', '1');
+    }
+
+    // EINMALIG (PreProduktionsauftrag): noch nicht freigegebene Kunden-Produktionsaufträge in die neue
+    // Vor-Produktion heben (Status 'vorbereitung') und für offene Aufträge OHNE Produktionsauftrag einen
+    // Vor-PA anlegen, damit die Vor-Produktions-Liste sofort gefüllt ist. Alles additiv, try/catch, Kill-Schalter.
+    if (table_exists('produktionsauftrag') && meta_get('pa_vorbereitung_backfill', '') !== '1'
+        && meta_get('pa_vorbereitung_backfill_off', '') !== '1') {
+        try {
+            // 1) Unentschiedene (noch nicht in die Produktion freigegebene) Kunden-PAs -> Vorbereitung.
+            q("UPDATE produktionsauftrag SET status='vorbereitung'
+               WHERE status='offen' AND auftrag_id IS NOT NULL AND art_festgelegt_am IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM produktion_schritt s WHERE s.pa_id=produktionsauftrag.id AND s.erledigt=1)");
+            // 2) Offene Aufträge mit Produkt, aber ohne jeden Produktionsauftrag -> Vor-PA anlegen (gedeckelt).
+            $ohne = all("SELECT a.id FROM auftrag a
+                         WHERE a.status='offen' AND a.produkt_id IS NOT NULL AND a.produkt_id>0
+                           AND NOT EXISTS (SELECT 1 FROM produktionsauftrag pa WHERE pa.auftrag_id=a.id)
+                         ORDER BY a.id DESC LIMIT 500");
+            foreach ($ohne as $__a) produktionsauftrag_aus_auftrag((int)$__a['id']);   // legt im Status 'vorbereitung' an
+        } catch (\Throwable $e) { /* Backfill darf den Schema-Build nie blockieren */ }
+        meta_set('pa_vorbereitung_backfill', '1');
     }
 
     // Bedarf-Cache nach jedem Deploy einmal invalidieren – so greifen Änderungen an der Bedarfsrechnung
@@ -4957,6 +4986,102 @@ function produktionsauftrag_art_setzen(int $pa_id, string $art): bool {
     return true;
 }
 
+// ===== PreProduktionsauftrag / Vor-Produktion =====================================================
+// Checkliste eines Vor-Produktionsauftrags: ist alles da, um die Produktion durchzuführen?
+// Rückgabe: ['pa'=>…, 'auftrag_id'=>…, 'einheiten_bedarf'=>…, 'checks'=>[['key','label','ok','wert','kritisch'], …],
+//            'fehlend'=>[…Material…], 'bereit'=>bool]. „bereit" ist nur die Ampel – der Admin kann IMMER freigeben.
+function pa_vorbereitung_checks(int $pa_id): array {
+    $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['pa'=>null, 'checks'=>[], 'fehlend'=>[], 'bereit'=>false, 'einheiten_bedarf'=>0];
+    $aid = (int)$pa['auftrag_id'];
+    $pid = (int)$pa['produkt_id'];
+    $slots = $pid ? one("SELECT verpackung_id, etikett_id FROM produkt WHERE id=?", [$pid]) : null;
+    $af    = $aid ? one("SELECT verpackung_id FROM auftrag WHERE id=?", [$aid]) : null;
+    $verpEff = !empty($af['verpackung_id']) ? (int)$af['verpackung_id'] : (int)($slots['verpackung_id'] ?? 0);
+
+    $checks = [];
+    // 1) Glas/Behälter gewählt (Konfiguration). Ohne Behälter kann weder Einkauf noch Produktion rechnen.
+    $checks[] = ['key'=>'glas', 'label'=>'Verpackung / Glas gewählt', 'kritisch'=>true,
+                 'ok'=>$verpEff > 0, 'wert'=>$verpEff > 0 ? (string) scalar("SELECT name FROM item WHERE id=?", [$verpEff]) : 'nicht gewählt'];
+    // 2) Etikett freigegeben (Kunde/Team) – nur wenn das Produkt ein Etikett braucht.
+    if (function_exists('auftrag_braucht_etikett') && $aid && auftrag_braucht_etikett($aid)) {
+        $frei = function_exists('etikett_freigegeben') && etikett_freigegeben($aid);
+        $checks[] = ['key'=>'etikett', 'label'=>'Etikett freigegeben', 'kritisch'=>true,
+                     'ok'=>(bool)$frei, 'wert'=>$frei ? 'freigegeben' : 'noch nicht freigegeben'];
+    }
+    // 3) Material: Rohstoffe/Bulk angekommen, genug Gläser, Kartons … – je Rolle aus der Stückliste.
+    $einh = max(0, (int) produktion_stueck_je_packung($pa)) * max(0, (int)$pa['menge']);
+    $fehlend = []; $proRolle = [];
+    foreach (auftrag_bedarf($pa_id) as $r) {
+        $rolle = (string)$r['rolle'];
+        $fehlt = (float)$r['fehlt'];
+        if (!isset($proRolle[$rolle])) $proRolle[$rolle] = 0.0;
+        $proRolle[$rolle] += $fehlt;
+        if ($fehlt > 1e-6) $fehlend[] = $r;
+    }
+    // Rollen zu sprechenden Vor-Produktions-Checks bündeln.
+    $rollenMap = [
+        'Material angekommen (Rohstoffe/Bulk)' => ['Rohstoff','Fertigware','Leerkapsel'],
+        'Gläser / Verpackung vorrätig'         => ['Verpackung','Deckel'],
+        'Kartons vorrätig'                     => ['Karton'],
+        'Etikett vorrätig'                     => ['Etikett'],
+        'Beipackzettel vorrätig'               => ['Beipackzettel'],
+    ];
+    foreach ($rollenMap as $label => $rollen) {
+        $betroffen = array_intersect_key($proRolle, array_flip($rollen));
+        if (!$betroffen) continue;   // diese Rolle kommt beim Auftrag gar nicht vor
+        $fehltSumme = array_sum($betroffen);
+        $checks[] = ['key'=>'mat_'.md5($label), 'label'=>$label, 'kritisch'=>false,
+                     'ok'=>$fehltSumme <= 1e-6, 'wert'=>$fehltSumme <= 1e-6 ? 'vollständig da'
+                            : ('fehlt noch ' . (fmod($fehltSumme, 1) == 0 ? (string)(int)$fehltSumme : number_format($fehltSumme, 2, ',', '.')))];
+    }
+    $bereit = true;
+    foreach ($checks as $c) if (!$c['ok']) { $bereit = false; break; }
+    return ['pa'=>$pa, 'auftrag_id'=>$aid, 'einheiten_bedarf'=>$einh, 'checks'=>$checks, 'fehlend'=>$fehlend, 'bereit'=>$bereit];
+}
+
+// Alle Vor-Produktionsaufträge (Status 'vorbereitung') mit Eckdaten für die Dashboard-Liste.
+function vorbereitung_liste(): array {
+    if (!table_exists('produktionsauftrag')) return [];
+    return all("SELECT pa.id AS pa_id, pa.nummer, pa.auftrag_id, pa.produktionsart, pa.menge, pa.prio,
+                       a.nummer AS auftrag_nr, a.angelegt AS auftrag_eingang,
+                       COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, rz.name) AS produkt,
+                       k.firma AS kunde
+                FROM produktionsauftrag pa
+                LEFT JOIN auftrag a   ON a.id=pa.auftrag_id
+                LEFT JOIN produkt p   ON p.id=pa.produkt_id
+                LEFT JOIN rezeptur rz ON rz.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
+                LEFT JOIN kunden k    ON k.id=pa.kunde_id
+                WHERE pa.status='vorbereitung'
+                ORDER BY COALESCE(pa.prio,2), pa.id DESC");
+}
+
+// Vor-Produktionsauftrag ZUR PRODUKTION FREIGEBEN. Harte Weiche: danach ist es ein echter, startbarer PA.
+// Der Admin kann IMMER freigeben (auch bei roten Checks – die sind dann nur Warnung). Setzt Eigen/Fremd
+// (inkl. passender Schritte), optional eine höhere Produktionsmenge (Überschuss -> Rezeptur-Bulk) und
+// kippt den Status auf 'offen'. Rückgabe: ['ok'=>bool, 'fehler'=>?string].
+function produktionsauftrag_freigeben(int $pa_id, string $art = 'fremd', ?int $menge_produktion = null, string $wer = ''): array {
+    $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['ok'=>false, 'fehler'=>'Produktionsauftrag nicht gefunden.'];
+    if (($pa['status'] ?? '') !== 'vorbereitung') return ['ok'=>true, 'fehler'=>null];   // schon freigegeben -> idempotent
+    $art = $art === 'eigen' ? 'eigen' : 'fremd';
+    // Schritte passend zu Eigen/Fremd neu erzeugen (setzt Status intern auf 'offen'); bei vorbereitung ist nie ein Schritt erledigt.
+    produktion_schritte_regenerieren($pa_id, $art === 'fremd');
+    // Überproduktion: geplante Menge in Einheiten; nur speichern, wenn höher als der reine Auftragsbedarf.
+    $bedarfEinh = max(0, (int) produktion_stueck_je_packung($pa)) * max(0, (int)$pa['menge']);
+    $mp = ($menge_produktion !== null && $menge_produktion > $bedarfEinh) ? (int)$menge_produktion : null;
+    q("UPDATE produktionsauftrag
+       SET status='offen', produktionsart=?, art_festgelegt_am=NOW(), freigegeben_am=NOW(), freigegeben_von=?, menge_produktion=?
+       WHERE id=?", [$art, $wer !== '' ? $wer : null, $mp, $pa_id]);
+    bedarf_bump();
+    $kid = (int)($pa['kunde_id'] ?? 0);
+    if ($kid) log_aktivitaet('kunde', $kid, 'team',
+        'Produktionsauftrag ' . (string)$pa['nummer'] . ' zur Produktion freigegeben (' . $art
+        . ($mp ? ', Produktionsmenge ' . $mp . ' Einheiten' : '') . ').',
+        'auftrag', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
+    return ['ok'=>true, 'fehler'=>null];
+}
+
 // --- Bestandsreservierung (manuell) ---
 function item_reserviert_andere(int $item_id, int $auftrag_id): float {
     $ck = 'ra:' . $item_id . ':' . $auftrag_id;
@@ -5599,7 +5724,7 @@ function auftraege_ohne_festlegung(): array {
                 LEFT JOIN produkt p   ON p.id=pa.produkt_id
                 LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
                 LEFT JOIN kunden k    ON k.id=pa.kunde_id
-                WHERE pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.art_festgelegt_am IS NULL
+                WHERE pa.status='vorbereitung' AND pa.auftrag_id IS NOT NULL
                 ORDER BY pa.id DESC");
 }
 function bedarf_bulk(bool $nur_gemeldet = false): array {
@@ -5807,6 +5932,10 @@ function produktion_scan_pruefen(string $scan, ?string $kat): array {
 // wird die Fertigware eingebucht und der Auftrag auf 'erledigt' gesetzt.
 // Rückgabe: ['ok'=>bool, 'fehler'=>?('reihenfolge'|'scan'|'mangel'), 'msg'=>string, 'fertig'=>bool, 'station'=>string]
 function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan = '', bool $ohneScan = false): array {
+    // PreProduktionsauftrag: solange der Auftrag in Vorbereitung ist (noch nicht vom Admin freigegeben),
+    // kann in der Produktion kein Schritt gestartet/abgeschlossen werden. Sichtbar ja – startbar nein.
+    if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')
+        return ['ok'=>false, 'fehler'=>'vorbereitung', 'msg'=>'Dieser Auftrag ist noch in Vorbereitung und nicht zur Produktion freigegeben.', 'fertig'=>false, 'station'=>''];
     $firstOpen = one("SELECT id, station FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort LIMIT 1", [$pa_id]);
     if (!$firstOpen || (int)$firstOpen['id'] !== $schritt_id)
         return ['ok'=>false, 'fehler'=>'reihenfolge', 'msg'=>'Dieser Schritt ist gerade nicht an der Reihe.', 'fertig'=>false, 'station'=>''];
@@ -6080,7 +6209,7 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$a['produkt_id']]) ?: 'kapsel';
     // Standard = Fremdproduktion (verkürzter Weg); auf Eigenproduktion umstellbar im Produktions-Detail.
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,produktionsart,status) VALUES (?,?,?,?,?,?,?)",
-      [naechste_nummer('PR'), $aid, $a['kunde_id'], $a['produkt_id'], $menge, 'fremd', 'offen']);
+      [naechste_nummer('PR'), $aid, $a['kunde_id'], $a['produkt_id'], $menge, 'fremd', 'vorbereitung']);
     $paid = insert_id();
     foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$a['produkt_id'], (int)($a['kunde_id'] ?? 0))) as $i => $station) {
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
@@ -6801,7 +6930,7 @@ function kontingent_abruf(int $kontingent_id, int $menge): array {
       [naechste_nummer('RE'), 'rechnung', $aid, $kid, $netto, $ustP, $ust, $brutto, 'offen']);
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,produktionsart,status) VALUES (?,?,?,?,?,?,?)",
-      [naechste_nummer('PR'), $aid, $kid, $pid, $menge, 'fremd', 'offen']);
+      [naechste_nummer('PR'), $aid, $kid, $pid, $menge, 'fremd', 'vorbereitung']);
     $paid = insert_id();
     foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$pid, (int)$kid)) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
@@ -6946,7 +7075,7 @@ function auftrag_aus_positionen(int $angebot_id, ?string $gruppe = null): ?int {
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$herst['rezeptur_id']]) ?: 'kapsel';
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('PR'), $aid, $a['kunde_id'], $pid, $menge, (int)$herst['stueck'],
-       $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null, 'fremd', 'offen']);
+       $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null, 'fremd', 'vorbereitung']);
     $paid = insert_id();
     foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$pid, (int)($a['kunde_id'] ?? 0))) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
@@ -6989,7 +7118,7 @@ function auftrag_aus_zelle(int $angebot_id, int $stueck, int $verp_id, int $best
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$bestellt]) ?: 'kapsel';
     // Standard = Fremdproduktion (verkürzter Weg); auf Eigenproduktion umstellbar im Produktions-Detail.
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
-      [naechste_nummer('PR'), $aid, $a['kunde_id'], $bestellt, $menge, $stueck, $verp_id, 'fremd', 'offen']);
+      [naechste_nummer('PR'), $aid, $a['kunde_id'], $bestellt, $menge, $stueck, $verp_id, 'fremd', 'vorbereitung']);
     $paid = insert_id();
     foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$bestellt, (int)($a['kunde_id'] ?? 0))) as $i => $station) q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Angebot bestätigt (' . $stueck . ' Stück/Pkg × ' . $menge . '), Auftrag + Rechnung + Produktion erzeugt.', 'auftrag', 'auftrag', $aid);
@@ -7010,7 +7139,7 @@ function produktionsauftrag_aus_auftrag(int $auftrag_id, string $art = 'eigen'):
     $art  = $art === 'fremd' ? 'fremd' : 'eigen';
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
-      [naechste_nummer('PR'), $auftrag_id, $a['kunde_id'], $pid, (int)$a['menge'], (int)$a['stueck'], $a['verpackung_id'] ?: null, $art, 'offen']);
+      [naechste_nummer('PR'), $auftrag_id, $a['kunde_id'], $pid, (int)$a['menge'], (int)$a['stueck'], $a['verpackung_id'] ?: null, $art, 'vorbereitung']);
     $paid = (int) insert_id();
     foreach (produktionsschritte_fuer($form, $art === 'fremd', false, produktion_wege_aufloesen((int)$pid, (int)($a['kunde_id'] ?? 0))) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);

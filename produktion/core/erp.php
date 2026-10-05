@@ -46,12 +46,12 @@ function erp_produktionsauftraege(string $status = '', bool $gateAware = true): 
             LEFT JOIN rezeptur r  ON r.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
             LEFT JOIN kunden k    ON k.id=pa.kunde_id";
     $params = [];
-    // Gate: nur FESTGELEGTE Aufträge (Eigen/Fremd im Backend entschieden) gehen in die Produktion.
-    // Noch offene erscheinen hier bewusst NICHT. (Fallback unten, falls Spalte noch nicht migriert.)
-    $gate = $gateAware ? " AND pa.art_festgelegt_am IS NOT NULL" : "";
-    if ($status === 'alle')  { if ($gateAware) $sql .= " WHERE pa.art_festgelegt_am IS NOT NULL"; }
-    elseif ($status !== '')  { $sql .= " WHERE pa.status=?" . $gate; $params[] = $status; }
-    else                     { $sql .= " WHERE pa.status IN ('offen','laufend')" . $gate; }   // aktive (Dashboard-Status)
+    // PreProduktionsauftrag: Vor-PAs (Status 'vorbereitung') sind hier SICHTBAR, aber gesperrt (nicht startbar).
+    // Erst die Admin-Freigabe im Dashboard macht daraus einen startbaren Auftrag ('offen'). $gateAware bleibt
+    // als Fallback, falls der Status in einer alten DB noch nicht existiert.
+    if ($status === 'alle')  { /* alle Status */ }
+    elseif ($status !== '')  { $sql .= " WHERE pa.status=?"; $params[] = $status; }
+    else                     { $sql .= " WHERE pa.status IN ('vorbereitung','offen','laufend')"; }   // aktive + Vorbereitung
     if ($status === 'erledigt') $sql .= " ORDER BY pa.aktualisiert DESC, pa.id DESC";  // zuletzt fertig zuerst
     else                        $sql .= " ORDER BY COALESCE(pa.prio,2), (pa.geplant_am IS NULL), pa.geplant_am, pa.id DESC";
     try { return all($sql, $params); }
