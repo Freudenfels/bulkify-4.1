@@ -16,7 +16,10 @@ Antworte AUSSCHLIESSLICH mit diesem JSON, ohne Text drumherum:
   "naechster_schritt": "",  // ein Satz: was sollte der Vertrieb als Naechstes tun?
   "frist_tage": null,       // in wie vielen Tagen nachfassen? Nennt die Anfrage eine Frist, rechne sie
                             // in Tage um. Sonst null (dann wird ein Standardwert verwendet).
-  "offene_punkte": ""       // was fehlt noch / was muss geklaert werden, kurz - sonst ""
+  "offene_punkte": "",      // was fehlt noch / was muss geklaert werden, kurz - sonst ""
+  "todos": [                // konkrete Aufgaben fuer den Vertrieb aus dieser Anfrage, hoechstens 4.
+    { "titel": "", "kategorie": "" }   // kategorie eines von: rueckruf|angebot|muster|rechnung|rueckfrage|aufgabe|sonstiges
+  ]
 }
 
 Regeln:

@@ -62,6 +62,18 @@ function crm_verlauf_typen(): array {
             'treffen' => 'Treffen', 'angebot' => 'Angebot'];
 }
 
+// Kategorien fuer To-Dos. Die Wiedervorlage ist keine eigene Kategorie zum Anlegen - offene
+// Wiedervorlagen erscheinen in der To-Do-Liste unter der Kennung 'wiedervorlage' (siehe todo.php).
+function crm_todo_kategorien(): array {
+    return ['rueckruf' => 'Rückruf', 'angebot' => 'Angebot', 'muster' => 'Muster',
+            'rechnung' => 'Rechnung', 'rueckfrage' => 'Rückfrage', 'aufgabe' => 'Aufgabe',
+            'sonstiges' => 'Sonstiges'];
+}
+function crm_todo_kategorie_label(string $k): string {
+    if ($k === 'wiedervorlage') return 'Wiedervorlage';
+    return crm_todo_kategorien()[$k] ?? ucfirst($k);
+}
+
 // Farbe je Phase - fuer die Spaltenkoepfe und Karten-Badges der Pipeline. Aus dem v3-CRM uebernommen,
 // an die bulkify-Farben angelehnt. Faellt eine unbekannte Phase an, kommt ein ruhiges Grau.
 function crm_phase_farbe(string $phase): string {

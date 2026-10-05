@@ -17,6 +17,7 @@
 // oder E-Mail werden NICHT ueberschrieben; die KI fasst nur zusammen und schlaegt einen Schritt vor.
 require_once __DIR__ . '/ki.php';
 require_once __DIR__ . '/kontakt.php';
+require_once __DIR__ . '/todo.php';
 
 // Standard-Nachfassfrist, wenn die Anfrage keine eigene Frist nennt (Tage).
 if (!defined('CRM_LEAD_NACHFASSEN')) define('CRM_LEAD_NACHFASSEN', 2);
@@ -39,6 +40,7 @@ function lead_ki_auswerten(int $kontakt_id, int $uid = 0, string $text = ''): ar
     try {
         $k = kontakt($kontakt_id);
         if (!$k) return ['ok' => false, 'daten' => [], 'fehler' => 'Kontakt nicht gefunden.'];
+        $erst = empty($k['ki_ausgewertet']);   // To-Dos nur bei der ERSTEN Auswertung anlegen
 
         $text = trim($text) !== '' ? trim($text) : trim((string)($k['notiz'] ?? ''));
         if ($text === '') return ['ok' => false, 'daten' => [], 'fehler' => 'Kein Anfragetext da.'];
@@ -88,6 +90,14 @@ function lead_ki_auswerten(int $kontakt_id, int $uid = 0, string $text = ''): ar
         // 4) Stempel, damit die Auswertung nicht doppelt automatisch laeuft.
         q("UPDATE crm_kontakt SET ki_ausgewertet=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $kontakt_id]);
 
+        // 5) To-Dos aus der Anfrage - nur bei der ersten Auswertung (sonst Dubletten beim Neu-Auswerten).
+        if ($erst) {
+            foreach ($d['todos'] as $t) {
+                todo_anlegen(['titel' => $t['titel'], 'kategorie' => $t['kategorie'],
+                              'bezug_typ' => 'kontakt', 'bezug_id' => $kontakt_id, 'quelle' => 'ki'], $uid);
+            }
+        }
+
         return ['ok' => true, 'daten' => $d, 'fehler' => ''];
     } catch (Throwable $e) {
         return ['ok' => false, 'daten' => [], 'fehler' => 'Interner Fehler bei der Auswertung.'];
@@ -110,7 +120,22 @@ function lead_ki_saeubern(array $d): array {
         'naechster_schritt' => trim((string)($d['naechster_schritt'] ?? '')),
         'frist_tage'        => is_numeric($d['frist_tage'] ?? null) ? max(0, min(90, (int)$d['frist_tage'])) : null,
         'offene_punkte'     => trim((string)($d['offene_punkte'] ?? '')),
+        'todos'             => lead_ki_todos_saeubern($d['todos'] ?? []),
     ];
+}
+
+// Die vorgeschlagenen To-Dos pruefen/kappen (hoechstens 4, gueltige Kategorie).
+function lead_ki_todos_saeubern($roh): array {
+    $kats = crm_todo_kategorien();
+    $out = [];
+    foreach ((array)$roh as $t) {
+        $titel = mb_substr(trim((string)($t['titel'] ?? '')), 0, 255);
+        if ($titel === '') continue;
+        $kat = (string)($t['kategorie'] ?? 'aufgabe');
+        $out[] = ['titel' => $titel, 'kategorie' => array_key_exists($kat, $kats) ? $kat : 'aufgabe'];
+        if (count($out) >= 4) break;
+    }
+    return $out;
 }
 
 // Die lesbare Verlaufsnotiz zusammenbauen - nur Zeilen, die auch etwas enthalten.

@@ -6,6 +6,7 @@ require_once BX_ROOT . '/core/fragenkatalog_ki.php';
 require_once BX_ROOT . '/core/lead_ki.php';
 require_once BX_ROOT . '/core/rezeptur_ki.php';
 require_once BX_ROOT . '/core/mail_senden.php';
+require_once BX_ROOT . '/core/todo.php';
 require_once BX_ROOT . '/core/markdown.php';
 
 $id = (int)($_GET['id'] ?? 0);
@@ -26,6 +27,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tage = max(0, min(365, (int)($_POST['tage'] ?? 3)));
         kontakt_wiedervorlage($id, 'Nachfassen: ' . $k['name'], $tage, crm_uid(), (string)($_POST['notiz'] ?? ''));
         header('Location: ?p=kontakt&id=' . $id . '&ok=erinnert'); exit;
+    }
+    if ($tun === 'todo_add') {
+        todo_anlegen(['titel' => (string)($_POST['titel'] ?? ''), 'kategorie' => (string)($_POST['kategorie'] ?? 'aufgabe'),
+                      'faellig' => (string)($_POST['faellig'] ?? ''), 'bezug_typ' => 'kontakt', 'bezug_id' => $id], crm_uid());
+        header('Location: ?p=kontakt&id=' . $id . '&ok=todo'); exit;
+    }
+    if ($tun === 'todo_erledigt') {
+        todo_erledigen('todo', (int)($_POST['tid'] ?? 0), crm_uid());
+        header('Location: ?p=kontakt&id=' . $id); exit;
     }
     if ($tun === 'fragenkatalog') {
         $r = fragenkatalog_erzeugen(trim(((string)($k['firma'] ?? '') !== '' ? $k['firma'] . ' – ' : '') . $k['name']), ['Anliegen' => (string)($k['notiz'] ?? ''), 'Quelle' => crm_quellen()[$k['quelle']] ?? '',
@@ -144,7 +154,7 @@ elseif ($m === 'fehler')  hinweis('Der Kunde konnte nicht angelegt werden.', 'wa
 elseif ($m === 'kifehler') hinweis('Die KI-Auswertung hat nicht geklappt. Bitte später erneut versuchen.', 'warn');
 elseif ($m === 'uploadfehler') hinweis('Der Upload hat nicht geklappt.', 'warn');
 elseif ($m !== '')        hinweis(['gespeichert' => 'Gespeichert.', 'notiert' => 'Notiert.',
-                                   'erinnert' => 'Wiedervorlage gesetzt.', 'ausgewertet' => 'Anfrage ausgewertet – siehe Verlauf.',
+                                   'erinnert' => 'Wiedervorlage gesetzt.', 'todo' => 'To-Do angelegt.', 'ausgewertet' => 'Anfrage ausgewertet – siehe Verlauf.',
                                    'hochgeladen' => 'Dokument hochgeladen.', 'geloescht' => 'Dokument gelöscht.',
                                    'gesendet' => 'Antwort gesendet.',
                                    '1' => 'Kontakt angelegt.'][$m] ?? 'Erledigt.');
@@ -160,6 +170,30 @@ if ($sendefehler !== '') hinweis('Senden fehlgeschlagen: ' . $sendefehler, 'warn
     <?php endforeach; ?>
   </div></div>
 <?php endif; ?>
+
+<?php $todos = todo_fuer_bezug('kontakt', $id); ?>
+<div class="karte"><div class="rumpf">
+  <h2 style="margin-top:0">To-Dos</h2>
+  <?php foreach ($todos as $t): ?>
+    <div class="crm-zeile" style="align-items:center">
+      <div class="crm-mitte"><span class="titel" style="font-weight:400"><?= h((string)$t['titel']) ?></span>
+        <span class="unter"><span class="crm-tag" style="display:inline-block"><?= h(crm_todo_kategorie_label((string)$t['kategorie'])) ?></span><?= $t['faellig'] ? ' · fällig ' . h(fmt_zeit($t['faellig'] . ' 00:00:00', 'd.m.Y')) : '' ?></span>
+      </div>
+      <form method="post" style="margin:0"><input type="hidden" name="tun" value="todo_erledigt"><input type="hidden" name="tid" value="<?= (int)$t['id'] ?>">
+        <button class="btn btn-primary btn-sm" type="submit">Erledigt</button></form>
+    </div>
+  <?php endforeach; ?>
+  <form method="post" style="margin-top:<?= $todos ? '12px' : '0' ?>">
+    <input type="hidden" name="tun" value="todo_add">
+    <div class="bx-field"><input type="text" name="titel" required placeholder="Aufgabe, z. B. „Muster schicken“"></div>
+    <div class="bx-grid">
+      <div class="bx-field"><label for="tkat">Kategorie</label>
+        <select id="tkat" name="kategorie"><?php foreach (crm_todo_kategorien() as $kk => $kv): ?><option value="<?= h($kk) ?>"><?= h($kv) ?></option><?php endforeach; ?></select></div>
+      <div class="bx-field"><label for="tfaellig">Fällig (optional)</label><input type="date" id="tfaellig" name="faellig"></div>
+    </div>
+    <button class="btn btn-ghost btn-sm" type="submit">To-Do hinzufügen</button>
+  </form>
+</div></div>
 
 <div class="karte"><div class="rumpf">
   <h2 style="margin-top:0">Notiz hinzufügen</h2>

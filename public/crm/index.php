@@ -14,6 +14,7 @@ $routen = [
     'login'    => 'auth/login.php',
     'wartet'   => 'liste/wartet.php',
     'pipeline' => 'kontakt/pipeline.php',
+    'todos'    => 'todo/liste.php',
     'kontakte' => 'kontakt/liste.php',
     'kontakt'  => 'kontakt/detail.php',
     'erfassen' => 'kontakt/erfassen.php',

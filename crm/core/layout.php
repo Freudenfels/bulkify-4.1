@@ -14,7 +14,7 @@ require_once __DIR__ . '/auth.php';
 // Die Bereiche des CRM - Aufbau wie das Menue im Dashboard: Gruppe, darunter die Punkte.
 function crm_nav(): array {
     return [
-        'Start'    => ['wartet' => 'Wer wartet auf mich', 'pipeline' => 'Pipeline'],
+        'Start'    => ['wartet' => 'Wer wartet auf mich', 'pipeline' => 'Pipeline', 'todos' => 'To-Dos'],
         'Kontakte' => ['kontakte' => 'Kontakte', 'eingang' => 'E-Mail-Eingang',
                        'erfassen' => 'Schnell erfassen', 'mail' => 'E-Mail einlesen'],
         'Kalender' => ['kalender' => 'Kalender', 'termine' => 'Termine'],
@@ -55,10 +55,11 @@ function kopf(string $titel, string $aktiv = ''): void {
 
         $offen = crm_wartet_zahl();
         $eingang = crm_eingang_zahl();
+        $todos = crm_todo_zahl();
         foreach (crm_nav() as $gruppe => $seiten) {
             echo '<div class="bx-navgroup">' . h($gruppe) . '</div>';
             foreach ($seiten as $route => $label) {
-                $n = $route === 'wartet' ? $offen : ($route === 'eingang' ? $eingang : 0);
+                $n = $route === 'wartet' ? $offen : ($route === 'eingang' ? $eingang : ($route === 'todos' ? $todos : 0));
                 $zahl = ($n > 0)
                       ? '<span class="bx-navbadge" title="offen">' . ($n > 99 ? '99+' : $n) . '</span>' : '';
                 echo '<a href="?p=' . h($route) . '"' . ($aktiv === $route ? ' class="on"' : '') . '>'
@@ -140,6 +141,15 @@ function crm_eingang_zahl(): int {
     static $n = null;
     if ($n !== null) return $n;
     try { $n = (int) scalar("SELECT COUNT(*) FROM crm_mail_eingang WHERE status='neu'"); }
+    catch (Throwable $e) { $n = 0; }
+    return $n;
+}
+
+// Offene To-Dos (inkl. Wiedervorlagen mit Kontakt/Kunde-Bezug) fuer das Menue. Guarded.
+function crm_todo_zahl(): int {
+    static $n = null;
+    if ($n !== null) return $n;
+    try { require_once __DIR__ . '/todo.php'; $n = todo_zahl_offen(); }
     catch (Throwable $e) { $n = 0; }
     return $n;
 }

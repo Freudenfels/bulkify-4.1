@@ -171,6 +171,29 @@ function crm_schema(): void {
         error_log('crm_schema: crm_mail_eingang konnte nicht angelegt werden: ' . $e->getMessage());
     }
 
+    // --- To-Dos: abhakbare Aufgaben, nach Kunde/Kontakt + Kategorie. ---------------------------
+    // Neue, strukturierte Aufgaben. Offene Wiedervorlagen (crm_wiedervorlage) erscheinen in der
+    // To-Do-Liste zusaetzlich - der Umbau laesst die bestehende "Wer wartet"-Engine unangetastet.
+    try {
+        q("CREATE TABLE IF NOT EXISTS crm_todo (
+            id           INT AUTO_INCREMENT PRIMARY KEY,
+            titel        VARCHAR(255) NOT NULL,
+            kategorie    VARCHAR(20) NOT NULL DEFAULT 'aufgabe',
+            bezug_typ    VARCHAR(20) NULL,       -- kontakt|kunde|'' (ohne Bezug)
+            bezug_id     INT NULL,
+            faellig      DATE NULL,
+            quelle       VARCHAR(12) NOT NULL DEFAULT 'manuell',   -- manuell|ki|mail
+            besitzer_id  INT NULL,               -- zustaendiger Mitarbeiter
+            benutzer_id  INT NULL,               -- wer angelegt hat
+            erledigt_am  DATETIME NULL,
+            erledigt_von INT NULL,
+            angelegt     DATETIME NOT NULL,
+            KEY (erledigt_am), KEY (bezug_typ, bezug_id), KEY (kategorie), KEY (faellig)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Throwable $e) {
+        error_log('crm_schema: crm_todo konnte nicht angelegt werden: ' . $e->getMessage());
+    }
+
     // --- Eigenes Mailkonto je Mitarbeiter (benutzer-Tabelle gehoert dem Dashboard, daher hier). --
     // Damit jeder Mitarbeiter direkt aus dem CRM unter seiner eigenen Adresse antworten kann.
     try {

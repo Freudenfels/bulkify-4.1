@@ -6,6 +6,8 @@ Die Reihenfolge ist Absicht: Beim Öffnen will man zuerst wissen, was zuletzt wa
 
 **KI-Auswertung der Anfrage** (`tun=ki_auswerten` → `core/lead_ki.php`) ordnet die Anfrage aus der Notiz ein: Zusammenfassung, Produktform, Menge, grober Wert, nächster Schritt. Setzt den geschätzten Wert (falls leer) und eine Wiedervorlage, Ergebnis landet im Verlauf. Website-Leads werden beim Eingang automatisch ausgewertet; der Knopf dient zum Wiederholen oder für Kontakte, die ohne KI hereinkamen. Nur sichtbar, wenn die KI eingerichtet ist und eine Notiz vorhanden ist.
 
+**To-Dos** (Karte oben, `tun=todo_add`/`todo_erledigt` → `core/todo.php`) listet die offenen Aufgaben dieses Kontakts und legt neue an (Titel, Kategorie, Fälligkeit). Erscheinen auch in der zentralen To-Do-Liste (`?p=todos`).
+
 **KI-Rezepturvorschlag** (`tun=rezeptvorschlag` → `core/rezeptur_ki.php`) entwickelt aus der Anfrage (strukturierte Felder + Notiz) einen herstellbaren Vorschlag: Zutaten + Mengen, Novel Food, Höchstmengen, Health Claims, Machbarkeit und die passende Kapselgröße. Wird am Kontakt gespeichert (`crm_rezeptur_ki`), „Neu entwickeln" überschreibt, „Verwerfen" löscht. Entwurf fürs Team – keine Freigabe; eine echte Rezeptur entsteht über „Rezeptur anlegen" im Dashboard.
 
 **Antwort vorschlagen** erzeugt über `core/antwort_ki.php` einen Entwurf aus Notiz und Verlauf. Er steht in der Sitzung, nicht in der Datenbank; verschickt wird nichts. Wer ihn wirklich abgeschickt hat, drückt auf „Als gesendet im Verlauf vermerken“.

@@ -18,6 +18,7 @@ einordnen lassen – damit eine Website-Anfrage sofort nutzbar ist, ohne dass je
    nur, wenn noch keine offene hängt (kein Dublettenaufbau beim erneuten Auswerten).
 4. Zeitstempel **`crm_kontakt.ki_ausgewertet`** – damit die automatische Auswertung nicht doppelt läuft.
 5. **Strukturierte Anfrage-Felder** (`anfrage_rezeptur/form/inhalt/vorhaben`) – aber nur leere, damit manuelle Einträge erhalten bleiben. Diese erscheinen im Anfrage-Block der Kontaktseite.
+6. **To-Dos** aus der Anfrage (max. 4, `crm_todo`, quelle `ki`) – nur bei der **ersten** Auswertung, damit beim Neu-Auswerten keine Dubletten entstehen. Siehe `todo.md`.
 
 Stammdaten (Name, Firma, E-Mail …) werden **nicht** angefasst – die KI fasst nur zusammen und schlägt
 einen nächsten Schritt vor.
