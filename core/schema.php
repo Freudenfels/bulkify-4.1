@@ -4525,10 +4525,12 @@ function etikett_masse(?string $s): ?array {
 // z. B. bei Zukauf/Fremdproduktion – dann kennt das Produkt sie nicht, der Auftrag aber schon.
 function produkt_behaelter_id(int $produkt_id): ?int {
     if ($produkt_id <= 0) return null;
-    $v = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$produkt_id]);
-    if ($v > 0) return $v;
+    // Auftrags-Behälter hat Vorrang (Admin kann je Auftrag ein anderes Glas setzen – das treibt dann
+    // auch Produktion/Einkauf/PIB). Nur wenn kein Auftrag einen Behälter nennt, gilt der am Produkt.
     $a = (int) scalar("SELECT verpackung_id FROM auftrag WHERE produkt_id=? AND verpackung_id IS NOT NULL ORDER BY id DESC LIMIT 1", [$produkt_id]);
-    return $a > 0 ? $a : null;
+    if ($a > 0) return $a;
+    $v = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$produkt_id]);
+    return $v > 0 ? $v : null;
 }
 // Etikett-Endformat [Breite, Höhe] mm eines Produkts (aus dem Behälter), oder null wenn nicht hinterlegt.
 function produkt_etikettmass(int $produkt_id): ?array {
@@ -5194,11 +5196,23 @@ function auftrag_bedarf(int $pa_id): array {
             $rows[] = ['rolle'=>'Leerkapsel','item_id'=>$kapId,'name'=>item_name_cached($kapId),'benoetigt'=>$einheiten,'verfuegbar'=>$verfK,'fehlt'=>max(0.0,$einheiten-$verfK),'einheit'=>'Stück'];
         }
     }
-    // Verpackungs-Stückliste (alle Slots) – je Packung 1 Stück
+    // Verpackungs-Stückliste (alle Slots) – je Packung 1 Stück. Der Behälter des AUFTRAGS hat Vorrang
+    // (Admin kann je Auftrag ein anderes Glas setzen); das passende Etikett wird dann aus DEM Behälter
+    // abgeleitet – anderes Glas => anderes Etikett => anderer Einkauf.
     $slots = produkt_row_cached((int)$pa['produkt_id']);
+    $afRow = auftrag_row_cached($aid);
+    $verpEff = !empty($afRow['verpackung_id']) ? (int)$afRow['verpackung_id'] : (int)($slots['verpackung_id'] ?? 0);
+    $etikettEff = (int)($slots['etikett_id'] ?? 0);
+    if (!empty($afRow['verpackung_id'])) {                 // Auftrag hat eigenen Behälter -> Etikett dazu ableiten
+        $au = etikett_id_fuer_behaelter((int)$afRow['verpackung_id']); if ($au) $etikettEff = $au;
+    } elseif (!$etikettEff && $verpEff) {                  // sonst: fehlt Etikett am Produkt -> aus Behälter ableiten
+        $au = etikett_id_fuer_behaelter($verpEff); if ($au) $etikettEff = $au;
+    }
+    $effSlots = ['verpackung_id'=>$verpEff, 'verschluss_id'=>(int)($slots['verschluss_id'] ?? 0),
+                 'etikett_id'=>$etikettEff, 'karton_id'=>(int)($slots['karton_id'] ?? 0), 'beipack_id'=>(int)($slots['beipack_id'] ?? 0)];
     foreach (['verpackung_id'=>'Verpackung','verschluss_id'=>'Deckel','etikett_id'=>'Etikett','karton_id'=>'Karton','beipack_id'=>'Beipackzettel'] as $f => $rolle) {
-        if (!empty($slots[$f]) && $menge > 0) {
-            $iid = (int)$slots[$f]; $verf = item_bestand($iid, true);
+        if (!empty($effSlots[$f]) && $menge > 0) {
+            $iid = (int)$effSlots[$f]; $verf = item_bestand($iid, true);
             $rows[] = ['rolle'=>$rolle,'item_id'=>$iid,'name'=>item_name_cached($iid),'benoetigt'=>$menge,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$menge-$verf),'einheit'=>'Stück'];
         }
     }
