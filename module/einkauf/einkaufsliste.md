@@ -1,6 +1,8 @@
-# einkauf/einkaufsliste.php – Einkaufsliste (Stufe 2)
+# einkauf/einkaufsliste.php – Bedarf (zentrale Einkaufsseite)
 
-Die ans Einkauf **gemeldeten** Bedarfe (`produktionsauftrag.bedarf_gemeldet`), gleiche Artikel über alle Aufträge gebündelt. Route `?p=einkaufsliste` (Rolle einkauf, admin). Menü: Einkauf.
+**Stand 2026-10-05:** Dies ist jetzt DIE eine Bedarfs-/Bestellseite (Menü „Bedarf"). Zeigt **alle** offenen Bedarfe (`bedarf_aggregiert(false)` / `bedarf_bulk(false)`) – kein „Melden"-Schritt mehr. Route `?p=einkaufsliste` (Rolle einkauf, admin). Die frühere „Einkaufsbedarf"-Seite (`?p=bedarf`, Melden + Eigen/Fremd) ist aus dem Menü entfernt; Eigen/Fremd wird im Produktionsauftrag entschieden.
+
+Zwei Aktionen auf derselben Auswahl: **„Beim Lieferanten bestellen"** (je Lieferant eine Bestellung, wie bisher) ODER **„Habe ich extern bestellt"** (`modus=extern`): legt EINE Bestellung ohne Lieferant an (Notiz „Extern bestellt (z. B. Amazon)", Datum = heute). In beiden Fällen nettet die Position aus dem Bedarf (via `bestellt`-Summe) und erscheint unter „Bestellt" (`?p=einkauf`).
 
 **Typ-Reiter** (`.settabs`, `?typ=`): Alle · Etiketten · Verpackung · Rohstoffe · Fertige Produkte · **Nachbestellung** · Betriebsmittel-Kategorien. Tabelle mit Auswahl-Checkbox je Artikel + Σ benötigt / auf Lager / offen bestellt / zu bestellen / Aufträge. Quelle `bedarf_aggregiert(true)` (nur gemeldet + Eigenproduktion).
 

@@ -29,7 +29,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     $sel     = (array)($_POST['sel'] ?? []);
     $liefMap = (array)($_POST['lief'] ?? []);
     $mengeMap = (array)($_POST['menge'] ?? []);   // vom Einkauf angehobene Bestellmenge je Zeile (optional)
-    $datum   = trim($_POST['datum'] ?? '') ?: null;
+    $extern  = ($_POST['modus'] ?? '') === 'extern';   // „Habe ich extern bestellt" (Amazon o. ä.): Bestellung ohne Lieferant, gilt als getätigt.
+    $datum   = $extern ? date('Y-m-d') : (trim($_POST['datum'] ?? '') ?: null);
     // Mengen-Override aus dem Feld lesen (deutsche Schreibweise: Punkt = Tausender, Komma = Dezimal); nur positiv zählt.
     $ovMenge = function(string $key) use ($mengeMap): ?float {
         $r = preg_replace('/[^0-9.,]/', '', trim((string)($mengeMap[$key] ?? '')));
@@ -39,18 +40,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     };
     // Zeilen-Info je Schlüssel (Etikett: etikett:<item>:<auftrag>, sonst item:<item>)
     $info = [];
-    foreach (bedarf_aggregiert(true) as $a) {
+    foreach (bedarf_aggregiert(false) as $a) {
         if ($a['zu_bestellen'] <= 1e-6) continue;
         $key = !empty($a['etikett']) ? ('etikett:' . $a['item_id'] . ':' . (int)$a['auftrag_id']) : ('item:' . $a['item_id']);
         $info[$key] = $a;
     }
-    $bulkIds = []; foreach (bedarf_bulk(true) as $b) $bulkIds[(int)$b['produkt_id']] = true;
+    $bulkIds = []; foreach (bedarf_bulk(false) as $b) $bulkIds[(int)$b['produkt_id']] = true;
     $freiIds = []; foreach (freibedarf_offen() as $f) $freiIds[(int)$f['id']] = true;
     $nachIds = []; foreach (meldebestand_bedarf() as $nb) $nachIds[(int)$nb['item_id']] = (float)$nb['zu_bestellen'];   // Meldebestand-Nachbestellung
     $groups = [];  // lieferant_id => ['pos'=>[{item_id,menge,auftrag_id}], 'bulk'=>[pid], 'frei'=>[fid]]
     $bulkMengeMap = [];  // produkt_id => angehobene Wunschmenge (global, da bestellung_erstellen nur die Gruppen-pids nutzt)
     foreach ($sel as $key) {
-        $sup = (int)($liefMap[$key] ?? 0);
+        $sup = $extern ? 0 : (int)($liefMap[$key] ?? 0);   // extern: eine Bestellung ohne Lieferant
         if (strncmp($key, 'bulk:', 5) === 0) {
             $pid = (int)substr($key, 5);
             if (isset($bulkIds[$pid])) { $groups[$sup]['bulk'][] = $pid; $ov = $ovMenge($key); if ($ov !== null) $bulkMengeMap[$pid] = $ov; }
@@ -73,14 +74,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         $bid = bestellung_erstellen($g['pos'] ?? [], $g['bulk'] ?? [], $sup ?: null, $datum, $g['frei'] ?? [], $bulkMengeMap);
         if (!$bid) continue;
         $n++;
+        if ($extern) q("UPDATE bestellung SET notiz='Extern bestellt (z. B. Amazon)' WHERE id=?", [$bid]);
         // Mit Bestelldatum ist die Bestellung sofort erteilt – der Lieferant bekommt die Mail (falls eingerichtet).
-        if ($datum && $sup && mail_bereit()) mail_lieferant_bestellung($bid);
+        elseif ($datum && $sup && mail_bereit()) mail_lieferant_bestellung($bid);
     }
-    header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n); exit;
+    header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($extern ? '&extern=1' : '')); exit;
 }
 
-$aggBedarf = array_values(array_filter(bedarf_aggregiert(true), fn($a) => $a['zu_bestellen'] > 1e-6));
-$bulkBedarf = array_values(array_filter(bedarf_bulk(true), fn($b) => $b['zu_bestellen'] > 1e-6));
+$aggBedarf = array_values(array_filter(bedarf_aggregiert(false), fn($a) => $a['zu_bestellen'] > 1e-6));
+$bulkBedarf = array_values(array_filter(bedarf_bulk(false), fn($b) => $b['zu_bestellen'] > 1e-6));
 $freiBedarf = freibedarf_offen();
 $nachBedarf = meldebestand_bedarf();   // Meldebestand-Nachbestellungen (Lagerartikel unter Mindestbestand)
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
@@ -123,10 +125,10 @@ $liefSelect = function(string $key, int $sel) use ($lieferanten): string {
     return $s . '</select>';
 };
 
-render_header('einkaufsliste', 'Einkaufsliste');
-bx_head('Einkaufsliste', 'Auswählen, Lieferant je Zeile prüfen, Datum wählen, bestellen – je Lieferant entsteht eine Bestellung.',
-        bx_btn('Zu den Bestellungen', '?p=einkauf', 'ghost'));
-if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . ' Bestellung(en) angelegt (je Lieferant eine) – unter „Bestellungen" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . '</div>';
+render_header('einkaufsliste', 'Bedarf');
+bx_head('Bedarf', 'Was bestellt werden muss. Auswählen und entweder beim Lieferanten bestellen oder „habe ich extern bestellt" (z. B. Amazon) – danach wandert es nach „Bestellt".',
+        bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
+if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['extern']) ? ' Position(en) als „extern bestellt" markiert' : ' Bestellung(en) angelegt (je Lieferant eine)') . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . '</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
 if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Die fehlenden Rohstoffe des Produktionsauftrags stehen jetzt hier – Bestand und bereits Bestelltes wurden übersprungen.</div>';
 ?>
@@ -146,7 +148,7 @@ if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padd
     <tbody>
       <?php if (!$hatWas): ?><tr><td colspan="6" class="muted"><?= $istFreiTyp
           ? 'Noch nichts unter „' . h($BM_KAT[$aktTyp]) . '" eingetragen – weiter unten unter „Neuen Bedarf eintragen" hinzufügen.'
-          : 'Kein gemeldeter Bedarf in diesem Typ. (Im „Einkaufsbedarf" melden.)' ?></td></tr><?php endif; ?>
+          : 'Kein offener Bedarf in diesem Typ.' ?></td></tr><?php endif; ?>
       <?php foreach ($aggTab as $a):
           $istEtikett = !empty($a['etikett']);
           $key = $istEtikett ? ('etikett:' . (int)$a['item_id'] . ':' . (int)$a['auftrag_id']) : ('item:' . (int)$a['item_id']);
@@ -213,9 +215,10 @@ if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padd
   <div class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:14px">
     <input type="hidden" name="aktion" value="bestellen">
     <div class="bx-field" style="margin:0;max-width:180px"><label>Bestellt am</label><input type="date" name="datum" value="<?= date('Y-m-d') ?>"></div>
-    <button class="btn btn-primary" id="btnBestellen" type="submit" disabled>Ausgewählte bestellen</button>
+    <button class="btn btn-primary" id="btnBestellen" type="submit" name="modus" value="lieferant" disabled>Beim Lieferanten bestellen</button>
+    <button class="btn btn-ghost" id="btnExtern" type="submit" name="modus" value="extern" disabled title="Für Sachen, die du selbst extern kaufst (z. B. Amazon) – legt eine Bestellung ohne Lieferant an und verschiebt die Position nach „Bestellt".">Habe ich extern bestellt</button>
   </div>
-  <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen setzen bei dem, was du bestellen willst, und je Zeile den <strong>Lieferant</strong> prüfen (bei Lagerartikeln mit dem Hauptlieferant vorbelegt). Beim Bestellen wird <strong>je Lieferant eine eigene Bestellung</strong> erzeugt; mit Datum = getätigt, ohne = Entwurf.</p>
+  <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen setzen. <strong>Beim Lieferanten bestellen</strong> = je Lieferant eine Bestellung (Lieferant je Zeile prüfen; mit Datum = getätigt). <strong>Habe ich extern bestellt</strong> = du hast es selbst gekauft (Amazon o. ä.) – es wird ohne Lieferant als „bestellt" verbucht. In beiden Fällen wandert die Position nach „Bestellt".</p>
   <?php endif; ?>
 </div>
 </form>
@@ -249,8 +252,8 @@ if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padd
   </div>
 </form>
 <script>(function(){
-  var boxes=document.querySelectorAll('.bx-sel'), btn=document.getElementById('btnBestellen'), a=document.getElementById('selAll');
-  function upd(){ if(!btn)return; var any=false; boxes.forEach(function(c){if(c.checked)any=true;}); btn.disabled=!any; }
+  var boxes=document.querySelectorAll('.bx-sel'), btn=document.getElementById('btnBestellen'), bex=document.getElementById('btnExtern'), a=document.getElementById('selAll');
+  function upd(){ var any=false; boxes.forEach(function(c){if(c.checked)any=true;}); if(btn)btn.disabled=!any; if(bex)bex.disabled=!any; }
   boxes.forEach(function(c){c.addEventListener('change',upd);});
   if(a) a.addEventListener('change',function(){boxes.forEach(function(c){c.checked=a.checked;});upd();});
   upd();
