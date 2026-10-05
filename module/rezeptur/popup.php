@@ -55,14 +55,21 @@ foreach ($zutaten as $z) {
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= h($rez['name'] ?? 'Rezeptur') ?></title>
+<script>try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <style>
-  :root{ --line:#e6e6e6; --muted:#6b7280; --gruen:#1D9E75; }
+  :root{ --bg:#fff; --fg:#1a1a1a; --line:#e6e6e6; --muted:#6b7280; --gruen:#1D9E75; --card:#fff; }
+  :root[data-theme="dark"]{ --bg:#10210f; --fg:#e8ece9; --line:#2a3a2a; --muted:#9fb0a7; --gruen:#5fd3a3; --card:#17301a; }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#10210f; --fg:#e8ece9; --line:#2a3a2a; --muted:#9fb0a7; --gruen:#5fd3a3; --card:#17301a; } }
   *{ box-sizing:border-box }
-  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:#1a1a1a; background:#fff; padding:20px 22px 40px }
-  h1{ font-size:20px; margin:0 0 2px } h2{ font-size:15px; margin:22px 0 8px }
-  .muted{ color:var(--muted) } .sub{ color:var(--muted); font-size:13px; margin-bottom:14px }
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); padding:18px 20px 24px }
+  h1{ font-size:20px; margin:0 0 2px } h2{ font-size:15px; margin:20px 0 8px }
+  a{ color:var(--gruen) }
+  .muted{ color:var(--muted) } .sub{ color:var(--muted); font-size:13px }
+  .top{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:12px }
+  .btn{ display:inline-block; padding:7px 12px; border:1px solid var(--line); border-radius:8px; color:var(--fg); text-decoration:none; font-size:13px; white-space:nowrap }
+  .btn:hover{ border-color:var(--gruen); color:var(--gruen) }
   .cards{ display:flex; gap:10px; flex-wrap:wrap; margin:8px 0 4px }
-  .card{ border:1px solid var(--line); border-radius:10px; padding:10px 14px; min-width:120px }
+  .card{ border:1px solid var(--line); border-radius:10px; padding:10px 14px; min-width:120px; background:var(--card) }
   .card .k{ color:var(--muted); font-size:12px } .card .v{ font-size:16px; font-weight:600; margin-top:2px }
   table{ width:100%; border-collapse:collapse; font-size:14px }
   th,td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top }
@@ -73,8 +80,13 @@ foreach ($zutaten as $z) {
 <?php if (!$rez): ?>
   <h1>Rezeptur nicht gefunden</h1>
 <?php else: ?>
-  <h1><?= h($rez['name']) ?></h1>
-  <div class="sub"><?= h((string)($rez['nummer'] ?? '')) ?><?= !empty($rez['darreichungsform']) ? ' · ' . h($dfLabel[(string)$rez['darreichungsform']] ?? (string)$rez['darreichungsform']) : '' ?></div>
+  <div class="top">
+    <div>
+      <h1><?= h($rez['name']) ?></h1>
+      <div class="sub"><?= h((string)($rez['nummer'] ?? '')) ?><?= !empty($rez['darreichungsform']) ? ' · ' . h($dfLabel[(string)$rez['darreichungsform']] ?? (string)$rez['darreichungsform']) : '' ?></div>
+    </div>
+    <a class="btn" href="?p=rezeptur_detail&id=<?= $rid ?>" target="_top">Zur Rezeptur bearbeiten →</a>
+  </div>
   <div class="cards">
     <div class="card"><div class="k">Gesamtgewicht</div><div class="v"><?= $gesamt > 0 ? $nf($gesamt, 0) . ' mg' : '–' ?></div></div>
     <div class="card"><div class="k">Kapselgröße</div><div class="v" style="color:var(--gruen)"><?= !empty($rez['kapselgroesse']) ? h((string)$rez['kapselgroesse']) : '–' ?></div></div>

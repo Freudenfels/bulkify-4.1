@@ -187,24 +187,30 @@ bx_head('Einkaufspreise', 'Alle Einkaufspreise an einem Ort – Fremdfertigung, 
 <?php endif; ?>
 </div>
 
-<!-- Popup: Klick auf Rezeptur/Artikel zeigt das Detail im Overlay. -->
-<div id="rezPop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;padding:3vh 2vw" onclick="if(event.target===this)rezPopClose()">
-  <div style="max-width:1000px;height:94vh;margin:0 auto;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 12px 44px rgba(0,0,0,.35);background:#fff">
-    <div class="bx-row" style="justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line,#e6e6e6);background:#fff">
-      <strong id="rezPopTitel">Detail</strong>
+<!-- Popup: Klick auf Rezeptur/Artikel zeigt das Detail im Overlay (Größe passt sich dem Inhalt an). -->
+<div id="rezPop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;padding:4vh 2vw" onclick="if(event.target===this)rezPopClose()">
+  <div style="position:relative;width:min(880px,96vw);max-height:92vh;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 12px 44px rgba(0,0,0,.35);background:var(--panel,#fff)">
+    <div style="display:flex;justify-content:flex-end;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line,#e6e6e6);background:var(--panel,#fff)">
       <button class="btn btn-ghost btn-sm" type="button" onclick="rezPopClose()">Schließen</button>
     </div>
-    <iframe id="rezPopFrame" src="" title="Detail" style="flex:1;width:100%;border:0;background:#fff"></iframe>
+    <iframe id="rezPopFrame" src="" title="Detail" style="display:block;width:100%;border:0;background:transparent;height:300px"></iframe>
   </div>
 </div>
 <script>
-function rezPopClose(){var p=document.getElementById('rezPop');p.style.display='none';document.getElementById('rezPopFrame').src='';}
+var rezFr = document.getElementById('rezPopFrame');
+rezFr.addEventListener('load', function(){
+  try {
+    var d = rezFr.contentDocument || rezFr.contentWindow.document;
+    var max = Math.floor(window.innerHeight * 0.92) - 52;   // Platz für die Kopfzeile
+    rezFr.style.height = Math.min((d.body.scrollHeight || 400) + 4, max) + 'px';
+  } catch(e) { rezFr.style.height = '70vh'; }
+});
+function rezPopClose(){ var p=document.getElementById('rezPop'); p.style.display='none'; rezFr.src=''; }
 document.addEventListener('click',function(e){
   var a=e.target.closest('.bx-rezpop'); if(!a) return;
   e.preventDefault();
-  document.getElementById('rezPopTitel').textContent=(a.textContent||'Detail').trim();
-  document.getElementById('rezPopFrame').src=a.getAttribute('href');
-  document.getElementById('rezPop').style.display='block';
+  rezFr.src = a.getAttribute('href');
+  document.getElementById('rezPop').style.display='flex';
 });
 document.addEventListener('keydown',function(e){ if(e.key==='Escape') rezPopClose(); });
 </script>
