@@ -3,6 +3,7 @@
 define('BX_T0', microtime(true));   // Request-Start für die Diagnose-Messung
 session_start();
 require_once __DIR__ . '/../core/schema.php';
+require_once __DIR__ . '/../core/dienstleistung.php';   // Dienstleistungen-Modul (Katalog) – stellt dienstleistung_schema() bereit
 require_once __DIR__ . '/../core/pdf_beleg.php';   // beleg_firma() – auch fuer den AGB-Entwurfstext
 require_once __DIR__ . '/../core/agb.php';
 require_once __DIR__ . '/../core/mail.php';
@@ -76,6 +77,8 @@ $routes = [
     'novelfood'       => 'produkt/novelfood.php',   // Schnell-Nachschlage: ist ein Stoff Novel Food?
     'angebote'        => 'angebot/liste.php',
     'angebot'         => 'angebot/detail.php',
+    'dienstleistungen'=> 'dienstleistung/liste.php',   // Service-Katalog (Dienstleistungen-Modul)
+    'dienstleistung'  => 'dienstleistung/detail.php',  // Dienstleistung anlegen/bearbeiten
     'rechnungen_ansicht' => 'intern/belege_ansicht.php',  // Nur-Lese-Rechnungsliste im Dashboard (Buchhaltung bleibt abgeschottet)
     'angebot_pdf'     => 'angebot/pdf.php',
     'vertrag_pdf'     => 'angebot/vertrag_pdf.php',   // Jahresabnahmevertrag (PDF) zum Angebot

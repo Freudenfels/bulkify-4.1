@@ -35,6 +35,8 @@ function route_rollen_map(): array {
         'partner_detail'     => ['sales', 'finance'],
         'angebote'           => ['sales', 'finance'],
         'angebot'            => ['sales', 'finance'],
+        'dienstleistungen'   => ['sales', 'finance'],   // Service-Katalog (Dienstleistungen)
+        'dienstleistung'     => ['sales', 'finance'],
         'rechnungen_ansicht' => ['sales', 'finance'],   // Nur-Lese-Rechnungsliste im Dashboard
         'angebot_pdf'        => ['sales', 'finance'],
         'vertrag_pdf'        => ['sales', 'finance'],

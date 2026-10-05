@@ -1757,6 +1757,10 @@ function init_schema(): void {
     // (z. B. Fallback produkt.einheiten_pro_packung -> auftrag.stueck) sofort und nicht erst nach TTL.
     bedarf_bump();
 
+    // Dienstleistungen-Modul: eigenes Schema (core/dienstleistung.php). Guarded, damit andere
+    // Einstiegspunkte (ds_api, tools) ohne diese Datei nicht abbrechen.
+    if (function_exists('dienstleistung_schema')) dienstleistung_schema();
+
     // Migrationen durch -> Marker setzen, damit der nächste Request den Block überspringt.
     if ($schemaBuild !== '') meta_set('schema_build', $schemaBuild);
 }
