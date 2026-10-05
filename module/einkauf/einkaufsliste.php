@@ -119,9 +119,18 @@ $mengeInput = fn(string $key, float $wert, string $einheit) =>
   . ' <span class="muted">' . h($einheit) . '</span>';
 $rolleBadge = fn($r) => bx_badge($r, $r === 'Fertigware' ? 'info' : '');
 // Lieferant-Dropdown je Zeile (vorbelegt)
-$liefSelect = function(string $key, int $sel) use ($lieferanten): string {
-    $s = '<select name="lief[' . h($key) . ']" style="max-width:170px"><option value="">– Lieferant –</option>';
-    foreach ($lieferanten as $l) $s .= '<option value="' . (int)$l['id'] . '"' . ($sel === (int)$l['id'] ? ' selected' : '') . '>' . h($l['firma']) . '</option>';
+$eurShort = fn($p) => number_format((float)$p, 2, ',', '.') . ' €';
+$liefSelect = function(string $key, int $sel, array $preise = []) use ($lieferanten, $eurShort): string {
+    // Lieferanten mit Preis zuerst (günstigste oben), dann der Rest alphabetisch; Preis im Label.
+    $mit = []; $ohne = [];
+    foreach ($lieferanten as $l) { if (isset($preise[(int)$l['id']])) $mit[] = $l; else $ohne[] = $l; }
+    usort($mit, fn($a, $b) => $preise[(int)$a['id']] <=> $preise[(int)$b['id']]);
+    $s = '<select name="lief[' . h($key) . ']" style="max-width:230px"><option value="">– Lieferant –</option>';
+    foreach (array_merge($mit, $ohne) as $l) {
+        $lid = (int)$l['id'];
+        $lbl = h($l['firma']) . (isset($preise[$lid]) ? ' · ' . $eurShort($preise[$lid]) : '');
+        $s .= '<option value="' . $lid . '"' . ($sel === $lid ? ' selected' : '') . '>' . $lbl . '</option>';
+    }
     return $s . '</select>';
 };
 
@@ -169,7 +178,7 @@ if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padd
           </td>
           <td><?= $rolleBadge($a['rolle']) ?></td>
           <td class="bx-num"><?php if ($gesperrt): ?><strong style="color:#8f231b"><?= $mfmt($a['zu_bestellen']) ?> <?= h($a['einheit']) ?></strong><?php else: ?><?= $mengeInput($key, (float)$a['zu_bestellen'], (string)$a['einheit']) ?><?php endif; ?><?php if (!$istEtikett): ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($a['zu_bestellen']) ?> · Lager <?= $mfmt($a['stock']) ?><?= $a['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($a['bestellt']) : '' ?></div><?php else: ?><div class="muted" style="font-size:11px">kundenspezifisch</div><?php endif; ?></td>
-          <td><?= $gesperrt ? '<span class="muted">–</span>' : $liefSelect($key, (int)($a['haupt_lieferant'] ?? 0)) ?></td>
+          <td><?= $gesperrt ? '<span class="muted">–</span>' : $liefSelect($key, (int)($a['haupt_lieferant'] ?? 0), item_lieferant_preise((int)$a['item_id'], (float)$a['zu_bestellen'])) ?></td>
           <td style="font-size:12px"><?php foreach ($a['orders'] as $o): if ($o['need'] <= 1e-6) continue; ?>
             <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a><?php endforeach; ?></td>
         </tr>
@@ -191,7 +200,7 @@ if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padd
           <td><a href="?p=rohstoff&id=<?= (int)$nb['item_id'] ?>" target="_blank" style="text-decoration:none"><?= h($nb['name']) ?></a></td>
           <td><?= bx_badge('Nachbestellung','warn') ?></td>
           <td class="bx-num"><?= $mengeInput($key, (float)$nb['zu_bestellen'], (string)$nb['einheit']) ?><div class="muted" style="font-size:11px">Meldebestand <?= $mfmt($nb['mindest']) ?> · Lager <?= $mfmt($nb['stock']) ?><?= $nb['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($nb['bestellt']) : '' ?></div></td>
-          <td><?= $liefSelect($key, (int)($nb['haupt_lieferant'] ?? 0)) ?></td>
+          <td><?= $liefSelect($key, (int)($nb['haupt_lieferant'] ?? 0), item_lieferant_preise((int)$nb['item_id'], (float)$nb['zu_bestellen'])) ?></td>
           <td style="font-size:12px"><span class="muted">unter Meldebestand</span></td>
         </tr>
       <?php endforeach; ?>

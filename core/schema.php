@@ -5345,6 +5345,18 @@ function meldebestand_bedarf(): array {
 function lieferant_preisliste_fuer(int $lieferant_id): array {
     return all("SELECT * FROM lieferant_preisliste WHERE lieferant_id=? ORDER BY rohstoff_name", [$lieferant_id]);
 }
+// Preis je Lieferant für EIN Item (gültiger Staffelpreis zur Menge). Rückgabe: [lieferant_id => preis(float)].
+// Für die Lieferanten-Auswahl im Einkauf (Lieferant mit Preis anzeigen, günstigste zuerst).
+function item_lieferant_preise(int $item_id, float $menge = 0): array {
+    if ($item_id <= 0 || !table_exists('lieferant_preis')) return [];
+    $out = [];
+    foreach (all("SELECT lieferant_id, menge_ab, preis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL ORDER BY menge_ab ASC", [$item_id]) as $r) {
+        $lid = (int)$r['lieferant_id']; $ma = (float)$r['menge_ab']; $pr = (float)$r['preis'];
+        if ($menge <= 0 || $ma <= $menge + 1e-9) $out[$lid] = $pr;   // größter passender Staffelwert gewinnt (ORDER BY ASC)
+        elseif (!isset($out[$lid])) $out[$lid] = $pr;                // alle Staffeln > Menge -> kleinste als Fallback
+    }
+    return $out;
+}
 // Neuester Preis-Stand des Lieferanten (Datum) oder null.
 function lieferant_preise_stand(int $lieferant_id): ?string {
     $s = scalar("SELECT MAX(stand) FROM lieferant_preisliste WHERE lieferant_id=? AND stand IS NOT NULL", [$lieferant_id]);
