@@ -81,6 +81,12 @@ function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null): ?string
     $prod = one("SELECT p.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS anzeige, r.darreichungsform, r.id AS rez_id
                  FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]);
     if (!$prod) return null;
+    // Behälter/Etikettmaß fehlen am Produkt? Vom jüngsten Auftrag übernehmen (Verpackung wird oft
+    // erst je Auftrag gewählt – sonst stünde das wichtige Etikettmaß nicht im PIB).
+    if (empty($prod['verpackung_id'])) {
+        $bid = produkt_behaelter_id($produkt_id);
+        if ($bid) $prod['verpackung_id'] = $bid;
+    }
     $L = 40; $R = 555;
     $mg = fn($x) => rtrim(rtrim(number_format((float)$x, 2, ',', '.'), '0'), ',');
     $formLbl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks',

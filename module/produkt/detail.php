@@ -404,6 +404,12 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   <?php if (isset($_GET['pib'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">PIB hochgeladen.</div><?php endif; ?>
   <?php if (isset($_GET['pibweg'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Hochgeladenes PIB entfernt – es gilt wieder das automatische.</div><?php endif; ?>
   <p class="muted" style="margin-top:0">Aktuell: <strong><?= $pibDok ? 'hochgeladenes PIB (' . h($pibDok['datei_orig'] ?: 'Datei') . ')' : 'automatisch aus den Produktdaten erzeugt' ?></strong></p>
+  <?php if (!$pibDok && is_numeric($id) && produkt_etikettmass((int)$id) === null): ?>
+    <div class="badge-warn" style="padding:8px 12px;margin-bottom:10px">
+      <strong>Etikettmaß fehlt</strong> – das automatische PIB kann keine Etikettengröße anzeigen (eines der wichtigsten Felder fürs Etikett).
+      Bitte am <strong>Behälter</strong> (Verpackung) das Endformat (B × H) hinterlegen, oder dem Produkt bzw. Auftrag eine Verpackung mit Etikettmaß zuordnen.
+    </div>
+  <?php endif; ?>
   <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap">
     <a class="btn btn-ghost btn-sm" href="?p=produkt_pib&id=<?= (int)$id ?>" target="_blank">PIB ansehen</a>
     <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0">

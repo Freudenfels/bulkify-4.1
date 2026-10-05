@@ -4482,6 +4482,24 @@ function etikett_masse(?string $s): ?array {
     return [(float) str_replace(',', '.', $m[1]), (float) str_replace(',', '.', $m[2])];
 }
 
+// Behälter (Primärverpackung) eines Produkts – mit Fallback auf den jüngsten Auftrag, falls am
+// Produkt (noch) keiner steht. Die Verpackung wird oft erst JE AUFTRAG gewählt (auftrag.verpackung_id),
+// z. B. bei Zukauf/Fremdproduktion – dann kennt das Produkt sie nicht, der Auftrag aber schon.
+function produkt_behaelter_id(int $produkt_id): ?int {
+    if ($produkt_id <= 0) return null;
+    $v = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$produkt_id]);
+    if ($v > 0) return $v;
+    $a = (int) scalar("SELECT verpackung_id FROM auftrag WHERE produkt_id=? AND verpackung_id IS NOT NULL ORDER BY id DESC LIMIT 1", [$produkt_id]);
+    return $a > 0 ? $a : null;
+}
+// Etikett-Endformat [Breite, Höhe] mm eines Produkts (aus dem Behälter), oder null wenn nicht hinterlegt.
+function produkt_etikettmass(int $produkt_id): ?array {
+    $bid = produkt_behaelter_id($produkt_id);
+    if (!$bid) return null;
+    $dims = etikett_masse((string) scalar("SELECT etikett_final FROM item WHERE id=?", [$bid]));
+    return $dims ? [max($dims[0], $dims[1]), min($dims[0], $dims[1])] : null;
+}
+
 // Welche Etiketten passen auf diesen Behälter? Maßgeblich ist das am BEHÄLTER hinterlegte
 // Endformat (`item.etikett_final`, B x H) – ein Etikett passt, wenn seine Breite und Höhe
 // (aus breite_mm/hoehe_mm, sonst aus etikett_format) bis auf 2 mm dazu stimmen.
