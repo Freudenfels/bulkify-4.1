@@ -6,7 +6,7 @@ require_once __DIR__ . '/auth.php';
 function pr_nav(): array {
     return [
         'Produktion' => ['dash' => 'Dashboard', 'liste' => 'Produktionsaufträge', 'kalender' => 'Kalender'],
-        'Betrieb'    => ['reinigung' => 'Reinigungspläne', 'anleitungen' => 'Anleitungen'],
+        'Betrieb'    => ['reinigung' => 'Reinigungspläne', 'anleitungen' => 'Anleitungen', 'einstellungen' => 'Einstellungen'],
     ];
 }
 

@@ -1,0 +1,2 @@
+# produktion/module/betrieb/einstellungen.php
+Einstellungen (`?p=einstellungen`): Stammdaten **Maschinen** und **Räume** je in einem Reiter (.settabs), jeweils mit **Reinigungsintervall** (kein/je Produktion/täglich/wöchentlich/monatlich/vierteljährlich), Raumzuordnung je Maschine, Hinweis. Anlegen/Entfernen. Eigene Tabellen `pr_raum`, `pr_maschine`. Basis der generierten Reinigungspläne (`?p=reinigung`).

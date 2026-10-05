@@ -20,6 +20,7 @@ $routen = [
     'kalender'    => 'produktion/kalender.php',
     'reinigung'   => 'betrieb/reinigung.php',
     'anleitungen' => 'betrieb/anleitungen.php',
+    'einstellungen' => 'betrieb/einstellungen.php',   // Maschinen & Räume
 ];
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'dash';
