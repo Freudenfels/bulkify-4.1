@@ -227,6 +227,12 @@ echo '<div class="bx-card"><div class="k">Art</div><div class="v">' . $artBadge 
 echo '<div class="bx-card"><div class="k">Packungen gesamt</div><div class="v">' . number_format((int)$pa['menge'], 0, ',', '.') . '</div></div>';
 if ($einhProP > 0)  echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . '</div></div>';
 if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' gesamt</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
+// Überproduktion (aus der Vor-Produktion-Freigabe): geplante Produktionsmenge in Einheiten + Überschuss -> Rezeptur-Bulk.
+if (!empty($pa['menge_produktion']) && (int)$pa['menge_produktion'] > $gesamtStk) {
+    $ueber = (int)$pa['menge_produktion'] - $gesamtStk;
+    echo '<div class="bx-card"><div class="k">Produktionsmenge (geplant)</div><div class="v">' . number_format((int)$pa['menge_produktion'], 0, ',', '.')
+       . ' <span class="muted" style="font-size:12px">+' . number_format($ueber, 0, ',', '.') . ' &rarr; Bulk</span></div></div>';
+}
 // 4) Planung / Charge
 echo '<div class="bx-card"><div class="k">Geplant am</div><div class="v">' . $geplantForm . '</div></div>';
 echo '<div class="bx-card"><div class="k">Charge' . ($chargeGeb ? (count($fwChargen) > 1 ? 'n' : '') : ' (geplant)') . '</div><div class="v">' . h($chargeNr) . (count($fwChargen) > 1 ? ' <span class="muted" style="font-size:13px">+' . (count($fwChargen) - 1) . '</span>' : '') . '</div></div>';
