@@ -155,7 +155,10 @@ function lg_schema(): void {
     // Menge auf dem Etikett auf die Kartons aufteilen (statt Gesamtmenge je Karton)?
     lg_spalte('lg_charge_info', 'aufteilen', 'TINYINT NOT NULL DEFAULT 0');
     // Sendungs-/Tracking-Nummer(n) des gelieferten Pakets (welches Paket ist gekommen).
-    lg_spalte('lg_charge_info', 'tracking', 'VARCHAR(255) NULL');
+    // TEXT, weil eine Lieferung in vielen Kartons mit je eigener UPS-/Paketnummer kommen kann.
+    lg_spalte('lg_charge_info', 'tracking', 'TEXT NULL');
+    // Bestehende Installationen (alte VARCHAR(255)-Spalte) auf TEXT erweitern – laeuft nur einmal je Deploy.
+    try { q("ALTER TABLE lg_charge_info MODIFY tracking TEXT NULL"); } catch (\Throwable $e) {}
 
     // Änderungs-Historie je Charge (wer hat wann was geändert) – fürs Lager-Protokoll.
     q("CREATE TABLE IF NOT EXISTS lg_charge_log (
@@ -238,10 +241,17 @@ function lg_tracking(int $charge_id): string {
     return (string) scalar("SELECT tracking FROM lg_charge_info WHERE charge_id=?", [$charge_id]);
 }
 function lg_tracking_set(int $charge_id, string $tracking): void {
-    $tracking = mb_substr(trim($tracking), 0, 255);
+    // Mehrere Paket-/Sendungsnummern erlaubt (eine Lieferung = viele Kartons). Grosszuegig begrenzen.
+    $tracking = mb_substr(trim($tracking), 0, 4000);
     if ($tracking === '') return;
     q("INSERT INTO lg_charge_info (charge_id,pakete,tracking,angelegt) VALUES (?,1,?,?)
        ON DUPLICATE KEY UPDATE tracking=VALUES(tracking)", [$charge_id, $tracking, jetzt_utc()]);
+}
+// Paket-/Sendungsnummern als Liste (fuer Anzeige + Vollstaendigkeits-Pruefung "welches Paket fehlt").
+function lg_tracking_liste(int $charge_id): array {
+    $s = lg_tracking($charge_id);
+    if (trim($s) === '') return [];
+    return array_values(array_filter(array_map('trim', preg_split('/[\r\n,;]+/', $s)), fn($x) => $x !== ''));
 }
 
 // --- Papierkorb (im Lager ausgeblendete Chargen; Dashboard-Charge bleibt erhalten) -----------

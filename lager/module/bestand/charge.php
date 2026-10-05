@@ -253,11 +253,11 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
   <!-- Sendung / Paket -->
   <div class="bx-card lg-ecard">
     <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>
-    <div class="k">Sendung / Paket</div>
-    <div class="v lg-eview lg-code" style="font-size:var(--fs-lg)"><?= h($trk) ?: '–' ?></div>
+    <div class="k">Sendung / Paket<?= trim($trk) !== '' ? ' (' . count(lg_tracking_liste($id)) . ')' : '' ?></div>
+    <div class="v lg-eview lg-code" style="font-size:var(--fs-lg)"><?= trim($trk) !== '' ? nl2br(h($trk)) : '–' ?></div>
     <form method="post" class="lg-eform" hidden>
       <input type="hidden" name="aktion" value="tracking">
-      <input type="text" name="tracking" class="lg-code" autocomplete="off" value="<?= h($trk) ?>" placeholder="Paketlabel scannen">
+      <textarea name="tracking" class="lg-code" autocomplete="off" rows="4" placeholder="Paket-/Sendungsnummern – eine je Zeile" style="width:100%;resize:vertical;font-family:inherit"><?= h($trk) ?></textarea>
       <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
     </form>
   </div>

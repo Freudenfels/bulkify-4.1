@@ -100,6 +100,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $mhd      = trim((string)($_POST['p_mhd'][$i] ?? ''));
         $blinker  = led_leiste_normalisieren((string)($_POST['p_blinker'][$i] ?? ''));
         $pakete   = max(1, (int)($_POST['p_pakete'][$i] ?? 1));
+        // Paket-/Sendungsnummern je Karton (eine je Zeile) – nur zur Rueckverfolgung/Vollstaendigkeit.
+        $paketNrn = array_values(array_filter(array_map('trim',
+            preg_split('/[\r\n]+/', (string)($_POST['p_paketnummern'][$i] ?? ''))), fn($x) => $x !== ''));
+        if ($paketNrn) $pakete = max($pakete, count($paketNrn));   // so viele Kartons wie Nummern
         $statusP  = (string)($_POST['p_frei'][$i] ?? '1') === '1' ? 'frei' : 'quarantaene';   // Haken je Position
         $rezeptur_id = (int)($_POST['p_rezeptur'][$i] ?? 0);   // nur bei Warenart 'fertig' relevant
         if ($name === '' && $menge <= 0 && $rezeptur_id <= 0) continue;   // leere Zeile
@@ -142,7 +146,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         lg_pakete_set((int)$cid, $pakete);
         $aufteilenPos = (string)($_POST['p_aufteilen'][$i] ?? '0') === '1';
         lg_aufteilen_set((int)$cid, $aufteilenPos && $pakete > 1);
-        lg_tracking_set((int)$cid, (string)($_POST['tracking'] ?? ''));
+        // Paketnummern je Position bevorzugt (eine je Karton), sonst das formweite Paketlabel.
+        lg_tracking_set((int)$cid, $paketNrn ? implode("\n", $paketNrn) : (string)($_POST['tracking'] ?? ''));
         $c = erp_charge((int)$cid);
         lg_bewegung_log((int)$cid, 'ein', $menge, $c['einheit'] ?? null, (string)($c['item_name'] ?? ''), $notiz);
         if ($kisteId > 0) {
@@ -376,6 +381,8 @@ if ($gebucht):
   .we-pos .f-einheit{flex:0 1 90px}
   .we-pos .f-artnr{flex:0 1 120px}
   .we-pos .f-pakete{flex:0 1 80px}
+  .we-pos .f-paketnrn{flex:1 1 180px}
+  .we-pos .we-paketnrn{width:100%;min-height:38px;resize:vertical;font-family:inherit;font-size:13px}
   .we-pos .f-split{flex:0 1 80px}
   .we-pos .f-frei{flex:0 1 100px}
   .we-pos .f-split input[type=checkbox],
@@ -450,11 +457,18 @@ if ($gebucht):
         '<div class="bx-field f-charge"><label class="lbl-charge">Charge-Nr.</label><input type="text" name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'"></div>'+
         '<div class="bx-field f-mhd"><label class="lbl-mhd">MHD</label><input type="date" name="p_mhd[]" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
         '<div class="bx-field f-pakete"><label>Pakete</label><input type="number" name="p_pakete[]" class="we-pakete" min="1" step="1" value="1"></div>'+
+        '<div class="bx-field f-paketnrn"><label>Paketnummern <span class="muted">(je Zeile)</span></label><textarea name="p_paketnummern[]" class="we-paketnrn" rows="1" placeholder="UPS-/Sendungsnr. je Karton – eine pro Zeile"></textarea></div>'+
         '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked title="Angehakt = freigegeben, nicht angehakt = Quarantäne"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
         '<div class="bx-field f-split"><label>Aufteilen</label><input type="checkbox" class="we-split" title="Menge gleichmäßig auf die Kartons verteilen"><input type="hidden" name="p_aufteilen[]" class="we-split-h" value="0"></div>'+
         '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
       '</div>';
     rows.appendChild(card);
+    // Paketnummern (eine je Zeile) -> Kartonanzahl folgt automatisch der Zeilenzahl.
+    var pnr=card.querySelector('.we-paketnrn'), pkt=card.querySelector('.we-pakete');
+    if(pnr&&pkt){ pnr.addEventListener('input',function(){
+      var n=pnr.value.split(/\r?\n/).map(function(s){return s.trim();}).filter(Boolean).length;
+      if(n>0) pkt.value=n;
+    }); }
     // Artikel-Name -> item_id, Einheit, Warenart aus Treffer uebernehmen.
     var name=card.querySelector('.we-name'), hid=card.querySelector('input[name="p_item[]"]'),
         art2=card.querySelector('.we-art'), einh=card.querySelector('input[name="p_einheit[]"]');
