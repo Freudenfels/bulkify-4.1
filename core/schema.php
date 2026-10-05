@@ -1742,6 +1742,17 @@ function init_schema(): void {
     ensure_index('beleg', 'idx_auftrag', 'auftrag_id');                // Rechnung je Auftrag
     ensure_index('beleg', 'idx_kunde_typ', 'kunde_id, typ');           // Rechnungen je Kunde
 
+    // Jede Rezeptur bekommt genau EIN Lager-Bulk-Item (Kategorie 'fertig', item.rezeptur_id),
+    // damit ankommende Ware im Lager der Rezeptur zugeordnet werden kann – auch wenn die Rezeptur
+    // nie in Produktion geht. Einmal je Deploy: fehlende nachlegen (idempotent via rezeptur_bulkitem).
+    if (table_exists('rezeptur') && table_exists('item')) {
+        try {
+            foreach (all("SELECT r.id FROM rezeptur r
+                          WHERE NOT EXISTS (SELECT 1 FROM item i WHERE i.rezeptur_id=r.id AND i.kategorie='fertig')") as $__rz)
+                rezeptur_bulkitem((int)$__rz['id']);
+        } catch (\Throwable $e) { /* Backfill darf den Schema-Build nie blockieren */ }
+    }
+
     // Bedarf-Cache nach jedem Deploy einmal invalidieren – so greifen Änderungen an der Bedarfsrechnung
     // (z. B. Fallback produkt.einheiten_pro_packung -> auftrag.stueck) sofort und nicht erst nach TTL.
     bedarf_bump();

@@ -36,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $nid = insert_id();
         foreach (all("SELECT * FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort,id", [(int)$id]) as $z)
             q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)", [$nid, $z['item_id'], $z['bezeichnung'], $z['menge_mg'], $z['sort']]);
+        rezeptur_bulkitem((int)$nid);   // koppelbares Lager-Bulk-Item sofort anlegen
         header('Location: ?p=rezeptur_detail&id=' . $nid . '&gespeichert=1'); exit;
     }
     // Lieferanten-Preisanfrage (Fremdfertigung) zurückziehen – nur solange kein Preis abgegeben wurde.
@@ -91,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
               [(int)$id, $iid, $bez, $mg, $i]);
         }
+        rezeptur_bulkitem((int)$id);   // jede Rezeptur hat ein koppelbares Lager-Bulk-Item
         header('Location: ?p=rezeptur_detail&id=' . $id . '&gespeichert=1'); exit;
     }
 }
