@@ -250,6 +250,8 @@ function lg_schema(): void {
     lg_spalte('lg_versand', 'masse_l', 'DECIMAL(6,1) NULL');
     lg_spalte('lg_versand', 'masse_b', 'DECIMAL(6,1) NULL');
     lg_spalte('lg_versand', 'masse_h', 'DECIMAL(6,1) NULL');
+    // DHL-Paketgröße: gross = Paket (V01PAK/V53WPAK), klein = Kleinpaket/Warenpost (V62KP/V66WPI).
+    lg_spalte('lg_versand', 'dhl_groesse', "VARCHAR(8) NOT NULL DEFAULT 'gross'");
 
     // Vom Carrier erzeugtes Versand-Label (PDF) je Sendung.
     q("CREATE TABLE IF NOT EXISTS lg_versand_label (
@@ -320,14 +322,15 @@ function lg_versand_kopf_speichern(int $id, array $d): void {
     $mass = fn($v) => ($v ?? '') !== '' ? (float)str_replace(',', '.', (string)$v) : null;
     q("UPDATE lg_versand SET kunde_id=?, empf_firma=?, empf_name=?, empf_strasse=?, empf_hausnummer=?,
          empf_plz=?, empf_ort=?, empf_land=?, empf_email=?, empf_telefon=?, adress_quelle=?, typ=?,
-         notiz=?, gewicht_kg=?, pakete=?, masse_l=?, masse_b=?, masse_h=? WHERE id=?",
+         notiz=?, gewicht_kg=?, pakete=?, masse_l=?, masse_b=?, masse_h=?, dhl_groesse=? WHERE id=?",
       [($d['kunde_id'] ?? null) ?: null, $d['empf_firma'] ?? '', $d['empf_name'] ?? '', $d['empf_strasse'] ?? '',
        $d['empf_hausnummer'] ?? '', $d['empf_plz'] ?? '', $d['empf_ort'] ?? '',
        strtoupper(trim((string)($d['empf_land'] ?? 'DE'))) ?: 'DE', $d['empf_email'] ?? '', $d['empf_telefon'] ?? '',
        $d['adress_quelle'] ?? 'frei', in_array(($d['typ'] ?? 'paket'), ['paket', 'palette'], true) ? ($d['typ'] ?? 'paket') : 'paket',
        $d['notiz'] ?? '',
        (($d['gewicht_kg'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$d['gewicht_kg']) : null),
-       max(1, (int)($d['pakete'] ?? 1)), $mass($d['masse_l'] ?? ''), $mass($d['masse_b'] ?? ''), $mass($d['masse_h'] ?? ''), $id]);
+       max(1, (int)($d['pakete'] ?? 1)), $mass($d['masse_l'] ?? ''), $mass($d['masse_b'] ?? ''), $mass($d['masse_h'] ?? ''),
+       (($d['dhl_groesse'] ?? 'gross') === 'klein' ? 'klein' : 'gross'), $id]);
 }
 // Vom Carrier erzeugtes Label speichern/lesen.
 function lg_versand_label_set(int $versand_id, string $carrier, string $format, string $pdf): void {

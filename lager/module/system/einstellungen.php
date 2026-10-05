@@ -3,6 +3,14 @@
 //  - Drucker: Etikettengröße, Drucker-Auswahl, Brücke auf dem Lager-PC, Sender/Blinker.
 //  - Formate: Lieferschein-Absender, Standard-Versandart.
 //  - Zugänge: API-Schlüssel für DHL (Paket) und Cargoboard (Palette/Fracht). In lg_meta (DB, nicht im Repo).
+// AJAX: DHL-Zugang testen (ohne echte Sendung).
+if (($_POST['aktion'] ?? '') === 'dhl_test') {
+    header('Content-Type: application/json; charset=utf-8');
+    require_once __DIR__ . '/../../core/versand.php';
+    echo json_encode(versand_dhl_test(), JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $reiter = (string)($_GET['reiter'] ?? 'drucker');
 if (!in_array($reiter, ['drucker', 'formate', 'zugaenge'], true)) $reiter = 'drucker';
 
@@ -36,9 +44,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         weiter('?p=einstellungen&reiter=formate');
     }
     if ($aktion === 'zugaenge_speichern') {
-        // DHL (Paket)
-        $setSecret('dhl_api_user'); $setSecret('dhl_api_key'); $setSecret('dhl_api_secret');
+        // DHL (Paket) – Secrets nur bei Eingabe; Nummern/Format normal.
+        $setSecret('dhl_api_key'); $setSecret('dhl_api_user'); $setSecret('dhl_api_secret');
+        lg_meta_schreiben('dhl_ekp', preg_replace('/\D/', '', (string)($_POST['dhl_ekp'] ?? '')));
+        foreach (['dhl_tn_v01pak', 'dhl_tn_v62wp', 'dhl_tn_v53wpak', 'dhl_tn_v66wpi'] as $tnf)
+            lg_meta_schreiben($tnf, preg_replace('/\D/', '', (string)($_POST[$tnf] ?? '')));
         lg_meta_schreiben('dhl_abrechnungsnummer', trim((string)($_POST['dhl_abrechnungsnummer'] ?? '')));
+        lg_meta_schreiben('dhl_format_gross', trim((string)($_POST['dhl_format_gross'] ?? '')) ?: '910-300-400');
+        lg_meta_schreiben('dhl_format_klein', trim((string)($_POST['dhl_format_klein'] ?? '')) ?: '100x70mm');
         lg_meta_schreiben('dhl_sandbox', ($_POST['dhl_sandbox'] ?? '') === '1' ? '1' : '0');
         // Cargoboard (Palette/Fracht)
         $setSecret('cargoboard_api_key');
@@ -223,21 +236,44 @@ $tab = fn(string $k, string $label): string => '<a href="?p=einstellungen&reiter
 ?>
 <form method="post" autocomplete="off">
   <input type="hidden" name="aktion" value="zugaenge_speichern">
+  <?php
+    $dhlEkp = lg_meta_lesen('dhl_ekp', '');
+    $tnV01 = lg_meta_lesen('dhl_tn_v01pak', ''); $tnV62 = lg_meta_lesen('dhl_tn_v62wp', '');
+    $tnV53 = lg_meta_lesen('dhl_tn_v53wpak', ''); $tnV66 = lg_meta_lesen('dhl_tn_v66wpi', '');
+    $fmtGross = lg_meta_lesen('dhl_format_gross', '910-300-400'); $fmtKlein = lg_meta_lesen('dhl_format_klein', '100x70mm');
+  ?>
   <div class="bx-panel">
-    <h2 style="margin-top:0">DHL – Paket (kleine Sendungen)</h2>
-    <p class="muted" style="margin:0 0 var(--sp-3)">Geschäftskunden-Zugang (GKP / „Paket DE Versenden"). Wird ab Phase 2 fürs Label + Tracking genutzt.</p>
+    <h2 style="margin-top:0">DHL – Paket DE „Versenden" v2</h2>
+    <p class="muted" style="margin:0 0 var(--sp-3)">Geschäftskunden (GKP). Produkt automatisch: Paket (groß) oder Kleinpaket/Warenpost (klein), national &amp; international. API-Key aus dem DHL Developer Portal (je Umgebung eigener Key).</p>
     <div class="bx-grid">
-      <div class="bx-field"><label>API-Benutzer / Client-ID</label>
-        <input type="password" name="dhl_api_user" value="" placeholder="<?= h($setHint($dhlUserSet)) ?>"></div>
-      <div class="bx-field"><label>API-Key</label>
+      <div class="bx-field"><label>API-Key (dhl-api-key)</label>
         <input type="password" name="dhl_api_key" value="" placeholder="<?= h($setHint($dhlKeySet)) ?>"></div>
-      <div class="bx-field"><label>API-Secret / Passwort</label>
+      <div class="bx-field"><label>GK-Benutzer</label>
+        <input type="password" name="dhl_api_user" value="" placeholder="<?= h($setHint($dhlUserSet)) ?>"></div>
+      <div class="bx-field"><label>GK-Passwort</label>
         <input type="password" name="dhl_api_secret" value="" placeholder="<?= h($setHint($dhlSecretSet)) ?>"></div>
-      <div class="bx-field"><label>Abrechnungsnummer (GK-Kundennummer)</label>
-        <input type="text" name="dhl_abrechnungsnummer" value="<?= h($dhlAbr) ?>" placeholder="z. B. 22222222220101"></div>
+      <div class="bx-field"><label>EKP (10-stellige Kundennummer)</label>
+        <input type="text" name="dhl_ekp" value="<?= h($dhlEkp) ?>" placeholder="10 Ziffern"></div>
+    </div>
+    <div style="font-weight:600;margin:var(--sp-3) 0 6px">Teilnahmenummern (je 4 Ziffern, je Produkt)</div>
+    <div class="bx-grid">
+      <div class="bx-field"><label>V01PAK – Paket national (groß)</label><input type="text" name="dhl_tn_v01pak" value="<?= h($tnV01) ?>" placeholder="z. B. 0101"></div>
+      <div class="bx-field"><label>V62KP – Kleinpaket/Warenpost (klein)</label><input type="text" name="dhl_tn_v62wp" value="<?= h($tnV62) ?>"></div>
+      <div class="bx-field"><label>V53WPAK – Paket International (groß)</label><input type="text" name="dhl_tn_v53wpak" value="<?= h($tnV53) ?>"></div>
+      <div class="bx-field"><label>V66WPI – Warenpost International (klein)</label><input type="text" name="dhl_tn_v66wpi" value="<?= h($tnV66) ?>"></div>
+    </div>
+    <div class="bx-grid" style="margin-top:var(--sp-3)">
+      <div class="bx-field"><label>Label-Format groß</label><input type="text" name="dhl_format_gross" value="<?= h($fmtGross) ?>" placeholder="910-300-400"></div>
+      <div class="bx-field"><label>Label-Format klein</label><input type="text" name="dhl_format_klein" value="<?= h($fmtKlein) ?>" placeholder="100x70mm"></div>
+      <div class="bx-field"><label>Alt-Abrechnungsnummer (optional, 14-stellig)</label><input type="text" name="dhl_abrechnungsnummer" value="<?= h($dhlAbr) ?>" placeholder="Fallback, wenn EKP/TN leer"></div>
       <div class="bx-field"><label>Umgebung</label>
         <label class="bx-check" style="margin-top:8px"><input type="checkbox" name="dhl_sandbox" value="1" <?= $dhlSandbox ? 'checked' : '' ?>> Sandbox (Test) verwenden</label></div>
     </div>
+    <div class="bx-row" style="gap:var(--sp-3);align-items:center;margin-top:var(--sp-3)">
+      <button type="button" class="btn btn-ghost" id="dhlTest">Verbindung testen</button>
+      <span id="dhlTestInfo" class="muted" style="font-size:12px"></span>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:var(--sp-2)">„Verbindung testen" schickt eine Prüf-Sendung an DHL (erzeugt kein echtes Label). Vorher Absender unter „Formate" eintragen und speichern.</div>
   </div>
   <div class="bx-panel">
     <h2 style="margin-top:0">Cargoboard – Palette / Fracht</h2>
@@ -254,6 +290,20 @@ $tab = fn(string $k, string $label): string => '<a href="?p=einstellungen&reiter
   </div>
   <div style="margin-top:var(--sp-4)"><button type="submit" class="btn btn-primary">Zugänge speichern</button></div>
 </form>
+<script>
+(function(){
+  var b=document.getElementById('dhlTest'), info=document.getElementById('dhlTestInfo');
+  if(!b) return;
+  b.addEventListener('click',function(){
+    info.style.color=''; info.textContent='Teste Verbindung … (gespeicherte Zugänge)';
+    var fd=new FormData(); fd.append('aktion','dhl_test');
+    fetch('?p=einstellungen',{method:'POST',body:fd,credentials:'same-origin'})
+      .then(function(r){return r.json();})
+      .then(function(j){ info.style.color=j.ok?'var(--gruen)':'var(--err)'; info.textContent=(j.ok?'OK – ':'')+(j.meldung||(j.ok?'Zugang ok.':'Fehler')); })
+      .catch(function(){ info.style.color='var(--err)'; info.textContent='Serverfehler beim Test.'; });
+  });
+})();
+</script>
 <?php endif; ?>
 <?php
 fuss();

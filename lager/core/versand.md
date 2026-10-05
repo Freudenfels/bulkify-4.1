@@ -12,5 +12,8 @@ Label + Tracking.
   das Label (PDF) über `lg_versand_label_set()` gespeichert und die Sendungsnummer über
   `lg_versand_tracking_setzen()`. Fehlt ein Zugang/Absender → klare Meldung, kein API-Call.
 
-Genutzt von [../module/versand/detail.md](../module/versand/detail.md) (Aktion „label").
-Keine Secrets im Code – alles in `lg_meta`.
+- `versand_storno($versand_id)` – Sendung beim Carrier stornieren (aktuell DHL), löscht Label + Tracking.
+- `versand_dhl_test()` – DHL-Zugang testen (`dhl_validate`, ohne echte Sendung) für „Verbindung testen".
+
+Genutzt von [../module/versand/detail.md](../module/versand/detail.md) (Aktionen „label"/„storno") und
+den Einstellungen (Zugänge → Verbindung testen). Keine Secrets im Code – alles in `lg_meta`.

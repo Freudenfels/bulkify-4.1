@@ -15,8 +15,11 @@ Hub für alles rund ums Lager, in **Reitern** (`.settabs`, `?reiter=`): **Drucke
 Absender** (`absender_name/strasse/hausnummer/plz/ort/land/email/telefon`) – Pflicht für die Carrier-Labels –
 und Standard-Versandart (`versand_typ_standard`).
 
-**Zugänge** (`reiter=zugaenge`): API-Schlüssel für **DHL – Paket** (`dhl_api_user/_key/_secret`,
-`dhl_abrechnungsnummer`, `dhl_sandbox`) und **Cargoboard – Palette/Fracht** (`cargoboard_api_key`,
+**Zugänge** (`reiter=zugaenge`): **DHL – Paket DE v2** – API-Key (`dhl_api_key`), GK-Benutzer/Passwort
+(`dhl_api_user`/`dhl_api_secret`), **EKP** (`dhl_ekp`) + **Teilnahmenummern** je Produkt (`dhl_tn_v01pak`,
+`dhl_tn_v62wp`, `dhl_tn_v53wpak`, `dhl_tn_v66wpi`), Label-Formate (`dhl_format_gross`/`_klein`), optionale
+14-stellige Alt-Abrechnungsnummer (`dhl_abrechnungsnummer`), `dhl_sandbox`, Knopf **„Verbindung testen"**
+(`aktion=dhl_test` → `versand_dhl_test()`, erzeugt keine Sendung). **Cargoboard** (`cargoboard_api_key`,
 `cargoboard_sandbox`). Secrets werden nur bei Eingabe überschrieben (leer = unverändert) und nie wieder im
 Klartext angezeigt. Liegen in `lg_meta` (DB, nicht im Repo) – fürs scharfe Deployment später nach
 `secrets.php` auslagern. **Werden von `core/versand.php` genutzt**: Paket → DHL, Palette → Cargoboard

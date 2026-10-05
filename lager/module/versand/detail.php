@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'empf_email' => trim((string)($_POST['empf_email'] ?? '')),
             'empf_telefon' => trim((string)($_POST['empf_telefon'] ?? '')),
             'typ' => (string)($_POST['typ'] ?? 'paket'),
+            'dhl_groesse' => (string)($_POST['dhl_groesse'] ?? 'gross'),
             'pakete' => (int)($_POST['pakete'] ?? 1),
             'gewicht_kg' => (string)($_POST['gewicht_kg'] ?? ''),
             'masse_l' => (string)($_POST['masse_l'] ?? ''),
@@ -70,6 +71,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $r = versand_label_erstellen($id);
         if (!empty($r['ok'])) flash('Versand-Label erstellt (' . strtoupper((string)$r['carrier']) . '). Sendungsnr.: ' . ((string)$r['tracking'] ?: '–'));
         else flash((string)($r['fehler'] ?? 'Label konnte nicht erstellt werden.'), 'warn');
+        weiter('?p=versand_detail&id=' . $id);
+    }
+    if ($aktion === 'storno') {
+        require_once __DIR__ . '/../../core/versand.php';
+        $r = versand_storno($id);
+        flash((string)($r['meldung'] ?? ($r['ok'] ? 'Storniert.' : 'Storno fehlgeschlagen.')), !empty($r['ok']) ? 'ok' : 'warn');
         weiter('?p=versand_detail&id=' . $id);
     }
     if ($aktion === 'versenden') {
@@ -142,10 +149,16 @@ flash_zeigen();
   <div class="bx-panel" style="margin-bottom:var(--sp-5)">
     <h2 style="margin-top:0">Versandart</h2>
     <div class="bx-row" style="gap:var(--sp-4);flex-wrap:wrap;align-items:flex-end">
-      <div class="bx-field" style="margin:0;min-width:200px"><label>Art</label>
+      <div class="bx-field" style="margin:0;min-width:160px"><label>Art</label>
         <select name="typ">
-          <option value="paket" <?= (string)$v['typ'] === 'paket' ? 'selected' : '' ?>>Paket (klein)</option>
-          <option value="palette" <?= (string)$v['typ'] === 'palette' ? 'selected' : '' ?>>Palette / Fracht</option>
+          <option value="paket" <?= (string)$v['typ'] === 'paket' ? 'selected' : '' ?>>Paket (DHL)</option>
+          <option value="palette" <?= (string)$v['typ'] === 'palette' ? 'selected' : '' ?>>Palette / Fracht (Cargoboard)</option>
+        </select>
+      </div>
+      <div class="bx-field vs-paket" style="margin:0;min-width:200px"><label>DHL-Größe</label>
+        <select name="dhl_groesse">
+          <option value="gross" <?= (string)($v['dhl_groesse'] ?? 'gross') !== 'klein' ? 'selected' : '' ?>>Paket (groß)</option>
+          <option value="klein" <?= (string)($v['dhl_groesse'] ?? 'gross') === 'klein' ? 'selected' : '' ?>>Kleinpaket / Warenpost (klein)</option>
         </select>
       </div>
       <div class="bx-field" style="margin:0;max-width:120px"><label>Pakete</label><input type="number" name="pakete" min="1" step="1" value="<?= (int)($v['pakete'] ?? 1) ?>"></div>
@@ -245,6 +258,12 @@ flash_zeigen();
       <button type="button" class="btn btn-primary" data-druck="label" data-id="<?= $id ?>">Label drucken</button>
       <a class="btn btn-ghost" href="?p=versand_label&id=<?= $id ?>" target="_blank" data-no-busy>Öffnen (PDF)</a>
     <?php endif; ?>
+    <?php if ((string)$v['carrier'] === 'dhl' && trim((string)($v['tracking'] ?? '')) !== ''): ?>
+    <form method="post" style="margin:0" onsubmit="return confirm('DHL-Sendung stornieren? Nur möglich, solange sie noch nicht übergeben wurde.')">
+      <input type="hidden" name="aktion" value="storno"><input type="hidden" name="id" value="<?= $id ?>">
+      <button class="btn btn-ghost" type="submit" style="color:#8f231b;border-color:#e6c4c0">Sendung stornieren</button>
+    </form>
+    <?php endif; ?>
   </div>
   <div id="vsDruckInfo" class="muted" style="font-size:12px;margin-top:var(--sp-2)">Druckt lautlos über die Brücke auf den in den Einstellungen → Drucker gewählten Drucker. „Öffnen" zeigt das PDF.</div>
 </div>
@@ -299,7 +318,9 @@ flash_zeigen();
 
   // Maße-Felder nur bei Palette/Fracht zeigen.
   var typ=document.querySelector('[name="typ"]');
-  function masseToggle(){ var pal=typ&&typ.value==='palette'; document.querySelectorAll('.vs-masse').forEach(function(el){ el.style.display=pal?'':'none'; }); }
+  function masseToggle(){ var pal=typ&&typ.value==='palette';
+    document.querySelectorAll('.vs-masse').forEach(function(el){ el.style.display=pal?'':'none'; });
+    document.querySelectorAll('.vs-paket').forEach(function(el){ el.style.display=pal?'none':''; }); }
   if(typ){ typ.addEventListener('change',masseToggle); masseToggle(); }
 
   // Direkt drucken (Lieferschein / Versand-Label) -> Druckjob fuer die Bruecke.

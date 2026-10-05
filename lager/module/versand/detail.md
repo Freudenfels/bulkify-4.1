@@ -16,8 +16,12 @@ gespeichert (`lg_versand_kopf_speichern`), bleibt also stabil, auch wenn der Kun
 **Versandart:** Bei **Palette/Fracht** erscheinen zusätzlich Maße je Packstück (Länge/Breite/Höhe cm,
 `masse_l/b/h`) – für Cargoboard (Standard Europalette, falls leer).
 
+**Versandart Paket:** Auswahl **DHL-Größe** (groß = Paket, klein = Kleinpaket/Warenpost; `dhl_groesse`) →
+Produkt + Label-Format je national/international automatisch.
+
 **Versand-Label & Tracking:** Aktion „label" (`versand_label_erstellen()`): **Paket → DHL**,
 **Palette → Cargoboard**. Erzeugt Label (PDF, `?p=versand_label`) + Sendungsnummer, speichert den Carrier.
+**Storno** (`aktion=storno` → `versand_storno()`, nur DHL, solange nicht übergeben) löscht Label + Tracking.
 Fehlt ein Zugang/Absender → klare Meldung. Zugänge/Absender in den Einstellungen.
 
 **Dokumente drucken:** **Lieferschein drucken** und **Label drucken** schicken einen Druckjob an die

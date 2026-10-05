@@ -10,6 +10,11 @@ function versand_cfg(): array {
         'dhl' => [
             'user' => trim($g('dhl_api_user')), 'key' => trim($g('dhl_api_key')), 'secret' => trim($g('dhl_api_secret')),
             'billing' => trim($g('dhl_abrechnungsnummer')), 'sandbox' => $g('dhl_sandbox', '1') === '1',
+            'ekp' => trim($g('dhl_ekp')),
+            'tn_v01pak' => trim($g('dhl_tn_v01pak')), 'tn_v62wp' => trim($g('dhl_tn_v62wp')),
+            'tn_v53wpak' => trim($g('dhl_tn_v53wpak')), 'tn_v66wpi' => trim($g('dhl_tn_v66wpi')),
+            'format_gross' => trim($g('dhl_format_gross', '910-300-400')) ?: '910-300-400',
+            'format_klein' => trim($g('dhl_format_klein', '100x70mm')) ?: '100x70mm',
         ],
         'cargoboard' => [
             'key' => trim($g('cargoboard_api_key')), 'sandbox' => $g('cargoboard_sandbox', '1') === '1',
@@ -36,6 +41,7 @@ function versand_http(string $method, string $url, array $headers, ?string $body
         CURLOPT_TIMEOUT => 45, CURLOPT_CONNECTTIMEOUT => 15,
     ]);
     if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+    if (defined('CURLSSLOPT_NATIVE_CA')) curl_setopt($ch, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);   // Windows: System-Zertifikate
     $res = curl_exec($ch);
     $st = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $ct = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
@@ -62,8 +68,9 @@ function versand_label_erstellen(int $versand_id): array {
         $carrier = 'cargoboard';
     } else {
         $d = $cfg['dhl'];
-        if ($d['user'] === '' || $d['key'] === '' || $d['secret'] === '' || $d['billing'] === '')
-            return ['ok' => false, 'fehler' => 'DHL-Zugang unvollständig – unter Einstellungen → Zugänge eintragen (Benutzer, Key, Secret, Abrechnungsnummer).'];
+        if ($d['key'] === '') return ['ok' => false, 'fehler' => 'DHL API-Key fehlt – unter Einstellungen → Zugänge eintragen.'];
+        if (!$d['sandbox'] && ($d['user'] === '' || $d['secret'] === ''))
+            return ['ok' => false, 'fehler' => 'DHL GK-Login fehlt (Benutzer/Passwort) – unter Einstellungen → Zugänge eintragen.'];
         require_once __DIR__ . '/versand_dhl.php';
         $r = dhl_label_erstellen($v, $abs, $d);
         $carrier = 'dhl';
@@ -73,4 +80,24 @@ function versand_label_erstellen(int $versand_id): array {
     lg_versand_label_set($versand_id, $carrier, (string)($r['format'] ?? 'A4'), (string)($r['pdf'] ?? ''));
     lg_versand_tracking_setzen($versand_id, (string)($r['tracking'] ?? ''), $carrier);
     return ['ok' => true, 'tracking' => (string)($r['tracking'] ?? ''), 'carrier' => $carrier];
+}
+
+// Sendung beim Carrier stornieren (nur DHL; solange noch nicht übergeben). Loescht Label + Tracking.
+function versand_storno(int $versand_id): array {
+    $v = lg_versand($versand_id);
+    if (!$v) return ['ok' => false, 'meldung' => 'Sendung nicht gefunden.'];
+    if ((string)$v['carrier'] !== 'dhl') return ['ok' => false, 'meldung' => 'Storno ist aktuell nur für DHL möglich.'];
+    require_once __DIR__ . '/versand_dhl.php';
+    $r = dhl_cancel(versand_cfg()['dhl'], (string)($v['tracking'] ?? ''));
+    if (!empty($r['ok'])) {
+        q("DELETE FROM lg_versand_label WHERE versand_id=?", [$versand_id]);
+        q("UPDATE lg_versand SET tracking=NULL WHERE id=?", [$versand_id]);
+    }
+    return $r;
+}
+
+// DHL-Zugang testen (ohne echte Sendung). Rueckgabe ['ok','meldung'].
+function versand_dhl_test(): array {
+    require_once __DIR__ . '/versand_dhl.php';
+    return dhl_validate(versand_cfg()['dhl']);
 }
