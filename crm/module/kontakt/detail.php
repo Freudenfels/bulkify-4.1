@@ -4,6 +4,7 @@ require_once BX_ROOT . '/core/kontakt.php';
 require_once BX_ROOT . '/core/antwort_ki.php';
 require_once BX_ROOT . '/core/fragenkatalog_ki.php';
 require_once BX_ROOT . '/core/lead_ki.php';
+require_once BX_ROOT . '/core/rezeptur_ki.php';
 require_once BX_ROOT . '/core/markdown.php';
 
 $id = (int)($_GET['id'] ?? 0);
@@ -34,6 +35,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($tun === 'fragenkatalog_weg') {
         fragenkatalog_loeschen('kontakt', $id);
+        header('Location: ?p=kontakt&id=' . $id); exit;
+    }
+    if ($tun === 'rezeptvorschlag') {
+        // Anfrage-Text aus den strukturierten Feldern + Notiz zusammenbauen.
+        $teile = [];
+        foreach ([['anfrage_rezeptur', 'Produkt/Rezeptur'], ['anfrage_form', 'Form'], ['anfrage_inhalt', 'Menge'], ['anfrage_vorhaben', 'Vorhaben']] as $af) {
+            if (trim((string)($k[$af[0]] ?? '')) !== '') $teile[] = $af[1] . ': ' . $k[$af[0]];
+        }
+        if (trim((string)($k['notiz'] ?? '')) !== '') $teile[] = "\n" . $k['notiz'];
+        $text = trim(implode("\n", $teile));
+        $form = (string)($_POST['form'] ?? 'kapsel');
+        $r = rezeptur_ki_entwickeln($text, $form);
+        if (!empty($r['ok'])) rezeptur_ki_merken('kontakt', $id, $r);
+        header('Location: ?p=kontakt&id=' . $id . ($r['ok'] ? '#rezeptvorschlag' : '&ok=kifehler')); exit;
+    }
+    if ($tun === 'rezeptvorschlag_weg') {
+        rezeptur_ki_loeschen('kontakt', $id);
         header('Location: ?p=kontakt&id=' . $id); exit;
     }
     if ($tun === 'ki_auswerten') {
@@ -180,6 +198,46 @@ elseif ($m !== '')        hinweis(['gespeichert' => 'Gespeichert.', 'notiert' =>
     <button class="btn <?= !empty($k['ki_ausgewertet']) ? 'btn-ghost btn-sm' : 'btn-primary' ?>" type="submit"
             data-busy="Die KI liest die Anfrage …"><?= !empty($k['ki_ausgewertet']) ? 'Neu auswerten' : 'Anfrage auswerten' ?></button>
   </form>
+</div></div>
+<?php endif; ?>
+
+<?php // --- KI-Rezepturvorschlag (aus der Anfrage) -----------------------------------------------
+$rv = rezeptur_ki_vorschlag('kontakt', $id);
+$rvBasis = trim((string)($k['notiz'] ?? '') . ($k['anfrage_rezeptur'] ?? '') . ($k['anfrage_vorhaben'] ?? ''));
+$rvForm = in_array((string)($k['anfrage_form'] ?? ''), array_keys(rezeptur_ki_formen()), true) ? (string)$k['anfrage_form']
+        : (stripos((string)($k['anfrage_form'] ?? ''), 'kaps') !== false ? 'kapsel' : 'kapsel'); ?>
+<?php if ($rv || (ki_bereit() && $rvBasis !== '')): ?>
+<div class="karte" id="rezeptvorschlag"><div class="rumpf">
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:12px">
+    <h2 style="margin:0">KI-Rezepturvorschlag</h2>
+    <?php if ($rv && !empty($rv['_stand'])): ?><span class="muted" style="font-size:var(--fs-sm)">erstellt <?= h(fmt_zeit((string)$rv['_stand'], 'd.m.Y H:i')) ?></span><?php endif; ?>
+  </div>
+  <?php if (!$rv): ?>
+    <p class="muted" style="margin:8px 0 12px">Entwickelt aus der Anfrage einen herstellbaren Vorschlag:
+      Zutaten mit Mengen, Novel-Food- und Höchstmengen-Einschätzung, Health Claims, Machbarkeit und die
+      passende Kapselgröße. <strong>Entwurf fürs Team – keine Freigabe.</strong></p>
+  <?php endif; ?>
+  <?php if (ki_bereit()): ?>
+  <form method="post" style="margin:0 0 <?= $rv ? '14px' : '0' ?>">
+    <input type="hidden" name="tun" value="rezeptvorschlag">
+    <div class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">
+      <div class="bx-field" style="margin:0;min-width:160px">
+        <label for="rvform">Darreichungsform</label>
+        <select id="rvform" name="form">
+          <?php foreach (rezeptur_ki_formen() as $fk2 => $fl): ?><option value="<?= h($fk2) ?>" <?= $fk2 === $rvForm ? 'selected' : '' ?>><?= h($fl) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+      <button class="btn <?= $rv ? 'btn-ghost btn-sm' : 'btn-primary' ?>" type="submit"
+              data-busy="Die KI entwickelt eine Rezeptur …"><?= $rv ? 'Neu entwickeln' : 'Rezepturvorschlag erstellen' ?></button>
+      <span class="muted" style="font-size:var(--fs-sm)">Dauert etwa eine Minute.</span>
+    </div>
+  </form>
+  <?php endif; ?>
+  <?php if ($rv): ?>
+    <div class="crm-md"><?= rezeptur_ki_html($rv) ?></div>
+    <form method="post" style="margin-top:12px"><input type="hidden" name="tun" value="rezeptvorschlag_weg">
+      <button class="btn btn-ghost btn-sm" type="submit">Verwerfen</button></form>
+  <?php endif; ?>
 </div></div>
 <?php endif; ?>
 

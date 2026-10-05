@@ -15,6 +15,13 @@ Der Grund: Am Dashboard wird weiterentwickelt, teilweise parallel in anderen Sit
 - `erp_angebote_fuer_kunde()` / `erp_rezepturen_fuer_kunde()` – Angebote bzw. Rezepturen eines Kunden, nur zur Anzeige am Kontakt.
 - `erp_dashboard_link('angebot&id=neu&kunde_id=5')` – baut einen Sprung in einen Dashboard-Flow (Angebot/Rezeptur anlegen). Angebot/Rezeptur werden **nicht** vom CRM geschrieben – der Kunde wird (falls nötig) über `erp_kunde_anlegen()` angelegt, dann übernimmt das Dashboard.
 
+## Für die Rezeptur-KI im CRM (nur lesen)
+- `erp_rohstoff_katalog()` – unser Rohstoffkatalog als `[id => "Name (lat)"]`, damit die KI Bekanntes vorschlägt.
+- `erp_rohstoff_finden($bez)` – Bezeichnung → unsere Rohstoff-ID (exakt, ohne Klammer, enthalten, umgekehrt).
+- `erp_item_info($id)` – Name + CAS zu einer Rohstoff-ID.
+- `erp_kapsel_passend($summe_mg)` – passende Kapselgröße zum Füllgewicht (Tatsache aus unseren Größen).
+Alle mit `tabelle_da()`-Schutz; fehlt die Tabelle, kommt leer/`null` statt Fehler. Genutzt von `crm/core/rezeptur_ki.php`.
+
 ## Die wichtigste Funktion
 `erp_offene_vorgaenge()` liefert alle Vorgänge, auf die jemand wartet. Je Zeile: `typ`, `id`, `titel`, `unter`, `seit`, `link`, `betrag`, `richtung`.
 

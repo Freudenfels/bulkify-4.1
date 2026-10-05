@@ -69,6 +69,11 @@ Datei zu prüfen – dann weiß man auch, wo man sucht.
 - **Fragenkatalog fürs Erstgespräch** (aus dem v3-CRM) – an Kontakt und Kunde: Kurzbriefing,
   fachlicher Knackpunkt mit Zahlen, Fragen an den Kunden, was wir aktiv sagen müssen,
   Hausaufgaben beidseitig. Das Wissen steht in `crm/prompts/fragenkatalog.md` – von Hand pflegbar.
+- **KI-Rezepturvorschlag** – an Kontakt (aus der Anfrage) und Kunde (Freitext-Idee): herstellbarer
+  Vorschlag mit Zutaten/Mengen, Novel Food, Höchstmengen, Health Claims, Machbarkeit und passender
+  Kapselgröße (aus unserer Rechnung). Prompt pflegbar in `crm/prompts/rezepturvorschlag.md`; liest
+  Rohstoffe/Kapseln über die `erp.php`-Naht. Entwurf fürs Team – echte Rezeptur entsteht im Dashboard.
+  Details: `crm/core/rezeptur_ki.md`.
 - **KI:** Visitenkarte fotografieren, Text auslesen, Antwortvorschlag, Tagesbriefing. Alle vier
   füllen nur vor – gespeichert und verschickt wird nie automatisch.
 - **Dublettenprüfung** beim Erfassen (rein rechnerisch, ohne KI).

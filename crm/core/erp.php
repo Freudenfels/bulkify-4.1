@@ -243,3 +243,63 @@ function erp_rezepturen_fuer_kunde(int $kunde_id): array {
                     WHERE kunde_id=? ORDER BY id DESC LIMIT 50", [$kunde_id]);
     } catch (Throwable $e) { return []; }
 }
+
+// --- Rohstoffe + Kapselgroessen (fuer die Rezeptur-KI im CRM) ----------------------------------
+// Unser Rohstoffkatalog als [id => "Name (lat)"] - die KI soll bevorzugt vorschlagen, was wir
+// einkaufen koennen. Nur gelesen.
+function erp_rohstoff_katalog(): array {
+    if (!tabelle_da('item')) return [];
+    $out = [];
+    try {
+        foreach (all("SELECT id, name, name_lat FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name") as $r)
+            $out[(int)$r['id']] = trim($r['name'] . ($r['name_lat'] ? ' (' . $r['name_lat'] . ')' : ''));
+    } catch (Throwable $e) { return []; }
+    return $out;
+}
+// Einen Rohstoff ueber die Bezeichnung finden (exakt, ohne Klammerzusatz, enthalten, dann umgekehrt).
+function erp_rohstoff_finden(string $bez): ?int {
+    if (!tabelle_da('item')) return null;
+    $bez = trim($bez);
+    if ($bez === '') return null;
+    try {
+        $ohne = trim(preg_replace('/\s*\([^)]*\)/u', '', $bez));
+        foreach (array_unique([$bez, $ohne]) as $v) {
+            if ($v === '') continue;
+            $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name=? LIMIT 1", [$v]);
+            if ($id) return (int)$id;
+        }
+        foreach (array_unique([$bez, $ohne]) as $v) {
+            if ($v === '') continue;
+            $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name LIKE ? LIMIT 1", ['%' . $v . '%']);
+            if ($id) return (int)$id;
+        }
+        $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND CHAR_LENGTH(name) >= 6
+                      AND ? LIKE CONCAT('%', name, '%') ORDER BY CHAR_LENGTH(name) DESC LIMIT 1", [$bez]);
+        return $id ? (int)$id : null;
+    } catch (Throwable $e) { return null; }
+}
+// Name + CAS zu einer Rohstoff-ID (fuer die Anzeige, damit nichts verwechselt wird).
+function erp_item_info(int $id): array {
+    if ($id <= 0 || !tabelle_da('item')) return ['name' => '', 'cas' => ''];
+    try {
+        $r = one("SELECT name, cas FROM item WHERE id=?", [$id]);
+        return ['name' => (string)($r['name'] ?? ''), 'cas' => (string)($r['cas'] ?? '')];
+    } catch (Throwable $e) { return ['name' => '', 'cas' => '']; }
+}
+// Passende Kapselgroesse zum Fuellgewicht (mg) - eine Tatsache aus unseren Groessen, keine KI-Meinung.
+function erp_kapsel_passend(float $summe_mg): ?array {
+    if ($summe_mg <= 0 || !tabelle_da('kapselgroesse')) return null;
+    try {
+        $passend  = one("SELECT id, name, fuellmenge_mg FROM kapselgroesse WHERE fuellmenge_mg >= ? ORDER BY fuellmenge_mg ASC LIMIT 1", [$summe_mg]);
+        $groesste = one("SELECT name, fuellmenge_mg FROM kapselgroesse ORDER BY fuellmenge_mg DESC LIMIT 1");
+        if (!$groesste) return null;
+        return [
+            'fuellgewicht_mg' => round($summe_mg, 1),
+            'groesse'         => $passend['name'] ?? null,
+            'groesse_id'      => $passend ? (int)$passend['id'] : null,
+            'passt'           => (bool)$passend,
+            'groesste'        => (string)($groesste['name'] ?? ''),
+            'groesste_mg'     => (float)($groesste['fuellmenge_mg'] ?? 0),
+        ];
+    } catch (Throwable $e) { return null; }
+}

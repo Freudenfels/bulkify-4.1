@@ -4,6 +4,7 @@
 require_once BX_ROOT . '/core/kontakt.php';
 require_once BX_ROOT . '/core/antwort_ki.php';
 require_once BX_ROOT . '/core/fragenkatalog_ki.php';
+require_once BX_ROOT . '/core/rezeptur_ki.php';
 require_once BX_ROOT . '/core/markdown.php';
 
 $id = (int)($_GET['id'] ?? 0);
@@ -30,7 +31,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($tun === 'fragenkatalog_weg') {
         fragenkatalog_loeschen('kunde', $id);
         header('Location: ?p=kunde&id=' . $id); exit;
-    }    if ($tun === 'antwort') {
+    }
+    if ($tun === 'rezeptvorschlag') {
+        $idee = trim((string)($_POST['idee'] ?? ''));
+        if ($idee === '') $idee = implode("\n", array_map(fn($v) => (string)$v['text'], array_slice(kunde_verlauf_liste($id), 0, 5)));
+        $r = rezeptur_ki_entwickeln($idee, (string)($_POST['form'] ?? 'kapsel'));
+        if (!empty($r['ok'])) rezeptur_ki_merken('kunde', $id, $r);
+        header('Location: ?p=kunde&id=' . $id . ($r['ok'] ? '#rezeptvorschlag' : '&ok=kifehler')); exit;
+    }
+    if ($tun === 'rezeptvorschlag_weg') {
+        rezeptur_ki_loeschen('kunde', $id);
+        header('Location: ?p=kunde&id=' . $id); exit;
+    }
+    if ($tun === 'antwort') {
         $_SESSION['antwort'] = antwort_ki_entwurf(
             (string)$k['firma'],
             'Bestandskunde, siehe Verlauf',
@@ -56,7 +69,8 @@ seitenkopf((string)$k['firma'],
     $dash !== '' ? '<a class="btn btn-ghost" target="_blank" rel="noopener" href="' . h($dash . '/?p=kunde&id=' . $id) . '">Im Dashboard</a>' : '');
 
 $m = (string)($_GET['ok'] ?? '');
-if ($m !== '') hinweis($m === 'erinnert' ? 'Wiedervorlage gesetzt.' : 'Notiert.');
+if ($m === 'kifehler')  hinweis('Die KI hat nicht geklappt. Bitte später erneut versuchen.', 'warn');
+elseif ($m !== '')      hinweis($m === 'erinnert' ? 'Wiedervorlage gesetzt.' : 'Notiert.');
 ?>
 
 <?php if ($wv): ?>
@@ -137,6 +151,37 @@ $fk = fragenkatalog('kunde', $id); ?>
     </form>
   <?php endif; ?>
 </div></div>
+
+<?php // --- KI-Rezepturvorschlag (Freitext-Idee) -------------------------------------------------
+$rv = rezeptur_ki_vorschlag('kunde', $id); ?>
+<?php if ($rv || ki_bereit()): ?>
+<div class="karte" id="rezeptvorschlag"><div class="rumpf">
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:12px">
+    <h2 style="margin:0">KI-Rezepturvorschlag</h2>
+    <?php if ($rv && !empty($rv['_stand'])): ?><span class="muted" style="font-size:var(--fs-sm)">erstellt <?= h(fmt_zeit((string)$rv['_stand'], 'd.m.Y H:i')) ?></span><?php endif; ?>
+  </div>
+  <p class="muted" style="margin:8px 0 12px">Beschreib die Produktidee des Kunden – die KI entwickelt einen
+    herstellbaren Vorschlag (Zutaten, Novel Food, Höchstmengen, Claims, Machbarkeit, Kapselgröße).
+    <strong>Entwurf fürs Team – keine Freigabe.</strong></p>
+  <?php if (ki_bereit()): ?>
+  <form method="post" style="margin:0 0 <?= $rv ? '14px' : '0' ?>">
+    <input type="hidden" name="tun" value="rezeptvorschlag">
+    <div class="bx-field"><textarea name="idee" placeholder="z. B. „etwas für besseren Schlaf, vegan, Kapseln, 2 pro Tag“"></textarea></div>
+    <div class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">
+      <div class="bx-field" style="margin:0;min-width:160px"><label for="rvform">Darreichungsform</label>
+        <select id="rvform" name="form"><?php foreach (rezeptur_ki_formen() as $fk2 => $fl): ?><option value="<?= h($fk2) ?>"><?= h($fl) ?></option><?php endforeach; ?></select></div>
+      <button class="btn <?= $rv ? 'btn-ghost btn-sm' : 'btn-primary' ?>" type="submit" data-busy="Die KI entwickelt eine Rezeptur …"><?= $rv ? 'Neu entwickeln' : 'Rezepturvorschlag erstellen' ?></button>
+      <span class="muted" style="font-size:var(--fs-sm)">Leer = aus dem Verlauf. Dauert etwa eine Minute.</span>
+    </div>
+  </form>
+  <?php endif; ?>
+  <?php if ($rv): ?>
+    <div class="crm-md"><?= rezeptur_ki_html($rv) ?></div>
+    <form method="post" style="margin-top:12px"><input type="hidden" name="tun" value="rezeptvorschlag_weg">
+      <button class="btn btn-ghost btn-sm" type="submit">Verwerfen</button></form>
+  <?php endif; ?>
+</div></div>
+<?php endif; ?>
 
 <?php if (ki_bereit()): $ant = $_SESSION['antwort'] ?? null; unset($_SESSION['antwort']); ?>
 <div class="karte" id="antwort"><div class="rumpf">

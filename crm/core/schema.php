@@ -171,6 +171,23 @@ function crm_schema(): void {
         error_log('crm_schema: crm_mail_eingang konnte nicht angelegt werden: ' . $e->getMessage());
     }
 
+    // --- KI-Rezepturvorschlag am Kontakt/Kunden (Verkaeufer-Workflow im CRM). ------------------
+    // Wie crm_briefing (Fragenkatalog): ein Vorschlag je Kontakt ODER Kunde, als JSON gespeichert.
+    // Best-effort (try/catch): scheitert das CREATE, laeuft der Rest des CRM trotzdem.
+    try {
+        q("CREATE TABLE IF NOT EXISTS crm_rezeptur_ki (
+            id        INT AUTO_INCREMENT PRIMARY KEY,
+            bezug_typ VARCHAR(20) NOT NULL,      -- kontakt|kunde
+            bezug_id  INT NOT NULL,
+            inhalt    MEDIUMTEXT NOT NULL,       -- JSON (Vorschlag)
+            modell    VARCHAR(60) NULL,
+            stand     DATETIME NOT NULL,
+            UNIQUE KEY bezug (bezug_typ, bezug_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Throwable $e) {
+        error_log('crm_schema: crm_rezeptur_ki konnte nicht angelegt werden: ' . $e->getMessage());
+    }
+
     // --- Nachtraeglich ergaenzte Spalten (additiv, idempotent). --------------------------------
     // Wann die KI die Anfrage dieses Kontakts ausgewertet hat (core/lead_ki.php). Leer = noch nie.
     crm_spalte('crm_kontakt', 'ki_ausgewertet', 'DATETIME NULL');
