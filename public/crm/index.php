@@ -47,4 +47,18 @@ if ($p === 'login' && crm_angemeldet())  { header('Location: ?p=wartet'); exit; 
 
 if (!isset($routen[$p])) $p = crm_angemeldet() ? 'wartet' : 'login';
 
-require __DIR__ . '/../../crm/module/' . $routen[$p];
+// Fehler-Anzeiger: nur mit korrektem Token (?dbg=<lead_intake_token>) wird die genaue Meldung
+// gezeigt - zum Aufspueren eines 500, ohne Server-Logzugriff. Sonst normaler Fehler (500).
+try {
+    require __DIR__ . '/../../crm/module/' . $routen[$p];
+} catch (Throwable $e) {
+    $dbg = (string)($_GET['dbg'] ?? '');
+    if ($dbg !== '' && hash_equals(lead_intake_token(), $dbg)) {
+        http_response_code(500);
+        while (ob_get_level() > 0) ob_end_clean();
+        header('Content-Type: text/plain; charset=utf-8');
+        echo "FEHLER: " . $e->getMessage() . "\n@ " . $e->getFile() . ':' . $e->getLine() . "\n\n" . $e->getTraceAsString();
+        exit;
+    }
+    throw $e;
+}
