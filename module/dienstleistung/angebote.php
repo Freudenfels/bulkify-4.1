@@ -28,7 +28,7 @@ dl_subtabs('dl_angebote');
   <h2 style="margin-top:0">Neues DL-Angebot</h2>
   <form method="post" class="bx-row" style="align-items:flex-end;gap:12px">
     <input type="hidden" name="aktion" value="neu">
-    <div class="bx-field" style="min-width:280px"><label>Kunde</label>
+    <div class="bx-field" style="min-width:280px;margin-bottom:0"><label>Kunde</label>
       <select name="kunde_id"><option value="">– ohne Kunde (später wählen) –</option>
         <?php foreach ($kunden as $k): ?><option value="<?= (int)$k['id'] ?>"><?= h($k['firma']) ?></option><?php endforeach; ?>
       </select>

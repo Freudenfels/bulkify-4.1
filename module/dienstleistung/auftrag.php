@@ -74,8 +74,8 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
   <?php else: ?>
     <form method="post" class="bx-row" style="align-items:flex-end;gap:12px">
       <input type="hidden" name="aktion" value="rechnung">
-      <div class="bx-field" style="max-width:160px"><label>Zahlungsziel (Tage)</label><input type="number" name="zahlungsziel_tage" min="0" placeholder="z. B. 14"></div>
-      <div class="bx-field"><label>Im Portal freigeben</label><div class="bx-check" style="padding-top:8px"><input type="checkbox" name="freigeben" id="f_frei" value="1"><label for="f_frei" style="margin:0">Kunde sieht die Rechnung</label></div></div>
+      <div class="bx-field" style="max-width:160px;margin-bottom:0"><label>Zahlungsziel (Tage)</label><input type="number" name="zahlungsziel_tage" min="0" placeholder="z. B. 14"></div>
+      <div class="bx-field" style="margin-bottom:0"><label>Im Portal freigeben</label><div class="bx-check" style="padding-top:8px"><input type="checkbox" name="freigeben" id="f_frei" value="1"><label for="f_frei" style="margin:0">Kunde sieht die Rechnung</label></div></div>
       <button class="btn btn-primary" type="submit">DL-Rechnung erstellen</button>
     </form>
     <p class="muted" style="font-size:12px;margin-top:8px">Erzeugt eine Rechnung mit eigenem Nummernkreis DR-… und übernimmt die Positionen. Sie erscheint danach auch im zentralen Kassenbuch der Buchhaltung.</p>

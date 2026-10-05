@@ -105,12 +105,12 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
 
   <form method="post" class="bx-row" style="align-items:flex-end;gap:12px;margin-top:16px;border-top:1px solid var(--line,#e5e5e5);padding-top:16px">
     <input type="hidden" name="aktion" value="pos_add">
-    <div class="bx-field" style="min-width:320px"><label>Dienstleistung hinzufügen</label>
+    <div class="bx-field" style="min-width:320px;margin-bottom:0"><label>Dienstleistung hinzufügen</label>
       <select name="dienstleistung_id" required><option value="">– aus dem Katalog wählen –</option>
         <?php foreach ($katalog as $d): ?><option value="<?= (int)$d['id'] ?>"><?= h($d['name']) ?> (<?= h(dienstleistung_preis_text($d)) ?>)</option><?php endforeach; ?>
       </select>
     </div>
-    <div class="bx-field" style="max-width:100px"><label>Menge</label><input type="text" name="menge" value="1" style="text-align:right"></div>
+    <div class="bx-field" style="max-width:100px;margin-bottom:0"><label>Menge</label><input type="text" name="menge" value="1" style="text-align:right"></div>
     <button class="btn btn-ghost" type="submit">+ Position</button>
   </form>
   <?php if (!$katalog): ?><p class="muted" style="font-size:12px;margin-top:8px">Kein aktiver Katalog-Eintrag. Lege zuerst unter „Katalog" Dienstleistungen an.</p><?php endif; ?>
