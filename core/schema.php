@@ -5580,8 +5580,15 @@ function etikett_del(int $auftrag_id): void {
 // --- Etikettenfreigabe (Kunde) -------------------------------------------------
 // Braucht dieser Auftrag überhaupt ein Etikett? (nur Produkte mit Etikett-Slot). Ohne Produkt/Slot = nein.
 function auftrag_braucht_etikett(int $auftrag_id): bool {
-    $eid = scalar("SELECT p.etikett_id FROM auftrag a JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
-    return $eid !== null && (int)$eid > 0;
+    $r = one("SELECT a.verpackung_id AS a_vp, p.etikett_id, p.verpackung_id AS p_vp
+              FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    if (!$r) return false;
+    if ((int)($r['etikett_id'] ?? 0) > 0) return true;           // expliziter Etikett-Slot am Produkt
+    // Etikett ist Standard: jedes VERPACKTE Produkt (Glas/Dose) bekommt ein Etikett. Behälter des Auftrags
+    // hat Vorrang (Admin kann je Auftrag ein anderes Glas setzen), sonst der des Produkts. Das Etikett (inkl.
+    // Maß) leitet sich aus dem Behälter ab (etikett_id_fuer_behaelter). Nur reine Bulkware ohne Behälter braucht keins.
+    $vp = (int)($r['a_vp'] ?? 0) ?: (int)($r['p_vp'] ?? 0);
+    return $vp > 0;
 }
 // Hat der Kunde das Etikett für DIESEN Auftrag freigegeben?
 function etikett_freigegeben(int $auftrag_id): bool {
