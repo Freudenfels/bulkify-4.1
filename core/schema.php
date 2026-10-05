@@ -2363,6 +2363,71 @@ function kunde_komplett_loeschen(int $kid): array {
     return ['ok' => true, 'geloescht' => $del];
 }
 
+// Lieferant/Partner KOMPLETT löschen (nur Admin, unwiderruflich) – inkl. ALLER Preise, Anfragen, Angebote,
+// Bestellungen, Preislisten, Kataloge, Dokumente, Portal-Login und Kreditoren-Rechnungen. Sicherheitsstopp:
+// produzierte/eingebuchte Chargen mit Bezug zu diesem Lieferanten (Lagerbestand/Rückverfolgung) blockieren.
+// item.haupt_lieferant_id wird nur gelöst (Artikel/Bestand bleiben). Rückgabe wie kunde_komplett_loeschen.
+function lieferant_komplett_loeschen(int $lid): array {
+    if ($lid <= 0) return ['ok' => false, 'fehler' => 'Ungültige Lieferanten-ID.'];
+    $firma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lid]);
+    if ($firma === '' && !one("SELECT id FROM lieferanten WHERE id=?", [$lid])) return ['ok' => false, 'fehler' => 'Lieferant nicht gefunden.'];
+
+    // Sicherheitsstopp: echte Chargen mit Lieferantenbezug (Wareneingang) bedeuten Lagerbestand – nie blind löschen.
+    $chargen = table_exists('charge') ? (int) scalar("SELECT COUNT(*) FROM charge WHERE lieferant_id=?", [$lid]) : 0;
+    if ($chargen > 0) return ['ok' => false, 'fehler' => 'Dieser Lieferant hat ' . $chargen . ' eingebuchte Charge(n) mit Lagerbezug. Bitte erst im Lager/den Chargen bereinigen – dann erneut löschen.'];
+
+    $del = 0;
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        // $x: DELETE nur, wenn die Tabelle existiert (Sub-Apps/Buchhaltung ggf. nicht initialisiert).
+        $x = function(string $tabelle, string $wo) use (&$del, $lid) {
+            if (!table_exists($tabelle)) return;
+            $del += q("DELETE FROM $tabelle WHERE $wo", [$lid])->rowCount();
+        };
+        // Staffeln zuerst (hängen an den Angeboten dieses Lieferanten).
+        if (table_exists('rezeptur_lief_angebot_staffel') && table_exists('rezeptur_lief_angebot'))
+            $del += q("DELETE FROM rezeptur_lief_angebot_staffel WHERE angebot_id IN (SELECT id FROM rezeptur_lief_angebot WHERE lieferant_id=?)", [$lid])->rowCount();
+        if (table_exists('lieferant_angebot_staffel') && table_exists('lieferant_angebot'))
+            $del += q("DELETE FROM lieferant_angebot_staffel WHERE angebot_id IN (SELECT id FROM lieferant_angebot WHERE lieferant_id=?)", [$lid])->rowCount();
+        // Bestellpositionen vor den Bestellungen.
+        if (table_exists('bestellung_position') && table_exists('bestellung'))
+            $del += q("DELETE FROM bestellung_position WHERE bestellung_id IN (SELECT id FROM bestellung WHERE lieferant_id=?)", [$lid])->rowCount();
+        // Kreditoren-Zahlungen vor den Kreditoren-Rechnungen (Buchhaltung).
+        if (table_exists('lieferant_zahlung') && table_exists('lieferant_rechnung'))
+            $del += q("DELETE FROM lieferant_zahlung WHERE lief_rechnung_id IN (SELECT id FROM lieferant_rechnung WHERE lieferant_id=?)", [$lid])->rowCount();
+
+        // Alle direkt am Lieferanten hängenden Tabellen (inkl. ALLER Preise).
+        $x('rezeptur_lief_angebot', 'lieferant_id=?');
+        $x('lieferant_angebot',     'lieferant_id=?');
+        $x('lieferant_anfrage',     'lieferant_id=?');
+        $x('lieferant_preis',       'lieferant_id=?');       // Rohstoff-EK je Lieferant
+        $x('produkt_lieferant_preis','lieferant_id=?');      // Fertigprodukt-EK je Lieferant
+        $x('pack_ek_staffel',       'lieferant_id=?');       // Verpackungs-EK-Staffeln
+        $x('lieferant_preisliste',  'lieferant_id=?');       // Nachschlage-Preisliste
+        $x('ek_import',             'lieferant_id=?');       // EK-Import-Staging
+        $x('lieferant_katalog',     'lieferant_id=?');
+        $x('lieferant_einladung',   'lieferant_id=?');
+        // lieferant_alias ordnet über den Firmennamen zu (kein lieferant_id).
+        if ($firma !== '' && table_exists('lieferant_alias')) $del += q("DELETE FROM lieferant_alias WHERE firma=?", [$firma])->rowCount();
+        $x('lieferant_chat',        'lieferant_id=?');       // Rückfragen-Chat (falls vorhanden)
+        $x('bestellung',            'lieferant_id=?');
+        $x('lieferant_rechnung',    'lieferant_id=?');       // Kreditoren-Rechnungen (Buchhaltung)
+        $x('benutzer',              'lieferant_id=?');        // Lieferanten-Portal-Login
+        if (table_exists('dokument')) $del += q("DELETE FROM dokument WHERE objekt_typ='lieferant' AND objekt_id=?", [$lid])->rowCount();
+
+        // Shared/Bestand: NICHT löschen, nur den Bezug lösen (Artikel & Bestand bleiben erhalten).
+        if (table_exists('item')) q("UPDATE item SET haupt_lieferant_id=NULL WHERE haupt_lieferant_id=?", [$lid]);
+
+        $del += q("DELETE FROM lieferanten WHERE id=?", [$lid])->rowCount();
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        $pdo->rollBack();
+        return ['ok' => false, 'fehler' => 'Löschen abgebrochen: ' . $e->getMessage()];
+    }
+    return ['ok' => true, 'geloescht' => $del];
+}
+
 // Station Verkapselung: Leerkapseln nach FEFO abbuchen (menge × einheiten je Packung). Blockiert bei zu wenig Bestand.
 function produktion_kapseln_entnehmen(int $pa_id): array {
     $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
