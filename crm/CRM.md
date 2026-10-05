@@ -59,6 +59,10 @@ Datei zu prüfen – dann weiß man auch, wo man sucht.
 - **Schnell erfassen** – auch Ziel des Android-Teilen-Menüs, mit KI-Auslesen von Text und Foto.
 - **E-Mail einlesen** (`/crm/?p=mail`) – Mail einfügen, die KI ordnet sie einem Kunden oder
   Kontakt zu und schlägt Notiz und Wiedervorlage vor. Ein Klick, dann steht es.
+- **E-Mail-Eingang** (`/crm/?p=eingang`) – automatischer Abruf eines Postfachs (z. B. crm@bulkify.pro)
+  per IMAP: neue Mails erscheinen mit KI-Vorschau (Zuordnung + Notiz + Wiedervorlage), ein Klick legt an,
+  Newsletter/Rechnungen werden erkannt. Zugang unter „Mehr" eintragbar, Hintergrund-Abruf per Cron
+  (`public/crm/mail_cron.php`). Details: `crm/core/mail_abruf.md`.
 - **Kalender** (`/crm/?p=kalender`) – Termine und Wiedervorlagen im Monat, im Aufbau des
   Produktions-Kalenders. Höchstens vier Einträge je Tag, danach „+N weitere".
 - **Termine**, **Kunden mit Verlauf**, **Mehr**.
@@ -92,7 +96,8 @@ Anthropic-Schlüssel, eine Stelle. Vor dem Portieren jeweils prüfen, ob v4 die 
 (viel KI liegt bereits in `core/spec_ki.php`, `core/rezeptur_ki.php`, Angebots-/Beleg-Import).
 
 ## Noch nicht gebaut
-Morgenmail, E-Mail-Eingang, WhatsApp Cloud API.
+Morgenmail, WhatsApp Cloud API. (E-Mail-Eingang ist gebaut – IMAP-Abruf, siehe oben; ein
+Socket-Fallback ohne PHP-IMAP-Erweiterung ist offen, falls der Server sie nicht hat.)
 
 ## Lokal starten
 Derselbe Server wie fürs Dashboard – das CRM liegt einfach darunter:

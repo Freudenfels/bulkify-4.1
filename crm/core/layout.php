@@ -15,8 +15,8 @@ require_once __DIR__ . '/auth.php';
 function crm_nav(): array {
     return [
         'Start'    => ['wartet' => 'Wer wartet auf mich', 'pipeline' => 'Pipeline'],
-        'Kontakte' => ['kontakte' => 'Kontakte', 'erfassen' => 'Schnell erfassen',
-                       'mail' => 'E-Mail einlesen'],
+        'Kontakte' => ['kontakte' => 'Kontakte', 'eingang' => 'E-Mail-Eingang',
+                       'erfassen' => 'Schnell erfassen', 'mail' => 'E-Mail einlesen'],
         'Kalender' => ['kalender' => 'Kalender', 'termine' => 'Termine'],
         'Kunden'   => ['kunden' => 'Kunden'],
         'System'   => ['mehr' => 'Einstellungen'],
@@ -54,11 +54,13 @@ function kopf(string $titel, string $aktiv = ''): void {
            . '<span class="bx-ver">' . h(BX_TITEL) . '</span></div><nav>';
 
         $offen = crm_wartet_zahl();
+        $eingang = crm_eingang_zahl();
         foreach (crm_nav() as $gruppe => $seiten) {
             echo '<div class="bx-navgroup">' . h($gruppe) . '</div>';
             foreach ($seiten as $route => $label) {
-                $zahl = ($route === 'wartet' && $offen > 0)
-                      ? '<span class="bx-navbadge" title="wartet auf dich">' . ($offen > 99 ? '99+' : $offen) . '</span>' : '';
+                $n = $route === 'wartet' ? $offen : ($route === 'eingang' ? $eingang : 0);
+                $zahl = ($n > 0)
+                      ? '<span class="bx-navbadge" title="offen">' . ($n > 99 ? '99+' : $n) . '</span>' : '';
                 echo '<a href="?p=' . h($route) . '"' . ($aktiv === $route ? ' class="on"' : '') . '>'
                    . '<span>' . h($label) . '</span>' . $zahl . '</a>';
             }
@@ -128,6 +130,16 @@ function crm_wartet_zahl(): int {
     static $n = null;
     if ($n !== null) return $n;
     try { require_once __DIR__ . '/wartet.php'; $n = count(wartet_zeilen('sie')); }
+    catch (Throwable $e) { $n = 0; }
+    return $n;
+}
+
+// Wie viele Mails liegen unbearbeitet im E-Mail-Eingang? Steht als Zahl am Menuepunkt.
+// Guarded: fehlt die Tabelle (alte DB), lieber 0 als ein Fehler im Menue.
+function crm_eingang_zahl(): int {
+    static $n = null;
+    if ($n !== null) return $n;
+    try { $n = (int) scalar("SELECT COUNT(*) FROM crm_mail_eingang WHERE status='neu'"); }
     catch (Throwable $e) { $n = 0; }
     return $n;
 }

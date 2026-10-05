@@ -144,6 +144,33 @@ function crm_schema(): void {
         error_log('crm_schema: crm_kontakt_datei konnte nicht angelegt werden: ' . $e->getMessage());
     }
 
+    // --- E-Mail-Eingang: automatisch abgeholte Mails aus dem Postfach crm@bulkify.pro. ----------
+    // Dienen als "Eingang" mit KI-Vorschau; mit einem Klick wird daraus Kontakt/Notiz/Wiedervorlage.
+    // Best-effort (try/catch): scheitert das CREATE, laeuft der Rest des CRM trotzdem.
+    try {
+        q("CREATE TABLE IF NOT EXISTS crm_mail_eingang (
+            id          INT AUTO_INCREMENT PRIMARY KEY,
+            message_id  VARCHAR(255) NULL,
+            imap_uid    INT NULL,
+            von_name    VARCHAR(190) NULL,
+            von_email   VARCHAR(190) NULL,
+            betreff     VARCHAR(255) NULL,
+            datum       DATETIME NULL,
+            body        MEDIUMTEXT NULL,
+            art         VARCHAR(20) NULL,
+            daten_json  MEDIUMTEXT NULL,
+            status      VARCHAR(12) NOT NULL DEFAULT 'neu',   -- neu|angelegt|verworfen
+            kontakt_id  INT NULL,
+            kunde_id    INT NULL,
+            angelegt    DATETIME NOT NULL,
+            bearbeitet  DATETIME NULL,
+            UNIQUE KEY msg (message_id(191)),
+            KEY (status)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Throwable $e) {
+        error_log('crm_schema: crm_mail_eingang konnte nicht angelegt werden: ' . $e->getMessage());
+    }
+
     // --- Nachtraeglich ergaenzte Spalten (additiv, idempotent). --------------------------------
     // Wann die KI die Anfrage dieses Kontakts ausgewertet hat (core/lead_ki.php). Leer = noch nie.
     crm_spalte('crm_kontakt', 'ki_ausgewertet', 'DATETIME NULL');
