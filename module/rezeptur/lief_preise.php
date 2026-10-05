@@ -77,7 +77,7 @@ $vkMarge = function (string $df): float {
 };
 
 render_header('rezept_preise', 'Rezeptur-Preise');
-bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · ' . $mitPreis . ' mit Preis – EK (Herstellpreis) & empf. VK je Rezeptur');
+bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · ' . $mitPreis . ' mit Preis');
 ?>
 <form method="get" class="bx-row" style="gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
   <input type="hidden" name="p" value="rezept_preise">
@@ -88,34 +88,50 @@ bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · 
   </label>
   <?php if ($q !== '' || $nurP): ?><a class="btn btn-ghost" href="?p=rezept_preise">Zurücksetzen</a><?php endif; ?>
 </form>
-<div class="bx-panel">
+<div class="bx-panel" style="padding:0;overflow:hidden">
   <?php if (!$rows): ?>
-    <div class="muted"><?= ($q !== '' || $nurP) ? 'Keine Treffer.' : 'Keine Lieferanten-Angebote vorhanden.' ?></div>
+    <div style="padding:16px" class="muted"><?= ($q !== '' || $nurP) ? 'Keine Treffer.' : 'Keine Lieferanten-Angebote vorhanden.' ?></div>
   <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr>
-      <th>Nr.</th><th>Rezeptur</th><th>Form</th><th>Kapselgröße</th><th>Lieferant</th>
-      <th class="bx-num">EK</th><th class="bx-num">Empf. VK</th><th>Einheit</th><th class="bx-num">Menge (Staffel)</th>
+      <th>Rezepturnr.</th><th>Rezeptur-Name</th><th>Form</th><th>Kapselgröße</th><th>Lieferant</th><th class="bx-num">Preis</th>
     </tr></thead>
     <tbody>
       <?php foreach ($rows as $r): $rid = (int)$r['rezeptur_id']; $ek = ($r['preis'] !== null && (float)$r['preis'] > 0) ? (float)$r['preis'] : null; ?>
         <tr>
           <td class="muted"><?= h((string)($r['rez_nr'] ?? '')) ?: '–' ?></td>
-          <td><?php if ($rid): ?><a class="kundenlink" href="?p=rezeptur_detail&id=<?= $rid ?>"><?= h((string)($r['rez_name'] ?? '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
+          <td><?php if ($rid): ?><a class="kundenlink bx-rezpop" href="?p=rezeptur_detail&id=<?= $rid ?>" data-rid="<?= $rid ?>"><?= h((string)($r['rez_name'] ?? '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
           <td class="muted"><?= h($dfLabel[(string)$r['df']] ?? (string)($r['df'] ?? '')) ?></td>
           <td><?= !empty($r['kapselgroesse']) ? h((string)$r['kapselgroesse']) : '<span class="muted">–</span>' ?></td>
           <td><?= $r['firma'] ? h((string)$r['firma']) : '<span class="muted">–</span>' ?></td>
-          <?php $guenstigster = $ek !== null && $rid && isset($minRez[$rid]) && abs($ek - $minRez[$rid]) < 1e-9; ?>
-          <td class="bx-num"><?= $ek !== null ? number_format($ek, 4, ',', '.') . ' &euro;' . ($guenstigster ? ' ' . bx_badge('günstigster', 'ok') : '') : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $ek !== null ? number_format($ek * (1 + $vkMarge((string)$r['df']) / 100), 4, ',', '.') . ' &euro;' : '<span class="muted">–</span>' ?></td>
-          <td><?= $r['einheit'] ? h((string)$r['einheit']) : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $r['menge'] !== null && (float)$r['menge'] > 0 ? rtrim(rtrim(number_format((float)$r['menge'], 3, ',', '.'), '0'), ',') : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $ek !== null ? number_format($ek, 4, ',', '.') . ' &euro;' : '<span class="muted">–</span>' ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>
   </table></div>
-  <?php if (count($rows) >= 2000): ?><p class="muted" style="font-size:12px;margin-top:8px">Nur die ersten 2.000 Treffer – bitte die Suche eingrenzen.</p><?php endif; ?>
+  <?php if (count($rows) >= 2000): ?><p class="muted" style="font-size:12px;padding:8px 16px">Nur die ersten 2.000 Treffer – bitte die Suche eingrenzen.</p><?php endif; ?>
   <?php endif; ?>
-  <p class="muted" style="font-size:12px;margin-top:8px"><strong>EK</strong> = Herstellpreis des Lieferanten (Fremdfertigung), <strong>Empf. VK</strong> = EK × (1 + Marge). Herstellpreise je Rezeptur (Fremdfertigung), keine Endprodukte. Quellen: alte v3-Übernahme UND die aktuellen Lieferanten-Angebote aus dem Anfrage-System (inkl. Staffeln). Klick auf die Rezeptur öffnet das Detail; neue Preise entstehen über eine Lieferanten-Anfrage (Rezeptur-Detail „Fremdfertigung") – Übersicht aller Anfragen unter Einkauf → „Anfragen & Preise".</p>
 </div>
+
+<!-- Rezeptur-Popup: Klick auf eine Rezeptur zeigt sie im Overlay (iframe auf die Rezeptur-Detailseite). -->
+<div id="rezPop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;padding:3vh 2vw" onclick="if(event.target===this)rezPopClose()">
+  <div style="max-width:1000px;height:94vh;margin:0 auto;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 12px 44px rgba(0,0,0,.35);background:#fff">
+    <div class="bx-row" style="justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line,#e6e6e6);background:#fff">
+      <strong id="rezPopTitel">Rezeptur</strong>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="rezPopClose()">Schließen</button>
+    </div>
+    <iframe id="rezPopFrame" src="" title="Rezeptur" style="flex:1;width:100%;border:0;background:#fff"></iframe>
+  </div>
+</div>
+<script>
+function rezPopClose(){var p=document.getElementById('rezPop');p.style.display='none';document.getElementById('rezPopFrame').src='';}
+document.addEventListener('click',function(e){
+  var a=e.target.closest('.bx-rezpop'); if(!a) return;
+  e.preventDefault();
+  document.getElementById('rezPopTitel').textContent=(a.textContent||'Rezeptur').trim();
+  document.getElementById('rezPopFrame').src=a.getAttribute('href');
+  document.getElementById('rezPop').style.display='block';
+});
+document.addEventListener('keydown',function(e){ if(e.key==='Escape') rezPopClose(); });
+</script>
 <?php render_footer(); ?>
