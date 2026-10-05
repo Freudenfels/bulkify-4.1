@@ -39,6 +39,18 @@ Beim **Wareneingang** kann die ankommende Ware jetzt der Rezeptur zugeordnet wer
   automatisch auf das Bulk-Item dieser Rezeptur. Keine Fehlermeldung mehr.
 - Es muss **kein** Artikel mehr von Hand im Dashboard angelegt werden.
 
+## Neu: Rezeptur ist beim Einbuchen schon vorausgewählt
+
+Wenn im Wareneingang eine **ankommende Sendung** gewählt wird, kommt jede Position jetzt
+bereits als **„Fertigware / Bulk" mit der passenden Rezeptur** vorbelegt – das Lager muss
+nicht mehr selbst suchen. Die Zuordnung wird in dieser Reihenfolge bestimmt:
+
+1. über den bestellten Lager-Artikel (falls es schon ein Bulk-Item ist),
+2. über den Auftrag → Produkt → Rezeptur,
+3. über Namensgleichheit (Bestellbezeichnung = Rezepturname).
+
+Passt es ausnahmsweise nicht, kann die Rezeptur in der Position wie gewohnt geändert werden.
+
 ## Was sich NICHT geändert hat
 
 - Es werden **keine** Produktionsaufträge, Bestellungen oder Preise erzeugt – nur der
@@ -55,6 +67,13 @@ Geänderte Dateien (v4-Repo `bulkify-4.1`):
   ohne Bulk-Item eines an (`rezeptur_bulkitem()`); läuft einmal je Deploy.
 - `module/rezeptur/detail.php` – beim Speichern einer Rezeptur (neu + „Neue Version") wird
   `rezeptur_bulkitem()` aufgerufen, damit das Bulk-Item sofort existiert.
+- `lager/core/erp.php` – `erp_rezeptur_zu_position()` leitet die Rezeptur je Position ab
+  (read-only), `erp_lieferung_positionen()`/`erp_position_zuordnen()` reichen sie durch.
+- `lager/module/bestand/wareneingang.php` – Positionskarte wird mit der Rezeptur vorbelegt.
+
+Hinweis Live-Nachtrag: Der Backfill läuft in `init_schema()` (Dashboard) beim ersten
+Dashboard-Aufruf nach dem Deploy. Die Lager-PWA allein löst ihn nicht aus – einmal
+app.bulkify.pro öffnen genügt.
 
 Modell: Bulk-Item = `item` mit `kategorie='fertig'` und `rezeptur_id = <Rezeptur>`. Die
 Lager-Naht `erp_rezeptur_bulkitem()` (read-only) findet es dadurch immer; die
