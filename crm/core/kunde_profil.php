@@ -5,7 +5,8 @@ require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/ui.php';
 
 function kunde_profil_lesen(int $kunde_id): array {
-    $r = $kunde_id > 0 ? one("SELECT * FROM crm_kunde_profil WHERE kunde_id=?", [$kunde_id]) : null;
+    try { $r = $kunde_id > 0 ? one("SELECT * FROM crm_kunde_profil WHERE kunde_id=?", [$kunde_id]) : null; }
+    catch (Throwable $e) { $r = null; }   // fehlt die Tabelle live, darf die Seite nicht 500en
     return $r ?: [];
 }
 

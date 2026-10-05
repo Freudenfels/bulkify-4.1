@@ -9,7 +9,8 @@ require_once __DIR__ . '/schema.php';
 
 // Konfiguration eines Mitarbeiters. 'bereit' = genug fuer den Versand hinterlegt.
 function mitarbeiter_mail_konfig(int $benutzer_id): array {
-    $r = $benutzer_id > 0 ? one("SELECT * FROM crm_mitarbeiter WHERE benutzer_id=?", [$benutzer_id]) : null;
+    try { $r = $benutzer_id > 0 ? one("SELECT * FROM crm_mitarbeiter WHERE benutzer_id=?", [$benutzer_id]) : null; }
+    catch (Throwable $e) { $r = null; }   // fehlt die Tabelle live, darf die Seite nicht 500en
     $r = $r ?: [];
     $konf = [
         'absender_name'  => trim((string)($r['absender_name'] ?? '')),

@@ -40,7 +40,9 @@ function todo_erledigen(string $quelle, int $id, int $uid = 0, bool $zurueck = f
 
 // Offene To-Dos (nur crm_todo) zu einem Bezug - fuer die Kontakt-/Kundenseite.
 function todo_fuer_bezug(string $typ, int $id): array {
-    return all("SELECT * FROM crm_todo WHERE bezug_typ=? AND bezug_id=? AND erledigt_am IS NULL ORDER BY (faellig IS NULL), faellig ASC, id DESC", [$typ, $id]);
+    try {
+        return all("SELECT * FROM crm_todo WHERE bezug_typ=? AND bezug_id=? AND erledigt_am IS NULL ORDER BY (faellig IS NULL), faellig ASC, id DESC", [$typ, $id]);
+    } catch (Throwable $e) { return []; }
 }
 
 // Wie viele offene Aufgaben insgesamt (To-Dos + Wiedervorlagen mit Kontakt/Kunde-Bezug)? Fuer das Menue.
@@ -65,18 +67,16 @@ function todo_liste(string $modus = 'offen', string $kat = ''): array {
         $args = [];
         if ($kat !== '' && $kat !== 'wiedervorlage') { $sql .= " AND kategorie=?"; $args[] = $kat; }
         $sql .= $offen ? " ORDER BY id DESC LIMIT 500" : " ORDER BY erledigt_am DESC LIMIT 300";
-        foreach (all($sql, $args) as $r) {
-            $zeilen[] = todo_zeile('todo', $r, (string)$r['kategorie']);
-        }
+        try { foreach (all($sql, $args) as $r) $zeilen[] = todo_zeile('todo', $r, (string)$r['kategorie']); }
+        catch (Throwable $e) {}
     }
 
     // offene/erledigte Wiedervorlagen mit Kontakt/Kunde-Bezug (als Kategorie 'wiedervorlage')
     if ($kat === '' || $kat === 'wiedervorlage') {
         $sql = "SELECT * FROM crm_wiedervorlage WHERE bezug_typ IN ('kontakt','kunde') AND erledigt_am IS " . ($offen ? "NULL" : "NOT NULL");
         $sql .= $offen ? " ORDER BY (faellig IS NULL), faellig ASC, id DESC LIMIT 500" : " ORDER BY erledigt_am DESC LIMIT 300";
-        foreach (all($sql) as $r) {
-            $zeilen[] = todo_zeile('wv', $r, 'wiedervorlage');
-        }
+        try { foreach (all($sql) as $r) $zeilen[] = todo_zeile('wv', $r, 'wiedervorlage'); }
+        catch (Throwable $e) {}
     }
 
     // Offen: nach Faelligkeit (ohne Datum zuletzt), dann neueste. Erledigt: nach Erledigt-Zeit.

@@ -86,10 +86,13 @@ function rezeptur_ki_entwickeln(string $text, string $form = 'kapsel'): array {
         'novel_food'    => rezeptur_ki_liste($d['novel_food'] ?? [], ['stoff', 'bewertung', 'begruendung']),
         'hoechstmengen' => rezeptur_ki_liste($d['hoechstmengen'] ?? [], ['stoff', 'menge_mg', 'bewertung', 'begruendung']),
         'health_claims' => rezeptur_ki_liste($d['health_claims'] ?? [], ['stoff', 'claim', 'zulaessig']),
-        'machbarkeit'   => [
-            'bewertung' => mb_substr(trim((string)($d['machbarkeit']['bewertung'] ?? '')), 0, 40),
-            'gruende'   => array_slice(array_map(fn($g) => mb_substr(trim((string)$g), 0, 300), (array)($d['machbarkeit']['gruende'] ?? [])), 0, 8),
-        ],
+        'machbarkeit'   => (function ($m) {
+            $m = is_array($m) ? $m : ['bewertung' => (string)$m];
+            return [
+                'bewertung' => mb_substr(trim((string)($m['bewertung'] ?? '')), 0, 40),
+                'gruende'   => array_slice(array_map(fn($g) => mb_substr(trim((string)$g), 0, 300), (array)($m['gruende'] ?? [])), 0, 8),
+            ];
+        })($d['machbarkeit'] ?? []),
         'kapsel'        => $kapsel,
         'hinweise'      => array_slice(array_map(fn($g) => mb_substr(trim((string)$g), 0, 300), (array)($d['hinweise'] ?? [])), 0, 8),
         'modell'        => $r['modell'] ?? '',
@@ -100,6 +103,7 @@ function rezeptur_ki_entwickeln(string $text, string $form = 'kapsel'): array {
 function rezeptur_ki_liste($roh, array $felder): array {
     $out = [];
     foreach ((array)$roh as $z) {
+        if (!is_array($z)) $z = [$felder[0] => (string)$z];   // KI lieferte Strings statt Objekte
         $zeile = [];
         foreach ($felder as $f) { $v = $z[$f] ?? ''; $zeile[$f] = is_bool($v) ? $v : mb_substr(trim((string)$v), 0, 400); }
         if (trim((string)($zeile[$felder[0]] ?? '')) === '') continue;
@@ -116,7 +120,8 @@ function rezeptur_ki_merken(string $typ, int $id, array $vorschlag): void {
       [$typ, $id, json_encode($vorschlag, JSON_UNESCAPED_UNICODE), (string)($vorschlag['modell'] ?? KI_MODELL), gmdate('Y-m-d H:i:s')]);
 }
 function rezeptur_ki_vorschlag(string $typ, int $id): ?array {
-    $row = one("SELECT * FROM crm_rezeptur_ki WHERE bezug_typ=? AND bezug_id=?", [$typ, $id]);
+    try { $row = one("SELECT * FROM crm_rezeptur_ki WHERE bezug_typ=? AND bezug_id=?", [$typ, $id]); }
+    catch (Throwable $e) { return null; }   // fehlt die Tabelle live, darf die Seite nicht 500en
     if (!$row) return null;
     $d = json_decode((string)$row['inhalt'], true);
     if (!is_array($d)) return null;
@@ -154,8 +159,9 @@ function rezeptur_ki_html(array $v): string {
     // Zutaten.
     if (!empty($v['zutaten'])) {
         $o .= '<h3 style="margin:14px 0 6px;font-size:var(--fs-sm)">Zutaten je Einheit</h3><div class="crm-reztab">';
-        foreach ($v['zutaten'] as $z) {
-            $menge = rtrim(rtrim(number_format((float)$z['menge_mg'], 2, ',', '.'), '0'), ',');
+        foreach ((array)$v['zutaten'] as $z) {
+            if (!is_array($z)) continue;
+            $menge = rtrim(rtrim(number_format((float)($z['menge_mg'] ?? 0), 2, ',', '.'), '0'), ',');
             $o .= '<div class="crm-zeile"><div class="crm-mitte"><span class="titel" style="font-weight:400">'
                 . h((string)$z['bezeichnung']) . ' · ' . h($menge) . ' mg</span><span class="unter">'
                 . (($z['item_id'] ?? null) ? 'im Katalog: ' . h((string)$z['item_name']) . (($z['cas'] ?? '') !== '' ? ' (CAS ' . h((string)$z['cas']) . ')' : '') : 'nicht im Katalog')
@@ -165,6 +171,7 @@ function rezeptur_ki_html(array $v): string {
     }
 
     $block = function (string $titel, array $zeilen, callable $fmt) use (&$o) {
+        $zeilen = array_values(array_filter($zeilen, 'is_array'));   // Strings/Unsinn ueberspringen
         if (!$zeilen) return;
         $o .= '<h3 style="margin:14px 0 6px;font-size:var(--fs-sm)">' . h($titel) . '</h3>';
         foreach ($zeilen as $z) $o .= '<p class="muted" style="margin:0 0 6px">' . $fmt($z) . '</p>';
