@@ -296,9 +296,14 @@ if ($gebucht):
         <p class="muted" style="margin:var(--sp-2) 0 0">Aktuell keine Lieferungen unterwegs.</p>
       <?php else: ?>
       <div class="we-liste">
-        <?php foreach ($erwartet as $l): $eta = (string)($l['eta_geplant'] ?? ''); $anz = count($l['positionen'] ?? []); ?>
+        <?php foreach ($erwartet as $l): $eta = (string)($l['eta_geplant'] ?? ''); $posis = $l['positionen'] ?? []; $anz = count($posis);
+          // Produkt-/Rezepturnamen der Lieferung – damit nicht nur "Wellgreen BE-2867" dasteht.
+          $namen = array_values(array_filter(array_map(fn($p) => trim((string)($p['name'] ?? '')), $posis), fn($s) => $s !== ''));
+          $namenKurz = implode(' · ', array_slice($namen, 0, 4)) . (count($namen) > 4 ? ' +' . (count($namen) - 4) : '');
+        ?>
         <button type="button" class="we-listitem" data-id="<?= (int)$l['id'] ?>">
           <div><strong><?= h((string)($l['lieferant'] ?: 'Ohne Lieferant')) ?></strong><?= !empty($l['nummer']) ? ' <span class="muted">· ' . h((string)$l['nummer']) . '</span>' : '' ?></div>
+          <?php if ($namenKurz !== ''): ?><div class="we-listnamen"><?= h($namenKurz) ?></div><?php endif; ?>
           <div class="muted"><?= $eta !== '' ? 'erwartet ' . h(date('d.m.Y', strtotime($eta))) : '' ?><?= $anz ? ' · ' . $anz . ' Position(en)' : '' ?></div>
         </button>
         <?php endforeach; ?>
@@ -369,6 +374,7 @@ if ($gebucht):
   .we-liste{display:flex;flex-direction:column;gap:8px;margin-top:var(--sp-3)}
   .we-listitem{text-align:left;border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--panel-2);color:var(--text);cursor:pointer;line-height:1.35}
   .we-listitem:hover{border-color:var(--gruen);text-decoration:none}
+  .we-listnamen{font-size:13px;margin-top:2px}
   .we-ziel{border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 14px;cursor:pointer;line-height:1.3}
   .we-ziel.on{border-color:var(--gruen);box-shadow:inset 0 0 0 1px var(--gruen)}
   .we-pos{position:relative;border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--sp-4);padding-top:var(--sp-5);margin-bottom:var(--sp-3);background:var(--panel-2)}
@@ -381,8 +387,9 @@ if ($gebucht):
   .we-pos .f-einheit{flex:0 1 90px}
   .we-pos .f-artnr{flex:0 1 120px}
   .we-pos .f-pakete{flex:0 1 80px}
-  .we-pos .f-paketnrn{flex:1 1 180px}
-  .we-pos .we-paketnrn{width:100%;min-height:38px;resize:vertical;font-family:inherit;font-size:13px}
+  .we-pos .f-paketnrn{flex:1 1 100%}
+  .we-pos .we-pakscan{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+  .we-pos .we-pak{flex:0 1 170px;min-width:140px}
   .we-pos .f-split{flex:0 1 80px}
   .we-pos .f-frei{flex:0 1 100px}
   .we-pos .f-split input[type=checkbox],
@@ -457,18 +464,48 @@ if ($gebucht):
         '<div class="bx-field f-charge"><label class="lbl-charge">Charge-Nr.</label><input type="text" name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'"></div>'+
         '<div class="bx-field f-mhd"><label class="lbl-mhd">MHD</label><input type="date" name="p_mhd[]" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
         '<div class="bx-field f-pakete"><label>Pakete</label><input type="number" name="p_pakete[]" class="we-pakete" min="1" step="1" value="1"></div>'+
-        '<div class="bx-field f-paketnrn"><label>Paketnummern <span class="muted">(je Zeile)</span></label><textarea name="p_paketnummern[]" class="we-paketnrn" rows="1" placeholder="UPS-/Sendungsnr. je Karton – eine pro Zeile"></textarea></div>'+
+        '<div class="bx-field f-paketnrn"><label>Paketnummern <span class="muted">(je Karton scannen)</span></label>'+
+          '<input type="hidden" name="p_paketnummern[]" class="we-pak-h">'+
+          '<div class="we-pakscan"><input type="text" class="we-pak lg-code" autocomplete="off" placeholder="Paket scannen + Enter"></div>'+
+          '<button type="button" class="btn btn-ghost btn-sm we-pak-add">+ weiteres Paket</button>'+
+        '</div>'+
         '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked title="Angehakt = freigegeben, nicht angehakt = Quarantäne"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
         '<div class="bx-field f-split"><label>Aufteilen</label><input type="checkbox" class="we-split" title="Menge gleichmäßig auf die Kartons verteilen"><input type="hidden" name="p_aufteilen[]" class="we-split-h" value="0"></div>'+
         '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
       '</div>';
     rows.appendChild(card);
-    // Paketnummern (eine je Zeile) -> Kartonanzahl folgt automatisch der Zeilenzahl.
-    var pnr=card.querySelector('.we-paketnrn'), pkt=card.querySelector('.we-pakete');
-    if(pnr&&pkt){ pnr.addEventListener('input',function(){
-      var n=pnr.value.split(/\r?\n/).map(function(s){return s.trim();}).filter(Boolean).length;
-      if(n>0) pkt.value=n;
-    }); }
+    // Paketnummern: viele Scan-Felder untereinander. Scan+Enter springt zum naechsten Feld;
+    // die Kartonanzahl folgt automatisch der Zahl gefuellter Felder. Ein Blinker, viele Pakete.
+    var pakWrap=card.querySelector('.we-pakscan'), pakH=card.querySelector('.we-pak-h'),
+        pkt=card.querySelector('.we-pakete');
+    function pakSync(){
+      var vals=[].map.call(pakWrap.querySelectorAll('.we-pak'), function(i){return i.value.trim();})
+                 .filter(function(v){return v!=='';});
+      if(pakH) pakH.value=vals.join('\n');
+      if(pkt && vals.length>0) pkt.value=vals.length;
+    }
+    function pakAdd(fokus){
+      var i=document.createElement('input');
+      i.type='text'; i.className='we-pak lg-code'; i.autocomplete='off'; i.placeholder='Paket scannen + Enter';
+      pakWrap.appendChild(i); wirePak(i); if(fokus) i.focus();
+      return i;
+    }
+    function wirePak(inp){
+      inp.addEventListener('input', pakSync);
+      inp.addEventListener('keydown', function(e){
+        if(e.key==='Enter'){
+          e.preventDefault(); pakSync();
+          if(inp.value.trim()!==''){
+            var next=inp.nextElementSibling;
+            if(!next || !next.classList.contains('we-pak')) next=pakAdd(false);
+            next.focus();
+          }
+        }
+      });
+    }
+    if(pakWrap){ [].forEach.call(pakWrap.querySelectorAll('.we-pak'), wirePak); }
+    var pakAddBtn=card.querySelector('.we-pak-add');
+    if(pakAddBtn) pakAddBtn.addEventListener('click', function(){ pakAdd(true); });
     // Artikel-Name -> item_id, Einheit, Warenart aus Treffer uebernehmen.
     var name=card.querySelector('.we-name'), hid=card.querySelector('input[name="p_item[]"]'),
         art2=card.querySelector('.we-art'), einh=card.querySelector('input[name="p_einheit[]"]');
