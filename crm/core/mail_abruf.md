@@ -10,12 +10,16 @@ und ist über **Mehr → E-Mail-Eingang** pflegbar – bewusst nicht in der `sec
 selbst in der Oberfläche einträgt. `mail_imap_konfig()` / `mail_imap_speichern()`.
 
 ## Abruf
-`mail_abholen($max=30)` verbindet per **PHP-IMAP-Erweiterung**, holt die **UNGELESENEN** Mails
-(neueste zuerst), dekodiert Betreff/Body (MIME, base64/quoted-printable, Zeichensatz → UTF-8, HTML→Text),
-lässt jede von der KI einordnen (`mail_ki_lesen()`), legt eine Zeile in `crm_mail_eingang` an und
-markiert die Mail als gelesen. **Wirft nie** (try/catch), dedupe über `message_id`.
-`mail_abruf_moeglich()` prüft, ob `imap_open` existiert; fehlt die Erweiterung, sagt die Oberfläche das
-deutlich (dann Socket-Abruf nachbauen).
+`mail_abholen($max=30)` holt die **UNGELESENEN** Mails (neueste zuerst), lässt jede von der KI
+einordnen (`mail_ki_lesen()`), legt eine Zeile in `crm_mail_eingang` an und markiert die Mail als
+gelesen. **Wirft nie**, dedupe über `message_id`. Gemeinsame Aufnahme beider Wege: `mail_eingang_aufnehmen()`.
+
+**Zwei Abrufwege** (automatisch gewählt):
+- `mail_abruf_via_ext()` – die **PHP-IMAP-Erweiterung** (`mail_abholen_imap`), wenn vorhanden.
+- `mail_abruf_via_socket()` – unser **eigener TLS-Socket-Abruf** (`mail_abholen_socket` + `imap_client.php`),
+  wenn ext-imap fehlt (so auf dem Live-Server). Braucht nur OpenSSL + mbstring.
+
+`mail_abruf_moeglich()` ist true, sobald einer der beiden Wege geht – sonst sagt die Oberfläche es deutlich.
 
 ## Eingang verarbeiten
 - `mail_eingang_liste('neu')`, `mail_eingang_zahl()`, `mail_eingang($id)`.

@@ -101,8 +101,8 @@ Anthropic-Schlüssel, eine Stelle. Vor dem Portieren jeweils prüfen, ob v4 die 
 (viel KI liegt bereits in `core/spec_ki.php`, `core/rezeptur_ki.php`, Angebots-/Beleg-Import).
 
 ## Noch nicht gebaut
-Morgenmail, WhatsApp Cloud API. (E-Mail-Eingang ist gebaut – IMAP-Abruf, siehe oben; ein
-Socket-Fallback ohne PHP-IMAP-Erweiterung ist offen, falls der Server sie nicht hat.)
+Morgenmail, WhatsApp Cloud API. (E-Mail-Eingang ist gebaut – IMAP-Abruf per ext-imap ODER, wenn die
+nicht da ist, per eigenem TLS-Socket-Abruf `crm/core/imap_client.php`; der Live-Server hat kein ext-imap.)
 
 ## Lokal starten
 Derselbe Server wie fürs Dashboard – das CRM liegt einfach darunter:

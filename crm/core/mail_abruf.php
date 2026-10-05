@@ -9,6 +9,7 @@ require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/mail_ki.php';
 require_once __DIR__ . '/kontakt.php';
 require_once __DIR__ . '/dublette.php';
+require_once __DIR__ . '/imap_client.php';   // Socket-Abruf (Fallback ohne ext-imap)
 
 // --- Zugang (crm_meta) -------------------------------------------------------------------------
 function mail_imap_konfig(): array {
@@ -34,82 +35,109 @@ function mail_imap_speichern(array $p): void {
     if (trim((string)($p['imap_pass'] ?? '')) !== '') crm_meta_schreiben('imap_pass', (string)$p['imap_pass']);
 }
 
-// Ist die IMAP-Erweiterung ueberhaupt da? (Steuert, was die Oberflaeche anbietet.)
-function mail_abruf_moeglich(): bool { return function_exists('imap_open'); }
-function mail_abruf_bereit(): bool   { return mail_abruf_moeglich() && mail_imap_konfig()['vollstaendig']; }
-function mail_abruf_letzter(): string { return crm_meta_lesen('imap_last_fetch', ''); }
+// Koennen wir ueberhaupt abrufen? Entweder ueber die PHP-IMAP-Erweiterung ODER ueber unseren
+// Socket-Abruf (OpenSSL + mbstring). Steuert, was die Oberflaeche anbietet.
+function mail_abruf_via_ext(): bool    { return function_exists('imap_open'); }
+function mail_abruf_via_socket(): bool { return function_exists('stream_socket_client') && extension_loaded('openssl') && function_exists('mb_decode_mimeheader'); }
+function mail_abruf_moeglich(): bool   { return mail_abruf_via_ext() || mail_abruf_via_socket(); }
+function mail_abruf_bereit(): bool     { return mail_abruf_moeglich() && mail_imap_konfig()['vollstaendig']; }
+function mail_abruf_letzter(): string  { return crm_meta_lesen('imap_last_fetch', ''); }
 
 // --- Abruf -------------------------------------------------------------------------------------
 // Holt die UNGELESENEN Mails, legt sie in crm_mail_eingang ab und markiert sie als gelesen.
+// Waehlt den Weg: PHP-IMAP-Erweiterung, wenn vorhanden, sonst der eigene Socket-Abruf.
 // Wirft nie. Rueckgabe: ['ok'=>bool, 'anzahl'=>int, 'fehler'=>string]
 function mail_abholen(int $max = 30): array {
-    if (!mail_abruf_moeglich()) return ['ok' => false, 'anzahl' => 0, 'fehler' => 'Die PHP-IMAP-Erweiterung ist auf dem Server nicht aktiv.'];
     $c = mail_imap_konfig();
-    if (!$c['vollstaendig'])    return ['ok' => false, 'anzahl' => 0, 'fehler' => 'IMAP-Zugang ist noch nicht vollständig eingetragen (Mehr → E-Mail-Eingang).'];
+    if (!$c['vollstaendig']) return ['ok' => false, 'anzahl' => 0, 'fehler' => 'IMAP-Zugang ist noch nicht vollständig eingetragen (Mehr → E-Mail-Eingang).'];
+    if (mail_abruf_via_ext())    $r = mail_abholen_imap($c, $max);
+    elseif (mail_abruf_via_socket()) $r = mail_abholen_socket($c, $max);
+    else return ['ok' => false, 'anzahl' => 0, 'fehler' => 'Kein Abrufweg verfügbar (weder PHP-IMAP noch OpenSSL).'];
+    if (!empty($r['ok'])) crm_meta_schreiben('imap_last_fetch', gmdate('Y-m-d H:i:s'));
+    return $r;
+}
 
-    // Mailbox-String fuer imap_open: {host:port/imap/ssl}ORDNER
+// Eine abgeholte Mail aufnehmen: Dubletten-Schutz, KI-Vorschau, Zeile in crm_mail_eingang.
+// Gemeinsam fuer beide Abrufwege. Rueckgabe: 1 = neu eingetragen, 0 = Dublette/uebersprungen.
+function mail_eingang_aufnehmen(string $messageId, int $uid, string $vonName, string $vonEmail, string $betreff, string $datum, string $body): int {
+    $messageId = trim($messageId) !== '' ? $messageId : ('sock:' . md5($vonEmail . '|' . $betreff . '|' . $datum . '|' . mb_substr($body, 0, 200)));
+    if (scalar("SELECT COUNT(*) FROM crm_mail_eingang WHERE message_id=?", [$messageId])) return 0;
+
+    $roh = "Von: " . trim($vonName . ' <' . $vonEmail . '>') . "\nBetreff: " . $betreff . "\n\n" . $body;
+    $r = mail_ki_lesen($roh);
+    $daten = ($r['ok'] ?? false) ? $r['daten'] : [
+        'art' => 'sonstiges', 'name' => $vonName, 'firma' => '', 'email' => $vonEmail, 'telefon' => '',
+        'betreff' => $betreff, 'zusammenfassung' => mb_substr(trim($body), 0, 300), 'wunsch' => '',
+        'wert' => null, 'tage' => null, 'antwort_noetig' => true, 'sprache' => 'de',
+    ];
+    if (trim((string)($daten['email'] ?? '')) === '' && $vonEmail !== '') $daten['email'] = $vonEmail;
+    if (trim((string)($daten['name'] ?? '')) === '' && $vonName !== '')   $daten['name']  = $vonName;
+
+    q("INSERT INTO crm_mail_eingang (message_id, imap_uid, von_name, von_email, betreff, datum, body, art, daten_json, status, angelegt)
+       VALUES (?,?,?,?,?,?,?,?,?, 'neu', ?)",
+      [mb_substr($messageId, 0, 255), $uid ?: null,
+       mb_substr($vonName, 0, 190) ?: null, mb_substr($vonEmail, 0, 190) ?: null,
+       mb_substr($betreff, 0, 255) ?: null, $datum, mb_substr($body, 0, 60000),
+       (string)($daten['art'] ?? 'sonstiges'), json_encode($daten, JSON_UNESCAPED_UNICODE), gmdate('Y-m-d H:i:s')]);
+    return 1;
+}
+
+// Abruf ueber die PHP-IMAP-Erweiterung.
+function mail_abholen_imap(array $c, int $max): array {
     $flags = '/imap' . ($c['ssl'] ? '/ssl' : '/novalidate-cert');
     $mbox  = '{' . $c['host'] . ':' . $c['port'] . $flags . '}' . $c['ordner'];
-
     $imap = @imap_open($mbox, $c['user'], $c['pass'], 0, 1);
     if (!$imap) return ['ok' => false, 'anzahl' => 0, 'fehler' => 'Anmeldung am Postfach fehlgeschlagen: ' . trim((string) imap_last_error())];
-
     $neu = 0;
     try {
         $ids = imap_search($imap, 'UNSEEN', SE_UID) ?: [];
-        // Neueste zuerst, hoechstens $max je Lauf (Rest kommt beim naechsten Abruf).
         rsort($ids);
-        $ids = array_slice($ids, 0, max(1, $max));
-        foreach ($ids as $uid) {
+        foreach (array_slice($ids, 0, max(1, $max)) as $uid) {
             try {
-                $ov = imap_fetch_overview($imap, (string)$uid, FT_UID);
-                $o  = $ov[0] ?? null;
+                $ov = imap_fetch_overview($imap, (string)$uid, FT_UID); $o = $ov[0] ?? null;
                 if (!$o) continue;
                 $messageId = trim((string)($o->message_id ?? '')) ?: ('uid:' . $c['user'] . ':' . $uid);
-                // Schon abgeholt? (Mehrfachlauf, oder \Seen hat letztes Mal nicht gegriffen.)
-                if (scalar("SELECT COUNT(*) FROM crm_mail_eingang WHERE message_id=?", [$messageId])) {
-                    @imap_setflag_full($imap, (string)$uid, '\\Seen', ST_UID);
-                    continue;
-                }
-                $vonEmail = ''; $vonName = '';
-                if (!empty($o->from)) { [$vonName, $vonEmail] = mail_absender_zerlegen((string)$o->from); }
+                if (scalar("SELECT COUNT(*) FROM crm_mail_eingang WHERE message_id=?", [$messageId])) { @imap_setflag_full($imap, (string)$uid, '\\Seen', ST_UID); continue; }
+                $vonName = ''; $vonEmail = '';
+                if (!empty($o->from)) [$vonName, $vonEmail] = mail_absender_zerlegen((string)$o->from);
                 $betreff = mail_dekodiere_kopf((string)($o->subject ?? ''));
                 $datum   = !empty($o->date) ? gmdate('Y-m-d H:i:s', strtotime((string)$o->date) ?: time()) : gmdate('Y-m-d H:i:s');
                 $body    = mail_body_text($imap, (int)$uid);
-
-                // Rohtext fuer die KI: Kopfzeilen + Text, damit die Einordnung Absender/Betreff kennt.
-                $roh = "Von: " . trim($vonName . ' <' . $vonEmail . '>') . "\nBetreff: " . $betreff . "\n\n" . $body;
-                $r = mail_ki_lesen($roh);
-                $daten = ($r['ok'] ?? false) ? $r['daten'] : [
-                    'art' => 'sonstiges', 'name' => $vonName, 'firma' => '', 'email' => $vonEmail,
-                    'telefon' => '', 'betreff' => $betreff, 'zusammenfassung' => mb_substr(trim($body), 0, 300),
-                    'wunsch' => '', 'wert' => null, 'tage' => null, 'antwort_noetig' => true, 'sprache' => 'de',
-                ];
-                // Fehlt der KI der Absender, die Kopfzeilen-Werte nachtragen.
-                if (trim((string)($daten['email'] ?? '')) === '' && $vonEmail !== '') $daten['email'] = $vonEmail;
-                if (trim((string)($daten['name'] ?? '')) === '' && $vonName !== '')   $daten['name']  = $vonName;
-
-                q("INSERT INTO crm_mail_eingang (message_id, imap_uid, von_name, von_email, betreff, datum, body, art, daten_json, status, angelegt)
-                   VALUES (?,?,?,?,?,?,?,?,?, 'neu', ?)",
-                  [mb_substr($messageId, 0, 255), (int)$uid,
-                   mb_substr($vonName, 0, 190) ?: null, mb_substr($vonEmail, 0, 190) ?: null,
-                   mb_substr($betreff, 0, 255) ?: null, $datum,
-                   mb_substr($body, 0, 60000),
-                   (string)($daten['art'] ?? 'sonstiges'),
-                   json_encode($daten, JSON_UNESCAPED_UNICODE),
-                   gmdate('Y-m-d H:i:s')]);
-                $neu++;
+                $neu += mail_eingang_aufnehmen($messageId, (int)$uid, $vonName, $vonEmail, $betreff, $datum, $body);
                 @imap_setflag_full($imap, (string)$uid, '\\Seen', ST_UID);
-            } catch (Throwable $e) {
-                error_log('mail_abholen: Mail UID ' . $uid . ' uebersprungen: ' . $e->getMessage());
-            }
+            } catch (Throwable $e) { error_log('mail_abholen(imap): UID ' . $uid . ' uebersprungen: ' . $e->getMessage()); }
         }
-    } catch (Throwable $e) {
-        @imap_close($imap);
-        return ['ok' => false, 'anzahl' => $neu, 'fehler' => 'Abruf-Fehler: ' . $e->getMessage()];
-    }
+    } catch (Throwable $e) { @imap_close($imap); return ['ok' => false, 'anzahl' => $neu, 'fehler' => 'Abruf-Fehler: ' . $e->getMessage()]; }
     @imap_close($imap);
-    crm_meta_schreiben('imap_last_fetch', gmdate('Y-m-d H:i:s'));
+    return ['ok' => true, 'anzahl' => $neu, 'fehler' => ''];
+}
+
+// Abruf ueber den eigenen Socket-Client (ohne ext-imap). Nutzt BxImap + mail_raw_parsen.
+function mail_abholen_socket(array $c, int $max): array {
+    $imap = new BxImap($c['host'], $c['port'], $c['ssl']);
+    if (!$imap->verbinden())            return ['ok' => false, 'anzahl' => 0, 'fehler' => $imap->fehler];
+    if (!$imap->anmelden($c['user'], $c['pass'])) { $f = $imap->fehler; $imap->abmelden(); return ['ok' => false, 'anzahl' => 0, 'fehler' => $f]; }
+    if (!$imap->waehlen($c['ordner']))  { $f = $imap->fehler; $imap->abmelden(); return ['ok' => false, 'anzahl' => 0, 'fehler' => $f]; }
+
+    $neu = 0;
+    try {
+        $ids = $imap->ungelesen();
+        rsort($ids);
+        foreach (array_slice($ids, 0, max(1, $max)) as $uid) {
+            try {
+                $raw = $imap->roh((int)$uid);
+                if ($raw === null || $raw === '') continue;
+                $p = mail_raw_parsen($raw);
+                $messageId = '';
+                if (preg_match('/^message-id:\s*(.+)$/im', $raw, $m)) $messageId = trim($m[1]);
+                if ($messageId === '') $messageId = 'uid:' . $c['user'] . ':' . $uid;
+                if (scalar("SELECT COUNT(*) FROM crm_mail_eingang WHERE message_id=?", [mb_substr($messageId, 0, 255)])) { $imap->gelesen((int)$uid); continue; }
+                $neu += mail_eingang_aufnehmen($messageId, (int)$uid, $p['from_name'], $p['from_email'], $p['subject'], $p['date'], $p['body']);
+                $imap->gelesen((int)$uid);
+            } catch (Throwable $e) { error_log('mail_abholen(socket): UID ' . $uid . ' uebersprungen: ' . $e->getMessage()); }
+        }
+    } catch (Throwable $e) { $imap->abmelden(); return ['ok' => false, 'anzahl' => $neu, 'fehler' => 'Abruf-Fehler: ' . $e->getMessage()]; }
+    $imap->abmelden();
     return ['ok' => true, 'anzahl' => $neu, 'fehler' => ''];
 }
 
