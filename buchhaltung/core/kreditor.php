@@ -48,6 +48,10 @@ function kreditor_init(): void {
     // Fremdwährung (z. B. USD bei China-Lieferanten): Originalbetrag + Kurs; netto/ust/brutto bleiben in EUR.
     ensure_column('lieferant_rechnung', 'fx_kurs', "DECIMAL(14,6) NULL");  // 1 Fremdwährung = X EUR (NULL/1 bei EUR)
     ensure_column('lieferant_rechnung', 'fw_netto', "DECIMAL(14,2) NULL"); // Netto in Rechnungswährung
+    // Hochgeladene Original-Rechnung (PDF/Bild) des Lieferanten – relativ zu BX_UPLOADS (belege/…).
+    ensure_column('lieferant_rechnung', 'datei', "VARCHAR(255) NULL");
+    ensure_column('lieferant_rechnung', 'orig_name', "VARCHAR(255) NULL");
+    ensure_column('lieferant_rechnung', 'mime', "VARCHAR(100) NULL");
 }
 
 // Verfügbare Währungen + Symbole.
@@ -168,12 +172,14 @@ function kr_rechnung_anlegen(array $d): int {
     $faellig = $ziel !== null ? kr_faellig($datum, $ziel) : ($d['faellig'] ?? null);
     q("INSERT INTO lieferant_rechnung
          (nummer, lieferant_id, bestellung_id, lief_nummer, datum, eingang_am, waehrung, fx_kurs, fw_netto,
-          netto, ust_prozent, ust_betrag, brutto, status, zahlungsziel_tage, faellig, notiz, erfasst_von)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          netto, ust_prozent, ust_betrag, brutto, status, zahlungsziel_tage, faellig, notiz, erfasst_von,
+          datei, orig_name, mime)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('ER'), $d['lieferant_id'] ?: null, $d['bestellung_id'] ?? null,
        trim((string)($d['lief_nummer'] ?? '')) ?: null, $datum ?: null, $d['eingang_am'] ?? date('Y-m-d'),
        $waehrung, $kurs, $fwNetto, $netto, $ustP, $ust, $brutto, 'offen', $ziel, $faellig,
-       trim((string)($d['notiz'] ?? '')) ?: null, $d['erfasst_von'] ?? null]);
+       trim((string)($d['notiz'] ?? '')) ?: null, $d['erfasst_von'] ?? null,
+       $d['datei'] ?? null, $d['orig_name'] ?? null, $d['mime'] ?? null]);
     return insert_id();
 }
 
@@ -198,6 +204,12 @@ function kr_rechnung_update(int $id, array $d): void {
        trim((string)($d['lief_nummer'] ?? $r['lief_nummer'])) ?: null, $datum ?: null, $d['eingang_am'] ?? $r['eingang_am'],
        $waehrung, $kurs, $fwNetto, $netto, $ustP, $ust, $brutto, $ziel, $faellig, trim((string)($d['notiz'] ?? $r['notiz'])) ?: null, $id]);
     kr_status_fortschreiben($id);
+}
+
+// Hochgeladene Original-Rechnung an eine Eingangsrechnung hängen (relativ zu BX_UPLOADS).
+function kr_datei_setzen(int $id, string $datei, string $orig, string $mime): void {
+    q("UPDATE lieferant_rechnung SET datei=?, orig_name=?, mime=? WHERE id=?",
+      [$datei ?: null, mb_substr($orig, 0, 255) ?: null, $mime ?: null, $id]);
 }
 
 function kr_rechnung_stornieren(int $id, string $grund = ''): void {

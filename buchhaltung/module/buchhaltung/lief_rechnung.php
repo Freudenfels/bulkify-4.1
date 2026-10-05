@@ -4,12 +4,32 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/kreditor.php';
+require_once BX_ROOT . '/core/belegeingang.php';   // be_datei_speichern(), be_pfad()
 kreditor_init();
 
 $id = (int)($_GET['id'] ?? 0);
 
+// Hochgeladene Original-Rechnung ausliefern (nur nach Login).
+if ($id && isset($_GET['datei'])) {
+    $rd = one("SELECT datei, orig_name FROM lieferant_rechnung WHERE id=?", [$id]);
+    $pf = ($rd && !empty($rd['datei'])) ? be_pfad((string)$rd['datei']) : '';
+    if (!$pf || !is_file($pf)) { http_response_code(404); echo 'Keine Original-Datei.'; exit; }
+    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
+    $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','gif'=>'image/gif','heic'=>'image/heic'][$ext] ?? 'application/octet-stream';
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($rd['orig_name'] ?: 'Eingangsrechnung')) . '"');
+    header('Content-Length: ' . filesize($pf));
+    header('X-Content-Type-Options: nosniff');
+    readfile($pf); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     $aktion = $_POST['aktion'] ?? '';
+    if ($aktion === 'datei_upload') {
+        $g = be_datei_speichern($_FILES['beleg_datei'] ?? []);
+        if ($g) kr_datei_setzen($id, $g['datei'], $g['orig'], $g['mime']);
+        header('Location: ?p=lief_rechnung&id=' . $id . ($g ? '&dateiok=1' : '&dateifehler=1')); exit;
+    }
     if ($aktion === 'zahlung') {
         $betrag = (float) str_replace(',', '.', (string)($_POST['betrag'] ?? '0'));
         $u = current_user();
@@ -55,7 +75,7 @@ render_header('buchhaltung', 'Eingangsrechnung ' . $r['nummer']);
 bx_head(trim(($r['nummer'] ?: 'Eingangsrechnung') . ' · ' . ($r['firma'] ?? '')),
         'Eingangsrechnung' . ($r['lief_nummer'] ? ' (Lieferant: ' . $r['lief_nummer'] . ')' : '') . ' · ' . $badge,
         bx_btn('Zurück', '?p=buchhaltung&tab=verbindlichkeiten', 'ghost'));
-foreach (['erfasst'=>'Eingangsrechnung erfasst.','gebucht'=>'Zahlung gebucht.','gespeichert'=>'Gespeichert.','storniert'=>'Eingangsrechnung storniert.'] as $k=>$msg)
+foreach (['erfasst'=>'Eingangsrechnung erfasst.','gebucht'=>'Zahlung gebucht.','gespeichert'=>'Gespeichert.','storniert'=>'Eingangsrechnung storniert.','dateiok'=>'Original-Rechnung angehängt.'] as $k=>$msg)
     if (isset($_GET[$k])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h($msg) . '</div>';
 ?>
 <div class="bx-cards" style="align-items:flex-start">
@@ -76,6 +96,28 @@ foreach (['erfasst'=>'Eingangsrechnung erfasst.','gebucht'=>'Zahlung gebucht.','
       <tr><td>Bereits bezahlt</td><td class="bx-num"><?= $eur($zs['bezahlt']) ?></td></tr>
       <tr><td><strong>Offen</strong></td><td class="bx-num"><strong style="<?= $zs['rest'] > 0 ? 'color:var(--warn)' : 'color:var(--gruen)' ?>"><?= $eur($zs['rest']) ?></strong></td></tr>
     </tbody></table></div>
+    <?php if (isset($_GET['dateifehler'])) echo '<div class="bx-panel" style="padding:10px 14px;border-color:#e6c4c0;margin-top:10px">Datei konnte nicht gespeichert werden (erlaubt: PDF/JPG/PNG/WEBP/HEIC, max. 25 MB).</div>'; ?>
+    <div style="margin-top:12px">
+      <?php if (!empty($r['datei'])): ?>
+        <?= pdf_btn('?p=lief_rechnung&id=' . $id . '&datei=1', 'Original-Rechnung ansehen' . ($r['orig_name'] ? ' (' . h($r['orig_name']) . ')' : ''), false) ?>
+        <?php if ($r['status'] !== 'storniert'): ?>
+        <details style="margin-top:8px"><summary class="muted" style="cursor:pointer;font-size:13px">Datei ersetzen</summary>
+          <form method="post" enctype="multipart/form-data" class="bx-row" style="margin-top:8px;align-items:center;gap:8px">
+            <input type="hidden" name="aktion" value="datei_upload">
+            <input type="file" name="beleg_datei" accept="image/*,application/pdf" required>
+            <button class="btn btn-ghost btn-sm" type="submit">Hochladen</button>
+          </form>
+        </details>
+        <?php endif; ?>
+      <?php elseif ($r['status'] !== 'storniert'): ?>
+        <form method="post" enctype="multipart/form-data" class="bx-row" style="align-items:center;gap:8px">
+          <input type="hidden" name="aktion" value="datei_upload">
+          <span class="muted" style="align-self:center">Original-Rechnung anhängen:</span>
+          <input type="file" name="beleg_datei" accept="image/*,application/pdf" required>
+          <button class="btn btn-ghost btn-sm" type="submit">Hochladen</button>
+        </form>
+      <?php endif; ?>
+    </div>
   </div>
   <div class="bx-panel" style="flex:1;min-width:320px">
     <h2>Zahlungen</h2>

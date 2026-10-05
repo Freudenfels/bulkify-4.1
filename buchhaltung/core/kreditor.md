@@ -44,3 +44,6 @@ vorbelegt – China = USD, Rest EUR), Kurs je Rechnung überschreibbar. Original
 Kurs wird je Rechnung fest gespeichert (Snapshot). Kein BMF-Monatsdurchschnitt (steuerlich alternativ), keine
 Settings-UI für Fixkurse, kein PDF-Upload der Original-Eingangsrechnung, keine Auto-Verknüpfung
 Wareneingang→Rechnung. Robust gegen Schema-Drift: Lieferanten-Prefill liest per `SELECT *` + Coalescing. Siehe `BUCHHALTUNG.md`.
+
+## Datei an Eingangsrechnung (neu)
+lieferant_rechnung hat datei/orig_name/mime (Original-Rechnung, relativ zu BX_UPLOADS). kr_rechnung_anlegen nimmt datei/orig_name/mime; kr_datei_setzen() hängt nachträglich eine Datei an. Ablage/KI über core/belegeingang.php (be_datei_speichern/be_ki_auslesen).
