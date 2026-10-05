@@ -17,6 +17,9 @@ $routen = [
     'run'   => 'produktion/run.php',
     'etikett' => 'produktion/etikett.php',   // Kunden-Etikett-Datei ausliefern (inline)
     'qs'      => 'produktion/qs.php',         // QS & Labor: Rückstellmuster, Laborprobe, Freigabedokument
+    'kalender'    => 'produktion/kalender.php',
+    'reinigung'   => 'betrieb/reinigung.php',
+    'anleitungen' => 'betrieb/anleitungen.php',
 ];
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'dash';

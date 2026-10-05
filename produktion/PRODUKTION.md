@@ -47,6 +47,11 @@ hier einbinden (zieht die zweite `core/db.php` + das ganze Dashboard herein).
 - `?p=run&id=…` – **Produktionsmodus** (tablettauglich): nächster Schritt groß, „Erledigt"/„Freigeben"
   (FEFO-Entnahme/Mangel-Guard, letzter Schritt bucht Fertigware ein, protokolliert wer/wann).
   Admin kann Schritte direkt abhaken/zurücksetzen (reine Statuskorrektur, ohne Lagerbewegung).
+- `?p=qs&id=…` – **QS & Labor**: Rückstellmuster, Laborprobe/-versand, druckbares QS-Freigabedokument.
+- `?p=kalender` – **Kalender** (terminierte Aufträge nach `geplant_am` + ohne Termin).
+- `?p=reinigung` – **Reinigungspläne** (Betrieb). `?p=anleitungen` – **Anleitungen** (Schritt-SOPs).
+
+Menü (`pr_nav`): Gruppe **Produktion** (Dashboard, Produktionsaufträge, Kalender) und **Betrieb** (Reinigungspläne, Anleitungen).
 
 ## Eigenproduktion – Werks-Ablauf (Zielbild)
 Schrittfolge bei Eigenproduktion (über den Produktionsweg erzeugt, `erp_weg_stationen`):

@@ -15,7 +15,33 @@ function pr_schema(): void {
         aktualisiert DATETIME     NULL,
         PRIMARY KEY (pa_id, feld)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // Reinigungspläne (Werk): wiederkehrende Reinigungen je Bereich/Maschine.
+    db()->exec("CREATE TABLE IF NOT EXISTS pr_reinigung (
+        id               INT AUTO_INCREMENT PRIMARY KEY,
+        titel            VARCHAR(190) NOT NULL,
+        bereich          VARCHAR(120) NULL,
+        intervall        VARCHAR(60)  NULL,
+        notiz            TEXT         NULL,
+        letzte_reinigung DATE         NULL,
+        letzte_von       VARCHAR(190) NULL,
+        aktiv            TINYINT(1)   NOT NULL DEFAULT 1,
+        angelegt         DATETIME     NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
+
+// --- Reinigungspläne -------------------------------------------------------------------------
+function pr_reinigung_alle(): array { pr_schema(); return all("SELECT * FROM pr_reinigung WHERE aktiv=1 ORDER BY bereich, titel"); }
+function pr_reinigung_neu(string $titel, string $bereich, string $intervall, string $notiz): int {
+    pr_schema();
+    q("INSERT INTO pr_reinigung (titel,bereich,intervall,notiz,angelegt) VALUES (?,?,?,?,?)",
+      [trim($titel), trim($bereich) ?: null, trim($intervall) ?: null, trim($notiz) ?: null, gmdate('Y-m-d H:i:s')]);
+    return insert_id();
+}
+function pr_reinigung_gereinigt(int $id, string $von): void {
+    pr_schema();
+    q("UPDATE pr_reinigung SET letzte_reinigung=CURDATE(), letzte_von=? WHERE id=?", [$von !== '' ? $von : null, $id]);
+}
+function pr_reinigung_loeschen(int $id): void { pr_schema(); q("UPDATE pr_reinigung SET aktiv=0 WHERE id=?", [$id]); }
 
 // Einen erfassten Wert setzen (überschreibt denselben feld-Eintrag).
 function pr_daten_setzen(int $pa_id, string $feld, string $wert, string $von = ''): void {

@@ -4,11 +4,10 @@ require_once __DIR__ . '/ui.php';
 require_once __DIR__ . '/auth.php';
 
 function pr_nav(): array {
-    $nav = [
-        'Produktion' => ['dash' => 'Dashboard', 'liste' => 'Produktionsaufträge'],
+    return [
+        'Produktion' => ['dash' => 'Dashboard', 'liste' => 'Produktionsaufträge', 'kalender' => 'Kalender'],
+        'Betrieb'    => ['reinigung' => 'Reinigungspläne', 'anleitungen' => 'Anleitungen'],
     ];
-    // Weitere Punkte (Geführte Produktion, Chargen, Bericht …) ergänzt der Produktions-Chat hier.
-    return $nav;
 }
 
 function kopf(string $titel, string $aktiv = ''): void {
