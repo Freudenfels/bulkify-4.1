@@ -542,8 +542,15 @@ function erp_lieferung_per_tracking(string $tracking): array {
             ];
         }
     }
-    return ['ok' => true, 'lieferant' => (string)$b['lieferant'], 'lieferant_id' => (int)$b['lieferant_id'],
+    return ['ok' => true, 'id' => (int)$b['id'], 'lieferant' => (string)$b['lieferant'], 'lieferant_id' => (int)$b['lieferant_id'],
             'nummer' => (string)$b['nummer'], 'positionen' => $pos];
+}
+
+// Bestellung als „angekommen" markieren (Wareneingang) – nur wenn noch offen. Lässt die Kunden-
+// Statusleiste automatisch auf „Rohstoff angekommen" springen und nimmt die Lieferung aus „erwartet".
+function erp_bestellung_angekommen(int $bestellung_id): void {
+    if ($bestellung_id <= 0 || !tabelle_da('bestellung')) return;
+    q("UPDATE bestellung SET angekommen_am=CURDATE() WHERE id=? AND angekommen_am IS NULL", [$bestellung_id]);
 }
 
 // Positionen einer bestimmten erwarteten Lieferung (Bestell-ID) – für "aus Liste wählen".
@@ -577,7 +584,7 @@ function erp_lieferung_positionen(int $id): array {
             ];
         }
     }
-    return ['ok' => true, 'lieferant' => (string)$b['lieferant'], 'lieferant_id' => (int)$b['lieferant_id'],
+    return ['ok' => true, 'id' => (int)$b['id'], 'lieferant' => (string)$b['lieferant'], 'lieferant_id' => (int)$b['lieferant_id'],
             'nummer' => (string)$b['nummer'], 'positionen' => $pos];
 }
 

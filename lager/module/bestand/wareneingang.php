@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'track
     foreach ($r['positionen'] as $p) $pos[] = erp_position_zuordnen($p);
     echo json_encode([
         'ok'  => true,
-        'kopf' => ['lieferant' => $r['lieferant'], 'lieferant_id' => $r['lieferant_id'], 'nummer' => $r['nummer']],
+        'kopf' => ['id' => (int)($r['id'] ?? 0), 'lieferant' => $r['lieferant'], 'lieferant_id' => $r['lieferant_id'], 'nummer' => $r['nummer']],
         'positionen' => $pos,
     ], JSON_UNESCAPED_UNICODE);
     exit;
@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'liefe
     foreach ($r['positionen'] as $p) $pos[] = erp_position_zuordnen($p);
     echo json_encode([
         'ok'  => true,
-        'kopf' => ['lieferant' => $r['lieferant'], 'lieferant_id' => $r['lieferant_id'], 'nummer' => $r['nummer']],
+        'kopf' => ['id' => (int)($r['id'] ?? 0), 'lieferant' => $r['lieferant'], 'lieferant_id' => $r['lieferant_id'], 'nummer' => $r['nummer']],
         'positionen' => $pos,
     ], JSON_UNESCAPED_UNICODE);
     exit;
@@ -162,6 +162,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $gebucht[] = (int)$cid;
     }
 
+    // Kam der Wareneingang aus einer gewählten Lieferung? Dann die Bestellung als „angekommen" markieren
+    // -> die Kunden-Statusleiste springt automatisch auf „Rohstoff angekommen" (mit Datum).
+    $beId = (int)($_POST['we_bestellung_id'] ?? 0);
+    if ($gebucht && $beId > 0 && function_exists('erp_bestellung_angekommen')) erp_bestellung_angekommen($beId);
+
     if ($gebucht) flash(count($gebucht) . ' Position(en) eingebucht' . ($kisteId > 0 ? ' (in Kiste gelegt).' : ', Blinker angehängt.') . ($fehler ? ' ' . count($fehler) . ' Hinweis(e).' : ''));
     if ($fehler)  flash(implode(' · ', $fehler), $gebucht ? 'warn' : 'warn');
     if (!$gebucht && !$fehler) flash('Nichts zu buchen – keine Position erfasst.', 'warn');
@@ -219,6 +224,7 @@ if ($gebucht):
 
 <form method="post" id="weForm" class="bx-form">
   <input type="hidden" name="aktion" value="buchen">
+  <input type="hidden" name="we_bestellung_id" id="weBestellungId" value=""><!-- gewählte Lieferung -> markiert Bestellung als angekommen -->
 
   <!-- Start: 4 Kacheln – wie einbuchen? -->
   <div id="weStart" class="we-kacheln">
@@ -706,6 +712,7 @@ if ($gebucht):
     fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
       if(!j.ok){ trackInfo.textContent=(j.fehler||'Keine Lieferung gefunden.'); return; }
       trackInfo.textContent='Lieferung geladen: '+(j.kopf.lieferant||'')+(j.kopf.nummer?(' · '+j.kopf.nummer):'')+' ('+j.positionen.length+' Position(en))';
+      var bidF=document.getElementById('weBestellungId'); if(bidF) bidF.value=(j.kopf.id||'');   // Lieferung merken -> beim Buchen als angekommen markieren
       if(j.kopf.lieferant_id){ var ls=document.getElementById('weLief'); if(ls) ls.value=String(j.kopf.lieferant_id); }
       var ln=document.getElementById('weLiefName'); if(ln && j.kopf.lieferant) ln.value=j.kopf.lieferant;
       rows.innerHTML='';
@@ -724,6 +731,7 @@ if ($gebucht):
     startBox.hidden=true; arbeit.hidden=false;
     document.querySelectorAll('.we-weg').forEach(function(p){ p.hidden = p.getAttribute('data-w')!==w; });
     rows.innerHTML=''; addRow();   // frische, leere Position
+    var bidF=document.getElementById('weBestellungId'); if(bidF) bidF.value='';   // kein Lieferungsbezug bei manuellem/Scan-Weg
     if(w==='tracking'){ var t=document.getElementById('weTrack'); if(t) setTimeout(function(){t.focus();},60); }
     arbeit.scrollIntoView({behavior:'smooth',block:'start'});
   }
@@ -735,6 +743,7 @@ if ($gebucht):
     b.addEventListener('click',function(){
       var id=b.getAttribute('data-id'), linfo=document.getElementById('weListeInfo');
       if(linfo) linfo.textContent='Lade Lieferung …';
+      var bidF=document.getElementById('weBestellungId'); if(bidF) bidF.value=id;   // Lieferung merken -> beim Buchen als angekommen markieren
       var fd=new FormData(); fd.append('aktion','lieferung'); fd.append('id',id);
       fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
         if(!j.ok){ if(linfo) linfo.textContent=(j.fehler||'Nicht gefunden.'); return; }
