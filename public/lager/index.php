@@ -22,6 +22,10 @@ $routen = [
     'bestand'        => 'bestand/liste.php',
     'eingang'        => 'bestand/eingang.php',
     'ausgang'        => 'bestand/ausgang.php',
+    // Warenausgang / Versand (Sendungen planen, Lieferschein, spaeter DHL/Cargoboard)
+    'versand'        => 'versand/liste.php',
+    'versand_detail' => 'versand/detail.php',
+    'lieferschein'   => 'versand/lieferschein.php',
     'bewegungen'     => 'bestand/bewegungen.php',
     'papierkorb'     => 'bestand/papierkorb.php',
     'etikett'        => 'bestand/etikett.php',

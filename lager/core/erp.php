@@ -196,6 +196,47 @@ function erp_kunde_name(int $id): string {
     return (string) scalar("SELECT firma FROM kunden WHERE id=?", [$id]);
 }
 
+// Alle Kunden fuer die Auswahl beim Versand (Warenausgang-Planung).
+function erp_kunden_liste(): array {
+    if (!tabelle_da('kunden')) return [];
+    return all("SELECT id, firma FROM kunden ORDER BY firma");
+}
+
+// Adressen eines Kunden als Auswahl: Lieferadresse (bevorzugt) + Hauptadresse + Rechnungsadresse.
+// Nur Adressen mit Inhalt. Jede: quelle/label/firma/name/strasse/hausnummer/plz/ort/land/email/telefon/bevorzugt.
+// Weltweit: land ist ein 2-Buchstaben-Laendercode (Default DE).
+function erp_kunde_adressen(int $kunde_id): array {
+    if ($kunde_id <= 0 || !tabelle_da('kunden')) return [];
+    $k = one("SELECT * FROM kunden WHERE id=?", [$kunde_id]);
+    if (!$k) return [];
+    $firma   = (string)($k['firma'] ?? '');
+    $email   = (string)($k['email'] ?? '');
+    $telefon = (string)($k['telefon'] ?? '');
+    $hatLiefer = trim((string)($k['liefer_strasse'] ?? '') . ($k['liefer_ort'] ?? '') . ($k['liefer_plz'] ?? '')) !== '';
+    $out = [];
+    if ($hatLiefer) {
+        $out[] = ['quelle' => 'liefer', 'label' => 'Lieferadresse', 'firma' => $firma, 'name' => '',
+            'strasse' => (string)($k['liefer_strasse'] ?? ''), 'hausnummer' => (string)($k['liefer_hausnummer'] ?? ''),
+            'plz' => (string)($k['liefer_plz'] ?? ''), 'ort' => (string)($k['liefer_ort'] ?? ''),
+            'land' => strtoupper((string)($k['liefer_land'] ?? '') ?: (string)($k['land'] ?? 'DE')),
+            'email' => $email, 'telefon' => $telefon, 'bevorzugt' => true];
+    }
+    $out[] = ['quelle' => 'haupt', 'label' => 'Hauptadresse', 'firma' => $firma, 'name' => '',
+        'strasse' => (string)($k['strasse'] ?? ''), 'hausnummer' => (string)($k['hausnummer'] ?? ''),
+        'plz' => (string)($k['plz'] ?? ''), 'ort' => (string)($k['ort'] ?? ''),
+        'land' => strtoupper((string)($k['land'] ?? 'DE') ?: 'DE'),
+        'email' => $email, 'telefon' => $telefon, 'bevorzugt' => !$hatLiefer];
+    $hatRech = trim((string)($k['rechnung_strasse'] ?? '') . ($k['rechnung_ort'] ?? '')) !== '';
+    if ($hatRech) {
+        $out[] = ['quelle' => 'rechnung', 'label' => 'Rechnungsadresse', 'firma' => (string)($k['rechnung_firma'] ?? '') ?: $firma, 'name' => '',
+            'strasse' => (string)($k['rechnung_strasse'] ?? ''), 'hausnummer' => (string)($k['rechnung_hausnummer'] ?? ''),
+            'plz' => (string)($k['rechnung_plz'] ?? ''), 'ort' => (string)($k['rechnung_ort'] ?? ''),
+            'land' => strtoupper((string)($k['rechnung_land'] ?? '') ?: (string)($k['land'] ?? 'DE')),
+            'email' => $email, 'telefon' => $telefon, 'bevorzugt' => false];
+    }
+    return $out;
+}
+
 // Bestand einer Charge manuell auf einen neuen Wert setzen (Korrektur). Rueckgabe ['ok','meldung',...].
 function erp_charge_menge_setzen(int $charge_id, float $neu, string $grund = ''): array {
     if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Charge-Tabelle.'];

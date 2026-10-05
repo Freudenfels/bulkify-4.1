@@ -1,12 +1,23 @@
 # system/einstellungen.php – Lager-Einstellungen (`?p=einstellungen`, nur Admin)
 
-Hub für alles rund ums Lager:
-- **Etikett & Drucker**: Standard-Etikettengröße (lg_meta `etikett_format`) + Drucker-Name
-  (lg_meta `drucker_name`, leer = Standarddrucker).
-- **Brücke auf dem Lager-PC**: Status (läuft/aus), Downloads – „Brücke einrichten (Hintergrund)"
-  (`?p=bruecke_skript&art=hintergrund`, legt Windows-Aufgabe an, unsichtbar + Autostart) und
-  „mit Fenster (zum Testen)" (`?p=bruecke_skript`), SumatraPDF-Link, Kurzanleitung. Die Brücke macht
-  BEIDES: Blinker leuchten + Etiketten drucken. (Keine `.vbs` mehr – wird von Browsern als Virus blockiert.)
-- **Blinker/Sender**: Links zu `?p=sender` (verwalten) und `?p=leisten` (Blinker testen).
+Hub für alles rund ums Lager, in **Reitern** (`.settabs`, `?reiter=`): **Drucker · Formate · Zugänge**.
 
-Menüeintrag „Einstellungen" (System, Admin). Druckweg: SumatraPDF, siehe `bruecke/bruecke.ps1`.
+**Drucker** (`reiter=drucker`, Standard):
+- Etikettengröße (fest 100×150) + Drucker-Zuordnung je Dokument: Karton-Etikett (`drucker_name`),
+  Lieferschein (`drucker_lieferschein`), Versand-Label (`drucker_versandlabel`) – leer = Standarddrucker.
+  Druckerliste kommt von der Brücke (`drucker_liste`).
+- **Brücke auf dem Lager-PC**: Status (läuft/aus) + Diagnose, Downloads „Brücke einrichten (Hintergrund)"
+  (`?p=bruecke_skript&art=hintergrund`) / „mit Fenster" / Reset, SumatraPDF-Link, „Schlüssel neu erzeugen"
+  (`aktion=token_neu`). Die Brücke macht BEIDES: Blinker leuchten + Etiketten/Dokumente drucken.
+- **Blinker/Sender**: Links zu `?p=sender` und `?p=leisten`.
+
+**Formate** (`reiter=formate`): **Lieferschein-Absender** (`versand_absender`, mehrzeilig) und
+Standard-Versandart (`versand_typ_standard`).
+
+**Zugänge** (`reiter=zugaenge`): API-Schlüssel für **DHL – Paket** (`dhl_api_user/_key/_secret`,
+`dhl_abrechnungsnummer`, `dhl_sandbox`) und **Cargoboard – Palette/Fracht** (`cargoboard_api_key`,
+`cargoboard_sandbox`). Secrets werden nur bei Eingabe überschrieben (leer = unverändert) und nie wieder im
+Klartext angezeigt. Liegen in `lg_meta` (DB, nicht im Repo) – fürs scharfe Deployment später nach
+`secrets.php` auslagern. Genutzt ab Phase 2 (DHL) / Phase 3 (Cargoboard).
+
+Alle Werte über `lg_meta_lesen/_schreiben`. Druckweg: SumatraPDF, siehe `bruecke/bruecke.ps1`.

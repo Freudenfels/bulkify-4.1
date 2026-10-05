@@ -199,6 +199,50 @@ function lg_schema(): void {
         KEY st (status, id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    // --- Warenausgang / Versand: eine geplante Sendung + ihre Positionen. --------------------------
+    // Empfaenger wird als Snapshot gespeichert (bleibt stabil, auch wenn der Kunde seine Adresse aendert).
+    // Weltweit: empf_land ist ein 2-Buchstaben-Laendercode (ISO), Default DE.
+    q("CREATE TABLE IF NOT EXISTS lg_versand (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nummer VARCHAR(20) NULL,
+        kunde_id INT NULL,
+        empf_firma VARCHAR(190) NULL,
+        empf_name VARCHAR(190) NULL,
+        empf_strasse VARCHAR(190) NULL,
+        empf_hausnummer VARCHAR(20) NULL,
+        empf_plz VARCHAR(20) NULL,
+        empf_ort VARCHAR(120) NULL,
+        empf_land VARCHAR(2) NOT NULL DEFAULT 'DE',
+        empf_email VARCHAR(190) NULL,
+        empf_telefon VARCHAR(60) NULL,
+        adress_quelle VARCHAR(20) NULL,                 -- liefer|haupt|rechnung|frei (nur Info)
+        typ VARCHAR(12) NOT NULL DEFAULT 'paket',       -- paket|palette
+        carrier VARCHAR(20) NOT NULL DEFAULT 'manuell', -- manuell|dhl|cargoboard
+        status VARCHAR(12) NOT NULL DEFAULT 'geplant',  -- geplant|versendet|storniert
+        tracking VARCHAR(255) NULL,
+        gewicht_kg DECIMAL(10,3) NULL,
+        pakete INT NOT NULL DEFAULT 1,
+        notiz TEXT NULL,
+        benutzer_id INT NULL,
+        benutzer_name VARCHAR(120) NULL,
+        angelegt DATETIME NOT NULL,
+        versendet_am DATETIME NULL,
+        KEY st (status, id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    q("CREATE TABLE IF NOT EXISTS lg_versand_pos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        versand_id INT NOT NULL,
+        charge_id INT NULL,
+        item_id INT NULL,
+        bezeichnung VARCHAR(255) NULL,
+        charge_nr VARCHAR(80) NULL,
+        menge DECIMAL(14,3) NOT NULL DEFAULT 0,
+        einheit VARCHAR(20) NULL,
+        abgebucht TINYINT(1) NOT NULL DEFAULT 0,
+        KEY v (versand_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     lg_meta_schreiben('schema_build', $build);
 }
 
@@ -226,6 +270,69 @@ function lg_charge_log_add(int $charge_id, string $feld, ?string $alt, ?string $
 function lg_charge_log_liste(int $charge_id, int $limit = 50): array {
     return all("SELECT * FROM lg_charge_log WHERE charge_id=? ORDER BY id DESC LIMIT " . max(1, $limit), [$charge_id]);
 }
+
+// --- Warenausgang / Versand (eigene lg_-Tabellen; Bestandsabbuchung laeuft ueber core/erp.php) ---
+function lg_versand_nr(): string {
+    $n = (int) scalar("SELECT COALESCE(MAX(id),0)+1 FROM lg_versand");
+    return 'WA-' . str_pad((string)$n, 5, '0', STR_PAD_LEFT);
+}
+function lg_versand_anlegen(array $d): int {
+    $u = function_exists('lg_benutzer') ? lg_benutzer() : null;
+    q("INSERT INTO lg_versand
+        (nummer,kunde_id,empf_firma,empf_name,empf_strasse,empf_hausnummer,empf_plz,empf_ort,empf_land,
+         empf_email,empf_telefon,adress_quelle,typ,carrier,status,notiz,gewicht_kg,pakete,benutzer_id,benutzer_name,angelegt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'manuell','geplant', ?,?,?,?,?,?)",
+      [lg_versand_nr(), ($d['kunde_id'] ?? null) ?: null,
+       $d['empf_firma'] ?? '', $d['empf_name'] ?? '', $d['empf_strasse'] ?? '', $d['empf_hausnummer'] ?? '',
+       $d['empf_plz'] ?? '', $d['empf_ort'] ?? '', strtoupper(trim((string)($d['empf_land'] ?? 'DE'))) ?: 'DE',
+       $d['empf_email'] ?? '', $d['empf_telefon'] ?? '', $d['adress_quelle'] ?? 'frei',
+       in_array(($d['typ'] ?? 'paket'), ['paket', 'palette'], true) ? ($d['typ'] ?? 'paket') : 'paket',
+       $d['notiz'] ?? '',
+       (($d['gewicht_kg'] ?? '') !== '' ? (float)$d['gewicht_kg'] : null),
+       max(1, (int)($d['pakete'] ?? 1)),
+       (int)($u['id'] ?? 0) ?: null, mb_substr((string)($u['name'] ?? ''), 0, 120), jetzt_utc()]);
+    return (int) insert_id();
+}
+function lg_versand(int $id): ?array { return one("SELECT * FROM lg_versand WHERE id=?", [$id]); }
+function lg_versand_liste(string $status = '', int $limit = 100): array {
+    $w = ''; $p = [];
+    if ($status !== '') { $w = 'WHERE status=?'; $p[] = $status; }
+    return all("SELECT * FROM lg_versand $w ORDER BY id DESC LIMIT " . max(1, $limit), $p);
+}
+function lg_versand_kopf_speichern(int $id, array $d): void {
+    q("UPDATE lg_versand SET kunde_id=?, empf_firma=?, empf_name=?, empf_strasse=?, empf_hausnummer=?,
+         empf_plz=?, empf_ort=?, empf_land=?, empf_email=?, empf_telefon=?, adress_quelle=?, typ=?,
+         notiz=?, gewicht_kg=?, pakete=? WHERE id=?",
+      [($d['kunde_id'] ?? null) ?: null, $d['empf_firma'] ?? '', $d['empf_name'] ?? '', $d['empf_strasse'] ?? '',
+       $d['empf_hausnummer'] ?? '', $d['empf_plz'] ?? '', $d['empf_ort'] ?? '',
+       strtoupper(trim((string)($d['empf_land'] ?? 'DE'))) ?: 'DE', $d['empf_email'] ?? '', $d['empf_telefon'] ?? '',
+       $d['adress_quelle'] ?? 'frei', in_array(($d['typ'] ?? 'paket'), ['paket', 'palette'], true) ? ($d['typ'] ?? 'paket') : 'paket',
+       $d['notiz'] ?? '',
+       (($d['gewicht_kg'] ?? '') !== '' ? (float)$d['gewicht_kg'] : null),
+       max(1, (int)($d['pakete'] ?? 1)), $id]);
+}
+function lg_versand_status_setzen(int $id, string $status): void {
+    if (!in_array($status, ['geplant', 'versendet', 'storniert'], true)) return;
+    if ($status === 'versendet') q("UPDATE lg_versand SET status=?, versendet_am=? WHERE id=?", [$status, jetzt_utc(), $id]);
+    else q("UPDATE lg_versand SET status=? WHERE id=?", [$status, $id]);
+}
+function lg_versand_tracking_setzen(int $id, string $tracking, string $carrier = ''): void {
+    if ($carrier !== '') q("UPDATE lg_versand SET tracking=?, carrier=? WHERE id=?", [$tracking, $carrier, $id]);
+    else q("UPDATE lg_versand SET tracking=? WHERE id=?", [$tracking, $id]);
+}
+function lg_versand_pos_add(int $versand_id, array $p): int {
+    q("INSERT INTO lg_versand_pos (versand_id,charge_id,item_id,bezeichnung,charge_nr,menge,einheit)
+       VALUES (?,?,?,?,?,?,?)",
+      [$versand_id, ($p['charge_id'] ?? null) ?: null, ($p['item_id'] ?? null) ?: null,
+       mb_substr((string)($p['bezeichnung'] ?? ''), 0, 255), mb_substr((string)($p['charge_nr'] ?? ''), 0, 80),
+       (float)($p['menge'] ?? 0), mb_substr((string)($p['einheit'] ?? ''), 0, 20)]);
+    return (int) insert_id();
+}
+function lg_versand_pos_liste(int $versand_id): array {
+    return all("SELECT * FROM lg_versand_pos WHERE versand_id=? ORDER BY id", [$versand_id]);
+}
+function lg_versand_pos_del(int $pos_id): void { q("DELETE FROM lg_versand_pos WHERE id=?", [$pos_id]); }
+function lg_versand_pos_abgebucht(int $pos_id): void { q("UPDATE lg_versand_pos SET abgebucht=1 WHERE id=?", [$pos_id]); }
 
 // Soll die Menge auf dem Etikett auf die Kartons aufgeteilt werden? (0/1)
 function lg_aufteilen(int $charge_id): bool {
