@@ -12,7 +12,8 @@ if (!in_array($tab, ['offen', 'abgeschlossen'], true)) $tab = 'offen';
 $alle = all("SELECT a.*, k.firma AS kunde_firma, COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name,
              p.rezeptur_id AS rezeptur_id,
              (SELECT nummer FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='rechnung' LIMIT 1) AS rechnung_nr
-             FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id");
+             FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
+             WHERE COALESCE(a.kategorie,'produkt') <> 'dienstleistung'");
 
 // Erstauftrag vs. Nachbestellung – berechnet über ALLE Aufträge (nicht nur den aktuellen Reiter).
 // Nachbestellung = ein früherer, nicht stornierter Auftrag mit demselben Produkt existiert.

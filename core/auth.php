@@ -37,6 +37,11 @@ function route_rollen_map(): array {
         'angebot'            => ['sales', 'finance'],
         'dienstleistungen'   => ['sales', 'finance'],   // Service-Katalog (Dienstleistungen)
         'dienstleistung'     => ['sales', 'finance'],
+        'dl_angebote'        => ['sales', 'finance'],   // DL-Angebote (DA-)
+        'dl_angebot'         => ['sales', 'finance'],
+        'dl_auftraege'       => ['sales', 'finance'],   // DL-Aufträge (DB-)
+        'dl_auftrag'         => ['sales', 'finance'],
+        'dl_rechnungen'      => ['sales', 'finance'],   // DL-Rechnungen (DR-)
         'rechnungen_ansicht' => ['sales', 'finance'],   // Nur-Lese-Rechnungsliste im Dashboard
         'angebot_pdf'        => ['sales', 'finance'],
         'vertrag_pdf'        => ['sales', 'finance'],

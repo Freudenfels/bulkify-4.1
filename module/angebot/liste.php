@@ -11,7 +11,8 @@ $dir  = $_GET['dir']  ?? 'desc';
 
 $rows = all("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name,
              (SELECT COUNT(*) FROM angebot_staffel s WHERE s.angebot_id=a.id) AS staffel_anzahl
-             FROM angebot a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id");
+             FROM angebot a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
+             WHERE COALESCE(a.kategorie,'produkt') <> 'dienstleistung'");
 if ($q !== '') {
     $needle = mb_strtolower($q);
     $rows = array_filter($rows, function($r) use ($needle) {

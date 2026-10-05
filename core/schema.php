@@ -52,7 +52,9 @@ function init_schema(): void {
     // entfernten DB. Sie müssen nur nach einer Schema-Änderung laufen. Marker = mtime dieser Datei:
     // Nach jedem Deploy (Datei neu geschrieben) ändert sie sich -> Migrationen laufen genau einmal,
     // danach überspringt jeder Request den ganzen Block und macht nur EINE meta_get-Abfrage.
-    $schemaBuild = (string) @filemtime(__FILE__);
+    // Zusaetzliche Schema-Dateien (eigene Module) fliessen mit ein, damit deren Aenderungen die
+    // Migration ebenfalls genau einmal ausloesen (sonst liefe dienstleistung_schema() nie neu).
+    $schemaBuild = (string) ((int) @filemtime(__FILE__) + (int) @filemtime(__DIR__ . '/dienstleistung.php'));
     if ($schemaBuild !== '' && meta_get('schema_build', '') === $schemaBuild) return;
 
     // users: interne Mitarbeiter + Portal-Logins (Rolle steuert die Sicht)
