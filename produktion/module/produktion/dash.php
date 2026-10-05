@@ -70,10 +70,11 @@ $liste = function (string $titel, array $rows, string $alleTab, string $art) {
        . '<th>Nr.</th><th>Produkt</th><th>Kunde</th>'
        . ($art === 'planung' ? '<th>Geplant am</th>' : '')
        . ($art === 'laufend' ? '<th>Fortschritt</th>' : '<th>Produzierbar?</th>')
-       . '<th></th></tr></thead><tbody>';
+       . '</tr></thead><tbody>';
     foreach (array_slice($rows, 0, 8) as $pa) {
         $g = (int)$pa['schritte_gesamt']; $f = (int)$pa['schritte_fertig'];
-        echo '<tr>';
+        $ziel = $art === 'laufend' ? 'run' : 'pa';
+        echo '<tr onclick="location.href=\'?p=' . $ziel . '&id=' . (int)$pa['id'] . '\'" style="cursor:pointer">';
         echo '<td><strong>' . h((string)$pa['nummer']) . '</strong></td>';
         echo '<td>' . h((string)($pa['produkt_name'] ?: '–')) . '</td>';
         echo '<td>' . h((string)($pa['kunde'] ?: '–')) . '</td>';
@@ -86,8 +87,6 @@ $liste = function (string $titel, array $rows, string $alleTab, string $art) {
             $ber = erp_pa_bereitschaft((int)$pa['id'], (string)$pa['status'], $f);
             echo '<td>' . bereit_badge($ber['status']) . '</td>';
         }
-        $ziel = $art === 'laufend' ? 'run' : 'pa';
-        echo '<td class="bx-num"><a class="btn btn-ghost btn-sm" href="?p=' . $ziel . '&id=' . (int)$pa['id'] . '">öffnen</a></td>';
         echo '</tr>';
     }
     echo '</tbody></table></div></div>';

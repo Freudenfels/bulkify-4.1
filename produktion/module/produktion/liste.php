@@ -24,7 +24,7 @@ seitenkopf('Produktionsaufträge', count($pas) . ' ' . (count($pas) === 1 ? 'Auf
 <div class="bx-tablewrap"><table class="bx-table">
   <thead><tr>
     <th>Nr.</th><th>Produkt</th><th>Kunde</th><th class="bx-num">Menge</th>
-    <th>Auftragseingang</th><th>Produzierbar?</th><th>Fortschritt</th><th>Status</th><th></th>
+    <th>Auftragseingang</th><th>Produzierbar?</th><th>Fortschritt</th><th>Status</th>
   </tr></thead>
   <tbody>
   <?php foreach ($pas as $pa):
@@ -32,7 +32,7 @@ seitenkopf('Produktionsaufträge', count($pas) . ' ' . (count($pas) === 1 ? 'Auf
       $proz = $g > 0 ? round($f * 100 / $g) : 0;
       $ber = erp_pa_bereitschaft((int)$pa['id'], (string)$pa['status'], $f);
       $eingang = $pa['auftrag_eingang'] ?? ($pa['angelegt'] ?? null); ?>
-    <tr>
+    <tr onclick="location.href='?p=pa&id=<?= (int)$pa['id'] ?>'" style="cursor:pointer">
       <td><strong><?= h((string)$pa['nummer']) ?></strong><?php if (!empty($pa['auftrag_nr'])): ?><br><span class="muted" style="font-size:12px"><?= h((string)$pa['auftrag_nr']) ?></span><?php endif; ?></td>
       <td><?= h((string)($pa['produkt_name'] ?: '–')) ?><?php if (!empty($pa['form'])): ?> <span class="muted" style="font-size:12px">· <?= h((string)$pa['form']) ?></span><?php endif; ?></td>
       <td><?= h((string)($pa['kunde'] ?: '–')) ?></td>
@@ -41,7 +41,6 @@ seitenkopf('Produktionsaufträge', count($pas) . ' ' . (count($pas) === 1 ? 'Auf
       <td><?= bereit_badge($ber['status']) ?></td>
       <td style="min-width:140px"><?= $g > 0 ? ('Schritt ' . $f . '/' . $g . ' · ' . $proz . '%') : '<span class="muted">–</span>' ?></td>
       <td><?= pa_badge((string)$pa['status']) ?></td>
-      <td class="bx-num"><a class="btn btn-ghost btn-sm" href="?p=pa&id=<?= (int)$pa['id'] ?>">öffnen</a></td>
     </tr>
   <?php endforeach; ?>
   </tbody>
