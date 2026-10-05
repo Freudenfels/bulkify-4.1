@@ -26,6 +26,7 @@ $routen = [
     'lief_rechnung_neu' => 'buchhaltung/lief_rechnung_neu.php',
     'lief_rechnung'     => 'buchhaltung/lief_rechnung.php',
     'angebote_ansicht'  => 'buchhaltung/angebote_ansicht.php',   // Nur-Lese-Angebote + Abgleich Angebot/Auftrag/Rechnung
+    'import_bulk'       => 'buchhaltung/import_bulk.php',         // Bulk-Import alter Angebote+Rechnungen (KI)
     'beleg_eingang'     => 'buchhaltung/beleg_eingang.php',       // Beleg-Posteingang (KI-Upload)
     'beleg_upload'      => 'buchhaltung/beleg_upload.php',        // Beleg hochladen (nach Login)
     'beleg_detail'      => 'buchhaltung/beleg_detail.php',        // Beleg prüfen/erfassen

@@ -49,6 +49,36 @@ function nummer_zurueckgeben(string $nummer): void {
     q("UPDATE nummernkreis SET naechste = naechste - 1 WHERE prefix = ? AND naechste = ?", [$m[1], (int)$m[2] + 1]);
 }
 
+// ---- kunden (geteilt) ------------------------------------------------------------------------------
+// Lesen: alle Kunden (für Zuordnung/Abgleich im Import). Nur id + firma + ust_id + kundennummer.
+function erp_kunden_alle(): array {
+    if (!tabelle_da('kunden')) return [];
+    return all("SELECT id, firma, kundennummer, ust_id FROM kunden ORDER BY firma");
+}
+function erp_kunde(int $id): ?array {
+    return ($id && tabelle_da('kunden')) ? one("SELECT * FROM kunden WHERE id=?", [$id]) : null;
+}
+// Fuzzy-Suche über die Firma (für den KI-Namensabgleich). Gibt die beste Übereinstimmung oder null.
+function erp_kunde_per_firma(string $firma): ?array {
+    $firma = trim($firma);
+    if ($firma === '' || !tabelle_da('kunden')) return null;
+    $exact = one("SELECT id, firma FROM kunden WHERE firma=? LIMIT 1", [$firma]);
+    if ($exact) return $exact;
+    return one("SELECT id, firma FROM kunden WHERE firma LIKE ? ORDER BY CHAR_LENGTH(firma) LIMIT 1", ['%' . $firma . '%']);
+}
+// EINZIGE Schreibstelle der Buchhaltung in die Kunden: Neuanlage (nur firma Pflicht). Gibt die neue id.
+// Für den Rechnungs-Import („Kunde neu anlegen", wenn kein Treffer). Vergibt eine Kundennummer (K-…).
+function erp_kunde_anlegen(string $firma, array $extra = []): int {
+    $firma = trim($firma);
+    if ($firma === '') return 0;
+    $vorhanden = one("SELECT id FROM kunden WHERE firma=? LIMIT 1", [$firma]);
+    if ($vorhanden) return (int)$vorhanden['id'];
+    q("INSERT INTO kunden (kundennummer, firma, email, ort, land) VALUES (?,?,?,?,?)",
+      [naechste_nummer('K'), $firma, trim((string)($extra['email'] ?? '')) ?: null,
+       trim((string)($extra['ort'] ?? '')) ?: null, strtoupper((string)($extra['land'] ?? 'DE')) ?: 'DE']);
+    return insert_id();
+}
+
 // ---- angebot / auftrag (geteilt, NUR LESEN; für die Buchhaltungs-Ansicht + Abgleich) --------------
 // Angebote mit Kundenname + Produkt + repräsentativer Summe (bestätigte, sonst erste Staffel: menge×VK).
 // $kunde_id filtert auf einen Kunden; $suche filtert (Nummer/Kunde) serverseitig im Aufrufer.

@@ -29,6 +29,7 @@ function bu_nav(): array {
             'angebote_ansicht'  => ['label' => 'Angebote (Ansicht)',  'href' => '?p=angebote_ansicht'],
             'auftrag_import'    => ['label' => 'Auftrag importieren', 'href' => '?p=auftrag_import'],
             'rechnung_import'   => ['label' => 'Alt-Rechnungen',      'href' => '?p=rechnung_import'],
+            'import_bulk'       => ['label' => 'Bulk-Import (alt)',   'href' => '?p=import_bulk'],
         ],
         'Eingang (Kreditoren)' => [
             'beleg_eingang'     => ['label' => 'Belege (KI)',         'href' => '?p=beleg_eingang'],
