@@ -21,8 +21,44 @@ $rows = all("SELECT la.*, r.nummer AS rez_nr, r.name AS rez_name, r.darreichungs
              ORDER BY r.name IS NULL, r.name, la.menge, (la.preis IS NULL OR la.preis = 0), la.preis
              LIMIT 2000", $args);
 
-$gesamt   = (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot");
-$mitPreis = (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot WHERE preis IS NOT NULL AND preis > 0");
+// NEU: aktuelle Lieferanten-Angebote aus dem v4-Anfrage-System (lieferant_anfrage/-angebot) mit einbeziehen –
+// sonst tauchen Preise, die ein Lieferant heute auf eine Fremdfertigungs-Anfrage abgibt, hier nicht auf.
+$neuRows = all("SELECT la.rezeptur_id, r.nummer AS rez_nr, r.name AS rez_name, r.darreichungsform AS df, r.kunde_id,
+                       l.firma, ag.id AS ag_id, ag.preis AS preis, ag.einheit AS einheit, la.menge AS menge
+                FROM lieferant_anfrage la
+                JOIN lieferant_angebot ag ON ag.anfrage_id = la.id
+                LEFT JOIN rezeptur r    ON r.id = la.rezeptur_id
+                LEFT JOIN lieferanten l ON l.id = la.lieferant_id
+                WHERE la.rezeptur_id IS NOT NULL AND la.art='fertigprodukt'");
+// Staffeln je Angebot -> je Preisstufe eine Zeile; ohne Staffel die Basiszeile.
+$staffeln = [];
+if ($neuRows) {
+    $agIds = array_values(array_unique(array_map(fn($x) => (int)$x['ag_id'], $neuRows)));
+    $in = implode(',', array_fill(0, count($agIds), '?'));
+    foreach (all("SELECT angebot_id, menge_ab, preis FROM lieferant_angebot_staffel WHERE angebot_id IN ($in) ORDER BY menge_ab", $agIds) as $s)
+        $staffeln[(int)$s['angebot_id']][] = $s;
+}
+foreach ($neuRows as $nr) {
+    $mk = fn($preis, $menge) => ['rezeptur_id'=>$nr['rezeptur_id'], 'rez_nr'=>$nr['rez_nr'], 'rez_name'=>$nr['rez_name'],
+        'df'=>$nr['df'], 'kunde_id'=>$nr['kunde_id'], 'firma'=>$nr['firma'], 'preis'=>$preis, 'einheit'=>$nr['einheit'], 'menge'=>$menge];
+    $kandidaten = !empty($staffeln[(int)$nr['ag_id']])
+        ? array_map(fn($s) => $mk($s['preis'], $s['menge_ab']), $staffeln[(int)$nr['ag_id']])
+        : [$mk($nr['preis'], $nr['menge'])];
+    foreach ($kandidaten as $row) {
+        // Such-/„nur mit Preis"-Filter wie bei der alten Quelle anwenden.
+        if ($q !== '' && mb_stripos((string)$row['rez_name'], $q) === false && mb_stripos((string)$row['firma'], $q) === false) continue;
+        if ($nurP && !($row['preis'] !== null && (float)$row['preis'] > 0)) continue;
+        $rows[] = $row;
+    }
+}
+// Zusammenführen & nach Rezeptur/Menge/Preis sortieren.
+usort($rows, function ($a, $b) {
+    return [ (string)($a['rez_name'] ?? ''), (float)($a['menge'] ?? 0), (float)($a['preis'] ?? 0) ]
+       <=> [ (string)($b['rez_name'] ?? ''), (float)($b['menge'] ?? 0), (float)($b['preis'] ?? 0) ];
+});
+
+$gesamt   = count($rows);
+$mitPreis = count(array_filter($rows, fn($r) => $r['preis'] !== null && (float)$r['preis'] > 0));
 // Günstigsten Preis je Rezeptur bestimmen (Lieferanten unterbieten sich – der niedrigste gewinnt).
 $minRez = [];
 foreach ($rows as $r) { $rid = (int)$r['rezeptur_id']; $p = ($r['preis'] !== null && (float)$r['preis'] > 0) ? (float)$r['preis'] : null;
@@ -76,6 +112,6 @@ bx_head('Rezeptur-Preise (Fremdfertigung)', $gesamt . ' Lieferanten-Angebote · 
   </table></div>
   <?php if (count($rows) >= 2000): ?><p class="muted" style="font-size:12px;margin-top:8px">Nur die ersten 2.000 Treffer – bitte die Suche eingrenzen.</p><?php endif; ?>
   <?php endif; ?>
-  <p class="muted" style="font-size:12px;margin-top:8px"><strong>EK</strong> = Herstellpreis des Lieferanten (Fremdfertigung), <strong>Empf. VK</strong> = EK × (1 + Marge). Kapsel-/Herstellpreise je Rezeptur (v3-Übernahme), keine Endprodukte. Klick auf die Rezeptur öffnet das Detail; Erfassen je Rezeptur im Panel „Lieferanten-Angebote (Fremdfertigung)".</p>
+  <p class="muted" style="font-size:12px;margin-top:8px"><strong>EK</strong> = Herstellpreis des Lieferanten (Fremdfertigung), <strong>Empf. VK</strong> = EK × (1 + Marge). Herstellpreise je Rezeptur (Fremdfertigung), keine Endprodukte. Quellen: alte v3-Übernahme UND die aktuellen Lieferanten-Angebote aus dem Anfrage-System (inkl. Staffeln). Klick auf die Rezeptur öffnet das Detail; neue Preise entstehen über eine Lieferanten-Anfrage (Rezeptur-Detail „Fremdfertigung") – Übersicht aller Anfragen unter Einkauf → „Anfragen & Preise".</p>
 </div>
 <?php render_footer(); ?>
