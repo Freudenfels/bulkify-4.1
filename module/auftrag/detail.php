@@ -158,11 +158,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     q("UPDATE auftrag SET status=?, menge=?, vk_stueck=?, gesamt_netto=? WHERE id=?",
       [$neuStatus, $menge, $vk, $netto, $id]);
     if ($neuStatus !== $altStatus) q("UPDATE auftrag SET status_datum=CURDATE() WHERE id=?", [$id]);   // Datum für Kundensicht
-    // Verpackung (Behälter) am Auftrag setzen/ändern – nur wenn das Feld mitgesendet wurde (kein Leeren
-    // durch andere POSTs). Wirkt auf Etikettmaß/PIB; Kunde sieht es ohne Bestätigung.
+    // Verpackung (Behälter): „nur dieser Auftrag" (auftrag.verpackung_id) ODER „Standard fürs Produkt"
+    // (zusätzlich produkt.verpackung_id). Wirkt auf Produktion/Einkauf/PIB; Kunde sieht es ohne Bestätigung.
     if (array_key_exists('verpackung_id', $_POST)) {
         $verpId = $_POST['verpackung_id'] !== '' ? (int)$_POST['verpackung_id'] : null;
         q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$verpId, $id]);
+        if (($_POST['verp_scope'] ?? '') === 'standard' && $verpId) {
+            $pidA = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$id]);
+            if ($pidA) q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$verpId, $pidA]);
+        }
+    }
+    // Kapselgröße = Rezeptur-Eigenschaft -> als Standard an der Rezeptur dieses Produkts setzen
+    // (gilt für alle Aufträge dieses Produkts). Nur wenn gesendet.
+    if (array_key_exists('kapselgroesse_id', $_POST)) {
+        $ridA = (int) scalar("SELECT p.rezeptur_id FROM auftrag a JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$id]);
+        if ($ridA) { $kapsId = $_POST['kapselgroesse_id'] !== '' ? (int)$_POST['kapselgroesse_id'] : null;
+            q("UPDATE rezeptur SET kapselgroesse_id=? WHERE id=?", [$kapsId, $ridA]); }
     }
     // Auftrag storniert -> offene Rechnung(en) automatisch per Gutschrift stornieren
     $stn = 0;
@@ -186,7 +197,7 @@ $rechnungZs = $rechnung ? beleg_zahlstatus($rechnung) : null;   // abgeleiteter 
 // Hochgeladene Alt-Rechnungen (Altsystem) zu diesem Auftrag.
 $altRechnungen = all("SELECT id, datei, datei_orig, dok_datum FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC", [$id]);
 $rezeptur = !empty($a['produkt_id'])
-    ? one("SELECT r.id, r.nummer, r.name FROM produkt p JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$a['produkt_id']])
+    ? one("SELECT r.id, r.nummer, r.name, r.darreichungsform, r.kapselgroesse_id FROM produkt p JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$a['produkt_id']])
     : null;
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 $statusBadge = match ($a['status']) {
@@ -684,14 +695,28 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
       <input type="number" name="menge" min="0" value="<?= (int)$a['menge'] ?>"></div>
     <div class="bx-field"><label>VK je Packung (netto)</label>
       <input type="text" name="vk_stueck" id="vkFeld" value="<?= h((float)$a['vk_stueck'] > 0 ? rtrim(rtrim(number_format((float)$a['vk_stueck'], 4, ',', ''), '0'), ',') : '') ?>" placeholder="z. B. 0,84"></div>
-    <div class="bx-field"><label>Verpackung (Behälter) <?= bx_hint('Primärverpackung dieses Auftrags. Fehlt sie (z. B. durch die Systemumstellung), hier setzen. Wirkt auf Etikettmaß & PIB – der Kunde sieht das aktualisierte Infoblatt automatisch (keine Freigabe/Bestätigung nötig).') ?></label>
+    <div class="bx-field"><label>Verpackung (Behälter) <?= bx_hint('Primärverpackung dieses Auftrags. Fehlt sie (z. B. durch die Systemumstellung), hier setzen. Anderes Glas → anderes Etikett → wirkt auf Produktion, Einkauf & PIB. Kunde sieht es ohne Bestätigung.') ?></label>
       <select name="verpackung_id" class="rscombo">
         <option value="">– keine –</option>
         <?php foreach (all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name") as $vp): ?>
           <option value="<?= (int)$vp['id'] ?>" <?= (int)($a['verpackung_id'] ?? 0) === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?></option>
         <?php endforeach; ?>
       </select>
+      <div style="margin-top:6px;font-size:13px">
+        <label style="margin-right:14px"><input type="radio" name="verp_scope" value="auftrag" checked style="width:auto"> nur dieser Auftrag</label>
+        <label><input type="radio" name="verp_scope" value="standard" style="width:auto"> als Standard für dieses Produkt</label>
+      </div>
     </div>
+    <?php if ($rezeptur && in_array($rezeptur['darreichungsform'] ?? '', ['kapsel','softgel'], true)): ?>
+    <div class="bx-field"><label>Kapselgröße <?= bx_hint('Gilt für die Rezeptur dieses Produkts (Standard für alle Aufträge). Wirkt auf Leerkapsel-Bedarf und Packungsrechnung.') ?></label>
+      <select name="kapselgroesse_id">
+        <option value="">– automatisch –</option>
+        <?php foreach (all("SELECT id, name FROM kapselgroesse ORDER BY fuellmenge_mg") as $kg): ?>
+          <option value="<?= (int)$kg['id'] ?>" <?= (int)($rezeptur['kapselgroesse_id'] ?? 0) === (int)$kg['id'] ? 'selected' : '' ?>><?= h($kg['name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <?php endif; ?>
   </div>
   <div class="muted" style="font-size:12px;margin-top:2px">Netto gesamt = Menge × VK je Packung – wird beim Speichern automatisch berechnet<span id="vkVorschau"></span>.</div>
   </div>
