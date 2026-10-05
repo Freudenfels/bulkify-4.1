@@ -7351,6 +7351,11 @@ function beleg_status_log_add(int $beleg_id, string $status, string $notiz = '',
 }
 
 // Hinterlegte Bankkonten (aus Einstellungen). Liefert nur befüllte Konten: [['key'=>'de','label'=>'…'], …].
+// Zusätzliche, frei anlegbare Bankkonten (app_meta 'bank_konten_extra', JSON-Liste [{id,name,iban,bic}, …]).
+function bank_konten_extra(): array {
+    $d = json_decode((string) meta_get('bank_konten_extra', ''), true);
+    return is_array($d) ? array_values(array_filter($d, fn($b) => is_array($b) && !empty($b['id']))) : [];
+}
 function bank_konten(): array {
     $out = [];
     foreach ([['de','bank_de_name','bank_de_iban'], ['int','bank_int_name','bank_int_iban']] as $kf) {
@@ -7360,6 +7365,13 @@ function bank_konten(): array {
         $tail = $iban !== '' ? ' · …' . substr(preg_replace('/\s+/', '', $iban), -4) : '';
         $out[] = ['key' => $key, 'label' => ($name ?: strtoupper($key)) . $tail];
     }
+    // Weitere, frei angelegte Konten (beliebig viele) – wichtig für die Buchhaltung (wohin hat der Kunde überwiesen).
+    foreach (bank_konten_extra() as $b) {
+        $name = trim((string)($b['name'] ?? '')); $iban = trim((string)($b['iban'] ?? ''));
+        if ($name === '' && $iban === '') continue;
+        $tail = $iban !== '' ? ' · …' . substr(preg_replace('/\s+/', '', $iban), -4) : '';
+        $out[] = ['key' => (string)$b['id'], 'label' => ($name ?: 'Bank') . $tail];
+    }
     return $out;
 }
 // Anzeigename eines gespeicherten Kontos anhand des key/Werts (Fallback: der gespeicherte Wert selbst).
@@ -7367,6 +7379,16 @@ function bank_konto_label(?string $konto): string {
     if (!$konto) return '';
     foreach (bank_konten() as $bk) if ($bk['key'] === $konto) return $bk['label'];
     return $konto;
+}
+// Volle Details eines Kontos (name/iban/bic) zu einem key – deckt 'de', 'int' UND die frei angelegten ab.
+// Für PDF/Buchhaltung: welches Konto steht auf der Rechnung bzw. wohin wurde überwiesen.
+function bank_konto_details(?string $key): ?array {
+    if (!$key) return null;
+    if ($key === 'de')  return ['name'=>trim((string)meta_get('bank_de_name','')),  'iban'=>trim((string)meta_get('bank_de_iban','')),  'bic'=>trim((string)meta_get('bank_de_bic',''))];
+    if ($key === 'int') return ['name'=>trim((string)meta_get('bank_int_name','')), 'iban'=>trim((string)meta_get('bank_int_iban','')), 'bic'=>trim((string)meta_get('bank_int_bic',''))];
+    foreach (bank_konten_extra() as $b) if ((string)($b['id'] ?? '') === $key)
+        return ['name'=>trim((string)($b['name'] ?? '')), 'iban'=>trim((string)($b['iban'] ?? '')), 'bic'=>trim((string)($b['bic'] ?? ''))];
+    return null;
 }
 
 function zahlungen_fuer(int $beleg_id): array {

@@ -38,6 +38,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'firma_save') {
     foreach (['firma_name','firma_strasse','firma_hausnr','firma_plz','firma_ort','firma_land','firma_ustid','firma_eori','firma_email','firma_tel','firma_gf','firma_web',
               'bank_de_name','bank_de_iban','bank_de_bic','bank_int_name','bank_int_iban','bank_int_bic'] as $k)
         meta_set($k, trim($_POST[$k] ?? ''));
+    // Weitere Banken (beliebig viele): parallele Arrays id/name/iban/bic; leere Zeilen raus; ids stabil halten.
+    $xs = [];
+    $xid = (array)($_POST['bank_x_id'] ?? []); $xnm = (array)($_POST['bank_x_name'] ?? []);
+    $xib = (array)($_POST['bank_x_iban'] ?? []); $xbc = (array)($_POST['bank_x_bic'] ?? []);
+    foreach ($xnm as $i => $_) {
+        $name = trim((string)($xnm[$i] ?? '')); $iban = trim((string)($xib[$i] ?? '')); $bic = trim((string)($xbc[$i] ?? ''));
+        if ($name === '' && $iban === '') continue;
+        $id = trim((string)($xid[$i] ?? ''));
+        if ($id === '' || !preg_match('/^b[0-9a-f]{6}$/', $id)) $id = 'b' . substr(md5(uniqid('', true)), 0, 6);
+        $xs[] = ['id' => $id, 'name' => $name, 'iban' => $iban, 'bic' => $bic];
+    }
+    meta_set('bank_konten_extra', $xs ? json_encode($xs, JSON_UNESCAPED_UNICODE) : '');
     header('Location: ?p=einstellungen&tab=firma&ok=1'); exit;
 }
 // --- Chargen/MHD-Standard speichern ---
@@ -294,6 +306,31 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       <div class="bx-field"><label>IBAN</label><input type="text" name="bank_int_iban" value="<?= $m('bank_int_iban') ?>"></div>
       <div class="bx-field"><label>BIC</label><input type="text" name="bank_int_bic" value="<?= $m('bank_int_bic') ?>"></div>
     </div>
+
+    <div style="font-weight:600;font-size:13px;color:var(--muted);margin:14px 0 4px">Weitere Banken <?= bx_hint('Beliebig viele zusätzliche Konten – z. B. wenn Kunden auf verschiedene Konten überweisen. Wichtig für die Buchhaltung (Zahlungszuordnung).') ?></div>
+    <div id="bankListe" style="display:flex;flex-direction:column;gap:10px">
+      <?php foreach (bank_konten_extra() as $b): ?>
+      <div class="bx-grid bank-row" style="align-items:end">
+        <input type="hidden" name="bank_x_id[]" value="<?= h((string)($b['id'] ?? '')) ?>">
+        <div class="bx-field"><label>Bank</label><input type="text" name="bank_x_name[]" value="<?= h((string)($b['name'] ?? '')) ?>" placeholder="z. B. Postbank …"></div>
+        <div class="bx-field"><label>IBAN</label><input type="text" name="bank_x_iban[]" value="<?= h((string)($b['iban'] ?? '')) ?>"></div>
+        <div class="bx-field"><label>BIC</label><input type="text" name="bank_x_bic[]" value="<?= h((string)($b['bic'] ?? '')) ?>"></div>
+        <div class="bx-field"><label>&nbsp;</label><button type="button" class="btn btn-ghost" onclick="this.closest('.bank-row').remove()">Entfernen</button></div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <div style="margin-top:8px"><button type="button" class="btn btn-ghost" onclick="bankAdd()">+ Bank hinzufügen</button></div>
+    <template id="bankTpl">
+      <div class="bx-grid bank-row" style="align-items:end">
+        <input type="hidden" name="bank_x_id[]" value="">
+        <div class="bx-field"><label>Bank</label><input type="text" name="bank_x_name[]" placeholder="z. B. Postbank …"></div>
+        <div class="bx-field"><label>IBAN</label><input type="text" name="bank_x_iban[]"></div>
+        <div class="bx-field"><label>BIC</label><input type="text" name="bank_x_bic[]"></div>
+        <div class="bx-field"><label>&nbsp;</label><button type="button" class="btn btn-ghost" onclick="this.closest('.bank-row').remove()">Entfernen</button></div>
+      </div>
+    </template>
+    <script>function bankAdd(){var t=document.getElementById('bankTpl');document.getElementById('bankListe').appendChild(t.content.cloneNode(true));}</script>
+
     <div style="margin-top:12px"><button class="btn btn-primary" type="submit">Speichern</button></div>
   </form>
 </div>
