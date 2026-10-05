@@ -8,9 +8,16 @@
 require_once __DIR__ . '/db.php';
 
 function crm_spalte(string $tabelle, string $spalte, string $definition): void {
-    $da = scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
-                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?", [$tabelle, $spalte]);
-    if (!$da) q("ALTER TABLE `$tabelle` ADD COLUMN `$spalte` $definition");
+    // Best-effort: eine fehlende Spalte darf NIE die ganze Seite killen. Schlaegt das ALTER fehl
+    // (z. B. Rechte, Sonderfall), wird es geloggt und die Seite laeuft trotzdem - nur das eine
+    // Feature, das die Spalte braucht, fehlt dann. Sonst steht das komplette CRM mit 500 still.
+    try {
+        $da = scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
+                      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?", [$tabelle, $spalte]);
+        if (!$da) q("ALTER TABLE `$tabelle` ADD COLUMN `$spalte` $definition");
+    } catch (Throwable $e) {
+        error_log('crm_schema: Spalte ' . $tabelle . '.' . $spalte . ' konnte nicht angelegt werden: ' . $e->getMessage());
+    }
 }
 
 function crm_schema(): void {
@@ -120,17 +127,22 @@ function crm_schema(): void {
 
     // --- Dokumente am Kontakt (Angebot/Abschluss/Rechnung/Sonstiges) - Verkaeufer-Workflow. ------
     // Datei liegt in data/ (gitignored), heruntergeladen wird ueber public/crm/kontakt_doc.php.
-    q("CREATE TABLE IF NOT EXISTS crm_kontakt_datei (
-        id          INT AUTO_INCREMENT PRIMARY KEY,
-        kontakt_id  INT NOT NULL,
-        kategorie   VARCHAR(20) NOT NULL DEFAULT 'sonstiges',   -- angebot|abschluss|rechnung|sonstiges
-        original    VARCHAR(255) NOT NULL,
-        stored      VARCHAR(190) NOT NULL,
-        groesse     INT NOT NULL DEFAULT 0,
-        benutzer_id INT NULL,
-        angelegt    DATETIME NOT NULL,
-        KEY (kontakt_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // Best-effort (try/catch): scheitert das CREATE, laeuft der Rest des CRM trotzdem.
+    try {
+        q("CREATE TABLE IF NOT EXISTS crm_kontakt_datei (
+            id          INT AUTO_INCREMENT PRIMARY KEY,
+            kontakt_id  INT NOT NULL,
+            kategorie   VARCHAR(20) NOT NULL DEFAULT 'sonstiges',
+            original    VARCHAR(255) NOT NULL,
+            stored      VARCHAR(190) NOT NULL,
+            groesse     INT NOT NULL DEFAULT 0,
+            benutzer_id INT NULL,
+            angelegt    DATETIME NOT NULL,
+            KEY (kontakt_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Throwable $e) {
+        error_log('crm_schema: crm_kontakt_datei konnte nicht angelegt werden: ' . $e->getMessage());
+    }
 
     // --- Nachtraeglich ergaenzte Spalten (additiv, idempotent). --------------------------------
     // Wann die KI die Anfrage dieses Kontakts ausgewertet hat (core/lead_ki.php). Leer = noch nie.
