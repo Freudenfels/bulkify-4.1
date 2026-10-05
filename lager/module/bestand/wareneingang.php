@@ -329,6 +329,7 @@ if ($gebucht):
         </div>
         <div class="bx-field" style="margin:0;min-width:220px"><label>Lieferant <span class="muted">(optional – tippen, neue werden angelegt)</span></label>
           <input type="text" name="lieferant_name" id="weLiefName" list="weLiefList" autocomplete="off" placeholder="Lieferant suchen oder neu eingeben">
+          <input type="hidden" name="lieferant_id" id="weLief" value="">
           <input type="hidden" name="auftrag_nr" id="weAuftragNr" value="">
         </div>
         <datalist id="weLiefList">
@@ -433,6 +434,10 @@ if ($gebucht):
       kundeWrap.style.display=l2?'':'none'; kunde.required=l2;
     });
   });
+
+  // Lieferant: tippt man selbst, gilt der Name (frühere Auswahl-ID verwerfen).
+  (function(){ var ln=document.getElementById('weLiefName'), lh=document.getElementById('weLief');
+    if(ln&&lh) ln.addEventListener('input', function(){ lh.value=''; }); })();
 
   // --- Positionen-Tabelle ---
   var rows=document.getElementById('weRows');
@@ -702,6 +707,7 @@ if ($gebucht):
       if(!j.ok){ trackInfo.textContent=(j.fehler||'Keine Lieferung gefunden.'); return; }
       trackInfo.textContent='Lieferung geladen: '+(j.kopf.lieferant||'')+(j.kopf.nummer?(' · '+j.kopf.nummer):'')+' ('+j.positionen.length+' Position(en))';
       if(j.kopf.lieferant_id){ var ls=document.getElementById('weLief'); if(ls) ls.value=String(j.kopf.lieferant_id); }
+      var ln=document.getElementById('weLiefName'); if(ln && j.kopf.lieferant) ln.value=j.kopf.lieferant;
       rows.innerHTML='';
       if(!j.positionen.length){ addRow(); } else j.positionen.forEach(function(p){ addRow(p); });
       var b=rows.querySelector('.we-blinker'); if(b) b.focus();   // direkt weiter scannen (Blinker)
@@ -734,6 +740,7 @@ if ($gebucht):
         if(!j.ok){ if(linfo) linfo.textContent=(j.fehler||'Nicht gefunden.'); return; }
         if(linfo) linfo.textContent='Geladen: '+(j.kopf.lieferant||'')+' ('+j.positionen.length+' Position(en))';
         if(j.kopf.lieferant_id){ var ls=document.getElementById('weLief'); if(ls) ls.value=String(j.kopf.lieferant_id); }
+        var ln=document.getElementById('weLiefName'); if(ln && j.kopf.lieferant) ln.value=j.kopf.lieferant;
         rows.innerHTML=''; if(!j.positionen.length){ addRow(); } else j.positionen.forEach(function(p){ addRow(p); });
         var blk=rows.querySelector('.we-blinker'); if(blk) blk.focus();
       }).catch(function(){ if(linfo) linfo.textContent='Serverfehler.'; });

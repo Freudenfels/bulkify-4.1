@@ -8,6 +8,14 @@
 require_once __DIR__ . '/qr.php';
 require_once __DIR__ . '/../../core/lib/minipdf.php';
 
+// Lieferant fuers Etikett: Name + Nummer (beides, wenn vorhanden), z. B. "Vita Actives · L-1023".
+function lg_lieferant_txt(array $c): string {
+    $name = trim((string)($c['lieferant'] ?? ''));
+    $nr   = trim((string)($c['lieferant_nr'] ?? ''));
+    if ($name !== '' && $nr !== '') return $name . ' · ' . $nr;
+    return $name !== '' ? $name : $nr;
+}
+
 // Zusatzzeile fuers Etikett: Warenart · Rezepturnummer · Kapselgröße (nur was zutrifft).
 function lg_etikett_info(array $c): string {
     $teile = [];
@@ -45,8 +53,10 @@ function lg_etikett_pdf(array $ids, string $format = 'klein', int $override = 0)
         }
         $split = $n > 1 && function_exists('lg_aufteilen') && lg_aufteilen($cid);
         $total = (float)($c['menge_verfuegbar'] ?? 0);
+        // Stück/Tabletten/Kapseln sind ganzzahlig -> ganze Stück je Karton (keine Nachkommastellen).
+        $istStueck = (bool) preg_match('/st(ü|u)?ck|^stk|tabl|kaps/i', (string)($c['einheit'] ?? ''));
         // Bei Aufteilung: gleiche Basismenge je Karton, der LETZTE bekommt den Rest (Summe = Gesamt).
-        $basis = $split ? floor(($total / $n) * 1000) / 1000 : 0.0;
+        $basis = $split ? ($istStueck ? floor($total / $n) : floor(($total / $n) * 1000) / 1000) : 0.0;
         $url = $scheme . '://' . $host . '/lager/?p=charge&id=' . $cid;
         for ($k = 1; $k <= $n; $k++) {
             if (!$erste) $pdf->addPage();
@@ -105,7 +115,7 @@ function lg_karton_etikett(MiniPDF $pdf, callable $mm, array $c, string $url, in
         $yy += $mm(8.4);
     };
     $midx = $lx + $tw / 2;
-    $lieferantTxt = ((string)($c['lieferant_nr'] ?? '') !== '') ? (string)$c['lieferant_nr'] : (string)($c['lieferant'] ?? '');
+    $lieferantTxt = lg_lieferant_txt($c);
     $eingangTxt   = !empty($c['wareneingang']) ? date('d.m.Y', strtotime((string)$c['wareneingang'])) : '–';
     $halb = function (string $l1, string $v1, string $l2, string $v2) use ($pdf, $lx, $midx, &$yy, $muted, $dark, $mm, $tw): void {
         $hw = $tw / 2 - $mm(2);
@@ -148,7 +158,7 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
     $yy += $mm(3);
 
     $midx = $lx + $tw / 2;
-    $lieferantTxt = ((string)($c['lieferant_nr'] ?? '') !== '') ? (string)$c['lieferant_nr'] : (string)($c['lieferant'] ?? '');
+    $lieferantTxt = lg_lieferant_txt($c);
     $eingangTxt   = !empty($c['wareneingang']) ? date('d.m.Y', strtotime((string)$c['wareneingang'])) : '–';
     $feld = function (string $l, string $v) use ($pdf, $lx, &$yy, $muted, $dark, $mm, $tw): void {
         $pdf->text($lx, $yy, $l, 8.5, false, $muted);
@@ -172,9 +182,9 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
         $pdf->text($midx, $yy + $mm(4.2), $pdf->fit($v2 !== '' ? $v2 : '–', $hw, 13, true), 13, true, $dark);
         $yy += $mm(10.5);
     };
-    $halb('Lieferant', $lieferantTxt, 'Eingang', $eingangTxt);
+    $feldAuto('Lieferant', $lieferantTxt);                              // volle Breite -> Name · Nummer immer komplett
     $feldAuto('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));   // volle Breite, nie abgeschnitten
     $halb('MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–',
           (string)($c['menge_label'] ?? 'Menge'), menge_txt($c['menge_anzeige'] ?? $c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
-    $feld('Blinker / Ort', (string)($c['blinker_code'] ?? ''));
+    $halb('Eingang', $eingangTxt, 'Blinker / Ort', (string)($c['blinker_code'] ?? ''));
 }

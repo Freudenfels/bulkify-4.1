@@ -23,7 +23,7 @@ $zeile = function (array $c): array {
 
 // Gescannter QR-Code vom Etikett ist eine URL mit ...&id=<charge_id> -> direkt diese Charge finden.
 $cid = 0;
-if (preg_match('/[?&]id=(\d+)/', $q, $mm) || preg_match('~charge[\/=](\d+)~i', $q, $mm)) $cid = (int)$mm[1];
+if (preg_match('/[?&]id=(\d+)/i', $q, $mm) || preg_match('~charge[\/=](\d+)~i', $q, $mm)) $cid = (int)$mm[1];
 if ($cid > 0 && function_exists('erp_charge_voll')) {
     $c = erp_charge_voll($cid);
     if ($c) { $c['id'] = $cid; $out[] = $zeile($c); }
