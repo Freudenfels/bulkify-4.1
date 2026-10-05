@@ -561,6 +561,20 @@ function erp_charge_auftrag_setzen(int $charge_id, int $auftrag_id): void {
     q("UPDATE charge SET auftrag_id=? WHERE id=? AND auftrag_id IS NULL", [$auftrag_id, $charge_id]);
 }
 
+// Absicherung: Wird Fertigware/Bulk MANUELL (ohne gewählte Lieferung) gebucht, versuchen wir, sie
+// einem offenen Auftrag zuzuordnen – aber NUR wenn es eindeutig ist (genau ein passender Auftrag,
+// der dieses Bulk-Item noch nicht bekommen hat). Sonst 0 -> nichts raten (dann greift der Dashboard-Button).
+function erp_auftrag_fuer_bulkitem(int $item_id): int {
+    if ($item_id <= 0 || !tabelle_da('item') || !tabelle_da('auftrag') || !tabelle_da('produkt')) return 0;
+    $rid = (int) scalar("SELECT rezeptur_id FROM item WHERE id=? AND kategorie='fertig'", [$item_id]);
+    if ($rid <= 0) return 0;   // nur Fertigware/Bulk mit Rezeptur – Rohstoffe sind geteilter Bestand, nie auto-zuordnen
+    $rows = all("SELECT a.id FROM auftrag a JOIN produkt p ON p.id=a.produkt_id
+                 WHERE p.rezeptur_id=? AND a.status IN ('offen','in_produktion')
+                   AND NOT EXISTS (SELECT 1 FROM charge c WHERE c.auftrag_id=a.id AND c.item_id=?)
+                 LIMIT 2", [$rid, $item_id]);
+    return count($rows) === 1 ? (int)$rows[0]['id'] : 0;
+}
+
 // Positionen einer bestimmten erwarteten Lieferung (Bestell-ID) – für "aus Liste wählen".
 function erp_lieferung_positionen(int $id): array {
     if ($id <= 0 || !tabelle_da('bestellung')) return ['ok' => false];

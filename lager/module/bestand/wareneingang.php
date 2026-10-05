@@ -146,6 +146,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         // Charge mit dem Auftrag verknüpfen (nur Lager 1) -> Produktion erkennt „Ware da" UND die
         // Kunden-Statusleiste springt auf „Rohstoff angekommen". Quelle: die gewählte Lieferung.
         $pAuftragId = (int)($_POST['p_auftrag_id'][$i] ?? 0);
+        // Absicherung: manuell gebucht (keine Lieferung gewählt)? Dann eindeutig offenem Auftrag zuordnen.
+        if ($ziel !== 'l2' && $pAuftragId <= 0 && function_exists('erp_auftrag_fuer_bulkitem'))
+            $pAuftragId = erp_auftrag_fuer_bulkitem($item_id);
         if ($ziel !== 'l2' && $pAuftragId > 0 && function_exists('erp_charge_auftrag_setzen'))
             erp_charge_auftrag_setzen((int)$cid, $pAuftragId);
 
