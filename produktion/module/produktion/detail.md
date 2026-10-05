@@ -11,6 +11,10 @@ Verpackung wird immer gezeigt (bei fehlender Angabe „–"); Produktionstyp = E
 
 **Produktionsweg (nur Admin):** Panel mit vier Schaltern – Abfüllen/Verpacken, Etikettieren, Karton/Umverpackung, Beipackzettel. `aktion=weg` → `erp_weg_anwenden()` erzeugt die Schrittfolge für diesen Auftrag neu (Grundweg Zukauf/Eigen bleibt automatisch; alles aus = nur Bulkware). Nur änderbar, solange kein Schritt erledigt ist; Bulk-Aufträge haben einen festen Weg (kein Panel).
 
+**Etikett (Kunde):** Vorschau des hochgeladenen Kunden-Etiketts (Dokument am Auftrag, `erp_etikett_datei`) – Bild inline bzw. PDF im iframe, ausgeliefert über die eigene Route `?p=etikett&id=<pa>` (`etikett.php`, aus `BX_UPLOADS`). Zeigt Dateiname, „in neuem Tab öffnen" und ob dasselbe Etikett schon bei anderen Aufträgen vorkam (`erp_etikett_schon_verwendet`, über `datei_hash`). Dazu der physische Etikett-Status (`erp_etikett_status`): angekommen/Quarantäne/bestellt/noch nicht da. Panel nur, wenn Etikett-Design oder Produkt-Etikett vorhanden.
+
+**Rohstoffbedarf** nur bei Eigen-/Bulk-Produktion; bei **Zukauf** (fertige Bulkware) ausgeblendet.
+
 **Produktionsfortschritt:** Balken „produziert X von Y" (+ Badge teilweise/vollständig) und ein Feld **„Teilmenge produzieren"** (`aktion=teilmenge` → `erp_teilmenge_produzieren()`): bucht eine Teilmenge sofort ein (Rohstoffe anteilig abgebucht), Auftrag bleibt offen bis voll.
 
 Oben rechts der Button in den Produktionsmodus (`?p=run&id=…`); Beschriftung je Status: „Produktion starten" (offen), „Produktion fortsetzen" (laufend), „Produktionsmodus" (erledigt).

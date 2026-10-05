@@ -15,6 +15,7 @@ $routen = [
     'liste' => 'produktion/liste.php',
     'pa'    => 'produktion/detail.php',
     'run'   => 'produktion/run.php',
+    'etikett' => 'produktion/etikett.php',   // Kunden-Etikett-Datei ausliefern (inline)
 ];
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'dash';

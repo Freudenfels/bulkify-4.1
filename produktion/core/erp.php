@@ -330,6 +330,40 @@ function erp_pa_zutaten(int $pa_id): array {
                 WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rid]);
 }
 
+// --- Kunden-Etikett am Auftrag --------------------------------------------------------------
+// Hochgeladenes Etikett-Design des Kunden (Dokument am Auftrag, typ='etikett').
+function erp_etikett_datei(int $pa_id): ?array {
+    if (!tabelle_da('dokument')) return null;
+    $auf = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$auf) return null;
+    return one("SELECT id, datei, datei_orig, datei_hash, angelegt FROM dokument
+                WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='etikett' ORDER BY id DESC LIMIT 1", [$auf]);
+}
+// Wie oft kam dasselbe Etikett-Design (gleicher Datei-Hash) schon bei ANDEREN Aufträgen vor?
+function erp_etikett_schon_verwendet(string $hash, int $pa_id): int {
+    if (trim($hash) === '' || !tabelle_da('dokument')) return 0;
+    $auf = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    return (int) scalar("SELECT COUNT(DISTINCT objekt_id) FROM dokument
+                         WHERE objekt_typ='auftrag' AND typ='etikett' AND datei_hash=? AND objekt_id<>?", [$hash, $auf]);
+}
+// Physisches Etikett: angekommen (Bestand frei), in Quarantäne, bestellt oder offen.
+function erp_etikett_status(int $pa_id): array {
+    $pa = one("SELECT produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa || empty($pa['produkt_id'])) return ['status'=>'kein_etikett'];
+    $eid = (int) (scalar("SELECT etikett_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
+    if (!$eid) return ['status'=>'kein_etikett'];
+    $name = (string) scalar("SELECT name FROM item WHERE id=?", [$eid]);
+    $frei = erp_item_bestand($eid);
+    if ($frei > 0)                   return ['status'=>'angekommen', 'name'=>$name, 'menge'=>$frei];
+    $quar = erp_item_quarantaene($eid);
+    if ($quar > 0)                   return ['status'=>'quarantaene', 'name'=>$name, 'menge'=>$quar];
+    $auf = (int)($pa['auftrag_id'] ?? 0);
+    $bestellt = ($auf && tabelle_da('bestellung_position')) ? (int) scalar(
+        "SELECT COUNT(*) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+         WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status<>'geliefert'", [$eid, $auf]) : 0;
+    return ['status'=>$bestellt > 0 ? 'bestellt' : 'offen', 'name'=>$name];
+}
+
 // Chargennummer + MHD eines Auftrags: schon gebucht (aus charge) oder geplant (.A + heute+18 M).
 function erp_pa_charge_info(int $pa_id): array {
     $c = one("SELECT charge_nr, mhd FROM charge WHERE pa_id=? ORDER BY id LIMIT 1", [$pa_id]);

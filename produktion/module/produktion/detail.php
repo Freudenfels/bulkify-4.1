@@ -59,6 +59,10 @@ $produziert = erp_produktion_gebucht($id);
 $benoetigt  = (int)$pa['menge'];
 $prod_rest  = max(0, $benoetigt - (int)round($produziert));
 $prod_proz  = $benoetigt > 0 ? min(100, (int)round($produziert * 100 / $benoetigt)) : 0;
+$etikett    = erp_etikett_datei($id);                     // hochgeladenes Kunden-Etikett (Dokument)
+$etStatus   = erp_etikett_status($id);                    // physisches Etikett: angekommen/bestellt/…
+$etBild     = $etikett && preg_match('/\.(png|jpe?g|gif|webp|svg)$/i', (string)($etikett['datei_orig'] ?? ''));
+$etSchon    = $etikett ? erp_etikett_schon_verwendet((string)($etikett['datei_hash'] ?? ''), $id) : 0;
 
 // Übersichtsdaten
 $ber    = erp_pa_bereitschaft($id, (string)$pa['status'], $fertig_cnt);
@@ -126,7 +130,40 @@ $felder = [
   </div>
 </div>
 
-<?php if ($bedarf): $sumMg = 0.0; foreach ($bedarf as $b) $sumMg += (float)$b['menge_mg']; ?>
+<?php if ($etikett || ($etStatus['status'] ?? '') !== 'kein_etikett'):
+    $etBadge = match ($etStatus['status'] ?? '') {
+        'angekommen'  => '<span class="badge badge-ok">angekommen' . (!empty($etStatus['menge']) ? ' (' . menge_txt($etStatus['menge']) . ')' : '') . '</span>',
+        'quarantaene' => '<span class="badge badge-warn">in Quarantäne – erst freigeben</span>',
+        'bestellt'    => '<span class="badge badge-info">bestellt</span>',
+        'offen'       => '<span class="badge badge-warn">noch nicht da</span>',
+        default       => '',
+    }; ?>
+<div class="bx-panel" style="margin-bottom:16px">
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+    <h2 style="margin:0">Etikett (Kunde)</h2>
+    <?php if ($etBadge !== ''): ?><div>Etikett physisch: <?= $etBadge ?></div><?php endif; ?>
+  </div>
+  <?php if ($etikett): ?>
+    <div style="margin-top:12px">
+      <?php if ($etBild): ?>
+        <a href="?p=etikett&id=<?= $id ?>" target="_blank"><img src="?p=etikett&id=<?= $id ?>" alt="Etikett" style="max-height:180px;max-width:100%;border:1px solid var(--line);border-radius:8px;background:#fff"></a>
+      <?php else: ?>
+        <iframe src="?p=etikett&id=<?= $id ?>" style="width:100%;max-width:420px;height:260px;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>
+      <?php endif; ?>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px">
+      <?= h((string)($etikett['datei_orig'] ?: 'Etikett-Datei')) ?> ·
+      <a href="?p=etikett&id=<?= $id ?>" target="_blank">in neuem Tab öffnen</a>
+      <?php if ($etSchon > 0): ?> · dieses Etikett wurde schon bei <?= (int)$etSchon ?> anderen Auftrag/Aufträgen verwendet<?php endif; ?>
+    </div>
+  <?php else: ?>
+    <div class="muted" style="margin-top:10px">Noch kein Kunden-Etikett hochgeladen.</div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php // Rohstoffbedarf nur bei Eigen-/Bulk-Produktion. Bei Zukauf (fertige Bulkware) irrelevant -> ausblenden.
+if ($bedarf && $weg['basis'] !== 'zukauf'): $sumMg = 0.0; foreach ($bedarf as $b) $sumMg += (float)$b['menge_mg']; ?>
 <div class="bx-panel" style="margin-bottom:16px">
   <h2 style="margin-top:0">Rezeptur &amp; Rohstoffbedarf<?= !empty($pa['rezeptur_name']) ? ' · ' . h((string)$pa['rezeptur_name']) : '' ?></h2>
   <div class="bx-tablewrap"><table class="bx-table">
@@ -146,7 +183,7 @@ $felder = [
   </table></div>
   <p class="muted" style="font-size:12px;margin:10px 0 0">Benötigt gesamt = Rezepturmenge je Einheit × Gesamtstückzahl. Abgebucht wird nach FEFO (älteste MHD zuerst) beim Schritt „Rohstoffe bereitstellen".</p>
 </div>
-<?php elseif ($zutaten): $sumMg = 0.0; foreach ($zutaten as $z) $sumMg += (float)$z['menge_mg']; ?>
+<?php elseif ($zutaten && $weg['basis'] !== 'zukauf'): $sumMg = 0.0; foreach ($zutaten as $z) $sumMg += (float)$z['menge_mg']; ?>
 <div class="bx-panel" style="margin-bottom:16px">
   <h2 style="margin-top:0">Rezeptur<?= !empty($pa['rezeptur_name']) ? ' · ' . h((string)$pa['rezeptur_name']) : '' ?></h2>
   <div class="bx-tablewrap"><table class="bx-table">
