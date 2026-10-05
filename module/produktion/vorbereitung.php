@@ -1,15 +1,15 @@
 <?php
-// Vor-Produktion / Freigabe (PreProduktionsauftrag) – Dashboard-Seite.
-// HIER wird ALLES angepasst, was die Produktion braucht: Glas/Behälter (mit Auto-Empfehlung), Kapselgröße,
-// Etikett (hochladen + freigeben), Menge/Überproduktion, Eigen/Fremd. Mit „Freigeben" wird aus dem Vor-PA ein
-// echter, startbarer Produktionsauftrag (Status offen) und wandert ins Produktionsmodul.
-// Harte Weiche: der Admin kann IMMER freigeben – rote Checks sind dann nur Warnung. Rolle: admin.
+// Vor-Produktion / Freigabe (PreProduktionsauftrag) – Dashboard.
+// Ohne ?id: TABELLE aller Aufträge in Vorbereitung (anklickbar). Mit ?id: Detail-/Edit-Seite EINES Auftrags,
+// wo alles festgelegt wird: Glas/Behälter (mit Auto-Empfehlung), Kapselgröße, Etikett (hochladen + freigeben),
+// Menge/Überproduktion, Eigen/Fremd. Mit „Freigeben" wird daraus ein echter, startbarer Produktionsauftrag.
+// Harte Weiche: Admin kann IMMER freigeben. Rolle: admin.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 
 if (!has_role('admin')) { header('Location: ?p=produktion'); exit; }
 
-// pa -> zugehörige IDs (Auftrag/Produkt/Rezeptur) auflösen.
+// pa -> zugehörige IDs (Auftrag/Produkt/Rezeptur).
 function vp_ids(int $pa_id): array {
     $r = one("SELECT auftrag_id, produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]) ?: [];
     $aid = (int)($r['auftrag_id'] ?? 0); $pid = (int)($r['produkt_id'] ?? 0);
@@ -17,63 +17,51 @@ function vp_ids(int $pa_id): array {
     return [$aid, $pid, $rid];
 }
 
-$R = fn($extra = '') => header('Location: ?p=produktion_vorbereitung' . $extra);
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
-    $pid_pa = (int)($_POST['pa_id'] ?? 0);
+    $paId   = (int)($_POST['pa_id'] ?? 0);
+    $back   = '?p=produktion_vorbereitung' . ($paId ? '&id=' . $paId : '');
 
-    // Alle nicht gestarteten Aufträge in die Vor-Produktion holen.
-    if ($aktion === 'alle_vorbereitung') {
-        $n = vorbereitung_alle_holen();
-        $R('&geholt=' . $n); exit;
-    }
-    // Glas/Behälter setzen (nur dieser Auftrag ODER als Produkt-Standard). Wirkt auf Produktion/Einkauf/PIB + Etikett.
-    if ($aktion === 'glas_setzen' && $pid_pa) {
-        [$aid, $pid] = vp_ids($pid_pa);
+    if ($aktion === 'alle_vorbereitung') { $n = vorbereitung_alle_holen(); header('Location: ?p=produktion_vorbereitung&geholt=' . $n); exit; }
+
+    if ($aktion === 'glas_setzen' && $paId) {
+        [$aid, $pid] = vp_ids($paId);
         $vid = ($_POST['verpackung_id'] ?? '') !== '' ? (int)$_POST['verpackung_id'] : null;
         if ($aid) q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vid, $aid]);
         if (($_POST['verp_scope'] ?? '') === 'standard' && $vid && $pid) q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$vid, $pid]);
-        bedarf_bump();
-        $R('&saved=1'); exit;
+        bedarf_bump(); header('Location: ' . $back . '&saved=1'); exit;
     }
-    // Kapselgröße der Rezeptur setzen.
-    if ($aktion === 'kapsel_setzen' && $pid_pa) {
-        [, , $rid] = vp_ids($pid_pa);
+    if ($aktion === 'kapsel_setzen' && $paId) {
+        [, , $rid] = vp_ids($paId);
         if ($rid) { $kg = ($_POST['kapselgroesse_id'] ?? '') !== '' ? (int)$_POST['kapselgroesse_id'] : null;
                     q("UPDATE rezeptur SET kapselgroesse_id=? WHERE id=?", [$kg, $rid]); bedarf_bump(); }
-        $R('&saved=1'); exit;
+        header('Location: ' . $back . '&saved=1'); exit;
     }
-    // Etikett vom Team hochladen (für den Kunden).
-    if ($aktion === 'etikett_upload' && $pid_pa) {
-        [$aid] = vp_ids($pid_pa);
+    if ($aktion === 'etikett_upload' && $paId) {
+        [$aid] = vp_ids($paId);
         if ($aid && etikett_upload($aid)) log_aktivitaet('kunde', (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]), 'team', 'Etikett vom Team hochgeladen.', 'auftrag', 'auftrag', $aid);
-        $R('&saved=1'); exit;
+        header('Location: ' . $back . '&saved=1'); exit;
     }
-    // Etikett-Freigabe im Namen des Kunden bestätigen.
-    if ($aktion === 'etikett_freigeben' && $pid_pa) {
-        [$aid] = vp_ids($pid_pa);
+    if ($aktion === 'etikett_freigeben' && $paId) {
+        [$aid] = vp_ids($paId);
         $name = trim((string)($_POST['freigabe_name'] ?? ''));
-        if ($aid && $name !== '') { $r = etikett_freigabe_setzen($aid, $name, 'team'); $R(!empty($r['ok']) ? '&saved=1' : '&fehler=' . urlencode($r['fehler'] ?? 'Freigabe nicht möglich.')); }
-        else $R('&fehler=' . urlencode('Bitte einen Namen für die Freigabe angeben.'));
+        if ($aid && $name !== '') { $r = etikett_freigabe_setzen($aid, $name, 'team'); header('Location: ' . $back . (!empty($r['ok']) ? '&saved=1' : '&fehler=' . urlencode($r['fehler'] ?? 'Freigabe nicht möglich.'))); }
+        else header('Location: ' . $back . '&fehler=' . urlencode('Bitte einen Namen für die Freigabe angeben.'));
         exit;
     }
-    // Freigeben: Eigen/Fremd + optionale Produktionsmenge setzen, Status -> offen.
-    if ($aktion === 'freigeben' && $pid_pa) {
+    if ($aktion === 'freigeben' && $paId) {
         $art = ($_POST['produktionsart'] ?? 'fremd') === 'eigen' ? 'eigen' : 'fremd';
         $mp  = trim((string)($_POST['menge_produktion'] ?? ''));
         $mp  = ($mp !== '' && ctype_digit($mp)) ? (int)$mp : null;
         $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
-        $r = produktionsauftrag_freigeben($pid_pa, $art, $mp, $wer);
-        $R(!empty($r['ok']) ? '&frei=1' : '&fehler=' . urlencode($r['fehler'] ?? 'Freigabe fehlgeschlagen.')); exit;
+        $r = produktionsauftrag_freigeben($paId, $art, $mp, $wer);
+        header('Location: ' . (!empty($r['ok']) ? '?p=produktion_vorbereitung&frei=1' : $back . '&fehler=' . urlencode($r['fehler'] ?? 'Freigabe fehlgeschlagen.'))); exit;
     }
-    $R(); exit;
+    header('Location: ?p=produktion_vorbereitung'); exit;
 }
 
-$rows = vorbereitung_liste();
-// Behälter- und Kapselgrößen-Optionen EINMAL laden (nicht je Karte).
-$verpOpt = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND COALESCE(gesperrt,0)=0 ORDER BY name");
-$kapsOpt = all("SELECT id, name FROM kapselgroesse ORDER BY fuellmenge_mg");
+$id = (int)($_GET['id'] ?? 0);
+$pa = $id ? one("SELECT * FROM produktionsauftrag WHERE id=? AND status='vorbereitung'", [$id]) : null;
 
 $prioDot = function($p) {
     $p = (int)($p ?: 2);
@@ -81,131 +69,111 @@ $prioDot = function($p) {
     $t = $p === 1 ? 'Hoch' : ($p === 3 ? 'Niedrig' : 'Normal');
     return '<span title="Priorität: ' . $t . '" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' . $f . '"></span>';
 };
+$flagOk  = fn($ok) => $ok ? '<span style="color:#1D9E75">&#10003;</span>' : '<span style="color:#d64545">&#10007;</span>';
 
-render_header('produktion_vorbereitung', 'Vor-Produktion');
-bx_head('Vor-Produktion / Freigabe',
-        count($rows) . ' Auftrag(e) in Vorbereitung – hier alles festlegen und freigeben.',
-        '<form method="post" style="display:inline" onsubmit="return confirm(\'Alle noch nicht gestarteten Aufträge in die Vor-Produktion holen?\');"><input type="hidden" name="aktion" value="alle_vorbereitung"><button class="btn btn-ghost" type="submit">Alle offenen Aufträge holen</button></form> '
-        . bx_btn('Zu den Produktionsaufträgen', '?p=produktion', 'ghost'));
-if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag zur Produktion freigegeben – jetzt im Produktionsmodul startbar.</div>';
-if (isset($_GET['saved']))  echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
-if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['geholt'] . ' Auftrag(e) in die Vor-Produktion geholt.</div>';
-if (isset($_GET['fehler'])) echo '<div class="bx-panel badge-err" style="padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
-?>
-<div class="bx-panel bx-keepinfo" style="padding:12px 16px;margin-bottom:14px">
-  <strong>So funktioniert die Weiche:</strong> Je Auftrag Glas, Etikett, Kapselgröße, Menge und Eigen/Fremd festlegen.
-  Fehlt das Glas, schlägt das System eins vor. Freigeben darfst du <em>immer</em> – rote Punkte sind nur Warnung.
-  Mit der Freigabe wird der Auftrag ein echter Produktionsauftrag und ist im Werk startbar.
-</div>
+/* ============================== DETAIL (ein Auftrag) ============================== */
+if ($pa):
+    $paId = (int)$pa['id'];
+    [$aid, $pid, $rid] = vp_ids($paId);
+    $info   = one("SELECT a.nummer AS auftrag_nr, COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, rz.name) AS produkt, k.firma AS kunde
+                   FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id LEFT JOIN produkt p ON p.id=pa.produkt_id
+                   LEFT JOIN rezeptur rz ON rz.id=COALESCE(pa.rezeptur_id,p.rezeptur_id) LEFT JOIN kunden k ON k.id=pa.kunde_id WHERE pa.id=?", [$paId]) ?: [];
+    $c      = pa_vorbereitung_checks($paId);
+    $bedarf = (int)$c['einheiten_bedarf'];
+    $art    = ($pa['produktionsart'] ?? 'fremd') === 'eigen' ? 'eigen' : 'fremd';
+    $verpAkt = $aid ? (int) scalar("SELECT verpackung_id FROM auftrag WHERE id=?", [$aid]) : 0;
+    if (!$verpAkt && $pid) $verpAkt = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$pid]);
+    $empf   = $verpAkt ? 0 : (int) (verpackung_empfehlung_fuer_pa($paId) ?? 0);
+    $rez    = $rid ? one("SELECT darreichungsform, kapselgroesse_id FROM rezeptur WHERE id=?", [$rid]) : null;
+    $istKapsel = $rez && in_array($rez['darreichungsform'] ?? '', ['kapsel','softgel'], true);
+    $etDok  = $aid ? etikett_datei($aid) : null;
+    $etFrei = $aid ? etikett_freigegeben($aid) : false;
+    $brauchtEt = auftrag_braucht_etikett((int)$aid);
+    $verpOpt = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND COALESCE(gesperrt,0)=0 ORDER BY name");
+    $kapsOpt = $istKapsel ? all("SELECT id, name FROM kapselgroesse ORDER BY fuellmenge_mg") : [];
 
-<?php if (!$rows): ?>
-  <div class="bx-panel"><div class="muted">Aktuell nichts in Vorbereitung.</div></div>
-<?php else: ?>
-  <div style="display:flex;flex-direction:column;gap:14px">
-  <?php foreach ($rows as $r):
-        $paId = (int)$r['pa_id'];
-        [$aid, $pid, $rid] = vp_ids($paId);
-        $c    = pa_vorbereitung_checks($paId);
-        $art  = ($r['produktionsart'] ?? 'fremd') === 'eigen' ? 'eigen' : 'fremd';
-        $bedarf = (int)$c['einheiten_bedarf'];
-        $verpAkt = $aid ? (int) scalar("SELECT verpackung_id FROM auftrag WHERE id=?", [$aid]) : 0;
-        if (!$verpAkt && $pid) $verpAkt = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$pid]);
-        $empf = $verpAkt ? 0 : (int) (verpackung_empfehlung_fuer_pa($paId) ?? 0);
-        $rez  = $rid ? one("SELECT darreichungsform, kapselgroesse_id FROM rezeptur WHERE id=?", [$rid]) : null;
-        $istKapsel = $rez && in_array($rez['darreichungsform'] ?? '', ['kapsel','softgel'], true);
-        $etDok = $aid ? etikett_datei($aid) : null;
-        $etFrei = $aid ? etikett_freigegeben($aid) : false;
-  ?>
-    <div class="bx-panel" style="padding:16px">
-      <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
-        <div>
-          <div style="font-size:15px;font-weight:600"><?= h($r['produkt'] ?: '–') ?></div>
-          <div class="muted" style="font-size:12px">
-            <?= $prioDot($r['prio']) ?>
-            <a href="?p=produktionsauftrag&id=<?= $paId ?>"><?= h($r['nummer'] ?: ('PR#' . $paId)) ?></a>
-            <?php if ($aid): ?> · <a href="?p=auftrag&id=<?= $aid ?>"><?= h($r['auftrag_nr'] ?: ('AB#' . $aid)) ?></a><?php endif; ?>
-            <?php if ($r['kunde']): ?> · <?= h(firma_kurz($r['kunde'])) ?><?php endif; ?>
-            · <?= (int)$r['menge'] ?> Packungen
-          </div>
-        </div>
-        <?= $c['bereit'] ? bx_badge('alles bereit', 'ok') : bx_badge('noch offen', 'warn') ?>
-      </div>
-
-      <!-- Checkliste -->
-      <div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:12px">
+    render_header('produktion_vorbereitung', 'Vor-Produktion');
+    bx_head(h($pa['nummer'] ?: ('PR#' . $paId)) . ' · ' . h($info['produkt'] ?? '–'),
+            trim(($info['kunde'] ? h($info['kunde']) . ' · ' : '') . (int)$pa['menge'] . ' Packungen' . ($info['auftrag_nr'] ? ' · ' . h($info['auftrag_nr']) : '')),
+            bx_btn('← Zur Übersicht', '?p=produktion_vorbereitung', 'ghost'));
+    if (isset($_GET['saved']))  echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+    if (isset($_GET['fehler'])) echo '<div class="bx-panel badge-err" style="padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
+    ?>
+    <!-- Checkliste -->
+    <div class="bx-panel" style="padding:14px 16px;margin-bottom:14px">
+      <div style="font-weight:600;margin-bottom:8px">Bereitschaft <?= $c['bereit'] ? bx_badge('alles bereit','ok') : bx_badge('noch offen','warn') ?></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
         <?php foreach ($c['checks'] as $ck): ?>
-          <span style="font-size:13px">
-            <?= $ck['ok'] ? '<span style="color:#1D9E75">&#10003;</span>' : '<span style="color:#d64545">&#10007;</span>' ?>
-            <?= h($ck['label']) ?> <span class="muted">(<?= h($ck['wert']) ?>)</span>
-          </span>
+          <div class="bx-row" style="justify-content:space-between;gap:10px;font-size:13px">
+            <span><?= $flagOk($ck['ok']) ?> <?= h($ck['label']) ?><?php if (!empty($ck['kritisch']) && !$ck['ok']): ?> <span class="muted">(wichtig)</span><?php endif; ?></span>
+            <span class="muted"><?= h($ck['wert']) ?></span>
+          </div>
         <?php endforeach; ?>
       </div>
+    </div>
 
-      <!-- Edit-Raster: Glas, (Kapselgröße), Etikett -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;border-top:1px solid var(--line,#e6e6e6);padding-top:12px">
-        <!-- Glas / Behälter -->
+    <div class="bx-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
+      <!-- Verpackung / Glas -->
+      <div class="bx-panel" style="padding:16px">
+        <div style="font-weight:600;margin-bottom:8px">Verpackung / Glas</div>
         <form method="post">
           <input type="hidden" name="aktion" value="glas_setzen"><input type="hidden" name="pa_id" value="<?= $paId ?>">
-          <label style="font-size:12px" class="muted">Verpackung / Glas</label>
           <select name="verpackung_id" class="rscombo" style="width:100%">
             <option value="">– keine –</option>
             <?php foreach ($verpOpt as $vp): ?>
-              <option value="<?= (int)$vp['id'] ?>" <?= $verpAkt === (int)$vp['id'] ? 'selected' : ($empf === (int)$vp['id'] ? 'selected' : '') ?>>
-                <?= h($vp['name']) ?><?= $empf === (int)$vp['id'] ? ' (Empfehlung)' : '' ?>
-              </option>
+              <option value="<?= (int)$vp['id'] ?>" <?= ($verpAkt === (int)$vp['id'] || $empf === (int)$vp['id']) ? 'selected' : '' ?>><?= h($vp['name']) ?><?= $empf === (int)$vp['id'] ? ' (Empfehlung)' : '' ?></option>
             <?php endforeach; ?>
           </select>
-          <?php if ($empf && !$verpAkt): ?><div class="muted" style="font-size:11px;margin-top:3px">Vorschlag passend zu Kapselgröße/Menge – prüfen und speichern.</div><?php endif; ?>
-          <div style="font-size:12px;margin-top:5px">
-            <label style="margin-right:12px"><input type="radio" name="verp_scope" value="auftrag" checked style="width:auto"> nur dieser Auftrag</label>
+          <?php if ($empf && !$verpAkt): ?><div class="muted" style="font-size:12px;margin-top:4px">Vorschlag passend zu Kapselgröße/Menge – prüfen und speichern.</div><?php endif; ?>
+          <div style="font-size:13px;margin-top:8px">
+            <label style="margin-right:14px"><input type="radio" name="verp_scope" value="auftrag" checked style="width:auto"> nur dieser Auftrag</label>
             <label><input type="radio" name="verp_scope" value="standard" style="width:auto"> Produkt-Standard</label>
           </div>
-          <button class="btn btn-ghost btn-sm" type="submit" style="margin-top:8px">Glas speichern</button>
+          <div style="margin-top:10px"><button class="btn btn-primary btn-sm" type="submit">Glas speichern</button></div>
         </form>
-
-        <!-- Kapselgröße -->
         <?php if ($istKapsel): ?>
-        <form method="post">
+        <form method="post" style="margin-top:14px;border-top:1px solid var(--line,#e6e6e6);padding-top:12px">
           <input type="hidden" name="aktion" value="kapsel_setzen"><input type="hidden" name="pa_id" value="<?= $paId ?>">
-          <label style="font-size:12px" class="muted">Kapselgröße</label>
+          <label class="muted" style="font-size:12px">Kapselgröße</label>
           <select name="kapselgroesse_id" style="width:100%">
             <option value="">– automatisch –</option>
-            <?php foreach ($kapsOpt as $kg): ?>
-              <option value="<?= (int)$kg['id'] ?>" <?= (int)($rez['kapselgroesse_id'] ?? 0) === (int)$kg['id'] ? 'selected' : '' ?>><?= h($kg['name']) ?></option>
-            <?php endforeach; ?>
+            <?php foreach ($kapsOpt as $kg): ?><option value="<?= (int)$kg['id'] ?>" <?= (int)($rez['kapselgroesse_id'] ?? 0) === (int)$kg['id'] ? 'selected' : '' ?>><?= h($kg['name']) ?></option><?php endforeach; ?>
           </select>
-          <button class="btn btn-ghost btn-sm" type="submit" style="margin-top:8px">Kapselgröße speichern</button>
+          <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" type="submit">Kapselgröße speichern</button></div>
         </form>
         <?php endif; ?>
-
-        <!-- Etikett -->
-        <div>
-          <label style="font-size:12px" class="muted">Etikett</label>
-          <div style="font-size:13px;margin:2px 0 6px">
-            <?php if (!auftrag_braucht_etikett((int)$aid)): ?><span class="muted">kein Etikett nötig (kein Glas)</span>
-            <?php elseif ($etFrei): ?><?= bx_badge('freigegeben', 'ok') ?>
-            <?php elseif ($etDok): ?><?= bx_badge('hinterlegt, nicht freigegeben', 'warn') ?>
-            <?php else: ?><?= bx_badge('fehlt', 'err') ?><?php endif; ?>
-          </div>
-          <?php if (auftrag_braucht_etikett((int)$aid)): ?>
-          <form method="post" enctype="multipart/form-data" style="margin-bottom:6px">
-            <input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="pa_id" value="<?= $paId ?>">
-            <input type="file" name="etikett" required accept="application/pdf,image/*" style="font-size:12px;max-width:100%">
-            <button class="btn btn-ghost btn-sm" type="submit"><?= $etDok ? 'ersetzen' : 'hochladen' ?></button>
-          </form>
-          <?php if ($etDok && !$etFrei): ?>
-          <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0">
-            <input type="hidden" name="aktion" value="etikett_freigeben"><input type="hidden" name="pa_id" value="<?= $paId ?>">
-            <input type="text" name="freigabe_name" required placeholder="Name (Freigabe)" style="padding:6px 8px;border:1px solid var(--line);border-radius:8px;min-width:150px;font-size:12px">
-            <button class="btn btn-primary btn-sm" type="submit">freigeben</button>
-          </form>
-          <?php endif; ?>
-          <?php endif; ?>
-        </div>
       </div>
 
-      <!-- Freigabe -->
-      <form method="post" class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;border-top:1px solid var(--line,#e6e6e6);margin-top:12px;padding-top:12px">
+      <!-- Etikett -->
+      <div class="bx-panel" style="padding:16px">
+        <div style="font-weight:600;margin-bottom:8px">Etikett</div>
+        <div style="font-size:13px;margin-bottom:10px">
+          <?php if (!$brauchtEt): ?><span class="muted">Kein Etikett nötig (kein Glas gesetzt).</span>
+          <?php elseif ($etFrei): ?><?= bx_badge('freigegeben', 'ok') ?><?php if ($etDok): ?> · <?= h((string)($etDok['datei_orig'] ?: 'Design')) ?><?php endif; ?>
+          <?php elseif ($etDok): ?><?= bx_badge('hinterlegt, nicht freigegeben', 'warn') ?> · <?= h((string)($etDok['datei_orig'] ?: 'Design')) ?>
+          <?php else: ?><?= bx_badge('fehlt', 'err') ?><?php endif; ?>
+        </div>
+        <?php if ($brauchtEt): ?>
+        <form method="post" enctype="multipart/form-data" style="margin-bottom:10px">
+          <input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="pa_id" value="<?= $paId ?>">
+          <input type="file" name="etikett" required accept="application/pdf,image/*" style="font-size:13px;max-width:100%">
+          <div style="margin-top:8px"><button class="btn btn-ghost btn-sm" type="submit"><?= $etDok ? 'Etikett ersetzen' : 'Etikett hochladen' ?></button></div>
+        </form>
+        <?php if ($etDok && !$etFrei): ?>
+        <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:0">
+          <input type="hidden" name="aktion" value="etikett_freigeben"><input type="hidden" name="pa_id" value="<?= $paId ?>">
+          <input type="text" name="freigabe_name" required placeholder="Name (Freigabe im Namen des Kunden)" style="padding:7px 10px;border:1px solid var(--line);border-radius:8px;min-width:200px">
+          <button class="btn btn-primary btn-sm" type="submit">Freigabe bestätigen</button>
+        </form>
+        <?php endif; ?>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <!-- Freigabe -->
+    <div class="bx-panel" style="padding:16px;margin-top:14px">
+      <div style="font-weight:600;margin-bottom:10px">Zur Produktion freigeben</div>
+      <form method="post" class="bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap">
         <input type="hidden" name="aktion" value="freigeben"><input type="hidden" name="pa_id" value="<?= $paId ?>">
         <label style="display:flex;flex-direction:column;gap:3px;font-size:12px">
           <span class="muted">Produktion</span>
@@ -217,14 +185,61 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel badge-err" style="padding
         <label style="display:flex;flex-direction:column;gap:3px;font-size:12px">
           <span class="muted">Produktionsmenge (Einheiten)</span>
           <input type="number" name="menge_produktion" min="<?= $bedarf ?>" step="1" placeholder="<?= $bedarf ?>" value="<?= $bedarf ?>"
-                 oninput="var s=this.closest('form').querySelector('.bx-ueber');var d=<?= $bedarf ?>;var v=parseInt(this.value||d);s.textContent=(v>d?('+'+(v-d)+' Überschuss -> Bulk'):'');">
+                 oninput="var s=document.getElementById('ueb');var d=<?= $bedarf ?>;var v=parseInt(this.value||d);s.textContent=(v>d?('+'+(v-d)+' Überschuss -> Bulk'):'');">
         </label>
-        <span class="bx-ueber muted" style="font-size:11px;color:#8a6d00"></span>
+        <span id="ueb" class="muted" style="font-size:11px;color:#8a6d00"></span>
         <div style="flex:1"></div>
-        <button class="btn btn-primary" type="submit">Zur Produktion freigeben</button>
+        <button class="btn btn-primary" type="submit">Freigeben</button>
       </form>
+      <p class="muted" style="font-size:12px;margin:10px 0 0">Du kannst immer freigeben – offene Punkte oben sind dann nur ein Hinweis (die Produktion wartet ggf. auf Material).</p>
     </div>
-  <?php endforeach; ?>
-  </div>
+    <?php render_footer(); return; ?>
+<?php endif; /* Detail */ ?>
+
+<?php
+/* ============================== TABELLE (Übersicht) ============================== */
+$rows = vorbereitung_liste();
+render_header('produktion_vorbereitung', 'Vor-Produktion');
+bx_head('Vor-Produktion / Freigabe', count($rows) . ' Auftrag(e) in Vorbereitung – zum Bearbeiten anklicken.',
+        '<form method="post" style="display:inline" onsubmit="return confirm(\'Alle noch nicht gestarteten Aufträge in die Vor-Produktion holen?\');"><input type="hidden" name="aktion" value="alle_vorbereitung"><button class="btn btn-ghost" type="submit">Alle offenen Aufträge holen</button></form> '
+        . bx_btn('Zu den Produktionsaufträgen', '?p=produktion', 'ghost'));
+if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag zur Produktion freigegeben – jetzt im Produktionsmodul startbar.</div>';
+if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['geholt'] . ' Auftrag(e) in die Vor-Produktion geholt.</div>';
+?>
+<?php if (!$rows): ?>
+  <div class="bx-panel"><div class="muted">Aktuell nichts in Vorbereitung.</div></div>
+<?php else: ?>
+<div class="bx-panel" style="padding:0;overflow:hidden">
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr>
+      <th>Prio</th><th>Nummer</th><th>Kunde</th><th>Produkt</th><th class="bx-num">Pack.</th>
+      <th>Glas</th><th>Etikett</th><th>Eigen/Fremd</th><th></th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($rows as $r):
+        $paId = (int)$r['pa_id'];
+        [$aid, $pid] = vp_ids($paId);
+        $verpAkt = $aid ? (int) scalar("SELECT verpackung_id FROM auftrag WHERE id=?", [$aid]) : 0;
+        if (!$verpAkt && $pid) $verpAkt = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$pid]);
+        $glasOk = $verpAkt > 0;
+        $brauchtEt = auftrag_braucht_etikett((int)$aid);
+        $etFrei = $brauchtEt && $aid ? etikett_freigegeben($aid) : false;
+        $href = '?p=produktion_vorbereitung&id=' . $paId;
+    ?>
+      <tr onclick="location.href='<?= $href ?>'" style="cursor:pointer">
+        <td><?= $prioDot($r['prio']) ?></td>
+        <td><a href="<?= $href ?>"><?= h($r['nummer'] ?: ('PR#' . $paId)) ?></a><?php if ($r['auftrag_nr']): ?><br><span class="muted" style="font-size:12px"><?= h($r['auftrag_nr']) ?></span><?php endif; ?></td>
+        <td><?= $r['kunde'] ? h(firma_kurz($r['kunde'])) : '<span class="muted">–</span>' ?></td>
+        <td><?= h($r['produkt'] ?: '–') ?></td>
+        <td class="bx-num"><?= (int)$r['menge'] ?></td>
+        <td><?= $glasOk ? $flagOk(true) : '<span style="color:#d64545">fehlt</span>' ?></td>
+        <td><?php if (!$brauchtEt): ?><span class="muted">–</span><?php else: ?><?= $etFrei ? $flagOk(true) : '<span style="color:#d64545">fehlt</span>' ?><?php endif; ?></td>
+        <td><?= ($r['produktionsart'] ?? 'fremd') === 'eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info') ?></td>
+        <td style="text-align:right"><span class="muted" style="font-size:18px">&#8250;</span></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
 <?php endif; ?>
 <?php render_footer(); ?>
