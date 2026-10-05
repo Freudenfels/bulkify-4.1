@@ -27,6 +27,10 @@ gelesen. **Wirft nie**, dedupe über `message_id`. Gemeinsame Aufnahme beider We
   ohne erneuten KI-Aufruf, damit das Ziel aktuell ist.
 - `mail_eingang_anlegen($id)` wendet den Plan an (wie die Bestätigung bei „E-Mail einlesen"):
   bestehender Kunde/Kontakt → Verlauf + Wiedervorlage, sonst neuer Kontakt (Quelle `mail`). Setzt Status.
+  **Bei Kontakten läuft zusätzlich die volle KI-Auswertung** (`lead_ki_auswerten()` mit dem Mail-Text):
+  strukturierte Anfrage-Felder, Einordnung, Dringlichkeit – der Lead ist danach sofort qualifiziert,
+  genau wie eine Website-Anfrage. Die Wiedervorlage entsteht nur einmal (lead_ki überspringt sie, wenn
+  schon eine offene da ist).
 - `mail_eingang_verwerfen($id)` legt die Mail still weg (Status `verworfen`).
 
 ## Cron

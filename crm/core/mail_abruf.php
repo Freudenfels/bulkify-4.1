@@ -10,6 +10,7 @@ require_once __DIR__ . '/mail_ki.php';
 require_once __DIR__ . '/kontakt.php';
 require_once __DIR__ . '/dublette.php';
 require_once __DIR__ . '/imap_client.php';   // Socket-Abruf (Fallback ohne ext-imap)
+require_once __DIR__ . '/lead_ki.php';       // volle KI-Auswertung beim Anlegen
 
 // --- Zugang (crm_meta) -------------------------------------------------------------------------
 function mail_imap_konfig(): array {
@@ -268,6 +269,8 @@ function mail_eingang_anlegen(int $id, int $uid = 0): array {
     if ($plan['ziel_art'] === 'kontakt' && $plan['ziel_id'] > 0) {
         kontakt_verlauf((int)$plan['ziel_id'], 'mail', $notiz, $uid);
         if ($tage > 0) kontakt_wiedervorlage((int)$plan['ziel_id'], $titel, $tage, $uid);
+        // Volle KI-Auswertung wie bei Website-Anfragen: strukturierte Felder + Einordnung.
+        if (ki_bereit()) { try { lead_ki_auswerten((int)$plan['ziel_id'], $uid, (string)($row['body'] ?? '')); } catch (Throwable $e) {} }
         mail_eingang_abschliessen($id, 'angelegt', (int)$plan['ziel_id'], null);
         return ['ok' => true, 'ziel' => 'kontakt', 'id' => (int)$plan['ziel_id'], 'fehler' => ''];
     }
@@ -282,6 +285,8 @@ function mail_eingang_anlegen(int $id, int $uid = 0): array {
         'wert_eur' => isset($d['wert']) && $d['wert'] !== null ? (string)$d['wert'] : '',
     ], $uid);
     if ($tage > 0) kontakt_wiedervorlage($kid, $titel, $tage, $uid);
+    // Volle KI-Auswertung direkt mitlaufen lassen - der Lead ist danach sofort qualifiziert.
+    if (ki_bereit()) { try { lead_ki_auswerten($kid, $uid, (string)($row['body'] ?? '')); } catch (Throwable $e) {} }
     mail_eingang_abschliessen($id, 'angelegt', $kid, null);
     return ['ok' => true, 'ziel' => 'kontakt', 'id' => $kid, 'fehler' => ''];
 }
