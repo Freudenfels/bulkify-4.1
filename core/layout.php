@@ -15,8 +15,9 @@ function fmt_zeit(?string $utc, string $fmt = 'd.m.Y H:i'): string {
     } catch (Exception $e) { return $utc; }
 }
 
-// Navigation: eine zentrale Definition (Bereich => [Seiten])
-function bx_nav(): array {
+// Navigation: die STANDARD-Definition (Bereich => [Seiten]). Welche Seiten es überhaupt gibt, steht hier.
+// Die tatsächliche Anzeige-Reihenfolge/Beschriftung liefert bx_nav() – ggf. mit Admin-Anpassung aus app_meta.
+function bx_nav_default(): array {
     return [
         'Start'        => ['dashboard' => 'Dashboard'],
         'Vertrieb'     => ['kunden' => 'Kunden', 'partner' => 'Partner', 'angebote' => 'Angebote', 'auftraege' => 'Aufträge', 'dienstleistungen' => 'Dienstleistungen', 'rechnungen_ansicht' => 'Rechnungen (Ansicht)', 'fasttrack' => 'Fast Track', 'kontingente' => 'Kontingente'],
@@ -30,9 +31,60 @@ function bx_nav(): array {
         'Produktion'   => ['produktion_vorbereitung' => 'Vor-Produktion', 'produktion' => 'Produktion', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
         'Lager'        => ['lager' => 'Warenlager', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'rohstoff_website' => 'Website-Freigabe', 'freigaben' => 'Freigaben', 'laboranalysen' => 'Laboranalysen', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
         'Einkauf'      => ['einkaufsliste' => 'Bedarf', 'einkauf' => 'Bestellt', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'lief_anfragen' => 'Anfragen & Preise', 'katalog_freigaben' => 'Katalog-Freigaben', 'einkauf_preise' => 'Preise'],
-        'System'       => ['einstellungen' => 'Einstellungen', 'benutzer' => 'Benutzer', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
+        'System'       => ['einstellungen' => 'Einstellungen', 'menu_editor' => 'Menü', 'benutzer' => 'Benutzer', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
         'Assistent'    => ['fastaction' => 'Fastaction'],
     ];
+}
+
+// Registry: jeder Menüpunkt EINMAL flach – key => ['label'=>…, 'def'=>Standarddefinition, 'group'=>Standardgruppe].
+// So weiß der Editor, welche Punkte es gibt, und bx_nav() kann Punkte sicher per key verschieben.
+function bx_nav_registry(): array {
+    $reg = [];
+    foreach (bx_nav_default() as $grp => $items) {
+        foreach ($items as $key => $def) {
+            $label = is_array($def) ? (string)($def['label'] ?? $key) : (string)$def;
+            $reg[$key] = ['label' => $label, 'def' => $def, 'group' => $grp];
+        }
+    }
+    return $reg;
+}
+
+// Gespeichertes Admin-Menü (JSON) aus app_meta, oder null. Form: ['groups'=>[['label'=>…, 'keys'=>[…]], …], 'hidden'=>[…]].
+function menu_layout_get(): ?array {
+    if (!function_exists('meta_get')) return null;
+    $raw = trim((string) meta_get('menu_layout', ''));
+    if ($raw === '') return null;
+    $d = json_decode($raw, true);
+    return (is_array($d) && !empty($d['groups']) && is_array($d['groups'])) ? $d : null;
+}
+
+// Die tatsächliche Navigation: Standard, überlagert mit der Admin-Anpassung. Punkte, die (noch) nirgends
+// einsortiert sind (z. B. neue Seiten), kommen automatisch unter „Weitere" – es geht nie etwas verloren.
+function bx_nav(): array {
+    $reg = bx_nav_registry();
+    $layout = menu_layout_get();
+    if (!$layout) return bx_nav_default();
+
+    $hidden = array_flip(array_map('strval', $layout['hidden'] ?? []));
+    $nav = []; $benutzt = [];
+    foreach ($layout['groups'] as $g) {
+        $label = trim((string)($g['label'] ?? '')); if ($label === '') continue;
+        $items = [];
+        foreach (($g['keys'] ?? []) as $key) {
+            $key = (string)$key;
+            if (!isset($reg[$key]) || isset($hidden[$key]) || isset($benutzt[$key])) continue;
+            $items[$key] = $reg[$key]['def'];
+            $benutzt[$key] = true;
+        }
+        if ($items) $nav[$label] = array_merge($nav[$label] ?? [], $items);
+    }
+    // Nicht einsortierte, nicht ausgeblendete Punkte -> an ihre Standardgruppe anhängen (sonst „Weitere").
+    foreach ($reg as $key => $r) {
+        if (isset($benutzt[$key]) || isset($hidden[$key])) continue;
+        $grp = isset($nav[$r['group']]) ? $r['group'] : 'Weitere';
+        $nav[$grp][$key] = $r['def'];
+    }
+    return $nav;
 }
 
 // Zähler offener Anfragen je Nav-Punkt (offen = noch nicht beantwortet/abgelehnt), wie ungelesene Mails

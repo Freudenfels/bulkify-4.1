@@ -122,6 +122,7 @@ function route_rollen_map(): array {
         // Finanz-Routen (Rechnungen/Belege/Buchhaltung) sind in das eigene Programm /buchhaltung/
         // ausgezogen (eigene Sitzung BXBUCH, eigene Rechte in buchhaltung/core/auth.php). Hier bewusst leer.
         'einstellungen'      => ['admin', 'finance', 'production'],
+        'menu_editor'        => [],   // Menü-Editor: nur Admin (global für alle)
         'angebotsscan'       => ['admin', 'finance', 'sales'],
         'benutzer'           => ['admin'],
         'benutzer_detail'    => ['admin'],

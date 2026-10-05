@@ -118,6 +118,7 @@ $routes = [
     'chargen'            => 'lager/chargen.php',
     'versand'            => 'versand/liste.php',
     'einstellungen'      => 'system/einstellungen.php',
+    'menu_editor'        => 'system/menu_editor.php',   // Menü selbst anpassen (Drag & Drop), global
     'angebotsscan'       => 'system/angebotsscan.php',  // KI liest Angebote (Fremd/Alt) ein: Rezepturen + Preise erfassen (kundenunabhängig)
     'suche'              => 'system/suche.php',        // globale Suche (Admin) über alle Bereiche
     'db_import'          => 'system/db_import.php',   // einmalige DB-Übernahme (Admin) – Rohstoffe & Co. auf einen anderen Stand bringen
