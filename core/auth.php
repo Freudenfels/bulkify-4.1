@@ -82,6 +82,7 @@ function route_rollen_map(): array {
         'lief_preisliste'    => ['production', 'einkauf', 'labor'],
         'rezept_preise'      => ['production', 'einkauf', 'labor'],
         'einkauf_preise'     => ['production', 'einkauf', 'labor'],
+        'rezeptur_popup'     => ['production', 'einkauf', 'labor', 'sales'],
         'spec_pdf'           => ['production', 'einkauf', 'labor'],
         'spec_bulkify'       => ['production', 'einkauf', 'labor'],
         'coa_bulkify'        => ['production', 'einkauf', 'labor'],

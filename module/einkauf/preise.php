@@ -105,7 +105,7 @@ bx_head('Einkaufspreise', 'Alle Einkaufspreise an einem Ort – Fremdfertigung, 
     <?php foreach ($rows as $r): $rid=(int)$r['rezeptur_id']; $ek=($r['preis']!==null && (float)$r['preis']>0)?(float)$r['preis']:null; ?>
       <tr>
         <td class="muted"><?= h((string)($r['rez_nr'] ?? '')) ?: '–' ?></td>
-        <td><?php if ($rid): ?><a class="kundenlink bx-rezpop" href="?p=rezeptur_detail&id=<?= $rid ?>"><?= h((string)($r['rez_name'] ?? '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
+        <td><?php if ($rid): ?><a class="kundenlink bx-rezpop" href="?p=rezeptur_popup&id=<?= $rid ?>"><?= h((string)($r['rez_name'] ?? '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
         <td class="muted"><?= h($dfLabel[(string)$r['df']] ?? (string)($r['df'] ?? '')) ?></td>
         <td><?= !empty($r['kapselgroesse']) ? h((string)$r['kapselgroesse']) : '<span class="muted">–</span>' ?></td>
         <td><?= $r['firma'] ? h((string)$r['firma']) : '<span class="muted">–</span>' ?></td>
