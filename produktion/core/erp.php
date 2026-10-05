@@ -202,10 +202,7 @@ function erp_schritt_material(int $pa_id, string $station): array {
         case 'Fertigware bereitstellen':
             $soll_menge = (float)$pa['menge'] * erp_stueck_je_packung($pa);
             $soll_einheit = 'Stück';
-            $chargen = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.item_id, i.name
-                            FROM charge c JOIN item i ON i.id=c.item_id
-                            WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0
-                            ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [(int)$pa['auftrag_id']]);
+            $chargen = erp_fertigware_chargen($pa_id, 'frei');   // Auftrag ODER Rezeptur-Bulk
             foreach ($chargen as $c)
                 $zeilen[] = ['name'=>$c['name'], 'detail'=>'Charge ' . $c['charge_nr'], 'menge'=>(float)$c['menge_verfuegbar'],
                              'einheit'=>'Stück', 'verfuegbar'=>(float)$c['menge_verfuegbar'], 'item_id'=>(int)$c['item_id'], 'charge_id'=>(int)$c['id']];
@@ -361,17 +358,13 @@ function erp_pa_fehlbedarf(int $pa_id): array {
     if (!$pa) return $fehlend;
     // Zukauf erkennen: formaler Zukauf-Weg ODER es liegt schon zugekaufte fertige Bulkware am Auftrag
     // (frei oder Quarantäne) – dann zählt die Fertigware, nicht die Rohstoffe.
-    $hatFertigware = $pa['auftrag_id'] && (int) scalar("SELECT COUNT(*) FROM charge c JOIN item i ON i.id=c.item_id
-        WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status IN ('frei','quarantaene')", [(int)$pa['auftrag_id']]) > 0;
+    $hatFertigware = count(erp_fertigware_chargen($pa_id, 'frei')) > 0 || count(erp_fertigware_chargen($pa_id, 'quarantaene')) > 0;
     if (erp_weg_basis($pa_id) === 'zukauf' || $hatFertigware) {
-        if (!$pa['auftrag_id']) return $fehlend;
         $benoetigt = (float)$pa['menge'] * erp_stueck_je_packung($pa);
         if ($benoetigt <= 0) return $fehlend;
-        $verf = (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
-                                WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0", [(int)$pa['auftrag_id']]);
+        $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], erp_fertigware_chargen($pa_id, 'frei')));
         if ($verf + 0.0001 < $benoetigt) {
-            $quar = (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
-                                    WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='quarantaene'", [(int)$pa['auftrag_id']]);
+            $quar = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], erp_fertigware_chargen($pa_id, 'quarantaene')));
             $fehlend[] = ['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt - $verf, 'einheit'=>'Stück', 'quarantaene'=>$quar];
         }
         return $fehlend;
@@ -599,15 +592,34 @@ function erp_kapseln_entnehmen(int $pa_id): array {
     erp_fefo_abbuchen($pa_id, $kid, $benoetigt, 'Stück');
     return ['ok'=>true, 'fehlt'=>[]];
 }
-// Zugekaufte fertige Bulkware (Kategorie 'fertig') des Auftrags FEFO abbuchen.
+// Rezeptur-ID eines Auftrags (pa.rezeptur_id oder produkt.rezeptur_id).
+function erp_pa_rezeptur_id(int $pa_id): int {
+    $pa = one("SELECT produkt_id, rezeptur_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return 0;
+    $rid = (int)($pa['rezeptur_id'] ?: 0);
+    if (!$rid && !empty($pa['produkt_id'])) $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    return $rid;
+}
+// Zugekaufte fertige Bulkware eines Auftrags: entweder direkt AM AUFTRAG gebucht oder als Bulk der REZEPTUR
+// (Kunde koppelt die Bulkware an die Rezeptur, nicht zwingend an den einzelnen Auftrag). $status: frei|quarantaene.
+function erp_fertigware_chargen(int $pa_id, string $status = 'frei'): array {
+    $auf = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $rid = erp_pa_rezeptur_id($pa_id);
+    if (!$auf && !$rid) return [];
+    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.item_id, i.name
+                FROM charge c JOIN item i ON i.id=c.item_id
+                WHERE i.kategorie='fertig' AND c.status=? AND c.menge_verfuegbar>0 AND c.fremd_kunde_id IS NULL
+                  AND (c.auftrag_id=? OR (?>0 AND i.rezeptur_id=?))
+                ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [$status, $auf, $rid, $rid]);
+}
+
+// Zugekaufte fertige Bulkware (Kategorie 'fertig') FEFO abbuchen (Auftrag ODER Rezeptur-Bulk).
 function erp_fertigware_entnehmen(int $pa_id): array {
     $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
-    if (!$pa || !$pa['auftrag_id']) return ['ok'=>true, 'fehlt'=>[]];
+    if (!$pa) return ['ok'=>true, 'fehlt'=>[]];
     $benoetigt = (float)$pa['menge'] * erp_stueck_je_packung($pa);
     if ($benoetigt <= 0) return ['ok'=>true, 'fehlt'=>[]];
-    $chargen = all("SELECT c.id, c.menge_verfuegbar, c.item_id FROM charge c JOIN item i ON i.id=c.item_id
-                    WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0
-                    ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [(int)$pa['auftrag_id']]);
+    $chargen = erp_fertigware_chargen($pa_id, 'frei');
     $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], $chargen));
     if ($verf + 0.0001 < $benoetigt)
         return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
