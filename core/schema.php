@@ -1260,6 +1260,8 @@ function init_schema(): void {
     ensure_column('auftrag', 'import_ref', "VARCHAR(60) NULL");            // Referenz der importierten Alt-Rechnung/-AB (Dedup beim PDF-Import)
     // Etikettenfreigabe durch den Kunden – PFLICHT je Auftrag, auch bei Nachbestellung mit altem Etikett.
     // Ohne Freigabe: Etiketten nicht bestellbar + Produktion nicht machbar (harte Sperre).
+    // Admin-Override „Rohstoff/Bulk angekommen" (für Alt-Aufträge / Zukauf ohne verknüpfte Charge).
+    ensure_column('auftrag', 'rohstoff_angekommen_am', "DATETIME NULL");
     ensure_column('auftrag', 'etikett_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('auftrag', 'etikett_freigabe_am', "DATETIME NULL");
     ensure_column('auftrag', 'etikett_freigabe_von', "VARCHAR(190) NULL");
@@ -3742,6 +3744,8 @@ function kunde_auftrag_phase(array $a): array {
                    WHERE bp.auftrag_id=? AND b.angekommen_am IS NOT NULL", [$aid]);
         if ($ba && !empty($ba['d'])) $angDate = $ba['d'];
     }
+    // Admin-Override (manuell gesetzt, z. B. für Alt-Aufträge oder Zukauf ohne verknüpfte Charge/Bestellung).
+    if (!$angDate && !empty($a['rohstoff_angekommen_am'])) $angDate = $a['rohstoff_angekommen_am'];
     $angekommen = $angDate !== null;
     if ($angekommen) { $dates[2] = $angDate; $bestellt = true; }
     $pa = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$aid]);
