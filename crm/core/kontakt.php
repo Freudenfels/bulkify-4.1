@@ -188,10 +188,12 @@ function kontakt_datei_kategorien(): array {
     return ['angebot' => 'Angebot', 'abschluss' => 'Abschluss', 'rechnung' => 'Rechnung', 'sonstiges' => 'Sonstiges'];
 }
 function kontakt_dateien(int $kontakt_id): array {
-    return all("SELECT * FROM crm_kontakt_datei WHERE kontakt_id=? ORDER BY angelegt DESC, id DESC", [$kontakt_id]);
+    try { return all("SELECT * FROM crm_kontakt_datei WHERE kontakt_id=? ORDER BY angelegt DESC, id DESC", [$kontakt_id]); }
+    catch (Throwable $e) { return []; }   // fehlt die Tabelle live, darf die Seite nicht 500en
 }
 function kontakt_datei(int $id): ?array {
-    return one("SELECT * FROM crm_kontakt_datei WHERE id=?", [$id]);
+    try { return one("SELECT * FROM crm_kontakt_datei WHERE id=?", [$id]); }
+    catch (Throwable $e) { return null; }
 }
 // Rueckgabe: ['ok'=>bool, 'fehler'=>string]
 function kontakt_datei_speichern(int $kontakt_id, array $f, string $kategorie, int $uid = 0): array {

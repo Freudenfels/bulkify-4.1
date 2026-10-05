@@ -47,6 +47,25 @@ if ($p === 'login' && crm_angemeldet())  { header('Location: ?p=wartet'); exit; 
 
 if (!isset($routen[$p])) $p = crm_angemeldet() ? 'wartet' : 'login';
 
+// Token-geschuetzter Schema-Check: ?schemacheck=1&dbg=<lead_intake_token>. Zeigt, welche crm_-Tabellen
+// fehlen und mit welchem Fehler eine Anlage scheitert. Nur zur Diagnose; wird danach entfernt.
+if (($_GET['schemacheck'] ?? '') !== '' && hash_equals(lead_intake_token(), (string)($_GET['dbg'] ?? ''))) {
+    header('Content-Type: text/plain; charset=utf-8');
+    $tabs = ['crm_kontakt','crm_meta','crm_kontakt_datei','crm_mail_eingang','crm_kunde_profil','crm_todo','crm_mitarbeiter','crm_rezeptur_ki'];
+    echo "DB: " . DB_NAME . "\n\nTabellen:\n";
+    foreach ($tabs as $t) {
+        $da = (bool) scalar("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?", [$t]);
+        echo '  ' . str_pad($t, 22) . ($da ? 'ok' : 'FEHLT') . "\n";
+    }
+    echo "\nCREATE-Test (crm_schema_test): ";
+    try { q("CREATE TABLE IF NOT EXISTS crm_schema_test (id INT)"); echo "OK (CREATE erlaubt)\n"; q("DROP TABLE IF EXISTS crm_schema_test"); }
+    catch (Throwable $e) { echo "FEHLER: " . $e->getMessage() . "\n"; }
+    echo "\nreale crm_kontakt_datei-Anlage: ";
+    try { q("CREATE TABLE IF NOT EXISTS crm_kontakt_datei (id INT AUTO_INCREMENT PRIMARY KEY, kontakt_id INT NOT NULL, kategorie VARCHAR(20) NOT NULL DEFAULT 'sonstiges', original VARCHAR(255) NOT NULL, stored VARCHAR(190) NOT NULL, groesse INT NOT NULL DEFAULT 0, benutzer_id INT NULL, angelegt DATETIME NOT NULL, KEY (kontakt_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"); echo "OK\n"; }
+    catch (Throwable $e) { echo "FEHLER: " . $e->getMessage() . "\n"; }
+    exit;
+}
+
 // Fehler-Anzeiger: nur mit korrektem Token (?dbg=<lead_intake_token>) wird die genaue Meldung
 // gezeigt - zum Aufspueren eines 500, ohne Server-Logzugriff. Sonst normaler Fehler (500).
 try {
