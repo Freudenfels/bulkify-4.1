@@ -26,6 +26,7 @@ $routen = [
     'versand'        => 'versand/liste.php',
     'versand_detail' => 'versand/detail.php',
     'lieferschein'   => 'versand/lieferschein.php',
+    'versand_label'  => 'versand/label.php',
     'bewegungen'     => 'bestand/bewegungen.php',
     'papierkorb'     => 'bestand/papierkorb.php',
     'etikett'        => 'bestand/etikett.php',

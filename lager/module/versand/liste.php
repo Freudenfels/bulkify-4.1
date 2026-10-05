@@ -2,7 +2,7 @@
 // Warenausgang / Versand – Liste aller geplanten und versendeten Sendungen. "Neue Sendung" legt
 // einen Entwurf an und springt in die Detailplanung (?p=versand_detail).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'neu') {
-    $id = lg_versand_anlegen(['empf_land' => 'DE']);
+    $id = lg_versand_anlegen(['empf_land' => 'DE', 'typ' => lg_meta_lesen('versand_typ_standard', 'paket')]);
     weiter('?p=versand_detail&id=' . (int)$id);
 }
 

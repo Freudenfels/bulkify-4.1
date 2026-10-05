@@ -13,6 +13,13 @@ gespeichert (`lg_versand_kopf_speichern`), bleibt also stabil, auch wenn der Kun
 **Positionen:** Bestand durchsuchen (`erp_bestand`) und per `aktion=pos_add` mit Menge übernehmen
 (Charge-Snapshot in `lg_versand_pos`); freie Position auch möglich. Entfernen per `aktion=pos_del`.
 
+**Versandart:** Bei **Palette/Fracht** erscheinen zusätzlich Maße je Packstück (Länge/Breite/Höhe cm,
+`masse_l/b/h`) – für Cargoboard (Standard Europalette, falls leer).
+
+**Versand-Label & Tracking:** Aktion „label" (`versand_label_erstellen()`): **Paket → DHL**,
+**Palette → Cargoboard**. Erzeugt Label (PDF, `?p=versand_label`) + Sendungsnummer, speichert den Carrier.
+Fehlt ein Zugang/Absender → klare Meldung. Zugänge/Absender in den Einstellungen.
+
 **Abschluss:**
 - **Lieferschein drucken** → `?p=lieferschein&id=` (PDF).
 - **Als versendet markieren & abbuchen** (`aktion=versenden`): bucht je Position den Bestand über

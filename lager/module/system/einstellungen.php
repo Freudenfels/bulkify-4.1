@@ -29,6 +29,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'formate_speichern') {
         lg_meta_schreiben('versand_absender', trim((string)($_POST['versand_absender'] ?? '')));
         lg_meta_schreiben('versand_typ_standard', in_array(($_POST['versand_typ_standard'] ?? 'paket'), ['paket', 'palette'], true) ? (string)$_POST['versand_typ_standard'] : 'paket');
+        foreach (['absender_name', 'absender_strasse', 'absender_hausnummer', 'absender_plz', 'absender_ort', 'absender_email', 'absender_telefon'] as $kf)
+            lg_meta_schreiben($kf, trim((string)($_POST[$kf] ?? '')));
+        lg_meta_schreiben('absender_land', strtoupper(trim((string)($_POST['absender_land'] ?? 'DE'))) ?: 'DE');
         flash('Formate gespeichert.');
         weiter('?p=einstellungen&reiter=formate');
     }
@@ -59,6 +62,14 @@ $zuletztTxt    = $zuletzt !== '' ? (function_exists('fmt_zeit') ? fmt_zeit($zule
 $sender        = function_exists('led_sender_alle') ? led_sender_alle() : [];
 $versandAbs    = lg_meta_lesen('versand_absender', '');
 $versandTyp    = lg_meta_lesen('versand_typ_standard', 'paket');
+$absName       = lg_meta_lesen('absender_name', '');
+$absStr        = lg_meta_lesen('absender_strasse', '');
+$absHnr        = lg_meta_lesen('absender_hausnummer', '');
+$absPlz        = lg_meta_lesen('absender_plz', '');
+$absOrt        = lg_meta_lesen('absender_ort', '');
+$absLand       = lg_meta_lesen('absender_land', 'DE');
+$absMail       = lg_meta_lesen('absender_email', '');
+$absTel        = lg_meta_lesen('absender_telefon', '');
 
 $letztDruck = null;
 try { $letztDruck = one("SELECT id, format, status, antwort, angelegt, erledigt FROM lg_druckjob ORDER BY id DESC LIMIT 1"); } catch (Throwable $e) {}
@@ -172,7 +183,21 @@ $tab = fn(string $k, string $label): string => '<a href="?p=einstellungen&reiter
     </div>
   </div>
   <div class="bx-panel">
-    <h2 style="margin-top:0">Versand</h2>
+    <h2 style="margin-top:0">Absender (für DHL / Cargoboard)</h2>
+    <p class="muted" style="margin:0 0 var(--sp-3)">Strukturierte Absenderadresse für die Versand-Labels. Pflicht, bevor ein Label erzeugt wird.</p>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Firma / Name</label><input type="text" name="absender_name" value="<?= h($absName) ?>"></div>
+      <div class="bx-field"><label>Straße</label><input type="text" name="absender_strasse" value="<?= h($absStr) ?>"></div>
+      <div class="bx-field" style="max-width:120px"><label>Hausnr.</label><input type="text" name="absender_hausnummer" value="<?= h($absHnr) ?>"></div>
+      <div class="bx-field" style="max-width:130px"><label>PLZ</label><input type="text" name="absender_plz" value="<?= h($absPlz) ?>"></div>
+      <div class="bx-field"><label>Ort</label><input type="text" name="absender_ort" value="<?= h($absOrt) ?>"></div>
+      <div class="bx-field" style="max-width:120px"><label>Land</label><input type="text" name="absender_land" maxlength="2" style="text-transform:uppercase" value="<?= h($absLand) ?>"></div>
+      <div class="bx-field"><label>E-Mail</label><input type="text" name="absender_email" value="<?= h($absMail) ?>"></div>
+      <div class="bx-field"><label>Telefon</label><input type="text" name="absender_telefon" value="<?= h($absTel) ?>"></div>
+    </div>
+  </div>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Lieferschein &amp; Versand</h2>
     <div class="bx-field" style="max-width:260px"><label>Standard-Versandart für neue Sendungen</label>
       <select name="versand_typ_standard">
         <option value="paket" <?= $versandTyp === 'paket' ? 'selected' : '' ?>>Paket (klein)</option>

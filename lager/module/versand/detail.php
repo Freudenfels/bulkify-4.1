@@ -31,6 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'typ' => (string)($_POST['typ'] ?? 'paket'),
             'pakete' => (int)($_POST['pakete'] ?? 1),
             'gewicht_kg' => (string)($_POST['gewicht_kg'] ?? ''),
+            'masse_l' => (string)($_POST['masse_l'] ?? ''),
+            'masse_b' => (string)($_POST['masse_b'] ?? ''),
+            'masse_h' => (string)($_POST['masse_h'] ?? ''),
             'notiz' => trim((string)($_POST['notiz'] ?? '')),
         ]);
         flash('Sendung gespeichert.');
@@ -62,6 +65,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Sendung storniert.');
         weiter('?p=versand_detail&id=' . $id);
     }
+    if ($aktion === 'label') {
+        require_once __DIR__ . '/../../core/versand.php';
+        $r = versand_label_erstellen($id);
+        if (!empty($r['ok'])) flash('Versand-Label erstellt (' . strtoupper((string)$r['carrier']) . '). Sendungsnr.: ' . ((string)$r['tracking'] ?: '–'));
+        else flash((string)($r['fehler'] ?? 'Label konnte nicht erstellt werden.'), 'warn');
+        weiter('?p=versand_detail&id=' . $id);
+    }
     if ($aktion === 'versenden') {
         // Bestand je Position abbuchen (nur eigener Bestand, nur noch nicht abgebucht).
         $fehler = [];
@@ -84,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pos    = lg_versand_pos_liste($id);
+$hatLabel = function_exists('lg_versand_hat_label') && lg_versand_hat_label($id);
 $kunden = function_exists('erp_kunden_liste') ? erp_kunden_liste() : [];
 $q      = trim((string)($_GET['q'] ?? ''));
 $treffer = $q !== '' ? erp_bestand('', $q, false, 30) : [];
@@ -138,7 +149,11 @@ flash_zeigen();
         </select>
       </div>
       <div class="bx-field" style="margin:0;max-width:120px"><label>Pakete</label><input type="number" name="pakete" min="1" step="1" value="<?= (int)($v['pakete'] ?? 1) ?>"></div>
-      <div class="bx-field" style="margin:0;max-width:160px"><label>Gewicht (kg)</label><input type="text" name="gewicht_kg" inputmode="decimal" value="<?= $v['gewicht_kg'] !== null ? h(rtrim(rtrim(number_format((float)$v['gewicht_kg'],3,',','.'),'0'),',')) : '' ?>"></div>
+      <div class="bx-field" style="margin:0;max-width:160px"><label>Gewicht (kg)<?= (string)$v['typ'] === 'palette' ? ' <span class="muted">(gesamt)</span>' : '' ?></label><input type="text" name="gewicht_kg" inputmode="decimal" value="<?= $v['gewicht_kg'] !== null ? h(rtrim(rtrim(number_format((float)$v['gewicht_kg'],3,',','.'),'0'),',')) : '' ?>"></div>
+      <?php $mz = fn($x) => $x !== null && $x !== '' ? h(rtrim(rtrim(number_format((float)$x,1,',',''),'0'),',')) : ''; ?>
+      <div class="bx-field vs-masse" style="margin:0;max-width:110px"><label>Länge (cm)</label><input type="text" name="masse_l" inputmode="decimal" value="<?= $mz($v['masse_l'] ?? null) ?>" placeholder="120"></div>
+      <div class="bx-field vs-masse" style="margin:0;max-width:110px"><label>Breite (cm)</label><input type="text" name="masse_b" inputmode="decimal" value="<?= $mz($v['masse_b'] ?? null) ?>" placeholder="80"></div>
+      <div class="bx-field vs-masse" style="margin:0;max-width:110px"><label>Höhe (cm)</label><input type="text" name="masse_h" inputmode="decimal" value="<?= $mz($v['masse_h'] ?? null) ?>" placeholder="100"></div>
       <div class="bx-field" style="margin:0;flex:1;min-width:240px"><label>Notiz (auf dem Lieferschein)</label><input type="text" name="notiz" value="<?= h((string)($v['notiz'] ?? '')) ?>"></div>
     </div>
     <div style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Speichern</button></div>
@@ -205,6 +220,24 @@ flash_zeigen();
   <?php endif; ?>
 </div>
 
+<div class="bx-panel" style="margin-bottom:var(--sp-5)">
+  <h2 style="margin-top:0">Versand-Label &amp; Tracking</h2>
+  <div class="bx-grid" style="margin-bottom:var(--sp-3)">
+    <div class="bx-card"><div class="k">Carrier</div><div class="v"><?= (string)$v['carrier'] === 'dhl' ? 'DHL (Paket)' : ((string)$v['carrier'] === 'cargoboard' ? 'Cargoboard (Fracht)' : '<span class="muted">noch keiner</span>') ?></div></div>
+    <div class="bx-card"><div class="k">Sendungsnummer</div><div class="v lg-code"><?= h((string)($v['tracking'] ?? '')) ?: '<span class="muted">–</span>' ?></div></div>
+  </div>
+  <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap">
+    <?php if ($geplant): ?>
+    <form method="post" onsubmit="return confirm('Jetzt beim Carrier ein Versand-Label erzeugen? (<?= (string)$v['typ'] === 'palette' ? 'Cargoboard' : 'DHL' ?>)')">
+      <input type="hidden" name="aktion" value="label"><input type="hidden" name="id" value="<?= $id ?>">
+      <button class="btn btn-primary" type="submit"><?= $hatLabel ? 'Label neu erstellen' : 'Versand-Label erstellen' ?></button>
+    </form>
+    <?php endif; ?>
+    <?php if ($hatLabel): ?><a class="btn btn-ghost" href="?p=versand_label&id=<?= $id ?>" target="_blank">Label öffnen (PDF)</a><?php endif; ?>
+  </div>
+  <div class="muted" style="font-size:12px;margin-top:var(--sp-2)">Paket → DHL, Palette → Cargoboard. Zugänge unter Einstellungen → Zugänge. Ohne Zugang kommt eine klare Meldung.</div>
+</div>
+
 <?php if ($geplant): ?>
 <div class="bx-panel">
   <h2 style="margin-top:0">Abschließen</h2>
@@ -252,6 +285,11 @@ flash_zeigen();
   if(adr){ adr.addEventListener('change',function(){ var i=parseInt(adr.value,10); if(!isNaN(i)&&ADR[i]) fuell(ADR[i]); }); }
   // Beim Laden: hat die Sendung schon einen Kunden, Adressliste nachladen (ohne Felder zu ueberschreiben).
   if(kunde && kunde.value){ ladeAdressen(kunde.value, false); }
+
+  // Maße-Felder nur bei Palette/Fracht zeigen.
+  var typ=document.querySelector('[name="typ"]');
+  function masseToggle(){ var pal=typ&&typ.value==='palette'; document.querySelectorAll('.vs-masse').forEach(function(el){ el.style.display=pal?'':'none'; }); }
+  if(typ){ typ.addEventListener('change',masseToggle); masseToggle(); }
 })();
 </script>
 <?php fuss();

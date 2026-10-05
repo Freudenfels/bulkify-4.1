@@ -243,6 +243,20 @@ function lg_schema(): void {
         KEY v (versand_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // Maße je Packstück (cm) – fuer Fracht/Palette (Cargoboard). Additiv.
+    lg_spalte('lg_versand', 'masse_l', 'DECIMAL(6,1) NULL');
+    lg_spalte('lg_versand', 'masse_b', 'DECIMAL(6,1) NULL');
+    lg_spalte('lg_versand', 'masse_h', 'DECIMAL(6,1) NULL');
+
+    // Vom Carrier erzeugtes Versand-Label (PDF) je Sendung.
+    q("CREATE TABLE IF NOT EXISTS lg_versand_label (
+        versand_id INT PRIMARY KEY,
+        carrier VARCHAR(20) NULL,
+        format VARCHAR(8) NULL,
+        pdf LONGBLOB NULL,
+        angelegt DATETIME NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     lg_meta_schreiben('schema_build', $build);
 }
 
@@ -300,17 +314,26 @@ function lg_versand_liste(string $status = '', int $limit = 100): array {
     return all("SELECT * FROM lg_versand $w ORDER BY id DESC LIMIT " . max(1, $limit), $p);
 }
 function lg_versand_kopf_speichern(int $id, array $d): void {
+    $mass = fn($v) => ($v ?? '') !== '' ? (float)str_replace(',', '.', (string)$v) : null;
     q("UPDATE lg_versand SET kunde_id=?, empf_firma=?, empf_name=?, empf_strasse=?, empf_hausnummer=?,
          empf_plz=?, empf_ort=?, empf_land=?, empf_email=?, empf_telefon=?, adress_quelle=?, typ=?,
-         notiz=?, gewicht_kg=?, pakete=? WHERE id=?",
+         notiz=?, gewicht_kg=?, pakete=?, masse_l=?, masse_b=?, masse_h=? WHERE id=?",
       [($d['kunde_id'] ?? null) ?: null, $d['empf_firma'] ?? '', $d['empf_name'] ?? '', $d['empf_strasse'] ?? '',
        $d['empf_hausnummer'] ?? '', $d['empf_plz'] ?? '', $d['empf_ort'] ?? '',
        strtoupper(trim((string)($d['empf_land'] ?? 'DE'))) ?: 'DE', $d['empf_email'] ?? '', $d['empf_telefon'] ?? '',
        $d['adress_quelle'] ?? 'frei', in_array(($d['typ'] ?? 'paket'), ['paket', 'palette'], true) ? ($d['typ'] ?? 'paket') : 'paket',
        $d['notiz'] ?? '',
-       (($d['gewicht_kg'] ?? '') !== '' ? (float)$d['gewicht_kg'] : null),
-       max(1, (int)($d['pakete'] ?? 1)), $id]);
+       (($d['gewicht_kg'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$d['gewicht_kg']) : null),
+       max(1, (int)($d['pakete'] ?? 1)), $mass($d['masse_l'] ?? ''), $mass($d['masse_b'] ?? ''), $mass($d['masse_h'] ?? ''), $id]);
 }
+// Vom Carrier erzeugtes Label speichern/lesen.
+function lg_versand_label_set(int $versand_id, string $carrier, string $format, string $pdf): void {
+    q("INSERT INTO lg_versand_label (versand_id,carrier,format,pdf,angelegt) VALUES (?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE carrier=VALUES(carrier), format=VALUES(format), pdf=VALUES(pdf), angelegt=VALUES(angelegt)",
+      [$versand_id, $carrier, $format, $pdf, jetzt_utc()]);
+}
+function lg_versand_label(int $versand_id): ?array { return one("SELECT * FROM lg_versand_label WHERE versand_id=?", [$versand_id]); }
+function lg_versand_hat_label(int $versand_id): bool { return (int) scalar("SELECT COUNT(*) FROM lg_versand_label WHERE versand_id=?", [$versand_id]) > 0; }
 function lg_versand_status_setzen(int $id, string $status): void {
     if (!in_array($status, ['geplant', 'versendet', 'storniert'], true)) return;
     if ($status === 'versendet') q("UPDATE lg_versand SET status=?, versendet_am=? WHERE id=?", [$status, jetzt_utc(), $id]);
