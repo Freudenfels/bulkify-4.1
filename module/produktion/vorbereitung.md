@@ -14,6 +14,16 @@ Neue Kundenaufträge entstehen im Produktionsauftrag-Status **`vorbereitung`** (
 - Etikett freigegeben (wichtig, nur wenn das Produkt ein Etikett braucht).
 - Material: Rohstoffe/Bulk angekommen, Gläser/Verpackung, Kartons, Etikett, Beipack vorrätig (aus der Stückliste).
 
+## Alles hier anpassen (Edit-Oberfläche)
+Je Karte wird direkt bearbeitet (jeweils eigenes POST):
+- **Glas/Behälter** (`glas_setzen`): Auswahl aller Primär-Verpackungen; fehlt das Glas, ist die **Auto-Empfehlung**
+  (`verpackung_empfehlung_fuer_pa` → kleinstes passendes aus `pack_kapazitaet` für Kapselgröße×Stück) vorausgewählt.
+  Scope „nur dieser Auftrag" (auftrag.verpackung_id) oder „Produkt-Standard" (zusätzlich produkt.verpackung_id).
+- **Kapselgröße** (`kapsel_setzen`, nur Kapsel/Softgel) → rezeptur.kapselgroesse_id.
+- **Etikett**: hochladen/ersetzen (`etikett_upload`) und Freigabe im Namen des Kunden (`etikett_freigeben`, Akteur 'team').
+- **„Alle offenen Aufträge holen"** (`alle_vorbereitung` → `vorbereitung_alle_holen()`): setzt alle noch nicht
+  gestarteten Kunden-PAs auf Status `vorbereitung`, damit man fehlende Gläser etc. sammeln nachziehen kann.
+
 ## Freigabe (`aktion=freigeben`)
 Pro Karte: **Eigen/Fremd** wählen, optional **Produktionsmenge in Einheiten** (höher als der Auftragsbedarf =
 Überproduktion; der Überschuss wird als Bulk der Rezeptur verrechnet – `menge_produktion`). Button ruft

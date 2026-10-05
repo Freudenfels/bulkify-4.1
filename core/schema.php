@@ -5082,6 +5082,38 @@ function produktionsauftrag_freigeben(int $pa_id, string $art = 'fremd', ?int $m
     return ['ok'=>true, 'fehler'=>null];
 }
 
+// Behälter-Empfehlung: das kleinste passende Glas/die kleinste Dose für Kapselgröße + Stückzahl je Packung
+// (aus pack_kapazitaet – max. Kapseln je Behälter und Größe). Rückgabe item-id oder null.
+function verpackung_empfehlung(int $kapselgroesse_id, int $stueck): ?int {
+    if ($kapselgroesse_id <= 0 || $stueck <= 0 || !table_exists('pack_kapazitaet')) return null;
+    $row = one("SELECT pk.item_id FROM pack_kapazitaet pk JOIN item i ON i.id=pk.item_id
+                WHERE pk.kapselgroesse_id=? AND pk.stueck>=? AND i.kategorie='verpackung'
+                  AND COALESCE(i.verpackung_rolle,'primaer')='primaer' AND COALESCE(i.gesperrt,0)=0
+                ORDER BY pk.stueck ASC, i.id ASC LIMIT 1", [$kapselgroesse_id, $stueck]);
+    return $row ? (int)$row['item_id'] : null;
+}
+// Behälter-Empfehlung für einen (Vor-)Produktionsauftrag: Kapselgröße der Rezeptur + Stück je Packung.
+function verpackung_empfehlung_fuer_pa(int $pa_id): ?int {
+    $pa = one("SELECT pa.stueck, p.rezeptur_id, p.einheiten_pro_packung
+               FROM produktionsauftrag pa LEFT JOIN produkt p ON p.id=pa.produkt_id WHERE pa.id=?", [$pa_id]);
+    if (!$pa || empty($pa['rezeptur_id'])) return null;
+    $kg  = (int) scalar("SELECT kapselgroesse_id FROM rezeptur WHERE id=?", [(int)$pa['rezeptur_id']]);
+    $stk = (int)($pa['einheiten_pro_packung'] ?? 0) ?: (int)($pa['stueck'] ?? 0);
+    return ($kg && $stk) ? verpackung_empfehlung($kg, $stk) : null;
+}
+// Alle noch nicht gestarteten Kunden-Produktionsaufträge in die Vor-Produktion holen (Status 'vorbereitung').
+// Lässt bereits begonnene (ein Schritt erledigt) und erledigte/stornierte unberührt. Rückgabe: Anzahl.
+function vorbereitung_alle_holen(): int {
+    if (!table_exists('produktionsauftrag')) return 0;
+    $ids = all("SELECT pa.id FROM produktionsauftrag pa
+                WHERE pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=1)");
+    $n = 0;
+    foreach ($ids as $r) { q("UPDATE produktionsauftrag SET status='vorbereitung', freigegeben_am=NULL, freigegeben_von=NULL WHERE id=?", [(int)$r['id']]); $n++; }
+    if ($n) bedarf_bump();
+    return $n;
+}
+
 // --- Bestandsreservierung (manuell) ---
 function item_reserviert_andere(int $item_id, int $auftrag_id): float {
     $ck = 'ra:' . $item_id . ':' . $auftrag_id;
