@@ -1086,7 +1086,10 @@ $NAVGROUPS = [
 $detailParent = [];
 if ($k['portal_rezeptur']) $detailParent['rezeptur'] = 'rezepturen';
 if ($k['portal_produkte']) $detailParent['produkt']  = 'produkte';
-if ($k['portal_rohstoffe']) $detailParent['rohstoff'] = 'rohstoffe';
+// Rohstoff-Infoblatt: über den Rohstoff-Katalog ODER (ohne Katalogzugang) über die Zutaten der
+// eigenen Rezepturen erreichbar – sonst führt der Zutat-Link ins Leere (fiel auf 'start' zurück).
+if ($k['portal_rohstoffe'])    $detailParent['rohstoff'] = 'rohstoffe';
+elseif ($k['portal_rezeptur']) $detailParent['rohstoff'] = 'rezepturen';
 $detailParent['bestellung'] = 'bestellungen';   // Bestell-Detail (eigene Bestellung)
 $detailParent['produktionsbericht'] = 'bestellungen';   // freigegebener Produktionsbericht zur Bestellung (kein Menuepunkt)
 $detailParent['suche'] = 'start';   // globale Suche (kein Menuepunkt, Suchfeld ist ueberall oben)
@@ -1231,10 +1234,16 @@ $rezDetail = ($rid && $k['portal_rezeptur']) ? one("SELECT * FROM rezeptur WHERE
 // Zutaten inklusive item_id – damit je Rohstoff die freigegebenen Dokumente (CoA/Spec) verlinkt werden können
 $rezZutaten = $rezDetail ? all("SELECT item_id, bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
 // Freigegebene Dokumente je Zutat-Rohstoff (nur, was intern ausdrücklich freigegeben wurde)
-$rezDoks = [];
+$rezDoks = []; $rezRohInfoDok = [];
 foreach ($rezZutaten as $z) if (!empty($z['item_id'])) {
-    $dk = dokumente_fuer_kunde('item', (int)$z['item_id']);
-    if ($dk) $rezDoks[(int)$z['item_id']] = $dk;
+    $iidz = (int)$z['item_id'];
+    $dk = dokumente_fuer_kunde('item', $iidz);
+    if ($dk) $rezDoks[$iidz] = $dk;
+    // Spec/CoA sind bewusst nicht in dokumente_fuer_kunde (keine Lieferanten-Originale). Die
+    // freigegebenen bulkify-Spec/Chargen-CoA liegen auf dem Rohstoff-Infoblatt – dorthin verlinken.
+    if ((int) scalar("SELECT spec_freigegeben FROM item WHERE id=?", [$iidz]) === 1
+        || (bool) scalar("SELECT 1 FROM charge WHERE item_id=? AND coa_freigegeben=1 LIMIT 1", [$iidz]))
+        $rezRohInfoDok[$iidz] = true;
 }
 
 // Rohstoff-Katalog (Preis auf Anfrage) – ohne Leerkapseln
@@ -2100,7 +2109,10 @@ portal_head('Kundenportal · ' . $k['firma']);
           <tr><td><?php if (!empty($z['item_id'])): ?><a href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$z['item_id'] ?>" title="Rohstoff-Infoblatt ansehen"><?= h($z['bezeichnung']) ?></a><?php else: ?><?= h($z['bezeichnung']) ?><?php endif; ?></td><td class="bx-num"><?= rtrim(rtrim(number_format((float)$z['menge_mg'],2,',','.'),'0'),',') ?> mg</td>
             <td><?php if ($dk): foreach ($dk as $d): ?>
                   <a href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener" style="margin-right:10px"><?= h($DOKTYP[$d['typ']] ?? $d['typ']) ?></a>
-                <?php endforeach; else: ?><span class="muted">–</span><?php endif; ?></td></tr>
+                <?php endforeach;
+                elseif (!empty($z['item_id']) && !empty($rezRohInfoDok[(int)$z['item_id']])): ?>
+                  <a href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$z['item_id'] ?>" title="Spezifikation / Analysenzertifikat auf dem Rohstoff-Infoblatt">Spec/CoA ansehen</a>
+                <?php else: ?><span class="muted">–</span><?php endif; ?></td></tr>
         <?php endforeach; ?>
         <tr style="font-weight:600"><td>Gesamt je <?= $dfP ?></td><td class="bx-num"><?= rtrim(rtrim(number_format($sum,2,',','.'),'0'),',') ?> mg</td><td></td></tr>
       </tbody></table>
@@ -2616,8 +2628,12 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-row" style="justify-content:space-between;align-items:center">
       <h1 style="margin:0"><?= h($rohDetail['name']) ?></h1>
       <div class="bx-row" style="gap:8px">
+        <?php if (!empty($k['portal_rohstoffe'])): ?>
         <a class="btn btn-primary btn-sm" href="<?= $portalLink('rohanfrage') ?>&iid=<?= (int)$rohDetail['id'] ?>">Rohstoff anfragen</a>
         <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rohstoffe') ?>">Zurück zum Katalog</a>
+        <?php else: ?>
+        <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezepturen') ?>">Zurück zu meinen Rezepturen</a>
+        <?php endif; ?>
       </div>
     </div>
     <p class="bx-sub"><?= h($FORMLBL_P[$rohDetail['form']] ?? $rohDetail['form']) ?><?= $rohDetail['name_lat'] ? ' · '.h($rohDetail['name_lat']) : '' ?><?= $rohDetail['cas'] ? ' · CAS '.h($rohDetail['cas']) : '' ?></p>
