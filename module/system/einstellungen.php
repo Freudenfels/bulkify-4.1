@@ -45,6 +45,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'charge_std_save') {
     meta_set('mhd_monate_standard', (string)max(1, (int)($_POST['mhd_monate_standard'] ?? 18)));
     header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
 }
+// --- Etikett-Haftungstext (Bestätigung bei der Kunden-Freigabe) speichern ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'etikett_haftung_save') {
+    meta_set('etikett_haftung_text', trim((string)($_POST['etikett_haftung_text'] ?? '')));
+    header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
+}
 // --- E-Mail: Zugangsdaten speichern. Das Passwort bleibt stehen, wenn das Feld leer bleibt. ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mail_save') {
     meta_set('mail_aktiv', isset($_POST['mail_aktiv']) ? '1' : '0');
@@ -371,6 +376,16 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   <form method="post">
     <input type="hidden" name="aktion" value="charge_std_save">
     <div class="bx-field" style="max-width:300px"><label>MHD-Standard (Monate ab Produktion)</label><input type="number" min="1" name="mhd_monate_standard" value="<?= h($m('mhd_monate_standard','18')) ?>"></div>
+    <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Speichern</button></div>
+  </form>
+</div>
+
+<div class="bx-panel">
+  <h2>Etikett-Freigabe: Haftungshinweis <?= bx_hint('Diesen Text muss der Kunde im Portal per Haken bestätigen, bevor er ein Etikett verbindlich freigibt. Leer = Standardtext.') ?></h2>
+  <p class="muted" style="margin-top:0">Wird dem Kunden bei der verbindlichen Etikett-Freigabe angezeigt (wir bestellen wie freigegeben, kein Standard-Korrektorat, keine Haftung für Fehler).</p>
+  <form method="post">
+    <input type="hidden" name="aktion" value="etikett_haftung_save">
+    <div class="bx-field"><textarea name="etikett_haftung_text" rows="4" style="width:100%" placeholder="Standardtext verwenden"><?= h((string) meta_get('etikett_haftung_text', '')) ?></textarea></div>
     <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Speichern</button></div>
   </form>
 </div>

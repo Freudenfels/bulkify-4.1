@@ -115,7 +115,9 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $name = trim((string)($_POST['freigabe_name'] ?? ''));
     if ($aid && (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]) === (int)$k['id']) {
         if ($name === '') { header('Location: ?p=portal&token=' . $token . '&v=bestellung&aid=' . $aid . '&etikettfehlt=1'); exit; }
+        if (($_POST['haftung'] ?? '') !== '1') { header('Location: ?p=portal&token=' . $token . '&v=bestellung&aid=' . $aid . '&etiketthaftung=1'); exit; }
         $r = etikett_freigabe_setzen($aid, $name, 'kunde');
+        if (!empty($r['ok'])) log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Etikett-Haftungshinweis bei der Freigabe bestätigt.', 'auftrag', 'auftrag', $aid);
         if (!empty($r['ok']) && mail_bereit()) nach_antwort(fn() => mail_team_etikett_hochgeladen($aid));
         header('Location: ?p=portal&token=' . $token . '&v=bestellung&aid=' . $aid . ($r['ok'] ? '&etikettfrei=1' : '&etikettfehlt=1')); exit;
     }
@@ -3228,6 +3230,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php if (isset($_GET['etikett'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Etikett-Design gespeichert – bitte unten noch freigeben.</div><?php endif; ?>
     <?php if (isset($_GET['etikettfrei'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Danke! Etikett ist freigegeben – die Produktion kann starten.</div><?php endif; ?>
     <?php if (isset($_GET['etikettfehlt'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:#e6c4c0;color:#8f231b">Bitte Ihren Namen für die Freigabe angeben.</div><?php endif; ?>
+    <?php if (isset($_GET['etiketthaftung'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:#e6c4c0;color:#8f231b">Bitte bestätigen Sie den Hinweis zum Etikett (Haken setzen), um verbindlich freizugeben.</div><?php endif; ?>
 
     <?php if ($etFrei): ?>
       <?php $fa = one("SELECT etikett_freigabe_am, etikett_freigabe_von FROM auftrag WHERE id=?", [(int)$a['id']]); ?>
@@ -3242,10 +3245,16 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php if (!empty($etQuelle['angelegt'])): ?><span class="muted">· <?= h(fmt_zeit($etQuelle['angelegt'], 'd.m.Y')) ?></span><?php endif; ?>
       </p>
       <p style="margin:0 0 8px;color:#8f231b"><strong>Bitte dieses Etikett für die Produktion freigeben.</strong> <?= $istAlt ? 'Auch bei einer Nachbestellung brauchen wir Ihre erneute Freigabe des Etiketts.' : '' ?></p>
-      <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:0 0 8px;flex-wrap:wrap">
+      <form method="post" style="margin:0 0 8px">
         <input type="hidden" name="aktion" value="etikett_freigeben"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>">
-        <input type="text" name="freigabe_name" required placeholder="Ihr Name (Freigabe)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:200px">
-        <button class="btn btn-primary btn-sm" type="submit">Etikett verbindlich freigeben</button>
+        <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#444;margin:0 0 10px;max-width:640px">
+          <input type="checkbox" name="haftung" value="1" required style="margin-top:3px">
+          <span><?= h(etikett_haftung_text()) ?></span>
+        </label>
+        <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" name="freigabe_name" required placeholder="Ihr Name (Freigabe)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:200px">
+          <button class="btn btn-primary btn-sm" type="submit">Etikett verbindlich freigeben</button>
+        </div>
       </form>
       <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-ghost btn-sm" type="submit"><?= $istAlt ? 'Anderes Etikett hochladen' : 'Neues Design hochladen' ?></button></form>
 

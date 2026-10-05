@@ -5630,6 +5630,15 @@ function etikett_freigabe_setzen(int $auftrag_id, string $name, string $akteur =
 function etikett_freigabe_zuruecksetzen(int $auftrag_id): void {
     q("UPDATE auftrag SET etikett_freigegeben=0, etikett_freigabe_am=NULL, etikett_freigabe_von=NULL WHERE id=?", [$auftrag_id]);
 }
+// Haftungsausschluss-Text, den der Kunde bei der Etikett-Freigabe bestätigen muss (editierbar in den Einstellungen).
+function etikett_haftung_text(): string {
+    $def = 'Ich bestätige, dass bulkify das Etikett genau in der freigegebenen/hochgeladenen Fassung in Druck und Bestellung gibt. '
+         . 'Ein Korrektorat (Gegenlesen auf Rechtschreibung, Grammatik, inhaltliche oder rechtliche Richtigkeit) ist nicht Teil des '
+         . 'Standardprozesses. Für Fehler jeglicher Art – insbesondere Rechtschreib-, Zahlen- oder Deklarationsfehler – übernimmt '
+         . 'bulkify keine Haftung. Die Verantwortung für den Etiketteninhalt liegt beim Auftraggeber.';
+    $t = trim((string) meta_get('etikett_haftung_text', ''));
+    return $t !== '' ? $t : $def;
+}
 // Liest die Seitenmaße einer Druckdatei. PDF → aus /MediaBox in mm ('210 × 297 mm'); Bild → Pixel. Sonst null.
 function pdf_masse(string $pfad): ?array {
     if (!is_file($pfad)) return null;
