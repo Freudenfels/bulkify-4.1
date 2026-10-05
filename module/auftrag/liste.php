@@ -10,8 +10,28 @@ $tab  = $_GET['tab']  ?? 'offen';
 if (!in_array($tab, ['offen', 'abgeschlossen'], true)) $tab = 'offen';
 
 $alle = all("SELECT a.*, k.firma AS kunde_firma, COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name,
+             p.rezeptur_id AS rezeptur_id,
              (SELECT nummer FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='rechnung' LIMIT 1) AS rechnung_nr
              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id");
+
+// Erstauftrag vs. Nachbestellung – berechnet über ALLE Aufträge (nicht nur den aktuellen Reiter).
+// Nachbestellung = ein früherer, nicht stornierter Auftrag mit demselben Produkt existiert.
+// Erstauftrag wird feiner unterschieden: neue Rezeptur (noch nie gemacht) vs. neues Produkt (Rezeptur bekannt).
+$erstProd = []; $erstRez = [];
+foreach ($alle as $r) {
+    if (($r['status'] ?? '') === 'storniert') continue;
+    $pid = (int)($r['produkt_id'] ?? 0); $rid = (int)($r['rezeptur_id'] ?? 0); $aid = (int)$r['id'];
+    if ($pid > 0 && (!isset($erstProd[$pid]) || $aid < $erstProd[$pid])) $erstProd[$pid] = $aid;
+    if ($rid > 0 && (!isset($erstRez[$rid])  || $aid < $erstRez[$rid]))  $erstRez[$rid]  = $aid;
+}
+// Key je Auftrag (bulk, ohne Einzelabfragen); Label/Stil kommen aus auftrag_art_meta().
+$auftragArt = function($r) use ($erstProd, $erstRez) {
+    $pid = (int)($r['produkt_id'] ?? 0); $rid = (int)($r['rezeptur_id'] ?? 0); $aid = (int)$r['id'];
+    if ($pid <= 0 && $rid <= 0) return 'none';
+    if ($pid > 0 && isset($erstProd[$pid]) && $aid > $erstProd[$pid]) return 'nach';
+    if ($rid > 0 && isset($erstRez[$rid]) && $aid > $erstRez[$rid])   return 'neu_prod';
+    return 'neu_rez';
+};
 // Abgeschlossen = versendet; offen = alles andere (offen, in Produktion, versandbereit).
 $istAbg   = fn($r) => ($r['status'] ?? '') === 'versendet';
 $anzOffen = count(array_filter($alle, fn($r) => !$istAbg($r)));
@@ -43,6 +63,12 @@ $cols = [
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
     'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
     'produkt_name' => ['label' => 'Produkt', 'render' => fn($r)=> $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>'],
+    'art'          => ['label' => 'Art', 'render' => function($r) use ($auftragArt) {
+                        $k = $auftragArt($r);
+                        if ($k === 'none') return '<span class="muted">–</span>';
+                        [$label, $stil, $hint] = auftrag_art_meta($k);
+                        return '<span title="' . h($hint) . '">' . bx_badge($label, $stil) . '</span>';
+                     }],
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
     'gesamt_netto' => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['gesamt_netto'])],
     'rechnung_nr'  => ['label' => 'Rechnung', 'render' => fn($r)=> $r['rechnung_nr'] ? h($r['rechnung_nr']) : '<span class="muted">–</span>'],

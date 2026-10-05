@@ -194,6 +194,9 @@ if ($einhProP <= 0) $einhProP = (int)($a['stueck'] ?? 0);   // Fallback: Stück 
 $gesamtStk = $einhProP > 0 ? (int)$a['menge'] * $einhProP : 0;
 // Namens-Snapshot zuerst: der zur Auftragszeit festgehaltene Name gilt, damit eine spätere Produkt-Umbenennung den Auftrag nicht ändert.
 $produktName = (string)($a['produkt_bezeichnung'] ?? '') ?: (string)($a['produkt_name'] ?? '');
+// Erstauftrag vs. Nachbestellung (neue Rezeptur / neues Produkt / Nachbestellung).
+$artKey = auftrag_art((int)$a['id']);
+[$artLabel, $artStil, $artHint] = auftrag_art_meta($artKey);
 $groesseLbl = produktion_groesse_label((int)$a['produkt_id']);
 // Bestellungen (bei welchem Lieferanten, welcher Status) – verknüpft über die Position.
 $best = all("SELECT DISTINCT b.id, b.nummer, b.status, b.bestaetigt, b.angekommen_am, l.firma AS lieferant
@@ -287,7 +290,7 @@ echo '</div>';
   <h2>Details</h2>
   <div class="bx-grid">
     <div><div class="k muted">Kunde</div><div><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
-    <div><div class="k muted">Produkt</div><div><?php if (!empty($a['produkt_id']) && $produktName): ?><a href="?p=produkt&id=<?= (int)$a['produkt_id'] ?>"><?= h($produktName) ?></a><?php elseif ($produktName): ?><?= h($produktName) ?> <span class="muted" style="font-size:12px">(aus v3)</span><?php else: ?>–<?php endif; ?></div></div>
+    <div><div class="k muted">Produkt</div><div><?php if (!empty($a['produkt_id']) && $produktName): ?><a href="?p=produkt&id=<?= (int)$a['produkt_id'] ?>"><?= h($produktName) ?></a><?php elseif ($produktName): ?><?= h($produktName) ?> <span class="muted" style="font-size:12px">(aus v3)</span><?php else: ?>–<?php endif; ?><?php if ($artKey !== 'none'): ?> <span title="<?= h($artHint) ?>"><?= bx_badge($artLabel, $artStil) ?></span><?php endif; ?></div></div>
     <div><div class="k muted">Rezeptur</div><div><?php if ($rezeptur): ?><a href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>"><?= h($rezeptur['nummer']) ?></a><?= $rezeptur['name'] ? ' · ' . h($rezeptur['name']) : '' ?><?php else: ?>–<?php endif; ?></div></div>
     <div><div class="k muted">Aus Angebot</div><div><?php if ($a['angebot_id']): ?><a href="?p=angebot&id=<?= (int)$a['angebot_id'] ?>"><?= h($a['angebot_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
     <?php if (!empty($a['kontingent_id'])): ?><div><div class="k muted">Herkunft</div><div><a href="?p=kontingente" title="Abruf aus einem Jahresabnahmevertrag"><?= bx_badge('aus Jahresvertrag','info') ?></a></div></div><?php endif; ?>

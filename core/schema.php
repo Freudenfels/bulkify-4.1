@@ -4742,6 +4742,32 @@ function rezeptur_bulkitem(int $rezeptur_id): ?int {
     return insert_id();
 }
 
+// Auftrags-Art: ist das ein Erstauftrag oder eine Nachbestellung? Basis: frühere, nicht stornierte
+// Aufträge. 'nach' = Produkt schon mal bestellt; 'neu_prod' = neues Produkt, Rezeptur aber bekannt;
+// 'neu_rez' = neue Rezeptur (noch nie produziert); 'none' = ohne Produkt/Rezeptur-Zuordnung.
+function auftrag_art(int $auftrag_id): string {
+    $a = one("SELECT a.id, a.produkt_id, p.rezeptur_id
+              FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    if (!$a) return 'none';
+    $pid = (int)($a['produkt_id'] ?? 0); $rid = (int)($a['rezeptur_id'] ?? 0); $id = (int)$a['id'];
+    if ($pid <= 0 && $rid <= 0) return 'none';
+    if ($pid > 0 && (int) scalar("SELECT COUNT(*) FROM auftrag WHERE produkt_id=? AND status<>'storniert' AND id<?", [$pid, $id]) > 0)
+        return 'nach';
+    if ($rid > 0 && (int) scalar("SELECT COUNT(*) FROM auftrag a JOIN produkt p ON p.id=a.produkt_id
+                                  WHERE p.rezeptur_id=? AND a.status<>'storniert' AND a.id<?", [$rid, $id]) > 0)
+        return 'neu_prod';
+    return 'neu_rez';
+}
+// Label/Stil/Hinweis je Auftrags-Art – EINE Quelle für Liste und Detail.
+function auftrag_art_meta(string $key): array {
+    return match ($key) {
+        'nach'     => ['Nachbestellung', '',     'Dieses Produkt wurde vorher schon bestellt.'],
+        'neu_prod' => ['Neues Produkt',  'info', 'Neues Produkt – die Rezeptur haben wir aber schon gemacht.'],
+        'neu_rez'  => ['Neue Rezeptur',  'warn', 'Erstauftrag – diese Rezeptur haben wir noch nie produziert.'],
+        default    => ['', '', ''],
+    };
+}
+
 // Bulk-Produktionsauftrag anlegen: nur Kapseln (o. Ä.) ohne Verpackung, auf Basis einer REZEPTUR.
 // Menge = Stueck (Kapseln). Gibt die neue pa-id zurueck (0 bei ungueltiger Rezeptur).
 function produktionsauftrag_bulk_erstellen(int $rezeptur_id, int $stueck, int $prio = 2): int {
