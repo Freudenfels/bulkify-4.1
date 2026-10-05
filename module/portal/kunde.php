@@ -956,7 +956,14 @@ $anfStatus = function($an) {
 $vorschlagZutaten = [];
 foreach ($vorschlaege as $vs) $vorschlagZutaten[$vs['id']] = all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort,id", [$vs['id']]);
 
-$aufBadge = fn($s) => match ($s) { 'offen'=>bx_badge('in Bearbeitung','info'),'in_produktion'=>bx_badge('in Produktion','warn'),'erledigt'=>bx_badge('versandbereit','info'),'versendet'=>bx_badge('versendet','ok'),default=>bx_badge($s) };
+// Status-Badge für den Kunden. Nimmt die Auftragszeile (oder nur den Status-String). Sonderfall:
+// Jahresvertrags-Auftrag (kontingent_id gesetzt), der beim Umwandeln auf „storniert" gesetzt wurde –
+// das verwirrt den Kunden. Stattdessen „hinterlegt in Jahresmenge".
+$aufBadge = function($a) {
+    $s = is_array($a) ? (string)($a['status'] ?? '') : (string)$a;
+    if ($s === 'storniert' && is_array($a) && !empty($a['kontingent_id'])) return bx_badge('hinterlegt in Jahresmenge','info');
+    return match ($s) { 'offen'=>bx_badge('in Bearbeitung','info'),'in_produktion'=>bx_badge('in Produktion','warn'),'erledigt'=>bx_badge('versandbereit','info'),'versendet'=>bx_badge('versendet','ok'),default=>bx_badge($s) };
+};
 // Einheitliches Status-Icon für alle Verlaufs-Schritte (Haupt- UND Parallel-Schritte):
 //   erledigt -> Haken, läuft/aktuell -> Sanduhr (sauberes SVG, kein Emoji), geplant/offen -> leer.
 $hourglassSvg = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px"><path d="M6 2h12M6 22h12M6 2c0 4 3 6 6 10 3-4 6-6 6-10M6 22c0-4 3-6 6-10 3 4 6 6 6 10"/></svg>';
@@ -3023,7 +3030,8 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div class="bx-row" style="gap:10px;align-items:center">
         <span class="muted" style="font-size:12px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : 'Schritt ' . ($cur + 1) . '/' . count($AUFSTEPS) . ': ' . h($AUFSTEPS[$cur]) ?></span>
         <?php if ($etMiss): ?><?= bx_badge('Etikett fehlt', 'err') ?><?php endif; ?>
-        <?= $aufBadge($a['status']) ?><?php $zst = $zahlMapBest[(int)$a['id']] ?? (!empty($a['bezahlt_am']) ? 'bezahlt' : ''); if ($zst): ?> <?= $reBadge($zst) ?><?php endif; ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
+        <?= $aufBadge($a) ?><?php $kontStorno = ($a['status'] ?? '') === 'storniert' && !empty($a['kontingent_id']);
+            $zst = $kontStorno ? '' : ($zahlMapBest[(int)$a['id']] ?? (!empty($a['bezahlt_am']) ? 'bezahlt' : '')); if ($zst): ?> <?= $reBadge($zst) ?><?php endif; ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
     <?php if ($etMiss): ?><div style="margin-top:8px;color:#8f231b;font-size:13px;font-weight:600">Etikett fehlt – bitte Etikett-Design hochladen und freigeben (Bestellung öffnen).</div><?php endif; ?>
     <ul class="bx-steps" style="margin-top:12px">
@@ -3067,7 +3075,7 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <!-- Status-Kacheln -->
   <div class="bx-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
-    <div class="bx-panel" style="margin:0"><div class="muted">Status</div><div style="margin-top:6px"><?= $aufBadge($a['status']) ?><?php if (!empty($a['status_datum'])): ?> <span class="muted" style="font-size:13px">seit <?= h(date('d.m.Y', strtotime($a['status_datum']))) ?></span><?php endif; ?></div></div>
+    <div class="bx-panel" style="margin:0"><div class="muted">Status</div><div style="margin-top:6px"><?= $aufBadge($a) ?><?php if (!empty($a['status_datum']) && !(($a['status'] ?? '') === 'storniert' && !empty($a['kontingent_id']))): ?> <span class="muted" style="font-size:13px">seit <?= h(date('d.m.Y', strtotime($a['status_datum']))) ?></span><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Menge</div><div style="margin-top:6px"><?= (int)$a['menge'] ?> Packungen<?php if ((int)$a['stueck']): ?> &middot; <?= (int)$a['stueck'] ?> je Packung<?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Gesamtbetrag</div><div style="margin-top:6px"><strong><?= $eur($re ? $re['brutto'] : $a['gesamt_netto']) ?></strong><?php if ($re): ?> <span class="muted">brutto</span><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Zahlung</div><div style="margin-top:6px"><?php
