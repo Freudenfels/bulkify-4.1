@@ -699,6 +699,9 @@ function init_schema(): void {
     ensure_column('produktionsauftrag', 'prio', "TINYINT NOT NULL DEFAULT 2");   // 1=Hoch, 2=Normal, 3=Niedrig
     ensure_column('produktionsauftrag', 'geplant_am', "DATE NULL");               // Baustein 2: geplantes Produktionsdatum
     ensure_column('produktionsauftrag', 'produktionsart', "VARCHAR(10) NOT NULL DEFAULT 'fremd'");   // eigen|fremd (Make-or-Buy); Standard = fremd (90% der Kapseln extern gefüllt)
+    // Eigen/Fremd wird im Backend FESTGELEGT, bevor der Auftrag in die Produktion geht. NULL = noch offen
+    // -> erscheint NICHT im Produktions-Arbeitsplatz. Entscheidung trifft Admin/Backend, nicht die Produktion.
+    ensure_column('produktionsauftrag', 'art_festgelegt_am', "DATETIME NULL");
     ensure_column('produktionsauftrag', 'bedarf_gemeldet', "DATETIME NULL");      // wann der Bedarf ans Einkauf gemeldet wurde
     ensure_column('produktionsauftrag', 'rezeptur_id', "INT NULL");               // Bulk-Produktion (nur Kapseln, ohne Verpackung): PA haengt an der Rezeptur statt am Produkt (produkt_id NULL)
 
@@ -1753,6 +1756,13 @@ function init_schema(): void {
                           WHERE NOT EXISTS (SELECT 1 FROM item i WHERE i.rezeptur_id=r.id AND i.kategorie='fertig')") as $__rz)
                 rezeptur_bulkitem((int)$__rz['id']);
         } catch (\Throwable $e) { /* Backfill darf den Schema-Build nie blockieren */ }
+    }
+
+    // EINMALIG: bestehende Produktionsaufträge gelten als bereits „festgelegt" (nicht nachträglich sperren).
+    // Nur NEUE Aufträge brauchen künftig die Eigen/Fremd-Festlegung, bevor sie in die Produktion gehen.
+    if (table_exists('produktionsauftrag') && meta_get('pa_art_festgelegt_backfill', '') !== '1') {
+        try { q("UPDATE produktionsauftrag SET art_festgelegt_am=COALESCE(angelegt, NOW()) WHERE art_festgelegt_am IS NULL"); } catch (\Throwable $e) {}
+        meta_set('pa_art_festgelegt_backfill', '1');
     }
 
     // Bedarf-Cache nach jedem Deploy einmal invalidieren – so greifen Änderungen an der Bedarfsrechnung
@@ -4928,7 +4938,8 @@ function produktionsauftrag_lager_erstellen(int $produkt_id, int $menge, string 
 function produktionsauftrag_art_setzen(int $pa_id, string $art): bool {
     $art = $art === 'eigen' ? 'eigen' : 'fremd';
     if (!produktion_schritte_regenerieren($pa_id, $art === 'fremd')) return false;   // fremd = verkürzter (Zukauf-)Weg
-    q("UPDATE produktionsauftrag SET produktionsart=? WHERE id=?", [$art, $pa_id]);
+    // Festlegen = Freigabe an die Produktion: produktionsart + Zeitstempel. Erst jetzt erscheint der Auftrag im Werk.
+    q("UPDATE produktionsauftrag SET produktionsart=?, art_festgelegt_am=NOW() WHERE id=?", [$art, $pa_id]);
     bedarf_bump();   // Eigen/Fremd geaendert -> andere Stueckliste
     return true;
 }

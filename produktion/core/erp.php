@@ -33,7 +33,7 @@ function erp_dashboard_url(): string { return '/'; }
 // --- Produktionsaufträge (nur lesen) ---------------------------------------------------------
 // Liste der Produktionsaufträge mit Produkt/Kunde/Fortschritt + Auftragseingang.
 // $status: '' = aktive (offen+laufend), 'alle' = alle, sonst genau dieser Status (offen|laufend|erledigt).
-function erp_produktionsauftraege(string $status = ''): array {
+function erp_produktionsauftraege(string $status = '', bool $gateAware = true): array {
     if (!tabelle_da('produktionsauftrag')) return [];
     $sql = "SELECT pa.*, a.nummer AS auftrag_nr, a.angelegt AS auftrag_eingang,
                    COALESCE(NULLIF(p.kundenname,''), p.name, r.name) AS produkt_name,
@@ -46,12 +46,16 @@ function erp_produktionsauftraege(string $status = ''): array {
             LEFT JOIN rezeptur r  ON r.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
             LEFT JOIN kunden k    ON k.id=pa.kunde_id";
     $params = [];
-    if ($status === 'alle')  { /* kein Filter */ }
-    elseif ($status !== '')  { $sql .= " WHERE pa.status=?"; $params[] = $status; }
-    else                     { $sql .= " WHERE pa.status IN ('offen','laufend')"; }   // aktive (Dashboard-Status)
+    // Gate: nur FESTGELEGTE Aufträge (Eigen/Fremd im Backend entschieden) gehen in die Produktion.
+    // Noch offene erscheinen hier bewusst NICHT. (Fallback unten, falls Spalte noch nicht migriert.)
+    $gate = $gateAware ? " AND pa.art_festgelegt_am IS NOT NULL" : "";
+    if ($status === 'alle')  { if ($gateAware) $sql .= " WHERE pa.art_festgelegt_am IS NOT NULL"; }
+    elseif ($status !== '')  { $sql .= " WHERE pa.status=?" . $gate; $params[] = $status; }
+    else                     { $sql .= " WHERE pa.status IN ('offen','laufend')" . $gate; }   // aktive (Dashboard-Status)
     if ($status === 'erledigt') $sql .= " ORDER BY pa.aktualisiert DESC, pa.id DESC";  // zuletzt fertig zuerst
     else                        $sql .= " ORDER BY COALESCE(pa.prio,2), (pa.geplant_am IS NULL), pa.geplant_am, pa.id DESC";
-    return all($sql, $params);
+    try { return all($sql, $params); }
+    catch (\Throwable $e) { return $gateAware ? erp_produktionsauftraege($status, false) : []; }
 }
 // Ein Produktionsauftrag – mit allen Übersichtsfeldern (Rezeptur, Kapselgröße, VPE, Verpackung, Kunde, Eingang).
 function erp_pa(int $id): ?array {

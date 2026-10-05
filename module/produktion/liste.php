@@ -95,16 +95,17 @@ if ($vorAuf) { $in = implode(',', array_fill(0, count($vorAuf), '?'));
         $sc['fw:' . (int)$row['auftrag_id']] = ['n'=>(int)$row['n'], 'frei'=>(float)$row['frei']]; }
 unset($sc);
 foreach ($alle as &$r) {
-    if ($r['status'] === 'erledigt')  $r['_bereit'] = 'erledigt';
-    elseif ((int)$r['n_done'] > 0)    $r['_bereit'] = 'laeuft';                                    // begonnen -> Material war da
-    else                              $r['_bereit'] = produktion_bereitschaft((int)$r['id'])['status'];
+    if ($r['status'] === 'erledigt')        $r['_bereit'] = 'erledigt';
+    elseif (empty($r['art_festgelegt_am'])) $r['_bereit'] = 'art_offen';   // Eigen/Fremd noch nicht festgelegt -> NICHT in Produktion
+    elseif ((int)$r['n_done'] > 0)          $r['_bereit'] = 'laeuft';      // begonnen -> Material war da
+    else                                    $r['_bereit'] = produktion_bereitschaft((int)$r['id'])['status'];
 }
 unset($r);
 // Cache bleibt für die (schreibfreie) Anzeige aktiv (Spalte „Kapsel/Tablette"); am Dateiende wieder aus.
 
 // Einteilung in die Reiter
 $istErledigt = fn($r) => $r['status'] === 'erledigt';
-$istWartet   = fn($r) => !$istErledigt($r) && ($r['_bereit'] ?? '') === 'wartet';
+$istWartet   = fn($r) => !$istErledigt($r) && in_array(($r['_bereit'] ?? ''), ['wartet', 'art_offen'], true);   // wartet auf Material ODER auf Eigen/Fremd-Festlegung
 $istBereit   = fn($r) => !$istErledigt($r) && !$istWartet($r);   // produktionsbereit + laufend (alles außer wartend/erledigt)
 
 $anzBereit   = count(array_filter($alle, $istBereit));
@@ -155,7 +156,7 @@ $cols = [
                         $txt   = $p === 1 ? 'Hoch' : ($p === 3 ? 'Niedrig' : 'Normal');
                         return '<span title="Priorität: ' . $txt . '" aria-label="Priorität: ' . $txt . '" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' . $farbe . '"></span>';
                      }],
-    'bereit'       => ['label' => 'Bereit', 'render' => fn($r)=> bereitschaft_badge($r['_bereit'] ?? '')],
+    'bereit'       => ['label' => 'Bereit', 'render' => fn($r)=> ($r['_bereit'] ?? '') === 'art_offen' ? bx_badge('Eigen/Fremd offen','warn') : bereitschaft_badge($r['_bereit'] ?? '')],
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
     'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, firma_kurz($r['kunde_firma']))],
     'produkt_name' => ['label' => 'Produkt', 'render' => fn($r)=> $r['produkt_name']?h($r['produkt_name']):'<span class="muted">–</span>'],
@@ -168,7 +169,9 @@ $cols = [
                         return '<span title="Kunde hat noch kein Etikett hinterlegt">' . bx_badge('fehlt', 'err') . '</span>';
                      }],
     'groesse'      => ['label' => 'Kapsel/Tablette', 'render' => function($r){ $g = produktion_groesse_label((int)($r['produkt_id'] ?? 0), true); return $g !== '' ? h($g) : '<span class="muted">–</span>'; }],
-    'produktionsart' => ['label' => 'Art', 'render' => fn($r)=> ($r['produktionsart'] ?? 'fremd')==='eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info')],
+    'produktionsart' => ['label' => 'Art', 'render' => fn($r)=> empty($r['art_festgelegt_am'])
+                        ? '<span title="Eigen/Fremd ist noch nicht festgelegt – erst danach geht der Auftrag in die Produktion">' . bx_badge('festlegen','err') . '</span>'
+                        : (($r['produktionsart'] ?? 'fremd')==='eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info'))],
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
     'fortschritt'  => ['label' => 'Fortschritt', 'render' => fn($r)=> (int)$r['n_done'].' / '.(int)$r['n_total']],
 ];

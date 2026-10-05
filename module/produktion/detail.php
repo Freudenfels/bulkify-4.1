@@ -86,8 +86,8 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
 // Produktionsweg umstellen (verkürzt bei Zukauf / voll)
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['weg_zukauf', 'weg_voll'], true)) {
     $fremd = ($_POST['aktion'] === 'weg_zukauf');
-    $ok = produktion_schritte_regenerieren($id, $fremd);
-    if ($ok) q("UPDATE produktionsauftrag SET produktionsart=? WHERE id=?", [$fremd ? 'fremd' : 'eigen', $id]);
+    // Über den zentralen Setter: setzt Produktionsart + markiert „festgelegt" (= Freigabe an die Produktion).
+    $ok = produktionsauftrag_art_setzen($id, $fremd ? 'fremd' : 'eigen');
     header('Location: ?p=produktionsauftrag&id=' . $id . ($ok ? '&weg=1' : '&wegfehler=1')); exit;
 }
 
