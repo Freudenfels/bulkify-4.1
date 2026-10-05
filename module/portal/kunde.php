@@ -1304,6 +1304,18 @@ $rohDetail = ($iid && $darfRohInfo) ? one("SELECT id, name, name_lat, form, cas,
     FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
 require_once BX_ROOT . '/core/spec_ki.php';   // item_kennwerte_relevant: nur echte Kennwerte (kein Schwermetall/Mikro/Mineral)
 $rohKennwerte = $rohDetail ? item_kennwerte_relevant($iid) : [];
+// Wirkstoffe + Gehalt (z. B. „L-Carnosin 99 %") – das Wichtigste zu einem Pulver/Extrakt.
+$rohWirkstoffe = $rohDetail ? all("SELECT n.name, iw.gehalt_wert, iw.gehalt_prozent, iw.gehalt_einheit
+    FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id
+    WHERE iw.item_id=? ORDER BY iw.sort, iw.id", [$iid]) : [];
+$gehaltFmt = function($w) {
+    $wert = $w['gehalt_wert'] !== null && $w['gehalt_wert'] !== '' ? (float)$w['gehalt_wert'] : ($w['gehalt_prozent'] !== null ? (float)$w['gehalt_prozent'] : null);
+    if ($wert === null) return '';
+    $z = rtrim(rtrim(number_format($wert, 3, ',', '.'), '0'), ',');
+    $einh = (string)($w['gehalt_einheit'] ?: 'prozent');
+    $suf = ['prozent'=>'%','mg_g'=>'mg/g','ug_g'=>'µg/g','ie_g'=>'I.E./g','ie_kg'=>'I.E./kg'][$einh] ?? '%';
+    return $z . ' ' . $suf;
+};
 // Freigegebene Analysenzertifikate (bulkify-Layout) zu diesem Rohstoff – nur was das Team freigegeben hat.
 $rohCoas = $rohDetail ? all("SELECT id, charge_nr, mhd FROM charge WHERE item_id=? AND coa_freigegeben=1 ORDER BY (wareneingang IS NULL), wareneingang DESC, id DESC", [$iid]) : [];
 $jaNein = fn($v) => $v === null || $v === '' ? null : ((int)$v === 1);
@@ -2664,6 +2676,20 @@ portal_head('Kundenportal · ' . $k['firma']);
           <tr><td><?= h($DOKTYP[$d['typ']] ?? $d['typ']) ?></td>
               <td><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument')) ?></td>
               <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener">öffnen</a></td></tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($rohWirkstoffe): ?>
+    <div class="bx-panel"><h2>Wirkstoffe &amp; Gehalt</h2>
+      <p class="muted" style="margin-top:0">Die wirksamen Bestandteile dieses Rohstoffs mit deklariertem Gehalt.</p>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Wirkstoff</th><th class="bx-num">Gehalt</th></tr></thead>
+        <tbody>
+        <?php foreach ($rohWirkstoffe as $w): $g = $gehaltFmt($w); ?>
+          <tr><td><?= h($w['name']) ?></td><td class="bx-num"><?= $g !== '' ? h($g) : '<span class="muted">–</span>' ?></td></tr>
         <?php endforeach; ?>
         </tbody>
       </table></div>
