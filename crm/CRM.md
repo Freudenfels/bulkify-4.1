@@ -58,7 +58,10 @@ Datei zu prüfen – dann weiß man auch, wo man sucht.
 - **To-Dos** (`/crm/?p=todos`) – abhakbare Aufgaben, gruppiert nach Kunde/Kontakt, nach Kategorie
   filterbar; zeigt To-Dos (`crm_todo`) und offene Wiedervorlagen gemeinsam. Die KI legt beim Auslesen
   einer Anfrage passende To-Dos an. Am Kunden/Kontakt gibt es eine To-Do-Karte. Details: `crm/core/todo.md`.
-- **Kontakte** mit Verlauf, Wiedervorlage und „Zum Kunden machen“.
+- **Kontakte** als **Cockpit** (zwei Reiter, wie die Kundenseite): *Übersicht* = Akte mit Aktivität
+  (Verlauf: Telefonat/Kontaktversuch/Besprechung …), To-Dos, Wiedervorlage, KI-Werkzeuge, Verkauf,
+  Dokumente, „Zum Kunden machen“; *Profil* = gleiche Felder wie beim Kunden (Qualifizierung + freies
+  Infos-Feld + Anfrage). Kontakt = noch kein Kunde; wird Besteller → Kunde (eigene Seite).
 - **Schnell erfassen** – auch Ziel des Android-Teilen-Menüs, mit KI-Auslesen von Text und Foto.
 - **E-Mail einlesen** (`/crm/?p=mail`) – Mail einfügen, die KI ordnet sie einem Kunden oder
   Kontakt zu und schlägt Notiz und Wiedervorlage vor. Ein Klick, dann steht es.

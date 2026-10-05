@@ -5,7 +5,9 @@ Wer auf der Messe, per WhatsApp oder am Telefon etwas will, ist noch kein Kunde.
 
 ## Phasen
 `neu` → `im Gespräch` → `Angebot draußen` → `gewonnen` / `verloren`. Bewusst wenige, damit sie gepflegt werden.
-Die **Pipeline** (`?p=pipeline`) zeigt alle Kontakte als Board nach Phase. `kontakt_phase_setzen()` verschiebt eine Karte (Drag & Drop oder Dropdown), setzt `phase_at` und schreibt eine Verlaufszeile. `kontakt_speichern()` pflegt zusätzlich **Zuständig** (`besitzer_id`), die **Segmentierung** (siehe `crm_segfelder()`) und die **strukturierten Anfrage-Felder** (`anfrage_rezeptur/form/inhalt/vorhaben`, von der KI oder von Hand gefüllt).
+Die **Pipeline** (`?p=pipeline`) zeigt alle Kontakte als Board nach Phase. `kontakt_phase_setzen()` verschiebt eine Karte (Drag & Drop oder Dropdown), setzt `phase_at` und schreibt eine Verlaufszeile.
+
+Die Kontaktseite ist ein **Cockpit mit zwei Reitern**: `kontakt_speichern()` schreibt die **Stammdaten** (Name, Firma, Phase, Kontaktdaten, Zuständig `besitzer_id`, Notiz); `kontakt_profil_speichern()` schreibt das **Profil** – Segmentierung (`crm_segfelder()`), Land/Website/Möglichkeiten/Besonderheiten, freies `infos`-Feld und die strukturierten Anfrage-Felder (`anfrage_rezeptur/form/inhalt/vorhaben`). Getrennt, damit sich die beiden Formulare nicht gegenseitig leeren.
 
 ## Dokumente
 `kontakt_datei_*()` legen Angebote/Abschlüsse/Rechnungen am Kontakt ab (Tabelle `crm_kontakt_datei`, Dateien in `data/kontakt_datei`, Download über `public/crm/kontakt_doc.php`).

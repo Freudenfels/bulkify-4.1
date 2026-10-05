@@ -1,8 +1,19 @@
-# detail.php – ein Kontakt
+# detail.php – ein Kontakt (Cockpit)
 
-Route `?p=kontakt&id=…`. Von oben nach unten: offene Wiedervorlagen, eine Notiz hinzufügen, **Antwort vorschlagen**, der Verlauf, die Stammdaten, und der Knopf **Zum Kunden machen**.
+Route `?p=kontakt&id=…`, zwei Reiter (wie die Kundenseite):
+- **Übersicht** – die Akte: Wiedervorlage, To-Dos, **Notiz/Aktivität** (Verlauf mit Typen Telefonat,
+  Kontaktversuch, Besprechung, WhatsApp, E-Mail …), KI-Auswertung, KI-Rezepturvorschlag, Fragenkatalog,
+  Antwort/Senden, Verlauf, Stammdaten (Name/Firma/Phase/Kontakt/Zuständig/Notiz), Verkauf, Dokumente,
+  **Zum Kunden machen**.
+- **Profil** (`&tab=profil`, `tun=profil_speichern` → `kontakt_profil_speichern`) – die gleichen Felder
+  wie beim Kunden: Qualifizierung (`crm_segfelder()`), Land/Website/Möglichkeiten/Besonderheiten, freies
+  **Infos**-Feld und die strukturierte Anfrage. Die Daten liegen an `crm_kontakt`.
 
-Die Reihenfolge ist Absicht: Beim Öffnen will man zuerst wissen, was zuletzt war und was ansteht – nicht die Adresse pflegen.
+Stammdaten (Übersicht) und Profil speichern getrennt (`kontakt_speichern` vs. `kontakt_profil_speichern`),
+damit die beiden Formulare sich nicht gegenseitig leer schreiben.
+
+**Kontakt** = jemand, der uns kontaktiert hat, aber noch keinen Dashboard-/Portalzugang hat; wird er
+Besteller, wird er zum Kunden (eigene Seite). Beim Öffnen steht die Akte im Vordergrund, nicht die Adresse.
 
 **KI-Auswertung der Anfrage** (`tun=ki_auswerten` → `core/lead_ki.php`) ordnet die Anfrage aus der Notiz ein: Zusammenfassung, Produktform, Menge, grober Wert, nächster Schritt. Setzt den geschätzten Wert (falls leer) und eine Wiedervorlage, Ergebnis landet im Verlauf. Website-Leads werden beim Eingang automatisch ausgewertet; der Knopf dient zum Wiederholen oder für Kontakte, die ohne KI hereinkamen. Nur sichtbar, wenn die KI eingerichtet ist und eine Notiz vorhanden ist.
 

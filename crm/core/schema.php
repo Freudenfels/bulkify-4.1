@@ -271,6 +271,8 @@ function crm_schema(): void {
     crm_spalte('crm_kontakt', 'anfrage_form', 'VARCHAR(120) NULL');
     crm_spalte('crm_kontakt', 'anfrage_inhalt', 'VARCHAR(120) NULL');
     crm_spalte('crm_kontakt', 'anfrage_vorhaben', 'VARCHAR(190) NULL');
+    // Freies Infos-Feld fuers Kontaktprofil (wie beim Kunden).
+    crm_spalte('crm_kontakt', 'infos', 'TEXT NULL');
 }
 
 function crm_meta_lesen(string $schluessel, string $standard = ''): string {

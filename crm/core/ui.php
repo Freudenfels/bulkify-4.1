@@ -58,8 +58,8 @@ function crm_phasen(): array {
             'gewonnen' => 'gewonnen', 'verloren' => 'verloren'];
 }
 function crm_verlauf_typen(): array {
-    return ['notiz' => 'Notiz', 'anruf' => 'Anruf', 'whatsapp' => 'WhatsApp', 'mail' => 'E-Mail',
-            'treffen' => 'Treffen', 'angebot' => 'Angebot'];
+    return ['notiz' => 'Notiz', 'anruf' => 'Telefonat', 'kontaktversuch' => 'Kontaktversuch',
+            'whatsapp' => 'WhatsApp', 'mail' => 'E-Mail', 'treffen' => 'Besprechung', 'angebot' => 'Angebot'];
 }
 
 // Kategorien fuer To-Dos. Die Wiedervorlage ist keine eigene Kategorie zum Anlegen - offene

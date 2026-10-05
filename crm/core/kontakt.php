@@ -39,8 +39,10 @@ function kontakt_anlegen(array $d, int $uid = 0): int {
 
 function kontakt(int $id): ?array { return one("SELECT * FROM crm_kontakt WHERE id=?", [$id]); }
 
+// Stammdaten (Reiter "Uebersicht"). Segmentierung/Anfrage/Infos stehen im Profil-Reiter und werden
+// ueber kontakt_profil_speichern() gesetzt - so blasen sich die beiden Formulare nicht gegenseitig leer.
 function kontakt_speichern(int $id, array $d): void {
-    $quellen = crm_quellen(); $phasen = crm_phasen(); $segfelder = crm_segfelder();
+    $quellen = crm_quellen(); $phasen = crm_phasen();
     $alt = kontakt($id);
     $phase = array_key_exists((string)($d['phase'] ?? ''), $phasen) ? (string)$d['phase'] : (string)($alt['phase'] ?? 'neu');
     $phaseWechsel = $alt && (string)$alt['phase'] !== $phase;
@@ -50,16 +52,8 @@ function kontakt_speichern(int $id, array $d): void {
     $gueltig = array_map(fn($u) => (int)$u['id'], erp_mitarbeiter());
     if ($besitzer > 0 && !in_array($besitzer, $gueltig, true)) $besitzer = 0;
 
-    // Segmentierungs-Dropdowns: nur gueltige Schluessel uebernehmen.
-    $seg = [];
-    foreach ($segfelder as $f => $def) { $v = (string)($d[$f] ?? ''); $seg[$f] = array_key_exists($v, $def[1]) ? $v : null; }
-
     q("UPDATE crm_kontakt SET name=?, firma=?, email=?, telefon=?, whatsapp=?, quelle=?, phase=?,
-              wert_eur=?, notiz=?, besitzer_id=?,
-              kontaktart=?, erfahrung=?, zielmarkt=?, nische=?, firmentyp=?, volumen=?, prioritaet=?,
-              land=?, website=?, moeglichkeiten=?, besonderheiten=?,
-              anfrage_rezeptur=?, anfrage_form=?, anfrage_inhalt=?, anfrage_vorhaben=?,
-              aktualisiert=?" . ($phaseWechsel ? ", phase_at=?" : "") . " WHERE id=?",
+              wert_eur=?, notiz=?, besitzer_id=?, aktualisiert=?" . ($phaseWechsel ? ", phase_at=?" : "") . " WHERE id=?",
       array_merge([
        mb_substr(trim((string)$d['name']), 0, 190) ?: 'Ohne Namen',
        mb_substr(trim((string)($d['firma'] ?? '')), 0, 190) ?: null,
@@ -71,17 +65,30 @@ function kontakt_speichern(int $id, array $d): void {
        zahl_lesen((string)($d['wert_eur'] ?? '')),
        trim((string)($d['notiz'] ?? '')) ?: null,
        $besitzer ?: null,
-       $seg['kontaktart'], $seg['erfahrung'], $seg['zielmarkt'], $seg['nische'], $seg['firmentyp'], $seg['volumen'], $seg['prioritaet'],
+       gmdate('Y-m-d H:i:s'),
+      ], $phaseWechsel ? [gmdate('Y-m-d H:i:s')] : [], [$id]));
+}
+
+// Profil (Reiter "Profil"): Qualifizierung/Segmentierung, freie Infos und die strukturierte Anfrage.
+function kontakt_profil_speichern(int $id, array $d): void {
+    $segfelder = crm_segfelder();
+    $seg = [];
+    foreach ($segfelder as $f => $def) { $v = (string)($d[$f] ?? ''); $seg[$f] = array_key_exists($v, $def[1]) ? $v : null; }
+    q("UPDATE crm_kontakt SET
+              kontaktart=?, erfahrung=?, zielmarkt=?, nische=?, firmentyp=?, volumen=?, prioritaet=?,
+              land=?, website=?, moeglichkeiten=?, besonderheiten=?, infos=?,
+              anfrage_rezeptur=?, anfrage_form=?, anfrage_inhalt=?, anfrage_vorhaben=?, aktualisiert=? WHERE id=?",
+      [$seg['kontaktart'], $seg['erfahrung'], $seg['zielmarkt'], $seg['nische'], $seg['firmentyp'], $seg['volumen'], $seg['prioritaet'],
        mb_substr(trim((string)($d['land'] ?? '')), 0, 120) ?: null,
        mb_substr(trim((string)($d['website'] ?? '')), 0, 190) ?: null,
        trim((string)($d['moeglichkeiten'] ?? '')) ?: null,
        trim((string)($d['besonderheiten'] ?? '')) ?: null,
+       trim((string)($d['infos'] ?? '')) ?: null,
        mb_substr(trim((string)($d['anfrage_rezeptur'] ?? '')), 0, 255) ?: null,
        mb_substr(trim((string)($d['anfrage_form'] ?? '')), 0, 120) ?: null,
        mb_substr(trim((string)($d['anfrage_inhalt'] ?? '')), 0, 120) ?: null,
        mb_substr(trim((string)($d['anfrage_vorhaben'] ?? '')), 0, 190) ?: null,
-       gmdate('Y-m-d H:i:s'),
-      ], $phaseWechsel ? [gmdate('Y-m-d H:i:s')] : [], [$id]));
+       gmdate('Y-m-d H:i:s'), $id]);
 }
 
 // Nur die Phase setzen (fuer das Pipeline-Board: Drag & Drop / Dropdown). Setzt phase_at bei Wechsel

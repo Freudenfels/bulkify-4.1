@@ -19,6 +19,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         kontakt_speichern($id, $_POST);
         header('Location: ?p=kontakt&id=' . $id . '&ok=gespeichert'); exit;
     }
+    if ($tun === 'profil_speichern') {
+        kontakt_profil_speichern($id, $_POST);
+        header('Location: ?p=kontakt&id=' . $id . '&tab=profil&ok=gespeichert'); exit;
+    }
     if ($tun === 'verlauf') {
         kontakt_verlauf($id, (string)($_POST['typ'] ?? 'notiz'), (string)($_POST['text'] ?? ''), crm_uid());
         header('Location: ?p=kontakt&id=' . $id . '&ok=notiert'); exit;
@@ -142,6 +146,7 @@ $hatAnfrage  = trim((string)($k['anfrage_rezeptur'] ?? '') . ($k['anfrage_form']
 $segFilled   = false;
 foreach (array_keys(crm_segfelder()) as $sf) { if (trim((string)($k[$sf] ?? '')) !== '') { $segFilled = true; break; } }
 foreach (['land', 'website', 'moeglichkeiten', 'besonderheiten'] as $sf) { if (trim((string)($k[$sf] ?? '')) !== '') { $segFilled = true; break; } }
+$tab = ($_GET['tab'] ?? '') === 'profil' ? 'profil' : 'uebersicht';
 
 kopf($k['name'], 'kontakte');
 seitenkopf(trim(((string)($k['firma'] ?? '') !== '' ? $k['firma'] . ' – ' : '') . $k['name']),
@@ -161,6 +166,60 @@ elseif ($m !== '')        hinweis(['gespeichert' => 'Gespeichert.', 'notiert' =>
 $sendefehler = (string)($_SESSION['sendefehler'] ?? ''); unset($_SESSION['sendefehler']);
 if ($sendefehler !== '') hinweis('Senden fehlgeschlagen: ' . $sendefehler, 'warn');
 ?>
+
+<div class="crm-reiter" style="margin-bottom:12px">
+  <a href="?p=kontakt&id=<?= $id ?>"<?= $tab === 'uebersicht' ? ' class="an"' : '' ?>>Übersicht</a>
+  <a href="?p=kontakt&id=<?= $id ?>&tab=profil"<?= $tab === 'profil' ? ' class="an"' : '' ?>>Profil</a>
+</div>
+
+<?php if ($tab === 'profil'): ?>
+  <div class="karte"><div class="rumpf">
+    <h2 style="margin-top:0">Profil</h2>
+    <p class="muted" style="margin-top:0">Die Einordnung dieses Kontakts – Qualifizierung, Herkunft, Potenzial
+       und freie Infos, die der Mitarbeiter pflegt. Gleiche Felder wie beim Kunden.</p>
+    <form method="post">
+      <input type="hidden" name="tun" value="profil_speichern">
+      <div class="bx-grid">
+        <?php foreach (crm_segfelder() as $f => $def): [$lbl, $opts] = $def; ?>
+          <div class="bx-field"><label for="pf_<?= h($f) ?>"><?= h($lbl) ?></label>
+            <select id="pf_<?= h($f) ?>" name="<?= h($f) ?>">
+              <option value="">– wählen –</option>
+              <?php foreach ($opts as $ok => $ol): ?><option value="<?= h($ok) ?>" <?= ($k[$f] ?? '') === $ok ? 'selected' : '' ?>><?= h($ol) ?></option><?php endforeach; ?>
+            </select></div>
+        <?php endforeach; ?>
+        <div class="bx-field"><label for="pf_land">Land / Region</label>
+          <input type="text" id="pf_land" name="land" value="<?= h((string)($k['land'] ?? '')) ?>" placeholder="z. B. Deutschland"></div>
+        <div class="bx-field"><label for="pf_website">Website / Social</label>
+          <input type="text" id="pf_website" name="website" value="<?= h((string)($k['website'] ?? '')) ?>" placeholder="z. B. instagram.com/marke"></div>
+      </div>
+      <div class="bx-field"><label for="pf_moeglichkeiten">Möglichkeiten / Potenzial</label>
+        <input type="text" id="pf_moeglichkeiten" name="moeglichkeiten" value="<?= h((string)($k['moeglichkeiten'] ?? '')) ?>" placeholder="z. B. plant eigene Marke, sucht Hersteller für 3 Produkte"></div>
+      <div class="bx-field"><label for="pf_besonderheiten">Besonderheiten</label>
+        <input type="text" id="pf_besonderheiten" name="besonderheiten" value="<?= h((string)($k['besonderheiten'] ?? '')) ?>" placeholder="z. B. nur vegan, Bio-Zertifikat wichtig, kleines Budget"></div>
+      <div class="bx-field"><label for="pf_infos">Infos zum Kontakt</label>
+        <textarea id="pf_infos" name="infos" style="min-height:120px"><?= h((string)($k['infos'] ?? '')) ?></textarea></div>
+
+      <details class="crm-details" <?= $hatAnfrage ? 'open' : '' ?> style="margin:4px 0 10px">
+        <summary style="cursor:pointer">Anfrage (strukturiert)</summary>
+        <div style="margin-top:12px">
+          <div class="bx-field"><label for="anfrage_rezeptur">Rezeptur / Produkt</label>
+            <input type="text" id="anfrage_rezeptur" name="anfrage_rezeptur" value="<?= h((string)($k['anfrage_rezeptur'] ?? '')) ?>"></div>
+          <div class="bx-grid">
+            <div class="bx-field"><label for="anfrage_form">Form</label>
+              <input type="text" id="anfrage_form" name="anfrage_form" value="<?= h((string)($k['anfrage_form'] ?? '')) ?>" placeholder="z. B. Kapsel"></div>
+            <div class="bx-field"><label for="anfrage_inhalt">Menge / Inhalt</label>
+              <input type="text" id="anfrage_inhalt" name="anfrage_inhalt" value="<?= h((string)($k['anfrage_inhalt'] ?? '')) ?>" placeholder="z. B. 5.000 Dosen"></div>
+          </div>
+          <div class="bx-field"><label for="anfrage_vorhaben">Vorhaben</label>
+            <input type="text" id="anfrage_vorhaben" name="anfrage_vorhaben" value="<?= h((string)($k['anfrage_vorhaben'] ?? '')) ?>" placeholder="z. B. bestehende Rezeptur herstellen"></div>
+        </div>
+      </details>
+
+      <button class="btn btn-primary" type="submit">Profil speichern</button>
+    </form>
+  </div></div>
+
+<?php else: ?>
 
 <?php if ($wv): ?>
   <div class="karte"><div class="rumpf">
@@ -407,57 +466,16 @@ $fk = fragenkatalog('kontakt', $id); ?>
         <input type="text" id="wert_eur" name="wert_eur" inputmode="decimal"
                value="<?= $k['wert_eur'] !== null ? h(number_format((float)$k['wert_eur'], 2, ',', '.')) : '' ?>"></div>
     </div>
-    <div class="bx-grid">
-      <div class="bx-field"><label for="besitzer_id">Zuständig</label>
-        <select id="besitzer_id" name="besitzer_id">
-          <option value="0">– niemand –</option>
-          <?php $curB = (int)($k['besitzer_id'] ?? 0); foreach ($mitarbeiter as $u): ?>
-            <option value="<?= (int)$u['id'] ?>" <?= $curB === (int)$u['id'] ? 'selected' : '' ?>><?= h((string)$u['name']) ?></option>
-          <?php endforeach; ?>
-        </select></div>
-      <div class="bx-field"><label for="land">Land / Region</label>
-        <input type="text" id="land" name="land" value="<?= h((string)($k['land'] ?? '')) ?>" placeholder="z. B. Deutschland"></div>
-    </div>
+    <div class="bx-field"><label for="besitzer_id">Zuständig</label>
+      <select id="besitzer_id" name="besitzer_id">
+        <option value="0">– niemand –</option>
+        <?php $curB = (int)($k['besitzer_id'] ?? 0); foreach ($mitarbeiter as $u): ?>
+          <option value="<?= (int)$u['id'] ?>" <?= $curB === (int)$u['id'] ? 'selected' : '' ?>><?= h((string)$u['name']) ?></option>
+        <?php endforeach; ?>
+      </select></div>
     <div class="bx-field"><label for="notiz">Notiz</label>
       <textarea id="notiz" name="notiz"><?= h((string)($k['notiz'] ?? '')) ?></textarea></div>
-
-    <details class="crm-details" <?= $segFilled ? 'open' : '' ?> style="margin:4px 0 10px">
-      <summary style="cursor:pointer">Qualifizierung &amp; Segmentierung</summary>
-      <div style="margin-top:12px">
-        <div class="bx-grid">
-          <?php foreach (crm_segfelder() as $f => $def): [$lbl, $opts] = $def; ?>
-            <div class="bx-field"><label for="seg_<?= h($f) ?>"><?= h($lbl) ?></label>
-              <select id="seg_<?= h($f) ?>" name="<?= h($f) ?>">
-                <option value="">– wählen –</option>
-                <?php foreach ($opts as $ok => $ol): ?><option value="<?= h($ok) ?>" <?= ($k[$f] ?? '') === $ok ? 'selected' : '' ?>><?= h($ol) ?></option><?php endforeach; ?>
-              </select></div>
-          <?php endforeach; ?>
-          <div class="bx-field"><label for="website">Website / Social</label>
-            <input type="text" id="website" name="website" value="<?= h((string)($k['website'] ?? '')) ?>" placeholder="z. B. instagram.com/marke"></div>
-        </div>
-        <div class="bx-field"><label for="moeglichkeiten">Möglichkeiten / Potenzial</label>
-          <input type="text" id="moeglichkeiten" name="moeglichkeiten" value="<?= h((string)($k['moeglichkeiten'] ?? '')) ?>" placeholder="z. B. plant eigene Marke, sucht Hersteller für 3 Produkte"></div>
-        <div class="bx-field"><label for="besonderheiten">Besonderheiten</label>
-          <input type="text" id="besonderheiten" name="besonderheiten" value="<?= h((string)($k['besonderheiten'] ?? '')) ?>" placeholder="z. B. nur vegan, Bio-Zertifikat wichtig, kleines Budget"></div>
-      </div>
-    </details>
-
-    <details class="crm-details" <?= $hatAnfrage ? 'open' : '' ?> style="margin:4px 0 10px">
-      <summary style="cursor:pointer">Anfrage (strukturiert)</summary>
-      <div style="margin-top:12px">
-        <div class="bx-field"><label for="anfrage_rezeptur">Rezeptur / Produkt</label>
-          <input type="text" id="anfrage_rezeptur" name="anfrage_rezeptur" value="<?= h((string)($k['anfrage_rezeptur'] ?? '')) ?>"></div>
-        <div class="bx-grid">
-          <div class="bx-field"><label for="anfrage_form">Form</label>
-            <input type="text" id="anfrage_form" name="anfrage_form" value="<?= h((string)($k['anfrage_form'] ?? '')) ?>" placeholder="z. B. Kapsel"></div>
-          <div class="bx-field"><label for="anfrage_inhalt">Menge / Inhalt</label>
-            <input type="text" id="anfrage_inhalt" name="anfrage_inhalt" value="<?= h((string)($k['anfrage_inhalt'] ?? '')) ?>" placeholder="z. B. 5.000 Dosen"></div>
-        </div>
-        <div class="bx-field"><label for="anfrage_vorhaben">Vorhaben</label>
-          <input type="text" id="anfrage_vorhaben" name="anfrage_vorhaben" value="<?= h((string)($k['anfrage_vorhaben'] ?? '')) ?>" placeholder="z. B. bestehende Rezeptur herstellen"></div>
-      </div>
-    </details>
-
+    <p class="muted" style="margin:4px 0 10px;font-size:var(--fs-sm)">Qualifizierung, Herkunft und die Anfrage-Details stehen im Reiter „Profil".</p>
     <button class="btn btn-primary" type="submit">Speichern</button>
   </form>
 </div></div>
@@ -553,4 +571,5 @@ $fk = fragenkatalog('kontakt', $id); ?>
   <input type="hidden" name="tun" value="archiv">
   <button class="btn btn-ghost btn-sm" type="submit"><?= $k['archiviert'] ? 'Aus dem Archiv holen' : 'Archivieren' ?></button>
 </form>
+<?php endif; // Ende Reiter "Übersicht" ?>
 <?php fuss('kontakte');
