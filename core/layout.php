@@ -26,10 +26,10 @@ function bx_nav(): array {
             'paf_rohstoff'       => ['label'=>'Rohstoffanfragen',       'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=rohstoff',       'typ'=>'rohstoff'],
             'paf_dienstleistung' => ['label'=>'Dienstleistungsanfragen', 'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=dienstleistung', 'typ'=>'dienstleistung'],
         ],
-        'Produkt'      => ['rezeptur' => 'Rezepturen', 'rezept_preise' => 'Rezeptur-Preise', 'produkte' => 'Produkte', 'novelfood' => 'Novel Food'],
+        'Produkt'      => ['rezeptur' => 'Rezepturen', 'produkte' => 'Produkte', 'novelfood' => 'Novel Food'],
         'Produktion'   => ['produktion_vorbereitung' => 'Vor-Produktion', 'produktion' => 'Produktion', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
         'Lager'        => ['lager' => 'Warenlager', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'rohstoff_website' => 'Website-Freigabe', 'freigaben' => 'Freigaben', 'laboranalysen' => 'Laboranalysen', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
-        'Einkauf'      => ['einkaufsliste' => 'Bedarf', 'einkauf' => 'Bestellt', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'lief_anfragen' => 'Anfragen & Preise', 'katalog_freigaben' => 'Katalog-Freigaben', 'lieferant_preise' => 'Lieferanten-Preise', 'lief_preisliste' => 'EK-Preisliste'],
+        'Einkauf'      => ['einkaufsliste' => 'Bedarf', 'einkauf' => 'Bestellt', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'lief_anfragen' => 'Anfragen & Preise', 'katalog_freigaben' => 'Katalog-Freigaben', 'einkauf_preise' => 'Preise'],
         'System'       => ['einstellungen' => 'Einstellungen', 'benutzer' => 'Benutzer', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
         'Assistent'    => ['fastaction' => 'Fastaction'],
     ];
