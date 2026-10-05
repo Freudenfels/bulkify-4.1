@@ -334,6 +334,22 @@ function erp_pa_zutaten(int $pa_id): array {
                 WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rid]);
 }
 
+// Existiert eine Spalte? (Für vorwärtskompatible Writes, bevor das Dashboard die Spalte anlegt.)
+function erp_spalte_da(string $tabelle, string $spalte): bool {
+    try {
+        return (bool) scalar("SELECT COUNT(*) FROM information_schema.columns
+                              WHERE table_schema=DATABASE() AND table_name=? AND column_name=?", [$tabelle, $spalte]);
+    } catch (Throwable $e) { return false; }
+}
+// Beim Laborversand das Auftragsfeld setzen, damit Auftrag/Kundenportal den Status zeigen können.
+// Vorwärtskompatibel: schreibt nur, wenn die Spalte (vom Dashboard) existiert.
+function erp_auftrag_labor_versendet(int $pa_id): void {
+    $auf = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$auf || !tabelle_da('auftrag')) return;
+    if (erp_spalte_da('auftrag', 'labor_versendet_am'))
+        q("UPDATE auftrag SET labor_versendet_am=CURDATE() WHERE id=? AND labor_versendet_am IS NULL", [$auf]);
+}
+
 // --- Kunden-Etikett am Auftrag --------------------------------------------------------------
 // Hochgeladenes Etikett-Design des Kunden (Dokument am Auftrag, typ='etikett').
 function erp_etikett_datei(int $pa_id): ?array {

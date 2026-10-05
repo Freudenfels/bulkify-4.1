@@ -21,6 +21,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } elseif ($aktion === 'qs_labor_versenden') {
         pr_daten_setzen($id, 'laborprobe_versendet_am', gmdate('Y-m-d'), $akteur);
         pr_daten_setzen($id, 'laborstatus', 'versendet', $akteur);
+        erp_auftrag_labor_versendet($id);   // Auftrag/Portal-Status setzen (falls Spalte vorhanden)
         flash('Laborprobe als ans Labor versendet markiert.');
     } elseif ($aktion === 'qs_freigabe') {
         pr_daten_setzen($id, 'qs_freigabe_am', gmdate('Y-m-d H:i:s'), $akteur);
