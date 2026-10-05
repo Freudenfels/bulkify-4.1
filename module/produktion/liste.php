@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'neu')
 }
 
 // Alle Produktionsaufträge laden (inkl. Fortschritt + nächste Station), Bereitschaft je Auftrag bestimmen.
-$alle = all("SELECT pa.*, k.firma AS kunde_firma,
+$alle = all("SELECT pa.*, k.firma AS kunde_firma, a.etikett_freigegeben AS etikett_freigegeben,
              COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.name,''), CONCAT(rz.name, ' · Bulk')) AS produkt_name,
              (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id) AS n_total,
              (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=1) AS n_done,
@@ -126,6 +126,15 @@ if ($q !== '') {
 }
 $rows = bx_sort_rows($rows, $sort, $dir);
 
+// Spalte „Etikett": je Auftrag prüfen, ob eine Etikett-Datei hinterlegt ist – in EINER Abfrage
+// für alle angezeigten Aufträge (statt je Zeile etikett_vorhanden() -> N+1).
+$etikettDa = [];
+$aufIds = array_values(array_unique(array_filter(array_map(fn($r) => (int)($r['auftrag_id'] ?? 0), $rows))));
+if ($aufIds) { $in = implode(',', array_fill(0, count($aufIds), '?'));
+    foreach (all("SELECT DISTINCT objekt_id FROM dokument WHERE objekt_typ='auftrag' AND typ='etikett' AND objekt_id IN ($in)", $aufIds) as $row)
+        $etikettDa[(int)$row['objekt_id']] = true;
+}
+
 // Spalte „Kapsel/Tablette": Grunddaten aller ANGEZEIGTEN Produkte in EINER Abfrage vorladen
 // (statt je Zeile eine) -> produktion_groesse_label() findet sie dann im Cache.
 $grlIds = array_values(array_unique(array_filter(array_map(fn($r) => (int)($r['produkt_id'] ?? 0), $rows))));
@@ -150,6 +159,14 @@ $cols = [
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
     'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, firma_kurz($r['kunde_firma']))],
     'produkt_name' => ['label' => 'Produkt', 'render' => fn($r)=> $r['produkt_name']?h($r['produkt_name']):'<span class="muted">–</span>'],
+    'etikett'      => ['label' => 'Etikett', 'render' => function($r) use ($etikettDa) {
+                        $aid = (int)($r['auftrag_id'] ?? 0);
+                        // Bulk-/Lagerproduktion ohne Kundenauftrag -> kein Kunden-Etikett nötig.
+                        if ($aid <= 0) return '<span class="muted" title="Bulk-/Lagerproduktion – kein Kunden-Etikett">–</span>';
+                        if ((int)($r['etikett_freigegeben'] ?? 0) === 1) return bx_badge('freigegeben', 'ok');
+                        if (!empty($etikettDa[$aid])) return '<span title="Etikett hinterlegt, Kundenfreigabe fehlt noch">' . bx_badge('nicht freigegeben', 'warn') . '</span>';
+                        return '<span title="Kunde hat noch kein Etikett hinterlegt">' . bx_badge('fehlt', 'err') . '</span>';
+                     }],
     'groesse'      => ['label' => 'Kapsel/Tablette', 'render' => function($r){ $g = produktion_groesse_label((int)($r['produkt_id'] ?? 0), true); return $g !== '' ? h($g) : '<span class="muted">–</span>'; }],
     'produktionsart' => ['label' => 'Art', 'render' => fn($r)=> ($r['produktionsart'] ?? 'fremd')==='eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info')],
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
