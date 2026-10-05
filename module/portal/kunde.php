@@ -1234,17 +1234,13 @@ $rezDetail = ($rid && $k['portal_rezeptur']) ? one("SELECT * FROM rezeptur WHERE
 // Zutaten inklusive item_id – damit je Rohstoff die freigegebenen Dokumente (CoA/Spec) verlinkt werden können
 $rezZutaten = $rezDetail ? all("SELECT item_id, bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
 // Freigegebene Dokumente je Zutat-Rohstoff (nur, was intern ausdrücklich freigegeben wurde)
-$rezDoks = []; $rezRohInfoDok = [];
+$rezDoks = [];
 foreach ($rezZutaten as $z) if (!empty($z['item_id'])) {
-    $iidz = (int)$z['item_id'];
-    $dk = dokumente_fuer_kunde('item', $iidz);
-    if ($dk) $rezDoks[$iidz] = $dk;
-    // Spec/CoA sind bewusst nicht in dokumente_fuer_kunde (keine Lieferanten-Originale). Die
-    // freigegebenen bulkify-Spec/Chargen-CoA liegen auf dem Rohstoff-Infoblatt – dorthin verlinken.
-    if ((int) scalar("SELECT spec_freigegeben FROM item WHERE id=?", [$iidz]) === 1
-        || (bool) scalar("SELECT 1 FROM charge WHERE item_id=? AND coa_freigegeben=1 LIMIT 1", [$iidz]))
-        $rezRohInfoDok[$iidz] = true;
+    $dk = dokumente_fuer_kunde('item', (int)$z['item_id']);
+    if ($dk) $rezDoks[(int)$z['item_id']] = $dk;
 }
+// Spec/CoA stehen bewusst NICHT in dokumente_fuer_kunde (keine Lieferanten-Originale). Unsere
+// bulkify-Spezifikation ist aber für jeden Rohstoff erzeugbar -> je Zutat aufs Infoblatt verlinken.
 
 // Rohstoff-Katalog (Preis auf Anfrage) – ohne Leerkapseln
 $rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, form, cas, name_lat, synonym, bot_quelle, herkunftsland FROM item
@@ -1317,7 +1313,10 @@ $gehaltFmt = function($w) {
     return $z . ' ' . $suf;
 };
 // Freigegebene Analysenzertifikate (bulkify-Layout) zu diesem Rohstoff – nur was das Team freigegeben hat.
-$rohCoas = $rohDetail ? all("SELECT id, charge_nr, mhd FROM charge WHERE item_id=? AND coa_freigegeben=1 ORDER BY (wareneingang IS NULL), wareneingang DESC, id DESC", [$iid]) : [];
+// CoA je Charge zeigen, sobald WIR eigene Analysenwerte haben (= es gibt einen bulkify-CoA) – ohne Freigabe-Flag, nie Lieferanten-PDF.
+$rohCoas = $rohDetail ? all("SELECT id, charge_nr, mhd FROM charge WHERE item_id=?
+    AND EXISTS (SELECT 1 FROM charge_analyse ca WHERE ca.charge_id=charge.id)
+    ORDER BY (wareneingang IS NULL), wareneingang DESC, id DESC", [$iid]) : [];
 $jaNein = fn($v) => $v === null || $v === '' ? null : ((int)$v === 1);
 $FORMLBL_P = ['pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle'];
 $offenAngebote = count(array_filter($angebote, fn($a) => $a['status'] === 'gesendet'));
@@ -1440,8 +1439,13 @@ $atab = $_GET['atab'] ?? 'alle'; if (!isset($anfTabs[$atab])) $atab = 'alle';
 // Vorlieferanten kommen auf deren Briefpapier und gehen nicht an den Kunden.
 if (($_GET['v'] ?? '') === 'spec_pdf') {
     $rid = (int)($_GET['rid'] ?? 0);
-    // Nur Rohstoffe, die der Kunde im Katalog ohnehin sieht – UND deren Spezifikation freigegeben ist.
-    $ok = $rid && $k['portal_rohstoffe'] && scalar("SELECT id FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0 AND spec_freigegeben=1", [$rid]);
+    // Zugang: Katalog-Kunde ODER der Rohstoff ist Zutat einer eigenen Rezeptur. Die bulkify-Spezifikation
+    // ist UNSER eigenes Dokument (aus unseren Daten erzeugt) – keine Freigabe nötig, nie ein Lieferanten-PDF.
+    $darfSpec = !empty($k['portal_rohstoffe']) || (!empty($k['portal_rezeptur']) && (bool) scalar(
+        "SELECT 1 FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id
+         WHERE z.item_id=? AND ((r.kunde_id=? AND r.status IN ('vorschlag','eingefroren','freigegeben','abgelehnt'))
+                                OR (r.kunde_id IS NULL AND r.status='freigegeben')) LIMIT 1", [$rid, $kid]));
+    $ok = $rid && $darfSpec && scalar("SELECT id FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$rid]);
     if (!$ok) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
     require_once BX_ROOT . '/core/pdf_spec.php';
     $pdf = build_spec_pdf($rid);
@@ -1455,9 +1459,16 @@ if (($_GET['v'] ?? '') === 'spec_pdf') {
 // für den Kunden sichtbar ist.
 if (($_GET['v'] ?? '') === 'coa_pdf') {
     $cid = (int)($_GET['cid'] ?? 0);
-    $ok = $cid && $k['portal_rohstoffe'] && scalar("SELECT c.id FROM charge c JOIN item i ON i.id=c.item_id
-             WHERE c.id=? AND c.coa_freigegeben=1 AND i.kategorie='rohstoff' AND i.gesperrt=0", [$cid]);
-    if (!$ok) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    // Item der Charge bestimmen, dann Zugang prüfen (Katalog ODER Rezeptur-Zutat). CoA nur, wenn die
+    // Charge WIRKLICH eigene Analysenwerte hat (= es gibt einen bulkify-CoA) – nie das Lieferanten-PDF.
+    $coaItem = $cid ? (int) scalar("SELECT i.id FROM charge c JOIN item i ON i.id=c.item_id
+        WHERE c.id=? AND i.kategorie='rohstoff' AND i.gesperrt=0
+          AND EXISTS (SELECT 1 FROM charge_analyse ca WHERE ca.charge_id=c.id)", [$cid]) : 0;
+    $darfCoa = $coaItem && (!empty($k['portal_rohstoffe']) || (!empty($k['portal_rezeptur']) && (bool) scalar(
+        "SELECT 1 FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id
+         WHERE z.item_id=? AND ((r.kunde_id=? AND r.status IN ('vorschlag','eingefroren','freigegeben','abgelehnt'))
+                                OR (r.kunde_id IS NULL AND r.status='freigegeben')) LIMIT 1", [$coaItem, $kid])));
+    if (!$darfCoa) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
     require_once BX_ROOT . '/core/pdf_spec.php';
     $pdf = build_coa_pdf($cid);
     if ($pdf === null) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
@@ -2122,8 +2133,8 @@ portal_head('Kundenportal · ' . $k['firma']);
             <td><?php if ($dk): foreach ($dk as $d): ?>
                   <a href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener" style="margin-right:10px"><?= h($DOKTYP[$d['typ']] ?? $d['typ']) ?></a>
                 <?php endforeach;
-                elseif (!empty($z['item_id']) && !empty($rezRohInfoDok[(int)$z['item_id']])): ?>
-                  <a href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$z['item_id'] ?>" title="Spezifikation / Analysenzertifikat auf dem Rohstoff-Infoblatt">Spec/CoA ansehen</a>
+                elseif (!empty($z['item_id'])): ?>
+                  <a href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$z['item_id'] ?>" title="Spezifikation / Analysenzertifikat (bulkify) auf dem Rohstoff-Infoblatt">Spec/CoA ansehen</a>
                 <?php else: ?><span class="muted">–</span><?php endif; ?></td></tr>
         <?php endforeach; ?>
         <tr style="font-weight:600"><td>Gesamt je <?= $dfP ?></td><td class="bx-num"><?= rtrim(rtrim(number_format($sum,2,',','.'),'0'),',') ?> mg</td><td></td></tr>
@@ -2650,13 +2661,11 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <p class="bx-sub"><?= h($FORMLBL_P[$rohDetail['form']] ?? $rohDetail['form']) ?><?= $rohDetail['name_lat'] ? ' · '.h($rohDetail['name_lat']) : '' ?><?= $rohDetail['cas'] ? ' · CAS '.h($rohDetail['cas']) : '' ?></p>
 
-    <?php if ((int)($rohDetail['spec_freigegeben'] ?? 0) === 1): ?>
     <div class="bx-panel">
       <h2>Spezifikation</h2>
-      <p class="muted" style="margin-top:0">Unsere Spezifikation zu diesem Rohstoff – Kennzahlen, Gehalt, Erklärungen und Lagerung.</p>
+      <p class="muted" style="margin-top:0">Unsere bulkify-Spezifikation zu diesem Rohstoff – Kennzahlen, Gehalt, Erklärungen und Lagerung.</p>
       <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('spec_pdf') ?>&rid=<?= (int)$rohDetail['id'] ?>">&#8681; Spezifikation (PDF)</a>
     </div>
-    <?php endif; ?>
     <?php if ($rohCoas): ?>
     <div class="bx-panel">
       <h2>Analysenzertifikate</h2>
