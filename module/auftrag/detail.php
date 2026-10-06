@@ -260,12 +260,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     q("UPDATE auftrag SET status=?, menge=?, vk_stueck=?, gesamt_netto=? WHERE id=?",
       [$neuStatus, $menge, $vk, $netto, $id]);
     if ($neuStatus !== $altStatus) q("UPDATE auftrag SET status_datum=CURDATE() WHERE id=?", [$id]);   // Datum für Kundensicht
-    // Verpackung (Behälter): „nur dieser Auftrag" (auftrag.verpackung_id) ODER „Standard fürs Produkt"
-    // (zusätzlich produkt.verpackung_id). Wirkt auf Produktion/Einkauf/PIB; Kunde sieht es ohne Bestätigung.
+    // Verpackung (Behälter): überschreibt IMMER das Produkt (es gibt kein „nur dieser Auftrag" – wir wollen
+    // das Produkt festlegen). Daher auftrag.verpackung_id UND produkt.verpackung_id setzen. Wirkt auf
+    // Produktion/Einkauf/PIB; Kunde sieht es ohne Bestätigung.
     if (array_key_exists('verpackung_id', $_POST)) {
         $verpId = $_POST['verpackung_id'] !== '' ? (int)$_POST['verpackung_id'] : null;
         q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$verpId, $id]);
-        if (($_POST['verp_scope'] ?? '') === 'standard' && $verpId) {
+        if ($verpId) {
             $pidA = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$id]);
             if ($pidA) q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$verpId, $pidA]);
         }
@@ -980,17 +981,13 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
       <input type="number" name="menge" min="0" value="<?= (int)$a['menge'] ?>"></div>
     <div class="bx-field"><label>VK je Packung (netto)</label>
       <input type="text" name="vk_stueck" id="vkFeld" value="<?= h((float)$a['vk_stueck'] > 0 ? rtrim(rtrim(number_format((float)$a['vk_stueck'], 4, ',', ''), '0'), ',') : '') ?>" placeholder="z. B. 0,84"></div>
-    <div class="bx-field"><label>Verpackung (Behälter) <?= bx_hint('Primärverpackung dieses Auftrags. Fehlt sie (z. B. durch die Systemumstellung), hier setzen. Anderes Glas → anderes Etikett → wirkt auf Produktion, Einkauf & PIB. Kunde sieht es ohne Bestätigung.') ?></label>
+    <div class="bx-field"><label>Verpackung (Behälter) <?= bx_hint('Primärverpackung des Produkts. Hier gesetzt überschreibt sie das Produkt (gilt für alle Aufträge). Anderes Glas → anderes Etikett → wirkt auf Produktion, Einkauf & PIB. Kunde sieht es ohne Bestätigung.') ?></label>
       <select name="verpackung_id" class="rscombo">
         <option value="">– keine –</option>
         <?php foreach (all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name") as $vp): ?>
           <option value="<?= (int)$vp['id'] ?>" <?= (int)($a['verpackung_id'] ?? 0) === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?></option>
         <?php endforeach; ?>
       </select>
-      <div style="margin-top:6px;font-size:13px">
-        <label style="margin-right:14px"><input type="radio" name="verp_scope" value="auftrag" checked style="width:auto"> nur dieser Auftrag</label>
-        <label><input type="radio" name="verp_scope" value="standard" style="width:auto"> als Standard für dieses Produkt</label>
-      </div>
     </div>
     <?php if ($rezeptur && in_array($rezeptur['darreichungsform'] ?? '', ['kapsel','softgel'], true)): ?>
     <div class="bx-field"><label>Kapselgröße <?= bx_hint('Gilt für die Rezeptur dieses Produkts (Standard für alle Aufträge). Wirkt auf Leerkapsel-Bedarf und Packungsrechnung.') ?></label>

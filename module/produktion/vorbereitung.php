@@ -132,7 +132,39 @@ if ($pa):
     foreach ($infoFelder as $k => $v)
         echo '<div><div class="muted" style="font-size:12px">' . h($k) . '</div><div style="font-size:14px">' . h((string)$v) . '</div></div>';
     echo '</div></div>';
-    ?>
+
+    // Rezeptur-Zusammensetzung – damit die Produktion entscheiden kann, ob wir das selbst machen oder zukaufen.
+    $zutaten = $rid ? all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
+    if ($zutaten):
+        $sumMg = 0.0; foreach ($zutaten as $z) $sumMg += (float)($z['menge_mg'] ?? 0);
+        $rezName = (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$rid]); ?>
+      <div class="bx-panel" style="padding:14px 16px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px">
+          <div style="font-weight:600">Rezeptur<?= $rezName !== '' ? ' · ' . h($rezName) : '' ?></div>
+          <a href="?p=rezeptur_detail&id=<?= (int)$rid ?>" style="font-size:13px">Rezeptur ansehen</a>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr>
+            <th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)">Zutat</th>
+            <th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--line)">mg je Einheit</th>
+          </tr></thead>
+          <tbody>
+          <?php foreach ($zutaten as $z): ?>
+            <tr>
+              <td style="padding:4px 8px;border-bottom:1px solid var(--line)"><?= h((string)($z['bezeichnung'] ?: '–')) ?></td>
+              <td style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:right"><?= $z['menge_mg'] !== null && $z['menge_mg'] !== '' ? number_format((float)$z['menge_mg'], 2, ',', '.') : '–' ?></td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+          <?php if ($sumMg > 0): ?>
+          <tfoot><tr>
+            <td style="padding:4px 8px;font-weight:600">Summe</td>
+            <td style="padding:4px 8px;text-align:right;font-weight:600"><?= number_format($sumMg, 2, ',', '.') ?> mg</td>
+          </tr></tfoot>
+          <?php endif; ?>
+        </table>
+      </div>
+    <?php endif; ?>
     <!-- Checkliste -->
     <div class="bx-panel" style="padding:14px 16px;margin-bottom:14px">
       <div style="font-weight:600;margin-bottom:8px">Bereitschaft <?= $c['bereit'] ? bx_badge('alles bereit','ok') : bx_badge('noch offen','warn') ?></div>
