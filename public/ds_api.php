@@ -2,11 +2,14 @@
 // ds_api.php – Schnittstelle für das Fulfillment-System (fulfillment-web).
 // Token im Header X-DS-Token. Kein Login (Front-Controller wird bewusst umgangen).
 // Vertrag (siehe fulfillment-web/src/bulkify_dash.php):
-//   GET  ?action=lager2          -> {ok:true, products:[{name,bsku,verfuegbar, kunde,produkt_nr,shopify_inventory_item_id}]}
+//   GET  ?action=lager2          -> {ok:true, products:[{name,bsku,verfuegbar, kunde,kundennummer,produkt_nr,shopify_inventory_item_id}]}
 //        products[] enthält NUR Verkaufsartikel (item.kategorie='verkaufsfertig' mit Produkt-Bezug) – keine
 //        Etiketten/Rohstoffe/Verpackungen. name = Verkaufs-/Produktname (kundenname, sonst produkt.name; nie leer),
-//        bsku = 5-stellige Produktnummer (Brücke zum Lager-2-Bestand), verfuegbar = freier Lager-2-Bestand.
+//        bsku = 5-stellige Produktnummer (Brücke zum Lager-2-Bestand), verfuegbar = freier Lager-2-Bestand,
+//        kundennummer = bulkify-Kundennummer (stabiler Filter-Schlüssel, besser als der Name).
 //        shopify_inventory_item_id wird NICHT im Dashboard gepflegt (meist leer) – die BSKU ist die Kopplung.
+//   GET  ?action=kunden          -> {ok:true, kunden:[{kundennummer,name}]}  (für die Shop↔Kunde-Zuordnung im
+//        Fulfillment; nur aktive Kunden mit gesetzter Kundennummer)
 //   POST ?action=verbrauch_sku   (iid|bsku, menge, ref)          -> Lager 2 abbuchen (idempotent), 404 = kein Artikel
 //   POST ?action=retoure_sku     (iid|bsku, menge, ref)          -> Lager 2 wieder hoch
 //   POST ?action=retoure_defekt  (iid|bsku, menge, ref, zustand) -> nur dokumentieren
@@ -34,9 +37,18 @@ if ($action === 'lager2') {
         'verfuegbar'                => (float)$r['bestand'],
         'name'                      => $r['anzeigename'],
         'kunde'                     => $r['kunde'],
+        'kundennummer'              => $r['kundennummer'],
         'produkt_nr'                => $r['produkt_nr'],
     ];
     jout(['ok'=>true, 'products'=>$products]);
+}
+
+// --- Kundenliste (für die Shop↔Kunde-Zuordnung im Fulfillment): bulkify-Kundennummer + Name ---
+if ($action === 'kunden') {
+    $kunden = [];
+    foreach (all("SELECT kundennummer, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 AND COALESCE(kundennummer,'')<>'' ORDER BY firma") as $k)
+        $kunden[] = ['kundennummer' => (string)$k['kundennummer'], 'name' => (string)$k['firma']];
+    jout(['ok'=>true, 'kunden'=>$kunden]);
 }
 
 // --- Buchungs-Aktionen (POST) ---

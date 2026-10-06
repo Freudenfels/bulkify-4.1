@@ -2744,7 +2744,7 @@ function lager2_produkte(?int $kunde_id = null): array {
     // AUFTRAG, für wen produziert wurde. Ohne diesen zweiten Weg bliebe das Fremdlager leer.
     $sql = "SELECT i.id AS item_id, i.artikelnummer, i.name, i.bsku, i.shopify_inventory_item_id,
                    p.id AS produkt_id, p.nummer AS produkt_nr, COALESCE(NULLIF(p.kundenname,''),p.name) AS anzeigename,
-                   k.id AS kunde_id, k.firma AS kunde
+                   k.id AS kunde_id, k.firma AS kunde, k.kundennummer AS kundennummer
             FROM item i
             JOIN produkt p ON p.id=i.produkt_id
             JOIN kunden k ON k.nutzt_fulfillment=1

@@ -16,3 +16,6 @@ Vertrag muss exakt zu `fulfillment-web/src/bulkify_dash.php` passen:
 
 Fehler: 401 (Token), 400 (ref/iid fehlt), 404 (kein Lager-2-Artikel → Fulfillment überspringt).
 Helfer + Ledger (`lager2_bewegung`, unique ref+typ) in `core/schema.php`.
+
+- `GET  ?action=kunden` → `{ok:true, kunden:[{kundennummer, name}]}` – Kundenliste (aktive Kunden mit Kundennummer) für die Shop↔Kunde-Zuordnung im Fulfillment.
+- Der `lager2`-Feed enthält je products[]-Eintrag zusätzlich `kundennummer` (bulkify-Kundennummer) als stabilen Filter-Schlüssel neben `kunde` (Name).
