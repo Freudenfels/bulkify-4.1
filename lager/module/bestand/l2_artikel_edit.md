@@ -1,7 +1,7 @@
 # bestand/l2_artikel_edit.php – Lager-2-Artikel anlegen/bearbeiten
 
 Route `?p=l2_artikel_edit&id=` (bzw. `&kunde=` für neu). Formular für alle Stammdaten eines Katalog-Artikels:
-**Kunde** (Pflicht), **Typ** (Produkt/Kundenetikett/Beilage/Sonstiges), **Name**, **Verkaufsartikel**-Haken,
+**Kunde** (Pflicht), **Typ** (`lg_artikel_typen()`: Verkaufsprodukt/Rohstoff/Etikett/Beipackzettel/Karton/Sonstiges), **Name**, **Verkaufsartikel**-Haken,
 optionale **Bestand-Verknüpfung** (Verkaufsfertig-Item des Kunden, `erp_kunde_verkaufsfertig()`), **Gewicht (g)**,
 **Maße** L/B/H (mm), **EAN**, **Kunden-SKU**, **Mindestbestand**, **Produktionszeit (Tage, Override)**,
 **Etikett-Bild** (Upload, JPG/PNG/GIF/WEBP → `data/uploads`, Anzeige über `?p=bild`), **Notiz**.

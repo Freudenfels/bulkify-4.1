@@ -16,7 +16,8 @@ function lg_nav(): array {
         ''            => ['uebersicht' => 'Übersicht', 'we' => 'Einbuchen'],
         'Lager 1'     => ['erwartet' => 'Erwartete Lieferungen', 'einlagern' => 'Einlagern',
                           'finden' => 'Suche', 'versand' => 'Warenausgang', 'bestand' => 'Bestand'],
-        'Lager 2 (Fremdlager)' => ['l2_finden' => 'Suche', 'l2_bestand' => 'Fremdlager-Bestand', 'l2_artikel' => 'Artikel'],
+        'Lager 2 (Fremdlager)' => ['l2_eingang' => 'Kundenware einbuchen', 'l2_finden' => 'Suche',
+                                   'l2_bestand' => 'Fremdlager-Bestand', 'l2_artikel' => 'Artikel'],
         'Verwaltung'  => ['bewegungen' => 'Bewegungen', 'kisten' => 'Kisten', 'leisten' => 'Blinker', 'papierkorb' => 'Mülleimer'],
     ];
     if (lg_ist_admin()) $nav['System'] = ['einstellungen' => 'Einstellungen'];

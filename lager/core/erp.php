@@ -462,6 +462,31 @@ function erp_items_eingang(): array {
                 ORDER BY name");
 }
 
+// Typen fuer die Lager-2-Einbuchung -> item.kategorie (+ Verpackungs-Rolle) + ob "neu anlegen" erlaubt.
+// Verkaufsprodukte werden hier NICHT neu angelegt (gehoeren zum Produkt-Lebenszyklus im Dashboard).
+function erp_l2_typ_defs(): array {
+    return [
+        'verkaufsprodukt' => ['label' => 'Verkaufsprodukt', 'kategorie' => 'verkaufsfertig', 'rolle' => '', 'neu' => false],
+        'rohstoff'        => ['label' => 'Rohstoff',        'kategorie' => 'rohstoff',       'rolle' => '', 'neu' => true],
+        'etikett'         => ['label' => 'Etikett',         'kategorie' => 'verpackung',     'rolle' => 'etikett', 'neu' => true],
+        'beipackzettel'   => ['label' => 'Beipackzettel',   'kategorie' => 'verpackung',     'rolle' => 'beipack', 'neu' => true],
+        'karton'          => ['label' => 'Karton',          'kategorie' => 'karton',         'rolle' => '', 'neu' => true],
+        'sonstiges'       => ['label' => 'Sonstiges',       'kategorie' => 'sonstiges',      'rolle' => '', 'neu' => true],
+    ];
+}
+
+// Buchbare Artikel fuer Lager 2 (alle Kategorien inkl. Karton/Sonstiges) + Verpackungs-Rolle (fuers Filtern je Typ).
+function erp_items_l2(): array {
+    if (!tabelle_da('item')) return [];
+    $hatSpalte = fn(string $c): bool => (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME=?", [$c]) > 0;
+    $w = $hatSpalte('gesperrt') ? ' AND gesperrt=0' : '';
+    $rolleSel = $hatSpalte('verpackung_rolle') ? ', verpackung_rolle AS rolle' : ", '' AS rolle";
+    return all("SELECT id, name, kategorie, einheit, form $rolleSel FROM item
+                WHERE kategorie IN ('rohstoff','verpackung','verbrauch','fertig','verkaufsfertig','karton','sonstiges')$w
+                ORDER BY name");
+}
+
 function erp_lieferanten(): array {
     if (!tabelle_da('lieferanten')) return [];
     return all("SELECT id, firma FROM lieferanten ORDER BY firma");
@@ -542,11 +567,11 @@ function erp_item_basis(int $id): ?array {
 // Kategorie, Einheit. Keine Artikelnummer (die Nummernkreise des Dashboards sind hier nicht geladen) –
 // das Team ergaenzt Details spaeter im Dashboard. Doppelte (gleicher Name + Kategorie) werden
 // wiederverwendet. Gibt die item-id oder null.
-function erp_item_anlegen(string $name, string $kategorie, string $einheit): ?int {
+function erp_item_anlegen(string $name, string $kategorie, string $einheit, string $rolle = ''): ?int {
     if (!tabelle_da('item')) return null;
     $name = trim($name);
     if ($name === '') return null;
-    $erlaubt = ['rohstoff', 'verpackung', 'verbrauch', 'fertig'];
+    $erlaubt = ['rohstoff', 'verpackung', 'verbrauch', 'fertig', 'karton', 'sonstiges'];
     if (!in_array($kategorie, $erlaubt, true)) $kategorie = 'rohstoff';
     $einheit = erp_einheit_norm($einheit);
     if ($einheit === '') $einheit = $kategorie === 'rohstoff' ? 'kg' : 'Stk';
@@ -555,7 +580,13 @@ function erp_item_anlegen(string $name, string $kategorie, string $einheit): ?in
     q("INSERT INTO item (artikelnummer, name, kategorie, einheit, preis_bezug, gesperrt, notiz)
        VALUES (NULL, ?, ?, ?, ?, 0, ?)",
       [$name, $kategorie, $einheit, $einheit, 'Im Lager beim Wareneingang angelegt.']);
-    return (int) insert_id();
+    $id = (int) insert_id();
+    // Verpackungs-Rolle (etikett/beipack/karton …) nur wenn Spalte existiert und Kategorie verpackung.
+    if ($id && $rolle !== '' && $kategorie === 'verpackung'
+        && (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME='verpackung_rolle'") > 0) {
+        q("UPDATE item SET verpackung_rolle=? WHERE id=?", [mb_substr($rolle, 0, 20), $id]);
+    }
+    return $id;
 }
 
 // „Waren, auf die wir warten" – beim Lieferanten bestellt, aber noch nicht angekommen (status='bestellt',
