@@ -40,15 +40,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'save'
         $ergebnis_upload     = isset($_POST['ergebnis_upload']) ? 1 : 0;
         $upload_schliesst_ab = ($ergebnis_upload && isset($_POST['upload_schliesst_ab'])) ? 1 : 0;
         $ohne_fortschritt    = isset($_POST['ohne_fortschritt']) ? 1 : 0;
+        $ff_paket_typ        = trim((string)($_POST['ff_paket_typ'] ?? '')) ?: null;
 
         if ($neu) {
-            q("INSERT INTO dienstleistung (nummer,name,kategorie,beschreibung,preismodell,einheit,ek_cent,vk_cent,mwst_satz,art,wiederkehrend,baustein,aktiv,ergebnis_upload,upload_schliesst_ab,ohne_fortschritt)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('DL'), $name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv, $ergebnis_upload, $upload_schliesst_ab, $ohne_fortschritt]);
+            q("INSERT INTO dienstleistung (nummer,name,kategorie,beschreibung,preismodell,einheit,ek_cent,vk_cent,mwst_satz,art,wiederkehrend,baustein,aktiv,ergebnis_upload,upload_schliesst_ab,ohne_fortschritt,ff_paket_typ)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('DL'), $name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv, $ergebnis_upload, $upload_schliesst_ab, $ohne_fortschritt, $ff_paket_typ]);
             $id = insert_id();
         } else {
-            q("UPDATE dienstleistung SET name=?,kategorie=?,beschreibung=?,preismodell=?,einheit=?,ek_cent=?,vk_cent=?,mwst_satz=?,art=?,wiederkehrend=?,baustein=?,aktiv=?,ergebnis_upload=?,upload_schliesst_ab=?,ohne_fortschritt=? WHERE id=?",
-              [$name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv, $ergebnis_upload, $upload_schliesst_ab, $ohne_fortschritt, (int)$id]);
+            q("UPDATE dienstleistung SET name=?,kategorie=?,beschreibung=?,preismodell=?,einheit=?,ek_cent=?,vk_cent=?,mwst_satz=?,art=?,wiederkehrend=?,baustein=?,aktiv=?,ergebnis_upload=?,upload_schliesst_ab=?,ohne_fortschritt=?,ff_paket_typ=? WHERE id=?",
+              [$name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv, $ergebnis_upload, $upload_schliesst_ab, $ohne_fortschritt, $ff_paket_typ, (int)$id]);
         }
         // Workflow-Schritte (eine je Zeile). „Ohne Fortschritt" (Fulfillment/Lagerung) = keine Schritte.
         // Sonst leer = Standard-Vorlage für den Baustein, damit es nie ohne läuft.
@@ -157,6 +158,8 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       <div class="bx-field"><label>Vorhandener Baustein <?= bx_hint('Zeigt auf einen Service, der schon im System existiert (z. B. Rezepturbewertung mit Auto-Rechnung) – damit wir die Logik nicht doppelt bauen.') ?></label>
         <select name="baustein"><?php foreach ($BAUSTEINE as $k=>$l): ?><option value="<?= h($k) ?>"<?= $sel($d['baustein'] ?? '', $k) ?>><?= h($l) ?></option><?php endforeach; ?></select>
       </div>
+      <div class="bx-field"><label>Fulfillment-Pakettyp <?= bx_hint('Nur für die monatliche Fulfillment-Abrechnung: der Pakettyp-Schlüssel aus dem Versandsystem, dessen MENGE hier abgerechnet wird. Der Preis (inkl. Kundenstaffel) kommt aus dieser Dienstleistung. Leer = kein Pakettyp (z. B. die reine Fulfillment-Service-Gebühr).') ?></label>
+        <input type="text" name="ff_paket_typ" value="<?= $v('ff_paket_typ') ?>" placeholder="z. B. paket_s / paket_m / paket_l"></div>
       <div class="bx-field"><label>Status</label>
         <div class="bx-check" style="padding-top:8px">
           <input type="checkbox" name="aktiv" id="f_aktiv" value="1" <?= (int)($d['aktiv'] ?? 1) === 1 ? 'checked' : '' ?>>

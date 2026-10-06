@@ -115,6 +115,7 @@ function dienstleistung_schema(): void {
     ensure_column('dienstleistung', 'ergebnis_upload',     "TINYINT(1) NOT NULL DEFAULT 0"); // Upload eines Endergebnis-Dokuments erlaubt
     ensure_column('dienstleistung', 'upload_schliesst_ab', "TINYINT(1) NOT NULL DEFAULT 0"); // Upload setzt den Auftrag auf erledigt
     ensure_column('dienstleistung', 'ohne_fortschritt',    "TINYINT(1) NOT NULL DEFAULT 0"); // kein Workflow – nur Abrechnung (z. B. Fulfillment/Lagerung)
+    ensure_column('dienstleistung', 'ff_paket_typ',        "VARCHAR(40) NULL");               // Monats-Abrechnung: Zuordnung zum Fulfillment-Pakettyp-Schlüssel (Menge aus Fulfillment, Preis von hier)
     // Kundenspezifische Preise je Service (optional) MIT Mengenstaffel: Standard = dienstleistung.vk_cent,
     // Ausnahmen je Kunde + ab-Menge hier (menge_ab = ab wie vielen Einheiten dieser Preis gilt).
     $pdo->exec("CREATE TABLE IF NOT EXISTS dienstleistung_kundenpreis (
@@ -180,6 +181,12 @@ function dl_katalog_schritte_setzen(int $dl_id, array $namen): void {
         if ($n === '') continue;
         q("INSERT INTO dienstleistung_schritt (dienstleistung_id,name,sort) VALUES (?,?,?)", [$dl_id, mb_substr($n, 0, 120), $sort++]);
     }
+}
+// Dienstleistung zu einem Fulfillment-Pakettyp-Schlüssel (für die Monatsabrechnung: Menge aus dem Fulfillment,
+// Preis von hier). null = keine passende. Nutzt später der Monatslauf: dl_kundenpreis(dl, kunde, menge).
+function dienstleistung_fuer_paket_typ(string $typ): ?array {
+    $typ = trim($typ); if ($typ === '') return null;
+    return one("SELECT * FROM dienstleistung WHERE aktiv=1 AND ff_paket_typ=? ORDER BY id LIMIT 1", [$typ]);
 }
 // Kundenspezifische Preis-Staffeln eines Service (für die Katalog-UI). Je Kunde + ab-Menge eine Zeile.
 function dl_kundenpreise(int $dl_id): array {
