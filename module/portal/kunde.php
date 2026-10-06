@@ -1595,26 +1595,53 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
 
     // Positionen: bevorzugt EINZELN wie im Angebot (Herstellung + Verpackung + Deckel + Etikett …) für die
     // bestätigte Konfiguration. Passt die Summe nicht exakt zum Auftrags-Netto, greift die Sammelposition.
+    $istDL = $re && (($re['kategorie'] ?? '') === 'dienstleistung');
     $nettoGesamt = $re ? (float)$re['netto'] : (float)$auf['gesamt_netto'];
     $menge = max(1, (int)$auf['menge']);
-    $aufReco = ['angebot_id'=>$auf['angebot_id'] ?? null, 'menge'=>$menge, 'gesamt_netto'=>$nettoGesamt];
-    $positionen = beleg_positionen_aus_auftrag($aufReco, $ustSatz);
     $produktStaffel = [];
-    if ($positionen) {
-        $produktStaffel = beleg_staffel_aus_auftrag(['menge'=>$menge, 'gesamt_netto'=>$nettoGesamt, 'stueck'=>$auf['stueck'] ?? 0, 'produkt_id'=>$auf['produkt_id'] ?? 0, 'produkt_name'=>$auf['produkt_name'] ?? '']);
+    if ($istDL) {
+        // Dienstleistungs-Rechnung: EXAKT die echten Beleg-Positionen rendern (wie die interne/
+        // Buchhaltungs-Rechnung), NICHT aus dem produktzentrierten Auftrag rekonstruieren. Sonst
+        // sieht der Kunde eine falsche Sammelposition „Produkt" mit abweichendem USt/Betrag.
+        $ustSatz = (float)$re['ust_prozent'];
+        $positionen = [];
+        foreach (beleg_positionen((int)$re['id']) as $p) {
+            $positionen[] = [
+                'artikelnr'    => $p['artikelnr'],
+                'bezeichnung'  => $p['bezeichnung'],
+                'beschreibung' => $p['beschreibung'],
+                'menge'        => $p['menge'],
+                'einheit'      => $p['einheit'],
+                'preis_cent'   => $p['preis_cent'],
+                'ust_satz'     => (float)$p['mwst_satz'],
+                'mwst_satz'    => (float)$p['mwst_satz'],
+            ];
+        }
+        if (!$positionen) {
+            $positionen = [[
+                'bezeichnung'=>'Dienstleistung', 'beschreibung'=>'', 'menge'=>1, 'einheit'=>'',
+                'preis_cent'=>(int) round($nettoGesamt * 100), 'ust_satz'=>$ustSatz, 'mwst_satz'=>$ustSatz,
+            ]];
+        }
     } else {
-        // Fallback: eine Sammelposition (Netto exakt aus Beleg bzw. Auftrag).
-        $preisCent = (int) round($nettoGesamt * 100 / $menge);
-        $vName = $auf['verpackung_id'] ? scalar("SELECT name FROM item WHERE id=?", [(int)$auf['verpackung_id']]) : '';
-        $besch = trim(((int)$auf['stueck'] ? (int)$auf['stueck'] . ' Stück je Packung' : '') . ($vName ? ' · ' . $vName : ''), ' ·');
-        $positionen = [[
-            'bezeichnung'  => $auf['produkt_name'] ?: 'Produkt',
-            'beschreibung' => $besch,
-            'menge'        => $menge,
-            'einheit'      => 'Pkg.',
-            'preis_cent'   => $preisCent,
-            'ust_satz'     => $ustSatz,
-        ]];
+        $aufReco = ['angebot_id'=>$auf['angebot_id'] ?? null, 'menge'=>$menge, 'gesamt_netto'=>$nettoGesamt];
+        $positionen = beleg_positionen_aus_auftrag($aufReco, $ustSatz);
+        if ($positionen) {
+            $produktStaffel = beleg_staffel_aus_auftrag(['menge'=>$menge, 'gesamt_netto'=>$nettoGesamt, 'stueck'=>$auf['stueck'] ?? 0, 'produkt_id'=>$auf['produkt_id'] ?? 0, 'produkt_name'=>$auf['produkt_name'] ?? '']);
+        } else {
+            // Fallback: eine Sammelposition (Netto exakt aus Beleg bzw. Auftrag).
+            $preisCent = (int) round($nettoGesamt * 100 / $menge);
+            $vName = $auf['verpackung_id'] ? scalar("SELECT name FROM item WHERE id=?", [(int)$auf['verpackung_id']]) : '';
+            $besch = trim(((int)$auf['stueck'] ? (int)$auf['stueck'] . ' Stück je Packung' : '') . ($vName ? ' · ' . $vName : ''), ' ·');
+            $positionen = [[
+                'bezeichnung'  => $auf['produkt_name'] ?: 'Produkt',
+                'beschreibung' => $besch,
+                'menge'        => $menge,
+                'einheit'      => 'Pkg.',
+                'preis_cent'   => $preisCent,
+                'ust_satz'     => $ustSatz,
+            ]];
+        }
     }
 
     $adr = trim(($k['strasse'] ?? '') . ' ' . ($k['hausnummer'] ?? '')) . "\n" . trim(($k['plz'] ?? '') . ' ' . ($k['ort'] ?? ''));
