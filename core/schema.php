@@ -6742,12 +6742,17 @@ function rezeptur_loeschen(int $id): array {
     $nP  = (int) scalar("SELECT COUNT(*) FROM produkt WHERE rezeptur_id=?", [$id]);              if ($nP)  $blocker[] = $nP . ' Produkt(e)';
     $nAp = (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE rezeptur_id=?", [$id]);     if ($nAp) $blocker[] = $nAp . ' Angebotsposition(en)';
     $nPa = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE rezeptur_id=?", [$id]);   if ($nPa) $blocker[] = $nPa . ' Produktionsauftrag/-aufträge';
-    $nIt = (int) scalar("SELECT COUNT(*) FROM item WHERE rezeptur_id=?", [$id]);                 if ($nIt) $blocker[] = $nIt . ' Lagerartikel (Bulk/Fertigware)';
+    // Lagerartikel (Bulk/Fertigware) der Rezeptur: nur blockieren, wenn Bestand (Chargen) dran hängt.
+    // LEERE Bulk-Artikel sind nur automatisch angelegte Nebenprodukte und werden unten mitgelöscht.
+    $nItBestand = (int) scalar("SELECT COUNT(*) FROM item i WHERE i.rezeptur_id=? AND EXISTS(SELECT 1 FROM charge c WHERE c.item_id=i.id)", [$id]);
+    if ($nItBestand) $blocker[] = $nItBestand . ' Lagerartikel mit Bestand (Bulk/Fertigware)';
     if ($blocker) return ['ok' => false, 'fehler' => 'Rezeptur wird noch verwendet: ' . implode(', ', $blocker) . '. Bitte dort zuerst entfernen/ersetzen.'];
 
     $pdo = db();
     $pdo->beginTransaction();
     try {
+        // Leere Bulk-/Fertigware-Lagerartikel der Rezeptur mitlöschen (kein Bestand -> reines Nebenprodukt).
+        q("DELETE FROM item WHERE rezeptur_id=? AND NOT EXISTS(SELECT 1 FROM charge c WHERE c.item_id=item.id)", [$id]);
         // Eigene Nebendaten der Rezeptur
         q("DELETE FROM rezeptur_zutat WHERE rezeptur_id=?", [$id]);
         foreach (['rezeptur_kundenpreis', 'rezeptur_lief_angebot'] as $t)
@@ -6773,8 +6778,12 @@ function rezeptur_verwendung(int $id): array {
     $out = [];
     foreach (all("SELECT id, COALESCE(NULLIF(name,''), NULLIF(kundenname,''), nummer, CONCAT('#',id)) AS name FROM produkt WHERE rezeptur_id=? ORDER BY id", [$id]) as $p)
         $out[] = ['typ'=>'Produkt', 'label'=>(string)$p['name'], 'url'=>'?p=produkt&id='.(int)$p['id'], 'blocker'=>true];
-    foreach (all("SELECT id, name, kategorie FROM item WHERE rezeptur_id=? ORDER BY id", [$id]) as $it)
-        $out[] = ['typ'=>'Lagerartikel (Bulk/Fertigware)', 'label'=>(string)$it['name'].' · '.(string)$it['kategorie'], 'url'=>null, 'blocker'=>true];
+    foreach (all("SELECT id, name, kategorie FROM item WHERE rezeptur_id=? ORDER BY id", [$id]) as $it) {
+        $hatBestand = (int) scalar("SELECT COUNT(*) FROM charge WHERE item_id=?", [(int)$it['id']]) > 0;
+        $out[] = ['typ'=>'Lagerartikel (Bulk/Fertigware)',
+                  'label'=>(string)$it['name'].' · '.(string)$it['kategorie'] . ($hatBestand ? ' · hat Bestand' : ' · leer, wird beim Löschen automatisch entfernt'),
+                  'url'=>null, 'blocker'=>$hatBestand];
+    }
     foreach (all("SELECT id, nummer FROM produktionsauftrag WHERE rezeptur_id=? ORDER BY id DESC", [$id]) as $pa)
         $out[] = ['typ'=>'Produktionsauftrag', 'label'=>(string)$pa['nummer'], 'url'=>'?p=produktionsauftrag&id='.(int)$pa['id'], 'blocker'=>true];
     foreach (all("SELECT DISTINCT ap.angebot_id, ag.nummer FROM angebot_position ap JOIN angebot ag ON ag.id=ap.angebot_id WHERE ap.rezeptur_id=? ORDER BY ap.angebot_id DESC", [$id]) as $ap)

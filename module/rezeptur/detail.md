@@ -45,3 +45,6 @@ Rohstoff-Wechsel und für neue Zeilen).
 
 ## „Wo wird diese Rezeptur verwendet?" (Verwendungs-Übersicht)
 Panel über dem Status (nur bestehende Rezepturen). Helfer `rezeptur_verwendung($id)` (core/schema.php) listet ALLE Verweise klickbar: **Produkt** (Blocker), **Lagerartikel Bulk/Fertigware** (Blocker, kein eigener Link), **Produktionsauftrag** (Blocker), **Angebot-Position** (Blocker), **abgeleitete Rezeptur (Basis)**, sowie die direkten Verknüpfungen **Auftrag/Angebot/Beleg** (rezeptur_id-Override). Mit „Blocker"-Badge markiert sind genau die, die das Löschen (`rezeptur_loeschen`) verhindern – dort zuerst entfernen/ersetzen, dann löschen.
+
+### Leere Bulk-Artikel blockieren nicht mehr
+`rezeptur_loeschen` blockiert beim Lagerartikel (Bulk/Fertigware, item.rezeptur_id) nur noch, wenn **Bestand** (Chargen) dranhängt. LEERE Bulk-Artikel sind reine Nebenprodukte der Rezeptur und werden beim Löschen **automatisch mitentfernt**. Die Verwendungs-Übersicht markiert sie entsprechend („leer, wird beim Löschen automatisch entfernt" = kein Blocker).
