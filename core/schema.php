@@ -3913,6 +3913,16 @@ function kunde_auftrag_parallel(array $a): array {
     $kid = (int)($a['kunde_id'] ?? 0);
     if ($kid <= 0) return [];
     $out = [];
+    // Reihenfolge wie in der Kette gewünscht: erst Laboranalyse, dann Energetisierung (beide nach QC).
+    if (kunde_will_labortest($kid)) {
+        $lt = auftrag_labortest_status((int)($a['id'] ?? 0), isset($a['produkt_id']) ? (int)$a['produkt_id'] : null);
+        $out[] = ['label' => 'Laboranalyse',
+                  'status' => $lt['status'],
+                  'sub'    => $lt['status'] === 'abgeschlossen'
+                                ? ($lt['datum'] ? 'Bericht vom ' . date('d.m.Y', strtotime((string)$lt['datum'])) : 'Bericht liegt vor')
+                                : (!empty($lt['versendet_am']) ? 'Probe beim Labor · versendet am ' . date('d.m.Y', strtotime((string)$lt['versendet_am'])) : 'Probe beim Drittlabor'),
+                  'dok_id' => $lt['dok_id']];
+    }
     if (kunde_zeigt_energetisierung($kid)) {
         $start  = (string)($a['energ_start'] ?? '');
         $stat   = $start !== '' ? energ_status($start) : '';
@@ -3924,15 +3934,6 @@ function kunde_auftrag_parallel(array $a): array {
                               : ($fertig ? 'bis ' . date('d.m.Y', strtotime((string)$fertig)) : null),
                   'dok_id' => null];
     }
-    if (kunde_will_labortest($kid)) {
-        $lt = auftrag_labortest_status((int)($a['id'] ?? 0), isset($a['produkt_id']) ? (int)$a['produkt_id'] : null);
-        $out[] = ['label' => 'Externer Labortest',
-                  'status' => $lt['status'],
-                  'sub'    => $lt['status'] === 'abgeschlossen'
-                                ? ($lt['datum'] ? 'Bericht vom ' . date('d.m.Y', strtotime((string)$lt['datum'])) : 'Bericht liegt vor')
-                                : (!empty($lt['versendet_am']) ? 'Probe beim Labor · versendet am ' . date('d.m.Y', strtotime((string)$lt['versendet_am'])) : 'Probe beim Drittlabor'),
-                  'dok_id' => $lt['dok_id']];
-    }
     return $out;
 }
 
@@ -3940,15 +3941,21 @@ function kunde_auftrag_parallel(array $a): array {
 // Bei Fulfillment-Kunden wird nichts versendet, sondern ins Fremdlager (Lager 2) eingelagert – die
 // letzten beiden Phasen heißen dann „Bereit zur Einlagerung" / „Eingelagert" (= abgeschlossen).
 function auftrag_phasen(bool $fulfillment = false): array {
-    $base = ['Bestätigt', 'Rohstoff bestellt', 'Rohstoff angekommen', 'In Produktion', 'Qualitätsprüfung'];
+    $base = ['Bestätigt', 'Rohstoff bestellt', 'Rohstoff angekommen', 'In Produktion', 'Etikettiert', 'Qualitätsprüfung'];
+    // Laboranalyse + Energetisierung kommen (nur für freigeschaltete Kunden) als parallele Punkte
+    // nach „Qualitätsprüfung" dazu – eingefügt in kunde_auftrag_track(), nicht hier in der festen Kette.
     return $fulfillment
         ? array_merge($base, ['Bereit zur Einlagerung', 'Eingelagert'])
-        : array_merge($base, ['Versandbereit', 'Versendet']);
+        : array_merge($base, ['Versandbereit', 'Eingelagert', 'Versendet']);
 }
-// Aktuelle Phase (0..6) + Datum je Phase aus den vorhandenen Signalen ableiten.
+// Aktuelle Phase + Datum je Phase aus den vorhandenen Signalen ableiten.
+// Positionen: 0 Bestätigt · 1 Rohstoff bestellt · 2 Rohstoff angekommen · 3 In Produktion · 4 Etikettiert ·
+// 5 Qualitätsprüfung · 6 Versandbereit/Bereit zur Einlagerung · 7 Eingelagert · 8 Versendet (nur non-Fulfillment).
 function kunde_auftrag_phase(array $a): array {
     $aid = (int)$a['id']; $st = (string)$a['status'];
-    $dates = array_fill(0, 7, null);
+    $ff  = array_key_exists('nutzt_fulfillment', $a) ? !empty($a['nutzt_fulfillment'])
+         : ($aid > 0 ? auftrag_ist_fulfillment($aid) : false);
+    $dates = array_fill(0, 9, null);
     $dates[0] = $a['angelegt'] ?? null;                                  // Bestätigt
     $best = one("SELECT COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d FROM bestellung b
                  JOIN bestellung_position bp ON bp.bestellung_id=b.id WHERE bp.auftrag_id=?", [$aid]);
@@ -3966,27 +3973,48 @@ function kunde_auftrag_phase(array $a): array {
     if (!$angDate && !empty($a['rohstoff_angekommen_am'])) $angDate = $a['rohstoff_angekommen_am'];
     $angekommen = $angDate !== null;
     if ($angekommen) { $dates[2] = $angDate; $bestellt = true; }
+    // Produktionsschritte: Start, „Etikettieren", „Qualitätsprüfung".
     $pa = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$aid]);
-    $qcDate = null; $prodStart = null;
+    $qcDate = null; $prodStart = null; $etikDate = null; $hasEtikStep = false;
     if ($pa) {
         foreach (all("SELECT station, erledigt, erledigt_at FROM produktion_schritt WHERE pa_id=? ORDER BY sort,id", [(int)$pa['id']]) as $s) {
+            $station = (string)$s['station'];
+            if (stripos($station, 'Etikett') !== false) $hasEtikStep = true;
             if ((int)$s['erledigt'] === 1 && !empty($s['erledigt_at'])) {
                 if ($prodStart === null || $s['erledigt_at'] < $prodStart) $prodStart = $s['erledigt_at'];
-                if (stripos((string)$s['station'], 'Qualität') !== false) $qcDate = $s['erledigt_at'];
+                if (stripos($station, 'Qualität') !== false) $qcDate  = $s['erledigt_at'];
+                if (stripos($station, 'Etikett')  !== false) $etikDate = $s['erledigt_at'];
             }
         }
     }
-    $qcDone = $qcDate !== null;
-    if ($prodStart !== null || in_array($st, ['in_produktion','erledigt','versendet'], true)) {
-        $dates[3] = $prodStart ?: ($st === 'in_produktion' ? ($a['status_datum'] ?? null) : null);
+    $qcDone        = $qcDate !== null;
+    $versandbereit = in_array($st, ['erledigt', 'versendet'], true);
+    $versendet     = $st === 'versendet';
+    // Etikettiert: der Etikettieren-Schritt ist erledigt – oder das Produkt wird gar nicht etikettiert
+    // (kein solcher Schritt), dann gilt es als erledigt, sobald QC/Versandbereit erreicht ist (nie blockierend).
+    $etikettiert   = ($etikDate !== null) || (!$hasEtikStep && ($qcDone || $versandbereit));
+    $prodGestartet = $prodStart !== null || in_array($st, ['in_produktion', 'erledigt', 'versendet'], true);
+    // Eingelagert: Fertigware zum Produktionsauftrag ist als Charge gebucht (Lager 1/2) – oder versendet.
+    $eingelagert   = ($pa && produktion_gebucht((int)$pa['id']) > 0.0001) || $versendet;
+
+    if ($prodGestartet) $dates[3] = $prodStart ?: ($st === 'in_produktion' ? ($a['status_datum'] ?? null) : null);
+    $dates[4] = $etikDate;
+    $dates[5] = $qcDate;
+    if ($versandbereit) $dates[6] = $a['status_datum'] ?? ($a['aktualisiert'] ?? null);
+    if ($versendet) {
+        $end = $a['aktualisiert'] ?? null;
+        if ($ff) $dates[7] = $end;
+        else { $dates[8] = $end; $dates[7] = $dates[7] ?? $end; }
     }
-    $dates[4] = $qcDate;
-    if ($st === 'erledigt')  $dates[5] = $a['aktualisiert'] ?? null;
-    if ($st === 'versendet') { $dates[6] = $a['aktualisiert'] ?? null; $dates[5] = $dates[5] ?? ($a['aktualisiert'] ?? null); }
-    if ($st === 'versendet')          $idx = 6;
-    elseif ($st === 'erledigt')       $idx = 5;
-    elseif ($st === 'in_produktion')  $idx = $qcDone ? 4 : 3;
-    else                              $idx = $angekommen ? 2 : ($bestellt ? 1 : 0);
+    // Aktuelle Phase (Index des gerade aktiven Schritts).
+    if ($versendet)            $idx = $ff ? 7 : 8;
+    elseif ($versandbereit)    $idx = $eingelagert ? 7 : 6;
+    elseif ($qcDone)           $idx = 5;
+    elseif ($etikettiert)      $idx = 5;                 // Etikettieren fertig -> Qualitätsprüfung aktiv
+    elseif ($prodGestartet)    $idx = 3;                 // In Produktion aktiv (Etikettieren noch offen)
+    elseif ($angekommen)       $idx = 2;
+    elseif ($bestellt)         $idx = 1;
+    else                       $idx = 0;
     return ['idx' => $idx, 'dates' => $dates];
 }
 // Fortschritts-Schritte je Auftrag: feste Phasen + kundenspezifische Zusatz-Schritte (Energetisierung,
@@ -4008,7 +4036,9 @@ function kunde_auftrag_track(array $a): array {
             $ins[] = ['label'=>$pz['label'], 'date'=>null, 'sub'=>$pz['sub'], 'dok_id'=>$pz['dok_id'] ?? null,
                       'done'=>($pz['status']==='abgeschlossen'), 'current'=>($pz['status']==='laeuft')];
         }
-        array_splice($track, 5, 0, $ins);
+        // Direkt NACH „Qualitätsprüfung" einfügen (Position dynamisch, da die Kette variabel lang ist).
+        $qi = array_search('Qualitätsprüfung', array_column($track, 'label'), true);
+        array_splice($track, $qi !== false ? $qi + 1 : 6, 0, $ins);
     }
     return $track;
 }

@@ -975,7 +975,7 @@ $statusIcon = function (string $state) use ($hourglassSvg) {
 $reBadge  = fn($s) => match ($s) { 'bezahlt'=>bx_badge('bezahlt','ok'),'teilbezahlt'=>bx_badge('teilbezahlt','info'),'offen'=>bx_badge('offen','warn'),'storniert'=>bx_badge('storniert','err'),default=>bx_badge($s) };
 // Feste Kunden-Phasen (wie v3) – der Kunde sieht KEINE internen Produktionsschritte, immer dieselben
 // Phasen, egal ob eigene Rohstoff-Produktion oder zugekauftes Fertigprodukt (kein Zukauf-Verräter).
-$AUFSTEPS = ['Bestätigt', 'Rohstoff bestellt', 'Rohstoff angekommen', 'In Produktion', 'Qualitätsprüfung', 'Versandbereit', 'Versendet'];
+$AUFSTEPS = ['Bestätigt', 'Rohstoff bestellt', 'Rohstoff angekommen', 'In Produktion', 'Etikettiert', 'Qualitätsprüfung', 'Versandbereit', 'Eingelagert', 'Versendet'];
 // Aktuelle Phase (0..6) + Datum je Phase aus den vorhandenen Signalen ableiten.
 if (!function_exists('kunde_auftrag_phase')) {
     function kunde_auftrag_phase(array $a): array {
