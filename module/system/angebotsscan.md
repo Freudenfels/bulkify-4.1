@@ -50,3 +50,10 @@ in `data/uploads` (für den Scan).
 
 ## Original beim Pruefen anzeigen
 Im Match-/Vorschau-Schritt wird das hochgeladene **Original** (PDF im iframe, Bild als img) oben eingeblendet, damit man die KI-Werte gegenlesen und korrigieren kann. Ausgeliefert ueber `?p=angebotsscan&schritt=datei` (streamt die Session-Datei aus BX_UPLOADS, inline). Zutaten + 4-stellige VK-Felder waren bereits vorhanden.
+
+## Tolerante Dedup + Verpackung + Layout
+- **Rezeptur-Dedup tolerant** (`rezeptur_finden_fuzzy`/`rez_name_norm`): exakt -> normalisiert (Groß/klein, Mehrfach-Leerzeichen, Satzzeichen) -> findet vorhandene Rezeptur trotz leicht abweichendem Namen (kein faelschliches "wird neu angelegt"). Genutzt in angebotsscan + angebot_import + rezeptur_finden_oder_anlegen.
+- **Kunden-Matching tolerant** (`kunde_finden_fuzzy`): Pure Health <-> Pure Health Alliance.
+- **Verpackung/Glas**: angebotsscan_ki liest jetzt zusaetzlich `verpackung` (Freitext mit Groesse) aus und zeigt sie im Match-Schritt (nur Info; Rezeptur hat keine Verpackung).
+- **Layout**: gelesener Kundenname unter das Feld (umbrechend) statt ins einzeilige Label (lief vorher aus dem Panel).
+- **Original-Viewer** (PDF/Bild) oben im Match-Schritt (schritt=datei streamt die Session-Datei).

@@ -7120,9 +7120,26 @@ function verpackung_finden(string $text): ?int {
 }
 
 // Rezeptur zu Name (+ Zutaten) finden oder neu anlegen. Rückgabe ['id'=>…, 'neu'=>bool].
+// Rezeptur-Name normalisieren (Groß/klein, Mehrfach-Leerzeichen, Satzzeichen) – für tolerante Dedup.
+function rez_name_norm(string $s): string {
+    $s = mb_strtolower(trim($s));
+    $s = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $s);   // nur Buchstaben/Zahlen behalten, Rest -> Leerzeichen
+    return trim((string)preg_replace('/\s+/', ' ', (string)$s));
+}
+// Rezeptur tolerant finden: exakt -> normalisiert gleich (fängt „A / B" vs „A/B", Groß/klein, Satzzeichen).
+// Bevorzugt die des Kunden, sonst kundenneutral. Rückgabe: Zeile (id,nummer,name) oder null.
+function rezeptur_finden_fuzzy(string $name, ?int $kunde_id): ?array {
+    $name = trim($name); if ($name === '') return null;
+    $t = one("SELECT id, nummer, name FROM rezeptur WHERE name=? ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$name, $kunde_id]);
+    if ($t) return $t;
+    $norm = rez_name_norm($name); if ($norm === '') return null;
+    foreach (all("SELECT id, nummer, name FROM rezeptur ORDER BY (kunde_id<=>?) DESC, id", [$kunde_id]) as $r)
+        if (rez_name_norm((string)$r['name']) === $norm) return $r;
+    return null;
+}
 function rezeptur_finden_oder_anlegen(string $name, string $form, array $zutaten, ?int $kunde_id): array {
     $name = trim($name) !== '' ? mb_substr(trim($name), 0, 190) : 'Rezeptur-Import';
-    $treffer = one("SELECT id FROM rezeptur WHERE name=? ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$name, $kunde_id]);
+    $treffer = rezeptur_finden_fuzzy($name, $kunde_id);
     if ($treffer) return ['id' => (int)$treffer['id'], 'neu' => false];
     q("INSERT INTO rezeptur (nummer,name,kunde_id,darreichungsform,status,notiz) VALUES (?,?,?,?,?,?)",
       [naechste_nummer('RZ'), $name, $kunde_id ?: null, $form ?: 'kapsel', 'eingefroren', 'Aus Angebot/AB importiert (KI).']);
@@ -7187,7 +7204,7 @@ function angebotsscan_ki(string $pfad): array {
     if (!ki_bereit()) return ['ok' => false, 'fehler' => 'KI ist nicht eingerichtet (Einstellungen → KI).'];
     $prompt = "Dies ist ein Angebot für ein Nahrungsergänzungsmittel (eigenes oder fremdes). "
         . "Erfasse Rezeptur, Preise (inkl. Mengen-Staffeln) UND den Kunden. Gib NUR JSON zurück:\n"
-        . '{"produkt_name":"","darreichungsform":"kapsel","stueck_je_packung":0,'
+        . '{"produkt_name":"","darreichungsform":"kapsel","stueck_je_packung":0,"verpackung":"",'
         . '"kunde_name":"","kunde_nr":"","datum":"","vk_stueck":0,"menge":0,'
         . '"staffeln":[{"menge":0,"vk_stueck":0}],'
         . '"zutaten":[{"name":"","menge_mg":0}],'
@@ -7196,6 +7213,7 @@ function angebotsscan_ki(string $pfad): array {
         . "Ein führendes 'AP' vor dem Produktnamen ist eine interne Kürzel-Zuordnung und soll WEGGELASSEN werden. "
         . "darreichungsform eines von kapsel|tablette|softgel|stick|pulver|fluessig. "
         . "stueck_je_packung = Kapseln/Stück je Packung (z. B. 120), sonst 0. "
+        . "verpackung = Verpackung/Behälter mit Größe als Freitext, z. B. '150 ml Weithalsglas', 'PET-Dose 120 ml' oder 'Standbodenbeutel 500 g'; leer wenn nicht genannt. "
         . "kunde_name = Firmenname des Angebotsempfängers, kunde_nr = dessen Kundennummer falls genannt. "
         . "datum = Angebotsdatum als YYYY-MM-DD. "
         . "staffeln = ALLE Mengen-Staffeln des Angebots: je Staffel menge = Anzahl Packungen und vk_stueck = Preis je Packung (netto). "
@@ -7251,6 +7269,7 @@ function angebotsscan_ki(string $pfad): array {
         'produkt_name'      => mb_substr(angebotsscan_name_bereinigen((string)($d['produkt_name'] ?? '')), 0, 190),
         'darreichungsform'  => in_array($form, $formen, true) ? $form : 'kapsel',
         'stueck_je_packung' => (int) round($num($d['stueck_je_packung'] ?? 0)),
+        'verpackung'        => mb_substr(trim((string)($d['verpackung'] ?? '')), 0, 120),
         'kunde_name'        => mb_substr(trim((string)($d['kunde_name'] ?? '')), 0, 190),
         'kunde_nr'          => mb_substr(trim((string)($d['kunde_nr'] ?? '')), 0, 40),
         'datum'             => (is_string($d['datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d['datum'])) ? $d['datum'] : null,

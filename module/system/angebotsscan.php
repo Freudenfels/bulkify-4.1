@@ -104,9 +104,9 @@ if ($schritt === 'match' && !empty($_SESSION['angebotsscan'])) {
     $zutaten = (array)$d['zutaten']; $preise = (array)$d['preise'];
     $staffeln = (array)($d['staffeln'] ?? []); if (!$staffeln) $staffeln = [['menge'=>$d['menge'], 'vk_stueck'=>$d['vk_stueck']]];
     $sumMg = 0.0; foreach ($zutaten as $z) $sumMg += (float)($z['menge_mg'] ?? 0);
-    // Rezeptur-Dedup (Anzeige) + Kunden-Match.
-    $rezExist = one("SELECT id, nummer FROM rezeptur WHERE name=? ORDER BY (kunde_id IS NULL) DESC, id LIMIT 1", [$d['produkt_name']]);
+    // Kunden-Match (fuzzy) + Rezeptur-Dedup (tolerant – fängt Groß/klein, Leerzeichen, „A / B" vs „A/B").
     $kMatch = kunde_finden_fuzzy((string)$d['kunde_name'], (string)$d['kunde_nr']);
+    $rezExist = rezeptur_finden_fuzzy((string)$d['produkt_name'], $kMatch ? (int)$kMatch['id'] : null);
     $kunden = all("SELECT id, firma, kundennummer FROM kunden ORDER BY firma");
 
     bx_head('Angebotsscan – prüfen & zuordnen', 'KI-Ergebnis kontrollieren, Kunde zuordnen, Staffeln korrigieren – dann speichern', bx_btn('Abbrechen', '?p=angebotsscan', 'ghost'));
@@ -131,14 +131,16 @@ if ($schritt === 'match' && !empty($_SESSION['angebotsscan'])) {
           <div class="bx-field"><label>Produkt / Rezeptur</label><input type="text" name="produkt_name" value="<?= h($d['produkt_name']) ?>"></div>
           <div class="bx-field"><label>Form</label><div><?= h($d['darreichungsform']) ?></div></div>
           <div class="bx-field"><label>Stück je Packung</label><input type="number" name="stueck" value="<?= (int)$d['stueck_je_packung'] ?>" min="0" style="max-width:140px"></div>
+          <div class="bx-field"><label>Verpackung / Glas <span class="muted" style="font-weight:400;font-size:12px">(gelesen)</span></label><div><?= ($d['verpackung'] ?? '') !== '' ? h((string)$d['verpackung']) : '<span class="muted">– nicht erkannt –</span>' ?></div></div>
           <div class="bx-field"><label>Angebotsdatum</label><input type="date" name="datum" value="<?= h((string)($d['datum'] ?? '')) ?>" style="max-width:180px"></div>
           <div class="bx-field"><label>Rezeptur</label><div><?= $rezExist ? '<span class="badge badge-ok">vorhanden: ' . h($rezExist['nummer']) . '</span>' : '<span class="badge badge-warn">wird neu angelegt</span>' ?></div></div>
-          <div class="bx-field"><label>Kunde <span class="muted" style="font-weight:400">(gelesen: <?= $d['kunde_name'] !== '' ? h($d['kunde_name']) . ($d['kunde_nr'] !== '' ? ' / ' . h($d['kunde_nr']) : '') : '–' ?>)</span></label>
+          <div class="bx-field"><label>Kunde</label>
             <select name="kunde_id">
               <?php if ($d['kunde_name'] !== ''): ?><option value="neu" <?= $kMatch ? '' : 'selected' ?>>+ Neu anlegen: <?= h($d['kunde_name']) ?><?= $d['kunde_nr'] !== '' ? ' (' . h($d['kunde_nr']) . ')' : '' ?></option><?php endif; ?>
               <option value="0">– kein Kunde –</option>
               <?php foreach ($kunden as $k): ?><option value="<?= (int)$k['id'] ?>" <?= $kMatch && (int)$kMatch['id'] === (int)$k['id'] ? 'selected' : '' ?>><?= h($k['firma']) ?><?= $k['kundennummer'] ? ' · ' . h($k['kundennummer']) : '' ?></option><?php endforeach; ?>
             </select>
+            <div class="muted" style="font-size:12px;margin-top:4px;word-break:break-word">gelesen: <?= $d['kunde_name'] !== '' ? h($d['kunde_name']) . ($d['kunde_nr'] !== '' ? ' / ' . h($d['kunde_nr']) : '') : '–' ?></div>
           </div>
         </div>
       </div>

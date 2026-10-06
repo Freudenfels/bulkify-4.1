@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anwen
     if ($kid <= 0) { $_SESSION['angimp_fehler'] = 'Bitte einen Kunden zuordnen (oder neu anlegen).'; header('Location: ?p=angebot_import&schritt=match'); exit; }
 
     // Rezeptur per Name auflösen (Haus-Rezeptur bevorzugt).
-    $rezid = (int) scalar("SELECT id FROM rezeptur WHERE LOWER(TRIM(name))=LOWER(TRIM(?)) ORDER BY (kunde_id IS NULL) DESC, id LIMIT 1", [$produktName]);
+    $rezF = rezeptur_finden_fuzzy($produktName, $kid ?: null); $rezid = $rezF ? (int)$rezF['id'] : 0;
 
     $modus = ($_POST['modus'] ?? '') === 'zuordnen' ? 'zuordnen' : 'neu';
     $uid   = (int)(current_user()['id'] ?? 0);
@@ -157,7 +157,8 @@ if ($schritt === 'match' && !empty($_SESSION['angebot_import'])) {
     $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
 
     // Rezeptur-Match + Glas-Vorschlag.
-    $rez = one("SELECT id, nummer, name, kapselgroesse_id FROM rezeptur WHERE LOWER(TRIM(name))=LOWER(TRIM(?)) ORDER BY (kunde_id IS NULL) DESC, id LIMIT 1", [$produktName]);
+    $rezF = rezeptur_finden_fuzzy($produktName, $kMatch ? (int)$kMatch['id'] : null);
+    $rez  = $rezF ? one("SELECT id, nummer, name, kapselgroesse_id FROM rezeptur WHERE id=?", [(int)$rezF['id']]) : null;
     $glasVorschlag = ($rez && (int)($rez['kapselgroesse_id'] ?? 0) > 0 && $stueck > 0) ? (int) verpackung_empfehlung((int)$rez['kapselgroesse_id'], $stueck) : 0;
     $verpOpt = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND COALESCE(gesperrt,0)=0 ORDER BY name");
 
