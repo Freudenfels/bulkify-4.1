@@ -167,11 +167,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
 // Charge). Setzt das Timeline-Signal; zusätzlich – falls vorhanden – die verknüpfte Bestellung.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'rohstoff_angekommen') {
     if (!has_role('admin') && !has_role('production') && !has_role('einkauf')) { header('Location: ?p=auftrag&id=' . $id); exit; }
-    $set = ($_POST['set'] ?? '1') === '1';
-    q("UPDATE auftrag SET rohstoff_angekommen_am=? WHERE id=?", [$set ? gmdate('Y-m-d H:i:s') : null, $id]);
-    if ($set) q("UPDATE bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
-                 SET b.angekommen_am=COALESCE(b.angekommen_am, CURDATE()) WHERE bp.auftrag_id=?", [$id]);
-    header('Location: ?p=auftrag&id=' . $id . '&rohok=' . ($set ? '1' : '0')); exit;
+    // Reiner Helfer: nur SETZEN (kein Rückgängig über diese Eingabe) – einmal angekommen bleibt angekommen.
+    q("UPDATE auftrag SET rohstoff_angekommen_am=? WHERE id=? AND rohstoff_angekommen_am IS NULL", [gmdate('Y-m-d H:i:s'), $id]);
+    q("UPDATE bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
+       SET b.angekommen_am=COALESCE(b.angekommen_am, CURDATE()) WHERE bp.auftrag_id=?", [$id]);
+    header('Location: ?p=auftrag&id=' . $id . '&rohok=1'); exit;
 }
 // Alte Rechnung (PDF) am Auftrag hochladen -> als Dokument (typ='rechnung', kunde_sichtbar) -> Portal-Download.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'altrechnung_upload') {
@@ -458,26 +458,10 @@ echo '</div>';
 // Zukauf ohne verknüpfte Charge auf „Rohstoff angekommen" springt.
 if (isset($_GET['rohok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . ($_GET['rohok']==='1' ? 'Als „Rohstoff angekommen" markiert – der Kunde sieht es sofort.' : 'Markierung zurückgesetzt.') . '</div>';
 if (isset($_GET['einlagerok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">An das Lager übergeben und in ' . h((string)$_GET['einlagerok']) . ' eingebucht.</div>';
-if (has_role('admin') || has_role('production') || has_role('einkauf')):
-    $_ph = kunde_auftrag_phase($a); $_angDa = $_ph['dates'][2] ?? null; $_override = !empty($a['rohstoff_angekommen_am']);
+// „Rohstoff/Bulk angekommen" ist ein reiner Helfer – er steht jetzt IM Reiter „Produktion" (Block
+// Produktion & Beschaffung), nicht mehr als eigene Leiste über den Reitern.
+$rohAngDa = (kunde_auftrag_phase($a)['dates'][2] ?? null);   // Datum „Rohstoff angekommen" (oder null)
 ?>
-<div class="bx-panel" style="padding:10px 14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-  <span class="muted" style="font-size:13px">Kunden-Status „Rohstoff angekommen":</span>
-  <?php if ($_angDa): ?>
-    <?= bx_badge('angekommen · ' . h(fmt_zeit((string)$_angDa, 'd.m.Y')), 'ok') ?>
-    <?php if ($_override): ?>
-    <form method="post" style="margin:0"><input type="hidden" name="aktion" value="rohstoff_angekommen"><input type="hidden" name="set" value="0">
-      <button class="btn btn-ghost btn-sm" type="submit">Markierung zurücknehmen</button></form>
-    <?php endif; ?>
-  <?php else: ?>
-    <?= bx_badge('noch nicht', 'warn') ?>
-    <form method="post" style="margin:0" title="Nutze das, wenn Ware (Zukauf/Bulk) da ist, der Kunde es aber noch nicht sieht.">
-      <input type="hidden" name="aktion" value="rohstoff_angekommen"><input type="hidden" name="set" value="1">
-      <button class="btn btn-primary btn-sm" type="submit">Rohstoff/Bulk als angekommen markieren</button>
-    </form>
-  <?php endif; ?>
-</div>
-<?php endif; ?>
 <div class="settabs" id="auftabs" style="margin-bottom:16px">
   <a href="#" class="on" data-tab="details">Details</a>
   <a href="#" data-tab="verpackung">Verpackung</a>
@@ -593,6 +577,18 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
     <div><div class="k muted">Herstellung</div><div>
       <?= $istFremd ? bx_badge('Fremdproduktion · fertige Bulkware zukaufen','info') : bx_badge('Eigenproduktion · aus Rohstoffen','ok') ?>
     </div></div>
+    <?php if (has_role('admin') || has_role('production') || has_role('einkauf')): ?>
+    <div><div class="k muted">Rohstoff/Bulk angekommen</div><div>
+      <?php if ($rohAngDa): ?>
+        <?= bx_badge('angekommen · ' . h(fmt_zeit((string)$rohAngDa, 'd.m.Y')), 'ok') ?>
+      <?php else: ?>
+        <form method="post" style="margin:0" title="Nutze das, wenn Ware (Zukauf/Bulk) da ist, der Kunde es aber noch nicht sieht.">
+          <input type="hidden" name="aktion" value="rohstoff_angekommen"><input type="hidden" name="set" value="1">
+          <button class="btn btn-ghost btn-sm" type="submit">Als angekommen markieren</button>
+        </form>
+      <?php endif; ?>
+    </div></div>
+    <?php endif; ?>
     <?php if ($pa): ?>
     <div><div class="k muted">Produktionsauftrag</div><div><a href="?p=produktionsauftrag&id=<?= (int)$pa['id'] ?>"><?= h($pa['nummer']) ?></a> · <?= $paStatusBadge ?></div></div>
     <div><div class="k muted">Material</div><div>

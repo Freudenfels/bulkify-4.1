@@ -51,3 +51,6 @@ Das Labortest-Panel zeigt jetzt drei Stufen: freigegebener Bericht = „abgeschl
 
 ## Rezeptur verknüpfen (Auftrag ohne Rezeptur)
 Hat der Auftrag keine aufgelöste Rezeptur (COALESCE(`auftrag.rezeptur_id`, Produkt-Rezeptur), z. B. v3-Import/Freitext), zeigt die Zeile „Rezeptur" im Reiter *Details* einen Picker (rscombo, nur Admin). Aktion `rezeptur_verknuepfen` setzt `auftrag.rezeptur_id`; hängt ein Produkt ohne Rezeptur dran, wird auch `produkt.rezeptur_id` gesetzt (Produktion/Specs/PIB kennen sie dann).
+
+## „Rohstoff/Bulk angekommen" (Helfer im Reiter Produktion)
+Die frühere Leiste „Kunden-Status Rohstoff angekommen" über den Reitern ist entfernt. Der reine Helfer steht jetzt im Reiter **Produktion**, Block „Produktion & Beschaffung", Feld „Rohstoff/Bulk angekommen": zeigt „angekommen · Datum" oder (nur wenn noch nicht) den Button „Als angekommen markieren". **Nur Setzen, kein Rückgängig** – einmal angekommen bleibt angekommen (`rohstoff_angekommen`-Handler setzt nur, mit `rohstoff_angekommen_am IS NULL`-Guard). Rollen admin/production/einkauf.
