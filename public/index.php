@@ -140,6 +140,7 @@ $routes = [
     'menu_editor'        => 'system/menu_editor.php',   // Menü selbst anpassen (Drag & Drop), global
     'angebotsscan'       => 'system/angebotsscan.php',  // KI liest Angebote (Fremd/Alt) ein: Rezepturen + Preise erfassen (kundenunabhängig)
     'angebot_import'     => 'system/angebot_import.php',// KI liest ein Alt-Angebot -> einem bestehenden Angebot zuordnen (anreichern) ODER neues Angebot anlegen; Glas aus Kapselgröße inferieren
+    'lager2_import'      => 'lager/lager2_import.php',  // Lager-2 Anfangsbestände: Produkte eines Fulfillment-Kunden aus der Auftragshistorie, Bestände in einem Rutsch buchen (mit Vorschau)
     'suche'              => 'system/suche.php',        // globale Suche (Admin) über alle Bereiche
     'db_import'          => 'system/db_import.php',   // einmalige DB-Übernahme (Admin) – Rohstoffe & Co. auf einen anderen Stand bringen
     'v3_import_upload'   => 'system/v3_import_upload.php',   // TEMPORÄR (v3-Migration): v3-Dump hochladen -> nach v4 importieren

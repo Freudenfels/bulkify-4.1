@@ -71,6 +71,7 @@ function route_rollen_map(): array {
         'versand'            => ['fulfillment', 'production', 'labor'],
         'lager'              => ['production', 'fulfillment', 'einkauf', 'labor'],
         'lager2'             => ['production', 'fulfillment', 'einkauf', 'labor'],
+        'lager2_import'      => ['production', 'fulfillment', 'einkauf', 'labor'],
         'betriebsmittel'     => ['production', 'fulfillment', 'einkauf', 'labor'],
         'wareneingang'       => ['einkauf', 'labor', 'production'],
         'rohstoffe'          => ['production', 'einkauf', 'labor'],
