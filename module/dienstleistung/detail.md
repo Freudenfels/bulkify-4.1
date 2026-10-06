@@ -15,3 +15,6 @@ Route `?p=dienstleistung&id=neu` (anlegen) bzw. `?p=dienstleistung&id=<ID>` (bea
 - „Löschen" entfernt den Katalog-Eintrag (POST `aktion=loeschen`, mit Rückfrage).
 
 Speichern → POST `aktion=save` → Redirect mit `&gespeichert=1`. Logik aus `core/dienstleistung.php`.
+
+## Ablauf & Ergebnis (Workflow)
+Panel „Ablauf & Ergebnis": **Schritte** (ein Schritt je Zeile = Fortschritts-Punkte der Aufträge dieser DL; leer = Baustein-Vorlage), Schalter **Endergebnis-Upload** und **Upload schließt ab** (nur aktiv, wenn Upload erlaubt). JS füllt bei Baustein-Wechsel die Schritte-Vorlage ein, solange das Feld leer ist. Speichern schreibt `dienstleistung_schritt` via `dl_katalog_schritte_setzen()` + die zwei Flags.

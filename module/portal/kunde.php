@@ -1067,6 +1067,26 @@ if (!function_exists('kunde_auftrag_track')) {
         return $track;
     }
 }
+if (!function_exists('portal_auftrag_track')) {
+    // Fortschritt für die Portalanzeige: Dienstleistungs-Aufträge (kategorie='dienstleistung') haben ihre
+    // EIGENEN Schritte (dl_auftrag_schritt) statt der Produkt-Phasen; alles andere die Produkt-Phasen.
+    function portal_auftrag_track(array $a): array {
+        if (($a['kategorie'] ?? '') === 'dienstleistung' && function_exists('dl_auftrag_track')) {
+            $st = dl_auftrag_track((int)$a['id']);
+            if ($st) {
+                $firstOpen = null;
+                foreach ($st as $i => $s) if (!(int)$s['erledigt'] && $firstOpen === null) $firstOpen = $i;
+                $out = [];
+                foreach ($st as $i => $s) {
+                    $out[] = ['label'=>(string)$s['name'], 'date'=>$s['erledigt_at'] ?? null, 'sub'=>null, 'dok_id'=>null,
+                              'done'=>((int)$s['erledigt'] === 1), 'current'=>($i === $firstOpen)];
+                }
+                return $out;
+            }
+        }
+        return kunde_auftrag_track($a);
+    }
+}
 
 // Menüpunkte (nur freigeschaltete) + Gruppierung
 $L = ['start' => 'Übersicht'];
@@ -3011,8 +3031,10 @@ portal_head('Kundenportal · ' . $k['firma']);
   })();</script>
 
 <?php elseif ($view === 'bestellungen'):
-    $inArbeit    = array_values(array_filter($auftraege, fn($a) => $a['status'] !== 'versendet'));
-    $abgeschlBest = array_values(array_filter($auftraege, fn($a) => $a['status'] === 'versendet'));
+    // DL-Auftrag gilt als abgeschlossen bei 'erledigt' (es gibt kein 'versendet'); Produkt-Auftrag bei 'versendet'.
+    $istAbgeschl = fn($a) => (($a['kategorie'] ?? '') === 'dienstleistung') ? ($a['status'] === 'erledigt') : ($a['status'] === 'versendet');
+    $inArbeit    = array_values(array_filter($auftraege, fn($a) => !$istAbgeschl($a)));
+    $abgeschlBest = array_values(array_filter($auftraege, fn($a) => $istAbgeschl($a)));
     $btab = ($_GET['btab'] ?? '') === 'abgeschlossen' ? 'abgeschlossen' : 'arbeit';
     $aktBest = $btab === 'abgeschlossen' ? $abgeschlBest : $inArbeit;
     // Phase je Auftrag EINMAL bestimmen (fuer Sortierung + Anzeige, statt sie im Loop erneut zu berechnen).
@@ -3068,22 +3090,28 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php if (!$aktBest): ?><div class="bx-panel"><div class="muted"><?= $btab === 'abgeschlossen' ? 'Noch keine abgeschlossenen Bestellungen.' : 'Aktuell keine Bestellung in Bearbeitung.' ?></div></div><?php endif; ?>
   <?php endif; ?>
-  <?php foreach ($aktBest as $a): $cur = $phaseCache[(int)$a['id']]['idx']; $complete = $a['status'] === 'versendet';
-        // Etikett offen? (Produkt braucht Etikett, aber noch nicht freigegeben) – in der Übersicht sichtbar machen.
-        $etMiss = !$complete && auftrag_braucht_etikett((int)$a['id']) && !etikett_freigegeben((int)$a['id']); ?>
+  <?php foreach ($aktBest as $a):
+        $istDLrow = ($a['kategorie'] ?? '') === 'dienstleistung';
+        $trackA   = portal_auftrag_track($a);
+        $complete = $istAbgeschl($a);
+        // aktueller Schritt-Index aus dem (DL- oder Produkt-)Track
+        $curIdx = 0; foreach ($trackA as $i => $t) { if (!empty($t['current'])) { $curIdx = $i; break; } if (!empty($t['done'])) $curIdx = $i; }
+        $totalA = count($trackA) ?: 1;
+        // Etikett offen? Nur Produkt-Aufträge, die ein Etikett brauchen und noch nicht freigegeben sind.
+        $etMiss = !$istDLrow && !$complete && auftrag_braucht_etikett((int)$a['id']) && !etikett_freigegeben((int)$a['id']); ?>
   <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit<?= $etMiss ? ';border-color:#e6c4c0' : '' ?>">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:12px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
       <div class="bx-row" style="gap:10px;align-items:center">
-        <span class="muted" style="font-size:12px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : 'Schritt ' . ($cur + 1) . '/' . count($AUFSTEPS) . ': ' . h($AUFSTEPS[$cur]) ?></span>
+        <span class="muted" style="font-size:12px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : 'Schritt ' . ($curIdx + 1) . '/' . $totalA . ': ' . h((string)($trackA[$curIdx]['label'] ?? '')) ?></span>
         <?php if ($etMiss): ?><?= bx_badge('Etikett fehlt', 'err') ?><?php endif; ?>
         <?= $aufBadge($a) ?><?php $kontStorno = ($a['status'] ?? '') === 'storniert' && !empty($a['kontingent_id']);
             $zst = $kontStorno ? '' : ($zahlMapBest[(int)$a['id']] ?? (!empty($a['bezahlt_am']) ? 'bezahlt' : '')); if ($zst): ?> <?= $reBadge($zst) ?><?php endif; ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
     <?php if ($etMiss): ?><div style="margin-top:8px;color:#8f231b;font-size:13px;font-weight:600">Etikett fehlt – bitte Etikett-Design hochladen und freigeben (Bestellung öffnen).</div><?php endif; ?>
     <ul class="bx-steps" style="margin-top:12px">
-      <?php foreach (kunde_auftrag_track($a) as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : '');
+      <?php foreach ($trackA as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : '');
           $sub = $t['date'] ? fmt_zeit($t['date'], 'd.m.Y') : ($t['sub'] ?? ''); ?>
         <li class="bx-step <?= $cls ?>">
           <span class="dot"><?= $statusIcon($cls) ?></span>
@@ -3101,7 +3129,8 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div class="bx-panel"><div class="muted">Bestellung nicht gefunden.</div>
         <div style="margin-top:12px"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellungen') ?>">Zurück zu den Bestellungen</a></div></div>
     <?php else:
-      $complete = $a['status'] === 'versendet';
+      $istDLdetail = ($a['kategorie'] ?? '') === 'dienstleistung';
+      $complete = $istDLdetail ? ($a['status'] === 'erledigt') : ($a['status'] === 'versendet');
       $re  = one("SELECT * FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND kunde_sichtbar=1 ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
       // Abgeleiteter Zahlstatus (aus den Zahlungseingängen) + die einzelnen Zahlungen (wann/wie viel).
       $zs = $re ? beleg_zahlstatus($re) : null;
@@ -3113,7 +3142,8 @@ portal_head('Kundenportal · ' . $k['firma']);
       // Feste Kunden-Phasen (wie v3) – KEINE internen Produktionsschritte. Identisch für Rohstoff-
       // und Fertigprodukt-Bestellung, verrät also nie einen Zukauf.
       $ph = kunde_auftrag_phase($a); $cur = $ph['idx'];
-      $track = kunde_auftrag_track($a);   // inkl. „Energetisierung" (nur freigeschaltete Kunden)
+      $track = portal_auftrag_track($a);   // DL-Auftrag: eigene Schritte; sonst Produkt-Phasen (inkl. „Energetisierung")
+      $dlErgebnis = $istDLdetail ? all("SELECT id, datei_orig, angelegt FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='dl_ergebnis' AND kunde_sichtbar=1 ORDER BY id DESC", [(int)$a['id']]) : [];
     ?>
   <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:4px">
     <h1 style="margin:0"><?= h($a['nummer']) ?></h1>
@@ -3157,6 +3187,20 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <?php endif; ?>
   </div>
+
+  <?php // Endergebnis einer Dienstleistung (z. B. Analysebericht, fertige Rezeptur) zum Download.
+        if ($istDLdetail && $dlErgebnis): ?>
+  <div class="bx-panel">
+    <h2 style="margin:0 0 8px;font-size:16px">Endergebnis</h2>
+    <p class="muted" style="margin:0 0 10px">Das Ergebnis Ihrer Dienstleistung zum Download.</p>
+    <?php foreach ($dlErgebnis as $ed): ?>
+      <div style="margin-bottom:6px">
+        <a class="btn btn-primary btn-sm" href="?p=portal_dok&token=<?= h((string)$k['portal_token']) ?>&id=<?= (int)$ed['id'] ?>" target="_blank" rel="noopener"><?= h((string)($ed['datei_orig'] ?: 'Ergebnis')) ?></a>
+        <span class="muted" style="font-size:12px"><?= $ed['angelegt'] ? h(fmt_zeit((string)$ed['angelegt'], 'd.m.Y')) : '' ?></span>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
 
   <?php // Produktionsbericht – nur wenn das Team ihn fuer den Kunden freigegeben hat.
         $pbFrei = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND bericht_freigegeben_am IS NOT NULL ORDER BY id DESC LIMIT 1", [(int)$a['id']]);

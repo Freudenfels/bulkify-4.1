@@ -46,3 +46,10 @@ Produkt-Listen (`module/angebot/liste.php`, `module/auftrag/liste.php`) blenden 
 - Phase 2 (fertig): eigenständige DL-Kette Angebot (DA-) → Auftrag (DB-) → Rechnung (DR-) mit eigenen Nummernkreisen; DL-Rechnung = normaler Beleg → Buchhaltung.
 - offen: DL-Angebot-PDF (nutzt derzeit `?p=angebot_pdf`, Positionen haben Vorrang), DL-Angebote im Kundenportal sichtbar/bestätigbar, Anfrage (`portal_anfrage.typ='dienstleistung'`) → DL-Angebot, Add-on-DL auf Produktangebot.
 - Phase 3: wiederkehrende (monatliche) Abrechnung (Lagerung/Fulfillment).
+
+## Workflow je Service + DL-Auftrag-Fortschritt (konfigurierbar)
+- **Katalog:** jeder Service hat frei definierbare **Schritte** (`dienstleistung_schritt`, Reihenfolge = sort) + Schalter `ergebnis_upload` (Endergebnis-Dokument erlaubt) und `upload_schliesst_ab` (Upload = Abschluss + Kundenmail). `dl_schritte_vorlage($baustein)` liefert Standard-Schritte je Baustein (Labortest: Bestätigung·Probe versendet·Ergebnis; Abfüllen/generisch: Bestätigung·In Bearbeitung·Abschluss …). `dl_katalog_schritte()/dl_katalog_schritte_setzen()`.
+- **Ein Service pro Auftrag:** `dl_auftrag_aus_angebot()` legt je DL-Angebotsposition **einen eigenen DB-Auftrag** an (`auftrag.dienstleistung_id`, `auftrag.angebot_position_id`) und materialisiert die Schritte (`dl_auftrag_schritt`) via `dl_auftrag_schritte_anlegen()`. Rückgabe = erster Auftrag. Rückwärtskompatibel: Alt-Angebote mit Sammel-Auftrag (ohne Position) bleiben unverändert.
+- **DL-Rechnung je Auftrag** rechnet nur dessen **eine** Position ab (über `angebot_position_id`; Legacy ohne Position = alles).
+- **Fortschritt:** `dl_auftrag_track()` (Schritte + erledigt), `dl_auftrag_schritt_setzen($aid,$schritt_id)` (alle bis dorthin = erledigt), `dl_auftrag_status_ableiten()` (offen/in_arbeit/erledigt). Status des DL-Auftrags wird daraus abgeleitet.
+- **Endergebnis:** `dl_ergebnis_upload()` legt `dokument typ='dl_ergebnis'` (kundensichtbar) an; bei `upload_schliesst_ab` → alle Schritte erledigt + `mail_kunde_dl_ergebnis()` (respektiert `kunde_mails_aus`). `dl_ergebnis_dateien()` listet sie.

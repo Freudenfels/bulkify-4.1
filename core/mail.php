@@ -428,6 +428,23 @@ function mail_kunde_angebot(int $angebot_id): string {
     return mail_senden((string)$a['email'], $m['betreff'], $m['text']);
 }
 
+// Endergebnis einer Dienstleistung liegt vor -> Kunde informieren (Link ins Portal, Reiter Bestellungen).
+function mail_kunde_dl_ergebnis(int $auftrag_id): string {
+    $a = one("SELECT a.nummer, a.kunde_id, k.firma, k.ansprechpartner, k.email
+              FROM auftrag a JOIN kunden k ON k.id=a.kunde_id WHERE a.id=? AND a.kategorie='dienstleistung'", [$auftrag_id]);
+    if (!$a) return 'Auftrag oder Kunde nicht gefunden.';
+    if (kunde_mails_aus((int)$a['kunde_id'])) return 'Benachrichtigungen für diesen Kunden sind ausgeschaltet.';
+    if (trim((string)$a['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
+    $fa   = beleg_firma();
+    $link = mail_link_kundenportal((int)$a['kunde_id'], 'bestellungen');
+    $betreff = 'Ihr Ergebnis liegt vor – ' . (string)$a['nummer'];
+    $text = mail_kunde_anrede($a) . "\n\n"
+          . 'das Ergebnis Ihrer Dienstleistung ' . (string)$a['nummer'] . ' liegt vor und steht in Ihrem Kundenbereich zum Download bereit.' . "\n\n"
+          . $link . "\n\n"
+          . 'Mit freundlichen Grüßen' . "\n" . (string)$fa['name'];
+    return mail_senden((string)$a['email'], $betreff, $text);
+}
+
 // Der Kunde hat ein Angebot angenommen: Bestätigung an den Kunden, Hinweis ans Team.
 // Rückgabe = Ergebnis der Kundenmail ('' = verschickt).
 function mail_angebot_angenommen(int $angebot_id, ?int $auftrag_id = null): string {

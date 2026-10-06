@@ -110,6 +110,120 @@ function dienstleistung_schema(): void {
     ensure_column('angebot', 'kategorie', "VARCHAR(20) NOT NULL DEFAULT 'produkt'");
     ensure_column('auftrag', 'kategorie', "VARCHAR(20) NOT NULL DEFAULT 'produkt'");
     ensure_column('beleg',   'kategorie', "VARCHAR(20) NOT NULL DEFAULT 'produkt'");
+
+    // Workflow je Service: frei definierbare Schritte (Fortschritt) + Endergebnis-Upload.
+    ensure_column('dienstleistung', 'ergebnis_upload',     "TINYINT(1) NOT NULL DEFAULT 0"); // Upload eines Endergebnis-Dokuments erlaubt
+    ensure_column('dienstleistung', 'upload_schliesst_ab', "TINYINT(1) NOT NULL DEFAULT 0"); // Upload setzt den Auftrag auf erledigt
+    $pdo->exec("CREATE TABLE IF NOT EXISTS dienstleistung_schritt (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        dienstleistung_id INT NOT NULL,
+        name VARCHAR(120) NOT NULL,
+        sort INT NOT NULL DEFAULT 0,
+        KEY idx_dl (dienstleistung_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // DL-Auftrag: welcher Service (ein Service pro Auftrag) + aus welcher Angebotsposition er stammt,
+    // damit die DL-Rechnung genau diese Position abrechnet (nicht das ganze Angebot).
+    ensure_column('auftrag', 'dienstleistung_id',   "INT NULL");
+    ensure_column('auftrag', 'angebot_position_id', "INT NULL");
+    // Materialisierte Schritte des DL-Auftrags (Fortschritt), aus dem Service kopiert.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS dl_auftrag_schritt (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        auftrag_id INT NOT NULL,
+        name VARCHAR(120) NOT NULL,
+        sort INT NOT NULL DEFAULT 0,
+        erledigt TINYINT(1) NOT NULL DEFAULT 0,
+        erledigt_at DATETIME NULL,
+        KEY idx_auf (auftrag_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
+// Standard-Schritte je Baustein (Vorlage beim Anlegen, frei anpassbar). Unbekannt = generisch.
+function dl_schritte_vorlage(?string $baustein): array {
+    return match ((string)$baustein) {
+        'labortest'         => ['Bestätigung', 'Probe versendet', 'Ergebnis'],
+        'energetisierung'   => ['Bestätigung', 'In Bearbeitung', 'Abschluss'],
+        'fulfillment'       => ['Bestätigung', 'Einlagerung', 'Aktiv'],
+        'etikettcheck'      => ['Bestätigung', 'Prüfung', 'Ergebnis'],
+        'rezepturbewertung' => ['Bestätigung', 'In Prüfung', 'Ergebnis'],
+        default             => ['Bestätigung', 'In Bearbeitung', 'Abschluss'],
+    };
+}
+// Katalog-Schritte eines Service lesen/setzen (frei editierbar, Reihenfolge = sort).
+function dl_katalog_schritte(int $dl_id): array {
+    return all("SELECT id, name, sort FROM dienstleistung_schritt WHERE dienstleistung_id=? ORDER BY sort, id", [$dl_id]);
+}
+function dl_katalog_schritte_setzen(int $dl_id, array $namen): void {
+    q("DELETE FROM dienstleistung_schritt WHERE dienstleistung_id=?", [$dl_id]);
+    $sort = 0;
+    foreach ($namen as $n) {
+        $n = trim((string)$n);
+        if ($n === '') continue;
+        q("INSERT INTO dienstleistung_schritt (dienstleistung_id,name,sort) VALUES (?,?,?)", [$dl_id, mb_substr($n, 0, 120), $sort++]);
+    }
+}
+// Schritte eines DL-Auftrags einmalig aus dem Service materialisieren (idempotent). Fällt auf die
+// Baustein-Vorlage zurück, wenn der Service keine eigenen Schritte hat.
+function dl_auftrag_schritte_anlegen(int $auftrag_id, int $dl_id): void {
+    if ((int) scalar("SELECT COUNT(*) FROM dl_auftrag_schritt WHERE auftrag_id=?", [$auftrag_id]) > 0) return;
+    $schritte = array_map(fn($s) => (string)$s['name'], dl_katalog_schritte($dl_id));
+    if (!$schritte) { $d = dienstleistung_laden($dl_id); $schritte = dl_schritte_vorlage($d['baustein'] ?? ''); }
+    $sort = 0;
+    foreach ($schritte as $n) { $n = trim((string)$n); if ($n === '') continue; q("INSERT INTO dl_auftrag_schritt (auftrag_id,name,sort) VALUES (?,?,?)", [$auftrag_id, mb_substr($n, 0, 120), $sort++]); }
+}
+// Fortschritt eines DL-Auftrags (für Dashboard + Portal).
+function dl_auftrag_track(int $auftrag_id): array {
+    return all("SELECT id, name, sort, erledigt, erledigt_at FROM dl_auftrag_schritt WHERE auftrag_id=? ORDER BY sort, id", [$auftrag_id]);
+}
+// Auftrag-Status aus den Schritten ableiten: nichts erledigt = offen, alle = erledigt, sonst in_arbeit.
+function dl_auftrag_status_ableiten(int $auftrag_id): void {
+    $tot = (int) scalar("SELECT COUNT(*) FROM dl_auftrag_schritt WHERE auftrag_id=?", [$auftrag_id]);
+    if ($tot === 0) return;
+    $don = (int) scalar("SELECT COUNT(*) FROM dl_auftrag_schritt WHERE auftrag_id=? AND erledigt=1", [$auftrag_id]);
+    $st = $don === 0 ? 'offen' : ($don >= $tot ? 'erledigt' : 'in_arbeit');
+    q("UPDATE auftrag SET status=? WHERE id=? AND kategorie='dienstleistung'", [$st, $auftrag_id]);
+}
+// Aktuellen Schritt setzen: alle bis einschließlich $schritt_id = erledigt, danach offen. Status ableiten.
+function dl_auftrag_schritt_setzen(int $auftrag_id, int $schritt_id): void {
+    $schritte = dl_auftrag_track($auftrag_id);
+    if (!$schritte) return;
+    $ziel = null;
+    foreach ($schritte as $i => $s) if ((int)$s['id'] === $schritt_id) $ziel = $i;
+    if ($ziel === null) return;
+    foreach ($schritte as $i => $s) {
+        $erl = $i <= $ziel ? 1 : 0;
+        q("UPDATE dl_auftrag_schritt SET erledigt=?, erledigt_at=? WHERE id=?",
+          [$erl, $erl ? ($s['erledigt_at'] ?: gmdate('Y-m-d H:i:s')) : null, (int)$s['id']]);
+    }
+    dl_auftrag_status_ableiten($auftrag_id);
+}
+// Endergebnis-Dokument hochladen (Feld „ergebnis"). Legt dokument typ='dl_ergebnis' an (kundensichtbar).
+// Ist am Service „Upload schließt ab" gesetzt: alle Schritte auf erledigt + Kunde benachrichtigen.
+function dl_ergebnis_upload(int $auftrag_id, string $feld = 'ergebnis'): array {
+    $a = one("SELECT id, kunde_id, dienstleistung_id, nummer FROM auftrag WHERE id=? AND kategorie='dienstleistung'", [$auftrag_id]);
+    if (!$a) return ['ok'=>false, 'msg'=>'Auftrag nicht gefunden.'];
+    if (empty($_FILES[$feld]['name']) || ($_FILES[$feld]['error'] ?? 1) !== UPLOAD_ERR_OK) return ['ok'=>false, 'msg'=>'Keine Datei empfangen.'];
+    if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+    $orig = (string)$_FILES[$feld]['name'];
+    $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($orig, PATHINFO_EXTENSION)));
+    $fn   = 'dl_ergebnis_' . $auftrag_id . '_' . bin2hex(random_bytes(6)) . ($ext ? '.' . $ext : '');
+    if (!move_uploaded_file($_FILES[$feld]['tmp_name'], BX_UPLOADS . '/' . $fn)) return ['ok'=>false, 'msg'=>'Upload fehlgeschlagen.'];
+    q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar) VALUES ('auftrag',?, 'dl_ergebnis', ?,?,?,1)",
+      [$auftrag_id, 'Endergebnis', $fn, $orig]);
+    $dlid = (int)($a['dienstleistung_id'] ?? 0);
+    $schliesst = $dlid ? (int) scalar("SELECT upload_schliesst_ab FROM dienstleistung WHERE id=?", [$dlid]) : 0;
+    if (!empty($a['kunde_id'])) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Endergebnis zu ' . (string)$a['nummer'] . ' hochgeladen.', 'auftrag', 'auftrag', $auftrag_id);
+    if ($schliesst) {
+        q("UPDATE dl_auftrag_schritt SET erledigt=1, erledigt_at=? WHERE auftrag_id=? AND erledigt=0", [gmdate('Y-m-d H:i:s'), $auftrag_id]);
+        dl_auftrag_status_ableiten($auftrag_id);
+        if (!empty($a['kunde_id']) && function_exists('mail_bereit') && mail_bereit())
+            nach_antwort(fn() => mail_kunde_dl_ergebnis($auftrag_id));
+    }
+    return ['ok'=>true, 'msg'=>'', 'abgeschlossen'=>(bool)$schliesst];
+}
+// Endergebnis-Dokument(e) eines DL-Auftrags.
+function dl_ergebnis_dateien(int $auftrag_id): array {
+    return all("SELECT id, titel, datei, datei_orig, angelegt FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='dl_ergebnis' ORDER BY id DESC", [$auftrag_id]);
 }
 
 // ===================== DL-Vorgangskette: Angebot (DA) -> Auftrag (DB) -> Rechnung (DR) =====================
@@ -181,19 +295,35 @@ function dl_angebot_status(int $angebot_id, string $status): void {
     q("UPDATE angebot SET status=? WHERE id=? AND kategorie='dienstleistung'", [$status, $angebot_id]);
 }
 
-// DL-Auftrag (DB-) aus einem bestaetigten DL-Angebot. Idempotent.
+// DL-Auftrag (DB-) aus einem bestaetigten DL-Angebot. Ein Service pro Auftrag: je Angebotsposition ein
+// eigener DB-Auftrag (mit dienstleistung_id + angebot_position_id + materialisierten Schritten). Idempotent.
+// Rueckgabe: id des ERSTEN Auftrags (Aufrufer leitet dorthin; weitere stehen in der DL-Auftragsliste).
 function dl_auftrag_aus_angebot(int $angebot_id): ?int {
     $a = dl_angebot_laden($angebot_id);
     if (!$a || $a['status'] !== 'bestaetigt') return null;
-    $ex = scalar("SELECT id FROM auftrag WHERE angebot_id=?", [$angebot_id]);
-    if ($ex) return (int)$ex;
-    $sum = dl_angebot_summe($angebot_id);
-    q("INSERT INTO auftrag (nummer,angebot_id,kunde_id,produkt_id,menge,vk_stueck,gesamt_netto,status,kategorie)
-       VALUES (?,?,?,?,?,?,?,?,?)",
-      [naechste_nummer('DB'), $angebot_id, $a['kunde_id'] ?: null, null, 0, 0, round((float)$sum['netto'], 2), 'offen', 'dienstleistung']);
-    $aid = (int) insert_id();
-    if (!empty($a['kunde_id'])) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'DL-Auftrag aus Angebot ' . (string)$a['nummer'] . ' erzeugt.', 'auftrag', 'auftrag', $aid);
-    return $aid;
+    // Rückwärtskompatibel: wurde das Angebot früher (alte Logik) schon in EINEN Sammel-Auftrag gewandelt,
+    // nicht nochmal aufsplitten – diesen zurückgeben.
+    $legacy = (int) scalar("SELECT id FROM auftrag WHERE angebot_id=? AND angebot_position_id IS NULL LIMIT 1", [$angebot_id]);
+    if ($legacy) return $legacy;
+    $positionen = dl_positionen($angebot_id);
+    if (!$positionen) return null;
+    $ersterAid = null;
+    foreach ($positionen as $p) {
+        $ex = (int) scalar("SELECT id FROM auftrag WHERE angebot_position_id=?", [(int)$p['id']]);
+        if ($ex) { $ersterAid = $ersterAid ?? $ex; continue; }
+        $dlid  = (int)($p['dienstleistung_id'] ?? 0);
+        $vk    = (int)$p['preis_cent'] / 100;
+        $netto = round(((float)$p['menge']) * $vk, 2);
+        q("INSERT INTO auftrag (nummer,angebot_id,angebot_position_id,kunde_id,produkt_id,dienstleistung_id,menge,vk_stueck,gesamt_netto,status,kategorie)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+          [naechste_nummer('DB'), $angebot_id, (int)$p['id'], $a['kunde_id'] ?: null, null, $dlid ?: null,
+           (float)$p['menge'], $vk, $netto, 'offen', 'dienstleistung']);
+        $aid = (int) insert_id();
+        if ($dlid) dl_auftrag_schritte_anlegen($aid, $dlid);
+        if (!empty($a['kunde_id'])) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'DL-Auftrag ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$aid]) . ' aus Angebot ' . (string)$a['nummer'] . ' erzeugt.', 'auftrag', 'auftrag', $aid);
+        $ersterAid = $ersterAid ?? $aid;
+    }
+    return $ersterAid;
 }
 
 // DL-Rechnung (DR-) aus einem DL-Auftrag. Kopiert die Positionen des zugehoerigen DL-Angebots.
@@ -204,6 +334,10 @@ function dl_rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     $ex = scalar("SELECT id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert' ORDER BY id LIMIT 1", [$auftrag_id]);
     if ($ex) return (int)$ex;
     $quellPos = dl_positionen((int)$a['angebot_id']);
+    // Ein Service pro Auftrag: nur die EINE Position dieses Auftrags abrechnen (sonst würde jeder der
+    // aufgesplitteten Aufträge das ganze Angebot berechnen). Legacy-Aufträge (ohne Position) = alles.
+    if (!empty($a['angebot_position_id']))
+        $quellPos = array_values(array_filter($quellPos, fn($p) => (int)$p['id'] === (int)$a['angebot_position_id']));
     $pos = [];
     foreach ($quellPos as $p) {
         $pos[] = [

@@ -37,16 +37,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'save'
         $beschreibung = trim($_POST['beschreibung'] ?? '') ?: null;
         $notiz   = trim($_POST['notiz'] ?? '') ?: null;
         $aktiv   = isset($_POST['aktiv']) ? 1 : 0;
+        $ergebnis_upload     = isset($_POST['ergebnis_upload']) ? 1 : 0;
+        $upload_schliesst_ab = ($ergebnis_upload && isset($_POST['upload_schliesst_ab'])) ? 1 : 0;
 
         if ($neu) {
-            q("INSERT INTO dienstleistung (nummer,name,kategorie,beschreibung,preismodell,einheit,ek_cent,vk_cent,mwst_satz,art,wiederkehrend,baustein,aktiv)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('DL'), $name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv]);
+            q("INSERT INTO dienstleistung (nummer,name,kategorie,beschreibung,preismodell,einheit,ek_cent,vk_cent,mwst_satz,art,wiederkehrend,baustein,aktiv,ergebnis_upload,upload_schliesst_ab)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('DL'), $name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv, $ergebnis_upload, $upload_schliesst_ab]);
             $id = insert_id();
         } else {
-            q("UPDATE dienstleistung SET name=?,kategorie=?,beschreibung=?,preismodell=?,einheit=?,ek_cent=?,vk_cent=?,mwst_satz=?,art=?,wiederkehrend=?,baustein=?,aktiv=? WHERE id=?",
-              [$name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv, (int)$id]);
+            q("UPDATE dienstleistung SET name=?,kategorie=?,beschreibung=?,preismodell=?,einheit=?,ek_cent=?,vk_cent=?,mwst_satz=?,art=?,wiederkehrend=?,baustein=?,aktiv=?,ergebnis_upload=?,upload_schliesst_ab=? WHERE id=?",
+              [$name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv, $ergebnis_upload, $upload_schliesst_ab, (int)$id]);
         }
+        // Workflow-Schritte (eine je Zeile). Leer = Standard-Vorlage für den Baustein, damit es nie ohne läuft.
+        $namen = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', (string)($_POST['schritte'] ?? ''))), fn($x) => $x !== ''));
+        if (!$namen) $namen = dl_schritte_vorlage($baustein);
+        dl_katalog_schritte_setzen((int)$id, $namen);
         header('Location: ?p=dienstleistung&id=' . (int)$id . '&gespeichert=1'); exit;
     }
 }
@@ -55,6 +61,13 @@ $d = $neu ? ['aktiv'=>1,'mwst_satz'=>19,'art'=>'beides','preismodell'=>'pauschal
 if (!$d) { $neu = true; $d = ['aktiv'=>1,'mwst_satz'=>19,'art'=>'beides','preismodell'=>'pauschale','wiederkehrend'=>'einmalig']; }
 $v   = fn($k) => h((string)($d[$k] ?? ''));
 $sel = fn($a, $b) => ((string)$a === (string)$b) ? ' selected' : '';
+// Workflow-Schritte zur Vorbelegung: vorhandene, sonst Vorlage des Bausteins.
+$schritteListe = $neu ? [] : array_map(fn($s) => (string)$s['name'], dl_katalog_schritte((int)$id));
+if (!$schritteListe) $schritteListe = dl_schritte_vorlage($d['baustein'] ?? '');
+$schritteText  = implode("\n", $schritteListe);
+// Vorlagen je Baustein für das JS (fuellt leeres Feld beim Wechsel).
+$vorlagenMap = [];
+foreach (array_keys($BAUSTEINE) as $bk) $vorlagenMap[$bk] = implode("\n", dl_schritte_vorlage($bk));
 
 render_header('dienstleistungen', $neu ? 'Neue Dienstleistung' : (string)$d['name']);
 bx_head($neu ? 'Neue Dienstleistung' : (string)$d['name'],
@@ -117,6 +130,28 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     <div class="bx-field"><label>Notiz (intern)</label><textarea name="notiz" placeholder="interne Hinweise"><?= $v('notiz') ?></textarea></div>
   </div>
 
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Ablauf &amp; Ergebnis</h2>
+    <div class="bx-field"><label>Schritte / Status <?= bx_hint('Die Fortschritts-Punkte für Aufträge dieser Dienstleistung – ein Schritt je Zeile, in Reihenfolge. Je Dienstleistungstyp eigene Punkte (z. B. Laboranalyse: Bestätigung · Probe versendet · Ergebnis; Abfüllen: Bestätigung · Mischen · Abfüllung · Abschluss).') ?></label>
+      <textarea name="schritte" id="f_schritte" rows="5" placeholder="ein Schritt je Zeile"><?= h($schritteText) ?></textarea>
+      <div class="muted" style="font-size:12px;margin-top:2px">Ein Schritt je Zeile. Leer lassen = Standard-Vorlage für den gewählten Baustein.</div>
+    </div>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Endergebnis-Upload</label>
+        <div class="bx-check" style="padding-top:8px">
+          <input type="checkbox" name="ergebnis_upload" id="f_ergup" value="1" <?= (int)($d['ergebnis_upload'] ?? 0) === 1 ? 'checked' : '' ?>>
+          <label for="f_ergup" style="margin:0">Hochladen eines Endergebnis-Dokuments erlauben (z. B. Analysebericht, fertige Rezeptur)</label>
+        </div>
+      </div>
+      <div class="bx-field"><label>Upload schließt ab</label>
+        <div class="bx-check" style="padding-top:8px">
+          <input type="checkbox" name="upload_schliesst_ab" id="f_updone" value="1" <?= (int)($d['upload_schliesst_ab'] ?? 0) === 1 ? 'checked' : '' ?>>
+          <label for="f_updone" style="margin:0">Mit dem Upload wird der Auftrag auf „erledigt" gesetzt und der Kunde benachrichtigt</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="bx-row" style="margin-top:var(--sp-4)">
     <button class="btn btn-primary" type="submit"><?= $neu ? 'Dienstleistung anlegen' : 'Speichern' ?></button>
     <a class="btn btn-ghost" href="?p=dienstleistungen">Abbrechen</a>
@@ -143,6 +178,24 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   }
   if (pm) pm.addEventListener('change', apply);
   apply();
+})();
+(function(){
+  // Schritte-Vorlage beim Baustein-Wechsel einfuellen, solange das Feld leer/unveraendert ist.
+  var map = <?= json_encode($vorlagenMap, JSON_UNESCAPED_UNICODE) ?>;
+  var baustein = document.querySelector('select[name="baustein"]');
+  var feld = document.getElementById('f_schritte');
+  if (baustein && feld) {
+    var autoFill = (feld.value.trim() === '');
+    feld.addEventListener('input', function(){ autoFill = false; });
+    baustein.addEventListener('change', function(){
+      if (autoFill || feld.value.trim() === '') { feld.value = map[baustein.value] || map[''] || ''; }
+    });
+  }
+  // „Upload schließt ab" nur aktivierbar, wenn Endergebnis-Upload erlaubt ist.
+  var up = document.getElementById('f_ergup'), done = document.getElementById('f_updone');
+  function syncUp(){ if (!up || !done) return; done.disabled = !up.checked; if (!up.checked) done.checked = false; }
+  if (up) up.addEventListener('change', syncUp);
+  syncUp();
 })();
 </script>
 <?php render_footer();
