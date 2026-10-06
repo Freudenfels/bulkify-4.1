@@ -6353,10 +6353,13 @@ function produktion_scan_pruefen(string $scan, ?string $kat): array {
 // bucht Material FEFO ab, markiert erledigt, aktualisiert den Status; beim letzten Schritt
 // wird die Fertigware eingebucht und der Auftrag auf 'erledigt' gesetzt.
 // Rückgabe: ['ok'=>bool, 'fehler'=>?('reihenfolge'|'scan'|'mangel'), 'msg'=>string, 'fertig'=>bool, 'station'=>string]
-function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan = '', bool $ohneScan = false): array {
+function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan = '', bool $ohneScan = false, bool $godmode = false): array {
+    // God-Mode (nur Admin): klickt alles durch, OHNE jede Prüfung/Buchung – keine Vorbereitungs-Weiche, kein
+    // Scan, kein Bestandscheck, keine Material-Abbuchung, keine Lager-Übergabe. Für Admin-Tests/Sonderfälle.
+    $god = $godmode && function_exists('has_role') && has_role('admin');
     // PreProduktionsauftrag: solange der Auftrag in Vorbereitung ist (noch nicht vom Admin freigegeben),
-    // kann in der Produktion kein Schritt gestartet/abgeschlossen werden. Sichtbar ja – startbar nein.
-    if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')
+    // kann in der Produktion kein Schritt gestartet/abgeschlossen werden. Sichtbar ja – startbar nein. (God-Mode überspringt das.)
+    if (!$god && (string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')
         return ['ok'=>false, 'fehler'=>'vorbereitung', 'msg'=>'Dieser Auftrag ist noch in Vorbereitung und nicht zur Produktion freigegeben.', 'fertig'=>false, 'station'=>''];
     $firstOpen = one("SELECT id, station FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort LIMIT 1", [$pa_id]);
     if (!$firstOpen || (int)$firstOpen['id'] !== $schritt_id)
@@ -6364,10 +6367,10 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
     $station = (string)$firstOpen['station'];
     $anl  = station_anleitung($station);
     $scan = trim($scan);
-    $master = ist_master_scan($scan);   // 8er-Folge: überspringt Scan-Prüfung + Bestandsabbuchung
+    $master = ist_master_scan($scan) || $god;   // 8er-Folge ODER God-Mode: überspringt Scan-Prüfung + Bestandsabbuchung
     // $ohneScan = einfacher Abhak-Modus (Detailseite): Schritt ohne Charge-Scan abschließen.
     // Material wird trotzdem nach FEFO abgebucht; nur die Scan-PRÜFUNG entfällt (es gibt noch keine Etiketten zum Scannen).
-    if ($anl['scan'] && !$ohneScan) {
+    if ($anl['scan'] && !$ohneScan && !$god) {
         if (!$master) {
             $chk = produktion_scan_pruefen($scan, $anl['kat']);
             if (!$chk['ok']) return ['ok'=>false, 'fehler'=>'scan', 'msg'=>$chk['msg'], 'fertig'=>false, 'station'=>$station];
@@ -6397,14 +6400,31 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
         // ÜBERGABE ANS LAGER statt Selbst-Buchung: ist die Produktion durch, bekommt das Lager eine Aufgabe,
         // die Fertigware in Lager 1 oder 2 zu buchen (Fulfillment -> Lager 2). Das Lager bucht via einlager_buchen().
         // Teilmengen, die während der Produktion direkt gebucht wurden, zählen; einlager_buchen bucht nur den Rest.
-        produktion_an_lager_uebergeben($pa_id);
+        // God-Mode: KEINE Lager-Übergabe (es soll nichts gebucht werden – reiner Durchlauf).
+        if (!$god) produktion_an_lager_uebergeben($pa_id);
         $pa = one("SELECT auftrag_id, kunde_id, nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
         if ($pa && $pa['auftrag_id']) {
             q("UPDATE auftrag SET status='erledigt' WHERE id=?", [(int)$pa['auftrag_id']]);
-            if ($pa['kunde_id']) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Produktion ' . $pa['nummer'] . ' abgeschlossen – an Lager zum Einlagern übergeben.', 'auftrag', 'auftrag', (int)$pa['auftrag_id']);
+            if ($pa['kunde_id']) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Produktion ' . $pa['nummer'] . ($god ? ' per God-Mode (Admin) ohne Bestandsbuchung durchlaufen.' : ' abgeschlossen – an Lager zum Einlagern übergeben.'), 'auftrag', 'auftrag', (int)$pa['auftrag_id']);
         }
     }
     return ['ok'=>true, 'fehler'=>null, 'msg'=>'', 'fertig'=>$fertig, 'station'=>$station];
+}
+// God-Mode (nur Admin): den ganzen Produktionsauftrag in einem Rutsch durchlaufen – alle offenen Schritte der
+// Reihe nach, ohne jede Prüfung/Buchung (kein Bestand geprüft/abgebucht, keine Lager-Übergabe). Rückgabe:
+// ['ok','done'(abgeschlossene Schritte),'fertig','msg'].
+function produktion_godmode_abschluss(int $pa_id): array {
+    if (!(function_exists('has_role') && has_role('admin')))
+        return ['ok'=>false, 'done'=>0, 'fertig'=>false, 'msg'=>'Nur Admin.'];
+    $done = 0; $fertig = false; $guard = 0;
+    while ($guard++ < 500) {
+        $next = one("SELECT id FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort LIMIT 1", [$pa_id]);
+        if (!$next) { $fertig = true; break; }
+        $r = produktion_schritt_erledigen($pa_id, (int)$next['id'], '', true, true);
+        if (!($r['ok'] ?? false)) return ['ok'=>false, 'done'=>$done, 'fertig'=>false, 'msg'=>($r['msg'] ?? 'Abbruch')];
+        $done++; $fertig = (bool)($r['fertig'] ?? false);
+    }
+    return ['ok'=>true, 'done'=>$done, 'fertig'=>$fertig, 'msg'=>''];
 }
 
 // Materialbedarf eines Produktionsauftrags: je Rohstoff benötigte vs. verfügbare Menge.
