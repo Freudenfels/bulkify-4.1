@@ -37,6 +37,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Produktionsauftrag konnte nicht angelegt werden (kein Produkt am Auftrag?).')); exit;
 }
 
+// Einlagern direkt am Auftrag anstoßen (an Lager übergeben / nachholen): bucht die fertige Ware ins Lager 1/2.
+// Für fertig produzierte Aufträge, die noch nicht eingelagert sind (z. B. Altaufträge) – ohne Modulwechsel.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'einlagern_nachholen') {
+    $paid = (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$id]);
+    if ($paid) { $r = einlager_buchen($paid); header('Location: ?p=auftrag&id=' . $id . '&einlagerok=' . urlencode((string)($r['label'] ?? 'Lager'))); exit; }
+    header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Produktionsauftrag zum Einlagern vorhanden.')); exit;
+}
+
 // Etikett (Team/Admin): Datei hochladen/ersetzen (z. B. Last-Minute-Änderung des Kunden), Freigabe im
 // Namen des Kunden bestätigen, Datei entfernen. Nur Admin/Vertrieb.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['etikett_upload_team','etikett_freigeben_team','etikett_del_team'], true)) {
@@ -228,6 +236,10 @@ $statusBadge = match ($a['status']) {
 // Produktion + Beschaffung zu diesem Auftrag
 $pa = one("SELECT * FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$id]);
 $istFremd = $pa && ($pa['produktionsart'] ?? '') === 'fremd';
+// Einlagern: fertig produziert (PA erledigt), aber noch offene (nicht gebuchte) Menge → an Lager übergeben.
+$paRest        = $pa ? produktion_rest((int)$pa['id']) : 0.0;
+$einlagerZiel  = $pa ? einlager_ziel_fuer_pa((int)$pa['id']) : ['ziel'=>'', 'label'=>''];
+$einlagerNoetig = $pa && ($pa['status'] ?? '') === 'erledigt' && $paRest > 0.0001;
 $paStatusBadge = $pa ? match ($pa['status']) {
     'offen'=>bx_badge('offen','info'),'laufend'=>bx_badge('läuft','warn'),'erledigt'=>bx_badge('fertig','ok'),
     default=>bx_badge(status_text((string)$pa['status'])),
@@ -370,6 +382,7 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))):
 // Admin-Override „Rohstoff/Bulk angekommen" – damit die Kunden-Statusleiste auch bei Alt-Aufträgen /
 // Zukauf ohne verknüpfte Charge auf „Rohstoff angekommen" springt.
 if (isset($_GET['rohok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . ($_GET['rohok']==='1' ? 'Als „Rohstoff angekommen" markiert – der Kunde sieht es sofort.' : 'Markierung zurückgesetzt.') . '</div>';
+if (isset($_GET['einlagerok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">An das Lager übergeben und in ' . h((string)$_GET['einlagerok']) . ' eingebucht.</div>';
 if (has_role('admin') || has_role('production') || has_role('einkauf')):
     $_ph = kunde_auftrag_phase($a); $_angDa = $_ph['dates'][2] ?? null; $_override = !empty($a['rohstoff_angekommen_am']);
 ?>
@@ -441,6 +454,15 @@ if (has_role('admin') || has_role('production') || has_role('einkauf')):
       <?= bereitschaft_badge($ber['status'] ?? '') ?>
       <?php if (($ber['status'] ?? '') === 'wartet'): ?> <a href="?p=produktionsauftrag&id=<?= (int)$pa['id'] ?>" style="font-size:12px">was fehlt?</a><?php endif; ?>
     </div></div>
+    <?php if ($einlagerNoetig): ?>
+    <div style="grid-column:1/-1"><div class="k muted">Einlagern</div><div>
+      <form method="post" style="margin:0" onsubmit="return confirm('Fertige Ware an das Lager übergeben und in <?= h($einlagerZiel['label']) ?> buchen?');">
+        <input type="hidden" name="aktion" value="einlagern_nachholen">
+        <button class="btn btn-primary btn-sm" type="submit">An Lager übergeben · in <?= h($einlagerZiel['label']) ?> buchen</button>
+      </form>
+      <div class="muted" style="font-size:12px;margin-top:4px">Produktion ist fertig, aber noch nicht eingelagert. Das Lager bekommt eine Aufgabe und bucht die Ware in <?= h($einlagerZiel['label']) ?> – oder du buchst hier direkt.</div>
+    </div></div>
+    <?php endif; ?>
     <?php else: $aktivPA = in_array((string)$a['status'], ['offen', 'in_produktion'], true); ?>
     <div><div class="k muted">Produktionsauftrag</div>
       <?php if ($aktivPA): ?>
