@@ -36,6 +36,10 @@ function meta_set(string $k, $v): void {
     $c[$k] = (string)$v;
 }
 
+// GoBD scharfgeschaltet? Default AUS (Aufbau-/Migrationsphase: Belege/Beträge/Positionen frei korrigierbar).
+// Scharf = festgeschriebene/freigegebene/bezahlte Belege sind unveränderbar (nur Storno/Gutschrift).
+function gobd_scharf(): bool { return (string) meta_get('gobd_scharf', '0') === '1'; }
+
 // ---- nummernkreis (fortlaufende Nummern, EINE geteilte Quelle) – verbatim -------------------------
 function naechste_nummer(string $prefix): string {
     $prefix = strtoupper(trim($prefix));

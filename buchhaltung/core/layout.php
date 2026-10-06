@@ -35,6 +35,9 @@ function bu_nav(): array {
             'beleg_eingang'     => ['label' => 'Belege (KI)',         'href' => '?p=beleg_eingang'],
             'lief_rechnung_neu' => ['label' => 'Eingangsrechnung',    'href' => '?p=lief_rechnung_neu'],
         ],
+        'System' => [
+            'einstellungen'     => ['label' => 'Einstellungen',       'href' => '?p=einstellungen'],
+        ],
     ];
 }
 

@@ -96,7 +96,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     if ($aktion === 'betraege_aus_positionen') {
         $bx = one("SELECT typ, status, kunde_sichtbar FROM beleg WHERE id=?", [$id]);
         $bezahlt = (float) scalar("SELECT COALESCE(SUM(betrag),0) FROM zahlung WHERE beleg_id=?", [$id]);
-        $entwurf = $bx && $bx['typ'] === 'rechnung' && $bx['status'] === 'offen' && (int)$bx['kunde_sichtbar'] === 0 && $bezahlt <= 0.005;
+        $istRechnung = $bx && $bx['typ'] === 'rechnung' && $bx['status'] !== 'storniert';
+        // GoBD aus (Aufbauphase): jede nicht-stornierte Rechnung. GoBD scharf: nur Entwürfe.
+        $entwurf = $istRechnung && (!gobd_scharf() || ($bx['status'] === 'offen' && (int)$bx['kunde_sichtbar'] === 0 && $bezahlt <= 0.005));
         if ($entwurf) {
             $pos = beleg_positionen($id);
             if ($pos) {
@@ -165,9 +167,10 @@ $zBadge = fn($s) => match ($s) {
 $zs = beleg_zahlstatus($b);   // abgeleiteter Zahlstatus + bezahlt/rest
 
 $istFrei = (int)($b['kunde_sichtbar'] ?? 0) === 1;
-// Entwurf = Rechnung noch korrigierbar: offen, nicht freigegeben, keine Zahlung. Dann darf der Betrag
-// aus den Positionen übernommen werden (z. B. versehentlich direkt gebuchte Rechnung richtigstellen).
-$istEntwurf = !$istGut && ($b['status'] ?? '') === 'offen' && !$istFrei && $zs['bezahlt'] <= 0.005;
+// Betrag aus Positionen übernehmbar? GoBD aus (Aufbauphase): jede nicht-stornierte Rechnung.
+// GoBD scharf: nur Entwürfe (offen, nicht freigegeben, keine Zahlung).
+$istEntwurf = !$istGut && ($b['status'] ?? '') !== 'storniert'
+    && (!gobd_scharf() || (($b['status'] ?? '') === 'offen' && !$istFrei && $zs['bezahlt'] <= 0.005));
 // Freigeben/Zurueckziehen (wie bei Angeboten) – nur fuer Rechnungen, nicht bei Storno.
 $freiBtn = '';
 if (!$istGut && $b['status'] !== 'storniert') {
