@@ -42,3 +42,6 @@ Dokument ein CoA/Spec-Anchor, der die Popup-Vorschau (`bxDocOeffnen`) öffnet. B
 dort ist das `<fieldset disabled>`, was nur Formularfelder sperrt, Anchors nicht. Daten: `$ZNR`
 (id→Artikelnummer), `$ITEMDOCS` (id→spec/coa/analyse) + JS `zactions(row)` (aktualisiert beim
 Rohstoff-Wechsel und für neue Zeilen).
+
+## „Wo wird diese Rezeptur verwendet?" (Verwendungs-Übersicht)
+Panel über dem Status (nur bestehende Rezepturen). Helfer `rezeptur_verwendung($id)` (core/schema.php) listet ALLE Verweise klickbar: **Produkt** (Blocker), **Lagerartikel Bulk/Fertigware** (Blocker, kein eigener Link), **Produktionsauftrag** (Blocker), **Angebot-Position** (Blocker), **abgeleitete Rezeptur (Basis)**, sowie die direkten Verknüpfungen **Auftrag/Angebot/Beleg** (rezeptur_id-Override). Mit „Blocker"-Badge markiert sind genau die, die das Löschen (`rezeptur_loeschen`) verhindern – dort zuerst entfernen/ersetzen, dann löschen.

@@ -174,6 +174,24 @@ if (isset($_GET['gesendet'])) echo '<div class="bx-panel badge-ok" style="paddin
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 if (!empty($_SESSION['rez_del_fehler'])) { echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($_SESSION['rez_del_fehler']) . '</div>'; unset($_SESSION['rez_del_fehler']); }
 ?>
+<?php if (!$neu): $rezVerw = rezeptur_verwendung((int)$id); if ($rezVerw): ?>
+<div class="bx-panel" style="border-left:3px solid var(--warn)">
+  <h2 style="margin-top:0;font-size:16px">Wo wird diese Rezeptur verwendet? <span class="muted" style="font-weight:400;font-size:13px">(<?= count($rezVerw) ?>)</span></h2>
+  <p class="muted" style="margin-top:0;font-size:13px">Zum Löschen zuerst die mit <strong>Blocker</strong> markierten Verweise entfernen/ersetzen. Ein Klick öffnet die jeweilige Stelle.</p>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Typ</th><th>Eintrag</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($rezVerw as $vv): ?>
+      <tr>
+        <td><?= h($vv['typ']) ?><?= !empty($vv['blocker']) ? ' ' . bx_badge('Blocker','warn') : '' ?></td>
+        <td><?= $vv['url'] ? '<a href="' . h((string)$vv['url']) . '">' . h((string)$vv['label']) . '</a>' : h((string)$vv['label']) ?></td>
+        <td style="text-align:right"><?= $vv['url'] ? '<a class="btn btn-ghost btn-sm" href="' . h((string)$vv['url']) . '">öffnen</a>' : '<span class="muted" style="font-size:12px">kein eigener Link</span>' ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; endif; ?>
 <?php if (!$neu): ?>
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center">

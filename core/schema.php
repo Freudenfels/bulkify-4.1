@@ -6765,6 +6765,31 @@ function rezeptur_loeschen(int $id): array {
     return ['ok' => true];
 }
 
+// Wo wird eine Rezeptur überall verwendet (klickbar auflösen, damit man die Lösch-Blocker gezielt findet)?
+// Deckt die Lösch-Blocker aus rezeptur_loeschen() ab PLUS abgeleitete Rezepturen und die direkten
+// Verknüpfungen (auftrag/angebot/beleg.rezeptur_id). Rückgabe: Liste ['typ','label','url'(?),'blocker'(bool)].
+function rezeptur_verwendung(int $id): array {
+    $id = (int)$id; if ($id <= 0) return [];
+    $out = [];
+    foreach (all("SELECT id, COALESCE(NULLIF(name,''), NULLIF(kundenname,''), nummer, CONCAT('#',id)) AS name FROM produkt WHERE rezeptur_id=? ORDER BY id", [$id]) as $p)
+        $out[] = ['typ'=>'Produkt', 'label'=>(string)$p['name'], 'url'=>'?p=produkt&id='.(int)$p['id'], 'blocker'=>true];
+    foreach (all("SELECT id, name, kategorie FROM item WHERE rezeptur_id=? ORDER BY id", [$id]) as $it)
+        $out[] = ['typ'=>'Lagerartikel (Bulk/Fertigware)', 'label'=>(string)$it['name'].' · '.(string)$it['kategorie'], 'url'=>null, 'blocker'=>true];
+    foreach (all("SELECT id, nummer FROM produktionsauftrag WHERE rezeptur_id=? ORDER BY id DESC", [$id]) as $pa)
+        $out[] = ['typ'=>'Produktionsauftrag', 'label'=>(string)$pa['nummer'], 'url'=>'?p=produktionsauftrag&id='.(int)$pa['id'], 'blocker'=>true];
+    foreach (all("SELECT DISTINCT ap.angebot_id, ag.nummer FROM angebot_position ap JOIN angebot ag ON ag.id=ap.angebot_id WHERE ap.rezeptur_id=? ORDER BY ap.angebot_id DESC", [$id]) as $ap)
+        $out[] = ['typ'=>'Angebot (Position)', 'label'=>(string)$ap['nummer'], 'url'=>'?p=angebot&id='.(int)$ap['angebot_id'], 'blocker'=>true];
+    foreach (all("SELECT id, nummer, name FROM rezeptur WHERE basis_rezeptur_id=? ORDER BY id", [$id]) as $c)
+        $out[] = ['typ'=>'Abgeleitete Rezeptur (Basis)', 'label'=>(string)$c['nummer'].' · '.(string)$c['name'], 'url'=>'?p=rezeptur_detail&id='.(int)$c['id'], 'blocker'=>false];
+    foreach (all("SELECT id, nummer FROM auftrag WHERE rezeptur_id=? ORDER BY id DESC", [$id]) as $a)
+        $out[] = ['typ'=>'Auftrag (verknüpft)', 'label'=>(string)$a['nummer'], 'url'=>'?p=auftrag&id='.(int)$a['id'], 'blocker'=>false];
+    foreach (all("SELECT id, nummer FROM angebot WHERE rezeptur_id=? ORDER BY id DESC", [$id]) as $a)
+        $out[] = ['typ'=>'Angebot (verknüpft)', 'label'=>(string)$a['nummer'], 'url'=>'?p=angebot&id='.(int)$a['id'], 'blocker'=>false];
+    foreach (all("SELECT id, nummer FROM beleg WHERE rezeptur_id=? ORDER BY id DESC", [$id]) as $b)
+        $out[] = ['typ'=>'Rechnung/Beleg (verknüpft)', 'label'=>(string)$b['nummer'], 'url'=>'/buchhaltung/?p=rechnung&id='.(int)$b['id'], 'blocker'=>false];
+    return $out;
+}
+
 // Aus ausgelesenen Positionen eine Rechnung (Beleg) ANLEGEN und mit einem bestehenden Auftrag
 // verknüpfen; Original-PDF anhängen; den (fehlenden) Auftragspreis aus der Positions-Summe füllen.
 // So sind die Preise aufgeschlüsselt (Etikett/Glas/Kapsel …) beim Kunden hinterlegt. Rückgabe:
