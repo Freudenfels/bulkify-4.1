@@ -23,3 +23,6 @@ Der Positionen-Panel wird IMMER gezeigt. Mit Einzelpositionen: Tabelle inkl. USt
 
 ## Positionen anpassen (neu)
 Panel „Positionen": Button „Positionen aus Angebot übernehmen" (bei Auftrags-Rechnungen; aufgeschlüsselte Positionen aus dem verknüpften Angebot) und ein manueller Editor (Zeilen hinzufügen/entfernen, Artikel-Nr/Bezeichnung/Menge/Einheit/Einzelpreis/USt). Beides ändert nur die Positionen, nicht die Kopfsummen (GoBD) – Abweichung Positionssumme vs. Beleg-Netto wird oben gewarnt. Logik in core/beleg_positionen.php.
+
+## Rechnungsbetrag aus Positionen (Entwurf)
+Weicht die Positionssumme vom Beleg-Netto ab und ist die Rechnung noch ein Entwurf (status offen, NICHT freigegeben, unbezahlt), erscheint am Hinweis der Button „Rechnungsbetrag aus Positionen übernehmen" (aktion betraege_aus_positionen). Er setzt Netto/USt/Brutto des Belegs auf die Summe der Positionen (beleg_summen_aus_positionen). Bei freigegebener/bezahlter Rechnung ist das gesperrt (GoBD → Storno + neu).

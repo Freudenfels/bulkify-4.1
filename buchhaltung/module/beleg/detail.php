@@ -91,6 +91,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
         header('Location: ?p=rechnung&id=' . $id . '&posman=' . $n); exit;
     }
 
+    // Rechnungsbetrag aus den Positionen übernehmen – NUR für Entwürfe (offen, nicht freigegeben, unbezahlt).
+    // Eine festgeschriebene/gesendete/bezahlte Rechnung wird NICHT geändert (GoBD → Storno + neu).
+    if ($aktion === 'betraege_aus_positionen') {
+        $bx = one("SELECT typ, status, kunde_sichtbar FROM beleg WHERE id=?", [$id]);
+        $bezahlt = (float) scalar("SELECT COALESCE(SUM(betrag),0) FROM zahlung WHERE beleg_id=?", [$id]);
+        $entwurf = $bx && $bx['typ'] === 'rechnung' && $bx['status'] === 'offen' && (int)$bx['kunde_sichtbar'] === 0 && $bezahlt <= 0.005;
+        if ($entwurf) {
+            $pos = beleg_positionen($id);
+            if ($pos) {
+                $s = beleg_summen_aus_positionen($pos);   // netto/ust/brutto aus den Positionen
+                $ustP = 0.0; foreach ($pos as $p) if ((float)($p['mwst_satz'] ?? 0) > 0) { $ustP = (float)$p['mwst_satz']; break; }
+                if ($ustP <= 0 && $s['netto'] > 0) $ustP = round($s['ust'] / $s['netto'] * 100, 2);
+                q("UPDATE beleg SET netto=?, ust_prozent=?, ust_betrag=?, brutto=? WHERE id=?",
+                  [$s['netto'], $ustP, $s['ust'], $s['brutto'], $id]);
+                beleg_status_log_add($id, 'offen', 'Rechnungsbetrag aus Positionen übernommen: netto ' . number_format($s['netto'],2,',','.') . ' €, brutto ' . number_format($s['brutto'],2,',','.') . ' €', $akteur);
+                header('Location: ?p=rechnung&id=' . $id . '&betrag=1'); exit;
+            }
+        }
+        header('Location: ?p=rechnung&id=' . $id . '&betragfehler=1'); exit;
+    }
+
     // Guthaben auf diese Rechnung anrechnen (verrechnen)
     if ($aktion === 'guthaben_anrechnen') {
         $wunsch = (float) str_replace(',', '.', trim($_POST['betrag'] ?? '0'));
@@ -144,6 +165,9 @@ $zBadge = fn($s) => match ($s) {
 $zs = beleg_zahlstatus($b);   // abgeleiteter Zahlstatus + bezahlt/rest
 
 $istFrei = (int)($b['kunde_sichtbar'] ?? 0) === 1;
+// Entwurf = Rechnung noch korrigierbar: offen, nicht freigegeben, keine Zahlung. Dann darf der Betrag
+// aus den Positionen übernommen werden (z. B. versehentlich direkt gebuchte Rechnung richtigstellen).
+$istEntwurf = !$istGut && ($b['status'] ?? '') === 'offen' && !$istFrei && $zs['bezahlt'] <= 0.005;
 // Freigeben/Zurueckziehen (wie bei Angeboten) – nur fuer Rechnungen, nicht bei Storno.
 $freiBtn = '';
 if (!$istGut && $b['status'] !== 'storniert') {
@@ -166,6 +190,8 @@ if (isset($_GET['kopf'])) echo '<div class="bx-panel badge-ok" style="padding:12
 if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnung storniert – Gutschrift wurde erstellt.</div>';
 if (isset($_GET['angerechnet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((float)$_GET['angerechnet'] > 0 ? $eur((float)$_GET['angerechnet']) . ' Guthaben angerechnet.' : 'Kein Guthaben angerechnet (nichts verfügbar/offen).') . '</div>';
 if (isset($_GET['ausgezahlt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((float)$_GET['ausgezahlt'] > 0 ? $eur((float)$_GET['ausgezahlt']) . ' Guthaben als ausgezahlt verbucht.' : 'Kein Guthaben ausgezahlt.') . '</div>';
+if (isset($_GET['betrag'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnungsbetrag aus den Positionen übernommen.</div>';
+if (isset($_GET['betragfehler'])) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#e6c4c0">Betrag konnte nicht übernommen werden (nur bei Entwürfen: offen, nicht freigegeben, unbezahlt – und es müssen Positionen vorhanden sein).</div>';
 if (isset($_GET['pos'])) echo '<div class="bx-panel ' . ((int)$_GET['pos'] > 0 ? 'badge-ok' : '') . '" style="padding:12px 16px' . ((int)$_GET['pos'] > 0 ? '' : ';border-color:#e6c4c0') . '">' . ((int)$_GET['pos'] > 0 ? (int)$_GET['pos'] . ' Position(en) aus dem Angebot übernommen.' : 'Positionen konnten nicht aus dem Angebot übernommen werden: ' . h((string)($_GET['posgrund'] ?? ''))) . '</div>';
 if (isset($_GET['posman'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Positionen gespeichert (' . (int)$_GET['posman'] . ').</div>';
 // Bezug-Hinweise
@@ -257,7 +283,15 @@ echo '</div>';
     </tfoot>
   </table></div>
   <?php if (abs($sumNetto - (float)$b['netto']) > 0.01): ?>
-    <p style="margin:8px 0 0;color:var(--warn)">Hinweis: Summe der Positionen (<?= $eur($sumNetto) ?>) weicht vom Beleg-Netto (<?= $eur($b['netto']) ?>) ab – bitte prüfen.</p>
+    <div class="bx-row" style="margin:8px 0 0;align-items:center;gap:10px;flex-wrap:wrap">
+      <p style="margin:0;color:var(--warn)">Hinweis: Summe der Positionen (<?= $eur($sumNetto) ?>) weicht vom Beleg-Netto (<?= $eur($b['netto']) ?>) ab.</p>
+      <?php if ($istEntwurf): ?>
+      <form method="post" style="margin:0" onsubmit="return confirm('Rechnungsbetrag auf die Positionssumme (<?= h($eur($sumNetto)) ?> netto) setzen? Das ändert Netto/USt/Brutto dieser Entwurfs-Rechnung.');">
+        <input type="hidden" name="aktion" value="betraege_aus_positionen">
+        <button class="btn btn-primary btn-sm" type="submit">Rechnungsbetrag aus Positionen übernehmen</button>
+      </form>
+      <?php else: ?><span class="muted" style="font-size:12px">Betrag nur bei Entwürfen änderbar – sonst Stornieren und neu.</span><?php endif; ?>
+    </div>
   <?php endif; ?>
   <?php else: ?>
   <p class="muted" style="margin:0 0 8px">Keine Einzelpositionen hinterlegt – diese Rechnung trägt nur einen Gesamtbetrag (z. B. Alt-Import oder Sammelposition aus dem Auftrag).</p>
