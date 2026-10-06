@@ -2644,10 +2644,19 @@ function produktion_an_lager_uebergeben(int $pa_id): int {
 // Das Lager bucht die Fertigware ein (Ziel L1/L2 ergibt sich aus Produkt/Kunde) und schließt die Einlager-Aufgabe.
 // Idempotent: ist schon alles gebucht, wird nur die Aufgabe geschlossen. Rückgabe: ['ok','charge_id','ziel','label'].
 function einlager_buchen(int $pa_id): array {
-    $cid = produktion_fertigware_einbuchen($pa_id);
+    $cid  = produktion_fertigware_einbuchen($pa_id);
+    $ziel = einlager_ziel_fuer_pa($pa_id);
+    // Fulfillment: mit dem Einlagern ins Lager 2 (Fremdlager) ist der Auftrag für den Kunden abgeschlossen
+    // (Phase „Eingelagert", wandert ins Kunden-Archiv). Normale Kunden bleiben „Versandbereit" bis zum Versand.
+    if ($ziel['ziel'] === 'lager2') {
+        $pa = one("SELECT auftrag_id, kunde_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+        if ($pa && !empty($pa['auftrag_id'])) {
+            q("UPDATE auftrag SET status='versendet' WHERE id=? AND status NOT IN ('storniert','versendet')", [(int)$pa['auftrag_id']]);
+            if (!empty($pa['kunde_id'])) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'In Lager 2 (Fremdlager) eingelagert – Auftrag abgeschlossen.', 'auftrag', 'auftrag', (int)$pa['auftrag_id']);
+        }
+    }
     foreach (all("SELECT id FROM aufgabe WHERE ref_typ='einlagern' AND ref_id=? AND status='offen'", [$pa_id]) as $a)
         aufgabe_erledigen((int)$a['id'], null);
-    $ziel = einlager_ziel_fuer_pa($pa_id);
     return ['ok'=>true, 'charge_id'=>$cid, 'ziel'=>$ziel['ziel'], 'label'=>$ziel['label']];
 }
 
