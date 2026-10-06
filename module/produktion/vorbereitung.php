@@ -146,6 +146,47 @@ if ($pa):
       </div>
     </div>
 
+    <?php
+    // Teilproduktions-Rechner: zwei Mengen – komplett fertig (inkl. Etikett) und bis vor Etikettieren.
+    $tp = produktion_teilmenge_machbar($paId);
+    $tpFarbe = ($tp['komplett'] > 0 || $tp['vor_etikett'] > 0) ? 'var(--gruen)' : 'var(--warn)';
+    $nf = fn($x) => number_format((int)$x, 0, ',', '.');
+    ?>
+    <div class="bx-panel" style="padding:14px 16px;margin-bottom:14px;border-left:3px solid <?= $tpFarbe ?>">
+      <div style="font-weight:600;margin-bottom:6px">Teilproduktion – was ist jetzt machbar?</div>
+      <div class="bx-row" style="gap:18px;flex-wrap:wrap;align-items:baseline">
+        <div><span class="muted" style="font-size:12px">Auftragsmenge</span><div style="font-size:15px"><?= $nf($tp['menge']) ?> Pkg.</div></div>
+        <div><span class="muted" style="font-size:12px">schon produziert</span><div style="font-size:15px"><?= $nf($tp['gebucht']) ?></div></div>
+        <div><span class="muted" style="font-size:12px">offen</span><div style="font-size:15px"><?= $nf($tp['rest']) ?></div></div>
+        <div><span class="muted" style="font-size:12px">komplett fertig (inkl. Etikett)</span><div style="font-size:16px;font-weight:700;color:<?= $tp['komplett']>0?'var(--gruen)':'var(--muted)' ?>"><?= $nf($tp['komplett']) ?> Pkg.</div></div>
+        <div><span class="muted" style="font-size:12px">bis vor Etikettieren</span><div style="font-size:16px;font-weight:700;color:<?= $tp['vor_etikett']>0?'var(--gruen)':'var(--muted)' ?>"><?= $nf($tp['vor_etikett']) ?> Pkg.</div></div>
+      </div>
+      <?php if ($tp['rest'] <= 0): ?>
+        <div class="muted" style="font-size:13px;margin-top:8px">Alles produziert – nichts mehr offen.</div>
+      <?php else: ?>
+        <div style="font-size:13px;margin-top:8px;display:flex;flex-direction:column;gap:4px">
+          <?php if ($tp['komplett'] > 0): ?>
+            <div><?= $flagOk(true) ?> <strong><?= $nf($tp['komplett']) ?></strong> Packungen können jetzt <strong>komplett fertig</strong> gemacht werden (inkl. Etikett)<?= $tp['komplett'] < $tp['rest'] ? ' – begrenzt durch <strong>' . h($tp['limit_komplett']) . '</strong>' : '' ?>.</div>
+          <?php endif; ?>
+          <?php if ($tp['vor_etikett'] > $tp['komplett']): ?>
+            <div><?= $flagOk(true) ?> Weitere <strong><?= $nf($tp['vor_etikett'] - $tp['komplett']) ?></strong> Packungen bis <strong>vor das Etikettieren</strong> (produzieren/abfüllen), Etikettieren folgt später<?= $tp['vor_etikett'] < $tp['rest'] ? ' – begrenzt durch <strong>' . h($tp['limit_vor']) . '</strong>' : '' ?>.</div>
+          <?php endif; ?>
+          <?php if ($tp['vor_etikett'] <= 0): ?>
+            <div style="color:#8f231b">Aktuell <strong>nichts</strong> produzierbar – es fehlt <strong><?= h($tp['limit_vor'] ?: 'Material') ?></strong>.</div>
+          <?php elseif ($tp['vor_etikett'] < $tp['rest']): ?>
+            <div class="muted">Der Rest (<?= $nf($tp['rest'] - $tp['vor_etikett']) ?> Pkg.) wartet auf mehr Material.</div>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
+      <?php if ($tp['braucht_etikett'] && !$tp['etikett_frei'] && $tp['vor_etikett'] > 0): ?>
+        <div class="muted" style="font-size:12px;margin-top:6px">Etikett noch nicht freigegeben – es lässt sich schon bis vor das Etikettieren produzieren; <strong>fertigstellen</strong> geht, sobald die Freigabe (und genug Etiketten) da sind.</div>
+      <?php endif; ?>
+      <?php if ($tp['fertig_moeglich']): ?>
+        <div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-top:8px;display:inline-block">Material + Etiketten reichen – der Auftrag kann jetzt <strong>komplett fertig</strong> produziert werden.</div>
+      <?php endif; ?>
+      <div class="muted" style="font-size:11px;margin-top:8px">Rechnet automatisch neu, sobald sich der Bestand ändert (z. B. neue Gläser oder Etiketten ankommen).</div>
+    </div>
+
     <div class="bx-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
       <!-- Verpackung / Glas -->
       <div class="bx-panel" id="glas" style="padding:16px;scroll-margin-top:80px">

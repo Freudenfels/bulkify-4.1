@@ -42,3 +42,10 @@ aber gesperrt (`produktion_schritt_erledigen` blockt Status `vorbereitung`).
 - `vorbereitung_liste()`, `pa_vorbereitung_checks()`, `produktionsauftrag_freigeben()` in `core/schema.php`.
 - Produktions-Naht `produktion/core/erp.php`: `erp_produktionsauftraege` zeigt `vorbereitung` mit an (gesperrt).
 - Einmaliger Backfill in `init_schema()` (`pa_vorbereitung_backfill`, Kill-Schalter `pa_vorbereitung_backfill_off`).
+
+## Teilproduktions-Rechner (2026-10-06)
+Panel „Teilproduktion – was ist jetzt machbar?" (unter der Bereitschaft). Helfer `produktion_teilmenge_machbar($pa_id)` (core/schema.php) liefert ZWEI Mengen in Packungen (schon Produziertes abgezogen):
+- **vor_etikett** = produzieren/abfüllen bis VOR dem Etikettieren – begrenzt durch den knappsten Baustein OHNE Etikett (Kapseln/Bulk, Glas, Deckel, Karton, Beipack).
+- **komplett** = komplett fertig inkl. Etikett – zusätzlich begrenzt durch Etikettenbestand UND Kundenfreigabe (ohne Freigabe = 0).
+
+Je Baustein `machbar = floor(verfügbar / (benoetigt/menge))` aus `auftrag_bedarf_cached`. Beispiel: 1.400 Gläser + 500 Etiketten → vor_etikett 1.400, komplett 500 (500 komplett fertig, 900 bis vor Etikettieren, Rest wartet auf Material). Rechnet automatisch neu bei Bestandsänderung (neue Gläser/Etiketten). `fertig_moeglich` = komplett deckt den ganzen offenen Rest. Siehe [[bulkify-teilproduktion-rechner]].

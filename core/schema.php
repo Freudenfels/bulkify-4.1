@@ -5610,6 +5610,52 @@ function auftrag_bedarf_cached(int $pa_id): array {
     return $d;
 }
 
+// Teilproduktions-Rechner. Liefert ZWEI Mengen (jeweils in Packungen, schon Produziertes abgezogen):
+//  - vor_etikett: produzieren/abfüllen BIS VOR dem Etikettieren – begrenzt durch den knappsten Baustein
+//    OHNE Etikett (Kapseln/Bulk, Glas, Deckel, Karton, Beipack).
+//  - komplett: komplett FERTIG inkl. Etikett – zusätzlich begrenzt durch den Etikettenbestand UND die
+//    Kundenfreigabe (ohne Freigabe = 0 fertigstellbar).
+// Beispiel: 1.400 Gläser + 500 Etiketten -> vor_etikett=1.400, komplett=500.
+// Rückgabe: ['menge','gebucht','rest','vor_etikett','komplett','limit_vor','limit_komplett',
+//            'braucht_etikett','etikett_frei','etikett_machbar','fertig_moeglich','rollen'=>[...]].
+function produktion_teilmenge_machbar(int $pa_id): array {
+    $menge   = (int) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $gebucht = (int) round(produktion_gebucht($pa_id));
+    $rest    = max(0, $menge - $gebucht);
+    $machbarVor = null; $limitVor = ''; $etikettMachbar = null; $rollen = [];
+    foreach (auftrag_bedarf_cached($pa_id) as $r) {
+        $rolle = (string)$r['rolle'];
+        $benoetigt = (float)$r['benoetigt']; $verf = max(0.0, (float)$r['verfuegbar']);
+        if ($benoetigt <= 1e-9 || $menge <= 0) continue;
+        $jePack = $benoetigt / $menge;          // Verbrauch dieses Bausteins je Packung
+        if ($jePack <= 1e-9) continue;
+        $m = (int) floor($verf / $jePack);      // so viele Packungen deckt der aktuelle Bestand
+        $rollen[] = ['rolle'=>$rolle, 'name'=>(string)($r['name'] ?? ''), 'verfuegbar'=>$verf, 'je_packung'=>$jePack, 'machbar'=>$m];
+        if ($rolle === 'Etikett') { $etikettMachbar = $m; continue; }   // Etikett getrennt rechnen
+        if ($machbarVor === null || $m < $machbarVor) { $machbarVor = $m; $limitVor = $rolle . (!empty($r['name']) ? ' (' . $r['name'] . ')' : ''); }
+    }
+    $machbarVor = max(0, (int)($machbarVor ?? $rest));
+    $vorEtikett = min($machbarVor, $rest);      // bis vor Etikettieren jetzt produzierbar
+    $aid = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $brauchtEt = $aid > 0 && auftrag_braucht_etikett($aid);
+    $frei      = $brauchtEt && etikett_freigegeben($aid);
+    // Komplett fertig: ohne Etikett = wie vor_etikett; mit Etikett = zusätzlich Etikettenbestand + Freigabe.
+    if (!$brauchtEt)      { $komplett = $vorEtikett; $limitKomplett = $limitVor; }
+    elseif (!$frei)       { $komplett = 0;           $limitKomplett = 'Etikett nicht freigegeben'; }
+    else {
+        $etM = max(0, (int)($etikettMachbar ?? 0));
+        $komplett = min($vorEtikett, $etM);
+        $limitKomplett = ($etM <= $vorEtikett) ? 'Etikett' : $limitVor;
+    }
+    $komplett = min($komplett, $rest);
+    $fertigMoeglich = $rest > 0 && $komplett >= $rest;   // der ganze offene Rest kann komplett fertig werden
+    return ['menge'=>$menge, 'gebucht'=>$gebucht, 'rest'=>$rest,
+            'vor_etikett'=>$vorEtikett, 'komplett'=>$komplett,
+            'limit_vor'=>$limitVor, 'limit_komplett'=>$limitKomplett,
+            'braucht_etikett'=>$brauchtEt, 'etikett_frei'=>$frei, 'etikett_machbar'=>$etikettMachbar,
+            'fertig_moeglich'=>$fertigMoeglich, 'rollen'=>$rollen];
+}
+
 // Kombinierte Bestellung für EINEN Lieferant. $itemPositionen = [['item_id','menge','auftrag_id'(0=Lager)], ...] + Bulk (produkt_ids).
 // $bulkMenge (produkt_id => Wunschmenge) hebt die Bestellmenge eines Bulk-Produkts über den reinen
 // Auftragsbedarf: Überschuss (Wunsch - zu_bestellen) wird als auftragsloser Puffer-Posten ergänzt.
