@@ -2613,6 +2613,44 @@ function produktion_fertigware_einbuchen(int $pa_id): ?int {
     return $r['ok'] ? (int)$r['charge_id'] : null;
 }
 
+// ===== Einlagern: Produktion → Lager-Übergabe (das LAGER bucht in Lager 1 oder 2) =====
+// Ziel je Produktionsauftrag: Fulfillment-Kunde → Lager 2 (Fremdlager), sonst Lager 1 (Warenlager/Versand).
+function einlager_ziel_fuer_pa(int $pa_id): array {
+    $pa = one("SELECT auftrag_id, produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $ff = false;
+    if ($pa) {
+        if (!empty($pa['auftrag_id'])) $ff = auftrag_ist_fulfillment((int)$pa['auftrag_id']);
+        if (!$ff && !empty($pa['produkt_id'])) $ff = (bool) scalar("SELECT k.nutzt_fulfillment FROM produkt p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [(int)$pa['produkt_id']]);
+    }
+    return $ff ? ['ziel'=>'lager2', 'label'=>'Lager 2 (Fremdlager)'] : ['ziel'=>'lager1', 'label'=>'Lager 1 (Warenlager)'];
+}
+// Produktion an das Lager übergeben: legt eine Lager-Aufgabe „Einlagern … → Lager 1/2" an. Idempotent je PA.
+function produktion_an_lager_uebergeben(int $pa_id): int {
+    if (!table_exists('aufgabe') || !function_exists('aufgabe_neu')) return 0;
+    if ((int) scalar("SELECT COUNT(*) FROM aufgabe WHERE ref_typ='einlagern' AND ref_id=? AND status='offen'", [$pa_id]) > 0) return 0;
+    $pa = one("SELECT pa.nummer, pa.auftrag_id, pa.menge, a.nummer AS auftrag_nr,
+                      COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, rz.name) AS produkt, k.firma AS kunde
+               FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id
+               LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN rezeptur rz ON rz.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
+               LEFT JOIN kunden k ON k.id=pa.kunde_id WHERE pa.id=?", [$pa_id]);
+    if (!$pa) return 0;
+    $ziel  = einlager_ziel_fuer_pa($pa_id);
+    $titel = 'Einlagern: ' . ($pa['produkt'] ?: ('PR ' . $pa['nummer'])) . ' → ' . $ziel['label'];
+    $besch = trim(($pa['auftrag_nr'] ? 'Auftrag ' . $pa['auftrag_nr'] . ' · ' : '') . 'PR ' . $pa['nummer']
+           . ($pa['kunde'] ? ' · ' . $pa['kunde'] : '') . ' · Menge ' . (int)$pa['menge']
+           . '. Fertige Ware bitte in ' . $ziel['label'] . ' buchen.');
+    return aufgabe_neu($titel, $besch, 2, null, null, null, 'einlagern', $pa_id);
+}
+// Das Lager bucht die Fertigware ein (Ziel L1/L2 ergibt sich aus Produkt/Kunde) und schließt die Einlager-Aufgabe.
+// Idempotent: ist schon alles gebucht, wird nur die Aufgabe geschlossen. Rückgabe: ['ok','charge_id','ziel','label'].
+function einlager_buchen(int $pa_id): array {
+    $cid = produktion_fertigware_einbuchen($pa_id);
+    foreach (all("SELECT id FROM aufgabe WHERE ref_typ='einlagern' AND ref_id=? AND status='offen'", [$pa_id]) as $a)
+        aufgabe_erledigen((int)$a['id'], null);
+    $ziel = einlager_ziel_fuer_pa($pa_id);
+    return ['ok'=>true, 'charge_id'=>$cid, 'ziel'=>$ziel['ziel'], 'label'=>$ziel['label']];
+}
+
 // ===== Lager 2 (Fremdlager) – nur für Fulfillment-Kunden (kunden.nutzt_fulfillment=1) =====
 // Interne 5-stellige BSKU vergeben (fortlaufend ab 10000, kollisionssicher). Brücke zum Fulfillment.
 function bsku_next(): string {
@@ -6141,6 +6179,9 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
     $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
     q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=?, erledigt_von=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $wer !== '' ? $wer : null, $schritt_id]);
     reservierung_abgleichen($pa_id);   // entnommene Items: Reservierung schließen
+    // Übergabe an das Lager: ist die Herstellung durch (Station „Bereit zur Einlagerung"), bekommt das Lager
+    // eine Aufgabe, die Ware in Lager 1 oder 2 zu buchen (je Kunde Fulfillment). Die Buchung macht das Lager (einlager_buchen).
+    if ($station === 'Bereit zur Einlagerung') produktion_an_lager_uebergeben($pa_id);
     $total = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=?", [$pa_id]);
     $done  = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]);
     $status = $done === 0 ? 'offen' : ($done >= $total ? 'erledigt' : 'laufend');
