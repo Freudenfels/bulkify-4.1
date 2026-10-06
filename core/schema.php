@@ -1111,6 +1111,9 @@ function init_schema(): void {
     // Fremdlager: Charge gehoert einem KUNDEN (Fulfillment) und ist NICHT unser Bestand. NULL = Warenlager (uns).
     // Fremdlager-Chargen werden aus item_bestand()/Reservierung/Produktion/Versand ausgeschlossen (Kundenware).
     ensure_column('charge', 'fremd_kunde_id', "INT NULL");
+    // Energetisierung je Einlagerung (nur Kunden mit kunden.zeige_energetisierung) – der Kunde sieht es in „Mein Lager".
+    ensure_column('charge', 'energetisiert_am', "DATETIME NULL");
+    ensure_column('charge', 'energetisiert_von', "VARCHAR(190) NULL");
     ensure_column('bestellung', 'bestelldatum', "DATE NULL");   // „gemeinsam bestellt am"
     ensure_column('bestellung_position', 'bezeichnung', "VARCHAR(200) NULL");   // Freitext (z. B. Bulk-Zukauf ohne Lagerartikel)
 
@@ -1216,6 +1219,9 @@ function init_schema(): void {
     ensure_column('produkt', 'leerkapsel_id', "INT NULL");         // optionale manuelle Wahl der Leerkapsel (sonst automatisch nach Größe)
     // Produkt-Entkopplung: Katalog vs. exklusiv (kunde_id = Besitzer, nur wenn exklusiv)
     ensure_column('produkt', 'exklusiv', "TINYINT(1) NOT NULL DEFAULT 0");
+    // Externe Kundenware: Produkt, das der Kunde woanders hat herstellen lassen und wir nur lagern/versenden
+    // (keine Rezeptur/Produktion bei uns). Gehört immer dem Kunden (exklusiv=1). Fürs Fremdlager/Fulfillment.
+    ensure_column('produkt', 'extern', "TINYINT(1) NOT NULL DEFAULT 0");
     // Portal-Freischaltungen je Kunde (welche Anfrage-Bereiche der Kunde sieht)
     ensure_column('kunden', 'portal_rezeptur', "TINYINT(1) NOT NULL DEFAULT 1");
     ensure_column('kunden', 'portal_produkte', "TINYINT(1) NOT NULL DEFAULT 0");
@@ -2702,7 +2708,14 @@ function lager2_einbuchen(int $produkt_id, float $menge, ?string $charge_nr, ?st
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,angelegt)
        VALUES (?,?,?,?, 'Stück', ?, CURDATE(), 'frei', ?, ?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $mhd ?: null, $notiz ?: 'Lager-2-Einbuchung', gmdate('Y-m-d H:i:s')]);
-    return insert_id();
+    $cid = (int) insert_id();
+    // Energetisierung: bei freigeschalteten Kunden (kunden.zeige_energetisierung) wird JEDE Einlagerung energetisiert.
+    $kid = (int) scalar("SELECT kunde_id FROM produkt WHERE id=?", [$produkt_id]);
+    if ($kid && kunde_zeigt_energetisierung($kid)) {
+        $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
+        q("UPDATE charge SET energetisiert_am=NOW(), energetisiert_von=? WHERE id=?", [$wer !== '' ? $wer : 'Team', $cid]);
+    }
+    return $cid;
 }
 
 // --- Fulfillment-Kopplung (ds_api): Artikel finden + Bestand ab-/zubuchen, idempotent per ref ---

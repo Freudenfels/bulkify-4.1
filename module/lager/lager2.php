@@ -43,7 +43,7 @@ $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 
 render_header('lager2', 'Fremdlager');
 bx_head('Fremdlager', $ffKunden . ' Fulfillment-Kunde(n) · ' . count($produkte) . ' Produkt(e)',
-        bx_btn('Zum Warenlager', '?p=lager', 'ghost'));
+        bx_btn('+ Externes Produkt (Kundenware)', '?p=produkt&neu=1&extern=1', 'primary') . ' ' . bx_btn('Zum Warenlager', '?p=lager', 'ghost'));
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['eingebucht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Fertigware ins Fremdlager eingebucht.</div>';
@@ -120,7 +120,7 @@ foreach ($ffArtikel as $a) {
   <input type="hidden" name="aktion" value="einbuchen">
   <div class="bx-panel">
     <h2 style="margin-top:0">Fertigware einbuchen</h2>
-    <p class="muted" style="margin-top:0;font-size:13px">Manuell Bestand ins Fremdlager legen (z. B. Erstbestand oder Korrektur). Bei Produktionsabschluss passiert das für Fulfillment-Kunden automatisch.</p>
+    <p class="muted" style="margin-top:0;font-size:13px">Manuell Bestand ins Fremdlager legen (z.&nbsp;B. Erstbestand, Korrektur oder <strong>externe Kundenware</strong>). Bei Produktionsabschluss passiert das für Fulfillment-Kunden automatisch. Externe Produkte vorher über „+ Externes Produkt (Kundenware)" anlegen. <strong>Bei freigeschalteten Kunden wird jede Einlagerung automatisch energetisiert</strong> (der Kunde sieht es in „Mein Lager").</p>
     <div class="bx-grid">
       <div class="bx-field"><label>Produkt</label>
         <select name="produkt_id" required>

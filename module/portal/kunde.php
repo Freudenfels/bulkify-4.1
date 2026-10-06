@@ -451,7 +451,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $vpe  = (int)($_POST['einheiten_pro_packung'] ?? 0);
     if ($name === '') { header('Location: ?p=portal&token=' . $token . '&v=fremdprodukte&fpfehler=' . urlencode('Bitte einen Produktnamen angeben.')); exit; }
     $notiz = 'Vom Kunden im Portal als Fremdprodukt angemeldet.' . ($ean !== '' ? ' EAN/GTIN: ' . $ean : '');
-    q("INSERT INTO produkt (nummer,name,kunde_id,exklusiv,einheiten_pro_packung,status,notiz) VALUES (?,?,?,1,?,?,?)",
+    q("INSERT INTO produkt (nummer,name,kunde_id,exklusiv,extern,einheiten_pro_packung,status,notiz) VALUES (?,?,?,1,1,?,?,?)",
       [naechste_nummer('P'), $name, (int)$k['id'], ($vpe > 0 ? $vpe : null), 'aktiv', $notiz]);
     $pid = (int) insert_id();
     produkt_lageritem($pid);   // Verkaufsfertig-Item fürs Lager 2 anlegen
@@ -3625,7 +3625,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       $fpChg = []; $fpStat = [];
       foreach ($fp as $r) {
           $iid = (int)$r['item_id'];
-          $fpChg[$iid] = all("SELECT charge_nr, menge_verfuegbar, mhd FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 ORDER BY (mhd IS NULL), mhd, id", [$iid]);
+          $fpChg[$iid] = all("SELECT charge_nr, menge_verfuegbar, mhd, energetisiert_am FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 ORDER BY (mhd IS NULL), mhd, id", [$iid]);
           $fpStat[$iid] = lager2_verkaufsstatistik($iid, 8);   // Verkaufsgeschwindigkeit + Reichweite (letzte 8 Wochen)
       }
       $fpNf = fn($x) => number_format((float)$x, (floor((float)$x) == (float)$x ? 0 : 2), ',', '.');
@@ -3691,7 +3691,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <td>
           <?php if (!$cs): ?><span class="muted">–</span>
           <?php else: foreach ($cs as $c): ?>
-            <div style="font-size:13px"><?= $c['charge_nr'] ? h($c['charge_nr']) : '<span class="muted">ohne Charge</span>' ?> · <?= $fpNf($c['menge_verfuegbar']) ?> Stk<?= $c['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$c['mhd']))) : '' ?></div>
+            <div style="font-size:13px"><?= $c['charge_nr'] ? h($c['charge_nr']) : '<span class="muted">ohne Charge</span>' ?> · <?= $fpNf($c['menge_verfuegbar']) ?> Stk<?= $c['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$c['mhd']))) : '' ?><?= !empty($c['energetisiert_am']) ? ' · <span style="color:var(--gruen,#1D9E75);font-weight:600">energetisiert ' . h(date('d.m.Y', strtotime((string)$c['energetisiert_am']))) . '</span>' : '' ?></div>
           <?php endforeach; endif; ?>
         </td>
       </tr>

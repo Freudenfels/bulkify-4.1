@@ -77,12 +77,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
     $f = fn($k) => trim($_POST[$k] ?? '');
     if ($f('name') === '') {
         $fehler = 'Name ist ein Pflichtfeld.';
+    } elseif (isset($_POST['extern']) && ($_POST['kunde_id'] ?? '') === '') {
+        $fehler = 'Für ein externes Produkt (Kundenware) bitte den Kunden wählen.';
     } else {
         $kunde_id = ($_POST['kunde_id'] ?? '') !== '' ? (int)$_POST['kunde_id'] : null;
         $rez_id   = ($_POST['rezeptur_id'] ?? '') !== '' ? (int)$_POST['rezeptur_id'] : null;
         $iid = fn($k) => ($_POST[$k] ?? '') !== '' ? (int)$_POST[$k] : null;
         $verp_id  = $iid('verpackung_id');
         $exkl = isset($_POST['exklusiv']) ? 1 : 0;
+        $extern = isset($_POST['extern']) ? 1 : 0;
+        if ($extern) $exkl = 1;   // externe Kundenware gehört immer dem Kunden
         // Der Kunde ist nur bei einem exklusiven Produkt der Besitzer. Ein Katalogprodukt gehört niemandem –
         // sonst steht in der Produktliste ein Kundenname bei einem Produkt, das jeder Kunde bestellen kann.
         if (!$exkl) $kunde_id = null;
@@ -115,6 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             foreach (['abfuellen', 'etikettieren', 'karton', 'beipack'] as $wf)
                 q("UPDATE produkt SET weg_$wf=? WHERE id=?", [isset($_POST['weg_' . $wf]) ? 1 : 0, (int)$id]);
         }
+        q("UPDATE produkt SET extern=? WHERE id=?", [$extern, (int)$id]);
         header('Location: ?p=produkt&id=' . $id . '&gespeichert=1'); exit;
     }
 }
@@ -123,6 +128,13 @@ $p = $neu ? ['status'=>'entwurf','einnahme_pro_tag'=>2,'einheiten_pro_packung'=>
           : one("SELECT * FROM produkt WHERE id=?", [(int)$id]);
 if (!$p) { $neu = true; $p = ['status'=>'entwurf','einnahme_pro_tag'=>2,'einheiten_pro_packung'=>120]; }
 $v = fn($k) => h((string)($p[$k] ?? ''));
+// Externes Produkt (Kundenware): neu via ?extern=1 (+ optional ?kunde_id=) oder bestehendes mit produkt.extern=1.
+$istExtern = $neu ? isset($_GET['extern']) : ((int)($p['extern'] ?? 0) === 1);
+if ($neu && $istExtern) {
+    if (($_GET['kunde_id'] ?? '') !== '') $p['kunde_id'] = (int)$_GET['kunde_id'];
+    $p['exklusiv'] = 1;                         // gehört dem Kunden
+    $p['status']   = 'aktiv';
+}
 
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
@@ -206,6 +218,12 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
 ?>
 <form id="nfCheckForm" method="post"></form>
 <form method="post" class="bx-form">
+  <?php if ($istExtern): ?>
+    <input type="hidden" name="extern" value="1">
+    <div class="bx-panel bx-keepinfo" style="padding:10px 14px;margin-bottom:12px">
+      <strong>Externes Produkt (Kundenware).</strong> Ware, die der Kunde woanders herstellen ließ und die wir nur lagern/versenden – ohne Rezeptur/Produktion bei uns. Es gehört dem gewählten Kunden (exklusiv) und ist danach im <a href="?p=lager2">Fremdlager</a> einbuchbar. Rezeptur ist optional.
+    </div>
+  <?php endif; ?>
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Produktname (intern) <?= bx_hint('unser Arbeitsname, z. B. „Zink". Gleiche Namen werden automatisch mit v2, v3 … fortlaufend nummeriert.') ?></label><input type="text" name="name" value="<?= $v('name') ?>" required placeholder="z. B. Zink"></div>
     <div class="bx-field"><label>Name für den Kunden <?= bx_hint('so heißt es beim Kunden im Portal / auf Belegen, z. B. „Super Zink". Leer = interner Name.') ?></label><input type="text" name="kundenname" value="<?= $v('kundenname') ?>" placeholder="z. B. Super Zink"></div>
