@@ -1366,6 +1366,7 @@ function init_schema(): void {
     ensure_column('kontingent', 'angebot_id', "INT NULL");                     // Herkunft: aus welchem Jahresvertrags-Angebot entstanden
     ensure_column('kontingent', 'freigabe_name', "VARCHAR(190) NULL");         // Unterzeichner (Portal-Bestätigung)
     ensure_column('kontingent', 'freigabe_am', "DATETIME NULL");
+    ensure_column('kontingent', 'min_abruf', "INT NOT NULL DEFAULT 0");         // Mindest-Abrufmenge je Abruf (0 = keine); Restmenge darf immer voll abgerufen werden
     // Einmalige Bereinigung: Der Zwischenstand „zurueckgezogen" ist entfallen – Zurückziehen heißt jetzt
     // schlicht zurück in den Entwurf. Bestehende Datensätze einmalig auf 'offen' ziehen.
     if (meta_get('fix_angebot_zurueck', '') !== '1') {
@@ -7068,6 +7069,10 @@ function kontingent_abruf(int $kontingent_id, int $menge): array {
     $rest = (int)$k['gesamt_menge'] - (int)$k['abgerufen'];
     if ($menge < 1) return ['ok' => false, 'fehler' => 'Bitte eine Menge größer 0 abrufen.'];
     if ($menge > $rest) return ['ok' => false, 'fehler' => 'Nur noch ' . $rest . ' verfügbar.'];
+    // Mindest-Abrufmenge je Abruf. Ausnahme: die letzte Restmenge (< Mindestmenge) darf voll abgerufen werden.
+    $min = (int)($k['min_abruf'] ?? 0);
+    if ($min > 0 && $menge < $min && $menge < $rest)
+        return ['ok' => false, 'fehler' => 'Mindest-Abrufmenge sind ' . $min . ' je Abruf' . ($rest < $min ? ' (oder die Restmenge ' . $rest . ')' : '') . '.'];
 
     $kid = (int)$k['kunde_id']; $pid = (int)$k['produkt_id']; $vk = (float)$k['vk_stueck'];
     $netto = round($menge * $vk, 2);

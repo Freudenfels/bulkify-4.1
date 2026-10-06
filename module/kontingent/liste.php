@@ -11,13 +11,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $prod   = (int)($_POST['produkt_id'] ?? 0);
         $menge  = max(0, (int)($_POST['gesamt_menge'] ?? 0));
         $vk     = round((float) str_replace(',', '.', (string)($_POST['vk_stueck'] ?? '0')), 4);
+        $minab  = max(0, (int)($_POST['min_abruf'] ?? 0));
         if ($kunde <= 0 || $prod <= 0 || $menge <= 0) { header('Location: ?p=kontingente&fehler=' . urlencode('Kunde, Produkt und Menge sind Pflicht.')); exit; }
-        q("INSERT INTO kontingent (kunde_id,produkt_id,gesamt_menge,vk_stueck,gueltig_von,gueltig_bis,notiz,status)
-           VALUES (?,?,?,?,?,?,?,'aktiv')",
-          [$kunde, $prod, $menge, $vk,
+        q("INSERT INTO kontingent (kunde_id,produkt_id,gesamt_menge,vk_stueck,min_abruf,gueltig_von,gueltig_bis,notiz,status)
+           VALUES (?,?,?,?,?,?,?,?,'aktiv')",
+          [$kunde, $prod, $menge, $vk, $minab,
            trim((string)($_POST['gueltig_von'] ?? '')) ?: null,
            trim((string)($_POST['gueltig_bis'] ?? '')) ?: null,
            trim((string)($_POST['notiz'] ?? '')) ?: null]);
+        header('Location: ?p=kontingente&ok=1'); exit;
+    }
+    if ($aktion === 'min_setzen') {
+        q("UPDATE kontingent SET min_abruf=? WHERE id=?", [max(0, (int)($_POST['min_abruf'] ?? 0)), (int)($_POST['id'] ?? 0)]);
         header('Location: ?p=kontingente&ok=1'); exit;
     }
     if ($aktion === 'beenden') {
@@ -54,7 +59,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
   <?php if (!$rows): ?><div class="muted">Noch keine Kontingente. Unten anlegen.</div>
   <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Kunde</th><th>Produkt</th><th class="bx-num">vereinbart</th><th class="bx-num">abgerufen</th><th class="bx-num">Rest</th><th class="bx-num">VK / Pkg</th><th>gültig bis</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Kunde</th><th>Produkt</th><th class="bx-num">vereinbart</th><th class="bx-num">abgerufen</th><th class="bx-num">Rest</th><th class="bx-num">Mind.-Abruf</th><th class="bx-num">VK / Pkg</th><th>gültig bis</th><th>Status</th><th></th></tr></thead>
     <tbody>
     <?php foreach ($rows as $r): $rest = (int)$r['gesamt_menge'] - (int)$r['abgerufen']; $abgelaufen = !empty($r['gueltig_bis']) && (string)$r['gueltig_bis'] < gmdate('Y-m-d'); ?>
       <tr>
@@ -63,6 +68,13 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
         <td class="bx-num"><?= number_format((int)$r['gesamt_menge'], 0, ',', '.') ?></td>
         <td class="bx-num"><?= number_format((int)$r['abgerufen'], 0, ',', '.') ?></td>
         <td class="bx-num"><strong><?= number_format($rest, 0, ',', '.') ?></strong></td>
+        <td class="bx-num">
+          <form method="post" style="margin:0;display:flex;gap:4px;justify-content:flex-end;align-items:center">
+            <input type="hidden" name="aktion" value="min_setzen"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+            <input type="number" name="min_abruf" min="0" value="<?= (int)($r['min_abruf'] ?? 0) ?>" style="width:70px;text-align:right" title="Mindest-Abrufmenge je Abruf (0 = keine)">
+            <button class="btn btn-ghost btn-sm" type="submit" title="Mindest-Abruf speichern">OK</button>
+          </form>
+        </td>
         <td class="bx-num"><?= $eur($r['vk_stueck']) ?> &euro;</td>
         <td><?= $r['gueltig_bis'] ? h(date('d.m.Y', strtotime((string)$r['gueltig_bis']))) . ($abgelaufen ? ' <span style="color:#8f231b;font-size:12px">abgelaufen</span>' : '') : '<span class="muted">–</span>' ?></td>
         <td><?= $statusBadge($r['status']) ?></td>
@@ -91,6 +103,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
       <div class="bx-field"><label>Produkt</label><select name="produkt_id" required><option value="">– wählen –</option>
         <?php foreach ($produkte as $p): ?><option value="<?= (int)$p['id'] ?>"><?= h($p['name']) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field" style="max-width:160px"><label>Gesamtmenge (Packungen)</label><input type="number" name="gesamt_menge" min="1" required></div>
+      <div class="bx-field" style="max-width:170px"><label>Mindest-Abruf je Abruf <?= bx_hint('Mindestmenge, die der Kunde pro Abruf nehmen muss (0 = keine). Die letzte Restmenge darf immer voll abgerufen werden.') ?></label><input type="number" name="min_abruf" min="0" value="0"></div>
       <div class="bx-field" style="max-width:140px"><label>VK je Packung (netto)</label><input type="text" name="vk_stueck" placeholder="z. B. 0,84"></div>
       <div class="bx-field" style="max-width:160px"><label>Gültig von</label><input type="date" name="gueltig_von"></div>
       <div class="bx-field" style="max-width:160px"><label>Gültig bis</label><input type="date" name="gueltig_bis"></div>

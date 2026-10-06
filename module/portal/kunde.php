@@ -3861,14 +3861,18 @@ portal_head('Kundenportal · ' . $k['firma']);
       </div>
       <?php if ($ab): ?><div class="muted">Dieser Vertrag ist abgelaufen – bitte melden Sie sich bei uns.</div>
       <?php elseif ($rest <= 0): ?><div class="muted">Kontingent ausgeschöpft.</div>
-      <?php else: ?>
+      <?php else:
+        $minAb   = (int)($kon['min_abruf'] ?? 0);
+        $minEff  = $minAb > 0 ? min($minAb, $rest) : 0;          // Restmenge < Mindestmenge -> dann gilt die Restmenge
+        $inputMin = $minEff > 0 ? max(1, $minEff) : 1; ?>
       <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap" onsubmit="return confirm('Menge verbindlich abrufen? Es entsteht eine Bestellung zum vereinbarten Preis.');">
         <input type="hidden" name="aktion" value="kontingent_abruf">
         <input type="hidden" name="kontingent_id" value="<?= (int)$kon['id'] ?>">
-        <div class="bx-field" style="margin:0;max-width:200px"><label>Menge abrufen (max. <?= $nf($rest) ?>)</label>
-          <input type="number" name="menge" min="1" max="<?= $rest ?>" required placeholder="z. B. 5000"></div>
+        <div class="bx-field" style="margin:0;max-width:220px"><label>Menge abrufen (max. <?= $nf($rest) ?><?= $minEff > 0 ? ', mind. ' . $nf($minEff) : '' ?>)</label>
+          <input type="number" name="menge" min="<?= $inputMin ?>" max="<?= $rest ?>" required placeholder="z. B. 5000"></div>
         <button class="btn btn-primary" type="submit">Menge abrufen</button>
       </form>
+      <?php if ($minAb > 0 && $rest >= $minAb): ?><div class="muted" style="font-size:12px;margin-top:6px">Mindestabruf: <?= $nf($minAb) ?> Packungen je Abruf.</div><?php endif; ?>
       <?php endif; ?>
     </div>
   <?php endforeach; ?>
