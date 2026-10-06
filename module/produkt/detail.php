@@ -73,6 +73,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'novel
     $_SESSION['nf_ergebnis'] = $erg;
     header('Location: ?p=produkt&id=' . $id . '&nfcheck=1'); exit;
 }
+// Produkt löschen (nur Admin, nur wenn nicht mehr verwendet).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'loeschen' && is_numeric($id)) {
+    if (!has_role('admin')) { header('Location: ?p=produkt&id=' . $id); exit; }
+    $r = produkt_loeschen((int)$id);
+    if (!empty($r['ok'])) { header('Location: ?p=produkte&geloescht=1'); exit; }
+    $_SESSION['prod_del_fehler'] = $r['fehler'] ?? 'Löschen fehlgeschlagen.';
+    header('Location: ?p=produkt&id=' . $id); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
     $f = fn($k) => trim($_POST[$k] ?? '');
     if ($f('name') === '') {
@@ -208,13 +216,31 @@ function verp_slot(string $label, string $name, array $rows, $current, string $h
          . '<select name="' . $name . '" id="' . $name . '">' . $opts . '</select></div>';
 }
 
+$kopfAkt = bx_btn('Zurück zur Liste', '?p=produkte', 'ghost');
+if (!$neu && function_exists('has_role') && has_role('admin'))
+    $kopfAkt .= ' <form method="post" style="display:inline" onsubmit="return confirm(\'Dieses Produkt endgültig löschen? Geht nur, wenn es nicht mehr verwendet wird (Auftrag/Angebot/Produktion/Bestand).\');"><input type="hidden" name="aktion" value="loeschen"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Löschen</button></form>';
 render_header('produkte', $neu ? 'Neues Produkt' : $p['name']);
 bx_head($neu ? 'Neues Produkt' : $v('name'),
         $neu ? 'Rezeptur + Verpackung + Kunde' : trim($v('nummer')),
-        bx_btn('Zurück zur Liste', '?p=produkte', 'ghost'));
+        $kopfAkt);
 if (!$neu && !empty($p['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angelegt am ' . h(fmt_zeit($p['angelegt'], 'd.m.Y H:i')) . (!empty($p['aktualisiert']) && $p['aktualisiert'] !== $p['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($p['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
+if (!empty($_SESSION['prod_del_fehler'])) { echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($_SESSION['prod_del_fehler']) . '</div>'; unset($_SESSION['prod_del_fehler']); }
+// Verwendungs-Übersicht (klickbar) – damit man die Lösch-Blocker gezielt findet.
+if (!$neu) { $prodVerw = produkt_verwendung((int)$id);
+  if ($prodVerw) {
+    echo '<div class="bx-panel" style="border-left:3px solid var(--warn)"><h2 style="margin-top:0;font-size:16px">Wo wird dieses Produkt verwendet? <span class="muted" style="font-weight:400;font-size:13px">(' . count($prodVerw) . ')</span></h2>'
+       . '<p class="muted" style="margin-top:0;font-size:13px">Zum Löschen zuerst diese Verweise entfernen/ersetzen. Ein Klick öffnet die Stelle.</p>'
+       . '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Typ</th><th>Eintrag</th><th></th></tr></thead><tbody>';
+    foreach ($prodVerw as $vv) {
+        $ein = $vv['url'] ? '<a href="' . h((string)$vv['url']) . '">' . h((string)$vv['label']) . '</a>' : h((string)$vv['label']);
+        $btn = $vv['url'] ? '<a class="btn btn-ghost btn-sm" href="' . h((string)$vv['url']) . '">öffnen</a>' : '<span class="muted" style="font-size:12px">kein eigener Link</span>';
+        echo '<tr><td>' . h((string)$vv['typ']) . (!empty($vv['blocker']) ? ' ' . bx_badge('Blocker', 'warn') : '') . '</td><td>' . $ein . '</td><td style="text-align:right">' . $btn . '</td></tr>';
+    }
+    echo '</tbody></table></div></div>';
+  }
+}
 ?>
 <form id="nfCheckForm" method="post"></form>
 <form method="post" class="bx-form">

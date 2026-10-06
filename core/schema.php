@@ -6790,6 +6790,60 @@ function rezeptur_verwendung(int $id): array {
     return $out;
 }
 
+// Produkt löschen – nur wenn es nirgends mehr hängt. Blocker: Aufträge, Produktionsaufträge, Kontingente,
+// Angebote (Kopf-Produkt ODER Angebots-Produkt), Fertigware-Bestand (Chargen am verkaufsfertigen Lagerartikel).
+// Eigene Nebendaten (Preise, Dokumente, leerer Lagerartikel) werden mitgelöscht; lose Verweise (Anfragen/
+// Fastaction/Import) nur entkoppelt (NULL), die Datensätze selbst bleiben.
+function produkt_loeschen(int $id): array {
+    $id = (int)$id;
+    if ($id <= 0 || !scalar("SELECT id FROM produkt WHERE id=?", [$id])) return ['ok'=>false, 'fehler'=>'Produkt nicht gefunden.'];
+    $blocker = [];
+    $nA  = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE produkt_id=?", [$id]);            if ($nA)  $blocker[] = $nA . ' Auftrag/Aufträge';
+    $nPa = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE produkt_id=?", [$id]); if ($nPa) $blocker[] = $nPa . ' Produktionsauftrag/-aufträge';
+    $nK  = (int) scalar("SELECT COUNT(*) FROM kontingent WHERE produkt_id=?", [$id]);         if ($nK)  $blocker[] = $nK . ' Kontingent(e)';
+    $nAg = (int) scalar("SELECT COUNT(*) FROM angebot WHERE produkt_id=?", [$id]) + (int) scalar("SELECT COUNT(*) FROM angebot_produkt WHERE produkt_id=?", [$id]);
+    if ($nAg) $blocker[] = $nAg . ' Angebot(e)';
+    $lit = (int) scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$id]);
+    $bestand = $lit ? (int) scalar("SELECT COUNT(*) FROM charge WHERE item_id=?", [$lit]) : 0;
+    if ($bestand) $blocker[] = $bestand . ' Charge(n) Fertigware-Bestand';
+    if ($blocker) return ['ok'=>false, 'fehler'=>'Produkt wird noch verwendet: ' . implode(', ', $blocker) . '. Bitte dort zuerst entfernen/ersetzen.'];
+
+    $pdo = db(); $pdo->beginTransaction();
+    try {
+        foreach (['produkt_preis', 'produkt_kundenpreis', 'produkt_lieferant_preis'] as $t)
+            if (table_exists($t)) q("DELETE FROM $t WHERE produkt_id=?", [$id]);
+        if (table_exists('dokument')) q("DELETE FROM dokument WHERE objekt_typ='produkt' AND objekt_id=?", [$id]);
+        if ($lit) q("DELETE FROM item WHERE id=? AND kategorie='verkaufsfertig'", [$lit]);   // leerer Lagerartikel
+        foreach (['fastaction_item', 'fastaction_notiz', 'portal_anfrage', 'portal_anfrage_pos', 'ek_import'] as $t)
+            if (table_exists($t)) q("UPDATE $t SET produkt_id=NULL WHERE produkt_id=?", [$id]);
+        q("DELETE FROM produkt WHERE id=?", [$id]);
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        $pdo->rollBack();
+        return ['ok'=>false, 'fehler'=>'Löschen abgebrochen: ' . $e->getMessage()];
+    }
+    return ['ok'=>true];
+}
+
+// Wo wird ein Produkt überall verwendet (klickbar) – deckt die Lösch-Blocker aus produkt_loeschen() ab.
+function produkt_verwendung(int $id): array {
+    $id = (int)$id; if ($id <= 0) return [];
+    $out = [];
+    foreach (all("SELECT id, nummer FROM auftrag WHERE produkt_id=? ORDER BY id DESC", [$id]) as $a)
+        $out[] = ['typ'=>'Auftrag', 'label'=>(string)$a['nummer'], 'url'=>'?p=auftrag&id='.(int)$a['id'], 'blocker'=>true];
+    foreach (all("SELECT id, nummer FROM produktionsauftrag WHERE produkt_id=? ORDER BY id DESC", [$id]) as $pa)
+        $out[] = ['typ'=>'Produktionsauftrag', 'label'=>(string)$pa['nummer'], 'url'=>'?p=produktionsauftrag&id='.(int)$pa['id'], 'blocker'=>true];
+    foreach (all("SELECT id, nummer FROM angebot WHERE produkt_id=? ORDER BY id DESC", [$id]) as $ag)
+        $out[] = ['typ'=>'Angebot (Kopf-Produkt)', 'label'=>(string)$ag['nummer'], 'url'=>'?p=angebot&id='.(int)$ag['id'], 'blocker'=>true];
+    foreach (all("SELECT DISTINCT ap.angebot_id, ag.nummer FROM angebot_produkt ap JOIN angebot ag ON ag.id=ap.angebot_id WHERE ap.produkt_id=? ORDER BY ap.angebot_id DESC", [$id]) as $ag)
+        $out[] = ['typ'=>'Angebot (Produkt)', 'label'=>(string)$ag['nummer'], 'url'=>'?p=angebot&id='.(int)$ag['angebot_id'], 'blocker'=>true];
+    foreach (all("SELECT id FROM kontingent WHERE produkt_id=? ORDER BY id DESC", [$id]) as $k)
+        $out[] = ['typ'=>'Kontingent', 'label'=>'Kontingent #'.(int)$k['id'], 'url'=>'?p=kontingente', 'blocker'=>true];
+    $lit = (int) scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$id]);
+    if ($lit) { $ch = (int) scalar("SELECT COUNT(*) FROM charge WHERE item_id=?", [$lit]); if ($ch) $out[] = ['typ'=>'Fertigware-Bestand', 'label'=>$ch.' Charge(n)', 'url'=>null, 'blocker'=>true]; }
+    return $out;
+}
+
 // Aus ausgelesenen Positionen eine Rechnung (Beleg) ANLEGEN und mit einem bestehenden Auftrag
 // verknüpfen; Original-PDF anhängen; den (fehlenden) Auftragspreis aus der Positions-Summe füllen.
 // So sind die Preise aufgeschlüsselt (Etikett/Glas/Kapsel …) beim Kunden hinterlegt. Rückgabe:

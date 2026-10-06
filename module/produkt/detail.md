@@ -48,3 +48,6 @@ günstigster markiert, hinzufügen/löschen. Rein **intern** (nie Kundensicht). 
 automatisch aus „EK-Preise (Import)" (Fertigprodukt bestätigen/neu anlegen →
 `produkt_zukauf_preis_schreiben()`, Versandart aus AIR/SEA/TRAIN im Namen) oder von Hand.
 Analog zu `lieferant_preis` beim Rohstoff.
+
+## Produkt löschen + Verwendungs-Übersicht (2026-10-06)
+Admin-Button „Löschen" im Kopf (nur bestehende Produkte). Aktion `loeschen` → `produkt_loeschen($id)` (core/schema.php): Blocker = Aufträge, Produktionsaufträge, Kontingente, Angebote (Kopf-Produkt + angebot_produkt), Fertigware-Bestand (Chargen am verkaufsfertigen Lagerartikel). Ohne Blocker werden eigene Nebendaten mitgelöscht (produkt_preis/_kundenpreis/_lieferant_preis, Produkt-Dokumente, leerer Lagerartikel) und lose Verweise (Anfragen/Fastaction/ek_import) entkoppelt (produkt_id=NULL). Panel „Wo wird dieses Produkt verwendet?" (`produkt_verwendung($id)`) listet alle Verweise klickbar mit Blocker-Badge – analog zur Rezeptur.
