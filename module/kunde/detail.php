@@ -32,10 +32,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    'rechnung_firma','rechnung_strasse','rechnung_hausnummer','rechnung_plz','rechnung_ort','rechnung_land',
                    'liefer_strasse','liefer_hausnummer','liefer_plz','liefer_ort','liefer_land',
                    'zahlungsart','zahlungsziel_tage','rabatt_marge','aufschlag_marge',
-                   'portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','zeige_energetisierung','labortest_extern','notiz'];
+                   'portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','zeige_energetisierung','labortest_extern','benachrichtigung_aus','notiz'];
         $vals = array_map($f, $felder);
         $vals[array_search('gesperrt', $felder)] = isset($_POST['gesperrt']) ? 1 : 0;
-        foreach (['portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','zeige_energetisierung','labortest_extern'] as $pf)
+        foreach (['portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','zeige_energetisierung','labortest_extern','benachrichtigung_aus'] as $pf)
             $vals[array_search($pf, $felder)] = isset($_POST[$pf]) ? 1 : 0;
         foreach (['zahlungsziel_tage','rabatt_marge','aufschlag_marge'] as $nf) { $ix = array_search($nf, $felder); if (trim((string)$vals[$ix]) === '') $vals[$ix] = 0; }
         if ($neu) {
@@ -219,6 +219,7 @@ if (!$neu) {
     <a href="#" data-tab="adr">Adressen</a>
     <a href="#" data-tab="zahl">Zahlung &amp; Konditionen</a>
     <a href="#" data-tab="portal">Portal-Einstellungen</a>
+    <a href="#" data-tab="benach">Benachrichtigungen</a>
   </div>
 
   <?php if (!$neu): ?>
@@ -533,6 +534,21 @@ if (!$neu) {
         </div>
       </div>
       <?php endif; ?>
+    </div>
+  </section>
+
+  <section data-panel="benach" hidden>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Benachrichtigungen</h2>
+      <div class="bx-check">
+        <input type="checkbox" name="benachrichtigung_aus" id="f_benach_aus" value="1" <?= (int)($k['benachrichtigung_aus'] ?? 0) === 1 ? 'checked' : '' ?>>
+        <label for="f_benach_aus" style="margin:0"><strong>Keine E-Mail-Benachrichtigungen an diesen Kunden</strong></label>
+      </div>
+      <div class="muted" style="font-size:13px;margin-top:8px">
+        Mit Haken bekommt der Kunde <strong>keine automatischen E-Mails</strong> mehr – praktisch für <strong>Nachholbuchungen</strong> (alte Angebote/Anfragen/Aufträge nacharbeiten), ohne ihn zu fluten.
+        Betroffen sind: Angebot gesendet, Angebot angenommen (Bestätigung), Anfrage-Eingang, Absage.
+        Das Kundenportal selbst bleibt normal nutzbar; der Kunde sieht alles weiterhin dort – nur eben ohne Mail. Haken wieder entfernen, um Benachrichtigungen zu reaktivieren.
+      </div>
     </div>
   </section>
 

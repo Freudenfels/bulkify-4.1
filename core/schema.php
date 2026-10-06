@@ -1161,6 +1161,7 @@ function init_schema(): void {
     // --- additive Migrationen ab hier (Beispielmuster) ---
     ensure_column('kunden', 'zeige_energetisierung', "TINYINT(1) NOT NULL DEFAULT 0");   // Energetisierung im Kundenportal zeigen (Spezialkunde, z. B. Annapurna/Pure Health)
     ensure_column('kunden', 'labortest_extern', "TINYINT(1) NOT NULL DEFAULT 0");        // Externer Labortest (Drittlabor) als paralleler Verlaufs-Punkt im Portal (Spezialkunde, will immer eine Drittlabor-Analyse)
+    ensure_column('kunden', 'benachrichtigung_aus', "TINYINT(1) NOT NULL DEFAULT 0");    // 1 = keine E-Mail-Benachrichtigungen an diesen Kunden (z. B. für Nachholbuchungen ohne Kunden-Mails)
     ensure_column('kunden', 'portal_token', "VARCHAR(64) NULL");   // Magic-Link-Zugang zum Kundenportal (Backup/Erstzugang)
     ensure_column('kunden', 'passwort', "VARCHAR(255) NULL");       // Passwort-Hash fuers Kunden-Login (password_hash); leer = noch nicht eingerichtet
     ensure_column('kunden', 'erstlogin_am', "DATETIME NULL");       // Zeitpunkt der Konto-Einrichtung (Erstzugang abgeschlossen)

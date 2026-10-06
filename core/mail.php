@@ -265,6 +265,11 @@ function mail_kunde_anrede(array $k): string {
     return $a !== '' ? $a : (string)($k['firma'] ?? '');
 }
 
+// Sind E-Mail-Benachrichtigungen an diesen Kunden ausgeschaltet? (z. B. für Nachholbuchungen ohne Kunden-Mails)
+function kunde_mails_aus(int $kunde_id): bool {
+    return $kunde_id > 0 && (int) scalar("SELECT COALESCE(benachrichtigung_aus,0) FROM kunden WHERE id=?", [$kunde_id]) === 1;
+}
+
 // --- Editierbare E-Mail-Vorlagen (Kunde, Deutsch) ---------------------------
 // Die Texte der Kunden-Mails lassen sich unter Einstellungen → E-Mail-Texte
 // anpassen. Solange nichts hinterlegt ist, gilt der Standardtext hier – das
@@ -386,6 +391,7 @@ function mail_kunde_anfrage_eingang(string $quelle, int $id): string {
                   FROM portal_anfrage p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [$id]);
     }
     if (!$p) return 'Anfrage oder Kunde nicht gefunden.';
+    if (kunde_mails_aus((int)$p['kunde_id'])) return 'Benachrichtigungen für diesen Kunden sind ausgeschaltet.';
     if (trim((string)$p['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
     $fa   = beleg_firma();
     $link = mail_link_kundenportal((int)$p['kunde_id'], 'meine_anfragen');
@@ -406,6 +412,7 @@ function mail_kunde_angebot(int $angebot_id): string {
     $a = one("SELECT a.nummer, a.gueltig_bis, a.kunde_id, k.firma, k.ansprechpartner, k.email
               FROM angebot a JOIN kunden k ON k.id=a.kunde_id WHERE a.id=?", [$angebot_id]);
     if (!$a) return 'Angebot oder Kunde nicht gefunden.';
+    if (kunde_mails_aus((int)$a['kunde_id'])) return 'Benachrichtigungen für diesen Kunden sind ausgeschaltet.';
     if (trim((string)$a['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
     $fa   = beleg_firma();
     $link = mail_link_kundenportal((int)$a['kunde_id'], 'angebote');
@@ -436,6 +443,7 @@ function mail_angebot_angenommen(int $angebot_id, ?int $auftrag_id = null): stri
         . ($aufNr !== '' ? "Auftrag $aufNr ist angelegt, Rechnung und Produktionsauftrag ebenfalls.\n" : '')
         . "\n" . mail_basis_url() . '/?p=angebot&id=' . $angebot_id . "\n");
 
+    if (kunde_mails_aus((int)$a['kunde_id'])) return 'Benachrichtigungen für diesen Kunden sind ausgeschaltet.';
     if (trim((string)$a['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
     $link = mail_link_kundenportal((int)$a['kunde_id'], 'bestellungen');
     $m = mail_render('auftrag', [
@@ -454,6 +462,7 @@ function mail_kunde_absage(int $anfrage_id): string {
     $p = one("SELECT p.nummer, p.betreff, p.absage_grund, p.kunde_id, k.firma, k.ansprechpartner, k.email
               FROM portal_anfrage p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [$anfrage_id]);
     if (!$p) return 'Anfrage oder Kunde nicht gefunden.';
+    if (kunde_mails_aus((int)$p['kunde_id'])) return 'Benachrichtigungen für diesen Kunden sind ausgeschaltet.';
     if (trim((string)$p['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
     $fa   = beleg_firma();
     $link = mail_link_kundenportal((int)$p['kunde_id'], 'meine_anfragen');
