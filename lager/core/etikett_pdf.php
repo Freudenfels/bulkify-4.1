@@ -8,12 +8,10 @@
 require_once __DIR__ . '/qr.php';
 require_once __DIR__ . '/../../core/lib/minipdf.php';
 
-// Lieferant fuers Etikett: Name + Nummer (beides, wenn vorhanden), z. B. "Vita Actives · L-1023".
+// Lieferant fuers Etikett: NUR die Lieferantennummer, NIE der Name (Regel Nico).
+// Ist keine Nummer hinterlegt, bleibt das Feld leer (Etikett zeigt dann "–").
 function lg_lieferant_txt(array $c): string {
-    $name = trim((string)($c['lieferant'] ?? ''));
-    $nr   = trim((string)($c['lieferant_nr'] ?? ''));
-    if ($name !== '' && $nr !== '') return $name . ' · ' . $nr;
-    return $name !== '' ? $name : $nr;
+    return trim((string)($c['lieferant_nr'] ?? ''));
 }
 
 // Zusatzzeile fuers Etikett: Warenart · Rezepturnummer · Kapselgröße (nur was zutrifft).
