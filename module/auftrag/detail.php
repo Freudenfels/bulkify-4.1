@@ -289,11 +289,22 @@ $rezeptur = !empty($a['produkt_id'])
     ? one("SELECT r.id, r.nummer, r.name, r.darreichungsform, r.kapselgroesse_id FROM produkt p JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$a['produkt_id']])
     : null;
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
+// Fulfillment-Kunde? Dann wird die Ware eingelagert, nicht versendet: der Abschluss heißt „abgeschlossen"
+// (statt „versendet"), „erledigt" = „bereit zur Einlagerung". Ein zentraler Label-Helfer für alle Status-Anzeigen.
+$ffAuftrag = $id ? auftrag_ist_fulfillment($id) : false;
+$stLbl = fn($s) => match ((string)$s) {
+    'offen'         => 'offen',
+    'in_produktion' => 'in Produktion',
+    'erledigt'      => $ffAuftrag ? 'bereit zur Einlagerung' : 'versandbereit',
+    'versendet'     => $ffAuftrag ? 'abgeschlossen' : 'versendet',
+    'storniert'     => 'storniert',
+    default         => status_text((string)$s),
+};
 $statusBadge = match ($a['status']) {
     'offen'         => bx_badge('offen','info'),
     'in_produktion' => bx_badge('in Produktion','warn'),
-    'erledigt'      => bx_badge('versandbereit','info'),
-    'versendet'     => bx_badge('versendet','ok'),
+    'erledigt'      => bx_badge($stLbl('erledigt'),'info'),
+    'versendet'     => bx_badge($stLbl('versendet'),'ok'),
     default         => bx_badge(status_text($a['status'])),
 };
 
@@ -414,9 +425,7 @@ echo '<style>.bx-cards{flex-wrap:nowrap;gap:8px}'
     'storniert'     => ['#6b7280', '#ffffff'],   // grau
     default         => ['#ffffff', '#111827'],
 };
-$stText = match ((string)$a['status']) {
-    'offen'=>'offen','in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet','storniert'=>'storniert', default=>(string)$a['status']
-};
+$stText = $stLbl($a['status']);
 echo '<div class="bx-cards">';
 echo '<div class="bx-card bx-card-status" title="Status" style="background:' . $stBg . ';color:' . $stFg . ';border:1px solid rgba(0,0,0,.15)"><div class="v" style="color:' . $stFg . '">' . h($stText) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . (int)$a['menge'] . '</div></div>';
@@ -532,7 +541,7 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
   </div>
   <?php // Status direkt hier am Fortschritt setzen – kein Reiter-Wechsel, funktioniert auch ohne Produktionsauftrag.
   if (has_role('admin') || has_role('sales') || has_role('production')):
-      $stKurz = ['offen'=>'offen', 'in_produktion'=>'in Produktion', 'erledigt'=>'versandbereit', 'versendet'=>'versendet']; ?>
+      $stKurz = ['offen'=>$stLbl('offen'), 'in_produktion'=>$stLbl('in_produktion'), 'erledigt'=>$stLbl('erledigt'), 'versendet'=>$stLbl('versendet')]; ?>
   <?php if (isset($_GET['statusok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Status aktualisiert – der Kunde sieht es sofort.</div><?php endif; ?>
   <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
     <span class="k muted">Status setzen</span>
@@ -929,7 +938,7 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Status</label>
       <select name="status">
-        <?php foreach (['offen'=>'offen','in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet','storniert'=>'storniert'] as $key=>$lbl): ?>
+        <?php foreach (['offen'=>$stLbl('offen'),'in_produktion'=>$stLbl('in_produktion'),'erledigt'=>$stLbl('erledigt'),'versendet'=>$stLbl('versendet'),'storniert'=>'storniert'] as $key=>$lbl): ?>
           <option value="<?= $key ?>" <?= $a['status']===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
       </select>
     </div>

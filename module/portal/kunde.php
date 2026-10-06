@@ -959,10 +959,18 @@ foreach ($vorschlaege as $vs) $vorschlagZutaten[$vs['id']] = all("SELECT bezeich
 // Status-Badge für den Kunden. Nimmt die Auftragszeile (oder nur den Status-String). Sonderfall:
 // Jahresvertrags-Auftrag (kontingent_id gesetzt), der beim Umwandeln auf „storniert" gesetzt wurde –
 // das verwirrt den Kunden. Stattdessen „hinterlegt in Jahresmenge".
-$aufBadge = function($a) {
+// Fulfillment-Kunde? Dann wird die Ware eingelagert, nicht versendet -> Abschluss heißt „abgeschlossen".
+$ffKunde = !empty($k['nutzt_fulfillment']);
+$aufBadge = function($a) use ($ffKunde) {
     $s = is_array($a) ? (string)($a['status'] ?? '') : (string)$a;
     if ($s === 'storniert' && is_array($a) && !empty($a['kontingent_id'])) return bx_badge('hinterlegt in Jahresmenge','info');
-    return match ($s) { 'offen'=>bx_badge('in Bearbeitung','info'),'in_produktion'=>bx_badge('in Produktion','warn'),'erledigt'=>bx_badge('versandbereit','info'),'versendet'=>bx_badge('versendet','ok'),default=>bx_badge($s) };
+    return match ($s) {
+        'offen'=>bx_badge('in Bearbeitung','info'),
+        'in_produktion'=>bx_badge('in Produktion','warn'),
+        'erledigt'=>bx_badge($ffKunde ? 'bereit zur Einlagerung' : 'versandbereit','info'),
+        'versendet'=>bx_badge($ffKunde ? 'abgeschlossen' : 'versendet','ok'),
+        default=>bx_badge($s)
+    };
 };
 // Einheitliches Status-Icon für alle Verlaufs-Schritte (Haupt- UND Parallel-Schritte):
 //   erledigt -> Haken, läuft/aktuell -> Sanduhr (sauberes SVG, kein Emoji), geplant/offen -> leer.
@@ -1400,7 +1408,7 @@ foreach ($portalAnfragen as $p) {
     // Erledigt = Angebot bereits angenommen (es gibt einen Auftrag). Dann Bestell-Status zeigen + Nachbestellen.
     $erledigt = ($p['angebot_status'] ?? '') === 'bestaetigt';
     $aufSt = (string)($p['auftrag_status'] ?? '');
-    $aufStLbl = match ($aufSt) { 'in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet', default=>'bestellt' };
+    $aufStLbl = match ($aufSt) { 'in_produktion'=>'in Produktion','erledigt'=>($ffKunde?'bereit zur Einlagerung':'versandbereit'),'versendet'=>($ffKunde?'abgeschlossen':'versendet'), default=>'bestellt' };
     if ($erledigt) {
         $st = bx_badge($aufStLbl, $aufSt === 'versendet' ? 'ok' : 'info');
     } else {

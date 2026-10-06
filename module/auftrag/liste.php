@@ -9,7 +9,8 @@ $dir  = $_GET['dir']  ?? 'desc';
 $tab  = $_GET['tab']  ?? 'offen';
 if (!in_array($tab, ['offen', 'abgeschlossen'], true)) $tab = 'offen';
 
-$alle = all("SELECT a.*, k.firma AS kunde_firma, COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name,
+$alle = all("SELECT a.*, k.firma AS kunde_firma, COALESCE(k.nutzt_fulfillment,0) AS nutzt_fulfillment,
+             COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name,
              p.rezeptur_id AS rezeptur_id,
              (SELECT nummer FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='rechnung' LIMIT 1) AS rechnung_nr
              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
@@ -53,11 +54,12 @@ if ($q !== '') {
 $rows = bx_sort_rows($rows, $sort, $dir);
 
 $statusBadge = function($r) {
+    $ff = !empty($r['nutzt_fulfillment']);   // Fulfillment: eingelagert statt versendet -> „abgeschlossen"
     return match ($r['status']) {
         'offen'         => bx_badge('offen','info'),
         'in_produktion' => bx_badge('in Produktion','warn'),
-        'erledigt'      => bx_badge('versandbereit','info'),
-        'versendet'     => bx_badge('versendet','ok'),
+        'erledigt'      => bx_badge($ff ? 'bereit zur Einlagerung' : 'versandbereit','info'),
+        'versendet'     => bx_badge($ff ? 'abgeschlossen' : 'versendet','ok'),
         default         => bx_badge(status_text($r['status'])),
     };
 };
