@@ -91,12 +91,13 @@ if (!$batch || $step === 'start'):
 // ===========================================================================
 ?>
 <div class="bx-panel" style="max-width:720px">
-  <h2 style="margin-top:0">Neuer Import</h2>
+  <h2 style="margin-top:0"><?= $batch ? 'Weitere Dateien zu Stapel ' . h($batch) : 'Neuer Import' ?></h2>
   <p class="muted">Lade beliebig viele PDFs auf einmal hoch (Rechnungen und Angebote gemischt). Der Upload speichert sie nur – die KI-Auslesung (Art, Kunde, Beträge; bei Angeboten die Positionen Produkt/Verpackung/Etikett) läuft danach <strong>Datei für Datei</strong> im Schritt „Prüfen", damit nichts in einen Timeout läuft.</p>
   <?php if (!ki_bereit()) echo '<p class="muted">Hinweis: KI nicht eingerichtet – Dateien werden gespeichert, Felder trägst du im nächsten Schritt ein.</p>'; ?>
   <form method="post" enctype="multipart/form-data" class="bx-form">
-    <input type="hidden" name="aktion" value="upload">
+    <input type="hidden" name="aktion" value="upload"><?php if ($batch): ?><input type="hidden" name="batch" value="<?= h($batch) ?>"><?php endif; ?>
     <div class="bx-field"><input type="file" name="dateien[]" accept="application/pdf,image/*" multiple required></div>
+    <p class="muted" style="font-size:12px;margin:4px 0 0">Pro Upload max. 20 Dateien (Server-Limit). Für mehr: in Runden hochladen – weitere Dateien landen im selben Stapel.</p>
     <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit" data-busy="lädt hoch …">Hochladen</button></div>
   </form>
 </div>
@@ -178,7 +179,7 @@ elseif ($step === 'pruefen'): $items = imp_items($batch); $ungelesen = imp_ungel
     <button class="btn btn-primary" type="submit">Speichern</button>
     <a class="btn btn-ghost" href="?p=import_bulk&batch=<?= h($batch) ?>&step=verknuepfen">Weiter: Verknüpfen</a>
     <span style="flex:1"></span>
-    <a class="btn btn-ghost btn-sm" href="?p=import_bulk">+ weitere hochladen</a>
+    <a class="btn btn-ghost btn-sm" href="?p=import_bulk&batch=<?= h($batch) ?>&step=start">+ weitere hochladen (gleicher Stapel)</a>
   </div>
 </form>
 
