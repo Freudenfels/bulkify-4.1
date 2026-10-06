@@ -16,6 +16,19 @@ $vkInput = fn($x) => (float)$x > 0 ? rtrim(rtrim(number_format((float)$x, 4, ','
 // mg/Mengen hübsch (Dashboard hat kein menge_txt wie die Sub-Apps).
 $mg = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 
+// --- Original-Datei (aus der Session) ausliefern – zum Gegenlesen im Match-Schritt ---
+if (($_GET['schritt'] ?? '') === 'datei') {
+    $fn   = (string)($_SESSION['angebotsscan']['datei'] ?? '');
+    $path = $fn !== '' ? BX_UPLOADS . '/' . basename($fn) : '';
+    if ($path === '' || !is_file($path)) { http_response_code(404); exit('Keine Datei.'); }
+    $mime = 'application/octet-stream';
+    if (function_exists('finfo_open')) { $fi = finfo_open(FILEINFO_MIME_TYPE); $mime = finfo_file($fi, $path) ?: $mime; finfo_close($fi); }
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: inline; filename="' . rawurlencode((string)($_SESSION['angebotsscan']['orig'] ?? basename($path))) . '"');
+    header('Content-Length: ' . filesize($path));
+    readfile($path); exit;
+}
+
 // --- Schritt 1: Hochladen + auslesen ---------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'scan') {
     if (empty($_FILES['datei']['name']) || (int)($_FILES['datei']['error'] ?? 1) !== UPLOAD_ERR_OK) {
@@ -100,7 +113,18 @@ if ($schritt === 'match' && !empty($_SESSION['angebotsscan'])) {
 
     bx_head('Angebotsscan – prüfen & zuordnen', 'KI-Ergebnis kontrollieren, Kunde zuordnen, Staffeln korrigieren – dann speichern', bx_btn('Abbrechen', '?p=angebotsscan', 'ghost'));
     if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($fehler) . '</div>';
+    $origName = (string)($S['orig'] ?? '');
+    $istPdf   = strtolower(pathinfo($origName, PATHINFO_EXTENSION)) === 'pdf';
     ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Original <span class="muted" style="font-weight:400;font-size:13px"><?= h($origName) ?></span></h2>
+      <?php if ($istPdf): ?>
+        <iframe src="?p=angebotsscan&schritt=datei" style="width:100%;height:70vh;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>
+      <?php else: ?>
+        <img src="?p=angebotsscan&schritt=datei" alt="Original" style="max-width:100%;border:1px solid var(--line);border-radius:8px">
+      <?php endif; ?>
+      <div style="margin-top:6px"><a class="btn btn-ghost btn-sm" href="?p=angebotsscan&schritt=datei" target="_blank" rel="noopener">In neuem Tab öffnen</a></div>
+    </div>
     <form method="post">
       <input type="hidden" name="aktion" value="speichern">
       <div class="bx-panel">

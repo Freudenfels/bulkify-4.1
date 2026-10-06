@@ -10,3 +10,6 @@
    - **neu**: Entwurfs-Angebot (`status 'offen'`) mit `rezeptur_id` + je Staffel eine Position (rezeptur, Menge, VK, Glas, Stück, USt aus `ust_inland`) anlegen, PDF anhängen, Kundenpreis erfassen → zum neuen Angebot.
 
 **Baut auf vorhandenem auf:** `angebotsscan_ki` (Extraktion), `verpackung_empfehlung` (Glas), `rezeptur_kundenpreis` (Preishistorie), `kunde_finden_oder_anlegen`. Braucht KI live (`ki_bereit`, Anthropic-Key; beta/live). Unterschied zum `angebotsscan` (kundenunabhängig Rezepturen/Preise erfassen): hier geht es um die **Zuordnung zu konkreten Angeboten**.
+
+## Original + gelesene Zutaten beim Pruefen
+Match-Schritt zeigt oben das **Original** (PDF/Bild, Stream `?p=angebot_import&schritt=datei`) und die **gelesenen Zutaten read-only** (nur Info). Hinweis dort: angebot_import ordnet die Rezeptur nur ueber den Namen zu und legt **keine** Rezeptur mit Zutaten an - dafuer ist `angebotsscan`.

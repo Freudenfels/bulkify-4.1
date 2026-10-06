@@ -15,6 +15,19 @@ if (!(function_exists('has_role') && (has_role('admin') || has_role('sales')))) 
 $fehler  = '';
 $schritt = (string)($_GET['schritt'] ?? '');
 
+// --- Original-Datei (aus der Session) ausliefern – zum Gegenlesen im Match-Schritt ---
+if ($schritt === 'datei') {
+    $fn   = (string)($_SESSION['angebot_import']['datei'] ?? '');
+    $path = $fn !== '' ? BX_UPLOADS . '/' . basename($fn) : '';
+    if ($path === '' || !is_file($path)) { http_response_code(404); exit('Keine Datei.'); }
+    $mime = 'application/octet-stream';
+    if (function_exists('finfo_open')) { $fi = finfo_open(FILEINFO_MIME_TYPE); $mime = finfo_file($fi, $path) ?: $mime; finfo_close($fi); }
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: inline; filename="' . rawurlencode((string)($_SESSION['angebot_import']['orig'] ?? basename($path))) . '"');
+    header('Content-Length: ' . filesize($path));
+    readfile($path); exit;
+}
+
 // --- Schritt 1: PDF hochladen -> KI lesen -------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'scan') {
     if (empty($_FILES['datei']['name']) || (int)($_FILES['datei']['error'] ?? 1) !== UPLOAD_ERR_OK) {
@@ -157,7 +170,29 @@ if ($schritt === 'match' && !empty($_SESSION['angebot_import'])) {
     bx_head('Angebots-Import – prüfen & zuordnen', 'KI-Ergebnis kontrollieren, Kunde + Glas bestätigen, dann einem bestehenden Angebot zuordnen ODER neu anlegen.', bx_btn('Abbrechen', '?p=angebot_import', 'ghost'));
     if (!empty($_SESSION['angimp_fehler'])) { echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($_SESSION['angimp_fehler']) . '</div>'; unset($_SESSION['angimp_fehler']); }
     if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($fehler) . '</div>';
+    $origName = (string)($S['orig'] ?? '');
+    $istPdf   = strtolower(pathinfo($origName, PATHINFO_EXTENSION)) === 'pdf';
+    $zutatenR = (array)($d['zutaten'] ?? []);
     ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Original <span class="muted" style="font-weight:400;font-size:13px"><?= h($origName) ?></span></h2>
+      <?php if ($istPdf): ?>
+        <iframe src="?p=angebot_import&schritt=datei" style="width:100%;height:70vh;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>
+      <?php else: ?>
+        <img src="?p=angebot_import&schritt=datei" alt="Original" style="max-width:100%;border:1px solid var(--line);border-radius:8px">
+      <?php endif; ?>
+      <div style="margin-top:6px"><a class="btn btn-ghost btn-sm" href="?p=angebot_import&schritt=datei" target="_blank" rel="noopener">In neuem Tab öffnen</a></div>
+    </div>
+    <?php if ($zutatenR): ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Gelesene Zutaten <span class="muted" style="font-weight:400;font-size:13px">(nur Info)</span></h2>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Wirkstoff</th><th class="bx-num">mg je Einheit</th></tr></thead>
+        <tbody><?php foreach ($zutatenR as $z): ?><tr><td><?= h((string)($z['name'] ?? '')) ?></td><td class="bx-num"><?= (float)($z['menge_mg'] ?? 0) > 0 ? h(rtrim(rtrim(number_format((float)$z['menge_mg'], 3, ',', '.'), '0'), ',')) . ' mg' : '<span class="muted">–</span>' ?></td></tr><?php endforeach; ?></tbody>
+      </table></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Hier wird die Rezeptur nur über den <strong>Namen</strong> zugeordnet – diese Zutaten werden <strong>nicht</strong> als neue Rezeptur angelegt. Zum Importieren der Rezeptur mit Zutaten den <a href="?p=angebotsscan">Angebotsscan</a> nutzen.</p>
+    </div>
+    <?php endif; ?>
     <form method="post">
       <input type="hidden" name="aktion" value="anwenden">
       <div class="bx-panel">

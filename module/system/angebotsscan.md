@@ -47,3 +47,6 @@ Nutzt `rezeptur_finden_oder_anlegen(..., null)`.
 (`core/auth.php`). Braucht die KI (Einstellungen → KI); ohne KI ist der Upload deaktiviert.
 Original-Angebote werden **nicht** als Beleg/Dokument an einen Kunden gehängt – nur die Datei liegt
 in `data/uploads` (für den Scan).
+
+## Original beim Pruefen anzeigen
+Im Match-/Vorschau-Schritt wird das hochgeladene **Original** (PDF im iframe, Bild als img) oben eingeblendet, damit man die KI-Werte gegenlesen und korrigieren kann. Ausgeliefert ueber `?p=angebotsscan&schritt=datei` (streamt die Session-Datei aus BX_UPLOADS, inline). Zutaten + 4-stellige VK-Felder waren bereits vorhanden.
