@@ -3691,7 +3691,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <td>
           <?php if (!$cs): ?><span class="muted">–</span>
           <?php else: foreach ($cs as $c): ?>
-            <div style="font-size:13px"><?= $c['charge_nr'] ? h($c['charge_nr']) : '<span class="muted">ohne Charge</span>' ?> · <?= $fpNf($c['menge_verfuegbar']) ?> Stk<?= $c['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$c['mhd']))) : '' ?><?= !empty($c['energetisiert_am']) ? ' · <span style="color:var(--gruen,#1D9E75);font-weight:600">energetisiert ' . h(date('d.m.Y', strtotime((string)$c['energetisiert_am']))) . '</span>' : '' ?></div>
+            <div style="font-size:13px"><?= $c['charge_nr'] ? h($c['charge_nr']) : '<span class="muted">ohne Charge</span>' ?> · <?= $fpNf($c['menge_verfuegbar']) ?> Stk<?= $c['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$c['mhd']))) : '' ?><?php if (!empty($c['energetisiert_am'])): $elauf = energ_status((string)$c['energetisiert_am']) !== 'abgeschlossen'; ?> · <span style="font-weight:600;color:<?= $elauf ? '#8a6d00' : 'var(--gruen,#1D9E75)' ?>"><?= h(energ_text_kurz((string)$c['energetisiert_am'])) ?></span><?php endif; ?></div>
           <?php endforeach; endif; ?>
         </td>
       </tr>

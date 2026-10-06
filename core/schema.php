@@ -3826,6 +3826,16 @@ function energ_fertig_am(?string $start): ?string {
     $ts = trim((string)$start) !== '' ? strtotime((string)$start) : false; if (!$ts) return null;
     return date('Y-m-d', $ts + energ_tage() * 86400);
 }
+// Kurz-Label der Energetisierung ab einem Startdatum (z. B. charge.energetisiert_am): „läuft · fertig am …
+// (noch X Tg)" bzw. „abgeschlossen am …". Dauer fix über energ_tage() (Standard 14).
+function energ_text_kurz(?string $start): string {
+    if (trim((string)$start) === '') return '';
+    $fertig = energ_fertig_am($start);
+    $fmt    = $fertig ? date('d.m.Y', strtotime($fertig)) : '';
+    if (energ_status($start) === 'abgeschlossen') return 'Energetisierung abgeschlossen' . ($fmt ? ' am ' . $fmt : '');
+    $rest = energ_rest_tage($start);
+    return 'Energetisierung läuft' . ($fmt ? ' · fertig am ' . $fmt : '') . ($rest !== null && $rest > 0 ? ' (noch ' . $rest . ' Tg)' : '');
+}
 
 // ---- Externer Labortest (Drittlabor): paralleler Verlaufs-Punkt, nur für freigeschaltete Kunden. ----
 // „Erledigt" automatisch, sobald für den Auftrag (oder dessen Produkt) ein Laborbericht hochgeladen UND
