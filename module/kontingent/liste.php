@@ -53,7 +53,12 @@ $statusBadge = fn($s) => match ($s) {
 };
 $kunden   = all("SELECT id, firma FROM kunden WHERE gesperrt=0 ORDER BY firma");
 $produkte = all("SELECT id, COALESCE(NULLIF(kundenname,''), name) AS name FROM produkt ORDER BY name");
-$eur = fn($x) => number_format((float)$x, 4, ',', '.');
+// VK/Pkg: normal 2 Nachkommastellen; nur bei echten Sub-Cent-Preisen (keine ganzen Cent) feiner zeigen.
+$eur = function($x) {
+    $x = (float)$x;
+    $dec = (abs($x * 100 - round($x * 100)) < 1e-6) ? 2 : 4;
+    return number_format($x, $dec, ',', '.');
+};
 
 render_header('kontingente', 'Kontingente');
 bx_head('Kontingente / Jahresverträge', count($rows) . ' Verträge', bx_hint('Rahmenvertrag: Kunde ruft aus einer vereinbarten Gesamtmenge zum Festpreis ab. Jeder Abruf im Kundenportal erzeugt einen Auftrag und senkt den Rest.'));
