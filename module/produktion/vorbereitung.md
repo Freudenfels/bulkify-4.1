@@ -14,6 +14,9 @@ Neue Kundenaufträge entstehen im Produktionsauftrag-Status **`vorbereitung`** (
 - Etikett freigegeben (wichtig, nur wenn das Produkt ein Etikett braucht).
 - Material: Rohstoffe/Bulk angekommen, Gläser/Verpackung, Kartons, Etikett, Beipack vorrätig (aus der Stückliste).
 
+## Info-Block (Detailansicht)
+Über der Checkliste steht ein **Info-Raster mit allen Auftrags-/Produktdaten** auf einen Blick: Kunde, Auftrag, Rezeptur-Nr., Darreichung, **Menge (Packungen)**, **Stück je Packung (VPE)**, **Gesamtstückzahl**, Kapselgröße, Verpackung/Glas, Herstellung (Eigen/Fremd) sowie die **systemseitig geplante Charge** (`charge_naechste_nr`) + **geplantes MHD** (`mhd_standard`, +18 Monate). So muss die Produktion nicht erst in den Auftrag wechseln.
+
 ## Alles hier anpassen (Edit-Oberfläche)
 Je Karte wird direkt bearbeitet (jeweils eigenes POST):
 - **Glas/Behälter** (`glas_setzen`): Auswahl aller Primär-Verpackungen; fehlt das Glas, ist die **Auto-Empfehlung**

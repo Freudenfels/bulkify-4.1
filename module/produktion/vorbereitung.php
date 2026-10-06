@@ -98,6 +98,34 @@ if ($pa):
             bx_btn('← Zur Übersicht', '?p=produktion_vorbereitung', 'ghost'));
     if (isset($_GET['saved']))  echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
     if (isset($_GET['fehler'])) echo '<div class="bx-panel badge-err" style="padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
+
+    // Volle Auftrags-/Produktinfos – damit die Produktion alles auf einen Blick hat (nicht nur „X Packungen").
+    $stkProP  = max(0, (int) produktion_stueck_je_packung($pa));
+    $gesamtSt = $stkProP * (int)$pa['menge'];
+    $glasName = $verpAkt ? (string) scalar("SELECT name FROM item WHERE id=?", [$verpAkt]) : '';
+    $kapsName = (int)($rez['kapselgroesse_id'] ?? 0) ? (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$rez['kapselgroesse_id']]) : '';
+    $darrLbl  = $rez['darreichungsform'] ?? '';
+    $chargeP  = charge_naechste_nr($paId);
+    $mhdP     = mhd_standard();
+    $infoFelder = [
+        'Kunde'              => $info['kunde'] ?: '–',
+        'Auftrag'            => $info['auftrag_nr'] ?: '–',
+        'Rezeptur'           => $rid ? ((string) scalar("SELECT nummer FROM rezeptur WHERE id=?", [$rid])) : '–',
+        'Darreichung'        => $darrLbl !== '' ? ucfirst($darrLbl) : '–',
+        'Menge (Packungen)'  => number_format((int)$pa['menge'], 0, ',', '.'),
+        'Stück je Packung'   => $stkProP > 0 ? number_format($stkProP, 0, ',', '.') : '–',
+        'Gesamtstückzahl'    => $gesamtSt > 0 ? number_format($gesamtSt, 0, ',', '.') : '–',
+        'Kapselgröße'        => $kapsName !== '' ? $kapsName : '–',
+        'Verpackung / Glas'  => $glasName !== '' ? $glasName : 'noch nicht gewählt',
+        'Herstellung'        => $art === 'eigen' ? 'Eigenproduktion' : 'Fremd (Zukauf)',
+        'Charge (geplant)'   => $chargeP,
+        'MHD (geplant)'      => date('d.m.Y', strtotime($mhdP)),
+    ];
+    echo '<div class="bx-panel" style="padding:14px 16px;margin-bottom:14px">';
+    echo '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 18px">';
+    foreach ($infoFelder as $k => $v)
+        echo '<div><div class="muted" style="font-size:12px">' . h($k) . '</div><div style="font-size:14px">' . h((string)$v) . '</div></div>';
+    echo '</div></div>';
     ?>
     <!-- Checkliste -->
     <div class="bx-panel" style="padding:14px 16px;margin-bottom:14px">
