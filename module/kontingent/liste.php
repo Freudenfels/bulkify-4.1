@@ -33,6 +33,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         q("UPDATE kontingent SET status='aktiv' WHERE id=?", [(int)($_POST['id'] ?? 0)]);
         header('Location: ?p=kontingente&ok=1'); exit;
     }
+    if ($aktion === 'loeschen') {
+        if (!has_role('admin')) { header('Location: ?p=kontingente'); exit; }
+        $r = kontingent_loeschen((int)($_POST['id'] ?? 0));
+        header('Location: ?p=kontingente' . (!empty($r['ok']) ? '&geloescht=1' : '&fehler=' . urlencode($r['fehler'] ?? 'Löschen fehlgeschlagen.'))); exit;
+    }
 }
 
 $rows = all("SELECT k.*, kd.firma AS kunde, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt,
@@ -53,6 +58,7 @@ $eur = fn($x) => number_format((float)$x, 4, ',', '.');
 render_header('kontingente', 'Kontingente');
 bx_head('Kontingente / Jahresverträge', count($rows) . ' Verträge', bx_hint('Rahmenvertrag: Kunde ruft aus einer vereinbarten Gesamtmenge zum Festpreis ab. Jeder Abruf im Kundenportal erzeugt einen Auftrag und senkt den Rest.'));
 if (isset($_GET['ok']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Kontingent gelöscht.</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 ?>
 <div class="bx-panel">
@@ -86,6 +92,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
           <?php elseif ($r['status'] === 'wartet_vertrag'): ?><span class="muted" style="font-size:12px">wartet auf Kunde</span>
           <?php elseif ($r['status'] === 'aktiv'): ?><button class="btn btn-ghost btn-sm" type="submit" name="aktion" value="beenden">beenden</button>
           <?php else: ?><button class="btn btn-ghost btn-sm" type="submit" name="aktion" value="aktivieren">aktivieren</button><?php endif; ?>
+          <?php if (has_role('admin')): ?><button class="btn btn-ghost btn-sm" type="submit" name="aktion" value="loeschen" style="color:#8f231b" onclick="return confirm('Kontingent endgültig löschen? Geht nur, wenn keine aktiven Abrufe/Aufträge mehr daran hängen.');">löschen</button><?php endif; ?>
         </form></td>
       </tr>
     <?php endforeach; ?>

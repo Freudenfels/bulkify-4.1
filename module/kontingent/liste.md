@@ -13,3 +13,6 @@
 
 ## Jahresvertrags-Ablauf (Status)
 Kontingente entstehen jetzt auch **aus einem Angebot** (`angebot.jahresvertrag=1`): Der Kunde schließt im Portal ab → `kontingent_aus_angebot()` legt das Kontingent im Status **`wartet_vertrag`** an (Abruf gesperrt). Der Kunde lädt den **unterschriebenen Vertrag** hoch → **`wartet_freigabe`**. Hier prüft das Team den Upload (Spalte „Vertrag") und klickt **freigeben** → **`aktiv`** (jetzt abrufbar). Direkt angelegte Kontingente (Formular unten) sind sofort `aktiv`. Statusreihenfolge in der Liste: zu prüfende zuerst.
+
+## Kontingent löschen (2026-10-06)
+Je Zeile ein Admin-Button „löschen" (Aktion `loeschen` → `kontingent_loeschen($id)`, core/schema.php). Blocker: nicht stornierte Aufträge mit `auftrag.kontingent_id` (aktive Abrufe) → Meldung „zuerst stornieren/entfernen". Ohne Blocker: stornierte Abrufe werden entkoppelt (kontingent_id=NULL), die Kontingent-Dokumente (signierter Vertrag) mitgelöscht, dann die Kontingent-Zeile. Nötig u. a., weil ein Kontingent ein Produkt blockiert (siehe produkt_loeschen).

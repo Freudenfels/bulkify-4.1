@@ -6825,6 +6825,27 @@ function produkt_loeschen(int $id): array {
     return ['ok'=>true];
 }
 
+// Kontingent (Jahresvertrag) löschen – nur wenn keine aktiven Abrufe/Aufträge mehr daran hängen.
+// Blocker: nicht stornierte Aufträge mit kontingent_id. Stornierte Abrufe werden entkoppelt, die
+// zugehörigen Dokumente (signierter Vertrag) mitgelöscht.
+function kontingent_loeschen(int $id): array {
+    $id = (int)$id;
+    if ($id <= 0 || !scalar("SELECT id FROM kontingent WHERE id=?", [$id])) return ['ok'=>false, 'fehler'=>'Kontingent nicht gefunden.'];
+    $aktiv = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE kontingent_id=? AND status<>'storniert'", [$id]);
+    if ($aktiv) return ['ok'=>false, 'fehler'=>'Es gibt noch ' . $aktiv . ' aktive(n) Abruf/Auftrag aus diesem Kontingent. Bitte dort zuerst stornieren/entfernen.'];
+    $pdo = db(); $pdo->beginTransaction();
+    try {
+        q("UPDATE auftrag SET kontingent_id=NULL WHERE kontingent_id=?", [$id]);   // stornierte Abrufe entkoppeln
+        if (table_exists('dokument')) q("DELETE FROM dokument WHERE objekt_typ='kontingent' AND objekt_id=?", [$id]);
+        q("DELETE FROM kontingent WHERE id=?", [$id]);
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        $pdo->rollBack();
+        return ['ok'=>false, 'fehler'=>'Löschen abgebrochen: ' . $e->getMessage()];
+    }
+    return ['ok'=>true];
+}
+
 // Wo wird ein Produkt überall verwendet (klickbar) – deckt die Lösch-Blocker aus produkt_loeschen() ab.
 function produkt_verwendung(int $id): array {
     $id = (int)$id; if ($id <= 0) return [];
