@@ -51,6 +51,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     q("UPDATE produktionsauftrag SET status='erledigt' WHERE id=?", [$paid]);
     q("UPDATE produktion_schritt SET erledigt=1 WHERE pa_id=? AND erledigt=0", [$paid]);
     $r = einlager_buchen($paid);
+    // Altware hat ihre eigene (gedruckte) Chargennummer + MHD – optional überschreiben wir die Auto-Werte.
+    $cNr  = trim((string)($_POST['charge_nr'] ?? ''));
+    $cMhd = trim((string)($_POST['mhd'] ?? ''));
+    $cMhd = ($cMhd !== '' && strtotime($cMhd)) ? date('Y-m-d', strtotime($cMhd)) : '';
+    if (!empty($r['charge_id']) && ($cNr !== '' || $cMhd !== '')) {
+        q("UPDATE charge SET charge_nr = COALESCE(?, charge_nr), mhd = COALESCE(?, mhd) WHERE id=?",
+          [$cNr !== '' ? $cNr : null, $cMhd !== '' ? $cMhd : null, (int)$r['charge_id']]);
+    }
     header('Location: ?p=auftrag&id=' . $id . '&einlagerok=' . urlencode((string)($r['label'] ?? 'Lager'))); exit;
 }
 
@@ -545,15 +553,23 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
       <div class="muted" style="font-size:12px;margin-top:4px">Danach erscheint der Materialbedarf (Rohstoffe) und der Auftrag ist produzierbar.</div>
       <?php elseif ((string)$a['status'] !== 'storniert'): $nachtragLabel = auftrag_ist_fulfillment($id) ? 'Lager 2 (Fremdlager)' : 'Lager 1 (Warenlager)'; ?>
       <div class="muted" style="margin-bottom:6px">Kein Produktionsauftrag – der Auftrag ist bereits <strong><?= h($stText) ?></strong> (Altauftrag, der nie durch die Produktion lief).</div>
-      <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0;flex-wrap:wrap" onsubmit="return confirm('Fertige Ware (<?= (int)$a['menge'] ?> Packungen) als Charge nachtragen und in <?= h($nachtragLabel) ?> einbuchen?');">
+      <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap" onsubmit="return confirm('Fertige Ware (<?= (int)$a['menge'] ?> Packungen) als Charge nachtragen und in <?= h($nachtragLabel) ?> einbuchen?');">
         <input type="hidden" name="aktion" value="charge_nachtragen_einlagern">
-        <select name="produktionsart" style="max-width:190px">
-          <option value="fremd">Zukauf (Fremdproduktion)</option>
-          <option value="eigen">Eigenproduktion</option>
-        </select>
-        <button class="btn btn-primary btn-sm" type="submit">Fertige Ware nachtragen &amp; in <?= h($nachtragLabel) ?> einbuchen</button>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Herstellung
+          <select name="produktionsart" style="max-width:190px">
+            <option value="fremd">Zukauf (Fremdproduktion)</option>
+            <option value="eigen">Eigenproduktion</option>
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Chargennummer <span style="font-weight:400">(leer = automatisch)</span>
+          <input type="text" name="charge_nr" placeholder="z. B. 2024-0815" style="min-width:160px">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">MHD <span style="font-weight:400">(leer = Standard +18 M.)</span>
+          <input type="date" name="mhd">
+        </label>
+        <button class="btn btn-primary btn-sm" type="submit">Nachtragen &amp; in <?= h($nachtragLabel) ?> einbuchen</button>
       </form>
-      <div class="muted" style="font-size:12px;margin-top:4px">Legt die fertige Ware als Charge an und bucht sie ins Lager (Fulfillment → Lager 2, Auftrag wird abgeschlossen). Für Altaufträge ohne Produktionsauftrag.</div>
+      <div class="muted" style="font-size:12px;margin-top:6px">Legt die fertige Ware als Charge an und bucht sie ins Lager (Fulfillment → Lager 2, Auftrag wird abgeschlossen). Chargennummer und MHD der Altware kannst du hier direkt eintragen (sonst Auto-Charge). Für Altaufträge ohne Produktionsauftrag.</div>
       <?php else: ?>
       <div class="muted">Auftrag ist storniert – nichts einzulagern.</div>
       <?php endif; ?>
