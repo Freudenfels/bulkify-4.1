@@ -429,7 +429,7 @@ if ($gebucht):
 <script>
 (function(){
   var ITEMS = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'f'=>(string)($it['form']??'')], $items), JSON_UNESCAPED_UNICODE) ?>;
-  var KISTEN = <?= json_encode(array_map(fn($k)=>['id'=>(int)$k['id'],'n'=>(string)$k['name'],'b'=>(string)($k['barcode']??'')], $kisten), JSON_UNESCAPED_UNICODE) ?>;
+  var KISTEN = <?= json_encode(array_map(fn($k)=>['id'=>(int)$k['id'],'n'=>(string)$k['name'],'b'=>(string)($k['barcode']??''),'bl'=>(string)($k['blinker']??'')], $kisten), JSON_UNESCAPED_UNICODE) ?>;
   var REZ = <?= json_encode(array_map(fn($r)=>[
         'id'=>(int)$r['id'],
         'n'=>trim((($r['nummer']??'')!==''? $r['nummer'].' · ':'').$r['name']),
@@ -588,6 +588,8 @@ if ($gebucht):
     if(fb&&fbh) fb.addEventListener('change',function(){ fbh.value=fb.checked?'1':'0'; });
     pflicht(card);
     blinkerPflicht();
+    // Ist eine Kiste mit Blinker gewählt, den Blinker-Code gleich in die neue Zeile eintragen.
+    var bk=kisteBlinker(); if(bk){ var bf=card.querySelector('.we-blinker'); if(bf&&bf.value==='') bf.value=bk; }
     zeigeAehnlich(card);
     return card;
   }
@@ -624,7 +626,19 @@ if ($gebucht):
   function blinkerPflicht(){
     var sel=document.getElementById('weKiste'), frei = sel && sel.value!=='';
     document.querySelectorAll('.we-blinker').forEach(function(b){ b.required=!frei; });
-    document.querySelectorAll('.f-blinker label').forEach(function(l){ l.innerHTML = frei ? 'Blinker <span class="muted">(optional)</span>' : 'Blinker *'; });
+    document.querySelectorAll('.f-blinker label').forEach(function(l){ l.innerHTML = frei ? 'Blinker <span class="muted">(optional – von der Kiste)</span>' : 'Blinker *'; });
+  }
+  // Blinker-Code der aktuell gewählten Kiste (leer, wenn keine Kiste / kein Blinker).
+  var vorKisteBl='';
+  function kisteBlinker(){
+    var hid=document.getElementById('weKiste'); if(!hid||!hid.value) return '';
+    var m=KISTEN.filter(function(k){return String(k.id)===String(hid.value);})[0];
+    return m&&m.bl?m.bl:'';
+  }
+  // Blinker-Felder an die Kiste anpassen: leere ODER den alten Kisten-Code ersetzen (manuelle bleiben).
+  function kisteBlinkerUebernehmen(neu){
+    document.querySelectorAll('.we-blinker').forEach(function(b){ if(b.value===''||b.value===vorKisteBl) b.value=neu; });
+    vorKisteBl=neu;
   }
   // Kiste: EIN Feld – tippen (Vorschläge via datalist) ODER Barcode scannen. Setzt die versteckte kiste_id.
   (function(){
@@ -633,11 +647,14 @@ if ($gebucht):
     if(!inp||!hid) return;
     function pick(){
       var v=(inp.value||'').trim();
-      if(v===''){ hid.value=''; info.textContent=''; blinkerPflicht(); return; }
+      if(v===''){ hid.value=''; info.textContent=''; kisteBlinkerUebernehmen(''); blinkerPflicht(); return; }
       var m=KISTEN.filter(function(k){return k.n.toLowerCase()===v.toLowerCase();})[0]            // exakt per Name
           || KISTEN.filter(function(k){return k.b && k.b.toLowerCase()===v.toLowerCase();})[0];   // oder per Barcode
-      if(m){ hid.value=m.id; inp.value=m.n; info.textContent='Kiste: '+m.n; info.style.color='var(--gruen)'; }
-      else { hid.value=''; info.textContent='Keine Kiste erkannt – weiter tippen oder Barcode scannen.'; info.style.color=''; }
+      if(m){ hid.value=m.id; inp.value=m.n;
+        info.textContent='Kiste: '+m.n+(m.bl?(' · Blinker '+m.bl):' · kein Blinker'); info.style.color='var(--gruen)';
+        kisteBlinkerUebernehmen(m.bl||'');   // Blinker der Kiste in die Positionen eintragen
+      }
+      else { hid.value=''; info.textContent='Keine Kiste erkannt – weiter tippen oder Barcode scannen.'; info.style.color=''; kisteBlinkerUebernehmen(''); }
       blinkerPflicht();
     }
     inp.addEventListener('input', pick);
