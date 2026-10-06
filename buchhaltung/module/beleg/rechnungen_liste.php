@@ -6,10 +6,14 @@ require_once BX_ROOT . '/core/schema.php';
 $q    = trim($_GET['q'] ?? '');
 $sort = $_GET['sort'] ?? 'angelegt';
 $dir  = $_GET['dir']  ?? 'desc';
+// Nur Dienstleistungs-Rechnungen (DR-)? Über die Route ?p=dl_rechnungen oder ?art=dienstleistung.
+$nurDL = (($p ?? '') === 'dl_rechnungen') || (($_GET['art'] ?? '') === 'dienstleistung');
+$route = $nurDL ? 'dl_rechnungen' : 'rechnungen';
 
 $rows = all("SELECT b.*, k.firma AS kunde_firma
              FROM beleg b LEFT JOIN kunden k ON k.id=b.kunde_id
-             WHERE b.typ IN ('rechnung','gutschrift')");
+             WHERE b.typ IN ('rechnung','gutschrift')"
+            . ($nurDL ? " AND b.kategorie='dienstleistung'" : ""));
 if ($q !== '') {
     $needle = mb_strtolower($q);
     $rows = array_filter($rows, function($r) use ($needle) {
@@ -36,7 +40,7 @@ $statusBadge = fn($r) => match ($r['status']) {
 
 $cols = [
     'nummer'      => ['label' => 'Nummer', 'sort' => true],
-    'art'         => ['label' => 'Art', 'render' => fn($r)=> ($r['typ'] ?? '')==='gutschrift' ? bx_badge('Gutschrift','info') : 'Rechnung'],
+    'art'         => ['label' => 'Art', 'render' => fn($r)=> ($r['typ'] ?? '')==='gutschrift' ? bx_badge('Gutschrift','info') : (($r['kategorie'] ?? 'produkt')==='dienstleistung' ? bx_badge('Dienstleistung','info') : 'Rechnung')],
     'datum'       => ['label' => 'Datum', 'sort' => true, 'render' => $datum],
     'kunde_firma' => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
     'netto'       => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['netto'])],
@@ -44,15 +48,19 @@ $cols = [
     'status'      => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
 ];
 
-render_header('rechnungen', 'Rechnungen');
-bx_head('Rechnungen', count($rows) . ' Einträge · offene Posten: ' . $eur($offen));
+render_header($route, $nurDL ? 'Dienstleistungs-Rechnungen' : 'Rechnungen');
+bx_head($nurDL ? 'Dienstleistungs-Rechnungen (DR-)' : 'Rechnungen', count($rows) . ' Einträge · offene Posten: ' . $eur($offen));
 if (isset($_GET['verrechnet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['verrechnet'] . ' Rechnung(en) storniert &amp; verrechnet (Gutschrift erzeugt).</div>';
 ?>
+<div class="bx-row" style="gap:8px;margin:0 0 12px">
+  <a class="btn btn-sm <?= $nurDL ? 'btn-ghost' : 'btn-primary' ?>" href="?p=rechnungen">Alle</a>
+  <a class="btn btn-sm <?= $nurDL ? 'btn-primary' : 'btn-ghost' ?>" href="?p=dl_rechnungen">Dienstleistungen</a>
+</div>
 <form class="bx-listbar" method="get">
-  <input type="hidden" name="p" value="rechnungen">
+  <input type="hidden" name="p" value="<?= h($route) ?>">
   <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Nummer, Kunde …">
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
-  <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=rechnungen">zurücksetzen</a><?php endif; ?>
+  <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=<?= h($route) ?>">zurücksetzen</a><?php endif; ?>
   <span style="flex:1"></span>
   <a class="btn btn-ghost btn-sm" href="?p=gutschrift_neu">Storno-Rechnung</a>
   <a class="btn btn-ghost btn-sm" href="?p=rechnung_import">Alt-Rechnungen importieren</a>
@@ -61,10 +69,10 @@ if (isset($_GET['verrechnet'])) echo '<div class="bx-panel badge-ok" style="padd
 </form>
 <?php
 bx_table($cols, array_values($rows), [
-    'baseUrl' => '?p=rechnungen' . ($q !== '' ? '&q=' . urlencode($q) : ''),
+    'baseUrl' => '?p=' . $route . ($q !== '' ? '&q=' . urlencode($q) : ''),
     'sort'    => $sort,
     'dir'     => $dir,
     'rowUrl'  => fn($r) => '?p=rechnung&id=' . $r['id'],
-    'empty'   => 'Noch keine Rechnungen – mit „+ Rechnung erstellen" (KI-gestützt) oder automatisch aus einem Auftrag.',
+    'empty'   => $nurDL ? 'Noch keine Dienstleistungs-Rechnungen – diese entstehen aus einem DL-Auftrag (Dienstleistungen-Modul → „Rechnung in der Buchhaltung erstellen").' : 'Noch keine Rechnungen – mit „+ Rechnung erstellen" (KI-gestützt) oder automatisch aus einem Auftrag.',
 ]);
 render_footer();

@@ -24,6 +24,7 @@ function bu_nav(): array {
         ],
         'Ausgang (Debitoren)' => [
             'rechnungen'        => ['label' => 'Rechnungen',          'href' => '?p=rechnungen'],
+            'dl_rechnungen'     => ['label' => 'DL-Rechnungen',       'href' => '?p=dl_rechnungen'],
             'rechnung_frei'     => ['label' => 'Rechnung erstellen',  'href' => '?p=rechnung_frei'],
             'gutschrift_neu'    => ['label' => 'Storno / Gutschrift', 'href' => '?p=gutschrift_neu'],
             'angebote_ansicht'  => ['label' => 'Angebote (Ansicht)',  'href' => '?p=angebote_ansicht'],

@@ -402,3 +402,51 @@ function guthaben_auszahlen(int $kunde_id, float $wunsch, string $notiz = '', st
     guthaben_bewegung_add($kunde_id, $betrag, 'auszahlung', null, $notiz ?: 'Guthaben ausgezahlt');
     return $betrag;
 }
+
+// ===== Dienstleistungs-Rechnung (DR-) aus DL-Auftrag =====
+// Sub-App-Variante von dl_rechnung_aus_auftrag() (Referenz: Dashboard core/dienstleistung.php). Liest
+// Auftrag + Angebotspositionen über die Naht (erp.php), schreibt beleg/beleg_position. Nur für
+// auftrag.kategorie='dienstleistung'; Positionen 1:1 aus dem DA-Angebot; Beleg mit kategorie='dienstleistung'
+// und Nummernkreis DR-. Idempotent: existiert schon eine nicht stornierte Rechnung zum Auftrag -> deren ID.
+function dl_rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
+    $a = erp_auftrag($auftrag_id);
+    if (!$a || ($a['kategorie'] ?? '') !== 'dienstleistung') return null;
+    $ex = scalar("SELECT id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert' ORDER BY id LIMIT 1", [$auftrag_id]);
+    if ($ex) return (int)$ex;
+    $pos = [];
+    foreach (erp_dl_positionen((int)($a['angebot_id'] ?? 0)) as $p) {
+        $pos[] = [
+            'artikelnr'   => $p['artikelnr'] ?? null,
+            'bezeichnung' => (string)$p['bezeichnung'],
+            'beschreibung'=> $p['beschreibung'] ?? null,
+            'menge'       => (float)$p['menge'],
+            'einheit'     => $p['einheit'] ?? null,
+            'preis_cent'  => (int)$p['preis_cent'],
+            'mwst_satz'   => (float)$p['mwst_satz'],
+        ];
+    }
+    if (!$pos) return null;
+    $s = beleg_summen_aus_positionen($pos);
+    if ($s['netto'] <= 0) return null;
+    $ustP = 0.0;
+    foreach ($pos as $p) if ((float)$p['mwst_satz'] > 0) { $ustP = (float)$p['mwst_satz']; break; }
+    $gilt  = fn($d) => (is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) ? $d : null;
+    $datum = $gilt($opt['datum'] ?? null) ?? gmdate('Y-m-d');
+    $ziel  = (isset($opt['zahlungsziel_tage']) && $opt['zahlungsziel_tage'] !== '') ? max(0, (int)$opt['zahlungsziel_tage']) : null;
+    $faellig = ($ziel !== null) ? date('Y-m-d', strtotime($datum . ' +' . $ziel . ' days')) : null;
+    $text  = trim((string)($opt['text'] ?? '')) ?: null;
+    $sicht = !empty($opt['freigeben']) ? 1 : 0;
+    q("INSERT INTO beleg (nummer,typ,kategorie,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,text,kunde_sichtbar)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('DR'), 'rechnung', 'dienstleistung', $auftrag_id, ($a['kunde_id'] ?: null),
+       $s['netto'], $ustP, $s['ust'], $s['brutto'], 'offen', $datum, $ziel, $faellig, $text, $sicht]);
+    $bid = (int) insert_id();
+    $sort = 0;
+    foreach ($pos as $p)
+        q("INSERT INTO beleg_position (beleg_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz) VALUES (?,?,?,?,?,?,?,?,?)",
+          [$bid, $sort++, $p['artikelnr'] ?: null, $p['bezeichnung'], $p['beschreibung'] ?: null,
+           $p['menge'], $p['einheit'] ?: null, $p['preis_cent'], $p['mwst_satz']]);
+    if (function_exists('beleg_status_log_add')) beleg_status_log_add($bid, 'offen', 'DL-Rechnung aus Auftrag ' . (string)$a['nummer'] . ' erstellt' . ($sicht ? ', für Kunde freigegeben' : ''), trim((string)($opt['ersteller'] ?? '')) ?: 'team');
+    if (!empty($a['kunde_id'])) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'DL-Rechnung ' . (string) scalar("SELECT nummer FROM beleg WHERE id=?", [$bid]) . ' erstellt.', 'beleg', 'auftrag', $auftrag_id);
+    return $bid;
+}

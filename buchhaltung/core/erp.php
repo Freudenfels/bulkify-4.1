@@ -124,6 +124,11 @@ function erp_angebot_positionen(int $angebot_id): array {
     $rows = all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]);
     return array_values(array_filter($rows, fn($r) => (float)$r['menge'] > 1e-9 || (int)$r['preis_cent'] > 0));
 }
+// ALLE Angebotspositionen (1:1, ohne Filter) – für DL-Rechnungen (Positionen unverändert übernehmen). Nur Lesen.
+function erp_dl_positionen(int $angebot_id): array {
+    if (!$angebot_id || !tabelle_da('angebot_position')) return [];
+    return all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]);
+}
 
 // Aufträge mit Kundenname (für den Abgleich Angebot→Auftrag→Rechnung). Nur Lesen.
 function erp_auftraege(?int $kunde_id = null): array {

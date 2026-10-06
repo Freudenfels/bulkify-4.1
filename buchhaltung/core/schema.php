@@ -46,6 +46,8 @@ function bu_schema(): void {
     bu_ensure_column('beleg', 'original_datei', "VARCHAR(255) NULL");
     bu_ensure_column('beleg', 'original_orig', "VARCHAR(255) NULL");
     bu_ensure_column('beleg', 'kunde_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0");
+    bu_ensure_column('beleg', 'imp_angebot_id', "INT NULL");                               // Bulk-Import: Verweis aufs archivierte Angebot
+    bu_ensure_column('beleg', 'kategorie', "VARCHAR(20) NOT NULL DEFAULT 'produkt'");       // produkt | dienstleistung (DL-Rechnung DR-)
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS beleg_position (
         id INT AUTO_INCREMENT PRIMARY KEY,

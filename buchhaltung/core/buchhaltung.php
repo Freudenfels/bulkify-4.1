@@ -72,7 +72,7 @@ function bh_umsatz_steuersatz(int $jahr): array {
 
 // Prüft die fortlaufenden Belegnummern je Präfix. Rein lesend.
 // Rückgabe: ['kreise'=>[...je Präfix...], 'rueckdatiert'=>[...], 'storno'=>[...]]
-function bh_nummernkreis_pruefung(array $praefixe = ['RE', 'GS']): array {
+function bh_nummernkreis_pruefung(array $praefixe = ['RE', 'GS', 'DA', 'DB', 'DR']): array {
     $kreise = [];
     $rueckdatiert = [];
     foreach ($praefixe as $pfx) {
