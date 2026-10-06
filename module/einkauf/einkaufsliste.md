@@ -25,3 +25,6 @@ Block unter „Neuen Bedarf eintragen": einen **bereits vorhandenen** Lagerartik
 
 ## Dark Mode
 Das Hinweis-Panel „… warten auf die Festlegung" nutzt `border-color/border-left:var(--warn)` statt eines harten hellen Hintergrunds (`#fff8f7`) – sonst heller Text auf hellem Grund im Dark Mode.
+
+## Zugang-Regel beim Bestellen (2026-10-06)
+Titel ist jetzt **„Bestellen"**. Beim Bestellen entscheidet der Lieferanten-**Portal-Zugang** (`lieferant_hat_zugang`, aktiver `benutzer.lieferant_id`): Lieferant **mit Zugang** → Bestellung geht in seinen Account, Status `gesendet` + Benachrichtigung → wartet auf seine Bestätigung. Lieferant **ohne Zugang** oder „extern" → nur erfasst (Status `bestellt`). Dropdowns markieren jeden Lieferanten mit „· Portal" bzw. „· extern".

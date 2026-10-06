@@ -1,72 +1,78 @@
 <?php
-// Einkauf – Bestellungen beim Lieferanten (Historie der getätigten/angelegten Bestellungen).
+// Einkauf – „Bestellt": einfache Positionsliste von allem, was bestellt wurde (Produkt, Menge, Lieferant,
+// Datum, Status). Klick auf eine Zeile öffnet die Bestellung mit allen weiteren Infos.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 
 $q    = trim($_GET['q'] ?? '');
-$sort = $_GET['sort'] ?? 'angelegt';
+$sort = $_GET['sort'] ?? 'bestelldatum';
 $dir  = $_GET['dir']  ?? 'desc';
 $archiv = ($_GET['archiv'] ?? '') === '1';   // Archiv = gelieferte Bestellungen
 
+// Lieferanten mit Portal-Zugang (aktiver Benutzer): deren Bestellungen „warten auf Bestätigung", bis der
+// Lieferant im Portal bestätigt. Ohne Zugang = extern (nur erfasst). Einmal laden.
+$zugangIds = [];
+foreach (all("SELECT DISTINCT lieferant_id FROM benutzer WHERE lieferant_id IS NOT NULL AND aktiv=1") as $z) $zugangIds[(int)$z['lieferant_id']] = true;
+
 $wo = $archiv ? "WHERE b.status='geliefert'" : "WHERE b.status<>'geliefert'";
-$rows = all("SELECT b.*, l.firma AS lieferant_firma,
-             (SELECT COUNT(*) FROM bestellung_position p WHERE p.bestellung_id=b.id) AS pos_anzahl,
-             (SELECT COALESCE(SUM(menge*ek_preis),0) FROM bestellung_position p WHERE p.bestellung_id=b.id) AS summe
-             FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id $wo");
-$anzArchiv = (int) scalar("SELECT COUNT(*) FROM bestellung WHERE status='geliefert'");
+// Eine Zeile je Bestellposition (Produkt + Menge), mit den Kopfdaten der Bestellung.
+$rows = all("SELECT bp.id AS pos_id, bp.menge, bp.einheit, bp.bestellung_id,
+             COALESCE(NULLIF(bp.bezeichnung,''), i.name, '–') AS produkt,
+             b.nummer, b.status, b.bestelldatum, b.angelegt, COALESCE(b.bestaetigt,0) AS bestaetigt,
+             b.lieferant_id, b.eta_geplant, l.firma AS lieferant_firma
+             FROM bestellung_position bp
+             JOIN bestellung b ON b.id=bp.bestellung_id
+             LEFT JOIN item i ON i.id=bp.item_id
+             LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+             $wo");
+$anzArchiv = (int) scalar("SELECT COUNT(*) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE b.status='geliefert'");
+
 if ($q !== '') {
     $needle = mb_strtolower($q);
     $rows = array_filter($rows, function($r) use ($needle) {
-        foreach (['nummer','lieferant_firma'] as $f) if (mb_strpos(mb_strtolower((string)$r[$f]), $needle) !== false) return true;
+        foreach (['produkt','lieferant_firma','nummer'] as $f) if (mb_strpos(mb_strtolower((string)$r[$f]), $needle) !== false) return true;
         return false;
     });
 }
 $rows = bx_sort_rows($rows, $sort, $dir);
 
-$eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
-$statusBadge = fn($r) => match ($r['status']) {
-    'offen'     => bx_badge('Entwurf','info'),
-    'bestellt'  => bx_badge('bestellt','warn'),
-    'geliefert' => bx_badge('geliefert','ok'),
-    default     => bx_badge(status_text($r['status'])),
+$mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+// Status je Zeile: geliefert > bestätigt > wartet auf Bestätigung (Portal-Lieferant, noch nicht bestätigt) > bestellt (erfasst) > Entwurf.
+$statusBadge = function($r) use ($zugangIds) {
+    $st = (string)$r['status'];
+    if ($st === 'geliefert')             return bx_badge('geliefert','ok');
+    if ((int)$r['bestaetigt'] === 1 || $st === 'bestaetigt') return bx_badge('bestätigt','ok');
+    $portal = !empty($r['lieferant_id']) && isset($zugangIds[(int)$r['lieferant_id']]);
+    if ($portal && in_array($st, ['gesendet','bestellt'], true)) return bx_badge('wartet auf Bestätigung','warn');
+    if ($st === 'offen')                 return bx_badge('Entwurf','info');
+    return bx_badge('bestellt','info');   // extern / Lieferant ohne Zugang: nur erfasst
 };
 
 $cols = [
-    'nummer'           => ['label'=>'Nummer', 'sort'=>true],
-    'lieferant_firma'  => ['label'=>'Lieferant', 'sort'=>true, 'render'=>fn($r)=> $r['lieferant_firma']?h($r['lieferant_firma']):'<span class="muted">–</span>'],
+    'produkt'          => ['label'=>'Produkt', 'sort'=>true, 'render'=>fn($r)=> h((string)$r['produkt'])],
+    'menge'            => ['label'=>'Menge', 'sort'=>true, 'num'=>true, 'render'=>fn($r)=> $mfmt($r['menge']) . ' ' . h((string)$r['einheit'])],
+    'lieferant_firma'  => ['label'=>'Lieferant', 'sort'=>true, 'render'=>fn($r)=> $r['lieferant_firma'] ? h($r['lieferant_firma']) : '<span class="muted">extern</span>'],
     'bestelldatum'     => ['label'=>'Bestellt am', 'sort'=>true, 'render'=>fn($r)=> !empty($r['bestelldatum']) ? h(date('d.m.Y', strtotime($r['bestelldatum']))) : '<span class="muted">–</span>'],
-    'pos_anzahl'       => ['label'=>'Positionen', 'sort'=>true, 'num'=>true],
-    'summe'            => ['label'=>'Summe', 'sort'=>true, 'num'=>true, 'render'=>fn($r)=> $eur($r['summe'])],
-    'eta_geplant'      => ['label'=>'Zugesagt', 'sort'=>true, 'render'=>fn($r)=> !empty($r['eta_geplant'])
-        ? h(date('d.m.Y', strtotime($r['eta_geplant']))) . ((int)($r['bestaetigt'] ?? 0) === 1 ? '' : '')
-        : '<span class="muted" title="Vom Lieferanten noch nicht bestätigt">–</span>'],
-    'station'          => ['label'=>'Fortschritt', 'render'=>function($r) {
-        $s = (string)($r['station'] ?? ''); if ($s === '') return '<span class="muted">–</span>';
-        $alle = bestellung_stationen();
-        return h($alle[$s] ?? $s) . '<div class="muted" style="font-size:12px">' . (bestellung_station_index($s)+1) . ' / ' . count($alle) . '</div>';
-    }],
+    'nummer'           => ['label'=>'Bestellung', 'sort'=>true],
     'status'           => ['label'=>'Status', 'sort'=>true, 'render'=>$statusBadge],
-    'pdf'              => ['label'=>'', 'render'=>fn($r) => $r['lieferant_id']
-        ? pdf_btn('?p=bestellung_pdf&id=' . (int)$r['id'], 'PDF', true, 'Bestellung als PDF')
-        : '<span class="muted" title="Kein Lieferant hinterlegt">–</span>'],
 ];
 
-render_header('einkauf', $archiv ? 'Bestellarchiv' : 'Bestellungen');
-bx_head($archiv ? 'Bestellarchiv' : 'Bestellungen',
-        count($rows) . ($archiv ? ' gelieferte Bestellungen' : ' laufende Bestellungen (unterwegs / Entwurf)'),
-        bx_btn('Schnell (mobil)', '?p=einkauf_mobil', 'ghost') . ' ' . bx_btn('Neue Bestellung', '?p=bestellung&id=neu', 'ghost'));
+render_header('einkauf', $archiv ? 'Bestellt – Archiv' : 'Bestellt');
+bx_head($archiv ? 'Bestellt – Archiv' : 'Bestellt',
+        count($rows) . ($archiv ? ' gelieferte Positionen' : ' bestellte Positionen (unterwegs / wartet auf Bestätigung)'),
+        bx_btn('Zu „Bestellen"', '?p=einkaufsliste', 'ghost') . ' ' . bx_btn('Neue Bestellung', '?p=bestellung&id=neu', 'ghost'));
 if (isset($_GET['vorsorglich'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Vorsorgliche Bestellung angelegt – sie steht jetzt hier unter „Bestellt".</div>';
 ?>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="einkauf">
   <?php if ($archiv): ?><input type="hidden" name="archiv" value="1"><?php endif; ?>
-  <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Nummer, Lieferant …">
+  <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Produkt, Lieferant, Bestellnummer …">
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
   <span style="flex:1"></span>
   <?php if ($archiv): ?>
     <a class="btn btn-ghost btn-sm" href="?p=einkauf">Zurück zu laufenden</a>
   <?php else: ?>
-    <a class="btn btn-ghost btn-sm" href="?p=einkauf&archiv=1">Bestellarchiv<?= $anzArchiv ? ' (' . $anzArchiv . ')' : '' ?></a>
+    <a class="btn btn-ghost btn-sm" href="?p=einkauf&archiv=1">Archiv (geliefert)<?= $anzArchiv ? ' (' . $anzArchiv . ')' : '' ?></a>
   <?php endif; ?>
 </form>
 <?php
@@ -74,7 +80,7 @@ bx_table($cols, array_values($rows), [
     'baseUrl' => '?p=einkauf' . ($archiv ? '&archiv=1' : '') . ($q !== '' ? '&q=' . urlencode($q) : ''),
     'sort'    => $sort,
     'dir'     => $dir,
-    'rowUrl'  => fn($r) => '?p=bestellung&id=' . $r['id'],
-    'empty'   => 'Noch keine Bestellungen.',
+    'rowUrl'  => fn($r) => '?p=bestellung&id=' . $r['bestellung_id'],
+    'empty'   => 'Noch nichts bestellt.',
 ]);
 render_footer();

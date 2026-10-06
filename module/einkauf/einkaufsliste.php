@@ -36,8 +36,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorso
     if ($iid > 0 && $menge > 0 && scalar("SELECT id FROM item WHERE id=?", [$iid])) {
         $bid = bestellung_erstellen([['item_id'=>$iid, 'menge'=>$menge, 'auftrag_id'=>0]], [], $sup, date('Y-m-d'));
         if ($bid) {
-            q("UPDATE bestellung SET notiz=? WHERE id=?", [$extern ? 'Vorsorglich · extern bestellt' : 'Vorsorglich bestellt', $bid]);
-            if (!$extern && $sup && function_exists('mail_bereit') && mail_bereit()) mail_lieferant_bestellung($bid);
+            $hatZugang = !$extern && $sup && lieferant_hat_zugang((int)$sup);
+            if ($hatZugang) {
+                q("UPDATE bestellung SET status='gesendet', notiz='Vorsorglich · an den Lieferanten-Account gesendet – wartet auf Bestätigung' WHERE id=?", [$bid]);
+                if (mail_bereit()) mail_lieferant_bestellung($bid);
+            } else {
+                q("UPDATE bestellung SET notiz=? WHERE id=?", [$extern ? 'Vorsorglich · extern bestellt' : 'Vorsorglich · erfasst (Lieferant ohne Portal-Zugang)', $bid]);
+            }
             header('Location: ?p=einkauf&vorsorglich=1'); exit;
         }
     }
@@ -92,9 +97,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         $bid = bestellung_erstellen($g['pos'] ?? [], $g['bulk'] ?? [], $sup ?: null, $datum, $g['frei'] ?? [], $bulkMengeMap);
         if (!$bid) continue;
         $n++;
-        if ($extern) q("UPDATE bestellung SET notiz='Extern bestellt (z. B. Amazon)' WHERE id=?", [$bid]);
-        // Mit Bestelldatum ist die Bestellung sofort erteilt – der Lieferant bekommt die Mail (falls eingerichtet).
-        elseif ($datum && $sup && mail_bereit()) mail_lieferant_bestellung($bid);
+        // Zugang-Regel: Lieferant mit Portal-Zugang -> an seinen Account gesendet (Status 'gesendet',
+        // wartet auf seine Bestätigung) + Benachrichtigung. Extern ODER Lieferant ohne Zugang -> nur erfasst.
+        $hatZugang = !$extern && $sup && lieferant_hat_zugang((int)$sup);
+        if ($hatZugang) {
+            q("UPDATE bestellung SET status='gesendet', notiz='An den Lieferanten-Account gesendet – wartet auf Bestätigung' WHERE id=?", [$bid]);
+            if (mail_bereit()) mail_lieferant_bestellung($bid);
+        } else {
+            q("UPDATE bestellung SET notiz=? WHERE id=?", [$extern ? 'Extern bestellt (z. B. Amazon)' : 'Erfasst – Lieferant ohne Portal-Zugang (extern)', $bid]);
+        }
     }
     header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($extern ? '&extern=1' : '')); exit;
 }
@@ -105,6 +116,10 @@ $freiBedarf = freibedarf_offen();
 $nachBedarf = meldebestand_bedarf();   // Meldebestand-Nachbestellungen (Lagerartikel unter Mindestbestand)
 $ohneFestlegung = auftraege_ohne_festlegung();   // Aufträge ohne Eigen/Fremd-Festlegung -> noch kein Bedarf, nur Hinweis
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+// Lieferanten MIT Portal-Zugang (aktiver Benutzer) – an die geht die Bestellung in den Account (wartet auf
+// Bestätigung); alle anderen sind „extern" (nur erfasst). Einmal laden statt je Zeile zu prüfen.
+$zugangIds = [];
+foreach (all("SELECT DISTINCT lieferant_id FROM benutzer WHERE lieferant_id IS NOT NULL AND aktiv=1") as $z) $zugangIds[(int)$z['lieferant_id']] = true;
 $BM_KAT = betriebsmittel_kategorien();
 
 $aktTyp = $_GET['typ'] ?? '';
@@ -139,22 +154,23 @@ $mengeInput = fn(string $key, float $wert, string $einheit) =>
 $rolleBadge = fn($r) => bx_badge($r, $r === 'Fertigware' ? 'info' : '');
 // Lieferant-Dropdown je Zeile (vorbelegt)
 $eurShort = fn($p) => number_format((float)$p, 2, ',', '.') . ' €';
-$liefSelect = function(string $key, int $sel, array $preise = []) use ($lieferanten, $eurShort): string {
+$liefSelect = function(string $key, int $sel, array $preise = []) use ($lieferanten, $eurShort, $zugangIds): string {
     // Lieferanten mit Preis zuerst (günstigste oben), dann der Rest alphabetisch; Preis im Label.
+    // Marker: „· Portal" = Bestellung geht in den Account (wartet auf Bestätigung); „· extern" = nur erfasst.
     $mit = []; $ohne = [];
     foreach ($lieferanten as $l) { if (isset($preise[(int)$l['id']])) $mit[] = $l; else $ohne[] = $l; }
     usort($mit, fn($a, $b) => $preise[(int)$a['id']] <=> $preise[(int)$b['id']]);
-    $s = '<select name="lief[' . h($key) . ']" style="max-width:230px"><option value="">– Lieferant –</option>';
+    $s = '<select name="lief[' . h($key) . ']" style="max-width:260px"><option value="">– Lieferant –</option>';
     foreach (array_merge($mit, $ohne) as $l) {
         $lid = (int)$l['id'];
-        $lbl = h($l['firma']) . (isset($preise[$lid]) ? ' · ' . $eurShort($preise[$lid]) : '');
+        $lbl = h($l['firma']) . (isset($preise[$lid]) ? ' · ' . $eurShort($preise[$lid]) : '') . (isset($zugangIds[$lid]) ? ' · Portal' : ' · extern');
         $s .= '<option value="' . $lid . '"' . ($sel === $lid ? ' selected' : '') . '>' . $lbl . '</option>';
     }
     return $s . '</select>';
 };
 
-render_header('einkaufsliste', 'Bedarf');
-bx_head('Bedarf', 'Was bestellt werden muss. Auswählen und entweder beim Lieferanten bestellen oder „habe ich extern bestellt" (z. B. Amazon) – danach wandert es nach „Bestellt".',
+render_header('einkaufsliste', 'Bestellen');
+bx_head('Bestellen', 'Was bestellt werden sollte – auswählen und bestellen. Lieferant mit Portal-Zugang: die Bestellung geht in seinen Account (wartet auf Bestätigung). Lieferant ohne Zugang oder „extern": wird nur erfasst. Danach steht alles unter „Bestellt".',
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['extern']) ? ' Position(en) als „extern bestellt" markiert' : ' Bestellung(en) angelegt (je Lieferant eine)') . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . '</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
@@ -312,7 +328,7 @@ if ($ohneFestlegung): ?>
       </div>
       <div class="bx-field"><label>Menge</label><input type="text" name="menge" placeholder="z. B. 2.520" required></div>
       <div class="bx-field"><label>Lieferant (optional)</label>
-        <select name="lieferant_id"><option value="">– offen –</option><?php foreach ($lieferanten as $l): ?><option value="<?= (int)$l['id'] ?>"><?= h($l['firma']) ?></option><?php endforeach; ?></select>
+        <select name="lieferant_id"><option value="">– offen / extern –</option><?php foreach ($lieferanten as $l): ?><option value="<?= (int)$l['id'] ?>"><?= h($l['firma']) ?><?= isset($zugangIds[(int)$l['id']]) ? ' · Portal' : ' · extern' ?></option><?php endforeach; ?></select>
       </div>
     </div>
     <div class="bx-row" style="margin-top:var(--sp-4);gap:8px;flex-wrap:wrap">
