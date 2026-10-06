@@ -6810,7 +6810,10 @@ function produkt_loeschen(int $id): array {
     $nA  = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE produkt_id=?", [$id]);            if ($nA)  $blocker[] = $nA . ' Auftrag/Aufträge';
     $nPa = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE produkt_id=?", [$id]); if ($nPa) $blocker[] = $nPa . ' Produktionsauftrag/-aufträge';
     $nK  = (int) scalar("SELECT COUNT(*) FROM kontingent WHERE produkt_id=?", [$id]);         if ($nK)  $blocker[] = $nK . ' Kontingent(e)';
-    $nAg = (int) scalar("SELECT COUNT(*) FROM angebot WHERE produkt_id=?", [$id]) + (int) scalar("SELECT COUNT(*) FROM angebot_produkt WHERE produkt_id=?", [$id]);
+    // Angebote: nur ECHTE (existierende) zählen – verwaiste angebot_produkt-Links (Angebot längst gelöscht)
+    // blockieren NICHT und werden unten aufgeräumt.
+    $nAg = (int) scalar("SELECT COUNT(*) FROM angebot WHERE produkt_id=?", [$id])
+         + (int) scalar("SELECT COUNT(*) FROM angebot_produkt ap JOIN angebot ag ON ag.id=ap.angebot_id WHERE ap.produkt_id=?", [$id]);
     if ($nAg) $blocker[] = $nAg . ' Angebot(e)';
     $lit = (int) scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$id]);
     $bestand = $lit ? (int) scalar("SELECT COUNT(*) FROM charge WHERE item_id=?", [$lit]) : 0;
@@ -6821,6 +6824,8 @@ function produkt_loeschen(int $id): array {
     try {
         foreach (['produkt_preis', 'produkt_kundenpreis', 'produkt_lieferant_preis'] as $t)
             if (table_exists($t)) q("DELETE FROM $t WHERE produkt_id=?", [$id]);
+        // Verwaiste Angebots-Produkt-Links aufräumen (echte Angebote hätten oben blockiert).
+        if (table_exists('angebot_produkt')) q("DELETE FROM angebot_produkt WHERE produkt_id=?", [$id]);
         if (table_exists('dokument')) q("DELETE FROM dokument WHERE objekt_typ='produkt' AND objekt_id=?", [$id]);
         if ($lit) q("DELETE FROM item WHERE id=? AND kategorie='verkaufsfertig'", [$lit]);   // leerer Lagerartikel
         foreach (['fastaction_item', 'fastaction_notiz', 'portal_anfrage', 'portal_anfrage_pos', 'ek_import'] as $t)
