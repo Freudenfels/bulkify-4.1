@@ -32,10 +32,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    'rechnung_firma','rechnung_strasse','rechnung_hausnummer','rechnung_plz','rechnung_ort','rechnung_land',
                    'liefer_strasse','liefer_hausnummer','liefer_plz','liefer_ort','liefer_land',
                    'zahlungsart','zahlungsziel_tage','rabatt_marge','aufschlag_marge',
-                   'portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','zeige_energetisierung','labortest_extern','benachrichtigung_aus','notiz'];
+                   'portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','eigener_dhl','zeige_energetisierung','labortest_extern','benachrichtigung_aus','notiz'];
         $vals = array_map($f, $felder);
         $vals[array_search('gesperrt', $felder)] = isset($_POST['gesperrt']) ? 1 : 0;
-        foreach (['portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','zeige_energetisierung','labortest_extern','benachrichtigung_aus'] as $pf)
+        foreach (['portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','eigener_dhl','zeige_energetisierung','labortest_extern','benachrichtigung_aus'] as $pf)
             $vals[array_search($pf, $felder)] = isset($_POST[$pf]) ? 1 : 0;
         foreach (['zahlungsziel_tage','rabatt_marge','aufschlag_marge'] as $nf) { $ix = array_search($nf, $felder); if (trim((string)$vals[$ix]) === '') $vals[$ix] = 0; }
         if ($neu) {
@@ -498,6 +498,11 @@ if (!$neu) {
           <label for="f_nutzt_fulfillment" style="margin:0">Nutzt unser Fulfillment (Fremdlager)</label>
         </div>
         <div class="muted" style="font-size:12px;margin-top:4px">Nur dann wird die Fertigware dieses Kunden bei uns eingelagert (Fremdlager) und mit dem Versandsystem gekoppelt. Ohne Haken wird nur produziert und an den Kunden geliefert.</div>
+        <div class="bx-check" style="margin-top:10px">
+          <input type="checkbox" name="eigener_dhl" id="f_eigener_dhl" value="1" <?= (int)($k['eigener_dhl'] ?? 0)===1?'checked':'' ?>>
+          <label for="f_eigener_dhl" style="margin:0">Eigener DHL-Vertrag</label>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:4px">Bei der monatlichen Fulfillment-Abrechnung bekommt dieser Kunde dann <strong>nur die Fulfillment-Service-Gebühr</strong> berechnet – keine Paketzeilen (Versand zahlt er über seinen eigenen DHL-Vertrag).</div>
       </div>
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line,#e5e5e5)">
         <div class="bx-check">
