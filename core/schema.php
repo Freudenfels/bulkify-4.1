@@ -6179,9 +6179,6 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
     $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
     q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=?, erledigt_von=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $wer !== '' ? $wer : null, $schritt_id]);
     reservierung_abgleichen($pa_id);   // entnommene Items: Reservierung schließen
-    // Übergabe an das Lager: ist die Herstellung durch (Station „Bereit zur Einlagerung"), bekommt das Lager
-    // eine Aufgabe, die Ware in Lager 1 oder 2 zu buchen (je Kunde Fulfillment). Die Buchung macht das Lager (einlager_buchen).
-    if ($station === 'Bereit zur Einlagerung') produktion_an_lager_uebergeben($pa_id);
     $total = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=?", [$pa_id]);
     $done  = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]);
     $status = $done === 0 ? 'offen' : ($done >= $total ? 'erledigt' : 'laufend');
@@ -6189,11 +6186,14 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
     $fertig = ($status === 'erledigt');
     if ($fertig) {
         auftrag_reservierung_freigeben($pa_id);     // Rest-Reservierungen freigeben
-        produktion_fertigware_einbuchen($pa_id);    // Fertigware als Charge einbuchen
+        // ÜBERGABE ANS LAGER statt Selbst-Buchung: ist die Produktion durch, bekommt das Lager eine Aufgabe,
+        // die Fertigware in Lager 1 oder 2 zu buchen (Fulfillment -> Lager 2). Das Lager bucht via einlager_buchen().
+        // Teilmengen, die während der Produktion direkt gebucht wurden, zählen; einlager_buchen bucht nur den Rest.
+        produktion_an_lager_uebergeben($pa_id);
         $pa = one("SELECT auftrag_id, kunde_id, nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
         if ($pa && $pa['auftrag_id']) {
             q("UPDATE auftrag SET status='erledigt' WHERE id=?", [(int)$pa['auftrag_id']]);
-            if ($pa['kunde_id']) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Produktion ' . $pa['nummer'] . ' abgeschlossen, Fertigware eingebucht, versandfrei.', 'auftrag', 'auftrag', (int)$pa['auftrag_id']);
+            if ($pa['kunde_id']) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Produktion ' . $pa['nummer'] . ' abgeschlossen – an Lager zum Einlagern übergeben.', 'auftrag', 'auftrag', (int)$pa['auftrag_id']);
         }
     }
     return ['ok'=>true, 'fehler'=>null, 'msg'=>'', 'fertig'=>$fertig, 'station'=>$station];
