@@ -18,6 +18,7 @@ $routen = [
     'uebersicht'     => 'start.php',   // Lager-Startseite (Dashboard/Überblick)
     // Grosses Lager
     'erwartet'       => 'bestand/erwartet.php',
+    'einlagern'      => 'bestand/einlagern.php',      // Produktion -> Lager-Uebergabe (Ein-Klick)
     'we'             => 'bestand/wareneingang.php',   // vollwertiger Wareneingang (L1/L2 + KI-Scan)
     'bestand'        => 'bestand/liste.php',
     'eingang'        => 'bestand/eingang.php',

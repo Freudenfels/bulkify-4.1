@@ -739,6 +739,56 @@ function erp_rezeptur_bulkitem(int $rezeptur_id): ?int {
     } catch (Throwable $e) { return null; }
 }
 
+// ===== Einlagern: Produktion → Lager-Übergabe =====================================================
+// Die Produktion legt eine Aufgabe (aufgabe.ref_typ='einlagern', ref_id=produktionsauftrag.id) an.
+// Das Lager zeigt sie und bucht per EIN KLICK die Fertigware ein. Die Buchung selbst ist kanonische
+// Dashboard-Logik (produktion_fertigware_einbuchen/BSKU/Lager-2) – die rufen wir NICHT nach (db()-Kollision,
+// Divergenz), sondern über einen Loopback-Endpunkt im Dashboard (?p=api_einlager) auf. Gemeinsamer Token
+// in app_meta['einlager_api_token'].
+function erp_einlager_aufgaben(): array {
+    if (!tabelle_da('aufgabe')) return [];
+    return all("SELECT id AS aufgabe_id, titel, beschreibung, ref_id AS pa_id, angelegt
+                FROM aufgabe WHERE ref_typ='einlagern' AND status='offen' ORDER BY id DESC LIMIT 100");
+}
+// Gemeinsamer Token (app_meta) – wird beim ersten Gebrauch erzeugt; die Dashboard-Seite prüft denselben Key.
+function erp_einlager_token(): string {
+    if (!tabelle_da('app_meta')) return '';
+    $t = (string) scalar("SELECT v FROM app_meta WHERE k='einlager_api_token'");
+    if ($t === '') {
+        try { $t = bin2hex(random_bytes(16)); } catch (Throwable $e) { $t = md5(uniqid('', true)); }
+        q("INSERT INTO app_meta (k,v) VALUES ('einlager_api_token', ?) ON DUPLICATE KEY UPDATE v=VALUES(v)", [$t]);
+    }
+    return $t;
+}
+// Einlagern auslösen: ruft die kanonische Dashboard-Funktion per Loopback auf (gleicher Server).
+// Rueckgabe ['ok'=>bool,'meldung'=>string,'ziel'=>?].
+function erp_einlager_buchen(int $pa_id): array {
+    if ($pa_id <= 0) return ['ok' => false, 'meldung' => 'Kein Produktionsauftrag angegeben.'];
+    if (!function_exists('curl_init')) return ['ok' => false, 'meldung' => 'PHP-curl fehlt auf dem Server.'];
+    $token = erp_einlager_token();
+    if ($token === '') return ['ok' => false, 'meldung' => 'app_meta nicht verfügbar – Token kann nicht gesetzt werden.'];
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
+    $url    = $scheme . '://' . $host . '/?p=api_einlager';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 45, CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_POSTFIELDS => http_build_query(['pa_id' => $pa_id, 'token' => $token]),
+        CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 2, CURLOPT_POSTREDIR => 7,  // http->https folgen, POST behalten
+    ]);
+    if (defined('CURLSSLOPT_NATIVE_CA')) curl_setopt($ch, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
+    $res = curl_exec($ch);
+    $st  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err = curl_error($ch);
+    curl_close($ch);
+    if ($err !== '') return ['ok' => false, 'meldung' => 'Verbindungsfehler zum Dashboard: ' . $err];
+    if ($st === 404) return ['ok' => false, 'meldung' => 'Dashboard-Endpunkt „api_einlager" fehlt noch – wird im Dashboard-Chat ergänzt.'];
+    $j = json_decode((string)$res, true);
+    if (is_array($j) && !empty($j['ok'])) return ['ok' => true, 'meldung' => 'Eingelagert in ' . (string)($j['label'] ?? 'das Lager') . '.', 'ziel' => (string)($j['ziel'] ?? '')];
+    $msg = is_array($j) && ($j['meldung'] ?? $j['fehler'] ?? '') !== '' ? (string)($j['meldung'] ?? $j['fehler']) : ('Dashboard antwortete HTTP ' . $st);
+    return ['ok' => false, 'meldung' => $msg];
+}
+
 function erp_erwartete_lieferungen(): array {
     if (!tabelle_da('bestellung')) return [];
     $rows = all("SELECT b.id, b.nummer, b.bestelldatum, b.eta_geplant, b.tracking, b.versandanbieter,
