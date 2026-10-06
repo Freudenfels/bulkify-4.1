@@ -149,3 +149,6 @@ eine Gruppe) neu auf – ersetzt die bisherigen. Preise werden dabei gesperrt (Z
 (core/schema.php) – bei Stück-Formen (Kapsel/Tablette/…) zählt `stueck`, bei Füllmengen-Formen (Pulver/Granulat/
 Flüssig/Gel) `fuellmenge_g`. Vorher wurde blind `fuellmenge_g ?: stueck` genommen; ein (importierter/veralteter)
 `fuellmenge_g`-Wert konnte so die Kapselzahl überschreiben (z. B. 69 statt der angefragten 60 im „Vom Kunden angefragt"-Hinweis und in der Position).
+
+## Rezeptur verknüpfen (Angebot ohne Rezeptur)
+Vor der Übersicht/Editor-Verzweigung (rendert auch für bestätigte/Nur-Ansicht-Angebote) steht ein „Rezeptur"-Block. Auflösung: `angebot.rezeptur_id` > Kopf-Produkt-Rezeptur > erste Positions-Rezeptur. Fehlt sie, Picker (rscombo, Admin); Aktion `rezeptur_verknuepfen` setzt `angebot.rezeptur_id` (+ Produkt-Rezeptur, falls leer).

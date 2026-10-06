@@ -48,3 +48,6 @@ Panel „Laboranalyse / Labortest" (zeigt ggf. die Fertigware-Charge). Admin lä
 
 ## Externer Labortest – Zwischenstand (2026-10-05)
 Das Labortest-Panel zeigt jetzt drei Stufen: freigegebener Bericht = „abgeschlossen"; sonst, wenn `auftrag.labor_versendet_am` gesetzt (von der Produktion über die Naht geschrieben) = „Probe beim Labor · versendet am …"; sonst „läuft". Quelle: `auftrag_labortest_status()` (Feld `versendet_am`). Nur für Kunden mit `kunden.labortest_extern=1`. Dashboard liest nur, schreibt nicht.
+
+## Rezeptur verknüpfen (Auftrag ohne Rezeptur)
+Hat der Auftrag keine aufgelöste Rezeptur (COALESCE(`auftrag.rezeptur_id`, Produkt-Rezeptur), z. B. v3-Import/Freitext), zeigt die Zeile „Rezeptur" im Reiter *Details* einen Picker (rscombo, nur Admin). Aktion `rezeptur_verknuepfen` setzt `auftrag.rezeptur_id`; hängt ein Produkt ohne Rezeptur dran, wird auch `produkt.rezeptur_id` gesetzt (Produktion/Specs/PIB kennen sie dann).
