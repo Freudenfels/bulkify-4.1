@@ -45,7 +45,8 @@ hier einbinden (zieht die zweite `core/db.php` + das ganze Dashboard herein).
 - `?p=pa&id=…` – Detail-Übersicht (ein Spaltenraster) + Rezeptur/Rohstoffbedarf + Schrittliste.
   Button **„In den Produktionsmodus"**.
 - `?p=run&id=…` – **Produktionsmodus** (tablettauglich): nächster Schritt groß, „Erledigt"/„Freigeben"
-  (FEFO-Entnahme/Mangel-Guard, letzter Schritt bucht Fertigware ein, protokolliert wer/wann).
+  (FEFO-Entnahme/Mangel-Guard; letzter Schritt **übergibt an das Lager zum Einlagern** – legt eine
+  Lager-Aufgabe an, das Lager bucht die Fertigware ein –, protokolliert wer/wann).
   Admin kann Schritte direkt abhaken/zurücksetzen (reine Statuskorrektur, ohne Lagerbewegung).
 - `?p=qs&id=…` – **QS & Labor**: Rückstellmuster, Laborprobe/-versand, druckbares QS-Freigabedokument.
 - `?p=kalender` – **Kalender** (terminierte Aufträge nach `geplant_am` + ohne Termin).
@@ -59,7 +60,9 @@ Rohstoffe bereitstellen → Mischen → ‹Herstellung› → Zwischenkontrolle 
 
 **Datenerfassung je Schritt** (Phase 1, fertig): im Produktionsmodus werden beim Abschließen Werte erfasst und in `pr_pa_daten` gespeichert (`pr_station_felder()`): Mischen = gemischte Menge (kg), Zwischenkontrolle = Kontrollgewicht (g), Rückstellmuster ziehen = Rückstell-/Labormuster-Mengen. Angezeigt in der Ablaufliste.
 
-**Noch offen (Phasen):** Phase 2 = Auto-Buchungen (Fertigstellen → Lager 1, Abfüllen → Abbuchung) + Lager 1 → Lager 2/Versand-Routing (berührt Lager/ds_api). Phase 3 = Barcode-/Etikettendruck für gemischte Eimer (mit Mischmenge). Hinweis: Die neue Eigen-Schrittfolge entsteht beim Speichern des Produktionswegs; für Neuanlagen muss der Dashboard-Stationen-Vertrag (Zwischenkontrolle, Rückstellmuster ziehen) nachgezogen werden.
+**Lager-Übergabe (neu, gespiegelt vom Dashboard, Commit 816573f):** Beim PA-Abschluss bucht die Produktion die Fertigware **nicht** mehr selbst ein, sondern `erp_an_lager_uebergeben()` legt eine Einlager-Aufgabe (`ref_typ='einlagern'`, Ziel Lager 1 bzw. Lager 2 bei Fulfillment) an; das **Lager** bucht die Charge beim Einlagern. Idempotent je PA. Teilmengen buchen weiterhin direkt (schnelle Ware). Dashboard-Seite: `produktion_an_lager_uebergeben`/`einlager_buchen`.
+
+**Noch offen (Phasen):** Phase 2 = restliche Auto-Buchungen (Abfüllen → Abbuchung) + Lager 1 → Lager 2/Versand-Routing (berührt Lager/ds_api). Phase 3 = Barcode-/Etikettendruck für gemischte Eimer (mit Mischmenge). Hinweis: Die neue Eigen-Schrittfolge entsteht beim Speichern des Produktionswegs; für Neuanlagen muss der Dashboard-Stationen-Vertrag (Zwischenkontrolle, Rückstellmuster ziehen) nachgezogen werden.
 
 ## Arbeiten im eigenen Chat
 Ein Chat, der **nur** im Ordner `produktion/` (+ `public/produktion/`) arbeitet, kollidiert praktisch

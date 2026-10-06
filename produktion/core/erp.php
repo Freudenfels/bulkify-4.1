@@ -534,13 +534,13 @@ function erp_schritt_abschliessen(int $schritt_id, string $akteur): array {
     $fertig = ($status === 'erledigt');
     if ($fertig) {
         erp_auftrag_reservierung_freigeben($pa_id);     // Rest-Reservierungen freigeben
-        erp_fertigware_einbuchen($pa_id);               // Fertigware als Charge einbuchen
+        erp_an_lager_uebergeben($pa_id);                // an Lager zum Einlagern übergeben (bucht NICHT selbst ein)
         $pa = one("SELECT auftrag_id, kunde_id, nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
         if ($pa && $pa['auftrag_id'] && tabelle_da('auftrag')) {
             q("UPDATE auftrag SET status='erledigt' WHERE id=?", [(int)$pa['auftrag_id']]);
             if ($pa['kunde_id'])
                 erp_log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team',
-                    'Produktion ' . $pa['nummer'] . ' abgeschlossen, Fertigware eingebucht, versandfrei.',
+                    'Produktion ' . $pa['nummer'] . ' abgeschlossen – an Lager zum Einlagern übergeben.',
                     'auftrag', 'auftrag', (int)$pa['auftrag_id']);
         }
     }
@@ -752,7 +752,9 @@ function erp_produktion_rest(int $pa_id): float {
     $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
     return max(0.0, $menge - erp_produktion_gebucht($pa_id));
 }
-// Den noch offenen Rest der Produktionsmenge als eigene Charge einbuchen (Abschluss normaler Aufträge).
+// Den noch offenen Rest der Produktionsmenge als eigene Charge einbuchen. Hinweis: Beim normalen
+// PA-Abschluss wird NICHT mehr direkt eingebucht, sondern per erp_an_lager_uebergeben() an das Lager
+// übergeben (das Lager bucht ein). Diese Funktion bleibt als Baustein (Teilmengen/Sonderfälle) erhalten.
 function erp_fertigware_einbuchen(int $pa_id): ?int {
     return erp_teilmenge_einbuchen($pa_id, erp_produktion_rest($pa_id));
 }
@@ -868,6 +870,39 @@ function erp_rezeptur_bulkitem(int $rezeptur_id): ?int {
 function erp_auftrag_ist_fulfillment(int $auftrag_id): bool {
     if ($auftrag_id <= 0) return false;
     return (bool) scalar("SELECT k.nutzt_fulfillment FROM auftrag a JOIN kunden k ON k.id=a.kunde_id WHERE a.id=?", [$auftrag_id]);
+}
+// Einlager-Ziel eines Auftrags: Fulfillment-Kunde -> Lager 2 (Fremdlager), sonst Lager 1 (Warenlager).
+// Spiegelt einlager_ziel_fuer_pa() im Dashboard – beide Seiten müssen dasselbe Ziel bestimmen.
+function erp_einlager_ziel(int $pa_id): array {
+    $pa = one("SELECT auftrag_id, produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $ff = false;
+    if ($pa) {
+        if (!empty($pa['auftrag_id'])) $ff = erp_auftrag_ist_fulfillment((int)$pa['auftrag_id']);
+        if (!$ff && !empty($pa['produkt_id'])) $ff = (bool) scalar("SELECT k.nutzt_fulfillment FROM produkt p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [(int)$pa['produkt_id']]);
+    }
+    return $ff ? ['ziel'=>'lager2', 'label'=>'Lager 2 (Fremdlager)'] : ['ziel'=>'lager1', 'label'=>'Lager 1 (Warenlager)'];
+}
+// Produktion an das Lager übergeben: legt eine Lager-Aufgabe „Einlagern … → Lager 1/2" an. Idempotent je PA.
+// Spiegelt produktion_an_lager_uebergeben() im Dashboard (gleiche Tabelle aufgabe, gleicher ref_typ='einlagern').
+// WICHTIG: Die Produktion bucht die Fertigware NICHT mehr selbst ein – das macht das Lager beim Einlagern.
+function erp_an_lager_uebergeben(int $pa_id): int {
+    if (!tabelle_da('aufgabe')) return 0;
+    if ((int) scalar("SELECT COUNT(*) FROM aufgabe WHERE ref_typ='einlagern' AND ref_id=? AND status='offen'", [$pa_id]) > 0) return 0;
+    $pa = one("SELECT pa.nummer, pa.auftrag_id, pa.menge, a.nummer AS auftrag_nr,
+                      COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, rz.name) AS produkt, k.firma AS kunde
+               FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id
+               LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN rezeptur rz ON rz.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
+               LEFT JOIN kunden k ON k.id=pa.kunde_id WHERE pa.id=?", [$pa_id]);
+    if (!$pa) return 0;
+    $ziel  = erp_einlager_ziel($pa_id);
+    $titel = 'Einlagern: ' . ($pa['produkt'] ?: ('PR ' . $pa['nummer'])) . ' → ' . $ziel['label'];
+    $besch = trim(($pa['auftrag_nr'] ? 'Auftrag ' . $pa['auftrag_nr'] . ' · ' : '') . 'PR ' . $pa['nummer']
+           . ($pa['kunde'] ? ' · ' . $pa['kunde'] : '') . ' · Menge ' . (int)$pa['menge']
+           . '. Fertige Ware bitte in ' . $ziel['label'] . ' buchen.');
+    q("INSERT INTO aufgabe (titel,beschreibung,prio,zugewiesen_an,erstellt_von,faellig,ref_typ,ref_id,angelegt)
+       VALUES (?,?,?,?,?,?,?,?,?)",
+      [$titel, $besch ?: null, 2, null, null, null, 'einlagern', $pa_id, gmdate('Y-m-d H:i:s')]);
+    return (int) insert_id();
 }
 function erp_bsku_ensure(int $item_id): string {
     $b = (string) scalar("SELECT bsku FROM item WHERE id=?", [$item_id]);
