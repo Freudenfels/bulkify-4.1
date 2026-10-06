@@ -37,15 +37,18 @@ $auftragArt = function($r) use ($erstProd, $erstRez) {
 $istAbg   = fn($r) => ($r['status'] ?? '') === 'versendet';
 $anzOffen = count(array_filter($alle, fn($r) => !$istAbg($r)));
 $anzAbg   = count(array_filter($alle, $istAbg));
-$rows     = $tab === 'abgeschlossen' ? array_filter($alle, $istAbg) : array_filter($alle, fn($r) => !$istAbg($r));
+// Bei einer Suche über ALLE Aufträge gehen (offen UND abgeschlossen) – sonst findet man einen bereits
+// versendeten/abgeschlossenen Auftrag im Standard-Reiter „Offen" nicht. Ohne Suche gilt der Reiter.
 if ($q !== '') {
     $needle = mb_strtolower($q);
-    $rows = array_filter($rows, function($r) use ($needle) {
+    $rows = array_filter($alle, function($r) use ($needle) {
         foreach (['nummer','kunde_firma','produkt_name'] as $f) {
             if (mb_strpos(mb_strtolower((string)$r[$f]), $needle) !== false) return true;
         }
         return false;
     });
+} else {
+    $rows = $tab === 'abgeschlossen' ? array_filter($alle, $istAbg) : array_filter($alle, fn($r) => !$istAbg($r));
 }
 $rows = bx_sort_rows($rows, $sort, $dir);
 
@@ -84,7 +87,7 @@ render_header('auftraege', 'Aufträge');
 $ohnePreis = (function_exists('has_role') && (has_role('admin') || has_role('finance') || has_role('sales')))
     ? (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status<>'storniert' AND COALESCE(gesamt_netto,0) <= 0") : 0;
 $kopfAktion = $ohnePreis > 0 ? bx_btn('Aufträge ohne Preis (' . $ohnePreis . ')', '?p=auftrag_preise', 'ghost') : '';
-bx_head('Aufträge', count($rows) . ' ' . ($tab === 'abgeschlossen' ? 'abgeschlossene (versendet)' : 'offene'), $kopfAktion);
+bx_head('Aufträge', $q !== '' ? count($rows) . ' Treffer (Suche über alle Aufträge, auch abgeschlossene)' : count($rows) . ' ' . ($tab === 'abgeschlossen' ? 'abgeschlossene (versendet)' : 'offene'), $kopfAktion);
 ?>
 <div class="settabs">
   <?php foreach ($TABS as $key => $lbl): ?>
