@@ -207,3 +207,6 @@ Admin-Reiter `?p=alt_rechnungen` (originale Rechnungen alter Aufträge). Siehe `
 
 ## Rohstoff-Infoblatt in der eigenen Rezeptur
 Zutaten in der Rezeptur-Ansicht verlinken auf das Rohstoff-Infoblatt (`?view=rohstoff&iid=`). Das Infoblatt ist jetzt auch ohne Katalog-Zugang (`portal_rohstoffe`) sichtbar, WENN der Rohstoff in einer eigenen, sichtbaren Rezeptur des Kunden steckt (via `portal_rezeptur`). Nur bulkify-Dokumente/Werte, nie Lieferanten-Originale.
+
+## Roter Zähler „Etiketten" im Portal-Menü (2026-10-06)
+Der Menüpunkt **Etiketten** zeigt einen **roten** Zähler (`.pt-badge-rot`) = Anzahl aktiver Bestellungen **ohne hochgeladenes Etikett-Design** (`$etikettFehltAnzahl`: auftrag.kunde_id, status NOT IN versendet/storniert, kein `dokument` typ='etikett'). Dieselbe Bedingung wie die „Etikett fehlt"-Liste in der Etiketten-Ansicht – der Zähler entspricht also der Anzahl der Zeilen mit „Etikett hochladen". Rot statt grün signalisiert Handlungsbedarf beim Kunden (`$navBadgeRot['etiketten']`). Andere Zähler bleiben grün (lime).

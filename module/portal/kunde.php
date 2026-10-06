@@ -701,6 +701,7 @@ function portal_head(string $titel): void {
     echo '<link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/icons/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png"><link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">';
     echo "<style>"
        . ".pt-badge{display:inline-block;background:var(--lime);color:#10210f;border-radius:10px;padding:0 7px;font-size:12px;font-weight:600}"
+       . ".pt-badge-rot{background:#d64545;color:#fff}"
        . ".pt-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0;max-width:760px}"
        . ".pt-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}"
        . ".pt-card .k{font-size:12px;color:var(--muted)}.pt-card .val{font-size:22px;font-weight:600;margin-top:4px}"
@@ -1343,12 +1344,17 @@ $inArbeit = count(array_filter($auftraege, fn($a) => $a['status'] !== 'versendet
 // Menü-Zähler: was ist offen bzw. in Bearbeitung (Kundensicht) – als Badge am jeweiligen Menüpunkt.
 $navKontingente = (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND jahresvertrag=1 AND status<>'offen' AND kunde_ausgeblendet=0 AND NOT EXISTS (SELECT 1 FROM kontingent kk WHERE kk.angebot_id=angebot.id)", [$kid])
                 + (int) scalar("SELECT COUNT(*) FROM kontingent WHERE kunde_id=? AND status='wartet_vertrag'", [$kid]);
+// Fehlende Etiketten = aktive Bestellungen ohne hochgeladenes Etikett-Design (gleiche Bedingung wie die
+// „Etikett fehlt"-Liste in der Etiketten-Ansicht). Der Kunde muss diese noch hochladen -> roter Zähler.
+$etikettFehltAnzahl = (int) scalar("SELECT COUNT(*) FROM auftrag a WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert')
+    AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='auftrag' AND d.objekt_id=a.id AND d.typ='etikett')", [(int)$k['id']]);
 $navBadges = [
     'meine_anfragen' => $offenAngebote + count($anfPruef),
     'angebote'       => $offenAngebote,
     'bestellungen'   => $inArbeit,
     'rechnungen'     => count($offenRechnungen),
     'kontingente'    => $navKontingente,
+    'etiketten'      => $etikettFehltAnzahl,
 ];
 $navBadgeTitel = [
     'meine_anfragen' => 'offene Vorgänge (Angebote zur Wahl / Vorschläge zur Prüfung / in Prüfung)',
@@ -1356,7 +1362,10 @@ $navBadgeTitel = [
     'bestellungen'   => 'Bestellungen in Bearbeitung',
     'rechnungen'     => 'offene Rechnungen',
     'kontingente'    => 'Jahresverträge, die auf Sie warten',
+    'etiketten'      => 'Etiketten, die Sie noch hochladen müssen',
 ];
+// Menüpunkte, deren Zähler ROT sind (Handlungsbedarf beim Kunden), statt grün.
+$navBadgeRot = ['etiketten' => true];
 $portalLink = fn($v) => '?p=portal&token=' . $token . '&v=' . $v;
 // Suchfeld für die Katalog-Listen. Behält Token und Ansicht bei, damit die Suche im Portal bleibt.
 $sucheForm = function (string $v, string $platzhalter) use ($token, $q) {
@@ -1723,7 +1732,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           foreach ($sichtbar as $key): ?>
             <a href="<?= $portalLink($key) ?>"<?= $activeItem===$key ? ' class="on"' : '' ?>><?= h($L[$key]) ?><?php
               $nv = (int)($navBadges[$key] ?? 0);
-              if ($nv > 0): ?> <span class="pt-badge" style="float:right" title="<?= $nv ?> <?= h($navBadgeTitel[$key] ?? 'offen') ?>"><?= $nv ?></span><?php endif; ?></a>
+              if ($nv > 0): ?> <span class="pt-badge<?= !empty($navBadgeRot[$key]) ? ' pt-badge-rot' : '' ?>" style="float:right" title="<?= $nv ?> <?= h($navBadgeTitel[$key] ?? 'offen') ?>"><?= $nv ?></span><?php endif; ?></a>
           <?php endforeach;
       endforeach; ?>
       <div class="bx-userbox">
