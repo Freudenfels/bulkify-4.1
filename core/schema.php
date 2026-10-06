@@ -561,6 +561,7 @@ function init_schema(): void {
         KEY idx_beleg (beleg_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('beleg', 'storno_von_id', "INT NULL");     // Gutschrift/Storno -> Original-Rechnung
+    ensure_column('beleg', 'rezeptur_id', "INT NULL");       // direkte Rezeptur-Verknuepfung (Override), z. B. freie Rechnung
     ensure_column('beleg', 'grund', "VARCHAR(255) NULL");    // Grund des Stornos / der Gutschrift
     ensure_column('beleg', 'zahlungsziel_tage', "INT NULL");  // Zahlungsziel in Tagen (Rechnung)
     ensure_column('beleg', 'faellig', "DATE NULL");          // Faelligkeit = datum + zahlungsziel_tage
@@ -578,6 +579,7 @@ function init_schema(): void {
     ensure_column('auftrag', 'status_datum', "DATE NULL");   // Datum des aktuellen Status (Kunde sieht es); Fast-Track/v3-Style
     ensure_column('auftrag', 'energ_start', "DATE NULL");     // Energetisierung: Startdatum (aus v3); Status laeuft/abgeschlossen wird daraus abgeleitet
     ensure_column('auftrag', 'bezahlt_am', "DATE NULL");          // manuelles „bezahlt am" fuer Alt-Auftraege (altes System, ohne v4-Rechnung)
+    ensure_column('auftrag', 'rezeptur_id', "INT NULL");          // direkte Rezeptur-Verknuepfung (Override), falls das Produkt keine hat / kein Produkt
     ensure_column('auftrag', 'bezahlt_betrag', "DECIMAL(14,2) NULL");  // optionaler Betrag fuer Alt-Auftraege (0-Wert-Faelle)
 
     // guthaben_bewegung: Verbrauch des Kunden-Guthabens (aus Gutschriften) – angerechnet auf Rechnung oder ausgezahlt.
@@ -1244,6 +1246,7 @@ function init_schema(): void {
     ensure_column('rezeptur', 'freigabe_name', "VARCHAR(190) NULL");
     ensure_column('rezeptur', 'freigabe_am', "DATETIME NULL");
     ensure_column('angebot', 'freigabe_name', "VARCHAR(190) NULL");
+    ensure_column('angebot', 'rezeptur_id', "INT NULL");          // direkte Rezeptur-Verknuepfung (Override)
     ensure_column('angebot', 'freigabe_am', "DATETIME NULL");
     ensure_column('rezeptur', 'agb_version', "VARCHAR(40) NULL");   // welche AGB-Fassung bei der Freigabe galt
     ensure_column('angebot', 'agb_version', "VARCHAR(40) NULL");

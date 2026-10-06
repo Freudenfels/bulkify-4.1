@@ -61,6 +61,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&mhdok=1'); exit;
 }
 
+// Auftrag ohne Rezeptur mit einer bestehenden Rezeptur verknüpfen (z. B. v3-Import/Freitext-Auftrag).
+// Setzt die direkte Verknüpfung am Auftrag; hängt ein Produkt ohne Rezeptur dran, wird sie dort auch gesetzt
+// (damit Produktion/Specs/PIB die Rezeptur kennen).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'rezeptur_verknuepfen') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $rzid = (int)($_POST['rezeptur_id'] ?? 0);
+    if ($rzid <= 0 || !scalar("SELECT id FROM rezeptur WHERE id=?", [$rzid])) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Bitte eine gültige Rezeptur wählen.')); exit; }
+    q("UPDATE auftrag SET rezeptur_id=? WHERE id=?", [$rzid, $id]);
+    $pid = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$id]);
+    if ($pid && !(int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$pid])) q("UPDATE produkt SET rezeptur_id=? WHERE id=?", [$rzid, $pid]);
+    header('Location: ?p=auftrag&id=' . $id . '&rezverk=1'); exit;
+}
+
 // Fertige Ware eines Altauftrags OHNE Produktionsauftrag nachtragen und direkt ins Lager 1/2 einbuchen.
 // Legt bei Bedarf einen Produktionsauftrag an (nur als Träger für die Charge), hakt ihn ab und bucht die
 // volle Menge als Fertigware-Charge (Fulfillment → Lager 2 + Auftrag abgeschlossen). Für produzierte
@@ -285,9 +298,10 @@ $rechnung = one("SELECT id, nummer, brutto, status FROM beleg WHERE auftrag_id=?
 $rechnungZs = $rechnung ? beleg_zahlstatus($rechnung) : null;   // abgeleiteter Zahlstatus (bezahlt/teilbezahlt/offen + Rest)
 // Hochgeladene Alt-Rechnungen (Altsystem) zu diesem Auftrag.
 $altRechnungen = all("SELECT id, datei, datei_orig, dok_datum FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC", [$id]);
-$rezeptur = !empty($a['produkt_id'])
-    ? one("SELECT r.id, r.nummer, r.name, r.darreichungsform, r.kapselgroesse_id FROM produkt p JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$a['produkt_id']])
-    : null;
+// Rezeptur = direkter Override am Auftrag (falls verknüpft) ODER die des Produkts.
+$rezEffId = (int)($a['rezeptur_id'] ?? 0);
+if (!$rezEffId && !empty($a['produkt_id'])) $rezEffId = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
+$rezeptur = $rezEffId ? one("SELECT id, nummer, name, darreichungsform, kapselgroesse_id FROM rezeptur WHERE id=?", [$rezEffId]) : null;
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 // Fulfillment-Kunde? Dann wird die Ware eingelagert, nicht versendet: der Abschluss heißt „abgeschlossen"
 // (statt „versendet"), „erledigt" = „bereit zur Einlagerung". Ein zentraler Label-Helfer für alle Status-Anzeigen.
@@ -514,7 +528,23 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
   <div class="bx-grid">
     <div><div class="k muted">Kunde</div><div><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
     <div><div class="k muted">Produkt</div><div><?php if (!empty($a['produkt_id']) && $produktName): ?><a href="?p=produkt&id=<?= (int)$a['produkt_id'] ?>"><?= h($produktName) ?></a><?php elseif ($produktName): ?><?= h($produktName) ?> <span class="muted" style="font-size:12px">(aus v3)</span><?php else: ?>–<?php endif; ?><?php if ($artKey !== 'none'): ?> <span title="<?= h($artHint) ?>"><?= bx_badge($artLabel, $artStil) ?></span><?php endif; ?></div></div>
-    <div><div class="k muted">Rezeptur</div><div><?php if ($rezeptur): ?><a href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>"><?= h($rezeptur['nummer']) ?></a><?= $rezeptur['name'] ? ' · ' . h($rezeptur['name']) : '' ?><?php else: ?>–<?php endif; ?></div></div>
+    <div><div class="k muted">Rezeptur</div><div>
+      <?php if ($rezeptur): ?>
+        <a href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>"><?= h($rezeptur['nummer']) ?></a><?= $rezeptur['name'] ? ' · ' . h($rezeptur['name']) : '' ?>
+      <?php elseif (has_role('admin')): // keine Rezeptur verknüpft -> Picker zum Verknüpfen ?>
+        <?php if (isset($_GET['rezverk'])): ?><span class="badge-ok" style="padding:3px 8px;border-radius:6px;margin-right:6px">Rezeptur verknüpft.</span><?php endif; ?>
+        <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0;flex-wrap:wrap">
+          <input type="hidden" name="aktion" value="rezeptur_verknuepfen">
+          <select name="rezeptur_id" class="rscombo" style="min-width:240px" required>
+            <option value="">– Rezeptur wählen –</option>
+            <?php foreach (all("SELECT id, nummer, name FROM rezeptur ORDER BY nummer DESC") as $rz): ?>
+              <option value="<?= (int)$rz['id'] ?>"><?= h($rz['nummer']) ?><?= $rz['name'] ? ' · ' . h($rz['name']) : '' ?></option>
+            <?php endforeach; ?>
+          </select>
+          <button class="btn btn-ghost btn-sm" type="submit">Rezeptur verknüpfen</button>
+        </form>
+      <?php else: ?>–<?php endif; ?>
+    </div></div>
     <div><div class="k muted">Aus Angebot</div><div><?php if ($a['angebot_id']): ?><a href="?p=angebot&id=<?= (int)$a['angebot_id'] ?>"><?= h($a['angebot_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
     <?php if (!empty($a['kontingent_id'])): ?><div><div class="k muted">Herkunft</div><div><a href="?p=kontingente" title="Abruf aus einem Jahresabnahmevertrag"><?= bx_badge('aus Jahresvertrag','info') ?></a></div></div><?php endif; ?>
     <div><div class="k muted">Rechnung</div><div><?php if ($rechnung): ?><a href="/buchhaltung/?p=rechnung&id=<?= (int)$rechnung['id'] ?>"><?= h($rechnung['nummer']) ?></a> · <?= $eur($rechnung['brutto']) ?> · <?php
