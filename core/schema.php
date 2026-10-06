@@ -717,6 +717,7 @@ function init_schema(): void {
     // Geplante Produktionsmenge in EINHEITEN/Stück (Kapseln). NULL = genau der Auftragsbedarf. Höher = Überproduktion;
     // der Überschuss wird als Bestand auf den Rezeptur-Bulk gebucht und beim nächsten Auftrag gleicher Rezeptur verrechnet.
     ensure_column('produktionsauftrag', 'menge_produktion', "INT NULL");
+    ensure_column('produktionsauftrag', 'mhd', "DATE NULL");                       // selbst festgelegtes MHD der Fertigware (gilt beim Einbuchen der Charge)
 
     // produktion_schritt: die Stationen/Gates eines Produktionsauftrags, der Reihe nach abzuarbeiten.
     $pdo->exec("CREATE TABLE IF NOT EXISTS produktion_schritt (
@@ -2573,7 +2574,7 @@ function produktion_rest(int $pa_id): float {
 // heute + 18 Monate. Es kann nie mehr gebucht werden, als vom Auftrag noch offen ist.
 // Rückgabe ['ok'=>bool, 'msg'=>string, 'charge_id'=>?int, 'charge_nr'=>string].
 function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd = null, string $notiz = ''): array {
-    $pa = one("SELECT nummer, produkt_id, rezeptur_id, menge, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = one("SELECT nummer, produkt_id, rezeptur_id, menge, auftrag_id, mhd FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return ['ok'=>false, 'msg'=>'Produktionsauftrag nicht gefunden.'];
     $istBulk = pa_ist_bulk($pa);
     if (!$pa['produkt_id'] && !$istBulk) return ['ok'=>false, 'msg'=>'Dem Produktionsauftrag fehlt das Produkt – ohne Produkt gibt es keinen Lagerartikel.'];
@@ -2595,7 +2596,10 @@ function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd =
             bsku_ensure($item_id);
     }
     $charge_nr = charge_naechste_nr($pa_id);
-    $mhd = ($mhd && strtotime($mhd)) ? date('Y-m-d', strtotime($mhd)) : mhd_standard();
+    // MHD-Quelle: explizit übergeben > am Produktionsauftrag hinterlegt (wir legen es selbst fest) > Standard +18 M.
+    if ($mhd && strtotime($mhd))            $mhd = date('Y-m-d', strtotime($mhd));
+    elseif (!empty($pa['mhd']))             $mhd = (string)$pa['mhd'];
+    else                                    $mhd = mhd_standard();
     $notiz = trim($notiz);
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
        VALUES (?,?,?,?, 'Stück', ?, CURDATE(), 'frei', ?, ?, ?)",

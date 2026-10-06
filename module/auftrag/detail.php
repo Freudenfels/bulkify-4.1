@@ -50,6 +50,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&freigabeok=1' : '&expressfehler=' . urlencode($r['fehler'] ?? 'Freigabe fehlgeschlagen.'))); exit;
 }
 
+// MHD der Fertigware selbst festlegen (am Produktionsauftrag) – wird beim Einbuchen der Charge verwendet.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'mhd_setzen') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $paid = (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$id]);
+    if (!$paid) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Produktionsauftrag.')); exit; }
+    $m = trim((string)($_POST['mhd'] ?? ''));
+    $m = ($m !== '' && strtotime($m)) ? date('Y-m-d', strtotime($m)) : null;
+    q("UPDATE produktionsauftrag SET mhd=? WHERE id=?", [$m, $paid]);
+    header('Location: ?p=auftrag&id=' . $id . '&mhdok=1'); exit;
+}
+
 // Fertige Ware eines Altauftrags OHNE Produktionsauftrag nachtragen und direkt ins Lager 1/2 einbuchen.
 // Legt bei Bedarf einen Produktionsauftrag an (nur als Träger für die Charge), hakt ihn ab und bucht die
 // volle Menge als Fertigware-Charge (Fulfillment → Lager 2 + Auftrag abgeschlossen). Für produzierte
@@ -317,7 +328,8 @@ $ber = $pa ? produktion_bereitschaft((int)$pa['id']) : ['status'=>''];
 $paVorbereitung = $pa && ($pa['status'] ?? '') === 'vorbereitung';
 $paChargen = $pa ? all("SELECT charge_nr, mhd, menge_verfuegbar FROM charge WHERE pa_id=? ORDER BY id", [(int)$pa['id']]) : [];
 $chargePlan = ($pa && !$paChargen) ? charge_naechste_nr((int)$pa['id']) : '';
-$mhdPlan    = ($pa && !$paChargen) ? mhd_standard() : '';
+$mhdGesetzt = $pa ? trim((string)($pa['mhd'] ?? '')) : '';          // selbst festgelegtes MHD am PA
+$mhdPlan    = ($pa && !$paChargen) ? ($mhdGesetzt !== '' ? $mhdGesetzt : mhd_standard()) : '';
 $freigabeBedarf = $pa ? max(0, (int) produktion_stueck_je_packung($pa)) * max(0, (int)$pa['menge']) : 0;
 $einhProP  = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
 if ($einhProP <= 0) $einhProP = (int)($a['stueck'] ?? 0);   // Fallback: Stück je Packung liegt am Auftrag (v3-Import)
@@ -557,7 +569,14 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
     </div></div>
     <div><div class="k muted">MHD (Fertigware)</div><div>
       <?php if ($paChargen && !empty($paChargen[0]['mhd'])): ?><?= h(date('d.m.Y', strtotime((string)$paChargen[0]['mhd']))) ?>
-      <?php elseif (!$paChargen): ?><?= h(date('d.m.Y', strtotime($mhdPlan))) ?> <span class="muted">(geplant, +18 M.)</span>
+      <?php elseif (!$paChargen): ?>
+        <?php if (isset($_GET['mhdok'])): ?><span class="badge-ok" style="padding:3px 8px;border-radius:6px;margin-right:6px">MHD gespeichert.</span><?php endif; ?>
+        <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0">
+          <input type="hidden" name="aktion" value="mhd_setzen">
+          <input type="date" name="mhd" value="<?= h($mhdGesetzt) ?>" style="padding:5px 8px;border:1px solid var(--line);border-radius:7px">
+          <button class="btn btn-ghost btn-sm" type="submit">MHD setzen</button>
+          <span class="muted" style="font-size:12px"><?= $mhdGesetzt !== '' ? 'selbst festgelegt' : 'leer = Standard +18 M.' ?></span>
+        </form>
       <?php else: ?><span class="muted">–</span><?php endif; ?>
     </div></div>
     <?php if ($paVorbereitung): ?>
