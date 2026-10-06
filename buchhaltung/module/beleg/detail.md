@@ -26,3 +26,6 @@ Panel „Positionen": Button „Positionen aus Angebot übernehmen" (bei Auftrag
 
 ## Rechnungsbetrag aus Positionen (Entwurf)
 Weicht die Positionssumme vom Beleg-Netto ab und ist die Rechnung noch ein Entwurf (status offen, NICHT freigegeben, unbezahlt), erscheint am Hinweis der Button „Rechnungsbetrag aus Positionen übernehmen" (aktion betraege_aus_positionen). Er setzt Netto/USt/Brutto des Belegs auf die Summe der Positionen (beleg_summen_aus_positionen). Bei freigegebener/bezahlter Rechnung ist das gesperrt (GoBD → Storno + neu).
+
+## Rezeptur verknüpfen (neu)
+Panel „Rezeptur": zeigt die zugeordnete Rezeptur – direkter Override `beleg.rezeptur_id`, sonst über den Auftrag → `produkt.rezeptur_id` aufgelöst – als Link ins Dashboard (`/?p=rezeptur_detail&id=…`). Admin/finance können per Picker (Auswahl aus allen Rezepturen) eine Rezeptur zuordnen/ändern/entfernen (aktion `rezeptur_verknuepfen`, setzt `beleg.rezeptur_id`). Optional-Haken: die Rezeptur zusätzlich am Produkt des Auftrags hinterlegen, falls dort noch keine steht (damit Produktion/Specs sie kennen). Zugriff auf die geteilten Tabellen `rezeptur`/`produkt` nur über core/erp.php (erp_rezepturen/erp_rezeptur/erp_auftrag_rezeptur_id/erp_auftrag_produkt_rezeptur_setzen). Nützlich für importierte/Freitext-Rechnungen ohne eigenen Auftrag.

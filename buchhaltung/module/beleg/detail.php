@@ -63,6 +63,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
         header('Location: ?p=rechnung&id=' . $id . '&gespeichert=1'); exit;
     }
 
+    // Rezeptur nachträglich an die Rechnung hängen (direkter Override beleg.rezeptur_id).
+    // Zugriff auf die geteilte rezeptur/produkt-Tabelle nur über erp.php. Nur admin/finance.
+    if ($aktion === 'rezeptur_verknuepfen' && (has_role('admin') || has_role('finance'))) {
+        $rid = (int)($_POST['rezeptur_id'] ?? 0);
+        q("UPDATE beleg SET rezeptur_id=? WHERE id=?", [$rid ?: null, $id]);
+        $bx = one("SELECT auftrag_id FROM beleg WHERE id=?", [$id]);
+        $pset = false;
+        if ($rid && !empty($_POST['auch_produkt']) && !empty($bx['auftrag_id']))
+            $pset = erp_auftrag_produkt_rezeptur_setzen((int)$bx['auftrag_id'], $rid);
+        $st = (string)(scalar("SELECT status FROM beleg WHERE id=?", [$id]) ?: 'offen');
+        beleg_status_log_add($id, $st, $rid ? ('Rezeptur verknüpft (ID ' . $rid . ')' . ($pset ? ', auch am Produkt des Auftrags hinterlegt' : '')) : 'Rezeptur-Verknüpfung entfernt', $akteur);
+        header('Location: ?p=rechnung&id=' . $id . '&rezeptur=' . ($rid ?: '0') . ($pset ? '&produkt=1' : '')); exit;
+    }
+
     // Rechnung stornieren -> Gutschrift (negativ) erzeugen + Original auf 'storniert'
     if ($aktion === 'storno') {
         $grund = trim($_POST['grund'] ?? '');
@@ -197,6 +211,7 @@ if (isset($_GET['betrag'])) echo '<div class="bx-panel badge-ok" style="padding:
 if (isset($_GET['betragfehler'])) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#e6c4c0">Betrag konnte nicht übernommen werden (nur bei Entwürfen: offen, nicht freigegeben, unbezahlt – und es müssen Positionen vorhanden sein).</div>';
 if (isset($_GET['pos'])) echo '<div class="bx-panel ' . ((int)$_GET['pos'] > 0 ? 'badge-ok' : '') . '" style="padding:12px 16px' . ((int)$_GET['pos'] > 0 ? '' : ';border-color:#e6c4c0') . '">' . ((int)$_GET['pos'] > 0 ? (int)$_GET['pos'] . ' Position(en) aus dem Angebot übernommen.' : 'Positionen konnten nicht aus dem Angebot übernommen werden: ' . h((string)($_GET['posgrund'] ?? ''))) . '</div>';
 if (isset($_GET['posman'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Positionen gespeichert (' . (int)$_GET['posman'] . ').</div>';
+if (isset($_GET['rezeptur'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['rezeptur'] > 0 ? 'Rezeptur verknüpft.' . (isset($_GET['produkt']) ? ' Sie wurde auch am Produkt des Auftrags hinterlegt.' : '') : 'Rezeptur-Verknüpfung entfernt.') . '</div>';
 // Bezug-Hinweise
 if ($stornoVon)  echo '<div class="bx-panel" style="padding:10px 14px">Storno zu Rechnung <a href="?p=rechnung&id=' . (int)$stornoVon['id'] . '">' . h($stornoVon['nummer']) . '</a>.</div>';
 if ($stornoDurch) echo '<div class="bx-panel" style="padding:10px 14px;border-color:#e6c4c0">Diese Rechnung wurde storniert – Gutschrift <a href="?p=rechnung&id=' . (int)$stornoDurch['id'] . '">' . h($stornoDurch['nummer']) . '</a>.</div>';
@@ -221,6 +236,47 @@ echo '</div>';
     <?php if (!empty($b['faellig'])): ?><div><div class="k muted">Fällig bis</div><div><?= h(date('d.m.Y', strtotime((string)$b['faellig']))) ?><?php if (!empty($b['zahlungsziel_tage'])): ?> <span class="muted" style="font-size:12px">(<?= (int)$b['zahlungsziel_tage'] ?> Tage)</span><?php endif; ?></div></div><?php endif; ?>
   </div>
   <?php if (!empty($b['text'])): ?><div class="muted" style="margin-top:10px;white-space:pre-line;font-size:13px"><?= h((string)$b['text']) ?></div><?php endif; ?>
+</div>
+
+<?php
+// Rezeptur verknüpfen: direkter Override (beleg.rezeptur_id), sonst über Auftrag → Produkt aufgelöst.
+$rezId = (int)($b['rezeptur_id'] ?? 0);
+$rezQuelle = $rezId ? 'direkt' : '';
+if (!$rezId && !empty($b['auftrag_id'])) { $rezId = erp_auftrag_rezeptur_id((int)$b['auftrag_id']); if ($rezId) $rezQuelle = 'produkt'; }
+$rez = $rezId ? erp_rezeptur($rezId) : null;
+$rezDarf = has_role('admin') || has_role('finance');
+?>
+<div class="bx-panel">
+  <h2>Rezeptur</h2>
+  <?php if ($rez): ?>
+    <div class="bx-row" style="align-items:baseline;gap:10px;flex-wrap:wrap">
+      <a href="/?p=rezeptur_detail&id=<?= (int)$rez['id'] ?>" target="_blank" title="Rezeptur im Dashboard öffnen"><strong><?= h((string)$rez['nummer']) ?></strong><?= $rez['name'] ? ' – ' . h((string)$rez['name']) : '' ?></a>
+      <span class="muted" style="font-size:12px"><?= $rezQuelle === 'direkt' ? 'direkt an der Rechnung hinterlegt' : 'über das Produkt des Auftrags' ?></span>
+    </div>
+  <?php else: ?>
+    <p class="muted" style="margin:0 0 <?= $rezDarf ? '12px' : '0' ?>">Dieser Rechnung ist noch keine Rezeptur zugeordnet<?= !empty($b['auftrag_id']) ? ' (auch nicht über das Produkt des Auftrags)' : '' ?>.</p>
+  <?php endif; ?>
+  <?php if ($rezDarf): $rezListe = erp_rezepturen(); ?>
+    <details class="bx-form" style="margin-top:<?= $rez ? '12px' : '0' ?>"<?= isset($_GET['rezeptur']) ? ' open' : '' ?>>
+      <summary style="cursor:pointer;color:var(--muted);font-size:13px"><?= $rez ? 'Andere Rezeptur zuordnen / entfernen' : 'Rezeptur zuordnen' ?></summary>
+      <form method="post" style="margin-top:10px">
+        <input type="hidden" name="aktion" value="rezeptur_verknuepfen">
+        <div class="bx-field"><label>Rezeptur</label>
+          <select name="rezeptur_id" class="rscombo" style="max-width:520px">
+            <option value="0">– keine / Verknüpfung entfernen –</option>
+            <?php foreach ($rezListe as $r): ?>
+              <option value="<?= (int)$r['id'] ?>" <?= (int)($b['rezeptur_id'] ?? 0) === (int)$r['id'] ? 'selected' : '' ?>><?= h((string)$r['nummer']) ?><?= $r['name'] ? ' – ' . h((string)$r['name']) : '' ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <?php if (!empty($b['auftrag_id'])): ?>
+        <label class="bx-check" style="display:flex;align-items:center;gap:8px;margin:8px 0 0"><input type="checkbox" name="auch_produkt" value="1" checked> Auch am Produkt des Auftrags hinterlegen, falls dort noch keine Rezeptur steht</label>
+        <?php endif; ?>
+        <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" type="submit">Speichern</button></div>
+        <p class="muted" style="margin:8px 0 0;font-size:12px">Direkter Override an der Rechnung. Nützlich für importierte/Freitext-Rechnungen ohne eigenen Auftrag.</p>
+      </form>
+    </details>
+  <?php endif; ?>
 </div>
 
 <?php if (!$istGut && $b['status'] !== 'storniert'):

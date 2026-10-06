@@ -48,6 +48,7 @@ function bu_schema(): void {
     bu_ensure_column('beleg', 'kunde_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0");
     bu_ensure_column('beleg', 'imp_angebot_id', "INT NULL");                               // Bulk-Import: Verweis aufs archivierte Angebot
     bu_ensure_column('beleg', 'kategorie', "VARCHAR(20) NOT NULL DEFAULT 'produkt'");       // produkt | dienstleistung (DL-Rechnung DR-)
+    bu_ensure_column('beleg', 'rezeptur_id', "INT NULL");                                   // direkter Rezeptur-Override (Dashboard legt die Spalte ebenfalls an)
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS beleg_position (
         id INT AUTO_INCREMENT PRIMARY KEY,

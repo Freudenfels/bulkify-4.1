@@ -145,6 +145,32 @@ function erp_auftraege(?int $kunde_id = null): array {
           ORDER BY a.id DESC", $args);
 }
 
+// ---- rezeptur (geteilt, NUR LESEN; + optionaler Produkt-Write) ------------------------------------
+// Für „Rezeptur verknüpfen" in der Rechnung (nachträglich Rezepturen an Belege hängen, v3-Import/Freitext).
+// Liste für den Picker (nummer/name). Nummer absteigend = neueste zuerst.
+function erp_rezepturen(int $limit = 1000): array {
+    if (!tabelle_da('rezeptur')) return [];
+    return all("SELECT id, nummer, name FROM rezeptur ORDER BY nummer DESC LIMIT " . max(1, $limit));
+}
+function erp_rezeptur(int $id): ?array {
+    return ($id && tabelle_da('rezeptur')) ? one("SELECT id, nummer, name, kunde_id FROM rezeptur WHERE id=?", [$id]) : null;
+}
+// Rezeptur, die am Produkt des Auftrags hängt (zur Auflösung, wenn beleg.rezeptur_id leer ist). Nur Lesen.
+function erp_auftrag_rezeptur_id(int $auftrag_id): int {
+    if (!$auftrag_id || !tabelle_da('auftrag')) return 0;
+    return (int) scalar("SELECT p.rezeptur_id FROM auftrag a JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+}
+// Optional: Rezeptur am Produkt des Auftrags NACHTRAGEN – nur wenn dort noch keine hinterlegt ist
+// (damit Produktion/Specs sie kennen; so macht es auch das Dashboard). Gibt true, wenn gesetzt wurde.
+function erp_auftrag_produkt_rezeptur_setzen(int $auftrag_id, int $rezeptur_id): bool {
+    if (!$auftrag_id || !$rezeptur_id || !tabelle_da('auftrag')) return false;
+    $pid = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$pid) return false;
+    if ((int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$pid])) return false;  // schon belegt → nicht überschreiben
+    q("UPDATE produkt SET rezeptur_id=? WHERE id=? AND (rezeptur_id IS NULL OR rezeptur_id=0)", [$rezeptur_id, $pid]);
+    return true;
+}
+
 // ---- aktivitaet (Kunden-Verlauf, geteilt) – verbatim ----------------------------------------------
 function log_aktivitaet(string $objekt_typ, int $objekt_id, string $akteur, string $text,
                         string $typ = '', string $ref_typ = '', int $ref_id = 0): void {
