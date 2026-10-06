@@ -183,10 +183,39 @@ function dl_katalog_schritte_setzen(int $dl_id, array $namen): void {
     }
 }
 // Dienstleistung zu einem Fulfillment-Pakettyp-Schlüssel (für die Monatsabrechnung: Menge aus dem Fulfillment,
-// Preis von hier). null = keine passende. Nutzt später der Monatslauf: dl_kundenpreis(dl, kunde, menge).
+// Preis von hier). ff_paket_typ darf mehrere DHL-Codes kommagetrennt enthalten (z. B. „V62KP,V62WP").
 function dienstleistung_fuer_paket_typ(string $typ): ?array {
     $typ = trim($typ); if ($typ === '') return null;
-    return one("SELECT * FROM dienstleistung WHERE aktiv=1 AND ff_paket_typ=? ORDER BY id LIMIT 1", [$typ]);
+    return one("SELECT * FROM dienstleistung WHERE aktiv=1 AND COALESCE(ff_paket_typ,'')<>''
+                AND (ff_paket_typ=? OR FIND_IN_SET(?, REPLACE(ff_paket_typ,' ','')))
+                ORDER BY id LIMIT 1", [$typ, $typ]);
+}
+// Die Fulfillment-Service-Dienstleistung (pro Stück auf die GESAMTMENGE aller Pakete). Konvention: baustein='fulfillment'.
+function dl_fulfillment_service(): ?array {
+    return one("SELECT * FROM dienstleistung WHERE aktiv=1 AND baustein='fulfillment' ORDER BY id LIMIT 1");
+}
+// Rechnungszeilen der monatlichen Fulfillment-Abrechnung für EINEN Kunden. $pakete = [['typ'=>'V01PAK','menge'=>355], …]
+// (aus dem Fulfillment-Feed, counts-only). Preise kommen aus den Dienstleistungen (pro Stück, mit Kundenstaffel):
+// je Pakettyp eine Zeile (Menge × Stückpreis), PLUS die Fulfillment-Service-Dienstleistung über die Gesamtmenge.
+// Keine Grundgebühr. eigener_dhl → KEINE Pakettyp-Zeilen (nur Fulfillment-Service). Gesamtmenge 0 → keine Zeilen.
+// Rückgabe: [['bezeichnung','menge','einzelpreis_cent','mwst_satz','dienstleistung_id','typ'?,'fehlt'?], …].
+function fulfillment_abrechnung_zeilen(int $kunde_id, array $pakete): array {
+    $eigenerDhl = (int) scalar("SELECT COALESCE(eigener_dhl,0) FROM kunden WHERE id=?", [$kunde_id]) === 1;
+    $gesamt = 0; foreach ($pakete as $p) $gesamt += max(0, (int)($p['menge'] ?? 0));
+    if ($gesamt <= 0) return [];
+    $zeilen = [];
+    if (!$eigenerDhl) {
+        foreach ($pakete as $p) {
+            $typ = trim((string)($p['typ'] ?? '')); $menge = (int)($p['menge'] ?? 0);
+            if ($typ === '' || $menge <= 0) continue;
+            $dl = dienstleistung_fuer_paket_typ($typ);
+            if (!$dl) { $zeilen[] = ['bezeichnung'=>'Pakettyp ' . $typ . ' (keine Dienstleistung zugeordnet)', 'menge'=>$menge, 'einzelpreis_cent'=>0, 'mwst_satz'=>0.0, 'dienstleistung_id'=>0, 'typ'=>$typ, 'fehlt'=>true]; continue; }
+            $zeilen[] = ['bezeichnung'=>(string)$dl['name'], 'menge'=>$menge, 'einzelpreis_cent'=>(int)dl_kundenpreis((int)$dl['id'], $kunde_id, $menge), 'mwst_satz'=>(float)$dl['mwst_satz'], 'dienstleistung_id'=>(int)$dl['id'], 'typ'=>$typ];
+        }
+    }
+    $svc = dl_fulfillment_service();
+    if ($svc) $zeilen[] = ['bezeichnung'=>(string)$svc['name'], 'menge'=>$gesamt, 'einzelpreis_cent'=>(int)dl_kundenpreis((int)$svc['id'], $kunde_id, $gesamt), 'mwst_satz'=>(float)$svc['mwst_satz'], 'dienstleistung_id'=>(int)$svc['id']];
+    return $zeilen;
 }
 // Kundenspezifische Preis-Staffeln eines Service (für die Katalog-UI). Je Kunde + ab-Menge eine Zeile.
 function dl_kundenpreise(int $dl_id): array {
