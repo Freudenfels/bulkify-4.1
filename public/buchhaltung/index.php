@@ -33,6 +33,7 @@ $routen = [
     'lief_rechnung'     => 'buchhaltung/lief_rechnung.php',
     'angebote_ansicht'  => 'buchhaltung/angebote_ansicht.php',   // Nur-Lese-Angebote + Abgleich Angebot/Auftrag/Rechnung
     'import_bulk'       => 'buchhaltung/import_bulk.php',         // Bulk-Import alter Angebote+Rechnungen (KI)
+    'buchen'            => 'buchhaltung/buchen.php',             // Kontoauszug-Import + Zuordnung (Eingang/Ausgang)
     'einstellungen'     => 'system/einstellungen.php',           // GoBD scharfschalten u. a.
     'beleg_eingang'     => 'buchhaltung/beleg_eingang.php',       // Beleg-Posteingang (KI-Upload)
     'beleg_upload'      => 'buchhaltung/beleg_upload.php',        // Beleg hochladen (nach Login)
