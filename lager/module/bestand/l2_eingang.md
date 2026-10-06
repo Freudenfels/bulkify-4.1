@@ -15,5 +15,12 @@ und bestimmt beim **Neu-Anlegen** die `item.kategorie` (+ `verpackung_rolle`):
 | Sonstiges | sonstiges | – | ja |
 
 Bucht dann eine Charge für den Kunden (`erp_wareneingang_buchen_fremd()`, Status **frei**, keine
-Quarantäne), setzt Paketzahl, schreibt die Bewegung (mit Typ-Label) und bindet den **Blinker** (Pflicht,
-leuchtet grün). Kunden = `erp_fulfillment_kunden()` (`kunden.nutzt_fulfillment`).
+Quarantäne), schreibt die Bewegung (mit Typ-Label) und bindet – **falls angegeben** – den Blinker
+(leuchtet grün). Kunden = `erp_fulfillment_kunden()` (`kunden.nutzt_fulfillment`).
+
+**Regeln Nico:**
+- **Blinker ist optional** – Feld darf leer bleiben; dann wird keine Leiste gebunden. Ein eingegebener
+  Code muss gültig sein (6 Zeichen), sonst Hinweis.
+- **Verkaufsfertige Produkte haben keine Pakete/Kartons** – bei Typ „Verkaufsprodukt" wird das Feld
+  „Anzahl Pakete / Kartons" ausgeblendet und die Paketzahl fest auf 1 gesetzt. Für die anderen Typen
+  (Rohstoff, Etikett, …) bleibt die Paketzahl wählbar.

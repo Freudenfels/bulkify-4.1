@@ -1,17 +1,19 @@
 <?php
 // Lager 2 (Fremdlager) – Kundenware einbuchen: Kunde (Pflicht) + Typ (Verkaufsprodukt/Rohstoff/Etikett/
-// Beipackzettel/Karton/Sonstiges) + Artikel (bestehend ODER neu) + Menge + MHD + Blinker (Pflicht)
+// Beipackzettel/Karton/Sonstiges) + Artikel (bestehend ODER neu) + Menge + MHD + Blinker (optional)
 // -> Charge, die dem Kunden gehoert (fremd_kunde_id). Der Typ filtert die Artikel und ordnet neue richtig ein.
+// Regel Nico: Verkaufsfertige Produkte haben KEINE Pakete/Kartons; der Blinker ist immer optional.
 $defs = erp_l2_typ_defs();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buchen') {
-    $kunde_id = (int)($_POST['kunde_id'] ?? 0);
-    $typ      = (string)($_POST['typ'] ?? '');
-    $blinker  = led_leiste_normalisieren((string)($_POST['blinker'] ?? ''));
-    $menge    = (float) str_replace(',', '.', trim((string)($_POST['menge'] ?? '0')));
+    $kunde_id   = (int)($_POST['kunde_id'] ?? 0);
+    $typ        = (string)($_POST['typ'] ?? '');
+    $blinkerRaw = trim((string)($_POST['blinker'] ?? ''));
+    $blinker    = $blinkerRaw === '' ? null : led_leiste_normalisieren($blinkerRaw);
+    $menge      = (float) str_replace(',', '.', trim((string)($_POST['menge'] ?? '0')));
     if ($kunde_id <= 0) { flash('Bitte den Kunden wählen, dem die Ware gehört.', 'warn'); weiter('?p=l2_eingang'); }
     if (!isset($defs[$typ])) { flash('Bitte einen Typ wählen (Verkaufsprodukt, Rohstoff, Etikett …).', 'warn'); weiter('?p=l2_eingang'); }
-    if ($blinker === null) { flash('Blinker ist Pflicht: bitte den Blinker-Code scannen oder eingeben (6 Zeichen).', 'warn'); weiter('?p=l2_eingang'); }
+    if ($blinkerRaw !== '' && $blinker === null) { flash('Blinker-Code ungültig (6 Zeichen) – oder das Feld leer lassen.', 'warn'); weiter('?p=l2_eingang'); }
     if ($menge <= 0) { flash('Bitte eine Menge größer 0 angeben.', 'warn'); weiter('?p=l2_eingang'); }
     $def = $defs[$typ];
 
@@ -23,7 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     }
     if (!$item_id) { flash('Bitte einen Artikel wählen – oder (außer Verkaufsprodukt) einen Namen für einen neuen Artikel eingeben.', 'warn'); weiter('?p=l2_eingang'); }
 
-    $pakete = max(1, (int)($_POST['pakete'] ?? 1));
+    // Verkaufsfertige Produkte haben keine Pakete/Kartons (Regel Nico) -> fest 1.
+    $pakete = ($typ === 'verkaufsprodukt') ? 1 : max(1, (int)($_POST['pakete'] ?? 1));
     $cid = erp_wareneingang_buchen_fremd($item_id, $menge, trim((string)($_POST['charge_nr'] ?? '')),
         trim((string)($_POST['mhd'] ?? '')) ?: null, $kunde_id, trim((string)($_POST['notiz'] ?? '')));
     if (!$cid) { flash('Einbuchen fehlgeschlagen. Bitte Angaben prüfen.', 'warn'); weiter('?p=l2_eingang'); }
@@ -31,13 +34,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $c = erp_charge((int)$cid);
     lg_bewegung_log((int)$cid, 'ein', $menge, $c['einheit'] ?? null, (string)($c['item_name'] ?? ''), 'Fremdlager-Wareneingang (' . $def['label'] . ')');
 
-    $bfehler = leiste_binden($blinker, (int)$cid);
-    if ($bfehler === '') {
-        $lr = leiste_per_code($blinker);
-        if ($lr) leiste_finden((int)$lr['id'], 'gruen', 3, false);
-        flash('Kundenware eingebucht (' . $def['label'] . '). Blinker ' . $blinker . ' hängt dran und leuchtet kurz grün.');
+    if ($blinker !== null) {
+        $bfehler = leiste_binden($blinker, (int)$cid);
+        if ($bfehler === '') {
+            $lr = leiste_per_code($blinker);
+            if ($lr) leiste_finden((int)$lr['id'], 'gruen', 3, false);
+            flash('Kundenware eingebucht (' . $def['label'] . '). Blinker ' . $blinker . ' hängt dran und leuchtet kurz grün.');
+        } else {
+            flash('Eingebucht – aber der Blinker konnte nicht angehängt werden: ' . $bfehler, 'warn');
+        }
     } else {
-        flash('Eingebucht – aber der Blinker konnte nicht angehängt werden: ' . $bfehler, 'warn');
+        flash('Kundenware eingebucht (' . $def['label'] . '). Kein Blinker angehängt.');
     }
     weiter('?p=charge&id=' . (int)$cid . '&neu=1');
 }
@@ -46,7 +53,7 @@ $items   = function_exists('erp_items_l2') ? erp_items_l2() : erp_items_eingang(
 $kunden  = erp_fulfillment_kunden();
 
 kopf('Lager 2 – Kundenware einbuchen', 'l2_eingang');
-seitenkopf('Lager 2 (Fremdlager) – Kundenware einbuchen', 'Kunde + Typ + Artikel + Menge + MHD + Blinker.',
+seitenkopf('Lager 2 (Fremdlager) – Kundenware einbuchen', 'Kunde + Typ + Artikel + Menge + MHD. Blinker optional; Verkaufsprodukte ohne Pakete/Kartons.',
     '<a class="btn btn-ghost" href="?p=l2_bestand">Zum Fremdlager-Bestand</a>');
 flash_zeigen();
 
@@ -89,12 +96,12 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
           <span id="l2Einheit" style="min-width:44px;font-weight:600;color:var(--muted)">–</span>
         </div>
       </div>
-      <div class="bx-field"><label>Blinker <span class="muted">(Pflicht)</span></label>
-        <input type="text" name="blinker" class="lg-code" required placeholder="Blinker-Code scannen oder eingeben">
+      <div class="bx-field"><label>Blinker <span class="muted">(optional)</span></label>
+        <input type="text" name="blinker" class="lg-code" placeholder="Blinker-Code scannen oder eingeben – oder leer lassen">
       </div>
       <div class="bx-field"><label>MHD</label><input type="date" name="mhd"></div>
       <div class="bx-field"><label>Charge-Nr.</label><input type="text" name="charge_nr" class="lg-code" placeholder="optional"></div>
-      <div class="bx-field"><label>Anzahl Pakete / Kartons</label><input type="number" name="pakete" min="1" step="1" value="1"></div>
+      <div class="bx-field" id="l2PaketeWrap"><label>Anzahl Pakete / Kartons</label><input type="number" name="pakete" id="l2Pakete" min="1" step="1" value="1"></div>
       <div class="bx-field"><label>Notiz (optional)</label><input type="text" name="notiz" placeholder="z. B. Anlieferung Kunde"></div>
     </div>
 
@@ -118,6 +125,7 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
   var box=document.getElementById('l2ArtSuche'), hid=document.getElementById('l2ArtId'), list=document.getElementById('l2ArtList');
   var einhEl=document.getElementById('l2Einheit');
   var neuBox=document.getElementById('l2Neu'), neuName=document.getElementById('l2NeuName'), neuEinheit=document.getElementById('l2NeuEinheit'), neuTyp=document.getElementById('l2NeuTyp');
+  var paketeWrap=document.getElementById('l2PaketeWrap'), paketeInp=document.getElementById('l2Pakete');
   if(!box||!hid||!list) return;
   var hl=-1, shown=[];
   function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
@@ -131,6 +139,8 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
   function pool(){ return items.filter(matchTyp); }
   function exakt(q){ q=(q||'').trim().toLowerCase(); return pool().some(function(it){ return it.n.toLowerCase()===q; }); }
   function neuErlaubt(){ var d=TYPDEFS[typ()]; return d ? !!d.neu : false; }
+  function paketeToggle(){ if(!paketeWrap) return; var aus = typ()==='verkaufsprodukt';
+    paketeWrap.hidden = aus; if(aus && paketeInp) paketeInp.value='1'; }
   function neuToggle(){ var q=(box.value||'').trim();
     var neu=q!=='' && !hid.value && !exakt(q) && neuErlaubt();
     neuBox.hidden=!neu; neuEinheit.required=neu;
@@ -147,7 +157,7 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
   function paint(){ Array.prototype.forEach.call(list.querySelectorAll('.opt'),function(o){o.classList.toggle('hl',+o.dataset.i===hl);}); }
   function choose(i){ var it=shown[i]; if(!it) return; hid.value=it.id; box.value=it.n; einhEl.textContent=it.e||'–'; neuToggle(); close(); }
   function close(){ list.hidden=true; }
-  if(typEl) typEl.addEventListener('change', function(){ hid.value=''; box.value=''; einhEl.textContent='–'; box.placeholder = typ() ? 'Produkt suchen – oder neuen Namen eingeben…' : 'Erst Typ wählen, dann suchen…'; neuToggle(); });
+  if(typEl) typEl.addEventListener('change', function(){ hid.value=''; box.value=''; einhEl.textContent='–'; box.placeholder = typ() ? 'Produkt suchen – oder neuen Namen eingeben…' : 'Erst Typ wählen, dann suchen…'; neuToggle(); paketeToggle(); });
   box.addEventListener('input', function(){ hid.value=''; einhEl.textContent='–'; render(box.value); neuToggle(); });
   box.addEventListener('focus', function(){ render(box.value); });
   box.addEventListener('keydown', function(e){
@@ -160,7 +170,7 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
   list.addEventListener('mousedown', function(e){ var o=e.target.closest('.opt'); if(!o) return; e.preventDefault(); if(o.dataset.neu){ hid.value=''; close(); neuToggle(); neuEinheit.focus(); } else { choose(+o.dataset.i); } });
   if(neuEinheit) neuEinheit.addEventListener('input', function(){ einhEl.textContent=neuEinheit.value||'–'; });
   document.addEventListener('click', function(e){ if(!e.target.closest('#l2ArtWrap')) close(); });
-  neuToggle();
+  neuToggle(); paketeToggle();
 })();
 </script>
 <?php
