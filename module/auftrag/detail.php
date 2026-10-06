@@ -45,6 +45,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Produktionsauftrag zum Einlagern vorhanden.')); exit;
 }
 
+// Schnelle Status-Änderung direkt am Auftrag (Statusleiste oben, auf jedem Reiter sichtbar, unabhängig von
+// einem Produktionsauftrag). Ändert NUR den Status + Status-Datum (Kundensicht) – Menge/VK/Verpackung bleiben
+// unberührt (anders als das große Details-Formular). Stornieren läuft bewusst weiter über Details (Gutschrift-Logik).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'status_schnell') {
+    if (!(has_role('admin') || has_role('sales') || has_role('production'))) { header('Location: ?p=auftrag&id=' . $id); exit; }
+    $neu = (string)($_POST['status'] ?? '');
+    if (!in_array($neu, ['offen','in_produktion','erledigt','versendet'], true)) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Ungültiger Status.')); exit; }
+    $alt = (string) scalar("SELECT status FROM auftrag WHERE id=?", [$id]);
+    if ($neu !== $alt) {
+        q("UPDATE auftrag SET status=?, status_datum=CURDATE() WHERE id=?", [$neu, $id]);
+        log_aktivitaet('auftrag', $id, 'team', 'Status geändert: ' . $alt . ' -> ' . $neu, 'status', 'auftrag', $id);
+    }
+    header('Location: ?p=auftrag&id=' . $id . '&statusok=1'); exit;
+}
+
 // Etikett (Team/Admin): Datei hochladen/ersetzen (z. B. Last-Minute-Änderung des Kunden), Freigabe im
 // Namen des Kunden bestätigen, Datei entfernen. Nur Admin/Vertrieb.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['etikett_upload_team','etikett_freigeben_team','etikett_del_team'], true)) {
@@ -356,6 +371,26 @@ echo '<div class="bx-card"><div class="k">Netto gesamt</div><div class="v">' . $
 if (!empty($a['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . '</div></div>';
 echo '</div>';
 
+// Status direkt am Auftrag ändern – eigene Leiste oberhalb der Reiter (ohne data-panel → immer sichtbar),
+// damit der Status ohne Reiter-Wechsel und auch bei Altaufträgen ohne Produktionsauftrag gesetzt werden kann.
+if (has_role('admin') || has_role('sales') || has_role('production')):
+    $stKurz = ['offen'=>'offen', 'in_produktion'=>'in Produktion', 'erledigt'=>'versandbereit', 'versendet'=>'versendet'];
+    if (isset($_GET['statusok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px;margin-bottom:12px">Status aktualisiert – der Kunde sieht es sofort.</div>';
+?>
+<div class="bx-panel" style="padding:10px 14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+  <span class="muted" style="font-size:13px">Status:</span>
+  <?= $statusBadgeGross ?? bx_badge(h($stText)) ?>
+  <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:0">
+    <input type="hidden" name="aktion" value="status_schnell">
+    <select name="status" style="min-width:170px">
+      <?php foreach ($stKurz as $k => $l): ?><option value="<?= $k ?>" <?= (string)$a['status'] === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?>
+    </select>
+    <button class="btn btn-primary btn-sm" type="submit">Status setzen</button>
+  </form>
+  <span class="muted" style="font-size:12px">Wirkt sofort auf die Kundenanzeige. „versendet" schließt den Auftrag ab (Kunden-Archiv). Stornieren sowie Preis/Menge im Reiter „Details".</span>
+</div>
+<?php endif; ?>
+<?php
 // (Etikett-Verwaltung ist in den Reiter „Verpackung" verschoben – siehe unten, data-panel="verpackung".)
 // Admin-Override „Rohstoff/Bulk angekommen" – damit die Kunden-Statusleiste auch bei Alt-Aufträgen /
 // Zukauf ohne verknüpfte Charge auf „Rohstoff angekommen" springt.

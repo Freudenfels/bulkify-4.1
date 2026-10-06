@@ -15,6 +15,9 @@
   - **Fertigprodukt zukaufen (Bulk):** Zukaufpreise des Produkts aus `produkt_lieferant_preis` (günstigste zuerst, mit Größe/Lieferbedingung). **„Fertigprodukt anfragen"** (`anfrage_produkt_button()`) holt über die Rezeptur Preise bei Lieferanten ein. Je Lieferant mit Zukaufpreis ein **Express-Zukauf**-Knopf (`aktion=express_bulk` → `auftrag_express_bulk_bestellung()`): legt eine Bestellung mit **einer Bulk-Position** (item_id NULL, Menge = Packungen × Einheiten/Packung) zum passenden Staffelpreis an. So lassen sich auch **fertige Produkte** direkt bestellen/anfragen, nicht nur Rohstoffe.
   Absenden an den Lieferanten in beiden Fällen wie gewohnt in der Bestellung.
 
+## Statusleiste (oben, auf jedem Reiter)
+Direkt unter den Kennzahl-Kacheln – **ohne `data-panel`, also auf jedem Reiter sichtbar** – steht eine kleine Leiste **„Status:"** mit Dropdown (offen · in Produktion · versandbereit · versendet) + **„Status setzen"** (Rollen admin/sales/production). Eigene Aktion `status_schnell`: ändert **nur** `auftrag.status` + `status_datum` (Kundensicht), **ohne** Menge/VK/Verpackung anzufassen (das große Details-Formular liest diese Felder mit und würde sie sonst überschreiben). `versendet` schließt den Auftrag ab → Kunden-Archiv. **Stornieren** läuft bewusst weiter über den Reiter *Details* (dort hängt die Gutschrift-/Storno-Logik). So lässt sich der Status auch bei **Altaufträgen ohne Produktionsauftrag** (z. B. AB-3257) direkt setzen, ohne Reiter-Wechsel.
+
 **Herkunft:** Der Auftrag wird von `auftrag_aus_angebot()` erzeugt, sobald im Angebot eine Staffel bestätigt wird. Menge und VK stammen aus der bestätigten Staffel.
 
 ## Zu Kontingent machen
