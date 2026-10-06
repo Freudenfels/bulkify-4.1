@@ -3,6 +3,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/importer.php';   // verknüpftes (archiviertes) Angebot + Positionen
+require_once BX_ROOT . '/core/mahnung.php';     // Mahnhistorie zum Beleg
 
 $id = (int)($_GET['id'] ?? 0);
 
@@ -278,6 +279,34 @@ $rezDarf = has_role('admin') || has_role('finance');
     </details>
   <?php endif; ?>
 </div>
+
+<?php
+// Mahnhistorie (nur Debitoren-Rechnungen). Nur anzeigen, wenn es Mahnungen gibt.
+$mahnungen = (!$istGut && ($b['typ'] ?? '') === 'rechnung') ? mahn_fuer_beleg($id) : [];
+if ($mahnungen):
+?>
+<div class="bx-panel">
+  <h2>Mahnungen</h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Mahnung</th><th>Stufe</th><th>Datum</th><th class="bx-num">Offen</th><th class="bx-num">Gebühr</th><th class="bx-num">Summe</th><th>Neue Frist</th><th></th></tr></thead>
+    <tbody>
+      <?php foreach ($mahnungen as $m): ?>
+      <tr>
+        <td><strong><?= h((string)$m['nummer']) ?></strong></td>
+        <td><?= h(mahn_stufe_label((int)$m['stufe'])) ?></td>
+        <td><?= $m['datum'] ? h(date('d.m.Y', strtotime((string)$m['datum']))) : '' ?></td>
+        <td class="bx-num"><?= $eur($m['offen']) ?></td>
+        <td class="bx-num"><?= $eur($m['gebuehr']) ?></td>
+        <td class="bx-num"><strong><?= $eur($m['summe']) ?></strong></td>
+        <td><?= $m['faellig_neu'] ? h(date('d.m.Y', strtotime((string)$m['faellig_neu']))) : '' ?></td>
+        <td><a class="btn btn-ghost btn-sm" href="?p=mahnung&id=<?= (int)$m['id'] ?>" target="_blank">Mahnbrief</a></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <p class="muted" style="margin:8px 0 0;font-size:12px">Neue Mahnungen entstehen über den <a href="?p=mahnlauf">Mahnlauf</a>.</p>
+</div>
+<?php endif; ?>
 
 <?php if (!$istGut && $b['status'] !== 'storniert'):
     $benutzer = all("SELECT id, name FROM benutzer WHERE aktiv=1 ORDER BY name");
