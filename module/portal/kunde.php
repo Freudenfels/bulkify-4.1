@@ -1344,10 +1344,14 @@ $inArbeit = count(array_filter($auftraege, fn($a) => $a['status'] !== 'versendet
 // Menü-Zähler: was ist offen bzw. in Bearbeitung (Kundensicht) – als Badge am jeweiligen Menüpunkt.
 $navKontingente = (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND jahresvertrag=1 AND status<>'offen' AND kunde_ausgeblendet=0 AND NOT EXISTS (SELECT 1 FROM kontingent kk WHERE kk.angebot_id=angebot.id)", [$kid])
                 + (int) scalar("SELECT COUNT(*) FROM kontingent WHERE kunde_id=? AND status='wartet_vertrag'", [$kid]);
-// Fehlende Etiketten = aktive Bestellungen ohne hochgeladenes Etikett-Design (gleiche Bedingung wie die
-// „Etikett fehlt"-Liste in der Etiketten-Ansicht). Der Kunde muss diese noch hochladen -> roter Zähler.
-$etikettFehltAnzahl = (int) scalar("SELECT COUNT(*) FROM auftrag a WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert')
+// Fehlende Etiketten = aktive Bestellungen ohne hochgeladenes Etikett-Design, die auch WIRKLICH ein Etikett
+// brauchen (Behälter gesetzt – auftrag_braucht_etikett). Sonst tauchen reine Bulkware-/Dienstleistungsaufträge
+// ohne Behälter (z. B. DB-…) auf, für die es gar kein Etikett gibt. Gleiche Bedingung wie die „Etikett fehlt"-
+// Liste in der Etiketten-Ansicht. Der Kunde muss diese noch hochladen -> roter Zähler.
+$etikettFehltKandidaten = all("SELECT a.id FROM auftrag a WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert')
     AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='auftrag' AND d.objekt_id=a.id AND d.typ='etikett')", [(int)$k['id']]);
+$etikettFehltAnzahl = 0;
+foreach ($etikettFehltKandidaten as $ef) if (auftrag_braucht_etikett((int)$ef['id'])) $etikettFehltAnzahl++;
 $navBadges = [
     'meine_anfragen' => $offenAngebote + count($anfPruef),
     'angebote'       => $offenAngebote,
@@ -3430,6 +3434,10 @@ portal_head('Kundenportal · ' . $k['firma']);
                     WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert')
                       AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='auftrag' AND d.objekt_id=a.id AND d.typ='etikett')
                     ORDER BY (a.status='offen') DESC, a.angelegt DESC", [(int)$k['id']]);
+    // Nur Bestellungen, die WIRKLICH ein Etikett brauchen (Behälter gesetzt). Sonst springt der „Etikett
+    // hochladen"-Button in eine Bestellung, die gar kein Upload-Feld zeigt (auftrag_braucht_etikett=false) –
+    // und reine Bulkware-/Dienstleistungsaufträge (z. B. DB-…) würden fälschlich hier erscheinen.
+    $etFehlt = array_values(array_filter($etFehlt, fn($f) => auftrag_braucht_etikett((int)$f['id'])));
     // Behaelter je Bestellung aufloesen: verknuepfter verpackung_id, sonst aus Rezeptur + Stueck berechnen
     // (Material aus dem Verpackungstext: "Weithalsglas" = Glas). Einmal pro Zeile gecacht. Basis fuer
     // Anzeigename (mit Glasgroesse) UND Etikett-Masze – beide zeigen so dieselbe Groesse.
