@@ -19,6 +19,25 @@ register_shutdown_function(function () { perf_aufzeichnen(BX_T0); });
 init_schema();
 seed_benutzer_if_empty();
 
+// Loopback-API „Einlagern": die Lager-App ruft hier die KANONISCHE Fertigware-Buchung auf (einlager_buchen →
+// produktion_fertigware_einbuchen: Chargennr./MHD/BSKU/Lager-2). Die Sub-App kann core/schema.php nicht requiren
+// (db()-Kollision), daher dieser token-authentifizierte Endpunkt VOR dem Login-Gate (kein Session-Login). Nur POST.
+if (($_GET['p'] ?? '') === 'api_einlager') {
+    header('Content-Type: application/json; charset=utf-8');
+    $soll  = trim((string) meta_get('einlager_api_token', ''));
+    $token = (string)($_POST['token'] ?? '');
+    if ($soll === '' || !hash_equals($soll, $token)) { http_response_code(401); echo json_encode(['ok'=>false, 'meldung'=>'Token ungültig.']); exit; }
+    $pa_id = (int)($_POST['pa_id'] ?? 0);
+    if ($pa_id <= 0) { http_response_code(400); echo json_encode(['ok'=>false, 'meldung'=>'pa_id fehlt.']); exit; }
+    try {
+        $r = einlager_buchen($pa_id);
+        echo json_encode(['ok'=>true, 'ziel'=>$r['ziel'] ?? null, 'label'=>$r['label'] ?? null, 'charge_id'=>$r['charge_id'] ?? null]);
+    } catch (\Throwable $e) {
+        http_response_code(500); echo json_encode(['ok'=>false, 'meldung'=>$e->getMessage()]);
+    }
+    exit;
+}
+
 // Router: Whitelist Seite -> Modul-Datei. Kein direkter Dateizugriff moeglich.
 $routes = [
     'login'       => 'auth/login.php',
