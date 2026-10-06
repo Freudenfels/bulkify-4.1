@@ -37,6 +37,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Produktionsauftrag konnte nicht angelegt werden (kein Produkt am Auftrag?).')); exit;
 }
 
+// Produktionsauftrag direkt vom Auftrag aus zur Produktion freigeben (Vorbereitung -> offen), ohne den Umweg
+// über das Modul Vor-Produktion. Admin-Weiche: offene Punkte (Etikett/Material) sind nur ein Hinweis.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'pa_freigeben') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $paid = (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$id]);
+    if (!$paid) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Produktionsauftrag zum Freigeben.')); exit; }
+    $art = ($_POST['produktionsart'] ?? '') === 'eigen' ? 'eigen' : 'fremd';
+    $mp  = ($_POST['menge_produktion'] ?? '') !== '' ? (int)$_POST['menge_produktion'] : null;
+    $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
+    $r = produktionsauftrag_freigeben($paid, $art, $mp, $wer);
+    header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&freigabeok=1' : '&expressfehler=' . urlencode($r['fehler'] ?? 'Freigabe fehlgeschlagen.'))); exit;
+}
+
 // Fertige Ware eines Altauftrags OHNE Produktionsauftrag nachtragen und direkt ins Lager 1/2 einbuchen.
 // Legt bei Bedarf einen Produktionsauftrag an (nur als Träger für die Charge), hakt ihn ab und bucht die
 // volle Menge als Fertigware-Charge (Fulfillment → Lager 2 + Auftrag abgeschlossen). Für produzierte
@@ -294,10 +307,18 @@ $einlagerNoetig = $einlagerErledigt && (
 // Reiner Finalisierungs-Fall (Ware schon gebucht, nur noch ins Archiv schieben) → anderer Button-Text.
 $einlagerNurFinal = $einlagerNoetig && $paRest <= 0.0001;
 $paStatusBadge = $pa ? match ($pa['status']) {
+    'vorbereitung'=>bx_badge('Vorbereitung','warn'),
     'offen'=>bx_badge('offen','info'),'laufend'=>bx_badge('läuft','warn'),'erledigt'=>bx_badge('fertig','ok'),
     default=>bx_badge(status_text((string)$pa['status'])),
 } : '';
 $ber = $pa ? produktion_bereitschaft((int)$pa['id']) : ['status'=>''];
+// Vorbereitung -> am Auftrag freigebbar. Charge/MHD der Fertigware: bereits gebuchte Chargen des PA, sonst
+// die systemseitig geplante nächste Charge (charge_naechste_nr) + Standard-MHD (+18 Monate).
+$paVorbereitung = $pa && ($pa['status'] ?? '') === 'vorbereitung';
+$paChargen = $pa ? all("SELECT charge_nr, mhd, menge_verfuegbar FROM charge WHERE pa_id=? ORDER BY id", [(int)$pa['id']]) : [];
+$chargePlan = ($pa && !$paChargen) ? charge_naechste_nr((int)$pa['id']) : '';
+$mhdPlan    = ($pa && !$paChargen) ? mhd_standard() : '';
+$freigabeBedarf = $pa ? max(0, (int) produktion_stueck_je_packung($pa)) * max(0, (int)$pa['menge']) : 0;
 $einhProP  = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
 if ($einhProP <= 0) $einhProP = (int)($a['stueck'] ?? 0);   // Fallback: Stück je Packung liegt am Auftrag (v3-Import)
 $gesamtStk = $einhProP > 0 ? (int)$a['menge'] * $einhProP : 0;
@@ -526,6 +547,37 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
       <?= bereitschaft_badge($ber['status'] ?? '') ?>
       <?php if (($ber['status'] ?? '') === 'wartet'): ?> <a href="?p=produktionsauftrag&id=<?= (int)$pa['id'] ?>" style="font-size:12px">was fehlt?</a><?php endif; ?>
     </div></div>
+    <div><div class="k muted">Charge (Fertigware)</div><div>
+      <?php if ($paChargen): ?>
+        <?php foreach ($paChargen as $ch): ?><div><?= h((string)$ch['charge_nr']) ?><?php if (!empty($ch['mhd'])): ?> <span class="muted">· MHD <?= h(date('d.m.Y', strtotime((string)$ch['mhd']))) ?></span><?php endif; ?></div><?php endforeach; ?>
+      <?php else: ?>
+        <?= h($chargePlan) ?> <span class="muted">(geplant)</span>
+      <?php endif; ?>
+    </div></div>
+    <div><div class="k muted">MHD (Fertigware)</div><div>
+      <?php if ($paChargen && !empty($paChargen[0]['mhd'])): ?><?= h(date('d.m.Y', strtotime((string)$paChargen[0]['mhd']))) ?>
+      <?php elseif (!$paChargen): ?><?= h(date('d.m.Y', strtotime($mhdPlan))) ?> <span class="muted">(geplant, +18 M.)</span>
+      <?php else: ?><span class="muted">–</span><?php endif; ?>
+    </div></div>
+    <?php if ($paVorbereitung): ?>
+    <div style="grid-column:1/-1"><div class="k muted">Zur Produktion freigeben</div>
+      <?php if (isset($_GET['freigabeok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:4px 0 8px;display:inline-block">Zur Produktion freigegeben.</div><?php endif; ?>
+      <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
+        <input type="hidden" name="aktion" value="pa_freigeben">
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Herstellung
+          <select name="produktionsart" style="max-width:190px">
+            <option value="fremd" <?= $istFremd ? 'selected' : '' ?>>Fremd (Zukauf)</option>
+            <option value="eigen" <?= $istFremd ? '' : 'selected' ?>>Eigen</option>
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Produktionsmenge (Einheiten)
+          <input type="number" name="menge_produktion" min="<?= (int)$freigabeBedarf ?>" step="1" value="<?= (int)$freigabeBedarf ?>" style="min-width:150px">
+        </label>
+        <button class="btn btn-primary btn-sm" type="submit">Zur Produktion freigeben</button>
+      </form>
+      <div class="muted" style="font-size:12px;margin-top:4px">Du kannst immer freigeben – offene Punkte (Etikett/Material) sind nur ein Hinweis; die Produktion wartet ggf. auf Material. Mehrmenge über den Bedarf wird als Bulk gebucht.</div>
+    </div>
+    <?php endif; ?>
     <?php if ($einlagerNoetig): ?>
     <div style="grid-column:1/-1"><div class="k muted">Einlagern</div><div>
       <form method="post" style="margin:0" onsubmit="return confirm('<?= $einlagerNurFinal ? 'Auftrag als eingelagert markieren und abschließen?' : ('Fertige Ware an das Lager übergeben und in ' . h($einlagerZiel['label']) . ' buchen?') ?>');">
