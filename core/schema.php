@@ -3897,9 +3897,11 @@ function energ_text_kurz(?string $start): string {
 function kunde_will_labortest(int $kunde_id): bool {
     return $kunde_id > 0 && (int) scalar("SELECT labortest_extern FROM kunden WHERE id=?", [$kunde_id]) === 1;
 }
-// Status des externen Labortests für EINEN Auftrag. Rückgabe: ['status'=>'laeuft'|'abgeschlossen', 'datum'=>?string, 'dok_id'=>?int].
+// Status des externen Labortests für EINEN Auftrag. Rückgabe: ['status'=>'geplant'|'laeuft'|'abgeschlossen', 'datum'=>?string, 'dok_id'=>?int].
+// Ablauf: Probe geht ERST nach der Produktion (mit fertiger Verpackung) ans Labor. Vorher 'geplant' (dunkel),
+// ab dem Versand ans Labor 'laeuft' (mit Versanddatum), nach Bericht-Upload 'abgeschlossen' (mit Berichtsdatum).
 function auftrag_labortest_status(int $auftrag_id, ?int $produkt_id = null): array {
-    if ($auftrag_id <= 0) return ['status' => 'laeuft', 'datum' => null, 'dok_id' => null, 'versendet_am' => null];
+    if ($auftrag_id <= 0) return ['status' => 'geplant', 'datum' => null, 'dok_id' => null, 'versendet_am' => null];
     if ($produkt_id === null) $produkt_id = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$auftrag_id]);
     $pid = (int)$produkt_id;
     // Laborbericht zu genau diesem Auftrag ODER (falls vorhanden) zum Produkt des Auftrags, nur wenn freigegeben.
@@ -3908,9 +3910,10 @@ function auftrag_labortest_status(int $auftrag_id, ?int $produkt_id = null): arr
                 AND ((objekt_typ='auftrag' AND objekt_id=?) OR (objekt_typ='produkt' AND objekt_id=? AND ?>0))
               ORDER BY datum DESC, id DESC LIMIT 1", [$auftrag_id, $pid, $pid]);
     if ($d) return ['status' => 'abgeschlossen', 'datum' => $d['datum'], 'dok_id' => (int)$d['id'], 'versendet_am' => null];
-    // Zwischenstand: Probe ist beim Labor (von der Produktion versendet), Bericht liegt noch nicht vor.
+    // Probe ans Labor gesendet (labor_versendet_am) -> läuft; vorher geplant (dunkel, noch nicht beim Labor).
     $vers = scalar("SELECT labor_versendet_am FROM auftrag WHERE id=?", [$auftrag_id]) ?: null;
-    return ['status' => 'laeuft', 'datum' => null, 'dok_id' => null, 'versendet_am' => $vers];
+    if ($vers) return ['status' => 'laeuft', 'datum' => null, 'dok_id' => null, 'versendet_am' => $vers];
+    return ['status' => 'geplant', 'datum' => null, 'dok_id' => null, 'versendet_am' => null];
 }
 // Parallel laufende Zusatz-Schritte eines Auftrags (Energetisierung, externer Labortest) – nur für
 // freigeschaltete Kunden. Laufen NEBEN dem Hauptablauf (können früher beginnen / parallel zur Prüfung),
@@ -3924,10 +3927,12 @@ function kunde_auftrag_parallel(array $a): array {
     if (kunde_will_labortest($kid)) {
         $lt = auftrag_labortest_status((int)($a['id'] ?? 0), isset($a['produkt_id']) ? (int)$a['produkt_id'] : null);
         $out[] = ['label' => 'Laboranalyse',
-                  'status' => $lt['status'],
+                  'status' => $lt['status'],   // geplant | laeuft | abgeschlossen
                   'sub'    => $lt['status'] === 'abgeschlossen'
-                                ? ($lt['datum'] ? 'Bericht vom ' . date('d.m.Y', strtotime((string)$lt['datum'])) : 'Bericht liegt vor')
-                                : (!empty($lt['versendet_am']) ? 'Probe beim Labor · versendet am ' . date('d.m.Y', strtotime((string)$lt['versendet_am'])) : 'Probe beim Drittlabor'),
+                                ? ($lt['datum'] ? 'abgeschlossen am ' . date('d.m.Y', strtotime((string)$lt['datum'])) : 'Bericht liegt vor')
+                                : ($lt['status'] === 'laeuft'
+                                    ? (!empty($lt['versendet_am']) ? 'versendet am ' . date('d.m.Y', strtotime((string)$lt['versendet_am'])) : 'beim Labor')
+                                    : 'nach Produktion ans Labor'),   // geplant -> dunkel
                   'dok_id' => $lt['dok_id']];
     }
     if (kunde_zeigt_energetisierung($kid)) {

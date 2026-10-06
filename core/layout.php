@@ -137,7 +137,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     echo "<aside class=\"bx-side\"><div class=\"bx-brand\"><img src=\"assets/bulkify-logo-white.png\" alt=\"$marke\" class=\"bx-logo\"><span class=\"bx-ver\">" . h($verLabel) . "</span></div><nav>";
     // Einklappbare Menü-Gruppen: Kopf = Umschalter, Items im Wrapper; Zustand je Gruppe in localStorage.
     echo "<style>.bx-navgroup{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}"
-       . ".bx-navchev{font-size:11px;opacity:.55;transition:transform .15s;margin-left:8px}"
+       . ".bx-navchev{font-size:15px;line-height:1;opacity:.85;transition:transform .15s;margin-left:8px;display:inline-block}"
        . ".bx-navgroup.collapsed .bx-navchev{transform:rotate(-90deg)}"
        . ".bx-navitems.collapsed{display:none}</style>";
     $darf = function_exists('route_erlaubt');   // Auth aktiv?
@@ -204,7 +204,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
             $badge = $n > 0 ? "<span class=\"bx-navbadge\" title=\"$badgeTitel\">$n</span>" : '';
             $grpHtml .= "<a href=\"" . h($href) . "\"$cls><span>" . h($label) . "</span>$badge</a>";
         }
-        echo "<div class=\"bx-navgroup\" data-g=\"$gid\" role=\"button\" tabindex=\"0\"><span>" . h($gruppe) . "</span><span class=\"bx-navchev\">▾</span></div>";
+        echo "<div class=\"bx-navgroup\" data-g=\"$gid\" role=\"button\" tabindex=\"0\"><span>" . h($gruppe) . "</span><span class=\"bx-navchev\">▼</span></div>";
         echo "<div class=\"bx-navitems" . ($grpOn ? ' open-forced' : '') . "\" data-g=\"$gid\">" . $grpHtml . "</div>";
     }
     // Unterseiten (eigene Programme unter /produktion/, /lager/, /crm/, /buchhaltung/) – unten als eigene
@@ -220,7 +220,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         if ($produktion) $sub .= "<a href=\"produktion/\"><span>Produktion</span></a>";
         if ($lager)      $sub .= "<a href=\"lager/\"><span>Lager</span></a>";
         if ($crm)        $sub .= "<a href=\"crm/\"><span>CRM</span></a>";
-        echo "<div class=\"bx-navgroup\" data-g=\"g_subpages\" role=\"button\" tabindex=\"0\"><span>Unterseiten</span><span class=\"bx-navchev\">▾</span></div>";
+        echo "<div class=\"bx-navgroup\" data-g=\"g_subpages\" role=\"button\" tabindex=\"0\"><span>Unterseiten</span><span class=\"bx-navchev\">▼</span></div>";
         echo "<div class=\"bx-navitems\" data-g=\"g_subpages\">" . $sub . "</div>";
     }
     // Benutzer-Fuß: Name + Rollen + Abmelden
