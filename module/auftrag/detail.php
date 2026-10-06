@@ -236,10 +236,23 @@ $statusBadge = match ($a['status']) {
 // Produktion + Beschaffung zu diesem Auftrag
 $pa = one("SELECT * FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$id]);
 $istFremd = $pa && ($pa['produktionsart'] ?? '') === 'fremd';
-// Einlagern: fertig produziert (PA erledigt), aber noch offene (nicht gebuchte) Menge → an Lager übergeben.
+// Einlagern: fertig produziert (PA erledigt), aber noch nicht vollständig ans Lager übergeben.
+//  (a) offene, noch nicht gebuchte Menge (produktion_rest) – oder
+//  (b) eine Einlager-Aufgabe liegt noch offen beim Lager – oder
+//  (c) Fulfillment-Altauftrag: Ware bereits gebucht (rest=0), aber der Auftrag ist noch nicht auf
+//      'versendet' finalisiert (Leberkomplex-Fall) → erst das Finalisieren schiebt ihn ins Kunden-Archiv.
 $paRest        = $pa ? produktion_rest((int)$pa['id']) : 0.0;
 $einlagerZiel  = $pa ? einlager_ziel_fuer_pa((int)$pa['id']) : ['ziel'=>'', 'label'=>''];
-$einlagerNoetig = $pa && ($pa['status'] ?? '') === 'erledigt' && $paRest > 0.0001;
+$einlagerOffeneAufgabe = $pa ? (int) scalar("SELECT COUNT(*) FROM aufgabe WHERE ref_typ='einlagern' AND ref_id=? AND status='offen'", [(int)$pa['id']]) : 0;
+$istFulfillmentZiel    = ($einlagerZiel['ziel'] ?? '') === 'lager2';
+$einlagerErledigt      = $pa && ($pa['status'] ?? '') === 'erledigt';
+$einlagerNoetig = $einlagerErledigt && (
+       $paRest > 0.0001
+    || $einlagerOffeneAufgabe > 0
+    || ($istFulfillmentZiel && ($a['status'] ?? '') !== 'versendet')
+);
+// Reiner Finalisierungs-Fall (Ware schon gebucht, nur noch ins Archiv schieben) → anderer Button-Text.
+$einlagerNurFinal = $einlagerNoetig && $paRest <= 0.0001;
 $paStatusBadge = $pa ? match ($pa['status']) {
     'offen'=>bx_badge('offen','info'),'laufend'=>bx_badge('läuft','warn'),'erledigt'=>bx_badge('fertig','ok'),
     default=>bx_badge(status_text((string)$pa['status'])),
@@ -343,12 +356,43 @@ echo '<div class="bx-card"><div class="k">Netto gesamt</div><div class="v">' . $
 if (!empty($a['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . '</div></div>';
 echo '</div>';
 
-// Etikett-Verwaltung (Team/Admin): hochladen/ersetzen (Last-Minute), Freigabe im Namen des Kunden, entfernen.
-if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))):
-    $etDokA = etikett_datei($id);
+// (Etikett-Verwaltung ist in den Reiter „Verpackung" verschoben – siehe unten, data-panel="verpackung".)
+// Admin-Override „Rohstoff/Bulk angekommen" – damit die Kunden-Statusleiste auch bei Alt-Aufträgen /
+// Zukauf ohne verknüpfte Charge auf „Rohstoff angekommen" springt.
+if (isset($_GET['rohok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . ($_GET['rohok']==='1' ? 'Als „Rohstoff angekommen" markiert – der Kunde sieht es sofort.' : 'Markierung zurückgesetzt.') . '</div>';
+if (isset($_GET['einlagerok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">An das Lager übergeben und in ' . h((string)$_GET['einlagerok']) . ' eingebucht.</div>';
+if (has_role('admin') || has_role('production') || has_role('einkauf')):
+    $_ph = kunde_auftrag_phase($a); $_angDa = $_ph['dates'][2] ?? null; $_override = !empty($a['rohstoff_angekommen_am']);
 ?>
-<div class="bx-panel" style="margin-top:14px">
-  <h2 style="margin-top:0">Etikett (Team)</h2>
+<div class="bx-panel" style="padding:10px 14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+  <span class="muted" style="font-size:13px">Kunden-Status „Rohstoff angekommen":</span>
+  <?php if ($_angDa): ?>
+    <?= bx_badge('angekommen · ' . h(fmt_zeit((string)$_angDa, 'd.m.Y')), 'ok') ?>
+    <?php if ($_override): ?>
+    <form method="post" style="margin:0"><input type="hidden" name="aktion" value="rohstoff_angekommen"><input type="hidden" name="set" value="0">
+      <button class="btn btn-ghost btn-sm" type="submit">Markierung zurücknehmen</button></form>
+    <?php endif; ?>
+  <?php else: ?>
+    <?= bx_badge('noch nicht', 'warn') ?>
+    <form method="post" style="margin:0" title="Nutze das, wenn Ware (Zukauf/Bulk) da ist, der Kunde es aber noch nicht sieht.">
+      <input type="hidden" name="aktion" value="rohstoff_angekommen"><input type="hidden" name="set" value="1">
+      <button class="btn btn-primary btn-sm" type="submit">Rohstoff/Bulk als angekommen markieren</button>
+    </form>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+<div class="settabs" id="auftabs" style="margin-bottom:16px">
+  <a href="#" class="on" data-tab="details">Details</a>
+  <a href="#" data-tab="verpackung">Verpackung</a>
+  <a href="#" data-tab="produktion">Produktion</a>
+  <a href="#" data-tab="preise">Preise &amp; Rechnung</a>
+  <a href="#" data-tab="dokumente">Dokumente</a>
+</div>
+
+<?php // Reiter „Verpackung": Etikett-Verwaltung (Team/Admin) – hochladen/ersetzen (Last-Minute), Freigabe im Namen des Kunden, entfernen.
+if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $etDokA = etikett_datei($id); ?>
+<div class="bx-panel" data-panel="verpackung">
+  <h2 style="margin-top:0">Etikett</h2>
   <?php if (isset($_GET['etikettok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Etikett aktualisiert.</div><?php endif; ?>
   <p class="muted" style="margin-top:0">Admin/Vertrieb kann hier ein Etikett für den Kunden hochladen (z.&nbsp;B. Last-Minute-Änderung) und die Freigabe im Namen des Kunden bestätigen.</p>
   <p style="margin:0 0 10px">
@@ -376,39 +420,11 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))):
     </form>
     <?php endif; ?>
   </div>
+  <p class="muted" style="font-size:12px;margin:12px 0 0">Verpackung/Glas und Kapselgröße werden im Reiter „Details" gesetzt (sie gehören zur Produktkonfiguration).</p>
 </div>
+<?php else: ?>
+<div class="bx-panel" data-panel="verpackung"><div class="muted">Für diesen Auftrag ist kein Etikett nötig (kein Behälter/Produkt hinterlegt) – oder du hast keine Berechtigung.</div></div>
 <?php endif; ?>
-<?php
-// Admin-Override „Rohstoff/Bulk angekommen" – damit die Kunden-Statusleiste auch bei Alt-Aufträgen /
-// Zukauf ohne verknüpfte Charge auf „Rohstoff angekommen" springt.
-if (isset($_GET['rohok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . ($_GET['rohok']==='1' ? 'Als „Rohstoff angekommen" markiert – der Kunde sieht es sofort.' : 'Markierung zurückgesetzt.') . '</div>';
-if (isset($_GET['einlagerok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">An das Lager übergeben und in ' . h((string)$_GET['einlagerok']) . ' eingebucht.</div>';
-if (has_role('admin') || has_role('production') || has_role('einkauf')):
-    $_ph = kunde_auftrag_phase($a); $_angDa = $_ph['dates'][2] ?? null; $_override = !empty($a['rohstoff_angekommen_am']);
-?>
-<div class="bx-panel" style="padding:10px 14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-  <span class="muted" style="font-size:13px">Kunden-Status „Rohstoff angekommen":</span>
-  <?php if ($_angDa): ?>
-    <?= bx_badge('angekommen · ' . h(fmt_zeit((string)$_angDa, 'd.m.Y')), 'ok') ?>
-    <?php if ($_override): ?>
-    <form method="post" style="margin:0"><input type="hidden" name="aktion" value="rohstoff_angekommen"><input type="hidden" name="set" value="0">
-      <button class="btn btn-ghost btn-sm" type="submit">Markierung zurücknehmen</button></form>
-    <?php endif; ?>
-  <?php else: ?>
-    <?= bx_badge('noch nicht', 'warn') ?>
-    <form method="post" style="margin:0" title="Nutze das, wenn Ware (Zukauf/Bulk) da ist, der Kunde es aber noch nicht sieht.">
-      <input type="hidden" name="aktion" value="rohstoff_angekommen"><input type="hidden" name="set" value="1">
-      <button class="btn btn-primary btn-sm" type="submit">Rohstoff/Bulk als angekommen markieren</button>
-    </form>
-  <?php endif; ?>
-</div>
-<?php endif; ?>
-<div class="settabs" id="auftabs" style="margin-bottom:16px">
-  <a href="#" class="on" data-tab="details">Details</a>
-  <a href="#" data-tab="produktion">Produktion</a>
-  <a href="#" data-tab="preise">Preise &amp; Rechnung</a>
-  <a href="#" data-tab="dokumente">Dokumente</a>
-</div>
 
 <div class="bx-panel" data-panel="details">
   <h2>Details</h2>
@@ -456,11 +472,14 @@ if (has_role('admin') || has_role('production') || has_role('einkauf')):
     </div></div>
     <?php if ($einlagerNoetig): ?>
     <div style="grid-column:1/-1"><div class="k muted">Einlagern</div><div>
-      <form method="post" style="margin:0" onsubmit="return confirm('Fertige Ware an das Lager übergeben und in <?= h($einlagerZiel['label']) ?> buchen?');">
+      <form method="post" style="margin:0" onsubmit="return confirm('<?= $einlagerNurFinal ? 'Auftrag als eingelagert markieren und abschließen?' : ('Fertige Ware an das Lager übergeben und in ' . h($einlagerZiel['label']) . ' buchen?') ?>');">
         <input type="hidden" name="aktion" value="einlagern_nachholen">
-        <button class="btn btn-primary btn-sm" type="submit">An Lager übergeben · in <?= h($einlagerZiel['label']) ?> buchen</button>
+        <button class="btn btn-primary btn-sm" type="submit"><?= $einlagerNurFinal ? 'Als eingelagert markieren · Auftrag abschließen' : ('An Lager übergeben · in ' . h($einlagerZiel['label']) . ' buchen') ?></button>
       </form>
-      <div class="muted" style="font-size:12px;margin-top:4px">Produktion ist fertig, aber noch nicht eingelagert. Das Lager bekommt eine Aufgabe und bucht die Ware in <?= h($einlagerZiel['label']) ?> – oder du buchst hier direkt.</div>
+      <div class="muted" style="font-size:12px;margin-top:4px">
+        <?php if ($einlagerNurFinal): ?>Die Ware ist bereits gebucht, der Auftrag aber noch nicht abgeschlossen. Ein Klick finalisiert ihn (bei Fulfillment → Lager 2, landet im Kunden-Archiv) und schließt die Lager-Aufgabe.
+        <?php else: ?>Produktion ist fertig, aber noch nicht eingelagert. Das Lager bekommt eine Aufgabe und bucht die Ware in <?= h($einlagerZiel['label']) ?> – oder du buchst hier direkt.<?php endif; ?>
+      </div>
     </div></div>
     <?php endif; ?>
     <?php else: $aktivPA = in_array((string)$a['status'], ['offen', 'in_produktion'], true); ?>
