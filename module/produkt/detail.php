@@ -316,6 +316,13 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
     <div class="bx-grid">
       <?= verp_slot('Verschluss/Deckel', 'verschluss_id', $VERP_ROLLE['verschluss'], $p['verschluss_id'] ?? '') ?>
       <?= verp_slot('Etikett', 'etikett_id', $VERP_ROLLE['etikett'], $p['etikett_id'] ?? '') ?>
+      <?php // Kein eigener Etikett-Slot, aber das Glas/der Behälter leitet ein Etikett ab -> das Produkt HAT ein Etikett.
+      if (empty($p['etikett_id']) && !empty($p['verpackung_id']) && ($__etAbl = etikett_id_fuer_behaelter((int)$p['verpackung_id']))):
+        $__etAblName = (string) scalar("SELECT name FROM item WHERE id=?", [(int)$__etAbl]); ?>
+      <div class="bx-field" style="align-self:end">
+        <div class="muted" style="font-size:12px;line-height:1.4">Automatisch aus dem Glas:<br><strong><?= h($__etAblName ?: 'Etikett aus Behälter') ?></strong><br>Nur ausfüllen, wenn ein abweichendes Etikett gewünscht ist.</div>
+      </div>
+      <?php endif; ?>
       <?php if (!$neu && ($__etb = etikett_bestand_info((int)$id))['hat_etikett']): ?>
       <div class="bx-field">
         <label>Etiketten-Bestand <?= bx_hint('Physisch = unser Lagerbestand (inkl. Puffer, den wir oft zusätzlich ordern). Bezahlt = die vom Kunden gekauften Etiketten. Dem Kunden wird NIE mehr als „bezahlt" angezeigt. Beim Bestellen von Etiketten einfach die (höhere) physische Menge erfassen.') ?></label>

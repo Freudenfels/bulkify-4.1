@@ -364,13 +364,21 @@ $produktName = (string)($a['produkt_bezeichnung'] ?? '') ?: (string)($a['produkt
 // Erstauftrag vs. Nachbestellung (neue Rezeptur / neues Produkt / Nachbestellung).
 $artKey = auftrag_art((int)$a['id']);
 [$artLabel, $artStil, $artHint] = auftrag_art_meta($artKey);
-// Etikett-Status je Auftrag: freigegeben (Kunde) / hinterlegt (Datei da) / fehlt.
+// Etikett-Status je Auftrag: freigegeben (Kunde) / hinterlegt bzw. aus Vorbestellung vorhanden / fehlt.
+// Ein Produkt im Glas HAT ein Etikett (Typ/Maß aus dem Behälter abgeleitet). "fehlt" (rot) nur, wenn gar
+// kein Design existiert – weder an diesem Auftrag noch aus einer früheren Bestellung desselben Produkts.
 $etikettFrei = (int)($a['etikett_freigegeben'] ?? 0) === 1;
-$etikettBadge = $etikettFrei
-    ? '<span title="Kunde hat das Etikett freigegeben">' . bx_badge('freigegeben', 'ok') . '</span>'
-    : (etikett_vorhanden((int)$a['id'])
-        ? '<span title="Etikett-Datei hinterlegt, Kundenfreigabe fehlt noch">' . bx_badge('nicht freigegeben', 'warn') . '</span>'
-        : '<span title="Kunde hat noch kein Etikett hinterlegt">' . bx_badge('fehlt', 'err') . '</span>');
+$etEigen     = etikett_vorhanden((int)$a['id']);
+$etQuelle    = (!$etikettFrei && !$etEigen) ? etikett_quelle((int)$a['id']) : null; // Nachbestellung: Design aus Vorauftrag
+if ($etikettFrei) {
+    $etikettBadge = '<span title="Kunde hat das Etikett freigegeben">' . bx_badge('freigegeben', 'ok') . '</span>';
+} elseif ($etEigen) {
+    $etikettBadge = '<span title="Etikett-Datei hinterlegt, Kundenfreigabe fehlt noch">' . bx_badge('nicht freigegeben', 'warn') . '</span>';
+} elseif ($etQuelle) {
+    $etikettBadge = '<span title="Etikett aus einer früheren Bestellung vorhanden – Freigabe für diesen Auftrag fehlt noch">' . bx_badge('nicht freigegeben', 'warn') . '</span>';
+} else {
+    $etikettBadge = '<span title="Kunde hat noch kein Etikett-Design hinterlegt">' . bx_badge('fehlt', 'err') . '</span>';
+}
 $groesseLbl = produktion_groesse_label((int)$a['produkt_id']);
 // Bestellungen (bei welchem Lieferanten, welcher Status) – verknüpft über die Position.
 $best = all("SELECT DISTINCT b.id, b.nummer, b.status, b.bestaetigt, b.angekommen_am, l.firma AS lieferant
