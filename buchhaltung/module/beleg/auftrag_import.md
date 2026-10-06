@@ -33,3 +33,10 @@ Beleg** mit dem Auftrag verknüpft.
 ## Route & Rechte
 `?p=auftrag_import` → `public/index.php`; Rollen **finance, sales**. Verlinkt aus der Rechnungen-Liste.
 Gegenstück für reine Rechnungen ohne Auftrag: [rechnung_import.md](rechnung_import.md).
+
+## Reparatur 2026-10-06
+Die Erzeugungs-/KI-Funktionen (auftrag_import_ki, auftrag_aus_import, verpackung_finden,
+rezeptur_finden_oder_anlegen, produkt_aus_rezeptur) waren beim Ausgliedern in /buchhaltung/ nicht mitgezogen
+worden – der Import lief ins Leere (undefinierte Funktion). Sie sind jetzt in core/erp.php (Naht) portiert.
+Einschränkung: importierte Produkte bekommen (noch) KEINE Preismatrix; diese ist im Dashboard nacherzeugbar.
+Mehrfach-Upload (bis 5 PDFs) ist offen (Entscheidung „erst nur reparieren").
