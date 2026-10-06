@@ -13,6 +13,8 @@ bu_schema();   // Finanz-Tabellen idempotent sicherstellen (beleg*, zahlung)
 $routen = [
     'buchhaltung'       => 'buchhaltung/hub.php',          // Finanz-Hub (Übersicht/OP/Verbindlichkeiten/Auswertung/Prüfung/Export)
     'rechnungen'        => 'beleg/rechnungen_liste.php',
+    'op_debitoren'      => 'beleg/op_debitoren.php',      // Offene Posten je Rechnung (Debitoren)
+    'op_kreditoren'     => 'beleg/op_kreditoren.php',     // Offene Posten je Eingangsrechnung (Kreditoren)
     'dl_rechnungen'     => 'beleg/rechnungen_liste.php',  // vorgefilterte Liste (nur Dienstleistungs-Rechnungen DR-)
     'dl_rechnung_neu'   => 'beleg/dl_rechnung_neu.php',   // DL-Rechnung aus DL-Auftrag: Vorschau + verbindlich erstellen
     'rechnung'          => 'beleg/detail.php',

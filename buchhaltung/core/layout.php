@@ -25,6 +25,8 @@ function bu_nav(): array {
         'Ausgang (Debitoren)' => [
             'rechnungen'        => ['label' => 'Rechnungen',          'href' => '?p=rechnungen'],
             'dl_rechnungen'     => ['label' => 'DL-Rechnungen',       'href' => '?p=dl_rechnungen'],
+            'op_debitoren'      => ['label' => 'Offene Posten',       'href' => '?p=op_debitoren'],
+            'mahnlauf'          => ['label' => 'Mahnungen',           'href' => '?p=mahnlauf'],
             'rechnung_frei'     => ['label' => 'Rechnung erstellen',  'href' => '?p=rechnung_frei'],
             'gutschrift_neu'    => ['label' => 'Storno / Gutschrift', 'href' => '?p=gutschrift_neu'],
             'angebote_ansicht'  => ['label' => 'Angebote (Ansicht)',  'href' => '?p=angebote_ansicht'],
@@ -35,6 +37,10 @@ function bu_nav(): array {
         'Eingang (Kreditoren)' => [
             'beleg_eingang'     => ['label' => 'Belege (KI)',         'href' => '?p=beleg_eingang'],
             'lief_rechnung_neu' => ['label' => 'Eingangsrechnung',    'href' => '?p=lief_rechnung_neu'],
+            'op_kreditoren'     => ['label' => 'Offene Posten',       'href' => '?p=op_kreditoren'],
+        ],
+        'Bank' => [
+            'buchen'            => ['label' => 'Kontoauszug buchen',  'href' => '?p=buchen'],
         ],
         'System' => [
             'einstellungen'     => ['label' => 'Einstellungen',       'href' => '?p=einstellungen'],

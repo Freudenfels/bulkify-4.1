@@ -49,6 +49,8 @@ function bu_schema(): void {
     bu_ensure_column('beleg', 'imp_angebot_id', "INT NULL");                               // Bulk-Import: Verweis aufs archivierte Angebot
     bu_ensure_column('beleg', 'kategorie', "VARCHAR(20) NOT NULL DEFAULT 'produkt'");       // produkt | dienstleistung (DL-Rechnung DR-)
     bu_ensure_column('beleg', 'rezeptur_id', "INT NULL");                                   // direkter Rezeptur-Override (Dashboard legt die Spalte ebenfalls an)
+    bu_ensure_column('beleg', 'mahnstufe', "TINYINT NOT NULL DEFAULT 0");                   // 0=keine, 1=Zahlungserinnerung, 2=1. Mahnung, 3=2. Mahnung
+    bu_ensure_column('beleg', 'letzte_mahnung', "DATE NULL");                               // Datum der zuletzt erzeugten Mahnung
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS beleg_position (
         id INT AUTO_INCREMENT PRIMARY KEY,
