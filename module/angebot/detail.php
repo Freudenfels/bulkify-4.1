@@ -308,7 +308,7 @@ $rezepturKatalog = all("SELECT id, name, darreichungsform FROM rezeptur WHERE st
 $rohstoffKatalog = all("SELECT id, name, artikelnummer, preis_bezug FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name");
 $verpPrim   = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name");
 $verpDeckel = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND verpackung_rolle='verschluss' AND gesperrt=0 ORDER BY name");
-$verpEtik   = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0 ORDER BY name");
+$verpEtik   = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0 AND produkt_id IS NULL ORDER BY name");
 
 $pid  = (int)($a['produkt_id'] ?? 0);
 $kid  = (int)($a['kunde_id'] ?? 0);

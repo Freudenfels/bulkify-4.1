@@ -1213,6 +1213,13 @@ function init_schema(): void {
     ensure_column('item', 'etikett_format', "VARCHAR(40) NULL");    // z. B. 100x70 mm (nur Etikett)
     ensure_column('item', 'etikett_druck', "VARCHAR(40) NULL");     // Etikett-Druckdatei-Maß je Behälter (B x H mm, = Endformat + 3mm rundum)
     ensure_column('item', 'etikett_final', "VARCHAR(40) NULL");     // finales Etikettenformat je Behälter (B x H mm)
+    // Kundenetikett (pro Produkt, versioniert): der gedruckte Etikett-Lagerartikel eines Produkts. produkt_id
+    // bindet ihn ans Produkt; etikett_version = v1/v2/…; etikett_datei_sig/_dokument_id = das Design, das diese
+    // Version repräsentiert (für Bump-Erkennung); etikett_vorlage_id = generischer Glas-Etikett (Maß-Vorlage).
+    ensure_column('item', 'etikett_version', "INT NULL");
+    ensure_column('item', 'etikett_dokument_id', "INT NULL");
+    ensure_column('item', 'etikett_datei_sig', "VARCHAR(64) NULL");
+    ensure_column('item', 'etikett_vorlage_id', "INT NULL");
     ensure_column('produkt', 'verschluss_id', "INT NULL");          // Stückliste: Verschluss/Deckel
     ensure_column('produkt', 'etikett_id', "INT NULL");             // Stückliste: Etikett
     ensure_column('produkt', 'karton_id', "INT NULL");             // Stückliste: Faltschachtel/Umkarton
@@ -1276,6 +1283,7 @@ function init_schema(): void {
     // Angebot als Preismatrix (Kunde wählt Zelle: Stückzahl × Bestellmenge) -> gewählte Werte fließen in Auftrag + Produktion
     ensure_column('auftrag', 'stueck', "INT NULL");
     ensure_column('auftrag', 'verpackung_id', "INT NULL");
+    ensure_column('auftrag', 'etikett_item_id', "INT NULL"); // welche Kundenetikett-Version (item) für diesen Auftrag gilt (kundenreine Verbuchung + Rückverfolgung)
     ensure_column('auftrag', 'kontingent_id', "INT NULL");   // Abruf aus einem Rahmenvertrag/Kontingent
     ensure_column('auftrag', 'produkt_bezeichnung', "VARCHAR(190) NULL");  // Namens-SNAPSHOT: friert den (internen) Produktnamen zur Auftragszeit ein -> spaetere Umbenennung aendert Auftraege nicht
     ensure_column('auftrag', 'produkt_form', "VARCHAR(20) NULL");          // Fallback-Darreichungsform dazu (kapsel|tablette|pulver|…)
@@ -4777,7 +4785,7 @@ function passende_etiketten_fuer(?int $verpackung_id): array {
     $ck = (int)$verpackung_id;
     if (array_key_exists($ck, $resCache)) return $resCache[$ck];
     if ($alleCache === null) $alleCache = all("SELECT id, name, breite_mm, hoehe_mm, etikett_format FROM item
-                 WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0 ORDER BY name");
+                 WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0 AND produkt_id IS NULL ORDER BY name");
     $alle = $alleCache;
     if (!$verpackung_id) return $resCache[$ck] = $alle;
     $ziel = etikett_masse((string) scalar("SELECT etikett_final FROM item WHERE id=?", [$verpackung_id]));
@@ -4819,7 +4827,7 @@ function behaelter_aus_rezeptur_stueck(int $rezeptur_id, string $form, int $stue
 // und das Zuordnungs-Raster in PHP gerechnet (gleiche Logik wie passende_etiketten_fuer).
 function etikett_zuordnung(): array {
     $etks = all("SELECT id, breite_mm, hoehe_mm, etikett_format FROM item
-                 WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0 ORDER BY name");
+                 WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0 AND produkt_id IS NULL ORDER BY name");
     $etkMass = [];
     foreach ($etks as $e)
         $etkMass[(int)$e['id']] = ($e['breite_mm'] && $e['hoehe_mm']) ? [(float)$e['breite_mm'], (float)$e['hoehe_mm']] : etikett_masse($e['etikett_format']);
@@ -5886,6 +5894,8 @@ function etikett_freigabe_setzen(int $auftrag_id, string $name, string $akteur =
     }
     q("UPDATE auftrag SET etikett_freigegeben=1, etikett_freigabe_am=UTC_TIMESTAMP(), etikett_freigabe_von=? WHERE id=?",
       [mb_substr($name, 0, 190), $auftrag_id]);
+    // Kundenetikett-Artikel binden bzw. bei neuem Design eine neue Version anlegen (v2, v3 …).
+    kundenetikett_nach_freigabe($auftrag_id);
     $kid = (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$auftrag_id]);
     log_aktivitaet('kunde', $kid, $akteur, 'Etikett zur Produktion freigegeben durch ' . $name . ($akteur === 'team' ? ' (vom Team bestätigt)' : '') . '.', 'auftrag', 'auftrag', $auftrag_id);
     return ['ok' => true];
@@ -5913,6 +5923,106 @@ function etikett_item_fuer_produkt(int $produkt_id): int {
     if ($eid > 0) return $eid;
     $vid = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$produkt_id]);
     return $vid ? (int) (etikett_id_fuer_behaelter($vid) ?? 0) : 0;
+}
+// Für einen AUFTRAG: die gebundene Kundenetikett-Version (auftrag.etikett_item_id), sonst der aktuelle
+// Produkt-Etikett-Artikel. So werden Etiketten kundenrein und je Design-Version verbucht/rückverfolgt.
+function etikett_item_fuer_auftrag(int $auftrag_id): int {
+    if ($auftrag_id <= 0) return 0;
+    $a = one("SELECT etikett_item_id, produkt_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a) return 0;
+    if ((int)($a['etikett_item_id'] ?? 0) > 0) return (int)$a['etikett_item_id'];
+    return etikett_item_fuer_produkt((int)($a['produkt_id'] ?? 0));
+}
+
+// ===== Kundenetikett-Artikel (pro Produkt, versioniert) ==========================================
+// Jedes verpackte Produkt bekommt seinen EIGENEN Etikett-Lagerartikel (item, rolle 'etikett', produkt_id),
+// in den das Lager die GEDRUCKTEN Kundenetiketten einbucht – kundenrein statt im generischen Glas-Topf.
+// produkt.etikett_id zeigt immer auf die AKTUELLE Version. Neue Version (v2, v3 …) entsteht, wenn der Kunde
+// ein NEUES Design hochlädt UND freigibt (Datei-Signatur weicht ab). Der generische Glas-Etikett bleibt nur
+// noch Maß-Vorlage. Alte Versionen werden gesperrt (Restbestand bleibt historisch sichtbar), nie gelöscht.
+
+// Signatur des Design-Files (zur Bump-Erkennung): sha1 des Inhalts, Fallback Dateiname.
+function kundenetikett_datei_sig(string $datei): string {
+    $p = BX_UPLOADS . '/' . basename($datei);
+    if (is_file($p)) { $h = @sha1_file($p); if ($h) return $h; }
+    return 'n:' . basename($datei);
+}
+// Maß-/Format-Vorlage aus dem generischen Glas-Etikett des Produkts.
+function kundenetikett_vorlage(int $produkt_id): array {
+    $vp = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [$produkt_id]);
+    if ($vp <= 0) return [];
+    $tid = (int) (etikett_id_fuer_behaelter($vp) ?? 0);
+    if ($tid <= 0) return ['_vorlage' => null];
+    $t = one("SELECT breite_mm,hoehe_mm,etikett_format,etikett_final,etikett_druck FROM item WHERE id=?", [$tid]) ?: [];
+    $t['_vorlage'] = $tid;
+    return $t;
+}
+// Aktuellen (nicht gesperrten) Kundenetikett-Artikel eines Produkts holen (0 = keiner).
+function kundenetikett_aktuell(int $produkt_id): int {
+    if ($produkt_id <= 0) return 0;
+    $eid = (int) scalar("SELECT etikett_id FROM produkt WHERE id=?", [$produkt_id]);
+    if ($eid > 0 && (int) scalar("SELECT 1 FROM item WHERE id=? AND verpackung_rolle='etikett' AND produkt_id=?", [$eid, $produkt_id]))
+        return $eid;
+    return (int) scalar("SELECT id FROM item WHERE verpackung_rolle='etikett' AND produkt_id=? AND COALESCE(gesperrt,0)=0
+                         ORDER BY COALESCE(etikett_version,1) DESC, id DESC LIMIT 1", [$produkt_id]);
+}
+// Neue Etikett-Version als Lagerartikel anlegen (interne Hilfe). Kopiert Maße aus der Glas-Vorlage und setzt
+// produkt.etikett_id auf den neuen Artikel. Sperrt NICHT die alte Version (macht der Aufrufer). Rückgabe: item-id.
+function kundenetikett_version_anlegen(int $produkt_id, int $version, ?int $dokument_id, string $datei_sig): int {
+    $p = one("SELECT p.name, p.kundenname, p.kunde_id, k.firma FROM produkt p LEFT JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [$produkt_id]);
+    if (!$p) return 0;
+    $m = kundenetikett_vorlage($produkt_id);
+    $pname = trim((string)($p['kundenname'] ?: $p['name'])) ?: ('Produkt ' . $produkt_id);
+    $kname = trim((string)($p['firma'] ?? ''));
+    $name  = 'Etikett · ' . $pname . ($kname !== '' ? ' · ' . $kname : '') . ' · v' . $version;
+    q("INSERT INTO item (name,kategorie,form,verpackungsart,verpackung_rolle,produkt_id,einheit,preis_bezug,
+            breite_mm,hoehe_mm,etikett_format,etikett_final,etikett_druck,
+            etikett_version,etikett_dokument_id,etikett_datei_sig,etikett_vorlage_id,gesperrt)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
+      [$name,'verpackung','pulver','etikett','etikett',$produkt_id,'Stk','Stück',
+       ($m['breite_mm'] ?? null),($m['hoehe_mm'] ?? null),($m['etikett_format'] ?? null),($m['etikett_final'] ?? null),($m['etikett_druck'] ?? null),
+       $version,$dokument_id,($datei_sig ?: null),($m['_vorlage'] ?? null)]);
+    $nid = (int) insert_id();
+    q("UPDATE produkt SET etikett_id=? WHERE id=?", [$nid, $produkt_id]);
+    return $nid;
+}
+// Stellt sicher, dass das Produkt einen aktuellen Kundenetikett-Artikel hat (legt v1 an, wenn nötig – nur wenn
+// das Produkt ein Etikett braucht = Behälter gesetzt). Rückgabe: item-id (0 = kein Etikett nötig). Idempotent.
+// Hook: Auftragsbestätigung (auftrag_aus_angebot).
+function kundenetikett_sicherstellen(int $produkt_id): int {
+    if ($produkt_id <= 0) return 0;
+    if ((int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [$produkt_id]) <= 0) return 0;
+    $cur = kundenetikett_aktuell($produkt_id);
+    if ($cur > 0) {
+        if ((int) scalar("SELECT COALESCE(etikett_id,0) FROM produkt WHERE id=?", [$produkt_id]) !== $cur)
+            q("UPDATE produkt SET etikett_id=? WHERE id=?", [$cur, $produkt_id]);
+        return $cur;
+    }
+    return kundenetikett_version_anlegen($produkt_id, 1, null, '');
+}
+// Nach einer Etikett-Freigabe aufrufen: bindet das freigegebene Design an die aktuelle Version – oder legt
+// bei einem NEUEN Design (abweichende Signatur) eine neue Version an und sperrt die alte. Bindet den Auftrag
+// an die gültige Version (auftrag.etikett_item_id). Hook: etikett_freigabe_setzen.
+function kundenetikett_nach_freigabe(int $auftrag_id): void {
+    $pid = (int) scalar("SELECT COALESCE(produkt_id,0) FROM auftrag WHERE id=?", [$auftrag_id]);
+    if ($pid <= 0 || !auftrag_braucht_etikett($auftrag_id)) return;
+    $dok = etikett_datei($auftrag_id);         // nach Freigabe gibt es IMMER eine eigene Datei (ggf. aus Vorbestellung kopiert)
+    if (!$dok) return;
+    $sig = kundenetikett_datei_sig((string)$dok['datei']);
+    $cur = kundenetikett_sicherstellen($pid);
+    if ($cur <= 0) return;
+    $curSig = (string) scalar("SELECT COALESCE(etikett_datei_sig,'') FROM item WHERE id=?", [$cur]);
+    if ($curSig === '') {                       // v1 hat noch kein Design -> dieses übernehmen (kein Bump)
+        q("UPDATE item SET etikett_datei_sig=?, etikett_dokument_id=? WHERE id=?", [$sig, (int)$dok['id'], $cur]);
+        $use = $cur;
+    } elseif ($curSig === $sig) {               // gleiches Design (Nachbestellung/Re-Freigabe) -> kein Bump
+        $use = $cur;
+    } else {                                    // NEUES Design freigegeben -> neue Version
+        $ver = (int) scalar("SELECT COALESCE(etikett_version,1) FROM item WHERE id=?", [$cur]) + 1;
+        q("UPDATE item SET gesperrt=1 WHERE id=?", [$cur]);
+        $use = kundenetikett_version_anlegen($pid, $ver, (int)$dok['id'], $sig);
+    }
+    if ($use > 0) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$use, $auftrag_id]);
 }
 // Etikett-Bestand eines Produkts – mit strikter Trennung PHYSISCH (unser Lager, inkl. Puffer) vs.
 // BEZAHLT (was der Kunde gekauft hat). Dem Kunden darf NIE mehr gezeigt werden als bezahlt.
@@ -6512,6 +6622,10 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
       [naechste_nummer('AB'), $angebot_id, $a['kunde_id'], $a['produkt_id'], $menge, $vk, $netto, 'offen']);
     $aid = insert_id();
     auftrag_name_snapshot((int)$aid);
+    // Kundenetikett-Artikel (v1) für dieses Produkt sicherstellen und den Auftrag daran binden – so kann das
+    // Lager die gelieferten, kundenspezifischen Etiketten gezielt einbuchen (kein generischer Glas-Topf).
+    $etId = kundenetikett_sicherstellen((int)$a['produkt_id']);
+    if ($etId) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$etId, $aid]);
     // Rechnung: Kleinunternehmer 0 %, EU-Ausland 0 %, sonst Inlands-USt aus den Einstellungen (Standard 19 %)
     $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
     $ustInland = (float) meta_get('ust_inland', 19);

@@ -147,7 +147,12 @@ if ($neu && $istExtern) {
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 $rezepte = all("SELECT id, name, darreichungsform, kapselgroesse_id FROM rezeptur ORDER BY name");
-$verpackungen = all("SELECT id, name, ek_preis, max_fuellgewicht_g, volumen_ml, COALESCE(verpackung_rolle,'primaer') AS rolle FROM item WHERE kategorie='verpackung' AND gesperrt=0 ORDER BY name");
+// Kundenetikett-Artikel (verpackung_rolle='etikett' MIT produkt_id) sind automatisch verwaltet und gehören
+// genau einem Produkt – im Stücklisten-Dropdown darum nur die generischen Etiketten + die EIGENEN zeigen.
+$verpackungen = all("SELECT id, name, ek_preis, max_fuellgewicht_g, volumen_ml, COALESCE(verpackung_rolle,'primaer') AS rolle
+                     FROM item WHERE kategorie='verpackung' AND gesperrt=0
+                       AND (COALESCE(verpackung_rolle,'primaer')<>'etikett' OR produkt_id IS NULL OR produkt_id=?)
+                     ORDER BY name", [is_numeric($id) ? (int)$id : 0]);
 // Verpackungen nach Rolle gruppieren (für die Stückliste-Auswahlen)
 $VERP_ROLLE = ['primaer'=>[],'verschluss'=>[],'etikett'=>[],'karton'=>[],'beipack'=>[]];
 foreach ($verpackungen as $vp) { $r = $vp['rolle'] ?: 'primaer'; if (!isset($VERP_ROLLE[$r])) $r='primaer'; $VERP_ROLLE[$r][] = $vp; }
