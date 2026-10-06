@@ -37,6 +37,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Produktionsauftrag konnte nicht angelegt werden (kein Produkt am Auftrag?).')); exit;
 }
 
+// Fertige Ware eines Altauftrags OHNE Produktionsauftrag nachtragen und direkt ins Lager 1/2 einbuchen.
+// Legt bei Bedarf einen Produktionsauftrag an (nur als Träger für die Charge), hakt ihn ab und bucht die
+// volle Menge als Fertigware-Charge (Fulfillment → Lager 2 + Auftrag abgeschlossen). Für produzierte
+// Aufträge, die nie durch die neue Produktion liefen und darum nirgends auftauchen (z. B. AB-3257).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'charge_nachtragen_einlagern') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $art  = ($_POST['produktionsart'] ?? '') === 'eigen' ? 'eigen' : 'fremd';
+    $paid = produktionsauftrag_aus_auftrag($id, $art);
+    if (!$paid) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Geht nicht – am Auftrag ist kein Produkt hinterlegt.')); exit; }
+    // Der PA ist hier nur Träger der Charge: sofort als erledigt markieren + Schritte abhaken, damit er nicht
+    // als neue Aufgabe in Vor-Produktion/Produktion auftaucht. Dann die Fertigware ins Lager buchen.
+    q("UPDATE produktionsauftrag SET status='erledigt' WHERE id=?", [$paid]);
+    q("UPDATE produktion_schritt SET erledigt=1 WHERE pa_id=? AND erledigt=0", [$paid]);
+    $r = einlager_buchen($paid);
+    header('Location: ?p=auftrag&id=' . $id . '&einlagerok=' . urlencode((string)($r['label'] ?? 'Lager'))); exit;
+}
+
 // Einlagern direkt am Auftrag anstoßen (an Lager übergeben / nachholen): bucht die fertige Ware ins Lager 1/2.
 // Für fertig produzierte Aufträge, die noch nicht eingelagert sind (z. B. Altaufträge) – ohne Modulwechsel.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'einlagern_nachholen') {
@@ -526,8 +543,19 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
         <button class="btn btn-primary btn-sm" type="submit">Produktionsauftrag anlegen</button>
       </form>
       <div class="muted" style="font-size:12px;margin-top:4px">Danach erscheint der Materialbedarf (Rohstoffe) und der Auftrag ist produzierbar.</div>
+      <?php elseif ((string)$a['status'] !== 'storniert'): $nachtragLabel = auftrag_ist_fulfillment($id) ? 'Lager 2 (Fremdlager)' : 'Lager 1 (Warenlager)'; ?>
+      <div class="muted" style="margin-bottom:6px">Kein Produktionsauftrag – der Auftrag ist bereits <strong><?= h($stText) ?></strong> (Altauftrag, der nie durch die Produktion lief).</div>
+      <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0;flex-wrap:wrap" onsubmit="return confirm('Fertige Ware (<?= (int)$a['menge'] ?> Packungen) als Charge nachtragen und in <?= h($nachtragLabel) ?> einbuchen?');">
+        <input type="hidden" name="aktion" value="charge_nachtragen_einlagern">
+        <select name="produktionsart" style="max-width:190px">
+          <option value="fremd">Zukauf (Fremdproduktion)</option>
+          <option value="eigen">Eigenproduktion</option>
+        </select>
+        <button class="btn btn-primary btn-sm" type="submit">Fertige Ware nachtragen &amp; in <?= h($nachtragLabel) ?> einbuchen</button>
+      </form>
+      <div class="muted" style="font-size:12px;margin-top:4px">Legt die fertige Ware als Charge an und bucht sie ins Lager (Fulfillment → Lager 2, Auftrag wird abgeschlossen). Für Altaufträge ohne Produktionsauftrag.</div>
       <?php else: ?>
-      <div class="muted">Kein Produktionsauftrag – der Auftrag ist bereits <strong><?= h($stText) ?></strong> (z. B. Altauftrag ohne eigenen Produktionsauftrag). Nichts mehr anzulegen.</div>
+      <div class="muted">Auftrag ist storniert – nichts einzulagern.</div>
       <?php endif; ?>
     </div>
     <?php endif; ?>
