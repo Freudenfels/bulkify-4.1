@@ -292,8 +292,39 @@ function render_footer(): void {
     echo bx_side_script();
     echo bx_menue_script();
     echo bx_busy_script();
+    echo bx_rscombo_script();
     echo pwa_script();
     echo "</body></html>";
+}
+
+// Durchsuchbares Dropdown: wertet jedes <select class="rscombo"> zu einem Suchfeld + Trefferliste auf.
+// Die Optionen kommen direkt aus dem <select> (kein Daten-Einbetten nötig); der gespeicherte Wert bleibt
+// das Select, funktioniert also auch ohne JS. Platzhalter per data-ph; Mehrfach-Selects werden ignoriert.
+function bx_rscombo_script(): string {
+    return "<script>(function(){"
+      . "function norm(s){return String(s).toLowerCase().replace(/\\u00e4/g,'ae').replace(/\\u00f6/g,'oe').replace(/\\u00fc/g,'ue').replace(/\\u00df/g,'ss');}"
+      . "function esc(s){return String(s).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c];});}"
+      . "function combo(sel){if(!sel||sel.multiple||sel.dataset.rscombo)return;sel.dataset.rscombo='1';"
+      . "var opts=Array.prototype.map.call(sel.options,function(o){return {v:o.value,t:o.textContent.trim(),d:o.disabled};});"
+      . "sel.style.display='none';var wrap=document.createElement('div');wrap.className='rs-combo';if(sel.style.minWidth)wrap.style.minWidth=sel.style.minWidth;if(sel.style.maxWidth)wrap.style.maxWidth=sel.style.maxWidth;"
+      . "sel.parentNode.insertBefore(wrap,sel);wrap.appendChild(sel);"
+      . "var box=document.createElement('input');box.type='text';box.className='rs-input';box.autocomplete='off';box.placeholder=sel.getAttribute('data-ph')||'Suchen…';"
+      . "var cur=sel.options[sel.selectedIndex];if(cur&&sel.value!=='')box.value=cur.textContent.trim();"
+      . "var list=document.createElement('div');list.className='rs-list';list.hidden=true;wrap.appendChild(box);wrap.appendChild(list);"
+      . "var hl=-1,shown=[];"
+      . "function render(q){q=norm((q||'').trim());shown=opts.filter(function(o){return o.v!==''&&!o.d&&(!q||norm(o.t).indexOf(q)>=0);}).slice(0,100);"
+      . "if(!shown.length){list.innerHTML='<div class=\"rs-empty\">Nichts gefunden.</div>';}else{list.innerHTML=shown.map(function(o,i){return '<div class=\"rs-opt\" data-i=\"'+i+'\">'+esc(o.t)+'</div>';}).join('');}hl=-1;list.hidden=false;}"
+      . "function paint(){Array.prototype.forEach.call(list.querySelectorAll('.rs-opt'),function(o){o.classList.toggle('hl',+o.dataset.i===hl);});var e=list.querySelector('.rs-opt.hl');if(e)e.scrollIntoView({block:'nearest'});}"
+      . "function pick(i){var o=shown[i];if(!o)return;sel.value=o.v;box.value=o.t;list.hidden=true;sel.dispatchEvent(new Event('change',{bubbles:true}));}"
+      . "box.addEventListener('input',function(){render(box.value);});"
+      . "box.addEventListener('focus',function(){render(box.value);});"
+      . "box.addEventListener('keydown',function(e){if(list.hidden){if(e.key==='ArrowDown')render(box.value);return;}if(e.key==='ArrowDown'){e.preventDefault();hl=Math.min(hl+1,shown.length-1);paint();}else if(e.key==='ArrowUp'){e.preventDefault();hl=Math.max(hl-1,0);paint();}else if(e.key==='Enter'){if(hl>=0){e.preventDefault();pick(hl);}}else if(e.key==='Escape'){list.hidden=true;}});"
+      . "box.addEventListener('blur',function(){setTimeout(function(){var c=sel.options[sel.selectedIndex];if(c&&sel.value!=='')box.value=c.textContent.trim();},160);});"
+      . "list.addEventListener('mousedown',function(e){var o=e.target.closest('.rs-opt');if(o){e.preventDefault();pick(+o.dataset.i);}});"
+      . "document.addEventListener('click',function(e){if(!wrap.contains(e.target))list.hidden=true;});}"
+      . "function init(root){(root||document).querySelectorAll('select.rscombo').forEach(combo);}"
+      . "if(document.readyState!=='loading')init();else document.addEventListener('DOMContentLoaded',function(){init();});"
+      . "window.bxRsComboInit=init;})();</script>";
 }
 
 // Lade-Rueckmeldung: Beim Absenden eines Formulars wird der geklickte Knopf zum Spinner
