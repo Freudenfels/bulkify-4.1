@@ -85,12 +85,18 @@ if ($pa):
     if (!$verpAkt && $pid) $verpAkt = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$pid]);
     $empf   = $verpAkt ? 0 : (int) (verpackung_empfehlung_fuer_pa($paId) ?? 0);
     $rez    = $rid ? one("SELECT darreichungsform, kapselgroesse_id FROM rezeptur WHERE id=?", [$rid]) : null;
-    $istKapsel = $rez && in_array($rez['darreichungsform'] ?? '', ['kapsel','softgel'], true);
+    $darr   = $rez['darreichungsform'] ?? '';
+    // Kapselgröße zeigen bei Kapsel/Softgel – ODER wenn schon eine Kapselgröße hinterlegt ist (dann ist es eine
+    // Kapsel, auch ohne saubere Darreichungsform) – ODER wenn die Darreichungsform gar nicht gepflegt ist.
+    // NICHT bei eindeutig anderer Form (Tablette/Pulver/Flüssig/…), da wäre eine Kapselgröße sinnlos.
+    $istKapsel  = $rez && in_array($darr, ['kapsel','softgel'], true);
+    $zeigeKapsel = $istKapsel || (int)($rez['kapselgroesse_id'] ?? 0) > 0
+                   || ($rez && !in_array($darr, ['tablette','pulver','fluessig','gummi','gel','stick'], true));
     $etDok  = $aid ? etikett_datei($aid) : null;
     $etFrei = $aid ? etikett_freigegeben($aid) : false;
     $brauchtEt = auftrag_braucht_etikett((int)$aid);
     $verpOpt = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND COALESCE(gesperrt,0)=0 ORDER BY name");
-    $kapsOpt = $istKapsel ? all("SELECT id, name FROM kapselgroesse ORDER BY fuellmenge_mg") : [];
+    $kapsOpt = $zeigeKapsel ? all("SELECT id, name FROM kapselgroesse ORDER BY fuellmenge_mg") : [];
 
     render_header('produktion_vorbereitung', 'Vor-Produktion');
     bx_head(h($pa['nummer'] ?: ('PR#' . $paId)) . ' · ' . h($info['produkt'] ?? '–'),
@@ -159,7 +165,7 @@ if ($pa):
           </div>
           <div style="margin-top:10px"><button class="btn btn-primary btn-sm" type="submit">Glas speichern</button></div>
         </form>
-        <?php if ($istKapsel): ?>
+        <?php if ($zeigeKapsel): ?>
         <form method="post" style="margin-top:14px;border-top:1px solid var(--line,#e6e6e6);padding-top:12px">
           <input type="hidden" name="aktion" value="kapsel_setzen"><input type="hidden" name="pa_id" value="<?= $paId ?>">
           <label class="muted" style="font-size:12px">Kapselgröße</label>
