@@ -270,6 +270,30 @@ function lg_schema(): void {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     lg_spalte('lg_versand_label', 'zoll_pdf', 'LONGBLOB NULL');   // CN23-Zollpapier (A4), Nicht-EU
 
+    // Lager-2-Artikelkatalog je Fulfillment-Kunde (Stammdaten). Eigene Tabelle – der Kunde hat hier
+    // Produkte, Kundenetiketten, Beilagen, Sonstiges; optional mit einem Dashboard-Item verknüpft (item_id).
+    q("CREATE TABLE IF NOT EXISTS lg_artikel (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        kunde_id INT NOT NULL,
+        item_id INT NULL,                              -- optional: Verkaufsfertig-Item (Bestand) im Dashboard
+        typ VARCHAR(16) NOT NULL DEFAULT 'produkt',    -- produkt|kundenetikett|beilage|sonstiges
+        name VARCHAR(190) NOT NULL,
+        verkaufsartikel TINYINT(1) NOT NULL DEFAULT 0,
+        gewicht_g DECIMAL(10,2) NULL,
+        masse_l_mm DECIMAL(8,1) NULL,
+        masse_b_mm DECIMAL(8,1) NULL,
+        masse_h_mm DECIMAL(8,1) NULL,
+        ean VARCHAR(40) NULL,
+        kunden_sku VARCHAR(80) NULL,
+        mindestbestand DECIMAL(14,3) NULL,
+        produktionszeit_tage INT NULL,                 -- Override; NULL = vom System bestimmt
+        etikett_bild VARCHAR(255) NULL,                -- Dateiname in data/uploads
+        notiz TEXT NULL,
+        angelegt DATETIME NOT NULL,
+        aktualisiert DATETIME NOT NULL,
+        KEY k (kunde_id), KEY it (item_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     lg_meta_schreiben('schema_build', $build);
 }
 
@@ -348,6 +372,62 @@ function lg_versand_label_set(int $versand_id, string $carrier, string $format, 
 }
 function lg_versand_label(int $versand_id): ?array { return one("SELECT * FROM lg_versand_label WHERE versand_id=?", [$versand_id]); }
 function lg_versand_hat_label(int $versand_id): bool { return (int) scalar("SELECT COUNT(*) FROM lg_versand_label WHERE versand_id=?", [$versand_id]) > 0; }
+
+// --- Lager-2-Artikelkatalog (Stammdaten je Fulfillment-Kunde) ---------------------------------
+function lg_artikel_typen(): array {
+    return ['produkt' => 'Produkt', 'kundenetikett' => 'Kundenetikett', 'beilage' => 'Beilage', 'sonstiges' => 'Sonstiges'];
+}
+function lg_artikel_liste(int $kunde_id = 0, string $q = ''): array {
+    $w = ['1=1']; $p = [];
+    if ($kunde_id > 0) { $w[] = 'kunde_id=?'; $p[] = $kunde_id; }
+    foreach (preg_split('/\s+/', trim($q), -1, PREG_SPLIT_NO_EMPTY) as $t) {
+        $w[] = '(name LIKE ? OR ean LIKE ? OR kunden_sku LIKE ?)';
+        $like = '%' . $t . '%'; array_push($p, $like, $like, $like);
+    }
+    return all("SELECT * FROM lg_artikel WHERE " . implode(' AND ', $w) . " ORDER BY name LIMIT 500", $p);
+}
+function lg_artikel(int $id): ?array { return one("SELECT * FROM lg_artikel WHERE id=?", [$id]); }
+// Numerik: deutsche Dezimaltrennung -> float/int oder null (leer).
+function lg_artikel_num($v, bool $int = false) {
+    if ($v === null || trim((string)$v) === '') return null;
+    $f = (float) str_replace(',', '.', (string)$v);
+    return $int ? (int) round($f) : $f;
+}
+function lg_artikel_anlegen(array $d): int {
+    $now = jetzt_utc();
+    q("INSERT INTO lg_artikel
+        (kunde_id,item_id,typ,name,verkaufsartikel,gewicht_g,masse_l_mm,masse_b_mm,masse_h_mm,
+         ean,kunden_sku,mindestbestand,produktionszeit_tage,notiz,angelegt,aktualisiert)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [max(0, (int)($d['kunde_id'] ?? 0)), ($d['item_id'] ?? null) ?: null,
+       array_key_exists($d['typ'] ?? '', lg_artikel_typen()) ? $d['typ'] : 'produkt',
+       mb_substr(trim((string)($d['name'] ?? '')), 0, 190),
+       !empty($d['verkaufsartikel']) ? 1 : 0,
+       lg_artikel_num($d['gewicht_g'] ?? null), lg_artikel_num($d['masse_l_mm'] ?? null),
+       lg_artikel_num($d['masse_b_mm'] ?? null), lg_artikel_num($d['masse_h_mm'] ?? null),
+       mb_substr(trim((string)($d['ean'] ?? '')), 0, 40), mb_substr(trim((string)($d['kunden_sku'] ?? '')), 0, 80),
+       lg_artikel_num($d['mindestbestand'] ?? null), lg_artikel_num($d['produktionszeit_tage'] ?? null, true),
+       (string)($d['notiz'] ?? ''), $now, $now]);
+    return (int) insert_id();
+}
+function lg_artikel_speichern(int $id, array $d): void {
+    q("UPDATE lg_artikel SET kunde_id=?, item_id=?, typ=?, name=?, verkaufsartikel=?, gewicht_g=?,
+         masse_l_mm=?, masse_b_mm=?, masse_h_mm=?, ean=?, kunden_sku=?, mindestbestand=?,
+         produktionszeit_tage=?, notiz=?, aktualisiert=? WHERE id=?",
+      [max(0, (int)($d['kunde_id'] ?? 0)), ($d['item_id'] ?? null) ?: null,
+       array_key_exists($d['typ'] ?? '', lg_artikel_typen()) ? $d['typ'] : 'produkt',
+       mb_substr(trim((string)($d['name'] ?? '')), 0, 190),
+       !empty($d['verkaufsartikel']) ? 1 : 0,
+       lg_artikel_num($d['gewicht_g'] ?? null), lg_artikel_num($d['masse_l_mm'] ?? null),
+       lg_artikel_num($d['masse_b_mm'] ?? null), lg_artikel_num($d['masse_h_mm'] ?? null),
+       mb_substr(trim((string)($d['ean'] ?? '')), 0, 40), mb_substr(trim((string)($d['kunden_sku'] ?? '')), 0, 80),
+       lg_artikel_num($d['mindestbestand'] ?? null), lg_artikel_num($d['produktionszeit_tage'] ?? null, true),
+       (string)($d['notiz'] ?? ''), jetzt_utc(), $id]);
+}
+function lg_artikel_bild_set(int $id, string $datei): void {
+    q("UPDATE lg_artikel SET etikett_bild=?, aktualisiert=? WHERE id=?", [mb_substr($datei, 0, 255), jetzt_utc(), $id]);
+}
+function lg_artikel_del(int $id): void { q("DELETE FROM lg_artikel WHERE id=?", [$id]); }
 function lg_versand_status_setzen(int $id, string $status): void {
     if (!in_array($status, ['geplant', 'versendet', 'storniert'], true)) return;
     if ($status === 'versendet') q("UPDATE lg_versand SET status=?, versendet_am=? WHERE id=?", [$status, jetzt_utc(), $id]);

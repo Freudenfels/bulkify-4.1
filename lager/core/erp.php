@@ -196,6 +196,19 @@ function erp_kunde_name(int $id): string {
     return (string) scalar("SELECT firma FROM kunden WHERE id=?", [$id]);
 }
 
+// Verkaufsfertig-Items (Bestand) eines Kunden – für die optionale Bestand-Verknüpfung im Lager-2-Katalog.
+function erp_kunde_verkaufsfertig(int $kunde_id): array {
+    if ($kunde_id <= 0 || !tabelle_da('item') || !tabelle_da('produkt')) return [];
+    $hatAuftrag = tabelle_da('auftrag');
+    $sql = "SELECT i.id, i.name, i.artikelnummer, i.bsku
+            FROM item i JOIN produkt p ON p.id=i.produkt_id
+            WHERE i.kategorie='verkaufsfertig' AND (p.kunde_id=?"
+         . ($hatAuftrag ? " OR EXISTS (SELECT 1 FROM auftrag a WHERE a.produkt_id=p.id AND a.kunde_id=?)" : "")
+         . ") ORDER BY i.name LIMIT 500";
+    $params = $hatAuftrag ? [$kunde_id, $kunde_id] : [$kunde_id];
+    try { return all($sql, $params); } catch (Throwable $e) { return []; }
+}
+
 // Alle Kunden fuer die Auswahl beim Versand (Warenausgang-Planung).
 function erp_kunden_liste(): array {
     if (!tabelle_da('kunden')) return [];
