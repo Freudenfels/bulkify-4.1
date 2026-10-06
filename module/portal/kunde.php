@@ -1088,18 +1088,18 @@ if (!function_exists('portal_auftrag_track')) {
     // Fortschritt für die Portalanzeige: Dienstleistungs-Aufträge (kategorie='dienstleistung') haben ihre
     // EIGENEN Schritte (dl_auftrag_schritt) statt der Produkt-Phasen; alles andere die Produkt-Phasen.
     function portal_auftrag_track(array $a): array {
-        if (($a['kategorie'] ?? '') === 'dienstleistung' && function_exists('dl_auftrag_track')) {
-            $st = dl_auftrag_track((int)$a['id']);
-            if ($st) {
-                $firstOpen = null;
-                foreach ($st as $i => $s) if (!(int)$s['erledigt'] && $firstOpen === null) $firstOpen = $i;
-                $out = [];
-                foreach ($st as $i => $s) {
-                    $out[] = ['label'=>(string)$s['name'], 'date'=>$s['erledigt_at'] ?? null, 'sub'=>null, 'dok_id'=>null,
-                              'done'=>((int)$s['erledigt'] === 1), 'current'=>($i === $firstOpen)];
-                }
-                return $out;
+        // Dienstleistungs-Aufträge: IMMER die eigenen Schritte (auch leer = kein Fortschritt, z. B. Fulfillment/
+        // Lagerung „nur Abrechnung"). NIE auf die Produkt-Phasen zurückfallen.
+        if (($a['kategorie'] ?? '') === 'dienstleistung') {
+            $st = function_exists('dl_auftrag_track') ? dl_auftrag_track((int)$a['id']) : [];
+            $firstOpen = null;
+            foreach ($st as $i => $s) if (!(int)$s['erledigt'] && $firstOpen === null) $firstOpen = $i;
+            $out = [];
+            foreach ($st as $i => $s) {
+                $out[] = ['label'=>(string)$s['name'], 'date'=>$s['erledigt_at'] ?? null, 'sub'=>null, 'dok_id'=>null,
+                          'done'=>((int)$s['erledigt'] === 1), 'current'=>($i === $firstOpen)];
             }
+            return $out;   // leer = kein Fortschritts-Balken
         }
         return kunde_auftrag_track($a);
     }
@@ -3124,7 +3124,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:12px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
       <div class="bx-row" style="gap:10px;align-items:center">
-        <span class="muted" style="font-size:12px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : 'Schritt ' . ($curIdx + 1) . '/' . $totalA . ': ' . h((string)($trackA[$curIdx]['label'] ?? '')) ?></span>
+        <span class="muted" style="font-size:12px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : (!$trackA ? 'In Bearbeitung' : 'Schritt ' . ($curIdx + 1) . '/' . $totalA . ': ' . h((string)($trackA[$curIdx]['label'] ?? ''))) ?></span>
         <?php if ($etMiss): ?><?= bx_badge('Etikett fehlt', 'err') ?><?php endif; ?>
         <?= $aufBadge($a) ?><?php $kontStorno = ($a['status'] ?? '') === 'storniert' && !empty($a['kontingent_id']);
             $zst = $kontStorno ? '' : ($zahlMapBest[(int)$a['id']] ?? (!empty($a['bezahlt_am']) ? 'bezahlt' : '')); if ($zst): ?> <?= $reBadge($zst) ?><?php endif; ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
@@ -3183,7 +3183,8 @@ portal_head('Kundenportal · ' . $k['firma']);
       ?></div></div>
   </div>
 
-  <!-- Fortschritt mit Datum (horizontal, wie Ladebalken) -->
+  <!-- Fortschritt (bei DL „nur Abrechnung" ist der Track leer -> kein Balken) -->
+  <?php if ($track): ?>
   <div class="bx-panel">
     <h2 style="margin:0 0 18px;font-size:16px">Fortschritt</h2>
     <div style="overflow-x:auto">
@@ -3207,6 +3208,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <?php endif; ?>
   </div>
+  <?php endif; /* $track */ ?>
 
   <?php // Endergebnis einer Dienstleistung (z. B. Analysebericht, fertige Rezeptur) zum Download.
         if ($istDLdetail && $dlErgebnis): ?>

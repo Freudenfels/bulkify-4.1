@@ -114,6 +114,15 @@ function dienstleistung_schema(): void {
     // Workflow je Service: frei definierbare Schritte (Fortschritt) + Endergebnis-Upload.
     ensure_column('dienstleistung', 'ergebnis_upload',     "TINYINT(1) NOT NULL DEFAULT 0"); // Upload eines Endergebnis-Dokuments erlaubt
     ensure_column('dienstleistung', 'upload_schliesst_ab', "TINYINT(1) NOT NULL DEFAULT 0"); // Upload setzt den Auftrag auf erledigt
+    ensure_column('dienstleistung', 'ohne_fortschritt',    "TINYINT(1) NOT NULL DEFAULT 0"); // kein Workflow – nur Abrechnung (z. B. Fulfillment/Lagerung)
+    // Kundenspezifische Preise je Service (optional): Standard = dienstleistung.vk_cent, Ausnahmen hier.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS dienstleistung_kundenpreis (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        dienstleistung_id INT NOT NULL,
+        kunde_id INT NOT NULL,
+        vk_cent INT NOT NULL DEFAULT 0,
+        UNIQUE KEY uniq_dl_kunde (dienstleistung_id, kunde_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $pdo->exec("CREATE TABLE IF NOT EXISTS dienstleistung_schritt (
         id INT AUTO_INCREMENT PRIMARY KEY,
         dienstleistung_id INT NOT NULL,
@@ -162,9 +171,38 @@ function dl_katalog_schritte_setzen(int $dl_id, array $namen): void {
         q("INSERT INTO dienstleistung_schritt (dienstleistung_id,name,sort) VALUES (?,?,?)", [$dl_id, mb_substr($n, 0, 120), $sort++]);
     }
 }
-// Schritte eines DL-Auftrags einmalig aus dem Service materialisieren (idempotent). Fällt auf die
-// Baustein-Vorlage zurück, wenn der Service keine eigenen Schritte hat.
+// Kundenspezifische Preise eines Service (für die Katalog-UI).
+function dl_kundenpreise(int $dl_id): array {
+    return all("SELECT kp.id, kp.kunde_id, kp.vk_cent, k.firma
+                FROM dienstleistung_kundenpreis kp LEFT JOIN kunden k ON k.id=kp.kunde_id
+                WHERE kp.dienstleistung_id=? ORDER BY k.firma", [$dl_id]);
+}
+// VK (Cent) für einen Kunden: kundenspezifisch, sonst Standard-VK des Service. null = Service unbekannt.
+function dl_kundenpreis(int $dl_id, ?int $kunde_id): ?int {
+    if ($dl_id <= 0) return null;
+    if ($kunde_id) {
+        $kp = scalar("SELECT vk_cent FROM dienstleistung_kundenpreis WHERE dienstleistung_id=? AND kunde_id=?", [$dl_id, $kunde_id]);
+        if ($kp !== null && $kp !== false) return (int)$kp;
+    }
+    $std = scalar("SELECT vk_cent FROM dienstleistung WHERE id=?", [$dl_id]);
+    return $std === null || $std === false ? null : (int)$std;
+}
+// Kundenpreise ersetzen: $zeilen = [['kunde_id'=>int,'vk_cent'=>int], …]. Doppelte/ungültige übersprungen.
+function dl_kundenpreise_setzen(int $dl_id, array $zeilen): void {
+    q("DELETE FROM dienstleistung_kundenpreis WHERE dienstleistung_id=?", [$dl_id]);
+    $seen = [];
+    foreach ($zeilen as $z) {
+        $kid = (int)($z['kunde_id'] ?? 0); $vk = (int)($z['vk_cent'] ?? -1);
+        if ($kid <= 0 || $vk < 0 || isset($seen[$kid])) continue;
+        $seen[$kid] = true;
+        q("INSERT INTO dienstleistung_kundenpreis (dienstleistung_id,kunde_id,vk_cent) VALUES (?,?,?)", [$dl_id, $kid, $vk]);
+    }
+}
+// Schritte eines DL-Auftrags einmalig aus dem Service materialisieren (idempotent). Service „ohne_fortschritt"
+// (z. B. Fulfillment/Lagerung) bekommt KEINE Schritte – der Auftrag ist dann reine Abrechnung ohne Fortschritt.
+// Sonst eigene Katalog-Schritte, hilfsweise die Baustein-Vorlage.
 function dl_auftrag_schritte_anlegen(int $auftrag_id, int $dl_id): void {
+    if ((int) scalar("SELECT COALESCE(ohne_fortschritt,0) FROM dienstleistung WHERE id=?", [$dl_id]) === 1) return;
     if ((int) scalar("SELECT COUNT(*) FROM dl_auftrag_schritt WHERE auftrag_id=?", [$auftrag_id]) > 0) return;
     $schritte = array_map(fn($s) => (string)$s['name'], dl_katalog_schritte($dl_id));
     if (!$schritte) { $d = dienstleistung_laden($dl_id); $schritte = dl_schritte_vorlage($d['baustein'] ?? ''); }
@@ -274,12 +312,18 @@ function dl_angebot_neu(?int $kunde_id): int {
 function dl_position_add(int $angebot_id, int $dienstleistung_id, float $menge = 1, ?int $preis_cent = null): bool {
     $d = dienstleistung_laden($dienstleistung_id);
     if (!$d) return false;
+    // Preis: explizit vorgegeben – sonst kundenspezifischer Preis (falls hinterlegt), sonst Standard-VK.
+    if ($preis_cent === null) {
+        $kid = (int) scalar("SELECT COALESCE(kunde_id,0) FROM angebot WHERE id=?", [$angebot_id]);
+        $kp  = dl_kundenpreis($dienstleistung_id, $kid ?: null);
+        $preis_cent = $kp !== null ? $kp : (int)$d['vk_cent'];
+    }
     $sort = (int) scalar("SELECT COALESCE(MAX(sort),-1)+1 FROM angebot_position WHERE angebot_id=?", [$angebot_id]);
     q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,dienstleistung_id)
        VALUES (?,?,?,?,?,?,?,?,?,?, 'dienstleistung', ?)",
       [$angebot_id, $sort, $d['nummer'] ?: null, $d['name'], $d['beschreibung'] ?: null,
        $menge > 0 ? $menge : 1, $d['einheit'] ?: null,
-       $preis_cent !== null ? $preis_cent : (int)$d['vk_cent'], (int)$d['ek_cent'], (float)$d['mwst_satz'], $dienstleistung_id]);
+       (int)$preis_cent, (int)$d['ek_cent'], (float)$d['mwst_satz'], $dienstleistung_id]);
     q("UPDATE angebot SET aktualisiert=CURRENT_TIMESTAMP WHERE id=?", [$angebot_id]);
     return true;
 }

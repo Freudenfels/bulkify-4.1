@@ -39,20 +39,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'save'
         $aktiv   = isset($_POST['aktiv']) ? 1 : 0;
         $ergebnis_upload     = isset($_POST['ergebnis_upload']) ? 1 : 0;
         $upload_schliesst_ab = ($ergebnis_upload && isset($_POST['upload_schliesst_ab'])) ? 1 : 0;
+        $ohne_fortschritt    = isset($_POST['ohne_fortschritt']) ? 1 : 0;
 
         if ($neu) {
-            q("INSERT INTO dienstleistung (nummer,name,kategorie,beschreibung,preismodell,einheit,ek_cent,vk_cent,mwst_satz,art,wiederkehrend,baustein,aktiv,ergebnis_upload,upload_schliesst_ab)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('DL'), $name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv, $ergebnis_upload, $upload_schliesst_ab]);
+            q("INSERT INTO dienstleistung (nummer,name,kategorie,beschreibung,preismodell,einheit,ek_cent,vk_cent,mwst_satz,art,wiederkehrend,baustein,aktiv,ergebnis_upload,upload_schliesst_ab,ohne_fortschritt)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('DL'), $name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv, $ergebnis_upload, $upload_schliesst_ab, $ohne_fortschritt]);
             $id = insert_id();
         } else {
-            q("UPDATE dienstleistung SET name=?,kategorie=?,beschreibung=?,preismodell=?,einheit=?,ek_cent=?,vk_cent=?,mwst_satz=?,art=?,wiederkehrend=?,baustein=?,aktiv=?,ergebnis_upload=?,upload_schliesst_ab=? WHERE id=?",
-              [$name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv, $ergebnis_upload, $upload_schliesst_ab, (int)$id]);
+            q("UPDATE dienstleistung SET name=?,kategorie=?,beschreibung=?,preismodell=?,einheit=?,ek_cent=?,vk_cent=?,mwst_satz=?,art=?,wiederkehrend=?,baustein=?,aktiv=?,ergebnis_upload=?,upload_schliesst_ab=?,ohne_fortschritt=? WHERE id=?",
+              [$name, $kategorie, $beschreibung, $preismodell, $einheit, $ek_cent, $vk_cent, $mwst, $art, $wieder, $baustein, $aktiv, $ergebnis_upload, $upload_schliesst_ab, $ohne_fortschritt, (int)$id]);
         }
-        // Workflow-Schritte (eine je Zeile). Leer = Standard-Vorlage für den Baustein, damit es nie ohne läuft.
-        $namen = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', (string)($_POST['schritte'] ?? ''))), fn($x) => $x !== ''));
-        if (!$namen) $namen = dl_schritte_vorlage($baustein);
-        dl_katalog_schritte_setzen((int)$id, $namen);
+        // Workflow-Schritte (eine je Zeile). „Ohne Fortschritt" (Fulfillment/Lagerung) = keine Schritte.
+        // Sonst leer = Standard-Vorlage für den Baustein, damit es nie ohne läuft.
+        if ($ohne_fortschritt) {
+            dl_katalog_schritte_setzen((int)$id, []);
+        } else {
+            $namen = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', (string)($_POST['schritte'] ?? ''))), fn($x) => $x !== ''));
+            if (!$namen) $namen = dl_schritte_vorlage($baustein);
+            dl_katalog_schritte_setzen((int)$id, $namen);
+        }
+        // Kundenspezifische Preise (optional): Zeilen kunde_id[] + kp_vk[] (€) -> Cent.
+        $kpZeilen = [];
+        foreach ((array)($_POST['kp_kunde'] ?? []) as $i => $kuid) {
+            $kuid = (int)$kuid; if ($kuid <= 0) continue;
+            $vkTxt = (string)($_POST['kp_vk'][$i] ?? '');
+            if (trim($vkTxt) === '') continue;
+            $kpZeilen[] = ['kunde_id' => $kuid, 'vk_cent' => dienstleistung_cent($vkTxt)];
+        }
+        dl_kundenpreise_setzen((int)$id, $kpZeilen);
         header('Location: ?p=dienstleistung&id=' . (int)$id . '&gespeichert=1'); exit;
     }
 }
@@ -68,6 +83,9 @@ $schritteText  = implode("\n", $schritteListe);
 // Vorlagen je Baustein für das JS (fuellt leeres Feld beim Wechsel).
 $vorlagenMap = [];
 foreach (array_keys($BAUSTEINE) as $bk) $vorlagenMap[$bk] = implode("\n", dl_schritte_vorlage($bk));
+// Kundenpreise (Ausnahmen) + Kundenliste für die Auswahl.
+$kundenpreise = $neu ? [] : dl_kundenpreise((int)$id);
+$kundenListe  = all("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");
 
 render_header('dienstleistungen', $neu ? 'Neue Dienstleistung' : (string)$d['name']);
 bx_head($neu ? 'Neue Dienstleistung' : (string)$d['name'],
@@ -115,6 +133,24 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   </div>
 
   <div class="bx-panel">
+    <h2 style="margin-top:0">Kundenpreise <span class="muted" style="font-weight:400;font-size:13px">(optional – Ausnahmen vom Standard-VK)</span></h2>
+    <p class="muted" style="margin-top:0;font-size:13px">Standard ist der VK oben. Hier je Kunde einen abweichenden Preis hinterlegen – greift automatisch, sobald die Dienstleistung diesem Kunden angeboten wird.</p>
+    <div class="bx-tablewrap"><table class="bx-table" id="kpTab">
+      <thead><tr><th style="width:60%">Kunde</th><th>VK je Einheit (netto, €)</th><th></th></tr></thead>
+      <tbody>
+        <?php foreach ($kundenpreise as $kp): ?>
+        <tr>
+          <td><select name="kp_kunde[]"><option value="">– wählen –</option><?php foreach ($kundenListe as $ku): ?><option value="<?= (int)$ku['id'] ?>" <?= (int)$kp['kunde_id'] === (int)$ku['id'] ? 'selected' : '' ?>><?= h($ku['firma']) ?></option><?php endforeach; ?></select></td>
+          <td><input type="text" name="kp_vk[]" value="<?= h(dienstleistung_eur((int)$kp['vk_cent'])) ?>" style="max-width:160px" placeholder="z. B. 99,00"></td>
+          <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('tr').remove()">entfernen</button></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <div class="bx-row" style="margin-top:8px"><button type="button" class="btn btn-ghost btn-sm" onclick="kpAdd()">+ Kundenpreis</button></div>
+  </div>
+
+  <div class="bx-panel">
     <h2 style="margin-top:0">Verknüpfung &amp; intern</h2>
     <div class="bx-grid">
       <div class="bx-field"><label>Vorhandener Baustein <?= bx_hint('Zeigt auf einen Service, der schon im System existiert (z. B. Rezepturbewertung mit Auto-Rechnung) – damit wir die Logik nicht doppelt bauen.') ?></label>
@@ -132,7 +168,13 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
 
   <div class="bx-panel">
     <h2 style="margin-top:0">Ablauf &amp; Ergebnis</h2>
-    <div class="bx-field"><label>Schritte / Status <?= bx_hint('Die Fortschritts-Punkte für Aufträge dieser Dienstleistung – ein Schritt je Zeile, in Reihenfolge. Je Dienstleistungstyp eigene Punkte (z. B. Laboranalyse: Bestätigung · Probe versendet · Ergebnis; Abfüllen: Bestätigung · Mischen · Abfüllung · Abschluss).') ?></label>
+    <div class="bx-field"><label>Fortschritt</label>
+      <div class="bx-check" style="padding-top:8px">
+        <input type="checkbox" name="ohne_fortschritt" id="f_ohnefort" value="1" <?= (int)($d['ohne_fortschritt'] ?? 0) === 1 ? 'checked' : '' ?>>
+        <label for="f_ohnefort" style="margin:0">Kein Fortschritt – nur Abrechnung (z. B. Fulfillment/Lagerung; vom Kunden gebucht, keine Schritte, nur Rechnung)</label>
+      </div>
+    </div>
+    <div class="bx-field" id="f_schritte_wrap"><label>Schritte / Status <?= bx_hint('Die Fortschritts-Punkte für Aufträge dieser Dienstleistung – ein Schritt je Zeile, in Reihenfolge. Je Dienstleistungstyp eigene Punkte (z. B. Laboranalyse: Bestätigung · Probe versendet · Ergebnis; Abfüllen: Bestätigung · Mischen · Abfüllung · Abschluss).') ?></label>
       <textarea name="schritte" id="f_schritte" rows="5" placeholder="ein Schritt je Zeile"><?= h($schritteText) ?></textarea>
       <div class="muted" style="font-size:12px;margin-top:2px">Ein Schritt je Zeile. Leer lassen = Standard-Vorlage für den gewählten Baustein.</div>
     </div>
@@ -196,6 +238,21 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   function syncUp(){ if (!up || !done) return; done.disabled = !up.checked; if (!up.checked) done.checked = false; }
   if (up) up.addEventListener('change', syncUp);
   syncUp();
+  // „Kein Fortschritt" -> Schritte-Editor ausgrauen (wird beim Speichern ohnehin geleert).
+  var ohne = document.getElementById('f_ohnefort'), schrWrap = document.getElementById('f_schritte_wrap'), schr = document.getElementById('f_schritte');
+  function syncFort(){ var off = ohne && ohne.checked; if (schrWrap) schrWrap.style.opacity = off ? .4 : 1; if (schr) schr.disabled = off; }
+  if (ohne) ohne.addEventListener('change', syncFort);
+  syncFort();
 })();
+// Kundenpreis-Zeile hinzufügen (globale Funktion für onclick).
+var KP_KUNDEN_OPT = <?= json_encode('<option value="">– wählen –</option>' . implode('', array_map(fn($ku) => '<option value="' . (int)$ku['id'] . '">' . h($ku['firma']) . '</option>', $kundenListe)), JSON_UNESCAPED_UNICODE) ?>;
+function kpAdd(){
+  var tb = document.querySelector('#kpTab tbody'); if (!tb) return;
+  var tr = document.createElement('tr');
+  tr.innerHTML = '<td><select name="kp_kunde[]">' + KP_KUNDEN_OPT + '</select></td>'
+    + '<td><input type="text" name="kp_vk[]" style="max-width:160px" placeholder="z. B. 99,00"></td>'
+    + '<td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest(\'tr\').remove()">entfernen</button></td>';
+  tb.appendChild(tr);
+}
 </script>
 <?php render_footer();

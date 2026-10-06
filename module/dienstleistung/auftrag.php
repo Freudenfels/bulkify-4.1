@@ -99,7 +99,9 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
       <form method="post" style="margin:0"><input type="hidden" name="aktion" value="status"><input type="hidden" name="status" value="in_arbeit"><button class="btn btn-ghost btn-sm" type="submit">in Arbeit</button></form>
       <form method="post" style="margin:0"><input type="hidden" name="aktion" value="status"><input type="hidden" name="status" value="erledigt"><button class="btn btn-ghost btn-sm" type="submit">erledigt</button></form>
     </div>
-    <p class="muted" style="font-size:12px;margin:6px 0 0">Dieser Auftrag hat keine definierten Schritte (Dienstleistung ohne Workflow). Schritte legst du am <a href="?p=dienstleistungen">Service im Katalog</a> fest.</p>
+    <p class="muted" style="font-size:12px;margin:6px 0 0"><?= (int)($dlRow['ohne_fortschritt'] ?? 0) === 1
+        ? 'Diese Dienstleistung läuft <strong>ohne Fortschritt</strong> – nur Abrechnung (z.&nbsp;B. Fulfillment/Lagerung). Status hier setzen, Rechnung unten.'
+        : 'Dieser Auftrag hat keine definierten Schritte. Schritte legst du am <a href="?p=dienstleistungen">Service im Katalog</a> fest.' ?></p>
   <?php endif; ?>
 </div>
 

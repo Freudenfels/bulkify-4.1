@@ -18,3 +18,7 @@ Speichern → POST `aktion=save` → Redirect mit `&gespeichert=1`. Logik aus `c
 
 ## Ablauf & Ergebnis (Workflow)
 Panel „Ablauf & Ergebnis": **Schritte** (ein Schritt je Zeile = Fortschritts-Punkte der Aufträge dieser DL; leer = Baustein-Vorlage), Schalter **Endergebnis-Upload** und **Upload schließt ab** (nur aktiv, wenn Upload erlaubt). JS füllt bei Baustein-Wechsel die Schritte-Vorlage ein, solange das Feld leer ist. Speichern schreibt `dienstleistung_schritt` via `dl_katalog_schritte_setzen()` + die zwei Flags.
+
+## Kundenpreise + „ohne Fortschritt"
+- **Kundenpreise** (optional): Panel unter Preis – je Kunde ein abweichender VK (dienstleistung_kundenpreis). Standard = dienstleistung.vk_cent. dl_position_add nimmt automatisch den Kundenpreis (dl_kundenpreis) des Angebots-Kunden, sonst Standard.
+- **„Kein Fortschritt – nur Abrechnung"** (ohne_fortschritt, z. B. Fulfillment/Lagerung): Schalter im Ablauf-Block. Dann werden keine Schritte angelegt (dl_auftrag_schritte_anlegen überspringt), der DL-Auftrag hat keinen Fortschritt – nur Status + Rechnung. Portal zeigt bei leerem Track keinen Balken (portal_auftrag_track fällt für DL NIE auf Produkt-Phasen zurück).
