@@ -19,8 +19,9 @@ nur für Kunden mit `kunden.nutzt_fulfillment=1`. Andere Kunden bekommen ihre Wa
 - `produktion_fertigware_einbuchen()` vergibt bei Fulfillment-Kunden automatisch die BSKU.
 
 ## Seite
-Übersicht je Kunde: Produkt, BSKU (vergeben-Button), Bestand, Shopify-Verknüpfung (inventory_item_id speicherbar)
-+ Formular „Fertigware einbuchen". Nav-Gruppe Lager (admin) und Warenwirtschaft (Werk).
+Übersicht je Kunde: Produkt, **BSKU** (vergeben-Button), Bestand + Formular „Fertigware einbuchen". Nav-Gruppe Lager (admin) und Warenwirtschaft (Werk).
+
+**Kopplung = BSKU.** Die alte ID-Kopplung („Fulfillment-Artikel abrufen" / Spalte „Shopify-Verknüpfung" / `shopify_inventory_item_id`, Richtung B) ist **ausgeblendet** – die Zuordnung Shop-Artikel ↔ bulkify-Verkaufsartikel passiert per Dropdown auf der Fulfillment-Seite über die BSKU. Handler `iid_save`/`ff_pull` + `ff_feed_pull()` bleiben als Code, werden aber nicht mehr angezeigt.
 
 ## Offen (nächste Schritte)
 - **ds_api.php** (Token `X-DS-Token`): `GET action=lager2` (Feed: verfuegbar, shopify_inventory_item_id, bsku),

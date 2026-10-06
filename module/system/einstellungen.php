@@ -536,16 +536,9 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <button class="btn btn-ghost btn-sm" type="submit">Neuen Token erzeugen</button>
   </form>
 </div>
-<div class="bx-panel">
-  <h2>Fulfillment-Artikel abrufen <?= bx_hint('damit das Dashboard die Artikel des Versandsystems direkt zieht und du sie im Fremdlager per Auswahl verknüpfst') ?></h2>
-  <p class="muted" style="margin-top:0;font-size:13px">Basis-URL des Versandsystems (ohne Pfad), z. B. <code>https://fulfillment.bulkify.pro</code>. Der Feed <code>/bulkify_feed.php</code> wird automatisch angehängt.</p>
-  <form method="post">
-    <input type="hidden" name="aktion" value="ffurl_save">
-    <div class="bx-field" style="max-width:420px"><label>Fulfillment-Basis-URL</label><input type="text" name="ff_base_url" value="<?= $m('ff_base_url') ?>" placeholder="https://fulfillment.bulkify.pro"></div>
-    <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Speichern</button></div>
-  </form>
-  <p class="muted" style="font-size:12px;margin-top:8px">Abgerufen und verknüpft wird dann direkt im <a href="?p=lager2">Fremdlager</a> („Fulfillment-Artikel abrufen").</p>
-</div>
+<?php /* „Fulfillment-Artikel abrufen" (Richtung B, ID-Kopplung über shopify_inventory_item_id) ausgeblendet:
+         die Kopplung läuft jetzt über die BSKU (Dropdown auf der Fulfillment-Seite). ff_feed_pull()/ffurl_save
+         bleiben als Code vorhanden, falls später wieder gebraucht. */ ?>
 
 <?php elseif ($tab === 'lagerscan'):
     $scanToken = lager_scan_token();

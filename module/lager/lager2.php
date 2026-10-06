@@ -31,9 +31,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einbu
 }
 
 $produkte = lager2_produkte();
-$ffArtikel = ff_feed_cached();                 // zuletzt gezogene Fulfillment-Artikel (Richtung B)
-$ffStand   = (string) meta_get('ff_feed_at', '');
-$ffKonfig  = trim((string) meta_get('ff_base_url', '')) !== '';
 // Fulfillment-Kunden + deren Produkte (auch ohne bisherigen Bestand) für die Einbuchung
 $ffProdukte = all("SELECT p.id, p.nummer, COALESCE(NULLIF(p.kundenname,''),p.name) AS anzeigename, k.firma AS kunde
                    FROM produkt p JOIN kunden k ON k.id=p.kunde_id
@@ -47,37 +44,19 @@ bx_head('Fremdlager', $ffKunden . ' Fulfillment-Kunde(n) · ' . count($produkte)
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['eingebucht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Fertigware ins Fremdlager eingebucht.</div>';
-if (isset($_GET['ffok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['ffok'] . ' Fulfillment-Artikel abgerufen – unten je Produkt verknüpfbar.</div>';
-if (isset($_GET['fffehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Fulfillment-Abruf fehlgeschlagen: ' . h((string)$_GET['fffehler']) . '</div>';
 
 if (!$ffKunden) {
     echo '<div class="bx-panel"><div class="muted">Noch kein Kunde als Fulfillment-Kunde markiert. Im <a href="?p=kunden">Kunden</a>-Datensatz „Nutzt unser Fulfillment (Fremdlager)" setzen – dann erscheint dessen Fertigware hier.</div></div>';
     render_footer(); return;
 }
 ?>
-<?php
-// Fulfillment-Artikel nach inventory_item_id indizieren (für Anzeige) + je Kunde gruppieren (für Auswahl-Dropdown).
-$ffById = []; $ffByKunde = [];
-foreach ($ffArtikel as $a) {
-    $iid = trim((string)($a['inventory_item_id'] ?? '')); if ($iid === '') continue;
-    $ffById[$iid] = $a;
-    $ffByKunde[mb_strtolower((string)($a['kunde'] ?? ''))][] = $a;
-}
-?>
 <div class="bx-panel">
-  <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
-    <h2 style="margin:0">Fertigwaren-Bestand</h2>
-    <form method="post" style="margin:0">
-      <input type="hidden" name="aktion" value="ff_pull">
-      <button class="btn btn-ghost btn-sm" type="submit"<?= $ffKonfig ? '' : ' disabled title="Erst die Fulfillment-URL in den Einstellungen hinterlegen"' ?>>Fulfillment-Artikel abrufen</button>
-      <?php if ($ffStand): ?><span class="muted" style="font-size:12px;margin-left:8px">zuletzt: <?= h(fmt_zeit($ffStand)) ?> · <?= count($ffArtikel) ?> Artikel</span><?php endif; ?>
-    </form>
-  </div>
-  <p class="muted" style="margin:8px 0 0;font-size:13px">Ware der Fulfillment-Kunden. BSKU = interne Nummer fürs Kisten-Etikett; die Shopify-Verknüpfung (inventory_item_id) ist der führende Schlüssel zum Versandsystem<?= $ffArtikel ? ' – unten per Auswahl verknüpfbar' : '' ?>.</p>
+  <h2 style="margin:0 0 4px">Fertigwaren-Bestand</h2>
+  <p class="muted" style="margin:0;font-size:13px">Ware der Fulfillment-Kunden. Die <strong>BSKU</strong> ist die Brücke zum Versandsystem (dort per Dropdown dem Shop-Artikel zugeordnet) und dient als interne Nummer fürs Kisten-Etikett.</p>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Kunde</th><th>Produkt (Etikettenname)</th><th>BSKU</th><th class="bx-num">Bestand (frei)</th><th>Shopify-Verknüpfung</th></tr></thead>
+    <thead><tr><th>Kunde</th><th>Produkt (Etikettenname)</th><th>BSKU</th><th class="bx-num">Bestand (frei)</th></tr></thead>
     <tbody>
-      <?php if (!$produkte): ?><tr><td colspan="5" class="muted">Noch keine Fertigware eingebucht. Unten „Fertigware einbuchen" nutzen oder einen Produktionsauftrag abschließen.</td></tr><?php endif; ?>
+      <?php if (!$produkte): ?><tr><td colspan="4" class="muted">Noch keine Fertigware eingebucht. Unten „Fertigware einbuchen" nutzen oder einen Produktionsauftrag abschließen.</td></tr><?php endif; ?>
       <?php foreach ($produkte as $r): ?>
         <tr>
           <td><?= h($r['kunde']) ?></td>
@@ -87,24 +66,6 @@ foreach ($ffArtikel as $a) {
             <?php else: ?><button class="btn btn-ghost btn-sm" type="submit" form="bsku<?= (int)$r['item_id'] ?>">BSKU vergeben</button><?php endif; ?>
           </td>
           <td class="bx-num"><strong><?= $mfmt($r['bestand']) ?></strong> Stück</td>
-          <td>
-            <?php $cur = trim((string)$r['shopify_inventory_item_id']); if ($ffArtikel):
-                // Auswahl aus den abgerufenen Fulfillment-Artikeln (bevorzugt die des gleichen Kunden, sonst alle)
-                $kand = $ffByKunde[mb_strtolower((string)$r['kunde'])] ?? $ffArtikel;
-            ?>
-              <select name="inventory_item_id" form="iid<?= (int)$r['item_id'] ?>" style="max-width:230px">
-                <option value="">– nicht verknüpft –</option>
-                <?php $found = false; foreach ($kand as $a): $iid = trim((string)($a['inventory_item_id'] ?? '')); if ($iid === '') continue; if ($iid === $cur) $found = true; ?>
-                  <option value="<?= h($iid) ?>" <?= $iid === $cur ? 'selected' : '' ?>><?= h(($a['titel'] ?: $a['sku']) . ($a['sku'] ? ' · ' . $a['sku'] : '')) ?></option>
-                <?php endforeach; ?>
-                <?php if ($cur !== '' && !$found): ?><option value="<?= h($cur) ?>" selected><?= h($cur) ?> (nicht im Feed)</option><?php endif; ?>
-              </select>
-            <?php else: ?>
-              <input type="text" name="inventory_item_id" form="iid<?= (int)$r['item_id'] ?>" value="<?= h($cur) ?>" placeholder="inventory_item_id" style="max-width:180px">
-            <?php endif; ?>
-            <button class="btn btn-ghost btn-sm" type="submit" form="iid<?= (int)$r['item_id'] ?>">Speichern</button>
-            <?php if ($cur !== '' && isset($ffById[$cur])): ?><div class="muted" style="font-size:11px">verknüpft: <?= h($ffById[$cur]['titel'] ?? '') ?><?= !empty($ffById[$cur]['shop']) ? ' · ' . h($ffById[$cur]['shop']) : '' ?></div><?php endif; ?>
-          </td>
         </tr>
       <?php endforeach; ?>
     </tbody>
@@ -113,7 +74,6 @@ foreach ($ffArtikel as $a) {
 
 <?php foreach ($produkte as $r): ?>
   <form id="bsku<?= (int)$r['item_id'] ?>" method="post" style="display:none"><input type="hidden" name="aktion" value="bsku"><input type="hidden" name="item_id" value="<?= (int)$r['item_id'] ?>"></form>
-  <form id="iid<?= (int)$r['item_id'] ?>" method="post" style="display:none"><input type="hidden" name="aktion" value="iid_save"><input type="hidden" name="item_id" value="<?= (int)$r['item_id'] ?>"></form>
 <?php endforeach; ?>
 
 <form method="post" class="bx-form" style="margin-top:16px">
