@@ -7139,6 +7139,20 @@ function rezeptur_finden_oder_anlegen(string $name, string $form, array $zutaten
 
 // Kunde per Name (und optional Kundennummer) finden oder neu anlegen. Rückgabe ['id'=>…, 'neu'=>bool].
 // Für den Angebotsscan: ist der Kunde im Angebot noch nicht im System, wird er angelegt.
+// Kunde tolerant finden (für Importe/Scans). Reihenfolge: exakte Nummer → exakte Firma → Kunde-Firma
+// ENTHÄLT den gelesenen Namen (gelesen „Pure Health" → Kunde „Pure Health Alliance") → gelesener Name
+// enthält eine Kunde-Firma (gelesen „Pure Health Alliance GmbH" → Kunde „Pure Health"). Nur ein VORSCHLAG –
+// der Import-Prüfschritt lässt den Kunden ändern. LIKE mit ESCAPE '=' (Backslash crasht die Live-DB).
+function kunde_finden_fuzzy(string $name, string $nr = ''): ?array {
+    $name = trim($name); $nr = trim($nr);
+    if ($nr !== '') { $k = one("SELECT id, firma, kundennummer FROM kunden WHERE kundennummer=? LIMIT 1", [$nr]); if ($k) return $k; }
+    if ($name === '') return null;
+    $k = one("SELECT id, firma, kundennummer FROM kunden WHERE LOWER(TRIM(firma))=LOWER(TRIM(?)) LIMIT 1", [$name]); if ($k) return $k;
+    $esc = str_replace(['=', '%', '_'], ['==', '=%', '=_'], $name);
+    $k = one("SELECT id, firma, kundennummer FROM kunden WHERE LOWER(firma) LIKE LOWER(?) ESCAPE '=' ORDER BY CHAR_LENGTH(firma) ASC LIMIT 1", ['%' . $esc . '%']); if ($k) return $k;
+    $k = one("SELECT id, firma, kundennummer FROM kunden WHERE CHAR_LENGTH(firma) >= 4 AND LOWER(?) LIKE CONCAT('%', LOWER(firma), '%') ORDER BY CHAR_LENGTH(firma) DESC LIMIT 1", [$name]); if ($k) return $k;
+    return null;
+}
 function kunde_finden_oder_anlegen(string $firma, string $nr = ''): array {
     $firma = trim($firma); $nr = trim($nr);
     if ($nr !== '') {

@@ -153,9 +153,7 @@ if ($schritt === 'match' && !empty($_SESSION['angebot_import'])) {
     $staffeln    = (array)($d['staffeln'] ?? []); if (!$staffeln) $staffeln = [['menge' => (int)($d['menge'] ?? 0), 'vk_stueck' => (float)($d['vk_stueck'] ?? 0)]];
 
     // Kunde-Match.
-    $kMatch = null;
-    if (trim((string)($d['kunde_nr'] ?? '')) !== '')  $kMatch = one("SELECT id, firma FROM kunden WHERE kundennummer=? LIMIT 1", [$d['kunde_nr']]);
-    if (!$kMatch && trim((string)($d['kunde_name'] ?? '')) !== '') $kMatch = one("SELECT id, firma FROM kunden WHERE LOWER(firma)=LOWER(?) LIMIT 1", [$d['kunde_name']]);
+    $kMatch = kunde_finden_fuzzy((string)($d['kunde_name'] ?? ''), (string)($d['kunde_nr'] ?? ''));
     $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
 
     // Rezeptur-Match + Glas-Vorschlag.

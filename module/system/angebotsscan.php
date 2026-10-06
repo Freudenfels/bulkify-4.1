@@ -106,9 +106,7 @@ if ($schritt === 'match' && !empty($_SESSION['angebotsscan'])) {
     $sumMg = 0.0; foreach ($zutaten as $z) $sumMg += (float)($z['menge_mg'] ?? 0);
     // Rezeptur-Dedup (Anzeige) + Kunden-Match.
     $rezExist = one("SELECT id, nummer FROM rezeptur WHERE name=? ORDER BY (kunde_id IS NULL) DESC, id LIMIT 1", [$d['produkt_name']]);
-    $kMatch = null;
-    if ($d['kunde_nr'] !== '') $kMatch = one("SELECT id, firma, kundennummer FROM kunden WHERE kundennummer=? LIMIT 1", [$d['kunde_nr']]);
-    if (!$kMatch && $d['kunde_name'] !== '') $kMatch = one("SELECT id, firma, kundennummer FROM kunden WHERE LOWER(firma)=LOWER(?) LIMIT 1", [$d['kunde_name']]);
+    $kMatch = kunde_finden_fuzzy((string)$d['kunde_name'], (string)$d['kunde_nr']);
     $kunden = all("SELECT id, firma, kundennummer FROM kunden ORDER BY firma");
 
     bx_head('Angebotsscan – prüfen & zuordnen', 'KI-Ergebnis kontrollieren, Kunde zuordnen, Staffeln korrigieren – dann speichern', bx_btn('Abbrechen', '?p=angebotsscan', 'ghost'));
