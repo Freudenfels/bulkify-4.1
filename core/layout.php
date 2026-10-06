@@ -137,7 +137,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     echo "<aside class=\"bx-side\"><div class=\"bx-brand\"><img src=\"assets/bulkify-logo-white.png\" alt=\"$marke\" class=\"bx-logo\"><span class=\"bx-ver\">" . h($verLabel) . "</span></div><nav>";
     // Einklappbare Menü-Gruppen: Kopf = Umschalter, Items im Wrapper; Zustand je Gruppe in localStorage.
     echo "<style>.bx-navgroup{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}"
-       . ".bx-navchev{font-size:15px;line-height:1;opacity:.85;transition:transform .15s;margin-left:8px;display:inline-block}"
+       . ".bx-navchev{font-size:12px;line-height:1;opacity:.85;transition:transform .15s;margin-left:8px;display:inline-block}"
        . ".bx-navgroup.collapsed .bx-navchev{transform:rotate(-90deg)}"
        . ".bx-navitems.collapsed{display:none}</style>";
     $darf = function_exists('route_erlaubt');   // Auth aktiv?

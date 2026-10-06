@@ -58,7 +58,7 @@ a:hover{text-decoration:underline}
 .bx-side{width:var(--side-w);flex:0 0 var(--side-w);background:var(--dunkelgruen);color:#dfe7dc;padding:var(--sp-4) 0;position:sticky;top:0;height:100vh;overflow:auto}
 .bx-brand{font-size:var(--fs-lg);padding:var(--sp-1) var(--sp-5) var(--sp-4);color:#fff}
 .bx-brand .bx-ver{color:var(--lime)}
-.bx-navgroup{font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;color:#cde0c6;font-weight:600;padding:6px 10px;margin:9px 10px 3px;background:rgba(0,0,0,.22);border:1px solid rgba(0,0,0,.38);border-radius:6px}
+.bx-navgroup{font-size:var(--fs-sm);letter-spacing:.06em;text-transform:uppercase;color:#cde0c6;font-weight:600;padding:6px 10px;margin:9px 10px 3px;background:rgba(0,0,0,.22);border:1px solid rgba(0,0,0,.38);border-radius:6px}
 .bx-side nav a{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px var(--sp-5);color:#dfe7dc;white-space:nowrap}
 .bx-navbadge{flex:0 0 auto;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--lime);color:#10210f;font-size:11px;font-weight:600;line-height:18px;text-align:center}
 .bx-side nav a.on .bx-navbadge{background:#fff;color:var(--gruen)}
