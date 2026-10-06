@@ -523,7 +523,7 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
   <?php if (isset($_GET['statusok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Status aktualisiert – der Kunde sieht es sofort.</div><?php endif; ?>
   <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
     <span class="k muted">Status setzen</span>
-    <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:0">
+    <form method="post" style="display:flex;flex-wrap:nowrap;gap:8px;align-items:center;margin:0">
       <input type="hidden" name="aktion" value="status_schnell">
       <select name="status" style="min-width:170px">
         <?php foreach ($stKurz as $k => $l): ?><option value="<?= $k ?>" <?= (string)$a['status'] === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?>
