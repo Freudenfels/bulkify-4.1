@@ -131,6 +131,8 @@ foreach ($rows as $r) { $sumOffen += (float)$r['offen']; $sumUe += (float)$r['ue
 <form class="bx-listbar" method="get">
   <span class="muted" style="align-self:center">Offene Posten je Kunde</span>
   <span style="flex:1"></span>
+  <a class="btn btn-ghost btn-sm" href="?p=op_debitoren">OP-Liste je Rechnung</a>
+  <a class="btn btn-ghost btn-sm" href="?p=mahnlauf">Mahnlauf</a>
   <a class="btn btn-ghost btn-sm" href="?p=beleg_export&art=op">OP-Liste als CSV</a>
 </form>
 <div class="bx-tablewrap"><table class="bx-table">
@@ -163,6 +165,7 @@ $verb = kr_op_summe(); $verbUe = kr_op_ueberfaellig_summe();
 <form class="bx-listbar" method="get">
   <span class="muted" style="align-self:center">Wir schulden Lieferanten</span>
   <span style="flex:1"></span>
+  <a class="btn btn-ghost btn-sm" href="?p=op_kreditoren">OP-Liste je Rechnung</a>
   <a class="btn btn-ghost btn-sm" href="?p=beleg_export&art=vop">Verbindlichkeiten als CSV</a>
   <a class="btn btn-primary btn-sm" href="?p=lief_rechnung_neu">+ Eingangsrechnung erfassen</a>
 </form>
