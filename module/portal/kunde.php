@@ -43,6 +43,23 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     header('Location: ?p=portal&token=' . (string)($k['portal_token'] ?? '') . '&setupfehler=' . urlencode($err)); exit;
 }
 
+// Mein Konto: Stammdaten + Adressen selbst pflegen (Kunde). Speichert auf die kunden-Tabelle
+// (Haupt-, Rechnungs-, Lieferadresse). E-Mail/Passwort laufen separat über konto_einrichten.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'konto_speichern') {
+    $g  = fn($f) => trim((string)($_POST[$f] ?? ''));
+    $ln = fn($f, $def = '') => strtoupper(substr($g($f) ?: $def, 0, 2)) ?: null;
+    q("UPDATE kunden SET ansprechpartner=?, telefon=?, strasse=?, hausnummer=?, plz=?, ort=?, land=?, ust_id=?,
+          rechnung_firma=?, rechnung_strasse=?, rechnung_hausnummer=?, rechnung_plz=?, rechnung_ort=?, rechnung_land=?,
+          liefer_strasse=?, liefer_hausnummer=?, liefer_plz=?, liefer_ort=?, liefer_land=?
+       WHERE id=?",
+      [$g('ansprechpartner') ?: null, $g('telefon') ?: null, $g('strasse') ?: null, $g('hausnummer') ?: null, $g('plz') ?: null, $g('ort') ?: null, $ln('land', 'DE'), $g('ust_id') ?: null,
+       $g('rechnung_firma') ?: null, $g('rechnung_strasse') ?: null, $g('rechnung_hausnummer') ?: null, $g('rechnung_plz') ?: null, $g('rechnung_ort') ?: null, $ln('rechnung_land'),
+       $g('liefer_strasse') ?: null, $g('liefer_hausnummer') ?: null, $g('liefer_plz') ?: null, $g('liefer_ort') ?: null, $ln('liefer_land'),
+       (int)$k['id']]);
+    log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Stammdaten/Adresse im Portal aktualisiert.', 'kunde');
+    header('Location: ?p=portal&token=' . $token . '&v=konto&saved=1'); exit;
+}
+
 // Angebot bestätigen (Kundenaktion) -> löst Auftrag + Rechnung aus
 // Angebot aus POSITIONEN annehmen (kein Produkt/keine Matrix) – hier entsteht das Produkt.
 // Verbindliche Annahme: ohne gesetzten Haken und ohne Namen passiert nichts. Der Name gilt als
@@ -1114,11 +1131,14 @@ $L['etiketten'] = 'Etiketten';
 $L['labortest'] = 'Labortest';
 // „Mein Lager": nur für Fulfillment-Kunden (Ware liegt intern im Fremdlager Lager 2). Kundensicht heißt nur „Mein Lager".
 if (!empty($k['nutzt_fulfillment'])) $L['fremdprodukte'] = 'Mein Lager';
+// Mein Konto: eigene Stammdaten + Adressen pflegen (dauerhafter Menüpunkt).
+$L['konto'] = 'Mein Konto';
 $NAVGROUPS = [
     ''          => ['start'],
     'Katalog'   => ['rezepturen', 'produkte', 'rohstoffe'],
     'Anfragen'  => ['meine_anfragen', 'anfrage', 'prodanfrage', 'rohanfrage', 'dienstleistung'],
     'Vorgänge'  => ['kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten', 'labortest', 'fremdprodukte'],
+    'Konto'     => ['konto'],
 ];
 // Detailansichten (kein Menüpunkt) – gültig je nach Freischaltung; hebt den Katalog-Punkt hervor
 $detailParent = [];
@@ -3987,6 +4007,57 @@ portal_head('Kundenportal · ' . $k['firma']);
       </tbody>
     </table></div>
   </div>
+<?php elseif ($view === 'konto'):
+  $kv = fn($f) => h((string)($k[$f] ?? ''));
+?>
+  <h1 style="margin-bottom:4px">Mein Konto</h1>
+  <p class="bx-sub" style="margin:0 0 14px">Ihre Stammdaten und Adressen. Diese verwenden wir für Angebote, Rechnungen und den Versand.</p>
+  <?php if (isset($_GET['saved'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div><?php endif; ?>
+  <form method="post">
+    <input type="hidden" name="aktion" value="konto_speichern">
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Kontakt</h2>
+      <div class="bx-grid">
+        <div class="bx-field"><label>Firma</label><input type="text" value="<?= $kv('firma') ?>" disabled></div>
+        <div class="bx-field"><label>Ansprechpartner</label><input type="text" name="ansprechpartner" value="<?= $kv('ansprechpartner') ?>"></div>
+        <div class="bx-field"><label>Telefon</label><input type="text" name="telefon" value="<?= $kv('telefon') ?>"></div>
+        <div class="bx-field"><label>E-Mail (Login)</label><input type="text" value="<?= $kv('email') ?>" disabled><div class="muted" style="font-size:12px;margin-top:4px">E-Mail/Passwort ändern Sie über den Zugang (Abmelden → Konto einrichten) oder lassen Sie es uns wissen.</div></div>
+      </div>
+    </div>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Hauptadresse</h2>
+      <div class="bx-grid">
+        <div class="bx-field" style="grid-column:span 2"><label>Straße</label><input type="text" name="strasse" value="<?= $kv('strasse') ?>"></div>
+        <div class="bx-field"><label>Hausnummer</label><input type="text" name="hausnummer" value="<?= $kv('hausnummer') ?>"></div>
+        <div class="bx-field"><label>PLZ</label><input type="text" name="plz" value="<?= $kv('plz') ?>"></div>
+        <div class="bx-field"><label>Ort</label><input type="text" name="ort" value="<?= $kv('ort') ?>"></div>
+        <div class="bx-field"><label>Land (ISO, z. B. DE)</label><input type="text" name="land" maxlength="2" value="<?= $kv('land') ?: 'DE' ?>" style="max-width:100px"></div>
+        <div class="bx-field"><label>USt-IdNr. (optional)</label><input type="text" name="ust_id" value="<?= $kv('ust_id') ?>"></div>
+      </div>
+    </div>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Rechnungsadresse <span class="muted" style="font-weight:400;font-size:13px">(nur falls abweichend)</span></h2>
+      <div class="bx-grid">
+        <div class="bx-field" style="grid-column:span 2"><label>Firma / Name</label><input type="text" name="rechnung_firma" value="<?= $kv('rechnung_firma') ?>"></div>
+        <div class="bx-field" style="grid-column:span 2"><label>Straße</label><input type="text" name="rechnung_strasse" value="<?= $kv('rechnung_strasse') ?>"></div>
+        <div class="bx-field"><label>Hausnummer</label><input type="text" name="rechnung_hausnummer" value="<?= $kv('rechnung_hausnummer') ?>"></div>
+        <div class="bx-field"><label>PLZ</label><input type="text" name="rechnung_plz" value="<?= $kv('rechnung_plz') ?>"></div>
+        <div class="bx-field"><label>Ort</label><input type="text" name="rechnung_ort" value="<?= $kv('rechnung_ort') ?>"></div>
+        <div class="bx-field"><label>Land (ISO)</label><input type="text" name="rechnung_land" maxlength="2" value="<?= $kv('rechnung_land') ?>" style="max-width:100px"></div>
+      </div>
+    </div>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Lieferadresse <span class="muted" style="font-weight:400;font-size:13px">(nur falls abweichend)</span></h2>
+      <div class="bx-grid">
+        <div class="bx-field" style="grid-column:span 2"><label>Straße</label><input type="text" name="liefer_strasse" value="<?= $kv('liefer_strasse') ?>"></div>
+        <div class="bx-field"><label>Hausnummer</label><input type="text" name="liefer_hausnummer" value="<?= $kv('liefer_hausnummer') ?>"></div>
+        <div class="bx-field"><label>PLZ</label><input type="text" name="liefer_plz" value="<?= $kv('liefer_plz') ?>"></div>
+        <div class="bx-field"><label>Ort</label><input type="text" name="liefer_ort" value="<?= $kv('liefer_ort') ?>"></div>
+        <div class="bx-field"><label>Land (ISO)</label><input type="text" name="liefer_land" maxlength="2" value="<?= $kv('liefer_land') ?>" style="max-width:100px"></div>
+      </div>
+    </div>
+    <div class="bx-row" style="margin-top:14px"><button class="btn btn-primary" type="submit">Speichern</button></div>
+  </form>
 <?php endif; ?>
   </main>
 </div>

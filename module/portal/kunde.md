@@ -212,3 +212,6 @@ Zutaten in der Rezeptur-Ansicht verlinken auf das Rohstoff-Infoblatt (`?view=roh
 
 ## Roter Zähler „Etiketten" im Portal-Menü (2026-10-06)
 Der Menüpunkt **Etiketten** zeigt einen **roten** Zähler (`.pt-badge-rot`) = Anzahl aktiver Bestellungen **ohne hochgeladenes Etikett-Design** (`$etikettFehltAnzahl`: auftrag.kunde_id, status NOT IN versendet/storniert, kein `dokument` typ='etikett'). Dieselbe Bedingung wie die „Etikett fehlt"-Liste in der Etiketten-Ansicht – der Zähler entspricht also der Anzahl der Zeilen mit „Etikett hochladen". Rot statt grün signalisiert Handlungsbedarf beim Kunden (`$navBadgeRot['etiketten']`). Andere Zähler bleiben grün (lime).
+
+## Mein Konto (v=konto)
+Dauerhafter Menüpunkt „Mein Konto" (Gruppe Konto). Der Kunde pflegt hier selbst seine **Stammdaten + Adressen** (auf der kunden-Tabelle): Ansprechpartner/Telefon, Hauptadresse (Straße/Hausnr/PLZ/Ort/Land/USt-IdNr.), Rechnungs- und Lieferadresse (nur falls abweichend). Firma + E-Mail sind read-only (E-Mail/Passwort laufen über konto_einrichten). POST `aktion=konto_speichern` -> UPDATE kunden, log_aktivitaet. Mehrere Lieferadressen (Adressbuch) sind noch nicht gebaut (bräuchte eigene Tabelle).
