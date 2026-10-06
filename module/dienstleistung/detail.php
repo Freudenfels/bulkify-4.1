@@ -59,13 +59,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'save'
             if (!$namen) $namen = dl_schritte_vorlage($baustein);
             dl_katalog_schritte_setzen((int)$id, $namen);
         }
-        // Kundenspezifische Preise (optional): Zeilen kunde_id[] + kp_vk[] (€) -> Cent.
+        // Kundenpreis-Staffeln (optional): Zeilen kunde_id[] + kp_menge[] (ab Menge) + kp_vk[] (€).
         $kpZeilen = [];
         foreach ((array)($_POST['kp_kunde'] ?? []) as $i => $kuid) {
             $kuid = (int)$kuid; if ($kuid <= 0) continue;
             $vkTxt = (string)($_POST['kp_vk'][$i] ?? '');
             if (trim($vkTxt) === '') continue;
-            $kpZeilen[] = ['kunde_id' => $kuid, 'vk_cent' => dienstleistung_cent($vkTxt)];
+            $kpZeilen[] = ['kunde_id' => $kuid, 'menge_ab' => max(1, (int)($_POST['kp_menge'][$i] ?? 1)), 'vk_cent' => dienstleistung_cent($vkTxt)];
         }
         dl_kundenpreise_setzen((int)$id, $kpZeilen);
         header('Location: ?p=dienstleistung&id=' . (int)$id . '&gespeichert=1'); exit;
@@ -133,21 +133,22 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   </div>
 
   <div class="bx-panel">
-    <h2 style="margin-top:0">Kundenpreise <span class="muted" style="font-weight:400;font-size:13px">(optional – Ausnahmen vom Standard-VK)</span></h2>
-    <p class="muted" style="margin-top:0;font-size:13px">Standard ist der VK oben. Hier je Kunde einen abweichenden Preis hinterlegen – greift automatisch, sobald die Dienstleistung diesem Kunden angeboten wird.</p>
+    <h2 style="margin-top:0">Kundenpreise <span class="muted" style="font-weight:400;font-size:13px">(optional – Ausnahmen vom Standard-VK, mit Mengenstaffel)</span></h2>
+    <p class="muted" style="margin-top:0;font-size:13px">Standard ist der VK oben. Hier je Kunde einen abweichenden Preis hinterlegen – optional mehrere Zeilen als <strong>Mengenstaffel</strong> („ab Menge"). Greift automatisch, sobald die Dienstleistung diesem Kunden angeboten wird (passende Staffel nach Menge).</p>
     <div class="bx-tablewrap"><table class="bx-table" id="kpTab">
-      <thead><tr><th style="width:60%">Kunde</th><th>VK je Einheit (netto, €)</th><th></th></tr></thead>
+      <thead><tr><th style="width:50%">Kunde</th><th>ab Menge</th><th>VK je Einheit (netto, €)</th><th></th></tr></thead>
       <tbody>
         <?php foreach ($kundenpreise as $kp): ?>
         <tr>
           <td><select name="kp_kunde[]"><option value="">– wählen –</option><?php foreach ($kundenListe as $ku): ?><option value="<?= (int)$ku['id'] ?>" <?= (int)$kp['kunde_id'] === (int)$ku['id'] ? 'selected' : '' ?>><?= h($ku['firma']) ?></option><?php endforeach; ?></select></td>
+          <td><input type="number" name="kp_menge[]" min="1" value="<?= (int)($kp['menge_ab'] ?? 1) ?>" style="max-width:110px"></td>
           <td><input type="text" name="kp_vk[]" value="<?= h(dienstleistung_eur((int)$kp['vk_cent'])) ?>" style="max-width:160px" placeholder="z. B. 99,00"></td>
           <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('tr').remove()">entfernen</button></td>
         </tr>
         <?php endforeach; ?>
       </tbody>
     </table></div>
-    <div class="bx-row" style="margin-top:8px"><button type="button" class="btn btn-ghost btn-sm" onclick="kpAdd()">+ Kundenpreis</button></div>
+    <div class="bx-row" style="margin-top:8px"><button type="button" class="btn btn-ghost btn-sm" onclick="kpAdd()">+ Preis / Staffel</button></div>
   </div>
 
   <div class="bx-panel">
@@ -250,6 +251,7 @@ function kpAdd(){
   var tb = document.querySelector('#kpTab tbody'); if (!tb) return;
   var tr = document.createElement('tr');
   tr.innerHTML = '<td><select name="kp_kunde[]">' + KP_KUNDEN_OPT + '</select></td>'
+    + '<td><input type="number" name="kp_menge[]" min="1" value="1" style="max-width:110px"></td>'
     + '<td><input type="text" name="kp_vk[]" style="max-width:160px" placeholder="z. B. 99,00"></td>'
     + '<td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest(\'tr\').remove()">entfernen</button></td>';
   tb.appendChild(tr);

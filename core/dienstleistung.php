@@ -115,14 +115,24 @@ function dienstleistung_schema(): void {
     ensure_column('dienstleistung', 'ergebnis_upload',     "TINYINT(1) NOT NULL DEFAULT 0"); // Upload eines Endergebnis-Dokuments erlaubt
     ensure_column('dienstleistung', 'upload_schliesst_ab', "TINYINT(1) NOT NULL DEFAULT 0"); // Upload setzt den Auftrag auf erledigt
     ensure_column('dienstleistung', 'ohne_fortschritt',    "TINYINT(1) NOT NULL DEFAULT 0"); // kein Workflow – nur Abrechnung (z. B. Fulfillment/Lagerung)
-    // Kundenspezifische Preise je Service (optional): Standard = dienstleistung.vk_cent, Ausnahmen hier.
+    // Kundenspezifische Preise je Service (optional) MIT Mengenstaffel: Standard = dienstleistung.vk_cent,
+    // Ausnahmen je Kunde + ab-Menge hier (menge_ab = ab wie vielen Einheiten dieser Preis gilt).
     $pdo->exec("CREATE TABLE IF NOT EXISTS dienstleistung_kundenpreis (
         id INT AUTO_INCREMENT PRIMARY KEY,
         dienstleistung_id INT NOT NULL,
         kunde_id INT NOT NULL,
+        menge_ab INT NOT NULL DEFAULT 1,
         vk_cent INT NOT NULL DEFAULT 0,
-        UNIQUE KEY uniq_dl_kunde (dienstleistung_id, kunde_id)
+        UNIQUE KEY uniq_dl_kunde_menge (dienstleistung_id, kunde_id, menge_ab)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('dienstleistung_kundenpreis', 'menge_ab', "INT NOT NULL DEFAULT 1");
+    // Alten 2-Spalten-Unique (uniq_dl_kunde) auf den 3-Spalten-Unique migrieren (best-effort, idempotent).
+    try {
+        if ((int) scalar("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='dienstleistung_kundenpreis' AND index_name='uniq_dl_kunde'"))
+            $pdo->exec("ALTER TABLE dienstleistung_kundenpreis DROP INDEX uniq_dl_kunde");
+        if (!(int) scalar("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='dienstleistung_kundenpreis' AND index_name='uniq_dl_kunde_menge'"))
+            $pdo->exec("ALTER TABLE dienstleistung_kundenpreis ADD UNIQUE KEY uniq_dl_kunde_menge (dienstleistung_id, kunde_id, menge_ab)");
+    } catch (Throwable $e) { /* best-effort */ }
     $pdo->exec("CREATE TABLE IF NOT EXISTS dienstleistung_schritt (
         id INT AUTO_INCREMENT PRIMARY KEY,
         dienstleistung_id INT NOT NULL,
@@ -171,31 +181,36 @@ function dl_katalog_schritte_setzen(int $dl_id, array $namen): void {
         q("INSERT INTO dienstleistung_schritt (dienstleistung_id,name,sort) VALUES (?,?,?)", [$dl_id, mb_substr($n, 0, 120), $sort++]);
     }
 }
-// Kundenspezifische Preise eines Service (für die Katalog-UI).
+// Kundenspezifische Preis-Staffeln eines Service (für die Katalog-UI). Je Kunde + ab-Menge eine Zeile.
 function dl_kundenpreise(int $dl_id): array {
-    return all("SELECT kp.id, kp.kunde_id, kp.vk_cent, k.firma
+    return all("SELECT kp.id, kp.kunde_id, kp.menge_ab, kp.vk_cent, k.firma
                 FROM dienstleistung_kundenpreis kp LEFT JOIN kunden k ON k.id=kp.kunde_id
-                WHERE kp.dienstleistung_id=? ORDER BY k.firma", [$dl_id]);
+                WHERE kp.dienstleistung_id=? ORDER BY k.firma, kp.menge_ab", [$dl_id]);
 }
-// VK (Cent) für einen Kunden: kundenspezifisch, sonst Standard-VK des Service. null = Service unbekannt.
-function dl_kundenpreis(int $dl_id, ?int $kunde_id): ?int {
+// VK (Cent) für einen Kunden bei gegebener Menge: passende Staffel (menge_ab<=menge, höchste), sonst die
+// kleinste Staffel des Kunden, sonst Standard-VK des Service. null = Service unbekannt.
+function dl_kundenpreis(int $dl_id, ?int $kunde_id, int $menge = 1): ?int {
     if ($dl_id <= 0) return null;
     if ($kunde_id) {
-        $kp = scalar("SELECT vk_cent FROM dienstleistung_kundenpreis WHERE dienstleistung_id=? AND kunde_id=?", [$dl_id, $kunde_id]);
+        $m = max(1, $menge);
+        $kp = scalar("SELECT vk_cent FROM dienstleistung_kundenpreis WHERE dienstleistung_id=? AND kunde_id=? AND menge_ab<=? ORDER BY menge_ab DESC LIMIT 1", [$dl_id, $kunde_id, $m]);
         if ($kp !== null && $kp !== false) return (int)$kp;
+        $kp2 = scalar("SELECT vk_cent FROM dienstleistung_kundenpreis WHERE dienstleistung_id=? AND kunde_id=? ORDER BY menge_ab ASC LIMIT 1", [$dl_id, $kunde_id]);
+        if ($kp2 !== null && $kp2 !== false) return (int)$kp2;
     }
     $std = scalar("SELECT vk_cent FROM dienstleistung WHERE id=?", [$dl_id]);
     return $std === null || $std === false ? null : (int)$std;
 }
-// Kundenpreise ersetzen: $zeilen = [['kunde_id'=>int,'vk_cent'=>int], …]. Doppelte/ungültige übersprungen.
+// Kundenpreis-Staffeln ersetzen: $zeilen = [['kunde_id'=>int,'menge_ab'=>int,'vk_cent'=>int], …].
+// Doppelte (kunde+menge_ab) und ungültige übersprungen.
 function dl_kundenpreise_setzen(int $dl_id, array $zeilen): void {
     q("DELETE FROM dienstleistung_kundenpreis WHERE dienstleistung_id=?", [$dl_id]);
     $seen = [];
     foreach ($zeilen as $z) {
-        $kid = (int)($z['kunde_id'] ?? 0); $vk = (int)($z['vk_cent'] ?? -1);
-        if ($kid <= 0 || $vk < 0 || isset($seen[$kid])) continue;
-        $seen[$kid] = true;
-        q("INSERT INTO dienstleistung_kundenpreis (dienstleistung_id,kunde_id,vk_cent) VALUES (?,?,?)", [$dl_id, $kid, $vk]);
+        $kid = (int)($z['kunde_id'] ?? 0); $vk = (int)($z['vk_cent'] ?? -1); $mab = max(1, (int)($z['menge_ab'] ?? 1));
+        if ($kid <= 0 || $vk < 0) continue;
+        $key = $kid . ':' . $mab; if (isset($seen[$key])) continue; $seen[$key] = true;
+        q("INSERT INTO dienstleistung_kundenpreis (dienstleistung_id,kunde_id,menge_ab,vk_cent) VALUES (?,?,?,?)", [$dl_id, $kid, $mab, $vk]);
     }
 }
 // Schritte eines DL-Auftrags einmalig aus dem Service materialisieren (idempotent). Service „ohne_fortschritt"
@@ -315,7 +330,7 @@ function dl_position_add(int $angebot_id, int $dienstleistung_id, float $menge =
     // Preis: explizit vorgegeben – sonst kundenspezifischer Preis (falls hinterlegt), sonst Standard-VK.
     if ($preis_cent === null) {
         $kid = (int) scalar("SELECT COALESCE(kunde_id,0) FROM angebot WHERE id=?", [$angebot_id]);
-        $kp  = dl_kundenpreis($dienstleistung_id, $kid ?: null);
+        $kp  = dl_kundenpreis($dienstleistung_id, $kid ?: null, (int) round($menge > 0 ? $menge : 1));
         $preis_cent = $kp !== null ? $kp : (int)$d['vk_cent'];
     }
     $sort = (int) scalar("SELECT COALESCE(MAX(sort),-1)+1 FROM angebot_position WHERE angebot_id=?", [$angebot_id]);

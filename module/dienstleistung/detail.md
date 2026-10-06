@@ -22,3 +22,6 @@ Panel „Ablauf & Ergebnis": **Schritte** (ein Schritt je Zeile = Fortschritts-P
 ## Kundenpreise + „ohne Fortschritt"
 - **Kundenpreise** (optional): Panel unter Preis – je Kunde ein abweichender VK (dienstleistung_kundenpreis). Standard = dienstleistung.vk_cent. dl_position_add nimmt automatisch den Kundenpreis (dl_kundenpreis) des Angebots-Kunden, sonst Standard.
 - **„Kein Fortschritt – nur Abrechnung"** (ohne_fortschritt, z. B. Fulfillment/Lagerung): Schalter im Ablauf-Block. Dann werden keine Schritte angelegt (dl_auftrag_schritte_anlegen überspringt), der DL-Auftrag hat keinen Fortschritt – nur Status + Rechnung. Portal zeigt bei leerem Track keinen Balken (portal_auftrag_track fällt für DL NIE auf Produkt-Phasen zurück).
+
+### Nachtrag: Kundenpreise MIT Mengenstaffel
+Kundenpreise sind Staffeln: je Kunde beliebig viele Zeilen (Kunde + „ab Menge" + VK). dienstleistung_kundenpreis hat menge_ab; dl_kundenpreis($dl,$kunde,$menge) nimmt die passende Staffel (menge_ab<=menge, höchste), sonst kleinste Staffel des Kunden, sonst Standard-VK. dl_position_add übergibt die Positionsmenge. (Alter 2-Spalten-Unique uniq_dl_kunde wird best-effort auf uniq_dl_kunde_menge migriert.)
