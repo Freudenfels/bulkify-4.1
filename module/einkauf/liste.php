@@ -55,6 +55,7 @@ render_header('einkauf', $archiv ? 'Bestellarchiv' : 'Bestellungen');
 bx_head($archiv ? 'Bestellarchiv' : 'Bestellungen',
         count($rows) . ($archiv ? ' gelieferte Bestellungen' : ' laufende Bestellungen (unterwegs / Entwurf)'),
         bx_btn('Schnell (mobil)', '?p=einkauf_mobil', 'ghost') . ' ' . bx_btn('Neue Bestellung', '?p=bestellung&id=neu', 'ghost'));
+if (isset($_GET['vorsorglich'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Vorsorgliche Bestellung angelegt – sie steht jetzt hier unter „Bestellt".</div>';
 ?>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="einkauf">

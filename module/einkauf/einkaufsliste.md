@@ -19,3 +19,9 @@ Zwei Aktionen auf derselben Auswahl: **„Beim Lieferanten bestellen"** (je Lief
 **Ablauf:** Einkaufsbedarf (melden, eigen/fremd) → **Einkaufsliste** (hier bestellen) → Bestellungen (`?p=einkauf`, nur Historie).
 ## E-Mail an den Lieferanten
 Wird mit Bestelldatum bestellt, entsteht die Bestellung direkt als „bestellt" – dann geht je Lieferant die Bestell-Mail raus (`mail_lieferant_bestellung()`), falls der Versand eingerichtet ist.
+
+## Vorsorglich bestellen (vorhandener Artikel)
+Block unter „Neuen Bedarf eintragen": einen **bereits vorhandenen** Lagerartikel (item kategorie rohstoff/verpackung/verbrauch/fertig) auf Vorrat bestellen – **ohne aktuellen Bedarf und ohne neuen Namen**. Aktion `vorsorglich` legt via `bestellung_erstellen([{item_id,menge,auftrag_id:0}], …, datum=heute)` eine sofort als „bestellt" markierte Bestellung ohne Auftragsbezug an (Notiz „Vorsorglich …") und leitet auf `?p=einkauf&vorsorglich=1` (Bestellt-Liste), damit man sieht, dass sie gelandet ist. Zwei Buttons: „Beim Lieferanten bestellen" (modus=lieferant, optional Lieferant + Mail) / „Habe ich extern bestellt" (modus=extern, ohne Lieferant).
+
+## Dark Mode
+Das Hinweis-Panel „… warten auf die Festlegung" nutzt `border-color/border-left:var(--warn)` statt eines harten hellen Hintergrunds (`#fff8f7`) – sonst heller Text auf hellem Grund im Dark Mode.

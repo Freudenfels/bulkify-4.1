@@ -25,6 +25,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'freib
     q("DELETE FROM freibedarf WHERE id=? AND status='offen'", [(int)($_POST['fb_id'] ?? 0)]);
     header('Location: ?p=einkaufsliste&typ=frei'); exit;
 }
+// Vorsorglich bestellen: einen VORHANDENEN Lagerartikel auf Vorrat bestellen – ohne aktuellen Bedarf, ohne
+// neuen Namen. Legt eine Bestellung ohne Auftragsbezug an (auftrag_id=0) und markiert sie sofort als bestellt.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorsorglich') {
+    $iid = (int)($_POST['item_id'] ?? 0);
+    $raw = preg_replace('/[^0-9.,]/', '', trim((string)($_POST['menge'] ?? '')));
+    $menge = $raw !== '' ? (float) str_replace(',', '.', str_replace('.', '', $raw)) : 0.0;
+    $extern = ($_POST['modus'] ?? '') === 'extern';
+    $sup = $extern ? null : ((int)($_POST['lieferant_id'] ?? 0) ?: null);
+    if ($iid > 0 && $menge > 0 && scalar("SELECT id FROM item WHERE id=?", [$iid])) {
+        $bid = bestellung_erstellen([['item_id'=>$iid, 'menge'=>$menge, 'auftrag_id'=>0]], [], $sup, date('Y-m-d'));
+        if ($bid) {
+            q("UPDATE bestellung SET notiz=? WHERE id=?", [$extern ? 'Vorsorglich · extern bestellt' : 'Vorsorglich bestellt', $bid]);
+            if (!$extern && $sup && function_exists('mail_bereit') && mail_bereit()) mail_lieferant_bestellung($bid);
+            header('Location: ?p=einkauf&vorsorglich=1'); exit;
+        }
+    }
+    header('Location: ?p=einkaufsliste&vorsorgfehler=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bestellen') {
     $sel     = (array)($_POST['sel'] ?? []);
     $liefMap = (array)($_POST['lief'] ?? []);
@@ -140,12 +158,13 @@ bx_head('Bedarf', 'Was bestellt werden muss. Auswählen und entweder beim Liefer
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['extern']) ? ' Position(en) als „extern bestellt" markiert' : ' Bestellung(en) angelegt (je Lieferant eine)') . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . '</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
+if (isset($_GET['vorsorgfehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Vorsorgliche Bestellung nicht möglich – bitte einen vorhandenen Artikel und eine Menge größer 0 angeben.</div>';
 if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Die fehlenden Rohstoffe des Produktionsauftrags stehen jetzt hier – Bestand und bereits Bestelltes wurden übersprungen.</div>';
 
 // Aufträge ohne Eigen/Fremd-Festlegung: NOCH KEIN Bedarf anzeigen (Stückliste steht nicht fest),
 // nur der Hinweis „erst festlegen" mit direktem Link in die Produktion.
 if ($ohneFestlegung): ?>
-<div class="bx-panel" style="border-color:#e6c4c0;background:#fff8f7;padding:12px 16px;margin-bottom:12px">
+<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px;margin-bottom:12px">
   <strong><?= count($ohneFestlegung) ?> Auftrag/Aufträge warten auf die Festlegung „Eigen- oder Fremdproduktion".</strong>
   <div class="muted" style="font-size:13px;margin:4px 0 8px">Erst festlegen – danach erscheint der passende Einkaufsbedarf (Rohstoffe bei Eigen-, Bulk-Zukauf bei Fremdproduktion). Die Festlegung erfolgt im Produktionsauftrag.</div>
   <div class="bx-row" style="flex-wrap:wrap;gap:8px">
@@ -274,6 +293,32 @@ if ($ohneFestlegung): ?>
       <label for="fb_elektrisch" style="margin:0">Elektronische Komponente – braucht die jährliche Geräteprüfung</label>
     </div>
     <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Hinzufügen</button></div>
+  </div>
+</form>
+
+<form method="post" class="bx-form" style="margin-top:16px">
+  <input type="hidden" name="aktion" value="vorsorglich">
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Vorsorglich bestellen <span class="muted" style="font-weight:400;font-size:13px">– vorhandener Artikel auf Vorrat</span></h2>
+    <p class="muted" style="margin-top:0;font-size:13px">Einen <strong>bereits vorhandenen</strong> Lagerartikel (Rohstoff, Verpackung, Verbrauch …) auf Vorrat bestellen – auch ohne aktuellen Bedarf und ohne einen neuen Namen einzutragen. Die Bestellung landet direkt unter „Bestellt".</p>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Artikel (vorhanden)</label>
+        <select name="item_id" class="rscombo" required>
+          <option value="">– Artikel wählen –</option>
+          <?php foreach (all("SELECT id, name, kategorie FROM item WHERE kategorie IN ('rohstoff','verpackung','verbrauch','fertig') AND COALESCE(gesperrt,0)=0 ORDER BY name") as $it): ?>
+            <option value="<?= (int)$it['id'] ?>"><?= h($it['name']) ?><?= $it['kategorie'] ? ' · ' . h($it['kategorie']) : '' ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="bx-field"><label>Menge</label><input type="text" name="menge" placeholder="z. B. 2.520" required></div>
+      <div class="bx-field"><label>Lieferant (optional)</label>
+        <select name="lieferant_id"><option value="">– offen –</option><?php foreach ($lieferanten as $l): ?><option value="<?= (int)$l['id'] ?>"><?= h($l['firma']) ?></option><?php endforeach; ?></select>
+      </div>
+    </div>
+    <div class="bx-row" style="margin-top:var(--sp-4);gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" type="submit" name="modus" value="lieferant">Beim Lieferanten bestellen</button>
+      <button class="btn btn-ghost" type="submit" name="modus" value="extern">Habe ich extern bestellt</button>
+    </div>
   </div>
 </form>
 <script>(function(){
