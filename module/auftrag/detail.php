@@ -371,26 +371,6 @@ echo '<div class="bx-card"><div class="k">Netto gesamt</div><div class="v">' . $
 if (!empty($a['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . '</div></div>';
 echo '</div>';
 
-// Status direkt am Auftrag ändern – eigene Leiste oberhalb der Reiter (ohne data-panel → immer sichtbar),
-// damit der Status ohne Reiter-Wechsel und auch bei Altaufträgen ohne Produktionsauftrag gesetzt werden kann.
-if (has_role('admin') || has_role('sales') || has_role('production')):
-    $stKurz = ['offen'=>'offen', 'in_produktion'=>'in Produktion', 'erledigt'=>'versandbereit', 'versendet'=>'versendet'];
-    if (isset($_GET['statusok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px;margin-bottom:12px">Status aktualisiert – der Kunde sieht es sofort.</div>';
-?>
-<div class="bx-panel" style="padding:10px 14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center">
-  <span class="muted" style="font-size:13px">Status:</span>
-  <?= $statusBadgeGross ?? bx_badge(h($stText)) ?>
-  <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:0">
-    <input type="hidden" name="aktion" value="status_schnell">
-    <select name="status" style="min-width:170px">
-      <?php foreach ($stKurz as $k => $l): ?><option value="<?= $k ?>" <?= (string)$a['status'] === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?>
-    </select>
-    <button class="btn btn-primary btn-sm" type="submit">Status setzen</button>
-  </form>
-  <span class="muted" style="font-size:12px">Wirkt sofort auf die Kundenanzeige. „versendet" schließt den Auftrag ab (Kunden-Archiv). Stornieren sowie Preis/Menge im Reiter „Details".</span>
-</div>
-<?php endif; ?>
-<?php
 // (Etikett-Verwaltung ist in den Reiter „Verpackung" verschoben – siehe unten, data-panel="verpackung".)
 // Admin-Override „Rohstoff/Bulk angekommen" – damit die Kunden-Statusleiste auch bei Alt-Aufträgen /
 // Zukauf ohne verknüpfte Charge auf „Rohstoff angekommen" springt.
@@ -491,6 +471,22 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
       <?php endforeach; ?>
     </ul>
   </div>
+  <?php // Status direkt hier am Fortschritt setzen – kein Reiter-Wechsel, funktioniert auch ohne Produktionsauftrag.
+  if (has_role('admin') || has_role('sales') || has_role('production')):
+      $stKurz = ['offen'=>'offen', 'in_produktion'=>'in Produktion', 'erledigt'=>'versandbereit', 'versendet'=>'versendet']; ?>
+  <?php if (isset($_GET['statusok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Status aktualisiert – der Kunde sieht es sofort.</div><?php endif; ?>
+  <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
+    <span class="k muted">Status setzen</span>
+    <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:0">
+      <input type="hidden" name="aktion" value="status_schnell">
+      <select name="status" style="min-width:170px">
+        <?php foreach ($stKurz as $k => $l): ?><option value="<?= $k ?>" <?= (string)$a['status'] === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?>
+      </select>
+      <button class="btn btn-primary btn-sm" type="submit">Setzen</button>
+    </form>
+    <span class="muted" style="font-size:12px">„versendet" schließt den Auftrag ab (Kunden-Archiv). Stornieren sowie Preis/Menge im Reiter „Details".</span>
+  </div>
+  <?php endif; ?>
 </div>
 
 <div class="bx-panel" data-panel="produktion">
