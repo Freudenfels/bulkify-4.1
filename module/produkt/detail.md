@@ -51,3 +51,7 @@ Analog zu `lieferant_preis` beim Rohstoff.
 
 ## Produkt löschen + Verwendungs-Übersicht (2026-10-06)
 Admin-Button „Löschen" im Kopf (nur bestehende Produkte). Aktion `loeschen` → `produkt_loeschen($id)` (core/schema.php): Blocker = Aufträge, Produktionsaufträge, Kontingente, Angebote (Kopf-Produkt + angebot_produkt), Fertigware-Bestand (Chargen am verkaufsfertigen Lagerartikel). Ohne Blocker werden eigene Nebendaten mitgelöscht (produkt_preis/_kundenpreis/_lieferant_preis, Produkt-Dokumente, leerer Lagerartikel) und lose Verweise (Anfragen/Fastaction/ek_import) entkoppelt (produkt_id=NULL). Panel „Wo wird dieses Produkt verwendet?" (`produkt_verwendung($id)`) listet alle Verweise klickbar mit Blocker-Badge – analog zur Rezeptur.
+
+## Verwendungs-Panel nur nach Löschversuch + „In Angeboten & Rechnungen"
+- Das Blocker-Panel „Wo wird dieses Produkt verwendet?" erscheint **nur nach einem fehlgeschlagenen Löschversuch** (`$_SESSION['prod_del_fehler']`), nicht dauerhaft.
+- Neuer Bereich **„In Angeboten & Rechnungen"** (immer sichtbar, bestehende Produkte): zeigt, wo das Produkt kommerziell auftaucht – Angebote (über `angebot.produkt_id`/`angebot_produkt`) mit Kunde, Menge/Vper Pkg (aus der Positions-Rezeptur), Status, Datum; Rechnungen (beleg via `auftrag.produkt_id`, typ='rechnung') mit Kunde, Menge, VK/Pkg, Netto, Datum. Jeweils „öffnen"-Link.

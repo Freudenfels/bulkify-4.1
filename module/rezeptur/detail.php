@@ -172,9 +172,10 @@ if (isset($_GET['fa_ges'])) { $fm = (int)($_GET['fa_match'] ?? 0); $fg = (int)$_
   echo '<div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen)">Aus Fastaction angelegt: <strong>' . $fm . ' von ' . $fg . '</strong> Zutaten automatisch einem Rohstoff zugeordnet. <strong>Bitte jede Zeile prüfen</strong> (Rohstoff, Menge, Kapselgröße), dann speichern. Nicht zugeordnete Zeilen brauchen noch die Rohstoff-Auswahl.</div>'; }
 if (isset($_GET['gesendet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Vorschlag an den Kunden gesendet – er sieht ihn jetzt in seinem Portal. Änderungen hier speichern und ggf. „Erneut als Vorschlag senden".</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
-if (!empty($_SESSION['rez_del_fehler'])) { echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($_SESSION['rez_del_fehler']) . '</div>'; unset($_SESSION['rez_del_fehler']); }
+$rezDelFehler = (string)($_SESSION['rez_del_fehler'] ?? ''); if ($rezDelFehler !== '') { echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($rezDelFehler) . '</div>'; unset($_SESSION['rez_del_fehler']); }
 ?>
-<?php if (!$neu): $rezVerw = rezeptur_verwendung((int)$id); if ($rezVerw): ?>
+<?php // Verwendungs-Übersicht NUR nach einem fehlgeschlagenen Löschversuch zeigen (sonst überflüssig).
+if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if ($rezVerw): ?>
 <div class="bx-panel" style="border-left:3px solid var(--warn)">
   <h2 style="margin-top:0;font-size:16px">Wo wird diese Rezeptur verwendet? <span class="muted" style="font-weight:400;font-size:13px">(<?= count($rezVerw) ?>)</span></h2>
   <p class="muted" style="margin-top:0;font-size:13px">Zum Löschen zuerst die mit <strong>Blocker</strong> markierten Verweise entfernen/ersetzen. Ein Klick öffnet die jeweilige Stelle.</p>

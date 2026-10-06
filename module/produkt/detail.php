@@ -226,9 +226,10 @@ bx_head($neu ? 'Neues Produkt' : $v('name'),
 if (!$neu && !empty($p['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angelegt am ' . h(fmt_zeit($p['angelegt'], 'd.m.Y H:i')) . (!empty($p['aktualisiert']) && $p['aktualisiert'] !== $p['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($p['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
-if (!empty($_SESSION['prod_del_fehler'])) { echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($_SESSION['prod_del_fehler']) . '</div>'; unset($_SESSION['prod_del_fehler']); }
-// Verwendungs-Übersicht (klickbar) – damit man die Lösch-Blocker gezielt findet.
-if (!$neu) { $prodVerw = produkt_verwendung((int)$id);
+$prodDelFehler = (string)($_SESSION['prod_del_fehler'] ?? '');
+if ($prodDelFehler !== '') { echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($prodDelFehler) . '</div>'; unset($_SESSION['prod_del_fehler']); }
+// Verwendungs-/Blocker-Übersicht NUR nach einem fehlgeschlagenen Löschversuch (sonst überflüssig).
+if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
   if ($prodVerw) {
     echo '<div class="bx-panel" style="border-left:3px solid var(--warn)"><h2 style="margin-top:0;font-size:16px">Wo wird dieses Produkt verwendet? <span class="muted" style="font-weight:400;font-size:13px">(' . count($prodVerw) . ')</span></h2>'
        . '<p class="muted" style="margin-top:0;font-size:13px">Zum Löschen zuerst diese Verweise entfernen/ersetzen. Ein Klick öffnet die Stelle.</p>'
@@ -646,6 +647,70 @@ recalc();
     </tbody>
   </table></div>
   <p class="muted" style="font-size:12px;margin-top:8px">Schneller Überblick, welcher Kunde welchen Preis hat. Verpackung ist teils Freitext (aus v3) – nach Bedarf einem Gebinde zuordnen.</p>
+</div>
+<?php endif; ?>
+<?php
+// ===== In Angeboten & Rechnungen (wo taucht dieses Produkt kommerziell auf) =====
+if (!$neu):
+    $pRezId = (int)($p['rezeptur_id'] ?? 0);
+    $eur2 = function($x){ $x=(float)$x; $d=(abs($x*100-round($x*100))<1e-6)?2:4; return number_format($x,$d,',','.').' €'; };
+    $stLblA = fn($s) => match ($s) { 'offen'=>'Entwurf','gesendet'=>'gesendet','bestaetigt'=>'bestätigt','abgelehnt'=>'abgelehnt', default=>$s };
+    $pAngebote = all("SELECT a.id, a.nummer, a.status, a.angelegt, k.firma AS kunde,
+                        (SELECT ap.menge FROM angebot_position ap WHERE ap.angebot_id=a.id AND ap.rezeptur_id=? AND ?>0 ORDER BY ap.id LIMIT 1) AS pos_menge,
+                        (SELECT ap.preis_cent FROM angebot_position ap WHERE ap.angebot_id=a.id AND ap.rezeptur_id=? AND ?>0 ORDER BY ap.id LIMIT 1) AS pos_preis
+                      FROM angebot a LEFT JOIN kunden k ON k.id=a.kunde_id
+                      WHERE a.produkt_id=? OR a.id IN (SELECT angebot_id FROM angebot_produkt WHERE produkt_id=?)
+                      ORDER BY a.id DESC", [$pRezId, $pRezId, $pRezId, $pRezId, (int)$id, (int)$id]);
+    $pRechnungen = all("SELECT b.id, b.nummer, b.netto, b.status, b.datum, k.firma AS kunde, a.menge, a.vk_stueck
+                        FROM beleg b JOIN auftrag a ON a.id=b.auftrag_id LEFT JOIN kunden k ON k.id=b.kunde_id
+                        WHERE a.produkt_id=? AND b.typ='rechnung' ORDER BY b.id DESC", [(int)$id]);
+?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">In Angeboten &amp; Rechnungen</h2>
+
+  <h3 style="margin:6px 0 6px;font-size:14px;font-weight:600">In Angeboten <span class="muted" style="font-weight:400">(<?= count($pAngebote) ?>)</span></h3>
+  <?php if (!$pAngebote): ?>
+    <div class="muted" style="font-size:13px">Dieses Produkt ist in keinem Angebot.</div>
+  <?php else: ?>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Angebot</th><th>Kunde</th><th class="bx-num">Menge</th><th class="bx-num">VK / Pkg</th><th>Status</th><th>Datum</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($pAngebote as $a2): ?>
+        <tr>
+          <td><?= h($a2['nummer']) ?></td>
+          <td><?= $a2['kunde'] ? h($a2['kunde']) : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $a2['pos_menge'] !== null ? number_format((int)$a2['pos_menge'], 0, ',', '.') : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $a2['pos_preis'] !== null ? $eur2(((int)$a2['pos_preis']) / 100) : '<span class="muted">–</span>' ?></td>
+          <td><?= h($stLblA($a2['status'])) ?></td>
+          <td><?= !empty($a2['angelegt']) ? h(fmt_zeit($a2['angelegt'], 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
+          <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=angebot&id=<?= (int)$a2['id'] ?>">öffnen</a></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  <?php endif; ?>
+
+  <h3 style="margin:16px 0 6px;font-size:14px;font-weight:600">In Rechnungen <span class="muted" style="font-weight:400">(<?= count($pRechnungen) ?>)</span></h3>
+  <?php if (!$pRechnungen): ?>
+    <div class="muted" style="font-size:13px">Zu diesem Produkt gibt es keine Rechnungen.</div>
+  <?php else: ?>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Rechnung</th><th>Kunde</th><th class="bx-num">Menge</th><th class="bx-num">VK / Pkg</th><th class="bx-num">Netto</th><th>Datum</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($pRechnungen as $b2): ?>
+        <tr>
+          <td><?= h($b2['nummer']) ?></td>
+          <td><?= $b2['kunde'] ? h($b2['kunde']) : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= number_format((int)$b2['menge'], 0, ',', '.') ?></td>
+          <td class="bx-num"><?= (float)$b2['vk_stueck'] > 0 ? $eur2((float)$b2['vk_stueck']) : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $eur2((float)$b2['netto']) ?></td>
+          <td><?= !empty($b2['datum']) ? h(date('d.m.Y', strtotime((string)$b2['datum']))) : '<span class="muted">–</span>' ?></td>
+          <td style="text-align:right"><a class="btn btn-ghost btn-sm" target="_blank" href="/buchhaltung/?p=rechnung&id=<?= (int)$b2['id'] ?>">öffnen</a></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  <?php endif; ?>
 </div>
 <?php endif; ?>
 <?php
