@@ -185,6 +185,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($aktion === 'pos_reset' && !$neu) {
         q("DELETE FROM angebot_position WHERE angebot_id=?", [(int)$id]);
         header('Location: ?p=angebot&id=' . $id . '&zurueckgesetzt=1'); exit;
+    } elseif ($aktion === 'rezeptur_verknuepfen' && !$neu) {
+        // Angebot ohne Rezeptur mit einer bestehenden Rezeptur verknüpfen (Override am Angebot).
+        $rzid = (int)($_POST['rezeptur_id'] ?? 0);
+        if ($rzid > 0 && scalar("SELECT id FROM rezeptur WHERE id=?", [$rzid])) {
+            q("UPDATE angebot SET rezeptur_id=? WHERE id=?", [$rzid, (int)$id]);
+            $pidA = (int) scalar("SELECT produkt_id FROM angebot WHERE id=?", [(int)$id]);
+            if ($pidA && !(int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$pidA])) q("UPDATE produkt SET rezeptur_id=? WHERE id=?", [$rzid, $pidA]);
+            header('Location: ?p=angebot&id=' . $id . '&rezverk=1'); exit;
+        }
+        header('Location: ?p=angebot&id=' . $id . '&rezverkfehler=1'); exit;
     } elseif (in_array($aktion, ['add_rezeptur','add_rohstoff','add_dienstleistung'], true) && !$neu) {
         $aRow = one("SELECT kunde_id, marge_override FROM angebot WHERE id=?", [(int)$id]);
         $kid = (int)($aRow['kunde_id'] ?? 0) ?: null;
@@ -353,6 +363,35 @@ if (isset($_GET['nachbestellung'])) { $nbq = (string)$_GET['nachbestellung'];
      . ' Jetzt <strong>Mengen/Preise prüfen</strong> und senden.</div>'; }
 if (isset($_GET['uebernommen']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angefragte Konfiguration übernommen – die Positionen wurden neu aufgebaut. Preise prüfen, dann freigeben/senden.</div>';
 if (isset($_GET['uebernahmefehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Übernahme nicht möglich – zur verknüpften Anfrage fehlt eine Rezeptur/Konfiguration.</div>';
+// Rezeptur-Verknüpfung (Referenz) – für ALLE Angebote sichtbar (auch bestätigte/Nur-Ansicht), daher hier
+// vor der Übersicht/Editor-Verzweigung. Override am Angebot ODER Rezeptur des Kopf-Produkts ODER erste Positions-Rezeptur.
+if (!$neu):
+    $angRezId = (int)($a['rezeptur_id'] ?? 0);
+    if (!$angRezId && $pid) $angRezId = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$pid]);
+    if (!$angRezId) $angRezId = (int) scalar("SELECT rezeptur_id FROM angebot_position WHERE angebot_id=? AND COALESCE(rezeptur_id,0)>0 ORDER BY id LIMIT 1", [(int)$id]);
+    $angRez = $angRezId ? one("SELECT nummer, name FROM rezeptur WHERE id=?", [$angRezId]) : null;
+?>
+<div class="bx-panel" style="padding:10px 14px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+  <span class="k muted">Rezeptur</span>
+  <?php if ($angRez): ?>
+    <a href="?p=rezeptur_detail&id=<?= (int)$angRezId ?>"><?= h($angRez['nummer']) ?></a><?= $angRez['name'] ? ' · ' . h($angRez['name']) : '' ?>
+  <?php elseif (has_role('admin')): ?>
+    <?php if (isset($_GET['rezverk'])): ?><span class="badge-ok" style="padding:3px 8px;border-radius:6px">Rezeptur verknüpft.</span><?php endif; ?>
+    <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0;flex-wrap:wrap">
+      <input type="hidden" name="aktion" value="rezeptur_verknuepfen">
+      <select name="rezeptur_id" class="rscombo" style="min-width:240px" required>
+        <option value="">– Rezeptur wählen –</option>
+        <?php foreach (all("SELECT id, nummer, name FROM rezeptur ORDER BY nummer DESC") as $rz): ?>
+          <option value="<?= (int)$rz['id'] ?>"><?= h($rz['nummer']) ?><?= $rz['name'] ? ' · ' . h($rz['name']) : '' ?></option>
+        <?php endforeach; ?>
+      </select>
+      <button class="btn btn-ghost btn-sm" type="submit">Rezeptur verknüpfen</button>
+    </form>
+    <span class="muted" style="font-size:12px">Für Angebote ohne Rezeptur (z. B. Freitext/Import).</span>
+  <?php else: ?>–<?php endif; ?>
+</div>
+<?php endif; ?>
+<?php
 if (isset($_GET['gesendet']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot an den Kunden gesendet – er sieht es jetzt im Portal (inkl. Preise).</div>';
 if (isset($_GET['preisfrei']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Preise freigegeben – der Kunde sieht das Angebot jetzt im Portal.</div>';
 if (isset($_GET['preisgesperrt'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Preise sind für den Kunden <strong>gesperrt</strong> – das Angebot ist in seinem Portal nicht sichtbar. Nach der Prüfung mit „Preise freigeben" wieder sichtbar machen.</div>';
