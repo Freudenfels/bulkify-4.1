@@ -156,29 +156,45 @@ function imp_ki_auslesen(string $pfad): array {
 }
 
 // --- Staging: Datei hinzufügen -------------------------------------------
-// Speichert die Datei, liest per KI aus, matcht den Kunden, legt ein bu_imp_item (+Positionen) an. Gibt id.
+// NUR speichern + Staging-Item anlegen (SCHNELL, ohne KI). Die KI-Auslesung läuft danach pro Datei
+// (imp_ki_item), damit der Upload vieler Dateien nicht in einen Timeout läuft. Gibt die Item-id.
 function imp_datei_hinzufuegen(string $batch, array $file): int {
     imp_init();
     $g = be_datei_speichern($file);
     if (!$g) return 0;
-    $ki = imp_ki_auslesen($g['pfad']);
-    $d = $ki['ok'] ? $ki['daten'] : [];
-    $ustP = (float)($d['ust_prozent'] ?? 0);
-    $netto = (float)($d['netto'] ?? 0);
+    q("INSERT INTO bu_imp_item (batch,datei,orig_name,mime,art,status,ki_ok) VALUES (?,?,?,?,?,?,0)",
+      [$batch, $g['datei'], $g['orig'], $g['mime'], 'unklar', 'neu']);
+    return insert_id();
+}
+
+// Ein einzelnes Staging-Item per KI auslesen (eigener Request → kein Sammel-Timeout). Aktualisiert Felder,
+// matcht den Kunden, legt die Angebotspositionen an. Rückgabe ['ok'=>bool,'art'=>...,'fehler'=>?].
+function imp_ki_item(int $id): array {
+    $it = imp_item($id);
+    if (!$it) return ['ok' => false, 'art' => 'unklar', 'fehler' => 'Item nicht gefunden'];
+    if (empty($it['datei'])) return ['ok' => false, 'art' => $it['art'], 'fehler' => 'keine Datei'];
+    $ki = imp_ki_auslesen(be_pfad((string)$it['datei']));
+    if (empty($ki['ok'])) { q("UPDATE bu_imp_item SET ki_ok=0 WHERE id=?", [$id]); return ['ok' => false, 'art' => $it['art'], 'fehler' => 'KI nicht erreichbar/eingerichtet']; }
+    $d = $ki['daten'];
+    $ustP = (float)($d['ust_prozent'] ?? 0); $netto = (float)($d['netto'] ?? 0);
     $match = imp_kunde_match((string)($d['kunde_name'] ?? ''));
-    q("INSERT INTO bu_imp_item (batch,datei,orig_name,mime,art,status,kunde_name,kunde_id,nummer,datum,
-            netto,ust_prozent,ust_betrag,brutto,waehrung,angebot_ref,ki_ok,ki_json)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-      [$batch, $g['datei'], $g['orig'], $g['mime'], (string)($d['art'] ?? 'unklar'), 'neu',
-       (string)($d['kunde_name'] ?? '') ?: null, $match['kunde_id'], (string)($d['nummer'] ?? '') ?: null, $d['datum'] ?? null,
-       $netto, $ustP, round($netto * $ustP / 100, 2), (float)($d['brutto'] ?? 0),
-       (string)($d['waehrung'] ?? 'EUR'), (string)($d['angebot_ref'] ?? '') ?: null, $ki['ok'] ? 1 : 0, $ki['roh'] ?? null]);
-    $iid = insert_id();
+    q("UPDATE bu_imp_item SET art=?, kunde_name=?, kunde_id=COALESCE(kunde_id,?), nummer=?, datum=?,
+            netto=?, ust_prozent=?, ust_betrag=?, brutto=?, waehrung=?, angebot_ref=?, ki_ok=1, ki_json=? WHERE id=?",
+      [(string)($d['art'] ?? 'unklar'), (string)($d['kunde_name'] ?? '') ?: null, $match['kunde_id'],
+       (string)($d['nummer'] ?? '') ?: null, $d['datum'] ?? null, $netto, $ustP, round($netto * $ustP / 100, 2),
+       (float)($d['brutto'] ?? 0), (string)($d['waehrung'] ?? 'EUR'), (string)($d['angebot_ref'] ?? '') ?: null, $ki['roh'] ?? null, $id]);
+    q("DELETE FROM bu_imp_pos WHERE imp_item_id=?", [$id]);
     $sort = 0;
     foreach ((array)($d['positionen'] ?? []) as $p)
         q("INSERT INTO bu_imp_pos (imp_item_id,sort,gruppe,typ,bezeichnung,menge,einheit,preis) VALUES (?,?,?,?,?,?,?,?)",
-          [$iid, $sort++, (int)$p['gruppe'], $p['typ'], $p['bezeichnung'] ?: null, $p['menge'] ?: null, $p['einheit'] ?: null, $p['preis'] ?: null]);
-    return $iid;
+          [$id, $sort++, (int)$p['gruppe'], $p['typ'], $p['bezeichnung'] ?: null, $p['menge'] ?: null, $p['einheit'] ?: null, $p['preis'] ?: null]);
+    return ['ok' => true, 'art' => (string)($d['art'] ?? 'unklar'), 'fehler' => null];
+}
+
+// Item-ids eines Batches, die noch nicht per KI gelesen wurden (für den Auto-Durchlauf).
+function imp_ungelesen(string $batch): array {
+    imp_init();
+    return array_map('intval', array_column(all("SELECT id FROM bu_imp_item WHERE batch=? AND status='neu' AND ki_ok=0 ORDER BY id", [$batch]), 'id'));
 }
 
 // --- Staging: lesen/ändern ------------------------------------------------

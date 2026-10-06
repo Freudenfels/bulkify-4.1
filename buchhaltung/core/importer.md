@@ -20,3 +20,6 @@ verknuepfen -> Zahlungen -> uebernehmen. Erzeugt BLEIBENDE Datensaetze; das Stag
 - `imp_batch_loeschen($batch)`: Staging + nicht-uebernommene Dateien weg; uebernommene Belege/Angebote bleiben.
 
 Kundenschreibzugriff nur ueber die Naht: `erp_kunde_anlegen()` (einzige Schreibstelle in kunden).
+
+## Upload entkoppelt (Timeout-Fix, 2026-10-06)
+Upload speichert nur (imp_datei_hinzufuegen = schnell, KEINE KI). KI danach pro Datei: imp_ki_item(id) + Endpunkt ?p=import_bulk&batch=&kiitem=ID (JSON). Prueffen-Schritt startet einen JS-Auto-Durchlauf (ein Request je Datei, Fortschrittsbalken) ueber imp_ungelesen(); pro Zeile zusaetzlich manueller Button (aktion ki_item). So kein Sammel-Timeout bei vielen Dateien, und ein scheiternder Einzel-Call blockiert die anderen nicht. imp_auto_verknuepfen laeuft beim Betreten des Verknuepfen-Schritts.

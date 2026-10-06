@@ -20,6 +20,13 @@ if ($batch && isset($_GET['datei'])) {
     header('Content-Length: ' . filesize($pf)); readfile($pf); exit;
 }
 
+// KI-Auslesung EINES Items als eigener Request (JSON) – vom Auto-Durchlauf (JS) aufgerufen, damit viele
+// Dateien nicht in einen Timeout laufen. Antwortet schlank und beendet sofort.
+if ($batch && isset($_GET['kiitem'])) {
+    $res = imp_ki_item((int)$_GET['kiitem']);
+    header('Content-Type: application/json'); echo json_encode($res); exit;
+}
+
 $hinweis = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $a = $_POST['aktion'] ?? '';
@@ -31,9 +38,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (($files['error'][$i] ?? 1) !== UPLOAD_ERR_OK) continue;
             if (imp_datei_hinzufuegen($batch, ['name'=>$files['name'][$i],'type'=>$files['type'][$i],'tmp_name'=>$files['tmp_name'][$i],'error'=>$files['error'][$i],'size'=>$files['size'][$i]])) $n++;
         }
-        imp_auto_verknuepfen($batch);
+        // KEINE KI hier – das läuft danach pro Datei (schnell + timeout-sicher).
         header('Location: ?p=import_bulk&batch=' . $batch . '&step=pruefen&hoch=' . $n); exit;
     }
+    if ($a === 'ki_item') { imp_ki_item((int)($_POST['item'] ?? 0)); header('Location: ?p=import_bulk&batch=' . $batch . '&step=pruefen'); exit; }
     if ($a === 'item_save') {
         foreach (($_POST['it'] ?? []) as $iid => $d) imp_item_update((int)$iid, (array)$d);
         foreach (($_POST['kunde'] ?? []) as $iid => $kid) if ((int)$kid > 0) imp_item_kunde_setzen((int)$iid, (int)$kid);
@@ -75,7 +83,7 @@ if ($batch && $step !== 'start') {
     foreach ($steps as $s => $lbl) echo '<a class="' . ($s===$step?'on':'') . '" href="?p=import_bulk&batch=' . h($batch) . '&step=' . $s . '">' . h($lbl) . '</a>';
     echo '</div>';
 }
-foreach (['hoch'=>'%d Datei(en) hochgeladen und ausgelesen.','gespeichert'=>'Gespeichert.','kneu'=>'Kunde neu angelegt und zugeordnet.','auto'=>'%d Rechnung(en) automatisch verknüpft.','geloescht'=>'Import verworfen.'] as $k=>$msg)
+foreach (['hoch'=>'%d Datei(en) hochgeladen – KI-Auslesung läuft unten.','fertigki'=>'KI-Auslesung abgeschlossen – bitte prüfen.','gespeichert'=>'Gespeichert.','kneu'=>'Kunde neu angelegt und zugeordnet.','auto'=>'%d Rechnung(en) automatisch verknüpft.','geloescht'=>'Import verworfen.'] as $k=>$msg)
     if (isset($_GET[$k])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(sprintf($msg, (int)($_GET[$k] ?: 0))) . '</div>';
 
 // ===========================================================================
@@ -84,12 +92,12 @@ if (!$batch || $step === 'start'):
 ?>
 <div class="bx-panel" style="max-width:720px">
   <h2 style="margin-top:0">Neuer Import</h2>
-  <p class="muted">Lade mehrere PDFs auf einmal hoch (Rechnungen und Angebote gemischt). Die KI erkennt je Datei die Art, den Kunden und die Beträge; bei Angeboten die Positionen (Produkt/Verpackung/Etikett).</p>
+  <p class="muted">Lade beliebig viele PDFs auf einmal hoch (Rechnungen und Angebote gemischt). Der Upload speichert sie nur – die KI-Auslesung (Art, Kunde, Beträge; bei Angeboten die Positionen Produkt/Verpackung/Etikett) läuft danach <strong>Datei für Datei</strong> im Schritt „Prüfen", damit nichts in einen Timeout läuft.</p>
   <?php if (!ki_bereit()) echo '<p class="muted">Hinweis: KI nicht eingerichtet – Dateien werden gespeichert, Felder trägst du im nächsten Schritt ein.</p>'; ?>
   <form method="post" enctype="multipart/form-data" class="bx-form">
     <input type="hidden" name="aktion" value="upload">
     <div class="bx-field"><input type="file" name="dateien[]" accept="application/pdf,image/*" multiple required></div>
-    <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit" data-busy="KI liest …">Hochladen &amp; auslesen</button></div>
+    <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit" data-busy="lädt hoch …">Hochladen</button></div>
   </form>
 </div>
 <?php $batches = array_filter(imp_batches(), fn($b)=>(int)$b['anz'] > (int)$b['uebernommen']); if ($batches): ?>
@@ -105,9 +113,35 @@ if (!$batch || $step === 'start'):
 
 <?php
 // ===========================================================================
-elseif ($step === 'pruefen'): $items = imp_items($batch);
+elseif ($step === 'pruefen'): $items = imp_items($batch); $ungelesen = imp_ungelesen($batch);
 // ===========================================================================
 ?>
+<?php if ($ungelesen && ki_bereit()): ?>
+<div class="bx-panel" id="kiBox" style="border-color:var(--gruen)">
+  <h2 style="margin-top:0">KI liest die Belege aus …</h2>
+  <p class="muted" id="kiProg">0 / <?= count($ungelesen) ?> ausgelesen</p>
+  <div style="background:var(--line);border-radius:6px;height:10px;overflow:hidden"><div id="kiBar" style="background:var(--gruen);height:10px;width:0%"></div></div>
+  <p class="muted" style="font-size:12px;margin:8px 0 0">Läuft automatisch, Datei für Datei. Du kannst warten oder die Seite offen lassen.</p>
+</div>
+<script>
+(function(){
+  var ids = <?= json_encode($ungelesen) ?>, base = '?p=import_bulk&batch=<?= h($batch) ?>&kiitem=', done = 0, total = ids.length;
+  var prog = document.getElementById('kiProg'), bar = document.getElementById('kiBar');
+  function next(){
+    if (!ids.length){ location.href='?p=import_bulk&batch=<?= h($batch) ?>&step=pruefen&fertigki=1'; return; }
+    var id = ids.shift();
+    fetch(base + id).catch(function(){}).finally(function(){
+      done++; if(prog) prog.textContent = done + ' / ' + total + ' ausgelesen';
+      if(bar) bar.style.width = Math.round(done/total*100) + '%';
+      setTimeout(next, 120);
+    });
+  }
+  next();
+})();
+</script>
+<?php elseif ($ungelesen): ?>
+<div class="bx-panel" style="padding:12px 16px">KI nicht eingerichtet – bitte Art/Kunde/Beträge je Zeile selbst eintragen.</div>
+<?php endif; ?>
 <form method="post">
   <input type="hidden" name="aktion" value="item_save"><input type="hidden" name="batch" value="<?= h($batch) ?>">
   <div class="bx-tablewrap"><table class="bx-table">
@@ -116,7 +150,8 @@ elseif ($step === 'pruefen'): $items = imp_items($batch);
       <?php if (!$items): ?><tr><td colspan="10" class="muted">Keine Belege im Stapel.</td></tr><?php endif; ?>
       <?php foreach ($items as $it): $iid=(int)$it['id']; ?>
       <tr>
-        <td><a href="?p=import_bulk&batch=<?= h($batch) ?>&datei=<?= $iid ?>" target="_blank"><?= h(mb_strimwidth((string)($it['orig_name'] ?: 'Datei'),0,22,'…')) ?></a><?= empty($it['ki_ok']) ? ' <span class="muted" title="KI nicht gelesen">(?)</span>' : '' ?></td>
+        <td><a href="?p=import_bulk&batch=<?= h($batch) ?>&datei=<?= $iid ?>" target="_blank"><?= h(mb_strimwidth((string)($it['orig_name'] ?: 'Datei'),0,22,'…')) ?></a>
+          <?php if (empty($it['ki_ok'])): ?><br><button class="btn btn-ghost btn-sm" type="submit" formnovalidate name="aktion" value="ki_item" style="padding:2px 8px;font-size:12px" onclick="this.form.querySelector('[name=item]').value='<?= $iid ?>'" title="Diese Datei per KI auslesen">KI auslesen</button><?php endif; ?></td>
         <td><select name="it[<?= $iid ?>][art]"><?php foreach (['rechnung'=>'Rechnung','angebot'=>'Angebot','unklar'=>'unklar'] as $k=>$v): ?><option value="<?= $k ?>" <?= $it['art']===$k?'selected':'' ?>><?= h($v) ?></option><?php endforeach; ?></select></td>
         <td>
           <select name="kunde[<?= $iid ?>]" style="max-width:170px">
@@ -149,7 +184,7 @@ elseif ($step === 'pruefen'): $items = imp_items($batch);
 
 <?php
 // ===========================================================================
-elseif ($step === 'verknuepfen'): $rechnungen = imp_items($batch,'rechnung'); $angebote = imp_items($batch,'angebot');
+elseif ($step === 'verknuepfen'): imp_auto_verknuepfen($batch); $rechnungen = imp_items($batch,'rechnung'); $angebote = imp_items($batch,'angebot');
 // ===========================================================================
 ?>
 <form method="post" class="bx-listbar" style="margin-bottom:12px"><input type="hidden" name="aktion" value="auto_verknuepfen"><input type="hidden" name="batch" value="<?= h($batch) ?>">
