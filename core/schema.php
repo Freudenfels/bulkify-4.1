@@ -3615,11 +3615,16 @@ function beleg_neu_berechnen(int $beleg_id): array {
     if (in_array((string)$b['status'], ['bezahlt','storniert'], true)) return ['ok'=>false, 'fehler'=>'Bezahlte/stornierte Rechnungen werden nicht neu berechnet.'];
     $netto = (float)$b['netto'];
     $ustP  = kunde_ust_satz((int)$b['kunde_id']);
-    $ust   = round($netto * $ustP / 100, 2); $brutto = round($netto + $ust, 2);
+    // WICHTIG: die MwSt-Summe der Rechnung/PDF kommt aus den POSITIONEN (mwst_satz). Also die Positionen
+    // mit dem neuen Satz versehen und die Kopf-Summen daraus neu bilden – sonst zeigt die PDF 0 % MwSt.
+    q("UPDATE beleg_position SET mwst_satz=? WHERE beleg_id=?", [$ustP, $beleg_id]);
+    $pos = beleg_positionen($beleg_id);
+    if ($pos) { $s = beleg_summen_aus_positionen($pos); $netto = round((float)$s['netto'], 2); $ust = round((float)$s['ust'], 2); $brutto = round((float)$s['brutto'], 2); }
+    else      { $ust = round($netto * $ustP / 100, 2); $brutto = round($netto + $ust, 2); }
     $hatAdr = kunde_hat_rechnungsadresse((int)$b['kunde_id']);
     $text   = (string)($b['text'] ?? '');
     if ($hatAdr) $text = trim(preg_replace('/Rechnungsadresse fehlt[^\n]*/u', '', $text));
-    q("UPDATE beleg SET ust_prozent=?, ust_betrag=?, brutto=?, text=? WHERE id=?", [$ustP, $ust, $brutto, $text !== '' ? $text : null, $beleg_id]);
+    q("UPDATE beleg SET netto=?, ust_prozent=?, ust_betrag=?, brutto=?, text=? WHERE id=?", [$netto, $ustP, $ust, $brutto, $text !== '' ? $text : null, $beleg_id]);
     return ['ok'=>true, 'ust_prozent'=>$ustP, 'sichtbar'=>$hatAdr, 'fehler'=>''];
 }
 // Die einzig zulaessigen deutschen Mehrwertsteuersaetze. Nichts anderes darf in einer Position stehen.

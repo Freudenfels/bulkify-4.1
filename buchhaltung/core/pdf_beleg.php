@@ -115,7 +115,7 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     // Absenderzeile + Empfänger links
     $ey = $rTop;
     $p->text($L, $ey - 12, $p->fit('bulkify | ' . $absender, 330, 7.5, false), 7.5, false, $GRAY);
-    $p->text($L, $ey, $p->fit((string) ($b['empfaenger'] ?? ''), 300, 11, true), 11, true, $INK);
+    $p->text($L, $ey, $p->fit((string) ($b['empfaenger'] ?? ''), 300, 11, false), 11, false, $INK);
     $ey += 14;
     foreach (array_slice(preg_split('/\r?\n/', (string) ($b['adresse'] ?? '')), 0, 4) as $ln) {
         $ln = trim($ln); if ($ln === '') continue;
