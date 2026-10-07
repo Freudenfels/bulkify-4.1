@@ -69,6 +69,17 @@ if ($vorschlag) {
 }
 
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
+// Lager-Rohstoffe für die Auswahl (mit Gehalt des Leitwirkstoffs) – zum Tauschen gegen echte Rohstoffe.
+$rohstoffe = all("SELECT i.id, i.name, i.artikelnummer,
+    (SELECT COALESCE(iw.gehalt_wert, iw.gehalt_prozent) FROM item_wirkstoff iw WHERE iw.item_id=i.id AND COALESCE(iw.gehalt_wert,iw.gehalt_prozent) IS NOT NULL ORDER BY iw.sort,iw.id LIMIT 1) AS gw,
+    (SELECT COALESCE(iw.gehalt_einheit,'prozent') FROM item_wirkstoff iw WHERE iw.item_id=i.id AND COALESCE(iw.gehalt_wert,iw.gehalt_prozent) IS NOT NULL ORDER BY iw.sort,iw.id LIMIT 1) AS ge
+    FROM item i WHERE i.kategorie='rohstoff' AND COALESCE(i.gesperrt,0)=0 ORDER BY i.name");
+$pbRohMap = [];
+foreach ($rohstoffe as $ro) {
+    $lbl = trim((string)$ro['name'] . ((string)($ro['artikelnummer'] ?? '') !== '' ? ' · ' . $ro['artikelnummer'] : ''));
+    $pbRohMap[$lbl] = ['id'=>(int)$ro['id'], 'name'=>(string)$ro['name'],
+        'gw'=>$ro['gw'] !== null ? (string)$ro['gw'] : '', 'ge'=>(string)($ro['ge'] ?? 'prozent')];
+}
 render_header('rezeptur', 'Produktbuilder (KI)');
 bx_head('Produktbuilder', 'Aus einem Wunsch eine Rezeptur – KI schlägt vor, der Rechner macht die Dosis exakt', bx_btn('Alle Rezepturen', '?p=rezeptur'));
 
@@ -136,9 +147,9 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       <tbody id="pbrows">
       <?php foreach ($zut as $z): ?>
         <tr>
-          <td><input type="text" name="z_name[]" value="<?= h((string)($z['name'] ?? '')) ?>" style="width:100%">
+          <td><input type="text" name="z_name[]" class="pbroh" list="pb_roh" value="<?= h((string)($z['name'] ?? '')) ?>" style="width:100%" placeholder="Rohstoff tippen – aus dem Lager wählen">
               <input type="hidden" name="z_item[]" value="<?= (int)($z['item_id'] ?? 0) ?: '' ?>">
-              <?php if (!empty($z['item_id'])): ?><div class="muted" style="font-size:11px;color:var(--gruen)">↳ Lager-Rohstoff: <?= h((string)($z['item_name'] ?? '')) ?></div><?php endif; ?></td>
+              <div class="pbroh-stat" style="font-size:11px;margin-top:2px"><?php if (!empty($z['item_id'])): ?><span style="color:var(--gruen)">↳ Lager-Rohstoff verknüpft</span><?php else: ?><span style="color:var(--warn)">nicht im Lager – Freitext</span><?php endif; ?></div></td>
           <td><input type="text" name="z_wirk[]" value="<?= h((string)($z['ziel_wirkstoff'] ?? '')) ?>" style="width:100%"></td>
           <td class="bx-num"><input type="text" name="z_dosis[]" value="<?= h((string)($z['ziel_dosis'] ?? '')) ?>" style="width:80px;text-align:right"></td>
           <td><select name="z_einheit[]"><?php foreach ($EINHEITEN as $ek=>$el): ?><option value="<?= $ek ?>"<?= (string)($z['ziel_einheit'] ?? 'mg')===$ek?' selected':'' ?>><?= $el ?></option><?php endforeach; ?></select></td>
@@ -204,11 +215,28 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     <p class="muted" style="font-size:12px;margin:6px 0 0">Die KI kann irren – Dosierung/Recht immer gegenprüfen. Die Rezeptur wird als <strong>Entwurf</strong> angelegt.</p>
   </div>
 </form>
+<datalist id="pb_roh"><?php foreach (array_keys($pbRohMap) as $lbl): ?><option value="<?= h($lbl) ?>"></option><?php endforeach; ?></datalist>
 <script>
+var PBROH = <?= json_encode($pbRohMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+// Rohstoff-Feld gegen einen Lager-Rohstoff auflösen: verknüpft (z_item) + echten Gehalt übernehmen.
+function pbResolve(inp){
+  var row=inp.closest('tr'); if(!row) return;
+  var hid=row.querySelector('input[name="z_item[]"]'); var stat=row.querySelector('.pbroh-stat');
+  var m=PBROH[inp.value.trim()];
+  if(m){
+    if(hid) hid.value=m.id;
+    if(m.gw!==''){ var gw=row.querySelector('input[name="z_gw[]"]'); if(gw) gw.value=m.gw; var ge=row.querySelector('select[name="z_ge[]"]'); if(ge) ge.value=m.ge; }
+    if(stat) stat.innerHTML='<span style="color:var(--gruen)">↓ Lager-Rohstoff verknüpft</span>';
+  } else {
+    if(hid) hid.value='';
+    if(stat) stat.innerHTML='<span style="color:var(--warn)">nicht im Lager – Freitext</span>';
+  }
+}
+document.addEventListener('input', function(e){ if(e.target && e.target.classList && e.target.classList.contains('pbroh')) pbResolve(e.target); });
 function pbAdd(){
   var tb=document.getElementById('pbrows');
   var tr=document.createElement('tr');
-  tr.innerHTML='<td><input type="text" name="z_name[]" style="width:100%"><input type="hidden" name="z_item[]"></td>'
+  tr.innerHTML='<td><input type="text" name="z_name[]" class="pbroh" list="pb_roh" style="width:100%" placeholder="Rohstoff tippen – aus dem Lager wählen"><input type="hidden" name="z_item[]"><div class="pbroh-stat" style="font-size:11px;margin-top:2px"><span style="color:var(--warn)">nicht im Lager – Freitext</span></div></td>'
    +'<td><input type="text" name="z_wirk[]" style="width:100%"></td>'
    +'<td class="bx-num"><input type="text" name="z_dosis[]" style="width:80px;text-align:right"></td>'
    +'<td><select name="z_einheit[]"><option>mg</option><option>µg</option><option>IE</option><option>g</option></select></td>'

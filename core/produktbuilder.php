@@ -56,6 +56,20 @@ function pb_ie_mg(string $name): ?float {
     return pb_ie_faktor($name);
 }
 
+// Bestehenden Rohstoff direkt per ID holen (echter Gehalt des Leitwirkstoffs) – für die manuelle Auswahl
+// eines Lager-Rohstoffs im Builder. Gleiche Rückgabe-Form wie pb_rohstoff_match.
+function pb_rohstoff_by_id(int $id): ?array {
+    if ($id <= 0) return null;
+    $it = one("SELECT id, name FROM item WHERE id=? AND kategorie='rohstoff'", [$id]);
+    if (!$it) return null;
+    $w = one("SELECT COALESCE(iw.gehalt_wert, iw.gehalt_prozent) AS gehalt_wert, COALESCE(iw.gehalt_einheit,'prozent') AS gehalt_einheit, n.ie_mg
+              FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id
+              WHERE iw.item_id=? AND COALESCE(iw.gehalt_wert, iw.gehalt_prozent) IS NOT NULL ORDER BY iw.sort, iw.id LIMIT 1", [(int)$it['id']]);
+    return ['id'=>(int)$it['id'], 'name'=>(string)$it['name'],
+            'gehalt_wert'=>$w['gehalt_wert'] ?? null, 'gehalt_einheit'=>$w['gehalt_einheit'] ?? null,
+            'ie_mg'=>isset($w['ie_mg']) && $w['ie_mg'] !== null ? (float)$w['ie_mg'] : null];
+}
+
 // Bestehenden Rohstoff (item) per Name/CAS finden – damit echte Gehalte/Dokumente (CoA/Spec) genutzt
 // werden. Rückgabe: ['id','name','gehalt_wert','gehalt_einheit','ie_mg'] oder null.
 function pb_rohstoff_match(string $name, string $cas = ''): ?array {
@@ -130,8 +144,10 @@ function pb_vorschlag_rechnen(array $v): array {
         $ie_mg = ($z['ie_mg'] ?? null) !== null && $z['ie_mg'] !== '' ? (float)$z['ie_mg'] : null;
         $ieLookup = pb_ie_mg($ieName);
         if ($ieLookup !== null) $ie_mg = $ieLookup;
-        // Bestehenden Rohstoff suchen – echter Gehalt schlägt KI-Schätzung
-        $match = pb_rohstoff_match((string)($z['name'] ?? ''), (string)($z['cas'] ?? ''));
+        // Verknüpfter Lager-Rohstoff (manuell gewählt) hat Vorrang; sonst per Name/CAS suchen.
+        // Echter Gehalt des Lager-Rohstoffs schlägt die KI-Schätzung.
+        $match = !empty($z['item_id']) ? pb_rohstoff_by_id((int)$z['item_id'])
+                                       : pb_rohstoff_match((string)($z['name'] ?? ''), (string)($z['cas'] ?? ''));
         if ($match) {
             if ($match['gehalt_wert'] !== null)    { $z['gehalt_wert'] = $match['gehalt_wert']; $z['gehalt_einheit'] = $match['gehalt_einheit']; }
             if ($match['ie_mg'] !== null)          $ie_mg = $match['ie_mg'];
@@ -225,7 +241,8 @@ function pb_anlegen(string $name, string $form, ?int $kunde_id, array $zutaten, 
         $bez = trim((string)($z['name'] ?? ''));
         $mg  = (float) str_replace(',', '.', (string)($z['menge_mg'] ?? 0));
         if ($bez === '' && !$iid) continue;
-        if ($iid && $bez === '') $bez = (string) scalar("SELECT name FROM item WHERE id=?", [$iid]);
+        // Verknüpfter Lager-Rohstoff: immer den echten Rohstoffnamen als Bezeichnung (nicht das „Name · R-123"-Label).
+        if ($iid) $bez = (string) scalar("SELECT name FROM item WHERE id=?", [$iid]) ?: $bez;
         q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
           [$rid, $iid, $bez, $mg, $sort++]);
     }
