@@ -106,6 +106,7 @@ foreach ($zeilen as $roh) {
 render_header('novelfood', 'Novel Food');
 bx_head('Novel Food – Schnellsuche', $anzKatalog . ' Einträge im EU-Katalog',
         (has_role('admin') || has_role('production') || has_role('labor') ? bx_btn('Katalog aktualisieren', '?p=novelfood_import') . ' ' : '')
+        . bx_btn('Aktualisierungs-Verlauf', '?p=novelfood_verlauf', 'ghost') . ' '
         . bx_btn('Zurück zum Dashboard', '?p=dashboard', 'ghost'));
 
 if ($anzKatalog === 0) {

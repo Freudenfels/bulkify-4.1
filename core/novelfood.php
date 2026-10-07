@@ -16,6 +16,7 @@ function novelfood_normalisieren(array $e): ?array {
     $name = novelfood_clean((string)($e['name'] ?? ''));
     if ($name === null) return null;
     $cut = fn($v, $n) => novelfood_clean((string)($v ?? '')) !== null ? mb_substr(novelfood_clean((string)$v), 0, $n) : null;
+    $datum = fn($v) => preg_match('/^\d{4}-\d{2}-\d{2}/', (string)($v ?? '')) ? substr((string)$v, 0, 10) : null;
     return [
         'code'            => novelfood_clean((string)($e['code'] ?? '')) ?: null,
         'name'            => mb_substr($name, 0, 255),
@@ -24,7 +25,13 @@ function novelfood_normalisieren(array $e): ?array {
         'status'          => $cut($e['status'] ?? '', 120),
         'status_code'     => mb_substr((string)($e['status_code'] ?? ''), 0, 50) ?: null,
         'teil'            => $cut($e['teil'] ?? ($e['part'] ?? ''), 120),
-        'beschreibung_de' => novelfood_clean((string)($e['beschreibung_de'] ?? '')) ?: novelfood_clean((string)($e['beschreibung'] ?? '')),
+        // Deutsch und englisches Original getrennt – kein Vermischen (CSV 'description' wird in
+        // novelfood_aus_datei bereits auf beschreibung_de gemappt).
+        'beschreibung_de' => novelfood_clean((string)($e['beschreibung_de'] ?? '')) ?: null,
+        'beschreibung'    => novelfood_clean((string)($e['beschreibung'] ?? '')) ?: null,   // englisches Original (EU)
+        'pub'             => $cut($e['pub'] ?? '', 40),
+        'erstellt'        => $datum($e['erstellt'] ?? ''),
+        'geaendert'       => $datum($e['geaendert'] ?? ''),
     ];
 }
 
@@ -106,12 +113,12 @@ function novelfood_uebernehmen(array $eintraege): array {
         if ($d === null) continue;
         $ex = novelfood_finden($d);
         if ($ex) {
-            q("UPDATE novelfood_katalog SET name=?,trivial=?,syn=?,status=?,status_code=?,teil=?,beschreibung_de=? WHERE id=?",
-              [$d['name'], $d['trivial'], $d['syn'], $d['status'], $d['status_code'], $d['teil'], $d['beschreibung_de'], (int)$ex['id']]);
+            q("UPDATE novelfood_katalog SET name=?,trivial=?,syn=?,status=?,status_code=?,teil=?,beschreibung_de=?,beschreibung=?,pub=?,erstellt=?,geaendert=? WHERE id=?",
+              [$d['name'], $d['trivial'], $d['syn'], $d['status'], $d['status_code'], $d['teil'], $d['beschreibung_de'], $d['beschreibung'], $d['pub'], $d['erstellt'], $d['geaendert'], (int)$ex['id']]);
             $upd++;
         } else {
-            q("INSERT INTO novelfood_katalog (code,name,trivial,syn,status,status_code,teil,beschreibung_de) VALUES (?,?,?,?,?,?,?,?)",
-              [$d['code'], $d['name'], $d['trivial'], $d['syn'], $d['status'], $d['status_code'], $d['teil'], $d['beschreibung_de']]);
+            q("INSERT INTO novelfood_katalog (code,name,trivial,syn,status,status_code,teil,beschreibung_de,beschreibung,pub,erstellt,geaendert) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+              [$d['code'], $d['name'], $d['trivial'], $d['syn'], $d['status'], $d['status_code'], $d['teil'], $d['beschreibung_de'], $d['beschreibung'], $d['pub'], $d['erstellt'], $d['geaendert']]);
             $neu++;
         }
     }

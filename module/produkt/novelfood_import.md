@@ -16,3 +16,10 @@ Einträge mit Status alt→neu). „Jetzt übernehmen" (mit Token) liest die Dat
 Core-Logik in `core/novelfood.php` (geteilt): `novelfood_aus_datei` (JSON/CSV), `novelfood_normalisieren`,
 `novelfood_finden`, `novelfood_diff`, `novelfood_uebernehmen`. Das alte CLI `tools/novelfood_import.php` bleibt
 für den Erstimport. Einstieg: Button „Katalog aktualisieren" auf der Novel-Food-Suche.
+
+**EU-Direktabgleich (Admin):** Zusätzlich zum Datei-Upload gibt es für Admins das Panel „Direkt aus dem
+EU-Katalog aktualisieren" (Aktion `eu_sync`). Es ruft `novelfood_sync_lauf('manuell', …)` aus
+`core/novelfood_sync.php` – zieht den Katalog ohne Datei direkt aus der EU-API, übersetzt das Delta per KI
+und protokolliert den Lauf. Ergebnis wird als Banner gezeigt, Link zum `?p=novelfood_verlauf`
+(Aktualisierungs-Verlauf). Kopf-Button „Aktualisierungs-Verlauf". Derselbe Job läuft monatlich per
+`tools/novelfood_sync.php`.

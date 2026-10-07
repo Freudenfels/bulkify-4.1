@@ -2,11 +2,20 @@
 // Novel-Food-Katalog aktualisieren: aktuelle Liste hochladen (JSON/CSV) -> Diff (neu/geändert) -> übernehmen.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/novelfood.php';
+require_once BX_ROOT . '/core/novelfood_sync.php';   // EU-Direktabgleich + KI-Übersetzung (Admin-Button)
 
-$fehler = ''; $diff = null; $token = ''; $stand = null; $ergebnis = null;
+$fehler = ''; $diff = null; $token = ''; $stand = null; $ergebnis = null; $eu = null;
 $tmpPfad = fn(string $t) => BX_UPLOADS . '/nf_import_' . preg_replace('/[^a-f0-9]/', '', $t) . '.dat';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'upload') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'eu_sync') {
+    // Direkt aus der EU-API abgleichen (nur Admin – outbound + schreibt den ganzen Katalog).
+    if (!has_role('admin')) {
+        $fehler = 'Nur Admins dürfen den EU-Abgleich starten.';
+    } else {
+        $u  = function_exists('current_user') ? current_user() : null;
+        $eu = novelfood_sync_lauf('manuell', $u['name'] ?? ($u['email'] ?? null));
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'upload') {
     if (empty($_FILES['nfdatei']['name']) || ($_FILES['nfdatei']['error'] ?? 1) !== UPLOAD_ERR_OK) {
         $fehler = 'Bitte eine Datei (JSON oder CSV) hochladen.';
     } else {
@@ -36,9 +45,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'uploa
 $gesamtDb = (int) scalar("SELECT COUNT(*) FROM novelfood_katalog");
 render_header('produkte', 'Novel-Food-Katalog aktualisieren');
 bx_head('Novel-Food-Katalog aktualisieren', $gesamtDb . ' Einträge aktuell in der Datenbank',
-        bx_btn('Zur Novel-Food-Suche', '?p=novelfood'));
+        bx_btn('Aktualisierungs-Verlauf', '?p=novelfood_verlauf') . ' ' . bx_btn('Zur Novel-Food-Suche', '?p=novelfood', 'ghost'));
 
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($fehler) . '</div>';
+
+if ($eu !== null):
+  if (!empty($eu['ok'])): ?>
+  <div class="bx-panel badge-ok" style="padding:14px 16px">
+    EU-Abgleich fertig: <strong><?= (int)$eu['neu'] ?></strong> neu, <strong><?= (int)$eu['geaendert'] ?></strong> geändert
+    (<strong><?= (int)$eu['status'] ?></strong> Statuswechsel), <strong><?= (int)$eu['entfernt'] ?></strong> entfernt,
+    <strong><?= (int)$eu['uebersetzt'] ?></strong> neu übersetzt.
+    <a href="?p=novelfood_verlauf">Details ansehen</a>.
+  </div>
+  <?php else: ?>
+  <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">EU-Abgleich fehlgeschlagen: <?= h((string)($eu['fehler'] ?? 'unbekannt')) ?></div>
+  <?php endif;
+endif;
+
+if (has_role('admin')): ?>
+  <div class="bx-panel">
+    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="max-width:620px">
+        <div style="font-weight:600">Direkt aus dem EU-Katalog aktualisieren</div>
+        <p class="muted" style="margin:4px 0 0">Holt den aktuellen Novel-Food-Katalog online von der EU-Kommission, übersetzt neue und geänderte Beschreibungen ins Deutsche und protokolliert den Lauf. Kein Datei-Upload nötig – derselbe Vorgang läuft auch automatisch monatlich.</p>
+      </div>
+      <form method="post" onsubmit="return confirm('Jetzt den kompletten Novel-Food-Katalog aus der EU-API abgleichen?');">
+        <input type="hidden" name="aktion" value="eu_sync">
+        <button class="btn btn-primary" type="submit" data-busy="Abgleich läuft…">Jetzt aus EU abgleichen</button>
+      </form>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:10px">
+      KI-Übersetzung: <?= ki_bereit() ? 'eingerichtet' : 'nicht eingerichtet – Beschreibungen bleiben ggf. ohne Deutsch (später nachholbar)' ?>
+      <?php $lr = (string) meta_get('novelfood_last_run', ''); if ($lr !== '') echo ' · letzter Lauf: ' . h(fmt_zeit($lr)); ?>
+    </div>
+  </div>
+<?php endif;
 
 if ($ergebnis !== null): ?>
   <div class="bx-panel badge-ok" style="padding:14px 16px">
