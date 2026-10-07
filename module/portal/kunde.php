@@ -1474,6 +1474,9 @@ $rohKennwerte = $rohDetail ? item_kennwerte_relevant($iid) : [];
 // Reinheits-/Sicherheits-Grenzwerte (pH, Gehalt, Chloride, Sulfate, Schwermetalle, Mikrobiologie …) –
 // dieselbe Quelle wie die bulkify-Spec. Dem Kunden alle Qualitätsangaben zeigen, die wir haben.
 $rohGrenz = $rohDetail ? all("SELECT parameter, grenzwert FROM item_grenzwert WHERE item_id=? ORDER BY sort, id", [$iid]) : [];
+// bulkify-Spezifikation nur anbieten, wenn echte Daten da sind (sonst würde build_spec_pdf nichts/null liefern).
+require_once BX_ROOT . '/core/pdf_spec.php';
+$rohHatSpec = $rohDetail ? spec_hat_daten($iid) : false;
 // Wirkstoffe + Gehalt (z. B. „L-Carnosin 99 %") – das Wichtigste zu einem Pulver/Extrakt.
 $rohWirkstoffe = $rohDetail ? all("SELECT n.name, iw.gehalt_wert, iw.gehalt_prozent, iw.gehalt_einheit
     FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id
@@ -1728,7 +1731,9 @@ if (($_GET['v'] ?? '') === 'rohstoff_info') {
     $coaList = [];
     foreach (all("SELECT id, charge_nr, mhd FROM charge WHERE item_id=? AND coa_freigegeben=1 ORDER BY (wareneingang IS NULL), wareneingang DESC, id DESC", [$iid]) as $c)
         $coaList[] = ['cid' => (int)$c['id'], 'label' => ($c['charge_nr'] ?: ('#' . (int)$c['id'])) . ($c['mhd'] ? ' (MHD ' . date('m/Y', strtotime((string)$c['mhd'])) . ')' : '')];
-    echo json_encode(['name' => $it['name'], 'rows' => $rows, 'spec' => ((int)$it['spec_freigegeben'] === 1), 'coas' => $coaList], JSON_UNESCAPED_UNICODE);
+    // Spezifikation nur anbieten, wenn freigegeben UND echte Daten hinterlegt sind (sonst gibt's keine bulkify-Spec).
+    require_once BX_ROOT . '/core/pdf_spec.php';
+    echo json_encode(['name' => $it['name'], 'rows' => $rows, 'spec' => ((int)$it['spec_freigegeben'] === 1 && spec_hat_daten($iid)), 'coas' => $coaList], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -2941,7 +2946,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-panel"><h2>Dokumente</h2>
       <p class="muted" style="margin-top:0">Spezifikation, Analysenzertifikate und weitere Unterlagen zu diesem Rohstoff.</p>
       <div class="bx-row" style="flex-wrap:wrap;gap:8px">
-        <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('spec_pdf') ?>&rid=<?= (int)$rohDetail['id'] ?>">&#8681; Spezifikation (PDF)</a>
+        <?php if ($rohHatSpec): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('spec_pdf') ?>&rid=<?= (int)$rohDetail['id'] ?>">&#8681; Spezifikation (PDF)</a><?php endif; ?>
         <?php foreach ($rohCoas as $co): ?>
           <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('coa_pdf') ?>&cid=<?= (int)$co['id'] ?>">&#8681; CoA <?= h($co['charge_nr'] ?: ('#' . (int)$co['id'])) ?><?= $co['mhd'] ? ' <span class="muted">(MHD ' . h(date('m/Y', strtotime((string)$co['mhd']))) . ')</span>' : '' ?></a>
         <?php endforeach; ?>

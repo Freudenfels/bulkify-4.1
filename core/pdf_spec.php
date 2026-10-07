@@ -162,9 +162,24 @@ function spec_fuss(MiniPDF $p, float $y, bool $maschHinweis = true): void {
 // ---------------------------------------------------------------------------
 // Spezifikation eines Rohstoffs (Artikel-Ebene) – aus unseren Stammdaten.
 // ---------------------------------------------------------------------------
+// Hat der Rohstoff echte Spec-Daten (Wirkstoffe/Gehalt, charakteristische Kennwerte, Reinheits-/Grenzwerte)?
+// Nur dann ist eine bulkify-Spezifikation sinnvoll – sonst (nichts hochgeladen/ausgelesen) wird keine erzeugt.
+function spec_hat_daten(int $item_id): bool {
+    if ($item_id <= 0) return false;
+    foreach (['item_wirkstoff', 'item_kennwert', 'item_grenzwert'] as $t) {
+        if (function_exists('table_exists') && !table_exists($t)) continue;
+        if ((int) scalar("SELECT COUNT(*) FROM $t WHERE item_id=?", [$item_id]) > 0) return true;
+    }
+    return false;
+}
+
 function build_spec_pdf(int $item_id): ?string {
     $it = one("SELECT * FROM item WHERE id=?", [$item_id]);
     if (!$it) return null;
+    // Keine bulkify-Spec erzeugen, wenn keine ECHTEN Daten hinterlegt sind (wir haben nichts hochgeladen/
+    // ausgelesen). Sonst ginge ein praktisch leeres/falsches Dokument an den Kunden. Daten = Wirkstoffe
+    // (Gehalt), charakteristische Kennwerte oder Reinheits-/Grenzwerte.
+    if (!spec_hat_daten($item_id)) return null;
     $L = 40; $R = 555;
     $p = new MiniPDF();
     spec_wasserzeichen($p);
