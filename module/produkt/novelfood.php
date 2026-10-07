@@ -104,7 +104,9 @@ foreach ($zeilen as $roh) {
 }
 
 render_header('novelfood', 'Novel Food');
-bx_head('Novel Food – Schnellsuche', $anzKatalog . ' Einträge im EU-Katalog', bx_btn('Zurück zum Dashboard', '?p=dashboard', 'ghost'));
+bx_head('Novel Food – Schnellsuche', $anzKatalog . ' Einträge im EU-Katalog',
+        (has_role('admin') || has_role('production') || has_role('labor') ? bx_btn('Katalog aktualisieren', '?p=novelfood_import') . ' ' : '')
+        . bx_btn('Zurück zum Dashboard', '?p=dashboard', 'ghost'));
 
 if ($anzKatalog === 0) {
     echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:14px 16px">Der Novel-Food-Katalog ist leer. Zuerst importieren: <code>php tools/novelfood_import.php "PFAD/novelfood.json"</code>.</div>';

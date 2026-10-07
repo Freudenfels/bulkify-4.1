@@ -99,6 +99,7 @@ $routes = [
     'produkt'         => 'produkt/detail.php',
     'produkt_pib'     => 'produkt/pib.php',          // Produktinformationsblatt (PIB) ansehen (Auto oder hochgeladen)
     'novelfood'       => 'produkt/novelfood.php',   // Schnell-Nachschlage: ist ein Stoff Novel Food?
+    'novelfood_import'=> 'produkt/novelfood_import.php',   // Katalog aktualisieren (Upload + Diff)
     'angebote'        => 'angebot/liste.php',
     'angebot'         => 'angebot/detail.php',
     'dienstleistungen'=> 'dienstleistung/liste.php',   // Service-Katalog (Dienstleistungen-Modul)

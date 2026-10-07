@@ -64,6 +64,7 @@ function route_rollen_map(): array {
         'produkte'           => ['production', 'sales'],
         'produkt'            => ['production', 'sales'],
         'novelfood'          => ['production', 'sales', 'labor'],   // Novel-Food-Schnellsuche
+        'novelfood_import'   => ['production', 'labor'],            // Katalog aktualisieren (Upload+Diff)
 
         'produktion'         => ['production', 'labor', 'fulfillment'],
         'produktionsauftrag' => ['production', 'labor', 'fulfillment'],
