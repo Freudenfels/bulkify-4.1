@@ -74,6 +74,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&rezverk=1'); exit;
 }
 
+// Rezeptur für DIESEN Auftrag überarbeiten: eine eigene Kopie anlegen (Rohstoffe neu matchen + frische
+// Spec/CoA), verknüpft über auftrag.rezeptur_id. Das Kunden-Original bleibt unangetastet. Danach direkt in
+// die Kopie springen (Status 'entwurf' = sofort editierbar).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'rezeptur_auftrag_kopie') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $neu = rezeptur_fuer_auftrag_kopieren($id);
+    if ($neu) { header('Location: ?p=rezeptur_detail&id=' . $neu . '#zutaten'); exit; }
+    header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Keine Rezeptur zum Kopieren gefunden.')); exit;
+}
+
 // Fertige Ware eines Altauftrags OHNE Produktionsauftrag nachtragen und direkt ins Lager 1/2 einbuchen.
 // Legt bei Bedarf einen Produktionsauftrag an (nur als Träger für die Charge), hakt ihn ab und bucht die
 // volle Menge als Fertigware-Charge (Fulfillment → Lager 2 + Auftrag abgeschlossen). Für produzierte
@@ -303,6 +313,9 @@ $altRechnungen = all("SELECT id, datei, datei_orig, dok_datum FROM dokument WHER
 $rezEffId = (int)($a['rezeptur_id'] ?? 0);
 if (!$rezEffId && !empty($a['produkt_id'])) $rezEffId = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
 $rezeptur = $rezEffId ? one("SELECT id, nummer, name, darreichungsform, kapselgroesse_id FROM rezeptur WHERE id=?", [$rezEffId]) : null;
+// Nutzt der Auftrag schon eine eigene (vom Produkt abweichende) Rezeptur? Dann ist es bereits die Auftrags-Kopie.
+$prodRezId   = !empty($a['produkt_id']) ? (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]) : 0;
+$rezIstKopie = $rezEffId && $rezEffId !== $prodRezId;
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 // Fulfillment-Kunde? Dann wird die Ware eingelagert, nicht versendet: der Abschluss heißt „abgeschlossen"
 // (statt „versendet"), „erledigt" = „bereit zur Einlagerung". Ein zentraler Label-Helfer für alle Status-Anzeigen.
@@ -524,6 +537,13 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
     <div><div class="k muted">Rezeptur</div><div>
       <?php if ($rezeptur): ?>
         <a href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>"><?= h($rezeptur['nummer']) ?></a><?= $rezeptur['name'] ? ' · ' . h($rezeptur['name']) : '' ?>
+        <?php if ($rezIstKopie): ?> <?= bx_badge('Auftrags-Kopie','info') ?><?php endif; ?>
+        <?php if (has_role('admin')): ?>
+          <form method="post" style="display:inline;margin-left:6px" <?= $rezIstKopie ? '' : 'onsubmit="return confirm(\'Eine eigene Rezeptur-Kopie NUR für diesen Auftrag anlegen? Das Kunden-Original bleibt unverändert. Danach kannst du die Rohstoffe neu zuordnen (frische Spec/CoA).\')"' ?>>
+            <input type="hidden" name="aktion" value="rezeptur_auftrag_kopie">
+            <button class="btn btn-ghost btn-sm" type="submit"><?= $rezIstKopie ? 'Auftrags-Rezeptur bearbeiten' : 'Für diesen Auftrag überarbeiten' ?></button>
+          </form>
+        <?php endif; ?>
       <?php elseif (has_role('admin')): // keine Rezeptur verknüpft -> Picker zum Verknüpfen ?>
         <?php if (isset($_GET['rezverk'])): ?><span class="badge-ok" style="padding:3px 8px;border-radius:6px;margin-right:6px">Rezeptur verknüpft.</span><?php endif; ?>
         <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0;flex-wrap:wrap">

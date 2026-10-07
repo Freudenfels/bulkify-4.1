@@ -8329,6 +8329,38 @@ function rezepturen_zu_ueberarbeiten(): array {
                         + SUM(CASE WHEN z.item_id IS NOT NULL AND i.id IS NULL THEN 1 ELSE 0 END)) DESC, r.name");
 }
 
+// Für diesen Auftrag eine eigene, überarbeitbare Rezeptur-KOPIE anlegen (frisches Rohstoff-Matching +
+// damit aktuelle Spec/CoA). Das eingefrorene Kunden-Original bleibt unangetastet; der Auftrag nutzt die
+// Kopie über auftrag.rezeptur_id (Override). Idempotent: hat der Auftrag bereits eine eigene Rezeptur
+// (Override ≠ Produkt-Rezeptur), wird genau die zurückgegeben (kein zweiter Klon). Rückgabe: Rezeptur-Id.
+function rezeptur_fuer_auftrag_kopieren(int $auftragId): ?int {
+    if ($auftragId <= 0) return null;
+    $a = one("SELECT id, nummer, kunde_id, produkt_id, rezeptur_id FROM auftrag WHERE id=?", [$auftragId]);
+    if (!$a) return null;
+    $prodRez = !empty($a['produkt_id']) ? (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]) : 0;
+    $ovr = (int)($a['rezeptur_id'] ?? 0);
+    // Bereits eine eigene (abweichende) Rezeptur am Auftrag? Dann die weiterverwenden.
+    if ($ovr && $ovr !== $prodRez) return $ovr;
+    $quelleId = $ovr ?: $prodRez;
+    if (!$quelleId) return null;
+    $src = one("SELECT * FROM rezeptur WHERE id=?", [$quelleId]);
+    if (!$src) return null;
+    $kunde = $a['kunde_id'] ?: $src['kunde_id'];
+    $nr = naechste_nummer('RZ');
+    q("INSERT INTO rezeptur (nummer,name,synonyme,kunde_id,darreichungsform,kapselgroesse_id,exklusiv,status,notiz,basis_rezeptur_id)
+       VALUES (?,?,?,?,?,?,?, 'entwurf', ?, ?)",
+      [$nr, $src['name'] . ' (AB ' . $a['nummer'] . ')', $src['synonyme'] ?? null, $kunde ?: null,
+       $src['darreichungsform'] ?? 'kapsel', $src['kapselgroesse_id'] ?? null, $kunde ? 1 : 0,
+       'Auftrags-Kopie zur Überarbeitung (Rohstoff-Matching/Spec/CoA) für ' . $a['nummer'] . '.', $quelleId]);
+    $neu = insert_id();
+    foreach (all("SELECT item_id, bezeichnung, menge_mg, sort FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$quelleId]) as $z)
+        q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
+          [$neu, $z['item_id'], $z['bezeichnung'], $z['menge_mg'], $z['sort']]);
+    q("UPDATE auftrag SET rezeptur_id=? WHERE id=?", [$neu, $auftragId]);
+    rezeptur_bulkitem((int)$neu);
+    return (int)$neu;
+}
+
 // Status einer EINZELNEN Zutat fürs Matching-UI: 'ok' | 'frei' (Freitext) | 'tot' (Item fehlt/kein Rohstoff) | 'ohne_wirkstoff'.
 function rezeptur_zutat_match(?int $item_id): string {
     if (!$item_id) return 'frei';

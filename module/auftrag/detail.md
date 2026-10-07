@@ -56,3 +56,13 @@ Hat der Auftrag keine aufgelöste Rezeptur (COALESCE(`auftrag.rezeptur_id`, Prod
 
 ## „Rohstoff/Bulk angekommen" (Helfer im Reiter Produktion)
 Die frühere Leiste „Kunden-Status Rohstoff angekommen" über den Reitern ist entfernt. Der reine Helfer steht jetzt im Reiter **Produktion**, Block „Produktion & Beschaffung", Feld „Rohstoff/Bulk angekommen": zeigt „angekommen · Datum" oder (nur wenn noch nicht) den Button „Als angekommen markieren". **Nur Setzen, kein Rückgängig** – einmal angekommen bleibt angekommen (`rohstoff_angekommen`-Handler setzt nur, mit `rohstoff_angekommen_am IS NULL`-Guard). Rollen admin/production/einkauf.
+
+## Rezeptur für diesen Auftrag überarbeiten (Auftrags-Kopie)
+Im Rezeptur-Feld (nur Admin) der Button **„Für diesen Auftrag überarbeiten"** (Aktion `rezeptur_auftrag_kopie`
+→ `rezeptur_fuer_auftrag_kopieren($auftragId)` in core/schema.php). Legt eine eigene Rezeptur-KOPIE an
+(Name „… (AB <nr>)", Status `entwurf`, `basis_rezeptur_id` = Quelle), kopiert die Zutaten und verknüpft sie
+über `auftrag.rezeptur_id` (Override). Das eingefrorene **Kunden-Original bleibt unangetastet** – nur dieser
+Auftrag nutzt die frische Version. Danach Sprung in die Kopie (editierbar) zum Rohstoff-Matchen; dadurch
+ziehen automatisch die **aktuellen Spec/CoA** der nun korrekt zugeordneten Rohstoffe. Idempotent: nutzt der
+Auftrag bereits eine eigene (vom Produkt abweichende) Rezeptur, wird diese weiterverwendet (Badge
+„Auftrags-Kopie", Button „Auftrags-Rezeptur bearbeiten") statt ein zweiter Klon.
