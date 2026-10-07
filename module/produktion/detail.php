@@ -14,11 +14,11 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=produktionsauftrag&id=' . $id . '&ok=1'); exit;
 }
 
-// God-Mode (nur Admin): den ganzen Auftrag ohne jede Prüfung/Buchung durchklicken (keine Bestandsprüfung,
-// keine Abbuchung, keine Lager-Übergabe). Für Tests/Sonderfälle.
-if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'godmode' && has_role('admin')) {
-    $r = produktion_godmode_abschluss($id);
-    header('Location: ?p=produktionsauftrag&id=' . $id . ($r['ok'] ? '&god=' . (int)$r['done'] : '&godfehler=' . urlencode($r['msg']))); exit;
+// God-Mode (nur Admin): die Produktion auf eine STUFE setzen – Gate überspringen, ohne Bestandsprüfung/-buchung
+// und ohne Lager-Übergabe. Setzt die Schritte bis zur gewählten Stufe auf erledigt (schritt=0 = alles offen).
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'godmode_stufe' && has_role('admin')) {
+    $r = produktion_godmode_stufe_setzen($id, (int)($_POST['schritt'] ?? 0));
+    header('Location: ?p=produktionsauftrag&id=' . $id . ($r['ok'] ? '&godstufe=' . urlencode((string)$r['stufe']) : '&godfehler=' . urlencode($r['msg']))); exit;
 }
 
 // Teilmenge Fertigware einbuchen (Teilproduktion .A/.B/.C) – der Abschluss bucht später nur noch den Rest
@@ -198,18 +198,28 @@ if (isset($_GET['reserviert'])) echo '<div class="bx-panel badge-ok" style="padd
 if (isset($_GET['resfrei'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Reservierungen freigegeben.</div>';
 if (isset($_GET['teil'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Teilmenge als Charge ' . h((string)$_GET['teil']) . ' eingebucht.</div>';
 if (isset($_GET['teilfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Teilmenge nicht gebucht: ' . h((string)$_GET['teilfehler']) . '</div>';
-if (isset($_GET['god'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">God-Mode: ' . (int)$_GET['god'] . ' Schritt(e) ohne Bestandsprüfung/-buchung durchlaufen.</div>';
-if (isset($_GET['godfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">God-Mode abgebrochen: ' . h((string)$_GET['godfehler']) . '</div>';
-// God-Mode (nur Admin): den ganzen Auftrag ohne jede Prüfung/Buchung durchklicken.
-if (has_role('admin') && ($pa['status'] ?? '') !== 'erledigt') {
-    echo '<div class="bx-panel" style="border-left:3px solid var(--warn);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'
-       . '<div><div style="font-weight:600">God-Mode (Admin)</div>'
-       . '<div class="muted" style="font-size:13px">Klickt den ganzen Auftrag durch – ohne Bestandsprüfung, ohne Abbuchung, ohne Lager-Übergabe. Nur für Tests/Sonderfälle.</div></div>'
-       . '<form method="post" style="margin:0" onsubmit="return confirm(\'God-Mode: alle Schritte dieses Auftrags ohne Prüfung und ohne Bestandsbuchung abschließen?\');">'
-       . '<input type="hidden" name="aktion" value="godmode">'
-       . '<button class="btn btn-ghost" type="submit">Alles durchlaufen</button>'
-       . '</form></div>';
-}
+if (isset($_GET['godstufe'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">God-Mode: Produktion auf Stufe „' . h((string)$_GET['godstufe']) . '" gesetzt – Gate übersprungen, ohne Bestandsbuchung.</div>';
+if (isset($_GET['godfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">God-Mode: ' . h((string)$_GET['godfehler']) . '</div>';
+// God-Mode (nur Admin): Produktion auf eine Stufe setzen – Gate überspringen, ohne Bestandsprüfung/-buchung.
+if (has_role('admin')):
+    $godSchritte = all("SELECT id, station, erledigt FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$id]);
+    if ($godSchritte): ?>
+  <div class="bx-panel" style="border-left:3px solid var(--warn)">
+    <div style="font-weight:600">God-Mode (Admin): Produktion auf Stufe setzen</div>
+    <div class="muted" style="font-size:13px;margin:4px 0 10px">Setzt die Produktion auf die gewählte Stufe und überspringt den Gate/„Zaun" (z.&nbsp;B. „kein Glas da") – <strong>ohne Bestandsprüfung, ohne Abbuchung, ohne Lager-Übergabe</strong>. Für Fälle, in denen du den echten Bestand (Gläser/Kapseln) nicht verbrauchen willst. Klick auf eine Stufe = alle Schritte bis dorthin gelten als erledigt, der Rest als offen.</div>
+    <div class="bx-row" style="gap:6px;flex-wrap:wrap;align-items:center">
+      <form method="post" style="margin:0" onsubmit="return confirm('Alle Schritte wieder auf OFFEN setzen?');"><input type="hidden" name="aktion" value="godmode_stufe"><input type="hidden" name="schritt" value="0"><button class="btn btn-ghost btn-sm" type="submit">Anfang (alles offen)</button></form>
+      <span class="muted" style="font-size:12px">→</span>
+      <?php foreach ($godSchritte as $gs): $done = (int)$gs['erledigt'] === 1; ?>
+        <form method="post" style="margin:0" onsubmit="return confirm('Produktion auf diese Stufe setzen (ohne Bestandsbuchung)?');">
+          <input type="hidden" name="aktion" value="godmode_stufe"><input type="hidden" name="schritt" value="<?= (int)$gs['id'] ?>">
+          <button class="btn btn-sm <?= $done ? 'btn-primary' : 'btn-ghost' ?>" type="submit" title="Produktion auf diese Stufe setzen (Gate überspringen, ohne Buchung)"><?= h((string)$gs['station']) ?></button>
+        </form>
+      <?php endforeach; ?>
+    </div>
+  </div>
+<?php endif; endif; ?>
+<?php
 
 // Einheitliche, ruhige Wertgröße für alle Kennzahl-Karten dieser Seite.
 echo '<style>.bx-cards .v{font-size:15px;line-height:1.4} details.bx-sek>summary{cursor:pointer;list-style:none;font-weight:600;font-size:15px;color:var(--gruen);padding:12px 2px}details.bx-sek>summary::-webkit-details-marker{display:none}details.bx-sek>summary::before{content:"\\25B8 ";color:var(--gruen)}details.bx-sek[open]>summary::before{content:"\\25BE "}</style>';

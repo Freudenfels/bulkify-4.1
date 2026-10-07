@@ -6411,21 +6411,40 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
     }
     return ['ok'=>true, 'fehler'=>null, 'msg'=>'', 'fertig'=>$fertig, 'station'=>$station];
 }
-// God-Mode (nur Admin): den ganzen Produktionsauftrag in einem Rutsch durchlaufen – alle offenen Schritte der
-// Reihe nach, ohne jede Prüfung/Buchung (kein Bestand geprüft/abgebucht, keine Lager-Übergabe). Rückgabe:
-// ['ok','done'(abgeschlossene Schritte),'fertig','msg'].
-function produktion_godmode_abschluss(int $pa_id): array {
-    if (!(function_exists('has_role') && has_role('admin')))
-        return ['ok'=>false, 'done'=>0, 'fertig'=>false, 'msg'=>'Nur Admin.'];
-    $done = 0; $fertig = false; $guard = 0;
-    while ($guard++ < 500) {
-        $next = one("SELECT id FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort LIMIT 1", [$pa_id]);
-        if (!$next) { $fertig = true; break; }
-        $r = produktion_schritt_erledigen($pa_id, (int)$next['id'], '', true, true);
-        if (!($r['ok'] ?? false)) return ['ok'=>false, 'done'=>$done, 'fertig'=>false, 'msg'=>($r['msg'] ?? 'Abbruch')];
-        $done++; $fertig = (bool)($r['fertig'] ?? false);
+// God-Mode (nur Admin): die Produktion manuell auf eine STUFE setzen – einen Gate/„Zaun" überspringen
+// (z. B. „kein Glas da"), OHNE Bestand zu prüfen/abzubuchen, OHNE Lager-Übergabe und OHNE den Auftrag/die
+// Fertigware anzufassen. Setzt alle Schritte bis einschließlich $schritt_id auf erledigt, alle danach auf
+// offen, und leitet daraus den PA-Status ab (offen/laufend/erledigt). $schritt_id=0 = alles wieder offen.
+// Zweck: eine Produktion auf den richtigen Stand bringen, wenn man den echten Bestand (Gläser/Kapseln)
+// nicht verbrauchen/buchen will. Rückgabe ['ok','msg','status','erledigt','total','stufe'].
+function produktion_godmode_stufe_setzen(int $pa_id, int $schritt_id): array {
+    if (!(function_exists('has_role') && has_role('admin'))) return ['ok'=>false, 'msg'=>'Nur Admin.'];
+    if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')
+        q("UPDATE produktionsauftrag SET status='offen' WHERE id=?", [$pa_id]);   // Freigabe-Weiche überspringen
+    $schritte = all("SELECT id, sort, station FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]);
+    if (!$schritte) return ['ok'=>false, 'msg'=>'Keine Schritte am Auftrag.'];
+    $zielIdx = -1;   // -1 = alles offen
+    if ($schritt_id > 0) {
+        foreach ($schritte as $i => $s) if ((int)$s['id'] === $schritt_id) $zielIdx = $i;
+        if ($zielIdx < 0) return ['ok'=>false, 'msg'=>'Schritt gehört nicht zu diesem Auftrag.'];
     }
-    return ['ok'=>true, 'done'=>$done, 'fertig'=>$fertig, 'msg'=>''];
+    $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
+    $now = gmdate('Y-m-d H:i:s');
+    foreach ($schritte as $i => $s) {
+        if ($i <= $zielIdx)
+            q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=COALESCE(erledigt_at,?), erledigt_von=COALESCE(NULLIF(erledigt_von,''),?) WHERE id=? AND erledigt=0",
+              [$now, $wer !== '' ? $wer : null, (int)$s['id']]);
+        else
+            q("UPDATE produktion_schritt SET erledigt=0, erledigt_at=NULL WHERE id=? AND erledigt=1", [(int)$s['id']]);
+    }
+    $total = count($schritte); $erledigt = $zielIdx + 1;
+    $status = $erledigt <= 0 ? 'offen' : ($erledigt >= $total ? 'erledigt' : 'laufend');
+    q("UPDATE produktionsauftrag SET status=? WHERE id=?", [$status, $pa_id]);   // KEINE Lager-Übergabe, KEIN auftrag.status
+    $stufeName = $zielIdx >= 0 ? (string)$schritte[$zielIdx]['station'] : 'Anfang (alles offen)';
+    $pa = one("SELECT nummer, kunde_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if ($pa && !empty($pa['kunde_id']))
+        log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Produktion ' . $pa['nummer'] . ' per God-Mode (Admin) auf Stufe „' . $stufeName . '" gesetzt (Gate übersprungen, ohne Bestandsbuchung).', 'auftrag', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
+    return ['ok'=>true, 'msg'=>'', 'status'=>$status, 'erledigt'=>$erledigt, 'total'=>$total, 'stufe'=>$stufeName];
 }
 
 // Materialbedarf eines Produktionsauftrags: je Rohstoff benötigte vs. verfügbare Menge.
