@@ -165,13 +165,14 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   if ($charge): $gfmt = fn($g) => $g >= 1000 ? rtrim(rtrim(number_format($g/1000,3,',','.'),'0'),',') . ' kg' : rtrim(rtrim(number_format($g,2,',','.'),'0'),',') . ' g'; ?>
   <div class="bx-panel">
     <h2 style="margin-top:0">Ansatz / Charge <span class="muted" style="font-weight:400;font-size:13px">– wie viel du von jedem Rohstoff mischen/bestellen musst</span></h2>
-    <div class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
+    <label style="display:block;margin-bottom:4px"><?= $form === 'fluessig' ? 'Anzahl Flaschen' : 'Anzahl Einheiten (' . h($bezug) . ')' ?></label>
+    <div class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap">
       <?php if ($form === 'fluessig'): ?>
-        <div class="bx-field" style="max-width:200px"><label>Anzahl Flaschen</label><input type="text" name="c_flaschen" value="<?= h((string)$cFlaschen) ?>"></div>
+        <input type="text" name="c_flaschen" value="<?= h((string)$cFlaschen) ?>" style="max-width:200px">
         <input type="hidden" name="c_einheiten" value="<?= h((string)$cEinheiten) ?>">
-        <div class="muted" style="font-size:13px;padding-bottom:8px">= <strong><?= (int)($charge['einheiten'] ?? 0) ?></strong> Tropfen gesamt</div>
+        <span class="muted" style="font-size:13px">= <strong><?= (int)($charge['einheiten'] ?? 0) ?></strong> Tropfen gesamt</span>
       <?php else: ?>
-        <div class="bx-field" style="max-width:220px"><label>Anzahl Einheiten (<?= h($bezug) ?>)</label><input type="text" name="c_einheiten" value="<?= h((string)$cEinheiten) ?>"></div>
+        <input type="text" name="c_einheiten" value="<?= h((string)$cEinheiten) ?>" style="max-width:220px">
         <input type="hidden" name="c_flaschen" value="<?= h((string)$cFlaschen) ?>">
       <?php endif; ?>
       <button type="submit" class="btn btn-ghost" name="aktion" value="recalc">Charge berechnen</button>
