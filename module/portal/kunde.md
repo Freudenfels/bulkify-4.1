@@ -158,6 +158,13 @@ Katalog-Guards berücksichtigen `$eigeneProd`. Der Rest bleibt unter **Katalog**
 Die Portal-**Suche** (`$sucheForm`) ist **live**: Eingabe filtert automatisch (debounced Auto-Submit,
 `data-live`), mit Autofokus und Fokus-Wiederherstellung nach dem Reload – kein „Suchen"-Klick nötig.
 
+**Produkt-Detail (`&v=produkt&pid=`) sichtbar = Katalog-Recht ODER Besitz.** `$prodDetail` lädt ein Produkt,
+wenn der Kunde es entweder im Katalog sehen darf (`portal_produkte` **und** `status='aktiv'` **und**
+`exklusiv=0 OR kunde_id`) **oder** es bereits besitzt – Besitz = genau die drei „Eigene"-Quellen
+(`produkt.kunde_id`, `produkt_kundenpreis`, `auftrag`). Ohne die Besitz-Zweige scheiterten eigene
+(meist exklusive, über v3 ohne `produkt.kunde_id` importierte) Produkte: sie standen zwar in der Liste,
+das Detail gab aber für alle „Produkt nicht gefunden".
+
 ## Team-Sicht im Kundenportal: Angebote/Anfragen löschen
 Öffnet ein **Team-Mitglied** das Kundenportal über den Token (Button „Kundenportal öffnen" am Kunden), erkennt die Seite das an der Team-Session: `$adminImPortal = is_logged_in() && !ist_echter_lieferant()` (gleiche Bedingung wie `$internVorschau`, das die Passwort-Einrichtung überspringt). Ein **echter Kunde** hat keine Team-Session → sieht davon nichts.
 

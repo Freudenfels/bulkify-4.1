@@ -1307,9 +1307,17 @@ $rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, form, cas, name_lat
     ORDER BY name", [$q, $qLike, $qLike, $qLike, $qLike]) : [];
 // Produkt-Detail (aus dem Katalog)
 $pid = (int)($_GET['pid'] ?? 0);
-$prodDetail = ($pid && $k['portal_produkte']) ? one("SELECT p.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS anzeige_name, r.darreichungsform, r.name AS rez_name
+// Sichtbar ist ein Produkt, wenn der Kunde es (a) im Katalog sehen darf – Produkt-Recht + aktiv + nicht fremd-exklusiv –
+// ODER (b) es bereits BESITZT. Besitz = genau die Quellen der „Eigene"-Liste (produkt.kunde_id, produkt_kundenpreis,
+// auftrag). Sonst tauchen eigene Produkte in der Liste auf, lassen sich aber nicht öffnen („Produkt nicht gefunden").
+$prodDetail = $pid ? one("SELECT p.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS anzeige_name, r.darreichungsform, r.name AS rez_name
     FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
-    WHERE p.id=? AND p.status='aktiv' AND (p.exklusiv=0 OR p.kunde_id=?)", [$pid, $kid]) : null;
+    WHERE p.id=? AND (
+           (? = 1 AND p.status='aktiv' AND (p.exklusiv=0 OR p.kunde_id=?))
+        OR p.kunde_id=?
+        OR EXISTS(SELECT 1 FROM auftrag a WHERE a.produkt_id=p.id AND a.kunde_id=?)
+        OR EXISTS(SELECT 1 FROM produkt_kundenpreis pk WHERE pk.produkt_id=p.id AND pk.kunde_id=?)
+    )", [$pid, (int)!empty($k['portal_produkte']), $kid, $kid, $kid, $kid]) : null;
 $prodZutaten = ($prodDetail && $prodDetail['rezeptur_id']) ? all("SELECT z.item_id, z.bezeichnung, z.menge_mg, i.allergene, i.vegan, i.gvo_frei
     FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [(int)$prodDetail['rezeptur_id']]) : [];
 // Aus den verknüpften Rohstoffen: Wirkstoffe je Zutat + Nährwert-Aggregation je Einheit + Deklaration
