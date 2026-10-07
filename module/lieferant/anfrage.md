@@ -41,3 +41,6 @@ Detailseite dem Lieferanten die **Rezeptur** (Panel „Rezeptur") – Inhaltssto
 (`bezeichnung`, sonst Item-Name) mit **mg je Einheit** plus Füllgewicht. Ohne das wüsste der
 Lohnhersteller nicht, was er herstellen soll. Bei reinen **Rohstoff**-Anfragen (kein `rezeptur_id`)
 erscheint kein Rezeptur-Panel. Labels: `lp_t('rezeptur'|'wirkstoff'|'mg_je_einheit'|'fuellgewicht')`.
+
+## Anzeige-Name ohne Kategorie-Praefix (2026-10-08)
+In Liste + Detail zeigt die Artikel-Ueberschrift den Artikelnamen bzw. den Betreff, aber OHNE fuehrenden Kategorie-Praefix (z. B. "Fertigprodukt (Bulk): ") – die Art/Form steht ohnehin direkt darunter (anfrage_art_label). Helfer `$anzName()` strippt den Praefix aus `anfrage_arten()[art]`. Betrifft nur die Anzeige; der gespeicherte Betreff (E-Mail-Betreff) bleibt unveraendert.

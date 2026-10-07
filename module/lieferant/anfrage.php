@@ -82,6 +82,18 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 lp_head('bulkify – ' . lp_t('anfragen'));
 lp_shell_start('lieferant_anfrage');
+// Anzeige-Name: Artikelname, sonst Betreff OHNE fuehrenden Kategorie-Praefix ("Fertigprodukt (Bulk): …"),
+// da Art/Form ohnehin direkt darunter stehen (sonst doppelt).
+$anzName = function(array $r): string {
+    $name = trim((string)($r['item_name'] ?? ''));
+    if ($name !== '') return $name;
+    $betreff = trim((string)($r['betreff'] ?? ''));
+    if ($betreff === '') return '–';
+    $pref = anfrage_arten()[(string)($r['art'] ?? '')] ?? '';
+    if ($pref !== '' && mb_stripos($betreff, $pref . ':') === 0)
+        $betreff = trim(mb_substr($betreff, mb_strlen($pref) + 1));
+    return $betreff !== '' ? $betreff : '–';
+};
 if (isset($_GET['ok']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('gespeichert')) . (isset($_GET['gelesen']) ? ' ' . h(lp_t('datei_gelesen')) : '') . (isset($_GET['unterlagen']) ? ' ' . h(lp_t('coa_empfangen')) : '') . '</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 
@@ -98,7 +110,7 @@ if (!$a):
       <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('artikel')) ?></th><th class="bx-num"><?= h(lp_t('gewuenscht')) ?></th><th class="bx-num"><?= h(lp_t('ihr_preis')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
       <tbody><?php foreach ($liste as $r): ?>
         <tr><td><?= h($r['nummer']) ?></td>
-            <td><?= h(($r['item_name'] ?? '') !== '' ? $r['item_name'] : ($r['betreff'] ?? '–')) ?>
+            <td><?= h($anzName($r)) ?>
                 <?php $typL = anfrage_art_label((string)($r['art'] ?? ''), (string)($r['form'] ?? ''), lp_sprache()); ?>
                 <?php if ($typL !== ''): ?><div class="muted" style="font-size:12px"><?= h($typL) ?></div><?php endif; ?></td>
             <td class="bx-num"><?= $r['menge'] ? h(lp_num($r['menge'])) . ' ' . h(lp_einheit($r['einheit'] ?: ($r['item_einheit'] ?? ''), (float)$r['menge'])) : '–' ?></td>
@@ -136,7 +148,7 @@ if (!$a):
   <p class="bx-sub"><a href="?p=lieferant_anfrage">&larr; <?= h(lp_t('anfragen')) ?></a></p>
 
   <div class="bx-panel">
-    <h2 style="margin-top:0"><?= h(($a['item_name'] ?? '') !== '' ? $a['item_name'] : ($a['betreff'] ?? '–')) ?></h2>
+    <h2 style="margin-top:0"><?= h($anzName($a)) ?></h2>
     <div class="bx-tablewrap"><table class="bx-table"><tbody>
       <?php $typ = anfrage_art_label((string)($a['art'] ?? ''), (string)($a['form'] ?? ''), lp_sprache()); ?>
       <?php if ($typ !== ''): ?><tr><td style="width:220px"><?= h(lp_t('produkttyp')) ?></td><td><?= h($typ) ?></td></tr><?php endif; ?>
