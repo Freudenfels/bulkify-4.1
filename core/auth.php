@@ -60,6 +60,7 @@ function route_rollen_map(): array {
         'kapsel_referenz'    => ['production', 'labor', 'sales'],   // Nachschlagewerk Kapselgrößen
         'rezeptur_detail'    => ['production', 'labor'],
         'rezeptur_umbau'     => ['production', 'labor'],
+        'produktbuilder'     => ['production', 'sales', 'labor'],
         'produkte'           => ['production', 'sales'],
         'produkt'            => ['production', 'sales'],
         'novelfood'          => ['production', 'sales', 'labor'],   // Novel-Food-Schnellsuche

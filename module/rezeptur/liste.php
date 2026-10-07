@@ -128,7 +128,8 @@ $cols = [
 render_header('rezeptur', 'Rezepturen');
 $umbauN = count(rezepturen_zu_ueberarbeiten());   // Rezepturen mit nicht gematchten Rohstoffen
 bx_head('Rezepturen', count($rows) . ' Einträge',
-        ($umbauN ? bx_btn('Überarbeiten (' . $umbauN . ')', '?p=rezeptur_umbau') . ' ' : '')
+        bx_btn('Produktbuilder (KI)', '?p=produktbuilder') . ' '
+        . ($umbauN ? bx_btn('Überarbeiten (' . $umbauN . ')', '?p=rezeptur_umbau') . ' ' : '')
         . bx_btn('Neue Rezeptur', '?p=rezeptur_detail&id=neu', 'primary'));
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rezeptur gelöscht.</div>';
 ?>
