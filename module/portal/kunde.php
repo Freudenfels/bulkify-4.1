@@ -3407,6 +3407,65 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
 
+  <?php
+    // ---- Etikett-Design + PFLICHT-Freigabe: einmal rendern, Platzierung je nach Freigabestatus ----
+    // Offen  -> prominente Kachel UEBER Bestelldetails/Dokumente. Freigegeben -> unauffaellig DARUNTER.
+    $etBraucht = auftrag_braucht_etikett((int)$a['id']);
+    $etFrei = false; $etHtml = '';
+    if ($etBraucht) {
+      $etDok     = etikett_datei((int)$a['id']);                 // eigenes Design dieses Auftrags
+      $etQuelle  = $etDok ?: etikett_quelle((int)$a['id']);      // sonst: altes Etikett (Vorbestellung)
+      $etFrei    = etikett_freigegeben((int)$a['id']);
+      $etVorlage = etikett_druckvorlage_datei((int)($a['produkt_id'] ?? 0));
+      ob_start(); ?>
+      <h2 style="margin:0 0 12px;font-size:16px">Ihr Etikett</h2>
+      <?php $__etbK = etikett_bestand_info((int)($a['produkt_id'] ?? 0), (int)$k['id']);
+            if (!empty($__etbK['hat_etikett']) && $__etbK['bezahlt'] > 0): ?>
+        <p class="muted" style="font-size:12px;margin:0 0 8px">Ihre Etiketten im Lager: <strong><?= number_format($__etbK['kunde_sichtbar'], 0, ',', '.') ?></strong> von <?= number_format($__etbK['bezahlt'], 0, ',', '.') ?> bestellten</p>
+      <?php endif; ?>
+      <?php if (isset($_GET['etikett'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Etikett-Design gespeichert – bitte unten noch freigeben.</div><?php endif; ?>
+      <?php if (isset($_GET['etikettfrei'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Danke! Etikett ist freigegeben – die Produktion kann starten.</div><?php endif; ?>
+      <?php if (isset($_GET['etikettfehlt'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Bitte Ihren Namen für die Freigabe angeben.</div><?php endif; ?>
+      <?php if (isset($_GET['etiketthaftung'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Bitte bestätigen Sie den Hinweis zum Etikett (Haken setzen), um verbindlich freizugeben.</div><?php endif; ?>
+
+      <?php if ($etFrei): ?>
+        <?php $fa = one("SELECT etikett_freigabe_am, etikett_freigabe_von FROM auftrag WHERE id=?", [(int)$a['id']]); ?>
+        <p style="margin:0 0 8px"><span class="bx-ok">✓ Freigegeben</span><?= !empty($fa['etikett_freigabe_am']) ? ' am ' . h(fmt_zeit($fa['etikett_freigabe_am'], 'd.m.Y')) : '' ?><?= !empty($fa['etikett_freigabe_von']) ? ' durch ' . h($fa['etikett_freigabe_von']) : '' ?>
+          <?php if ($etDok): ?> · <a href="<?= $portalLink('etikett_datei') ?>&aid=<?= (int)$a['id'] ?>" target="_blank"><?= h($etDok['datei_orig'] ?: 'Etikett-Design') ?></a><?php endif; ?></p>
+
+      <?php elseif ($etQuelle): ?>
+        <?php $istAlt = !$etDok && !empty($etQuelle['alt']); ?>
+        <p style="margin:0 0 6px">
+          <?php if ($istAlt): ?><strong>Bisheriges Etikett</strong> aus Ihrer vorherigen Bestellung<?php else: ?><span class="bx-ok">✓ hochgeladen</span><?php endif; ?>
+          · <a href="<?= $portalLink('etikett_datei') ?>&aid=<?= (int)($etQuelle['quell_auftrag_id'] ?? $a['id']) ?>" target="_blank"><?= h($etQuelle['datei_orig'] ?: 'Etikett-Design') ?></a>
+          <?php if (!empty($etQuelle['angelegt'])): ?><span class="muted">· <?= h(fmt_zeit($etQuelle['angelegt'], 'd.m.Y')) ?></span><?php endif; ?>
+        </p>
+        <p style="margin:0 0 10px;color:var(--danger,#d64545);font-weight:600">Bitte dieses Etikett für die Produktion freigeben. <?= $istAlt ? 'Auch bei einer Nachbestellung brauchen wir Ihre erneute Freigabe des Etiketts.' : '' ?></p>
+        <form method="post" style="margin:0 0 8px">
+          <input type="hidden" name="aktion" value="etikett_freigeben"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>">
+          <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text);margin:0 0 10px;max-width:640px">
+            <input type="checkbox" name="haftung" value="1" required style="margin-top:3px">
+            <span><?= h(etikett_haftung_text()) ?></span>
+          </label>
+          <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="text" name="freigabe_name" required placeholder="Ihr Name (Freigabe)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:200px;background:var(--panel)">
+            <button class="btn btn-primary btn-sm" type="submit">Etikett verbindlich freigeben</button>
+          </div>
+        </form>
+        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-ghost btn-sm" type="submit"><?= $istAlt ? 'Anderes Etikett hochladen' : 'Neues Design hochladen' ?></button></form>
+
+      <?php else: ?>
+        <p style="margin:0 0 8px"><strong style="color:var(--danger,#d64545)">✗ noch nicht hochgeladen</strong> – bitte laden Sie Ihr Etikett-Design (PDF oder Bild) hoch und geben es anschließend frei.</p>
+        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-primary btn-sm" type="submit">Etikett-Design hochladen</button></form>
+      <?php endif; ?>
+      <?php if ($etVorlage): ?><p style="margin:8px 0 0"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('druckvorlage') ?>&aid=<?= (int)$a['id'] ?>" target="_blank">Etikett-Druckvorlage herunterladen</a> <span class="muted" style="font-size:12px">– mit Maßen/Stanzkontur</span></p><?php endif; ?>
+      <?php $etHtml = ob_get_clean();
+    }
+  ?>
+  <?php if ($etBraucht && !$etFrei): ?>
+  <div class="bx-panel" style="margin:0 0 var(--sp-5);border-color:var(--gruen);background:var(--panel-2)"><?= $etHtml ?></div>
+  <?php endif; ?>
+
   <!-- Bestelldetails + Rechnung nebeneinander -->
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;align-items:start;margin-bottom:var(--sp-5)">
   <div class="bx-panel" style="margin:0">
@@ -3485,58 +3544,12 @@ portal_head('Kundenportal · ' . $k['firma']);
       </div>
       <?php endif; ?>
 
-    <?php // Etikett-Design + PFLICHT-Freigabe (auch bei Nachbestellung mit altem Etikett).
-      $etBraucht = auftrag_braucht_etikett((int)$a['id']);
-      $etDok     = etikett_datei((int)$a['id']);                 // eigenes Design dieses Auftrags
-      $etQuelle  = $etDok ?: etikett_quelle((int)$a['id']);      // sonst: altes Etikett (Vorbestellung)
-      $etFrei    = etikett_freigegeben((int)$a['id']);
-      $etVorlage = etikett_druckvorlage_datei((int)($a['produkt_id'] ?? 0));
-    ?>
-    <?php if ($etBraucht): ?>
-    <div class="muted" style="font-size:13px;margin:18px 0 8px">Ihr Etikett</div>
-    <?php $__etbK = etikett_bestand_info((int)($a['produkt_id'] ?? 0), (int)$k['id']);
-          if (!empty($__etbK['hat_etikett']) && $__etbK['bezahlt'] > 0): ?>
-      <p class="muted" style="font-size:12px;margin:0 0 8px">Ihre Etiketten im Lager: <strong><?= number_format($__etbK['kunde_sichtbar'], 0, ',', '.') ?></strong> von <?= number_format($__etbK['bezahlt'], 0, ',', '.') ?> bestellten</p>
-    <?php endif; ?>
-    <?php if (isset($_GET['etikett'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Etikett-Design gespeichert – bitte unten noch freigeben.</div><?php endif; ?>
-    <?php if (isset($_GET['etikettfrei'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Danke! Etikett ist freigegeben – die Produktion kann starten.</div><?php endif; ?>
-    <?php if (isset($_GET['etikettfehlt'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:#e6c4c0;color:#8f231b">Bitte Ihren Namen für die Freigabe angeben.</div><?php endif; ?>
-    <?php if (isset($_GET['etiketthaftung'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:#e6c4c0;color:#8f231b">Bitte bestätigen Sie den Hinweis zum Etikett (Haken setzen), um verbindlich freizugeben.</div><?php endif; ?>
-
-    <?php if ($etFrei): ?>
-      <?php $fa = one("SELECT etikett_freigabe_am, etikett_freigabe_von FROM auftrag WHERE id=?", [(int)$a['id']]); ?>
-      <p style="margin:0 0 8px"><span class="bx-ok">✓ Freigegeben</span><?= !empty($fa['etikett_freigabe_am']) ? ' am ' . h(fmt_zeit($fa['etikett_freigabe_am'], 'd.m.Y')) : '' ?><?= !empty($fa['etikett_freigabe_von']) ? ' durch ' . h($fa['etikett_freigabe_von']) : '' ?>
-        <?php if ($etDok): ?> · <a href="<?= $portalLink('etikett_datei') ?>&aid=<?= (int)$a['id'] ?>" target="_blank"><?= h($etDok['datei_orig'] ?: 'Etikett-Design') ?></a><?php endif; ?></p>
-
-    <?php elseif ($etQuelle): ?>
-      <?php $istAlt = !$etDok && !empty($etQuelle['alt']); ?>
-      <p style="margin:0 0 6px">
-        <?php if ($istAlt): ?><strong>Bisheriges Etikett</strong> aus Ihrer vorherigen Bestellung<?php else: ?><span class="bx-ok">✓ hochgeladen</span><?php endif; ?>
-        · <a href="<?= $portalLink('etikett_datei') ?>&aid=<?= (int)($etQuelle['quell_auftrag_id'] ?? $a['id']) ?>" target="_blank"><?= h($etQuelle['datei_orig'] ?: 'Etikett-Design') ?></a>
-        <?php if (!empty($etQuelle['angelegt'])): ?><span class="muted">· <?= h(fmt_zeit($etQuelle['angelegt'], 'd.m.Y')) ?></span><?php endif; ?>
-      </p>
-      <p style="margin:0 0 8px;color:#8f231b"><strong>Bitte dieses Etikett für die Produktion freigeben.</strong> <?= $istAlt ? 'Auch bei einer Nachbestellung brauchen wir Ihre erneute Freigabe des Etiketts.' : '' ?></p>
-      <form method="post" style="margin:0 0 8px">
-        <input type="hidden" name="aktion" value="etikett_freigeben"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>">
-        <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#444;margin:0 0 10px;max-width:640px">
-          <input type="checkbox" name="haftung" value="1" required style="margin-top:3px">
-          <span><?= h(etikett_haftung_text()) ?></span>
-        </label>
-        <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap">
-          <input type="text" name="freigabe_name" required placeholder="Ihr Name (Freigabe)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:200px">
-          <button class="btn btn-primary btn-sm" type="submit">Etikett verbindlich freigeben</button>
-        </div>
-      </form>
-      <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-ghost btn-sm" type="submit"><?= $istAlt ? 'Anderes Etikett hochladen' : 'Neues Design hochladen' ?></button></form>
-
-    <?php else: ?>
-      <p style="margin:0 0 8px"><strong style="color:#8f231b">✗ noch nicht hochgeladen</strong> – bitte laden Sie Ihr Etikett-Design (PDF oder Bild) hoch und geben es anschließend frei.</p>
-      <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-primary btn-sm" type="submit">Etikett-Design hochladen</button></form>
-    <?php endif; ?>
-    <?php if ($etVorlage): ?><p style="margin:8px 0 0"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('druckvorlage') ?>&aid=<?= (int)$a['id'] ?>" target="_blank">Etikett-Druckvorlage herunterladen</a> <span class="muted" style="font-size:12px">– mit Maßen/Stanzkontur</span></p><?php endif; ?>
-    <?php endif; /* $etBraucht */ ?>
+    <?php /* Etikett-Design + Freigabe wird ausserhalb der Kacheln gerendert ($etHtml): offen -> prominent oben, freigegeben -> unten. */ ?>
   </div>
   </div>
+  <?php if ($etBraucht && $etFrei): ?>
+  <div class="bx-panel" style="margin:0 0 var(--sp-5)"><?= $etHtml ?></div>
+  <?php endif; ?>
 
   <?php endif; ?>
 
