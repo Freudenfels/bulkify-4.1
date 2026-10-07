@@ -281,6 +281,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
             if ($pidA) q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$verpId, $pidA]);
         }
     }
+    // Stück/Kapseln je Packung: am Auftrag (stueck) UND dauerhaft am Produkt (einheiten_pro_packung) setzen –
+    // so übernehmen künftige Nachbestellungen den Wert und man muss nichts erneut anpassen.
+    if (array_key_exists('einheiten_pro_packung', $_POST) && trim((string)$_POST['einheiten_pro_packung']) !== '') {
+        $epp = max(0, (int)$_POST['einheiten_pro_packung']);
+        q("UPDATE auftrag SET stueck=? WHERE id=?", [$epp ?: null, $id]);
+        $pidE = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$id]);
+        if ($pidE && $epp > 0) q("UPDATE produkt SET einheiten_pro_packung=? WHERE id=?", [$epp, $pidE]);
+    }
     // Kapselgröße = Rezeptur-Eigenschaft -> als Standard an der Rezeptur dieses Produkts setzen
     // (gilt für alle Aufträge dieses Produkts). Nur wenn gesendet.
     if (array_key_exists('kapselgroesse_id', $_POST)) {
@@ -462,10 +470,16 @@ echo '<style>.bx-cards{flex-wrap:nowrap;gap:8px}'
     default         => ['#ffffff', '#111827'],
 };
 $stText = $stLbl($a['status']);
+// Effektives Glas (Behälter): Auftrags-Override oder Produkt. Für die Anzeige „welches Glas".
+$glasId   = (int)($a['verpackung_id'] ?? 0) ?: (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
+$glasName = $glasId ? (string) scalar("SELECT name FROM item WHERE id=?", [$glasId]) : '';
+$fehltCard = fn($txt) => '<span style="color:var(--warn)">' . h($txt) . '</span>';
 echo '<div class="bx-cards">';
 echo '<div class="bx-card bx-card-status" title="Status" style="background:' . $stBg . ';color:' . $stFg . ';border:1px solid rgba(0,0,0,.15)"><div class="v" style="color:' . $stFg . '">' . h($stText) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . (int)$a['menge'] . '</div></div>';
-if ($einhProP > 0) echo '<div class="bx-card"><div class="k">Stück je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . '</div></div>';
+// Glas + Kapselzahl IMMER zeigen (auch wenn leer) – sonst sieht man bei alten Nachbestellungen nicht, dass es fehlt.
+echo '<div class="bx-card"><div class="k">Verpackung (Glas)</div><div class="v" style="font-size:16px">' . ($glasName !== '' ? h($glasName) : $fehltCard('nicht gesetzt')) . '</div></div>';
+echo '<div class="bx-card"><div class="k">Stück je Packung</div><div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') : $fehltCard('nicht gesetzt')) . '</div></div>';
 if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamtstückzahl</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
 if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablette</div><div class="v">' . h($groesseLbl) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Herstellung</div><div class="v">' . ($istFremd ? bx_badge('Zukauf','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
@@ -1010,6 +1024,8 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
         <?php endforeach; ?>
       </select>
     </div>
+    <div class="bx-field"><label>Stück/Kapseln je Packung <?= bx_hint('Wie viele Einheiten (z. B. Kapseln) in eine Packung kommen. Hier gesetzt wird DAUERHAFT am Produkt gespeichert – künftige Nachbestellungen übernehmen es, und daraus rechnen sich Glas/Etikett/Packungsbedarf. Bei alten Produkten (v3) ist das oft leer.') ?></label>
+      <input type="number" name="einheiten_pro_packung" min="0" value="<?= $einhProP > 0 ? (int)$einhProP : '' ?>" placeholder="z. B. 120"></div>
     <?php if ($rezeptur && in_array($rezeptur['darreichungsform'] ?? '', ['kapsel','softgel'], true)): ?>
     <div class="bx-field"><label>Kapselgröße <?= bx_hint('Gilt für die Rezeptur dieses Produkts (Standard für alle Aufträge). Wirkt auf Leerkapsel-Bedarf und Packungsrechnung.') ?></label>
       <select name="kapselgroesse_id">
