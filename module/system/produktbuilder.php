@@ -177,8 +177,9 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       <?php endif; ?>
       <button type="submit" class="btn btn-ghost" name="aktion" value="recalc">Charge berechnen</button>
     </div>
+    <?php $istFl = ($form === 'fluessig'); $vfmt = fn($ml) => $ml >= 1000 ? rtrim(rtrim(number_format($ml/1000,3,',','.'),'0'),',') . ' L' : rtrim(rtrim(number_format($ml,1,',','.'),'0'),',') . ' ml'; ?>
     <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
-      <thead><tr><th>Rohstoff</th><th>Rolle</th><th class="bx-num">je Bezug (mg)</th><th class="bx-num">Gesamt für die Charge</th></tr></thead>
+      <thead><tr><th>Rohstoff</th><th>Rolle</th><th class="bx-num">je Bezug (mg)</th><th class="bx-num">Gesamt (Gewicht)</th><?php if ($istFl): ?><th class="bx-num">Gesamt (Volumen ≈)</th><?php endif; ?></tr></thead>
       <tbody>
       <?php foreach ((array)($charge['zeilen'] ?? []) as $cz): ?>
         <tr>
@@ -186,12 +187,13 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
           <td><?= h((string)$cz['rolle']) ?></td>
           <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$cz['je_einheit_mg'],4,',','.'),'0'),',')) ?></td>
           <td class="bx-num"><strong><?= h($gfmt((float)$cz['gesamt_g'])) ?></strong></td>
+          <?php if ($istFl): ?><td class="bx-num"><?= h($vfmt((float)$cz['gesamt_g'] / $ldichte)) ?></td><?php endif; ?>
         </tr>
       <?php endforeach; ?>
-        <tr style="font-weight:600"><td colspan="3">Gesamtmenge Ansatz</td><td class="bx-num"><?= h($gfmt((float)($charge['gesamt_g'] ?? 0))) ?></td></tr>
+        <tr style="font-weight:600"><td colspan="3">Gesamtmenge Ansatz</td><td class="bx-num"><?= h($gfmt((float)($charge['gesamt_g'] ?? 0))) ?></td><?php if ($istFl): ?><td class="bx-num"><?= h($vfmt((float)($charge['gesamt_g'] ?? 0) / $ldichte)) ?></td><?php endif; ?></tr>
       </tbody>
     </table></div>
-    <div class="muted" style="font-size:12px;margin-top:8px">Gesamt je Rohstoff = „mg je Bezug" × Anzahl <?= $form==='fluessig' ? 'Tropfen (Flaschen × Tropfen/Flasche)' : 'Einheiten' ?>. Das ist deine Einkaufs- und Mischmenge. Ändere die Anzahl und „Charge berechnen".</div>
+    <div class="muted" style="font-size:12px;margin-top:8px">Gesamt je Rohstoff = „mg je Bezug" × Anzahl <?= $istFl ? 'Tropfen (Flaschen × Tropfen/Flasche)' : 'Einheiten' ?>. <?php if ($istFl): ?>Volumen ≈ Gewicht ÷ Dichte (<?= h(rtrim(rtrim(number_format($ldichte,3,',','.'),'0'),',')) ?> g/ml) – fürs genaue Dosieren bitte <strong>wiegen</strong> (präziser als volumetrisch), die ml-Spalte ist die Volumen­referenz. <?php endif; ?>Das ist deine Einkaufs- und Mischmenge.</div>
   </div>
   <?php endif; ?>
 
