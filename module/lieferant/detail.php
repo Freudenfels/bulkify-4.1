@@ -87,11 +87,11 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einladung_mailen') {
     $einl = lieferant_einladung((int)$id, mail_basis_url());
     $f = mail_lieferant_einladung((int)$id, (string)$einl['link']);
-    header('Location: ?p=lieferant&id=' . (int)$id . ($f === '' ? '&gemailt=1' : '&mailfehler=' . urlencode($f))); exit;
+    header('Location: ?p=lieferant&id=' . (int)$id . ($f === '' ? '&gemailt=1' : '&mailfehler=' . urlencode($f)) . '#zugang'); exit;
 }
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einladen') {
     lieferant_einladung((int)$id);
-    header('Location: ?p=lieferant&id=' . (int)$id . '&eingeladen=1'); exit;
+    header('Location: ?p=lieferant&id=' . (int)$id . '&eingeladen=1#zugang'); exit;
 }
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage') {
     lieferant_anfrage_stellen((int)$id,
