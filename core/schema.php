@@ -6902,9 +6902,20 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     $s = one("SELECT * FROM angebot_staffel WHERE angebot_id=? AND bestaetigt=1 ORDER BY sort LIMIT 1", [$angebot_id]);
     if (!$s) return null;
     $menge = (int)$s['menge']; $vk = (float)$s['vk_stueck']; $netto = round($menge * $vk, 2);
-    q("INSERT INTO auftrag (nummer,angebot_id,kunde_id,produkt_id,menge,vk_stueck,gesamt_netto,status)
-       VALUES (?,?,?,?,?,?,?,?)",
-      [naechste_nummer('AB'), $angebot_id, $a['kunde_id'], $a['produkt_id'], $menge, $vk, $netto, 'offen']);
+    // Stück je Packung + Behälter MIT in den Auftrag übernehmen, damit er vollständig ist (sonst muss das
+    // Team Menge/Verpackung nachtragen). Quellen-Priorität: bestätigte Staffel → Produkt → Anfrage.
+    $pidA = (int)($a['produkt_id'] ?? 0);
+    $prodA = $pidA ? one("SELECT verpackung_id, einheiten_pro_packung FROM produkt WHERE id=?", [$pidA]) : null;
+    $stueck = (int)($s['stueck'] ?? 0);
+    if ($stueck <= 0 && $prodA) $stueck = (int)($prodA['einheiten_pro_packung'] ?? 0);
+    $verpId = $prodA ? (int)($prodA['verpackung_id'] ?? 0) : 0;
+    if (($stueck <= 0 || $verpId <= 0) && !empty($a['anfrage_id'])) {
+        $an = one("SELECT stueck, verpackung_id FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']]);
+        if ($an) { if ($stueck <= 0) $stueck = (int)($an['stueck'] ?? 0); if ($verpId <= 0) $verpId = (int)($an['verpackung_id'] ?? 0); }
+    }
+    q("INSERT INTO auftrag (nummer,angebot_id,kunde_id,produkt_id,menge,stueck,verpackung_id,vk_stueck,gesamt_netto,status)
+       VALUES (?,?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('AB'), $angebot_id, $a['kunde_id'], $pidA, $menge, $stueck ?: null, $verpId ?: null, $vk, $netto, 'offen']);
     $aid = insert_id();
     auftrag_name_snapshot((int)$aid);
     // Kundenetikett-Artikel (v1) für dieses Produkt sicherstellen und den Auftrag daran binden – so kann das
@@ -6925,8 +6936,8 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     // Produktionsauftrag (PR) + Stationen automatisch anlegen
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$a['produkt_id']]) ?: 'kapsel';
     // Standard = Fremdproduktion (verkürzter Weg); auf Eigenproduktion umstellbar im Produktions-Detail.
-    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,produktionsart,status) VALUES (?,?,?,?,?,?,?)",
-      [naechste_nummer('PR'), $aid, $a['kunde_id'], $a['produkt_id'], $menge, 'fremd', 'vorbereitung']);
+    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('PR'), $aid, $a['kunde_id'], $a['produkt_id'], $menge, $stueck ?: null, $verpId ?: null, 'fremd', 'vorbereitung']);
     $paid = insert_id();
     foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$a['produkt_id'], (int)($a['kunde_id'] ?? 0))) as $i => $station) {
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
@@ -7792,8 +7803,12 @@ function kontingent_abruf(int $kontingent_id, int $menge): array {
 
     $kid = (int)$k['kunde_id']; $pid = (int)$k['produkt_id']; $vk = (float)$k['vk_stueck'];
     $netto = round($menge * $vk, 2);
-    q("INSERT INTO auftrag (nummer,kunde_id,produkt_id,menge,vk_stueck,gesamt_netto,status,kontingent_id) VALUES (?,?,?,?,?,?,?,?)",
-      [naechste_nummer('AB'), $kid, $pid, $menge, $vk, $netto, 'offen', $kontingent_id]);
+    // Stück je Packung + Behälter aus dem Produkt übernehmen, damit der Abruf-Auftrag vollständig ist.
+    $prodK = $pid ? one("SELECT verpackung_id, einheiten_pro_packung FROM produkt WHERE id=?", [$pid]) : null;
+    $kStueck = $prodK ? (int)($prodK['einheiten_pro_packung'] ?? 0) : 0;
+    $kVerp   = $prodK ? (int)($prodK['verpackung_id'] ?? 0) : 0;
+    q("INSERT INTO auftrag (nummer,kunde_id,produkt_id,menge,stueck,verpackung_id,vk_stueck,gesamt_netto,status,kontingent_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('AB'), $kid, $pid, $menge, $kStueck ?: null, $kVerp ?: null, $vk, $netto, 'offen', $kontingent_id]);
     $aid = insert_id();
     auftrag_name_snapshot((int)$aid);
     $land = scalar("SELECT land FROM kunden WHERE id=?", [$kid]) ?: 'DE';
@@ -7802,8 +7817,8 @@ function kontingent_abruf(int $kontingent_id, int $menge): array {
     q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum) VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
       [naechste_nummer('RE'), 'rechnung', $aid, $kid, $netto, $ustP, $ust, $brutto, 'offen']);
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
-    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,produktionsart,status) VALUES (?,?,?,?,?,?,?)",
-      [naechste_nummer('PR'), $aid, $kid, $pid, $menge, 'fremd', 'vorbereitung']);
+    q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('PR'), $aid, $kid, $pid, $menge, $kStueck ?: null, $kVerp ?: null, 'fremd', 'vorbereitung']);
     $paid = insert_id();
     foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$pid, (int)$kid)) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
