@@ -1388,6 +1388,9 @@ $rohDetail = ($iid && $darfRohInfo) ? one("SELECT id, name, name_lat, form, cas,
     FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
 require_once BX_ROOT . '/core/spec_ki.php';   // item_kennwerte_relevant: nur echte Kennwerte (kein Schwermetall/Mikro/Mineral)
 $rohKennwerte = $rohDetail ? item_kennwerte_relevant($iid) : [];
+// Reinheits-/Sicherheits-Grenzwerte (pH, Gehalt, Chloride, Sulfate, Schwermetalle, Mikrobiologie …) –
+// dieselbe Quelle wie die bulkify-Spec. Dem Kunden alle Qualitätsangaben zeigen, die wir haben.
+$rohGrenz = $rohDetail ? all("SELECT parameter, grenzwert FROM item_grenzwert WHERE item_id=? ORDER BY sort, id", [$iid]) : [];
 // Wirkstoffe + Gehalt (z. B. „L-Carnosin 99 %") – das Wichtigste zu einem Pulver/Extrakt.
 $rohWirkstoffe = $rohDetail ? all("SELECT n.name, iw.gehalt_wert, iw.gehalt_prozent, iw.gehalt_einheit
     FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id
@@ -2808,10 +2811,22 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php endif; ?>
 
     <?php if ($rohKennwerte): ?>
-    <div class="bx-panel"><h2>Kennwerte</h2>
+    <div class="bx-panel"><h2>Charakteristische Kennwerte</h2>
       <div class="bx-tablewrap"><table class="bx-table"><tbody>
         <?php foreach ($rohKennwerte as $kw): ?><tr><td><?= h($kw['parameter']) ?></td><td class="bx-num"><?= h($kw['wert']) ?></td></tr><?php endforeach; ?>
       </tbody></table></div>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($rohGrenz): ?>
+    <div class="bx-panel"><h2>Reinheit &amp; Grenzwerte</h2>
+      <p class="muted" style="margin-top:0">Spezifizierte Grenzwerte zu Reinheit und Sicherheit (u. a. Schwermetalle, Mikrobiologie) – die chargengenauen Messwerte stehen im jeweiligen Analysenzertifikat.</p>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Parameter</th><th class="bx-num">Grenzwert</th></tr></thead>
+        <tbody>
+        <?php foreach ($rohGrenz as $gw): ?><tr><td><?= h($gw['parameter']) ?></td><td class="bx-num"><?= h($gw['grenzwert']) ?></td></tr><?php endforeach; ?>
+        </tbody>
+      </table></div>
     </div>
     <?php endif; ?>
 
