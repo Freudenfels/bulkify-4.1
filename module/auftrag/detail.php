@@ -501,6 +501,7 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
   <p style="margin:0 0 10px">
     <?php if ($etDokA): ?>Hinterlegt: <strong><?= h((string)($etDokA['datei_orig'] ?: 'Etikett-Design')) ?></strong>
       <?= $etikettFrei ? bx_badge('freigegeben', 'ok') : bx_badge('nicht freigegeben', 'warn') ?>
+      <a class="btn btn-ghost btn-sm" style="margin-left:8px" href="?p=dokument&id=<?= (int)$etDokA['id'] ?>" download target="_blank" rel="noopener">&#8681; Herunterladen (für die Druckerei)</a>
     <?php else: ?><span class="muted">Noch kein Etikett hinterlegt.</span><?php endif; ?>
   </p>
   <div class="bx-row" style="gap:16px;flex-wrap:wrap;align-items:flex-end">

@@ -339,6 +339,20 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
         </div>
       </div>
       <?php endif; ?>
+      <?php // Aktuelles Kundenetikett-DESIGN (versioniert) zum Herunterladen – z. B. um es an die Druckerei zu schicken.
+      if (!$neu):
+        $__keItem = kundenetikett_aktuell((int)$id);
+        $__keDok  = $__keItem ? (int) scalar("SELECT COALESCE(etikett_dokument_id,0) FROM item WHERE id=?", [$__keItem]) : 0;
+        if ($__keDok):
+          $__keVer = (int) scalar("SELECT COALESCE(etikett_version,1) FROM item WHERE id=?", [$__keItem]);
+          $__keFn  = (string) scalar("SELECT COALESCE(NULLIF(datei_orig,''),'Etikett-Design') FROM dokument WHERE id=?", [$__keDok]); ?>
+      <div class="bx-field" style="align-self:end">
+        <label>Kundenetikett (Design)</label>
+        <div style="font-size:13px;padding-top:6px">v<?= $__keVer ?> · <strong><?= h($__keFn) ?></strong><br>
+          <a class="btn btn-ghost btn-sm" href="?p=dokument&id=<?= $__keDok ?>" download target="_blank" rel="noopener" style="margin-top:6px">&#8681; Herunterladen (für die Druckerei)</a>
+        </div>
+      </div>
+      <?php endif; endif; ?>
       <?= verp_slot('Faltschachtel/Karton', 'karton_id', $VERP_ROLLE['karton'], $p['karton_id'] ?? '') ?>
       <?= verp_slot('Beipackzettel', 'beipack_id', $VERP_ROLLE['beipack'], $p['beipack_id'] ?? '') ?>
       <div class="bx-field"><label>Leerkapsel <?= bx_hint('nur Kapselprodukte. Leer = automatisch nach Kapselgröße; nur wählen, wenn mehrere Kapseln gleicher Größe existieren (Material/Farbe).') ?></label>
