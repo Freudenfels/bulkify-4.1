@@ -113,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Umbenennung: den bisherigen Namen automatisch als Synonym merken (bleibt überall suchbar).
             $altName = (string) scalar("SELECT name FROM rezeptur WHERE id=?", [(int)$id]);
             if ($altName !== '' && $altName !== $f('name') && mb_stripos($synonyme, $altName) === false) {
-                $synonyme = trim(($synonyme !== '' ? $synonyme . "\n" : '') . $altName);
+                $synonyme = trim(($synonyme !== '' ? $synonyme . ', ' : '') . $altName);
             }
             q("UPDATE rezeptur SET name=?,synonyme=?,kunde_id=?,darreichungsform=?,kapselgroesse_id=?,exklusiv=?,status=?,notiz=? WHERE id=?",
               [$f('name'), $synonyme ?: null, $kunde_id, $f('darreichungsform'), $kapsGr, $exkl, $f('status'), $f('notiz'), (int)$id]);
@@ -287,7 +287,7 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
   <fieldset <?= $locked ? 'disabled' : '' ?> style="border:0;padding:0;margin:0;min-width:0">
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Name</label><input type="text" name="name" value="<?= $v('name') ?>" required></div>
-    <div class="bx-field"><label>Synonyme / frühere Namen <?= bx_hint('Alternative oder alte Namen (z. B. wenn der Kunde umbenennt). Intern bekannt und überall mitsuchbar. Beim Umbenennen wird der alte Name automatisch hier ergänzt. Eine Zeile oder Komma je Name.') ?></label><textarea name="synonyme" rows="2" placeholder="z. B. alter Produktname, Kunden-Kürzel"><?= $v('synonyme') ?></textarea></div>
+    <div class="bx-field"><label>Synonyme / frühere Namen <?= bx_hint('Alternative oder alte Namen (z. B. wenn der Kunde umbenennt). Intern bekannt und überall mitsuchbar. Beim Umbenennen wird der alte Name automatisch hier ergänzt. Mehrere durch Komma trennen.') ?></label><input type="text" name="synonyme" placeholder="z. B. alter Produktname, Kunden-Kürzel" value="<?= $v('synonyme') ?>"></div>
     <div class="bx-field"><label>Kunde <?= bx_hint('Kunde gewählt = eigene Rezeptur DIESES Kunden (erscheint bei ihm, nur für ihn sichtbar). Leer = Hausrezeptur im Katalog (für alle).') ?></label>
       <select name="kunde_id">
         <option value="">– keiner (Hausrezeptur) –</option>
