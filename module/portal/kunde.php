@@ -26,15 +26,22 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $email = trim(mb_strtolower((string)($_POST['email'] ?? '')));
     $pw  = (string)($_POST['passwort'] ?? '');
     $pw2 = (string)($_POST['passwort2'] ?? '');
+    $g  = fn($f) => trim((string)($_POST[$f] ?? ''));
     $err = '';
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $err = 'Bitte eine gültige E-Mail-Adresse eingeben.';
     elseif (strlen($pw) < 8) $err = 'Das Passwort muss mindestens 8 Zeichen haben.';
     elseif ($pw !== $pw2)    $err = 'Die beiden Passwörter stimmen nicht überein.';
     elseif ((int) scalar("SELECT COUNT(*) FROM kunden WHERE LOWER(email)=? AND id<>?", [$email, (int)$k['id']]) > 0)
         $err = 'Diese E-Mail-Adresse wird bereits verwendet.';
+    // Anschrift ist beim Erstzugang Pflicht (brauchen wir für Angebote/Lieferung/Rechnung).
+    elseif ($g('strasse') === '' || $g('plz') === '' || $g('ort') === '')
+        $err = 'Bitte Ihre Anschrift vollständig angeben (Straße, PLZ, Ort).';
     if ($err === '') {
-        q("UPDATE kunden SET email=?, ansprechpartner=COALESCE(NULLIF(?,''), ansprechpartner), telefon=COALESCE(NULLIF(?,''), telefon) WHERE id=?",
-          [$email, trim((string)($_POST['ansprechpartner'] ?? '')), trim((string)($_POST['telefon'] ?? '')), (int)$k['id']]);
+        $land = strtoupper(substr($g('land') ?: 'DE', 0, 2));
+        q("UPDATE kunden SET email=?, ansprechpartner=COALESCE(NULLIF(?,''), ansprechpartner), telefon=COALESCE(NULLIF(?,''), telefon),
+              strasse=?, hausnummer=?, plz=?, ort=?, land=?, ust_id=COALESCE(NULLIF(?,''), ust_id) WHERE id=?",
+          [$email, $g('ansprechpartner'), $g('telefon'),
+           $g('strasse'), $g('hausnummer') ?: null, $g('plz'), $g('ort'), $land, $g('ust_id'), (int)$k['id']]);
         kunde_passwort_setzen((int)$k['id'], $pw);
         $_SESSION['portal_kid'] = (int)$k['id'];
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Portal-Konto eingerichtet (E-Mail + Passwort gesetzt).', 'kunde');
@@ -759,13 +766,19 @@ if (empty($k['passwort']) && !$internVorschau) {
     echo '<div style="max-width:460px;margin:6vh auto;padding:0 16px">'
        . '<div style="text-align:center;margin-bottom:18px"><img src="assets/bulkify-logo-dark.png" alt="bulkify" style="height:38px"></div>'
        . '<div class="bx-panel"><h1 style="margin:0 0 4px;font-size:22px">Willkommen bei bulkify</h1>'
-       . '<p class="bx-sub" style="margin-top:0">Bitte richten Sie einmalig Ihren Zugang ein: E-Mail und Passwort. Danach melden Sie sich künftig damit an.</p>';
+       . '<p class="bx-sub" style="margin-top:0">Bitte richten Sie einmalig Ihren Zugang ein: Anschrift, E-Mail und Passwort. Danach melden Sie sich künftig damit an.</p>';
     if ($setupErr !== '') echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px">' . h($setupErr) . '</div>';
     echo '<form method="post">'
        . '<input type="hidden" name="aktion" value="konto_einrichten">'
        . '<div class="bx-field"><label>Firma</label><input type="text" value="' . h((string)($k['firma'] ?? '')) . '" disabled></div>'
        . '<div class="bx-field"><label>Ansprechpartner</label><input type="text" name="ansprechpartner" value="' . h((string)($k['ansprechpartner'] ?? '')) . '" placeholder="Vor- und Nachname"></div>'
        . '<div class="bx-field"><label>Telefon</label><input type="text" name="telefon" value="' . h((string)($k['telefon'] ?? '')) . '"></div>'
+       . '<div class="bx-row" style="gap:10px"><div class="bx-field" style="flex:3"><label>Straße *</label><input type="text" name="strasse" required value="' . h((string)($k['strasse'] ?? '')) . '" placeholder="Straße"></div>'
+       . '<div class="bx-field" style="flex:1"><label>Nr.</label><input type="text" name="hausnummer" value="' . h((string)($k['hausnummer'] ?? '')) . '"></div></div>'
+       . '<div class="bx-row" style="gap:10px"><div class="bx-field" style="flex:1"><label>PLZ *</label><input type="text" name="plz" required value="' . h((string)($k['plz'] ?? '')) . '"></div>'
+       . '<div class="bx-field" style="flex:2"><label>Ort *</label><input type="text" name="ort" required value="' . h((string)($k['ort'] ?? '')) . '"></div>'
+       . '<div class="bx-field" style="flex:1"><label>Land</label><input type="text" name="land" maxlength="2" value="' . h((string)($k['land'] ?? 'DE')) . '" placeholder="DE"></div></div>'
+       . '<div class="bx-field"><label>USt-IdNr. (optional)</label><input type="text" name="ust_id" value="' . h((string)($k['ust_id'] ?? '')) . '" placeholder="z. B. DE123456789"></div>'
        . '<div class="bx-field"><label>E-Mail (Ihr Login)</label><input type="email" name="email" required value="' . h((string)($k['email'] ?? '')) . '" placeholder="name@firma.de" autocomplete="email"></div>'
        . '<div class="bx-field"><label>Passwort (mind. 8 Zeichen)</label><input type="password" name="passwort" required minlength="8" autocomplete="new-password"></div>'
        . '<div class="bx-field"><label>Passwort wiederholen</label><input type="password" name="passwort2" required minlength="8" autocomplete="new-password"></div>'
