@@ -82,8 +82,11 @@ function lieferant_dateien(int $lieferant_id): array {
 // Abfrage, nicht an der Oberfläche – für die Download-Route im Portal.
 function lieferant_darf_datei(int $lieferant_id, int $dok_id): ?array {
     if ($lieferant_id <= 0 || $dok_id <= 0) return null;
-    return one("SELECT * FROM dokument WHERE id=? AND ((objekt_typ='lieferant' AND objekt_id=?) OR (objekt_typ='item' AND lieferant_id=?))",
-               [$dok_id, $lieferant_id, $lieferant_id]);
+    return one("SELECT * FROM dokument WHERE id=? AND (
+                   (objekt_typ='lieferant' AND objekt_id=?)
+                OR (objekt_typ='item' AND lieferant_id=?)
+                OR (objekt_typ='bestellung' AND lieferant_id=? AND objekt_id IN (SELECT id FROM bestellung WHERE lieferant_id=?)))",
+               [$dok_id, $lieferant_id, $lieferant_id, $lieferant_id, $lieferant_id]);
 }
 
 // Löschen: das Team alles aus der Ablage, der Lieferant nur, was er selbst hochgeladen hat.
@@ -151,4 +154,36 @@ function lieferant_dateien_panel(int $lieferant_id, string $wer = 'team', string
         . '<div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">' . $t('Datei hochladen', 'Upload file', '上传文件') . '</button></div>'
         . '</form></div>';
     return $o;
+}
+
+// Datei direkt an eine BESTELLUNG hängen (CoA, Rechnung, Sonstiges) – vom Lieferanten. So ist das Dokument
+// mit genau dieser Bestellung verknüpft (dokument.objekt_typ='bestellung'). Rückgabe: '' ok, sonst Fehlertext.
+function bestell_dok_upload(int $bestellung_id, int $lieferant_id, string $typ, string $sprache = 'de'): string {
+    $t = fn(string $de, string $en, string $zh = '') => $sprache === 'de' ? $de : (($sprache === 'zh' && $zh !== '') ? $zh : $en);
+    if ($bestellung_id <= 0 || $lieferant_id <= 0) return 'Bestellung/Lieferant fehlt.';
+    // Gehört die Bestellung dem Lieferanten?
+    if (!scalar("SELECT id FROM bestellung WHERE id=? AND lieferant_id=?", [$bestellung_id, $lieferant_id]))
+        return $t('Bestellung nicht gefunden.', 'Order not found.', '未找到订单。');
+    if (empty($_FILES['dok']['name']) || ($_FILES['dok']['error'] ?? 1) !== UPLOAD_ERR_OK)
+        return $t('Bitte eine Datei auswählen.', 'Please choose a file.', '请选择文件。');
+    $orig = (string)$_FILES['dok']['name'];
+    $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($orig, PATHINFO_EXTENSION)));
+    if (!in_array($ext, lieferant_datei_endungen(), true))
+        return $t('Dateityp nicht erlaubt.', 'File type not allowed.', '不支持的文件类型。');
+    if ((int)$_FILES['dok']['size'] > lieferant_datei_max_mb() * 1024 * 1024)
+        return $t('Die Datei ist zu groß.', 'The file is too large.', '文件过大。');
+    if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+    $fn = 'bestellung_' . $bestellung_id . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
+    if (!move_uploaded_file($_FILES['dok']['tmp_name'], BX_UPLOADS . '/' . $fn))
+        return $t('Die Datei konnte nicht gespeichert werden.', 'The file could not be saved.', '文件无法保存。');
+    $typ = in_array($typ, ['coa', 'rechnung', 'spec', 'analyse', 'sonstiges'], true) ? $typ : 'sonstiges';
+    q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von) VALUES ('bestellung',?,?,?,?,?,?,0,'lieferant')",
+      [$bestellung_id, $typ, $lieferant_id, mb_substr(trim((string)($_POST['dok_titel'] ?? '')), 0, 190) ?: null, $fn, mb_substr($orig, 0, 255)]);
+    $dokId = (int) insert_id();
+    log_aktivitaet('lieferant', $lieferant_id, 'lieferant', 'Datei zur Bestellung ' . $bestellung_id . ' hochgeladen (' . $typ . ').', 'dokument', 'dokument', $dokId);
+    return '';
+}
+// Dokumente einer Bestellung (vom Lieferanten hochgeladen).
+function bestell_dokumente(int $bestellung_id): array {
+    return all("SELECT id, typ, titel, datei, datei_orig, angelegt FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? ORDER BY id DESC", [$bestellung_id]);
 }

@@ -36,6 +36,13 @@ if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (($r['neu'] ?? 0) > 0 && mail_bereit()) mail_team_bestellung($id, 'Versand-Pakete gemeldet');
     } elseif ($aktion === 'paket_del') {
         lieferung_paket_loeschen((int)($_POST['paket_id'] ?? 0), $id);
+    } elseif ($aktion === 'bestell_dok_upload') {
+        require_once BX_ROOT . '/core/lieferant_dateien.php';
+        $fehler = bestell_dok_upload($id, $lid, (string)($_POST['bd_typ'] ?? 'sonstiges'), lp_sprache());
+    } elseif ($aktion === 'bestell_dok_del') {
+        $dd = (int)($_POST['dok_id'] ?? 0);
+        if ($dd) { $row = one("SELECT datei FROM dokument WHERE id=? AND objekt_typ='bestellung' AND objekt_id=? AND lieferant_id=?", [$dd, $id, $lid]);
+                   if ($row) { @unlink(BX_UPLOADS . '/' . basename((string)$row['datei'])); q("DELETE FROM dokument WHERE id=?", [$dd]); } }
     }
     header('Location: ?p=lieferant_bestellung&id=' . $id . ($fehler === '' ? '&ok=1' : '&fehler=' . urlencode($fehler))); exit;
 }
@@ -76,7 +83,10 @@ if (!$b):
     $pos = all("SELECT bp.*, i.name AS item_name, i.artikelnummer
                 FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
                 WHERE bp.bestellung_id=? ORDER BY bp.sort, bp.id", [$id]);
-    $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
+    // Preise in der Währung DES LIEFERANTEN (USD/EUR/CNY) – Stückpreis mit 4 Nachkommastellen (Sub-Cent).
+    $waehrung = (string) scalar("SELECT waehrung FROM lieferanten WHERE id=?", [$lid]) ?: 'EUR';
+    $sym = ['EUR'=>'€', 'USD'=>'$', 'CNY'=>'¥'][$waehrung] ?? $waehrung;
+    $money = fn($x, $dec = 2) => number_format((float)$x, $dec, ',', '.') . ' ' . $sym;
     $summe = 0.0; foreach ($pos as $p) $summe += (float)$p['menge'] * (float)$p['ek_preis'];
 ?>
   <h1 style="margin-bottom:4px"><?= h($b['nummer']) ?></h1>
@@ -97,10 +107,10 @@ if (!$b):
               <?= $p['artikelnummer'] ? '<div class="muted" style="font-size:12px">' . h($p['artikelnummer']) . '</div>' : '' ?></td>
             <td class="bx-num"><?= rtrim(rtrim(number_format((float)$p['menge'], 3, ',', '.'), '0'), ',') ?></td>
             <td><?= h($p['einheit'] ?? '') ?></td>
-            <td class="bx-num"><?= $eur($p['ek_preis']) ?></td>
-            <td class="bx-num"><?= $eur((float)$p['menge'] * (float)$p['ek_preis']) ?></td></tr>
+            <td class="bx-num"><?= $money($p['ek_preis'], 4) ?></td>
+            <td class="bx-num"><?= $money((float)$p['menge'] * (float)$p['ek_preis'], 2) ?></td></tr>
       <?php endforeach; ?>
-        <tr style="font-weight:600"><td colspan="4"><?= h(lp_t('summe')) ?></td><td class="bx-num"><?= $eur($summe) ?></td></tr>
+        <tr style="font-weight:600"><td colspan="4"><?= h(lp_t('summe')) ?></td><td class="bx-num"><?= $money($summe, 2) ?></td></tr>
       </tbody>
     </table></div>
     <?php if (!empty($b['notiz'])): ?><div class="muted" style="margin-top:10px;white-space:pre-line"><?= h($b['notiz']) ?></div><?php endif; ?>
@@ -144,6 +154,37 @@ if (!$b):
         <div class="bx-field"><label>Anzahl Pakete <span class="muted" style="font-weight:400">(optional, falls Nummern noch fehlen)</span></label><input type="number" name="pakete_angekuendigt" min="0" value="<?= $angekuendigt ?: '' ?>" style="max-width:140px"></div>
       </div>
       <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" type="submit">Pakete speichern</button></div>
+    </form>
+  </div>
+
+  <?php // Dokumente & Rechnung: der Lieferant lädt CoA, Rechnung o. Ä. direkt zu DIESER Bestellung hoch.
+  require_once BX_ROOT . '/core/lieferant_dateien.php';
+  $bdoks = bestell_dokumente($id);
+  $BDTYP = ['coa'=>'CoA / Analysenzertifikat', 'rechnung'=>'Rechnung', 'spec'=>'Spezifikation', 'analyse'=>'Laboranalyse', 'sonstiges'=>'Sonstiges']; ?>
+  <div class="bx-panel">
+    <h2 style="margin:0 0 4px">Dokumente &amp; Rechnung</h2>
+    <p class="muted" style="margin:0 0 12px">Laden Sie hier die Unterlagen zu dieser Bestellung hoch – z. B. das <strong>Analysenzertifikat (CoA)</strong> und Ihre <strong>Rechnung</strong>, damit wir zahlen können. Die Dokumente sind direkt mit dieser Bestellung verknüpft.</p>
+    <?php if ($bdoks): ?>
+    <div class="bx-tablewrap" style="margin-bottom:12px"><table class="bx-table">
+      <thead><tr><th>Typ</th><th>Datei</th><th>Datum</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($bdoks as $d): ?>
+        <tr><td><?= h($BDTYP[$d['typ']] ?? $d['typ']) ?></td>
+            <td><a href="?p=lieferant_dokument&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener"><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument')) ?></a></td>
+            <td class="muted"><?= h(date('d.m.Y', strtotime((string)$d['angelegt']))) ?></td>
+            <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Dokument entfernen?');"><input type="hidden" name="aktion" value="bestell_dok_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">entfernen</button></form></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <?php endif; ?>
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="aktion" value="bestell_dok_upload">
+      <div class="bx-grid">
+        <div class="bx-field"><label>Typ</label><select name="bd_typ"><?php foreach ($BDTYP as $k=>$l): ?><option value="<?= $k ?>"<?= $k==='coa'?' selected':'' ?>><?= h($l) ?></option><?php endforeach; ?></select></div>
+        <div class="bx-field"><label>Titel (optional)</label><input type="text" name="dok_titel" maxlength="190"></div>
+        <div class="bx-field"><label>Datei <span class="muted" style="font-weight:400">(max. <?= lieferant_datei_max_mb() ?> MB)</span></label><input type="file" name="dok" required accept=".<?= implode(',.', lieferant_datei_endungen()) ?>"></div>
+      </div>
+      <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" type="submit">Dokument hochladen</button></div>
     </form>
   </div>
 <?php endif;

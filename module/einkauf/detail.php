@@ -334,4 +334,25 @@ function psum(){
   psum();
 })();
 </script>
+<?php // Vom Lieferanten zu dieser Bestellung hochgeladene Dokumente (CoA, Rechnung zum Bezahlen …).
+if (!$neu):
+  require_once BX_ROOT . '/core/lieferant_dateien.php';
+  $bdoks = bestell_dokumente((int)$id);
+  $BDTYP = ['coa'=>'CoA / Analysenzertifikat','rechnung'=>'Rechnung','spec'=>'Spezifikation','analyse'=>'Laboranalyse','sonstiges'=>'Sonstiges'];
+  if ($bdoks): ?>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Dokumente vom Lieferanten</h2>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Typ</th><th>Datei</th><th>Datum</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($bdoks as $d): ?>
+        <tr><td><?= h($BDTYP[$d['typ']] ?? $d['typ']) ?><?= $d['typ']==='rechnung' ? ' ' . bx_badge('Rechnung','warn') : '' ?></td>
+            <td><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument')) ?></td>
+            <td class="muted"><?= h(date('d.m.Y', strtotime((string)$d['angelegt']))) ?></td>
+            <td style="text-align:right"><a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id=<?= (int)$d['id'] ?>">öffnen</a></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; endif; ?>
 <?php render_footer(); ?>
