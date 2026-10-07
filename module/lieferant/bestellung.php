@@ -80,7 +80,7 @@ if (!$b):
     <?php endif; ?>
   </div>
 <?php else:
-    $pos = all("SELECT bp.*, i.name AS item_name, i.artikelnummer
+    $pos = all("SELECT bp.*, i.name AS item_name, i.artikelnummer, i.rezeptur_id
                 FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
                 WHERE bp.bestellung_id=? ORDER BY bp.sort, bp.id", [$id]);
     // Preise in der Währung DES LIEFERANTEN (USD/EUR/CNY) – Stückpreis mit 4 Nachkommastellen (Sub-Cent).
@@ -104,7 +104,8 @@ if (!$b):
       <thead><tr><th><?= h(lp_t('artikel')) ?></th><th class="bx-num"><?= h(lp_t('menge')) ?></th><th><?= h(lp_t('einheit')) ?></th><th class="bx-num"><?= h(lp_t('preis')) ?></th><th class="bx-num"><?= h(lp_t('summe')) ?></th></tr></thead>
       <tbody><?php foreach ($pos as $p): ?>
         <tr><td><?= h(($p['item_name'] ?? '') !== '' ? $p['item_name'] : ($p['bezeichnung'] ?? '–')) ?>
-              <?= $p['artikelnummer'] ? '<div class="muted" style="font-size:12px">' . h($p['artikelnummer']) . '</div>' : '' ?></td>
+              <?= $p['artikelnummer'] ? '<div class="muted" style="font-size:12px">' . h($p['artikelnummer']) . '</div>' : '' ?>
+              <?php if (!empty($p['rezeptur_id'])): ?><div style="margin-top:2px"><a class="btn btn-ghost btn-sm" href="?p=lieferant_rezeptur&id=<?= (int)$p['rezeptur_id'] ?>">Rezeptur ansehen</a></div><?php endif; ?></td>
             <td class="bx-num"><?= rtrim(rtrim(number_format((float)$p['menge'], 3, ',', '.'), '0'), ',') ?></td>
             <td><?= h($p['einheit'] ?? '') ?></td>
             <td class="bx-num"><?= $money($p['ek_preis'], 4) ?></td>
