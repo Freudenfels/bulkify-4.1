@@ -206,7 +206,8 @@ function spec_ki_anwenden(int $item_id, array $ergebnis, ?int $lieferant_id = nu
     spec_ki_coa_charge($item_id, $ergebnis, $lieferant_id);
     spec_ki_grenzwerte($item_id, $ergebnis);
     spec_ki_kennwerte($item_id, $ergebnis);    // charakteristische Kennwerte (OPC-Gehalt, DEV, pH …)
-    spec_ki_wirkstoffe($item_id, $ergebnis);   // erkannte Wirk-/Leitsubstanzen an den Rohstoff
+    // Wirkstoffgehalte aus dem Dokument automatisch übernehmen – auch vorhandene aktualisieren (CoA/Spec = Quelle).
+    spec_ki_wirkstoffe($item_id, $ergebnis, false, true);
 }
 
 // Aus dem KI-Ergebnis den passenden VORHANDENEN Rohstoff finden (kein Neuanlegen).
@@ -417,7 +418,10 @@ function spec_ki_grenzwerte(int $item_id, array $ergebnis, bool $ueberschreiben 
 // Analog zu spec_ki_grenzwerte: fehlende ergaenzen; mit $ueberschreiben=true die bisherigen ersetzen.
 // naehrstoff_id_by_name() legt einen fehlenden Naehrstoff automatisch an (kategorie 'sonstige'), sodass auch
 // Nicht-NRV-Wirkstoffe (z. B. Leitsubstanzen von Extrakten) verknuepft werden. Rueckgabe: Anzahl gespeicherter Zeilen.
-function spec_ki_wirkstoffe(int $item_id, array $ergebnis, bool $ueberschreiben = false): int {
+// $ueberschreiben=true: alle bisherigen Wirkstoffe löschen und neu setzen.
+// $gehaltAktualisieren=true: vorhandene Wirkstoffe behalten, aber ihren Gehalt aus dem Dokument AKTUALISIEREN
+//   (so werden beim CoA-/Spec-Upload ALLE Wirkstoffgehalte aus dem Dokument übernommen, nicht nur fehlende).
+function spec_ki_wirkstoffe(int $item_id, array $ergebnis, bool $ueberschreiben = false, bool $gehaltAktualisieren = false): int {
     if ($item_id <= 0) return 0;
     $ws = (array)($ergebnis['wirkstoffe'] ?? []);
     if (!$ws) return 0;
@@ -432,9 +436,11 @@ function spec_ki_wirkstoffe(int $item_id, array $ergebnis, bool $ueberschreiben 
         $g = ($g === null || $g === '') ? null : (float) str_replace(',', '.', (string)$g);
         $vorhanden = one("SELECT id, gehalt_wert, gehalt_prozent FROM item_wirkstoff WHERE item_id=? AND naehrstoff_id=? LIMIT 1", [$item_id, $nid]);
         if ($vorhanden && !$ueberschreiben) {
-            // Existiert schon: nur FEHLENDEN Wert auffüllen (sonst nichts anfassen – keine geprüften Werte überschreiben).
             $hatWert = ($vorhanden['gehalt_wert'] !== null && $vorhanden['gehalt_wert'] !== '') || ($vorhanden['gehalt_prozent'] !== null && $vorhanden['gehalt_prozent'] !== '');
-            if (!$hatWert && $g !== null) { q("UPDATE item_wirkstoff SET gehalt_prozent=?, gehalt_wert=?, gehalt_einheit='prozent' WHERE id=?", [$g, $g, (int)$vorhanden['id']]); $n++; }
+            // Gehalt aus dem Dokument übernehmen, wenn bisher keiner da ist ODER ausdrücklich aktualisiert werden soll.
+            if ($g !== null && (!$hatWert || $gehaltAktualisieren)) {
+                q("UPDATE item_wirkstoff SET gehalt_prozent=?, gehalt_wert=?, gehalt_einheit='prozent' WHERE id=?", [$g, $g, (int)$vorhanden['id']]); $n++;
+            }
             continue;
         }
         q("INSERT INTO item_wirkstoff (item_id,naehrstoff_id,gehalt_prozent,gehalt_wert,gehalt_einheit,sort) VALUES (?,?,?,?, 'prozent', ?)",
