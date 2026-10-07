@@ -31,6 +31,13 @@ Ein angenommener Auftrag mit Menge + VK (und Kunde/Produkt) kann per Button **�
 aktives Kontingent (gesamt_menge = Auftragsmenge, vk_stueck) an und **storniert** den Ursprungsauftrag –
 produziert wird danach über die Abrufe (`kontingent_abruf`, je Abruf ein Auftrag). Idempotent; blockiert,
 wenn bereits eine bezahlte Rechnung existiert oder der Auftrag selbst aus einem Kontingent stammt.
+Beim Umwandeln werden **offene/vorbereitete Produktionsaufträge** dieses Auftrags abgebrochen (Reservierungen
+frei) und eine **noch nicht bezahlte Rechnung storniert** – sonst zöge die Produktion die volle Jahresmenge
+(z. B. 45.000 Gläser/Etiketten) auf einmal.
+
+**Warn-Banner oben:** Ist ein Auftrag KEIN Kontingent, nicht storniert und die Menge ≥ Schwelle
+(`app_meta['jahresmenge_warnschwelle']`, Standard 10.000), erscheint über den Reitern ein Hinweis mit
+Ein-Klick-Button „Zu Kontingent (Jahresvertrag) machen" – damit Glas/Etikett/Rohstoffe nur je Abruf anfallen.
 
 ## Löschen & zurück zur Anfrage
 Button **„Löschen & zurück zur Anfrage"** (nur Admin, nicht bei versendet): `auftrag_zurueck_und_loeschen()`

@@ -6331,6 +6331,7 @@ function auftraege_ohne_festlegung(): array {
                 LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
                 LEFT JOIN kunden k    ON k.id=pa.kunde_id
                 WHERE pa.status='vorbereitung' AND pa.auftrag_id IS NOT NULL
+                  AND (a.status IS NULL OR a.status <> 'storniert')
                 ORDER BY pa.id DESC");
 }
 function bedarf_bulk(bool $nur_gemeldet = false): array {
@@ -7691,6 +7692,16 @@ function kontingent_aus_auftrag(int $auftrag_id, int $monate = 12): array {
     $kid = insert_id();
     // Ursprungsauftrag stornieren – produziert wird ueber die Abrufe.
     q("UPDATE auftrag SET status='storniert' WHERE id=?", [$auftrag_id]);
+    // Offene/vorbereitete Produktionsauftraege dieses Auftrags abbrechen: produziert wird kuenftig je Abruf
+    // (Teilmenge), nicht die volle Jahresmenge. Nur solange noch kein Schritt erledigt ist. Reservierungen frei.
+    foreach (all("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status IN ('vorbereitung','offen','laufend')
+                  AND NOT EXISTS (SELECT 1 FROM produktion_schritt s WHERE s.pa_id=produktionsauftrag.id AND s.erledigt=1)", [$auftrag_id]) as $__pa) {
+        auftrag_reservierung_freigeben((int)$__pa['id']);
+        q("UPDATE produktionsauftrag SET status='storniert' WHERE id=?", [(int)$__pa['id']]);
+    }
+    // Automatisch erzeugte, noch nicht bezahlte Rechnung stornieren – abgerechnet wird je Abruf.
+    q("UPDATE beleg SET status='storniert' WHERE auftrag_id=? AND typ='rechnung' AND status<>'bezahlt'", [$auftrag_id]);
+    bedarf_bump();
     log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftrag ' . (string)$a['nummer'] . ' in ein Kontingent (' . $menge . ' Stück, Abruf) umgewandelt.', 'kontingent', 'auftrag', $auftrag_id);
     return ['ok' => true, 'kontingent_id' => $kid];
 }

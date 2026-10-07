@@ -509,7 +509,22 @@ if (isset($_GET['rechneu'])) echo '<div class="bx-panel badge-ok" style="padding
 // „Rohstoff/Bulk angekommen" ist ein reiner Helfer – er steht jetzt IM Reiter „Produktion" (Block
 // Produktion & Beschaffung), nicht mehr als eigene Leiste über den Reitern.
 $rohAngDa = (kunde_auftrag_phase($a)['dates'][2] ?? null);   // Datum „Rohstoff angekommen" (oder null)
+// Warnung: sehr grosse Einzelmenge, die kein Kontingent ist -> besser als Jahresvertrag/Kontingent fuehren,
+// sonst wuerde die Produktion die komplette Jahresmenge auf einmal ziehen (z. B. 45.000 Glaeser/Etiketten).
+$jvSchwelle = (int) meta_get('jahresmenge_warnschwelle', 10000);
+$jvWarnung  = has_role('admin') && empty($a['kontingent_id']) && (string)$a['status'] !== 'storniert'
+           && $jvSchwelle > 0 && (int)$a['menge'] >= $jvSchwelle && (float)$a['vk_stueck'] > 0;
 ?>
+<?php if ($jvWarnung): ?>
+<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px;margin-bottom:16px">
+  <strong>Große Menge als Einzelauftrag: <?= number_format((int)$a['menge'],0,',','.') ?> Stück.</strong>
+  <div class="muted" style="font-size:13px;margin:4px 0 10px">Der Kunde ruft so große Mengen meist nicht auf einmal ab. Als <strong>Jahresvertrag/Kontingent</strong> geführt, entsteht Bedarf (Glas, Etiketten, Rohstoffe) nur je Abruf – nicht <?= number_format((int)$a['menge'],0,',','.') ?> Stück auf einmal.</div>
+  <form method="post" style="margin:0" onsubmit="return confirm('Auftrag <?= h($a['nummer']) ?> in ein Kontingent umwandeln? Der Auftrag wird storniert; produziert wird über die Abrufe.');">
+    <input type="hidden" name="aktion" value="zu_kontingent">
+    <button class="btn btn-primary btn-sm" type="submit" data-busy="Wandle um…">Zu Kontingent (Jahresvertrag) machen</button>
+  </form>
+</div>
+<?php endif; ?>
 <div class="settabs" id="auftabs" style="margin-bottom:16px">
   <a href="#" class="on" data-tab="details">Details</a>
   <a href="#" data-tab="verpackung">Verpackung</a>
