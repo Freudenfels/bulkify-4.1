@@ -116,12 +116,34 @@ function dokument_panel(string $objekt_typ, int $objekt_id, array $lieferanten):
           <div class="bx-field"><label>Titel (optional)</label><input type="text" name="dok_titel" placeholder="z. B. CoA Charge 2026-04"></div>
           <div class="bx-field"><label>Datei</label><input type="file" name="dok" required accept="application/pdf,image/*"></div>
         </div>
-        <div class="bx-row" style="gap:8px;align-items:center;margin-top:var(--sp-3)">
+        <div class="bx-row" id="dokKundeRow" style="gap:8px;align-items:center;margin-top:var(--sp-3)">
           <input type="checkbox" name="dok_kunde" id="dok_kunde" value="1">
           <label for="dok_kunde" style="margin:0">im Kundenportal sichtbar <?= bx_hint('Standard ist intern. Nur anhaken, was der Kunde sehen darf – Lieferanten-Spezifikationen in der Regel nicht.') ?></label>
+        </div>
+        <div id="dokKundeNote" class="muted" style="display:none;margin-top:var(--sp-3);font-size:13px">
+          Lieferanten-Original – bleibt intern. Der Kunde bekommt automatisch das <strong>bulkify-Dokument</strong> (Spezifikation/CoA im bulkify-Layout), nicht diese Datei.
         </div>
         <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Dokument hochladen</button></div>
       </form>
     </div>
+    <?php if ($objekt_typ === 'item'): ?>
+    <script>
+    (function(){
+      // Bei Rohstoff-Unterlagen sind Spec/CoA/Analyse immer Lieferanten-Originale -> nie an den Kunden.
+      // Darum die „im Kundenportal sichtbar"-Frage nur für Typen zeigen, die kundensichtbar sein dürfen.
+      var sel = document.querySelector('select[name="dok_typ"]');
+      var row = document.getElementById('dokKundeRow');
+      var note = document.getElementById('dokKundeNote');
+      if (!sel || !row) return;
+      function upd(){
+        var orig = ['coa','spec','analyse'].indexOf(sel.value) !== -1;
+        row.style.display = orig ? 'none' : '';
+        if (note) note.style.display = orig ? '' : 'none';
+        if (orig) { var cb = document.getElementById('dok_kunde'); if (cb) cb.checked = false; }
+      }
+      sel.addEventListener('change', upd); upd();
+    })();
+    </script>
+    <?php endif; ?>
     <?php
 }
