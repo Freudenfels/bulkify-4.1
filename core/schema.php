@@ -1098,6 +1098,8 @@ function init_schema(): void {
     ensure_column('lieferanten', 'keine_anfragen', "TINYINT(1) NOT NULL DEFAULT 0");  // Onlineshop o. Ä. – keine Preisanfragen senden
     ensure_column('lieferanten', 'shop_login', "VARCHAR(190) NULL");     // gemeinsamer Shop-Login (Benutzer/E-Mail)
     ensure_column('lieferanten', 'shop_passwort', "VARCHAR(190) NULL");  // gemeinsames Shop-Passwort (intern, Team-Zugang)
+    ensure_column('lieferanten', 'quelle', "VARCHAR(20) NOT NULL DEFAULT 'manuell'");  // manuell | bewerbung (Lieferant hat sich selbst beworben)
+    ensure_column('lieferanten', 'bewerbung_nachricht', "TEXT NULL");    // Freitext aus der Selbst-Bewerbung (was bieten sie an)
     // Bankverbindung des Lieferanten – FORMATOFFEN (nicht IBAN-fix!). Chinesische Lieferanten zahlen oft
     // ueber Banken in Drittlaendern (HK/Singapur): dann SWIFT/BIC + Kontonummer statt IBAN, oft mit
     // Beguenstigtem, Bankadresse und ggf. Zwischen-/Korrespondenzbank. Jedes Feld optional; der Lieferant
@@ -4694,6 +4696,49 @@ function lieferant_zugang_anlegen(string $token, string $name, string $email, st
     q("UPDATE lieferant_einladung SET eingeloest=1 WHERE id=?", [(int)$inv['id']]);
     log_aktivitaet('lieferant', (int)$inv['lieferant_id'], 'lieferant', 'Zugang zum Lieferantenportal angelegt (' . $email . ').', 'lieferant');
     return '';
+}
+
+// Selbst-Bewerbung eines Lieferanten (öffentliche Landing Page). Legt einen GESPERRTEN Lieferanten
+// (quelle='bewerbung') + einen INAKTIVEN Login an – der Zugang greift erst nach Freigabe durch das Team.
+// Rückgabe: ['ok'=>bool, 'fehler'=>string]. Fehlertexte sind generisch (öffentlich).
+function lieferant_bewerbung_anlegen(array $d): array {
+    $firma = trim((string)($d['firma'] ?? ''));
+    $email = trim(mb_strtolower((string)($d['email'] ?? '')));
+    $pass  = (string)($d['passwort'] ?? '');
+    $name  = trim((string)($d['ansprechpartner'] ?? '')) ?: $firma;
+    if ($firma === '')                               return ['ok'=>false, 'fehler'=>'Bitte den Firmennamen angeben.'];
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL))  return ['ok'=>false, 'fehler'=>'Bitte eine gültige E-Mail-Adresse angeben.'];
+    if (mb_strlen($pass) < 8)                        return ['ok'=>false, 'fehler'=>'Das Passwort muss mindestens 8 Zeichen haben.'];
+    if (scalar("SELECT id FROM benutzer WHERE email=?", [$email]))
+                                                     return ['ok'=>false, 'fehler'=>'Für diese E-Mail gibt es bereits einen Zugang.'];
+    if (scalar("SELECT id FROM lieferanten WHERE LOWER(firma)=LOWER(?)", [$firma]))
+                                                     return ['ok'=>false, 'fehler'=>'Diese Firma ist bereits registriert. Bitte über den Login anmelden oder uns kontaktieren.'];
+    $kat = array_values(array_intersect(
+        array_map('strval', (array)($d['kategorien'] ?? [])),
+        ['rohstoff','verpackung','verbrauch','maschine','labor','fertigprodukt']));
+    $spr = in_array((string)($d['sprache'] ?? ''), ['de','en','zh'], true) ? (string)$d['sprache'] : 'en';
+    $wae = in_array((string)($d['waehrung'] ?? ''), ['USD','EUR','CNY'], true) ? (string)$d['waehrung'] : 'USD';
+    $land = strtoupper(substr(trim((string)($d['land'] ?? '')) ?: 'CN', 0, 2));
+    q("INSERT INTO lieferanten (firma,ansprechpartner,email,telefon,webseite,land,sprache,waehrung,kategorien,bewerbung_nachricht,quelle,gesperrt)
+       VALUES (?,?,?,?,?,?,?,?,?,?, 'bewerbung', 1)",
+      [mb_substr($firma,0,190), mb_substr($name,0,190), $email, mb_substr(trim((string)($d['telefon'] ?? '')),0,60) ?: null,
+       mb_substr(trim((string)($d['webseite'] ?? '')),0,190) ?: null, $land, $spr, $wae,
+       implode(',', $kat) ?: null, trim((string)($d['nachricht'] ?? '')) ?: null]);
+    $lid = (int) insert_id();
+    q("INSERT INTO benutzer (name,email,pass_hash,rollen,aktiv,lieferant_id) VALUES (?,?,?,?,0,?)",
+      [mb_substr($name,0,190) ?: 'Lieferant', $email, password_hash($pass, PASSWORD_DEFAULT), 'lieferant', $lid]);
+    log_aktivitaet('lieferant', $lid, 'lieferant', 'Neue Lieferanten-Bewerbung über die Website (' . $email . '). Wartet auf Freigabe.', 'lieferant');
+    return ['ok'=>true, 'fehler'=>''];
+}
+
+// Bewerbung freigeben (Team): Lieferant entsperren + zugehörige Logins aktivieren. Rückgabe: true bei Erfolg.
+function lieferant_bewerbung_freigeben(int $lieferant_id): bool {
+    if ($lieferant_id <= 0) return false;
+    if (!scalar("SELECT id FROM lieferanten WHERE id=?", [$lieferant_id])) return false;
+    q("UPDATE lieferanten SET gesperrt=0 WHERE id=?", [$lieferant_id]);
+    q("UPDATE benutzer SET aktiv=1 WHERE lieferant_id=? AND rollen LIKE '%lieferant%'", [$lieferant_id]);
+    log_aktivitaet('lieferant', $lieferant_id, 'team', 'Lieferanten-Bewerbung freigegeben – Zugang aktiviert.', 'lieferant');
+    return true;
 }
 // Stationen einer Bestellung beim Lieferanten – in dieser Reihenfolge, kumulativ.
 function bestellung_stationen(): array {

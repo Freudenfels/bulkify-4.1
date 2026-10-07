@@ -28,6 +28,12 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
          . ($anz > 0 ? '&sammel=' . $anz : '&fehler=' . urlencode($hinweis)) . '#preise'); exit;
 }
 
+// Lieferanten-Bewerbung freigeben: entsperrt den Lieferanten und aktiviert seinen Portal-Zugang.
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bewerbung_freigeben') {
+    lieferant_bewerbung_freigeben((int)$id);
+    header('Location: ?p=lieferant&id=' . (int)$id . '&freigegeben=1'); exit;
+}
+
 // Katalog des Lieferanten: je Zeile entscheiden, ob daraus ein Artikel wird.
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['kat_uebernehmen', 'kat_ablehnen', 'kat_alle', 'kat_upload'], true)) {
     require_once BX_ROOT . '/core/lieferant_katalog.php';
@@ -202,7 +208,20 @@ bx_head($neu ? 'Neuer Lieferant' : $v('firma'),
         $liefActions);
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['freigegeben'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Bewerbung freigegeben – der Lieferant ist entsperrt und kann sich jetzt anmelden.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
+
+// Offene Selbst-Bewerbung (hat sich über die Website beworben, noch nicht freigegeben) -> Freigabe anbieten.
+if (!$neu && $gesperrt && (string)($l['quelle'] ?? '') === 'bewerbung') {
+    echo '<div class="bx-panel" style="border-left:3px solid var(--warn)">'
+       . '<h2 style="margin-top:0;font-size:16px">Neue Lieferanten-Bewerbung · wartet auf Freigabe</h2>'
+       . '<p class="muted" style="margin-top:0">Dieser Lieferant hat sich selbst über die Website beworben. Nach der Freigabe ist der Zugang aktiv und er wird bei Anfragen/Bestellungen berücksichtigt.</p>';
+    if (!empty($l['bewerbung_nachricht'])) echo '<p style="white-space:pre-wrap"><strong>Nachricht:</strong> ' . h((string)$l['bewerbung_nachricht']) . '</p>';
+    echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bewerbung freigeben und Zugang aktivieren?\');">'
+       . '<input type="hidden" name="aktion" value="bewerbung_freigeben">'
+       . '<button class="btn btn-primary" type="submit">Bewerbung freigeben</button></form>'
+       . '</div>';
+}
 
 if (!$neu) {
     echo '<div class="bx-cards">';

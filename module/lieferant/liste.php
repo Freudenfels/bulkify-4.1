@@ -22,7 +22,10 @@ if ($q !== '') {
 }
 $rows = bx_sort_rows($rows, $sort, $dir);
 
-$statusBadge = fn($r) => (int)$r['gesperrt'] === 1 ? bx_badge('gesperrt', 'err') : bx_badge('aktiv', 'ok');
+$statusBadge = function($r) {
+    if ((int)$r['gesperrt'] === 1 && (string)($r['quelle'] ?? '') === 'bewerbung') return bx_badge('Bewerbung', 'warn');
+    return (int)$r['gesperrt'] === 1 ? bx_badge('gesperrt', 'err') : bx_badge('aktiv', 'ok');
+};
 $sprache = fn($r) => h(strtoupper($r['sprache'] ?? ''));
 $kats = fn($r) => $r['kategorien'] ? h(str_replace(',', ', ', $r['kategorien'])) : '<span class="muted">–</span>';
 
@@ -54,6 +57,9 @@ $cols = [
 
 render_header('lieferanten', 'Lieferanten');
 bx_head('Lieferanten', count($rows) . ' Einträge', bx_btn('Neuer Lieferant', '?p=lieferant&id=neu', 'primary'));
+$bewOffen = count(array_filter($rows, fn($r) => (int)$r['gesperrt'] === 1 && (string)($r['quelle'] ?? '') === 'bewerbung'));
+if ($bewOffen > 0) echo '<div class="bx-panel" style="border-left:3px solid var(--warn);padding:12px 16px">'
+    . '<strong>' . $bewOffen . ' neue Lieferanten-Bewerbung(en)</strong> warten auf Freigabe – in der Spalte „Status" mit <em>Bewerbung</em> markiert. Zum Freigeben den Lieferanten öffnen.</div>';
 ?>
 <?php if ($katOffenGesamt > 0): ?>
 <div class="bx-panel" style="border-color:#e6c4c0;background:rgba(230,196,192,.12);padding:12px 16px">

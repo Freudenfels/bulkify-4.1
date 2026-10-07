@@ -39,7 +39,8 @@ lp_head('bulkify – ' . lp_t('portal'));
       <div class="bx-field"><label><?= h(lp_t('passwort')) ?></label><input type="password" name="passwort" required autocomplete="current-password"></div>
       <button class="btn btn-primary" type="submit"><?= h(lp_t('anmelden')) ?></button>
     </form>
-    <p class="muted" style="font-size:13px;margin-bottom:0"><?= h(lp_t('kein_zugang')) ?></p>
+    <p class="muted" style="font-size:13px;margin-bottom:8px"><?= h(lp_t('kein_zugang')) ?></p>
+    <a class="btn btn-ghost btn-sm" href="?p=lieferant_bewerbung"><?= h(lp_t('bew_jetzt')) ?></a>
   </div>
 </main></div>
 <?php lp_foot();

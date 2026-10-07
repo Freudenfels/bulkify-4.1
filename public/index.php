@@ -52,6 +52,7 @@ $routes = [
     // Lieferantenportal (eigener Zugang, kein interner Bereich)
     'lieferant_login'        => 'lieferant/login.php',
     'lieferant_einladung'    => 'lieferant/einladung.php',
+    'lieferant_bewerbung'    => 'lieferant/bewerbung.php',   // oeffentliche Selbst-Bewerbung (Landing Page)
     'lieferant_portal'       => 'lieferant/portal.php',
     'lieferant_bestellung'   => 'lieferant/bestellung.php',
     'lieferant_bestellung_pdf'=> 'lieferant/bestellung_pdf.php',
@@ -186,7 +187,7 @@ if ($p === 'autologin') {
 }
 
 // Öffentliche Routen (ohne internen Login): Login-Seite + Kundenportal (Token-basiert)
-$PUBLIC = ['login', 'portal', 'portal_login', 'portal_dok', 'lieferant_login', 'lieferant_einladung', 'ki_job'];   // portal_dok prüft Token + Freigabe selbst
+$PUBLIC = ['login', 'portal', 'portal_login', 'portal_dok', 'lieferant_login', 'lieferant_einladung', 'lieferant_bewerbung', 'ki_job'];   // portal_dok prüft Token + Freigabe selbst
 
 // Nicht angemeldet -> zur Login-Seite (außer öffentliche Routen)
 if (!in_array($p, $PUBLIC, true) && !is_logged_in()) { header('Location: ?p=login'); exit; }
