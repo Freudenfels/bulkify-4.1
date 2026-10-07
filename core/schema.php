@@ -3635,7 +3635,8 @@ function beleg_positionen_materialisieren(int $beleg_id, ?float $ustSatz = null)
     $pos = beleg_positionen_aus_auftrag(['angebot_id'=>$auf['angebot_id'] ?? null, 'menge'=>$menge, 'gesamt_netto'=>$nettoGesamt], $ustSatz);
     if (!$pos) {   // keine exakte Aufschlüsselung -> eine Sammelposition (Produktname)
         $bez = (string) scalar("SELECT COALESCE(NULLIF(kundenname,''),name) FROM produkt WHERE id=?", [(int)($auf['produkt_id'] ?? 0)]) ?: 'Produkt';
-        $pos = [['bezeichnung'=>$bez, 'beschreibung'=>'', 'menge'=>$menge, 'einheit'=>'Stk.',
+        $rezNr = (string) scalar("SELECT r.nummer FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)($auf['produkt_id'] ?? 0)]);
+        $pos = [['artikelnr'=>$rezNr, 'bezeichnung'=>$bez, 'beschreibung'=>'', 'menge'=>$menge, 'einheit'=>'Stk.',
                  'preis_cent'=>(int) round(($menge > 0 ? $nettoGesamt / $menge : $nettoGesamt) * 100), 'ust_satz'=>$ustSatz]];
     }
     q("DELETE FROM beleg_position WHERE beleg_id=?", [$beleg_id]);
@@ -3772,8 +3773,9 @@ function angebot_gruppe_positionen(array $g, ?float $mo, ?int $kid, ?string $let
         if ($kg && !empty($kg['name'])) $summary .= ', #' . trim(str_ireplace(['Größe', 'Gr.', 'Gr'], '', $kg['name']));
     }
     $besch = $rezLines ? (implode("\n", $rezLines) . "\n" . $summary) : $summary;
+    $rezNr = $rid ? (string) scalar("SELECT nummer FROM rezeptur WHERE id=?", [$rid]) : '';
     $out = [[
-        'artikelnr'=>'', 'bezeichnung'=>$pname, 'beschreibung'=>$besch,
+        'artikelnr'=>$rezNr, 'bezeichnung'=>$pname, 'beschreibung'=>$besch,
         'menge'=>(float)($featMenge ?: 1), 'einheit'=>'Pkg.',
         'preis_cent'=>(int) round(vk_fuer_kunde($cell['vk'], $kid) * 100),
         'ek_cent'=>(int) round($cell['ek'] * 100), 'mwst_satz'=>$ust, 'quelle'=>'herstellung', 'gruppe'=>$letter,
@@ -3995,10 +3997,11 @@ function angebot_positionen_aus_staffel(array $a, array $staffeln): array {
     $rezId = !empty($basis['rezeptur_id']) ? (int)$basis['rezeptur_id'] : ((int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)($a['produkt_id'] ?? 0)]) ?: null);
     $verpId= !empty($basis['verpackung_id']) ? (int)$basis['verpackung_id'] : null;
     $mwst  = produkt_ust_satz((int)($a['produkt_id'] ?? 0), (int)($a['kunde_id'] ?? 0));
+    $rezNr = $rezId ? (string) scalar("SELECT nummer FROM rezeptur WHERE id=?", [$rezId]) : '';
     $mehrere = count($staffeln) > 1; $out = []; $i = 0;
     foreach ($staffeln as $s) {
         $besch = ((int)$s['stueck'] > 0 ? (int)$s['stueck'] . ' je Packung · ' : '') . 'Preis je Packung inkl. Verpackung & Etikett';
-        $out[] = ['artikelnr'=>'', 'bezeichnung'=>$bez, 'beschreibung'=>$besch,
+        $out[] = ['artikelnr'=>$rezNr, 'bezeichnung'=>$bez, 'beschreibung'=>$besch,
             'menge'=>(float)$s['menge'], 'einheit'=>'Pkg.', 'preis_cent'=>(int) round((float)$s['vk_stueck'] * 100),
             'ek_cent'=>0, 'mwst_satz'=>$mwst, 'quelle'=>'staffel', 'gruppe'=>($mehrere ? chr(65 + $i) : null),
             'rezeptur_id'=>$rezId, 'stueck'=>(int)$s['stueck'] ?: null, 'verpackung_id'=>$verpId];
@@ -4341,7 +4344,8 @@ function beleg_positionen_aus_auftrag(array $auf, float $ustSatz): array {
         $out = [];
         foreach ($rows as $r) {
             $bez = preg_replace('/^[A-Z]\)\s*/', '', (string)$r['bezeichnung']);   // Gruppen-Buchstabe raus (eine Konfig)
-            $out[] = ['bezeichnung'=>$bez, 'beschreibung'=>(string)($r['beschreibung'] ?? ''),
+            $out[] = ['artikelnr'=>(string)($r['artikelnr'] ?? ''),
+                      'bezeichnung'=>$bez, 'beschreibung'=>(string)($r['beschreibung'] ?? ''),
                       'menge'=>$menge, 'einheit'=>($r['einheit'] ?: 'Stk.'),
                       'preis_cent'=>(int)$r['preis_cent'], 'ust_satz'=>$ustSatz];
         }

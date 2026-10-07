@@ -1820,6 +1820,7 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
             $vName = $auf['verpackung_id'] ? scalar("SELECT name FROM item WHERE id=?", [(int)$auf['verpackung_id']]) : '';
             $besch = trim(((int)$auf['stueck'] ? (int)$auf['stueck'] . ' Stück je Packung' : '') . ($vName ? ' · ' . $vName : ''), ' ·');
             $positionen = [[
+                'artikelnr'    => (string) scalar("SELECT r.nummer FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)($auf['produkt_id'] ?? 0)]),
                 'bezeichnung'  => $auf['produkt_name'] ?: 'Produkt',
                 'beschreibung' => $besch,
                 'menge'        => $menge,
