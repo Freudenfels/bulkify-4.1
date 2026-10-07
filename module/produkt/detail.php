@@ -122,6 +122,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             q("UPDATE produkt SET name=?,synonyme=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,novelfood_status=?,haltbarkeit=?,allergene=?,notiz=? WHERE id=?",
               [$name, $synonyme ?: null, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $nf, $halt, $allerg, $f('notiz'), (int)$id]);
         }
+        // USt-Satz je Produkt – NUR Admin. Leer = Standard (NULL -> 19 % aus den Einstellungen). Auf zulässigen Satz gezogen.
+        if (has_role('admin') && array_key_exists('mwst_satz', $_POST)) {
+            $ms = trim((string)$_POST['mwst_satz']);
+            $msVal = $ms === '' ? null : mwst_normalisieren((float) str_replace(',', '.', $ms));
+            q("UPDATE produkt SET mwst_satz=? WHERE id=?", [$msVal, (int)$id]);
+        }
         // Standard-Produktionsweg (Ausbaustufen) – nur Admin darf das setzen.
         if (has_role('admin')) {
             foreach (['abfuellen', 'etikettieren', 'karton', 'beipack'] as $wf)
@@ -303,6 +309,17 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
         <label for="f_exkl" style="margin:0">exklusiv (nur für den Kunden)</label>
       </div>
     </div>
+    <?php if (has_role('admin')): ?>
+    <div class="bx-field"><label>MwSt-Satz <?= bx_hint('Produkte sind standardmäßig 19 %. Nur ändern, wenn für dieses Produkt ausnahmsweise ein anderer Satz gilt (z. B. 7 %). Hinweis: Glas & Etikett bleiben bei 19 % – eine getrennte Rate je Bestandteil kann bei Bedarf ergänzt werden. Nur Admin.') ?></label>
+      <?php $curMs = ($p['mwst_satz'] ?? null); $curMsS = ($curMs === null || $curMs === '') ? '' : (string)(float)$curMs; ?>
+      <select name="mwst_satz">
+        <option value="" <?= $curMsS===''?'selected':'' ?>>Standard (19 %)</option>
+        <?php foreach (['19'=>'19 %','7'=>'7 %','0'=>'0 %'] as $val=>$lbl): ?>
+          <option value="<?= $val ?>" <?= $curMsS===(string)(float)$val?'selected':'' ?>><?= $lbl ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <?php endif; ?>
   </div></div>
 
   <div class="bx-panel"><div class="bx-grid">

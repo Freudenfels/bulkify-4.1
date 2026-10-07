@@ -1316,6 +1316,7 @@ function init_schema(): void {
     ensure_column('rezeptur_anfrage', 'produktname', "VARCHAR(190) NULL");    // Wunsch-Produktname des Kunden bei der Rezepturanfrage
     ensure_column('produkt', 'kundenname', "VARCHAR(190) NULL");              // vom Kunden gewünschter Produktname (intern = name)
     ensure_column('produkt', 'novelfood_status', "VARCHAR(20) NOT NULL DEFAULT 'unklar'"); // Novel-Food-Konformität: unklar|konform|novel_food|pruefung
+    ensure_column('produkt', 'mwst_satz', "DECIMAL(5,2) NULL");   // USt-Satz des Produkts; NULL = Standard (ust_inland, i.d.R. 19 %). Nur Admin ändert ihn.
     ensure_column('produkt', 'haltbarkeit', "VARCHAR(60) NULL");              // Mindesthaltbarkeit (z. B. „24 Monate"), aus Spec
     ensure_column('produkt', 'allergene', "VARCHAR(255) NULL");               // Allergene des Fertigprodukts, aus Spec
     // Angebot als Preismatrix (Kunde wählt Zelle: Stückzahl × Bestellmenge) -> gewählte Werte fließen in Auftrag + Produktion
@@ -3598,6 +3599,16 @@ function kunde_ust_satz(int $kunde_id): float {
     $hatUstId = trim((string)($k['ust_id'] ?? '')) !== '';
     return $hatUstId ? 0.0 : $ustInland;   // Nicht-DE ohne USt-IdNr -> trotzdem Inland-Satz (sicher)
 }
+// USt-Satz für ein PRODUKT an einen Kunden: Reverse-Charge/Kleinunternehmer/EU-mit-USt-IdNr (= kunde_ust_satz
+// liefert 0) gewinnt immer -> 0 %. Sonst der Produktsatz (produkt.mwst_satz), Standard = Inland (19 %).
+// So sind Produkte standardmäßig 19 %, per Produkt überschreibbar; die Kunden-Steuerbefreiung bleibt erhalten.
+function produkt_ust_satz(int $produkt_id, int $kunde_id): float {
+    if (kunde_ust_satz($kunde_id) <= 0.0) return 0.0;   // steuerfrei (EU-IdNr/Export/Kleinunternehmer)
+    $std = (float) meta_get('ust_inland', 19);
+    if ($produkt_id <= 0) return $std;
+    $p = scalar("SELECT mwst_satz FROM produkt WHERE id=?", [$produkt_id]);
+    return ($p !== null && $p !== '') ? mwst_normalisieren((float)$p) : $std;
+}
 // Hat der Kunde eine brauchbare Rechnungsadresse (Haupt- ODER Rechnungsadresse vollständig)?
 function kunde_hat_rechnungsadresse(int $kunde_id): bool {
     if ($kunde_id <= 0) return false;
@@ -3614,7 +3625,8 @@ function beleg_neu_berechnen(int $beleg_id): array {
     if (!$b) return ['ok'=>false, 'fehler'=>'Rechnung nicht gefunden.'];
     if (in_array((string)$b['status'], ['bezahlt','storniert'], true)) return ['ok'=>false, 'fehler'=>'Bezahlte/stornierte Rechnungen werden nicht neu berechnet.'];
     $netto = (float)$b['netto'];
-    $ustP  = kunde_ust_satz((int)$b['kunde_id']);
+    $pidB  = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [(int)($b['auftrag_id'] ?? 0)]);
+    $ustP  = produkt_ust_satz($pidB, (int)$b['kunde_id']);
     // WICHTIG: die MwSt-Summe der Rechnung/PDF kommt aus den POSITIONEN (mwst_satz). Also die Positionen
     // mit dem neuen Satz versehen und die Kopf-Summen daraus neu bilden – sonst zeigt die PDF 0 % MwSt.
     q("UPDATE beleg_position SET mwst_satz=? WHERE beleg_id=?", [$ustP, $beleg_id]);
@@ -3947,7 +3959,7 @@ function angebot_positionen_aus_staffel(array $a, array $staffeln): array {
     $bez   = trim((string)($basis['bezeichnung'] ?? '')) ?: ((string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [(int)($a['produkt_id'] ?? 0)]) ?: 'Position');
     $rezId = !empty($basis['rezeptur_id']) ? (int)$basis['rezeptur_id'] : ((int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)($a['produkt_id'] ?? 0)]) ?: null);
     $verpId= !empty($basis['verpackung_id']) ? (int)$basis['verpackung_id'] : null;
-    $mwst  = kunde_ust_satz((int)($a['kunde_id'] ?? 0));
+    $mwst  = produkt_ust_satz((int)($a['produkt_id'] ?? 0), (int)($a['kunde_id'] ?? 0));
     $mehrere = count($staffeln) > 1; $out = []; $i = 0;
     foreach ($staffeln as $s) {
         $besch = ((int)$s['stueck'] > 0 ? (int)$s['stueck'] . ' je Packung · ' : '') . 'Preis je Packung inkl. Verpackung & Etikett';
@@ -4243,11 +4255,11 @@ function angebot_ki_produkt_verpackung(int $angebot_id, array $d): void {
     if ($sets) { $args[] = $pid; q("UPDATE produkt SET " . implode(',', $sets) . " WHERE id=?", $args); }
 }
 function angebot_ki_pdf_uebernehmen(int $angebot_id, array $d): int {
-    $a = one("SELECT id, kunde_id FROM angebot WHERE id=?", [$angebot_id]);
+    $a = one("SELECT id, kunde_id, produkt_id FROM angebot WHERE id=?", [$angebot_id]);
     if (!$a) return 0;
     $pos = array_values(array_filter((array)($d['positionen'] ?? []), fn($p) => trim((string)($p['bezeichnung'] ?? '')) !== ''));
     if (!$pos) return 0;
-    $mwst = kunde_ust_satz((int)$a['kunde_id']);
+    $mwst = produkt_ust_satz((int)($a['produkt_id'] ?? 0), (int)$a['kunde_id']);
     q("DELETE FROM angebot_position WHERE angebot_id=?", [$angebot_id]);
     q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$angebot_id]);
     $letter = []; $next = 0; $sort = 0;
@@ -6798,9 +6810,9 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     // Lager die gelieferten, kundenspezifischen Etiketten gezielt einbuchen (kein generischer Glas-Topf).
     $etId = kundenetikett_sicherstellen((int)$a['produkt_id']);
     if ($etId) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$etId, $aid]);
-    // Rechnung: zentrale, korrekte USt (keine ungerechtfertigte 0 %). Ohne Rechnungsadresse wird die Rechnung
-    // NICHT für den Kunden freigegeben (Entwurf mit Hinweis) – der Kunde muss die Adresse angeben, danach neu berechnen.
-    $ustP = kunde_ust_satz((int)$a['kunde_id']);
+    // Rechnung: korrekte USt (Produktsatz, i.d.R. 19 %; Reverse-Charge/Kleinunternehmer 0 %). Ohne Rechnungs-
+    // adresse wird die Rechnung NICHT für den Kunden freigegeben (Entwurf mit Hinweis) – Adresse ergänzen, dann neu berechnen.
+    $ustP = produkt_ust_satz((int)($a['produkt_id'] ?? 0), (int)$a['kunde_id']);
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
     $sicht = kunde_hat_rechnungsadresse((int)$a['kunde_id']) ? 1 : 0;
     $hinw  = $sicht ? null : 'Rechnungsadresse fehlt – bitte Kundenadresse ergänzen, dann Rechnung neu berechnen.';
@@ -6840,7 +6852,7 @@ function rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     if (isset($opt['ust_prozent']) && $opt['ust_prozent'] !== '' && $opt['ust_prozent'] !== null) {
         $ustP = max(0.0, (float)$opt['ust_prozent']);
     } else {
-        $ustP = kunde_ust_satz((int)$a['kunde_id']);
+        $ustP = produkt_ust_satz((int)($a['produkt_id'] ?? 0), (int)$a['kunde_id']);
     }
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
     // Datum / Fälligkeit / Leistungsdatum.
