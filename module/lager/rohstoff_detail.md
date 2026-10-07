@@ -93,3 +93,6 @@ Reiter `spec` (`&kiauto=1&kidok=<id>`) und zeigt den Vorschlag ohne Extra-Klick 
 Konnte die KI nicht lesen (nicht aktiv oder Scan ohne Textebene) → Hinweis `&kioff=1`. Darum wirkt ein Upload
 „ohne Änderung", wenn Kennwerte/Wirkstoffe schon vorhanden waren und der Stammdaten-Vorschlag nicht übernommen
 wurde.
+
+## Feld „Art“ (Stoffklasse)
+Select `art` (Optionen `rohstoff_art_optionen()`), im Stamm-Reiter vor „Form“; in der Feld-Whitelist gespeichert. Dient dem Filter in Liste + Kundenportal.

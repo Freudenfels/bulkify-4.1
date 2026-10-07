@@ -1391,11 +1391,15 @@ foreach ($rezZutaten as $z) if (!empty($z['item_id'])) {
 // Spec/CoA stehen bewusst NICHT in dokumente_fuer_kunde (keine Lieferanten-Originale). Unsere
 // bulkify-Spezifikation ist aber für jeden Rohstoff erzeugbar -> je Zutat aufs Infoblatt verlinken.
 
-// Rohstoff-Katalog (Preis auf Anfrage) – ohne Leerkapseln
-$rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, form, cas, name_lat, synonym, bot_quelle, herkunftsland FROM item
+// Rohstoff-Katalog (Preis auf Anfrage) – ohne Leerkapseln. Filter nach Art (Stoffklasse) und Form.
+$rohArt  = trim((string)($_GET['art'] ?? ''));
+$rohForm = trim((string)($_GET['form'] ?? ''));
+$rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, art, form, cas, name_lat, synonym, bot_quelle, herkunftsland FROM item
     WHERE kategorie='rohstoff' AND gesperrt=0 AND (form<>'kapselhuelle' OR form IS NULL)
       AND (? = '' OR name LIKE ? OR name_lat LIKE ? OR synonym LIKE ? OR cas LIKE ?)
-    ORDER BY name", [$q, $qLike, $qLike, $qLike, $qLike]) : [];
+      AND (? = '' OR art = ?)
+      AND (? = '' OR form = ?)
+    ORDER BY name", [$q, $qLike, $qLike, $qLike, $qLike, $rohArt, $rohArt, $rohForm, $rohForm]) : [];
 // Produkt-Detail (aus dem Katalog)
 $pid = (int)($_GET['pid'] ?? 0);
 // Sichtbar ist ein Produkt, wenn der Kunde es (a) im Katalog sehen darf – Produkt-Recht + aktiv + nicht fremd-exklusiv –
@@ -1499,7 +1503,7 @@ $rohCoas = $rohDetail ? array_values(array_filter(
     fn($c) => charge_coa_hat_analysewerte((int)$c['id'])
 )) : [];
 $jaNein = fn($v) => $v === null || $v === '' ? null : ((int)$v === 1);
-$FORMLBL_P = ['pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle'];
+$FORMLBL_P = ['pulver'=>'Pulver','granulat'=>'Granulat','extrakt'=>'Extrakt','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle'];
 $offenAngebote = count(array_filter($angebote, fn($a) => $a['status'] === 'gesendet'));
 $offenRechnungen = array_values(array_filter($rechnungen, fn($r) => ($r['status'] ?? '') === 'offen'));
 $offenBetrag = array_sum(array_map(fn($r) => (float)$r['brutto'], $offenRechnungen));
@@ -2865,13 +2869,25 @@ portal_head('Kundenportal · ' . $k['firma']);
   <p class="bx-sub">Unser Rohstoff-Katalog. Preise auf Anfrage.</p>
   <div class="bx-panel">
     <?php $sucheForm('rohstoffe', 'Rohstoff suchen – Name, lateinisch oder CAS'); ?>
-    <?php if (!$rohkatalog): ?><div class="muted"><?= $q !== '' ? 'Kein Rohstoff gefunden zu „' . h($q) . '".' : 'Aktuell keine Rohstoffe verfügbar.' ?></div>
+    <form method="get" class="bx-row" style="gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
+      <input type="hidden" name="p" value="portal"><input type="hidden" name="token" value="<?= h($token) ?>"><input type="hidden" name="v" value="rohstoffe"><?php if ($q !== ''): ?><input type="hidden" name="q" value="<?= h($q) ?>"><?php endif; ?>
+      <select name="art" onchange="this.form.submit()" title="Nach Stoffklasse filtern">
+        <option value="">Art: alle</option>
+        <?php foreach (rohstoff_art_optionen() as $kk => $lbl): ?><option value="<?= h($kk) ?>" <?= $rohArt === $kk ? 'selected' : '' ?>><?= h($lbl) ?></option><?php endforeach; ?>
+      </select>
+      <select name="form" onchange="this.form.submit()" title="Nach Form filtern">
+        <option value="">Form: alle</option>
+        <?php foreach (rohstoff_form_optionen() as $kk => $lbl): ?><option value="<?= h($kk) ?>" <?= $rohForm === $kk ? 'selected' : '' ?>><?= h($lbl) ?></option><?php endforeach; ?>
+      </select>
+      <?php if ($rohArt !== '' || $rohForm !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=portal&token=<?= h($token) ?>&v=rohstoffe<?= $q !== '' ? '&q=' . urlencode($q) : '' ?>">Filter zurücksetzen</a><?php endif; ?>
+    </form>
+    <?php if (!$rohkatalog): ?><div class="muted"><?= ($q !== '' || $rohArt !== '' || $rohForm !== '') ? 'Kein Rohstoff zu diesem Filter gefunden.' : 'Aktuell keine Rohstoffe verfügbar.' ?></div>
     <?php else: ?>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Name</th><th>Form</th><th>CAS</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Art</th><th>Form</th><th>CAS</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($rohkatalog as $ro): ?>
-        <tr><td><?= h($ro['name']) ?></td><td><?= h($FORMLBL_P[$ro['form']] ?? $ro['form']) ?></td><td><?= h($ro['cas'] ?: '–') ?></td>
+        <tr><td><?= h($ro['name']) ?></td><td><?= ($lbl = rohstoff_art_label($ro['art'] ?? '')) !== '' ? h($lbl) : '<span class="muted">–</span>' ?></td><td><?= h($FORMLBL_P[$ro['form']] ?? $ro['form']) ?></td><td><?= h($ro['cas'] ?: '–') ?></td>
           <td style="text-align:right"><div class="bx-row" style="gap:6px;justify-content:flex-end">
             <a class="btn btn-primary btn-sm" href="<?= $portalLink('rohanfrage') ?>&iid=<?= (int)$ro['id'] ?>">Anfragen</a>
             <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$ro['id'] ?>">ansehen</a>

@@ -5,20 +5,32 @@ require_once BX_ROOT . '/core/schema.php';
 
 seed_item_if_empty();
 
+// Stoffklasse ("Art") leerer Rohstoffe per Namens-Heuristik vorbelegen (nur Admin). Setzt nur klare Treffer.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'art_autofuellen' && has_role('admin')) {
+    $n = rohstoff_art_autofuellen();
+    header('Location: ?p=rohstoffe&kat=rohstoff&artfill=' . (int)$n); exit;
+}
+
 $KAT  = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','fertig'=>'Fertigware','verkaufsfertig'=>'Verkaufsfertig','maschine'=>'Maschine'];
-$FORM = ['pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle'];
+$FORM = ['pulver'=>'Pulver','granulat'=>'Granulat','extrakt'=>'Extrakt','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle'];
+$ART  = rohstoff_art_optionen();
 
 $q    = trim($_GET['q'] ?? '');
 $kat  = $_GET['kat'] ?? 'rohstoff';          // Standard: Rohstoffe
 $sort = $_GET['sort'] ?? 'name';
 $dir  = $_GET['dir']  ?? 'asc';
 $fehlt = $_GET['fehlt'] ?? '';               // Lücken-Filter: '', 'lief', 'spec', 'coa', 'preis', 'irgendwas'
+$artF  = $_GET['art']  ?? '';                // Stoffklasse-Filter (item.art): '', vitamin, mineralstoff, …
+$formF = $_GET['form'] ?? '';                // Form-Filter (item.form): '', pulver, extrakt, fluessig, …
 $istKapsel = ($kat === 'leerkapsel');
 
 if ($kat === 'alle')            $rows = all("SELECT * FROM item");
 elseif ($istKapsel)             $rows = all("SELECT * FROM item WHERE kategorie='rohstoff' AND form='kapselhuelle'");
 elseif ($kat === 'rohstoff')    $rows = all("SELECT * FROM item WHERE kategorie='rohstoff' AND (form<>'kapselhuelle' OR form IS NULL)");
 else                            $rows = all("SELECT * FROM item WHERE kategorie=?", [$kat]);
+// Art-/Form-Filter (serverseitig, wie kat/fehlt). Greift für Rohstoffe; bei Leerkapseln ohne Wirkung.
+if ($artF !== '')  $rows = array_values(array_filter($rows, fn($r) => (string)($r['art'] ?? '') === $artF));
+if ($formF !== '') $rows = array_values(array_filter($rows, fn($r) => (string)($r['form'] ?? '') === $formF));
 
 // Kapselgrößen-Namen für die Leerkapsel-Sicht
 $KGMAP = [];
@@ -116,6 +128,7 @@ $cols = [
     // Namen sind teils sehr lang – kleiner + umbrechen (Tabelle ist sonst global nowrap und läuft über den Rand).
     'name'          => ['label' => 'Name', 'sort' => true, 'render' => fn($r)=> '<span style="white-space:normal">' . h($r['name']) . '</span>'],
     'ek_preis'      => ['label' => 'Preis ab', 'sort' => true, 'num' => true, 'render' => $preisAb],
+    'art'           => ['label' => 'Art', 'sort' => true, 'render' => fn($r) => ($ART[$r['art'] ?? ''] ?? '') !== '' ? h($ART[$r['art']]) : '<span class="muted">–</span>'],
     'form'          => ['label' => 'Form', 'sort' => true, 'render' => fn($r)=> h($FORM[$r['form']] ?? $r['form'])],
     'wirkstoffe' => ['label' => 'Wirkstoffe', 'th' => 'width:160px', 'render' => function($r) use ($wmap) {
         $list = $wmap[$r['id']] ?? [];
@@ -138,6 +151,7 @@ $neuBtn  = ($istKapsel ? bx_btn('Neue Leerkapsel', '?p=rohstoff&id=neu&form=kaps
 $fehltLbl = ['irgendwas'=>'etwas fehlt','lief'=>'ohne Lieferant','preis'=>'ohne Preis','spec'=>'ohne Spec','coa'=>'ohne CoA'][$fehlt] ?? '';
 render_header('rohstoffe', $titel);
 bx_head($titel, count($rows) . ' Einträge' . ($fehltLbl ? ' · Filter: ' . $fehltLbl : ''), $neuBtn);
+if (isset($_GET['artfill'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">Stoffklasse (Art) bei <strong>' . (int)$_GET['artfill'] . '</strong> Rohstoff(en) automatisch vorbelegt. Leer gebliebene bitte am Rohstoff pflegen.</div>';
 ?>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="rohstoffe">
@@ -152,6 +166,14 @@ bx_head($titel, count($rows) . ' Einträge' . ($fehltLbl ? ' · Filter: ' . $feh
   <input class="bx-search" type="text" id="rohSuche" name="q" value="<?= h($q) ?>" placeholder="Suchen: Name, lat. Name, Art.-Nr …" autocomplete="off">
   <span class="muted" id="rohCount" style="font-size:13px;white-space:nowrap"></span>
   <?php if (!$istKapsel): ?>
+  <select name="art" onchange="this.form.submit()" title="Nach Stoffklasse (Art) filtern">
+    <option value="">Art: alle</option>
+    <?php foreach ($ART as $k => $lbl): ?><option value="<?= h($k) ?>" <?= $artF === $k ? 'selected' : '' ?>><?= h($lbl) ?></option><?php endforeach; ?>
+  </select>
+  <select name="form" onchange="this.form.submit()" title="Nach Form filtern">
+    <option value="">Form: alle</option>
+    <?php foreach (rohstoff_form_optionen() as $k => $lbl): ?><option value="<?= h($k) ?>" <?= $formF === $k ? 'selected' : '' ?>><?= h($lbl) ?></option><?php endforeach; ?>
+  </select>
   <select name="fehlt" onchange="this.form.submit()" title="Nur Rohstoffe zeigen, bei denen etwas fehlt">
     <?php foreach (['' => 'alle', 'irgendwas' => 'etwas fehlt', 'lief' => 'ohne Lieferant', 'preis' => 'ohne Preis', 'spec' => 'ohne Spec', 'coa' => 'ohne CoA'] as $k => $lbl): ?>
       <option value="<?= $k ?>" <?= $fehlt === $k ? 'selected' : '' ?>><?= $lbl ?></option>
@@ -159,11 +181,18 @@ bx_head($titel, count($rows) . ' Einträge' . ($fehltLbl ? ' · Filter: ' . $feh
   </select>
   <?php endif; ?>
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
-  <?php if ($q !== '' || $fehlt !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=rohstoffe&kat=<?= h($kat) ?>">zurücksetzen</a><?php endif; ?>
+  <?php if ($q !== '' || $fehlt !== '' || $artF !== '' || $formF !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=rohstoffe&kat=<?= h($kat) ?>">zurücksetzen</a><?php endif; ?>
 </form>
+<?php if (!$istKapsel && has_role('admin')): ?>
+<form method="post" style="margin:-6px 0 10px" onsubmit="return confirm('Leere „Art" aller Rohstoffe per Namens-Heuristik vorbelegen? Nur klare Treffer werden gesetzt, Bestehendes bleibt. Danach manuell nachpflegbar.');">
+  <input type="hidden" name="aktion" value="art_autofuellen">
+  <button class="btn btn-ghost btn-sm" type="submit">Art automatisch vorbelegen</button>
+  <span class="muted" style="font-size:12px">– füllt leere „Art" anhand des Namens (konservativ)</span>
+</form>
+<?php endif; ?>
 <?php
 bx_table($cols, array_values($rows), [
-    'baseUrl' => '?p=rohstoffe&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : '') . ($fehlt !== '' ? '&fehlt=' . h($fehlt) : ''),
+    'baseUrl' => '?p=rohstoffe&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : '') . ($fehlt !== '' ? '&fehlt=' . h($fehlt) : '') . ($artF !== '' ? '&art=' . h($artF) : '') . ($formF !== '' ? '&form=' . h($formF) : ''),
     'sort'    => $sort,
     'dir'     => $dir,
     'rowUrl'  => fn($r) => '?p=rohstoff&id=' . $r['id'],

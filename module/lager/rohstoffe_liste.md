@@ -19,3 +19,6 @@
 Die **Suche** durchsucht weiterhin auch den lateinischen Namen, auch wenn er nicht mehr als Spalte steht.
 
 **Lücken-Filter (`?fehlt=`):** Dropdown in der Leiste – „alle / etwas fehlt / ohne Lieferant / ohne Preis / ohne Spec / ohne CoA". Zeigt gezielt die Rohstoffe, bei denen etwas fehlt, damit man sie anfragen/hinterlegen kann. Grundlage sind dieselben Sets wie die Marker (id-verknüpfte Lieferantenpreise, Spec/CoA-Inhalte). Die v3-`lieferant_preisliste` fließt bewusst NICHT ein: 636 Freitext-Zeilen (Menge/Verpackung im Namen, „5HTP 25Kg"), nur ~30 exakte Namenstreffer und keine Lieferantennamen – das würde die Marker verfälschen.
+
+## Filter Art (Stoffklasse) + Form (Stand 2026-10-07)
+Zwei Dropdowns in der Filterleiste (nur Rohstoffe): **Art** = `item.art` (Stoffklasse: vitamin/mineralstoff/pflanzenstoff/aminosaeure/fettsaeure/ballaststoff/probiotikum/enzym/sonstiges, Optionen via `rohstoff_art_optionen()`), **Form** = `item.form` (`rohstoff_form_optionen()`, inkl. Extrakt). Beide serverseitig gefiltert (GET `art`/`form`), eigene Tabellenspalte „Art“. Admin-Button **„Art automatisch vorbelegen“** (POST `aktion=art_autofuellen`) ruft `rohstoff_art_autofuellen()` – konservative Namens-Heuristik `rohstoff_art_raten()`, setzt nur leere Felder/klare Treffer (~49% Abdeckung), Rest manuell am Rohstoff-Detail.

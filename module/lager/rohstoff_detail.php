@@ -6,7 +6,7 @@ require_once BX_ROOT . '/core/dokument_ui.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status-Badge
 
 $KAT  = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','fertig'=>'Fertigware','verkaufsfertig'=>'Verkaufsfertig','maschine'=>'Maschine'];
-$FORM = ['pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle (leer)'];
+$FORM = ['pulver'=>'Pulver','granulat'=>'Granulat','extrakt'=>'Extrakt','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle (leer)'];
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
 
@@ -222,7 +222,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
     if ($f('name') === '') {
         $fehler = 'Name ist ein Pflichtfeld.';
     } else {
-        $felder = ['artikelnummer','name','name_en','name_lat','cas','kategorie','form',
+        $felder = ['artikelnummer','name','name_en','name_lat','cas','kategorie','form','art',
                    'material','farbe','kapselgroesse_id','leergewicht_mg',
                    'dichte','allergene','overage_prozent','einheit',
                    'ek_preis','preis_bezug','vk_aufschlag_prozent','haupt_lieferant_id','gesperrt','notiz',
@@ -488,6 +488,14 @@ if (!$neu) {
         <select name="kategorie">
           <?php foreach ($KAT as $key=>$lbl): ?>
             <option value="<?= $key ?>" <?= ($it['kategorie']??'')===$key?'selected':'' ?>><?= $lbl ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="bx-field"><label>Art <?= bx_hint('Stoffklasse für die Filterung (intern + Kundenportal): Vitamine, Mineralstoffe, Pflanzenstoffe, Aminosäuren …') ?></label>
+        <select name="art">
+          <option value="">– keine –</option>
+          <?php foreach (rohstoff_art_optionen() as $key=>$lbl): ?>
+            <option value="<?= h($key) ?>" <?= ($it['art']??'')===$key?'selected':'' ?>><?= h($lbl) ?></option>
           <?php endforeach; ?>
         </select>
       </div>

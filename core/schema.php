@@ -1500,6 +1500,7 @@ function init_schema(): void {
     ensure_column('item', 'synonym', "VARCHAR(60) NULL");            // z. B. RM940
     ensure_column('item', 'ec_nr', "VARCHAR(30) NULL");
     ensure_column('item', 'bot_quelle', "VARCHAR(190) NULL");        // botanische Quelle / Pflanzenteil
+    ensure_column('item', 'art', "VARCHAR(20) NULL");                // Stoffklasse: vitamin|mineralstoff|pflanzenstoff|aminosaeure|fettsaeure|ballaststoff|probiotikum|enzym|sonstiges (Filter Rohstoffe)
     // Öffentliche Rohstoff-Datenbank (Website/SEO): je Rohstoff einzeln freigeben; nichts geht automatisch online.
     ensure_column('item', 'website_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0"); // 1 = auf bulkify.pro-Rohstoff-DB zeigen
     ensure_column('item', 'web_slug', "VARCHAR(190) NULL");          // stabile URL (z. B. ashwagandha-wurzelextrakt)
@@ -8699,6 +8700,64 @@ function rohstoff_entwurf_aktivieren(int $item_id): void {
     if ($item_id <= 0) return;
     if ((int) scalar("SELECT anfrage_entwurf FROM item WHERE id=?", [$item_id]) !== 1) return;
     q("UPDATE item SET gesperrt=0, anfrage_entwurf=0 WHERE id=?", [$item_id]);
+}
+
+// ===== Rohstoff-Stoffklasse ("Art") + physische Form: Optionen + Heuristik =======================
+// Stoffklasse (item.art) – für Filter (intern + Kundenportal). Reihenfolge = Anzeigereihenfolge.
+function rohstoff_art_optionen(): array {
+    return ['vitamin'=>'Vitamine', 'mineralstoff'=>'Mineralstoffe', 'pflanzenstoff'=>'Pflanzenstoffe',
+            'aminosaeure'=>'Aminosäuren', 'fettsaeure'=>'Fettsäuren/Öle', 'ballaststoff'=>'Ballaststoffe',
+            'probiotikum'=>'Probiotika', 'enzym'=>'Enzyme', 'sonstiges'=>'Sonstiges'];
+}
+function rohstoff_art_label(?string $art): string { return rohstoff_art_optionen()[(string)$art] ?? ''; }
+// Physische Form (item.form) – gleiche Werte wie in der Liste; Extrakt bleibt bewusst eine FORM-Option.
+function rohstoff_form_optionen(): array {
+    return ['pulver'=>'Pulver', 'granulat'=>'Granulat', 'extrakt'=>'Extrakt', 'fluessig'=>'Flüssig',
+            'oel'=>'Öl', 'paste'=>'Paste', 'kristallin'=>'Kristallin'];
+}
+function rohstoff_form_label(?string $form): string {
+    return (rohstoff_form_optionen()[(string)$form] ?? '') ?: ((string)$form === 'kapselhuelle' ? 'Kapselhülle' : '');
+}
+// Heuristik: Stoffklasse aus dem Namen raten. KONSERVATIV – nur klare Treffer, sonst '' (unbestimmt).
+// Dient nur zur Vorbelegung leerer Felder; die Pflege bleibt am Rohstoff-Detail möglich.
+function rohstoff_art_raten(string $name): string {
+    $n = ' ' . mb_strtolower($name) . ' ';
+    $hat = fn(string $re): bool => (bool) preg_match('/' . $re . '/u', $n);
+    // Vitamine (inkl. chemische Namen)
+    if ($hat('vitamin|cholecalciferol|ergocalciferol| ascorbin|ascorbinsäure|tocopherol|tocotrienol|retinol|retinyl|\bbiotin|folsäure|folat|methylfolat|niacin|nicotinamid|riboflavin|thiamin|cobalamin|methylcobalamin|pyridoxin|panthenol|pantothen|menachinon|menaquinon|phyllochinon|cholin'))
+        return 'vitamin';
+    // Mineralstoffe / Spurenelemente – VOR den Aminosäuren, weil Mineral-Chelate oft nach einer
+    // Aminosäure benannt sind (z. B. "Magnesium Bisglycinat", "Zink Aspartat") – der Mineralstoff ist aktiv.
+    if ($hat('magnesium|calcium|kalzium|\bzink|\beisen|kalium|natrium|\bselen|kupfer|\bmangan|\bchrom|molybd|\bjod\b|\biod|phosphor|\bbor\b|silicium|silizium|kiesel|spurenelement|mineral'))
+        return 'mineralstoff';
+    // Aminosäuren (optionales D-/DL-/L- Präfix, auch bare Namen + Beta-Alanin, Creatin, BCAA)
+    if ($hat('\b(?:d-|dl-|l-)?(arginin|lysin|glutamin|glutaminsäure|glutamat|carnitin|carnosin|citrullin|ornithin|theanin|tryptophan|tyrosin|cystein|cystin|glycin|methionin|leucin|isoleucin|valin|threonin|phenylalanin|histidin|prolin|serin|taurin|alanin|asparagin|asparaginsäure|aspartat)|beta.?alanin|\bbcaa\b|\bcreatin|\bkreatin|aminosäure'))
+        return 'aminosaeure';
+    // Fettsäuren / Öle
+    if ($hat('omega|fischöl|lein(öl|samen)|\bdha\b|\bepa\b|fettsäure|mct|krill'))
+        return 'fettsaeure';
+    // Probiotika
+    if ($hat('lactobacillus|bifidobacterium|probiotik|\bkulturen|\bcfu'))
+        return 'probiotikum';
+    // Enzyme
+    if ($hat('enzym|bromelain|papain|protease|lipase|amylase|laktase|lactase'))
+        return 'enzym';
+    // Ballaststoffe
+    if ($hat('ballaststoff|inulin|flohsamen|psyllium|glucomannan|\bpektin|akazienfaser|cellulose'))
+        return 'ballaststoff';
+    // Pflanzenstoffe (Extrakte/Botanicals) – breiter Fang zum Schluss
+    if ($hat('extrakt|extract|wurzel|blatt|blätter|kraut|frucht|samen|rinde|blüte|pflanz|botanical|kakao|cacao|acerola|curcumin|kurkuma|ginseng|ashwagandha|ginkgo|mariendistel|brennnessel|ingwer|grüntee|grüner tee|traubenkern|olivenblatt|weihrauch|bockshornklee|moringa|spirulina|chlorella|aroniabeere|holunder|hagebutte|resveratrol|quercetin|rutin|oleuropein|polyphenol|flavonoid|beere|pilz|reishi|cordyceps'))
+        return 'pflanzenstoff';
+    return '';
+}
+// Leere item.art konservativ vorbelegen (nur Rohstoffe, nur klare Namens-Treffer). Rückgabe: Anzahl gesetzt.
+function rohstoff_art_autofuellen(): int {
+    $n = 0;
+    foreach (all("SELECT id, name FROM item WHERE kategorie='rohstoff' AND (art IS NULL OR art='')") as $r) {
+        $a = rohstoff_art_raten((string)$r['name']);
+        if ($a !== '') { q("UPDATE item SET art=? WHERE id=?", [$a, (int)$r['id']]); $n++; }
+    }
+    return $n;
 }
 
 /**

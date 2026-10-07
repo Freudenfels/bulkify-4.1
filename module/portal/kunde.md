@@ -265,3 +265,6 @@ fällt auf die Rollen-Startseite zurück. Mitarbeiter-Verwaltung (`ma_*`) nur f�
 ## Erstzugang verlangt die Anschrift
 Das einmalige „Konto einrichten" fragt jetzt neben E-Mail/Passwort auch die **Anschrift** ab
 (Straße/Nr., PLZ, Ort, Land, optional USt-IdNr.); Straße/PLZ/Ort sind Pflicht.
+
+## Rohstoffkatalog-Filter (Stand 2026-10-07)
+Die Rohstoff-Ansicht (`v=rohstoffe`) hat neben der Textsuche zwei Filter-Dropdowns **Art** (`item.art`, `rohstoff_art_optionen()`) und **Form** (`rohstoff_form_optionen()`), serverseitig in der `$rohkatalog`-Query (GET `art`/`form`). Tabelle zeigt zusätzlich die Spalte „Art“.
