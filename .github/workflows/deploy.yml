@@ -13,9 +13,18 @@ on:
       - main
   workflow_dispatch:
 
+# Nur EIN Deploy gleichzeitig: mehrere parallele SFTP-Sessions zum selben Server blockieren sich sonst
+# (Runs bleiben auf "In progress" haengen). cancel-in-progress: false = laufenden Upload NIE abbrechen
+# (sonst Teil-Upload), neue Runs warten in der Queue und laufen nacheinander.
+concurrency:
+  group: deploy-sftp
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Falls ein SFTP-Schritt doch haengt: nach 10 min abbrechen (statt endlos "In progress"), Queue laeuft weiter.
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v5
