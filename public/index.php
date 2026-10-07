@@ -101,6 +101,7 @@ $routes = [
     'novelfood'       => 'produkt/novelfood.php',   // Schnell-Nachschlage: ist ein Stoff Novel Food?
     'novelfood_import'=> 'produkt/novelfood_import.php',   // Katalog aktualisieren (Upload + Diff + EU-Direktabgleich)
     'novelfood_verlauf'=> 'produkt/novelfood_verlauf.php', // Aktualisierungs-Verlauf (was ist neu/geändert, je Lauf)
+    'novelfood_export'=> 'produkt/novelfood_export.php',   // Öffentlicher JSON-Export des Katalogs (für die Website)
     'angebote'        => 'angebot/liste.php',
     'angebot'         => 'angebot/detail.php',
     'dienstleistungen'=> 'dienstleistung/liste.php',   // Service-Katalog (Dienstleistungen-Modul)
@@ -190,7 +191,7 @@ if ($p === 'autologin') {
 }
 
 // Öffentliche Routen (ohne internen Login): Login-Seite + Kundenportal (Token-basiert)
-$PUBLIC = ['login', 'portal', 'portal_login', 'portal_dok', 'lieferant_login', 'lieferant_einladung', 'lieferant_bewerbung', 'ki_job'];   // portal_dok prüft Token + Freigabe selbst
+$PUBLIC = ['login', 'portal', 'portal_login', 'portal_dok', 'lieferant_login', 'lieferant_einladung', 'lieferant_bewerbung', 'ki_job', 'novelfood_export'];   // portal_dok prüft Token + Freigabe selbst; novelfood_export = öffentlicher JSON-Katalog
 
 // Nicht angemeldet -> zur Login-Seite (außer öffentliche Routen)
 if (!in_array($p, $PUBLIC, true) && !is_logged_in()) { header('Location: ?p=login'); exit; }
