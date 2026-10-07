@@ -5,10 +5,22 @@ require_once BX_ROOT . '/core/schema.php';
 
 $fehler = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $k = kunde_login((string)($_POST['email'] ?? ''), (string)($_POST['passwort'] ?? ''));
+    $em = (string)($_POST['email'] ?? ''); $pwIn = (string)($_POST['passwort'] ?? '');
+    $k = kunde_login($em, $pwIn);
     if ($k) {
+        // Inhaber-Login: voller Zugriff. Eventuelle Mitarbeiter-Rolle aus der Session entfernen.
         $_SESSION['portal_kid'] = (int)$k['id'];
+        unset($_SESSION['portal_subuser'], $_SESSION['portal_rolle']);
         header('Location: ?p=portal' . (!empty($k['portal_token']) ? '&token=' . $k['portal_token'] : '')); exit;
+    }
+    // Sonst: Mitarbeiter-Zugang (kunde_portal_user) mit eigener Rolle.
+    $mu = kunde_portal_login($em, $pwIn);
+    if ($mu) {
+        $_SESSION['portal_kid']     = (int)$mu['kunde']['id'];
+        $_SESSION['portal_subuser'] = (int)$mu['user_id'];
+        $_SESSION['portal_rolle']   = (string)$mu['rolle'];
+        // KEIN Token in der URL -> die Rolle greift (Token = Inhaber-Zugang).
+        header('Location: ?p=portal'); exit;
     }
     $fehler = 'E-Mail oder Passwort ist nicht korrekt.';
 }

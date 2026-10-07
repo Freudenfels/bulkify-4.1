@@ -246,3 +246,22 @@ hochgeladene Unterlagen), zuletzt „Anfrage stellen". **COA-Regel** (siehe Memo
 echte Analysewerte (Schwermetalle/Mikrobiologie …). `charge_coa_hat_analysewerte()` + `coa_parameter_ist_analyse()`
 (core/schema.php) prüfen das. Chargen ohne solche Werte werden **nicht** als CoA angeboten; `build_coa_pdf`
 (core/pdf_spec.php) kennzeichnet ein PDF ohne Analysewerte als **Spezifikation** statt Analysenzertifikat.
+
+## Mein Konto: Marken + Mitarbeiter-Zugänge mit Rollen
+**Marken** (`kunde_marke`): der Kunde pflegt seine Marken/Webseiten selbst (Aktionen `marke_add`/`marke_del`)
+– erleichtert uns die Zuordnung/Suche.
+
+**Mitarbeiter-Zugänge** (`kunde_portal_user`: name, email UNIQUE, passwort-Hash, rolle, aktiv): der **Inhaber**
+(Token-/Inhaber-Login) legt weitere Portal-Logins an (`ma_add`/`ma_toggle`/`ma_del`) und wählt je Person die
+Rolle: `besteller` (voller Zugriff, darf verbindlich bestellen), `rezepte` (nur Rezepturen ansehen),
+`lager` (nur „Mein Lager"). Login der Mitarbeiter über `kunde_portal_login()` in login.php
+(Session `portal_subuser` + `portal_rolle`). Der Magic-Link/Token = immer Inhaber (voller Zugriff).
+
+**Durchsetzung (Deny-by-default):** `$portalRolle` wird früh bestimmt; `$darfBestellen/_rezepte/_lager`.
+Eingeschränkte Rollen: (1) **jede** ändernde/bestellende POST-Aktion wird hart geblockt (`&krechte=1`),
+(2) Menü `$L` und `$detailParent` werden auf die erlaubten Views eingedampft, (3) ein nicht erlaubter `$view`
+fällt auf die Rollen-Startseite zurück. Mitarbeiter-Verwaltung (`ma_*`) nur für den Inhaber.
+
+## Erstzugang verlangt die Anschrift
+Das einmalige „Konto einrichten" fragt jetzt neben E-Mail/Passwort auch die **Anschrift** ab
+(Straße/Nr., PLZ, Ort, Land, optional USt-IdNr.); Straße/PLZ/Ort sind Pflicht.

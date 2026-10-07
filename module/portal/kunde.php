@@ -8,12 +8,27 @@ $token = preg_replace('/[^a-f0-9]/', '', $_GET['token'] ?? '');
 agb_seed_wenn_leer();   // AGB-Entwurf anlegen, solange keine Fassung existiert
 
 // Logout aus dem Kundenportal (E-Mail/Passwort-Session beenden).
-if (($_GET['v'] ?? '') === 'logout') { unset($_SESSION['portal_kid']); header('Location: ?p=portal_login&abgemeldet=1'); exit; }
+if (($_GET['v'] ?? '') === 'logout') { unset($_SESSION['portal_kid'], $_SESSION['portal_subuser'], $_SESSION['portal_rolle']); header('Location: ?p=portal_login&abgemeldet=1'); exit; }
 
 $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
 // Zugang auch per Kunden-Login (E-Mail+Passwort): Session-basiert. Magic-Link bleibt Backup.
 if (!$k && !empty($_SESSION['portal_kid'])) $k = one("SELECT * FROM kunden WHERE id=?", [(int)$_SESSION['portal_kid']]);
 if ($k) { $_SESSION['portal_kid'] = (int)$k['id']; if (!empty($k['portal_token'])) $token = (string)$k['portal_token']; }
+
+// Portal-Rolle: Token-Zugang (Magic-Link) ODER Inhaber-Login = voller Zugriff. Ein per E-Mail angemeldeter
+// MITARBEITER (kunde_portal_user) erbt seine eingeschränkte Rolle. Nur ohne ?token= in der URL greift sie.
+$portalRolle = 'inhaber';
+if (empty($_GET['token']) && !empty($_SESSION['portal_subuser'])) $portalRolle = (string)($_SESSION['portal_rolle'] ?? 'besteller');
+$istInhaber    = ($portalRolle === 'inhaber');
+$darfBestellen = in_array($portalRolle, ['inhaber', 'besteller'], true);   // verbindlich bestellen / alles ändern
+$darfRezepte   = in_array($portalRolle, ['inhaber', 'besteller', 'rezepte'], true);
+$darfLager     = in_array($portalRolle, ['inhaber', 'besteller', 'lager'], true);
+
+// Harte Schutzregel: ein Mitarbeiter ohne Bestellrecht darf KEINE ändernden/bestellenden POST-Aktionen
+// auslösen (Deny-by-default). Logout läuft über GET. So kann „nur Rezepte/Lager ansehen" nichts bestellen.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && !$darfBestellen) {
+    header('Location: ?p=portal&v=' . ($darfRezepte ? 'rezepturen' : ($darfLager ? 'fremdprodukte' : 'start')) . '&krechte=1'); exit;
+}
 
 // Ein eingeloggtes Team-Mitglied, das das Kundenportal ueber den Token ansieht (kein echter Kunde,
 // kein Lieferant), darf mehr: Angebote/Anfragen endgueltig loeschen. Gleiche Bedingung wie die interne
@@ -65,6 +80,50 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
        (int)$k['id']]);
     log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Stammdaten/Adresse im Portal aktualisiert.', 'kunde');
     header('Location: ?p=portal&token=' . $token . '&v=konto&saved=1'); exit;
+}
+
+// Marken des Kunden (White-Label) selbst pflegen – erleichtert uns später die Zuordnung/Suche.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'marke_add') {
+    $nm = trim((string)($_POST['marke_name'] ?? '')); $web = trim((string)($_POST['marke_web'] ?? ''));
+    if ($nm !== '' || $web !== '') {
+        $sort = (int) scalar("SELECT COALESCE(MAX(sort),-1)+1 FROM kunde_marke WHERE kunde_id=?", [(int)$k['id']]);
+        q("INSERT INTO kunde_marke (kunde_id,name,webseite,sort) VALUES (?,?,?,?)", [(int)$k['id'], $nm ?: null, $web ?: null, $sort]);
+        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Marke im Portal hinzugefügt: ' . ($nm ?: $web), 'kunde');
+    }
+    header('Location: ?p=portal&token=' . $token . '&v=konto&mok=1#marken'); exit;
+}
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'marke_del') {
+    $mid = (int)($_POST['marke_id'] ?? 0);
+    if ($mid) q("DELETE FROM kunde_marke WHERE id=? AND kunde_id=?", [$mid, (int)$k['id']]);
+    header('Location: ?p=portal&token=' . $token . '&v=konto&mok=1#marken'); exit;
+}
+
+// Mitarbeiter-Zugänge verwalten – nur der Inhaber (Token-/Inhaber-Login), nicht eingeschränkte Mitarbeiter.
+if ($k && $istInhaber && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ma_add') {
+    $nm = trim((string)($_POST['ma_name'] ?? '')); $em = trim(mb_strtolower((string)($_POST['ma_email'] ?? '')));
+    $pw = (string)($_POST['ma_pw'] ?? ''); $ro = (string)($_POST['ma_rolle'] ?? 'besteller');
+    if (!in_array($ro, ['besteller','rezepte','lager'], true)) $ro = 'besteller';
+    $err = '';
+    if ($nm === '' || !filter_var($em, FILTER_VALIDATE_EMAIL)) $err = 'Bitte Name und gültige E-Mail angeben.';
+    elseif (strlen($pw) < 8) $err = 'Das Passwort muss mindestens 8 Zeichen haben.';
+    elseif ((int) scalar("SELECT COUNT(*) FROM kunde_portal_user WHERE LOWER(email)=?", [$em]) > 0
+         || (int) scalar("SELECT COUNT(*) FROM kunden WHERE LOWER(email)=?", [$em]) > 0)
+        $err = 'Diese E-Mail-Adresse wird bereits verwendet.';
+    if ($err !== '') { header('Location: ?p=portal&token=' . $token . '&v=konto&mafehler=' . urlencode($err) . '#mitarbeiter'); exit; }
+    q("INSERT INTO kunde_portal_user (kunde_id,name,email,passwort,rolle,aktiv) VALUES (?,?,?,?,?,1)",
+      [(int)$k['id'], $nm, $em, password_hash($pw, PASSWORD_DEFAULT), $ro]);
+    log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Mitarbeiter-Zugang angelegt: ' . $nm . ' (' . $ro . ').', 'kunde');
+    header('Location: ?p=portal&token=' . $token . '&v=konto&mok=1#mitarbeiter'); exit;
+}
+if ($k && $istInhaber && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ma_toggle') {
+    $uid = (int)($_POST['ma_id'] ?? 0);
+    if ($uid) q("UPDATE kunde_portal_user SET aktiv = 1 - aktiv WHERE id=? AND kunde_id=?", [$uid, (int)$k['id']]);
+    header('Location: ?p=portal&token=' . $token . '&v=konto&mok=1#mitarbeiter'); exit;
+}
+if ($k && $istInhaber && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ma_del') {
+    $uid = (int)($_POST['ma_id'] ?? 0);
+    if ($uid) q("DELETE FROM kunde_portal_user WHERE id=? AND kunde_id=?", [$uid, (int)$k['id']]);
+    header('Location: ?p=portal&token=' . $token . '&v=konto&mok=1#mitarbeiter'); exit;
 }
 
 // Angebot bestätigen (Kundenaktion) -> löst Auftrag + Rechnung aus
@@ -1174,6 +1233,17 @@ $detailParent['agb'] = 'start';   // AGB: kein Menuepunkt, aber eine echte Seite
 $view = $_GET['v'] ?? 'start';
 if (!isset($L[$view]) && !isset($detailParent[$view])) $view = 'start';
 $activeItem = $detailParent[$view] ?? $view;
+
+// Rollen-Beschränkung für Mitarbeiter: Menü + Views auf das Erlaubte eindampfen (Deny-by-default).
+if (!$darfBestellen) {
+    $erlaubt = $darfRezepte ? ['rezepturen', 'rezeptur', 'rohstoff']
+             : ($darfLager  ? ['fremdprodukte'] : []);
+    $home = $erlaubt[0] ?? 'start';
+    foreach (array_keys($L) as $kk)            if (!in_array($kk, $erlaubt, true)) unset($L[$kk]);
+    foreach (array_keys($detailParent) as $kk) if (!in_array($kk, $erlaubt, true)) unset($detailParent[$kk]);
+    if (!in_array($view, $erlaubt, true)) $view = $home;
+    $activeItem = $detailParent[$view] ?? $view;
+}
 
 // Suchbegriff für die Katalog-Listen (Produkte, Rezepturen, Rohstoffe).
 // Gesucht wird über den Namen UND über die enthaltenen Rohstoffe – ein Kunde sucht eher
@@ -4060,10 +4130,13 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
 <?php elseif ($view === 'konto'):
   $kv = fn($f) => h((string)($k[$f] ?? ''));
+  $meineMarken = all("SELECT id, name, webseite FROM kunde_marke WHERE kunde_id=? ORDER BY sort, id", [$kid]);
+  $meineMitarbeiter = all("SELECT id, name, email, rolle, aktiv FROM kunde_portal_user WHERE kunde_id=? ORDER BY id", [$kid]);
+  $ROLLE_LBL = ['besteller'=>'darf verbindlich bestellen', 'rezepte'=>'nur Rezepturen ansehen', 'lager'=>'nur „Mein Lager" ansehen'];
 ?>
   <h1 style="margin-bottom:4px">Mein Konto</h1>
   <p class="bx-sub" style="margin:0 0 14px">Ihre Stammdaten und Adressen. Diese verwenden wir für Angebote, Rechnungen und den Versand.</p>
-  <?php if (isset($_GET['saved'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div><?php endif; ?>
+  <?php if (isset($_GET['saved']) || isset($_GET['mok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div><?php endif; ?>
   <form method="post">
     <input type="hidden" name="aktion" value="konto_speichern">
     <div class="bx-panel">
@@ -4109,6 +4182,74 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <div class="bx-row" style="margin-top:14px"><button class="btn btn-primary" type="submit">Speichern</button></div>
   </form>
+
+  <?php // Marken (White-Label): eigenes Formular (nie in ein anderes Formular verschachteln). ?>
+  <div class="bx-panel" id="marken">
+    <h2 style="margin-top:0">Meine Marken</h2>
+    <p class="muted" style="margin-top:0">Ihre Marken / Webseiten. Das hilft uns, Ihre Produkte und Anfragen schneller zuzuordnen.</p>
+    <?php if ($meineMarken): ?>
+    <div class="bx-tablewrap" style="margin-bottom:12px"><table class="bx-table">
+      <thead><tr><th>Marke</th><th>Webseite</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($meineMarken as $m): ?>
+        <tr>
+          <td><?= h((string)($m['name'] ?? '')) ?: '<span class="muted">–</span>' ?></td>
+          <td><?= h((string)($m['webseite'] ?? '')) ?: '<span class="muted">–</span>' ?></td>
+          <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Marke entfernen?');"><input type="hidden" name="aktion" value="marke_del"><input type="hidden" name="marke_id" value="<?= (int)$m['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">entfernen</button></form></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <?php else: ?><p class="muted" style="margin:0 0 12px">Noch keine Marke hinterlegt.</p><?php endif; ?>
+    <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">
+      <input type="hidden" name="aktion" value="marke_add">
+      <div class="bx-field" style="flex:2;min-width:180px"><label>Marke</label><input type="text" name="marke_name" placeholder="z. B. Annapurna"></div>
+      <div class="bx-field" style="flex:2;min-width:180px"><label>Webseite (optional)</label><input type="text" name="marke_web" placeholder="z. B. annapurna.de"></div>
+      <button class="btn btn-ghost" type="submit">+ Marke hinzufügen</button>
+    </form>
+  </div>
+
+  <?php // Mitarbeiter mit eigenem Zugang + Rolle (eigenes Formular). ?>
+  <div class="bx-panel" id="mitarbeiter">
+    <h2 style="margin-top:0">Mitarbeiter &amp; Zugänge</h2>
+    <p class="muted" style="margin-top:0">Legen Sie weitere Zugänge für Ihr Team an und bestimmen Sie je Person, was sie darf.</p>
+    <?php if ($meineMitarbeiter): ?>
+    <div class="bx-tablewrap" style="margin-bottom:12px"><table class="bx-table">
+      <thead><tr><th>Name</th><th>E-Mail (Login)</th><th>Rolle</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($meineMitarbeiter as $mm): ?>
+        <tr>
+          <td><?= h((string)$mm['name']) ?></td>
+          <td><?= h((string)$mm['email']) ?></td>
+          <td><?= h($ROLLE_LBL[(string)$mm['rolle']] ?? (string)$mm['rolle']) ?></td>
+          <td><?= (int)$mm['aktiv'] === 1 ? bx_badge('aktiv','ok') : bx_badge('deaktiviert') ?></td>
+          <td style="text-align:right">
+            <form method="post" style="display:inline" title="Login aktiv/inaktiv"><input type="hidden" name="aktion" value="ma_toggle"><input type="hidden" name="ma_id" value="<?= (int)$mm['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= (int)$mm['aktiv'] === 1 ? 'deaktivieren' : 'aktivieren' ?></button></form>
+            <form method="post" style="display:inline" onsubmit="return confirm('Zugang löschen?');"><input type="hidden" name="aktion" value="ma_del"><input type="hidden" name="ma_id" value="<?= (int)$mm['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">löschen</button></form>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <?php else: ?><p class="muted" style="margin:0 0 12px">Noch keine weiteren Zugänge.</p><?php endif; ?>
+    <?php if (isset($_GET['mafehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px"><?= h((string)$_GET['mafehler']) ?></div><?php endif; ?>
+    <form method="post">
+      <input type="hidden" name="aktion" value="ma_add">
+      <div class="bx-grid">
+        <div class="bx-field"><label>Name</label><input type="text" name="ma_name" placeholder="Vor- und Nachname" required></div>
+        <div class="bx-field"><label>E-Mail (Login)</label><input type="email" name="ma_email" placeholder="name@firma.de" required></div>
+        <div class="bx-field"><label>Passwort (mind. 8 Zeichen)</label><input type="password" name="ma_pw" minlength="8" required></div>
+        <div class="bx-field"><label>Darf</label>
+          <select name="ma_rolle">
+            <option value="besteller">verbindlich bestellen (voller Zugriff)</option>
+            <option value="rezepte">nur Rezepturen ansehen</option>
+            <option value="lager">nur „Mein Lager" ansehen</option>
+          </select>
+        </div>
+      </div>
+      <div class="bx-row" style="margin-top:12px"><button class="btn btn-ghost" type="submit">+ Zugang anlegen</button></div>
+    </form>
+  </div>
 <?php endif; ?>
   </main>
 </div>

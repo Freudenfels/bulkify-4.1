@@ -119,6 +119,22 @@ function init_schema(): void {
         KEY idx_kunde (kunde_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // kunde_portal_user: weitere Portal-Zugänge eines Kunden (Mitarbeiter) mit eigener Rolle.
+    // rolle: besteller (voller Zugriff, darf verbindlich bestellen) | rezepte (nur Rezepturen ansehen) |
+    // lager (nur „Mein Lager"). Der Haupt-Login über kunden.email bleibt der Inhaber (voller Zugriff).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS kunde_portal_user (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        kunde_id INT NOT NULL,
+        name VARCHAR(190) NOT NULL,
+        email VARCHAR(190) NOT NULL,
+        passwort VARCHAR(255) NULL,
+        rolle VARCHAR(20) NOT NULL DEFAULT 'besteller',
+        aktiv TINYINT(1) NOT NULL DEFAULT 1,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_email (email),
+        KEY idx_kunde (kunde_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // aktivitaet: EIN zentrales Protokoll aller Ereignisse – für JEDES Objekt (Kunde, Lieferant, ...).
     // objekt_typ+objekt_id sagen, wozu der Eintrag gehört; akteur steuert die Chat-Seite.
     // Jedes künftige Modul ruft log_aktivitaet(...) auf -> Verlauf schreibt sich von selbst.
@@ -2911,6 +2927,18 @@ function kunde_login(string $email, string $passwort): ?array {
     if (!$k || !password_verify($passwort, (string)$k['passwort'])) return null;
     q("UPDATE kunden SET letzter_login=UTC_TIMESTAMP() WHERE id=?", [(int)$k['id']]);
     return $k;
+}
+
+// Login eines Kunden-MITARBEITERS (kunde_portal_user). Rückgabe bei Erfolg:
+// ['kunde'=>kunden-Zeile, 'user_id'=>int, 'rolle'=>string], sonst null.
+function kunde_portal_login(string $email, string $passwort): ?array {
+    $email = trim(mb_strtolower($email));
+    if ($email === '' || $passwort === '' || !table_exists('kunde_portal_user')) return null;
+    $u = one("SELECT * FROM kunde_portal_user WHERE LOWER(email)=? AND passwort IS NOT NULL AND passwort<>'' AND aktiv=1", [$email]);
+    if (!$u || !password_verify($passwort, (string)$u['passwort'])) return null;
+    $k = one("SELECT * FROM kunden WHERE id=? AND COALESCE(gesperrt,0)=0", [(int)$u['kunde_id']]);
+    if (!$k) return null;
+    return ['kunde' => $k, 'user_id' => (int)$u['id'], 'rolle' => (string)$u['rolle']];
 }
 
 // Passwort setzen/aendern (Erstzugang oder Wechsel). Mindestens 8 Zeichen. Speichert nur den Hash.
