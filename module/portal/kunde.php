@@ -1928,7 +1928,7 @@ portal_head('Kundenportal · ' . $k['firma']);
 
 <?php if ($view === 'start'): ?>
   <h1 style="margin-bottom:4px">Willkommen, <?= h($k['ansprechpartner'] ?: $k['firma']) ?></h1>
-  <p class="bx-sub">Ihr Überblick – wählen Sie im Menü einen Bereich für Details.</p>
+  <p class="bx-sub">Ihr Überblick – tippen Sie unten auf einen Bereich oder nutzen Sie das Menü.</p>
 
   <?php if ($vorschlaege): $nV = count($vorschlaege); ?>
   <a href="#vorschlaege" class="bx-panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:inherit;border-color:var(--gruen);background:var(--panel-2)">
@@ -1942,6 +1942,22 @@ portal_head('Kundenportal · ' . $k['firma']);
     <a class="pt-card" href="<?= $portalLink('bestellungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Bestellungen in Arbeit</div><div class="val"><?= $inArbeit ?></div></a>
     <a class="pt-card" href="<?= $portalLink('rechnungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Offene Rechnungen</div><div class="val"><?= $eur($offenBetrag) ?></div></a>
   </div>
+
+  <?php // Schnellzugriff: große Kacheln zu allen freigeschalteten Bereichen – damit die App (v. a. mobil)
+        // direkt bedienbar ist und nicht alles im Hamburger-Menü gesucht werden muss. $L ist bereits je
+        // Freischaltung/Rolle gefiltert; 'start' lassen wir weg.
+    $schnellKeys = [];
+    foreach ($NAVGROUPS as $keys) foreach ($keys as $vk) if ($vk !== 'start' && isset($L[$vk]) && !in_array($vk, $schnellKeys, true)) $schnellKeys[] = $vk;
+    if ($schnellKeys): ?>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Schnellzugriff</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
+      <?php foreach ($schnellKeys as $vk): ?>
+        <a href="<?= $portalLink($vk) ?>" style="display:flex;align-items:center;justify-content:center;text-align:center;min-height:64px;padding:14px 12px;border:1px solid var(--line);border-radius:12px;text-decoration:none;color:inherit;background:var(--panel-2);font-weight:600"><?= h($L[$vk]) ?></a>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <?php if ($vorschlaege): ?>
   <div class="bx-panel" id="vorschlaege" style="border-color:var(--gruen);background:var(--panel-2)">
