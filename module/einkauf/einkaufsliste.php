@@ -191,29 +191,43 @@ if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padd
 // Aufträge ohne Eigen/Fremd-Festlegung: NOCH KEIN Bedarf anzeigen (Stückliste steht nicht fest).
 // Festlegung passiert direkt hier im Einkauf (ein Klick je Auftrag -> gibt den Auftrag zugleich ans Werk frei).
 if ($ohneFestlegung): ?>
-<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px;margin-bottom:12px">
-  <strong><?= count($ohneFestlegung) ?> Auftrag/Aufträge warten auf die Festlegung „Eigen- oder Fremdproduktion".</strong>
-  <div class="muted" style="font-size:13px;margin:4px 0 10px">Ein Klick legt fest und gibt den Auftrag frei – danach erscheint der passende Einkaufsbedarf (Rohstoffe bei Eigen-, Bulk-Zukauf bei Fremdproduktion).</div>
+<details class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px;margin-bottom:12px" open>
+  <summary style="cursor:pointer;font-weight:600"><?= count($ohneFestlegung) ?> Auftrag/Aufträge warten auf die Festlegung „Eigen- oder Fremdproduktion"</summary>
+  <div class="muted" style="font-size:13px;margin:8px 0 10px">Ein Klick legt fest und gibt den Auftrag frei – danach erscheint der passende Einkaufsbedarf (Rohstoffe bei Eigen-, Bulk-Zukauf bei Fremdproduktion). „Letzte Festlegung" zeigt, wie dasselbe Produkt zuletzt entschieden wurde.</div>
   <div class="bx-row" style="flex-direction:column;gap:8px;align-items:stretch">
-    <?php foreach ($ohneFestlegung as $o): ?>
+    <?php foreach ($ohneFestlegung as $o):
+        $letzte = produktionsart_letzte((int)$o['produkt_id'], (int)$o['kunde_id'], (int)$o['pa_id']);
+        $letztArt = $letzte ? (string)$letzte['art'] : '';
+    ?>
       <div class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:8px 12px">
-        <span style="flex:1 1 240px;min-width:0"><strong><?= h($o['auftrag_nr'] ?: ('#' . (int)$o['auftrag_id'])) ?></strong><?= $o['produkt'] ? ' · ' . h($o['produkt']) : '' ?><?= $o['kunde'] ? ' <span class="muted">· ' . h(firma_kurz($o['kunde'])) . '</span>' : '' ?></span>
+        <span style="flex:1 1 240px;min-width:0">
+          <strong><?= h($o['auftrag_nr'] ?: ('#' . (int)$o['auftrag_id'])) ?></strong><?= $o['produkt'] ? ' · ' . h($o['produkt']) : '' ?><?= $o['kunde'] ? ' <span class="muted">· ' . h(firma_kurz($o['kunde'])) . '</span>' : '' ?>
+          <?php if ($letzte): ?>
+            <div class="muted" style="font-size:12px;margin-top:2px">Letzte Festlegung: <strong><?= $letztArt === 'fremd' ? 'Fremdproduktion' : 'Eigenproduktion' ?></strong>
+              <?= $letzte['auftrag_nr'] ? '· ' . h($letzte['auftrag_nr']) . ' ' : '' ?><?= $letzte['am'] ? '· ' . h(fmt_zeit($letzte['am'], 'd.m.Y')) . ' ' : '' ?><?= ((int)$letzte['kunde_id'] === (int)$o['kunde_id'] && $o['kunde']) ? '· selber Kunde' : ($letzte['kunde'] ? '· ' . h(firma_kurz($letzte['kunde'])) : '') ?></div>
+          <?php else: ?>
+            <div class="muted" style="font-size:12px;margin-top:2px">Letzte Festlegung: – (erstmalig)</div>
+          <?php endif; ?>
+        </span>
         <form method="post" style="margin:0;display:inline-flex;gap:8px;flex-wrap:wrap">
           <input type="hidden" name="aktion" value="festlegen">
           <input type="hidden" name="pa_id" value="<?= (int)$o['pa_id'] ?>">
-          <button class="btn btn-ghost btn-sm" type="submit" name="art" value="eigen" title="Wir produzieren selbst – Rohstoffbedarf">Eigenproduktion</button>
-          <button class="btn btn-ghost btn-sm" type="submit" name="art" value="fremd" title="Fertiges Produkt (Bulk) zukaufen – Verpackung/Etiketten trotzdem">Fremdproduktion (zukaufen)</button>
+          <button class="btn <?= $letztArt === 'eigen' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" type="submit" name="art" value="eigen" title="<?= $letztArt === 'eigen' ? 'Wie zuletzt: ' : '' ?>Wir produzieren selbst – Rohstoffbedarf">Eigenproduktion<?= $letztArt === 'eigen' ? ' (wie zuletzt)' : '' ?></button>
+          <button class="btn <?= $letztArt === 'fremd' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" type="submit" name="art" value="fremd" title="<?= $letztArt === 'fremd' ? 'Wie zuletzt: ' : '' ?>Fertiges Produkt (Bulk) zukaufen – Verpackung/Etiketten trotzdem">Fremdproduktion (zukaufen)<?= $letztArt === 'fremd' ? ' (wie zuletzt)' : '' ?></button>
         </form>
       </div>
     <?php endforeach; ?>
   </div>
-</div>
+</details>
 <?php endif; ?>
 <form method="post" class="bx-form">
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
     <h2 style="margin:0">Zu bestellen</h2>
-    <label class="muted" style="font-size:13px;cursor:pointer"><input type="checkbox" id="selAll" style="vertical-align:middle"> alle im Reiter</label>
+    <div class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="bestSuche" placeholder="Tabelle durchsuchen …" autocomplete="off" style="padding:7px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);min-width:200px">
+      <label class="muted" style="font-size:13px;cursor:pointer"><input type="checkbox" id="selAll" style="vertical-align:middle"> alle im Reiter</label>
+    </div>
   </div>
   <div class="settabs" style="margin:8px 0 4px">
     <?php foreach ($TYPEN as $t => $lbl): $n = $anzahlTyp($t); ?>
@@ -222,7 +236,7 @@ if ($ohneFestlegung): ?>
   </div>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
     <thead><tr><th style="width:34px"></th><th>Artikel / Produkt</th><th></th><th class="bx-num">zu bestellen</th><th style="width:190px">Lieferant</th><th>Aufträge</th></tr></thead>
-    <tbody>
+    <tbody id="bestTbody">
       <?php if (!$hatWas): ?><tr><td colspan="6" class="muted"><?= $istFreiTyp
           ? 'Noch nichts unter „' . h($BM_KAT[$aktTyp]) . '" eingetragen – weiter unten unter „Neuen Bedarf eintragen" hinzufügen.'
           : 'Kein offener Bedarf in diesem Typ.' ?></td></tr><?php endif; ?>
@@ -358,7 +372,20 @@ if ($ohneFestlegung): ?>
   var boxes=document.querySelectorAll('.bx-sel'), btn=document.getElementById('btnBestellen'), bex=document.getElementById('btnExtern'), a=document.getElementById('selAll');
   function upd(){ var any=false; boxes.forEach(function(c){if(c.checked)any=true;}); if(btn)btn.disabled=!any; if(bex)bex.disabled=!any; }
   boxes.forEach(function(c){c.addEventListener('change',upd);});
-  if(a) a.addEventListener('change',function(){boxes.forEach(function(c){c.checked=a.checked;});upd();});
+  if(a) a.addEventListener('change',function(){boxes.forEach(function(c){ if(c.closest('tr').style.display!=='none') c.checked=a.checked; });upd();});
+  // Suche: Zeilen der "Zu bestellen"-Tabelle filtern; versteckte Zeilen werden abgewählt.
+  var q=document.getElementById('bestSuche'), tb=document.getElementById('bestTbody');
+  if(q && tb){
+    q.addEventListener('input', function(){
+      var s=q.value.trim().toLowerCase();
+      tb.querySelectorAll('tr').forEach(function(tr){
+        var hit = s==='' || tr.textContent.toLowerCase().indexOf(s)!==-1;
+        tr.style.display = hit ? '' : 'none';
+        if(!hit){ var cb=tr.querySelector('.bx-sel'); if(cb && cb.checked) cb.checked=false; }
+      });
+      upd();
+    });
+  }
   upd();
 })();</script>
 <?php render_footer(); ?>

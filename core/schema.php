@@ -1756,6 +1756,51 @@ function init_schema(): void {
         UNIQUE KEY uq_code (code),
         KEY idx_name (name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Zusatzfelder für den automatischen EU-Abgleich (core/novelfood_sync.php): englisches Original,
+    // Publikationsstatus und die EU-Datumsangaben. Additiv, damit der bestehende Import weiter läuft.
+    ensure_column('novelfood_katalog', 'beschreibung', 'TEXT NULL AFTER beschreibung_de');   // englisches Original (aus EU-API)
+    ensure_column('novelfood_katalog', 'pub',       "VARCHAR(40) NULL AFTER beschreibung");  // Publikationsstatus (z. B. PUBLISHED)
+    ensure_column('novelfood_katalog', 'erstellt',  'VARCHAR(10) NULL AFTER pub');            // EU-Erstelldatum (YYYY-MM-DD)
+    ensure_column('novelfood_katalog', 'geaendert', 'VARCHAR(10) NULL AFTER erstellt');       // EU-Änderungsdatum (YYYY-MM-DD)
+
+    // novelfood_lauf: Kopf je Aktualisierungslauf (Button oder Monatsroutine). Gruppiert die Änderungen,
+    // damit die Übersicht „was ist neu / was wurde geändert" pro Lauf zeigt.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS novelfood_lauf (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        gestartet_at DATETIME NOT NULL,            -- UTC
+        beendet_at DATETIME NULL,                  -- UTC
+        ausgeloest_von VARCHAR(20) NOT NULL DEFAULT 'manuell',   -- manuell | auto | cli
+        benutzer VARCHAR(120) NULL,                -- wer den Button gedrückt hat
+        status VARCHAR(20) NOT NULL DEFAULT 'laufend',           -- laufend | fertig | fehler
+        quelle VARCHAR(190) NULL,                  -- API-URL/Herkunft
+        katalog_stand VARCHAR(40) NULL,            -- gemeldeter Stand (falls vorhanden)
+        anzahl_gesamt INT NOT NULL DEFAULT 0,
+        anzahl_neu INT NOT NULL DEFAULT 0,
+        anzahl_geaendert INT NOT NULL DEFAULT 0,
+        anzahl_status INT NOT NULL DEFAULT 0,      -- davon mit Statuswechsel
+        anzahl_entfernt INT NOT NULL DEFAULT 0,
+        anzahl_uebersetzt INT NOT NULL DEFAULT 0,
+        ki_tokens INT NOT NULL DEFAULT 0,
+        dauer_ms INT NOT NULL DEFAULT 0,
+        meldung TEXT NULL,
+        KEY idx_gestartet (gestartet_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // novelfood_change: eine Zeile je geänderter Position eines Laufs (neu | geaendert | entfernt).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS novelfood_change (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        lauf_id INT NOT NULL,
+        art VARCHAR(12) NOT NULL,                  -- neu | geaendert | entfernt
+        code VARCHAR(40) NULL,
+        name VARCHAR(255) NOT NULL,
+        felder VARCHAR(255) NULL,                  -- bei 'geaendert': welche Felder (CSV)
+        status_wechsel TINYINT NOT NULL DEFAULT 0,
+        status_alt VARCHAR(120) NULL,
+        status_neu VARCHAR(120) NULL,
+        status_code VARCHAR(50) NULL,
+        KEY idx_lauf (lauf_id),
+        KEY idx_art (art)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     // verpackung_dokument: Dokumente je Verpackung (PPWR-Nachweise, DoC, Spez., Etikett-Druckdatei …).
     $pdo->exec("CREATE TABLE IF NOT EXISTS verpackung_dokument (
@@ -6323,7 +6368,7 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
 // („erst festlegen", mit Link in die Produktion). Ihre Bedarfspositionen erscheinen bewusst noch nicht.
 function auftraege_ohne_festlegung(): array {
     if (!table_exists('produktionsauftrag')) return [];
-    return all("SELECT pa.id AS pa_id, pa.auftrag_id, a.nummer AS auftrag_nr,
+    return all("SELECT pa.id AS pa_id, pa.auftrag_id, pa.produkt_id, pa.kunde_id, a.nummer AS auftrag_nr,
                        COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, rz.name) AS produkt, k.firma AS kunde
                 FROM produktionsauftrag pa
                 LEFT JOIN auftrag a   ON a.id=pa.auftrag_id
@@ -6333,6 +6378,21 @@ function auftraege_ohne_festlegung(): array {
                 WHERE pa.status='vorbereitung' AND pa.auftrag_id IS NOT NULL
                   AND (a.status IS NULL OR a.status <> 'storniert')
                 ORDER BY pa.id DESC");
+}
+// Wie wurde dasselbe Produkt zuletzt festgelegt (eigen/fremd)? Fuer die Einkauf-Festlegung als Hinweis.
+// Bevorzugt denselben Kunden, sonst irgendein frueherer, bereits festgelegter Produktionsauftrag des Produkts.
+// Rueckgabe: ['art','am','auftrag_nr','kunde','kunde_id'] oder null.
+function produktionsart_letzte(int $produkt_id, ?int $kunde_id = null, int $exclude_pa_id = 0): ?array {
+    if ($produkt_id <= 0 || !table_exists('produktionsauftrag')) return null;
+    $row = one("SELECT pa.produktionsart AS art, pa.art_festgelegt_am AS am, a.nummer AS auftrag_nr,
+                       k.firma AS kunde, pa.kunde_id
+                FROM produktionsauftrag pa
+                LEFT JOIN auftrag a ON a.id=pa.auftrag_id
+                LEFT JOIN kunden k  ON k.id=pa.kunde_id
+                WHERE pa.produkt_id=? AND pa.art_festgelegt_am IS NOT NULL AND pa.id<>?
+                ORDER BY (pa.kunde_id <=> ?) DESC, pa.art_festgelegt_am DESC
+                LIMIT 1", [$produkt_id, $exclude_pa_id, (int)($kunde_id ?: 0)]);
+    return $row ?: null;
 }
 function bedarf_bulk(bool $nur_gemeldet = false): array {
     $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.produktionsart='fremd' AND pa.art_festgelegt_am IS NOT NULL"
