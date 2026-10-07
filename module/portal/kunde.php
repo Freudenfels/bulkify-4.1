@@ -1145,9 +1145,11 @@ $detailParent = [];
 if ($k['portal_rezeptur']) $detailParent['rezeptur'] = 'rezepturen';
 if ($k['portal_produkte']) $detailParent['produkt']  = 'produkte';
 // Rohstoff-Infoblatt: über den Rohstoff-Katalog ODER (ohne Katalogzugang) über die Zutaten der
-// eigenen Rezepturen erreichbar – sonst führt der Zutat-Link ins Leere (fiel auf 'start' zurück).
+// eigenen Rezepturen ODER der eigenen Produkte erreichbar – sonst führt der Zutat-Link ins Leere
+// (View fiel auf 'start' zurück, weil 'rohstoff' weder Menü noch Parent hatte).
 if ($k['portal_rohstoffe'])    $detailParent['rohstoff'] = 'rohstoffe';
 elseif ($k['portal_rezeptur']) $detailParent['rohstoff'] = 'rezepturen';
+elseif ($k['portal_produkte']) $detailParent['rohstoff'] = 'produkte';
 $detailParent['bestellung'] = 'bestellungen';   // Bestell-Detail (eigene Bestellung)
 $detailParent['produktionsbericht'] = 'bestellungen';   // freigegebener Produktionsbericht zur Bestellung (kein Menuepunkt)
 $detailParent['suche'] = 'start';   // globale Suche (kein Menuepunkt, Suchfeld ist ueberall oben)
@@ -1360,6 +1362,18 @@ if (!$darfRohInfo && $iid && !empty($k['portal_rezeptur'])) {
     $darfRohInfo = (bool) scalar("SELECT 1 FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id
         WHERE z.item_id=? AND ((r.kunde_id=? AND r.status IN ('vorschlag','eingefroren','freigegeben','abgelehnt'))
                                OR (r.kunde_id IS NULL AND r.status='freigegeben')) LIMIT 1", [$iid, $kid]);
+}
+// Oder: der Rohstoff steckt in der Rezeptur eines Produkts, das der Kunde BESITZT oder im Katalog sehen darf
+// (gleiche Logik wie die Produkt-Detailsicht). Dann darf er die Infos zur Zutat seines Produkts sehen,
+// auch ohne Rohstoffkatalog-Recht und ohne eigene Rezeptur.
+if (!$darfRohInfo && $iid) {
+    $darfRohInfo = (bool) scalar("SELECT 1 FROM rezeptur_zutat z JOIN produkt p ON p.rezeptur_id=z.rezeptur_id
+        WHERE z.item_id=? AND (
+               p.kunde_id=?
+            OR EXISTS(SELECT 1 FROM auftrag a WHERE a.produkt_id=p.id AND a.kunde_id=?)
+            OR EXISTS(SELECT 1 FROM produkt_kundenpreis pk WHERE pk.produkt_id=p.id AND pk.kunde_id=?)
+            OR (? = 1 AND p.status='aktiv' AND p.exklusiv=0)
+        ) LIMIT 1", [$iid, $kid, $kid, $kid, (int)!empty($k['portal_produkte'])]);
 }
 $rohDetail = ($iid && $darfRohInfo) ? one("SELECT id, name, name_lat, form, cas, herkunft, synonym, bot_quelle, herkunftsland,
     haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben
@@ -2382,7 +2396,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php foreach ($prodZutaten as $z):
             $wl = $z['item_id'] && isset($prodWirk[$z['item_id']]) ? implode(' · ', $prodWirk[$z['item_id']]) : ''; ?>
           <tr>
-            <td><?php if ($z['item_id'] && $k['portal_rohstoffe']): ?><a href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$z['item_id'] ?>"><?= h($z['bezeichnung']) ?></a><?php else: ?><?= h($z['bezeichnung']) ?><?php endif; ?></td>
+            <td><?php if ($z['item_id']): ?><a href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$z['item_id'] ?>"><?= h($z['bezeichnung']) ?></a><?php else: ?><?= h($z['bezeichnung']) ?><?php endif; ?></td>
             <td class="muted"><?= $wl !== '' ? h($wl) : '–' ?></td>
             <td class="bx-num"><?= rtrim(rtrim(number_format((float)$z['menge_mg'],2,',','.'),'0'),',') ?> mg</td>
           </tr>
@@ -2759,8 +2773,8 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php if (!empty($k['portal_rohstoffe'])): ?>
         <a class="btn btn-primary btn-sm" href="<?= $portalLink('rohanfrage') ?>&iid=<?= (int)$rohDetail['id'] ?>">Rohstoff anfragen</a>
         <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rohstoffe') ?>">Zurück zum Katalog</a>
-        <?php else: ?>
-        <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezepturen') ?>">Zurück zu meinen Rezepturen</a>
+        <?php else: $rohBack = $detailParent['rohstoff'] ?? 'start'; ?>
+        <a class="btn btn-ghost btn-sm" href="<?= $portalLink($rohBack) ?>">Zurück<?= $rohBack === 'produkte' ? ' zu meinen Produkten' : ($rohBack === 'rezepturen' ? ' zu meinen Rezepturen' : '') ?></a>
         <?php endif; ?>
       </div>
     </div>

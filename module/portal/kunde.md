@@ -165,6 +165,15 @@ wenn der Kunde es entweder im Katalog sehen darf (`portal_produkte` **und** `sta
 (meist exklusive, über v3 ohne `produkt.kunde_id` importierte) Produkte: sie standen zwar in der Liste,
 das Detail gab aber für alle „Produkt nicht gefunden".
 
+**Zutaten im Produkt-Detail sind klickbar → Rohstoff-Info.** Die Zusammensetzung verlinkt jede Zutat mit
+`&v=rohstoff&iid=<item>` (früher nur mit `portal_rohstoffe`-Recht). Damit das Rohstoff-Detail dann auch
+lädt, ist `$darfRohInfo` um einen Produkt-Besitz-Zweig erweitert: steckt der Rohstoff in der Rezeptur eines
+Produkts, das der Kunde besitzt oder im Katalog sehen darf (gleiche Logik wie die Produkt-Detailsicht),
+wird die Info gezeigt – auch ohne Rohstoffkatalog- und ohne Rezeptur-Recht. Zusätzlich hat `rohstoff` jetzt
+einen Parent-Fallback auf `produkte` (`$detailParent['rohstoff']`), sonst wäre der View für reine
+Produkt-Kunden auf `start` zurückgefallen. Der „Rohstoff anfragen"-Button bleibt `portal_rohstoffe`-gated;
+ohne das Recht gibt es nur die Info + passenden Zurück-Link.
+
 ## Team-Sicht im Kundenportal: Angebote/Anfragen löschen
 Öffnet ein **Team-Mitglied** das Kundenportal über den Token (Button „Kundenportal öffnen" am Kunden), erkennt die Seite das an der Team-Session: `$adminImPortal = is_logged_in() && !ist_echter_lieferant()` (gleiche Bedingung wie `$internVorschau`, das die Passwort-Einrichtung überspringt). Ein **echter Kunde** hat keine Team-Session → sieht davon nichts.
 
