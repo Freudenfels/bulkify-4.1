@@ -3581,10 +3581,46 @@ function angebot_zelle_netto_cent(int $produkt_id, int $stueck, int $bestellmeng
 // ---- Angebots-Positionen (Hybrid: automatisch erzeugt, überschreibbar) ----
 // USt-Satz für einen Kunden: Kleinunternehmer/EU-Ausland -> 0 %, sonst Inland-Satz.
 function angebot_ust_satz(?int $kunde_id): float {
+    return kunde_ust_satz((int)$kunde_id);
+}
+// Zentrale, korrekte USt-Logik für einen Kunden. WICHTIG: 0 % (steuerfreie innergemeinschaftliche
+// Lieferung/Ausfuhr) NUR bei Nicht-DE MIT USt-IdNr. Leeres/unbekanntes Land ODER Nicht-DE OHNE USt-IdNr
+// -> Inland-Satz (keine ungerechtfertigte 0 %, die sonst bei fehlender Adresse entstand). Groß/klein egal.
+function kunde_ust_satz(int $kunde_id): float {
     if ((string) meta_get('kleinunternehmer', '0') === '1') return 0.0;
-    $land = strtoupper(trim((string) (scalar("SELECT land FROM kunden WHERE id=?", [$kunde_id]) ?? '')));
-    $inland = ($land === '' || in_array($land, ['DE','D','DEUTSCHLAND','GERMANY'], true));
-    return $inland ? (float) meta_get('ust_inland', 19) : 0.0;
+    $ustInland = (float) meta_get('ust_inland', 19);
+    if ($kunde_id <= 0) return $ustInland;
+    $k = one("SELECT land, rechnung_land, ust_id FROM kunden WHERE id=?", [$kunde_id]);
+    if (!$k) return $ustInland;
+    $land = strtoupper(trim((string)($k['rechnung_land'] ?? '') ?: (string)($k['land'] ?? '')));
+    $istDE = ($land === '' || in_array($land, ['DE','D','DEUTSCHLAND','GERMANY'], true));
+    if ($istDE) return $ustInland;
+    $hatUstId = trim((string)($k['ust_id'] ?? '')) !== '';
+    return $hatUstId ? 0.0 : $ustInland;   // Nicht-DE ohne USt-IdNr -> trotzdem Inland-Satz (sicher)
+}
+// Hat der Kunde eine brauchbare Rechnungsadresse (Haupt- ODER Rechnungsadresse vollständig)?
+function kunde_hat_rechnungsadresse(int $kunde_id): bool {
+    if ($kunde_id <= 0) return false;
+    $k = one("SELECT strasse,plz,ort, rechnung_strasse,rechnung_plz,rechnung_ort FROM kunden WHERE id=?", [$kunde_id]);
+    if (!$k) return false;
+    $voll = fn($s,$p,$o) => trim((string)($k[$s] ?? '')) !== '' && trim((string)($k[$p] ?? '')) !== '' && trim((string)($k[$o] ?? '')) !== '';
+    return $voll('strasse','plz','ort') || $voll('rechnung_strasse','rechnung_plz','rechnung_ort');
+}
+// Eine (offene) Rechnung neu berechnen: USt-Satz + Betrag + Brutto aus dem aktuellen Kunden neu setzen und –
+// falls jetzt eine Adresse vorliegt – den „Adresse fehlt"-Hinweis entfernen. NICHT bei bezahlten/stornierten.
+// Rückgabe: ['ok'=>bool, 'ust_prozent'=>float, 'sichtbar'=>bool, 'fehler'=>string].
+function beleg_neu_berechnen(int $beleg_id): array {
+    $b = one("SELECT * FROM beleg WHERE id=? AND typ='rechnung'", [$beleg_id]);
+    if (!$b) return ['ok'=>false, 'fehler'=>'Rechnung nicht gefunden.'];
+    if (in_array((string)$b['status'], ['bezahlt','storniert'], true)) return ['ok'=>false, 'fehler'=>'Bezahlte/stornierte Rechnungen werden nicht neu berechnet.'];
+    $netto = (float)$b['netto'];
+    $ustP  = kunde_ust_satz((int)$b['kunde_id']);
+    $ust   = round($netto * $ustP / 100, 2); $brutto = round($netto + $ust, 2);
+    $hatAdr = kunde_hat_rechnungsadresse((int)$b['kunde_id']);
+    $text   = (string)($b['text'] ?? '');
+    if ($hatAdr) $text = trim(preg_replace('/Rechnungsadresse fehlt[^\n]*/u', '', $text));
+    q("UPDATE beleg SET ust_prozent=?, ust_betrag=?, brutto=?, text=? WHERE id=?", [$ustP, $ust, $brutto, $text !== '' ? $text : null, $beleg_id]);
+    return ['ok'=>true, 'ust_prozent'=>$ustP, 'sichtbar'=>$hatAdr, 'fehler'=>''];
 }
 // Die einzig zulaessigen deutschen Mehrwertsteuersaetze. Nichts anderes darf in einer Position stehen.
 function mwst_saetze(): array { return [0.0, 7.0, 19.0]; }
@@ -3906,8 +3942,7 @@ function angebot_positionen_aus_staffel(array $a, array $staffeln): array {
     $bez   = trim((string)($basis['bezeichnung'] ?? '')) ?: ((string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [(int)($a['produkt_id'] ?? 0)]) ?: 'Position');
     $rezId = !empty($basis['rezeptur_id']) ? (int)$basis['rezeptur_id'] : ((int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)($a['produkt_id'] ?? 0)]) ?: null);
     $verpId= !empty($basis['verpackung_id']) ? (int)$basis['verpackung_id'] : null;
-    $land  = (string) scalar("SELECT land FROM kunden WHERE id=?", [(int)($a['kunde_id'] ?? 0)]) ?: 'DE';
-    $mwst  = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
+    $mwst  = kunde_ust_satz((int)($a['kunde_id'] ?? 0));
     $mehrere = count($staffeln) > 1; $out = []; $i = 0;
     foreach ($staffeln as $s) {
         $besch = ((int)$s['stueck'] > 0 ? (int)$s['stueck'] . ' je Packung · ' : '') . 'Preis je Packung inkl. Verpackung & Etikett';
@@ -4207,8 +4242,7 @@ function angebot_ki_pdf_uebernehmen(int $angebot_id, array $d): int {
     if (!$a) return 0;
     $pos = array_values(array_filter((array)($d['positionen'] ?? []), fn($p) => trim((string)($p['bezeichnung'] ?? '')) !== ''));
     if (!$pos) return 0;
-    $land = (string) scalar("SELECT land FROM kunden WHERE id=?", [(int)$a['kunde_id']]) ?: 'DE';
-    $mwst = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
+    $mwst = kunde_ust_satz((int)$a['kunde_id']);
     q("DELETE FROM angebot_position WHERE angebot_id=?", [$angebot_id]);
     q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$angebot_id]);
     $letter = []; $next = 0; $sort = 0;
@@ -6759,14 +6793,15 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     // Lager die gelieferten, kundenspezifischen Etiketten gezielt einbuchen (kein generischer Glas-Topf).
     $etId = kundenetikett_sicherstellen((int)$a['produkt_id']);
     if ($etId) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$etId, $aid]);
-    // Rechnung: Kleinunternehmer 0 %, EU-Ausland 0 %, sonst Inlands-USt aus den Einstellungen (Standard 19 %)
-    $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
-    $ustInland = (float) meta_get('ust_inland', 19);
-    $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : $ustInland;
+    // Rechnung: zentrale, korrekte USt (keine ungerechtfertigte 0 %). Ohne Rechnungsadresse wird die Rechnung
+    // NICHT für den Kunden freigegeben (Entwurf mit Hinweis) – der Kunde muss die Adresse angeben, danach neu berechnen.
+    $ustP = kunde_ust_satz((int)$a['kunde_id']);
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,kunde_sichtbar)
-       VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),1)",
-      [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen']);
+    $sicht = kunde_hat_rechnungsadresse((int)$a['kunde_id']) ? 1 : 0;
+    $hinw  = $sicht ? null : 'Rechnungsadresse fehlt – bitte Kundenadresse ergänzen, dann Rechnung neu berechnen.';
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,text,kunde_sichtbar)
+       VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),?,?)",
+      [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen', $hinw, $sicht]);
     // Produktionsauftrag (PR) + Stationen automatisch anlegen
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$a['produkt_id']]) ?: 'kapsel';
     // Standard = Fremdproduktion (verkürzter Weg); auf Eigenproduktion umstellbar im Produktions-Detail.
@@ -6796,13 +6831,11 @@ function rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     $netto = round((float)($a['gesamt_netto'] ?? 0), 2);
     if ($netto <= 0) $netto = round($menge * $vk, 2);
     if ($netto <= 0) return null;                               // ohne Preis keine Rechnung
-    // USt: explizit vorgegeben? sonst Kleinunternehmer/EU-Ausland 0 %, sonst Inland.
+    // USt: explizit vorgegeben? sonst zentrale, korrekte Logik (keine ungerechtfertigte 0 %).
     if (isset($opt['ust_prozent']) && $opt['ust_prozent'] !== '' && $opt['ust_prozent'] !== null) {
         $ustP = max(0.0, (float)$opt['ust_prozent']);
     } else {
-        $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
-        $ustInland = (float) meta_get('ust_inland', 19);
-        $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : $ustInland;
+        $ustP = kunde_ust_satz((int)$a['kunde_id']);
     }
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
     // Datum / Fälligkeit / Leistungsdatum.
@@ -6813,6 +6846,10 @@ function rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     $leist = $gilt($opt['leistung_datum'] ?? null);
     $text  = trim((string)($opt['text'] ?? '')) ?: null;
     $sicht = !empty($opt['freigeben']) ? 1 : 0;                  // standardmaessig NICHT fuer den Kunden freigegeben
+    // Keine Rechnung an den Kunden freigeben, solange keine Rechnungsadresse vorliegt. Der Beleg entsteht
+    // als Entwurf (nicht sichtbar) mit Hinweis; sobald die Adresse da ist, kann er neu berechnet/freigegeben werden.
+    $adresseFehlt = !kunde_hat_rechnungsadresse((int)$a['kunde_id']);
+    if ($adresseFehlt) { $sicht = 0; $text = trim(($text ? $text . "\n" : '') . 'Rechnungsadresse fehlt – bitte Kundenadresse ergänzen, dann Rechnung neu berechnen.'); }
     $bearb = (int)($opt['bearbeiter_id'] ?? 0) ?: null;
     q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,leistung_datum,text,bearbeiter_id,kunde_sichtbar)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",

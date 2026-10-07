@@ -84,6 +84,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Keine Rezeptur zum Kopieren gefunden.')); exit;
 }
 
+// Rechnung dieses Auftrags neu berechnen (USt + Adresse aus dem aktuellen Kunden). Fix für Rechnungen, die
+// ohne Adresse/ohne USt entstanden sind: sobald die Kundenadresse da ist, hier neu berechnen -> wird korrekt
+// bepreist und (bei vorhandener Adresse) für den Kunden freigegeben.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'rechnung_neu_berechnen') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id); exit; }
+    $rid = (int) scalar("SELECT id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$id]);
+    $r = $rid ? beleg_neu_berechnen($rid) : ['ok'=>false, 'fehler'=>'Keine Rechnung vorhanden.'];
+    if (!empty($r['ok']) && !empty($r['sichtbar'])) q("UPDATE beleg SET kunde_sichtbar=1 WHERE id=?", [$rid]);
+    header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&rechneu=1' : '&expressfehler=' . urlencode($r['fehler'] ?? 'Neu berechnen fehlgeschlagen.'))); exit;
+}
+
 // Fertige Ware eines Altauftrags OHNE Produktionsauftrag nachtragen und direkt ins Lager 1/2 einbuchen.
 // Legt bei Bedarf einen Produktionsauftrag an (nur als Träger für die Charge), hakt ihn ab und bucht die
 // volle Menge als Fertigware-Charge (Fulfillment → Lager 2 + Auftrag abgeschlossen). Für produzierte
@@ -494,6 +505,7 @@ echo '</div>';
 // Zukauf ohne verknüpfte Charge auf „Rohstoff angekommen" springt.
 if (isset($_GET['rohok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . ($_GET['rohok']==='1' ? 'Als „Rohstoff angekommen" markiert – der Kunde sieht es sofort.' : 'Markierung zurückgesetzt.') . '</div>';
 if (isset($_GET['einlagerok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">An das Lager übergeben und in ' . h((string)$_GET['einlagerok']) . ' eingebucht.</div>';
+if (isset($_GET['rechneu'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">Rechnung neu berechnet (USt &amp; Adresse) – bei vorhandener Adresse ist sie jetzt für den Kunden freigegeben.</div>';
 // „Rohstoff/Bulk angekommen" ist ein reiner Helfer – er steht jetzt IM Reiter „Produktion" (Block
 // Produktion & Beschaffung), nicht mehr als eigene Leiste über den Reitern.
 $rohAngDa = (kunde_auftrag_phase($a)['dates'][2] ?? null);   // Datum „Rohstoff angekommen" (oder null)
@@ -579,7 +591,12 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
         $rst = $rechnungZs['status'] ?? $rechnung['status'];
         echo match ($rst) { 'bezahlt'=>bx_badge('bezahlt','ok'), 'teilbezahlt'=>bx_badge('teilbezahlt','info'), 'storniert'=>bx_badge('storniert','err'), default=>bx_badge('offen','warn') };
         if ($rst === 'teilbezahlt') echo ' <span class="muted" style="font-size:12px">offen ' . $eur($rechnungZs['rest']) . '</span>';
-      ?> · <a href="/buchhaltung/?p=rechnung&id=<?= (int)$rechnung['id'] ?>" style="font-size:12px">Zahlung erfassen</a><?php else: ?><a class="btn btn-primary btn-sm" href="/buchhaltung/?p=rechnung_neu&auftrag=<?= (int)$id ?>">Rechnung erstellen</a><?php endif; ?></div></div>
+      ?> · <a href="/buchhaltung/?p=rechnung&id=<?= (int)$rechnung['id'] ?>" style="font-size:12px">Zahlung erfassen</a>
+        <?php if (has_role('admin')): $rAdr = kunde_hat_rechnungsadresse((int)($a['kunde_id'] ?? 0)); ?>
+          <?php if (!$rAdr): ?><div class="muted" style="font-size:12px;color:var(--warn);margin-top:2px">&#9888; Rechnungsadresse fehlt – Kundenadresse ergänzen, dann neu berechnen.</div><?php endif; ?>
+          <form method="post" style="display:inline"><input type="hidden" name="aktion" value="rechnung_neu_berechnen"><button class="btn btn-ghost btn-sm" type="submit" style="margin-top:4px" title="USt-Satz und Adresse aus dem aktuellen Kunden neu berechnen (und bei vorhandener Adresse freigeben)">USt/Adresse neu berechnen</button></form>
+        <?php endif; ?>
+      <?php else: ?><a class="btn btn-primary btn-sm" href="/buchhaltung/?p=rechnung_neu&auftrag=<?= (int)$id ?>">Rechnung erstellen</a><?php endif; ?></div></div>
   </div>
 </div>
 
