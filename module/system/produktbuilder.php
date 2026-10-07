@@ -69,14 +69,26 @@ if ($vorschlag) {
 }
 
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
-// Lager-Rohstoffe für die Auswahl (mit Gehalt des Leitwirkstoffs) – zum Tauschen gegen echte Rohstoffe.
+// Lager-Rohstoffe für die Auswahl (mit Gehalt des Leitwirkstoffs + ob CoA/Spec vorhanden).
 $rohstoffe = all("SELECT i.id, i.name, i.artikelnummer,
     (SELECT COALESCE(iw.gehalt_wert, iw.gehalt_prozent) FROM item_wirkstoff iw WHERE iw.item_id=i.id AND COALESCE(iw.gehalt_wert,iw.gehalt_prozent) IS NOT NULL ORDER BY iw.sort,iw.id LIMIT 1) AS gw,
-    (SELECT COALESCE(iw.gehalt_einheit,'prozent') FROM item_wirkstoff iw WHERE iw.item_id=i.id AND COALESCE(iw.gehalt_wert,iw.gehalt_prozent) IS NOT NULL ORDER BY iw.sort,iw.id LIMIT 1) AS ge
+    (SELECT COALESCE(iw.gehalt_einheit,'prozent') FROM item_wirkstoff iw WHERE iw.item_id=i.id AND COALESCE(iw.gehalt_wert,iw.gehalt_prozent) IS NOT NULL ORDER BY iw.sort,iw.id LIMIT 1) AS ge,
+    (CASE WHEN EXISTS(SELECT 1 FROM item_kennwert k WHERE k.item_id=i.id)
+             OR EXISTS(SELECT 1 FROM item_grenzwert g WHERE g.item_id=i.id)
+             OR EXISTS(SELECT 1 FROM item_wirkstoff w WHERE w.item_id=i.id)
+             OR EXISTS(SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=i.id AND d.typ='spec')
+          THEN 1 ELSE 0 END) AS hat_spec,
+    (CASE WHEN EXISTS(SELECT 1 FROM charge c JOIN charge_analyse ca ON ca.charge_id=c.id WHERE c.item_id=i.id)
+             OR EXISTS(SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=i.id AND d.typ IN ('coa','analyse'))
+          THEN 1 ELSE 0 END) AS hat_coa
     FROM item i WHERE i.kategorie='rohstoff' AND COALESCE(i.gesperrt,0)=0 ORDER BY i.name");
 $pbRohMap = [];
 foreach ($rohstoffe as $ro) {
-    $lbl = trim((string)$ro['name'] . ((string)($ro['artikelnummer'] ?? '') !== '' ? ' · ' . $ro['artikelnummer'] : ''));
+    $doc = [];
+    if ((int)$ro['hat_coa'])  $doc[] = 'CoA';
+    if ((int)$ro['hat_spec']) $doc[] = 'Spec';
+    $marker = $doc ? ' · ' . implode('+', $doc) : ' · ohne Doku';
+    $lbl = trim((string)$ro['name'] . ((string)($ro['artikelnummer'] ?? '') !== '' ? ' · ' . $ro['artikelnummer'] : '')) . $marker;
     $pbRohMap[$lbl] = ['id'=>(int)$ro['id'], 'name'=>(string)$ro['name'],
         'gw'=>$ro['gw'] !== null ? (string)$ro['gw'] : '', 'ge'=>(string)($ro['ge'] ?? 'prozent')];
 }
