@@ -48,3 +48,15 @@ Panel über dem Status (nur bestehende Rezepturen). Helfer `rezeptur_verwendung(
 
 ### Leere Bulk-Artikel blockieren nicht mehr
 `rezeptur_loeschen` blockiert beim Lagerartikel (Bulk/Fertigware, item.rezeptur_id) nur noch, wenn **Bestand** (Chargen) dranhängt. LEERE Bulk-Artikel sind reine Nebenprodukte der Rezeptur und werden beim Löschen **automatisch mitentfernt**. Die Verwendungs-Übersicht markiert sie entsprechend („leer, wird beim Löschen automatisch entfernt" = kein Blocker).
+
+## Nährwerte der Rezeptur: automatisch vs. festgeschrieben (Snapshot + Override)
+Panel **„Nährwerte der Rezeptur"** (unter dem Haupt-Formular, eigenes `<form>` – nie verschachtelt). Datenmodell:
+Tabelle `rezeptur_naehrwert` (je Einheit: name, menge_mg intern, nrv_wert, einheit mg/µg, quelle auto|manuell) + Flag
+`rezeptur.naehrwerte_fixiert`. Zentrale Funktionen in `core/schema.php`:
+- `rezeptur_naehrwerte_ableiten($rid)` – Live-Ableitung aus `rezeptur_zutat → item_wirkstoff → naehrstoff` (identisch zur Etikett-Deklaration, nutzt `wirkstoff_mg_je_mg`).
+- `rezeptur_naehrwerte($rid)` – **effektiv**: fixiert → gespeicherte Zeilen, sonst Ableitung. Diese Funktion nutzt auch das Kundenportal-Produktdetail.
+- `rezeptur_naehrwerte_snapshot($rid)` – schreibt die abgeleiteten Werte fest (quelle=auto), setzt das Flag; überschreibt eine bereits manuelle Pflege NICHT; leere Ableitung → kein Fixieren.
+- `rezeptur_naehrwerte_speichern($rid,$rows)` – manuelle Deklaration (quelle=manuell), Eingabe in der gewählten Einheit, intern immer mg.
+- `rezeptur_naehrwerte_zuruecksetzen($rid)` – zurück auf automatisch.
+
+**Snapshot-Hooks:** beim Freigeben/Einfrieren im Dashboard (`status_setzen`, Ziel freigegeben|eingefroren) und beim Annehmen im Portal (`rezeptur_annehmen`). So verschiebt sich die Deklaration nicht mehr, wenn später Rohstoffdaten wechseln. Der Override ist bewusst **auch im gesperrten Zustand** erlaubt (genau dafür: eine festgeschriebene Deklaration korrigieren, wenn Rohstoffe keine/falsche Wirkstoffdaten haben). POST-Aktionen: `naehrwerte_speichern`, `naehrwerte_fixieren`, `naehrwerte_auto`.

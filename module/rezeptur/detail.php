@@ -22,11 +22,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Verknüpfte Anfrage nachziehen: erneut als Vorschlag/freigeben → wieder „beantwortet".
             if (in_array($ziel, ['vorschlag','freigegeben','eingefroren'], true))
                 q("UPDATE rezeptur_anfrage SET status='beantwortet' WHERE rezeptur_id=?", [(int)$id]);
+            // Beim Freigeben/Einfrieren die Nährwert-Deklaration festschreiben (Snapshot), damit sie sich
+            // später nicht verschiebt, wenn Rohstoffdaten wechseln. Überschreibt keine manuelle Pflege.
+            if (in_array($ziel, ['freigegeben','eingefroren'], true)) rezeptur_naehrwerte_snapshot((int)$id);
             $kid = scalar("SELECT kunde_id FROM rezeptur WHERE id=?", [(int)$id]);
             $lbl = ['vorschlag'=>'als Vorschlag gesendet','eingefroren'=>'freigegeben & eingefroren (verbindlich)','freigegeben'=>'freigegeben','entwurf'=>'wieder zur Bearbeitung geöffnet'][$ziel] ?? $ziel;
             if ($kid) log_aktivitaet('kunde', (int)$kid, 'team', 'Rezeptur ' . scalar("SELECT nummer FROM rezeptur WHERE id=?", [(int)$id]) . ' ' . $lbl . '.', 'rezeptur', 'rezeptur', (int)$id);
         }
         header('Location: ?p=rezeptur_detail&id=' . $id); exit;
+    }
+    // Nährwert-Deklaration: manuell speichern (Override) – erlaubt AUCH im gesperrten Zustand, denn genau
+    // dafür ist der Override da (eine festgeschriebene Deklaration korrigieren).
+    if (!$neu && $aktion === 'naehrwerte_speichern') {
+        $rows = [];
+        $nn = $_POST['n_name'] ?? []; $nm = $_POST['n_mg'] ?? []; $ne = $_POST['n_einheit'] ?? []; $nv = $_POST['n_nrv'] ?? [];
+        foreach ($nn as $i => $nm0) $rows[] = ['name'=>$nm0, 'mg'=>$nm[$i] ?? 0, 'einheit'=>$ne[$i] ?? 'mg', 'nrv'=>$nv[$i] ?? ''];
+        rezeptur_naehrwerte_speichern((int)$id, $rows);
+        header('Location: ?p=rezeptur_detail&id=' . $id . '&nwok=1'); exit;
+    }
+    // Jetzt festschreiben (Snapshot der aktuell abgeleiteten Werte), ohne Statuswechsel.
+    if (!$neu && $aktion === 'naehrwerte_fixieren') {
+        rezeptur_naehrwerte_snapshot((int)$id);
+        header('Location: ?p=rezeptur_detail&id=' . $id . '&nwok=1'); exit;
+    }
+    // Zurück auf automatisch (Live-Ableitung aus den Rohstoffen).
+    if (!$neu && $aktion === 'naehrwerte_auto') {
+        rezeptur_naehrwerte_zuruecksetzen((int)$id);
+        header('Location: ?p=rezeptur_detail&id=' . $id . '&nwauto=1'); exit;
     }
     // Neue Version (Kopie als Entwurf)
     if (!$neu && $aktion === 'neue_version') {
@@ -329,6 +351,78 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
     <a class="btn btn-ghost" href="?p=rezeptur">Zurück</a>
   </div>
 </form>
+
+<?php if (!$neu):
+    // Nährwert-Deklaration der Rezeptur: normal live aus den Rohstoffen abgeleitet; festgeschrieben
+    // (Snapshot beim Einfrieren) oder manuell korrigiert, wenn die Rohstoffdaten fehlen/nicht matchen.
+    $nwFixiert   = rezeptur_naehrwerte_fixiert((int)$id);
+    $nwEffektiv  = rezeptur_naehrwerte((int)$id);
+    $nwManuell   = $nwFixiert && (int) scalar("SELECT COUNT(*) FROM rezeptur_naehrwert WHERE rezeptur_id=? AND quelle='manuell'", [(int)$id]) > 0;
+    $nwBadge     = $nwFixiert ? ($nwManuell ? bx_badge('manuell gepflegt','info') : bx_badge('festgeschrieben (Snapshot)','ok')) : bx_badge('automatisch (aus Rohstoffen)');
+    // Editor-Zeilen: effektive Werte in der jeweiligen Einheit (µg-Nährstoffe in µg anzeigen).
+    $nwRows = [];
+    foreach ($nwEffektiv as $n) {
+        $einh = ($n['einheit'] ?? 'mg') === 'µg' ? 'µg' : 'mg';
+        $anz  = $einh === 'µg' ? (float)$n['mg'] * 1000 : (float)$n['mg'];
+        $nwRows[] = ['name'=>$n['name'], 'anz'=>$anz, 'einheit'=>$einh, 'nrv'=>$n['nrv']];
+    }
+    $nwFmt = fn($x) => rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',');
+?>
+<div class="bx-panel" id="naehrwerte">
+  <div class="bx-row" style="justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Nährwerte der Rezeptur <span class="muted" style="font-weight:400;font-size:13px">(je Einheit)</span></h2>
+    <div><?= $nwBadge ?></div>
+  </div>
+  <p class="muted" style="margin-top:6px">
+    Normalerweise werden die Nährwerte automatisch aus den Wirkstoffdaten der Rohstoffe berechnet. Wenn ein
+    Rohstoff keine Wirkstoffdaten hat oder nicht zum Lagerartikel passt, bleiben Werte leer – dann hier die
+    korrekten Werte eintragen und festschreiben. Beim Einfrieren/Freigeben wird automatisch ein Snapshot gesetzt.
+  </p>
+  <?php if (!$nwFixiert && !$nwRows): ?>
+    <div class="muted" style="margin:8px 0">Keine Wirkstoffdaten an den Rohstoffen hinterlegt – Deklaration ist aktuell leer. Trage sie unten ein.</div>
+  <?php endif; ?>
+  <form method="post" style="margin-top:8px">
+    <input type="hidden" name="aktion" value="naehrwerte_speichern">
+    <table class="bx-table" id="nwTab">
+      <thead><tr><th>Nährstoff</th><th class="bx-num" style="width:160px">Menge je Einheit</th><th style="width:90px">Einheit</th><th class="bx-num" style="width:140px">NRV-Bezug</th><th style="width:40px"></th></tr></thead>
+      <tbody>
+      <?php $nwRender = $nwRows ?: [['name'=>'','anz'=>'','einheit'=>'mg','nrv'=>'']]; foreach ($nwRender as $row): ?>
+        <tr>
+          <td><input type="text" name="n_name[]" value="<?= h((string)$row['name']) ?>" placeholder="z. B. Magnesium" style="width:100%"></td>
+          <td class="bx-num"><input type="text" name="n_mg[]" value="<?= $row['anz'] === '' ? '' : h($nwFmt($row['anz'])) ?>" style="width:100%;text-align:right"></td>
+          <td><select name="n_einheit[]"><option value="mg"<?= ($row['einheit'] ?? 'mg')==='mg'?' selected':'' ?>>mg</option><option value="µg"<?= ($row['einheit'] ?? '')==='µg'?' selected':'' ?>>µg</option></select></td>
+          <td class="bx-num"><input type="text" name="n_nrv[]" value="<?= ($row['nrv'] ?? '') !== '' && $row['nrv'] !== null ? h($nwFmt($row['nrv'])) : '' ?>" placeholder="optional" style="width:100%;text-align:right"></td>
+          <td style="text-align:center"><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('tr').remove()">×</button></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    <div class="bx-row" style="margin-top:10px;gap:8px">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="nwAddRow()">+ Nährstoff</button>
+      <span style="flex:1"></span>
+      <?php if ($nwFixiert): ?>
+        <button type="submit" formaction="?p=rezeptur_detail&id=<?= (int)$id ?>" class="btn btn-ghost" name="aktion" value="naehrwerte_auto" onclick="return confirm('Zurück auf automatische Berechnung? Die festgeschriebenen Werte werden verworfen.')">Zurück auf automatisch</button>
+      <?php elseif ($nwRows): ?>
+        <button type="submit" class="btn btn-ghost" name="aktion" value="naehrwerte_fixieren" title="Die aktuell abgeleiteten Werte unverändert festschreiben">Werte festschreiben</button>
+      <?php endif; ?>
+      <button type="submit" class="btn btn-primary">Speichern &amp; festschreiben</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:6px">NRV-Bezug = Nährstoffbezugswert (für die %-Spalte), in derselben Einheit wie oben. Leer lassen, wenn kein NRV existiert.</div>
+  </form>
+</div>
+<script>
+function nwAddRow(){
+  var tb = document.querySelector('#nwTab tbody');
+  var tr = document.createElement('tr');
+  tr.innerHTML = '<td><input type="text" name="n_name[]" placeholder="z. B. Magnesium" style="width:100%"></td>'
+    + '<td class="bx-num"><input type="text" name="n_mg[]" style="width:100%;text-align:right"></td>'
+    + '<td><select name="n_einheit[]"><option value="mg">mg</option><option value="µg">µg</option></select></td>'
+    + '<td class="bx-num"><input type="text" name="n_nrv[]" placeholder="optional" style="width:100%;text-align:right"></td>'
+    + '<td style="text-align:center"><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest(\'tr\').remove()">×</button></td>';
+  tb.appendChild(tr);
+}
+</script>
+<?php endif; ?>
 
 <?php // Rohstoffpreise je Zutat – damit man schon an der Rezeptur sieht, was der Einkauf kostet
       // und wo noch ein Preis fehlt. Anfrage per Popup (Lieferanten auswählen). Nur für gespeicherte

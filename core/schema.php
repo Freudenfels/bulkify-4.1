@@ -392,6 +392,26 @@ function init_schema(): void {
         KEY idx_rezeptur (rezeptur_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // rezeptur_naehrwert: eigene Nährwert-Deklaration je Rezeptur (je Einheit). Normal werden die Werte live
+    // aus den Rohstoffen (item_wirkstoff) abgeleitet; existieren hier Zeilen (naehrwerte_fixiert=1), gelten
+    // DIESE – als beim Einfrieren festgeschriebener Snapshot (quelle='auto') und/oder manuell korrigiert
+    // (quelle='manuell'). Dann verschiebt sich die Deklaration nicht mehr, auch wenn Rohstoffdaten wechseln.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS rezeptur_naehrwert (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        rezeptur_id INT NOT NULL,
+        naehrstoff_id INT NULL,                           -- Verweis naehrstoff (NULL = Freitext)
+        name VARCHAR(190) NOT NULL,                       -- Nährstoffname (Snapshot/Anzeige)
+        menge_mg DECIMAL(14,5) NOT NULL DEFAULT 0,        -- mg je Einheit
+        nrv_wert DECIMAL(12,4) NULL,                      -- NRV-Bezug (Snapshot) für %-Berechnung
+        einheit VARCHAR(10) NULL,                         -- 'mg' | 'µg' (wie naehrstoff.einheit)
+        ie_mg DECIMAL(14,6) NULL,                         -- I.E.-Faktor (Snapshot)
+        einheit_anzeige VARCHAR(20) NULL,                 -- Label (Snapshot)
+        quelle VARCHAR(10) NOT NULL DEFAULT 'auto',       -- auto | manuell
+        sort INT NOT NULL DEFAULT 0,
+        KEY idx_rez (rezeptur_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('rezeptur', 'naehrwerte_fixiert', "TINYINT(1) NOT NULL DEFAULT 0");  // 1 = Deklaration festgeschrieben (rezeptur_naehrwert gilt statt Live-Ableitung)
+
     // produkt: SKU = Rezeptur + Verpackung + Kunde. Verbindet die Stammdaten zum verkaufbaren Produkt.
     $pdo->exec("CREATE TABLE IF NOT EXISTS produkt (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -8171,6 +8191,119 @@ function wirkstoff_mg_je_mg($wert, ?string $einheit, $ie_mg): float {
         case 'ie_kg':   return $ie !== null ? $w * $ie / 1e6  : 0.0;  // I.E. je kg
     }
     return 0.0;
+}
+
+// ---------------------------------------------------------------------------
+// Nährwerte je Rezeptur (je Einheit): Live-Ableitung aus den Rohstoffen vs. fester Snapshot/Override.
+// Eine Rezeptur „kennt" damit ihre Nährwerte – standardmäßig abgeleitet, beim Einfrieren festgeschrieben,
+// jederzeit manuell korrigierbar. Rückgabe-Zeilen: name, mg (je Einheit), nrv, einheit, anzeige, ie_mg,
+// naehrstoff_id. So reihen sie sich nahtlos in die bestehende Nährwert-Anzeige ein.
+// ---------------------------------------------------------------------------
+
+// Live aus rezeptur_zutat → item_wirkstoff → naehrstoff ableiten (identisch zur Etikett-Deklaration).
+function rezeptur_naehrwerte_ableiten(int $rid): array {
+    if ($rid <= 0) return [];
+    $zutaten = all("SELECT z.menge_mg, z.item_id FROM rezeptur_zutat z WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rid]);
+    $ids = array_values(array_unique(array_filter(array_map(fn($z) => (int)$z['item_id'], $zutaten))));
+    $wmap = [];
+    if ($ids) {
+        $in = implode(',', array_fill(0, count($ids), '?'));
+        foreach (all("SELECT iw.item_id, n.id AS naehrstoff_id, n.name, n.nrv_wert, n.einheit, n.ie_mg, n.einheit_anzeige,
+                             COALESCE(iw.gehalt_wert, iw.gehalt_prozent) AS gehalt_wert, COALESCE(iw.gehalt_einheit,'prozent') AS gehalt_einheit
+                      FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id WHERE iw.item_id IN ($in)", $ids) as $w) {
+            $wmap[(int)$w['item_id']][] = [
+                'naehrstoff_id' => (int)$w['naehrstoff_id'], 'name' => $w['name'], 'nrv' => $w['nrv_wert'],
+                'einheit' => $w['einheit'], 'anzeige' => $w['einheit_anzeige'],
+                'ie_mg' => $w['ie_mg'] !== null ? (float)$w['ie_mg'] : null,
+                'basePerMg' => wirkstoff_mg_je_mg($w['gehalt_wert'], $w['gehalt_einheit'], $w['ie_mg']),
+            ];
+        }
+    }
+    $nutr = []; $order = [];
+    foreach ($zutaten as $z) {
+        $mg = (float)$z['menge_mg']; if ($mg <= 0) continue;
+        foreach ($wmap[(int)$z['item_id']] ?? [] as $w) {
+            if (!$w['basePerMg']) continue;
+            $mgN = $mg * (float)$w['basePerMg'];
+            if (!isset($nutr[$w['name']])) {
+                $nutr[$w['name']] = ['name' => $w['name'], 'mg' => 0.0, 'nrv' => $w['nrv'], 'einheit' => $w['einheit'],
+                                     'anzeige' => $w['anzeige'], 'ie_mg' => $w['ie_mg'], 'naehrstoff_id' => $w['naehrstoff_id']];
+                $order[] = $w['name'];
+            }
+            $nutr[$w['name']]['mg'] += $mgN;
+        }
+    }
+    $out = [];
+    foreach ($order as $nm) $out[] = $nutr[$nm];
+    return $out;
+}
+
+// Ist die Deklaration festgeschrieben (Snapshot/Override gilt statt Live-Ableitung)?
+function rezeptur_naehrwerte_fixiert(int $rid): bool {
+    return $rid > 0 && (bool) scalar("SELECT naehrwerte_fixiert FROM rezeptur WHERE id=?", [$rid]);
+}
+
+// Effektive Nährwerte: festgeschrieben → gespeicherte Zeilen, sonst Live-Ableitung.
+function rezeptur_naehrwerte(int $rid): array {
+    if ($rid <= 0) return [];
+    if (rezeptur_naehrwerte_fixiert($rid)) {
+        $rows = all("SELECT naehrstoff_id, name, menge_mg, nrv_wert, einheit, ie_mg, einheit_anzeige, quelle
+                     FROM rezeptur_naehrwert WHERE rezeptur_id=? ORDER BY sort, id", [$rid]);
+        return array_map(fn($r) => [
+            'name' => $r['name'], 'mg' => (float)$r['menge_mg'], 'nrv' => $r['nrv_wert'],
+            'einheit' => $r['einheit'], 'anzeige' => $r['einheit_anzeige'],
+            'ie_mg' => $r['ie_mg'] !== null ? (float)$r['ie_mg'] : null,
+            'naehrstoff_id' => $r['naehrstoff_id'] !== null ? (int)$r['naehrstoff_id'] : null,
+            'quelle' => $r['quelle'],
+        ], $rows);
+    }
+    return rezeptur_naehrwerte_ableiten($rid);
+}
+
+// Beim Einfrieren/Freigeben: aktuelle abgeleitete Werte festschreiben – nur wenn noch NICHT fixiert
+// (eine bereits manuell gepflegte Deklaration wird nicht überschrieben). Best-effort.
+function rezeptur_naehrwerte_snapshot(int $rid): void {
+    if ($rid <= 0 || rezeptur_naehrwerte_fixiert($rid)) return;
+    $werte = rezeptur_naehrwerte_ableiten($rid);
+    if (!$werte) return;  // nichts Ableitbares → nicht fixieren (bleibt live, Hinweis in der UI)
+    q("DELETE FROM rezeptur_naehrwert WHERE rezeptur_id=?", [$rid]);
+    $sort = 0;
+    foreach ($werte as $w) {
+        q("INSERT INTO rezeptur_naehrwert (rezeptur_id,naehrstoff_id,name,menge_mg,nrv_wert,einheit,ie_mg,einheit_anzeige,quelle,sort)
+           VALUES (?,?,?,?,?,?,?,?, 'auto', ?)",
+          [$rid, $w['naehrstoff_id'] ?: null, $w['name'], (float)$w['mg'], $w['nrv'] !== null && $w['nrv'] !== '' ? (float)$w['nrv'] : null,
+           $w['einheit'] ?: null, $w['ie_mg'] !== null ? (float)$w['ie_mg'] : null, $w['anzeige'] ?: null, $sort++]);
+    }
+    q("UPDATE rezeptur SET naehrwerte_fixiert=1 WHERE id=?", [$rid]);
+}
+
+// Manuelle Deklaration speichern (aus dem Rezeptur-Editor). $rows: [['name','mg','einheit','nrv'], …].
+// Setzt die Deklaration fest (quelle='manuell'). Leere Namen werden ignoriert.
+function rezeptur_naehrwerte_speichern(int $rid, array $rows): void {
+    if ($rid <= 0) return;
+    q("DELETE FROM rezeptur_naehrwert WHERE rezeptur_id=?", [$rid]);
+    $sort = 0;
+    foreach ($rows as $r) {
+        $name = trim((string)($r['name'] ?? ''));
+        if ($name === '') continue;
+        $einheit = ($r['einheit'] ?? 'mg') === 'µg' ? 'µg' : 'mg';
+        // Eingabe erfolgt in der gewählten Einheit; intern immer in mg je Einheit speichern (wie die Ableitung).
+        $eingabe = (float)str_replace(',', '.', (string)($r['mg'] ?? 0));
+        $mg = $einheit === 'µg' ? $eingabe / 1000 : $eingabe;
+        $nrv = isset($r['nrv']) && $r['nrv'] !== '' ? (float)str_replace(',', '.', (string)$r['nrv']) : null;
+        $nid = naehrstoff_id_by_name($name, false);
+        q("INSERT INTO rezeptur_naehrwert (rezeptur_id,naehrstoff_id,name,menge_mg,nrv_wert,einheit,ie_mg,einheit_anzeige,quelle,sort)
+           VALUES (?,?,?,?,?,?,NULL,NULL,'manuell',?)",
+          [$rid, $nid ?: null, $name, $mg, $nrv, $einheit, $sort++]);
+    }
+    q("UPDATE rezeptur SET naehrwerte_fixiert=1 WHERE id=?", [$rid]);
+}
+
+// Zurück auf automatisch: Snapshot/Override verwerfen, wieder live aus den Rohstoffen ableiten.
+function rezeptur_naehrwerte_zuruecksetzen(int $rid): void {
+    if ($rid <= 0) return;
+    q("DELETE FROM rezeptur_naehrwert WHERE rezeptur_id=?", [$rid]);
+    q("UPDATE rezeptur SET naehrwerte_fixiert=0 WHERE id=?", [$rid]);
 }
 
 // Nährstoff per Name finden – oder neu anlegen (für „neuen Wirkstoff eintippen")

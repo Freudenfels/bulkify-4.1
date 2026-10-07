@@ -392,6 +392,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     if ($rez && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=rezeptur&rid=' . $rid . '&freigabefehlt=1'); exit; }
     if ($rez) {
         q("UPDATE rezeptur SET status='eingefroren', freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $rid]);
+        rezeptur_naehrwerte_snapshot($rid);   // Nährwert-Deklaration beim Annehmen festschreiben (verschiebt sich nicht mehr)
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Rezeptur ' . $rez['nummer'] . ' verbindlich angenommen durch ' . $name . '.', 'rezeptur', 'rezeptur', $rid);
     }
     // Kann der Kunde Produkte anfragen, ist der nächste Schritt „prodanfrage" (Menge/Verpackung).
@@ -1322,22 +1323,21 @@ $prodDetail = $pid ? one("SELECT p.*, COALESCE(NULLIF(p.kundenname,''), p.name) 
     )", [$pid, (int)!empty($k['portal_produkte']), $kid, $kid, $kid, $kid]) : null;
 $prodZutaten = ($prodDetail && $prodDetail['rezeptur_id']) ? all("SELECT z.item_id, z.bezeichnung, z.menge_mg, i.allergene, i.vegan, i.gvo_frei
     FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [(int)$prodDetail['rezeptur_id']]) : [];
-// Aus den verknüpften Rohstoffen: Wirkstoffe je Zutat + Nährwert-Aggregation je Einheit + Deklaration
-$prodWirk = []; $prodNaehr = []; $prodAllergene = []; $veganFlags = []; $gvoFlags = [];
+// Aus den verknüpften Rohstoffen: Wirkstoffe je Zutat (Anzeige in der Zusammensetzung) + Allergen/Vegan/GVO.
+$prodWirk = []; $prodAllergene = []; $veganFlags = []; $gvoFlags = [];
 foreach ($prodZutaten as $z) {
     if (!$z['item_id']) continue;
     $al = trim((string)$z['allergene']);
     if ($al !== '' && mb_stripos($al, 'keine') === false) $prodAllergene[] = $al;
     $veganFlags[] = $z['vegan']; $gvoFlags[] = $z['gvo_frei'];
-    foreach (all("SELECT n.name, n.nrv_wert, n.einheit, iw.gehalt_prozent
+    foreach (all("SELECT n.name, iw.gehalt_prozent
                   FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id WHERE iw.item_id=?", [(int)$z['item_id']]) as $w) {
         $prodWirk[$z['item_id']][] = ($w['gehalt_prozent'] !== null ? rtrim(rtrim(number_format((float)$w['gehalt_prozent'],2,',','.'),'0'),',') . ' % ' : '') . $w['name'];
-        if ($w['gehalt_prozent'] === null) continue;
-        $mgN = (float)$z['menge_mg'] * (float)$w['gehalt_prozent'] / 100;
-        if (!isset($prodNaehr[$w['name']])) $prodNaehr[$w['name']] = ['name'=>$w['name'], 'mg'=>0.0, 'nrv'=>$w['nrv_wert'], 'einheit'=>$w['einheit']];
-        $prodNaehr[$w['name']]['mg'] += $mgN;
     }
 }
+// Nährwert-Deklaration je Einheit = effektive Quelle der Rezeptur: festgeschriebener Snapshot, sonst
+// korrekte Live-Ableitung (zentral, inkl. mg/g, µg/g, I.E.). So „kennt" das Produkt die Nährwerte stabil.
+$prodNaehr = ($prodDetail && $prodDetail['rezeptur_id']) ? rezeptur_naehrwerte((int)$prodDetail['rezeptur_id']) : [];
 // Deklaration nur behaupten, wenn ALLE Rohstoffe bekannt & konform sind (sonst „–")
 $aggFlag = function ($flags) { $known = array_filter($flags, fn($x) => $x !== null && $x !== ''); if (!$known || count($known) < count($flags)) return null; foreach ($known as $f) if ((int)$f === 0) return false; return true; };
 $prodVegan = $prodDetail ? $aggFlag($veganFlags) : null;
