@@ -1052,7 +1052,7 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
       <select name="verpackung_id" class="rscombo">
         <option value="">– keine –</option>
         <?php foreach (all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name") as $vp): ?>
-          <option value="<?= (int)$vp['id'] ?>" <?= (int)($a['verpackung_id'] ?? 0) === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?></option>
+          <option value="<?= (int)$vp['id'] ?>" <?= $glasId === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?></option>
         <?php endforeach; ?>
       </select>
     </div>

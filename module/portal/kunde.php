@@ -2512,6 +2512,25 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <p class="bx-sub"><?= h($prodDetail['nummer']) ?><?= $prodDetail['darreichungsform'] ? ' · '.h($DFORM_P[$prodDetail['darreichungsform']] ?? $prodDetail['darreichungsform']) : '' ?></p>
     <?php $dfE = in_array($prodDetail['darreichungsform'] ?? '', ['pulver','stick','granulat'], true) ? 'Portion' : 'Einheit'; ?>
+
+    <?php // Hinterlegte Verpackung des Produkts (Behälter/Verschluss) + Einheiten je Packung – damit der Kunde
+          //  sieht, in welcher Verpackung sein Produkt konfiguriert ist (nicht nur „zzgl. Verpackung").
+      $pdVpId = (int)($prodDetail['verpackung_id'] ?? 0);
+      $pdVsId = (int)($prodDetail['verschluss_id'] ?? 0);
+      $pdEinh = (int)($prodDetail['einheiten_pro_packung'] ?? 0);
+      $pdVpName = $pdVpId ? (string) scalar("SELECT name FROM item WHERE id=?", [$pdVpId]) : '';
+      $pdVsName = $pdVsId ? (string) scalar("SELECT name FROM item WHERE id=?", [$pdVsId]) : '';
+      if ($pdVpName !== '' || $pdEinh > 0):
+    ?>
+    <div class="bx-panel"><h2>Verpackung</h2>
+      <div class="bx-tablewrap"><table class="bx-table"><tbody>
+        <?php if ($pdVpName !== ''): ?><tr><td style="width:220px">Behälter</td><td><?= h($pdVpName) ?></td></tr><?php endif; ?>
+        <?php if ($pdVsName !== ''): ?><tr><td style="width:220px">Verschluss</td><td><?= h($pdVsName) ?></td></tr><?php endif; ?>
+        <?php if ($pdEinh > 0): ?><tr><td style="width:220px"><?= h($dfE) ?>en je Packung</td><td><?= (int)$pdEinh ?></td></tr><?php endif; ?>
+      </tbody></table></div>
+    </div>
+    <?php endif; ?>
+
     <?php if ($prodZutaten): ?>
     <div class="bx-panel"><h2>Zusammensetzung</h2>
       <div class="bx-tablewrap"><table class="bx-table">
