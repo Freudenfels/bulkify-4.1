@@ -248,8 +248,15 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
   }
 }
 ?>
+<?php if (!$neu): ?>
+<div id="prodTabs" class="bx-row" style="gap:8px;margin:0 0 14px;flex-wrap:wrap">
+  <button type="button" class="btn btn-ghost btn-sm on" data-ptab="stamm">Stammdaten &amp; Verpackung</button>
+  <button type="button" class="btn btn-ghost btn-sm" data-ptab="preise">Preise</button>
+  <button type="button" class="btn btn-ghost btn-sm" data-ptab="dokumente">Dokumente</button>
+</div>
+<?php endif; ?>
 <form id="nfCheckForm" method="post"></form>
-<form method="post" class="bx-form">
+<form method="post" class="bx-form" data-ppanel="stamm">
   <?php if ($istExtern): ?>
     <input type="hidden" name="extern" value="1">
     <div class="bx-panel bx-keepinfo" style="padding:10px 14px;margin-bottom:12px">
@@ -419,7 +426,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
 </form>
 
 <?php if (!$neu): ?>
-<div class="bx-panel">
+<div class="bx-panel" data-ppanel="preise">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
     <h2 style="margin:0">Preis-Matrix <?= bx_hint('automatische VK-Kalkulation: Packungsgröße (Stück, Gramm bei Pulver, Milliliter bei Flüssig) × passende Verpackung × Bestellmenge. VK = EK (Rezeptur + Kapsel/Presshilfsstoffe/Trägerflüssigkeit) × Marge je Typ, ohne Kundenrabatt. Interne Sale-Auskunft.') ?></h2>
     <form method="post" style="margin:0"><input type="hidden" name="aktion" value="matrix"><button class="btn btn-primary btn-sm" type="submit">Matrix neu berechnen</button></form>
@@ -445,7 +452,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
     <div class="muted" style="margin-top:8px">VK je Packung (Basis, ohne Kundenrabatt). Stand: <?= h(fmt_zeit($matrix[0]['stand'])) ?>.</div>
   <?php endif; ?>
 </div>
-<div class="bx-panel" id="zukauf">
+<div class="bx-panel" id="zukauf" data-ppanel="preise">
   <h2 style="margin-top:0">Lieferantenpreise (Zukauf) <?= bx_hint('Einkaufspreise für dieses Fertigprodukt je Lieferant/Versandweg (AIR/SEA), günstigster markiert. Kommen aus „EK-Preise (Import)" oder von Hand. Rein intern – nie in der Kundensicht.') ?></h2>
   <?php if (isset($_GET['zkok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Preis gespeichert.</div><?php endif; ?>
   <?php $VERSZ = versandart_liste();
@@ -481,7 +488,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
   <p class="muted" style="font-size:12px;margin-top:8px">Interne Zukauf-Preise – erscheinen nie in der Kundensicht.</p>
 </div>
 <?php require_once BX_ROOT . '/core/pdf_pib.php'; $pibDok = pib_datei((int)$id); ?>
-<div class="bx-panel" id="pibfeld">
+<div class="bx-panel" id="pibfeld" data-ppanel="dokumente">
   <h2 style="margin-top:0">Produktinformationsblatt (PIB) <?= bx_hint('Der Kunde bekommt beim Bestellen automatisch ein PIB aus den Produktdaten (Zutaten, Nährwerte, Darreichung) – als Grundlage für sein Etikett. Optional hier ein fertiges PIB hochladen (PDF/Bild); das hat dann Vorrang.') ?></h2>
   <?php if (isset($_GET['pib'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">PIB hochgeladen.</div><?php endif; ?>
   <?php if (isset($_GET['pibweg'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Hochgeladenes PIB entfernt – es gilt wieder das automatische.</div><?php endif; ?>
@@ -506,7 +513,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
   </div>
 </div>
 
-<div class="bx-panel" id="specfeld">
+<div class="bx-panel" id="specfeld" data-ppanel="dokumente">
   <h2 style="margin-top:0">Spezifikation &amp; CoA <?= bx_hint('Spec oder CoA (Analysenzertifikat) hochladen – die KI liest es aus. Spec füllt Haltbarkeit/Allergene ins Produkt; beim CoA werden Charge/MHD und die Analysewerte angezeigt. KI läuft nur auf beta.') ?></h2>
   <?php if (isset($_GET['kigelesen'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Dokument von der KI ausgelesen – Vorschlag unten.</div><?php endif; ?>
   <?php if (isset($_GET['specueb'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px"><?= (int)$_GET['specueb'] ?> Feld(er) ins Produkt übernommen.</div><?php endif; ?>
@@ -655,7 +662,7 @@ function recalc(){
 recalc();
 </script>
 <?php if (!$neu && $kundenpreise): ?>
-<div class="bx-panel">
+<div class="bx-panel" data-ppanel="preise">
   <h2 style="margin-top:0">Kundenpreise <?= bx_hint('Was wurde welchem Kunden für dieses Produkt berechnet – je Konfiguration (Menge je Packung + Anzahl VPE). Aus früheren Angeboten/Bestätigungen bzw. dem v3-Import.') ?></h2>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th>Kunde</th><th class="bx-num">Menge je VPE</th><th class="bx-num">Anzahl VPE</th><th>Verpackung</th><th class="bx-num">Preis je VPE</th><th></th></tr></thead>
@@ -691,7 +698,7 @@ if (!$neu):
                         FROM beleg b JOIN auftrag a ON a.id=b.auftrag_id LEFT JOIN kunden k ON k.id=b.kunde_id
                         WHERE a.produkt_id=? AND b.typ='rechnung' ORDER BY b.id DESC", [(int)$id]);
 ?>
-<div class="bx-panel">
+<div class="bx-panel" data-ppanel="preise">
   <h2 style="margin-top:0">In Angeboten &amp; Rechnungen</h2>
 
   <h3 style="margin:6px 0 6px;font-size:14px;font-weight:600">In Angeboten <span class="muted" style="font-weight:400">(<?= count($pAngebote) ?>)</span></h3>
@@ -739,5 +746,20 @@ if (!$neu):
   <?php endif; ?>
 </div>
 <?php endif; ?>
+<script>
+(function(){
+  var tabs=document.getElementById('prodTabs'); if(!tabs) return;
+  var panels=document.querySelectorAll('[data-ppanel]');
+  var btns=tabs.querySelectorAll('[data-ptab]');
+  function show(key){
+    panels.forEach(function(p){ p.style.display = (p.getAttribute('data-ppanel')===key) ? '' : 'none'; });
+    btns.forEach(function(b){ b.className='btn btn-sm '+(b.getAttribute('data-ptab')===key?'btn-primary':'btn-ghost'); });
+    try{ localStorage.setItem('bx-prodtab', key); }catch(e){}
+  }
+  btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.getAttribute('data-ptab')); }); });
+  var start='stamm'; try{ var s=localStorage.getItem('bx-prodtab'); if(s && document.querySelector('[data-ppanel="'+s+'"]')) start=s; }catch(e){}
+  show(start);
+})();
+</script>
 <?php
 render_footer();
