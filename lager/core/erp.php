@@ -462,16 +462,19 @@ function erp_items_eingang(): array {
                 ORDER BY name");
 }
 
-// Typen fuer die Lager-2-Einbuchung -> item.kategorie (+ Verpackungs-Rolle) + ob "neu anlegen" erlaubt.
+// Typen fuer die Lager-2-Einbuchung -> item.kategorie (+ Verpackungs-Rolle + Verpackungsart) + ob "neu anlegen" erlaubt.
 // Verkaufsprodukte werden hier NICHT neu angelegt (gehoeren zum Produkt-Lebenszyklus im Dashboard).
+// 'art' = item.verpackungsart (beutel/stick …) – trennt Pouchbag von Rollenware (beide rolle=primaer).
 function erp_l2_typ_defs(): array {
     return [
-        'verkaufsprodukt' => ['label' => 'Verkaufsprodukt', 'kategorie' => 'verkaufsfertig', 'rolle' => '', 'neu' => false],
-        'rohstoff'        => ['label' => 'Rohstoff',        'kategorie' => 'rohstoff',       'rolle' => '', 'neu' => true],
-        'etikett'         => ['label' => 'Etikett',         'kategorie' => 'verpackung',     'rolle' => 'etikett', 'neu' => true],
-        'beipackzettel'   => ['label' => 'Beipackzettel',   'kategorie' => 'verpackung',     'rolle' => 'beipack', 'neu' => true],
-        'karton'          => ['label' => 'Karton',          'kategorie' => 'karton',         'rolle' => '', 'neu' => true],
-        'sonstiges'       => ['label' => 'Sonstiges',       'kategorie' => 'sonstiges',      'rolle' => '', 'neu' => true],
+        'verkaufsprodukt' => ['label' => 'Verkaufsprodukt',     'kategorie' => 'verkaufsfertig', 'rolle' => '',        'art' => '',       'neu' => false],
+        'rohstoff'        => ['label' => 'Rohstoff',            'kategorie' => 'rohstoff',       'rolle' => '',        'art' => '',       'neu' => true],
+        'etikett'         => ['label' => 'Etikett',             'kategorie' => 'verpackung',     'rolle' => 'etikett', 'art' => '',       'neu' => true],
+        'beipackzettel'   => ['label' => 'Beipackzettel',       'kategorie' => 'verpackung',     'rolle' => 'beipack', 'art' => '',       'neu' => true],
+        'pouchbag'        => ['label' => 'Pouchbag',            'kategorie' => 'verpackung',     'rolle' => 'primaer', 'art' => 'beutel', 'neu' => true],
+        'rollenware'      => ['label' => 'Rollenware (Stick)',  'kategorie' => 'verpackung',     'rolle' => 'primaer', 'art' => 'stick',  'neu' => true],
+        'karton'          => ['label' => 'Karton',              'kategorie' => 'karton',         'rolle' => '',        'art' => '',       'neu' => true],
+        'sonstiges'       => ['label' => 'Sonstiges',           'kategorie' => 'sonstiges',      'rolle' => '',        'art' => '',       'neu' => true],
     ];
 }
 
@@ -482,7 +485,8 @@ function erp_items_l2(): array {
         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME=?", [$c]) > 0;
     $w = $hatSpalte('gesperrt') ? ' AND gesperrt=0' : '';
     $rolleSel = $hatSpalte('verpackung_rolle') ? ', verpackung_rolle AS rolle' : ", '' AS rolle";
-    return all("SELECT id, name, kategorie, einheit, form $rolleSel FROM item
+    $artSel   = $hatSpalte('verpackungsart')   ? ', verpackungsart AS art'     : ", '' AS art";
+    return all("SELECT id, name, kategorie, einheit, form $rolleSel $artSel FROM item
                 WHERE kategorie IN ('rohstoff','verpackung','verbrauch','fertig','verkaufsfertig','karton','sonstiges')$w
                 ORDER BY name");
 }
@@ -567,7 +571,7 @@ function erp_item_basis(int $id): ?array {
 // Kategorie, Einheit. Keine Artikelnummer (die Nummernkreise des Dashboards sind hier nicht geladen) –
 // das Team ergaenzt Details spaeter im Dashboard. Doppelte (gleicher Name + Kategorie) werden
 // wiederverwendet. Gibt die item-id oder null.
-function erp_item_anlegen(string $name, string $kategorie, string $einheit, string $rolle = ''): ?int {
+function erp_item_anlegen(string $name, string $kategorie, string $einheit, string $rolle = '', string $art = ''): ?int {
     if (!tabelle_da('item')) return null;
     $name = trim($name);
     if ($name === '') return null;
@@ -581,10 +585,12 @@ function erp_item_anlegen(string $name, string $kategorie, string $einheit, stri
        VALUES (NULL, ?, ?, ?, ?, 0, ?)",
       [$name, $kategorie, $einheit, $einheit, 'Im Lager beim Wareneingang angelegt.']);
     $id = (int) insert_id();
-    // Verpackungs-Rolle (etikett/beipack/karton …) nur wenn Spalte existiert und Kategorie verpackung.
-    if ($id && $rolle !== '' && $kategorie === 'verpackung'
-        && (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME='verpackung_rolle'") > 0) {
-        q("UPDATE item SET verpackung_rolle=? WHERE id=?", [mb_substr($rolle, 0, 20), $id]);
+    $hatSpalte = fn(string $c): bool => (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME=?", [$c]) > 0;
+    // Verpackungs-Rolle (etikett/beipack/primaer …) + Verpackungsart (beutel/stick …) nur bei Kategorie verpackung.
+    if ($id && $kategorie === 'verpackung') {
+        if ($rolle !== '' && $hatSpalte('verpackung_rolle')) q("UPDATE item SET verpackung_rolle=? WHERE id=?", [mb_substr($rolle, 0, 20), $id]);
+        if ($art   !== '' && $hatSpalte('verpackungsart'))   q("UPDATE item SET verpackungsart=? WHERE id=?",   [mb_substr($art,   0, 30), $id]);
     }
     return $id;
 }

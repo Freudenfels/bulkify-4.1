@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     if (!$item_id) {
         $neuName = trim((string)($_POST['art_text'] ?? ''));
         if ($neuName !== '' && !$def['neu']) { flash('Verkaufsprodukte können hier nicht neu angelegt werden – bitte ein bestehendes Produkt wählen.', 'warn'); weiter('?p=l2_eingang'); }
-        if ($neuName !== '') $item_id = (int) erp_item_anlegen($neuName, $def['kategorie'], (string)($_POST['neu_einheit'] ?? ''), $def['rolle']);
+        if ($neuName !== '') $item_id = (int) erp_item_anlegen($neuName, $def['kategorie'], (string)($_POST['neu_einheit'] ?? ''), $def['rolle'], $def['art'] ?? '');
     }
     if (!$item_id) { flash('Bitte einen Artikel wählen – oder (außer Verkaufsprodukt) einen Namen für einen neuen Artikel eingeben.', 'warn'); weiter('?p=l2_eingang'); }
 
@@ -119,8 +119,8 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
 
 <script>
 (function(){
-  var items = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'r'=>(string)($it['rolle'] ?? '')], $items), JSON_UNESCAPED_UNICODE) ?>;
-  var TYPDEFS = <?= json_encode(array_map(fn($d)=>['kategorie'=>$d['kategorie'],'rolle'=>$d['rolle'],'neu'=>$d['neu'],'label'=>$d['label']], $defs), JSON_UNESCAPED_UNICODE) ?>;
+  var items = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'r'=>(string)($it['rolle'] ?? ''),'a'=>(string)($it['art'] ?? '')], $items), JSON_UNESCAPED_UNICODE) ?>;
+  var TYPDEFS = <?= json_encode(array_map(fn($d)=>['kategorie'=>$d['kategorie'],'rolle'=>$d['rolle'],'art'=>$d['art'] ?? '','neu'=>$d['neu'],'label'=>$d['label']], $defs), JSON_UNESCAPED_UNICODE) ?>;
   var typEl=document.getElementById('l2Typ');
   var box=document.getElementById('l2ArtSuche'), hid=document.getElementById('l2ArtId'), list=document.getElementById('l2ArtList');
   var einhEl=document.getElementById('l2Einheit');
@@ -133,7 +133,7 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
   function matchTyp(it){ var t=typ(), d=TYPDEFS[t]; if(!t||!d) return true;
     if(t==='karton') return it.k==='karton' || (it.k==='verpackung' && it.r==='karton');
     if(t==='sonstiges') return it.k==='sonstiges' || it.k==='verbrauch';
-    if(d.kategorie==='verpackung') return it.k==='verpackung' && (d.rolle==='' || it.r===d.rolle);
+    if(d.kategorie==='verpackung') return it.k==='verpackung' && (d.rolle==='' || it.r===d.rolle) && (!d.art || it.a===d.art);
     return it.k===d.kategorie;
   }
   function pool(){ return items.filter(matchTyp); }

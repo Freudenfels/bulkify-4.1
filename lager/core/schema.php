@@ -376,7 +376,8 @@ function lg_versand_hat_label(int $versand_id): bool { return (int) scalar("SELE
 // --- Lager-2-Artikelkatalog (Stammdaten je Fulfillment-Kunde) ---------------------------------
 function lg_artikel_typen(): array {
     return ['verkaufsprodukt' => 'Verkaufsprodukt', 'rohstoff' => 'Rohstoff', 'etikett' => 'Etikett',
-            'beipackzettel' => 'Beipackzettel', 'karton' => 'Karton', 'sonstiges' => 'Sonstiges'];
+            'beipackzettel' => 'Beipackzettel', 'pouchbag' => 'Pouchbag', 'rollenware' => 'Rollenware (Stick)',
+            'karton' => 'Karton', 'sonstiges' => 'Sonstiges'];
 }
 function lg_artikel_liste(int $kunde_id = 0, string $q = ''): array {
     $w = ['1=1']; $p = [];

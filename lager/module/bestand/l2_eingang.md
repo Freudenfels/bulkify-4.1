@@ -1,18 +1,24 @@
 # bestand/l2_eingang.php – Lager 2: Kundenware einbuchen (`?p=l2_eingang`)
 
 Eigener **Menüpunkt** unter Lager 2 (nicht mehr nur Knopf im Bestand). Pflicht: **Kunde** (wem gehört die
-Ware) + **Typ** (`erp_l2_typ_defs()`: Verkaufsprodukt · Rohstoff · Etikett · Beipackzettel · Karton ·
-Sonstiges). Der Typ **filtert die Artikelliste** (`erp_items_l2()` liefert Kategorie + Verpackungs-Rolle)
-und bestimmt beim **Neu-Anlegen** die `item.kategorie` (+ `verpackung_rolle`):
+Ware) + **Typ** (`erp_l2_typ_defs()`: Verkaufsprodukt · Rohstoff · Etikett · Beipackzettel · Pouchbag ·
+Rollenware (Stick) · Karton · Sonstiges). Der Typ **filtert die Artikelliste** (`erp_items_l2()` liefert
+Kategorie + Verpackungs-Rolle + Verpackungsart) und bestimmt beim **Neu-Anlegen** die `item.kategorie`
+(+ `verpackung_rolle` + `verpackungsart`):
 
-| Typ | kategorie | Rolle | neu anlegen? |
-|---|---|---|---|
-| Verkaufsprodukt | verkaufsfertig | – | nein (nur bestehende; gehören zum Produkt-Lebenszyklus) |
-| Rohstoff | rohstoff | – | ja |
-| Etikett | verpackung | etikett | ja |
-| Beipackzettel | verpackung | beipack | ja |
-| Karton | karton | – | ja |
-| Sonstiges | sonstiges | – | ja |
+| Typ | kategorie | Rolle | Art | neu anlegen? |
+|---|---|---|---|---|
+| Verkaufsprodukt | verkaufsfertig | – | – | nein (nur bestehende; gehören zum Produkt-Lebenszyklus) |
+| Rohstoff | rohstoff | – | – | ja |
+| Etikett | verpackung | etikett | – | ja |
+| Beipackzettel | verpackung | beipack | – | ja |
+| Pouchbag | verpackung | primaer | beutel | ja |
+| Rollenware (Stick) | verpackung | primaer | stick | ja |
+| Karton | karton | – | – | ja |
+| Sonstiges | sonstiges | – | – | ja |
+
+Pouchbag und Rollenware sind Primärverpackung (`verpackung_rolle=primaer`) und werden über die
+**Verpackungsart** (`beutel` bzw. `stick`) getrennt – sonst würden beide dieselbe Liste zeigen.
 
 Bucht dann eine Charge für den Kunden (`erp_wareneingang_buchen_fremd()`, Status **frei**, keine
 Quarantäne), schreibt die Bewegung (mit Typ-Label) und bindet – **falls angegeben** – den Blinker
