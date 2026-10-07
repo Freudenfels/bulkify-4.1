@@ -177,6 +177,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'rezeptur'        => ['de'=>'Rezeptur je Einheit',     'en'=>'Formulation per unit', 'zh'=>'每单位配方'],
         'wirkstoff'       => ['de'=>'Inhaltsstoff',            'en'=>'Ingredient', 'zh'=>'成分'],
         'mg_je_einheit'   => ['de'=>'mg je Einheit',          'en'=>'mg per unit', 'zh'=>'每单位毫克'],
+        'pro_100g'        => ['de'=>'pro 100 g',              'en'=>'per 100 g', 'zh'=>'每100克'],
         'fuellgewicht'    => ['de'=>'Füllgewicht je Einheit',  'en'=>'Fill weight per unit', 'zh'=>'每单位填充重量'],
         'verpackung_lbl'  => ['de'=>'Verpackung',              'en'=>'Packaging', 'zh'=>'包装'],
         'preis_je'        => ['de'=>'je',                     'en'=>'per', 'zh'=>'每'],

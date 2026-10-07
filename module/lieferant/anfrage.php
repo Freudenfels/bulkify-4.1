@@ -189,13 +189,21 @@ if (!$a):
     if ($rezZutaten): $sumMg = 0.0; foreach ($rezZutaten as $z) $sumMg += (float)$z['menge_mg']; ?>
   <div class="bx-panel">
     <h2 style="margin-top:0"><?= h(lp_t('rezeptur')) ?></h2>
+    <?php // „pro 100 g" = Masseanteil des Inhaltsstoffs (menge_mg / Füllgewicht × 100 g). Fürs Bulk-Kalkulieren
+          //  einfacher als „je Einheit". Adaptiv: ab 1 g in g, darunter in mg.
+      $per100 = function(float $mg) use ($sumMg): string {
+          if ($sumMg <= 0 || $mg <= 0) return '–';
+          $v = $mg / $sumMg * 100000.0;   // mg pro 100 g
+          return $v >= 1000 ? lp_num($v / 1000, 3) . ' g' : lp_num($v, 3) . ' mg';
+      };
+    ?>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th><?= h(lp_t('wirkstoff')) ?></th><th class="bx-num"><?= h(lp_t('mg_je_einheit')) ?></th></tr></thead>
+      <thead><tr><th><?= h(lp_t('wirkstoff')) ?></th><th class="bx-num"><?= h(lp_t('pro_100g')) ?></th><th class="bx-num"><?= h(lp_t('mg_je_einheit')) ?></th></tr></thead>
       <tbody>
         <?php foreach ($rezZutaten as $z): ?>
-          <tr><td><?= h((string)$z['bezeichnung']) ?></td><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? h(lp_num($z['menge_mg'], 3)) . ' mg' : '–' ?></td></tr>
+          <tr><td><?= h((string)$z['bezeichnung']) ?></td><td class="bx-num"><?= h($per100((float)$z['menge_mg'])) ?></td><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? h(lp_num($z['menge_mg'], 3)) . ' mg' : '–' ?></td></tr>
         <?php endforeach; ?>
-        <tr><td class="muted"><?= h(lp_t('fuellgewicht')) ?></td><td class="bx-num"><?= h(lp_num($sumMg, 3)) ?> mg</td></tr>
+        <tr><td class="muted"><?= h(lp_t('fuellgewicht')) ?></td><td class="bx-num">100 g</td><td class="bx-num"><?= h(lp_num($sumMg, 3)) ?> mg</td></tr>
       </tbody>
     </table></div>
   </div>

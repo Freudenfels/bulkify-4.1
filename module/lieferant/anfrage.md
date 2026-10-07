@@ -44,3 +44,6 @@ erscheint kein Rezeptur-Panel. Labels: `lp_t('rezeptur'|'wirkstoff'|'mg_je_einhe
 
 ## Anzeige-Name ohne Kategorie-Praefix (2026-10-08)
 In Liste + Detail zeigt die Artikel-Ueberschrift den Artikelnamen bzw. den Betreff, aber OHNE fuehrenden Kategorie-Praefix (z. B. "Fertigprodukt (Bulk): ") – die Art/Form steht ohnehin direkt darunter (anfrage_art_label). Helfer `$anzName()` strippt den Praefix aus `anfrage_arten()[art]`. Betrifft nur die Anzeige; der gespeicherte Betreff (E-Mail-Betreff) bleibt unveraendert.
+
+## Rezeptur zusaetzlich pro 100 g (2026-10-08)
+Die Rezeptur-Tabelle zeigt neben "mg je Einheit" jetzt eine Spalte "pro 100 g" (`lp_t(pro_100g)`): Masseanteil = menge_mg / Fuellgewicht x 100 g, adaptiv in g (>=1 g) bzw. mg. Fuer Bulk-Pulver leichter zu kalkulieren als je Einheit; Summe ergibt 100 g.
