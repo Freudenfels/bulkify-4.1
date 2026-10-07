@@ -9,6 +9,7 @@ require_once BX_ROOT . '/core/schema.php';
 $DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 $rows  = rezepturen_zu_ueberarbeiten();
 
+render_header('rezeptur', 'Rezepturen überarbeiten');
 bx_head('Rezepturen überarbeiten', count($rows) . ' Rezeptur(en) mit nicht gematchten Rohstoffen',
         bx_btn('Alle Rezepturen', '?p=rezeptur'));
 ?>
@@ -63,3 +64,4 @@ bx_head('Rezepturen überarbeiten', count($rows) . ' Rezeptur(en) mit nicht gema
   </table></div>
 </div>
 <?php endif; ?>
+<?php render_footer(); ?>
