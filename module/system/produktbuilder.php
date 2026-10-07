@@ -12,7 +12,14 @@ $wunsch = trim((string)($_POST['wunsch'] ?? ''));
 $form   = (string)($_POST['form'] ?? 'fluessig');
 $bezug  = trim((string)($_POST['bezug'] ?? '')) ?: ($form === 'fluessig' ? '1 Tropfen' : '1 ' . ($FORMEN[$form] ?? 'Einheit'));
 $kundeId= (int)($_POST['kunde_id'] ?? 0) ?: null;
-$fehler = ''; $vorschlag = null;
+$fehler = ''; $vorschlag = null; $charge = null;
+
+// Flüssig-Parameter (für Tropfen/Flasche + Trägerauffüllung) und Chargen-/Ansatzgröße.
+$lml    = (float) str_replace(',', '.', (string)($_POST['l_ml'] ?? '')) ?: 30.0;
+$ltpml  = (float) str_replace(',', '.', (string)($_POST['l_tpml'] ?? '')) ?: 25.0;
+$ldichte= (float) str_replace(',', '.', (string)($_POST['l_dichte'] ?? '')) ?: 0.95;
+$cFlaschen  = (float) str_replace(',', '.', (string)($_POST['c_flaschen'] ?? '')) ?: 100.0;
+$cEinheiten = (float) str_replace(',', '.', (string)($_POST['c_einheiten'] ?? '')) ?: 10000.0;
 
 // Zutaten aus dem POST (Editier-/Anlegen-Schritt) in die Vorschlags-Struktur zurücklesen.
 $zutatenAusPost = function(): array {
@@ -26,6 +33,8 @@ $zutatenAusPost = function(): array {
     }
     return $out;
 };
+// Rechnet je nach Form: Flüssig mit Trägerauffüllung, sonst normal.
+$rechne = fn(array $data) => $form === 'fluessig' ? pb_liquid_rechnen($data, $lml, $ltpml, $ldichte) : pb_vorschlag_rechnen($data);
 
 $aktion = $_POST['aktion'] ?? '';
 if ($aktion === 'ki') {
@@ -33,22 +42,30 @@ if ($aktion === 'ki') {
     else {
         $r = pb_ki_vorschlag($wunsch, $form, $bezug);
         if (!$r['ok']) $fehler = $r['fehler'];
-        else { $vorschlag = pb_vorschlag_rechnen((array)$r['daten']); $form = (string)($vorschlag['darreichungsform'] ?? $form); }
+        else { $d = (array)$r['daten']; $form = array_key_exists((string)($d['darreichungsform'] ?? ''), $FORMEN) ? (string)$d['darreichungsform'] : $form;
+               $rechne = fn(array $x) => $form === 'fluessig' ? pb_liquid_rechnen($x, $lml, $ltpml, $ldichte) : pb_vorschlag_rechnen($x);
+               $vorschlag = $rechne($d); }
     }
-} elseif ($aktion === 'recalc') {
-    $vorschlag = pb_vorschlag_rechnen([
-        'name' => $_POST['p_name'] ?? '', 'darreichungsform' => $form, 'bezug' => $bezug,
+} elseif (in_array($aktion, ['recalc','anlegen'], true)) {
+    $data = ['name' => $_POST['p_name'] ?? '', 'darreichungsform' => $form, 'bezug' => $bezug,
         'kapselgroesse' => $_POST['p_kaps'] ?? '', 'verzehrempfehlung' => $_POST['p_verzehr'] ?? '',
         'verpackung_typ' => $_POST['p_verp'] ?? '', 'zutaten' => $zutatenAusPost(),
-        'hinweise' => array_filter(array_map('trim', explode("\n", (string)($_POST['p_hinweise'] ?? '')))),
-    ]);
-} elseif ($aktion === 'anlegen') {
-    $r = pb_anlegen((string)($_POST['p_name'] ?? ''), $form, $kundeId, $zutatenAusPost(),
-                    (string)($_POST['p_kaps'] ?? ''), (string)($_POST['p_verzehr'] ?? ''));
-    if (!empty($r['ok'])) { header('Location: ?p=rezeptur_detail&id=' . (int)$r['rezeptur_id'] . '&gespeichert=1#zutaten'); exit; }
-    $fehler = $r['fehler'] ?? 'Anlegen fehlgeschlagen.';
-    $vorschlag = pb_vorschlag_rechnen(['name'=>$_POST['p_name'] ?? '','darreichungsform'=>$form,'bezug'=>$bezug,
-        'kapselgroesse'=>$_POST['p_kaps'] ?? '','verzehrempfehlung'=>$_POST['p_verzehr'] ?? '','verpackung_typ'=>$_POST['p_verp'] ?? '','zutaten'=>$zutatenAusPost()]);
+        'hinweise' => array_filter(array_map('trim', explode("\n", (string)($_POST['p_hinweise'] ?? ''))))];
+    if ($aktion === 'anlegen') {
+        $v = $rechne($data);   // Träger auffüllen, bevor angelegt wird
+        $r = pb_anlegen((string)$data['name'], $form, $kundeId, (array)$v['zutaten'], (string)$data['kapselgroesse'], (string)$data['verzehrempfehlung']);
+        if (!empty($r['ok'])) { header('Location: ?p=rezeptur_detail&id=' . (int)$r['rezeptur_id'] . '&gespeichert=1#zutaten'); exit; }
+        $fehler = $r['fehler'] ?? 'Anlegen fehlgeschlagen.'; $vorschlag = $v;
+    } else {
+        $vorschlag = $rechne($data);
+    }
+}
+// Ansatz/Charge berechnen: Einheiten = Flaschen × Tropfen/Flasche (flüssig) bzw. direkt Anzahl Einheiten.
+if ($vorschlag) {
+    $einh = ($form === 'fluessig' && !empty($vorschlag['liquid']['tropfen_gesamt']))
+          ? $cFlaschen * (float)$vorschlag['liquid']['tropfen_gesamt']
+          : $cEinheiten;
+    $charge = pb_charge($vorschlag, $einh);
 }
 
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
@@ -68,6 +85,11 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       <div class="bx-field"><label>Dosis bezieht sich auf <?= bx_hint('Worauf sich die Zieldosen beziehen, z. B. „1 Tropfen", „1 Kapsel", „1 ml", „tägliche Portion".') ?></label><input type="text" name="bezug" value="<?= h($bezug) ?>"></div>
       <div class="bx-field"><label>Für Kunde (optional)</label><select name="kunde_id"><option value="">– Hausrezeptur –</option><?php foreach ($kunden as $kk): ?><option value="<?= (int)$kk['id'] ?>"<?= $kundeId===(int)$kk['id']?' selected':'' ?>><?= h($kk['firma']) ?></option><?php endforeach; ?></select></div>
     </div>
+    <div class="bx-grid" style="margin-top:4px">
+      <div class="bx-field"><label>Flaschenvolumen (ml) <?= bx_hint('nur Flüssig/Tropfen – Größe der Tropfflasche') ?></label><input type="text" name="l_ml" value="<?= h((string)$lml) ?>" placeholder="30"></div>
+      <div class="bx-field"><label>Tropfen je ml <?= bx_hint('dropperabhängig, Öl ca. 20–30. Für die Garantie je Tropfen am besten durch Auswiegen bestätigen.') ?></label><input type="text" name="l_tpml" value="<?= h((string)$ltpml) ?>" placeholder="25"></div>
+      <div class="bx-field"><label>Dichte des Öls (g/ml) <?= bx_hint('MCT ≈ 0,95. Für mg↔ml-Umrechnung.') ?></label><input type="text" name="l_dichte" value="<?= h((string)$ldichte) ?>" placeholder="0,95"></div>
+    </div>
     <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary" type="submit"<?= ki_bereit()?'':' disabled' ?>>KI-Vorschlag erstellen</button></div>
   </form>
 </div>
@@ -85,8 +107,27 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       <div class="bx-field"><label>Verzehrempfehlung</label><input type="text" name="p_verzehr" value="<?= h((string)($vorschlag['verzehrempfehlung'] ?? '')) ?>"></div>
       <div class="bx-field"><label>Verpackung (Vorschlag)</label><input type="text" name="p_verp" value="<?= h((string)($vorschlag['verpackung_typ'] ?? '')) ?>"></div>
     </div>
-    <p class="muted" style="margin:6px 0 0">Bezug: <strong><?= h($bezug) ?></strong> · Gesamtgewicht je Bezug: <strong><?= h(rtrim(rtrim(number_format((float)($vorschlag['gesamt_mg'] ?? 0),3,',','.'),'0'),',')) ?> mg</strong> <span class="muted">(ohne Trägerauffüllung)</span></p>
+    <p class="muted" style="margin:6px 0 0">Bezug: <strong><?= h($bezug) ?></strong> · Gesamtgewicht je Bezug: <strong><?= h(rtrim(rtrim(number_format((float)($vorschlag['gesamt_mg'] ?? 0),3,',','.'),'0'),',')) ?> mg</strong><?= $form!=='fluessig' ? ' <span class="muted">(ohne Trägerauffüllung)</span>' : '' ?></p>
   </div>
+
+  <?php if ($form === 'fluessig'): $lq = (array)($vorschlag['liquid'] ?? []); ?>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Flüssig / Tropfen</h2>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Flaschenvolumen (ml)</label><input type="text" name="l_ml" value="<?= h((string)$lml) ?>"></div>
+      <div class="bx-field"><label>Tropfen je ml</label><input type="text" name="l_tpml" value="<?= h((string)$ltpml) ?>"></div>
+      <div class="bx-field"><label>Dichte (g/ml)</label><input type="text" name="l_dichte" value="<?= h((string)$ldichte) ?>"></div>
+    </div>
+    <p class="muted" style="margin:8px 0 0">
+      Je Tropfen ≈ <strong><?= h(rtrim(rtrim(number_format((float)($lq['masse_je_tropfen_mg'] ?? 0),2,',','.'),'0'),',')) ?> mg</strong> ·
+      Tropfen je Flasche: <strong><?= (int)($lq['tropfen_gesamt'] ?? 0) ?></strong> ·
+      Füllgewicht je Flasche: <strong><?= h(rtrim(rtrim(number_format((float)($lq['fuellgewicht_flasche_g'] ?? 0),2,',','.'),'0'),',')) ?> g</strong>.
+      Das <strong>Trägeröl (MCT)</strong> füllt jeden Tropfen automatisch auf – siehe Zutatentabelle.
+    </p>
+  </div>
+  <?php else: ?>
+    <input type="hidden" name="l_ml" value="<?= h((string)$lml) ?>"><input type="hidden" name="l_tpml" value="<?= h((string)$ltpml) ?>"><input type="hidden" name="l_dichte" value="<?= h((string)$ldichte) ?>">
+  <?php endif; ?>
 
   <div class="bx-panel">
     <h2 style="margin-top:0">Zutaten &amp; Dosis <span class="muted" style="font-weight:400;font-size:13px">(mg je Bezug wird exakt gerechnet)</span></h2>
@@ -119,6 +160,39 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     </div>
     <div class="muted" style="font-size:12px;margin-top:8px">„mg je Bezug" = benötigte Rohstoffmenge je <?= h($bezug) ?>, exakt gerechnet aus Zieldosis × Gehalt (IE/µg/mg sauber umgerechnet). Ändere Dosis/Gehalt und „Neu berechnen".</div>
   </div>
+
+  <?php // Ansatz/Charge: wie viel von jedem Rohstoff für eine Charge – zum Bestellen und Mischen.
+  if ($charge): $gfmt = fn($g) => $g >= 1000 ? rtrim(rtrim(number_format($g/1000,3,',','.'),'0'),',') . ' kg' : rtrim(rtrim(number_format($g,2,',','.'),'0'),',') . ' g'; ?>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Ansatz / Charge <span class="muted" style="font-weight:400;font-size:13px">– wie viel du von jedem Rohstoff mischen/bestellen musst</span></h2>
+    <div class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <?php if ($form === 'fluessig'): ?>
+        <div class="bx-field" style="max-width:200px"><label>Anzahl Flaschen</label><input type="text" name="c_flaschen" value="<?= h((string)$cFlaschen) ?>"></div>
+        <input type="hidden" name="c_einheiten" value="<?= h((string)$cEinheiten) ?>">
+        <div class="muted" style="font-size:13px;padding-bottom:8px">= <strong><?= (int)($charge['einheiten'] ?? 0) ?></strong> Tropfen gesamt</div>
+      <?php else: ?>
+        <div class="bx-field" style="max-width:220px"><label>Anzahl Einheiten (<?= h($bezug) ?>)</label><input type="text" name="c_einheiten" value="<?= h((string)$cEinheiten) ?>"></div>
+        <input type="hidden" name="c_flaschen" value="<?= h((string)$cFlaschen) ?>">
+      <?php endif; ?>
+      <button type="submit" class="btn btn-ghost" name="aktion" value="recalc">Charge berechnen</button>
+    </div>
+    <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
+      <thead><tr><th>Rohstoff</th><th>Rolle</th><th class="bx-num">je Bezug (mg)</th><th class="bx-num">Gesamt für die Charge</th></tr></thead>
+      <tbody>
+      <?php foreach ((array)($charge['zeilen'] ?? []) as $cz): ?>
+        <tr>
+          <td><?= h((string)$cz['name']) ?></td>
+          <td><?= h((string)$cz['rolle']) ?></td>
+          <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$cz['je_einheit_mg'],4,',','.'),'0'),',')) ?></td>
+          <td class="bx-num"><strong><?= h($gfmt((float)$cz['gesamt_g'])) ?></strong></td>
+        </tr>
+      <?php endforeach; ?>
+        <tr style="font-weight:600"><td colspan="3">Gesamtmenge Ansatz</td><td class="bx-num"><?= h($gfmt((float)($charge['gesamt_g'] ?? 0))) ?></td></tr>
+      </tbody>
+    </table></div>
+    <div class="muted" style="font-size:12px;margin-top:8px">Gesamt je Rohstoff = „mg je Bezug" × Anzahl <?= $form==='fluessig' ? 'Tropfen (Flaschen × Tropfen/Flasche)' : 'Einheiten' ?>. Das ist deine Einkaufs- und Mischmenge. Ändere die Anzahl und „Charge berechnen".</div>
+  </div>
+  <?php endif; ?>
 
   <?php $hinw = (array)($vorschlag['hinweise'] ?? []); ?>
   <div class="bx-panel">

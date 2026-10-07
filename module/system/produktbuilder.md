@@ -17,3 +17,18 @@ je Zutat `pb_rohstoff_match()` (bestehender Lager-Rohstoff → echter Gehalt + i
 
 Einstieg: Button „Produktbuilder (KI)" im Kopf der Rezeptur-Liste. v1 – Produkt/Verpackung folgt aus der
 Rezeptur über den bestehenden Weg; Verpackungsvorschlag steht als Textfeld im Vorschlag.
+
+## Flüssig/Tropfen + Ansatz/Charge (für Produktion & Einkauf)
+Bei Form **Flüssig** rechnet `pb_liquid_rechnen($v,$ml,$tropfen_pro_ml,$dichte)`:
+- mg↔ml über die **Dichte** (MCT ≈ 0,95 g/ml), **Tropfen/ml** (dropperabhängig, Standard 25), **Flaschenvolumen**.
+- Der **Träger (MCT)** wird automatisch aufgefüllt: `menge_mg = Tropfenmasse − Σ Wirkstoffe` je Tropfen.
+- Zusammenfassung: mg je Tropfen, Tropfen je Flasche, Füllgewicht je Flasche.
+
+**IE-Umrechnung verlässlich:** `pb_ie_faktor()` liefert feste Konstanten (D3/D2 = 25 ng/IE, E = 0,667 mg/IE,
+A = 0,0003 mg/IE) – unabhängig vom Nährstoffstamm; `pb_ie_mg()` nimmt zuerst den exakten Stammwert, sonst die
+Konstante.
+
+**Ansatz/Charge** (`pb_charge($v,$einheiten)`): wie viel von JEDEM Rohstoff für eine Charge – die Misch- und
+Bestellmenge. Flüssig: Einheiten = Flaschen × Tropfen/Flasche; sonst direkt Anzahl Einheiten. Gesamt je
+Rohstoff = mg je Bezug × Einheiten (g/kg). Beispiel 100× 30-ml-Flaschen D3/K2: 750 g D3-Öl + 750 g K2-Öl +
+1350 g MCT = 2850 g (= 30 ml × 0,95 × 100). Gegengeprüft.

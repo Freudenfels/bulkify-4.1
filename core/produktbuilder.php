@@ -35,15 +35,25 @@ function pb_zutat_rechnen(array $z): array {
     return ['roh_mg'=> $rein / $frac, 'rein_mg'=>$rein, 'ok'=>true, 'hinweis'=>''];
 }
 
-// Nährstoff-Faktor ie_mg (mg je 1 IE) per Name finden – für die IE-Umrechnung (Vitamin D3/E/A …).
+// Eingebaute IE-Faktoren (mg je 1 IE) für die Vitamine, die in IE dosiert werden – verlässliche
+// physikalische Konstanten, unabhängig vom Nährstoffstamm. D3/D2 = 25 ng/IE; E (d-alpha natürlich)
+// = 0,667 mg/IE; A (Retinol) = 0,0003 mg/IE.
+function pb_ie_faktor(string $name): ?float {
+    $n = mb_strtolower(trim($name));
+    if ($n === '') return null;
+    if (preg_match('/(vitamin ?d|cholecalciferol|ergocalciferol|\bd3\b|\bd2\b)/u', $n)) return 0.000025;
+    if (preg_match('/(vitamin ?e|tocopherol)/u', $n)) return 0.667;
+    if (preg_match('/(vitamin ?a|retinol|retinyl)/u', $n)) return 0.0003;
+    return null;
+}
+// IE-Faktor ie_mg (mg je 1 IE) für einen Namen: zuerst exakter Nährstoffstamm, sonst die eingebaute
+// Konstante (zuverlässig für D3/E/A), sonst null.
 function pb_ie_mg(string $name): ?float {
     $name = trim($name);
     if ($name === '') return null;
     $v = scalar("SELECT ie_mg FROM naehrstoff WHERE name=? AND ie_mg IS NOT NULL ORDER BY id LIMIT 1", [$name]);
-    if ($v !== null) return (float)$v;
-    // Teiltreffer (z. B. „Vitamin D3 (Cholecalciferol)")
-    $v = scalar("SELECT ie_mg FROM naehrstoff WHERE ie_mg IS NOT NULL AND (? LIKE CONCAT('%',name,'%') OR name LIKE CONCAT('%',?,'%')) ORDER BY CHAR_LENGTH(name) DESC LIMIT 1", [$name, $name]);
-    return $v !== null ? (float)$v : null;
+    if ($v !== null && (float)$v > 0) return (float)$v;
+    return pb_ie_faktor($name);
 }
 
 // Bestehenden Rohstoff (item) per Name/CAS finden – damit echte Gehalte/Dokumente (CoA/Spec) genutzt
@@ -115,8 +125,11 @@ function pb_vorschlag_rechnen(array $v): array {
     foreach ((array)($v['zutaten'] ?? []) as $z) {
         $z = (array)$z;
         $ieName = (string)($z['ziel_wirkstoff'] ?? $z['name'] ?? '');
-        // IE-Faktor aus Nährstoffstamm (verlässlicher als KI-Schätzung)
-        $ie_mg = pb_ie_mg($ieName);
+        // IE-Faktor: Nährstoffstamm (verlässlichster physikalischer Faktor) schlägt den übergebenen Wert;
+        // fehlt er im Stamm, bleibt der übergebene/geschätzte ie_mg erhalten (NICHT auf null überschreiben).
+        $ie_mg = ($z['ie_mg'] ?? null) !== null && $z['ie_mg'] !== '' ? (float)$z['ie_mg'] : null;
+        $ieLookup = pb_ie_mg($ieName);
+        if ($ieLookup !== null) $ie_mg = $ieLookup;
         // Bestehenden Rohstoff suchen – echter Gehalt schlägt KI-Schätzung
         $match = pb_rohstoff_match((string)($z['name'] ?? ''), (string)($z['cas'] ?? ''));
         if ($match) {
@@ -136,6 +149,59 @@ function pb_vorschlag_rechnen(array $v): array {
     $v['zutaten'] = $zut;
     $v['gesamt_mg'] = round(array_sum(array_map(fn($z) => (float)($z['menge_mg'] ?? 0), $zut)), 3);
     return $v;
+}
+
+// Flüssig/Tropfen: füllt den Träger (z.B. MCT-Öl) automatisch auf das Tropfen-Volumen auf und rechnet
+// je Tropfen / je ml / je Flasche. Bezug ist 1 Tropfen. mg<->ml über die Dichte des Öls.
+//   $ml   = Flaschenvolumen, $tropfen_pro_ml = Tropfen je ml (dropperabhängig), $dichte = g/ml des Öls.
+function pb_liquid_rechnen(array $v, float $ml, float $tropfen_pro_ml, float $dichte): array {
+    $v = pb_vorschlag_rechnen($v);                       // Wirkstoffe: mg je Tropfen exakt
+    $tropfen_pro_ml = $tropfen_pro_ml > 0 ? $tropfen_pro_ml : 25.0;
+    $dichte         = $dichte > 0 ? $dichte : 0.95;      // MCT ~0,94–0,96 g/ml
+    $tropfenVolMl   = 1.0 / $tropfen_pro_ml;
+    $tropfenMasseMg = $tropfenVolMl * $dichte * 1000.0;  // Masse eines Tropfens in mg
+
+    // Summe der Nicht-Träger-Zutaten je Tropfen; einen Träger finden (oder später anlegen).
+    $aktivMg = 0.0; $tIdx = null;
+    foreach ($v['zutaten'] as $i => $z) {
+        if ((string)($z['rolle'] ?? '') === 'traeger') { $tIdx = $i; continue; }
+        $aktivMg += (float)($z['menge_mg'] ?? 0);
+    }
+    $traegerMg = $tropfenMasseMg - $aktivMg;             // Rest = Träger füllt den Tropfen auf
+    $tHinweis  = $traegerMg < 0 ? 'Wirkstoffe überschreiten das Tropfenvolumen – größere Tropfen/Flasche oder konzentriertere Rohstoffe wählen.' : '';
+    if ($tIdx === null) {
+        $v['zutaten'][] = ['name'=>'MCT-Öl', 'ziel_wirkstoff'=>'', 'ziel_dosis'=>'', 'ziel_einheit'=>'mg',
+            'gehalt_wert'=>'', 'gehalt_einheit'=>'prozent', 'rolle'=>'traeger',
+            'menge_mg'=>round(max(0.0, $traegerMg), 4), 'calc_ok'=>($traegerMg >= 0), 'calc_hinweis'=>$tHinweis];
+    } else {
+        $v['zutaten'][$tIdx]['menge_mg']     = round(max(0.0, $traegerMg), 4);
+        $v['zutaten'][$tIdx]['calc_ok']      = ($traegerMg >= 0);
+        $v['zutaten'][$tIdx]['calc_hinweis'] = $tHinweis;
+    }
+    $v['gesamt_mg'] = round(array_sum(array_map(fn($z) => (float)($z['menge_mg'] ?? 0), $v['zutaten'])), 3);
+    $v['liquid'] = [
+        'ml' => $ml, 'tropfen_pro_ml' => $tropfen_pro_ml, 'dichte' => $dichte,
+        'tropfen_gesamt'        => (int) round($ml * $tropfen_pro_ml),
+        'masse_je_tropfen_mg'   => round($tropfenMasseMg, 3),
+        'fuellgewicht_flasche_g'=> round($ml * $dichte, 2),
+    ];
+    return $v;
+}
+
+// Ansatz/Charge: wie viel von jedem Rohstoff für $einheiten Einheiten (Tropfen/Kapseln/Portionen) –
+// das ist die Misch-/Bestellmenge. Rückgabe: Zeilen je Zutat (je Einheit mg, gesamt mg/g/kg) + Summen.
+function pb_charge(array $v, float $einheiten): array {
+    $einheiten = max(0.0, $einheiten);
+    $rows = []; $sum = 0.0;
+    foreach ((array)($v['zutaten'] ?? []) as $z) {
+        $mg  = (float)($z['menge_mg'] ?? 0);
+        $ges = $mg * $einheiten;
+        $sum += $ges;
+        $rows[] = ['name'=>(string)($z['name'] ?? ''), 'rolle'=>(string)($z['rolle'] ?? ''),
+                   'je_einheit_mg'=>$mg, 'gesamt_mg'=>$ges, 'gesamt_g'=>$ges/1000, 'gesamt_kg'=>$ges/1e6,
+                   'item_id'=>(int)($z['item_id'] ?? 0) ?: null];
+    }
+    return ['einheiten'=>$einheiten, 'zeilen'=>$rows, 'gesamt_g'=>$sum/1000, 'gesamt_kg'=>$sum/1e6];
 }
 
 // Rezeptur (Entwurf) aus dem (ggf. editierten) Vorschlag anlegen. Rückgabe: ['ok','rezeptur_id','fehler'].
