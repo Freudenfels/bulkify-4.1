@@ -3620,23 +3620,58 @@ function kunde_hat_rechnungsadresse(int $kunde_id): bool {
 // Eine (offene) Rechnung neu berechnen: USt-Satz + Betrag + Brutto aus dem aktuellen Kunden neu setzen und –
 // falls jetzt eine Adresse vorliegt – den „Adresse fehlt"-Hinweis entfernen. NICHT bei bezahlten/stornierten.
 // Rückgabe: ['ok'=>bool, 'ust_prozent'=>float, 'sichtbar'=>bool, 'fehler'=>string].
+// Die detaillierten Positionen (Produkt + Glas + Deckel + Etikett …) aus dem Auftrag/Angebot in die
+// beleg_position-Tabelle MATERIALISIEREN – so sieht das Team im Buchhaltungs-Beleg dieselbe Aufschlüsselung
+// wie der Kunde, die Team-PDF funktioniert und alle Summen/USt sind konsistent. $ustSatz = der anzuwendende
+// Satz (sonst Produktsatz). Rückgabe: Anzahl Positionszeilen. Setzt auch die Kopf-Summen (netto/ust/brutto).
+function beleg_positionen_materialisieren(int $beleg_id, ?float $ustSatz = null): int {
+    $b = one("SELECT * FROM beleg WHERE id=? AND typ='rechnung'", [$beleg_id]);
+    if (!$b || empty($b['auftrag_id'])) return 0;
+    $auf = one("SELECT * FROM auftrag WHERE id=?", [(int)$b['auftrag_id']]);
+    if (!$auf) return 0;
+    if ($ustSatz === null) $ustSatz = produkt_ust_satz((int)($auf['produkt_id'] ?? 0), (int)$b['kunde_id']);
+    $menge = max(1, (int)($auf['menge'] ?? 0));
+    $nettoGesamt = (float)($b['netto'] ?? 0) ?: (float)($auf['gesamt_netto'] ?? 0);
+    $pos = beleg_positionen_aus_auftrag(['angebot_id'=>$auf['angebot_id'] ?? null, 'menge'=>$menge, 'gesamt_netto'=>$nettoGesamt], $ustSatz);
+    if (!$pos) {   // keine exakte Aufschlüsselung -> eine Sammelposition (Produktname)
+        $bez = (string) scalar("SELECT COALESCE(NULLIF(kundenname,''),name) FROM produkt WHERE id=?", [(int)($auf['produkt_id'] ?? 0)]) ?: 'Produkt';
+        $pos = [['bezeichnung'=>$bez, 'beschreibung'=>'', 'menge'=>$menge, 'einheit'=>'Stk.',
+                 'preis_cent'=>(int) round(($menge > 0 ? $nettoGesamt / $menge : $nettoGesamt) * 100), 'ust_satz'=>$ustSatz]];
+    }
+    q("DELETE FROM beleg_position WHERE beleg_id=?", [$beleg_id]);
+    $sort = 0;
+    foreach ($pos as $p) {
+        q("INSERT INTO beleg_position (beleg_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz) VALUES (?,?,?,?,?,?,?,?,?)",
+          [$beleg_id, $sort++, (string)($p['artikelnr'] ?? ''), (string)$p['bezeichnung'], (string)($p['beschreibung'] ?? ''),
+           (float)$p['menge'], (string)($p['einheit'] ?? 'Stk.'), (int)$p['preis_cent'], (float)($p['ust_satz'] ?? $ustSatz)]);
+    }
+    $rows = all("SELECT menge, preis_cent, mwst_satz FROM beleg_position WHERE beleg_id=?", [$beleg_id]);
+    $s = beleg_summen_aus_positionen($rows);
+    q("UPDATE beleg SET netto=?, ust_prozent=?, ust_betrag=?, brutto=? WHERE id=?",
+      [round((float)$s['netto'],2), $ustSatz, round((float)$s['ust'],2), round((float)$s['brutto'],2), $beleg_id]);
+    return count($pos);
+}
+
 function beleg_neu_berechnen(int $beleg_id): array {
     $b = one("SELECT * FROM beleg WHERE id=? AND typ='rechnung'", [$beleg_id]);
     if (!$b) return ['ok'=>false, 'fehler'=>'Rechnung nicht gefunden.'];
     if (in_array((string)$b['status'], ['bezahlt','storniert'], true)) return ['ok'=>false, 'fehler'=>'Bezahlte/stornierte Rechnungen werden nicht neu berechnet.'];
-    $netto = (float)$b['netto'];
     $pidB  = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [(int)($b['auftrag_id'] ?? 0)]);
     $ustP  = produkt_ust_satz($pidB, (int)$b['kunde_id']);
-    // WICHTIG: die MwSt-Summe der Rechnung/PDF kommt aus den POSITIONEN (mwst_satz). Also die Positionen
-    // mit dem neuen Satz versehen und die Kopf-Summen daraus neu bilden – sonst zeigt die PDF 0 % MwSt.
-    q("UPDATE beleg_position SET mwst_satz=? WHERE beleg_id=?", [$ustP, $beleg_id]);
-    $pos = beleg_positionen($beleg_id);
-    if ($pos) { $s = beleg_summen_aus_positionen($pos); $netto = round((float)$s['netto'], 2); $ust = round((float)$s['ust'], 2); $brutto = round((float)$s['brutto'], 2); }
-    else      { $ust = round($netto * $ustP / 100, 2); $brutto = round($netto + $ust, 2); }
+    // Positionen materialisieren (falls nur Gesamtbetrag) + auf den neuen Satz setzen; Kopf-Summen daraus.
+    if (!empty($b['auftrag_id'])) {
+        beleg_positionen_materialisieren($beleg_id, $ustP);
+    } else {
+        // Freie Rechnung ohne Auftrag: vorhandene Positionen auf den Satz setzen, Summen neu bilden.
+        q("UPDATE beleg_position SET mwst_satz=? WHERE beleg_id=?", [$ustP, $beleg_id]);
+        $rows = all("SELECT menge, preis_cent, mwst_satz FROM beleg_position WHERE beleg_id=?", [$beleg_id]);
+        if ($rows) { $s = beleg_summen_aus_positionen($rows); $netto = round((float)$s['netto'],2); $ust = round((float)$s['ust'],2); $brutto = round((float)$s['brutto'],2); }
+        else       { $netto = (float)$b['netto']; $ust = round($netto * $ustP / 100, 2); $brutto = round($netto + $ust, 2); }
+        q("UPDATE beleg SET ust_prozent=?, ust_betrag=?, brutto=? WHERE id=?", [$ustP, $ust, $brutto, $beleg_id]);
+    }
     $hatAdr = kunde_hat_rechnungsadresse((int)$b['kunde_id']);
     $text   = (string)($b['text'] ?? '');
-    if ($hatAdr) $text = trim(preg_replace('/Rechnungsadresse fehlt[^\n]*/u', '', $text));
-    q("UPDATE beleg SET netto=?, ust_prozent=?, ust_betrag=?, brutto=?, text=? WHERE id=?", [$netto, $ustP, $ust, $brutto, $text !== '' ? $text : null, $beleg_id]);
+    if ($hatAdr) { $text = trim(preg_replace('/Rechnungsadresse fehlt[^\n]*/u', '', $text)); q("UPDATE beleg SET text=? WHERE id=?", [$text !== '' ? $text : null, $beleg_id]); }
     return ['ok'=>true, 'ust_prozent'=>$ustP, 'sichtbar'=>$hatAdr, 'fehler'=>''];
 }
 // Die einzig zulaessigen deutschen Mehrwertsteuersaetze. Nichts anderes darf in einer Position stehen.
@@ -6819,6 +6854,8 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,text,kunde_sichtbar)
        VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),?,?)",
       [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen', $hinw, $sicht]);
+    // Detaillierte Positionen (Produkt + Glas + Etikett) materialisieren -> Team sieht sie, PDF funktioniert.
+    beleg_positionen_materialisieren((int) insert_id(), $ustP);
     // Produktionsauftrag (PR) + Stationen automatisch anlegen
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$a['produkt_id']]) ?: 'kapsel';
     // Standard = Fremdproduktion (verkürzter Weg); auf Eigenproduktion umstellbar im Produktions-Detail.
@@ -6876,16 +6913,9 @@ function rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     // Ersteller als Bearbeiter im Verlauf festhalten.
     $ersteller = trim((string)($opt['ersteller'] ?? '')) ?: 'team';
     if (function_exists('beleg_status_log_add')) beleg_status_log_add($bid, 'offen', 'Rechnung aus Auftrag ' . (string)$a['nummer'] . ' erstellt' . ($sicht ? ', für Kunde freigegeben' : ''), $ersteller);
-    // Eine Positionszeile aus dem Auftrag (Produkt × Menge × VK). Passt die Zeilensumme nicht exakt
-    // zum Netto (z. B. Sub-Cent-Preise), wird eine Pauschal-Zeile (Menge 1 = Netto) gesetzt.
-    $prodName = (string) (scalar("SELECT COALESCE(NULLIF(p.kundenname,''), p.name) FROM produkt p WHERE p.id=?", [(int)($a['produkt_id'] ?? 0)])
-        ?: ($a['produkt_bezeichnung'] ?? '')) ?: ('Leistung laut Auftrag ' . (string)$a['nummer']);
-    $preisCent = (int) round($vk * 100);
-    $nettoCent = (int) round($netto * 100);
-    if ($menge > 0 && $preisCent * $menge === $nettoCent) { $pMenge = $menge; $pEinheit = 'Stk.'; }
-    else { $pMenge = 1; $preisCent = $nettoCent; $pEinheit = ''; }
-    q("INSERT INTO beleg_position (beleg_id,sort,bezeichnung,menge,einheit,preis_cent,mwst_satz) VALUES (?,0,?,?,?,?,?)",
-      [$bid, $prodName, $pMenge, $pEinheit, $preisCent, $ustP]);
+    // Detaillierte Positionen (Produkt + Glas + Deckel + Etikett) aus dem Auftrag materialisieren – so sieht
+    // das Team dieselbe Aufschlüsselung wie der Kunde. Fallback (keine exakte Aufschlüsselung): eine Sammelzeile.
+    beleg_positionen_materialisieren($bid, $ustP);
     if (!empty($a['kunde_id'])) {
         $re = (string) scalar("SELECT nummer FROM beleg WHERE id=?", [$bid]);
         log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Rechnung ' . $re . ' aus Auftrag ' . (string)$a['nummer'] . ' erstellt.', 'beleg', 'auftrag', $auftrag_id);
