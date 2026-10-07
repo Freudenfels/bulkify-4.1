@@ -519,7 +519,12 @@ function nwAddRow(){
 </div>
 <?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=rezeptur_detail&id=' . (int)$id); ?>
 
-<?php // Dokument-Vorschau (CoA/Spec) als Popup: Inline-Ansicht im iframe + Download. ?>
+<?php endif; ?>
+
+<?php // Dokument-Vorschau (CoA/Spec) als Popup: Inline-Ansicht im iframe + Download.
+      // IMMER rendern (auch bei neuer Rezeptur) – die Zutatenliste nutzt bxDocOeffnen() für die
+      // Spec/CoA-Links; früher lag das Overlay im „Rohstoffpreise"-Block (nur bei gespeicherten
+      // Rezepturen), daher öffnete sich bei einer neuen Rezeptur nichts. ?>
 <div id="bxDocOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;align-items:center;justify-content:center;padding:16px">
   <div class="bx-panel" style="max-width:920px;width:100%;height:90vh;max-height:92vh;display:flex;flex-direction:column;margin:0">
     <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -538,7 +543,6 @@ function bxDocZu(){ var o=document.getElementById('bxDocOverlay'); o.style.displ
 document.addEventListener('keydown', function(e){ if(e.key==='Escape') bxDocZu(); });
 document.getElementById('bxDocOverlay').addEventListener('click', function(e){ if(e.target===this) bxDocZu(); });
 </script>
-<?php endif; ?>
 
 <?php // Wo wurde diese Rezeptur als Fertigprodukt (Fremdfertigung) angefragt? Schnell sehen, ob schon angefragt.
   $prodAnfragen = $neu ? [] : anfrage_produkt_anfragen((int)$id);

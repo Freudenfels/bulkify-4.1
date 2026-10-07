@@ -72,3 +72,6 @@ nichts (Status bleibt gespeichert). Aktionen: `ueberarbeiten_start`, `ueberarbei
 Zutaten-Editor zeigt je Zeile einen Match-Badge (`rezeptur_zutat_match`): „nicht zugeordnet / Rohstoff fehlt /
 ohne Wirkstoffdaten"; bei Freitext-Zeilen wird der ursprüngliche `bezeichnung`-Name als Suchhilfe vorbefüllt.
 Worklist aller betroffenen Rezepturen: [umbau.md](umbau.md).
+
+## Fix 2026-10-07: Spec/CoA-Popup auch bei neuer Rezeptur
+Das Dokument-Popup (`bxDocOverlay` + `bxDocOeffnen()`) lag früher im Block `if ($rzZutaten)` (Panel „Rohstoffpreise“, nur bei gespeicherten Rezepturen). Bei einer NEUEN Rezeptur war die Funktion daher nicht definiert – Klick auf „Spez. (bulkify)“ in der Zutatenliste tat nichts. Overlay + Script jetzt ausserhalb des `if` (immer gerendert).
