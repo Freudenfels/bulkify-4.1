@@ -521,7 +521,7 @@ function nwAddRow(){
 
 <?php // Dokument-Vorschau (CoA/Spec) als Popup: Inline-Ansicht im iframe + Download. ?>
 <div id="bxDocOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;align-items:center;justify-content:center;padding:16px">
-  <div class="bx-panel" style="max-width:920px;width:100%;max-height:92vh;display:flex;flex-direction:column;margin:0">
+  <div class="bx-panel" style="max-width:920px;width:100%;height:90vh;max-height:92vh;display:flex;flex-direction:column;margin:0">
     <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
       <strong id="bxDocTitel">Dokument</strong>
       <div class="bx-row" style="gap:8px">
@@ -529,7 +529,7 @@ function nwAddRow(){
         <button type="button" class="btn btn-ghost btn-sm" onclick="bxDocZu()">Schließen</button>
       </div>
     </div>
-    <iframe id="bxDocFrame" src="" style="flex:1;width:100%;height:72vh;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>
+    <iframe id="bxDocFrame" src="" style="flex:1;min-height:0;width:100%;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>
   </div>
 </div>
 <script>
