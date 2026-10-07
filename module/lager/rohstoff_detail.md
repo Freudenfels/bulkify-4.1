@@ -81,3 +81,15 @@ dann erscheint das bulkify-CoA. Original des Lieferanten bleibt intern.
 (`?p=spec_bulkify&id=<item>`, allgemein, kundentauglich) – plus das **CoA je Charge** mit Analysewerten
 (`coa_bulkify`). Ohne Analyse-Charge erscheint ein Hinweis statt leerer Liste. So ist auch bei Rohstoffen
 ohne CoA-Charge mindestens die bulkify-Spezifikation da.
+
+## Spec/CoA-Upload ist KI-gestützt – aber Stammdaten brauchen „Übernehmen"
+Beim Hochladen eines Dokuments (Reiter Dokumente, `dok_upload`) wird eine Datei mit Typ `spec`/`coa`/`analyse`
+sofort per KI ausgelesen (`spec_ki_nach_upload`), sofern die KI aktiv ist (`ki_bereit()`). Dabei werden
+**Kennwerte, Wirkstoffe und Grenzwerte additiv ergänzt** und bei einer CoA eine Vorab-Charge angelegt
+(`spec_ki_anwenden`). Die **Stammdaten** (Name, CAS, Herkunft, Allergene, vegan/GVO …) werden NICHT
+automatisch geändert – sie landen als **Vorschlag** und müssen im Reiter Spezifikation per **„Übernehmen"**
+(`ki_uebernehmen`) bestätigt werden. Nach dem Upload leitet die Seite bei vorhandenem Vorschlag direkt in den
+Reiter `spec` (`&kiauto=1&kidok=<id>`) und zeigt den Vorschlag ohne Extra-Klick (GET-Variante von `ki_zeigen`).
+Konnte die KI nicht lesen (nicht aktiv oder Scan ohne Textebene) → Hinweis `&kioff=1`. Darum wirkt ein Upload
+„ohne Änderung", wenn Kennwerte/Wirkstoffe schon vorhanden waren und der Stammdaten-Vorschlag nicht übernommen
+wurde.

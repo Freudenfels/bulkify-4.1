@@ -112,6 +112,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ze
     $kiDok = $did;
     if (!$kiVorschlag) $kiFehler = 'Zu dieser Datei liegt kein Vorschlag vor.';
 }
+// Direkt nach dem Upload (&kidok=) den frisch erzeugten Vorschlag ohne Extra-Klick anzeigen.
+if (!$kiVorschlag && !$neu && ($_GET['kidok'] ?? '') !== '') {
+    $gd = (int)$_GET['kidok'];
+    if ($gd && scalar("SELECT id FROM dokument WHERE id=? AND objekt_typ='item' AND objekt_id=?", [$gd, (int)$id])) {
+        require_once BX_ROOT . '/core/spec_ki.php';
+        $kiVorschlag = spec_ki_vorschlag($gd);
+        if ($kiVorschlag) $kiDok = $gd;
+    }
+}
 // Geprüfte Felder in die Stammdaten übernehmen.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_uebernehmen' && !$neu) {
     require_once BX_ROOT . '/core/spec_ki.php';
@@ -150,17 +159,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'analy
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_upload' && !$neu) {
     $dokId = dokument_upload('item', (int)$id);
-    // Frisch hochgeladene Spezifikationen und CoA gleich auslesen - der Vorschlag wartet dann
-    // im Reiter Spezifikation auf die Pruefung.
-    $coaChargeNeu = 0;
+    // Frisch hochgeladene Spezifikationen/CoA gleich mit der KI auslesen. Kennwerte/Wirkstoffe/Grenzwerte
+    // werden additiv ergaenzt; die STAMMDATEN-Vorschlaege warten im Reiter Spezifikation aufs Uebernehmen.
+    $coaChargeNeu = 0; $kiAuto = 0; $kiOff = 0;
     if ($dokId) {
         require_once BX_ROOT . '/core/spec_ki.php';
-        // Liest die Datei aus und legt bei einer CoA automatisch Vorab-Charge + Grenzwerte an.
-        spec_ki_nach_upload($dokId);
-        $erg = spec_ki_vorschlag($dokId);
-        if ($erg && in_array((string)($erg['typ'] ?? ''), ['coa', 'beides'], true)) $coaChargeNeu = 1;
+        $dTyp = (string) scalar("SELECT typ FROM dokument WHERE id=?", [$dokId]);
+        if (in_array($dTyp, ['spec', 'coa', 'analyse'], true)) {
+            $kiOk = spec_ki_nach_upload($dokId);          // liest + legt bei CoA Vorab-Charge/Grenzwerte an
+            $erg  = $kiOk ? spec_ki_vorschlag($dokId) : null;
+            if ($erg) {
+                $kiAuto = 1;
+                if (in_array((string)($erg['typ'] ?? ''), ['coa', 'beides'], true)) $coaChargeNeu = 1;
+            } else {
+                $kiOff = 1;                                // KI nicht aktiv oder Datei (Scan) nicht auslesbar
+            }
+        }
     }
-    header('Location: ?p=rohstoff&id=' . $id . '&tab=dok&gespeichert=1' . ($coaChargeNeu ? '&coacharge=' . $coaChargeNeu : '')); exit;
+    // Bei KI-Vorschlag direkt in den Reiter Spezifikation – dort steht der Vorschlag zum Übernehmen.
+    $zielTab = $kiAuto ? 'spec' : 'dok';
+    header('Location: ?p=rohstoff&id=' . $id . '&tab=' . $zielTab . '&gespeichert=1'
+        . ($coaChargeNeu ? '&coacharge=1' : '') . ($kiAuto ? '&kiauto=1&kidok=' . (int)$dokId : '') . ($kiOff ? '&kioff=1' : '')); exit;
 }
 // bulkify-Spezifikation für den Kunden freigeben bzw. Freigabe zurückziehen (separater Schritt).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_freigabe' && !$neu) {
@@ -379,7 +398,9 @@ bx_head($neu ? 'Neuer Rohstoff' : $v('name'),
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.'
     . (isset($_GET['coacharge']) ? ' Aus der CoA wurde eine Charge angelegt (noch ohne Ware) – bei der Warenannahme wird sie über die Chargennummer abgeglichen und eingebucht.' : '')
+    . (isset($_GET['kiauto']) ? ' Die KI hat die Datei ausgelesen: Kennwerte, Wirkstoffe und Grenzwerte wurden ergänzt. Die <strong>Stammdaten-Vorschläge</strong> (Name, CAS, Herkunft, Allergene …) stehen unten im Reiter <strong>Spezifikation</strong> – dort prüfen und auf <strong>„Übernehmen"</strong> klicken.' : '')
     . '</div>';
+if (isset($_GET['kioff'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Datei gespeichert, aber die KI konnte sie nicht auslesen (KI nicht aktiv oder ein Scan ohne Textebene). Werte bitte von Hand erfassen.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 if (isset($_GET['flok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Ins Fremdlager umgebucht – die Menge zählt jetzt zum Kundenbestand, nicht mehr zu unserem.</div>';
 if (isset($_GET['flfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['flfehler']) . '</div>';
