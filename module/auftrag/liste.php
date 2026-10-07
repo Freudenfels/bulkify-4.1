@@ -58,7 +58,7 @@ $statusBadge = function($r) {
     return match ($r['status']) {
         'offen'         => bx_badge('offen','info'),
         'in_produktion' => bx_badge('in Produktion','warn'),
-        'erledigt'      => bx_badge($ff ? 'bereit zur Einlagerung' : 'versandbereit','info'),
+        'erledigt'      => bx_badge('versandbereit','info'),
         'versendet'     => bx_badge($ff ? 'abgeschlossen' : 'versendet','ok'),
         default         => bx_badge(status_text($r['status'])),
     };

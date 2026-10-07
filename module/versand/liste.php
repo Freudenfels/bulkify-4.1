@@ -4,9 +4,14 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 
 $hinweis = ''; $fehler = '';
+// Das Lager entscheidet je Auftrag: an den Kunden senden ODER an Lager 2 (Fremdlager) übergeben.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'versenden') {
     $res = auftrag_versenden((int)($_POST['auftrag_id'] ?? 0));
     header('Location: ?p=versand&' . ($res['ok'] ? 'ok=1' : 'fehler=' . urlencode($res['msg']))); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'an_lager2') {
+    $res = auftrag_ins_fremdlager((int)($_POST['auftrag_id'] ?? 0));
+    header('Location: ?p=versand&' . ($res['ok'] ? 'l2=1' : 'fehler=' . urlencode($res['msg']))); exit;
 }
 
 $q    = trim($_GET['q'] ?? '');
@@ -28,7 +33,8 @@ if ($q !== '') {
 
 render_header('versand', 'Versand');
 bx_head('Versand', count($rows) . ' Aufträge');
-if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag versendet – Fertigware ausgebucht, Lieferschein erstellt.</div>';
+if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">An den Kunden versendet – Fertigware ausgebucht, Lieferschein erstellt.</div>';
+if (isset($_GET['l2'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">An Lager 2 (Fremdlager) übergeben – der Bestand bleibt dort, bis der Endkunde bestellt.</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($_GET['fehler']) . '</div>';
 ?>
 <form class="bx-listbar" method="get">
@@ -52,11 +58,16 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
       <td class="bx-num"><?= (int)$r['menge'] ?></td>
       <td class="bx-num"><?= (int)$r['fertig_frei'] ?></td>
       <td><?= $r['lieferschein_nr'] ? h($r['lieferschein_nr']) : '<span class="muted">–</span>' ?></td>
-      <td><?= $versendet ? bx_badge($ff ? 'im Fremdlager' : 'versendet','ok') : bx_badge($ff ? 'für das Fremdlager' : 'versandbereit','info') ?></td>
+      <td><?= $versendet ? bx_badge('abgeschlossen','ok') : bx_badge('versandbereit','info') ?></td>
       <td style="text-align:right">
         <?php if (!$versendet): ?>
           <?php if ($genug): ?>
-            <form method="post" style="display:inline"><input type="hidden" name="aktion" value="versenden"><input type="hidden" name="auftrag_id" value="<?= (int)$r['id'] ?>"><button class="btn btn-primary btn-sm" type="submit"><?= $ff ? 'Ins Fremdlager' : 'Versenden' ?></button></form>
+            <div class="bx-row" style="gap:6px;justify-content:flex-end;flex-wrap:wrap">
+              <form method="post" style="margin:0"><input type="hidden" name="aktion" value="versenden"><input type="hidden" name="auftrag_id" value="<?= (int)$r['id'] ?>"><button class="btn btn-primary btn-sm" type="submit" title="An den Kunden ausliefern (Lieferschein, Fertigware ausbuchen)">An Kunden senden</button></form>
+              <?php if ($ff): ?>
+              <form method="post" style="margin:0"><input type="hidden" name="aktion" value="an_lager2"><input type="hidden" name="auftrag_id" value="<?= (int)$r['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit" title="An das Fremdlager (Lager 2) übergeben – Bestand bleibt bis zur Endkundenbestellung">An Lager 2 übergeben</button></form>
+              <?php endif; ?>
+            </div>
           <?php else: ?>
             <span class="badge badge-warn">zu wenig Fertigware</span>
           <?php endif; ?>

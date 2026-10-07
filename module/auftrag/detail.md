@@ -73,3 +73,6 @@ Auftrag nutzt die frische Version. Danach Sprung in die Kopie (editierbar) zum R
 ziehen automatisch die **aktuellen Spec/CoA** der nun korrekt zugeordneten Rohstoffe. Idempotent: nutzt der
 Auftrag bereits eine eigene (vom Produkt abweichende) Rezeptur, wird diese weiterverwendet (Badge
 „Auftrags-Kopie", Button „Auftrags-Rezeptur bearbeiten") statt ein zweiter Klon.
+
+## Einlagern/Versand vereinheitlicht (2026-10-08)
+Einlagern geht IMMER in **Lager 1** (`einlager_ziel_fuer_pa()` liefert immer lager1; `einlager_buchen()` bucht nur noch die Fertigware + schließt die Aufgabe, setzt NICHT mehr „versendet" bei Fulfillment). Button am Auftrag: **„In Lager 1 buchen"** -> Auftrag wird **versandbereit** (Status `erledigt`, Label einheitlich „versandbereit", kein „bereit zur Einlagerung" mehr). Erst beim **Versand** entscheidet das Lager: **An Kunden senden** (`auftrag_versenden`, Lieferschein + FEFO-Ausbuchen) ODER **An Lager 2 übergeben** (`auftrag_ins_fremdlager`). `auftrag_versenden()` leitet NICHT mehr automatisch ins Fremdlager um.

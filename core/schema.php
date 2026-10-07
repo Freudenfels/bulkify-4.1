@@ -2718,13 +2718,9 @@ function produktion_fertigware_einbuchen(int $pa_id): ?int {
 // ===== Einlagern: Produktion → Lager-Übergabe (das LAGER bucht in Lager 1 oder 2) =====
 // Ziel je Produktionsauftrag: Fulfillment-Kunde → Lager 2 (Fremdlager), sonst Lager 1 (Warenlager/Versand).
 function einlager_ziel_fuer_pa(int $pa_id): array {
-    $pa = one("SELECT auftrag_id, produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
-    $ff = false;
-    if ($pa) {
-        if (!empty($pa['auftrag_id'])) $ff = auftrag_ist_fulfillment((int)$pa['auftrag_id']);
-        if (!$ff && !empty($pa['produkt_id'])) $ff = (bool) scalar("SELECT k.nutzt_fulfillment FROM produkt p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [(int)$pa['produkt_id']]);
-    }
-    return $ff ? ['ziel'=>'lager2', 'label'=>'Lager 2 (Fremdlager)'] : ['ziel'=>'lager1', 'label'=>'Lager 1 (Warenlager)'];
+    // Einlagern geht IMMER zuerst in Lager 1 (Warenlager) – auch für Fulfillment-Kunden. Erst danach
+    // entscheidet das Lager beim Versand: an den Kunden senden ODER an Lager 2 (Fremdlager) übergeben.
+    return ['ziel'=>'lager1', 'label'=>'Lager 1 (Warenlager)'];
 }
 // Produktion an das Lager übergeben: legt eine Lager-Aufgabe „Einlagern … → Lager 1/2" an. Idempotent je PA.
 function produktion_an_lager_uebergeben(int $pa_id): int {
@@ -2746,17 +2742,11 @@ function produktion_an_lager_uebergeben(int $pa_id): int {
 // Das Lager bucht die Fertigware ein (Ziel L1/L2 ergibt sich aus Produkt/Kunde) und schließt die Einlager-Aufgabe.
 // Idempotent: ist schon alles gebucht, wird nur die Aufgabe geschlossen. Rückgabe: ['ok','charge_id','ziel','label'].
 function einlager_buchen(int $pa_id): array {
+    // Bucht die Fertigware IMMER in Lager 1 (Warenlager). Der Auftrag bleibt danach „versandbereit" – auch
+    // bei Fulfillment-Kunden. Die Weiterleitung (an Kunden senden ODER an Lager 2 übergeben) entscheidet das
+    // Lager erst beim Versand (auftrag_versenden / auftrag_ins_fremdlager). So ist der Ablauf für alle gleich.
     $cid  = produktion_fertigware_einbuchen($pa_id);
     $ziel = einlager_ziel_fuer_pa($pa_id);
-    // Fulfillment: mit dem Einlagern ins Lager 2 (Fremdlager) ist der Auftrag für den Kunden abgeschlossen
-    // (Phase „Eingelagert", wandert ins Kunden-Archiv). Normale Kunden bleiben „Versandbereit" bis zum Versand.
-    if ($ziel['ziel'] === 'lager2') {
-        $pa = one("SELECT auftrag_id, kunde_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
-        if ($pa && !empty($pa['auftrag_id'])) {
-            q("UPDATE auftrag SET status='versendet' WHERE id=? AND status NOT IN ('storniert','versendet')", [(int)$pa['auftrag_id']]);
-            if (!empty($pa['kunde_id'])) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'In Lager 2 (Fremdlager) eingelagert – Auftrag abgeschlossen.', 'auftrag', 'auftrag', (int)$pa['auftrag_id']);
-        }
-    }
     foreach (all("SELECT id FROM aufgabe WHERE ref_typ='einlagern' AND ref_id=? AND status='offen'", [$pa_id]) as $a)
         aufgabe_erledigen((int)$a['id'], null);
     return ['ok'=>true, 'charge_id'=>$cid, 'ziel'=>$ziel['ziel'], 'label'=>$ziel['label']];
@@ -6859,8 +6849,9 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
 }
 
 function auftrag_versenden(int $auftrag_id): array {
-    // Kunden mit Fulfillment bekommen nichts geschickt – ihre Ware bleibt bei uns im Fremdlager.
-    if (auftrag_ist_fulfillment($auftrag_id)) return auftrag_ins_fremdlager($auftrag_id);
+    // „An den Kunden senden" – echte Auslieferung (FEFO-Ausbuchen + Lieferschein). Die Entscheidung
+    // Kunde vs. Lager 2 trifft das Lager jetzt explizit beim Versand; es gibt daher KEINE automatische
+    // Weiterleitung ins Fremdlager mehr (dafür ruft die Versandseite auftrag_ins_fremdlager() auf).
     $a = one("SELECT * FROM auftrag WHERE id=? AND status='erledigt'", [$auftrag_id]);
     if (!$a) return ['ok'=>false, 'msg'=>'Auftrag ist nicht versandbereit (Produktion muss abgeschlossen sein).'];
     $vfitem = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$a['produkt_id']]) ?: 0);

@@ -336,13 +336,13 @@ $rezeptur = $rezEffId ? one("SELECT id, nummer, name, darreichungsform, kapselgr
 $prodRezId   = !empty($a['produkt_id']) ? (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]) : 0;
 $rezIstKopie = $rezEffId && $rezEffId !== $prodRezId;
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
-// Fulfillment-Kunde? Dann wird die Ware eingelagert, nicht versendet: der Abschluss heißt „abgeschlossen"
-// (statt „versendet"), „erledigt" = „bereit zur Einlagerung". Ein zentraler Label-Helfer für alle Status-Anzeigen.
+// „erledigt" = versandbereit (Ware in Lager 1, für alle gleich). Bei Fulfillment heißt der Abschluss
+// „abgeschlossen" (Ware ging ins Fremdlager/Lager 2), sonst „versendet". Zentraler Label-Helfer.
 $ffAuftrag = $id ? auftrag_ist_fulfillment($id) : false;
 $stLbl = fn($s) => match ((string)$s) {
     'offen'         => 'offen',
     'in_produktion' => 'in Produktion',
-    'erledigt'      => $ffAuftrag ? 'bereit zur Einlagerung' : 'versandbereit',
+    'erledigt'      => 'versandbereit',
     'versendet'     => $ffAuftrag ? 'abgeschlossen' : 'versendet',
     'storniert'     => 'storniert',
     default         => status_text((string)$s),
@@ -364,17 +364,12 @@ $istFremd = $pa && ($pa['produktionsart'] ?? '') === 'fremd';
 //  (c) Fulfillment-Altauftrag: Ware bereits gebucht (rest=0), aber der Auftrag ist noch nicht auf
 //      'versendet' finalisiert (Leberkomplex-Fall) → erst das Finalisieren schiebt ihn ins Kunden-Archiv.
 $paRest        = $pa ? produktion_rest((int)$pa['id']) : 0.0;
-$einlagerZiel  = $pa ? einlager_ziel_fuer_pa((int)$pa['id']) : ['ziel'=>'', 'label'=>''];
+$einlagerZiel  = $pa ? einlager_ziel_fuer_pa((int)$pa['id']) : ['ziel'=>'', 'label'=>''];   // immer Lager 1
 $einlagerOffeneAufgabe = $pa ? (int) scalar("SELECT COUNT(*) FROM aufgabe WHERE ref_typ='einlagern' AND ref_id=? AND status='offen'", [(int)$pa['id']]) : 0;
-$istFulfillmentZiel    = ($einlagerZiel['ziel'] ?? '') === 'lager2';
 $einlagerErledigt      = $pa && ($pa['status'] ?? '') === 'erledigt';
-$einlagerNoetig = $einlagerErledigt && (
-       $paRest > 0.0001
-    || $einlagerOffeneAufgabe > 0
-    || ($istFulfillmentZiel && ($a['status'] ?? '') !== 'versendet')
-);
-// Reiner Finalisierungs-Fall (Ware schon gebucht, nur noch ins Archiv schieben) → anderer Button-Text.
-$einlagerNurFinal = $einlagerNoetig && $paRest <= 0.0001;
+// Einlagern nötig, solange fertig produziert ist und noch nicht alles in Lager 1 gebucht wurde
+// (offene Menge) ODER noch eine Einlager-Aufgabe offen liegt. Danach entscheidet das Lager beim Versand.
+$einlagerNoetig = $einlagerErledigt && ($paRest > 0.0001 || $einlagerOffeneAufgabe > 0);
 $paStatusBadge = $pa ? match ($pa['status']) {
     'vorbereitung'=>bx_badge('Vorbereitung','warn'),
     'offen'=>bx_badge('offen','info'),'laufend'=>bx_badge('läuft','warn'),'erledigt'=>bx_badge('fertig','ok'),
@@ -711,14 +706,11 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
     <?php endif; ?>
     <?php if ($einlagerNoetig): ?>
     <div style="grid-column:1/-1"><div class="k muted">Einlagern</div><div>
-      <form method="post" style="margin:0" onsubmit="return confirm('<?= $einlagerNurFinal ? 'Auftrag als eingelagert markieren und abschließen?' : ('Fertige Ware an das Lager übergeben und in ' . h($einlagerZiel['label']) . ' buchen?') ?>');">
+      <form method="post" style="margin:0" onsubmit="return confirm('Fertige Ware in Lager 1 (Warenlager) buchen? Danach ist der Auftrag versandbereit; das Lager entscheidet beim Versand zwischen Kunde und Lager 2.');">
         <input type="hidden" name="aktion" value="einlagern_nachholen">
-        <button class="btn btn-primary btn-sm" type="submit"><?= $einlagerNurFinal ? 'Als eingelagert markieren · Auftrag abschließen' : ('An Lager übergeben · in ' . h($einlagerZiel['label']) . ' buchen') ?></button>
+        <button class="btn btn-primary btn-sm" type="submit">In Lager 1 buchen</button>
       </form>
-      <div class="muted" style="font-size:12px;margin-top:4px">
-        <?php if ($einlagerNurFinal): ?>Die Ware ist bereits gebucht, der Auftrag aber noch nicht abgeschlossen. Ein Klick finalisiert ihn (bei Fulfillment → Lager 2, landet im Kunden-Archiv) und schließt die Lager-Aufgabe.
-        <?php else: ?>Produktion ist fertig, aber noch nicht eingelagert. Das Lager bekommt eine Aufgabe und bucht die Ware in <?= h($einlagerZiel['label']) ?> – oder du buchst hier direkt.<?php endif; ?>
-      </div>
+      <div class="muted" style="font-size:12px;margin-top:4px">Produktion ist fertig. Die Ware wird in <strong>Lager 1</strong> gebucht und der Auftrag wird <strong>versandbereit</strong>. Ob sie an den Kunden geht oder an Lager 2 (Fremdlager), entscheidet das Lager anschließend beim Versand.</div>
     </div></div>
     <?php endif; ?>
     <?php else: $aktivPA = in_array((string)$a['status'], ['offen', 'in_produktion'], true); ?>

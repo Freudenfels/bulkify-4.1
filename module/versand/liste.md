@@ -10,3 +10,6 @@
 
 ## Fulfillment-Kunden
 Bei einem Kunden mit Fremdlager heißt der Knopf **Ins Fremdlager** und der Status **für das Fremdlager** bzw. **im Fremdlager**. Dabei wird nichts ausgebucht und kein Lieferschein geschrieben – die Fertigware bleibt als Bestand in Lager 2 stehen, bis der Endkunde im Shop bestellt. Erst dann bucht die Fulfillment-Kopplung sie ab (`lager2_verbrauch`). Ob ein Auftrag so läuft, sagt `auftrag_ist_fulfillment()`.
+
+## Lager entscheidet (2026-10-08)
+Je versandbereiter Auftrag (Status `erledigt`, Ware in Lager 1): **An Kunden senden** (`aktion=versenden` -> `auftrag_versenden`) für alle; zusätzlich **An Lager 2 übergeben** (`aktion=an_lager2` -> `auftrag_ins_fremdlager`) nur bei Fulfillment-Kunden. Beide erfordern genug Fertigware. Status-Badges: `erledigt`=versandbereit, `versendet`=abgeschlossen.
