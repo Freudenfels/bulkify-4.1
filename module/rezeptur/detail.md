@@ -60,3 +60,15 @@ Tabelle `rezeptur_naehrwert` (je Einheit: name, menge_mg intern, nrv_wert, einhe
 - `rezeptur_naehrwerte_zuruecksetzen($rid)` – zurück auf automatisch.
 
 **Snapshot-Hooks:** beim Freigeben/Einfrieren im Dashboard (`status_setzen`, Ziel freigegeben|eingefroren) und beim Annehmen im Portal (`rezeptur_annehmen`). So verschiebt sich die Deklaration nicht mehr, wenn später Rohstoffdaten wechseln. Der Override ist bewusst **auch im gesperrten Zustand** erlaubt (genau dafür: eine festgeschriebene Deklaration korrigieren, wenn Rohstoffe keine/falsche Wirkstoffdaten haben). POST-Aktionen: `naehrwerte_speichern`, `naehrwerte_fixieren`, `naehrwerte_auto`.
+
+## Überarbeitungsmodus: eingefrorene Rezeptur entsperren, Rohstoffe neu matchen
+Importierte Rezepturen zeigen oft auf nicht gematchte Rohstoffe (Freitext/kein Rohstoff/ohne Wirkstoffe) →
+leere Nährwerte, keine CoA/Spec. Admin-Weg ohne Statuswechsel: Button **„Überarbeiten"** (nur Admin, nur
+freigegeben/eingefroren) setzt `$_SESSION['rez_unlock'][id]=<status>`. Dann ist `$locked=false` (`$imUmbau`),
+die Zutaten sind editierbar, ein Banner weist darauf hin. Beim normalen **Speichern** wird der ursprüngliche
+Status wiederhergestellt, die Nährwerte aus den korrigierten Zutaten neu festgeschrieben
+(`rezeptur_naehrwerte_zuruecksetzen` + `_snapshot`) und die Entsperrung beendet. Der Kunde sieht währenddessen
+nichts (Status bleibt gespeichert). Aktionen: `ueberarbeiten_start`, `ueberarbeiten_abbrechen`. Der
+Zutaten-Editor zeigt je Zeile einen Match-Badge (`rezeptur_zutat_match`): „nicht zugeordnet / Rohstoff fehlt /
+ohne Wirkstoffdaten"; bei Freitext-Zeilen wird der ursprüngliche `bezeichnung`-Name als Suchhilfe vorbefüllt.
+Worklist aller betroffenen Rezepturen: [umbau.md](umbau.md).

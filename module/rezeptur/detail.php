@@ -31,6 +31,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: ?p=rezeptur_detail&id=' . $id); exit;
     }
+    // Überarbeiten starten: eine eingefrorene/freigegebene Rezeptur temporär zum Bearbeiten entsperren
+    // (nur Admin). Der gespeicherte Status bleibt unverändert – der Kunde sieht währenddessen nichts.
+    if (!$neu && $aktion === 'ueberarbeiten_start') {
+        $st = (string) scalar("SELECT status FROM rezeptur WHERE id=?", [(int)$id]);
+        if (has_role('admin') && in_array($st, ['freigegeben','eingefroren'], true)) $_SESSION['rez_unlock'][(int)$id] = $st;
+        header('Location: ?p=rezeptur_detail&id=' . $id . '#zutaten'); exit;
+    }
+    // Überarbeiten abbrechen (ohne Speichern): Entsperrung verwerfen, nichts ändern.
+    if (!$neu && $aktion === 'ueberarbeiten_abbrechen') {
+        unset($_SESSION['rez_unlock'][(int)$id]);
+        header('Location: ?p=rezeptur_detail&id=' . $id); exit;
+    }
     // Nährwert-Deklaration: manuell speichern (Override) – erlaubt AUCH im gesperrten Zustand, denn genau
     // dafür ist der Override da (eine festgeschriebene Deklaration korrigieren).
     if (!$neu && $aktion === 'naehrwerte_speichern') {
@@ -76,8 +88,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['rez_del_fehler'] = $r['fehler'] ?? 'Löschen fehlgeschlagen.';
         header('Location: ?p=rezeptur_detail&id=' . $id); exit;
     }
-    // Bearbeitung gesperrt, wenn eingefroren/freigegeben
-    if (!$neu && in_array((string) scalar("SELECT status FROM rezeptur WHERE id=?", [(int)$id]), ['freigegeben','eingefroren'], true)) {
+    // Bearbeitung gesperrt, wenn eingefroren/freigegeben – außer im (Admin-)Überarbeitungsmodus.
+    $gesperrtPost = !$neu && in_array((string) scalar("SELECT status FROM rezeptur WHERE id=?", [(int)$id]), ['freigegeben','eingefroren'], true);
+    $umbauPost    = !$neu && isset($_SESSION['rez_unlock'][(int)$id]) && has_role('admin');
+    if ($gesperrtPost && !$umbauPost) {
         header('Location: ?p=rezeptur_detail&id=' . $id); exit;
     }
     if ($f('name') === '') {
@@ -115,6 +129,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               [(int)$id, $iid, $bez, $mg, $i]);
         }
         rezeptur_bulkitem((int)$id);   // jede Rezeptur hat ein koppelbares Lager-Bulk-Item
+        // Überarbeitungsmodus abschließen: ursprünglichen (gesperrten) Status wiederherstellen und die
+        // Nährwerte aus den jetzt korrigierten Zutaten frisch festschreiben; Entsperrung beenden.
+        if (!$neu && isset($_SESSION['rez_unlock'][(int)$id]) && has_role('admin')) {
+            $stBack = (string) $_SESSION['rez_unlock'][(int)$id];
+            q("UPDATE rezeptur SET status=? WHERE id=?", [$stBack, (int)$id]);
+            rezeptur_naehrwerte_zuruecksetzen((int)$id);
+            rezeptur_naehrwerte_snapshot((int)$id);
+            unset($_SESSION['rez_unlock'][(int)$id]);
+        }
         header('Location: ?p=rezeptur_detail&id=' . $id . '&gespeichert=1'); exit;
     }
 }
@@ -125,7 +148,11 @@ if (!$r) { $neu = true; $r = ['darreichungsform'=>'kapsel','status'=>'entwurf'];
 $v = fn($k) => h((string)($r[$k] ?? ''));
 $df = $r['darreichungsform'] ?? 'kapsel';
 $status = $r['status'] ?? 'entwurf';
-$locked = !$neu && in_array($status, ['freigegeben','eingefroren'], true);
+// Überarbeitungsmodus (Admin): entsperrt eine eingefrorene/freigegebene Rezeptur temporär zum Umbau,
+// ohne den gespeicherten Status zu ändern. Beim Speichern wird automatisch wieder gesichert.
+$imUmbau = !$neu && isset($_SESSION['rez_unlock'][(int)$id]) && has_role('admin');
+$gesperrt = !$neu && in_array($status, ['freigegeben','eingefroren'], true);
+$locked = $gesperrt && !$imUmbau;
 
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
 $zutaten = $neu ? [] : all("SELECT * FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [(int)$id]);
@@ -230,6 +257,9 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
         <form method="post" style="display:inline" onsubmit="return confirm('Überarbeiteten Vorschlag erneut an den Kunden senden?');"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="vorschlag"><button class="btn btn-primary btn-sm" type="submit">Erneut als Vorschlag senden</button></form>
         <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="entwurf"><button class="btn btn-ghost btn-sm" type="submit">zurück zu Entwurf</button></form>
       <?php else: ?>
+        <?php if (has_role('admin') && !$imUmbau): ?>
+          <form method="post" style="display:inline"><input type="hidden" name="aktion" value="ueberarbeiten_start"><button class="btn btn-primary btn-sm" type="submit" title="Rohstoffe neu zuordnen, ohne den Status zu ändern – danach automatisch wieder gesichert">Überarbeiten</button></form>
+        <?php endif; ?>
         <form method="post" style="display:inline"><input type="hidden" name="aktion" value="neue_version"><button class="btn btn-ghost btn-sm" type="submit">Neue Version</button></form>
         <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="entwurf"><button class="btn btn-danger btn-sm" type="submit">Bearbeitung öffnen</button></form>
       <?php endif; ?>
@@ -241,7 +271,12 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
   <?php if ($status==='abgelehnt' && !empty($r['ablehnung_grund'])): ?>
     <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;margin-top:10px;padding:10px 14px"><strong>Vom Kunden abgelehnt.</strong> Grund: <?= h($r['ablehnung_grund']) ?><div class="muted" style="margin-top:4px;font-size:12px">Zutaten unten anpassen und dann „Erneut als Vorschlag senden" – der Kunde sieht den überarbeiteten Vorschlag wieder im Portal.</div></div>
   <?php endif; ?>
-  <?php if ($locked): ?><div class="muted" style="margin-top:8px">Diese Rezeptur ist <strong>schreibgeschützt</strong> (verbindlich). Für Änderungen „Neue Version" erstellen oder „Bearbeitung öffnen".</div><?php endif; ?>
+  <?php if ($imUmbau): ?>
+    <div class="bx-panel badge-warn" style="margin-top:8px;padding:10px 14px">
+      <strong>Überarbeitungsmodus aktiv.</strong> Ordne die Zutaten unten den echten Lager-Rohstoffen zu und <strong>speichere</strong> – danach wird die Rezeptur automatisch wieder gesichert (Status bleibt „<?= h($status) ?>", die Nährwerte werden aus den korrigierten Zutaten neu festgeschrieben). Der Kunde sieht währenddessen nichts.
+      <form method="post" style="display:inline;margin-left:8px"><input type="hidden" name="aktion" value="ueberarbeiten_abbrechen"><button class="btn btn-ghost btn-sm" type="submit">Abbrechen (ohne Speichern)</button></form>
+    </div>
+  <?php elseif ($locked): ?><div class="muted" style="margin-top:8px">Diese Rezeptur ist <strong>schreibgeschützt</strong> (verbindlich). Zum Rohstoff-Matchen „Überarbeiten", sonst „Neue Version" oder „Bearbeitung öffnen".</div><?php endif; ?>
 </div>
 <?php endif; ?>
 
@@ -279,7 +314,7 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
   <div class="bx-field"><label>Notiz</label><textarea name="notiz"><?= $v('notiz') ?></textarea></div>
   </div>
 
-  <div class="bx-panel">
+  <div class="bx-panel" id="zutaten">
     <h2>Zutaten <?= bx_hint('Rohstoffe je Einheit (Kapsel/Portion) in mg. Auswahl nach Form vorsortiert.') ?></h2>
     <table class="bx-table" style="margin-bottom:10px">
       <thead><tr><th style="width:55%">Rohstoff</th><th style="width:160px">Menge (mg)</th><th></th></tr></thead>
@@ -307,12 +342,17 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
             }
             return $out;
         };
-        $zr = $zutaten ?: [['item_id'=>'','menge_mg'=>'']]; foreach ($zr as $z): ?>
+        $zr = $zutaten ?: [['item_id'=>'','menge_mg'=>'']]; foreach ($zr as $z):
+          $zMatch = !empty($zutaten) ? rezeptur_zutat_match(!empty($z['item_id']) ? (int)$z['item_id'] : null) : 'ok';
+          // Startwert fürs Rohstoff-Feld: gematchtes Label, sonst der ursprüngliche (Freitext-)Name als Suchhilfe.
+          $zTxt = !empty($z['item_id']) && isset($itemById[(int)$z['item_id']]) ? $zlabel($itemById[(int)$z['item_id']]) : (string)($z['bezeichnung'] ?? '');
+          $zBadge = ['frei'=>'nicht zugeordnet','tot'=>'Rohstoff fehlt','ohne_wirkstoff'=>'ohne Wirkstoffdaten'][$zMatch] ?? '';
+        ?>
         <tr class="zutatrow">
           <td>
-            <input type="text" class="zitem-txt" list="zutat_dl" autocomplete="off" placeholder="Rohstoff tippen …" style="width:100%" value="<?= h(!empty($z['item_id']) && isset($itemById[(int)$z['item_id']]) ? $zlabel($itemById[(int)$z['item_id']]) : '') ?>">
+            <input type="text" class="zitem-txt" list="zutat_dl" autocomplete="off" placeholder="Rohstoff tippen …" style="width:100%<?= $zMatch!=='ok' ? ';border-color:var(--warn)' : '' ?>" value="<?= h($zTxt) ?>">
             <input type="hidden" name="z_item[]" class="zitem" value="<?= (int)($z['item_id'] ?? 0) ?: '' ?>">
-            <div class="zactions" style="margin-top:4px"><?= $zActionsHtml($z['item_id'] ?? 0) ?></div>
+            <div class="zactions" style="margin-top:4px"><?php if ($zBadge !== ''): ?><span class="muted" style="font-size:12px;color:var(--warn)">&#9888; <?= h($zBadge) ?></span> <?php endif; ?><?= $zActionsHtml($z['item_id'] ?? 0) ?></div>
           </td>
           <td><input type="number" step="0.001" name="z_menge[]" class="zmenge" value="<?= h($z['menge_mg']!==''&&$z['menge_mg']!==null ? rtrim(rtrim(number_format((float)$z['menge_mg'],3,'.',''),'0'),'.') : '') ?>"></td>
           <td><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.zutatrow').remove();recalc()">entfernen</button></td>

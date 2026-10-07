@@ -87,6 +87,7 @@ $routes = [
     'verpackung_dok' => 'lager/verpackung_dok_download.php',
     'rezeptur'        => 'rezeptur/liste.php',
     'rezeptur_detail' => 'rezeptur/detail.php',
+    'rezeptur_umbau'  => 'rezeptur/umbau.php',        // Worklist: importierte Rezepturen mit nicht gematchten Rohstoffen überarbeiten
     'einkauf_preise'  => 'einkauf/preise.php',       // ALLE Einkaufspreise (Fremdfertigung/Rohstoff/Verpackung/Zukauf)
     'rezeptur_popup'  => 'rezeptur/popup.php',        // schlanke read-only Rezeptur-Ansicht fuer Popups (iframe)
     'rezept_preise'   => 'rezeptur/lief_preise.php', // Alt: leitet auf einkauf_preise&tab=fremd weiter

@@ -8306,6 +8306,37 @@ function rezeptur_naehrwerte_zuruecksetzen(int $rid): void {
     q("UPDATE rezeptur SET naehrwerte_fixiert=0 WHERE id=?", [$rid]);
 }
 
+// Worklist „Rezepturen überarbeiten": Rezepturen, deren Zutaten NICHT sauber auf Lager-Rohstoffe gematcht
+// sind – Freitext (item_id NULL), Verweis ins Leere/kein Rohstoff, oder Rohstoff ohne Wirkstoffdaten.
+// Genau diese liefern leere Nährwerte und keine automatische CoA/Spec-Verknüpfung.
+function rezepturen_zu_ueberarbeiten(): array {
+    return all("SELECT r.id, r.nummer, r.name, r.status, r.kunde_id, r.darreichungsform, r.naehrwerte_fixiert,
+                       k.firma AS kunde,
+                       COUNT(z.id) AS zutaten,
+                       SUM(CASE WHEN z.item_id IS NULL THEN 1 ELSE 0 END) AS frei,
+                       SUM(CASE WHEN z.item_id IS NOT NULL AND i.id IS NULL THEN 1 ELSE 0 END) AS tot,
+                       SUM(CASE WHEN i.id IS NOT NULL AND iw.c IS NULL THEN 1 ELSE 0 END) AS ohne_wirkstoff
+                FROM rezeptur r
+                JOIN rezeptur_zutat z ON z.rezeptur_id=r.id
+                LEFT JOIN item i ON i.id=z.item_id AND i.kategorie='rohstoff'
+                LEFT JOIN (SELECT item_id, COUNT(*) c FROM item_wirkstoff GROUP BY item_id) iw ON iw.item_id=i.id
+                LEFT JOIN kunden k ON k.id=r.kunde_id
+                GROUP BY r.id, r.nummer, r.name, r.status, r.kunde_id, r.darreichungsform, r.naehrwerte_fixiert, k.firma
+                HAVING SUM(CASE WHEN z.item_id IS NULL THEN 1 ELSE 0 END) > 0
+                    OR SUM(CASE WHEN z.item_id IS NOT NULL AND i.id IS NULL THEN 1 ELSE 0 END) > 0
+                    OR SUM(CASE WHEN i.id IS NOT NULL AND iw.c IS NULL THEN 1 ELSE 0 END) > 0
+                ORDER BY (SUM(CASE WHEN z.item_id IS NULL THEN 1 ELSE 0 END)
+                        + SUM(CASE WHEN z.item_id IS NOT NULL AND i.id IS NULL THEN 1 ELSE 0 END)) DESC, r.name");
+}
+
+// Status einer EINZELNEN Zutat fürs Matching-UI: 'ok' | 'frei' (Freitext) | 'tot' (Item fehlt/kein Rohstoff) | 'ohne_wirkstoff'.
+function rezeptur_zutat_match(?int $item_id): string {
+    if (!$item_id) return 'frei';
+    $i = one("SELECT id FROM item WHERE id=? AND kategorie='rohstoff'", [$item_id]);
+    if (!$i) return 'tot';
+    return (int) scalar("SELECT COUNT(*) FROM item_wirkstoff WHERE item_id=?", [$item_id]) > 0 ? 'ok' : 'ohne_wirkstoff';
+}
+
 // Nährstoff per Name finden – oder neu anlegen (für „neuen Wirkstoff eintippen")
 function naehrstoff_id_by_name(string $name, bool $create = true): ?int {
     $name = trim($name);
