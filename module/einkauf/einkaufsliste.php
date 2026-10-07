@@ -25,6 +25,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'freib
     q("DELETE FROM freibedarf WHERE id=? AND status='offen'", [(int)($_POST['fb_id'] ?? 0)]);
     header('Location: ?p=einkaufsliste&typ=frei'); exit;
 }
+// Eigen/Fremd direkt im Einkauf festlegen: gibt den Vor-Produktionsauftrag zugleich ans Werk frei
+// (ein Klick je Auftrag). Danach erscheint der passende Bedarf im jeweiligen Typ-Reiter.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'festlegen') {
+    $paId = (int)($_POST['pa_id'] ?? 0);
+    $art  = ($_POST['art'] ?? '') === 'eigen' ? 'eigen' : 'fremd';
+    $wer  = trim((string)(current_user()['name'] ?? '')) ?: 'Einkauf';
+    $res  = $paId ? produktionsauftrag_freigeben($paId, $art, null, $wer) : ['ok'=>false, 'fehler'=>'Auftrag fehlt.'];
+    header('Location: ?p=einkaufsliste' . ($res['ok'] ? '&festgelegt=' . urlencode($art) : '&festlegfehler=1')); exit;
+}
 // Vorsorglich bestellen: einen VORHANDENEN Lagerartikel auf Vorrat bestellen – ohne aktuellen Bedarf, ohne
 // neuen Namen. Legt eine Bestellung ohne Auftragsbezug an (auftrag_id=0) und markiert sie sofort als bestellt.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorsorglich') {
@@ -174,20 +183,28 @@ bx_head('Bestellen', 'Was bestellt werden sollte – auswählen und bestellen. L
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['extern']) ? ' Position(en) als „extern bestellt" markiert' : ' Bestellung(en) angelegt (je Lieferant eine)') . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . '</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
+if (isset($_GET['festgelegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ($_GET['festgelegt'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion') . ' festgelegt und freigegeben – der Bedarf steht jetzt im passenden Typ-Reiter.</div>';
+if (isset($_GET['festlegfehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Festlegung nicht möglich – für diesen Auftrag wurde evtl. schon bestellt oder ein Produktionsschritt ist erledigt.</div>';
 if (isset($_GET['vorsorgfehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Vorsorgliche Bestellung nicht möglich – bitte einen vorhandenen Artikel und eine Menge größer 0 angeben.</div>';
 if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Die fehlenden Rohstoffe des Produktionsauftrags stehen jetzt hier – Bestand und bereits Bestelltes wurden übersprungen.</div>';
 
-// Aufträge ohne Eigen/Fremd-Festlegung: NOCH KEIN Bedarf anzeigen (Stückliste steht nicht fest),
-// nur der Hinweis „erst festlegen" mit direktem Link in die Produktion.
+// Aufträge ohne Eigen/Fremd-Festlegung: NOCH KEIN Bedarf anzeigen (Stückliste steht nicht fest).
+// Festlegung passiert direkt hier im Einkauf (ein Klick je Auftrag -> gibt den Auftrag zugleich ans Werk frei).
 if ($ohneFestlegung): ?>
 <div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px;margin-bottom:12px">
   <strong><?= count($ohneFestlegung) ?> Auftrag/Aufträge warten auf die Festlegung „Eigen- oder Fremdproduktion".</strong>
-  <div class="muted" style="font-size:13px;margin:4px 0 8px">Erst festlegen – danach erscheint der passende Einkaufsbedarf (Rohstoffe bei Eigen-, Bulk-Zukauf bei Fremdproduktion). Die Festlegung erfolgt im Produktionsauftrag.</div>
-  <div class="bx-row" style="flex-wrap:wrap;gap:8px">
+  <div class="muted" style="font-size:13px;margin:4px 0 10px">Ein Klick legt fest und gibt den Auftrag frei – danach erscheint der passende Einkaufsbedarf (Rohstoffe bei Eigen-, Bulk-Zukauf bei Fremdproduktion).</div>
+  <div class="bx-row" style="flex-direction:column;gap:8px;align-items:stretch">
     <?php foreach ($ohneFestlegung as $o): ?>
-      <a class="btn btn-ghost btn-sm" href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" title="Im Produktionsauftrag Eigen/Fremd festlegen">
-        <?= h($o['auftrag_nr'] ?: ('#' . (int)$o['auftrag_id'])) ?><?= $o['produkt'] ? ' · ' . h($o['produkt']) : '' ?><?= $o['kunde'] ? ' · ' . h(firma_kurz($o['kunde'])) : '' ?> → festlegen
-      </a>
+      <div class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:8px 12px">
+        <span style="flex:1 1 240px;min-width:0"><strong><?= h($o['auftrag_nr'] ?: ('#' . (int)$o['auftrag_id'])) ?></strong><?= $o['produkt'] ? ' · ' . h($o['produkt']) : '' ?><?= $o['kunde'] ? ' <span class="muted">· ' . h(firma_kurz($o['kunde'])) . '</span>' : '' ?></span>
+        <form method="post" style="margin:0;display:inline-flex;gap:8px;flex-wrap:wrap">
+          <input type="hidden" name="aktion" value="festlegen">
+          <input type="hidden" name="pa_id" value="<?= (int)$o['pa_id'] ?>">
+          <button class="btn btn-ghost btn-sm" type="submit" name="art" value="eigen" title="Wir produzieren selbst – Rohstoffbedarf">Eigenproduktion</button>
+          <button class="btn btn-ghost btn-sm" type="submit" name="art" value="fremd" title="Fertiges Produkt (Bulk) zukaufen – Verpackung/Etiketten trotzdem">Fremdproduktion (zukaufen)</button>
+        </form>
+      </div>
     <?php endforeach; ?>
   </div>
 </div>

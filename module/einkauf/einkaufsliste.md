@@ -1,6 +1,8 @@
 # einkauf/einkaufsliste.php – Bedarf (zentrale Einkaufsseite)
 
-**Stand 2026-10-05:** Dies ist jetzt DIE eine Bedarfs-/Bestellseite (Menü „Bedarf"). Zeigt **alle** offenen Bedarfe (`bedarf_aggregiert(false)` / `bedarf_bulk(false)`) – kein „Melden"-Schritt mehr. Route `?p=einkaufsliste` (Rolle einkauf, admin). Die frühere „Einkaufsbedarf"-Seite (`?p=bedarf`, Melden + Eigen/Fremd) ist aus dem Menü entfernt; Eigen/Fremd wird im Produktionsauftrag entschieden.
+**Stand 2026-10-05:** Dies ist jetzt DIE eine Bedarfs-/Bestellseite (Menü „Bedarf"). Zeigt **alle** offenen Bedarfe (`bedarf_aggregiert(false)` / `bedarf_bulk(false)`) – kein „Melden"-Schritt mehr. Route `?p=einkaufsliste` (Rolle einkauf, admin). Die frühere „Einkaufsbedarf"-Seite (`?p=bedarf`, Melden + Eigen/Fremd) ist aus dem Menü entfernt.
+
+**Stand 2026-10-07 – Eigen/Fremd direkt im Einkauf festlegen:** Aufträge, die noch auf die Festlegung warten (`auftraege_ohne_festlegung()`, Vor-Produktionsaufträge im Status `vorbereitung`), erscheinen oben als Warteblock. Je Auftrag gibt es **ein Klick** auf `Eigenproduktion` / `Fremdproduktion (zukaufen)` – das ruft `produktionsauftrag_freigeben()` auf (setzt produktionsart + `art_festgelegt_am` + `freigegeben_am`, regeneriert die Schritte, Status → `offen`). Danach taucht der passende Bedarf im Typ-Reiter auf. POST `aktion=festlegen`, `pa_id`, `art`. Vorher sprang der Chip in den Produktionsauftrag (`?p=produktionsauftrag`), für den die Rolle einkauf keine Rechte hat – das war eine Sackgasse.
 
 Zwei Aktionen auf derselben Auswahl: **„Beim Lieferanten bestellen"** (je Lieferant eine Bestellung, wie bisher) ODER **„Habe ich extern bestellt"** (`modus=extern`): legt EINE Bestellung ohne Lieferant an (Notiz „Extern bestellt (z. B. Amazon)", Datum = heute). In beiden Fällen nettet die Position aus dem Bedarf (via `bestellt`-Summe) und erscheint unter „Bestellt" (`?p=einkauf`).
 
