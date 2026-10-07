@@ -20,6 +20,13 @@ bx_head('Rezepturen überarbeiten', count($rows) . ' Rezeptur(en) mit nicht gema
     du ordnest die Zutaten den richtigen Rohstoffen zu und speicherst. Die Rezeptur wird dabei nur temporär
     entsperrt und danach automatisch wieder gesichert (Status bleibt, Nährwerte werden neu festgeschrieben).
   </p>
+  <?php if ($rows): ?>
+  <div class="bx-row" style="gap:10px;align-items:center;margin-top:8px">
+    <input class="bx-search" type="text" id="umSuche" placeholder="Suchen: Name, Nummer, Kunde, Problem …" autocomplete="off" autofocus style="flex:1;min-width:220px">
+    <span class="muted" id="umCount" style="font-size:13px;white-space:nowrap"></span>
+    <button class="btn btn-ghost btn-sm" type="button" id="umReset" hidden>zurücksetzen</button>
+  </div>
+  <?php endif; ?>
 </div>
 
 <?php if (!$rows): ?>
@@ -63,5 +70,27 @@ bx_head('Rezepturen überarbeiten', count($rows) . ' Rezeptur(en) mit nicht gema
     </tbody>
   </table></div>
 </div>
+<script>
+(function(){
+  var box=document.getElementById('umSuche'); if(!box) return;
+  var tbody=document.querySelector('.bx-table tbody'); if(!tbody) return;
+  var rows=Array.prototype.slice.call(tbody.querySelectorAll('tr')),
+      cnt=document.getElementById('umCount'), reset=document.getElementById('umReset'), total=rows.length;
+  var leer=document.createElement('tr'); leer.hidden=true;
+  leer.innerHTML='<td colspan="7" class="muted">Keine Treffer.</td>';
+  tbody.appendChild(leer);
+  function norm(s){ return (s||'').toLowerCase(); }
+  function filter(){
+    var q=norm(box.value.trim()), sichtbar=0;
+    rows.forEach(function(tr){ var m = !q || norm(tr.textContent).indexOf(q)>=0; tr.hidden=!m; if(m) sichtbar++; });
+    leer.hidden = sichtbar>0;
+    cnt.textContent = q ? (sichtbar + ' von ' + total) : (total + ' Rezeptur(en)');
+    if(reset) reset.hidden = q==='';
+  }
+  box.addEventListener('input', filter);
+  if(reset) reset.addEventListener('click', function(){ box.value=''; filter(); box.focus(); });
+  filter();
+})();
+</script>
 <?php endif; ?>
 <?php render_footer(); ?>
