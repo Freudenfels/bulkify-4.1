@@ -183,6 +183,9 @@ foreach (all("SELECT iw.item_id, n.name, n.nrv_wert, n.einheit, n.ie_mg, n.einhe
         'anzeige'=>$w['einheit_anzeige'], 'ie_mg'=>$w['ie_mg']!==null?(float)$w['ie_mg']:null,
         'basePerMg'=>wirkstoff_mg_je_mg($w['gehalt_wert'], $w['gehalt_einheit'], $w['ie_mg'])];
 }
+// Rohstoffe mit nutzbarem Wirkstoffgehalt (für das Dropdown markieren): mind. ein Wirkstoff mit basePerMg>0.
+$gehaltSet = [];
+foreach ($wmap as $iid => $ws) foreach ($ws as $w) if ((float)($w['basePerMg'] ?? 0) > 0) { $gehaltSet[(int)$iid] = true; break; }
 $ITEMS = [];
 foreach ($items as $it) {
     $ITEMS[$it['id']] = [
@@ -321,7 +324,8 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
       <tbody id="zutatrows">
         <?php
         // Rohstoff-Feld: tippbar mit Filter (datalist). Anzeige = Label, gespeichert wird die id (verstecktes Feld).
-        $zlabel = fn($it) => implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']] ?? $it['form']), $it['artikelnummer'] ?? '']));
+        $zlabel = fn($it) => implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']] ?? $it['form']), $it['artikelnummer'] ?? '']))
+            . (!empty($gehaltSet[(int)$it['id']]) ? ' · Gehalt ✓' : '');
         $itemById = []; foreach ($items as $it) $itemById[(int)$it['id']] = $it;
         // R-Nummer + CoA/Spec je Rohstoff – als Link/Popup direkt an der Zutat (auch bei festgesetzter, nicht editierbarer Rezeptur: Anchor-Links wirken trotz disabled fieldset).
         $ZNR = []; foreach (all("SELECT id, artikelnummer FROM item WHERE kategorie='rohstoff'") as $it) $ZNR[(int)$it['id']] = (string)($it['artikelnummer'] ?? '');
@@ -619,7 +623,7 @@ document.getElementById('bxDocOverlay').addEventListener('click', function(e){ i
 var ITEMS = <?= json_encode($ITEMS, JSON_UNESCAPED_UNICODE) ?>;
 var KAPSELN = <?= json_encode($KAPSELN, JSON_UNESCAPED_UNICODE) ?>;
 // Rohstoff-Label -> id (für das tippbare Zutatenfeld mit datalist)
-var ZMAP = <?= json_encode((function($items,$FORMLBL){ $m=[]; foreach($items as $it){ $lbl=implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']]??$it['form']), $it['artikelnummer']??''])); $m[$lbl]=(int)$it['id']; } return $m; })($items,$FORMLBL), JSON_UNESCAPED_UNICODE) ?>;
+var ZMAP = <?= json_encode((function($items,$FORMLBL,$gehaltSet){ $m=[]; foreach($items as $it){ $lbl=implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']]??$it['form']), $it['artikelnummer']??''])) . (!empty($gehaltSet[(int)$it['id']]) ? ' · Gehalt ✓' : ''); $m[$lbl]=(int)$it['id']; } return $m; })($items,$FORMLBL,$gehaltSet), JSON_UNESCAPED_UNICODE) ?>;
 function zsync(row){ var t=row.querySelector('.zitem-txt'), h=row.querySelector('.zitem'); if(!t||!h) return; var id=ZMAP[(t.value||'').trim()]; h.value = id ? id : ''; }
 // R-Nummer-Link + CoA/Spec je Zutat (Anchor -> funktioniert auch bei festgesetzter/disabled Rezeptur).
 var ZNR = <?= json_encode($ZNR) ?>;

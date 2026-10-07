@@ -75,3 +75,6 @@ Worklist aller betroffenen Rezepturen: [umbau.md](umbau.md).
 
 ## Fix 2026-10-07: Spec/CoA-Popup auch bei neuer Rezeptur
 Das Dokument-Popup (`bxDocOverlay` + `bxDocOeffnen()`) lag früher im Block `if ($rzZutaten)` (Panel „Rohstoffpreise“, nur bei gespeicherten Rezepturen). Bei einer NEUEN Rezeptur war die Funktion daher nicht definiert – Klick auf „Spez. (bulkify)“ in der Zutatenliste tat nichts. Overlay + Script jetzt ausserhalb des `if` (immer gerendert).
+
+## Dropdown: Wirkstoffgehalt-Marker (2026-10-07)
+Im Rohstoff-Picker (datalist `zutat_dl`) zeigt das Label `· Gehalt ✓`, wenn der Rohstoff einen nutzbaren Wirkstoffgehalt hat (mind. ein item_wirkstoff mit basePerMg>0, `$gehaltSet`). Marker ist Teil des Anzeige-Labels in datalist UND `ZMAP` (muss identisch sein, sonst matcht die Auswahl nicht); beim Speichern irrelevant, da `bezeichnung` aus `item.name` kommt.
