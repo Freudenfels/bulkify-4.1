@@ -231,3 +231,18 @@ Der Menüpunkt **Etiketten** zeigt einen **roten** Zähler (`.pt-badge-rot`) = A
 
 ## Mein Konto (v=konto)
 Dauerhafter Menüpunkt „Mein Konto" (Gruppe Konto). Der Kunde pflegt hier selbst seine **Stammdaten + Adressen** (auf der kunden-Tabelle): Ansprechpartner/Telefon, Hauptadresse (Straße/Hausnr/PLZ/Ort/Land/USt-IdNr.), Rechnungs- und Lieferadresse (nur falls abweichend). Firma + E-Mail sind read-only (E-Mail/Passwort laufen über konto_einrichten). POST `aktion=konto_speichern` -> UPDATE kunden, log_aktivitaet. Mehrere Lieferadressen (Adressbuch) sind noch nicht gebaut (bräuchte eigene Tabelle).
+
+## Richtpreise: 0,00 nie zeigen + Herkunft der Bepreisung
+Die „ab"-Richtpreise (Produktliste) und die Tabelle „Größen & Preise" (Produktdetail) kommen aus der
+Preismatrix `produkt_preis` (günstigster `vk_preis`), gefiltert auf Produkte, deren Preise dem Kunden
+freigegeben sind (`kunde_produkt_preise`), und mit dem Kunden-Margenrabatt (`vk_fuer_kunde`). Einzige
+Preisquelle bleibt Katalog/Angebot. **0,00-Zeilen (noch nicht kalkuliert) werden nie als Richtpreis gezeigt**
+(`WHERE vk_preis>0`, zusätzlich `$abPreis`/`$prodPreise` > 0); bleibt nichts übrig → „Preis auf Anfrage".
+
+## Rohstoff-Detail (Portal): Aufbau + COA-Pflicht
+Reihenfolge wie im Dashboard (viele Infos): **Wirkstoffe & Gehalt** ganz oben, dann Kennwerte, Eigenschaften,
+dann ein gebündelter **„Dokumente"**-Reiter (bulkify-Spezifikation PDF + Analysenzertifikate je Charge +
+hochgeladene Unterlagen), zuletzt „Anfrage stellen". **COA-Regel** (siehe Memory): ein bulkify-COA braucht
+echte Analysewerte (Schwermetalle/Mikrobiologie …). `charge_coa_hat_analysewerte()` + `coa_parameter_ist_analyse()`
+(core/schema.php) prüfen das. Chargen ohne solche Werte werden **nicht** als CoA angeboten; `build_coa_pdf`
+(core/pdf_spec.php) kennzeichnet ein PDF ohne Analysewerte als **Spezifikation** statt Analysenzertifikat.

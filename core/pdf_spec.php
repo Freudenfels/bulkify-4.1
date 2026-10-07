@@ -241,10 +241,15 @@ function build_coa_pdf(int $charge_id): ?string {
     $c = one("SELECT c.*, i.name AS item_name, i.spec_nr, i.spec_version, i.herkunftsland, i.allergene
               FROM charge c JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
     if (!$c) return null;
+    // Eine echte COA braucht echte Analysewerte (Schwermetalle/Mikrobiologie …). Fehlen sie, ist das Dokument
+    // KEINE COA, sondern höchstens eine Spezifikation – dann Titel/Schlusssatz entsprechend kennzeichnen.
+    $istCoa = charge_coa_hat_analysewerte($charge_id);
     $L = 40; $R = 555;
     $p = new MiniPDF();
     spec_wasserzeichen($p);
-    $y = spec_kopf($p, 'ANALYSENZERTIFIKAT', 'Certificate of Analysis · ' . (string)$c['item_name']);
+    $y = $istCoa
+        ? spec_kopf($p, 'ANALYSENZERTIFIKAT', 'Certificate of Analysis · ' . (string)$c['item_name'])
+        : spec_kopf($p, 'SPEZIFIKATION', 'Specification · ' . (string)$c['item_name']);
     $fmtD = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '–';
     $num  = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 
@@ -273,7 +278,9 @@ function build_coa_pdf(int $charge_id): ?string {
 
     $y += 16;
     // Neutrale Konformitätsaussage – KEIN interner Quarantäne-/Freigabestatus auf dem Kundendokument.
-    $freigabe = 'Die aufgeführten Analysenwerte entsprechen der Spezifikation.';
+    $freigabe = $istCoa
+        ? 'Die aufgeführten Analysenwerte entsprechen der Spezifikation.'
+        : 'Dies ist eine Spezifikation (Zielwerte/Grenzwerte). Chargenspezifische Analysenergebnisse (z. B. Schwermetalle, Mikrobiologie) liegen separat als Analysenzertifikat vor.';
     foreach ($p->wrap($freigabe, $R - $L, 9, false) as $wl) { if ($y > 780) { $p->addPage(); $y = 48; } $p->text($L, $y, $wl, 9, false, SPEC_INK); $y += 12; }
     $y = spec_release($p, $y, date('d.m.Y'));
     spec_fuss($p, $y + 18);

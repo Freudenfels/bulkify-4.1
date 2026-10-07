@@ -1185,8 +1185,13 @@ $VTYPEN = ['glas'=>'Glas', 'pet'=>'PET-Dose', 'pla'=>'PLA-Becher', 'beutel'=>'St
 // Alle anderen sehen „auf Anfrage" – sonst wandert die Kalkulation eines Kunden zum nächsten.
 $preisFrei = kunde_produkt_preise($kid);
 $abMap = [];
-foreach (all("SELECT produkt_id, MIN(vk_preis) AS mn FROM produkt_preis GROUP BY produkt_id") as $r) $abMap[(int)$r['produkt_id']] = (float)$r['mn'];
-$abPreis = fn($pid) => (isset($abMap[(int)$pid]) && isset($preisFrei[(int)$pid])) ? vk_fuer_kunde($abMap[(int)$pid], $kid) : null;
+// Nur echte Preise (>0) zählen – 0,00-Zeilen (noch nicht kalkuliert) ergeben keinen „ab"-Preis.
+foreach (all("SELECT produkt_id, MIN(vk_preis) AS mn FROM produkt_preis WHERE vk_preis>0 GROUP BY produkt_id") as $r) $abMap[(int)$r['produkt_id']] = (float)$r['mn'];
+$abPreis = function($pid) use ($abMap, $preisFrei, $kid) {
+    if (!isset($abMap[(int)$pid]) || !isset($preisFrei[(int)$pid])) return null;
+    $v = vk_fuer_kunde($abMap[(int)$pid], $kid);
+    return $v > 0 ? $v : null;   // 0,00 nie als Richtpreis zeigen -> „auf Anfrage"
+};
 // Nährwerte je Einheit aus einer Rezeptur (aggregiert über die Wirkstoffe der Rohstoffe)
 if (!function_exists('pt_naehr')) {
     function pt_naehr(int $rid): array {
@@ -1346,9 +1351,12 @@ $prodAllergene = array_values(array_unique($prodAllergene));
 // Größen & Preise des Produkts (je Stückzahl der günstigste VK, mit Kundenrabatt).
 // Nur für Produkte, die diesem Kunden angeboten wurden – sonst bleibt die Tabelle leer und es steht „auf Anfrage".
 $prodPreise = [];
+// Nur Zeilen mit echtem Preis (>0) – 0,00 nie als Richtpreis zeigen. Bleibt nichts übrig -> „Preis auf Anfrage".
 if ($prodDetail && isset($preisFrei[(int)$prodDetail['id']]))
-    foreach (all("SELECT stueck, MIN(vk_preis) AS mn FROM produkt_preis WHERE produkt_id=? GROUP BY stueck ORDER BY stueck", [(int)$prodDetail['id']]) as $r)
-        $prodPreise[] = ['stueck'=>(int)$r['stueck'], 'ab'=>vk_fuer_kunde((float)$r['mn'], $kid)];
+    foreach (all("SELECT stueck, MIN(vk_preis) AS mn FROM produkt_preis WHERE produkt_id=? AND vk_preis>0 GROUP BY stueck ORDER BY stueck", [(int)$prodDetail['id']]) as $r) {
+        $ab = vk_fuer_kunde((float)$r['mn'], $kid);
+        if ($ab > 0) $prodPreise[] = ['stueck'=>(int)$r['stueck'], 'ab'=>$ab];
+    }
 $prodForm = $prodDetail['darreichungsform'] ?? '';
 $prodIstFuell  = form_ist_fuellmenge($prodForm);   // Anfrage nach Füllmenge (Pulver g / Flüssig ml) statt Stückzahl
 $prodFuellEinheit = form_groessen_einheit($prodForm) ?: 'g';
@@ -1393,10 +1401,14 @@ $gehaltFmt = function($w) {
     return $z . ' ' . $suf;
 };
 // Freigegebene Analysenzertifikate (bulkify-Layout) zu diesem Rohstoff – nur was das Team freigegeben hat.
-// CoA je Charge zeigen, sobald WIR eigene Analysenwerte haben (= es gibt einen bulkify-CoA) – ohne Freigabe-Flag, nie Lieferanten-PDF.
-$rohCoas = $rohDetail ? all("SELECT id, charge_nr, mhd FROM charge WHERE item_id=?
-    AND EXISTS (SELECT 1 FROM charge_analyse ca WHERE ca.charge_id=charge.id)
-    ORDER BY (wareneingang IS NULL), wareneingang DESC, id DESC", [$iid]) : [];
+// Eine echte COA braucht ECHTE Analysewerte (Schwermetalle/Mikrobiologie …) – Chargen mit nur Identitäts-/
+// Kennwerten sind KEINE COA (höchstens Spec) und werden hier nicht als CoA angeboten.
+$rohCoas = $rohDetail ? array_values(array_filter(
+    all("SELECT id, charge_nr, mhd FROM charge WHERE item_id=?
+         AND EXISTS (SELECT 1 FROM charge_analyse ca WHERE ca.charge_id=charge.id)
+         ORDER BY (wareneingang IS NULL), wareneingang DESC, id DESC", [$iid]),
+    fn($c) => charge_coa_hat_analysewerte((int)$c['id'])
+)) : [];
 $jaNein = fn($v) => $v === null || $v === '' ? null : ((int)$v === 1);
 $FORMLBL_P = ['pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle'];
 $offenAngebote = count(array_filter($angebote, fn($a) => $a['status'] === 'gesendet'));
@@ -2780,37 +2792,8 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <p class="bx-sub"><?= h($FORMLBL_P[$rohDetail['form']] ?? $rohDetail['form']) ?><?= $rohDetail['name_lat'] ? ' · '.h($rohDetail['name_lat']) : '' ?><?= $rohDetail['cas'] ? ' · CAS '.h($rohDetail['cas']) : '' ?></p>
 
-    <div class="bx-panel">
-      <h2>Spezifikation</h2>
-      <p class="muted" style="margin-top:0">Unsere bulkify-Spezifikation zu diesem Rohstoff – Kennzahlen, Gehalt, Erklärungen und Lagerung.</p>
-      <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('spec_pdf') ?>&rid=<?= (int)$rohDetail['id'] ?>">&#8681; Spezifikation (PDF)</a>
-    </div>
-    <?php if ($rohCoas): ?>
-    <div class="bx-panel">
-      <h2>Analysenzertifikate</h2>
-      <p class="muted" style="margin-top:0">CoA je Charge im bulkify-Layout – soweit freigegeben.</p>
-      <?php foreach ($rohCoas as $co): ?>
-        <a class="btn btn-ghost btn-sm" target="_blank" style="margin:0 8px 8px 0" href="<?= $portalLink('coa_pdf') ?>&cid=<?= (int)$co['id'] ?>">&#8681; CoA <?= h($co['charge_nr'] ?: ('#' . (int)$co['id'])) ?><?= $co['mhd'] ? ' <span class="muted">(MHD ' . h(date('m/Y', strtotime((string)$co['mhd']))) . ')</span>' : '' ?></a>
-      <?php endforeach; ?>
-    </div>
-    <?php endif; ?>
-    <?php $rohDoks = dokumente_fuer_kunde('item', (int)$rohDetail['id']); if ($rohDoks): ?>
-    <div class="bx-panel"><h2>Dokumente</h2>
-      <p class="muted" style="margin-top:0">Analysenzertifikat und Spezifikation zu diesem Rohstoff.</p>
-      <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Typ</th><th>Dokument</th><th></th></tr></thead>
-        <tbody>
-        <?php foreach ($rohDoks as $d): ?>
-          <tr><td><?= h($DOKTYP[$d['typ']] ?? $d['typ']) ?></td>
-              <td><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument')) ?></td>
-              <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener">öffnen</a></td></tr>
-        <?php endforeach; ?>
-        </tbody>
-      </table></div>
-    </div>
-    <?php endif; ?>
-
-    <?php if ($rohWirkstoffe): ?>
+    <?php // Wirkstoffe & Gehalt ganz nach oben (wichtigste Info, wie im Dashboard).
+    if ($rohWirkstoffe): ?>
     <div class="bx-panel"><h2>Wirkstoffe &amp; Gehalt</h2>
       <p class="muted" style="margin-top:0">Die wirksamen Bestandteile dieses Rohstoffs mit deklariertem Gehalt.</p>
       <div class="bx-tablewrap"><table class="bx-table">
@@ -2854,6 +2837,22 @@ portal_head('Kundenportal · ' . $k['firma']);
       </tbody></table></div>
     </div>
     <?php endif; ?>
+
+    <?php // Dokumente gebündelt: Spezifikation (PDF) + Analysenzertifikate (CoA je Charge) + weitere Unterlagen.
+      $rohDoks = dokumente_fuer_kunde('item', (int)$rohDetail['id']); ?>
+    <div class="bx-panel"><h2>Dokumente</h2>
+      <p class="muted" style="margin-top:0">Spezifikation, Analysenzertifikate und weitere Unterlagen zu diesem Rohstoff.</p>
+      <div class="bx-row" style="flex-wrap:wrap;gap:8px">
+        <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('spec_pdf') ?>&rid=<?= (int)$rohDetail['id'] ?>">&#8681; Spezifikation (PDF)</a>
+        <?php foreach ($rohCoas as $co): ?>
+          <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('coa_pdf') ?>&cid=<?= (int)$co['id'] ?>">&#8681; CoA <?= h($co['charge_nr'] ?: ('#' . (int)$co['id'])) ?><?= $co['mhd'] ? ' <span class="muted">(MHD ' . h(date('m/Y', strtotime((string)$co['mhd']))) . ')</span>' : '' ?></a>
+        <?php endforeach; ?>
+        <?php foreach ($rohDoks as $d): ?>
+          <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>">&#8681; <?= h(($DOKTYP[$d['typ']] ?? $d['typ']) . ': ' . ($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument'))) ?></a>
+        <?php endforeach; ?>
+      </div>
+      <?php if (!$rohCoas): ?><p class="muted" style="font-size:12px;margin:10px 0 0">Zu diesem Rohstoff liegt aktuell kein freigegebenes Analysenzertifikat (CoA) vor.</p><?php endif; ?>
+    </div>
 
     <div class="bx-panel"><h2>Anfrage stellen</h2>
       <p class="muted" style="margin-top:0">Preis auf Anfrage – nennen Sie uns die gewünschte Menge.</p>

@@ -8361,6 +8361,24 @@ function rezeptur_fuer_auftrag_kopieren(int $auftragId): ?int {
     return (int)$neu;
 }
 
+// Ist ein Analyse-Parameter ein echter Sicherheits-/Analysewert (Schwermetalle, Mikrobiologie, Mykotoxine,
+// Pestizide, Lösungsmittel)? Nur mit solchen Werten ist ein Dokument eine echte COA – sonst nur eine Spec.
+function coa_parameter_ist_analyse(string $parameter): bool {
+    $p = mb_strtolower(trim($parameter));
+    if ($p === '') return false;
+    return (bool) preg_match('/(blei|lead|cadmium|arsen|arsenic|quecksilber|mercury|schwermetall|heavy ?metal|'
+        . 'nickel|chrom|aluminium|mikrobiolog|keimzahl|gesamtkeim|koloniezahl|e\.? ?coli|escherichia|salmonell|'
+        . 'staphyl|pseudomonas|hefe|schimmel|yeast|mould|mold|enterobacter|aerob|anaerob|mykotox|aflatox|'
+        . 'ochratox|pestizid|pesticide|lösungsmittel|solvent|residual)/u', $p);
+}
+// Hat die Charge echte Analyse-/Sicherheitswerte? -> dann ist ein bulkify-COA zulässig, sonst nur Spec.
+function charge_coa_hat_analysewerte(int $charge_id): bool {
+    if ($charge_id <= 0) return false;
+    foreach (all("SELECT parameter FROM charge_analyse WHERE charge_id=?", [$charge_id]) as $r)
+        if (coa_parameter_ist_analyse((string)$r['parameter'])) return true;
+    return false;
+}
+
 // Status einer EINZELNEN Zutat fürs Matching-UI: 'ok' | 'frei' (Freitext) | 'tot' (Item fehlt/kein Rohstoff) | 'ohne_wirkstoff'.
 function rezeptur_zutat_match(?int $item_id): string {
     if (!$item_id) return 'frei';
