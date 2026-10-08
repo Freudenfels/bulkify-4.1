@@ -9,3 +9,6 @@
 Hinweis: Der frühere Inline-Status-Dropdown in der Liste ist entfallen – Status wird jetzt auf der Detailseite gesetzt (der POST-Handler `aktion=status` bleibt zur Sicherheit erhalten).
 
 **Quelle:** Tabelle `portal_anfrage` (befüllt vom Kundenportal). Nummernkreis PAF-.
+
+## Notiz als Popup (Stand 2026-10-08)
+Die Kunden-Notiz steht nicht mehr als Volltext in der Spalte „Anfrage" (Tabelle wurde zu breit), sondern als klickbarer Link „Notiz ansehen" → `<dialog>` mit der vollen Notiz (stopPropagation, damit die Zeilen-Navigation nicht ausgelöst wird).

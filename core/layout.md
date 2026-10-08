@@ -26,3 +26,6 @@
 
 ## Novel-Food News im Menü (Stand 2026-10-08)
 `bx_nav_default()` enthält jetzt `novelfood_verlauf => 'Novel-Food News'` in den Gruppen Produkt und Entwicklung (Route existiert bereits: Aktualisierungs-Verlauf je Katalog-Lauf). Vorher war der Verlauf nur über den Button „Was ist neu (Verlauf)" auf der Novel-Food-Seite erreichbar.
+
+## Menü-Badge „Anfragen & Preise" (Stand 2026-10-08)
+`bx_nav()` setzt `$anfCount['lief_anfragen']` = Anzahl neu abgegebener, noch nicht bearbeiteter Lieferantenpreise (`lieferant_anfrage` JOIN `lieferant_angebot` WHERE `ag.status='offen'`). So sieht der Einkauf am Menü, wenn ein Lieferant einen Preis abgegeben hat (zusätzlich zur E-Mail `mail_team_preisanfrage` und der „Preis da"-Ansicht auf der Seite).

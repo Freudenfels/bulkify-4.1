@@ -118,7 +118,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       <td><a href="?p=portal_anfrage&id=<?= (int)$r['id'] ?>"><?= h($r['nummer']) ?></a></td>
       <td><?= h($r['firma'] ?: '–') ?></td>
       <td><?= h($TYP[$r['typ']] ?? $r['typ']) ?></td>
-      <td><?= h($txt) ?><?php if ($r['notiz']): ?><div class="muted" style="font-size:12px"><?= h($r['notiz']) ?></div><?php endif; ?></td>
+      <td><?= h($txt) ?><?php if ($r['notiz']): ?> <a href="#" class="kundenlink" style="font-size:12px;white-space:nowrap" onclick="event.stopPropagation(); document.getElementById('nz<?= (int)$r['id'] ?>').showModal(); return false;" title="Notiz des Kunden ansehen">Notiz&nbsp;ansehen</a><?php endif; ?></td>
       <td><?= $stBadge($r['status']) ?></td>
       <td style="white-space:nowrap"><?= $r['angelegt'] ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>' ?></td>
       <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=portal_anfrage&id=<?= (int)$r['id'] ?>">öffnen</a></td>
@@ -126,4 +126,20 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   <?php endforeach; ?>
   </tbody>
 </table></div>
+<?php // Notiz-Popups – damit die Tabelle schmal bleibt, steht die volle Notiz im Dialog statt in der Zeile.
+$hatNotiz = false;
+foreach ($rows as $r): if (empty($r['notiz'])) continue; $hatNotiz = true; ?>
+<dialog id="nz<?= (int)$r['id'] ?>" class="nz-dlg">
+  <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px">
+    <h2 style="margin:0;font-size:17px">Notiz zu <?= h($r['nummer']) ?></h2>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('dialog').close()" aria-label="schließen">&#10005;</button>
+  </div>
+  <?php if (!empty($r['firma'])): ?><div class="muted" style="font-size:13px;margin:4px 0 10px"><?= h((string)$r['firma']) ?></div><?php endif; ?>
+  <div style="white-space:pre-line;line-height:1.5"><?= h((string)$r['notiz']) ?></div>
+</dialog>
+<?php endforeach; ?>
+<?php if ($hatNotiz): ?>
+<style>.nz-dlg{border:1px solid var(--line);border-radius:14px;max-width:560px;width:calc(100% - 32px);padding:22px 24px;background:var(--panel);color:var(--text);box-shadow:0 24px 70px rgba(0,0,0,.45);color-scheme:light dark}.nz-dlg h2{color:var(--text)}.nz-dlg::backdrop{background:rgba(0,0,0,.55)}</style>
+<script>document.querySelectorAll('.nz-dlg').forEach(function(d){ d.addEventListener('click', function(e){ if(e.target===d) d.close(); }); });</script>
+<?php endif; ?>
 <?php render_footer(); ?>

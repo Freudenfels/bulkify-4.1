@@ -174,6 +174,8 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
               + (int) scalar("SELECT COUNT(*) FROM charge c WHERE COALESCE(c.coa_freigegeben,0)=0 AND EXISTS (SELECT 1 FROM charge_analyse a WHERE a.charge_id=c.id)");
             // Offene Lieferanten-Uploads (Mein Katalog: Katalog/CoA/Spec/manuell), die auf unsere Prüfung warten.
             $anfCount['katalog_freigaben'] = (int) scalar("SELECT COUNT(*) FROM lieferant_katalog WHERE status='neu'");
+            // Neu abgegebene Lieferantenpreise (Preisanfrage beantwortet, noch nicht angenommen/abgelehnt).
+            $anfCount['lief_anfragen'] = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage la JOIN lieferant_angebot ag ON ag.anfrage_id=la.id WHERE ag.status='offen'");
         } catch (Throwable $e) { /* Tabellen evtl. noch nicht da */ }
     }
     foreach ($navdef as $gruppe => $seiten) {
@@ -200,6 +202,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 'auftraege'     => "$n Aufträge noch nicht fertig",
                 'freigaben'     => "$n offene Freigaben (Spezifikationen/CoA)",
                 'katalog_freigaben' => "$n Lieferanten-Uploads zu prüfen",
+                'lief_anfragen' => "$n neue Lieferantenpreise (abgegeben, noch nicht bearbeitet)",
                 default         => "$n offene Anfragen",
             };
             $badge = $n > 0 ? "<span class=\"bx-navbadge\" title=\"$badgeTitel\">$n</span>" : '';
