@@ -104,9 +104,9 @@ foreach ($zeilen as $roh) {
 }
 
 render_header('novelfood', 'Novel Food');
-bx_head('Novel Food – Schnellsuche', $anzKatalog . ' Einträge im EU-Katalog',
+bx_head('Novel-Food-Katalog', $anzKatalog . ' Einträge im EU-Katalog – suchen oder durchblättern',
         (has_role('admin') || has_role('production') || has_role('labor') ? bx_btn('Katalog aktualisieren', '?p=novelfood_import') . ' ' : '')
-        . bx_btn('Aktualisierungs-Verlauf', '?p=novelfood_verlauf', 'ghost') . ' '
+        . bx_btn('Was ist neu (Verlauf)', '?p=novelfood_verlauf', 'ghost') . ' '
         . bx_btn('Zurück zum Dashboard', '?p=dashboard', 'ghost'));
 
 if ($anzKatalog === 0) {
@@ -189,16 +189,42 @@ if ($anzKatalog === 0) {
     </div>
   <?php endforeach; ?>
   <p class="muted" style="font-size:12px">Quelle: EU-Novel-Food-Katalog (importierter Stand). Die Ampel ist eine Orientierung, keine Rechtsberatung – im Zweifel den Einzelfall prüfen. Rot = im Katalog als Novel Food ohne Zulassung; Gelb = zugelassenes oder offenes Novel Food (Bedingungen prüfen); Grün = kein Novel Food.</p>
-<?php else: ?>
+<?php else:
+  // KATALOG DURCHBLÄTTERN (ohne Suche): nach Status filtern + Liste. „Was ist neu" steht oben als Verlauf.
+  $FILT = ['' => 'Alle', 'NOT_YET_AUTHORISED_NOVEL_FOOD' => 'Novel Food (Zulassung nötig)',
+           'AUTHORISED_NOVEL_FOOD' => 'zugelassenes Novel Food', 'SUBJECT_TO_A_CONSULTATION_REQUEST' => 'Konsultation',
+           'NOT_NOVEL_IN_FOOD' => 'kein NF (Lebensmittel)', 'NOT_NOVEL_IN_FOOD_SUPPLEMENTS' => 'kein NF (NEM)'];
+  $nf = (string)($_GET['nf'] ?? ''); if (!array_key_exists($nf, $FILT)) $nf = '';
+  $where = $nf !== '' ? ' WHERE status_code=?' : ''; $args = $nf !== '' ? [$nf] : [];
+  $gesamtF = (int) scalar("SELECT COUNT(*) FROM novelfood_katalog$where", $args);
+  $LIMIT = 300;
+  $katRows = all("SELECT name, teil, status, status_code, beschreibung_de FROM novelfood_katalog$where ORDER BY name LIMIT $LIMIT", $args);
+?>
   <div class="bx-panel">
-    <div style="font-weight:600;margin-bottom:6px">So funktioniert's</div>
-    <p class="muted" style="margin:0;line-height:1.7">
-      Stoffnamen oben eintippen und „Prüfen" klicken. Die Suche gleicht mit dem EU-Novel-Food-Katalog ab und zeigt sofort:
-      <span style="color:var(--err)">rot</span> = Novel Food ohne Zulassung (nicht verkehrsfähig),
-      <span style="color:var(--warn)">gelb</span> = zugelassenes/offenes Novel Food (Bedingungen prüfen),
-      <span style="color:var(--gruen)">grün</span> = kein Novel Food. Mehrere Stoffe: einen pro Zeile.
-    </p>
+    <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Katalog durchblättern <span class="muted" style="font-size:14px;font-weight:400"><?= number_format($gesamtF, 0, ',', '.') ?> Einträge</span></h2>
+    </div>
+    <div class="settabs" style="margin:10px 0 4px">
+      <?php foreach ($FILT as $k => $lbl): ?><a href="?p=novelfood<?= $k !== '' ? '&nf=' . urlencode($k) : '' ?>" class="<?= $nf === $k ? 'on' : '' ?>"><?= h($lbl) ?></a><?php endforeach; ?>
+    </div>
+    <input class="bx-search" type="text" id="katSuche" placeholder="In der Liste filtern (Name, Pflanzenteil) …" autocomplete="off" style="margin:8px 0 4px;max-width:420px">
+    <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table">
+      <thead><tr><th>Eintrag</th><th>Pflanzenteil / Form</th><th>Status</th></tr></thead>
+      <tbody id="katBody">
+      <?php foreach ($katRows as $c): [$amp, $txt] = nf_ampel((string)$c['status_code']); $fb = nf_farbe($amp); ?>
+        <tr>
+          <td><?= h($c['name']) ?>
+            <?php $extra = trim((string)$c['beschreibung_de']); if ($extra !== ''): ?><div class="muted" style="font-size:12px;margin-top:2px;white-space:normal"><?= h(mb_strlen($extra) > 160 ? mb_substr($extra, 0, 160) . '…' : $extra) ?></div><?php endif; ?>
+          </td>
+          <td class="muted" style="font-size:13px"><?= $c['teil'] ? h($c['teil']) : '–' ?></td>
+          <td><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:<?= $fb ?>;flex:0 0 auto"></span><span style="color:<?= $fb ?>"><?= h($txt) ?></span></span></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <?php if ($gesamtF > $LIMIT): ?><p class="muted" style="font-size:12px;margin-top:8px">Nur die ersten <?= $LIMIT ?> von <?= number_format($gesamtF, 0, ',', '.') ?> angezeigt – nach einem bestimmten Stoff am besten oben suchen.</p><?php endif; ?>
   </div>
+  <script>(function(){var b=document.getElementById('katSuche'),t=document.getElementById('katBody');if(!b||!t)return;var rows=[].slice.call(t.querySelectorAll('tr'));b.addEventListener('input',function(){var q=(b.value||'').trim().toLowerCase();rows.forEach(function(tr){tr.style.display=(!q||tr.textContent.toLowerCase().indexOf(q)>=0)?'':'none';});});})();</script>
 <?php endif; ?>
 <?php
 render_footer();
