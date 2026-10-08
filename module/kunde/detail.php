@@ -20,6 +20,18 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
     header('Location: ?p=kunde&id=' . (int)$id . '&loeschfehler=' . urlencode((string)($r['fehler'] ?? 'Löschen fehlgeschlagen.'))); exit;
 }
 
+// Dublette zusammenführen (nur Admin): der GEWÄHLTE (doppelte) Kunde wird in DIESEN Kunden überführt und gelöscht.
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zusammenfuehren') {
+    if (!has_role('admin')) { header('Location: ?p=kunde&id=' . (int)$id . '&mergefehler=' . urlencode('Nur Admins dürfen Kunden zusammenführen.')); exit; }
+    $quelle = (int)($_POST['quelle_id'] ?? 0);   // der doppelte Kunde -> wird gelöscht
+    $r = kunde_zusammenfuehren($quelle, (int)$id);   // Ziel = dieser Kunde (bleibt)
+    if (!empty($r['ok'])) {
+        $sum = array_sum($r['moved'] ?? []);
+        header('Location: ?p=kunde&id=' . (int)$id . '&merged=' . (int)$sum . '&mergename=' . urlencode((string)($r['quelle'] ?? ''))); exit;
+    }
+    header('Location: ?p=kunde&id=' . (int)$id . '&mergefehler=' . urlencode((string)($r['fehler'] ?? 'Zusammenführen fehlgeschlagen.'))); exit;
+}
+
 // Speichern
 $fehler = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -563,7 +575,39 @@ if (!$neu) {
   </div>
 </form>
 
-<?php if (!$neu && function_exists('has_role') && has_role('admin')): ?>
+<?php if (!$neu && function_exists('has_role') && has_role('admin')):
+  // Dublette zusammenführen – doppelte Kundendatensätze zu einem (diesem) vereinen.
+  if (isset($_GET['merged'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px;margin-top:20px"><strong>' . h((string)($_GET['mergename'] ?? 'Dublette')) . '</strong> wurde in diesen Kunden zusammengeführt (' . (int)$_GET['merged'] . ' Verknüpfungen umgehängt) und der doppelte Datensatz gelöscht.</div>';
+  if (isset($_GET['mergefehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px;margin-top:20px">' . h((string)$_GET['mergefehler']) . '</div>';
+  $mergeKunden = all("SELECT id, firma, kundennummer FROM kunden WHERE id<>? ORDER BY firma", [(int)$id]);
+?>
+<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);margin-top:20px">
+  <h2 style="margin-top:0">Dublette zusammenführen</h2>
+  <p class="muted" style="margin-top:0">Wähle einen <strong>doppelten</strong> Kunden (dieselbe Firma als zweiter Datensatz). Alle seine Angebote, Aufträge, Rechnungen, Rezepturen, Produkte, Anfragen, Lagerbestände usw. werden <strong>hierher</strong> (zu <strong><?= $v('firma') ?></strong>) überführt – danach wird der doppelte Datensatz gelöscht. Das lässt sich nicht rückgängig machen.</p>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap" onsubmit="return mergeConfirm();">
+    <input type="hidden" name="aktion" value="zusammenfuehren">
+    <input type="hidden" name="quelle_id" id="mergeQuelleId">
+    <div class="bx-field" style="margin:0;min-width:320px"><label>Doppelter Kunde (wird gelöscht)</label>
+      <input type="text" id="mergeSuche" list="mergeDL" autocomplete="off" placeholder="Firma oder Kundennummer suchen …">
+      <datalist id="mergeDL">
+        <?php foreach ($mergeKunden as $mk): $lbl = trim($mk['firma'] . ($mk['kundennummer'] ? ' · ' . $mk['kundennummer'] : '')); ?><option value="<?= h($lbl) ?>"></option><?php endforeach; ?>
+      </datalist>
+    </div>
+    <button class="btn btn-primary" type="submit">In diesen Kunden zusammenführen</button>
+  </form>
+</div>
+<script>
+(function(){
+  var map = {};
+  <?php foreach ($mergeKunden as $mk): $lbl = trim($mk['firma'] . ($mk['kundennummer'] ? ' · ' . $mk['kundennummer'] : '')); ?>map[<?= json_encode($lbl, JSON_UNESCAPED_UNICODE) ?>]=<?= (int)$mk['id'] ?>;<?php endforeach; ?>
+  var inp=document.getElementById('mergeSuche'), hid=document.getElementById('mergeQuelleId');
+  function sync(){ hid.value = map[(inp.value||'').trim()] || ''; }
+  if(inp){ inp.addEventListener('input', sync); inp.addEventListener('change', sync); }
+  window.mergeConfirm=function(){ sync(); if(!hid.value){ alert('Bitte einen gültigen Kunden aus der Liste wählen.'); return false; }
+    return confirm('Den gewählten Kunden wirklich in „'+<?= json_encode((string)($k['firma'] ?? ''), JSON_UNESCAPED_UNICODE) ?>+'" zusammenführen und löschen?'); };
+})();
+</script>
+
 <?php if (isset($_GET['loeschfehler'])): ?>
   <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['loeschfehler']) ?></div>
 <?php endif; ?>

@@ -97,3 +97,6 @@
 
 ## KI-Info je Rohstoff (Stand 2026-10-08)
 `item.ki_info` (TEXT) + `item.ki_info_am` (DATETIME, UTC). `item_ki_info_erzeugen($item_id)` ruft die KI (ki_frage, aufwand=low), erzeugt eine neutrale, Health-Claims-konforme Kurzinfo (3–5 Sätze, DE) aus Name/lat/CAS/Form/Wirkstoffen und speichert sie. Nur auf Knopfdruck (kein Automatismus). Rückgabe ['ok','text','fehler']; ohne ANTHROPIC_API_KEY sauberer Fehler. Wird Team (Rohstoff-Liste/-Detail) + Kunde (Portal) als „KI-Info" gezeigt.
+
+## Kunden zusammenführen / Dublette (Stand 2026-10-08)
+`kunde_zusammenfuehren($quelle_id, $ziel_id)` hängt ALLE Verweise des doppelten Quell-Kunden auf den Ziel-Kunden um und löscht die Quelle. Dynamisch über alle Spalten, deren Name auf `kunde_id` endet (information_schema), in einer Transaktion (bei Fehler komplett Rollback). **Import-/Staging-Tabellen** (`v3imp_*`, `bu_imp_*`) sind ausgeschlossen – die haben einen eigenen ID-Raum und würden sonst korrumpiert (Ausschluss per `NOT LIKE ... ESCAPE '='`, kein Backslash wegen Live-MySQL). Keine UNIQUE-Constraints auf Kunden-Spalten → kollisionsfrei. Rückgabe ['ok','moved'(Tabelle.Spalte⇒Anzahl),'quelle','ziel'|'fehler'].

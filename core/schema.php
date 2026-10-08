@@ -2476,6 +2476,48 @@ function kunde_komplett_loeschen(int $kid): array {
     return ['ok' => true, 'geloescht' => $del];
 }
 
+// Zwei Kunden zusammenführen (Dublette): ALLE Verweise von $quelle_id auf $ziel_id umhängen, dann den
+// doppelten Quell-Kunden löschen. Dynamisch über alle Spalten, deren Name auf „kunde_id" endet (kunde_id,
+// fremd_kunde_id, rechnung_kunde_id …) – so wandern auch künftige Tabellen automatisch mit. In einer
+// Transaktion; bei Fehler wird ALLES zurückgerollt (kein Teil-Merge). Tabellen-/Spaltennamen stammen aus dem
+// Schema (information_schema), nicht aus Nutzereingaben. Rückgabe ['ok','moved','quelle','ziel'|'fehler'].
+function kunde_zusammenfuehren(int $quelle_id, int $ziel_id): array {
+    if ($quelle_id <= 0 || $ziel_id <= 0) return ['ok'=>false, 'fehler'=>'Ungültige Kunden-ID.'];
+    if ($quelle_id === $ziel_id)          return ['ok'=>false, 'fehler'=>'Quelle und Ziel sind derselbe Kunde.'];
+    $q = one("SELECT id, firma FROM kunden WHERE id=?", [$quelle_id]);
+    $z = one("SELECT id, firma FROM kunden WHERE id=?", [$ziel_id]);
+    if (!$q || !$z) return ['ok'=>false, 'fehler'=>'Einer der Kunden wurde nicht gefunden.'];
+
+    // Nur LIVE-Tabellen: Import-/Staging-Tabellen (v3imp_*, bu_imp_*) haben einen EIGENEN ID-Raum – ihr
+    // kunde_id zeigt NICHT auf die Live-Kunden, die würden wir sonst korrumpieren. Ausschluss per Präfix.
+    // ESCAPE '=' statt Backslash (Backslash-Escape crasht die Live-MySQL).
+    $cols = all("SELECT TABLE_NAME AS t, COLUMN_NAME AS c
+                 FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND COLUMN_NAME LIKE '%kunde_id'
+                   AND TABLE_NAME <> 'kunden'
+                   AND TABLE_NAME NOT LIKE 'v3imp=_%' ESCAPE '='
+                   AND TABLE_NAME NOT LIKE 'bu=_imp=_%' ESCAPE '='");
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $moved = [];
+        foreach ($cols as $cc) {
+            $t = (string)$cc['t']; $c = (string)$cc['c'];
+            $n = q("UPDATE `$t` SET `$c`=? WHERE `$c`=?", [$ziel_id, $quelle_id])->rowCount();
+            if ($n > 0) $moved[$t . '.' . $c] = $n;
+        }
+        q("DELETE FROM kunden WHERE id=?", [$quelle_id]);
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return ['ok'=>false, 'fehler'=>'Zusammenführen abgebrochen (nichts geändert): ' . $e->getMessage()];
+    }
+    if (function_exists('log_aktivitaet'))
+        log_aktivitaet('kunde', $ziel_id, 'team', 'Doppelten Kunden „' . (string)$q['firma'] . '" (ID ' . $quelle_id . ') hierher zusammengeführt.', 'merge');
+    return ['ok'=>true, 'moved'=>$moved, 'quelle'=>(string)$q['firma'], 'ziel'=>(string)$z['firma']];
+}
+
 // Lieferant/Partner KOMPLETT löschen (nur Admin, unwiderruflich) – inkl. ALLER Preise, Anfragen, Angebote,
 // Bestellungen, Preislisten, Kataloge, Dokumente, Portal-Login und Kreditoren-Rechnungen. Sicherheitsstopp:
 // produzierte/eingebuchte Chargen mit Bezug zu diesem Lieferanten (Lagerbestand/Rückverfolgung) blockieren.

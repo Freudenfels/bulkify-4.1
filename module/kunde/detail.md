@@ -37,3 +37,6 @@
 
 ## Reiter „Benachrichtigungen" (2026-10-06)
 Schalter **„Keine E-Mail-Benachrichtigungen an diesen Kunden"** (`kunden.benachrichtigung_aus`). Für Nachholbuchungen, ohne den Kunden mit Mails zu fluten. Gated in core/mail.php über `kunde_mails_aus($kunde_id)` – betrifft die 4 Kunden-Mails: `mail_kunde_angebot`, `mail_angebot_angenommen` (Kunden-Bestätigung; die Team-Mail geht weiter), `mail_kunde_anfrage_eingang`, `mail_kunde_absage`. Portal-Nutzung bleibt unberührt (Kunde sieht alles weiter im Portal, nur ohne Mail). Gespeichert über den normalen Kunden-Save (Feldliste + Checkbox-Normalisierung in module/kunde/detail.php).
+
+## Dublette zusammenführen (Stand 2026-10-08)
+Admin-Abschnitt über der Gefahrenzone: einen doppelten Kunden (Suchfeld-Dropdown über alle anderen Kunden, Firma/Kundennummer) in DIESEN Kunden überführen. POST `aktion=zusammenfuehren` + `quelle_id` → `kunde_zusammenfuehren(quelle, dieser)`. Bestätigung per JS-confirm; danach Flash `merged`/`mergefehler`. Der Quell-Datensatz wird gelöscht, alle Vorgänge wandern hierher.
