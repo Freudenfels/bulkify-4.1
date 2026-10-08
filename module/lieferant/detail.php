@@ -128,11 +128,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $felder = ['lieferantennummer','kuerzel','firma','ansprechpartner','email','telefon','gesperrt','sprache','kategorien','fertig_formen','webseite',
                    'strasse','hausnummer','plz','ort','land','ust_id',
                    'waehrung','zahlungsart','zahlungsziel_tage','lieferzeit_tage','mindestbestellwert','notiz',
-                   'keine_anfragen','shop_login','shop_passwort',
+                   'keine_anfragen','ist_partner','shop_login','shop_passwort',
                    'bank_inhaber','bank_name','bank_land','bank_iban','bank_swift','bank_konto','bank_adresse','bank_waehrung','bank_zwischenbank','bank_notiz'];
         $vals = array_map($f, $felder);
         $vals[array_search('gesperrt', $felder)]        = isset($_POST['gesperrt']) ? 1 : 0;
         $vals[array_search('keine_anfragen', $felder)]  = isset($_POST['keine_anfragen']) ? 1 : 0;
+        $vals[array_search('ist_partner', $felder)]     = isset($_POST['ist_partner']) ? 1 : 0;
         foreach (['zahlungsziel_tage','lieferzeit_tage','mindestbestellwert'] as $nf) { $ix = array_search($nf, $felder); if (trim((string)$vals[$ix]) === '') $vals[$ix] = 0; }
         $katsSel = array_keys(array_intersect_key($KATS, (array)($_POST['kat'] ?? [])));
         $vals[array_search('kategorien', $felder)] = implode(',', $katsSel);
@@ -152,6 +153,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $vals[] = (int)$id;
             q("UPDATE lieferanten SET $set WHERE id=?", $vals);
         }
+        // Partner: ist der Schalter an, verknuepfen wir einen kunden-Datensatz und schreiben die Marge dorthin
+        // (eine Quelle: kunden.rabatt_marge). Beim Ausschalten bleibt die Verknuepfung bestehen, nur das Flag faellt.
+        if (isset($_POST['ist_partner'])) {
+            $kid = lieferant_partner_verknuepfen((int)$id);
+            if ($kid > 0) {
+                $marge = trim((string)($_POST['partner_marge'] ?? '')) !== '' ? zahl_lesen((string)$_POST['partner_marge']) : 0.0;
+                if ($marge < 0) $marge = 0.0; if ($marge > 100) $marge = 100.0;
+                q("UPDATE kunden SET rabatt_marge=? WHERE id=?", [$marge, $kid]);
+            }
+        }
         header('Location: ?p=lieferant&id=' . $id . '&gespeichert=1'); exit;
     }
 }
@@ -164,6 +175,10 @@ $v = fn($key) => h((string)($l[$key] ?? ''));
 $gesperrt = (int)($l['gesperrt'] ?? 0) === 1;
 $aktKats = array_filter(explode(',', (string)($l['kategorien'] ?? '')));
 $aktFormen = array_filter(explode(',', (string)($l['fertig_formen'] ?? '')));
+// Partner: verknuepfter Kunde (fuer Marge-Anzeige + Link). Marge lebt an kunden.rabatt_marge.
+$partnerKunde = (!$neu && !empty($l['kunde_id'])) ? one("SELECT id,kundennummer,firma,rabatt_marge FROM kunden WHERE id=?", [(int)$l['kunde_id']]) : null;
+$partnerMarge = $partnerKunde ? (float)$partnerKunde['rabatt_marge'] : 0.0;
+$margeFmt = $partnerMarge > 0 ? rtrim(rtrim(number_format($partnerMarge, 2, ',', ''), '0'), ',') : '';
 $hatFertig = in_array('fertigprodukt', $aktKats, true);
 if (!$neu) { seed_aktivitaet_if_empty(); $verlauf = verlauf_fuer('lieferant', (int)$id); } else { $verlauf = []; }
 $ungelesen = $neu ? 0 : nachrichten_ungelesen((int)$id, 'team');
@@ -465,6 +480,22 @@ if (!$neu) {
   </section>
 
   <section data-panel="kond" hidden>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Partner <?= bx_hint('Darf dieser Lieferant ZUSÄTZLICH wie ein Kunde bei uns bestellen? Dann wird er mit einem Kunden-Datensatz verknüpft – seine Partner-Marge läuft über die normale Kunden-Preislogik.') ?></h2>
+      <label class="bx-row" style="gap:10px;align-items:center;margin:0 0 10px">
+        <input type="checkbox" name="ist_partner" id="f_partner" value="1" <?= (int)($l['ist_partner']??0)===1?'checked':'' ?>>
+        <span>Dieser Lieferant darf auch wie ein Kunde bei uns bestellen (Partner)</span>
+      </label>
+      <div class="bx-grid">
+        <div class="bx-field" style="max-width:200px"><label>Partner-Marge % <?= bx_hint('Wirkt auf die Marge (nie unter EK), genau wie der Kundenrabatt. Leer = 0.') ?></label>
+          <input type="text" name="partner_marge" inputmode="decimal" value="<?= h($margeFmt) ?>" placeholder="z. B. 15"></div>
+      </div>
+      <?php if ($partnerKunde): ?>
+        <p class="muted" style="margin:4px 0 0">Verknüpfter Kunde: <a class="kundenlink" href="?p=kunde&id=<?= (int)$partnerKunde['id'] ?>"><?= h((string)$partnerKunde['kundennummer']) ?> · <?= h((string)$partnerKunde['firma']) ?></a></p>
+      <?php else: ?>
+        <p class="muted" style="margin:4px 0 0">Beim Speichern mit gesetztem Haken wird automatisch ein verknüpfter Kunde angelegt (oder ein bestehender gleicher Firma verknüpft).</p>
+      <?php endif; ?>
+    </div>
     <div class="bx-panel"><div class="bx-grid">
       <div class="bx-field"><label>Währung <?= bx_hint('EK oft in Fremdwährung – hier die Standardwährung des Lieferanten') ?></label>
         <select name="waehrung">

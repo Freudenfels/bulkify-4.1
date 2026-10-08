@@ -1707,6 +1707,11 @@ function init_schema(): void {
     ensure_column('lieferant_preisliste', 'lieferant_id', "INT NULL");        // Zuordnung zum Lieferanten (die Preisliste GEHOERT diesem Lieferanten)
     ensure_column('lieferant_preisliste', 'einheit', "VARCHAR(20) NULL");     // Bezug des Preises (Standard kg)
     ensure_column('lieferanten', 'preis_intervall_tage', "INT NOT NULL DEFAULT 28");   // 4-Wochen-Regel: Preise muessen so oft aktualisiert werden
+    // Partner: ein Lieferant darf ZUSAETZLICH wie ein Kunde bei uns bestellen (Alex-Fall). Dann verknuepfen wir
+    // ihn mit einem kunden-Datensatz (kunde_id) – so laeuft die ganze Kunden-/Marge-/Anfrage-Logik unveraendert.
+    // Die Partner-Marge lebt an EINER Quelle: kunden.rabatt_marge des verknuepften Kunden (hier nichts doppeln).
+    ensure_column('lieferanten', 'ist_partner', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('lieferanten', 'kunde_id', "INT NULL");   // verknuepfter kunden-Datensatz, sobald Partner aktiviert
     ensure_index('lieferant_preisliste', 'idx_lief', 'lieferant_id');
     // Einmalig: importierte/vorhandene Preislisten-Zeilen dem Lieferanten per Namen zuordnen (firma == lieferant-Text).
     if (meta_get('preisliste_lief_link', '') !== '1') {
@@ -6087,6 +6092,29 @@ function meldebestand_bedarf(): array {
 // ===== Lieferanten-Preisliste (gehört EINEM Lieferanten) + 4-Wochen-Aktualisierungsregel =====
 function lieferant_preisliste_fuer(int $lieferant_id): array {
     return all("SELECT * FROM lieferant_preisliste WHERE lieferant_id=? ORDER BY rohstoff_name", [$lieferant_id]);
+}
+// Partner-Verknuepfung: stellt sicher, dass der Lieferant einen verknuepften kunden-Datensatz hat, und gibt
+// dessen id zurueck. Vorhandene Verknuepfung gewinnt; sonst Kunde mit exakt gleicher Firma verknuepfen (keine
+// Dublette); sonst neu anlegen (Stammdaten aus dem Lieferanten uebernommen). Damit kann der Lieferant wie ein
+// Kunde bei uns bestellen und bekommt seine Marge ueber kunden.rabatt_marge (eine Quelle).
+function lieferant_partner_verknuepfen(int $lieferant_id): int {
+    $l = one("SELECT * FROM lieferanten WHERE id=?", [$lieferant_id]);
+    if (!$l) return 0;
+    $kid = (int)($l['kunde_id'] ?? 0);
+    if ($kid > 0 && one("SELECT id FROM kunden WHERE id=?", [$kid])) return $kid;
+    $vorhanden = one("SELECT id FROM kunden WHERE firma=? LIMIT 1", [(string)$l['firma']]);
+    if ($vorhanden) {
+        $kid = (int)$vorhanden['id'];
+    } else {
+        q("INSERT INTO kunden (kundennummer, firma, ansprechpartner, email, telefon, strasse, hausnummer, plz, ort, land, ust_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+          [naechste_nummer('K'), mb_substr((string)$l['firma'], 0, 190), ($l['ansprechpartner'] ?: null), ($l['email'] ?: null),
+           ($l['telefon'] ?: null), ($l['strasse'] ?: null), ($l['hausnummer'] ?: null), ($l['plz'] ?: null), ($l['ort'] ?: null),
+           ((string)($l['land'] ?? '') ?: 'DE'), ($l['ust_id'] ?: null)]);
+        $kid = insert_id();
+    }
+    q("UPDATE lieferanten SET kunde_id=? WHERE id=?", [$kid, $lieferant_id]);
+    return $kid;
 }
 // Preis je Lieferant für EIN Item (gültiger Staffelpreis zur Menge). Rückgabe: [lieferant_id => preis(float)].
 // Für die Lieferanten-Auswahl im Einkauf (Lieferant mit Preis anzeigen, günstigste zuerst).

@@ -66,3 +66,11 @@ Admin-Abschnitt über der Gefahrenzone: einen doppelten Lieferanten (Suchfeld-Dr
 
 ## Gelieferte Ware am Lieferanten (Stand 2026-10-08)
 Im Reiter „Bestellungen" steht zusätzlich das Panel „Gelieferte Ware (N)" – alle Chargen, die von diesem Lieferanten eingegangen sind (`charge.lieferant_id`). Spalten: Artikel (Rohstoff verlinkt), Charge-Nr, Menge, verfügbar, Wareneingang, MHD, Status (Quarantäne/frei/gesperrt/leer). Read-only.
+
+## Partner: Lieferant darf auch bestellen (Stand 2026-10-08)
+Im Reiter **Konditionen** oben das Panel **Partner**. Statt eines eigenen Partner-Datensatzes (Modul `partner` bleibt davon unberührt) bekommt ein bestehender Lieferant hier zusätzliche **Kundenrechte** (Fall „Alex": fragt als Lieferant an UND bestellt wie ein Kunde).
+- Haken **„darf auch wie ein Kunde bei uns bestellen (Partner)"** → `lieferanten.ist_partner`.
+- Beim Speichern mit Haken: `lieferant_partner_verknuepfen($id)` (in `core/schema.php`) stellt einen verknüpften `kunden`-Datensatz sicher → vorhandene Verknüpfung gewinnt, sonst Kunde gleicher Firma verknüpfen, sonst neu anlegen (Stammdaten aus dem Lieferanten, `naechste_nummer('K')`); `lieferanten.kunde_id` wird gemerkt.
+- **Partner-Marge %** wird an **einer** Quelle gehalten: `kunden.rabatt_marge` des verknüpften Kunden (am Lieferanten KEIN eigenes Marge-Feld). So greift die normale Kunden-Preislogik (wirkt auf die Marge, nie unter EK).
+- Anzeige: Link zum verknüpften Kunden (`?p=kunde&id=`). Ausschalten lässt die Verknüpfung bestehen, nur das Flag fällt.
+- **Phase 1** = nur dieses Fundament (Schalter/Marge/Verknüpfung), noch KEINE Portal-Seiten. Nächster Schritt wäre, dem Lieferantenportal die Kundensicht („Meine Anfragen"/Angebote) auf die `kunde_id` zu geben.
