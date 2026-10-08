@@ -25,9 +25,19 @@ $rows = all("SELECT k.*, l.firma FROM lieferant_katalog k
              JOIN lieferanten l ON l.id=k.lieferant_id
              WHERE k.status='neu'
              ORDER BY l.firma, k.name");
+// Starker Treffer = eindeutig derselbe Artikel: gleiche CAS ODER exakt gleicher Name. Dann ist ZUORDNEN
+// der richtige Weg (eine Stammdatei je Stoff, mehrere Lieferanten dran) statt eine Dublette anzulegen.
+$starkTreffer = function($z) {
+    $cas = trim((string)($z['cas'] ?? ''));
+    if ($cas !== '') { $t = one("SELECT id,artikelnummer,name,kategorie FROM item WHERE cas=? AND gesperrt=0 LIMIT 1", [$cas]); if ($t) return $t; }
+    $name = trim((string)($z['name'] ?? ''));
+    if ($name !== '') { $t = one("SELECT id,artikelnummer,name,kategorie FROM item WHERE name=? AND gesperrt=0 LIMIT 1", [$name]); if ($t) return $t; }
+    return null;
+};
 // Je Zeile einmal die Ähnlichen + KI-Daten ermitteln (Tabelle und Popups nutzen dieselben Werte).
 $data = array_map(fn($z) => [
     'z'        => $z,
+    'stark'    => $starkTreffer($z),
     'aehnlich' => katalog_aehnliche($z),
     'ki'       => !empty($z['ki_json']) ? json_decode((string)$z['ki_json'], true) : null,
     'dlg'      => 'dlgZ' . (int)$z['id'],
@@ -66,9 +76,25 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
         <td><?= h((string)$z['name']) ?><?php if (!empty($z['name_original']) && $z['name_original'] !== $z['name']): ?><div class="muted" style="font-size:12px">Original: <?= h((string)$z['name_original']) ?></div><?php endif; ?></td>
         <td><?= h(anfrage_art_label($z['art'] === 'fertigprodukt' ? 'fertigprodukt' : 'rohstoff', (string)$z['form'])) ?></td>
         <td class="bx-num"><?= $z['preis'] !== null ? h($zahl($z['preis'], 4) . ' ' . $z['waehrung'] . ($z['einheit'] ? ' / ' . $z['einheit'] : '')) : '–' ?></td>
-        <td><?= $d['aehnlich'] ? bx_badge('evtl. vorhanden (' . count($d['aehnlich']) . ')', 'warn') : bx_badge('neu', 'ok') ?></td>
+        <td>
+          <?php if ($d['stark']): ?>
+            <?= bx_badge('vorhanden', 'ok') ?>
+            <div class="muted" style="font-size:12px"><?= h((string)$d['stark']['artikelnummer']) ?> · <?= h((string)$d['stark']['name']) ?></div>
+          <?php else: ?>
+            <?= $d['aehnlich'] ? bx_badge('evtl. vorhanden (' . count($d['aehnlich']) . ')', 'warn') : bx_badge('neu', 'ok') ?>
+          <?php endif; ?>
+        </td>
         <td class="bx-num" style="white-space:nowrap">
-          <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('<?= $d['dlg'] ?>').showModal()">Ansehen</button>
+          <?php if ($d['stark']): ?>
+            <form method="post" style="display:inline" onsubmit="return confirm('Preis &amp; Unterlagen dem bestehenden Artikel <?= h(addslashes((string)$d['stark']['name'])) ?> zuordnen?');">
+              <input type="hidden" name="aktion" value="kat_uebernehmen"><input type="hidden" name="zeile_id" value="<?= (int)$z['id'] ?>">
+              <input type="hidden" name="item_id" value="<?= (int)$d['stark']['id'] ?>"><input type="hidden" name="preis_mit" value="1">
+              <button class="btn btn-primary btn-sm" type="submit">Diesem Rohstoff zuordnen</button>
+            </form>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('<?= $d['dlg'] ?>').showModal()">Ansehen</button>
+          <?php else: ?>
+            <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('<?= $d['dlg'] ?>').showModal()">Ansehen</button>
+          <?php endif; ?>
           <form method="post" style="display:inline" onsubmit="return confirm('Diese Zeile ablehnen?');">
             <input type="hidden" name="aktion" value="kat_ablehnen"><input type="hidden" name="zeile_id" value="<?= (int)$z['id'] ?>">
             <button class="btn btn-ghost btn-sm" type="submit">ablehnen</button>
@@ -137,11 +163,21 @@ foreach ($data as $d): $z = $d['z']; $aehnlich = $d['aehnlich']; $ki = $d['ki'];
       </tbody></table></div>
     <?php endif; ?>
 
+    <?php if ($d['stark']): ?>
+    <div class="bx-panel" style="background:var(--surface-2,#f6f7f5);margin:6px 0 2px">
+      <p style="margin:0 0 8px">Dieser Stoff ist eindeutig schon angelegt: <strong><?= h((string)$d['stark']['artikelnummer']) ?> · <?= h((string)$d['stark']['name']) ?></strong>. Ordne den Lieferanten dort zu, dann bleibt es eine Stammdatei (keine Dublette).</p>
+      <form method="post" style="margin:0" onsubmit="return confirm('Preis &amp; Unterlagen dem bestehenden Artikel zuordnen?');">
+        <input type="hidden" name="aktion" value="kat_uebernehmen"><input type="hidden" name="zeile_id" value="<?= (int)$z['id'] ?>">
+        <input type="hidden" name="item_id" value="<?= (int)$d['stark']['id'] ?>"><input type="hidden" name="preis_mit" value="1">
+        <button class="btn btn-primary" type="submit">Diesem Rohstoff zuordnen</button>
+      </form>
+    </div>
+    <?php endif; ?>
     <div class="bx-row" style="gap:8px;flex-wrap:wrap;margin-top:6px">
       <form method="post" style="margin:0" onsubmit="return confirm('Als NEUEN Artikel im Lager anlegen?');">
         <input type="hidden" name="aktion" value="kat_uebernehmen"><input type="hidden" name="zeile_id" value="<?= (int)$z['id'] ?>">
         <input type="hidden" name="preis_mit" value="1">
-        <button class="btn btn-primary" type="submit">Als neuen Artikel anlegen</button>
+        <button class="btn <?= $d['stark'] ? 'btn-ghost' : 'btn-primary' ?>" type="submit">Als neuen Artikel anlegen</button>
       </form>
       <form method="post" style="margin:0" onsubmit="return confirm('Diese Zeile ablehnen?');">
         <input type="hidden" name="aktion" value="kat_ablehnen"><input type="hidden" name="zeile_id" value="<?= (int)$z['id'] ?>">

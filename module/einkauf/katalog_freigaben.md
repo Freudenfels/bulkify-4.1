@@ -4,13 +4,16 @@
 
 **Warum es das gibt:** Solche Uploads landen als Zeilen in `lieferant_katalog` mit `status='neu'`. Vorher konnte man sie nur einzeln im jeweiligen Lieferantenkonto (Reiter „Katalog") prüfen – man musste also wissen, welcher Lieferant etwas hochgeladen hat. Diese Seite zeigt alle offenen Uploads über **alle** Lieferanten auf einen Blick. (Nicht zu verwechseln mit **Lager → Freigaben**: das sind Kunden-Freigaben von Spezifikationen/CoA an bereits bestehenden Rohstoffen/Chargen.)
 
-**Bedienung:** Tabelle mit Lieferant (Link ins Konto, Reiter Katalog) · Artikel · Typ · Preis · **Im Bestand?** (Badge „evtl. vorhanden (N)" oder „neu") · Aktion. Jede Zeile hat einen **Ansehen**-Knopf, der ein **Popup** öffnet – so muss man nicht in die Detailseite wechseln.
+**Bedienung:** Tabelle mit Lieferant (Link ins Konto, Reiter Katalog) · Artikel · Typ · Preis · **Im Bestand?** · Aktion. Jede Zeile hat einen **Ansehen**-Knopf, der ein **Popup** öffnet – so muss man nicht in die Detailseite wechseln.
+
+**Matchen zuerst (Stand 2026-10-08):** Gibt es einen **eindeutigen** Treffer – gleiche CAS **oder** exakt gleicher Name (`$starkTreffer`, nicht gesperrt) –, zeigt die Spalte „Im Bestand?" direkt den Treffer (Badge „vorhanden" + R-Nummer·Name) und die Zeile bekommt als **Haupt-Button** „**Diesem Rohstoff zuordnen**" (1 Klick → `kat_uebernehmen` mit `item_id`, Preis + CoA wandern dorthin). „Ansehen" wird dann zur Nebenaktion (Ghost); im Popup ist „Als neuen Artikel anlegen" ebenfalls nur noch Ghost. So entsteht **keine Dublette**, wenn derselbe Stoff schon angelegt ist (ein Rohstoff, viele Lieferanten über Kürzel/Kennung). Ohne eindeutigen Treffer bleibt es beim bekannten „evtl. vorhanden (N)"/„neu"-Badge und „Ansehen" als Haupt-Button.
 
 **Popup je Zeile** (`.bx-dialog`, theme-tauglich; liegt bewusst **außerhalb** der Tabelle, sonst löst der Browser ein `<dialog>` im `<table>` heraus):
 - **Angaben des Lieferanten:** Name, Original/Englisch, CAS, Spezifikation, Herkunft, Preis + ab Menge, Notiz.
 - **Aus CoA/Spezifikation gelesen:** falls die Zeile aus einem CoA/Spec-Upload stammt (`ki_json`), die erkannten Wirkstoffe (mit Gehalt %) und Kennwerte.
 - **Schon im Bestand?** Liste möglicher Treffer via `katalog_aehnliche()` (gleiche CAS, gleicher Name, ähnliche Namensteile) – jeder mit **Öffnen** (Link zum Rohstoff/Produkt) und **Preis dorthin** (ordnet den Preis dem bestehenden Artikel zu). Kein Treffer → Hinweis „wahrscheinlich neu".
-- Unten: **Als neuen Artikel anlegen** und **ablehnen**.
+- Bei einem **eindeutigen** Treffer (`$starkTreffer`) steht zusätzlich ein hervorgehobener Kasten „Diesem Rohstoff zuordnen" ganz unten vor den Schlussknöpfen.
+- Unten: **Als neuen Artikel anlegen** (bei eindeutigem Treffer nur Ghost) und **ablehnen**.
 
 **Aktionen:**
 - **Anlegen / Preis dorthin** (`kat_uebernehmen`): ohne `item_id` neuer Artikel + EK-Preis; mit `item_id` (aus „Preis dorthin") wandert der Preis zum bestehenden Artikel (`katalog_uebernehmen()`).
