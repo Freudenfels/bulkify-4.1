@@ -1412,7 +1412,7 @@ foreach ($rezZutaten as $z) if (!empty($z['item_id'])) {
 // Rohstoff-Katalog (Preis auf Anfrage) – ohne Leerkapseln. Filter nach Art (Stoffklasse) und Form.
 $rohArt  = trim((string)($_GET['art'] ?? ''));
 $rohForm = trim((string)($_GET['form'] ?? ''));
-$rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, art, form, cas, name_lat, synonym, bot_quelle, herkunftsland FROM item
+$rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, art, form, beschaffenheit, dev, cas, name_lat, synonym, bot_quelle, herkunftsland FROM item
     WHERE kategorie='rohstoff' AND gesperrt=0 AND (form<>'kapselhuelle' OR form IS NULL)
       AND (? = '' OR name LIKE ? OR name_lat LIKE ? OR synonym LIKE ? OR cas LIKE ?)
       AND (? = '' OR art = ?)
@@ -1488,7 +1488,7 @@ if (!$darfRohInfo && $iid) {
             OR (? = 1 AND p.status='aktiv' AND p.exklusiv=0)
         ) LIMIT 1", [$iid, $kid, $kid, $kid, (int)!empty($k['portal_produkte'])]);
 }
-$rohDetail = ($iid && $darfRohInfo) ? one("SELECT id, name, name_lat, form, cas, herkunft, synonym, bot_quelle, herkunftsland,
+$rohDetail = ($iid && $darfRohInfo) ? one("SELECT id, name, name_lat, form, beschaffenheit, dev, cas, herkunft, synonym, bot_quelle, herkunftsland,
     haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben,
     novelfood_status, novelfood_geprueft_am, ki_info, ki_info_am
     FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
@@ -2972,7 +2972,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <thead><tr><th>Name</th><th>Art</th><th>Form</th><th>CAS</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($rohkatalog as $ro): ?>
-        <tr><td><?= h($ro['name']) ?></td><td><?= ($lbl = rohstoff_art_label($ro['art'] ?? '')) !== '' ? h($lbl) : '<span class="muted">–</span>' ?></td><td><?= h($FORMLBL_P[$ro['form']] ?? $ro['form']) ?></td><td><?= h($ro['cas'] ?: '–') ?></td>
+        <tr><td><?= h(rohstoff_anzeige_name($ro)) ?></td><td><?= ($lbl = rohstoff_art_label($ro['art'] ?? '')) !== '' ? h($lbl) : '<span class="muted">–</span>' ?></td><td><?= h($FORMLBL_P[$ro['form']] ?? $ro['form']) ?></td><td><?= h($ro['cas'] ?: '–') ?></td>
           <td style="text-align:right"><div class="bx-row" style="gap:6px;justify-content:flex-end">
             <a class="btn btn-primary btn-sm" href="<?= $portalLink('rohanfrage') ?>&iid=<?= (int)$ro['id'] ?>">Anfragen</a>
             <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$ro['id'] ?>">ansehen</a>
@@ -2989,7 +2989,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-panel"><div class="muted">Rohstoff nicht gefunden.</div><div style="margin-top:12px"><a class="btn btn-ghost" href="<?= $portalLink('rohstoffe') ?>">Zurück zum Katalog</a></div></div>
   <?php else: ?>
     <div class="bx-row" style="justify-content:space-between;align-items:center">
-      <h1 style="margin:0"><?= h($rohDetail['name']) ?></h1>
+      <h1 style="margin:0"><?= h(rohstoff_anzeige_name($rohDetail)) ?></h1>
       <div class="bx-row" style="gap:8px">
         <?php if (!empty($k['portal_rohstoffe'])): ?>
         <a class="btn btn-primary btn-sm" href="<?= $portalLink('rohanfrage') ?>&iid=<?= (int)$rohDetail['id'] ?>">Rohstoff anfragen</a>

@@ -305,7 +305,7 @@ $kunden   = all("SELECT id, firma, portal_token FROM kunden ORDER BY firma");
 $produkte = all("SELECT id, name FROM produkt ORDER BY name");
 // Kataloge für „Position hinzufügen" (Typ zuerst)
 $rezepturKatalog = all("SELECT id, name, darreichungsform FROM rezeptur WHERE status IN ('entwurf','vorschlag','eingefroren','freigegeben') ORDER BY name");
-$rohstoffKatalog = all("SELECT id, name, artikelnummer, preis_bezug FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name");
+$rohstoffKatalog = all("SELECT id, name, artikelnummer, preis_bezug, beschaffenheit, dev FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name");
 $verpPrim   = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name");
 $verpDeckel = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND verpackung_rolle='verschluss' AND gesperrt=0 ORDER BY name");
 $verpEtik   = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0 AND produkt_id IS NULL ORDER BY name");
@@ -705,7 +705,7 @@ if (!$neu):
     <div class="bx-grid">
       <div class="bx-field"><label>Rohstoff</label>
         <select name="add_rohstoff_id" required><option value="">– wählen –</option>
-          <?php foreach ($rohstoffKatalog as $rs): ?><option value="<?= (int)$rs['id'] ?>"><?= h($rs['name']) ?><?= $rs['artikelnummer'] ? ' · '.h($rs['artikelnummer']) : '' ?></option><?php endforeach; ?>
+          <?php foreach ($rohstoffKatalog as $rs): ?><option value="<?= (int)$rs['id'] ?>"><?= h(rohstoff_anzeige_name($rs)) ?><?= $rs['artikelnummer'] ? ' · '.h($rs['artikelnummer']) : '' ?></option><?php endforeach; ?>
         </select>
       </div>
       <div class="bx-field"><label>Menge</label><input type="number" step="0.001" name="add_menge" placeholder="z. B. 25" required></div>

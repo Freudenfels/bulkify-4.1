@@ -183,12 +183,14 @@ function build_spec_pdf(int $item_id): ?string {
     $L = 40; $R = 555;
     $p = new MiniPDF();
     spec_wasserzeichen($p);
-    $y = spec_kopf($p, 'PRODUKTSPEZIFIKATION', 'Product Specification · ' . (string)$it['name']);
+    $anzName = rohstoff_anzeige_name($it);
+    $y = spec_kopf($p, 'PRODUKTSPEZIFIKATION', 'Product Specification · ' . $anzName);
     $fmtD = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '';
 
     // Kopf-/Produktidentität als graues Label-Gitter
     $ident = [];
-    $ident[] = ['Bezeichnung', (string)$it['name']];
+    $ident[] = ['Bezeichnung', $anzName];
+    if (!empty($it['beschaffenheit'])) $ident[] = ['Beschaffenheit', rohstoff_beschaffenheit_label($it['beschaffenheit']) . (trim((string)($it['dev'] ?? '')) !== '' ? ' (' . trim((string)$it['dev']) . ')' : '')];
     if (!empty($it['synonym']))    $ident[] = ['Synonyme', (string)$it['synonym']];
     if (!empty($it['bot_quelle'])) $ident[] = ['Botanische Quelle', (string)$it['bot_quelle']];
     if (!empty($it['cas']))        $ident[] = ['CAS-Nr.', (string)$it['cas']];

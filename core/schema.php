@@ -4132,12 +4132,12 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
 }
 // Positionszeile aus einem ROHSTOFF (Weiterverkauf): EK-Staffel × Aufschlag, Kundenrabatt.
 function angebot_rohstoff_zeile(int $item_id, float $menge, string $einheit, ?int $kid): array {
-    $it = one("SELECT name, artikelnummer, preis_bezug FROM item WHERE id=? AND kategorie='rohstoff'", [$item_id]); if (!$it) return [];
+    $it = one("SELECT name, artikelnummer, preis_bezug, beschaffenheit, dev FROM item WHERE id=? AND kategorie='rohstoff'", [$item_id]); if (!$it) return [];
     $menge = $menge > 0 ? $menge : 1;
     $vk = vk_fuer_kunde(rohstoff_vk_bei_menge($item_id, $menge) ?? 0.0, $kid);
     $ek = rohstoff_ek_bei_menge($item_id, $menge) ?? 0.0;
     return [[
-        'artikelnr'=>$it['artikelnummer'] ?? '', 'bezeichnung'=>$it['name'], 'beschreibung'=>'',
+        'artikelnr'=>$it['artikelnummer'] ?? '', 'bezeichnung'=>rohstoff_anzeige_name($it), 'beschreibung'=>'',
         'menge'=>(float)$menge, 'einheit'=>$einheit ?: ($it['preis_bezug'] ?: 'kg'),
         'preis_cent'=>(int) round($vk * 100), 'ek_cent'=>(int) round($ek * 100),
         'mwst_satz'=>angebot_ust_satz($kid), 'quelle'=>'rohstoff',

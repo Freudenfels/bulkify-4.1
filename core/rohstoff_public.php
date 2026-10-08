@@ -35,7 +35,7 @@ function rohstoff_public_liste(?string $slug = null): array {
     $where = "i.kategorie='rohstoff' AND COALESCE(i.website_sichtbar,0)=1";
     $args  = [];
     if ($slug !== null && $slug !== '') { $where .= " AND i.web_slug=?"; $args[] = $slug; }
-    $items = all("SELECT id, name, name_en, name_lat, cas, bot_quelle, form, web_slug, web_beschreibung
+    $items = all("SELECT id, name, name_en, name_lat, cas, bot_quelle, form, beschaffenheit, dev, web_slug, web_beschreibung
                   FROM item i WHERE $where ORDER BY i.name", $args);
     $out = [];
     foreach ($items as $it) {
@@ -53,7 +53,7 @@ function rohstoff_public_liste(?string $slug = null): array {
         }
         $out[] = [
             'slug'         => $slugV,
-            'name'         => (string)$it['name'],
+            'name'         => rohstoff_anzeige_name($it),
             'name_en'      => (string)($it['name_en'] ?? ''),
             'name_lat'     => (string)($it['name_lat'] ?? ''),
             'cas'          => (string)($it['cas'] ?? ''),
