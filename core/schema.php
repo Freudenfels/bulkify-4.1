@@ -7701,6 +7701,7 @@ function angebotsscan_ki(string $pfad): array {
         . "Produkte/Rezepturen enthalten – erfasse ALLE. Gib NUR JSON zurück:\n"
         . '{"kunde_name":"","kunde_nr":"","datum":"",'
         . '"produkte":[{"produkt_name":"","darreichungsform":"kapsel","stueck_je_packung":0,"verpackung":"",'
+        . '"kapselgroesse":"","einheit":"","beschreibung":"",'
         . '"staffeln":[{"menge":0,"vk_stueck":0}],"zutaten":[{"name":"","menge_mg":0}],'
         . '"preise":[{"bezeichnung":"","typ":"herstellung","einzelpreis":0,"menge":0,"einheit":""}]}]}' . "\n"
         . "Regeln: produkte = JEDES im Angebot aufgeführte Produkt als eigener Eintrag (z. B. zwei Rezepturen = zwei Einträge). "
@@ -7708,6 +7709,9 @@ function angebotsscan_ki(string $pfad): array {
         . "Ein führendes 'AP' vor dem Produktnamen ist eine interne Kürzel-Zuordnung und soll WEGGELASSEN werden. "
         . "darreichungsform eines von kapsel|tablette|softgel|stick|pulver|fluessig. "
         . "stueck_je_packung = Kapseln/Stück je Packung (z. B. 120), sonst 0. "
+        . "kapselgroesse = die Kapselgröße, falls genannt (z. B. '#2', '#0', '0', '00'); sonst leer. "
+        . "einheit = die Einheit aus der Mengenspalte (z. B. 'Stk.', 'Packung', 'kg', 'g', 'L'); bei loser Ware / Bulk oft 'Stk.' oder 'kg'. "
+        . "beschreibung = die kompletten Zusatzzeilen UNTER der Bezeichnung WORTGETREU (Wirkstoff-Aufschlüsselung mit mg, Kapselgröße, Füllgewicht, Stückzahl – z. B. 'Bacopa-Extrakt 10:1 150mg; MCC 50mg; #2, ~217mg, 100.000 Kapseln'). "
         . "verpackung = Verpackung/Behälter mit Größe als Freitext, z. B. '150 ml Weithalsglas', 'PET-Dose 120 ml' oder 'Standbodenbeutel 500 g'; leer wenn nicht genannt. "
         . "kunde_name = Firmenname des Angebotsempfängers, kunde_nr = dessen Kundennummer falls genannt (gilt fürs ganze Angebot). "
         . "datum = Angebotsdatum als YYYY-MM-DD. "
@@ -7758,6 +7762,9 @@ function angebotsscan_ki(string $pfad): array {
             'darreichungsform'  => in_array($form, $formen, true) ? $form : 'kapsel',
             'stueck_je_packung' => (int) round($num($pd['stueck_je_packung'] ?? 0)),
             'verpackung'        => mb_substr(trim((string)($pd['verpackung'] ?? '')), 0, 120),
+            'kapselgroesse'     => mb_substr(trim((string)($pd['kapselgroesse'] ?? '')), 0, 20),
+            'einheit'           => mb_substr(trim((string)($pd['einheit'] ?? '')), 0, 20),
+            'beschreibung'      => mb_substr(trim((string)($pd['beschreibung'] ?? '')), 0, 500),
             'vk_stueck'         => $vkEin,
             'menge'             => $mEin,
             'staffeln'          => $staffeln,

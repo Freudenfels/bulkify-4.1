@@ -761,6 +761,7 @@ if (!$neu):
   </style>
   <form method="post">
     <input type="hidden" name="aktion" value="pos_save">
+    <datalist id="angEinhListe"><option value="Stk."><option value="Packung"><option value="kg"><option value="g"><option value="L"><option value="Beutel"></datalist>
     <table class="bx-table" id="postab">
       <colgroup>
         <col><col style="width:118px"><col style="width:88px"><col style="width:72px"><col style="width:92px"><col style="width:74px">
@@ -787,7 +788,7 @@ if (!$neu):
           <?php $u=$inhaltUnit($pp['rezeptur_id']??0); ?>
           <td><div style="display:flex;align-items:center;gap:4px"><input type="number" step="1" min="0" name="p_stk[]" class="p_stk" data-unit="<?= h($u) ?>" value="<?= (int)($pp['stueck'] ?? 0) ?: '' ?>" placeholder="&ndash;" style="width:100%;text-align:right"><?php if($u!==''): ?><span class="muted" style="font-size:11px;white-space:nowrap"><?= h($u) ?></span><?php endif; ?></div></td>
           <td><input type="number" step="0.001" name="p_menge[]" class="p_menge" value="<?= h(rtrim(rtrim(number_format($pp['menge'],3,'.',''),'0'),'.')) ?>" style="width:100%"></td>
-          <td><input type="text" name="p_einheit[]" value="<?= h($pp['einheit'] ?? '') ?>" style="width:100%"></td>
+          <td><input type="text" name="p_einheit[]" value="<?= h($pp['einheit'] ?? '') ?>" list="angEinhListe" style="width:100%"></td>
           <td><input type="number" step="0.01" min="0" name="p_preis[]" class="p_preis" value="<?= h(number_format((int)$pp['preis_cent']/100,2,'.','')) ?>" style="width:100%"></td>
           <td><?php $mwCur = mwst_normalisieren((float)$pp['mwst_satz']); ?><select name="p_mwst[]" style="width:100%"><?php foreach (mwst_saetze() as $ms): ?><option value="<?= (int)$ms ?>" <?= (int)$ms === (int)$mwCur ? 'selected' : '' ?>><?= (int)$ms ?> %</option><?php endforeach; ?></select></td>
           <td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>
@@ -925,7 +926,7 @@ function posRecalc(){
       +'<input type="hidden" name="p_rez[]" value=""><input type="hidden" name="p_vid[]" value=""></td>'
       +'<td><input type="number" step="1" min="0" name="p_stk[]" class="p_stk" data-unit="" placeholder="&ndash;" style="width:100%;text-align:right"></td>'
       +'<td><input type="number" step="0.001" name="p_menge[]" class="p_menge"></td>'
-      +'<td><input type="text" name="p_einheit[]" value="Stück"></td>'
+      +'<td><input type="text" name="p_einheit[]" value="Stück" list="angEinhListe"></td>'
       +'<td><input type="number" step="0.01" min="0" name="p_preis[]" class="p_preis"></td>'
       +'<td><select name="p_mwst[]" style="width:100%"><?php foreach (mwst_saetze() as $ms): ?><option value="<?= (int)$ms ?>"<?= (int)$ms === (int)mwst_normalisieren(angebot_ust_satz($kid)) ? ' selected' : '' ?>><?= (int)$ms ?> %</option><?php endforeach; ?></select></td>'
       +'<td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>'

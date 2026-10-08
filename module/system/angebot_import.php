@@ -68,6 +68,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anwen
         $name   = mb_substr(trim((string)$pn), 0, 190);
         $stueck = max(0, (int)($_POST['stueck'][$pi] ?? 0));
         $glas   = (int)($_POST['verpackung_id'][$pi] ?? 0);
+        $besch  = mb_substr(trim((string)($_POST['beschreibung'][$pi] ?? '')), 0, 500);
+        $einheit= mb_substr(trim((string)($_POST['einheit'][$pi] ?? '')), 0, 20) ?: 'Stk.';
         $staffeln = [];
         foreach ((array)($_POST['st_menge'][$pi] ?? []) as $j => $m) {
             $m = (int)$m; $v = round((float) str_replace(',', '.', (string)(($_POST['st_vk'][$pi][$j]) ?? 0)), 4);
@@ -75,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anwen
             $staffeln[] = ['menge' => $m, 'vk_stueck' => $v];
         }
         if ($name === '' && !$staffeln) continue;
-        $produkte[] = ['name' => $name ?: 'Produkt', 'stueck' => $stueck, 'glas' => $glas, 'staffeln' => $staffeln];
+        $produkte[] = ['name' => $name ?: 'Produkt', 'stueck' => $stueck, 'glas' => $glas, 'beschreibung' => $besch, 'einheit' => $einheit, 'staffeln' => $staffeln];
     }
     if (!$produkte) { $_SESSION['angimp_fehler'] = 'Kein Produkt erkannt – bitte mindestens ein Produkt mit Preis angeben.'; header('Location: ?p=angebot_import&schritt=match'); exit; }
 
@@ -139,9 +141,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anwen
     foreach ($produkte as $pp) {
         $gruppe = count($produkte) > 1 ? chr(65 + $gi) : null; $gi++;
         foreach ($pp['staffeln'] as $stf) {
-            q("INSERT INTO angebot_position (angebot_id,sort,bezeichnung,menge,einheit,preis_cent,mwst_satz,quelle,rezeptur_id,stueck,verpackung_id,gruppe)
-               VALUES (?,?,?,?, 'Packung', ?, ?, 'import', ?, ?, ?, ?)",
-              [$aid, $sort++, $pp['name'], (int)$stf['menge'], (int) round(((float)$stf['vk_stueck']) * 100), $ustInland,
+            q("INSERT INTO angebot_position (angebot_id,sort,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz,quelle,rezeptur_id,stueck,verpackung_id,gruppe)
+               VALUES (?,?,?,?,?,?,?,?, 'import', ?, ?, ?, ?)",
+              [$aid, $sort++, $pp['name'], (string)($pp['beschreibung'] ?? ''), (int)$stf['menge'], (string)($pp['einheit'] ?? 'Stk.'),
+               (int) round(((float)$stf['vk_stueck']) * 100), $ustInland,
                $pp['rezid'] ?: null, $pp['stueck'] ?: null, $pp['glas'] ?: null, $gruppe]);
         }
         $kundenpreisErfassen($pp);
@@ -204,6 +207,7 @@ if ($schritt === 'match' && !empty($_SESSION['angebot_import'])) {
       <?php endif; ?>
       <div style="margin-top:6px"><a class="btn btn-ghost btn-sm" href="?p=angebot_import&schritt=datei" target="_blank" rel="noopener">In neuem Tab öffnen</a></div>
     </div>
+    <datalist id="einhListe"><option value="Stk."><option value="Packung"><option value="kg"><option value="g"><option value="L"><option value="Beutel"></datalist>
     <form method="post">
       <input type="hidden" name="aktion" value="anwenden">
       <div class="bx-panel">
@@ -221,7 +225,20 @@ if ($schritt === 'match' && !empty($_SESSION['angebot_import'])) {
 
       <?php if ($mehr): ?><div class="bx-panel badge-ok" style="padding:10px 14px"><?= count($produkte) ?> Produkte im Angebot erkannt – alle werden als Positionen (Gruppen A, B, …) in ein neues Angebot übernommen. Bitte je Produkt prüfen.</div><?php endif; ?>
 
-      <?php foreach ($produkte as $pi => $pp): $rez = $pp['_rez']; ?>
+      <?php foreach ($produkte as $pi => $pp): $rez = $pp['_rez'];
+          // Beschreibung = wortgetreue Zusatzzeilen der KI; falls leer, aus Zutaten (+ Kapselgröße) bauen.
+          $beschVor = trim((string)($pp['beschreibung'] ?? ''));
+          if ($beschVor === '' && !empty($pp['zutaten'])) {
+              $zl = [];
+              foreach ((array)$pp['zutaten'] as $z) { $zn = trim((string)($z['name'] ?? '')); if ($zn === '') continue; $zm = (float)($z['menge_mg'] ?? 0);
+                  $zl[] = $zn . ($zm > 0 ? ' ' . rtrim(rtrim(number_format($zm, 3, ',', '.'), '0'), ',') . 'mg' : ''); }
+              if (trim((string)($pp['kapselgroesse'] ?? '')) !== '') $zl[] = 'Kapselgröße ' . trim((string)$pp['kapselgroesse']);
+              $beschVor = implode("\n", $zl);
+          } elseif ($beschVor !== '' && trim((string)($pp['kapselgroesse'] ?? '')) !== '' && mb_stripos($beschVor, trim((string)$pp['kapselgroesse'])) === false) {
+              $beschVor .= "\nKapselgröße " . trim((string)$pp['kapselgroesse']);
+          }
+          $einhVor = trim((string)($pp['einheit'] ?? '')) ?: 'Stk.';
+      ?>
       <div class="bx-panel">
         <h2 style="margin-top:0"><?= $mehr ? 'Produkt ' . chr(65 + $pi) : 'Erkannt' ?></h2>
         <div class="bx-grid">
@@ -229,14 +246,18 @@ if ($schritt === 'match' && !empty($_SESSION['angebot_import'])) {
             <input type="text" name="produkt_name[<?= $pi ?>]" value="<?= h((string)$pp['produkt_name']) ?>">
             <div class="muted" style="font-size:12px;margin-top:4px"><?= $rez ? 'Rezeptur erkannt: <strong>' . h($rez['nummer'] . ' · ' . $rez['name']) . '</strong>' : 'Keine passende Rezeptur gefunden (Glas-Vorschlag dann nicht möglich).' ?></div>
           </div>
-          <div class="bx-field"><label>Stück je Packung</label><input type="number" name="stueck[<?= $pi ?>]" value="<?= (int)$pp['stueck_je_packung'] ?>" min="0" style="max-width:140px"></div>
-          <div class="bx-field"><label>Glas / Verpackung <span class="muted" style="font-weight:400"><?= $pp['_glas'] ? '(Vorschlag aus Kapselgröße × Stück)' : '(kein Vorschlag – bitte wählen)' ?></span></label>
+          <div class="bx-field"><label>Stück je Packung <?= $pp['kapselgroesse'] ? '<span class="muted" style="font-weight:400">· Kapselgröße ' . h((string)$pp['kapselgroesse']) . '</span>' : '' ?></label><input type="number" name="stueck[<?= $pi ?>]" value="<?= (int)$pp['stueck_je_packung'] ?>" min="0" style="max-width:140px"></div>
+          <div class="bx-field"><label>Einheit <?= bx_hint('Verkaufseinheit: Stk. (z. B. lose Kapseln = Bulk), Packung, kg, g, L … Für Bulk-Ware z. B. „Stk." oder „kg".') ?></label>
+            <input type="text" name="einheit[<?= $pi ?>]" value="<?= h($einhVor) ?>" list="einhListe" style="max-width:140px"></div>
+          <div class="bx-field"><label>Glas / Verpackung <span class="muted" style="font-weight:400"><?= $pp['_glas'] ? '(Vorschlag)' : '(leer = Bulk/ohne Verpackung)' ?></span></label>
             <select name="verpackung_id[<?= $pi ?>]" class="rscombo">
-              <option value="">– keins –</option>
+              <option value="">– keins (Bulk) –</option>
               <?php foreach ($verpOpt as $vp): ?><option value="<?= (int)$vp['id'] ?>" <?= (int)$pp['_glas'] === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?><?= (int)$pp['_glas'] === (int)$vp['id'] ? ' (Vorschlag)' : '' ?></option><?php endforeach; ?>
             </select>
           </div>
         </div>
+        <div class="bx-field" style="margin-top:4px"><label>Beschreibung <span class="muted" style="font-weight:400">(erscheint unter der Position im Angebot)</span></label>
+          <textarea name="beschreibung[<?= $pi ?>]" rows="<?= max(2, substr_count($beschVor, "\n") + 1) ?>" style="width:100%"><?= h($beschVor) ?></textarea></div>
         <div style="margin-top:12px;font-weight:600">Preise / Staffeln</div>
         <div class="bx-tablewrap"><table class="bx-table">
           <thead><tr><th>Menge (Packungen)</th><th>VK je Packung (netto)</th></tr></thead>
