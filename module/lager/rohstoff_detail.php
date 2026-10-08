@@ -397,7 +397,7 @@ $fremd_gesamt = $neu ? 0 : item_fremdbestand((int)$id);
 $fremdJeKunde = $neu ? [] : item_fremdbestand_je_kunde((int)$id);
 $fremdKunden  = $neu ? [] : all("SELECT id, firma FROM kunden ORDER BY firma");
 if (!$neu) seed_lieferant_preis_if_empty();
-$preise = $neu ? [] : all("SELECT lp.*, COALESCE(l.firma, lp.lieferant_name) AS firma FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id WHERE lp.item_id=? ORDER BY lp.preis ASC, lp.menge_ab ASC", [(int)$id]);
+$preise = $neu ? [] : all("SELECT lp.*, COALESCE(l.firma, lp.lieferant_name) AS firma, l.kuerzel AS lief_kuerzel FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id WHERE lp.item_id=? ORDER BY lp.preis ASC, lp.menge_ab ASC", [(int)$id]);
 $preis_lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 
 function bx_bald(string $modul): void {
@@ -557,8 +557,10 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
   <section data-panel="stamm">
     <div class="bx-panel"><div class="bx-grid">
       <div class="bx-field"><label>Artikelnummer <?= bx_hint('leer lassen = wird automatisch vergeben (R-/VP-/FP-… je Kategorie)') ?></label><input type="text" name="artikelnummer" value="<?= $v('artikelnummer') ?>" placeholder="<?= $neu ? 'automatisch' : '' ?>"></div>
-      <?php if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'): $bxNr = rohstoff_bx_nummer($it); ?>
-      <div class="bx-field"><label>buxtrade-Nr. <?= bx_hint('Handels-Kennung für buxtrade = Artikelnummer (R-Nummer) + „BX". Wird automatisch aus der Artikelnummer gebildet.') ?></label><input type="text" value="<?= h($bxNr) ?>" readonly style="background:var(--panel-2)"></div>
+      <?php if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
+          $hauptKuerzel = (int)($it['haupt_lieferant_id'] ?? 0) ? (string) scalar("SELECT kuerzel FROM lieferanten WHERE id=?", [(int)$it['haupt_lieferant_id']]) : '';
+          $liefKennung = rohstoff_lief_kennung($it['artikelnummer'] ?? '', $hauptKuerzel); ?>
+      <div class="bx-field"><label>Lieferanten-Kennung (Hauptlieferant) <?= bx_hint('Artikelnummer (R-Nummer) + Kürzel des Hauptlieferanten (z. B. R-12345BX). So lässt sich derselbe Rohstoff je Lieferant unterscheiden. Das Kürzel wird am Lieferanten gepflegt. Weitere Lieferanten mit Kennung siehst du im Reiter „Einkauf".') ?></label><input type="text" value="<?= h($liefKennung ?: '–') ?>" readonly style="background:var(--panel-2)"></div>
       <?php endif; ?>
       <div class="bx-field"><label>Name (deutsch)</label><input type="text" name="name" value="<?= $v('name') ?>" required></div>
       <div class="bx-field"><label>Name (englisch)</label><input type="text" name="name_en" value="<?= $v('name_en') ?>"></div>
@@ -1075,12 +1077,13 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
     <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin:10px 0"><?= (int)$_GET['angefragt'] ?> Preisanfrage(n) verschickt<?= isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '' ?>.</div><?php endif; ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <?php $VERS = versandart_liste(); ?>
-      <thead><tr><th>Lieferant</th><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Incoterm</th><th>Versand</th><th>Stand</th><th></th></tr></thead>
+      <thead><tr><th>Lieferant</th><th>Kennung</th><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Incoterm</th><th>Versand</th><th>Stand</th><th></th></tr></thead>
       <tbody>
-      <?php if (!$preise): ?><tr><td colspan="7" class="muted">Noch keine Preise. Unten eintragen oder per Preisanfrage einholen.</td></tr><?php endif; ?>
+      <?php if (!$preise): ?><tr><td colspan="8" class="muted">Noch keine Preise. Unten eintragen oder per Preisanfrage einholen.</td></tr><?php endif; ?>
       <?php $best = $preise ? (float)$preise[0]['preis'] : null; foreach ($preise as $pz): $ist_best = $best !== null && abs((float)$pz['preis'] - $best) < 0.0001; ?>
         <tr<?= $ist_best ? ' style="font-weight:600"' : '' ?>>
           <td><?= h($pz['firma'] ?: '–') ?> <?= $ist_best ? bx_badge('günstigster','ok') : '' ?></td>
+          <td class="muted"><?= h(rohstoff_lief_kennung($it['artikelnummer'] ?? '', $pz['lief_kuerzel'] ?? '') ?: '–') ?></td>
           <td class="bx-num"><?= rtrim(rtrim(number_format((float)$pz['menge_ab'],3,',','.'),'0'),',') ?> <?= h($it['einheit']) ?></td>
           <td class="bx-num"><?= number_format((float)$pz['preis'], (float)$pz['preis']<1?4:2, ',', '.') ?> <?= h($pz['waehrung']) ?>/<?= h($it['preis_bezug']) ?></td>
           <td><?= $pz['incoterm'] ? h($pz['incoterm']) : '<span class="muted">–</span>' ?></td>

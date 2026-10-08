@@ -1529,10 +1529,12 @@ function init_schema(): void {
     // KI-Kurzinfo je Rohstoff: nur auf Knopfdruck erzeugt (item_ki_info_erzeugen). Wird Team + Kunde als „KI-Info" gezeigt.
     ensure_column('item', 'ki_info', "TEXT NULL");
     ensure_column('item', 'ki_info_am', "DATETIME NULL");   // wann zuletzt erzeugt (UTC)
-    // buxtrade-Kennung je Rohstoff = Artikelnummer (R-Nummer) + „BX" (z. B. R-12345BX). Die R-Nummer bleibt unverändert.
-    ensure_column('item', 'bx_nummer', "VARCHAR(60) NULL");
-    // Befüllung (idempotent – nach dem ersten Lauf trifft es 0 Zeilen): fehlende BX-Kennung = Artikelnummer + „BX".
-    q("UPDATE item SET bx_nummer = CONCAT(artikelnummer, 'BX') WHERE kategorie='rohstoff' AND artikelnummer<>'' AND (bx_nummer IS NULL OR bx_nummer='')");
+    // Lieferanten-Kürzel: je Lieferant ein kurzes Suffix aus dem Namen (Buxtrade→BX, Wellgreen→WG …).
+    // Damit lässt sich derselbe Rohstoff je Lieferant eindeutig kennzeichnen: Kennung = R-Nummer + Kürzel.
+    ensure_column('lieferanten', 'kuerzel', "VARCHAR(10) NULL");
+    // Vorschlag befüllen (idempotent): die ersten beiden Buchstaben/Ziffern des Namens, GROSS. Manuell überschreibbar.
+    q("UPDATE lieferanten SET kuerzel = LEFT(UPPER(REGEXP_REPLACE(firma, '[^A-Za-z0-9]', '')), 2)
+       WHERE (kuerzel IS NULL OR kuerzel='') AND firma<>''");
     ensure_column('pack_ek_staffel', 'lieferant_id', "INT NULL");        // Verpackung: welcher Lieferant je EK-Staffelstufe
     // Verpackungs-Maße (mm) + Leergewicht (g) – u. a. für PPWR-Meldung / Etikettenmaße
     ensure_column('item', 'hoehe_mm', "DECIMAL(8,2) NULL");
@@ -3128,13 +3130,17 @@ function item_prefix(string $kategorie): string {
     ][$kategorie] ?? 'R';
 }
 
-// buxtrade-Kennung eines Rohstoffs: gespeicherte bx_nummer, sonst abgeleitet = Artikelnummer + „BX" (nur Rohstoffe).
-// Immer korrekt, auch bevor der Backfill gelaufen ist. Leer bei Nicht-Rohstoffen oder fehlender Artikelnummer.
-function rohstoff_bx_nummer(array $item): string {
-    $bx = trim((string)($item['bx_nummer'] ?? ''));
-    if ($bx !== '') return $bx;
-    $nr = trim((string)($item['artikelnummer'] ?? ''));
-    return ($nr !== '' && ($item['kategorie'] ?? '') === 'rohstoff') ? $nr . 'BX' : '';
+// Lieferanten-Kürzel aus dem Firmennamen vorschlagen: erste zwei Buchstaben/Ziffern, GROSS (z. B. „Buxtrade"→„BU").
+// Nur ein Vorschlag – das echte Kürzel (z. B. „BX") wird am Lieferanten gepflegt.
+function lieferant_kuerzel_vorschlag(string $firma): string {
+    $s = preg_replace('/[^A-Za-z0-9]/', '', $firma);
+    return mb_strtoupper(mb_substr((string)$s, 0, 2));
+}
+// Rohstoff-Kennung JE LIEFERANT = Artikelnummer (R-Nummer) + Lieferant-Kürzel (z. B. R-12345BX).
+// So lässt sich derselbe Rohstoff je Lieferant unterscheiden. Leer, wenn Nummer oder Kürzel fehlt.
+function rohstoff_lief_kennung(?string $artikelnummer, ?string $kuerzel): string {
+    $nr = trim((string)$artikelnummer); $k = trim((string)$kuerzel);
+    return ($nr !== '' && $k !== '') ? $nr . $k : '';
 }
 
 // Braucht diese Kategorie eine Quarantäne beim Wareneingang?

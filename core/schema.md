@@ -106,3 +106,6 @@
 
 ## buxtrade-Nummer je Rohstoff (Stand 2026-10-08)
 `item.bx_nummer` (VARCHAR) = buxtrade-Handelskennung eines Rohstoffs = Artikelnummer (R-Nummer) + „BX" (z. B. R-12345BX). Die R-Nummer bleibt unverändert. Befüllung idempotent im `init_schema()` (nach dem ersten Lauf 0 Zeilen; neue Rohstoffe werden beim nächsten Request nachgetragen). Helfer `rohstoff_bx_nummer($item)` liefert die gespeicherte bx_nummer, sonst abgeleitet aus der Artikelnummer (immer korrekt, auch vor dem Backfill). Angezeigt read-only auf der Rohstoff-Detailseite (Feld „buxtrade-Nr.").
+
+## Lieferanten-Kürzel + Rohstoff-Kennung je Lieferant (Stand 2026-10-08, ersetzt die fixe „BX"-Nummer)
+Jeder Lieferant hat ein `lieferanten.kuerzel` (aus dem Namen, editierbar; Vorschlag `lieferant_kuerzel_vorschlag()` = erste 2 Buchstaben GROSS, Backfill idempotent per REGEXP_REPLACE). Die Rohstoff-Kennung JE LIEFERANT = Artikelnummer (R-Nummer) + Kürzel (`rohstoff_lief_kennung($artikelnummer,$kuerzel)`, z. B. R-12345BX für Buxtrade, R-12345WG für Wellgreen). So lässt sich derselbe Rohstoff je Lieferant unterscheiden. Angezeigt: Rohstoff-Stammdaten (Hauptlieferant-Kennung) + je Zeile im EK-Reiter „Lieferantenpreise" (Spalte „Kennung"); Kürzel-Feld in den Lieferanten-Stammdaten. (Die frühere globale `item.bx_nummer` = R+„BX" war falsch und wird nicht mehr genutzt.)

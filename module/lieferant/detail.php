@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($f('firma') === '') {
         $fehler = 'Firma ist ein Pflichtfeld.';
     } else {
-        $felder = ['lieferantennummer','firma','ansprechpartner','email','telefon','gesperrt','sprache','kategorien','fertig_formen','webseite',
+        $felder = ['lieferantennummer','kuerzel','firma','ansprechpartner','email','telefon','gesperrt','sprache','kategorien','fertig_formen','webseite',
                    'strasse','hausnummer','plz','ort','land','ust_id',
                    'waehrung','zahlungsart','zahlungsziel_tage','lieferzeit_tage','mindestbestellwert','notiz',
                    'keine_anfragen','shop_login','shop_passwort',
@@ -384,6 +384,7 @@ if (!$neu) {
     <div class="bx-panel"><div class="bx-grid">
       <div class="bx-field"><label>Lieferantennummer <?= bx_hint('leer lassen = wird automatisch vergeben (L-…)') ?></label><input type="text" name="lieferantennummer" value="<?= $v('lieferantennummer') ?>" placeholder="<?= $neu ? 'automatisch (L-…)' : '' ?>"></div>
       <div class="bx-field"><label>Firma</label><input type="text" name="firma" value="<?= $v('firma') ?>" required></div>
+      <div class="bx-field"><label>Kürzel <?= bx_hint('Kurzes Lieferanten-Kürzel aus dem Namen (z. B. Buxtrade → BX, Wellgreen → WG). Es bildet die Rohstoff-Kennung je Lieferant: R-Nummer + Kürzel (z. B. R-12345BX) – so lässt sich derselbe Rohstoff je Lieferant unterscheiden. Leer = Vorschlag aus den ersten zwei Buchstaben.') ?></label><input type="text" name="kuerzel" maxlength="10" value="<?= $v('kuerzel') ?>" placeholder="<?= h(lieferant_kuerzel_vorschlag((string)($l['firma'] ?? ''))) ?>" style="max-width:120px;text-transform:uppercase"></div>
       <div class="bx-field"><label>Ansprechpartner</label><input type="text" name="ansprechpartner" value="<?= $v('ansprechpartner') ?>"></div>
       <div class="bx-field"><label>E-Mail</label><input type="email" name="email" value="<?= $v('email') ?>"></div>
       <div class="bx-field"><label>Telefon</label><input type="text" name="telefon" value="<?= $v('telefon') ?>"></div>
