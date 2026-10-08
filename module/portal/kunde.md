@@ -271,3 +271,6 @@ Die Rohstoff-Ansicht (`v=rohstoffe`) hat neben der Textsuche zwei Filter-Dropdow
 
 ## KI-Info in der Rohstoff-Ansicht (Stand 2026-10-08)
 In der Rohstoff-Detailansicht (v=rohstoff) wird `item.ki_info` als Karte „KI-Info" gezeigt – nur wenn vorhanden. `$rohDetail`-SELECT um ki_info/ki_info_am ergänzt. Mit Hinweis, dass es eine allgemeine KI-Kurzbeschreibung ist (keine gesundheitsbezogene Aussage/Verzehrempfehlung).
+
+## „Ansehen"-Popup bei Anfragen in Prüfung (Stand 2026-10-08)
+In „Meine Anfragen" haben Produkt-/Rohstoffanfragen (del_typ=portal) im Reiter „Offen" jetzt einen „Ansehen"-Button → `<dialog>` mit der genauen Anfrage: Verpackung und ALLE Mengen-Staffeln (aus `portal_anfrage_pos`: Anzahl je Verpackung × Menge Verpackungen), bei Rohstoff die gewünschte Menge, plus Notiz. Vorher war nur die erste Staffel als kurze Detailzeile sichtbar. Staffeln werden einmalig per `$anfPosMap` (portal_anfrage_pos) geladen und an die Zeile gehängt.

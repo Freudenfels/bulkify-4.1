@@ -1327,6 +1327,15 @@ $portalAnfragen = all("SELECT pa.*, p.name AS produkt_name, i.name AS verp_name,
     LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN item i ON i.id=pa.verpackung_id
     LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
     WHERE pa.kunde_id=? ORDER BY pa.angelegt DESC", [$kid]);
+// Staffel-Positionen je Anfrage (mehrere Mengen pro Produktanfrage) – für das „Ansehen"-Detailpopup.
+$anfPosMap = [];
+$pafIds = array_values(array_filter(array_map(fn($p) => (int)$p['id'], $portalAnfragen)));
+if ($pafIds) {
+    $inPaf = implode(',', $pafIds);
+    foreach (all("SELECT anfrage_id, stueck, fuellmenge_g, verpackung_typ, menge, sort
+                  FROM portal_anfrage_pos WHERE anfrage_id IN ($inPaf) ORDER BY anfrage_id, sort, id") as $ps)
+        $anfPosMap[(int)$ps['anfrage_id']][] = $ps;
+}
 // Produktanfragen, deren Menge der Kunde noch ändern darf: solange NOCH KEIN Auftrag existiert
 // (auch wenn schon ein Angebot vorliegt). Danach ist die Konfiguration verbindlich -> nur Nachbestellen.
 $mengeAenderbar = [];
@@ -1625,7 +1634,8 @@ foreach ($portalAnfragen as $p) {
     }
     $nzP = trim((string)($p['notiz'] ?? '')); if ($nzP !== '') $detailParts[] = mb_strimwidth($nzP, 0, 160, '…');
     $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt, 'loeschbar'=>empty($p['angebot_id']), 'del_typ'=>'portal', 'del_id'=>(int)$p['id'],
-        'link'=>$zeilenLink, 'angebot_id'=>(int)($p['angebot_id'] ?? 0), 'erledigt'=>$erledigt, 'auftrag_id'=>(int)($p['auftrag_id'] ?? 0), 'stufe'=>$stufe, 'detail'=>implode(' · ', $detailParts)];
+        'link'=>$zeilenLink, 'angebot_id'=>(int)($p['angebot_id'] ?? 0), 'erledigt'=>$erledigt, 'auftrag_id'=>(int)($p['auftrag_id'] ?? 0), 'stufe'=>$stufe, 'detail'=>implode(' · ', $detailParts),
+        'staffeln'=>($anfPosMap[(int)$p['id']] ?? []), 'verp'=>trim((string)($p['verp_name'] ?: ($p['verpackung_typ'] ?? ''))), 'wunsch_menge'=>$p['wunsch_menge'] ?? null, 'wunsch_einheit'=>($p['wunsch_einheit'] ?? ''), 'notiz_voll'=>trim((string)($p['notiz'] ?? ''))];
 }
 usort($meineAnfRows, fn($x,$y) => strcmp((string)$y['datum'], (string)$x['datum']));
 // Wirklich offene Anfragen (in Prüfung, noch kein Angebot) – für Zähler & Menü-Badge.
@@ -2256,6 +2266,7 @@ portal_head('Kundenportal · ' . $k['firma']);
             <td><?= $r['status'] ?></td>
             <td style="text-align:right">
               <div class="bx-row" style="gap:8px;justify-content:flex-end">
+                <?php if (($r['del_typ'] ?? '') === 'portal'): ?><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('anfDlg_<?= (int)$r['del_id'] ?>').showModal()">Ansehen</button><?php endif; ?>
                 <?php if ($r['aktion']): ?><a class="btn <?= $r['aktion']['primary'] ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="<?= h($r['aktion']['href']) ?>"><?= h($r['aktion']['label']) ?></a><?php endif; ?>
                 <?php if (!empty($r['loeschbar'])): ?>
                 <form method="post" style="margin:0" onsubmit="return confirm('Anfrage <?= h($r['nummer']) ?> wirklich löschen?');">
@@ -2270,6 +2281,41 @@ portal_head('Kundenportal · ' . $k['firma']);
         </tbody>
       </table></div>
     </div>
+    <?php // Detail-Popups „Ansehen" für Produkt-/Rohstoff-Anfragen (in Prüfung) – mit allen Mengen-Staffeln.
+      $anfPopupOffen = false;
+      foreach ($pending as $r): if (($r['del_typ'] ?? '') !== 'portal') continue; $anfPopupOffen = true; ?>
+    <dialog id="anfDlg_<?= (int)$r['del_id'] ?>" class="anf-dlg">
+      <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px">
+        <h2 style="margin:0;font-size:18px"><?= h($r['bez'] ?: 'Anfrage') ?></h2>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('dialog').close()" aria-label="schließen">&#10005;</button>
+      </div>
+      <div class="muted" style="font-size:13px;margin:4px 0 12px"><?= h($r['nummer']) ?> · <?= h($typLabelP[$r['typ']] ?? $r['typ']) ?><?= !empty($r['datum']) ? ' · ' . h(fmt_zeit($r['datum'],'d.m.Y')) : '' ?></div>
+      <?php if (!empty($r['verp'])): ?><div style="margin-bottom:10px"><strong>Verpackung:</strong> <?= h($r['verp']) ?></div><?php endif; ?>
+      <?php if (!empty($r['staffeln'])): ?>
+        <div style="font-weight:600;margin-bottom:6px">Mengen-Staffel</div>
+        <div class="bx-tablewrap"><table class="bx-table">
+          <thead><tr><th class="bx-num">Anzahl je Verpackung</th><th class="bx-num">Menge (Verpackungen)</th></tr></thead>
+          <tbody>
+          <?php foreach ($r['staffeln'] as $ps):
+            $proVp = $ps['stueck'] !== null ? number_format((int)$ps['stueck'],0,',','.') . ' Stück'
+                   : ($ps['fuellmenge_g'] !== null ? rtrim(rtrim(number_format((float)$ps['fuellmenge_g'],2,',','.'),'0'),',') . ' g' : '–'); ?>
+            <tr><td class="bx-num"><?= h($proVp) ?></td><td class="bx-num"><?= $ps['menge'] !== null ? number_format((int)$ps['menge'],0,',','.') : '–' ?></td></tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table></div>
+      <?php elseif (!empty($r['wunsch_menge'])): ?>
+        <div><strong>Gewünschte Menge:</strong> <?= h(rtrim(rtrim(number_format((float)$r['wunsch_menge'],3,',','.'),'0'),',')) ?> <?= h((string)($r['wunsch_einheit'] ?? '')) ?></div>
+      <?php elseif (!empty($r['detail'])): ?>
+        <div class="muted"><?= h($r['detail']) ?></div>
+      <?php endif; ?>
+      <?php if (!empty($r['notiz_voll'])): ?><div style="margin-top:12px"><strong>Ihre Notiz:</strong><div style="white-space:pre-line"><?= h($r['notiz_voll']) ?></div></div><?php endif; ?>
+      <div class="muted" style="font-size:12px;margin-top:14px">Status: in Prüfung – wir melden uns mit einem Angebot.</div>
+    </dialog>
+    <?php endforeach; ?>
+    <?php if ($anfPopupOffen): ?>
+    <style>.anf-dlg{border:1px solid var(--line);border-radius:14px;max-width:560px;width:calc(100% - 32px);padding:22px 24px;background:var(--panel);color:var(--text);box-shadow:0 24px 70px rgba(0,0,0,.45);color-scheme:light dark}.anf-dlg h2{color:var(--text)}.anf-dlg::backdrop{background:rgba(0,0,0,.55)}</style>
+    <script>document.querySelectorAll('.anf-dlg').forEach(function(d){ d.addEventListener('click', function(e){ if(e.target===d) d.close(); }); });</script>
+    <?php endif; ?>
     <?php endif; ?>
     <?php if (!$pending && !$anfPruefShow): ?><div class="bx-panel"><div class="muted">Aktuell nichts Offenes. Neue Anfragen stellen Sie über das Menü links.</div></div><?php endif; ?>
 
