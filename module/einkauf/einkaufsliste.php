@@ -153,12 +153,13 @@ $freiTab = ($aktTyp === '') ? $freiBedarf : ($istFreiTyp ? array_values(array_fi
 $nachTab = ($aktTyp === '' || $aktTyp === 'nachbestell') ? $nachBedarf : [];
 $hatWas  = $aggTab || $bulkTab || $freiTab || $nachTab;
 $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
-// Wert fürs Eingabefeld: Komma-Dezimal, aber OHNE Tausenderpunkt (sonst würde die Rückgabe falsch geparst).
-$minput = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', ''), '0'), ',');
+// Wert fürs Eingabefeld: deutsche Schreibweise MIT Tausenderpunkt (z. B. 135.000) – übersichtlicher.
+// Gefahrlos, weil $ovMenge die Tausenderpunkte beim Absenden wieder entfernt (Punkt = Tausender, Komma = Dezimal).
+$minput = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 // Editierbares Mengenfeld je Zeile – der Einkauf darf die Menge über den Bedarf anheben (z. B. 1000 -> 2000).
 $mengeInput = fn(string $key, float $wert, string $einheit) =>
     '<input type="text" inputmode="decimal" name="menge[' . h($key) . ']" value="' . h($minput($wert)) . '"'
-  . ' style="width:88px;text-align:right" title="Bestellmenge – kann über den Bedarf angehoben werden">'
+  . ' style="width:100px;text-align:right" title="Bestellmenge – kann über den Bedarf angehoben werden (Punkt = Tausender)">'
   . ' <span class="muted">' . h($einheit) . '</span>';
 $rolleBadge = fn($r) => bx_badge($r, $r === 'Fertigware' ? 'info' : '');
 // Lieferant-Dropdown je Zeile (vorbelegt)
