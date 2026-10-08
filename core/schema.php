@@ -502,6 +502,9 @@ function init_schema(): void {
     ensure_column('angebot_position', 'rezeptur_id', "INT NULL");
     ensure_column('angebot_position', 'stueck', "INT NULL");
     ensure_column('angebot_position', 'verpackung_id', "INT NULL");
+    // VK je Einheit in e4 (Euro x 10.000) fuer Sub-Cent-Preise (z. B. Bulk 0,0250 EUR/Stk). preis_cent allein
+    // (ganze Cent) rundet 0,025 auf 0,03 -> falsche Summe. preis_e4 NULL = Altwert, dann gilt preis_cent*100.
+    ensure_column('angebot_position', 'preis_e4', "INT NULL");
 
     // angebot_scan: per KI eingelesene (fremde/alte) Angebote – rein zur Erfassung von Rezeptur + Preisen.
     // Kundenunabhängig (System-Werkzeug). Preise werden als JSON-Aufschlüsselung mitgeführt (Herstellung,
@@ -4048,8 +4051,8 @@ function angebot_gruppe_anhaengen(int $aid, array $rows): void {
     $letter = chr(65 + $anzGrp);   // erste Gruppe A, dann B, C …
     $sort = (int) scalar("SELECT COALESCE(MAX(sort),-1)+1 FROM angebot_position WHERE angebot_id=?", [$aid]);
     foreach ($rows as $p) {
-        q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-          [$aid, $sort++, $p['artikelnr'] ?? '', $p['bezeichnung'], $p['beschreibung'] ?? '', (float)$p['menge'], $p['einheit'] ?? '', (int)$p['preis_cent'], (int)($p['ek_cent'] ?? 0), (float)($p['mwst_satz'] ?? 0), $p['quelle'] ?? 'manuell', $letter,
+        q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,preis_e4,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          [$aid, $sort++, $p['artikelnr'] ?? '', $p['bezeichnung'], $p['beschreibung'] ?? '', (float)$p['menge'], $p['einheit'] ?? '', (int)$p['preis_cent'], (($p['preis_e4'] ?? null) !== null ? (int)$p['preis_e4'] : null), (int)($p['ek_cent'] ?? 0), (float)($p['mwst_satz'] ?? 0), $p['quelle'] ?? 'manuell', $letter,
            $p['rezeptur_id'] ?? null, $p['stueck'] ?? null, $p['verpackung_id'] ?? null]);
     }
     $all = all("SELECT id,bezeichnung,gruppe FROM angebot_position WHERE angebot_id=? ORDER BY sort,id", [$aid]);
@@ -4384,6 +4387,20 @@ function kunde_bestell_status_label(array $a, ?array $k = null): string {
 }
 
 // Pro Angebot innerhalb eines Requests mehrfach aufgerufen (Übersicht + Karte) – request-lokal cachen.
+// VK je Einheit in e4 (Euro x 10.000): preis_e4 falls gesetzt, sonst aus ganzen Cent (preis_cent) hochgerechnet.
+function angpos_e4(array $r): int {
+    return (isset($r['preis_e4']) && $r['preis_e4'] !== null && $r['preis_e4'] !== '') ? (int)$r['preis_e4'] : (int)($r['preis_cent'] ?? 0) * 100;
+}
+// Zeilensumme (netto) in Cent: Menge x VK sub-cent-genau gerechnet, am Ende auf Cent gerundet.
+function angpos_netto_cent(array $r): int { return (int) round((float)($r['menge'] ?? 0) * angpos_e4($r) / 100); }
+// VK je Einheit als Euro-Zahl (fuer Anzeige mit bis zu 4 Nachkommastellen).
+function angpos_vk_eur(array $r): float { return angpos_e4($r) / 10000; }
+// VK je Einheit als deutscher Preis-String: ganze Cent -> 2 Nachkommastellen, Sub-Cent -> bis 4 (ohne Null-Schwanz).
+function angpos_vk_str(array $r): string {
+    $v = angpos_vk_eur($r);
+    if (abs($v * 100 - round($v * 100)) <= 1e-9) return number_format($v, 2, ',', '.');
+    return rtrim(number_format($v, 4, ',', '.'), '0');
+}
 function angebot_positionen(int $angebot_id): array {
     static $cache = [];
     if (!array_key_exists($angebot_id, $cache)) $cache[$angebot_id] = angebot_positionen_calc($angebot_id);
@@ -4396,6 +4413,7 @@ function angebot_positionen_calc(int $angebot_id): array {
     if ($echt) return array_map(fn($r) => [
         'artikelnr'=>$r['artikelnr'], 'bezeichnung'=>$r['bezeichnung'], 'beschreibung'=>$r['beschreibung'],
         'menge'=>(float)$r['menge'], 'einheit'=>$r['einheit'], 'preis_cent'=>(int)$r['preis_cent'],
+        'preis_e4'=>((isset($r['preis_e4']) && $r['preis_e4'] !== null && $r['preis_e4'] !== '') ? (int)$r['preis_e4'] : (int)$r['preis_cent'] * 100),
         'ek_cent'=>(int)$r['ek_cent'], 'mwst_satz'=>(float)$r['mwst_satz'], 'quelle'=>$r['quelle'], 'gruppe'=>$r['gruppe'] ?? null,
         'rezeptur_id'=>$r['rezeptur_id'] ?? null, 'stueck'=>$r['stueck'] ?? null, 'verpackung_id'=>$r['verpackung_id'] ?? null,
     ], $echt);

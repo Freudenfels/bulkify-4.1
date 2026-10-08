@@ -130,12 +130,13 @@ if ($a['status'] === 'bestaetigt') {
     <?php endforeach; ?>
     <?php foreach ($extra as $x): ?>
       <tr><td colspan="2"><?= h($x['bezeichnung']) ?><div class="muted" style="font-size:12px">wird zusätzlich berechnet</div></td>
-          <td colspan="2" class="bx-num"><?= $eur((float)$x['menge'] * (int)$x['preis_cent'] / 100) ?></td></tr>
+          <td colspan="2" class="bx-num"><?= $eur((float)$x['menge'] * (float)(($x['preis_e4'] ?? null) !== null ? (int)$x['preis_e4'] : (int)$x['preis_cent'] * 100) / 10000) ?></td></tr>
     <?php endforeach; ?>
     </tbody>
   </table></div>
   <?php elseif ($offen && !$st && $inf['pos']):
-        $sumNetto = 0; foreach ($inf['pos'] as $p) $sumNetto += $p['menge'] * $p['preis_cent'] / 100; ?>
+        $sumNetto = 0; foreach ($inf['pos'] as $p) $sumNetto += $p['menge'] * (($p['preis_e4'] ?? (int)$p['preis_cent'] * 100)) / 10000;
+        $pVk = fn($p) => (function($v){ return abs($v*100-round($v*100))<=1e-9 ? number_format($v,2,',','.') : rtrim(number_format($v,4,',','.'),'0'); })((($p['preis_e4'] ?? (int)$p['preis_cent'] * 100)) / 10000); ?>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
     <thead><tr><th>Position</th><th class="bx-num">Menge</th><th class="bx-num">Preis / Einheit</th><th class="bx-num">Gesamt</th></tr></thead>
     <tbody>
@@ -143,8 +144,8 @@ if ($a['status'] === 'bestaetigt') {
       <tr>
         <td><?= h($p['bezeichnung']) ?><?= $p['beschreibung'] ? '<div class="muted" style="font-size:12px;white-space:pre-line">' . h($p['beschreibung']) . '</div>' : '' ?></td>
         <td class="bx-num"><?= rtrim(rtrim(number_format($p['menge'],2,',','.'),'0'),',') ?> <?= h($p['einheit']) ?></td>
-        <td class="bx-num"><?= $eur($p['preis_cent']/100) ?></td>
-        <td class="bx-num"><?= $eur($p['menge'] * $p['preis_cent']/100) ?></td>
+        <td class="bx-num"><?= h($pVk($p)) ?> €</td>
+        <td class="bx-num"><?= $eur($p['menge'] * (($p['preis_e4'] ?? (int)$p['preis_cent'] * 100)) / 10000) ?></td>
       </tr>
     <?php endforeach; ?>
       <tr style="font-weight:600"><td colspan="3">Gesamt netto</td><td class="bx-num"><?= $eur($sumNetto) ?></td></tr>

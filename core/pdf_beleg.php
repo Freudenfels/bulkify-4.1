@@ -67,6 +67,14 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     $T = beleg_labels((string)($b['sprache'] ?? 'de'));   // Beschriftungen (de/en)
     $istEinkauf = in_array((string)($b['belegart_label'] ?? ''), ['Bestellung','Purchase Order'], true);
 
+    // VK je Einheit in e4 (Euro x 10.000) fuer Sub-Cent (z. B. Bulk 0,0250). preis_e4 fehlt bei Belegen -> Fallback
+    // auf ganze Cent (preis_cent*100), dann identisch wie bisher. So stimmen Angebots-PDFs mit Sub-Cent-Preisen.
+    $posE4    = fn($p) => (isset($p['preis_e4']) && $p['preis_e4'] !== null && $p['preis_e4'] !== '') ? (int)$p['preis_e4'] : (int)($p['preis_cent'] ?? 0) * 100;
+    $posNetto = fn($p) => (int) round((float)($p['menge'] ?? 0) * $posE4($p) / 100);
+    // VK-String: ganze Cent -> 2 Nachkomma, Sub-Cent -> bis 4 (ohne Null-Schwanz).
+    $posVkStr = function($p) use ($posE4) { $v = $posE4($p) / 10000;
+        return abs($v * 100 - round($v * 100)) <= 1e-9 ? number_format($v, 2, ',', '.') : rtrim(number_format($v, 4, ',', '.'), '0'); };
+
     // Logo (JPEG) laden, falls vorhanden
     $logoImg = null;
     $lp = BX_ROOT . '/assets/bulkify-logo.jpg';
@@ -75,7 +83,7 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     // Summen je USt-Satz
     $byRate = [];
     foreach ($positionen as $pp) {
-        $g = (int) round((float) $pp['menge'] * (int) $pp['preis_cent']);
+        $g = $posNetto($pp);
         $r = (string) (float) ($pp['mwst_satz'] ?? 0);
         if (!isset($byRate[$r])) $byRate[$r] = ['satz' => (float) ($pp['mwst_satz'] ?? 0), 'netto' => 0, 'ust' => 0];
         $byRate[$r]['netto'] += $g;
@@ -182,8 +190,8 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $p->text($cBez, $by, $p->fit((string) $pos['bezeichnung'], $bezMax, 9, true), 9, true, $INK);
         $p->textRight($cMengeR, $by, beleg_num((float) $pos['menge']), 8, false, $INK);
         $p->text($cEinh, $by, $p->fit((string) ($pos['einheit'] ?? ''), 34, 8, false), 8, false, $INK);
-        $p->textRight($cPreisR, $by, beleg_eur((int) $pos['preis_cent'], ''), 8, false, $INK);
-        $p->textRight($cGesR, $by, beleg_eur((int) ($pos['gesamt_cent'] ?? round((float)$pos['menge']*(int)$pos['preis_cent'])), ''), 9, true, $INK);
+        $p->textRight($cPreisR, $by, ((isset($pos['preis_e4']) && $pos['preis_e4'] !== null && $pos['preis_e4'] !== '') ? $posVkStr($pos) : beleg_eur((int) $pos['preis_cent'], '')), 8, false, $INK);
+        $p->textRight($cGesR, $by, beleg_eur((int) ($pos['gesamt_cent'] ?? $posNetto($pos)), ''), 9, true, $INK);
         $y += 15;
         $besch = trim((string) ($pos['beschreibung'] ?? ''));
         if ($besch !== '') {

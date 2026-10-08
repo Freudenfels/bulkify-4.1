@@ -82,10 +82,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($bez as $i => $b) {
             $b = trim($b); if ($b === '') continue;
             $gv = strtoupper(trim($grp[$i] ?? '')); $gv = ($gv !== '' && ctype_alpha($gv)) ? substr($gv, 0, 2) : null;
-            q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            $pEur = (float)str_replace(',', '.', $preis[$i] ?? '0');
+            q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,preis_e4,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
               [(int)$id, $sort++, trim($art[$i] ?? ''), $b, trim($besch[$i] ?? ''),
                (float)str_replace(',', '.', $mng[$i] ?? '0'), trim($einh[$i] ?? ''),
-               (int) round((float)str_replace(',', '.', $preis[$i] ?? '0') * 100),
+               (int) round($pEur * 100), (int) round($pEur * 10000),
                (int) round((float)str_replace(',', '.', $ek[$i] ?? '0') * 100),
                mwst_normalisieren((float)str_replace(',', '.', $mwst[$i] ?? '0')), in_array($quelle[$i] ?? '', ['herstellung','verpackung','manuell'], true) ? $quelle[$i] : 'manuell', $gv,
                (int)($prez[$i] ?? 0) ?: null, (int)($pstk[$i] ?? 0) ?: null, (int)($pvid[$i] ?? 0) ?: null]);
@@ -221,7 +222,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $preis = (float)str_replace(',', '.', $_POST['add_preis'] ?? '0');
                 $mng = (float)str_replace(',', '.', $_POST['add_menge'] ?? '1') ?: 1;
                 $mwst = ($_POST['add_mwst'] ?? '') !== '' ? mwst_normalisieren((float)str_replace(',', '.', $_POST['add_mwst'])) : angebot_ust_satz($kid);
-                angebot_gruppe_anhaengen((int)$id, [['artikelnr'=>'', 'bezeichnung'=>$bez, 'beschreibung'=>trim($_POST['add_besch'] ?? ''), 'menge'=>$mng, 'einheit'=>trim($_POST['add_einheit'] ?? ''), 'preis_cent'=>(int)round($preis*100), 'ek_cent'=>0, 'mwst_satz'=>$mwst, 'quelle'=>'manuell']]);
+                angebot_gruppe_anhaengen((int)$id, [['artikelnr'=>'', 'bezeichnung'=>$bez, 'beschreibung'=>trim($_POST['add_besch'] ?? ''), 'menge'=>$mng, 'einheit'=>trim($_POST['add_einheit'] ?? ''), 'preis_cent'=>(int)round($preis*100), 'preis_e4'=>(int)round($preis*10000), 'ek_cent'=>0, 'mwst_satz'=>$mwst, 'quelle'=>'manuell']]);
             }
         }
         header('Location: ?p=angebot&id=' . $id . '&gespeichert=1#positionen'); exit;
@@ -252,7 +253,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // greift die automatische Kalkulation.
                 $altPreis = [];
                 $pkey = fn($quelle, $stueck, $art, $verp) => ($quelle ?: 'manuell') . '|' . (int)$stueck . '|' . trim((string)$art) . '|' . (int)$verp;
-                foreach (all("SELECT quelle, stueck, artikelnr, verpackung_id, preis_cent, ek_cent, mwst_satz FROM angebot_position WHERE angebot_id=?", [(int)$id]) as $o) {
+                foreach (all("SELECT quelle, stueck, artikelnr, verpackung_id, preis_cent, preis_e4, ek_cent, mwst_satz FROM angebot_position WHERE angebot_id=?", [(int)$id]) as $o) {
                     $key = $pkey($o['quelle'], $o['stueck'], $o['artikelnr'], $o['verpackung_id'] ?? 0);
                     if (!isset($altPreis[$key])) $altPreis[$key] = $o;   // erste Uebereinstimmung je Konfiguration
                 }
@@ -272,11 +273,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $key = $pkey($p['quelle'] ?? 'manuell', $p['stueck'] ?? 0, $p['artikelnr'] ?? '', $p['verpackung_id'] ?? 0);
                             if (isset($altPreis[$key])) {
                                 $p['preis_cent'] = (int)$altPreis[$key]['preis_cent'];
+                                $p['preis_e4']   = $altPreis[$key]['preis_e4'] ?? null;
                                 $p['ek_cent']    = (int)$altPreis[$key]['ek_cent'];
                                 $p['mwst_satz']  = (float)$altPreis[$key]['mwst_satz'];
                             }
-                            q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                              [(int)$id, $sort++, $p['artikelnr'] ?? '', $p['bezeichnung'], $p['beschreibung'] ?? '', (float)$p['menge'], $p['einheit'] ?? '', (int)$p['preis_cent'], (int)($p['ek_cent'] ?? 0), (float)($p['mwst_satz'] ?? 0), $p['quelle'] ?? 'manuell', $letter, $p['rezeptur_id'] ?? null, $p['stueck'] ?? null, $p['verpackung_id'] ?? null]);
+                            q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,preis_e4,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                              [(int)$id, $sort++, $p['artikelnr'] ?? '', $p['bezeichnung'], $p['beschreibung'] ?? '', (float)$p['menge'], $p['einheit'] ?? '', (int)$p['preis_cent'], (($p['preis_e4'] ?? null) !== null ? (int)$p['preis_e4'] : null), (int)($p['ek_cent'] ?? 0), (float)($p['mwst_satz'] ?? 0), $p['quelle'] ?? 'manuell', $letter, $p['rezeptur_id'] ?? null, $p['stueck'] ?? null, $p['verpackung_id'] ?? null]);
                         }
                     }
                     // Positions-Bezeichnungen (A) B) … / ohne Prefix bei nur einer Gruppe) konsistent setzen.
@@ -413,7 +415,7 @@ if (!$neu && !$editMode) {
     $posU = angebot_positionen((int)$id);
     $nettoU = 0; $ustGrp = [];
     foreach ($posU as $pp) {
-        $g = (int) round((float)$pp['menge'] * (int)$pp['preis_cent']);
+        $g = angpos_netto_cent($pp);
         $nettoU += $g;
         $s = (string) mwst_normalisieren((float)$pp['mwst_satz']);
         $ustGrp[$s] = ($ustGrp[$s] ?? 0) + $g;
@@ -452,7 +454,7 @@ if (!$neu && !$editMode) {
               $rezNrMap = [];
               foreach ($posU as $pp2) { $rid2 = (int)($pp2['rezeptur_id'] ?? 0);
                   if ($rid2 && !isset($rezNrMap[$rid2])) $rezNrMap[$rid2] = (string) scalar("SELECT nummer FROM rezeptur WHERE id=?", [$rid2]); } ?>
-        <?php foreach ($posU as $i => $pp): $g = (float)$pp['menge'] * (int)$pp['preis_cent'];
+        <?php foreach ($posU as $i => $pp): $g = angpos_netto_cent($pp);
               $artnr = $pp['artikelnr'] !== '' ? (string)$pp['artikelnr'] : ($rezNrMap[(int)($pp['rezeptur_id'] ?? 0)] ?? ''); ?>
           <tr>
             <td class="muted"><?= $i + 1 ?></td>
@@ -463,7 +465,7 @@ if (!$neu && !$editMode) {
             </td>
             <td class="bx-num"><?= rtrim(rtrim(number_format((float)$pp['menge'], 3, ',', '.'), '0'), ',') ?></td>
             <td><?= h((string)($pp['einheit'] ?? '')) ?></td>
-            <td class="bx-num"><?= $eur((int)$pp['preis_cent']) ?></td>
+            <td class="bx-num"><?= h(angpos_vk_str($pp)) ?> €</td>
             <td class="bx-num"><?= $eur($g) ?></td>
           </tr>
         <?php endforeach; ?>
@@ -499,7 +501,7 @@ if (!$neu && !$editMode) {
         <?php endforeach; ?>
         <?php foreach ($optU['extra'] as $x): ?>
           <tr><td colspan="4"><?= h($x['bezeichnung']) ?><span class="muted" style="font-size:12px"> · wird zusätzlich berechnet</span></td>
-              <td class="bx-num"><?= $eur((float)$x['menge'] * (int)$x['preis_cent']) ?></td></tr>
+              <td class="bx-num"><?= $eur(angpos_netto_cent($x)) ?></td></tr>
         <?php endforeach; ?>
         </tbody>
       </table></div>
@@ -598,7 +600,7 @@ if (!$neu):
     $eur = fn($c) => number_format($c/100, 2, ',', '.') . ' €';
     // interne Summen
     $sumVk = 0; $sumEk = 0;
-    foreach ($pos as $pp) { $sumVk += $pp['menge'] * $pp['preis_cent']; $sumEk += $pp['menge'] * $pp['ek_cent']; }
+    foreach ($pos as $pp) { $sumVk += angpos_netto_cent($pp); $sumEk += $pp['menge'] * $pp['ek_cent']; }
     $marge = $sumVk - $sumEk; $margePct = $sumVk > 0 ? $marge / $sumVk * 100 : 0;
     $ktok = ''; foreach ($kunden as $k) if ((int)$k['id'] === $kid) { $ktok = $k['portal_token']; break; }
     // Wunsch aus der verknüpften Portal-Anfrage übernehmen: Rezeptur, Menge je Packung, Anzahl Packungen
@@ -789,7 +791,7 @@ if (!$neu):
           <td><div style="display:flex;align-items:center;gap:4px"><input type="number" step="1" min="0" name="p_stk[]" class="p_stk" data-unit="<?= h($u) ?>" value="<?= (int)($pp['stueck'] ?? 0) ?: '' ?>" placeholder="&ndash;" style="width:100%;text-align:right"><?php if($u!==''): ?><span class="muted" style="font-size:11px;white-space:nowrap"><?= h($u) ?></span><?php endif; ?></div></td>
           <td><input type="number" step="0.001" name="p_menge[]" class="p_menge" value="<?= h(rtrim(rtrim(number_format($pp['menge'],3,'.',''),'0'),'.')) ?>" style="width:100%"></td>
           <td><input type="text" name="p_einheit[]" value="<?= h($pp['einheit'] ?? '') ?>" list="angEinhListe" style="width:100%"></td>
-          <td><input type="number" step="0.01" min="0" name="p_preis[]" class="p_preis" value="<?= h(number_format((int)$pp['preis_cent']/100,2,'.','')) ?>" style="width:100%"></td>
+          <td><input type="number" step="0.0001" min="0" name="p_preis[]" class="p_preis" value="<?= h(rtrim(rtrim(number_format(angpos_vk_eur($pp),4,'.',''),'0'),'.')) ?>" style="width:100%"></td>
           <td><?php $mwCur = mwst_normalisieren((float)$pp['mwst_satz']); ?><select name="p_mwst[]" style="width:100%"><?php foreach (mwst_saetze() as $ms): ?><option value="<?= (int)$ms ?>" <?= (int)$ms === (int)$mwCur ? 'selected' : '' ?>><?= (int)$ms ?> %</option><?php endforeach; ?></select></td>
           <td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>
           <td><button type="button" class="btn btn-ghost btn-sm" title="Position löschen" onclick="var f=this.closest('form');this.closest('.posrow').remove();posRecalc();f.submit()">×</button></td>
@@ -835,7 +837,7 @@ if (!$neu):
       <?php endforeach; ?>
       <?php foreach ($optE['extra'] as $x): ?>
         <tr><td colspan="4"><?= h($x['bezeichnung']) ?><span class="muted" style="font-size:12px"> · wird zusätzlich berechnet</span></td>
-            <td class="bx-num"><?= $eur((float)$x['menge'] * (int)$x['preis_cent']) ?></td></tr>
+            <td class="bx-num"><?= $eur(angpos_netto_cent($x)) ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
@@ -927,7 +929,7 @@ function posRecalc(){
       +'<td><input type="number" step="1" min="0" name="p_stk[]" class="p_stk" data-unit="" placeholder="&ndash;" style="width:100%;text-align:right"></td>'
       +'<td><input type="number" step="0.001" name="p_menge[]" class="p_menge"></td>'
       +'<td><input type="text" name="p_einheit[]" value="Stück" list="angEinhListe"></td>'
-      +'<td><input type="number" step="0.01" min="0" name="p_preis[]" class="p_preis"></td>'
+      +'<td><input type="number" step="0.0001" min="0" name="p_preis[]" class="p_preis"></td>'
       +'<td><select name="p_mwst[]" style="width:100%"><?php foreach (mwst_saetze() as $ms): ?><option value="<?= (int)$ms ?>"<?= (int)$ms === (int)mwst_normalisieren(angebot_ust_satz($kid)) ? ' selected' : '' ?>><?= (int)$ms ?> %</option><?php endforeach; ?></select></td>'
       +'<td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>'
       +'<td><button type="button" class="btn btn-ghost btn-sm">×</button></td>';

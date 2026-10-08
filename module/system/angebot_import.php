@@ -142,10 +142,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anwen
     foreach ($produkte as $pp) {
         $gruppe = count($produkte) > 1 ? chr(65 + $gi) : null; $gi++;
         foreach ($pp['staffeln'] as $stf) {
-            q("INSERT INTO angebot_position (angebot_id,sort,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz,quelle,rezeptur_id,stueck,verpackung_id,gruppe)
-               VALUES (?,?,?,?,?,?,?,?, 'import', ?, ?, ?, ?)",
+            $vk = (float)$stf['vk_stueck'];
+            q("INSERT INTO angebot_position (angebot_id,sort,bezeichnung,beschreibung,menge,einheit,preis_cent,preis_e4,mwst_satz,quelle,rezeptur_id,stueck,verpackung_id,gruppe)
+               VALUES (?,?,?,?,?,?,?,?,?, 'import', ?, ?, ?, ?)",
               [$aid, $sort++, $pp['name'], (string)($pp['beschreibung'] ?? ''), (int)$stf['menge'], (string)($pp['einheit'] ?? 'Stk.'),
-               (int) round(((float)$stf['vk_stueck']) * 100), $ustInland,
+               (int) round($vk * 100), (int) round($vk * 10000), $ustInland,
                $pp['rezid'] ?: null, $pp['stueck'] ?: null, $pp['glas'] ?: null, $gruppe]);
         }
         $kundenpreisErfassen($pp);
