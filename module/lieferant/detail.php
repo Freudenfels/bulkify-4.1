@@ -175,6 +175,13 @@ $l_bestellungen = $neu ? [] : all("SELECT b.*, (SELECT COALESCE(SUM(menge*ek_pre
                                     FROM bestellung b WHERE b.lieferant_id=? ORDER BY b.angelegt DESC", [(int)$id]);
 $l_einkauf = 0.0; foreach ($l_bestellungen as $lb) $l_einkauf += (float)$lb['summe'];
 $l_beur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
+// Gelieferte Ware: alle Chargen, die von diesem Lieferanten eingegangen sind (charge.lieferant_id).
+$l_chargen = $neu ? [] : all("SELECT c.charge_nr, c.menge, c.menge_verfuegbar, c.einheit, c.mhd, c.wareneingang, c.status, c.notiz,
+                                     i.name AS artikel, i.artikelnummer, i.id AS item_id, i.kategorie
+                              FROM charge c LEFT JOIN item i ON i.id=c.item_id
+                              WHERE c.lieferant_id=? ORDER BY (c.wareneingang IS NULL), c.wareneingang DESC, c.id DESC", [(int)$id]);
+$l_chStatus = ['quarantaene'=>['Quarantäne','warn'],'frei'=>['frei','ok'],'gesperrt'=>['gesperrt','err'],'leer'=>['leer','']];
+$l_mfmt = fn($x) => $x === null ? '–' : rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 $l_bBadge = fn($s) => match ($s) { 'offen'=>bx_badge('offen','info'),'bestellt'=>bx_badge('bestellt','warn'),'geliefert'=>bx_badge('geliefert','ok'),default=>bx_badge($s) };
 $l_bestTabelle = function($rows) use ($l_beur, $l_bBadge) {
     echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Nummer</th><th class="bx-num">Positionen</th><th class="bx-num">Summe</th><th>Status</th></tr></thead><tbody>';
@@ -327,7 +334,31 @@ if (!$neu) {
       </tbody></table></div>
     </div>
     <?php endif; ?></section>
-  <section data-panel="bestell" hidden><div class="bx-panel"><h2>Bestellungen (<?= count($l_bestellungen) ?>)</h2><?php $l_bestTabelle($l_bestellungen); ?></div></section>
+  <section data-panel="bestell" hidden><div class="bx-panel"><h2>Bestellungen (<?= count($l_bestellungen) ?>)</h2><?php $l_bestTabelle($l_bestellungen); ?></div>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Gelieferte Ware (<?= count($l_chargen) ?>) <?= bx_hint('Alle Chargen/Wareneingänge, die von diesem Lieferanten gekommen sind (über den Wareneingang mit Lieferantenbezug).') ?></h2>
+      <?php if (!$l_chargen): ?>
+        <p class="muted" style="margin-top:0">Noch keine Ware von diesem Lieferanten eingebucht.</p>
+      <?php else: ?>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Artikel</th><th>Charge</th><th class="bx-num">Menge</th><th class="bx-num">verfügbar</th><th>Wareneingang</th><th>MHD</th><th>Status</th></tr></thead>
+        <tbody>
+        <?php foreach ($l_chargen as $c): $st = $l_chStatus[$c['status']] ?? [$c['status'],'']; ?>
+          <tr>
+            <td><?php if (!empty($c['item_id']) && ($c['kategorie'] ?? '') === 'rohstoff'): ?><a class="kundenlink" href="?p=rohstoff&id=<?= (int)$c['item_id'] ?>"><?= h((string)($c['artikel'] ?: '–')) ?></a><?php else: ?><?= h((string)($c['artikel'] ?: '–')) ?><?php endif; ?><?php if (!empty($c['artikelnummer'])): ?> <span class="muted" style="font-size:12px"><?= h((string)$c['artikelnummer']) ?></span><?php endif; ?></td>
+            <td><?= h((string)($c['charge_nr'] ?: '–')) ?></td>
+            <td class="bx-num"><?= $l_mfmt($c['menge']) ?> <span class="muted"><?= h((string)$c['einheit']) ?></span></td>
+            <td class="bx-num"><?= $l_mfmt($c['menge_verfuegbar']) ?></td>
+            <td class="muted" style="font-size:12px"><?= $c['wareneingang'] ? h(date('d.m.Y', strtotime((string)$c['wareneingang']))) : '–' ?></td>
+            <td class="muted" style="font-size:12px"><?= $c['mhd'] ? h(date('d.m.Y', strtotime((string)$c['mhd']))) : '–' ?></td>
+            <td><?= bx_badge($st[0], $st[1]) ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <?php endif; ?>
+    </div>
+  </section>
 
   <section data-panel="rechnungen" hidden>
     <div class="bx-panel">

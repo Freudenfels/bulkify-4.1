@@ -63,3 +63,6 @@ Der Reiter zeigt zusätzlich die **Fremdfertigungs-Preise** dieses Lieferanten a
 
 ## Dublette zusammenführen (Stand 2026-10-08)
 Admin-Abschnitt über der Gefahrenzone: einen doppelten Lieferanten (Suchfeld-Dropdown: Firma/Nummer/Land) in DIESEN überführen. POST `aktion=zusammenfuehren` + `quelle_id` → `lieferant_zusammenfuehren(quelle, dieser)`. Für Fälle wie KI-Lesefehler beim Lieferschein (z. B. „VitaActives"/„Vita Actives Limited", „Vitamin B.V."/„Vitanics B.V.", „Packari"/„Packari GmbH", Wellnature/Wellgreen). Alle Preise/Anfragen/Bestellungen/Hauptlieferant-Zuordnungen wandern mit; der Quell-Datensatz wird gelöscht.
+
+## Gelieferte Ware am Lieferanten (Stand 2026-10-08)
+Im Reiter „Bestellungen" steht zusätzlich das Panel „Gelieferte Ware (N)" – alle Chargen, die von diesem Lieferanten eingegangen sind (`charge.lieferant_id`). Spalten: Artikel (Rohstoff verlinkt), Charge-Nr, Menge, verfügbar, Wareneingang, MHD, Status (Quarantäne/frei/gesperrt/leer). Read-only.
