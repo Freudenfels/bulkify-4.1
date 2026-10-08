@@ -236,6 +236,8 @@ function lp_t(string $key, string $sprache = ''): string {
         'alle_aktuell'    => ['de'=>'Alle als aktuell bestätigen', 'en'=>'Confirm all as current', 'zh'=>'全部确认为最新'],
         'aktualisieren'   => ['de'=>'Aktualisieren',            'en'=>'Update', 'zh'=>'更新'],
         'rohstoff'        => ['de'=>'Rohstoff',                 'en'=>'Raw material', 'zh'=>'原料'],
+        'bio_lbl'         => ['de'=>'Bio',                      'en'=>'Organic', 'zh'=>'有机'],
+        'bio_ja'          => ['de'=>'Bio / organisch',          'en'=>'Organic', 'zh'=>'有机'],
         'stand'           => ['de'=>'Stand',                    'en'=>'As of', 'zh'=>'更新日期'],
         'hinzufuegen'     => ['de'=>'Hinzufügen',               'en'=>'Add', 'zh'=>'添加'],
         'rezeptur'        => ['de'=>'Rezeptur',                 'en'=>'Formula', 'zh'=>'配方'],

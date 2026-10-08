@@ -73,7 +73,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
     <?php foreach ($data as $d): $z = $d['z']; ?>
       <tr>
         <td><a class="kundenlink" href="?p=lieferant&id=<?= (int)$z['lieferant_id'] ?>#katalog"><?= h((string)$z['firma']) ?></a></td>
-        <td><?= h((string)$z['name']) ?><?php if (!empty($z['name_original']) && $z['name_original'] !== $z['name']): ?><div class="muted" style="font-size:12px">Original: <?= h((string)$z['name_original']) ?></div><?php endif; ?></td>
+        <td><?= h((string)$z['name']) ?><?php if (!empty($z['bio'])): ?> <?= bx_badge('Bio', 'ok') ?><?php endif; ?><?php if (!empty($z['name_original']) && $z['name_original'] !== $z['name']): ?><div class="muted" style="font-size:12px">Original: <?= h((string)$z['name_original']) ?></div><?php endif; ?></td>
         <td><?= h(anfrage_art_label($z['art'] === 'fertigprodukt' ? 'fertigprodukt' : 'rohstoff', (string)$z['form'])) ?></td>
         <td class="bx-num"><?= $z['preis'] !== null ? h($zahl($z['preis'], 4) . ' ' . $z['waehrung'] . ($z['einheit'] ? ' / ' . $z['einheit'] : '')) : '–' ?></td>
         <td>
@@ -125,6 +125,7 @@ foreach ($data as $d): $z = $d['z']; $aehnlich = $d['aehnlich']; $ki = $d['ki'];
       <?php if (!empty($z['cas'])): ?><tr><td>CAS</td><td><?= h((string)$z['cas']) ?></td></tr><?php endif; ?>
       <?php if (!empty($z['spezifikation'])): ?><tr><td>Spezifikation</td><td><?= h((string)$z['spezifikation']) ?></td></tr><?php endif; ?>
       <?php if (!empty($z['herkunft'])): ?><tr><td>Herkunft</td><td><?= h((string)$z['herkunft']) ?></td></tr><?php endif; ?>
+      <?php if (!empty($z['bio'])): ?><tr><td>Bio</td><td>ja (Lieferantenangabe)</td></tr><?php endif; ?>
       <tr><td>Preis</td><td><?= $z['preis'] !== null ? h($zahl($z['preis'], 4) . ' ' . $z['waehrung'] . ($z['einheit'] ? ' / ' . $z['einheit'] : '')) : '–' ?><?= $z['menge_ab'] !== null ? ' · ab ' . h($zahl($z['menge_ab'], 3)) : '' ?></td></tr>
       <?php if (!empty($z['notiz'])): ?><tr><td>Notiz</td><td style="white-space:pre-line"><?= h((string)$z['notiz']) ?></td></tr><?php endif; ?>
     </tbody></table></div>

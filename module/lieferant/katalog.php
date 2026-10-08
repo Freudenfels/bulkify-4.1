@@ -31,8 +31,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $ziel . ($r['ok'] ? '&spec_ok=' . urlencode((string)$r['name']) : '&fehler=' . urlencode((string)($r['fehler'] ?? '')))); exit;
     }
     if ($aktion === 'zeile_neu') {
-        q("INSERT INTO lieferant_katalog (lieferant_id,name,art,form,spezifikation,herkunft,preis,waehrung,einheit,menge_ab,notiz,status,angelegt)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,'neu',?)",
+        q("INSERT INTO lieferant_katalog (lieferant_id,name,art,form,spezifikation,herkunft,preis,waehrung,einheit,menge_ab,bio,notiz,status,angelegt)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'neu',?)",
           [$lid, mb_substr(trim((string)($_POST['name'] ?? '')), 0, 190) ?: 'ohne Namen',
            in_array(($_POST['art'] ?? ''), ['rohstoff','fertigprodukt'], true) ? $_POST['art'] : 'rohstoff',
            array_key_exists((string)($_POST['form'] ?? ''), katalog_formen()) ? $_POST['form'] : null,
@@ -42,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
            mb_substr(trim((string)($_POST['waehrung'] ?? 'EUR')), 0, 3) ?: 'EUR',
            mb_substr(trim((string)($_POST['einheit'] ?? '')), 0, 20) ?: null,
            trim((string)($_POST['menge_ab'] ?? '')) !== '' ? zahl_lesen((string)$_POST['menge_ab'], true, $spr) : null,
+           !empty($_POST['bio']) ? 1 : 0,
            mb_substr(trim((string)($_POST['notiz'] ?? '')), 0, 500) ?: null, gmdate('Y-m-d H:i:s')]);
         header('Location: ' . $ziel . '&ok=1'); exit;
     }
@@ -151,7 +152,7 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
     <tbody>
     <?php foreach ($zeilen as $z): $neu = $z['status'] === 'neu'; ?>
       <tr>
-        <td><?= h($z['name']) ?><?php if (!empty($z['name_original']) && $z['name_original'] !== $z['name']): ?><div class="muted" style="font-size:12px">Original: <?= h($z['name_original']) ?></div><?php endif; ?><?php if ($z['herkunft']): ?><div class="muted" style="font-size:12px"><?= h($z['herkunft']) ?></div><?php endif; ?></td>
+        <td><?= h($z['name']) ?><?php if (!empty($z['bio'])): ?> <span class="bx-badge" style="font-size:11px;background:rgba(29,158,117,.15);color:#1D9E75"><?= h(lp_t('bio_ja')) ?></span><?php endif; ?><?php if (!empty($z['name_original']) && $z['name_original'] !== $z['name']): ?><div class="muted" style="font-size:12px">Original: <?= h($z['name_original']) ?></div><?php endif; ?><?php if ($z['herkunft']): ?><div class="muted" style="font-size:12px"><?= h($z['herkunft']) ?></div><?php endif; ?></td>
         <td><?= h(anfrage_art_label($z['art'] === 'fertigprodukt' ? 'fertigprodukt' : 'rohstoff', (string)$z['form'], $spr)) ?></td>
         <td><?= h((string)$z['spezifikation']) ?></td>
         <td class="bx-num"><?= $z['preis'] !== null ? h($zahl($z['preis'], 4) . ' ' . $z['waehrung'] . ($z['einheit'] ? ' / ' . $z['einheit'] : '')) : '–' ?></td>
@@ -163,7 +164,7 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
                   data-form="<?= h((string)$z['form']) ?>" data-spez="<?= h((string)$z['spezifikation']) ?>"
                   data-herkunft="<?= h((string)$z['herkunft']) ?>" data-preis="<?= h($zahl($z['preis'], 4)) ?>"
                   data-waehrung="<?= h((string)$z['waehrung'] ?: 'EUR') ?>" data-einheit="<?= h((string)$z['einheit']) ?>"
-                  data-menge="<?= h(lp_num($z['menge_ab'], 3)) ?>" data-notiz="<?= h((string)$z['notiz']) ?>"><?= h(lp_t('bearbeiten')) ?></button>
+                  data-menge="<?= h(lp_num($z['menge_ab'], 3)) ?>" data-bio="<?= !empty($z['bio']) ? '1' : '' ?>" data-notiz="<?= h((string)$z['notiz']) ?>"><?= h(lp_t('bearbeiten')) ?></button>
           <form method="post" style="display:inline" onsubmit="return confirm('<?= h(lp_t('loeschen')) ?>?');">
             <input type="hidden" name="aktion" value="zeile_weg"><input type="hidden" name="zeile_id" value="<?= (int)$z['id'] ?>">
             <button class="btn btn-ghost btn-sm" type="submit">&times;</button></form>
@@ -191,6 +192,8 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
         <select name="form" id="kf_form"><option value="">–</option><?php foreach (katalog_formen() as $k => $lbl): ?><option value="<?= h($k) ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field"><label><?= h(lp_t('spezifikation')) ?></label><input type="text" name="spezifikation" id="kf_spez" maxlength="190" placeholder="95 % Curcumin"></div>
       <div class="bx-field" style="max-width:170px"><label><?= h(lp_t('herkunft')) ?></label><input type="text" name="herkunft" id="kf_herkunft" maxlength="120"></div>
+      <div class="bx-field" style="max-width:150px"><label><?= h(lp_t('bio_lbl')) ?></label>
+        <label class="bx-row" style="gap:8px;align-items:center;margin:0;font-weight:normal"><input type="checkbox" name="bio" id="kf_bio" value="1" style="width:auto"> <span><?= h(lp_t('bio_ja')) ?></span></label></div>
       <div class="bx-field" style="max-width:130px"><label><?= h(lp_t('preis')) ?></label><input type="text" name="preis" id="kf_preis"></div>
       <div class="bx-field" style="max-width:90px"><label><?= h(lp_t('waehrung')) ?></label><input type="text" name="waehrung" id="kf_waehrung" value="EUR" maxlength="3"></div>
       <div class="bx-field" style="max-width:110px"><label><?= h(lp_t('einheit')) ?></label><input type="text" name="einheit" id="kf_einheit" placeholder="kg" maxlength="20"></div>
@@ -223,6 +226,7 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
       set('kf_name',d.name); set('kf_spez',d.spez); set('kf_herkunft',d.herkunft);
       set('kf_preis',d.preis); set('kf_waehrung',d.waehrung); set('kf_einheit',d.einheit);
       set('kf_menge',d.menge); set('kf_notiz',d.notiz);
+      var bio=document.getElementById('kf_bio'); if(bio) bio.checked=(d.bio==='1');
       var art=document.getElementById('kf_art'); if(art) art.value=d.art||'rohstoff';
       var f=document.getElementById('kf_form'); if(f) f.value=d.form||'';
       titel.textContent=T.edit; submit.textContent=T.save;

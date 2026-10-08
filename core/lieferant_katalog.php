@@ -331,7 +331,7 @@ function katalog_speichern(int $zeile_id, array $daten, ?int $lieferant_id = nul
         ? one("SELECT id FROM lieferant_katalog WHERE id=? AND lieferant_id=? AND status='neu'", [$zeile_id, $lieferant_id])
         : one("SELECT id FROM lieferant_katalog WHERE id=?", [$zeile_id]);
     if (!$z) return;
-    q("UPDATE lieferant_katalog SET name=?, art=?, form=?, spezifikation=?, herkunft=?, preis=?, waehrung=?, einheit=?, menge_ab=?, notiz=? WHERE id=?",
+    q("UPDATE lieferant_katalog SET name=?, art=?, form=?, spezifikation=?, herkunft=?, preis=?, waehrung=?, einheit=?, menge_ab=?, bio=?, notiz=? WHERE id=?",
       [mb_substr(trim((string)($daten['name'] ?? '')), 0, 190),
        in_array(($daten['art'] ?? ''), ['rohstoff', 'fertigprodukt'], true) ? $daten['art'] : 'rohstoff',
        array_key_exists((string)($daten['form'] ?? ''), katalog_formen()) ? $daten['form'] : null,
@@ -341,6 +341,7 @@ function katalog_speichern(int $zeile_id, array $daten, ?int $lieferant_id = nul
        mb_substr(trim((string)($daten['waehrung'] ?? 'EUR')), 0, 3) ?: 'EUR',
        mb_substr(trim((string)($daten['einheit'] ?? '')), 0, 20) ?: null,
        trim((string)($daten['menge_ab'] ?? '')) !== '' ? zahl_lesen((string)$daten['menge_ab'], true) : null,
+       !empty($daten['bio']) ? 1 : 0,
        mb_substr(trim((string)($daten['notiz'] ?? '')), 0, 500) ?: null,
        $zeile_id]);
 }

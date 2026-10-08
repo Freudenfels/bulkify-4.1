@@ -6,6 +6,8 @@
 
 **Bedienung:** Tabelle mit Lieferant (Link ins Konto, Reiter Katalog) · Artikel · Typ · Preis · **Im Bestand?** · Aktion. Jede Zeile hat einen **Ansehen**-Knopf, der ein **Popup** öffnet – so muss man nicht in die Detailseite wechseln.
 
+**Bio-Kennzeichen:** Hat der Lieferant eine Zeile als Bio/organisch markiert (`lieferant_katalog.bio=1`), steht in der Spalte Artikel ein „Bio"-Badge und im Popup eine Zeile „Bio: ja (Lieferantenangabe)". Rein informativ fürs Team.
+
 **Matchen zuerst (Stand 2026-10-08):** Gibt es einen **eindeutigen** Treffer – gleiche CAS **oder** exakt gleicher Name (`$starkTreffer`, nicht gesperrt) –, zeigt die Spalte „Im Bestand?" direkt den Treffer (Badge „vorhanden" + R-Nummer·Name) und die Zeile bekommt als **Haupt-Button** „**Diesem Rohstoff zuordnen**" (1 Klick → `kat_uebernehmen` mit `item_id`, Preis + CoA wandern dorthin). „Ansehen" wird dann zur Nebenaktion (Ghost); im Popup ist „Als neuen Artikel anlegen" ebenfalls nur noch Ghost. So entsteht **keine Dublette**, wenn derselbe Stoff schon angelegt ist (ein Rohstoff, viele Lieferanten über Kürzel/Kennung). Ohne eindeutigen Treffer bleibt es beim bekannten „evtl. vorhanden (N)"/„neu"-Badge und „Ansehen" als Haupt-Button.
 
 **Popup je Zeile** (`.bx-dialog`, theme-tauglich; liegt bewusst **außerhalb** der Tabelle, sonst löst der Browser ein `<dialog>` im `<table>` heraus):
