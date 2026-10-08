@@ -1033,6 +1033,14 @@ $anfRest   = array_values(array_filter($anfragen, fn($a) => ($a['rezeptur_status
 $DFORM_P = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 $anfBadge = fn($s) => match ($s) { 'neu'=>bx_badge('eingereicht','info'),'in_bearbeitung'=>bx_badge('in Prüfung','warn'),'beantwortet'=>bx_badge('Vorschlag erhalten','ok'),'ueberarbeiten'=>bx_badge('wird überarbeitet','warn'),'abgelehnt'=>bx_badge('abgelehnt','err'),default=>bx_badge($s) };
 $vorschlaege = all("SELECT * FROM rezeptur WHERE kunde_id=? AND status='vorschlag' ORDER BY aktualisiert DESC", [$kid]);
+// Team-initiierte Vorschläge (ohne Kundenanfrage) ebenfalls unter „Meine Anfragen" (Wartet auf Sie) zeigen –
+// sonst fände der Kunde sie nur auf der Übersicht. Nur die, die NICHT schon über eine Anfrage abgebildet sind.
+$anfRezIds = []; foreach ($anfragen as $a) if (!empty($a['rezeptur_id'])) $anfRezIds[(int)$a['rezeptur_id']] = true;
+foreach ($vorschlaege as $vs) {
+    if (isset($anfRezIds[(int)$vs['id']])) continue;   // schon als Antwort auf eine Anfrage in der Liste
+    $anfPruef[] = ['nummer'=>$vs['nummer'], 'produktname'=>$vs['name'], 'darreichungsform'=>($vs['darreichungsform'] ?? ''),
+                   'rezeptur_name'=>$vs['name'], 'rezeptur_id'=>(int)$vs['id'], 'rezeptur_status'=>'vorschlag'];
+}
 // Kundenseitiger Status – bewusst nur vier Zustände (richtet sich nach dem ECHTEN Rezeptur-Stand):
 //  in Prüfung  = liegt bei uns (nichts gesendet) · Vorschlag erhalten = wir haben einen Vorschlag gesendet
 //  abgelehnt   = Vorschlag abgelehnt (vom Kunden oder von uns) · Rezeptur angelegt = final bestätigt (eingefroren)
@@ -1938,7 +1946,7 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <?php if ($vorschlaege): $nV = count($vorschlaege); ?>
   <a href="#vorschlaege" class="bx-panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:inherit;border-color:var(--gruen);background:var(--panel-2)">
-    <div><strong><?= $nV ?> <?= $nV === 1 ? 'Anfrage wurde beantwortet' : 'Anfragen wurden beantwortet' ?></strong> – Ihr <?= $nV === 1 ? 'Rezeptur-Vorschlag liegt' : 'Rezeptur-Vorschläge liegen' ?> zur Freigabe bereit.</div>
+    <div><strong><?= $nV ?> Rezeptur-Vorschlag<?= $nV === 1 ? '' : 'e' ?> für Sie</strong> – <?= $nV === 1 ? 'liegt' : 'liegen' ?> zur Freigabe bereit. Bitte ansehen und annehmen.</div>
     <span class="btn btn-primary">Ansehen</span>
   </a>
   <?php endif; ?>
@@ -1968,7 +1976,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if ($vorschlaege): ?>
   <div class="bx-panel" id="vorschlaege" style="border-color:var(--gruen);background:var(--panel-2)">
     <h2>Rezeptur-Vorschläge für Sie</h2>
-    <p class="muted" style="margin-top:0">Wir haben Ihre Anfrage geprüft. Bitte schauen Sie sich den Vorschlag an und nehmen Sie ihn an, damit wir starten können.</p>
+    <p class="muted" style="margin-top:0">Bitte schauen Sie sich den Vorschlag an und nehmen Sie ihn an, damit wir starten können.</p>
     <?php foreach ($vorschlaege as $vs): ?>
       <div class="bx-panel" style="background:var(--panel)">
         <div class="bx-row" style="justify-content:space-between"><div><strong><?= h($vs['name']) ?></strong> · <?= h($vs['nummer']) ?></div><div><?= bx_badge('Vorschlag','info') ?></div></div>
