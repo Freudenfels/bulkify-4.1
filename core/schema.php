@@ -7697,83 +7697,92 @@ function angebotsscan_name_bereinigen(string $name): string {
 function angebotsscan_ki(string $pfad): array {
     require_once __DIR__ . '/ki.php';
     if (!ki_bereit()) return ['ok' => false, 'fehler' => 'KI ist nicht eingerichtet (Einstellungen → KI).'];
-    $prompt = "Dies ist ein Angebot für ein Nahrungsergänzungsmittel (eigenes oder fremdes). "
-        . "Erfasse Rezeptur, Preise (inkl. Mengen-Staffeln) UND den Kunden. Gib NUR JSON zurück:\n"
-        . '{"produkt_name":"","darreichungsform":"kapsel","stueck_je_packung":0,"verpackung":"",'
-        . '"kunde_name":"","kunde_nr":"","datum":"","vk_stueck":0,"menge":0,'
-        . '"staffeln":[{"menge":0,"vk_stueck":0}],'
-        . '"zutaten":[{"name":"","menge_mg":0}],'
-        . '"preise":[{"bezeichnung":"","typ":"herstellung","einzelpreis":0,"menge":0,"einheit":""}]}' . "\n"
-        . "Regeln: produkt_name = Name des Produkts OHNE die Wirkstoff-Aufzählung. "
+    $prompt = "Dies ist ein Angebot für Nahrungsergänzungsmittel (eigenes oder fremdes). Ein Angebot kann MEHRERE "
+        . "Produkte/Rezepturen enthalten – erfasse ALLE. Gib NUR JSON zurück:\n"
+        . '{"kunde_name":"","kunde_nr":"","datum":"",'
+        . '"produkte":[{"produkt_name":"","darreichungsform":"kapsel","stueck_je_packung":0,"verpackung":"",'
+        . '"staffeln":[{"menge":0,"vk_stueck":0}],"zutaten":[{"name":"","menge_mg":0}],'
+        . '"preise":[{"bezeichnung":"","typ":"herstellung","einzelpreis":0,"menge":0,"einheit":""}]}]}' . "\n"
+        . "Regeln: produkte = JEDES im Angebot aufgeführte Produkt als eigener Eintrag (z. B. zwei Rezepturen = zwei Einträge). "
+        . "produkt_name = Name des Produkts OHNE die Wirkstoff-Aufzählung. "
         . "Ein führendes 'AP' vor dem Produktnamen ist eine interne Kürzel-Zuordnung und soll WEGGELASSEN werden. "
         . "darreichungsform eines von kapsel|tablette|softgel|stick|pulver|fluessig. "
         . "stueck_je_packung = Kapseln/Stück je Packung (z. B. 120), sonst 0. "
         . "verpackung = Verpackung/Behälter mit Größe als Freitext, z. B. '150 ml Weithalsglas', 'PET-Dose 120 ml' oder 'Standbodenbeutel 500 g'; leer wenn nicht genannt. "
-        . "kunde_name = Firmenname des Angebotsempfängers, kunde_nr = dessen Kundennummer falls genannt. "
+        . "kunde_name = Firmenname des Angebotsempfängers, kunde_nr = dessen Kundennummer falls genannt (gilt fürs ganze Angebot). "
         . "datum = Angebotsdatum als YYYY-MM-DD. "
-        . "staffeln = ALLE Mengen-Staffeln des Angebots: je Staffel menge = Anzahl Packungen und vk_stueck = Preis je Packung (netto). "
-        . "Gibt es nur einen Preis, genau eine Staffel. vk_stueck/menge (oben) = die günstigste bzw. einzige Staffel. "
-        . "zutaten = alle aufgeführten Wirkstoffe mit mg je Einheit (z. B. 'NAC 300 mg'). "
+        . "staffeln = ALLE Mengen-Staffeln DIESES Produkts: je Staffel menge = Anzahl Packungen und vk_stueck = Preis je Packung (netto). "
+        . "Gibt es nur einen Preis, genau eine Staffel. "
+        . "zutaten = alle aufgeführten Wirkstoffe dieses Produkts mit mg je Einheit (z. B. 'NAC 300 mg'). "
         . "preise = JEDE Preiszeile EINER Staffel einzeln (Aufschlüsselung): typ eines von "
         . "herstellung|kapsel|verpackung|etikett|zusatz|gesamt. bezeichnung = Originaltext der Zeile. "
         . "einzelpreis = Preis je Einheit (netto), menge = Stück/Packungen, einheit = Text (z. B. 'Packung','Stück'). "
         . "Zahlen mit Punkt als Dezimaltrennzeichen, keine Tausenderpunkte. Nichts erfinden – Unbekanntes leer/0.";
-    $r = ki_datei_frage($pfad, $prompt, ['json' => true, 'denken' => true, 'max_tokens' => 4000, 'timeout' => 240, 'zweck' => 'angebotsscan']);
+    $r = ki_datei_frage($pfad, $prompt, ['json' => true, 'denken' => true, 'max_tokens' => 6000, 'timeout' => 240, 'zweck' => 'angebotsscan']);
     if (empty($r['ok'])) return ['ok' => false, 'fehler' => (string)($r['fehler'] ?? 'Das Dokument konnte nicht gelesen werden.')];
     $d = is_array($r['daten'] ?? null) ? $r['daten'] : [];
     $num = fn($x) => (float) str_replace(',', '.', (string)$x);
-    $zut = [];
-    foreach ((array)($d['zutaten'] ?? []) as $z) {
-        if (!is_array($z)) continue;
-        $n = trim((string)($z['name'] ?? '')); if ($n === '') continue;
-        $zut[] = ['name' => mb_substr($n, 0, 190), 'menge_mg' => $num($z['menge_mg'] ?? 0)];
-    }
-    $typen = ['herstellung','kapsel','verpackung','etikett','zusatz','gesamt'];
-    $preise = [];
-    foreach ((array)($d['preise'] ?? []) as $p) {
-        if (!is_array($p)) continue;
-        $bez = trim((string)($p['bezeichnung'] ?? '')); $ep = $num($p['einzelpreis'] ?? 0);
-        if ($bez === '' && $ep <= 0) continue;
-        $typ = strtolower(trim((string)($p['typ'] ?? '')));
-        $preise[] = [
-            'bezeichnung' => mb_substr($bez, 0, 190),
-            'typ'         => in_array($typ, $typen, true) ? $typ : 'zusatz',
-            'einzelpreis' => round($ep, 4),
-            'menge'       => $num($p['menge'] ?? 0),
-            'einheit'     => mb_substr(trim((string)($p['einheit'] ?? '')), 0, 20),
-        ];
-    }
-    // Mengen-Staffeln (Menge -> VK je Packung). Doppelte Mengen zusammenfassen; nach Menge sortieren.
-    $staffeln = [];
-    foreach ((array)($d['staffeln'] ?? []) as $st) {
-        if (!is_array($st)) continue;
-        $m = (int) round($num($st['menge'] ?? 0)); $v = round($num($st['vk_stueck'] ?? 0), 4);
-        if ($m <= 0 && $v <= 0) continue;
-        $staffeln[] = ['menge' => $m, 'vk_stueck' => $v];
-    }
-    // Fallback: keine Staffeln erkannt, aber Einzelpreis/-menge vorhanden -> eine Staffel daraus.
-    $vkEin = round($num($d['vk_stueck'] ?? 0), 4); $mEin = (int) round($num($d['menge'] ?? 0));
-    if (!$staffeln && ($vkEin > 0 || $mEin > 0)) $staffeln[] = ['menge' => $mEin, 'vk_stueck' => $vkEin];
-    usort($staffeln, fn($a, $b) => $a['menge'] <=> $b['menge']);
-    // Repräsentativer Einzelwert = kleinste Menge mit Preis (bzw. erste Staffel).
-    if ($vkEin <= 0 && $staffeln) { $vkEin = (float)$staffeln[0]['vk_stueck']; $mEin = (int)$staffeln[0]['menge']; }
-
     $formen = ['kapsel','tablette','softgel','stick','pulver','fluessig'];
-    $form = strtolower(trim((string)($d['darreichungsform'] ?? 'kapsel')));
-    return ['ok' => true, 'daten' => [
-        'produkt_name'      => mb_substr(angebotsscan_name_bereinigen((string)($d['produkt_name'] ?? '')), 0, 190),
-        'darreichungsform'  => in_array($form, $formen, true) ? $form : 'kapsel',
-        'stueck_je_packung' => (int) round($num($d['stueck_je_packung'] ?? 0)),
-        'verpackung'        => mb_substr(trim((string)($d['verpackung'] ?? '')), 0, 120),
-        'kunde_name'        => mb_substr(trim((string)($d['kunde_name'] ?? '')), 0, 190),
-        'kunde_nr'          => mb_substr(trim((string)($d['kunde_nr'] ?? '')), 0, 40),
-        'datum'             => (is_string($d['datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d['datum'])) ? $d['datum'] : null,
-        'vk_stueck'         => $vkEin,
-        'menge'             => $mEin,
-        'staffeln'          => $staffeln,
-        'zutaten'           => $zut,
-        'preise'            => $preise,
-    ]];
+    $typen  = ['herstellung','kapsel','verpackung','etikett','zusatz','gesamt'];
+    // EIN Produkt-Block normalisieren (wird je Produkt aufgerufen).
+    $parseProd = function(array $pd) use ($num, $formen, $typen): array {
+        $zut = [];
+        foreach ((array)($pd['zutaten'] ?? []) as $z) {
+            if (!is_array($z)) continue;
+            $n = trim((string)($z['name'] ?? '')); if ($n === '') continue;
+            $zut[] = ['name' => mb_substr($n, 0, 190), 'menge_mg' => $num($z['menge_mg'] ?? 0)];
+        }
+        $preise = [];
+        foreach ((array)($pd['preise'] ?? []) as $p) {
+            if (!is_array($p)) continue;
+            $bez = trim((string)($p['bezeichnung'] ?? '')); $ep = $num($p['einzelpreis'] ?? 0);
+            if ($bez === '' && $ep <= 0) continue;
+            $typ = strtolower(trim((string)($p['typ'] ?? '')));
+            $preise[] = ['bezeichnung' => mb_substr($bez, 0, 190), 'typ' => in_array($typ, $typen, true) ? $typ : 'zusatz',
+                'einzelpreis' => round($ep, 4), 'menge' => $num($p['menge'] ?? 0), 'einheit' => mb_substr(trim((string)($p['einheit'] ?? '')), 0, 20)];
+        }
+        $staffeln = [];
+        foreach ((array)($pd['staffeln'] ?? []) as $st) {
+            if (!is_array($st)) continue;
+            $m = (int) round($num($st['menge'] ?? 0)); $v = round($num($st['vk_stueck'] ?? 0), 4);
+            if ($m <= 0 && $v <= 0) continue;
+            $staffeln[] = ['menge' => $m, 'vk_stueck' => $v];
+        }
+        $vkEin = round($num($pd['vk_stueck'] ?? 0), 4); $mEin = (int) round($num($pd['menge'] ?? 0));
+        if (!$staffeln && ($vkEin > 0 || $mEin > 0)) $staffeln[] = ['menge' => $mEin, 'vk_stueck' => $vkEin];
+        usort($staffeln, fn($a, $b) => $a['menge'] <=> $b['menge']);
+        if ($vkEin <= 0 && $staffeln) { $vkEin = (float)$staffeln[0]['vk_stueck']; $mEin = (int)$staffeln[0]['menge']; }
+        $form = strtolower(trim((string)($pd['darreichungsform'] ?? 'kapsel')));
+        return [
+            'produkt_name'      => mb_substr(angebotsscan_name_bereinigen((string)($pd['produkt_name'] ?? '')), 0, 190),
+            'darreichungsform'  => in_array($form, $formen, true) ? $form : 'kapsel',
+            'stueck_je_packung' => (int) round($num($pd['stueck_je_packung'] ?? 0)),
+            'verpackung'        => mb_substr(trim((string)($pd['verpackung'] ?? '')), 0, 120),
+            'vk_stueck'         => $vkEin,
+            'menge'             => $mEin,
+            'staffeln'          => $staffeln,
+            'zutaten'           => $zut,
+            'preise'            => $preise,
+        ];
+    };
+    // Produkte sammeln: neues Format (produkte[]) oder Altformat (Produktfelder direkt in $d).
+    $produkteRaw = (isset($d['produkte']) && is_array($d['produkte'])) ? $d['produkte'] : [$d];
+    $produkte = [];
+    foreach ($produkteRaw as $pd) {
+        if (!is_array($pd)) continue;
+        $pp = $parseProd($pd);
+        if ($pp['produkt_name'] === '' && !$pp['staffeln'] && !$pp['zutaten']) continue;   // leere Blöcke überspringen
+        $produkte[] = $pp;
+    }
+    if (!$produkte) $produkte[] = $parseProd($d);   // nichts erkannt -> wenigstens ein (leerer) Block
+    // Top-Level = erstes Produkt (Rückwärtskompatibilität für angebotsscan.php) + Angebotsebene (Kunde/Datum) + produkte[].
+    $erst = $produkte[0];
+    return ['ok' => true, 'daten' => array_merge($erst, [
+        'kunde_name' => mb_substr(trim((string)($d['kunde_name'] ?? '')), 0, 190),
+        'kunde_nr'   => mb_substr(trim((string)($d['kunde_nr'] ?? '')), 0, 40),
+        'datum'      => (is_string($d['datum'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d['datum'])) ? $d['datum'] : null,
+        'produkte'   => $produkte,
+    ])];
 }
 
 // Angebotsscan SPEICHERN (nach dem Match/Vorschau-Schritt). Erwartet die – ggf. vom Nutzer korrigierten –

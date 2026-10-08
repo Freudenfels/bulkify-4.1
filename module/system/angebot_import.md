@@ -13,3 +13,8 @@
 
 ## Original + gelesene Zutaten beim Pruefen
 Match-Schritt zeigt oben das **Original** (PDF/Bild, Stream `?p=angebot_import&schritt=datei`) und die **gelesenen Zutaten read-only** (nur Info). Hinweis dort: angebot_import ordnet die Rezeptur nur ueber den Namen zu und legt **keine** Rezeptur mit Zutaten an - dafuer ist `angebotsscan`.
+
+## Mehrere Produkte je Angebot (Stand 2026-10-09)
+`angebotsscan_ki()` liefert jetzt ein **`produkte`-Array** (jedes Produkt mit eigenem Namen, Darreichungsform, Stück/Packung, Verpackung, Staffeln, Zutaten, Preisen). Kunde/Kundennr/Datum sind Angebotsebene. Die Top-Level-Felder bleiben = **erstes Produkt** (Rückwärtskompatibilität für `angebotsscan.php`). Erkennt die KI nur ein Produkt oder liefert sie das Altformat, wird genau ein Block erzeugt.
+
+Der Match-Schritt zeigt **je Produkt einen Block** (Name/Rezeptur-Match, Stück, Glas-Vorschlag, Staffeln, Zutaten als ausklappbare Info). Beim Übernehmen entsteht **ein** Angebot mit Positionen je Produkt (Gruppen A, B, … über `angebot_position.gruppe`); je Produkt wird – falls die Rezeptur per Name gefunden wird – eine `rezeptur_kundenpreis`-Zeile geschrieben. **Zuordnen zu einem bestehenden Angebot** ist nur bei **genau einem** Produkt möglich; bei mehreren wird immer neu angelegt. Formularfelder sind je Produkt indiziert: `produkt_name[pi]`, `stueck[pi]`, `verpackung_id[pi]`, `st_menge[pi][j]`, `st_vk[pi][j]`.
