@@ -6009,11 +6009,34 @@ function produkt_lieferant_preise(int $produkt_id, float $stueck = 0): array {
     }
     return $out;
 }
+// Fremdfertigungs-Preise je Lieferant für eine Rezeptur (rezeptur_lief_angebot), passend zur Stückzahl.
+// Rückgabe [lieferant_id => preis_je_stück]. So tauchen die Fremdfertiger (z. B. Wellgreen, Rainwood) auch
+// im Bestellvorgang (Bulk/Fertigprodukt) auf – ihre Preise hängen an der Rezeptur, nicht am Produkt.
+function rezeptur_fremd_lieferant_preise(int $rezeptur_id, float $stueck = 0): array {
+    if ($rezeptur_id <= 0 || !table_exists('rezeptur_lief_angebot')) return [];
+    $out = [];
+    foreach (all("SELECT lieferant_id, menge, preis FROM rezeptur_lief_angebot
+                  WHERE rezeptur_id = ? AND lieferant_id IS NOT NULL AND preis IS NOT NULL AND preis > 0
+                  ORDER BY menge ASC", [$rezeptur_id]) as $r) {
+        $lid = (int)$r['lieferant_id']; $m = (float)$r['menge']; $p = (float)$r['preis'];
+        if ($stueck <= 0 || $m <= $stueck + 1e-9) $out[$lid] = $p;   // größte passende Staffel gewinnt
+        elseif (!isset($out[$lid])) $out[$lid] = $p;                 // alle Staffeln > Menge -> kleinste als Fallback
+    }
+    return $out;
+}
+// Fremdfertigungs-Preise je Lieferant für ein Produkt (über dessen Rezeptur).
+function produkt_fremd_lieferant_preise(int $produkt_id, float $stueck = 0): array {
+    $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id = ?", [$produkt_id]);
+    return $rid ? rezeptur_fremd_lieferant_preise($rid, $stueck) : [];
+}
 // Zukauf-Preis je Einheit für EINEN Lieferanten + Fertigprodukt bei gegebener Stückzahl, oder null.
+// Erst der Zukaufpreis (produkt_lieferant_preis), sonst der Fremdfertigungspreis (rezeptur_lief_angebot).
 function produkt_zukauf_preis(int $produkt_id, ?int $lieferant_id, float $stueck = 0): ?float {
     if ($produkt_id <= 0) return null;
     $preise = produkt_lieferant_preise($produkt_id, $stueck);
     if ($lieferant_id && isset($preise[(int)$lieferant_id])) return (float)$preise[(int)$lieferant_id];
+    $fremd = produkt_fremd_lieferant_preise($produkt_id, $stueck);
+    if ($lieferant_id && isset($fremd[(int)$lieferant_id])) return (float)$fremd[(int)$lieferant_id];
     return null;
 }
 // Neuester Preis-Stand des Lieferanten (Datum) oder null.

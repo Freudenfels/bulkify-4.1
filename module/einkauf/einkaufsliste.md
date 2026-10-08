@@ -24,6 +24,7 @@ Zwei Aktionen auf derselben Auswahl: **„Beim Lieferanten bestellen"** (je Lief
 - **Bestand wird angerechnet.** `bedarf_bulk()` zieht jetzt – wie bei Rohstoffen – den **freien, nicht kundengebundenen Fertigware-Bestand** des Produkts ab (`zu bestellen = Bedarf − Lager − bereits bestellt`). Die Bulk-Zeile zeigt „Bedarf X · Lager Y · offen Z". `bestellung_bulk_anlegen()` verrechnet den Bestand über die Aufträge (FIFO), bevor Positionen angelegt werden.
 - **Lieferant-Dropdown gefiltert.** Die Bulk-Zeile zeigt im Lieferant-Dropdown **nur** Lieferanten mit einem echten Zukaufpreis für genau dieses Produkt (`produkt_lieferant_preise($produkt_id,$stueck)`, `$liefSelect(..., $nurMit=true)`). Gibt es keinen, steht „– kein Zukaufpreis –".
 - **Preis + Gesamtsumme.** Unter dem Dropdown steht „ab X,XX €/Stück · Summe Y €" (günstigster passender Staffelpreis × Menge). `bestellung_bulk_anlegen()` legt die Position mit genau diesem Lieferanten-Zukaufpreis an (`produkt_zukauf_preis()`) statt mit 0.
+- **Fremdfertigungs-Preise inklusive.** Der Bulk-Lieferant-Dropdown zieht Preise aus `produkt_lieferant_preise` UND `produkt_fremd_lieferant_preise` (Fremdfertigung der Rezeptur, z. B. Wellgreen/Rainwood) – Zukauf gewinnt bei gleichem Lieferanten, Fremd füllt auf.
 
 **Ablauf:** Einkaufsbedarf (melden, eigen/fremd) → **Einkaufsliste** (hier bestellen) → Bestellungen (`?p=einkauf`, nur Historie).
 ## E-Mail an den Lieferanten

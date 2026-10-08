@@ -269,7 +269,10 @@ if ($ohneFestlegung): ?>
         </tr>
       <?php endforeach; ?>
       <?php foreach ($bulkTab as $b): $key = 'bulk:' . (int)$b['produkt_id'];
-          $bPreise = produkt_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen']);
+          // Zukaufpreise (produkt_lieferant_preis) UND Fremdfertigungspreise (rezeptur_lief_angebot der Rezeptur,
+          // z. B. Wellgreen/Rainwood) zusammenführen – Zukauf gewinnt bei gleichem Lieferanten, Fremd füllt auf.
+          $bPreise = produkt_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen'])
+                   + produkt_fremd_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen']);
           $bAb = $bPreise ? min($bPreise) : null;                       // günstigster Zukaufpreis je Stück
           $bSumme = $bAb !== null ? $bAb * (float)$b['zu_bestellen'] : null; // Gesamtsumme (günstigster Preis)
       ?>
