@@ -124,7 +124,10 @@ $bulkBedarf = array_values(array_filter(bedarf_bulk(false), fn($b) => $b['zu_bes
 $freiBedarf = freibedarf_offen();
 $nachBedarf = meldebestand_bedarf();   // Meldebestand-Nachbestellungen (Lagerartikel unter Mindestbestand)
 $ohneFestlegung = auftraege_ohne_festlegung();   // Aufträge ohne Eigen/Fremd-Festlegung -> noch kein Bedarf, nur Hinweis
-$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+$lieferanten = all("SELECT id, firma, waehrung FROM lieferanten ORDER BY firma");
+// Währung je Lieferant (viele China-Lieferanten in USD, nicht EUR). Default aus dem Lieferanten-Stamm.
+$liefWaehr = [];
+foreach ($lieferanten as $l) $liefWaehr[(int)$l['id']] = (string)($l['waehrung'] ?: 'EUR');
 // Lieferanten MIT Portal-Zugang (aktiver Benutzer) – an die geht die Bestellung in den Account (wartet auf
 // Bestätigung); alle anderen sind „extern" (nur erfasst). Einmal laden statt je Zeile zu prüfen.
 $zugangIds = [];
@@ -162,21 +165,28 @@ $mengeInput = fn(string $key, float $wert, string $einheit) =>
   . ' style="width:100px;text-align:right" title="Bestellmenge – kann über den Bedarf angehoben werden (Punkt = Tausender)">'
   . ' <span class="muted">' . h($einheit) . '</span>';
 $rolleBadge = fn($r) => bx_badge($r, $r === 'Fertigware' ? 'info' : '');
-// Lieferant-Dropdown je Zeile (vorbelegt)
-$eurShort = fn($p) => number_format((float)$p, 2, ',', '.') . ' €';
-$liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit = false) use ($lieferanten, $eurShort, $zugangIds): string {
-    // Lieferanten mit Preis zuerst (günstigste oben), dann der Rest alphabetisch; Preis im Label.
+// Lieferantenpreise IMMER mit 4 Nachkommastellen + Währung (viele China-Lieferanten in USD, nicht EUR).
+$preis4 = fn($p, $cur = 'EUR') => number_format((float)$p, 4, ',', '.') . ' ' . h((string)($cur ?: 'EUR'));
+$sum2   = fn($p, $cur = 'EUR') => number_format((float)$p, 2, ',', '.') . ' ' . h((string)($cur ?: 'EUR'));   // Gesamtsumme: 2 Nachkommastellen
+$eurShort = $preis4;   // Rückwärtskompatibel: alte Aufrufe ohne Währung -> EUR
+$liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit = false, array $extraSelAttr = []) use ($lieferanten, $preis4, $zugangIds, $liefWaehr): string {
+    // Lieferanten mit Preis zuerst (günstigste oben), dann der Rest alphabetisch; Preis (4 Nachkommastellen) + Währung im Label.
     // Marker: „· Portal" = Bestellung geht in den Account (wartet auf Bestätigung); „· extern" = nur erfasst.
     // $nurMit=true: nur Lieferanten anzeigen, die für diese Position wirklich einen Preis abgegeben haben.
+    // Jede Option trägt data-preis/data-cur, damit JS die Summe live auf den gewählten Lieferanten umrechnen kann.
     $mit = []; $ohne = [];
     foreach ($lieferanten as $l) { if (isset($preise[(int)$l['id']])) $mit[] = $l; else $ohne[] = $l; }
     usort($mit, fn($a, $b) => $preise[(int)$a['id']] <=> $preise[(int)$b['id']]);
     if ($nurMit && !$mit) return '<span class="muted" title="Kein Lieferant hat für dieses Produkt einen Zukaufpreis abgegeben">– kein Zukaufpreis –</span>';
-    $s = '<select name="lief[' . h($key) . ']" style="max-width:260px"><option value="">– Lieferant –</option>';
+    $attr = '';
+    foreach ($extraSelAttr as $k => $v) $attr .= ' ' . $k . '="' . h((string)$v) . '"';
+    $s = '<select name="lief[' . h($key) . ']" style="max-width:260px"' . $attr . '><option value="">– Lieferant –</option>';
     foreach ($nurMit ? $mit : array_merge($mit, $ohne) as $l) {
         $lid = (int)$l['id'];
-        $lbl = h($l['firma']) . (isset($preise[$lid]) ? ' · ' . $eurShort($preise[$lid]) : '') . (isset($zugangIds[$lid]) ? ' · Portal' : ' · extern');
-        $s .= '<option value="' . $lid . '"' . ($sel === $lid ? ' selected' : '') . '>' . $lbl . '</option>';
+        $cur = $liefWaehr[$lid] ?? 'EUR';
+        $data = isset($preise[$lid]) ? ' data-preis="' . h((string)(float)$preise[$lid]) . '" data-cur="' . h((string)$cur) . '"' : '';
+        $lbl = h($l['firma']) . (isset($preise[$lid]) ? ' · ' . $preis4($preise[$lid], $cur) : '') . (isset($zugangIds[$lid]) ? ' · Portal' : ' · extern');
+        $s .= '<option value="' . $lid . '"' . ($sel === $lid ? ' selected' : '') . $data . '>' . $lbl . '</option>';
     }
     return $s . '</select>';
 };
@@ -273,15 +283,19 @@ if ($ohneFestlegung): ?>
           // z. B. Wellgreen/Rainwood) zusammenführen – Zukauf gewinnt bei gleichem Lieferanten, Fremd füllt auf.
           $bPreise = produkt_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen'])
                    + produkt_fremd_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen']);
-          $bAb = $bPreise ? min($bPreise) : null;                       // günstigster Zukaufpreis je Stück
-          $bSumme = $bAb !== null ? $bAb * (float)$b['zu_bestellen'] : null; // Gesamtsumme (günstigster Preis)
+          // Günstigster Zukaufpreis je Stück + dessen Währung (Lieferanten-Stamm) – als Vorgabe („ab"), solange
+          // kein Lieferant gewählt ist. Danach rechnet JS die Summe auf den GEWÄHLTEN Lieferanten/Preis um.
+          $bAb = null; $bAbLid = null;
+          foreach ($bPreise as $__lid => $__p) { if ($bAb === null || $__p < $bAb) { $bAb = $__p; $bAbLid = (int)$__lid; } }
+          $bAbCur = $bAbLid !== null ? ($liefWaehr[$bAbLid] ?? 'EUR') : 'EUR';
+          $bSumme = $bAb !== null ? $bAb * (float)$b['zu_bestellen'] : null;
       ?>
         <tr>
           <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
           <td>Bulk: <?= h($b['produkt'] ?: '–') ?></td>
           <td><?= bx_badge('Fertiges Produkt','info') ?></td>
           <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], 'Stück') ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($b['need'] ?? $b['zu_bestellen']) ?> · Lager <?= $mfmt($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $mfmt($b['bestellt']) : '' ?></div></td>
-          <td><?= $liefSelect($key, 0, $bPreise, true) ?><?php if ($bAb !== null): ?><div class="muted" style="font-size:11px">ab <?= $eurShort($bAb) ?>/Stück · Summe <?= $eurShort($bSumme) ?></div><?php endif; ?></td>
+          <td><?= $liefSelect($key, 0, $bPreise, true, ['class'=>'bx-bulk-lief', 'data-ab'=>($bAb !== null ? (float)$bAb : ''), 'data-abcur'=>$bAbCur]) ?><?php if ($bAb !== null): ?><div class="muted bx-bulk-sum" style="font-size:11px">ab <?= $preis4($bAb, $bAbCur) ?>/Stück · Summe <?= $sum2($bSumme, $bAbCur) ?></div><?php endif; ?></td>
           <td style="font-size:12px"><?php foreach ($b['orders'] as $o): ?>
             <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a><?php endforeach; ?><span class="muted">· Fremdfertigung</span></td>
         </tr>
@@ -397,5 +411,27 @@ if ($ohneFestlegung): ?>
     });
   }
   upd();
+})();</script>
+<script>(function(){
+  // Bulk-Zeilen: die Summe folgt dem GEWÄHLTEN Lieferanten. Ohne Auswahl: günstigster Preis („ab").
+  // Preis immer 4 Nachkommastellen + Währung (USD/EUR/CNY je Lieferant), Summe 2 Nachkommastellen.
+  function parseMenge(v){ var r=(v||'').replace(/[^0-9.,]/g,'').replace(/\./g,'').replace(',', '.'); var f=parseFloat(r); return isFinite(f)?f:0; }
+  function fmt(n, dez){ try { return n.toLocaleString('de-DE', {minimumFractionDigits:dez, maximumFractionDigits:dez}); } catch(e){ return n.toFixed(dez).replace('.', ','); } }
+  document.querySelectorAll('select.bx-bulk-lief').forEach(function(sel){
+    var row = sel.closest('tr'); if(!row) return;
+    var menge = row.querySelector('input[name^="menge["]');
+    var sum   = row.querySelector('.bx-bulk-sum'); if(!sum) return;
+    function upd(){
+      var m = menge ? parseMenge(menge.value) : 0;
+      var opt = sel.options[sel.selectedIndex], preis, cur, praefix;
+      if (sel.value && opt && opt.dataset.preis){ preis=parseFloat(opt.dataset.preis); cur=opt.dataset.cur||'EUR'; praefix=''; }
+      else { preis=parseFloat(sel.dataset.ab||''); cur=sel.dataset.abcur||'EUR'; praefix='ab '; }
+      if (!isFinite(preis)){ sum.textContent=''; return; }
+      sum.textContent = praefix + fmt(preis,4) + ' ' + cur + '/Stück · Summe ' + fmt(preis*m,2) + ' ' + cur;
+    }
+    sel.addEventListener('change', upd);
+    if (menge){ menge.addEventListener('input', upd); menge.addEventListener('change', upd); }
+    upd();
+  });
 })();</script>
 <?php render_footer(); ?>

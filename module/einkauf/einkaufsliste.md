@@ -38,3 +38,8 @@ Das Hinweis-Panel „… warten auf die Festlegung" nutzt `border-color/border-l
 
 ## Zugang-Regel beim Bestellen (2026-10-06)
 Titel ist jetzt **„Bestellen"**. Beim Bestellen entscheidet der Lieferanten-**Portal-Zugang** (`lieferant_hat_zugang`, aktiver `benutzer.lieferant_id`): Lieferant **mit Zugang** → Bestellung geht in seinen Account, Status `gesendet` + Benachrichtigung → wartet auf seine Bestätigung. Lieferant **ohne Zugang** oder „extern" → nur erfasst (Status `bestellt`). Dropdowns markieren jeden Lieferanten mit „· Portal" bzw. „· extern".
+
+## Preise 4 Nachkommastellen + Währung + Summe folgt Auswahl (Stand 2026-10-08)
+- Lieferantenpreise werden IMMER mit **4 Nachkommastellen** und **Währung** angezeigt (`$preis4`). Währung je Lieferant aus `lieferanten.waehrung` (Default USD; viele China-Lieferanten in USD, nicht EUR) – `$liefWaehr`-Map. Die Fremdfertigungs-Preise (rezeptur_lief_angebot) haben keine eigene Währung → es gilt die Lieferanten-Währung.
+- `$liefSelect` schreibt je Option `data-preis`/`data-cur`; der Bulk-Select bekommt zusätzlich `class=bx-bulk-lief` + `data-ab`/`data-abcur`.
+- **Summe folgt der Auswahl:** JS (unten) rechnet die Summe der Bulk-Zeile auf den GEWÄHLTEN Lieferanten/Preis um (× Menge). Ohne Auswahl steht der günstigste Preis als „ab …". Summe mit 2 Nachkommastellen (`$sum2`), Stückpreis mit 4.
