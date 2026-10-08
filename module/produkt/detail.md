@@ -55,3 +55,6 @@ Admin-Button „Löschen" im Kopf (nur bestehende Produkte). Aktion `loeschen` �
 ## Verwendungs-Panel nur nach Löschversuch + „In Angeboten & Rechnungen"
 - Das Blocker-Panel „Wo wird dieses Produkt verwendet?" erscheint **nur nach einem fehlgeschlagenen Löschversuch** (`$_SESSION['prod_del_fehler']`), nicht dauerhaft.
 - Neuer Bereich **„In Angeboten & Rechnungen"** (immer sichtbar, bestehende Produkte): zeigt, wo das Produkt kommerziell auftaucht – Angebote (über `angebot.produkt_id`/`angebot_produkt`) mit Kunde, Menge/Vper Pkg (aus der Positions-Rezeptur), Status, Datum; Rechnungen (beleg via `auftrag.produkt_id`, typ='rechnung') mit Kunde, Menge, VK/Pkg, Netto, Datum. Jeweils „öffnen"-Link.
+
+## Auswahl „Art des Produkts" (Stand 2026-10-08)
+Oben im Formular eine Auswahl (Radio `extern`): „Eigenes Produkt – Herstellung bei bulkify" (0) vs. „Nur Fulfillment – Kundenware, wir versenden nur" (1). Bei Fulfillment blendet JS alle Fertigungs-/Preis-Bereiche aus (Klasse `.js-mfg`: Rezeptur-Panel inkl. Haltbarkeit/Allergene/Notiz, Stückliste, Standard-Produktionsweg, Kalkulation, Preis-Matrix, Zukauf-Panel, Preise-Reiter) und setzt exklusiv automatisch. Server: `extern` ist jetzt value-basiert (0/1, vorher presence-basiert); bei extern wird `rezeptur_id=NULL` erzwungen und exklusiv=1. `?extern=1` wählt beim Anlegen direkt „Nur Fulfillment" vor.

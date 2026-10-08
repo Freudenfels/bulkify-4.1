@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
     $f = fn($k) => trim($_POST[$k] ?? '');
     if ($f('name') === '') {
         $fehler = 'Name ist ein Pflichtfeld.';
-    } elseif (isset($_POST['extern']) && ($_POST['kunde_id'] ?? '') === '') {
+    } elseif (((string)($_POST['extern'] ?? '0') === '1') && ($_POST['kunde_id'] ?? '') === '') {
         $fehler = 'Für ein externes Produkt (Kundenware) bitte den Kunden wählen.';
     } else {
         $kunde_id = ($_POST['kunde_id'] ?? '') !== '' ? (int)$_POST['kunde_id'] : null;
@@ -93,8 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
         $iid = fn($k) => ($_POST[$k] ?? '') !== '' ? (int)$_POST[$k] : null;
         $verp_id  = $iid('verpackung_id');
         $exkl = isset($_POST['exklusiv']) ? 1 : 0;
-        $extern = isset($_POST['extern']) ? 1 : 0;
-        if ($extern) $exkl = 1;   // externe Kundenware gehört immer dem Kunden
+        $extern = ((string)($_POST['extern'] ?? '0') === '1') ? 1 : 0;   // Radio „Art des Produkts" (0=Herstellung, 1=nur Fulfillment)
+        if ($extern) { $exkl = 1; $rez_id = null; }   // externe Kundenware gehört dem Kunden und hat KEINE Rezeptur bei uns
         // Der Kunde ist nur bei einem exklusiven Produkt der Besitzer. Ein Katalogprodukt gehört niemandem –
         // sonst steht in der Produktliste ein Kundenname bei einem Produkt, das jeder Kunde bestellen kann.
         if (!$exkl) $kunde_id = null;
@@ -257,18 +257,21 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
 <?php if (!$neu): ?>
 <div id="prodTabs" class="bx-row" style="gap:8px;margin:0 0 14px;flex-wrap:wrap">
   <button type="button" class="btn btn-ghost btn-sm on" data-ptab="stamm">Stammdaten &amp; Verpackung</button>
-  <button type="button" class="btn btn-ghost btn-sm" data-ptab="preise">Preise</button>
+  <button type="button" class="btn btn-ghost btn-sm js-mfg" data-ptab="preise">Preise</button>
   <button type="button" class="btn btn-ghost btn-sm" data-ptab="dokumente">Dokumente</button>
 </div>
 <?php endif; ?>
 <form id="nfCheckForm" method="post"></form>
 <form method="post" class="bx-form" data-ppanel="stamm">
-  <?php if ($istExtern): ?>
-    <input type="hidden" name="extern" value="1">
-    <div class="bx-panel bx-keepinfo" style="padding:10px 14px;margin-bottom:12px">
-      <strong>Externes Produkt (Kundenware).</strong> Ware, die der Kunde woanders herstellen ließ und die wir nur lagern/versenden – ohne Rezeptur/Produktion bei uns. Es gehört dem gewählten Kunden (exklusiv) und ist danach im <a href="?p=lager2">Fremdlager</a> einbuchbar. Rezeptur ist optional.
+  <?php // Art des Produkts: steuert, was angezeigt wird. „Nur Fulfillment" blendet Rezeptur/Produktion/Preise aus. ?>
+  <div class="bx-panel" style="border-left:3px solid var(--lime, #C0F24E)">
+    <div style="font-weight:600;margin-bottom:8px">Art des Produkts</div>
+    <div class="bx-row" style="gap:24px;flex-wrap:wrap">
+      <label class="bx-check" style="gap:8px;margin:0;cursor:pointer"><input type="radio" name="extern" value="0" <?= $istExtern ? '' : 'checked' ?>> Eigenes Produkt – Herstellung bei bulkify <span class="muted" style="font-weight:400">(Rezeptur, Produktion, Preise)</span></label>
+      <label class="bx-check" style="gap:8px;margin:0;cursor:pointer"><input type="radio" name="extern" value="1" <?= $istExtern ? 'checked' : '' ?>> Nur Fulfillment – Kundenware, wir versenden nur <span class="muted" style="font-weight:400">(ohne Rezeptur/Produktion)</span></label>
     </div>
-  <?php endif; ?>
+    <div class="muted bx-keepinfo" id="externHint" style="font-size:13px;margin-top:10px<?= $istExtern ? '' : ';display:none' ?>">Ware, die der Kunde woanders herstellen ließ und die wir nur lagern/versenden. Gehört dem gewählten <strong>Kunden</strong> (exklusiv) und ist danach im <a href="?p=lager2">Fremdlager</a> einbuchbar. Rezeptur, Stückliste, Kalkulation und Preise werden ausgeblendet.</div>
+  </div>
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Produktname (intern) <?= bx_hint('unser Arbeitsname, z. B. „Zink". Gleiche Namen werden automatisch mit v2, v3 … fortlaufend nummeriert.') ?></label><input type="text" name="name" value="<?= $v('name') ?>" required placeholder="z. B. Zink"></div>
     <div class="bx-field"><label>Name für den Kunden <?= bx_hint('so heißt es beim Kunden im Portal / auf Belegen, z. B. „Super Zink". Leer = interner Name.') ?></label><input type="text" name="kundenname" value="<?= $v('kundenname') ?>" placeholder="z. B. Super Zink"></div>
@@ -322,7 +325,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
     <?php endif; ?>
   </div></div>
 
-  <div class="bx-panel"><div class="bx-grid">
+  <div class="bx-panel js-mfg"><div class="bx-grid">
     <div class="bx-field"><label>Rezeptur</label>
       <select name="rezeptur_id" id="rezeptur">
         <option value="">– wählen –</option>
@@ -340,7 +343,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
   <div class="bx-field"><label>Notiz</label><textarea name="notiz"><?= $v('notiz') ?></textarea></div>
   </div>
 
-  <div class="bx-panel">
+  <div class="bx-panel js-mfg">
     <div style="font-weight:600;margin-bottom:8px">Stückliste – weitere Verpackung</div>
     <div class="bx-grid">
       <?= verp_slot('Verschluss/Deckel', 'verschluss_id', $VERP_ROLLE['verschluss'], $p['verschluss_id'] ?? '') ?>
@@ -402,7 +405,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
             'etikettieren' => $neu ? 1 : (int)($p['weg_etikettieren'] ?? 1),
             'karton' => $neu ? 0 : (int)($p['weg_karton'] ?? 0),
             'beipack' => $neu ? 0 : (int)($p['weg_beipack'] ?? 0)]; ?>
-  <div class="bx-panel">
+  <div class="bx-panel js-mfg">
     <div style="font-weight:600;margin-bottom:4px">Standard-Produktionsweg <?= bx_hint('Welche Ausbaustufen beim Anlegen eines Produktionsauftrags für dieses Produkt gesetzt werden. Reihenfolge: Verpacken → Etikettieren → Beipackzettel → Umkarton (vor der Qualitätsprüfung). Nur der Startzustand – im Produktions-Programm je Auftrag überschreibbar. Setzt nur Admin.') ?></div>
     <div class="muted" style="font-size:12px;margin-bottom:10px">Gilt für neue Produktionsaufträge. Bestehende bleiben unverändert.</div>
     <div class="bx-grid">
@@ -421,7 +424,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
   </div>
   <?php endif; ?>
 
-  <div class="bx-panel" id="ergebnis">
+  <div class="bx-panel js-mfg" id="ergebnis">
     <h2>Kalkulation &amp; Tages-Deklaration</h2>
     <div class="bx-cards" style="margin-bottom:16px">
       <div class="bx-card"><div class="k">Kosten / Packung</div><div class="v" id="k_kosten">–</div></div>
@@ -443,7 +446,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
 </form>
 
 <?php if (!$neu): ?>
-<div class="bx-panel" data-ppanel="preise">
+<div class="bx-panel js-mfg" data-ppanel="preise">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
     <h2 style="margin:0">Preis-Matrix <?= bx_hint('automatische VK-Kalkulation: Packungsgröße (Stück, Gramm bei Pulver, Milliliter bei Flüssig) × passende Verpackung × Bestellmenge. VK = EK (Rezeptur + Kapsel/Presshilfsstoffe/Trägerflüssigkeit) × Marge je Typ, ohne Kundenrabatt. Interne Sale-Auskunft.') ?></h2>
     <form method="post" style="margin:0"><input type="hidden" name="aktion" value="matrix"><button class="btn btn-primary btn-sm" type="submit">Matrix neu berechnen</button></form>
@@ -469,7 +472,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
     <div class="muted" style="margin-top:8px">VK je Packung (Basis, ohne Kundenrabatt). Stand: <?= h(fmt_zeit($matrix[0]['stand'])) ?>.</div>
   <?php endif; ?>
 </div>
-<div class="bx-panel" id="zukauf" data-ppanel="preise">
+<div class="bx-panel js-mfg" id="zukauf" data-ppanel="preise">
   <h2 style="margin-top:0">Lieferantenpreise (Zukauf) <?= bx_hint('Einkaufspreise für dieses Fertigprodukt je Lieferant/Versandweg (AIR/SEA), günstigster markiert. Kommen aus „EK-Preise (Import)" oder von Hand. Rein intern – nie in der Kundensicht.') ?></h2>
   <?php if (isset($_GET['zkok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Preis gespeichert.</div><?php endif; ?>
   <?php $VERSZ = versandart_liste();
@@ -776,6 +779,26 @@ if (!$neu):
   btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.getAttribute('data-ptab')); }); });
   var start='stamm'; try{ var s=localStorage.getItem('bx-prodtab'); if(s && document.querySelector('[data-ppanel="'+s+'"]')) start=s; }catch(e){}
   show(start);
+})();
+</script>
+<script>
+(function(){
+  // „Art des Produkts": Nur Fulfillment blendet alle Fertigungs-/Preis-Bereiche (.js-mfg) aus.
+  var radios = document.querySelectorAll('input[name="extern"]');
+  if (!radios.length) return;
+  var mfg = document.querySelectorAll('.js-mfg');
+  var hint = document.getElementById('externHint');
+  var exkl = document.getElementById('f_exkl');
+  function aktuell(){ var r = document.querySelector('input[name="extern"]:checked'); return r ? r.value : '0'; }
+  function anwenden(){
+    var extern = aktuell() === '1';
+    mfg.forEach(function(el){ el.style.display = extern ? 'none' : ''; });
+    if (hint) hint.style.display = extern ? '' : 'none';
+    // Fulfillment = Kundenware: exklusiv automatisch setzen (gehört dem Kunden).
+    if (extern && exkl && !exkl.checked) exkl.checked = true;
+  }
+  radios.forEach(function(r){ r.addEventListener('change', anwenden); });
+  anwenden();
 })();
 </script>
 <?php
