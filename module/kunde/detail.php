@@ -576,11 +576,13 @@ if (!$neu) {
 </form>
 
 <?php if (!$neu && function_exists('has_role') && has_role('admin')):
-  // Dublette zusammenführen – doppelte Kundendatensätze zu einem (diesem) vereinen.
-  if (isset($_GET['merged'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px;margin-top:20px"><strong>' . h((string)($_GET['mergename'] ?? 'Dublette')) . '</strong> wurde in diesen Kunden zusammengeführt (' . (int)$_GET['merged'] . ' Verknüpfungen umgehängt) und der doppelte Datensatz gelöscht.</div>';
-  if (isset($_GET['mergefehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px;margin-top:20px">' . h((string)$_GET['mergefehler']) . '</div>';
+  // Dublette zusammenführen + Löschen stehen NUR im Reiter Stammdaten (data-panel="stamm"),
+  // damit nicht jeder Reiter damit vollläuft. Die Reiter-JS aktiviert „stamm" auch nach einer Aktion.
   $mergeKunden = all("SELECT id, firma, kundennummer FROM kunden WHERE id<>? ORDER BY firma", [(int)$id]);
 ?>
+<div data-panel="stamm" hidden>
+  <?php if (isset($_GET['merged'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px;margin-top:20px"><strong>' . h((string)($_GET['mergename'] ?? 'Dublette')) . '</strong> wurde in diesen Kunden zusammengeführt (' . (int)$_GET['merged'] . ' Verknüpfungen umgehängt) und der doppelte Datensatz gelöscht.</div>'; ?>
+  <?php if (isset($_GET['mergefehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px;margin-top:20px">' . h((string)$_GET['mergefehler']) . '</div>'; ?>
 <div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);margin-top:20px">
   <h2 style="margin-top:0">Dublette zusammenführen</h2>
   <p class="muted" style="margin-top:0">Wähle einen <strong>doppelten</strong> Kunden (dieselbe Firma als zweiter Datensatz). Alle seine Angebote, Aufträge, Rechnungen, Rezepturen, Produkte, Anfragen, Lagerbestände usw. werden <strong>hierher</strong> (zu <strong><?= $v('firma') ?></strong>) überführt – danach wird der doppelte Datensatz gelöscht. Das lässt sich nicht rückgängig machen.</p>
@@ -629,6 +631,7 @@ if (!$neu) {
   inp.addEventListener('input', function(){ btn.disabled = (inp.value.trim() !== soll); });
 })();
 </script>
+</div><!-- /data-panel=stamm (Merge + Löschen) -->
 <?php endif; ?>
 
 <script>
@@ -649,6 +652,8 @@ if (!$neu) {
   // Nach dem Speichern (oder per ?tab=) im zuletzt genutzten Tab bleiben statt zur Übersicht zu springen.
   var wunsch = new URLSearchParams(location.search).get('tab');
   if (wunsch) activate(wunsch);
+  // Nach Merge/Löschen (Flash-Parameter) direkt den Stammdaten-Reiter zeigen, wo diese Blöcke stehen.
+  else if (/[?&](merged|mergefehler|loeschfehler)=/.test(location.search)) activate('stamm');
   var add = document.getElementById('addMarke');
   if (add) add.addEventListener('click', function(){
     var row = document.createElement('div');

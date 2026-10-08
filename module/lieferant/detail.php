@@ -488,6 +488,8 @@ if (!$neu) {
   // Ein Reiter aus dem Link (#dok, #rueckfragen) wird direkt geöffnet – z. B. nach dem Speichern dort.
   var hashTab = (location.hash || '').replace('#', '');
   if (hashTab) tabs.forEach(function(t){ if (t.getAttribute('data-tab') === hashTab) t.click(); });
+  // Nach Merge/Löschen (Flash-Parameter) direkt den Stammdaten-Reiter zeigen, wo diese Blöcke stehen.
+  else if (/[?&](merged|mergefehler|loeschfehler)=/.test(location.search)) tabs.forEach(function(t){ if (t.getAttribute('data-tab') === 'stamm') t.click(); });
   // „Fertige Produkte" -> Formen-Auswahl ein/ausblenden
   var katFertig = document.getElementById('kat_fertig');
   var formenBlock = document.getElementById('formenBlock');
@@ -849,11 +851,13 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
 <?php endif; ?>
 
 <?php if (!$neu && function_exists('has_role') && has_role('admin')):
-  // Dublette zusammenführen – doppelte Lieferanten (z. B. durch KI-Lesefehler beim Lieferschein) zu einem vereinen.
-  if (isset($_GET['merged'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px;margin-top:20px"><strong>' . h((string)($_GET['mergename'] ?? 'Dublette')) . '</strong> wurde in diesen Lieferanten zusammengeführt (' . (int)$_GET['merged'] . ' Verknüpfungen umgehängt) und der doppelte Datensatz gelöscht.</div>';
-  if (isset($_GET['mergefehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px;margin-top:20px">' . h((string)$_GET['mergefehler']) . '</div>';
+  // Dublette zusammenführen + Löschen stehen NUR im Reiter Stammdaten (data-panel="stamm"),
+  // damit nicht jeder Reiter damit vollläuft. Die Reiter-JS öffnet „stamm" auch nach einer Aktion.
   $mergeLief = all("SELECT id, firma, lieferantennummer, land FROM lieferanten WHERE id<>? ORDER BY firma", [(int)$id]);
 ?>
+<div data-panel="stamm" hidden>
+  <?php if (isset($_GET['merged'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px;margin-top:20px"><strong>' . h((string)($_GET['mergename'] ?? 'Dublette')) . '</strong> wurde in diesen Lieferanten zusammengeführt (' . (int)$_GET['merged'] . ' Verknüpfungen umgehängt) und der doppelte Datensatz gelöscht.</div>'; ?>
+  <?php if (isset($_GET['mergefehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px;margin-top:20px">' . h((string)$_GET['mergefehler']) . '</div>'; ?>
 <div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);margin-top:20px">
   <h2 style="margin-top:0">Dublette zusammenführen</h2>
   <p class="muted" style="margin-top:0">Wähle einen <strong>doppelten</strong> Lieferanten (dieselbe Firma als zweiter Datensatz, z. B. durch Tippfehler oder KI-Lesefehler beim Lieferschein). Alle seine Preise, Anfragen, Angebote, Bestellungen, Rohstoff-Zuordnungen (Hauptlieferant), Dokumente, Portal-Logins usw. werden <strong>hierher</strong> (zu <strong><?= $v('firma') ?></strong>) überführt – danach wird der doppelte Datensatz gelöscht. Das lässt sich nicht rückgängig machen.</p>
@@ -902,6 +906,7 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
   inp.addEventListener('input', function(){ btn.disabled = (inp.value.trim() !== soll); });
 })();
 </script>
+</div><!-- /data-panel=stamm (Merge + Löschen) -->
 <?php endif; ?>
 <?php
 render_footer();
