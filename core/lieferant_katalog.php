@@ -264,6 +264,67 @@ function katalog_loeschen(int $zeile_id, ?int $lieferant_id = null): void {
     if ($lieferant_id) q("DELETE FROM lieferant_katalog WHERE id=? AND lieferant_id=? AND status<>'uebernommen'", [$zeile_id, $lieferant_id]);
     else               q("DELETE FROM lieferant_katalog WHERE id=? AND status<>'uebernommen'", [$zeile_id]);
 }
+// ===== Gegenrichtung: Rohstoffe, die BULKIFY beim Lieferanten führt (Portal "Mein Katalog") =====
+// Items (Rohstoffe), bei denen dieser Lieferant Hauptlieferant ist ODER zu denen er einen
+// Staffelpreis hat. Je Item: unsere Anforderung (Wirkstoffe + Kennwerte) und SEINE eigenen Preise.
+// Read-only fuers Portal – keine fremden Preise, keine Kunden/Rezepturen.
+function lieferant_gefuehrte_artikel(int $lieferant_id): array {
+    if ($lieferant_id <= 0) return [];
+    $items = all("SELECT DISTINCT i.id, i.artikelnummer, i.name, i.name_lat, i.kategorie, i.form, i.cas, i.herkunft, i.einheit,
+                         (i.haupt_lieferant_id = ?) AS ist_haupt
+                  FROM item i
+                  LEFT JOIN lieferant_preis lp ON lp.item_id = i.id AND lp.lieferant_id = ?
+                  WHERE i.kategorie = 'rohstoff' AND i.gesperrt = 0
+                    AND (i.haupt_lieferant_id = ? OR lp.id IS NOT NULL)
+                  ORDER BY i.name", [$lieferant_id, $lieferant_id, $lieferant_id]);
+    if (!$items) return [];
+    $ids = array_map(fn($r) => (int)$r['id'], $items);
+    $in  = implode(',', $ids);
+    $preise = [];
+    foreach (all("SELECT item_id, menge_ab, preis, waehrung, stand FROM lieferant_preis
+                  WHERE lieferant_id = ? AND item_id IN ($in) ORDER BY item_id, menge_ab", [$lieferant_id]) as $p)
+        $preise[(int)$p['item_id']][] = $p;
+    $wirk = [];
+    foreach (all("SELECT iw.item_id, n.name, iw.gehalt_wert, iw.gehalt_prozent, iw.gehalt_einheit
+                  FROM item_wirkstoff iw JOIN naehrstoff n ON n.id = iw.naehrstoff_id
+                  WHERE iw.item_id IN ($in) ORDER BY iw.item_id, iw.sort") as $w)
+        $wirk[(int)$w['item_id']][] = $w;
+    $kenn = [];
+    foreach (all("SELECT item_id, parameter, wert FROM item_kennwert WHERE item_id IN ($in) ORDER BY item_id, sort") as $k)
+        $kenn[(int)$k['item_id']][] = $k;
+    foreach ($items as &$it) {
+        $id = (int)$it['id'];
+        $it['preise']     = $preise[$id] ?? [];
+        $it['wirkstoffe'] = $wirk[$id]   ?? [];
+        $it['kennwerte']  = $kenn[$id]   ?? [];
+    }
+    unset($it);
+    return $items;
+}
+// Der Lieferant schlaegt fuer einen ihm zugeordneten Artikel einen neuen Preis vor. Das legt – genau wie
+// ein hochgeladener Katalog – eine Pruef-Zeile in lieferant_katalog an (status 'neu', mit item_id). Das Team
+// uebernimmt sie in der Katalog-Freigabe ("Preis dorthin") -> Preis wandert in lieferant_preis des Artikels.
+// Nie direkt live. Rueckgabe ['ok'=>bool, 'msg'=>'…'].
+function katalog_preis_vorschlag(int $lieferant_id, int $item_id, float $preis, ?float $menge_ab, string $einheit = '', string $waehrung = 'EUR'): array {
+    if ($lieferant_id <= 0 || $item_id <= 0) return ['ok'=>false, 'msg'=>'Angaben fehlen.'];
+    if ($preis <= 0) return ['ok'=>false, 'msg'=>'Bitte einen Preis größer 0 angeben.'];
+    // Nur fuer einen Artikel, der dem Lieferanten wirklich zugeordnet ist (Isolation).
+    $it = one("SELECT id, name, kategorie, form, cas, herkunft FROM item
+               WHERE id = ? AND gesperrt = 0
+                 AND (haupt_lieferant_id = ? OR id IN (SELECT item_id FROM lieferant_preis WHERE lieferant_id = ?))",
+              [$item_id, $lieferant_id, $lieferant_id]);
+    if (!$it) return ['ok'=>false, 'msg'=>'Dieser Artikel ist Ihnen nicht zugeordnet.'];
+    $art = $it['kategorie'] === 'fertig' ? 'fertigprodukt' : 'rohstoff';
+    q("INSERT INTO lieferant_katalog (lieferant_id,item_id,name,art,form,cas,herkunft,preis,waehrung,einheit,menge_ab,notiz,status,angelegt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'neu', ?)",
+      [$lieferant_id, $item_id, $it['name'], $art, $it['form'] ?: null, $it['cas'] ?: null, $it['herkunft'] ?: null,
+       $preis, mb_substr(trim($waehrung), 0, 3) ?: 'EUR', mb_substr(trim($einheit), 0, 20) ?: null,
+       $menge_ab !== null ? $menge_ab : 0,
+       'Preis-Aktualisierung des Lieferanten für den vorhandenen Artikel „' . $it['name'] . '".', gmdate('Y-m-d H:i:s')]);
+    log_aktivitaet('lieferant', $lieferant_id, 'lieferant', 'Preis-Aktualisierung für „' . $it['name'] . '" vorgeschlagen (wartet auf Prüfung).', 'katalog');
+    return ['ok'=>true, 'msg'=>''];
+}
+
 // Eine Zeile ändern (der Lieferant korrigiert seine eigene, das Team jede).
 function katalog_speichern(int $zeile_id, array $daten, ?int $lieferant_id = null): void {
     $z = $lieferant_id

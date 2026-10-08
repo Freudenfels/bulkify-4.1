@@ -30,3 +30,8 @@ Ein Fertigprodukt landet in der Kategorie `fertig`, alles andere als `rohstoff`;
 
 ## Grenzen
 Die KI liest, was in der Liste steht – sie prüft nicht, ob der Lieferant den Artikel wirklich liefern kann. Deshalb entscheidet immer ein Mensch. Bei sehr langen Katalogen kann das Auslesen an der Antwortgrenze enden; dann kommen die ersten Zeilen an, der Rest fehlt. In dem Fall die Liste geteilt hochladen. Formate: PDF, Bild (auch Scan), CSV und Excel `.xlsx`/`.xlsm`; altes `.xls` bitte vorher umspeichern (siehe `core/tabelle_lesen.md`).
+
+## Gegenrichtung: Was bulkify beim Lieferanten führt (Stand 2026-10-08)
+`lieferant_gefuehrte_artikel($lieferant_id)` liefert die **Rohstoffe**, bei denen der Lieferant Hauptlieferant (`item.haupt_lieferant_id`) ist ODER zu denen er einen Staffelpreis in `lieferant_preis` hat (Vereinigung, nur `kategorie='rohstoff'`, `gesperrt=0`). Je Artikel: unsere Anforderung (`item_wirkstoff` mit Gehalt + `item_kennwert`) und SEINE eigenen `lieferant_preis`-Staffeln – read-only, keine fremden Preise/Kunden/Rezepturen. Wird im Portal „Mein Katalog" als eigener Abschnitt „Von bulkify bei Ihnen geführt" angezeigt.
+
+`katalog_preis_vorschlag($lieferant_id,$item_id,$preis,$menge_ab,$einheit,$waehrung)` – der Lieferant schlägt für einen ihm zugeordneten Artikel einen neuen Preis vor. Legt (mit Isolationsprüfung: Artikel muss ihm zugeordnet sein) eine normale `lieferant_katalog`-Zeile an (`status='neu'`, `item_id` gesetzt). **Nie direkt live** – das Team übernimmt sie in der Katalog-Freigabe über „Preis dorthin" (`katalog_aehnliche()` findet den Artikel per Namens-/CAS-Treffer), wodurch der Preis in `lieferant_preis` des bestehenden Artikels wandert.

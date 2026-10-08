@@ -21,3 +21,6 @@
 Dieselben Funktionen nutzt der Reiter „Katalog" im Lieferantenkonto (`module/lieferant/detail.php`); die Seite hier ist nur die gesammelte Sicht. Details der Katalog-Logik: `core/lieferant_katalog.md`.
 
 **Menü & Zähler:** Eintrag in `core/layout.php` (Gruppe Einkauf) mit Badge = Zahl offener Zeilen (`SELECT COUNT(*) FROM lieferant_katalog WHERE status='neu'`). Rechte: `einkauf`, `finance` (+ admin) in `core/auth.php`. Zusätzlich zeigt die **Lieferantenliste** eine Spalte „Zu prüfen" je Lieferant (siehe `module/lieferant/liste.md`).
+
+## Preis-Aktualisierungen aus dem Portal (Stand 2026-10-08)
+Hier landen auch **Preis-Aktualisierungen**, die ein Lieferant im Portal für einen ihm zugeordneten Artikel vorschlägt (`katalog_preis_vorschlag()`, Abschnitt „Von bulkify bei Ihnen geführt"). Diese Zeilen haben `item_id` gesetzt und `katalog_aehnliche()` zeigt den bestehenden Artikel als „gleicher Name"-Treffer → mit „Preis dorthin" wandert der neue Preis in `lieferant_preis` des Artikels (kein neuer Artikel).
