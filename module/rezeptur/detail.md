@@ -78,3 +78,6 @@ Das Dokument-Popup (`bxDocOverlay` + `bxDocOeffnen()`) lag früher im Block `if 
 
 ## Dropdown: Wirkstoffgehalt-Marker (2026-10-07)
 Im Rohstoff-Picker (datalist `zutat_dl`) zeigt das Label `· Gehalt ✓`, wenn der Rohstoff einen nutzbaren Wirkstoffgehalt hat (mind. ein item_wirkstoff mit basePerMg>0, `$gehaltSet`). Marker ist Teil des Anzeige-Labels in datalist UND `ZMAP` (muss identisch sein, sonst matcht die Auswahl nicht); beim Speichern irrelevant, da `bezeichnung` aus `item.name` kommt.
+
+## Kundenrezeptur: Annahme kommt vom Kunden (Stand 2026-10-08)
+Bei **kundenspezifischen** Rezepturen (kunde_id gesetzt) ist der Hauptweg jetzt „Als Vorschlag an den Kunden senden" (→ status `vorschlag`). Der KUNDE nimmt den Vorschlag im Portal selbst an (`rezeptur_annehmen` → `eingefroren`, mit seinem Namen als Unterzeichner/`freigabe_name`). Die direkte Team-Abkürzung zu `eingefroren` ist nur noch ein klar getrennter, de-emphasierter Admin-Ausnahmebutton „Ohne Kundenannahme verbindlich setzen" (mit Rückfrage; setzt KEIN freigabe_name → keine falsche Kunden-Zuschreibung). **Hausrezepturen** (kunde_id NULL, Katalog) sind unverändert. Grund: „freigeben" durch das Team darf nicht so wirken, als hätte der Kunde angenommen.

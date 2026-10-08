@@ -251,11 +251,21 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
     <div>Status: <?= match($status){'entwurf'=>bx_badge('Entwurf'),'vorschlag'=>bx_badge('Vorschlag','info'),'freigegeben'=>bx_badge('freigegeben','ok'),'eingefroren'=>bx_badge('eingefroren · verbindlich','warn'),'abgelehnt'=>bx_badge('vom Kunden abgelehnt','err'),default=>bx_badge($status)} ?></div>
     <div class="bx-row">
       <?php if ($status==='entwurf'): ?>
-        <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="vorschlag"><button class="btn btn-ghost btn-sm" type="submit">Als Vorschlag senden</button></form>
-        <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="eingefroren"><button class="btn btn-primary btn-sm" type="submit">Freigeben &amp; einfrieren</button></form>
+        <?php if (!empty($r['kunde_id'])): // Kundenspezifisch: der KUNDE nimmt den Vorschlag im Portal selbst an. ?>
+          <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="vorschlag"><button class="btn btn-primary btn-sm" type="submit">Als Vorschlag an den Kunden senden</button></form>
+          <?php if (has_role('admin')): ?><form method="post" style="display:inline" onsubmit="return confirm('Wirklich OHNE Kundenannahme verbindlich setzen? Normalerweise nimmt der Kunde den Vorschlag im Portal selbst an.');"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="eingefroren"><button class="btn btn-ghost btn-sm" type="submit" title="Nur für Ausnahmen (z. B. offline schon vereinbart). Normalerweise nimmt der Kunde selbst an.">Ohne Kundenannahme verbindlich setzen</button></form><?php endif; ?>
+        <?php else: // Hausrezeptur (Katalog) – kein Kunde, der annimmt. Verhalten unverändert. ?>
+          <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="vorschlag"><button class="btn btn-ghost btn-sm" type="submit">Als Vorschlag senden</button></form>
+          <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="eingefroren"><button class="btn btn-primary btn-sm" type="submit">Freigeben &amp; einfrieren</button></form>
+        <?php endif; ?>
       <?php elseif ($status==='vorschlag'): ?>
         <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="entwurf"><button class="btn btn-ghost btn-sm" type="submit">zurück zu Entwurf</button></form>
-        <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="eingefroren"><button class="btn btn-primary btn-sm" type="submit">Freigeben &amp; einfrieren</button></form>
+        <?php if (!empty($r['kunde_id'])): ?>
+          <span class="muted" style="font-size:12px;align-self:center">wartet auf Annahme durch den Kunden im Portal</span>
+          <?php if (has_role('admin')): ?><form method="post" style="display:inline" onsubmit="return confirm('Wirklich OHNE Kundenannahme verbindlich setzen? Normalerweise nimmt der Kunde den Vorschlag im Portal selbst an.');"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="eingefroren"><button class="btn btn-ghost btn-sm" type="submit" title="Nur für Ausnahmen (z. B. offline schon vereinbart). Normalerweise nimmt der Kunde selbst an.">Ohne Kundenannahme verbindlich setzen</button></form><?php endif; ?>
+        <?php else: ?>
+          <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="eingefroren"><button class="btn btn-primary btn-sm" type="submit">Freigeben &amp; einfrieren</button></form>
+        <?php endif; ?>
       <?php elseif ($status==='abgelehnt'): ?>
         <form method="post" style="display:inline" onsubmit="return confirm('Überarbeiteten Vorschlag erneut an den Kunden senden?');"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="vorschlag"><button class="btn btn-primary btn-sm" type="submit">Erneut als Vorschlag senden</button></form>
         <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="entwurf"><button class="btn btn-ghost btn-sm" type="submit">zurück zu Entwurf</button></form>
