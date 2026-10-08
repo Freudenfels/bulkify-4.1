@@ -10,6 +10,9 @@ define('BX_TITEL', 'Buchhaltung');
 define('BX_VERSION', 'Buchhaltung');
 // Uploads liegen im Dashboard-Projekt (eine Ebene höher) – geteilt mit dem Dashboard.
 define('BX_UPLOADS', dirname(BX_ROOT) . '/data/uploads');
+// Daten-Verzeichnis (geteilt mit dem Dashboard) – u. a. für ki.log. ki_log() in core/ki.php nutzt BX_DATA;
+// ohne diese Definition stürzte jeder KI-Aufruf in der Buchhaltung mit „Undefined constant BX_DATA" ab.
+if (!defined('BX_DATA')) define('BX_DATA', dirname(BX_ROOT) . '/data');
 
 $GLOBALS['bu_secrets_quelle'] = '';
 $__kandidaten = [BX_ROOT . '/secrets.php'];
