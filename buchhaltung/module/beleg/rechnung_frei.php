@@ -82,11 +82,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ba
             $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo((string)$_FILES['anhang']['name'], PATHINFO_EXTENSION)));
             $save = rtrim(sys_get_temp_dir(), '/\\') . '/refr_' . bin2hex(random_bytes(5)) . ($ext ? '.' . $ext : '');
             if (!@move_uploaded_file($_FILES['anhang']['tmp_name'], $save)) $save = (string)$_FILES['anhang']['tmp_name'];
-            // aufwand=low + begrenztes Zeitbudget: sonst läuft der (langsame) KI-Call in den Server-Timeout → 500.
-            $r = ki_datei_frage($save, $anw, ['json' => true, 'system' => $system, 'max_tokens' => 2500, 'aufwand' => 'low', 'timeout' => 100, 'budget' => 110, 'zweck' => 'rechnung_frei']);
+            // aufwand=low macht den (sonst sehr langsamen) KI-Call schnell genug für den Server-Timeout.
+            // max_tokens hoch lassen, damit auch viele Positionen vollständig zurückkommen (sonst abgeschnitten).
+            $r = ki_datei_frage($save, $anw, ['json' => true, 'system' => $system, 'max_tokens' => 4000, 'aufwand' => 'low', 'timeout' => 120, 'budget' => 150, 'zweck' => 'rechnung_frei']);
             if (@is_file($save) && strpos($save, sys_get_temp_dir()) === 0) @unlink($save);
         } else {
-            $r = ki_json($anw, ['system' => $system, 'max_tokens' => 2500, 'aufwand' => 'low', 'timeout' => 100, 'budget' => 110, 'zweck' => 'rechnung_frei']);
+            $r = ki_json($anw, ['system' => $system, 'max_tokens' => 4000, 'aufwand' => 'low', 'timeout' => 120, 'budget' => 150, 'zweck' => 'rechnung_frei']);
         }
         if (empty($r['ok'])) {
             $fehler = 'Die KI konnte daraus keine Rechnung bauen: ' . ($r['fehler'] ?? 'unbekannter Fehler');
