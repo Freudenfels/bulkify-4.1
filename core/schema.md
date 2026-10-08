@@ -103,3 +103,6 @@
 
 ## Lieferanten zusammenführen / Dublette (Stand 2026-10-08)
 `lieferant_zusammenfuehren($quelle_id, $ziel_id)` – analog zu `kunde_zusammenfuehren`: hängt ALLE Verweise des doppelten Lieferanten auf den Ziel-Lieferanten um (alle Spalten mit Namen auf `lieferant_id`, inkl. `item.haupt_lieferant_id`), in einer Transaktion (Rollback bei Fehler), Import-/Staging-Tabellen (v3imp_*, bu_imp_*) ausgeschlossen (ESCAPE '='). UNIQUE-Keys auf Lieferant-Spalten gibt es nur in Staging → Live kollisionsfrei. Löscht die Quelle. Rückgabe wie der Kunden-Merge.
+
+## buxtrade-Nummer je Rohstoff (Stand 2026-10-08)
+`item.bx_nummer` (VARCHAR) = buxtrade-Handelskennung eines Rohstoffs = Artikelnummer (R-Nummer) + „BX" (z. B. R-12345BX). Die R-Nummer bleibt unverändert. Befüllung idempotent im `init_schema()` (nach dem ersten Lauf 0 Zeilen; neue Rohstoffe werden beim nächsten Request nachgetragen). Helfer `rohstoff_bx_nummer($item)` liefert die gespeicherte bx_nummer, sonst abgeleitet aus der Artikelnummer (immer korrekt, auch vor dem Backfill). Angezeigt read-only auf der Rohstoff-Detailseite (Feld „buxtrade-Nr.").

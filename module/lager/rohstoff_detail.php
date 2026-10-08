@@ -557,6 +557,9 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
   <section data-panel="stamm">
     <div class="bx-panel"><div class="bx-grid">
       <div class="bx-field"><label>Artikelnummer <?= bx_hint('leer lassen = wird automatisch vergeben (R-/VP-/FP-… je Kategorie)') ?></label><input type="text" name="artikelnummer" value="<?= $v('artikelnummer') ?>" placeholder="<?= $neu ? 'automatisch' : '' ?>"></div>
+      <?php if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'): $bxNr = rohstoff_bx_nummer($it); ?>
+      <div class="bx-field"><label>buxtrade-Nr. <?= bx_hint('Handels-Kennung für buxtrade = Artikelnummer (R-Nummer) + „BX". Wird automatisch aus der Artikelnummer gebildet.') ?></label><input type="text" value="<?= h($bxNr) ?>" readonly style="background:var(--panel-2)"></div>
+      <?php endif; ?>
       <div class="bx-field"><label>Name (deutsch)</label><input type="text" name="name" value="<?= $v('name') ?>" required></div>
       <div class="bx-field"><label>Name (englisch)</label><input type="text" name="name_en" value="<?= $v('name_en') ?>"></div>
       <div class="bx-field"><label>Lateinischer Name <?= bx_hint('botanischer/pharmazeutischer Name, z. B. Withania somnifera') ?></label><input type="text" name="name_lat" value="<?= $v('name_lat') ?>"></div>

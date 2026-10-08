@@ -99,3 +99,6 @@ Select `art` (Optionen `rohstoff_art_optionen()`), im Stamm-Reiter vor „Form�
 
 ## KI-Info-Karte (Stand 2026-10-08)
 Karte „KI-Info" (nur Rohstoffe, nicht beim Anlegen) unter dem Novel-Food-Status: zeigt den gespeicherten Text + Erzeug-Datum. Buttons: „KI-Info erzeugen"/„neu erzeugen" (POST aktion=ki_info → item_ki_info_erzeugen) und „löschen" (aktion=ki_info_del → ki_info/ki_info_am = NULL). Flash kiok/kidel/kierr. Hinweis: wird dem Kunden im Portal gezeigt → vor Freigabe kurz prüfen (keine Health-Claims).
+
+## buxtrade-Nr. (Stand 2026-10-08)
+Read-only-Feld „buxtrade-Nr." (nur bei bestehenden Rohstoffen) neben der Artikelnummer = Artikelnummer + „BX" (`rohstoff_bx_nummer()`). Handels-Kennung für buxtrade; die interne R-Nummer bleibt unverändert.
