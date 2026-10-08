@@ -238,6 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
         $fehler = 'Name ist ein Pflichtfeld.';
     } else {
         $felder = ['artikelnummer','name','name_en','name_lat','cas','kategorie','form','art',
+                   'beschaffenheit','dev',
                    'material','farbe','kapselgroesse_id','leergewicht_mg',
                    'dichte','allergene','overage_prozent','einheit',
                    'ek_preis','preis_bezug','vk_aufschlag_prozent','haupt_lieferant_id','gesperrt','notiz',
@@ -563,6 +564,9 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       <div class="bx-field"><label>Lieferanten-Kennung (Hauptlieferant) <?= bx_hint('Artikelnummer (R-Nummer) + Kürzel des Hauptlieferanten (z. B. R-12345BX). So lässt sich derselbe Rohstoff je Lieferant unterscheiden. Das Kürzel wird am Lieferanten gepflegt. Weitere Lieferanten mit Kennung siehst du im Reiter „Einkauf".') ?></label><input type="text" value="<?= h($liefKennung ?: '–') ?>" readonly style="background:var(--panel-2)"></div>
       <?php endif; ?>
       <div class="bx-field"><label>Name (deutsch)</label><input type="text" name="name" value="<?= $v('name') ?>" required></div>
+      <?php if (!$neu): $anzN = rohstoff_anzeige_name($it); if ($anzN !== '' && $anzN !== trim((string)($it['name'] ?? ''))): ?>
+      <div class="bx-field"><label>Anzeigename <?= bx_hint('So erscheint der Rohstoff im Angebot, Portal und auf der Spezifikation – aus Name + Beschaffenheit + Verhältnis zusammengesetzt.') ?></label><input type="text" value="<?= h($anzN) ?>" readonly style="background:var(--panel-2)"></div>
+      <?php endif; endif; ?>
       <div class="bx-field"><label>Name (englisch)</label><input type="text" name="name_en" value="<?= $v('name_en') ?>"></div>
       <div class="bx-field"><label>Lateinischer Name <?= bx_hint('botanischer/pharmazeutischer Name, z. B. Withania somnifera') ?></label><input type="text" name="name_lat" value="<?= $v('name_lat') ?>"></div>
       <div class="bx-field"><label>CAS-Nummer <?= bx_hint('eindeutige Stoff-Nummer, z. B. Ascorbinsäure 50-81-7') ?></label><input type="text" name="cas" value="<?= $v('cas') ?>" placeholder="z. B. 50-81-7"></div>
@@ -588,6 +592,16 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
           <?php endforeach; ?>
         </select>
       </div>
+      <div class="bx-field"><label>Beschaffenheit <?= bx_hint('Was der Rohstoff IST: Extrakt, reines/natives Pulver, Isolat … Getrennt von der physischen Form und der Spezifikation. Fließt in den Anzeigenamen ein (z. B. „… Extrakt 10:1“).') ?></label>
+        <select name="beschaffenheit">
+          <option value="">– keine –</option>
+          <?php foreach (rohstoff_beschaffenheit_optionen() as $key=>$lbl): ?>
+            <option value="<?= h($key) ?>" <?= ($it['beschaffenheit']??'')===$key?'selected':'' ?>><?= h($lbl) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="bx-field"><label>Extraktverhältnis (DEV) <?= bx_hint('Droge-Extrakt-Verhältnis, nur bei Extrakten – z. B. 1:10, 10:1, 4:1. Erscheint im Anzeigenamen.') ?></label>
+        <input type="text" name="dev" value="<?= $v('dev') ?>" placeholder="z. B. 10:1"></div>
       <div class="bx-field" data-only="kapselhuelle"><label>Kapselgröße</label>
         <select name="kapselgroesse_id">
           <option value="">– wählen –</option>

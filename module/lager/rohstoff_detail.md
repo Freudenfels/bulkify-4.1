@@ -102,3 +102,6 @@ Karte „KI-Info" (nur Rohstoffe, nicht beim Anlegen) unter dem Novel-Food-Statu
 
 ## buxtrade-Nr. (Stand 2026-10-08)
 Read-only-Feld „buxtrade-Nr." (nur bei bestehenden Rohstoffen) neben der Artikelnummer = Artikelnummer + „BX" (`rohstoff_bx_nummer()`). Handels-Kennung für buxtrade; die interne R-Nummer bleibt unverändert.
+
+## Beschaffenheit + Extraktverhältnis (DEV) (Stand 2026-10-08)
+Zwei neue Stammdatenfelder am Rohstoff: **Beschaffenheit** (`item.beschaffenheit`: Extrakt / reines Pulver / Isolat / Konzentrat / Flüssigextrakt / Öl / Sonstiges) und **Extraktverhältnis (DEV)** (`item.dev`, z. B. 1:10). Getrennt von der physischen `form` und der `spezifikation` (Standardisierung). Daraus baut `rohstoff_anzeige_name($item)` (core/schema.php) den **Anzeigenamen**, z. B. „Ashwagandha Extrakt 10:1" – doppeltes „Extrakt" bei Alt-Namen wird vermieden. Der Anzeigename wird im Detail als read-only Feld gezeigt und soll in Angebot/Rezeptur, Kundenportal/Rohstoffkatalog und Spezifikations-PDF genutzt werden. Helfer: `rohstoff_beschaffenheit_optionen()/_label()`, `rohstoff_beschaffenheit_namenswort()`, `rohstoff_anzeige_name()`.

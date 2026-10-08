@@ -1527,6 +1527,11 @@ function init_schema(): void {
     ensure_column('item', 'spec_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");   // bulkify-Spezifikation fuer den Kunden freigegeben?
     ensure_column('item', 'spec_freigabe_am', "DATETIME NULL");
     ensure_column('item', 'spec_freigabe_von', "VARCHAR(190) NULL");
+    // Beschaffenheit: WAS der Rohstoff ist (Extrakt / reines Pulver / Isolat ...) + Extraktverhaeltnis (DEV, z. B. 1:10).
+    // Getrennt von der physischen Form und der Spezifikation (Standardisierung). Fliesst in den Anzeigenamen ein
+    // (rohstoff_anzeige_name(): z. B. "Ashwagandha Extrakt 10:1").
+    ensure_column('item', 'beschaffenheit', "VARCHAR(30) NULL");
+    ensure_column('item', 'dev', "VARCHAR(20) NULL");   // Droge-Extrakt-Verhaeltnis, z. B. 1:10 / 10:1 / 4:1
     ensure_column('item', 'vk_aufschlag_prozent', "DECIMAL(6,2) NULL"); // Rohstoff-Verkauf: eigener Aufschlag % (leer = globaler aufschlag_rohstoff)
     // KI-Kurzinfo je Rohstoff: nur auf Knopfdruck erzeugt (item_ki_info_erzeugen). Wird Team + Kunde als „KI-Info" gezeigt.
     ensure_column('item', 'ki_info', "TEXT NULL");
@@ -8948,6 +8953,31 @@ function rohstoff_form_optionen(): array {
 }
 function rohstoff_form_label(?string $form): string {
     return (rohstoff_form_optionen()[(string)$form] ?? '') ?: ((string)$form === 'kapselhuelle' ? 'Kapselhülle' : '');
+}
+// Beschaffenheit: WAS der Rohstoff ist. Getrennt von der physischen Form (ein Extrakt ist meist ein Pulver)
+// und von der Spezifikation (Standardisierung wie "95% Curcumin").
+function rohstoff_beschaffenheit_optionen(): array {
+    return ['extrakt'=>'Extrakt', 'pulver_rein'=>'Reines/natives Pulver', 'isolat'=>'Isolat / reiner Stoff',
+            'konzentrat'=>'Konzentrat', 'fluessigextrakt'=>'Flüssigextrakt', 'oel'=>'Öl', 'sonstiges'=>'Sonstiges'];
+}
+function rohstoff_beschaffenheit_label(?string $b): string { return rohstoff_beschaffenheit_optionen()[(string)$b] ?? ''; }
+// Kurzwort fuer den Anzeigenamen (nur Extrakt-Arten tragen ein Wort in den Namen; Verhaeltnis separat).
+function rohstoff_beschaffenheit_namenswort(?string $b): string {
+    return ['extrakt'=>'Extrakt', 'fluessigextrakt'=>'Flüssigextrakt', 'konzentrat'=>'Konzentrat'][(string)$b] ?? '';
+}
+// Anzeigename: Basisname + (Extrakt-Wort, falls noch nicht im Namen) + Verhaeltnis (DEV).
+// Beispiel: "Ashwagandha" + beschaffenheit=extrakt + dev=10:1 -> "Ashwagandha Extrakt 10:1".
+// Alt-Namen, die "Extrakt" schon enthalten, werden NICHT gedoppelt. $it braucht name, beschaffenheit, dev.
+function rohstoff_anzeige_name(array $it): string {
+    $name = trim((string)($it['name'] ?? ''));
+    if ($name === '') return '';
+    $wort = rohstoff_beschaffenheit_namenswort($it['beschaffenheit'] ?? '');
+    if ($wort !== '' && mb_stripos($name, $wort) === false && mb_stripos($name, 'extract') === false) {
+        $name .= ' ' . $wort;
+    }
+    $dev = trim((string)($it['dev'] ?? ''));
+    if ($dev !== '' && mb_strpos($name, $dev) === false) $name .= ' ' . $dev;
+    return $name;
 }
 // Heuristik: Stoffklasse aus dem Namen raten. KONSERVATIV – nur klare Treffer, sonst '' (unbestimmt).
 // Dient nur zur Vorbelegung leerer Felder; die Pflege bleibt am Rohstoff-Detail möglich.
