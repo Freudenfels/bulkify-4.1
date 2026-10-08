@@ -1471,7 +1471,8 @@ if (!$darfRohInfo && $iid) {
         ) LIMIT 1", [$iid, $kid, $kid, $kid, (int)!empty($k['portal_produkte'])]);
 }
 $rohDetail = ($iid && $darfRohInfo) ? one("SELECT id, name, name_lat, form, cas, herkunft, synonym, bot_quelle, herkunftsland,
-    haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben
+    haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben,
+    novelfood_status, novelfood_geprueft_am
     FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
 require_once BX_ROOT . '/core/spec_ki.php';   // item_kennwerte_relevant: nur echte Kennwerte (kein Schwermetall/Mikro/Mineral)
 $rohKennwerte = $rohDetail ? item_kennwerte_relevant($iid) : [];
@@ -2934,6 +2935,18 @@ portal_head('Kundenportal · ' . $k['firma']);
       </div>
     </div>
     <p class="bx-sub"><?= h($FORMLBL_P[$rohDetail['form']] ?? $rohDetail['form']) ?><?= $rohDetail['name_lat'] ? ' · '.h($rohDetail['name_lat']) : '' ?><?= $rohDetail['cas'] ? ' · CAS '.h($rohDetail['cas']) : '' ?></p>
+
+    <?php // Novel-Food-Status (automatische Einschätzung aus dem EU-Katalog) – nur zeigen, wenn geprüft.
+    if (!empty($rohDetail['novelfood_status'])):
+      $nfm = novelfood_status_meta($rohDetail['novelfood_status']); ?>
+    <div class="bx-panel" style="border-left:3px solid <?= $nfm['farbe'] ?>">
+      <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">Novel-Food-Status</h2>
+        <span style="font-size:16px;font-weight:600;color:<?= $nfm['farbe'] ?>"><?= h($nfm['label']) ?></span>
+      </div>
+      <p class="muted" style="margin:8px 0 0;font-size:13px">Automatischer Abgleich mit dem EU-Novel-Food-Katalog<?= $rohDetail['novelfood_geprueft_am'] ? ', Stand ' . h(fmt_zeit($rohDetail['novelfood_geprueft_am'], 'd.m.Y')) : '' ?>. Dies ist eine Einschätzung, keine Rechtsberatung – maßgeblich ist der jeweils aktuelle EU-Katalog.</p>
+    </div>
+    <?php endif; ?>
 
     <?php // Wirkstoffe & Gehalt ganz nach oben (wichtigste Info, wie im Dashboard).
     if ($rohWirkstoffe): ?>

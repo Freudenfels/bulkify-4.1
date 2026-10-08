@@ -9402,6 +9402,30 @@ function novelfood_status_meta(?string $status): array {
         default:           return ['ampel' => 'grau',  'label' => 'noch nicht geprüft',               'farbe' => 'var(--muted)'];
     }
 }
+// Novel-Food-Snapshot eines PRODUKTS aus den GESPEICHERTEN Zutat-Status (+ Prüfdatum). Für das PIB:
+// so ist nachvollziehbar, was zum Prüfzeitpunkt galt. Rückgabe: ['status','auffaellig'=>[[name,status]…],
+// 'geprueft_am'=>frühestes Zutat-Prüfdatum,'ungeprueft'=>Anzahl Zutaten ohne Status].
+function produkt_novelfood_snapshot(int $pid): array {
+    $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$pid]);
+    if (!$rid) return ['status' => 'unklar', 'auffaellig' => [], 'geprueft_am' => null, 'ungeprueft' => 0];
+    $items = all("SELECT DISTINCT i.name, i.novelfood_status AS st, i.novelfood_geprueft_am AS am
+                  FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id
+                  WHERE z.rezeptur_id=? AND i.kategorie='rohstoff'", [$rid]);
+    if (!$items) return ['status' => 'unklar', 'auffaellig' => [], 'geprueft_am' => null, 'ungeprueft' => 0];
+    $problem = false; $pruef = false; $auff = []; $daten = []; $ungeprueft = 0;
+    foreach ($items as $it) {
+        $s = (string)($it['st'] ?? '');
+        if ($s === '') { $ungeprueft++; continue; }
+        if (!empty($it['am'])) $daten[] = (string)$it['am'];
+        if ($s === 'novel_food') { $problem = true; $auff[] = ['name' => (string)$it['name'], 'status' => 'novel_food']; }
+        elseif ($s === 'pruefung') { $pruef = true; $auff[] = ['name' => (string)$it['name'], 'status' => 'pruefung']; }
+    }
+    sort($daten);
+    // Keine einzige Zutat geprüft -> 'unklar' (NICHT fälschlich 'konform' behaupten).
+    if ($ungeprueft >= count($items)) return ['status' => 'unklar', 'auffaellig' => [], 'geprueft_am' => null, 'ungeprueft' => $ungeprueft];
+    return ['status' => $problem ? 'novel_food' : ($pruef ? 'pruefung' : 'konform'),
+            'auffaellig' => $auff, 'geprueft_am' => $daten[0] ?? null, 'ungeprueft' => $ungeprueft];
+}
 
 // Einmaliger Backfill: verpackung_id der Alt-Importe aus der v3-Wahrheit setzen (siehe Kommentar am Aufruf
 // in init_schema). Zuordnung v3-Auftrag (auftrag.v3_id) -> "Material|Volumen(ml)" -> v4-Behaelter. Idempotent:

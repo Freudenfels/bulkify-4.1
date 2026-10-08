@@ -258,6 +258,26 @@ function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null): ?string
     $y = spec_h($p, $y, 'Deklaration');
     $y = spec_grid($p, $y, $decl);
 
+    // Novel-Food-Status – aus den GESPEICHERTEN Zutat-Status (Snapshot MIT Datum). Nur zeigen, wenn geprüft,
+    // damit der Kunde später nachvollziehen kann, was zum angegebenen Datum galt.
+    $nfSnap = produkt_novelfood_snapshot($produkt_id);
+    if ($rid && $nfSnap['status'] !== 'unklar') {
+        if ($y > 690) { $p->addPage(); $y = 48; }
+        $y = spec_h($p, $y, 'Novel-Food-Status');
+        $stand = $nfSnap['geprueft_am'] ? ' (Stand: ' . date('d.m.Y', strtotime((string)$nfSnap['geprueft_am'])) . ')' : '';
+        if ($nfSnap['status'] === 'konform') {
+            $txt = 'Alle eingesetzten Rohstoffe gelten nach dem EU-Novel-Food-Katalog als nicht-neuartig (konform)' . $stand . '.';
+        } else {
+            $liste = implode(', ', array_map(fn($a) => $a['name'] . ($a['status'] === 'novel_food' ? ' (Novel Food)' : ' (Status prüfen)'), $nfSnap['auffaellig']));
+            $txt = ($nfSnap['status'] === 'novel_food'
+                    ? 'Enthält Rohstoffe, die als Novel Food gelten und ohne Zulassung nicht verkehrsfähig sind'
+                    : 'Enthält Rohstoffe, deren Novel-Food-Status zu prüfen ist') . $stand . ': ' . $liste . '.';
+        }
+        foreach ($p->wrap($txt, $R - $L, 9, false) as $i => $wl) { if ($y > 785) { $p->addPage(); $y = 48; } $p->text($L, $y, $wl, 9, false, [60, 60, 58]); $y += 13; }
+        if ((int)$nfSnap['ungeprueft'] > 0) { $p->text($L, $y, 'Hinweis: ' . (int)$nfSnap['ungeprueft'] . ' Zutat(en) noch nicht geprüft.', 8, false, [110, 110, 108]); $y += 12; }
+        $p->text($L, $y, 'Automatischer Abgleich mit dem EU-Novel-Food-Katalog – Einschätzung, keine Rechtsberatung; maßgeblich ist der jeweils aktuelle EU-Katalog.', 8, false, [110, 110, 108]); $y += 16;
+    }
+
     // Verzehrempfehlung + Nährwerte je Tagesdosis (wenn Einnahme/Tag am Produkt gepflegt).
     $proTag = (int)($prod['einnahme_pro_tag'] ?? 0);
     if ($proTag > 0) {
