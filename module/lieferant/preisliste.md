@@ -1,10 +1,14 @@
 # lieferant/preisliste.php – „Rohstoff-Preise" (Lieferantenportal)
 
-**Zweck:** Der Lieferant sieht und pflegt seine **eigene Rohstoff-Preisliste** und aktualisiert sie regelmäßig. Route `?p=lieferant_preisliste`, Menüpunkt **„Rohstoff-Preise"** (früher „Meine Preisliste" – umbenannt, damit sie klar von den „Fertigprodukt-Preisen" unterscheidbar ist). Das Menü zeigt diesen Punkt nur Materiallieferanten (siehe `portal_layout.md`, Menü-Gating).
+**Zweck:** Der Lieferant sieht und pflegt die **Rohstoff-Preise**, die wir bei ihm führen. Route `?p=lieferant_preisliste`, Menüpunkt **„Rohstoff-Preise"**. Das Menü zeigt diesen Punkt nur Materiallieferanten bzw. Lieferanten mit geführten Rohstoffen (siehe `portal_layout.md`, Menü-Gating).
 
-**Datenbasis:** Tabelle `lieferant_preisliste` – gehört jetzt einem Lieferanten (`lieferant_id`; die v3-importierten Zeilen werden per Namensabgleich `firma == lieferant` zugeordnet, einmalig beim Migrieren). Felder je Zeile: `rohstoff_name`, `eur_kg`, `einheit` (Standard kg), `stand` (Datum des letzten Preises).
+**Umbau 2026-10-08 – „Preisliste = geführte Rohstoffe":** Es gab drei Preis-Orte beim Lieferanten (Portfolio-Katalog, geführte Artikel mit Staffel, flache Preisliste). Nico-Entscheidung: Diese Seite ist jetzt die **echte Rohstoff-Preisseite** und zeigt als **Hauptinhalt die von bulkify geführten Rohstoffe** (`lieferant_gefuehrte_artikel($lid)` → `item` + `lieferant_preis`) **mit Staffel/Währung**. „Mein Katalog" ist davon getrennt = reines Portfolio (was der Lieferant anbietet).
 
-**4-Wochen-Regel:** je Lieferant ein Intervall `lieferanten.preis_intervall_tage` (Standard **28**; aus v3 `preis_update_tage` übernommen). Helfer in `core/schema.php`:
+**Datenbasis:**
+- **Hauptinhalt – geführte Rohstoffe:** `lieferant_gefuehrte_artikel($lid)` (Hauptlieferant ODER eigener Staffelpreis). Je Artikel: unsere Spezifikation (Wirkstoffe/Kennwerte), **Ihr Preis** (Staffeln in `lieferant_preis`, Währung je Zeile). Button **„Preis aktualisieren"** → Popup `#dlgPreis` → POST `aktion=preis_vorschlag` → `katalog_preis_vorschlag()`. Der neue Preis geht als **Prüf-Zeile ans Team** (Katalog-Freigaben), **nie direkt live** (gleicher Weg wie früher im Katalog-Reiter).
+- **Zusatz unten – Alt-Format:** Tabelle `lieferant_preisliste` (frei eingetippt, `rohstoff_name`/`eur_kg`/`einheit`/`stand`, **ohne Staffel**). Wird nur angezeigt, wenn solche Zeilen existieren – damit beim Umbau nichts verloren geht. Weiter direkt pflegbar (speichern/hinzufügen/löschen).
+
+**4-Wochen-Regel:** gilt (Stand 2026-10-08) weiter für die **Alt-Format-Zeilen** (`lieferant_preisliste`); der rote „überfällig"-Hinweis oben erscheint nur, wenn solche Zeilen vorhanden und überfällig sind. (Offener Ausbau: Fälligkeit auch auf die Staffel-Preise der geführten Rohstoffe anwenden.) Je Lieferant ein Intervall `lieferanten.preis_intervall_tage` (Standard **28**; aus v3 `preis_update_tage` übernommen). Helfer in `core/schema.php`:
 - `lieferant_preisliste_fuer($lid)` · `lieferant_preise_stand($lid)` (neuestes Datum) · `lieferant_preise_alter_tage($lid)` · `lieferant_preis_intervall($lid)`.
 - `lieferant_preise_veraltet($lid)` – true, wenn der neueste Stand älter als das Intervall ist (Preise ohne Stand gelten als überfällig; keine Preise = nicht überfällig).
 - `lieferant_preise_bestaetigen($lid)` – setzt `stand=heute` für alle Zeilen (erfüllt die Regel in einem Klick).

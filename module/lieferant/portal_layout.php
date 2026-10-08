@@ -227,6 +227,10 @@ function lp_t(string $key, string $sprache = ''): string {
                               'en'=>'Your raw-material prices. Please update every 4 weeks – we calculate with them.',
                               'zh'=>'您的原料价格。请每 4 周更新一次，我们据此报价。'],
         'preisliste_leer' => ['de'=>'Noch keine Preise. Unten hinzufügen.', 'en'=>'No prices yet. Add below.', 'zh'=>'暂无价格，请在下方添加。'],
+        'preis_weitere'   => ['de'=>'Weitere Preisangaben (ohne Staffel)', 'en'=>'Further prices (no tiers)', 'zh'=>'其他价格（无阶梯）'],
+        'preis_weitere_sub'=>['de'=>'Frühere, frei eingetragene Preise. Die strukturierten Rohstoffpreise mit Staffel stehen oben.',
+                              'en'=>'Earlier, free-form prices. The structured tiered raw-material prices are shown above.',
+                              'zh'=>'早前自由填写的价格。上方为带阶梯的结构化原料价格。'],
         'preise_bestaetigt'=>['de'=>'Danke – Ihre Preise sind als aktuell bestätigt.', 'en'=>'Thank you – your prices are confirmed as current.', 'zh'=>'谢谢，您的价格已确认为最新。'],
         'preis_veraltet'  => ['de'=>'Ihre Preise sind überfällig – bitte aktualisieren.', 'en'=>'Your prices are overdue – please update.', 'zh'=>'您的价格已过期，请更新。'],
         'preis_aktuell'   => ['de'=>'Ihre Preise sind aktuell.', 'en'=>'Your prices are up to date.', 'zh'=>'您的价格是最新的。'],
@@ -394,7 +398,9 @@ function lp_shell_start(string $aktiv): void {
     $hatMaterial = (bool) array_intersect($lfKat, ['rohstoff', 'verpackung', 'verbrauch', 'maschine', 'labor']);
     // Wer schon Preise gepflegt hat, behaelt die Liste – auch wenn Formen/Kategorien (noch) nicht gesetzt sind.
     if ($lfId && !$hatFertig)   $hatFertig   = (bool) scalar("SELECT 1 FROM rezeptur_lief_angebot WHERE lieferant_id=? LIMIT 1", [$lfId]);
-    if ($lfId && !$hatMaterial) $hatMaterial = (bool) scalar("SELECT 1 FROM lieferant_preisliste WHERE lieferant_id=? LIMIT 1", [$lfId]);
+    if ($lfId && !$hatMaterial) $hatMaterial = (bool) scalar("SELECT 1 FROM lieferant_preisliste WHERE lieferant_id=? LIMIT 1", [$lfId])
+        || (bool) scalar("SELECT 1 FROM item WHERE haupt_lieferant_id=? AND kategorie='rohstoff' AND gesperrt=0 LIMIT 1", [$lfId])
+        || (bool) scalar("SELECT 1 FROM lieferant_preis WHERE lieferant_id=? LIMIT 1", [$lfId]);
     if (!$hatFertig && !$hatMaterial) { $hatFertig = $hatMaterial = true; } // nichts konfiguriert -> beide zeigen
     $menu = [
         'lieferant_portal'      => lp_t('uebersicht'),
