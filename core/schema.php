@@ -1526,6 +1526,9 @@ function init_schema(): void {
     ensure_column('item', 'spec_freigabe_am', "DATETIME NULL");
     ensure_column('item', 'spec_freigabe_von', "VARCHAR(190) NULL");
     ensure_column('item', 'vk_aufschlag_prozent', "DECIMAL(6,2) NULL"); // Rohstoff-Verkauf: eigener Aufschlag % (leer = globaler aufschlag_rohstoff)
+    // KI-Kurzinfo je Rohstoff: nur auf Knopfdruck erzeugt (item_ki_info_erzeugen). Wird Team + Kunde als „KI-Info" gezeigt.
+    ensure_column('item', 'ki_info', "TEXT NULL");
+    ensure_column('item', 'ki_info_am', "DATETIME NULL");   // wann zuletzt erzeugt (UTC)
     ensure_column('pack_ek_staffel', 'lieferant_id', "INT NULL");        // Verpackung: welcher Lieferant je EK-Staffelstufe
     // Verpackungs-Maße (mm) + Leergewicht (g) – u. a. für PPWR-Meldung / Etikettenmaße
     ensure_column('item', 'hoehe_mm', "DECIMAL(8,2) NULL");
@@ -6039,6 +6042,39 @@ function produkt_zukauf_preis(int $produkt_id, ?int $lieferant_id, float $stueck
     if ($lieferant_id && isset($fremd[(int)$lieferant_id])) return (float)$fremd[(int)$lieferant_id];
     return null;
 }
+// KI-Kurzinfo zu einem Rohstoff erzeugen – NUR auf Knopfdruck. Neutral, Health-Claims-konform, Deutsch.
+// Speichert den Text in item.ki_info (+ ki_info_am) und gibt ['ok','text','fehler'] zurück.
+function item_ki_info_erzeugen(int $item_id): array {
+    require_once __DIR__ . '/ki.php';
+    if (!ki_bereit()) return ['ok'=>false, 'fehler'=>'Die KI ist nicht eingerichtet (ANTHROPIC_API_KEY in secrets.php).'];
+    $it = one("SELECT id, name, name_en, name_lat, cas, kategorie, form FROM item WHERE id=?", [$item_id]);
+    if (!$it) return ['ok'=>false, 'fehler'=>'Rohstoff nicht gefunden.'];
+    // Wirkstoffe als Kontext (mit Gehalt), falls vorhanden.
+    $wirk = [];
+    foreach (all("SELECT n.name, iw.gehalt_wert, iw.gehalt_prozent FROM item_wirkstoff iw
+                  JOIN naehrstoff n ON n.id=iw.naehrstoff_id WHERE iw.item_id=? ORDER BY iw.sort", [$item_id]) as $w) {
+        $g = $w['gehalt_wert'] !== null ? $w['gehalt_wert'] : $w['gehalt_prozent'];
+        $wirk[] = trim((string)$w['name'] . ($g !== null && $g !== '' ? ' (' . rtrim(rtrim(number_format((float)$g, 2, '.', ''), '0'), '.') . ')' : ''));
+    }
+    $ctx = 'Rohstoff: ' . (string)$it['name'];
+    if ($it['name_lat']) $ctx .= ' (lat. ' . (string)$it['name_lat'] . ')';
+    if ($it['cas'])      $ctx .= ', CAS ' . (string)$it['cas'];
+    if ($it['form'])     $ctx .= ', Form ' . (string)$it['form'];
+    if ($wirk)           $ctx .= '. Wirkstoffe: ' . implode(', ', $wirk);
+    $system = 'Du bist Fachredakteur für Rohstoffe in Nahrungsergänzungsmitteln. Schreibe eine sachliche Kurzinfo auf DEUTSCH, '
+            . '3 bis 5 Sätze: Was ist der Stoff, woraus/woher stammt er, und wofür wird er üblicherweise in Nahrungsergänzung eingesetzt. '
+            . 'Allgemeinverständlich, neutral, werbefrei. WICHTIG: KEINE gesundheitsbezogenen Wirkversprechen und KEINE krankheitsbezogenen Aussagen '
+            . '(keine Heilung, Linderung oder Vorbeugung), konform zur EU-Health-Claims-Verordnung. Keine Dosierungsempfehlung. '
+            . 'Nur Fließtext, keine Überschrift, keine Aufzählung.';
+    $r = ki_frage($ctx, ['system'=>$system, 'aufwand'=>'low', 'max_tokens'=>700, 'timeout'=>60, 'budget'=>90, 'zweck'=>'rohstoff-ki-info']);
+    if (!($r['ok'] ?? false)) return ['ok'=>false, 'fehler'=>$r['fehler'] ?? 'Die KI konnte nicht antworten.'];
+    $text = trim((string)($r['text'] ?? ''));
+    if ($text === '') return ['ok'=>false, 'fehler'=>'Die KI hat keinen Text geliefert.'];
+    q("UPDATE item SET ki_info=?, ki_info_am=? WHERE id=?", [$text, gmdate('Y-m-d H:i:s'), $item_id]);
+    if (function_exists('log_aktivitaet')) log_aktivitaet('item', $item_id, 'team', 'KI-Kurzinfo erzeugt.', 'ki');
+    return ['ok'=>true, 'text'=>$text];
+}
+
 // Neuester Preis-Stand des Lieferanten (Datum) oder null.
 function lieferant_preise_stand(int $lieferant_id): ?string {
     $s = scalar("SELECT MAX(stand) FROM lieferant_preisliste WHERE lieferant_id=? AND stand IS NOT NULL", [$lieferant_id]);

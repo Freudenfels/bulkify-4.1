@@ -195,6 +195,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_
     header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=spec&specfrei=' . ($an ? '1' : '0')); exit;
 }
 // Novel-Food-Status dieses Rohstoffs gegen den EU-Katalog prüfen + mit Datum festschreiben (Snapshot fürs PIB).
+// KI-Kurzinfo erzeugen/erneuern (nur auf Knopfdruck) bzw. löschen.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_info' && !$neu) {
+    $r = item_ki_info_erzeugen((int)$id);
+    header('Location: ?p=rohstoff&id=' . (int)$id . ($r['ok'] ? '&kiok=1' : '&kierr=' . rawurlencode($r['fehler'] ?? 'Fehler'))); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_info_del' && !$neu) {
+    q("UPDATE item SET ki_info=NULL, ki_info_am=NULL WHERE id=?", [(int)$id]);
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&kidel=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nf_pruefen' && !$neu) {
     $st = item_novelfood_aktualisieren((int)$id);
     log_aktivitaet('item', (int)$id, 'team', 'Novel-Food-Status geprüft: ' . novelfood_status_meta($st)['label'] . '.', 'notiz');
@@ -449,6 +458,38 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
     </ul>
   <?php elseif (($it['novelfood_status'] ?? '') === 'konform'): ?>
     <div class="muted" style="font-size:13px;margin-top:8px">Kein Treffer im Novel-Food-Katalog – gilt als nicht-neuartig (konform).</div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+<?php // KI-Info: Kurzinfo zum Rohstoff, NUR auf Knopfdruck erzeugt. Wird Team + Kunde (Portal) als „KI-Info" gezeigt.
+if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
+    if (isset($_GET['kiok']))  echo '<div class="bx-panel badge-ok" style="padding:10px 14px">KI-Kurzinfo erzeugt und gespeichert.</div>';
+    if (isset($_GET['kidel'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">KI-Kurzinfo gelöscht.</div>';
+    if (isset($_GET['kierr'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:10px 14px">KI-Kurzinfo nicht möglich: ' . h((string)$_GET['kierr']) . '</div>';
+    $kiInfo = trim((string)($it['ki_info'] ?? ''));
+?>
+<div class="bx-panel">
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">KI-Info <?= bx_hint('Von der KI erzeugte, neutrale Kurzinfo zum Rohstoff (was ist das, wofür wird es eingesetzt). Nur auf Knopfdruck. Wird dir und dem Kunden im Portal als „KI-Info" angezeigt. Keine gesundheitsbezogenen Wirkversprechen – bitte vor der Kundenfreigabe kurz prüfen.') ?></h2>
+    <div class="bx-row" style="gap:8px;margin:0">
+      <form method="post" style="margin:0" onsubmit="return confirm('KI-Kurzinfo <?= $kiInfo !== '' ? 'neu ' : '' ?>erzeugen? Fragt die KI (kann ein paar Sekunden dauern).');">
+        <input type="hidden" name="aktion" value="ki_info">
+        <button class="btn <?= $kiInfo === '' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" type="submit" data-busy="KI schreibt&#8230;"><?= $kiInfo === '' ? 'KI-Info erzeugen' : 'neu erzeugen' ?></button>
+      </form>
+      <?php if ($kiInfo !== ''): ?>
+      <form method="post" style="margin:0" onsubmit="return confirm('KI-Info löschen? Dann wird sie dir und dem Kunden nicht mehr angezeigt.');">
+        <input type="hidden" name="aktion" value="ki_info_del"><button class="btn btn-ghost btn-sm" type="submit">löschen</button>
+      </form>
+      <?php endif; ?>
+    </div>
+  </div>
+  <?php if ($kiInfo !== ''): ?>
+    <div style="margin-top:10px;white-space:pre-line;line-height:1.5"><?= h($kiInfo) ?></div>
+    <div class="muted" style="font-size:12px;margin-top:8px">Erzeugt am <?= $it['ki_info_am'] ? h(fmt_zeit($it['ki_info_am'], 'd.m.Y H:i')) : '–' ?> · wird dem Kunden im Portal als „KI-Info" angezeigt.</div>
+  <?php elseif (!ki_bereit()): ?>
+    <div class="muted" style="margin-top:8px">Die KI ist nicht eingerichtet (Einstellungen &rarr; KI).</div>
+  <?php else: ?>
+    <div class="muted" style="margin-top:8px">Noch keine KI-Info. Auf „KI-Info erzeugen" klicken – die KI schreibt eine kurze, neutrale Beschreibung, die gespeichert und dem Kunden gezeigt wird.</div>
   <?php endif; ?>
 </div>
 <?php endif; ?>

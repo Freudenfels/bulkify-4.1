@@ -23,3 +23,6 @@
 - Menüpunkte werden **nur in `bx_nav()`** geändert – nicht in einzelnen Seiten.
 - Wer welche Seite sehen darf, steht **nicht** hier, sondern in `route_rollen_map()` in [core/auth.php](auth.php).
 - Jede Modul-Seite ruft am Anfang `render_header(...)` und am Ende `render_footer()` auf.
+
+## Novel-Food News im Menü (Stand 2026-10-08)
+`bx_nav_default()` enthält jetzt `novelfood_verlauf => 'Novel-Food News'` in den Gruppen Produkt und Entwicklung (Route existiert bereits: Aktualisierungs-Verlauf je Katalog-Lauf). Vorher war der Verlauf nur über den Button „Was ist neu (Verlauf)" auf der Novel-Food-Seite erreichbar.

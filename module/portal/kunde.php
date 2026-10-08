@@ -1472,7 +1472,7 @@ if (!$darfRohInfo && $iid) {
 }
 $rohDetail = ($iid && $darfRohInfo) ? one("SELECT id, name, name_lat, form, cas, herkunft, synonym, bot_quelle, herkunftsland,
     haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben,
-    novelfood_status, novelfood_geprueft_am
+    novelfood_status, novelfood_geprueft_am, ki_info, ki_info_am
     FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
 require_once BX_ROOT . '/core/spec_ki.php';   // item_kennwerte_relevant: nur echte Kennwerte (kein Schwermetall/Mikro/Mineral)
 $rohKennwerte = $rohDetail ? item_kennwerte_relevant($iid) : [];
@@ -2945,6 +2945,15 @@ portal_head('Kundenportal · ' . $k['firma']);
         <span style="font-size:16px;font-weight:600;color:<?= $nfm['farbe'] ?>"><?= h($nfm['label']) ?></span>
       </div>
       <p class="muted" style="margin:8px 0 0;font-size:13px">Automatischer Abgleich mit dem EU-Novel-Food-Katalog<?= $rohDetail['novelfood_geprueft_am'] ? ', Stand ' . h(fmt_zeit($rohDetail['novelfood_geprueft_am'], 'd.m.Y')) : '' ?>. Dies ist eine Einschätzung, keine Rechtsberatung – maßgeblich ist der jeweils aktuelle EU-Katalog.</p>
+    </div>
+    <?php endif; ?>
+
+    <?php // KI-Info: neutrale Kurzinfo zum Rohstoff (vom Team per Knopfdruck erzeugt) – nur zeigen, wenn vorhanden.
+    if (trim((string)($rohDetail['ki_info'] ?? '')) !== ''): ?>
+    <div class="bx-panel">
+      <h2 style="margin:0">KI-Info</h2>
+      <div style="margin-top:8px;white-space:pre-line;line-height:1.5"><?= h(trim((string)$rohDetail['ki_info'])) ?></div>
+      <p class="muted" style="margin:8px 0 0;font-size:12px">Von einer KI erstellte, allgemeine Kurzbeschreibung – keine gesundheitsbezogene Aussage und keine Verzehrempfehlung.</p>
     </div>
     <?php endif; ?>
 

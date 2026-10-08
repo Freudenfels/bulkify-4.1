@@ -22,3 +22,6 @@ Die **Suche** durchsucht weiterhin auch den lateinischen Namen, auch wenn er nic
 
 ## Filter Art (Stoffklasse) + Form (Stand 2026-10-07)
 Zwei Dropdowns in der Filterleiste (nur Rohstoffe): **Art** = `item.art` (Stoffklasse: vitamin/mineralstoff/pflanzenstoff/aminosaeure/fettsaeure/ballaststoff/probiotikum/enzym/sonstiges, Optionen via `rohstoff_art_optionen()`), **Form** = `item.form` (`rohstoff_form_optionen()`, inkl. Extrakt). Beide serverseitig gefiltert (GET `art`/`form`), eigene Tabellenspalte „Art“. Admin-Button **„Art automatisch vorbelegen“** (POST `aktion=art_autofuellen`) ruft `rohstoff_art_autofuellen()` – konservative Namens-Heuristik `rohstoff_art_raten()`, setzt nur leere Felder/klare Treffer (~49% Abdeckung), Rest manuell am Rohstoff-Detail.
+
+## KI-Info-Spalte (Stand 2026-10-08)
+Spalte „KI-Info" je Rohstoff mit Button „erzeugen"/„erneuern" (POST aktion=ki_info, item_id, zurueck). Ruft `item_ki_info_erzeugen()`, speichert den Text, kehrt zum selben Filter zurück (kiok/kierr). Button-Form nutzt onclick=stopPropagation, damit die Zeilen-Navigation (rowUrl) nicht ausgelöst wird. „vorhanden" (grün, Tooltip = Textanfang), wenn schon eine KI-Info da ist.

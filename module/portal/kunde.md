@@ -268,3 +268,6 @@ Das einmalige „Konto einrichten" fragt jetzt neben E-Mail/Passwort auch die **
 
 ## Rohstoffkatalog-Filter (Stand 2026-10-07)
 Die Rohstoff-Ansicht (`v=rohstoffe`) hat neben der Textsuche zwei Filter-Dropdowns **Art** (`item.art`, `rohstoff_art_optionen()`) und **Form** (`rohstoff_form_optionen()`), serverseitig in der `$rohkatalog`-Query (GET `art`/`form`). Tabelle zeigt zusätzlich die Spalte „Art“.
+
+## KI-Info in der Rohstoff-Ansicht (Stand 2026-10-08)
+In der Rohstoff-Detailansicht (v=rohstoff) wird `item.ki_info` als Karte „KI-Info" gezeigt – nur wenn vorhanden. `$rohDetail`-SELECT um ki_info/ki_info_am ergänzt. Mit Hinweis, dass es eine allgemeine KI-Kurzbeschreibung ist (keine gesundheitsbezogene Aussage/Verzehrempfehlung).

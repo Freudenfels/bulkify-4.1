@@ -15,6 +15,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nf_pr
     $r = rohstoffe_novelfood_pruefen_alle();
     header('Location: ?p=rohstoffe&kat=rohstoff&nfall=' . (int)($r['geprueft'] ?? 0) . '&nfnf=' . (int)($r['novel_food'] ?? 0) . '&nfpr=' . (int)($r['pruefung'] ?? 0)); exit;
 }
+// KI-Kurzinfo für EINEN Rohstoff erzeugen (nur auf Knopfdruck). Fragt die KI, speichert den Text (item.ki_info).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_info') {
+    $iid = (int)($_POST['item_id'] ?? 0);
+    $r = $iid ? item_ki_info_erzeugen($iid) : ['ok'=>false, 'fehler'=>'Kein Rohstoff.'];
+    $back = (string)($_POST['zurueck'] ?? '');
+    if (strncmp($back, '?p=rohstoffe', 12) !== 0) $back = '?p=rohstoffe&kat=rohstoff';   // nur zurück zur eigenen Liste
+    $back = preg_replace('/[&?](kiok|kierr)=[^&]*/', '', $back);
+    $sep  = strpos($back, '?') === false ? '?' : '&';
+    header('Location: ' . $back . $sep . ($r['ok'] ? 'kiok=1' : 'kierr=' . urlencode($r['fehler'] ?? 'Fehler'))); exit;
+}
 
 $KAT  = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','fertig'=>'Fertigware','verkaufsfertig'=>'Verkaufsfertig','maschine'=>'Maschine'];
 $FORM = ['pulver'=>'Pulver','granulat'=>'Granulat','extrakt'=>'Extrakt','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle'];
@@ -147,6 +157,18 @@ $cols = [
         return $list ? '<span style="white-space:normal;display:inline-block">' . h(implode(' · ', $list)) . '</span>' : '<span class="muted">–</span>';
     }],
     'unterlagen'    => ['label' => 'Unterlagen / Lieferant', 'render' => $verf],
+    'kiinfo'        => ['label' => 'KI-Info', 'th' => 'width:118px', 'render' => function($r) {
+        $has  = trim((string)($r['ki_info'] ?? '')) !== '';
+        $snip = $has ? mb_substr(trim((string)$r['ki_info']), 0, 220) : '';
+        // onclick-stopPropagation: der Button darf NICHT die Zeilen-Navigation (rowUrl) auslösen.
+        return '<form method="post" style="margin:0;white-space:nowrap" onclick="event.stopPropagation()" '
+             . 'onsubmit="return confirm(\'KI-Kurzinfo für diesen Rohstoff erzeugen und speichern? Fragt die KI (kann ein paar Sekunden dauern).\');">'
+             . '<input type="hidden" name="aktion" value="ki_info"><input type="hidden" name="item_id" value="' . (int)$r['id'] . '">'
+             . '<input type="hidden" name="zurueck" value="' . h((string)($_SERVER['REQUEST_URI'] ?? '')) . '">'
+             . ($has ? '<span title="' . h($snip) . '" style="color:var(--gruen);font-size:12px">vorhanden</span> ' : '')
+             . '<button class="btn btn-ghost btn-sm" type="submit">' . ($has ? 'erneuern' : 'erzeugen') . '</button>'
+             . '</form>';
+    }],
     'gesperrt'      => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
 ];
 }
@@ -165,6 +187,8 @@ render_header('rohstoffe', $titel);
 bx_head($titel, count($rows) . ' Einträge' . ($fehltLbl ? ' · Filter: ' . $fehltLbl : ''), $neuBtn);
 if (isset($_GET['artfill'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">Stoffklasse (Art) bei <strong>' . (int)$_GET['artfill'] . '</strong> Rohstoff(en) automatisch vorbelegt. Leer gebliebene bitte am Rohstoff pflegen.</div>';
 if (isset($_GET['nfall'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px"><strong>' . (int)$_GET['nfall'] . '</strong> Rohstoffe gegen den EU-Novel-Food-Katalog geprüft (mit Datum gespeichert): <strong style="color:var(--err)">' . (int)($_GET['nfnf'] ?? 0) . ' Novel Food</strong>, ' . (int)($_GET['nfpr'] ?? 0) . ' zu prüfen, Rest konform.</div>';
+if (isset($_GET['kiok']))  echo '<div class="bx-panel badge-ok" style="padding:10px 14px">KI-Kurzinfo erzeugt und gespeichert – sie wird dir und dem Kunden als „KI-Info" angezeigt.</div>';
+if (isset($_GET['kierr'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:10px 14px">KI-Kurzinfo nicht möglich: ' . h((string)$_GET['kierr']) . '</div>';
 ?>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="rohstoffe">

@@ -94,3 +94,6 @@
 
 ## Fremdfertigungs-Preise im Bestellvorgang (Stand 2026-10-08)
 `rezeptur_fremd_lieferant_preise($rezeptur_id,$stueck)` → [lieferant_id ⇒ Preis je Stück] aus `rezeptur_lief_angebot` (passende Mengenstaffel). `produkt_fremd_lieferant_preise($produkt_id,$stueck)` macht dasselbe über die Rezeptur des Produkts. So erscheinen die Fremdfertiger (z. B. Wellgreen, Rainwood) im Bulk-Bestellvorgang. `produkt_zukauf_preis()` nimmt jetzt erst den Zukaufpreis (produkt_lieferant_preis), sonst den Fremdfertigungspreis.
+
+## KI-Info je Rohstoff (Stand 2026-10-08)
+`item.ki_info` (TEXT) + `item.ki_info_am` (DATETIME, UTC). `item_ki_info_erzeugen($item_id)` ruft die KI (ki_frage, aufwand=low), erzeugt eine neutrale, Health-Claims-konforme Kurzinfo (3–5 Sätze, DE) aus Name/lat/CAS/Form/Wirkstoffen und speichert sie. Nur auf Knopfdruck (kein Automatismus). Rückgabe ['ok','text','fehler']; ohne ANTHROPIC_API_KEY sauberer Fehler. Wird Team (Rohstoff-Liste/-Detail) + Kunde (Portal) als „KI-Info" gezeigt.
