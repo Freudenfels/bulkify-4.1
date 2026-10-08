@@ -66,8 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anwen
     $produkte = [];
     foreach ((array)($_POST['produkt_name'] ?? []) as $pi => $pn) {
         $name   = mb_substr(trim((string)$pn), 0, 190);
-        $stueck = max(0, (int)($_POST['stueck'][$pi] ?? 0));
         $glas   = (int)($_POST['verpackung_id'][$pi] ?? 0);
+        // „Stück je Packung" gilt nur bei Verpackung; bei Bulk (keine Verpackung) kein Packungsinhalt.
+        $stueck = $glas > 0 ? max(0, (int)($_POST['stueck'][$pi] ?? 0)) : 0;
         $besch  = mb_substr(trim((string)($_POST['beschreibung'][$pi] ?? '')), 0, 500);
         $einheit= mb_substr(trim((string)($_POST['einheit'][$pi] ?? '')), 0, 20) ?: 'Stk.';
         $staffeln = [];
@@ -239,28 +240,28 @@ if ($schritt === 'match' && !empty($_SESSION['angebot_import'])) {
           }
           $einhVor = trim((string)($pp['einheit'] ?? '')) ?: 'Stk.';
       ?>
-      <div class="bx-panel">
+      <div class="bx-panel js-prodblock">
         <h2 style="margin-top:0"><?= $mehr ? 'Produkt ' . chr(65 + $pi) : 'Erkannt' ?></h2>
         <div class="bx-grid">
           <div class="bx-field"><label>Produkt / Rezeptur</label>
             <input type="text" name="produkt_name[<?= $pi ?>]" value="<?= h((string)$pp['produkt_name']) ?>">
             <div class="muted" style="font-size:12px;margin-top:4px"><?= $rez ? 'Rezeptur erkannt: <strong>' . h($rez['nummer'] . ' · ' . $rez['name']) . '</strong>' : 'Keine passende Rezeptur gefunden (Glas-Vorschlag dann nicht möglich).' ?></div>
           </div>
-          <div class="bx-field"><label>Stück je Packung <?= $pp['kapselgroesse'] ? '<span class="muted" style="font-weight:400">· Kapselgröße ' . h((string)$pp['kapselgroesse']) . '</span>' : '' ?></label><input type="number" name="stueck[<?= $pi ?>]" value="<?= (int)$pp['stueck_je_packung'] ?>" min="0" style="max-width:140px"></div>
-          <div class="bx-field"><label>Einheit <?= bx_hint('Verkaufseinheit: Stk. (z. B. lose Kapseln = Bulk), Packung, kg, g, L … Für Bulk-Ware z. B. „Stk." oder „kg".') ?></label>
-            <input type="text" name="einheit[<?= $pi ?>]" value="<?= h($einhVor) ?>" list="einhListe" style="max-width:140px"></div>
+          <div class="bx-field"><label>Einheit <?= bx_hint('Verkaufseinheit: Stk. (z. B. lose Kapseln = Bulk), Packung, kg, g, L … Für Bulk-Ware z. B. „Stk." oder „kg". Die Staffel-Spalten richten sich danach.') ?></label>
+            <input type="text" name="einheit[<?= $pi ?>]" value="<?= h($einhVor) ?>" list="einhListe" class="js-einh" style="max-width:140px"></div>
           <div class="bx-field"><label>Glas / Verpackung <span class="muted" style="font-weight:400"><?= $pp['_glas'] ? '(Vorschlag)' : '(leer = Bulk/ohne Verpackung)' ?></span></label>
-            <select name="verpackung_id[<?= $pi ?>]" class="rscombo">
+            <select name="verpackung_id[<?= $pi ?>]" class="rscombo js-verp">
               <option value="">– keins (Bulk) –</option>
               <?php foreach ($verpOpt as $vp): ?><option value="<?= (int)$vp['id'] ?>" <?= (int)$pp['_glas'] === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?><?= (int)$pp['_glas'] === (int)$vp['id'] ? ' (Vorschlag)' : '' ?></option><?php endforeach; ?>
             </select>
           </div>
+          <div class="bx-field js-stueckwrap"><label>Stück je Packung <?= $pp['kapselgroesse'] ? '<span class="muted" style="font-weight:400">· Kapselgröße ' . h((string)$pp['kapselgroesse']) . '</span>' : '' ?> <?= bx_hint('Nur bei Verpackung/Dose – wie viele Stück in eine Packung. Bei Bulk (keine Verpackung) leer.') ?></label><input type="number" name="stueck[<?= $pi ?>]" value="<?= (int)$pp['stueck_je_packung'] ?>" min="0" style="max-width:140px"></div>
         </div>
         <div class="bx-field" style="margin-top:4px"><label>Beschreibung <span class="muted" style="font-weight:400">(erscheint unter der Position im Angebot)</span></label>
           <textarea name="beschreibung[<?= $pi ?>]" rows="<?= max(2, substr_count($beschVor, "\n") + 1) ?>" style="width:100%"><?= h($beschVor) ?></textarea></div>
         <div style="margin-top:12px;font-weight:600">Preise / Staffeln</div>
         <div class="bx-tablewrap"><table class="bx-table">
-          <thead><tr><th>Menge (Packungen)</th><th>VK je Packung (netto)</th></tr></thead>
+          <thead><tr><th class="js-menge-head">Menge (<?= h($einhVor) ?>)</th><th class="js-vk-head">VK je <?= h($einhVor) ?> (netto)</th></tr></thead>
           <tbody>
           <?php foreach ($pp['_staffeln'] as $j => $stf): ?>
             <tr>
@@ -306,6 +307,24 @@ if ($schritt === 'match' && !empty($_SESSION['angebot_import'])) {
         <a class="btn btn-ghost" href="?p=angebot_import">Abbrechen</a>
       </div>
     </form>
+    <script>
+    // Je Produktblock: Staffel-Spalten folgen der Einheit; „Stück je Packung" nur bei gewählter Verpackung.
+    document.querySelectorAll('.js-prodblock').forEach(function(block){
+      var einh = block.querySelector('.js-einh'), verp = block.querySelector('.js-verp'),
+          stwrap = block.querySelector('.js-stueckwrap'),
+          mh = block.querySelector('.js-menge-head'), vh = block.querySelector('.js-vk-head');
+      function upd(){
+        var e = (einh && einh.value.trim()) ? einh.value.trim() : 'Einheit';
+        if (mh) mh.textContent = 'Menge (' + e + ')';
+        if (vh) vh.textContent = 'VK je ' + e + ' (netto)';
+        var packaged = verp && verp.value !== '';
+        if (stwrap) stwrap.style.display = packaged ? '' : 'none';
+      }
+      if (einh) einh.addEventListener('input', upd);
+      if (verp) verp.addEventListener('change', upd);
+      upd();
+    });
+    </script>
     <?php
     render_footer();
     return;

@@ -21,3 +21,6 @@ Der Match-Schritt zeigt **je Produkt einen Block** (Name/Rezeptur-Match, Stück,
 
 ## Beschreibung, Kapselgröße, Einheit/Bulk (Stand 2026-10-09)
 `angebotsscan_ki()` liest je Produkt zusätzlich **beschreibung** (die wortgetreuen Zusatzzeilen unter der Bezeichnung: Wirkstoff-Aufschlüsselung mg, Kapselgröße, Füllgewicht, Stückzahl), **kapselgroesse** (z. B. „#2") und **einheit** (Mengenspalte, z. B. „Stk." = lose/Bulk, „kg", „Packung"). Der Match-Schritt zeigt je Produkt ein **Beschreibung**-Feld (vorbefüllt; fehlt die KI-Beschreibung, wird sie aus den Zutaten + Kapselgröße gebaut) und ein **Einheit**-Feld (Datalist Stk./Packung/kg/g/L/Beutel – so lässt sich **Bulk-Ware** wählen). Beim Übernehmen landen Beschreibung + Einheit an der `angebot_position` (statt vorher fix „Packung" und leerer Beschreibung); Glas leer = Bulk/ohne Verpackung. Behebt: Import übernahm keine Kapselgröße/Beschreibung und keine Bulk-Einheit.
+
+## Bulk-gerechte Beschriftung (Stand 2026-10-09)
+Im Match-Schritt richten sich die Staffel-Spalten nach der **Einheit** je Produkt (JS): „Menge (Stk.)" / „VK je Stk. (netto)" statt fix „Packungen"/„je Packung". Das Feld **„Stück je Packung"** erscheint nur, wenn eine **Verpackung** gewählt ist – bei Bulk (keine Verpackung) ist es ausgeblendet und wird beim Übernehmen als 0 gespeichert (lose Ware hat keinen Packungsinhalt).
