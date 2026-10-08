@@ -163,14 +163,16 @@ $mengeInput = fn(string $key, float $wert, string $einheit) =>
 $rolleBadge = fn($r) => bx_badge($r, $r === 'Fertigware' ? 'info' : '');
 // Lieferant-Dropdown je Zeile (vorbelegt)
 $eurShort = fn($p) => number_format((float)$p, 2, ',', '.') . ' €';
-$liefSelect = function(string $key, int $sel, array $preise = []) use ($lieferanten, $eurShort, $zugangIds): string {
+$liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit = false) use ($lieferanten, $eurShort, $zugangIds): string {
     // Lieferanten mit Preis zuerst (günstigste oben), dann der Rest alphabetisch; Preis im Label.
     // Marker: „· Portal" = Bestellung geht in den Account (wartet auf Bestätigung); „· extern" = nur erfasst.
+    // $nurMit=true: nur Lieferanten anzeigen, die für diese Position wirklich einen Preis abgegeben haben.
     $mit = []; $ohne = [];
     foreach ($lieferanten as $l) { if (isset($preise[(int)$l['id']])) $mit[] = $l; else $ohne[] = $l; }
     usort($mit, fn($a, $b) => $preise[(int)$a['id']] <=> $preise[(int)$b['id']]);
+    if ($nurMit && !$mit) return '<span class="muted" title="Kein Lieferant hat für dieses Produkt einen Zukaufpreis abgegeben">– kein Zukaufpreis –</span>';
     $s = '<select name="lief[' . h($key) . ']" style="max-width:260px"><option value="">– Lieferant –</option>';
-    foreach (array_merge($mit, $ohne) as $l) {
+    foreach ($nurMit ? $mit : array_merge($mit, $ohne) as $l) {
         $lid = (int)$l['id'];
         $lbl = h($l['firma']) . (isset($preise[$lid]) ? ' · ' . $eurShort($preise[$lid]) : '') . (isset($zugangIds[$lid]) ? ' · Portal' : ' · extern');
         $s .= '<option value="' . $lid . '"' . ($sel === $lid ? ' selected' : '') . '>' . $lbl . '</option>';
@@ -265,13 +267,17 @@ if ($ohneFestlegung): ?>
             <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a><?php endforeach; ?></td>
         </tr>
       <?php endforeach; ?>
-      <?php foreach ($bulkTab as $b): $key = 'bulk:' . (int)$b['produkt_id']; ?>
+      <?php foreach ($bulkTab as $b): $key = 'bulk:' . (int)$b['produkt_id'];
+          $bPreise = produkt_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen']);
+          $bAb = $bPreise ? min($bPreise) : null;                       // günstigster Zukaufpreis je Stück
+          $bSumme = $bAb !== null ? $bAb * (float)$b['zu_bestellen'] : null; // Gesamtsumme (günstigster Preis)
+      ?>
         <tr>
           <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
           <td>Bulk: <?= h($b['produkt'] ?: '–') ?></td>
           <td><?= bx_badge('Fertiges Produkt','info') ?></td>
-          <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], 'Stück') ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($b['zu_bestellen']) ?> Stück</div></td>
-          <td><?= $liefSelect($key, 0) ?></td>
+          <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], 'Stück') ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($b['need'] ?? $b['zu_bestellen']) ?> · Lager <?= $mfmt($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $mfmt($b['bestellt']) : '' ?></div></td>
+          <td><?= $liefSelect($key, 0, $bPreise, true) ?><?php if ($bAb !== null): ?><div class="muted" style="font-size:11px">ab <?= $eurShort($bAb) ?>/Stück · Summe <?= $eurShort($bSumme) ?></div><?php endif; ?></td>
           <td style="font-size:12px"><?php foreach ($b['orders'] as $o): ?>
             <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a><?php endforeach; ?><span class="muted">· Fremdfertigung</span></td>
         </tr>

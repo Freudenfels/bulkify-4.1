@@ -5995,6 +5995,27 @@ function item_lieferant_preise(int $item_id, float $menge = 0): array {
     }
     return $out;
 }
+// Zukauf-Preise je Lieferant für ein Fertigprodukt (produkt_lieferant_preis), passend zur Stückzahl.
+// Rückgabe: [lieferant_id => preis_je_einheit]. Nur EUR. Gleiche Staffel-Logik wie item_lieferant_preise.
+function produkt_lieferant_preise(int $produkt_id, float $stueck = 0): array {
+    if ($produkt_id <= 0 || !table_exists('produkt_lieferant_preis')) return [];
+    $out = [];
+    foreach (all("SELECT lieferant_id, menge_ab, preis FROM produkt_lieferant_preis
+                  WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')
+                  ORDER BY menge_ab ASC", [$produkt_id]) as $r) {
+        $lid = (int)$r['lieferant_id']; $ma = (float)$r['menge_ab']; $pr = (float)$r['preis'];
+        if ($stueck <= 0 || $ma <= $stueck + 1e-9) $out[$lid] = $pr;   // größter passender Staffelwert gewinnt
+        elseif (!isset($out[$lid])) $out[$lid] = $pr;                  // alle Staffeln > Menge -> kleinste als Fallback
+    }
+    return $out;
+}
+// Zukauf-Preis je Einheit für EINEN Lieferanten + Fertigprodukt bei gegebener Stückzahl, oder null.
+function produkt_zukauf_preis(int $produkt_id, ?int $lieferant_id, float $stueck = 0): ?float {
+    if ($produkt_id <= 0) return null;
+    $preise = produkt_lieferant_preise($produkt_id, $stueck);
+    if ($lieferant_id && isset($preise[(int)$lieferant_id])) return (float)$preise[(int)$lieferant_id];
+    return null;
+}
 // Neuester Preis-Stand des Lieferanten (Datum) oder null.
 function lieferant_preise_stand(int $lieferant_id): ?string {
     $s = scalar("SELECT MAX(stand) FROM lieferant_preisliste WHERE lieferant_id=? AND stand IS NOT NULL", [$lieferant_id]);
@@ -6414,8 +6435,12 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
         $in = implode(',', array_map('intval', $aids ?: [0]));
         $bestellt = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                     WHERE bp.item_id IS NULL AND bp.auftrag_id IN ($in) AND b.status<>'geliefert'");
+        // Freier, nicht kundengebundener Fertigware-Bestand dieses Produkts (ohne Item neu anzulegen).
+        $lagerItem = (int) scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$g['produkt_id']]);
+        $stock = $lagerItem > 0 ? item_bestand($lagerItem, true) : 0.0;
         $g['bestellt'] = $bestellt;
-        $g['zu_bestellen'] = max(0.0, $g['need'] - $bestellt);
+        $g['stock'] = $stock;
+        $g['zu_bestellen'] = max(0.0, $g['need'] - $stock - $bestellt);
         unset($g['auftrag_ids']);
         $out[] = $g;
     }
@@ -6435,13 +6460,19 @@ function bestellung_bulk_anlegen(array $produkt_ids, ?int $lieferant, ?string $d
     $wann = $datum ? ' (bestellt am ' . date('d.m.Y', strtotime($datum)) . ')' : '';
     $i = 0;
     foreach ($gruppen as $g) {
+        $stockPool = (float)($g['stock'] ?? 0);   // freier Fertigware-Bestand deckt den Bedarf zuerst (FIFO über die Aufträge)
         foreach ($g['orders'] as $o) {
             $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                      WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status<>'geliefert'", [(int)$o['auftrag_id']]);
             $noch = (float)$o['need'] - $offen;
+            if ($stockPool > 1e-6 && $noch > 1e-6) {   // vorhandenen Bestand anrechnen
+                $ab = min($stockPool, $noch);
+                $noch -= $ab; $stockPool -= $ab;
+            }
             if ($noch <= 1e-6) continue;
+            $ek = produkt_zukauf_preis((int)$g['produkt_id'], $lieferant ?: null, $noch) ?? 0.0;
             q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-              [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, 0, 'Stück', (int)$o['auftrag_id'], $i++]);
+              [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, $ek, 'Stück', (int)$o['auftrag_id'], $i++]);
             if ((int)$o['auftrag_id'] > 0)
                 log_aktivitaet('auftrag', (int)$o['auftrag_id'], 'team', 'Bulk (Fremdproduktion) per Bestellung ' . $nummer . $wann . ' bestellt.', 'bestellung', 'bestellung', $bid);
         }
