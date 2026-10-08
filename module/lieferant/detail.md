@@ -60,3 +60,6 @@ Panel „Bankverbindung" – **formatoffen** (nicht IBAN-fix). Felder `bank_inha
 
 ## Fremdfertigungs-Preise im Reiter „Preise / Angebote" (Stand 2026-10-08)
 Der Reiter zeigt zusätzlich die **Fremdfertigungs-Preise** dieses Lieferanten aus `rezeptur_lief_angebot` (Panel „Fremdfertigung – Rezepturpreise"). Diese Preise sind dem Lieferanten über `lieferant_id` zugeordnet und erscheinen in `einkauf_preise` unter „Fremdfertigung", wurden auf der Lieferanten-Seite aber bisher nicht angezeigt (nur v4-`lieferant_angebot` + Portal-Preisliste). Betrifft v. a. aus v3 übernommene Preise (z. B. Wellgreen). Read-only; Spalten: Rezeptur (Nr. + Name), Preis/Einheit, ab Menge, Status (angenommen/erfasst), Stand.
+
+## Dublette zusammenführen (Stand 2026-10-08)
+Admin-Abschnitt über der Gefahrenzone: einen doppelten Lieferanten (Suchfeld-Dropdown: Firma/Nummer/Land) in DIESEN überführen. POST `aktion=zusammenfuehren` + `quelle_id` → `lieferant_zusammenfuehren(quelle, dieser)`. Für Fälle wie KI-Lesefehler beim Lieferschein (z. B. „VitaActives"/„Vita Actives Limited", „Vitamin B.V."/„Vitanics B.V.", „Packari"/„Packari GmbH", Wellnature/Wellgreen). Alle Preise/Anfragen/Bestellungen/Hauptlieferant-Zuordnungen wandern mit; der Quell-Datensatz wird gelöscht.

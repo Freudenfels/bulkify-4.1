@@ -2518,6 +2518,46 @@ function kunde_zusammenfuehren(int $quelle_id, int $ziel_id): array {
     return ['ok'=>true, 'moved'=>$moved, 'quelle'=>(string)$q['firma'], 'ziel'=>(string)$z['firma']];
 }
 
+// Zwei Lieferanten zusammenführen (Dublette): ALLE Verweise von $quelle_id auf $ziel_id umhängen, dann den
+// doppelten Quell-Lieferanten löschen. Dynamisch über alle Spalten, deren Name auf „lieferant_id" endet
+// (lieferant_id, haupt_lieferant_id …) – so wandern auch item.haupt_lieferant_id und künftige Tabellen mit.
+// In einer Transaktion (bei Fehler komplett Rollback). Import-/Staging-Tabellen (v3imp_*, bu_imp_*) sind
+// ausgeschlossen (eigener ID-Raum). Keine UNIQUE-Keys auf Lieferant-Spalten in Live-Tabellen -> kollisionsfrei.
+// ESCAPE '=' statt Backslash (Backslash-Escape crasht die Live-MySQL).
+function lieferant_zusammenfuehren(int $quelle_id, int $ziel_id): array {
+    if ($quelle_id <= 0 || $ziel_id <= 0) return ['ok'=>false, 'fehler'=>'Ungültige Lieferanten-ID.'];
+    if ($quelle_id === $ziel_id)          return ['ok'=>false, 'fehler'=>'Quelle und Ziel sind derselbe Lieferant.'];
+    $q = one("SELECT id, firma FROM lieferanten WHERE id=?", [$quelle_id]);
+    $z = one("SELECT id, firma FROM lieferanten WHERE id=?", [$ziel_id]);
+    if (!$q || !$z) return ['ok'=>false, 'fehler'=>'Einer der Lieferanten wurde nicht gefunden.'];
+
+    $cols = all("SELECT TABLE_NAME AS t, COLUMN_NAME AS c
+                 FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND COLUMN_NAME LIKE '%lieferant_id'
+                   AND TABLE_NAME <> 'lieferanten'
+                   AND TABLE_NAME NOT LIKE 'v3imp=_%' ESCAPE '='
+                   AND TABLE_NAME NOT LIKE 'bu=_imp=_%' ESCAPE '='");
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $moved = [];
+        foreach ($cols as $cc) {
+            $t = (string)$cc['t']; $c = (string)$cc['c'];
+            $n = q("UPDATE `$t` SET `$c`=? WHERE `$c`=?", [$ziel_id, $quelle_id])->rowCount();
+            if ($n > 0) $moved[$t . '.' . $c] = $n;
+        }
+        q("DELETE FROM lieferanten WHERE id=?", [$quelle_id]);
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return ['ok'=>false, 'fehler'=>'Zusammenführen abgebrochen (nichts geändert): ' . $e->getMessage()];
+    }
+    if (function_exists('log_aktivitaet'))
+        log_aktivitaet('lieferant', $ziel_id, 'team', 'Doppelten Lieferanten „' . (string)$q['firma'] . '" (ID ' . $quelle_id . ') hierher zusammengeführt.', 'merge');
+    return ['ok'=>true, 'moved'=>$moved, 'quelle'=>(string)$q['firma'], 'ziel'=>(string)$z['firma']];
+}
+
 // Lieferant/Partner KOMPLETT löschen (nur Admin, unwiderruflich) – inkl. ALLER Preise, Anfragen, Angebote,
 // Bestellungen, Preislisten, Kataloge, Dokumente, Portal-Login und Kreditoren-Rechnungen. Sicherheitsstopp:
 // produzierte/eingebuchte Chargen mit Bezug zu diesem Lieferanten (Lagerbestand/Rückverfolgung) blockieren.

@@ -100,3 +100,6 @@
 
 ## Kunden zusammenführen / Dublette (Stand 2026-10-08)
 `kunde_zusammenfuehren($quelle_id, $ziel_id)` hängt ALLE Verweise des doppelten Quell-Kunden auf den Ziel-Kunden um und löscht die Quelle. Dynamisch über alle Spalten, deren Name auf `kunde_id` endet (information_schema), in einer Transaktion (bei Fehler komplett Rollback). **Import-/Staging-Tabellen** (`v3imp_*`, `bu_imp_*`) sind ausgeschlossen – die haben einen eigenen ID-Raum und würden sonst korrumpiert (Ausschluss per `NOT LIKE ... ESCAPE '='`, kein Backslash wegen Live-MySQL). Keine UNIQUE-Constraints auf Kunden-Spalten → kollisionsfrei. Rückgabe ['ok','moved'(Tabelle.Spalte⇒Anzahl),'quelle','ziel'|'fehler'].
+
+## Lieferanten zusammenführen / Dublette (Stand 2026-10-08)
+`lieferant_zusammenfuehren($quelle_id, $ziel_id)` – analog zu `kunde_zusammenfuehren`: hängt ALLE Verweise des doppelten Lieferanten auf den Ziel-Lieferanten um (alle Spalten mit Namen auf `lieferant_id`, inkl. `item.haupt_lieferant_id`), in einer Transaktion (Rollback bei Fehler), Import-/Staging-Tabellen (v3imp_*, bu_imp_*) ausgeschlossen (ESCAPE '='). UNIQUE-Keys auf Lieferant-Spalten gibt es nur in Staging → Live kollisionsfrei. Löscht die Quelle. Rückgabe wie der Kunden-Merge.
