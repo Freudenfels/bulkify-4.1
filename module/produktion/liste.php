@@ -7,8 +7,8 @@ require_once BX_ROOT . '/core/schema.php';
 $q    = trim($_GET['q'] ?? '');
 $sort = $_GET['sort'] ?? 'prio';
 $dir  = $_GET['dir']  ?? 'asc';
-$tab  = $_GET['tab']  ?? 'bereit';
-if (!in_array($tab, ['bereit', 'wartet', 'erledigt'], true)) $tab = 'bereit';
+$tab  = $_GET['tab']  ?? 'laufend';
+if (!in_array($tab, ['laufend', 'bereit', 'wartet', 'erledigt'], true)) $tab = 'laufend';
 
 // Sammel-Umstellung Eigen-/Fremdproduktion für markierte Aufträge.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'art_bulk') {
@@ -107,18 +107,22 @@ foreach ($alle as &$r) {
 unset($r);
 // Cache bleibt für die (schreibfreie) Anzeige aktiv (Spalte „Kapsel/Tablette"); am Dateiende wieder aus.
 
-// Einteilung in die Reiter
+// Einteilung in die Reiter – LAUFEND (in Produktion, mind. ein Schritt erledigt) ist jetzt EIGEN,
+// damit „Produktionsbereit" nur noch die wirklich startklaren (Material da, noch nicht begonnen) zeigt.
 $istErledigt = fn($r) => $r['status'] === 'erledigt';
-$istWartet   = fn($r) => !$istErledigt($r) && in_array(($r['_bereit'] ?? ''), ['wartet', 'art_offen'], true);   // wartet auf Material ODER auf Eigen/Fremd-Festlegung
-$istBereit   = fn($r) => !$istErledigt($r) && !$istWartet($r);   // produktionsbereit + laufend (alles außer wartend/erledigt)
+$istLaufend  = fn($r) => !$istErledigt($r) && ($r['_bereit'] ?? '') === 'laeuft';
+$istWartet   = fn($r) => !$istErledigt($r) && in_array(($r['_bereit'] ?? ''), ['wartet', 'art_offen'], true);   // wartet auf Material ODER Eigen/Fremd-Festlegung
+$istBereit   = fn($r) => !$istErledigt($r) && !$istLaufend($r) && !$istWartet($r);   // startklar: Material da, noch nicht begonnen
 
+$anzLaufend  = count(array_filter($alle, $istLaufend));
 $anzBereit   = count(array_filter($alle, $istBereit));
 $anzWartet   = count(array_filter($alle, $istWartet));
 $anzErledigt = count(array_filter($alle, $istErledigt));
 
 if ($tab === 'erledigt')      $rows = array_filter($alle, $istErledigt);
 elseif ($tab === 'wartet')    $rows = array_filter($alle, $istWartet);
-else                          $rows = array_filter($alle, $istBereit);
+elseif ($tab === 'bereit')    $rows = array_filter($alle, $istBereit);
+else                          $rows = array_filter($alle, $istLaufend);
 
 // Suche innerhalb des Reiters
 if ($q !== '') {
@@ -177,22 +181,47 @@ $cols = [
                         ? '<span title="Eigen/Fremd ist noch nicht festgelegt – erst danach geht der Auftrag in die Produktion">' . bx_badge('festlegen','err') . '</span>'
                         : (($r['produktionsart'] ?? 'fremd')==='eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info'))],
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
+    'station'      => ['label' => 'Aktuelle Station', 'render' => function($r){
+                        if (($r['status'] ?? '') === 'erledigt') return '<span class="bx-ok">fertig</span>';
+                        $st = trim((string)($r['naechste_station'] ?? ''));
+                        if ($st === '') return '<span class="muted">–</span>';
+                        // Begonnen = „läuft: <Station>", noch nicht begonnen = „als Nächstes: <Station>".
+                        return (int)($r['n_done'] ?? 0) > 0
+                            ? '<strong>' . h($st) . '</strong>'
+                            : '<span class="muted">als Nächstes: </span>' . h($st);
+                     }],
     'fortschritt'  => ['label' => 'Fortschritt', 'render' => fn($r)=> (int)$r['n_done'].' / '.(int)$r['n_total']],
 ];
+// Auswahl-Checkbox nur dort, wo die Eigen/Fremd-Sammelumstellung greift (bereit/wartet).
+if (!in_array($tab, ['bereit', 'wartet'], true)) unset($cols['_sel']);
 
 $TABS = [
+    'laufend'  => 'In Produktion',
     'bereit'   => 'Produktionsbereit',
     'wartet'   => 'Wartet auf Material',
     'erledigt' => 'Abgeschlossen',
 ];
-$TABCOUNT = ['bereit' => $anzBereit, 'wartet' => $anzWartet, 'erledigt' => $anzErledigt];
-$sub = ['bereit' => 'produktionsbereite Aufträge (Material vollständig da)', 'wartet' => 'Aufträge, die auf Material warten', 'erledigt' => 'abgeschlossene Produktionsaufträge'];
+$TABCOUNT = ['laufend' => $anzLaufend, 'bereit' => $anzBereit, 'wartet' => $anzWartet, 'erledigt' => $anzErledigt];
+$sub = ['laufend' => 'laufende Produktionen (schon begonnen)', 'bereit' => 'startklare Aufträge (Material da, noch nicht begonnen)', 'wartet' => 'Aufträge, die auf Material warten', 'erledigt' => 'abgeschlossene Produktionsaufträge'];
 
 $flash = $_SESSION['prod_flash'] ?? null; unset($_SESSION['prod_flash']);
 $zeigeNeu = isset($_GET['neu']);
 render_header('produktion', 'Produktion');
 bx_head('Produktion', count($rows) . ' ' . $sub[$tab], bx_btn('+ Neuer Produktionsauftrag', '?p=produktion&neu=1', 'primary'));
 if ($flash) echo '<div class="bx-panel badge-ok" style="padding:8px 12px">' . h($flash) . '</div>';
+// Übersicht auf einen Blick (anklickbar): echter Stand der Produktion nach Status.
+$kpi = function(string $label, int $wert, string $href, string $farbe = '', bool $aktiv = false) {
+    echo '<a href="' . h($href) . '" class="bx-card" style="margin:0;text-decoration:none;color:inherit;border:1px solid ' . ($aktiv ? 'var(--gruen)' : 'var(--line)') . ($aktiv ? ';background:var(--panel-2)' : '') . '">'
+       . '<div class="k muted" style="font-size:12px">' . h($label) . '</div>'
+       . '<div style="font-size:24px;line-height:1.2;margin-top:2px' . ($farbe && $wert > 0 ? ';color:' . $farbe : '') . '">' . $wert . '</div></a>';
+};
+echo '<div class="bx-cards" style="margin-bottom:16px">';
+if (has_role('admin')) $kpi('In Vorbereitung', (int)$vorbereitungN, '?p=produktion_vorbereitung', '#f59e0b');
+$kpi('In Produktion', $anzLaufend, '?p=produktion&tab=laufend', '', $tab === 'laufend');
+$kpi('Produktionsbereit', $anzBereit, '?p=produktion&tab=bereit', 'var(--gruen)', $tab === 'bereit');
+$kpi('Wartet auf Material', $anzWartet, '?p=produktion&tab=wartet', '#f59e0b', $tab === 'wartet');
+$kpi('Abgeschlossen', $anzErledigt, '?p=produktion&tab=erledigt', '', $tab === 'erledigt');
+echo '</div>';
 if (!empty($vorbereitungN) && has_role('admin'))
     echo '<div class="bx-panel badge-warn" style="padding:10px 14px">' . (int)$vorbereitungN
        . ' Auftrag(e) in <strong>Vorbereitung</strong> – erst prüfen und freigeben: '
@@ -331,15 +360,17 @@ bx_table($cols, array_values($rows), [
     'baseUrl' => '?p=produktion&tab=' . $tab . ($q !== '' ? '&q=' . urlencode($q) : ''),
     'sort'    => $sort,
     'dir'     => $dir,
-    'rowUrl'  => fn($r) => '?p=produktionsauftrag&id=' . $r['id'],
+    // Laufende direkt in den Produktions-Run (Schritte abarbeiten), sonst in die Auftrags-Detailseite.
+    'rowUrl'  => fn($r) => $tab === 'laufend' ? ('?p=produktion_run&id=' . $r['id']) : ('?p=produktionsauftrag&id=' . $r['id']),
     'empty'   => match ($tab) {
+        'laufend'  => 'Aktuell läuft keine Produktion.',
         'wartet'   => 'Kein Auftrag wartet aktuell auf Material.',
         'erledigt' => 'Noch keine abgeschlossenen Produktionsaufträge.',
-        default    => 'Kein Auftrag ist aktuell produktionsbereit.',
+        default    => 'Kein Auftrag ist aktuell startklar.',
     },
 ]);
 ?>
-<?php if ($rows): ?>
+<?php if ($rows && in_array($tab, ['bereit', 'wartet'], true)): ?>
 <form id="prodBulk" method="post" class="bx-row" style="gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap"
       onsubmit="if(!document.querySelectorAll('input[name=&quot;pa[]&quot;]:checked').length){alert('Bitte zuerst Aufträge markieren.');return false;}">
   <input type="hidden" name="aktion" value="art_bulk">

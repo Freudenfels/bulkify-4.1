@@ -28,3 +28,6 @@ Zeigt je Auftrag direkt die Größe (`produktion_groesse_label()` in `core/schem
 Kapsel/Softgel die gepflegte Kapselgröße, sonst die **kleinste passende** aus dem Füllgewicht
 der Rezeptur berechnet (Zusatz „(berechnet)"); bei Tablette das Füllgewicht in mg. Bei
 Pulver/Stick/Flüssig steht „–".
+
+## Umbau 2026-10-08: echter Stand + Status getrennt
+Die Seite war unübersichtlich – „Produktionsbereit" enthielt auch schon LAUFENDE Aufträge. Jetzt: KPI-Übersicht oben (anklickbar: In Vorbereitung, In Produktion, Produktionsbereit, Wartet auf Material, Abgeschlossen) + **4 Reiter**: **In Produktion** (laufend, mind. 1 Schritt erledigt → Zeile führt in den Produktions-Run), **Produktionsbereit** (Material da, noch NICHT begonnen), **Wartet auf Material** (inkl. Eigen/Fremd offen), **Abgeschlossen**. Neue Spalte **„Aktuelle Station"** (naechste_station: begonnen = fett die laufende Station, sonst „als Nächstes: …"). Default-Reiter = In Produktion. Eigen/Fremd-Sammelumstellung + Auswahl-Checkbox nur in bereit/wartet.
