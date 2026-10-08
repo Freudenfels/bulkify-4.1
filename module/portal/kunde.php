@@ -2096,7 +2096,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (isset($_GET['abgelehnt'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rückmeldung ist eingegangen – wir überarbeiten das Angebot.</div><?php endif; ?>
 
   <?php
-  $istLeer = !$meineAnfRows && empty($angebote);
+  $istLeer = !$meineAnfRows && empty($angebote) && !$anfPruef;   // team-initiierte Vorschläge (nur in $anfPruef) zählen auch
   // Einstiegs-Optionen – nur die für diesen Kunden freigegebenen Anfrage-Typen.
   $anfrageOpt = [];
   if (!empty($k['portal_rezeptur']))      $anfrageOpt[] = ['t'=>'Rezeptur anfragen',      's'=>'Eigene Rezeptur von uns entwickeln lassen.', 'r'=>'anfrage'];
