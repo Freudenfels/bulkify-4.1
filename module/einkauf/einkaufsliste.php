@@ -191,8 +191,8 @@ if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padd
 // Aufträge ohne Eigen/Fremd-Festlegung: NOCH KEIN Bedarf anzeigen (Stückliste steht nicht fest).
 // Festlegung passiert direkt hier im Einkauf (ein Klick je Auftrag -> gibt den Auftrag zugleich ans Werk frei).
 if ($ohneFestlegung): ?>
-<details class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px;margin-bottom:12px" open>
-  <summary style="cursor:pointer;font-weight:600"><?= count($ohneFestlegung) ?> Auftrag/Aufträge warten auf die Festlegung „Eigen- oder Fremdproduktion"</summary>
+<details class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px;margin-bottom:12px">
+  <summary style="cursor:pointer;font-weight:600"><?= count($ohneFestlegung) ?> Auftrag/Aufträge warten auf die Festlegung „Eigen- oder Fremdproduktion" <span class="muted" style="font-weight:400;font-size:12px">(zum Aufklappen klicken)</span></summary>
   <div class="muted" style="font-size:13px;margin:8px 0 10px">Ein Klick legt fest und gibt den Auftrag frei – danach erscheint der passende Einkaufsbedarf (Rohstoffe bei Eigen-, Bulk-Zukauf bei Fremdproduktion). „Letzte Festlegung" zeigt, wie dasselbe Produkt zuletzt entschieden wurde.</div>
   <div class="bx-row" style="flex-direction:column;gap:8px;align-items:stretch">
     <?php foreach ($ohneFestlegung as $o):
