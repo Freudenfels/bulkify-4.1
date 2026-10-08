@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ba
         $fehler = 'KI ist nicht verfügbar (kein Schlüssel hinterlegt). Bitte Positionen unten manuell erfassen.';
     } elseif ($text === '' && !$hatDatei) {
         $fehler = 'Bitte die Rechnung in eigenen Worten beschreiben – oder eine Datei hochladen.';
-    } else {
+    } else { try {
         // Kundenliste als Kontext, damit die KI auf eine bestehende Firma matcht.
         $kundenAll = all("SELECT firma FROM kunden WHERE firma<>'' ORDER BY firma");
         $firmen = array_slice(array_column($kundenAll, 'firma'), 0, 400);
@@ -82,10 +82,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ba
             $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo((string)$_FILES['anhang']['name'], PATHINFO_EXTENSION)));
             $save = rtrim(sys_get_temp_dir(), '/\\') . '/refr_' . bin2hex(random_bytes(5)) . ($ext ? '.' . $ext : '');
             if (!@move_uploaded_file($_FILES['anhang']['tmp_name'], $save)) $save = (string)$_FILES['anhang']['tmp_name'];
-            $r = ki_datei_frage($save, $anw, ['json' => true, 'system' => $system, 'max_tokens' => 4000, 'zweck' => 'rechnung_frei']);
+            // aufwand=low + begrenztes Zeitbudget: sonst läuft der (langsame) KI-Call in den Server-Timeout → 500.
+            $r = ki_datei_frage($save, $anw, ['json' => true, 'system' => $system, 'max_tokens' => 2500, 'aufwand' => 'low', 'timeout' => 100, 'budget' => 110, 'zweck' => 'rechnung_frei']);
             if (@is_file($save) && strpos($save, sys_get_temp_dir()) === 0) @unlink($save);
         } else {
-            $r = ki_json($anw, ['system' => $system, 'max_tokens' => 4000, 'zweck' => 'rechnung_frei']);
+            $r = ki_json($anw, ['system' => $system, 'max_tokens' => 2500, 'aufwand' => 'low', 'timeout' => 100, 'budget' => 110, 'zweck' => 'rechnung_frei']);
         }
         if (empty($r['ok'])) {
             $fehler = 'Die KI konnte daraus keine Rechnung bauen: ' . ($r['fehler'] ?? 'unbekannter Fehler');
@@ -113,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ba
             if ($prefill) $kiInfo = count($prefill) . ' Position(en) erkannt – bitte alles prüfen und ggf. anpassen, dann Rechnung erstellen.';
             else $fehler = 'Es konnten keine Positionen erkannt werden. Bitte unten manuell erfassen.';
         }
+    } catch (\Throwable $e) { $fehler = 'Die KI-Verarbeitung ist fehlgeschlagen: ' . $e->getMessage() . ' – bitte die Positionen unten manuell erfassen.'; }
     }
 }
 
