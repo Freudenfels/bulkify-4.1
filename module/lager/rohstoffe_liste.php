@@ -10,6 +10,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'art_a
     $n = rohstoff_art_autofuellen();
     header('Location: ?p=rohstoffe&kat=rohstoff&artfill=' . (int)$n); exit;
 }
+// Alle Rohstoffe gegen den EU-Novel-Food-Katalog prüfen + Status mit Datum festschreiben.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nf_pruefen_alle' && has_role('admin')) {
+    $r = rohstoffe_novelfood_pruefen_alle();
+    header('Location: ?p=rohstoffe&kat=rohstoff&nfall=' . (int)($r['geprueft'] ?? 0) . '&nfnf=' . (int)($r['novel_food'] ?? 0) . '&nfpr=' . (int)($r['pruefung'] ?? 0)); exit;
+}
 
 $KAT  = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','fertig'=>'Fertigware','verkaufsfertig'=>'Verkaufsfertig','maschine'=>'Maschine'];
 $FORM = ['pulver'=>'Pulver','granulat'=>'Granulat','extrakt'=>'Extrakt','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle'];
@@ -130,6 +135,13 @@ $cols = [
     'ek_preis'      => ['label' => 'Preis ab', 'sort' => true, 'num' => true, 'render' => $preisAb],
     'art'           => ['label' => 'Art', 'sort' => true, 'render' => fn($r) => ($ART[$r['art'] ?? ''] ?? '') !== '' ? h($ART[$r['art']]) : '<span class="muted">–</span>'],
     'form'          => ['label' => 'Form', 'sort' => true, 'render' => fn($r)=> h($FORM[$r['form']] ?? $r['form'])],
+    'novelfood'     => ['label' => 'Novel Food', 'sort' => true, 'render' => function($r){
+                        $s = (string)($r['novelfood_status'] ?? '');
+                        if ($s === '' ) return '<span class="muted" title="noch nicht geprüft">–</span>';
+                        $m = novelfood_status_meta($s);
+                        $kurz = $s === 'konform' ? 'konform' : ($s === 'novel_food' ? 'Novel Food' : ($s === 'pruefung' ? 'prüfen' : '?'));
+                        return '<span title="' . h($m['label']) . '" style="color:' . $m['farbe'] . '">' . h($kurz) . '</span>';
+                     }],
     'wirkstoffe' => ['label' => 'Wirkstoffe', 'th' => 'width:160px', 'render' => function($r) use ($wmap) {
         $list = $wmap[$r['id']] ?? [];
         return $list ? '<span style="white-space:normal;display:inline-block">' . h(implode(' · ', $list)) . '</span>' : '<span class="muted">–</span>';
@@ -152,6 +164,7 @@ $fehltLbl = ['irgendwas'=>'etwas fehlt','lief'=>'ohne Lieferant','preis'=>'ohne 
 render_header('rohstoffe', $titel);
 bx_head($titel, count($rows) . ' Einträge' . ($fehltLbl ? ' · Filter: ' . $fehltLbl : ''), $neuBtn);
 if (isset($_GET['artfill'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">Stoffklasse (Art) bei <strong>' . (int)$_GET['artfill'] . '</strong> Rohstoff(en) automatisch vorbelegt. Leer gebliebene bitte am Rohstoff pflegen.</div>';
+if (isset($_GET['nfall'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px"><strong>' . (int)$_GET['nfall'] . '</strong> Rohstoffe gegen den EU-Novel-Food-Katalog geprüft (mit Datum gespeichert): <strong style="color:var(--err)">' . (int)($_GET['nfnf'] ?? 0) . ' Novel Food</strong>, ' . (int)($_GET['nfpr'] ?? 0) . ' zu prüfen, Rest konform.</div>';
 ?>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="rohstoffe">
@@ -184,11 +197,18 @@ if (isset($_GET['artfill'])) echo '<div class="bx-panel badge-ok" style="padding
   <?php if ($q !== '' || $fehlt !== '' || $artF !== '' || $formF !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=rohstoffe&kat=<?= h($kat) ?>">zurücksetzen</a><?php endif; ?>
 </form>
 <?php if (!$istKapsel && has_role('admin')): ?>
-<form method="post" style="margin:-6px 0 10px" onsubmit="return confirm('Leere „Art" aller Rohstoffe per Namens-Heuristik vorbelegen? Nur klare Treffer werden gesetzt, Bestehendes bleibt. Danach manuell nachpflegbar.');">
-  <input type="hidden" name="aktion" value="art_autofuellen">
-  <button class="btn btn-ghost btn-sm" type="submit">Art automatisch vorbelegen</button>
-  <span class="muted" style="font-size:12px">– füllt leere „Art" anhand des Namens (konservativ)</span>
-</form>
+<div class="bx-row" style="gap:16px;flex-wrap:wrap;margin:-6px 0 10px;align-items:center">
+  <form method="post" style="margin:0" onsubmit="return confirm('Leere „Art" aller Rohstoffe per Namens-Heuristik vorbelegen? Nur klare Treffer werden gesetzt, Bestehendes bleibt. Danach manuell nachpflegbar.');">
+    <input type="hidden" name="aktion" value="art_autofuellen">
+    <button class="btn btn-ghost btn-sm" type="submit">Art automatisch vorbelegen</button>
+    <span class="muted" style="font-size:12px">– füllt leere „Art" anhand des Namens (konservativ)</span>
+  </form>
+  <form method="post" style="margin:0" onsubmit="return confirm('Alle Rohstoffe gegen den EU-Novel-Food-Katalog prüfen und den Status mit Datum speichern? (Überschreibt den gespeicherten Novel-Food-Status.)');">
+    <input type="hidden" name="aktion" value="nf_pruefen_alle">
+    <button class="btn btn-ghost btn-sm" type="submit">Rohstoffe auf Novel Food prüfen</button>
+    <span class="muted" style="font-size:12px">– gleicht Namen mit dem EU-Katalog ab, speichert Status + Datum</span>
+  </form>
+</div>
 <?php endif; ?>
 <?php
 bx_table($cols, array_values($rows), [

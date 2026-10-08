@@ -194,6 +194,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_
     }
     header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=spec&specfrei=' . ($an ? '1' : '0')); exit;
 }
+// Novel-Food-Status dieses Rohstoffs gegen den EU-Katalog prüfen + mit Datum festschreiben (Snapshot fürs PIB).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nf_pruefen' && !$neu) {
+    $st = item_novelfood_aktualisieren((int)$id);
+    log_aktivitaet('item', (int)$id, 'team', 'Novel-Food-Status geprüft: ' . novelfood_status_meta($st)['label'] . '.', 'notiz');
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&nfok=1'); exit;
+}
 // bulkify-CoA einer Charge für den Kunden freigeben bzw. zurückziehen (separater Schritt, wie bei der Spec).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'coa_freigabe' && !$neu) {
     $cid = (int)($_POST['charge_id'] ?? 0);
@@ -413,9 +419,39 @@ if (!$neu) {
     echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . $pr . ' €/' . h($it['preis_bezug']) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Bestand (frei)</div><div class="v">' . ($bestand_frei>0 ? h(rtrim(rtrim(number_format($bestand_frei,3,',','.'),'0'),',')).' '.h($it['einheit']) : '<span class="muted">0</span>') . '</div></div>';
     if ($fremd_gesamt > 0) echo '<div class="bx-card"><div class="k">Fremdlager (Kunden)</div><div class="v">' . h(rtrim(rtrim(number_format($fremd_gesamt,3,',','.'),'0'),',')) . ' ' . h($it['einheit']) . '</div></div>';
+    if (($it['kategorie'] ?? '') === 'rohstoff') {
+        $nfm = novelfood_status_meta($it['novelfood_status'] ?? null);
+        echo '<div class="bx-card"><div class="k">Novel Food</div><div class="v" style="font-size:15px;color:' . $nfm['farbe'] . '">' . h($nfm['label']) . '</div></div>';
+    }
     echo '</div>';
 }
 ?>
+<?php // Novel-Food-Status (automatisch aus dem EU-Katalog) – mit Prüfdatum als Snapshot fürs PIB.
+if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
+    if (isset($_GET['nfok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">Novel-Food-Status neu geprüft.</div>';
+    $nfm = novelfood_status_meta($it['novelfood_status'] ?? null);
+    $nfTreffer = json_decode((string)($it['novelfood_treffer'] ?? ''), true) ?: [];
+    $nfDatum = $it['novelfood_geprueft_am'] ?? null;
+?>
+<div class="bx-panel">
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">Novel-Food-Status <?= bx_hint('Automatischer Abgleich des Rohstoffs mit dem EU-Novel-Food-Katalog. Keine Rechtsberatung – eine Einschätzung. Der Status wird mit Datum gespeichert, damit auch später nachvollziehbar ist, was zum Prüfzeitpunkt galt (z. B. für das PIB).') ?></h2>
+    <form method="post" style="margin:0"><input type="hidden" name="aktion" value="nf_pruefen"><button class="btn btn-ghost btn-sm" type="submit">Jetzt prüfen / aktualisieren</button></form>
+  </div>
+  <div style="margin-top:8px;font-size:16px;color:<?= $nfm['farbe'] ?>"><strong><?= h($nfm['label']) ?></strong></div>
+  <div class="muted" style="font-size:12px;margin-top:2px">
+    <?= $nfDatum ? 'Geprüft am ' . h(fmt_zeit($nfDatum, 'd.m.Y')) . ' gegen den damaligen EU-Katalog.' : 'Noch nicht geprüft – auf „Jetzt prüfen" klicken.' ?>
+  </div>
+  <?php if ($nfTreffer): ?>
+    <div class="muted" style="font-size:13px;margin-top:10px">Katalog-Treffer:</div>
+    <ul style="margin:4px 0 0;padding-left:18px">
+      <?php foreach ($nfTreffer as $t): ?><li><strong><?= h((string)($t['stoff'] ?? '')) ?></strong> – <?= h((string)($t['status'] ?? '')) ?></li><?php endforeach; ?>
+    </ul>
+  <?php elseif (($it['novelfood_status'] ?? '') === 'konform'): ?>
+    <div class="muted" style="font-size:13px;margin-top:8px">Kein Treffer im Novel-Food-Katalog – gilt als nicht-neuartig (konform).</div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 <?php // Beim Anlegen sofort sichtbar – und ausserhalb des Formulars, weil es ein eigenes hat. ?>
   <?php // Beim Anlegen: aus einer Spezifikation heraus starten. Spart das Abtippen und ist der
         // Weg, über den jeder Rohstoff von Anfang an Papiere hat.

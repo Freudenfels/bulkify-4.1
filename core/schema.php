@@ -1501,6 +1501,10 @@ function init_schema(): void {
     ensure_column('item', 'ec_nr', "VARCHAR(30) NULL");
     ensure_column('item', 'bot_quelle', "VARCHAR(190) NULL");        // botanische Quelle / Pflanzenteil
     ensure_column('item', 'art', "VARCHAR(20) NULL");                // Stoffklasse: vitamin|mineralstoff|pflanzenstoff|aminosaeure|fettsaeure|ballaststoff|probiotikum|enzym|sonstiges (Filter Rohstoffe)
+    // Novel-Food-Status je Rohstoff (automatisch aus dem EU-Katalog, GESPEICHERT mit Prüfdatum = Snapshot fürs PIB).
+    ensure_column('item', 'novelfood_status', "VARCHAR(20) NULL");    // konform|pruefung|novel_food|unklar
+    ensure_column('item', 'novelfood_geprueft_am', "DATETIME NULL");  // wann der Status zuletzt gesetzt wurde
+    ensure_column('item', 'novelfood_treffer', "TEXT NULL");          // JSON der Katalog-Treffer (Stoff + Status), für Anzeige/Beleg
     // Öffentliche Rohstoff-Datenbank (Website/SEO): je Rohstoff einzeln freigeben; nichts geht automatisch online.
     ensure_column('item', 'website_sichtbar', "TINYINT(1) NOT NULL DEFAULT 0"); // 1 = auf bulkify.pro-Rohstoff-DB zeigen
     ensure_column('item', 'web_slug', "VARCHAR(190) NULL");          // stabile URL (z. B. ashwagandha-wurzelextrakt)
@@ -9317,6 +9321,86 @@ function produkt_novelfood_pruefen(int $pid): array {
     }
     $status = $problem ? 'novel_food' : ($pruef ? 'pruefung' : 'konform');
     return ['status' => $status, 'treffer' => $treffer, 'grund' => ''];
+}
+
+// ===== Novel-Food je Rohstoff (Item) =============================================================
+// Normalisierung + Katalog-Suchbegriffe (name+trivial+syn, >=5 Zeichen, ohne generische Stopwörter).
+// Gleiche Semantik wie produkt_novelfood_pruefen(); hier zentral + request-gecacht, damit die Katalog-
+// Begriffe nicht je Rohstoff neu gebaut werden (bei Batch-Prüfung über 1400 Rohstoffe entscheidend).
+function novelfood_norm(string $s): string {
+    $s = mb_strtolower(trim($s));
+    $s = preg_replace('/\([^)]*\)/u', ' ', $s);
+    $s = preg_replace('/[^a-z0-9äöüß ]+/u', ' ', $s);
+    return trim(preg_replace('/\s+/', ' ', $s));
+}
+function novelfood_begriffe(): array {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    if (!table_exists('novelfood_katalog')) return $cache = [];
+    $stop = ['magnesium'=>1,'calcium'=>1,'kalzium'=>1,'natrium'=>1,'sodium'=>1,'kalium'=>1,'potassium'=>1,'zink'=>1,'zinc'=>1,'eisen'=>1,'iron'=>1,'kupfer'=>1,'copper'=>1,'mangan'=>1,'selen'=>1,'selenium'=>1,'jod'=>1,'iodine'=>1,'chrom'=>1,'chromium'=>1,'vitamin'=>1,'wasser'=>1,'water'=>1,'salz'=>1,'salts'=>1,'salt'=>1,'extrakt'=>1,'extract'=>1,'pulver'=>1,'powder'=>1,'saeure'=>1,'acid'=>1];
+    $begriffe = [];
+    foreach (all("SELECT name, trivial, syn, status, status_code FROM novelfood_katalog") as $c) {
+        $terms = [$c['name']];
+        foreach (['trivial', 'syn'] as $f) foreach (preg_split('/[,;]/', (string)$c[$f]) as $t) { $t = preg_replace('/\([^)]*\)/u', '', (string)$t); if (trim($t) !== '') $terms[] = $t; }
+        foreach ($terms as $t) { $nt = novelfood_norm($t); if (mb_strlen($nt) >= 5 && !isset($stop[$nt])) $begriffe[$nt] = $c; }
+    }
+    return $cache = $begriffe;
+}
+// Beliebige Kandidaten-Texte (z. B. Name, lat. Name, Synonym, botanische Quelle) gegen den Katalog prüfen.
+// Rückgabe: ['status'=>konform|pruefung|novel_food|unklar, 'treffer'=>[['stoff','status','code'], …], 'grund'=>?].
+function novelfood_text_pruefen(array $kandidaten): array {
+    $begriffe = novelfood_begriffe();
+    if (!$begriffe) return ['status' => 'unklar', 'treffer' => [], 'grund' => 'Novel-Food-Katalog ist leer – bitte importieren'];
+    $treffer = []; $problem = false; $pruef = false; $gesehen = [];
+    foreach ($kandidaten as $cand) {
+        $nz = novelfood_norm((string)$cand); if ($nz === '') continue;
+        foreach ($begriffe as $bt => $c) {
+            if ($nz === $bt || preg_match('/\b' . preg_quote($bt, '/') . '\b/u', $nz)) {
+                if (isset($gesehen[$c['name']])) continue;
+                $gesehen[$c['name']] = 1;
+                $treffer[] = ['stoff' => $c['name'], 'status' => (string)$c['status'], 'code' => (string)$c['status_code']];
+                if ($c['status_code'] === 'NOT_YET_AUTHORISED_NOVEL_FOOD') $problem = true;
+                elseif (in_array((string)$c['status_code'], ['AUTHORISED_NOVEL_FOOD', 'SUBJECT_TO_A_CONSULTATION_REQUEST', ''], true)) $pruef = true;
+            }
+        }
+    }
+    if (!$treffer) return ['status' => 'konform', 'treffer' => [], 'grund' => 'kein Treffer im Novel-Food-Katalog'];
+    return ['status' => $problem ? 'novel_food' : ($pruef ? 'pruefung' : 'konform'), 'treffer' => $treffer, 'grund' => ''];
+}
+// Live-Prüfung EINES Rohstoffs (ohne Speichern).
+function item_novelfood_pruefen(int $item_id): array {
+    $it = one("SELECT name, name_lat, synonym, bot_quelle FROM item WHERE id=? AND kategorie='rohstoff'", [$item_id]);
+    if (!$it) return ['status' => 'unklar', 'treffer' => [], 'grund' => 'Rohstoff nicht gefunden'];
+    return novelfood_text_pruefen([$it['name'], $it['name_lat'] ?? '', $it['synonym'] ?? '', $it['bot_quelle'] ?? '']);
+}
+// Prüfen UND den Status am Rohstoff festschreiben (mit Datum = Snapshot fürs PIB). Rückgabe: der Status-String.
+function item_novelfood_aktualisieren(int $item_id): string {
+    $r = item_novelfood_pruefen($item_id);
+    q("UPDATE item SET novelfood_status=?, novelfood_geprueft_am=?, novelfood_treffer=? WHERE id=?",
+      [$r['status'], gmdate('Y-m-d H:i:s'), json_encode($r['treffer'], JSON_UNESCAPED_UNICODE), $item_id]);
+    return $r['status'];
+}
+// Alle Rohstoffe gegen den aktuellen Katalog prüfen + Status festschreiben. Rückgabe: ['geprueft'=>n, 'novel_food'=>n, 'pruefung'=>n].
+function rohstoffe_novelfood_pruefen_alle(): array {
+    $begriffe = novelfood_begriffe();
+    if (!$begriffe) return ['geprueft' => 0, 'novel_food' => 0, 'pruefung' => 0, 'leer' => true];
+    $n = 0; $nf = 0; $pr = 0; $now = gmdate('Y-m-d H:i:s');
+    foreach (all("SELECT id, name, name_lat, synonym, bot_quelle FROM item WHERE kategorie='rohstoff' AND gesperrt=0") as $it) {
+        $r = novelfood_text_pruefen([$it['name'], $it['name_lat'] ?? '', $it['synonym'] ?? '', $it['bot_quelle'] ?? '']);
+        q("UPDATE item SET novelfood_status=?, novelfood_geprueft_am=?, novelfood_treffer=? WHERE id=?",
+          [$r['status'], $now, json_encode($r['treffer'], JSON_UNESCAPED_UNICODE), (int)$it['id']]);
+        $n++; if ($r['status'] === 'novel_food') $nf++; elseif ($r['status'] === 'pruefung') $pr++;
+    }
+    return ['geprueft' => $n, 'novel_food' => $nf, 'pruefung' => $pr];
+}
+// Anzeige-Meta je Status: [ampel, label, farbe-css].
+function novelfood_status_meta(?string $status): array {
+    switch ((string)$status) {
+        case 'konform':    return ['ampel' => 'gruen', 'label' => 'Novel-Food-konform',               'farbe' => 'var(--gruen)'];
+        case 'pruefung':   return ['ampel' => 'gelb',  'label' => 'Status prüfen (zugelassen/Konsultation)', 'farbe' => 'var(--warn)'];
+        case 'novel_food': return ['ampel' => 'rot',   'label' => 'Novel Food – Zulassung nötig',     'farbe' => 'var(--err)'];
+        default:           return ['ampel' => 'grau',  'label' => 'noch nicht geprüft',               'farbe' => 'var(--muted)'];
+    }
 }
 
 // Einmaliger Backfill: verpackung_id der Alt-Importe aus der v3-Wahrheit setzen (siehe Kommentar am Aufruf
