@@ -2,7 +2,7 @@
 
 **Zweck:** Der Lieferant kann eine Rezeptur, die er für die Fremdfertigung bepreisen/produzieren soll, **read-only ansehen** – die Zusammensetzung je Einheit. Route `?p=lieferant_rezeptur&id=<rezeptur_id>`. Vorher gab es in „Rezeptur-Preise" nur Namen, aber keine Möglichkeit, die eigentliche Rezeptur einzusehen.
 
-**Was gezeigt wird:** Name + Nummer, Darreichungsform, Kapselgröße (international als `#0`), Füllgewicht je Einheit und die **Bestandteile** (Name + Menge in mg je Einheit, aus `rezeptur_zutat`, Name-Snapshot bevorzugt).
+**Was gezeigt wird:** Name + Nummer, Darreichungsform, Kapselgröße (international als `#0`), Füllgewicht je Einheit und die **Bestandteile** (aus `rezeptur_zutat`, Name-Snapshot bevorzugt). Die Zusammensetzungs-Tabelle zeigt je Inhaltsstoff **„pro 100 g"** (Masseanteil = menge_mg / Füllgewicht × 100 g, adaptiv g/mg) **und „mg je Einheit"** – wie in der Lieferanten-Anfrage-Ansicht (`anfrage.php`), damit der Lieferant fürs Bulk-Kalkulieren besser vergleichen kann (Stand 2026-10-08). Füllgewicht-Zeile = 100 g bzw. die mg-Summe je Einheit.
 
 **Was NICHT gezeigt wird:** kein Kundenbezug (`kunde_id`), keine Preise, keine internen Artikelnummern. Nur, was der Hersteller zum Produzieren braucht.
 
