@@ -10,8 +10,9 @@ $q    = trim($_GET['q'] ?? '');
 $sort = $_GET['sort'] ?? 'aktualisiert';
 $dir  = $_GET['dir']  ?? 'desc';
 
-// Nur „echte" Rezepturen: Hausrezepturen (ohne Kunde) sowie vom Kunden ANGENOMMENE (eingefroren).
-// Kundenvorschläge (Entwurf/Vorschlag/abgelehnt) sind noch keine Rezeptur → werden an der Anfrage geführt.
+// Hausrezepturen (ohne Kunde) immer; kundenspezifische Rezepturen inkl. der noch NICHT angenommenen
+// (Entwurf/Vorschlag) – damit das Team sie sieht und z. B. schon Lieferanten anfragen kann, bevor der
+// Kunde annimmt. Nur vom Kunden abgelehnte bleiben draußen (werden an der Anfrage überarbeitet).
 // Je Rezeptur zusätzlich: Anzahl Rohstoffe, davon mit freiem Lagerbestand, und wie viele noch kein
 // Spec/CoA-Dokument haben (Rohstoff-Doku = dokument objekt_typ='item', typ spec|coa|analyse).
 $rows = all("SELECT r.*, k.firma AS kunde_firma, kg.name AS kaps_name,
@@ -25,7 +26,7 @@ $rows = all("SELECT r.*, k.firma AS kunde_firma, kg.name AS kaps_name,
                 WHERE z.rezeptur_id=r.id AND z.item_id IS NOT NULL
                   AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=z.item_id AND d.typ IN ('spec','coa','analyse'))) AS dok_fehlen
              FROM rezeptur r LEFT JOIN kunden k ON k.id=r.kunde_id LEFT JOIN kapselgroesse kg ON kg.id=r.kapselgroesse_id
-             WHERE r.kunde_id IS NULL OR r.status IN ('eingefroren','freigegeben')");
+             WHERE r.kunde_id IS NULL OR r.status IN ('eingefroren','freigegeben','vorschlag','entwurf')");
 // Suche ist LIVE (clientseitig, siehe Script unten) – es werden immer alle Zeilen gerendert und beim
 // Tippen sofort gefiltert. $q dient nur zum Vorbefüllen (z. B. per Deep-Link).
 $rows = bx_sort_rows($rows, $sort, $dir);

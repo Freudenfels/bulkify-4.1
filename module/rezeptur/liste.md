@@ -17,3 +17,6 @@
    - **Status:** Status-Badge (Entwurf / Vorschlag / freigegeben / eingefroren) + Hinweis-Chip (leer / nicht zugeordnet / CoA/Spec fehlt).
    - Klick öffnet die Rezeptur (`?p=rezeptur_detail&id=...`) – dort werden Rohstoffe und Dokumente gepflegt.
 5. Button „Neue Rezeptur" (Nummer RZ-… wird automatisch vergeben).
+
+## Noch nicht angenommene Kundenrezepturen sichtbar (Stand 2026-10-08)
+Die Liste zeigt jetzt auch kundenspezifische Rezepturen im Status `vorschlag` und `entwurf` (vorher nur Hausrezepturen + angenommene `eingefroren`/`freigegeben`). So sieht das Team die noch nicht vom Kunden angenommenen Rezepturen und kann z. B. schon Lieferanten anfragen (Fremdfertigung), bevor der Kunde annimmt. Erkennbar am Status-Badge („Vorschlag"/„Entwurf"). Nur vom Kunden `abgelehnt`e bleiben draußen (werden an der Anfrage überarbeitet). Die Fremdfertigungs-Anfrage ist ohnehin nicht an `eingefroren` gebunden (siehe `module/einkauf/lief_anfragen`).
