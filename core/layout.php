@@ -296,6 +296,7 @@ function render_footer(): void {
     echo bx_menue_script();
     echo bx_busy_script();
     echo bx_rscombo_script();
+    echo bx_tabs_persist_script();
     echo pwa_script();
     echo "</body></html>";
 }
@@ -377,6 +378,27 @@ function bx_side_scroll_script(): string {
         . "try{var y=sessionStorage.getItem('bx-side-scroll');if(y!==null)el.scrollTop=parseInt(y,10)||0;}catch(e){}"
         . "var t;el.addEventListener('scroll',function(){try{clearTimeout(t);t=setTimeout(function(){sessionStorage.setItem('bx-side-scroll',el.scrollTop);},80);}catch(e){}});"
         . "el.querySelectorAll('a[href]').forEach(function(a){a.addEventListener('click',function(){try{sessionStorage.setItem('bx-side-scroll',el.scrollTop);}catch(e){}});});"
+        . "})();</script>";
+}
+
+// Merkt sich den aktiven Reiter je Seite (Route + id) in sessionStorage und stellt ihn NACH dem vollstaendigen
+// Parsen wieder her. Loest zwei Dinge: (1) nach dem Speichern (POST->Redirect) nicht mehr zurueck auf Reiter 1,
+// (2) ein per #hash angesprungener Reiter (z. B. #zugang nach „Einladungslink erzeugen") zeigt seinen Inhalt,
+// auch wenn das Panel im HTML NACH dem seiteneigenen Reiter-Skript steht (sonst klickte es ins Leere).
+// Setzt auf die vorhandenen Reiter-Klick-Handler je Seite auf (ruft nur .click()).
+function bx_tabs_persist_script(): string {
+    return "<script>(function(){"
+        . "function run(){"
+        . "var links=document.querySelectorAll('[data-tab]');if(!links.length)return;"
+        . "var qs=new URLSearchParams(location.search);var key='bxtab:'+(qs.get('p')||'')+':'+(qs.get('id')||'');"
+        . "function klick(name){for(var i=0;i<links.length;i++){if(links[i].getAttribute('data-tab')===name){links[i].click();return true;}}return false;}"
+        . "links.forEach(function(l){l.addEventListener('click',function(){try{sessionStorage.setItem(key,l.getAttribute('data-tab'));}catch(e){}});});"
+        . "var hash=(location.hash||'').replace('#','');"
+        . "if(hash){if(klick(hash)){try{sessionStorage.setItem(key,hash);}catch(e){}}return;}"
+        . "var saved=null;try{saved=sessionStorage.getItem(key);}catch(e){}"
+        . "if(saved)klick(saved);"
+        . "}"
+        . "if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run);else run();"
         . "})();</script>";
 }
 
