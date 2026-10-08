@@ -174,7 +174,11 @@ $l_bestellungen = $neu ? [] : all("SELECT b.*, (SELECT COALESCE(SUM(menge*ek_pre
                                     (SELECT COUNT(*) FROM bestellung_position p WHERE p.bestellung_id=b.id) AS pos
                                     FROM bestellung b WHERE b.lieferant_id=? ORDER BY b.angelegt DESC", [(int)$id]);
 $l_einkauf = 0.0; foreach ($l_bestellungen as $lb) $l_einkauf += (float)$lb['summe'];
-$l_beur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
+// Währung dieses Lieferanten (viele China-Lieferanten in USD). Summen/Preise in SEINER Währung anzeigen, nicht fix €.
+$l_waehr = ((string)($l['waehrung'] ?? '') ?: 'EUR');
+$l_sym   = fn($w) => ['EUR'=>'€','USD'=>'$','CNY'=>'¥'][$w] ?? $w;
+$l_cur   = $l_sym($l_waehr);
+$l_beur = fn($x) => number_format((float)$x, 2, ',', '.') . ' ' . $l_cur;
 // Gelieferte Ware: alle Chargen, die von diesem Lieferanten eingegangen sind (charge.lieferant_id).
 $l_chargen = $neu ? [] : all("SELECT c.charge_nr, c.menge, c.menge_verfuegbar, c.einheit, c.mhd, c.wareneingang, c.status, c.notiz,
                                      i.name AS artikel, i.artikelnummer, i.id AS item_id, i.kategorie
@@ -192,18 +196,18 @@ $l_bestTabelle = function($rows) use ($l_beur, $l_bBadge) {
 
 // Echte Angebote/Preise dieses Lieferanten (aus Preisanfragen) – für die Übersicht und den Reiter „Preise / Angebote".
 $l_angebote = $neu ? [] : all("SELECT af.nummer, COALESCE(NULLIF(i.name,''), af.betreff) AS bez,
-        ag.preis, ag.einheit, ag.preis_basis, ag.status AS ang_status, ag.incoterm, ag.versandart, ag.angelegt
+        ag.preis, ag.einheit, ag.preis_basis, ag.waehrung AS ang_waehrung, ag.status AS ang_status, ag.incoterm, ag.versandart, ag.angelegt
     FROM lieferant_angebot ag
     JOIN lieferant_anfrage af ON af.id=ag.anfrage_id
     LEFT JOIN item i ON i.id=af.item_id
     WHERE af.lieferant_id=? ORDER BY ag.angelegt DESC", [(int)$id]);
-$l_angTabelle = function($rows) {
+$l_angTabelle = function($rows) use ($l_sym) {
     $VERSL = versandart_liste();
     echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Nummer</th><th>Artikel / Betreff</th><th class="bx-num">Preis</th><th>Lieferbedingung</th><th>Status</th></tr></thead><tbody>';
     if (!$rows) echo '<tr><td colspan="5" class="muted">Noch keine Angebote von diesem Lieferanten. Anfragen stellen Sie unten im Bereich „Preisanfragen".</td></tr>';
     foreach ($rows as $r) {
         $pb = (int)($r['preis_basis'] ?? 1) === 1000 ? 1000 : 1;
-        $preis = $r['preis'] !== null ? number_format((float)$r['preis'], 4, ',', '.') . ' &euro; / ' . ($pb === 1000 ? '1.000 ' : '') . h($r['einheit'] ?: '–') : '–';
+        $preis = $r['preis'] !== null ? number_format((float)$r['preis'], 4, ',', '.') . ' ' . h($l_sym((string)($r['ang_waehrung'] ?? 'EUR'))) . ' / ' . ($pb === 1000 ? '1.000 ' : '') . h($r['einheit'] ?: '–') : '–';
         $terms = array_filter([(string)($r['incoterm'] ?? ''), !empty($r['versandart']) ? ($VERSL[$r['versandart']] ?? $r['versandart']) : '']);
         $st = ($r['ang_status'] ?? '') === 'angenommen' ? bx_badge('übernommen', 'ok') : bx_badge('offen', 'info');
         echo '<tr><td>' . h($r['nummer']) . '</td><td>' . h($r['bez'] ?: '–') . '</td><td class="bx-num">' . $preis . '</td><td class="muted">' . ($terms ? h(implode(' · ', $terms)) : '–') . '</td><td>' . $st . '</td></tr>';
@@ -244,7 +248,7 @@ if (!$neu && $gesperrt && (string)($l['quelle'] ?? '') === 'bewerbung') {
 if (!$neu) {
     echo '<div class="bx-cards">';
     echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . ($gesperrt ? bx_badge('gesperrt','err') : bx_badge('aktiv','ok')) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Einkauf gesamt</div><div class="v">' . ($l_einkauf>0 ? number_format($l_einkauf,2,',','.').' €' : '<span class="muted">–</span>') . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Einkauf gesamt</div><div class="v">' . ($l_einkauf>0 ? number_format($l_einkauf,2,',','.').' '.$l_cur : '<span class="muted">–</span>') . '</div></div>';
     echo '<div class="bx-card"><div class="k">Produkte hergestellt</div><div class="v muted">–</div></div>';
     echo '<div class="bx-card"><div class="k">Offene Rechnungen</div><div class="v muted">–</div></div>';
     echo '<div class="bx-card"><div class="k">Ø Lieferzeit</div><div class="v">' . ((int)($l['lieferzeit_tage']??0) ?: '–') . '<span style="font-size:14px"> Tage</span></div></div>';
@@ -311,7 +315,7 @@ if (!$neu) {
       <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Rohstoff</th><th class="bx-num">Preis</th><th>Stand</th></tr></thead><tbody>
         <?php foreach ($l_preisliste as $pr): ?>
           <tr><td><?= h($pr['rohstoff_name']) ?></td>
-              <td class="bx-num"><?= $pr['eur_kg'] !== null ? h(rtrim(rtrim(number_format((float)$pr['eur_kg'], 4, ',', '.'), '0'), ',')) . ' € / ' . h($pr['einheit'] ?: 'kg') : '<span class="muted">–</span>' ?></td>
+              <td class="bx-num"><?= $pr['eur_kg'] !== null ? h(rtrim(rtrim(number_format((float)$pr['eur_kg'], 4, ',', '.'), '0'), ',')) . ' ' . h($l_cur) . ' / ' . h($pr['einheit'] ?: 'kg') : '<span class="muted">–</span>' ?></td>
               <td class="muted" style="font-size:12px"><?= $pr['stand'] ? h(date('d.m.Y', strtotime((string)$pr['stand']))) : '–' ?></td></tr>
         <?php endforeach; ?>
       </tbody></table></div>
@@ -325,7 +329,7 @@ if (!$neu) {
         <?php foreach ($l_fremd as $f): ?>
           <tr>
             <td><?= $f['rez_nr'] ? h((string)$f['rez_nr']) . ' · ' : '' ?><?= h((string)($f['rez_name'] ?: '–')) ?></td>
-            <td class="bx-num"><?= $f['preis'] !== null ? h(rtrim(rtrim(number_format((float)$f['preis'], 4, ',', '.'), '0'), ',')) . ' € ' . ($f['einheit'] ? '/ ' . h((string)$f['einheit']) : '') : '<span class="muted">–</span>' ?></td>
+            <td class="bx-num"><?= $f['preis'] !== null ? h(rtrim(rtrim(number_format((float)$f['preis'], 4, ',', '.'), '0'), ',')) . ' ' . h($l_cur) . ' ' . ($f['einheit'] ? '/ ' . h((string)$f['einheit']) : '') : '<span class="muted">–</span>' ?></td>
             <td class="bx-num"><?= $f['menge'] !== null ? h(rtrim(rtrim(number_format((float)$f['menge'], 3, ',', '.'), '0'), ',')) : '–' ?></td>
             <td><?= (($f['status'] ?? '') === 'angenommen' || !empty($f['angenommen_am'])) ? bx_badge('angenommen', 'ok') : bx_badge('erfasst', 'info') ?></td>
             <td class="muted" style="font-size:12px"><?= !empty($f['stand']) ? h(date('d.m.Y', strtotime((string)$f['stand']))) : '–' ?></td>
@@ -363,7 +367,7 @@ if (!$neu) {
   <section data-panel="rechnungen" hidden>
     <div class="bx-panel">
       <h2>Rechnungen &amp; Zahlungen <?= bx_hint('Lieferanten-Rechnungen und Zahlungen zu den Bestellungen') ?></h2>
-      <p class="muted" style="margin-top:0">Die Erfassung von Lieferanten-Rechnungen und Zahlungen wird gerade angebunden. Die Bestellungen dieses Lieferanten sehen Sie im Reiter „Bestellungen"<?= $l_einkauf > 0 ? ' (Einkauf gesamt: ' . h(number_format($l_einkauf, 2, ',', '.')) . ' €)' : '' ?>.</p>
+      <p class="muted" style="margin-top:0">Die Erfassung von Lieferanten-Rechnungen und Zahlungen wird gerade angebunden. Die Bestellungen dieses Lieferanten sehen Sie im Reiter „Bestellungen"<?= $l_einkauf > 0 ? ' (Einkauf gesamt: ' . h(number_format($l_einkauf, 2, ',', '.')) . ' ' . h($l_cur) . ')' : '' ?>.</p>
       <?php bx_bald('Rechnungen &amp; Zahlungen'); ?>
     </div>
   </section>
@@ -840,7 +844,7 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
   <?php $VERSL = versandart_liste(); ?>
   <?php $anfr = all("SELECT af.*, i.name AS item_name, ag.id AS ang_id, ag.preis, ag.einheit AS ang_einheit,
                             ag.mindestmenge, ag.lieferzeit_tage, ag.status AS ang_status, ag.preis_basis AS ang_basis,
-                            ag.incoterm AS ang_incoterm, ag.versandart AS ang_versandart
+                            ag.waehrung AS ang_waehrung, ag.incoterm AS ang_incoterm, ag.versandart AS ang_versandart
                      FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
                      LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=af.id
                      WHERE af.lieferant_id=? ORDER BY af.angelegt DESC", [(int)$id]);
@@ -858,14 +862,14 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
               <?php if ($r['stueck_je_packung']): ?><div class="muted" style="font-size:12px"><?= (int)$r['stueck_je_packung'] ?> <?= h(einheit_wort($r['einheit'] ?? '', (float)$r['stueck_je_packung'])) ?> je Packung<?= $r['kapselgroesse_id'] ? ' · ' . h((string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$r['kapselgroesse_id']])) : '' ?></div><?php endif; ?></td>
           <td><?php $lbl = anfrage_art_label((string)($r['art'] ?? ''), (string)($r['form'] ?? '')); echo $lbl !== '' ? h($lbl) : '<span class="muted">–</span>'; ?></td>
           <td class="bx-num"><?= $r['menge'] ? $zahl($r['menge'], 3) . ' ' . h(einheit_wort($r['einheit'] ?? '', (float)$r['menge'])) : '–' ?></td>
-          <td><?php if ($r['ang_id']): $basis = (int)($r['ang_basis'] ?? 1) === 1000 ? 1000 : 1; ?><strong><?= $zahl($r['preis'], 4) ?> €</strong> / <?= $basis === 1000 ? '1.000 ' : '' ?><?= h($r['ang_einheit'] ? einheit_wort($r['ang_einheit'], $basis) : '–') ?>
+          <td><?php if ($r['ang_id']): $basis = (int)($r['ang_basis'] ?? 1) === 1000 ? 1000 : 1; $angCur = h($l_sym((string)($r['ang_waehrung'] ?? 'EUR'))); ?><strong><?= $zahl($r['preis'], 4) ?> <?= $angCur ?></strong> / <?= $basis === 1000 ? '1.000 ' : '' ?><?= h($r['ang_einheit'] ? einheit_wort($r['ang_einheit'], $basis) : '–') ?>
                 <div class="muted" style="font-size:12px">
                   <?= $r['mindestmenge'] ? 'MOQ ' . $zahl($r['mindestmenge'], 3) . ' · ' : '' ?>
                   <?= $r['lieferzeit_tage'] ? (int)$r['lieferzeit_tage'] . ' Tage' : '' ?>
                   <?php $terms = array_filter([(string)($r['ang_incoterm'] ?? ''), !empty($r['ang_versandart']) ? ($VERSL[$r['ang_versandart']] ?? $r['ang_versandart']) : '']); ?>
                   <?php if ($terms): ?><br><span style="color:var(--gruen)"><?= h(implode(' · ', $terms)) ?></span><?php endif; ?>
                   <?php $stf = all("SELECT menge_ab,preis FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$r['ang_id']]);
-                        if ($stf) { $tx = []; foreach ($stf as $s) $tx[] = $zahl($s['menge_ab'], 0) . '+: ' . $zahl($s['preis'], 4) . ' €'; echo '<br>' . h(implode(' · ', $tx)); } ?>
+                        if ($stf) { $tx = []; foreach ($stf as $s) $tx[] = $zahl($s['menge_ab'], 0) . '+: ' . $zahl($s['preis'], 4) . ' ' . $l_sym((string)($r['ang_waehrung'] ?? 'EUR')); echo '<br>' . h(implode(' · ', $tx)); } ?>
                 </div>
               <?php else: ?><span class="muted">–</span><?php endif; ?></td>
           <td><?= $r['status'] === 'offen' ? bx_badge('offen', 'info') : ($r['status'] === 'beantwortet' ? bx_badge('beantwortet', 'warn') : bx_badge('übernommen', 'ok')) ?></td>
