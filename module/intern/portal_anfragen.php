@@ -108,7 +108,8 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
           $txt = ($r['produkt_name'] ?: ($r['rezeptur_name'] ?: '–'))
                . ($groesse ? ' · ' . $groesse : '')
                . ($r['verpackung_typ'] ? ' · ' . ($VTYPEN[$r['verpackung_typ']] ?? $r['verpackung_typ']) : '')
-               . ($r['menge'] ? ' · ' . (int)$r['menge'] . ' Pkg' : '');
+               . ($r['menge'] ? ' · ' . (int)$r['menge'] . ' Pkg' : '')
+               . (!empty($r['umkarton']) ? ' · Umkarton' : '');
       } else {
           $txt = ($r['betreff'] ?: '–')
                . ($r['wunsch_menge'] ? ' · ' . rtrim(rtrim(number_format((float)$r['wunsch_menge'],3,',','.'),'0'),',') . ' ' . ($r['wunsch_einheit'] ?: '') : '');

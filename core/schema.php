@@ -1289,6 +1289,7 @@ function init_schema(): void {
     ensure_column('portal_anfrage', 'absage_grund', "VARCHAR(500) NULL");   // wenn wir NICHT anbieten koennen: Begruendung fuer den Kunden
     ensure_column('portal_anfrage', 'zielpreis', "DECIMAL(12,2) NULL");     // Rohstoff-Anfrage: gewuenschter Zielpreis (optional)
     ensure_column('portal_anfrage', 'dienstleistung_typ', "VARCHAR(30) NULL"); // Dienstleistungsanfrage: Typ (labortest|abfuellung|sourcing|…)
+    ensure_column('portal_anfrage', 'umkarton', "TINYINT(1) NOT NULL DEFAULT 0"); // Kunde wünscht einen Umkarton (nur wenn app_meta portal_umkarton=1); Details in der Notiz
     // Verbindliche Freigabe durch den Kunden: Name gilt als Unterschrift, Zeitpunkt daneben.
     ensure_column('rezeptur', 'freigabe_name', "VARCHAR(190) NULL");
     ensure_column('rezeptur', 'freigabe_am', "DATETIME NULL");

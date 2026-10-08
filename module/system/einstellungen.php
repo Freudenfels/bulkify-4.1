@@ -201,6 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'preise_save') {
     meta_set('std_fuellgewicht_g', $clean($_POST['std_fuellgewicht_g'] ?? '') ?: '150,300,500,1000');
     meta_set('std_fuellvolumen_ml', $clean($_POST['std_fuellvolumen_ml'] ?? '') ?: '50,100,250,500');
     meta_set('std_bestellmenge', $clean($_POST['std_bestellmenge'] ?? '') ?: '1000,2500,5000,10000');
+    meta_set('portal_umkarton', isset($_POST['portal_umkarton']) ? '1' : '0');
     meta_set('aufschlag_rohstoff', (string)(float)str_replace(',', '.', $_POST['aufschlag_rohstoff'] ?? '30'));
     meta_set('aufschlag_verpackung', (string)(float)str_replace(',', '.', $_POST['aufschlag_verpackung'] ?? '30'));
     meta_set('tablette_hilfsstoff_prozent', (string)(float)str_replace(',', '.', $_POST['tablette_hilfsstoff_prozent'] ?? '20'));
@@ -375,6 +376,11 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       <div class="bx-field"><label>Flüssig-Füllvolumen (ml) <?= bx_hint('für Flüssiges wird nach Volumen angeboten (z. B. 250 ml), kommagetrennt') ?></label><input type="text" name="std_fuellvolumen_ml" value="<?= $m('std_fuellvolumen_ml','50,100,250,500') ?>"></div>
       <div class="bx-field"><label>Bestellmengen-Staffeln <?= bx_hint('kommagetrennt, z. B. 1000,2500,5000,10000') ?></label><input type="text" name="std_bestellmenge" value="<?= $m('std_bestellmenge','1000,2500,5000,10000') ?>"></div>
     </div>
+    <div style="font-weight:600;margin:14px 0 6px">Portal-Produktanfrage</div>
+    <label class="bx-row" style="gap:10px;align-items:center;margin:0">
+      <input type="checkbox" name="portal_umkarton" value="1" <?= meta_get('portal_umkarton','0')==='1'?'checked':'' ?>>
+      <span>Kunde darf im Portal einen <strong>Umkarton</strong> anfragen <?= bx_hint('Blendet in der Produktanfrage eine Ja/Nein-Auswahl „Umkarton gewünscht" ein. Details gibt der Kunde über die Notiz an. Standard: aus.') ?></span>
+    </label>
     <div style="font-weight:600;margin:14px 0 6px">Tablette &amp; Flüssig – Kalkulationsgrundlagen</div>
     <div class="bx-grid">
       <div class="bx-field"><label>Presshilfsstoffe Tablette (%) <?= bx_hint('Füllstoff, Trennmittel und Überzug kommen zum Wirkstoffgewicht der Rezeptur dazu – bestimmt Tablettengewicht und Behälter-Auswahl') ?></label><input type="number" step="0.1" name="tablette_hilfsstoff_prozent" value="<?= $m('tablette_hilfsstoff_prozent','20') ?>"></div>

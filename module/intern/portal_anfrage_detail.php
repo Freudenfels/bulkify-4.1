@@ -250,6 +250,7 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
       <tr><td>Verpackungstyp</td><td><?= $vtypEdit() ?></td></tr>
       <tr><td>Anzahl Packungen</td><td><?= $pa['menge'] ? number_format((int)$pa['menge'], 0, ',', '.') : '–' ?></td></tr>
       <?php endif; ?>
+      <?php if (!empty($pa['umkarton'])): ?><tr><td>Umkarton</td><td>ja (Kundenwunsch – Details ggf. in der Notiz)</td></tr><?php endif; ?>
     <?php else: ?>
       <tr><td style="width:220px">Betreff</td><td><?= h($pa['betreff'] ?: '–') ?></td></tr>
       <?php if ($pa['wunsch_menge']): ?><tr><td>Gewünschte Menge</td><td><?= $mg($pa['wunsch_menge']) . ' ' . h($pa['wunsch_einheit'] ?: '') ?></td></tr><?php endif; ?>

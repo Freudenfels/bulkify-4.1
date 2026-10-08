@@ -618,8 +618,9 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         if ($zeilen) {
             $mapAnzahl = fn($a) => $istFuell ? [null, $a] : [$a, null];   // -> [stueck, fuellmenge_g]
             [$hStk, $hFg] = $mapAnzahl($zeilen[0]['anzahl']);
-            q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,produkt_id,rezeptur_id,stueck,fuellmenge_g,verpackung_typ,menge,notiz,status) VALUES (?,?,?,?,?,?,?,?,?,?,'neu')",
-              [naechste_nummer('PAF'), (int)$k['id'], 'produkt', $pid ?: null, $rezWahl ?: null, $hStk, $hFg, $vtyp, $zeilen[0]['vpe'], trim($_POST['notiz'] ?? '')]);
+            $umk = (meta_get('portal_umkarton','0') === '1' && !empty($_POST['umkarton'])) ? 1 : 0;
+            q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,produkt_id,rezeptur_id,stueck,fuellmenge_g,verpackung_typ,menge,umkarton,notiz,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,'neu')",
+              [naechste_nummer('PAF'), (int)$k['id'], 'produkt', $pid ?: null, $rezWahl ?: null, $hStk, $hFg, $vtyp, $zeilen[0]['vpe'], $umk, trim($_POST['notiz'] ?? '')]);
             $paf = insert_id();
             $sort = 0;
             foreach ($zeilen as $z) {
@@ -1631,6 +1632,7 @@ foreach ($portalAnfragen as $p) {
         if ((int)($p['menge'] ?? 0))  $detailParts[] = (int)$p['menge'] . ' Packungen';
         if ((int)($p['stueck'] ?? 0)) $detailParts[] = (int)$p['stueck'] . ' Stück/Pkg.';
         if (!empty($p['verp_name']))  $detailParts[] = (string)$p['verp_name'];
+        if (!empty($p['umkarton']))   $detailParts[] = 'Umkarton';
     }
     $nzP = trim((string)($p['notiz'] ?? '')); if ($nzP !== '') $detailParts[] = mb_strimwidth($nzP, 0, 160, '…');
     $meineAnfRows[] = ['typ'=>$p['typ'],'nummer'=>$p['nummer'],'bez'=>$bez,'datum'=>$p['angelegt'],'status'=>$st,'aktion'=>$akt, 'loeschbar'=>empty($p['angebot_id']), 'del_typ'=>'portal', 'del_id'=>(int)$p['id'],
@@ -2791,6 +2793,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
 
 <?php elseif ($view === 'prodanfrage'): ?>
+  <?php $umkartonAn = meta_get('portal_umkarton','0') === '1'; ?>
   <h1 style="margin-bottom:4px">Produkt anfragen</h1>
   <?php if (isset($_GET['freigegeben'])):
         $frRez = $rid ? one("SELECT nummer, name, freigabe_name FROM rezeptur WHERE id=? AND kunde_id=?", [$rid, (int)$k['id']]) : null; ?>
@@ -2854,6 +2857,14 @@ portal_head('Kundenportal · ' . $k['firma']);
         <div id="pa_stickhint" class="muted" style="display:none;font-size:12px;margin-top:8px">Bei Sticks geben Sie die <strong>Sticks je Verpackung</strong> an (z. B. Karton mit je 30 Sticks) und darunter die gewünschte Anzahl Verpackungen.</div>
         <div id="pa_warn" style="display:none;margin-top:10px;border:1px solid #e6c4c0;background:#fbeeec;color:#8f231b;border-radius:8px;padding:10px 12px;font-size:13px"></div>
       </div>
+      <?php if ($umkartonAn): ?>
+      <div class="bx-field" style="margin-top:14px">
+        <label class="bx-row" style="gap:10px;align-items:center;margin:0;font-weight:normal">
+          <input type="checkbox" name="umkarton" value="1" style="width:auto">
+          <span>Umkarton gewünscht <?= bx_hint('Sollen die Packungen in einem Umkarton (Versandkarton) geliefert werden? Details gern in die Notiz schreiben.') ?></span>
+        </label>
+      </div>
+      <?php endif; ?>
       <div class="bx-field" style="margin-top:14px"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"></textarea></div>
       <button class="btn btn-primary" type="submit">Anfrage senden</button>
     </form>

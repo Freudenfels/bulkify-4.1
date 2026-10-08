@@ -274,3 +274,6 @@ In der Rohstoff-Detailansicht (v=rohstoff) wird `item.ki_info` als Karte „KI-I
 
 ## „Ansehen"-Popup bei Anfragen in Prüfung (Stand 2026-10-08)
 In „Meine Anfragen" haben Produkt-/Rohstoffanfragen (del_typ=portal) im Reiter „Offen" jetzt einen „Ansehen"-Button → `<dialog>` mit der genauen Anfrage: Verpackung und ALLE Mengen-Staffeln (aus `portal_anfrage_pos`: Anzahl je Verpackung × Menge Verpackungen), bei Rohstoff die gewünschte Menge, plus Notiz. Vorher war nur die erste Staffel als kurze Detailzeile sichtbar. Staffeln werden einmalig per `$anfPosMap` (portal_anfrage_pos) geladen und an die Zeile gehängt.
+
+## Umkarton in der Produktanfrage (Stand 2026-10-08)
+Nur wenn der Admin es freigeschaltet hat (`app_meta portal_umkarton=1`, Einstellungen → Preise & Margen), erscheint im Formular „Produkt anfragen" eine Checkbox **„Umkarton gewünscht"** (Ja/Nein). Gespeichert an `portal_anfrage.umkarton`; Details schreibt der Kunde in die Notiz. In „Meine Anfragen" erscheint bei gesetztem Haken „Umkarton" in der Detailzeile.

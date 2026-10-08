@@ -94,3 +94,6 @@ Beim Absagen (`aktion=anfrage_absagen`) bekommt der Kunde die Begründung per Ma
 
 ## Rohstoffpreise & Status (Stand 2026-09-03)
 Bei einer Rezeptur-/Produktanfrage steht unten das Panel **Rohstoffpreise**: je Zutat der angefragten Rezeptur ein Status-Badge („Preise liegen vor" / „angefragt" / „kein Preis") und **„Preis anfragen"** (Popup aus `core/anfrage_ui.php`, Lieferanten auswählen). So sieht das Team die Lieferantenpreise, bevor es das Angebot kalkuliert. Das frühere manuelle **Bearbeitungsstatus**-Formular ist entfernt – der Status wird automatisch gesetzt (Angebot bauen → in Bearbeitung, senden → beantwortet, absagen → abgelehnt) und nur noch als Info-Zeile angezeigt.
+
+## Umkarton-Wunsch (Stand 2026-10-08)
+Hat der Kunde in der Produktanfrage „Umkarton gewünscht" gesetzt (`portal_anfrage.umkarton=1`, nur wenn `app_meta portal_umkarton=1`), zeigt die Detailseite im Produkt-Block eine Zeile **„Umkarton: ja (Kundenwunsch)"**. In der Anfrageliste (`portal_anfragen.php`) erscheint „· Umkarton" in der Anfrage-Spalte.
