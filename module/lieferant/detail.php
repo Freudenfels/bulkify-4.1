@@ -278,7 +278,13 @@ if (!$neu) {
 
   <section data-panel="angebote" hidden><div class="bx-panel"><h2>Preise / Angebote (<?= count($l_angebote) ?>)</h2><?php $l_angTabelle($l_angebote); ?>
     <p class="muted" style="font-size:12px;margin-top:8px">Neue Preise holen Sie unten im Bereich „Preisanfragen" ein; angenommene Angebote stehen als EK-Staffeln am Artikel.</p></div>
-    <?php $l_preisliste = $neu ? [] : lieferant_preisliste_fuer((int)$id); $l_veraltet = !$neu && lieferant_preise_veraltet((int)$id); $l_pAlter = $neu ? null : lieferant_preise_alter_tage((int)$id); ?>
+    <?php $l_preisliste = $neu ? [] : lieferant_preisliste_fuer((int)$id); $l_veraltet = !$neu && lieferant_preise_veraltet((int)$id); $l_pAlter = $neu ? null : lieferant_preise_alter_tage((int)$id);
+      // Fremdfertigungs-Preise dieses Lieferanten (rezeptur_lief_angebot, inkl. v3-Datenuebernahme). Sie sind dem
+      // Lieferanten ueber lieferant_id zugeordnet und erscheinen in der Preisuebersicht unter „Fremdfertigung".
+      $l_fremd = $neu ? [] : all("SELECT la.preis, la.einheit, la.menge, la.status, la.stand, la.angenommen_am,
+                                         r.nummer AS rez_nr, r.name AS rez_name
+                                  FROM rezeptur_lief_angebot la LEFT JOIN rezeptur r ON r.id=la.rezeptur_id
+                                  WHERE la.lieferant_id=? ORDER BY r.name, la.menge", [(int)$id]); ?>
     <div class="bx-panel"<?= $l_veraltet ? ' style="border-color:#e6c4c0"' : '' ?>>
       <h2 style="margin-top:0">Preisliste des Lieferanten (<?= count($l_preisliste) ?>)
         <?= $l_preisliste ? ($l_veraltet ? bx_badge('überfällig – seit ' . (int)$l_pAlter . ' Tagen', 'warn') : bx_badge('aktuell' . ($l_pAlter !== null ? ' (vor ' . (int)$l_pAlter . ' Tagen)' : ''), 'ok')) : '' ?></h2>
@@ -292,7 +298,24 @@ if (!$neu) {
         <?php endforeach; ?>
       </tbody></table></div>
       <?php else: ?><p class="muted">Noch keine Preisliste hinterlegt.</p><?php endif; ?>
-    </div></section>
+    </div>
+    <?php if ($l_fremd): ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Fremdfertigung – Rezepturpreise (<?= count($l_fremd) ?>)</h2>
+      <p class="muted" style="margin-top:0;font-size:13px">Preise, die dieser Lieferant für die Fremdfertigung ganzer Rezepturen genannt hat (auch aus der Datenübernahme). Sie erscheinen in der Preisübersicht unter „Fremdfertigung".</p>
+      <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Rezeptur</th><th class="bx-num">Preis</th><th class="bx-num">ab Menge</th><th>Status</th><th>Stand</th></tr></thead><tbody>
+        <?php foreach ($l_fremd as $f): ?>
+          <tr>
+            <td><?= $f['rez_nr'] ? h((string)$f['rez_nr']) . ' · ' : '' ?><?= h((string)($f['rez_name'] ?: '–')) ?></td>
+            <td class="bx-num"><?= $f['preis'] !== null ? h(rtrim(rtrim(number_format((float)$f['preis'], 4, ',', '.'), '0'), ',')) . ' € ' . ($f['einheit'] ? '/ ' . h((string)$f['einheit']) : '') : '<span class="muted">–</span>' ?></td>
+            <td class="bx-num"><?= $f['menge'] !== null ? h(rtrim(rtrim(number_format((float)$f['menge'], 3, ',', '.'), '0'), ',')) : '–' ?></td>
+            <td><?= (($f['status'] ?? '') === 'angenommen' || !empty($f['angenommen_am'])) ? bx_badge('angenommen', 'ok') : bx_badge('erfasst', 'info') ?></td>
+            <td class="muted" style="font-size:12px"><?= !empty($f['stand']) ? h(date('d.m.Y', strtotime((string)$f['stand']))) : '–' ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody></table></div>
+    </div>
+    <?php endif; ?></section>
   <section data-panel="bestell" hidden><div class="bx-panel"><h2>Bestellungen (<?= count($l_bestellungen) ?>)</h2><?php $l_bestTabelle($l_bestellungen); ?></div></section>
 
   <section data-panel="rechnungen" hidden>

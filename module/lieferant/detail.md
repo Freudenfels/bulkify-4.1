@@ -57,3 +57,6 @@ Der Reiter **Preise / Angebote** (und das Übersichts-Panel) zeigt jetzt die **e
 
 ## Bankverbindung
 Panel „Bankverbindung" – **formatoffen** (nicht IBAN-fix). Felder `bank_inhaber/bank_name/bank_land/bank_iban/bank_swift/bank_konto/bank_adresse/bank_waehrung/bank_zwischenbank/bank_notiz` an `lieferanten`. Chinesische Lieferanten zahlen oft über Drittland-Banken → SWIFT/BIC + Kontonummer statt IBAN, ggf. Zwischen-/Korrespondenzbank. Der Lieferant kann dieselben Felder selbst im Portal (`lieferant_profil`) pflegen; die **Buchhaltung** liest sie für die Zahlung.
+
+## Fremdfertigungs-Preise im Reiter „Preise / Angebote" (Stand 2026-10-08)
+Der Reiter zeigt zusätzlich die **Fremdfertigungs-Preise** dieses Lieferanten aus `rezeptur_lief_angebot` (Panel „Fremdfertigung – Rezepturpreise"). Diese Preise sind dem Lieferanten über `lieferant_id` zugeordnet und erscheinen in `einkauf_preise` unter „Fremdfertigung", wurden auf der Lieferanten-Seite aber bisher nicht angezeigt (nur v4-`lieferant_angebot` + Portal-Preisliste). Betrifft v. a. aus v3 übernommene Preise (z. B. Wellgreen). Read-only; Spalten: Rezeptur (Nr. + Name), Preis/Einheit, ab Menge, Status (angenommen/erfasst), Stand.
