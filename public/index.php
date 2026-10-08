@@ -66,6 +66,7 @@ $routes = [
     'lieferant_dateien'      => 'lieferant/dateien.php',
     'lieferant_katalog'      => 'lieferant/katalog.php',
     'lieferant_hilfe'        => 'lieferant/hilfe.php',
+    'lieferant_ueber'        => 'lieferant/ueber_uns.php',   // Portal „Über uns" (wer ist bulkify, Vision)
     'lieferant_dokument'     => 'lieferant/dokument.php',
     'partner'        => 'partner/liste.php',
     'partner_detail' => 'partner/detail.php',
@@ -211,7 +212,7 @@ if (is_logged_in() && function_exists('ist_echter_lieferant') && !ist_echter_lie
 // in der Vorschau bleibt frei navigierbar und kann zurueck in den Admin-Bereich.
 $istLieferant = is_logged_in() && function_exists('ist_echter_lieferant') && ist_echter_lieferant();
 $LIEF_ROUTEN  = ['lieferant_portal', 'lieferant_bestellung', 'lieferant_bestellung_pdf', 'lieferant_anfrage', 'lieferant_profil', 'lieferant_logo',
-                 'lieferant_nachrichten', 'lieferant_dateien', 'lieferant_dokument', 'lieferant_katalog', 'lieferant_preisliste', 'lieferant_rezepturpreise', 'lieferant_rezeptur', 'lieferant_hilfe', 'logout'];
+                 'lieferant_nachrichten', 'lieferant_dateien', 'lieferant_dokument', 'lieferant_katalog', 'lieferant_preisliste', 'lieferant_rezepturpreise', 'lieferant_rezeptur', 'lieferant_hilfe', 'lieferant_ueber', 'logout'];
 if ($istLieferant && !in_array($p, $LIEF_ROUTEN, true) && !in_array($p, ['lieferant_login','lieferant_einladung'], true)) {
     header('Location: ?p=lieferant_portal'); exit;
 }

@@ -190,6 +190,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'dateien_menu'    => ['de'=>'Dateien',                 'en'=>'Files', 'zh'=>'文件'],
         'katalog'         => ['de'=>'Mein Katalog',            'en'=>'My catalogue', 'zh'=>'我的产品目录'],
         'anleitung'       => ['de'=>'Anleitung',               'en'=>'Guide', 'zh'=>'使用说明'],
+        'ueber_uns'       => ['de'=>'Über uns',                'en'=>'About us', 'zh'=>'关于我们'],
         'katalog_sub'     => ['de'=>'Was Sie anbieten. Wir legen daraus unsere Artikel an – nach Prüfung.',
                               'en'=>'What you offer. We create our items from it – after review.',
                               'zh'=>'您所提供的产品。我方审核后据此建立物料。'],
@@ -403,6 +404,7 @@ function lp_shell_start(string $aktiv): void {
         'lieferant_rezepturpreise' => lp_t('rez_preise_menu'),
         'lieferant_dateien'     => lp_t('dateien_menu'),
         'lieferant_profil'      => lp_t('profil'),
+        'lieferant_ueber'       => lp_t('ueber_uns'),
         'lieferant_hilfe'       => lp_t('anleitung'),
     ];
     if (!$hatMaterial) unset($menu['lieferant_preisliste']);
