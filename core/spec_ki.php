@@ -18,6 +18,8 @@ function spec_ki_felder(): array {
         'name_lat'         => ['Lateinische/botanische Bezeichnung (z. B. Curcuma longa L.)', 'text'],
         'synonym'          => ['Synonym oder Kurzname', 'text'],
         'bot_quelle'       => ['Botanische Quelle mit Pflanzenteil (z. B. Curcuma longa, Wurzelstock)', 'text'],
+        'beschaffenheit'   => ['Beschaffenheit – genau ein Wort: extrakt, pulver_rein, isolat, konzentrat, fluessigextrakt oder oel (sonst leer)', 'text'],
+        'dev'              => ['Extraktverhältnis (DEV), z. B. 10:1 / 1:10 / 4:1 (sonst leer)', 'text'],
         'cas'              => ['CAS-Nummer', 'text'],
         'ec_nr'            => ['EC- oder E-Nummer', 'text'],
         'herkunftsland'    => ['Herkunftsland des Rohstoffs', 'text'],
@@ -168,6 +170,19 @@ function spec_ki_lesen(string $pfad): array {
     ];
 }
 
+// KI-Beschaffenheit (evtl. Freitext) auf einen gueltigen Enum-Wert normalisieren; '' wenn unklar.
+function spec_ki_beschaffenheit_norm(string $v): string {
+    $v = mb_strtolower(trim($v));
+    if ($v === '') return '';
+    if (function_exists('rohstoff_beschaffenheit_optionen') && array_key_exists($v, rohstoff_beschaffenheit_optionen())) return $v;
+    if (str_contains($v, 'flüssig') || str_contains($v, 'fluessig') || str_contains($v, 'liquid')) return 'fluessigextrakt';
+    if (str_contains($v, 'extrakt') || str_contains($v, 'extract')) return 'extrakt';
+    if (str_contains($v, 'konzentrat') || str_contains($v, 'concentrate')) return 'konzentrat';
+    if (str_contains($v, 'isolat') || str_contains($v, 'isolate')) return 'isolat';
+    if (str_contains($v, 'öl') || str_contains($v, 'oel') || str_contains($v, 'oil')) return 'oel';
+    if (str_contains($v, 'pulver') || str_contains($v, 'powder') || str_contains($v, 'nativ')) return 'pulver_rein';
+    return '';
+}
 // Einen Wert in die Form bringen, die die Spalte erwartet.
 function spec_ki_wert($v, string $art) {
     if ($art === 'janein') return is_bool($v) ? ($v ? 1 : 0) : (in_array(mb_strtolower(trim((string)$v)), ['ja','yes','true','1'], true) ? 1 : 0);
@@ -295,7 +310,9 @@ function spec_ki_uebernehmen(int $item_id, array $stamm, array $felder, bool $ue
         if (!isset($erlaubt[$k]) || !array_key_exists($k, $stamm)) continue;
         $alt = $it[$k] ?? null;
         if (!$ueberschreiben && $alt !== null && trim((string)$alt) !== '') continue;
-        q("UPDATE item SET `$k`=? WHERE id=?", [$stamm[$k], $item_id]);
+        $val = $stamm[$k];
+        if ($k === 'beschaffenheit') { $val = spec_ki_beschaffenheit_norm((string)$val); if ($val === '') continue; }
+        q("UPDATE item SET `$k`=? WHERE id=?", [$val, $item_id]);
         $n++;
     }
     if ($n) log_aktivitaet('item', $item_id, 'team', $n . ' Feld(er) aus einer Lieferantenunterlage übernommen (KI-Vorschlag, geprüft).', 'dokument', 'item', $item_id);
