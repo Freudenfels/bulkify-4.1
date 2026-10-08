@@ -224,14 +224,17 @@ function bxAnfrageProduktOeffnen(rezId, btn){
   var el = document.getElementById('bxAnfMenge'); if (!el) return;
   el.addEventListener('input', function(){
     var start = el.selectionStart || 0, val = el.value;
-    var ziffernVorCursor = (val.slice(0, start).match(/[0-9]/g) || []).length;
+    // Anker = Ziffern UND Kommas vor dem Cursor (nur Tausenderpunkte/Leerzeichen ändern sich beim Formatieren).
+    var sigVorCursor = (val.slice(0, start).match(/[0-9,]/g) || []).length;
     var out = val.split(',').map(function(teil){
       var d = teil.replace(/[^0-9]/g, '');
       return d === '' ? '' : parseInt(d, 10).toLocaleString('de-DE');
     }).join(', ');
     el.value = out;
     var pos = 0, gesehen = 0;
-    while (pos < out.length && gesehen < ziffernVorCursor) { if (/[0-9]/.test(out[pos])) gesehen++; pos++; }
+    while (pos < out.length && gesehen < sigVorCursor) { if (/[0-9,]/.test(out[pos])) gesehen++; pos++; }
+    // Hinter ein Trenn-Leerzeichen springen, damit man direkt die nächste Menge weitertippen kann.
+    while (pos < out.length && out[pos] === ' ') pos++;
     try { el.setSelectionRange(pos, pos); } catch(e){}
   });
 })();

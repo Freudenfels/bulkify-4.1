@@ -28,3 +28,6 @@ Wenn der E-Mail-Versand eingerichtet ist, geht direkt eine Mail (`mail_lieferant
 - `module/rezeptur/detail.php` – Panel „Rohstoffpreise", je Zutat Badge + Knopf; zusätzlich oben ein Block „Ganzes Produkt fremdfertigen lassen" (Fertigprodukt-Anfrage).
 - `module/angebot/detail.php` – Panel „Rohstoffkosten je Lieferant", je Zutat Badge + Knopf; darüber je Rezeptur des Angebots ein Fertigprodukt-Knopf. So sieht das Team die Lieferantenpreise, bevor es den Angebotspreis macht.
 - `module/intern/portal_anfrage_detail.php` – Panel „Rohstoffpreise" zur angefragten Rezeptur, plus Fertigprodukt-Block.
+
+## Mengen-Staffel: flüssiges Tippen (Stand 2026-10-08)
+Der Live-Formatter des Mengen-Staffel-Felds (`#bxAnfMenge`, Tausenderpunkte je kommagetrennter Menge) setzte den Cursor nur hinter die letzte Ziffer – beim Tippen eines Kommas sprang er hinter das Komma zurück. Fix: Der Cursor-Anker zählt jetzt Ziffern UND Kommas vor dem Cursor und überspringt danach das Trenn-Leerzeichen, sodass man direkt die nächste Menge weitertippen kann (z. B. „60.000, 90.000, 120.000").
