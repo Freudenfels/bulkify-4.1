@@ -47,3 +47,6 @@ In Liste + Detail zeigt die Artikel-Ueberschrift den Artikelnamen bzw. den Betre
 
 ## Rezeptur zusaetzlich pro 100 g (2026-10-08)
 Die Rezeptur-Tabelle zeigt neben "mg je Einheit" jetzt eine Spalte "pro 100 g" (`lp_t(pro_100g)`): Masseanteil = menge_mg / Fuellgewicht x 100 g, adaptiv in g (>=1 g) bzw. mg. Fuer Bulk-Pulver leichter zu kalkulieren als je Einheit; Summe ergibt 100 g.
+
+## Anklickbare Rohstoffe (Stand 2026-10-08)
+In der Rezeptur-Tabelle sind Inhaltsstoffe mit `item_id` Links (`a.lp-roh[data-iid]`) → Rohstoff-Info-Popup (`lp_rohstoff_popup()`, lädt `?p=lieferant_rohstoff_info`): Identität + Beschaffenheit/DEV + Wirkstoff-Gehalte, ohne Preise/Lieferanten.

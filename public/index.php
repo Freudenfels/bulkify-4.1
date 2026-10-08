@@ -59,6 +59,7 @@ $routes = [
     'lieferant_preisliste'   => 'lieferant/preisliste.php',
     'lieferant_rezepturpreise'=> 'lieferant/rezepturpreise.php',
     'lieferant_rezeptur'     => 'lieferant/rezeptur_ansicht.php',
+    'lieferant_rohstoff_info'=> 'lieferant/rohstoff_info.php',
     'lieferant_anfrage'      => 'lieferant/anfrage.php',
     'lieferant_profil'       => 'lieferant/profil.php',
     'lieferant_logo'         => 'lieferant/logo.php',
@@ -212,7 +213,7 @@ if (is_logged_in() && function_exists('ist_echter_lieferant') && !ist_echter_lie
 // in der Vorschau bleibt frei navigierbar und kann zurueck in den Admin-Bereich.
 $istLieferant = is_logged_in() && function_exists('ist_echter_lieferant') && ist_echter_lieferant();
 $LIEF_ROUTEN  = ['lieferant_portal', 'lieferant_bestellung', 'lieferant_bestellung_pdf', 'lieferant_anfrage', 'lieferant_profil', 'lieferant_logo',
-                 'lieferant_nachrichten', 'lieferant_dateien', 'lieferant_dokument', 'lieferant_katalog', 'lieferant_preisliste', 'lieferant_rezepturpreise', 'lieferant_rezeptur', 'lieferant_hilfe', 'lieferant_ueber', 'logout'];
+                 'lieferant_nachrichten', 'lieferant_dateien', 'lieferant_dokument', 'lieferant_katalog', 'lieferant_preisliste', 'lieferant_rezepturpreise', 'lieferant_rezeptur', 'lieferant_rohstoff_info', 'lieferant_hilfe', 'lieferant_ueber', 'logout'];
 if ($istLieferant && !in_array($p, $LIEF_ROUTEN, true) && !in_array($p, ['lieferant_login','lieferant_einladung'], true)) {
     header('Location: ?p=lieferant_portal'); exit;
 }

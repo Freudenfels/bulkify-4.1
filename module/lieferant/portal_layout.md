@@ -41,3 +41,6 @@ Lieferant → "Zugang zum Lieferantenportal" → Button "Portal ansehen (Vorscha
 Technik: `$_SESSION['lief_vorschau']` + `lief_vorschau_id()` (auth.php). `ist_lieferant()`/`aktueller_lieferant_id()` sind
 vorschau-bewusst (alle Portal-Guards greifen), die ROUTE-Sperre im Router nutzt `ist_echter_lieferant()`, damit der
 Admin nicht gefangen ist. Oben im Portal erscheint das Banner "Interne Vorschau … · Vorschau beenden" (`?p=lief_vorschau_stop`).
+
+## lp_rohstoff_popup() (Stand 2026-10-08)
+Gibt einen theme-tauglichen `<dialog id="lpRohDlg">` + JS aus, das an `a.lp-roh[data-iid]` bindet und `?p=lieferant_rohstoff_info&iid=…` (JSON) lädt → zeigt dem Lieferanten die Rohstoff-Infos (Identität + Beschaffenheit/DEV + Wirkstoff-Gehalte, OHNE Preise/Lieferanten). Einmal je Seite aufrufen (nach den Zutaten-Tabellen). Genutzt in `anfrage.php` + `rezeptur_ansicht.php`. Neuer i18n-Key `roh_info_titel`.

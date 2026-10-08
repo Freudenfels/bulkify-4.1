@@ -11,3 +11,6 @@
 **Erreichbar aus:** `module/lieferant/rezepturpreise.php` – der Rezeptur-Name in jeder bepreisten Zeile ist ein Link; im „Weitere Rezeptur bepreisen"-Formular erscheint nach der Auswahl ein „Rezeptur ansehen"-Button (öffnet in neuem Tab).
 
 **Verdrahtung:** Route in `public/index.php` (`$routes` + `$LIEF_ROUTEN`), Rolle `['*']` in `core/auth.php` (dabei auch `lieferant_preisliste` und `lieferant_rezepturpreise` nachgetragen, die dort gefehlt hatten – echte Lieferanten bekamen sonst „Kein Zugriff"). i18n-Keys in `portal_layout.php` (de/en/zh): rez_ansehen, rez_zusammensetzung, bestandteil, menge_je_einheit, fuellgewicht, rez_nicht_da.
+
+## Anklickbare Rohstoffe (Stand 2026-10-08)
+Zutaten mit `item_id` sind jetzt Links (`a.lp-roh[data-iid]`) → öffnen das Rohstoff-Info-Popup (`lp_rohstoff_popup()` aus `portal_layout.php`, lädt `?p=lieferant_rohstoff_info`). Zeigt Identität + Beschaffenheit/DEV + Wirkstoff-Gehalte (ohne Preise/Lieferanten), damit der Lieferant besser vergleichen kann. Gleiches Popup auch in `anfrage.php`.

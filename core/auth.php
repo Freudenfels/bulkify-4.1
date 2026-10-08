@@ -122,6 +122,7 @@ function route_rollen_map(): array {
         'lieferant_preisliste'    => ['*'],
         'lieferant_rezepturpreise'=> ['*'],
         'lieferant_rezeptur'      => ['*'],
+        'lieferant_rohstoff_info' => ['*'],
         'lieferant_hilfe'         => ['*'],
         'lieferant_dokument'      => ['*'],
         // Finanz-Routen (Rechnungen/Belege/Buchhaltung) sind in das eigene Programm /buchhaltung/

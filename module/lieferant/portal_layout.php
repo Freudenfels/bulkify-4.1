@@ -179,6 +179,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'mg_je_einheit'   => ['de'=>'mg je Einheit',          'en'=>'mg per unit', 'zh'=>'每单位毫克'],
         'pro_100g'        => ['de'=>'pro 100 g',              'en'=>'per 100 g', 'zh'=>'每100克'],
         'fuellgewicht'    => ['de'=>'Füllgewicht je Einheit',  'en'=>'Fill weight per unit', 'zh'=>'每单位填充重量'],
+        'roh_info_titel'  => ['de'=>'Rohstoff-Infos ansehen',  'en'=>'View raw-material info', 'zh'=>'查看原料信息'],
         'verpackung_lbl'  => ['de'=>'Verpackung',              'en'=>'Packaging', 'zh'=>'包装'],
         'preis_je'        => ['de'=>'je',                     'en'=>'per', 'zh'=>'每'],
         'rueckfragen'     => ['de'=>'Rückfragen',              'en'=>'Questions and answers', 'zh'=>'留言与答复'],
@@ -454,6 +455,50 @@ function lp_shell_start(string $aktiv): void {
     }
 }
 function lp_shell_ende(): void { echo '</main></div>'; }
+
+// Rohstoff-Info-Popup fuer die Rezeptur-Ansichten: macht Zutaten mit <a class="lp-roh" data-iid="…"> anklickbar.
+// Laedt ?p=lieferant_rohstoff_info&iid=… (JSON) und zeigt Identitaet + Beschaffenheit + Wirkstoff-Gehalte.
+// Einmal je Seite ausgeben (nach den Tabellen). Theme-tauglich, ohne Preise/Lieferanten.
+function lp_rohstoff_popup(): void {
+    $wlab = json_encode(h(lp_t('wirkstoff')));   // JS-sichere Beschriftung fuer den Wirkstoff-Abschnitt
+    echo '<dialog id="lpRohDlg" class="lp-rohdlg">'
+       . '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
+       . '<h2 id="lpRohName" style="margin:0;font-size:18px"></h2>'
+       . '<button type="button" onclick="document.getElementById(\'lpRohDlg\').close()" aria-label="schließen" '
+       . 'style="background:none;border:0;font-size:20px;cursor:pointer;color:var(--text)">&#10005;</button></div>'
+       . '<div id="lpRohBody" style="margin-top:12px"></div>'
+       . '</dialog>'
+       . '<style>'
+       . '.lp-rohdlg{border:1px solid var(--line);border-radius:14px;max-width:560px;width:calc(100% - 32px);'
+       . 'padding:22px 24px;background:var(--panel);color:var(--text);box-shadow:0 24px 70px rgba(0,0,0,.45);color-scheme:light dark}'
+       . '.lp-rohdlg::backdrop{background:rgba(0,0,0,.55)}'
+       . '.lp-rohdlg table{width:100%;border-collapse:collapse}'
+       . '.lp-rohdlg td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px}'
+       . '.lp-rohdlg td.k{color:var(--muted,#8a8f98);width:180px}'
+       . '.lp-rohdlg h3{font-size:13px;margin:16px 0 4px}'
+       . 'a.lp-roh{cursor:pointer}'
+       . '</style>'
+       . '<script>(function(){'
+       . 'var dlg=document.getElementById("lpRohDlg");if(!dlg)return;'
+       . 'dlg.addEventListener("click",function(e){if(e.target===dlg)dlg.close();});'
+       . 'function esc(s){var d=document.createElement("div");d.textContent=(s==null?"":String(s));return d.innerHTML;}'
+       . 'function rows(arr){var h="";(arr||[]).forEach(function(r){h+="<tr><td class=\\"k\\">"+esc(r[0])+"</td><td>"+esc(r[1])+"</td></tr>";});return h;}'
+       . 'document.querySelectorAll("a.lp-roh[data-iid]").forEach(function(a){a.addEventListener("click",function(e){'
+       . 'e.preventDefault();var iid=a.getAttribute("data-iid");if(!iid)return;'
+       . 'document.getElementById("lpRohName").textContent=a.textContent||"";'
+       . 'document.getElementById("lpRohBody").innerHTML="<div style=\\"color:var(--muted,#8a8f98)\\">…</div>";'
+       . 'dlg.showModal();'
+       . 'fetch("?p=lieferant_rohstoff_info&iid="+encodeURIComponent(iid)).then(function(r){return r.json();}).then(function(d){'
+       . 'if(!d||!d.name){document.getElementById("lpRohBody").innerHTML="<div style=\\"color:var(--muted,#8a8f98)\\">Keine Angaben.</div>";return;}'
+       . 'document.getElementById("lpRohName").textContent=d.name;'
+       . 'var h="";if(d.rows&&d.rows.length)h+="<table><tbody>"+rows(d.rows)+"</tbody></table>";'
+       . 'if(d.wirkstoffe&&d.wirkstoffe.length){h+="<h3>"+' . $wlab . '+"</h3><table><tbody>"+rows(d.wirkstoffe)+"</tbody></table>";}'
+       . 'if(!h)h="<div style=\\"color:var(--muted,#8a8f98)\\">Keine weiteren Angaben.</div>";'
+       . 'document.getElementById("lpRohBody").innerHTML=h;'
+       . '}).catch(function(){document.getElementById("lpRohBody").innerHTML="<div style=\\"color:#8f231b\\">Konnte nicht geladen werden.</div>";});'
+       . '});});'
+       . '})();</script>';
+}
 
 // Die Wahl aus ?lang= gilt ab sofort – auch fuer Texte, die vor lp_head() gebaut werden.
 lp_sprache_setzen();

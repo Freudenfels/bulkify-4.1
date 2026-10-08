@@ -183,7 +183,7 @@ if (!$a):
   <?php // Rezeptur zeigen, wenn es um die Fertigung eines Produkts geht (Fremdfertigung) – der
         // Lohnhersteller muss wissen, was er herstellen soll. Nur bei Anfragen mit rezeptur_id.
     $rezId = (int)($a['rezeptur_id'] ?? 0);
-    $rezZutaten = $rezId ? all("SELECT COALESCE(NULLIF(z.bezeichnung,''), i.name) AS bezeichnung, z.menge_mg
+    $rezZutaten = $rezId ? all("SELECT z.item_id, COALESCE(NULLIF(z.bezeichnung,''), i.name) AS bezeichnung, z.menge_mg
                                 FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                                 WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rezId]) : [];
     if ($rezZutaten): $sumMg = 0.0; foreach ($rezZutaten as $z) $sumMg += (float)$z['menge_mg']; ?>
@@ -201,12 +201,13 @@ if (!$a):
       <thead><tr><th><?= h(lp_t('wirkstoff')) ?></th><th class="bx-num"><?= h(lp_t('pro_100g')) ?></th><th class="bx-num"><?= h(lp_t('mg_je_einheit')) ?></th></tr></thead>
       <tbody>
         <?php foreach ($rezZutaten as $z): ?>
-          <tr><td><?= h((string)$z['bezeichnung']) ?></td><td class="bx-num"><?= h($per100((float)$z['menge_mg'])) ?></td><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? h(lp_num($z['menge_mg'], 3)) . ' mg' : '–' ?></td></tr>
+          <tr><td><?php if (!empty($z['item_id'])): ?><a class="lp-roh" data-iid="<?= (int)$z['item_id'] ?>" title="<?= h(lp_t('roh_info_titel')) ?>"><?= h((string)$z['bezeichnung']) ?></a><?php else: ?><?= h((string)$z['bezeichnung']) ?><?php endif; ?></td><td class="bx-num"><?= h($per100((float)$z['menge_mg'])) ?></td><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? h(lp_num($z['menge_mg'], 3)) . ' mg' : '–' ?></td></tr>
         <?php endforeach; ?>
         <tr><td class="muted"><?= h(lp_t('fuellgewicht')) ?></td><td class="bx-num">100 g</td><td class="bx-num"><?= h(lp_num($sumMg, 3)) ?> mg</td></tr>
       </tbody>
     </table></div>
   </div>
+  <?php lp_rohstoff_popup(); ?>
   <?php endif; ?>
 
   <div class="bx-panel">
