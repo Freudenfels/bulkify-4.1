@@ -1799,6 +1799,22 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
     if (!$auf) { http_response_code(404); echo 'Bestellung nicht gefunden.'; exit; }
     $re = one("SELECT * FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND kunde_sichtbar=1 ORDER BY id DESC LIMIT 1", [(int)$auf['id']]);
     if ($art === 're' && !$re) { http_response_code(404); echo 'Für diese Bestellung liegt noch keine Rechnung vor.'; exit; }
+    // Der Kunde sieht EXAKT die Rechnung aus der Buchhaltung: wenn der Beleg echte Positionen hat, rendern wir
+    // ihn mit demselben Generator (rechnung_pdf_bauen -> beleg_positionen, korrekte MwSt je Position). Vorher
+    // wurden die Positionen aus dem Auftrag rekonstruiert und die USt aus beleg.ust_prozent gezogen – war der 0,
+    // zeigte das Kunden-PDF 0,00 % MwSt, obwohl die Buchhaltungs-Rechnung korrekt war. $re ist bereits auf diesen
+    // Kunden + kunde_sichtbar geprüft. Fallback (unten) nur für Alt-Belege ohne eigene Positionen.
+    if ($art === 're' && $re) {
+        require_once BX_ROOT . '/core/pdf_rechnung.php';
+        $pdfBuch = rechnung_pdf_bauen((int)$re['id']);
+        if ($pdfBuch !== null) {
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: inline; filename="Rechnung_' . preg_replace('/[^A-Za-z0-9_-]/', '', (string)$re['nummer']) . '.pdf"');
+            header('Content-Length: ' . strlen($pdfBuch));
+            header('Cache-Control: private, max-age=0, must-revalidate');
+            echo $pdfBuch; exit;
+        }
+    }
     require_once BX_ROOT . '/core/pdf_beleg.php';
 
     // USt: aus Rechnung, sonst Inland/Export

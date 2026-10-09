@@ -277,3 +277,6 @@ In „Meine Anfragen" haben Produkt-/Rohstoffanfragen (del_typ=portal) im Reiter
 
 ## Umkarton in der Produktanfrage (Stand 2026-10-08)
 Nur wenn der Admin es freigeschaltet hat (`app_meta portal_umkarton=1`, Einstellungen → Preise & Margen), erscheint im Formular „Produkt anfragen" eine Checkbox **„Umkarton gewünscht"** (Ja/Nein). Gespeichert an `portal_anfrage.umkarton`; Details schreibt der Kunde in die Notiz. In „Meine Anfragen" erscheint bei gesetztem Haken „Umkarton" in der Detailzeile.
+
+## Kunden-Rechnung = Buchhaltungs-Rechnung (Stand 2026-10-10)
+Der Kunden-Download `?v=rechnung_pdf&aid=` rendert eine echte Rechnung (`beleg` mit Positionen) jetzt über **`rechnung_pdf_bauen()`** (`core/pdf_rechnung.php`) – denselben Generator wie die Buchhaltung. Dadurch sieht der Kunde EXAKT die Rechnung aus der Buchhaltung inkl. korrekter **MwSt je Position** (`beleg_position.mwst_satz`, Gruppierung in `build_beleg_pdf`). Vorher wurden die Positionen aus dem Auftrag rekonstruiert und die USt aus `beleg.ust_prozent` gezogen – war der 0, zeigte das Kunden-PDF fälschlich 0,00 % MwSt. Die Auftragsbestätigung (`ab_pdf`) und der Fallback (Alt-Belege ohne eigene Positionen) laufen unverändert über die Rekonstruktion.
