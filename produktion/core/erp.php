@@ -1002,6 +1002,38 @@ function erp_prod_charge_rohstoff_verknuepfen(int $prod_charge_id, array $d): in
        mb_substr(trim((string)($d['erfasst_von'] ?? '')), 0, 190) ?: null]);
     return insert_id();
 }
+// ===== Proben / Rueckstellmuster (Spec 8, 3-stufig) – Raw-SQL auf der Dashboard-Tabelle prod_probe =====
+// Ebenen: rohstoff (je eingesetztem Rohstoff-Batch) | gebinde (je Gebinde) | endprodukt (Rueckstellmuster) | labor.
+function erp_proben_fuer_pa(int $pa_id): array {
+    if ($pa_id <= 0 || !tabelle_da('prod_probe')) return [];
+    return all("SELECT p.*, i.name AS item_name FROM prod_probe p LEFT JOIN item i ON i.id=p.item_id
+                WHERE p.pa_id=? ORDER BY FIELD(p.ebene,'rohstoff','gebinde','endprodukt','labor'), p.id", [$pa_id]);
+}
+function erp_probe_anlegen(array $d): int {
+    if (!tabelle_da('prod_probe')) return 0;
+    $ebenen = ['rohstoff', 'gebinde', 'endprodukt', 'labor'];
+    q("INSERT INTO prod_probe (pa_id,prod_charge_id,item_id,charge_id,ebene,batch_nr,anzahl,bezeichnung,etikett_gedruckt,labor,erfasst_von)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      [($d['pa_id'] ?? null), ($d['prod_charge_id'] ?? null), ($d['item_id'] ?? null), ($d['charge_id'] ?? null),
+       in_array($d['ebene'] ?? '', $ebenen, true) ? $d['ebene'] : 'endprodukt',
+       mb_substr(trim((string)($d['batch_nr'] ?? '')), 0, 80) ?: null,
+       (isset($d['anzahl']) && $d['anzahl'] !== '') ? (int)$d['anzahl'] : null,
+       mb_substr(trim((string)($d['bezeichnung'] ?? '')), 0, 190) ?: null,
+       !empty($d['etikett_gedruckt']) ? 1 : 0,
+       mb_substr(trim((string)($d['labor'] ?? '')), 0, 190) ?: null,
+       mb_substr(trim((string)($d['erfasst_von'] ?? '')), 0, 190) ?: null]);
+    return insert_id();
+}
+function erp_probe_loeschen(int $id, int $pa_id): void {
+    if ($id <= 0 || $pa_id <= 0 || !tabelle_da('prod_probe')) return;
+    q("DELETE FROM prod_probe WHERE id=? AND pa_id=?", [$id, $pa_id]);
+}
+// Soll-Anzahl Endprodukt-Rueckstellmuster: max(5, Anzahl Gebinde). Anzahl Gebinde = erfasste Gebinde-Proben.
+function erp_rueckstell_soll(int $pa_id): int {
+    $geb = ($pa_id > 0 && tabelle_da('prod_probe')) ? (int) scalar("SELECT COUNT(*) FROM prod_probe WHERE pa_id=? AND ebene='gebinde'", [$pa_id]) : 0;
+    return max(5, $geb);
+}
+
 // Schon mit dieser Charge verknüpfte Lager-Chargen (verhindert Doppel-Verknüpfung bei erneutem Lauf).
 function erp_prod_charge_verknuepfte_chargen(int $prod_charge_id): array {
     if ($prod_charge_id <= 0 || !tabelle_da('prod_charge_rohstoff')) return [];

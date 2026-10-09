@@ -31,6 +31,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         pr_daten_setzen($id, 'qs_freigabe_am', '', $akteur);
         pr_daten_setzen($id, 'qs_freigabe_von', '', $akteur);
         flash('QS-Freigabe zurückgezogen.', 'warn');
+    } elseif ($aktion === 'probe_add') {
+        // 3-stufige Probe (Spec 8): rohstoff | gebinde | endprodukt
+        erp_probe_anlegen([
+            'pa_id'       => $id,
+            'ebene'       => (string)($_POST['ebene'] ?? 'endprodukt'),
+            'item_id'     => ($_POST['item_id'] ?? '') !== '' ? (int)$_POST['item_id'] : null,
+            'batch_nr'    => (string)($_POST['batch_nr'] ?? ''),
+            'anzahl'      => (string)($_POST['anzahl'] ?? ''),
+            'bezeichnung' => (string)($_POST['bezeichnung'] ?? ''),
+            'erfasst_von' => $akteur,
+        ]);
+        flash('Probe erfasst.');
+    } elseif ($aktion === 'probe_del') {
+        erp_probe_loeschen((int)($_POST['probe_id'] ?? 0), $id);
+        flash('Probe gelöscht.', 'warn');
     }
     weiter('?p=qs&id=' . $id);
 }
@@ -42,6 +57,13 @@ $charge = erp_pa_charge_info($id);
 $wert   = fn(string $f) => (string)($d[$f]['wert'] ?? '');
 $laborstatus = $wert('laborstatus');
 $freigegeben = $wert('qs_freigabe_am') !== '';
+// 3-stufige Proben (Spec 8) aus prod_probe
+$proben = erp_proben_fuer_pa($id);
+$probenNach = ['rohstoff' => [], 'gebinde' => [], 'endprodukt' => [], 'labor' => []];
+foreach ($proben as $pr) { $eb = (string)$pr['ebene']; if (isset($probenNach[$eb])) $probenNach[$eb][] = $pr; }
+$rsSoll    = erp_rueckstell_soll($id);                               // Soll Endprodukt-Rueckstellmuster = max(5, Gebinde)
+$rsHaben   = 0; foreach ($probenNach['endprodukt'] as $pr) $rsHaben += (int)$pr['anzahl'];
+$paZutaten = function_exists('erp_pa_zutaten') ? erp_pa_zutaten($id) : [];
 
 kopf($pa['nummer'] . ' – QS & Labor', 'liste');
 seitenkopf('QS & Labor · ' . (string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''),
@@ -65,14 +87,55 @@ $laborBadge = match ($laborstatus) {
 </div>
 
 <div class="bx-panel" style="margin-bottom:16px">
-  <h2 style="margin-top:0">Rückstellmuster</h2>
-  <form method="post" class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="qs_muster">
-    <div class="bx-field" style="margin:0;max-width:140px"><label>Anzahl</label><input type="text" name="anzahl" value="<?= h($wert('rueckstellmuster_anzahl')) ?>"></div>
-    <div class="bx-field" style="margin:0;max-width:200px"><label>Charge</label><input type="text" name="charge" value="<?= h($wert('rueckstellmuster_charge') ?: $charge['nr']) ?>"></div>
-    <div class="bx-field" style="margin:0;max-width:180px"><label>MHD</label><input type="date" name="mhd" value="<?= h($wert('rueckstellmuster_mhd') ?: ($charge['mhd'] ? date('Y-m-d', strtotime($charge['mhd'])) : '')) ?>"></div>
-    <div class="bx-field" style="margin:0;max-width:180px"><label>Gezogen am</label><input type="date" name="datum" value="<?= h($wert('rueckstellmuster_datum') ?: date('Y-m-d')) ?>"></div>
-    <button type="submit" class="btn btn-primary">Speichern</button>
+  <h2 style="margin-top:0">Proben &amp; Rückstellmuster</h2>
+  <p class="muted" style="margin-top:0;font-size:13px">Dreistufig (Spec 8): je eingesetztem Rohstoff-Batch, je Gebinde und als Endprodukt-Rückstellmuster. Jede Probe wird mit Etikett gezogen und hier dokumentiert.</p>
+  <?php
+  // Render-Helfer: erfasste Proben einer Ebene als kleine Liste + Loeschen.
+  $probeListe = function(array $rows) {
+      if (!$rows) { echo '<div class="muted" style="font-size:13px;margin:4px 0 8px">Noch keine erfasst.</div>'; return; }
+      echo '<div class="bx-tablewrap" style="margin:4px 0 10px"><table class="bx-table" style="margin:0"><tbody>';
+      foreach ($rows as $pr) {
+          $txt = trim(((string)($pr['item_name'] ?? '')) ?: ((string)($pr['bezeichnung'] ?? '')) ?: '–');
+          echo '<tr><td>' . h($txt) . '</td>'
+             . '<td>' . ($pr['batch_nr'] ? 'Batch ' . h((string)$pr['batch_nr']) : '') . '</td>'
+             . '<td class="bx-num">' . ((int)$pr['anzahl'] > 0 ? (int)$pr['anzahl'] . ' Stk' : '') . '</td>'
+             . '<td style="text-align:right"><form method="post" style="margin:0;display:inline" onsubmit="return confirm(\'Probe löschen?\');"><input type="hidden" name="aktion" value="probe_del"><input type="hidden" name="probe_id" value="' . (int)$pr['id'] . '"><button type="submit" class="btn btn-ghost btn-sm" title="löschen">×</button></form></td></tr>';
+      }
+      echo '</tbody></table></div>';
+  };
+  ?>
+  <h3 style="margin:10px 0 2px;font-size:14px;font-weight:600">Rohstoff-Proben <span class="muted" style="font-weight:400">· je eingesetztem Batch</span></h3>
+  <?php $probeListe($probenNach['rohstoff']); ?>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="probe_add"><input type="hidden" name="ebene" value="rohstoff">
+    <div class="bx-field" style="margin:0;min-width:200px"><label>Rohstoff</label>
+      <select name="bezeichnung">
+        <option value="">– wählen / frei lassen –</option>
+        <?php foreach ($paZutaten as $z): $zn = trim((string)($z['name'] ?? '')); if ($zn === '') continue; ?><option value="<?= h($zn) ?>"><?= h($zn) ?></option><?php endforeach; ?>
+      </select>
+    </div>
+    <div class="bx-field" style="margin:0;max-width:200px"><label>Batch-Nr. (Hersteller)</label><input type="text" name="batch_nr"></div>
+    <div class="bx-field" style="margin:0;max-width:110px"><label>Anzahl</label><input type="text" name="anzahl" inputmode="numeric" value="1"></div>
+    <button type="submit" class="btn btn-ghost">+ Probe</button>
+  </form>
+
+  <h3 style="margin:16px 0 2px;font-size:14px;font-weight:600">Gebinde-Proben <span class="muted" style="font-weight:400">· je Gebinde / Sub-Charge</span></h3>
+  <?php $probeListe($probenNach['gebinde']); ?>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="probe_add"><input type="hidden" name="ebene" value="gebinde">
+    <div class="bx-field" style="margin:0;min-width:200px"><label>Gebinde / Bezeichnung</label><input type="text" name="bezeichnung" placeholder="z. B. Gebinde 1"></div>
+    <div class="bx-field" style="margin:0;max-width:110px"><label>Anzahl</label><input type="text" name="anzahl" inputmode="numeric" value="1"></div>
+    <button type="submit" class="btn btn-ghost">+ Probe</button>
+  </form>
+
+  <h3 style="margin:16px 0 2px;font-size:14px;font-weight:600">Endprodukt-Rückstellmuster</h3>
+  <div class="muted" style="font-size:13px;margin-bottom:4px">Soll max(5, Gebinde) = <strong><?= (int)$rsSoll ?></strong> · erfasst <strong style="color:<?= $rsHaben >= $rsSoll ? 'var(--gruen)' : 'inherit' ?>"><?= (int)$rsHaben ?></strong></div>
+  <?php $probeListe($probenNach['endprodukt']); ?>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="probe_add"><input type="hidden" name="ebene" value="endprodukt">
+    <div class="bx-field" style="margin:0;max-width:140px"><label>Anzahl Muster</label><input type="text" name="anzahl" inputmode="numeric" value="<?= (int)max(0, $rsSoll - $rsHaben) ?>"></div>
+    <div class="bx-field" style="margin:0;max-width:220px"><label>Bezeichnung (optional)</label><input type="text" name="bezeichnung" placeholder="z. B. Charge <?= h($charge['nr']) ?>"></div>
+    <button type="submit" class="btn btn-primary">+ Rückstellmuster</button>
   </form>
 </div>
 
