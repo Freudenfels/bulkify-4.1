@@ -269,7 +269,7 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
       <input type="hidden" name="aktion" value="rezeptur_zuordnen">
       <select name="rezeptur_id">
         <option value="">– Rezeptur (Kapselgröße) wählen –</option>
-        <?php foreach ($rezListe as $rz): ?><option value="<?= (int)$rz['id'] ?>"><?= h(((string)$rz['nummer'] !== '' ? (string)$rz['nummer'] . ' · ' : '') . (string)$rz['name']) ?></option><?php endforeach; ?>
+        <?php foreach ($rezListe as $rz): $kgL = trim((string)($rz['kapselgroesse'] ?? '')); ?><option value="<?= (int)$rz['id'] ?>"><?= h(((string)$rz['nummer'] !== '' ? (string)$rz['nummer'] . ' · ' : '') . (string)$rz['name'] . ($kgL !== '' ? ' · Kapsel ' . $kgL : '')) ?></option><?php endforeach; ?>
       </select>
       <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
     </form>

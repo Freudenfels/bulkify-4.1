@@ -835,9 +835,11 @@ function erp_rezeptur_liste(): array {
     if (!tabelle_da('rezeptur')) return [];
     try {
         return all("SELECT r.id, r.nummer, r.name, r.darreichungsform,
+                           kg.name AS kapselgroesse,
                            bi.id AS bulk_item_id, bi.einheit AS bulk_einheit
                       FROM rezeptur r
                       LEFT JOIN item bi ON bi.rezeptur_id = r.id AND bi.kategorie='fertig'
+                      LEFT JOIN kapselgroesse kg ON kg.id = r.kapselgroesse_id
                      WHERE r.status <> 'entwurf'
                      ORDER BY r.name, r.id");
     } catch (Throwable $e) { return []; }
