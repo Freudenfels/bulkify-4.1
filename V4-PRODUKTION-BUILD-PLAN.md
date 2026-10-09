@@ -69,7 +69,7 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 | 9 | Maschinen (QR/Scan/Reinigung-Sperre/Typen) | 🟡 `pr_raum`/`pr_maschine`+Reinigung (intervall) da; QR/Scan/Typen/harte Sperre NEU → **Agent Produktion** |
 | 7.13/10/12.2 | Gewicht/Schwund, Umgebung, Zeit | 🟡 Zeitmessung da (`erp_produktionszeit_schnitt`); Schwund+Umgebung NEU → **Agent Produktion** |
 | 5/6.2 | Lager WE+Blinker+QR/Gebinde+Standort | 🟡 Blinker+WE-Scan+QR-Encoder da; `charge.standort` gebaut (A); Gebinde-QR (5.6)/Standort-Flow NEU → **Agent Lager** |
-| 15.3 | Live-Mengenfortschritt | 🟡 intern „X von Y" in run.php; Auftrag/Portal-Anzeige NEU → Paket E (offen) |
+| 15.3 | Live-Mengenfortschritt | 🟢 **fertig** – `auftrag_mengenfortschritt()` (core/schema.php) + Balken „Produziert X von Y Packungen" im Dashboard-Auftrag (immer) und im Kundenportal (ab Produktionsstart). 15.4 (Sichtbarkeit intern/extern) weiter offen. |
 | 13.1 | Abschlussfotos | 🔴 fehlt → Agent Produktion/Paket E |
 
 ## Fortschritt (Nacht 09.→10.10.2026)
@@ -82,7 +82,7 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 **Agent Produktion (Paket B/C): ✅ GEMERGT & LIVE auf beta/main** — Maschinenfuhrpark (`pr_maschine`+typ/qr, 10 Typen, Typ↔Step-Kopplung, QR auto `MA-<id>`), Maschinen-Scan je Step in `run.php` (maschine_id an prod_charge), **Produktionscharge CH/CHE** beim Mischen/Bereitstellen über `produktion/core/erp.php` (Raw-SQL, Rohstoff-Batches aus `produktion_verbrauch`), **Mischer-Kapazität/Umrechnung** je Gebinde + Unterchargen, **Umgebungsdaten** (Temp/Feuchte) je Step, **Reinigung ereignisgesteuert + harte Sperre** bei „nicht sauber" (end-to-end getestet). Geprüft: nur `produktion/`, additiv, php -l sauber.
 
 ## Noch offen (Paket E + Rest – für die nächsten Etappen)
-- **Live-Mengenfortschritt (15.3)** in Auftrag/Portal (Daten da: `produktion_gebucht`/`charge.pa_id`).
+- ✅ **Live-Mengenfortschritt (15.3)** in Auftrag/Portal – ERLEDIGT (10.10.2026, `auftrag_mengenfortschritt()`).
 - **Proben-UI 3-stufig** (Datenmodell `prod_probe` steht): Erfassung in `produktion/.../qs.php` (Rohstoff-/Gebinde-/Endprodukt-/Laborprobe + Mengenregel max(5, Gebinde)).
 - **FIFO/Gebinde-Durchziehen beim Abfüllen (7.8)** + Unterchargen beim Griff zum nächsten Gebinde (bisher nur beim Mischen).
 - **Produktionsbericht (17)** gekürzt/ausführlich aus den neuen Daten (Maschine/Klima/Reinigung/prod_charge/Proben).
