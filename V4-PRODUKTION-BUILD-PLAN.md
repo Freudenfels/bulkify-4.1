@@ -79,7 +79,15 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 
 **Agent Lager (Paket D): ✅ GEMERGT & LIVE auf beta/main** — `charge.standort`-Flow (an Produktion übergeben / wieder einlagern + Ist-Gewicht, „in Produktion"-Badge in Bestand+Versand), eigener **Gebinde-QR** pro Karton (`lg_gebinde`, GB-Nummernkreis, PDF, Scan→Charge/Wareneingang/Lieferant für Regress), **Rezepturnummer-Aufkleber-Scan** im Wareneingang. Geprüft: nur `lager/`, additiv, php -l sauber.
 
-**Agent Produktion (Paket B/C): läuft noch** (isolierter Worktree, committet dort, PUSH erst nach Review) — Maschinenfuhrpark (Typ/QR/Scan je Step), prod_charge-Anbindung beim Mischen/Abfüllen (über `produktion/core/erp.php`, Raw-SQL), Mischer-Umrechnung, Umgebungsdaten, Reinigung ereignisgesteuert+harte Sperre.
+**Agent Produktion (Paket B/C): ✅ GEMERGT & LIVE auf beta/main** — Maschinenfuhrpark (`pr_maschine`+typ/qr, 10 Typen, Typ↔Step-Kopplung, QR auto `MA-<id>`), Maschinen-Scan je Step in `run.php` (maschine_id an prod_charge), **Produktionscharge CH/CHE** beim Mischen/Bereitstellen über `produktion/core/erp.php` (Raw-SQL, Rohstoff-Batches aus `produktion_verbrauch`), **Mischer-Kapazität/Umrechnung** je Gebinde + Unterchargen, **Umgebungsdaten** (Temp/Feuchte) je Step, **Reinigung ereignisgesteuert + harte Sperre** bei „nicht sauber" (end-to-end getestet). Geprüft: nur `produktion/`, additiv, php -l sauber.
+
+## Noch offen (Paket E + Rest – für die nächsten Etappen)
+- **Live-Mengenfortschritt (15.3)** in Auftrag/Portal (Daten da: `produktion_gebucht`/`charge.pa_id`).
+- **Proben-UI 3-stufig** (Datenmodell `prod_probe` steht): Erfassung in `produktion/.../qs.php` (Rohstoff-/Gebinde-/Endprodukt-/Laborprobe + Mengenregel max(5, Gebinde)).
+- **FIFO/Gebinde-Durchziehen beim Abfüllen (7.8)** + Unterchargen beim Griff zum nächsten Gebinde (bisher nur beim Mischen).
+- **Produktionsbericht (17)** gekürzt/ausführlich aus den neuen Daten (Maschine/Klima/Reinigung/prod_charge/Proben).
+- **Abschlussfotos (13.1)**, **Pausen nur an cleanen Punkten/Schichtwechsel (7.11/7.12)**.
+- **Bulk-Weiterverkauf-Abfang (7.1)** + CH/CHE-Nummernformat → mit Nico klären.
 
 **Wichtig (Architektur):** Sub-Apps requiren NICHT `core/schema.php` (db()-Kollision) → Zugriff auf `prod_charge`/`charge.standort` nur per Raw-SQL in der jeweiligen `*/core/erp.php`.
 
