@@ -452,20 +452,24 @@ $stText = $stLbl($a['status']);
 $glasId   = (int)($a['verpackung_id'] ?? 0) ?: (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
 $glasName = $glasId ? (string) scalar("SELECT name FROM item WHERE id=?", [$glasId]) : '';
 $fehltCard = fn($txt) => '<span style="color:var(--warn)">' . h($txt) . '</span>';
-echo '<div class="bx-cards">';
-echo '<div class="bx-card bx-card-status" title="Status" style="background:' . $stBg . ';color:' . $stFg . ';border:1px solid rgba(0,0,0,.15)"><div class="v" style="color:' . $stFg . '">' . h($stText) . '</div></div>';
-echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . (int)$a['menge'] . '</div></div>';
-// Glas + Kapselzahl IMMER zeigen (auch wenn leer) – sonst sieht man bei alten Nachbestellungen nicht, dass es fehlt.
-echo '<div class="bx-card"><div class="k">Verpackung (Glas)</div><div class="v" style="font-size:16px">' . ($glasName !== '' ? h($glasName) : $fehltCard('nicht gesetzt')) . '</div></div>';
-echo '<div class="bx-card"><div class="k">Stück je Packung</div><div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') : $fehltCard('nicht gesetzt')) . '</div></div>';
-if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamtstückzahl</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
-if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablette</div><div class="v">' . h($groesseLbl) . '</div></div>';
-echo '<div class="bx-card"><div class="k">Herstellung</div><div class="v">' . ($istFremd ? bx_badge('Zukauf','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
-echo '<div class="bx-card"><div class="k">Etikett</div><div class="v">' . $etikettBadge . '</div></div>';
-echo '<div class="bx-card"><div class="k">VK / Stück</div><div class="v">' . $eur($a['vk_stueck']) . '</div></div>';
-echo '<div class="bx-card"><div class="k">Netto gesamt</div><div class="v">' . $eur($a['gesamt_netto']) . '</div></div>';
-if (!empty($a['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . '</div></div>';
-echo '</div>';
+// Die Kennzahl-Kacheln stehen jetzt IM Reiter „Details" (siehe unten, data-panel="details"), nicht mehr
+// über den Reitern. Als Closure vorbereitet, damit sie dort an der richtigen Stelle gerendert werden.
+$kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCard, $einhProP, $gesamtStk, $groesseLbl, $istFremd, $etikettBadge, $eur) {
+    echo '<div class="bx-cards" style="margin-bottom:16px">';
+    echo '<div class="bx-card bx-card-status" title="Status" style="background:' . $stBg . ';color:' . $stFg . ';border:1px solid rgba(0,0,0,.15)"><div class="v" style="color:' . $stFg . '">' . h($stText) . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . (int)$a['menge'] . '</div></div>';
+    // Glas + Kapselzahl IMMER zeigen (auch wenn leer) – sonst sieht man bei alten Nachbestellungen nicht, dass es fehlt.
+    echo '<div class="bx-card"><div class="k">Verpackung (Glas)</div><div class="v" style="font-size:16px">' . ($glasName !== '' ? h($glasName) : $fehltCard('nicht gesetzt')) . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Stück je Packung</div><div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') : $fehltCard('nicht gesetzt')) . '</div></div>';
+    if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamtstückzahl</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
+    if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablette</div><div class="v">' . h($groesseLbl) . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Herstellung</div><div class="v">' . ($istFremd ? bx_badge('Zukauf','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Etikett</div><div class="v">' . $etikettBadge . '</div></div>';
+    echo '<div class="bx-card"><div class="k">VK / Stück</div><div class="v">' . $eur($a['vk_stueck']) . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Netto gesamt</div><div class="v">' . $eur($a['gesamt_netto']) . '</div></div>';
+    if (!empty($a['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . '</div></div>';
+    echo '</div>';
+};
 
 // (Etikett-Verwaltung ist in den Reiter „Verpackung" verschoben – siehe unten, data-panel="verpackung".)
 // Admin-Override „Rohstoff/Bulk angekommen" – damit die Kunden-Statusleiste auch bei Alt-Aufträgen /
@@ -494,10 +498,11 @@ $jvWarnung  = has_role('admin') && empty($a['kontingent_id']) && (string)$a['sta
 <?php endif; ?>
 <div class="settabs" id="auftabs" style="margin-bottom:16px">
   <a href="#" class="on" data-tab="details">Details</a>
-  <a href="#" data-tab="verpackung">Verpackung</a>
   <a href="#" data-tab="produktion">Produktion</a>
+  <a href="#" data-tab="lager">Lager</a>
   <a href="#" data-tab="preise">Preise &amp; Rechnung</a>
   <a href="#" data-tab="dokumente">Dokumente</a>
+  <a href="#" data-tab="verpackung">Verpackung</a>
 </div>
 
 <?php // Reiter „Verpackung": Etikett-Verwaltung (Team/Admin) – hochladen/ersetzen (Last-Minute), Freigabe im Namen des Kunden, entfernen.
@@ -539,6 +544,7 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
 <?php endif; ?>
 
 <div class="bx-panel" data-panel="details">
+  <?php $kachelnRender(); // Kennzahl-Kacheln (aus dem Seitenkopf in den Details-Reiter verschoben) ?>
   <h2>Details</h2>
   <div class="bx-grid">
     <div><div class="k muted">Kunde</div><div><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
@@ -591,6 +597,44 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
   </div>
   <?php endif; ?>
 </div>
+
+<?php // Etikett-Vorschau-Fenster im Reiter „Details": zeigt das hinterlegte Etikett-Design (eigenes oder aus
+      // einer Vorbestellung desselben Produkts/Kunden, via etikett_quelle()). Bild wird direkt angezeigt, PDF im
+      // Rahmen eingebettet. Verwaltet (hochladen/ersetzen/freigeben) wird das Etikett im Reiter „Verpackung".
+if (auftrag_braucht_etikett($id)):
+    $etPrev = etikett_quelle($id);
+    $etExt  = $etPrev ? strtolower(pathinfo((string)($etPrev['datei_orig'] ?: $etPrev['datei']), PATHINFO_EXTENSION)) : '';
+    $etIstBild = in_array($etExt, ['jpg','jpeg','png','gif','webp','avif','bmp','svg'], true);
+    $etIstPdf  = $etExt === 'pdf'; ?>
+<div class="bx-panel" data-panel="details">
+  <h2 style="margin-top:0">Etikett-Vorschau</h2>
+  <?php if ($etPrev): ?>
+    <div style="margin:0 0 10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <?= $etikettFrei ? bx_badge('freigegeben','ok') : bx_badge('nicht freigegeben','warn') ?>
+      <span class="muted" style="font-size:13px"><?= h((string)($etPrev['datei_orig'] ?: 'Etikett-Design')) ?></span>
+      <?php if (!empty($etPrev['alt'])): ?><span class="muted" style="font-size:12px">· aus einer Vorbestellung übernommen</span><?php endif; ?>
+    </div>
+    <div style="border:1px solid var(--line);border-radius:10px;background:var(--panel-2,#f6f7f8);padding:12px;display:flex;align-items:center;justify-content:center;min-height:220px">
+      <?php if ($etIstBild): ?>
+        <img src="?p=dokument&id=<?= (int)$etPrev['id'] ?>" alt="Etikett-Vorschau" style="max-width:100%;max-height:440px;border-radius:6px;box-shadow:0 1px 6px rgba(0,0,0,.12)">
+      <?php elseif ($etIstPdf): ?>
+        <iframe src="?p=dokument&id=<?= (int)$etPrev['id'] ?>#toolbar=0&view=FitH" title="Etikett-Vorschau" style="width:100%;height:460px;border:0;border-radius:6px;background:#fff"></iframe>
+      <?php else: ?>
+        <div class="muted" style="text-align:center">Vorschau für <strong><?= h($etExt ?: 'diese Datei') ?></strong> nicht möglich.<br><a class="btn btn-ghost btn-sm" style="margin-top:8px" href="?p=dokument&id=<?= (int)$etPrev['id'] ?>" target="_blank" rel="noopener">Etikett öffnen</a></div>
+      <?php endif; ?>
+    </div>
+    <div class="bx-row" style="gap:10px;margin-top:10px;flex-wrap:wrap">
+      <a class="btn btn-ghost btn-sm" href="?p=dokument&id=<?= (int)$etPrev['id'] ?>" target="_blank" rel="noopener">In neuem Tab öffnen</a>
+      <?php if (has_role('admin') || has_role('sales')): ?><a class="btn btn-ghost btn-sm" href="#" onclick="var t=document.querySelector(String.fromCharCode(35)+'auftabs [data-tab=verpackung]');if(t)t.click();return false;">Etikett verwalten (Reiter Verpackung)</a><?php endif; ?>
+    </div>
+  <?php else: ?>
+    <div style="border:1px dashed var(--line);border-radius:10px;background:var(--panel-2,#f6f7f8);padding:28px 16px;text-align:center;color:var(--muted,#667085)">
+      Noch kein Etikett-Design hinterlegt.
+      <?php if (has_role('admin') || has_role('sales')): ?><br><a class="btn btn-ghost btn-sm" style="margin-top:10px" href="#" onclick="var t=document.querySelector(String.fromCharCode(35)+'auftabs [data-tab=verpackung]');if(t)t.click();return false;">Etikett hochladen (Reiter Verpackung)</a><?php endif; ?>
+    </div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <?php $track = kunde_auftrag_track($a); ?>
 <div class="bx-panel" data-panel="produktion">
@@ -701,15 +745,7 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
       <div class="muted" style="font-size:12px;margin-top:4px">Du kannst immer freigeben – offene Punkte (Etikett/Material) sind nur ein Hinweis; die Produktion wartet ggf. auf Material. Mehrmenge über den Bedarf wird als Bulk gebucht.</div>
     </div>
     <?php endif; ?>
-    <?php if ($einlagerNoetig): ?>
-    <div style="grid-column:1/-1"><div class="k muted">Einlagern</div><div>
-      <form method="post" style="margin:0" onsubmit="return confirm('Fertige Ware in Lager 1 (Warenlager) buchen? Danach ist der Auftrag versandbereit; das Lager entscheidet beim Versand zwischen Kunde und Lager 2.');">
-        <input type="hidden" name="aktion" value="einlagern_nachholen">
-        <button class="btn btn-primary btn-sm" type="submit">In Lager 1 buchen</button>
-      </form>
-      <div class="muted" style="font-size:12px;margin-top:4px">Produktion ist fertig. Die Ware wird in <strong>Lager 1</strong> gebucht und der Auftrag wird <strong>versandbereit</strong>. Ob sie an den Kunden geht oder an Lager 2 (Fremdlager), entscheidet das Lager anschließend beim Versand.</div>
-    </div></div>
-    <?php endif; ?>
+    <?php // „Einlagern" (In Lager 1 buchen) steht jetzt im Reiter „Lager". ?>
     <?php else: $aktivPA = in_array((string)$a['status'], ['offen', 'in_produktion'], true); ?>
     <div><div class="k muted">Produktionsauftrag</div>
       <?php if ($aktivPA): ?>
@@ -766,8 +802,46 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
     </table></div>
   <?php endif; ?>
 
-  <?php if ($wareneingaenge): ?>
+</div>
+
+<?php // Reiter „Lager": Fertigware-Chargen (physischer Bestand), Einlagern (an Lager 1 übergeben) und die
+      // Wareneingänge zu diesem Auftrag – zuvor im Reiter „Produktion", hierher ausgelagert. ?>
+<div class="bx-panel" data-panel="lager">
+  <h2 style="margin-top:0">Lager</h2>
+
+  <?php if ($einlagerNoetig): ?>
+  <div style="margin-bottom:16px">
+    <div class="k muted" style="margin-bottom:4px">Einlagern</div>
+    <form method="post" style="margin:0" onsubmit="return confirm('Fertige Ware in Lager 1 (Warenlager) buchen? Danach ist der Auftrag versandbereit; das Lager entscheidet beim Versand zwischen Kunde und Lager 2.');">
+      <input type="hidden" name="aktion" value="einlagern_nachholen">
+      <button class="btn btn-primary btn-sm" type="submit">In Lager 1 buchen</button>
+    </form>
+    <div class="muted" style="font-size:12px;margin-top:4px">Produktion ist fertig. Die Ware wird in <strong>Lager 1</strong> gebucht und der Auftrag wird <strong>versandbereit</strong>. Ob sie an den Kunden geht oder an Lager 2 (Fremdlager), entscheidet das Lager anschließend beim Versand.</div>
+  </div>
+  <?php endif; ?>
+
+  <h3 style="margin:0 0 6px;font-size:14px;font-weight:600">Fertigware (Charge)</h3>
+  <?php if ($paChargen): ?>
+  <div class="bx-tablewrap" style="margin-bottom:8px"><table class="bx-table">
+    <thead><tr><th>Charge</th><th>MHD</th><th class="bx-num">verfügbar</th></tr></thead>
+    <tbody>
+      <?php foreach ($paChargen as $ch): ?>
+      <tr>
+        <td><?= h((string)$ch['charge_nr']) ?></td>
+        <td><?= !empty($ch['mhd']) ? h(date('d.m.Y', strtotime((string)$ch['mhd']))) : '<span class="muted">–</span>' ?></td>
+        <td class="bx-num"><?= rtrim(rtrim(number_format((float)($ch['menge_verfuegbar'] ?? 0),3,',','.'),'0'),',') ?></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php elseif ($pa && $chargePlan !== ''): ?>
+    <div class="muted" style="margin-bottom:8px">Noch nicht eingelagert · geplante Charge <strong><?= h($chargePlan) ?></strong>.</div>
+  <?php else: ?>
+    <div class="muted" style="margin-bottom:8px">Noch keine Fertigware-Charge im Lager.</div>
+  <?php endif; ?>
+
   <h3 style="margin:18px 0 6px;font-size:14px;font-weight:600">Wareneingänge zu diesem Auftrag</h3>
+  <?php if ($wareneingaenge): ?>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th>Charge</th><th>Artikel</th><th class="bx-num">Menge</th><th>MHD</th><th>Eingang</th><th>Status</th></tr></thead>
     <tbody>
@@ -783,6 +857,8 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
       <?php endforeach; ?>
     </tbody>
   </table></div>
+  <?php else: ?>
+    <div class="muted">Keine Wareneingänge erfasst.</div>
   <?php endif; ?>
 </div>
 
