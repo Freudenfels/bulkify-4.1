@@ -30,6 +30,15 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && !$darfBestellen) {
     header('Location: ?p=portal&v=' . ($darfRezepte ? 'rezepturen' : ($darfLager ? 'fremdprodukte' : 'start')) . '&krechte=1'); exit;
 }
 
+// Datei groesser als das POST-Limit (post_max_size): PHP verwirft dann $_POST UND $_FILES komplett, die
+// Aktion laeuft gar nicht und es passiert scheinbar nichts. Betrifft v. a. grosse Etikett-Uploads.
+// Sauber mit Hinweis zurueck, statt still zu schlucken.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && empty($_FILES) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+    $backAid = (int)($_GET['aid'] ?? 0);
+    $backV   = preg_replace('/[^a-z_]/', '', (string)($_GET['v'] ?? 'start')) ?: 'start';
+    header('Location: ?p=portal&token=' . $token . '&v=' . $backV . ($backAid ? '&aid=' . $backAid : '') . '&uploadzugross=1'); exit;
+}
+
 // Ein eingeloggtes Team-Mitglied, das das Kundenportal ueber den Token ansieht (kein echter Kunde,
 // kein Lieferant), darf mehr: Angebote/Anfragen endgueltig loeschen. Gleiche Bedingung wie die interne
 // Vorschau ($internVorschau weiter unten). Echte Kunden haben keine Team-Session.
@@ -185,12 +194,20 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 
 // Etikett-Design zum Auftrag hochladen (Kunde) -> Team informieren, dass die Etiketten bestellt werden können.
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_upload') {
-    $aid = (int)($_POST['auftrag_id'] ?? 0);
-    if ($aid && (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]) === (int)$k['id'] && etikett_upload($aid)) {
+    $aid  = (int)($_POST['auftrag_id'] ?? 0);
+    $mein = $aid && (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]) === (int)$k['id'];
+    $flash = '&etikettupfehler=fehler';
+    if ($mein && etikett_upload($aid)) {
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Etikett-Design hochgeladen – bitte noch freigeben.', 'auftrag', 'auftrag', $aid);
         if (mail_bereit()) nach_antwort(fn() => mail_team_etikett_hochgeladen($aid));
+        $flash = '&etikett=1';
+    } elseif ($mein) {
+        // Echten Grund melden, statt faelschlich "gespeichert" zu zeigen (haeufigster Fall: Datei zu gross).
+        $err = (int)($_FILES['etikett']['error'] ?? UPLOAD_ERR_NO_FILE);
+        $flash = '&etikettupfehler=' . (in_array($err, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) ? 'gross'
+                 : ($err === UPLOAD_ERR_NO_FILE ? 'keine' : 'fehler'));
     }
-    header('Location: ?p=portal&token=' . $token . '&v=bestellung&aid=' . $aid . '&etikett=1'); exit;
+    header('Location: ?p=portal&token=' . $token . '&v=bestellung&aid=' . $aid . $flash); exit;
 }
 // Etikett zur Produktion FREIGEBEN (Kunde) – Pflicht je Auftrag, auch bei Nachbestellung (altes Etikett).
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_freigeben') {
@@ -3564,6 +3581,9 @@ portal_head('Kundenportal · ' . $k['firma']);
         <p class="muted" style="font-size:12px;margin:0 0 8px">Ihre Etiketten im Lager: <strong><?= number_format($__etbK['kunde_sichtbar'], 0, ',', '.') ?></strong> von <?= number_format($__etbK['bezahlt'], 0, ',', '.') ?> bestellten</p>
       <?php endif; ?>
       <?php if (isset($_GET['etikett'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Etikett-Design gespeichert – bitte unten noch freigeben.</div><?php endif; ?>
+      <?php if (($_GET['etikettupfehler'] ?? '') === 'gross' || isset($_GET['uploadzugross'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Die Datei ist zu groß (max. <?= h((string) ini_get('upload_max_filesize')) ?> je Datei). Bitte als komprimiertes PDF oder kleineres Bild hochladen – dann erneut versuchen.</div><?php endif; ?>
+      <?php if (($_GET['etikettupfehler'] ?? '') === 'keine'): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Es wurde keine Datei ausgewählt. Bitte eine PDF- oder Bilddatei wählen.</div><?php endif; ?>
+      <?php if (($_GET['etikettupfehler'] ?? '') === 'fehler'): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Der Upload hat nicht geklappt. Bitte erneut versuchen (PDF oder Bild).</div><?php endif; ?>
       <?php if (isset($_GET['etikettfrei'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Danke! Etikett ist freigegeben – die Produktion kann starten.</div><?php endif; ?>
       <?php if (isset($_GET['etikettfehlt'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Bitte Ihren Namen für die Freigabe angeben.</div><?php endif; ?>
       <?php if (isset($_GET['etiketthaftung'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Bitte bestätigen Sie den Hinweis zum Etikett (Haken setzen), um verbindlich freizugeben.</div><?php endif; ?>
