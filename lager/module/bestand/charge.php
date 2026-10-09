@@ -267,13 +267,17 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
     <div class="v lg-eview" style="font-size:var(--fs-md,15px)"><?= $istLose ? '<span class="muted">lose – bitte zuordnen</span>' : 'zugeordnet' ?></div>
     <form method="post" class="lg-eform" hidden>
       <input type="hidden" name="aktion" value="rezeptur_zuordnen">
-      <select name="rezeptur_id">
+      <input type="text" placeholder="Rezeptur suchen …" oninput="bxRezFilter(this)" data-for="rezZuSel" autocomplete="off" style="width:100%;margin-bottom:6px;box-sizing:border-box">
+      <select name="rezeptur_id" id="rezZuSel" size="8" style="width:100%;box-sizing:border-box">
         <option value="">– Rezeptur (Kapselgröße) wählen –</option>
         <?php foreach ($rezListe as $rz): $kgL = trim((string)($rz['kapselgroesse'] ?? '')); ?><option value="<?= (int)$rz['id'] ?>"><?= h(((string)$rz['nummer'] !== '' ? (string)$rz['nummer'] . ' · ' : '') . (string)$rz['name'] . ($kgL !== '' ? ' · Kapsel ' . $kgL : '')) ?></option><?php endforeach; ?>
       </select>
       <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
     </form>
   </div>
+  <script>
+  function bxRezFilter(inp){var q=(inp.value||'').toLowerCase().trim();var s=document.getElementById(inp.getAttribute('data-for'));if(!s)return;for(var k=0;k<s.options.length;k++){var o=s.options[k];if(!o.value){continue;}o.hidden=q!=='' && o.textContent.toLowerCase().indexOf(q)<0;}}
+  </script>
   <?php endif; endif; ?>
 
   <!-- Einheit -->

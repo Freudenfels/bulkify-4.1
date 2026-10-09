@@ -128,6 +128,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             if (!$bulk) { $fehler[] = 'Zeile ' . ($i + 1) . ': Für diese Rezeptur gibt es noch kein Bulk-Lagerartikel – bitte erst im Dashboard anlegen.'; continue; }
             $item_id = (int)$bulk;
         }
+        // Bulk/Fertigware MUSS einer Rezeptur zugeordnet werden (sonst entsteht ein loser Ad-hoc-Artikel,
+        // der am Rezeptur-/Produkt-Bulk-Artikel nicht als Bestand erfasst wird). Ausnahme: die Position kommt
+        // schon mit einem bestehenden Artikel (aus einer Bestellung/„aus Liste") -> $item_id ist dann gesetzt.
+        if ($warenart === 'fertig' && $rezeptur_id <= 0 && !$item_id) {
+            $fehler[] = 'Zeile ' . ($i + 1) . ': Für Bulk/Fertigware bitte die Rezeptur wählen – die Ware wird dem Rezeptur-Artikel zugeordnet (kein loser Artikel).';
+            continue;
+        }
         // Artikel bestimmen (bestehend oder neu anlegen).
         if (!$item_id && $name !== '') {
             $item_id = (int) erp_item_anlegen($name, $def['kategorie'], $einheit);
