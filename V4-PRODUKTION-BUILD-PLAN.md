@@ -71,6 +71,7 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 | 5/6.2 | Lager WE+Blinker+QR/Gebinde+Standort | 🟡 Blinker+WE-Scan+QR-Encoder da; `charge.standort` gebaut (A); Gebinde-QR (5.6)/Standort-Flow NEU → **Agent Lager** |
 | 15.3 | Live-Mengenfortschritt | 🟢 **fertig** – `auftrag_mengenfortschritt()` (core/schema.php) + Balken „Produziert X von Y Packungen" im Dashboard-Auftrag (immer) und im Kundenportal (ab Produktionsstart). 15.4 (Sichtbarkeit intern/extern) weiter offen. |
 | 13.1 | Abschlussfotos | 🟢 **fertig** (10.10.2026): Upload im Produktionsbericht (dokument typ='abschlussfoto'), Thumbnails + Loeschen, im gedruckten internen Bericht. Kundenansicht Folgeschritt (Portal-Bildroute). |
+| 7.11/7.12 | Pausen nur an cleanen Punkten / Schichtwechsel | 🟢 **fertig** (10.10.2026): pr_pause-Log + Panel in run.php (zwischen Schritten), art pause|schichtende, Uebergabe/Notiz. |
 
 ## Fortschritt (Nacht 09.→10.10.2026)
 **Gebaut & gepusht (main):**
@@ -84,7 +85,10 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 ## Noch offen (Paket E + Rest – für die nächsten Etappen)
 - ✅ **Live-Mengenfortschritt (15.3)** in Auftrag/Portal – ERLEDIGT (10.10.2026, `auftrag_mengenfortschritt()`).
 - ✅ **Proben-UI 3-stufig** – ERLEDIGT (10.10.2026): Rohstoff-/Gebinde-/Endprodukt-Proben in `produktion/.../qs.php` über `prod_probe`, Soll max(5, Gebinde).
-- ✅ **FIFO/Gebinde beim Abfüllen (7.8)** – ERLEDIGT (10.10.2026): FEFO-Fuehrung der Gebinde-Unterchargen in run.php (angefangen/leer melden), Status im Bericht. Werk-Test ausstehend.
+- ✅ **FIFO/Gebinde beim Abfüllen (7.8)** – ERLEDIGT (10.10.2026): FEFO-Fuehrung der Gebinde-Unterchargen in run.php. Werk-Test ausstehend.
+- ✅ **Pausen nur an cleanen Punkten / Schichtwechsel (7.11/7.12)** – ERLEDIGT (10.10.2026): pr_pause-Log + Panel in run.php. Werk-Test ausstehend.
+
+**Alle in diesem Plan gelisteten offenen Produktionsmodul-Punkte sind damit abgearbeitet (Stand 10.10.2026).** Offen bleiben bewusst spaetere Themen (15.4 Sichtbarkeit intern/extern, Auto-Sensoren 10, Kunden-Live-Mengen).
 - ✅ **Produktionsbericht (17)** – ERLEDIGT (10.10.2026): Sektionen Produktionschargen (CH/CHE + Rohstoff-Batches) + Proben im Dashboard-Bericht. Offen: Maschine/Klima/Reinigung (liegen in der Produktions-Sub-App; folgt mit Maschinen→Dashboard).
 - ✅ **Abschlussfotos (13.1)** – ERLEDIGT (10.10.2026). **Pausen nur an cleanen Punkten/Schichtwechsel (7.11/7.12)** offen.
 - ✅ **Bulk-Weiterverkauf-Abfang (7.1)** – ERLEDIGT (10.10.2026): Flag produkt.handelsware, PA-Abfang zentral. CH/CHE-Nummernformat bleibt (Nico, 10.10.).
