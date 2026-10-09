@@ -47,7 +47,9 @@ Ein-Klick-Button „Zu Kontingent (Jahresvertrag) machen" – damit Glas/Etikett
 Eigenes Panel oben im Reiter *Dokumente* mit Direkt-Links (neuer Tab): **Auftragsbestätigung (PDF)** (`?p=auftrag_pdf&id=`), **Produktinformationsblatt (PIB)** (`?p=produkt_pib&id=<produkt_id>`, nur wenn Produkt hinterlegt) sowie – sobald ein Produktionsauftrag existiert – **Laufzettel** (`?p=produktionsauftrag_pdf&id=<pa_id>`) und **Produktionsbericht** (`?p=produktion_bericht&id=<pa_id>`). Darunter bleibt das Laboranalyse/Labortest-Panel.
 
 ## Auftrag stornieren / löschen
-Panel **„Auftrag stornieren / löschen"** (Reiter *Details*, nur Admin, nicht bei versendet) mit zwei Aktionen: **„Auftrag stornieren"** (`auftrag_stornieren`, nur wenn nicht schon storniert; Status→storniert + Gutschrift) und **„Löschen & zurück zur Anfrage"**: `auftrag_zurueck_und_loeschen()`
+Panel **„Auftrag stornieren / löschen"** (Reiter *Details*, nur Admin, nicht bei versendet). Zwei Fälle:
+- **Bereits storniert:** Button **„Stornierten Auftrag endgültig löschen"** (`auftrag_hart_loeschen`) → `auftrag_komplett_loeschen()`: entfernt Auftrag + Produktionsauftrag/Schritte/Chargen + (stornierte) Rechnung, entkoppelt Bestellungen (bleiben erhalten). **Das Angebot bleibt unverändert** (wird NICHT wieder geöffnet – anders als „zurück zur Anfrage"). Nur Admin, nur bei Status `storniert`, geblockt bei bezahlter Rechnung. Danach Redirect in die Liste (`?p=auftraege&geloescht=1&nr=…`, dort Flash „Auftrag … gelöscht.").
+- **Noch aktiv:** **„Auftrag stornieren"** (`auftrag_stornieren`, Status→storniert + Gutschrift) und **„Löschen & zurück zur Anfrage"**: `auftrag_zurueck_und_loeschen()`
 löscht die Auftragsbestätigung samt Produktionsauftrag/Schritten und (unbezahlter) Rechnung
 (`auftrag_komplett_loeschen`), setzt das zugehörige Angebot von `bestaetigt` zurück auf `gesendet`
 (Staffel-Haken zurück) und springt zur **Anfrage** (`?p=portal_anfrage&id=…`), um sie anzupassen oder

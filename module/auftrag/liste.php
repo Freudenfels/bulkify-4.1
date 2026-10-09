@@ -90,6 +90,7 @@ $ohnePreis = (function_exists('has_role') && (has_role('admin') || has_role('fin
     ? (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status<>'storniert' AND COALESCE(gesamt_netto,0) <= 0") : 0;
 $kopfAktion = $ohnePreis > 0 ? bx_btn('Aufträge ohne Preis (' . $ohnePreis . ')', '?p=auftrag_preise', 'ghost') : '';
 bx_head('Aufträge', $q !== '' ? count($rows) . ' Treffer (Suche über alle Aufträge, auch abgeschlossene)' : count($rows) . ' ' . ($tab === 'abgeschlossen' ? 'abgeschlossene (versendet)' : 'offene'), $kopfAktion);
+if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag' . (isset($_GET['nr']) ? ' ' . h((string)$_GET['nr']) : '') . ' gelöscht.</div>';
 ?>
 <div class="settabs">
   <?php foreach ($TABS as $key => $lbl): ?>

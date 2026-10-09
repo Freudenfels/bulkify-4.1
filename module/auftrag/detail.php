@@ -288,6 +288,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&gespeichert=1' . ($stn ? '&storno=' . $stn : '')); exit;
 }
 
+// Stornierten Auftrag ENDGÜLTIG löschen (Aufräumen) – nur Admin, nur wenn storniert. Entfernt den Auftrag
+// samt Produktionsauftrag/Schritten/Chargen und (stornierter) Rechnung sauber (auftrag_komplett_loeschen);
+// Bestellungen bleiben erhalten (nur entkoppelt). Das Angebot bleibt UNVERÄNDERT (anders als „zurück zur
+// Anfrage"). Geblockt bei bezahlter Rechnung (erst in der Buchhaltung klären).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'auftrag_hart_loeschen') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $st = (string) scalar("SELECT status FROM auftrag WHERE id=?", [$id]);
+    if ($st !== 'storniert') { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur stornierte Aufträge können hier endgültig gelöscht werden.')); exit; }
+    if ((int) scalar("SELECT COUNT(*) FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status='bezahlt'", [$id]) > 0) {
+        header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Zu diesem Auftrag gibt es eine bezahlte Rechnung – bitte erst in der Buchhaltung klären.')); exit;
+    }
+    $nr = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$id]);
+    auftrag_komplett_loeschen($id);
+    header('Location: ?p=auftraege&geloescht=1&nr=' . rawurlencode($nr)); exit;
+}
+
 $a = $id ? one("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name, ang.nummer AS angebot_nr
                 FROM auftrag a
                 LEFT JOIN kunden k ON k.id=a.kunde_id
@@ -1126,18 +1142,24 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
 <?php if (has_role('admin') && (string)$a['status'] !== 'versendet'): ?>
 <div class="bx-panel" data-panel="details" style="border-color:#e6c4c0">
   <h2 style="margin-top:0">Auftrag stornieren / löschen</h2>
-  <?php if ((string)$a['status'] !== 'storniert'): ?>
+  <?php if ((string)$a['status'] === 'storniert'): ?>
+  <p class="muted" style="margin-top:0">Dieser Auftrag ist <strong>storniert</strong>. Du kannst ihn endgültig löschen – das räumt Produktionsauftrag, Chargen und die stornierte Rechnung mit auf (Bestellungen bleiben erhalten). Das zugehörige <strong>Angebot bleibt unverändert</strong> (wird nicht wieder geöffnet).</p>
+  <form method="post" style="margin:0" onsubmit="return confirm('Stornierten Auftrag <?= h($a['nummer']) ?> endgültig löschen? Das kann nicht rückgängig gemacht werden.');">
+    <input type="hidden" name="aktion" value="auftrag_hart_loeschen">
+    <button class="btn btn-danger" type="submit" data-busy="Lösche…">Stornierten Auftrag endgültig löschen</button>
+  </form>
+  <?php else: ?>
   <p class="muted" style="margin-top:0">Stornieren setzt den Auftrag auf <strong>storniert</strong> und storniert eine offene Rechnung per Gutschrift. Menge und Preis bleiben zur Nachvollziehbarkeit erhalten.</p>
   <form method="post" style="margin:0 0 16px" onsubmit="return confirm('Auftrag <?= h($a['nummer']) ?> stornieren? Eine offene Rechnung wird per Gutschrift storniert.');">
     <input type="hidden" name="aktion" value="auftrag_stornieren">
     <button class="btn btn-ghost btn-sm" type="submit" data-busy="Storniere…">Auftrag stornieren</button>
   </form>
-  <?php endif; ?>
   <p class="muted" style="margin-top:0">Löscht diese Auftragsbestätigung samt Produktionsauftrag und (unbezahlter) Rechnung. Das zugehörige Angebot wird wieder <strong>offen</strong>, und Sie springen zurück zur Anfrage, um es anzupassen oder neu zu senden.</p>
   <form method="post" style="margin:0" onsubmit="return confirm('Auftragsbestätigung <?= h($a['nummer']) ?> löschen? Produktionsauftrag und unbezahlte Rechnung werden entfernt; das Angebot wird wieder offen.');">
     <input type="hidden" name="aktion" value="auftrag_zurueck">
     <button class="btn btn-danger" type="submit" data-busy="Lösche…">Löschen &amp; zurück zur Anfrage</button>
   </form>
+  <?php endif; ?>
 </div>
 <?php endif; ?>
 <script>
