@@ -27,6 +27,18 @@ function erp_benutzer(int $id): ?array {
     if (!tabelle_da('benutzer')) return null;
     return one("SELECT id, name, email, rollen FROM benutzer WHERE id=? AND aktiv=1", [$id]);
 }
+// Mitarbeiter per Tablet-PIN (Produktions-App): sucht unter allen aktiven Benutzern mit gesetzter PIN
+// die/den mit passendem Hash. Nur Benutzer mit Produktions-Zugang (production/admin). 0–1 Treffer.
+function erp_benutzer_per_pin(string $pin): ?array {
+    $pin = preg_replace('/\D/', '', $pin);
+    if (!tabelle_da('benutzer') || $pin === '') return null;
+    foreach (all("SELECT id, name, email, rollen, pin_hash FROM benutzer WHERE aktiv=1 AND pin_hash IS NOT NULL AND pin_hash<>''") as $u) {
+        $r = array_map('trim', explode(',', (string)($u['rollen'] ?? '')));
+        if (!array_intersect(['admin', 'production'], $r)) continue;
+        if (password_verify($pin, (string)$u['pin_hash'])) { unset($u['pin_hash']); return $u; }
+    }
+    return null;
+}
 // Das Dashboard liegt auf derselben Domain unter "/".
 function erp_dashboard_url(): string { return '/'; }
 

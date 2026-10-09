@@ -17,6 +17,7 @@ $routen = [
     'archiv'=> 'produktion/archiv.php',       // abgeschlossene Aufträge
     'pa'    => 'produktion/detail.php',
     'run'   => 'produktion/run.php',
+    'werk'  => 'produktion/werk.php',        // Mitarbeiter-Vollbild-App (eigener PIN-Login, kiosktauglich)
     'etikett' => 'produktion/etikett.php',   // Kunden-Etikett-Datei ausliefern (inline)
     'qs'      => 'produktion/qs.php',         // QS & Labor: Rückstellmuster, Laborprobe, Freigabedokument
     'kalender'    => 'produktion/kalender.php',
@@ -38,7 +39,8 @@ if ($p === 'autologin') {
     weiter('?p=login');
 }
 
-if ($p !== 'login' && !pr_angemeldet()) weiter('?p=login');
+// Die Mitarbeiter-App (?p=werk) hat einen EIGENEN PIN-Login (kein Team-Login nötig) – deshalb ausgenommen.
+if ($p !== 'login' && $p !== 'werk' && !pr_angemeldet()) weiter('?p=login');
 if ($p === 'login' && pr_angemeldet()) weiter('?p=dash');
 if (!isset($routen[$p])) $p = pr_angemeldet() ? 'dash' : 'login';
 
