@@ -104,7 +104,7 @@ $produkte = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name,
                  FROM produkt p LEFT JOIN kunden k ON k.id=p.kunde_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                  ORDER BY name");
 // Menge je Packung fuer die Dropdown-Beschriftung (nur wenn nicht schon im Namen als Variante enthalten).
-$labWort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : ($f === 'pulver' || $f === 'fluessig' ? '' : 'Stück')));
+$labWort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : ($f === 'pulver' || $f === 'fluessig' ? '' : 'Stk')));
 $labMenge = function (array $p) use ($labWort): string {
     if (mb_strpos((string)$p['name'], ' · ') !== false) return '';   // Variante hat die Menge schon im Namen
     $stk = (int)($p['einheiten_pro_packung'] ?? 0); $w = $labWort((string)($p['form'] ?? ''));

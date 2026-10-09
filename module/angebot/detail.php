@@ -711,7 +711,7 @@ if (!$neu):
         </select>
       </div>
       <div class="bx-field"><label>Menge</label><input type="number" step="0.001" name="add_menge" placeholder="z. B. 25" required></div>
-      <div class="bx-field"><label>Einheit</label><select name="add_einheit"><?php foreach (['kg','g','Stück','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
+      <div class="bx-field"><label>Einheit</label><select name="add_einheit"><?php foreach (['kg','g','Stk','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
     </div>
     <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Hinzufügen</button></div>
   </form>
@@ -763,7 +763,7 @@ if (!$neu):
   </style>
   <form method="post">
     <input type="hidden" name="aktion" value="pos_save">
-    <datalist id="angEinhListe"><option value="Stk."><option value="Packung"><option value="kg"><option value="g"><option value="L"><option value="Beutel"></datalist>
+    <datalist id="angEinhListe"><option value="Stk"><option value="Packung"><option value="kg"><option value="g"><option value="L"><option value="Beutel"></datalist>
     <table class="bx-table" id="postab">
       <colgroup>
         <col><col style="width:118px"><col style="width:88px"><col style="width:72px"><col style="width:92px"><col style="width:74px">
@@ -928,7 +928,7 @@ function posRecalc(){
       +'<input type="hidden" name="p_rez[]" value=""><input type="hidden" name="p_vid[]" value=""></td>'
       +'<td><input type="number" step="1" min="0" name="p_stk[]" class="p_stk" data-unit="" placeholder="&ndash;" style="width:100%;text-align:right"></td>'
       +'<td><input type="number" step="0.001" name="p_menge[]" class="p_menge"></td>'
-      +'<td><input type="text" name="p_einheit[]" value="Stück" list="angEinhListe"></td>'
+      +'<td><input type="text" name="p_einheit[]" value="Stk" list="angEinhListe"></td>'
       +'<td><input type="number" step="0.0001" min="0" name="p_preis[]" class="p_preis"></td>'
       +'<td><select name="p_mwst[]" style="width:100%"><?php foreach (mwst_saetze() as $ms): ?><option value="<?= (int)$ms ?>"<?= (int)$ms === (int)mwst_normalisieren(angebot_ust_satz($kid)) ? ' selected' : '' ?>><?= (int)$ms ?> %</option><?php endforeach; ?></select></td>'
       +'<td class="bx-num c_ek">–</td><td class="bx-num c_marge">–</td><td class="bx-num c_ges">–</td>'

@@ -848,7 +848,7 @@ $sammelRez = $neu ? [] : sammel_rezepturen((int)$id);
       // Stückware wird in ihrer Form bepreist, Schüttgut nach der Bezugsgröße des Artikels.
       var stueckForm = ['kapsel','tablette','softgel','stick'].indexOf(form.value) !== -1;
       var e = (hatForm && stueckForm) ? (formEinheit[form.value] || '')
-            : (itemEinheit[iid] || (hatForm ? (formEinheit[form.value] || '') : (art.value === 'sonstiges' ? '' : 'Stück')));
+            : (itemEinheit[iid] || (hatForm ? (formEinheit[form.value] || '') : (art.value === 'sonstiges' ? '' : 'Stk')));
       if (!handEingabe) einheit.value = e;
       hint.textContent = e ? '(in ' + e + ')' : '';
     }

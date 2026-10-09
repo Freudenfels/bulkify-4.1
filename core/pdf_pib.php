@@ -111,7 +111,7 @@ function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null): ?string
     $ident = [['Produkt', (string)$prod['anzeige']]];
     if ($formLbl !== '') $ident[] = ['Darreichungsform', $formLbl];
     if ($kg)             $ident[] = ['Kapselgröße', (string)$kg['name'] . ((float)($kg['volumen_ml'] ?? 0) > 0 ? ' · ' . $mg($kg['volumen_ml']) . ' ml' : '')];
-    if ($einh > 0)       $ident[] = ['Einheiten pro Packung', number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stück')];
+    if ($einh > 0)       $ident[] = ['Einheiten pro Packung', number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stk')];
     $ident[] = ['Erstellt am', (function_exists('fmt_zeit') ? fmt_zeit(gmdate('Y-m-d H:i:s'), 'd.m.Y, H:i') : date('d.m.Y, H:i')) . ' Uhr'];
     $y = spec_grid($p, $y, $ident);
 
@@ -289,7 +289,7 @@ function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null): ?string
 
     // Pflichtangaben, die der Kunde auf das Etikett bringen MUSS (LMIV/VO 1169/2011 + NemV) – vorbefüllt, wo bekannt.
     $nettoTxt = (isset($nettoGesamtG) && $nettoGesamtG > 0)
-        ? $mg($nettoGesamtG) . ' g' . ($einh > 0 ? ' (' . number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stück') . ')' : '')
+        ? $mg($nettoGesamtG) . ' g' . ($einh > 0 ? ' (' . number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stk') . ')' : '')
         : '____ (Nettofüllmenge eintragen)';
     $verzehrTxt = $proTag > 0
         ? number_format($proTag, 0, ',', '.') . ' ' . ($istKapsel ? ($proTag === 1 ? 'Kapsel' : 'Kapseln') : ($formLbl !== '' ? $formLbl : 'Einheiten')) . ' täglich mit ausreichend Flüssigkeit'

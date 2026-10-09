@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'freib
         q("INSERT INTO freibedarf (bezeichnung,menge,einheit,kategorie,lieferant_id,elektrisch,notiz) VALUES (?,?,?,?,?,?,?)",
           [$bez,
            (float)str_replace(',', '.', $_POST['fb_menge'] ?? '1') ?: 1,
-           trim($_POST['fb_einheit'] ?? '') ?: 'Stück',
+           trim($_POST['fb_einheit'] ?? '') ?: 'Stk',
            $kat,
            ($_POST['fb_lieferant'] ?? '') !== '' ? (int)$_POST['fb_lieferant'] : null,
            isset($_POST['fb_elektrisch']) ? 1 : 0,
@@ -294,7 +294,7 @@ if ($ohneFestlegung): ?>
           <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
           <td>Bulk: <?= h($b['produkt'] ?: '–') ?></td>
           <td><?= bx_badge('Fertiges Produkt','info') ?></td>
-          <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], 'Stück') ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($b['need'] ?? $b['zu_bestellen']) ?> · Lager <?= $mfmt($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $mfmt($b['bestellt']) : '' ?></div></td>
+          <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], 'Stk') ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($b['need'] ?? $b['zu_bestellen']) ?> · Lager <?= $mfmt($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $mfmt($b['bestellt']) : '' ?></div></td>
           <td><?= $liefSelect($key, 0, $bPreise, true, ['class'=>'bx-bulk-lief', 'data-ab'=>($bAb !== null ? (float)$bAb : ''), 'data-abcur'=>$bAbCur]) ?><?php if ($bAb !== null): ?><div class="muted bx-bulk-sum" style="font-size:11px">ab <?= $preis4($bAb, $bAbCur) ?>/Stück · Summe <?= $sum2($bSumme, $bAbCur) ?></div><?php endif; ?></td>
           <td style="font-size:12px"><?php foreach ($b['orders'] as $o): ?>
             <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a><?php endforeach; ?><span class="muted">· Fremdfertigung</span></td>
@@ -319,7 +319,7 @@ if ($ohneFestlegung): ?>
             <?php if (!empty($f['gemeldet_von'])): ?><div class="muted" style="font-size:11px">gemeldet von <?= h($f['gemeldet_von']) ?></div><?php endif; ?>
           </td>
           <td><?= $f['kategorie'] ? bx_badge($BM_KAT[$f['kategorie']] ?? $f['kategorie'], '') : bx_badge('Sonstiges','') ?></td>
-          <td class="bx-num"><strong style="color:#8f231b"><?= $mfmt($f['menge']) ?> <?= h($f['einheit'] ?: 'Stück') ?></strong><div class="muted" style="font-size:11px">ohne Produktionsbezug</div></td>
+          <td class="bx-num"><strong style="color:#8f231b"><?= $mfmt($f['menge']) ?> <?= h($f['einheit'] ?: 'Stk') ?></strong><div class="muted" style="font-size:11px">ohne Produktionsbezug</div></td>
           <td><?= $liefSelect($key, (int)($f['lieferant_id'] ?? 0)) ?></td>
           <td style="font-size:12px"><button class="btn btn-ghost btn-sm" type="submit" form="delfrei<?= (int)$f['id'] ?>" onclick="return confirm('Aus der Einkaufsliste entfernen?');">entfernen</button></td>
         </tr>
@@ -350,7 +350,7 @@ if ($ohneFestlegung): ?>
     <div class="bx-grid">
       <div class="bx-field"><label>Bezeichnung</label><input type="text" name="fb_bezeichnung" required placeholder="z. B. Toilettenpapier / iPhone 15"></div>
       <div class="bx-field"><label>Menge</label><input type="number" step="0.001" name="fb_menge" value="1"></div>
-      <div class="bx-field"><label>Einheit</label><input type="text" name="fb_einheit" value="Stück"></div>
+      <div class="bx-field"><label>Einheit</label><input type="text" name="fb_einheit" value="Stk"></div>
       <div class="bx-field"><label>Typ / Kategorie <?= bx_hint('ordnet es einem Warenlager-Typ und dem passenden Reiter zu') ?></label>
         <select name="fb_kategorie"><option value="">– Sonstiges –</option><?php foreach ($BM_KAT as $k => $lbl): ?><option value="<?= $k ?>" <?= $aktTyp === $k ? 'selected' : '' ?>><?= h($lbl) ?></option><?php endforeach; ?></select>
       </div>

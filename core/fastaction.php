@@ -122,7 +122,7 @@ function fastaction_notiz_anlegen(array $d, array $auf_e, string $eingabe, ?stri
         $rid = (!$pid && $rn !== '') ? (int) scalar("SELECT id FROM rezeptur WHERE name LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $rn . '%', $rn]) : 0;
         if (!$pid && $rid) { }   // Rezeptur reicht
         $menge = ($p['menge'] ?? null) !== null && $p['menge'] !== '' ? (float) str_replace(['.', ','], ['', '.'], (string)$p['menge']) : null;
-        $einheit = mb_substr(trim((string)($p['einheit'] ?? '')), 0, 20) ?: 'Stück';
+        $einheit = mb_substr(trim((string)($p['einheit'] ?? '')), 0, 20) ?: 'Stk';
         $name = $pn !== '' ? $pn : $rn;
         $text = 'Angebot: ' . $name . ($menge ? ' · ' . number_format($menge, 0, ',', '.') . ' ' . $einheit : '');
         q("INSERT INTO fastaction_item (notiz_id,typ,text,rezeptur_id,produkt_id,menge,einheit,aktion,sort)
@@ -212,7 +212,7 @@ function fastaction_item_link(array $item, ?int $kunde_id): array {
         elseif (preg_match('/anrufen|nachfrage|nachfragen|kontakt|melden|best[äa]tigen/u', $txt)) $aktion = 'kunde';
     }
     $notizTxt = trim((($rid ? (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$rid]) : ($pid ? (string) scalar("SELECT COALESCE(NULLIF(kundenname,''),name) FROM produkt WHERE id=?", [$pid]) : '')))
-              . ($menge > 0 ? ' · ' . number_format($menge, 0, ',', '.') . ' ' . ((string)($item['einheit'] ?? '') ?: 'Stück') : ''));
+              . ($menge > 0 ? ' · ' . number_format($menge, 0, ',', '.') . ' ' . ((string)($item['einheit'] ?? '') ?: 'Stk') : ''));
     $notizTxt = $notizTxt !== '' ? 'Aus Fastaction: ' . $notizTxt : 'Aus Fastaction';
     if ($aktion === 'angebot') {
         $q = '?p=angebot&id=neu' . ($kunde_id ? '&kunde_id=' . $kunde_id : '') . '&fa_notiz=' . rawurlencode($notizTxt);

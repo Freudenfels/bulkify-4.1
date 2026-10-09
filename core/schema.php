@@ -1268,7 +1268,7 @@ function init_schema(): void {
         id INT AUTO_INCREMENT PRIMARY KEY,
         bezeichnung VARCHAR(200) NOT NULL,
         menge DECIMAL(14,3) NOT NULL DEFAULT 1,
-        einheit VARCHAR(20) NULL DEFAULT 'Stück',
+        einheit VARCHAR(20) NULL DEFAULT 'Stk',
         kategorie VARCHAR(20) NULL,                        -- karton|verbrauch|inventar|maschine|sonstiges (optional)
         lieferant_id INT NULL,
         elektrisch TINYINT NOT NULL DEFAULT 0,             -- elektronische Komponente → später Geräteprüfung
@@ -2049,6 +2049,22 @@ function init_schema(): void {
     // Einstiegspunkte (ds_api, tools) ohne diese Datei nicht abbrechen.
     if (function_exists('dienstleistung_schema')) dienstleistung_schema();
 
+    // Einheit „Stück" (und Schreibvarianten) überall auf „Stk" vereinheitlichen – einmalig, idempotent.
+    // Reine Kosmetik am Freitext-Feld `einheit`; betrifft ALLE Tabellen, die eine Spalte `einheit` haben.
+    if (meta_get('einheit_stk_v1', '') !== '1') {
+        try {
+            foreach (all("SELECT TABLE_NAME AS t FROM information_schema.COLUMNS
+                          WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'einheit'") as $__c) {
+                $__t = preg_replace('/[^A-Za-z0-9_]/', '', (string)$__c['t']);
+                if ($__t === '') continue;
+                try { q("UPDATE `$__t` SET einheit='Stk'
+                         WHERE einheit IN ('Stk','Stück.','Stueck','stück','stueck','STÜCK','STUECK','Stk.','stk','stk.','STK')"); }
+                catch (\Throwable $e) { /* einzelne Tabelle darf den Build nicht blockieren */ }
+            }
+        } catch (\Throwable $e) { /* Normalisierung ist best-effort */ }
+        meta_set('einheit_stk_v1', '1');
+    }
+
     // Migrationen durch -> Marker setzen, damit der nächste Request den Block überspringt.
     if ($schemaBuild !== '') meta_set('schema_build', $schemaBuild);
 }
@@ -2099,7 +2115,7 @@ function seed_behaelter_kapazitaet(): void {
         if (!$iid) {
             q("INSERT INTO item (artikelnummer,name,kategorie,verpackung_rolle,verpackungsart,material,volumen_ml,einheit,preis_bezug)
                VALUES (?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('VP'), $name, 'verpackung', 'primaer', $art, $mat, $vol, 'Stück', 'Stück']);
+              [naechste_nummer('VP'), $name, 'verpackung', 'primaer', $art, $mat, $vol, 'Stk', 'Stk']);
             $iid = insert_id();
         }
         if ((int) scalar("SELECT COUNT(*) FROM pack_kapazitaet WHERE item_id=?", [$iid]) === 0) {
@@ -2171,7 +2187,7 @@ function seed_etikett_formate(): void {
         if (!$iid && isset($neu[$name])) {
             q("INSERT INTO item (artikelnummer,name,kategorie,verpackung_rolle,verpackungsart,material,volumen_ml,farbe,einheit,preis_bezug)
                VALUES (?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('VP'), $name, 'verpackung', 'primaer', 'flasche', 'Braunglas', $neu[$name], 'braun', 'Stück', 'Stück']);
+              [naechste_nummer('VP'), $name, 'verpackung', 'primaer', 'flasche', 'Braunglas', $neu[$name], 'braun', 'Stk', 'Stk']);
             $iid = (int) insert_id();
         }
         if (!$iid) continue;
@@ -2184,7 +2200,7 @@ function seed_etikett_formate(): void {
         if (!$eid) {
             q("INSERT INTO item (artikelnummer,name,kategorie,verpackung_rolle,verpackungsart,material,etikett_format,breite_mm,hoehe_mm,einheit,preis_bezug)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('VP'), 'Etikett ' . $final . ' mm (' . $name . ')', 'verpackung', 'etikett', 'etikett', 'Papier/Folie', $final . ' mm', $m[0], $m[1], 'Stück', 'Stück']);
+              [naechste_nummer('VP'), 'Etikett ' . $final . ' mm (' . $name . ')', 'verpackung', 'etikett', 'etikett', 'Papier/Folie', $final . ' mm', $m[0], $m[1], 'Stk', 'Stk']);
             $eid = (int) insert_id();
         }
         // EK-Staffel des Etiketts aus den Etikettenpreisen des Gebindes – nur, wenn der Artikel noch keine hat.
@@ -2236,7 +2252,7 @@ function seed_standbodenbeutel(): void {
             q("INSERT INTO item (artikelnummer,name,kategorie,verpackung_rolle,verpackungsart,material,volumen_ml,max_fuellgewicht_g,breite_mm,hoehe_mm,tiefe_mm,einheit,preis_bezug,ek_preis)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
               [naechste_nummer('VP'), $name, 'verpackung', 'primaer', 'beutel', 'PP-Folie metallic matt',
-               $vol, $maxG, $b, $h, $t, 'Stück', 'Stück', $p500]);
+               $vol, $maxG, $b, $h, $t, 'Stk', 'Stk', $p500]);
             $iid = insert_id();
         }
         if ((int) scalar("SELECT COUNT(*) FROM pack_ek_staffel WHERE item_id=?", [$iid]) === 0) {
@@ -2298,7 +2314,7 @@ function seed_packari_behaelter(): void {
         if (!$iid) {
             q("INSERT INTO item (artikelnummer,name,kategorie,verpackung_rolle,material,farbe,einheit,preis_bezug,ek_preis,haupt_lieferant_id,notiz)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('VP'), $name, 'verpackung', 'verschluss', 'PP', $farbe, 'Stück', 'Stück', $ek, $lief ?: null,
+              [naechste_nummer('VP'), $name, 'verpackung', 'verschluss', 'PP', $farbe, 'Stk', 'Stk', $ek, $lief ?: null,
                'Packari, Gewinde ' . $gewinde . ', druckempfindliche Dichteinlage (Pressure Seal). EK abgeleitet: Set-Preis minus ' . $quelle . ' ohne Verschluss.']);
             $iid = insert_id();
         }
@@ -2761,7 +2777,7 @@ function produktion_kapseln_entnehmen(int $pa_id): array {
     $benoetigt = (float)$pa['menge'] * $einh;                          // Gesamt-Kapseln
     $verf = item_bestand($kid, true);
     if ($verf + 0.0001 < $benoetigt) {
-        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
+        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stk']]];
     }
     $rest = $benoetigt;
     foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$kid]) as $c) {
@@ -2770,7 +2786,7 @@ function produktion_kapseln_entnehmen(int $pa_id): array {
         $neu = (float)$c['menge_verfuegbar'] - $nimm;
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
-          [$pa_id, $kid, $c['id'], $nimm, 'Stück', gmdate('Y-m-d H:i:s')]);
+          [$pa_id, $kid, $c['id'], $nimm, 'Stk', gmdate('Y-m-d H:i:s')]);
         $rest -= $nimm;
     }
     return ['ok'=>true, 'fehlt'=>[]];
@@ -2788,7 +2804,7 @@ function produktion_fertigware_entnehmen(int $pa_id): array {
                     ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [(int)$pa['auftrag_id']]);
     $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], $chargen));
     if ($verf + 0.0001 < $benoetigt)
-        return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
+        return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stk']]];
     $rest = $benoetigt;
     foreach ($chargen as $c) {
         if ($rest <= 0.0001) break;
@@ -2796,7 +2812,7 @@ function produktion_fertigware_entnehmen(int $pa_id): array {
         $neu = (float)$c['menge_verfuegbar'] - $nimm;
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
-          [$pa_id, (int)$c['item_id'], $c['id'], $nimm, 'Stück', gmdate('Y-m-d H:i:s')]);
+          [$pa_id, (int)$c['item_id'], $c['id'], $nimm, 'Stk', gmdate('Y-m-d H:i:s')]);
         $rest -= $nimm;
     }
     return ['ok'=>true, 'fehlt'=>[]];
@@ -2809,7 +2825,7 @@ function produkt_lageritem(int $produkt_id): ?int {
     $p = one("SELECT name FROM produkt WHERE id=?", [$produkt_id]);
     if (!$p) return null;
     q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug,produkt_id) VALUES (?,?,?,?,?,?)",
-      [naechste_nummer('VF'), $p['name'], 'verkaufsfertig', 'Stück', 'Stück', $produkt_id]);
+      [naechste_nummer('VF'), $p['name'], 'verkaufsfertig', 'Stk', 'Stk', $produkt_id]);
     return insert_id();
 }
 
@@ -2833,7 +2849,7 @@ function fremdlager_umbuchen(int $item_id, int $kunde_id, float $menge, ?string 
     if ($menge <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Menge größer 0 angeben.'];
     $frei = item_bestand($item_id, true);   // nur unser Bestand (Fremdlager ist hier schon ausgeschlossen)
     if ($frei + 1e-9 < $menge) return ['ok'=>false, 'msg'=>'Nicht genug im Warenlager (' . rtrim(rtrim(number_format($frei, 3, ',', '.'), '0'), ',') . ' verfügbar).'];
-    $einheit = (string) scalar("SELECT einheit FROM item WHERE id=?", [$item_id]) ?: 'Stück';
+    $einheit = (string) scalar("SELECT einheit FROM item WHERE id=?", [$item_id]) ?: 'Stk';
     // FEFO aus unseren freien Chargen abbuchen (Fremdlager-Chargen sind ausgeschlossen).
     $rest = $menge;
     foreach (all("SELECT id, menge_verfuegbar FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$item_id]) as $c) {
@@ -3079,7 +3095,7 @@ function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd =
     else                                    $mhd = mhd_standard();
     $notiz = trim($notiz);
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
-       VALUES (?,?,?,?, 'Stück', ?, CURDATE(), 'frei', ?, ?, ?)",
+       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?, ?)",
       [$charge_nr, $item_id, $menge, $menge, $mhd, 'Aus Produktion ' . $pa['nummer'] . ($notiz !== '' ? ' – ' . mb_substr($notiz, 0, 200) : ''), $pa_id, gmdate('Y-m-d H:i:s')]);
     return ['ok'=>true, 'msg'=>'', 'charge_id'=>insert_id(), 'charge_nr'=>$charge_nr];
 }
@@ -3224,7 +3240,7 @@ function lager2_einbuchen(int $produkt_id, float $menge, ?string $charge_nr, ?st
     if (!$item_id) return null;
     bsku_ensure($item_id);
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,angelegt)
-       VALUES (?,?,?,?, 'Stück', ?, CURDATE(), 'frei', ?, ?)",
+       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $mhd ?: null, $notiz ?: 'Lager-2-Einbuchung', gmdate('Y-m-d H:i:s')]);
     $cid = (int) insert_id();
     // Energetisierung: bei freigeschalteten Kunden (kunden.zeige_energetisierung) wird JEDE Einlagerung energetisiert.
@@ -3270,7 +3286,7 @@ function lager2_retoure(int $item_id, float $menge, string $ref): array {
     if ($menge <= 0) return ['ok'=>true, 'skip'=>'menge<=0'];
     if (lager2_ref_gesehen($ref, 'retoure')) return ['ok'=>true, 'idempotent'=>true];
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,wareneingang,status,notiz,angelegt)
-       VALUES ('RETOURE',?,?,?, 'Stück', CURDATE(), 'frei', ?, ?)",
+       VALUES ('RETOURE',?,?,?, 'Stk', CURDATE(), 'frei', ?, ?)",
       [$item_id, $menge, $menge, 'Retoure (Fulfillment) ' . $ref, gmdate('Y-m-d H:i:s')]);
     q("INSERT INTO lager2_bewegung (item_id,typ,menge,ref) VALUES (?,?,?,?)", [$item_id, 'retoure', $menge, $ref]);
     return ['ok'=>true];
@@ -3678,7 +3694,7 @@ function anfrage_groesse($stueck, $fuellmenge_g, string $form): int {
 }
 // Plural der Stück-Einheit (nur für Formen, die nach Stückzahl verkauft werden).
 function form_plural(string $form): string {
-    return ['kapsel'=>'Kapseln', 'tablette'=>'Tabletten', 'softgel'=>'Softgels', 'stick'=>'Sticks', 'gummi'=>'Gummis'][$form] ?? 'Stück';
+    return ['kapsel'=>'Kapseln', 'tablette'=>'Tabletten', 'softgel'=>'Softgels', 'stick'=>'Sticks', 'gummi'=>'Gummis'][$form] ?? 'Stk';
 }
 // Beschriftung einer Packungsgröße: „300 g", „250 ml", „120 Kapseln".
 function form_groessen_label(string $form, float $wert): string {
@@ -4222,7 +4238,7 @@ function angebot_gruppe_positionen(array $g, ?float $mo, ?int $kid, ?string $let
         $t = verpackung_zeile_teile($vp);   // Art in die Überschrift, Größe/Format in die Beschreibung
         $out[] = [
             'artikelnr'=>$vp['artikelnummer'] ?? '', 'bezeichnung'=>$t['bezeichnung'], 'beschreibung'=>$t['beschreibung'],
-            'menge'=>(float)($featMenge ?: 1), 'einheit'=>'Stück',
+            'menge'=>(float)($featMenge ?: 1), 'einheit'=>'Stk',
             'preis_cent'=>(int) round(vk_fuer_kunde(verpackung_vk_bei_menge($vp['id'], $featMenge ?: 1), $kid) * 100),
             'ek_cent'=>(int) round(pack_ek_bei_menge($vp['id'], $featMenge ?: 1) * 100), 'mwst_satz'=>$ust, 'quelle'=>'verpackung', 'gruppe'=>$letter,
         ];
@@ -4405,7 +4421,7 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
         $t = verpackung_zeile_teile(['rolle'=>$rolleLbl, 'name'=>$vp['name'], 'volumen_ml'=>$vp['volumen_ml'], 'etikett_format'=>$vp['etikett_format']]);
         $rows[] = [
             'artikelnr'=>$vp['artikelnummer'] ?? '', 'bezeichnung'=>$t['bezeichnung'], 'beschreibung'=>$t['beschreibung'],
-            'menge'=>(float)$menge, 'einheit'=>'Stück',
+            'menge'=>(float)$menge, 'einheit'=>'Stk',
             'preis_cent'=>(int) round(vk_fuer_kunde(verpackung_vk_bei_menge($vid, $menge), $kid) * 100),
             'ek_cent'=>(int) round(pack_ek_bei_menge($vid, $menge) * 100), 'mwst_satz'=>$ust, 'quelle'=>'verpackung',
         ];
@@ -4971,7 +4987,7 @@ function anfrage_form_fuer_item(?int $item_id): string {
 function anfrage_einheit_fuer_form(string $form): string {
     return ['kapsel'=>'Kapsel', 'tablette'=>'Tablette', 'softgel'=>'Softgel', 'stick'=>'Stick',
             'gummi'=>'kg', 'gel'=>'L',
-            'pulver'=>'kg', 'granulat'=>'kg', 'extrakt'=>'kg', 'fluessig'=>'L', 'oel'=>'L'][$form] ?? 'Stück';
+            'pulver'=>'kg', 'granulat'=>'kg', 'extrakt'=>'kg', 'fluessig'=>'L', 'oel'=>'L'][$form] ?? 'Stk';
 }
 // Die Einheit einer Anfrage – ohne dass jemand sie eintippen muss.
 // Reihenfolge: was am Artikel steht (Bezugsgröße vor Lagereinheit), sonst die Form des
@@ -4990,8 +5006,8 @@ function anfrage_einheit(?int $item_id, string $art = '', string $form = ''): st
         }
     }
     if ($form !== '' && array_key_exists($form, anfrage_formen())) return anfrage_einheit_fuer_form($form);
-    if (in_array($art, ['verpackung', 'verbrauch'], true)) return 'Stück';
-    if ($art === 'fertigprodukt') return 'Stück';
+    if (in_array($art, ['verpackung', 'verbrauch'], true)) return 'Stk';
+    if ($art === 'fertigprodukt') return 'Stk';
     if ($art === 'rohstoff') return 'kg';
     return '';
 }
@@ -5037,8 +5053,10 @@ function einheit_wort(?string $e, float $menge = 1, string $sprache = 'de'): str
     $mehr = abs($menge) != 1;
     // [de-Einzahl, de-Mehrzahl, en-Einzahl, en-Mehrzahl, zh]
     $map = [
-        'stück'    => ['Stück', 'Stück', 'piece', 'pieces', '个'],
-        'stueck'   => ['Stück', 'Stück', 'piece', 'pieces', '个'],
+        'stück'    => ['Stk', 'Stk', 'pcs', 'pcs', '个'],
+        'stueck'   => ['Stk', 'Stk', 'pcs', 'pcs', '个'],
+        'stk'      => ['Stk', 'Stk', 'pcs', 'pcs', '个'],
+        'stk.'     => ['Stk', 'Stk', 'pcs', 'pcs', '个'],
         'kapsel'   => ['Kapsel', 'Kapseln', 'capsule', 'capsules', '粒'],
         'kapseln'  => ['Kapsel', 'Kapseln', 'capsule', 'capsules', '粒'],
         'tablette' => ['Tablette', 'Tabletten', 'tablet', 'tablets', '片'],
@@ -5670,7 +5688,7 @@ function rezeptur_bulkitem(int $rezeptur_id): ?int {
     if ($id) return (int)$id;
     $rz = one("SELECT name, darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]);
     if (!$rz) return null;
-    $einheit = ($rz['darreichungsform'] === 'pulver') ? 'g' : (in_array($rz['darreichungsform'], ['fluessig','gel'], true) ? 'ml' : 'Stück');
+    $einheit = ($rz['darreichungsform'] === 'pulver') ? 'g' : (in_array($rz['darreichungsform'], ['fluessig','gel'], true) ? 'ml' : 'Stk');
     q("INSERT INTO item (artikelnummer,name,kategorie,form,einheit,preis_bezug,rezeptur_id) VALUES (?,?,?,?,?,?,?)",
       [naechste_nummer('BULK'), $rz['name'] . ' – Bulk', 'fertig', (string)$rz['darreichungsform'], $einheit, $einheit, $rezeptur_id]);
     return insert_id();
@@ -6180,7 +6198,7 @@ function produkt_bulk_info(int $produkt_id, string $fbName = '', string $fbForm 
     $form = (string)($p['form'] ?? '') ?: trim($fbForm);          // Fallback-Form (v3-Auftrag ohne Produkt)
     $wort = $formMap[$form] ?? '';
     $name = trim((string)($p['name'] ?? '')) ?: (trim($fbName) ?: 'Produkt');
-    $einheit = $form === 'pulver' ? 'g' : (in_array($form, ['fluessig','gel'], true) ? 'ml' : 'Stück');
+    $einheit = $form === 'pulver' ? 'g' : (in_array($form, ['fluessig','gel'], true) ? 'ml' : 'Stk');
     // Ohne bekannte Form (Produkt ohne Rezeptur) ehrlich als „Bulk (Form offen)" ausweisen.
     $bez = $name . ' – ' . ($wort !== '' ? $wort : 'Bulk (Form offen)') . ' (Zukauf)';
     return ['name'=>$name, 'form'=>$form, 'form_wort'=>$wort, 'einheit'=>$einheit, 'bezeichnung'=>$bez];
@@ -6239,7 +6257,7 @@ function produktion_bericht_daten(int $pa_id): ?array {
 
     $istBulk = pa_ist_bulk($pa);
     $form    = (string)($pa['rezeptur_form'] ?: $pa['auftrag_produkt_form'] ?: '');
-    $wort    = in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : ($form === 'stick' ? 'Sticks' : 'Stück'));
+    $wort    = in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : ($form === 'stick' ? 'Sticks' : 'Stk'));
     $formLabel = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig','granulat'=>'Granulat'][$form] ?? ($form ?: '–');
 
     $einh   = produktion_stueck_je_packung($pa);
@@ -6316,7 +6334,7 @@ function auftrag_bedarf(int $pa_id): array {
         $kapId = rezeptur_leerkapsel_id((int)$pa['rezeptur_id']);
         if ($kapId && $menge > 0) {
             $verfK = item_bestand($kapId, true);
-            $rows[] = ['rolle'=>'Leerkapsel','item_id'=>$kapId,'name'=>item_name_cached($kapId),'benoetigt'=>$menge,'verfuegbar'=>$verfK,'fehlt'=>max(0.0,$menge-$verfK),'einheit'=>'Stück'];
+            $rows[] = ['rolle'=>'Leerkapsel','item_id'=>$kapId,'name'=>item_name_cached($kapId),'benoetigt'=>$menge,'verfuegbar'=>$verfK,'fehlt'=>max(0.0,$menge-$verfK),'einheit'=>'Stk'];
         }
         foreach ($rows as &$rb) {
             $iid = (int)$rb['item_id'];
@@ -6347,7 +6365,7 @@ function auftrag_bedarf(int $pa_id): array {
         $kapId = produkt_leerkapsel_id((int)$pa['produkt_id']);
         if ($kapId && $einheiten > 0) {
             $verfK = item_bestand($kapId, true);
-            $rows[] = ['rolle'=>'Leerkapsel','item_id'=>$kapId,'name'=>item_name_cached($kapId),'benoetigt'=>$einheiten,'verfuegbar'=>$verfK,'fehlt'=>max(0.0,$einheiten-$verfK),'einheit'=>'Stück'];
+            $rows[] = ['rolle'=>'Leerkapsel','item_id'=>$kapId,'name'=>item_name_cached($kapId),'benoetigt'=>$einheiten,'verfuegbar'=>$verfK,'fehlt'=>max(0.0,$einheiten-$verfK),'einheit'=>'Stk'];
         }
     }
     // Verpackungs-Stückliste (alle Slots) – je Packung 1 Stück. Der Behälter des AUFTRAGS hat Vorrang
@@ -6367,7 +6385,7 @@ function auftrag_bedarf(int $pa_id): array {
     foreach (['verpackung_id'=>'Verpackung','verschluss_id'=>'Deckel','etikett_id'=>'Etikett','karton_id'=>'Karton','beipack_id'=>'Beipackzettel'] as $f => $rolle) {
         if (!empty($effSlots[$f]) && $menge > 0) {
             $iid = (int)$effSlots[$f]; $verf = item_bestand($iid, true);
-            $rows[] = ['rolle'=>$rolle,'item_id'=>$iid,'name'=>item_name_cached($iid),'benoetigt'=>$menge,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$menge-$verf),'einheit'=>'Stück'];
+            $rows[] = ['rolle'=>$rolle,'item_id'=>$iid,'name'=>item_name_cached($iid),'benoetigt'=>$menge,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$menge-$verf),'einheit'=>'Stk'];
         }
     }
     // Netto-Verfügbarkeit: freier Bestand abzüglich Reservierungen anderer Aufträge; eigene Reservierung ausweisen.
@@ -6491,7 +6509,7 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
                 $noch = (float)$o['need'] - $offen;
                 if ($noch <= 1e-6) continue;
                 q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, 0, 'Stück', (int)$o['auftrag_id'], $i++]);
+                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, 0, 'Stk', (int)$o['auftrag_id'], $i++]);
                 $betroffen[(int)$o['auftrag_id']] = true;
             }
             // Vom Einkauf angehobene Menge: Überschuss über den Auftragsbedarf als Puffer (ohne Auftrag) ergänzen.
@@ -6499,7 +6517,7 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
             $ueber  = $wunsch - (float)$g['zu_bestellen'];
             if ($ueber > 1e-6) {
                 q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (Puffer/Lager)', $ueber, 0, 'Stück', null, $i++]);
+                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (Puffer/Lager)', $ueber, 0, 'Stk', null, $i++]);
             }
         }
     }
@@ -6508,7 +6526,7 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
             $fb = one("SELECT * FROM freibedarf WHERE id=? AND status='offen'", [$fid]);
             if (!$fb) continue;
             q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,sort) VALUES (?,?,?,?,?,?,?)",
-              [$bid, null, $fb['bezeichnung'], (float)$fb['menge'], 0, $fb['einheit'] ?: 'Stück', $i++]);
+              [$bid, null, $fb['bezeichnung'], (float)$fb['menge'], 0, $fb['einheit'] ?: 'Stk', $i++]);
             q("UPDATE freibedarf SET status='bestellt', bestellung_id=? WHERE id=?", [$bid, $fid]);
         }
     }
@@ -6540,7 +6558,7 @@ function meldebestand_bedarf(): array {
         $soll = (float)$it['mindestbestand'];
         $verf = $bestand + $offen;
         if ($verf + 1e-6 >= $soll) continue;   // genug (inkl. offener Bestellungen)
-        $out[] = ['item_id'=>$iid, 'name'=>(string)$it['name'], 'einheit'=>(string)($it['einheit'] ?: 'Stück'),
+        $out[] = ['item_id'=>$iid, 'name'=>(string)$it['name'], 'einheit'=>(string)($it['einheit'] ?: 'Stk'),
                   'mindest'=>$soll, 'stock'=>$bestand, 'bestellt'=>$offen,
                   'zu_bestellen'=>max(0.0, $soll - $verf), 'haupt_lieferant'=>(int)($it['haupt_lieferant_id'] ?? 0)];
     }
@@ -6871,7 +6889,7 @@ function kundenetikett_version_anlegen(int $produkt_id, int $version, ?int $doku
             breite_mm,hoehe_mm,etikett_format,etikett_final,etikett_druck,
             etikett_version,etikett_dokument_id,etikett_datei_sig,etikett_vorlage_id,gesperrt)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
-      [$name,'verpackung','pulver','etikett','etikett',$produkt_id,'Stk','Stück',
+      [$name,'verpackung','pulver','etikett','etikett',$produkt_id,'Stk','Stk',
        ($m['breite_mm'] ?? null),($m['hoehe_mm'] ?? null),($m['etikett_format'] ?? null),($m['etikett_final'] ?? null),($m['etikett_druck'] ?? null),
        $version,$dokument_id,($datei_sig ?: null),($m['_vorlage'] ?? null)]);
     $nid = (int) insert_id();
@@ -7119,7 +7137,7 @@ function bestellung_bulk_anlegen(array $produkt_ids, ?int $lieferant, ?string $d
             if ($noch <= 1e-6) continue;
             $ek = produkt_zukauf_preis((int)$g['produkt_id'], $lieferant ?: null, $noch) ?? 0.0;
             q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-              [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, $ek, 'Stück', (int)$o['auftrag_id'], $i++]);
+              [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, $ek, 'Stk', (int)$o['auftrag_id'], $i++]);
             if ((int)$o['auftrag_id'] > 0)
                 log_aktivitaet('auftrag', (int)$o['auftrag_id'], 'team', 'Bulk (Fremdproduktion) per Bestellung ' . $nummer . $wann . ' bestellt.', 'bestellung', 'bestellung', $bid);
         }
@@ -7448,11 +7466,11 @@ function auftrag_express_bulk_bestellung(int $auftrag_id, int $lieferant_id): ?i
     if (!$a || !$a['produkt_id']) return null;
     $stk = (int)$a['menge'] * (int)($a['einheiten_pro_packung'] ?? 0);
     if ($stk <= 0) $stk = (int)$a['menge'];
-    $preis = null; $einheit = 'Stück'; $groesse = '';
+    $preis = null; $einheit = 'Stk'; $groesse = '';
     foreach (all("SELECT preis, menge_ab, einheit, groesse FROM produkt_lieferant_preis
                   WHERE produkt_id=? AND lieferant_id=? AND (waehrung IS NULL OR waehrung='EUR') ORDER BY menge_ab", [(int)$a['produkt_id'], $lieferant_id]) as $s) {
-        if ($preis === null) { $preis = (float)$s['preis']; $einheit = $s['einheit'] ?: 'Stück'; $groesse = (string)$s['groesse']; }
-        if ((float)$s['menge_ab'] <= $stk) { $preis = (float)$s['preis']; $einheit = $s['einheit'] ?: 'Stück'; $groesse = (string)$s['groesse']; }
+        if ($preis === null) { $preis = (float)$s['preis']; $einheit = $s['einheit'] ?: 'Stk'; $groesse = (string)$s['groesse']; }
+        if ((float)$s['menge_ab'] <= $stk) { $preis = (float)$s['preis']; $einheit = $s['einheit'] ?: 'Stk'; $groesse = (string)$s['groesse']; }
     }
     if ($preis === null) return null;
     q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum) VALUES (?,?,?,?,CURDATE())",
@@ -7496,7 +7514,7 @@ function produktion_verpackung_entnehmen(int $pa_id): array {
     $benoetigt = (float)$pa['menge'];
     $verf = item_bestand($vid, true);
     if ($verf + 0.0001 < $benoetigt) {
-        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$vid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
+        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$vid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stk']]];
     }
     $rest = $benoetigt;
     foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$vid]) as $c) {
@@ -7505,7 +7523,7 @@ function produktion_verpackung_entnehmen(int $pa_id): array {
         $neu = (float)$c['menge_verfuegbar'] - $nimm;
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
-          [$pa_id, $vid, $c['id'], $nimm, 'Stück', gmdate('Y-m-d H:i:s')]);
+          [$pa_id, $vid, $c['id'], $nimm, 'Stk', gmdate('Y-m-d H:i:s')]);
         $rest -= $nimm;
     }
     return ['ok'=>true, 'fehlt'=>[]];
@@ -8183,7 +8201,7 @@ function angebotsscan_ki(string $pfad): array {
         . "zutaten = alle aufgeführten Wirkstoffe dieses Produkts mit mg je Einheit (z. B. 'NAC 300 mg'). "
         . "preise = JEDE Preiszeile EINER Staffel einzeln (Aufschlüsselung): typ eines von "
         . "herstellung|kapsel|verpackung|etikett|zusatz|gesamt. bezeichnung = Originaltext der Zeile. "
-        . "einzelpreis = Preis je Einheit (netto), menge = Stück/Packungen, einheit = Text (z. B. 'Packung','Stück'). "
+        . "einzelpreis = Preis je Einheit (netto), menge = Stück/Packungen, einheit = Text (z. B. 'Packung','Stk'). "
         . "Zahlen mit Punkt als Dezimaltrennzeichen, keine Tausenderpunkte. Nichts erfinden – Unbekanntes leer/0.";
     $r = ki_datei_frage($pfad, $prompt, ['json' => true, 'denken' => true, 'max_tokens' => 6000, 'timeout' => 240, 'zweck' => 'angebotsscan']);
     if (empty($r['ok'])) return ['ok' => false, 'fehler' => (string)($r['fehler'] ?? 'Das Dokument konnte nicht gelesen werden.')];
@@ -9461,7 +9479,7 @@ function seed_verpackung_if_empty(): void {
     foreach ($demo as $d) {
         q("INSERT INTO item (artikelnummer,name,kategorie,verpackungsart,material,volumen_ml,farbe,einheit,ek_preis,preis_bezug)
            VALUES (?,?,?,?,?,?,?,?,?,?)",
-          [naechste_nummer('VP'), $d[0], 'verpackung', $d[1], $d[2], $d[3], $d[4], 'Stück', $d[5], 'Stück']);
+          [naechste_nummer('VP'), $d[0], 'verpackung', $d[1], $d[2], $d[3], $d[4], 'Stk', $d[5], 'Stk']);
     }
 }
 
@@ -10040,7 +10058,7 @@ function demo_testset_einspielen(): array {
             $fid = (int) scalar("SELECT id FROM item WHERE name=? AND kategorie='fertig'", [$fname]);
             if (!$fid) {
                 q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug) VALUES (?,?,?,?,?)",
-                  [naechste_nummer('FP'), $fname, 'fertig', 'Stück', 'Stück']);
+                  [naechste_nummer('FP'), $fname, 'fertig', 'Stk', 'Stk']);
                 $fid = insert_id();
             }
             $lief = (int) scalar("SELECT id FROM lieferanten ORDER BY id LIMIT 1");

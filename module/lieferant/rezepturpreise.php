@@ -12,7 +12,7 @@ $spr  = lp_sprache();
 $ziel = '?p=lieferant_rezepturpreise';
 
 // Einheit-Label je Darreichungsform (der Preis gilt je Stueck/Kapsel …).
-$formEinheit = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapsel' : ($f === 'tablette' ? 'Tablette' : ($f === 'stick' ? 'Stick' : 'Stück'));
+$formEinheit = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapsel' : ($f === 'tablette' ? 'Tablette' : ($f === 'stick' ? 'Stick' : 'Stk'));
 // Welche Darreichungsformen hat das Team fuer diesen Lieferanten freigeschaltet? Nur diese darf er bepreisen.
 $fertigFormen = array_values(array_filter(array_map('trim', explode(',', (string) scalar("SELECT fertig_formen FROM lieferanten WHERE id=?", [$lid])))));
 $formLabel = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'Pulver','fluessig'=>'Flüssig','gummi'=>'Fruchtgummi','gel'=>'Gel'];

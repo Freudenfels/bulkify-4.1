@@ -739,7 +739,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         foreach ($namen as $i => $nm) {
             $nm = trim((string)$nm); if ($nm === '') continue;
             $wm = (float) str_replace(',', '.', (string)($mengen[$i] ?? '0'));
-            $we = in_array($einh[$i] ?? '', ['kg','g','t','Stück','L'], true) ? $einh[$i] : null;
+            $we = in_array($einh[$i] ?? '', ['kg','g','t','Stk','L'], true) ? $einh[$i] : null;
             $zp = (float) str_replace(',', '.', (string)($ziele[$i] ?? '0'));
             $rid = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND name=? LIMIT 1", [$nm]);   // Katalog-Treffer -> item-Id
             q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,betreff,notiz,wunsch_menge,wunsch_einheit,rohstoff_id,zielpreis,status) VALUES (?,?, 'rohstoff', ?,?,?,?,?,?, 'neu')",
@@ -3148,7 +3148,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <input type="hidden" name="rohstoff_id" value="<?= (int)$rohDetail['id'] ?>">
         <div class="bx-grid">
           <div class="bx-field"><label>Gewünschte Menge</label><input type="number" name="wunsch_menge" min="0" step="0.001" placeholder="z. B. 25"></div>
-          <div class="bx-field"><label>Einheit</label><select name="wunsch_einheit"><?php foreach (['kg','g','t','Stück','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
+          <div class="bx-field"><label>Einheit</label><select name="wunsch_einheit"><?php foreach (['kg','g','t','Stk','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
         </div>
         <div class="bx-field"><label>Details (optional)</label><textarea name="notiz" placeholder="z. B. vegan, Zieltermin, Spezifikation"></textarea></div>
         <button class="btn btn-primary" type="submit">Anfrage senden</button>
@@ -3181,7 +3181,7 @@ portal_head('Kundenportal · ' . $k['firma']);
             <div class="rohinfo muted" style="font-size:12px;margin-top:6px"></div></div>
           <div class="bx-grid">
             <div class="bx-field"><label>Menge</label><input type="number" name="roh_menge[]" min="0" step="0.001" placeholder="z. B. 25"></div>
-            <div class="bx-field"><label>Einheit</label><select name="roh_einheit[]"><?php foreach (['kg','g','t','Stück','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
+            <div class="bx-field"><label>Einheit</label><select name="roh_einheit[]"><?php foreach (['kg','g','t','Stk','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
             <div class="bx-field"><label>Wunschpreis <span class="muted">(optional)</span> <?= bx_hint('Falls Sie schon eine Preisvorstellung haben – € pro Einheit (z. B. je kg). Kein Muss; hilft uns nur bei der Einordnung.') ?></label><input type="number" name="roh_zielpreis[]" min="0" step="0.01" placeholder="z. B. 12,50 € / kg"></div>
           </div>
           <div class="bx-field"><label>Notiz (optional)</label><input type="text" name="roh_notiz[]" placeholder="Spezifikation, Qualität, Termin …"></div>
@@ -3861,7 +3861,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     };
     // Konsistenter Anzeigename: Produkt · Menge pro VPE (Stück je Packung) · Verpackung (mit Glasgröße).
     // Varianten tragen das schon im Namen (enthalten „ · ") – die bleiben unveraendert, damit nichts doppelt steht.
-    $etFormWort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : ($f === 'pulver' || $f === 'fluessig' ? '' : 'Stück')));
+    $etFormWort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : ($f === 'pulver' || $f === 'fluessig' ? '' : 'Stk')));
     $etName = function (array $f) use ($etFormWort, $etBehaelter): string {
         $name = trim((string)($f['produkt'] ?? '')) ?: '–';
         if (mb_strpos($name, ' · ') !== false) return $name;   // Variante: Menge/Verpackung schon enthalten

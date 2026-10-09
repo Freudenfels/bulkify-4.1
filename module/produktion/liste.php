@@ -234,7 +234,7 @@ if ($zeigeNeu):
                         ORDER BY (p.rezeptur_id IS NULL), p.name");
     $DFORMN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
     // Einheit-Wort + Label je Produkt einmal bauen (datalist + JS-Map nutzen dasselbe -> müssen identisch sein).
-    $ehlWort = fn($form) => in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : 'Stück');
+    $ehlWort = fn($form) => in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : 'Stk');
     foreach ($produkteNeu as &$pn) {
         $epp = (int)$pn['epp']; $ehl = $ehlWort($pn['form'] ?? '');
         $mengeTeil = $epp > 0 ? number_format($epp, 0, ',', '.') . ' ' . $ehl : ($DFORMN[$pn['form'] ?? ''] ?? ($pn['form'] ?? ''));

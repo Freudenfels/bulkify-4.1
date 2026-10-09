@@ -13,7 +13,7 @@ require_once __DIR__ . '/dokument_ui.php';
 function laboranalyse_ki_vorschlag(string $pfad): array {
     require_once __DIR__ . '/ki.php';
     if (!ki_bereit()) return ['ok' => false, 'fehler' => 'KI-Vorschlag läuft nur auf beta (Schlüssel serverseitig).'];
-    $wort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : 'Stück'));
+    $wort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : 'Stk'));
     // Produkt-Kandidaten MIT Menge je Packung (damit „60 Kapseln" 6mg/60 von 8mg/90 unterscheidet).
     $prods = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, p.einheiten_pro_packung AS stk, r.darreichungsform AS form
                   FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id ORDER BY name LIMIT 400");

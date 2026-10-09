@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q("INSERT INTO freibedarf (bezeichnung,menge,einheit,kategorie,notiz,gemeldet_von) VALUES (?,?,?,?,?,?)",
               [$bez,
                (float)str_replace(',', '.', $_POST['menge'] ?? '1') ?: 1,
-               trim($_POST['einheit'] ?? '') ?: 'Stück',
+               trim($_POST['einheit'] ?? '') ?: 'Stk',
                $kat,
                trim($_POST['notiz'] ?? '') ?: null,
                $von]);
@@ -153,7 +153,7 @@ $BM_KAT = betriebsmittel_kategorien();
     <div class="bx-grid">
       <div class="bx-field"><label>Bezeichnung</label><input type="text" name="bezeichnung" required placeholder="z. B. Nitril-Handschuhe Gr. L"></div>
       <div class="bx-field"><label>Menge</label><input type="number" step="0.001" name="menge" value="1"></div>
-      <div class="bx-field"><label>Einheit</label><input type="text" name="einheit" value="Stück"></div>
+      <div class="bx-field"><label>Einheit</label><input type="text" name="einheit" value="Stk"></div>
       <div class="bx-field"><label>Typ / Kategorie</label>
         <select name="kategorie"><option value="">– Sonstiges –</option><?php foreach ($BM_KAT as $k => $lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select>
       </div>

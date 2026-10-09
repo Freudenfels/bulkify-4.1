@@ -11,7 +11,7 @@ $offen = $a['status'] === 'gesendet';
 $canAccept = $offen && !empty($accept);
 $einh = (int)$a['einheiten_pro_packung'];
 $formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'Portionen','granulat'=>'Portionen','fluessig'=>'ml'];
-$mengeLbl = $einh . ' ' . ($formPl[$inf['form']] ?? 'Stück');
+$mengeLbl = $einh . ' ' . ($formPl[$inf['form']] ?? 'Stk');
 $gPack = ($inf['istPulver'] && $inf['portionG'] > 0) ? $mg($einh * $inf['portionG']) . ' g pro Packung' : '';
 // Packungs-Label je Staffel aus deren Stückzahl (v3 menge_pro_vpe): Kapseln/Tabletten als Anzahl,
 // Pulver/Granulat als Gramm-Packung (Portionen × Tagesdosis) – für den Kunden greifbarer (z. B. „250 g").
@@ -19,7 +19,7 @@ $paketLbl = function (int $stk) use ($inf, $mg, $formPl, $mengeLbl) {
     if ($stk <= 0) return $mengeLbl;
     if (in_array($inf['form'], ['pulver','granulat'], true) && $inf['portionG'] > 0)
         return $mg($stk * $inf['portionG']) . ' g';
-    return $stk . ' ' . ($formPl[$inf['form']] ?? 'Stück');
+    return $stk . ' ' . ($formPl[$inf['form']] ?? 'Stk');
 };
 // Upsell-Argument fuer bxBestaetigen: Labortest nur anbieten, wenn der Kunde Dienstleistungen anfragen darf.
 $upN = htmlspecialchars(str_replace(["\\","'"], ["\\\\","\\'"], (string)$titelFuer($a)), ENT_QUOTES);

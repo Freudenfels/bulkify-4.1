@@ -89,8 +89,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $vals = array_map($f, $felder);
         $vals[array_search('kategorie', $felder)] = 'verpackung';
         if (trim($vals[array_search('verpackung_rolle', $felder)]) === '') $vals[array_search('verpackung_rolle', $felder)] = 'primaer';
-        $vals[array_search('einheit', $felder)]   = 'Stück';
-        $vals[array_search('preis_bezug', $felder)] = 'Stück';
+        $vals[array_search('einheit', $felder)]   = 'Stk';
+        $vals[array_search('preis_bezug', $felder)] = 'Stk';
         $vals[array_search('gesperrt', $felder)]  = isset($_POST['gesperrt']) ? 1 : 0;
         $vals[array_search('haupt_lieferant_id', $felder)] = ($_POST['haupt_lieferant_id'] ?? '') !== '' ? (int)$_POST['haupt_lieferant_id'] : null;
         foreach (['hoehe_mm','durchmesser_mm','breite_mm','tiefe_mm','gewicht_g','vk_aufschlag_prozent'] as $nf) {

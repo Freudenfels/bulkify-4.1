@@ -207,7 +207,7 @@ function katalog_uebernehmen(int $zeile_id, ?int $item_id = null, bool $preis_ue
     } else {
         // Neu anlegen. Fertigprodukte gehören in die Kategorie 'fertig', alles andere ist Rohstoff.
         $kat = $z['art'] === 'fertigprodukt' ? 'fertig' : 'rohstoff';
-        $einheit = trim((string)$z['einheit']) ?: ($kat === 'fertig' ? 'Stück' : 'kg');
+        $einheit = trim((string)$z['einheit']) ?: ($kat === 'fertig' ? 'Stk' : 'kg');
         q("INSERT INTO item (artikelnummer,name,name_en,name_lat,kategorie,form,cas,herkunftsland,einheit,preis_bezug,ek_preis,haupt_lieferant_id,notiz)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
           [naechste_nummer(item_prefix($kat)), $z['name'], $z['name_en'], $z['name_lat'], $kat,

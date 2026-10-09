@@ -36,13 +36,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speic
         $mindest    = $f('mindestbestand') !== '' ? (float)str_replace(',', '.', $_POST['mindestbestand']) : null;
         $ek         = $f('ek_preis') !== '' ? (float)str_replace(',', '.', $_POST['ek_preis']) : 0;
         $lief       = $f('haupt_lieferant_id') !== '' ? (int)$_POST['haupt_lieferant_id'] : null;
-        $einheit    = $f('einheit') !== '' ? $f('einheit') : 'Stück';
+        $einheit    = $f('einheit') !== '' ? $f('einheit') : 'Stk';
         if ($neu) {
             $art = $f('artikelnummer') !== '' ? $f('artikelnummer') : naechste_nummer(item_prefix($kat));
             q("INSERT INTO item (artikelnummer,name,kategorie,einheit,ek_preis,preis_bezug,haupt_lieferant_id,
                                   bestand_menge,mindestbestand,elektrisch,pruef_intervall_monate,letzte_pruefung,notiz)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-              [$art, $f('name'), $kat, $einheit, $ek, 'Stück', $lief, $bestand, $mindest, $elektrisch, $intervall, $letzte, $f('notiz')]);
+              [$art, $f('name'), $kat, $einheit, $ek, 'Stk', $lief, $bestand, $mindest, $elektrisch, $intervall, $letzte, $f('notiz')]);
             $id = insert_id();
             log_aktivitaet('item', (int)$id, 'team', 'Betriebsmittel angelegt.', 'notiz');
         } else {
@@ -75,7 +75,7 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
 if (!$neu) {
     echo '<div class="bx-cards">';
     echo '<div class="bx-card"><div class="k">Kategorie</div><div class="v">' . h($KAT[$it['kategorie']] ?? $it['kategorie']) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Bestand</div><div class="v">' . rtrim(rtrim(number_format((float)($it['bestand_menge'] ?? 0), 3, ',', '.'), '0'), ',') . ' ' . h($it['einheit'] ?: 'Stück') . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Bestand</div><div class="v">' . rtrim(rtrim(number_format((float)($it['bestand_menge'] ?? 0), 3, ',', '.'), '0'), ',') . ' ' . h($it['einheit'] ?: 'Stk') . '</div></div>';
     echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . number_format((float)($it['ek_preis'] ?? 0), 2, ',', '.') . ' €</div></div>';
     if ($pruef) {
         $kind = $pruef['stufe'] === 'faellig' ? 'err' : ($pruef['stufe'] === 'bald' ? 'warn' : ($pruef['stufe'] === 'offen' ? 'warn' : 'ok'));
@@ -95,7 +95,7 @@ if (!$neu) {
         <?php foreach ($KAT as $k => $lbl): ?><option value="<?= $k ?>" <?= ($it['kategorie'] ?? '') === $k ? 'selected' : '' ?>><?= h($lbl) ?></option><?php endforeach; ?>
       </select>
     </div>
-    <div class="bx-field"><label>Einheit</label><input type="text" name="einheit" value="<?= h((string)($it['einheit'] ?? 'Stück')) ?>" placeholder="Stück"></div>
+    <div class="bx-field"><label>Einheit</label><input type="text" name="einheit" value="<?= h((string)($it['einheit'] ?? 'Stk')) ?>" placeholder="Stk"></div>
     <div class="bx-field"><label>Bestand</label><input type="number" step="0.001" name="bestand_menge" value="<?= h($it['bestand_menge'] !== null && $it['bestand_menge'] !== '' ? rtrim(rtrim(number_format((float)($it['bestand_menge'] ?? 0), 3, '.', ''), '0'), '.') : '') ?>" placeholder="0"></div>
     <div class="bx-field"><label>Mindestbestand <?= bx_hint('optional – Meldebestand für die Nachbestellung') ?></label><input type="number" step="0.001" name="mindestbestand" value="<?= h(($it['mindestbestand'] ?? '') !== '' && ($it['mindestbestand'] ?? null) !== null ? rtrim(rtrim(number_format((float)$it['mindestbestand'], 3, '.', ''), '0'), '.') : '') ?>" placeholder="–"></div>
     <div class="bx-field"><label>Haupt-Lieferant</label>

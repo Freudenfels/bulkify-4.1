@@ -339,7 +339,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
 
 $neuForm = ($_GET['form'] ?? '') === 'kapselhuelle' ? 'kapselhuelle' : 'pulver';
 $neuDefault = $neuForm === 'kapselhuelle'
-    ? ['kategorie'=>'rohstoff','form'=>'kapselhuelle','einheit'=>'Stück','preis_bezug'=>'Stück','gesperrt'=>0]
+    ? ['kategorie'=>'rohstoff','form'=>'kapselhuelle','einheit'=>'Stk','preis_bezug'=>'Stk','gesperrt'=>0]
     : ['kategorie'=>'rohstoff','form'=>'pulver','einheit'=>'kg','preis_bezug'=>'kg','gesperrt'=>0];
 // Liegt ein ausgelesener Vorschlag bereit, füllt er das Anlegeformular – Feld für Feld sichtbar,
 // änderbar, und gespeichert wird erst beim Klick auf Speichern.
@@ -618,7 +618,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       <div class="bx-field" data-only="kapselhuelle"><label>Leergewicht (mg) <?= bx_hint('Gewicht der leeren Hülle – zählt zum Bruttogewicht, nicht zum Wirkstoff') ?></label><input type="number" step="0.01" name="leergewicht_mg" value="<?= $v('leergewicht_mg') ?>"></div>
       <div class="bx-field"><label>Basiseinheit</label>
         <select name="einheit">
-          <?php foreach (['kg'=>'kg','g'=>'g','Stück'=>'Stück','L'=>'Liter','ml'=>'ml'] as $key=>$lbl): ?>
+          <?php foreach (['kg'=>'kg','g'=>'g','Stk'=>'Stk','L'=>'Liter','ml'=>'ml'] as $key=>$lbl): ?>
             <option value="<?= $key ?>" <?= ($it['einheit']??'')===$key?'selected':'' ?>><?= $lbl ?></option>
           <?php endforeach; ?>
         </select>
@@ -777,7 +777,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       <?php if (darf_verkauf()): ?><div class="bx-field"><label>VK-Aufschlag (%) <?= bx_hint('Nur für Rohstoff-Weiterverkauf an Kunden. Leer = globaler Aufschlag aus den Einstellungen.') ?></label><input type="number" step="0.1" name="vk_aufschlag_prozent" value="<?= $v('vk_aufschlag_prozent') ?>" placeholder="<?= h((string)(float)meta_get('aufschlag_rohstoff','30')) ?> (Standard)"></div><?php endif; ?>
       <div class="bx-field"><label>Preis je</label>
         <select name="preis_bezug">
-          <?php foreach (['kg'=>'kg','g'=>'g','Stück'=>'Stück','L'=>'Liter'] as $key=>$lbl): ?>
+          <?php foreach (['kg'=>'kg','g'=>'g','Stk'=>'Stk','L'=>'Liter'] as $key=>$lbl): ?>
             <option value="<?= $key ?>" <?= ($it['preis_bezug']??'')===$key?'selected':'' ?>><?= $lbl ?></option>
           <?php endforeach; ?>
         </select>
@@ -1191,8 +1191,8 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
     var isKap = formSel && formSel.value === 'kapselhuelle';
     document.querySelectorAll('[data-only="kapselhuelle"]').forEach(function(el){ el.style.display = isKap ? '' : 'none'; });
     if (isKap && fromUser){
-      var eh=document.querySelector('select[name="einheit"]'); if (eh && eh.value==='kg') eh.value='Stück';
-      var pb=document.querySelector('select[name="preis_bezug"]'); if (pb && pb.value==='kg') pb.value='Stück';
+      var eh=document.querySelector('select[name="einheit"]'); if (eh && eh.value==='kg') eh.value='Stk';
+      var pb=document.querySelector('select[name="preis_bezug"]'); if (pb && pb.value==='kg') pb.value='Stk';
     }
   }
   if (formSel) formSel.addEventListener('change', function(){ applyForm(true); });

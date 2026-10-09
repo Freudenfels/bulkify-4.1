@@ -66,7 +66,7 @@ $mng = fn($x,$e) => $x > 0 ? rtrim(rtrim(number_format((float)$x,3,',','.'),'0')
 // Bestand-Zelle: frei verfügbar + Hinweis-Badges für Quarantäne/gesperrt (damit Ware, die nur in
 // Quarantäne liegt, nicht fälschlich als „0/leer" wirkt).
 $bestandCell = function($r) use ($mng) {
-    $e = $r['einheit'] ?: 'Stück';
+    $e = $r['einheit'] ?: 'Stk';
     $out = $mng($r['frei'], $e);
     if ((float)($r['quarantaene'] ?? 0) > 0) $out .= ' <span class="badge badge-warn">' . $mng($r['quarantaene'], $e) . ' Quar.</span>';
     if ((float)($r['gesperrt'] ?? 0) > 0)    $out .= ' <span class="badge">' . $mng($r['gesperrt'], $e) . ' gesperrt</span>';
@@ -74,7 +74,7 @@ $bestandCell = function($r) use ($mng) {
 };
 // „Unterwegs": bestellte, noch nicht eingegangene Menge (status='bestellt', ohne angekommen_am).
 $unterwegsCell = fn($r) => (float)($r['unterwegs'] ?? 0) > 0
-    ? bx_badge($mng($r['unterwegs'], $r['einheit'] ?: 'Stück') . ' unterwegs', 'info')
+    ? bx_badge($mng($r['unterwegs'], $r['einheit'] ?: 'Stk') . ' unterwegs', 'info')
     : '<span class="muted">–</span>';
 $detailUrl = function($r) {
     if (ist_betriebsmittel_kat($r['kategorie'])) return '?p=betriebsmittel&id=' . $r['id'];

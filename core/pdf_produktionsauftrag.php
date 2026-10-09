@@ -19,7 +19,7 @@ function produktionsauftrag_pdf_bauen(int $pa_id): ?string {
 
     $istBulk = empty($pa['produkt_id']) && !empty($pa['rezeptur_id']);
     $form    = (string)($pa['darreichungsform'] ?? '');
-    $stkWort = in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : 'Stück');
+    $stkWort = in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : 'Stk');
     $einhProP = (int)($pa['einheiten_pro_packung'] ?? 0);
     $menge    = (int)($pa['menge'] ?? 0);
     $gesamt   = $istBulk ? $menge : ($einhProP > 0 ? $menge * $einhProP : 0);

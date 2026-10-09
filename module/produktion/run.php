@@ -130,7 +130,7 @@ if (!$firstOpen):
   <div class="bx-panel" style="border-color:var(--gruen);background:rgba(29,158,117,.06);text-align:center;padding:32px 20px">
     <div style="font-size:44px;line-height:1;color:var(--gruen)">&#10003;</div>
     <h2 style="margin:12px 0 4px">Produktion abgeschlossen</h2>
-    <p class="muted" style="margin:0 0 6px"><?= h($pa['produkt'] ?: '–') ?> · <?= number_format((float)$pa['menge'],0,',','.') ?> <?= pa_ist_bulk($pa) ? 'Stück' : 'Packungen' ?></p>
+    <p class="muted" style="margin:0 0 6px"><?= h($pa['produkt'] ?: '–') ?> · <?= number_format((float)$pa['menge'],0,',','.') ?> <?= pa_ist_bulk($pa) ? 'Stk' : 'Packungen' ?></p>
     <?php if ($chargen): ?>
       <p style="margin:0">Fertigware eingebucht:
         <?php foreach ($chargen as $c): ?><strong><?= h($c['charge_nr']) ?></strong> (<?= number_format((float)$c['menge'],0,',','.') ?>) <?php endforeach; ?>

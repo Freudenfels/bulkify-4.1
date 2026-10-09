@@ -228,7 +228,7 @@ $einhProP  = produktion_stueck_je_packung($pa);
 $formPa    = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$pa['produkt_id']]);
 if ($formPa === '') $formPa = (string)($pa['rezeptur_form'] ?? '');           // Bulk-PA: Form aus der Rezeptur
 if ($formPa === '') $formPa = (string)($pa['auftrag_produkt_form'] ?? '');   // Fallback: v3-Auftrag ohne Produkt
-$stkWort   = in_array($formPa, ['kapsel','softgel'], true) ? 'Kapseln' : ($formPa === 'tablette' ? 'Tabletten' : 'Stück');
+$stkWort   = in_array($formPa, ['kapsel','softgel'], true) ? 'Kapseln' : ($formPa === 'tablette' ? 'Tabletten' : 'Stk');
 $produktName = (string)($pa['produkt_name'] ?? '') ?: (string)($pa['auftrag_produkt_bez'] ?? '');
 if ($produktName === '' && pa_ist_bulk($pa)) $produktName = (string)($pa['rezeptur_name'] ?? '') . ' · Bulk';   // Bulk-PA: Rezepturname
 $gesamtStk = $einhProP > 0 ? (int)$pa['menge'] * $einhProP : 0;

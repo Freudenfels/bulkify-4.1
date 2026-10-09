@@ -40,7 +40,7 @@ function build_jahresvertrag_pdf(int $angebot_id): ?string {
     // Vertragsgegenstand – die hier festgeschriebenen Angaben sind verbindlich und nicht mehr änderbar.
     $einh = (int)($a['einheiten_pro_packung'] ?? 0);
     $form = (string)($a['darreichungsform'] ?? '');
-    $stkWort = in_array($form, ['kapsel', 'softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : 'Stück');
+    $stkWort = in_array($form, ['kapsel', 'softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : 'Stk');
     $groesse = function_exists('produktion_groesse_label') && !empty($a['produkt_id'])
         ? produktion_groesse_label((int)$a['produkt_id']) : '';
     $vgz = [

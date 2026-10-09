@@ -530,7 +530,7 @@ function dienstleistung_startseed(): int {
     $start = [
         ['name'=>'Laboranalyse (Standard)',   'kategorie'=>'labortest',         'preismodell'=>'pauschale',   'art'=>'beides',      'wiederkehrend'=>'einmalig', 'baustein'=>'labortest',
          'beschreibung'=>'Externe Laboranalyse einer Charge (Schwermetalle, Mikrobiologie, Identität). Pauschale je Analyseauftrag.'],
-        ['name'=>'Abfüllung (je Einheit)',    'kategorie'=>'abfuellung',        'preismodell'=>'pro_einheit', 'einheit'=>'Stück', 'art'=>'beides',      'wiederkehrend'=>'einmalig', 'baustein'=>'',
+        ['name'=>'Abfüllung (je Einheit)',    'kategorie'=>'abfuellung',        'preismodell'=>'pro_einheit', 'einheit'=>'Stk', 'art'=>'beides',      'wiederkehrend'=>'einmalig', 'baustein'=>'',
          'beschreibung'=>'Abfüllen vorhandener Bulkware in das Zielgebinde. Preis je abgefüllter Einheit.'],
         ['name'=>'Beratung (je Stunde)',      'kategorie'=>'beratung',          'preismodell'=>'pro_stunde',  'einheit'=>'Stunde','art'=>'standalone',  'wiederkehrend'=>'einmalig', 'baustein'=>'',
          'beschreibung'=>'Fachberatung (Regulatorik, Rezeptur, Markt). Abrechnung nach Aufwand je Stunde.'],
