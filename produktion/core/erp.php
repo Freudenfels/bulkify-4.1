@@ -42,6 +42,39 @@ function erp_benutzer_per_pin(string $pin): ?array {
 // Das Dashboard liegt auf derselben Domain unter "/".
 function erp_dashboard_url(): string { return '/'; }
 
+// --- Rohstoff-Rückgabe nach dem Mischen (ganze Charge geholt, Rest zurücklegen) ----------------
+// Verbrauchte ROHSTOFF-Chargen dieses Auftrags: der Mitarbeiter hat sie als ganze Charge geholt und
+// meldet nach dem Mischen das zurückgelegte Rest-Gewicht. Blinker/Lagerplatz bleiben gleich.
+function erp_rohstoff_rueckgabe_offen(int $pa_id): array {
+    if ($pa_id <= 0 || !tabelle_da('produktion_verbrauch')) return [];
+    return all("SELECT v.charge_id, v.item_id, i.name AS item_name, c.charge_nr,
+                       c.menge_verfuegbar, COALESCE(NULLIF(c.einheit,''), NULLIF(i.einheit,''), 'kg') AS einheit
+                FROM produktion_verbrauch v
+                JOIN item i   ON i.id=v.item_id
+                JOIN charge c ON c.id=v.charge_id
+                WHERE v.pa_id=? AND i.kategorie='rohstoff'
+                GROUP BY v.charge_id, v.item_id, i.name, c.charge_nr, c.menge_verfuegbar, c.einheit, i.einheit
+                ORDER BY i.name", [$pa_id]);
+}
+function erp_rohstoff_rueckgabe_erledigt(int $pa_id): bool {
+    $d = function_exists('pr_daten') ? pr_daten($pa_id) : [];
+    return !empty($d['rohstoff_rueckgabe_done']['wert']);
+}
+// Rückgabe speichern: je Charge das zurückgelegte Gewicht als neuen Bestand setzen (menge_verfuegbar).
+// $gewichte = [charge_id => rest]. Setzt ein „erledigt"-Flag, damit nicht erneut gefragt wird.
+function erp_rohstoff_rueckgabe_speichern(int $pa_id, array $gewichte, string $von = ''): int {
+    $n = 0;
+    foreach (erp_rohstoff_rueckgabe_offen($pa_id) as $r) {
+        $cid = (int)$r['charge_id']; if (!array_key_exists($cid, $gewichte)) continue;
+        $rest = max(0.0, (float)$gewichte[$cid]);
+        q("UPDATE charge SET menge_verfuegbar=? WHERE id=?", [$rest, $cid]);
+        $n++;
+    }
+    if (function_exists('pr_daten_setzen')) pr_daten_setzen($pa_id, 'rohstoff_rueckgabe_done', '1', $von);
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return $n;
+}
+
 // --- Produktionsaufträge (nur lesen) ---------------------------------------------------------
 // Liste der Produktionsaufträge mit Produkt/Kunde/Fortschritt + Auftragseingang.
 // $status: '' = aktive (offen+laufend), 'alle' = alle, sonst genau dieser Status (offen|laufend|erledigt).

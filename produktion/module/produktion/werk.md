@@ -13,6 +13,9 @@ Eigener **PIN-Login** (kein Team-Login). Die PIN setzt der Admin im Dashboard je
 ## Mischen: Mischbehälter einzeln
 Beim Schritt **Mischen** zeigt die App „Gesamt anzumischen" (kg + Einheiten), ein Feld „kg je Mischbehälter" (+ „Behälter berechnen", GET `cap`) und dann **jeden Behälter einzeln** als Karte „Mischbehälter N / gesamt" mit den **kg je Rohstoff** (`erp_mischer_plan`). Beim „Erledigt" des Mischens werden je Behälter Gebinde-Unterchargen angelegt (`erp_prod_charge_fuer_station` + `erp_mischer_unterchargen_anlegen`), ein Etikett je Behälter (FEFO beim Abfüllen).
 
+## Rohstoff-Rückgabe nach dem Mischen (Teil B)
+Nach dem abgeschlossenen **Mischen** schaltet die App einen **Zwischenschritt „Rohstoff zurück ins Lager"** davor (vor dem nächsten echten Schritt): je verbrauchter **Rohstoff-Charge** (`erp_rohstoff_rueckgabe_offen`, aus `produktion_verbrauch`, nur Kategorie rohstoff) trägt der Mitarbeiter das **zurückgelegte Rest-Gewicht** ein. `erp_rohstoff_rueckgabe_speichern` setzt `charge.menge_verfuegbar` = Rückgabe (Bestand = physischer Rest; Verbrauch = vorher − zurück) und ein Flag `rohstoff_rueckgabe_done` (pr_daten), damit nicht erneut gefragt wird. **Blinker/Lagerplatz bleiben gleich** (dieselbe Charge). Modell: ganze Charge geholt, Rest zurück; kleine Reste (< ~500 g) können verworfen werden (0 eintragen).
+
 ## Pflicht-Gates (schlank)
 „Erledigt" postet `aktion=werk_erledigt` → **`erp_schritt_abschliessen($schritt_id, $name)`** – dieselbe Logik wie `?p=run`: Reihenfolge-Prüfung, Vorbereitungs-Sperre, **Material-FEFO-Abbuchung mit Mangel-Schutz** (fehlt Pflicht-Material, ist der Button gesperrt + Hinweis). Bewusst **ohne** die Leiter-Extras (Maschinenauswahl/Reinigung/Klima/Mischer-Plan/FEFO-Gebinde) – die laufen weiter über `?p=run` (Produktionsleiter). *Offen/nächster Ausbau:* Maschinen-Reinigungs-Gate auch in die Mitarbeiter-App holen, falls gewünscht.
 

@@ -34,6 +34,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['werk_flash_ok'] = !empty($r['ok']);
         weiter('?p=werk&id=' . $paId . (!empty($r['fertig']) ? '&fertig=1' : ''));
     }
+    if ($werkUid && $aktion === 'werk_rueckgabe') {
+        $paId = (int)($_POST['pa_id'] ?? 0);
+        $g = [];
+        foreach ((array)($_POST['rest'] ?? []) as $cid => $val) {
+            $cid = (int)$cid; if ($cid <= 0) continue;
+            $g[$cid] = (float) str_replace(',', '.', (string)$val);
+        }
+        $n = erp_rohstoff_rueckgabe_speichern($paId, $g, $werkName ?: 'Mitarbeiter');
+        $_SESSION['werk_flash'] = 'Rohstoff-Rückgabe gespeichert' . ($n > 0 ? ' (' . $n . ')' : '') . '.';
+        $_SESSION['werk_flash_ok'] = true;
+        weiter('?p=werk&id=' . $paId);
+    }
     weiter('?p=werk');
 }
 
@@ -184,6 +196,11 @@ header('Content-Type: text/html; charset=utf-8');
     $fertigCnt = 0; foreach ($schritte as $s) if ((int)$s['erledigt'] === 1) $fertigCnt++;
     $cur = null; foreach ($schritte as $s) if ((int)$s['erledigt'] === 0) { $cur = $s; break; }
     $alleFertig = $total > 0 && $fertigCnt >= $total;
+    // Rohstoff-Rückgabe als Zwischenschritt: nach dem Mischen den geholten Rohstoff zurücklegen (Rest-Gewicht),
+    // solange noch nicht erfasst und es überhaupt verbrauchte Rohstoff-Chargen gibt.
+    $mischenDone = false; foreach ($schritte as $s) if ((string)$s['station'] === 'Mischen' && (int)$s['erledigt'] === 1) { $mischenDone = true; break; }
+    $rueckListe = ($mischenDone && !erp_rohstoff_rueckgabe_erledigt($id)) ? erp_rohstoff_rueckgabe_offen($id) : [];
+    $rueckOffen = !empty($rueckListe);
   ?>
   <div class="topbar">
     <a class="back" href="?p=werk">&larr; Alle Aufträge</a>
@@ -198,7 +215,30 @@ header('Content-Type: text/html; charset=utf-8');
     <div class="count"><?= menge_txt($pa['menge']) ?> Packungen · Schritt <?= min($fertigCnt + 1, $total) ?> / <?= $total ?></div>
   </div>
 
-  <?php if ($alleFertig || !$cur): ?>
+  <?php if ($rueckOffen): ?>
+    <div class="panel" style="border-color:var(--lime)">
+      <div class="step-sub">Nach dem Mischen</div>
+      <div class="step-h">Rohstoff zurück ins Lager</div>
+      <div class="muted" style="font-size:17px;margin-bottom:6px">Bring jeden Rohstoff zurück an seinen Platz (gleicher Blinker) und trag das <strong style="color:var(--text)">zurückgelegte Gewicht</strong> ein. Kleine Reste (unter ~500 g) kannst du verwerfen – dann 0 eintragen.</div>
+      <form method="post">
+        <input type="hidden" name="aktion" value="werk_rueckgabe">
+        <input type="hidden" name="pa_id" value="<?= (int)$id ?>">
+        <table class="mat">
+          <thead><tr><th>Rohstoff</th><th>Charge</th><th class="num">zurückgelegt</th></tr></thead>
+          <tbody>
+            <?php foreach ($rueckListe as $r): $einh = (string)$r['einheit']; ?>
+            <tr>
+              <td><?= h((string)$r['item_name']) ?></td>
+              <td class="muted"><?= h((string)($r['charge_nr'] ?: '–')) ?></td>
+              <td class="num"><input type="text" inputmode="decimal" name="rest[<?= (int)$r['charge_id'] ?>]" placeholder="0" style="font-size:19px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:120px;text-align:right"> <?= h($einh) ?></td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+        <div style="margin-top:20px"><button class="btn btn-lime btn-lg" type="submit">Rückgabe speichern &amp; weiter</button></div>
+      </form>
+    </div>
+  <?php elseif ($alleFertig || !$cur): ?>
     <div class="panel" style="text-align:center;border-color:var(--gruen)">
       <div style="font-size:30px;font-weight:800;margin-bottom:8px">Fertig ✓</div>
       <div class="muted" style="margin-bottom:18px">Alle Schritte erledigt – die Produktion ist abgeschlossen.</div>
