@@ -6059,10 +6059,30 @@ function produktion_bericht_daten(int $pa_id): ?array {
     $abg = null; foreach ($schritte as $s) if ((int)$s['erledigt'] === 1 && $s['erledigt_at'] && (!$abg || $s['erledigt_at'] > $abg)) $abg = $s['erledigt_at'];
     $done = count(array_filter($schritte, fn($s) => (int)$s['erledigt'] === 1));
 
+    // Produktionschargen CH/CHE (+ Unterchargen) und je Charge die verknuepften Rohstoff-Batches (Spec 7.5/16).
+    $prodChargen = []; $pcRohstoffe = [];
+    try {
+        $prodChargen = all("SELECT * FROM prod_charge WHERE pa_id=? ORDER BY COALESCE(parent_id,id), (parent_id IS NOT NULL), id", [$pa_id]);
+        if ($prodChargen) {
+            $pcIds = implode(',', array_map(fn($c) => (int)$c['id'], $prodChargen));
+            foreach (all("SELECT r.*, i.name AS item_name FROM prod_charge_rohstoff r LEFT JOIN item i ON i.id=r.item_id
+                          WHERE r.prod_charge_id IN ($pcIds) ORDER BY r.id") as $r)
+                $pcRohstoffe[(int)$r['prod_charge_id']][] = $r;
+        }
+    } catch (Throwable $e) { $prodChargen = []; $pcRohstoffe = []; }
+    // Proben / Rueckstellmuster (Spec 8), nach Ebene gruppiert.
+    $probenNach = ['rohstoff'=>[], 'gebinde'=>[], 'endprodukt'=>[], 'labor'=>[]];
+    try {
+        foreach (all("SELECT p.*, i.name AS item_name FROM prod_probe p LEFT JOIN item i ON i.id=p.item_id
+                      WHERE p.pa_id=? ORDER BY FIELD(p.ebene,'rohstoff','gebinde','endprodukt','labor'), p.id", [$pa_id]) as $pr)
+            if (isset($probenNach[(string)$pr['ebene']])) $probenNach[(string)$pr['ebene']][] = $pr;
+    } catch (Throwable $e) {}
+
     return [
         'pa'=>$pa, 'istBulk'=>$istBulk, 'form'=>$form, 'wort'=>$wort, 'formLabel'=>$formLabel,
         'einh'=>$einh, 'pack'=>$pack, 'gesamt'=>$gesamt, 'zutaten'=>$zutaten, 'schritte'=>$schritte,
         'verbrauch'=>$verbrauch, 'zugeChargen'=>$zugeChargen, 'fwChargen'=>$fwChargen, 'groesse'=>$groesse,
+        'prodChargen'=>$prodChargen, 'pcRohstoffe'=>$pcRohstoffe, 'proben'=>$probenNach,
         'abg'=>$abg, 'done'=>$done, 'fertig'=>($pa['status']==='erledigt'),
     ];
 }

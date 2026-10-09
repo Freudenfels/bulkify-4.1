@@ -147,6 +147,54 @@ $kundeStation = function(string $st): string {
 </div>
 <?php endif; ?>
 
+<?php // Produktionschargen CH/CHE (+ Unterchargen) + Rohstoff-Batches – nur intern (Chargen-Rueckverfolgung).
+if (!$fuerKunde && !empty($D['prodChargen'])): ?>
+<div class="bx-panel pb-sec">
+  <h2>Produktionschargen (CH/CHE)</h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Charge</th><th>Typ</th><th>Gebinde</th><th class="bx-num">Menge</th><th>Status</th></tr></thead>
+    <tbody>
+      <?php foreach ($D['prodChargen'] as $pc): $sub = !empty($pc['parent_id']); ?>
+      <tr>
+        <td><?= $sub ? '<span class="muted">&#8627; </span>' : '' ?><strong><?= h((string)$pc['nummer']) ?></strong></td>
+        <td><?= ($pc['typ'] ?? 'intern') === 'extern' ? 'extern (CHE)' : 'intern (CH)' ?></td>
+        <td><?= h((string)($pc['gebinde'] ?? '')) ?: '<span class="muted">–</span>' ?></td>
+        <td class="bx-num"><?= $pc['menge'] !== null ? $zahl($pc['menge']) . ' ' . h((string)($pc['einheit'] ?? '')) : '–' ?></td>
+        <td><?= h((string)($pc['status'] ?? '')) ?></td>
+      </tr>
+      <?php $rbs = $D['pcRohstoffe'][(int)$pc['id']] ?? []; if ($rbs): ?>
+      <tr><td colspan="5" style="padding-top:0"><div class="muted" style="font-size:12px">Rohstoff-Batches: <?= h(implode(', ', array_map(fn($r) => trim(((string)($r['item_name'] ?? '')) ?: '–') . ($r['batch_nr'] ? ' (Batch ' . $r['batch_nr'] . ')' : ''), $rbs))) ?></div></td></tr>
+      <?php endif; ?>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
+
+<?php // Proben & Rueckstellmuster (Spec 8) – fuer Kunde eine saubere Zusammenfassung (Nachweis der Probenziehung),
+      // intern mit Batch-/Bezeichnungsdetails.
+$pb = $D['proben'] ?? ['rohstoff'=>[],'gebinde'=>[],'endprodukt'=>[],'labor'=>[]];
+$probenGesamt = count($pb['rohstoff']) + count($pb['gebinde']) + count($pb['endprodukt']) + count($pb['labor']);
+if ($probenGesamt > 0):
+  $psum = fn(array $rows) => array_sum(array_map(fn($r) => (int)$r['anzahl'], $rows));
+  $ebenenLbl = ['rohstoff'=>'Rohstoff-Proben','gebinde'=>'Gebinde-Proben','endprodukt'=>'Endprodukt-Rückstellmuster','labor'=>'Laborproben']; ?>
+<div class="bx-panel pb-sec">
+  <h2>Proben &amp; Rückstellmuster</h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Art</th><th class="bx-num">Anzahl</th><?php if (!$fuerKunde): ?><th>Details</th><?php endif; ?></tr></thead>
+    <tbody>
+      <?php foreach ($ebenenLbl as $eb => $lbl): $rows = $pb[$eb]; if (!$rows) continue; ?>
+      <tr>
+        <td><?= h($lbl) ?></td>
+        <td class="bx-num"><?= (int)($psum($rows) ?: count($rows)) ?></td>
+        <?php if (!$fuerKunde): ?><td class="muted" style="font-size:12px"><?= h(implode(', ', array_map(fn($r) => trim((((string)($r['item_name'] ?? '')) ?: ((string)($r['bezeichnung'] ?? '')) ?: '–')) . ($r['batch_nr'] ? ' (Batch ' . $r['batch_nr'] . ')' : '') . ((int)$r['anzahl'] > 0 ? ' ×' . (int)$r['anzahl'] : ''), $rows))) ?></td><?php endif; ?>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
+
 <?php if (trim((string)($pa['bericht_notiz'] ?? '')) !== ''): ?>
 <div class="bx-panel pb-sec">
   <h2>Bemerkung</h2>
