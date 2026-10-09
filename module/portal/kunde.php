@@ -2089,7 +2089,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <div class="muted" style="font-size:13px;margin-top:4px">Zielgruppe, Wirkung, Wünsche – alles, was Ihnen wichtig ist. Je mehr Sie uns verraten, desto besser: Das hilft uns, Ihnen direkt die bestmögliche Rezeptur anzubieten.</div></div>
       <div class="muted" style="font-size:13px;margin-bottom:6px">Sie haben schon konkrete Zutaten? Dann tragen Sie sie hier ein – sonst lassen Sie die Tabelle einfach leer.</div>
       <table class="bx-table" style="margin-bottom:10px">
-        <thead><tr><th>Wirkstoff / Zutat</th><th style="width:120px">Menge je Kapsel</th><th style="width:90px">Einheit</th><th></th></tr></thead>
+        <thead><tr><th>Wirkstoff / Zutat</th><th style="width:140px" id="pf_mengehdr">Menge je Kapsel</th><th style="width:90px">Einheit</th><th></th></tr></thead>
         <tbody id="pwrows">
           <?php
           $rows = $wzeilen ?: array_fill(0, 3, ['bezeichnung'=>'','wunsch_menge'=>'','einheit'=>'mg']);
@@ -2111,6 +2111,15 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
 
   <div class="bx-panel"><div class="muted">Alle Ihre Anfragen und deren Stand finden Sie unter <a href="<?= $portalLink('meine_anfragen') ?>">Meine Anfragen</a>.</div></div>
+  <script>
+  // Spaltenkopf der Zutaten an die gewählte Darreichungsform anpassen (Menge je Kapsel / pro Stick / pro Portion …).
+  (function(){
+    var sel=document.getElementById('pf_form'), hdr=document.getElementById('pf_mengehdr'); if(!sel||!hdr) return;
+    var MAP={kapsel:'Menge je Kapsel',softgel:'Menge je Softgel',tablette:'Menge je Tablette',stick:'Menge pro Stick',pulver:'Menge pro Portion',gummi:'Menge pro Stück',fluessig:'Menge pro Portion',gel:'Menge pro Portion',oel:'Menge pro Portion'};
+    function upd(){ hdr.textContent = MAP[sel.value] || 'Menge je Einheit'; }
+    sel.addEventListener('change', upd); upd();
+  })();
+  </script>
 
 <?php elseif ($view === 'anfrage_ansehen'):
     $aid = (int)($_GET['aid'] ?? 0);
