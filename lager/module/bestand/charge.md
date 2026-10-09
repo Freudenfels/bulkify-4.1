@@ -19,6 +19,12 @@ Zusätzlich, wie im Dashboard, aber auf diese Charge bezogen:
 - **Einheit** (`einheit` → `erp_charge_einheit_setzen`, z. B. Pulver „Stk" → „kg"),
 - **Lieferant** (`lieferant` → `erp_charge_lieferant_setzen`, tippen, neue werden angelegt; nur Lager 1),
 - **Sendung / Paket** (`tracking` → `lg_tracking_set`, Paketlabel scannen/eintippen).
+- **Rezeptur / Bulk-Artikel** (nur Bulk/Fertigware; `rezeptur_zuordnen` → `erp_charge_rezeptur_zuordnen`): hängt eine im
+  Lager ad-hoc angelegte Charge (Artikelnummer leer = „lose – bitte zuordnen", gelb markiert) an das kanonische
+  Bulk-Item der gewählten Rezeptur (setzt `charge.item_id`). So läuft verstreuter Fertigware-Bestand je Variante
+  zusammen. Das Dropdown (aus `erp_rezeptur_liste()`, nur Rezepturen mit Bulk-Item) zeigt die **Kapselgröße**
+  (`rezeptur.kapselgroesse_id` → `kapselgroesse.name`), damit sich gleichnamige Rezepturen je Größe (0/00)
+  unterscheiden lassen – Voraussetzung: die Kapselgröße ist am Rezeptur gesetzt.
 
 Charge und Lager sind nicht bearbeitbar (reine Anzeige).
 
