@@ -95,6 +95,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } elseif ($aktion === 'gebinde_status') {   // Spec 7.8: FEFO-Führung beim Abfüllen – Gebinde angefangen/leer melden
         $ok = erp_gebinde_status_setzen((int)($_POST['gebinde_id'] ?? 0), $id, (string)($_POST['status'] ?? ''));
         flash($ok ? 'Gebinde-Status aktualisiert.' : 'Gebinde-Status nicht geändert.', $ok ? 'ok' : 'warn');
+    } elseif ($aktion === 'pause') {   // Spec 7.11/7.12: Pause/Schichtwechsel am cleanen Punkt (zwischen Schritten)
+        $art = (string)($_POST['art'] ?? 'pause');
+        pr_pause_erfassen(['pa_id'=>$id, 'art'=>$art, 'nach_station'=>(string)($_POST['nach_station'] ?? ''),
+            'von'=>$akteur, 'an_wen'=>(string)($_POST['an_wen'] ?? ''), 'grund'=>(string)($_POST['grund'] ?? '')]);
+        flash(($art === 'schichtende' ? 'Schichtwechsel' : 'Pause') . ' erfasst – an einem sauberen Punkt zwischen den Schritten.');
     }
     weiter('?p=run&id=' . $id);
 }
@@ -321,6 +326,37 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
     <?php endif; ?>
     <button type="submit" class="btn btn-primary" style="font-size:16px;padding:12px 28px"><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
   </form>
+  <?php endif; ?>
+</div>
+
+<?php // Pause / Schichtwechsel (Spec 7.11/7.12) – nur HIER, zwischen den Schritten (sauberer Punkt).
+$letzteStation = ($fertig_cnt > 0 && isset($schritte[$fertig_cnt - 1]['station'])) ? (string)$schritte[$fertig_cnt - 1]['station'] : 'Start';
+$pausen = pr_pausen_fuer_pa($id); ?>
+<div class="bx-panel" style="margin-bottom:16px">
+  <h2 style="margin:0 0 4px;font-size:15px">Pause / Schichtwechsel</h2>
+  <div class="muted" style="font-size:13px;margin-bottom:10px">Nur zwischen den Schritten eintragen – an einem sauberen Punkt. Aktuell nach: <strong><?= h($letzteStation) ?></strong>.</div>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="pause"><input type="hidden" name="nach_station" value="<?= h($letzteStation) ?>">
+    <div class="bx-field" style="margin:0;max-width:170px"><label>Art</label>
+      <select name="art"><option value="pause">Pause</option><option value="schichtende">Schichtwechsel</option></select></div>
+    <div class="bx-field" style="margin:0;max-width:210px"><label>Übergabe an (optional)</label><input type="text" name="an_wen" placeholder="Name Nachfolger"></div>
+    <div class="bx-field" style="margin:0;min-width:200px;flex:1"><label>Notiz (optional)</label><input type="text" name="grund" placeholder="z. B. Mittagspause"></div>
+    <button class="btn btn-ghost" type="submit">Erfassen</button>
+  </form>
+  <?php if ($pausen): ?>
+  <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table" style="margin:0">
+    <thead><tr><th>Wann</th><th>Art</th><th>Nach</th><th>Von</th><th>Übergabe</th><th>Notiz</th></tr></thead>
+    <tbody>
+      <?php foreach ($pausen as $pz): ?>
+      <tr><td><?= h(fmt_zeit((string)$pz['angelegt'])) ?></td>
+          <td><?= ($pz['art'] ?? '') === 'schichtende' ? 'Schichtwechsel' : 'Pause' ?></td>
+          <td class="muted"><?= h((string)($pz['nach_station'] ?? '')) ?></td>
+          <td><?= h((string)($pz['von'] ?? '')) ?></td>
+          <td><?= h((string)($pz['an_wen'] ?? '')) ?: '<span class="muted">–</span>' ?></td>
+          <td class="muted"><?= h((string)($pz['grund'] ?? '')) ?></td></tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
   <?php endif; ?>
 </div>
 <?php else: ?>

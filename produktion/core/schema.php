@@ -180,6 +180,38 @@ function pr_maschine_reinigung_log_pa(int $pa_id): array {
     return all("SELECT r.*, m.name AS maschine_name FROM pr_maschine_reinigung r
                 LEFT JOIN pr_maschine m ON m.id=r.maschine_id WHERE r.pa_id=? ORDER BY r.id", [$pa_id]);
 }
+
+// Pausen / Schichtwechsel (Spec 7.11/7.12): nur an cleanen Punkten (zwischen Schritten) erfassen.
+function pr_pause_schema(): void {
+    static $done = false; if ($done) return; $done = true;
+    db()->exec("CREATE TABLE IF NOT EXISTS pr_pause (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        pa_id INT NOT NULL,
+        art VARCHAR(20) NOT NULL DEFAULT 'pause',   -- pause | schichtende
+        nach_station VARCHAR(190) NULL,             -- letzter abgeschlossener Schritt (cleaner Punkt)
+        von VARCHAR(190) NULL,
+        an_wen VARCHAR(190) NULL,                   -- Nachfolger (bei Schichtwechsel)
+        grund VARCHAR(255) NULL,
+        angelegt DATETIME NOT NULL,
+        KEY idx_pa (pa_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+function pr_pause_erfassen(array $d): int {
+    pr_pause_schema();
+    $pa = (int)($d['pa_id'] ?? 0); if ($pa <= 0) return 0;
+    $art = in_array($d['art'] ?? '', ['pause', 'schichtende'], true) ? (string)$d['art'] : 'pause';
+    q("INSERT INTO pr_pause (pa_id,art,nach_station,von,an_wen,grund,angelegt) VALUES (?,?,?,?,?,?,?)",
+      [$pa, $art, mb_substr(trim((string)($d['nach_station'] ?? '')), 0, 190) ?: null,
+       mb_substr(trim((string)($d['von'] ?? '')), 0, 190) ?: null,
+       mb_substr(trim((string)($d['an_wen'] ?? '')), 0, 190) ?: null,
+       mb_substr(trim((string)($d['grund'] ?? '')), 0, 255) ?: null, gmdate('Y-m-d H:i:s')]);
+    return insert_id();
+}
+function pr_pausen_fuer_pa(int $pa_id): array {
+    pr_pause_schema();
+    if ($pa_id <= 0) return [];
+    return all("SELECT * FROM pr_pause WHERE pa_id=? ORDER BY id DESC", [$pa_id]);
+}
 // Reinigungsintervalle: Code => [Label, Tage (null = kein Datumsrhythmus, z. B. vor jeder Produktion)].
 function pr_intervalle(): array {
     return ['je_charge'=>['Vor jeder Produktion', null], 'taeglich'=>['Täglich', 1], 'woechentlich'=>['Wöchentlich', 7],
