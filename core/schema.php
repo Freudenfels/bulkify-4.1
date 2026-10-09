@@ -8239,8 +8239,13 @@ function kontingent_abruf(int $kontingent_id, int $menge): array {
     $land = scalar("SELECT land FROM kunden WHERE id=?", [$kid]) ?: 'DE';
     $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum) VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
-      [naechste_nummer('RE'), 'rechnung', $aid, $kid, $netto, $ustP, $ust, $brutto, 'offen']);
+    // Rechnung wie im normalen Auto-Weg (auftrag_aus_angebot): MIT Positionen + Sichtbarkeit, sonst hat die
+    // Rechnung nur einen Nettobetrag ohne Positionen -> PDF fuer den Kunden nicht baubar (Bug bei Abruf-Rechnungen).
+    $sicht = kunde_hat_rechnungsadresse($kid) ? 1 : 0;
+    $hinw  = $sicht ? null : 'Rechnungsadresse fehlt – bitte Kundenadresse ergänzen, dann Rechnung neu berechnen.';
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,text,kunde_sichtbar) VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),?,?)",
+      [naechste_nummer('RE'), 'rechnung', $aid, $kid, $netto, $ustP, $ust, $brutto, 'offen', $hinw, $sicht]);
+    beleg_positionen_materialisieren((int) insert_id(), $ustP);   // Produkt + Glas + Etikett als echte Positionen
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('PR'), $aid, $kid, $pid, $menge, $kStueck ?: null, $kVerp ?: null, 'fremd', 'vorbereitung']);
