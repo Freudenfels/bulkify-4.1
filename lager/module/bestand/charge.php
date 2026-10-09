@@ -93,6 +93,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
     }
+    if ($aktion === 'rezeptur_zuordnen') {
+        $rid = (int)($_POST['rezeptur_id'] ?? 0);
+        $alt = (string)($c['item_name'] ?? '');
+        $r = erp_charge_rezeptur_zuordnen($id, $rid);
+        if ($r['ok'] && !empty($r['item_name']) && $r['item_name'] !== $alt) lg_charge_log_add($id, 'Artikel (Rezeptur)', $alt, (string)$r['item_name']);
+        flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+        weiter('?p=charge&id=' . $id);
+    }
     if ($aktion === 'tracking') {
         $neuT = trim((string)($_POST['tracking'] ?? ''));
         $altT = function_exists('lg_tracking') ? lg_tracking($id) : '';
@@ -245,6 +253,28 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
       <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
     </form>
   </div>
+
+  <?php // Rezeptur/Bulk-Artikel zuordnen – nur fuer Bulk/Fertigware. Haengt eine (ggf. ad-hoc im Lager
+        // angelegte) Charge an das kanonische Bulk-Item der gewaehlten Rezeptur -> Bestand laeuft je
+        // Variante (Kapselgroesse = eigene Rezeptur) zusammen. Artikelnummer leer = lose, noch zuzuordnen.
+  if ($aktWarenart === 'fertig' && !$fremd_kunde):
+      $rezListe = function_exists('erp_rezeptur_liste') ? array_values(array_filter(erp_rezeptur_liste(), fn($r) => (int)($r['bulk_item_id'] ?? 0) > 0)) : [];
+      if ($rezListe):
+        $istLose = trim((string)($c['artikelnummer'] ?? '')) === ''; ?>
+  <div class="bx-card lg-ecard"<?= $istLose ? ' style="outline:2px solid var(--warn,#c79a00);outline-offset:-2px"' : '' ?>>
+    <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>
+    <div class="k">Rezeptur / Bulk-Artikel</div>
+    <div class="v lg-eview" style="font-size:var(--fs-md,15px)"><?= $istLose ? '<span class="muted">lose – bitte zuordnen</span>' : 'zugeordnet' ?></div>
+    <form method="post" class="lg-eform" hidden>
+      <input type="hidden" name="aktion" value="rezeptur_zuordnen">
+      <select name="rezeptur_id">
+        <option value="">– Rezeptur (Kapselgröße) wählen –</option>
+        <?php foreach ($rezListe as $rz): ?><option value="<?= (int)$rz['id'] ?>"><?= h(((string)$rz['nummer'] !== '' ? (string)$rz['nummer'] . ' · ' : '') . (string)$rz['name']) ?></option><?php endforeach; ?>
+      </select>
+      <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
+    </form>
+  </div>
+  <?php endif; endif; ?>
 
   <!-- Einheit -->
   <div class="bx-card lg-ecard">

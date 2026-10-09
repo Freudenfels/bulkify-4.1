@@ -713,6 +713,24 @@ function erp_charge_auftrag_setzen(int $charge_id, int $auftrag_id): void {
     q("UPDATE charge SET auftrag_id=? WHERE id=? AND auftrag_id IS NULL", [$auftrag_id, $charge_id]);
 }
 
+// Charge "umhaengen": einer REZEPTUR zuordnen = an deren kanonisches Bulk-Item haengen (charge.item_id).
+// So laufen im Lager ad-hoc angelegte Fertigware-Chargen (ohne Rezeptur, "– Bulk #0" o. Ae.) auf den
+// richtigen Rezeptur-Bulk-Artikel zusammen -> der Bestand wird korrekt je Variante (Kapselgroesse) erfasst.
+// Rueckgabe: ['ok'=>bool,'meldung'=>string,'item_name'=>?]. Fremdlager-Chargen sind tabu.
+function erp_charge_rezeptur_zuordnen(int $charge_id, int $rezeptur_id): array {
+    if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Chargen vorhanden.'];
+    $c = one("SELECT item_id, fremd_kunde_id FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
+    if (!empty($c['fremd_kunde_id'])) return ['ok' => false, 'meldung' => 'Fremdlager-Charge – nicht umhängbar.'];
+    if ($rezeptur_id <= 0) return ['ok' => false, 'meldung' => 'Bitte eine Rezeptur wählen.'];
+    $bi = erp_rezeptur_bulkitem($rezeptur_id);
+    if (!$bi) return ['ok' => false, 'meldung' => 'Für diese Rezeptur gibt es noch keinen Bulk-Lagerartikel – bitte zuerst im Dashboard anlegen (Rezeptur speichern).'];
+    $nm = (string) scalar("SELECT name FROM item WHERE id=?", [$bi]);
+    if ((int)$c['item_id'] === $bi) return ['ok' => true, 'meldung' => 'Charge ist bereits zugeordnet: ' . $nm, 'item_name' => $nm];
+    q("UPDATE charge SET item_id=? WHERE id=?", [$bi, $charge_id]);
+    return ['ok' => true, 'meldung' => 'Charge zugeordnet: ' . $nm, 'item_name' => $nm];
+}
+
 // Absicherung: Wird Fertigware/Bulk MANUELL (ohne gewählte Lieferung) gebucht, versuchen wir, sie
 // einem offenen Auftrag zuzuordnen – aber NUR wenn es eindeutig ist (genau ein passender Auftrag,
 // der dieses Bulk-Item noch nicht bekommen hat). Sonst 0 -> nichts raten (dann greift der Dashboard-Button).
