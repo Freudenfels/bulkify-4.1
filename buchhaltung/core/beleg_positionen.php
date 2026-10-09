@@ -61,9 +61,14 @@ function beleg_positionen_aus_angebot(int $beleg_id): array {
     $rezId = erp_auftrag_rezeptur_id((int)$auf['id']);
     $rezNr = $rezId ? (string)(erp_rezeptur($rezId)['nummer'] ?? '') : '';
     $einzelCent = (int) round($menge > 0 ? $zielCent / $menge : $zielCent);
+    // Beschreibung macht den Festpreis je Packung transparent (Verpackung + Etikett sind im Packungspreis enthalten).
+    $teile = [];
+    $stk = (int)($auf['stueck'] ?? 0);
+    if ($stk > 0) $teile[] = $stk . ' Stück je Packung';
+    $teile[] = 'fertig abgefüllt & etikettiert';
     q("INSERT INTO beleg_position (beleg_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz)
        VALUES (?,?,?,?,?,?,?,?,?)",
-      [$beleg_id, 0, $rezNr ?: null, $bez, null, $menge, 'Stk.', $einzelCent, $ustSatz]);
+      [$beleg_id, 0, $rezNr ?: null, $bez, implode(' · ', $teile), $menge, 'Pkg.', $einzelCent, $ustSatz]);
     return ['ok' => true, 'anzahl' => 1, 'grund' => ''];
 }
 

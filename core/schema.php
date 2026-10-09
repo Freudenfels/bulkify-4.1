@@ -3962,10 +3962,19 @@ function beleg_positionen_materialisieren(int $beleg_id, ?float $ustSatz = null)
     $menge = max(1, (int)($auf['menge'] ?? 0));
     $nettoGesamt = (float)($b['netto'] ?? 0) ?: (float)($auf['gesamt_netto'] ?? 0);
     $pos = beleg_positionen_aus_auftrag(['angebot_id'=>$auf['angebot_id'] ?? null, 'menge'=>$menge, 'gesamt_netto'=>$nettoGesamt], $ustSatz);
-    if (!$pos) {   // keine exakte Aufschlüsselung -> eine Sammelposition (Produktname)
-        $bez = (string) scalar("SELECT COALESCE(NULLIF(kundenname,''),name) FROM produkt WHERE id=?", [(int)($auf['produkt_id'] ?? 0)]) ?: 'Produkt';
-        $rezNr = (string) scalar("SELECT r.nummer FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)($auf['produkt_id'] ?? 0)]);
-        $pos = [['artikelnr'=>$rezNr, 'bezeichnung'=>$bez, 'beschreibung'=>'', 'menge'=>$menge, 'einheit'=>'Stk.',
+    if (!$pos) {   // keine exakte Aufschlüsselung (z. B. Jahresvertrag mit Festpreis je Packung) -> eine Sammelposition.
+        $pid = (int)($auf['produkt_id'] ?? 0);
+        $prd = $pid ? one("SELECT COALESCE(NULLIF(kundenname,''),name) AS nm, einheiten_pro_packung, verpackung_id FROM produkt WHERE id=?", [$pid]) : null;
+        $bez = (string)($prd['nm'] ?? '') ?: 'Produkt';
+        $rezNr = (string) scalar("SELECT r.nummer FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]);
+        // Beschreibung macht den Festpreis je Packung transparent: fertiges Produkt inkl. Gebinde, abgefüllt + etikettiert
+        // (Verpackung + Etikett sind beim Jahresvertrag im Packungspreis enthalten, nicht als Einzelbeträge hinterlegt).
+        $teile = [];
+        $epp = (int)($prd['einheiten_pro_packung'] ?? 0);
+        if ($epp > 0) $teile[] = $epp . ' Stück je Packung';
+        if (!empty($prd['verpackung_id'])) { $vn = (string) scalar("SELECT name FROM item WHERE id=?", [(int)$prd['verpackung_id']]); if ($vn !== '') $teile[] = $vn; }
+        $teile[] = 'fertig abgefüllt & etikettiert';
+        $pos = [['artikelnr'=>$rezNr, 'bezeichnung'=>$bez, 'beschreibung'=>implode(' · ', $teile), 'menge'=>$menge, 'einheit'=>'Pkg.',
                  'preis_cent'=>(int) round(($menge > 0 ? $nettoGesamt / $menge : $nettoGesamt) * 100), 'ust_satz'=>$ustSatz]];
     }
     q("DELETE FROM beleg_position WHERE beleg_id=?", [$beleg_id]);
