@@ -2064,6 +2064,19 @@ function init_schema(): void {
         } catch (\Throwable $e) { /* Normalisierung ist best-effort */ }
         meta_set('einheit_stk_v1', '1');
     }
+    // v2: auch die Preis-Bezugseinheit (item.preis_bezug) auf „Stk" vereinheitlichen; außerdem bei Fertigware
+    // die Bezugseinheit an die Lagereinheit angleichen (EK €/Stk statt fälschlich €/kg bei Stückware) – nur
+    // wo kein EK gepflegt ist, damit eine echte €/kg-Angabe nicht umbenannt wird. Einmalig, idempotent.
+    if (meta_get('einheit_stk_v2', '') !== '1') {
+        try {
+            q("UPDATE item SET preis_bezug='Stk'
+               WHERE preis_bezug IN ('Stück','Stück.','Stueck','stück','stueck','STÜCK','STUECK','Stk.','stk','stk.','STK')");
+            q("UPDATE item SET preis_bezug=einheit
+               WHERE kategorie IN ('fertig','verkaufsfertig') AND COALESCE(ek_preis,0)=0
+                 AND einheit IS NOT NULL AND einheit<>'' AND preis_bezug<>einheit");
+        } catch (\Throwable $e) { /* best-effort */ }
+        meta_set('einheit_stk_v2', '1');
+    }
 
     // Migrationen durch -> Marker setzen, damit der nächste Request den Block überspringt.
     if ($schemaBuild !== '') meta_set('schema_build', $schemaBuild);
