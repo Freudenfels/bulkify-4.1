@@ -1206,6 +1206,27 @@ function init_schema(): void {
         KEY idx_pc (prod_charge_id), KEY idx_item (item_id), KEY idx_batch (batch_nr)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // prod_probe: dreistufige physische Proben/Rueckstellmuster (Spec 8). ebene: rohstoff (pro eingesetztem
+    // Rohstoff-Batch) | gebinde (pro Gebinde/Sub-Charge) | endprodukt (Rueckstellmuster) | labor (nur bei
+    // Laborpruefung, 2 Stueck). Rueckstell-Mengenregel Endprodukt: max(5, Anzahl Gebinde) – siehe Helfer.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS prod_probe (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        pa_id INT NULL,
+        prod_charge_id INT NULL,
+        item_id INT NULL,
+        charge_id INT NULL,
+        ebene VARCHAR(20) NOT NULL DEFAULT 'endprodukt',   -- rohstoff|gebinde|endprodukt|labor
+        batch_nr VARCHAR(80) NULL,                         -- bei ebene=rohstoff: Hersteller-Batchnummer
+        anzahl INT NULL,
+        bezeichnung VARCHAR(190) NULL,
+        etikett_gedruckt TINYINT(1) NOT NULL DEFAULT 0,
+        labor VARCHAR(190) NULL,                           -- bei ebene=labor: Ziel-Labor
+        versendet_am DATETIME NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        erfasst_von VARCHAR(190) NULL,
+        KEY idx_pa (pa_id), KEY idx_pc (prod_charge_id), KEY idx_ebene (ebene)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     ensure_column('bestellung', 'bestelldatum', "DATE NULL");   // „gemeinsam bestellt am"
     ensure_column('bestellung_position', 'bezeichnung', "VARCHAR(200) NULL");   // Freitext (z. B. Bulk-Zukauf ohne Lagerartikel)
 
@@ -2893,6 +2914,29 @@ function prod_charge_voll(int $prod_charge_id): ?array {
     $pc['unterchargen'] = all("SELECT * FROM prod_charge WHERE parent_id=? ORDER BY sub_kennung, id", [$prod_charge_id]);
     $pc['rohstoffe']    = prod_charge_rohstoffe($prod_charge_id);
     return $pc;
+}
+
+// === Proben / Rueckstellmuster (Spec 8) ====================================================================
+// Rueckstell-Mengenregel Endprodukt (Spec 8.4): mindestens 5 Stueck, bei mehr Gebinden eine Probe pro Gebinde.
+function rueckstellmuster_sollzahl(int $gebinde_anzahl): int { return max(5, $gebinde_anzahl); }
+// Eine Probe / ein Rueckstellmuster erfassen. ebene: rohstoff|gebinde|endprodukt|labor.
+function prod_probe_anlegen(array $d): int {
+    $ebenen = ['rohstoff', 'gebinde', 'endprodukt', 'labor'];
+    q("INSERT INTO prod_probe (pa_id,prod_charge_id,item_id,charge_id,ebene,batch_nr,anzahl,bezeichnung,etikett_gedruckt,labor,erfasst_von)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      [($d['pa_id'] ?? null), ($d['prod_charge_id'] ?? null), ($d['item_id'] ?? null), ($d['charge_id'] ?? null),
+       in_array($d['ebene'] ?? '', $ebenen, true) ? $d['ebene'] : 'endprodukt',
+       mb_substr(trim((string)($d['batch_nr'] ?? '')), 0, 80) ?: null,
+       isset($d['anzahl']) ? (int)$d['anzahl'] : null,
+       mb_substr(trim((string)($d['bezeichnung'] ?? '')), 0, 190) ?: null,
+       !empty($d['etikett_gedruckt']) ? 1 : 0,
+       mb_substr(trim((string)($d['labor'] ?? '')), 0, 190) ?: null,
+       mb_substr(trim((string)($d['erfasst_von'] ?? '')), 0, 190) ?: null]);
+    return insert_id();
+}
+// Alle Proben eines Produktionsauftrags (nach Ebene sortiert).
+function prod_proben_fuer_pa(int $pa_id): array {
+    return all("SELECT * FROM prod_probe WHERE pa_id=? ORDER BY ebene, id", [$pa_id]);
 }
 // Eine Menge Fertigware zu einem Produktionsauftrag als eigene Charge einbuchen (Teilproduktion).
 // Die Chargennummer ist die PR-Basis mit dem nächsten Buchstaben (.A, .B, .C …), das MHD standardmäßig
