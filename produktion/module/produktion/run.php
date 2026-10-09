@@ -40,6 +40,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $zusatz .= ' Charge ' . $pc['nummer'] . ($pc['neu'] ? ' angelegt' : '')
                          . ($pc['verknuepft'] > 0 ? (', ' . $pc['verknuepft'] . ' Rohstoff-Charge(n) verknüpft') : '') . '.';
             }
+            // Mischer-Kapazität (Spec 7.7): kg je Gebinde -> Gebinde-Unterchargen anlegen (ein Etikett je Gebinde).
+            $capv = trim((string)($_POST['kg_pro_gebinde'] ?? ''));
+            if ((string)$r['station'] === 'Mischen' && $capv !== '') {
+                $cap = (float) str_replace(',', '.', $capv);
+                if ($cap > 0) {
+                    pr_daten_setzen($id, 'kg_pro_gebinde', $capv, $akteur);
+                    $ng = erp_mischer_unterchargen_anlegen($id, $cap, $akteur);
+                    if ($ng > 0) $zusatz .= ' ' . $ng . ' Gebinde-Untercharge(n) angelegt (' . $ng . ' Etikett(en)).';
+                }
+            }
         }
         flash($r['ok'] ? (($r['fertig'] ? 'Letzter Schritt erledigt – Produktion fertig, Fertigware eingebucht.' : 'Schritt „' . $r['station'] . '" erledigt.') . $zusatz)
                        : ($r['msg'] ?: 'Schritt konnte nicht abgeschlossen werden.'), $r['ok'] ? 'ok' : 'warn');
@@ -120,6 +130,10 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
     $isGate = str_contains((string)$cur['station'], 'Freigabe');
     $anl = station_anleitung_text((string)$cur['station']);
     $mat = erp_schritt_material($id, (string)$cur['station']);
+    $istMischen = (string)$cur['station'] === 'Mischen';
+    $cap = $istMischen ? (float) str_replace(',', '.', (string)($_GET['cap'] ?? ($daten['kg_pro_gebinde']['wert'] ?? ''))) : 0.0;
+    $capTxt = $cap > 0 ? rtrim(rtrim(number_format($cap, 3, '.', ''), '0'), '.') : '';
+    $mischplan = $istMischen ? erp_mischer_plan($id, $cap) : null;
     // Fehlt PFLICHT-Material für diesen Schritt? Dann ist er (noch) nicht erledigbar.
     // Info-Zeilen (pflicht=false, z. B. Deckel/Etikett) sperren nicht – sie werden nicht abgebucht.
     $materialFehlt = false;
@@ -129,6 +143,31 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
   <div class="muted">Jetzt dran · Schritt <?= $fertig_cnt + 1 ?> von <?= $total ?></div>
   <h2 style="margin:4px 0 8px;font-size:22px"><?= h((string)$cur['station']) ?></h2>
   <?php if ($anl !== ''): ?><p style="margin:0 0 12px;font-size:15px"><?= h($anl) ?></p><?php endif; ?>
+
+  <?php if ($istMischen && !empty($mischplan['ok'])): ?>
+  <div style="margin:0 0 14px;padding:12px 14px;border:1px solid var(--line-2);border-radius:8px">
+    <div class="muted" style="font-size:13px">Mischer-Kapazität</div>
+    <div style="margin:4px 0 8px">Gesamt anzumischen: <strong><?= menge_txt($mischplan['total_kg']) ?> kg</strong> (<?= number_format((int)$mischplan['einheiten'], 0, ',', '.') ?> Einheiten)</div>
+    <form method="get" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0">
+      <input type="hidden" name="p" value="run"><input type="hidden" name="id" value="<?= (int)$id ?>">
+      <div class="bx-field" style="margin:0;max-width:180px"><label>kg je Gebinde</label><input type="number" name="cap" min="0.001" step="0.001" value="<?= h($capTxt) ?>" placeholder="z. B. 8"></div>
+      <button type="submit" class="btn btn-ghost btn-sm">Berechnen</button>
+    </form>
+    <?php if (!empty($mischplan['gebinde'])): ?>
+    <div style="margin-top:10px">Ergibt <strong><?= (int)$mischplan['anzahl'] ?></strong> Gebinde – ein Etikett je Gebinde. Angefangenes Gebinde komplett durchziehen (FIFO).</div>
+    <div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table">
+      <thead><tr><th>Gebinde</th><th class="bx-num">Menge</th><th>Je Zutat</th></tr></thead>
+      <tbody>
+        <?php foreach ($mischplan['gebinde'] as $g): ?>
+        <tr><td><?= (int)$g['nr'] ?> / <?= (int)$mischplan['anzahl'] ?></td><td class="bx-num"><?= menge_txt($g['kg']) ?> kg</td>
+          <td class="muted" style="font-size:12px"><?php $t = []; foreach ($g['zutaten'] as $z) $t[] = h((string)$z['name']) . ': ' . menge_txt($z['kg']) . ' kg'; echo implode(' · ', $t); ?></td></tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Beim Abschließen des Mischens wird je Gebinde eine Untercharge der Mischcharge angelegt.</p>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
 
   <?php if ($mat['zeilen']): ?>
   <div style="margin:0 0 14px">
@@ -171,6 +210,7 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
   <form method="post" style="margin:0" onsubmit="return confirm('Schritt &quot;<?= h((string)$cur['station']) ?>&quot; jetzt abschließen?');">
     <input type="hidden" name="aktion" value="erledigen">
     <input type="hidden" name="schritt_id" value="<?= (int)$cur['id'] ?>">
+    <?php if ($istMischen && $cap > 0): ?><input type="hidden" name="kg_pro_gebinde" value="<?= h($capTxt) ?>"><?php endif; ?>
     <?php $mtypen = pr_station_maschinentypen((string)$cur['station']);
           $maschinen_liste = $mtypen ? pr_maschinen_fuer_station((string)$cur['station']) : [];
           if ($mtypen): ?>

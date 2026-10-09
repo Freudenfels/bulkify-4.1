@@ -43,5 +43,9 @@ Die Dashboard-Tabellen `prod_charge` / `prod_charge_rohstoff` + `charge.standort
 - `erp_prod_charge_rohstoffe_aus_verbrauch($pa_id,$pc_id,$akteur)` – **das Wichtigste (Spec 7.5):** verknüpft ALLE für den Auftrag verbrauchten Rohstoff-Chargen (`produktion_verbrauch`) als Batches. Idempotent (bereits verknüpfte Lager-Chargen werden übersprungen).
 - `erp_prod_charge_fuer_station($pa_id,$station,$maschine_id,$menge,$akteur)` – Orchestrierung je Schritt: `Mischen` → interne CH-Charge anlegen/finden (+ Mischmenge, Maschine) und Rohstoffe verknüpfen; `Fertigware bereitstellen` → externe CHE-Charge; spätere Steps → nur Maschine anhängen. Wird aus `run.php` nach erfolgreichem Schritt-Abschluss aufgerufen.
 
+## Mischer-Kapazität & Umrechnung (Spec 7.7)
+- `erp_mischer_plan($pa_id,$cap)` – reine Berechnung (kein DB-Schreiben): Gesamt-Mischmasse in kg (Summe `menge_mg` × Einheiten / 1e6) und, mit `cap` (kg je Gebinde), die Aufteilung in Gebinde (volle à `cap`, letztes mit Rest) inkl. anteiliger Rezeptur je Gebinde.
+- `erp_mischer_unterchargen_anlegen($pa_id,$cap,$akteur)` – legt je Gebinde eine Untercharge unter der internen CH-Hauptcharge an (ein Etikett je Gebinde, Spec 7.7/7.8). Idempotent (nur wenn noch keine Unterchargen existieren).
+
 ### Einzige bewusste Abweichung
 `erp_produkt_leerkapsel_id()` nutzt die **manuell gepflegte** `produkt.leerkapsel_id` bzw. die eindeutige Leerkapsel über die **gepflegte** `rezeptur.kapselgroesse_id`. Die gewichtsbasierte Auto-Berechnung der Kapselgröße (Dashboard: `rezeptur_kapselgroesse()` via Füllgewicht/Dichte) ist hier **nicht** nachgebaut. Ist die Kapselgröße nicht gepflegt, wird – wie im Dashboard bei Uneindeutigkeit – nichts abgebucht.

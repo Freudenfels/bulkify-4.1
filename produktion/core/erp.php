@@ -1058,3 +1058,52 @@ function erp_prod_charge_fuer_station(int $pa_id, string $station, int $maschine
     if ($maschine_id > 0) { $pc = erp_prod_charge_fuer_pa($pa_id); if ($pc) erp_prod_charge_maschine((int)$pc['id'], $maschine_id); }
     return null;
 }
+
+// --- Mischer-Kapazität & Rezeptur-Umrechnung (Spec 7.7) --------------------------------------
+// Gesamt-Mischmasse eines Auftrags (kg, theoretisch) = Summe(menge_mg aller Zutaten) × Einheiten / 1e6.
+// Mit $cap (kg je Gebinde) wird in Gebinde aufgeteilt: volle Gebinde à $cap, letztes mit dem Rest; je
+// Gebinde die anteilige Rezeptur. Reine Berechnung (kein DB-Schreiben). Rückgabe:
+// ['ok','total_kg','einheiten','anzahl','cap','gebinde'=>[['nr','kg','zutaten'=>[['name','kg']]]]].
+function erp_mischer_plan(int $pa_id, float $cap = 0.0): array {
+    $pa = one("SELECT menge, produkt_id, rezeptur_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['ok'=>false];
+    $rid = erp_pa_rezeptur_id($pa_id);
+    if (!$rid) return ['ok'=>false];
+    $einheiten = erp_pa_ist_bulk($pa) ? (int)$pa['menge'] : (int)$pa['menge'] * erp_stueck_je_packung($pa);
+    $zutaten = all("SELECT COALESCE(NULLIF(z.bezeichnung,''), i.name) AS name, z.menge_mg
+                    FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
+                    WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rid]);
+    $total_mg = 0.0; foreach ($zutaten as $z) $total_mg += (float)$z['menge_mg'];
+    $total_kg = $total_mg * $einheiten / 1e6;
+    $out = ['ok'=>true, 'total_kg'=>$total_kg, 'einheiten'=>$einheiten, 'anzahl'=>0, 'cap'=>$cap, 'gebinde'=>[]];
+    if ($cap <= 0 || $total_kg <= 0) return $out;
+    $anzahl = (int) ceil($total_kg / $cap - 1e-9);
+    $rest = $total_kg; $gebinde = [];
+    for ($i = 1; $i <= $anzahl; $i++) {
+        $kg = min($cap, $rest); $rest = max(0.0, $rest - $kg);
+        $anteil = $total_kg > 0 ? $kg / $total_kg : 0.0;
+        $zrows = [];
+        foreach ($zutaten as $z) $zrows[] = ['name'=>(string)$z['name'], 'kg'=>((float)$z['menge_mg'] * $einheiten / 1e6) * $anteil];
+        $gebinde[] = ['nr'=>$i, 'kg'=>$kg, 'zutaten'=>$zrows];
+    }
+    $out['anzahl'] = $anzahl; $out['gebinde'] = $gebinde;
+    return $out;
+}
+// Je Gebinde eine Untercharge unter der internen CH-Hauptcharge anlegen (Spec 7.7/7.8: ein Etikett je Gebinde).
+// Legt nur an, wenn die Hauptcharge noch keine Unterchargen hat (idempotent). Rückgabe = Anzahl angelegter.
+function erp_mischer_unterchargen_anlegen(int $pa_id, float $cap, string $akteur = ''): int {
+    if ($cap <= 0) return 0;
+    $pc = erp_prod_charge_fuer_pa($pa_id);
+    if (!$pc || ($pc['typ'] ?? '') !== 'intern') return 0;
+    if ((int) scalar("SELECT COUNT(*) FROM prod_charge WHERE parent_id=?", [(int)$pc['id']]) > 0) return 0;
+    $plan = erp_mischer_plan($pa_id, $cap);
+    if (empty($plan['ok']) || empty($plan['gebinde'])) return 0;
+    $n = 0; $ges = (int)$plan['anzahl'];
+    foreach ($plan['gebinde'] as $g) {
+        $r = erp_prod_charge_sub_anlegen((int)$pc['id'], [
+            'gebinde'=>'Gebinde ' . $g['nr'] . '/' . $ges . ' (' . rtrim(rtrim(number_format((float)$g['kg'], 3, ',', '.'), '0'), ',') . ' kg)',
+            'menge'=>round((float)$g['kg'], 3), 'einheit'=>'kg', 'status'=>'gemischt']);
+        if ($r['id']) $n++;
+    }
+    return $n;
+}
