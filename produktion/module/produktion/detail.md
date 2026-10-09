@@ -17,6 +17,6 @@ Verpackung wird immer gezeigt (bei fehlender Angabe „–"); Produktionstyp = E
 
 **Produktionsfortschritt:** Balken „produziert X von Y" (+ Badge teilweise/vollständig) und ein Feld **„Teilmenge produzieren"** (`aktion=teilmenge` → `erp_teilmenge_produzieren()`): bucht eine Teilmenge sofort ein (Rohstoffe anteilig abgebucht), Auftrag bleibt offen bis voll.
 
-Oben rechts der Button in den Produktionsmodus (`?p=run&id=…`); Beschriftung je Status: „Produktion starten" (offen), „Produktion fortsetzen" (laufend), „Produktionsmodus" (erledigt).
+Oben rechts der Button in den Produktionsmodus (`?p=run&id=…`); Beschriftung je Status: „Produktion starten" (offen), „Produktion fortsetzen" (laufend), „Produktionsmodus" (erledigt). Bei Status **`vorbereitung`** ist der Button **ausgegraut/deaktiviert** (kein Run-Link, `pointer-events:none`, Tooltip + Hinweis „noch nicht freigegeben – Vor-Produktion im Dashboard"), weil die Run-Ansicht dann ohnehin gesperrt wäre.
 
 **Schritte:** der jeweils erste offene Schritt ist „als Nächstes" und trägt den **Abschließen**-Button. Der POST (`aktion=schritt_ab`, `schritt_id`) ruft `erp_schritt_abschliessen()` auf (FEFO-Entnahme, Mangel-Guard; letzter Schritt bucht Fertigware ein) und leitet danach um (PRG, Flash). Zeiten via `fmt_zeit()`.

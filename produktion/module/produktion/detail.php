@@ -85,13 +85,20 @@ $zutaten = erp_pa_zutaten($id);
 $bedarf  = erp_materialbedarf($id);   // Rohstoffe mit Mengen (benötigt gesamt / verfügbar)
 
 kopf($pa['nummer'] . ' – Produktion', 'liste');
+$istVorb  = (string)$pa['status'] === 'vorbereitung';
 $runLabel = match ((string)$pa['status']) {
     'offen'    => 'Produktion starten',
     'laufend'  => 'Produktion fortsetzen',
     'erledigt' => 'Produktionsmodus',
     default    => 'In den Produktionsmodus',
 };
-$aktionen = '<a class="btn btn-primary btn-sm" href="?p=run&id=' . $id . '">' . h($runLabel) . '</a>'
+// In Vorbereitung ist der Auftrag noch nicht freigegeben – „In den Produktionsmodus" dann ausgrauen
+// (Freigabe erfolgt im Dashboard unter „Vor-Produktion"), statt in die gesperrte Run-Ansicht zu führen.
+$runBtn = $istVorb
+    ? '<span class="btn btn-primary btn-sm" aria-disabled="true" title="Noch in Vorbereitung – erst im Dashboard unter &#8222;Vor-Produktion&#8220; freigeben." style="opacity:.5;cursor:not-allowed;pointer-events:none">' . h($runLabel) . '</span>'
+      . ' <span class="muted" style="font-size:12px">· noch nicht freigegeben (Vor-Produktion im Dashboard)</span>'
+    : '<a class="btn btn-primary btn-sm" href="?p=run&id=' . $id . '">' . h($runLabel) . '</a>';
+$aktionen = $runBtn
           . ' <a class="btn btn-ghost btn-sm" href="?p=qs&id=' . $id . '">QS &amp; Labor</a>'
           . ' <a class="btn btn-ghost btn-sm" href="?p=liste">Zurück zur Liste</a>';
 seitenkopf((string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''), $aktionen);
