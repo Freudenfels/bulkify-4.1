@@ -217,16 +217,16 @@ function erp_schritt_material(int $pa_id, string $station): array {
             if ($kid) {
                 $need = (float)$pa['menge'] * erp_stueck_je_packung($pa);
                 $zeilen[] = ['name'=> (string) scalar("SELECT name FROM item WHERE id=?", [$kid]), 'detail'=>'Leerkapseln',
-                             'menge'=>$need, 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($kid), 'item_id'=>$kid];
+                             'menge'=>$need, 'einheit'=>'Stk', 'verfuegbar'=>erp_item_bestand($kid), 'item_id'=>$kid];
             }
             break;
         case 'Fertigware bereitstellen':
             $soll_menge = (float)$pa['menge'] * erp_stueck_je_packung($pa);
-            $soll_einheit = 'Stück';
+            $soll_einheit = 'Stk';
             $chargen = erp_fertigware_chargen($pa_id, 'frei');   // Auftrag ODER Rezeptur-Bulk
             foreach ($chargen as $c)
                 $zeilen[] = ['name'=>$c['name'], 'detail'=>'Charge ' . $c['charge_nr'], 'menge'=>(float)$c['menge_verfuegbar'],
-                             'einheit'=>'Stück', 'verfuegbar'=>(float)$c['menge_verfuegbar'], 'item_id'=>(int)$c['item_id'], 'charge_id'=>(int)$c['id']];
+                             'einheit'=>'Stk', 'verfuegbar'=>(float)$c['menge_verfuegbar'], 'item_id'=>(int)$c['item_id'], 'charge_id'=>(int)$c['id']];
             // Noch keine Fertigware im Lager: trotzdem klar ansagen, WAS und WIE VIEL bereitzustellen ist.
             if (!$chargen) {
                 $pname = (string) scalar("SELECT COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung, r.name)
@@ -236,7 +236,7 @@ function erp_schritt_material(int $pa_id, string $station): array {
                                           LEFT JOIN rezeptur r ON r.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
                                           WHERE pa.id=?", [$pa_id]);
                 $zeilen[] = ['name'=>($pname !== '' ? $pname : 'Fertigware') . ' (zugekaufte Fertigware)', 'detail'=>'noch nicht im Lager gebucht',
-                             'menge'=>$soll_menge, 'einheit'=>'Stück', 'verfuegbar'=>0.0, 'item_id'=>0];
+                             'menge'=>$soll_menge, 'einheit'=>'Stk', 'verfuegbar'=>0.0, 'item_id'=>0];
             }
             break;
         case 'Verpacken':
@@ -244,17 +244,17 @@ function erp_schritt_material(int $pa_id, string $station): array {
             $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
             if ($vid)
                 $zeilen[] = ['name'=> (string) scalar("SELECT name FROM item WHERE id=?", [$vid]), 'detail'=>'Verpackung',
-                             'menge'=>(float)$pa['menge'], 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($vid), 'item_id'=>$vid];
+                             'menge'=>(float)$pa['menge'], 'einheit'=>'Stk', 'verfuegbar'=>erp_item_bestand($vid), 'item_id'=>$vid];
             $did = (int) (scalar("SELECT verschluss_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
             if ($did)
                 $zeilen[] = ['name'=> (string) scalar("SELECT name FROM item WHERE id=?", [$did]), 'detail'=>'Deckel',
-                             'menge'=>(float)$pa['menge'], 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($did), 'item_id'=>$did, 'pflicht'=>false];
+                             'menge'=>(float)$pa['menge'], 'einheit'=>'Stk', 'verfuegbar'=>erp_item_bestand($did), 'item_id'=>$did, 'pflicht'=>false];
             break;
         case 'Etikettieren':
             $eid = (int) (scalar("SELECT etikett_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
             if ($eid)
                 $zeilen[] = ['name'=> (string) scalar("SELECT name FROM item WHERE id=?", [$eid]), 'detail'=>'Etikett',
-                             'menge'=>(float)$pa['menge'], 'einheit'=>'Stück', 'verfuegbar'=>erp_item_bestand($eid), 'item_id'=>$eid, 'pflicht'=>false];
+                             'menge'=>(float)$pa['menge'], 'einheit'=>'Stk', 'verfuegbar'=>erp_item_bestand($eid), 'item_id'=>$eid, 'pflicht'=>false];
             break;
     }
     // Je Zeile die FEFO-Charge (für den Blinker), Quarantäne-Menge (Hinweis) und ob schon entnommen.
@@ -437,7 +437,7 @@ function erp_pa_fehlbedarf(int $pa_id): array {
         $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], erp_fertigware_chargen($pa_id, 'frei')));
         if ($verf + 0.0001 < $benoetigt) {
             $quar = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], erp_fertigware_chargen($pa_id, 'quarantaene')));
-            $fehlend[] = ['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt - $verf, 'einheit'=>'Stück', 'quarantaene'=>$quar];
+            $fehlend[] = ['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt - $verf, 'einheit'=>'Stk', 'quarantaene'=>$quar];
         }
         return $fehlend;
     }
@@ -452,7 +452,7 @@ function erp_pa_fehlbedarf(int $pa_id): array {
         $need = (float)$pa['menge'] * erp_stueck_je_packung($pa);
         $verf = erp_item_bestand($kid);
         if ($need > 0 && $verf + 0.0001 < $need)
-            $fehlend[] = ['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>$need-$verf, 'einheit'=>'Stück'];
+            $fehlend[] = ['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>$need-$verf, 'einheit'=>'Stk'];
     }
     // Verpackung (1 je Packung)
     $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
@@ -460,7 +460,7 @@ function erp_pa_fehlbedarf(int $pa_id): array {
         $need = (float)$pa['menge'];
         $verf = erp_item_bestand($vid);
         if ($verf + 0.0001 < $need)
-            $fehlend[] = ['name'=> scalar("SELECT name FROM item WHERE id=?", [$vid]), 'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>$need-$verf, 'einheit'=>'Stück'];
+            $fehlend[] = ['name'=> scalar("SELECT name FROM item WHERE id=?", [$vid]), 'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>$need-$verf, 'einheit'=>'Stk'];
     }
     return $fehlend;
 }
@@ -666,8 +666,8 @@ function erp_kapseln_entnehmen(int $pa_id): array {
     if ($benoetigt <= 0) return ['ok'=>true, 'fehlt'=>[]];
     $verf = erp_item_bestand($kid);
     if ($verf + 0.0001 < $benoetigt)
-        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
-    erp_fefo_abbuchen($pa_id, $kid, $benoetigt, 'Stück');
+        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stk']]];
+    erp_fefo_abbuchen($pa_id, $kid, $benoetigt, 'Stk');
     return ['ok'=>true, 'fehlt'=>[]];
 }
 // Rezeptur-ID eines Auftrags (pa.rezeptur_id oder produkt.rezeptur_id).
@@ -700,7 +700,7 @@ function erp_fertigware_entnehmen(int $pa_id): array {
     $chargen = erp_fertigware_chargen($pa_id, 'frei');
     $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], $chargen));
     if ($verf + 0.0001 < $benoetigt)
-        return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
+        return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stk']]];
     $rest = $benoetigt;
     foreach ($chargen as $c) {
         if ($rest <= 0.0001) break;
@@ -708,7 +708,7 @@ function erp_fertigware_entnehmen(int $pa_id): array {
         $neu  = (float)$c['menge_verfuegbar'] - $nimm;
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
-          [$pa_id, (int)$c['item_id'], $c['id'], $nimm, 'Stück', gmdate('Y-m-d H:i:s')]);
+          [$pa_id, (int)$c['item_id'], $c['id'], $nimm, 'Stk', gmdate('Y-m-d H:i:s')]);
         $rest -= $nimm;
     }
     return ['ok'=>true, 'fehlt'=>[]];
@@ -722,8 +722,8 @@ function erp_verpackung_entnehmen(int $pa_id): array {
     $benoetigt = (float)$pa['menge'];
     $verf = erp_item_bestand($vid);
     if ($verf + 0.0001 < $benoetigt)
-        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$vid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stück']]];
-    erp_fefo_abbuchen($pa_id, $vid, $benoetigt, 'Stück');
+        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$vid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stk']]];
+    erp_fefo_abbuchen($pa_id, $vid, $benoetigt, 'Stk');
     return ['ok'=>true, 'fehlt'=>[]];
 }
 
@@ -794,7 +794,7 @@ function erp_teilmenge_einbuchen(int $pa_id, float $menge): ?int {
     if (!$item_id) return null;
     $charge_nr = erp_charge_naechste_nr($pa_id);
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
-       VALUES (?,?,?,?, 'Stück', ?, CURDATE(), 'frei', ?, ?, ?)",
+       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?, ?)",
       [$charge_nr, $item_id, $menge, $menge, erp_mhd_standard(), 'Aus Produktion ' . $pa['nummer'], $pa_id, gmdate('Y-m-d H:i:s')]);
     return insert_id();
 }
@@ -819,7 +819,7 @@ function erp_teilmenge_bedarf(int $pa_id, float $m): array {
         $need = $m * $vpe;   // M Packungen × Kapseln je Packung (bei Bulk ist vpe über Auftrag/0 -> dann M direkt)
         if ($vpe <= 0) $need = $m;
         $verf = erp_item_bestand($kid);
-        $out[] = ['item_id'=>$kid, 'name'=>(string) scalar("SELECT name FROM item WHERE id=?", [$kid]), 'einheit'=>'Stück',
+        $out[] = ['item_id'=>$kid, 'name'=>(string) scalar("SELECT name FROM item WHERE id=?", [$kid]), 'einheit'=>'Stk',
                   'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>max(0.0, $need - $verf), 'kapsel'=>true];
     }
     return $out;
@@ -870,7 +870,7 @@ function erp_produkt_lageritem(int $produkt_id): ?int {
     $name = scalar("SELECT name FROM produkt WHERE id=?", [$produkt_id]);
     if ($name === null) return null;
     q("INSERT INTO item (artikelnummer,name,kategorie,einheit,preis_bezug,produkt_id) VALUES (?,?,?,?,?,?)",
-      [erp_naechste_nummer('VF'), $name, 'verkaufsfertig', 'Stück', 'Stück', $produkt_id]);
+      [erp_naechste_nummer('VF'), $name, 'verkaufsfertig', 'Stk', 'Stk', $produkt_id]);
     return insert_id();
 }
 function erp_rezeptur_bulkitem(int $rezeptur_id): ?int {
@@ -879,7 +879,7 @@ function erp_rezeptur_bulkitem(int $rezeptur_id): ?int {
     if ($id) return (int)$id;
     $rz = one("SELECT name, darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]);
     if (!$rz) return null;
-    $einheit = ($rz['darreichungsform'] === 'pulver') ? 'g' : (in_array($rz['darreichungsform'], ['fluessig','gel'], true) ? 'ml' : 'Stück');
+    $einheit = ($rz['darreichungsform'] === 'pulver') ? 'g' : (in_array($rz['darreichungsform'], ['fluessig','gel'], true) ? 'ml' : 'Stk');
     q("INSERT INTO item (artikelnummer,name,kategorie,form,einheit,preis_bezug,rezeptur_id) VALUES (?,?,?,?,?,?,?)",
       [erp_naechste_nummer('BULK'), $rz['name'] . ' – Bulk', 'fertig', (string)$rz['darreichungsform'], $einheit, $einheit, $rezeptur_id]);
     return insert_id();

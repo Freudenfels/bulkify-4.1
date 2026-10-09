@@ -70,7 +70,7 @@ $charge = erp_pa_charge_info($id);
 $vpe    = erp_stueck_je_packung($pa);                     // Stück/Kapseln je Packung (VPE)
 $gesamt = $vpe > 0 ? (int)$pa['menge'] * $vpe : 0;        // Gesamtstückzahl
 $form   = (string)($pa['form'] ?? '');
-$stkWort = in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : 'Stück');
+$stkWort = in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : 'Stk');
 $eingang = $pa['auftrag_eingang'] ?? ($pa['angelegt'] ?? null);
 // Verpackung lesbar zusammensetzen (Name · Typ · Volumen · Material), ohne Dopplungen zum Namen.
 $vpName = trim((string)($pa['verpackung_name'] ?? ''));
