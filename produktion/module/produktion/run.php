@@ -78,6 +78,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
         flash($r['ok'] ? (($r['fertig'] ? 'Letzter Schritt erledigt – Produktion fertig, Fertigware eingebucht.' : 'Schritt „' . $r['station'] . '" erledigt.') . $zusatz)
                        : ($r['msg'] ?: 'Schritt konnte nicht abgeschlossen werden.'), $r['ok'] ? 'ok' : 'warn');
+    } elseif ($aktion === 'teilmenge') {
+        // Direkt-Buchen einer (Teil-)Menge unter Umgehung der Schritte – NUR Produktionsleiter (Admin).
+        if (!pr_ist_admin()) { flash('Nur für den Produktionsleiter.', 'warn'); }
+        else {
+            $r = erp_teilmenge_produzieren($id, (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0')), $akteur);
+            if (!$r['ok'] && !empty($r['fehlt'])) {
+                $t = []; foreach ($r['fehlt'] as $f) $t[] = (string)$f['name'] . ' (fehlt ' . menge_txt($f['fehlt']) . ' ' . (string)$f['einheit'] . ')';
+                flash('Nicht genug Material: ' . implode(', ', $t) . '.', 'warn');
+            } else flash($r['msg'], $r['ok'] ? 'ok' : 'warn');
+        }
     } elseif ($aktion === 'blink') {
         $modus = ($_POST['modus'] ?? 'an') === 'aus' ? 'aus' : 'an';
         $r = pr_lager_blink((int)($_POST['charge_id'] ?? 0), $modus);
@@ -136,9 +146,28 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
   <p class="muted" style="font-size:12px;margin:10px 0 0">Chargennummer und MHD vergibt das System automatisch.</p>
 </div>
 
-<?php // Die Produktions-App ist bewusst rein schrittweise: die frühere Abkürzung „Teilmenge produzieren /
-      // Produzieren & einbuchen" (direktes Fertig-Buchen unter Umgehung der Schritte) ist hier entfernt.
-      // Der Fortschritt steht als Schrittzähler oben (Schritt X / Y); gebucht wird beim letzten Schritt. ?>
+<?php // Mengen-Fortschritt + Direkt-Buchen: NUR für den Produktionsleiter (Admin). Die Mitarbeiter-App
+      // (fullscreen, ?p=werk) arbeitet rein schrittweise ohne diese Abkürzung.
+      if (pr_ist_admin()): ?>
+<div class="bx-panel" style="margin-bottom:16px">
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+    <div>Produziert <strong><?= number_format($produziert, 0, ',', '.') ?></strong> von <?= number_format($benoetigt, 0, ',', '.') ?>
+      <?php if ($produziert > 0 && $prod_rest > 0): ?> <span class="badge badge-info">teilweise</span><?php elseif ($benoetigt > 0 && $prod_rest <= 0): ?> <span class="badge badge-ok">vollständig</span><?php endif; ?></div>
+    <div class="muted"><?= $prod_proz ?>% · nur Produktionsleiter</div>
+  </div>
+  <div style="height:12px;border-radius:6px;background:var(--line-2);overflow:hidden;margin-top:8px">
+    <div style="height:100%;width:<?= $prod_proz ?>%;background:var(--gruen)"></div>
+  </div>
+  <?php if ($prod_rest > 0): ?>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:14px" onsubmit="return confirm('Teilmenge jetzt produzieren? Rohstoffe werden anteilig abgebucht und als Fertigware-Charge eingebucht.');">
+    <input type="hidden" name="aktion" value="teilmenge">
+    <div class="bx-field" style="margin:0;max-width:200px"><label>Teilmenge produzieren</label>
+      <input type="number" name="menge" min="1" max="<?= (int)$prod_rest ?>" step="1" required placeholder="max. <?= (int)$prod_rest ?>"></div>
+    <button type="submit" class="btn btn-primary">Produzieren &amp; einbuchen</button>
+  </form>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <?php if ($cur):
     $isGate = str_contains((string)$cur['station'], 'Freigabe');
