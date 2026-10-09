@@ -41,13 +41,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $f = $lidB ? nachricht_post_verarbeiten($lidB, 'team', (string)(current_user()['name'] ?? 'Team'), 'bestellung', (int)$id) : 'Die Bestellung hat noch keinen Lieferanten.';
         header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f))); exit;
     }
-    // Entwurf zurück in den Einkaufsbedarf: Entwurf löschen -> Bedarf erscheint wieder (kein Netting mehr)
+    // Entwurf zurück in den Einkaufsbedarf: Entwurf löschen -> Bedarf erscheint wieder (kein Netting mehr).
+    // Zusätzlich: eine KOMPLETT LEERE Bestellung (0 Positionen) darf immer gelöscht werden (egal welcher Status) –
+    // sonst bleibt ein Geist-Datensatz im Lager als „Keine Positionen hinterlegt" stehen.
     if ($aktion === 'zurueck_bedarf' && !$neu) {
         $st = scalar("SELECT status FROM bestellung WHERE id=?", [(int)$id]);
-        if ($st === 'offen') {
+        $posAnz = (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=?", [(int)$id]);
+        if ($st === 'offen' || $posAnz === 0) {
             q("DELETE FROM bestellung_position WHERE bestellung_id=?", [(int)$id]);
             q("DELETE FROM bestellung WHERE id=?", [(int)$id]);
-            header('Location: ?p=bedarf&zurueck=1'); exit;
+            header('Location: ?p=einkauf&geloescht=1'); exit;
         }
         header('Location: ?p=bestellung&id=' . $id); exit;
     }
@@ -100,6 +103,7 @@ $geliefert = ($b['status'] ?? '') === 'geliefert';
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 $items = all("SELECT id, name, einheit, ek_preis, kategorie FROM item WHERE kategorie IN ('rohstoff','verpackung','verbrauch') AND gesperrt=0 ORDER BY name");
 $positionen = $neu ? [] : all("SELECT * FROM bestellung_position WHERE bestellung_id=? AND item_id IS NOT NULL ORDER BY sort,id", [(int)$id]);
+$posGesamt  = $neu ? 0 : (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=?", [(int)$id]);   // inkl. Bulk-/Freitext-Positionen (item_id NULL)
 $bulkPositionen = $neu ? [] : all("SELECT * FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL ORDER BY sort,id", [(int)$id]);
 $EK = []; foreach ($items as $it) $EK[$it['id']] = (float)$it['ek_preis'];
 
@@ -192,6 +196,7 @@ if (!$neu) {
     echo '<div class="bx-panel"><div class="bx-row" style="justify-content:space-between;align-items:center">';
     echo '<div>Status: ' . (match($b['status']){'offen'=>bx_badge('offen','info'),'bestellt'=>bx_badge('bestellt','warn'),'geliefert'=>bx_badge('geliefert','ok'),default=>bx_badge(status_text($b['status']))}) . '</div><div class="bx-row">';
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" title="Diesen Entwurf verwerfen – der Bedarf erscheint wieder im Einkaufsbedarf">Zurück in den Einkaufsbedarf</button></form> ';
+    if ($b['status'] !== 'offen' && $posGesamt === 0) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese leere Bestellung löschen?\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Diese Bestellung hat keine Positionen – löschen">Leere Bestellung löschen</button></form> ';
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form>';
     if ($b['status'] === 'bestellt') echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="liefern"><button class="btn btn-primary btn-sm" type="submit">Wareneingang buchen</button></form>';
     echo '</div></div></div>';
