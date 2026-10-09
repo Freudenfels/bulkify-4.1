@@ -13,6 +13,15 @@ Ein Team-Panel (nicht im Druck/Kundenansicht):
 - **Bemerkung für den Kunden** (`produktionsauftrag.bericht_notiz`, editierbar) – erscheint als Abschnitt „Bemerkung" im Bericht.
 - **Für Kunden freigeben** (`aktion=bericht_freigeben`) setzt `bericht_freigegeben_am/_von`; erst dann erscheint der Bericht (Kundenansicht) im **Kundenportal** bei der Bestellung. „Freigabe zurücknehmen" macht ihn wieder unsichtbar. Freigeben ist erst möglich, wenn der Auftrag **abgeschlossen** ist. Es wird ein Verlaufseintrag am Kunden geschrieben.
 
+## Produktionschargen + Proben (Spec 7.5/16/8)
+`produktion_bericht_daten()` liefert zusätzlich `prodChargen` (`prod_charge` inkl. Unterchargen, über `pa_id`),
+`pcRohstoffe` (`prod_charge_rohstoff` je Produktionscharge = Rohstoff-Batch-Rückverfolgung) und `proben`
+(`prod_probe`, nach Ebene rohstoff/gebinde/endprodukt/labor). `_bericht_inhalt.php` rendert daraus:
+- **Produktionschargen (CH/CHE)** – nur interne Ansicht, mit Rohstoff-Batches je Charge.
+- **Proben & Rückstellmuster** – Kunde sieht eine Zusammenfassung (Nachweis der Probenziehung), intern mit Details.
+Beide Sektionen erscheinen nur, wenn Daten vorhanden sind. Maschinenname noch nicht gezeigt (Maschinen liegen in
+der Produktions-Sub-App; folgt mit dem Maschinen→Dashboard-Umzug).
+
 ## Druck
 Button „Drucken / PDF" (`window.print()`); `@media print` blendet Seitenleiste, Mobilbar und die `.no-print`-Bereiche (Aktionen, Freigabe-Panel, Hinweise) aus.
 

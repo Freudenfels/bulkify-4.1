@@ -85,7 +85,7 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 - ✅ **Live-Mengenfortschritt (15.3)** in Auftrag/Portal – ERLEDIGT (10.10.2026, `auftrag_mengenfortschritt()`).
 - ✅ **Proben-UI 3-stufig** – ERLEDIGT (10.10.2026): Rohstoff-/Gebinde-/Endprodukt-Proben in `produktion/.../qs.php` über `prod_probe`, Soll max(5, Gebinde).
 - **FIFO/Gebinde-Durchziehen beim Abfüllen (7.8)** + Unterchargen beim Griff zum nächsten Gebinde (bisher nur beim Mischen).
-- **Produktionsbericht (17)** gekürzt/ausführlich aus den neuen Daten (Maschine/Klima/Reinigung/prod_charge/Proben).
+- ✅ **Produktionsbericht (17)** – ERLEDIGT (10.10.2026): Sektionen Produktionschargen (CH/CHE + Rohstoff-Batches) + Proben im Dashboard-Bericht. Offen: Maschine/Klima/Reinigung (liegen in der Produktions-Sub-App; folgt mit Maschinen→Dashboard).
 - **Abschlussfotos (13.1)**, **Pausen nur an cleanen Punkten/Schichtwechsel (7.11/7.12)**.
 - **Bulk-Weiterverkauf-Abfang (7.1)** + CH/CHE-Nummernformat → mit Nico klären.
 
