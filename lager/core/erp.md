@@ -9,6 +9,8 @@ Stand heute wird hier nur gelesen, und zwar die Logins aus der Tabelle `benutzer
 `einlager_buchen()` per **Loopback** auf (`?p=api_einlager`, Token in `app_meta['einlager_api_token']`,
 `erp_einlager_token()`) – die komplexe Fertigwaren-Buchung (BSKU/Lager 2) wird NICHT im Lager nachgebaut.
 
+**Erwartete Lieferungen (read-only):** `erp_erwartete_lieferungen()` liest offene Bestellungen (`bestellung.status='bestellt'`, `angekommen_am IS NULL`) inkl. Positionen. Jede Position erhält eine **`warenart`** für die Kategorie-Reiter der Tabelle (`?p=erwartet`): `item.kategorie` → sonst `fertig` bei auftragsgebundenem Zukauf → sonst `erp_warenart_raten($name)` (grobe Heuristik aus dem Freitext-Namen: Verpackungs-Begriffe → `verpackung`, Darreichungsformen/Dosierungen → `fertig`, sonst '' = Sonstiges). Die echte Warenart wird erst beim Einbuchen festgelegt.
+
 **Lager-2-Katalog (read-only):** `erp_kunde_verkaufsfertig($kunde_id)` – Verkaufsfertig-Items (Bestand) eines Kunden für die optionale Bestand-Verknüpfung im Artikelkatalog (`?p=l2_artikel_edit`).
 
 **Lager-2-Einbuchen:** `erp_l2_typ_defs()` (Typ → item.kategorie + Verpackungs-Rolle + **Verpackungsart** + ob „neu" erlaubt) und `erp_items_l2()` (buchbare Artikel aller Kategorien inkl. Karton/Sonstiges + `rolle` + `art`, fürs Filtern je Typ). Typen: Verkaufsprodukt, Rohstoff, Etikett, Beipackzettel, **Pouchbag**, **Rollenware (Stick)**, Karton, Sonstiges. Pouchbag/Rollenware sind beide `verpackung`/`primaer` und werden über die Verpackungsart (`beutel`/`stick`) getrennt. `erp_item_anlegen($name,$kat,$einheit,$rolle='',$art='')` kann `karton`/`sonstiges`, die Verpackungs-Rolle und die Verpackungsart setzen.

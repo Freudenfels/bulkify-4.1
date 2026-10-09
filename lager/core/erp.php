@@ -922,6 +922,19 @@ function erp_einlager_buchen(int $pa_id): array {
     return ['ok' => false, 'meldung' => $msg];
 }
 
+// Best-effort-Warenart aus einem Freitext-Positionsnamen (nur wenn keine Item-/Auftrags-Verknuepfung
+// vorliegt – z. B. alte Freitext-Bestellungen). Liefert einen Schluessel aus erp_kategorien() oder ''
+// (= Sonstiges). Bewusst grob und ueberschreibbar: echte Zuordnung passiert beim Einbuchen.
+function erp_warenart_raten(string $name): string {
+    $n = mb_strtolower(trim($name));
+    if ($n === '') return '';
+    // Verpackung zuerst (eindeutige Material-Begriffe).
+    if (preg_match('/etikett|label|karton|faltschachtel|dose|glas|flasche|deckel|verschluss|beutel|pouch|sleeve|folie|zipper|standbodenbeutel/u', $n)) return 'verpackung';
+    // Fertige/ Bulk-Ware: Darreichungsformen und typische Produktbegriffe.
+    if (preg_match('/kapsel|tablette|tabl\b|softgel|stick|pulver|granulat|komplex|premix|extrakt|\d\s*(mg|µg|mcg|g|iu)\b/u', $n)) return 'fertig';
+    return '';
+}
+
 function erp_erwartete_lieferungen(): array {
     if (!tabelle_da('bestellung')) return [];
     $rows = all("SELECT b.id, b.nummer, b.bestelldatum, b.eta_geplant, b.tracking, b.versandanbieter,
@@ -936,8 +949,15 @@ function erp_erwartete_lieferungen(): array {
                    FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
                    WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id", [(int)$r['id']])
             : [];
-        foreach ($pos as &$p)
+        foreach ($pos as &$p) {
             $p['kapselgroesse'] = erp_kapselgroesse_label((int)($p['item_id'] ?? 0), (int)($p['auftrag_id'] ?? 0));
+            // Warenart fuer die Kategorie-Reiter: 1) Item-Kategorie, 2) auftragsgebundener Zukauf
+            // fertiger Ware = 'fertig', 3) Freitext-Position ohne Verknuepfung -> aus dem Namen raten.
+            $k = (string)($p['kategorie'] ?? '');
+            if ($k === '' && !empty($p['auftrag_id'])) $k = 'fertig';
+            if ($k === '') $k = erp_warenart_raten((string)($p['name'] ?? ''));
+            $p['warenart'] = $k;
+        }
         unset($p);
         $r['positionen'] = $pos;
     }
