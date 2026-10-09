@@ -9,3 +9,6 @@
 - Rollen werden gegen `rollen_liste()` gefiltert und als CSV in `benutzer.rollen` gespeichert. Rollen, die es hier nicht zum Ankreuzen gibt – vor allem `lieferant` bei einem Portalzugang –, bleiben beim Speichern **erhalten**; sonst waere der Portalzugang mit einem Klick weg.
 - Passwort via `password_hash()` (nur bei neuem Konto oder wenn ein neues eingegeben wurde).
 - **Lockout-Schutz:** Änderungen werden abgelehnt, wenn danach **kein aktiver Admin** mehr übrig wäre.
+
+## Produktions-PIN (Tablet)
+Feld **Produktions-PIN (Tablet)** (4–8 Ziffern) je Mitarbeiter: wird gehasht in `benutzer.pin_hash` gespeichert (Set/Reset wie das Passwort; leer = unverändert, Checkbox „PIN löschen" entfernt sie). Dient dem Login in der Mitarbeiter-Produktions-App (`/produktion/?p=werk`). Nur Ziffern; Validierung 4–8 Stellen.

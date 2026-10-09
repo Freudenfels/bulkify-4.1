@@ -24,6 +24,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rollenCsv = implode(',', $rollenArr);
     $pass  = (string)($_POST['pass'] ?? '');
     $editId = $neu ? 0 : (int)$id;
+    $pin    = preg_replace('/\D/', '', (string)($_POST['pin'] ?? ''));   // Tablet-PIN: nur Ziffern
+    $pinDel = !empty($_POST['pin_loeschen']);
+    $pinFehler = ($pin !== '' && (strlen($pin) < 4 || strlen($pin) > 8)) ? 'Die Produktions-PIN muss 4–8 Ziffern haben.' : '';
 
     if ($name === '' || $email === '') {
         $fehler = 'Name und E-Mail sind Pflicht.';
@@ -31,6 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fehler = 'Diese E-Mail wird bereits verwendet.';
     } elseif ($neu && $pass === '') {
         $fehler = 'Für einen neuen Benutzer ist ein Passwort nötig.';
+    } elseif ($pinFehler !== '') {
+        $fehler = $pinFehler;
     } else {
         // Lockout-Schutz: mindestens ein aktiver Admin muss bleiben
         $wirdAdmin = in_array('admin', $rollenArr, true) && $aktiv === 1;
@@ -40,10 +45,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($neu) {
             q("INSERT INTO benutzer (name,email,pass_hash,rollen,aktiv) VALUES (?,?,?,?,?)",
               [$name, $email, password_hash($pass, PASSWORD_DEFAULT), $rollenCsv, $aktiv]);
+            $nid = insert_id();
+            if ($pin !== '') q("UPDATE benutzer SET pin_hash=? WHERE id=?", [password_hash($pin, PASSWORD_DEFAULT), $nid]);
             header('Location: ?p=benutzer&ok=1'); exit;
         } else {
             q("UPDATE benutzer SET name=?, email=?, rollen=?, aktiv=? WHERE id=?", [$name, $email, $rollenCsv, $aktiv, $editId]);
             if ($pass !== '') q("UPDATE benutzer SET pass_hash=? WHERE id=?", [password_hash($pass, PASSWORD_DEFAULT), $editId]);
+            if ($pinDel)         q("UPDATE benutzer SET pin_hash=NULL WHERE id=?", [$editId]);
+            elseif ($pin !== '') q("UPDATE benutzer SET pin_hash=? WHERE id=?", [password_hash($pin, PASSWORD_DEFAULT), $editId]);
             header('Location: ?p=benutzer_detail&id=' . $editId . '&ok=1'); exit;
         }
     }
@@ -66,6 +75,10 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
     <div class="bx-field"><label>Name</label><input type="text" name="name" value="<?= $v('name') ?>" required></div>
     <div class="bx-field"><label>E-Mail (Login)</label><input type="email" name="email" value="<?= $v('email') ?>" required></div>
     <div class="bx-field"><label>Passwort <?= bx_hint($neu ? 'für den ersten Login' : 'leer lassen = unverändert') ?></label><input type="password" name="pass" <?= $neu ? 'required' : '' ?> placeholder="<?= $neu ? '' : '••••••• (unverändert)' ?>"></div>
+    <div class="bx-field"><label>Produktions-PIN (Tablet) <?= bx_hint('4–8 Ziffern für die Mitarbeiter-Produktions-App am Tablet (?p=werk). ' . ($neu ? '' : 'Leer lassen = unverändert.')) ?></label>
+      <input type="text" inputmode="numeric" pattern="[0-9]*" name="pin" autocomplete="off" placeholder="<?= !$neu && !empty($u['pin_hash']) ? '•••• (gesetzt)' : 'z. B. 2468' ?>">
+      <?php if (!$neu && !empty($u['pin_hash'])): ?><label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:6px"><input type="checkbox" name="pin_loeschen" value="1"> PIN löschen (kein Tablet-Login)</label><?php endif; ?>
+    </div>
     <div class="bx-field"><label>Konto aktiv</label>
       <div class="bx-check" style="padding-top:8px">
         <input type="checkbox" name="aktiv" id="f_aktiv" value="1" <?= (int)($u['aktiv'] ?? 1) === 1 ? 'checked' : '' ?>>

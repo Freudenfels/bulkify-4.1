@@ -1704,6 +1704,7 @@ function init_schema(): void {
         UNIQUE KEY uniq_email (email)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('benutzer', 'login_token', "VARCHAR(64) NULL");   // für lokalen Autologin-Link
+    ensure_column('benutzer', 'pin_hash', "VARCHAR(255) NULL");      // Tablet-PIN (gehasht) für die Mitarbeiter-Produktions-App
     // Fehlende Login-Tokens auffüllen (nur leere)
     foreach (all("SELECT id FROM benutzer WHERE login_token IS NULL OR login_token=''") as $bu) {
         q("UPDATE benutzer SET login_token=? WHERE id=?", [bin2hex(random_bytes(16)), (int)$bu['id']]);
