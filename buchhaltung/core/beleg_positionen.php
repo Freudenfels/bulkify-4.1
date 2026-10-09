@@ -54,7 +54,22 @@ function beleg_positionen_aus_angebot(int $beleg_id): array {
         return ['ok' => true, 'anzahl' => $sort, 'grund' => ''];
     }
 
-    // 2) Keine Angebots-Aufschlüsselung (z. B. Jahresvertrag-Abruf ohne Angebot, oder nur Staffelpreis):
+    // 2) Jahresvertrag-Abruf: Positionen der gewählten JV-Option auf den Festpreis je Packung skalieren
+    //    -> getrennte Zeilen (Produkt + Glas + Etikett), die in Summe den Festpreis ergeben.
+    if (!empty($auf['kontingent_id'])) {
+        $kpos = be_kontingent_positionen((int)$auf['kontingent_id'], $menge, $ustSatz);
+        if ($kpos) {
+            foreach ($kpos as $r)
+                q("INSERT INTO beleg_position (beleg_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz)
+                   VALUES (?,?,?,?,?,?,?,?,?)",
+                  [$beleg_id, $sort++, trim((string)($r['artikelnr'] ?? '')) ?: null, (string)$r['bezeichnung'],
+                   trim((string)($r['beschreibung'] ?? '')) ?: null, $menge, ($r['einheit'] ?: 'Stk.'),
+                   (int)$r['preis_cent'], $ustSatz]);
+            return ['ok' => true, 'anzahl' => $sort, 'grund' => ''];
+        }
+    }
+
+    // 3) Keine Angebots-Aufschlüsselung (z. B. Jahresvertrag-Abruf ohne Angebot, oder nur Staffelpreis):
     //    eine Sammelposition aus dem Auftrag – Produktname, Auftragsmenge, Netto/Menge als Einzelpreis
     //    (reproduziert das Rechnungs-Netto; Kopfsummen bleiben). Spiegelt den Fallback des Dashboard-Materializers.
     $bez   = trim((string)($auf['produkt_name'] ?? '')) ?: 'Produkt';
@@ -70,6 +85,38 @@ function beleg_positionen_aus_angebot(int $beleg_id): array {
        VALUES (?,?,?,?,?,?,?,?,?)",
       [$beleg_id, 0, $rezNr ?: null, $bez, implode(' · ', $teile), $menge, 'Pkg.', $einzelCent, $ustSatz]);
     return ['ok' => true, 'anzahl' => 1, 'grund' => ''];
+}
+
+// Jahresvertrag-Abruf-Positionen: die gewählte Option aus dem Quell-Angebot (kontingent.angebot_id/gruppe)
+// auf den Festpreis je Packung (kontingent.vk_stueck) skalieren -> getrennte Zeilen (Produkt + Glas + Etikett),
+// die in Summe genau den Festpreis ergeben (Rundungsdrift auf die größte Zeile). Nur Lesen über die Naht.
+// Rückgabe: Positions-Rohzeilen [['artikelnr','bezeichnung','beschreibung','einheit','preis_cent'], …] oder [].
+function be_kontingent_positionen(int $kontingent_id, int $menge, float $ustSatz): array {
+    $k = erp_kontingent($kontingent_id);
+    if (!$k || empty($k['angebot_id'])) return [];
+    $pos = erp_angebot_positionen((int)$k['angebot_id']);
+    if (!$pos) return [];
+    $grp = [];
+    foreach ($pos as $p) $grp[trim((string)($p['gruppe'] ?? ''))][] = $p;
+    $wahl = trim((string)($k['gruppe'] ?? ''));
+    if ($wahl !== '' && isset($grp[$wahl])) $rows = $grp[$wahl];
+    elseif (count($grp) === 1)              $rows = reset($grp);
+    else return [];
+    $sumCent = 0; foreach ($rows as $r) $sumCent += (int)$r['preis_cent'];
+    $targetCent = (int) round((float)($k['vk_stueck'] ?? 0) * 100);   // Festpreis je Packung
+    if ($sumCent <= 0 || $targetCent <= 0) return [];
+    $faktor = $targetCent / $sumCent;
+    $skaliert = []; foreach ($rows as $r) $skaliert[] = (int) round((int)$r['preis_cent'] * $faktor);
+    $drift = $targetCent - array_sum($skaliert);
+    if ($drift !== 0 && $skaliert) { $maxI = 0; foreach ($skaliert as $i => $v) if ($v > $skaliert[$maxI]) $maxI = $i; $skaliert[$maxI] += $drift; }
+    $out = [];
+    foreach ($rows as $i => $r) {
+        $bez = preg_replace('/^[A-Z]\)\s*/', '', (string)$r['bezeichnung']);
+        $out[] = ['artikelnr'=>(string)($r['artikelnr'] ?? ''), 'bezeichnung'=>$bez,
+                  'beschreibung'=>(string)($r['beschreibung'] ?? ''), 'einheit'=>($r['einheit'] ?: 'Stk.'),
+                  'preis_cent'=>$skaliert[$i]];
+    }
+    return $out;
 }
 
 // Positionen manuell setzen (ersetzt alle). $zeilen: [['artikelnr','bezeichnung','beschreibung','menge','einheit','preis'(€),'ust'], …].

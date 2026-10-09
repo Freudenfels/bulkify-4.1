@@ -1507,6 +1507,7 @@ function init_schema(): void {
     ensure_column('kontingent', 'freigabe_name', "VARCHAR(190) NULL");         // Unterzeichner (Portal-Bestätigung)
     ensure_column('kontingent', 'freigabe_am', "DATETIME NULL");
     ensure_column('kontingent', 'min_abruf', "INT NOT NULL DEFAULT 0");         // Mindest-Abrufmenge je Abruf (0 = keine); Restmenge darf immer voll abgerufen werden
+    ensure_column('kontingent', 'gruppe', "VARCHAR(10) NULL");                  // gewaehlte Option (A/B/C) des JV-Angebots – fuer die Positions-Aufschluesselung der Abruf-Rechnung
     // Einmalige Bereinigung: Der Zwischenstand „zurueckgezogen" ist entfallen – Zurückziehen heißt jetzt
     // schlicht zurück in den Entwurf. Bestehende Datensätze einmalig auf 'offen' ziehen.
     if (meta_get('fix_angebot_zurueck', '') !== '1') {
@@ -8162,9 +8163,9 @@ function kontingent_aus_angebot(int $angebot_id, string $unterzeichner = '', ?st
     $ex = one("SELECT id FROM kontingent WHERE angebot_id=?", [$angebot_id]);
     if ($ex) return ['ok' => true, 'kontingent_id' => (int)$ex['id'], 'schon_da' => true];
     $mon = (int)($a['jahres_laufzeit_monate'] ?? 12) ?: 12;
-    q("INSERT INTO kontingent (kunde_id,produkt_id,angebot_id,gesamt_menge,abgerufen,vk_stueck,gueltig_von,gueltig_bis,status,freigabe_name,freigabe_am,notiz)
-       VALUES (?,?,?,?,0,?,CURDATE(),DATE_ADD(CURDATE(), INTERVAL ? MONTH),'wartet_vertrag',?,UTC_TIMESTAMP(),?)",
-      [(int)$a['kunde_id'], $produktId, $angebot_id, $menge, $vk, $mon, ($unterzeichner ?: null),
+    q("INSERT INTO kontingent (kunde_id,produkt_id,angebot_id,gruppe,gesamt_menge,abgerufen,vk_stueck,gueltig_von,gueltig_bis,status,freigabe_name,freigabe_am,notiz)
+       VALUES (?,?,?,?,?,0,?,CURDATE(),DATE_ADD(CURDATE(), INTERVAL ? MONTH),'wartet_vertrag',?,UTC_TIMESTAMP(),?)",
+      [(int)$a['kunde_id'], $produktId, $angebot_id, $gruppe, $menge, $vk, $mon, ($unterzeichner ?: null),
        'Aus Angebot ' . (string)$a['nummer'] . ' (Jahresvertrag).']);
     $kid = insert_id();
     q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$angebot_id]);
@@ -8219,6 +8220,40 @@ function kontingent_status(int $kontingent_id, string $status): bool {
     return true;
 }
 
+// Rechnungspositionen fuer einen Abruf aufschluesseln: die Positionen der gewaehlten JV-Option
+// (Produkt/Herstellung + Glas + Etikett) werden auf den vereinbarten Festpreis je Packung (vk_stueck)
+// SKALIERT, damit getrennte Zeilen entstehen, die in Summe exakt den Festpreis ergeben. Rundungsdrift
+// kommt auf die groesste Zeile. Rueckgabe: Positions-Array (menge = Abrufmenge) oder [] (dann Sammelzeile).
+function kontingent_abruf_positionen(array $k, int $menge, float $ustP): array {
+    $angId = (int)($k['angebot_id'] ?? 0);
+    if ($angId <= 0) return [];
+    $pos = angebot_positionen($angId);
+    if (!$pos) return [];
+    // Nach Konfigurations-Gruppe buendeln; die am Kontingent gespeicherte Option waehlen (sonst die einzige).
+    $grp = [];
+    foreach ($pos as $p) $grp[trim((string)($p['gruppe'] ?? ''))][] = $p;
+    $wahl = trim((string)($k['gruppe'] ?? ''));
+    if ($wahl !== '' && isset($grp[$wahl]))  $rows = $grp[$wahl];
+    elseif (count($grp) === 1)               $rows = reset($grp);
+    else                                     return [];           // mehrere Optionen, keine eindeutig -> Sammelzeile
+    $sumCent = 0; foreach ($rows as $r) $sumCent += (int)$r['preis_cent'];
+    $targetCent = (int) round((float)($k['vk_stueck'] ?? 0) * 100);   // Festpreis je Packung
+    if ($sumCent <= 0 || $targetCent <= 0) return [];
+    $faktor = $targetCent / $sumCent;
+    $skaliert = []; foreach ($rows as $r) $skaliert[] = (int) round((int)$r['preis_cent'] * $faktor);
+    // Rundungsdrift auf die groesste Position legen, damit die Summe exakt dem Festpreis je Packung entspricht.
+    $drift = $targetCent - array_sum($skaliert);
+    if ($drift !== 0 && $skaliert) { $maxI = 0; foreach ($skaliert as $i => $v) if ($v > $skaliert[$maxI]) $maxI = $i; $skaliert[$maxI] += $drift; }
+    $out = [];
+    foreach ($rows as $i => $r) {
+        $bez = preg_replace('/^[A-Z]\)\s*/', '', (string)$r['bezeichnung']);   // Gruppen-Buchstabe raus
+        $out[] = ['artikelnr'=>(string)($r['artikelnr'] ?? ''), 'bezeichnung'=>$bez,
+                  'beschreibung'=>(string)($r['beschreibung'] ?? ''), 'menge'=>$menge,
+                  'einheit'=>($r['einheit'] ?: 'Stk.'), 'preis_cent'=>$skaliert[$i], 'mwst_satz'=>$ustP];
+    }
+    return $out;
+}
+
 // Abruf aus einem Kontingent (Rahmenvertrag/Jahresvertrag): erzeugt einen Auftrag zum vereinbarten
 // Festpreis (+ Rechnung + Produktionsauftrag + Stationen) und schreibt die abgerufene Menge fort.
 // Rueckgabe: ['ok'=>true,'auftrag_id'=>…,'rest'=>…] oder ['ok'=>false,'fehler'=>…].
@@ -8254,7 +8289,24 @@ function kontingent_abruf(int $kontingent_id, int $menge): array {
     $hinw  = $sicht ? null : 'Rechnungsadresse fehlt – bitte Kundenadresse ergänzen, dann Rechnung neu berechnen.';
     q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,text,kunde_sichtbar) VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),?,?)",
       [naechste_nummer('RE'), 'rechnung', $aid, $kid, $netto, $ustP, $ust, $brutto, 'offen', $hinw, $sicht]);
-    beleg_positionen_materialisieren((int) insert_id(), $ustP);   // Produkt + Glas + Etikett als echte Positionen
+    $belId = (int) insert_id();
+    // Rechnungspositionen: die Positionen der gewählten JV-Option (Produkt + Glas + Etikett) auf den vereinbarten
+    // Festpreis je Packung skalieren -> echte Aufschlüsselung wie bei normalen Aufträgen. Geht das nicht
+    // (kein Angebot/keine Positionen), fällt beleg_positionen_materialisieren auf die Sammelzeile zurück.
+    $posList = kontingent_abruf_positionen($k, $menge, $ustP);
+    if ($posList) {
+        $sort = 0;
+        foreach ($posList as $p)
+            q("INSERT INTO beleg_position (beleg_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz) VALUES (?,?,?,?,?,?,?,?,?)",
+              [$belId, $sort++, (string)($p['artikelnr'] ?? ''), (string)$p['bezeichnung'], (string)($p['beschreibung'] ?? ''),
+               (float)$p['menge'], (string)($p['einheit'] ?? 'Stk.'), (int)$p['preis_cent'], (float)($p['mwst_satz'] ?? $ustP)]);
+        $rows = all("SELECT menge, preis_cent, mwst_satz FROM beleg_position WHERE beleg_id=?", [$belId]);
+        $s = beleg_summen_aus_positionen($rows);
+        q("UPDATE beleg SET netto=?, ust_prozent=?, ust_betrag=?, brutto=? WHERE id=?",
+          [round((float)$s['netto'],2), $ustP, round((float)$s['ust'],2), round((float)$s['brutto'],2), $belId]);
+    } else {
+        beleg_positionen_materialisieren($belId, $ustP);          // Sammelzeile (Festpreis je Packung, inkl. Gebinde/Etikett)
+    }
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('PR'), $aid, $kid, $pid, $menge, $kStueck ?: null, $kVerp ?: null, 'fremd', 'vorbereitung']);

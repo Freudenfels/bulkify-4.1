@@ -117,6 +117,13 @@ function erp_auftrag(int $id): ?array {
     return one("SELECT a.*, p.name AS produkt_name FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$id]);
 }
 
+// Kontingent (Jahresvertrag) zu einem Abruf-Auftrag. Nur Lesen. Liefert die gewaehlte Option (gruppe) +
+// den Festpreis je Packung (vk_stueck) + das Quell-Angebot – fuer die Aufschluesselung der Abruf-Rechnung.
+function erp_kontingent(int $id): ?array {
+    if (!$id || !tabelle_da('kontingent')) return null;
+    return one("SELECT id, angebot_id, gruppe, vk_stueck FROM kontingent WHERE id=?", [$id]);
+}
+
 // Echte (hinterlegte) Angebotspositionen – Rohzeilen aus angebot_position (leere v3-Null-Zeilen raus).
 // Für die aufgeschlüsselte Rechnungsposition. Nur Lesen. (Staffel-/Auto-Ableitung liegt im Dashboard.)
 function erp_angebot_positionen(int $angebot_id): array {
