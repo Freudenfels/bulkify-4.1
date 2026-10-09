@@ -32,6 +32,8 @@ $routen = [
     'papierkorb'     => 'bestand/papierkorb.php',
     'etikett'        => 'bestand/etikett.php',
     'etikett_ansicht'=> 'bestand/etikett_ansicht.php',   // In-App-Ansicht mit Zurück-Button
+    'gebinde'        => 'bestand/gebinde.php',           // eigene Gebinde-Aufkleber (QR+Nr) + Scan-Auflösung
+    'gebinde_etikett'=> 'bestand/gebinde_etikett.php',   // Gebinde-Aufkleber als PDF
     'charge'         => 'bestand/charge.php',
     'dok'            => 'bestand/dok.php',
     // Lager 2 (Fremdlager): Kundenware (charge.fremd_kunde_id)
