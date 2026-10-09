@@ -1046,7 +1046,7 @@ if ($auftraege) {
                   WHERE pa.auftrag_id IN ($inA) AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id", $aids) as $cr)
         $auftragChargen[(int)$cr['auftrag_id']][] = ['nr' => (string)$cr['charge_nr'], 'mhd' => $cr['mhd']];
 }
-$rechnungen = all("SELECT * FROM beleg WHERE kunde_id=? AND typ='rechnung' AND kunde_sichtbar=1 ORDER BY angelegt DESC", [$kid]);
+$rechnungen = all("SELECT * FROM beleg WHERE kunde_id=? AND typ='rechnung' AND kunde_sichtbar=1 AND status<>'storniert' ORDER BY angelegt DESC", [$kid]);
 $anfragen = all("SELECT a.*, r.name AS rezeptur_name, r.status AS rezeptur_status,
                  (SELECT COUNT(*) FROM rezeptur_anfrage_wunsch w WHERE w.anfrage_id=a.id) AS wunsch_anzahl
                  FROM rezeptur_anfrage a LEFT JOIN rezeptur r ON r.id=a.rezeptur_id WHERE a.kunde_id=? ORDER BY a.angelegt DESC", [$kid]);

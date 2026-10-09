@@ -15,6 +15,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (in_array($s, ['offen','in_arbeit','erledigt'], true)) q("UPDATE auftrag SET status=? WHERE id=? AND kategorie='dienstleistung'", [$s, $id]);
         header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1'); exit;
     }
+    // DL-Auftrag stornieren (z. B. faelschlich angelegt). Setzt den Auftrag auf 'storniert' -> beim Kunden
+    // ausgeblendet. Eine evtl. schon erstellte DL-Rechnung (DR-) muss separat in der Buchhaltung storniert
+    // werden (Beleg gehoert der Buchhaltung; das Dashboard schreibt sie nicht).
+    if ($aktion === 'storno') {
+        q("UPDATE auftrag SET status='storniert' WHERE id=? AND kategorie='dienstleistung'", [$id]);
+        log_aktivitaet('kunde', (int)($a['kunde_id'] ?? 0), 'team', 'DL-Auftrag ' . (string)$a['nummer'] . ' storniert.', 'auftrag', 'auftrag', $id);
+        header('Location: ?p=dl_auftrag&id=' . $id . '&storniert=1'); exit;
+    }
     if ($aktion === 'schritt') {               // aktuellen Fortschritts-Schritt setzen
         dl_auftrag_schritt_setzen($id, (int)($_POST['schritt_id'] ?? 0));
         header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1'); exit;
@@ -52,6 +60,7 @@ if (isset($_GET['done']))   echo '<div class="bx-panel badge-ok" style="padding:
 elseif (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['uperr']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Upload: ' . h((string)$_GET['uperr']) . '</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Rechnung konnte nicht erstellt werden (keine Positionen/kein Betrag).</div>';
+if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag storniert – beim Kunden ausgeblendet. Eine evtl. erstellte DR-Rechnung bitte noch in der Buchhaltung stornieren.</div>';
 ?>
 <div class="bx-cards">
   <div class="bx-card"><div class="k">Kunde</div><div class="v"><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
@@ -102,6 +111,17 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
     <p class="muted" style="font-size:12px;margin:6px 0 0"><?= (int)($dlRow['ohne_fortschritt'] ?? 0) === 1
         ? 'Diese Dienstleistung läuft <strong>ohne Fortschritt</strong> – nur Abrechnung (z.&nbsp;B. Fulfillment/Lagerung). Status hier setzen, Rechnung unten.'
         : 'Dieser Auftrag hat keine definierten Schritte. Schritte legst du am <a href="?p=dienstleistungen">Service im Katalog</a> fest.' ?></p>
+  <?php endif; ?>
+  <?php if (($a['status'] ?? '') !== 'storniert'): ?>
+  <div class="bx-row" style="gap:8px;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+    <form method="post" style="margin:0" onsubmit="return confirm('Diesen DL-Auftrag stornieren? Er wird beim Kunden ausgeblendet. Eine bereits erstellte DR-Rechnung bitte zusätzlich in der Buchhaltung stornieren.');">
+      <input type="hidden" name="aktion" value="storno">
+      <button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Auftrag stornieren</button>
+    </form>
+    <?php if ($rechnung): ?><a class="btn btn-ghost btn-sm" href="/buchhaltung/?p=rechnung&id=<?= (int)$rechnung['id'] ?>" target="_blank">Rechnung <?= h((string)$rechnung['nummer']) ?> stornieren →</a><?php endif; ?>
+  </div>
+  <?php else: ?>
+  <p class="muted" style="font-size:12px;margin:10px 0 0;color:#8f231b">Dieser Auftrag ist storniert und wird dem Kunden nicht angezeigt.</p>
   <?php endif; ?>
 </div>
 
