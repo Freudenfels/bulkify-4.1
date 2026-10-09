@@ -396,6 +396,10 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('rezeptur', 'ablehnung_grund', "TEXT NULL");   // Kunde lehnt Vorschlag ab (Pflicht-Grund), Team überarbeitet
     ensure_column('rezeptur', 'kapselgroesse_id', "INT NULL");   // gewählte Kapselgröße (nur Kapsel-Form) → vererbt ins Produkt + Packungsrechnung
+    // Form-spezifische Eigenschaft NEBEN der Kapselgröße: Füll-/Stückgewicht je Einzeleinheit (Gummi/Stick = g,
+    // Pulver = g pro Bag, Flüssig/Gel/Öl = ml) und die Tablettenform (nur Tablette). Statt Kapselgröße bei Nicht-Kapsel.
+    ensure_column('rezeptur', 'einheit_fuellmenge', "DECIMAL(12,3) NULL");   // g (fest) bzw. ml (flüssig) je Einzeleinheit, je nach Form
+    ensure_column('rezeptur', 'tabletten_form', "VARCHAR(40) NULL");          // rund_mit_bruch|rund_ohne_bruch|oval|laenglich|sonstige
     ensure_column('rezeptur', 'synonyme', "TEXT NULL");          // frühere/alternative Namen (Kunde benennt um) – intern bekannt, überall mitsuchbar
 
     // rezeptur_zutat: die Zutaten (Rohstoffe) einer Rezeptur, Menge in mg je Einheit.
@@ -2424,6 +2428,40 @@ function rezeptur_kapselgroesse(int $rezeptur_id): ?array {
     return null;   // passt in keine Standardgröße
 }
 
+// Welche form-spezifische Eigenschaft gehört zu dieser Darreichungsform?
+// 'kapsel' = Kapselgröße, 'tablette' = Tablettenform, 'gewicht' = Füll-/Stückmenge, '' = keine.
+function form_attribut(string $form, bool $hatKapselgroesse = false): string {
+    if (in_array($form, ['kapsel','softgel'], true)) return 'kapsel';
+    if ($form === 'tablette') return 'tablette';
+    if (in_array($form, ['gummi','stick','pulver','gel','fluessig','oel'], true)) return 'gewicht';
+    return $hatKapselgroesse ? 'kapsel' : ($form === '' ? '' : 'gewicht');
+}
+// Label + Einheit (g/ml) für das Füll-/Stückmengen-Feld je Form.
+function form_gewicht_feld(string $form): array {
+    return match ($form) {
+        'gummi'    => ['Gewicht pro Stück', 'g'],
+        'stick'    => ['Gewicht pro Stick', 'g'],
+        'pulver'   => ['Gewicht pro Bag', 'g'],
+        'gel'      => ['Füllmenge pro Einheit', 'ml'],
+        'fluessig' => ['Füllmenge pro Flasche', 'ml'],
+        'oel'      => ['Füllmenge pro Flasche', 'ml'],
+        default    => ['Gewicht pro Einheit', 'g'],
+    };
+}
+function tabletten_formen(): array {
+    return [
+        'rund_mit_bruch'  => 'Rund mit Brechkante',
+        'rund_ohne_bruch' => 'Rund ohne Brechkante',
+        'oval'            => 'Oval',
+        'laenglich'       => 'Länglich (Caplet)',
+        'sonstige'        => 'Sonstige',
+    ];
+}
+function tabletten_form_label(?string $k): string {
+    $k = (string)$k;
+    return $k === '' ? '' : (tabletten_formen()[$k] ?? $k);
+}
+
 // ===== Health Claims (EU-VO 432/2012) =====
 // Aktive Claims eines Naehrstoffs.
 function health_claims_naehrstoff(int $naehrstoff_id): array {
@@ -2507,7 +2545,7 @@ function produktion_groesse_label(int $produkt_id, bool $kurz = false): string {
     if (isset($GLOBALS['bx_stock_cache']) && array_key_exists('grl:' . $produkt_id, $GLOBALS['bx_stock_cache'])) {
         $p = $GLOBALS['bx_stock_cache']['grl:' . $produkt_id];
     } else {
-        $p = one("SELECT r.darreichungsform AS form, kg.name AS kapsel_name,
+        $p = one("SELECT r.darreichungsform AS form, kg.name AS kapsel_name, r.einheit_fuellmenge AS ff, r.tabletten_form AS tf,
                          (SELECT COALESCE(SUM(z.menge_mg),0) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id) AS fg
                   FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                   LEFT JOIN kapselgroesse kg ON kg.id=r.kapselgroesse_id WHERE p.id=?", [$produkt_id]);
@@ -2524,7 +2562,18 @@ function produktion_groesse_label(int $produkt_id, bool $kurz = false): string {
         }
         return '';
     }
-    if ($form === 'tablette') return $fg > 0 ? '≈ ' . number_format($fg, 0, ',', '.') . ' mg' : '';
+    if ($form === 'tablette') {
+        $tf = tabletten_form_label((string)($p['tf'] ?? ''));
+        if ($tf !== '') return $tf;
+        return $fg > 0 ? '≈ ' . number_format($fg, 0, ',', '.') . ' mg' : '';
+    }
+    // Gummi/Stick/Pulver/Flüssig: Füll-/Stückmenge je Einheit (g bzw. ml), mit Einheiten-Wort.
+    $ff = (float)($p['ff'] ?? 0);
+    if ($ff > 0 && in_array($form, ['gummi','stick','pulver','gel','fluessig','oel'], true)) {
+        [, $einh] = form_gewicht_feld($form);
+        $wort = match ($form) { 'gummi'=>'/Stück', 'stick'=>'/Stick', 'pulver'=>'/Bag', default=>'' };
+        return rtrim(rtrim(number_format($ff, 3, ',', '.'), '0'), ',') . ' ' . $einh . $wort;
+    }
     return '';
 }
 

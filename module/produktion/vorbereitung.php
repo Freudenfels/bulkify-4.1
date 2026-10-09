@@ -37,6 +37,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     q("UPDATE rezeptur SET kapselgroesse_id=? WHERE id=?", [$kg, $rid]); bedarf_bump(); }
         header('Location: ' . $back . '&saved=1#glas'); exit;
     }
+    // Tablettenform (nur Tablette) – Form an der Rezeptur.
+    if ($aktion === 'tablettenform_setzen' && $paId) {
+        [, , $rid] = vp_ids($paId);
+        if ($rid) { $tf = trim((string)($_POST['tabletten_form'] ?? '')); $tf = array_key_exists($tf, tabletten_formen()) ? $tf : null;
+                    q("UPDATE rezeptur SET tabletten_form=? WHERE id=?", [$tf, $rid]); }
+        header('Location: ' . $back . '&saved=1#glas'); exit;
+    }
+    // Füll-/Stückmenge je Einheit (Gummi/Stick = g, Pulver = g/Bag, Flüssig = ml) – an der Rezeptur.
+    if ($aktion === 'gewicht_setzen' && $paId) {
+        [, , $rid] = vp_ids($paId);
+        if ($rid) { $g = trim((string)($_POST['einheit_fuellmenge'] ?? ''));
+                    $g = $g !== '' ? (float) zahl_lesen($g) : null;
+                    q("UPDATE rezeptur SET einheit_fuellmenge=? WHERE id=?", [$g, $rid]); bedarf_bump(); }
+        header('Location: ' . $back . '&saved=1#glas'); exit;
+    }
     if ($aktion === 'etikett_upload' && $paId) {
         [$aid] = vp_ids($paId);
         if ($aid && etikett_upload($aid)) log_aktivitaet('kunde', (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]), 'team', 'Etikett vom Team hochgeladen.', 'auftrag', 'auftrag', $aid);
@@ -84,14 +99,12 @@ if ($pa):
     $verpAkt = $aid ? (int) scalar("SELECT verpackung_id FROM auftrag WHERE id=?", [$aid]) : 0;
     if (!$verpAkt && $pid) $verpAkt = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$pid]);
     $empf   = $verpAkt ? 0 : (int) (verpackung_empfehlung_fuer_pa($paId) ?? 0);
-    $rez    = $rid ? one("SELECT darreichungsform, kapselgroesse_id FROM rezeptur WHERE id=?", [$rid]) : null;
+    $rez    = $rid ? one("SELECT darreichungsform, kapselgroesse_id, einheit_fuellmenge, tabletten_form FROM rezeptur WHERE id=?", [$rid]) : null;
     $darr   = $rez['darreichungsform'] ?? '';
-    // Kapselgröße zeigen bei Kapsel/Softgel – ODER wenn schon eine Kapselgröße hinterlegt ist (dann ist es eine
-    // Kapsel, auch ohne saubere Darreichungsform) – ODER wenn die Darreichungsform gar nicht gepflegt ist.
-    // NICHT bei eindeutig anderer Form (Tablette/Pulver/Flüssig/…), da wäre eine Kapselgröße sinnlos.
-    $istKapsel  = $rez && in_array($darr, ['kapsel','softgel'], true);
-    $zeigeKapsel = $istKapsel || (int)($rez['kapselgroesse_id'] ?? 0) > 0
-                   || ($rez && !in_array($darr, ['tablette','pulver','fluessig','gummi','gel','stick'], true));
+    // Form-spezifische Eigenschaft: Kapsel/Softgel -> Kapselgröße, Tablette -> Tablettenform,
+    // Gummi/Stick/Pulver/Flüssig/… -> Füll-/Stückmenge (g bzw. ml). Kapselgröße gibt es NUR bei 'kapsel'.
+    $formAttr   = $rez ? form_attribut($darr, (int)($rez['kapselgroesse_id'] ?? 0) > 0) : '';
+    $zeigeKapsel = $formAttr === 'kapsel';
     $etDok  = $aid ? etikett_datei($aid) : null;
     $etFrei = $aid ? etikett_freigegeben($aid) : false;
     $brauchtEt = auftrag_braucht_etikett((int)$aid);
@@ -122,6 +135,17 @@ if ($pa):
     $darrLbl  = $rez['darreichungsform'] ?? '';
     $chargeP  = charge_naechste_nr($paId);
     $mhdP     = mhd_standard();
+    // Form-spezifisches Attribut für die Übersicht (statt festem „Kapselgröße").
+    $attrLabel = ''; $attrValue = '';
+    if ($formAttr === 'kapsel') {
+        $attrLabel = 'Kapselgröße'; $attrValue = $kapsName !== '' ? $kapsName : '–';
+    } elseif ($formAttr === 'tablette') {
+        $attrLabel = 'Tablettenform'; $attrValue = tabletten_form_label($rez['tabletten_form'] ?? '') ?: '–';
+    } elseif ($formAttr === 'gewicht') {
+        [$glbl, $geinh] = form_gewicht_feld($darr); $gv = (float)($rez['einheit_fuellmenge'] ?? 0);
+        $attrLabel = $glbl . ' (' . $geinh . ')';
+        $attrValue = $gv > 0 ? rtrim(rtrim(number_format($gv, 3, ',', '.'), '0'), ',') . ' ' . $geinh : '–';
+    }
     $infoFelder = [
         'Kunde'              => $info['kunde'] ?: '–',
         'Auftrag'            => $info['auftrag_nr'] ?: '–',
@@ -130,7 +154,9 @@ if ($pa):
         'Menge (Packungen)'  => number_format((int)$pa['menge'], 0, ',', '.'),
         'Stück je Packung'   => $stkProP > 0 ? number_format($stkProP, 0, ',', '.') : '–',
         'Gesamtstückzahl'    => $gesamtSt > 0 ? number_format($gesamtSt, 0, ',', '.') : '–',
-        'Kapselgröße'        => $kapsName !== '' ? $kapsName : '–',
+    ];
+    if ($attrLabel !== '') $infoFelder[$attrLabel] = $attrValue;
+    $infoFelder += [
         'Verpackung / Glas'  => $glasName !== '' ? $glasName : 'noch nicht gewählt',
         'Herstellung'        => $art === 'eigen' ? 'Eigenproduktion' : 'Fremd (Zukauf)',
         'Charge (geplant)'   => $chargeP,
@@ -247,7 +273,7 @@ if ($pa):
             <button class="btn btn-ghost btn-sm" type="submit" style="margin-left:auto">Glas speichern</button>
           </div>
         </form>
-        <?php if ($zeigeKapsel): ?>
+        <?php if ($formAttr === 'kapsel'): ?>
         <?php $kapsSet = (int)($rez['kapselgroesse_id'] ?? 0);
               // Automatik-Empfehlung (passend zum Füllgewicht) – nur relevant, solange nichts manuell gewählt ist.
               $kapsAuto = ($kapsSet <= 0 && $rid) ? rezeptur_kapselgroesse((int)$rid) : null; ?>
@@ -262,6 +288,27 @@ if ($pa):
             <?php foreach ($kapsOpt as $kg): ?><option value="<?= (int)$kg['id'] ?>" <?= $kapsSet === (int)$kg['id'] ? 'selected' : '' ?>><?= h($kg['name']) ?></option><?php endforeach; ?>
           </select>
           <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" type="submit">Kapselgröße speichern</button></div>
+        </form>
+        <?php elseif ($formAttr === 'tablette'): ?>
+        <form method="post" style="margin-top:14px;border-top:1px solid var(--line,#e6e6e6);padding-top:12px">
+          <input type="hidden" name="aktion" value="tablettenform_setzen"><input type="hidden" name="pa_id" value="<?= $paId ?>">
+          <label class="muted" style="font-size:12px">Tablettenform</label>
+          <select name="tabletten_form" style="width:100%">
+            <option value="">– wählen –</option>
+            <?php foreach (tabletten_formen() as $tk => $tl): ?><option value="<?= h($tk) ?>" <?= (string)($rez['tabletten_form'] ?? '') === $tk ? 'selected' : '' ?>><?= h($tl) ?></option><?php endforeach; ?>
+          </select>
+          <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" type="submit">Form speichern</button></div>
+        </form>
+        <?php elseif ($formAttr === 'gewicht'): ?>
+        <?php [$glbl, $geinh] = form_gewicht_feld($darr); $gVal = (float)($rez['einheit_fuellmenge'] ?? 0); ?>
+        <form method="post" style="margin-top:14px;border-top:1px solid var(--line,#e6e6e6);padding-top:12px">
+          <input type="hidden" name="aktion" value="gewicht_setzen"><input type="hidden" name="pa_id" value="<?= $paId ?>">
+          <label class="muted" style="font-size:12px"><?= h($glbl) ?> (<?= h($geinh) ?>)</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:2px">
+            <input type="text" inputmode="decimal" name="einheit_fuellmenge" value="<?= $gVal > 0 ? h(rtrim(rtrim(number_format($gVal,3,',',''),'0'),',')) : '' ?>" placeholder="z. B. 2,5" style="flex:1;min-width:0">
+            <span class="muted" style="font-size:13px"><?= h($geinh) ?></span>
+            <button class="btn btn-ghost btn-sm" type="submit" style="white-space:nowrap">Speichern</button>
+          </div>
         </form>
         <?php endif; ?>
       </div>

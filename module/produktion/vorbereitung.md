@@ -24,7 +24,11 @@ Je Karte wird direkt bearbeitet (jeweils eigenes POST):
 - **Glas/Behälter** (`glas_setzen`): Auswahl aller Primär-Verpackungen; fehlt das Glas, ist die **Auto-Empfehlung**
   (`verpackung_empfehlung_fuer_pa` → kleinstes passendes aus `pack_kapazitaet` für Kapselgröße×Stück) vorausgewählt.
   Scope „Produkt-Standard" (Default, setzt zusätzlich produkt.verpackung_id) oder „nur dieser Auftrag" (nur auftrag.verpackung_id). Radios + „Glas speichern"-Button (dezent, btn-ghost) stehen in einer Zeile, Button rechts (`margin-left:auto`).
-- **Kapselgröße** (`kapsel_setzen`, nur Kapsel/Softgel) → rezeptur.kapselgroesse_id. Ist nichts manuell gewählt („– automatisch –"), wird **über dem Dropdown die Automatik-Empfehlung** angezeigt: „Automatik: Größe … (passend zum Füllgewicht)" aus `rezeptur_kapselgroesse()` (passt keine Standardgröße → „bitte manuell wählen"). Die Empfehlung steht zusätzlich in der automatisch-Option.
+- **Form-spezifische Eigenschaft** (statt fest „Kapselgröße"): je Darreichungsform das passende Feld, über `form_attribut($form)`:
+  - **Kapsel/Softgel → Kapselgröße** (`kapsel_setzen` → rezeptur.kapselgroesse_id). Ohne manuelle Wahl („– automatisch –") steht über dem Dropdown die **Automatik-Empfehlung** „Automatik: Größe … (passend zum Füllgewicht)" aus `rezeptur_kapselgroesse()` (passt keine → „bitte manuell wählen"); auch in der automatisch-Option.
+  - **Tablette → Tablettenform** (`tablettenform_setzen` → rezeptur.tabletten_form): Rund mit/ohne Brechkante, Oval, Länglich, Sonstige (`tabletten_formen()`).
+  - **Gummi/Stick/Pulver/Flüssig → Füll-/Stückmenge** (`gewicht_setzen` → rezeptur.einheit_fuellmenge): Gummi „Gewicht pro Stück (g)", Stick „… pro Stick (g)", Pulver „… pro Bag (g)", Flüssig „Füllmenge pro Flasche (ml)" (`form_gewicht_feld()`). Eingabe mit Komma (z. B. 2,5), geparst via `zahl_lesen`.
+  Das Info-Raster oben zeigt entsprechend „Kapselgröße" / „Tablettenform" / „Gewicht pro … (g/ml)" statt immer „Kapselgröße". Dieselben Werte speisen `produktion_groesse_label()` (Kachel auf der Auftragsseite).
 - **Etikett**: hochladen/ersetzen (`etikett_upload`) und Freigabe im Namen des Kunden (`etikett_freigeben`, Akteur 'team').
 - **„Alle offenen Aufträge holen"** (`alle_vorbereitung` → `vorbereitung_alle_holen()`): setzt alle noch nicht
   gestarteten Kunden-PAs auf Status `vorbereitung`, damit man fehlende Gläser etc. sammeln nachziehen kann.
