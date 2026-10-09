@@ -3644,7 +3644,11 @@ portal_head('Kundenportal · ' . $k['firma']);
         <tr><td class="muted" style="width:150px">Produkt</td><td><?= h($titelFuer($a)) ?></td></tr>
         <?php if ((int)$a['stueck']): ?><tr><td class="muted">Stück je Packung</td><td><?= (int)$a['stueck'] ?></td></tr><?php endif; ?>
         <tr><td class="muted">Anzahl Packungen</td><td><?= (int)$a['menge'] ?></td></tr>
-        <?php $mf = auftrag_mengenfortschritt((int)$a['id']); if (!empty($mf['hat']) && (int)$mf['ziel'] > 0): ?>
+        <?php $mf = auftrag_mengenfortschritt((int)$a['id']);
+              // Dem Kunden erst zeigen, wenn die Produktion laeuft (oder schon etwas fertig ist) – nicht bei frisch bestaetigt.
+              $mfZeigen = !empty($mf['hat']) && (int)$mf['ziel'] > 0
+                          && ((int)$mf['gebucht'] > 0 || in_array((string)($a['status'] ?? ''), ['in_produktion','erledigt','versendet'], true));
+              if ($mfZeigen): ?>
         <tr><td class="muted">Produziert</td><td>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <div style="flex:1;min-width:120px;max-width:220px;height:9px;background:var(--panel-2,#eceef0);border-radius:6px;overflow:hidden">
