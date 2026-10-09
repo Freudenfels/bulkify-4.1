@@ -29,6 +29,16 @@ function pr_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
 
+// Eine Spalte additiv ergänzen (best-effort, wie ensure_column im Dashboard – aber nur für pr_*-Tabellen).
+// Fehler (Spalte existiert bereits o. Ä.) werden geschluckt, damit kein 500 beim Seitenaufruf entsteht.
+function pr_ensure_column(string $tabelle, string $spalte, string $definition): void {
+    try {
+        $da = (bool) scalar("SELECT COUNT(*) FROM information_schema.columns
+                             WHERE table_schema=DATABASE() AND table_name=? AND column_name=?", [$tabelle, $spalte]);
+        if (!$da) db()->exec("ALTER TABLE `$tabelle` ADD COLUMN `$spalte` $definition");
+    } catch (\Throwable $e) { /* best-effort */ }
+}
+
 // --- Betriebsmittel: Räume & Maschinen (mit Reinigungsintervall) -----------------------------
 function pr_stamm_schema(): void {
     static $done = false; if ($done) return; $done = true;
@@ -46,6 +56,61 @@ function pr_stamm_schema(): void {
             angelegt DATETIME NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
+    // Maschinenfuhrpark (Spec 9.3): Typ (an Produktionsschritt gekoppelt) + eigener QR-Code zum Scannen je Step.
+    pr_ensure_column('pr_maschine', 'typ', "VARCHAR(40) NULL");
+    pr_ensure_column('pr_maschine', 'qr_code', "VARCHAR(60) NULL");
+}
+
+// --- Maschinentypen (Spec 9.3) ----------------------------------------------------------------
+// Feste Startliste laut Lastenheft; Code => Anzeigename. Nico kann später erweitern (dann hier ergänzen).
+function pr_maschinen_typen(): array {
+    return [
+        'mischer'        => 'Mischer',
+        'kapselmaschine' => 'Kapselmaschine',
+        'tablettenpresse'=> 'Tablettenpresse',
+        'abfuelllinie'   => 'Abfülllinie',
+        'stickmaschine'  => 'Stickmaschine',
+        'pulver_auto'    => 'Pulver-Abfüllmaschine (automatisch)',
+        'pulver_manuell' => 'Pulver-Abfüllmaschine (manuell)',
+        'blister'        => 'Blistermaschine',
+        'fluessig'       => 'Flüssig-Flaschenabfüllung',
+        'pouchbag'       => 'Pouchbag-/Standbodenbeutel-Füllmaschine',
+    ];
+}
+function pr_maschinentyp_label(string $code): string { return pr_maschinen_typen()[$code] ?? ($code ?: '–'); }
+
+// Welche Maschinentypen gehören zu einem Produktionsschritt (Station)? (Spec 9.1 – Scan je Step.)
+// Leere Liste = Schritt braucht keine Maschine (z. B. Freigaben, Etikettieren, Bereitstellen).
+function pr_station_maschinentypen(string $station): array {
+    return match ($station) {
+        'Mischen'             => ['mischer'],
+        'Verkapselung'        => ['kapselmaschine'],
+        'Tablettierung'       => ['tablettenpresse'],
+        'Stick-Abfüllung'     => ['stickmaschine'],
+        'Pulver-Abfüllung'    => ['pulver_auto', 'pulver_manuell', 'pouchbag'],
+        'Abfüllung'           => ['fluessig'],
+        'Verpacken'           => ['abfuelllinie', 'blister'],
+        default               => [],
+    };
+}
+// Aktive Maschinen, die zu den Typen einer Station passen (für die Auswahl/Scan im Produktionsmodus).
+function pr_maschinen_fuer_station(string $station): array {
+    pr_stamm_schema();
+    $typen = pr_station_maschinentypen($station);
+    if (!$typen) return [];
+    $in = implode(',', array_fill(0, count($typen), '?'));
+    return all("SELECT * FROM pr_maschine WHERE aktiv=1 AND typ IN ($in) ORDER BY name", $typen);
+}
+// Eine Maschine zu einem gescannten/eingegebenen QR-Code oder Namen finden (Spec 9.1).
+function pr_maschine_per_qr(string $code): ?array {
+    pr_stamm_schema();
+    $code = trim($code);
+    if ($code === '') return null;
+    return one("SELECT * FROM pr_maschine WHERE aktiv=1 AND (qr_code=? OR name=?) ORDER BY id LIMIT 1", [$code, $code]);
+}
+function pr_maschine(int $id): ?array {
+    if ($id <= 0) return null; pr_stamm_schema();
+    return one("SELECT * FROM pr_maschine WHERE id=?", [$id]);
 }
 // Reinigungsintervalle: Code => [Label, Tage (null = kein Datumsrhythmus, z. B. vor jeder Produktion)].
 function pr_intervalle(): array {
@@ -67,10 +132,22 @@ function pr_maschine_alle(): array {
     pr_stamm_schema();
     return all("SELECT m.*, r.name AS raum_name FROM pr_maschine m LEFT JOIN pr_raum r ON r.id=m.raum_id WHERE m.aktiv=1 ORDER BY m.name");
 }
-function pr_maschine_neu(string $name, ?int $raum_id, string $intervall, string $notiz): void {
+function pr_maschine_neu(string $name, ?int $raum_id, string $intervall, string $notiz, string $typ = '', string $qr = ''): int {
     pr_stamm_schema();
-    q("INSERT INTO pr_maschine (name,raum_id,reinigung_intervall,notiz,angelegt) VALUES (?,?,?,?,?)",
-      [trim($name), $raum_id ?: null, trim($intervall) ?: null, trim($notiz) ?: null, gmdate('Y-m-d H:i:s')]);
+    $typ = in_array($typ, array_keys(pr_maschinen_typen()), true) ? $typ : '';
+    q("INSERT INTO pr_maschine (name,raum_id,reinigung_intervall,notiz,typ,qr_code,angelegt) VALUES (?,?,?,?,?,?,?)",
+      [trim($name), $raum_id ?: null, trim($intervall) ?: null, trim($notiz) ?: null, $typ ?: null, trim($qr) ?: null, gmdate('Y-m-d H:i:s')]);
+    $id = insert_id();
+    // Ohne vorgegebenen QR-Code einen eindeutigen vergeben (MA-<id>), damit jede Maschine scanbar ist.
+    if (trim($qr) === '') q("UPDATE pr_maschine SET qr_code=? WHERE id=?", ['MA-' . $id, $id]);
+    return $id;
+}
+// Typ/QR einer bestehenden Maschine ändern (additiv, ohne Löschen/Neuanlage).
+function pr_maschine_setzen(int $id, string $typ, string $qr): void {
+    pr_stamm_schema();
+    if ($id <= 0) return;
+    $typ = in_array($typ, array_keys(pr_maschinen_typen()), true) ? $typ : '';
+    q("UPDATE pr_maschine SET typ=?, qr_code=? WHERE id=?", [$typ ?: null, trim($qr) ?: ('MA-' . $id), $id]);
 }
 function pr_maschine_loeschen(int $id): void { pr_stamm_schema(); q("UPDATE pr_maschine SET aktiv=0 WHERE id=?", [$id]); }
 
