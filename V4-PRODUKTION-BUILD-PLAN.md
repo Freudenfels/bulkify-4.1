@@ -66,7 +66,7 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 | 7.1 | Produktionswege/Formgebung | 🟡 `produktionsschritte_fuer`/`produktion_wege_aufloesen` + `weg_*`-Flags; **Bulk-Weiterverkauf-Abfang fehlt** |
 | 7.5/16 | CH/CHE-Chargen + Unterchargen + Rohstoff-Batch | 🟢 **Fundament gebaut** (Paket A, s. u.) |
 | 8 | Proben 3-stufig + Rückstellmuster-Regel | 🟢 **fertig** – Datenmodell (`prod_probe`) + 3-stufige QS-UI (Rohstoff/Gebinde/Endprodukt) in `produktion/.../qs.php` über die Naht (`erp_proben_fuer_pa`/`_probe_anlegen`/`_probe_loeschen`/`_rueckstell_soll`), Soll max(5, Gebinde). Labor-Ebene: bestehender Laborproben-Flow bleibt (pr_daten). |
-| 9 | Maschinen (QR/Scan/Reinigung-Sperre/Typen) | 🟡 `pr_raum`/`pr_maschine`+Reinigung (intervall) da; QR/Scan/Typen/harte Sperre NEU → **Agent Produktion** |
+| 9 | Maschinen (QR/Scan/Reinigung-Sperre/Typen) | 🟢 Fuhrpark + QR/Scan/Typen/Reinigung-Sperre; **Verwaltung ins DASHBOARD umgezogen** (10.10.2026, `?p=maschinen`, Tabellen bleiben pr_maschine/pr_raum; Sub-App nur Ansicht). Reinigung/Sperre bleiben im Werk. |
 | 7.13/10/12.2 | Gewicht/Schwund, Umgebung, Zeit | 🟡 Zeitmessung da (`erp_produktionszeit_schnitt`); Schwund+Umgebung NEU → **Agent Produktion** |
 | 5/6.2 | Lager WE+Blinker+QR/Gebinde+Standort | 🟡 Blinker+WE-Scan+QR-Encoder da; `charge.standort` gebaut (A); Gebinde-QR (5.6)/Standort-Flow NEU → **Agent Lager** |
 | 15.3 | Live-Mengenfortschritt | 🟢 **fertig** – `auftrag_mengenfortschritt()` (core/schema.php) + Balken „Produziert X von Y Packungen" im Dashboard-Auftrag (immer) und im Kundenportal (ab Produktionsstart). 15.4 (Sichtbarkeit intern/extern) weiter offen. |
@@ -94,5 +94,5 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 ## Für Nico morgen (Entscheidungen)
 - Chargennummer-Format CH/CHE (aktuell `CH-2690`-Stil, 4 Stellen; Jahresanteil? → leicht anpassbar).
 - Bulk-Weiterverkauf-Abfang (7.1): die PA-Erstellung sitzt an ~7 Stellen in `core/schema.php` – sauber zentralisieren vs. Flag am Produkt; **bewusst nicht blind über Nacht geändert**.
-- Maschinen: als Dashboard-Tabelle (alle) ODER in der Produktions-Sub-App (`pr_maschine`) – aktuell baut der Agent auf `pr_maschine` auf.
+- ✅ Maschinen: ENTSCHIEDEN (10.10.2026) – Verwaltung im DASHBOARD (`?p=maschinen`), Tabellen bleiben `pr_maschine`/`pr_raum` (geteilte DB, keine Datenmigration), Sub-App nur Ansicht.
 - Auto-Laborversand der 2 Proben aus der Produktion (14.3) – Status bestätigen.
