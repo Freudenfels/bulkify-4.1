@@ -712,7 +712,7 @@ if (auftrag_braucht_etikett($id)):
   <?php endif; ?>
   <div class="bx-grid">
     <div><div class="k muted">Herstellung</div><div>
-      <?= $istFremd ? bx_badge('Fremdproduktion · fertige Bulkware zukaufen','info') : bx_badge('Eigenproduktion · aus Rohstoffen','ok') ?>
+      <?= $istFremd ? bx_badge('Einkaufen · fertige Bulkware zukaufen','info') : bx_badge('Herstellen · aus Rohstoffen','ok') ?>
     </div></div>
     <?php if (has_role('admin') || has_role('production') || has_role('einkauf')): ?>
     <div><div class="k muted">Rohstoff/Bulk angekommen</div><div>
@@ -768,8 +768,8 @@ if (auftrag_braucht_etikett($id)):
         <input type="hidden" name="aktion" value="pa_freigeben">
         <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Herstellung
           <select name="produktionsart" style="max-width:190px">
-            <option value="fremd" <?= $istFremd ? 'selected' : '' ?>>Fremd (Zukauf)</option>
-            <option value="eigen" <?= $istFremd ? '' : 'selected' ?>>Eigen</option>
+            <option value="fremd" <?= $istFremd ? 'selected' : '' ?>>Einkaufen (Zukauf)</option>
+            <option value="eigen" <?= $istFremd ? '' : 'selected' ?>>Herstellen</option>
           </select>
         </label>
         <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Produktionsmenge (Einheiten)
@@ -784,24 +784,29 @@ if (auftrag_braucht_etikett($id)):
     <?php else: $aktivPA = in_array((string)$a['status'], ['offen', 'in_produktion'], true); ?>
     <div><div class="k muted">Produktionsauftrag</div>
       <?php if ($aktivPA): ?>
-      <div class="muted" style="margin-bottom:6px">noch keiner angelegt</div>
-      <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0;flex-wrap:wrap">
-        <input type="hidden" name="aktion" value="pa_anlegen">
-        <select name="produktionsart" style="max-width:190px">
-          <option value="eigen">Eigenproduktion</option>
-          <option value="fremd">Fremdproduktion (zukaufen)</option>
-        </select>
-        <button class="btn btn-primary btn-sm" type="submit">Produktionsauftrag anlegen</button>
-      </form>
-      <div class="muted" style="font-size:12px;margin-top:4px">Danach erscheint der Materialbedarf (Rohstoffe) und der Auftrag ist produzierbar.</div>
+      <div class="muted" style="margin-bottom:6px">Wie soll dieser Auftrag beschafft werden?</div>
+      <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap">
+        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="pa_anlegen"><input type="hidden" name="produktionsart" value="eigen">
+          <button class="btn btn-primary btn-sm" type="submit" title="Selbst aus Rohstoffen produzieren">Herstellen</button></form>
+        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="pa_anlegen"><input type="hidden" name="produktionsart" value="fremd">
+          <button class="btn btn-ghost btn-sm" type="submit" title="Fertige Bulkware beim Lieferanten einkaufen">Einkaufen</button></form>
+        <?php if ($istAdmin): $bulkDa = (($bulkQ['item'] ?? 0) && ($bulkQ['bestellungen'] || $bulkQ['chargen'])); ?>
+          <?php if ($bulkDa): ?>
+          <a class="btn btn-ghost btn-sm" href="#bulkreserve" onclick="var t=document.querySelector(String.fromCharCode(35)+'auftabs [data-tab=produktion]');if(t)t.click();var e=document.getElementById('bulkreserve');if(e)e.scrollIntoView({behavior:'smooth'});return false;" title="Aus bereits bestellter oder vorhandener Bulkware reservieren">Reservieren</a>
+          <?php else: ?>
+          <button class="btn btn-ghost btn-sm" type="button" disabled style="opacity:.5;cursor:not-allowed" title="Nur möglich, wenn Bulk des gleichen Produkts unterwegs oder vorhanden ist">Reservieren</button>
+          <?php endif; ?>
+        <?php endif; ?>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:6px"><strong>Herstellen</strong> = selbst aus Rohstoffen · <strong>Einkaufen</strong> = fertige Bulkware beim Lieferanten bestellen · <strong>Reservieren</strong> = aus schon bestellter/vorhandener Bulkware des gleichen Produkts (nur wenn welche unterwegs oder vorhanden ist). Herstellen/Einkaufen legen den Produktionsauftrag an.</div>
       <?php elseif ((string)$a['status'] !== 'storniert'): $nachtragLabel = auftrag_ist_fulfillment($id) ? 'Lager 2 (Fremdlager)' : 'Lager 1 (Warenlager)'; ?>
       <div class="muted" style="margin-bottom:6px">Kein Produktionsauftrag – der Auftrag ist bereits <strong><?= h($stText) ?></strong> (Altauftrag, der nie durch die Produktion lief).</div>
       <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap" onsubmit="return confirm('Fertige Ware (<?= (int)$a['menge'] ?> Packungen) als Charge nachtragen und in <?= h($nachtragLabel) ?> einbuchen?');">
         <input type="hidden" name="aktion" value="charge_nachtragen_einlagern">
         <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Herstellung
           <select name="produktionsart" style="max-width:190px">
-            <option value="fremd">Zukauf (Fremdproduktion)</option>
-            <option value="eigen">Eigenproduktion</option>
+            <option value="fremd">Einkaufen (Zukauf)</option>
+            <option value="eigen">Herstellen</option>
           </select>
         </label>
         <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Chargennummer <span style="font-weight:400">(leer = automatisch)</span>
@@ -824,7 +829,7 @@ if (auftrag_braucht_etikett($id)):
         $nzB = fn($x)=>rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',');
         $bulkResSumme = 0.0; foreach ($bulkRes as $rv) $bulkResSumme += (float)$rv['menge'];
         $bulkOffen = max(0, (int)$gesamtStk - (int)round($bulkResSumme)); ?>
-  <h3 style="margin:18px 0 6px;font-size:14px;font-weight:600">Aus Bulk reservieren <span class="muted" style="font-weight:normal">· statt neu bestellen/produzieren</span></h3>
+  <h3 id="bulkreserve" style="margin:18px 0 6px;font-size:14px;font-weight:600;scroll-margin-top:80px">Reservieren <span class="muted" style="font-weight:normal">· aus bereits bestellter/vorhandener Bulkware</span></h3>
   <?php if (isset($_GET['bulkres'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Reservierung aktualisiert.</div><?php endif; ?>
   <?php if ($bulkRes): ?>
   <div class="bx-tablewrap" style="margin-bottom:10px"><table class="bx-table">
@@ -866,7 +871,7 @@ if (auftrag_braucht_etikett($id)):
   </form>
   <div class="muted" style="font-size:12px;margin-top:6px">Reserviert fertige Bulkware aus einer konkreten Bestellung (auch noch nicht geliefert) oder einer vorhandenen Charge – ohne neue Lieferantenbestellung und ohne Eigenproduktion. Benötigt für diesen Auftrag: <strong><?= number_format((int)$gesamtStk,0,',','.') ?></strong> Stück<?= $bulkResSumme>0 ? ', bereits reserviert ' . number_format((int)round($bulkResSumme),0,',','.') : '' ?>.</div>
   <?php else: ?>
-  <div class="muted" style="font-size:12px">Keine Bulk-Bestellung oder -Charge für dieses Produkt gefunden. Erst eine Lieferantenbestellung für die Bulkware anlegen (oder Bestand einbuchen), dann hier reservieren.</div>
+  <div class="muted" style="font-size:12px">Reservieren ist nur möglich, wenn Bulk des gleichen Produkts <strong>unterwegs</strong> (bestellt) oder <strong>vorhanden</strong> ist. Erst eine Lieferantenbestellung für die Bulkware anlegen (oder Bestand einbuchen), dann hier reservieren.</div>
   <?php endif; ?>
   <?php endif; /* Aus Bulk reservieren */ ?>
 
