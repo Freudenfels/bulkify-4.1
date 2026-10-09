@@ -1,2 +1,4 @@
 # produktion/module/betrieb/reinigung.php
+Hinweis: Zusätzlich zur intervallbasierten Planung dokumentiert die Produktion die **ereignisgesteuerte** Reinigung je Maschine (Spec 9.4) direkt im Produktionsmodus (`?p=run`): Start-Prüfung „sauber ja/nein" mit harter Sperre und Reinigungs-Bestätigung beim Abschluss (`pr_maschine_reinigung`). Diese Reinigungen schreiben `pr_maschine.letzte_reinigung` fort und erscheinen daher auch hier im Plan.
+
 Reinigungspläne (`?p=reinigung`): **generiert** aus Maschinen & Räumen mit Reinigungsintervall (`pr_reinigungsplaene()`). Je Betriebsmittel eine Fälligkeit (je_charge = „vor jeder Produktion", datumsbasiert = fällig/ok mit nächstem Termin aus letzte_reinigung + Intervall). „Gereinigt" setzt Datum + Bediener am Betriebsmittel (`pr_gereinigt_setzen`). Pflege der Betriebsmittel unter Einstellungen.

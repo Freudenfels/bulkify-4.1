@@ -82,6 +82,11 @@ function erp_pa_schritte(int $pa_id): array {
     if ($pa_id <= 0 || !tabelle_da('produktion_schritt')) return [];
     return all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]);
 }
+// Station (Name) eines einzelnen Schritts – für Prüfungen vor dem Abschließen (z. B. Reinigungs-Sperre).
+function erp_schritt_station(int $schritt_id): string {
+    if ($schritt_id <= 0 || !tabelle_da('produktion_schritt')) return '';
+    return (string) scalar("SELECT station FROM produktion_schritt WHERE id=?", [$schritt_id]);
+}
 
 // --- Produktionsweg je Auftrag (Ausbaustufen) ------------------------------------------------
 // Der Weg ist in den produktion_schritt-Zeilen abgebildet (keine Extra-Tabelle). Grundweg

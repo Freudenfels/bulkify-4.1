@@ -112,6 +112,74 @@ function pr_maschine(int $id): ?array {
     if ($id <= 0) return null; pr_stamm_schema();
     return one("SELECT * FROM pr_maschine WHERE id=?", [$id]);
 }
+
+// --- Reinigung: ereignisgesteuert + harte Sperre (Spec 9.4) -----------------------------------
+// Dokumentiert jede Reinigung/Start-Prüfung je Maschine: war sie beim Start sauber (ja/nein),
+// wurde nach der Nutzung gereinigt (+ Unterschrift, optional Bild), von wem, wann, zu welchem Auftrag.
+function pr_reinigung_log_schema(): void {
+    static $done = false; if ($done) return; $done = true;
+    db()->exec("CREATE TABLE IF NOT EXISTS pr_maschine_reinigung (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        maschine_id INT NOT NULL,
+        pa_id INT NULL,
+        schritt_id INT NULL,
+        sauber_bei_start TINYINT(1) NULL,
+        gereinigt TINYINT(1) NOT NULL DEFAULT 0,
+        unterschrift VARCHAR(190) NULL,
+        bild VARCHAR(255) NULL,
+        von VARCHAR(190) NULL,
+        angelegt DATETIME NOT NULL,
+        KEY idx_maschine (maschine_id), KEY idx_pa (pa_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+// Ein Reinigungs-/Start-Prüf-Ereignis erfassen. Bei bestätigter Reinigung zusätzlich das
+// letzte_reinigung/letzte_von der Maschine fortschreiben (Basis der Reinigungspläne).
+function pr_maschine_reinigung_erfassen(array $d): int {
+    pr_reinigung_log_schema();
+    $mid = (int)($d['maschine_id'] ?? 0);
+    if ($mid <= 0) return 0;
+    $gereinigt = !empty($d['gereinigt']) ? 1 : 0;
+    q("INSERT INTO pr_maschine_reinigung (maschine_id,pa_id,schritt_id,sauber_bei_start,gereinigt,unterschrift,bild,von,angelegt)
+       VALUES (?,?,?,?,?,?,?,?,?)",
+      [$mid, ($d['pa_id'] ?? null) ?: null, ($d['schritt_id'] ?? null) ?: null,
+       array_key_exists('sauber_bei_start', $d) && $d['sauber_bei_start'] !== null ? (int)$d['sauber_bei_start'] : null,
+       $gereinigt, mb_substr(trim((string)($d['unterschrift'] ?? '')), 0, 190) ?: null,
+       mb_substr(trim((string)($d['bild'] ?? '')), 0, 255) ?: null,
+       mb_substr(trim((string)($d['von'] ?? '')), 0, 190) ?: null, gmdate('Y-m-d H:i:s')]);
+    $neu = insert_id();
+    if ($gereinigt) {
+        pr_stamm_schema();
+        $wer = trim((string)($d['unterschrift'] ?? '')) ?: trim((string)($d['von'] ?? ''));
+        q("UPDATE pr_maschine SET letzte_reinigung=CURDATE(), letzte_von=? WHERE id=?", [$wer !== '' ? $wer : null, $mid]);
+    }
+    return $neu;
+}
+// Optionales Reinigungs-Bild aus einem Datei-Upload speichern (best-effort). Rückgabe = relativer
+// Pfad unter BX_UPLOADS (produktion/reinigung/…) oder '' (kein/ungültiges Bild). Keine 500er bei Fehlern.
+function pr_reinigung_bild_speichern(string $feld): string {
+    try {
+        if (empty($_FILES[$feld]) || ($_FILES[$feld]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) return '';
+        $tmp = (string)$_FILES[$feld]['tmp_name'];
+        if (!is_uploaded_file($tmp)) return '';
+        if ((int)$_FILES[$feld]['size'] > 12 * 1024 * 1024) return '';   // max 12 MB
+        $typ = function_exists('mime_content_type') ? (string) mime_content_type($tmp) : '';
+        $ext = match ($typ) { 'image/jpeg'=>'jpg', 'image/png'=>'png', 'image/webp'=>'webp', 'image/heic'=>'heic', default=>'' };
+        if ($ext === '') return '';
+        $dir = (defined('BX_UPLOADS') ? BX_UPLOADS : (__DIR__ . '/../../data/uploads')) . '/produktion/reinigung';
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) return '';
+        $name = 'reinigung_' . gmdate('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+        if (!@move_uploaded_file($tmp, $dir . '/' . $name)) return '';
+        return 'produktion/reinigung/' . $name;
+    } catch (\Throwable $e) { return ''; }
+}
+
+// Reinigungs-/Prüf-Ereignisse zu einem Auftrag (für den Produktionsbericht).
+function pr_maschine_reinigung_log_pa(int $pa_id): array {
+    pr_reinigung_log_schema();
+    if ($pa_id <= 0) return [];
+    return all("SELECT r.*, m.name AS maschine_name FROM pr_maschine_reinigung r
+                LEFT JOIN pr_maschine m ON m.id=r.maschine_id WHERE r.pa_id=? ORDER BY r.id", [$pa_id]);
+}
 // Reinigungsintervalle: Code => [Label, Tage (null = kein Datumsrhythmus, z. B. vor jeder Produktion)].
 function pr_intervalle(): array {
     return ['je_charge'=>['Vor jeder Produktion', null], 'taeglich'=>['Täglich', 1], 'woechentlich'=>['Wöchentlich', 7],

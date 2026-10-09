@@ -11,6 +11,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
     $schritt_id = (int)($_POST['schritt_id'] ?? 0);
     if ($aktion === 'erledigen') {
+        // Maschine (Spec 9.1): bevorzugt aus gescanntem QR-Code, sonst aus der Auswahl – schon VOR dem
+        // Abschluss bestimmen, damit die Reinigungs-Sperre (Spec 9.4) greifen kann.
+        $mid = 0;
+        $qr = trim((string)($_POST['maschine_qr'] ?? ''));
+        if ($qr !== '') { $m = pr_maschine_per_qr($qr); if ($m) $mid = (int)$m['id']; }
+        if ($mid === 0) $mid = (int)($_POST['maschine_id'] ?? 0);
+        $station_vorab = erp_schritt_station($schritt_id);
+        $hatMaschinen  = $station_vorab !== '' && count(pr_maschinen_fuer_station($station_vorab)) > 0;
+        // HARTE SPERRE (Spec 9.4): Maschine beim Start als "nicht sauber" gemeldet -> blockieren.
+        if ($hatMaschinen && $mid > 0 && (string)($_POST['sauber'] ?? '') === 'nein') {
+            pr_maschine_reinigung_erfassen(['maschine_id'=>$mid, 'pa_id'=>$id, 'schritt_id'=>$schritt_id, 'sauber_bei_start'=>0, 'von'=>$akteur]);
+            flash('Maschine als nicht sauber gemeldet – erst reinigen und bestätigen, dann den Schritt abschließen.', 'warn');
+            weiter('?p=run&id=' . $id);
+        }
         $r = erp_schritt_abschliessen($schritt_id, $akteur);
         $zusatz = '';
         if ($r['ok']) {
@@ -18,11 +32,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $v = trim((string)($_POST['daten'][$feld['feld']] ?? ''));
                 if ($v !== '') pr_daten_setzen($id, $feld['feld'], $v, $akteur);
             }
-            // Maschine (Spec 9.1): bevorzugt aus gescanntem QR-Code, sonst aus der Auswahl. Am Schritt festhalten.
-            $mid = 0;
-            $qr = trim((string)($_POST['maschine_qr'] ?? ''));
-            if ($qr !== '') { $m = pr_maschine_per_qr($qr); if ($m) $mid = (int)$m['id']; }
-            if ($mid === 0) $mid = (int)($_POST['maschine_id'] ?? 0);
+            // Maschine am Schritt festhalten.
             if ($mid > 0) {
                 $mm = pr_maschine($mid);
                 if ($mm) {
@@ -54,6 +64,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     $ng = erp_mischer_unterchargen_anlegen($id, $cap, $akteur);
                     if ($ng > 0) $zusatz .= ' ' . $ng . ' Gebinde-Untercharge(n) angelegt (' . $ng . ' Etikett(en)).';
                 }
+            }
+            // Reinigung am Abschluss (Spec 9.4): bestätigt + unterschrieben (+ Bild optional) -> dokumentieren,
+            // Maschine als gereinigt fortschreiben (Basis der Reinigungspläne).
+            if ($mid > 0 && $hatMaschinen && !empty($_POST['gereinigt'])) {
+                $unter = trim((string)($_POST['unterschrift'] ?? '')) ?: $akteur;
+                $bild  = pr_reinigung_bild_speichern('reinigung_bild');
+                pr_maschine_reinigung_erfassen(['maschine_id'=>$mid, 'pa_id'=>$id, 'schritt_id'=>$schritt_id,
+                    'sauber_bei_start'=> ((string)($_POST['sauber'] ?? '') === 'ja' ? 1 : null),
+                    'gereinigt'=>1, 'unterschrift'=>$unter, 'bild'=>$bild, 'von'=>$akteur]);
+                $zusatz .= ' Reinigung bestätigt (' . $unter . ')' . ($bild ? ' mit Bild' : '') . '.';
             }
         }
         flash($r['ok'] ? (($r['fertig'] ? 'Letzter Schritt erledigt – Produktion fertig, Fertigware eingebucht.' : 'Schritt „' . $r['station'] . '" erledigt.') . $zusatz)
@@ -90,6 +110,8 @@ $benoetigt  = (int)$pa['menge'];
 $prod_rest  = max(0, $benoetigt - (int)round($produziert));
 $prod_proz  = $benoetigt > 0 ? min(100, (int)round($produziert * 100 / $benoetigt)) : 0;
 $daten      = pr_daten($id);   // erfasste Werte (Mischmenge, Gewichte, Muster)
+$reinigungen = [];             // bestätigte Reinigungen je Schritt (Spec 9.4)
+foreach (pr_maschine_reinigung_log_pa($id) as $rr) if (!empty($rr['gereinigt'])) $reinigungen[(int)$rr['schritt_id']] = $rr;
 $cur = null;
 foreach ($schritte as $s) if ((int)$s['id'] === $erster_offen) { $cur = $s; break; }
 
@@ -212,7 +234,7 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
     <button type="button" class="btn btn-primary" style="font-size:16px;padding:12px 28px" disabled><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
     <?php if ($istAdmin): ?><div class="muted" style="font-size:12px;margin-top:8px">Admin: über „Abhaken" in der Ablaufliste lässt sich der Schritt notfalls trotzdem setzen (ohne Lagerabbuchung).</div><?php endif; ?>
   <?php else: ?>
-  <form method="post" style="margin:0" onsubmit="return confirm('Schritt &quot;<?= h((string)$cur['station']) ?>&quot; jetzt abschließen?');">
+  <form method="post" enctype="multipart/form-data" style="margin:0" onsubmit="return confirm('Schritt &quot;<?= h((string)$cur['station']) ?>&quot; jetzt abschließen?');">
     <input type="hidden" name="aktion" value="erledigen">
     <input type="hidden" name="schritt_id" value="<?= (int)$cur['id'] ?>">
     <?php if ($istMischen && $cap > 0): ?><input type="hidden" name="kg_pro_gebinde" value="<?= h($capTxt) ?>"><?php endif; ?>
@@ -233,6 +255,20 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
       </div>
       <div class="bx-field" style="margin:0;max-width:200px"><label>QR-Code</label><input type="text" name="maschine_qr" placeholder="QR der Maschine"></div>
     </div>
+    <?php if ($maschinen_liste): ?>
+    <div style="margin:0 0 14px;padding:12px 14px;border:1px solid var(--line-2);border-radius:8px">
+      <div class="muted" style="font-size:13px">Reinigung</div>
+      <div class="bx-row" style="gap:16px;flex-wrap:wrap;align-items:flex-end;margin-top:6px">
+        <div class="bx-field" style="margin:0;max-width:220px"><label>Maschine beim Start sauber?</label>
+          <select name="sauber" required><option value="">— bitte wählen —</option><option value="ja">Ja</option><option value="nein">Nein</option></select></div>
+        <div class="bx-field" style="margin:0;max-width:240px"><label>Nach Nutzung gereinigt</label>
+          <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" name="gereinigt" value="1"> bestätige Reinigung</label></div>
+        <div class="bx-field" style="margin:0;max-width:220px"><label>Unterschrift (Name)</label><input type="text" name="unterschrift" value="<?= h($akteur) ?>"></div>
+        <div class="bx-field" style="margin:0;max-width:240px"><label>Bild (optional)</label><input type="file" name="reinigung_bild" accept="image/*"></div>
+      </div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">„Nein" blockiert den Abschluss, bis die Maschine gereinigt und bestätigt ist.</p>
+    </div>
+    <?php endif; ?>
     <?php endif; ?>
     <div class="bx-row" style="gap:12px;flex-wrap:wrap;margin:0 0 14px;align-items:flex-end">
       <div class="bx-field" style="margin:0;max-width:160px"><label>Temperatur (°C)</label><input type="text" name="umg_temp" value="<?= h((string)($daten['temp_' . $cur['id']]['wert'] ?? '')) ?>" placeholder="z. B. 21"></div>
@@ -276,6 +312,9 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
           <?php $kt = (string)($daten['temp_' . $s['id']]['wert'] ?? ''); $kf = (string)($daten['feuchte_' . $s['id']]['wert'] ?? '');
                 if ($kt !== '' || $kf !== ''): ?>
             <br><span class="muted" style="font-size:12px">Klima: <?= $kt !== '' ? h($kt) . ' °C' : '' ?><?= ($kt !== '' && $kf !== '') ? ' / ' : '' ?><?= $kf !== '' ? h($kf) . ' %' : '' ?></span>
+          <?php endif; ?>
+          <?php if (!empty($reinigungen[(int)$s['id']])): ?>
+            <br><span class="muted" style="font-size:12px">Gereinigt: <?= h((string)($reinigungen[(int)$s['id']]['unterschrift'] ?: $reinigungen[(int)$s['id']]['von'])) ?></span>
           <?php endif; ?>
         </td>
         <td><?= $done ? '<span class="badge badge-ok">erledigt</span>' : ($dran ? '<span class="badge badge-info">als Nächstes</span>' : '<span class="badge badge-warn">offen</span>') ?></td>
