@@ -1035,8 +1035,14 @@ $ustP = (meta_get('kleinunternehmer','0') === '1' || $land !== 'DE') ? 0.0 : (fl
 // Stornierte Auftraege sieht der Kunde NICHT (sie wurden ja nicht ausgefuehrt). Einzige Ausnahme:
 // ein in ein Kontingent umgewandelter Jahresvertrags-Auftrag (kontingent_id) – der wird bewusst als
 // „hinterlegt in Jahresmenge" gezeigt (siehe aufBadge).
+// Nicht in den Kunden-„Bestellungen": Fulfillment-/Lager-Abrechnungen (DL-Auftrag, dessen Service
+// baustein='fulfillment' oder kategorie='lagerung' ist). Das sind wiederkehrende Abrechnungen, keine
+// nachverfolgbaren Bestellungen – echte DL (Labortest o. Ä.) bleiben sichtbar.
 $auftraege = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
-                  WHERE a.kunde_id=? AND (a.status <> 'storniert' OR a.kontingent_id IS NOT NULL) ORDER BY a.angelegt DESC", [$kid]);
+                  WHERE a.kunde_id=? AND (a.status <> 'storniert' OR a.kontingent_id IS NOT NULL)
+                    AND NOT (a.kategorie='dienstleistung' AND a.dienstleistung_id IN
+                             (SELECT id FROM dienstleistung WHERE baustein='fulfillment' OR kategorie='lagerung'))
+                  ORDER BY a.angelegt DESC", [$kid]);
 // Fertigware-Chargen je Bestellung (Charge-Nr steht auf dem Produkt, deshalb sichtbar fuer den Kunden).
 $auftragChargen = [];
 if ($auftraege) {
