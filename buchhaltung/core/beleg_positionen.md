@@ -6,11 +6,14 @@
   (Menge = Auftragsmenge). Mirror der Dashboard-Logik `beleg_positionen_aus_auftrag`, aber schreibend.
   Rückgabe `['ok','anzahl','grund']`. Ändert NICHT die Kopfsummen (GoBD) – Positionen sind die
   Aufschlüsselung des bestehenden Betrags; Abweichungen zeigt die Detailseite als Hinweis.
-  **Jahresvertrag-Abruf:** Hat der Auftrag ein `kontingent_id`, schlüsselt `be_kontingent_positionen()`
-  die gewählte JV-Option (aus `kontingent.angebot_id`/`gruppe`) auf und **skaliert** sie auf den Festpreis
-  je Packung (`kontingent.vk_stueck`) → getrennte Zeilen (Produkt + Glas + Etikett), die in Summe genau den
-  Festpreis ergeben (Rundungsdrift auf die größte Zeile). Zugriff auf die geteilten Tabellen nur über die
-  Naht (`erp_kontingent`, `erp_angebot_positionen`). Spiegelt `kontingent_abruf_positionen()` im Dashboard.
+  **Jahresvertrag-Abruf (Reparatur bestehender Rechnungen):** Hat der Auftrag ein `kontingent_id`, schlüsselt
+  `be_kontingent_positionen()` die gewählte JV-Option (aus `kontingent.angebot_id`/`gruppe`) auf und
+  **skaliert** sie auf den Festpreis je Packung (`kontingent.vk_stueck`) → getrennte Zeilen (Produkt + Glas +
+  Etikett), die in Summe genau den Festpreis ergeben (Rundungsdrift auf die größte Zeile). Zugriff auf die
+  geteilten Tabellen nur über die Naht (`erp_kontingent`, `erp_angebot_positionen`). Hinweis: dieser Pfad
+  nutzt die Positionen des **Original-Angebots** (eingefroren – richtig für bereits erstellte Rechnungen).
+  NEUE Abrufe schlüsselt das Dashboard dagegen aus der **aktuellen Produkt-Zusammensetzung** auf
+  (`kontingent_abruf_positionen()` → `produkt_komponenten_zeilen()`), damit Produktänderungen sofort wirken.
   **Fallback:** Hat der Auftrag kein verknüpftes Angebot/Kontingent (oder ist die Option nicht eindeutig) oder
   das Angebot nur Staffelpreise (keine Einzelpositionen), wird **eine Sammelposition** aus dem Auftrag geschrieben:
   Produktname, Auftragsmenge, Netto/Menge als Einzelpreis (reproduziert das Rechnungs-Netto). Spiegelt den

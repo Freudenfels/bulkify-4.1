@@ -8220,25 +8220,31 @@ function kontingent_status(int $kontingent_id, string $status): bool {
     return true;
 }
 
-// Rechnungspositionen fuer einen Abruf aufschluesseln: die Positionen der gewaehlten JV-Option
-// (Produkt/Herstellung + Glas + Etikett) werden auf den vereinbarten Festpreis je Packung (vk_stueck)
+// Komponentenzeilen eines Produkts (Herstellung + Gebinde + Verschluss + Etikett + Karton) mit Preisen je
+// Packung – aus der AKTUELLEN Produkt-Zusammensetzung (nicht eingefroren). Nutzt dieselbe Engine wie das
+// Angebot (angebot_rezeptur_zeilen); Etikett wird aus dem Behälter abgeleitet, wenn kein Slot gesetzt ist.
+function produkt_komponenten_zeilen(int $pid, int $menge, ?int $kid): array {
+    $p = $pid ? one("SELECT rezeptur_id, einheiten_pro_packung, verpackung_id, verschluss_id, etikett_id, karton_id, beipack_id FROM produkt WHERE id=?", [$pid]) : null;
+    if (!$p || empty($p['rezeptur_id']) || (int)($p['einheiten_pro_packung'] ?? 0) <= 0) return [];
+    $verp = array_values(array_filter([
+        (int)($p['verpackung_id'] ?? 0), (int)($p['verschluss_id'] ?? 0),
+        (int)($p['etikett_id'] ?? 0), (int)($p['karton_id'] ?? 0), (int)($p['beipack_id'] ?? 0),
+    ]));
+    return angebot_rezeptur_zeilen((int)$p['rezeptur_id'], (int)$p['einheiten_pro_packung'], $verp, max(1, $menge), null, $kid);
+}
+
+// Rechnungspositionen fuer einen Abruf aufschluesseln: die AKTUELLE Produkt-Zusammensetzung
+// (Produkt/Herstellung + Glas + Etikett) wird auf den vereinbarten Festpreis je Packung (vk_stueck)
 // SKALIERT, damit getrennte Zeilen entstehen, die in Summe exakt den Festpreis ergeben. Rundungsdrift
-// kommt auf die groesste Zeile. Rueckgabe: Positions-Array (menge = Abrufmenge) oder [] (dann Sammelzeile).
+// kommt auf die groesste Zeile. Erweiterst du das Produkt (Glas/Etikett), wirkt das sofort auf neue
+// Abrufe. Rueckgabe: Positions-Array (menge = Abrufmenge) oder [] (dann Sammelzeile).
 function kontingent_abruf_positionen(array $k, int $menge, float $ustP): array {
-    $angId = (int)($k['angebot_id'] ?? 0);
-    if ($angId <= 0) return [];
-    $pos = angebot_positionen($angId);
-    if (!$pos) return [];
-    // Nach Konfigurations-Gruppe buendeln; die am Kontingent gespeicherte Option waehlen (sonst die einzige).
-    $grp = [];
-    foreach ($pos as $p) $grp[trim((string)($p['gruppe'] ?? ''))][] = $p;
-    $wahl = trim((string)($k['gruppe'] ?? ''));
-    if ($wahl !== '' && isset($grp[$wahl]))  $rows = $grp[$wahl];
-    elseif (count($grp) === 1)               $rows = reset($grp);
-    else                                     return [];           // mehrere Optionen, keine eindeutig -> Sammelzeile
-    $sumCent = 0; foreach ($rows as $r) $sumCent += (int)$r['preis_cent'];
     $targetCent = (int) round((float)($k['vk_stueck'] ?? 0) * 100);   // Festpreis je Packung
-    if ($sumCent <= 0 || $targetCent <= 0) return [];
+    if ($targetCent <= 0) return [];
+    $rows = produkt_komponenten_zeilen((int)($k['produkt_id'] ?? 0), max(1, $menge), (int)($k['kunde_id'] ?? 0) ?: null);
+    if (!$rows) return [];
+    $sumCent = 0; foreach ($rows as $r) $sumCent += (int)$r['preis_cent'];
+    if ($sumCent <= 0) return [];
     $faktor = $targetCent / $sumCent;
     $skaliert = []; foreach ($rows as $r) $skaliert[] = (int) round((int)$r['preis_cent'] * $faktor);
     // Rundungsdrift auf die groesste Position legen, damit die Summe exakt dem Festpreis je Packung entspricht.
@@ -8246,8 +8252,7 @@ function kontingent_abruf_positionen(array $k, int $menge, float $ustP): array {
     if ($drift !== 0 && $skaliert) { $maxI = 0; foreach ($skaliert as $i => $v) if ($v > $skaliert[$maxI]) $maxI = $i; $skaliert[$maxI] += $drift; }
     $out = [];
     foreach ($rows as $i => $r) {
-        $bez = preg_replace('/^[A-Z]\)\s*/', '', (string)$r['bezeichnung']);   // Gruppen-Buchstabe raus
-        $out[] = ['artikelnr'=>(string)($r['artikelnr'] ?? ''), 'bezeichnung'=>$bez,
+        $out[] = ['artikelnr'=>(string)($r['artikelnr'] ?? ''), 'bezeichnung'=>(string)$r['bezeichnung'],
                   'beschreibung'=>(string)($r['beschreibung'] ?? ''), 'menge'=>$menge,
                   'einheit'=>($r['einheit'] ?: 'Stk.'), 'preis_cent'=>$skaliert[$i], 'mwst_satz'=>$ustP];
     }
