@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     // Positionen aus dem verknüpften Angebot übernehmen (aufgeschlüsselt).
     if ($aktion === 'pos_aus_angebot') {
         $res = beleg_positionen_aus_angebot($id);
-        if ($res['ok']) beleg_status_log_add($id, (string)(scalar("SELECT status FROM beleg WHERE id=?", [$id]) ?: 'offen'), 'Positionen aus Angebot übernommen (' . (int)$res['anzahl'] . ')', $akteur);
+        if ($res['ok']) beleg_status_log_add($id, (string)(scalar("SELECT status FROM beleg WHERE id=?", [$id]) ?: 'offen'), 'Positionen aus Auftrag übernommen (' . (int)$res['anzahl'] . ')', $akteur);
         $url = '?p=rechnung&id=' . $id . '&pos=' . ($res['ok'] ? (int)$res['anzahl'] : '0');
         if (!$res['ok']) $url .= '&posgrund=' . urlencode($res['grund']);
         header('Location: ' . $url); exit;
@@ -347,7 +347,7 @@ if ($mahnungen):
     <?php if ($b['auftrag_id']): ?>
     <form method="post" style="margin:0">
       <input type="hidden" name="aktion" value="pos_aus_angebot">
-      <button class="btn btn-ghost btn-sm" type="submit" data-busy="Übernehme …" <?= $positionen ? "onclick=\"return confirm('Positionen neu aus dem Angebot übernehmen? Vorhandene Positionen werden ersetzt.');\"" : '' ?>>Positionen aus Angebot übernehmen</button>
+      <button class="btn btn-ghost btn-sm" type="submit" data-busy="Übernehme …" <?= $positionen ? "onclick=\"return confirm('Positionen neu aus dem Auftrag übernehmen? Vorhandene Positionen werden ersetzt.');\"" : '' ?>>Positionen aus Auftrag übernehmen</button>
     </form>
     <?php endif; ?>
     <button class="btn btn-ghost btn-sm" type="button" onclick="document.getElementById('posEdit').open=true;document.getElementById('posEdit').scrollIntoView({behavior:'smooth'})">Positionen manuell bearbeiten</button>

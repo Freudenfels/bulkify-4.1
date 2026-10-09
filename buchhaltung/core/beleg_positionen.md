@@ -6,7 +6,11 @@
   (Menge = Auftragsmenge). Mirror der Dashboard-Logik `beleg_positionen_aus_auftrag`, aber schreibend.
   Rückgabe `['ok','anzahl','grund']`. Ändert NICHT die Kopfsummen (GoBD) – Positionen sind die
   Aufschlüsselung des bestehenden Betrags; Abweichungen zeigt die Detailseite als Hinweis.
-  Hat das Angebot nur Staffelpreise (keine Einzelpositionen), gibt es einen erklärenden Grund zurück.
+  **Fallback:** Hat der Auftrag kein verknüpftes Angebot (z. B. Jahresvertrag-Abruf) oder das Angebot nur
+  Staffelpreise (keine Einzelpositionen), wird **eine Sammelposition** aus dem Auftrag geschrieben:
+  Produktname, Auftragsmenge, Netto/Menge als Einzelpreis (reproduziert das Rechnungs-Netto). Spiegelt den
+  Fallback des Dashboard-Materializers `beleg_positionen_materialisieren`. Dadurch ist der Button auch für
+  Abruf-Rechnungen ein Ein-Klick-Fix, wenn eine Rechnung nur mit Kopf-Netto (ohne Positionen) existiert.
 - `beleg_positionen_manuell_setzen($beleg_id, $zeilen)`: ersetzt alle Positionen aus einem Formular
   (bezeichnung/menge/einheit/preis €/ust). Leere Zeilen werden übersprungen. Kopfsummen bleiben.
 

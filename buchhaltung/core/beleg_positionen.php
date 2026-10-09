@@ -17,39 +17,54 @@ function beleg_positionen_aus_angebot(int $beleg_id): array {
 
     $auf = erp_auftrag((int)$b['auftrag_id']);
     if (!$auf)                            return ['ok' => false, 'anzahl' => 0, 'grund' => 'Auftrag nicht gefunden.'];
-    if (empty($auf['angebot_id']))        return ['ok' => false, 'anzahl' => 0, 'grund' => 'Der Auftrag hat kein verknüpftes Angebot.'];
 
     $menge = max(1, (int)($auf['menge'] ?? 0));
     $zielCent = (int) round((float)($auf['gesamt_netto'] ?? 0) * 100);
     if ($zielCent <= 0) $zielCent = (int) round((float)$b['netto'] * 100);   // Fallback: Beleg-Netto
     $ustSatz = (float) $b['ust_prozent'];
 
-    $pos = erp_angebot_positionen((int)$auf['angebot_id']);
-    if (!$pos) return ['ok' => false, 'anzahl' => 0, 'grund' => 'Im Angebot sind keine aufgeschlüsselten Positionen hinterlegt (nur Staffelpreis) – es bleibt bei der Gesamtposition oder trage die Positionen manuell ein.'];
-
-    // Nach Konfigurations-Gruppe (A/B/C …; leer = einzige) bündeln und die zum Betrag passende Gruppe wählen.
-    $grp = [];
-    foreach ($pos as $p) $grp[trim((string)($p['gruppe'] ?? ''))][] = $p;
+    // 1) Bevorzugt: aufgeschlüsselt aus dem Angebot (wenn ein Angebot mit echten Positionen hängt).
+    //    Nach Konfigurations-Gruppe (A/B/C …; leer = einzige) bündeln und die zum Betrag passende Gruppe wählen.
     $gewaehlt = null;
-    foreach ($grp as $rows) {
-        $sumPack = 0; foreach ($rows as $r) $sumPack += (int)$r['preis_cent'];
-        if ($sumPack * $menge === $zielCent) { $gewaehlt = $rows; break; }
+    if (!empty($auf['angebot_id'])) {
+        $pos = erp_angebot_positionen((int)$auf['angebot_id']);
+        if ($pos) {
+            $grp = [];
+            foreach ($pos as $p) $grp[trim((string)($p['gruppe'] ?? ''))][] = $p;
+            foreach ($grp as $rows) {
+                $sumPack = 0; foreach ($rows as $r) $sumPack += (int)$r['preis_cent'];
+                if ($sumPack * $menge === $zielCent) { $gewaehlt = $rows; break; }
+            }
+            if ($gewaehlt === null && count($grp) === 1) $gewaehlt = reset($grp);   // nur eine Konfiguration -> die nehmen
+        }
     }
-    if ($gewaehlt === null && count($grp) === 1) $gewaehlt = reset($grp);   // nur eine Konfiguration -> die nehmen
-    if ($gewaehlt === null) return ['ok' => false, 'anzahl' => 0, 'grund' => 'Keine Angebots-Konfiguration passt exakt zum Rechnungsbetrag – bitte manuell prüfen/erfassen.'];
 
-    // Positionen ersetzen (Aufschlüsselung des bestehenden Betrags; Kopfsummen bleiben).
     q("DELETE FROM beleg_position WHERE beleg_id=?", [$beleg_id]);
     $sort = 0;
-    foreach ($gewaehlt as $r) {
-        $bez = preg_replace('/^[A-Z]\)\s*/', '', (string)$r['bezeichnung']);   // Gruppen-Buchstabe raus
-        q("INSERT INTO beleg_position (beleg_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz)
-           VALUES (?,?,?,?,?,?,?,?,?)",
-          [$beleg_id, $sort++, trim((string)($r['artikelnr'] ?? '')) ?: null, $bez,
-           trim((string)($r['beschreibung'] ?? '')) ?: null, $menge, ($r['einheit'] ?: 'Stk.'),
-           (int)$r['preis_cent'], $ustSatz]);
+    if ($gewaehlt !== null) {
+        // Positionen ersetzen (Aufschlüsselung des bestehenden Betrags; Kopfsummen bleiben).
+        foreach ($gewaehlt as $r) {
+            $bez = preg_replace('/^[A-Z]\)\s*/', '', (string)$r['bezeichnung']);   // Gruppen-Buchstabe raus
+            q("INSERT INTO beleg_position (beleg_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz)
+               VALUES (?,?,?,?,?,?,?,?,?)",
+              [$beleg_id, $sort++, trim((string)($r['artikelnr'] ?? '')) ?: null, $bez,
+               trim((string)($r['beschreibung'] ?? '')) ?: null, $menge, ($r['einheit'] ?: 'Stk.'),
+               (int)$r['preis_cent'], $ustSatz]);
+        }
+        return ['ok' => true, 'anzahl' => $sort, 'grund' => ''];
     }
-    return ['ok' => true, 'anzahl' => $sort, 'grund' => ''];
+
+    // 2) Keine Angebots-Aufschlüsselung (z. B. Jahresvertrag-Abruf ohne Angebot, oder nur Staffelpreis):
+    //    eine Sammelposition aus dem Auftrag – Produktname, Auftragsmenge, Netto/Menge als Einzelpreis
+    //    (reproduziert das Rechnungs-Netto; Kopfsummen bleiben). Spiegelt den Fallback des Dashboard-Materializers.
+    $bez   = trim((string)($auf['produkt_name'] ?? '')) ?: 'Produkt';
+    $rezId = erp_auftrag_rezeptur_id((int)$auf['id']);
+    $rezNr = $rezId ? (string)(erp_rezeptur($rezId)['nummer'] ?? '') : '';
+    $einzelCent = (int) round($menge > 0 ? $zielCent / $menge : $zielCent);
+    q("INSERT INTO beleg_position (beleg_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz)
+       VALUES (?,?,?,?,?,?,?,?,?)",
+      [$beleg_id, 0, $rezNr ?: null, $bez, null, $menge, 'Stk.', $einzelCent, $ustSatz]);
+    return ['ok' => true, 'anzahl' => 1, 'grund' => ''];
 }
 
 // Positionen manuell setzen (ersetzt alle). $zeilen: [['artikelnr','bezeichnung','beschreibung','menge','einheit','preis'(€),'ust'], …].
