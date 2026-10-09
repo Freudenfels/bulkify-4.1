@@ -486,13 +486,14 @@ $anfRid = (int)($pa['rezeptur_id'] ?? 0);
 if (!$anfRid && !empty($pa['produkt_id'])) $anfRid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
 $anfZutaten = $anfRid ? all("SELECT DISTINCT z.item_id, i.name FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id
                              WHERE z.rezeptur_id=? AND z.item_id IS NOT NULL ORDER BY i.name", [$anfRid]) : [];
-if ($anfZutaten):
+if ($anfRid):
     $mitPreis = 0; foreach ($anfZutaten as $rz) if (anfrage_status((int)$rz['item_id']) === 'preise') $mitPreis++;
+    $pAnfragen = anfrage_produkt_anfragen($anfRid);   // Fertigprodukt-Anfragen: wo/wann schon angefragt
 ?>
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
-    <h2 style="margin:0">Rohstoffpreise</h2>
-    <?php if ($mitPreis > 0): ?><span><?= bx_badge('Preise liegen vor', 'ok') ?> <span class="muted" style="font-size:12px"><?= $mitPreis ?>/<?= count($anfZutaten) ?></span></span><?php endif; ?>
+    <h2 style="margin:0">Rohstoffpreise / Lieferantenanfragen</h2>
+    <?php if ($anfZutaten && $mitPreis > 0): ?><span><?= bx_badge('Preise liegen vor', 'ok') ?> <span class="muted" style="font-size:12px"><?= $mitPreis ?>/<?= count($anfZutaten) ?></span></span><?php endif; ?>
   </div>
   <p class="muted" style="margin-top:4px">Was kostet uns die Rezeptur beim Lieferanten? Wo kein Preis steht, hier direkt anfragen – dann kannst du das Angebot sauber kalkulieren.</p>
   <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px"><?= (int)$_GET['angefragt'] ?> Preisanfrage(n) verschickt<?= isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '' ?>.</div><?php endif; ?>
@@ -510,6 +511,33 @@ if ($anfZutaten):
     </div>
   </div>
   <?php endif; ?>
+  <?php // Überblick „schon angefragt?": wo/wann wurde dieses Fertigprodukt bereits bei Lieferanten angefragt.
+  if ($pAnfragen): ?>
+  <div style="margin:0 0 12px">
+    <div class="muted" style="font-size:12px;margin-bottom:4px">Bereits bei Lieferanten angefragt:</div>
+    <div class="bx-tablewrap"><table class="bx-table" style="margin:0">
+      <thead><tr><th>Lieferant</th><th>angefragt am</th><th>Status</th><th class="bx-num">Angebot</th></tr></thead>
+      <tbody>
+      <?php foreach ($pAnfragen as $pq):
+          $stLbl = match ((string)$pq['status']) {
+              'offen'       => bx_badge('wartet', 'warn'),
+              'beantwortet' => bx_badge('beantwortet', 'ok'),
+              'angenommen'  => bx_badge('angenommen', 'ok'),
+              'abgelehnt'   => bx_badge('abgelehnt', 'err'),
+              default       => bx_badge((string)$pq['status']),
+          };
+          $preis = ($pq['ang_preis'] !== null && $pq['ang_preis'] !== '') ? number_format((float)$pq['ang_preis'], 2, ',', '.') . ' ' . h((string)($pq['ang_einheit'] ?? '')) : '–';
+      ?>
+        <tr><td><?= h((string)$pq['firma']) ?></td>
+            <td><?= $pq['angelegt'] ? h(fmt_zeit($pq['angelegt'])) : '–' ?></td>
+            <td><?= $stLbl ?></td>
+            <td class="bx-num"><?= $preis ?></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; ?>
+  <?php if ($anfZutaten): ?>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th>Rohstoff</th><th>Status</th><th></th></tr></thead>
     <tbody>
@@ -522,6 +550,9 @@ if ($anfZutaten):
     <?php endforeach; ?>
     </tbody>
   </table></div>
+  <?php else: ?>
+  <p class="muted" style="margin:0">Die Zutaten dieser Rezeptur sind (noch) keinen Rohstoffen zugeordnet – Einzelpreise lassen sich erst abfragen, wenn die Zutaten im <a href="?p=rezeptur_detail&id=<?= (int)$anfRid ?>">Rezeptur-Editor</a> mit Rohstoffen verknüpft sind. Das ganze Produkt kannst du oben als Fertigprodukt anfragen.</p>
+  <?php endif; ?>
 </div>
 <?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=portal_anfrage&id=' . (int)$id); ?>
 <?php endif; ?>
