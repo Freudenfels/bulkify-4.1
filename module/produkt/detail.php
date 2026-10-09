@@ -134,6 +134,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
                 q("UPDATE produkt SET weg_$wf=? WHERE id=?", [isset($_POST['weg_' . $wf]) ? 1 : 0, (int)$id]);
         }
         q("UPDATE produkt SET extern=? WHERE id=?", [$extern, (int)$id]);
+        // Handelsware (Spec 7.1): nur bei Eigenprodukt relevant (extern hat ohnehin keine Produktion). Beim
+        // Bestellen wird dann KEIN Produktionsauftrag erzeugt – versendet wird aus dem Bestand.
+        $handelsware = (!$extern && isset($_POST['handelsware'])) ? 1 : 0;
+        q("UPDATE produkt SET handelsware=? WHERE id=?", [$handelsware, (int)$id]);
         header('Location: ?p=produkt&id=' . $id . '&gespeichert=1'); exit;
     }
 }
@@ -271,7 +275,12 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
       <label class="bx-check" style="gap:8px;margin:0;cursor:pointer"><input type="radio" name="extern" value="1" <?= $istExtern ? 'checked' : '' ?>> Nur Fulfillment – Kundenware, wir versenden nur <span class="muted" style="font-weight:400">(ohne Rezeptur/Produktion)</span></label>
     </div>
     <div class="muted bx-keepinfo" id="externHint" style="font-size:13px;margin-top:10px<?= $istExtern ? '' : ';display:none' ?>">Ware, die der Kunde woanders herstellen ließ und die wir nur lagern/versenden. Gehört dem gewählten <strong>Kunden</strong> (exklusiv) und ist danach im <a href="?p=lager2">Fremdlager</a> einbuchbar. Rezeptur, Stückliste, Kalkulation und Preise werden ausgeblendet.</div>
+    <label class="bx-check" id="handelswareBox" style="gap:8px;margin:12px 0 0;cursor:pointer<?= $istExtern ? ';display:none' : '' ?>">
+      <input type="checkbox" name="handelsware" value="1" <?= (int)($p['handelsware'] ?? 0) === 1 ? 'checked' : '' ?>>
+      <span>Handelsware – als <strong>Fertigware zugekauft</strong> &amp; weiterverkauft <span class="muted" style="font-weight:400">(kein Produktionsauftrag beim Bestellen – versendet aus dem Bestand)</span></span>
+    </label>
   </div>
+  <script>(function(){var rs=document.querySelectorAll('input[name=extern]'),hb=document.getElementById('handelswareBox');function upd(){var ext=document.querySelector('input[name=extern]:checked');if(hb)hb.style.display=(ext&&ext.value==='1')?'none':'';}rs.forEach(function(r){r.addEventListener('change',upd);});upd();})();</script>
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Produktname (intern) <?= bx_hint('unser Arbeitsname, z. B. „Zink". Gleiche Namen werden automatisch mit v2, v3 … fortlaufend nummeriert.') ?></label><input type="text" name="name" value="<?= $v('name') ?>" required placeholder="z. B. Zink"></div>
     <div class="bx-field"><label>Name für den Kunden <?= bx_hint('so heißt es beim Kunden im Portal / auf Belegen, z. B. „Super Zink". Leer = interner Name.') ?></label><input type="text" name="kundenname" value="<?= $v('kundenname') ?>" placeholder="z. B. Super Zink"></div>

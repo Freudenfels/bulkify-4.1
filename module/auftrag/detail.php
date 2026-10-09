@@ -644,6 +644,11 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
 
 <div class="bx-panel" data-panel="produktion">
   <h2>Produktion &amp; Beschaffung</h2>
+  <?php if (produkt_ist_handelsware((int)($a['produkt_id'] ?? 0))): ?>
+  <div class="bx-panel" style="border-color:var(--gruen,#1D9E75);background:var(--panel-2);padding:10px 14px;margin:0 0 12px">
+    <strong>Handelsware</strong> – dieses Produkt wird als Fertigware zugekauft &amp; weiterverkauft. Es wird <strong>kein Produktionsauftrag</strong> erzeugt; versendet wird aus dem Bestand.
+  </div>
+  <?php endif; ?>
   <div class="bx-grid">
     <div><div class="k muted">Herstellung</div><div>
       <?= $istFremd ? bx_badge('Fremdproduktion · fertige Bulkware zukaufen','info') : bx_badge('Eigenproduktion · aus Rohstoffen','ok') ?>

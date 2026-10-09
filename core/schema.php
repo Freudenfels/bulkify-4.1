@@ -1372,6 +1372,10 @@ function init_schema(): void {
     // Externe Kundenware: Produkt, das der Kunde woanders hat herstellen lassen und wir nur lagern/versenden
     // (keine Rezeptur/Produktion bei uns). Gehört immer dem Kunden (exklusiv=1). Fürs Fremdlager/Fulfillment.
     ensure_column('produkt', 'extern', "TINYINT(1) NOT NULL DEFAULT 0");
+    // Handelsware (Spec 7.1): unser Katalog-Produkt, das wir als FERTIGE Ware zukaufen und weiterverkaufen –
+    // der Kunde verkauft die Kapseln ggf. weiter. KEINE Produktion bei uns -> beim Bestellen wird KEIN
+    // Produktionsauftrag erzeugt; Auftrag + Rechnung entstehen normal, versendet wird aus dem Bestand.
+    ensure_column('produkt', 'handelsware', "TINYINT(1) NOT NULL DEFAULT 0");
     // Portal-Freischaltungen je Kunde (welche Anfrage-Bereiche der Kunde sieht)
     ensure_column('kunden', 'portal_rezeptur', "TINYINT(1) NOT NULL DEFAULT 1");
     ensure_column('kunden', 'portal_produkte', "TINYINT(1) NOT NULL DEFAULT 0");
@@ -3855,10 +3859,11 @@ function produkt_variante_id(int $vorlage_produkt_id, int $stueck, ?int $verp_id
     // „120 Kapseln in der PET-Dose" nur durch ein nichtssagendes v2.
     $behName = $verp_id ? (string) scalar("SELECT name FROM item WHERE id=?", [$verp_id]) : '';
     $name = produkt_name_versioniert($rez . ' · ' . form_groessen_label($form, (float)$stueck) . ($behName !== '' ? ' · ' . $behName : ''));
-    q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,notiz)
-       VALUES (?,?,NULL,?,?,?,?,?,?,?,0,?,?,?,?)",
+    q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,handelsware,einheiten_pro_packung,einnahme_pro_tag,status,notiz)
+       VALUES (?,?,NULL,?,?,?,?,?,?,?,0,?,?,?,?,?)",
       [naechste_nummer('P'), $name, $rid, $verp_id,
        $v['verschluss_id'], $v['etikett_id'], $v['karton_id'], $v['beipack_id'], $v['leerkapsel_id'],
+       (int)($v['handelsware'] ?? 0),
        $stueck, $v['einnahme_pro_tag'], 'aktiv',
        'Automatisch aus der Angebotskalkulation entstanden (Rezeptur x Menge + Verpackung).']);
     $neu = insert_id();
@@ -7470,6 +7475,11 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
       [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen', $hinw, $sicht]);
     // Detaillierte Positionen (Produkt + Glas + Etikett) materialisieren -> Team sieht sie, PDF funktioniert.
     beleg_positionen_materialisieren((int) insert_id(), $ustP);
+    // Handelsware (Spec 7.1): KEIN Produktionsauftrag – Auftrag + Rechnung reichen, versendet wird aus dem Bestand.
+    if (produkt_ist_handelsware((int)($a['produkt_id'] ?? 0))) {
+        if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftragsbestätigung & Rechnung automatisch erzeugt (Handelsware – ohne Produktion).', 'auftrag', 'auftrag', $aid);
+        return $aid;
+    }
     // Produktionsauftrag (PR) + Stationen automatisch anlegen
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$a['produkt_id']]) ?: 'kapsel';
     // Standard = Fremdproduktion (verkürzter Weg); auf Eigenproduktion umstellbar im Produktions-Detail.
@@ -7481,6 +7491,12 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     }
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftragsbestätigung, Rechnung & Produktionsauftrag automatisch erzeugt.', 'auftrag', 'auftrag', $aid);
     return $aid;
+}
+
+// Handelsware (Spec 7.1): Produkt wird als Fertigware zugekauft und weiterverkauft – KEINE Produktion bei uns.
+function produkt_ist_handelsware(int $produkt_id): bool {
+    if ($produkt_id <= 0) return false;
+    try { return (int) scalar("SELECT handelsware FROM produkt WHERE id=?", [$produkt_id]) === 1; } catch (Throwable $e) { return false; }
 }
 
 // Rechnung (Beleg) aus einem BESTEHENDEN Auftrag erzeugen – fuer Auftraege ohne (automatische)
@@ -8617,6 +8633,11 @@ function auftrag_aus_zelle(int $angebot_id, int $stueck, int $verp_id, int $best
     q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum)
        VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
       [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen']);
+    // Handelsware (Spec 7.1): KEIN Produktionsauftrag – versendet wird aus dem Bestand.
+    if (produkt_ist_handelsware((int)($a['produkt_id'] ?? 0)) || produkt_ist_handelsware((int)$bestellt)) {
+        if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Angebot bestätigt (' . $stueck . ' Stück/Pkg × ' . $menge . '), Auftrag + Rechnung erzeugt (Handelsware – ohne Produktion).', 'auftrag', 'auftrag', $aid);
+        return $aid;
+    }
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$bestellt]) ?: 'kapsel';
     // Standard = Fremdproduktion (verkürzter Weg); auf Eigenproduktion umstellbar im Produktions-Detail.
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -8638,6 +8659,7 @@ function produktionsauftrag_aus_auftrag(int $auftrag_id, string $art = 'eigen'):
     if ($ex) return $ex;
     $pid = (int)$a['produkt_id'];
     if ($pid <= 0) return null;
+    if (produkt_ist_handelsware($pid)) return null;   // Handelsware (Spec 7.1): kein Produktionsauftrag
     $art  = $art === 'fremd' ? 'fremd' : 'eigen';
     $form = scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) ?: 'kapsel';
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
