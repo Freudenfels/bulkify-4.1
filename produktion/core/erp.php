@@ -1126,6 +1126,22 @@ function erp_mischer_plan(int $pa_id, float $cap = 0.0): array {
     $out['anzahl'] = $anzahl; $out['gebinde'] = $gebinde;
     return $out;
 }
+// Gebinde-Unterchargen einer PA (beim Mischen angelegt), in FEFO-Reihenfolge (sub_kennung A,B,C = ältestes zuerst).
+// Spec 7.8: beim Abfüllen führt das den Mitarbeiter – angefangenes/ältestes Gebinde zuerst durchziehen.
+function erp_gebinde_unterchargen(int $pa_id): array {
+    if ($pa_id <= 0 || !tabelle_da('prod_charge')) return [];
+    $pc = erp_prod_charge_fuer_pa($pa_id);
+    if (!$pc) return [];
+    return all("SELECT id, nummer, sub_kennung, gebinde, menge, einheit, status FROM prod_charge
+                WHERE parent_id=? ORDER BY (status='abgefuellt'), (status<>'angefangen'), sub_kennung, id", [(int)$pc['id']]);
+}
+// Status einer Gebinde-Untercharge setzen (nur Unterchargen): gemischt | angefangen | abgefuellt.
+function erp_gebinde_status_setzen(int $sub_id, int $pa_id, string $status): bool {
+    if ($sub_id <= 0 || $pa_id <= 0 || !in_array($status, ['gemischt', 'angefangen', 'abgefuellt'], true) || !tabelle_da('prod_charge')) return false;
+    q("UPDATE prod_charge SET status=? WHERE id=? AND pa_id=? AND parent_id IS NOT NULL", [$status, $sub_id, $pa_id]);
+    return true;
+}
+
 // Je Gebinde eine Untercharge unter der internen CH-Hauptcharge anlegen (Spec 7.7/7.8: ein Etikett je Gebinde).
 // Legt nur an, wenn die Hauptcharge noch keine Unterchargen hat (idempotent). Rückgabe = Anzahl angelegter.
 function erp_mischer_unterchargen_anlegen(int $pa_id, float $cap, string $akteur = ''): int {

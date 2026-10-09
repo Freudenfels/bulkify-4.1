@@ -92,6 +92,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $r = erp_schritt_status_setzen($schritt_id, $aktion === 'admin_done', $akteur);
         flash($r['ok'] ? ($aktion === 'admin_done' ? 'Schritt als erledigt markiert (Admin).' : 'Schritt zurückgesetzt (Admin).')
                        : ($r['msg'] ?: 'Konnte den Schritt nicht ändern.'), $r['ok'] ? 'ok' : 'warn');
+    } elseif ($aktion === 'gebinde_status') {   // Spec 7.8: FEFO-Führung beim Abfüllen – Gebinde angefangen/leer melden
+        $ok = erp_gebinde_status_setzen((int)($_POST['gebinde_id'] ?? 0), $id, (string)($_POST['status'] ?? ''));
+        flash($ok ? 'Gebinde-Status aktualisiert.' : 'Gebinde-Status nicht geändert.', $ok ? 'ok' : 'warn');
     }
     weiter('?p=run&id=' . $id);
 }
@@ -195,6 +198,38 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
     <?php endif; ?>
   </div>
   <?php endif; ?>
+
+  <?php // FEFO-Gebinde-Führung beim Abfüllen (Spec 7.8): die beim Mischen angelegten Gebinde in Reihenfolge durchziehen.
+  if (!$istMischen && !$isGate):
+      $gebinde = erp_gebinde_unterchargen($id);
+      if ($gebinde):
+          $naechstesId = 0; foreach ($gebinde as $g) { if ((string)($g['status'] ?? '') !== 'abgefuellt') { $naechstesId = (int)$g['id']; break; } }
+          $gLbl = ['gemischt'=>['offen', ''], 'angefangen'=>['angefangen', 'badge-warn'], 'abgefuellt'=>['leer', 'badge-ok']]; ?>
+  <div style="margin:0 0 14px;padding:12px 14px;border:1px solid var(--line-2);border-radius:8px">
+    <div class="muted" style="font-size:13px">Gebinde abfüllen · FEFO</div>
+    <div style="margin:4px 0 8px;font-size:14px">Angefangenes/ältestes Gebinde zuerst komplett durchziehen. Das als Nächstes zu verwendende ist markiert.</div>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Gebinde</th><th class="bx-num">Menge</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        <?php foreach ($gebinde as $g): $st = (string)($g['status'] ?? ''); $lbl = $gLbl[$st] ?? [$st ?: '–', '']; $next = (int)$g['id'] === $naechstesId; ?>
+        <tr<?= $next ? ' style="outline:2px solid var(--gruen);outline-offset:-2px"' : '' ?>>
+          <td><strong><?= h((string)($g['gebinde'] ?: ($g['nummer'] ?? '–'))) ?></strong><?= $next ? ' <span class="muted" style="font-size:12px">· als Nächstes</span>' : '' ?></td>
+          <td class="bx-num"><?= $g['menge'] !== null ? menge_txt($g['menge']) . ' ' . h((string)($g['einheit'] ?? '')) : '–' ?></td>
+          <td><span class="badge <?= h($lbl[1]) ?>"><?= h($lbl[0]) ?></span></td>
+          <td style="text-align:right;white-space:nowrap">
+            <?php if ($st !== 'abgefuellt'): ?>
+              <?php if ($st !== 'angefangen'): ?><form method="post" style="display:inline;margin:0"><input type="hidden" name="aktion" value="gebinde_status"><input type="hidden" name="gebinde_id" value="<?= (int)$g['id'] ?>"><input type="hidden" name="status" value="angefangen"><button class="btn btn-ghost btn-sm" type="submit">angefangen</button></form> <?php endif; ?>
+              <form method="post" style="display:inline;margin:0" onsubmit="return confirm('Gebinde als leer (fertig abgefüllt) melden?');"><input type="hidden" name="aktion" value="gebinde_status"><input type="hidden" name="gebinde_id" value="<?= (int)$g['id'] ?>"><input type="hidden" name="status" value="abgefuellt"><button class="btn btn-primary btn-sm" type="submit">leer</button></form>
+            <?php else: ?>
+              <form method="post" style="display:inline;margin:0"><input type="hidden" name="aktion" value="gebinde_status"><input type="hidden" name="gebinde_id" value="<?= (int)$g['id'] ?>"><input type="hidden" name="status" value="gemischt"><button class="btn btn-ghost btn-sm" type="submit" title="zurücksetzen">&#8634;</button></form>
+            <?php endif; ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; endif; ?>
 
   <?php if ($mat['zeilen']): ?>
   <div style="margin:0 0 14px">
