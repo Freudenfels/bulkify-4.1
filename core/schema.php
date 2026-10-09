@@ -6232,7 +6232,10 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
         }
     }
     if ($bulkProduktIds) {
-        $gruppen = array_values(array_filter(bedarf_bulk(true), fn($g) => in_array($g['produkt_id'], $bulkProduktIds, true) && $g['zu_bestellen'] > 1e-6));
+        // bedarf_bulk(false): identisch zur Einkaufsliste-Anzeige. Frueher stand hier (true) = "nur gemeldet";
+        // seit der Melden-Schritt abgeschafft ist (bedarf_gemeldet bleibt leer), filterte das die ausgewaehlte
+        // Position faelschlich weg -> es entstand eine Bestellung OHNE Position (Lager: "Keine Positionen").
+        $gruppen = array_values(array_filter(bedarf_bulk(false), fn($g) => in_array($g['produkt_id'], $bulkProduktIds, true) && $g['zu_bestellen'] > 1e-6));
         foreach ($gruppen as $g) {
             foreach ($g['orders'] as $o) {
                 $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
@@ -6261,6 +6264,9 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
             q("UPDATE freibedarf SET status='bestellt', bestellung_id=? WHERE id=?", [$bid, $fid]);
         }
     }
+    // Sicherung: Wurde keine einzige Position geschrieben (z. B. alles schon gedeckt/weggefiltert),
+    // keine leere Bestellung zuruecklassen – sie taucht sonst im Lager als "Keine Positionen hinterlegt" auf.
+    if ($i === 0) { q("DELETE FROM bestellung WHERE id=?", [$bid]); return 0; }
     foreach (array_keys($betroffen) as $aid) if ($aid > 0)
         log_aktivitaet('auftrag', $aid, 'team', 'Material per Bestellung ' . $nummer . $wann . ' bestellt.', 'bestellung', 'bestellung', $bid);
     bedarf_bump();   // bestellt -> offener Bedarf aendert sich
@@ -6843,7 +6849,7 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
 function bestellung_bulk_anlegen(array $produkt_ids, ?int $lieferant, ?string $datum): int {
     $produkt_ids = array_values(array_filter(array_map('intval', $produkt_ids)));
     if (!$produkt_ids) return 0;
-    $gruppen = array_values(array_filter(bedarf_bulk(true), fn($g) => in_array($g['produkt_id'], $produkt_ids, true) && $g['zu_bestellen'] > 1e-6));
+    $gruppen = array_values(array_filter(bedarf_bulk(false), fn($g) => in_array($g['produkt_id'], $produkt_ids, true) && $g['zu_bestellen'] > 1e-6));
     if (!$gruppen) return 0;
     $status = $datum ? 'bestellt' : 'offen';
     q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum) VALUES (?,?,?,?,?)",
