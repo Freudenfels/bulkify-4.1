@@ -26,12 +26,57 @@ function erp_benutzer(int $id): ?array {
 // Das Dashboard liegt auf derselben Domain unter "/".
 function erp_dashboard_url(): string { return '/'; }
 
+// --- Material-Standort der Charge (Spec 6.2): lager1 | produktion | lager2 --------------------
+// Die Spalte charge.standort gehoert dem Dashboard (core/schema.php). Sie wird hier NIE angelegt –
+// solange sie fehlt, verhaelt sich alles wie 'lager1' (Default), nichts bricht. Erst wenn der
+// Orchestrator die Spalte ergaenzt, greift der echte Standort-Wechsel.
+function erp_charge_standort_spalte(): bool {
+    static $da = null;
+    if ($da !== null) return $da;
+    if (!tabelle_da('charge')) return $da = false;
+    try {
+        $da = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='charge' AND COLUMN_NAME='standort'") > 0;
+    } catch (Throwable $e) { $da = false; }
+    return $da;
+}
+// SELECT-Baustein: liefert den echten Standort, sonst konstant 'lager1'. $alias = Charge-Alias.
+function erp_standort_sel(string $alias = 'c'): string {
+    return erp_charge_standort_spalte()
+        ? ", COALESCE($alias.standort,'lager1') AS standort"
+        : ", 'lager1' AS standort";
+}
+// Standort einer Charge lesen (immer ein Wert; 'lager1' als Default).
+function erp_charge_standort(int $charge_id): string {
+    if ($charge_id <= 0 || !erp_charge_standort_spalte()) return 'lager1';
+    $s = (string) scalar("SELECT standort FROM charge WHERE id=?", [$charge_id]);
+    return in_array($s, ['lager1', 'produktion', 'lager2'], true) ? $s : 'lager1';
+}
+function erp_standort_label(string $s): string {
+    return ['lager1' => 'Lager 1', 'produktion' => 'In Produktion', 'lager2' => 'Lager 2'][$s] ?? 'Lager 1';
+}
+// Standort setzen (Entnahme in die Produktion / Rueckgabe ins Lager 1). Der Blinker bleibt dran –
+// nur der Standort wandert. Rueckgabe ['ok','meldung','alt']. Fehlt die Dashboard-Spalte: freundlicher
+// Hinweis statt Fehler (der Orchestrator muss charge.standort erst ergaenzen).
+function erp_charge_standort_setzen(int $charge_id, string $standort): array {
+    if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Charge-Tabelle.'];
+    if (!in_array($standort, ['lager1', 'produktion', 'lager2'], true))
+        return ['ok' => false, 'meldung' => 'Unbekannter Standort.'];
+    if (!erp_charge_standort_spalte())
+        return ['ok' => false, 'meldung' => 'Standort-Verfolgung ist noch nicht freigeschaltet (Spalte charge.standort fehlt – wird vom Dashboard ergänzt).'];
+    $c = one("SELECT standort, fremd_kunde_id FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
+    $alt = (string)($c['standort'] ?? 'lager1') ?: 'lager1';
+    q("UPDATE charge SET standort=? WHERE id=?", [$standort, $charge_id]);
+    return ['ok' => true, 'meldung' => 'Standort: ' . erp_standort_label($standort), 'alt' => erp_standort_label($alt)];
+}
+
 // --- Chargen des grossen Lagers (fuer das Chaos-Finden) ---------------------------------------
 // Nur EIGENER Bestand: Fremdlager-Chargen (charge.fremd_kunde_id gesetzt = Kundenware) bleiben aussen
 // vor, die gehoeren ins Fulfillment. Leere Chargen (status='leer' oder menge_verfuegbar<=0) auch nicht.
 function erp_charge_select(): string {
     return "SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.einheit, c.mhd, c.status,
-                   i.name AS item_name, i.artikelnummer, i.kategorie
+                   i.name AS item_name, i.artikelnummer, i.kategorie" . erp_standort_sel('c') . "
             FROM charge c JOIN item i ON i.id = c.item_id";
 }
 function erp_charge(int $id): ?array {
@@ -115,6 +160,7 @@ function erp_bestand(string $kat = '', string $q = '', bool $mit_leer = false, i
     };
     $sql = "SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.menge, c.einheit, c.mhd, c.status, c.wareneingang,
                    i.id AS item_id, i.name AS item_name, i.artikelnummer, i.kategorie, i.form"
+         . erp_standort_sel('c')
          . ($lief ? ", l.firma AS lieferant" : ", NULL AS lieferant") . "
             FROM charge c JOIN item i ON i.id=c.item_id"
          . ($lief ? " LEFT JOIN lieferanten l ON l.id=c.lieferant_id" : "") . "
@@ -777,6 +823,43 @@ function erp_rezeptur_liste(): array {
                      WHERE r.status <> 'entwurf'
                      ORDER BY r.name, r.id");
     } catch (Throwable $e) { return []; }
+}
+
+// Rezepturnummer-Aufkleber (R…) scannen (Spec 5.2): aus einer gescannten Rezepturnummer die Rezeptur
+// bestimmen -> fertige Position für den Wareneingang (kein Tippen, keine Fehlzuordnung durch Tippfehler).
+// Tolerant: akzeptiert "R12345", "RZ-12345", nackte Ziffern. Rückgabe wie eine erwartete Position
+// (rezeptur_id/-name + koppelbares Bulk-Item + warenart 'fertig') oder null, wenn nicht gefunden.
+function erp_rezeptur_per_nummer(string $scan): ?array {
+    if (!tabelle_da('rezeptur')) return null;
+    $roh = strtoupper(trim($scan));
+    if ($roh === '') return null;
+    // Nummer-Varianten bilden: exakt, nur Ziffern, und Ziffern mit gängigen Präfixen.
+    $ziffern = preg_replace('/\D+/', '', $roh);
+    $kand = array_values(array_unique(array_filter([$roh, $ziffern,
+        $ziffern !== '' ? 'R' . $ziffern : '', $ziffern !== '' ? 'RZ-' . $ziffern : ''], fn($x) => $x !== '')));
+    $r = null;
+    foreach ($kand as $k) {
+        $r = one("SELECT id, nummer, name FROM rezeptur WHERE UPPER(TRIM(nummer))=? ORDER BY id LIMIT 1", [$k]);
+        if ($r) break;
+    }
+    // Fallback: Nummer endet auf die Ziffern (z. B. gescannt ohne Präfix, gespeichert mit).
+    if (!$r && $ziffern !== '') {
+        $r = one("SELECT id, nummer, name FROM rezeptur WHERE REPLACE(REPLACE(UPPER(nummer),'RZ-',''),'R','')=? ORDER BY id LIMIT 1", [$ziffern]);
+    }
+    if (!$r) return null;
+    $rid = (int)$r['id'];
+    $bi  = tabelle_da('item') ? one("SELECT id, name, einheit FROM item WHERE rezeptur_id=? AND kategorie='fertig' ORDER BY id LIMIT 1", [$rid]) : null;
+    return [
+        'name'          => (string)$r['name'],
+        'menge'         => 0.0,
+        'einheit'       => (string)($bi['einheit'] ?? ''),
+        'charge_nr'     => '', 'mhd' => '',
+        'warenart'      => 'fertig',
+        'rezeptur_id'   => $rid,
+        'rezeptur_name' => trim(((string)$r['nummer'] !== '' ? (string)$r['nummer'] . ' · ' : '') . (string)$r['name']),
+        'item_id'       => (int)($bi['id'] ?? 0),
+        'item_name'     => (string)($bi['name'] ?? ''),
+    ];
 }
 
 // Kanonisches Bulk-Item einer Rezeptur auflösen (read-only). Null, wenn es noch keines gibt

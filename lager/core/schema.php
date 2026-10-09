@@ -294,8 +294,68 @@ function lg_schema(): void {
         KEY k (kunde_id), KEY it (item_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // --- Eigene Gebinde-/Karton-Aufkleber (Spec 5.6): Verpackungsmaterial OHNE Hersteller-Charge
+    //     bekommt je Gebinde/Karton einen EIGENEN QR + eine EIGENE Nummer (GB-...). Das ist unsere
+    //     „Ersatz-Charge": beim Scan in der Produktion -> Nummer -> Charge -> Produkt/Wareneingang/
+    //     Lieferant (Regress). Eigene lg_-Tabelle; Dashboard-Charge bleibt unberuehrt.
+    q("CREATE TABLE IF NOT EXISTS lg_gebinde (
+        id               INT AUTO_INCREMENT PRIMARY KEY,
+        nummer           VARCHAR(20)  NOT NULL,
+        charge_id        INT          NULL,          -- Dashboard-Charge, aus der dieses Gebinde stammt
+        wareneingang_ref VARCHAR(190) NULL,          -- Momentaufnahme (Wareneingangsdatum / Charge-Nr.)
+        lieferant_id     INT          NULL,          -- Lieferant (fuer Regress); nur Referenz-Id
+        laufnr           INT          NOT NULL DEFAULT 1,  -- Gebinde X von N dieser Charge
+        angelegt         DATETIME     NOT NULL,
+        UNIQUE KEY nummer (nummer),
+        KEY charge (charge_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     lg_meta_schreiben('schema_build', $build);
 }
+
+// --- Eigene Gebinde-/Karton-Nummern (GB-...) -------------------------------------------------
+// Fortlaufende, eindeutige Nummer je Gebinde. Zaehler steht in lg_meta (kein Dashboard-Nummernkreis).
+function lg_gebinde_nummer(): string {
+    $z = (int) lg_meta_lesen('gebinde_zaehler', '0') + 1;
+    lg_meta_schreiben('gebinde_zaehler', (string)$z);
+    $nr = 'GB-' . str_pad((string)$z, 5, '0', STR_PAD_LEFT);
+    // Falls der Zaehler mal hinterherhinkt: bei Kollision hochzaehlen bis frei.
+    $schutz = 0;
+    while (scalar("SELECT id FROM lg_gebinde WHERE nummer=?", [$nr]) && $schutz < 1000) {
+        $z++; $schutz++;
+        lg_meta_schreiben('gebinde_zaehler', (string)$z);
+        $nr = 'GB-' . str_pad((string)$z, 5, '0', STR_PAD_LEFT);
+    }
+    return $nr;
+}
+// N neue Gebinde-Aufkleber fuer eine Charge anlegen. Gibt die angelegten Zeilen zurueck (neueste zuletzt).
+function lg_gebinde_anlegen(int $charge_id, int $anzahl, ?int $lieferant_id = null, string $ref = ''): array {
+    $anzahl = max(1, min(500, $anzahl));
+    if ($charge_id <= 0) return [];
+    $von = (int) scalar("SELECT COALESCE(MAX(laufnr),0) FROM lg_gebinde WHERE charge_id=?", [$charge_id]);
+    $neu = [];
+    for ($k = 1; $k <= $anzahl; $k++) {
+        $nr = lg_gebinde_nummer();
+        q("INSERT INTO lg_gebinde (nummer,charge_id,wareneingang_ref,lieferant_id,laufnr,angelegt) VALUES (?,?,?,?,?,?)",
+          [$nr, $charge_id, mb_substr($ref, 0, 190) ?: null, $lieferant_id ?: null, $von + $k, jetzt_utc()]);
+        $neu[] = (int) insert_id();
+    }
+    return all("SELECT * FROM lg_gebinde WHERE id IN (" . implode(',', array_map('intval', $neu)) . ") ORDER BY laufnr");
+}
+function lg_gebinde_liste(int $charge_id): array {
+    if ($charge_id <= 0) return [];
+    return all("SELECT * FROM lg_gebinde WHERE charge_id=? ORDER BY laufnr, id", [$charge_id]);
+}
+function lg_gebinde(int $id): ?array { return one("SELECT * FROM lg_gebinde WHERE id=?", [$id]); }
+function lg_gebinde_per_nummer(string $nummer): ?array {
+    $nummer = strtoupper(trim($nummer));
+    if ($nummer === '') return null;
+    return one("SELECT * FROM lg_gebinde WHERE nummer=?", [$nummer]);
+}
+function lg_gebinde_zahl(int $charge_id): int {
+    return (int) scalar("SELECT COUNT(*) FROM lg_gebinde WHERE charge_id=?", [$charge_id]);
+}
+function lg_gebinde_del(int $id): void { q("DELETE FROM lg_gebinde WHERE id=?", [$id]); }
 
 // Anzahl Pakete/Kartons einer Charge (Standard 1).
 function lg_pakete(int $charge_id): int {

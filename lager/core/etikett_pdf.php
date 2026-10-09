@@ -186,3 +186,97 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
           (string)($c['menge_label'] ?? 'Menge'), menge_txt($c['menge_anzeige'] ?? $c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);
     $halb('Eingang', $eingangTxt, 'Blinker / Ort', (string)($c['blinker_code'] ?? ''));
 }
+
+// === Gebinde-/Karton-Aufkleber (Spec 5.6) ====================================================
+// Je Gebinde EIN Aufkleber mit EIGENEM QR + EIGENER Nummer (GB-...). Der QR fuehrt auf die Scan-
+// Aufloesung im Lager (?p=gebinde&nr=GB-...), ueber die sich Produkt/Wareneingang/Lieferant finden
+// lassen (Regress). Format: 'klein' = 100x70 quer, 'gross' = 100x150 hoch.
+function lg_gebinde_etikett_pdf(int $charge_id, string $format = 'gross'): ?string {
+    if (!function_exists('lg_gebinde_liste')) return null;
+    $geb = lg_gebinde_liste($charge_id);
+    if (!$geb) return null;
+    $c = erp_charge_voll($charge_id);
+    if (!$c) return null;
+
+    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $format = $format === 'klein' ? 'klein' : 'gross';
+    $mm = fn(float $v): float => $v / 25.4 * 72;
+    $pdf = new MiniPDF();
+    $pdf->w = $mm(100);
+    $pdf->h = $format === 'klein' ? $mm(70) : $mm(150);
+
+    $gesamt = count($geb);
+    $erste = true;
+    foreach ($geb as $g) {
+        if (!$erste) $pdf->addPage();
+        $erste = false;
+        $url = $scheme . '://' . $host . '/lager/?p=gebinde&nr=' . rawurlencode((string)$g['nummer']);
+        $format === 'klein'
+            ? lg_gebinde_label($pdf, $mm, $c, $g, $url, (int)$g['laufnr'], $gesamt)
+            : lg_gebinde_label_hoch($pdf, $mm, $c, $g, $url, (int)$g['laufnr'], $gesamt);
+    }
+    return $pdf->output();
+}
+
+function lg_gebinde_label(MiniPDF $pdf, callable $mm, array $c, array $g, string $url, int $nr, int $gesamt): void {
+    $W = $pdf->w; $H = $pdf->h;
+    $dark = [20, 20, 20]; $muted = [120, 120, 120]; $line = [205, 205, 205];
+    $pdf->rectStroke($mm(1.5), $mm(1.5), $W - $mm(3), $H - $mm(3), 0.6, $line);
+
+    $qrArea = $mm(37); $qx = $W - $mm(4) - $qrArea; $qy = $mm(4);
+    $m = qr_matrix($url);
+    if ($m) {
+        $n = count($m); $quiet = 2; $mod = $qrArea / ($n + 2 * $quiet);
+        $pdf->rect($qx, $qy, $qrArea, $qrArea, [255, 255, 255]);
+        for ($y = 0; $y < $n; $y++) for ($x = 0; $x < $n; $x++)
+            if ($m[$y][$x]) $pdf->rect($qx + ($x + $quiet) * $mod, $qy + ($y + $quiet) * $mod, $mod + 0.25, $mod + 0.25, $dark);
+    }
+    $pdf->textCenter($qx + $qrArea / 2, $qy + $qrArea + $mm(6), 'Gebinde ' . $nr . ' / ' . $gesamt, 11, true, $dark);
+
+    $lx = $mm(4); $tw = $qx - $lx - $mm(3);
+    $pdf->text($lx, $mm(7), 'bulkify · Gebinde-Nr.', 7, false, $muted);
+    $pdf->text($lx, $mm(14), $pdf->fit((string)$g['nummer'], $tw, 15, true), 15, true, $dark);
+
+    $yy = $mm(22);
+    $name = (string)($c['item_name'] ?? '');
+    foreach (array_slice($pdf->wrap($name, $tw, 11, true), 0, 2) as $ln) { $pdf->text($lx, $yy, $ln, 11, true, $dark); $yy += $mm(5); }
+    $yy += $mm(1);
+    $feld = function (string $l, string $v) use ($pdf, $lx, &$yy, $muted, $dark, $mm, $tw): void {
+        $pdf->text($lx, $yy, $l, 7, false, $muted);
+        $pdf->text($lx, $yy + $mm(3.4), $pdf->fit($v !== '' ? $v : '–', $tw, 10, true), 10, true, $dark);
+        $yy += $mm(8.2);
+    };
+    $feld('Lieferant', lg_lieferant_txt($c));
+    $feld('Eingang', !empty($c['wareneingang']) ? date('d.m.Y', strtotime((string)$c['wareneingang'])) : '–');
+}
+
+function lg_gebinde_label_hoch(MiniPDF $pdf, callable $mm, array $c, array $g, string $url, int $nr, int $gesamt): void {
+    $W = $pdf->w; $dark = [20, 20, 20]; $muted = [120, 120, 120]; $line = [205, 205, 205];
+    $pdf->rectStroke($mm(2), $mm(2), $W - $mm(4), $pdf->h - $mm(4), 0.6, $line);
+    $pdf->text($mm(6), $mm(9), 'bulkify · Gebinde', 9, false, $muted);
+
+    $qrArea = $mm(52); $qx = ($W - $qrArea) / 2; $qy = $mm(12);
+    $m = qr_matrix($url);
+    if ($m) {
+        $n = count($m); $quiet = 2; $mod = $qrArea / ($n + 2 * $quiet);
+        $pdf->rect($qx, $qy, $qrArea, $qrArea, [255, 255, 255]);
+        for ($y = 0; $y < $n; $y++) for ($x = 0; $x < $n; $x++)
+            if ($m[$y][$x]) $pdf->rect($qx + ($x + $quiet) * $mod, $qy + ($y + $quiet) * $mod, $mod + 0.3, $mod + 0.3, $dark);
+    }
+    $pdf->textCenter($W / 2, $qy + $qrArea + $mm(9), (string)$g['nummer'], 16, true, $dark);
+    $pdf->textCenter($W / 2, $qy + $qrArea + $mm(15), 'Gebinde ' . $nr . ' / ' . $gesamt, 11, false, $muted);
+
+    $lx = $mm(6); $tw = $W - $mm(12); $yy = $qy + $qrArea + $mm(24);
+    $name = (string)($c['item_name'] ?? '');
+    foreach (array_slice($pdf->wrap($name, $tw, 14, true), 0, 3) as $ln) { $pdf->text($lx, $yy, $ln, 14, true, $dark); $yy += $mm(6); }
+    $yy += $mm(2);
+    $feld = function (string $l, string $v) use ($pdf, $lx, &$yy, $muted, $dark, $mm, $tw): void {
+        $pdf->text($lx, $yy, $l, 8.5, false, $muted);
+        $pdf->text($lx, $yy + $mm(4.2), $pdf->fit($v !== '' ? $v : '–', $tw, 12, true), 12, true, $dark);
+        $yy += $mm(10);
+    };
+    $feld('Lieferant', lg_lieferant_txt($c));
+    $feld('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));
+    $feld('Eingang', !empty($c['wareneingang']) ? date('d.m.Y', strtotime((string)$c['wareneingang'])) : '–');
+}

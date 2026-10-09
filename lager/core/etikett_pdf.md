@@ -11,3 +11,8 @@ Gewicht/Volumen auf 3 Nachkommastellen. Hinweis: `etikett.php` druckt aktuell nu
 Genutzt von [../module/bestand/etikett.md](../module/bestand/etikett.md) (Anzeige/Download) und der
 Druck-Brücke `public/lager/bruecke.php` (lautloser Druck). Braucht `erp_charge_voll`, `lg_pakete`,
 `menge_txt`, `qr_matrix`, MiniPDF.
+
+**Gebinde-Aufkleber (Spec 5.6):** `lg_gebinde_etikett_pdf(int $charge_id, string $format='gross'): ?string`
+baut je **Gebinde** (aus `lg_gebinde`) einen eigenen Aufkleber mit **eigenem QR** (führt auf
+`?p=gebinde&nr=GB-…`) und der **eigenen Nummer**, dazu Produktname, Lieferanten-Nummer und
+Wareneingangsdatum (`lg_gebinde_label` / `lg_gebinde_label_hoch`). Ausgabe über `?p=gebinde_etikett`.
