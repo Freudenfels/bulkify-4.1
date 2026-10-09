@@ -11,10 +11,9 @@ $mg = fn($x) => $x === null || $x === '' ? '–' : rtrim(rtrim(number_format((fl
 $pa = $pc['pa_id'] ? one("SELECT id, nummer FROM produktionsauftrag WHERE id=?", [(int)$pc['pa_id']]) : null;
 $rez = $pc['rezeptur_id'] ? one("SELECT id, nummer, name FROM rezeptur WHERE id=?", [(int)$pc['rezeptur_id']]) : null;
 $prod = $pc['produkt_id'] ? one("SELECT id, name FROM produkt WHERE id=?", [(int)$pc['produkt_id']]) : null;
-// Mitarbeiter/Maschine best-effort (Maschine liegt in der Produktions-Sub-App; Lesezugriff tolerant).
+// Mitarbeiter + Maschine (Maschinen werden jetzt im Dashboard verwaltet -> sauberer Helfer maschine_name()).
 $mitarbeiter = $pc['mitarbeiter_id'] ? (string) scalar("SELECT name FROM mitarbeiter WHERE id=?", [(int)$pc['mitarbeiter_id']]) : '';
-$maschine = '';
-if (!empty($pc['maschine_id'])) { try { $maschine = (string) scalar("SELECT name FROM pr_maschine WHERE id=?", [(int)$pc['maschine_id']]); } catch (\Throwable $e) {} }
+$maschine = !empty($pc['maschine_id']) ? maschine_name((int)$pc['maschine_id']) : '';
 
 render_header('produktionschargen', 'Charge ' . $pc['nummer']);
 bx_head('Charge ' . h((string)$pc['nummer']), ((string)$pc['typ'] === 'extern' ? 'CHE – extern zugekaufte Bulkware' : 'CH – intern gemischt/produziert'), bx_btn('Zurück zur Liste', '?p=produktionschargen', 'ghost'));

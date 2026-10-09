@@ -148,6 +148,7 @@ $routes = [
     'produktionscharge'  => 'charge/detail.php',
     'versand'            => 'versand/liste.php',
     'einstellungen'      => 'system/einstellungen.php',
+    'maschinen'          => 'system/maschinen.php',    // Maschinenfuhrpark (Spec 9.3) – Dashboard-Verwaltung (pr_maschine/pr_raum)
     'menu_editor'        => 'system/menu_editor.php',   // Menü selbst anpassen (Drag & Drop), global
     'angebotsscan'       => 'system/angebotsscan.php',  // KI liest Angebote (Fremd/Alt) ein: Rezepturen + Preise erfassen (kundenunabhängig)
     'angebot_import'     => 'system/angebot_import.php',// KI liest ein Alt-Angebot -> einem bestehenden Angebot zuordnen (anreichern) ODER neues Angebot anlegen; Glas aus Kapselgröße inferieren

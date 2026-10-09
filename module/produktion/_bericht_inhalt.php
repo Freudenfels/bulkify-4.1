@@ -152,7 +152,7 @@ if (!$fuerKunde && !empty($D['prodChargen'])): ?>
 <div class="bx-panel pb-sec">
   <h2>Produktionschargen (CH/CHE)</h2>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Charge</th><th>Typ</th><th>Gebinde</th><th class="bx-num">Menge</th><th>Status</th></tr></thead>
+    <thead><tr><th>Charge</th><th>Typ</th><th>Gebinde</th><th class="bx-num">Menge</th><th>Maschine</th><th>Status</th></tr></thead>
     <tbody>
       <?php foreach ($D['prodChargen'] as $pc): $sub = !empty($pc['parent_id']); ?>
       <tr>
@@ -160,10 +160,11 @@ if (!$fuerKunde && !empty($D['prodChargen'])): ?>
         <td><?= ($pc['typ'] ?? 'intern') === 'extern' ? 'extern (CHE)' : 'intern (CH)' ?></td>
         <td><?= h((string)($pc['gebinde'] ?? '')) ?: '<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $pc['menge'] !== null ? $zahl($pc['menge']) . ' ' . h((string)($pc['einheit'] ?? '')) : '–' ?></td>
+        <td><?= h((string)($pc['maschine_name'] ?? '')) ?: '<span class="muted">–</span>' ?></td>
         <td><?= h((string)($pc['status'] ?? '')) ?></td>
       </tr>
       <?php $rbs = $D['pcRohstoffe'][(int)$pc['id']] ?? []; if ($rbs): ?>
-      <tr><td colspan="5" style="padding-top:0"><div class="muted" style="font-size:12px">Rohstoff-Batches: <?= h(implode(', ', array_map(fn($r) => trim(((string)($r['item_name'] ?? '')) ?: '–') . ($r['batch_nr'] ? ' (Batch ' . $r['batch_nr'] . ')' : ''), $rbs))) ?></div></td></tr>
+      <tr><td colspan="6" style="padding-top:0"><div class="muted" style="font-size:12px">Rohstoff-Batches: <?= h(implode(', ', array_map(fn($r) => trim(((string)($r['item_name'] ?? '')) ?: '–') . ($r['batch_nr'] ? ' (Batch ' . $r['batch_nr'] . ')' : ''), $rbs))) ?></div></td></tr>
       <?php endif; ?>
       <?php endforeach; ?>
     </tbody>

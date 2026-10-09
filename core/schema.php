@@ -1239,6 +1239,26 @@ function init_schema(): void {
     ensure_column('bestellung', 'bestelldatum', "DATE NULL");   // „gemeinsam bestellt am"
     ensure_column('bestellung_position', 'bezeichnung', "VARCHAR(200) NULL");   // Freitext (z. B. Bulk-Zukauf ohne Lagerartikel)
 
+    // Maschinenfuhrpark (Spec 9.3) – ab jetzt IM DASHBOARD verwaltet. Tabellen bleiben pr_maschine/pr_raum
+    // (geteilte DB), damit bestehende IDs, QR-Codes (MA-<id>) und prod_charge.maschine_id gueltig bleiben.
+    // Identische Definition wie in der Produktions-Sub-App (CREATE IF NOT EXISTS = idempotent, keine Divergenz).
+    foreach (['pr_raum', 'pr_maschine'] as $__mt) {
+        $__extra = $__mt === 'pr_maschine' ? 'raum_id INT NULL,' : '';
+        $pdo->exec("CREATE TABLE IF NOT EXISTS $__mt (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(190) NOT NULL,
+            $__extra
+            reinigung_intervall VARCHAR(20) NULL,
+            notiz TEXT NULL,
+            letzte_reinigung DATE NULL,
+            letzte_von VARCHAR(190) NULL,
+            aktiv TINYINT(1) NOT NULL DEFAULT 1,
+            angelegt DATETIME NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+    ensure_column('pr_maschine', 'typ', "VARCHAR(40) NULL");
+    ensure_column('pr_maschine', 'qr_code', "VARCHAR(60) NULL");
+
     // freibedarf: freier Einkaufsbedarf ohne Produktionsbezug (Kartons, Verbrauchsgüter, Inventar, Maschinen …).
     $pdo->exec("CREATE TABLE IF NOT EXISTS freibedarf (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -2961,6 +2981,63 @@ function prod_probe_anlegen(array $d): int {
 function prod_proben_fuer_pa(int $pa_id): array {
     return all("SELECT * FROM prod_probe WHERE pa_id=? ORDER BY ebene, id", [$pa_id]);
 }
+
+// ===== Maschinenfuhrpark (Spec 9.3) – Dashboard-Verwaltung auf pr_maschine/pr_raum (geteilte DB) =====
+// Typen/Intervalle 1:1 wie in der Produktions-Sub-App (Codes muessen gleich sein, sonst bricht die
+// Stations-Zuordnung in der Produktion). Die Reinigung/Sperre bleibt im Werk (Sub-App).
+function maschinen_typen(): array {
+    return ['mischer'=>'Mischer', 'kapselmaschine'=>'Kapselmaschine', 'tablettenpresse'=>'Tablettenpresse',
+            'abfuelllinie'=>'Abfülllinie', 'stickmaschine'=>'Stickmaschine', 'pulver_auto'=>'Pulver-Abfüllmaschine (automatisch)',
+            'pulver_manuell'=>'Pulver-Abfüllmaschine (manuell)', 'blister'=>'Blistermaschine', 'fluessig'=>'Flüssig-Flaschenabfüllung',
+            'pouchbag'=>'Pouchbag-/Standbodenbeutel-Füllmaschine'];
+}
+function maschinentyp_label(string $c): string { return maschinen_typen()[$c] ?? ($c !== '' ? $c : '–'); }
+function maschine_intervalle(): array {
+    return ['je_charge'=>'Vor jeder Produktion', 'taeglich'=>'Täglich', 'woechentlich'=>'Wöchentlich', 'monatlich'=>'Monatlich', 'quartal'=>'Vierteljährlich'];
+}
+function maschine_intervall_label(string $c): string { return maschine_intervalle()[$c] ?? ($c !== '' ? $c : '–'); }
+function maschine_name(int $id): string {
+    if ($id <= 0) return '';
+    try { return (string) scalar("SELECT name FROM pr_maschine WHERE id=?", [$id]); } catch (Throwable $e) { return ''; }
+}
+function maschine_liste(bool $nur_aktiv = true): array {
+    try { return all("SELECT m.*, r.name AS raum_name FROM pr_maschine m LEFT JOIN pr_raum r ON r.id=m.raum_id"
+                     . ($nur_aktiv ? " WHERE m.aktiv=1" : "") . " ORDER BY m.name, m.id"); }
+    catch (Throwable $e) { return []; }
+}
+function raum_liste(bool $nur_aktiv = true): array {
+    try { return all("SELECT * FROM pr_raum" . ($nur_aktiv ? " WHERE aktiv=1" : "") . " ORDER BY name, id"); }
+    catch (Throwable $e) { return []; }
+}
+function maschine_neu(string $name, ?int $raum_id, string $intervall, string $notiz, string $typ = '', string $qr = ''): int {
+    $name = trim($name); if ($name === '') return 0;
+    $typ = array_key_exists($typ, maschinen_typen()) ? $typ : '';
+    try {
+        q("INSERT INTO pr_maschine (name,raum_id,reinigung_intervall,notiz,typ,aktiv,angelegt) VALUES (?,?,?,?,?,1,?)",
+          [mb_substr($name, 0, 190), $raum_id ?: null, trim($intervall) ?: null, trim($notiz) ?: null, $typ ?: null, gmdate('Y-m-d H:i:s')]);
+        $id = (int) insert_id();
+        q("UPDATE pr_maschine SET qr_code=? WHERE id=?", [mb_substr(trim($qr) ?: ('MA-' . $id), 0, 60), $id]);   // QR default MA-<id>
+        return $id;
+    } catch (Throwable $e) { return 0; }
+}
+function maschine_setzen(int $id, string $name, ?int $raum_id, string $intervall, string $notiz, string $typ, string $qr): bool {
+    if ($id <= 0) return false;
+    $typ = array_key_exists($typ, maschinen_typen()) ? $typ : '';
+    try {
+        q("UPDATE pr_maschine SET name=?, raum_id=?, reinigung_intervall=?, notiz=?, typ=?, qr_code=? WHERE id=?",
+          [mb_substr(trim($name), 0, 190), $raum_id ?: null, trim($intervall) ?: null, trim($notiz) ?: null, $typ ?: null,
+           mb_substr(trim($qr) ?: ('MA-' . $id), 0, 60), $id]);
+        return true;
+    } catch (Throwable $e) { return false; }
+}
+function maschine_loeschen(int $id): void { if ($id > 0) { try { q("UPDATE pr_maschine SET aktiv=0 WHERE id=?", [$id]); } catch (Throwable $e) {} } }
+function raum_neu(string $name, string $intervall, string $notiz): int {
+    $name = trim($name); if ($name === '') return 0;
+    try { q("INSERT INTO pr_raum (name,reinigung_intervall,notiz,aktiv,angelegt) VALUES (?,?,?,1,?)",
+            [mb_substr($name, 0, 190), trim($intervall) ?: null, trim($notiz) ?: null, gmdate('Y-m-d H:i:s')]);
+          return (int) insert_id(); } catch (Throwable $e) { return 0; }
+}
+function raum_loeschen(int $id): void { if ($id > 0) { try { q("UPDATE pr_raum SET aktiv=0 WHERE id=?", [$id]); } catch (Throwable $e) {} } }
 // Eine Menge Fertigware zu einem Produktionsauftrag als eigene Charge einbuchen (Teilproduktion).
 // Die Chargennummer ist die PR-Basis mit dem nächsten Buchstaben (.A, .B, .C …), das MHD standardmäßig
 // heute + 18 Monate. Es kann nie mehr gebucht werden, als vom Auftrag noch offen ist.
@@ -6062,7 +6139,9 @@ function produktion_bericht_daten(int $pa_id): ?array {
     // Produktionschargen CH/CHE (+ Unterchargen) und je Charge die verknuepften Rohstoff-Batches (Spec 7.5/16).
     $prodChargen = []; $pcRohstoffe = [];
     try {
-        $prodChargen = all("SELECT * FROM prod_charge WHERE pa_id=? ORDER BY COALESCE(parent_id,id), (parent_id IS NOT NULL), id", [$pa_id]);
+        $prodChargen = all("SELECT pc.*, mm.name AS maschine_name FROM prod_charge pc
+                            LEFT JOIN pr_maschine mm ON mm.id=pc.maschine_id
+                            WHERE pc.pa_id=? ORDER BY COALESCE(pc.parent_id,pc.id), (pc.parent_id IS NOT NULL), pc.id", [$pa_id]);
         if ($prodChargen) {
             $pcIds = implode(',', array_map(fn($c) => (int)$c['id'], $prodChargen));
             foreach (all("SELECT r.*, i.name AS item_name FROM prod_charge_rohstoff r LEFT JOIN item i ON i.id=r.item_id
