@@ -63,7 +63,7 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 | 3.4 | Rezeptur Kunde/Katalog beim Anlegen | 🟢 **fertig** (`module/rezeptur/detail.php`, `rezeptur.exklusiv`/`kunde_id`) – kein Baubedarf |
 | 11 | Energetisierung | 🟢 **fertig** (kundengebunden, `charge.energetisiert_*`) |
 | 7 | Step-by-Step | 🟡 Basis da (`produktion/.../run.php`, `produktion/core/erp.php`), aber ohne echte Scans |
-| 7.1 | Produktionswege/Formgebung | 🟡 `produktionsschritte_fuer`/`produktion_wege_aufloesen` + `weg_*`-Flags; **Bulk-Weiterverkauf-Abfang fehlt** |
+| 7.1 | Produktionswege/Formgebung | 🟢 Wege/weg_*-Flags da; **Bulk-Weiterverkauf-Abfang ERLEDIGT** (10.10.2026): produkt.handelsware -> kein Produktionsauftrag (auftrag_aus_angebot/_positionen + produktionsauftrag_aus_auftrag), Checkbox im Produkt-Editor. |
 | 7.5/16 | CH/CHE-Chargen + Unterchargen + Rohstoff-Batch | 🟢 **Fundament gebaut** (Paket A, s. u.) |
 | 8 | Proben 3-stufig + Rückstellmuster-Regel | 🟢 **fertig** – Datenmodell (`prod_probe`) + 3-stufige QS-UI (Rohstoff/Gebinde/Endprodukt) in `produktion/.../qs.php` über die Naht (`erp_proben_fuer_pa`/`_probe_anlegen`/`_probe_loeschen`/`_rueckstell_soll`), Soll max(5, Gebinde). Labor-Ebene: bestehender Laborproben-Flow bleibt (pr_daten). |
 | 9 | Maschinen (QR/Scan/Reinigung-Sperre/Typen) | 🟢 Fuhrpark + QR/Scan/Typen/Reinigung-Sperre; **Verwaltung ins DASHBOARD umgezogen** (10.10.2026, `?p=maschinen`, Tabellen bleiben pr_maschine/pr_raum; Sub-App nur Ansicht). Reinigung/Sperre bleiben im Werk. |
@@ -87,12 +87,12 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 - **FIFO/Gebinde-Durchziehen beim Abfüllen (7.8)** + Unterchargen beim Griff zum nächsten Gebinde (bisher nur beim Mischen).
 - ✅ **Produktionsbericht (17)** – ERLEDIGT (10.10.2026): Sektionen Produktionschargen (CH/CHE + Rohstoff-Batches) + Proben im Dashboard-Bericht. Offen: Maschine/Klima/Reinigung (liegen in der Produktions-Sub-App; folgt mit Maschinen→Dashboard).
 - **Abschlussfotos (13.1)**, **Pausen nur an cleanen Punkten/Schichtwechsel (7.11/7.12)**.
-- **Bulk-Weiterverkauf-Abfang (7.1)** + CH/CHE-Nummernformat → mit Nico klären.
+- ✅ **Bulk-Weiterverkauf-Abfang (7.1)** – ERLEDIGT (10.10.2026): Flag produkt.handelsware, PA-Abfang zentral. CH/CHE-Nummernformat bleibt (Nico, 10.10.).
 
 **Wichtig (Architektur):** Sub-Apps requiren NICHT `core/schema.php` (db()-Kollision) → Zugriff auf `prod_charge`/`charge.standort` nur per Raw-SQL in der jeweiligen `*/core/erp.php`.
 
 ## Für Nico morgen (Entscheidungen)
 - Chargennummer-Format CH/CHE (aktuell `CH-2690`-Stil, 4 Stellen; Jahresanteil? → leicht anpassbar).
-- Bulk-Weiterverkauf-Abfang (7.1): die PA-Erstellung sitzt an ~7 Stellen in `core/schema.php` – sauber zentralisieren vs. Flag am Produkt; **bewusst nicht blind über Nacht geändert**.
+- ✅ Bulk-Weiterverkauf-Abfang (7.1): ERLEDIGT – Flag produkt.handelsware, Abfang an auftrag_aus_angebot/_positionen + produktionsauftrag_aus_auftrag (deckt den bedarfsgetriebenen Weg mit ab).
 - ✅ Maschinen: ENTSCHIEDEN (10.10.2026) – Verwaltung im DASHBOARD (`?p=maschinen`), Tabellen bleiben `pr_maschine`/`pr_raum` (geteilte DB, keine Datenmigration), Sub-App nur Ansicht.
 - Auto-Laborversand der 2 Proben aus der Produktion (14.3) – Status bestätigen.
