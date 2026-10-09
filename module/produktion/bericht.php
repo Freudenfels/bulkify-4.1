@@ -26,6 +26,14 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST') {
         q("UPDATE produktionsauftrag SET bericht_freigegeben_am=NULL, bericht_freigegeben_von=NULL WHERE id=?", [$id]);
         header('Location: ?p=produktion_bericht&id=' . $id . '&zurueck=1'); exit;
     }
+    if ($akt === 'foto_upload') {   // Abschlussfotos (Spec 13.1) hochladen
+        $n = abschlussfoto_upload($id, 'foto');
+        header('Location: ?p=produktion_bericht&id=' . $id . ($n > 0 ? '&foto=' . $n : '&fotofehler=1')); exit;
+    }
+    if ($akt === 'foto_del') {
+        abschlussfoto_del((int)($_POST['dok_id'] ?? 0), $id);
+        header('Location: ?p=produktion_bericht&id=' . $id . '&fotodel=1'); exit;
+    }
     header('Location: ?p=produktion_bericht&id=' . $id); exit;
 }
 
@@ -67,6 +75,9 @@ render_header('produktion', 'Bericht ' . $pa['nummer']);
 <?php if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok no-print" style="padding:12px 16px">Bemerkung gespeichert.</div>';
 if (isset($_GET['freigegeben'])) echo '<div class="bx-panel badge-ok no-print" style="padding:12px 16px">Bericht für den Kunden freigegeben – er sieht ihn im Portal bei der Bestellung.</div>';
 if (isset($_GET['zurueck'])) echo '<div class="bx-panel badge-ok no-print" style="padding:12px 16px">Freigabe zurückgenommen.</div>';
+if (isset($_GET['foto'])) echo '<div class="bx-panel badge-ok no-print" style="padding:12px 16px">' . (int)$_GET['foto'] . ' Abschlussfoto(s) hochgeladen.</div>';
+if (isset($_GET['fotodel'])) echo '<div class="bx-panel badge-ok no-print" style="padding:12px 16px">Foto gelöscht.</div>';
+if (isset($_GET['fotofehler'])) echo '<div class="bx-panel no-print" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Kein Foto hochgeladen (nur Bilddateien, max. Upload-Größe beachten).</div>';
 if (!$D['fertig']) echo '<div class="bx-panel no-print" style="border-color:#e6c4c0;padding:10px 14px;font-size:13px">Hinweis: Der Auftrag ist noch <strong>nicht abgeschlossen</strong> – der Bericht zeigt den aktuellen Zwischenstand.</div>';
 ?>
 
@@ -93,6 +104,28 @@ if (!$D['fertig']) echo '<div class="bx-panel no-print" style="border-color:#e6c
     <label class="muted" style="font-size:13px">Bemerkung für den Kunden (erscheint im Bericht)</label>
     <textarea name="notiz" rows="2" style="width:100%;margin-top:4px" placeholder="z. B. Produziert nach GMP-Grundsätzen, alle Prüfungen bestanden."><?= h((string)($pa['bericht_notiz'] ?? '')) ?></textarea>
     <div style="margin-top:6px"><button class="btn btn-ghost btn-sm" type="submit">Bemerkung speichern</button></div>
+  </form>
+</div>
+<?php endif; ?>
+
+<?php if (!$fuerKunde): $fotos = $D['abschlussfotos'] ?? []; ?>
+<div class="bx-panel no-print">
+  <h2 style="margin:0 0 4px;font-size:15px">Abschlussfotos</h2>
+  <div class="muted" style="font-size:13px;margin-bottom:10px">Fotos der fertigen Charge (z. B. abgefüllte Gebinde, Etikett, Palette) – erscheinen im gedruckten Bericht.</div>
+  <?php if ($fotos): ?>
+  <div class="bx-row" style="gap:10px;flex-wrap:wrap;margin-bottom:10px">
+    <?php foreach ($fotos as $f): ?>
+      <div style="position:relative">
+        <a href="?p=dokument&id=<?= (int)$f['id'] ?>" target="_blank" rel="noopener"><img src="?p=dokument&id=<?= (int)$f['id'] ?>" alt="Abschlussfoto" style="height:90px;width:auto;border-radius:8px;border:1px solid var(--line);object-fit:cover"></a>
+        <form method="post" style="position:absolute;top:2px;right:2px;margin:0" onsubmit="return confirm('Foto löschen?');"><input type="hidden" name="aktion" value="foto_del"><input type="hidden" name="dok_id" value="<?= (int)$f['id'] ?>"><button type="submit" class="btn btn-ghost btn-sm" style="padding:0 7px;background:rgba(255,255,255,.85)" title="löschen">×</button></form>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
+  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center">
+    <input type="hidden" name="aktion" value="foto_upload">
+    <input type="file" name="foto[]" accept="image/*" multiple required>
+    <button class="btn btn-ghost btn-sm" type="submit" data-busy="Lädt …">Fotos hochladen</button>
   </form>
 </div>
 <?php endif; ?>

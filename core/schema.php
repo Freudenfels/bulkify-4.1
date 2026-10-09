@@ -6097,6 +6097,35 @@ function produktion_stueck_je_packung(array $pa): int {
 
 // Alle Daten fuer den Produktionsbericht (Herstellprotokoll) sammeln – genutzt von der internen
 // Berichtseite UND der Kundenportal-Ansicht (gemeinsamer Render-Include _bericht_inhalt.php).
+// Abschlussfotos (Spec 13.1) eines Produktionsauftrags – als generische Dokumente (typ='abschlussfoto').
+// Mehrfach-Upload (Handyfotos); Anzeige im Produktionsbericht. Datei unter BX_UPLOADS.
+function abschlussfoto_upload(int $pa_id, string $feld = 'foto'): int {
+    if ($pa_id <= 0 || empty($_FILES[$feld]['name'])) return 0;
+    if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+    $namen = (array)($_FILES[$feld]['name'] ?? []); $tmps = (array)($_FILES[$feld]['tmp_name'] ?? []); $errs = (array)($_FILES[$feld]['error'] ?? []);
+    $erlaubt = ['jpg','jpeg','png','webp','heic','heif','gif']; $n = 0;
+    foreach ($namen as $i => $orig) {
+        if ((int)($errs[$i] ?? 1) !== UPLOAD_ERR_OK || empty($tmps[$i]) || !is_uploaded_file((string)$tmps[$i])) continue;
+        $ext = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo((string)$orig, PATHINFO_EXTENSION)));
+        if (!in_array($ext, $erlaubt, true)) continue;
+        $fn = 'pa_' . $pa_id . '_abschluss_' . bin2hex(random_bytes(6)) . '.' . $ext;
+        if (!move_uploaded_file((string)$tmps[$i], BX_UPLOADS . '/' . $fn)) continue;
+        q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig) VALUES ('produktionsauftrag',?,?,?,?,?)",
+          [$pa_id, 'abschlussfoto', 'Abschlussfoto', $fn, mb_substr((string)$orig, 0, 190)]);
+        $n++;
+    }
+    return $n;
+}
+function abschlussfotos_fuer_pa(int $pa_id): array {
+    if ($pa_id <= 0) return [];
+    return all("SELECT id, datei, datei_orig FROM dokument WHERE objekt_typ='produktionsauftrag' AND objekt_id=? AND typ='abschlussfoto' ORDER BY id", [$pa_id]);
+}
+function abschlussfoto_del(int $dok_id, int $pa_id): void {
+    if ($dok_id <= 0) return;
+    $d = one("SELECT datei FROM dokument WHERE id=? AND objekt_typ='produktionsauftrag' AND objekt_id=? AND typ='abschlussfoto'", [$dok_id, $pa_id]);
+    if ($d) { @unlink(BX_UPLOADS . '/' . basename((string)$d['datei'])); q("DELETE FROM dokument WHERE id=?", [$dok_id]); }
+}
+
 function produktion_bericht_daten(int $pa_id): ?array {
     $pa = one("SELECT pa.*, k.firma AS kunde_firma, p.name AS produkt_name, a.nummer AS auftrag_nr,
                       a.produkt_bezeichnung AS auftrag_produkt_bez, a.produkt_form AS auftrag_produkt_form,
@@ -6167,6 +6196,7 @@ function produktion_bericht_daten(int $pa_id): ?array {
         'einh'=>$einh, 'pack'=>$pack, 'gesamt'=>$gesamt, 'zutaten'=>$zutaten, 'schritte'=>$schritte,
         'verbrauch'=>$verbrauch, 'zugeChargen'=>$zugeChargen, 'fwChargen'=>$fwChargen, 'groesse'=>$groesse,
         'prodChargen'=>$prodChargen, 'pcRohstoffe'=>$pcRohstoffe, 'proben'=>$probenNach,
+        'abschlussfotos'=>abschlussfotos_fuer_pa($pa_id),
         'abg'=>$abg, 'done'=>$done, 'fertig'=>($pa['status']==='erledigt'),
     ];
 }

@@ -196,6 +196,18 @@ if ($probenGesamt > 0):
 </div>
 <?php endif; ?>
 
+<?php // Abschlussfotos (Spec 13.1) – intern/Druck (Kundenportal kann die interne Dokument-Route nicht laden).
+if (!$fuerKunde && !empty($D['abschlussfotos'])): ?>
+<div class="bx-panel pb-sec">
+  <h2>Abschlussfotos</h2>
+  <div class="bx-row" style="gap:10px;flex-wrap:wrap">
+    <?php foreach ($D['abschlussfotos'] as $f): ?>
+      <img src="?p=dokument&id=<?= (int)$f['id'] ?>" alt="Abschlussfoto" style="height:130px;width:auto;border-radius:8px;border:1px solid var(--line);object-fit:cover">
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
+
 <?php if (trim((string)($pa['bericht_notiz'] ?? '')) !== ''): ?>
 <div class="bx-panel pb-sec">
   <h2>Bemerkung</h2>
