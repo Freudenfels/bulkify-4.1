@@ -94,9 +94,10 @@ $runLabel = match ((string)$pa['status']) {
 };
 // In Vorbereitung ist der Auftrag noch nicht freigegeben – „In den Produktionsmodus" dann ausgrauen
 // (Freigabe erfolgt im Dashboard unter „Vor-Produktion"), statt in die gesperrte Run-Ansicht zu führen.
+$vorbHint = 'Noch in Vorbereitung – erst im Dashboard unter „Vor-Produktion" freigeben, dann ist der Produktionsmodus startbar.';
 $runBtn = $istVorb
-    ? '<span class="btn btn-primary btn-sm" aria-disabled="true" title="Noch in Vorbereitung – erst im Dashboard unter &#8222;Vor-Produktion&#8220; freigeben." style="opacity:.5;cursor:not-allowed;pointer-events:none">' . h($runLabel) . '</span>'
-      . ' <span class="muted" style="font-size:12px">· noch nicht freigegeben (Vor-Produktion im Dashboard)</span>'
+    ? '<span class="btn btn-primary btn-sm" aria-disabled="true" title="' . h($vorbHint) . '" style="opacity:.5;cursor:not-allowed;pointer-events:none">' . h($runLabel) . '</span>'
+      . '<span title="' . h($vorbHint) . '" style="display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:#2b6cd4;color:#fff;font-size:11px;font-weight:700;cursor:help;margin-left:6px;vertical-align:middle" aria-label="Info">i</span>'
     : '<a class="btn btn-primary btn-sm" href="?p=run&id=' . $id . '">' . h($runLabel) . '</a>';
 $aktionen = $runBtn
           . ' <a class="btn btn-ghost btn-sm" href="?p=qs&id=' . $id . '">QS &amp; Labor</a>'
