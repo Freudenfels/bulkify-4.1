@@ -32,9 +32,14 @@ $zahl = ['alle' => count($alle), 'bereit' => count($eimer['bereit']), 'laufend' 
 
 $pas = $tab === 'alle' ? $alle : $eimer[$tab];
 
-// Standard-Sortierung: Auftragseingang alt → neu (ohne Eingang ans Ende). Clientseitig umsortierbar.
 $eingangVon = fn($pa) => (string)($pa['auftrag_eingang'] ?? ($pa['angelegt'] ?? ''));
-usort($pas, function ($a, $b) use ($eingangVon) {
+// Standard-Sortierung: „in Produktion" (laufend) und „produzierbar" (bereit) IMMER OBEN, Gesperrtes
+// (Vorbereitung / wartet auf Material) unten. Innerhalb der Gruppe nach Auftragseingang alt → neu.
+// Clientseitig über die Spaltenköpfe umsortierbar.
+$prioRang = fn($pa) => ['laufend' => 0, 'bereit' => 1, 'gesperrt' => 2][$pa['_eimer'] ?? 'gesperrt'] ?? 2;
+usort($pas, function ($a, $b) use ($eingangVon, $prioRang) {
+    $pr = $prioRang($a) - $prioRang($b);
+    if ($pr !== 0) return $pr;
     $ea = $eingangVon($a) ?: '9999'; $eb = $eingangVon($b) ?: '9999';
     return strcmp($ea, $eb);
 });
@@ -77,8 +82,8 @@ seitenkopf('Produktionsaufträge', count($alle) . ' aktive ' . (count($alle) ===
   <thead><tr>
     <th>Nr.</th><th>Produkt</th><th>Kunde</th><th class="bx-num">Menge</th>
     <th class="bx-sort" data-sort="geplant">Wann dran<span class="arr"></span></th>
-    <th class="bx-sort on" data-sort="eingang" data-dir="1">Auftragseingang<span class="arr">▲</span></th>
-    <th>Produzierbar?</th><th>Fortschritt</th>
+    <th class="bx-sort" data-sort="eingang">Auftragseingang<span class="arr"></span></th>
+    <th class="bx-sort on" data-sort="prio" data-dir="1">Produzierbar?<span class="arr">▲</span></th><th>Fortschritt</th>
     <th class="bx-sort" data-sort="statusrank">Status<span class="arr"></span></th>
   </tr></thead>
   <tbody id="pa-rows">
@@ -95,6 +100,7 @@ seitenkopf('Produktionsaufträge', count($alle) . ' aktive ' . (count($alle) ===
         data-eingang="<?= h($eingang ?: '9999') ?>"
         data-geplant="<?= h((string)($pa['geplant_am'] ?? '') ?: '9999') ?>"
         data-statusrank="<?= (int)$statusRang((string)$pa['status']) ?>"
+        data-prio="<?= (int)$prioRang($pa) ?>"
         data-search="<?= h($suche) ?>">
       <td><strong><?= h((string)$pa['nummer']) ?></strong><?php if (!empty($pa['auftrag_nr'])): ?><br><span class="muted" style="font-size:12px"><?= h((string)$pa['auftrag_nr']) ?></span><?php endif; ?></td>
       <td><?= h((string)($pa['produkt_name'] ?: '–')) ?><?php if (!empty($pa['form'])): ?> <span class="muted" style="font-size:12px">· <?= h((string)$pa['form']) ?></span><?php endif; ?></td>
@@ -147,7 +153,7 @@ seitenkopf('Produktionsaufträge', count($alle) . ' aktive ' . (count($alle) ===
     var zeilen = alleZeilen();
     zeilen.sort(function (a, b) {
       var va = a.dataset[key] || '', vb = b.dataset[key] || '';
-      if (key === 'statusrank') return (parseInt(va, 10) - parseInt(vb, 10)) * dir;
+      if (key === 'statusrank' || key === 'prio') return (parseInt(va, 10) - parseInt(vb, 10)) * dir;
       return va < vb ? -1 * dir : (va > vb ? 1 * dir : 0);
     });
     zeilen.forEach(function (r) { tbody.appendChild(r); });

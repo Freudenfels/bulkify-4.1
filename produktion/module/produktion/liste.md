@@ -11,7 +11,8 @@ Dashboard-Links (`?p=liste&tab=alle` / `tab=laufend`) landen so direkt im passen
 **Suche** (clientseitig, sofort): filtert über PR-Nummer, Auftragsnummer, Produkt, Darreichungsform und Kunde; Zähler „X angezeigt" aktualisiert sich live.
 
 **Sortierung** (clientseitig, klickbare Spaltenköpfe `.bx-sort`, Pfeil zeigt Richtung, immer nur ein aktiver Kopf):
-- **Auftragseingang** – Standard, **alt → neu**; erneuter Klick kippt auf neu → alt.
+- **Produzierbar?** – **Standard**: „in Produktion" (laufend) und „produzierbar" (bereit) **immer oben**, Gesperrtes (Vorbereitung / wartet auf Material) unten; innerhalb der Gruppe nach Auftragseingang alt → neu. Rang aus `_eimer` (laufend 0, bereit 1, gesperrt 2) als `data-prio`; serverseitig vorsortiert (`usort` prio + Eingang) und über den Spaltenkopf umsortierbar.
+- **Auftragseingang** – alt → neu; erneuter Klick kippt auf neu → alt.
 - **Wann dran** (geplant_am) und **Status** (Rang vorbereitung→offen→laufend) ebenfalls sortierbar.
 Reiterwechsel lädt neu (Zähler kommen vom Server); Suche und Sortierung laufen ohne Reload.
 
