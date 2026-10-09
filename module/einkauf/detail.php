@@ -45,11 +45,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Zusätzlich: eine KOMPLETT LEERE Bestellung (0 Positionen) darf immer gelöscht werden (egal welcher Status) –
     // sonst bleibt ein Geist-Datensatz im Lager als „Keine Positionen hinterlegt" stehen.
     if ($aktion === 'zurueck_bedarf' && !$neu) {
-        $st = scalar("SELECT status FROM bestellung WHERE id=?", [(int)$id]);
+        $row = one("SELECT status, angekommen_am FROM bestellung WHERE id=?", [(int)$id]);
+        $st = (string)($row['status'] ?? '');
         $posAnz = (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=?", [(int)$id]);
-        if ($st === 'offen' || $posAnz === 0) {
+        // Loeschbar: Entwurf ('offen'), komplett leere Bestellung (egal welcher Status) ODER eine bereits
+        // "bestellte", die noch NICHT angekommen ist (zuruecknehmen -> Bedarf erscheint wieder in "Zu bestellen").
+        $loeschbar = $st === 'offen' || $posAnz === 0 || ($st === 'bestellt' && empty($row['angekommen_am']));
+        if ($loeschbar) {
             q("DELETE FROM bestellung_position WHERE bestellung_id=?", [(int)$id]);
             q("DELETE FROM bestellung WHERE id=?", [(int)$id]);
+            bedarf_bump();   // offener Bedarf aendert sich -> Zu-bestellen-Liste sofort aktuell
             header('Location: ?p=einkauf&geloescht=1'); exit;
         }
         header('Location: ?p=bestellung&id=' . $id); exit;
@@ -197,6 +202,7 @@ if (!$neu) {
     echo '<div>Status: ' . (match($b['status']){'offen'=>bx_badge('offen','info'),'bestellt'=>bx_badge('bestellt','warn'),'geliefert'=>bx_badge('geliefert','ok'),default=>bx_badge(status_text($b['status']))}) . '</div><div class="bx-row">';
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" title="Diesen Entwurf verwerfen – der Bedarf erscheint wieder im Einkaufsbedarf">Zurück in den Einkaufsbedarf</button></form> ';
     if ($b['status'] !== 'offen' && $posGesamt === 0) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese leere Bestellung löschen?\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Diese Bestellung hat keine Positionen – löschen">Leere Bestellung löschen</button></form> ';
+    if ($b['status'] === 'bestellt' && $posGesamt > 0 && empty($b['angekommen_am'])) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung zurückziehen und löschen? Der Bedarf erscheint wieder unter „Zu bestellen“.\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Bestellung ist noch nicht angekommen – zurückziehen und löschen (Bedarf kommt zurück)">Bestellung zurückziehen</button></form> ';
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form>';
     if ($b['status'] === 'bestellt') echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="liefern"><button class="btn btn-primary btn-sm" type="submit">Wareneingang buchen</button></form>';
     echo '</div></div></div>';
