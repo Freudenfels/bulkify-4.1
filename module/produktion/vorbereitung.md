@@ -15,7 +15,7 @@ Neue Kundenaufträge entstehen im Produktionsauftrag-Status **`vorbereitung`** (
 - Material: Rohstoffe/Bulk angekommen, Gläser/Verpackung, Kartons, Etikett, Beipack vorrätig (aus der Stückliste).
 
 ## Info-Block (Detailansicht)
-Über der Checkliste steht ein **Info-Raster mit allen Auftrags-/Produktdaten** auf einen Blick: Kunde, Auftrag, Rezeptur-Nr., Darreichung, **Menge (Packungen)**, **Stück je Packung (VPE)**, **Gesamtstückzahl**, Kapselgröße, Verpackung/Glas, Herstellung (Eigen/Fremd) sowie die **systemseitig geplante Charge** (`charge_naechste_nr`) + **geplantes MHD** (`mhd_standard`, +18 Monate). So muss die Produktion nicht erst in den Auftrag wechseln.
+Über der Checkliste steht ein **Info-Raster mit allen Auftrags-/Produktdaten** auf einen Blick: Kunde, Auftrag, Rezeptur-Nr., Darreichung, **Menge (Packungen)**, **Stück je Packung (VPE)**, **Gesamtstückzahl**, Kapselgröße (gesetzte Größe oder bei Kapsel/Softgel die **Automatik-Empfehlung** „… (automatisch)" aus `rezeptur_kapselgroesse()`), Verpackung/Glas, Herstellung (Eigen/Fremd) sowie die **systemseitig geplante Charge** (`charge_naechste_nr`) + **geplantes MHD** (`mhd_standard`, +18 Monate). So muss die Produktion nicht erst in den Auftrag wechseln.
 
 Direkt darunter ein **Rezeptur-Block mit der Zusammensetzung** (Zutaten aus `rezeptur_zutat`: Bezeichnung + mg je Einheit + Summe) und einem Link „Rezeptur ansehen" (`?p=rezeptur_detail`). Damit kann die Produktion am PR **entscheiden, ob wir selbst herstellen oder zukaufen (Eigen/Fremd)**, ohne die Rezeptur erst woanders zu suchen.
 

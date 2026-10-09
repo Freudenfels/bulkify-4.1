@@ -109,7 +109,16 @@ if ($pa):
     $stkProP  = max(0, (int) produktion_stueck_je_packung($pa));
     $gesamtSt = $stkProP * (int)$pa['menge'];
     $glasName = $verpAkt ? (string) scalar("SELECT name FROM item WHERE id=?", [$verpAkt]) : '';
-    $kapsName = (int)($rez['kapselgroesse_id'] ?? 0) ? (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$rez['kapselgroesse_id']]) : '';
+    // Kapselgröße für die Übersicht: manuell gesetzte Größe ODER (bei Kapsel/Softgel, solange nichts gewählt)
+    // die Automatik-Empfehlung passend zum Füllgewicht (rezeptur_kapselgroesse), mit Zusatz „(automatisch)".
+    $kapsSetId = (int)($rez['kapselgroesse_id'] ?? 0);
+    if ($kapsSetId) {
+        $kapsName = (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [$kapsSetId]);
+    } elseif ($zeigeKapsel && $rid && ($kapsAutoI = rezeptur_kapselgroesse((int)$rid))) {
+        $kapsName = (string)$kapsAutoI['name'] . ' (automatisch)';
+    } else {
+        $kapsName = '';
+    }
     $darrLbl  = $rez['darreichungsform'] ?? '';
     $chargeP  = charge_naechste_nr($paId);
     $mhdP     = mhd_standard();
