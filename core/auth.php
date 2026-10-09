@@ -30,6 +30,8 @@ function route_rollen_map(): array {
         'bedarf'             => ['production', 'labor', 'fulfillment', 'einkauf'],
         'einkaufsliste'      => ['einkauf'],
         'chargen'            => ['production', 'labor', 'fulfillment', 'einkauf'],
+        'produktionschargen' => ['production', 'labor', 'fulfillment', 'einkauf'],
+        'produktionscharge'  => ['production', 'labor', 'fulfillment', 'einkauf'],
         'kunden'             => ['sales', 'finance'],
         'kunde'              => ['sales', 'finance'],
         'kunde_ki'           => ['sales', 'finance'],

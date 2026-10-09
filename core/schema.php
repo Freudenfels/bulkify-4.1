@@ -1159,6 +1159,53 @@ function init_schema(): void {
     // Energetisierung je Einlagerung (nur Kunden mit kunden.zeige_energetisierung) – der Kunde sieht es in „Mein Lager".
     ensure_column('charge', 'energetisiert_am', "DATETIME NULL");
     ensure_column('charge', 'energetisiert_von', "VARCHAR(190) NULL");
+    // Standort der Ware (Spec 6.2): lager1 (Hauptlager) | produktion (entnommen, in der Fertigung) | lager2 (Fremdlager).
+    // Blinker bleibt dran, nur der Standort wechselt. Default lager1. Genutzt von der Lager-/Produktions-Logik.
+    ensure_column('charge', 'standort', "VARCHAR(20) NOT NULL DEFAULT 'lager1'");
+
+    // === Produktions-Charge CH/CHE (Spec 7.5 + 16) =========================================================
+    // EIGENE, durchsuchbare Entitaet fuer die PRODUKTIONS-/Misch-Charge – getrennt von der Fertigprodukt-Charge
+    // (charge.charge_nr .A/.B bleibt wie sie ist!). CH… = intern gemischt/produziert, CHE… = extern zugekaufte
+    // Bulkware. Unterchargen je Gebinde/Tag/Mitarbeiter als eigener Datensatz mit parent_id + sub_kennung (-A/-B).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS prod_charge (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nummer VARCHAR(40) NOT NULL,                       -- CH-2691 (intern) / CHE-2691 (extern); Untercharge CH-2691-A
+        typ VARCHAR(10) NOT NULL DEFAULT 'intern',         -- intern | extern
+        parent_id INT NULL,                                -- NULL = Hauptcharge; sonst Untercharge von dieser
+        sub_kennung VARCHAR(4) NULL,                       -- -A/-B/-C je Gebinde/Tag/Mitarbeiter (nur Untercharge)
+        pa_id INT NULL,                                    -- Produktionsauftrag
+        rezeptur_id INT NULL,
+        produkt_id INT NULL,
+        gebinde VARCHAR(80) NULL,                          -- z. B. Eimer 8 kg oder Sack 25 kg
+        menge DECIMAL(14,3) NULL,
+        einheit VARCHAR(20) NULL,
+        mitarbeiter_id INT NULL,
+        maschine_id INT NULL,                              -- Maschine (Spec 9), wenn gekoppelt
+        status VARCHAR(30) NOT NULL DEFAULT 'offen',       -- offen|gemischt|verarbeitet|abgefuellt|fertig
+        tag DATE NULL,                                     -- Produktionstag (fuer Tageswechsel-Historie)
+        notiz TEXT NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        aktualisiert DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_nummer (nummer),
+        KEY idx_pa (pa_id), KEY idx_parent (parent_id), KEY idx_rezeptur (rezeptur_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // prod_charge_rohstoff: DAS WICHTIGSTE (Spec 7.5) – jede CH-Charge → ALLE eingesetzten Rohstoff-Batchnummern.
+    // Rohstoffe bekommen KEINE eigene Nummer: batch_nr = Hersteller-Batchnummer (= Rohstoff-Probenname, Regress).
+    // Rueckverfolgung in beide Richtungen: Charge→Batches und Batch→alle Chargen/Produkte.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS prod_charge_rohstoff (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        prod_charge_id INT NOT NULL,
+        item_id INT NULL,                                  -- Rohstoff (item)
+        charge_id INT NULL,                                -- Lager-Charge (falls bekannt)
+        batch_nr VARCHAR(80) NULL,                         -- Hersteller-Batchnummer
+        menge DECIMAL(14,3) NULL,
+        einheit VARCHAR(20) NULL,
+        erfasst_am DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        erfasst_von VARCHAR(190) NULL,
+        KEY idx_pc (prod_charge_id), KEY idx_item (item_id), KEY idx_batch (batch_nr)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     ensure_column('bestellung', 'bestelldatum', "DATE NULL");   // „gemeinsam bestellt am"
     ensure_column('bestellung_position', 'bezeichnung', "VARCHAR(200) NULL");   // Freitext (z. B. Bulk-Zukauf ohne Lagerartikel)
 
@@ -2776,6 +2823,76 @@ function produktion_gebucht(int $pa_id): float {
 function produktion_rest(int $pa_id): float {
     $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
     return max(0.0, $menge - produktion_gebucht($pa_id));
+}
+
+// === Produktions-Charge CH/CHE – Helfer (Spec 7.5 + 16) ====================================================
+// Diese Funktionen sind die EINZIGE Schreib-/Rueckverfolgungs-Schnittstelle fuer die Produktionscharge. Die
+// Sub-Apps (produktion/) rufen sie ueber ihre eigene core/erp.php-Naht auf – sie fassen core/schema.php nicht an.
+
+// Neue HAUPT-Produktionscharge anlegen. $d['typ']='extern' -> CHE…, sonst CH…. Rueckgabe ['id','nummer'].
+function prod_charge_anlegen(array $d): array {
+    $typ    = (($d['typ'] ?? 'intern') === 'extern') ? 'extern' : 'intern';
+    $nummer = naechste_nummer($typ === 'extern' ? 'CHE' : 'CH');
+    q("INSERT INTO prod_charge (nummer,typ,pa_id,rezeptur_id,produkt_id,gebinde,menge,einheit,mitarbeiter_id,maschine_id,status,tag,notiz)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [$nummer, $typ, $d['pa_id'] ?? null, $d['rezeptur_id'] ?? null, $d['produkt_id'] ?? null,
+       mb_substr(trim((string)($d['gebinde'] ?? '')), 0, 80) ?: null,
+       ($d['menge'] ?? null), mb_substr(trim((string)($d['einheit'] ?? '')), 0, 20) ?: null,
+       ($d['mitarbeiter_id'] ?? null), ($d['maschine_id'] ?? null),
+       mb_substr((string)($d['status'] ?? 'offen'), 0, 30), ($d['tag'] ?? gmdate('Y-m-d')), ($d['notiz'] ?? null)]);
+    return ['id' => insert_id(), 'nummer' => $nummer];
+}
+// Untercharge zu einer Hauptcharge (je Gebinde/Tag/Mitarbeiter). sub_kennung automatisch A/B/C… wenn leer.
+function prod_charge_sub_anlegen(int $parent_id, array $d = []): array {
+    $p = one("SELECT nummer, typ, pa_id, rezeptur_id, produkt_id FROM prod_charge WHERE id=?", [$parent_id]);
+    if (!$p) return ['id' => 0, 'nummer' => ''];
+    $sub = strtoupper(trim((string)($d['sub_kennung'] ?? '')));
+    if ($sub === '') { $n = (int) scalar("SELECT COUNT(*) FROM prod_charge WHERE parent_id=?", [$parent_id]); $sub = ($n < 26) ? chr(ord('A') + $n) : ('X' . ($n + 1)); }
+    $nummer = $p['nummer'] . '-' . $sub;
+    q("INSERT INTO prod_charge (nummer,typ,parent_id,sub_kennung,pa_id,rezeptur_id,produkt_id,gebinde,menge,einheit,mitarbeiter_id,maschine_id,status,tag,notiz)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [$nummer, $p['typ'], $parent_id, $sub, $p['pa_id'], $p['rezeptur_id'], $p['produkt_id'],
+       mb_substr(trim((string)($d['gebinde'] ?? '')), 0, 80) ?: null,
+       ($d['menge'] ?? null), mb_substr(trim((string)($d['einheit'] ?? '')), 0, 20) ?: null,
+       ($d['mitarbeiter_id'] ?? null), ($d['maschine_id'] ?? null),
+       mb_substr((string)($d['status'] ?? 'offen'), 0, 30), ($d['tag'] ?? gmdate('Y-m-d')), ($d['notiz'] ?? null)]);
+    return ['id' => insert_id(), 'nummer' => $nummer];
+}
+// Einen eingesetzten Rohstoff(-Batch) mit einer Produktionscharge verknuepfen (Spec 7.5). batch_nr = Hersteller-Batch.
+function prod_charge_rohstoff_verknuepfen(int $prod_charge_id, array $d): int {
+    if ($prod_charge_id <= 0) return 0;
+    $batch = trim((string)($d['batch_nr'] ?? ''));
+    if ($batch === '' && !empty($d['charge_id'])) $batch = (string) scalar("SELECT charge_nr FROM charge WHERE id=?", [(int)$d['charge_id']]);
+    q("INSERT INTO prod_charge_rohstoff (prod_charge_id,item_id,charge_id,batch_nr,menge,einheit,erfasst_von)
+       VALUES (?,?,?,?,?,?,?)",
+      [$prod_charge_id, ($d['item_id'] ?? null), ($d['charge_id'] ?? null), mb_substr($batch, 0, 80) ?: null,
+       ($d['menge'] ?? null), mb_substr(trim((string)($d['einheit'] ?? '')), 0, 20) ?: null,
+       mb_substr(trim((string)($d['erfasst_von'] ?? '')), 0, 190) ?: null]);
+    return insert_id();
+}
+// Rueckverfolgung RUECKWAERTS: alle eingesetzten Rohstoff-Batches einer Charge (inkl. ihrer Unterchargen).
+function prod_charge_rohstoffe(int $prod_charge_id): array {
+    $ids = [$prod_charge_id];
+    foreach (all("SELECT id FROM prod_charge WHERE parent_id=?", [$prod_charge_id]) as $r) $ids[] = (int)$r['id'];
+    $in = implode(',', array_map('intval', $ids));
+    return all("SELECT pcr.*, i.name AS item_name, i.artikelnummer FROM prod_charge_rohstoff pcr
+                LEFT JOIN item i ON i.id=pcr.item_id WHERE pcr.prod_charge_id IN ($in) ORDER BY pcr.id");
+}
+// Rueckverfolgung VORWAERTS: welche Produktionschargen haben einen Rohstoff-Batch verwendet (Regress/Rueckruf).
+function prod_charge_vorwaerts(string $batch_nr): array {
+    $batch_nr = trim($batch_nr); if ($batch_nr === '') return [];
+    return all("SELECT pc.*, pcr.item_id, pcr.menge AS eingesetzt_menge
+                FROM prod_charge_rohstoff pcr JOIN prod_charge pc ON pc.id=pcr.prod_charge_id
+                WHERE pcr.batch_nr=? OR pcr.batch_nr LIKE ? ESCAPE '='",
+               [$batch_nr, str_replace(['=', '%', '_'], ['==', '=%', '=_'], $batch_nr) . '%']);
+}
+// Eine Produktionscharge mit Unterchargen + Rohstoffen fuer das Chargen-Menue laden.
+function prod_charge_voll(int $prod_charge_id): ?array {
+    $pc = one("SELECT * FROM prod_charge WHERE id=?", [$prod_charge_id]);
+    if (!$pc) return null;
+    $pc['unterchargen'] = all("SELECT * FROM prod_charge WHERE parent_id=? ORDER BY sub_kennung, id", [$prod_charge_id]);
+    $pc['rohstoffe']    = prod_charge_rohstoffe($prod_charge_id);
+    return $pc;
 }
 // Eine Menge Fertigware zu einem Produktionsauftrag als eigene Charge einbuchen (Teilproduktion).
 // Die Chargennummer ist die PR-Basis mit dem nächsten Buchstaben (.A, .B, .C …), das MHD standardmäßig

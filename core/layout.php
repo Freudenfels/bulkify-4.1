@@ -108,7 +108,7 @@ function bx_nav_werk(): array {
     return [
         'Start'            => ['werk' => 'Cockpit', 'aufgaben' => 'Aufgaben'],
         'Produktion'       => ['produktion_run' => 'Geführte Produktion', 'produktion' => 'Produktionsaufträge', 'kalender' => 'Kalender'],
-        'Warenwirtschaft'  =>['einkaufsliste' => 'Bedarf', 'lager' => 'Bestand', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'chargen' => 'Chargen',
+        'Warenwirtschaft'  =>['einkaufsliste' => 'Bedarf', 'lager' => 'Bestand', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'chargen' => 'Chargen', 'produktionschargen' => 'Produktionschargen',
                                'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'freigaben' => 'Freigaben', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)',
                                'versand' => 'Versand'],
         'Entwicklung'      => ['rezeptur' => 'Rezepturen', 'anfragen' => 'Rezepturanfragen', 'novelfood' => 'Novel Food', 'novelfood_verlauf' => 'Novel-Food News'],
