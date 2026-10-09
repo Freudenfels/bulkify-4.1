@@ -77,9 +77,9 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 - **Paket A – Chargen-Fundament** (`core/schema.php`): `prod_charge` (CH/CHE + Unterchargen parent_id/sub_kennung), `prod_charge_rohstoff` (Batch-Verknüpfung, beide Richtungen), `charge.standort`, Helfer `prod_charge_anlegen/_sub_anlegen/_rohstoff_verknuepfen/_rohstoffe/_vorwaerts/_voll`. Chargen-Menü `module/charge/` (durchsuchbar). Helfer end-to-end getestet.
 - **Proben-Datenmodell** (`core/schema.php`): `prod_probe` (rohstoff|gebinde|endprodukt|labor) + `rueckstellmuster_sollzahl()` (max(5, Gebinde)).
 
-**Laufende Agenten (isolierte Worktrees, committen dort, PUSH erst nach Review durch Orchestrator):**
-- **Agent Produktion** (`produktion/`): Maschinenfuhrpark (Typ/QR/Scan je Step), prod_charge-Anbindung beim Mischen/Abfüllen (über `produktion/core/erp.php`, Raw-SQL), Mischer-Umrechnung, Umgebungsdaten, Reinigung ereignisgesteuert+harte Sperre.
-- **Agent Lager** (`lager/`): `charge.standort`-Flow (Entnahme/Wiedereinlagerung), eigener Gebinde-QR (5.6), Aufkleber-Scan→Rezeptur (5.2).
+**Agent Lager (Paket D): ✅ GEMERGT & LIVE auf beta/main** — `charge.standort`-Flow (an Produktion übergeben / wieder einlagern + Ist-Gewicht, „in Produktion"-Badge in Bestand+Versand), eigener **Gebinde-QR** pro Karton (`lg_gebinde`, GB-Nummernkreis, PDF, Scan→Charge/Wareneingang/Lieferant für Regress), **Rezepturnummer-Aufkleber-Scan** im Wareneingang. Geprüft: nur `lager/`, additiv, php -l sauber.
+
+**Agent Produktion (Paket B/C): läuft noch** (isolierter Worktree, committet dort, PUSH erst nach Review) — Maschinenfuhrpark (Typ/QR/Scan je Step), prod_charge-Anbindung beim Mischen/Abfüllen (über `produktion/core/erp.php`, Raw-SQL), Mischer-Umrechnung, Umgebungsdaten, Reinigung ereignisgesteuert+harte Sperre.
 
 **Wichtig (Architektur):** Sub-Apps requiren NICHT `core/schema.php` (db()-Kollision) → Zugriff auf `prod_charge`/`charge.standort` nur per Raw-SQL in der jeweiligen `*/core/erp.php`.
 
