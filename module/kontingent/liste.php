@@ -75,7 +75,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
     <?php foreach ($rows as $r): $rest = (int)$r['gesamt_menge'] - (int)$r['abgerufen']; $abgelaufen = !empty($r['gueltig_bis']) && (string)$r['gueltig_bis'] < gmdate('Y-m-d'); ?>
       <tr>
         <td><?= kunde_link($r['kunde_id'] ?? null, $r['kunde']) ?></td>
-        <td><?= h($r['produkt'] ?: '–') ?></td>
+        <td><a href="?p=kontingent&id=<?= (int)$r['id'] ?>"><?= h($r['produkt'] ?: '–') ?></a></td>
         <td class="bx-num"><?= number_format((int)$r['gesamt_menge'], 0, ',', '.') ?></td>
         <td class="bx-num"><?= number_format((int)$r['abgerufen'], 0, ',', '.') ?></td>
         <td class="bx-num"><strong><?= number_format($rest, 0, ',', '.') ?></strong></td>
@@ -90,6 +90,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
         <td><?= $r['gueltig_bis'] ? h(date('d.m.Y', strtotime((string)$r['gueltig_bis']))) . ($abgelaufen ? ' <span style="color:#8f231b;font-size:12px">abgelaufen</span>' : '') : '<span class="muted">–</span>' ?></td>
         <td><?= $statusBadge($r['status']) ?></td>
         <td class="bx-num" style="white-space:nowrap">
+          <a class="btn btn-ghost btn-sm" href="?p=kontingent&id=<?= (int)$r['id'] ?>">Details</a>
           <?php if ($r['sig_dok']): ?><a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id=<?= (int)$r['sig_dok'] ?>">Vertrag</a><?php endif; ?>
           <form method="post" style="margin:0;display:inline">
           <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">

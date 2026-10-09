@@ -118,6 +118,7 @@ $routes = [
     'vertrag_pdf'     => 'angebot/vertrag_pdf.php',   // Jahresabnahmevertrag (PDF) zum Angebot
     'auftraege'       => 'auftrag/liste.php',
     'kontingente'     => 'kontingent/liste.php',
+    'kontingent'      => 'kontingent/detail.php',   // Jahresvertrag-Detail (Zusammensetzung + Rechnungs-Vorschau + Abrufe)
     'auftrag'         => 'auftrag/detail.php',
     'auftrag_pdf'     => 'auftrag/pdf.php',   // Auftragsbestätigung als PDF (Download/Druck)
     'auftrag_preise'  => 'auftrag/preisliste.php',   // Arbeitsliste: Aufträge ohne Preis -> Rechnung-Upload füllt Preis (aufgeschlüsselt)
