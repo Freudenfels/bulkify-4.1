@@ -20,6 +20,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sid = (int)($_POST['schritt_id'] ?? 0);
         $paId = (int)($_POST['pa_id'] ?? 0);
         $r = erp_schritt_abschliessen($sid, $werkName ?: 'Mitarbeiter');
+        // Mischen: je Mischbehälter eine Gebinde-Untercharge anlegen (ein Etikett je Behälter, FEFO beim Abfüllen).
+        if (!empty($r['ok']) && ($r['station'] ?? '') === 'Mischen') {
+            $cap = (float) str_replace(',', '.', (string)($_POST['cap'] ?? ''));
+            if ($cap > 0 && function_exists('erp_mischer_unterchargen_anlegen')) {
+                $wn = $werkName ?: 'Mitarbeiter';
+                if (function_exists('pr_daten_setzen')) pr_daten_setzen($paId, 'kg_pro_gebinde', rtrim(rtrim(number_format($cap, 3, '.', ''), '0'), '.'), $wn);
+                if (function_exists('erp_prod_charge_fuer_station')) erp_prod_charge_fuer_station($paId, 'Mischen', 0, null, $wn);
+                erp_mischer_unterchargen_anlegen($paId, $cap, $wn);
+            }
+        }
         $_SESSION['werk_flash']    = $r['ok'] ? (($r['fertig'] ?? false) ? 'Fertig – Produktion abgeschlossen, Fertigware eingebucht.' : 'Schritt erledigt.') : ($r['msg'] ?: 'Schritt konnte nicht abgeschlossen werden.');
         $_SESSION['werk_flash_ok'] = !empty($r['ok']);
         weiter('?p=werk&id=' . $paId . (!empty($r['fertig']) ? '&fertig=1' : ''));
@@ -201,11 +211,46 @@ header('Content-Type: text/html; charset=utf-8');
     foreach (($mat['zeilen'] ?? []) as $z)
         if (($z['pflicht'] ?? true) && empty($z['entnommen']) && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']) { $materialFehlt = true; break; }
     $isGate = str_contains((string)$cur['station'], 'Freigabe');
+    $istMischen = (string)$cur['station'] === 'Mischen';
+    $cap  = $istMischen ? (float) str_replace(',', '.', (string)($_GET['cap'] ?? '')) : 0.0;
+    $plan = $istMischen ? erp_mischer_plan($id, $cap) : null;
+    $nz   = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
   ?>
   <div class="panel" style="border-color:var(--gruen)">
     <div class="step-sub">Jetzt dran · Schritt <?= $fertigCnt + 1 ?> von <?= $total ?></div>
     <div class="step-h"><?= h((string)$cur['station']) ?></div>
     <?php if ($anl !== ''): ?><div class="muted" style="font-size:18px;margin-bottom:6px"><?= h($anl) ?></div><?php endif; ?>
+
+    <?php if ($istMischen && $plan && !empty($plan['ok'])): ?>
+    <div class="panel" style="background:var(--panel2);border-color:var(--line);margin-top:16px">
+      <div class="muted">Gesamt anzumischen</div>
+      <div style="font-size:24px;font-weight:800"><?= $nz($plan['total_kg'] ?? 0) ?> kg <span class="muted" style="font-size:16px;font-weight:400">(<?= number_format((int)($plan['einheiten'] ?? 0), 0, ',', '.') ?> Einheiten)</span></div>
+      <form method="get" style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <input type="hidden" name="p" value="werk"><input type="hidden" name="id" value="<?= (int)$id ?>">
+        <div><div class="muted" style="font-size:14px;margin-bottom:4px">kg je Mischbehälter</div>
+          <input type="text" inputmode="decimal" name="cap" value="<?= h($cap > 0 ? $nz($cap) : '') ?>" placeholder="z. B. 10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
+        <button class="btn btn-ghost" type="submit" style="min-height:52px">Behälter berechnen</button>
+      </form>
+      <?php if (!empty($plan['gebinde'])): ?>
+      <div class="muted" style="margin:16px 0 10px">Ergibt <strong style="color:var(--text)"><?= (int)$plan['anzahl'] ?> Mischbehälter</strong> – ein Etikett je Behälter. Angefangenen Behälter komplett durchziehen (FIFO).</div>
+      <?php foreach ($plan['gebinde'] as $g): ?>
+      <div style="border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">
+          <div style="font-size:21px;font-weight:800">Mischbehälter <?= (int)$g['nr'] ?> <span class="muted" style="font-size:15px;font-weight:400">/ <?= (int)$plan['anzahl'] ?></span></div>
+          <div style="font-size:18px;font-weight:700"><?= $nz($g['kg']) ?> kg gesamt</div>
+        </div>
+        <table class="mat" style="margin-top:8px"><tbody>
+          <?php foreach ($g['zutaten'] as $z): ?>
+          <tr><td><?= h((string)$z['name']) ?></td><td class="num" style="font-weight:700;color:var(--lime)"><?= $nz($z['kg']) ?> kg</td></tr>
+          <?php endforeach; ?>
+        </tbody></table>
+      </div>
+      <?php endforeach; ?>
+      <?php else: ?>
+      <div class="muted" style="margin-top:10px">Trage „kg je Mischbehälter" ein (z. B. die Behältergröße) – dann wird jeder Behälter einzeln mit den Rohstoff-Mengen angezeigt.</div>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
 
     <?php if (!empty($mat['zeilen'])): ?>
     <div class="muted" style="margin-top:14px">Aus dem Lager holen<?php if (($mat['soll_menge'] ?? null) !== null): ?> · benötigt <strong style="color:var(--text)"><?= menge_txt($mat['soll_menge']) ?> <?= h((string)($mat['soll_einheit'] ?? '')) ?></strong><?php endif; ?>:</div>
@@ -233,6 +278,7 @@ header('Content-Type: text/html; charset=utf-8');
           <input type="hidden" name="aktion" value="werk_erledigt">
           <input type="hidden" name="schritt_id" value="<?= (int)$cur['id'] ?>">
           <input type="hidden" name="pa_id" value="<?= (int)$id ?>">
+          <?php if ($istMischen && $cap > 0): ?><input type="hidden" name="cap" value="<?= h($nz($cap)) ?>"><?php endif; ?>
           <button class="btn btn-lime btn-lg" type="submit"><?= $isGate ? 'Freigeben' : 'Erledigt – nächster Schritt' ?></button>
         </form>
       <?php endif; ?>

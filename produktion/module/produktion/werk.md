@@ -10,6 +10,9 @@ Eigener **PIN-Login** (kein Team-Login). Die PIN setzt der Admin im Dashboard je
 2. **Kachel-Liste** (`?p=werk`): große Karten der **produzierbaren** (`erp_pa_bereitschaft`=bereit) + **laufenden** Aufträge; laufend zuerst, dann nach geplantem Termin. Karte zeigt Nr., Produkt, Menge, Kunde, Status-Badge, Fortschrittsbalken + „Schritt X / Y". Tippen → Schritt-Ansicht.
 3. **Schritt-Ansicht** (`?p=werk&id=<pa>`): Kopf (Nr./Produkt/Menge/Schritt), der **aktuelle Schritt** groß (Station + Anleitung via `station_anleitung_text`), Material **„Aus dem Lager holen"** (`erp_schritt_material`: Material/Menge/Bestand, Knappheit rot), großer **„Erledigt – nächster Schritt"**-Button und darunter der **Ablauf** (erledigt ✓ / aktuell / offen). Alle Schritte fertig → **„Fertig ✓"** + zurück zur Liste.
 
+## Mischen: Mischbehälter einzeln
+Beim Schritt **Mischen** zeigt die App „Gesamt anzumischen" (kg + Einheiten), ein Feld „kg je Mischbehälter" (+ „Behälter berechnen", GET `cap`) und dann **jeden Behälter einzeln** als Karte „Mischbehälter N / gesamt" mit den **kg je Rohstoff** (`erp_mischer_plan`). Beim „Erledigt" des Mischens werden je Behälter Gebinde-Unterchargen angelegt (`erp_prod_charge_fuer_station` + `erp_mischer_unterchargen_anlegen`), ein Etikett je Behälter (FEFO beim Abfüllen).
+
 ## Pflicht-Gates (schlank)
 „Erledigt" postet `aktion=werk_erledigt` → **`erp_schritt_abschliessen($schritt_id, $name)`** – dieselbe Logik wie `?p=run`: Reihenfolge-Prüfung, Vorbereitungs-Sperre, **Material-FEFO-Abbuchung mit Mangel-Schutz** (fehlt Pflicht-Material, ist der Button gesperrt + Hinweis). Bewusst **ohne** die Leiter-Extras (Maschinenauswahl/Reinigung/Klima/Mischer-Plan/FEFO-Gebinde) – die laufen weiter über `?p=run` (Produktionsleiter). *Offen/nächster Ausbau:* Maschinen-Reinigungs-Gate auch in die Mitarbeiter-App holen, falls gewünscht.
 
