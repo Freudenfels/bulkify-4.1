@@ -1032,8 +1032,11 @@ $std_menge_ang  = std_bestellmengen();
 // USt-Satz dieses Kunden (EU-Ausland/Kleinunternehmer 0 %, sonst Inland)
 $land = $k['land'] ?? 'DE';
 $ustP = (meta_get('kleinunternehmer','0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
+// Stornierte Auftraege sieht der Kunde NICHT (sie wurden ja nicht ausgefuehrt). Einzige Ausnahme:
+// ein in ein Kontingent umgewandelter Jahresvertrags-Auftrag (kontingent_id) – der wird bewusst als
+// „hinterlegt in Jahresmenge" gezeigt (siehe aufBadge).
 $auftraege = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
-                  WHERE a.kunde_id=? ORDER BY a.angelegt DESC", [$kid]);
+                  WHERE a.kunde_id=? AND (a.status <> 'storniert' OR a.kontingent_id IS NOT NULL) ORDER BY a.angelegt DESC", [$kid]);
 // Fertigware-Chargen je Bestellung (Charge-Nr steht auf dem Produkt, deshalb sichtbar fuer den Kunden).
 $auftragChargen = [];
 if ($auftraege) {
