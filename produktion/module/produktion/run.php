@@ -31,6 +31,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     $zusatz .= ' Maschine: ' . $mm['name'] . '.';
                 }
             }
+            // Umgebungsdaten (Spec 10): Temperatur/Luftfeuchte je Schritt erfassen (fließt später in den Bericht).
+            $temp = trim((string)($_POST['umg_temp'] ?? ''));
+            $feu  = trim((string)($_POST['umg_feuchte'] ?? ''));
+            if ($temp !== '') pr_daten_setzen($id, 'temp_' . $schritt_id, $temp, $akteur);
+            if ($feu !== '')  pr_daten_setzen($id, 'feuchte_' . $schritt_id, $feu, $akteur);
             // Produktionscharge CH/CHE anbinden + eingesetzte Rohstoff-Batches verknüpfen (Spec 7.5).
             $mm_menge = null;
             $mmv = trim((string)($_POST['daten']['mischmenge'] ?? ''));
@@ -229,6 +234,10 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
       <div class="bx-field" style="margin:0;max-width:200px"><label>QR-Code</label><input type="text" name="maschine_qr" placeholder="QR der Maschine"></div>
     </div>
     <?php endif; ?>
+    <div class="bx-row" style="gap:12px;flex-wrap:wrap;margin:0 0 14px;align-items:flex-end">
+      <div class="bx-field" style="margin:0;max-width:160px"><label>Temperatur (°C)</label><input type="text" name="umg_temp" value="<?= h((string)($daten['temp_' . $cur['id']]['wert'] ?? '')) ?>" placeholder="z. B. 21"></div>
+      <div class="bx-field" style="margin:0;max-width:160px"><label>Luftfeuchte (%)</label><input type="text" name="umg_feuchte" value="<?= h((string)($daten['feuchte_' . $cur['id']]['wert'] ?? '')) ?>" placeholder="z. B. 45"></div>
+    </div>
     <?php $felder = pr_station_felder((string)$cur['station']); if ($felder): ?>
     <div class="bx-row" style="gap:12px;flex-wrap:wrap;margin:0 0 14px">
       <?php foreach ($felder as $feld): ?>
@@ -263,6 +272,10 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
           <?php endif; endforeach; ?>
           <?php if (!empty($daten['maschine_' . $s['id']]['wert'])): ?>
             <br><span class="muted" style="font-size:12px">Maschine: <?= h((string)$daten['maschine_' . $s['id']]['wert']) ?></span>
+          <?php endif; ?>
+          <?php $kt = (string)($daten['temp_' . $s['id']]['wert'] ?? ''); $kf = (string)($daten['feuchte_' . $s['id']]['wert'] ?? '');
+                if ($kt !== '' || $kf !== ''): ?>
+            <br><span class="muted" style="font-size:12px">Klima: <?= $kt !== '' ? h($kt) . ' °C' : '' ?><?= ($kt !== '' && $kf !== '') ? ' / ' : '' ?><?= $kf !== '' ? h($kf) . ' %' : '' ?></span>
           <?php endif; ?>
         </td>
         <td><?= $done ? '<span class="badge badge-ok">erledigt</span>' : ($dran ? '<span class="badge badge-info">als Nächstes</span>' : '<span class="badge badge-warn">offen</span>') ?></td>
