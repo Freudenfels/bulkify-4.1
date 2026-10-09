@@ -1206,6 +1206,15 @@ function init_schema(): void {
         KEY idx_pc (prod_charge_id), KEY idx_item (item_id), KEY idx_batch (batch_nr)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // CH/CHE-Nummernkreis startet bei 2977 (4 Stellen -> CH-2977; waechst natuerlich auf 5 Stellen bei >=10000).
+    // Seed auf frischen Systemen; Korrektur nur solange noch keine echte Charge dieses Typs vergeben wurde
+    // (faengt Test-Hochzaehlungen ab, ohne je eine real vergebene Nummer zu ueberschreiben).
+    foreach (['CH' => 'intern', 'CHE' => 'extern'] as $pfx => $typ) {
+        q("INSERT IGNORE INTO nummernkreis (prefix, naechste, stellen) VALUES (?, 2977, 4)", [$pfx]);
+        if ((int) scalar("SELECT COUNT(*) FROM prod_charge WHERE typ=?", [$typ]) === 0)
+            q("UPDATE nummernkreis SET naechste=2977, stellen=4 WHERE prefix=? AND naechste<2977", [$pfx]);
+    }
+
     // prod_probe: dreistufige physische Proben/Rueckstellmuster (Spec 8). ebene: rohstoff (pro eingesetztem
     // Rohstoff-Batch) | gebinde (pro Gebinde/Sub-Charge) | endprodukt (Rueckstellmuster) | labor (nur bei
     // Laborpruefung, 2 Stueck). Rueckstell-Mengenregel Endprodukt: max(5, Anzahl Gebinde) – siehe Helfer.
