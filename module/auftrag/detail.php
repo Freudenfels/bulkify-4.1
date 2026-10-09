@@ -305,6 +305,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftraege&geloescht=1&nr=' . rawurlencode($nr)); exit;
 }
 
+// Fertige Bulkware aus einer konkreten Bestellung (auch noch nicht geliefert) oder Charge für diesen Auftrag
+// reservieren – dritter Weg neben Eigenproduktion/Fremdbestellung. Keine neue Lieferantenbestellung.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'bulk_reservieren') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    [$qTyp, $qId] = array_pad(explode(':', (string)($_POST['quelle'] ?? ''), 2), 2, '');
+    $menge = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['menge'] ?? '0'));
+    $r = bulk_reservieren($id, (string)$qTyp, (int)$qId, $menge);
+    header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&bulkres=1' : '&expressfehler=' . urlencode($r['fehler'] ?? 'Reservierung nicht möglich.'))); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'bulk_res_storno') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id); exit; }
+    bulk_reservierung_storno((int)($_POST['res_id'] ?? 0), $id);
+    header('Location: ?p=auftrag&id=' . $id . '&bulkres=1'); exit;
+}
+
 $a = $id ? one("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name, ang.nummer AS angebot_nr
                 FROM auftrag a
                 LEFT JOIN kunden k ON k.id=a.kunde_id
@@ -439,6 +454,9 @@ if ($istAdmin && !empty($a['produkt_id'])) {
     foreach ($zukaufPreise as $z) if (!empty($z['lieferant_id'])) $zukaufLief[(int)$z['lieferant_id']] = (string)$z['firma'];
 }
 $anfrageLieferanten = $istAdmin ? all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma") : [];
+// Bulk-Reservierung (dritter Weg): mögliche Quellen (Bestellungen/Chargen des Bulk-Artikels) + bestehende Reservierungen.
+$bulkQ   = $istAdmin ? bulk_quellen_fuer_auftrag($id) : ['item'=>0, 'bestellungen'=>[], 'chargen'=>[]];
+$bulkRes = $istAdmin ? auftrag_bulk_reservierungen($id) : [];
 
 render_header('auftraege', $a['nummer']);
 $kopfProdukt = trim((string)($a['produkt_bezeichnung'] ?? '')) ?: (string)($a['produkt_name'] ?? '');
@@ -801,6 +819,56 @@ if (auftrag_braucht_etikett($id)):
     </div>
     <?php endif; ?>
   </div>
+
+  <?php if ($istAdmin && ($bulkQ['item'] ?? 0)):
+        $nzB = fn($x)=>rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',');
+        $bulkResSumme = 0.0; foreach ($bulkRes as $rv) $bulkResSumme += (float)$rv['menge'];
+        $bulkOffen = max(0, (int)$gesamtStk - (int)round($bulkResSumme)); ?>
+  <h3 style="margin:18px 0 6px;font-size:14px;font-weight:600">Aus Bulk reservieren <span class="muted" style="font-weight:normal">· statt neu bestellen/produzieren</span></h3>
+  <?php if (isset($_GET['bulkres'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Reservierung aktualisiert.</div><?php endif; ?>
+  <?php if ($bulkRes): ?>
+  <div class="bx-tablewrap" style="margin-bottom:10px"><table class="bx-table">
+    <thead><tr><th>Quelle</th><th class="bx-num">reserviert</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      <?php foreach ($bulkRes as $rv): ?>
+      <tr>
+        <td><?php if ($rv['bestellung_nr']): ?>Bestellung <?= h((string)$rv['bestellung_nr']) ?><?= $rv['lieferant'] ? ' · ' . h((string)$rv['lieferant']) : '' ?><?php elseif ($rv['charge_nr']): ?>Charge <?= h((string)$rv['charge_nr']) ?><?php else: ?>–<?php endif; ?></td>
+        <td class="bx-num"><?= $nzB($rv['menge']) ?> <?= h((string)($rv['einheit'] ?: '')) ?></td>
+        <td><?php if ($rv['charge_nr']): ?><?= bx_badge('aus Bestand','ok') ?><?php elseif (!empty($rv['angekommen_am'])): ?><?= bx_badge('geliefert','ok') ?><?php else: ?><?= bx_badge('unterwegs','warn') ?><?php endif; ?></td>
+        <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Reservierung aufheben?');"><input type="hidden" name="aktion" value="bulk_res_storno"><input type="hidden" name="res_id" value="<?= (int)$rv['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Aufheben</button></form></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php endif; ?>
+  <?php if ($bulkQ['bestellungen'] || $bulkQ['chargen']): ?>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="bulk_reservieren">
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Quelle (Bestellung oder vorhandene Charge)
+      <select name="quelle" class="rscombo" style="min-width:320px" required>
+        <option value="">– wählen –</option>
+        <?php if ($bulkQ['bestellungen']): ?><optgroup label="Bestellungen (auch unterwegs)">
+          <?php foreach ($bulkQ['bestellungen'] as $bq): if ($bq['frei'] <= 0.0001) continue; ?>
+            <option value="bestellung:<?= (int)$bq['bp_id'] ?>">Bestellung <?= h((string)$bq['nummer']) ?><?= $bq['lieferant'] ? ' · ' . h((string)$bq['lieferant']) : '' ?> · <?= !empty($bq['angekommen_am']) ? 'geliefert' : 'unterwegs' ?> · frei <?= $nzB($bq['frei']) ?></option>
+          <?php endforeach; ?>
+        </optgroup><?php endif; ?>
+        <?php if ($bulkQ['chargen']): ?><optgroup label="Vorhandene Chargen (Bestand)">
+          <?php foreach ($bulkQ['chargen'] as $cq): ?>
+            <option value="charge:<?= (int)$cq['id'] ?>">Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $nzB($cq['frei']) ?></option>
+          <?php endforeach; ?>
+        </optgroup><?php endif; ?>
+      </select>
+    </label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Menge (Stück Bulk)
+      <input type="text" inputmode="numeric" name="menge" data-tausender value="<?= number_format((int)$bulkOffen, 0, ',', '.') ?>" style="min-width:130px">
+    </label>
+    <button class="btn btn-primary btn-sm" type="submit" data-busy="Reserviere…">Reservieren</button>
+  </form>
+  <div class="muted" style="font-size:12px;margin-top:6px">Reserviert fertige Bulkware aus einer konkreten Bestellung (auch noch nicht geliefert) oder einer vorhandenen Charge – ohne neue Lieferantenbestellung und ohne Eigenproduktion. Benötigt für diesen Auftrag: <strong><?= number_format((int)$gesamtStk,0,',','.') ?></strong> Stück<?= $bulkResSumme>0 ? ', bereits reserviert ' . number_format((int)round($bulkResSumme),0,',','.') : '' ?>.</div>
+  <?php else: ?>
+  <div class="muted" style="font-size:12px">Keine Bulk-Bestellung oder -Charge für dieses Produkt gefunden. Erst eine Lieferantenbestellung für die Bulkware anlegen (oder Bestand einbuchen), dann hier reservieren.</div>
+  <?php endif; ?>
+  <?php endif; /* Aus Bulk reservieren */ ?>
 
   <h3 style="margin:18px 0 6px;font-size:14px;font-weight:600">Bestellungen zu diesem Auftrag</h3>
   <?php if (!$best): ?>

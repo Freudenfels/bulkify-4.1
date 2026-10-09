@@ -661,6 +661,10 @@ function init_schema(): void {
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         KEY idx_item (item_id, status), KEY idx_auftrag (auftrag_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Bulk-Reservierung (dritter Beschaffungsweg): fertige Bulkware aus einer KONKRETEN Quelle einem Auftrag
+    // zuteilen – entweder eine (ggf. noch nicht gelieferte) Bestellposition ODER eine vorhandene Charge.
+    ensure_column('reservierung', 'bestellung_position_id', "INT NULL");
+    ensure_column('reservierung', 'charge_id', "INT NULL");
 
     // aufgabe: „Das musst du machen"-Aufgaben für den Werk-Bereich. zugewiesen_an NULL = ganzes Team.
     $pdo->exec("CREATE TABLE IF NOT EXISTS aufgabe (
@@ -5670,6 +5674,103 @@ function rezeptur_bulkitem(int $rezeptur_id): ?int {
     q("INSERT INTO item (artikelnummer,name,kategorie,form,einheit,preis_bezug,rezeptur_id) VALUES (?,?,?,?,?,?,?)",
       [naechste_nummer('BULK'), $rz['name'] . ' – Bulk', 'fertig', (string)$rz['darreichungsform'], $einheit, $einheit, $rezeptur_id]);
     return insert_id();
+}
+
+// === Bulk-Reservierung (dritter Weg: fertige Bulkware reservieren) =======================================
+// Statt für einen Auftrag neu beim Lieferanten zu bestellen oder selbst zu produzieren, kann fertige Bulkware
+// aus einer KONKRETEN Quelle reserviert werden: einer (ggf. noch nicht gelieferten) Bestellposition ODER einer
+// vorhandenen Charge. Reserviert wird gegen den Bulk-Artikel (rezeptur_bulkitem) des Auftrags-Produkts.
+
+// Bulk-Artikel (Kategorie fertig) des Auftrags-Produkts/Rezeptur. 0 = keiner.
+function auftrag_bulk_item(int $auftrag_id): int {
+    $a = one("SELECT produkt_id, rezeptur_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a) return 0;
+    $rid = (int)($a['rezeptur_id'] ?? 0);
+    if (!$rid && !empty($a['produkt_id'])) $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
+    return $rid ? (int)(rezeptur_bulkitem($rid) ?? 0) : 0;
+}
+// Schon aktiv reservierte Menge gegen eine Bestellposition bzw. eine Charge.
+function bestellposition_reserviert(int $bp_id): float {
+    return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE bestellung_position_id=? AND status='aktiv'", [$bp_id]);
+}
+function charge_bulk_reserviert(int $charge_id): float {
+    return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE charge_id=? AND status='aktiv'", [$charge_id]);
+}
+// Mögliche Bulk-Quellen für einen Auftrag: offene Bestellpositionen (auch noch nicht geliefert) und freie
+// vorhandene Chargen des Bulk-Artikels. Je Quelle: Gesamtmenge, schon reserviert, noch frei.
+function bulk_quellen_fuer_auftrag(int $auftrag_id): array {
+    $item = auftrag_bulk_item($auftrag_id);
+    if (!$item) return ['item'=>0, 'bestellungen'=>[], 'chargen'=>[]];
+    $best = all("SELECT bp.id AS bp_id, bp.menge, bp.einheit, b.nummer, b.status, b.angekommen_am, b.eta_geplant,
+                        COALESCE(l.firma,'') AS lieferant
+                 FROM bestellung_position bp
+                 JOIN bestellung b ON b.id=bp.bestellung_id
+                 LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                 WHERE bp.item_id=? AND b.status<>'storniert'
+                 ORDER BY b.angelegt DESC", [$item]);
+    $bestellungen = [];
+    foreach ($best as $bp) {
+        $frei = max(0.0, (float)$bp['menge'] - bestellposition_reserviert((int)$bp['bp_id']));
+        $bestellungen[] = $bp + ['frei'=>$frei];
+    }
+    $ch = all("SELECT id, charge_nr, menge_verfuegbar, mhd FROM charge
+               WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL
+               ORDER BY COALESCE(mhd,'9999-12-31'), id", [$item]);
+    $chargen = [];
+    foreach ($ch as $c) {
+        $frei = max(0.0, (float)$c['menge_verfuegbar'] - charge_bulk_reserviert((int)$c['id']));
+        if ($frei > 0.0001) $chargen[] = $c + ['frei'=>$frei];
+    }
+    return ['item'=>$item, 'bestellungen'=>$bestellungen, 'chargen'=>$chargen];
+}
+// Reservierung anlegen. $quelle = 'bestellung' (|bp_id) oder 'charge' (|charge_id).
+function bulk_reservieren(int $auftrag_id, string $quelle, int $quelle_id, float $menge): array {
+    if ($menge <= 0) return ['ok'=>false, 'fehler'=>'Bitte eine Menge größer 0 angeben.'];
+    $item = auftrag_bulk_item($auftrag_id);
+    if (!$item) return ['ok'=>false, 'fehler'=>'Kein Bulk-Artikel zum Produkt gefunden (Rezeptur fehlt?).'];
+    $nz = fn($x)=>rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',');
+    $bpId = null; $chId = null;
+    if ($quelle === 'bestellung') {
+        $bp = one("SELECT bp.id, bp.menge, bp.item_id FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.id=? AND b.status<>'storniert'", [$quelle_id]);
+        if (!$bp || (int)$bp['item_id'] !== $item) return ['ok'=>false, 'fehler'=>'Bestellposition passt nicht zum Bulk-Artikel dieses Auftrags.'];
+        $frei = (float)$bp['menge'] - bestellposition_reserviert($quelle_id);
+        if ($menge > $frei + 1e-6) return ['ok'=>false, 'fehler'=>'Nur noch ' . $nz($frei) . ' aus dieser Bestellung frei.'];
+        $bpId = $quelle_id;
+    } elseif ($quelle === 'charge') {
+        $c = one("SELECT id, menge_verfuegbar, item_id FROM charge WHERE id=?", [$quelle_id]);
+        if (!$c || (int)$c['item_id'] !== $item) return ['ok'=>false, 'fehler'=>'Charge passt nicht zum Bulk-Artikel dieses Auftrags.'];
+        $frei = (float)$c['menge_verfuegbar'] - charge_bulk_reserviert($quelle_id);
+        if ($menge > $frei + 1e-6) return ['ok'=>false, 'fehler'=>'Nur noch ' . $nz($frei) . ' auf dieser Charge frei.'];
+        $chId = $quelle_id;
+    } else {
+        return ['ok'=>false, 'fehler'=>'Unbekannte Quelle.'];
+    }
+    $paId = (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$auftrag_id]) ?: null;
+    q("INSERT INTO reservierung (pa_id, auftrag_id, item_id, menge, status, bestellung_position_id, charge_id)
+       VALUES (?,?,?,?, 'aktiv', ?, ?)", [$paId, $auftrag_id, $item, $menge, $bpId, $chId]);
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return ['ok'=>true, 'id'=>insert_id()];
+}
+// Aktive Bulk-Reservierungen eines Auftrags (für die Anzeige) – mit Quellen-Infos.
+function auftrag_bulk_reservierungen(int $auftrag_id): array {
+    return all("SELECT r.id, r.menge, r.bestellung_position_id, r.charge_id,
+                       b.nummer AS bestellung_nr, b.angekommen_am, COALESCE(l.firma,'') AS lieferant,
+                       c.charge_nr, i.name AS item_name, i.einheit
+                FROM reservierung r
+                LEFT JOIN bestellung_position bp ON bp.id=r.bestellung_position_id
+                LEFT JOIN bestellung b ON b.id=bp.bestellung_id
+                LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                LEFT JOIN charge c ON c.id=r.charge_id
+                LEFT JOIN item i ON i.id=r.item_id
+                WHERE r.auftrag_id=? AND r.status='aktiv'
+                  AND (r.bestellung_position_id IS NOT NULL OR r.charge_id IS NOT NULL)
+                ORDER BY r.id DESC", [$auftrag_id]);
+}
+function bulk_reservierung_storno(int $res_id, int $auftrag_id): bool {
+    if (!one("SELECT id FROM reservierung WHERE id=? AND auftrag_id=?", [$res_id, $auftrag_id])) return false;
+    q("UPDATE reservierung SET status='storniert' WHERE id=?", [$res_id]);
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return true;
 }
 
 // Auftrags-Art: ist das ein Erstauftrag oder eine Nachbestellung? Basis: frühere, nicht stornierte
