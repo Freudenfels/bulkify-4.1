@@ -101,6 +101,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Sendungs-/Paketnummer gespeichert.');
         weiter('?p=charge&id=' . $id);
     }
+    if ($aktion === 'standort') {
+        $ziel = (string)($_POST['standort'] ?? '');
+        $r = erp_charge_standort_setzen($id, $ziel);
+        if ($r['ok']) {
+            lg_charge_log_add($id, 'Standort', (string)($r['alt'] ?? ''), erp_standort_label($ziel));
+            // Beim Wiedereinlagern (zurück nach Lager 1): optional das tatsächliche Ist-Gewicht erfassen (Spec 7.13).
+            if ($ziel === 'lager1' && trim((string)($_POST['ist_menge'] ?? '')) !== '') {
+                $neu = (float) str_replace(',', '.', (string)$_POST['ist_menge']);
+                $mr = erp_charge_menge_setzen($id, $neu, 'Ist-Gewicht bei Rückgabe aus Produktion');
+                if ($mr['ok']) {
+                    $delta = (float)$mr['delta'];
+                    if (abs($delta) > 1e-9) lg_bewegung_log($id, $delta > 0 ? 'ein' : 'aus', abs($delta), (string)$mr['einheit'], (string)$c['item_name'], 'Ist-Gewicht Rückgabe Produktion');
+                    lg_charge_log_add($id, 'Bestand', menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit'], menge_txt($neu) . ' ' . (string)($mr['einheit'] ?? $c['einheit']));
+                }
+            }
+        }
+        flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+        weiter('?p=charge&id=' . $id);
+    }
     if ($aktion === 'loeschen') {
         $grund = trim((string)($_POST['grund'] ?? ''));
         lg_papierkorb_rein($id, (string)$c['item_name'], (string)$c['charge_nr'],
@@ -112,6 +131,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $bl = leiste_fuer_charge($id);
 $in_kiste = kiste_fuer_charge($id);
+$standort         = function_exists('erp_charge_standort') ? erp_charge_standort($id) : 'lager1';
+$standortFeature  = function_exists('erp_charge_standort_spalte') ? erp_charge_standort_spalte() : false;
+$gebindeZahl      = function_exists('lg_gebinde_zahl') ? lg_gebinde_zahl($id) : 0;
 $item = erp_item_voll((int)$c['item_id']);
 $produkt_id = $item['produkt_id'] ?? null;
 $produkt = $produkt_id ? erp_produkt((int)$produkt_id) : null;
@@ -335,6 +357,43 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
   document.addEventListener('keydown',function(e){if(e.key==='Escape')zu();});
 })();
 </script>
+
+<?php if (!$fremd_kunde): ?>
+<div class="bx-panel" style="margin-bottom:var(--sp-5)">
+  <h2 style="margin-top:0">Standort</h2>
+  <?php
+    $stTxt = ['lager1' => 'Lager 1 · eigener Bestand', 'produktion' => 'In Produktion', 'lager2' => 'Lager 2'][$standort] ?? 'Lager 1';
+  ?>
+  <p>Aktuell: <strong><?= h($stTxt) ?></strong>.
+    <?php if ($standort === 'produktion'): ?><span class="muted">Die Ware liegt in der Produktion (Blinker bleibt dran). Sie zählt weiter zum Bestand, ist aber nicht mehr für Versand/Produktion frei verplanbar.</span>
+    <?php else: ?><span class="muted">Wird Material aus dem Lager in die Produktion geholt, hier auf „In Produktion" setzen – der Blinker bleibt dran, nur der Standort wandert (Spec 6.2).</span><?php endif; ?></p>
+  <?php if (!$standortFeature): ?>
+    <div class="bx-panel warn" style="margin:0">Standort-Verfolgung ist noch nicht freigeschaltet (die Dashboard-Spalte <span class="lg-code">charge.standort</span> fehlt noch). Sobald sie da ist, wirkt der Wechsel.</div>
+  <?php elseif ($standort === 'produktion'): ?>
+    <form method="post" class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap">
+      <input type="hidden" name="aktion" value="standort"><input type="hidden" name="standort" value="lager1">
+      <div class="bx-field" style="margin:0;max-width:200px"><label>Ist-Gewicht/-Menge <span class="muted">(optional)</span></label>
+        <input type="text" inputmode="decimal" name="ist_menge" placeholder="<?= h(menge_txt($c['menge_verfuegbar'])) ?>"></div>
+      <button type="submit" class="btn btn-primary">Wieder einlagern (Lager 1)</button>
+    </form>
+    <div class="muted" style="font-size:12px;margin-top:var(--sp-2)">Bei der Rückgabe aus der Produktion kannst du das tatsächliche Ist-Gewicht erfassen (Spec 7.13). Der Blinker bleibt an der Charge.</div>
+  <?php else: ?>
+    <form method="post" class="bx-row" style="gap:var(--sp-3)" onsubmit="return confirm('Diese Charge an die Produktion übergeben? Der Blinker bleibt dran.')">
+      <input type="hidden" name="aktion" value="standort"><input type="hidden" name="standort" value="produktion">
+      <button type="submit" class="btn btn-primary">An Produktion übergeben</button>
+    </form>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<div class="bx-panel" style="margin-bottom:var(--sp-5)">
+  <h2 style="margin-top:0">Gebinde-Aufkleber <span class="muted">(QR + eigene Nummer)</span></h2>
+  <p class="muted" style="margin-top:0">Für Verpackung/Material ohne Hersteller-Charge: je Gebinde ein eigener QR-Aufkleber mit eigener Nummer. Beim Scan in der Produktion führt er zurück auf Wareneingang/Lieferant (Regress).</p>
+  <div class="bx-row" style="gap:var(--sp-2)">
+    <a class="btn btn-ghost" href="?p=gebinde&charge=<?= $id ?>"><?= $gebindeZahl > 0 ? 'Gebinde verwalten (' . (int)$gebindeZahl . ')' : 'Gebinde-Aufkleber erzeugen' ?></a>
+    <?php if ($gebindeZahl > 0): ?><a class="btn btn-ghost" href="?p=gebinde_etikett&charge=<?= $id ?>" target="_blank">Etiketten (PDF)</a><?php endif; ?>
+  </div>
+</div>
 
 <div class="bx-panel">
   <h2>Blinker</h2>

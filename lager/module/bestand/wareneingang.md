@@ -24,6 +24,11 @@ Ein Bereich für alles, was reinkommt. Ablauf:
 Ersetzt im Menü die alten getrennten Seiten `eingang.php` (L1) und `l2_eingang.php` (L2); deren Routen
 bleiben für Altlinks (z. B. Erwartete Lieferungen → Einbuchen) bestehen.
 
+**Rezepturnummer-Aufkleber scannen (Spec 5.2):** fünfte Start-Kachel „Rezepturnummer-Aufkleber". Ein
+Feld nimmt den gescannten R-Code auf (Enter) → `POST aktion=rsticker` → `erp_rezeptur_per_nummer()` →
+die erkannte Rezeptur wird als **Fertigware/Bulk-Position** eingefügt (Rezeptur + koppelbares Bulk-Item
+vorausgewählt), Fokus springt auf den Blinker. Kein Tippen von Nummern = keine Fehlzuordnung durch Tippfehler.
+
 **Kiste (optional):** Oben lässt sich eine **Kiste** (`kiste_id`) wählen (aus `kiste_alle()`, Name oder
 Barcode). Ist eine Kiste gewählt, wird jede gebuchte Charge per `kiste_charge_zuordnen()` hineingelegt und der
 **Blinker je Position ist optional** (die Kiste blinkt beim Finden). Ohne Kiste bleibt der Blinker Pflicht.

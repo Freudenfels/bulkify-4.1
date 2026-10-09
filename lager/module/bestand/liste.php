@@ -102,7 +102,7 @@ if ($nur_kisten):
         <td data-label="Eingang" class="muted"><?= !empty($z['wareneingang']) ? h(date('d.m.Y', strtotime((string)$z['wareneingang']))) : '–' ?></td>
         <td data-label="MHD"><?= mhd_html($z['mhd']) ?></td>
         <td data-label="Bestand"><?= h(menge_txt($z['menge_verfuegbar'])) ?> <?= h((string)$z['einheit']) ?></td>
-        <td data-label="Status"><?= status_badge($z['status']) ?></td>
+        <td data-label="Status"><?= status_badge($z['status']) ?><?= (($z['standort'] ?? 'lager1') === 'produktion') ? ' <span class="bx-badge" style="background:#eef3e0;color:#3d5a18;border:1px solid #c9d9a3">in Produktion</span>' : '' ?></td>
         <td data-label="Ort"><?= $ort !== '' ? '<span class="lg-code">' . h($ort) . '</span>' : '<span class="muted">–</span>' ?></td>
         <td data-label="Finden" class="lg-td-finden"><?php if ($lid): ?><button type="button" class="btn btn-primary btn-sm" data-klingeln="<?= $lid ?>" data-farbe="gruen" data-sek="40" onclick="event.stopPropagation()">Finden</button><?php else: ?><span class="muted" style="font-size:12px">kein Blinker</span><?php endif; ?></td>
         <td data-label="" style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=etikett_ansicht&id=<?= (int)$z['id'] ?>&zurueck=<?= rawurlencode('?p=bestand' . $qs . '&sort=' . $sort) ?>" onclick="event.stopPropagation()" title="Etikett ansehen / drucken">Etikett</a></td>

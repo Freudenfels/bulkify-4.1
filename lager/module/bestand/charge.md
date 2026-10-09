@@ -24,6 +24,10 @@ Charge und Lager sind nicht bearbeitbar (reine Anzeige).
 
 **Änderungen (Protokoll):** Unter den Kacheln steht eine Tabelle „Änderungen" (Zeitpunkt via `fmt_zeit()`, Benutzer, Feld, vorher → nachher). Jeder der obigen Edits schreibt über `lg_charge_log_add()` einen Eintrag; gelesen wird mit `lg_charge_log_liste($id)`. Unveränderte Werte werden nicht protokolliert.
 
+**Standort (Spec 6.2, nur Lager 1):** eigenes Panel – zeigt den aktuellen Standort (`erp_charge_standort`) und schaltet ihn um (`standort` → `erp_charge_standort_setzen`): „**An Produktion übergeben**" (→ `produktion`) bzw. „**Wieder einlagern (Lager 1)**" (→ `lager1`). Der Blinker bleibt dran, nur der Standort wandert. Beim Wiedereinlagern lässt sich optional das **Ist-Gewicht/-Menge** erfassen (Spec 7.13; schreibt Bestandskorrektur + Lagerbewegung). Fehlt die Dashboard-Spalte `charge.standort`, zeigt das Panel einen Hinweis statt zu buchen.
+
+**Gebinde-Aufkleber (Spec 5.6):** Panel mit Link zu `?p=gebinde&charge=` (eigene QR-Codes je Gebinde erzeugen/verwalten) und – sobald welche existieren – zum PDF (`?p=gebinde_etikett`).
+
 **Charge löschen:** eigenes Panel ganz unten – in den Mülleimer (`loeschen`), 30 Tage wiederherstellbar; blendet die Charge nur aus (das Dashboard behält sie).
 
 Der **Produktname ist überall ein Link** (Bestand-Liste, Such-Popup) und führt hierher.

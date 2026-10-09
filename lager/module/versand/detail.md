@@ -12,6 +12,8 @@ gespeichert (`lg_versand_kopf_speichern`), bleibt also stabil, auch wenn der Kun
 
 **Positionen:** Bestand durchsuchen (`erp_bestand`) und per `aktion=pos_add` mit Menge übernehmen
 (Charge-Snapshot in `lg_versand_pos`); freie Position auch möglich. Entfernen per `aktion=pos_del`.
+Chargen, die gerade **in der Produktion** sind (`charge.standort='produktion'`, Spec 6.2), werden im
+Such-Treffer mit „in Produktion" markiert – als Warnung, sie nicht doppelt zu verplanen.
 
 **Versandart:** Bei **Palette/Fracht** erscheinen zusätzlich Maße je Packstück (Länge/Breite/Höhe cm,
 `masse_l/b/h`) – für Cargoboard (Standard Europalette, falls leer).

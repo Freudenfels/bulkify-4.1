@@ -72,6 +72,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'liefe
     exit;
 }
 
+// --- AJAX: Rezepturnummer-Aufkleber (R…) scannen -> Rezeptur/Produkt vorausgefüllt (Spec 5.2) --
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rsticker') {
+    header('Content-Type: application/json; charset=utf-8');
+    $r = function_exists('erp_rezeptur_per_nummer') ? erp_rezeptur_per_nummer((string)($_POST['code'] ?? '')) : null;
+    if (!$r) { echo json_encode(['ok' => false, 'fehler' => 'Keine Rezeptur zu dieser Nummer gefunden.']); exit; }
+    $pos = erp_position_zuordnen($r);
+    echo json_encode(['ok' => true, 'position' => $pos], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // --- Buchen: alle Positionen ------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buchen') {
     $ziel     = ($_POST['ziel'] ?? 'l1') === 'l2' ? 'l2' : 'l1';
@@ -253,6 +263,10 @@ if ($gebucht):
       <div class="we-kachel-t">Aus Liste wählen</div>
       <div class="we-kachel-s"><?= count($erwartet) ?> ankommende Sendung(en)</div>
     </button>
+    <button type="button" class="we-kachel" data-weg="rsticker">
+      <div class="we-kachel-t">Rezepturnummer-Aufkleber</div>
+      <div class="we-kachel-s">R-Code scannen – Rezeptur/Produkt wird erkannt</div>
+    </button>
   </div>
 
   <!-- Arbeitsbereich nach Kachel-Wahl -->
@@ -301,6 +315,16 @@ if ($gebucht):
         <input type="text" id="weTrack" class="lg-code" autocomplete="off" placeholder="Barcode scannen – die Lieferung wird geladen">
       </div>
       <div id="weTrackInfo" class="muted" style="margin-top:var(--sp-2)"></div>
+    </div>
+
+    <!-- Methode: Rezepturnummer-Aufkleber (R…) scannen -->
+    <div class="bx-panel we-weg" data-w="rsticker" hidden>
+      <h2 style="margin-top:0">Rezepturnummer-Aufkleber scannen</h2>
+      <div class="bx-field" style="margin:0;max-width:460px">
+        <label>Rezepturnummer vom Aufkleber (z. B. R12345)</label>
+        <input type="text" id="weRsticker" class="lg-code" autocomplete="off" placeholder="R-Code scannen – Rezeptur/Produkt wird erkannt">
+      </div>
+      <div id="weRstickerInfo" class="muted" style="margin-top:var(--sp-2)">Kein Tippen von Chargen-/Rezepturnummern – nur scannen (Spec 5.2).</div>
     </div>
 
     <!-- Methode: aus Liste wählen -->
@@ -751,6 +775,26 @@ if ($gebucht):
     track.addEventListener('change',trackSuchen);
   }
 
+  // Rezepturnummer-Aufkleber (R…) scannen -> Rezeptur/Produkt als Fertigware-Position vorausfüllen.
+  var rst=document.getElementById('weRsticker'), rstInfo=document.getElementById('weRstickerInfo');
+  function rstSuchen(){
+    var code=(rst.value||'').trim(); if(code==='')return;
+    rstInfo.textContent='Suche Rezeptur …';
+    var fd=new FormData(); fd.append('aktion','rsticker'); fd.append('code',code);
+    fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
+      if(!j.ok){ rstInfo.textContent=(j.fehler||'Keine Rezeptur gefunden.'); return; }
+      var p=j.position||{};
+      rstInfo.textContent='Erkannt: '+(p.rezeptur_name||p.item_name||'Rezeptur')+(p.item_id?'':' (noch kein Bulk-Artikel – im Dashboard anlegen)');
+      rows.innerHTML=''; addRow(p);
+      rst.value='';
+      var b=rows.querySelector('.we-blinker'); if(b) b.focus();   // weiter scannen
+    }).catch(function(){ rstInfo.textContent='Netzwerk-/Serverfehler.'; });
+  }
+  if(rst){
+    rst.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); rstSuchen(); } });
+    rst.addEventListener('change',rstSuchen);
+  }
+
   // --- 4 Kacheln: Methode wählen -> passender Weg öffnet sich ---
   var startBox=document.getElementById('weStart'), arbeit=document.getElementById('weArbeit');
   function zeigeWeg(w){
@@ -759,6 +803,7 @@ if ($gebucht):
     rows.innerHTML=''; addRow();   // frische, leere Position
     var bidF=document.getElementById('weBestellungId'); if(bidF) bidF.value='';   // kein Lieferungsbezug bei manuellem/Scan-Weg
     if(w==='tracking'){ var t=document.getElementById('weTrack'); if(t) setTimeout(function(){t.focus();},60); }
+    if(w==='rsticker'){ var rs=document.getElementById('weRsticker'); if(rs) setTimeout(function(){rs.focus();},60); }
     arbeit.scrollIntoView({behavior:'smooth',block:'start'});
   }
   document.querySelectorAll('.we-kachel').forEach(function(b){ b.addEventListener('click',function(){ zeigeWeg(b.getAttribute('data-weg')); }); });

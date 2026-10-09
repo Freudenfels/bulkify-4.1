@@ -226,7 +226,7 @@ flash_zeigen();
         <tbody>
         <?php foreach ($treffer as $t): ?>
           <tr>
-            <td data-label=""><?= h((string)$t['item_name']) ?></td>
+            <td data-label=""><?= h((string)$t['item_name']) ?><?= (($t['standort'] ?? 'lager1') === 'produktion') ? ' <span class="bx-badge" style="background:#eef3e0;color:#3d5a18;border:1px solid #c9d9a3" title="Diese Ware ist aktuell in der Produktion – nicht doppelt verplanen.">in Produktion</span>' : '' ?></td>
             <td data-label="Charge" class="lg-code"><?= h((string)$t['charge_nr']) ?></td>
             <td data-label="Verfügbar"><?= h(menge_txt($t['menge_verfuegbar'])) ?> <?= h((string)$t['einheit']) ?></td>
             <td data-label="Menge" colspan="2">
