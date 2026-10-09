@@ -51,8 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($aktion === 'freigeben' && $paId) {
         $art = ($_POST['produktionsart'] ?? 'fremd') === 'eigen' ? 'eigen' : 'fremd';
-        $mp  = trim((string)($_POST['menge_produktion'] ?? ''));
-        $mp  = ($mp !== '' && ctype_digit($mp)) ? (int)$mp : null;
+        $mp  = preg_replace('/\D+/', '', (string)($_POST['menge_produktion'] ?? ''));   // Tausenderpunkte entfernen
+        $mp  = $mp !== '' ? (int)$mp : null;
         $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
         $r = produktionsauftrag_freigeben($paId, $art, $mp, $wer);
         header('Location: ' . (!empty($r['ok']) ? '?p=produktion_vorbereitung&frei=1' : $back . '&fehler=' . urlencode($r['fehler'] ?? 'Freigabe fehlgeschlagen.'))); exit;
@@ -306,8 +306,8 @@ if ($pa):
         </label>
         <label style="display:flex;flex-direction:column;gap:3px;font-size:12px">
           <span class="muted">Produktionsmenge (Einheiten)</span>
-          <input type="number" name="menge_produktion" min="<?= $bedarf ?>" step="1" placeholder="<?= $bedarf ?>" value="<?= $bedarf ?>"
-                 oninput="var s=document.getElementById('ueb');var d=<?= $bedarf ?>;var v=parseInt(this.value||d);s.textContent=(v>d?('+'+(v-d)+' Überschuss -> Bulk'):'');">
+          <input type="text" inputmode="numeric" name="menge_produktion" data-tausender placeholder="<?= number_format((int)$bedarf,0,',','.') ?>" value="<?= number_format((int)$bedarf,0,',','.') ?>"
+                 oninput="var s=document.getElementById('ueb');var d=<?= (int)$bedarf ?>;var v=parseInt((this.value||'').replace(/\D/g,''))||d;s.textContent=(v>d?('+'+((v-d).toLocaleString('de-DE'))+' Überschuss -> Bulk'):'');">
         </label>
         <span id="ueb" class="muted" style="font-size:11px;color:#8a6d00"></span>
         <div style="flex:1"></div>
@@ -315,6 +315,13 @@ if ($pa):
       </form>
       <p class="muted" style="font-size:12px;margin:10px 0 0">Du kannst immer freigeben – offene Punkte oben sind dann nur ein Hinweis (die Produktion wartet ggf. auf Material).</p>
     </div>
+    <script>
+    // Ganzzahl-Felder mit Tausenderpunkt (Produktionsmenge): beim Laden + bei Blur formatieren (1.080.000).
+    (function(){
+      function fmt(el){ var d=(el.value||'').replace(/\D/g,''); el.value = d ? d.replace(/\B(?=(\d{3})+(?!\d))/g,'.') : ''; }
+      document.querySelectorAll('input[data-tausender]').forEach(function(el){ fmt(el); el.addEventListener('blur', function(){ fmt(el); }); });
+    })();
+    </script>
     <?php render_footer(); return; ?>
 <?php endif; /* Detail */ ?>
 

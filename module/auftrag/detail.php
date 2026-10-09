@@ -44,7 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     $paid = (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$id]);
     if (!$paid) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Produktionsauftrag zum Freigeben.')); exit; }
     $art = ($_POST['produktionsart'] ?? '') === 'eigen' ? 'eigen' : 'fremd';
-    $mp  = ($_POST['menge_produktion'] ?? '') !== '' ? (int)$_POST['menge_produktion'] : null;
+    $mpRaw = preg_replace('/\D+/', '', (string)($_POST['menge_produktion'] ?? ''));   // Tausenderpunkte entfernen
+    $mp  = $mpRaw !== '' ? (int)$mpRaw : null;
     $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
     $r = produktionsauftrag_freigeben($paid, $art, $mp, $wer);
     header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&freigabeok=1' : '&expressfehler=' . urlencode($r['fehler'] ?? 'Freigabe fehlgeschlagen.'))); exit;
@@ -754,7 +755,7 @@ if (auftrag_braucht_etikett($id)):
           </select>
         </label>
         <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Produktionsmenge (Einheiten)
-          <input type="number" name="menge_produktion" min="<?= (int)$freigabeBedarf ?>" step="1" value="<?= (int)$freigabeBedarf ?>" style="min-width:150px">
+          <input type="text" inputmode="numeric" name="menge_produktion" value="<?= number_format((int)$freigabeBedarf, 0, ',', '.') ?>" data-tausender style="min-width:150px">
         </label>
         <button class="btn btn-primary btn-sm" type="submit">Zur Produktion freigeben</button>
       </form>
@@ -1182,6 +1183,13 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
   try { var s = sessionStorage.getItem(KEY); if (s) start = s; } catch(e){}
   <?php if (isset($_GET['analyse'])): ?>start = 'dokumente';<?php endif; ?>
   activate(start);
+})();
+</script>
+<script>
+// Ganzzahl-Felder mit Tausenderpunkt (z. B. Produktionsmenge): beim Laden + bei Blur formatieren (1.080.000).
+(function(){
+  function fmt(el){ var d=(el.value||'').replace(/\D/g,''); el.value = d ? d.replace(/\B(?=(\d{3})+(?!\d))/g,'.') : ''; }
+  document.querySelectorAll('input[data-tausender]').forEach(function(el){ fmt(el); el.addEventListener('blur', function(){ fmt(el); }); });
 })();
 </script>
 <?php render_footer(); ?>
