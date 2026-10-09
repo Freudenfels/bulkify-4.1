@@ -12,13 +12,36 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $schritt_id = (int)($_POST['schritt_id'] ?? 0);
     if ($aktion === 'erledigen') {
         $r = erp_schritt_abschliessen($schritt_id, $akteur);
+        $zusatz = '';
         if ($r['ok']) {
             foreach (pr_station_felder((string)$r['station']) as $feld) {
                 $v = trim((string)($_POST['daten'][$feld['feld']] ?? ''));
                 if ($v !== '') pr_daten_setzen($id, $feld['feld'], $v, $akteur);
             }
+            // Maschine (Spec 9.1): bevorzugt aus gescanntem QR-Code, sonst aus der Auswahl. Am Schritt festhalten.
+            $mid = 0;
+            $qr = trim((string)($_POST['maschine_qr'] ?? ''));
+            if ($qr !== '') { $m = pr_maschine_per_qr($qr); if ($m) $mid = (int)$m['id']; }
+            if ($mid === 0) $mid = (int)($_POST['maschine_id'] ?? 0);
+            if ($mid > 0) {
+                $mm = pr_maschine($mid);
+                if ($mm) {
+                    pr_daten_setzen($id, 'maschine_' . $schritt_id, (string)$mm['name'], $akteur);
+                    pr_daten_setzen($id, 'maschine_id_' . $schritt_id, (string)$mid, $akteur);
+                    $zusatz .= ' Maschine: ' . $mm['name'] . '.';
+                }
+            }
+            // Produktionscharge CH/CHE anbinden + eingesetzte Rohstoff-Batches verknüpfen (Spec 7.5).
+            $mm_menge = null;
+            $mmv = trim((string)($_POST['daten']['mischmenge'] ?? ''));
+            if ($mmv !== '') $mm_menge = (float) str_replace(',', '.', $mmv);
+            $pc = erp_prod_charge_fuer_station($id, (string)$r['station'], $mid, $mm_menge, $akteur);
+            if ($pc) {
+                $zusatz .= ' Charge ' . $pc['nummer'] . ($pc['neu'] ? ' angelegt' : '')
+                         . ($pc['verknuepft'] > 0 ? (', ' . $pc['verknuepft'] . ' Rohstoff-Charge(n) verknüpft') : '') . '.';
+            }
         }
-        flash($r['ok'] ? ($r['fertig'] ? 'Letzter Schritt erledigt – Produktion fertig, Fertigware eingebucht.' : 'Schritt „' . $r['station'] . '" erledigt.')
+        flash($r['ok'] ? (($r['fertig'] ? 'Letzter Schritt erledigt – Produktion fertig, Fertigware eingebucht.' : 'Schritt „' . $r['station'] . '" erledigt.') . $zusatz)
                        : ($r['msg'] ?: 'Schritt konnte nicht abgeschlossen werden.'), $r['ok'] ? 'ok' : 'warn');
     } elseif ($aktion === 'teilmenge') {
         $r = erp_teilmenge_produzieren($id, (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0')), $akteur);
@@ -148,6 +171,24 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
   <form method="post" style="margin:0" onsubmit="return confirm('Schritt &quot;<?= h((string)$cur['station']) ?>&quot; jetzt abschließen?');">
     <input type="hidden" name="aktion" value="erledigen">
     <input type="hidden" name="schritt_id" value="<?= (int)$cur['id'] ?>">
+    <?php $mtypen = pr_station_maschinentypen((string)$cur['station']);
+          $maschinen_liste = $mtypen ? pr_maschinen_fuer_station((string)$cur['station']) : [];
+          if ($mtypen): ?>
+    <div class="bx-row" style="gap:12px;flex-wrap:wrap;margin:0 0 14px;align-items:flex-end">
+      <div class="bx-field" style="margin:0;max-width:280px">
+        <label>Maschine (<?= h(implode(' / ', array_map('pr_maschinentyp_label', $mtypen))) ?>) scannen oder wählen</label>
+        <?php if ($maschinen_liste): ?>
+        <select name="maschine_id">
+          <option value="">— wählen —</option>
+          <?php foreach ($maschinen_liste as $m): ?><option value="<?= (int)$m['id'] ?>"><?= h((string)$m['name']) ?><?= $m['qr_code'] ? ' (' . h((string)$m['qr_code']) . ')' : '' ?></option><?php endforeach; ?>
+        </select>
+        <?php else: ?>
+        <div class="muted" style="font-size:12px">Keine Maschine dieses Typs angelegt – unter <a href="?p=einstellungen">Einstellungen</a> pflegen.</div>
+        <?php endif; ?>
+      </div>
+      <div class="bx-field" style="margin:0;max-width:200px"><label>QR-Code</label><input type="text" name="maschine_qr" placeholder="QR der Maschine"></div>
+    </div>
+    <?php endif; ?>
     <?php $felder = pr_station_felder((string)$cur['station']); if ($felder): ?>
     <div class="bx-row" style="gap:12px;flex-wrap:wrap;margin:0 0 14px">
       <?php foreach ($felder as $feld): ?>
@@ -180,6 +221,9 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
           <?php foreach (pr_station_felder((string)$s['station']) as $feld): if (!empty($daten[$feld['feld']]['wert'])): ?>
             <br><span class="muted" style="font-size:12px"><?= h($feld['label']) ?>: <?= h((string)$daten[$feld['feld']]['wert']) ?><?= $feld['einheit'] !== '' ? ' ' . h($feld['einheit']) : '' ?></span>
           <?php endif; endforeach; ?>
+          <?php if (!empty($daten['maschine_' . $s['id']]['wert'])): ?>
+            <br><span class="muted" style="font-size:12px">Maschine: <?= h((string)$daten['maschine_' . $s['id']]['wert']) ?></span>
+          <?php endif; ?>
         </td>
         <td><?= $done ? '<span class="badge badge-ok">erledigt</span>' : ($dran ? '<span class="badge badge-info">als Nächstes</span>' : '<span class="badge badge-warn">offen</span>') ?></td>
         <td class="muted"><?= h((string)($s['erledigt_von'] ?? '')) ?></td>

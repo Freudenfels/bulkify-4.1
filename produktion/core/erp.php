@@ -933,3 +933,128 @@ function erp_log_aktivitaet(string $objekt_typ, int $objekt_id, string $akteur, 
     q("INSERT INTO aktivitaet (objekt_typ,objekt_id,akteur,typ,text,ref_typ,ref_id,erstellt) VALUES (?,?,?,?,?,?,?,?)",
       [$objekt_typ, $objekt_id, $akteur, $typ ?: null, $text, $ref_typ ?: null, $ref_id ?: null, gmdate('Y-m-d H:i:s')]);
 }
+
+// =============================================================================================
+// PRODUKTIONS-CHARGE CH/CHE (Spec 7.5 + 16) – RAW-SQL-NAHT zur Dashboard-Tabelle prod_charge.
+//
+// WICHTIG: Das Dashboard besitzt die Tabellen prod_charge / prod_charge_rohstoff und eigene Helfer in
+// core/schema.php (prod_charge_anlegen etc.). Wir dürfen core/schema.php NICHT einbinden (db()-Kollision).
+// Darum spiegeln wir die Schreib-/Lese-Logik hier per Raw-SQL. Diese Entität ist ZUSÄTZLICH zur
+// Fertigprodukt-Charge (charge.charge_nr .A/.B bleibt unangetastet). CH… = intern gemischt, CHE… = extern.
+// Nummernkreis identisch zum Dashboard (erp_naechste_nummer('CH'|'CHE') -> CH-2692).
+// =============================================================================================
+
+// Haupt-Produktionscharge eines Auftrags (jüngste ohne parent). Null, wenn noch keine existiert.
+function erp_prod_charge_fuer_pa(int $pa_id): ?array {
+    if ($pa_id <= 0 || !tabelle_da('prod_charge')) return null;
+    return one("SELECT * FROM prod_charge WHERE pa_id=? AND parent_id IS NULL ORDER BY id DESC LIMIT 1", [$pa_id]);
+}
+// Neue HAUPT-Produktionscharge anlegen. $d['typ']='extern' -> CHE…, sonst CH…. Rückgabe ['id','nummer'].
+function erp_prod_charge_anlegen(array $d): array {
+    if (!tabelle_da('prod_charge')) return ['id'=>0, 'nummer'=>''];
+    $typ    = (($d['typ'] ?? 'intern') === 'extern') ? 'extern' : 'intern';
+    $nummer = erp_naechste_nummer($typ === 'extern' ? 'CHE' : 'CH');
+    q("INSERT INTO prod_charge (nummer,typ,pa_id,rezeptur_id,produkt_id,gebinde,menge,einheit,mitarbeiter_id,maschine_id,status,tag,notiz)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [$nummer, $typ, $d['pa_id'] ?? null, $d['rezeptur_id'] ?? null, $d['produkt_id'] ?? null,
+       mb_substr(trim((string)($d['gebinde'] ?? '')), 0, 80) ?: null,
+       ($d['menge'] ?? null), mb_substr(trim((string)($d['einheit'] ?? '')), 0, 20) ?: null,
+       ($d['mitarbeiter_id'] ?? null), ($d['maschine_id'] ?? null),
+       mb_substr((string)($d['status'] ?? 'offen'), 0, 30), ($d['tag'] ?? gmdate('Y-m-d')), ($d['notiz'] ?? null)]);
+    return ['id'=>insert_id(), 'nummer'=>$nummer];
+}
+// Untercharge zu einer Hauptcharge (je Gebinde/Tag/Mitarbeiter). sub_kennung automatisch A/B/C… wenn leer.
+function erp_prod_charge_sub_anlegen(int $parent_id, array $d = []): array {
+    if ($parent_id <= 0 || !tabelle_da('prod_charge')) return ['id'=>0, 'nummer'=>''];
+    $p = one("SELECT nummer, typ, pa_id, rezeptur_id, produkt_id FROM prod_charge WHERE id=?", [$parent_id]);
+    if (!$p) return ['id'=>0, 'nummer'=>''];
+    $sub = strtoupper(trim((string)($d['sub_kennung'] ?? '')));
+    if ($sub === '') { $n = (int) scalar("SELECT COUNT(*) FROM prod_charge WHERE parent_id=?", [$parent_id]); $sub = ($n < 26) ? chr(ord('A') + $n) : ('X' . ($n + 1)); }
+    $nummer = $p['nummer'] . '-' . $sub;
+    q("INSERT INTO prod_charge (nummer,typ,parent_id,sub_kennung,pa_id,rezeptur_id,produkt_id,gebinde,menge,einheit,mitarbeiter_id,maschine_id,status,tag,notiz)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [$nummer, $p['typ'], $parent_id, $sub, $p['pa_id'], $p['rezeptur_id'], $p['produkt_id'],
+       mb_substr(trim((string)($d['gebinde'] ?? '')), 0, 80) ?: null,
+       ($d['menge'] ?? null), mb_substr(trim((string)($d['einheit'] ?? '')), 0, 20) ?: null,
+       ($d['mitarbeiter_id'] ?? null), ($d['maschine_id'] ?? null),
+       mb_substr((string)($d['status'] ?? 'offen'), 0, 30), ($d['tag'] ?? gmdate('Y-m-d')), ($d['notiz'] ?? null)]);
+    return ['id'=>insert_id(), 'nummer'=>$nummer];
+}
+// Maschine an einer Produktionscharge festhalten (Spec 9.1).
+function erp_prod_charge_maschine(int $prod_charge_id, int $maschine_id): void {
+    if ($prod_charge_id <= 0 || $maschine_id <= 0 || !tabelle_da('prod_charge')) return;
+    q("UPDATE prod_charge SET maschine_id=? WHERE id=?", [$maschine_id, $prod_charge_id]);
+}
+// Einen eingesetzten Rohstoff(-Batch) mit einer Produktionscharge verknüpfen (Spec 7.5). batch_nr = Hersteller-Batch.
+function erp_prod_charge_rohstoff_verknuepfen(int $prod_charge_id, array $d): int {
+    if ($prod_charge_id <= 0 || !tabelle_da('prod_charge_rohstoff')) return 0;
+    $batch = trim((string)($d['batch_nr'] ?? ''));
+    if ($batch === '' && !empty($d['charge_id'])) $batch = (string) scalar("SELECT charge_nr FROM charge WHERE id=?", [(int)$d['charge_id']]);
+    q("INSERT INTO prod_charge_rohstoff (prod_charge_id,item_id,charge_id,batch_nr,menge,einheit,erfasst_von)
+       VALUES (?,?,?,?,?,?,?)",
+      [$prod_charge_id, ($d['item_id'] ?? null), ($d['charge_id'] ?? null), mb_substr($batch, 0, 80) ?: null,
+       ($d['menge'] ?? null), mb_substr(trim((string)($d['einheit'] ?? '')), 0, 20) ?: null,
+       mb_substr(trim((string)($d['erfasst_von'] ?? '')), 0, 190) ?: null]);
+    return insert_id();
+}
+// Schon mit dieser Charge verknüpfte Lager-Chargen (verhindert Doppel-Verknüpfung bei erneutem Lauf).
+function erp_prod_charge_verknuepfte_chargen(int $prod_charge_id): array {
+    if ($prod_charge_id <= 0 || !tabelle_da('prod_charge_rohstoff')) return [];
+    return array_map('intval', array_column(
+        all("SELECT DISTINCT charge_id FROM prod_charge_rohstoff WHERE prod_charge_id=? AND charge_id IS NOT NULL", [$prod_charge_id]), 'charge_id'));
+}
+// DAS WICHTIGSTE (Spec 7.5): Alle für diesen Auftrag verbrauchten Rohstoff-Chargen (produktion_verbrauch)
+// als Rohstoff-Batches (batch_nr = charge.charge_nr) mit der Produktionscharge verknüpfen. Idempotent:
+// bereits verknüpfte Lager-Chargen werden übersprungen. Rückgabe = Anzahl neu verknüpfter Batches.
+function erp_prod_charge_rohstoffe_aus_verbrauch(int $pa_id, int $prod_charge_id, string $akteur = ''): int {
+    if ($pa_id <= 0 || $prod_charge_id <= 0 || !tabelle_da('produktion_verbrauch')) return 0;
+    $schon = erp_prod_charge_verknuepfte_chargen($prod_charge_id);
+    $n = 0;
+    foreach (all("SELECT v.item_id, v.charge_id, SUM(v.menge) AS menge, MAX(v.einheit) AS einheit, c.charge_nr
+                  FROM produktion_verbrauch v LEFT JOIN charge c ON c.id=v.charge_id
+                  WHERE v.pa_id=? GROUP BY v.item_id, v.charge_id, c.charge_nr", [$pa_id]) as $r) {
+        $cid = (int)($r['charge_id'] ?? 0);
+        if ($cid > 0 && in_array($cid, $schon, true)) continue;   // schon verknüpft
+        erp_prod_charge_rohstoff_verknuepfen($prod_charge_id, [
+            'item_id'=>(int)$r['item_id'], 'charge_id'=>$cid ?: null,
+            'batch_nr'=>(string)($r['charge_nr'] ?? ''), 'menge'=>$r['menge'], 'einheit'=>(string)($r['einheit'] ?? ''),
+            'erfasst_von'=>$akteur]);
+        $n++;
+    }
+    return $n;
+}
+// Orchestrierung je Produktionsschritt: legt (falls nötig) die passende Produktionscharge an und verknüpft
+// die eingesetzten Rohstoffe. Wird NACH dem erfolgreichen Schritt-Abschluss aus run.php aufgerufen.
+// Rückgabe ['nummer'=>string,'neu'=>bool,'verknuepft'=>int] oder null (Station ohne Chargenbezug).
+function erp_prod_charge_fuer_station(int $pa_id, string $station, int $maschine_id = 0, ?float $menge = null, string $akteur = ''): ?array {
+    if (!tabelle_da('prod_charge')) return null;
+    $pa = one("SELECT produkt_id, rezeptur_id, menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return null;
+    $rid = erp_pa_rezeptur_id($pa_id);
+    if ($station === 'Mischen') {
+        $vorhanden = erp_prod_charge_fuer_pa($pa_id);
+        if ($vorhanden && $vorhanden['typ'] === 'intern') { $pc = ['id'=>(int)$vorhanden['id'], 'nummer'=>(string)$vorhanden['nummer']]; $neu = false; }
+        else { $pc = erp_prod_charge_anlegen(['typ'=>'intern', 'pa_id'=>$pa_id, 'rezeptur_id'=>$rid ?: null,
+                       'produkt_id'=>$pa['produkt_id'] ?? null, 'menge'=>$menge, 'einheit'=>$menge !== null ? 'kg' : null,
+                       'maschine_id'=>$maschine_id ?: null, 'status'=>'gemischt', 'notiz'=>'Mischcharge']); $neu = true; }
+        if (!$pc['id']) return null;
+        if ($maschine_id > 0) erp_prod_charge_maschine($pc['id'], $maschine_id);
+        if ($menge !== null) q("UPDATE prod_charge SET menge=?, einheit='kg', status='gemischt' WHERE id=?", [$menge, $pc['id']]);
+        $v = erp_prod_charge_rohstoffe_aus_verbrauch($pa_id, $pc['id'], $akteur);
+        return ['nummer'=>$pc['nummer'], 'neu'=>$neu, 'verknuepft'=>$v];
+    }
+    if ($station === 'Fertigware bereitstellen') {
+        // Zukauf: externe Charge CHE, die die bereitgestellte Fertigware-Charge als Batch hält.
+        $vorhanden = erp_prod_charge_fuer_pa($pa_id);
+        if ($vorhanden && $vorhanden['typ'] === 'extern') { $pc = ['id'=>(int)$vorhanden['id'], 'nummer'=>(string)$vorhanden['nummer']]; $neu = false; }
+        else { $pc = erp_prod_charge_anlegen(['typ'=>'extern', 'pa_id'=>$pa_id, 'rezeptur_id'=>$rid ?: null,
+                       'produkt_id'=>$pa['produkt_id'] ?? null, 'status'=>'fertig', 'notiz'=>'Zugekaufte Bulkware']); $neu = true; }
+        if (!$pc['id']) return null;
+        if ($maschine_id > 0) erp_prod_charge_maschine($pc['id'], $maschine_id);
+        $v = erp_prod_charge_rohstoffe_aus_verbrauch($pa_id, $pc['id'], $akteur);
+        return ['nummer'=>$pc['nummer'], 'neu'=>$neu, 'verknuepft'=>$v];
+    }
+    // Spätere Steps (Verkapselung/Abfüllen …): nur die Maschine an die bestehende Charge hängen.
+    if ($maschine_id > 0) { $pc = erp_prod_charge_fuer_pa($pa_id); if ($pc) erp_prod_charge_maschine((int)$pc['id'], $maschine_id); }
+    return null;
+}
