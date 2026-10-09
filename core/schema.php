@@ -2856,6 +2856,19 @@ function produktion_rest(int $pa_id): float {
     return max(0.0, $menge - produktion_gebucht($pa_id));
 }
 
+// Live-Mengenfortschritt eines AUFTRAGS (Spec 15.3): aggregiert ueber alle (nicht stornierten)
+// Produktionsauftraege des Auftrags – wie viele Packungen schon als Fertigware gebucht sind vs. Ziel.
+// Rueckgabe: ['hat'=>bool,'ziel'=>int,'gebucht'=>int,'rest'=>int,'prozent'=>int]. Einheit = Packungen.
+function auftrag_mengenfortschritt(int $auftrag_id): array {
+    $pas = $auftrag_id > 0 ? all("SELECT id, menge FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert'", [$auftrag_id]) : [];
+    if (!$pas) return ['hat' => false, 'ziel' => 0, 'gebucht' => 0, 'rest' => 0, 'prozent' => 0];
+    $ziel = 0; $gebucht = 0.0;
+    foreach ($pas as $pa) { $ziel += (int)$pa['menge']; $gebucht += produktion_gebucht((int)$pa['id']); }
+    $geb = (int) round($gebucht);
+    return ['hat' => true, 'ziel' => $ziel, 'gebucht' => $geb, 'rest' => max(0, $ziel - $geb),
+            'prozent' => $ziel > 0 ? min(100, (int) round($geb * 100 / $ziel)) : 0];
+}
+
 // === Produktions-Charge CH/CHE – Helfer (Spec 7.5 + 16) ====================================================
 // Diese Funktionen sind die EINZIGE Schreib-/Rueckverfolgungs-Schnittstelle fuer die Produktionscharge. Die
 // Sub-Apps (produktion/) rufen sie ueber ihre eigene core/erp.php-Naht auf – sie fassen core/schema.php nicht an.

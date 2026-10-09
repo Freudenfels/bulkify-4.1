@@ -662,6 +662,16 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
     <?php endif; ?>
     <?php if ($pa): ?>
     <div><div class="k muted">Produktionsauftrag</div><div><a href="?p=produktionsauftrag&id=<?= (int)$pa['id'] ?>"><?= h($pa['nummer']) ?></a> · <?= $paStatusBadge ?></div></div>
+    <?php $mf = auftrag_mengenfortschritt((int)$a['id']); if (!empty($mf['hat']) && $mf['ziel'] > 0): ?>
+    <div style="grid-column:1/-1"><div class="k muted">Produziert (Live)</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px">
+        <div style="flex:1;min-width:160px;height:10px;background:var(--panel-2,#eceef0);border-radius:6px;overflow:hidden">
+          <div style="height:100%;width:<?= (int)$mf['prozent'] ?>%;background:var(--gruen)"></div>
+        </div>
+        <span style="white-space:nowrap"><strong><?= number_format((int)$mf['gebucht'],0,',','.') ?></strong> von <?= number_format((int)$mf['ziel'],0,',','.') ?> Packungen · <?= (int)$mf['prozent'] ?>%</span>
+      </div>
+    </div>
+    <?php endif; ?>
     <div><div class="k muted">Material</div><div>
       <?= bereitschaft_badge($ber['status'] ?? '') ?>
       <?php if (($ber['status'] ?? '') === 'wartet'): ?> <a href="?p=produktionsauftrag&id=<?= (int)$pa['id'] ?>" style="font-size:12px">was fehlt?</a><?php endif; ?>

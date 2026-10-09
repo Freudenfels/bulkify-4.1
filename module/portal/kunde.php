@@ -3644,6 +3644,16 @@ portal_head('Kundenportal · ' . $k['firma']);
         <tr><td class="muted" style="width:150px">Produkt</td><td><?= h($titelFuer($a)) ?></td></tr>
         <?php if ((int)$a['stueck']): ?><tr><td class="muted">Stück je Packung</td><td><?= (int)$a['stueck'] ?></td></tr><?php endif; ?>
         <tr><td class="muted">Anzahl Packungen</td><td><?= (int)$a['menge'] ?></td></tr>
+        <?php $mf = auftrag_mengenfortschritt((int)$a['id']); if (!empty($mf['hat']) && (int)$mf['ziel'] > 0): ?>
+        <tr><td class="muted">Produziert</td><td>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div style="flex:1;min-width:120px;max-width:220px;height:9px;background:var(--panel-2,#eceef0);border-radius:6px;overflow:hidden">
+              <div style="height:100%;width:<?= (int)$mf['prozent'] ?>%;background:var(--gruen)"></div>
+            </div>
+            <span style="white-space:nowrap"><strong><?= number_format((int)$mf['gebucht'],0,',','.') ?></strong> von <?= number_format((int)$mf['ziel'],0,',','.') ?> Packungen · <?= (int)$mf['prozent'] ?>%</span>
+          </div>
+        </td></tr>
+        <?php endif; ?>
         <?php if ($vName): ?><tr><td class="muted">Verpackung</td><td><?= h($vName) ?></td></tr><?php endif; ?>
         <?php if ((float)$a['vk_stueck']): ?><tr><td class="muted">Preis je Packung</td><td><?= $eur($a['vk_stueck']) ?></td></tr><?php endif; ?>
         <tr><td class="muted">Bestellt am</td><td><?= h(fmt_zeit($a['angelegt'], 'd.m.Y')) ?></td></tr>
