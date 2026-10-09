@@ -232,19 +232,25 @@ if ($pa):
             <?php endforeach; ?>
           </select>
           <?php if ($empf && !$verpAkt): ?><div class="muted" style="font-size:12px;margin-top:4px">Vorschlag passend zu Kapselgröße/Menge – prüfen und speichern.</div><?php endif; ?>
-          <div style="font-size:13px;margin-top:8px">
-            <label style="margin-right:14px"><input type="radio" name="verp_scope" value="auftrag" checked style="width:auto"> nur dieser Auftrag</label>
-            <label><input type="radio" name="verp_scope" value="standard" style="width:auto"> Produkt-Standard</label>
+          <div style="display:flex;align-items:center;gap:14px;margin-top:10px;flex-wrap:wrap;font-size:13px">
+            <label><input type="radio" name="verp_scope" value="standard" checked style="width:auto"> Produkt-Standard</label>
+            <label><input type="radio" name="verp_scope" value="auftrag" style="width:auto"> nur dieser Auftrag</label>
+            <button class="btn btn-ghost btn-sm" type="submit" style="margin-left:auto">Glas speichern</button>
           </div>
-          <div style="margin-top:10px"><button class="btn btn-primary btn-sm" type="submit">Glas speichern</button></div>
         </form>
         <?php if ($zeigeKapsel): ?>
+        <?php $kapsSet = (int)($rez['kapselgroesse_id'] ?? 0);
+              // Automatik-Empfehlung (passend zum Füllgewicht) – nur relevant, solange nichts manuell gewählt ist.
+              $kapsAuto = ($kapsSet <= 0 && $rid) ? rezeptur_kapselgroesse((int)$rid) : null; ?>
         <form method="post" style="margin-top:14px;border-top:1px solid var(--line,#e6e6e6);padding-top:12px">
           <input type="hidden" name="aktion" value="kapsel_setzen"><input type="hidden" name="pa_id" value="<?= $paId ?>">
           <label class="muted" style="font-size:12px">Kapselgröße</label>
+          <?php if ($kapsSet <= 0): ?>
+          <div class="muted" style="font-size:12px;margin:2px 0 6px">Automatik: <strong><?= $kapsAuto ? h((string)$kapsAuto['name']) : 'keine Standardgröße passt' ?></strong> <span style="font-weight:400"><?= $kapsAuto ? '(passend zum Füllgewicht)' : '– bitte manuell wählen' ?></span></div>
+          <?php endif; ?>
           <select name="kapselgroesse_id" style="width:100%">
-            <option value="">– automatisch –</option>
-            <?php foreach ($kapsOpt as $kg): ?><option value="<?= (int)$kg['id'] ?>" <?= (int)($rez['kapselgroesse_id'] ?? 0) === (int)$kg['id'] ? 'selected' : '' ?>><?= h($kg['name']) ?></option><?php endforeach; ?>
+            <option value="">– automatisch<?= $kapsAuto ? ' (' . h((string)$kapsAuto['name']) . ')' : '' ?> –</option>
+            <?php foreach ($kapsOpt as $kg): ?><option value="<?= (int)$kg['id'] ?>" <?= $kapsSet === (int)$kg['id'] ? 'selected' : '' ?>><?= h($kg['name']) ?></option><?php endforeach; ?>
           </select>
           <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" type="submit">Kapselgröße speichern</button></div>
         </form>

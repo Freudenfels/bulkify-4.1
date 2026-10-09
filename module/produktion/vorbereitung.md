@@ -23,8 +23,8 @@ Direkt darunter ein **Rezeptur-Block mit der Zusammensetzung** (Zutaten aus `rez
 Je Karte wird direkt bearbeitet (jeweils eigenes POST):
 - **Glas/Behälter** (`glas_setzen`): Auswahl aller Primär-Verpackungen; fehlt das Glas, ist die **Auto-Empfehlung**
   (`verpackung_empfehlung_fuer_pa` → kleinstes passendes aus `pack_kapazitaet` für Kapselgröße×Stück) vorausgewählt.
-  Scope „nur dieser Auftrag" (auftrag.verpackung_id) oder „Produkt-Standard" (zusätzlich produkt.verpackung_id).
-- **Kapselgröße** (`kapsel_setzen`, nur Kapsel/Softgel) → rezeptur.kapselgroesse_id.
+  Scope „Produkt-Standard" (Default, setzt zusätzlich produkt.verpackung_id) oder „nur dieser Auftrag" (nur auftrag.verpackung_id). Radios + „Glas speichern"-Button (dezent, btn-ghost) stehen in einer Zeile, Button rechts (`margin-left:auto`).
+- **Kapselgröße** (`kapsel_setzen`, nur Kapsel/Softgel) → rezeptur.kapselgroesse_id. Ist nichts manuell gewählt („– automatisch –"), wird **über dem Dropdown die Automatik-Empfehlung** angezeigt: „Automatik: Größe … (passend zum Füllgewicht)" aus `rezeptur_kapselgroesse()` (passt keine Standardgröße → „bitte manuell wählen"). Die Empfehlung steht zusätzlich in der automatisch-Option.
 - **Etikett**: hochladen/ersetzen (`etikett_upload`) und Freigabe im Namen des Kunden (`etikett_freigeben`, Akteur 'team').
 - **„Alle offenen Aufträge holen"** (`alle_vorbereitung` → `vorbereitung_alle_holen()`): setzt alle noch nicht
   gestarteten Kunden-PAs auf Status `vorbereitung`, damit man fehlende Gläser etc. sammeln nachziehen kann.
