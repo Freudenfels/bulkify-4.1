@@ -65,7 +65,7 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 | 7 | Step-by-Step | 🟡 Basis da (`produktion/.../run.php`, `produktion/core/erp.php`), aber ohne echte Scans |
 | 7.1 | Produktionswege/Formgebung | 🟡 `produktionsschritte_fuer`/`produktion_wege_aufloesen` + `weg_*`-Flags; **Bulk-Weiterverkauf-Abfang fehlt** |
 | 7.5/16 | CH/CHE-Chargen + Unterchargen + Rohstoff-Batch | 🟢 **Fundament gebaut** (Paket A, s. u.) |
-| 8 | Proben 3-stufig + Rückstellmuster-Regel | 🟢 **Datenmodell gebaut** (`prod_probe` + `rueckstellmuster_sollzahl`); QS-UI 🟡 (`produktion/.../qs.php`) |
+| 8 | Proben 3-stufig + Rückstellmuster-Regel | 🟢 **fertig** – Datenmodell (`prod_probe`) + 3-stufige QS-UI (Rohstoff/Gebinde/Endprodukt) in `produktion/.../qs.php` über die Naht (`erp_proben_fuer_pa`/`_probe_anlegen`/`_probe_loeschen`/`_rueckstell_soll`), Soll max(5, Gebinde). Labor-Ebene: bestehender Laborproben-Flow bleibt (pr_daten). |
 | 9 | Maschinen (QR/Scan/Reinigung-Sperre/Typen) | 🟡 `pr_raum`/`pr_maschine`+Reinigung (intervall) da; QR/Scan/Typen/harte Sperre NEU → **Agent Produktion** |
 | 7.13/10/12.2 | Gewicht/Schwund, Umgebung, Zeit | 🟡 Zeitmessung da (`erp_produktionszeit_schnitt`); Schwund+Umgebung NEU → **Agent Produktion** |
 | 5/6.2 | Lager WE+Blinker+QR/Gebinde+Standort | 🟡 Blinker+WE-Scan+QR-Encoder da; `charge.standort` gebaut (A); Gebinde-QR (5.6)/Standort-Flow NEU → **Agent Lager** |
@@ -83,7 +83,7 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 
 ## Noch offen (Paket E + Rest – für die nächsten Etappen)
 - ✅ **Live-Mengenfortschritt (15.3)** in Auftrag/Portal – ERLEDIGT (10.10.2026, `auftrag_mengenfortschritt()`).
-- **Proben-UI 3-stufig** (Datenmodell `prod_probe` steht): Erfassung in `produktion/.../qs.php` (Rohstoff-/Gebinde-/Endprodukt-/Laborprobe + Mengenregel max(5, Gebinde)).
+- ✅ **Proben-UI 3-stufig** – ERLEDIGT (10.10.2026): Rohstoff-/Gebinde-/Endprodukt-Proben in `produktion/.../qs.php` über `prod_probe`, Soll max(5, Gebinde).
 - **FIFO/Gebinde-Durchziehen beim Abfüllen (7.8)** + Unterchargen beim Griff zum nächsten Gebinde (bisher nur beim Mischen).
 - **Produktionsbericht (17)** gekürzt/ausführlich aus den neuen Daten (Maschine/Klima/Reinigung/prod_charge/Proben).
 - **Abschlussfotos (13.1)**, **Pausen nur an cleanen Punkten/Schichtwechsel (7.11/7.12)**.
