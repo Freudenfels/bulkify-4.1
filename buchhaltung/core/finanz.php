@@ -287,6 +287,37 @@ function zahlung_erfassen(int $beleg_id, float $betrag, ?string $datum, ?string 
     if ($zs['status'] === 'bezahlt' && $b['kunde_id']) log_aktivitaet('kunde', (int)$b['kunde_id'], 'team', 'Rechnung ' . $b['nummer'] . ' vollständig bezahlt.', 'beleg', 'beleg', $beleg_id);
 }
 
+// Deutschen/englischen Geldbetrag ROBUST lesen: Tausenderpunkte entfernen, Dezimal-Komma -> Punkt.
+// Wichtig: (float) str_replace(',', '.', "21.687,75") bricht beim 2. Punkt ab -> 21.687 (Fehlbuchung!).
+// "21.687,75" -> 21687.75 | "21687,75" -> 21687.75 | "21,687.75" -> 21687.75 | "21.50" -> 21.50.
+function be_betrag_lesen(string $s): float {
+    $s = preg_replace('/[^0-9,.\-]/', '', trim($s));
+    if ($s === '' || $s === '-') return 0.0;
+    $k = strrpos($s, ','); $p = strrpos($s, '.');
+    if ($k !== false && $p !== false) {
+        if ($k > $p) $s = str_replace(',', '.', str_replace('.', '', $s));   // DE: Punkt=Tausender, Komma=Dezimal
+        else         $s = str_replace(',', '', $s);                          // EN: Komma=Tausender, Punkt=Dezimal
+    } elseif ($k !== false) {
+        $s = str_replace(',', '.', $s);                                      // nur Komma -> Dezimal
+    }
+    return (float) $s;
+}
+
+// Eine einzelne Zahlung loeschen + Belegstatus neu ziehen (Korrektur von Fehlbuchungen).
+function zahlung_loeschen(int $zahlung_id, int $beleg_id, string $akteur = 'System'): bool {
+    $z = one("SELECT betrag FROM zahlung WHERE id=? AND beleg_id=?", [$zahlung_id, $beleg_id]);
+    if (!$z) return false;
+    q("DELETE FROM zahlung WHERE id=? AND beleg_id=?", [$zahlung_id, $beleg_id]);
+    $b = one("SELECT * FROM beleg WHERE id=?", [$beleg_id]);
+    if ($b) {
+        $zs = beleg_zahlstatus($b);
+        if ($zs['status'] !== ($b['status'] ?? '')) q("UPDATE beleg SET status=? WHERE id=?", [$zs['status'], $beleg_id]);
+        $euro = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
+        beleg_status_log_add($beleg_id, $zs['status'], 'Zahlung ' . $euro($z['betrag']) . ' gelöscht (Korrektur)', $akteur);
+    }
+    return true;
+}
+
 // Statusverlauf lesen; legt bei fehlendem Verlauf einmalig einen „erstellt"-Eintrag aus beleg.angelegt an (Backfill für Altbelege).
 function beleg_status_verlauf(int $beleg_id): array {
     $rows = all("SELECT * FROM beleg_status_log WHERE beleg_id=? ORDER BY angelegt ASC, id ASC", [$beleg_id]);

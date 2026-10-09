@@ -55,13 +55,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     }
 
     if ($aktion === 'zahlung') {
-        $betrag = (float) str_replace(',', '.', trim($_POST['betrag'] ?? '0'));
+        $betrag = be_betrag_lesen((string)($_POST['betrag'] ?? '0'));   // robust: Tausenderpunkt + Dezimalkomma
         if ($betrag > 0) {
             zahlung_erfassen($id, $betrag, trim($_POST['datum'] ?? '') ?: null,
                              trim($_POST['konto'] ?? '') ?: null, trim($_POST['art'] ?? '') ?: null,
                              trim($_POST['zahl_notiz'] ?? ''), $akteur);
         }
         header('Location: ?p=rechnung&id=' . $id . '&gespeichert=1'); exit;
+    }
+    // Einzelne (Fehl-)Zahlung loeschen, dann Status neu ziehen. Nur admin/finance.
+    if ($aktion === 'zahlung_loeschen' && (has_role('admin') || has_role('finance'))) {
+        zahlung_loeschen((int)($_POST['zahlung_id'] ?? 0), $id, $akteur);
+        header('Location: ?p=rechnung&id=' . $id . '&zahlweg=1'); exit;
     }
 
     // Rezeptur nachträglich an die Rechnung hängen (direkter Override beleg.rezeptur_id).
@@ -131,14 +136,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
 
     // Guthaben auf diese Rechnung anrechnen (verrechnen)
     if ($aktion === 'guthaben_anrechnen') {
-        $wunsch = (float) str_replace(',', '.', trim($_POST['betrag'] ?? '0'));
+        $wunsch = be_betrag_lesen((string)($_POST['betrag'] ?? '0'));
         $an = guthaben_anrechnen($id, $wunsch, $akteur);
         header('Location: ?p=rechnung&id=' . $id . '&angerechnet=' . number_format($an, 2, '.', '')); exit;
     }
     // Guthaben (dieses Gutschrift-Kunden) auszahlen
     if ($aktion === 'guthaben_auszahlen') {
         $kid    = (int)($_POST['kunde_id'] ?? 0);
-        $wunsch = (float) str_replace(',', '.', trim($_POST['betrag'] ?? '0'));
+        $wunsch = be_betrag_lesen((string)($_POST['betrag'] ?? '0'));
         $aus = guthaben_auszahlen($kid, $wunsch, trim($_POST['notiz'] ?? ''), $akteur);
         header('Location: ?p=rechnung&id=' . $id . '&ausgezahlt=' . number_format($aus, 2, '.', '')); exit;
     }
@@ -210,6 +215,7 @@ if (isset($_GET['angerechnet'])) echo '<div class="bx-panel badge-ok" style="pad
 if (isset($_GET['ausgezahlt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((float)$_GET['ausgezahlt'] > 0 ? $eur((float)$_GET['ausgezahlt']) . ' Guthaben als ausgezahlt verbucht.' : 'Kein Guthaben ausgezahlt.') . '</div>';
 if (isset($_GET['betrag'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rechnungsbetrag aus den Positionen übernommen.</div>';
 if (isset($_GET['betragfehler'])) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#e6c4c0">Betrag konnte nicht übernommen werden (nur bei Entwürfen: offen, nicht freigegeben, unbezahlt – und es müssen Positionen vorhanden sein).</div>';
+if (isset($_GET['zahlweg'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zahlung gelöscht – der Zahlstatus wurde neu berechnet.</div>';
 if (isset($_GET['pos'])) echo '<div class="bx-panel ' . ((int)$_GET['pos'] > 0 ? 'badge-ok' : '') . '" style="padding:12px 16px' . ((int)$_GET['pos'] > 0 ? '' : ';border-color:#e6c4c0') . '">' . ((int)$_GET['pos'] > 0 ? (int)$_GET['pos'] . ' Position(en) aus dem Angebot übernommen.' : 'Positionen konnten nicht aus dem Angebot übernommen werden: ' . h((string)($_GET['posgrund'] ?? ''))) . '</div>';
 if (isset($_GET['posman'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Positionen gespeichert (' . (int)$_GET['posman'] . ').</div>';
 if (isset($_GET['rezeptur'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['rezeptur'] > 0 ? 'Rezeptur verknüpft.' . (isset($_GET['produkt']) ? ' Sie wurde auch am Produkt des Auftrags hinterlegt.' : '') : 'Rezeptur-Verknüpfung entfernt.') . '</div>';
@@ -540,10 +546,11 @@ $artLbl = ['ueberweisung'=>'Überweisung','lastschrift'=>'Lastschrift','paypal'=
 <!-- Zahlungseingänge -->
 <div class="bx-panel">
   <h2>Zahlungseingänge</h2>
+  <?php $darfZahlWeg = has_role('admin') || has_role('finance'); ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Überweisungsdatum</th><th class="bx-num">Betrag</th><th>Konto</th><th>Art</th><th>Anmerkung</th><th>Erfasst</th></tr></thead>
+    <thead><tr><th>Überweisungsdatum</th><th class="bx-num">Betrag</th><th>Konto</th><th>Art</th><th>Anmerkung</th><th>Erfasst</th><?php if ($darfZahlWeg): ?><th></th><?php endif; ?></tr></thead>
     <tbody>
-      <?php if (!$zahlungen): ?><tr><td colspan="6" class="muted">Noch keine Zahlungseingänge erfasst.</td></tr><?php endif; ?>
+      <?php if (!$zahlungen): ?><tr><td colspan="<?= $darfZahlWeg ? 7 : 6 ?>" class="muted">Noch keine Zahlungseingänge erfasst.</td></tr><?php endif; ?>
       <?php foreach ($zahlungen as $z): ?>
         <tr>
           <td><?= $z['datum'] ? h(date('d.m.Y', strtotime($z['datum']))) : '<span class="muted">–</span>' ?></td>
@@ -552,10 +559,11 @@ $artLbl = ['ueberweisung'=>'Überweisung','lastschrift'=>'Lastschrift','paypal'=
           <td><?= $z['art'] ? h($artLbl[$z['art']] ?? $z['art']) : '<span class="muted">–</span>' ?></td>
           <td><?= $z['notiz'] ? h($z['notiz']) : '<span class="muted">–</span>' ?></td>
           <td class="muted"><?= h(fmt_zeit($z['angelegt'], 'd.m.Y H:i')) ?><?= $z['akteur'] ? ' · ' . h($z['akteur']) : '' ?></td>
+          <?php if ($darfZahlWeg): ?><td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Diese Zahlung (<?= h($eur($z['betrag'])) ?>) wirklich löschen? Der Status wird neu berechnet.');"><input type="hidden" name="aktion" value="zahlung_loeschen"><input type="hidden" name="zahlung_id" value="<?= (int)$z['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit" title="Fehlbuchung löschen">&times;</button></form></td><?php endif; ?>
         </tr>
       <?php endforeach; ?>
       <?php if ($zahlungen): ?>
-        <tr><td class="muted">Summe</td><td class="bx-num"><strong><?= $eur($zs['bezahlt']) ?></strong></td><td colspan="4" class="muted"><?= $zs['rest'] > 0.005 ? 'Offener Rest ' . $eur($zs['rest']) : 'Vollständig bezahlt' ?></td></tr>
+        <tr><td class="muted">Summe</td><td class="bx-num"><strong><?= $eur($zs['bezahlt']) ?></strong></td><td colspan="<?= $darfZahlWeg ? 5 : 4 ?>" class="muted"><?= $zs['rest'] > 0.005 ? 'Offener Rest ' . $eur($zs['rest']) : 'Vollständig bezahlt' ?></td></tr>
       <?php endif; ?>
     </tbody>
   </table></div>

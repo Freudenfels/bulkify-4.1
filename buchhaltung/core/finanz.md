@@ -1,2 +1,6 @@
 # finanz.php — Beleg-/Rechnungs-/Gutschrift-Funktionen
 VERBATIM aus dem Dashboard-core/schema.php übernommen (bewusste Doppelung, da die Sub-App die Dashboard-schema.php nicht einbinden darf: db()-Kollision). Block A: Rechnungserzeugung (rechnung_aus_auftrag/rechnung_frei_erstellen/rechnung_import_ki/rechnung_alt_anlegen/rechnung_import_positionen_ki). Block B: Status/Zahlungen/Gutschrift (beleg_status_log_add, bank_konten, zahlung_summe, beleg_zahlstatus, zahlung_erfassen, beleg_status_verlauf, beleg_positionen, beleg_summen_aus_positionen, gutschrift_erstellen, gutschrift_aus_rechnung). Block C: Kundenguthaben. Abhängigkeiten aus db.php/erp.php/ki.php. Roh-SQL-Reads auf auftrag/kunden/produkt: beim Umbenennen dieser Spalten hier mitprüfen.
+
+## be_betrag_lesen() + zahlung_loeschen() (Stand 2026-10-10)
+`be_betrag_lesen($s)`: robuster Geldbetrag-Parser. Behebt den Fehler, dass `(float) str_replace(',', '.', "21.687,75")` beim zweiten Punkt abbricht → 21.687 (Fehlbuchung!). Erkennt Tausenderpunkt + Dezimalkomma (DE) UND Komma-Tausender + Punkt-Dezimal (EN). Wird in `beleg/detail.php` für Zahlung + Guthaben-Anrechnung/-Auszahlung genutzt.
+`zahlung_loeschen($zahlung_id,$beleg_id,$akteur)`: löscht eine einzelne (Fehl-)Zahlung und zieht den Belegstatus (offen/teilbezahlt/bezahlt) neu. Button „×" je Zahlung in der Zahlungseingänge-Tabelle (nur admin/finance).
