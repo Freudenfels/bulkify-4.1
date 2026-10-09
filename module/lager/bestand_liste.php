@@ -30,7 +30,9 @@ $rows = all("SELECT i.id,i.artikelnummer,i.name,i.kategorie,i.einheit,i.bestand_
              (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='frei') AS frei_charge,
              (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='quarantaene') AS quarantaene,
              (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='gesperrt') AS gesperrt,
-             (SELECT COUNT(*) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt')) AS n_chargen
+             (SELECT COUNT(*) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt')) AS n_chargen,
+             (SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                WHERE bp.item_id=i.id AND b.status='bestellt' AND b.angekommen_am IS NULL) AS unterwegs
              FROM item i WHERE $where", $params);
 
 // Bestand vereinheitlichen: Betriebsmittel = manueller Bestand, sonst Chargen-Bestand.
@@ -45,9 +47,11 @@ unset($r);
 // Nullbestände ausblenden (Standard): „leer" = physisch NICHTS da (auch keine Quarantäne/gesperrt).
 // Ware in Quarantäne/gesperrt ist vorhanden (und wartet auf Freigabe) → bleibt sichtbar, auch wenn frei=0.
 // Betriebsmittel (Maschinen/Inventar) sind Anlagegüter – immer sichtbar. ?leer=1 zeigt alles.
+// „leer" = physisch nichts da UND nichts unterwegs. Bestellte, noch nicht eingegangene Ware (unterwegs > 0)
+// bleibt sichtbar, auch wenn aktuell kein Bestand da ist – sonst sieht man nicht, dass etwas kommt.
 $anzahlLeer = 0;
-foreach ($rows as $r) if (!ist_betriebsmittel_kat($r['kategorie']) && (float)$r['gesamt'] <= 0) $anzahlLeer++;
-if (!$zeigeLeer) $rows = array_values(array_filter($rows, fn($r) => ist_betriebsmittel_kat($r['kategorie']) || (float)$r['gesamt'] > 0));
+foreach ($rows as $r) if (!ist_betriebsmittel_kat($r['kategorie']) && (float)$r['gesamt'] <= 0 && (float)($r['unterwegs'] ?? 0) <= 0) $anzahlLeer++;
+if (!$zeigeLeer) $rows = array_values(array_filter($rows, fn($r) => ist_betriebsmittel_kat($r['kategorie']) || (float)$r['gesamt'] > 0 || (float)($r['unterwegs'] ?? 0) > 0));
 
 if ($q !== '') {
     $needle = mb_strtolower($q);
@@ -68,6 +72,10 @@ $bestandCell = function($r) use ($mng) {
     if ((float)($r['gesperrt'] ?? 0) > 0)    $out .= ' <span class="badge">' . $mng($r['gesperrt'], $e) . ' gesperrt</span>';
     return $out;
 };
+// „Unterwegs": bestellte, noch nicht eingegangene Menge (status='bestellt', ohne angekommen_am).
+$unterwegsCell = fn($r) => (float)($r['unterwegs'] ?? 0) > 0
+    ? bx_badge($mng($r['unterwegs'], $r['einheit'] ?: 'Stück') . ' unterwegs', 'info')
+    : '<span class="muted">–</span>';
 $detailUrl = function($r) {
     if (ist_betriebsmittel_kat($r['kategorie'])) return '?p=betriebsmittel&id=' . $r['id'];
     return $r['kategorie'] === 'verpackung' ? '?p=verpackung&id=' . $r['id'] : '?p=rohstoff&id=' . $r['id'];
@@ -96,6 +104,7 @@ if ($istBM) {
         'name'          => ['label'=>'Name', 'sort'=>true],
         'kategorie'     => ['label'=>'Typ', 'sort'=>true, 'render'=>fn($r)=> h($ALLE_KAT[$r['kategorie']] ?? $r['kategorie'])],
         'frei'          => ['label'=>'Bestand', 'sort'=>true, 'num'=>true, 'render'=>$bestandCell],
+        'unterwegs'     => ['label'=>'Unterwegs', 'sort'=>true, 'num'=>true, 'render'=>$unterwegsCell],
         'pruefung'      => ['label'=>'Prüfung', 'render'=>$pruefRender],
     ];
 } else {
@@ -106,6 +115,7 @@ if ($istBM) {
         'n_chargen'     => ['label'=>'Chargen', 'sort'=>true, 'num'=>true],
         'frei'          => ['label'=>'Bestand (frei)', 'sort'=>true, 'num'=>true, 'render'=>fn($r)=> $mng($r['frei'],$r['einheit'])],
         'quarantaene'   => ['label'=>'Quarantäne', 'sort'=>true, 'num'=>true, 'render'=>fn($r)=> (float)$r['quarantaene']>0 ? '<span class="badge badge-warn">'.$mng($r['quarantaene'],$r['einheit']).'</span>' : '<span class="muted">–</span>'],
+        'unterwegs'     => ['label'=>'Unterwegs', 'sort'=>true, 'num'=>true, 'render'=>$unterwegsCell],
     ];
 }
 
