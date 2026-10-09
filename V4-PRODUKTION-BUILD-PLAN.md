@@ -84,7 +84,7 @@ Das Lastenheft ist **mehrere Wochen** Arbeit. Über Nacht entsteht ein **tragfä
 ## Noch offen (Paket E + Rest – für die nächsten Etappen)
 - ✅ **Live-Mengenfortschritt (15.3)** in Auftrag/Portal – ERLEDIGT (10.10.2026, `auftrag_mengenfortschritt()`).
 - ✅ **Proben-UI 3-stufig** – ERLEDIGT (10.10.2026): Rohstoff-/Gebinde-/Endprodukt-Proben in `produktion/.../qs.php` über `prod_probe`, Soll max(5, Gebinde).
-- **FIFO/Gebinde-Durchziehen beim Abfüllen (7.8)** + Unterchargen beim Griff zum nächsten Gebinde (bisher nur beim Mischen).
+- ✅ **FIFO/Gebinde beim Abfüllen (7.8)** – ERLEDIGT (10.10.2026): FEFO-Fuehrung der Gebinde-Unterchargen in run.php (angefangen/leer melden), Status im Bericht. Werk-Test ausstehend.
 - ✅ **Produktionsbericht (17)** – ERLEDIGT (10.10.2026): Sektionen Produktionschargen (CH/CHE + Rohstoff-Batches) + Proben im Dashboard-Bericht. Offen: Maschine/Klima/Reinigung (liegen in der Produktions-Sub-App; folgt mit Maschinen→Dashboard).
 - ✅ **Abschlussfotos (13.1)** – ERLEDIGT (10.10.2026). **Pausen nur an cleanen Punkten/Schichtwechsel (7.11/7.12)** offen.
 - ✅ **Bulk-Weiterverkauf-Abfang (7.1)** – ERLEDIGT (10.10.2026): Flag produkt.handelsware, PA-Abfang zentral. CH/CHE-Nummernformat bleibt (Nico, 10.10.).
