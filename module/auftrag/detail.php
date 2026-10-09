@@ -271,47 +271,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&analyse=1'); exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
-    // Preis nachpflegen: VK je Packung + Menge editierbar, Netto = Menge × VK automatisch.
-    $menge = max(0, (int)($_POST['menge'] ?? 0));
-    $vk    = round(zahl_lesen((string)($_POST['vk_stueck'] ?? '0')), 4);
-    $netto = round($menge * $vk, 2);
-    $neuStatus = trim($_POST['status'] ?? 'offen');
+// Auftrag stornieren: Der Auftrag ist „gesetzt" – Menge/Preis/Verpackung werden hier NICHT mehr bearbeitet
+// (Rezeptur-Änderungen laufen über die Rezeptur, Flaschen/Verpackung über die Vor-Produktion). Einzige
+// Werte-Änderung am Auftrag selbst ist das Stornieren: Status 'storniert' + offene Rechnung(en) per
+// Gutschrift stornieren. Nur Admin.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'auftrag_stornieren') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
     $altStatus = (string) scalar("SELECT status FROM auftrag WHERE id=?", [$id]);
-    q("UPDATE auftrag SET status=?, menge=?, vk_stueck=?, gesamt_netto=? WHERE id=?",
-      [$neuStatus, $menge, $vk, $netto, $id]);
-    if ($neuStatus !== $altStatus) q("UPDATE auftrag SET status_datum=CURDATE() WHERE id=?", [$id]);   // Datum für Kundensicht
-    // Verpackung (Behälter): überschreibt IMMER das Produkt (es gibt kein „nur dieser Auftrag" – wir wollen
-    // das Produkt festlegen). Daher auftrag.verpackung_id UND produkt.verpackung_id setzen. Wirkt auf
-    // Produktion/Einkauf/PIB; Kunde sieht es ohne Bestätigung.
-    if (array_key_exists('verpackung_id', $_POST)) {
-        $verpId = $_POST['verpackung_id'] !== '' ? (int)$_POST['verpackung_id'] : null;
-        q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$verpId, $id]);
-        if ($verpId) {
-            $pidA = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$id]);
-            if ($pidA) q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$verpId, $pidA]);
-        }
-    }
-    // Stück/Kapseln je Packung: am Auftrag (stueck) UND dauerhaft am Produkt (einheiten_pro_packung) setzen –
-    // so übernehmen künftige Nachbestellungen den Wert und man muss nichts erneut anpassen.
-    if (array_key_exists('einheiten_pro_packung', $_POST) && trim((string)$_POST['einheiten_pro_packung']) !== '') {
-        $epp = max(0, (int)$_POST['einheiten_pro_packung']);
-        q("UPDATE auftrag SET stueck=? WHERE id=?", [$epp ?: null, $id]);
-        $pidE = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$id]);
-        if ($pidE && $epp > 0) q("UPDATE produkt SET einheiten_pro_packung=? WHERE id=?", [$epp, $pidE]);
-    }
-    // Kapselgröße = Rezeptur-Eigenschaft -> als Standard an der Rezeptur dieses Produkts setzen
-    // (gilt für alle Aufträge dieses Produkts). Nur wenn gesendet.
-    if (array_key_exists('kapselgroesse_id', $_POST)) {
-        $ridA = (int) scalar("SELECT p.rezeptur_id FROM auftrag a JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$id]);
-        if ($ridA) { $kapsId = $_POST['kapselgroesse_id'] !== '' ? (int)$_POST['kapselgroesse_id'] : null;
-            q("UPDATE rezeptur SET kapselgroesse_id=? WHERE id=?", [$kapsId, $ridA]); }
-    }
-    // Auftrag storniert -> offene Rechnung(en) automatisch per Gutschrift stornieren
     $stn = 0;
-    if ($neuStatus === 'storniert' && $altStatus !== 'storniert') {
+    if ($altStatus !== 'storniert') {
+        q("UPDATE auftrag SET status='storniert', status_datum=CURDATE() WHERE id=?", [$id]);
         $akteur = (function_exists('current_user') && ($u = current_user())) ? $u['name'] : 'team';
         $stn = auftrag_rechnungen_stornieren($id, 'Auftrag ' . ((string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$id])) . ' storniert', $akteur);
+        log_aktivitaet('auftrag', $id, 'team', 'Auftrag storniert.', 'status', 'auftrag', $id);
     }
     header('Location: ?p=auftrag&id=' . $id . '&gespeichert=1' . ($stn ? '&storno=' . $stn : '')); exit;
 }
@@ -601,13 +573,23 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
         $rst = $rechnungZs['status'] ?? $rechnung['status'];
         echo match ($rst) { 'bezahlt'=>bx_badge('bezahlt','ok'), 'teilbezahlt'=>bx_badge('teilbezahlt','info'), 'storniert'=>bx_badge('storniert','err'), default=>bx_badge('offen','warn') };
         if ($rst === 'teilbezahlt') echo ' <span class="muted" style="font-size:12px">offen ' . $eur($rechnungZs['rest']) . '</span>';
-      ?> · <a href="/buchhaltung/?p=rechnung&id=<?= (int)$rechnung['id'] ?>" style="font-size:12px">Zahlung erfassen</a>
-        <?php if (has_role('admin')): $rAdr = kunde_hat_rechnungsadresse((int)($a['kunde_id'] ?? 0)); ?>
-          <?php if (!$rAdr): ?><div class="muted" style="font-size:12px;color:var(--warn);margin-top:2px">&#9888; Rechnungsadresse fehlt – Kundenadresse ergänzen, dann neu berechnen.</div><?php endif; ?>
-          <form method="post" style="display:inline"><input type="hidden" name="aktion" value="rechnung_neu_berechnen"><button class="btn btn-ghost btn-sm" type="submit" style="margin-top:4px" title="USt-Satz und Adresse aus dem aktuellen Kunden neu berechnen (und bei vorhandener Adresse freigeben)">USt/Adresse neu berechnen</button></form>
-        <?php endif; ?>
-      <?php else: ?><a class="btn btn-primary btn-sm" href="/buchhaltung/?p=rechnung_neu&auftrag=<?= (int)$id ?>">Rechnung erstellen</a><?php endif; ?></div></div>
+      ?> <span class="muted" style="font-size:12px">· in der Buchhaltung verwalten</span>
+      <?php else: ?><a class="btn btn-ghost btn-sm" href="/buchhaltung/?p=rechnung_neu&auftrag=<?= (int)$id ?>">Rechnung in Buchhaltung erstellen</a><?php endif; ?></div></div>
   </div>
+  <?php // Der Auftrag ist gesetzt (keine Bearbeitung von Menge/Preis/Verpackung hier). Änderungen laufen über
+        // die jeweils zuständige Stelle: Rezeptur -> Rezeptur-Modul, Flaschen/Verpackung/Kapselgröße -> Vor-Produktion.
+        if (has_role('admin') || has_role('sales') || has_role('production')): ?>
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <span class="muted" style="font-size:13px">Der Auftrag ist gesetzt. Änderungen laufen über:</span>
+    <?php if ($rezeptur): ?><a class="btn btn-ghost btn-sm" href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>">Rezeptur bearbeiten</a><?php endif; ?>
+    <?php if ($paVorbereitung): ?>
+      <a class="btn btn-primary btn-sm" href="?p=produktion_vorbereitung&id=<?= (int)$pa['id'] ?>">Vor-Produktion öffnen (Flaschen &amp; Verpackung)</a>
+    <?php else: ?>
+      <a class="btn btn-ghost btn-sm" href="?p=produktion_vorbereitung">Vor-Produktion</a>
+    <?php endif; ?>
+    <span class="muted" style="font-size:12px">Menge und Preis sind fixiert; Flaschen, Verpackung &amp; Kapselgröße setzt du in der Vor-Produktion.</span>
+  </div>
+  <?php endif; ?>
 </div>
 
 <?php $track = kunde_auftrag_track($a); ?>
@@ -637,7 +619,7 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
       </select>
       <button class="btn btn-primary btn-sm" type="submit">Setzen</button>
     </form>
-    <span class="muted" style="font-size:12px">„versendet" schließt den Auftrag ab (Kunden-Archiv). Stornieren sowie Preis/Menge im Reiter „Details".</span>
+    <span class="muted" style="font-size:12px">„versendet" schließt den Auftrag ab (Kunden-Archiv). Menge und Preis sind fixiert; Stornieren im Reiter „Details".</span>
   </div>
   <?php endif; ?>
 </div>
@@ -856,8 +838,10 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
 </div>
 <?php endif; ?>
 
-<?php // Zahlung / Alt-Rechnung – für alles aus dem alten System (noch keine echte v4-Rechnung).
+<?php // Zahlung / Alt-Rechnung (Altsystem) ist im Reiter „Preise & Rechnung" ausgeblendet – Rechnungen und
+      // Zahlungen laufen über die Buchhaltung. Markup bleibt (if(false)) für Alt-Aufträge erhalten, falls nötig.
       $hatV4Rechnung = (bool)$rechnung; ?>
+<?php if (false): ?>
 <div class="bx-panel" data-panel="preise">
   <h2 style="margin-top:0">Zahlung / Alt-Rechnung <span class="muted" style="font-weight:normal;font-size:13px">· Altsystem</span></h2>
   <?php if (isset($_GET['bezahltok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Gespeichert.</div><?php endif; ?>
@@ -905,24 +889,54 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
     </form>
   </div>
 </div>
+<?php endif; // Ende ausgeblendetes Alt-Rechnung/Zahlung-Panel ?>
 
-<?php if ($istAdmin): ?>
-<?php if (isset($_GET['expressfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['expressfehler']) ?></div><?php endif; ?>
+<?php if ($istAdmin):
+  // Marge auf Basis der günstigsten hinterlegten Rohstoff-EK-Preise (nur Material). Fremdwährungen werden
+  // nicht automatisch summiert (kein Kurs hinterlegt); fehlt bei einem Rohstoff der EK, ist die Marge unvollständig.
+  $matKostenEur = 0.0; $matHatNichtEur = false; $matVollstaendig = (bool)$ekBedarf;
+  foreach ($ekBedarf as $bd) {
+      $ao = $bd['angebote'][0] ?? null;
+      if (!$ao) { $matVollstaendig = false; continue; }
+      if (strtoupper((string)($ao['waehrung'] ?: 'EUR')) !== 'EUR') { $matHatNichtEur = true; $matVollstaendig = false; continue; }
+      $matKostenEur += (float)$ao['preis'] * (float)$bd['benoetigt'];
+  }
+  $mMenge = (int)$a['menge']; $mNetto = (float)$a['gesamt_netto']; $mVk = (float)$a['vk_stueck'];
+  $mEkProP = $mMenge > 0 ? $matKostenEur / $mMenge : 0.0;
+  $mMarge  = $mNetto - $matKostenEur; $mMargeProz = $mNetto > 0 ? ($mMarge / $mNetto) * 100 : 0.0;
+?>
+<?php if (isset($_GET['expressfehler'])): ?><div class="bx-panel" data-panel="preise" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['expressfehler']) ?></div><?php endif; ?>
 <div class="bx-panel" data-panel="preise">
-  <h2 style="margin-top:0">EK-Preise &amp; Express-Bestellung <span class="muted" style="font-weight:normal;font-size:13px">· nur intern (Admin)</span></h2>
+  <h2 style="margin-top:0">Kalkulation (Marge) <span class="muted" style="font-weight:normal;font-size:13px">· nur intern (Admin)</span></h2>
+  <div class="bx-grid">
+    <div><div class="k muted">VK je Packung (netto)</div><div><?= $eur($mVk) ?></div></div>
+    <div><div class="k muted">Menge</div><div><?= number_format($mMenge,0,',','.') ?> Packungen</div></div>
+    <div><div class="k muted">Umsatz netto</div><div><?= $eur($mNetto) ?></div></div>
+    <?php if ($matVollstaendig): ?>
+    <div><div class="k muted">Materialkosten (EK, günstigste)</div><div><?= $eur($matKostenEur) ?> <span class="muted" style="font-size:12px">· <?= $eur($mEkProP) ?>/Packung</span></div></div>
+    <div><div class="k muted">Marge (nach Material)</div><div><strong><?= $eur($mMarge) ?></strong> <span class="muted" style="font-size:12px">· <?= number_format($mMargeProz,1,',','.') ?>%</span></div></div>
+    <?php else: ?>
+    <div style="grid-column:1/-1"><div class="k muted">Marge</div><div class="muted"><?= $matHatNichtEur ? 'Teils Fremdwährungs-EK hinterlegt – Materialkosten lassen sich nicht automatisch summieren.' : (!$ekBedarf ? 'Keine Rohstoff-EK-Preise (Zukauf oder Rezeptur ohne Zutaten) – Materialkosten nicht ermittelbar.' : 'Für nicht alle Rohstoffe ist ein EK-Preis hinterlegt – Marge unvollständig.') ?></div></div>
+    <?php endif; ?>
+  </div>
+  <p class="muted" style="font-size:12px;margin:10px 0 0">Richtwert auf Basis der günstigsten hinterlegten Rohstoff-EK-Preise – nur Material, ohne Lohn, Verpackung und Gemeinkosten.</p>
+</div>
+
+<div class="bx-panel" data-panel="preise">
+  <h2 style="margin-top:0">Lieferanten-Preise zu diesem Auftrag <span class="muted" style="font-weight:normal;font-size:13px">· nur intern (Admin)</span></h2>
   <?php if (!$pa): ?>
-    <div class="muted">Kein Produktionsauftrag – Materialbedarf nicht berechenbar.</div>
+    <div class="muted">Kein Produktionsauftrag – Rohstoffbedarf nicht berechenbar.</div>
   <?php elseif (!$ekBedarf): ?>
     <div class="muted">Keine Rohstoffe im Bedarf (Zukauf oder Rezeptur ohne Zutaten).</div>
   <?php else: ?>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Rohstoff</th><th class="bx-num">benötigt</th><th>Wo bestellbar – EK je Einheit (günstigste zuerst)</th></tr></thead>
+      <thead><tr><th>Rohstoff</th><th class="bx-num">benötigt</th><th>Lieferant – EK je Einheit (günstigste zuerst)</th></tr></thead>
       <tbody>
       <?php foreach ($ekBedarf as $bd): $nz = fn($x,$n=3)=>rtrim(rtrim(number_format((float)$x,$n,',','.'),'0'),','); ?>
         <tr>
           <td><a class="kundenlink" href="?p=rohstoff&id=<?= (int)$bd['item_id'] ?>&tab=ek"><?= h($bd['name']) ?></a></td>
           <td class="bx-num"><?= $nz($bd['benoetigt']) ?> <?= h($bd['einheit']) ?><?php if ($bd['fehlt'] > 0.0001): ?><br><span style="color:#8f231b;font-size:12px">fehlt <?= $nz($bd['fehlt']) ?></span><?php else: ?><br><span class="bx-ok" style="font-size:12px">auf Lager</span><?php endif; ?></td>
-          <td><?php if (!$bd['angebote']): ?><span class="muted">kein EK-Preis hinterlegt</span> · <a href="?p=rohstoff&id=<?= (int)$bd['item_id'] ?>&tab=ek" style="font-size:12px">anfragen</a>
+          <td><?php if (!$bd['angebote']): ?><span class="muted">kein EK-Preis hinterlegt</span>
               <?php else: $bi = 0; foreach ($bd['angebote'] as $ao): ?>
                 <div style="<?= $bi === 0 ? 'font-weight:600' : '' ?>"><?= h($ao['firma'] ?: '–') ?>: <?= $nz($ao['preis'], 4) ?> <?= h($ao['waehrung'] ?: 'EUR') ?><?= (float)$ao['menge_ab'] > 0 ? ' <span class="muted">(ab ' . $nz($ao['menge_ab']) . ')</span>' : '' ?><?= $bi === 0 ? ' <span class="muted">· günstigste</span>' : '' ?></div>
               <?php $bi++; endforeach; endif; ?></td>
@@ -930,23 +944,10 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
       <?php endforeach; ?>
       </tbody>
     </table></div>
-    <?php if ($ekLieferanten): ?>
-    <div class="bx-row" style="gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center">
-      <span class="muted" style="font-size:13px">Express-Bestellung (überspringt den Einkauf – bestellt die fehlenden Mengen direkt beim Lieferanten):</span>
-      <?php foreach ($ekLieferanten as $lid => $firma): ?>
-      <form method="post" style="margin:0" onsubmit="return confirm('Express-Bestellung anlegen? Bestellt die fehlenden Rohstoffe dieses Auftrags direkt bei diesem Lieferanten.');">
-        <input type="hidden" name="aktion" value="express_bestellung"><input type="hidden" name="lieferant_id" value="<?= (int)$lid ?>">
-        <button class="btn btn-primary btn-sm" type="submit" data-busy="Bestellt…">Express bei <?= h($firma ?: 'Lieferant') ?></button>
-      </form>
-      <?php endforeach; ?>
-    </div>
-    <p class="muted" style="font-size:12px;margin:8px 0 0">Legt sofort eine Bestellung (Entwurf) mit den fehlenden Rohstoffen an und öffnet sie – ohne den Umweg über Einkaufsbedarf/-liste. Absenden an den Lieferanten dann wie gewohnt in der Bestellung.</p>
-    <?php endif; ?>
   <?php endif; ?>
 
-  <?php if ($zukaufPreise || $prodRezId): $nz = fn($x,$n=3)=>rtrim(rtrim(number_format((float)$x,$n,',','.'),'0'),','); ?>
-  <h3 style="margin:20px 0 8px;font-size:14px;font-weight:600">Fertigprodukt zukaufen (Bulk)</h3>
-  <?php if ($zukaufPreise): $VZ = versandart_liste(); ?>
+  <?php if ($zukaufPreise): $nz = fn($x,$n=3)=>rtrim(rtrim(number_format((float)$x,$n,',','.'),'0'),','); $VZ = versandart_liste(); ?>
+  <h3 style="margin:20px 0 8px;font-size:14px;font-weight:600">Fertigprodukt (Bulk) – Zukaufpreise</h3>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Lieferant</th><th>Größe</th><th class="bx-num">ab Menge</th><th class="bx-num">EK je Einheit</th><th>Lieferbedingung</th></tr></thead>
       <tbody>
@@ -961,24 +962,9 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
       <?php $bi++; endforeach; ?>
       </tbody>
     </table></div>
-  <?php else: ?>
-    <div class="muted">Noch keine Zukaufpreise für dieses Produkt hinterlegt – per „Fertigprodukt anfragen" bei Lieferanten einholen.</div>
   <?php endif; ?>
-  <div class="bx-row" style="gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center">
-    <?php if ($prodRezId) echo anfrage_produkt_button($prodRezId, (string)($a['produkt_name'] ?? ''), '', 'Fertigprodukt anfragen'); ?>
-    <?php if ($zukaufLief): ?><span class="muted" style="font-size:13px">· Express-Zukauf (Bulk, überspringt den Einkauf):</span>
-      <?php foreach ($zukaufLief as $lid => $firma): ?>
-      <form method="post" style="margin:0" onsubmit="return confirm('Fertigprodukt als Bulk direkt bei diesem Lieferanten bestellen?');">
-        <input type="hidden" name="aktion" value="express_bulk"><input type="hidden" name="lieferant_id" value="<?= (int)$lid ?>">
-        <button class="btn btn-primary btn-sm" type="submit" data-busy="Bestellt…">Express bei <?= h($firma ?: 'Lieferant') ?></button>
-      </form>
-      <?php endforeach; ?>
-    <?php endif; ?>
-  </div>
-  <p class="muted" style="font-size:12px;margin:8px 0 0">Zukauf des fertigen Produkts als Bulk (Kunde sieht das nie). „Anfragen" holt Preise bei Lieferanten ein; „Express" legt direkt eine Bulk-Bestellung an.</p>
-  <?php endif; ?>
+  <p class="muted" style="font-size:12px;margin:10px 0 0">Reine Preisübersicht (intern). Bestellungen laufen über den Einkauf, nicht von hier.</p>
 </div>
-<?php anfrage_modal($anfrageLieferanten, '?p=auftrag&id=' . $id); ?>
 <?php endif; ?>
 
 <?php if (has_role('admin') && empty($a['kontingent_id']) && (string)$a['status'] !== 'storniert' && (int)$a['menge'] > 0 && (float)$a['vk_stueck'] > 0): ?>
@@ -1000,6 +986,21 @@ $befundBadge = fn($b) => $b === 'bestanden' ? bx_badge('bestanden','ok') : ($b =
 $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
                              WHERE pa.auftrag_id=? AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id LIMIT 1", [$id]);
 ?>
+<div class="bx-panel" data-panel="dokumente">
+  <h2 style="margin-top:0">Dokumente &amp; Downloads</h2>
+  <div class="bx-row" style="gap:10px;flex-wrap:wrap">
+    <a class="btn btn-ghost btn-sm" href="?p=auftrag_pdf&id=<?= (int)$a['id'] ?>" target="_blank" rel="noopener">Auftragsbestätigung (PDF)</a>
+    <?php if (!empty($a['produkt_id'])): ?>
+      <a class="btn btn-ghost btn-sm" href="?p=produkt_pib&id=<?= (int)$a['produkt_id'] ?>" target="_blank" rel="noopener">Produktinformationsblatt (PIB)</a>
+    <?php endif; ?>
+    <?php if ($pa): ?>
+      <a class="btn btn-ghost btn-sm" href="?p=produktionsauftrag_pdf&id=<?= (int)$pa['id'] ?>" target="_blank" rel="noopener">Laufzettel (Produktionsauftrag)</a>
+      <a class="btn btn-ghost btn-sm" href="?p=produktion_bericht&id=<?= (int)$pa['id'] ?>" target="_blank" rel="noopener">Produktionsbericht</a>
+    <?php endif; ?>
+  </div>
+  <?php if (!$pa): ?><p class="muted" style="font-size:12px;margin:10px 0 0">Laufzettel und Produktionsbericht erscheinen, sobald ein Produktionsauftrag existiert.</p><?php endif; ?>
+</div>
+
 <div class="bx-panel" data-panel="dokumente">
   <h2 style="margin-top:0">Laboranalyse / Labortest<?= $chargeNr ? ' <span class="muted" style="font-weight:normal;font-size:13px">· Charge ' . h($chargeNr) . '</span>' : '' ?></h2>
   <p class="muted" style="margin-top:0">Labortest bzw. Analysenzertifikat (CoA) für <strong>diese Bestellung</strong>. Als „freigegeben" erscheint es im Kundenportal-Reiter „Labortest".</p>
@@ -1043,47 +1044,19 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
   </form>
 </div>
 
-<form method="post" class="bx-form" data-panel="details">
-  <div class="bx-panel"><div class="bx-grid">
-    <div class="bx-field"><label>Status</label>
-      <select name="status">
-        <?php foreach (['offen'=>$stLbl('offen'),'in_produktion'=>$stLbl('in_produktion'),'erledigt'=>$stLbl('erledigt'),'versendet'=>$stLbl('versendet'),'storniert'=>'storniert'] as $key=>$lbl): ?>
-          <option value="<?= $key ?>" <?= $a['status']===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
-      </select>
-    </div>
-    <div class="bx-field"><label>Menge (Packungen)</label>
-      <input type="number" name="menge" min="0" value="<?= (int)$a['menge'] ?>"></div>
-    <div class="bx-field"><label>VK je Packung (netto)</label>
-      <input type="text" name="vk_stueck" id="vkFeld" value="<?= h((float)$a['vk_stueck'] > 0 ? rtrim(rtrim(number_format((float)$a['vk_stueck'], 4, ',', ''), '0'), ',') : '') ?>" placeholder="z. B. 0,84"></div>
-    <div class="bx-field"><label>Verpackung (Behälter) <?= bx_hint('Primärverpackung des Produkts. Hier gesetzt überschreibt sie das Produkt (gilt für alle Aufträge). Anderes Glas → anderes Etikett → wirkt auf Produktion, Einkauf & PIB. Kunde sieht es ohne Bestätigung.') ?></label>
-      <select name="verpackung_id" class="rscombo">
-        <option value="">– keine –</option>
-        <?php foreach (all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name") as $vp): ?>
-          <option value="<?= (int)$vp['id'] ?>" <?= $glasId === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?></option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-    <div class="bx-field"><label>Stück/Kapseln je Packung <?= bx_hint('Wie viele Einheiten (z. B. Kapseln) in eine Packung kommen. Hier gesetzt wird DAUERHAFT am Produkt gespeichert – künftige Nachbestellungen übernehmen es, und daraus rechnen sich Glas/Etikett/Packungsbedarf. Bei alten Produkten (v3) ist das oft leer.') ?></label>
-      <input type="number" name="einheiten_pro_packung" min="0" value="<?= $einhProP > 0 ? (int)$einhProP : '' ?>" placeholder="z. B. 120"></div>
-    <?php if ($rezeptur && in_array($rezeptur['darreichungsform'] ?? '', ['kapsel','softgel'], true)): ?>
-    <div class="bx-field"><label>Kapselgröße <?= bx_hint('Gilt für die Rezeptur dieses Produkts (Standard für alle Aufträge). Wirkt auf Leerkapsel-Bedarf und Packungsrechnung.') ?></label>
-      <select name="kapselgroesse_id">
-        <option value="">– automatisch –</option>
-        <?php foreach (all("SELECT id, name FROM kapselgroesse ORDER BY fuellmenge_mg") as $kg): ?>
-          <option value="<?= (int)$kg['id'] ?>" <?= (int)($rezeptur['kapselgroesse_id'] ?? 0) === (int)$kg['id'] ? 'selected' : '' ?>><?= h($kg['name']) ?></option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-    <?php endif; ?>
-  </div>
-  <div class="muted" style="font-size:12px;margin-top:2px">Netto gesamt = Menge × VK je Packung – wird beim Speichern automatisch berechnet<span id="vkVorschau"></span>.</div>
-  </div>
-  <button class="btn btn-primary" type="submit" data-busy="Speichert…">Speichern</button>
-</form>
-
+<?php // Der Auftrag ist gesetzt: Menge/Preis/Verpackung/Kapselgröße werden hier NICHT mehr bearbeitet.
+      // Rezeptur -> Rezeptur-Modul, Flaschen/Verpackung/Kapsel -> Vor-Produktion (Links im Reiter „Details").
+      // Am Auftrag selbst sind nur noch Stornieren und Löschen möglich (Admin). ?>
 <?php if (has_role('admin') && (string)$a['status'] !== 'versendet'): ?>
 <div class="bx-panel" data-panel="details" style="border-color:#e6c4c0">
-  <h2 style="margin-top:0">Löschen &amp; zurück zur Anfrage</h2>
+  <h2 style="margin-top:0">Auftrag stornieren / löschen</h2>
+  <?php if ((string)$a['status'] !== 'storniert'): ?>
+  <p class="muted" style="margin-top:0">Stornieren setzt den Auftrag auf <strong>storniert</strong> und storniert eine offene Rechnung per Gutschrift. Menge und Preis bleiben zur Nachvollziehbarkeit erhalten.</p>
+  <form method="post" style="margin:0 0 16px" onsubmit="return confirm('Auftrag <?= h($a['nummer']) ?> stornieren? Eine offene Rechnung wird per Gutschrift storniert.');">
+    <input type="hidden" name="aktion" value="auftrag_stornieren">
+    <button class="btn btn-ghost btn-sm" type="submit" data-busy="Storniere…">Auftrag stornieren</button>
+  </form>
+  <?php endif; ?>
   <p class="muted" style="margin-top:0">Löscht diese Auftragsbestätigung samt Produktionsauftrag und (unbezahlter) Rechnung. Das zugehörige Angebot wird wieder <strong>offen</strong>, und Sie springen zurück zur Anfrage, um es anzupassen oder neu zu senden.</p>
   <form method="post" style="margin:0" onsubmit="return confirm('Auftragsbestätigung <?= h($a['nummer']) ?> löschen? Produktionsauftrag und unbezahlte Rechnung werden entfernt; das Angebot wird wieder offen.');">
     <input type="hidden" name="aktion" value="auftrag_zurueck">
@@ -1091,17 +1064,6 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
   </form>
 </div>
 <?php endif; ?>
-<script>
-(function(){
-  var m = document.querySelector('input[name="menge"]'), v = document.getElementById('vkFeld'), out = document.getElementById('vkVorschau');
-  if (!m || !v || !out) return;
-  function rechne(){
-    var mv = parseFloat((m.value||'').replace(',','.'))||0, vv = parseFloat((v.value||'').replace(/\./g,'').replace(',','.'))||0;
-    out.textContent = (mv>0 && vv>0) ? ' → ' + (mv*vv).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €' : '';
-  }
-  m.addEventListener('input', rechne); v.addEventListener('input', rechne); rechne();
-})();
-</script>
 <script>
 (function(){
   // Reiter wie auf der Kundenseite: oben Kennzahlen, darunter Tabs. Panels sind per data-panel getaggt;
