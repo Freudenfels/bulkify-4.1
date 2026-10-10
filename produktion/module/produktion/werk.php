@@ -2,6 +2,16 @@
 // Mitarbeiter-Vollbild-App (Kiosk/Tablet) – rein schrittweise Produktion. Eigener PIN-Login
 // (benutzer.pin_hash, vom Admin im Dashboard gesetzt). Kein Team-Login nötig. Nutzt dieselben
 // Schritt-/Material-Funktionen wie ?p=run, aber großflächig/touch und ohne Sidebar/Abkürzungen.
+// Mehrsprachig (DE/EN/UK) – der Mitarbeiter wählt die Sprache selbst (siehe core/werk_i18n.php).
+
+require_once __DIR__ . '/../../core/werk_i18n.php';
+
+// Sprache umschalten (GET-Link ?setlang=) – setzen und ohne Parameter zurück.
+$id = (int)($_GET['id'] ?? 0);
+if (isset($_GET['setlang'])) { werk_lang_setzen((string)$_GET['setlang']); weiter('?p=werk' . ($id > 0 ? '&id=' . $id : '')); }
+
+$lang = werk_lang();
+$T    = werk_texte($lang);
 
 $werkUid  = (int)($_SESSION['werk_uid'] ?? 0);
 $werkName = '';
@@ -13,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'werk_login') {
         $u = erp_benutzer_per_pin((string)($_POST['pin'] ?? ''));
         if ($u) { $_SESSION['werk_uid'] = (int)$u['id']; weiter('?p=werk'); }
-        $_SESSION['werk_fehler'] = 'PIN nicht erkannt.'; weiter('?p=werk');
+        $_SESSION['werk_fehler'] = $T['pin_wrong']; weiter('?p=werk');
     }
     if ($aktion === 'werk_logout') { unset($_SESSION['werk_uid']); weiter('?p=werk'); }
     if ($werkUid && $aktion === 'werk_erledigt') {
@@ -30,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $have = array_flip(array_filter(array_map('intval', explode(',', (string)($_POST['scanned'] ?? '')))));
                 $offen = 0; foreach (array_keys($need) as $cid) if (!isset($have[$cid])) $offen++;
                 if ($offen > 0) {
-                    $_SESSION['werk_flash'] = 'Bitte zuerst alle Chargen scannen (' . $offen . ' noch offen).';
+                    $_SESSION['werk_flash'] = sprintf($T['fl_scan_first'], $offen);
                     $_SESSION['werk_flash_ok'] = false;
                     weiter('?p=werk&id=' . $paId);
                 }
@@ -47,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 erp_mischer_unterchargen_anlegen($paId, $cap, $wn);
             }
         }
-        $_SESSION['werk_flash']    = $r['ok'] ? (($r['fertig'] ?? false) ? 'Fertig – Produktion abgeschlossen, Fertigware eingebucht.' : 'Schritt erledigt.') : ($r['msg'] ?: 'Schritt konnte nicht abgeschlossen werden.');
+        $_SESSION['werk_flash']    = $r['ok'] ? (($r['fertig'] ?? false) ? $T['fl_finished'] : $T['fl_step_done']) : ($r['msg'] ?: $T['fl_step_fail']);
         $_SESSION['werk_flash_ok'] = !empty($r['ok']);
         weiter('?p=werk&id=' . $paId . (!empty($r['fertig']) ? '&fertig=1' : ''));
     }
@@ -59,14 +69,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $g[$cid] = (float) str_replace(',', '.', (string)$val);
         }
         $n = erp_rohstoff_rueckgabe_speichern($paId, $g, $werkName ?: 'Mitarbeiter');
-        $_SESSION['werk_flash'] = 'Rohstoff-Rückgabe gespeichert' . ($n > 0 ? ' (' . $n . ')' : '') . '.';
+        $_SESSION['werk_flash'] = $T['fl_return_saved'] . ($n > 0 ? ' (' . $n . ')' : '') . '.';
         $_SESSION['werk_flash_ok'] = true;
         weiter('?p=werk&id=' . $paId);
     }
     if ($werkUid && $aktion === 'werk_probe') {
         $paId = (int)($_POST['pa_id'] ?? 0);
         erp_rohstoff_probe_ziehen($paId, (int)($_POST['charge_id'] ?? 0), (int)($_POST['item_id'] ?? 0), $werkName ?: 'Mitarbeiter');
-        $_SESSION['werk_flash'] = 'Probe erfasst.'; $_SESSION['werk_flash_ok'] = true;
+        $_SESSION['werk_flash'] = $T['fl_sample_ok']; $_SESSION['werk_flash_ok'] = true;
         weiter('?p=werk&id=' . $paId);
     }
     if ($werkUid && $aktion === 'werk_blink') {
@@ -81,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['ok' => !empty($r['ok']), 'meldung' => (string)($r['meldung'] ?? '')]);
             exit;
         }
-        $_SESSION['werk_flash'] = ($r['ok'] ? 'Blinker im Lager: ' : 'Blinker: ') . ($r['meldung'] ?: ($r['ok'] ? ($modus === 'aus' ? 'aus.' : 'leuchtet.') : 'nicht ausgelöst.'));
+        $_SESSION['werk_flash'] = !empty($r['ok']) ? ($modus === 'aus' ? $T['fl_blink_off'] : $T['fl_blink_on']) : $T['fl_blink_fail'];
         $_SESSION['werk_flash_ok'] = !empty($r['ok']);
         weiter('?p=werk&id=' . (int)($_POST['pa_id'] ?? 0));
     }
@@ -92,20 +102,18 @@ $flash   = $_SESSION['werk_flash'] ?? ''; $flashOk = !empty($_SESSION['werk_flas
 $fehler  = $_SESSION['werk_fehler'] ?? '';
 unset($_SESSION['werk_flash'], $_SESSION['werk_flash_ok'], $_SESSION['werk_fehler']);
 
-$id = (int)($_GET['id'] ?? 0);
-
 // Pick-to-Light: großer Touch-Button, der den Blinker der FEFO-Charge im Lager leuchten lässt (AJAX, ohne Reload).
-$blinkBtn = function($cid, string $extra = '') {
+$blinkBtn = function($cid, string $extra = '') use ($T) {
     $cid = (int)$cid;
-    if ($cid <= 0) return '<span class="muted" style="font-size:14px">kein Blinker</span>';
+    if ($cid <= 0) return '<span class="muted" style="font-size:14px">' . h($T['no_blinker']) . '</span>';
     return '<button type="button" class="werk-blink btn btn-ghost" data-cid="' . $cid . '"'
-         . ' style="min-height:48px;padding:10px 18px;font-size:16px;' . $extra . '">Platz zeigen</button>';
+         . ' style="min-height:48px;padding:10px 18px;font-size:16px;' . $extra . '">' . h($T['show_location']) . '</button>';
 };
 
 // ---- Ausgabe: eigenes Vollbild-Dokument (keine Sidebar) ----
 header('Content-Type: text/html; charset=utf-8');
 ?><!doctype html>
-<html lang="de"><head>
+<html lang="<?= h($lang) ?>"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#10210f">
@@ -123,7 +131,7 @@ header('Content-Type: text/html; charset=utf-8');
   html,body{margin:0;height:100%}
   body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:18px;-webkit-text-size-adjust:100%}
   .wrap{max-width:1100px;margin:0 auto;padding:18px 18px 60px}
-  .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 4px;margin-bottom:16px;position:sticky;top:0;z-index:30;background:var(--bg);border-bottom:1px solid var(--line)}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 4px;margin-bottom:16px;position:sticky;top:0;z-index:30;background:var(--bg);border-bottom:1px solid var(--line);flex-wrap:wrap}
   .brand{font-weight:800;font-size:22px;letter-spacing:.3px}
   .brand b{color:var(--lime)}
   .who{color:var(--muted);font-size:15px}
@@ -138,8 +146,12 @@ header('Content-Type: text/html; charset=utf-8');
   .flash{border-radius:14px;padding:14px 18px;margin-bottom:16px;font-weight:600}
   .flash.ok{background:rgba(29,158,117,.18);border:1px solid var(--gruen)}
   .flash.err{background:rgba(228,88,78,.16);border:1px solid var(--err)}
+  /* Sprach-Umschalter */
+  .langsw{display:inline-flex;gap:4px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:3px}
+  .langbtn{min-height:40px;display:inline-flex;align-items:center;padding:6px 14px;border-radius:9px;color:var(--muted);text-decoration:none;font-size:15px;font-weight:700}
+  .langbtn.on{background:var(--gruen);color:#06130d}
   /* Login */
-  .login{max-width:420px;margin:6vh auto 0;text-align:center}
+  .login{max-width:420px;margin:4vh auto 0;text-align:center}
   .pindisp{font-size:42px;letter-spacing:14px;min-height:56px;margin:14px 0 18px;font-weight:800}
   .keys{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
   .key{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:16px;font-size:30px;font-weight:700;padding:20px 0;cursor:pointer;user-select:none}
@@ -171,10 +183,13 @@ header('Content-Type: text/html; charset=utf-8');
 </head><body><div class="wrap">
 
 <?php if (!$werkUid): // ===================== PIN-LOGIN ===================== ?>
-  <div class="topbar"><div class="brand"><img src="/assets/bulkify-logo-white.png" alt="Produktion" style="height:30px;vertical-align:middle;display:inline-block"></div></div>
+  <div class="topbar">
+    <div class="brand"><img src="/assets/bulkify-logo-white.png" alt="Produktion" style="height:30px;vertical-align:middle;display:inline-block"></div>
+    <?= werk_lang_switcher($lang, $id) ?>
+  </div>
   <div class="login">
-    <div style="font-size:22px;margin-top:10px">PIN eingeben</div>
-    <div class="muted" style="font-size:15px">Deinen Tablet-PIN hat dir der Produktionsleiter gegeben.</div>
+    <div style="font-size:22px;margin-top:10px"><?= h($T['pin_enter']) ?></div>
+    <div class="muted" style="font-size:15px"><?= h($T['pin_hint']) ?></div>
     <?php if ($fehler): ?><div class="flash err" style="margin-top:16px"><?= h($fehler) ?></div><?php endif; ?>
     <form method="post" id="pinform">
       <input type="hidden" name="aktion" value="werk_login">
@@ -188,8 +203,8 @@ header('Content-Type: text/html; charset=utf-8');
       </div>
     </form>
     <div style="margin-top:26px">
-      <button id="pwaInstall" type="button" class="btn btn-ghost" style="display:none">Auf dem Tablet installieren</button>
-      <div class="muted" style="font-size:13px;margin-top:12px">Für Vollbild ohne Browser: die App über das Browser-Menü <strong>„Zur Startseite / Zum Startbildschirm hinzufügen"</strong> installieren.</div>
+      <button id="pwaInstall" type="button" class="btn btn-ghost" style="display:none"><?= h($T['install']) ?></button>
+      <div class="muted" style="font-size:13px;margin-top:12px"><?= h($T['install_hint']) ?></div>
     </div>
   </div>
   <script>
@@ -200,7 +215,7 @@ header('Content-Type: text/html; charset=utf-8');
       var k=b.getAttribute('data-k');
       if(k==='del'){ pin=pin.slice(0,-1); upd(); return; }
       if(k==='ok'){ if(pin.length>=4){ hid.value=pin; f.submit(); } return; }
-      if(pin.length<8){ pin+=k; upd(); if(pin.length>=4){ /* Auto-Absenden bei 4+ erst mit OK */ } }
+      if(pin.length<8){ pin+=k; upd(); }
     });});
     document.addEventListener('keydown',function(e){ if(e.key>='0'&&e.key<='9'&&pin.length<8){pin+=e.key;upd();} else if(e.key==='Backspace'){pin=pin.slice(0,-1);upd();} else if(e.key==='Enter'&&pin.length>=4){hid.value=pin;f.submit();} });
   })();
@@ -222,25 +237,26 @@ header('Content-Type: text/html; charset=utf-8');
   ?>
   <div class="topbar">
     <div class="brand"><img src="/assets/bulkify-logo-white.png" alt="Produktion" style="height:30px;vertical-align:middle;display:inline-block"></div>
-    <div style="display:flex;align-items:center;gap:14px">
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <?= werk_lang_switcher($lang, 0) ?>
       <span class="who"><?= h($werkName) ?></span>
-      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_logout"><button class="btn btn-ghost" style="min-height:48px;padding:10px 18px;font-size:16px" type="submit">Abmelden</button></form>
+      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_logout"><button class="btn btn-ghost" style="min-height:48px;padding:10px 18px;font-size:16px" type="submit"><?= h($T['logout']) ?></button></form>
     </div>
   </div>
   <?php if ($flash): ?><div class="flash <?= $flashOk ? 'ok' : 'err' ?>"><?= h($flash) ?></div><?php endif; ?>
-  <h1 style="font-size:24px;margin:0 0 14px">Was möchtest du produzieren?</h1>
+  <h1 style="font-size:24px;margin:0 0 14px"><?= h($T['what_produce']) ?></h1>
   <?php if (!$jobs): ?>
-    <div class="panel muted">Aktuell ist kein Auftrag produzierbar oder in Produktion. Sobald Material da und freigegeben ist, erscheint er hier.</div>
+    <div class="panel muted"><?= h($T['no_jobs']) ?></div>
   <?php else: ?>
   <div class="cards">
     <?php foreach ($jobs as $pa): $g = (int)$pa['schritte_gesamt']; $f = (int)$pa['schritte_fertig']; $proz = $g > 0 ? round($f * 100 / $g) : 0; ?>
     <a class="card" href="?p=werk&id=<?= (int)$pa['id'] ?>">
       <div class="nr"><?= h((string)$pa['nummer']) ?></div>
       <div class="prod"><?= h((string)($pa['produkt_name'] ?: '–')) ?></div>
-      <div class="meta"><?= menge_txt($pa['menge']) ?> Packungen<?= !empty($pa['kunde']) ? ' · ' . h((string)$pa['kunde']) : '' ?></div>
-      <span class="badge <?= !empty($pa['_lauf']) ? 'b-lauf' : 'b-bereit' ?>"><?= !empty($pa['_lauf']) ? 'in Produktion' : 'produzierbar' ?></span>
+      <div class="meta"><?= menge_txt($pa['menge']) ?> <?= h($T['packages']) ?><?= !empty($pa['kunde']) ? ' · ' . h((string)$pa['kunde']) : '' ?></div>
+      <span class="badge <?= !empty($pa['_lauf']) ? 'b-lauf' : 'b-bereit' ?>"><?= !empty($pa['_lauf']) ? h($T['in_production']) : h($T['producible']) ?></span>
       <div class="prog"><div style="width:<?= (int)$proz ?>%"></div></div>
-      <div class="meta" style="margin-top:6px"><?= $g > 0 ? ('Schritt ' . $f . ' / ' . $g) : 'bereit' ?></div>
+      <div class="meta" style="margin-top:6px"><?= $g > 0 ? h($T['step']) . ' ' . $f . ' / ' . $g : h($T['ready']) ?></div>
     </a>
     <?php endforeach; ?>
   </div>
@@ -249,7 +265,7 @@ header('Content-Type: text/html; charset=utf-8');
 <?php else: // ===================== SCHRITT-ANSICHT ===================== ?>
   <?php
     $pa = erp_pa($id);
-    if (!$pa) { echo '<div class="panel">Auftrag nicht gefunden. <a class="back" href="?p=werk">Zurück</a></div></div></body></html>'; return; }
+    if (!$pa) { echo '<div class="panel">' . h($T['order_not_found']) . ' <a class="back" href="?p=werk">' . h($T['back']) . '</a></div></div></body></html>'; return; }
     $schritte = erp_pa_schritte($id);
     $total = count($schritte);
     $fertigCnt = 0; foreach ($schritte as $s) if ((int)$s['erledigt'] === 1) $fertigCnt++;
@@ -265,52 +281,52 @@ header('Content-Type: text/html; charset=utf-8');
     $probenPflicht = false; foreach ($probenListe as $pr) if (empty($pr['hat_probe'])) { $probenPflicht = true; break; }
   ?>
   <div class="topbar">
-    <a class="back" href="?p=werk">&larr; Alle Aufträge</a>
-    <div style="display:flex;align-items:center;gap:14px"><span class="who"><?= h($werkName) ?></span>
-      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_logout"><button class="btn btn-ghost" style="min-height:44px;padding:8px 16px;font-size:15px" type="submit">Abmelden</button></form>
+    <a class="back" href="?p=werk">&larr; <?= h($T['back_all']) ?></a>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><?= werk_lang_switcher($lang, $id) ?><span class="who"><?= h($werkName) ?></span>
+      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_logout"><button class="btn btn-ghost" style="min-height:44px;padding:8px 16px;font-size:15px" type="submit"><?= h($T['logout']) ?></button></form>
     </div>
   </div>
   <?php if ($flash): ?><div class="flash <?= $flashOk ? 'ok' : 'err' ?>"><?= h($flash) ?></div><?php endif; ?>
 
   <div class="panel" style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
     <div><span style="font-size:24px;font-weight:800"><?= h((string)$pa['nummer']) ?></span> · <?= h((string)($pa['produkt_name'] ?? '–')) ?></div>
-    <div class="count"><?= menge_txt($pa['menge']) ?> Packungen · Schritt <?= min($fertigCnt + 1, $total) ?> / <?= $total ?></div>
+    <div class="count"><?= menge_txt($pa['menge']) ?> <?= h($T['packages']) ?> · <?= h($T['step']) ?> <?= min($fertigCnt + 1, $total) ?> / <?= $total ?></div>
   </div>
 
   <?php if ($probenPflicht): ?>
     <div class="panel" style="border-color:var(--lime)">
-      <div class="step-sub">Vor dem Mischen</div>
-      <div class="step-h">Rohstoff-Probe ziehen</div>
-      <div class="muted" style="font-size:17px;margin-bottom:6px">Von jeder Rohstoff-Charge eine <strong style="color:var(--text)">Chargenprobe</strong> (Rückstellmuster) ziehen und bestätigen. Erst danach geht es ans Mischen. (Jede Produktion braucht frische Proben – auch wenn die Charge zwischendurch wieder im Lager war.)</div>
+      <div class="step-sub"><?= h($T['before_mixing']) ?></div>
+      <div class="step-h"><?= h($T['draw_sample_h']) ?></div>
+      <div class="muted" style="font-size:17px;margin-bottom:6px"><?= $T['draw_sample_text'] ?></div>
       <table class="mat">
-        <thead><tr><th>Rohstoff</th><th>Charge</th><th class="num">Probe</th></tr></thead>
+        <thead><tr><th><?= h($T['th_rawmaterial']) ?></th><th><?= h($T['th_charge']) ?></th><th class="num"><?= h($T['th_sample']) ?></th></tr></thead>
         <tbody>
           <?php foreach ($probenListe as $pr): ?>
           <tr>
             <td><?= h((string)$pr['name']) ?></td>
             <td class="muted"><?= h((string)($pr['charge_nr'] ?: '–')) ?><?php if (!empty($pr['charge_id'])): ?><div style="margin-top:6px"><?= $blinkBtn($pr['charge_id']) ?></div><?php endif; ?></td>
             <td class="num">
-              <?php if (!empty($pr['hat_probe'])): ?><span style="color:var(--gruen);font-weight:700">✓ erfasst</span>
+              <?php if (!empty($pr['hat_probe'])): ?><span style="color:var(--gruen);font-weight:700"><?= h($T['sample_recorded_badge']) ?></span>
               <?php else: ?>
-                <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_probe"><input type="hidden" name="pa_id" value="<?= (int)$id ?>"><input type="hidden" name="charge_id" value="<?= (int)$pr['charge_id'] ?>"><input type="hidden" name="item_id" value="<?= (int)$pr['item_id'] ?>"><button class="btn btn-ghost" type="submit" style="min-height:48px">Probe gezogen</button></form>
+                <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_probe"><input type="hidden" name="pa_id" value="<?= (int)$id ?>"><input type="hidden" name="charge_id" value="<?= (int)$pr['charge_id'] ?>"><input type="hidden" name="item_id" value="<?= (int)$pr['item_id'] ?>"><button class="btn btn-ghost" type="submit" style="min-height:48px"><?= h($T['sample_taken_btn']) ?></button></form>
               <?php endif; ?>
             </td>
           </tr>
           <?php endforeach; ?>
         </tbody>
       </table>
-      <div class="muted" style="font-size:14px;margin-top:12px">Sobald alle Proben erfasst sind, erscheint der Mischen-Schritt automatisch.</div>
+      <div class="muted" style="font-size:14px;margin-top:12px"><?= h($T['samples_hint']) ?></div>
     </div>
   <?php elseif ($rueckOffen): ?>
     <div class="panel" style="border-color:var(--lime)">
-      <div class="step-sub">Nach dem Mischen</div>
-      <div class="step-h">Rohstoff zurück ins Lager</div>
-      <div class="muted" style="font-size:17px;margin-bottom:6px">Bring jeden Rohstoff zurück an seinen Platz (gleicher Blinker) und trag das <strong style="color:var(--text)">zurückgelegte Gewicht</strong> ein. Kleine Reste (unter ~500 g) kannst du verwerfen – dann 0 eintragen.</div>
+      <div class="step-sub"><?= h($T['after_mixing']) ?></div>
+      <div class="step-h"><?= h($T['return_h']) ?></div>
+      <div class="muted" style="font-size:17px;margin-bottom:6px"><?= $T['return_text'] ?></div>
       <form method="post">
         <input type="hidden" name="aktion" value="werk_rueckgabe">
         <input type="hidden" name="pa_id" value="<?= (int)$id ?>">
         <table class="mat">
-          <thead><tr><th>Rohstoff</th><th>Charge</th><th class="num">zurückgelegt</th></tr></thead>
+          <thead><tr><th><?= h($T['th_rawmaterial']) ?></th><th><?= h($T['th_charge']) ?></th><th class="num"><?= h($T['th_returned']) ?></th></tr></thead>
           <tbody>
             <?php foreach ($rueckListe as $r): $einh = (string)$r['einheit']; ?>
             <tr>
@@ -321,17 +337,17 @@ header('Content-Type: text/html; charset=utf-8');
             <?php endforeach; ?>
           </tbody>
         </table>
-        <div style="margin-top:20px"><button class="btn btn-lime btn-lg" type="submit">Rückgabe speichern &amp; weiter</button></div>
+        <div style="margin-top:20px"><button class="btn btn-lime btn-lg" type="submit"><?= h($T['return_save']) ?></button></div>
       </form>
     </div>
   <?php elseif ($alleFertig || !$cur): ?>
     <div class="panel" style="text-align:center;border-color:var(--gruen)">
-      <div style="font-size:30px;font-weight:800;margin-bottom:8px">Fertig ✓</div>
-      <div class="muted" style="margin-bottom:18px">Alle Schritte erledigt – die Produktion ist abgeschlossen.</div>
-      <a class="btn btn-primary btn-lg" href="?p=werk" style="max-width:360px;margin:0 auto">Zurück zu den Aufträgen</a>
+      <div style="font-size:30px;font-weight:800;margin-bottom:8px"><?= h($T['done_h']) ?></div>
+      <div class="muted" style="margin-bottom:18px"><?= h($T['done_text']) ?></div>
+      <a class="btn btn-primary btn-lg" href="?p=werk" style="max-width:360px;margin:0 auto"><?= h($T['back_to_orders']) ?></a>
     </div>
   <?php else:
-    $anl = station_anleitung_text((string)$cur['station']);
+    $anl = werk_station_anleitung((string)$cur['station'], $lang);
     $mat = erp_schritt_material($id, (string)$cur['station']);
     $materialFehlt = false;
     foreach (($mat['zeilen'] ?? []) as $z)
@@ -347,27 +363,27 @@ header('Content-Type: text/html; charset=utf-8');
         if (($z['pflicht'] ?? true) && !empty($z['charge_id'])) { $scanAktiv = true; break; }
   ?>
   <div class="panel" style="border-color:var(--gruen)">
-    <div class="step-sub">Jetzt dran · Schritt <?= $fertigCnt + 1 ?> von <?= $total ?></div>
-    <div class="step-h"><?= h((string)$cur['station']) ?></div>
+    <div class="step-sub"><?= h($T['now_due']) ?> · <?= h($T['step']) ?> <?= $fertigCnt + 1 ?> <?= h($T['of']) ?> <?= $total ?></div>
+    <div class="step-h"><?= h(werk_station_label((string)$cur['station'], $lang)) ?></div>
     <?php if ($anl !== ''): ?><div class="muted" style="font-size:18px;margin-bottom:6px"><?= h($anl) ?></div><?php endif; ?>
 
     <?php if ($istMischen && $plan && !empty($plan['ok'])): ?>
     <div class="panel" style="background:var(--panel2);border-color:var(--line);margin-top:16px">
-      <div class="muted">Gesamt anzumischen</div>
-      <div style="font-size:24px;font-weight:800"><?= $nz($plan['total_kg'] ?? 0) ?> kg <span class="muted" style="font-size:16px;font-weight:400">(<?= number_format((int)($plan['einheiten'] ?? 0), 0, ',', '.') ?> Einheiten)</span></div>
+      <div class="muted"><?= h($T['mix_total']) ?></div>
+      <div style="font-size:24px;font-weight:800"><?= $nz($plan['total_kg'] ?? 0) ?> kg <span class="muted" style="font-size:16px;font-weight:400">(<?= number_format((int)($plan['einheiten'] ?? 0), 0, ',', '.') ?> <?= h($T['units']) ?>)</span></div>
       <form method="get" style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
         <input type="hidden" name="p" value="werk"><input type="hidden" name="id" value="<?= (int)$id ?>">
-        <div><div class="muted" style="font-size:14px;margin-bottom:4px">kg je Mischbehälter</div>
-          <input type="text" inputmode="decimal" name="cap" value="<?= h($cap > 0 ? $nz($cap) : '') ?>" placeholder="z. B. 10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
-        <button class="btn btn-ghost" type="submit" style="min-height:52px">Behälter berechnen</button>
+        <div><div class="muted" style="font-size:14px;margin-bottom:4px"><?= h($T['kg_per_container']) ?></div>
+          <input type="text" inputmode="decimal" name="cap" value="<?= h($cap > 0 ? $nz($cap) : '') ?>" placeholder="10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
+        <button class="btn btn-ghost" type="submit" style="min-height:52px"><?= h($T['calc_containers']) ?></button>
       </form>
       <?php if (!empty($plan['gebinde'])): ?>
-      <div class="muted" style="margin:16px 0 10px">Ergibt <strong style="color:var(--text)"><?= (int)$plan['anzahl'] ?> Mischbehälter</strong> – ein Etikett je Behälter. Angefangenen Behälter komplett durchziehen (FIFO).</div>
+      <div class="muted" style="margin:16px 0 10px"><?= sprintf($T['mix_result'], (int)$plan['anzahl']) ?></div>
       <?php foreach ($plan['gebinde'] as $g): ?>
       <div style="border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">
-          <div style="font-size:21px;font-weight:800">Mischbehälter <?= (int)$g['nr'] ?> <span class="muted" style="font-size:15px;font-weight:400">/ <?= (int)$plan['anzahl'] ?></span></div>
-          <div style="font-size:18px;font-weight:700"><?= $nz($g['kg']) ?> kg gesamt</div>
+          <div style="font-size:21px;font-weight:800"><?= h($T['container']) ?> <?= (int)$g['nr'] ?> <span class="muted" style="font-size:15px;font-weight:400">/ <?= (int)$plan['anzahl'] ?></span></div>
+          <div style="font-size:18px;font-weight:700"><?= $nz($g['kg']) ?> kg <?= h($T['total_word']) ?></div>
         </div>
         <table class="mat" style="margin-top:8px"><tbody>
           <?php foreach ($g['zutaten'] as $z): ?>
@@ -377,24 +393,24 @@ header('Content-Type: text/html; charset=utf-8');
       </div>
       <?php endforeach; ?>
       <?php else: ?>
-      <div class="muted" style="margin-top:10px">Trage „kg je Mischbehälter" ein (z. B. die Behältergröße) – dann wird jeder Behälter einzeln mit den Rohstoff-Mengen angezeigt.</div>
+      <div class="muted" style="margin-top:10px"><?= h($T['mix_empty_hint']) ?></div>
       <?php endif; ?>
     </div>
     <?php endif; ?>
 
     <?php if (!empty($mat['zeilen'])): ?>
-    <div class="muted" style="margin-top:14px">Aus dem Lager holen<?php if (($mat['soll_menge'] ?? null) !== null): ?> · benötigt <strong style="color:var(--text)"><?= menge_txt($mat['soll_menge']) ?> <?= h((string)($mat['soll_einheit'] ?? '')) ?></strong><?php endif; ?>:</div>
+    <div class="muted" style="margin-top:14px"><?= h($T['get_from_stock']) ?><?php if (($mat['soll_menge'] ?? null) !== null): ?> · <?= h($T['needed']) ?> <strong style="color:var(--text)"><?= menge_txt($mat['soll_menge']) ?> <?= h((string)($mat['soll_einheit'] ?? '')) ?></strong><?php endif; ?>:</div>
     <table class="mat">
-      <thead><tr><th>Material</th><th class="num">Menge</th><th class="num">Bestand</th><th class="num">Lagerplatz</th></tr></thead>
+      <thead><tr><th><?= h($T['th_material']) ?></th><th class="num"><?= h($T['th_amount']) ?></th><th class="num"><?= h($T['th_stock']) ?></th><th class="num"><?= h($T['th_location']) ?></th></tr></thead>
       <tbody>
         <?php foreach ($mat['zeilen'] as $z): $pflicht = $z['pflicht'] ?? true;
               $knapp = $pflicht && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']; ?>
         <tr>
-          <td><?= h((string)$z['name']) ?><?php if (!empty($z['detail'])): ?> <span class="muted" style="font-size:14px">· <?= h((string)$z['detail']) ?><?= $pflicht ? '' : ' (zur Info)' ?></span><?php endif; ?>
+          <td><?= h((string)$z['name']) ?><?php if (!empty($z['detail'])): ?> <span class="muted" style="font-size:14px">· <?= h((string)$z['detail']) ?><?= $pflicht ? '' : ' ' . h($T['info_note']) ?></span><?php endif; ?>
               <?php if (!empty($z['charge_id']) && ($pflicht || !empty($z['charge_nr']))): ?>
               <div class="muted" style="font-size:14px;margin-top:3px">
-                <?php if (!empty($z['charge_nr'])): ?>Charge <strong style="color:var(--text)"><?= h((string)$z['charge_nr']) ?></strong> <span style="font-size:13px">(FEFO)</span><?php endif; ?>
-                <?php if ($scanAktiv && $pflicht): ?><span class="scanstat" data-cid="<?= (int)$z['charge_id'] ?>" data-cnr="<?= h(strtoupper((string)($z['charge_nr'] ?? ''))) ?>" style="display:inline-block;margin-left:8px;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:700;background:var(--panel2);border:1px solid var(--line);color:var(--muted)">zu scannen</span><?php endif; ?>
+                <?php if (!empty($z['charge_nr'])): ?><?= h($T['th_charge']) ?> <strong style="color:var(--text)"><?= h((string)$z['charge_nr']) ?></strong> <span style="font-size:13px">(FEFO)</span><?php endif; ?>
+                <?php if ($scanAktiv && $pflicht): ?><span class="scanstat" data-cid="<?= (int)$z['charge_id'] ?>" data-cnr="<?= h(strtoupper((string)($z['charge_nr'] ?? ''))) ?>" style="display:inline-block;margin-left:8px;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:700;background:var(--panel2);border:1px solid var(--line);color:var(--muted)"><?= h($T['to_scan']) ?></span><?php endif; ?>
               </div>
               <?php endif; ?></td>
           <td class="num"><?= menge_txt($z['menge']) ?> <?= h((string)$z['einheit']) ?></td>
@@ -408,11 +424,11 @@ header('Content-Type: text/html; charset=utf-8');
 
     <?php if ($scanAktiv && !$materialFehlt): ?>
     <div class="panel" style="margin-top:18px;background:var(--panel2);border-color:var(--line)">
-      <div style="font-weight:700;font-size:18px;margin-bottom:4px">Chargen bestätigen – jede Charge scannen</div>
-      <div class="muted" style="font-size:14px;margin-bottom:12px">QR auf dem Charge-Etikett mit der Kamera scannen, oder mit dem Handscanner ins Feld scannen. <span id="scancount" style="color:var(--text);font-weight:600"></span></div>
+      <div style="font-weight:700;font-size:18px;margin-bottom:4px"><?= h($T['confirm_batches_h']) ?></div>
+      <div class="muted" style="font-size:14px;margin-bottom:12px"><?= h($T['scan_help']) ?> <span id="scancount" style="color:var(--text);font-weight:600"></span></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <button type="button" id="camstart" class="btn btn-ghost" style="min-height:52px">Mit Kamera scannen</button>
-        <input type="text" id="scaninput" autocomplete="off" autocapitalize="characters" placeholder="oder Code hier scannen" style="flex:1;min-width:180px;font-size:18px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text)">
+        <button type="button" id="camstart" class="btn btn-ghost" style="min-height:52px"><?= h($T['scan_with_cam']) ?></button>
+        <input type="text" id="scaninput" autocomplete="off" autocapitalize="characters" placeholder="<?= h($T['scan_placeholder']) ?>" style="flex:1;min-width:180px;font-size:18px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text)">
       </div>
       <div id="scanmsg" style="font-size:15px;margin-top:10px;min-height:20px"></div>
       <video id="camview" playsinline muted style="display:none;width:100%;max-width:440px;border-radius:12px;margin-top:12px;background:#000"></video>
@@ -421,29 +437,29 @@ header('Content-Type: text/html; charset=utf-8');
 
     <div style="margin-top:22px">
       <?php if ($materialFehlt): ?>
-        <div class="flash err" style="margin-bottom:14px">Noch nicht möglich: Das benötigte Material ist nicht vollständig im Lager. Bitte erst bereitstellen bzw. im Wareneingang buchen.</div>
-        <button class="btn btn-primary btn-lg" disabled><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
+        <div class="flash err" style="margin-bottom:14px"><?= h($T['material_missing']) ?></div>
+        <button class="btn btn-primary btn-lg" disabled><?= $isGate ? h($T['release']) : h($T['done_btn']) ?></button>
       <?php else: ?>
-        <form method="post" onsubmit="return confirm('Schritt „<?= h((string)$cur['station']) ?>“ jetzt abschließen?');">
+        <form method="post" onsubmit="return confirm('<?= h($T['confirm_finish']) ?>');">
           <input type="hidden" name="aktion" value="werk_erledigt">
           <input type="hidden" name="schritt_id" value="<?= (int)$cur['id'] ?>">
           <input type="hidden" name="pa_id" value="<?= (int)$id ?>">
           <?php if ($istMischen && $cap > 0): ?><input type="hidden" name="cap" value="<?= h($nz($cap)) ?>"><?php endif; ?>
           <input type="hidden" name="scanned" id="scannedfield" value="">
-          <button class="btn btn-lime btn-lg" type="submit" id="erledigtbtn"<?= $scanAktiv ? ' disabled data-scan-gate="1"' : '' ?>><?= $isGate ? 'Freigeben' : 'Erledigt – nächster Schritt' ?></button>
+          <button class="btn btn-lime btn-lg" type="submit" id="erledigtbtn"<?= $scanAktiv ? ' disabled data-scan-gate="1"' : '' ?>><?= $isGate ? h($T['release']) : h($T['done_next']) ?></button>
         </form>
-        <?php if ($scanAktiv): ?><div class="muted" id="gatehint" style="font-size:14px;margin-top:8px">Bitte erst alle Chargen scannen – dann wird „Erledigt" freigegeben.</div><?php endif; ?>
+        <?php if ($scanAktiv): ?><div class="muted" id="gatehint" style="font-size:14px;margin-top:8px"><?= h($T['scan_gate_hint']) ?></div><?php endif; ?>
       <?php endif; ?>
     </div>
   </div>
 
   <?php // Ablauf-Überblick (klein) – welche Schritte schon erledigt sind. ?>
   <div class="panel">
-    <div class="muted" style="margin-bottom:8px">Ablauf</div>
+    <div class="muted" style="margin-bottom:8px"><?= h($T['flow']) ?></div>
     <?php foreach ($schritte as $i => $s): $done = (int)$s['erledigt'] === 1; $isCur = $cur && (int)$s['id'] === (int)$cur['id']; ?>
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;<?= $isCur ? 'font-weight:700' : '' ?>">
         <span style="width:24px;text-align:center;color:<?= $done ? 'var(--gruen)' : ($isCur ? 'var(--lime)' : 'var(--muted)') ?>"><?= $done ? '✓' : ($i + 1) ?></span>
-        <span style="<?= !$done && !$isCur ? 'color:var(--muted)' : '' ?>"><?= h((string)$s['station']) ?></span>
+        <span style="<?= !$done && !$isCur ? 'color:var(--muted)' : '' ?>"><?= h(werk_station_label((string)$s['station'], $lang)) ?></span>
       </div>
     <?php endforeach; ?>
   </div>
@@ -452,6 +468,7 @@ header('Content-Type: text/html; charset=utf-8');
 <?php endif; ?>
 
 <script>
+var WT = <?= json_encode(werk_js_texte($T), JSON_UNESCAPED_UNICODE) ?>;
 // PWA: Service Worker registrieren (Installation am Tablet). Installieren-Button auf dem Login,
 // sobald der Browser die Installation anbietet (Android/Chrome). iOS: ueber Teilen -> Zum Startbildschirm.
 if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ navigator.serviceWorker.register('/produktion/werk-sw.js').catch(function(){}); }); }
@@ -475,7 +492,7 @@ if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ 
   }
   function gate(){
     var ok=0; stats.forEach(function(x){ if(x.getAttribute('data-ok')==='1') ok++; });
-    var c=document.getElementById('scancount'); if(c) c.textContent = ok+' von '+stats.length+' bestätigt';
+    var c=document.getElementById('scancount'); if(c) c.textContent = WT.js_confirmed_tpl.replace('%A%',ok).replace('%B%',stats.length);
     var f=document.getElementById('scannedfield');
     if(f){ var ids=[]; stats.forEach(function(x){ if(x.getAttribute('data-ok')==='1') ids.push(x.getAttribute('data-cid')); }); f.value=ids.join(','); }
     var b=document.getElementById('erledigtbtn'), h=document.getElementById('gatehint');
@@ -486,29 +503,29 @@ if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ 
     stats.forEach(function(x){ if(el) return;
       if(p.cid && x.getAttribute('data-cid')===String(p.cid)) el=x;
       else if(p.cnr && x.getAttribute('data-cnr') && x.getAttribute('data-cnr')===p.cnr) el=x; });
-    if(!el){ msg('Unbekannte oder falsche Charge: '+raw, false); return false; }
-    if(el.getAttribute('data-ok')==='1'){ msg('Charge war schon bestätigt.', true); return true; }
-    el.setAttribute('data-ok','1'); el.textContent='✓ bestätigt';
+    if(!el){ msg(WT.js_unknown_charge+raw, false); return false; }
+    if(el.getAttribute('data-ok')==='1'){ msg(WT.js_already, true); return true; }
+    el.setAttribute('data-ok','1'); el.textContent=WT.js_confirmed_badge;
     el.style.background='rgba(29,158,117,.18)'; el.style.color='#7fe3c2'; el.style.borderColor='var(--gruen)';
-    msg('Charge bestätigt.', true); gate(); return true;
+    msg(WT.js_charge_ok, true); gate(); return true;
   }
   var inp=document.getElementById('scaninput');
   if(inp) inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); if(inp.value.trim()){ confirmScan(inp.value); inp.value=''; } } });
   // Kamera-Scan (Android/Chrome: BarcodeDetector)
   var cam=document.getElementById('camstart'), video=document.getElementById('camview');
   if(cam){
-    if(!('BarcodeDetector' in window)){ cam.disabled=true; cam.textContent='Kamera hier nicht unterstützt'; }
+    if(!('BarcodeDetector' in window)){ cam.disabled=true; cam.textContent=WT.js_cam_unsupported; }
     else {
       var stream=null, det=null, run=false;
-      function stop(){ run=false; if(stream){ stream.getTracks().forEach(function(t){t.stop();}); stream=null; } if(video){ video.style.display='none'; } cam.textContent='Mit Kamera scannen'; }
+      function stop(){ run=false; if(stream){ stream.getTracks().forEach(function(t){t.stop();}); stream=null; } if(video){ video.style.display='none'; } cam.textContent=WT.scan_with_cam; }
       async function loop(){ if(!run) return;
         try{ var codes=await det.detect(video); if(codes&&codes.length) confirmScan(codes[0].rawValue); }catch(e){}
         if(run) setTimeout(loop, 400); }
       async function start(){
         try{ det=new BarcodeDetector({formats:['qr_code']});
           stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-          video.srcObject=stream; video.style.display='block'; await video.play(); run=true; cam.textContent='Kamera aus'; loop();
-        }catch(e){ msg('Kamera nicht verfügbar: '+(e&&e.message?e.message:e), false); }
+          video.srcObject=stream; video.style.display='block'; await video.play(); run=true; cam.textContent=WT.js_cam_off; loop();
+        }catch(e){ msg(WT.js_cam_unavailable+(e&&e.message?e.message:e), false); }
       }
       cam.addEventListener('click', function(){ run?stop():start(); });
       window.addEventListener('pagehide', stop);
@@ -521,12 +538,12 @@ if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ 
   document.querySelectorAll('.werk-blink').forEach(function(btn){
     btn.addEventListener('click', function(){
       var cid = btn.getAttribute('data-cid'); if (!cid || btn.disabled) return;
-      var orig = btn.textContent; btn.disabled = true; btn.textContent = 'Zeige…';
+      var orig = btn.textContent; btn.disabled = true; btn.textContent = WT.js_showing;
       var body = 'aktion=werk_blink&js=1&charge_id=' + encodeURIComponent(cid);
       fetch('?p=werk', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:body})
         .then(function(r){ return r.json(); })
-        .then(function(j){ btn.textContent = j && j.ok ? 'Leuchtet ✓' : ((j && j.meldung) || 'Nicht ausgelöst'); })
-        .catch(function(){ btn.textContent = 'Fehler'; })
+        .then(function(j){ btn.textContent = j && j.ok ? WT.js_lit : WT.js_not_triggered; })
+        .catch(function(){ btn.textContent = WT.js_error; })
         .then(function(){ setTimeout(function(){ btn.disabled = false; btn.textContent = orig; }, 2500); });
     });
   });
