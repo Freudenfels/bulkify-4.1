@@ -321,10 +321,12 @@ function erp_schritt_material(int $pa_id, string $station): array {
                              'menge'=>(float)$pa['menge'], 'einheit'=>'Stk', 'verfuegbar'=>erp_item_bestand($eid), 'item_id'=>$eid, 'pflicht'=>false];
             break;
     }
-    // Je Zeile die FEFO-Charge (für den Blinker), Quarantäne-Menge (Hinweis) und ob schon entnommen.
+    // Je Zeile die FEFO-Charge (für Blinker + Anzeige/Scan-Bestätigung), Quarantäne-Menge (Hinweis) und ob schon entnommen.
     foreach ($zeilen as &$z)
         if (!empty($z['item_id'])) {
             if (!isset($z['charge_id'])) $z['charge_id'] = erp_fefo_charge_id((int)$z['item_id']);
+            if (!empty($z['charge_id']) && empty($z['charge_nr']))
+                $z['charge_nr'] = (string) scalar("SELECT charge_nr FROM charge WHERE id=?", [(int)$z['charge_id']]);
             $z['quarantaene'] = erp_item_quarantaene((int)$z['item_id']);
             $z['entnommen'] = (int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, (int)$z['item_id']]) > 0;
         }

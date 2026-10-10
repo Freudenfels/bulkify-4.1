@@ -143,7 +143,7 @@ header('Content-Type: text/html; charset=utf-8');
   table.mat{width:100%;border-collapse:collapse;margin-top:6px}
   table.mat th,table.mat td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);font-size:18px}
   table.mat th{color:var(--muted);font-size:14px;font-weight:600}
-  table.mat td.num{text-align:right;white-space:nowrap}
+  table.mat td.num,table.mat th.num{text-align:right;white-space:nowrap}
   .knapp{color:#ff8f86}
   .step-h{font-size:30px;font-weight:800;margin:2px 0 6px}
   .step-sub{color:var(--muted);font-size:16px}
@@ -368,7 +368,8 @@ header('Content-Type: text/html; charset=utf-8');
         <?php foreach ($mat['zeilen'] as $z): $pflicht = $z['pflicht'] ?? true;
               $knapp = $pflicht && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']; ?>
         <tr>
-          <td><?= h((string)$z['name']) ?><?php if (!empty($z['detail'])): ?> <span class="muted" style="font-size:14px">· <?= h((string)$z['detail']) ?><?= $pflicht ? '' : ' (zur Info)' ?></span><?php endif; ?></td>
+          <td><?= h((string)$z['name']) ?><?php if (!empty($z['detail'])): ?> <span class="muted" style="font-size:14px">· <?= h((string)$z['detail']) ?><?= $pflicht ? '' : ' (zur Info)' ?></span><?php endif; ?>
+              <?php if (!empty($z['charge_nr'])): ?><div class="muted" style="font-size:14px;margin-top:3px">Charge <strong style="color:var(--text)"><?= h((string)$z['charge_nr']) ?></strong> <span style="font-size:13px">(FEFO)</span></div><?php endif; ?></td>
           <td class="num"><?= menge_txt($z['menge']) ?> <?= h((string)$z['einheit']) ?></td>
           <td class="num <?= $knapp ? 'knapp' : '' ?>"><?= isset($z['verfuegbar']) ? menge_txt($z['verfuegbar']) . ' ' . h((string)$z['einheit']) : '–' ?></td>
           <td class="num"><?= $blinkBtn($z['charge_id'] ?? 0) ?></td>
