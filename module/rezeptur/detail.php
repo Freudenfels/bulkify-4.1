@@ -422,6 +422,50 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
     }
     $nwFmt = fn($x) => rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',');
 ?>
+<?php
+  // Materialkosten + Gesamt-Einwaage je Einheit aus den Lieferanten-Kilopreisen (günstigste Staffel bei Batchgröße).
+  $mkBatch = (int)($_GET['kalk_stueck'] ?? 1000); if ($mkBatch < 1) $mkBatch = 1000;
+  $mk = rezeptur_materialkosten((int)$id, $mkBatch);
+  $ewMg = (float)$mk['einwaage_mg'];
+  $mgTxt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+  $eur4  = fn($x) => number_format((float)$x, 4, ',', '.');
+  $eur2  = fn($x) => number_format((float)$x, 2, ',', '.');
+?>
+<div class="bx-panel" id="materialkosten">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <h2 style="margin:0">Kosten &amp; Einwaage <span class="muted" style="font-weight:400;font-size:13px">(pro Einheit · aus Lieferanten-Kilopreisen)</span></h2>
+    <form method="get" style="margin:0;display:flex;align-items:center;gap:8px">
+      <?php foreach (['p'=>'rezeptur_detail','id'=>(int)$id] as $kk=>$vv): ?><input type="hidden" name="<?= h($kk) ?>" value="<?= h((string)$vv) ?>"><?php endforeach; ?>
+      <label class="muted" style="font-size:13px">Staffel bei</label>
+      <input type="number" name="kalk_stueck" value="<?= (int)$mkBatch ?>" min="1" step="100" style="width:110px;text-align:right">
+      <span class="muted" style="font-size:13px">Stück</span>
+      <button class="btn btn-ghost btn-sm" type="submit">neu rechnen</button>
+    </form>
+  </div>
+  <div class="bx-cards" style="margin:12px 0 16px">
+    <div class="bx-card"><div class="k">Gesamt-Einwaage / Einheit</div><div class="v"><?= $mgTxt($ewMg) ?> mg <span class="muted" style="font-size:14px">· <?= $mgTxt($ewMg/1000) ?> g</span></div></div>
+    <div class="bx-card"><div class="k">Materialkosten / Einheit</div><div class="v"><?= $mk['kosten'] > 0 ? $eur4($mk['kosten']) . ' €' : '–' ?></div></div>
+    <div class="bx-card"><div class="k">pro 1.000 Stück</div><div class="v"><?= $mk['kosten'] > 0 ? $eur2($mk['kosten'] * 1000) . ' €' : '–' ?></div></div>
+  </div>
+  <table class="bx-table">
+    <thead><tr><th>Rohstoff</th><th class="bx-num">Menge / Einheit</th><th class="bx-num">EK (Lieferant)</th><th class="bx-num">Kosten / Einheit</th></tr></thead>
+    <tbody>
+      <?php if (!$mk['zeilen']): ?><tr><td colspan="4" class="muted">Keine Zutaten.</td></tr><?php endif; ?>
+      <?php foreach ($mk['zeilen'] as $zk): ?>
+      <tr>
+        <td><?= h((string)$zk['name']) ?></td>
+        <td class="bx-num"><?= $mgTxt($zk['menge_mg']) ?> mg</td>
+        <td class="bx-num"><?php if ($zk['ek'] !== null): ?><?= $eur4($zk['ek']) ?> €/<?= h((string)$zk['bezug']) ?><?php if ($zk['lieferant'] !== ''): ?> <span class="muted" style="font-size:12px"><?= h((string)$zk['lieferant']) ?></span><?php endif; ?><?php else: ?><span class="muted" style="color:var(--warn)">kein Lieferantenpreis</span><?php endif; ?></td>
+        <td class="bx-num"><?= $zk['kosten'] !== null ? $eur4($zk['kosten']) . ' €' : '–' ?></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  <p class="muted" style="font-size:12px;margin-top:8px">
+    Gesamt-Einwaage = Summe aller Zutaten je Einheit (= Füllmenge pro Portion). Kosten = je Rohstoff <em>EK/kg × Menge</em>, mit der günstigsten passenden Lieferanten-Staffel bei <?= number_format($mkBatch,0,',','.') ?> Stück Produktionsmenge.<?php if ((int)$mk['ohne_preis'] > 0): ?> <span style="color:var(--warn)"><?= (int)$mk['ohne_preis'] ?> Zutat(en) ohne hinterlegten Lieferantenpreis – diese fehlen in den Materialkosten.</span><?php endif; ?>
+  </p>
+</div>
+
 <div class="bx-panel" id="naehrwerte">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
     <h2 style="margin:0">Nährwerte der Rezeptur <span class="muted" style="font-weight:400;font-size:13px">(je Einheit)</span></h2>
@@ -666,8 +710,9 @@ function recalc(){
   rows.forEach(function(row){
     var iid = row.querySelector('.zitem').value;
     var mg = parseFloat((row.querySelector('.zmenge').value || '').replace(',','.')) || 0;
-    var it = ITEMS[iid]; if (!it || !mg) return;
-    totalW += mg;
+    if (!mg) return;
+    totalW += mg;                          // Gesamtgewicht zählt immer (auch ohne zugeordneten Rohstoff)
+    var it = ITEMS[iid]; if (!it) return;  // Kosten/Nährstoffe nur bei bekanntem Rohstoff
     // Kosten: EK je Bezug -> je mg
     var perMg = 0;
     if (it.preis_bezug === 'kg') perMg = it.ek_preis / 1e6;

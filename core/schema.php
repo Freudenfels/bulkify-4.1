@@ -5002,6 +5002,35 @@ function rohstoff_ek_bei_menge(int $item_id, float $menge): ?float {
     $flat = scalar("SELECT ek_preis FROM item WHERE id=?", [$item_id]);
     return ($flat !== null && (float) $flat > 0) ? (float) $flat : null;
 }
+// Materialkosten + Gesamt-Einwaage einer Rezeptur JE EINHEIT (Kapsel/Stick/Portion), aus den
+// Lieferanten-Kilopreisen (günstigste passende Staffel bei der Produktions-Batchgröße; Fallback item.ek_preis).
+// Die Gesamt-Einwaage zählt IMMER alle Zutaten (auch ohne Lieferantenpreis/Match) – damit „Gesamtmenge
+// pro Portion" robust sichtbar ist. Rückgabe:
+//   ['zeilen'=>[{item_id,name,menge_mg,bezug,ek,lieferant,kosten}], 'einwaage_mg'=>float,
+//    'kosten'=>float, 'ohne_preis'=>int, 'batch'=>int]
+function rezeptur_materialkosten(int $rid, int $batch = 1000): array {
+    $batch = max(1, $batch);
+    $zeilen = []; $einwaage = 0.0; $kosten = 0.0; $ohne = 0;
+    foreach (all("SELECT z.item_id, z.menge_mg, COALESCE(NULLIF(i.name,''), z.bezeichnung) AS name,
+                         i.preis_bezug, i.einheit, i.dichte
+                  FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
+                  WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rid]) as $z) {
+        $mg = (float)$z['menge_mg'];
+        $einwaage += $mg;
+        $pb = (string)($z['preis_bezug'] ?: $z['einheit'] ?: 'kg');
+        // Bedarf je Einheit in der Bezugseinheit (kg/g/L über Dichte).
+        $jeEinheit = $pb === 'g' ? $mg / 1e3 : ($pb === 'L' && !empty($z['dichte']) ? $mg / 1e6 / (float)$z['dichte'] : $mg / 1e6);
+        $iid  = (int)($z['item_id'] ?? 0);
+        $ek   = $iid ? rohstoff_ek_bei_menge($iid, $jeEinheit * $batch) : null;      // €/Bezug bei Batch-Menge (Staffel), Fallback item.ek_preis
+        $best = $iid ? rohstoff_bester_lieferant($iid, $jeEinheit * $batch) : null;  // nur für den Lieferantennamen
+        $k    = $ek !== null ? $ek * $jeEinheit : null;
+        if ($k !== null) $kosten += $k; else $ohne++;
+        $zeilen[] = ['item_id'=>$iid, 'name'=>(string)$z['name'], 'menge_mg'=>$mg, 'bezug'=>$pb,
+                     'ek'=>$ek, 'lieferant'=>$best['firma'] ?? '', 'kosten'=>$k];
+    }
+    return ['zeilen'=>$zeilen, 'einwaage_mg'=>$einwaage, 'kosten'=>$kosten, 'ohne_preis'=>$ohne, 'batch'=>$batch];
+}
+
 // Aufschlag % für einen Rohstoff: eigener Wert am Rohstoff, sonst globaler aufschlag_rohstoff.
 function rohstoff_aufschlag_prozent(int $item_id): float {
     $o = scalar("SELECT vk_aufschlag_prozent FROM item WHERE id=?", [$item_id]);
