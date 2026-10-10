@@ -2,6 +2,9 @@
 
 Kiosk-/Tablet-App für die **Mitarbeiter**, rein **schrittweise**. Vollbild, dunkles Theme, große Touch-Buttons, **ohne Sidebar** und ohne die Leiter-Abkürzungen (keine „Teilmenge produzieren"). Eigener Einstieg (Route in `public/produktion/index.php`, von der Normal-Login-Weiche **ausgenommen**).
 
+## Als App installieren (PWA, Vollbild am Tablet)
+Die Werk-App ist eine **PWA**: `public/produktion/werk.webmanifest` (`display:"fullscreen"`, `scope:/produktion/`, `start_url:/produktion/?p=werk`, bulkify-Icons aus `/assets/app-icon-*`) + Service Worker `public/produktion/werk-sw.js` (Scope `/produktion/`, nur Icons gecacht, App-Seiten immer frisch). In `werk.php` sind Manifest-Link, `apple-mobile-web-app-*`/`mobile-web-app-capable`-Meta, Apple-Touch-Icon und die SW-Registrierung eingebunden. Auf dem **Login** erscheint ein **„Auf dem Tablet installieren"**-Button, sobald Chrome/Android es anbietet (`beforeinstallprompt`); iOS: Teilen → Zum Startbildschirm. Installiert startet die App **im Vollbild ohne Browser-Leiste** direkt in `?p=werk`.
+
 ## Login per PIN
 Eigener **PIN-Login** (kein Team-Login). Die PIN setzt der Admin im Dashboard je Mitarbeiter (`benutzer.pin_hash`, siehe `system/benutzer_detail.php`). On-Screen-Ziffernblock (JS) → `aktion=werk_login` → `erp_benutzer_per_pin()` (sucht aktive Benutzer mit production/admin-Rolle + passendem Hash). Treffer setzt `$_SESSION['werk_uid']`. „Abmelden" = `werk_logout`. Der angemeldete Name wird als **Akteur** bei „erledigt" protokolliert.
 

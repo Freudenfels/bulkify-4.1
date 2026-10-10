@@ -68,6 +68,13 @@ header('Content-Type: text/html; charset=utf-8');
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#10210f">
+<link rel="manifest" href="/produktion/werk.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Produktion">
+<link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+<link rel="icon" href="/assets/app-icon-192.png" type="image/png">
 <title>Produktion · Werk</title>
 <style>
   :root{--bg:#0f1a12;--panel:#17241a;--panel2:#1e2f22;--line:#2c4232;--text:#e9f1ea;--muted:#9fb6a6;--gruen:#1D9E75;--lime:#C0F24E;--warn:#e0a53a;--err:#e4584e}
@@ -138,6 +145,10 @@ header('Content-Type: text/html; charset=utf-8');
         <div class="key" data-k="ok" style="background:var(--gruen);color:#06130d;font-size:22px">OK</div>
       </div>
     </form>
+    <div style="margin-top:26px">
+      <button id="pwaInstall" type="button" class="btn btn-ghost" style="display:none">Auf dem Tablet installieren</button>
+      <div class="muted" style="font-size:13px;margin-top:12px">Für Vollbild ohne Browser: die App über das Browser-Menü <strong>„Zur Startseite / Zum Startbildschirm hinzufügen"</strong> installieren.</div>
+    </div>
   </div>
   <script>
   (function(){
@@ -372,4 +383,15 @@ header('Content-Type: text/html; charset=utf-8');
 
 <?php endif; ?>
 
+<script>
+// PWA: Service Worker registrieren (Installation am Tablet). Installieren-Button auf dem Login,
+// sobald der Browser die Installation anbietet (Android/Chrome). iOS: ueber Teilen -> Zum Startbildschirm.
+if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ navigator.serviceWorker.register('/produktion/werk-sw.js').catch(function(){}); }); }
+(function(){
+  var dp = null, b = document.getElementById('pwaInstall');
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); dp = e; if (b) b.style.display = 'inline-flex'; });
+  if (b) b.addEventListener('click', function(){ if (dp) { dp.prompt(); dp = null; b.style.display = 'none'; } });
+  window.addEventListener('appinstalled', function(){ if (b) b.style.display = 'none'; });
+})();
+</script>
 </div></body></html>
