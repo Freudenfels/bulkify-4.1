@@ -75,8 +75,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($werkUid && $aktion === 'werk_probe') {
         $paId = (int)($_POST['pa_id'] ?? 0);
-        erp_rohstoff_probe_ziehen($paId, (int)($_POST['charge_id'] ?? 0), (int)($_POST['item_id'] ?? 0), $werkName ?: 'Mitarbeiter');
-        $_SESSION['werk_flash'] = $T['fl_sample_ok']; $_SESSION['werk_flash_ok'] = true;
+        $pid  = erp_rohstoff_probe_ziehen($paId, (int)($_POST['charge_id'] ?? 0), (int)($_POST['item_id'] ?? 0), $werkName ?: 'Mitarbeiter');
+        $msg  = $T['fl_sample_ok'];
+        if ($pid > 0 && function_exists('pr_lager_druck_probe')) {   // Proben-Etikett lautlos über die Lager-Brücke drucken
+            $d = pr_lager_druck_probe($pid);
+            if (!empty($d['ok'])) { if (function_exists('erp_probe_etikett_gedruckt')) erp_probe_etikett_gedruckt($pid); $msg .= ' ' . $T['fl_label_sent']; }
+            else { $msg .= ' ' . $T['fl_label_fail']; }
+        }
+        $_SESSION['werk_flash'] = $msg; $_SESSION['werk_flash_ok'] = true;
         weiter('?p=werk&id=' . $paId);
     }
     if ($werkUid && $aktion === 'werk_blink') {

@@ -76,6 +76,7 @@ $druck = [];
 $druckerEtikett     = lg_meta_lesen('drucker_name', '');          // leer = Standarddrucker
 $druckerLieferschein = lg_meta_lesen('drucker_lieferschein', '');
 $druckerLabel       = lg_meta_lesen('drucker_versandlabel', '');
+$druckerProbe       = lg_meta_lesen('drucker_probe', '');
 foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' ORDER BY id LIMIT 10") as $j) {
     if (q("UPDATE lg_druckjob SET status='abgeholt' WHERE id=? AND status='offen'", [(int)$j['id']])->rowCount() === 0) continue;
     $typ = (string)($j['typ'] ?? 'etikett');
@@ -94,6 +95,10 @@ foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' 
         $lab = function_exists('lg_versand_label') ? lg_versand_label((int)$j['ids']) : null;
         $pdf = $lab && (string)($lab['zoll_pdf'] ?? '') !== '' ? (string)$lab['zoll_pdf'] : null;
         $fehlt = 'Kein Zollpapier';
+    } elseif ($typ === 'probe') {
+        $drucker = $druckerProbe ?: $druckerEtikett;          // Proben-Etikett auf den (festgelegten) Proben-Drucker
+        $pdf = function_exists('lg_probe_etikett_pdf') ? lg_probe_etikett_pdf((int)$j['ids']) : null;
+        $fehlt = 'Probe nicht gefunden';
     } else {
         $pdf = lg_etikett_pdf(explode(',', (string)$j['ids']), (string)$j['format']);
     }

@@ -364,6 +364,17 @@ function pr_lager_blink_leiste(string $code, string $aktion = 'an'): array {
     if ($code === '') return ['ok'=>false, 'meldung'=>'Kein Blinker-Code.'];
     return pr_lager_blink_call('p=api_blink&leiste=' . rawurlencode($code) . '&aktion=' . rawurlencode($aktion));
 }
+// Proben-Etikett (Rückstellmuster) über die Lager-Brücke drucken – lautlos auf dem in den
+// Lager-Einstellungen festgelegten Proben-Drucker. Legt nur einen Druckjob an (gleiche Loopback-
+// Kette wie Pick-to-Light), die PDF erzeugt die Brücke selbst. Rückgabe ['ok','meldung'].
+function pr_lager_druck_probe(int $probe_id): array {
+    if ($probe_id <= 0) return ['ok'=>false, 'meldung'=>'Keine Probe angegeben.'];
+    return pr_lager_blink_call('p=api_druck&typ=probe&id=' . $probe_id);
+}
+// Eine Probe als „Etikett gedruckt" markieren (Dashboard-Tabelle prod_probe, Raw-SQL über die Naht).
+function erp_probe_etikett_gedruckt(int $probe_id): void {
+    if ($probe_id > 0 && tabelle_da('prod_probe')) q("UPDATE prod_probe SET etikett_gedruckt=1 WHERE id=?", [$probe_id]);
+}
 // Gemeinsamer Aufruf des Lager-Blink-Endpunkts auf DERSELBEN Maschine.
 // Problem auf dem Server: der eigene öffentliche HTTPS-Name lässt sich oft nicht aufrufen
 // (Hairpin/TLS-Alert). Deshalb lenken wir den Aufruf per CURLOPT_RESOLVE fest auf 127.0.0.1

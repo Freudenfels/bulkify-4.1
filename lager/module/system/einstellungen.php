@@ -24,6 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lg_meta_schreiben('drucker_name', trim((string)($_POST['drucker_name'] ?? '')));
         lg_meta_schreiben('drucker_lieferschein', trim((string)($_POST['drucker_lieferschein'] ?? '')));
         lg_meta_schreiben('drucker_versandlabel', trim((string)($_POST['drucker_versandlabel'] ?? '')));
+        lg_meta_schreiben('drucker_probe', trim((string)($_POST['drucker_probe'] ?? '')));
         flash('Drucker-Einstellungen gespeichert.');
         weiter('?p=einstellungen&reiter=drucker');
     }
@@ -65,6 +66,7 @@ $etikettFormat = lg_meta_lesen('etikett_format', 'klein');
 $drucker       = lg_meta_lesen('drucker_name', '');
 $druckerLS     = lg_meta_lesen('drucker_lieferschein', '');
 $druckerVL     = lg_meta_lesen('drucker_versandlabel', '');
+$druckerProbe  = lg_meta_lesen('drucker_probe', '');
 $druckerListe  = array_values(array_filter(array_map('trim', explode('|', lg_meta_lesen('drucker_liste', '')))));
 $druckerStd    = lg_meta_lesen('drucker_standard', '');
 $zuletzt       = lg_meta_lesen('bruecke_zuletzt', '');
@@ -136,6 +138,10 @@ $tab = fn(string $k, string $label): string => '<a href="?p=einstellungen&reiter
       <div class="bx-field"><label>Drucker – Versand-Label</label>
         <?= $druckerSelect('drucker_versandlabel', $druckerVL) ?>
         <div class="muted" style="font-size:12px;margin-top:4px">Label-Drucker (ab Phase 2, DHL/Cargoboard). Leer = Standarddrucker.</div>
+      </div>
+      <div class="bx-field"><label>Drucker – Proben-Etikett</label>
+        <?= $druckerSelect('drucker_probe', $druckerProbe) ?>
+        <div class="muted" style="font-size:12px;margin-top:4px">Für Rückstellmuster/Chargenproben aus der Produktion (100 × 70 mm). Leer = Standarddrucker.</div>
       </div>
     </div>
     <div style="margin-top:var(--sp-3)"><button type="submit" class="btn btn-primary">Speichern</button></div>

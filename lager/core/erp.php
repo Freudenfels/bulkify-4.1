@@ -83,6 +83,19 @@ function erp_charge(int $id): ?array {
     if (!tabelle_da('charge')) return null;
     return one(erp_charge_select() . " WHERE c.id=?", [$id]);
 }
+// Daten für ein Proben-Etikett (Rückstellmuster). Liest prod_probe + Rohstoff/Charge/Produktionsauftrag.
+// Dashboard-Tabellen – wie überall im Lager nur über diese Naht (lager/core/erp.php).
+function erp_probe_etikett_daten(int $probe_id): ?array {
+    if (!tabelle_da('prod_probe') || $probe_id <= 0) return null;
+    $p = one("SELECT pr.*, COALESCE(NULLIF(i.name,''), pr.bezeichnung) AS item_name, i.artikelnummer,
+                     c.charge_nr, c.mhd, c.item_id AS c_item_id, pa.nummer AS pa_nummer
+              FROM prod_probe pr
+              LEFT JOIN item i   ON i.id = pr.item_id
+              LEFT JOIN charge c ON c.id = pr.charge_id
+              LEFT JOIN produktionsauftrag pa ON pa.id = pr.pa_id
+              WHERE pr.id=?", [$probe_id]);
+    return $p ?: null;
+}
 // Suche ueber Rohstoffname, Artikelnummer und Chargennummer. Leere/Fremdlager-Chargen raus.
 //
 // Tolerant fuer die Sprache: die Eingabe wird in einzelne WOERTER zerlegt, und JEDES Wort muss

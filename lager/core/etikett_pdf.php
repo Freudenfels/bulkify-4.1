@@ -187,6 +187,69 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
     $halb('Eingang', $eingangTxt, 'Blinker / Ort', (string)($c['blinker_code'] ?? ''));
 }
 
+// === Proben-Etikett (Rückstellmuster / Chargenprobe) =========================================
+// Klein (100x70 quer): QR rechts (führt auf die Charge), Textblock links. Daten aus prod_probe
+// über die Lager-Naht erp_probe_etikett_daten(). Wird lautlos über die Druck-Brücke gedruckt.
+function lg_probe_etikett_pdf(int $probe_id): ?string {
+    if (!function_exists('erp_probe_etikett_daten')) return null;
+    $p = erp_probe_etikett_daten($probe_id);
+    if (!$p) return null;
+
+    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $cid    = (int)($p['charge_id'] ?? 0);
+    $url    = $cid > 0 ? $scheme . '://' . $host . '/lager/?p=charge&id=' . $cid : '';
+
+    $mm = fn(float $v): float => $v / 25.4 * 72;
+    $pdf = new MiniPDF();
+    $pdf->w = $mm(100);
+    $pdf->h = $mm(70);
+
+    $W = $pdf->w; $H = $pdf->h;
+    $dark = [20, 20, 20]; $muted = [120, 120, 120]; $line = [205, 205, 205];
+    $pdf->rectStroke($mm(1.5), $mm(1.5), $W - $mm(3), $H - $mm(3), 0.6, $line);
+
+    // QR rechts (falls Charge bekannt) – führt auf die Charge im Lager.
+    $lxRight = $W - $mm(5);
+    if ($url !== '') {
+        $qrArea = $mm(30); $qx = $W - $mm(4) - $qrArea; $qy = $mm(5);
+        $m = qr_matrix($url);
+        if ($m) {
+            $n = count($m); $quiet = 2; $mod = $qrArea / ($n + 2 * $quiet);
+            $pdf->rect($qx, $qy, $qrArea, $qrArea, [255, 255, 255]);
+            for ($y = 0; $y < $n; $y++) for ($x = 0; $x < $n; $x++)
+                if ($m[$y][$x]) $pdf->rect($qx + ($x + $quiet) * $mod, $qy + ($y + $quiet) * $mod, $mod + 0.25, $mod + 0.25, $dark);
+        }
+        $lxRight = $qx - $mm(3);
+    }
+
+    $lx = $mm(5); $tw = $lxRight - $lx;
+    $pdf->text($lx, $mm(8), 'RÜCKSTELLMUSTER · PROBE', 11, true, $dark);
+    $yy = $mm(16.5);
+    $name = (string)($p['item_name'] ?? '');
+    foreach (array_slice($pdf->wrap($name !== '' ? $name : '–', $tw, 13, true), 0, 2) as $ln) { $pdf->text($lx, $yy, $ln, 13, true, $dark); $yy += $mm(6); }
+    $yy += $mm(1.5);
+
+    $feld = function (string $l, string $v) use ($pdf, $lx, &$yy, $muted, $dark, $mm, $tw): void {
+        $pdf->text($lx, $yy, $l, 7.5, false, $muted);
+        $pdf->text($lx, $yy + $mm(3.6), $pdf->fit($v !== '' ? $v : '–', $tw, 11, true), 11, true, $dark);
+        $yy += $mm(9);
+    };
+    $charge = (string)($p['batch_nr'] ?? '') !== '' ? (string)$p['batch_nr'] : (string)($p['charge_nr'] ?? '');
+    $feld('Charge', $charge);
+    $feld('Produktionsauftrag', (string)($p['pa_nummer'] ?? '–'));
+
+    $dat = !empty($p['angelegt']) ? date('d.m.Y', strtotime((string)$p['angelegt'])) : date('d.m.Y');
+    $von = (string)($p['erfasst_von'] ?? '');
+    $midx = $lx + $tw / 2;
+    $pdf->text($lx, $yy, 'Datum', 7.5, false, $muted);
+    $pdf->text($lx, $yy + $mm(3.6), $dat, 11, true, $dark);
+    $pdf->text($midx, $yy, 'Mitarbeiter', 7.5, false, $muted);
+    $pdf->text($midx, $yy + $mm(3.6), $pdf->fit($von !== '' ? $von : '–', $tw / 2 - $mm(2), 11, true), 11, true, $dark);
+
+    return $pdf->output();
+}
+
 // === Gebinde-/Karton-Aufkleber (Spec 5.6) ====================================================
 // Je Gebinde EIN Aufkleber mit EIGENEM QR + EIGENER Nummer (GB-...). Der QR fuehrt auf die Scan-
 // Aufloesung im Lager (?p=gebinde&nr=GB-...), ueber die sich Produkt/Wareneingang/Lieferant finden

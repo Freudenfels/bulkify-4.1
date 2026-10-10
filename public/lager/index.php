@@ -50,6 +50,7 @@ $routen = [
     'kiste'          => 'kiste/detail.php',
     'klingeln'       => 'led/klingeln.php',
     'api_blink'      => 'led/api_blink.php',   // interner Blink-Auslöser für andere Programme (Token/Loopback)
+    'api_druck'      => 'system/api_druck.php',// interner Druck-Auslöser (Proben-Etikett) für andere Programme (Token/Loopback)
     'suche'          => 'leiste/suche.php',
     // System
     'einstellungen'  => 'system/einstellungen.php',
@@ -76,6 +77,7 @@ if ($p === 'autologin') {
 // Interner Blink-Endpunkt für andere Programme (z. B. Produktion): eigene Token-/Loopback-Auth,
 // KEIN Lager-Login. Muss vor dem Login-Gate laufen.
 if ($p === 'api_blink') { require __DIR__ . '/../../lager/module/led/api_blink.php'; exit; }
+if ($p === 'api_druck') { require __DIR__ . '/../../lager/module/system/api_druck.php'; exit; }
 
 if ($p !== 'login' && !lg_angemeldet()) {
     if ($p === 'klingeln' || $p === 'suche') json_antwort(['ok' => false, 'meldung' => 'Bitte neu anmelden.'], 401);
