@@ -185,7 +185,7 @@ function werk_texte(string $lang): array {
         'js_charge_ok' => 'Charge bestätigt.',
         'js_cam_unsupported' => 'Kamera hier nicht unterstützt',
         'js_cam_unavailable' => 'Kamera nicht verfügbar: ',
-        'js_cam_off' => 'Kamera aus',
+        'js_cam_off' => 'Kamera schließen',
     ];
     $en = [
         'pin_enter' => 'Enter PIN',
@@ -272,7 +272,7 @@ function werk_texte(string $lang): array {
         'js_charge_ok' => 'Batch confirmed.',
         'js_cam_unsupported' => 'Camera not supported here',
         'js_cam_unavailable' => 'Camera unavailable: ',
-        'js_cam_off' => 'Camera off',
+        'js_cam_off' => 'Close camera',
     ];
     $uk = [
         'pin_enter' => 'Введіть PIN',
@@ -359,7 +359,7 @@ function werk_texte(string $lang): array {
         'js_charge_ok' => 'Партію підтверджено.',
         'js_cam_unsupported' => 'Камера тут не підтримується',
         'js_cam_unavailable' => 'Камера недоступна: ',
-        'js_cam_off' => 'Вимкнути камеру',
+        'js_cam_off' => 'Закрити камеру',
     ];
     $map = ['de' => $de, 'en' => $en, 'uk' => $uk];
     return array_merge($de, $map[$lang] ?? []);   // fehlende Schlüssel -> Deutsch

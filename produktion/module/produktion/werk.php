@@ -431,7 +431,10 @@ header('Content-Type: text/html; charset=utf-8');
         <input type="text" id="scaninput" autocomplete="off" autocapitalize="characters" placeholder="<?= h($T['scan_placeholder']) ?>" style="flex:1;min-width:180px;font-size:18px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text)">
       </div>
       <div id="scanmsg" style="font-size:15px;margin-top:10px;min-height:20px"></div>
-      <video id="camview" playsinline muted style="display:none;width:100%;max-width:440px;border-radius:12px;margin-top:12px;background:#000"></video>
+      <div id="camwrap" style="display:none;position:relative;max-width:440px;margin-top:12px">
+        <video id="camview" playsinline muted style="width:100%;border-radius:12px;background:#000;display:block"></video>
+        <button type="button" id="camclose" aria-label="<?= h($T['js_cam_off']) ?>" style="position:absolute;top:8px;right:8px;width:46px;height:46px;border-radius:50%;border:none;background:rgba(0,0,0,.65);color:#fff;font-size:24px;font-weight:700;line-height:1;cursor:pointer">&#10005;</button>
+      </div>
     </div>
     <?php endif; ?>
 
@@ -482,6 +485,7 @@ if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ 
 (function(){
   var stats = document.querySelectorAll('.scanstat');
   if (!stats.length) return;
+  var camStop = null;   // wird gesetzt, sobald die Kamera läuft (zum Auto-Abschalten)
   function msg(t, ok){ var m=document.getElementById('scanmsg'); if(m){ m.textContent=t; m.style.color = ok ? 'var(--gruen)' : 'var(--err)'; } }
   function parse(s){
     s = (s||'').trim(); if(!s) return {};
@@ -497,6 +501,7 @@ if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ 
     if(f){ var ids=[]; stats.forEach(function(x){ if(x.getAttribute('data-ok')==='1') ids.push(x.getAttribute('data-cid')); }); f.value=ids.join(','); }
     var b=document.getElementById('erledigtbtn'), h=document.getElementById('gatehint');
     if(b && b.getAttribute('data-scan-gate')==='1'){ var done = ok>=stats.length; b.disabled=!done; if(h) h.style.display = done ? 'none' : ''; }
+    if(ok>=stats.length && camStop){ camStop(); }   // alles bestätigt -> Kamera automatisch aus
   }
   function confirmScan(raw){
     var p=parse(raw), el=null;
@@ -512,22 +517,25 @@ if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ 
   var inp=document.getElementById('scaninput');
   if(inp) inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); if(inp.value.trim()){ confirmScan(inp.value); inp.value=''; } } });
   // Kamera-Scan (Android/Chrome: BarcodeDetector)
-  var cam=document.getElementById('camstart'), video=document.getElementById('camview');
+  var cam=document.getElementById('camstart'), video=document.getElementById('camview'),
+      camwrap=document.getElementById('camwrap'), camclose=document.getElementById('camclose');
   if(cam){
     if(!('BarcodeDetector' in window)){ cam.disabled=true; cam.textContent=WT.js_cam_unsupported; }
     else {
       var stream=null, det=null, run=false;
-      function stop(){ run=false; if(stream){ stream.getTracks().forEach(function(t){t.stop();}); stream=null; } if(video){ video.style.display='none'; } cam.textContent=WT.scan_with_cam; }
+      function stop(){ run=false; if(stream){ stream.getTracks().forEach(function(t){t.stop();}); stream=null; } if(camwrap){ camwrap.style.display='none'; } cam.textContent=WT.scan_with_cam; }
       async function loop(){ if(!run) return;
         try{ var codes=await det.detect(video); if(codes&&codes.length) confirmScan(codes[0].rawValue); }catch(e){}
         if(run) setTimeout(loop, 400); }
       async function start(){
         try{ det=new BarcodeDetector({formats:['qr_code']});
           stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-          video.srcObject=stream; video.style.display='block'; await video.play(); run=true; cam.textContent=WT.js_cam_off; loop();
+          video.srcObject=stream; if(camwrap) camwrap.style.display='block'; await video.play(); run=true; cam.textContent=WT.js_cam_off; loop();
         }catch(e){ msg(WT.js_cam_unavailable+(e&&e.message?e.message:e), false); }
       }
+      camStop = stop;   // damit die Kamera auch automatisch ausgeht, wenn alles bestätigt ist
       cam.addEventListener('click', function(){ run?stop():start(); });
+      if(camclose) camclose.addEventListener('click', stop);
       window.addEventListener('pagehide', stop);
     }
   }
