@@ -19,6 +19,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($werkUid && $aktion === 'werk_erledigt') {
         $sid = (int)($_POST['schritt_id'] ?? 0);
         $paId = (int)($_POST['pa_id'] ?? 0);
+        // Scan-Pflicht: jede Pflicht-Charge dieses Schritts muss bestätigt (gescannt) sein, bevor abgeschlossen wird.
+        $station = '';
+        foreach (erp_pa_schritte($paId) as $s) if ((int)$s['id'] === $sid) { $station = (string)$s['station']; break; }
+        if ($station !== '') {
+            $need = [];
+            foreach ((erp_schritt_material($paId, $station)['zeilen'] ?? []) as $z)
+                if (($z['pflicht'] ?? true) && !empty($z['charge_id'])) $need[(int)$z['charge_id']] = true;
+            if ($need) {
+                $have = array_flip(array_filter(array_map('intval', explode(',', (string)($_POST['scanned'] ?? '')))));
+                $offen = 0; foreach (array_keys($need) as $cid) if (!isset($have[$cid])) $offen++;
+                if ($offen > 0) {
+                    $_SESSION['werk_flash'] = 'Bitte zuerst alle Chargen scannen (' . $offen . ' noch offen).';
+                    $_SESSION['werk_flash_ok'] = false;
+                    weiter('?p=werk&id=' . $paId);
+                }
+            }
+        }
         $r = erp_schritt_abschliessen($sid, $werkName ?: 'Mitarbeiter');
         // Mischen: je Mischbehälter eine Gebinde-Untercharge anlegen (ein Etikett je Behälter, FEFO beim Abfüllen).
         if (!empty($r['ok']) && ($r['station'] ?? '') === 'Mischen') {
@@ -323,6 +340,10 @@ header('Content-Type: text/html; charset=utf-8');
     $cap  = $istMischen ? (float) str_replace(',', '.', (string)($_GET['cap'] ?? '')) : 0.0;
     $plan = $istMischen ? erp_mischer_plan($id, $cap) : null;
     $nz   = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+    // Scan-Pflicht: jede Pflicht-Zeile mit bekannter Charge muss vor dem Abschließen gescannt werden.
+    $scanAktiv = false;
+    foreach (($mat['zeilen'] ?? []) as $z)
+        if (($z['pflicht'] ?? true) && !empty($z['charge_id'])) { $scanAktiv = true; break; }
   ?>
   <div class="panel" style="border-color:var(--gruen)">
     <div class="step-sub">Jetzt dran · Schritt <?= $fertigCnt + 1 ?> von <?= $total ?></div>
@@ -369,7 +390,12 @@ header('Content-Type: text/html; charset=utf-8');
               $knapp = $pflicht && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']; ?>
         <tr>
           <td><?= h((string)$z['name']) ?><?php if (!empty($z['detail'])): ?> <span class="muted" style="font-size:14px">· <?= h((string)$z['detail']) ?><?= $pflicht ? '' : ' (zur Info)' ?></span><?php endif; ?>
-              <?php if (!empty($z['charge_nr'])): ?><div class="muted" style="font-size:14px;margin-top:3px">Charge <strong style="color:var(--text)"><?= h((string)$z['charge_nr']) ?></strong> <span style="font-size:13px">(FEFO)</span></div><?php endif; ?></td>
+              <?php if (!empty($z['charge_id']) && ($pflicht || !empty($z['charge_nr']))): ?>
+              <div class="muted" style="font-size:14px;margin-top:3px">
+                <?php if (!empty($z['charge_nr'])): ?>Charge <strong style="color:var(--text)"><?= h((string)$z['charge_nr']) ?></strong> <span style="font-size:13px">(FEFO)</span><?php endif; ?>
+                <?php if ($scanAktiv && $pflicht): ?><span class="scanstat" data-cid="<?= (int)$z['charge_id'] ?>" data-cnr="<?= h(strtoupper((string)($z['charge_nr'] ?? ''))) ?>" style="display:inline-block;margin-left:8px;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:700;background:var(--panel2);border:1px solid var(--line);color:var(--muted)">zu scannen</span><?php endif; ?>
+              </div>
+              <?php endif; ?></td>
           <td class="num"><?= menge_txt($z['menge']) ?> <?= h((string)$z['einheit']) ?></td>
           <td class="num <?= $knapp ? 'knapp' : '' ?>"><?= isset($z['verfuegbar']) ? menge_txt($z['verfuegbar']) . ' ' . h((string)$z['einheit']) : '–' ?></td>
           <td class="num"><?= $blinkBtn($z['charge_id'] ?? 0) ?></td>
@@ -377,6 +403,19 @@ header('Content-Type: text/html; charset=utf-8');
         <?php endforeach; ?>
       </tbody>
     </table>
+    <?php endif; ?>
+
+    <?php if ($scanAktiv && !$materialFehlt): ?>
+    <div class="panel" style="margin-top:18px;background:var(--panel2);border-color:var(--line)">
+      <div style="font-weight:700;font-size:18px;margin-bottom:4px">Chargen bestätigen – jede Charge scannen</div>
+      <div class="muted" style="font-size:14px;margin-bottom:12px">QR auf dem Charge-Etikett mit der Kamera scannen, oder mit dem Handscanner ins Feld scannen. <span id="scancount" style="color:var(--text);font-weight:600"></span></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button type="button" id="camstart" class="btn btn-ghost" style="min-height:52px">Mit Kamera scannen</button>
+        <input type="text" id="scaninput" autocomplete="off" autocapitalize="characters" placeholder="oder Code hier scannen" style="flex:1;min-width:180px;font-size:18px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text)">
+      </div>
+      <div id="scanmsg" style="font-size:15px;margin-top:10px;min-height:20px"></div>
+      <video id="camview" playsinline muted style="display:none;width:100%;max-width:440px;border-radius:12px;margin-top:12px;background:#000"></video>
+    </div>
     <?php endif; ?>
 
     <div style="margin-top:22px">
@@ -389,8 +428,10 @@ header('Content-Type: text/html; charset=utf-8');
           <input type="hidden" name="schritt_id" value="<?= (int)$cur['id'] ?>">
           <input type="hidden" name="pa_id" value="<?= (int)$id ?>">
           <?php if ($istMischen && $cap > 0): ?><input type="hidden" name="cap" value="<?= h($nz($cap)) ?>"><?php endif; ?>
-          <button class="btn btn-lime btn-lg" type="submit"><?= $isGate ? 'Freigeben' : 'Erledigt – nächster Schritt' ?></button>
+          <input type="hidden" name="scanned" id="scannedfield" value="">
+          <button class="btn btn-lime btn-lg" type="submit" id="erledigtbtn"<?= $scanAktiv ? ' disabled data-scan-gate="1"' : '' ?>><?= $isGate ? 'Freigeben' : 'Erledigt – nächster Schritt' ?></button>
         </form>
+        <?php if ($scanAktiv): ?><div class="muted" id="gatehint" style="font-size:14px;margin-top:8px">Bitte erst alle Chargen scannen – dann wird „Erledigt" freigegeben.</div><?php endif; ?>
       <?php endif; ?>
     </div>
   </div>
@@ -418,6 +459,61 @@ if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ 
   window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); dp = e; if (b) b.style.display = 'inline-flex'; });
   if (b) b.addEventListener('click', function(){ if (dp) { dp.prompt(); dp = null; b.style.display = 'none'; } });
   window.addEventListener('appinstalled', function(){ if (b) b.style.display = 'none'; });
+})();
+// Scan-Bestätigung: jede Pflicht-Charge per Kamera (QR) oder Handscanner bestätigen, erst dann "Erledigt".
+(function(){
+  var stats = document.querySelectorAll('.scanstat');
+  if (!stats.length) return;
+  function msg(t, ok){ var m=document.getElementById('scanmsg'); if(m){ m.textContent=t; m.style.color = ok ? 'var(--gruen)' : 'var(--err)'; } }
+  function parse(s){
+    s = (s||'').trim(); if(!s) return {};
+    var m = s.match(/[?&]id=(\d+)/);            // QR-URL .../lager/?p=charge&id=123
+    if(m) return {cid:m[1]};
+    if(/^\d+$/.test(s)) return {cid:s};          // nackte Charge-ID
+    return {cnr:s.toUpperCase()};                // Chargennummer als Text
+  }
+  function gate(){
+    var ok=0; stats.forEach(function(x){ if(x.getAttribute('data-ok')==='1') ok++; });
+    var c=document.getElementById('scancount'); if(c) c.textContent = ok+' von '+stats.length+' bestätigt';
+    var f=document.getElementById('scannedfield');
+    if(f){ var ids=[]; stats.forEach(function(x){ if(x.getAttribute('data-ok')==='1') ids.push(x.getAttribute('data-cid')); }); f.value=ids.join(','); }
+    var b=document.getElementById('erledigtbtn'), h=document.getElementById('gatehint');
+    if(b && b.getAttribute('data-scan-gate')==='1'){ var done = ok>=stats.length; b.disabled=!done; if(h) h.style.display = done ? 'none' : ''; }
+  }
+  function confirmScan(raw){
+    var p=parse(raw), el=null;
+    stats.forEach(function(x){ if(el) return;
+      if(p.cid && x.getAttribute('data-cid')===String(p.cid)) el=x;
+      else if(p.cnr && x.getAttribute('data-cnr') && x.getAttribute('data-cnr')===p.cnr) el=x; });
+    if(!el){ msg('Unbekannte oder falsche Charge: '+raw, false); return false; }
+    if(el.getAttribute('data-ok')==='1'){ msg('Charge war schon bestätigt.', true); return true; }
+    el.setAttribute('data-ok','1'); el.textContent='✓ bestätigt';
+    el.style.background='rgba(29,158,117,.18)'; el.style.color='#7fe3c2'; el.style.borderColor='var(--gruen)';
+    msg('Charge bestätigt.', true); gate(); return true;
+  }
+  var inp=document.getElementById('scaninput');
+  if(inp) inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); if(inp.value.trim()){ confirmScan(inp.value); inp.value=''; } } });
+  // Kamera-Scan (Android/Chrome: BarcodeDetector)
+  var cam=document.getElementById('camstart'), video=document.getElementById('camview');
+  if(cam){
+    if(!('BarcodeDetector' in window)){ cam.disabled=true; cam.textContent='Kamera hier nicht unterstützt'; }
+    else {
+      var stream=null, det=null, run=false;
+      function stop(){ run=false; if(stream){ stream.getTracks().forEach(function(t){t.stop();}); stream=null; } if(video){ video.style.display='none'; } cam.textContent='Mit Kamera scannen'; }
+      async function loop(){ if(!run) return;
+        try{ var codes=await det.detect(video); if(codes&&codes.length) confirmScan(codes[0].rawValue); }catch(e){}
+        if(run) setTimeout(loop, 400); }
+      async function start(){
+        try{ det=new BarcodeDetector({formats:['qr_code']});
+          stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+          video.srcObject=stream; video.style.display='block'; await video.play(); run=true; cam.textContent='Kamera aus'; loop();
+        }catch(e){ msg('Kamera nicht verfügbar: '+(e&&e.message?e.message:e), false); }
+      }
+      cam.addEventListener('click', function(){ run?stop():start(); });
+      window.addEventListener('pagehide', stop);
+    }
+  }
+  gate();
 })();
 // Pick-to-Light: Blinker im Lager leuchten lassen, ohne die Seite neu zu laden (Scrollposition bleibt).
 (function(){
