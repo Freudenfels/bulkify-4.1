@@ -52,6 +52,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['werk_flash'] = 'Probe erfasst.'; $_SESSION['werk_flash_ok'] = true;
         weiter('?p=werk&id=' . $paId);
     }
+    if ($werkUid && $aktion === 'werk_blink') {
+        // Pick-to-Light: den Blinker der FEFO-Charge im Lager leuchten lassen (gleiche Kette wie ?p=run).
+        $cid   = (int)($_POST['charge_id'] ?? 0);
+        $modus = ((string)($_POST['modus'] ?? 'an') === 'aus') ? 'aus' : 'an';
+        $r = (function_exists('pr_lager_blink') && $cid > 0)
+           ? pr_lager_blink($cid, $modus)
+           : ['ok' => false, 'meldung' => 'Keine Charge für den Blinker.'];
+        if (!empty($_POST['js'])) {   // AJAX vom Tablet: kein Reload, nur kurze Rückmeldung am Button
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['ok' => !empty($r['ok']), 'meldung' => (string)($r['meldung'] ?? '')]);
+            exit;
+        }
+        $_SESSION['werk_flash'] = ($r['ok'] ? 'Blinker im Lager: ' : 'Blinker: ') . ($r['meldung'] ?: ($r['ok'] ? ($modus === 'aus' ? 'aus.' : 'leuchtet.') : 'nicht ausgelöst.'));
+        $_SESSION['werk_flash_ok'] = !empty($r['ok']);
+        weiter('?p=werk&id=' . (int)($_POST['pa_id'] ?? 0));
+    }
     weiter('?p=werk');
 }
 
@@ -60,6 +76,14 @@ $fehler  = $_SESSION['werk_fehler'] ?? '';
 unset($_SESSION['werk_flash'], $_SESSION['werk_flash_ok'], $_SESSION['werk_fehler']);
 
 $id = (int)($_GET['id'] ?? 0);
+
+// Pick-to-Light: großer Touch-Button, der den Blinker der FEFO-Charge im Lager leuchten lässt (AJAX, ohne Reload).
+$blinkBtn = function($cid, string $extra = '') {
+    $cid = (int)$cid;
+    if ($cid <= 0) return '<span class="muted" style="font-size:14px">kein Blinker</span>';
+    return '<button type="button" class="werk-blink btn btn-ghost" data-cid="' . $cid . '"'
+         . ' style="min-height:48px;padding:10px 18px;font-size:16px;' . $extra . '">Platz zeigen</button>';
+};
 
 // ---- Ausgabe: eigenes Vollbild-Dokument (keine Sidebar) ----
 header('Content-Type: text/html; charset=utf-8');
@@ -246,7 +270,7 @@ header('Content-Type: text/html; charset=utf-8');
           <?php foreach ($probenListe as $pr): ?>
           <tr>
             <td><?= h((string)$pr['name']) ?></td>
-            <td class="muted"><?= h((string)($pr['charge_nr'] ?: '–')) ?></td>
+            <td class="muted"><?= h((string)($pr['charge_nr'] ?: '–')) ?><?php if (!empty($pr['charge_id'])): ?><div style="margin-top:6px"><?= $blinkBtn($pr['charge_id']) ?></div><?php endif; ?></td>
             <td class="num">
               <?php if (!empty($pr['hat_probe'])): ?><span style="color:var(--gruen);font-weight:700">✓ erfasst</span>
               <?php else: ?>
@@ -273,7 +297,7 @@ header('Content-Type: text/html; charset=utf-8');
             <?php foreach ($rueckListe as $r): $einh = (string)$r['einheit']; ?>
             <tr>
               <td><?= h((string)$r['item_name']) ?></td>
-              <td class="muted"><?= h((string)($r['charge_nr'] ?: '–')) ?></td>
+              <td class="muted"><?= h((string)($r['charge_nr'] ?: '–')) ?><?php if (!empty($r['charge_id'])): ?><div style="margin-top:6px"><?= $blinkBtn($r['charge_id']) ?></div><?php endif; ?></td>
               <td class="num"><input type="text" inputmode="decimal" name="rest[<?= (int)$r['charge_id'] ?>]" placeholder="0" style="font-size:19px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:120px;text-align:right"> <?= h($einh) ?></td>
             </tr>
             <?php endforeach; ?>
@@ -339,7 +363,7 @@ header('Content-Type: text/html; charset=utf-8');
     <?php if (!empty($mat['zeilen'])): ?>
     <div class="muted" style="margin-top:14px">Aus dem Lager holen<?php if (($mat['soll_menge'] ?? null) !== null): ?> · benötigt <strong style="color:var(--text)"><?= menge_txt($mat['soll_menge']) ?> <?= h((string)($mat['soll_einheit'] ?? '')) ?></strong><?php endif; ?>:</div>
     <table class="mat">
-      <thead><tr><th>Material</th><th class="num">Menge</th><th class="num">Bestand</th></tr></thead>
+      <thead><tr><th>Material</th><th class="num">Menge</th><th class="num">Bestand</th><th class="num">Lagerplatz</th></tr></thead>
       <tbody>
         <?php foreach ($mat['zeilen'] as $z): $pflicht = $z['pflicht'] ?? true;
               $knapp = $pflicht && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']; ?>
@@ -347,6 +371,7 @@ header('Content-Type: text/html; charset=utf-8');
           <td><?= h((string)$z['name']) ?><?php if (!empty($z['detail'])): ?> <span class="muted" style="font-size:14px">· <?= h((string)$z['detail']) ?><?= $pflicht ? '' : ' (zur Info)' ?></span><?php endif; ?></td>
           <td class="num"><?= menge_txt($z['menge']) ?> <?= h((string)$z['einheit']) ?></td>
           <td class="num <?= $knapp ? 'knapp' : '' ?>"><?= isset($z['verfuegbar']) ? menge_txt($z['verfuegbar']) . ' ' . h((string)$z['einheit']) : '–' ?></td>
+          <td class="num"><?= $blinkBtn($z['charge_id'] ?? 0) ?></td>
         </tr>
         <?php endforeach; ?>
       </tbody>
@@ -392,6 +417,21 @@ if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ 
   window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); dp = e; if (b) b.style.display = 'inline-flex'; });
   if (b) b.addEventListener('click', function(){ if (dp) { dp.prompt(); dp = null; b.style.display = 'none'; } });
   window.addEventListener('appinstalled', function(){ if (b) b.style.display = 'none'; });
+})();
+// Pick-to-Light: Blinker im Lager leuchten lassen, ohne die Seite neu zu laden (Scrollposition bleibt).
+(function(){
+  document.querySelectorAll('.werk-blink').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var cid = btn.getAttribute('data-cid'); if (!cid || btn.disabled) return;
+      var orig = btn.textContent; btn.disabled = true; btn.textContent = 'Zeige…';
+      var body = 'aktion=werk_blink&js=1&charge_id=' + encodeURIComponent(cid);
+      fetch('?p=werk', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:body})
+        .then(function(r){ return r.json(); })
+        .then(function(j){ btn.textContent = j && j.ok ? 'Leuchtet ✓' : ((j && j.meldung) || 'Nicht ausgelöst'); })
+        .catch(function(){ btn.textContent = 'Fehler'; })
+        .then(function(){ setTimeout(function(){ btn.disabled = false; btn.textContent = orig; }, 2500); });
+    });
+  });
 })();
 </script>
 </div></body></html>
