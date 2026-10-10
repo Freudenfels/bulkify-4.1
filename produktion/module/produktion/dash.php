@@ -36,7 +36,8 @@ $prodzeit  = erp_produktionszeit_schnitt();
 $durchlauf = erp_durchlaufzeit_schnitt();
 
 kopf('Dashboard', 'dash');
-seitenkopf('Dashboard', 'Produktion auf einen Blick');
+seitenkopf('Dashboard', 'Produktion auf einen Blick',
+    '<a class="btn btn-primary" href="?p=werk" title="Vollbild-App für Mitarbeiter am Tablet (PIN-Login, rein schrittweise)">Mitarbeiter-App öffnen</a>');
 
 // KPI-Kachel
 $kpi = function (string $label, string $wert, string $sub = '') {
