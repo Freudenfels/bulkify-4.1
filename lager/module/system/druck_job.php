@@ -7,7 +7,7 @@
 header('Content-Type: application/json; charset=utf-8');
 
 $typ = (string)($_POST['typ'] ?? 'etikett');
-if (!in_array($typ, ['etikett', 'lieferschein', 'label', 'zoll', 'probe'], true)) $typ = 'etikett';
+if (!in_array($typ, ['etikett', 'lieferschein', 'label', 'zoll', 'probe', 'gebinde'], true)) $typ = 'etikett';
 
 if ($typ === 'etikett') {
     $roh = (string)($_POST['ids'] ?? '');
@@ -26,7 +26,7 @@ if ($typ === 'etikett') {
         if (!$l || (string)($l['zoll_pdf'] ?? '') === '') { echo json_encode(['ok' => false, 'fehler' => 'Für diese Sendung gibt es kein Zollpapier.']); exit; }
     }
     $refs = (string)$vid;
-    $format = $typ === 'label' ? 'label' : ($typ === 'probe' ? 'klein' : 'a4');
+    $format = $typ === 'label' ? 'label' : (in_array($typ, ['probe', 'gebinde'], true) ? 'klein' : 'a4');
 }
 
 $uid = (int)(lg_benutzer()['id'] ?? 0);

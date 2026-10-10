@@ -96,6 +96,21 @@ function erp_probe_etikett_daten(int $probe_id): ?array {
               WHERE pr.id=?", [$probe_id]);
     return $p ?: null;
 }
+// Daten für ein Eimer-/Mischgebinde-Etikett (eine Gebinde-Untercharge aus dem Mischen).
+function erp_mischgebinde_etikett_daten(int $sub_id): ?array {
+    if (!tabelle_da('prod_charge') || $sub_id <= 0) return null;
+    return one("SELECT sc.id, sc.nummer, sc.gebinde, sc.menge, sc.einheit, sc.tag,
+                       pc.nummer AS haupt_nummer,
+                       COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung, r.name) AS produkt_name,
+                       pa.nummer AS pa_nummer
+                FROM prod_charge sc
+                LEFT JOIN prod_charge pc        ON pc.id = sc.parent_id
+                LEFT JOIN produktionsauftrag pa ON pa.id = sc.pa_id
+                LEFT JOIN produkt p             ON p.id  = sc.produkt_id
+                LEFT JOIN auftrag a             ON a.id  = pa.auftrag_id
+                LEFT JOIN rezeptur r            ON r.id  = sc.rezeptur_id
+                WHERE sc.id=? AND sc.parent_id IS NOT NULL", [$sub_id]) ?: null;
+}
 // Suche ueber Rohstoffname, Artikelnummer und Chargennummer. Leere/Fremdlager-Chargen raus.
 //
 // Tolerant fuer die Sprache: die Eingabe wird in einzelne WOERTER zerlegt, und JEDES Wort muss

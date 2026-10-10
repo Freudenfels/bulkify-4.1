@@ -19,7 +19,7 @@ if (!$tokenOk && !$loopback) {
 }
 
 $typ = preg_replace('/[^a-z]/', '', (string)($_REQUEST['typ'] ?? 'probe'));
-if (!in_array($typ, ['probe'], true)) {   // nur definierte interne Drucktypen
+if (!in_array($typ, ['probe', 'gebinde'], true)) {   // nur definierte interne Drucktypen
     echo json_encode(['ok' => false, 'meldung' => 'Unbekannter Drucktyp.'], JSON_UNESCAPED_UNICODE);
     exit;
 }

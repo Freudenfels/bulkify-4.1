@@ -85,6 +85,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['werk_flash'] = $msg; $_SESSION['werk_flash_ok'] = true;
         weiter('?p=werk&id=' . $paId);
     }
+    if ($werkUid && $aktion === 'werk_eimer_fertig') {
+        // Einen Mischbehälter (Eimer) abschließen: Gebinde anlegen + Etikett drucken. Letzter Eimer schließt Mischen ab.
+        $paId = (int)($_POST['pa_id'] ?? 0);
+        $nr   = (int)($_POST['nr'] ?? 0);
+        $cap  = (float) str_replace(',', '.', (string)($_POST['cap'] ?? ''));
+        $r = erp_mischer_eimer_abschliessen($paId, $cap, $nr, $werkName ?: 'Mitarbeiter');
+        if (!empty($r['ok'])) {
+            $msg = sprintf($T['fl_eimer_done'], (int)$r['nr'], (int)$r['anzahl']);
+            if (!empty($r['sub_id']) && function_exists('pr_lager_druck_gebinde')) {
+                $dr = pr_lager_druck_gebinde((int)$r['sub_id']);
+                $msg .= ' ' . (!empty($dr['ok']) ? $T['fl_label_sent'] : $T['fl_label_fail']);
+            }
+            if (!empty($r['alle_fertig'])) {   // alle Eimer fertig -> Mischen-Schritt abschließen
+                $sid = 0; foreach (erp_pa_schritte($paId) as $s) if ((string)$s['station'] === 'Mischen' && (int)$s['erledigt'] === 0) { $sid = (int)$s['id']; break; }
+                if ($sid) erp_schritt_abschliessen($sid, $werkName ?: 'Mitarbeiter');
+                $msg .= ' ' . $T['fl_mix_done'];
+            }
+            $_SESSION['werk_flash'] = $msg; $_SESSION['werk_flash_ok'] = true;
+        } else {
+            $_SESSION['werk_flash'] = $r['msg'] ?: $T['fl_step_fail']; $_SESSION['werk_flash_ok'] = false;
+        }
+        weiter('?p=werk&id=' . $paId);
+    }
     if ($werkUid && $aktion === 'werk_blink') {
         // Pick-to-Light: den Blinker der FEFO-Charge im Lager leuchten lassen (gleiche Kette wie ?p=run).
         $cid   = (int)($_POST['charge_id'] ?? 0);
@@ -345,6 +368,70 @@ header('Content-Type: text/html; charset=utf-8');
         </table>
         <div style="margin-top:20px"><button class="btn btn-lime btn-lg" type="submit"><?= h($T['return_save']) ?></button></div>
       </form>
+    </div>
+  <?php elseif ($cur && (string)$cur['station'] === 'Mischen'): // ===== MISCHEN: Eimer für Eimer =====
+    $anlM = werk_station_anleitung('Mischen', $lang);
+    $capLocked = erp_mischer_cap($id);
+    $capM = $capLocked > 0 ? $capLocked : (float) str_replace(',', '.', (string)($_GET['cap'] ?? ''));
+    $planM = erp_mischer_plan($id, $capM);
+    $NM    = (int)($planM['anzahl'] ?? 0);
+    $doneM = erp_mischer_fertig_anzahl($id);
+    $nzM   = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+  ?>
+    <div class="panel" style="border-color:var(--gruen)">
+      <div class="step-sub"><?= h($T['now_due']) ?> · <?= h($T['step']) ?> <?= $fertigCnt + 1 ?> <?= h($T['of']) ?> <?= $total ?></div>
+      <div class="step-h"><?= h(werk_station_label('Mischen', $lang)) ?></div>
+      <?php if ($anlM !== ''): ?><div class="muted" style="font-size:18px;margin-bottom:6px"><?= h($anlM) ?></div><?php endif; ?>
+
+      <div class="panel" style="background:var(--panel2);border-color:var(--line);margin-top:16px">
+        <div class="muted"><?= h($T['mix_total']) ?></div>
+        <div style="font-size:24px;font-weight:800"><?= $nzM($planM['total_kg'] ?? 0) ?> kg <span class="muted" style="font-size:16px;font-weight:400">(<?= number_format((int)($planM['einheiten'] ?? 0), 0, ',', '.') ?> <?= h($T['units']) ?>)</span></div>
+
+        <?php if ($capLocked <= 0): ?>
+        <form method="get" style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <input type="hidden" name="p" value="werk"><input type="hidden" name="id" value="<?= (int)$id ?>">
+          <div><div class="muted" style="font-size:14px;margin-bottom:4px"><?= h($T['kg_per_container']) ?></div>
+            <input type="text" inputmode="decimal" name="cap" value="<?= h($capM > 0 ? $nzM($capM) : '') ?>" placeholder="10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
+          <button class="btn btn-ghost" type="submit" style="min-height:52px"><?= h($T['calc_containers']) ?></button>
+        </form>
+        <?php endif; ?>
+
+        <?php if ($capM > 0 && !empty($planM['ok']) && !empty($planM['gebinde'])): ?>
+        <div class="muted" style="margin:16px 0 6px"><?= h($T['eimer_hint']) ?></div>
+        <div style="font-weight:800;font-size:18px;margin-bottom:8px"><?= h(sprintf($T['eimer_progress'], $doneM, $NM)) ?></div>
+        <div class="prog" style="margin-bottom:14px"><div style="width:<?= $NM > 0 ? round($doneM * 100 / $NM) : 0 ?>%"></div></div>
+        <?php foreach ($planM['gebinde'] as $g): $i = (int)$g['nr']; $fertig = ($i <= $doneM); $istDran = ($i === $doneM + 1); ?>
+        <div style="border:1px solid <?= $istDran ? 'var(--lime)' : 'var(--line)' ?>;border-radius:14px;padding:14px 16px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">
+            <div style="font-size:21px;font-weight:800"><?= h($T['container']) ?> <?= $i ?> <span class="muted" style="font-size:15px;font-weight:400">/ <?= $NM ?></span></div>
+            <div style="font-size:18px;font-weight:700"><?= $nzM($g['kg']) ?> kg <?= h($T['total_word']) ?></div>
+          </div>
+          <table class="mat" style="margin-top:8px"><tbody>
+            <?php foreach ($g['zutaten'] as $z): ?>
+            <tr><td><?= h((string)$z['name']) ?></td><td class="num" style="font-weight:700;color:var(--lime)"><?= $nzM($z['kg']) ?> kg</td></tr>
+            <?php endforeach; ?>
+          </tbody></table>
+          <div style="margin-top:12px">
+            <?php if ($fertig): ?>
+              <span style="color:var(--gruen);font-weight:800;font-size:18px"><?= h($T['eimer_done']) ?></span>
+            <?php elseif ($istDran): ?>
+              <form method="post" style="margin:0">
+                <input type="hidden" name="aktion" value="werk_eimer_fertig">
+                <input type="hidden" name="pa_id" value="<?= (int)$id ?>">
+                <input type="hidden" name="nr" value="<?= $i ?>">
+                <input type="hidden" name="cap" value="<?= h($nzM($capM)) ?>">
+                <button class="btn btn-lime btn-lg" type="submit"><?= h(sprintf($T['eimer_fertig_btn'], $i)) ?></button>
+              </form>
+            <?php else: ?>
+              <span class="muted" style="font-size:16px"><?= h($T['eimer_wait']) ?></span>
+            <?php endif; ?>
+          </div>
+        </div>
+        <?php endforeach; ?>
+        <?php elseif ($capLocked <= 0): ?>
+        <div class="muted" style="margin-top:10px"><?= h($T['mix_empty_hint']) ?></div>
+        <?php endif; ?>
+      </div>
     </div>
   <?php elseif ($alleFertig || !$cur): ?>
     <div class="panel" style="text-align:center;border-color:var(--gruen)">

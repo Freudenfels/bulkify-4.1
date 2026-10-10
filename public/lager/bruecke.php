@@ -77,6 +77,7 @@ $druckerEtikett     = lg_meta_lesen('drucker_name', '');          // leer = Stan
 $druckerLieferschein = lg_meta_lesen('drucker_lieferschein', '');
 $druckerLabel       = lg_meta_lesen('drucker_versandlabel', '');
 $druckerProbe       = lg_meta_lesen('drucker_probe', '');
+$druckerGebinde     = lg_meta_lesen('drucker_gebinde', '');
 foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' ORDER BY id LIMIT 10") as $j) {
     if (q("UPDATE lg_druckjob SET status='abgeholt' WHERE id=? AND status='offen'", [(int)$j['id']])->rowCount() === 0) continue;
     $typ = (string)($j['typ'] ?? 'etikett');
@@ -99,6 +100,10 @@ foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' 
         $drucker = $druckerProbe ?: $druckerEtikett;          // Proben-Etikett auf den (festgelegten) Proben-Drucker
         $pdf = function_exists('lg_probe_etikett_pdf') ? lg_probe_etikett_pdf((int)$j['ids']) : null;
         $fehlt = 'Probe nicht gefunden';
+    } elseif ($typ === 'gebinde') {
+        $drucker = $druckerGebinde ?: $druckerEtikett;        // Eimer-/Gebinde-Etikett auf den (festgelegten) Gebinde-Drucker
+        $pdf = function_exists('lg_mischgebinde_etikett_pdf') ? lg_mischgebinde_etikett_pdf((int)$j['ids']) : null;
+        $fehlt = 'Gebinde nicht gefunden';
     } else {
         $pdf = lg_etikett_pdf(explode(',', (string)$j['ids']), (string)$j['format']);
     }

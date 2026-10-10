@@ -250,6 +250,66 @@ function lg_probe_etikett_pdf(int $probe_id): ?string {
     return $pdf->output();
 }
 
+// === Eimer-/Mischgebinde-Etikett (ein Etikett je Eimer beim Mischen) =========================
+// Klein (100x70 quer): QR (= Gebinde-/Chargennummer zum Scannen) rechts, Textblock links.
+function lg_mischgebinde_etikett_pdf(int $sub_id): ?string {
+    if (!function_exists('erp_mischgebinde_etikett_daten')) return null;
+    $d = erp_mischgebinde_etikett_daten($sub_id);
+    if (!$d) return null;
+
+    $nummer = (string)($d['nummer'] ?? '');
+    $mm = fn(float $v): float => $v / 25.4 * 72;
+    $pdf = new MiniPDF();
+    $pdf->w = $mm(100);
+    $pdf->h = $mm(70);
+
+    $W = $pdf->w; $dark = [20, 20, 20]; $muted = [120, 120, 120]; $line = [205, 205, 205];
+    $pdf->rectStroke($mm(1.5), $mm(1.5), $W - $mm(3), $pdf->h - $mm(3), 0.6, $line);
+
+    // QR = Chargennummer des Gebindes (zum Scannen/Zuordnen).
+    $lxRight = $W - $mm(5);
+    if ($nummer !== '') {
+        $qrArea = $mm(30); $qx = $W - $mm(4) - $qrArea; $qy = $mm(5);
+        $m = qr_matrix($nummer);
+        if ($m) {
+            $n = count($m); $quiet = 2; $mod = $qrArea / ($n + 2 * $quiet);
+            $pdf->rect($qx, $qy, $qrArea, $qrArea, [255, 255, 255]);
+            for ($y = 0; $y < $n; $y++) for ($x = 0; $x < $n; $x++)
+                if ($m[$y][$x]) $pdf->rect($qx + ($x + $quiet) * $mod, $qy + ($y + $quiet) * $mod, $mod + 0.25, $mod + 0.25, $dark);
+        }
+        $lxRight = $qx - $mm(3);
+    }
+
+    $lx = $mm(5); $tw = $lxRight - $lx;
+    $pdf->text($lx, $mm(8), 'MISCHGEBINDE', 11, true, $dark);
+    $yy = $mm(16.5);
+    // Produkt (bis 2 Zeilen)
+    $name = (string)($d['produkt_name'] ?? '');
+    foreach (array_slice($pdf->wrap($name !== '' ? $name : '–', $tw, 12, true), 0, 2) as $ln) { $pdf->text($lx, $yy, $ln, 12, true, $dark); $yy += $mm(5.6); }
+    $yy += $mm(1.5);
+
+    $feld = function (string $l, string $v) use ($pdf, $lx, &$yy, $muted, $dark, $mm, $tw): void {
+        $pdf->text($lx, $yy, $l, 7.5, false, $muted);
+        $pdf->text($lx, $yy + $mm(3.6), $pdf->fit($v !== '' ? $v : '–', $tw, 11.5, true), 11.5, true, $dark);
+        $yy += $mm(9);
+    };
+    // „Gebinde X/Y (… kg)" – prominent.
+    $feld('Gebinde', (string)($d['gebinde'] ?? '–'));
+    $feld('Mischcharge', $nummer);
+
+    $menge = $d['menge'] !== null ? rtrim(rtrim(number_format((float)$d['menge'], 3, ',', '.'), '0'), ',') . ' ' . (string)($d['einheit'] ?: 'kg') : '–';
+    $dat   = !empty($d['tag']) ? date('d.m.Y', strtotime((string)$d['tag'])) : date('d.m.Y');
+    $midx  = $lx + $tw / 2;
+    $pdf->text($lx, $yy, 'Menge', 7.5, false, $muted);
+    $pdf->text($lx, $yy + $mm(3.6), $pdf->fit($menge, $tw / 2 - $mm(2), 11.5, true), 11.5, true, $dark);
+    $pdf->text($midx, $yy, 'Datum', 7.5, false, $muted);
+    $pdf->text($midx, $yy + $mm(3.6), $dat, 11.5, true, $dark);
+    $yy += $mm(9);
+    if (!empty($d['pa_nummer'])) $pdf->text($lx, $yy, 'Auftrag ' . (string)$d['pa_nummer'], 8, false, $muted);
+
+    return $pdf->output();
+}
+
 // === Gebinde-/Karton-Aufkleber (Spec 5.6) ====================================================
 // Je Gebinde EIN Aufkleber mit EIGENEM QR + EIGENER Nummer (GB-...). Der QR fuehrt auf die Scan-
 // Aufloesung im Lager (?p=gebinde&nr=GB-...), ueber die sich Produkt/Wareneingang/Lieferant finden

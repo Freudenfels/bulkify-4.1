@@ -371,6 +371,11 @@ function pr_lager_druck_probe(int $probe_id): array {
     if ($probe_id <= 0) return ['ok'=>false, 'meldung'=>'Keine Probe angegeben.'];
     return pr_lager_blink_call('p=api_druck&typ=probe&id=' . $probe_id);
 }
+// Eimer-/Gebinde-Etikett (eine Mischgebinde-Untercharge) über die Lager-Brücke drucken.
+function pr_lager_druck_gebinde(int $sub_charge_id): array {
+    if ($sub_charge_id <= 0) return ['ok'=>false, 'meldung'=>'Kein Gebinde angegeben.'];
+    return pr_lager_blink_call('p=api_druck&typ=gebinde&id=' . $sub_charge_id);
+}
 // Eine Probe als „Etikett gedruckt" markieren (Dashboard-Tabelle prod_probe, Raw-SQL über die Naht).
 function erp_probe_etikett_gedruckt(int $probe_id): void {
     if ($probe_id > 0 && tabelle_da('prod_probe')) q("UPDATE prod_probe SET etikett_gedruckt=1 WHERE id=?", [$probe_id]);
@@ -1248,4 +1253,43 @@ function erp_mischer_unterchargen_anlegen(int $pa_id, float $cap, string $akteur
         if ($r['id']) $n++;
     }
     return $n;
+}
+
+// --- Mischen Eimer für Eimer (ein Etikett je Eimer; Rest-Rohstoff erst wenn ALLE Eimer fertig) -----
+// Die gewählte Behältergröße (kg je Eimer) wird beim ersten Eimer festgeschrieben, damit die Anzahl stabil bleibt.
+function erp_mischer_cap(int $pa_id): float {
+    $d = function_exists('pr_daten') ? pr_daten($pa_id) : [];
+    return (float) str_replace(',', '.', (string)($d['mischer_cap']['wert'] ?? '0'));
+}
+// Wie viele Eimer sind schon fertig? = Anzahl bereits angelegter Gebinde-Unterchargen.
+function erp_mischer_fertig_anzahl(int $pa_id): int { return count(erp_gebinde_unterchargen($pa_id)); }
+
+// Einen Eimer (Mischbehälter) abschließen: legt GENAU EINE Gebinde-Untercharge an (der Reihe nach).
+// Rückgabe: ['ok','sub_id','nummer','nr','anzahl','alle_fertig','msg'].
+function erp_mischer_eimer_abschliessen(int $pa_id, float $cap, int $eimer_nr, string $akteur = ''): array {
+    if ($cap <= 0) $cap = erp_mischer_cap($pa_id);
+    if ($cap <= 0) return ['ok'=>false, 'msg'=>'Keine Behältergröße eingegeben.'];
+    if (erp_mischer_cap($pa_id) <= 0 && function_exists('pr_daten_setzen'))
+        pr_daten_setzen($pa_id, 'mischer_cap', rtrim(rtrim(number_format($cap, 3, '.', ''), '0'), '.'), $akteur);
+    $cap  = erp_mischer_cap($pa_id) ?: $cap;
+    $plan = erp_mischer_plan($pa_id, $cap);
+    if (empty($plan['ok']) || empty($plan['gebinde'])) return ['ok'=>false, 'msg'=>'Mischplan nicht berechenbar.'];
+    $N    = (int)$plan['anzahl'];
+    $done = erp_mischer_fertig_anzahl($pa_id);
+    if ($done >= $N) return ['ok'=>false, 'msg'=>'Alle Eimer sind bereits fertig.', 'nr'=>$done, 'anzahl'=>$N, 'alle_fertig'=>true];
+    if ($eimer_nr !== $done + 1) return ['ok'=>false, 'msg'=>'Dieser Eimer ist gerade nicht an der Reihe.', 'nr'=>$done, 'anzahl'=>$N, 'alle_fertig'=>false];
+    // Mischcharge (Parent) sicherstellen + Rohstoffe verknüpfen (idempotent).
+    erp_prod_charge_fuer_station($pa_id, 'Mischen', 0, round((float)$plan['total_kg'], 3), $akteur);
+    $pc = erp_prod_charge_fuer_pa($pa_id);
+    if (!$pc || ($pc['typ'] ?? '') !== 'intern') return ['ok'=>false, 'msg'=>'Mischcharge fehlt.', 'nr'=>$done, 'anzahl'=>$N, 'alle_fertig'=>false];
+    $g  = $plan['gebinde'][$eimer_nr - 1] ?? null;
+    if (!$g) return ['ok'=>false, 'msg'=>'Eimer unbekannt.', 'nr'=>$done, 'anzahl'=>$N, 'alle_fertig'=>false];
+    $kg = round((float)$g['kg'], 3);
+    $r  = erp_prod_charge_sub_anlegen((int)$pc['id'], [
+        'gebinde'=>'Gebinde ' . $eimer_nr . '/' . $N . ' (' . rtrim(rtrim(number_format($kg, 3, ',', '.'), '0'), ',') . ' kg)',
+        'menge'=>$kg, 'einheit'=>'kg', 'status'=>'gemischt']);
+    $doneNeu = $done + 1;
+    return ['ok'=>!empty($r['id']), 'sub_id'=>(int)($r['id'] ?? 0), 'nummer'=>(string)($r['nummer'] ?? ''),
+            'nr'=>$eimer_nr, 'anzahl'=>$N, 'alle_fertig'=>($doneNeu >= $N),
+            'msg'=>!empty($r['id']) ? '' : 'Gebinde konnte nicht angelegt werden.'];
 }
