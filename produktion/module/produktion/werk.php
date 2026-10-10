@@ -46,6 +46,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['werk_flash_ok'] = true;
         weiter('?p=werk&id=' . $paId);
     }
+    if ($werkUid && $aktion === 'werk_probe') {
+        $paId = (int)($_POST['pa_id'] ?? 0);
+        erp_rohstoff_probe_ziehen($paId, (int)($_POST['charge_id'] ?? 0), (int)($_POST['item_id'] ?? 0), $werkName ?: 'Mitarbeiter');
+        $_SESSION['werk_flash'] = 'Probe erfasst.'; $_SESSION['werk_flash_ok'] = true;
+        weiter('?p=werk&id=' . $paId);
+    }
     weiter('?p=werk');
 }
 
@@ -201,6 +207,9 @@ header('Content-Type: text/html; charset=utf-8');
     $mischenDone = false; foreach ($schritte as $s) if ((string)$s['station'] === 'Mischen' && (int)$s['erledigt'] === 1) { $mischenDone = true; break; }
     $rueckListe = ($mischenDone && !erp_rohstoff_rueckgabe_erledigt($id)) ? erp_rohstoff_rueckgabe_offen($id) : [];
     $rueckOffen = !empty($rueckListe);
+    // Chargenprobe VOR dem Mischen: je Rohstoff-Charge eine Probe (prod_probe). Erst danach geht es ans Mischen.
+    $probenListe = ($cur && (string)$cur['station'] === 'Mischen') ? erp_rohstoff_proben_status($id) : [];
+    $probenPflicht = false; foreach ($probenListe as $pr) if (empty($pr['hat_probe'])) { $probenPflicht = true; break; }
   ?>
   <div class="topbar">
     <a class="back" href="?p=werk">&larr; Alle Aufträge</a>
@@ -215,7 +224,31 @@ header('Content-Type: text/html; charset=utf-8');
     <div class="count"><?= menge_txt($pa['menge']) ?> Packungen · Schritt <?= min($fertigCnt + 1, $total) ?> / <?= $total ?></div>
   </div>
 
-  <?php if ($rueckOffen): ?>
+  <?php if ($probenPflicht): ?>
+    <div class="panel" style="border-color:var(--lime)">
+      <div class="step-sub">Vor dem Mischen</div>
+      <div class="step-h">Rohstoff-Probe ziehen</div>
+      <div class="muted" style="font-size:17px;margin-bottom:6px">Von jeder Rohstoff-Charge eine <strong style="color:var(--text)">Chargenprobe</strong> (Rückstellmuster) ziehen und bestätigen. Erst danach geht es ans Mischen. (Jede Produktion braucht frische Proben – auch wenn die Charge zwischendurch wieder im Lager war.)</div>
+      <table class="mat">
+        <thead><tr><th>Rohstoff</th><th>Charge</th><th class="num">Probe</th></tr></thead>
+        <tbody>
+          <?php foreach ($probenListe as $pr): ?>
+          <tr>
+            <td><?= h((string)$pr['name']) ?></td>
+            <td class="muted"><?= h((string)($pr['charge_nr'] ?: '–')) ?></td>
+            <td class="num">
+              <?php if (!empty($pr['hat_probe'])): ?><span style="color:var(--gruen);font-weight:700">✓ erfasst</span>
+              <?php else: ?>
+                <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_probe"><input type="hidden" name="pa_id" value="<?= (int)$id ?>"><input type="hidden" name="charge_id" value="<?= (int)$pr['charge_id'] ?>"><input type="hidden" name="item_id" value="<?= (int)$pr['item_id'] ?>"><button class="btn btn-ghost" type="submit" style="min-height:48px">Probe gezogen</button></form>
+              <?php endif; ?>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      <div class="muted" style="font-size:14px;margin-top:12px">Sobald alle Proben erfasst sind, erscheint der Mischen-Schritt automatisch.</div>
+    </div>
+  <?php elseif ($rueckOffen): ?>
     <div class="panel" style="border-color:var(--lime)">
       <div class="step-sub">Nach dem Mischen</div>
       <div class="step-h">Rohstoff zurück ins Lager</div>

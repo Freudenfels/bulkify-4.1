@@ -75,6 +75,37 @@ function erp_rohstoff_rueckgabe_speichern(int $pa_id, array $gewichte, string $v
     return $n;
 }
 
+// --- Chargenprobe je Rohstoff (vor dem Mischen) -----------------------------------------------
+// Pro verwendeter Rohstoff-Charge ist je Produktionsauftrag eine Probe (prod_probe, Ebene rohstoff) nötig.
+// Da die Probe pro PA erfasst wird, verlangt jede neue Produktion automatisch eine frische Probe – also auch
+// dann, wenn eine Charge nach dem Zurücklegen wieder aus dem Lager verwendet wird ("neue Probe bei nächster
+// Produktion, sofern wieder im Lager"). Grundlage sind die Mischen-Pflichtrohstoffe (FEFO-Charge).
+function erp_rohstoff_proben_status(int $pa_id): array {
+    if ($pa_id <= 0) return [];
+    // Die Rohstoff-Chargen (FEFO) stehen am Schritt „Rohstoffe bereitstellen" – vor dem Mischen und
+    // vor dem Verbrauch (der erst beim Mischen gebucht wird), also sind die Chargen hier bekannt.
+    $mat = erp_schritt_material($pa_id, 'Rohstoffe bereitstellen');
+    $out = [];
+    foreach (($mat['zeilen'] ?? []) as $z) {
+        if (!($z['pflicht'] ?? true)) continue;
+        $cid = (int)($z['charge_id'] ?? 0); if ($cid <= 0) continue;
+        $hat = tabelle_da('prod_probe') && (int) scalar("SELECT COUNT(*) FROM prod_probe WHERE pa_id=? AND charge_id=? AND ebene='rohstoff'", [$pa_id, $cid]) > 0;
+        $out[] = ['charge_id'=>$cid, 'item_id'=>(int)($z['item_id'] ?? 0), 'name'=>(string)$z['name'],
+                  'charge_nr'=>(string) scalar("SELECT charge_nr FROM charge WHERE id=?", [$cid]), 'hat_probe'=>$hat];
+    }
+    return $out;
+}
+function erp_rohstoff_proben_offen(int $pa_id): bool {
+    foreach (erp_rohstoff_proben_status($pa_id) as $r) if (empty($r['hat_probe'])) return true;
+    return false;
+}
+function erp_rohstoff_probe_ziehen(int $pa_id, int $charge_id, int $item_id, string $von = ''): int {
+    if (!tabelle_da('prod_probe') || $charge_id <= 0) return 0;
+    if ((int) scalar("SELECT COUNT(*) FROM prod_probe WHERE pa_id=? AND charge_id=? AND ebene='rohstoff'", [$pa_id, $charge_id]) > 0) return 0;
+    $bn = (string) scalar("SELECT charge_nr FROM charge WHERE id=?", [$charge_id]);
+    return erp_probe_anlegen(['pa_id'=>$pa_id, 'item_id'=>$item_id, 'charge_id'=>$charge_id, 'ebene'=>'rohstoff', 'batch_nr'=>$bn, 'anzahl'=>1, 'erfasst_von'=>$von]);
+}
+
 // --- Produktionsaufträge (nur lesen) ---------------------------------------------------------
 // Liste der Produktionsaufträge mit Produkt/Kunde/Fortschritt + Auftragseingang.
 // $status: '' = aktive (offen+laufend), 'alle' = alle, sonst genau dieser Status (offen|laufend|erledigt).
