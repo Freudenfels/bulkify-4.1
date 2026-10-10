@@ -423,7 +423,7 @@ header('Content-Type: text/html; charset=utf-8');
     <?php endif; ?>
 
     <?php if ($scanAktiv && !$materialFehlt): ?>
-    <div class="panel" style="margin-top:18px;background:var(--panel2);border-color:var(--line)">
+    <div class="panel" id="scanpanel" style="margin-top:18px;background:var(--panel2);border-color:var(--line)">
       <div style="font-weight:700;font-size:18px;margin-bottom:4px"><?= h($T['confirm_batches_h']) ?></div>
       <div class="muted" style="font-size:14px;margin-bottom:12px"><?= h($T['scan_help']) ?> <span id="scancount" style="color:var(--text);font-weight:600"></span></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
@@ -500,8 +500,10 @@ if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ 
     var f=document.getElementById('scannedfield');
     if(f){ var ids=[]; stats.forEach(function(x){ if(x.getAttribute('data-ok')==='1') ids.push(x.getAttribute('data-cid')); }); f.value=ids.join(','); }
     var b=document.getElementById('erledigtbtn'), h=document.getElementById('gatehint');
-    if(b && b.getAttribute('data-scan-gate')==='1'){ var done = ok>=stats.length; b.disabled=!done; if(h) h.style.display = done ? 'none' : ''; }
-    if(ok>=stats.length && camStop){ camStop(); }   // alles bestätigt -> Kamera automatisch aus
+    var alle = ok>=stats.length;
+    if(b && b.getAttribute('data-scan-gate')==='1'){ b.disabled=!alle; if(h) h.style.display = alle ? 'none' : ''; }
+    if(alle && camStop){ camStop(); }                       // alles bestätigt -> Kamera automatisch aus
+    var sp=document.getElementById('scanpanel'); if(sp) sp.style.display = alle ? 'none' : '';  // Scan-Panel ausblenden, nur noch "Erledigt"
   }
   function confirmScan(raw){
     var p=parse(raw), el=null;
