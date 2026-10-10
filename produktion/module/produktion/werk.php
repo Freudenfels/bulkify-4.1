@@ -129,7 +129,7 @@ header('Content-Type: text/html; charset=utf-8');
 </head><body><div class="wrap">
 
 <?php if (!$werkUid): // ===================== PIN-LOGIN ===================== ?>
-  <div class="topbar"><div class="brand">bulkify <b>Produktion</b></div></div>
+  <div class="topbar"><div class="brand"><img src="/assets/bulkify-logo-white.png" alt="Produktion" style="height:30px;vertical-align:middle;display:inline-block"></div></div>
   <div class="login">
     <div style="font-size:22px;margin-top:10px">PIN eingeben</div>
     <div class="muted" style="font-size:15px">Deinen Tablet-PIN hat dir der Produktionsleiter gegeben.</div>
@@ -179,7 +179,7 @@ header('Content-Type: text/html; charset=utf-8');
     });
   ?>
   <div class="topbar">
-    <div class="brand">bulkify <b>Produktion</b></div>
+    <div class="brand"><img src="/assets/bulkify-logo-white.png" alt="Produktion" style="height:30px;vertical-align:middle;display:inline-block"></div>
     <div style="display:flex;align-items:center;gap:14px">
       <span class="who"><?= h($werkName) ?></span>
       <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_logout"><button class="btn btn-ghost" style="min-height:48px;padding:10px 18px;font-size:16px" type="submit">Abmelden</button></form>
