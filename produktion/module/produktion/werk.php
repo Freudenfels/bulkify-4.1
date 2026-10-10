@@ -123,7 +123,7 @@ header('Content-Type: text/html; charset=utf-8');
   html,body{margin:0;height:100%}
   body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:18px;-webkit-text-size-adjust:100%}
   .wrap{max-width:1100px;margin:0 auto;padding:18px 18px 60px}
-  .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 4px 18px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 4px;margin-bottom:16px;position:sticky;top:0;z-index:30;background:var(--bg);border-bottom:1px solid var(--line)}
   .brand{font-weight:800;font-size:22px;letter-spacing:.3px}
   .brand b{color:var(--lime)}
   .who{color:var(--muted);font-size:15px}
@@ -165,7 +165,8 @@ header('Content-Type: text/html; charset=utf-8');
   .step-h{font-size:30px;font-weight:800;margin:2px 0 6px}
   .step-sub{color:var(--muted);font-size:16px}
   .count{font-size:16px;color:var(--muted)}
-  a.back{color:var(--muted);text-decoration:none;font-size:16px}
+  a.back{display:inline-flex;align-items:center;gap:8px;color:var(--text);text-decoration:none;font-size:17px;font-weight:700;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px 20px;min-height:48px}
+  a.back:active{background:var(--gruen);color:#06130d}
 </style>
 </head><body><div class="wrap">
 

@@ -11,6 +11,8 @@ Eigener **PIN-Login** (kein Team-Login). Die PIN setzt der Admin im Dashboard je
 ## Drei Ansichten
 1. **PIN-Login** (keine `werk_uid`): Ziffernblock, 4–8 Stellen, OK.
 2. **Kachel-Liste** (`?p=werk`): große Karten der **produzierbaren** (`erp_pa_bereitschaft`=bereit) + **laufenden** Aufträge; laufend zuerst, dann nach geplantem Termin. Karte zeigt Nr., Produkt, Menge, Kunde, Status-Badge, Fortschrittsbalken + „Schritt X / Y". Tippen → Schritt-Ansicht.
+Die Kopfzeile (`.topbar`) ist **sticky** (bleibt beim Scrollen oben kleben) – so sind der **Zurück-Button** „← Alle Aufträge" (als echter Touch-Button, nicht nur Textlink) und „Abmelden" immer erreichbar, auch bei langen Schritt-Seiten (wichtig in der installierten Vollbild-PWA ohne Browser-Zurück).
+
 3. **Schritt-Ansicht** (`?p=werk&id=<pa>`): Kopf (Nr./Produkt/Menge/Schritt), der **aktuelle Schritt** groß (Station + Anleitung via `station_anleitung_text`), Material **„Aus dem Lager holen"** (`erp_schritt_material`: Material/Menge/Bestand, Knappheit rot), großer **„Erledigt – nächster Schritt"**-Button und darunter der **Ablauf** (erledigt ✓ / aktuell / offen). Alle Schritte fertig → **„Fertig ✓"** + zurück zur Liste.
 
 ## Mischen: Mischbehälter einzeln
