@@ -35,6 +35,7 @@ function kopf(string $titel, string $aktiv = ''): void {
                 echo '<a href="?p=' . h($route) . '"' . ($aktiv === $route ? ' class="on"' : '') . '><span>' . h($label) . '</span></a>';
         }
         echo '<div class="bx-navgroup">Dashboard</div><a href="' . h(erp_dashboard_url()) . '"><span>Zum Dashboard</span></a>';
+        if (pr_ist_admin()) echo '<a href="' . h(erp_dashboard_url()) . '?p=testdaten"><span>Testdaten (Durchspiel)</span></a>';
         echo '<div class="bx-userbox">'
            . '<div class="bx-username">' . h((string)$u['name']) . '</div>'
            . '<div class="bx-userroles">' . h((string)$u['email']) . '</div>'
