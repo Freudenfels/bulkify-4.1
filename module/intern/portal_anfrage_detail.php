@@ -7,6 +7,7 @@ require_once BX_ROOT . '/core/anfrage_ui.php';   // Rohstoffpreise + Preisanfrag
 $id = (int)($_GET['id'] ?? 0);
 $TYP = ['produkt'=>'Produktanfrage', 'rohstoff'=>'Rohstoffanfrage', 'dienstleistung'=>'Dienstleistungsanfrage'];
 $VTYPEN = ['glas'=>'Glas', 'pet'=>'PET-Dose', 'pla'=>'PLA-Becher', 'beutel'=>'Standbodenbeutel', 'stick'=>'Stick', 'blister'=>'Blister'];
+$DLTYP = ['labortest'=>'Labortest / Analyse', 'abfuellung'=>'Reine Abfüllung', 'sourcing'=>'Sourcing / Beschaffung', 'konfektionierung'=>'Konfektionierung / Verpackung', 'lagerung'=>'Lagerung / Fulfillment', 'beratung'=>'Beratung / Regulatorik', 'sonstiges'=>'Sonstiges'];
 
 // Hinweis: Der Status wird automatisch gesetzt (Angebot bauen -> in Bearbeitung, senden ->
 // beantwortet, absagen -> abgelehnt). Ein manuelles Status-Formular gibt es daher nicht mehr.
@@ -125,6 +126,21 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
         q("UPDATE portal_anfrage SET status='in_bearbeitung' WHERE id=?", [$id]);
         log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [$angid]) . ' aus Anfrage ' . $pa['nummer'] . ' im Editor angelegt.', 'angebot', 'angebot', $angid);
         header('Location: ?p=angebot&id=' . $angid); exit;
+    }
+    header('Location: ?p=portal_anfrage&id=' . $id); exit;
+}
+// Dienstleistungsanfrage -> DL-Angebot (DA-) erstellen (oder vorhandenes öffnen) und in den DL-Editor springen.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dl_angebot_erstellen') {
+    $pa = one("SELECT * FROM portal_anfrage WHERE id=?", [$id]);
+    if ($pa && $pa['typ'] === 'dienstleistung' && (int)($pa['kunde_id'] ?? 0) > 0 && function_exists('dl_angebot_neu')) {
+        $vorhanden = (int) scalar("SELECT id FROM angebot WHERE anfrage_id=? AND kategorie='dienstleistung' AND status IN ('offen','gesendet') ORDER BY id DESC LIMIT 1", [$id]);
+        if ($vorhanden) { header('Location: ?p=dl_angebot&id=' . $vorhanden); exit; }   // nicht doppelt anlegen
+        $agid  = dl_angebot_neu((int)$pa['kunde_id']);
+        $notiz = 'Aus Anfrage ' . $pa['nummer'] . (trim((string)($pa['betreff'] ?? '')) !== '' ? ' — ' . trim((string)$pa['betreff']) : '');
+        q("UPDATE angebot SET anfrage_id=?, notiz=? WHERE id=?", [$id, mb_substr($notiz, 0, 500), $agid]);
+        q("UPDATE portal_anfrage SET status='in_bearbeitung' WHERE id=?", [$id]);
+        log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'DL-Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [$agid]) . ' aus Anfrage ' . $pa['nummer'] . ' angelegt.', 'angebot', 'angebot', $agid);
+        header('Location: ?p=dl_angebot&id=' . $agid); exit;
     }
     header('Location: ?p=portal_anfrage&id=' . $id); exit;
 }
@@ -252,8 +268,12 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
       <?php endif; ?>
       <?php if (!empty($pa['umkarton'])): ?><tr><td>Umkarton</td><td>ja (Kundenwunsch – Details ggf. in der Notiz)</td></tr><?php endif; ?>
     <?php else: ?>
+      <?php if ($pa['typ'] === 'dienstleistung' && !empty($pa['dienstleistung_typ'])): ?>
+      <tr><td style="width:220px">Art der Dienstleistung</td><td><?= h($DLTYP[$pa['dienstleistung_typ']] ?? $pa['dienstleistung_typ']) ?></td></tr>
+      <?php endif; ?>
       <tr><td style="width:220px">Betreff</td><td><?= h($pa['betreff'] ?: '–') ?></td></tr>
       <?php if ($pa['wunsch_menge']): ?><tr><td>Gewünschte Menge</td><td><?= $mg($pa['wunsch_menge']) . ' ' . h($pa['wunsch_einheit'] ?: '') ?></td></tr><?php endif; ?>
+      <?php if ($pa['typ'] === 'dienstleistung' && ($pa['zielpreis'] ?? null) !== null && (float)$pa['zielpreis'] > 0): ?><tr><td>Zielpreis (Kunde)</td><td><?= $mg($pa['zielpreis']) ?> €</td></tr><?php endif; ?>
     <?php endif; ?>
     <?php if ($pa['notiz']): ?><tr><td>Notiz</td><td><?= h($pa['notiz']) ?></td></tr><?php endif; ?>
   </tbody></table></div>
@@ -272,8 +292,9 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
   </form>
 </div>
 <?php endif; ?>
-<?php // Rohstoff-/Dienstleistungsanfragen haben keine Angebot-Aktionszeile -> hier der rote Absage-Button.
-if ($darfAbsage && in_array($pa['typ'], ['rohstoff','dienstleistung'], true)): ?>
+<?php // Rohstoffanfragen haben keine Angebot-Aktionszeile -> hier der rote Absage-Button.
+// (Dienstleistung hat ein eigenes Panel „Dienstleistungs-Angebot" weiter unten – mit Absage dort.)
+if ($darfAbsage && $pa['typ'] === 'rohstoff'): ?>
 <div class="bx-row" style="gap:10px;margin:0 0 16px"><button class="btn btn-danger" type="button" onclick="bxAbsageOeffnen()">Nicht machbar</button></div>
 <?php endif; ?>
 
@@ -344,6 +365,37 @@ if ($darfAbsage && in_array($pa['typ'], ['rohstoff','dienstleistung'], true)): ?
   <?php else: ?>
     <div class="muted">Ordne oben einen Rohstoff zu, dann rechnet das System EK, Aufschlag und VK aus.</div>
   <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php // Dienstleistungsanfrage -> DL-Angebot (DA-) erstellen, bepreisen und senden (im DL-Editor).
+if ($pa['status'] !== 'abgelehnt' && $pa['typ'] === 'dienstleistung'):
+    $dlAngebote = all("SELECT id, nummer, status FROM angebot WHERE anfrage_id=? AND kategorie='dienstleistung' ORDER BY id DESC", [(int)$pa['id']]);
+?>
+<div class="bx-panel">
+  <h2>Dienstleistungs-Angebot</h2>
+  <p class="muted" style="margin-top:0">Erstelle ein <strong>DL-Angebot (DA-)</strong> zu dieser Anfrage: Leistung(en) + Preise im DL-Editor eintragen und an den Kunden senden. Nach Zusage bestätigst du dort das Angebot &rarr; es entsteht ein DL-Auftrag (DB-).</p>
+  <?php if ($dlAngebote): ?>
+    <p class="muted" style="margin:0 0 4px">Angebote zu dieser Anfrage:</p>
+    <?php foreach ($dlAngebote as $ag): ?>
+      <div class="bx-row" style="gap:10px;align-items:center;margin-bottom:6px">
+        <a href="?p=dl_angebot&id=<?= (int)$ag['id'] ?>"><?= h($ag['nummer']) ?></a>
+        <?= match ((string)$ag['status']) { 'offen'=>bx_badge('Entwurf – noch nicht beim Kunden','info'), 'gesendet'=>bx_badge('beim Kunden','ok'), 'angenommen','bestaetigt'=>bx_badge('bestätigt','ok'), 'abgelehnt'=>bx_badge('abgelehnt','err'), default=>bx_badge((string)$ag['status']) } ?>
+      </div>
+    <?php endforeach; ?>
+  <?php endif; ?>
+  <?php if (!(int)($pa['kunde_id'] ?? 0)): ?>
+    <div class="bx-panel badge-warn" style="padding:10px 14px;margin:8px 0">Dieser Anfrage ist kein Kunde zugeordnet – ein DL-Angebot braucht einen Kunden.</div>
+  <?php endif; ?>
+  <div class="bx-row" style="gap:10px;margin-top:8px">
+    <?php if ((int)($pa['kunde_id'] ?? 0)): ?>
+    <form method="post" style="margin:0">
+      <input type="hidden" name="aktion" value="dl_angebot_erstellen">
+      <button class="btn btn-primary" type="submit"><?= $dlAngebote ? 'Weiteres DL-Angebot erstellen' : 'DL-Angebot erstellen' ?></button>
+    </form>
+    <?php endif; ?>
+    <?php if ($darfAbsage): ?><button class="btn btn-danger" type="button" onclick="bxAbsageOeffnen()">Nicht machbar</button><?php endif; ?>
+  </div>
 </div>
 <?php endif; ?>
 
