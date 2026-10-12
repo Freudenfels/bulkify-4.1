@@ -3653,7 +3653,7 @@ function seed_lieferant_preis_if_empty(): void {
 // $einheiten = wie viele Einheiten (Kapseln, Portionen …) insgesamt produziert werden. Ist das
 // bekannt, zählt je Zutat die Lieferanten-Staffel (`lieferant_preis`), die zur Gesamtmenge passt –
 // so wird eine große Bestellung je Einheit günstiger (Mengenrabatt). Ohne Angabe: flacher item.ek_preis.
-function rezeptur_kosten_pro_einheit(?int $rid, float $einheiten = 0): float {
+function rezeptur_kosten_pro_einheit(?int $rid, float $einheiten = 0, bool $mitFremd = true): float {
     if (!$rid) return 0.0;
     $c = 0.0;
     foreach (all("SELECT z.item_id, z.menge_mg, i.ek_preis, i.preis_bezug, i.dichte
@@ -3669,33 +3669,48 @@ function rezeptur_kosten_pro_einheit(?int $rid, float $einheiten = 0): float {
         $perMg = $pb === 'kg' ? $ek/1e6 : ($pb === 'g' ? $ek/1e3 : ($pb === 'L' && $z['dichte'] ? ($ek/(1000*(float)$z['dichte']))/1e3 : 0));
         $c += $mg * $perMg;
     }
-    // Fallback: keine Rohstoff-EK bekannt -> Fremdfertigungspreis (Lohnherstellung) je Stück nutzen,
-    // falls fuer diese Rezeptur ein Lieferanten-Angebot mit Preis vorliegt (aus rezept_preise).
-    if ($c <= 0) {
+    // Fallback: keine Rohstoff-EK bekannt -> Fremdfertigungspreis (Fertigprodukt des Lieferanten) je Stück
+    // nutzen, falls fuer diese Rezeptur ein Lieferanten-Angebot mit Preis vorliegt. Mit $mitFremd=false
+    // liefert die Funktion NUR die Rohstoffkosten (der Aufrufer behandelt den Fremdpreis dann selbst).
+    if ($c <= 0 && $mitFremd) {
         $f = rezeptur_fremd_ek_pro_einheit((int)$rid, $einheiten);
         if ($f !== null) return $f;
     }
     return $c;
 }
 
-// Fremdfertigungspreis je Stueck aus rezeptur_lief_angebot (nur Stueck-Formen: Kapsel/Tablette/…).
-// Waehlt die guenstigste Zeile, deren Mengenstaffel fuer die gewuenschte Stueckzahl gilt.
+// Fremdfertigungspreis je Stueck (Fertigprodukt des Lieferanten), nur Stueck-Formen (Kapsel/Tablette/…).
+// Zwei Quellen, guenstigster Preis gewinnt:
+//   A) rezeptur_lief_angebot  – Fremdfertigungs-Angebot direkt an der Rezeptur (Lieferantenportal/v3-Import).
+//   B) produkt_lieferant_preis – angenommene v4-Fertigprodukt-Angebote je Produkt dieser Rezeptur (Zukauf).
+// Jeweils passend zur gewuenschten Stueckzahl (Mengenstaffel). Dadurch greift der Angebots-Fallback
+// „kein Rohstoff-EK -> Lieferanten-Fertigproduktpreis" auch fuer angenommene Fertigprodukt-Angebote.
 function rezeptur_fremd_ek_pro_einheit(int $rid, float $einheiten = 0): ?float {
     if (!$rid) return null;
     $df = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
     if (!in_array($df, ['kapsel','tablette','softgel','stick','gummi','gel'], true)) return null;
-    $rows = all("SELECT preis, menge FROM rezeptur_lief_angebot
-                 WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0
-                   AND (einheit IS NULL OR einheit='' OR LOWER(einheit) IN ('kapsel','tablette','softgel','stick','stueck','stück','stk','gummi','gel'))",
-                [$rid]);
-    if (!$rows) return null;
-    $best = null;                                  // guenstigste Zeile, deren Staffel <= gewuenschte Menge
-    foreach ($rows as $r) {
-        $m = (float)$r['menge']; $p = (float)$r['preis'];
-        if ($einheiten > 0 && $m > 0 && $m > $einheiten) continue;  // hoehere Staffel gilt noch nicht
-        if ($best === null || $p < $best) $best = $p;
+    $best = null;
+    // Quelle A: Fremdfertigungs-Angebot an der Rezeptur (nur Stueck-Preise). Passende Staffel, sonst Basis.
+    if (table_exists('rezeptur_lief_angebot')) {
+        $rows = all("SELECT preis, menge FROM rezeptur_lief_angebot
+                     WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0
+                       AND (einheit IS NULL OR einheit='' OR LOWER(einheit) IN ('kapsel','tablette','softgel','stick','stueck','stück','stk','gummi','gel'))",
+                    [$rid]);
+        $passend = null; $basis = null;
+        foreach ($rows as $r) {
+            $m = (float)$r['menge']; $p = (float)$r['preis'];
+            if ($basis === null || $p < $basis) $basis = $p;
+            if ($einheiten > 0 && $m > 0 && $m > $einheiten) continue;   // hoehere Staffel gilt noch nicht
+            if ($passend === null || $p < $passend) $passend = $p;
+        }
+        $a = $passend ?? $basis;
+        if ($a !== null && ($best === null || $a < $best)) $best = $a;
     }
-    if ($best === null) foreach ($rows as $r) { $p = (float)$r['preis']; if ($best === null || $p < $best) $best = $p; } // sonst Basis
+    // Quelle B: angenommene Fertigprodukt-Angebote je Produkt dieser Rezeptur (produkt_lieferant_preis, je Stueck).
+    if (table_exists('produkt_lieferant_preis'))
+        foreach (all("SELECT id FROM produkt WHERE rezeptur_id=?", [$rid]) as $pr)
+            foreach (produkt_lieferant_preise((int)$pr['id'], $einheiten) as $p)
+                if ((float)$p > 0 && ($best === null || (float)$p < $best)) $best = (float)$p;
     return $best;
 }
 
@@ -4438,10 +4453,20 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
         $servings = $stueck / gel_portion_ml();
         $ekH = rezeptur_kosten_pro_einheit($rid, $servings * $menge) * $servings + ($stueck / 1000) * gel_basis_ek_l();
     } else {
-        $ekH = rezeptur_kosten_pro_einheit($rid, $stueck * $menge) * $stueck
-             + ($istKapsel ? leerkapsel_ek_fuer_rezeptur($rid) * $stueck : 0)
-             + ($form === 'tablette' ? tablette_hilfsstoff_ek_stueck($rid) * $stueck : 0)
-             + ($form === 'gummi' ? gummi_basis_ek_stueck($rid) * $stueck : 0);
+        // Nur die Rohstoffkosten (ohne Fremd-Fallback), damit wir unterscheiden koennen:
+        $rawPer = rezeptur_kosten_pro_einheit($rid, $stueck * $menge, false);
+        if ($rawPer > 0) {
+            // Eigenherstellung: Fuellkosten + Huelle/Presshilfe/Gummibasis je Stueck.
+            $ekH = $rawPer * $stueck
+                 + ($istKapsel ? leerkapsel_ek_fuer_rezeptur($rid) * $stueck : 0)
+                 + ($form === 'tablette' ? tablette_hilfsstoff_ek_stueck($rid) * $stueck : 0)
+                 + ($form === 'gummi' ? gummi_basis_ek_stueck($rid) * $stueck : 0);
+        } else {
+            // Keine Rohstoffpreise -> Fertigprodukt-Preis des Lieferanten je Stueck ist der KOMPLETTE EK
+            // (Huelle + Labor bereits enthalten) – nichts zusaetzlich aufschlagen.
+            $fremdPer = rezeptur_fremd_ek_pro_einheit($rid, $stueck * $menge);
+            $ekH = ($fremdPer !== null ? $fremdPer : 0.0) * $stueck;
+        }
     }
     $marge = $mo !== null ? $mo : max(marge_typ_prozent($form), marge_min_prozent());
     $vkH = vk_fuer_kunde($ekH * (1 + $marge/100), $kid);
