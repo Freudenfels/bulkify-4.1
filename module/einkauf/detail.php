@@ -78,6 +78,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['ki_best'] = $r['daten'] ?? [];
         header('Location: ?p=bestellung&id=neu&ki=1'); exit;
     }
+    // Leere Bestellung verhindern: ohne Position sieht der Lieferant im Portal nichts (BE-xxxx „–").
+    // Zählt eingehende Lagerartikel-Positionen + (beim Bearbeiten) erhaltene Bulk-/Freitext-Positionen.
+    $neuePosEin = 0; foreach (($_POST['p_item'] ?? []) as $iid) if ((int)$iid > 0) $neuePosEin++;
+    $bulkDa = (!$neu && (int)$id > 0) ? (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL", [(int)$id]) : 0;
+    if ($neuePosEin + $bulkDa === 0) {
+        header('Location: ?p=bestellung&id=' . ($neu ? 'neu' : (int)$id) . '&fehler=' . urlencode('Bitte mindestens eine Position (Artikel + Menge) hinzufügen, bevor die Bestellung gespeichert wird.')); exit;
+    }
     if ($neu) {
         q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz) VALUES (?,?,?,?)",
           [naechste_nummer('BE'), $lief, 'offen', trim($_POST['notiz'] ?? '')]);

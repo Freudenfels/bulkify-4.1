@@ -100,6 +100,9 @@ if (!$b):
       <h2 style="margin:0"><?= h(lp_t('positionen')) ?></h2>
       <a class="btn btn-ghost btn-sm" target="_blank" href="?p=lieferant_bestellung_pdf&id=<?= (int)$b['id'] ?>">&#8681; <?= h(lp_t('pdf')) ?></a>
     </div>
+    <?php if (!$pos): ?>
+    <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px;margin-top:12px"><?= h(lp_t('keine_positionen')) ?></div>
+    <?php else: ?>
     <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
       <thead><tr><th><?= h(lp_t('artikel')) ?></th><th class="bx-num"><?= h(lp_t('menge')) ?></th><th><?= h(lp_t('einheit')) ?></th><th class="bx-num"><?= h(lp_t('preis')) ?></th><th class="bx-num"><?= h(lp_t('summe')) ?></th></tr></thead>
       <tbody><?php foreach ($pos as $p): ?>
@@ -114,6 +117,7 @@ if (!$b):
         <tr style="font-weight:600"><td colspan="4"><?= h(lp_t('summe')) ?></td><td class="bx-num"><?= $money($summe, 2) ?></td></tr>
       </tbody>
     </table></div>
+    <?php endif; ?>
     <?php if (!empty($b['notiz'])): ?><div class="muted" style="margin-top:10px;white-space:pre-line"><?= h($b['notiz']) ?></div><?php endif; ?>
   </div>
 

@@ -22,6 +22,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'nummer'          => ['de'=>'Nummer',                 'en'=>'Number', 'zh'=>'编号'],
         'datum'           => ['de'=>'Datum',                  'en'=>'Date', 'zh'=>'日期'],
         'positionen'      => ['de'=>'Positionen',             'en'=>'Items', 'zh'=>'明细'],
+        'keine_positionen'=> ['de'=>'Zu dieser Bestellung sind noch keine Positionen hinterlegt. Bitte in Kürze erneut nachsehen oder beim Team nachfragen.', 'en'=>'No items have been added to this order yet. Please check back shortly or contact the team.', 'zh'=>'此订单尚未添加明细，请稍后再查看或联系团队。'],
         'status'          => ['de'=>'Status',                 'en'=>'Status', 'zh'=>'状态'],
         'termin'          => ['de'=>'Zugesagter Termin',      'en'=>'Confirmed date', 'zh'=>'确认交货日期'],
         'menge'           => ['de'=>'Menge',                  'en'=>'Quantity', 'zh'=>'数量'],
