@@ -955,6 +955,11 @@ if ($angIds) foreach (all("SELECT angebot_id, COUNT(*) n FROM angebot_position
 if ($anfIds) foreach (all("SELECT id FROM portal_anfrage
                            WHERE id IN (" . $inList($anfIds) . ") AND rezeptur_id IS NOT NULL AND COALESCE(stueck, fuellmenge_g, 0) > 0") as $c)
     $anfRezOk[(int)$c['id']] = true;
+// Positionen sind die Quelle der Wahrheit (Team editiert sie, PDF liest sie). Hat ein Angebot
+// bepreiste Positions-Optionen, ignorieren wir eine (ggf. VERALTETE) angebot_staffel – sonst würde
+// eine alte Staffel-Menge (z. B. 4500) im Portal die bearbeitete Positions-Menge (z. B. 10000)
+// verdecken und nur die alte Menge annehmbar machen. Reine Staffel-Angebote (ohne Positionen) bleiben.
+foreach ($angIds as $id) if (!empty($posRezCount[$id])) $staffelMap[$id] = [];
 $produktionszeit = (float) meta_get('produktionszeit_wochen', 7);   // globaler Standard
 $itemName = fn($id) => $id ? (string) scalar("SELECT name FROM item WHERE id=?", [(int)$id]) : '';
 $staffelFuer = function(array $a) use (&$staffelMap) {
@@ -975,6 +980,10 @@ $angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $prod
         $vk = $mo !== null ? (float)$mr['ek_preis'] * (1 + $mo/100) : (float)$mr['vk_preis'];
         if (!isset($matrix[$s][$bm])) $matrix[$s][$bm] = ['vk'=>$vk, 'verp'=>(int)$mr['verpackung_id']];
     }
+    // Hat das Angebot bepreiste (verhandelte) Rezeptur-Positionen, sind DIESE die Quelle der Wahrheit
+    // (wie im PDF). Dann NICHT die generische Produkt-Matrix zeigen, sondern die Positions-Optionen –
+    // sonst würde eine bearbeitete Angebotsmenge hinter der Katalog-Matrix verschwinden.
+    if (!empty($posRezCount[$id])) $matrix = [];
     // SICHERUNG (v3-Import): Angebote aus der v3-Migration ohne v4-Preisstaffeln würden sonst die (cost-basierte,
     // oft viel zu niedrige) Auto-Matrix aus produkt_preis zeigen – falsche Preise. Solche Angebote werden gesperrt:
     // keine Matrix, keine Annahme; der Kunde sieht "Preis wird finalisiert". Freischaltung durch Pflege echter Staffeln.

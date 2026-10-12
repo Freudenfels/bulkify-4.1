@@ -4855,6 +4855,17 @@ function angebot_ki_pdf_uebernehmen(int $angebot_id, array $d): int {
     angebot_ki_produkt_verpackung($angebot_id, $d);
     return count($pos);
 }
+// Nach einer Positions-Bearbeitung ist die Angebots-Staffel (angebot_staffel) ein VERALTETER Cache:
+// das PDF liest die Positionen (menge), Kundenportal-Übersicht + Annahme lasen bisher die Staffel –
+// änderte das Team die Menge (z. B. 4500 -> 10000), zeigte das Portal weiter die alte Staffel und ließ
+// nur die alte Menge annehmen. Darum die Staffel verwerfen, sobald es Positionen gibt: dann baut das
+// Portal Übersicht + Annahme aus den aktuellen Positionen (konsistent mit dem PDF). Reine Staffel-
+// Angebote ohne Positionen bleiben unangetastet.
+function angebot_staffel_cache_verwerfen(int $angebot_id): void {
+    if ($angebot_id <= 0 || !tabelle_da('angebot_staffel') || !tabelle_da('angebot_position')) return;
+    if ((int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=?", [$angebot_id]) > 0)
+        q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$angebot_id]);
+}
 // Rechnungs-/AB-Positionen zu einem Auftrag: die EINZELPOSITIONEN der bestaetigten Konfiguration
 // (Herstellung + Verpackung + Deckel + Etikett …) wie im Angebot, statt einer Sammelposition.
 // Streng: nur wenn die Summe (Preis je Packung × Menge) EXAKT den Auftrags-Netto ergibt – sonst [].

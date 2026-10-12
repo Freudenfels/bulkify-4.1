@@ -93,6 +93,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         } catch (Throwable $e) { db()->rollBack(); throw $e; }
         db()->commit();
+        // Angebots-Staffel ist ein veralteter Cache, sobald die Positionen bearbeitet wurden (z. B. Menge
+        // 4500 -> 10000): entfernen, damit Kundenportal-Übersicht UND Annahme die aktuellen Positionen
+        // verwenden (wie das PDF). Nur wenn es jetzt Positionen gibt (reines Staffel-Angebot bleibt erhalten).
+        angebot_staffel_cache_verwerfen((int)$id);
         // „Speichern & an Kunden senden" (Button unten bei den Positionen): direkt nach dem Speichern senden.
         if (!empty($_POST['und_senden'])) {
             $st  = (string) scalar("SELECT status FROM angebot WHERE id=?", [(int)$id]);
@@ -286,6 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     foreach (angebot_positionen_prefix($allp) as $p) q("UPDATE angebot_position SET bezeichnung=? WHERE id=?", [$p['bezeichnung'], (int)$p['id']]);
                 } catch (Throwable $e) { db()->rollBack(); throw $e; }
                 db()->commit();
+                angebot_staffel_cache_verwerfen((int)$id);   // veraltete Staffel entfernen -> Portal nutzt die neuen Positionen
                 q("UPDATE angebot SET preise_kunde=0 WHERE id=?", [(int)$id]);   // Zwischenstand nicht sichtbar bis zur Freigabe
                 header('Location: ?p=angebot&id=' . $id . '&uebernommen=1#positionen'); exit;
             }
