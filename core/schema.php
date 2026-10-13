@@ -4441,35 +4441,8 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
     $istKapsel = in_array($form, ['kapsel','softgel'], true);
     $ust = angebot_ust_satz($kid);
     $menge = max(1, $menge);
-    // EK je Packung – je Form: Pulver/Granulat nach Gramm, Flüssig nach ml, sonst je Einheit (+ Kapsel/Presshilfsstoffe).
-    // Die Rohstoffe werden mit der Staffel zur GESAMTMENGE (Einheiten je Packung × Packungen) gerechnet –
-    // darum ist dieselbe Konfiguration bei mehr Packungen je Packung günstiger.
-    if (in_array($form, ['pulver','granulat'], true)) {
-        $portionG = rezeptur_gewicht_mg($rid) / 1000;
-        $servings = $portionG > 0 ? $stueck / $portionG : 0;
-        $ekH = rezeptur_kosten_pro_einheit($rid, $servings * $menge) * $servings;
-    } elseif ($form === 'fluessig') {
-        $servings = $stueck / fluessig_portion_ml();
-        $ekH = rezeptur_kosten_pro_einheit($rid, $servings * $menge) * $servings + ($stueck / 1000) * fluessig_basis_ek_l();
-    } elseif ($form === 'gel') {
-        $servings = $stueck / gel_portion_ml();
-        $ekH = rezeptur_kosten_pro_einheit($rid, $servings * $menge) * $servings + ($stueck / 1000) * gel_basis_ek_l();
-    } else {
-        // Nur die Rohstoffkosten (ohne Fremd-Fallback), damit wir unterscheiden koennen:
-        $rawPer = rezeptur_kosten_pro_einheit($rid, $stueck * $menge, false);
-        if ($rawPer > 0) {
-            // Eigenherstellung: Fuellkosten + Huelle/Presshilfe/Gummibasis je Stueck.
-            $ekH = $rawPer * $stueck
-                 + ($istKapsel ? leerkapsel_ek_fuer_rezeptur($rid) * $stueck : 0)
-                 + ($form === 'tablette' ? tablette_hilfsstoff_ek_stueck($rid) * $stueck : 0)
-                 + ($form === 'gummi' ? gummi_basis_ek_stueck($rid) * $stueck : 0);
-        } else {
-            // Keine Rohstoffpreise -> Fertigprodukt-Preis des Lieferanten je Stueck ist der KOMPLETTE EK
-            // (Huelle + Labor bereits enthalten) – nichts zusaetzlich aufschlagen.
-            $fremdPer = rezeptur_fremd_ek_pro_einheit($rid, $stueck * $menge);
-            $ekH = ($fremdPer !== null ? $fremdPer : 0.0) * $stueck;
-        }
-    }
+    // EK je Packung aus der zentralen Herstell-Kalkulation (eine Quelle, siehe rezeptur_herstell_ek_pro_packung).
+    $ekH = rezeptur_herstell_ek_pro_packung($rid, $stueck, $menge);
     $marge = $mo !== null ? $mo : max(marge_typ_prozent($form), marge_min_prozent());
     $vkH = vk_fuer_kunde($ekH * (1 + $marge/100), $kid);
     // Rezeptur-Beschreibung (je Zutat eine Zeile + Zusammenfassung)
@@ -4517,6 +4490,60 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
         ];
     }
     return $rows;
+}
+// Herstell-EK EINER Packung – eine Quelle fuer alle Pfade (Angebotszeilen, Nachkalkulation, Editor-Refresh).
+// Je Form: Pulver/Granulat nach Gramm, Fluessig/Gel nach ml, sonst je Einheit (+ Kapsel/Presshilfsstoffe).
+// Hat die Rezeptur keine Rohstoffpreise, zaehlt der Fertigprodukt-Preis des Lieferanten je Stueck als
+// KOMPLETTER EK (Huelle + Labor bereits enthalten) – nichts zusaetzlich aufschlagen. Staffel = stueck*menge.
+function rezeptur_herstell_ek_pro_packung(int $rid, int $stueck, int $menge): float {
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+    if ($form === '') return 0.0;
+    $menge  = max(1, $menge);
+    $istKapsel = in_array($form, ['kapsel','softgel'], true);
+    if (in_array($form, ['pulver','granulat'], true)) {
+        $portionG = rezeptur_gewicht_mg($rid) / 1000;
+        $servings = $portionG > 0 ? $stueck / $portionG : 0;
+        return rezeptur_kosten_pro_einheit($rid, $servings * $menge) * $servings;
+    }
+    if ($form === 'fluessig') {
+        $servings = $stueck / fluessig_portion_ml();
+        return rezeptur_kosten_pro_einheit($rid, $servings * $menge) * $servings + ($stueck / 1000) * fluessig_basis_ek_l();
+    }
+    if ($form === 'gel') {
+        $servings = $stueck / gel_portion_ml();
+        return rezeptur_kosten_pro_einheit($rid, $servings * $menge) * $servings + ($stueck / 1000) * gel_basis_ek_l();
+    }
+    $rawPer = rezeptur_kosten_pro_einheit($rid, $stueck * $menge, false);   // nur Rohstoff, ohne Fremd-Fallback
+    if ($rawPer > 0) {
+        return $rawPer * $stueck
+             + ($istKapsel ? leerkapsel_ek_fuer_rezeptur($rid) * $stueck : 0)
+             + ($form === 'tablette' ? tablette_hilfsstoff_ek_stueck($rid) * $stueck : 0)
+             + ($form === 'gummi' ? gummi_basis_ek_stueck($rid) * $stueck : 0);
+    }
+    $fremdPer = rezeptur_fremd_ek_pro_einheit($rid, $stueck * $menge);
+    return ($fremdPer !== null ? $fremdPer : 0.0) * $stueck;
+}
+// Herstell-EK der Angebots-Positionen frisch aus der aktuellen Rezeptur/Lieferantenkalkulation ziehen.
+// Noetig, weil die Positions-EK beim Anlegen eingefroren wird: traegt der Lieferant den Fertig-/Rohstoffpreis
+// erst SPAETER ein (Lieferantenportal), bliebe die Position sonst auf dem alten – oft 0 – Wert stehen.
+// Nur Herstellungszeilen mit Rezeptur+Stueck; der Kunden-VK (preis_cent) wird NIE angefasst, nur der interne EK.
+// Bewusst NUR Zeilen mit EK=0 gefuellt: ein bereits gesetzter EK (z. B. aus der Produkt-Matrix, die anders
+// staffelt) bleibt unangetastet – wir reparieren ausschliesslich den „EK bleibt 0"-Fall. Rueckgabe: Anzahl.
+function angebot_herstellung_ek_auffrischen(int $angebot_id): int {
+    $rows = all("SELECT id, rezeptur_id, stueck, menge FROM angebot_position
+                 WHERE angebot_id=? AND quelle='herstellung' AND rezeptur_id IS NOT NULL AND rezeptur_id>0
+                       AND stueck>0 AND COALESCE(ek_cent,0)<=0",
+                [$angebot_id]);
+    $n = 0;
+    foreach ($rows as $r) {
+        $live = rezeptur_herstell_ek_pro_packung((int)$r['rezeptur_id'], (int)$r['stueck'], (int) round((float)$r['menge']));
+        $liveCent = (int) round($live * 100);
+        if ($liveCent > 0) {
+            q("UPDATE angebot_position SET ek_cent=? WHERE id=?", [$liveCent, (int)$r['id']]);
+            $n++;
+        }
+    }
+    return $n;
 }
 // Positionszeile aus einem ROHSTOFF (Weiterverkauf): EK-Staffel × Aufschlag, Kundenrabatt.
 function angebot_rohstoff_zeile(int $item_id, float $menge, string $einheit, ?int $kid): array {

@@ -596,6 +596,9 @@ if (!$neu && !$editMode) {
 // Positionen, Summen und PDF gibt es für JEDES gespeicherte Angebot – auch ohne Produkt im Kopf.
 // (Vorher hing der ganze Bereich an $pid: Bei einer Rezeptur-Anfrage ohne Produkt blieb nur der Kopf stehen.)
 if (!$neu):
+    // Herstell-EK der Positionen frisch aus Rezeptur/Lieferantenpreis ziehen – so erscheint ein erst spaeter
+    // vom Lieferanten eingetragener Fertig-/Rohstoffpreis hier automatisch, statt als 0 stehen zu bleiben.
+    angebot_herstellung_ek_auffrischen((int)$id);
     $pos = angebot_positionen((int)$id);
     // Einheit fuer die Spalte "Inhalt" (Stueck je Packung): je Rezeptur die Darreichungsform -> Kapseln/g/ml.
     $rezForm = [];

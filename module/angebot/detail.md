@@ -152,3 +152,11 @@ Flüssig/Gel) `fuellmenge_g`. Vorher wurde blind `fuellmenge_g ?: stueck` genomm
 
 ## Rezeptur verknüpfen (Angebot ohne Rezeptur)
 Vor der Übersicht/Editor-Verzweigung (rendert auch für bestätigte/Nur-Ansicht-Angebote) steht ein „Rezeptur"-Block. Auflösung: `angebot.rezeptur_id` > Kopf-Produkt-Rezeptur > erste Positions-Rezeptur. Fehlt sie, Picker (rscombo, Admin); Aktion `rezeptur_verknuepfen` setzt `angebot.rezeptur_id` (+ Produkt-Rezeptur, falls leer).
+
+## Herstell-EK automatisch aktualisieren (Lieferantenpreis nachgereicht)
+Beim Öffnen des Editors läuft `angebot_herstellung_ek_auffrischen($id)` (core/schema.php). Es füllt die interne
+Einkaufs-EK (`angebot_position.ek_cent`) von Herstellungs-Positionen, die noch auf **0** stehen, aus der
+aktuellen Rezeptur-/Lieferantenkalkulation nach – wichtig, wenn der Lieferant den Kapsel-/Fertigpreis
+(Lieferantenportal) **erst nach** dem Anlegen des Angebots einträgt. Der Kunden-VK (`preis_cent`) wird dabei
+nie verändert; ein bereits gesetzter EK bleibt unangetastet (die Produkt-Matrix staffelt anders). Repariert
+also nur den Fall „EK bleibt 0" und schreibt den Wert fest, sobald man speichert.
