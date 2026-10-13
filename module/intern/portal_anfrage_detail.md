@@ -100,3 +100,8 @@ Hat der Kunde in der Produktanfrage „Umkarton gewünscht" gesetzt (`portal_anf
 
 ## Dienstleistungsanfrage → DL-Angebot (Stand 2026-10-12)
 Für `typ='dienstleistung'` gibt es jetzt (wie bei Produktanfragen) einen Weg ins Angebot: Panel **„Dienstleistungs-Angebot"** mit Button **„DL-Angebot erstellen"** (`aktion=dl_angebot_erstellen`). Das legt ein DL-Angebot an (`dl_angebot_neu()` → `angebot` mit `kategorie='dienstleistung'`, Nr. DA-), verknüpft es über `anfrage_id`, setzt die Anfrage auf `in_bearbeitung` und springt in den DL-Editor (`?p=dl_angebot&id=`). Dort trägt das Team Leistung(en) + Preise ein, sendet an den Kunden und bestätigt nach Zusage (→ DL-Auftrag DB-). Vorhandene DL-Angebote zur Anfrage werden im Panel verlinkt (nicht doppelt anlegen). Der „Wunsch des Kunden" zeigt bei DL zusätzlich **Art der Dienstleistung** (`dienstleistung_typ`) und **Zielpreis** (`zielpreis`). Die Absage („Nicht machbar") sitzt bei DL im Panel; die separate Absage-Zeile gilt nur noch für Rohstoffanfragen. Hinweis: DL-Angebote erscheinen (noch) NICHT im Kundenportal „Ihre Angebote" (die Portal-Query verlangt Produkt- oder Rezeptur-Position) – die DL-Bestätigung läuft team-seitig im DL-Editor.
+
+## Produkt bei Dienstleistungs-Anfragen
+Für Dienstleistungs-Anfragen (z. B. Laboranalyse) zeigt die Info-Tabelle eine Zeile **Produkt** mit dem
+zugehörigen Produkt (verlinkt), aufgelöst aus `pa.produkt_id` oder – bei älteren Labor-Upsell-Anfragen – aus der
+ersten `portal_anfrage_pos.produkt_id`. So lässt sich die Laboranalyse eindeutig dem Produkt zuordnen.

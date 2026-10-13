@@ -144,12 +144,16 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
 }
 
 $pa = $id ? one("SELECT pa.*, k.firma, p.name AS produkt_name, r.darreichungsform,
-                        ri.name AS rohstoff_name, ri.preis_bezug AS rohstoff_bezug
+                        ri.name AS rohstoff_name, ri.preis_bezug AS rohstoff_bezug,
+                        COALESCE(NULLIF(posp.kundenname,''), posp.name) AS pos_produkt_name
                  FROM portal_anfrage pa
                  LEFT JOIN kunden k ON k.id=pa.kunde_id
                  LEFT JOIN produkt p ON p.id=pa.produkt_id
                  LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                  LEFT JOIN item ri ON ri.id=pa.rohstoff_id
+                 LEFT JOIN (SELECT anfrage_id, MIN(produkt_id) AS produkt_id FROM portal_anfrage_pos
+                            WHERE produkt_id IS NOT NULL GROUP BY anfrage_id) fp ON fp.anfrage_id=pa.id
+                 LEFT JOIN produkt posp ON posp.id=fp.produkt_id
                  WHERE pa.id=?", [$id]) : null;
 if (!$pa) { render_header('portal_anfragen','Anfrage'); bx_head('Anfrage nicht gefunden','', bx_btn('Zurück','?p=portal_anfragen','ghost')); render_footer(); exit; }
 
@@ -268,6 +272,12 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
     <?php else: ?>
       <?php if ($pa['typ'] === 'dienstleistung' && !empty($pa['dienstleistung_typ'])): ?>
       <tr><td style="width:220px">Art der Dienstleistung</td><td><?= h($DLTYP[$pa['dienstleistung_typ']] ?? $pa['dienstleistung_typ']) ?></td></tr>
+      <?php endif; ?>
+      <?php // Produkt, zu dem die Dienstleistung (z. B. Laboranalyse) gehört – aus pa.produkt_id oder der Position.
+            $dlProdName = $pa['produkt_name'] ?: ($pa['pos_produkt_name'] ?: ''); $dlProdId = (int)($pa['produkt_id'] ?: 0);
+            if (!$dlProdId && !empty($pa['pos_produkt_name'])) $dlProdId = (int) scalar("SELECT MIN(produkt_id) FROM portal_anfrage_pos WHERE anfrage_id=? AND produkt_id IS NOT NULL", [(int)$pa['id']]);
+            if ($pa['typ'] === 'dienstleistung' && $dlProdName !== ''): ?>
+      <tr><td style="width:220px">Produkt</td><td><?php if ($dlProdId): ?><a href="?p=produkt&id=<?= $dlProdId ?>"><?= h($dlProdName) ?></a><?php else: ?><?= h($dlProdName) ?><?php endif; ?></td></tr>
       <?php endif; ?>
       <tr><td style="width:220px">Betreff</td><td><?= h($pa['betreff'] ?: '–') ?></td></tr>
       <?php if ($pa['wunsch_menge']): ?><tr><td>Gewünschte Menge</td><td><?= $mg($pa['wunsch_menge']) . ' ' . h($pa['wunsch_einheit'] ?: '') ?></td></tr><?php endif; ?>

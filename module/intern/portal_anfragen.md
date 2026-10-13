@@ -12,3 +12,10 @@ Hinweis: Der frühere Inline-Status-Dropdown in der Liste ist entfallen – Stat
 
 ## Notiz als Popup (Stand 2026-10-08)
 Die Kunden-Notiz steht nicht mehr als Volltext in der Spalte „Anfrage" (Tabelle wurde zu breit), sondern als klickbarer Link „Notiz ansehen" → `<dialog>` mit der vollen Notiz (stopPropagation, damit die Zeilen-Navigation nicht ausgelöst wird).
+
+## Produktname bei Dienstleistungs-Anfragen (Laboranalyse)
+Bei einer Dienstleistungs-Anfrage (z. B. Laboranalyse, vom Kunden bei der Bestellung dazugebucht) steht in der
+Spalte „Anfrage" jetzt der **Produktname** dahinter, zu dem die Dienstleistung gehört (z. B. „Labortest / Analyse ·
+Magnesium Komplex 5-Fach"). Das Produkt wird aufgelöst aus `pa.produkt_id` **oder** – falls dort nicht gesetzt
+(ältere Labor-Upsell-Anfragen, die das Produkt nur in der Positionszeile tragen) – aus der ersten
+`portal_anfrage_pos.produkt_id`. So sieht man ohne Öffnen, zu welchem Produkt die Laboranalyse gehört.

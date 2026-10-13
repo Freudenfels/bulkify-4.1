@@ -151,8 +151,10 @@ function portal_labortest_upsell(array $kunde, int $angebotId): void {
     if (empty($_POST['labortest']) || empty($kunde['portal_dienstleistung'])) return;
     $pid = (int) scalar("SELECT produkt_id FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [$angebotId]);
     if (!$pid) return;
-    q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,dienstleistung_typ,betreff,status) VALUES (?,?, 'dienstleistung','labortest','Labortest / Analyse','neu')",
-      [naechste_nummer('PAF'), (int)$kunde['id']]);
+    // Produkt auch am Anfrage-Kopf setzen (pa.produkt_id), nicht nur in der Position – so steht der Produktname
+    // in der Dienstleistungs-/Anfragen-Liste direkt dran und man kann die Laboranalyse eindeutig zuordnen.
+    q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,dienstleistung_typ,produkt_id,betreff,status) VALUES (?,?, 'dienstleistung','labortest',?,'Laboranalyse','neu')",
+      [naechste_nummer('PAF'), (int)$kunde['id'], $pid]);
     $aid = insert_id();
     q("INSERT INTO portal_anfrage_pos (anfrage_id,produkt_id,sort) VALUES (?,?,0)", [$aid, $pid]);
     log_aktivitaet('kunde', (int)$kunde['id'], 'kunde', 'Labortest zum bestätigten Angebot dazugebucht (Upsell).', 'anfrage');

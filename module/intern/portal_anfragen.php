@@ -44,11 +44,17 @@ $order = match ($sort) {
     'status' => "FIELD(pa.status,'neu','in_bearbeitung','beantwortet','abgelehnt'), pa.angelegt DESC",
     default  => "(pa.status='neu') DESC, pa.angelegt DESC",
 };
-$rows = all("SELECT pa.*, k.firma, p.name AS produkt_name, rz.name AS rezeptur_name
+// Produkt der Anfrage: direkt (pa.produkt_id) ODER – z. B. bei Labortest-Dienstleistungen, die das Produkt in
+// der Position tragen – aus der ersten Positionszeile. So steht bei Dienstleistungen der Produktname dran.
+$rows = all("SELECT pa.*, k.firma, p.name AS produkt_name, rz.name AS rezeptur_name,
+                    COALESCE(NULLIF(posp.kundenname,''), posp.name) AS pos_produkt_name
              FROM portal_anfrage pa
              LEFT JOIN kunden k ON k.id=pa.kunde_id
              LEFT JOIN produkt p ON p.id=pa.produkt_id
              LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
+             LEFT JOIN (SELECT anfrage_id, MIN(produkt_id) AS produkt_id FROM portal_anfrage_pos
+                        WHERE produkt_id IS NOT NULL GROUP BY anfrage_id) fp ON fp.anfrage_id=pa.id
+             LEFT JOIN produkt posp ON posp.id=fp.produkt_id
              $where ORDER BY $order", $args);
 // Zähler je Ansicht (für die Tabs) – unabhängig von der aktuellen Auswahl, aber im Typ-Filter.
 $cntW = ''; $cntArgs = [];
@@ -111,7 +117,11 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
                . ($r['menge'] ? ' · ' . (int)$r['menge'] . ' Pkg' : '')
                . (!empty($r['umkarton']) ? ' · Umkarton' : '');
       } else {
+          // Dienstleistung (z. B. Laboranalyse): Produktname dranhängen, damit man sofort sieht, zu WELCHEM
+          // Produkt die Dienstleistung gehört (Produkt aus pa.produkt_id oder aus der Positionszeile).
+          $dlProd = $r['produkt_name'] ?: ($r['pos_produkt_name'] ?: '');
           $txt = ($r['betreff'] ?: '–')
+               . ($dlProd ? ' · ' . $dlProd : '')
                . ($r['wunsch_menge'] ? ' · ' . rtrim(rtrim(number_format((float)$r['wunsch_menge'],3,',','.'),'0'),',') . ' ' . ($r['wunsch_einheit'] ?: '') : '');
       }
   ?>
