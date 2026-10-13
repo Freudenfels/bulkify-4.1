@@ -1450,6 +1450,9 @@ function init_schema(): void {
     // Ohne Freigabe: Etiketten nicht bestellbar + Produktion nicht machbar (harte Sperre).
     // Admin-Override „Rohstoff/Bulk angekommen" (für Alt-Aufträge / Zukauf ohne verknüpfte Charge).
     ensure_column('auftrag', 'rohstoff_angekommen_am', "DATETIME NULL");
+    // Admin-Override Fortschritt: manuell gesetzter Phasenindex (0..n). Hebt den Fortschrittsbalken MINDESTENS
+    // auf die gewählte Stufe (z. B. „Rohstoff bestellt"), ohne dass es im System ein passendes Signal braucht.
+    ensure_column('auftrag', 'phase_override', "TINYINT NULL");
     // Externer Labortest: Datum, an dem die Produktion die Probe ans Labor versendet hat (Zwischenstand).
     // Geschrieben wird es von der Produktion über die Naht; das Dashboard liest/zeigt es nur.
     ensure_column('auftrag', 'labor_versendet_am', "DATE NULL");
@@ -4824,6 +4827,17 @@ function kunde_auftrag_phase(array $a): array {
     elseif ($angekommen)       $idx = 2;
     elseif ($bestellt)         $idx = 1;
     else                       $idx = 0;
+    // Admin-Override: Fortschritt mindestens auf die manuell gesetzte Stufe heben (nie unter den echten Stand).
+    // So lassen sich auch Zwischenstufen wie „Rohstoff bestellt" setzen, für die es (noch) kein Systemsignal gibt.
+    if (isset($a['phase_override']) && $a['phase_override'] !== null && $a['phase_override'] !== '') {
+        $ov = (int)$a['phase_override'];
+        if ($ov > $idx) {
+            // Erledigte Stufen ohne eigenes Datum mit dem Status-Datum fuellen, damit der Haken ein Datum zeigt.
+            $fill = $a['status_datum'] ?? ($a['aktualisiert'] ?? null);
+            for ($i = 1; $i <= $ov && $i < count($dates); $i++) if (($dates[$i] ?? null) === null) $dates[$i] = $fill;
+            $idx = $ov;
+        }
+    }
     return ['idx' => $idx, 'dates' => $dates];
 }
 // Fortschritts-Schritte je Auftrag: feste Phasen + kundenspezifische Zusatz-Schritte (Energetisierung,

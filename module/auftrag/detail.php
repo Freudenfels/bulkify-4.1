@@ -143,6 +143,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     }
     header('Location: ?p=auftrag&id=' . $id . '&statusok=1'); exit;
 }
+// Fortschritt direkt auf EINE Stufe setzen (alle Phasen, nicht nur die groben Status). Setzt den Phasen-Override
+// und fuehrt den groben Auftragsstatus passend mit (offen/in_produktion/erledigt/versendet), damit die uebrige
+// Logik (Listen, Kundenportal) konsistent bleibt. „Versendet"/letzte Stufe schliesst den Auftrag ab.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'phase_setzen') {
+    if (!(has_role('admin') || has_role('sales') || has_role('production'))) { header('Location: ?p=auftrag&id=' . $id); exit; }
+    $ff     = auftrag_ist_fulfillment($id);
+    $phasen = auftrag_phasen($ff);
+    $idx    = (int)($_POST['phase'] ?? -1);
+    if ($idx < 0 || $idx >= count($phasen)) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Ungültige Stufe.')); exit; }
+    $last   = count($phasen) - 1;                       // Eingelagert (FF) bzw. Versendet (sonst)
+    // Groben Auftragsstatus passend zur gewaehlten Stufe mitfuehren (erlaubt auch das Zurueckstufen, wie die
+    // alte Status-Auswahl). Override als „mindestens diese Stufe" (0 = Basis -> kein Override, NULL).
+    $neuStatus = $idx >= $last ? 'versendet' : ($idx >= 6 ? 'erledigt' : ($idx >= 3 ? 'in_produktion' : 'offen'));
+    $ovVal = $idx > 0 ? $idx : null;
+    $alt = one("SELECT status, phase_override FROM auftrag WHERE id=?", [$id]);
+    q("UPDATE auftrag SET phase_override=?, status=?, status_datum=CURDATE() WHERE id=?", [$ovVal, $neuStatus, $id]);
+    if ((int)($alt['phase_override'] ?? -1) !== (int)($ovVal ?? -1) || (string)($alt['status'] ?? '') !== $neuStatus)
+        log_aktivitaet('auftrag', $id, 'team', 'Fortschritt gesetzt: ' . ($phasen[$idx] ?? ('Stufe ' . $idx)) . ' (Status ' . $neuStatus . ')', 'status', 'auftrag', $id);
+    header('Location: ?p=auftrag&id=' . $id . '&statusok=1'); exit;
+}
 
 // Etikett (Team/Admin): Datei hochladen/ersetzen (z. B. Last-Minute-Änderung des Kunden), Freigabe im
 // Namen des Kunden bestätigen, Datei entfernen. Nur Admin/Vertrieb.
@@ -686,20 +706,23 @@ if (auftrag_braucht_etikett($id)):
       <?php endforeach; ?>
     </ul>
   </div>
-  <?php // Status direkt hier am Fortschritt setzen – kein Reiter-Wechsel, funktioniert auch ohne Produktionsauftrag.
+  <?php // Fortschritt direkt auf JEDE Stufe setzen (alle Phasen, nicht nur die groben Status) – kein Reiter-Wechsel,
+        // funktioniert auch ohne Produktionsauftrag. Der grobe Auftragsstatus wird passend mitgefuehrt.
   if (has_role('admin') || has_role('sales') || has_role('production')):
-      $stKurz = ['offen'=>$stLbl('offen'), 'in_produktion'=>$stLbl('in_produktion'), 'erledigt'=>$stLbl('erledigt'), 'versendet'=>$stLbl('versendet')]; ?>
+      $ffA     = auftrag_ist_fulfillment((int)$a['id']);
+      $phasenA = auftrag_phasen($ffA);
+      $curIdxA = (int) kunde_auftrag_phase($a)['idx']; ?>
   <?php if (isset($_GET['statusok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Status aktualisiert – der Kunde sieht es sofort.</div><?php endif; ?>
   <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
-    <span class="k muted">Status setzen</span>
+    <span class="k muted">Fortschritt setzen</span>
     <form method="post" style="display:flex;flex-wrap:nowrap;gap:8px;align-items:center;margin:0">
-      <input type="hidden" name="aktion" value="status_schnell">
-      <select name="status" style="min-width:170px">
-        <?php foreach ($stKurz as $k => $l): ?><option value="<?= $k ?>" <?= (string)$a['status'] === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?>
+      <input type="hidden" name="aktion" value="phase_setzen">
+      <select name="phase" style="min-width:190px">
+        <?php foreach ($phasenA as $pi => $plbl): ?><option value="<?= (int)$pi ?>" <?= (int)$pi === $curIdxA ? 'selected' : '' ?>><?= h($plbl) ?></option><?php endforeach; ?>
       </select>
       <button class="btn btn-primary btn-sm" type="submit">Setzen</button>
     </form>
-    <span class="muted" style="font-size:12px">„versendet" schließt den Auftrag ab (Kunden-Archiv). Menge und Preis sind fixiert; Stornieren im Reiter „Details".</span>
+    <span class="muted" style="font-size:12px">Jede Stufe wählbar (z. B. „Rohstoff bestellt"). Die letzte Stufe schließt den Auftrag ab (Kunden-Archiv); Menge und Preis sind fixiert, Stornieren im Reiter „Details".</span>
   </div>
   <?php endif; ?>
 </div>

@@ -95,3 +95,11 @@ Auftrag bereits eine eigene (vom Produkt abweichende) Rezeptur, wird diese weite
 
 ## Einlagern/Versand vereinheitlicht (2026-10-08)
 Einlagern geht IMMER in **Lager 1** (`einlager_ziel_fuer_pa()` liefert immer lager1; `einlager_buchen()` bucht nur noch die Fertigware + schließt die Aufgabe, setzt NICHT mehr „versendet" bei Fulfillment). Button am Auftrag (Reiter *Lager*): **„In Lager 1 buchen"** -> Auftrag wird **versandbereit** (Status `erledigt`, Label einheitlich „versandbereit", kein „bereit zur Einlagerung" mehr). Erst beim **Versand** entscheidet das Lager: **An Kunden senden** (`auftrag_versenden`, Lieferschein + FEFO-Ausbuchen) ODER **An Lager 2 übergeben** (`auftrag_ins_fremdlager`). `auftrag_versenden()` leitet NICHT mehr automatisch ins Fremdlager um.
+
+## Fortschritt auf jede Stufe setzen (Admin/Team)
+Am Fortschrittsbalken gibt es „Fortschritt setzen" mit **allen** Phasen (nicht nur den groben Status): Bestätigt,
+Rohstoff bestellt, Rohstoff angekommen, In Produktion, Etikettiert, Qualitätsprüfung, Versandbereit, Eingelagert,
+Versendet (bei Fulfillment endet die Kette mit „Eingelagert"). Die Auswahl kommt aus `auftrag_phasen()`; der Handler
+`phase_setzen` schreibt `auftrag.phase_override` (gewählter Phasenindex) und führt den groben `auftrag.status`
+passend mit (offen/in_produktion/erledigt/versendet) – auch Zurückstufen ist möglich. „Bestätigt" (Stufe 0) löscht
+den Override (phase_override=NULL → wieder automatisch aus den Signalen). Der Kunde sieht die Stufe sofort.

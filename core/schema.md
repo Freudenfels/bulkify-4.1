@@ -123,3 +123,12 @@ vergibt jeder Herstellungszeile wieder einen eigenen Buchstaben (Zeilen vor der 
 gruppenlos = echte Zuschläge). Idempotent (saubere Angebote: je Gruppe hoechstens eine Herstellungszeile → keine
 Aenderung). Aufruf an den Schreib-/Lese-Einstiegen: Angebots-Editor (Laden **und** `pos_save`) und
 `angebot_pdf_bauen()` – so repariert sich ein betroffenes Angebot beim naechsten Oeffnen/Drucken selbst.
+
+## Fortschritt-Override (`auftrag.phase_override`)
+`kunde_auftrag_phase()` leitet die aktuelle Phase aus Signalen ab (Bestellung, Charge/Wareneingang,
+Produktionsschritte, Status). Für Stufen ohne Systemsignal (z. B. „Rohstoff bestellt" bei Alt-/Zukauf-Aufträgen)
+gibt es `auftrag.phase_override` (Phasenindex): er hebt den Balken **mindestens** auf die gewählte Stufe (Floor,
+echte Signale können weiter schieben); fehlende Zwischendaten werden mit dem Status-Datum gefüllt. Gesetzt im
+Auftrag-Reiter Produktion („Fortschritt setzen", Handler `phase_setzen`), der auch den groben `auftrag.status`
+mitführt. Gilt in Team- und Kundenansicht (beide lesen `auftrag.*`, inkl. der Portal-Fallback-Variante von
+`kunde_auftrag_track`).
