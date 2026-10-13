@@ -948,18 +948,25 @@ if ($angIds) foreach (all("SELECT * FROM angebot_staffel WHERE angebot_id IN (" 
     $staffelMap[(int)$s['angebot_id']][] = $s;
 }
 foreach ($angIds as $id) if (!isset($staffelMap[$id])) $staffelMap[$id] = [];   // leere Angebote merken -> kein Nachladen
-$posRezCount = $anfRezOk = [];   // Annehmbar-Zaehler je Angebot / je Anfrage
+$posRezCount = $anfRezOk = $hatHerst = [];   // Annehmbar-Zaehler je Angebot / je Anfrage; Herstellungs-Positionen
 if ($angIds) foreach (all("SELECT angebot_id, COUNT(*) n FROM angebot_position
                            WHERE angebot_id IN (" . $inList($angIds) . ") AND rezeptur_id IS NOT NULL AND stueck > 0
                            GROUP BY angebot_id") as $c) $posRezCount[(int)$c['angebot_id']] = (int)$c['n'];
+// Herstellungs-Positionen = Quelle der Options-Tabelle (angebot_optionen). AUCH wenn an der Position die
+// Rezeptur-Verknuepfung oder Stueckzahl (noch) fehlt – dann greift die Nachruestung in angebot_optionen.
+// Ohne dieses Signal zeigte das Portal faelschlich die generische Produkt-Preismatrix (viele Standard-Mengen,
+// voller Katalogpreis) statt der verhandelten Positionen (Team-/PDF-Preis).
+if ($angIds) foreach (all("SELECT angebot_id, COUNT(*) n FROM angebot_position
+                           WHERE angebot_id IN (" . $inList($angIds) . ") AND quelle='herstellung'
+                           GROUP BY angebot_id") as $c) $hatHerst[(int)$c['angebot_id']] = (int)$c['n'];
 if ($anfIds) foreach (all("SELECT id FROM portal_anfrage
                            WHERE id IN (" . $inList($anfIds) . ") AND rezeptur_id IS NOT NULL AND COALESCE(stueck, fuellmenge_g, 0) > 0") as $c)
     $anfRezOk[(int)$c['id']] = true;
 // Positionen sind die Quelle der Wahrheit (Team editiert sie, PDF liest sie). Hat ein Angebot
-// bepreiste Positions-Optionen, ignorieren wir eine (ggf. VERALTETE) angebot_staffel – sonst würde
+// Herstellungs-Positionen, ignorieren wir eine (ggf. VERALTETE) angebot_staffel – sonst würde
 // eine alte Staffel-Menge (z. B. 4500) im Portal die bearbeitete Positions-Menge (z. B. 10000)
 // verdecken und nur die alte Menge annehmbar machen. Reine Staffel-Angebote (ohne Positionen) bleiben.
-foreach ($angIds as $id) if (!empty($posRezCount[$id])) $staffelMap[$id] = [];
+foreach ($angIds as $id) if (!empty($posRezCount[$id]) || !empty($hatHerst[$id])) $staffelMap[$id] = [];
 $produktionszeit = (float) meta_get('produktionszeit_wochen', 7);   // globaler Standard
 $itemName = fn($id) => $id ? (string) scalar("SELECT name FROM item WHERE id=?", [(int)$id]) : '';
 $staffelFuer = function(array $a) use (&$staffelMap) {
@@ -967,7 +974,7 @@ $staffelFuer = function(array $a) use (&$staffelMap) {
     if (!array_key_exists($id, $staffelMap)) $staffelMap[$id] = all("SELECT * FROM angebot_staffel WHERE angebot_id=? ORDER BY sort, id", [$id]);
     return $staffelMap[$id];
 };
-$angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $produktionszeit, $matrixRows, $zutMap, $portionMap, $nutrMap, $posRezCount, $anfRezOk) {
+$angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $produktionszeit, $matrixRows, $zutMap, $portionMap, $nutrMap, $posRezCount, $anfRezOk, $hatHerst) {
     $id = (int)$a['id'];
     if (array_key_exists($id, $angInfo)) return $angInfo[$id];
     $rid = (int)($a['rezeptur_id'] ?? 0);
@@ -980,10 +987,11 @@ $angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $prod
         $vk = $mo !== null ? (float)$mr['ek_preis'] * (1 + $mo/100) : (float)$mr['vk_preis'];
         if (!isset($matrix[$s][$bm])) $matrix[$s][$bm] = ['vk'=>$vk, 'verp'=>(int)$mr['verpackung_id']];
     }
-    // Hat das Angebot bepreiste (verhandelte) Rezeptur-Positionen, sind DIESE die Quelle der Wahrheit
-    // (wie im PDF). Dann NICHT die generische Produkt-Matrix zeigen, sondern die Positions-Optionen –
-    // sonst würde eine bearbeitete Angebotsmenge hinter der Katalog-Matrix verschwinden.
-    if (!empty($posRezCount[$id])) $matrix = [];
+    // Hat das Angebot Herstellungs-Positionen (verhandelt, wie im PDF), sind DIESE die Quelle der Wahrheit.
+    // Dann NICHT die generische Produkt-Matrix zeigen, sondern die Positions-Optionen – sonst würde eine
+    // bearbeitete Angebotsmenge/ein verhandelter Preis hinter der Katalog-Matrix verschwinden. Auch wenn an
+    // der Position die Rezeptur-Verknuepfung fehlt: angebot_optionen() ruestet sie beim Laden nach.
+    if (!empty($posRezCount[$id]) || !empty($hatHerst[$id])) $matrix = [];
     // SICHERUNG (v3-Import): Angebote aus der v3-Migration ohne v4-Preisstaffeln würden sonst die (cost-basierte,
     // oft viel zu niedrige) Auto-Matrix aus produkt_preis zeigen – falsche Preise. Solche Angebote werden gesperrt:
     // keine Matrix, keine Annahme; der Kunde sieht "Preis wird finalisiert". Freischaltung durch Pflege echter Staffeln.
@@ -991,7 +999,7 @@ $angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $prod
     // Positions-Optionen (gruppierte Herstellungszeilen, $posRezCount). Ein v3-Angebot mit übernommenen
     // Beleg-Positionen (Herstellung + Glas + Etikett je Gruppe) hat einen Preis -> nicht sperren.
     $gesperrt = (stripos((string)($a['notiz'] ?? ''), 'Aus v3') !== false)
-                && empty($staffelMap[$id]) && empty($posRezCount[$id]);
+                && empty($staffelMap[$id]) && empty($posRezCount[$id]) && empty($hatHerst[$id]);
     if ($gesperrt) $matrix = [];
     // Positionen/Optionen liest die Karte ausschliesslich im Zweig "gesendet UND keine Matrix UND keine Staffel"
     // (positionsbasiertes Angebot). Fuer Matrix-/Staffel-Angebote NIE laden. Gesperrte NIE.
