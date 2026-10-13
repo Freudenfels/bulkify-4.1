@@ -4887,7 +4887,7 @@ function angebot_ki_pdf_uebernehmen(int $angebot_id, array $d): int {
 // Portal Übersicht + Annahme aus den aktuellen Positionen (konsistent mit dem PDF). Reine Staffel-
 // Angebote ohne Positionen bleiben unangetastet.
 function angebot_staffel_cache_verwerfen(int $angebot_id): void {
-    if ($angebot_id <= 0 || !tabelle_da('angebot_staffel') || !tabelle_da('angebot_position')) return;
+    if ($angebot_id <= 0 || !table_exists('angebot_staffel') || !table_exists('angebot_position')) return;
     if ((int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=?", [$angebot_id]) > 0)
         q("DELETE FROM angebot_staffel WHERE angebot_id=?", [$angebot_id]);
 }
