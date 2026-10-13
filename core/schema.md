@@ -112,3 +112,14 @@
 
 ## Lieferanten-Kürzel + Rohstoff-Kennung je Lieferant (Stand 2026-10-08, ersetzt die fixe „BX"-Nummer)
 Jeder Lieferant hat ein `lieferanten.kuerzel` (aus dem Namen, editierbar; Vorschlag `lieferant_kuerzel_vorschlag()` = erste 2 Buchstaben GROSS, Backfill idempotent per REGEXP_REPLACE). Die Rohstoff-Kennung JE LIEFERANT = Artikelnummer (R-Nummer) + Kürzel (`rohstoff_lief_kennung($artikelnummer,$kuerzel)`, z. B. R-12345BX für Buxtrade, R-12345WG für Wellgreen). So lässt sich derselbe Rohstoff je Lieferant unterscheiden. Angezeigt: Rohstoff-Stammdaten (Hauptlieferant-Kennung) + je Zeile im EK-Reiter „Lieferantenpreise" (Spalte „Kennung"); Kürzel-Feld in den Lieferanten-Stammdaten. (Die frühere globale `item.bx_nummer` = R+„BX" war falsch und wird nicht mehr genutzt.)
+
+## Varianten-Gruppen reparieren (`angebot_gruppen_normalisieren`)
+Eine **Variante** eines Angebots = genau EINE Herstellungszeile + die darauf folgenden Verpackungs-/Zusatzzeilen,
+gekennzeichnet durch einen Gruppenbuchstaben (A, B, C …). Landen mehrere Mengen-Varianten faelschlich in
+**derselben** Gruppe, wirft `angebot_optionen()` / die PDF-Zusammenfassung „Preis je fertiges Produkt" sie
+zusammen: Packungspreis = **Summe ALLER Varianten ÷ letzte Menge** (z. B. 24.390 € ÷ 5.000 = 4,88 € statt der
+echten 2,75 €), und der Kunde koennte nicht eine einzelne Variante annehmen. `angebot_gruppen_normalisieren($id)`
+vergibt jeder Herstellungszeile wieder einen eigenen Buchstaben (Zeilen vor der ersten Herstellungszeile bleiben
+gruppenlos = echte Zuschläge). Idempotent (saubere Angebote: je Gruppe hoechstens eine Herstellungszeile → keine
+Aenderung). Aufruf an den Schreib-/Lese-Einstiegen: Angebots-Editor (Laden **und** `pos_save`) und
+`angebot_pdf_bauen()` – so repariert sich ein betroffenes Angebot beim naechsten Oeffnen/Drucken selbst.

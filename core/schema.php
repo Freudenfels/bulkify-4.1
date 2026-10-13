@@ -4353,6 +4353,36 @@ function angebot_gruppe_positionen(array $g, ?float $mo, ?int $kid, ?string $let
     }
     return $out;
 }
+// Gruppen eines Angebots reparieren: jede VARIANTE ist genau eine Herstellungszeile + die darauf folgenden
+// Verpackungs-/Zusatzzeilen (bis zur nächsten Herstellungszeile). Liegen mehrere Herstellungszeilen (= mehrere
+// Mengen-Varianten) faelschlich in DERSELBEN Gruppe, wirft angebot_optionen/die „Preis je fertiges Produkt"-
+// Zusammenfassung sie zusammen (Summe aller Varianten geteilt durch die letzte Menge -> falscher Packungspreis)
+// und der Kunde koennte nicht EINE Variante annehmen. Hier bekommt jede Variante wieder ihren eigenen Buchstaben
+// (A, B, C …). Zeilen VOR der ersten Herstellungszeile bleiben gruppenlos (echte Zuschläge). Idempotent:
+// bei bereits sauberen Angeboten (je Gruppe hoechstens eine Herstellungszeile) passiert nichts. Rueckgabe: Anzahl.
+function angebot_gruppen_normalisieren(int $angebot_id): int {
+    $pos = all("SELECT id, quelle, gruppe FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]);
+    if (!$pos) return 0;
+    // Nur eingreifen, wenn eine Gruppe MEHRERE Herstellungszeilen enthaelt (die Anomalie).
+    $herstProGruppe = [];
+    foreach ($pos as $p) if (($p['quelle'] ?? '') === 'herstellung') {
+        $g = (string)($p['gruppe'] ?? '');
+        $herstProGruppe[$g] = ($herstProGruppe[$g] ?? 0) + 1;
+    }
+    $anomalie = false; foreach ($herstProGruppe as $n) if ($n > 1) { $anomalie = true; break; }
+    if (!$anomalie) return 0;
+    // Neu gruppieren: jede Herstellungszeile startet eine neue Variante (A, B, C …).
+    $idx = -1; $cur = null; $n = 0;
+    foreach ($pos as $p) {
+        if (($p['quelle'] ?? '') === 'herstellung') { $idx++; $cur = chr(65 + $idx); }
+        $ziel = $cur;   // vor der ersten Herstellungszeile: null -> gruppenloser Zuschlag
+        if ((string)($p['gruppe'] ?? '') !== (string)($ziel ?? '')) { q("UPDATE angebot_position SET gruppe=? WHERE id=?", [$ziel, (int)$p['id']]); $n++; }
+    }
+    // Bezeichnungs-Präfixe (A)/B) …) konsistent nachziehen.
+    $all = all("SELECT id,bezeichnung,gruppe FROM angebot_position WHERE angebot_id=? ORDER BY sort,id", [$angebot_id]);
+    foreach (angebot_positionen_prefix($all) as $p) q("UPDATE angebot_position SET bezeichnung=? WHERE id=?", [$p['bezeichnung'], (int)$p['id']]);
+    return $n;
+}
 // Bezeichnungen mit Gruppen-Präfix „A) …" versehen, wenn mehr als eine Gruppe vorhanden ist (sonst Präfixe entfernen).
 function angebot_positionen_prefix(array $pos): array {
     $letters = [];

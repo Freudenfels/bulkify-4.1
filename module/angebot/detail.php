@@ -93,6 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         } catch (Throwable $e) { db()->rollBack(); throw $e; }
         db()->commit();
+        // Mehrere Mengen-Varianten in derselben Gruppe wieder auftrennen (je Variante ein Buchstabe).
+        angebot_gruppen_normalisieren((int)$id);
         // Angebots-Staffel ist ein veralteter Cache, sobald die Positionen bearbeitet wurden (z. B. Menge
         // 4500 -> 10000): entfernen, damit Kundenportal-Übersicht UND Annahme die aktuellen Positionen
         // verwenden (wie das PDF). Nur wenn es jetzt Positionen gibt (reines Staffel-Angebot bleibt erhalten).
@@ -596,6 +598,9 @@ if (!$neu && !$editMode) {
 // Positionen, Summen und PDF gibt es für JEDES gespeicherte Angebot – auch ohne Produkt im Kopf.
 // (Vorher hing der ganze Bereich an $pid: Bei einer Rezeptur-Anfrage ohne Produkt blieb nur der Kopf stehen.)
 if (!$neu):
+    // Gruppen reparieren: liegen mehrere Mengen-Varianten faelschlich in derselben Gruppe, bekommt jede wieder
+    // ihren eigenen Buchstaben (sonst wirft die „Preis je fertiges Produkt"-Zusammenfassung sie zusammen).
+    angebot_gruppen_normalisieren((int)$id);
     // Herstell-EK der Positionen frisch aus Rezeptur/Lieferantenpreis ziehen – so erscheint ein erst spaeter
     // vom Lieferanten eingetragener Fertig-/Rohstoffpreis hier automatisch, statt als 0 stehen zu bleiben.
     angebot_herstellung_ek_auffrischen((int)$id);

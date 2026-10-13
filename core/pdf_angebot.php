@@ -32,6 +32,10 @@ function angebot_pdf_bauen(int $angebot_id): ?string {
     $land = strtoupper(trim((string)($k['land'] ?? '')));
     $istInland = ($land === '' || in_array($land, ['DE','D','DEUTSCHLAND','GERMANY'], true));
 
+    // Gruppen reparieren, bevor Positionen/Optionen gelesen werden: mehrere Mengen-Varianten in derselben
+    // Gruppe wuerden sonst in der „Preis je fertiges Produkt"-Zusammenfassung zusammengeworfen (Summe aller
+    // Varianten / letzte Menge = falscher Packungspreis). Idempotent – saubere Angebote bleiben unveraendert.
+    angebot_gruppen_normalisieren($angebot_id);
     // Positionen: gespeicherte haben Vorrang, sonst die automatische Kalkulation.
     $positionen = angebot_positionen($angebot_id);
     // Rezeptur(en) zum Angebot – Zusammensetzung unten im PDF aufschlüsseln (nur Inhaltsstoffe, keine Kosten).

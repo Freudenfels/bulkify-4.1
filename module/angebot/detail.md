@@ -163,3 +163,10 @@ aktuellen Rezeptur-/Lieferantenkalkulation nach – wichtig, wenn der Lieferant 
 Kunden-VK der Zeile **ebenfalls 0** (nie bepreist), wird er aus EK × Marge mitberechnet; ein bereits
 gesetzter EK **oder** Preis bleibt unangetastet (die Produkt-Matrix staffelt anders). Repariert also den
 Fall „EK/Preis bleibt 0" und schreibt die Werte fest, sobald man speichert.
+
+## Varianten-Gruppen beim Öffnen/Speichern reparieren
+Beim Öffnen des Editors und nach `pos_save` läuft `angebot_gruppen_normalisieren($id)` (core/schema.php). Lagen
+mehrere Mengen-Varianten in derselben Gruppe (Symptom: PDF-Zusammenfassung „Preis je fertiges Produkt" zeigt
+einen falschen Packungspreis = Summe aller Varianten ÷ letzte Menge, und es erscheint eine irreführende
+Endsumme über alle Varianten), bekommt jede Variante wieder ihren eigenen Buchstaben A/B/C. Die Positions-
+Auflistung war schon korrekt – nur die Zusammenfassung lief daneben.
