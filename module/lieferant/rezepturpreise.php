@@ -24,6 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $preis = zahl_lesen((string)($_POST['preis'] ?? ''), false, $spr);
         q("UPDATE rezeptur_lief_angebot SET preis=?, stand=CURDATE() WHERE id=? AND lieferant_id=?",
           [$preis > 0 ? $preis : null, $aid, $lid]);
+        // Preismatrix der betroffenen Produkte neu rechnen -> Fertigpreis fliesst automatisch ins Angebot.
+        rezeptur_produkt_matrizen_auffrischen((int) scalar("SELECT rezeptur_id FROM rezeptur_lief_angebot WHERE id=? AND lieferant_id=?", [$aid, $lid]));
         header('Location: ' . $ziel . '&ok=1'); exit;
     }
     if ($aktion === 'preis_add') {
@@ -34,11 +36,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($rid > 0 && in_array($form, $fertigFormen, true) && !scalar("SELECT id FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=?", [$rid, $lid])) {
             q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,angelegt) VALUES (?,?,?,?, 'angeboten', CURDATE(), NOW())",
               [$rid, $lid, $preis > 0 ? $preis : null, $formEinheit($form)]);
+            rezeptur_produkt_matrizen_auffrischen($rid);   // Matrix auffrischen -> Fertigpreis automatisch im Angebot
         }
         header('Location: ' . $ziel . '&ok=1'); exit;
     }
     if ($aktion === 'preis_del') {
+        $rid = (int) scalar("SELECT rezeptur_id FROM rezeptur_lief_angebot WHERE id=? AND lieferant_id=?", [(int)($_POST['id'] ?? 0), $lid]);
         q("DELETE FROM rezeptur_lief_angebot WHERE id=? AND lieferant_id=?", [(int)($_POST['id'] ?? 0), $lid]);
+        rezeptur_produkt_matrizen_auffrischen($rid);   // ohne diesen Preis neu rechnen (ggf. anderer Lieferant/EK)
         header('Location: ' . $ziel . '&ok=1'); exit;
     }
     if ($aktion === 'alle_bestaetigen') {

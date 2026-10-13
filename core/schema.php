@@ -5690,6 +5690,13 @@ function passende_behaelter_fuer(int $rezeptur_id, string $form, int $stueck): a
 }
 
 // Preismatrix eines Produkts neu erzeugen: Stückzahlen × passende Behälter (kleinster je Material) × Bestellmengen.
+// Nach Aenderung eines Fremdfertigungs-/Fertigproduktpreises an einer Rezeptur: die Preismatrix ALLER
+// Produkte dieser Rezeptur neu rechnen, damit der (ggf. neue) Fertigpreis automatisch einfliesst – sonst
+// bliebe eine alte, vor dem Preis erzeugte Matrix stehen und der Fertigpreis wuerde im Angebot ignoriert.
+function rezeptur_produkt_matrizen_auffrischen(int $rid): void {
+    if ($rid <= 0 || !table_exists('produkt')) return;
+    foreach (all("SELECT id FROM produkt WHERE rezeptur_id=?", [$rid]) as $pr) produkt_matrix_generieren((int)$pr['id']);
+}
 function produkt_matrix_generieren(int $produkt_id): int {
     $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$produkt_id]);
     if (!$rid) return 0;
@@ -5699,6 +5706,18 @@ function produkt_matrix_generieren(int $produkt_id): int {
     foreach (std_groessen_fuer($form) as $stueck)   // Pulver/Granulat: Füllgewicht (g); sonst Stückzahl
         $anz += produkt_preis_fuer_groesse($produkt_id, (int)$stueck);
     return $anz;
+}
+// Stellt sicher, dass die Preismatrix aktuell ist, bevor ein Angebot daraus gebaut wird: ist sie leer,
+// oder steht ueberall EK=0 obwohl es inzwischen einen Fremd-/Fertigproduktpreis gibt (Matrix wurde vor dem
+// Preis erzeugt), wird sie neu gerechnet. Sonst (bereits bepreist) passiert nichts -> guenstig (2 Abfragen).
+function produkt_matrix_sicherstellen(int $produkt_id): void {
+    if ($produkt_id <= 0) return;
+    $cnt = (int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$produkt_id]);
+    if ($cnt === 0) { produkt_matrix_generieren($produkt_id); return; }
+    $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$produkt_id]);
+    if (!$rid) return;
+    $maxEk = (float) scalar("SELECT MAX(ek_preis) FROM produkt_preis WHERE produkt_id=?", [$produkt_id]);
+    if ($maxEk <= 0 && rezeptur_fremd_ek_pro_einheit($rid) !== null) produkt_matrix_generieren($produkt_id);
 }
 
 // Preiszeilen für EINE Packungsgröße nachrechnen – auch für Größen außerhalb des Standardrasters.

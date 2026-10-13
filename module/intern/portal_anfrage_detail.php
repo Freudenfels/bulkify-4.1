@@ -31,8 +31,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_abgeben') {
     $pa = one("SELECT * FROM portal_anfrage WHERE id=?", [$id]);
     if ($pa && $pa['typ'] === 'produkt' && $pa['produkt_id'] && $pa['kunde_id']) {
-        if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [(int)$pa['produkt_id']]) === 0)
-            produkt_matrix_generieren((int)$pa['produkt_id']);   // Preismatrix sicherstellen
+        produkt_matrix_sicherstellen((int)$pa['produkt_id']);   // Matrix aktuell halten (auch Fertigpreis)
         $marge = trim($_POST['marge'] ?? '') !== '' ? (float) str_replace(',', '.', $_POST['marge']) : null;
         $pz    = trim($_POST['produktionszeit'] ?? '') !== '' ? (float) str_replace(',', '.', $_POST['produktionszeit']) : null;
         $notiz = trim($_POST['notiz'] ?? '');
@@ -98,8 +97,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     if ($pa && $pa['typ'] === 'produkt' && ($pa['produkt_id'] || $pa['rezeptur_id']) && $pa['kunde_id']) {
         $vorhanden = (int) scalar("SELECT id FROM angebot WHERE anfrage_id=? AND status IN ('offen','gesendet') ORDER BY id DESC LIMIT 1", [$id]);
         if ($vorhanden) { header('Location: ?p=angebot&id=' . $vorhanden); exit; }   // nicht doppelt anlegen
-        if ($pa['produkt_id'] && (int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [(int)$pa['produkt_id']]) === 0)
-            produkt_matrix_generieren((int)$pa['produkt_id']);   // Matrix versuchen (leer ist ok – Positionen manuell)
+        if ($pa['produkt_id']) produkt_matrix_sicherstellen((int)$pa['produkt_id']);   // Matrix aktuell halten (auch Fertigpreis)
         q("INSERT INTO angebot (nummer,kunde_id,produkt_id,status,notiz,anfrage_id,gueltig_bis) VALUES (?,?,?,?,?,?,?)",
           [naechste_nummer('AN'), (int)$pa['kunde_id'], $pa['produkt_id'] ? (int)$pa['produkt_id'] : null, 'offen', 'Aus Anfrage ' . $pa['nummer'], $id, angebot_gueltig_bis_default()]);
         $angid = insert_id();
@@ -401,7 +399,7 @@ if ($pa['status'] !== 'abgelehnt' && $pa['typ'] === 'dienstleistung'):
 
 <?php if ($pa['status'] !== 'abgelehnt' && $pa['typ'] === 'produkt' && $pa['produkt_id']):
     $pid = (int)$pa['produkt_id'];
-    if ((int) scalar("SELECT COUNT(*) FROM produkt_preis WHERE produkt_id=?", [$pid]) === 0) produkt_matrix_generieren($pid);
+    produkt_matrix_sicherstellen($pid);   // Matrix aktuell halten – zeigt in der Vorschau auch den Fertigpreis
     $form     = $pa['darreichungsform'] ?: 'kapsel';
     $defMarge = max(marge_typ_prozent($form), marge_min_prozent());
     $defPz    = (float) meta_get('produktionszeit_wochen', 7);
