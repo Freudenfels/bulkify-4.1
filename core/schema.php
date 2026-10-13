@@ -3692,9 +3692,11 @@ function rezeptur_fremd_ek_pro_einheit(int $rid, float $einheiten = 0): ?float {
     $best = null;
     // Quelle A: Fremdfertigungs-Angebot an der Rezeptur (nur Stueck-Preise). Passende Staffel, sonst Basis.
     if (table_exists('rezeptur_lief_angebot')) {
+        // Stück-Preise: die Rezeptur ist bereits eine Stück-Form, daher jede Zeile akzeptieren, die KEINE
+        // Gewichts-/Volumeneinheit ist (so fallen „Stk.", „pcs", „Kapseln" etc. nicht durch eine zu enge Liste).
         $rows = all("SELECT preis, menge FROM rezeptur_lief_angebot
                      WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0
-                       AND (einheit IS NULL OR einheit='' OR LOWER(einheit) IN ('kapsel','tablette','softgel','stick','stueck','stück','stk','gummi','gel'))",
+                       AND (einheit IS NULL OR einheit='' OR LOWER(TRIM(einheit)) NOT IN ('kg','g','l','ml','liter','gramm','kilogramm','mg'))",
                     [$rid]);
         $passend = null; $basis = null;
         foreach ($rows as $r) {
