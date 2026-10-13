@@ -3680,11 +3680,13 @@ function rezeptur_kosten_pro_einheit(?int $rid, float $einheiten = 0, bool $mitF
 }
 
 // Fremdfertigungspreis je Stueck (Fertigprodukt des Lieferanten), nur Stueck-Formen (Kapsel/Tablette/…).
-// Zwei Quellen, guenstigster Preis gewinnt:
-//   A) rezeptur_lief_angebot  – Fremdfertigungs-Angebot direkt an der Rezeptur (Lieferantenportal/v3-Import).
-//   B) produkt_lieferant_preis – angenommene v4-Fertigprodukt-Angebote je Produkt dieser Rezeptur (Zukauf).
+// Drei Quellen, guenstigster Preis gewinnt:
+//   A) rezeptur_lief_angebot  – Fremdfertigungs-Angebot direkt an der Rezeptur (Lieferantenportal „Rezepturpreise"/v3).
+//   B) produkt_lieferant_preis – ANGENOMMENE Fertigprodukt-Angebote je Produkt dieser Rezeptur (Zukauf).
+//   C) lieferant_angebot       – BEANTWORTETES Fertigprodukt-Anfrage-Angebot (Button „Fertigprodukt anfragen"),
+//                                greift schon vor dem Annehmen und ohne Produkt zur Rezeptur.
 // Jeweils passend zur gewuenschten Stueckzahl (Mengenstaffel). Dadurch greift der Angebots-Fallback
-// „kein Rohstoff-EK -> Lieferanten-Fertigproduktpreis" auch fuer angenommene Fertigprodukt-Angebote.
+// „kein Rohstoff-EK -> Lieferanten-Fertigproduktpreis" auch fuer noch nicht angenommene Fertigprodukt-Angebote.
 function rezeptur_fremd_ek_pro_einheit(int $rid, float $einheiten = 0): ?float {
     if (!$rid) return null;
     $df = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
@@ -3713,6 +3715,32 @@ function rezeptur_fremd_ek_pro_einheit(int $rid, float $einheiten = 0): ?float {
         foreach (all("SELECT id FROM produkt WHERE rezeptur_id=?", [$rid]) as $pr)
             foreach (produkt_lieferant_preise((int)$pr['id'], $einheiten) as $p)
                 if ((float)$p > 0 && ($best === null || (float)$p < $best)) $best = (float)$p;
+    // Quelle C: BEANTWORTETES Fertigprodukt-Angebot (lieferant_anfrage art='fertigprodukt' -> lieferant_angebot).
+    // Greift schon VOR dem Annehmen und OHNE dass es ein Produkt zur Rezeptur gibt – genau der Fall „Lieferant
+    // hat im Portal geantwortet, aber das Produkt entsteht erst beim Annehmen des Angebots". Preisbasis
+    // (je 1 / je 1000) auf je EINE Einheit normiert; Mengenstaffel wie bei Quelle A beachtet.
+    if (table_exists('lieferant_angebot') && table_exists('lieferant_anfrage')) {
+        $angebote = all("SELECT ag.id, ag.preis, ag.mindestmenge, COALESCE(ag.preis_basis,1) AS basis
+                         FROM lieferant_angebot ag JOIN lieferant_anfrage af ON af.id=ag.anfrage_id
+                         WHERE af.rezeptur_id=? AND af.art='fertigprodukt' AND ag.preis IS NOT NULL AND ag.preis>0",
+                        [$rid]);
+        foreach ($angebote as $ag) {
+            $basis = ((int)$ag['basis']) === 1000 ? 1000 : 1;
+            $staffel = table_exists('lieferant_angebot_staffel')
+                ? all("SELECT menge_ab, preis FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$ag['id']]) : [];
+            if (!$staffel) $staffel = [['menge_ab'=>(float)($ag['mindestmenge'] ?: 0), 'preis'=>(float)$ag['preis']]];
+            $passend = null; $kleinste = null;
+            foreach ($staffel as $z) {
+                $p = (float)$z['preis'] / $basis; $m = (float)$z['menge_ab'];
+                if ($p <= 0) continue;
+                if ($kleinste === null || $p < $kleinste) $kleinste = $p;           // guenstigster Preis ueberhaupt
+                if ($einheiten > 0 && $m > 0 && $m > $einheiten) continue;          // hoehere Staffel gilt noch nicht
+                if ($passend === null || $p < $passend) $passend = $p;              // guenstigste erreichte Staffel
+            }
+            $p = $passend ?? $kleinste;
+            if ($p !== null && ($best === null || $p < $best)) $best = $p;
+        }
+    }
     return $best;
 }
 
@@ -4526,23 +4554,41 @@ function rezeptur_herstell_ek_pro_packung(int $rid, int $stueck, int $menge): fl
 // Herstell-EK der Angebots-Positionen frisch aus der aktuellen Rezeptur/Lieferantenkalkulation ziehen.
 // Noetig, weil die Positions-EK beim Anlegen eingefroren wird: traegt der Lieferant den Fertig-/Rohstoffpreis
 // erst SPAETER ein (Lieferantenportal), bliebe die Position sonst auf dem alten – oft 0 – Wert stehen.
-// Nur Herstellungszeilen mit Rezeptur+Stueck; der Kunden-VK (preis_cent) wird NIE angefasst, nur der interne EK.
-// Bewusst NUR Zeilen mit EK=0 gefuellt: ein bereits gesetzter EK (z. B. aus der Produkt-Matrix, die anders
-// staffelt) bleibt unangetastet – wir reparieren ausschliesslich den „EK bleibt 0"-Fall. Rueckgabe: Anzahl.
+// Nur Herstellungszeilen mit Rezeptur+Stueck, und bewusst NUR Zeilen mit EK=0: ein bereits gesetzter EK
+// (z. B. aus der Produkt-Matrix, die anders staffelt) bleibt unangetastet – repariert wird ausschliesslich der
+// „EK bleibt 0"-Fall. Der Kunden-VK (preis_cent) wird nur dann berechnet, wenn er ebenfalls noch 0 ist (die
+// Zeile wurde also nie bepreist, weil beim Anlegen kein Lieferantenpreis vorlag); ein vorhandener Preis
+// bleibt immer stehen. Marge = Angebots-Override, sonst Form-/Mindestmarge. Rueckgabe: Anzahl geaenderter Zeilen.
 function angebot_herstellung_ek_auffrischen(int $angebot_id): int {
-    $rows = all("SELECT id, rezeptur_id, stueck, menge FROM angebot_position
+    $rows = all("SELECT id, rezeptur_id, stueck, menge, preis_cent, preis_e4 FROM angebot_position
                  WHERE angebot_id=? AND quelle='herstellung' AND rezeptur_id IS NOT NULL AND rezeptur_id>0
                        AND stueck>0 AND COALESCE(ek_cent,0)<=0",
                 [$angebot_id]);
+    if (!$rows) return 0;
+    $a   = one("SELECT kunde_id, marge_override FROM angebot WHERE id=?", [$angebot_id]);
+    $kid = (int)($a['kunde_id'] ?? 0) ?: null;
+    $mo  = (($a['marge_override'] ?? null) !== null && $a['marge_override'] !== '') ? (float)$a['marge_override'] : null;
     $n = 0;
     foreach ($rows as $r) {
-        $live = rezeptur_herstell_ek_pro_packung((int)$r['rezeptur_id'], (int)$r['stueck'], (int) round((float)$r['menge']));
-        $liveCent = (int) round($live * 100);
-        if ($liveCent > 0) {
-            q("UPDATE angebot_position SET ek_cent=? WHERE id=?", [$liveCent, (int)$r['id']]);
-            $n++;
+        $rid = (int)$r['rezeptur_id']; $stueck = (int)$r['stueck']; $menge = (int) round((float)$r['menge']);
+        $ekH = rezeptur_herstell_ek_pro_packung($rid, $stueck, $menge);
+        $ekCent = (int) round($ekH * 100);
+        if ($ekCent <= 0) continue;
+        $sets = ['ek_cent=?']; $args = [$ekCent];
+        // VK nur fuellen, wenn die Herstellungszeile nie bepreist wurde (0) – manuelle/Matrix-Preise bleiben.
+        $vkLeer = (int)$r['preis_cent'] <= 0 && (($r['preis_e4'] ?? null) === null || (int)$r['preis_e4'] <= 0);
+        if ($vkLeer) {
+            $form  = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
+            $marge = $mo !== null ? $mo : max(marge_typ_prozent($form), marge_min_prozent());
+            $vkH   = vk_fuer_kunde($ekH * (1 + $marge / 100), $kid);
+            $sets[] = 'preis_cent=?'; $args[] = (int) round($vkH * 100);
+            $sets[] = 'preis_e4=?';   $args[] = (int) round($vkH * 10000);
         }
+        $args[] = (int)$r['id'];
+        q("UPDATE angebot_position SET " . implode(',', $sets) . " WHERE id=?", $args);
+        $n++;
     }
+    if ($n && function_exists('angebot_staffel_cache_verwerfen')) angebot_staffel_cache_verwerfen($angebot_id);
     return $n;
 }
 // Positionszeile aus einem ROHSTOFF (Weiterverkauf): EK-Staffel × Aufschlag, Kundenrabatt.

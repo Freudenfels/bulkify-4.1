@@ -157,6 +157,9 @@ Vor der Übersicht/Editor-Verzweigung (rendert auch für bestätigte/Nur-Ansicht
 Beim Öffnen des Editors läuft `angebot_herstellung_ek_auffrischen($id)` (core/schema.php). Es füllt die interne
 Einkaufs-EK (`angebot_position.ek_cent`) von Herstellungs-Positionen, die noch auf **0** stehen, aus der
 aktuellen Rezeptur-/Lieferantenkalkulation nach – wichtig, wenn der Lieferant den Kapsel-/Fertigpreis
-(Lieferantenportal) **erst nach** dem Anlegen des Angebots einträgt. Der Kunden-VK (`preis_cent`) wird dabei
-nie verändert; ein bereits gesetzter EK bleibt unangetastet (die Produkt-Matrix staffelt anders). Repariert
-also nur den Fall „EK bleibt 0" und schreibt den Wert fest, sobald man speichert.
+**erst nach** dem Anlegen des Angebots einträgt. Der Fertigpreis kommt aus allen drei Quellen von
+`rezeptur_fremd_ek_pro_einheit()` – **auch aus einem beantworteten „Fertigprodukt anfragen"-Angebot**
+(`lieferant_angebot`), das vorher ignoriert wurde (Badge „Angebote liegen vor", EK trotzdem 0). War der
+Kunden-VK der Zeile **ebenfalls 0** (nie bepreist), wird er aus EK × Marge mitberechnet; ein bereits
+gesetzter EK **oder** Preis bleibt unangetastet (die Produkt-Matrix staffelt anders). Repariert also den
+Fall „EK/Preis bleibt 0" und schreibt die Werte fest, sobald man speichert.
