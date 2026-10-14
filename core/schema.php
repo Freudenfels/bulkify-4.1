@@ -150,6 +150,8 @@ function init_schema(): void {
         erstellt DATETIME NOT NULL,                     -- UTC (via gmdate gesetzt)
         KEY idx_objekt (objekt_typ, objekt_id, erstellt)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Handelnde Person (Name) bei Team-Aktionen – fuer das Admin-Protokoll „wer hat was geaendert".
+    ensure_column('aktivitaet', 'benutzer', "VARCHAR(190) NULL");
 
     // lieferant_katalog: was ein Lieferant anbietet – als VORSCHLAG, bevor daraus ein Artikel wird.
     // Der Lieferant pflegt seine Liste selbst (oder lädt sie hoch, die KI liest sie); das Team
@@ -9095,8 +9097,14 @@ function produktionsauftrag_aus_auftrag(int $auftrag_id, string $art = 'eigen'):
 // Zentrale Protokoll-Funktion – von jedem Modul aufrufbar, für jedes Objekt. Zeit als UTC.
 function log_aktivitaet(string $objekt_typ, int $objekt_id, string $akteur, string $text,
                         string $typ = '', string $ref_typ = '', int $ref_id = 0): void {
-    q("INSERT INTO aktivitaet (objekt_typ,objekt_id,akteur,typ,text,ref_typ,ref_id,erstellt) VALUES (?,?,?,?,?,?,?,?)",
-      [$objekt_typ, $objekt_id, $akteur, $typ ?: null, $text, $ref_typ ?: null, $ref_id ?: null, gmdate('Y-m-d H:i:s')]);
+    // Handelnde Person festhalten – nur bei Team-Aktionen (Kunde/Lieferant stecken im Objekt).
+    $benutzer = null;
+    if ($akteur === 'team' && function_exists('current_user')) {
+        $u = current_user();
+        if ($u) $benutzer = mb_substr(trim((string)($u['name'] ?? '')), 0, 190) ?: null;
+    }
+    q("INSERT INTO aktivitaet (objekt_typ,objekt_id,akteur,benutzer,typ,text,ref_typ,ref_id,erstellt) VALUES (?,?,?,?,?,?,?,?,?)",
+      [$objekt_typ, $objekt_id, $akteur, $benutzer, $typ ?: null, $text, $ref_typ ?: null, $ref_id ?: null, gmdate('Y-m-d H:i:s')]);
 }
 
 function verlauf_fuer(string $objekt_typ, int $objekt_id): array {
