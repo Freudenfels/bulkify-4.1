@@ -252,6 +252,14 @@ function lg_schema(): void {
     lg_spalte('lg_versand', 'masse_h', 'DECIMAL(6,1) NULL');
     // DHL-Paketgröße: gross = Paket (V01PAK/V53WPAK), klein = Kleinpaket/Warenpost (V62KP/V66WPI).
     lg_spalte('lg_versand', 'dhl_groesse', "VARCHAR(8) NOT NULL DEFAULT 'gross'");
+    // Lieferschein-Generator: Versicherungswert gesamt (Cent). Aus EK (sonst VK/2) × Menge errechnet, editierbar.
+    lg_spalte('lg_versand', 'versicherung_cent', 'INT NULL');
+    // Position: Kartons × Menge je Karton (Menge gesamt = kartons × menge_karton), Stückwert für die Versicherung (Cent).
+    lg_spalte('lg_versand_pos', 'kartons', 'INT NULL');
+    lg_spalte('lg_versand_pos', 'menge_karton', 'DECIMAL(14,3) NULL');
+    lg_spalte('lg_versand_pos', 'produkt_id', 'INT NULL');
+    lg_spalte('lg_versand_pos', 'einzelwert_cent', 'INT NULL');
+    lg_spalte('lg_versand_pos', 'gewicht_g', 'INT NULL');
 
     // Zoll (CN23) je Position – nur für Nicht-EU-Sendungen. HS-Code, Ursprungsland (ISO2),
     // Warenwert je Stück (EUR), Gewicht je Stück (g, optional).
@@ -403,6 +411,41 @@ function lg_versand_anlegen(array $d): int {
        max(1, (int)($d['pakete'] ?? 1)),
        (int)($u['id'] ?? 0) ?: null, mb_substr((string)($u['name'] ?? ''), 0, 120), jetzt_utc()]);
     return (int) insert_id();
+}
+// Lieferschein-Generator: Sendung + Positionen in einem Rutsch anlegen. Rechnet Menge (Kartons × Menge/Karton),
+// Versicherungswert (Σ Stückwert × Menge, Stückwert = EK bzw. VK/2) und Gesamtgewicht (Σ g × Menge) aus –
+// Felder lassen sich ueber $d['versicherung_cent']/['gewicht_kg']/['pakete'] uebersteuern. Gibt die Versand-ID.
+function lg_lieferschein_erstellen(array $d): int {
+    $vid = lg_versand_anlegen([
+        'kunde_id' => $d['kunde_id'] ?? null,
+        'empf_firma' => $d['empf_firma'] ?? '', 'empf_name' => $d['empf_name'] ?? '',
+        'empf_strasse' => $d['empf_strasse'] ?? '', 'empf_hausnummer' => $d['empf_hausnummer'] ?? '',
+        'empf_plz' => $d['empf_plz'] ?? '', 'empf_ort' => $d['empf_ort'] ?? '', 'empf_land' => $d['empf_land'] ?? 'DE',
+        'empf_email' => $d['empf_email'] ?? '', 'empf_telefon' => $d['empf_telefon'] ?? '',
+        'adress_quelle' => $d['adress_quelle'] ?? 'frei', 'typ' => $d['typ'] ?? 'paket', 'notiz' => $d['notiz'] ?? '',
+    ]);
+    $vicSum = 0; $gewSumG = 0.0; $kartonsSum = 0;
+    foreach (($d['positionen'] ?? []) as $p) {
+        $kartons = max(0, (int)($p['kartons'] ?? 0));
+        $mk = (float)str_replace(',', '.', (string)($p['menge_karton'] ?? 0));
+        $menge = ($kartons > 0 && $mk > 0) ? $kartons * $mk : (float)($p['menge'] ?? 0);
+        if (trim((string)($p['bezeichnung'] ?? '')) === '' && $menge <= 0) continue;
+        $einzel = (int)($p['einzelwert_cent'] ?? 0);
+        $gewG   = (int)($p['gewicht_g'] ?? 0);
+        $vicSum += (int) round($einzel * $menge);
+        $gewSumG += $gewG * $menge;
+        $kartonsSum += $kartons;
+        q("INSERT INTO lg_versand_pos (versand_id,produkt_id,item_id,bezeichnung,menge,einheit,kartons,menge_karton,einzelwert_cent,gewicht_g)
+           VALUES (?,?,?,?,?,?,?,?,?,?)",
+          [$vid, ($p['produkt_id'] ?? null) ?: null, ($p['item_id'] ?? null) ?: null,
+           mb_substr((string)($p['bezeichnung'] ?? ''), 0, 255), $menge, mb_substr((string)($p['einheit'] ?? 'Stk'), 0, 20) ?: 'Stk',
+           $kartons ?: null, $mk ?: null, $einzel ?: null, $gewG ?: null]);
+    }
+    $vic    = (($d['versicherung_cent'] ?? '') !== '') ? max(0, (int)$d['versicherung_cent']) : $vicSum;
+    $gewKg  = (($d['gewicht_kg'] ?? '') !== '') ? (float)str_replace(',', '.', (string)$d['gewicht_kg']) : round($gewSumG / 1000, 3);
+    $pakete = max(1, ((int)($d['pakete'] ?? 0)) ?: $kartonsSum ?: 1);
+    q("UPDATE lg_versand SET versicherung_cent=?, gewicht_kg=?, pakete=? WHERE id=?", [$vic ?: null, $gewKg ?: null, $pakete, $vid]);
+    return $vid;
 }
 function lg_versand(int $id): ?array { return one("SELECT * FROM lg_versand WHERE id=?", [$id]); }
 function lg_versand_liste(string $status = '', int $limit = 100): array {

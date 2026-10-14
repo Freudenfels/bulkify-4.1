@@ -26,6 +26,7 @@ $routen = [
     // Warenausgang / Versand (Sendungen planen, Lieferschein, spaeter DHL/Cargoboard)
     'versand'        => 'versand/liste.php',
     'versand_detail' => 'versand/detail.php',
+    'lieferschein_neu' => 'versand/erstellen.php',   // einfacher Lieferschein-Generator (Katalog + Kartons)
     'lieferschein'   => 'versand/lieferschein.php',
     'versand_label'  => 'versand/label.php',
     'bewegungen'     => 'bestand/bewegungen.php',

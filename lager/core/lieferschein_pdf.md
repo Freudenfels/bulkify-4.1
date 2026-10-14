@@ -12,3 +12,8 @@ Helfer: `lg_land_name($code)` (gängige ISO-Codes → Klarname, sonst Code), `lg
 und die `lg_versand*`-Helfer aus `core/schema.php`.
 
 Genutzt von [../module/versand/lieferschein.md](../module/versand/lieferschein.md).
+
+## Erweiterung (Generator)
+Der Lieferschein zeigt jetzt zusätzlich **Gewicht** (gesamt + kg/Paket), **Warenwert (vers.)** aus
+`lg_versand.versicherung_cent` und in der Positionsspalte **Kartons × Menge/Karton** (statt Charge, wenn über den
+Generator erfasst).

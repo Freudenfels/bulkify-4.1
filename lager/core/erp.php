@@ -289,6 +289,47 @@ function erp_kunden_liste(): array {
     return all("SELECT id, firma FROM kunden ORDER BY firma");
 }
 
+// Produkt-Katalog eines Kunden fuer den Lieferschein-Generator: je Produkt Name, verknuepftes verkaufsfertiges
+// Item (fuer EK/Gewicht), EK (Cent), VK (Cent, aus der Preismatrix) und Gewicht je Stueck (g). Ohne Kunde:
+// alle Produkte (Suche $q). Der Versicherungswert rechnet sich spaeter aus EK bzw. VK/2.
+function erp_versandkatalog(int $kunde_id = 0, string $q = ''): array {
+    if (!tabelle_da('produkt')) return [];
+    $w = []; $p = [];
+    if ($kunde_id > 0) {
+        $hatAuftrag = tabelle_da('auftrag');
+        $w[] = '(p.kunde_id=?' . ($hatAuftrag ? ' OR EXISTS (SELECT 1 FROM auftrag a WHERE a.produkt_id=p.id AND a.kunde_id=?)' : '') . ')';
+        $p[] = $kunde_id; if ($hatAuftrag) $p[] = $kunde_id;
+    }
+    foreach (preg_split('/\s+/', trim($q), -1, PREG_SPLIT_NO_EMPTY) as $t) {
+        $w[] = '(p.name LIKE ? OR p.kundenname LIKE ? OR p.nummer LIKE ?)';
+        $like = '%' . $t . '%'; array_push($p, $like, $like, $like);
+    }
+    $where  = $w ? 'WHERE ' . implode(' AND ', $w) : '';
+    $hatVf  = tabelle_da('item');
+    $hatPp  = tabelle_da('produkt_preis');
+    $itemSub = fn($col) => $hatVf ? "(SELECT i.$col FROM item i WHERE i.produkt_id=p.id AND i.kategorie='verkaufsfertig' ORDER BY i.id LIMIT 1)" : 'NULL';
+    $vkSub   = $hatPp ? "(SELECT MIN(pp.vk_preis) FROM produkt_preis pp WHERE pp.produkt_id=p.id AND pp.vk_preis>0)" : 'NULL';
+    $sql = "SELECT p.id AS produkt_id, p.nummer, COALESCE(NULLIF(p.kundenname,''), p.name) AS name,
+                   " . $itemSub('id') . " AS item_id,
+                   " . $itemSub('ek_preis') . " AS ek_eur,
+                   " . $itemSub('gewicht_g') . " AS gewicht_g,
+                   $vkSub AS vk_eur
+            FROM produkt p $where ORDER BY name LIMIT 500";
+    try {
+        return array_map(function ($r) {
+            return [
+                'produkt_id' => (int)$r['produkt_id'],
+                'item_id'    => (int)($r['item_id'] ?? 0) ?: null,
+                'nummer'     => (string)($r['nummer'] ?? ''),
+                'name'       => (string)$r['name'],
+                'ek_cent'    => $r['ek_eur'] !== null ? (int) round((float)$r['ek_eur'] * 100) : 0,
+                'vk_cent'    => $r['vk_eur'] !== null ? (int) round((float)$r['vk_eur'] * 100) : 0,
+                'gewicht_g'  => $r['gewicht_g'] !== null ? (int)$r['gewicht_g'] : 0,
+            ];
+        }, all($sql, $p));
+    } catch (Throwable $e) { return []; }
+}
+
 // Ursprungsland eines Artikels als ISO2 (für die Zollerklärung) – aus item.herkunftsland (Freitext).
 function erp_item_herkunft_iso2(int $item_id): string {
     if ($item_id <= 0 || !tabelle_da('item')) return '';

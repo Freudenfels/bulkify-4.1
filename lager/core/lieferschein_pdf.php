@@ -66,6 +66,13 @@ function lg_lieferschein_pdf(int $versand_id): ?string {
         ['Versandart', ((string)$v['typ'] === 'palette' ? 'Palette / Fracht' : 'Paket')],
         ['Pakete', (string)(int)($v['pakete'] ?? 1)],
     ];
+    $pakete = max(1, (int)($v['pakete'] ?? 1));
+    if (($v['gewicht_kg'] ?? null) !== null && (float)$v['gewicht_kg'] > 0) {
+        $gw = (float)$v['gewicht_kg'];
+        $meta[] = ['Gewicht', number_format($gw, 3, ',', '.') . ' kg' . ($pakete > 1 ? ' (' . number_format($gw / $pakete, 3, ',', '.') . ' kg/Paket)' : '')];
+    }
+    if (($v['versicherung_cent'] ?? null) !== null && (int)$v['versicherung_cent'] > 0)
+        $meta[] = ['Warenwert (vers.)', number_format((int)$v['versicherung_cent'] / 100, 2, ',', '.') . ' €'];
     if (trim((string)($v['tracking'] ?? '')) !== '') $meta[] = ['Sendungsnr.', (string)$v['tracking']];
     $my = $mm(46); $mlx = $lx + $tw / 2 + $mm(10);
     foreach ($meta as $row) {
@@ -80,7 +87,7 @@ function lg_lieferschein_pdf(int $versand_id): ?string {
     $pdf->rect($lx, $ty - $mm(4.5), $tw, $mm(7), [243, 243, 243]);
     $pdf->text($cPos, $ty, 'Pos', 8, false, $muted);
     $pdf->text($cBez, $ty, 'Bezeichnung', 8, false, $muted);
-    $pdf->text($cChg, $ty, 'Charge', 8, false, $muted);
+    $pdf->text($cChg, $ty, 'Kartons / Charge', 8, false, $muted);
     $pdf->text($cMng, $ty, 'Menge', 8, false, $muted);
     $ty += $mm(8);
 
@@ -93,7 +100,12 @@ function lg_lieferschein_pdf(int $versand_id): ?string {
         $pdf->text($cPos, $ty, (string)$i, 10, false, $dark);
         $first = true;
         foreach ($zeilen as $zl) { $pdf->text($cBez, $ty + ($first ? 0 : $mm(4.6)), $zl, 10, false, $dark); $first = false; }
-        $pdf->text($cChg, $ty, $pdf->fit((string)($p['charge_nr'] ?? ''), $cMng - $cChg - $mm(2), 9.5, false), 9.5, false, $dark);
+        // Kartons × Menge/Karton (Lieferschein-Generator) – sonst die Chargennummer.
+        $kt = (int)($p['kartons'] ?? 0);
+        $chgTxt = $kt > 0
+            ? $kt . ' Kt' . (($p['menge_karton'] ?? null) ? ' × ' . rtrim(rtrim(number_format((float)$p['menge_karton'], 3, ',', '.'), '0'), ',') : '')
+            : (string)($p['charge_nr'] ?? '');
+        $pdf->text($cChg, $ty, $pdf->fit($chgTxt, $cMng - $cChg - $mm(2), 9.5, false), 9.5, false, $dark);
         $pdf->text($cMng, $ty, $pdf->fit($menge, $rx - $cMng, 10, true), 10, true, $dark);
         $ty += $mm(6.4) * max(1, count($zeilen)) + $mm(1.6);
         $pdf->rectStroke($lx, $ty - $mm(2.4), $tw, 0.3, 0.3, $line);

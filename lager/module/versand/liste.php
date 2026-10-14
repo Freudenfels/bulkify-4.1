@@ -12,7 +12,8 @@ $zeilen = lg_versand_liste($filter, 200);
 
 kopf('Warenausgang', 'versand');
 seitenkopf('Warenausgang', 'Sendungen planen, Lieferscheine und Versand-Etiketten drucken.',
-    '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="neu"><button class="btn btn-primary" type="submit">+ Neue Sendung</button></form> '
+    '<a class="btn btn-primary" href="?p=lieferschein_neu">+ Lieferschein erstellen</a> '
+    . '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="neu"><button class="btn btn-ghost" type="submit">+ Leere Sendung</button></form> '
     . '<a class="btn btn-ghost" href="?p=ausgang">Schnell abbuchen</a>');
 flash_zeigen();
 
