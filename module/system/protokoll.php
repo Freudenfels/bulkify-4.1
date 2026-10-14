@@ -34,8 +34,31 @@ if ($q !== '') {
 $rows = all("SELECT * FROM aktivitaet WHERE $where ORDER BY erstellt DESC, id DESC LIMIT 500", $args);
 $gesamt = (int) scalar("SELECT COUNT(*) FROM aktivitaet");
 
-$akteurLbl = fn($r) => $r['akteur'] === 'team' ? (trim((string)($r['benutzer'] ?? '')) !== '' ? (string)$r['benutzer'] : 'Team')
-    : ($r['akteur'] === 'kunde' ? 'Kunde' : ($r['akteur'] === 'lieferant' ? 'Lieferant' : 'System'));
+// „Wer" bei Kunde-/Lieferant-Aktionen: die Firma hinter dem Objekt auflösen (gebündelt, wenige Abfragen).
+$kBy = ['auftrag'=>[], 'angebot'=>[], 'rezeptur'=>[], 'portal_anfrage'=>[]];
+$kundeIds = $liefIds = [];
+foreach ($rows as $r) {
+    $t = (string)$r['objekt_typ']; $oid = (int)$r['objekt_id'];
+    if (isset($kBy[$t])) $kBy[$t][$oid] = 0;
+    elseif ($t === 'kunde')     $kundeIds[$oid] = 1;
+    elseif ($t === 'lieferant') $liefIds[$oid] = 1;
+}
+$inInt = fn(array $m) => implode(',', array_map('intval', array_keys($m)));
+foreach (['auftrag','angebot','rezeptur','portal_anfrage'] as $t)
+    if ($kBy[$t]) foreach (all("SELECT id, kunde_id FROM $t WHERE id IN (" . $inInt($kBy[$t]) . ")") as $x)
+        { $kBy[$t][(int)$x['id']] = (int)$x['kunde_id']; if ((int)$x['kunde_id']) $kundeIds[(int)$x['kunde_id']] = 1; }
+$kundeFirma = $liefFirma = [];
+if ($kundeIds) foreach (all("SELECT id, firma FROM kunden WHERE id IN (" . $inInt($kundeIds) . ")") as $x) $kundeFirma[(int)$x['id']] = (string)$x['firma'];
+if ($liefIds)  foreach (all("SELECT id, firma FROM lieferanten WHERE id IN (" . $inInt($liefIds) . ")") as $x) $liefFirma[(int)$x['id']] = (string)$x['firma'];
+
+$akteurLbl = function($r) use ($kBy, $kundeFirma, $liefFirma) {
+    if ($r['akteur'] === 'team')   return trim((string)($r['benutzer'] ?? '')) !== '' ? (string)$r['benutzer'] : 'Team';
+    if ($r['akteur'] === 'system') return 'System';
+    $t = (string)$r['objekt_typ']; $oid = (int)$r['objekt_id'];
+    if ($r['akteur'] === 'lieferant') return 'Lieferant' . (($liefFirma[$oid] ?? '') !== '' ? ': ' . $liefFirma[$oid] : '');
+    $kid = $t === 'kunde' ? $oid : (int)($kBy[$t][$oid] ?? 0);
+    return 'Kunde' . (($kundeFirma[$kid] ?? '') !== '' ? ': ' . $kundeFirma[$kid] : '');
+};
 
 render_header('protokoll', 'Protokoll');
 bx_head('Protokoll', 'Wer hat wann was gemacht – zentrale Aktivitätenliste (' . number_format($gesamt, 0, ',', '.') . ' Einträge)');

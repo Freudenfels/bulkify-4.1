@@ -138,6 +138,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             rezeptur_naehrwerte_snapshot((int)$id);
             unset($_SESSION['rez_unlock'][(int)$id]);
         }
+        // Protokoll: wer hat die Rezeptur (fuer welchen Kunden) angelegt/angepasst.
+        $rzNr = (string) scalar("SELECT nummer FROM rezeptur WHERE id=?", [(int)$id]);
+        $kFirma = $kunde_id ? (string) scalar("SELECT firma FROM kunden WHERE id=?", [(int)$kunde_id]) : '';
+        log_aktivitaet('rezeptur', (int)$id, 'team',
+            'Rezeptur ' . $rzNr . ($neu ? ' angelegt' : ' angepasst') . ($kFirma !== '' ? ' für Kunde ' . $kFirma : '') . '.',
+            'rezeptur', 'rezeptur', (int)$id);
         header('Location: ?p=rezeptur_detail&id=' . $id . '&gespeichert=1'); exit;
     }
 }

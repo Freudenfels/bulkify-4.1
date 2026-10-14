@@ -200,7 +200,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $mein = $aid && (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]) === (int)$k['id'];
     $flash = '&etikettupfehler=fehler';
     if ($mein && etikett_upload($aid)) {
-        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Etikett-Design hochgeladen – bitte noch freigeben.', 'auftrag', 'auftrag', $aid);
+        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Etikett-Design hochgeladen (Auftrag ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$aid]) . ') – bitte noch freigeben.', 'etikett', 'auftrag', $aid);
         if (mail_bereit()) nach_antwort(fn() => mail_team_etikett_hochgeladen($aid));
         $flash = '&etikett=1';
     } elseif ($mein) {
@@ -253,6 +253,7 @@ if ($k && ($_GET['v'] ?? '') === 'analyse_datei') {
     }
     $pf = ($ok && $d) ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
     if (!$ok || !$pf || !is_file($pf)) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Laboranalyse/CoA heruntergeladen: ' . mb_substr((string)($d['datei_orig'] ?: 'Datei'), 0, 120), 'coa_download', (string)$d['objekt_typ'], (int)$d['objekt_id']);
     $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
     $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','gif'=>'image/gif'][$ext] ?? 'application/octet-stream';
     header('Content-Type: ' . $mime);
@@ -1741,6 +1742,7 @@ if (($_GET['v'] ?? '') === 'coa_pdf') {
          WHERE z.item_id=? AND ((r.kunde_id=? AND r.status IN ('vorschlag','eingefroren','freigegeben','abgelehnt'))
                                 OR (r.kunde_id IS NULL AND r.status='freigegeben')) LIMIT 1", [$coaItem, $kid])));
     if (!$darfCoa) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    if (!empty($k['id'])) log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'CoA heruntergeladen (Charge-ID ' . $cid . ').', 'coa_download', 'item', (int)$coaItem);
     require_once BX_ROOT . '/core/pdf_spec.php';
     $pdf = build_coa_pdf($cid);
     if ($pdf === null) { http_response_code(404); echo 'Nicht gefunden.'; exit; }

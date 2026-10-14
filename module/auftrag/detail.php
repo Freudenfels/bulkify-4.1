@@ -278,6 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,befund,kunde_sichtbar,hochgeladen_von)
                VALUES ('auftrag',?,'analyse',?,?,?,?,?,?,?,'team')",
               [$id, trim((string)($_POST['titel'] ?? '')) ?: null, $fn, $orig, $datum, $charge, $befund, isset($_POST['kunde_sichtbar']) ? 1 : 0]);
+            log_aktivitaet('auftrag', $id, 'team', 'Laboranalyse/CoA hochgeladen' . ($charge ? ' (Charge ' . $charge . ')' : '') . ': ' . mb_substr($orig, 0, 100), 'coa', 'auftrag', $id);
         }
     }
     header('Location: ?p=auftrag&id=' . $id . '&analyse=1'); exit;

@@ -80,6 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($darfSpeichern) {
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,dok_datum,charge_nr,befund,kunde_sichtbar,hochgeladen_von)
                VALUES (?,?,'analyse',?,?,?,?,?,?,?,?,'team')", [$objTyp, $objId, $lid, $titel, $fn, $orig ?: $fn, $datum, $charge, $befund, $sicht]);
+            if ($objId > 0) log_aktivitaet($objTyp, $objId, 'team', 'Laboranalyse/CoA hochgeladen' . ($charge ? ' (Charge ' . $charge . ')' : '') . ': ' . mb_substr((string)($orig ?: $fn), 0, 100), 'coa', $objTyp, $objId);
             $hinweis = ['ok', 'Laboranalyse gespeichert' . ($quelle === 'offen' ? ' – noch OHNE Zuordnung (später zuordnen).' : ' und mit ' . $bezug . ' verknüpft' . ($charge ? ' (Charge ' . $charge . ')' : '') . '.')];
         } else {
             @unlink(BX_UPLOADS . '/' . $fn);

@@ -22,7 +22,12 @@ function dokument_upload(string $objekt_typ, int $objekt_id): int {
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,kunde_sichtbar) VALUES (?,?,?,?,?,?,?,?)",
               [$objekt_typ, $objekt_id, $typ, $lid, trim($_POST['dok_titel'] ?? '') ?: null, $fn, $orig,
                isset($_POST['dok_kunde']) ? 1 : 0]);
-            return (int) insert_id();
+            $did = (int) insert_id();
+            // Protokoll: was/wo hochgeladen (CoA/Spezifikation/… an Rohstoff/Produkt).
+            if (function_exists('log_aktivitaet'))
+                log_aktivitaet($objekt_typ, $objekt_id, 'team',
+                    (dokument_typen()[$typ] ?? $typ) . ' hochgeladen: ' . mb_substr((string)$orig, 0, 120), 'dokument', 'dokument', $did);
+            return $did;
         }
     }
     return 0;
