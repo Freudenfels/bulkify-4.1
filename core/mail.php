@@ -240,11 +240,33 @@ function mail_lieferant_anfrage(int $anfrage_id): string {
 // Interne Benachrichtigung an alle aktiven Admins (z. B. „Lieferant hat bestätigt").
 function mail_team(string $betreff, string $text): int {
     if (!mail_bereit()) return 0;
-    $n = 0;
+    $n = 0; $gesendet = [];
     foreach (all("SELECT email FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL AND rollen LIKE '%admin%'") as $u) {
+        $e = mb_strtolower(trim((string)$u['email']));
+        if ($e === '' || isset($gesendet[$e])) continue;
+        $gesendet[$e] = true;
         if (mail_senden((string)$u['email'], $betreff, $text) === '') $n++;
     }
+    // Zusaetzliche feste Benachrichtigungs-Adressen (Einstellungen -> benachrichtigung_cc), kommagetrennt.
+    // So bekommen z. B. Team-Mitglieder ohne Admin-Login (Tabea) alle Rueckfragen/Infos ebenfalls per Mail.
+    foreach (mail_team_cc_adressen() as $e) {
+        if (isset($gesendet[mb_strtolower($e)])) continue;
+        $gesendet[mb_strtolower($e)] = true;
+        if (mail_senden($e, $betreff, $text) === '') $n++;
+    }
     return $n;
+}
+// Zusaetzliche Benachrichtigungs-Empfaenger (CC) aus den Einstellungen: komma-/semikolon-/zeilengetrennt,
+// nur gueltige Adressen. Leere Liste, wenn nichts gepflegt ist.
+function mail_team_cc_adressen(): array {
+    $roh = (string) meta_get('benachrichtigung_cc', '');
+    if (trim($roh) === '') return [];
+    $out = [];
+    foreach (preg_split('/[,;\s]+/', $roh) as $e) {
+        $e = trim($e);
+        if ($e !== '' && filter_var($e, FILTER_VALIDATE_EMAIL)) $out[$e] = $e;
+    }
+    return array_values($out);
 }
 
 // --- Links ------------------------------------------------------------------

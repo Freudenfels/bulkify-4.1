@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'etikett_haftung_save')
 // --- E-Mail: Zugangsdaten speichern. Das Passwort bleibt stehen, wenn das Feld leer bleibt. ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mail_save') {
     meta_set('mail_aktiv', isset($_POST['mail_aktiv']) ? '1' : '0');
-    foreach (['smtp_host', 'smtp_user', 'smtp_helo', 'mail_from', 'mail_from_name', 'portal_url'] as $f)
+    foreach (['smtp_host', 'smtp_user', 'smtp_helo', 'mail_from', 'mail_from_name', 'portal_url', 'benachrichtigung_cc'] as $f)
         meta_set($f, trim((string)($_POST[$f] ?? '')));
     meta_set('smtp_port', (string) max(1, (int)($_POST['smtp_port'] ?? 587)));
     meta_set('smtp_secure', in_array($_POST['smtp_secure'] ?? '', ['tls', 'ssl', ''], true) ? (string)$_POST['smtp_secure'] : 'tls');
@@ -790,6 +790,8 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
         <input type="text" name="mail_from_name" value="<?= h($mc['from_name']) ?>" placeholder="bulkify"></div>
       <div class="bx-field" style="grid-column:1/-1"><label>Portal-Adresse <?= bx_hint('Kommt in die Mails an Lieferanten und Kunden, z. B. https://beta.bulkify.pro') ?></label>
         <input type="text" name="portal_url" value="<?= h((string) meta_get('portal_url', '')) ?>" placeholder="https://beta.bulkify.pro"></div>
+      <div class="bx-field" style="grid-column:1/-1"><label>Zusätzliche Benachrichtigungs-Adressen <?= bx_hint('Bekommen ALLE Team-Benachrichtigungen (Lieferanten-Rückfragen, beantwortete Preisanfragen, angenommene Angebote, Etikett-Uploads …) zusätzlich per Mail – auch ohne Dashboard-Login. Mehrere mit Komma trennen.') ?></label>
+        <input type="text" name="benachrichtigung_cc" value="<?= h((string) meta_get('benachrichtigung_cc', '')) ?>" placeholder="z. B. albers@bulkify.pro"></div>
     </div>
     <button class="btn btn-primary" type="submit">Speichern</button>
   </form>

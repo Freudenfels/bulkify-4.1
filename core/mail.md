@@ -47,3 +47,12 @@ Die Mails an **Lieferanten** (mehrsprachig) und die internen **Team**-Hinweise s
 
 ## Vorlage Preisanfrage
 `mail_lieferant_anfrage($anfrage_id)` schickt eine Preisanfrage an den Lieferanten (Sprache je `lieferanten.sprache`, mit Link ins Portal). Wird von der zentralen Route `?p=preis_anfragen` genutzt, sobald der Versand eingerichtet ist.
+
+## Zusätzliche Benachrichtigungs-Adressen (CC)
+`mail_team()` geht an alle aktiven Admin-Benutzer (ohne Lieferantenbindung) PLUS an die Adressen aus
+`app_meta.benachrichtigung_cc` (komma-/semikolon-/zeilengetrennt, nur gültige Adressen, dedupliziert) –
+siehe `mail_team_cc_adressen()`. So bekommen Team-Mitglieder ohne Admin-Login (z. B. Tabea
+albers@bulkify.pro) ALLE Team-Benachrichtigungen per Mail: Lieferanten-Rückfragen, beantwortete
+Preisanfragen, angenommene Angebote, Etikett-Uploads, neue Bestellungen. Pflege in Einstellungen →
+E-Mail → „Zusätzliche Benachrichtigungs-Adressen". Beim ersten Start wird der Schlüssel einmalig mit
+`albers@bulkify.pro` vorbelegt (danach frei änderbar; leeren = niemand extra).

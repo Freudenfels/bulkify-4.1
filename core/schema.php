@@ -2086,6 +2086,11 @@ function init_schema(): void {
         meta_set('einheit_stk_v2', '1');
     }
 
+    // Einmalig: Tabea (albers@bulkify.pro) als zusaetzliche Benachrichtigungs-Adresse vorbelegen – bekommt dann
+    // alle Team-Mails (Rueckfragen/Infos). Nur setzen, wenn der Schluessel noch nie gesetzt wurde; spaeter in
+    // den Einstellungen (E-Mail -> Zusaetzliche Benachrichtigungs-Adressen) frei aenderbar.
+    if (meta_get('benachrichtigung_cc', null) === null) meta_set('benachrichtigung_cc', 'albers@bulkify.pro');
+
     // Migrationen durch -> Marker setzen, damit der nächste Request den Block überspringt.
     if ($schemaBuild !== '') meta_set('schema_build', $schemaBuild);
 }
