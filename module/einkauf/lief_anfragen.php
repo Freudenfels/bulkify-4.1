@@ -80,7 +80,7 @@ bx_head('Lieferanten-Anfragen & Preise', 'Alle an Lieferanten gestellten Anfrage
         $hatPreis = ($r['ang_preis'] !== null && $r['ang_preis'] !== '' && (float)$r['ang_preis'] > 0);
     ?>
       <tr>
-        <td style="white-space:nowrap"><?= h((string)($r['nummer'] ?: ('#'.$r['id']))) ?></td>
+        <td style="white-space:nowrap"><a href="?p=lief_anfrage_detail&id=<?= (int)$r['id'] ?>"><?= h((string)($r['nummer'] ?: ('#'.$r['id']))) ?></a></td>
         <td style="max-width:200px;overflow-wrap:anywhere"><?= h((string)($r['firma'] ?: '–')) ?></td>
         <td style="max-width:320px;overflow-wrap:anywhere">
           <?php if ($wasLink): ?><a href="<?= $wasLink ?>"><?= h($wasText) ?></a><?php else: ?><?= h($wasText) ?><?php endif; ?>

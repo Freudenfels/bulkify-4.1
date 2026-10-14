@@ -107,7 +107,7 @@ function nachricht_panel(int $lieferant_id, string $wer = 'team', string $sprach
                 $lbl = nachricht_bezug_label($e['bezug_typ'], (int)$e['bezug_id'], $sprache);
                 $url = $wer === 'lieferant'
                      ? ($e['bezug_typ'] === 'bestellung' ? '?p=lieferant_bestellung&id=' : '?p=lieferant_anfrage&id=') . (int)$e['bezug_id']
-                     : ($e['bezug_typ'] === 'bestellung' ? '?p=bestellung&id=' . (int)$e['bezug_id'] : '?p=lieferant&id=' . $lieferant_id);
+                     : ($e['bezug_typ'] === 'bestellung' ? '?p=bestellung&id=' . (int)$e['bezug_id'] : '?p=lief_anfrage_detail&id=' . (int)$e['bezug_id']);
                 $meta[] = '<a href="' . $h($url) . '">' . $h($lbl) . '</a>';
             }
             $o .= '<div class="meta">' . implode(' · ', $meta) . '</div></div></div>';

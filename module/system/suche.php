@@ -86,6 +86,27 @@ if (mb_strlen($q) >= 2) {
         fn($r) => '?p=auftrag&id=' . $r['id'],
         fn($r) => ($r['nummer'] ?: 'Auftrag #' . $r['id']),
         fn($r) => trim(($r['firma'] ?: '') . ' · ' . ($r['status'] ?: '')));
+
+    // Lieferanten-Anfragen (RFQ, Nummernkreis „LA") – eigene Anfragen an Lieferanten. Fuehrt auf die
+    // Anfragen-Liste, auf genau diese Nummer gefiltert (zeigt Rezeptur/Rohstoff + Kunde + abgegebenen Preis).
+    if (table_exists('lieferant_anfrage'))
+    $add('Lieferanten-Anfragen',
+        all("SELECT la.id, la.nummer, la.betreff, l.firma AS lief,
+                    rz.name AS rez_name, kz.firma AS rez_kunde, i.name AS item_name
+             FROM lieferant_anfrage la
+             LEFT JOIN lieferanten l ON l.id=la.lieferant_id
+             LEFT JOIN rezeptur rz ON rz.id=la.rezeptur_id
+             LEFT JOIN kunden kz ON kz.id=rz.kunde_id
+             LEFT JOIN item i ON i.id=la.item_id
+             WHERE la.nummer LIKE ? OR l.firma LIKE ? OR la.betreff LIKE ? OR rz.name LIKE ? OR i.name LIKE ?
+                   OR (?<>'' AND REPLACE(REPLACE(LOWER(la.nummer),'-',''),' ','') LIKE ?)
+             ORDER BY la.id DESC LIMIT $LIMIT", [$like, $like, $like, $like, $like, $qk, $likeK]),
+        fn($r) => '?p=lief_anfrage_detail&id=' . (int)$r['id'],
+        fn($r) => ($r['nummer'] ?: 'LA-' . $r['id']),
+        function($r) {
+            $was = $r['rez_name'] ? 'Fremdfertigung: ' . $r['rez_name'] : ($r['item_name'] ?: ($r['betreff'] ?: ''));
+            return implode(' · ', array_filter([(string)($r['lief'] ?? ''), (string)$was, $r['rez_kunde'] ? 'Kunde: ' . $r['rez_kunde'] : '']));
+        });
 }
 
 $gesamt = array_sum(array_map(fn($g) => count($g['rows']), $gruppen));
@@ -97,7 +118,7 @@ bx_head('Globale Suche', $q !== '' ? $gesamt . ' Treffer für „' . h($q) . '"'
   <input type="hidden" name="p" value="suche">
   <div class="bx-panel">
     <div class="bx-row" style="gap:8px">
-      <input class="bx-search" style="flex:1" type="text" name="q" value="<?= h($q) ?>" autofocus placeholder="Kunde, Lieferant, Rohstoff, Produkt, Rezeptur, Angebot- oder Auftragsnummer …">
+      <input class="bx-search" style="flex:1" type="text" name="q" value="<?= h($q) ?>" autofocus placeholder="Kunde, Lieferant, Rohstoff, Produkt, Rezeptur, Angebot (AN), Auftrag (AU) oder Lieferanten-Anfrage (LA) …">
       <button class="btn btn-primary" type="submit" data-busy="Suche…">Suchen</button>
       <?php if ($q !== ''): ?><a class="btn btn-ghost" href="?p=suche">Leeren</a><?php endif; ?>
     </div>
@@ -124,7 +145,7 @@ bx_head('Globale Suche', $q !== '' ? $gesamt . ' Treffer für „' . h($q) . '"'
     </div>
   <?php endforeach; ?>
 <?php else: ?>
-  <div class="bx-panel muted">Tippe oben einen Suchbegriff ein. Die Suche geht über Kunden, Lieferanten, Rohstoffe/Artikel, Produkte, Rezepturen, Angebote und Aufträge.</div>
+  <div class="bx-panel muted">Tippe oben einen Suchbegriff ein. Die Suche geht über Kunden, Lieferanten, Rohstoffe/Artikel, Produkte, Rezepturen, Angebote, Aufträge und Lieferanten-Anfragen (LA).</div>
 <?php endif; ?>
 <style>
 .bx-searchhits{display:flex;flex-direction:column}

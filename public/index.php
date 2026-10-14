@@ -47,6 +47,7 @@ $routes = [
     'kunde_ki'    => 'kunde/ki_anlegen.php',   // Neuer Kunde aus eingefügtem Text (KI) -> Formular vorbefüllen
     'lieferanten'    => 'lieferant/liste.php',
     'lief_anfragen'  => 'einkauf/lief_anfragen.php', // Übersicht Lieferanten-Anfragen + abgegebene Preise
+    'lief_anfrage_detail' => 'einkauf/lief_anfrage_detail.php', // EINE Lieferanten-Anfrage (RFQ) im Detail + Rückfragen
     'lieferant'      => 'lieferant/detail.php',
     'katalog_freigaben' => 'einkauf/katalog_freigaben.php',
     // Lieferantenportal (eigener Zugang, kein interner Bereich)
