@@ -77,7 +77,7 @@ function pib_table(MiniPDF $p, float $y, array $colDefs, array $rows): float {
 }
 
 // Auto-PIB als PDF-Bytes aus den vorhandenen Produktdaten. Null, wenn das Produkt fehlt.
-function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null): ?string {
+function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null, ?int $proTagOverride = null): ?string {
     $prod = one("SELECT p.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS anzeige, r.darreichungsform, r.id AS rez_id
                  FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]);
     if (!$prod) return null;
@@ -105,6 +105,11 @@ function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null): ?string
     $sumMg = 0.0; foreach ($zut as $z) $sumMg += (float)$z['menge_mg'];
     $istKapsel = in_array($prod['darreichungsform'] ?? '', ['kapsel', 'softgel'], true);
     $einheitWort = $istKapsel ? 'Kapsel' : 'Einheit';
+    // Tagesdosis (Einnahme pro Tag): vom Aufrufer (Kundenwahl vor dem Download) oder am Produkt gepflegt.
+    // Daraus rechnet das PIB die Werte JE TAGESDOSIS aus (zusaetzlich zu „je Einheit").
+    $proTag = ($proTagOverride !== null && $proTagOverride > 0) ? (int)$proTagOverride : (int)($prod['einnahme_pro_tag'] ?? 0);
+    $istPortion = in_array($prod['darreichungsform'] ?? '', ['pulver','granulat','stick','fluessig','gel'], true);
+    $tdEinheitWort = $istKapsel ? 'Kapseln' : ($istPortion ? 'Portionen' : ($formLbl !== '' ? $formLbl : 'Einheiten'));
     $kg = ($istKapsel && $rid) ? rezeptur_kapselgroesse($rid) : null;
 
     // Identität
@@ -197,27 +202,39 @@ function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null): ?string
         $y += 10;
     }
 
-    // Nährwert-/Wirkstoffdeklaration je Einheit (Name · Menge · % NRV)
+    // Nährwert-/Wirkstoffdeklaration je Einheit (Name · Menge · % NRV). Ist eine Tagesdosis bekannt,
+    // zusaetzlich die Spalten „je Tagesdosis" (Menge × Einnahme/Tag) und „% NRV (TD)" – das ist der
+    // Wert, der fuer die Etiketten-Deklaration und Health Claims (signifikante Menge) zaehlt.
     $nutr = pib_naehr($rid);
     if ($nutr) {
+        $wertMg = function(array $n, float $faktor) use ($mg) {
+            $lbl  = ($n['anzeige'] ?? '') !== '' ? $n['anzeige'] : $n['einheit'];
+            $betr = ($n['einheit'] === 'µg') ? $mg($n['mg'] * $faktor * 1000) . ' ' . $lbl : $mg($n['mg'] * $faktor) . ' ' . $lbl;
+            if (($n['ie_mg'] ?? null) !== null && (float)$n['ie_mg'] > 0) $betr .= ' (' . $mg($n['mg'] * $faktor / (float)$n['ie_mg']) . ' I.E.)';
+            return $betr;
+        };
+        $pctFn = function(array $n, float $faktor) {
+            if ($n['nrv'] === null || $n['nrv'] === '') return '–';
+            $nrvMg = $n['einheit'] === 'µg' ? (float)$n['nrv'] / 1000 : (float)$n['nrv'];
+            return $nrvMg > 0 ? number_format($n['mg'] * $faktor / $nrvMg * 100, 0, ',', '.') . ' %' : '–';
+        };
         $rows = [];
         foreach ($nutr as $n) {
-            $lbl  = ($n['anzeige'] ?? '') !== '' ? $n['anzeige'] : $n['einheit'];
-            $betr = ($n['einheit'] === 'µg') ? $mg($n['mg'] * 1000) . ' ' . $lbl : $mg($n['mg']) . ' ' . $lbl;
-            // Zusätzlich I.E. ausweisen, wenn der Nährstoff eine I.E.-Umrechnung hat (z. B. Vitamin D/A/E).
-            if (($n['ie_mg'] ?? null) !== null && (float)$n['ie_mg'] > 0) $betr .= ' (' . $mg($n['mg'] / (float)$n['ie_mg']) . ' I.E.)';
-            $pct = '–';
-            if ($n['nrv'] !== null && $n['nrv'] !== '') {
-                $nrvMg = $n['einheit'] === 'µg' ? (float)$n['nrv'] / 1000 : (float)$n['nrv'];
-                if ($nrvMg > 0) $pct = number_format($n['mg'] / $nrvMg * 100, 0, ',', '.') . ' %';
-            }
-            $rows[] = [(string)$n['name'], $betr, $pct];
+            if ($proTag > 0)
+                $rows[] = [(string)$n['name'], $wertMg($n, 1), $wertMg($n, $proTag), $pctFn($n, $proTag)];
+            else
+                $rows[] = [(string)$n['name'], $wertMg($n, 1), $pctFn($n, 1)];
         }
-        $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration (je ' . $einheitWort . ')');
-        $y = pib_table($p, $y, [[$L, 'Nährstoff'], [330, 'je ' . $einheitWort], [455, '% NRV*']], $rows);
+        if ($proTag > 0) {
+            $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration (je ' . $einheitWort . ' und je Tagesdosis = ' . number_format($proTag, 0, ',', '.') . ' ' . $tdEinheitWort . ')');
+            $y = pib_table($p, $y, [[$L, 'Nährstoff'], [270, 'je ' . $einheitWort], [385, 'je Tagesdosis'], [500, '% NRV*']], $rows);
+        } else {
+            $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration (je ' . $einheitWort . ')');
+            $y = pib_table($p, $y, [[$L, 'Nährstoff'], [330, 'je ' . $einheitWort], [455, '% NRV*']], $rows);
+        }
         // Pflicht-Fußnote direkt unter der Tabelle (wie auf dem Etikett).
         $y += 12;
-        $p->text($L, $y, '* NRV = Prozentsatz der Nährstoffbezugswerte (Referenzmenge) gemäß Verordnung (EU) Nr. 1169/2011.', 8, false, [90, 90, 88]); $y += 16;
+        $p->text($L, $y, '* NRV = Prozentsatz der Nährstoffbezugswerte' . ($proTag > 0 ? ' je Tagesdosis' : '') . ' gemäß Verordnung (EU) Nr. 1169/2011.', 8, false, [90, 90, 88]); $y += 16;
     } else {
         $y = spec_h($p, $y, 'Nährwert-/Wirkstoffdeklaration');
         $y += 11;
@@ -278,8 +295,7 @@ function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null): ?string
         $p->text($L, $y, 'Automatischer Abgleich mit dem EU-Novel-Food-Katalog – Einschätzung, keine Rechtsberatung; maßgeblich ist der jeweils aktuelle EU-Katalog.', 8, false, [110, 110, 108]); $y += 16;
     }
 
-    // Verzehrempfehlung + Nährwerte je Tagesdosis (wenn Einnahme/Tag am Produkt gepflegt).
-    $proTag = (int)($prod['einnahme_pro_tag'] ?? 0);
+    // Verzehrempfehlung + Nährwerte je Tagesdosis (Tagesdosis oben aus Kundenwahl/Produkt bestimmt).
     if ($proTag > 0) {
         $vz = [['Verzehrempfehlung', number_format($proTag, 0, ',', '.') . ' ' . ($istKapsel ? ($proTag === 1 ? 'Kapsel' : 'Kapseln') : ($formLbl !== '' ? $formLbl : 'Einheiten')) . ' pro Tag']];
         if ($sumMg > 0) $vz[] = ['Wirkstoffe je Tagesdosis', $mg($sumMg * $proTag) . ' mg' . ($sumMg * $proTag >= 1000 ? ' · ' . $mg($sumMg * $proTag / 1000) . ' g' : '')];
@@ -323,9 +339,10 @@ function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null): ?string
 }
 
 // PIB ausliefern: hochgeladenes PIB (Vorrang) sonst Auto-PIB. Setzt Header + gibt Body aus. false = nichts da.
-function pib_ausliefern(int $produkt_id, string $dateiname = 'Produktinformationsblatt', ?int $einheitenOverride = null): bool {
+function pib_ausliefern(int $produkt_id, string $dateiname = 'Produktinformationsblatt', ?int $einheitenOverride = null, ?int $proTagOverride = null): bool {
     $safe = preg_replace('/[^A-Za-z0-9._-]+/', '_', $dateiname) ?: 'Produktinformationsblatt';
-    $d = pib_datei($produkt_id);
+    // Hat der Kunde eine Tagesdosis gewaehlt, IMMER frisch generieren (die hochgeladene Datei kennt sie nicht).
+    $d = ($proTagOverride !== null && $proTagOverride > 0) ? null : pib_datei($produkt_id);
     if ($d) {
         $pf = BX_UPLOADS . '/' . basename((string)$d['datei']);
         if (is_file($pf)) {
@@ -337,7 +354,7 @@ function pib_ausliefern(int $produkt_id, string $dateiname = 'Produktinformation
             return true;
         }
     }
-    $pdf = pib_pdf_bauen($produkt_id, $einheitenOverride);
+    $pdf = pib_pdf_bauen($produkt_id, $einheitenOverride, $proTagOverride);
     if ($pdf === null) return false;
     header('Content-Type: application/pdf');
     header('Content-Disposition: inline; filename="' . $safe . '.pdf"');
