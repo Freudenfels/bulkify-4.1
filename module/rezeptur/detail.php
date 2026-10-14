@@ -210,14 +210,14 @@ if (!$neu && !empty($r['kunde_id'])) {
     $dupN = all("SELECT id, nummer FROM rezeptur WHERE kunde_id=? AND id<>? AND LOWER(TRIM(name))=LOWER(TRIM(?)) ORDER BY id",
                 [(int)$r['kunde_id'], (int)$id, (string)$r['name']]);
     if ($dupN) {
-        $links = implode(', ', array_map(fn($d) => '<a href="?p=rezeptur&id=' . (int)$d['id'] . '">' . h($d['nummer']) . '</a>', $dupN));
+        $links = implode(', ', array_map(fn($d) => '<a href="?p=rezeptur_detail&id=' . (int)$d['id'] . '">' . h($d['nummer']) . '</a>', $dupN));
         echo '<div class="bx-panel badge-warn" style="padding:10px 14px"><strong style="font-weight:600">Mögliche Dublette:</strong> Dieser Kunde hat bereits ' . count($dupN) . ' Rezeptur(en) mit dem Namen „' . h($r['name']) . '": ' . $links . '. Bitte Namen eindeutig machen, damit der Kunde nicht zwei gleichnamige Rezepturen hat.</div>';
     }
 }
 // Vom Kunden aus einer Katalog-/Haus-Rezeptur weiterentwickelt: interne Basis-Herkunft anzeigen.
 if (!$neu && !empty($r['basis_rezeptur_id'])) {
     $bn = one("SELECT id, nummer, name FROM rezeptur WHERE id=?", [(int)$r['basis_rezeptur_id']]);
-    if ($bn) echo '<div class="bx-panel" style="padding:10px 14px;background:var(--panel-2);border-color:var(--gruen)"><strong>Vom Kunden weiterentwickelt</strong> aus Basis <a href="?p=rezeptur&id=' . (int)$bn['id'] . '">' . h($bn['nummer'] . ' ' . $bn['name']) . '</a>.</div>';
+    if ($bn) echo '<div class="bx-panel" style="padding:10px 14px;background:var(--panel-2);border-color:var(--gruen)"><strong>Vom Kunden weiterentwickelt</strong> aus Basis <a href="?p=rezeptur_detail&id=' . (int)$bn['id'] . '">' . h($bn['nummer'] . ' ' . $bn['name']) . '</a>.</div>';
 }
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['fa_ges'])) { $fm = (int)($_GET['fa_match'] ?? 0); $fg = (int)$_GET['fa_ges'];

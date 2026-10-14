@@ -14,3 +14,7 @@ Reiter **Alle / Preis ausstehend / Preis da**, Suche (Lieferant/Rezeptur/Nr.). S
 **Was** (Fremdfertigung → Link zur Rezeptur, Rohstoff → Link zum Rohstoff, sonst Freitext), Menge,
 **Angebotspreis** (aus `lieferant_angebot`, mit Währung/Einheit, Mindestmenge, Lieferzeit), Status, Datum.
 Rein lesend – Angebote erfassen/annehmen weiterhin im Lieferant-/Rezeptur-Detail.
+
+## Link & Kunde (Fix)
+- Die „Was"-Spalte verlinkt Fremdfertigungs-Anfragen auf **`?p=rezeptur_detail&id=`** (nicht `?p=rezeptur`, das ist die Rezeptur-LISTE und ignoriert die id → führte „ins Nichts").
+- Bei Fremdfertigung steht unter dem Rezepturnamen der **Kunde** (aus `rezeptur.kunde_id`), damit man ohne Klick sieht, für wen angefragt wurde. Die Suche findet Anfragen jetzt auch über den **Kundennamen** (`kz.firma`).

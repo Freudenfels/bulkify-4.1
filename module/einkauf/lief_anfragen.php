@@ -17,8 +17,8 @@ if ($f === 'offen')        $where .= " AND ag.id IS NULL";             // noch k
 elseif ($f === 'beantwortet') $where .= " AND ag.id IS NOT NULL";      // Preis liegt vor
 if ($q !== '') {
     $like = '%' . str_replace('\\', '', $q) . '%';
-    $where .= " AND (l.firma LIKE ? OR la.nummer LIKE ? OR la.betreff LIKE ? OR i.name LIKE ? OR rz.name LIKE ? OR rz.synonyme LIKE ?)";
-    array_push($args, $like, $like, $like, $like, $like, $like);
+    $where .= " AND (l.firma LIKE ? OR la.nummer LIKE ? OR la.betreff LIKE ? OR i.name LIKE ? OR rz.name LIKE ? OR rz.synonyme LIKE ? OR kz.firma LIKE ?)";
+    array_push($args, $like, $like, $like, $like, $like, $like, $like);
 }
 
 $rows = all("SELECT la.id, la.nummer, la.art, la.betreff, la.menge, la.einheit, la.status, la.angelegt,
@@ -26,12 +26,13 @@ $rows = all("SELECT la.id, la.nummer, la.art, la.betreff, la.menge, la.einheit, 
                     ag.preis AS ang_preis, ag.einheit AS ang_einheit, ag.waehrung AS ang_waehrung,
                     ag.mindestmenge AS ang_min, ag.lieferzeit_tage AS ang_lz,
                     i.name AS item_name, i.artikelnummer AS item_nr,
-                    rz.name AS rez_name, rz.nummer AS rez_nummer
+                    rz.name AS rez_name, rz.nummer AS rez_nummer, kz.firma AS rez_kunde
              FROM lieferant_anfrage la
              LEFT JOIN lieferanten l ON l.id = la.lieferant_id
              LEFT JOIN lieferant_angebot ag ON ag.anfrage_id = la.id
              LEFT JOIN item i ON i.id = la.item_id
              LEFT JOIN rezeptur rz ON rz.id = la.rezeptur_id
+             LEFT JOIN kunden kz ON kz.id = rz.kunde_id
              WHERE $where ORDER BY la.angelegt DESC LIMIT 500", $args);
 
 $cAlle = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage");
@@ -66,7 +67,7 @@ bx_head('Lieferanten-Anfragen & Preise', 'Alle an Lieferanten gestellten Anfrage
     <?php foreach ($rows as $r):
         // "Was" + Link (Rezeptur-Fremdfertigung / Rohstoff / Freitext)
         if ((int)$r['rezeptur_id'] > 0) {
-            $wasLink = '?p=rezeptur&id=' . (int)$r['rezeptur_id'];
+            $wasLink = '?p=rezeptur_detail&id=' . (int)$r['rezeptur_id'];   // rezeptur = Liste; Detail ist rezeptur_detail
             $wasText = 'Fremdfertigung: ' . ($r['rez_name'] ?: ('Rezeptur ' . $r['rez_nummer']));
         } elseif ((int)$r['item_id'] > 0) {
             $wasLink = '?p=rohstoff&id=' . (int)$r['item_id'];
@@ -83,6 +84,7 @@ bx_head('Lieferanten-Anfragen & Preise', 'Alle an Lieferanten gestellten Anfrage
         <td style="max-width:200px;overflow-wrap:anywhere"><?= h((string)($r['firma'] ?: '–')) ?></td>
         <td style="max-width:320px;overflow-wrap:anywhere">
           <?php if ($wasLink): ?><a href="<?= $wasLink ?>"><?= h($wasText) ?></a><?php else: ?><?= h($wasText) ?><?php endif; ?>
+          <?php if ((int)$r['rezeptur_id'] > 0 && !empty($r['rez_kunde'])): ?><div class="muted" style="font-size:11px">Kunde: <?= h((string)$r['rez_kunde']) ?></div><?php endif; ?>
           <?php if ($artBadge): ?><div><?= $artBadge ?></div><?php endif; ?>
         </td>
         <td class="bx-num"><?= $menge($r['menge'], $r['einheit']) ?></td>
