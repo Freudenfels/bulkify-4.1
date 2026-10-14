@@ -6,7 +6,8 @@ require_once BX_ROOT . '/core/schema.php';
 
 seed_anfrage_if_empty();
 
-$DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
+$DFORM = function_exists('anfrage_formen') ? anfrage_formen()
+    : ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','extrakt'=>'Extrakt'];
 $q    = trim($_GET['q'] ?? '');
 $sort = $_GET['sort'] ?? 'angelegt';
 $dir  = $_GET['dir']  ?? 'desc';

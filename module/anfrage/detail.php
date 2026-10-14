@@ -4,7 +4,12 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup (Lieferantenauswahl) für nicht vorhandene Rohstoffe
 
-$DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
+// Team darf JEDE Darreichungsform setzen (nicht nur die 6, die der Kunde im Portal anbieten kann) – sonst
+// liesse sich eine als z. B. „Öl" angelegte/abgeleitete Anfrage im Dropdown gar nicht sehen oder auf „Pulver"
+// korrigieren (das Dropdown zeigte dann die erste Option statt des echten Werts).
+$DFORM = function_exists('anfrage_formen')
+    ? anfrage_formen()
+    : ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','oel'=>'Öl','extrakt'=>'Extrakt'];
 $KAPSELFORMEN = ['kapsel','tablette','softgel'];
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
