@@ -205,6 +205,12 @@ bx_head($neu ? 'Neue Rezeptur' : $v('name'),
         $neu ? 'Formulierung anlegen' : trim($v('nummer') . ' · ' . ($DFORM[$df] ?? $df)),
         bx_btn('Zurück zur Liste', '?p=rezeptur', 'ghost'));
 if (!$neu && !empty($r['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angelegt am ' . h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) . (!empty($r['aktualisiert']) && $r['aktualisiert'] !== $r['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($r['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
+// Form-Warnung: Öl-/Flüssig-Rohstoffe in einem trockenen Produkt (z. B. „Hagebutte Öl" in einem Pulver).
+if (!$neu && ($oelMiss = rezeptur_oel_in_trocken((int)$id))) {
+    echo '<div class="bx-panel" style="border-color:#e6c4c0;background:#fdf3f1;color:#8f231b;padding:12px 16px;margin-bottom:12px">'
+       . '<strong>Form passt nicht:</strong> Diese Rezeptur ist ein <strong>' . h($DFORM[$df] ?? $df) . '</strong>, enthält aber Öl-/Flüssig-Rohstoffe: '
+       . h(implode(', ', $oelMiss)) . '. Bitte die passende <strong>Pulver-/Extrakt-Variante</strong> wählen (ein Öl gehört nicht in ein Trockenprodukt).</div>';
+}
 // Dubletten-Hinweis bei der Prüfung: hat DERSELBE Kunde schon eine Rezeptur mit demselben Namen?
 if (!$neu && !empty($r['kunde_id'])) {
     $dupN = all("SELECT id, nummer FROM rezeptur WHERE kunde_id=? AND id<>? AND LOWER(TRIM(name))=LOWER(TRIM(?)) ORDER BY id",

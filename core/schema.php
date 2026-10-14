@@ -9750,13 +9750,45 @@ function seed_verpackung_if_empty(): void {
 }
 
 // Wunschname -> passender Rohstoff (über Nährstoff-Name oder Item-Name).
-function anfrage_auto_item(string $bez): ?int {
+// Form-Praeferenz fuer die Rohstoff-Zuordnung: ein Öl-/Flüssig-Rohstoff gehoert nicht in ein trockenes
+// Produkt (Pulver/Granulat/Kapsel/…) und umgekehrt. Liefert ein ORDER-BY-Praefix (mit abschliessendem Komma),
+// das die unpassende Form ans Ende sortiert. Leerer String, wenn die Form keine klare Praeferenz vorgibt.
+// $alias = Tabellen-Alias der item-Spalten in der Query (z. B. 'i'); '' = ohne Praefix.
+function rohstoff_form_order_sql(string $produktForm, string $alias = ''): string {
+    $p = $alias !== '' ? $alias . '.' : '';
+    // Öl/flüssig primaer ueber das strukturierte Formfeld. Der Name-Check ist akzent-/gross-klein-genau
+    // (utf8mb4_bin) – sonst matcht die ci-Collation „öl" auch auf „ol" (z. B. Pr-ol-in) und wuerde Pulver
+    // faelschlich als Öl einstufen. Rohstoffnamen schreiben die Form als „Öl" (gross) bzw. englisch „Oil".
+    $oel = "({$p}form IN ('oel','fluessig') OR {$p}name COLLATE utf8mb4_bin LIKE '%Öl%' OR {$p}name COLLATE utf8mb4_bin LIKE '% Oil%')";
+    $trocken = ['pulver','granulat','stick','gummi','kapsel','tablette','extrakt'];
+    $fluessig = ['fluessig','oel','gel','softgel'];
+    if (in_array($produktForm, $trocken, true))  return "$oel ASC, ";   // Öl-/Flüssig-Rohstoffe ans Ende
+    if (in_array($produktForm, $fluessig, true)) return "$oel DESC, ";  // Öl-/Flüssig-Rohstoffe bevorzugen
+    return '';
+}
+// Warnung: Öl-/Flüssig-Rohstoffe in einem TROCKENEN Produkt (Pulver/Granulat/Stick/Gummi/Kapsel/Tablette) –
+// z. B. „Hagebutte Frucht Öl" in einem Pulver. Rueckgabe: Namen der unpassenden Zutaten (leer = alles ok).
+function rezeptur_oel_in_trocken(int $rid): array {
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+    if (!in_array($form, ['pulver','granulat','stick','gummi','kapsel','tablette'], true)) return [];
+    return array_column(all(
+        "SELECT i.name FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id
+         WHERE z.rezeptur_id=? AND (i.form IN ('oel','fluessig')
+               OR i.name COLLATE utf8mb4_bin LIKE '%Öl%' OR i.name COLLATE utf8mb4_bin LIKE '% Oil%')", [$rid]), 'name');
+}
+// Rohstoff zu einer Wunsch-Bezeichnung finden. $produktForm (Darreichungsform der Anfrage/Rezeptur) sorgt dafuer,
+// dass z. B. „Hagebutte" in einem PULVER nicht als „Hagebutte Frucht Öl" zugeordnet wird (Form-Praeferenz).
+function anfrage_auto_item(string $bez, string $produktForm = ''): ?int {
     $bez = trim(str_replace(['%','_'], '', $bez));
     if ($bez === '') return null;
+    $pref = rohstoff_form_order_sql($produktForm, 'i');
     $id = scalar("SELECT iw.item_id FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id
-                  JOIN item i ON i.id=iw.item_id WHERE i.kategorie='rohstoff' AND i.gesperrt=0 AND n.name LIKE ? LIMIT 1", ['%'.$bez.'%']);
+                  JOIN item i ON i.id=iw.item_id WHERE i.kategorie='rohstoff' AND i.gesperrt=0 AND n.name LIKE ?
+                  ORDER BY {$pref}i.id LIMIT 1", ['%'.$bez.'%']);
     if ($id) return (int)$id;
-    $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name LIKE ? LIMIT 1", ['%'.$bez.'%']);
+    $prefI = rohstoff_form_order_sql($produktForm, '');
+    $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name LIKE ?
+                  ORDER BY {$prefI}id LIMIT 1", ['%'.$bez.'%']);
     return $id ? (int)$id : null;
 }
 

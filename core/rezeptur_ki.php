@@ -18,17 +18,22 @@ function rezeptur_ki_katalog(): array {
     return $out;
 }
 
-// Der Auftrag an die KI.
-function rezeptur_ki_anweisung(string $form, array $katalog): string {
-    $liste = $katalog ? "\n- " . implode("\n- ", array_values($katalog)) : ' (noch keine)';
-    $formLbl = ['kapsel'=>'Kapseln', 'tablette'=>'Tabletten', 'softgel'=>'Softgels', 'stick'=>'Sticks',
-                'pulver'=>'Pulver', 'fluessig'=>'flüssig'][$form] ?? $form;
+// Der Auftrag an die KI. $katalogZeilen = fertige Anzeigezeilen „Name — Form: Pulver/Öl/…" (siehe entwickeln).
+function rezeptur_ki_anweisung(string $form, array $katalogZeilen): string {
+    $liste = $katalogZeilen ? "\n- " . implode("\n- ", array_values($katalogZeilen)) : ' (noch keine)';
+    $formLbl = ['kapsel'=>'Kapseln', 'tablette'=>'Tabletten', 'softgel'=>'Softgels', 'stick'=>'Sticks', 'gummi'=>'Fruchtgummis',
+                'gel'=>'Gel', 'pulver'=>'Pulver', 'granulat'=>'Granulat', 'fluessig'=>'flüssig', 'oel'=>'Öl', 'extrakt'=>'Extrakt'][$form] ?? $form;
+    $trocken = in_array($form, ['pulver','granulat','stick','gummi','kapsel','tablette'], true);
+    $formRegel = $trocken
+        ? 'Die Darreichungsform ist ' . $formLbl . ' (ein TROCKENES Produkt). Waehle NUR trockene Rohstoffe (Pulver, Granulat, Extrakt) – KEINE Öle oder fluessigen Rohstoffe. Gibt es einen Rohstoff als Öl UND als Pulver (z. B. Hagebutte Frucht Öl vs. Hagebutte Pulver), nimm IMMER die Pulver-/Extrakt-Variante.'
+        : 'Die Darreichungsform ist ' . $formLbl . '. Waehle Rohstoffe, deren physische Form dazu passt (fuer ein fluessiges/Öl-Produkt die Öl-/fluessigen Varianten).';
     return <<<TXT
 Du entwickelst Rezepturen für einen deutschen Lohnhersteller von Nahrungsergänzungsmitteln.
 Aus der Idee des Kunden soll ein sauberer, herstellbarer und verkehrsfähiger Vorschlag werden.
 Darreichungsform: $formLbl.
+$formRegel
 
-Diese Rohstoffe haben wir im Katalog – bevorzuge sie, wenn sie fachlich passen:$liste
+Diese Rohstoffe haben wir im Katalog (mit physischer Form) – bevorzuge sie, wenn sie fachlich UND von der Form passen:$liste
 
 Gib NUR dieses JSON zurück:
 {
@@ -65,7 +70,15 @@ function rezeptur_ki_entwickeln(int $anfrage_id): array {
     if (!ki_bereit()) return ['ok'=>false, 'fehler'=>'Die KI ist nicht eingerichtet (Einstellungen → KI).'];
 
     $form = (string)($a['darreichungsform'] ?: 'kapsel');
-    $katalog = rezeptur_ki_katalog();
+    $katalog = rezeptur_ki_katalog();   // id=>Name (fuer die Rueckabbildung auf unseren Katalog)
+    // Anzeigezeilen fuer den Prompt MIT physischer Form, damit die KI die formpassende Variante waehlt
+    // (sonst landet „Hagebutte Öl" in einem Pulver). Matching laeuft weiter ueber $katalog/den Namen.
+    $formLblMap = function_exists('rohstoff_form_optionen') ? rohstoff_form_optionen() : [];
+    $katalogZeilen = [];
+    foreach (all("SELECT name, name_lat, form FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name") as $r) {
+        $fl = $r['form'] ? ($formLblMap[$r['form']] ?? $r['form']) : '';
+        $katalogZeilen[] = trim($r['name'] . ($r['name_lat'] ? ' (' . $r['name_lat'] . ')' : '')) . ($fl ? ' — Form: ' . $fl : '');
+    }
 
     // Was der Kunde geschrieben hat – Idee, Produktname und seine Wunschzutaten.
     $text = "Idee des Kunden:\n" . trim((string)$a['notiz']);
@@ -77,7 +90,7 @@ function rezeptur_ki_entwickeln(int $anfrage_id): array {
     }
 
     $r = ki_json($text, [
-        'system'     => rezeptur_ki_anweisung($form, $katalog),
+        'system'     => rezeptur_ki_anweisung($form, $katalogZeilen),
         'denken'     => true,
         'aufwand'    => 'high',
         'max_tokens' => 12000,
@@ -97,7 +110,7 @@ function rezeptur_ki_entwickeln(int $anfrage_id): array {
         $mg = (float) str_replace(',', '.', (string)($z['menge_mg'] ?? 0));
         $kat = trim((string)($z['katalog'] ?? ''));
         $iid = $kat !== '' ? ($katalogUmgekehrt[mb_strtolower($kat)] ?? null) : null;
-        if (!$iid) $iid = rezeptur_ki_item_finden($bez);   // zweiter Versuch über den Namen
+        if (!$iid) $iid = rezeptur_ki_item_finden($bez, $form);   // zweiter Versuch über den Namen (formpassend)
         $zutaten[] = [
             'bezeichnung' => mb_substr($bez, 0, 190),
             'menge_mg'    => $mg,
@@ -162,27 +175,31 @@ function rezeptur_ki_liste($roh, array $felder): array {
     return array_slice($out, 0, 30);
 }
 
-// Einen Rohstoff über den Namen suchen (exakt, dann enthalten).
-function rezeptur_ki_item_finden(string $bez): ?int {
+// Einen Rohstoff über den Namen suchen (exakt, dann enthalten). $produktForm (Darreichungsform) sorgt via
+// Form-Praeferenz dafuer, dass z. B. „Hagebutte" in einem PULVER nicht als „Hagebutte Frucht Öl" zugeordnet
+// wird – Öl-/Flüssig-Rohstoffe werden bei trockenen Produkten ans Ende sortiert (rohstoff_form_order_sql).
+function rezeptur_ki_item_finden(string $bez, string $produktForm = ''): ?int {
     $bez = trim($bez);
     if ($bez === '') return null;
     // Die KI haengt gern eine Erklaerung an ("Magnesiumbisglycinat (ca. 14 % Mg)"). Ohne die Klammer
     // trifft der Name unseren Stammdatensatz meistens genau.
     $ohne = trim(preg_replace('/\s*\([^)]*\)/u', '', $bez));
+    $pref = function_exists('rohstoff_form_order_sql') ? rohstoff_form_order_sql($produktForm, '') : '';
     foreach (array_unique([$bez, $ohne]) as $v) {
         if ($v === '') continue;
-        $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name=? LIMIT 1", [$v]);
+        // Exakter Name, aber bei mehreren gleich benannten Varianten die formpassende zuerst.
+        $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name=? ORDER BY {$pref}id LIMIT 1", [$v]);
         if ($id) return (int)$id;
     }
     foreach (array_unique([$bez, $ohne]) as $v) {
         if ($v === '') continue;
-        $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name LIKE ? LIMIT 1", ['%' . $v . '%']);
+        $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND name LIKE ? ORDER BY {$pref}CHAR_LENGTH(name) ASC LIMIT 1", ['%' . $v . '%']);
         if ($id) return (int)$id;
     }
     // Andersherum: unser Name steckt in der Bezeichnung der KI. Kurze Namen bleiben aussen vor,
     // sonst passt "Zink" auf alles; der laengste Treffer gewinnt, das ist der genaueste.
     $id = scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND CHAR_LENGTH(name) >= 6
-                  AND ? LIKE CONCAT('%', name, '%') ORDER BY CHAR_LENGTH(name) DESC LIMIT 1", [$bez]);
+                  AND ? LIKE CONCAT('%', name, '%') ORDER BY {$pref}CHAR_LENGTH(name) DESC LIMIT 1", [$bez]);
     return $id ? (int)$id : null;
 }
 

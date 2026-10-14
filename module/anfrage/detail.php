@@ -119,7 +119,7 @@ $lieferantenListe = all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=
 $kapseln = all("SELECT * FROM kapselgroesse ORDER BY sort, fuellmenge_mg");
 $wuensche = $neu ? [] : all("SELECT * FROM rezeptur_anfrage_wunsch WHERE anfrage_id=? ORDER BY sort, id", [(int)$id]);
 // Auto-Zuordnung vorschlagen, wo noch keine da ist
-foreach ($wuensche as &$w) if (!$w['item_id']) $w['item_id'] = anfrage_auto_item($w['bezeichnung']);
+foreach ($wuensche as &$w) if (!$w['item_id']) $w['item_id'] = anfrage_auto_item($w['bezeichnung'], $form);
 unset($w);
 
 // Aufgabe 4 (Stufe A, intern): ähnliche bestehende Rezepturen aus den zugeordneten Zeilen finden.
