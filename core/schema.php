@@ -153,6 +153,23 @@ function init_schema(): void {
     // Handelnde Person (Name) bei Team-Aktionen – fuer das Admin-Protokoll „wer hat was geaendert".
     ensure_column('aktivitaet', 'benutzer', "VARCHAR(190) NULL");
 
+    // Team-Benachrichtigungen (Dashboard-Postfach): wird bei jedem Team-Ereignis (ueber mail_team) gefuellt.
+    // Jeder Team-Benutzer markiert sie selbst als gelesen (benachrichtigung_gelesen je Benutzer).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS benachrichtigung (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        betreff VARCHAR(255) NOT NULL,
+        text TEXT NULL,
+        link VARCHAR(255) NULL,
+        erstellt DATETIME NOT NULL,
+        KEY idx_erstellt (erstellt)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS benachrichtigung_gelesen (
+        benachrichtigung_id INT NOT NULL,
+        benutzer_id INT NOT NULL,
+        gelesen_am DATETIME NOT NULL,
+        PRIMARY KEY (benachrichtigung_id, benutzer_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // lieferant_katalog: was ein Lieferant anbietet – als VORSCHLAG, bevor daraus ein Artikel wird.
     // Der Lieferant pflegt seine Liste selbst (oder lädt sie hoch, die KI liest sie); das Team
     // entscheidet je Zeile, ob daraus ein Artikel entsteht. Siehe core/lieferant_katalog.php.
@@ -9110,6 +9127,46 @@ function log_aktivitaet(string $objekt_typ, int $objekt_id, string $akteur, stri
 function verlauf_fuer(string $objekt_typ, int $objekt_id): array {
     return all("SELECT * FROM aktivitaet WHERE objekt_typ=? AND objekt_id=? ORDER BY erstellt ASC, id ASC",
                [$objekt_typ, $objekt_id]);
+}
+
+// --- Team-Benachrichtigungen (Dashboard-Postfach) ---
+// Eine Benachrichtigung anlegen (team-weit). Wird aus mail_team() bei jedem Team-Ereignis aufgerufen.
+function benachrichtigung_add(string $betreff, string $text = '', string $link = ''): int {
+    $betreff = trim($betreff);
+    if ($betreff === '') return 0;
+    if (!table_exists('benachrichtigung')) return 0;
+    q("INSERT INTO benachrichtigung (betreff, text, link, erstellt) VALUES (?,?,?,?)",
+      [mb_substr($betreff, 0, 255), mb_substr(trim($text), 0, 4000) ?: null, mb_substr(trim($link), 0, 255) ?: null, gmdate('Y-m-d H:i:s')]);
+    return (int) insert_id();
+}
+// Ungelesene fuer EINEN Benutzer = Benachrichtigungen ohne Lese-Eintrag dieses Benutzers.
+function benachrichtigungen_ungelesen_count(int $benutzer_id): int {
+    if ($benutzer_id <= 0 || !table_exists('benachrichtigung')) return 0;
+    return (int) scalar("SELECT COUNT(*) FROM benachrichtigung b
+        WHERE NOT EXISTS (SELECT 1 FROM benachrichtigung_gelesen g WHERE g.benachrichtigung_id=b.id AND g.benutzer_id=?)",
+        [$benutzer_id]);
+}
+// Liste fuer einen Benutzer, neueste zuerst, mit Lese-Flag. $nurUngelesen = nur offene.
+function benachrichtigungen_liste(int $benutzer_id, bool $nurUngelesen = false, int $limit = 200): array {
+    if ($benutzer_id <= 0 || !table_exists('benachrichtigung')) return [];
+    $limit = max(1, min(500, $limit));
+    $w = $nurUngelesen ? 'WHERE g.benutzer_id IS NULL' : '';
+    return all("SELECT b.*, (g.benutzer_id IS NOT NULL) AS gelesen FROM benachrichtigung b
+                LEFT JOIN benachrichtigung_gelesen g ON g.benachrichtigung_id=b.id AND g.benutzer_id=?
+                $w ORDER BY b.erstellt DESC, b.id DESC LIMIT $limit", [$benutzer_id]);
+}
+// Als gelesen markieren: eine (id) oder ALLE (id=null) fuer diesen Benutzer. Idempotent.
+function benachrichtigung_gelesen_setzen(int $benutzer_id, ?int $id = null): void {
+    if ($benutzer_id <= 0 || !table_exists('benachrichtigung')) return;
+    $jetzt = gmdate('Y-m-d H:i:s');
+    if ($id !== null && $id > 0) {
+        q("INSERT IGNORE INTO benachrichtigung_gelesen (benachrichtigung_id, benutzer_id, gelesen_am) VALUES (?,?,?)", [$id, $benutzer_id, $jetzt]);
+    } else {
+        q("INSERT IGNORE INTO benachrichtigung_gelesen (benachrichtigung_id, benutzer_id, gelesen_am)
+           SELECT b.id, ?, ? FROM benachrichtigung b
+           WHERE NOT EXISTS (SELECT 1 FROM benachrichtigung_gelesen g WHERE g.benachrichtigung_id=b.id AND g.benutzer_id=?)",
+          [$benutzer_id, $jetzt, $benutzer_id]);
+    }
 }
 
 // --- Aufgaben (Werk) ---

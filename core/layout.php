@@ -231,7 +231,10 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     if (function_exists('current_user') && ($u = current_user())) {
         $rollen = function_exists('rollen_liste') ? rollen_liste() : [];
         $meine = array_map(fn($r) => $rollen[$r] ?? $r, user_rollen());
+        $nBenach = function_exists('benachrichtigungen_ungelesen_count') ? benachrichtigungen_ungelesen_count((int)$u['id']) : 0;
         echo "<div class=\"bx-userbox\">"
+           . "<a class=\"bx-usernotify\" href=\"?p=benachrichtigungen\" style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;text-decoration:none;color:inherit\">"
+           . "<span>Benachrichtigungen</span>" . ($nBenach > 0 ? "<span class=\"bx-navbadge\">" . (int)$nBenach . "</span>" : "<span class=\"muted\" style=\"font-size:12px\">keine neuen</span>") . "</a>"
            . "<div class=\"bx-username\">" . h($u['name']) . "</div>"
            . "<div class=\"bx-userroles\">" . h(implode(' · ', $meine) ?: 'keine Rolle') . "</div>"
            . "<a class=\"bx-logout\" href=\"?p=logout\">Abmelden</a>"

@@ -239,6 +239,12 @@ function mail_lieferant_anfrage(int $anfrage_id): string {
 
 // Interne Benachrichtigung an alle aktiven Admins (z. B. „Lieferant hat bestätigt").
 function mail_team(string $betreff, string $text): int {
+    // Dashboard-Benachrichtigung IMMER anlegen (unabhaengig vom Mailversand) – mit Deep-Link aus dem Text.
+    if (function_exists('benachrichtigung_add')) {
+        $link = '';
+        if (preg_match('#\?p=[A-Za-z0-9_]+(?:&(?:amp;)?[A-Za-z0-9_]+=[^\s"\'<>]+)*#', $text, $mm)) $link = $mm[0];
+        benachrichtigung_add($betreff, $text, $link);
+    }
     if (!mail_bereit()) return 0;
     $n = 0; $gesendet = [];
     foreach (all("SELECT email FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL AND rollen LIKE '%admin%'") as $u) {
