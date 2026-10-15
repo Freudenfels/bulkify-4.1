@@ -280,6 +280,9 @@ In „Meine Anfragen" haben Produkt-/Rohstoffanfragen (del_typ=portal) im Reiter
 ## Umkarton in der Produktanfrage (Stand 2026-10-08)
 Nur wenn der Admin es freigeschaltet hat (`app_meta portal_umkarton=1`, Einstellungen → Preise & Margen), erscheint im Formular „Produkt anfragen" eine Checkbox **„Umkarton gewünscht"** (Ja/Nein). Gespeichert an `portal_anfrage.umkarton`; Details schreibt der Kunde in die Notiz. In „Meine Anfragen" erscheint bei gesetztem Haken „Umkarton" in der Detailzeile.
 
+## Fix: mobiles Menü im Portal ließ sich nicht öffnen (Stand 2026-10-15)
+Das Portal nutzt dieselbe Shell wie das Dashboard (`bx_mobilbar()` Burger + `bx_menue_scrim()`), aber `portal_foot()` lud das Toggle-Script **`bx_menue_script()`** nicht – der Burger war tot. In schmaler Ansicht (z. B. eingebettetes Portal-Fenster in der Desktop-App) ist die Seitenleiste ausgeblendet und nur über den Burger erreichbar → Kunde/Admin sah das Menü, konnte es aber nicht öffnen. Fix: `portal_foot()` gibt jetzt zusätzlich `bx_menue_script()` aus (function_exists-geschützt; `core/layout.php` ist über `public/index.php` immer geladen).
+
 ## Umkarton je 1 Glas + Druckvorlage im PIB (Stand 2026-10-15)
 Ein **Umkarton** ist ein Faltkarton um **genau ein** Gebinde (1 Glas), größengenau zum Behälter. Modell: je Behälter(-größe) **ein** Umkarton-Artikel (eigener Verpackungs-Artikel mit `verpackung_rolle='karton'`, Maße B×T×H am Item). Verknüpfung: `item.karton_item_id` am Behälter → Umkarton-Artikel. Gepflegt im Behälter (`?p=verpackung&id=…`, Reiter **Füllmengen** = die „Matrix"): Umkarton auswählen, Maße werden angezeigt, Druckvorlage-PDF direkt hochladen (landet als `verpackung_dokument kategorie='druckvorlage'` am Umkarton-Artikel). Beispiel vorangelegt per `seed_umkarton_250ml_if_empty()` (`core/schema.php`): 250-ml-Weithalsglas → „Umkarton 250 ml (Automatikboden)", 69×69×134 mm, Druckvorlage aus `assets/druckvorlagen/250ml_automatik.pdf`.
 
