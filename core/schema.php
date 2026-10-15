@@ -1376,6 +1376,7 @@ function init_schema(): void {
     ensure_column('item', 'max_fuellgewicht_g', "DECIMAL(10,2) NULL"); // Verpackung: max. Füllgewicht (g) – für Pulver-Match (Glas/Dose)
     // Verpackungs-Stückliste: Rolle je Verpackungs-Item + Produkt-Slots für die komplette Stückliste
     ensure_column('item', 'verpackung_rolle', "VARCHAR(20) NULL");  // primaer|verschluss|etikett|karton|beipack (nur kategorie=verpackung)
+    ensure_column('item', 'karton_item_id', "INT NULL");            // Behälter (Primärverpackung) -> zugehöriger Umkarton (1 Glas je Karton), ein Karton-Item mit Maßen + Druckvorlage
     ensure_column('item', 'etikett_format', "VARCHAR(40) NULL");    // z. B. 100x70 mm (nur Etikett)
     ensure_column('item', 'etikett_druck', "VARCHAR(40) NULL");     // Etikett-Druckdatei-Maß je Behälter (B x H mm, = Endformat + 3mm rundum)
     ensure_column('item', 'etikett_final', "VARCHAR(40) NULL");     // finales Etikettenformat je Behälter (B x H mm)
@@ -2109,6 +2110,8 @@ function init_schema(): void {
     // Umkarton-Haken in der Produktanfrage generell anbieten (Kunde kann einen Umkarton anhaken). Einmalig
     // einschalten; in den Einstellungen weiter abschaltbar.
     if (meta_get('portal_umkarton', null) === null) meta_set('portal_umkarton', '1');
+    // Beispiel-Umkarton 250 ml (69×69×134, Automatikboden) anlegen + ans 250-ml-Weithalsglas hängen + Druckvorlage.
+    seed_umkarton_250ml_if_empty();
 
     // Einmalig: Tabea (albers@bulkify.pro) als zusaetzliche Benachrichtigungs-Adresse vorbelegen – bekommt dann
     // alle Team-Mails (Rueckfragen/Infos). Nur setzen, wenn der Schluessel noch nie gesetzt wurde; spaeter in
@@ -2402,6 +2405,18 @@ function etikett_druckvorlage_datei(int $produkt_id): ?array {
     }
     if (!$eids) return null;
     return one("SELECT * FROM verpackung_dokument WHERE item_id IN (" . implode(',', array_map('intval', $eids)) . ") AND kategorie='druckvorlage' ORDER BY id DESC LIMIT 1");
+}
+// Umkarton-Druckvorlage eines Produkts: am Umkarton-Artikel (produkt.karton_id oder – Fallback – am Behälter
+// hinterlegter item.karton_item_id) als verpackung_dokument kategorie='druckvorlage'. Umkarton = 1 Glas je Karton.
+function umkarton_druckvorlage_datei(int $produkt_id): ?array {
+    if ($produkt_id <= 0) return null;
+    $p = one("SELECT karton_id, verpackung_id FROM produkt WHERE id=?", [$produkt_id]);
+    if (!$p) return null;
+    $kid = (int)($p['karton_id'] ?? 0);
+    if ($kid <= 0 && !empty($p['verpackung_id']))
+        $kid = (int) scalar("SELECT karton_item_id FROM item WHERE id=? AND karton_item_id IS NOT NULL AND karton_item_id>0", [(int)$p['verpackung_id']]);
+    if ($kid <= 0) return null;
+    return one("SELECT * FROM verpackung_dokument WHERE item_id=? AND kategorie='druckvorlage' ORDER BY id DESC LIMIT 1", [$kid]);
 }
 // Kapsel-Referenztabelle (Nachschlagewerk): je Größe die Standardwerte.
 // [Fuellgewicht 0.45 leicht, 0.70 typisch, 1.00 dicht (mg)], Volumen ml, Verschlusslänge mm,
@@ -4130,9 +4145,19 @@ function produkt_verpackung_items(int $produkt_id, ?int $verp_override = null): 
 function produkt_karton_info(int $produkt_id, int $kunde_id): ?array {
     if ($produkt_id <= 0) return null;
     $p = one("SELECT karton_id, karton_inhalt FROM produkt WHERE id=?", [$produkt_id]);
-    if (!$p || empty($p['karton_id'])) return null;
-    $kid = (int)$p['karton_id'];
+    if (!$p) return null;
+    $kid    = (int)($p['karton_id'] ?? 0);
     $inhalt = (int)($p['karton_inhalt'] ?? 0);
+    // Fallback: kein Umkarton am Produkt -> der am Behälter (Primärverpackung) hinterlegte Umkarton.
+    // Umkarton = 1 Glas je Karton, daher Inhalt-Default 1.
+    if ($kid <= 0) {
+        $kid = (int) scalar(
+            "SELECT b.karton_item_id FROM produkt pr
+               JOIN item b ON b.id = pr.verpackung_id
+              WHERE pr.id=? AND b.karton_item_id IS NOT NULL AND b.karton_item_id>0", [$produkt_id]);
+        if ($kid > 0 && $inhalt <= 0) $inhalt = 1;
+    }
+    if ($kid <= 0) return null;
     $verf = 0;
     if ($kunde_id > 0 && table_exists('charge'))
         $verf = (int) round((float) scalar(
@@ -9196,6 +9221,50 @@ function benachrichtigung_gelesen_setzen(int $benutzer_id, ?int $id = null): voi
            WHERE NOT EXISTS (SELECT 1 FROM benachrichtigung_gelesen g WHERE g.benachrichtigung_id=b.id AND g.benutzer_id=?)",
           [$benutzer_id, $jetzt, $benutzer_id]);
     }
+}
+
+// Beispiel-Umkarton 250 ml (69×69×134, Automatikboden): als Verpackungs-Item anlegen, ans 250-ml-Weithalsglas
+// hängen und die Druckvorlage (PDF aus dem Repo) als verpackung_dokument ablegen. Umkarton = 1 Glas je Karton.
+// Läuft einmal (meta-Marker). Best-effort: Fehler brechen init_schema nicht ab.
+function seed_umkarton_250ml_if_empty(): void {
+    if (meta_get('seed_umkarton_250', null) === '1') return;
+    if (!table_exists('item')) return;
+    try {
+        // 250-ml-Weithalsglas (Primärverpackung) suchen – nicht hartkodiert, damit es live passt.
+        $glas = (int) scalar(
+            "SELECT id FROM item WHERE kategorie='verpackung' AND verpackung_rolle='primaer'
+               AND volumen_ml=250 AND name LIKE '%Weithalsglas%' LIMIT 1");
+        if (!$glas) return;   // kein passender Behälter -> Marker ungesetzt, später erneut versuchen
+
+        // Umkarton-Item (einmalig je Name).
+        $karton = (int) scalar(
+            "SELECT id FROM item WHERE kategorie='verpackung' AND verpackung_rolle='karton'
+               AND name LIKE 'Umkarton 250 ml%' LIMIT 1");
+        if (!$karton) {
+            q("INSERT INTO item (artikelnummer,name,kategorie,verpackung_rolle,verpackungsart,material,breite_mm,tiefe_mm,hoehe_mm,einheit,preis_bezug,notiz)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('VP'), 'Umkarton 250 ml (Automatikboden)', 'verpackung', 'karton', 'karton', 'Karton',
+               69, 69, 134, 'Stk', 'Stk', 'Umkarton je 1 Glas (250-ml-Weithalsglas). Maße 69×69×134 mm, Automatikboden.']);
+            $karton = insert_id();
+        }
+
+        // Behälter -> Umkarton verknüpfen (nur wenn noch leer).
+        q("UPDATE item SET karton_item_id=? WHERE id=? AND (karton_item_id IS NULL OR karton_item_id=0)", [$karton, $glas]);
+
+        // Druckvorlage aus dem Repo in die Uploads kopieren + als verpackung_dokument am Umkarton ablegen.
+        if ($karton && table_exists('verpackung_dokument')) {
+            $hat = (int) scalar("SELECT COUNT(*) FROM verpackung_dokument WHERE item_id=? AND kategorie='druckvorlage'", [$karton]);
+            $src = BX_ROOT . '/assets/druckvorlagen/250ml_automatik.pdf';
+            if (!$hat && is_file($src)) {
+                if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+                $fn = 'druckvorlage_umkarton250_' . bin2hex(random_bytes(6)) . '.pdf';
+                if (@copy($src, BX_UPLOADS . '/' . $fn))
+                    q("INSERT INTO verpackung_dokument (item_id,titel,kategorie,datei,datei_orig) VALUES (?,?,?,?,?)",
+                      [$karton, 'Druckvorlage Umkarton 250 ml (Automatikboden)', 'druckvorlage', $fn, '250ml_automatik.pdf']);
+            }
+        }
+        meta_set('seed_umkarton_250', '1');
+    } catch (\Throwable $e) { /* best-effort */ }
 }
 
 // --- Aufgaben (Werk) ---

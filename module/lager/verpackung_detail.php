@@ -58,6 +58,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etike
     }
     header('Location: ?p=verpackung&id=' . $id . '&tab=etipreis&gespeichert=1'); exit;
 }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'umkarton_save' && is_numeric($id)) {
+    // Umkarton (je 1 Glas) am Behälter hinterlegen + optional Druckvorlage am Umkarton-Artikel ablegen.
+    $kartonId = ($_POST['karton_item_id'] ?? '') !== '' ? (int)$_POST['karton_item_id'] : null;
+    q("UPDATE item SET karton_item_id=? WHERE id=?", [$kartonId, (int)$id]);
+    if ($kartonId && !empty($_FILES['umk_dok']['name']) && ($_FILES['umk_dok']['error'] ?? 1) === UPLOAD_ERR_OK) {
+        if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+        $orig = $_FILES['umk_dok']['name'];
+        $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($orig, PATHINFO_EXTENSION)));
+        $fn   = 'vp_' . $kartonId . '_' . bin2hex(random_bytes(6)) . ($ext ? '.' . $ext : '');
+        if (move_uploaded_file($_FILES['umk_dok']['tmp_name'], BX_UPLOADS . '/' . $fn))
+            q("INSERT INTO verpackung_dokument (item_id,titel,kategorie,datei,datei_orig) VALUES (?,?,?,?,?)",
+              [$kartonId, trim($_POST['umk_titel'] ?? '') ?: 'Druckvorlage Umkarton', 'druckvorlage', $fn, $orig]);
+    }
+    log_aktivitaet('item', (int)$id, 'team', 'Umkarton am Behälter aktualisiert.', 'notiz');
+    header('Location: ?p=verpackung&id=' . $id . '&tab=fuell&gespeichert=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_upload' && is_numeric($id)) {
     $kat = in_array($_POST['dok_kategorie'] ?? '', ['ppwr','doc','spez','etikett','druckvorlage','sonstiges'], true) ? $_POST['dok_kategorie'] : 'ppwr';
     if (!empty($_FILES['dok']['name']) && ($_FILES['dok']['error'] ?? 1) === UPLOAD_ERR_OK) {
@@ -131,6 +147,16 @@ $etikettstaffel = (!$neu) ? etikett_staffel((int)$id) : [];
 $ekstaffel = (!$neu) ? all("SELECT s.*, l.firma AS lieferant_firma FROM pack_ek_staffel s LEFT JOIN lieferanten l ON l.id=s.lieferant_id WHERE s.item_id=? ORDER BY s.menge_ab", [(int)$id]) : [];
 $vkstaffel = (!$neu) ? all("SELECT * FROM pack_vk_staffel WHERE item_id=? ORDER BY menge_ab", [(int)$id]) : [];
 $dokumente = (!$neu) ? all("SELECT * FROM verpackung_dokument WHERE item_id=? ORDER BY kategorie, id DESC", [(int)$id]) : [];
+// Umkarton (je 1 Glas) – Auswahl + aktuelle Druckvorlagen des gewählten Umkartons
+$kartonCur   = (!$neu) ? (int)($it['karton_item_id'] ?? 0) : 0;
+$kartonItems = (!$neu) ? all("SELECT id,name,breite_mm,tiefe_mm,hoehe_mm FROM item WHERE kategorie='verpackung' AND verpackung_rolle='karton' AND (gesperrt IS NULL OR gesperrt=0) ORDER BY name") : [];
+$umkMasse = function(?array $kc): string {
+    if (!$kc) return '';
+    $t = array_filter([$kc['breite_mm'] ?? null, $kc['tiefe_mm'] ?? null, $kc['hoehe_mm'] ?? null], fn($x) => $x !== null && $x !== '' && (float)$x > 0);
+    return $t ? implode(' × ', array_map(fn($x) => rtrim(rtrim(number_format((float)$x, 1, ',', '.'), '0'), ','), $t)) . ' mm' : '';
+};
+$umkDocs = ($kartonCur > 0) ? all("SELECT * FROM verpackung_dokument WHERE item_id=? AND kategorie='druckvorlage' ORDER BY id DESC", [$kartonCur]) : [];
+$kartonCurRow = ($kartonCur > 0) ? one("SELECT id,name,breite_mm,tiefe_mm,hoehe_mm FROM item WHERE id=?", [$kartonCur]) : null;
 $DOKKAT = ['ppwr'=>'PPWR-Nachweis', 'doc'=>'Konformität (DoC)', 'spez'=>'Spezifikation', 'etikett'=>'Etikett-Druckdatei', 'druckvorlage'=>'Etikett-Druckvorlage (Kunde)', 'sonstiges'=>'Sonstiges'];
 if (!$neu) { seed_aktivitaet_if_empty(); $verlauf = verlauf_fuer('item', (int)$id); } else { $verlauf = []; }
 
@@ -294,6 +320,46 @@ if (!$neu) {
       </table></div>
       <div class="bx-row" style="margin-top:var(--sp-4)">
         <button class="btn btn-primary" type="submit">Füllmengen speichern</button>
+      </div>
+    </div>
+  </form>
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="aktion" value="umkarton_save">
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Umkarton (je 1 Glas)</h2>
+      <p class="muted" style="margin-top:0">Faltkarton um je ein einzelnes Gebinde dieser Größe. Wird dem Kunden bei der Anfrage als Option angeboten; die Druckvorlage kann im PIB direkt mit heruntergeladen werden.</p>
+      <div class="bx-grid" style="margin-bottom:10px">
+        <div class="bx-field"><label>Umkarton (Artikel) <?= bx_hint('Verpackungs-Artikel mit Rolle „Karton". Maße kommen aus dem Artikel.') ?></label>
+          <select name="karton_item_id">
+            <option value="">– keiner –</option>
+            <?php foreach ($kartonItems as $kc): $m = $umkMasse($kc); ?>
+              <option value="<?= (int)$kc['id'] ?>" <?= $kartonCur===(int)$kc['id']?'selected':'' ?>><?= h($kc['name']) . ($m ? ' (' . $m . ')' : '') ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="bx-field"><label>Maße des gewählten Umkartons (B × T × H)</label><input type="text" value="<?= h($umkMasse($kartonCurRow) ?: '–') ?>" disabled></div>
+      </div>
+      <?php if ($umkDocs): ?>
+      <div style="font-weight:600;margin:6px 0 4px">Druckvorlagen am Umkarton</div>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Titel / Datei</th><th>Hochgeladen</th></tr></thead>
+        <tbody>
+          <?php foreach ($umkDocs as $ud): ?>
+          <tr>
+            <td><a href="?p=verpackung_dok&id=<?= (int)$ud['id'] ?>" target="_blank"><?= h($ud['titel'] ?: ($ud['datei_orig'] ?: 'Druckvorlage')) ?></a></td>
+            <td class="muted"><?= h(fmt_zeit($ud['angelegt'], 'd.m.Y')) ?></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <?php endif; ?>
+      <div class="bx-grid" style="margin-top:10px">
+        <div class="bx-field"><label>Druckvorlage (PDF) hochladen <?= bx_hint('wird am gewählten Umkarton-Artikel abgelegt') ?></label><input type="file" name="umk_dok" accept="application/pdf,image/*"></div>
+        <div class="bx-field"><label>Titel (optional)</label><input type="text" name="umk_titel" placeholder="z. B. Druckvorlage Umkarton 250 ml"></div>
+      </div>
+      <div class="bx-row" style="margin-top:var(--sp-4)">
+        <button class="btn btn-primary" type="submit">Umkarton speichern</button>
+        <?php if ($kartonCur): ?><a class="btn btn-ghost" href="?p=verpackung&id=<?= (int)$kartonCur ?>" target="_blank">Umkarton-Artikel öffnen</a><?php endif; ?>
       </div>
     </div>
   </form>

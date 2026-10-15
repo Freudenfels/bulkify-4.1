@@ -324,6 +324,20 @@ if ($k && ($_GET['v'] ?? '') === 'druckvorlage') {
     header('Content-Length: ' . filesize($pf));
     readfile($pf); exit;
 }
+// Umkarton-Druckvorlage (Faltkarton je 1 Glas) zum eigenen Auftrag herunterladen.
+if ($k && ($_GET['v'] ?? '') === 'umkarton_vorlage') {
+    $aid = (int)($_GET['aid'] ?? 0);
+    $pid = $aid ? (int) scalar("SELECT produkt_id FROM auftrag WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : 0;
+    $d  = $pid ? umkarton_druckvorlage_datei($pid) : null;
+    $pf = $d ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
+    if (!$d || !is_file($pf)) { http_response_code(404); echo 'Keine Umkarton-Druckvorlage hinterlegt.'; exit; }
+    if ($pid && $aid) log_aktivitaet('auftrag', $aid, 'kunde', 'Umkarton-Druckvorlage heruntergeladen · ' . (string)($k['firma'] ?? ('Kunde ' . (int)$k['id'])), 'notiz', 'auftrag', $aid);
+    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
+    header('Content-Type: ' . ($ext === 'pdf' ? 'application/pdf' : ($ext === 'png' ? 'image/png' : ($ext === 'jpg' || $ext === 'jpeg' ? 'image/jpeg' : 'application/octet-stream'))));
+    header('Content-Disposition: inline; filename="Umkarton-Druckvorlage-' . $aid . '.' . ($ext ?: 'pdf') . '"');
+    header('Content-Length: ' . filesize($pf));
+    readfile($pf); exit;
+}
 
 // Angebot ablehnen (mit Begründung) -> Status zurück, Team überarbeitet
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_ablehnen') {
@@ -3786,6 +3800,9 @@ portal_head('Kundenportal · ' . $k['firma']);
         <input type="number" name="td" min="0" max="50" value="1" style="width:52px;text-align:center;padding:4px" title="Kapseln/Portionen pro Tag (0 = ohne Tagesdosis)">
         <button class="btn btn-primary btn-sm" type="submit" data-busy="PIB…" style="white-space:nowrap">Produktinfo (PIB)</button>
       </form>
+      <?php if (umkarton_druckvorlage_datei((int)($a['produkt_id'] ?? 0))): ?>
+      <a class="btn btn-ghost" target="_blank" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('umkarton_vorlage') ?>&aid=<?= (int)$a['id'] ?>" title="Druckvorlage für den Umkarton (je 1 Glas)">Umkarton-Druckvorlage</a>
+      <?php endif; ?>
     </div>
     <?php
       // Nachgetragene Original-Dokumente (z. B. alte Rechnungen), die das Team fuer den Kunden freigegeben hat.
