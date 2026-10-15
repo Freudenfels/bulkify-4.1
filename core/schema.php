@@ -2106,6 +2106,10 @@ function init_schema(): void {
         meta_set('einheit_stk_v2', '1');
     }
 
+    // Umkarton-Haken in der Produktanfrage generell anbieten (Kunde kann einen Umkarton anhaken). Einmalig
+    // einschalten; in den Einstellungen weiter abschaltbar.
+    if (meta_get('portal_umkarton', null) === null) meta_set('portal_umkarton', '1');
+
     // Einmalig: Tabea (albers@bulkify.pro) als zusaetzliche Benachrichtigungs-Adresse vorbelegen – bekommt dann
     // alle Team-Mails (Rueckfragen/Infos). Nur setzen, wenn der Schluessel noch nie gesetzt wurde; spaeter in
     // den Einstellungen (E-Mail -> Zusaetzliche Benachrichtigungs-Adressen) frei aenderbar.
