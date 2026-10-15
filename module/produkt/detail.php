@@ -58,6 +58,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zk_pr
     q("DELETE FROM produkt_lieferant_preis WHERE id=? AND produkt_id=?", [(int)($_POST['preis_id'] ?? 0), (int)$id]);
     header('Location: ?p=produkt&id=' . $id . '#zukauf'); exit;
 }
+// Kundenpreis anlegen (vereinbarter VK je Packung je Kunde) -> Kunde sieht im Portal „ab xy" statt „auf Anfrage".
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kp_add' && is_numeric($id)) {
+    $kpk = (int)($_POST['kp_kunde'] ?? 0);
+    $kpm = trim((string)($_POST['kp_menge'] ?? '')) !== '' ? max(0, (int)$_POST['kp_menge']) : null;   // Kapseln/Stück je Verpackung
+    $kpa = trim((string)($_POST['kp_anzahl'] ?? '')) !== '' ? max(0, (int)str_replace('.', '', (string)$_POST['kp_anzahl'])) : null;  // Anzahl Verpackungen
+    $kpp = (float) str_replace(',', '.', (string)($_POST['kp_preis'] ?? '0'));   // Preis je Packung (ohne Verpackung)
+    $kpn = trim((string)($_POST['kp_notiz'] ?? ''));
+    if ($kpk > 0 && $kpp > 0) {
+        q("INSERT INTO produkt_kundenpreis (produkt_id,kunde_id,menge_pro_vpe,anzahl_vpe,preis,notiz) VALUES (?,?,?,?,?,?)",
+          [(int)$id, $kpk, $kpm, $kpa, $kpp, $kpn ?: null]);
+        log_aktivitaet('produkt', (int)$id, 'team', 'Kundenpreis gesetzt: ' . number_format($kpp, 2, ',', '.') . ' € je Packung' . ($kpm ? ' (' . $kpm . ' je VPE)' : '') . '.', 'notiz');
+    }
+    header('Location: ?p=produkt&id=' . $id . '&kpok=1#kundenpreise'); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kp_del' && is_numeric($id)) {
+    q("DELETE FROM produkt_kundenpreis WHERE id=? AND produkt_id=?", [(int)($_POST['kp_id'] ?? 0), (int)$id]);
+    header('Location: ?p=produkt&id=' . $id . '#kundenpreise'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && is_numeric($id)) {
     dokument_freigabe_toggle('produkt', (int)$id, (int)($_POST['dok_id'] ?? 0));
     header('Location: ?p=produkt&id=' . $id . '#dok'); exit;
@@ -693,25 +711,37 @@ function recalc(){
 });
 recalc();
 </script>
-<?php if (!$neu && $kundenpreise): ?>
-<div class="bx-panel" data-ppanel="preise">
-  <h2 style="margin-top:0">Kundenpreise <?= bx_hint('Was wurde welchem Kunden für dieses Produkt berechnet – je Konfiguration (Menge je Packung + Anzahl VPE). Aus früheren Angeboten/Bestätigungen bzw. dem v3-Import.') ?></h2>
+<?php if (!$neu): ?>
+<div class="bx-panel js-mfg" id="kundenpreise" data-ppanel="preise">
+  <h2 style="margin-top:0">Kundenpreise <?= bx_hint('Vereinbarter VK je Packung (ohne Verpackung) pro Kunde. Sobald hier ein Preis steht, sieht DIESER Kunde das Produkt in seinem Portal mit „ab xy €" statt „Preis auf Anfrage". Mehrere Zeilen je Kunde möglich – der günstigste Preis ist der „ab"-Preis.') ?></h2>
+  <?php if (isset($_GET['kpok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Kundenpreis gespeichert.</div><?php endif; ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Kunde</th><th class="bx-num">Menge je VPE</th><th class="bx-num">Anzahl VPE</th><th>Verpackung</th><th class="bx-num">Preis je VPE</th><th></th></tr></thead>
+    <thead><tr><th>Kunde</th><th class="bx-num">Kapseln/Stück je Verpackung</th><th class="bx-num">Anzahl Verpackungen</th><th class="bx-num">Preis je Verpackung</th><th>Notiz</th><th></th></tr></thead>
     <tbody>
+      <?php if (!$kundenpreise): ?><tr><td colspan="6" class="muted">Noch keine Kundenpreise. Unten eintragen – danach sieht der Kunde „ab xy €" im Portal.</td></tr><?php endif; ?>
       <?php foreach ($kundenpreise as $kp): ?>
         <tr>
           <td><?= h($kp['firma']) ?></td>
           <td class="bx-num"><?= $kp['menge_pro_vpe'] !== null ? (int)$kp['menge_pro_vpe'] : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $kp['anzahl_vpe'] !== null ? number_format((int)$kp['anzahl_vpe'], 0, ',', '.') : '<span class="muted">–</span>' ?></td>
-          <td><?= $kp['verpackung'] !== '' && $kp['verpackung'] !== null ? h($kp['verpackung']) : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $kp['preis'] !== null ? '<strong>' . number_format((float)$kp['preis'], 2, ',', '.') . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
-          <td class="muted" style="font-size:12px"><?= $kp['notiz'] ? h($kp['notiz']) : '' ?></td>
+          <td class="muted" style="font-size:12px"><?= $kp['notiz'] ? h($kp['notiz']) : ($kp['verpackung'] ? h($kp['verpackung']) : '') ?></td>
+          <td style="text-align:right"><form method="post" style="display:inline" onsubmit="return confirm('Kundenpreis löschen?');"><input type="hidden" name="aktion" value="kp_del"><input type="hidden" name="kp_id" value="<?= (int)$kp['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form></td>
         </tr>
       <?php endforeach; ?>
     </tbody>
   </table></div>
-  <p class="muted" style="font-size:12px;margin-top:8px">Schneller Überblick, welcher Kunde welchen Preis hat. Verpackung ist teils Freitext (aus v3) – nach Bedarf einem Gebinde zuordnen.</p>
+  <form method="post" class="bx-row" style="margin-top:12px;align-items:flex-end;gap:10px;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="kp_add">
+    <div class="bx-field" style="margin:0;min-width:200px"><label>Kunde</label>
+      <select name="kp_kunde" required><option value="">– wählen –</option><?php foreach ($kunden as $kc): ?><option value="<?= (int)$kc['id'] ?>" <?= (int)($p['kunde_id'] ?? 0)===(int)$kc['id']?'selected':'' ?>><?= h($kc['firma']) ?></option><?php endforeach; ?></select></div>
+    <div class="bx-field" style="margin:0;width:150px"><label>Kapseln/Stück je Verpackung</label><input type="number" min="0" step="1" name="kp_menge" placeholder="z. B. 120"></div>
+    <div class="bx-field" style="margin:0;width:140px"><label>Anzahl Verpackungen</label><input type="text" name="kp_anzahl" placeholder="z. B. 1.490"></div>
+    <div class="bx-field" style="margin:0;width:130px"><label>Preis je Verpackung (€)</label><input type="text" name="kp_preis" required placeholder="z. B. 4,05"></div>
+    <div class="bx-field" style="margin:0;width:170px"><label>Notiz (optional)</label><input type="text" name="kp_notiz" placeholder="z. B. ohne Verpackung"></div>
+    <button class="btn btn-primary btn-sm" type="submit">Kundenpreis hinzufügen</button>
+  </form>
+  <p class="muted" style="font-size:12px;margin-top:8px">Preis ist der VK je Packung <strong>ohne Verpackung</strong> (Glas/Deckel/Etikett kommen beim Angebot dazu). Der niedrigste Preis dieses Kunden erscheint im Portal als „ab xy €".</p>
 </div>
 <?php endif; ?>
 <?php

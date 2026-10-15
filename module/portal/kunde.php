@@ -1346,12 +1346,20 @@ $VTYPEN = ['glas'=>'Glas', 'pet'=>'PET-Dose', 'pla'=>'PLA-Becher', 'beutel'=>'St
 // Preise sind KUNDENSPEZIFISCH: sichtbar nur, wenn diesem Kunden das Produkt schon angeboten wurde.
 // Alle anderen sehen „auf Anfrage" – sonst wandert die Kalkulation eines Kunden zum nächsten.
 $preisFrei = kunde_produkt_preise($kid);
+// Am Produkt gesetzte Kundenpreise (Reiter Preise) – DIESER Kunde sieht sie direkt als „ab" (bereits der
+// vereinbarte VK, KEIN zusätzlicher Rabatt). Schon ein gesetzter Preis gibt das Produkt frei.
+$kundenpreisAb = [];
+foreach (all("SELECT produkt_id, MIN(preis) AS mn FROM produkt_kundenpreis WHERE kunde_id=? AND preis>0 GROUP BY produkt_id", [$kid]) as $r) {
+    $pid = (int)$r['produkt_id']; $kundenpreisAb[$pid] = (float)$r['mn']; $preisFrei[$pid] = true;
+}
 $abMap = [];
 // Nur echte Preise (>0) zählen – 0,00-Zeilen (noch nicht kalkuliert) ergeben keinen „ab"-Preis.
 foreach (all("SELECT produkt_id, MIN(vk_preis) AS mn FROM produkt_preis WHERE vk_preis>0 GROUP BY produkt_id") as $r) $abMap[(int)$r['produkt_id']] = (float)$r['mn'];
-$abPreis = function($pid) use ($abMap, $preisFrei, $kid) {
-    if (!isset($abMap[(int)$pid]) || !isset($preisFrei[(int)$pid])) return null;
-    $v = vk_fuer_kunde($abMap[(int)$pid], $kid);
+$abPreis = function($pid) use ($abMap, $preisFrei, $kid, $kundenpreisAb) {
+    $pid = (int)$pid;
+    if (isset($kundenpreisAb[$pid]) && $kundenpreisAb[$pid] > 0) return $kundenpreisAb[$pid];   // vereinbarter Kundenpreis (final)
+    if (!isset($abMap[$pid]) || !isset($preisFrei[$pid])) return null;
+    $v = vk_fuer_kunde($abMap[$pid], $kid);
     return $v > 0 ? $v : null;   // 0,00 nie als Richtpreis zeigen -> „auf Anfrage"
 };
 // Nährwerte je Einheit aus einer Rezeptur (aggregiert über die Wirkstoffe der Rohstoffe)
@@ -1527,11 +1535,19 @@ $prodAllergene = array_values(array_unique($prodAllergene));
 // Nur für Produkte, die diesem Kunden angeboten wurden – sonst bleibt die Tabelle leer und es steht „auf Anfrage".
 $prodPreise = [];
 // Nur Zeilen mit echtem Preis (>0) – 0,00 nie als Richtpreis zeigen. Bleibt nichts übrig -> „Preis auf Anfrage".
-if ($prodDetail && isset($preisFrei[(int)$prodDetail['id']]))
-    foreach (all("SELECT stueck, MIN(vk_preis) AS mn FROM produkt_preis WHERE produkt_id=? AND vk_preis>0 GROUP BY stueck ORDER BY stueck", [(int)$prodDetail['id']]) as $r) {
-        $ab = vk_fuer_kunde((float)$r['mn'], $kid);
-        if ($ab > 0) $prodPreise[] = ['stueck'=>(int)$r['stueck'], 'ab'=>$ab];
+if ($prodDetail) {
+    $pdid = (int)$prodDetail['id'];
+    // 1) Am Produkt gesetzte Kundenpreise dieses Kunden (je Kapsel-/Stückzahl der günstigste) = seine Preisliste.
+    foreach (all("SELECT menge_pro_vpe, MIN(preis) AS mn FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND preis>0 AND menge_pro_vpe IS NOT NULL AND menge_pro_vpe>0 GROUP BY menge_pro_vpe ORDER BY menge_pro_vpe", [$pdid, $kid]) as $r) {
+        if ((float)$r['mn'] > 0) $prodPreise[] = ['stueck'=>(int)$r['menge_pro_vpe'], 'ab'=>(float)$r['mn']];
     }
+    // 2) Sonst die angebotene Matrix (nur wenn freigegeben) – bisheriges Verhalten, mit Kundenrabatt.
+    if (!$prodPreise && isset($preisFrei[$pdid]))
+        foreach (all("SELECT stueck, MIN(vk_preis) AS mn FROM produkt_preis WHERE produkt_id=? AND vk_preis>0 GROUP BY stueck ORDER BY stueck", [$pdid]) as $r) {
+            $ab = vk_fuer_kunde((float)$r['mn'], $kid);
+            if ($ab > 0) $prodPreise[] = ['stueck'=>(int)$r['stueck'], 'ab'=>$ab];
+        }
+}
 $prodForm = $prodDetail['darreichungsform'] ?? '';
 $prodIstFuell  = form_ist_fuellmenge($prodForm);   // Anfrage nach Füllmenge (Pulver g / Flüssig ml) statt Stückzahl
 $prodFuellEinheit = form_groessen_einheit($prodForm) ?: 'g';
