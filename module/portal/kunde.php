@@ -2279,7 +2279,11 @@ portal_head('Kundenportal · ' . $k['firma']);
     // Aktiver Haupt-Reiter + Anzahl je Typ IN diesem Reiter (für die Zahlen an den Unterreitern) – aus den ungefilterten Listen.
     $oatabRaw = (string)($_GET['oatab'] ?? '');
     if (in_array($oatabRaw, ['bestaetigt','abgelehnt'], true)) $oatabRaw = 'archiv';   // Alt-Links -> Archiv
-    $oatab = in_array($oatabRaw, ['zubestaetigen','archiv'], true) ? $oatabRaw : 'offen';
+    // Ohne ausdrückliche Wahl: „Zu bestätigen" zuerst, wenn ein Angebot auf die Entscheidung wartet
+    // (Handlungsbedarf vor reiner Übersicht) – sonst „Offen".
+    $oatab = in_array($oatabRaw, ['offen','zubestaetigen','archiv'], true)
+           ? $oatabRaw
+           : ($nZuBest > 0 ? 'zubestaetigen' : 'offen');
     $typsInTab = [];
     if ($oatab === 'offen') {
         foreach ($anfPruef as $x)   $typsInTab[] = 'rezeptur';
@@ -2325,10 +2329,10 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
 
-  <?php // Drei Reiter: Offen · Bestätigt (angenommen/bestellt/versendet + Rezeptur angelegt) · Abgelehnt. ($oatab oben gesetzt.) ?>
+  <?php // Drei Reiter in Prioritätsreihenfolge: Zu bestätigen (Handlungsbedarf) · Offen · Archiv. ($oatab oben gesetzt.) ?>
   <div class="settabs" style="margin:0 0 8px">
-    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen&atab=<?= $atab ?>"      class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=zubestaetigen&atab=<?= $atab ?>" class="<?= $oatab === 'zubestaetigen' ? 'on' : '' ?>">Zu bestätigen<?= $nZuBest ? ' (' . $nZuBest . ')' : '' ?></a>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen&atab=<?= $atab ?>"      class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=archiv&atab=<?= $atab ?>" class="<?= $oatab === 'archiv' ? 'on' : '' ?>">Archiv<?= ($sumBest + $sumAbgel) ? ' (' . ($sumBest + $sumAbgel) . ')' : '' ?></a>
   </div>
   <?php if (count($anfTabs) > 1): ?>

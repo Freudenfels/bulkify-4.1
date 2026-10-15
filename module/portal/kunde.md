@@ -148,7 +148,7 @@ Darreichungsform von der Basis) + eine Rezeptur-Anfrage fürs Team (RZA, `rezept
 Rezeptur-Editor die Herkunft ("Vom Kunden weiterentwickelt aus Basis …"), finalisiert und sendet als Vorschlag; der Kunde nimmt an.
 
 ## Archiv (angenommen + abgelehnt)
-Die „Vorgänge"-Reiter sind: **Offen · Zu bestätigen · Archiv**. Das **Archiv** (`oatab=archiv`) bündelt
+Die „Vorgänge"-Reiter stehen in Prioritätsreihenfolge: **Zu bestätigen · Offen · Archiv** (Handlungsbedarf zuerst). **Standard-Reiter ohne `oatab`-Parameter:** „Zu bestätigen", sobald ein Angebot auf die Entscheidung wartet (`$nZuBest>0`), sonst „Offen". Das **Archiv** (`oatab=archiv`) bündelt
 alle angenommenen UND abgelehnten Angebote/Anfragen (Sektionen „Angenommen" und „Abgelehnt / nicht
 machbar"); die früheren Einzelreiter `oatab=bestaetigt`/`oatab=abgelehnt` leiten dorthin.
 In der **Angebote-Ansicht** (`v=angebote`) stehen offene Angebote oben, angenommene/abgelehnte in einem
