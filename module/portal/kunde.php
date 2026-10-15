@@ -701,8 +701,9 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         if ($zeilen) {
             $mapAnzahl = fn($a) => $istFuell ? [null, $a] : [$a, null];   // -> [stueck, fuellmenge_g]
             [$hStk, $hFg] = $mapAnzahl($zeilen[0]['anzahl']);
-            q("UPDATE portal_anfrage SET stueck=?, fuellmenge_g=?, menge=?, notiz=?, status='neu' WHERE id=?",
-              [$hStk, $hFg, $zeilen[0]['vpe'], trim($_POST['notiz'] ?? ''), $paf]);
+            $umk = (meta_get('portal_umkarton','0') === '1' && !empty($_POST['umkarton'])) ? 1 : 0;
+            q("UPDATE portal_anfrage SET stueck=?, fuellmenge_g=?, menge=?, umkarton=?, notiz=?, status='neu' WHERE id=?",
+              [$hStk, $hFg, $zeilen[0]['vpe'], $umk, trim($_POST['notiz'] ?? ''), $paf]);
             q("DELETE FROM portal_anfrage_pos WHERE anfrage_id=?", [$paf]);
             $sort = 0;
             foreach ($zeilen as $z) {
@@ -1626,6 +1627,16 @@ $navBadgeTitel = [
 // Menüpunkte, deren Zähler ROT sind (Handlungsbedarf beim Kunden), statt grün.
 $navBadgeRot = ['etiketten' => true];
 $portalLink = fn($v) => '?p=portal&token=' . $token . '&v=' . $v;
+// Umkarton-Option: nur wenn vom Admin freigeschaltet. Gilt für ALLE produktbezogenen Anfrage-Formulare.
+$umkartonAn = meta_get('portal_umkarton', '0') === '1';
+// Umkarton-Checkbox (einheitlich in allen Produkt-Anfrageformularen). $checked = aus bestehendem Wunsch vorbelegen.
+$umkartonFeld = function (bool $checked = false) use ($umkartonAn): string {
+    if (!$umkartonAn) return '';
+    return '<div class="bx-field" style="margin-top:14px"><label class="bx-row" style="gap:10px;align-items:center;margin:0;font-weight:normal">'
+         . '<input type="checkbox" name="umkarton" value="1" style="width:auto"' . ($checked ? ' checked' : '') . '>'
+         . '<span>Umkarton gewünscht ' . (function_exists('bx_hint') ? bx_hint('Faltkarton um je ein einzelnes Glas (größengenau). Wunsch gern in die Notiz schreiben.') : '') . '</span>'
+         . '</label></div>';
+};
 // Suchfeld für die Katalog-Listen. Behält Token und Ansicht bei, damit die Suche im Portal bleibt.
 $sucheForm = function (string $v, string $platzhalter) use ($token, $q) {
     static $once = false; ?>
@@ -2766,6 +2777,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           </div>
           <div class="bx-field"><label>Anzahl (Packungen) <?= bx_hint('Mehrere Mengen mit Komma für Staffelpreise, z. B. 1000, 2500, 5000') ?></label><input type="text" name="menge" placeholder="z. B. 1000, 2500, 5000"></div>
         </div>
+        <?= $umkartonFeld() ?>
         <div class="bx-field"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"></textarea></div>
         <button class="btn btn-primary" type="submit">Anfrage senden</button>
       </form>
@@ -2866,6 +2878,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         </tbody>
       </table></div>
       <button type="button" class="btn btn-ghost btn-sm" id="ma_addrow">+ Staffel</button>
+      <?= $umkartonFeld(!empty($pa['umkarton'])) ?>
       <div class="bx-field" style="margin-top:14px"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"><?= h((string)$pa['notiz']) ?></textarea></div>
       <div class="bx-row" style="gap:10px;margin-top:8px">
         <button class="btn btn-primary" type="submit">Änderung senden</button>
@@ -2953,14 +2966,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <div id="pa_warn" style="display:none;margin-top:10px;border:1px solid #e6c4c0;background:#fbeeec;color:#8f231b;border-radius:8px;padding:10px 12px;font-size:13px"></div>
         <div id="pa_karton" style="display:none;margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px"></div>
       </div>
-      <?php if ($umkartonAn): ?>
-      <div class="bx-field" style="margin-top:14px">
-        <label class="bx-row" style="gap:10px;align-items:center;margin:0;font-weight:normal">
-          <input type="checkbox" name="umkarton" value="1" style="width:auto">
-          <span>Umkarton gewünscht <?= bx_hint('Sollen die Packungen in einem Umkarton (Versandkarton) geliefert werden? Details gern in die Notiz schreiben.') ?></span>
-        </label>
-      </div>
-      <?php endif; ?>
+      <?= $umkartonFeld() ?>
       <div class="bx-field" style="margin-top:14px"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"></textarea></div>
       <button class="btn btn-primary" type="submit">Anfrage senden</button>
     </form>
