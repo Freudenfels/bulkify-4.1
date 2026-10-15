@@ -105,10 +105,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
         $nf = in_array($f('novelfood_status'), ['unklar','konform','novel_food','pruefung'], true) ? $f('novelfood_status') : 'unklar';
         $halt = mb_substr($f('haltbarkeit'), 0, 60) ?: null; $allerg = mb_substr($f('allergene'), 0, 255) ?: null;
         $synonyme = $f('synonyme');
+        $kartonInh = $f('karton_inhalt') === '' ? null : max(0, (int)$f('karton_inhalt'));   // Packungen je Umkarton
         if ($neu) {
-            q("INSERT INTO produkt (nummer,name,synonyme,kundenname,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,novelfood_status,haltbarkeit,allergene,notiz)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('P'), $name, $synonyme ?: null, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status') ?: 'entwurf', $nf, $halt, $allerg, $f('notiz')]);
+            q("INSERT INTO produkt (nummer,name,synonyme,kundenname,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,karton_inhalt,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,novelfood_status,haltbarkeit,allergene,notiz)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [naechste_nummer('P'), $name, $synonyme ?: null, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $kartonInh, $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status') ?: 'entwurf', $nf, $halt, $allerg, $f('notiz')]);
             $id = insert_id();
             log_aktivitaet('kunde', (int)($kunde_id ?: 0), 'team', 'Produkt „' . $name . '" angelegt.', 'produkt', (int)$id);
         } else {
@@ -119,8 +120,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             if ($altAnzeige !== '' && $altAnzeige !== $neuAnzeige && mb_stripos($synonyme, $altAnzeige) === false) {
                 $synonyme = trim(($synonyme !== '' ? $synonyme . "\n" : '') . $altAnzeige);
             }
-            q("UPDATE produkt SET name=?,synonyme=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,novelfood_status=?,haltbarkeit=?,allergene=?,notiz=? WHERE id=?",
-              [$name, $synonyme ?: null, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $nf, $halt, $allerg, $f('notiz'), (int)$id]);
+            q("UPDATE produkt SET name=?,synonyme=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,karton_inhalt=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,novelfood_status=?,haltbarkeit=?,allergene=?,notiz=? WHERE id=?",
+              [$name, $synonyme ?: null, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $kartonInh, $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $nf, $halt, $allerg, $f('notiz'), (int)$id]);
         }
         // USt-Satz je Produkt – NUR Admin. Leer = Standard (NULL -> 19 % aus den Einstellungen). Auf zulässigen Satz gezogen.
         if (has_role('admin') && array_key_exists('mwst_satz', $_POST)) {
@@ -390,6 +391,8 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
       </div>
       <?php endif; endif; ?>
       <?= verp_slot('Faltschachtel/Karton', 'karton_id', $VERP_ROLLE['karton'], $p['karton_id'] ?? '') ?>
+      <div class="bx-field"><label>Packungen je Umkarton <?= bx_hint('Wie viele fertige Packungen in EINEN Umkarton passen. Grundlage für den Karton-Bestand: zeigt dem Kunden, wie viele Einheiten er mit seinen vorhandenen Kartons noch verpacken/bestellen kann.') ?></label>
+        <input type="number" name="karton_inhalt" min="0" step="1" value="<?= h((string)($p['karton_inhalt'] ?? '')) ?>" placeholder="z. B. 48"></div>
       <?= verp_slot('Beipackzettel', 'beipack_id', $VERP_ROLLE['beipack'], $p['beipack_id'] ?? '') ?>
       <div class="bx-field"><label>Leerkapsel <?= bx_hint('nur Kapselprodukte. Leer = automatisch nach Kapselgröße; nur wählen, wenn mehrere Kapseln gleicher Größe existieren (Material/Farbe).') ?></label>
         <select name="leerkapsel_id">

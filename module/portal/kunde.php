@@ -2937,6 +2937,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <button type="button" class="btn btn-ghost btn-sm" id="pa_addrow">+ Staffel</button>
         <div id="pa_stickhint" class="muted" style="display:none;font-size:12px;margin-top:8px">Bei Sticks geben Sie die <strong>Sticks je Verpackung</strong> an (z. B. Karton mit je 30 Sticks) und darunter die gewünschte Anzahl Verpackungen.</div>
         <div id="pa_warn" style="display:none;margin-top:10px;border:1px solid #e6c4c0;background:#fbeeec;color:#8f231b;border-radius:8px;padding:10px 12px;font-size:13px"></div>
+        <div id="pa_karton" style="display:none;margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px"></div>
       </div>
       <?php if ($umkartonAn): ?>
       <div class="bx-field" style="margin-top:14px">
@@ -2962,6 +2963,39 @@ portal_head('Kundenportal · ' . $k['firma']);
           foreach ($katalog as $pk) if (in_array($pk['darreichungsform'] ?? '', ['kapsel','softgel'], true) && !empty($pk['rezeptur_id'])) { $x = kapsel_max_stueck_je_verpackung((int)$pk['rezeptur_id']); if ($x > 0) $m['p'.$pk['id']] = $x; }
           return $m;
       })(), JSON_UNESCAPED_UNICODE) ?>;
+      // Umkarton-Bestand des Kunden je Katalog-Produkt (nur Fulfillment-Kunden): Kartons im Lager 2 + wie viele
+      // Packungen damit noch verpackt/bestellt werden koennen (Kartons × Packungen je Umkarton).
+      var PA_KARTON=<?= json_encode((function() use ($katalog, $kid, $ffKunde) {
+          $m = [];
+          foreach ($katalog as $pk) {
+              $ki = produkt_karton_info((int)$pk['id'], $kid);
+              // Zeigen, wenn das Produkt einen Umkarton hat UND der Kunde Ware bei uns lagert (Fulfillment) oder
+              // tatsaechlich Kartons im Bestand hat. So sehen Lager-Kunden ihren Kartonvorrat, Normalkunden nicht.
+              if ($ki && ($ffKunde || (int)$ki['kartons'] > 0))
+                  $m['p'.$pk['id']] = ['name'=>$ki['name'], 'inhalt'=>(int)$ki['inhalt'], 'kartons'=>(int)$ki['kartons'], 'max'=>(int)$ki['max_einheiten']];
+          }
+          return $m;
+      })(), JSON_UNESCAPED_UNICODE) ?>;
+      function paKarton(){
+        var box=document.getElementById('pa_karton'); if(!box) return;
+        var k=PA_KARTON[sel.value];
+        if(!k){ box.style.display='none'; box.innerHTML=''; return; }
+        var bestellt=0; Array.prototype.forEach.call(document.querySelectorAll('#pa_staffel .pa_srow input[name="st_vpe[]"]'), function(i){ bestellt+=parseInt(i.value)||0; });
+        var nf=function(n){ return (n||0).toLocaleString('de-DE'); };
+        var html='<strong>Umkarton „'+k.name+'":</strong> Sie haben <strong>'+nf(k.kartons)+' Karton(s)</strong> bei uns im Lager';
+        if(k.inhalt>0) html+=' = bis zu <strong>'+nf(k.max)+' Packungen</strong> verpackbar';
+        html+='.';
+        if(k.inhalt<=0){ html+=' <span class="muted">(Packungen je Umkarton noch nicht hinterlegt.)</span>'; box.style.border='1px solid var(--line)'; box.style.background=''; box.style.color=''; box.innerHTML=html; box.style.display=''; return; }
+        if(bestellt>k.max){
+          var fehlt=Math.ceil((bestellt-k.max)/k.inhalt);
+          html+='<br><strong style="color:#8f231b">Für '+nf(bestellt)+' Packungen reichen die Kartons nicht – es müssen ca. '+nf(fehlt)+' zusätzliche Karton(s) bestellt werden.</strong>';
+          box.style.border='1px solid #e6c4c0'; box.style.background='#fbeeec'; box.style.color='#8f231b';
+        } else if(bestellt>0){
+          html+='<br><span style="color:var(--gruen,#1D9E75)">Reicht für diese Bestellmenge.</span>';
+          box.style.border='1px solid var(--line)'; box.style.background=''; box.style.color='';
+        } else { box.style.border='1px solid var(--line)'; box.style.background=''; box.style.color=''; }
+        box.innerHTML=html; box.style.display='';
+      }
       function curForm(){ var o=sel.options[sel.selectedIndex]; return o?(o.getAttribute('data-form')||''):''; }
       function lbl(){
         var f=curForm();
@@ -2990,9 +3024,9 @@ portal_head('Kundenportal · ' . $k['firma']);
         vp.innerHTML=html;
         if(keep && allow.indexOf(keep)>=0) vp.value=keep;   // vorherige Wahl behalten, wenn noch gültig
       }
-      sel.addEventListener('change',function(){ lbl(); updVerp(); paCheck(); }); lbl(); updVerp(); paCheck();
+      sel.addEventListener('change',function(){ lbl(); updVerp(); paCheck(); paKarton(); }); lbl(); updVerp(); paCheck(); paKarton();
       var tb=document.querySelector('#pa_staffel tbody');
-      tb.addEventListener('input', paCheck);
+      tb.addEventListener('input', function(){ paCheck(); paKarton(); });
       document.getElementById('pa_addrow').addEventListener('click',function(){
         var tr=document.createElement('tr'); tr.className='pa_srow';
         tr.innerHTML='<td><input type="number" name="st_anzahl[]" min="1" step="1" placeholder="z. B. 120"></td>'

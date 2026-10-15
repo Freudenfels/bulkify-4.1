@@ -1389,6 +1389,7 @@ function init_schema(): void {
     ensure_column('produkt', 'verschluss_id', "INT NULL");          // Stückliste: Verschluss/Deckel
     ensure_column('produkt', 'etikett_id', "INT NULL");             // Stückliste: Etikett
     ensure_column('produkt', 'karton_id', "INT NULL");             // Stückliste: Faltschachtel/Umkarton
+    ensure_column('produkt', 'karton_inhalt', "INT NULL");         // wie viele Packungen in EINEN Umkarton passen (für Karton-Bestand/Reichweite)
     ensure_column('produkt', 'beipack_id', "INT NULL");            // Stückliste: Beipackzettel
     // Leerkapsel (Rohstoff-Untertyp, form=kapselhuelle) – Material/Farbe reuse item.material/item.farbe
     ensure_column('item', 'kapselgroesse_id', "INT NULL");         // Leerkapsel: welche Kapselgröße (FK kapselgroesse)
@@ -4117,6 +4118,30 @@ function produkt_verpackung_items(int $produkt_id, ?int $verp_override = null): 
         }
     }
     return $cache[$ck] = $out;
+}
+// Umkarton-Bestand eines Produkts für EINEN Kunden: welcher Umkarton (produkt.karton_id), wie viele Packungen
+// passen hinein (produkt.karton_inhalt) und wie viele Kartons der Kunde noch im Fremdlager (Lager 2) hat.
+// Rueckgabe null, wenn am Produkt kein Umkarton hinterlegt ist. max_einheiten = Kartons × Inhalt = so viele
+// Packungen lassen sich mit dem vorhandenen Kartonbestand noch verpacken.
+function produkt_karton_info(int $produkt_id, int $kunde_id): ?array {
+    if ($produkt_id <= 0) return null;
+    $p = one("SELECT karton_id, karton_inhalt FROM produkt WHERE id=?", [$produkt_id]);
+    if (!$p || empty($p['karton_id'])) return null;
+    $kid = (int)$p['karton_id'];
+    $inhalt = (int)($p['karton_inhalt'] ?? 0);
+    $verf = 0;
+    if ($kunde_id > 0 && table_exists('charge'))
+        $verf = (int) round((float) scalar(
+            "SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge
+             WHERE item_id=? AND fremd_kunde_id=? AND (status IS NULL OR status='frei') AND menge_verfuegbar>0",
+            [$kid, $kunde_id]));
+    return [
+        'karton_id'     => $kid,
+        'name'          => (string) scalar("SELECT name FROM item WHERE id=?", [$kid]),
+        'inhalt'        => $inhalt,
+        'kartons'       => $verf,
+        'max_einheiten' => $inhalt > 0 ? $verf * $inhalt : 0,
+    ];
 }
 // Überschrift + Beschreibung einer Verpackungs-/Etikett-Position: Art in die Überschrift, Größe in die Beschreibung.
 // $vp: ['rolle'=>'Verpackung'|'Deckel'|'Etikett', 'name'=>…, 'volumen_ml'=>…?, 'etikett_format'=>…?]
