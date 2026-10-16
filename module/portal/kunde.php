@@ -2330,10 +2330,12 @@ portal_head('Kundenportal · ' . $k['firma']);
   ?>
 
   <?php if ($anfPruefShow): ?>
-  <div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2)">
-    <h2 style="margin-top:0">Wartet auf Sie (<?= count($anfPruefShow) ?>)</h2>
-    <p class="muted" style="margin-top:0">Zu diesen Anfragen liegt ein Vorschlag bereit – bitte prüfen und annehmen oder ablehnen.</p>
-    <div class="bx-tablewrap"><table class="bx-table">
+  <?php // Einklappbar: stört sonst dauerhaft offen. Zustand pro Betrachter im Browser gemerkt (localStorage),
+        // standardmäßig zugeklappt. Die Anzahl bleibt in der Überschrift sichtbar, damit man es trotzdem bemerkt. ?>
+  <details class="bx-panel" id="ptWartet" style="border-color:var(--gruen);background:var(--panel-2)">
+    <summary style="cursor:pointer;font-size:19px;font-weight:600">Wartet auf Sie (<?= count($anfPruefShow) ?>)<span class="muted" style="font-weight:400;font-size:13px">&nbsp;– zum Auf-/Zuklappen klicken</span></summary>
+    <p class="muted" style="margin:10px 0 0">Zu diesen Anfragen liegt ein Vorschlag bereit – bitte prüfen und annehmen oder ablehnen.</p>
+    <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table">
       <thead><tr><th>Nummer</th><th>Wunschname</th><th>Form</th><th>Vorschlag</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($anfPruefShow as $an): ?>
@@ -2347,7 +2349,14 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php endforeach; ?>
       </tbody>
     </table></div>
-  </div>
+  </details>
+  <script>
+  (function(){
+    var d = document.getElementById('ptWartet'); if (!d) return;
+    try { d.open = (localStorage.getItem('bxWartetOffen') === '1'); } catch (e) { d.open = false; }
+    d.addEventListener('toggle', function(){ try { localStorage.setItem('bxWartetOffen', d.open ? '1' : '0'); } catch (e) {} });
+  })();
+  </script>
   <?php endif; ?>
 
   <?php // Drei Reiter in Prioritätsreihenfolge: Zu bestätigen (Handlungsbedarf) · Offen · Archiv. ($oatab oben gesetzt.) ?>

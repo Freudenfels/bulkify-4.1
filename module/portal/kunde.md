@@ -75,7 +75,7 @@ Der Aufbau des PDFs liegt in `core/pdf_angebot.php` – dieselbe Funktion nutzt 
 **Entwürfe sieht der Kunde nie:** Die Angebotsliste filtert `status <> 'offen'`; annehmbar ist nur `gesendet`.
 
 **Reiter (oben in „Meine Anfragen"):** Vier Reiter **Offen · Zu bestätigen · Bestätigt · Abgelehnt** mit Zahlen direkt am Reiter:
-- **Offen** = `$nOffen` (`count($anfPruef)+count($pending)`) – Vorschläge (wartet auf Sie) und „In Prüfung", also alles **noch ohne Preis**. Body zeigt die „In Prüfung"-Tabelle; die „Wartet auf Sie"-Box steht darüber (reiterunabhängig).
+- **Offen** = `$nOffen` (`count($anfPruef)+count($pending)`) – Vorschläge (wartet auf Sie) und „In Prüfung", also alles **noch ohne Preis**. Body zeigt die „In Prüfung"-Tabelle; die „Wartet auf Sie"-Box steht darüber (reiterunabhängig). Die „Wartet auf Sie"-Box ist ein **einklappbares `<details>`** (`#ptWartet`): standardmäßig **zugeklappt** (stört sonst dauerhaft offen), der Auf-/Zu-Zustand wird pro Betrachter im Browser gemerkt (`localStorage['bxWartetOffen']`, try/catch). Die Anzahl bleibt in der Überschrift sichtbar, damit anstehende Vorschläge auch zugeklappt erkennbar sind.
 - **Zu bestätigen** = `$nZuBest` (`count($offen_ang)`) – **nur gesendete Angebote mit Preis**: die Annehmen-Karten (`$accept=true`, aufgeklappt). Hierher zeigen auch die Dashboard-Kachel „Offene Angebote", die CTA „Menge wählen & annehmen" und der Link „Angebot ansehen & wählen" (`oatab=zubestaetigen`).
 - **Bestätigt** = `$sumBest` (`count($best_ang)+count($bestRows)` – bestätigte Angebote inkl. versendet + „Rezeptur angelegt").
 - **Abgelehnt** = `$sumAbgel` (`count($abgel_ang)+count($abglRows)`).
