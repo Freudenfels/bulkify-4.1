@@ -8059,6 +8059,24 @@ function auftrag_versenden(int $auftrag_id): array {
     return ['ok'=>true, 'msg'=>'Versendet.'];
 }
 
+// Produktion eines Auftrags abschließen OHNE Bestandsbuchung – für bereits fertige / Alt-Aufträge, die
+// als „erledigt/versendet" markiert werden. Setzt alle noch offenen Produktionsaufträge des Auftrags auf
+// 'erledigt' und hakt deren Schritte ab, damit KEIN Rohstoff-Einkaufsbedarf mehr entsteht. Bucht bewusst
+// KEINE Fertigware ein (dafür gibt es „Charge nachtragen & einbuchen"). Gibt die Anzahl geschlossener PAs zurück.
+function auftrag_produktion_schliessen(int $auftrag_id): int {
+    if ($auftrag_id <= 0 || !table_exists('produktionsauftrag')) return 0;
+    $n = 0; $jetzt = gmdate('Y-m-d H:i:s');
+    foreach (all("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status NOT IN ('erledigt','storniert')", [$auftrag_id]) as $pa) {
+        $paid = (int)$pa['id'];
+        if (table_exists('produktion_schritt'))
+            q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=COALESCE(erledigt_at, ?) WHERE pa_id=? AND erledigt=0", [$jetzt, $paid]);
+        q("UPDATE produktionsauftrag SET status='erledigt' WHERE id=?", [$paid]);
+        $n++;
+    }
+    if (function_exists('bedarf_bump')) bedarf_bump();   // Einkaufsbedarf-Cache invalidieren -> Bedarf fällt sofort weg
+    return $n;
+}
+
 // Auto-Kette: bestätigtes Angebot -> Auftragsbestätigung (AB) + Rechnung (RE) + Produktionsauftrag (PR). Idempotent.
 // Namens-Snapshot bei Auftrags-Erstellung: friert den aktuellen internen Produktnamen am Auftrag ein,
 // damit eine spaetere Produkt-Umbenennung laufende/abgeschlossene Auftraege NICHT umbenennt.

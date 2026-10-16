@@ -140,6 +140,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     if ($neu !== $alt) {
         q("UPDATE auftrag SET status=?, status_datum=CURDATE() WHERE id=?", [$neu, $id]);
         log_aktivitaet('auftrag', $id, 'team', 'Status geändert: ' . $alt . ' -> ' . $neu, 'status', 'auftrag', $id);
+        // Fertig/versendet -> Produktion mit abschließen, damit kein Rohstoffbedarf mehr entsteht (ohne Lagerbuchung).
+        if (in_array($neu, ['erledigt','versendet'], true)) {
+            $closed = auftrag_produktion_schliessen($id);
+            if ($closed > 0) log_aktivitaet('auftrag', $id, 'team', 'Produktion mit abgeschlossen (' . $closed . ' Produktionsauftrag/-aufträge) – Rohstoffbedarf gestoppt.', 'status', 'auftrag', $id);
+        }
     }
     header('Location: ?p=auftrag&id=' . $id . '&statusok=1'); exit;
 }
@@ -161,6 +166,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     q("UPDATE auftrag SET phase_override=?, status=?, status_datum=CURDATE() WHERE id=?", [$ovVal, $neuStatus, $id]);
     if ((int)($alt['phase_override'] ?? -1) !== (int)($ovVal ?? -1) || (string)($alt['status'] ?? '') !== $neuStatus)
         log_aktivitaet('auftrag', $id, 'team', 'Fortschritt gesetzt: ' . ($phasen[$idx] ?? ('Stufe ' . $idx)) . ' (Status ' . $neuStatus . ')', 'status', 'auftrag', $id);
+    // Fertig/versendet -> Produktion mit abschließen (Rohstoffbedarf stoppen, ohne Lagerbuchung).
+    if (in_array($neuStatus, ['erledigt','versendet'], true) && (string)($alt['status'] ?? '') !== $neuStatus) {
+        $closed = auftrag_produktion_schliessen($id);
+        if ($closed > 0) log_aktivitaet('auftrag', $id, 'team', 'Produktion mit abgeschlossen (' . $closed . ') – Rohstoffbedarf gestoppt.', 'status', 'auftrag', $id);
+    }
     header('Location: ?p=auftrag&id=' . $id . '&statusok=1'); exit;
 }
 
