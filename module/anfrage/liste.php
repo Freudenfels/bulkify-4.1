@@ -19,18 +19,27 @@ $ansicht = isset($ANSICHT[$_GET['ansicht'] ?? '']) ? $_GET['ansicht'] : 'offen';
 
 $alle = all("SELECT a.*, k.firma AS kunde_firma,
              (SELECT COUNT(*) FROM rezeptur_anfrage_wunsch w WHERE w.anfrage_id=a.id) AS wunsch_anzahl,
-             r.nummer AS rezeptur_nr
+             r.nummer AS rezeptur_nr, r.status AS rezeptur_status
              FROM rezeptur_anfrage a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN rezeptur r ON r.id=a.rezeptur_id");
+
+// Bucket aus BEIDEN Status (Anfrage + verknüpfte Rezeptur). Grund: der v3-Import hat viele Anfragen pauschal auf
+// „beantwortet" gesetzt, obwohl gar kein Vorschlag draußen ist – die wären im Arbeitsfach „Offen" sonst unsichtbar,
+// während der Kunde sie als „in Prüfung" sieht. „Beantwortet" heißt hier: es liegt WIRKLICH ein Vorschlag beim Kunden
+// (verknüpfte Rezeptur vorschlag/freigegeben/eingefroren). Alles andere (kein Vorschlag, nur Entwurf, neu/in
+// Bearbeitung, „überarbeiten") ist OFFEN = wir müssen ran. Endgültig vom Kunden abgelehnt = Archiv.
+$rezRaus = ['vorschlag','freigegeben','eingefroren'];
+$bucketOf = function(array $r) use ($rezRaus): string {
+    $as = (string)($r['status'] ?? ''); $rs = (string)($r['rezeptur_status'] ?? '');
+    if ($as === 'abgelehnt') return 'abgelehnt';
+    if ($as !== 'ueberarbeiten' && in_array($rs, $rezRaus, true)) return 'beantwortet';
+    return 'offen';
+};
 
 // Zähler je Ansicht (unabhängig von Suche/Auswahl)
 $cnt = ['offen'=>0,'beantwortet'=>0,'abgelehnt'=>0,'alle'=>count($alle)];
-foreach ($alle as $r) {
-    if (in_array($r['status'], $OFFEN, true)) $cnt['offen']++;
-    elseif ($r['status'] === 'beantwortet')   $cnt['beantwortet']++;
-    elseif ($r['status'] === 'abgelehnt')      $cnt['abgelehnt']++;
-}
+foreach ($alle as $r) { $b = $bucketOf($r); if (isset($cnt[$b])) $cnt[$b]++; }
 
-// Bei aktiver Suche über ALLE Status (die Ansicht zählt dann nicht), sonst nach Ansicht filtern.
+// Bei aktiver Suche über ALLE Status (die Ansicht zählt dann nicht), sonst nach Ansicht (Bucket) filtern.
 if ($q !== '') {
     $needle = mb_strtolower($q);
     $rows = array_filter($alle, function($r) use ($needle) {
@@ -38,22 +47,26 @@ if ($q !== '') {
             if (mb_strpos(mb_strtolower((string)($r[$f] ?? '')), $needle) !== false) return true;
         return false;
     });
-} elseif ($ansicht === 'offen')       { $rows = array_filter($alle, fn($r) => in_array($r['status'], $OFFEN, true)); }
-elseif   ($ansicht === 'beantwortet') { $rows = array_filter($alle, fn($r) => $r['status'] === 'beantwortet'); }
-elseif   ($ansicht === 'abgelehnt')   { $rows = array_filter($alle, fn($r) => $r['status'] === 'abgelehnt'); }
-else                                   { $rows = $alle; }
+} elseif (in_array($ansicht, ['offen','beantwortet','abgelehnt'], true)) {
+    $rows = array_filter($alle, fn($r) => $bucketOf($r) === $ansicht);
+} else {
+    $rows = $alle;
+}
 
 $rows = bx_sort_rows(array_values($rows), $sort, $dir);
-// Vom Kunden abgelehnte Vorschläge („überarbeiten") immer zuoberst – da muss das Team reagieren.
+// „Überarbeiten" (Kunde hat Vorschlag abgelehnt) zuoberst – da muss das Team sofort reagieren.
 usort($rows, fn($a, $b) => (($b['status'] === 'ueberarbeiten') <=> ($a['status'] === 'ueberarbeiten')));
 
-$statusBadge = fn($r) => match ($r['status']) {
-    'neu'            => bx_badge('neu','info'),
-    'in_bearbeitung' => bx_badge('in Bearbeitung','warn'),
-    'beantwortet'    => bx_badge('beantwortet','ok'),
-    'ueberarbeiten'  => bx_badge('Vorschlag abgelehnt – überarbeiten','err'),
-    'abgelehnt'      => bx_badge('abgelehnt','err'),
-    default          => bx_badge(status_text($r['status'])),
+// Badge aus dem echten Zustand (Anfrage + Rezeptur), nicht nur aus dem (oft ungenauen) Anfrage-Status.
+$statusBadge = function(array $r) use ($rezRaus): string {
+    $as = (string)($r['status'] ?? ''); $rs = (string)($r['rezeptur_status'] ?? '');
+    if ($as === 'abgelehnt')      return bx_badge('abgelehnt','err');
+    if ($as === 'ueberarbeiten')  return bx_badge('Vorschlag abgelehnt – überarbeiten','err');
+    if (in_array($rs, $rezRaus, true))
+        return ($rs === 'vorschlag') ? bx_badge('Vorschlag gesendet','ok') : bx_badge('angenommen','ok');
+    if ($rs === 'entwurf')        return bx_badge('Entwurf – nicht gesendet','warn');
+    if ($as === 'in_bearbeitung') return bx_badge('in Bearbeitung','warn');
+    return bx_badge('offen – kein Vorschlag','info');
 };
 
 $cols = [

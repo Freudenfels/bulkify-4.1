@@ -2,7 +2,14 @@
 
 **Zweck:** Übersicht aller Rezepturanfragen (Kundenwünsche, die wir prüfen und in Rezepturen übersetzen).
 
-**Aufbau wie die Portal-Anfragen** (Eingangsfach mit Archiv): **Ansicht-Tabs** (`.settabs`, `?ansicht=`) mit Zählern – **Offen** (Standard: `neu` + `in_bearbeitung` + `ueberarbeiten`) · **Beantwortet** · **Abgelehnt** · **Alle**. Beantwortete/abgelehnte Anfragen sind damit aus dem Arbeitsfach raus, aber im Archiv auffindbar.
+**Aufbau wie die Portal-Anfragen** (Eingangsfach mit Archiv): **Ansicht-Tabs** (`.settabs`, `?ansicht=`) mit Zählern – **Offen** (Standard) · **Beantwortet** · **Abgelehnt** · **Alle**.
+
+**Bucket aus Anfrage + Rezeptur (wichtig):** Die Einordnung (`$bucketOf`) richtet sich NICHT nur nach `rezeptur_anfrage.status`, sondern auch nach dem Status der verknüpften Rezeptur. Hintergrund: der v3-Import hat viele Anfragen pauschal auf `beantwortet` gesetzt, obwohl gar kein Vorschlag draußen ist – die wären im Arbeitsfach „Offen" sonst unsichtbar, während der Kunde sie als „in Prüfung" sieht.
+- **Beantwortet** = es liegt WIRKLICH ein Vorschlag beim Kunden (verknüpfte Rezeptur `vorschlag`/`freigegeben`/`eingefroren`) und die Anfrage ist nicht `ueberarbeiten`.
+- **Abgelehnt** = `rezeptur_anfrage.status='abgelehnt'` (Archiv).
+- **Offen** = alles andere: kein Vorschlag, nur `entwurf`, `neu`/`in_bearbeitung`, oder `ueberarbeiten` (Kunde hat abgelehnt → zuoberst). Das ist das Arbeitsfach „wir müssen ran" und deckt sich mit der Kundensicht „in Prüfung".
+
+Der **Status-Badge** wird ebenfalls aus beiden Status abgeleitet (z. B. „offen – kein Vorschlag", „Entwurf – nicht gesendet", „Vorschlag gesendet", „angenommen").
 
 **Was passiert hier:**
 1. `seed_anfrage_if_empty()` – legt lokal eine Demo-Anfrage an.
