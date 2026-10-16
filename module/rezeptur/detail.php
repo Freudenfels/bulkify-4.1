@@ -293,6 +293,13 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
       <?php endif; ?>
     </div>
   </div>
+  <?php // Wer hat wann verbindlich angenommen? Wird bei der Portal-Annahme gesetzt (freigabe_name/freigabe_am, UTC). ?>
+  <?php if (!empty($r['freigabe_am'])): ?>
+    <div class="badge-ok" style="margin-top:10px;padding:8px 14px;border-radius:8px;font-size:13px">
+      <strong>Verbindlich angenommen</strong><?= !empty($r['freigabe_name']) ? ' von ' . h((string)$r['freigabe_name']) : '' ?>
+      am <?= h(fmt_zeit($r['freigabe_am'], 'd.m.Y H:i')) ?> Uhr<?= !empty($r['agb_version']) ? ' · AGB-Fassung ' . h((string)$r['agb_version']) : '' ?>.
+    </div>
+  <?php endif; ?>
   <?php if ($status==='abgelehnt' && !empty($r['ablehnung_grund'])): ?>
     <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;margin-top:10px;padding:10px 14px"><strong>Vom Kunden abgelehnt.</strong> Grund: <?= h($r['ablehnung_grund']) ?><div class="muted" style="margin-top:4px;font-size:12px">Zutaten unten anpassen und dann „Erneut als Vorschlag senden" – der Kunde sieht den überarbeiteten Vorschlag wieder im Portal.</div></div>
   <?php endif; ?>
