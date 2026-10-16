@@ -59,25 +59,6 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
     header('Location: ?p=anfrage&id=' . (int)$id . '&kunde_neu=1'); exit;
 }
 
-// Verknüpften Rezeptur-ENTWURF jetzt als Vorschlag an den Kunden senden.
-// Hintergrund: v3-Altanfragen hängen oft an einer Rezeptur im Status 'entwurf', die NIE gesendet wurde –
-// dadurch blieb die Anfrage zu Recht offen und der Kunde wartet, obwohl im Admin „bereits ein Vorschlag" stand.
-// Dieselbe Transition wie in rezeptur/detail.php (status_setzen -> vorschlag): Rezeptur auf 'vorschlag',
-// Anfrage auf 'beantwortet'. Erst damit sieht der Kunde den Vorschlag im Portal.
-if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorschlag_senden') {
-    $rid = (int) scalar("SELECT rezeptur_id FROM rezeptur_anfrage WHERE id=?", [(int)$id]);
-    $rs  = $rid ? (string) scalar("SELECT status FROM rezeptur WHERE id=?", [$rid]) : '';
-    if ($rid && in_array($rs, ['entwurf', 'abgelehnt'], true)) {
-        q("UPDATE rezeptur SET status='vorschlag' WHERE id=?", [$rid]);
-        q("UPDATE rezeptur_anfrage SET status='beantwortet' WHERE id=?", [(int)$id]);
-        $kid = (int) scalar("SELECT kunde_id FROM rezeptur_anfrage WHERE id=?", [(int)$id]);
-        $anr = (string) scalar("SELECT nummer FROM rezeptur_anfrage WHERE id=?", [(int)$id]);
-        if ($kid) log_aktivitaet('kunde', $kid, 'team', 'Vorschlag aus Anfrage ' . $anr . ' an den Kunden gesendet.', 'rezeptur', 'rezeptur', $rid);
-        header('Location: ?p=rezeptur_detail&id=' . $rid . '&gesendet=1'); exit;
-    }
-    header('Location: ?p=anfrage&id=' . (int)$id); exit;
-}
-
 $fehler = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $f = fn($k) => trim($_POST[$k] ?? '');
@@ -96,6 +77,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach ($rows as $i => $r) {
         q("INSERT INTO rezeptur_anfrage_wunsch (anfrage_id,bezeichnung,wunsch_menge,einheit,notiz,item_id,menge_final,sort)
            VALUES (?,?,?,?,?,?,?,?)", [(int)$id, $r['bez'], $r['menge'], $r['einheit'], $r['notiz'], $r['item_id'], $r['final'], $i]);
+    }
+
+    if (($_POST['aktion'] ?? '') === 'vorschlag_aktualisieren') {
+        // Die bearbeitete Wunsch-Zuordnung in den BEREITS verknüpften Vorschlag (Rezeptur) übernehmen und neu senden.
+        // Nötig, weil Anfrage (rezeptur_anfrage_wunsch) und Vorschlag (rezeptur_zutat) zwei getrennte Objekte sind –
+        // der Kunde sieht die Rezeptur. Ohne diesen Schritt bliebe beim Kunden die alte Fassung stehen.
+        // Nur für (noch) nicht verbindliche Vorschläge (entwurf/abgelehnt/vorschlag); freigegeben/eingefroren bleibt unangetastet.
+        $rid = (int) scalar("SELECT rezeptur_id FROM rezeptur_anfrage WHERE id=?", [(int)$id]);
+        $rs  = $rid ? (string) scalar("SELECT status FROM rezeptur WHERE id=?", [$rid]) : '';
+        if ($rid && in_array($rs, ['entwurf', 'abgelehnt', 'vorschlag'], true)) {
+            $zutatRows = array_values(array_filter($rows, fn($r) => $r['item_id'] && $r['final'] !== null));
+            if (!$zutatRows) { header('Location: ?p=anfrage&id=' . $id . '&leer=1#block-zuordnung'); exit; }
+            db()->beginTransaction();
+            try {
+                q("DELETE FROM rezeptur_zutat WHERE rezeptur_id=?", [$rid]);
+                $pos = 0;
+                foreach ($zutatRows as $r) {
+                    $bez = scalar("SELECT name FROM item WHERE id=?", [$r['item_id']]);
+                    q("INSERT INTO rezeptur_zutat (rezeptur_id,item_id,bezeichnung,menge_mg,sort) VALUES (?,?,?,?,?)",
+                      [$rid, $r['item_id'], $bez, $r['final'], $pos++]);
+                }
+                q("UPDATE rezeptur SET status='vorschlag' WHERE id=?", [$rid]);
+                q("UPDATE rezeptur_anfrage SET status='beantwortet' WHERE id=?", [(int)$id]);
+            } catch (Throwable $e) { db()->rollBack(); throw $e; }
+            db()->commit();
+            $anr = (string) scalar("SELECT nummer FROM rezeptur_anfrage WHERE id=?", [(int)$id]);
+            if ($kunde_id) log_aktivitaet('kunde', $kunde_id, 'team', 'Vorschlag aus Anfrage ' . $anr . ' aktualisiert und an den Kunden gesendet.', 'rezeptur', 'rezeptur', $rid);
+            header('Location: ?p=rezeptur_detail&id=' . $rid . '&gesendet=1'); exit;
+        }
+        // Verbindlich (freigegeben/eingefroren) oder keine Rezeptur -> nur speichern, nicht überschreiben.
+        header('Location: ?p=anfrage&id=' . $id . '&ok=1#block-zuordnung'); exit;
     }
 
     if (($_POST['aktion'] ?? '') === 'rezeptur_erstellen') {
@@ -137,6 +149,10 @@ $rezId       = (int)($a['rezeptur_id'] ?? 0);
 $rezStatus   = $rezId ? (string) scalar("SELECT status FROM rezeptur WHERE id=?", [$rezId]) : '';
 $rezGesendet = in_array($rezStatus, ['vorschlag', 'freigegeben', 'eingefroren'], true);
 $rezEntwurf  = $rezId && in_array($rezStatus, ['entwurf', 'abgelehnt'], true);
+// Syncbar = die (noch nicht verbindliche) Rezeptur kann aus der Zuordnung neu aufgebaut & gesendet werden.
+// 'freigegeben'/'eingefroren' ist verbindlich vom Kunden angenommen -> NICHT überschreiben.
+$rezSyncbar  = $rezId && in_array($rezStatus, ['entwurf', 'abgelehnt', 'vorschlag'], true);
+$rezVerbindlich = $rezId && in_array($rezStatus, ['freigegeben', 'eingefroren'], true);
 
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
 // hat_dok = es liegt mind. ein Dokument (CoA/Spec/Analyse …) am Rohstoff -> „Papiere vorhanden". Eine Abfrage für alle.
@@ -398,14 +414,15 @@ if (!$neu):
   <?php endif; ?>
 
   <div class="bx-row" style="margin-top:var(--sp-4)">
-    <button class="btn btn-ghost" type="submit">Speichern</button>
-    <?php if (!$neu && $rezGesendet): ?>
+    <button class="btn btn-ghost" type="submit">Nur speichern</button>
+    <?php if (!$neu && $rezSyncbar): ?>
+      <?php // Verknüpfter Vorschlag/Entwurf: die Zuordnung in die Rezeptur übernehmen und senden – das sieht der Kunde. ?>
+      <button class="btn btn-primary" type="submit" name="aktion" value="vorschlag_aktualisieren" onclick="return confirm('Die aktuelle Zuordnung in den Vorschlag übernehmen und an den Kunden senden? Der Kunde sieht danach genau diese Rohstoffe/Mengen.')">Zuordnung in den Vorschlag übernehmen &amp; senden</button>
+      <a class="btn btn-ghost" href="?p=rezeptur_detail&id=<?= $rezId ?>"><?= $rezEntwurf ? 'Entwurf öffnen' : 'Vorschlag öffnen' ?></a>
+      <span class="muted" style="font-size:12px;align-self:center">Wichtig: Anfrage und Vorschlag (Rezeptur <?= h((string) scalar('SELECT nummer FROM rezeptur WHERE id=?', [$rezId])) ?>) sind getrennt. Der Kunde sieht den <strong>Vorschlag</strong> – Änderungen an der Zuordnung erreichen ihn erst über diesen Knopf.</span>
+    <?php elseif (!$neu && $rezVerbindlich): ?>
       <a class="btn btn-primary" href="?p=rezeptur_detail&id=<?= $rezId ?>">Vorschlag öffnen</a>
-      <span class="muted" style="font-size:12px;align-self:center">Zu dieser Anfrage gibt es bereits einen <strong>gesendeten</strong> Vorschlag – dort überarbeiten (nicht neu erstellen). Erst mit Kundenzustimmung wird daraus eine Rezeptur.</span>
-    <?php elseif (!$neu && $rezEntwurf): ?>
-      <button class="btn btn-primary" type="submit" name="aktion" value="vorschlag_senden" onclick="return confirm('Den verknüpften Entwurf jetzt als Vorschlag an den Kunden senden?')">Als Vorschlag an den Kunden senden</button>
-      <a class="btn btn-ghost" href="?p=rezeptur_detail&id=<?= $rezId ?>">Entwurf öffnen</a>
-      <span class="muted" style="font-size:12px;align-self:center">Hier hängt ein Rezeptur-<strong>Entwurf</strong> (noch nicht gesendet) – deshalb steht die Anfrage weiter offen und der Kunde wartet. Entwurf prüfen und dann senden.</span>
+      <span class="muted" style="font-size:12px;align-self:center">Der Kunde hat diesen Vorschlag bereits <strong>verbindlich angenommen</strong> – er wird hier nicht mehr überschrieben. Für Änderungen die Rezeptur öffnen.</span>
     <?php else: ?>
       <button class="btn btn-primary" type="submit" name="aktion" value="rezeptur_erstellen">Vorschlag erstellen &amp; senden</button>
     <?php endif; ?>
