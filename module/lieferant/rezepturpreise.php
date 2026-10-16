@@ -22,11 +22,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'preis_save') {
         $aid   = (int)($_POST['id'] ?? 0);
         $preis = zahl_lesen((string)($_POST['preis'] ?? ''), false, $spr);
-        q("UPDATE rezeptur_lief_angebot SET preis=?, stand=CURDATE() WHERE id=? AND lieferant_id=?",
-          [$preis > 0 ? $preis : null, $aid, $lid]);
-        // Preismatrix der betroffenen Produkte neu rechnen -> Fertigpreis fliesst automatisch ins Angebot.
-        rezeptur_produkt_matrizen_auffrischen((int) scalar("SELECT rezeptur_id FROM rezeptur_lief_angebot WHERE id=? AND lieferant_id=?", [$aid, $lid]));
-        header('Location: ' . $ziel . '&ok=1'); exit;
+        $cur   = one("SELECT preis FROM rezeptur_lief_angebot WHERE id=? AND lieferant_id=?", [$aid, $lid]);
+        if ($cur) {
+            $alt = ($cur['preis'] !== null && (float)$cur['preis'] > 0) ? (float)$cur['preis'] : null;
+            if ($alt === null) {
+                // Noch kein festgesetzter Preis -> gilt sofort (Erstangebot).
+                q("UPDATE rezeptur_lief_angebot SET preis=?, stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL WHERE id=? AND lieferant_id=?", [$preis > 0 ? $preis : null, $aid, $lid]);
+                rezeptur_produkt_matrizen_auffrischen((int) scalar("SELECT rezeptur_id FROM rezeptur_lief_angebot WHERE id=?", [$aid]));
+                header('Location: ' . $ziel . '&ok=1'); exit;
+            }
+            if ($preis > 0 && abs($preis - $alt) < 0.00005) {
+                // Gleicher Preis -> als aktuell bestätigt behandeln (4-Wochen-Regel), Vorschlag weg.
+                q("UPDATE rezeptur_lief_angebot SET stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL WHERE id=? AND lieferant_id=?", [$aid, $lid]);
+                header('Location: ' . $ziel . '&ok=1'); exit;
+            }
+            // Änderung eines festgesetzten Preises -> nur VORSCHLAG; der alte Preis bleibt gültig, bis bulkify freigibt.
+            q("UPDATE rezeptur_lief_angebot SET preis_vorschlag=?, vorschlag_am=NOW() WHERE id=? AND lieferant_id=?", [$preis > 0 ? $preis : null, $aid, $lid]);
+            if (function_exists('benachrichtigung_add')) {
+                $lfirma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lid]);
+                benachrichtigung_add('Preis-Vorschlag (Fremdfertigung): ' . ($lfirma ?: ('Lieferant #' . $lid)),
+                    'Ein Lieferant möchte einen festgesetzten Fremdfertigungspreis ändern – wartet auf Freigabe.', '?p=einkauf_preise&tab=fremd');
+            }
+            header('Location: ' . $ziel . '&vorschlag=1'); exit;
+        }
+        header('Location: ' . $ziel); exit;
     }
     if ($aktion === 'preis_add') {
         $rid   = (int)($_POST['rezeptur_id'] ?? 0);
@@ -53,21 +72,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: ' . $ziel); exit;
 }
 
-$rows = all("SELECT la.id, la.preis, la.einheit, la.stand, r.id AS rezeptur_id, r.nummer, r.name, r.darreichungsform AS form
+$rows = all("SELECT la.id, la.preis, la.preis_vorschlag, la.einheit, la.stand, r.id AS rezeptur_id, r.nummer, r.name, r.darreichungsform AS form
              FROM rezeptur_lief_angebot la JOIN rezeptur r ON r.id=la.rezeptur_id
              WHERE la.lieferant_id=? ORDER BY r.name", [$lid]);
-// Zusätzlich: Preise, die über eine PREISANFRAGE (LA-…) abgegeben wurden (lieferant_angebot zu einer
-// Fremdfertigungs-Anfrage mit Rezeptur). Die stehen nicht in rezeptur_lief_angebot – ohne das würden sie
-// hier fehlen. Read-only (bearbeitet wird über die Anfrage). Doppelte (Rezeptur schon oben) ausblenden.
-$schonRez = array_fill_keys(array_map(fn($r) => (int)$r['rezeptur_id'], $rows), true);
-$laRows = all("SELECT la.nummer AS la_nr, ag.preis, COALESCE(ag.preis_basis,1) AS preis_basis, ag.einheit AS ag_einheit,
-                      r.id AS rezeptur_id, r.nummer, r.name, r.darreichungsform AS form
-               FROM lieferant_anfrage la
-               JOIN lieferant_angebot ag ON ag.anfrage_id = la.id
-               JOIN rezeptur r ON r.id = la.rezeptur_id
-               WHERE la.lieferant_id=? AND la.rezeptur_id IS NOT NULL
-               ORDER BY r.name", [$lid]);
-$laRows = array_values(array_filter($laRows, fn($r) => empty($schonRez[(int)$r['rezeptur_id']])));
 // Rezepturen, die der Lieferant noch NICHT bepreist hat – NUR in den freigeschalteten Formen.
 $offen = [];
 if ($fertigFormen) {
@@ -87,6 +94,7 @@ lp_head('bulkify – ' . lp_t('rez_preise_menu'));
 lp_shell_start('lieferant_rezepturpreise');
 if (isset($_GET['ok']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('gespeichert')) . '</div>';
 if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('preise_bestaetigt')) . '</div>';
+if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen);background:var(--panel-2)">' . h(lp_t('preis_vorschlag_info')) . '</div>';
 ?>
 <h1 style="margin-bottom:4px"><?= h(lp_t('rez_preise_titel')) ?></h1>
 <p class="bx-sub"><?= h(lp_t('rez_preise_sub')) ?></p>
@@ -129,6 +137,9 @@ if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12
             <span class="muted">€ / <?= h($r['einheit'] ?: $formEinheit($r['form'])) ?></span>
             <button class="btn btn-ghost btn-sm" type="submit"><?= h(lp_t('aktualisieren')) ?></button>
           </form>
+          <?php if (($r['preis_vorschlag'] ?? null) !== null && (float)$r['preis_vorschlag'] > 0): ?>
+            <div class="muted" style="font-size:11px;margin-top:4px;color:var(--gruen)"><?= h(lp_t('vorschlag_offen')) ?>: <?= h($num($r['preis_vorschlag'])) ?> €</div>
+          <?php endif; ?>
         </td>
         <td><?= $r['stand'] ? h(date('d.m.Y', strtotime((string)$r['stand']))) . ($alt !== null && $alt > $intervall ? ' <span style="color:#8f231b">!</span>' : '') : '<span class="muted">–</span>' ?></td>
         <td><form method="post" style="margin:0" onsubmit="return confirm('<?= h(lp_t('loeschen')) ?>?');"><input type="hidden" name="aktion" value="preis_del"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">&times;</button></form></td>
@@ -152,22 +163,6 @@ if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12
   </form>
   <?php endif; ?>
 
-  <?php if ($laRows): ?>
-  <h2 style="margin:22px 0 6px;font-size:16px"><?= h(lp_t('rez_preise_aus_anfrage')) ?> <span class="muted" style="font-weight:normal">(<?= count($laRows) ?>)</span></h2>
-  <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?></th><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('form_lbl')) ?></th><th class="bx-num"><?= h(lp_t('ihr_preis')) ?></th></tr></thead>
-    <tbody>
-    <?php foreach ($laRows as $r): $pe = (int)$r['preis_basis'] === 1000 ? (float)$r['preis'] / 1000 : (float)$r['preis']; ?>
-      <tr>
-        <td><a href="?p=lieferant_rezeptur&id=<?= (int)$r['rezeptur_id'] ?>"><?= h($r['name']) ?></a> <span class="muted" style="font-size:12px"><?= h($r['nummer']) ?></span></td>
-        <td class="muted"><?= h((string)$r['la_nr']) ?></td>
-        <td><?= h(anfrage_art_label('rohstoff', (string)$r['form'], $spr) ?: $formEinheit($r['form'])) ?></td>
-        <td class="bx-num"><strong><?= $pe > 0 ? h($num($pe)) . ' € / ' . h($r['ag_einheit'] ?: $formEinheit($r['form'])) : '<span class="muted">–</span>' ?></strong></td>
-      </tr>
-    <?php endforeach; ?>
-    </tbody>
-  </table></div>
-  <?php endif; ?>
 </div>
 <script>
 (function(){

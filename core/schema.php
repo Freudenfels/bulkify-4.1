@@ -1513,6 +1513,25 @@ function init_schema(): void {
             q("UPDATE lieferant_anfrage SET art='fertigprodukt' WHERE rezeptur_id IS NOT NULL AND COALESCE(art,'')<>'fertigprodukt'");
         meta_set('fix_la_art_fertig_v1', '1');
     }
+    // Einmalig: bereits über Preisanfragen abgegebene Fremdfertigungspreise als FESTGESETZTEN Rezeptur-Preis
+    // spiegeln (rezeptur_lief_angebot), falls es dort noch keinen gibt. Danach ist rezeptur_lief_angebot die
+    // einzige Kalkulations-Quelle (Quelle C entfällt) und Preisänderungen laufen über die Freigabe.
+    if (meta_get('fix_la_rez_spiegel_v1', '') !== '1') {
+        if (table_exists('rezeptur_lief_angebot') && table_exists('lieferant_angebot') && table_exists('lieferant_anfrage'))
+            foreach (all("SELECT ag.preis, COALESCE(ag.preis_basis,1) AS basis, af.rezeptur_id, af.lieferant_id
+                          FROM lieferant_angebot ag JOIN lieferant_anfrage af ON af.id=ag.anfrage_id
+                          WHERE af.rezeptur_id IS NOT NULL AND ag.preis IS NOT NULL AND ag.preis>0") as $r) {
+                $rez = (int)$r['rezeptur_id']; $lief = (int)$r['lieferant_id'];
+                if (!$rez || !$lief) continue;
+                if ((int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=?", [$rez, $lief]) > 0) continue;
+                $pe = ((int)$r['basis']) === 1000 ? (float)$r['preis'] / 1000 : (float)$r['preis'];
+                $rform = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rez]);
+                $re = in_array($rform, ['kapsel','softgel'], true) ? 'Kapsel' : ($rform === 'tablette' ? 'Tablette' : ($rform === 'stick' ? 'Stick' : 'Stk'));
+                q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,angelegt) VALUES (?,?,?,?, 'angeboten', CURDATE(), NOW())",
+                  [$rez, $lief, $pe > 0 ? $pe : null, $re]);
+            }
+        meta_set('fix_la_rez_spiegel_v1', '1');
+    }
     // Einmalig: Lieferanten-/Partner-Kategorien aus dem v3-Import säubern. Der Import schrieb die
     // item-Kategorien 'fertig'/'verkaufsfertig' in lieferanten.kategorien, das Formular kennt dort aber nur
     // 'fertigprodukt' („Fertige Produkte"). Beides -> 'fertigprodukt'; nur gültige Keys behalten; dedupen.
@@ -1852,6 +1871,12 @@ function init_schema(): void {
         KEY idx_rezeptur (rezeptur_id), KEY idx_lieferant (lieferant_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('rezeptur_lief_angebot', 'stand', "DATE NULL");   // wann der Preis zuletzt eingetragen/aktualisiert wurde (4-Wochen-Regel)
+    // Festpreis mit Freigabe: `preis` = FREIGEGEBENER Preis (nur der zählt für die Kalkulation). Eine Änderung
+    // des Lieferanten landet zuerst als `preis_vorschlag` (wartet auf Team-Freigabe) – bis dahin rechnen wir
+    // mit dem alten freigegebenen Preis weiter. `quelle_anfrage_id` = aus welcher Preisanfrage (LA) der Preis kam.
+    ensure_column('rezeptur_lief_angebot', 'preis_vorschlag', "DECIMAL(12,4) NULL");
+    ensure_column('rezeptur_lief_angebot', 'vorschlag_am', "DATETIME NULL");
+    ensure_column('rezeptur_lief_angebot', 'quelle_anfrage_id', "INT NULL");
     // Mengenstaffeln je Fremdfertigungs-Angebot (ab_menge -> Preis je Einheit). Lieferanten unterbieten sich hierüber.
     $pdo->exec("CREATE TABLE IF NOT EXISTS rezeptur_lief_angebot_staffel (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -3789,32 +3814,9 @@ function rezeptur_fremd_ek_pro_einheit(int $rid, float $einheiten = 0): ?float {
         foreach (all("SELECT id FROM produkt WHERE rezeptur_id=?", [$rid]) as $pr)
             foreach (produkt_lieferant_preise((int)$pr['id'], $einheiten) as $p)
                 if ((float)$p > 0 && ($best === null || (float)$p < $best)) $best = (float)$p;
-    // Quelle C: BEANTWORTETES Fertigprodukt-Angebot (lieferant_anfrage art='fertigprodukt' -> lieferant_angebot).
-    // Greift schon VOR dem Annehmen und OHNE dass es ein Produkt zur Rezeptur gibt – genau der Fall „Lieferant
-    // hat im Portal geantwortet, aber das Produkt entsteht erst beim Annehmen des Angebots". Preisbasis
-    // (je 1 / je 1000) auf je EINE Einheit normiert; Mengenstaffel wie bei Quelle A beachtet.
-    if (table_exists('lieferant_angebot') && table_exists('lieferant_anfrage')) {
-        $angebote = all("SELECT ag.id, ag.preis, ag.mindestmenge, COALESCE(ag.preis_basis,1) AS basis
-                         FROM lieferant_angebot ag JOIN lieferant_anfrage af ON af.id=ag.anfrage_id
-                         WHERE af.rezeptur_id=? AND af.art='fertigprodukt' AND ag.preis IS NOT NULL AND ag.preis>0",
-                        [$rid]);
-        foreach ($angebote as $ag) {
-            $basis = ((int)$ag['basis']) === 1000 ? 1000 : 1;
-            $staffel = table_exists('lieferant_angebot_staffel')
-                ? all("SELECT menge_ab, preis FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [(int)$ag['id']]) : [];
-            if (!$staffel) $staffel = [['menge_ab'=>(float)($ag['mindestmenge'] ?: 0), 'preis'=>(float)$ag['preis']]];
-            $passend = null; $kleinste = null;
-            foreach ($staffel as $z) {
-                $p = (float)$z['preis'] / $basis; $m = (float)$z['menge_ab'];
-                if ($p <= 0) continue;
-                if ($kleinste === null || $p < $kleinste) $kleinste = $p;           // guenstigster Preis ueberhaupt
-                if ($einheiten > 0 && $m > 0 && $m > $einheiten) continue;          // hoehere Staffel gilt noch nicht
-                if ($passend === null || $p < $passend) $passend = $p;              // guenstigste erreichte Staffel
-            }
-            $p = $passend ?? $kleinste;
-            if ($p !== null && ($best === null || $p < $best)) $best = $p;
-        }
-    }
+    // (Früher Quelle C: roher lieferant_angebot-Preis. Entfernt – ein über eine Preisanfrage abgegebener
+    //  Fremdfertigungspreis wird jetzt als FREIGEGEBENER Preis in rezeptur_lief_angebot gespiegelt (Quelle A),
+    //  mit Freigabe-Gate für Änderungen. So kalkulieren wir nie mit einem noch nicht freigegebenen Preis.)
     return $best;
 }
 
@@ -5587,7 +5589,49 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
     }
     q("UPDATE lieferant_anfrage SET status='beantwortet' WHERE id=?", [$anfrage_id]);
     log_aktivitaet('lieferant', $lieferant_id, 'lieferant', 'Angebot zu ' . $a['nummer'] . ' abgegeben: ' . number_format($preis, 4, ',', '.') . ' je ' . ($einheit ?: 'Einheit') . '.', 'angebot', 'lieferant_anfrage', $anfrage_id);
+    // Fremdfertigung (Anfrage an einer Rezeptur): den Preis als FESTGESETZTEN Rezeptur-Preis spiegeln.
+    // Erstangebot = sofort freigegeben; Änderung eines schon freigegebenen Preises = nur Vorschlag (Team-Freigabe nötig).
+    $rezId = (int)($a['rezeptur_id'] ?? 0);
+    if ($rezId > 0) {
+        $pe = $preis_basis === 1000 ? $preis / 1000 : $preis;   // je EINE Einheit
+        $rform = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezId]);
+        $rEinheit = in_array($rform, ['kapsel','softgel'], true) ? 'Kapsel' : ($rform === 'tablette' ? 'Tablette' : ($rform === 'stick' ? 'Stick' : 'Stk'));
+        $ex = one("SELECT id, preis FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=? ORDER BY id LIMIT 1", [$rezId, $lieferant_id]);
+        if (!$ex) {
+            q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,quelle_anfrage_id,angelegt) VALUES (?,?,?,?, 'angeboten', CURDATE(), ?, NOW())",
+              [$rezId, $lieferant_id, $pe > 0 ? $pe : null, $rEinheit, $anfrage_id]);
+            if (function_exists('rezeptur_produkt_matrizen_auffrischen')) rezeptur_produkt_matrizen_auffrischen($rezId);
+        } elseif (abs((float)$ex['preis'] - $pe) < 0.00005) {
+            q("UPDATE rezeptur_lief_angebot SET stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL, quelle_anfrage_id=? WHERE id=?", [$anfrage_id, (int)$ex['id']]);
+        } else {
+            q("UPDATE rezeptur_lief_angebot SET preis_vorschlag=?, vorschlag_am=NOW(), quelle_anfrage_id=? WHERE id=?", [$pe > 0 ? $pe : null, $anfrage_id, (int)$ex['id']]);
+            if (function_exists('benachrichtigung_add')) {
+                $lfirma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lieferant_id]);
+                benachrichtigung_add('Preis-Vorschlag (Fremdfertigung): ' . ($lfirma ?: ('Lieferant #' . $lieferant_id)) . ' · ' . (string)$a['nummer'],
+                    'Geänderter Fremdfertigungspreis wartet auf Freigabe. Kalkulation läuft bis dahin mit dem alten Preis weiter.', '?p=einkauf_preise&tab=fremd');
+            }
+        }
+    }
     return '';
+}
+
+// Preis-Vorschlag eines Fremdfertigungspreises FREIGEBEN: Vorschlag wird zum freigegebenen Preis, Kalkulation neu.
+function rezeptur_lief_preis_freigeben(int $id): void {
+    if ($id <= 0 || !table_exists('rezeptur_lief_angebot')) return;
+    $r = one("SELECT rezeptur_id, preis_vorschlag FROM rezeptur_lief_angebot WHERE id=?", [$id]);
+    if (!$r || $r['preis_vorschlag'] === null) return;
+    q("UPDATE rezeptur_lief_angebot SET preis=?, preis_vorschlag=NULL, vorschlag_am=NULL, stand=CURDATE() WHERE id=?", [(float)$r['preis_vorschlag'], $id]);
+    if (function_exists('rezeptur_produkt_matrizen_auffrischen')) rezeptur_produkt_matrizen_auffrischen((int)$r['rezeptur_id']);
+}
+// Preis-Vorschlag ABLEHNEN: der alte freigegebene Preis bleibt, der Vorschlag wird verworfen.
+function rezeptur_lief_preis_vorschlag_ablehnen(int $id): void {
+    if ($id <= 0 || !table_exists('rezeptur_lief_angebot')) return;
+    q("UPDATE rezeptur_lief_angebot SET preis_vorschlag=NULL, vorschlag_am=NULL WHERE id=?", [$id]);
+}
+// Anzahl offener Preis-Vorschläge (Fremdfertigung) – für Hinweis/Badge beim Team.
+function rezeptur_lief_vorschlag_count(): int {
+    if (!table_exists('rezeptur_lief_angebot')) return 0;
+    return (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot WHERE preis_vorschlag IS NOT NULL");
 }
 
 // Angebot annehmen: die Preise landen als EK-Staffeln am Artikel (lieferant_preis) – genau dort

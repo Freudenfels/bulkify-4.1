@@ -5,6 +5,13 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 
+// Preis-Vorschlag eines Lieferanten freigeben / ablehnen (Fremdfertigung, Festpreis-Regel).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['vorschlag_freigeben','vorschlag_ablehnen'], true)) {
+    $rlaId = (int)($_POST['rla_id'] ?? 0);
+    if (($_POST['aktion']) === 'vorschlag_freigeben') rezeptur_lief_preis_freigeben($rlaId); else rezeptur_lief_preis_vorschlag_ablehnen($rlaId);
+    header('Location: ?p=einkauf_preise&tab=fremd'); exit;
+}
+
 $TABS = ['fremd' => 'Fremdfertigung (Kapsel)', 'rohstoff' => 'Rohstoff', 'verpackung' => 'Verpackung', 'zukauf' => 'Fertigprodukt/Zukauf'];
 $tab = $_GET['tab'] ?? 'fremd';
 if (!isset($TABS[$tab])) $tab = 'fremd';
@@ -20,8 +27,8 @@ if ($tab === 'fremd') {
     $where = []; $args = [];
     if ($q !== '') { $where[] = "(r.name LIKE ? OR r.synonyme LIKE ? OR l.firma LIKE ?)"; $args[] = '%'.$q.'%'; $args[] = '%'.$q.'%'; $args[] = '%'.$q.'%'; }
     $wsql = $where ? 'WHERE '.implode(' AND ', $where) : '';
-    $rows = all("SELECT la.rezeptur_id, r.nummer AS rez_nr, r.name AS rez_name, r.darreichungsform AS df,
-                        kg.name AS kapselgroesse, l.firma, la.preis, la.einheit, la.menge
+    $rows = all("SELECT la.id AS rla_id, la.lieferant_id, la.preis_vorschlag, la.rezeptur_id, r.nummer AS rez_nr, r.name AS rez_name, r.darreichungsform AS df,
+                        kg.name AS kapselgroesse, l.firma, la.preis, la.einheit, la.menge, la.stand
                  FROM rezeptur_lief_angebot la
                  LEFT JOIN rezeptur r   ON r.id = la.rezeptur_id
                  LEFT JOIN kapselgroesse kg ON kg.id = r.kapselgroesse_id
@@ -36,7 +43,7 @@ if ($tab === 'fremd') {
                     LEFT JOIN rezeptur r    ON r.id = la.rezeptur_id
                     LEFT JOIN kapselgroesse kg ON kg.id = r.kapselgroesse_id
                     LEFT JOIN lieferanten l ON l.id = la.lieferant_id
-                    WHERE la.art='fertigprodukt' OR la.rezeptur_id IS NOT NULL");
+                    WHERE la.art='fertigprodukt' AND la.rezeptur_id IS NULL");   // rezeptur-verknüpfte stehen als Festpreis in rezeptur_lief_angebot
     $staffeln = [];
     if ($neuRows) {
         $agIds = array_values(array_unique(array_map(fn($x) => (int)$x['ag_id'], $neuRows)));
@@ -80,7 +87,7 @@ if ($tab === 'fremd') {
 // Reiter-Zähler (ohne Suche).
 $cnt = [
     'fremd'      => (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot")
-                    + (int) scalar("SELECT COUNT(*) FROM lieferant_angebot ag JOIN lieferant_anfrage la ON la.id=ag.anfrage_id WHERE la.art='fertigprodukt' OR la.rezeptur_id IS NOT NULL"),
+                    + (int) scalar("SELECT COUNT(*) FROM lieferant_angebot ag JOIN lieferant_anfrage la ON la.id=ag.anfrage_id WHERE la.art='fertigprodukt' AND la.rezeptur_id IS NULL"),
     'rohstoff'   => (int) scalar("SELECT COUNT(*) FROM lieferant_preis"),
     'verpackung' => (int) scalar("SELECT COUNT(*) FROM pack_ek_staffel"),
     'zukauf'     => (int) scalar("SELECT COUNT(*) FROM produkt_lieferant_preis"),
@@ -103,11 +110,19 @@ bx_head('Einkaufspreise', 'Alle Einkaufspreise an einem Ort – Fremdfertigung, 
 
 <div class="bx-panel" style="padding:0;overflow:hidden">
 <?php if ($tab === 'fremd'): ?>
-  <?php if (!$rows): ?><div style="padding:16px" class="muted">Keine Fremdfertigungs-Preise.</div><?php else: ?>
+  <?php $offenVorschlaege = rezeptur_lief_vorschlag_count(); if ($offenVorschlaege > 0): ?>
+    <div style="padding:10px 16px;border-bottom:1px solid var(--line);background:rgba(230,196,192,.14);color:#8f231b">
+      <strong><?= (int)$offenVorschlaege ?> Preis-Vorschlag/Vorschläge warten auf Freigabe.</strong>
+      <span class="muted" style="color:inherit">Bis zur Freigabe kalkulieren wir mit dem alten, festgesetzten Preis weiter.</span>
+    </div>
+  <?php endif; ?>
+  <?php if (!$rows): ?><div style="padding:16px" class="muted">Keine Fremdfertigungs-Preise.</div><?php else: $intFremd = 28; ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Rezepturnr.</th><th>Anfrage</th><th>Rezeptur-Name</th><th>Form</th><th>Kapselgröße</th><th>Lieferant</th><th class="bx-num">Preis</th></tr></thead>
+    <thead><tr><th>Rezepturnr.</th><th>Anfrage</th><th>Rezeptur-Name</th><th>Form</th><th>Kapselgröße</th><th>Lieferant</th><th class="bx-num">Festpreis</th><th>Freigabe</th></tr></thead>
     <tbody>
-    <?php foreach ($rows as $r): $rid=(int)$r['rezeptur_id']; $ek=($r['preis']!==null && (float)$r['preis']>0)?(float)$r['preis']:null; ?>
+    <?php foreach ($rows as $r): $rid=(int)$r['rezeptur_id']; $ek=($r['preis']!==null && (float)$r['preis']>0)?(float)$r['preis']:null;
+          $vors = (isset($r['preis_vorschlag']) && $r['preis_vorschlag']!==null && (float)$r['preis_vorschlag']>0) ? (float)$r['preis_vorschlag'] : null;
+          $alt  = !empty($r['stand']) ? (int) floor((time() - strtotime((string)$r['stand'])) / 86400) : null; ?>
       <tr>
         <td class="muted"><?= h((string)($r['rez_nr'] ?? '')) ?: '–' ?></td>
         <td class="muted"><?= !empty($r['la_nr']) ? h((string)$r['la_nr']) : '–' ?></td>
@@ -115,7 +130,12 @@ bx_head('Einkaufspreise', 'Alle Einkaufspreise an einem Ort – Fremdfertigung, 
         <td class="muted"><?= h($dfLabel[(string)$r['df']] ?? (string)($r['df'] ?? '')) ?></td>
         <td><?= !empty($r['kapselgroesse']) ? h((string)$r['kapselgroesse']) : '<span class="muted">–</span>' ?></td>
         <td><?= $r['firma'] ? h((string)$r['firma']) : '<span class="muted">–</span>' ?></td>
-        <td class="bx-num"><?= $ek!==null ? $preisFmt($ek) . ' &euro;' : '<span class="muted">–</span>' ?></td>
+        <td class="bx-num"><?= $ek!==null ? $preisFmt($ek) . ' &euro;' : '<span class="muted">–</span>' ?><?php if ($alt !== null && $alt > $intFremd): ?><div class="muted" style="font-size:11px;color:#8f231b">unbestätigt seit <?= (int)$alt ?> T</div><?php endif; ?></td>
+        <td><?php if ($vors !== null && !empty($r['rla_id'])): ?>
+            <div style="font-size:12px;margin-bottom:4px">Vorschlag: <strong><?= $preisFmt($vors) ?> &euro;</strong></div>
+            <form method="post" style="display:inline;margin:0"><input type="hidden" name="aktion" value="vorschlag_freigeben"><input type="hidden" name="rla_id" value="<?= (int)$r['rla_id'] ?>"><button class="btn btn-primary btn-sm" type="submit">Freigeben</button></form>
+            <form method="post" style="display:inline;margin:0" onsubmit="return confirm('Vorschlag ablehnen? Der alte Preis bleibt.');"><input type="hidden" name="aktion" value="vorschlag_ablehnen"><input type="hidden" name="rla_id" value="<?= (int)$r['rla_id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Ablehnen</button></form>
+          <?php else: ?><span class="muted">–</span><?php endif; ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
