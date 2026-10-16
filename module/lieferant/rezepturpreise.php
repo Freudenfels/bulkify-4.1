@@ -56,6 +56,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $rows = all("SELECT la.id, la.preis, la.einheit, la.stand, r.id AS rezeptur_id, r.nummer, r.name, r.darreichungsform AS form
              FROM rezeptur_lief_angebot la JOIN rezeptur r ON r.id=la.rezeptur_id
              WHERE la.lieferant_id=? ORDER BY r.name", [$lid]);
+// Zusätzlich: Preise, die über eine PREISANFRAGE (LA-…) abgegeben wurden (lieferant_angebot zu einer
+// Fremdfertigungs-Anfrage mit Rezeptur). Die stehen nicht in rezeptur_lief_angebot – ohne das würden sie
+// hier fehlen. Read-only (bearbeitet wird über die Anfrage). Doppelte (Rezeptur schon oben) ausblenden.
+$schonRez = array_fill_keys(array_map(fn($r) => (int)$r['rezeptur_id'], $rows), true);
+$laRows = all("SELECT la.nummer AS la_nr, ag.preis, COALESCE(ag.preis_basis,1) AS preis_basis, ag.einheit AS ag_einheit,
+                      r.id AS rezeptur_id, r.nummer, r.name, r.darreichungsform AS form
+               FROM lieferant_anfrage la
+               JOIN lieferant_angebot ag ON ag.anfrage_id = la.id
+               JOIN rezeptur r ON r.id = la.rezeptur_id
+               WHERE la.lieferant_id=? AND la.rezeptur_id IS NOT NULL
+               ORDER BY r.name", [$lid]);
+$laRows = array_values(array_filter($laRows, fn($r) => empty($schonRez[(int)$r['rezeptur_id']])));
 // Rezepturen, die der Lieferant noch NICHT bepreist hat – NUR in den freigeschalteten Formen.
 $offen = [];
 if ($fertigFormen) {
@@ -138,6 +150,23 @@ if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12
     <a id="rezAnsehen" class="btn btn-ghost" href="#" target="_blank" rel="noopener" hidden><?= h(lp_t('rez_ansehen')) ?></a>
     <button class="btn btn-primary" type="submit"><?= h(lp_t('hinzufuegen')) ?></button>
   </form>
+  <?php endif; ?>
+
+  <?php if ($laRows): ?>
+  <h2 style="margin:22px 0 6px;font-size:16px"><?= h(lp_t('rez_preise_aus_anfrage')) ?> <span class="muted" style="font-weight:normal">(<?= count($laRows) ?>)</span></h2>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?></th><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('form_lbl')) ?></th><th class="bx-num"><?= h(lp_t('ihr_preis')) ?></th></tr></thead>
+    <tbody>
+    <?php foreach ($laRows as $r): $pe = (int)$r['preis_basis'] === 1000 ? (float)$r['preis'] / 1000 : (float)$r['preis']; ?>
+      <tr>
+        <td><a href="?p=lieferant_rezeptur&id=<?= (int)$r['rezeptur_id'] ?>"><?= h($r['name']) ?></a> <span class="muted" style="font-size:12px"><?= h($r['nummer']) ?></span></td>
+        <td class="muted"><?= h((string)$r['la_nr']) ?></td>
+        <td><?= h(anfrage_art_label('rohstoff', (string)$r['form'], $spr) ?: $formEinheit($r['form'])) ?></td>
+        <td class="bx-num"><strong><?= $pe > 0 ? h($num($pe)) . ' € / ' . h($r['ag_einheit'] ?: $formEinheit($r['form'])) : '<span class="muted">–</span>' ?></strong></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
   <?php endif; ?>
 </div>
 <script>

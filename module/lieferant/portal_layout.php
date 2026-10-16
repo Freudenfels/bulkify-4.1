@@ -258,6 +258,7 @@ function lp_t(string $key, string $sprache = ''): string {
                               'zh'=>'请为每个配方填写您的价格（例如每粒）。请每 4 周更新一次。'],
         'rez_preise_leer' => ['de'=>'Noch keine Preise. Unten eine Rezeptur wählen und Preis eintragen.', 'en'=>'No prices yet. Pick a formula below and enter a price.', 'zh'=>'暂无价格。请在下方选择配方并填写价格。'],
         'rez_preise_add'  => ['de'=>'Weitere Rezeptur bepreisen', 'en'=>'Price another formula', 'zh'=>'为其他配方报价'],
+        'rez_preise_aus_anfrage' => ['de'=>'Aus Preisanfragen abgegeben', 'en'=>'Submitted via price requests', 'zh'=>'通过询价提交的报价'],
         'rez_ansehen'     => ['de'=>'Rezeptur ansehen',          'en'=>'View formula', 'zh'=>'查看配方'],
         'rez_zusammensetzung'=>['de'=>'Zusammensetzung je Einheit','en'=>'Composition per unit', 'zh'=>'每单位成分'],
         'bestandteil'     => ['de'=>'Bestandteil',              'en'=>'Component', 'zh'=>'成分'],
