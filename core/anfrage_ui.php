@@ -3,6 +3,24 @@
 // (Rohstoffseite, Rezeptur, Angebots-Editor). Statt pro Seite einen eigenen Weg zu bauen.
 require_once __DIR__ . '/schema.php';
 
+// Lieferanten für eine Preisanfrage – gefiltert nach dem, was sie laut Stammdaten anbieten
+// (lieferanten.kategorien, CSV wie 'rohstoff,fertigprodukt,verpackung'). $kat z. B. 'rohstoff' oder
+// 'fertigprodukt'. Lieferanten OHNE Kategorien (noch nicht eingeordnet) bleiben sichtbar, damit niemand
+// verloren geht; wer NUR andere Kategorien führt, fällt raus. Gesperrte / „keine Anfragen" immer raus.
+function lieferanten_fuer_anfrage(string $kat = ''): array {
+    $w = "gesperrt=0 AND COALESCE(keine_anfragen,0)=0"; $args = [];
+    if ($kat !== '') {
+        // Synonyme abfangen: das Lieferanten-Formular nutzt 'fertigprodukt', der v3-Import aber die
+        // item-Kategorien 'fertig'/'verkaufsfertig'. Beides bedeutet „macht Fertigprodukte".
+        $syn = ['fertigprodukt' => ['fertigprodukt', 'fertig', 'verkaufsfertig'], 'rohstoff' => ['rohstoff']];
+        $toks = $syn[$kat] ?? [$kat];
+        $or = [];
+        foreach ($toks as $t) { $or[] = "FIND_IN_SET(?, REPLACE(kategorien,' ',''))"; $args[] = $t; }
+        $w .= " AND (kategorien IS NULL OR kategorien='' OR " . implode(' OR ', $or) . ")";
+    }
+    return all("SELECT id, firma, land FROM lieferanten WHERE $w ORDER BY firma", $args);
+}
+
 // Status eines Rohstoffs bezogen auf Lieferantenpreise:
 //   'preise'    – mindestens ein Lieferantenpreis liegt vor
 //   'angefragt' – es gibt eine offene Preisanfrage, aber noch keinen Preis

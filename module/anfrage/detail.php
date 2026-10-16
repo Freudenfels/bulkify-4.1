@@ -115,7 +115,7 @@ $istKapsel = in_array($form, $KAPSELFORMEN, true);
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
 $rohstoffe = all("SELECT id, name, artikelnummer, synonym, cas FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name");
 // Lieferanten für das Anfrage-Popup (nicht vorhandener Rohstoff -> direkt anfragen)
-$lieferantenListe = all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma");
+$lieferantenListe = lieferanten_fuer_anfrage('rohstoff');   // Rohstoff-Anfrage: nur Lieferanten, die Rohstoffe führen (oder untagged)
 $kapseln = all("SELECT * FROM kapselgroesse ORDER BY sort, fuellmenge_mg");
 $wuensche = $neu ? [] : all("SELECT * FROM rezeptur_anfrage_wunsch WHERE anfrage_id=? ORDER BY sort, id", [(int)$id]);
 // Auto-Zuordnung vorschlagen, wo noch keine da ist

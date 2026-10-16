@@ -587,7 +587,7 @@ function nwAddRow(){
     </tbody>
   </table></div>
 </div>
-<?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=rezeptur_detail&id=' . (int)$id); ?>
+<?php anfrage_modal(lieferanten_fuer_anfrage('fertigprodukt'), '?p=rezeptur_detail&id=' . (int)$id); ?>
 
 <?php endif; ?>
 

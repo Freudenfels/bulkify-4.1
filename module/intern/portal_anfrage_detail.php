@@ -614,7 +614,7 @@ if ($anfRid):
   <p class="muted" style="margin:0">Die Zutaten dieser Rezeptur sind (noch) keinen Rohstoffen zugeordnet – Einzelpreise lassen sich erst abfragen, wenn die Zutaten im <a href="?p=rezeptur_detail&id=<?= (int)$anfRid ?>">Rezeptur-Editor</a> mit Rohstoffen verknüpft sind. Das ganze Produkt kannst du oben als Fertigprodukt anfragen.</p>
   <?php endif; ?>
 </div>
-<?php anfrage_modal(all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 AND COALESCE(keine_anfragen,0)=0 ORDER BY firma"), '?p=portal_anfrage&id=' . (int)$id); ?>
+<?php anfrage_modal(lieferanten_fuer_anfrage('rohstoff'), '?p=portal_anfrage&id=' . (int)$id); ?>
 <?php endif; ?>
 
 <?php // Status nur zur Info – gesetzt wird er automatisch (Angebot bauen/senden/absagen).

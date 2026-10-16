@@ -8,6 +8,7 @@ Artikelzentrierte Preisanfrage: „Ich brauche Rohstoff X – bei wem frage ich 
 - `anfrage_badge($item_id)` → farbiges Badge dazu („Preise liegen vor" / „angefragt" / „kein Preis").
 - `anfrage_button($item_id, $label, $klasse)` → Knopf, der das Popup für diesen Rohstoff öffnet (alternativ inline `onclick="bxAnfrageOeffnen(id,this)"` mit `data-name` für den Popup-Titel).
 - `anfrage_modal($lieferanten, $back)` → das Popup + JS **einmal je Seite** ausgeben. `$lieferanten` = Liste mit `id, firma[, land]`; `$back` = Rückkehrziel nach dem Senden.
+- `lieferanten_fuer_anfrage($kat)` → Lieferantenliste für die Auswahl, **gefiltert nach dem, was der Lieferant anbietet** (`lieferanten.kategorien`, CSV). `$kat='rohstoff'` bzw. `'fertigprodukt'`. Gesperrte / „keine Anfragen" immer raus. Lieferanten **ohne** Kategorien (noch nicht einsortiert) bleiben sichtbar (sonst gingen untagged-Lieferanten verloren); wer NUR andere Kategorien führt (z. B. nur `verpackung`), fällt raus. **Synonyme:** für `fertigprodukt` zählen auch `fertig`/`verkaufsfertig` (v3-Import nutzt die item-Kategorien statt des Formular-Keys `fertigprodukt`). Eingesetzt in allen `anfrage_modal`-Aufrufern: Rezeptur-Detail (`fertigprodukt`), Rohstoff-Detail / Angebot-Editor / Portal-Anfrage-Detail / Rezepturanfrage-Detail (`rohstoff`).
 
 ### Fertigprodukt (Fremdfertigung) statt Einzel-Rohstoffe
 Manche Lieferanten fertigen das ganze Produkt (Kapsel/Tablette/Premix). Dafür wird die **Rezeptur** als Fertigprodukt angefragt, nicht die einzelnen Rohstoffe.
