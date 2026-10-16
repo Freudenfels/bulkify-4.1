@@ -40,6 +40,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'telefon'         => ['de'=>'Telefon',                'en'=>'Phone', 'zh'=>'电话'],
         'speichern'       => ['de'=>'Speichern',              'en'=>'Save', 'zh'=>'保存'],
         'sprache'         => ['de'=>'Sprache',                'en'=>'Language', 'zh'=>'语言'],
+        'val_pflicht'     => ['de'=>'Bitte füllen Sie dieses Feld aus.', 'en'=>'Please fill out this field.', 'zh'=>'请填写此字段。'],
         'angebot_abgeben' => ['de'=>'Angebot abgeben',        'en'=>'Submit quote', 'zh'=>'提交报价'],
         'ihr_preis'       => ['de'=>'Ihr Preis',              'en'=>'Your price', 'zh'=>'您的报价'],
         'ab_menge'        => ['de'=>'ab Menge',               'en'=>'from quantity', 'zh'=>'起订数量'],
@@ -365,7 +366,17 @@ function lp_head(string $titel): void {
 function lp_foot(): void {
     echo (function_exists('bx_theme_script') ? bx_theme_script() : '') . bx_menue_script()
        . (function_exists('bx_busy_script') ? bx_busy_script() : '') . pwa_script()
-       . lp_menge_script() . '</body></html>';
+       . lp_menge_script() . lp_validate_script() . '</body></html>';
+}
+// Native Pflichtfeld-Meldung des Browsers in der PORTALSPRACHE zeigen (sonst erscheint sie in der
+// Browsersprache – z. B. Chinesisch auf einer deutschen Seite). Nur die „leeres Pflichtfeld"-Meldung
+// wird überschrieben; andere Validierungen bleiben Browser-Standard. Beim Tippen wieder freigeben.
+function lp_validate_script(): string {
+    $msg = json_encode(lp_t('val_pflicht'), JSON_UNESCAPED_UNICODE);
+    return '<script>(function(){var M=' . $msg . ';'
+         . 'document.addEventListener("invalid",function(e){var el=e.target;if(el&&el.validity&&el.validity.valueMissing&&el.setCustomValidity)el.setCustomValidity(M);},true);'
+         . 'function clr(e){if(e.target&&e.target.setCustomValidity)e.target.setCustomValidity("");}'
+         . 'document.addEventListener("input",clr,true);document.addEventListener("change",clr,true);})();</script>';
 }
 
 // Mengen-Eingabefelder (Klasse "lp-menge") live mit Tausendertrennung formatieren – überall im Portal.

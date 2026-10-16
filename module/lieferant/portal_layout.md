@@ -12,6 +12,7 @@ Kopf, Menü, Fuß und die **Übersetzung** für alle Portalseiten. Zwei Sprachen
 - Die Markenleiste zeigt das **bulkify-Logo** (`assets/bulkify-logo-white.png`), nicht mehr den Schriftzug – wie im internen Bereich.
 - **Drei Sprachen: Deutsch, English, 中文.** Die chinesischen Texte für Login, Einladung und Bestellablauf sind aus v3 übernommen, die neuen Bausteine (Firmendaten, Logo, Staffeln) sind neu übersetzt und gehören von jemandem gegengelesen, der Chinesisch spricht.
 - **Grenze:** Die PDFs (Bestellung, Angebot, Spezifikation, CoA) bleiben deutsch/englisch. Der PDF-Baukasten bringt nur westliche Schriften mit; für chinesische Zeichen müsste erst eine CJK-Schrift eingebettet werden.
+- `lp_validate_script()` (in `lp_foot()` eingebunden) – lokalisiert die **native Browser-Pflichtfeld-Meldung** auf die Portalsprache. Ohne das zeigt der Browser „leeres Pflichtfeld" in SEINER Sprache (z. B. Chinesisch auf einer deutschen Seite – wirkt wie „nur teilweise übersetzt"). Überschrieben wird nur `validity.valueMissing` via `setCustomValidity(lp_t('val_pflicht'))`, beim Tippen/Ändern wieder freigegeben; andere Validierungen bleiben Browser-Standard. Key `val_pflicht` (de/en/zh) – nicht mit `pflichtfeld` („Pflichtfeld." als Label-Suffix) verwechseln.
 
 ## Verwandt
 `core/auth.php` (`ist_lieferant()`, `aktueller_lieferant()`, `lieferant_sprache()`).
