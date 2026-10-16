@@ -5,6 +5,7 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status-Badges
 require_once BX_ROOT . '/core/ki.php';           // KI-Angebots-PDF-Erfassung
+require_once BX_ROOT . '/core/dienstleistung.php'; // DL-Katalog-Positionen (dl_position_add) + Kundenwunsch bei DL-Angeboten
 
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
@@ -223,6 +224,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mng = (float)str_replace(',', '.', $_POST['add_menge'] ?? '0');
             if ($iid) angebot_gruppe_anhaengen((int)$id, angebot_rohstoff_zeile($iid, $mng, trim($_POST['add_einheit'] ?? ''), $kid));
         } else { // add_dienstleistung
+            // Aus dem DL-Katalog gewählt? Dann über dl_position_add – das setzt dienstleistung_id (für den späteren
+            // DL-Auftrag) und den kundenspezifischen Preis (dl_kundenpreis). Sonst Freitext-Zuschlag wie bisher.
+            $dlid = (int)($_POST['add_dl_id'] ?? 0);
+            if ($dlid > 0 && function_exists('dl_position_add')) {
+                $mng = (float)str_replace(',', '.', $_POST['add_dl_menge'] ?? '1') ?: 1;
+                dl_position_add((int)$id, $dlid, $mng);
+                header('Location: ?p=angebot&id=' . $id . '&gespeichert=1#positionen'); exit;
+            }
             $bez = trim($_POST['add_bez'] ?? '');
             if ($bez !== '') {
                 $preis = (float)str_replace(',', '.', $_POST['add_preis'] ?? '0');
@@ -318,6 +327,13 @@ $rohstoffKatalog = all("SELECT id, name, artikelnummer, preis_bezug, beschaffenh
 $verpPrim   = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name");
 $verpDeckel = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND verpackung_rolle='verschluss' AND gesperrt=0 ORDER BY name");
 $verpEtik   = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND verpackung_rolle='etikett' AND gesperrt=0 AND produkt_id IS NULL ORDER BY name");
+// Dienstleistungs-Angebot: dieselbe reguläre Maske, nur mit DL-Katalog beim Position-Hinzufügen und dem
+// Kundenwunsch aus der DL-Anfrage. So baut man EIN reguläres Angebot mit Dienstleistung + Produkten (Gläser, Etikett).
+$istDL    = (string)($a['kategorie'] ?? 'produkt') === 'dienstleistung';
+$dlKatalog = function_exists('dienstleistungen_alle') ? dienstleistungen_alle(true) : [];
+$dlWunsch = (!$neu && !empty($a['anfrage_id']))
+    ? one("SELECT nummer, betreff, notiz, dienstleistung_typ, zielpreis, wunsch_menge, wunsch_einheit FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']])
+    : null;
 
 $pid  = (int)($a['produkt_id'] ?? 0);
 $kid  = (int)($a['kunde_id'] ?? 0);
@@ -325,7 +341,7 @@ $form = $pid ? (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JO
 $defMarge = max(marge_typ_prozent($form ?: 'kapsel'), marge_min_prozent());
 $defPz    = (float) meta_get('produktionszeit_wochen', 7);
 
-render_header('angebote', $neu ? 'Neues Angebot' : ($a['nummer'] ?? 'Angebot'));
+render_header($istDL ? 'dienstleistungen' : 'angebote', $neu ? 'Neues Angebot' : ($a['nummer'] ?? 'Angebot'));
 // Senden und Zurückziehen sind die einzigen Wege, die Sichtbarkeit beim Kunden zu ändern.
 $st          = (string)($a['status'] ?? 'offen');
 $preiseKunde = (int)($a['preise_kunde'] ?? 0) === 1;   // sieht der Kunde die Preise?
@@ -337,7 +353,7 @@ $kannPreisSperren   = !$neu && $st !== 'offen' && $preiseKunde;
 // Nach dem Senden zeigt die Seite eine ruhige Übersicht; „Bearbeiten" (?edit=1) schaltet in den Editor.
 // Entwürfe (offen) und neue Angebote öffnen direkt im Editor.
 $editMode = $neu || $st === 'offen' || isset($_GET['edit']);
-$kopfBtn = bx_btn('Zurück zur Liste', '?p=angebote', 'ghost');
+$kopfBtn = bx_btn('Zurück zur Liste', $istDL ? '?p=dl_angebote' : '?p=angebote', 'ghost');
 if (!$neu) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Angebot als PDF ansehen – genau das, was der Kunde bekommt" href="?p=angebot_pdf&id=' . (int)$id . '">&#8681; PDF</a>' . $kopfBtn;
 if (!$neu && (int)($a['jahresvertrag'] ?? 0) === 1) $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Jahresabnahmevertrag als PDF" href="?p=vertrag_pdf&id=' . (int)$id . '">&#8681; Vertrag</a>' . $kopfBtn;
 // Angebot löschen: NUR das Angebot – die Anfrage bleibt bestehen und ist danach wieder offen für ein neues Angebot.
@@ -414,6 +430,21 @@ if (isset($_GET['zurueckgesetzt'])) echo '<div class="bx-panel badge-ok" style="
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 if (isset($_GET['kiok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['kiok'] . ' Positionen aus dem PDF übernommen (Herstellung, Verpackung, Etikett) – bitte prüfen.</div>';
 if (isset($_GET['kifehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['kifehler']) . '</div>';
+
+// Kundenwunsch aus der DL-Anfrage (wie in der alten DL-Maske) – damit man beim Angebot sieht, was der Kunde wollte.
+if ($istDL && $dlWunsch && (trim((string)($dlWunsch['betreff'] ?? '')) !== '' || trim((string)($dlWunsch['notiz'] ?? '')) !== '' || ($dlWunsch['zielpreis'] ?? null) !== null || ($dlWunsch['wunsch_menge'] ?? null) !== null)):
+?>
+<div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2)">
+  <h2 style="margin-top:0;font-size:16px">Wunsch des Kunden <span class="muted" style="font-weight:normal;font-size:13px">(Anfrage <?= h((string)($dlWunsch['nummer'] ?? '')) ?>)</span></h2>
+  <div class="bx-tablewrap"><table class="bx-table"><tbody>
+    <?php if (trim((string)($dlWunsch['dienstleistung_typ'] ?? '')) !== ''): ?><tr><td style="width:200px" class="muted">Art</td><td><?= h((string)$dlWunsch['dienstleistung_typ']) ?></td></tr><?php endif; ?>
+    <?php if (trim((string)($dlWunsch['betreff'] ?? '')) !== ''): ?><tr><td class="muted">Betreff</td><td><?= h((string)$dlWunsch['betreff']) ?></td></tr><?php endif; ?>
+    <?php if (($dlWunsch['wunsch_menge'] ?? null) !== null && (float)$dlWunsch['wunsch_menge'] > 0): ?><tr><td class="muted">Gewünschte Menge</td><td><?= h(rtrim(rtrim(number_format((float)$dlWunsch['wunsch_menge'],3,',','.'),'0'),',')) ?> <?= h((string)($dlWunsch['wunsch_einheit'] ?? '')) ?></td></tr><?php endif; ?>
+    <?php if (($dlWunsch['zielpreis'] ?? null) !== null && (float)$dlWunsch['zielpreis'] > 0): ?><tr><td class="muted">Zielpreis</td><td><?= number_format((float)$dlWunsch['zielpreis'],2,',','.') ?> €</td></tr><?php endif; ?>
+    <?php if (trim((string)($dlWunsch['notiz'] ?? '')) !== ''): ?><tr><td class="muted">Notiz</td><td style="white-space:pre-line"><?= h((string)$dlWunsch['notiz']) ?></td></tr><?php endif; ?>
+  </tbody></table></div>
+</div>
+<?php endif;
 
 // ===================== ÜBERSICHT (nach dem Senden, wie v3) =====================
 // Ruhige, belegartige Ansicht: Kopfdaten (Kunde) · Positionen · Summen. „Bearbeiten" oben schaltet in den Editor.
@@ -731,8 +762,19 @@ if (!$neu):
 
   <form method="post" data-add="dienstleistung" style="display:none">
     <input type="hidden" name="aktion" value="add_dienstleistung">
+    <?php if ($dlKatalog): ?>
     <div class="bx-grid">
-      <div class="bx-field"><label>Bezeichnung</label><input type="text" name="add_bez" placeholder="z. B. Laboranalyse" required></div>
+      <div class="bx-field" style="min-width:320px"><label>Aus dem Dienstleistungs-Katalog</label>
+        <select name="add_dl_id" class="rscombo"><option value="">– frei eintragen (unten) –</option>
+          <?php foreach ($dlKatalog as $d): ?><option value="<?= (int)$d['id'] ?>"><?= h($d['name']) ?> (<?= h(dienstleistung_preis_text($d)) ?>)</option><?php endforeach; ?>
+        </select>
+      </div>
+      <div class="bx-field" style="max-width:120px"><label>Menge</label><input type="text" name="add_dl_menge" value="1" style="text-align:right"></div>
+    </div>
+    <div class="muted" style="font-size:12px;margin:4px 0 10px">Katalog-Leistung gewählt? Preis kommt automatisch (kundenspezifisch, falls hinterlegt) – Menge ggf. anpassen. Sonst unten frei eintragen.</div>
+    <?php endif; ?>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Bezeichnung (frei)</label><input type="text" name="add_bez" placeholder="z. B. Laboranalyse"></div>
       <div class="bx-field"><label>Menge</label><input type="number" step="0.01" name="add_menge" value="1"></div>
       <div class="bx-field"><label>Einheit</label><input type="text" name="add_einheit" placeholder="Stück / Pauschal"></div>
       <div class="bx-field"><label>Preis je Einheit (€)</label><input type="number" step="0.01" name="add_preis" placeholder="0,00"></div>

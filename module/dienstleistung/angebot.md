@@ -1,10 +1,13 @@
-# module/dienstleistung/angebot.php - DL-Angebot (Editor)
+# module/dienstleistung/angebot.php - Redirect-Stub
 
-Route `?p=dl_angebot&id=<ID>`. Bearbeitet ein Dienstleistungs-Angebot (DA-).
+**DL-Angebote werden jetzt in der regulären Angebotsmaske bearbeitet** (`module/angebot/detail.php`),
+damit Dienstleistung **und** Produkte (Gläser, Etikett, …) in **einem** regulären Angebot zusammengeführt
+werden können. Die Route `?p=dl_angebot` zeigt in `public/index.php` direkt auf `angebot/detail.php`.
 
-- Kopf: Kunde, gültig bis, Notiz.
-- Positionen: aus dem DL-Katalog hinzufügen (`dl_position_add`), Menge/Preis je Zeile editierbar (`dl_position_update`), löschen (`dl_position_del`). Preis/Einheit/MwSt kommen aus dem Katalog, je Angebot überschreibbar.
-- Status: gesendet/abgelehnt.
-- "Angebot bestätigen -> DL-Auftrag anlegen": setzt Status bestätigt und erzeugt den DL-Auftrag (`dl_auftrag_aus_angebot`, Nummernkreis DB-).
+Diese Datei ist nur noch ein **Stub**: Sie fängt alte Direkt-/Bookmark-Aufrufe von `?p=dl_angebot&id=<ID>`
+ab und leitet auf `?p=angebot&id=<ID>` um (bzw. ohne ID auf die DL-Angebotsliste `?p=dl_angebote`).
 
-Alle Summen/Logik in `core/dienstleistung.php`.
+DL-Angebote sind weiterhin `angebot`-Zeilen mit `kategorie='dienstleistung'` (Nummernkreis DA-) und erscheinen
+in der getrennten DL-Liste `?p=dl_angebote`. Die DL-spezifischen Teile (Kundenwunsch-Panel, DL-Katalog beim
+Position-Hinzufügen mit `dl_position_add` inkl. `dienstleistung_id` + Kundenpreis) sind in `angebot/detail.php`
+eingebaut. Summen/Logik bleiben in `core/dienstleistung.php`.

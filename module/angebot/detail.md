@@ -90,9 +90,17 @@ vergibt den nächsten Buchstaben, normalisiert die A)/B)-Präfixe).
   Produkt-SKU.
 - **Rohstoff** (`add_rohstoff`) → Rohstoff + Menge + Einheit → `angebot_rohstoff_zeile()` (EK-Staffel ×
   Verpackungs-/Rohstoff-Aufschlag, Kundenrabatt).
-- **Dienstleistung** (`add_dienstleistung`) → Bezeichnung + Menge + Preis (freie Position).
+- **Dienstleistung** (`add_dienstleistung`) → **zwei Wege in einem Formular**:
+  - **Aus dem DL-Katalog** (`add_dl_id` + `add_dl_menge`, sichtbar sobald es aktive Katalog-Einträge gibt): übernimmt die Leistung über `dl_position_add()` – das schreibt `angebot_position.dienstleistung_id` (für den späteren DL-Auftrag) und den **kundenspezifischen** Preis (`dl_kundenpreis()`), MwSt aus dem Katalog.
+  - **Frei** (`add_bez` + Menge + Einheit + Preis): freie Dienstleistungs-Position wie bisher.
 
 „**+ freie Position**" in der Positionstabelle bleibt für schnelle manuelle Zeilen/Zuschläge.
+
+## DL-Angebote laufen über DIESE Maske
+Dienstleistungs-Angebote (`angebot.kategorie='dienstleistung'`, Nummernkreis DA-) werden **hier** bearbeitet, nicht mehr in einer eigenen Maske – so lässt sich **eine Dienstleistung zusammen mit Produkten (Gläser, Etikett, Rezeptur …) in EINEM regulären Angebot** zusammenstellen. Die Route `?p=dl_angebot` zeigt direkt auf `angebot/detail.php` (die alte `dienstleistung/angebot.php` ist nur noch ein Redirect-Stub). Bei einem DL-Angebot:
+- `$istDL` (aus `kategorie`) schaltet Menü-Highlight auf „Dienstleistungen" und „Zurück zur Liste" auf `?p=dl_angebote`.
+- Steht oben das **Kundenwunsch-Panel** aus der verknüpften DL-Anfrage (`$dlWunsch` aus `portal_anfrage`: Art, Betreff, gewünschte Menge, Zielpreis, Notiz).
+- Senden/Preise/Portal/Annahme laufen wie bei jedem Angebot; die Kundenannahme erzeugt bei DL den DL-Auftrag (`dl_auftrag_aus_angebot()`).
 
 Hinweis: Das frühere „Produkt zusammenstellen" (Produkt-Auswahl) ist ersetzt. Für Alt-Angebote ohne
 Anfrage nutzt die Automatik weiter die Produkt-Standardmenge `einheiten_pro_packung` (nicht die kleinste
