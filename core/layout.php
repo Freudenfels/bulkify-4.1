@@ -23,7 +23,7 @@ function bx_nav_default(): array {
         'Vertrieb'     => ['kunden' => 'Kunden', 'partner' => 'Partner', 'angebote' => 'Angebote', 'auftraege' => 'Aufträge', 'dienstleistungen' => 'Dienstleistungen', 'rechnungen_ansicht' => 'Rechnungen (Ansicht)', 'fasttrack' => 'Fast Track', 'kontingente' => 'Kontingente'],
         'Anfragen'     => [
             'anfragen'           => 'Rezepturanfragen',
-            'paf_produkt'        => ['label'=>'Portal-Anfragen',         'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen'],
+            'paf_produkt'        => ['label'=>'Produktanfragen',        'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=produkt',        'typ'=>'produkt'],
             'paf_rohstoff'       => ['label'=>'Rohstoffanfragen',       'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=rohstoff',       'typ'=>'rohstoff'],
             'paf_dienstleistung' => ['label'=>'Dienstleistungsanfragen', 'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=dienstleistung', 'typ'=>'dienstleistung'],
         ],
@@ -94,13 +94,10 @@ function bx_anfrage_counts(): array {
     if (!function_exists('scalar')) return $c;
     try {
         $c['anfragen'] = (int) scalar("SELECT COUNT(*) FROM rezeptur_anfrage WHERE status NOT IN ('beantwortet','abgelehnt')");
-        $total = 0;
         foreach (all("SELECT typ, COUNT(*) c FROM portal_anfrage WHERE status NOT IN ('beantwortet','abgelehnt') GROUP BY typ") as $r) {
-            $total += (int) $r['c'];
-            $k = ['rohstoff'=>'paf_rohstoff','dienstleistung'=>'paf_dienstleistung'][$r['typ']] ?? null;
+            $k = ['produkt'=>'paf_produkt','rohstoff'=>'paf_rohstoff','dienstleistung'=>'paf_dienstleistung'][$r['typ']] ?? null;
             if ($k) $c[$k] = (int) $r['c'];
         }
-        $c['paf_produkt'] = $total;   // Sammel-Eintrag „Portal-Anfragen" = alle offenen Portal-Anfragen (jeden Typs)
     } catch (Throwable $e) { /* Tabelle evtl. noch nicht da */ }
     return $c;
 }
