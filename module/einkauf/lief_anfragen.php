@@ -82,8 +82,8 @@ bx_head('Lieferanten-Anfragen & Preise', 'Alle an Lieferanten gestellten Anfrage
     ?>
       <tr>
         <td style="white-space:nowrap"><a href="?p=lief_anfrage_detail&id=<?= (int)$r['id'] ?>"><?= h((string)($r['nummer'] ?: ('#'.$r['id']))) ?></a></td>
-        <td style="max-width:200px;overflow-wrap:anywhere"><?= h((string)($r['firma'] ?: '–')) ?></td>
-        <td style="max-width:320px;overflow-wrap:anywhere">
+        <td style="max-width:200px;white-space:normal;overflow-wrap:anywhere"><?= h((string)($r['firma'] ?: '–')) ?></td>
+        <td style="max-width:320px;white-space:normal;overflow-wrap:anywhere">
           <?php if ($wasLink): ?><a href="<?= $wasLink ?>"><?= h($wasText) ?></a><?php else: ?><?= h($wasText) ?><?php endif; ?>
           <?php if ((int)$r['rezeptur_id'] > 0 && !empty($r['rez_kunde'])): ?><div class="muted" style="font-size:11px">Kunde: <?= h((string)$r['rez_kunde']) ?></div><?php endif; ?>
           <?php if ($artBadge): ?><div><?= $artBadge ?></div><?php endif; ?>
