@@ -232,6 +232,8 @@ Admin-Reiter `?p=alt_rechnungen` (originale Rechnungen alter Aufträge). Siehe `
 ## Rohstoff-Infoblatt in der eigenen Rezeptur
 Zutaten in der Rezeptur-Ansicht verlinken auf das Rohstoff-Infoblatt (`?view=rohstoff&iid=`). Das Infoblatt ist jetzt auch ohne Katalog-Zugang (`portal_rohstoffe`) sichtbar, WENN der Rohstoff in einer eigenen, sichtbaren Rezeptur des Kunden steckt (via `portal_rezeptur`). Nur bulkify-Dokumente/Werte, nie Lieferanten-Originale.
 
+**„Spec/CoA ansehen" nur bei echtem Inhalt (Stand 2026-10):** In der Dokumente-Spalte der Rezeptur-Zutaten erscheint der Link **„Spec/CoA ansehen"** nur, wenn es für den Rohstoff überhaupt etwas Kundensichtbares gibt – eine **freigegebene bulkify-Spezifikation mit echten Daten** (`item.spec_freigegeben=1 && spec_hat_daten()`) ODER eine **freigegebene Charge-CoA** (`charge.coa_freigegeben=1`). Vorberechnet in `$rezHatSpecCoa` je Zutat-Rohstoff. Vorher wurde der Link immer gezeigt (sobald die Zutat einem Rohstoff zugeordnet war) → führte auf ein leeres/fast leeres Infoblatt, wenn nur der Name gepflegt war. Bereits freigegebene Dokumente (`dokumente_fuer_kunde`, z. B. Laboranalysen) werden wie bisher direkt verlinkt.
+
 ## Roter Zähler „Etiketten" im Portal-Menü (2026-10-06)
 Der Menüpunkt **Etiketten** zeigt einen **roten** Zähler (`.pt-badge-rot`) = Anzahl aktiver Bestellungen **ohne hochgeladenes Etikett-Design** (`$etikettFehltAnzahl`: auftrag.kunde_id, status NOT IN versendet/storniert, kein `dokument` typ='etikett'). Dieselbe Bedingung wie die „Etikett fehlt"-Liste in der Etiketten-Ansicht – der Zähler entspricht also der Anzahl der Zeilen mit „Etikett hochladen". Rot statt grün signalisiert Handlungsbedarf beim Kunden (`$navBadgeRot['etiketten']`). Andere Zähler bleiben grün (lime).
 

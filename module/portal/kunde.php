@@ -1494,6 +1494,17 @@ foreach ($rezZutaten as $z) if (!empty($z['item_id'])) {
     $dk = dokumente_fuer_kunde('item', (int)$z['item_id']);
     if ($dk) $rezDoks[(int)$z['item_id']] = $dk;
 }
+// „Spec/CoA ansehen" nur anbieten, wenn es für den Rohstoff überhaupt etwas Kundensichtbares gibt:
+// eine FREIGEGEBENE bulkify-Spezifikation (mit echten Daten) ODER eine FREIGEGEBENE Charge-CoA. Sonst
+// wäre das Infoblatt/Papier leer – dann keinen Link zeigen (nur der Name ist kein „Papier").
+$rezHatSpecCoa = [];
+if ($rezZutaten) { require_once BX_ROOT . '/core/pdf_spec.php';
+  foreach ($rezZutaten as $z) { $iid = (int)($z['item_id'] ?? 0); if ($iid <= 0 || isset($rezHatSpecCoa[$iid])) continue;
+    $hat = (int) scalar("SELECT COUNT(*) FROM charge WHERE item_id=? AND coa_freigegeben=1", [$iid]) > 0;
+    if (!$hat && (int) scalar("SELECT spec_freigegeben FROM item WHERE id=?", [$iid]) === 1 && spec_hat_daten($iid)) $hat = true;
+    $rezHatSpecCoa[$iid] = $hat;
+  }
+}
 // Spec/CoA stehen bewusst NICHT in dokumente_fuer_kunde (keine Lieferanten-Originale). Unsere
 // bulkify-Spezifikation ist aber für jeden Rohstoff erzeugbar -> je Zutat aufs Infoblatt verlinken.
 
@@ -2569,7 +2580,7 @@ portal_head('Kundenportal · ' . $k['firma']);
             <td><?php if ($dk): foreach ($dk as $d): ?>
                   <a href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener" style="margin-right:10px"><?= h($DOKTYP[$d['typ']] ?? $d['typ']) ?></a>
                 <?php endforeach;
-                elseif (!empty($z['item_id'])): ?>
+                elseif (!empty($z['item_id']) && !empty($rezHatSpecCoa[(int)$z['item_id']])): ?>
                   <a href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$z['item_id'] ?>" title="Spezifikation / Analysenzertifikat (bulkify) auf dem Rohstoff-Infoblatt">Spec/CoA ansehen</a>
                 <?php else: ?><span class="muted">–</span><?php endif; ?></td></tr>
         <?php endforeach; ?>
