@@ -150,6 +150,7 @@ $routes = [
     'versand'            => 'versand/liste.php',
     'einstellungen'      => 'system/einstellungen.php',
     'protokoll'          => 'system/protokoll.php',   // Admin-Protokoll: wer hat wann was gemacht
+    'durchlaufzeiten'    => 'system/durchlaufzeiten.php', // Durchlaufzeiten-Tracker: Dauer je Meilenstein (Rezepturanfrage -> Produktion fertig)
     'benachrichtigungen' => 'system/benachrichtigungen.php', // Team-Postfach (als gelesen markieren)
     'maschinen'          => 'system/maschinen.php',    // Maschinenfuhrpark (Spec 9.3) – Dashboard-Verwaltung (pr_maschine/pr_raum)
     'menu_editor'        => 'system/menu_editor.php',   // Menü selbst anpassen (Drag & Drop), global

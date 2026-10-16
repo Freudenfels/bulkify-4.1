@@ -4075,6 +4075,63 @@ function kunde_produkt_preise(int $kunde_id): array {
     foreach (all("SELECT DISTINCT ap.produkt_id FROM angebot_produkt ap JOIN angebot a ON a.id=ap.angebot_id WHERE a.kunde_id=?", [$kunde_id]) as $r) $ids[(int)$r['produkt_id']] = true;
     return $ids;
 }
+// Durchlaufzeiten-Tracker: je Vorgang (Rezepturanfrage -> Rezeptur -> Produkt -> Angebot -> Auftrag -> Produktion)
+// die Meilenstein-Zeitpunkte sammeln. m1..m7. Verkettung über die Rezeptur (rezeptur_anfrage.rezeptur_id =
+// rezeptur.id = produkt.rezeptur_id -> portal_anfrage/angebot/auftrag/produktion). Je Folge-Meilenstein der
+// FRÜHESTE Treffer (= „Zeit bis zum ersten X"). Nur Vorgänge, die als Rezepturanfrage begonnen haben.
+function durchlaufzeiten_rows(?int $kunde_id = null, ?string $von = null, ?string $bis = null): array {
+    if (!table_exists('rezeptur_anfrage') || !table_exists('rezeptur')) return [];
+    $w = ['ra.rezeptur_id IS NOT NULL']; $args = [];
+    if ($kunde_id) { $w[] = 'ra.kunde_id=?'; $args[] = $kunde_id; }
+    if ($von !== null && $von !== '') { $w[] = 'ra.angelegt>=?'; $args[] = $von . ' 00:00:00'; }
+    if ($bis !== null && $bis !== '') { $w[] = 'ra.angelegt<=?'; $args[] = $bis . ' 23:59:59'; }
+    $rows = all("SELECT ra.id anf_id, ra.nummer anf_nr, ra.kunde_id, k.firma,
+                        ra.angelegt m1, r.id rez_id, r.nummer rez_nr, r.name rez_name,
+                        r.angelegt m2, r.freigabe_am m3
+                 FROM rezeptur_anfrage ra
+                 JOIN rezeptur r ON r.id=ra.rezeptur_id
+                 LEFT JOIN kunden k ON k.id=ra.kunde_id
+                 WHERE " . implode(' AND ', $w) . "
+                 ORDER BY ra.angelegt DESC", $args);
+    if (!$rows) return [];
+    $rezIds = array_values(array_unique(array_map(fn($r) => (int)$r['rez_id'], $rows)));
+    $in = implode(',', array_fill(0, count($rezIds), '?'));
+    $prodToRez = [];
+    foreach (all("SELECT id, rezeptur_id FROM produkt WHERE rezeptur_id IN ($in)", $rezIds) as $p)
+        $prodToRez[(int)$p['id']] = (int)$p['rezeptur_id'];
+    $allProd = array_keys($prodToRez);
+    $m4 = $m5 = $m6 = $m7 = [];
+    $setMin = function (array &$m, int $rid, $ts) { if ($rid <= 0 || !$ts) return; if (!isset($m[$rid]) || strcmp((string)$ts, (string)$m[$rid]) < 0) $m[$rid] = $ts; };
+    if ($allProd) {
+        $pin = implode(',', array_fill(0, count($allProd), '?'));
+        foreach (all("SELECT produkt_id, MIN(angelegt) mn FROM portal_anfrage WHERE typ='produkt' AND produkt_id IN ($pin) GROUP BY produkt_id", $allProd) as $x)
+            $setMin($m4, $prodToRez[(int)$x['produkt_id']] ?? 0, $x['mn']);
+        foreach (all("SELECT produkt_id, MIN(angelegt) mn, MIN(freigabe_am) mb FROM angebot WHERE produkt_id IN ($pin) GROUP BY produkt_id", $allProd) as $x) {
+            $rid = $prodToRez[(int)$x['produkt_id']] ?? 0;
+            $setMin($m5, $rid, $x['mn']); $setMin($m6, $rid, $x['mb']);
+        }
+        if (table_exists('produktionsauftrag') && table_exists('produktion_schritt'))
+            foreach (all("SELECT au.produkt_id, MIN(x.fertig) mn
+                          FROM (SELECT pa.id, pa.auftrag_id, MAX(ps.erledigt_at) fertig
+                                FROM produktionsauftrag pa JOIN produktion_schritt ps ON ps.pa_id=pa.id
+                                WHERE pa.status='erledigt' GROUP BY pa.id) x
+                          JOIN auftrag au ON au.id=x.auftrag_id
+                          WHERE au.produkt_id IN ($pin) GROUP BY au.produkt_id", $allProd) as $x)
+                $setMin($m7, $prodToRez[(int)$x['produkt_id']] ?? 0, $x['mn']);
+    }
+    $out = [];
+    foreach ($rows as $r) {
+        $rid = (int)$r['rez_id'];
+        $out[] = [
+            'anf_nr' => $r['anf_nr'], 'kunde_id' => (int)$r['kunde_id'], 'firma' => $r['firma'],
+            'rez_id' => $rid, 'rez_nr' => $r['rez_nr'], 'rez_name' => $r['rez_name'],
+            'ms' => ['m1' => $r['m1'], 'm2' => $r['m2'], 'm3' => $r['m3'],
+                     'm4' => $m4[$rid] ?? null, 'm5' => $m5[$rid] ?? null,
+                     'm6' => $m6[$rid] ?? null, 'm7' => $m7[$rid] ?? null],
+        ];
+    }
+    return $out;
+}
 // Einen Kundenpreis (VK je Packung OHNE Verpackung) idempotent setzen -> Grundlage für „ab xy" im Portal.
 // Upsert je (Produkt, Kunde, Stück je Packung): bestehende Zeile dieser Größe wird aktualisiert, sonst neu.
 // Wird bei Angebots-Bestätigung automatisch aus der Herstellungs-Position/-Zelle gepflegt. $quelle = Herkunftsnotiz.
