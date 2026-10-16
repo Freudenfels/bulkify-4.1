@@ -1504,6 +1504,24 @@ function init_schema(): void {
            WHERE menge > 0 AND ek_preis > 0 AND (menge * ek_preis) > 1000000");
         meta_set('fix_bestellpos_gesamtpreis_v1', '1');
     }
+    // Einmalig: Lieferanten-/Partner-Kategorien aus dem v3-Import säubern. Der Import schrieb die
+    // item-Kategorien 'fertig'/'verkaufsfertig' in lieferanten.kategorien, das Formular kennt dort aber nur
+    // 'fertigprodukt' („Fertige Produkte"). Beides -> 'fertigprodukt'; nur gültige Keys behalten; dedupen.
+    if (meta_get('fix_lief_kategorien_v1', '') !== '1') {
+        $erlaubt = ['rohstoff','verpackung','verbrauch','maschine','labor','fertigprodukt'];
+        $map = ['fertig'=>'fertigprodukt', 'verkaufsfertig'=>'fertigprodukt'];
+        foreach (['lieferanten','partner'] as $tab) {
+            if (!table_exists($tab)) continue;
+            foreach (all("SELECT id, kategorien FROM $tab WHERE COALESCE(kategorien,'')<>''") as $r) {
+                $toks = array_filter(array_map('trim', explode(',', (string)$r['kategorien'])), fn($t) => $t !== '');
+                $neu = [];
+                foreach ($toks as $t) { $t = $map[$t] ?? $t; if (in_array($t, $erlaubt, true) && !in_array($t, $neu, true)) $neu[] = $t; }
+                $neuStr = implode(',', $neu);
+                if ($neuStr !== (string)$r['kategorien']) q("UPDATE $tab SET kategorien=? WHERE id=?", [$neuStr, (int)$r['id']]);
+            }
+        }
+        meta_set('fix_lief_kategorien_v1', '1');
+    }
     // Einmalig: 4 offene Annapurna-Auftraege ohne verknuepftes Produkt auf Wunsch loeschen
     // (AB-3213/3214/3215/3217 mit PR-2729..2732). Sicherung: nur solange sie wirklich KEIN Produkt haben.
     if (meta_get('del_auftrag_ohne_produkt_v3', '') !== '1') {
