@@ -36,7 +36,7 @@ if ($tab === 'fremd') {
                     LEFT JOIN rezeptur r    ON r.id = la.rezeptur_id
                     LEFT JOIN kapselgroesse kg ON kg.id = r.kapselgroesse_id
                     LEFT JOIN lieferanten l ON l.id = la.lieferant_id
-                    WHERE la.art='fertigprodukt'");
+                    WHERE la.art='fertigprodukt' OR la.rezeptur_id IS NOT NULL");
     $staffeln = [];
     if ($neuRows) {
         $agIds = array_values(array_unique(array_map(fn($x) => (int)$x['ag_id'], $neuRows)));
@@ -46,7 +46,7 @@ if ($tab === 'fremd') {
     }
     foreach ($neuRows as $nr) {
         $mk = fn($preis, $menge) => ['rezeptur_id'=>$nr['rezeptur_id'],
-            'rez_nr'=>$nr['rez_nr'] ?: $nr['la_nr'],
+            'rez_nr'=>$nr['rez_nr'], 'la_nr'=>$nr['la_nr'],
             'rez_name'=>$nr['rez_name'] ?: ($nr['betreff'] ?: 'Fremdfertigung'),
             'df'=>$nr['df'],'kapselgroesse'=>$nr['kapselgroesse'],'firma'=>$nr['firma'],'preis'=>$preis,'einheit'=>$nr['einheit'],'menge'=>$menge];
         $kand = !empty($staffeln[(int)$nr['ag_id']]) ? array_map(fn($s) => $mk($s['preis'], $s['menge_ab']), $staffeln[(int)$nr['ag_id']]) : [$mk($nr['preis'], $nr['menge'])];
@@ -80,7 +80,7 @@ if ($tab === 'fremd') {
 // Reiter-Zähler (ohne Suche).
 $cnt = [
     'fremd'      => (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot")
-                    + (int) scalar("SELECT COUNT(*) FROM lieferant_angebot ag JOIN lieferant_anfrage la ON la.id=ag.anfrage_id WHERE la.art='fertigprodukt'"),
+                    + (int) scalar("SELECT COUNT(*) FROM lieferant_angebot ag JOIN lieferant_anfrage la ON la.id=ag.anfrage_id WHERE la.art='fertigprodukt' OR la.rezeptur_id IS NOT NULL"),
     'rohstoff'   => (int) scalar("SELECT COUNT(*) FROM lieferant_preis"),
     'verpackung' => (int) scalar("SELECT COUNT(*) FROM pack_ek_staffel"),
     'zukauf'     => (int) scalar("SELECT COUNT(*) FROM produkt_lieferant_preis"),
@@ -105,11 +105,12 @@ bx_head('Einkaufspreise', 'Alle Einkaufspreise an einem Ort – Fremdfertigung, 
 <?php if ($tab === 'fremd'): ?>
   <?php if (!$rows): ?><div style="padding:16px" class="muted">Keine Fremdfertigungs-Preise.</div><?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Rezepturnr.</th><th>Rezeptur-Name</th><th>Form</th><th>Kapselgröße</th><th>Lieferant</th><th class="bx-num">Preis</th></tr></thead>
+    <thead><tr><th>Rezepturnr.</th><th>Anfrage</th><th>Rezeptur-Name</th><th>Form</th><th>Kapselgröße</th><th>Lieferant</th><th class="bx-num">Preis</th></tr></thead>
     <tbody>
     <?php foreach ($rows as $r): $rid=(int)$r['rezeptur_id']; $ek=($r['preis']!==null && (float)$r['preis']>0)?(float)$r['preis']:null; ?>
       <tr>
         <td class="muted"><?= h((string)($r['rez_nr'] ?? '')) ?: '–' ?></td>
+        <td class="muted"><?= !empty($r['la_nr']) ? h((string)$r['la_nr']) : '–' ?></td>
         <td><?php if ($rid): ?><a class="kundenlink bx-rezpop" href="?p=rezeptur_popup&id=<?= $rid ?>"><?= h((string)($r['rez_name'] ?? '–')) ?></a><?php else: ?><?= h((string)($r['rez_name'] ?? '')) ?: '<span class="muted">–</span>' ?><?php endif; ?></td>
         <td class="muted"><?= h($dfLabel[(string)$r['df']] ?? (string)($r['df'] ?? '')) ?></td>
         <td><?= !empty($r['kapselgroesse']) ? h((string)$r['kapselgroesse']) : '<span class="muted">–</span>' ?></td>

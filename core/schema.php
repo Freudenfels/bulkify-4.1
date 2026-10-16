@@ -1504,6 +1504,15 @@ function init_schema(): void {
            WHERE menge > 0 AND ek_preis > 0 AND (menge * ek_preis) > 1000000");
         meta_set('fix_bestellpos_gesamtpreis_v1', '1');
     }
+    // Einmalig: Fremdfertigungs-Anfragen, die an einer Rezeptur hängen, aber nicht als 'fertigprodukt'
+    // markiert sind (Altbestand/Freitext), korrekt auf art='fertigprodukt' setzen. Eine rezeptur-verknüpfte
+    // Anfrage ist immer eine Fremdfertigung – so erscheinen die Angebote in den Fertigprodukt-Preisen UND
+    // zählen als Fremd-EK-Quelle. Nicht-destruktiv.
+    if (meta_get('fix_la_art_fertig_v1', '') !== '1') {
+        if (table_exists('lieferant_anfrage'))
+            q("UPDATE lieferant_anfrage SET art='fertigprodukt' WHERE rezeptur_id IS NOT NULL AND COALESCE(art,'')<>'fertigprodukt'");
+        meta_set('fix_la_art_fertig_v1', '1');
+    }
     // Einmalig: Lieferanten-/Partner-Kategorien aus dem v3-Import säubern. Der Import schrieb die
     // item-Kategorien 'fertig'/'verkaufsfertig' in lieferanten.kategorien, das Formular kennt dort aber nur
     // 'fertigprodukt' („Fertige Produkte"). Beides -> 'fertigprodukt'; nur gültige Keys behalten; dedupen.
