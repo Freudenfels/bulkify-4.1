@@ -22,18 +22,24 @@ $suche   = trim((string)($_GET['q'] ?? ''));
 $SORT = ['neu'=>'Neueste zuerst', 'alt'=>'Älteste zuerst', 'kunde'=>'Kunde (A–Z)', 'status'=>'Status'];
 $sort = isset($SORT[$_GET['sort'] ?? '']) ? $_GET['sort'] : 'neu';
 
+// „Sichtbares, preislich freigegebenes Angebot" = genau das, was der Kunde im Portal als Angebot sieht
+// (vgl. module/portal/kunde.php). Damit deckt sich die Admin-Ansicht „Offen/Beantwortet" mit der Kundensicht
+// (in Prüfung vs. Angebot erhalten): eine Anfrage mit Status 'beantwortet', deren Angebot aber zurückgezogen
+// oder preislich gesperrt wurde, zählt wieder als OFFEN (wir müssen ran) – nicht mehr als beantwortet.
+$ANG = "EXISTS(SELECT 1 FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id AND COALESCE(a.kunde_ausgeblendet,0)=0 AND a.status<>'offen' AND a.preise_kunde=1)";
+
 $w = []; $args = [];
 if ($filterTyp !== 'alle' && isset($TYP[$filterTyp])) { $w[] = "pa.typ=?"; $args[] = $filterTyp; }
-// Bei aktiver Suche über ALLE Status suchen (die Ansicht-Tabs zählen dann nicht), sonst nach Ansicht filtern.
+// Bei aktiver Suche über ALLE Status suchen (die Ansicht-Tabs zählen dann nicht), sonst nach Ansicht (Bucket) filtern.
 if ($suche !== '') {
     // LIKE mit ESCAPE '=' (Backslash bringt MySQL live zum Absturz – siehe Projektregel).
     $like = '%' . str_replace(['=','%','_'], ['==','=%','=_'], $suche) . '%';
     $w[] = "(pa.nummer LIKE ? ESCAPE '=' OR k.firma LIKE ? ESCAPE '=' OR p.name LIKE ? ESCAPE '=' OR p.synonyme LIKE ? ESCAPE '=' OR rz.name LIKE ? ESCAPE '=' OR rz.synonyme LIKE ? ESCAPE '=' OR pa.betreff LIKE ? ESCAPE '=' OR pa.notiz LIKE ? ESCAPE '=')";
     array_push($args, $like, $like, $like, $like, $like, $like, $like, $like);
 } elseif ($ansicht === 'offen') {
-    $w[] = "pa.status IN ('neu','in_bearbeitung')";
+    $w[] = "pa.status<>'abgelehnt' AND NOT $ANG";
 } elseif ($ansicht === 'beantwortet') {
-    $w[] = "pa.status='beantwortet'";
+    $w[] = "pa.status<>'abgelehnt' AND $ANG";
 } elseif ($ansicht === 'abgelehnt') {
     $w[] = "pa.status='abgelehnt'";
 }
@@ -47,7 +53,8 @@ $order = match ($sort) {
 // Produkt der Anfrage: direkt (pa.produkt_id) ODER – z. B. bei Labortest-Dienstleistungen, die das Produkt in
 // der Position tragen – aus der ersten Positionszeile. So steht bei Dienstleistungen der Produktname dran.
 $rows = all("SELECT pa.*, k.firma, p.name AS produkt_name, rz.name AS rezeptur_name,
-                    COALESCE(NULLIF(posp.kundenname,''), posp.name) AS pos_produkt_name
+                    COALESCE(NULLIF(posp.kundenname,''), posp.name) AS pos_produkt_name,
+                    $ANG AS hat_angebot
              FROM portal_anfrage pa
              LEFT JOIN kunden k ON k.id=pa.kunde_id
              LEFT JOIN produkt p ON p.id=pa.produkt_id
@@ -57,17 +64,28 @@ $rows = all("SELECT pa.*, k.firma, p.name AS produkt_name, rz.name AS rezeptur_n
              LEFT JOIN produkt posp ON posp.id=fp.produkt_id
              $where ORDER BY $order", $args);
 // Zähler je Ansicht (für die Tabs) – unabhängig von der aktuellen Auswahl, aber im Typ-Filter.
+// Buckets exakt wie die Ansicht-Filter (echter Zustand via $ANG), damit Zähler und Liste zusammenpassen.
 $cntW = ''; $cntArgs = [];
-if ($filterTyp !== 'alle' && isset($TYP[$filterTyp])) { $cntW = 'WHERE typ=?'; $cntArgs[] = $filterTyp; }
-$cnt = ['offen'=>0,'beantwortet'=>0,'abgelehnt'=>0,'alle'=>0];
-foreach (all("SELECT status, COUNT(*) n FROM portal_anfrage $cntW GROUP BY status", $cntArgs) as $c) {
-    $cnt['alle'] += (int)$c['n'];
-    if (in_array($c['status'], ['neu','in_bearbeitung'], true)) $cnt['offen'] += (int)$c['n'];
-    elseif ($c['status'] === 'beantwortet') $cnt['beantwortet'] += (int)$c['n'];
-    elseif ($c['status'] === 'abgelehnt') $cnt['abgelehnt'] += (int)$c['n'];
-}
+if ($filterTyp !== 'alle' && isset($TYP[$filterTyp])) { $cntW = 'WHERE pa.typ=?'; $cntArgs[] = $filterTyp; }
+$cntRow = one("SELECT
+        SUM(CASE WHEN pa.status<>'abgelehnt' AND NOT $ANG THEN 1 ELSE 0 END) AS offen,
+        SUM(CASE WHEN pa.status<>'abgelehnt' AND $ANG THEN 1 ELSE 0 END) AS beantwortet,
+        SUM(CASE WHEN pa.status='abgelehnt' THEN 1 ELSE 0 END) AS abgelehnt,
+        COUNT(*) AS alle
+    FROM portal_anfrage pa $cntW", $cntArgs);
+$cnt = ['offen'=>(int)($cntRow['offen'] ?? 0), 'beantwortet'=>(int)($cntRow['beantwortet'] ?? 0),
+        'abgelehnt'=>(int)($cntRow['abgelehnt'] ?? 0), 'alle'=>(int)($cntRow['alle'] ?? 0)];
 $VTYPEN = ['glas'=>'Glas', 'pet'=>'PET-Dose', 'pla'=>'PLA-Becher', 'beutel'=>'Standbodenbeutel', 'stick'=>'Stick', 'blister'=>'Blister'];
-$stBadge = fn($s) => match ($s) { 'neu'=>bx_badge('neu','info'),'in_bearbeitung'=>bx_badge('in Bearbeitung','warn'),'beantwortet'=>bx_badge('Angebot abgegeben','ok'),'abgelehnt'=>bx_badge('abgelehnt','err'),default=>bx_badge($s) };
+// Badge aus dem echten Zustand (Status + ob ein Angebot beim Kunden sichtbar ist), nicht nur aus pa.status.
+$stBadge = function(array $r): string {
+    $s = (string)($r['status'] ?? '');
+    if ($s === 'abgelehnt') return bx_badge('abgelehnt','err');
+    if (!empty($r['hat_angebot'])) return bx_badge('Angebot abgegeben','ok');
+    // Kein sichtbares Angebot -> Kunde wartet. 'beantwortet' ohne Angebot = zurückgezogen/preisgesperrt.
+    if ($s === 'beantwortet')     return bx_badge('Angebot zurückgezogen – offen','warn');
+    if ($s === 'in_bearbeitung')  return bx_badge('in Bearbeitung','warn');
+    return bx_badge('neu','info');
+};
 // Hilfsfunktion: Link mit erhaltenen Parametern (Typ/Ansicht/Sortierung/Suche) bauen.
 $lnk = function(array $over) use ($filterTyp, $ansicht, $sort, $suche) {
     $p = array_merge(['p'=>'portal_anfragen', 'typ'=>$filterTyp, 'ansicht'=>$ansicht, 'sort'=>$sort, 'q'=>$suche], $over);
@@ -130,7 +148,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       <td><?= h($r['firma'] ?: '–') ?></td>
       <td><?= h($TYP[$r['typ']] ?? $r['typ']) ?></td>
       <td><?= h($txt) ?><?php if ($r['notiz']): ?> <a href="#" class="kundenlink" style="font-size:12px;white-space:nowrap" onclick="event.stopPropagation(); document.getElementById('nz<?= (int)$r['id'] ?>').showModal(); return false;" title="Notiz des Kunden ansehen">Notiz&nbsp;ansehen</a><?php endif; ?></td>
-      <td><?= $stBadge($r['status']) ?></td>
+      <td><?= $stBadge($r) ?></td>
       <td style="white-space:nowrap"><?= $r['angelegt'] ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>' ?></td>
       <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=portal_anfrage&id=<?= (int)$r['id'] ?>">öffnen</a></td>
     </tr>

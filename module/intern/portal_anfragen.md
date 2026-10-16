@@ -2,7 +2,14 @@
 
 **Zweck:** Eingangsliste aller Kundenanfragen aus dem Portal – **Produkt / Rohstoff / Dienstleistung** (die Rezepturanfrage läuft separat über `anfrage`). Rollen sales/production/einkauf.
 
-**Anzeige:** Filter nach Typ; Tabelle Nr. · Kunde · Typ · Anfrage · Status. Bei Produktanfragen wird der Text aus Produkt + Stück/Packung + Verpackung + Menge gebaut, sonst aus Betreff/Notiz. Neue Anfragen stehen oben.
+**Anzeige:** Filter nach Typ; Ansicht-Tabs Offen/Beantwortet/Abgelehnt/Alle; Tabelle Nr. · Kunde · Typ · Anfrage · Status. Bei Produktanfragen wird der Text aus Produkt + Stück/Packung + Verpackung + Menge gebaut, sonst aus Betreff/Notiz. Neue Anfragen stehen oben.
+
+## Offen/Beantwortet aus dem ECHTEN Zustand (nicht nur `pa.status`)
+Die Ansicht-Buckets richten sich danach, ob der Kunde wirklich ein Angebot sieht – nicht nur nach `portal_anfrage.status`. Das SQL-Prädikat `$ANG` prüft, ob ein **sichtbares, preislich freigegebenes** Angebot existiert (`angebot` mit `anfrage_id`+`kunde_id`, `kunde_ausgeblendet=0`, `status<>'offen'`, `preise_kunde=1`) – genau die Bedingung, unter der das Kundenportal ein Angebot zeigt.
+- **Offen** = `status<>'abgelehnt' AND NOT $ANG` → wir müssen ran (deckt sich mit Kundensicht „in Prüfung"). Enthält auch `status='beantwortet'`, dessen Angebot zurückgezogen/preisgesperrt wurde.
+- **Beantwortet** = `status<>'abgelehnt' AND $ANG` → Angebot liegt beim Kunden.
+- **Abgelehnt** = `status='abgelehnt'`.
+Zähler (Tabs) und Liste nutzen dieselben Bedingungen. Der **Status-Badge** (`$stBadge($r)`) kommt ebenfalls aus Status + `hat_angebot`: „Angebot abgegeben", „Angebot zurückgezogen – offen", „in Bearbeitung", „neu", „abgelehnt". (Analog zur Rezeptur-Anfragenliste `anfrage/liste.php`.)
 
 **Aktion:** Die ganze Zeile ist anklickbar (auch die Nr. und der „öffnen"-Button) und führt zur Detailseite `?p=portal_anfrage&id=…` (`portal_anfrage_detail.php`). Dort sieht man den genauen Wunsch und kann **Preise zurücksenden** (Angebot abgeben). Der Status-Badge zeigt „Angebot abgegeben", sobald ein Angebot draußen ist.
 
