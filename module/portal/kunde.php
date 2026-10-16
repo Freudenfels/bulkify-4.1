@@ -161,15 +161,23 @@ function portal_labortest_upsell(array $kunde, int $angebotId): void {
 }
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_annehmen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
-    $ang = $aid ? one("SELECT id, jahresvertrag FROM angebot WHERE id=? AND kunde_id=? AND status='gesendet'", [$aid, (int)$k['id']]) : null;
+    $ang = $aid ? one("SELECT id, jahresvertrag, kategorie, nummer FROM angebot WHERE id=? AND kunde_id=? AND status='gesendet'", [$aid, (int)$k['id']]) : null;
     // Jahresvertrags-Angebot wird NICHT als Einmalbestellung angenommen -> zum Jahresvertrags-Abschluss.
     if ($ang && !empty($ang['jahresvertrag'])) { header('Location: ?p=portal&token=' . $token . '&v=kontingente'); exit; }
     $name = $freigabeName();
     if ($ang && $name === null) { header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&freigabefehlt=1'); exit; }
     if ($ang) {
         q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $aid]);
-        $neuAuftrag = auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
-        portal_labortest_upsell($k, $aid);
+        if (($ang['kategorie'] ?? '') === 'dienstleistung') {
+            // Dienstleistungs-Angebot: eigener Weg -> bestätigt + DL-Auftrag(DB-) anlegen.
+            q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
+            log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'DL-Angebot ' . (string)$ang['nummer'] . ' im Portal verbindlich angenommen durch ' . $name . '.', 'angebot', 'angebot', $aid);
+            require_once BX_ROOT . '/core/dienstleistung.php';
+            $neuAuftrag = dl_auftrag_aus_angebot($aid);
+        } else {
+            $neuAuftrag = auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
+            portal_labortest_upsell($k, $aid);
+        }
         if (mail_bereit()) nach_antwort(fn() => mail_angebot_angenommen($aid, $neuAuftrag));
     }
     header('Location: ?p=portal&token=' . $token . '&v=bestellungen&bestaetigt=1'); exit;
@@ -917,6 +925,7 @@ $angebote = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produk
                    -- Waisen-Angebote (Produkt/Rezeptur in v3 gelöscht) nicht im Kundenportal zeigen: kein Produkt UND
                    -- keine Rezeptur-Position => für den Kunden nicht handelbar. Intern (Cockpit) bleiben sie sichtbar.
                    AND (a.produkt_id IS NOT NULL
+                        OR a.kategorie='dienstleistung'
                         OR EXISTS (SELECT 1 FROM angebot_position ap WHERE ap.angebot_id=a.id AND ap.rezeptur_id IS NOT NULL AND ap.rezeptur_id>0))
                  ORDER BY a.angelegt DESC", [$kid]);
 // Portal-Render ist schreibfrei (die POST-Handler oben sind bereits mit exit raus) -> Bestands-/Zeilen-Cache
@@ -1064,6 +1073,7 @@ $angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $prod
         'annehmbar' => $brauchtPos && (
               ($posRezCount[$id] ?? 0) > 0
            || !empty($anfRezOk[(int)($a['anfrage_id'] ?? 0)])
+           || (($a['kategorie'] ?? '') === 'dienstleistung' && $posGespeichert)   // DL-Angebot: Positionen reichen
         ),
         'prodzeit'=> ($a['produktionszeit_wochen'] ?? '') !== '' && $a['produktionszeit_wochen'] !== null ? (float)$a['produktionszeit_wochen'] : $produktionszeit,
         'gesperrt' => $gesperrt,   // v3-Import ohne v4-Preise: Preis wird finalisiert, keine Annahme

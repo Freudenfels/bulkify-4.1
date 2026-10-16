@@ -28,6 +28,7 @@ Spiegelt den Produkt-Weg (`auftrag_aus_angebot` / `rechnung_aus_auftrag`), aber 
 - `dl_subtabs($aktiv)` – Untermenue (Katalog/Angebote/Aufträge/Rechnungen)
 - `dl_angebote_alle()` / `dl_angebot_laden()` / `dl_positionen()` / `dl_angebot_summe()`
 - `dl_angebot_neu()` / `dl_position_add()` / `dl_position_update()` / `dl_position_del()` / `dl_angebot_status()`
+- `dl_angebot_senden($id)` – DL-Angebot an den Kunden senden (wie Produkt-Angebot): Status `gesendet`, **`preise_kunde=1`** (sonst im Portal unsichtbar), `gueltig_bis` (Default +30 Tage), Anfrage auf `beantwortet`, Mail via `mail_kunde_angebot()` (Portal-Link). Angenommen wird im Kundenportal über `aktion=angebot_annehmen`; der Portal-Handler erkennt `kategorie='dienstleistung'` und ruft `dl_auftrag_aus_angebot()` statt des Produkt-Wegs (`module/portal/kunde.php`). Die DL-Maske (`module/dienstleistung/angebot.php`) zeigt zusätzlich den **Wunsch des Kunden** aus der verknüpften `portal_anfrage` (Betreff/Notiz/Art/Zielpreis/Menge).
 - `dl_auftrag_aus_angebot()` – DB- aus bestätigtem DA- (idempotent)
 - `dl_rechnung_aus_auftrag()` – DR- aus DB-, kopiert die Positionen (idempotent, verweigert ohne Betrag)
 - `dl_auftraege_alle()` / `dl_auftrag_laden()` / `dl_rechnungen_alle()`

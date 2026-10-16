@@ -32,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($aktion === 'pos_del') { dl_position_del((int)($_POST['pos_id'] ?? 0)); header('Location: ?p=dl_angebot&id=' . $id); exit; }
     if ($aktion === 'status')  { dl_angebot_status($id, (string)($_POST['status'] ?? '')); header('Location: ?p=dl_angebot&id=' . $id . '&ok=1'); exit; }
+    if ($aktion === 'senden')  { $f = dl_angebot_senden($id); header('Location: ?p=dl_angebot&id=' . $id . ($f === '' ? '&gesendet=1' : '&fehler=' . rawurlencode($f))); exit; }
     if ($aktion === 'auftrag') {
         dl_angebot_status($id, 'bestaetigt');
         $aid = dl_auftrag_aus_angebot($id);
@@ -41,6 +42,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $pos    = dl_positionen($id);
 $sum    = dl_angebot_summe($id);
+// Kundenwunsch aus der zugehörigen Portal-Anfrage (falls das Angebot aus einer Anfrage entstand).
+$wunsch = !empty($a['anfrage_id'])
+    ? one("SELECT nummer, betreff, notiz, dienstleistung_typ, zielpreis, wunsch_menge, wunsch_einheit FROM portal_anfrage WHERE id=?", [(int)$a['anfrage_id']])
+    : null;
 $kunden = all("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");
 $katalog = dienstleistungen_alle(true);
 $auftragId = (int) scalar("SELECT id FROM auftrag WHERE angebot_id=? LIMIT 1", [$id]);
@@ -52,7 +57,21 @@ render_header('dienstleistungen', (string)$a['nummer']);
 bx_head('DL-Angebot ' . h((string)$a['nummer']), '', bx_btn('Zurück zur Liste', '?p=dl_angebote', 'ghost'));
 dl_subtabs('dl_angebote');
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['gesendet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Angebot an den Kunden gesendet – er sieht es jetzt im Portal.</div>';
+if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#e6c4c0;color:#8f231b">' . h((string)$_GET['fehler']) . '</div>';
 ?>
+<?php if ($wunsch && (trim((string)($wunsch['betreff'] ?? '')) !== '' || trim((string)($wunsch['notiz'] ?? '')) !== '' || ($wunsch['zielpreis'] ?? null) !== null || ($wunsch['wunsch_menge'] ?? null) !== null)): ?>
+<div class="bx-panel" style="border-color:var(--gruen);background:var(--panel-2)">
+  <h2 style="margin-top:0;font-size:16px">Wunsch des Kunden <span class="muted" style="font-weight:normal;font-size:13px">(Anfrage <?= h((string)($wunsch['nummer'] ?? '')) ?>)</span></h2>
+  <div class="bx-tablewrap"><table class="bx-table"><tbody>
+    <?php if (trim((string)($wunsch['dienstleistung_typ'] ?? '')) !== ''): ?><tr><td style="width:200px" class="muted">Art</td><td><?= h((string)$wunsch['dienstleistung_typ']) ?></td></tr><?php endif; ?>
+    <?php if (trim((string)($wunsch['betreff'] ?? '')) !== ''): ?><tr><td class="muted">Betreff</td><td><?= h((string)$wunsch['betreff']) ?></td></tr><?php endif; ?>
+    <?php if (($wunsch['wunsch_menge'] ?? null) !== null && (float)$wunsch['wunsch_menge'] > 0): ?><tr><td class="muted">Gewünschte Menge</td><td><?= h(rtrim(rtrim(number_format((float)$wunsch['wunsch_menge'],3,',','.'),'0'),',')) ?> <?= h((string)($wunsch['wunsch_einheit'] ?? '')) ?></td></tr><?php endif; ?>
+    <?php if (($wunsch['zielpreis'] ?? null) !== null && (float)$wunsch['zielpreis'] > 0): ?><tr><td class="muted">Zielpreis</td><td><?= number_format((float)$wunsch['zielpreis'],2,',','.') ?> €</td></tr><?php endif; ?>
+    <?php if (trim((string)($wunsch['notiz'] ?? '')) !== ''): ?><tr><td class="muted">Notiz</td><td style="white-space:pre-line"><?= h((string)$wunsch['notiz']) ?></td></tr><?php endif; ?>
+  </tbody></table></div>
+</div>
+<?php endif; ?>
 <div class="bx-cards">
   <div class="bx-card"><div class="k">Status</div><div class="v"><?= $statusBadge($a['status']) ?></div></div>
   <div class="bx-card"><div class="k">Netto</div><div class="v"><?= number_format((float)$sum['netto'],2,',','.') ?> €</div></div>
@@ -119,7 +138,12 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
 <div class="bx-panel">
   <h2 style="margin-top:0">Status &amp; Auftrag</h2>
   <div class="bx-row" style="gap:8px;flex-wrap:wrap">
-    <form method="post" style="margin:0"><input type="hidden" name="aktion" value="status"><input type="hidden" name="status" value="gesendet"><button class="btn btn-ghost btn-sm" type="submit">als gesendet markieren</button></form>
+    <?php if ($pos && in_array($a['status'], ['offen','abgelehnt'], true)): ?>
+      <form method="post" style="margin:0" onsubmit="return confirm('Angebot <?= h((string)$a['nummer']) ?> jetzt an den Kunden senden? Er sieht es dann im Portal und kann es annehmen.');"><input type="hidden" name="aktion" value="senden"><button class="btn btn-primary btn-sm" type="submit">An Kunden senden</button></form>
+    <?php elseif ($a['status'] === 'gesendet'): ?>
+      <span class="bx-badge badge-info" style="align-self:center">an Kunden gesendet</span>
+      <form method="post" style="margin:0" onsubmit="return confirm('Erneut senden?');"><input type="hidden" name="aktion" value="senden"><button class="btn btn-ghost btn-sm" type="submit">erneut senden</button></form>
+    <?php endif; ?>
     <form method="post" style="margin:0"><input type="hidden" name="aktion" value="status"><input type="hidden" name="status" value="abgelehnt"><button class="btn btn-ghost btn-sm" type="submit">abgelehnt</button></form>
     <span style="flex:1"></span>
     <?php if (!$auftragId && $pos): ?>

@@ -389,6 +389,20 @@ function dl_angebot_status(int $angebot_id, string $status): void {
     if (!in_array($status, $erlaubt, true)) return;
     q("UPDATE angebot SET status=? WHERE id=? AND kategorie='dienstleistung'", [$status, $angebot_id]);
 }
+// DL-Angebot an den Kunden SENDEN – wie beim Produkt-Angebot: Status 'gesendet', Preise für den Kunden
+// freigeben (preise_kunde=1, sonst sieht er es im Portal nicht), Gültigkeit setzen, Mail mit Portal-Link.
+function dl_angebot_senden(int $angebot_id): string {
+    $a = dl_angebot_laden($angebot_id);
+    if (!$a) return 'Angebot nicht gefunden.';
+    if ((int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=?", [$angebot_id]) === 0) return 'Bitte zuerst mindestens eine Leistung hinzufügen.';
+    if (empty($a['kunde_id'])) return 'Bitte zuerst einen Kunden wählen.';
+    $gueltig = $a['gueltig_bis'] ?: date('Y-m-d', strtotime('+30 days'));
+    q("UPDATE angebot SET status='gesendet', preise_kunde=1, gueltig_bis=?, aktualisiert=CURRENT_TIMESTAMP WHERE id=? AND kategorie='dienstleistung'", [$gueltig, $angebot_id]);
+    if (!empty($a['anfrage_id'])) q("UPDATE portal_anfrage SET status='beantwortet' WHERE id=?", [(int)$a['anfrage_id']]);
+    log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'DL-Angebot ' . (string)$a['nummer'] . ' an den Kunden gesendet.', 'angebot', 'angebot', $angebot_id);
+    if (function_exists('mail_bereit') && mail_bereit() && function_exists('mail_kunde_angebot')) mail_kunde_angebot($angebot_id);
+    return '';
+}
 
 // DL-Auftrag (DB-) aus einem bestaetigten DL-Angebot. Ein Service pro Auftrag: je Angebotsposition ein
 // eigener DB-Auftrag (mit dienstleistung_id + angebot_position_id + materialisierten Schritten). Idempotent.
