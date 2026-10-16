@@ -10,13 +10,15 @@ require_once __DIR__ . '/schema.php';
 function lieferanten_fuer_anfrage(string $kat = ''): array {
     $w = "gesperrt=0 AND COALESCE(keine_anfragen,0)=0"; $args = [];
     if ($kat !== '') {
-        // Synonyme abfangen: das Lieferanten-Formular nutzt 'fertigprodukt', der v3-Import aber die
-        // item-Kategorien 'fertig'/'verkaufsfertig'. Beides bedeutet „macht Fertigprodukte".
+        // STRIKT: nur Lieferanten, die diese Kategorie wirklich führen. Ohne Kategorie (noch nicht
+        // eingeordnet, z. B. interne „Lieferanten" wie die eigene Produktion) tauchen NICHT auf –
+        // die Preisanfrage soll nur sinnvolle Adressaten zeigen.
+        // Synonyme: das Formular nutzt 'fertigprodukt', der v3-Import 'fertig'/'verkaufsfertig' (= dasselbe).
         $syn = ['fertigprodukt' => ['fertigprodukt', 'fertig', 'verkaufsfertig'], 'rohstoff' => ['rohstoff']];
         $toks = $syn[$kat] ?? [$kat];
         $or = [];
         foreach ($toks as $t) { $or[] = "FIND_IN_SET(?, REPLACE(kategorien,' ',''))"; $args[] = $t; }
-        $w .= " AND (kategorien IS NULL OR kategorien='' OR " . implode(' OR ', $or) . ")";
+        $w .= " AND (" . implode(' OR ', $or) . ")";
     }
     return all("SELECT id, firma, land FROM lieferanten WHERE $w ORDER BY firma", $args);
 }
