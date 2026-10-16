@@ -104,11 +104,15 @@ if (!$a):
                   WHERE af.lieferant_id=? ORDER BY (af.status<>'offen'), af.angelegt DESC", [$lid]);
 ?>
   <h1 style="margin-bottom:4px"><?= h(lp_t('anfragen')) ?></h1>
-  <div class="bx-panel">
-    <?php if (!$liste): ?><div class="muted"><?= h(lp_t('keine_anfragen')) ?></div><?php else: ?>
+  <?php
+    // Offene zuerst (Handlungsbedarf), beantwortete darunter in einem eigenen Abschnitt – so ist die
+    // offene Liste sauber und abgegebene Angebote verschwinden daraus.
+    $offen = array_values(array_filter($liste, fn($r) => ($r['status'] ?? '') === 'offen'));
+    $beant = array_values(array_filter($liste, fn($r) => ($r['status'] ?? '') !== 'offen'));
+    $anfrageTabelle = function(array $zeilen) use ($anzName, $lid): void { /* $lid nur Kontext */ ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('artikel')) ?></th><th class="bx-num"><?= h(lp_t('gewuenscht')) ?></th><th class="bx-num"><?= h(lp_t('ihr_preis')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
-      <tbody><?php foreach ($liste as $r): ?>
+      <tbody><?php foreach ($zeilen as $r): ?>
         <tr><td><?= h($r['nummer']) ?></td>
             <td><?= h($anzName($r)) ?>
                 <?php $typL = anfrage_art_label((string)($r['art'] ?? ''), (string)($r['form'] ?? ''), lp_sprache()); ?>
@@ -119,6 +123,17 @@ if (!$a):
             <td class="bx-num"><a class="btn <?= $r['status'] === 'offen' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="?p=lieferant_anfrage&id=<?= (int)$r['id'] ?>"><?= h($r['status'] === 'offen' ? lp_t('angebot_abgeben') : lp_t('ansehen')) ?></a></td></tr>
       <?php endforeach; ?></tbody>
     </table></div>
+    <?php };
+  ?>
+  <div class="bx-panel">
+    <?php if (!$liste): ?><div class="muted"><?= h(lp_t('keine_anfragen')) ?></div>
+    <?php else: ?>
+      <div style="font-weight:600;margin-bottom:6px"><?= h(lp_t('offene_anfragen')) ?> (<?= count($offen) ?>)</div>
+      <?php if ($offen): $anfrageTabelle($offen); else: ?><div class="muted" style="margin-bottom:6px"><?= h(lp_t('keine_anfragen')) ?></div><?php endif; ?>
+      <?php if ($beant): ?>
+        <div style="font-weight:600;margin:18px 0 6px"><?= h(lp_t('beantw_anfragen')) ?> (<?= count($beant) ?>)</div>
+        <?php $anfrageTabelle($beant); ?>
+      <?php endif; ?>
     <?php endif; ?>
   </div>
 <?php else:

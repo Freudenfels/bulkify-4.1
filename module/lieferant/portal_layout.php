@@ -19,6 +19,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'offene_best'     => ['de'=>'Offene Bestellungen',    'en'=>'Open orders', 'zh'=>'未完成订单'],
         'unbestaetigt'    => ['de'=>'Noch nicht bestätigt',   'en'=>'Awaiting confirmation', 'zh'=>'待确认'],
         'offene_anfragen' => ['de'=>'Offene Anfragen',        'en'=>'Open requests', 'zh'=>'待处理询价'],
+        'beantw_anfragen' => ['de'=>'Bereits beantwortet',    'en'=>'Already answered', 'zh'=>'已回复'],
         'nummer'          => ['de'=>'Nummer',                 'en'=>'Number', 'zh'=>'编号'],
         'datum'           => ['de'=>'Datum',                  'en'=>'Date', 'zh'=>'日期'],
         'positionen'      => ['de'=>'Positionen',             'en'=>'Items', 'zh'=>'明细'],

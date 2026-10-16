@@ -27,14 +27,16 @@ if ($tab === 'fremd') {
                  LEFT JOIN kapselgroesse kg ON kg.id = r.kapselgroesse_id
                  LEFT JOIN lieferanten l ON l.id = la.lieferant_id
                  $wsql ORDER BY r.name IS NULL, r.name, la.menge LIMIT 2000", $args);
+    // Beantwortete Fertigprodukt-Anfragen – AUCH ohne Rezeptur-Verknüpfung (Freitext). Dann dient der
+    // Anfrage-Betreff/-Nummer als Bezeichnung, damit das Angebot trotzdem in der Liste erscheint.
     $neuRows = all("SELECT la.rezeptur_id, r.nummer AS rez_nr, r.name AS rez_name, r.darreichungsform AS df, kg.name AS kapselgroesse,
-                           l.firma, ag.id AS ag_id, ag.preis, ag.einheit, la.menge
+                           la.betreff, la.nummer AS la_nr, l.firma, ag.id AS ag_id, ag.preis, ag.einheit, la.menge
                     FROM lieferant_anfrage la
                     JOIN lieferant_angebot ag ON ag.anfrage_id = la.id
                     LEFT JOIN rezeptur r    ON r.id = la.rezeptur_id
                     LEFT JOIN kapselgroesse kg ON kg.id = r.kapselgroesse_id
                     LEFT JOIN lieferanten l ON l.id = la.lieferant_id
-                    WHERE la.rezeptur_id IS NOT NULL AND la.art='fertigprodukt'");
+                    WHERE la.art='fertigprodukt'");
     $staffeln = [];
     if ($neuRows) {
         $agIds = array_values(array_unique(array_map(fn($x) => (int)$x['ag_id'], $neuRows)));
@@ -43,7 +45,9 @@ if ($tab === 'fremd') {
             $staffeln[(int)$s['angebot_id']][] = $s;
     }
     foreach ($neuRows as $nr) {
-        $mk = fn($preis, $menge) => ['rezeptur_id'=>$nr['rezeptur_id'],'rez_nr'=>$nr['rez_nr'],'rez_name'=>$nr['rez_name'],
+        $mk = fn($preis, $menge) => ['rezeptur_id'=>$nr['rezeptur_id'],
+            'rez_nr'=>$nr['rez_nr'] ?: $nr['la_nr'],
+            'rez_name'=>$nr['rez_name'] ?: ($nr['betreff'] ?: 'Fremdfertigung'),
             'df'=>$nr['df'],'kapselgroesse'=>$nr['kapselgroesse'],'firma'=>$nr['firma'],'preis'=>$preis,'einheit'=>$nr['einheit'],'menge'=>$menge];
         $kand = !empty($staffeln[(int)$nr['ag_id']]) ? array_map(fn($s) => $mk($s['preis'], $s['menge_ab']), $staffeln[(int)$nr['ag_id']]) : [$mk($nr['preis'], $nr['menge'])];
         foreach ($kand as $row) {
@@ -75,7 +79,8 @@ if ($tab === 'fremd') {
 
 // Reiter-Zähler (ohne Suche).
 $cnt = [
-    'fremd'      => (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot"),
+    'fremd'      => (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot")
+                    + (int) scalar("SELECT COUNT(*) FROM lieferant_angebot ag JOIN lieferant_anfrage la ON la.id=ag.anfrage_id WHERE la.art='fertigprodukt'"),
     'rohstoff'   => (int) scalar("SELECT COUNT(*) FROM lieferant_preis"),
     'verpackung' => (int) scalar("SELECT COUNT(*) FROM pack_ek_staffel"),
     'zukauf'     => (int) scalar("SELECT COUNT(*) FROM produkt_lieferant_preis"),
@@ -105,7 +110,7 @@ bx_head('Einkaufspreise', 'Alle Einkaufspreise an einem Ort – Fremdfertigung, 
     <?php foreach ($rows as $r): $rid=(int)$r['rezeptur_id']; $ek=($r['preis']!==null && (float)$r['preis']>0)?(float)$r['preis']:null; ?>
       <tr>
         <td class="muted"><?= h((string)($r['rez_nr'] ?? '')) ?: '–' ?></td>
-        <td><?php if ($rid): ?><a class="kundenlink bx-rezpop" href="?p=rezeptur_popup&id=<?= $rid ?>"><?= h((string)($r['rez_name'] ?? '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
+        <td><?php if ($rid): ?><a class="kundenlink bx-rezpop" href="?p=rezeptur_popup&id=<?= $rid ?>"><?= h((string)($r['rez_name'] ?? '–')) ?></a><?php else: ?><?= h((string)($r['rez_name'] ?? '')) ?: '<span class="muted">–</span>' ?><?php endif; ?></td>
         <td class="muted"><?= h($dfLabel[(string)$r['df']] ?? (string)($r['df'] ?? '')) ?></td>
         <td><?= !empty($r['kapselgroesse']) ? h((string)$r['kapselgroesse']) : '<span class="muted">–</span>' ?></td>
         <td><?= $r['firma'] ? h((string)$r['firma']) : '<span class="muted">–</span>' ?></td>
