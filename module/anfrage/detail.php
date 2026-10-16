@@ -113,7 +113,10 @@ $form = $a['darreichungsform'] ?? 'kapsel';
 $istKapsel = in_array($form, $KAPSELFORMEN, true);
 
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
-$rohstoffe = all("SELECT id, name, artikelnummer, synonym, cas FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name");
+// hat_dok = es liegt mind. ein Dokument (CoA/Spec/Analyse …) am Rohstoff -> „Papiere vorhanden". Eine Abfrage für alle.
+$rohstoffe = all("SELECT i.id, i.name, i.artikelnummer, i.synonym, i.cas,
+                         EXISTS(SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=i.id) AS hat_dok
+                  FROM item i WHERE i.kategorie='rohstoff' AND i.gesperrt=0 ORDER BY i.name");
 // Lieferanten für das Anfrage-Popup (nicht vorhandener Rohstoff -> direkt anfragen)
 $lieferantenListe = lieferanten_fuer_anfrage('rohstoff');   // Rohstoff-Anfrage: nur Lieferanten, die Rohstoffe führen (oder untagged)
 $kapseln = all("SELECT * FROM kapselgroesse ORDER BY sort, fuellmenge_mg");
@@ -136,8 +139,8 @@ $aehnliche = (!$neu && count($zutatenIst) >= 1)
 function rohstoff_options(array $rohstoffe, $sel): string {
     $s = '<option value="">– Rohstoff wählen –</option>';
     foreach ($rohstoffe as $r) {
-        $lbl = $r['name'] . ($r['cas'] ? ' · CAS ' . $r['cas'] : '');
-        $s .= '<option value="' . (int)$r['id'] . '"' . ((int)$sel === (int)$r['id'] ? ' selected' : '') . '>' . h($lbl) . '</option>';
+        $lbl = $r['name'] . ($r['cas'] ? ' · CAS ' . $r['cas'] : '') . (!empty($r['hat_dok']) ? ' · mit Papieren' : ' · ohne Papiere');
+        $s .= '<option value="' . (int)$r['id'] . '"' . ((int)$sel === (int)$r['id'] ? ' selected' : '') . ' data-dok="' . (!empty($r['hat_dok']) ? '1' : '0') . '">' . h($lbl) . '</option>';
     }
     return $s;
 }
@@ -305,7 +308,8 @@ if (!$neu):
           <td><input type="text" name="w_bez[]" value="<?= h($w['bezeichnung']) ?>" placeholder="z. B. Vitamin C"></td>
           <td><input type="text" name="w_menge[]" value="<?= h($w['wunsch_menge']) ?>"></td>
           <td><select name="w_einheit[]" style="width:72px"><?php foreach (['mg','g','µg','IE','ml'] as $eh): ?><option value="<?= $eh ?>" <?= ($w['einheit'] ?? 'mg')===$eh?'selected':'' ?>><?= $eh ?></option><?php endforeach; ?></select></td>
-          <td><select name="w_item[]"><?= rohstoff_options($rohstoffe, $w['item_id']) ?></select></td>
+          <td><select name="w_item[]"><?= rohstoff_options($rohstoffe, $w['item_id']) ?></select>
+              <a class="rs-open" href="?p=rohstoff&id=<?= (int)($w['item_id'] ?? 0) ?>" target="_blank" rel="noopener" style="font-size:12px;margin-top:4px;<?= (int)($w['item_id'] ?? 0) > 0 ? 'display:inline-block' : 'display:none' ?>">Rohstoff im neuen Tab öffnen</a></td>
           <td><input type="number" step="0.001" class="wfinal" name="w_final[]" value="<?= h($w['menge_final']!==''&&$w['menge_final']!==null ? rtrim(rtrim(number_format((float)$w['menge_final'],3,'.',''),'0'),'.') : '') ?>"></td>
           <td><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.wrow').remove();kcheck()">×</button></td>
         </tr>
@@ -392,7 +396,7 @@ if (!$neu):
 var OPTIONS =<?= json_encode(rohstoff_options($rohstoffe, 0), JSON_UNESCAPED_UNICODE) ?>;
 // Aufgabe 2: durchsuchbare Rohstoff-Auswahl. Daten einmal eingebettet; das <select name="w_item[]">
 // bleibt (versteckt) erhalten -> gleicher gespeicherter Wert, funktioniert auch ohne JS.
-var ROHSTOFFE = <?= json_encode(array_map(fn($r)=>['id'=>(int)$r['id'],'n'=>(string)$r['name'],'a'=>(string)($r['artikelnummer'] ?? ''),'s'=>(string)($r['synonym'] ?? ''),'c'=>(string)($r['cas'] ?? '')], $rohstoffe), JSON_UNESCAPED_UNICODE) ?>;
+var ROHSTOFFE = <?= json_encode(array_map(fn($r)=>['id'=>(int)$r['id'],'n'=>(string)$r['name'],'a'=>(string)($r['artikelnummer'] ?? ''),'s'=>(string)($r['synonym'] ?? ''),'c'=>(string)($r['cas'] ?? ''),'d'=>!empty($r['hat_dok'])?1:0], $rohstoffe), JSON_UNESCAPED_UNICODE) ?>;
 function bxNorm(s){ return String(s).toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss'); }
 function bxEsc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function bxRohstoffCombo(sel){
@@ -404,16 +408,20 @@ function bxRohstoffCombo(sel){
   var list=document.createElement('div'); list.className='rs-list'; list.hidden=true;
   wrap.appendChild(box); wrap.appendChild(list);
   var hl=-1, shown=[];
+  // „Rohstoff im neuen Tab öffnen"-Link (liegt im selben <td> hinter dem Combo) je Auswahl aktualisieren.
+  var openLink = wrap.parentNode ? wrap.parentNode.querySelector('.rs-open') : null;
+  function updOpen(){ if(!openLink) return; var v=parseInt(sel.value||'0',10); if(v>0){ openLink.href='?p=rohstoff&id='+v; openLink.style.display='inline-block'; } else { openLink.style.display='none'; } }
+  updOpen();
   function render(q){
     q=bxNorm((q||'').trim());
     shown = !q ? ROHSTOFFE.slice(0,50) : ROHSTOFFE.filter(function(r){ return bxNorm(r.n+' '+r.a+' '+r.s+' '+r.c).indexOf(q)>=0; }).slice(0,50);
     if(!shown.length){ list.innerHTML='<div class="rs-empty">Kein Rohstoff gefunden.<div style="margin-top:8px"><button type="button" class="btn btn-ghost btn-sm rs-neu">Beim Lieferanten anfragen</button></div></div>'; }
-    else list.innerHTML=shown.map(function(r,i){ var sub=[r.a, r.c?('CAS '+r.c):'', r.s].filter(Boolean).join(' · '); return '<div class="rs-opt" data-i="'+i+'">'+bxEsc(r.n)+(sub?' <span class="muted">('+bxEsc(sub)+')</span>':'')+'</div>'; }).join('');
+    else list.innerHTML=shown.map(function(r,i){ var sub=[r.a, r.c?('CAS '+r.c):'', r.s].filter(Boolean).join(' · '); var pap=r.d?'<span style="color:var(--gruen)">mit Papieren</span>':'<span class="muted">ohne Papiere</span>'; return '<div class="rs-opt" data-i="'+i+'">'+bxEsc(r.n)+(sub?' <span class="muted">('+bxEsc(sub)+')</span>':'')+' · '+pap+'</div>'; }).join('');
     hl=-1; list.hidden=false;
   }
   function paint(){ Array.prototype.forEach.call(list.querySelectorAll('.rs-opt'),function(o){o.classList.toggle('hl',+o.dataset.i===hl);}); var e=list.querySelector('.rs-opt.hl'); if(e)e.scrollIntoView({block:'nearest'}); }
-  function pick(i){ var r=shown[i]; if(!r)return; sel.value=r.id; box.value=r.n; list.hidden=true; }
-  box.addEventListener('input',function(){ sel.value=''; render(box.value); });
+  function pick(i){ var r=shown[i]; if(!r)return; sel.value=r.id; box.value=r.n; list.hidden=true; updOpen(); }
+  box.addEventListener('input',function(){ sel.value=''; render(box.value); updOpen(); });
   box.addEventListener('focus',function(){ render(box.value); });
   box.addEventListener('keydown',function(e){
     if(list.hidden){ if(e.key==='ArrowDown'){ render(box.value); } return; }
