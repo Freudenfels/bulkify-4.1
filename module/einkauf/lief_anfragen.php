@@ -68,7 +68,8 @@ bx_head('Lieferanten-Anfragen & Preise', 'Alle an Lieferanten gestellten Anfrage
         // "Was" + Link (Rezeptur-Fremdfertigung / Rohstoff / Freitext)
         if ((int)$r['rezeptur_id'] > 0) {
             $wasLink = '?p=rezeptur_detail&id=' . (int)$r['rezeptur_id'];   // rezeptur = Liste; Detail ist rezeptur_detail
-            $wasText = 'Fremdfertigung: ' . ($r['rez_name'] ?: ('Rezeptur ' . $r['rez_nummer']));
+            // Rezepturnummer immer mit zeigen (RZ-… · Name), nicht nur den Namen.
+            $wasText = 'Fremdfertigung: ' . trim(((string)$r['rez_nummer'] !== '' ? $r['rez_nummer'] . ' · ' : '') . ($r['rez_name'] ?: 'Rezeptur'));
         } elseif ((int)$r['item_id'] > 0) {
             $wasLink = '?p=rohstoff&id=' . (int)$r['item_id'];
             $wasText = ($r['item_nr'] ? $r['item_nr'] . ' · ' : '') . ($r['item_name'] ?: 'Rohstoff');

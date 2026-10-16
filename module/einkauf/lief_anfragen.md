@@ -18,3 +18,5 @@ Rein lesend – Angebote erfassen/annehmen weiterhin im Lieferant-/Rezeptur-Deta
 ## Link & Kunde (Fix)
 - Die „Was"-Spalte verlinkt Fremdfertigungs-Anfragen auf **`?p=rezeptur_detail&id=`** (nicht `?p=rezeptur`, das ist die Rezeptur-LISTE und ignoriert die id → führte „ins Nichts").
 - Bei Fremdfertigung steht unter dem Rezepturnamen der **Kunde** (aus `rezeptur.kunde_id`), damit man ohne Klick sieht, für wen angefragt wurde. Die Suche findet Anfragen jetzt auch über den **Kundennamen** (`kz.firma`).
+- Die „Was"-Spalte zeigt bei Fremdfertigung immer die **Rezepturnummer** mit (`RZ-… · Name`), nicht nur den Namen (gleich im Detail `lief_anfrage_detail.php`).
+- **Rückfragen des Lieferanten** landen als `nachricht` an der jeweiligen Anfrage/Bestellung (Panel „Rückfragen" im Detail). Seit 2026-10: schreibt der Lieferant, legt `nachricht_senden()` (`core/nachricht.php`) zusätzlich eine **Dashboard-Benachrichtigung** an (Team-Postfach `?p=benachrichtigungen`, mit Deep-Link zur Anfrage/Bestellung) – vorher war die Frage nur im jeweiligen Detail sichtbar.

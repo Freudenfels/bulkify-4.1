@@ -18,6 +18,14 @@ function nachricht_senden(int $lieferant_id, string $akteur, string $autor, stri
     $id = (int) insert_id();
     // Die andere Seite erfährt es per Mail – wenn der Versand eingerichtet ist. Ein Fehler stoppt nichts.
     if (function_exists('mail_nachricht') && function_exists('mail_bereit') && mail_bereit()) mail_nachricht($lieferant_id, $akteur, $text, $bezug_typ, $bezug_id);
+    // Schreibt der LIEFERANT, bekommt das Team zusätzlich eine Dashboard-Benachrichtigung (sonst nur im Detail sichtbar).
+    if ($akteur === 'lieferant' && function_exists('benachrichtigung_add')) {
+        $firma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lieferant_id]);
+        $link = $bezug_typ === 'lieferant_anfrage' ? '?p=lief_anfrage_detail&id=' . (int)$bezug_id
+              : ($bezug_typ === 'bestellung' ? '?p=bestellung&id=' . (int)$bezug_id : '?p=lieferant&id=' . $lieferant_id);
+        $bezugLbl = function_exists('nachricht_bezug_label') ? nachricht_bezug_label($bezug_typ, $bezug_id) : '';
+        benachrichtigung_add('Lieferant-Rückfrage: ' . ($firma !== '' ? $firma : ('Lieferant #' . $lieferant_id)) . ($bezugLbl !== '' ? ' · ' . $bezugLbl : ''), $text, $link);
+    }
     return $id;
 }
 

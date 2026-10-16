@@ -42,7 +42,8 @@ if ((int)$a['rezeptur_id'] > 0) {
     $rz = one("SELECT rz.name, rz.nummer, rz.darreichungsform, k.firma AS kunde FROM rezeptur rz
                LEFT JOIN kunden k ON k.id=rz.kunde_id WHERE rz.id=?", [(int)$a['rezeptur_id']]);
     $wasLink = '?p=rezeptur_detail&id=' . (int)$a['rezeptur_id'];
-    $wasText = 'Fremdfertigung: ' . ($rz['name'] ?? ('Rezeptur ' . ($rz['nummer'] ?? '')));
+    // Rezepturnummer immer mit zeigen (RZ-… · Name).
+    $wasText = 'Fremdfertigung: ' . trim((((string)($rz['nummer'] ?? '')) !== '' ? $rz['nummer'] . ' · ' : '') . ($rz['name'] ?? 'Rezeptur'));
     $kundeName = (string)($rz['kunde'] ?? '');
 } elseif ((int)$a['item_id'] > 0) {
     $it = one("SELECT name, artikelnummer FROM item WHERE id=?", [(int)$a['item_id']]);
