@@ -77,6 +77,7 @@ $routes = [
     'rohstoff'       => 'lager/rohstoff_detail.php',
     'rohstoff_split' => 'lager/rohstoff_split.php',   // lange Namen (Varianten) aufschluesseln
     'freigaben'      => 'lager/freigaben.php',       // offene Kundenfreigaben (Spec/CoA)
+    'rohstoffe_papiere' => 'lager/rohstoffe_ohne_papiere.php', // Rohstoffe in angebotenen Rezepturen ohne Papiere (CoA/Spec)
     'lieferant_preise'=> 'einkauf/lieferant_preise.php', // strukturierte Lieferantenpreise (Rohstoff/Fertigprodukt)
     'lief_preisliste'=> 'lager/lief_preisliste.php', // EK-Preisliste (Referenz aus v3)
     'spec_pdf'       => 'lager/spec_download.php',
