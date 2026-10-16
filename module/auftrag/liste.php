@@ -65,6 +65,25 @@ $statusBadge = function($r) {
 };
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 
+// Produktion fertig (letzter erledigter Schritt) je Auftrag + Dauer/Alter -> laufende Produktionen sichtbar machen.
+$fertigMap = [];
+$auftragIds = array_map(fn($r) => (int)$r['id'], $rows);
+if ($auftragIds) {
+    $in = implode(',', array_fill(0, count($auftragIds), '?'));
+    foreach (all("SELECT pa.auftrag_id, MAX(ps.erledigt_at) fertig
+                  FROM produktionsauftrag pa JOIN produktion_schritt ps ON ps.pa_id=pa.id
+                  WHERE pa.status='erledigt' AND pa.auftrag_id IN ($in) GROUP BY pa.auftrag_id", $auftragIds) as $x)
+        if ($x['fertig']) $fertigMap[(int)$x['auftrag_id']] = $x['fertig'];
+}
+$jetztUtc = gmdate('Y-m-d H:i:s');
+$dauerFmt = function (?string $a, ?string $b): string {
+    if (!$a || !$b) return '';
+    $s = strtotime($b) - strtotime($a); if ($s < 0) return '';
+    if ($s < 3600) return max(1, intdiv($s, 60)) . ' Min';
+    $d = intdiv($s, 86400); $h = intdiv($s % 86400, 3600);
+    return $d > 0 ? $d . ' T' . ($h ? ' ' . $h . ' Std' : '') : $h . ' Std';
+};
+
 $cols = [
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
     'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
@@ -79,7 +98,21 @@ $cols = [
     'gesamt_netto' => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['gesamt_netto'])],
     'rechnung_nr'  => ['label' => 'Rechnung', 'render' => fn($r)=> $r['rechnung_nr'] ? h($r['rechnung_nr']) : '<span class="muted">–</span>'],
     'status'       => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
-    'angelegt'     => ['label' => 'Erstellt', 'sort' => true, 'render' => fn($r)=> !empty($r['angelegt']) ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
+    'angelegt'     => ['label' => 'Bestellt am', 'sort' => true, 'render' => fn($r)=> !empty($r['angelegt']) ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
+    'dauer'        => ['label' => 'Dauer / Stand', 'render' => function($r) use ($fertigMap, $jetztUtc, $dauerFmt) {
+                        $start = $r['angelegt'] ?? null;
+                        $fertig = $fertigMap[(int)$r['id']] ?? null;
+                        if ($fertig) {
+                            $t = $dauerFmt($start, $fertig);
+                            return $t !== ''
+                                ? '<span title="bestellt → Produktion fertig am ' . h(fmt_zeit($fertig, 'd.m.Y H:i')) . '"><strong>' . h($t) . '</strong> <span class="muted">bis fertig</span></span>'
+                                : '<span class="muted">fertig</span>';
+                        }
+                        if (($r['status'] ?? '') === 'versendet') return '<span class="muted">abgeschlossen</span>';
+                        if (($r['status'] ?? '') === 'storniert') return '<span class="muted">–</span>';
+                        $t = $dauerFmt($start, $jetztUtc);
+                        return $t !== '' ? '<span class="muted">läuft seit ' . h($t) . '</span>' : '<span class="muted">–</span>';
+                     }],
 ];
 
 $TABS = ['offen' => 'Offen', 'abgeschlossen' => 'Abgeschlossen'];
