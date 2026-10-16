@@ -4075,6 +4075,17 @@ function kunde_produkt_preise(int $kunde_id): array {
     foreach (all("SELECT DISTINCT ap.produkt_id FROM angebot_produkt ap JOIN angebot a ON a.id=ap.angebot_id WHERE a.kunde_id=?", [$kunde_id]) as $r) $ids[(int)$r['produkt_id']] = true;
     return $ids;
 }
+// Einen Kundenpreis (VK je Packung OHNE Verpackung) idempotent setzen -> Grundlage für „ab xy" im Portal.
+// Upsert je (Produkt, Kunde, Stück je Packung): bestehende Zeile dieser Größe wird aktualisiert, sonst neu.
+// Wird bei Angebots-Bestätigung automatisch aus der Herstellungs-Position/-Zelle gepflegt. $quelle = Herkunftsnotiz.
+function kundenpreis_setzen(int $produkt_id, int $kunde_id, int $stueck, ?int $anzahl, float $preis, string $quelle = ''): void {
+    if ($produkt_id <= 0 || $kunde_id <= 0 || $stueck <= 0 || $preis <= 0) return;
+    if (!table_exists('produkt_kundenpreis')) return;
+    $notiz = $quelle !== '' ? ('automatisch aus ' . $quelle) : null;
+    $ex = (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? LIMIT 1", [$produkt_id, $kunde_id, $stueck]);
+    if ($ex) q("UPDATE produkt_kundenpreis SET anzahl_vpe=?, preis=?, notiz=? WHERE id=?", [$anzahl, round($preis, 4), $notiz, $ex]);
+    else     q("INSERT INTO produkt_kundenpreis (produkt_id,kunde_id,menge_pro_vpe,anzahl_vpe,preis,notiz) VALUES (?,?,?,?,?,?)", [$produkt_id, $kunde_id, $stueck, $anzahl, round($preis, 4), $notiz]);
+}
 
 // ---- Verpackung als eigene Position (Dose/Deckel/Etikett kommen extra) ----
 // Aufschlag % für einen Verpackungsartikel: eigener Wert am Artikel, sonst globaler aufschlag_verpackung.
@@ -7957,6 +7968,12 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     // Lager die gelieferten, kundenspezifischen Etiketten gezielt einbuchen (kein generischer Glas-Topf).
     $etId = kundenetikett_sicherstellen((int)$a['produkt_id']);
     if ($etId) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$etId, $aid]);
+    // Kundenpreisliste pflegen: nur wenn es eine Herstellungs-Position dieser Größe gibt (Preis OHNE Verpackung).
+    // Sonst sieht der Kunde weiterhin den gerechneten Matrix-„ab"-Preis (ebenfalls ohne Verpackung).
+    if ($pidA > 0 && $stueck > 0) {
+        $hp = one("SELECT preis_cent FROM angebot_position WHERE angebot_id=? AND quelle='herstellung' AND stueck=? AND preis_cent>0 ORDER BY id LIMIT 1", [$angebot_id, $stueck]);
+        if ($hp) kundenpreis_setzen($pidA, (int)$a['kunde_id'], $stueck, $menge, (int)$hp['preis_cent'] / 100, 'Angebot ' . (string)$a['nummer']);
+    }
     // Rechnung: korrekte USt (Produktsatz, i.d.R. 19 %; Reverse-Charge/Kleinunternehmer 0 %). Ohne Rechnungs-
     // adresse wird die Rechnung NICHT für den Kunden freigegeben (Entwurf mit Hinweis) – Adresse ergänzen, dann neu berechnen.
     $ustP = produkt_ust_satz((int)($a['produkt_id'] ?? 0), (int)$a['kunde_id']);
@@ -9075,6 +9092,8 @@ function auftrag_aus_positionen(int $angebot_id, ?string $gruppe = null): ?int {
     q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$angebot_id]);
     q("INSERT IGNORE INTO angebot_produkt (angebot_id,produkt_id,stueck,verpackung_id) VALUES (?,?,?,?)",
       [$angebot_id, $pid, (int)$herst['stueck'], $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null]);
+    // Kundenpreisliste pflegen: Herstellungspreis je Packung (OHNE Verpackung) -> Kunde sieht „ab xy" im Portal.
+    kundenpreis_setzen((int)$pid, (int)$a['kunde_id'], (int)$herst['stueck'], $menge, (int)$herst['preis_cent'] / 100, 'Angebot ' . (string)$a['nummer']);
 
     $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
     $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
@@ -9120,6 +9139,10 @@ function auftrag_aus_zelle(int $angebot_id, int $stueck, int $verp_id, int $best
     auftrag_name_snapshot((int)$aid);
     q("INSERT IGNORE INTO angebot_produkt (angebot_id,produkt_id,stueck,verpackung_id) VALUES (?,?,?,?)",
       [$angebot_id, $bestellt, $stueck, $verp_id]);   // Preis dieses Produkts ist für diesen Kunden freigegeben
+    // Kundenpreisliste pflegen: Herstellung je Packung (OHNE Verpackung) -> „ab xy" im Portal (Basis- und Varianten-Produkt).
+    kundenpreis_setzen((int)$a['produkt_id'], (int)$a['kunde_id'], $stueck, $menge, (float)$vk, 'Angebot ' . (string)($a['nummer'] ?? ''));
+    if ((int)$bestellt !== (int)$a['produkt_id'])
+        kundenpreis_setzen((int)$bestellt, (int)$a['kunde_id'], $stueck, $menge, (float)$vk, 'Angebot ' . (string)($a['nummer'] ?? ''));
     $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
     $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
