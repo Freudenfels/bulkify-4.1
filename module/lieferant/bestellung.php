@@ -80,8 +80,20 @@ if (!$b):
     <?php endif; ?>
   </div>
 <?php else:
-    $pos = all("SELECT bp.*, i.name AS item_name, i.artikelnummer, i.rezeptur_id
-                FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
+    // Rezeptur auflösen: entweder über das Bulk-Item (item.rezeptur_id) ODER – bei Fremdfertigungs-/Zukauf-
+    // Bestellungen ohne Bulk-Item – über den verknüpften Auftrag/das Produkt. So sieht der Lieferant auch
+    // bei Fertigprodukt-Zukauf, welche Rezeptur er herstellen soll.
+    $pos = all("SELECT bp.*, i.name AS item_name, i.artikelnummer,
+                       COALESCE(i.rezeptur_id, au.rezeptur_id, pr.rezeptur_id) AS rezeptur_id,
+                       COALESCE(rz.nummer, rz2.nummer, rz3.nummer) AS rez_nr,
+                       COALESCE(rz.name, rz2.name, rz3.name) AS rez_name
+                FROM bestellung_position bp
+                LEFT JOIN item i      ON i.id = bp.item_id
+                LEFT JOIN auftrag au  ON au.id = bp.auftrag_id
+                LEFT JOIN produkt pr  ON pr.id = au.produkt_id
+                LEFT JOIN rezeptur rz  ON rz.id = i.rezeptur_id
+                LEFT JOIN rezeptur rz2 ON rz2.id = au.rezeptur_id
+                LEFT JOIN rezeptur rz3 ON rz3.id = pr.rezeptur_id
                 WHERE bp.bestellung_id=? ORDER BY bp.sort, bp.id", [$id]);
     // Preise in der Währung DES LIEFERANTEN (USD/EUR/CNY) – Stückpreis mit 4 Nachkommastellen (Sub-Cent).
     $waehrung = (string) scalar("SELECT waehrung FROM lieferanten WHERE id=?", [$lid]) ?: 'EUR';
@@ -108,7 +120,7 @@ if (!$b):
       <tbody><?php foreach ($pos as $p): ?>
         <tr><td><?= h(($p['item_name'] ?? '') !== '' ? $p['item_name'] : ($p['bezeichnung'] ?? '–')) ?>
               <?= $p['artikelnummer'] ? '<div class="muted" style="font-size:12px">' . h($p['artikelnummer']) . '</div>' : '' ?>
-              <?php if (!empty($p['rezeptur_id'])): ?><div style="margin-top:2px"><a class="btn btn-ghost btn-sm" href="?p=lieferant_rezeptur&id=<?= (int)$p['rezeptur_id'] ?>">Rezeptur ansehen</a></div><?php endif; ?></td>
+              <?php if (!empty($p['rezeptur_id'])): ?><div style="margin-top:4px;font-size:13px"><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?>: <strong><?= h(trim((string)($p['rez_nr'] ?? '') . ' ' . (string)($p['rez_name'] ?? ''))) ?: ('#' . (int)$p['rezeptur_id']) ?></strong> <a class="btn btn-ghost btn-sm" style="margin-left:6px" href="?p=lieferant_rezeptur&id=<?= (int)$p['rezeptur_id'] ?>"><?= h(lp_t('rez_ansehen')) ?></a></div><?php endif; ?></td>
             <td class="bx-num"><?= rtrim(rtrim(number_format((float)$p['menge'], 3, ',', '.'), '0'), ',') ?></td>
             <td><?= h($p['einheit'] ?? '') ?></td>
             <td class="bx-num"><?= $money($p['ek_preis'], 4) ?></td>

@@ -4,6 +4,8 @@ Route: `?p=lieferant_bestellung[&id=<ID>]`
 
 Ohne `id` die Liste, mit `id` die einzelne Bestellung: das **Ablauf-Panel** (`core/bestellung_ui.md`) zum Bestätigen mit Termin, Stationen pflegen und Versanddaten eintragen, darunter die Positionen mit Preisen und Summe sowie das Bestell-PDF.
 
+**Rezeptur je Position:** Bei Fremdfertigung/Bulk sieht der Lieferant, **welche Rezeptur** er herstellen soll. Die Rezeptur wird aufgelöst über `COALESCE(item.rezeptur_id, auftrag.rezeptur_id, produkt.rezeptur_id)` – also auch, wenn die Position kein Bulk-Item hat (Express-Fertigprodukt-Zukauf: `bestellung_position.item_id` NULL, aber `auftrag_id` gesetzt). Angezeigt wird Nummer + Name plus Knopf **„Rezeptur ansehen"** (→ `?p=lieferant_rezeptur`). Die read-only Rezepturansicht (`rezeptur_ansicht.php`) lässt eine Rezeptur zu, wenn ihre Form in `lieferanten.fertig_formen` steht **oder** der Lieferant sie angefragt/als Angebot bepreist/bestellt hat – so sieht er bestellte Rezepturen immer, kann aber keine fremden über die ID aufrufen.
+
 **Zugriff:** Jede Abfrage filtert auf `lieferant_id` des angemeldeten Benutzers – die Prüfung hängt an der Abfrage, nicht an der Oberfläche. Eine fremde ID zeigt einfach die eigene Liste.
 ## E-Mail ans Team
 Bestätigt der Lieferant die Bestellung oder setzt er eine Station, bekommen alle Admins eine Mail (`mail_team_bestellung()`), sofern der Versand eingerichtet ist.

@@ -15,8 +15,19 @@ $rid = (int)($_GET['id'] ?? 0);
 // Welche Formen darf dieser Lieferant sehen?
 $fertigFormen = array_values(array_filter(array_map('trim', explode(',', (string) scalar("SELECT fertig_formen FROM lieferanten WHERE id=?", [$lid])))));
 $r = $rid ? one("SELECT id, nummer, name, darreichungsform AS form, kapselgroesse_id FROM rezeptur WHERE id=?", [$rid]) : null;
-// Nur anzeigen, wenn die Form fuer den Lieferanten freigeschaltet ist.
-if ($r && !in_array((string)$r['form'], $fertigFormen, true)) $r = null;
+// Sichtbar, wenn (a) die Form fuer den Lieferanten freigeschaltet ist ODER (b) wir ihm diese Rezeptur
+// bereits angefragt/bestellt haben (dann darf er sie fuer die Fremdfertigung natuerlich sehen). So kann
+// er keine fremden Rezepturen ueber die ID aufrufen, aber die bestellte sieht er immer.
+if ($r) {
+    $erlaubt = in_array((string)$r['form'], $fertigFormen, true)
+        || (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE lieferant_id=? AND rezeptur_id=?", [$lid, $rid]) > 0
+        || (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot WHERE lieferant_id=? AND rezeptur_id=?", [$lid, $rid]) > 0
+        || (int) scalar("SELECT COUNT(*) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                         LEFT JOIN item i ON i.id=bp.item_id LEFT JOIN auftrag au ON au.id=bp.auftrag_id
+                         LEFT JOIN produkt pr ON pr.id=au.produkt_id
+                         WHERE b.lieferant_id=? AND (i.rezeptur_id=? OR au.rezeptur_id=? OR pr.rezeptur_id=?)", [$lid, $rid, $rid, $rid]) > 0;
+    if (!$erlaubt) $r = null;
+}
 
 $formLabel = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'Pulver','fluessig'=>'Flüssig','gummi'=>'Fruchtgummi','gel'=>'Gel'];
 
