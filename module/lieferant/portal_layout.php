@@ -60,6 +60,8 @@ function lp_t(string $key, string $sprache = ''): string {
         'notiz'           => ['de'=>'Notiz',                  'en'=>'Note', 'zh'=>'备注'],
         'gewuenscht'      => ['de'=>'Angefragte Menge',       'en'=>'Requested quantity', 'zh'=>'询价数量'],
         'abgegeben_am'    => ['de'=>'abgegeben am',           'en'=>'submitted on', 'zh'=>'提交于'],
+        'ihr_abg_angebot' => ['de'=>'Ihr abgegebenes Angebot', 'en'=>'Your submitted quote', 'zh'=>'您已提交的报价'],
+        'angebot_anpassen'=> ['de'=>'Angebot anpassen',       'en'=>'Adjust quote', 'zh'=>'修改报价'],
         'anmelden'        => ['de'=>'Anmelden',                'en'=>'Sign in', 'zh'=>'登录'],
         'login_sub'       => ['de'=>'Zugang für Lieferanten',  'en'=>'Supplier access', 'zh'=>'供应商登录'],
         'passwort'        => ['de'=>'Passwort',                'en'=>'Password', 'zh'=>'密码'],

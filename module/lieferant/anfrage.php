@@ -225,6 +225,20 @@ if (!$a):
         <?php if (trim((string)($ang['notiz'] ?? '')) !== ''): ?><tr><td><?= h(lp_t('notiz')) ?></td><td style="white-space:pre-line"><?= h($ang['notiz']) ?></td></tr><?php endif; ?>
       </tbody></table></div>
     <?php else: ?>
+      <?php // Bereits abgegeben (aber noch nicht angenommen): kleine Zusammenfassung oben, Formular zum Anpassen darunter.
+      if ($ang): $pbShow = (int)($ang['preis_basis'] ?? 1) === 1000 ? 1000 : 1; ?>
+      <div style="font-weight:600;margin-bottom:6px"><?= h(lp_t('ihr_abg_angebot')) ?></div>
+      <div class="bx-tablewrap" style="margin-bottom:14px"><table class="bx-table"><tbody>
+        <tr><td style="width:220px"><?= h(lp_t('ihr_preis')) ?></td><td><strong><?= h($zahl($ang['preis'], 4)) ?></strong> <?= $pbShow === 1000 ? h(lp_t('je_1000')) : h(lp_t('preis_je')) ?> <?= h(lp_einheit($einheit, $pbShow)) ?><?= $hauptMenge > 0 ? ' · ' . h(lp_t('ab_menge')) . ' ' . h($zahl($hauptMenge, 3)) . ' ' . h(lp_einheit($einheit, $hauptMenge)) : '' ?></td></tr>
+        <?php foreach ($staffeln as $s): if (($s['preis'] ?? '') === '' ) continue; ?><tr><td><?= h(lp_t('staffel')) ?></td><td><?= h($zahl($s['preis'], 4)) ?> · <?= h(lp_t('ab_menge')) ?> <?= h($zahl($s['menge_ab'], 3)) ?> <?= h(lp_einheit($einheit, (float)$s['menge_ab'])) ?></td></tr><?php endforeach; ?>
+        <?php if (!empty($ang['mindestmenge'])): ?><tr><td><?= h(lp_t('moq')) ?></td><td><?= h($zahl($ang['mindestmenge'], 3)) ?> <?= h(lp_einheit($einheit, (float)$ang['mindestmenge'])) ?></td></tr><?php endif; ?>
+        <?php if (!empty($ang['lieferzeit_tage'])): ?><tr><td><?= h(lp_t('lieferzeit')) ?></td><td><?= (int)$ang['lieferzeit_tage'] ?></td></tr><?php endif; ?>
+        <?php $sInco = (string)($ang['incoterm'] ?? ''); $sVers = (string)($ang['versandart'] ?? ''); $sTerms = array_filter([$sInco, $sVers !== '' ? lp_t('vers_' . $sVers) : '']); ?>
+        <?php if ($sTerms): ?><tr><td><?= h(lp_t('incoterm')) ?> / <?= h(lp_t('versandart')) ?></td><td><?= h(implode(' · ', $sTerms)) ?></td></tr><?php endif; ?>
+        <?php if (trim((string)($ang['notiz'] ?? '')) !== ''): ?><tr><td><?= h(lp_t('notiz')) ?></td><td style="white-space:pre-line"><?= h($ang['notiz']) ?></td></tr><?php endif; ?>
+      </tbody></table></div>
+      <div style="font-weight:600;margin:4px 0 8px"><?= h(lp_t('angebot_anpassen')) ?></div>
+      <?php endif; ?>
     <form method="post" enctype="multipart/form-data">
       <input type="hidden" name="aktion" value="angebot">
       <?php // Eine Zeile: links die Preisspalte, rechts daneben Basis, Mindestmenge und Lieferzeit.
