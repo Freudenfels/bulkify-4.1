@@ -21,7 +21,12 @@
 
 **Aktionen:**
 - **Speichern:** Kopf (inkl. Wunsch-Produktname) + Wunsch-/Zuordnungs-Zeilen (`rezeptur_anfrage_wunsch`).
-- **Rezeptur erstellen:** legt aus den zugeordneten Zeilen (Rohstoff + finale Menge) eine **Rezeptur** (`rezeptur` + `rezeptur_zutat`, Status Entwurf) an, verknüpft sie mit der Anfrage (`rezeptur_id`), setzt die Anfrage auf **beantwortet**, schreibt einen Verlaufseintrag und öffnet die neue Rezeptur im normalen Baukasten.
+- **Vorschlag erstellen & senden:** legt aus den zugeordneten Zeilen (Rohstoff + finale Menge) eine **Rezeptur** an (`rezeptur` + `rezeptur_zutat`, Status direkt **`vorschlag`** = an den Kunden gesendet), verknüpft sie mit der Anfrage (`rezeptur_id`), setzt die Anfrage auf **beantwortet**, schreibt einen Verlaufseintrag und öffnet die neue Rezeptur. Nur sichtbar, wenn noch keine Rezeptur verknüpft ist.
+
+**Verknüpfte Rezeptur – drei Zustände (wichtig: „offen" vs. „Vorschlag"):** Die Buttons unten richten sich nach dem **Status der verknüpften Rezeptur** (`rezeptur.status`), nicht bloß danach, ob `rezeptur_id` gefüllt ist:
+- **Gesendet** (`vorschlag`/`freigegeben`/`eingefroren`): „Zu dieser Anfrage gibt es bereits einen **gesendeten** Vorschlag" + **Vorschlag öffnen**. Hier nicht neu erstellen, sondern in der Rezeptur überarbeiten.
+- **Entwurf** (`entwurf`/`abgelehnt`, z. B. aus v3 übernommen): Die Rezeptur ist verknüpft, wurde aber **nie gesendet** – deshalb steht die Anfrage weiter **offen** und der Kunde sieht „in Prüfung / wartet auf uns". Buttons: **Als Vorschlag an den Kunden senden** (`aktion=vorschlag_senden` → setzt `rezeptur.status='vorschlag'` + `rezeptur_anfrage.status='beantwortet'`, dieselbe Transition wie in `rezeptur/detail.php`) und **Entwurf öffnen**.
+- **Keine Rezeptur:** **Vorschlag erstellen & senden** (siehe oben).
 
 ## Rezeptur entwickeln (KI)
 Über dem Formular steht der Rezepturvorschlag aus der Kundenidee (`core/rezeptur_ki.md`): Zutaten mit Mengen, Novel-Food-Einschätzung, Höchstmengen, Health Claims, Machbarkeit und das **selbst nachgerechnete Füllgewicht** samt passender Kapselgröße. `aktion=ki_entwickeln` erzeugt ihn, `aktion=ki_zeilen` übernimmt die Zutaten in die Wunschzeilen. Ein vorhandener Vorschlag wird immer angezeigt, auch wenn gerade kein Schlüssel hinterlegt ist. Alles ist ein Entwurf – gesendet wird erst über den bestehenden Weg „Rezeptur erstellen".

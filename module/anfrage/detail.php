@@ -59,6 +59,25 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
     header('Location: ?p=anfrage&id=' . (int)$id . '&kunde_neu=1'); exit;
 }
 
+// Verknüpften Rezeptur-ENTWURF jetzt als Vorschlag an den Kunden senden.
+// Hintergrund: v3-Altanfragen hängen oft an einer Rezeptur im Status 'entwurf', die NIE gesendet wurde –
+// dadurch blieb die Anfrage zu Recht offen und der Kunde wartet, obwohl im Admin „bereits ein Vorschlag" stand.
+// Dieselbe Transition wie in rezeptur/detail.php (status_setzen -> vorschlag): Rezeptur auf 'vorschlag',
+// Anfrage auf 'beantwortet'. Erst damit sieht der Kunde den Vorschlag im Portal.
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorschlag_senden') {
+    $rid = (int) scalar("SELECT rezeptur_id FROM rezeptur_anfrage WHERE id=?", [(int)$id]);
+    $rs  = $rid ? (string) scalar("SELECT status FROM rezeptur WHERE id=?", [$rid]) : '';
+    if ($rid && in_array($rs, ['entwurf', 'abgelehnt'], true)) {
+        q("UPDATE rezeptur SET status='vorschlag' WHERE id=?", [$rid]);
+        q("UPDATE rezeptur_anfrage SET status='beantwortet' WHERE id=?", [(int)$id]);
+        $kid = (int) scalar("SELECT kunde_id FROM rezeptur_anfrage WHERE id=?", [(int)$id]);
+        $anr = (string) scalar("SELECT nummer FROM rezeptur_anfrage WHERE id=?", [(int)$id]);
+        if ($kid) log_aktivitaet('kunde', $kid, 'team', 'Vorschlag aus Anfrage ' . $anr . ' an den Kunden gesendet.', 'rezeptur', 'rezeptur', $rid);
+        header('Location: ?p=rezeptur_detail&id=' . $rid . '&gesendet=1'); exit;
+    }
+    header('Location: ?p=anfrage&id=' . (int)$id); exit;
+}
+
 $fehler = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $f = fn($k) => trim($_POST[$k] ?? '');
@@ -111,6 +130,13 @@ if (!$a) { $neu = true; $a = ['darreichungsform'=>'kapsel','status'=>'neu']; }
 $v = fn($k) => h((string)($a[$k] ?? ''));
 $form = $a['darreichungsform'] ?? 'kapsel';
 $istKapsel = in_array($form, $KAPSELFORMEN, true);
+
+// Status der verknüpften Rezeptur: nur 'vorschlag'/'freigegeben'/'eingefroren' = wirklich an den Kunden GESENDET.
+// Ein 'entwurf' (z. B. aus v3 übernommen) ist NOCH KEIN Vorschlag -> die Anfrage bleibt zu Recht offen.
+$rezId       = (int)($a['rezeptur_id'] ?? 0);
+$rezStatus   = $rezId ? (string) scalar("SELECT status FROM rezeptur WHERE id=?", [$rezId]) : '';
+$rezGesendet = in_array($rezStatus, ['vorschlag', 'freigegeben', 'eingefroren'], true);
+$rezEntwurf  = $rezId && in_array($rezStatus, ['entwurf', 'abgelehnt'], true);
 
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
 // hat_dok = es liegt mind. ein Dokument (CoA/Spec/Analyse …) am Rohstoff -> „Papiere vorhanden". Eine Abfrage für alle.
@@ -373,9 +399,13 @@ if (!$neu):
 
   <div class="bx-row" style="margin-top:var(--sp-4)">
     <button class="btn btn-ghost" type="submit">Speichern</button>
-    <?php if (!$neu && !empty($a['rezeptur_id'])): ?>
-      <a class="btn btn-primary" href="?p=rezeptur_detail&id=<?= (int)$a['rezeptur_id'] ?>">Vorschlag öffnen</a>
-      <span class="muted" style="font-size:12px;align-self:center">Zu dieser Anfrage gibt es bereits einen Vorschlag – dort überarbeiten (nicht neu erstellen). Erst mit Kundenzustimmung wird daraus eine Rezeptur.</span>
+    <?php if (!$neu && $rezGesendet): ?>
+      <a class="btn btn-primary" href="?p=rezeptur_detail&id=<?= $rezId ?>">Vorschlag öffnen</a>
+      <span class="muted" style="font-size:12px;align-self:center">Zu dieser Anfrage gibt es bereits einen <strong>gesendeten</strong> Vorschlag – dort überarbeiten (nicht neu erstellen). Erst mit Kundenzustimmung wird daraus eine Rezeptur.</span>
+    <?php elseif (!$neu && $rezEntwurf): ?>
+      <button class="btn btn-primary" type="submit" name="aktion" value="vorschlag_senden" onclick="return confirm('Den verknüpften Entwurf jetzt als Vorschlag an den Kunden senden?')">Als Vorschlag an den Kunden senden</button>
+      <a class="btn btn-ghost" href="?p=rezeptur_detail&id=<?= $rezId ?>">Entwurf öffnen</a>
+      <span class="muted" style="font-size:12px;align-self:center">Hier hängt ein Rezeptur-<strong>Entwurf</strong> (noch nicht gesendet) – deshalb steht die Anfrage weiter offen und der Kunde wartet. Entwurf prüfen und dann senden.</span>
     <?php else: ?>
       <button class="btn btn-primary" type="submit" name="aktion" value="rezeptur_erstellen">Vorschlag erstellen &amp; senden</button>
     <?php endif; ?>
