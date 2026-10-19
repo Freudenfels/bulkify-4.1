@@ -23,6 +23,11 @@ nur für Kunden mit `kunden.nutzt_fulfillment=1`. Andere Kunden bekommen ihre Wa
 
 **Kopplung = BSKU.** Die alte ID-Kopplung („Fulfillment-Artikel abrufen" / Spalte „Shopify-Verknüpfung" / `shopify_inventory_item_id`, Richtung B) ist **ausgeblendet** – die Zuordnung Shop-Artikel ↔ bulkify-Verkaufsartikel passiert per Dropdown auf der Fulfillment-Seite über die BSKU. Handler `iid_save`/`ff_pull` + `ff_feed_pull()` bleiben als Code, werden aber nicht mehr angezeigt.
 
+## Energetisierung (Startdatum je Charge anpassen)
+Nur für Kunden mit `kunden.zeige_energetisierung=1`. Beim Einbuchen (`lager2_einbuchen()`) wird automatisch der aktuelle Zeitpunkt als `charge.energetisiert_am` gesetzt – ab da sieht der Kunde in „Mein Lager" „Energetisierung läuft · fertig am … / abgeschlossen" (Dauer global `energ_tage`, Standard 14).
+
+Das Panel **„Energetisierung"** listet die betroffenen Chargen (frei + verfügbar, wie im Portal) und lässt das **Startdatum setzen/ändern** (`aktion=energ_set`, Datum `YYYY-MM-DD` → `energetisiert_am` + `energetisiert_von`=aktueller Nutzer) oder **entfernen** (`aktion=energ_clear` → NULL). Status/Resttage kommen aus `energ_text_kurz()`. **Bewusst ohne Admin-Sperre:** Admin UND Lager-Mitarbeiter (die diese Seite ohnehin öffnen dürfen) können „ab wann" anpassen. Der Handler prüft serverseitig, dass die Charge zu einem Energetisierungs-Kunden gehört.
+
 ## Offen (nächste Schritte)
 - **ds_api.php** (Token `X-DS-Token`): `GET action=lager2` (Feed: verfuegbar, shopify_inventory_item_id, bsku),
   `POST verbrauch_sku` (iid/bsku, menge, ref → abbuchen, idempotent), `POST retoure_sku` (+ Bestand),

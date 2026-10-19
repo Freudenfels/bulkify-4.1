@@ -30,7 +30,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einbu
     header('Location: ?p=lager2&eingebucht=1'); exit;
 }
 
+// Energetisierungs-Startdatum je Charge setzen/ändern/entfernen. Bewusst OHNE Admin-Sperre: Admin UND
+// Lager-Mitarbeiter (die diese Seite ohnehin öffnen dürfen) sollen anpassen können, ab wann sie läuft.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['energ_set', 'energ_clear'], true)) {
+    $cid = (int)($_POST['charge_id'] ?? 0);
+    // Sicherheit: nur Chargen von Kunden mit Energetisierungs-Freigabe (sonst keine Wirkung).
+    $ok = $cid && (int) scalar("SELECT COUNT(*) FROM charge c
+                                JOIN item i ON i.id=c.item_id AND i.kategorie='verkaufsfertig'
+                                JOIN produkt p ON p.id=i.produkt_id JOIN kunden k ON k.id=p.kunde_id
+                                WHERE c.id=? AND k.zeige_energetisierung=1", [$cid]) > 0;
+    if ($ok) {
+        if (($_POST['aktion'] ?? '') === 'energ_clear') {
+            q("UPDATE charge SET energetisiert_am=NULL, energetisiert_von=NULL WHERE id=?", [$cid]);
+        } else {
+            $d = trim((string)($_POST['energ_datum'] ?? ''));
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
+                $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
+                q("UPDATE charge SET energetisiert_am=?, energetisiert_von=? WHERE id=?", [$d . ' 00:00:00', $wer !== '' ? $wer : 'Team', $cid]);
+            }
+        }
+    }
+    header('Location: ?p=lager2&energ=1'); exit;
+}
+
 $produkte = lager2_produkte();
+// Chargen der Energetisierungs-Kunden (Fulfillment) mit Startdatum – wie im Kundenportal (frei + verfügbar).
+$energChargen = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, c.energetisiert_am,
+                            COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name, p.nummer AS produkt_nr, k.firma AS kunde
+                     FROM charge c
+                     JOIN item i ON i.id=c.item_id AND i.kategorie='verkaufsfertig'
+                     JOIN produkt p ON p.id=i.produkt_id
+                     JOIN kunden k ON k.id=p.kunde_id
+                     WHERE k.zeige_energetisierung=1 AND c.status='frei' AND c.menge_verfuegbar>0
+                     ORDER BY k.firma, p.nummer, c.id");
 // Fulfillment-Kunden + deren Produkte (auch ohne bisherigen Bestand) für die Einbuchung
 $ffProdukte = all("SELECT p.id, p.nummer, COALESCE(NULLIF(p.kundenname,''),p.name) AS anzeigename, k.firma AS kunde
                    FROM produkt p JOIN kunden k ON k.id=p.kunde_id
@@ -44,6 +76,7 @@ bx_head('Fremdlager', $ffKunden . ' Fulfillment-Kunde(n) · ' . count($produkte)
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['eingebucht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Fertigware ins Fremdlager eingebucht.</div>';
+if (isset($_GET['energ'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Energetisierung aktualisiert.</div>';
 
 if (!$ffKunden) {
     echo '<div class="bx-panel"><div class="muted">Noch kein Kunde als Fulfillment-Kunde markiert. Im <a href="?p=kunden">Kunden</a>-Datensatz „Nutzt unser Fulfillment (Fremdlager)" setzen – dann erscheint dessen Fertigware hier.</div></div>';
@@ -75,6 +108,35 @@ if (!$ffKunden) {
 <?php foreach ($produkte as $r): ?>
   <form id="bsku<?= (int)$r['item_id'] ?>" method="post" style="display:none"><input type="hidden" name="aktion" value="bsku"><input type="hidden" name="item_id" value="<?= (int)$r['item_id'] ?>"></form>
 <?php endforeach; ?>
+
+<?php if ($energChargen): ?>
+<div class="bx-panel">
+  <h2 style="margin:0 0 4px">Energetisierung</h2>
+  <p class="muted" style="margin:0 0 10px;font-size:13px">Startdatum je Charge – ab diesem Tag läuft die Energetisierung <?= energ_tage() ?> Tage, dann „abgeschlossen". Beim Einbuchen wird automatisch der aktuelle Tag gesetzt; hier kannst du (Admin oder Lager) anpassen, <strong>ab wann</strong> sie läuft, oder sie entfernen. Der Kunde sieht den Stand in „Mein Lager".</p>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Kunde</th><th>Produkt</th><th>Charge</th><th class="bx-num">Bestand</th><th>Startdatum</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($energChargen as $c): $start = (string)($c['energetisiert_am'] ?? ''); $dval = $start !== '' ? date('Y-m-d', strtotime($start)) : ''; ?>
+      <tr>
+        <td><?= h($c['kunde']) ?></td>
+        <td><?= h($c['produkt_name']) ?><div class="muted" style="font-size:11px"><?= h($c['produkt_nr']) ?></div></td>
+        <td><?= $c['charge_nr'] ? h($c['charge_nr']) : '<span class="muted">ohne</span>' ?></td>
+        <td class="bx-num"><?= $mfmt($c['menge_verfuegbar']) ?> Stk</td>
+        <td>
+          <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0">
+            <input type="hidden" name="aktion" value="energ_set"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
+            <input type="date" name="energ_datum" value="<?= h($dval) ?>" required>
+            <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
+          </form>
+        </td>
+        <td style="font-size:13px"><?= $start !== '' ? h(energ_text_kurz($start)) : '<span class="muted">nicht gestartet</span>' ?></td>
+        <td class="bx-num"><?php if ($start !== ''): ?><form method="post" style="margin:0" onsubmit="return confirm('Energetisierung für diese Charge entfernen?');"><input type="hidden" name="aktion" value="energ_clear"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Entfernen</button></form><?php endif; ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
 
 <form method="post" class="bx-form" style="margin-top:16px">
   <input type="hidden" name="aktion" value="einbuchen">
