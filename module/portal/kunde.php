@@ -1439,10 +1439,17 @@ $titelFuer = function(array $r): string {
         if ($n !== '') return $n;
     }
     $ang = (int)($r['angebot_id'] ?? 0);
-    if (!$ang && strpos((string)($r['nummer'] ?? ''), 'AN-') === 0) $ang = (int)($r['id'] ?? 0);
+    // Eigene Angebotszeile ($a) selbst auflösen: Produkt-Angebote AN-, Dienstleistungs-Angebote DA-.
+    // Ohne DA- blieb bei DL-Angeboten der Titel „–", obwohl die erste Position den Leistungsnamen trägt.
+    if (!$ang && preg_match('/^(AN|DA)-/', (string)($r['nummer'] ?? ''))) $ang = (int)($r['id'] ?? 0);
     if ($ang) {
         $b = (string) scalar("SELECT bezeichnung FROM angebot_position WHERE angebot_id=? ORDER BY sort, id LIMIT 1", [$ang]);
         if ($b !== '') return preg_replace('/^[A-Z]\)\s*/', '', $b);
+    }
+    // Dienstleistungs-Angebot ohne Position: Titel aus der verknüpften Anfrage (Betreff) – was der Kunde angefragt hat.
+    if (!empty($r['anfrage_id'])) {
+        $bt = (string) scalar("SELECT betreff FROM portal_anfrage WHERE id=?", [(int)$r['anfrage_id']]);
+        if (trim($bt) !== '') return $bt;
     }
     return '–';
 };
