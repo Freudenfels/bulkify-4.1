@@ -93,8 +93,22 @@ function bx_anfrage_counts(): array {
     $c = ['anfragen'=>0,'paf_produkt'=>0,'paf_rohstoff'=>0,'paf_dienstleistung'=>0];
     if (!function_exists('scalar')) return $c;
     try {
-        $c['anfragen'] = (int) scalar("SELECT COUNT(*) FROM rezeptur_anfrage WHERE status NOT IN ('beantwortet','abgelehnt')");
-        foreach (all("SELECT typ, COUNT(*) c FROM portal_anfrage WHERE status NOT IN ('beantwortet','abgelehnt') GROUP BY typ") as $r) {
+        // Deckungsgleich mit den Listen-Ansichten „Offen" (module/anfrage/liste.php, module/intern/portal_anfragen.php)
+        // und der Kundensicht: OFFEN = es liegt noch KEIN echter Vorschlag bzw. kein sichtbares Angebot beim Kunden.
+        // Sonst zeigt der Menü-Badge etwas an, das in der geöffneten Liste (Standard „Offen") gar nicht steht.
+        // Rezepturanfrage: beantwortet = verknüpfte Rezeptur ist vorschlag/freigegeben/eingefroren (und nicht „überarbeiten“).
+        $c['anfragen'] = (int) scalar(
+            "SELECT COUNT(*) FROM rezeptur_anfrage ra LEFT JOIN rezeptur r ON r.id=ra.rezeptur_id
+             WHERE ra.status<>'abgelehnt'
+               AND NOT (ra.status<>'ueberarbeiten' AND r.status IN ('vorschlag','freigegeben','eingefroren'))");
+        // Portal-Anfrage (Produkt/Rohstoff/Dienstleistung): beantwortet = es gibt ein sichtbares, preislich
+        // freigegebenes Angebot (genau wie im Kundenportal). Zurückgezogenes/gesperrtes Angebot zählt wieder als offen.
+        foreach (all(
+            "SELECT pa.typ, COUNT(*) c FROM portal_anfrage pa
+             WHERE pa.status<>'abgelehnt'
+               AND NOT EXISTS (SELECT 1 FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id
+                               AND COALESCE(a.kunde_ausgeblendet,0)=0 AND a.status<>'offen' AND a.preise_kunde=1)
+             GROUP BY pa.typ") as $r) {
             $k = ['produkt'=>'paf_produkt','rohstoff'=>'paf_rohstoff','dienstleistung'=>'paf_dienstleistung'][$r['typ']] ?? null;
             if ($k) $c[$k] = (int) $r['c'];
         }
