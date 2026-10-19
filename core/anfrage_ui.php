@@ -115,6 +115,7 @@ function anfrage_modal(array $lieferanten, string $back): void {
       <input type="hidden" name="rezeptur_id" id="bxAnfrageRezId" value="">
       <input type="hidden" name="art" id="bxAnfrageArt" value="">
       <input type="hidden" name="neu_rohstoff" id="bxAnfrageNeu" value="">
+      <input type="hidden" name="item_ids" id="bxAnfrageItemIds" value="">
       <input type="hidden" name="back" value="<?= h($back) ?>">
       <div style="max-height:230px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin-bottom:12px">
         <?php if (!$lieferanten): ?>
@@ -196,6 +197,7 @@ function bxAnfrageOeffnen(itemId, btn){
   document.getElementById('bxAnfrageRezId').value = '';
   document.getElementById('bxAnfrageArt').value = '';
   document.getElementById('bxAnfrageNeu').value = '';
+  var _ids1=document.getElementById('bxAnfrageItemIds'); if(_ids1) _ids1.value='';
   bxAnfrageModus('preis'); bxAnfMengeStaffel(false);
   // Benötigte Menge (Bedarf aus der Kundenkalkulation) vorbefüllen, falls der Knopf sie mitgibt.
   var mEl = document.getElementById('bxAnfMenge');
@@ -217,6 +219,7 @@ window.bxAnfrageNeuOeffnen = function(name){
   document.getElementById('bxAnfrageRezId').value = '';
   document.getElementById('bxAnfrageArt').value = '';
   document.getElementById('bxAnfrageNeu').value = name;
+  var _ids2=document.getElementById('bxAnfrageItemIds'); if(_ids2) _ids2.value='';
   var mEl0 = document.getElementById('bxAnfMenge'); if (mEl0) mEl0.value = '';
   var mLbl0 = document.getElementById('bxAnfMengeLbl'); if (mLbl0) mLbl0.textContent = 'Menge (optional)';
   bxAnfrageModus('doku'); bxAnfMengeStaffel(false);   // Fokus: CoA / Spezifikation – Kilopreis optional
@@ -231,6 +234,7 @@ function bxAnfrageProduktOeffnen(rezId, btn){
   document.getElementById('bxAnfrageRezId').value = rezId;
   document.getElementById('bxAnfrageArt').value = 'fertigprodukt';
   document.getElementById('bxAnfrageNeu').value = '';
+  var _ids3=document.getElementById('bxAnfrageItemIds'); if(_ids3) _ids3.value='';
   bxAnfrageModus('preis'); bxAnfMengeStaffel(true);   // Fertigprodukt: Mengen-Staffel (kommagetrennt) möglich
   var name = btn && btn.getAttribute('data-name');
   var form = btn && btn.getAttribute('data-form');
@@ -238,6 +242,20 @@ function bxAnfrageProduktOeffnen(rezId, btn){
     'Fertigprodukt „' + (name || '') + '"' + (form ? ' (' + form + ')' : '') + ' – bei welchen Lieferanten fertigen lassen?';
   document.getElementById('bxAnfrageOverlay').style.display='flex';
 }
+// Bulk-Modus: MEHRERE Rohstoffe auf einmal anfragen (z. B. „Alle anfragen" auf „Rohstoffe ohne Papiere").
+// ids = Array von item_ids. Fokus CoA/Spezifikation (doku-Modus), an alle gewählten Lieferanten.
+window.bxAnfrageBulkOeffnen = function(ids, label){
+  ids = ids || [];
+  document.getElementById('bxAnfrageItemId').value = '';
+  document.getElementById('bxAnfrageRezId').value = '';
+  document.getElementById('bxAnfrageArt').value = '';
+  document.getElementById('bxAnfrageNeu').value = '';
+  var idsEl = document.getElementById('bxAnfrageItemIds'); if (idsEl) idsEl.value = ids.join(',');
+  bxAnfrageModus('doku'); bxAnfMengeStaffel(false);   // Fokus CoA/Spezifikation, Kilopreis optional
+  document.getElementById('bxAnfrageItem').textContent = label
+    || (ids.length + ' Rohstoffe – bei welchen Lieferanten anfragen? (CoA/Spezifikation)');
+  document.getElementById('bxAnfrageOverlay').style.display='flex';
+};
 // Mengenfeld mit Tausenderpunkt (10.000 statt 10000). Komma bleibt der Staffel-Trenner;
 // je kommagetrennte Menge einzeln formatiert. Cursor wird über die Ziffernposition erhalten.
 (function(){

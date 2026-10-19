@@ -24,6 +24,25 @@ $lieferOpt  = ['incoterm' => $incoterm, 'versandart' => $versandart];   // gewü
 
 if (!$lids) { header('Location: ' . $back . '&anffehler=1'); exit; }
 
+// Bulk: viele Rohstoffe auf einmal (Seite „Rohstoffe ohne Papiere" → „Alle anfragen"). Für jeden Rohstoff
+// an jeden gewählten Lieferanten eine Anfrage (CoA/Spezifikation + optional Kilopreis), gleiche Mechanik wie unten.
+$itemIds = array_values(array_unique(array_filter(array_map('intval', preg_split('/[,\s]+/', (string)($_POST['item_ids'] ?? ''))), fn($x) => $x > 0)));
+if ($art !== 'fertigprodukt' && $itemIds) {
+    $n = 0; $gemailt = 0;
+    foreach ($itemIds as $iid) {
+        if (!scalar("SELECT id FROM item WHERE id=? AND kategorie='rohstoff'", [$iid])) continue;
+        $einhB = (string) (scalar("SELECT preis_bezug FROM item WHERE id=?", [$iid]) ?: scalar("SELECT einheit FROM item WHERE id=?", [$iid]));
+        foreach ($lids as $lid) {
+            if (!scalar("SELECT id FROM lieferanten WHERE id=? AND gesperrt=0 AND COALESCE(keine_anfragen,0)=0", [$lid])) continue;
+            $af = lieferant_anfrage_stellen($lid, $iid, '', $menge > 0 ? $menge : null, $einhB, $notiz, $coa, $lieferOpt);
+            $n++;
+            if (mail_bereit() && function_exists('mail_lieferant_anfrage') && mail_lieferant_anfrage((int)$af) === '') $gemailt++;
+        }
+    }
+    $sep = strpos($back, '?') !== false ? '&' : '?';
+    header('Location: ' . $back . $sep . 'angefragt=' . $n . '&gemailt=' . $gemailt); exit;
+}
+
 // Zwei Wege: einzelner Rohstoff (item_id) ODER ganzes Fertigprodukt (rezeptur_id).
 if ($art === 'fertigprodukt' && $rez_id > 0) {
     $rez = one("SELECT name, darreichungsform FROM rezeptur WHERE id=?", [$rez_id]);

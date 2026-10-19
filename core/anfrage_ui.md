@@ -30,5 +30,8 @@ Wenn der E-Mail-Versand eingerichtet ist, geht direkt eine Mail (`mail_lieferant
 - `module/angebot/detail.php` – Panel „Rohstoffkosten je Lieferant", je Zutat Badge + Knopf; darüber je Rezeptur des Angebots ein Fertigprodukt-Knopf. So sieht das Team die Lieferantenpreise, bevor es den Angebotspreis macht.
 - `module/intern/portal_anfrage_detail.php` – Panel „Rohstoffpreise" zur angefragten Rezeptur, plus Fertigprodukt-Block.
 
+## Bulk-Anfrage (mehrere Rohstoffe auf einmal)
+`bxAnfrageBulkOeffnen(ids, label)` öffnet dasselbe Popup im Dokumente-Modus (CoA/Spezifikation) und schreibt die item_ids in das Hidden-Feld `item_ids` (kommagetrennt). Die Lieferanten-Mehrfachauswahl (`anf_lieferant[]`) funktioniert unverändert. `preis_anfragen.php` verarbeitet `item_ids` als m×n-Schleife (jeder Rohstoff an jeden gewählten Lieferanten). Die Einzel-Opener (`bxAnfrageOeffnen`/`…NeuOeffnen`/`…ProduktOeffnen`) setzen `item_ids` wieder zurück, damit keine alte Bulk-Auswahl hängen bleibt. Eingesetzt auf `module/lager/rohstoffe_ohne_papiere.php` („Alle anfragen").
+
 ## Mengen-Staffel: flüssiges Tippen (Stand 2026-10-08)
 Der Live-Formatter des Mengen-Staffel-Felds (`#bxAnfMenge`, Tausenderpunkte je kommagetrennter Menge) setzte den Cursor nur hinter die letzte Ziffer – beim Tippen eines Kommas sprang er hinter das Komma zurück. Fix: Der Cursor-Anker zählt jetzt Ziffern UND Kommas vor dem Cursor und überspringt danach das Trenn-Leerzeichen, sodass man direkt die nächste Menge weitertippen kann (z. B. „60.000, 90.000, 120.000").
