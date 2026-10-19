@@ -237,6 +237,54 @@ function mail_lieferant_anfrage(int $anfrage_id): string {
     return mail_senden((string)$a['email'], $betreff, $text);
 }
 
+// Gesammelte Preisanfrage: EINE Mail an einen Lieferanten mit MEHREREN Rohstoffen (Bulk „Alle anfragen").
+// Die einzelnen lieferant_anfrage bleiben pro Rohstoff bestehen – nur der Mailversand wird gebündelt,
+// damit der Lieferant nicht je Rohstoff eine eigene Mail bekommt. Lieferbedingung aus der ersten Anfrage.
+function mail_lieferant_anfrage_sammel(int $lieferant_id, array $anfrage_ids): string {
+    $ids = array_values(array_unique(array_filter(array_map('intval', $anfrage_ids), fn($x) => $x > 0)));
+    if (!$ids) return 'Keine Anfragen angegeben.';
+    $l = one("SELECT firma, ansprechpartner, email, sprache FROM lieferanten WHERE id=?", [$lieferant_id]);
+    if (!$l) return 'Lieferant nicht gefunden.';
+    if (trim((string)$l['email']) === '') return 'Für diesen Lieferanten ist keine E-Mail-Adresse hinterlegt.';
+    $in = implode(',', $ids);   // $ids sind geprüfte Integer – sicher in IN()
+    $zeilen = all("SELECT af.menge, af.einheit, af.incoterm, af.versandart, COALESCE(i.name, af.betreff) AS was
+                   FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
+                   WHERE af.id IN ($in) AND af.lieferant_id=? ORDER BY was", [$lieferant_id]);
+    if (!$zeilen) return 'Keine passenden Anfragen für diesen Lieferanten.';
+    $fa = beleg_firma();
+    $sp = mail_lief_sprache($l['sprache']);
+    $anrede = trim((string)$l['ansprechpartner']) !== '' ? (string)$l['ansprechpartner'] : (string)$l['firma'];
+    $link = mail_basis_url() . '/?p=lieferant_login';
+    $vmap = ['luft'=>['Luftfracht','air freight','空运'],'see'=>['Seefracht','sea freight','海运'],'bahn'=>['Bahnfracht','rail freight','铁路运输'],'lkw'=>['LKW / Straße','road freight','陆运'],'express'=>['Express','express','快递'],'standard'=>['Standard','standard','标准']];
+    $spIdx = ['de'=>0,'zh'=>2][$sp] ?? 1;
+    $first = $zeilen[0];
+    $versLbl = (!empty($first['versandart']) && isset($vmap[$first['versandart']])) ? $vmap[$first['versandart']][$spIdx] : '';
+    $terms = implode(', ', array_filter([(string)($first['incoterm'] ?? ''), $versLbl]));
+    $liste = '';
+    foreach ($zeilen as $z) {
+        $mng = $z['menge'] ? ' (' . rtrim(rtrim(number_format((float)$z['menge'], 3, ',', '.'), '0'), ',') . ' ' . (string)$z['einheit'] . ')' : '';
+        $liste .= '- ' . trim((string)$z['was']) . $mng . "\n";
+    }
+    $n = count($zeilen);
+    if ($sp === 'de') {
+        $betreff = 'Preisanfrage – ' . $n . ' Rohstoffe';
+        $text = "Guten Tag $anrede,\n\nwir bitten um ein Preisangebot (inkl. CoA/Spezifikation) für folgende Rohstoffe:\n\n$liste\n"
+              . ($terms ? "Gewünschte Lieferbedingung: $terms.\n\n" : '')
+              . "Bitte geben Sie Ihr Angebot im Portal ab (Preis, Mindestmenge, Staffeln, CoA/Spec):\n$link\n\nViele Grüße\n" . $fa['name'];
+    } elseif ($sp === 'zh') {
+        $betreff = '询价 – ' . $n . ' 种原料';
+        $text = "$anrede 您好，\n\n我方就以下原料请求报价（含 COA/规格）：\n\n$liste\n"
+              . ($terms ? "要求的交货条件：$terms。\n\n" : '')
+              . "请在门户中提交您的报价（价格、最小起订量、阶梯价、COA/Spec）：\n$link\n\n此致\n" . $fa['name'];
+    } else {
+        $betreff = 'Price request – ' . $n . ' raw materials';
+        $text = "Dear $anrede,\n\nwe kindly ask for a quotation (incl. CoA/specification) for the following raw materials:\n\n$liste\n"
+              . ($terms ? "Requested delivery terms: $terms.\n\n" : '')
+              . "Please submit your offer in the portal (price, MOQ, tiers, CoA/Spec):\n$link\n\nBest regards\n" . $fa['name'];
+    }
+    return mail_senden((string)$l['email'], $betreff, $text);
+}
+
 // Interne Benachrichtigung an alle aktiven Admins (z. B. „Lieferant hat bestätigt").
 function mail_team(string $betreff, string $text): int {
     // Dashboard-Benachrichtigung IMMER anlegen (unabhaengig vom Mailversand) – mit Deep-Link aus dem Text.

@@ -28,7 +28,7 @@ if (!$lids) { header('Location: ' . $back . '&anffehler=1'); exit; }
 // an jeden gewählten Lieferanten eine Anfrage (CoA/Spezifikation + optional Kilopreis), gleiche Mechanik wie unten.
 $itemIds = array_values(array_unique(array_filter(array_map('intval', preg_split('/[,\s]+/', (string)($_POST['item_ids'] ?? ''))), fn($x) => $x > 0)));
 if ($art !== 'fertigprodukt' && $itemIds) {
-    $n = 0; $afIds = [];
+    $n = 0; $afBySupplier = [];   // je Lieferant die erzeugten Anfrage-IDs -> EINE gesammelte Mail
     foreach ($itemIds as $iid) {
         if (!scalar("SELECT id FROM item WHERE id=? AND kategorie='rohstoff'", [$iid])) continue;
         $einhB = (string) (scalar("SELECT preis_bezug FROM item WHERE id=?", [$iid]) ?: scalar("SELECT einheit FROM item WHERE id=?", [$iid]));
@@ -36,13 +36,15 @@ if ($art !== 'fertigprodukt' && $itemIds) {
             if (!scalar("SELECT id FROM lieferanten WHERE id=? AND gesperrt=0 AND COALESCE(keine_anfragen,0)=0", [$lid])) continue;
             $af = lieferant_anfrage_stellen($lid, $iid, '', $menge > 0 ? $menge : null, $einhB, $notiz, $coa, $lieferOpt);
             $n++;
-            if ($af) $afIds[] = (int)$af;
+            if ($af) $afBySupplier[(int)$lid][] = (int)$af;
         }
     }
-    // E-Mails NACH der Antwort verschicken: SMTP ist langsam (bis 15 s je Mail); bei vielen Rohstoffen × Lieferanten
-    // würde synchroner Versand sonst ins PHP-Timeout laufen (500). nach_antwort() liefert erst die Weiterleitung aus.
-    if ($afIds && mail_bereit() && function_exists('mail_lieferant_anfrage') && function_exists('nach_antwort'))
-        nach_antwort(function () use ($afIds) { foreach ($afIds as $af) mail_lieferant_anfrage($af); });
+    // Pro Lieferant EINE gesammelte Mail mit allen angefragten Rohstoffen – NACH der Antwort (SMTP ist langsam,
+    // synchron liefe es sonst ins PHP-Timeout). Die einzelnen Anfragen bleiben pro Rohstoff bestehen.
+    if ($afBySupplier && mail_bereit() && function_exists('mail_lieferant_anfrage_sammel') && function_exists('nach_antwort'))
+        nach_antwort(function () use ($afBySupplier) {
+            foreach ($afBySupplier as $lid => $ids) mail_lieferant_anfrage_sammel((int)$lid, $ids);
+        });
     $sep = strpos($back, '?') !== false ? '&' : '?';
     header('Location: ' . $back . $sep . 'angefragt=' . $n); exit;
 }
