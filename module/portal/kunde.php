@@ -2110,28 +2110,39 @@ portal_head('Kundenportal · ' . $k['firma']);
     <a class="pt-card" href="<?= $portalLink('rechnungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Offene Rechnungen</div><div class="val"><?= $eur($offenBetrag) ?></div></a>
   </div>
 
-  <?php // In Produktion: Aufträge dieses Kunden, die gerade produziert werden – das Wichtigste auf einen Blick.
-        $inProd = array_values(array_filter($auftraege, fn($a) => ($a['status'] ?? '') === 'in_produktion')); ?>
+  <?php // In Produktion / in Arbeit: aktive Aufträge des Kunden (nicht versendet/storniert) mit ihrem echten Status.
+        $inProd = array_values(array_filter($auftraege, fn($a) => !in_array((string)($a['status'] ?? ''), ['versendet', 'storniert'], true)));
+        $inProdShow = array_slice($inProd, 0, 10);
+        $aufBadge = function($s) {
+            switch ($s) {
+                case 'in_produktion': return bx_badge('in Produktion', 'warn');
+                case 'in_arbeit':     return bx_badge('in Arbeit', 'warn');
+                case 'erledigt':      return bx_badge('versandbereit', 'info');
+                case 'offen':         return bx_badge('bestellt', 'info');
+                default:              return bx_badge(status_text($s));
+            }
+        }; ?>
   <?php if ($inProd): ?>
   <div class="bx-panel">
     <div class="bx-row" style="justify-content:space-between;align-items:center">
-      <h2 style="margin:0">In Produktion <span class="muted" style="font-weight:400;font-size:14px">(<?= count($inProd) ?>)</span></h2>
+      <h2 style="margin:0">In Produktion / in Arbeit <span class="muted" style="font-weight:400;font-size:14px">(<?= count($inProd) ?>)</span></h2>
       <a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellungen') ?>">Alle Bestellungen</a>
     </div>
     <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
       <thead><tr><th>Auftrag</th><th>Produkt</th><th class="bx-num">Menge</th><th>Status</th><th></th></tr></thead>
       <tbody>
-      <?php foreach ($inProd as $a): ?>
+      <?php foreach ($inProdShow as $a): ?>
         <tr>
           <td><?= h((string)$a['nummer']) ?></td>
           <td><?= h($titelFuer($a)) ?></td>
           <td class="bx-num"><?= (int)($a['menge'] ?? 0) ? number_format((int)$a['menge'], 0, ',', '.') . ' Pkg.' : '<span class="muted">–</span>' ?></td>
-          <td><?= bx_badge('in Produktion', 'warn') ?></td>
+          <td><?= $aufBadge((string)($a['status'] ?? '')) ?></td>
           <td class="bx-num"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>">Ansehen</a></td>
         </tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
+    <?php if (count($inProd) > count($inProdShow)): ?><div class="muted" style="font-size:12px;margin-top:8px">… und <?= count($inProd) - count($inProdShow) ?> weitere – siehe <a href="<?= $portalLink('bestellungen') ?>">Bestellungen</a>.</div><?php endif; ?>
   </div>
   <?php endif; ?>
 
