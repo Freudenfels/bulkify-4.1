@@ -565,11 +565,39 @@ $jvWarnung  = has_role('admin') && empty($a['kontingent_id']) && (string)$a['sta
 <?php endif; ?>
 <div class="settabs" id="auftabs" style="margin-bottom:16px">
   <a href="#" class="on" data-tab="details">Details</a>
+  <a href="#" data-tab="rezeptur">Rezeptur</a>
   <a href="#" data-tab="produktion">Produktion</a>
   <a href="#" data-tab="lager">Lager</a>
   <a href="#" data-tab="preise">Preise &amp; Rechnung</a>
   <a href="#" data-tab="dokumente">Dokumente</a>
   <a href="#" data-tab="verpackung">Verpackung</a>
+</div>
+
+<?php // Reiter „Rezeptur": zeigt die (effektive) Rezeptur des Auftrags zum Nachsehen (auftrag.rezeptur_id, sonst Produkt-Rezeptur). ?>
+<div class="bx-panel" data-panel="rezeptur">
+  <?php if ($rezeptur):
+      $rzZut = all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rezEffId]);
+      $rzSum = 0.0; foreach ($rzZut as $z) $rzSum += (float)$z['menge_mg'];
+      $kgName = (int)($rezeptur['kapselgroesse_id'] ?? 0) ? (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$rezeptur['kapselgroesse_id']]) : '';
+      $mgF = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+  ?>
+    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <h2 style="margin:0"><?= h((string)$rezeptur['nummer']) ?> · <?= h((string)$rezeptur['name']) ?></h2>
+      <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="?p=rezeptur_detail&id=<?= (int)$rezEffId ?>">Rezeptur öffnen &#8599;</a>
+    </div>
+    <div class="muted" style="font-size:13px;margin:4px 0 12px"><?= h((string)$rezeptur['darreichungsform']) ?><?= $kgName !== '' ? ' · Kapselgröße ' . h($kgName) : '' ?><?= $rzSum > 0 ? ' · Gesamt ' . $mgF($rzSum) . ' mg je Einheit' : '' ?></div>
+    <?php if ($rzZut): ?>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Zutat</th><th class="bx-num">Menge je Einheit</th></tr></thead>
+      <tbody>
+        <?php foreach ($rzZut as $z): ?><tr><td><?= h((string)$z['bezeichnung']) ?></td><td class="bx-num"><?= $mgF($z['menge_mg']) ?> mg</td></tr><?php endforeach; ?>
+        <tr style="font-weight:600"><td>Gesamt je Einheit</td><td class="bx-num"><?= $mgF($rzSum) ?> mg</td></tr>
+      </tbody>
+    </table></div>
+    <?php else: ?><div class="muted">Diese Rezeptur hat noch keine Zutaten.</div><?php endif; ?>
+  <?php else: ?>
+    <div class="muted">Diesem Auftrag ist noch keine Rezeptur zugeordnet. Im Reiter „Details" kannst du eine Rezeptur verknüpfen.</div>
+  <?php endif; ?>
 </div>
 
 <?php // Reiter „Verpackung": Etikett-Verwaltung (Team/Admin) – hochladen/ersetzen (Last-Minute), Freigabe im Namen des Kunden, entfernen.
