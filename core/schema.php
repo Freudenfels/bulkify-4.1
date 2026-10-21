@@ -10015,12 +10015,16 @@ function charge_coa_hat_analysewerte(int $charge_id): bool {
     return false;
 }
 
-// Status einer EINZELNEN Zutat fürs Matching-UI: 'ok' | 'frei' (Freitext) | 'tot' (Item fehlt/kein Rohstoff) | 'ohne_wirkstoff'.
+// Status einer EINZELNEN Zutat fürs Matching-UI: 'ok' | 'frei' (Freitext) | 'tot' (Item fehlt/kein Rohstoff)
+// | 'ohne_papiere' (Rohstoff zugeordnet, aber KEINE Unterlagen hinterlegt – kein CoA/Spec/Dokument).
+// Nicht jedes Produkt hat einen Wirkstoff (Botanicals haben legitim keinen); die orange Markierung soll fehlende
+// UNTERLAGEN anzeigen (nie CoA/Spec hochgeladen), nicht fehlende Wirkstoffdaten. „Papiere" = mind. ein dokument
+// am Rohstoff (wie in module/lager/rohstoffe_ohne_papiere.php).
 function rezeptur_zutat_match(?int $item_id): string {
     if (!$item_id) return 'frei';
     $i = one("SELECT id FROM item WHERE id=? AND kategorie='rohstoff'", [$item_id]);
     if (!$i) return 'tot';
-    return (int) scalar("SELECT COUNT(*) FROM item_wirkstoff WHERE item_id=?", [$item_id]) > 0 ? 'ok' : 'ohne_wirkstoff';
+    return (int) scalar("SELECT COUNT(*) FROM dokument WHERE objekt_typ='item' AND objekt_id=?", [$item_id]) > 0 ? 'ok' : 'ohne_papiere';
 }
 
 // Nährstoff per Name finden – oder neu anlegen (für „neuen Wirkstoff eintippen")

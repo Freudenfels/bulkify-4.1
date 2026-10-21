@@ -89,3 +89,11 @@ Bei **kundenspezifischen** Rezepturen (kunde_id gesetzt) ist der Hauptweg jetzt 
 
 ## PIB an der Rezeptur
 Im Kopf steht **„⇩ PIB ansehen"**, wenn zu dieser Rezeptur ein Produkt verknüpft ist (`produkt.rezeptur_id`). Das PIB ist produktbasiert und wird über die Route `?p=produkt_pib&id=<produkt_id>` ausgeliefert (`pib_ausliefern()` in `core/pdf_pib.php`: hochgeladenes PIB hat Vorrang, sonst Auto-PIB). Mehrere Produkte → je Produkt ein PIB-Knopf. Ohne verknüpftes Produkt zeigt der Knopf das REZEPTUR-PIB (Route `?p=rezeptur_pib&id=<rezeptur_id>`, `pib_pdf_bauen_rezeptur()`): Komposition, Nährwertdeklaration und Kapselgröße – ohne Verpackung/Verzehrempfehlung/Nettofüllmenge (die kommen erst mit dem Produkt/Auftrag).
+
+## Orange Markierung an einer Zutat (Rohstoff-Feld)
+Der orange Rahmen (+ ⚠-Badge) am Rohstoff-Feld kommt aus `rezeptur_zutat_match()` (core/schema.php), sobald der Status ≠ `ok` ist:
+- **frei** – „nicht zugeordnet" (noch kein Rohstoff gewählt),
+- **tot** – „Rohstoff fehlt" (zugeordneter Rohstoff existiert nicht mehr),
+- **ohne_papiere** – „keine Unterlagen (CoA/Spec)": dem Rohstoff ist **kein einziges Dokument** hinterlegt (`dokument`, objekt_typ='item').
+
+Bewusst **nicht** mehr an fehlenden Wirkstoffdaten (`item_wirkstoff`) festgemacht – nicht jedes Produkt hat einen Wirkstoff (Botanicals). Die Markierung zeigt, wo uns **Unterlagen fehlen** (nie ein CoA/Spec hochgeladen), konsistent mit `module/lager/rohstoffe_ohne_papiere.php`.

@@ -394,7 +394,7 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
           $zMatch = !empty($zutaten) ? rezeptur_zutat_match(!empty($z['item_id']) ? (int)$z['item_id'] : null) : 'ok';
           // Startwert fürs Rohstoff-Feld: gematchtes Label, sonst der ursprüngliche (Freitext-)Name als Suchhilfe.
           $zTxt = !empty($z['item_id']) && isset($itemById[(int)$z['item_id']]) ? $zlabel($itemById[(int)$z['item_id']]) : (string)($z['bezeichnung'] ?? '');
-          $zBadge = ['frei'=>'nicht zugeordnet','tot'=>'Rohstoff fehlt','ohne_wirkstoff'=>'ohne Wirkstoffdaten'][$zMatch] ?? '';
+          $zBadge = ['frei'=>'nicht zugeordnet','tot'=>'Rohstoff fehlt','ohne_papiere'=>'keine Unterlagen (CoA/Spec)'][$zMatch] ?? '';
         ?>
         <tr class="zutatrow">
           <td>
