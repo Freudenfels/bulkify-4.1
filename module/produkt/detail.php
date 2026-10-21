@@ -359,6 +359,9 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
         <option value="">– wählen –</option>
         <?php foreach ($rezepte as $rz): ?><option value="<?= $rz['id'] ?>" <?= (int)($p['rezeptur_id']??0)===(int)$rz['id']?'selected':'' ?>><?= h($rz['name']) ?> · <?= h($DFORM[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
       </select>
+      <?php $pRezId = (int)($p['rezeptur_id'] ?? 0); ?>
+      <a id="rezLink" target="_blank" rel="noopener" href="?p=rezeptur_detail&id=<?= $pRezId ?>" style="display:<?= $pRezId>0?'inline-block':'none' ?>;font-size:12px;margin-top:4px;color:var(--gruen)">Rezeptur ansehen &#8599;</a>
+      <script>(function(){var s=document.getElementById('rezeptur'),a=document.getElementById('rezLink');if(!s||!a)return;function u(){var v=parseInt(s.value||'0',10);if(v>0){a.href='?p=rezeptur_detail&id='+v;a.style.display='inline-block';}else{a.style.display='none';}}s.addEventListener('change',u);u();})();</script>
     </div>
     <?= verp_slot('Verpackung (Primär)', 'verpackung_id', $VERP_ROLLE['primaer'], $p['verpackung_id'] ?? '', 'Dose/Glas/Beutel, der das Produkt direkt hält') ?>
     <div class="bx-field"><label>Einheiten je Packung <?= bx_hint('z. B. 120 Kapseln je Dose') ?></label><input type="number" name="einheiten_pro_packung" id="einheiten" value="<?= $v('einheiten_pro_packung') ?>"></div>
