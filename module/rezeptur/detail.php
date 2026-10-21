@@ -727,16 +727,24 @@ function zactions(row){
   box.innerHTML = html;
 }
 function nf(x, d){ return x.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d}); }
+// Adaptiv: mindestens minDec Nachkommastellen, aber bis maxDec mehr, damit kleine Werte (z. B. 0,05) nicht
+// auf 0 gerundet werden. Überflüssige Nullen jenseits minDec werden getrimmt (200 bleibt 200, 0,05 bleibt 0,05).
+function nfA(x, minDec, maxDec){ x = parseFloat(x)||0; if (maxDec==null) maxDec = Math.max(minDec,3);
+  return x.toLocaleString('de-DE', {minimumFractionDigits:minDec, maximumFractionDigits:maxDec}); }
 function betragEinheit(mg, einheit, anzeige, ie_mg){
   var lbl = (anzeige && anzeige!=='') ? anzeige : einheit;
-  var s = einheit === 'µg' ? nf(mg*1000,1)+' '+lbl : nf(mg,1)+' '+lbl;
+  var s = einheit === 'µg' ? nfA(mg*1000,1,3)+' '+lbl : nfA(mg,1,3)+' '+lbl;
   if (ie_mg && ie_mg > 0) s += ' ('+nf(mg/ie_mg,0)+' I.E.)';   // zusätzlich I.E. (Vitamin D/A/E …)
   return s;
 }
 function nrvProzent(mg, nrv, einheit){
   if (nrv === null || nrv === undefined) return '';
   var nrvMg = einheit === 'µg' ? parseFloat(nrv)/1000 : parseFloat(nrv);
-  return nrvMg > 0 ? nf(mg / nrvMg * 100, 0)+' %' : '';
+  if (!(nrvMg > 0)) return '';
+  var pct = mg / nrvMg * 100;
+  // Kleine Werte nicht auf „0 %" runden: unter 1 % eine, unter 0,1 % zwei Nachkommastellen.
+  var dec = (pct > 0 && pct < 0.095) ? 2 : ((pct > 0 && pct < 0.95) ? 1 : 0);
+  return nf(pct, dec)+' %';
 }
 function recalc(){
   var rows = document.querySelectorAll('.zutatrow');
@@ -754,7 +762,7 @@ function recalc(){
     else if (it.preis_bezug === 'L' && it.dichte) perMg = (it.ek_preis / (1000*it.dichte)) / 1e3; // L->g über Dichte
     cost += mg * perMg;
     // Etikett-Zeile: Inhaltsstoff
-    etikett += '<tr><td><strong>'+it.name+'</strong></td><td class="bx-num">'+nf(mg,0)+' mg</td><td></td></tr>';
+    etikett += '<tr><td><strong>'+it.name+'</strong></td><td class="bx-num">'+nfA(mg,0,3)+' mg</td><td></td></tr>';
     (it.wirkstoffe||[]).forEach(function(w){
       if (!w.basePerMg) return;
       var mgN = mg * w.basePerMg;   // mg Nährstoff = mg Rohstoff × (mg Nährstoff je mg Rohstoff)
