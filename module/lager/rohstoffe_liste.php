@@ -125,6 +125,20 @@ $verf = fn($r) => $verfTok('Spec', isset($specSet[(int)$r['id']])) . ' <span sty
                 . $verfTok('CoA', isset($coaSet[(int)$r['id']])) . ' <span style="color:#ddd">·</span> '
                 . $verfTok('Lief.', isset($liefSet[(int)$r['id']]));
 
+// Bedarf (aus offenen Produktionsaufträgen) + Lagerbestand je Rohstoff – für die Spalten „Bedarf"/„Auf Lager".
+// Beides gebündelt (nicht pro Zeile): Bedarf einmal über bedarf_aggregiert(), Bestand als eine Charge-Summe.
+$bedarfMap = [];
+foreach (bedarf_aggregiert() as $b) if (empty($b['etikett'])) $bedarfMap[(int)$b['item_id']] = ($bedarfMap[(int)$b['item_id']] ?? 0) + (float)$b['need'];
+$bestandMap = [];
+$idsBB = array_map('intval', array_column($rows, 'id'));
+if ($idsBB) {
+    $inBB = implode(',', array_fill(0, count($idsBB), '?'));
+    foreach (all("SELECT item_id, COALESCE(SUM(menge_verfuegbar),0) AS b FROM charge
+                  WHERE item_id IN ($inBB) AND status='frei' AND fremd_kunde_id IS NULL GROUP BY item_id", $idsBB) as $cb)
+        $bestandMap[(int)$cb['item_id']] = (float)$cb['b'];
+}
+$mgMenge = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+
 if ($istKapsel) {
     $mg = fn($x) => $x !== null && $x !== '' ? rtrim(rtrim(number_format((float)$x,2,',','.'),'0'),',').' mg' : '<span class="muted">–</span>';
     $cols = [
@@ -143,6 +157,12 @@ $cols = [
     // Namen sind teils sehr lang – kleiner + umbrechen (Tabelle ist sonst global nowrap und läuft über den Rand).
     'name'          => ['label' => 'Name', 'sort' => true, 'render' => fn($r)=> '<span style="white-space:normal">' . h($r['name']) . '</span>'],
     'ek_preis'      => ['label' => 'Preis ab', 'sort' => true, 'num' => true, 'render' => $preisAb],
+    'bedarf'        => ['label' => 'Bedarf', 'num' => true, 'render' => function($r) use ($bedarfMap, $mgMenge) {
+        $n = $bedarfMap[(int)$r['id']] ?? 0;
+        return $n > 0 ? '<strong>' . $mgMenge($n) . '</strong> ' . h((string)($r['einheit'] ?? '')) : '<span class="muted">–</span>'; }],
+    'bestand'       => ['label' => 'Auf Lager', 'num' => true, 'render' => function($r) use ($bestandMap, $mgMenge) {
+        $b = $bestandMap[(int)$r['id']] ?? 0;
+        return $b > 0 ? $mgMenge($b) . ' ' . h((string)($r['einheit'] ?? '')) : '<span class="muted">0</span>'; }],
     'art'           => ['label' => 'Art', 'sort' => true, 'render' => fn($r) => ($ART[$r['art'] ?? ''] ?? '') !== '' ? h($ART[$r['art']]) : '<span class="muted">–</span>'],
     'form'          => ['label' => 'Form', 'sort' => true, 'render' => fn($r)=> h($FORM[$r['form']] ?? $r['form'])],
     'novelfood'     => ['label' => 'Novel Food', 'sort' => true, 'render' => function($r){

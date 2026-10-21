@@ -25,3 +25,6 @@ Zwei Dropdowns in der Filterleiste (nur Rohstoffe): **Art** = `item.art` (Stoffk
 
 ## KI-Info-Spalte (Stand 2026-10-08)
 Spalte „KI-Info" je Rohstoff mit Button „erzeugen"/„erneuern" (POST aktion=ki_info, item_id, zurueck). Ruft `item_ki_info_erzeugen()`, speichert den Text, kehrt zum selben Filter zurück (kiok/kierr). Button-Form nutzt onclick=stopPropagation, damit die Zeilen-Navigation (rowUrl) nicht ausgelöst wird. „vorhanden" (grün, Tooltip = Textanfang), wenn schon eine KI-Info da ist.
+
+## Spalten Bedarf / Auf Lager
+In der Rohstoff-/Nicht-Kapsel-Ansicht zwei Spalten: **Bedarf** (Summe `need` aus `bedarf_aggregiert()`, nur Nicht-Etikett, je item_id) und **Auf Lager** (gebündelte Charge-Summe: `SUM(menge_verfuegbar)` WHERE status=frei AND fremd_kunde_id IS NULL, je item_id). Beides einmal vorberechnet (eine Abfrage), nicht pro Zeile. Menge mit der item-`einheit`.
