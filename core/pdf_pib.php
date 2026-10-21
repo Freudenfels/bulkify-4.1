@@ -81,9 +81,25 @@ function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null, ?int $pr
     $prod = one("SELECT p.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS anzeige, r.darreichungsform, r.id AS rez_id
                  FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]);
     if (!$prod) return null;
+    return pib_pdf_render($prod, $produkt_id, $einheitenOverride, $proTagOverride);
+}
+
+// PIB direkt aus einer REZEPTUR (ohne Produkt): Komposition, Nährwertdeklaration, Kapselgröße, Pflichtangaben.
+// Produktspezifisches (Verpackung/Einheiten je Packung/Novel-Food-Snapshot) entfällt mangels Produkt.
+function pib_pdf_bauen_rezeptur(int $rezeptur_id, ?int $proTagOverride = null): ?string {
+    $r = one("SELECT id AS rez_id, darreichungsform, COALESCE(NULLIF(name,''),'Rezeptur') AS anzeige FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    if (!$r) return null;
+    $prod = $r + ['verpackung_id'=>null, 'verschluss_id'=>null, 'etikett_id'=>null,
+                  'einheiten_pro_packung'=>0, 'einnahme_pro_tag'=>0, 'leerkapsel_id'=>null, 'allergene'=>''];
+    return pib_pdf_render($prod, 0, null, $proTagOverride);
+}
+
+// Render-Körper des PIB – Quelle ist ein $prod-Datensatz (aus einem Produkt ODER aus einer Rezeptur abgeleitet).
+// $produkt_id>0 schaltet produktspezifische Teile frei (Behälter-Fallback aus Auftrag, Novel-Food-Snapshot).
+function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = null, ?int $proTagOverride = null): string {
     // Behälter/Etikettmaß fehlen am Produkt? Vom jüngsten Auftrag übernehmen (Verpackung wird oft
-    // erst je Auftrag gewählt – sonst stünde das wichtige Etikettmaß nicht im PIB).
-    if (empty($prod['verpackung_id'])) {
+    // erst je Auftrag gewählt – sonst stünde das wichtige Etikettmaß nicht im PIB). Nur bei echtem Produkt.
+    if ($produkt_id > 0 && empty($prod['verpackung_id'])) {
         $bid = produkt_behaelter_id($produkt_id);
         if ($bid) $prod['verpackung_id'] = $bid;
     }
@@ -277,7 +293,7 @@ function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null, ?int $pr
 
     // Novel-Food-Status – aus den GESPEICHERTEN Zutat-Status (Snapshot MIT Datum). Nur zeigen, wenn geprüft,
     // damit der Kunde später nachvollziehen kann, was zum angegebenen Datum galt.
-    $nfSnap = produkt_novelfood_snapshot($produkt_id);
+    $nfSnap = $produkt_id > 0 ? produkt_novelfood_snapshot($produkt_id) : ['status'=>'unklar'];
     if ($rid && $nfSnap['status'] !== 'unklar') {
         if ($y > 690) { $p->addPage(); $y = 48; }
         $y = spec_h($p, $y, 'Novel-Food-Status');

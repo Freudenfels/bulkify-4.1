@@ -102,6 +102,7 @@ $routes = [
     'produkte'        => 'produkt/liste.php',
     'produkt'         => 'produkt/detail.php',
     'produkt_pib'     => 'produkt/pib.php',          // Produktinformationsblatt (PIB) ansehen (Auto oder hochgeladen)
+    'rezeptur_pib'    => 'rezeptur/pib.php',        // PIB direkt aus einer Rezeptur (ohne Produkt)
     'novelfood'       => 'produkt/novelfood.php',   // Schnell-Nachschlage: ist ein Stoff Novel Food?
     'novelfood_import'=> 'produkt/novelfood_import.php',   // Katalog aktualisieren (Upload + Diff + EU-Direktabgleich)
     'novelfood_verlauf'=> 'produkt/novelfood_verlauf.php', // Aktualisierungs-Verlauf (was ist neu/geändert, je Lauf)

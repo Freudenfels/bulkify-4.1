@@ -20,3 +20,6 @@ Stellt dem Kunden ein **Produktinformationsblatt** bereit, damit er sein **Etike
 
 ## Grenzen
 Das Auto-PIB kennt nur, was die App hat (Rezeptur/Nährwerte/Darreichung). COA-/Laborwerte, Garantie-Texte und exakte Pflichtangaben sind NICHT enthalten – dafür ein fertiges PIB (z. B. aus der Skill `bulkify-produktinfo`) hochladen.
+
+## Rezepturbasiertes PIB (ohne Produkt)
+Der Render-Körper steckt in `pib_pdf_render(array $prod, int $produkt_id, …)`. `pib_pdf_bauen($produkt_id)` lädt das Produkt und delegiert; `pib_pdf_bauen_rezeptur($rezeptur_id)` baut ein minimales $prod aus der Rezeptur (rez_id, Form, Name; Verpackung/Einheiten/Leerkapsel leer) und rendert ohne Produkt. Produktspezifische Teile (Behälter-Fallback aus Auftrag, Novel-Food-Snapshot) laufen nur bei `produkt_id>0`. Genutzt von der Route `rezeptur_pib` (module/rezeptur/pib.php).
