@@ -86,3 +86,6 @@ Im Rohstoff-Picker (datalist `zutat_dl`) zeigt das Label `· Gehalt ✓`, wenn d
 
 ## Kundenrezeptur: Annahme kommt vom Kunden (Stand 2026-10-08)
 Bei **kundenspezifischen** Rezepturen (kunde_id gesetzt) ist der Hauptweg jetzt „Als Vorschlag an den Kunden senden" (→ status `vorschlag`). Der KUNDE nimmt den Vorschlag im Portal selbst an (`rezeptur_annehmen` → `eingefroren`, mit seinem Namen als Unterzeichner/`freigabe_name`). Die direkte Team-Abkürzung zu `eingefroren` ist nur noch ein klar getrennter, de-emphasierter Admin-Ausnahmebutton „Ohne Kundenannahme verbindlich setzen" (mit Rückfrage; setzt KEIN freigabe_name → keine falsche Kunden-Zuschreibung). **Hausrezepturen** (kunde_id NULL, Katalog) sind unverändert. Grund: „freigeben" durch das Team darf nicht so wirken, als hätte der Kunde angenommen.
+
+## PIB an der Rezeptur
+Im Kopf steht **„⇩ PIB ansehen"**, wenn zu dieser Rezeptur ein Produkt verknüpft ist (`produkt.rezeptur_id`). Das PIB ist produktbasiert und wird über die Route `?p=produkt_pib&id=<produkt_id>` ausgeliefert (`pib_ausliefern()` in `core/pdf_pib.php`: hochgeladenes PIB hat Vorrang, sonst Auto-PIB). Mehrere Produkte → je Produkt ein PIB-Knopf. Ohne verknüpftes Produkt kein Knopf, sondern ein Hinweis (PIB entsteht über das Produkt, i. d. R. mit Angebot/Auftrag).

@@ -207,10 +207,21 @@ $KAPSELN = all("SELECT id, name, fuellmenge_mg FROM kapselgroesse ORDER BY fuell
 $istKapselForm = in_array($df, ['kapsel','softgel'], true);
 
 render_header('rezeptur', $neu ? 'Neue Rezeptur' : $r['name']);
+// PIB direkt an der Rezeptur: das PIB ist produktbasiert (Route produkt_pib&id=<produkt_id>), darum auf die
+// verknüpften Produkte (produkt.rezeptur_id) verweisen. Ohne Produkt gibt es kein Auto-PIB -> Hinweis statt Knopf.
+$pibProdukte = $neu ? [] : all("SELECT id, COALESCE(NULLIF(kundenname,''), name) AS nm FROM produkt WHERE rezeptur_id=? ORDER BY id", [(int)$id]);
+$pibBtn = '';
+if (count($pibProdukte) === 1) {
+    $pibBtn = '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" rel="noopener" href="?p=produkt_pib&id=' . (int)$pibProdukte[0]['id'] . '">&#8681; PIB ansehen</a>';
+} elseif (count($pibProdukte) > 1) {
+    foreach ($pibProdukte as $pp)
+        $pibBtn .= '<a class="btn btn-ghost btn-sm" style="margin-right:6px" target="_blank" rel="noopener" href="?p=produkt_pib&id=' . (int)$pp['id'] . '" title="Produktinformationsblatt">&#8681; PIB · ' . h((string)$pp['nm']) . '</a>';
+}
 bx_head($neu ? 'Neue Rezeptur' : $v('name'),
         $neu ? 'Formulierung anlegen' : trim($v('nummer') . ' · ' . ($DFORM[$df] ?? $df)),
-        bx_btn('Zurück zur Liste', '?p=rezeptur', 'ghost'));
+        $pibBtn . bx_btn('Zurück zur Liste', '?p=rezeptur', 'ghost'));
 if (!$neu && !empty($r['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angelegt am ' . h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) . (!empty($r['aktualisiert']) && $r['aktualisiert'] !== $r['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($r['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
+if (!$neu && !$pibProdukte) echo '<div class="muted" style="font-size:12px;margin:-2px 0 10px">PIB entsteht über das Produkt – zu dieser Rezeptur ist noch kein Produkt verknüpft (entsteht i. d. R. mit dem Angebot/Auftrag).</div>';
 // Form-Warnung: Öl-/Flüssig-Rohstoffe in einem trockenen Produkt (z. B. „Hagebutte Öl" in einem Pulver).
 if (!$neu && ($oelMiss = rezeptur_oel_in_trocken((int)$id))) {
     echo '<div class="bx-panel" style="border-color:#e6c4c0;background:#fdf3f1;color:#8f231b;padding:12px 16px;margin-bottom:12px">'
