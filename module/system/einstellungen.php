@@ -67,6 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'mail_save') {
     meta_set('mail_aktiv', isset($_POST['mail_aktiv']) ? '1' : '0');
     foreach (['smtp_host', 'smtp_user', 'smtp_helo', 'mail_from', 'mail_from_name', 'portal_url', 'benachrichtigung_cc'] as $f)
         meta_set($f, trim((string)($_POST[$f] ?? '')));
+    // Zentrale Signatur-Vorlage (HTML, Platzhalter {name} {position} {telefon} {email} {logo}). Leer = eingebauter Standard.
+    meta_set('mail_signatur_vorlage', rtrim((string)($_POST['mail_signatur_vorlage'] ?? '')));
     meta_set('smtp_port', (string) max(1, (int)($_POST['smtp_port'] ?? 587)));
     meta_set('smtp_secure', in_array($_POST['smtp_secure'] ?? '', ['tls', 'ssl', ''], true) ? (string)$_POST['smtp_secure'] : 'tls');
     if (trim((string)($_POST['smtp_pass'] ?? '')) !== '') meta_set('smtp_pass', (string)$_POST['smtp_pass']);
@@ -792,6 +794,8 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
         <input type="text" name="portal_url" value="<?= h((string) meta_get('portal_url', '')) ?>" placeholder="https://beta.bulkify.pro"></div>
       <div class="bx-field" style="grid-column:1/-1"><label>Zusätzliche Benachrichtigungs-Adressen <?= bx_hint('Bekommen ALLE Team-Benachrichtigungen (Lieferanten-Rückfragen, beantwortete Preisanfragen, angenommene Angebote, Etikett-Uploads …) zusätzlich per Mail – auch ohne Dashboard-Login. Mehrere mit Komma trennen.') ?></label>
         <input type="text" name="benachrichtigung_cc" value="<?= h((string) meta_get('benachrichtigung_cc', '')) ?>" placeholder="z. B. albers@bulkify.pro"></div>
+      <div class="bx-field" style="grid-column:1/-1"><label>E-Mail-Signatur – Vorlage (HTML) <?= bx_hint('Wird für neue Mitarbeiter automatisch mit deren Daten befüllt und unter die vom Dashboard verschickten Mails gesetzt. Platzhalter: {name} {position} {telefon} {email} {logo}. Leer = eingebauter Standard. Je Mitarbeiter unter Benutzer überschreibbar.') ?></label>
+        <textarea name="mail_signatur_vorlage" rows="8" style="font-family:monospace;font-size:12px"><?= h(mail_signatur_vorlage()) ?></textarea></div>
     </div>
     <button class="btn btn-primary" type="submit">Speichern</button>
   </form>

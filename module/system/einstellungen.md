@@ -29,3 +29,6 @@ Der Reiter **Preise & Margen** enthält zusätzlich unter „Rohstoff- & Verpack
 
 ## Portal-Produktanfrage: Umkarton (Stand 2026-10-08)
 Reiter **Preise & Margen**, Abschnitt „Portal-Produktanfrage": Checkbox **„Kunde darf im Portal einen Umkarton anfragen"** (`app_meta portal_umkarton`, Standard `0`). Ist sie an, blendet das Kundenportal in der Produktanfrage (`?p=portal&v=prodanfrage`) eine Ja/Nein-Auswahl „Umkarton gewünscht" ein; Details gibt der Kunde über die Notiz an. Gespeichert wird das Flag an `portal_anfrage.umkarton`. Team sieht es in der Anfrageliste/-detail (`portal_anfragen`/`portal_anfrage_detail`).
+
+## E-Mail-Signatur-Vorlage
+Textfeld `mail_signatur_vorlage` (app_meta) im E-Mail-Block: zentrale HTML-Signatur mit Platzhaltern {name} {position} {telefon} {email} {logo}. Leer = eingebauter bulkify-Standard (core/mail.php `mail_signatur_vorlage()`). Wird für neue Mitarbeiter befüllt und (Phase 2) unter die vom Dashboard verschickten Mails gesetzt.

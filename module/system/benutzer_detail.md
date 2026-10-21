@@ -12,3 +12,6 @@
 
 ## Produktions-PIN (Tablet)
 Feld **Produktions-PIN (Tablet)** (4–8 Ziffern) je Mitarbeiter: wird gehasht in `benutzer.pin_hash` gespeichert (Set/Reset wie das Passwort; leer = unverändert, Checkbox „PIN löschen" entfernt sie). Dient dem Login in der Mitarbeiter-Produktions-App (`/produktion/?p=werk`). Nur Ziffern; Validierung 4–8 Stellen.
+
+## E-Mail-Signatur je Mitarbeiter
+Felder Position, Telefon und optionale eigene Signatur (HTML). Beim **Anlegen** eines Benutzers wird `benutzer.mail_signatur` automatisch aus der zentralen Vorlage (`mail_signatur_vorlage()` in core/mail.php) mit Name/Position/Telefon/E-Mail gerendert (sofern keine eigene eingetragen). Leeres Signatur-Feld = Vorlage. Vorschau unten im Formular. Vorlage selbst unter Einstellungen → E-Mail.

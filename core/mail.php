@@ -331,6 +331,49 @@ function mail_basis_url(): string {
     if ($b === '') $b = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
     return $b;
 }
+// --- E-Mail-Signatur (zentral + je Benutzer) --------------------------------
+// Globale Vorlage (HTML) mit Platzhaltern {name} {position} {telefon} {email} {tel_href} {logo}.
+// Über app_meta['mail_signatur_vorlage'] überschreibbar; sonst die eingebaute bulkify-Standardsignatur.
+function mail_signatur_vorlage(): string {
+    $v = trim((string) meta_get('mail_signatur_vorlage', ''));
+    if ($v !== '') return $v;
+    return '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;line-height:1.5">'
+         . 'Mit freundlichen Grüßen,<br><br>'
+         . '<strong style="font-size:16px">{name}</strong><br>'
+         . '<span style="color:#555555">{position}</span><br><br>'
+         . '<img src="{logo}" alt="bulkify" width="126" height="66" style="display:block"><br>'
+         . '<strong>Maniso GmbH</strong> · bulkify.pro<br>'
+         . 'Produktion &amp; Lager: II. Hüllenweg 29 · 26676 Barßel<br>'
+         . '<a href="tel:{tel_href}" style="color:#0073aa;text-decoration:none">{telefon}</a> · '
+         . '<a href="mailto:{email}" style="color:#0073aa;text-decoration:none">{email}</a> · '
+         . '<a href="https://bulkify.pro" style="color:#0073aa;text-decoration:none">bulkify.pro</a><br><br>'
+         . '<span style="font-size:11px;color:#888888">bulkify® ist eine Marke der Maniso GmbH · '
+         . 'Sitz der Gesellschaft: Ahornstraße 45, 26842 Ostrhauderfehn · HRB 207014 Amtsgericht Aurich · '
+         . 'Geschäftsführer: Nico Thomalla</span></div>';
+}
+// Vorlage mit den Daten eines Benutzers füllen (aus einem Array mit name/position/telefon/email).
+function mail_signatur_render(array $u): string {
+    $esc = fn($x) => htmlspecialchars((string)$x, ENT_QUOTES, 'UTF-8');
+    $tel = trim((string)($u['telefon'] ?? ''));
+    $map = [
+        '{name}'     => $esc($u['name'] ?? ''),
+        '{position}' => $esc($u['position'] ?? ''),
+        '{email}'    => $esc($u['email'] ?? ''),
+        '{telefon}'  => $esc($tel),
+        '{tel_href}' => $esc(preg_replace('/[^0-9+]/', '', $tel)),
+        '{logo}'     => rtrim(mail_basis_url(), '/') . '/assets/bulkify-logo-dark.png',
+    ];
+    return strtr(mail_signatur_vorlage(), $map);
+}
+// Fertige Signatur für einen Benutzer: eigene (benutzer.mail_signatur) falls gesetzt, sonst aus der Vorlage.
+function mail_signatur_fuer(int $benutzer_id): string {
+    if ($benutzer_id <= 0) return '';
+    $u = one("SELECT name, email, telefon, position, mail_signatur FROM benutzer WHERE id=?", [$benutzer_id]);
+    if (!$u) return '';
+    $s = trim((string)($u['mail_signatur'] ?? ''));
+    return $s !== '' ? $s : mail_signatur_render($u);
+}
+
 // Passwortloser Link ins Kundenportal, optional direkt auf eine Ansicht (angebote, bestellungen …).
 function mail_link_kundenportal(int $kunde_id, string $ansicht = ''): string {
     return mail_basis_url() . '/?p=portal&token=' . kunde_portal_token($kunde_id) . ($ansicht !== '' ? '&v=' . $ansicht : '');
