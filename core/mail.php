@@ -40,17 +40,24 @@ function nach_antwort(callable $fn): void {
 
 // Mail verschicken. Gibt '' zurück, wenn es geklappt hat, sonst den Grund.
 // Wirft nie – ein fehlgeschlagener Versand darf keinen Vorgang abbrechen.
-function mail_senden(string $to, string $betreff, string $text): string {
+// $signatur_html: null = automatisch die Signatur des eingeloggten TEAM-Mitarbeiters anhängen (HTML-Mail);
+// '' = ohne Signatur (reiner Text, z. B. interne Benachrichtigungen); ein String = genau diese Signatur.
+function mail_senden(string $to, string $betreff, string $text, ?string $signatur_html = null): string {
     $to = trim($to);
     if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) return 'Keine gültige Empfängeradresse.';
-    mail_log($to, $betreff, $text);
+    // Automatik: Signatur des aktuell eingeloggten Teamkontos (nicht im Kundenportal -> dort null, keine Signatur).
+    if ($signatur_html === null) {
+        $signatur_html = '';
+        if (function_exists('current_user')) { $cu = current_user(); if ($cu && empty($cu['lieferant_id']) && !empty($cu['id'])) $signatur_html = mail_signatur_fuer((int)$cu['id']); }
+    }
+    mail_log($to, $betreff, $text . ($signatur_html !== '' ? "\n[+ Signatur]" : ''));
 
     $c = mail_config();
     if (!$c['aktiv']) return 'Der E-Mail-Versand ist in den Einstellungen ausgeschaltet.';
     if ($c['host'] === '') return 'Es ist kein SMTP-Server hinterlegt (Einstellungen → E-Mail).';
     if ($c['from'] === '') return 'Es ist keine Absenderadresse hinterlegt (Einstellungen → E-Mail).';
 
-    $fehler = smtp_senden($to, $betreff, $text, $c);
+    $fehler = smtp_senden($to, $betreff, $text, $c, $signatur_html);
     if ($fehler !== '') mail_log($to, 'FEHLER: ' . $betreff, $fehler);
     return $fehler;
 }
@@ -62,7 +69,7 @@ function mail_log(string $to, string $betreff, string $text): void {
 
 // Minimaler SMTP-Versand über einen Socket. Unterstützt STARTTLS (587), implizites TLS (465)
 // und AUTH LOGIN. Rückgabe: '' = gesendet, sonst eine Kurzbeschreibung des Schritts, der scheiterte.
-function smtp_senden(string $to, string $betreff, string $text, array $c): string {
+function smtp_senden(string $to, string $betreff, string $text, array $c, string $signatur_html = ''): string {
     $port   = $c['port'] ?: 587;
     $secure = in_array($c['secure'], ['tls', 'ssl', ''], true) ? $c['secure'] : 'tls';
     $from   = $c['from'];
@@ -104,18 +111,30 @@ function smtp_senden(string $to, string $betreff, string $text, array $c): strin
         if ($code($cmd('DATA')) !== 354)                       throw new RuntimeException('DATA abgelehnt.');
 
         $fromKopf = preg_match('/[\x80-\xFF]/', $fname) ? '=?UTF-8?B?' . base64_encode($fname) . '?=' : $fname;
-        $msg = 'Date: ' . date('r') . "\r\n"
+        $headers = 'Date: ' . date('r') . "\r\n"
              . 'Message-ID: <' . bin2hex(random_bytes(12)) . '.' . time() . '@' . $domain . ">\r\n"
              . 'From: ' . $fromKopf . ' <' . $from . ">\r\n"
              . 'To: <' . $to . ">\r\n"
              . 'Reply-To: ' . $from . "\r\n"
              . 'Subject: =?UTF-8?B?' . base64_encode($betreff) . "?=\r\n"
              . "MIME-Version: 1.0\r\n"
-             . "Content-Type: text/plain; charset=UTF-8\r\n"
-             . "Content-Transfer-Encoding: base64\r\n"
-             . "X-Mailer: bulkify\r\n\r\n"
-             . chunk_split(base64_encode($text));
-        fwrite($fp, $msg . "\r\n.\r\n");
+             . "X-Mailer: bulkify\r\n";
+        if (trim($signatur_html) !== '') {
+            // Multipart: Text-Teil (für alle Clients) + HTML-Teil mit Signatur. Der Text bleibt als pre-wrap erhalten.
+            $boundary = 'bx_' . bin2hex(random_bytes(10));
+            $htmlBody = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;white-space:pre-wrap">'
+                      . htmlspecialchars($text, ENT_QUOTES, 'UTF-8') . '</div><br>' . $signatur_html;
+            $body = 'Content-Type: multipart/alternative; boundary="' . $boundary . "\"\r\n\r\n"
+                  . '--' . $boundary . "\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+                  . chunk_split(base64_encode($text))
+                  . '--' . $boundary . "\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+                  . chunk_split(base64_encode($htmlBody))
+                  . '--' . $boundary . "--\r\n";
+        } else {
+            $body = "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+                  . chunk_split(base64_encode($text));
+        }
+        fwrite($fp, $headers . $body . "\r\n.\r\n");
         if ($code($lesen()) !== 250) throw new RuntimeException('Server hat die Nachricht nicht angenommen.');
         $cmd('QUIT');
     } catch (Throwable $e) {
@@ -299,14 +318,14 @@ function mail_team(string $betreff, string $text): int {
         $e = mb_strtolower(trim((string)$u['email']));
         if ($e === '' || isset($gesendet[$e])) continue;
         $gesendet[$e] = true;
-        if (mail_senden((string)$u['email'], $betreff, $text) === '') $n++;
+        if (mail_senden((string)$u['email'], $betreff, $text, '') === '') $n++;
     }
     // Zusaetzliche feste Benachrichtigungs-Adressen (Einstellungen -> benachrichtigung_cc), kommagetrennt.
     // So bekommen z. B. Team-Mitglieder ohne Admin-Login (Tabea) alle Rueckfragen/Infos ebenfalls per Mail.
     foreach (mail_team_cc_adressen() as $e) {
         if (isset($gesendet[mb_strtolower($e)])) continue;
         $gesendet[mb_strtolower($e)] = true;
-        if (mail_senden($e, $betreff, $text) === '') $n++;
+        if (mail_senden($e, $betreff, $text, '') === '') $n++;
     }
     return $n;
 }
