@@ -46,6 +46,18 @@ lp_head('bulkify – ' . lp_t('bew_titel'));
     <a class="btn btn-primary" href="?p=lieferant_login"><?= h(lp_t('bew_zum_login')) ?></a>
   </div>
 <?php else: ?>
+  <?php // Einladender Pitch: was wir tun + Einladung an Bord. Steht über dem Bewerbungsformular (ein Link zum Senden). ?>
+  <div class="bx-panel" style="max-width:620px;border-color:var(--gruen);background:var(--panel-2)">
+    <h2 style="margin:0 0 8px"><?= h(lp_t('pitch_head')) ?></h2>
+    <p style="margin:0 0 12px"><?= h(lp_t('pitch_wer')) ?></p>
+    <ul style="margin:0 0 12px;padding-left:20px;line-height:1.7">
+      <li><?= h(lp_t('pitch_b1')) ?></li>
+      <li><?= h(lp_t('pitch_b2')) ?></li>
+      <li><?= h(lp_t('pitch_b3')) ?></li>
+      <li><?= h(lp_t('pitch_b4')) ?></li>
+    </ul>
+    <p style="margin:0;font-weight:600"><?= h(lp_t('pitch_invite')) ?></p>
+  </div>
   <p class="bx-sub" style="max-width:620px"><?= h(lp_t('bew_sub')) ?></p>
   <?php if ($fehler): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px;max-width:620px"><?= h($fehler) ?></div><?php endif; ?>
   <div class="bx-panel" style="max-width:620px">

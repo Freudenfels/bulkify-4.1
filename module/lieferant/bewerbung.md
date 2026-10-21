@@ -18,3 +18,6 @@ Hinweisbanner mit Anzahl). Im Lieferant-Detail erscheint ein Freigabe-Panel; `be
 (`benutzer.aktiv=1`).
 
 Einstieg für Lieferanten: Button „Jetzt bewerben" auf der Login-Seite (`lp_t('bew_jetzt')`).
+
+## Einladender Pitch (oben)
+Über dem Formular steht ein mehrsprachiger Pitch-Block (`pitch_head/pitch_wer/pitch_b1..b4/pitch_invite` in `portal_layout.php`): kurz, was bulkify (Maniso GmbH) macht, Vorteile der Zusammenarbeit und eine Einladung „wir hätten Sie gern an Bord". So ist `?p=lieferant_bewerbung` die eine Seite, die das Team Lieferanten schicken kann: erst der Pitch, darunter das Bewerbungsformular (Selbst-Registrierung → gesperrter Lieferant + inaktiver Login bis zur Freigabe). DE/EN/ZH über die Sprachwahl oben.
