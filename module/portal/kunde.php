@@ -2098,7 +2098,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <p class="bx-sub">Ihr Überblick – tippen Sie unten auf einen Bereich oder nutzen Sie das Menü.</p>
 
   <?php if ($vorschlaege): $nV = count($vorschlaege); ?>
-  <a href="#vorschlaege" class="bx-panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:inherit;border-color:var(--gruen);background:var(--panel-2)">
+  <a href="<?= $portalLink('meine_anfragen') ?>" class="bx-panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:inherit;border-color:var(--gruen);background:var(--panel-2)">
     <div><strong><?= $nV ?> Rezeptur-Vorschlag<?= $nV === 1 ? '' : 'e' ?> für Sie</strong> – <?= $nV === 1 ? 'liegt' : 'liegen' ?> zur Freigabe bereit. Bitte ansehen und annehmen.</div>
     <span class="btn btn-primary">Ansehen</span>
   </a>
@@ -2109,6 +2109,31 @@ portal_head('Kundenportal · ' . $k['firma']);
     <a class="pt-card" href="<?= $portalLink('bestellungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Bestellungen in Arbeit</div><div class="val"><?= $inArbeit ?></div></a>
     <a class="pt-card" href="<?= $portalLink('rechnungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Offene Rechnungen</div><div class="val"><?= $eur($offenBetrag) ?></div></a>
   </div>
+
+  <?php // In Produktion: Aufträge dieses Kunden, die gerade produziert werden – das Wichtigste auf einen Blick.
+        $inProd = array_values(array_filter($auftraege, fn($a) => ($a['status'] ?? '') === 'in_produktion')); ?>
+  <?php if ($inProd): ?>
+  <div class="bx-panel">
+    <div class="bx-row" style="justify-content:space-between;align-items:center">
+      <h2 style="margin:0">In Produktion <span class="muted" style="font-weight:400;font-size:14px">(<?= count($inProd) ?>)</span></h2>
+      <a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellungen') ?>">Alle Bestellungen</a>
+    </div>
+    <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
+      <thead><tr><th>Auftrag</th><th>Produkt</th><th class="bx-num">Menge</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($inProd as $a): ?>
+        <tr>
+          <td><?= h((string)$a['nummer']) ?></td>
+          <td><?= h($titelFuer($a)) ?></td>
+          <td class="bx-num"><?= (int)($a['menge'] ?? 0) ? number_format((int)$a['menge'], 0, ',', '.') . ' Pkg.' : '<span class="muted">–</span>' ?></td>
+          <td><?= bx_badge('in Produktion', 'warn') ?></td>
+          <td class="bx-num"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>">Ansehen</a></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; ?>
 
   <?php // Schnellzugriff: große Kacheln zu allen freigeschalteten Bereichen – damit die App (v. a. mobil)
         // direkt bedienbar ist und nicht alles im Hamburger-Menü gesucht werden muss. $L ist bereits je
@@ -2123,28 +2148,6 @@ portal_head('Kundenportal · ' . $k['firma']);
         <a href="<?= $portalLink($vk) ?>" style="display:flex;align-items:center;justify-content:center;text-align:center;min-height:64px;padding:14px 12px;border:1px solid var(--line);border-radius:12px;text-decoration:none;color:inherit;background:var(--panel-2);font-weight:600"><?= h($L[$vk]) ?></a>
       <?php endforeach; ?>
     </div>
-  </div>
-  <?php endif; ?>
-
-  <?php if ($vorschlaege): ?>
-  <div class="bx-panel" id="vorschlaege" style="border-color:var(--gruen);background:var(--panel-2)">
-    <h2>Rezeptur-Vorschläge für Sie</h2>
-    <p class="muted" style="margin-top:0">Bitte schauen Sie sich den Vorschlag an und nehmen Sie ihn an, damit wir starten können.</p>
-    <?php foreach ($vorschlaege as $vs): ?>
-      <div class="bx-panel" style="background:var(--panel)">
-        <div class="bx-row" style="justify-content:space-between"><div><strong><?= h($vs['name']) ?></strong> · <?= h($vs['nummer']) ?></div><div><?= bx_badge('Vorschlag','info') ?></div></div>
-        <table class="bx-table" style="margin:10px 0"><thead><tr><th>Zutat</th><th class="bx-num">Menge je Einheit</th></tr></thead><tbody>
-          <?php $vsum = 0; foreach ($vorschlagZutaten[$vs['id']] as $z): $vsum += (float)$z['menge_mg']; ?>
-            <tr><td><?= h($z['bezeichnung']) ?></td><td class="bx-num"><?= rtrim(rtrim(number_format((float)$z['menge_mg'],2,',','.'),'0'),',') ?> mg</td></tr>
-          <?php endforeach; ?>
-          <tr style="font-weight:600"><td>Gesamt je Einheit</td><td class="bx-num"><?= rtrim(rtrim(number_format($vsum,2,',','.'),'0'),',') ?> mg</td></tr>
-        </tbody></table>
-        <?php if ($vs['darreichungsform'] === 'kapsel'): $vkg = $kapselAnzeige($vs, $vsum); ?>
-          <div class="muted" style="margin:-4px 0 10px;font-size:13px">Kapselgröße: <strong><?= $vkg ? h($vkg['name']) : 'individuell (Füllgewicht > Standardkapsel)' ?></strong></div>
-        <?php endif; ?>
-        <span style="display:inline"><button class="btn btn-primary" type="button" onclick="bxBestaetigen('Rezeptur verbindlich annehmen', '<div class=\'bx-panel\' style=\'margin:0 0 12px;padding:12px 14px\'><strong><?= h(($vs['nummer'] ?? '') . ' ' . ($vs['name'] ?? '')) ?></strong></div>Mit der Annahme wird die Rezeptur <strong>eingefroren</strong>: Zusammensetzung und Mengen sind damit festgelegt und k&ouml;nnen nicht mehr ge&auml;ndert werden. &Auml;nderungen brauchen danach eine neue Rezeptur.', 'Ich habe die Rezeptur gepr&uuml;ft und nehme sie verbindlich an. Mir ist bewusst, dass sie danach nicht mehr ge&auml;ndert werden kann.', {aktion:'rezeptur_annehmen', rezeptur_id:'<?= (int)$vs['id'] ?>'})">Rezeptur verbindlich annehmen</button></span>
-      </div>
-    <?php endforeach; ?>
   </div>
   <?php endif; ?>
 
