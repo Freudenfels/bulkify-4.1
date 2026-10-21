@@ -180,7 +180,10 @@ $btnEinkauf = $offenerBedarf
           . '<input type="hidden" name="aktion" value="auf_einkaufsliste">'
           . '<button class="btn btn-accent btn-sm" type="submit">Fehlende Rohstoffe → Einkaufsliste</button></form> ')
     : '';
-bx_head($pa['nummer'], 'Produktionsauftrag',
+// Produktname schon für den Kopf bestimmen, damit oben direkt steht, WAS produziert wird (nicht nur die PR-Nummer).
+$produktName = (string)($pa['produkt_name'] ?? '') ?: (string)($pa['auftrag_produkt_bez'] ?? '');
+if ($produktName === '' && !empty($pa['rezeptur_name'])) $produktName = (string)$pa['rezeptur_name'] . (pa_ist_bulk($pa) ? ' · Bulk' : '');
+bx_head($pa['nummer'] . ($produktName !== '' ? ' · ' . $produktName : ''), 'Produktionsauftrag',
         ($pa['status'] !== 'erledigt' ? bx_btn('Geführt produzieren', '?p=produktion_run&id=' . $id, 'primary') . ' ' : '')
         . $btnEinkauf
         . pdf_btn('?p=produktionsauftrag_pdf&id=' . $id, 'Laufzettel drucken', false, 'Produktionsauftrag / Laufzettel als PDF') . ' '
@@ -229,8 +232,7 @@ $formPa    = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN
 if ($formPa === '') $formPa = (string)($pa['rezeptur_form'] ?? '');           // Bulk-PA: Form aus der Rezeptur
 if ($formPa === '') $formPa = (string)($pa['auftrag_produkt_form'] ?? '');   // Fallback: v3-Auftrag ohne Produkt
 $stkWort   = in_array($formPa, ['kapsel','softgel'], true) ? 'Kapseln' : ($formPa === 'tablette' ? 'Tabletten' : 'Stk');
-$produktName = (string)($pa['produkt_name'] ?? '') ?: (string)($pa['auftrag_produkt_bez'] ?? '');
-if ($produktName === '' && pa_ist_bulk($pa)) $produktName = (string)($pa['rezeptur_name'] ?? '') . ' · Bulk';   // Bulk-PA: Rezepturname
+// $produktName ist bereits oben (vor bx_head) bestimmt.
 $gesamtStk = $einhProP > 0 ? (int)$pa['menge'] * $einhProP : 0;
 // Eingabe-Kacheln vorbereiten (Priorität, Geplant am) und Größe.
 $prioSel = '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="prio"><select name="prio" onchange="this.form.submit()">';
