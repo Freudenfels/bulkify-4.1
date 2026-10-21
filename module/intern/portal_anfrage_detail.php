@@ -158,6 +158,10 @@ $pa = $id ? one("SELECT pa.*, k.firma, p.name AS produkt_name, r.darreichungsfor
 if (!$pa) { render_header('portal_anfragen','Anfrage'); bx_head('Anfrage nicht gefunden','', bx_btn('Zurück','?p=portal_anfragen','ghost')); render_footer(); exit; }
 
 $mg = fn($x) => rtrim(rtrim(number_format((float)$x, 2, ',', '.'), '0'), ',');
+// Preis mit Sub-Cent-Genauigkeit: mind. 2, bis 4 Nachkommastellen (Lieferanten-Kapselpreise wie 0,0325 nicht auf 0,03 runden).
+$preis4 = function($x) { $s = rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',');
+    if (strpos($s, ',') === false) return $s . ',00';
+    $d = strlen($s) - strpos($s, ',') - 1; return $d < 2 ? $s . str_repeat('0', 2 - $d) : $s; };
 $stBadge = fn($s) => match ($s) { 'neu'=>bx_badge('neu','info'),'in_bearbeitung'=>bx_badge('in Bearbeitung','warn'),'beantwortet'=>bx_badge('Angebot abgegeben','ok'),'abgelehnt'=>bx_badge('abgelehnt','err'),default=>bx_badge($s) };
 // Bereits abgegebene Angebote zu dieser Anfrage (Verknüpfung über Notiz-Präfix "Aus Anfrage <Nr>")
 // Angebote zur Anfrage: bevorzugt über anfrage_id (sauber), zusätzlich über die alte Notiz-Konvention.
@@ -586,7 +590,7 @@ if ($anfRid):
               'abgelehnt'   => bx_badge('abgelehnt', 'err'),
               default       => bx_badge((string)$pq['status']),
           };
-          $preis = ($pq['ang_preis'] !== null && $pq['ang_preis'] !== '') ? number_format((float)$pq['ang_preis'], 2, ',', '.') . ' ' . h((string)($pq['ang_einheit'] ?? '')) : '–';
+          $preis = ($pq['ang_preis'] !== null && $pq['ang_preis'] !== '') ? $preis4($pq['ang_preis']) . ' € / ' . h((string)($pq['ang_einheit'] ?? '')) : '–';
       ?>
         <tr><td><?= h((string)$pq['firma']) ?></td>
             <td><?= $pq['angelegt'] ? h(fmt_zeit($pq['angelegt'])) : '–' ?></td>
