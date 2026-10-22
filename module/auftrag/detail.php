@@ -75,6 +75,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&rezverk=1'); exit;
 }
 
+// Verpackung (Behälter) am AUFTRAG setzen – auftrag.verpackung_id hat Vorrang vor dem Produkt (auftrag_braucht_etikett,
+// PIB, Etikettmaß). Wichtig für alte v3-Aufträge ohne Produkt-Verpackung: hier lässt sich der Behälter auswählen.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'verpackung_setzen') {
+    if (!(has_role('admin') || has_role('sales'))) { header('Location: ?p=auftrag&id=' . $id); exit; }
+    $vp = (int)($_POST['verpackung_id'] ?? 0);
+    if ($vp > 0 && !scalar("SELECT id FROM item WHERE id=? AND kategorie='verpackung'", [$vp])) $vp = 0;
+    q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vp ?: null, $id]);
+    header('Location: ?p=auftrag&id=' . $id . '&vpok=1'); exit;
+}
+
 // Rezeptur für DIESEN Auftrag überarbeiten: eine eigene Kopie anlegen (Rohstoffe neu matchen + frische
 // Spec/CoA), verknüpft über auftrag.rezeptur_id. Das Kunden-Original bleibt unangetastet. Danach direkt in
 // die Kopie springen (Status 'entwurf' = sofort editierbar).
@@ -600,6 +610,35 @@ $jvWarnung  = has_role('admin') && empty($a['kontingent_id']) && (string)$a['sta
   <?php endif; ?>
 </div>
 
+<?php // Behälter/Verpackung am Auftrag wählen (setzt auftrag.verpackung_id). Vor allem für alte v3-Aufträge ohne Produkt-Verpackung.
+if (has_role('admin') || has_role('sales')):
+    $vpListe  = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name");
+    $aVp      = (int)($a['verpackung_id'] ?? 0);
+    $pVp      = !empty($a['produkt_id']) ? (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]) : 0;
+    $effVp    = $aVp ?: $pVp;
+    $effFinal = $effVp ? (string) scalar("SELECT etikett_final FROM item WHERE id=?", [$effVp]) : '';
+    $effName  = $effVp ? (string) scalar("SELECT name FROM item WHERE id=?", [$effVp]) : '';
+?>
+<div class="bx-panel" data-panel="verpackung">
+  <h2 style="margin-top:0">Verpackung (Behälter)</h2>
+  <?php if (isset($_GET['vpok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Verpackung gespeichert.</div><?php endif; ?>
+  <p class="muted" style="margin-top:0">Behälter/Glas für diesen Auftrag – bestimmt Etikett und Etikettmaß (fürs PIB). Der Auftrag hat Vorrang vor dem Produkt; nötig z. B. bei alten Aufträgen ohne Produkt-Verpackung.</p>
+  <form method="post" class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin:0">
+    <input type="hidden" name="aktion" value="verpackung_setzen">
+    <select name="verpackung_id" class="rscombo" style="min-width:260px">
+      <option value="">– kein Behälter (reine Bulkware) –</option>
+      <?php foreach ($vpListe as $vpi): ?><option value="<?= (int)$vpi['id'] ?>" <?= $aVp === (int)$vpi['id'] ? 'selected' : '' ?>><?= h($vpi['name']) ?></option><?php endforeach; ?>
+    </select>
+    <button class="btn btn-primary btn-sm" type="submit">Verpackung speichern</button>
+  </form>
+  <?php if ($effVp): ?>
+    <div class="muted" style="font-size:12px;margin-top:8px">Aktueller Behälter: <strong><?= h($effName) ?></strong><?= $aVp ? '' : ' (vom Produkt übernommen)' ?> · Etikett-Endformat: <?= trim($effFinal) !== '' ? '<strong>' . h($effFinal) . '</strong>' : '<span style="color:var(--warn)">nicht hinterlegt – am Behälter unter Lager → Verpackungen pflegen</span>' ?></div>
+  <?php else: ?>
+    <div class="muted" style="font-size:12px;margin-top:8px">Noch kein Behälter gewählt.</div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php // Reiter „Verpackung": Etikett-Verwaltung (Team/Admin) – hochladen/ersetzen (Last-Minute), Freigabe im Namen des Kunden, entfernen.
 if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $etDokA = etikett_datei($id); ?>
 <div class="bx-panel" data-panel="verpackung">
@@ -632,10 +671,8 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
     </form>
     <?php endif; ?>
   </div>
-  <p class="muted" style="font-size:12px;margin:12px 0 0">Verpackung/Glas und Kapselgröße werden im Reiter „Details" gesetzt (sie gehören zur Produktkonfiguration).</p>
+  <p class="muted" style="font-size:12px;margin:12px 0 0">Kapselgröße wird im Reiter „Details" gesetzt (gehört zur Produktkonfiguration). Der Behälter wird oben gewählt.</p>
 </div>
-<?php else: ?>
-<div class="bx-panel" data-panel="verpackung"><div class="muted">Für diesen Auftrag ist kein Etikett nötig (kein Behälter/Produkt hinterlegt) – oder du hast keine Berechtigung.</div></div>
 <?php endif; ?>
 
 <div class="bx-panel" data-panel="details">

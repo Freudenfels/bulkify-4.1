@@ -103,3 +103,6 @@ Versendet (bei Fulfillment endet die Kette mit „Eingelagert"). Die Auswahl kom
 `phase_setzen` schreibt `auftrag.phase_override` (gewählter Phasenindex) und führt den groben `auftrag.status`
 passend mit (offen/in_produktion/erledigt/versendet) – auch Zurückstufen ist möglich. „Bestätigt" (Stufe 0) löscht
 den Override (phase_override=NULL → wieder automatisch aus den Signalen). Der Kunde sieht die Stufe sofort.
+
+## Verpackung (Behälter) je Auftrag wählbar
+Im Reiter „Verpackung" gibt es einen Behälter-Selektor (Admin/Vertrieb), der `auftrag.verpackung_id` setzt (`aktion=verpackung_setzen`). Der Auftrags-Behälter hat Vorrang vor dem Produkt (siehe `auftrag_braucht_etikett()` + PIB/Etikettmaß). Wichtig für alte v3-Aufträge ohne Produkt-Verpackung – dort ließ sich bisher keine Verpackung wählen. Der Hinweis zeigt den aktuellen Behälter und sein Etikett-Endformat (bzw. „nicht hinterlegt").
