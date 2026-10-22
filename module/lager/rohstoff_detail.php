@@ -224,6 +224,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'coa_f
     }
     header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&coafrei=1'); exit;
 }
+// Bestand einer Charge korrigieren (nur Admin): verfügbare Menge + Einheit setzen – z. B. eine falsch in „g"
+// gebuchte Charge auf den echten kg-Wert bringen. Setzt menge + menge_verfuegbar und passt den Status an.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'charge_bestand_korr' && !$neu) {
+    if (!has_role('admin')) { header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrfehler=1'); exit; }
+    $cid = (int)($_POST['charge_id'] ?? 0);
+    $c   = $cid ? one("SELECT id, status, einheit FROM charge WHERE id=? AND item_id=?", [$cid, (int)$id]) : null;
+    if ($c) {
+        $raw  = str_replace(['.', ' '], '', trim((string)($_POST['menge'] ?? '')));   // Tausenderpunkt raus
+        $neuM = (float) str_replace(',', '.', $raw);                                   // Komma -> Dezimalpunkt
+        $einh = trim((string)($_POST['einheit'] ?? '')) ?: (string)$c['einheit'];
+        if ($neuM >= 0) {
+            $status = $neuM <= 1e-9 ? 'leer' : (($c['status'] ?? '') === 'leer' ? 'frei' : (string)$c['status']);
+            q("UPDATE charge SET menge=?, menge_verfuegbar=?, einheit=?, status=? WHERE id=? AND item_id=?",
+              [$neuM, $neuM, $einh, $status, $cid, (int)$id]);
+            if (function_exists('bedarf_bump')) bedarf_bump();   // Bestand geändert -> Bedarf/Einkaufsliste neu rechnen
+            log_aktivitaet('item', (int)$id, 'team', 'Charge-Bestand korrigiert: ' . rtrim(rtrim(number_format($neuM, 3, ',', '.'), '0'), ',') . ' ' . $einh . '.', 'notiz');
+        }
+    }
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrok=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && !$neu) {
     dokument_freigabe_toggle('item', (int)$id, (int)($_POST['dok_id'] ?? 0));
     header('Location: ?p=rohstoff&id=' . $id . '&tab=dok'); exit;
@@ -939,6 +959,8 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       <tbody>
       <?php if (!$charges): ?><tr><td colspan="8" class="muted">Noch keine Chargen. Über „Wareneingang" buchen.</td></tr><?php endif; ?>
       <?php if (isset($_GET['coafrei'])): ?><tr><td colspan="8" class="badge-ok" style="padding:8px 12px">CoA-Freigabe aktualisiert.</td></tr><?php endif; ?>
+      <?php if (isset($_GET['korrok'])): ?><tr><td colspan="8" class="badge-ok" style="padding:8px 12px">Charge-Bestand korrigiert. Der Bedarf/die Einkaufsliste rechnet neu.</td></tr><?php endif; ?>
+      <?php if (isset($_GET['korrfehler'])): ?><tr><td colspan="8" style="padding:8px 12px;color:#8f231b">Nur Admins dürfen den Bestand korrigieren.</td></tr><?php endif; ?>
       <?php foreach ($charges as $c): $coaFrei = (int)($c['coa_freigegeben'] ?? 0) === 1; ?>
         <tr>
           <td><?= h($c['charge_nr'] ?: '–') ?></td>
@@ -961,6 +983,18 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
           </td>
           <td class="bx-num">
             <a class="btn btn-ghost btn-sm" target="_blank" href="?p=coa_bulkify&id=<?= (int)$c['id'] ?>" title="Analysenzertifikat im bulkify-Layout – das geht an den Kunden">&#8681; CoA</a>
+            <?php if (has_role('admin')): ?>
+            <details style="margin-top:6px;text-align:left">
+              <summary class="muted" style="cursor:pointer;font-size:11px">Bestand korrigieren</summary>
+              <form method="post" style="margin:6px 0 0;display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                <input type="hidden" name="aktion" value="charge_bestand_korr">
+                <input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
+                <input type="text" name="menge" value="<?= h(rtrim(rtrim(number_format((float)$c['menge_verfuegbar'],3,',','.'),'0'),',')) ?>" style="width:90px;padding:4px 6px;text-align:right" inputmode="decimal" title="Verfügbare Menge">
+                <input type="text" name="einheit" value="<?= h($v('einheit')) ?>" style="width:56px;padding:4px 6px" title="Einheit (z. B. kg)">
+                <button class="btn btn-ghost btn-sm" type="submit">setzen</button>
+              </form>
+            </details>
+            <?php endif; ?>
           </td>
         </tr>
       <?php endforeach; ?>
