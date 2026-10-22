@@ -121,6 +121,22 @@ if ($pa):
     // Volle Auftrags-/Produktinfos – damit die Produktion alles auf einen Blick hat (nicht nur „X Packungen").
     $stkProP  = max(0, (int) produktion_stueck_je_packung($pa));
     $gesamtSt = $stkProP * (int)$pa['menge'];
+    // Schüttgut (Pulver/Granulat/Gel/Flüssig/Öl): es gibt KEINE Stückzahl – abgefüllt wird nach Gewicht/Volumen
+    // je Beutel/Flasche. Die „Einheiten" (Portionen) sind nur für die NRV-/Nährwertrechnung relevant, nicht
+    // fürs Abfüllen. Darum hier Füllmenge je Packung + Gesamtmenge (g/kg bzw. ml/l) statt Stückzahl zeigen.
+    $schuett      = in_array($darr, ['pulver', 'granulat', 'gel', 'fluessig', 'oel'], true);
+    [, $fuellEinheit] = $schuett ? form_gewicht_feld($darr) : ['', 'g'];   // 'g' oder 'ml'
+    $sumMgKennz   = $rid ? (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rid]) : 0.0;
+    $gProPkg      = (float)($rez['einheit_fuellmenge'] ?? 0);            // am Rezept hinterlegte Füllmenge je Packung
+    if ($gProPkg <= 0 && $schuett && $fuellEinheit === 'g' && $sumMgKennz > 0 && $stkProP > 0)
+        $gProPkg = $sumMgKennz * $stkProP / 1000.0;                       // sonst aus Rezeptursumme je Portion × Portionen (mg → g)
+    $gGesamt      = $gProPkg * (int)$pa['menge'];
+    $fmtMenge = function (float $v, string $e): string {
+        if ($v <= 0) return '–';
+        if ($e === 'g'  && $v >= 1000) return rtrim(rtrim(number_format($v / 1000, 3, ',', '.'), '0'), ',') . ' kg';
+        if ($e === 'ml' && $v >= 1000) return rtrim(rtrim(number_format($v / 1000, 3, ',', '.'), '0'), ',') . ' l';
+        return rtrim(rtrim(number_format($v, 2, ',', '.'), '0'), ',') . ' ' . $e;
+    };
     $glasName = $verpAkt ? (string) scalar("SELECT name FROM item WHERE id=?", [$verpAkt]) : '';
     // Kapselgröße für die Übersicht: manuell gesetzte Größe ODER (bei Kapsel/Softgel, solange nichts gewählt)
     // die Automatik-Empfehlung passend zum Füllgewicht (rezeptur_kapselgroesse), mit Zusatz „(automatisch)".
@@ -141,7 +157,7 @@ if ($pa):
         $attrLabel = 'Kapselgröße'; $attrValue = $kapsName !== '' ? $kapsName : '–';
     } elseif ($formAttr === 'tablette') {
         $attrLabel = 'Tablettenform'; $attrValue = tabletten_form_label($rez['tabletten_form'] ?? '') ?: '–';
-    } elseif ($formAttr === 'gewicht') {
+    } elseif ($formAttr === 'gewicht' && !$schuett) {
         [$glbl, $geinh] = form_gewicht_feld($darr); $gv = (float)($rez['einheit_fuellmenge'] ?? 0);
         $attrLabel = $glbl . ' (' . $geinh . ')';
         $attrValue = $gv > 0 ? rtrim(rtrim(number_format($gv, 3, ',', '.'), '0'), ',') . ' ' . $geinh : '–';
@@ -152,9 +168,15 @@ if ($pa):
         'Rezeptur'           => $rid ? ((string) scalar("SELECT nummer FROM rezeptur WHERE id=?", [$rid])) : '–',
         'Darreichung'        => $darrLbl !== '' ? ucfirst($darrLbl) : '–',
         'Menge (Packungen)'  => number_format((int)$pa['menge'], 0, ',', '.'),
-        'Stück je Packung'   => $stkProP > 0 ? number_format($stkProP, 0, ',', '.') : '–',
-        'Gesamtstückzahl'    => $gesamtSt > 0 ? number_format($gesamtSt, 0, ',', '.') : '–',
     ];
+    if ($schuett) {
+        if ($stkProP > 0) $infoFelder['Portionen je Packung (NRV)'] = number_format($stkProP, 0, ',', '.');
+        $infoFelder['Füllmenge je Packung'] = $fmtMenge($gProPkg, $fuellEinheit);
+        $infoFelder['Gesamtmenge']          = $fmtMenge($gGesamt, $fuellEinheit);
+    } else {
+        $infoFelder['Stück je Packung'] = $stkProP > 0 ? number_format($stkProP, 0, ',', '.') : '–';
+        $infoFelder['Gesamtstückzahl']  = $gesamtSt > 0 ? number_format($gesamtSt, 0, ',', '.') : '–';
+    }
     if ($attrLabel !== '') $infoFelder[$attrLabel] = $attrValue;
     $infoFelder += [
         'Verpackung / Glas'  => $glasName !== '' ? $glasName : 'noch nicht gewählt',
