@@ -7,7 +7,7 @@ $q    = trim($_GET['q'] ?? '');
 $sort = $_GET['sort'] ?? 'angelegt';
 $dir  = $_GET['dir']  ?? 'desc';
 $tab  = $_GET['tab']  ?? 'offen';
-if (!in_array($tab, ['offen', 'abgeschlossen'], true)) $tab = 'offen';
+if (!in_array($tab, ['offen', 'abgeschlossen', 'storniert'], true)) $tab = 'offen';
 
 $alle = all("SELECT a.*, k.firma AS kunde_firma, COALESCE(k.nutzt_fulfillment,0) AS nutzt_fulfillment,
              COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name,
@@ -34,10 +34,13 @@ $auftragArt = function($r) use ($erstProd, $erstRez) {
     if ($rid > 0 && isset($erstRez[$rid]) && $aid > $erstRez[$rid])   return 'neu_prod';
     return 'neu_rez';
 };
-// Abgeschlossen = versendet; offen = alles andere (offen, in Produktion, versandbereit).
-$istAbg   = fn($r) => ($r['status'] ?? '') === 'versendet';
-$anzOffen = count(array_filter($alle, fn($r) => !$istAbg($r)));
-$anzAbg   = count(array_filter($alle, $istAbg));
+// Abgeschlossen = versendet; storniert = eigener Reiter; offen = alles andere (offen, in Produktion, versandbereit).
+$istStorno = fn($r) => ($r['status'] ?? '') === 'storniert';
+$istAbg    = fn($r) => ($r['status'] ?? '') === 'versendet';
+$istOffen  = fn($r) => !$istAbg($r) && !$istStorno($r);
+$anzOffen  = count(array_filter($alle, $istOffen));
+$anzAbg    = count(array_filter($alle, $istAbg));
+$anzStorno = count(array_filter($alle, $istStorno));
 // Bei einer Suche über ALLE Aufträge gehen (offen UND abgeschlossen) – sonst findet man einen bereits
 // versendeten/abgeschlossenen Auftrag im Standard-Reiter „Offen" nicht. Ohne Suche gilt der Reiter.
 if ($q !== '') {
@@ -49,7 +52,11 @@ if ($q !== '') {
         return false;
     });
 } else {
-    $rows = $tab === 'abgeschlossen' ? array_filter($alle, $istAbg) : array_filter($alle, fn($r) => !$istAbg($r));
+    $rows = match ($tab) {
+        'abgeschlossen' => array_filter($alle, $istAbg),
+        'storniert'     => array_filter($alle, $istStorno),
+        default         => array_filter($alle, $istOffen),
+    };
 }
 $rows = bx_sort_rows($rows, $sort, $dir);
 
@@ -116,13 +123,15 @@ $cols = [
 ];
 
 $TABS = ['offen' => 'Offen', 'abgeschlossen' => 'Abgeschlossen'];
-$TABCOUNT = ['offen' => $anzOffen, 'abgeschlossen' => $anzAbg];
+if ($anzStorno > 0) $TABS['storniert'] = 'Storniert';   // Reiter nur zeigen, wenn es stornierte gibt
+$TABCOUNT = ['offen' => $anzOffen, 'abgeschlossen' => $anzAbg, 'storniert' => $anzStorno];
 
 render_header('auftraege', 'Aufträge');
 $ohnePreis = (function_exists('has_role') && (has_role('admin') || has_role('finance') || has_role('sales')))
     ? (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status<>'storniert' AND COALESCE(gesamt_netto,0) <= 0") : 0;
 $kopfAktion = $ohnePreis > 0 ? bx_btn('Aufträge ohne Preis (' . $ohnePreis . ')', '?p=auftrag_preise', 'ghost') : '';
-bx_head('Aufträge', $q !== '' ? count($rows) . ' Treffer (Suche über alle Aufträge, auch abgeschlossene)' : count($rows) . ' ' . ($tab === 'abgeschlossen' ? 'abgeschlossene (versendet)' : 'offene'), $kopfAktion);
+$tabWort = match ($tab) { 'abgeschlossen' => 'abgeschlossene (versendet)', 'storniert' => 'stornierte', default => 'offene' };
+bx_head('Aufträge', $q !== '' ? count($rows) . ' Treffer (Suche über alle Aufträge, auch abgeschlossene)' : count($rows) . ' ' . $tabWort, $kopfAktion);
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag' . (isset($_GET['nr']) ? ' ' . h((string)$_GET['nr']) : '') . ' gelöscht.</div>';
 ?>
 <div class="settabs">
@@ -143,8 +152,10 @@ bx_table($cols, array_values($rows), [
     'sort'    => $sort,
     'dir'     => $dir,
     'rowUrl'  => fn($r) => '?p=auftrag&id=' . $r['id'],
-    'empty'   => $tab === 'abgeschlossen'
-        ? 'Noch keine abgeschlossenen (versendeten) Aufträge.'
-        : 'Kein offener Auftrag – entstehen automatisch aus bestätigten Angeboten.',
+    'empty'   => match ($tab) {
+        'abgeschlossen' => 'Noch keine abgeschlossenen (versendeten) Aufträge.',
+        'storniert'     => 'Keine stornierten Aufträge.',
+        default         => 'Kein offener Auftrag – entstehen automatisch aus bestätigten Angeboten.',
+    },
 ]);
 render_footer();
