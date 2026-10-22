@@ -1105,6 +1105,22 @@ if ($auftraege) {
         $auftragChargen[(int)$cr['auftrag_id']][] = ['nr' => (string)$cr['charge_nr'], 'mhd' => $cr['mhd']];
 }
 $rechnungen = all("SELECT * FROM beleg WHERE kunde_id=? AND typ='rechnung' AND kunde_sichtbar=1 AND status<>'storniert' ORDER BY angelegt DESC", [$kid]);
+// Zahlstatus je Rechnung (Brutto − Zahlungen = Rest) in EINER Abfrage – für die Übersichts-Kachel „Offene
+// Rechnungen" UND die Offen-Spalte in der Rechnungsliste. Teilzahlungen werden so korrekt berücksichtigt.
+$reZahl = [];   // beleg_id => ['brutto','bezahlt','rest','status']
+$reIds  = array_map(fn($r) => (int)$r['id'], $rechnungen);
+if ($reIds) {
+    $bezMap = [];
+    foreach (all("SELECT beleg_id, COALESCE(SUM(betrag),0) AS bez FROM zahlung WHERE beleg_id IN (" . implode(',', $reIds) . ") GROUP BY beleg_id") as $z)
+        $bezMap[(int)$z['beleg_id']] = (float)$z['bez'];
+    foreach ($rechnungen as $r) {
+        $bid = (int)$r['id']; $brutto = (float)$r['brutto']; $bez = $bezMap[$bid] ?? 0.0;
+        $rest = round($brutto - $bez, 2);
+        $st = ($r['status'] ?? '') === 'storniert' ? 'storniert'
+            : ($bez <= 0.005 ? 'offen' : ($rest > 0.005 ? 'teilbezahlt' : 'bezahlt'));
+        $reZahl[$bid] = ['brutto' => $brutto, 'bezahlt' => $bez, 'rest' => max(0.0, $rest), 'status' => $st];
+    }
+}
 $anfragen = all("SELECT a.*, r.name AS rezeptur_name, r.status AS rezeptur_status,
                  (SELECT COUNT(*) FROM rezeptur_anfrage_wunsch w WHERE w.anfrage_id=a.id) AS wunsch_anzahl
                  FROM rezeptur_anfrage a LEFT JOIN rezeptur r ON r.id=a.rezeptur_id WHERE a.kunde_id=? ORDER BY a.angelegt DESC", [$kid]);
@@ -1638,8 +1654,10 @@ $rohCoas = $rohDetail ? array_values(array_filter(
 $jaNein = fn($v) => $v === null || $v === '' ? null : ((int)$v === 1);
 $FORMLBL_P = ['pulver'=>'Pulver','granulat'=>'Granulat','extrakt'=>'Extrakt','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle'];
 $offenAngebote = count(array_filter($angebote, fn($a) => $a['status'] === 'gesendet'));
-$offenRechnungen = array_values(array_filter($rechnungen, fn($r) => ($r['status'] ?? '') === 'offen'));
-$offenBetrag = array_sum(array_map(fn($r) => (float)$r['brutto'], $offenRechnungen));
+// Offener Betrag = Summe der RESTE (Brutto − Zahlungen) über alle Rechnungen – Teilzahlungen korrekt abgezogen,
+// nicht mehr der volle Brutto nur anhand des rohen Status. „Offene Rechnungen" = alle mit Restbetrag > 0.
+$offenRechnungen = array_values(array_filter($rechnungen, fn($r) => ($reZahl[(int)$r['id']]['rest'] ?? 0.0) > 0.005));
+$offenBetrag = array_sum(array_map(fn($r) => (float)($reZahl[(int)$r['id']]['rest'] ?? 0.0), $rechnungen));
 $inArbeit = count(array_filter($auftraege, fn($a) => $a['status'] !== 'versendet'));
 // Menü-Zähler: was ist offen bzw. in Bearbeitung (Kundensicht) – als Badge am jeweiligen Menüpunkt.
 $navKontingente = (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND jahresvertrag=1 AND status<>'offen' AND kunde_ausgeblendet=0 AND NOT EXISTS (SELECT 1 FROM kontingent kk WHERE kk.angebot_id=angebot.id)", [$kid])
@@ -4521,18 +4539,19 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px">Ihre Rechnungen</h1>
   <div class="bx-panel">
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Nummer</th><th>Datum</th><th class="bx-num">Betrag</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Nummer</th><th>Datum</th><th class="bx-num">Betrag</th><th class="bx-num">Offen</th><th>Status</th><th></th></tr></thead>
       <tbody>
-      <?php if (!$rechnungen): ?><tr><td colspan="5" class="muted">Noch keine Rechnungen.</td></tr><?php endif; ?>
+      <?php if (!$rechnungen): ?><tr><td colspan="6" class="muted">Noch keine Rechnungen.</td></tr><?php endif; ?>
       <?php foreach ($rechnungen as $r):
         // Verknüpftes (archiviertes) Angebot aus dem Bulk-Import -> Leistungsumfang je Produkt anzeigen.
         $impPos = [];
         if (!empty($r['imp_angebot_id'])) { try { $impPos = all("SELECT typ,gruppe,bezeichnung,menge,einheit FROM bu_imp_angebot_pos WHERE angebot_id=? ORDER BY sort,id", [(int)$r['imp_angebot_id']]); } catch (Throwable $e) { $impPos = []; } }
       ?>
-        <tr><td><?= h($r['nummer']) ?></td><td><?= $r['datum']?h(date('d.m.Y',strtotime($r['datum']))):'' ?></td><td class="bx-num"><?= $eur($r['brutto']) ?></td><td><?= $reBadge($r['status']) ?></td>
+        <?php $rz = $reZahl[(int)$r['id']] ?? ['rest'=>0.0,'status'=>(string)($r['status']??'')]; ?>
+        <tr><td><?= h($r['nummer']) ?></td><td><?= $r['datum']?h(date('d.m.Y',strtotime($r['datum']))):'' ?></td><td class="bx-num"><?= $eur($r['brutto']) ?></td><td class="bx-num"><?= $rz['rest'] > 0.005 ? '<strong>' . $eur($rz['rest']) . '</strong>' : '<span class="muted">–</span>' ?></td><td><?= $reBadge($rz['status']) ?></td>
           <td class="bx-num" style="white-space:nowrap"><?php if (!empty($r['original_datei'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_datei') ?>&id=<?= (int)$r['id'] ?>">Rechnung (PDF)</a><?php elseif (!empty($r['auftrag_id'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_pdf') ?>&aid=<?= (int)$r['auftrag_id'] ?>">Rechnung (PDF)</a><?php endif; ?></td></tr>
         <?php if ($impPos): $tl=['produkt'=>'Produkt','verpackung'=>'Verpackung','etikett'=>'Etikett']; ?>
-        <tr><td colspan="5" style="padding-top:0">
+        <tr><td colspan="6" style="padding-top:0">
           <details><summary class="muted" style="cursor:pointer;font-size:13px">Leistungsumfang anzeigen</summary>
             <div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table">
               <thead><tr><th>Produkt</th><th>Art</th><th>Position</th><th class="bx-num">Menge</th><th>Einheit</th></tr></thead><tbody>
