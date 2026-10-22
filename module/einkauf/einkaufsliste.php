@@ -136,7 +136,7 @@ $BM_KAT = betriebsmittel_kategorien();
 
 $aktTyp = $_GET['typ'] ?? '';
 // Produktions-Typen + Nachbestellung (Meldebestand) + freie Betriebsmittel-Typen als eigene Reiter.
-$TYPEN = ['' => 'Alle', 'etikett' => 'Etiketten', 'verpackung' => 'Verpackung', 'rohstoff' => 'Rohstoffe', 'fertig' => 'Fertige Produkte', 'nachbestell' => 'Nachbestellung'] + $BM_KAT;
+$TYPEN = ['' => 'Alle', 'etikett' => 'Etiketten / Tüten', 'verpackung' => 'Verpackung', 'rohstoff' => 'Rohstoffe', 'fertig' => 'Fertige Produkte', 'nachbestell' => 'Nachbestellung'] + $BM_KAT;
 // Ordnet eine freie Bedarfszeile einem Betriebsmittel-Reiter zu (ohne Kategorie = Sonstiges).
 $freiMatch = function($f, $t) {
     $k = (string)($f['kategorie'] ?? '');
@@ -274,10 +274,12 @@ if ($ohneFestlegung): ?>
           <td><?= $rolleBadge($a['rolle']) ?></td>
           <td class="bx-num"><?php if ($gesperrt): ?><strong style="color:#8f231b"><?= $mfmt($a['zu_bestellen']) ?> <?= h($a['einheit']) ?></strong><?php else: ?><?= $mengeInput($key, (float)$a['zu_bestellen'], (string)$a['einheit']) ?><?php endif; ?><?php if (!$istEtikett): ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($a['zu_bestellen']) ?> · Lager <?= $mfmt($a['stock']) ?><?= $a['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($a['bestellt']) : '' ?></div><?php else: ?><div class="muted" style="font-size:11px">kundenspezifisch</div><?php endif; ?></td>
           <td><?= $gesperrt ? '<span class="muted">–</span>' : $liefSelect($key, (int)($a['haupt_lieferant'] ?? 0), item_lieferant_preise((int)$a['item_id'], (float)$a['zu_bestellen'])) ?></td>
+          <?php // Kunde·Produkt je Auftrag nur bei bedruckten Tüten/Beuteln (kundenspezifisch) – bei Gläsern & Co. nicht nötig.
+                $zeigKdPr = (($a['verpackungsart'] ?? '') === 'beutel'); ?>
           <td style="font-size:12px"><?php foreach ($a['orders'] as $o): if ($o['need'] <= 1e-6) continue; ?>
-            <div style="margin-bottom:5px">
+            <div style="margin-bottom:<?= $zeigKdPr ? '5px' : '2px' ?>">
               <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a>
-              <?php $oKd = firma_kurz((string)($o['kunde'] ?? '')); $oPr = (string)($o['produkt'] ?? ''); if ($oKd !== '' || $oPr !== ''): ?><div class="muted" style="font-size:11px"><?= h($oKd) ?><?= $oKd !== '' && $oPr !== '' ? ' · ' : '' ?><?= h($oPr) ?></div><?php endif; ?>
+              <?php if ($zeigKdPr): $oKd = firma_kurz((string)($o['kunde'] ?? '')); $oPr = (string)($o['produkt'] ?? ''); if ($oKd !== '' || $oPr !== ''): ?><div class="muted" style="font-size:11px"><?= h($oKd) ?><?= $oKd !== '' && $oPr !== '' ? ' · ' : '' ?><?= h($oPr) ?></div><?php endif; endif; ?>
             </div><?php endforeach; ?></td>
         </tr>
       <?php endforeach; ?>

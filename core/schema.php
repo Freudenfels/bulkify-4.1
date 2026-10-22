@@ -7499,7 +7499,7 @@ function bedarf_typ(string $rolle): string {
     };
 }
 function bedarf_typ_label(string $typ): string {
-    return ['etikett'=>'Etiketten','verpackung'=>'Verpackung','rohstoff'=>'Rohstoffe','fertig'=>'Fertige Produkte'][$typ] ?? $typ;
+    return ['etikett'=>'Etiketten / Tüten','verpackung'=>'Verpackung','rohstoff'=>'Rohstoffe','fertig'=>'Fertige Produkte'][$typ] ?? $typ;
 }
 
 // Aggregierter Bedarf über ALLE offenen Aufträge, je Artikel summiert (für Sammel-/Bulk-Bestellungen).
@@ -7521,7 +7521,12 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
             // Etiketten NICHT gruppieren (jedes braucht das Kundendesign) -> Schlüssel je (Item + Auftrag).
             $etikett = $r['rolle'] === 'Etikett';
             $key = $etikett ? ('e' . $iid . '_' . (int)$pa['auftrag_id']) : ('i' . $iid);
-            if (!isset($agg[$key])) $agg[$key] = ['item_id'=>$iid,'name'=>$r['name'],'rolle'=>$r['rolle'],'typ'=>bedarf_typ($r['rolle']),'einheit'=>$r['einheit'],'need'=>0.0,'orders'=>[],'etikett'=>$etikett,'auftrag_id'=>$etikett?(int)$pa['auftrag_id']:0];
+            if (!isset($agg[$key])) {
+                $vart = (string) scalar("SELECT verpackungsart FROM item WHERE id=?", [$iid]);
+                // Bedruckte Tüten/Beutel sind faktisch kundenspezifisch (wie Etiketten) -> eigener Reiter „Etiketten/Tüten".
+                $typ  = $vart === 'beutel' ? 'etikett' : bedarf_typ($r['rolle']);
+                $agg[$key] = ['item_id'=>$iid,'name'=>$r['name'],'rolle'=>$r['rolle'],'typ'=>$typ,'einheit'=>$r['einheit'],'need'=>0.0,'orders'=>[],'etikett'=>$etikett,'auftrag_id'=>$etikett?(int)$pa['auftrag_id']:0,'verpackungsart'=>$vart];
+            }
             $agg[$key]['need'] += (float)$r['benoetigt'];
             $agg[$key]['orders'][] = ['pa_id'=>(int)$pa['id'],'auftrag_id'=>(int)$pa['auftrag_id'],'auftrag_nr'=>$pa['auftrag_nr'],'kunde'=>(string)($pa['kunde'] ?? ''),'produkt'=>(string)($pa['produkt'] ?? ''),'need'=>(float)$r['benoetigt']];
         }
