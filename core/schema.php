@@ -7510,8 +7510,12 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
     // Nur FESTGELEGTE Aufträge (Eigen/Fremd entschieden) – sonst steht die Stückliste noch nicht fest (Rohstoffe vs. Bulk).
     $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.art_festgelegt_am IS NOT NULL"
         . ($nur_gemeldet ? " AND pa.bedarf_gemeldet IS NOT NULL" : "");
-    foreach (all("SELECT pa.id, pa.auftrag_id, a.nummer AS auftrag_nr FROM produktionsauftrag pa
-                  LEFT JOIN auftrag a ON a.id=pa.auftrag_id WHERE $wo") as $pa) {
+    foreach (all("SELECT pa.id, pa.auftrag_id, a.nummer AS auftrag_nr, k.firma AS kunde,
+                         COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.kundenname,''), p.name) AS produkt
+                  FROM produktionsauftrag pa
+                  LEFT JOIN auftrag a ON a.id=pa.auftrag_id
+                  LEFT JOIN produkt p ON p.id=a.produkt_id
+                  LEFT JOIN kunden k ON k.id=a.kunde_id WHERE $wo") as $pa) {
         foreach (auftrag_bedarf_cached((int)$pa['id']) as $r) {
             $iid = (int)$r['item_id']; if ($iid <= 0) continue;
             // Etiketten NICHT gruppieren (jedes braucht das Kundendesign) -> Schlüssel je (Item + Auftrag).
@@ -7519,7 +7523,7 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
             $key = $etikett ? ('e' . $iid . '_' . (int)$pa['auftrag_id']) : ('i' . $iid);
             if (!isset($agg[$key])) $agg[$key] = ['item_id'=>$iid,'name'=>$r['name'],'rolle'=>$r['rolle'],'typ'=>bedarf_typ($r['rolle']),'einheit'=>$r['einheit'],'need'=>0.0,'orders'=>[],'etikett'=>$etikett,'auftrag_id'=>$etikett?(int)$pa['auftrag_id']:0];
             $agg[$key]['need'] += (float)$r['benoetigt'];
-            $agg[$key]['orders'][] = ['pa_id'=>(int)$pa['id'],'auftrag_id'=>(int)$pa['auftrag_id'],'auftrag_nr'=>$pa['auftrag_nr'],'need'=>(float)$r['benoetigt']];
+            $agg[$key]['orders'][] = ['pa_id'=>(int)$pa['id'],'auftrag_id'=>(int)$pa['auftrag_id'],'auftrag_nr'=>$pa['auftrag_nr'],'kunde'=>(string)($pa['kunde'] ?? ''),'produkt'=>(string)($pa['produkt'] ?? ''),'need'=>(float)$r['benoetigt']];
         }
     }
     foreach ($agg as &$a) {

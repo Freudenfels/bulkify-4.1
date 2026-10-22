@@ -275,7 +275,10 @@ if ($ohneFestlegung): ?>
           <td class="bx-num"><?php if ($gesperrt): ?><strong style="color:#8f231b"><?= $mfmt($a['zu_bestellen']) ?> <?= h($a['einheit']) ?></strong><?php else: ?><?= $mengeInput($key, (float)$a['zu_bestellen'], (string)$a['einheit']) ?><?php endif; ?><?php if (!$istEtikett): ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($a['zu_bestellen']) ?> · Lager <?= $mfmt($a['stock']) ?><?= $a['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($a['bestellt']) : '' ?></div><?php else: ?><div class="muted" style="font-size:11px">kundenspezifisch</div><?php endif; ?></td>
           <td><?= $gesperrt ? '<span class="muted">–</span>' : $liefSelect($key, (int)($a['haupt_lieferant'] ?? 0), item_lieferant_preise((int)$a['item_id'], (float)$a['zu_bestellen'])) ?></td>
           <td style="font-size:12px"><?php foreach ($a['orders'] as $o): if ($o['need'] <= 1e-6) continue; ?>
-            <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a><?php endforeach; ?></td>
+            <div style="margin-bottom:5px">
+              <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a>
+              <?php $oKd = firma_kurz((string)($o['kunde'] ?? '')); $oPr = (string)($o['produkt'] ?? ''); if ($oKd !== '' || $oPr !== ''): ?><div class="muted" style="font-size:11px"><?= h($oKd) ?><?= $oKd !== '' && $oPr !== '' ? ' · ' : '' ?><?= h($oPr) ?></div><?php endif; ?>
+            </div><?php endforeach; ?></td>
         </tr>
       <?php endforeach; ?>
       <?php foreach ($bulkTab as $b): $key = 'bulk:' . (int)$b['produkt_id'];
