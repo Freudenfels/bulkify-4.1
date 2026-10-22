@@ -375,6 +375,15 @@ if ($kannSenden) $kopfBtn = '<form method="post" style="display:inline;margin-ri
 // Übersicht <-> Editor: aus der Übersicht per „Bearbeiten" in den Editor, aus dem Editor zurück zur Übersicht.
 if (!$neu && !$editMode) $kopfBtn = '<a class="btn btn-primary" style="margin-right:8px" href="?p=angebot&id=' . (int)$id . '&edit=1">Bearbeiten</a>' . $kopfBtn;
 elseif (!$neu && $st !== 'offen') $kopfBtn = '<a class="btn btn-ghost" style="margin-right:8px" href="?p=angebot&id=' . (int)$id . '">Zur Übersicht</a>' . $kopfBtn;
+// Verknüpfte Auftragsbestätigung(en): direkter Sprung Angebot -> Auftrag, falls aus diesem Angebot schon ein Auftrag
+// entstanden ist. Steht ganz links, weil das bei einem bestätigten Angebot der nützlichste nächste Schritt ist.
+if (!$neu) {
+    $angAuftraege = all("SELECT id, nummer FROM auftrag WHERE angebot_id=? ORDER BY id", [(int)$id]);
+    $auftBtns = '';
+    foreach ($angAuftraege as $au)
+        $auftBtns .= '<a class="btn btn-primary" style="margin-right:8px" href="?p=auftrag&id=' . (int)$au['id'] . '" title="Zur Auftragsbestätigung wechseln">Zum Auftrag ' . h((string)($au['nummer'] ?? '')) . ' &#8594;</a>';
+    if ($auftBtns !== '') $kopfBtn = $auftBtns . $kopfBtn;
+}
 $stLabel = match ($st) { 'gesendet'=>'gesendet','bestaetigt'=>'bestätigt','abgelehnt'=>'abgelehnt','offen'=>'Entwurf', default=>$st };
 bx_head($neu ? 'Neues Angebot' : $v('nummer'),
         $neu ? 'Positionen' : ($editMode ? 'Angebot bearbeiten' : 'Übersicht · ' . $stLabel),

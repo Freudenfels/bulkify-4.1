@@ -29,6 +29,9 @@ Die **Kopfdaten** sind ein zugeklapptes `<details>` – sie werden selten gebrau
 ## PDF ansehen
 In der Kopfzeile steht **⇩ PDF** (`?p=angebot_pdf&id=…`, neuer Tab) – dasselbe PDF, das der Kunde bekommt. Es wird **nicht gespeichert**, sondern bei jedem Aufruf aus dem aktuellen Stand gebaut; nach einer Änderung an den Positionen einfach neu öffnen. Ohne Kunde in den Kopfdaten gibt es keinen Empfänger und damit kein PDF – dann kommt ein Hinweis statt eines leeren Belegs. In der **Angebotsliste** steht dasselbe als Download-Icon in der letzten Spalte. Siehe `core/pdf_angebot.md`.
 
+## Sprung zum verknüpften Auftrag
+Ist aus dem Angebot bereits ein Auftrag entstanden (`auftrag.angebot_id = <Angebot>`), steht in der Kopfzeile ganz links ein **primärer Button „Zum Auftrag AB-… →"** (`?p=auftrag&id=…`). Bei mehreren Aufträgen aus demselben Angebot (mehrere angenommene Staffeln) erscheint je Auftrag ein eigener Button. Fehlt ein Auftrag (Entwurf/gesendet, noch nicht bestätigt), wird nichts angezeigt. Gilt nur für die direkte `angebot_id`-Verknüpfung, nicht für Jahresvertrags-Abrufe (die laufen über `kontingent_id`).
+
 ## PDF-Vorschau (auf der Seite)
 Ganz unten am Angebot (nur bei gespeichertem Angebot) ein aufklappbares Panel **„PDF-Vorschau"** – zeigt das Angebots-PDF direkt eingebettet (`<iframe>` auf `?p=angebot_pdf&id=…`), also **genau das, was der Kunde bekommt**: das generierte bulkify-PDF oder – falls ein v3-Original nachgereicht wurde – dieses Original (siehe „Angebot aus PDF einlesen"). Das PDF wird **lazy** erst erzeugt, wenn das Panel offen ist (per JS wird `src` erst beim Aufklappen gesetzt), damit das Bearbeiten schnell bleibt; standardmäßig ist es offen. Der Knopf **„Neu laden"** hängt einen Zeitstempel an die URL, damit nach dem Speichern der Positionen wirklich neu gebaut wird (Cache umgehen). Ist kein Kunde hinterlegt, zeigt der Rahmen die Hinweismeldung der PDF-Route (kein leerer Beleg).
 
