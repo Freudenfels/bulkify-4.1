@@ -173,7 +173,7 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
   var box=document.getElementById('weArtSuche'), hid=document.getElementById('weArtId'), list=document.getElementById('weArtList');
   if(!box||!hid||!list) return;
   function itemById(id){ id=+id; for(var i=0;i<items.length;i++) if(items[i].id===id) return items[i]; return null; }
-  function nz(x){ return String(x).replace(/\.?0+$/,''); }   // 172.00 -> 172
+  function nz(x){ return (Math.round(Number(x)*100)/100).toString(); }   // 172.00 -> 172, 60 bleibt 60
   function etMass(it){ return (it.w&&it.h) ? (nz(it.w)+' × '+nz(it.h)+' mm') : (it.f||''); }
   // Etikett-Abgleich: bestelltes Format + (falls Auftrag gewählt) das freigegebene Design als Bild.
   function showEtikett(){
