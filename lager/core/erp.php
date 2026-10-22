@@ -484,7 +484,9 @@ function erp_chargen_suche_fremd(string $q, int $kunde_id = 0, int $limit = 30):
 function erp_wareneingang_buchen_fremd(int $item_id, float $menge, string $charge_nr, ?string $mhd, int $kunde_id, string $notiz = '', string $einheit = ''): ?int {
     if ($item_id <= 0 || $menge <= 0 || $kunde_id <= 0 || !tabelle_da('charge')) return null;
     $einheit = erp_einheit_norm(trim($einheit));   // Eingabe hat Vorrang
-    if ($einheit === '') $einheit = (string) scalar("SELECT einheit FROM item WHERE id=?", [$item_id]) ?: 'Stk';
+    $itEinheit = (string) scalar("SELECT einheit FROM item WHERE id=?", [$item_id]) ?: 'Stk';
+    if ($einheit === '') $einheit = $itEinheit;
+    [$menge, $einheit] = erp_menge_in_item_einheit($menge, $einheit, $itEinheit);   // g -> kg usw.
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,fremd_kunde_id,notiz,angelegt)
        VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,?,?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $mhd ?: null, $kunde_id, $notiz ?: 'Fremdlager-Wareneingang', gmdate('Y-m-d H:i:s')]);
@@ -1064,6 +1066,9 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
     // Eingegebene Einheit hat VORRANG vor den Stammdaten (z. B. Kapseln = Stk, nicht kg).
     $einheit = erp_einheit_norm(trim($einheit));
     if ($einheit === '') $einheit = (string)$it['einheit'];
+    // Gewichts-/Volumen-Eingaben in die Artikel-Basiseinheit umrechnen (25.000 g -> 25 kg), damit der
+    // Bestand nicht 1000x zu hoch zaehlt. Stk/Karton/… bleiben unveraendert.
+    [$menge, $einheit] = erp_menge_in_item_einheit($menge, $einheit, (string)$it['einheit']);
     // Status wird beim Einbuchen gewaehlt (Standard: freigegeben). Quarantaene nur im Sonderfall.
     $status = in_array($status, ['frei', 'quarantaene', 'gesperrt'], true) ? $status : 'frei';
     $charge_nr = trim($charge_nr);
@@ -1229,6 +1234,21 @@ function erp_einheit_norm(string $s): string {
         'flasche'=>'Flasche','flaschen'=>'Flasche','bottle'=>'Flasche','bottles'=>'Flasche',
     ];
     return $map[$k] ?? $s;
+}
+
+// Menge in die BASISEINHEIT des Artikels umrechnen, wenn die Eingabe-Einheit eine Gewichts- bzw.
+// Volumen-Verwandte ist (g<->kg<->mg, ml<->L). So wird „25.000 g" bei einem kg-Artikel zu 25 kg
+// gebucht – sonst zaehlt der Bestand die 25.000 faelschlich als kg (1000x). Kategoriale Einheiten
+// (Stk, Karton, Beutel, …) bleiben wie eingegeben (z. B. Kapseln = Stk, nicht kg). Rueckgabe: [menge, einheit].
+function erp_menge_in_item_einheit(float $menge, string $von, string $item_einheit): array {
+    $von  = erp_einheit_norm(trim($von));
+    $ziel = erp_einheit_norm(trim($item_einheit));
+    if ($von === '' || $ziel === '' || $von === $ziel) return [$menge, $ziel !== '' ? $ziel : $von];
+    $gewicht = ['mg' => 0.001, 'g' => 1.0, 'kg' => 1000.0];   // in Gramm
+    $vol     = ['ml' => 1.0, 'L' => 1000.0];                   // in Milliliter
+    if (isset($gewicht[$von], $gewicht[$ziel])) return [$menge * $gewicht[$von] / $gewicht[$ziel], $ziel];
+    if (isset($vol[$von], $vol[$ziel]))         return [$menge * $vol[$von] / $vol[$ziel], $ziel];
+    return [$menge, $von];   // nicht umrechenbar -> Eingabe behalten
 }
 
 // Artikel per (Teil-)Name suchen – fuer das Zuordnen einer Lieferschein-Position zu einem
