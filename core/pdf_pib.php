@@ -117,8 +117,19 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
 
     // Rezeptur/Zutaten + Kennzahlen vorab laden.
     $rid = (int)($prod['rez_id'] ?? 0);
-    $zut = $rid ? all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
+    $zut = $rid ? all("SELECT item_id, bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rid]) : [];
     $sumMg = 0.0; foreach ($zut as $z) $sumMg += (float)$z['menge_mg'];
+    // Wirkstoff-Aufschlüsselung JE ZUTAT (Form -> elementarer Nährstoff), z. B. Magnesiumbisglycinat -> davon Magnesium.
+    $zutWirk = [];
+    if ($rid) foreach (all("SELECT z.item_id, z.menge_mg, COALESCE(iw.gehalt_wert, iw.gehalt_prozent) AS gw,
+                                   COALESCE(iw.gehalt_einheit,'prozent') AS ge, na.name, na.einheit, na.ie_mg, na.einheit_anzeige
+                            FROM rezeptur_zutat z JOIN item_wirkstoff iw ON iw.item_id=z.item_id
+                            JOIN naehrstoff na ON na.id=iw.naehrstoff_id
+                            WHERE z.rezeptur_id=? AND COALESCE(iw.gehalt_wert, iw.gehalt_prozent) IS NOT NULL
+                            ORDER BY z.sort, z.id", [$rid]) as $w) {
+        $mgN = (float)$w['menge_mg'] * wirkstoff_mg_je_mg($w['gw'], $w['ge'], $w['ie_mg']);
+        $zutWirk[(int)$w['item_id']][] = ['name'=>$w['name'], 'mg'=>$mgN, 'einheit'=>$w['einheit'], 'anzeige'=>$w['einheit_anzeige'], 'ie_mg'=>$w['ie_mg']];
+    }
     $istKapsel = in_array($prod['darreichungsform'] ?? '', ['kapsel', 'softgel'], true);
     $einheitWort = $istKapsel ? 'Kapsel' : 'Einheit';
     // Tagesdosis (Einnahme pro Tag): vom Aufrufer (Kundenwahl vor dem Download) oder am Produkt gepflegt.
@@ -199,11 +210,21 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
 
     // Zutaten je Einheit – ABSTEIGEND nach Menge (= gesetzliche Reihenfolge fürs Zutatenverzeichnis) + Gesamt.
     if ($zut) {
-        $zutSort = array_map(fn($z) => ['bezeichnung' => (string)$z['bezeichnung'], 'menge_mg' => (float)$z['menge_mg']], $zut);
-        if ($huelleTxt !== '') $zutSort[] = ['bezeichnung' => $huelleTxt, 'menge_mg' => $shellMg];   // Hülle als Zutat mitführen
+        $zutSort = array_map(fn($z) => ['item_id' => (int)($z['item_id'] ?? 0), 'bezeichnung' => (string)$z['bezeichnung'], 'menge_mg' => (float)$z['menge_mg']], $zut);
+        if ($huelleTxt !== '') $zutSort[] = ['item_id' => 0, 'bezeichnung' => $huelleTxt, 'menge_mg' => $shellMg];   // Hülle als Zutat mitführen
         usort($zutSort, fn($a, $b) => $b['menge_mg'] <=> $a['menge_mg']);
         $gesamtMg = $sumMg + ($huelleTxt !== '' ? $shellMg : 0.0);
-        $rows = array_map(fn($z) => [$z['bezeichnung'], ($z['menge_mg'] > 0 ? $mg($z['menge_mg']) . ' mg' : '–')], $zutSort);
+        $rows = [];
+        foreach ($zutSort as $z) {
+            $rows[] = [$z['bezeichnung'], ($z['menge_mg'] > 0 ? $mg($z['menge_mg']) . ' mg' : '–')];
+            // Aufschlüsselung je Form: elementarer Nährstoffgehalt (z. B. Magnesiumbisglycinat -> „– davon Magnesium 110 mg").
+            foreach (($zutWirk[$z['item_id']] ?? []) as $w) {
+                $lbl  = ($w['anzeige'] ?? '') !== '' ? $w['anzeige'] : $w['einheit'];
+                $betr = ($w['einheit'] === 'µg') ? $mg($w['mg'] * 1000) . ' ' . $lbl : $mg($w['mg']) . ' ' . $lbl;
+                if (($w['ie_mg'] ?? null) !== null && (float)$w['ie_mg'] > 0) $betr .= ' (' . $mg($w['mg'] / (float)$w['ie_mg']) . ' I.E.)';
+                $rows[] = ['      – davon ' . $w['name'], $betr];
+            }
+        }
         $rows[] = ['Gesamt', $mg($gesamtMg) . ' mg'];
         $y = spec_h($p, $y, 'Zutaten (je ' . $einheitWort . ', absteigend nach Menge)');
         $y = pib_table($p, $y, [[$L, 'Zutat'], [400, 'Menge je ' . $einheitWort]], $rows);

@@ -23,3 +23,6 @@ Das Auto-PIB kennt nur, was die App hat (Rezeptur/Nährwerte/Darreichung). COA-/
 
 ## Rezepturbasiertes PIB (ohne Produkt)
 Der Render-Körper steckt in `pib_pdf_render(array $prod, int $produkt_id, …)`. `pib_pdf_bauen($produkt_id)` lädt das Produkt und delegiert; `pib_pdf_bauen_rezeptur($rezeptur_id)` baut ein minimales $prod aus der Rezeptur (rez_id, Form, Name; Verpackung/Einheiten/Leerkapsel leer) und rendert ohne Produkt. Produktspezifische Teile (Behälter-Fallback aus Auftrag, Novel-Food-Snapshot) laufen nur bei `produkt_id>0`. Genutzt von der Route `rezeptur_pib` (module/rezeptur/pib.php).
+
+## Aufschlüsselung je Form (elementarer Gehalt)
+Die Zutaten-Tabelle zeigt je Verbindung/Form zusätzlich „– davon <Nährstoff>" mit dem elementaren Gehalt (z. B. Magnesiumbisglycinat → davon Magnesium). Datenquelle: `item_wirkstoff` je Zutat (`$zutWirk`, Menge × `wirkstoff_mg_je_mg()`), analog zu `pib_naehr()`, nur pro Zutat statt summiert. Die summierten Gesamtwerte je Nährstoff stehen weiterhin in der „Nährwert-/Wirkstoffdeklaration". Formen ohne hinterlegten Wirkstoffgehalt bekommen keine „davon"-Zeile.
