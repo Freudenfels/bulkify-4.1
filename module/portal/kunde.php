@@ -3556,6 +3556,10 @@ portal_head('Kundenportal · ' . $k['firma']);
         } else { // neu
             usort($aktBest, fn($x, $y) => strcmp((string)($y['angelegt'] ?? ''), (string)($x['angelegt'] ?? '')));  // neueste zuerst
         }
+    } else {
+        // Abgeschlossene: zuletzt abgeschlossen oben (jüngstes Versand-/Status-Datum zuerst).
+        $abschlDat = fn($a) => (string)(($a['versendet_am'] ?? '') ?: ($a['status_datum'] ?? '') ?: ($a['bezahlt_am'] ?? '') ?: ($a['angelegt'] ?? ''));
+        usort($aktBest, fn($x, $y) => strcmp($abschlDat($y), $abschlDat($x)));
     } ?>
   <h1 style="margin-bottom:4px">Ihre Bestellungen</h1>
   <p class="muted" style="margin:0 0 16px">Klicken Sie auf eine Bestellung, um alle Schritte, Rechnung und Details zu sehen.</p>
@@ -3578,7 +3582,14 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php endif; ?>
   </div>
   <?php if (!$aktBest): ?><div class="bx-panel"><div class="muted"><?= $btab === 'abgeschlossen' ? 'Noch keine abgeschlossenen Bestellungen.' : 'Aktuell keine Bestellung in Bearbeitung.' ?></div></div><?php endif; ?>
+  <?php if (count($aktBest) > 1): ?>
+  <div class="bx-row" style="margin:0 0 12px">
+    <input type="search" id="bxBestSuche" placeholder="Bestellungen durchsuchen (Nummer, Produkt, Charge …)" autocomplete="off"
+           style="width:100%;max-width:440px;padding:9px 13px;border:1px solid var(--rand,#d8d8d2);border-radius:8px;font-size:14px">
+  </div>
   <?php endif; ?>
+  <?php endif; ?>
+  <div id="bxBestListe">
   <?php foreach ($aktBest as $a):
         $istDLrow = ($a['kategorie'] ?? '') === 'dienstleistung';
         $trackA   = portal_auftrag_track($a);
@@ -3610,6 +3621,25 @@ portal_head('Kundenportal · ' . $k['firma']);
     </ul>
   </a>
   <?php endforeach; ?>
+  </div>
+  <?php if (count($aktBest) > 1): ?>
+  <div id="bxBestLeer" class="bx-panel" style="display:none"><div class="muted">Keine Bestellung passt zu Ihrer Suche.</div></div>
+  <script>
+  (function(){
+    var inp = document.getElementById('bxBestSuche'), liste = document.getElementById('bxBestListe'), leer = document.getElementById('bxBestLeer');
+    if (!inp || !liste) return;
+    var rows = Array.prototype.slice.call(liste.querySelectorAll('.bx-order-row'));
+    rows.forEach(function(r){ r.dataset.such = (r.textContent || '').toLowerCase().replace(/\s+/g, ' '); });
+    function norm(s){ return (s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+    function filter(){
+      var q = norm(inp.value), treffer = 0;
+      rows.forEach(function(r){ var ok = !q || r.dataset.such.indexOf(q) !== -1; r.style.display = ok ? '' : 'none'; if (ok) treffer++; });
+      if (leer) leer.style.display = treffer ? 'none' : 'block';
+    }
+    inp.addEventListener('input', filter);
+  })();
+  </script>
+  <?php endif; ?>
 
 <?php elseif ($view === 'bestellung'):
     $aid = (int)($_GET['aid'] ?? 0);
