@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$items = all("SELECT id, name, kategorie, einheit FROM item WHERE kategorie IN ('rohstoff','verpackung','fertig','verkaufsfertig') AND gesperrt=0 ORDER BY name");
+$items = all("SELECT id, name, kategorie, einheit, verpackung_rolle, breite_mm, hoehe_mm, etikett_format FROM item WHERE kategorie IN ('rohstoff','verpackung','fertig','verkaufsfertig') AND gesperrt=0 ORDER BY name");
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 $offeneAuftraege = all("SELECT a.id, a.nummer, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, k.firma
                         FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN kunden k ON k.id=a.kunde_id
@@ -55,6 +55,13 @@ $zukaufAuftraege = all("SELECT a.id, a.nummer, COALESCE(NULLIF(p.kundenname,''),
                         FROM auftrag a JOIN produkt p ON p.id=a.produkt_id JOIN rezeptur r ON r.id=p.rezeptur_id
                         LEFT JOIN kunden k ON k.id=a.kunde_id
                         WHERE a.status NOT IN ('versendet','erledigt') ORDER BY a.angelegt DESC");
+// Etikett-Design je offenem Auftrag (dokument typ='etikett') – fürs Abgleichen beim Etikett-Wareneingang:
+// Bild + Maße zeigen, damit man sieht, ob das gelieferte Etikett dem bestellten entspricht.
+$aufEtikett = [];   // auftrag_id => dokument_id
+$aufIdsE = array_values(array_filter(array_map(fn($a) => (int)$a['id'], $offeneAuftraege)));
+if ($aufIdsE)
+    foreach (all("SELECT objekt_id, MAX(id) AS did FROM dokument WHERE objekt_typ='auftrag' AND typ='etikett' AND objekt_id IN (" . implode(',', $aufIdsE) . ") GROUP BY objekt_id") as $d)
+        $aufEtikett[(int)$d['objekt_id']] = (int)$d['did'];
 $such = trim((string)($_GET['such'] ?? ''));   // Suche nach Tracking-Code / Charge / Artikel (Paket wiederfinden)
 if ($such !== '') {
     $like = '%' . $such . '%';
@@ -144,6 +151,12 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
         </select>
       </div>
     </div>
+    <!-- Etikett-Abgleich: bestelltes Format + Design-Bild, damit die Lieferung gegen die Bestellung geprüft werden kann -->
+    <div class="bx-panel" id="weEtikettBox" style="display:none;margin:0 0 12px;border-color:#C0F24E">
+      <div style="font-weight:600;margin-bottom:6px">Etikett prüfen – stimmt das Gelieferte mit der Bestellung?</div>
+      <div id="weEtikettMass" class="muted" style="font-size:13px;margin-bottom:8px"></div>
+      <div id="weEtikettDesign"></div>
+    </div>
     <div class="bx-field"><label>Tracking-Code(s) Paket / Palette <?= bx_hint('Barcode/Sendungsnummer vom Paket- oder Palettenetikett scannen. Mehrere Pakete: einfach nacheinander scannen – jeder Scan landet automatisch in einer eigenen Zeile.') ?></label>
       <textarea name="tracking" id="weTracking" rows="2" placeholder="Etikett scannen … (je Paket eine Zeile)" style="font-variant-numeric:tabular-nums"></textarea>
       <div class="muted" id="weTrackCount" style="font-size:12px;margin-top:4px"></div>
@@ -155,9 +168,34 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
 </form>
 <script>
 (function(){
-  var items = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie']], $items), JSON_UNESCAPED_UNICODE) ?>;
+  var items = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'r'=>(string)($it['verpackung_rolle'] ?? ''),'w'=>$it['breite_mm']!==null?(float)$it['breite_mm']:null,'h'=>$it['hoehe_mm']!==null?(float)$it['hoehe_mm']:null,'f'=>(string)($it['etikett_format'] ?? '')], $items), JSON_UNESCAPED_UNICODE) ?>;
+  var aufEtikett = <?= json_encode($aufEtikett, JSON_FORCE_OBJECT) ?>;   // auftrag_id => dokument_id (Etikett-Design)
   var box=document.getElementById('weArtSuche'), hid=document.getElementById('weArtId'), list=document.getElementById('weArtList');
   if(!box||!hid||!list) return;
+  function itemById(id){ id=+id; for(var i=0;i<items.length;i++) if(items[i].id===id) return items[i]; return null; }
+  function nz(x){ return String(x).replace(/\.?0+$/,''); }   // 172.00 -> 172
+  function etMass(it){ return (it.w&&it.h) ? (nz(it.w)+' × '+nz(it.h)+' mm') : (it.f||''); }
+  // Etikett-Abgleich: bestelltes Format + (falls Auftrag gewählt) das freigegebene Design als Bild.
+  function showEtikett(){
+    var boxEl=document.getElementById('weEtikettBox'); if(!boxEl) return;
+    var it=itemById(hid.value);
+    if(!it || it.r!=='etikett'){ boxEl.style.display='none'; return; }
+    var mass=etMass(it);
+    document.getElementById('weEtikettMass').innerHTML = mass
+      ? ('Bestelltes Etikettenformat: <strong>'+esc(mass)+'</strong> &nbsp;·&nbsp; bitte das gelieferte Etikett ausmessen und vergleichen.')
+      : 'Für diesen Etikett-Artikel ist kein Format hinterlegt.';
+    var aid = (typeof normalAuf!=='undefined' && normalAuf) ? normalAuf.value : '';
+    var dok = (aid && aufEtikett[aid]) ? aufEtikett[aid] : 0;
+    var dz=document.getElementById('weEtikettDesign');
+    if(dok){
+      dz.innerHTML = '<div class="muted" style="font-size:12px;margin-bottom:6px">Design laut Auftrag:</div>'
+        + '<iframe src="?p=dokument&id='+dok+'" style="width:100%;max-width:440px;height:320px;border:1px solid var(--line);border-radius:8px;background:#fff" title="Etikett-Design"></iframe>'
+        + '<div style="margin-top:6px"><a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id='+dok+'">Design in neuem Tab öffnen</a></div>';
+    } else {
+      dz.innerHTML = '<div class="muted" style="font-size:12px">Design-Bild: oben bei „Für Auftrag" den passenden Auftrag wählen – dann erscheint hier das freigegebene Etikett-Design zum Vergleich.</div>';
+    }
+    boxEl.style.display='';
+  }
   var katLbl={rohstoff:'Rohstoff',verpackung:'Verpackung',fertig:'Fertigware',verkaufsfertig:'Verkaufsfertig'};
   var hl=-1, shown=[], curKat='rohstoff';   // aktive Typ-Kategorie fuers Filtern
   function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
@@ -176,9 +214,9 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
     if(einhEl) einhEl.textContent = e || '–';
     if(einhHint) einhHint.textContent = e ? ('Menge in ' + e + ' eingeben.') : 'Erst Artikel wählen – die Einheit erscheint hier.';
   }
-  function choose(i){ var it=shown[i]; if(!it) return; hid.value=it.id; box.value=it.n; box.setCustomValidity(''); setEinheit(it.e); close(); }
+  function choose(i){ var it=shown[i]; if(!it) return; hid.value=it.id; box.value=it.n; box.setCustomValidity(''); setEinheit(it.e); showEtikett(); close(); }
   function close(){ list.hidden=true; box.setAttribute('aria-expanded','false'); }
-  box.addEventListener('input', function(){ hid.value=''; setEinheit(''); render(box.value); });
+  box.addEventListener('input', function(){ hid.value=''; setEinheit(''); showEtikett(); render(box.value); });
   box.addEventListener('focus', function(){ render(box.value); });
   box.addEventListener('keydown', function(e){
     if(list.hidden){ if(e.key==='ArrowDown') render(box.value); return; }
@@ -217,7 +255,8 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
       box.value=''; hid.value=''; setEinheit('');
     }
   }
-  if(typSel){ typSel.addEventListener('change', applyTyp); applyTyp(); }
+  if(typSel){ typSel.addEventListener('change', function(){ applyTyp(); showEtikett(); }); applyTyp(); }
+  if(normalAuf) normalAuf.addEventListener('change', showEtikett);   // Auftrag gewählt -> Design-Bild nachladen
 
   if(box.form) box.form.addEventListener('submit', function(e){
     if(typSel && typSel.value==='zukauf') return;   // Zukauf: Auftrag-Select greift (required)
