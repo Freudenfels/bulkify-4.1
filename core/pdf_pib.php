@@ -257,6 +257,15 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
         $p->text($L, $y, 'Für die eingesetzten Rohstoffe sind noch keine Wirkstoffgehalte/NRV hinterlegt.', 9, false, [110, 110, 108]); $y += 16;
     }
 
+    // Disclaimer: die Deklarationswerte sind aus den Rohstoff-Spezifikationen BERECHNET (Richtwerte); erst eine
+    // Analyse des fertigen Produkts bestätigt die tatsächlichen Gehalte. Bei Naturrohstoffen sind Schwankungen üblich.
+    $y += 2;
+    foreach ($p->wrap('Hinweis: Die angegebenen Nährwert-/Wirkstoffgehalte sind aus den Spezifikationen der eingesetzten Rohstoffe berechnet und stellen Richtwerte dar. Bei natürlichen Rohstoffen sind herstellungs- und chargenbedingte Schwankungen üblich. Eine aussagekräftige, verbindliche Bestätigung der tatsächlichen Gehalte liefert erst eine Analyse des fertigen Produkts (Endprodukt-Charge).', $R - $L, 8, false) as $wl) {
+        if ($y > 785) { $p->addPage(); $y = 48; }
+        $p->text($L, $y, $wl, 8, false, [110, 110, 108]); $y += 11;
+    }
+    $y += 8;
+
     // Zugelassene Angaben (Health Claims) für die enthaltenen Nährstoffe (EU 432/2012).
     $claims = health_claims_fuer_rezeptur($rid);
     if ($claims) {
@@ -297,6 +306,7 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
     if ($rid && $nfSnap['status'] !== 'unklar') {
         if ($y > 690) { $p->addPage(); $y = 48; }
         $y = spec_h($p, $y, 'Novel-Food-Status');
+        $y += 11;   // Grundlinie absetzen, sonst klebt der Text an der Überschrift
         $stand = $nfSnap['geprueft_am'] ? ' (Stand: ' . date('d.m.Y', strtotime((string)$nfSnap['geprueft_am'])) . ')' : '';
         if ($nfSnap['status'] === 'konform') {
             $txt = 'Alle eingesetzten Rohstoffe gelten nach dem EU-Novel-Food-Katalog als nicht-neuartig (konform)' . $stand . '.';
