@@ -586,8 +586,20 @@ $jvWarnung  = has_role('admin') && empty($a['kontingent_id']) && (string)$a['sta
 <?php // Reiter „Rezeptur": zeigt die (effektive) Rezeptur des Auftrags zum Nachsehen (auftrag.rezeptur_id, sonst Produkt-Rezeptur). ?>
 <div class="bx-panel" data-panel="rezeptur">
   <?php if ($rezeptur):
-      $rzZut = all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rezEffId]);
+      $rzZut = all("SELECT item_id, bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rezEffId]);
       $rzSum = 0.0; foreach ($rzZut as $z) $rzSum += (float)$z['menge_mg'];
+      // CoA/Spec je zugeordnetem Rohstoff (dokument am item) – für die anklickbare Liste mit Papier-Status.
+      $coaMap = [];
+      $zutIds = array_values(array_unique(array_filter(array_map(fn($z) => (int)$z['item_id'], $rzZut))));
+      if ($zutIds) {
+          $ph = implode(',', array_fill(0, count($zutIds), '?'));
+          foreach (all("SELECT objekt_id, typ FROM dokument WHERE objekt_typ='item' AND typ IN ('coa','spec','beides','analyse') AND objekt_id IN ($ph)", $zutIds) as $dr) {
+              $iid = (int)$dr['objekt_id']; $t = (string)$dr['typ'];
+              if (!isset($coaMap[$iid])) $coaMap[$iid] = ['coa' => false, 'spec' => false];
+              if ($t === 'coa' || $t === 'beides' || $t === 'analyse') $coaMap[$iid]['coa'] = true;
+              if ($t === 'spec' || $t === 'beides') $coaMap[$iid]['spec'] = true;
+          }
+      }
       $kgName = (int)($rezeptur['kapselgroesse_id'] ?? 0) ? (string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$rezeptur['kapselgroesse_id']]) : '';
       $mgF = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
   ?>
@@ -597,11 +609,23 @@ $jvWarnung  = has_role('admin') && empty($a['kontingent_id']) && (string)$a['sta
     </div>
     <div class="muted" style="font-size:13px;margin:4px 0 12px"><?= h((string)$rezeptur['darreichungsform']) ?><?= $kgName !== '' ? ' · Kapselgröße ' . h($kgName) : '' ?><?= $rzSum > 0 ? ' · Gesamt ' . $mgF($rzSum) . ' mg je Einheit' : '' ?></div>
     <?php if ($rzZut): ?>
+    <div class="muted" style="font-size:12px;margin:0 0 8px">Zutat anklicken, um den Rohstoff zu öffnen. „Unterlagen" zeigt, ob am Rohstoff ein CoA bzw. eine Spezifikation hinterlegt ist.</div>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Zutat</th><th class="bx-num">Menge je Einheit</th></tr></thead>
+      <thead><tr><th>Zutat</th><th>Unterlagen</th><th class="bx-num">Menge je Einheit</th></tr></thead>
       <tbody>
-        <?php foreach ($rzZut as $z): ?><tr><td><?= h((string)$z['bezeichnung']) ?></td><td class="bx-num"><?= $mgF($z['menge_mg']) ?> mg</td></tr><?php endforeach; ?>
-        <tr style="font-weight:600"><td>Gesamt je Einheit</td><td class="bx-num"><?= $mgF($rzSum) ?> mg</td></tr>
+        <?php foreach ($rzZut as $z): $iid = (int)$z['item_id']; $papier = $coaMap[$iid] ?? null; ?>
+        <tr>
+          <td><?php if ($iid): ?><a href="?p=rohstoff&id=<?= $iid ?>" target="_blank" rel="noopener"><?= h((string)$z['bezeichnung']) ?></a><?php else: ?><?= h((string)$z['bezeichnung']) ?><?php endif; ?></td>
+          <td><?php
+              if (!$iid)                              echo '<span class="muted" title="Diesem Zutat-Text ist kein Rohstoff zugeordnet">nicht zugeordnet</span>';
+              elseif ($papier && $papier['coa'])      echo bx_badge('CoA' . ($papier['spec'] ? ' + Spec' : ''), 'ok');
+              elseif ($papier && $papier['spec'])      echo bx_badge('nur Spec – CoA fehlt', 'warn');
+              else                                     echo bx_badge('keine Unterlagen', 'warn');
+          ?></td>
+          <td class="bx-num"><?= $mgF($z['menge_mg']) ?> mg</td>
+        </tr>
+        <?php endforeach; ?>
+        <tr style="font-weight:600"><td>Gesamt je Einheit</td><td></td><td class="bx-num"><?= $mgF($rzSum) ?> mg</td></tr>
       </tbody>
     </table></div>
     <?php else: ?><div class="muted">Diese Rezeptur hat noch keine Zutaten.</div><?php endif; ?>
