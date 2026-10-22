@@ -6436,13 +6436,13 @@ function pa_vorbereitung_checks(int $pa_id): array {
     }
     // 3) Material: Rohstoffe/Bulk angekommen, genug Gläser, Kartons … – je Rolle aus der Stückliste.
     $einh = max(0, (int) produktion_stueck_je_packung($pa)) * max(0, (int)$pa['menge']);
-    $fehlend = []; $proRolle = [];
+    $fehlend = []; $proRolle = []; $einhRolle = [];
     foreach (auftrag_bedarf($pa_id) as $r) {
         $rolle = (string)$r['rolle'];
         $fehlt = (float)$r['fehlt'];
         if (!isset($proRolle[$rolle])) $proRolle[$rolle] = 0.0;
         $proRolle[$rolle] += $fehlt;
-        if ($fehlt > 1e-6) $fehlend[] = $r;
+        if ($fehlt > 1e-6) { $fehlend[] = $r; $e = trim((string)($r['einheit'] ?? '')); if ($e !== '') $einhRolle[$rolle][$e] = true; }
     }
     // Rollen zu sprechenden Vor-Produktions-Checks bündeln.
     $rollenMap = [
@@ -6456,9 +6456,14 @@ function pa_vorbereitung_checks(int $pa_id): array {
         $betroffen = array_intersect_key($proRolle, array_flip($rollen));
         if (!$betroffen) continue;   // diese Rolle kommt beim Auftrag gar nicht vor
         $fehltSumme = array_sum($betroffen);
+        // Einheit anhängen, wenn die fehlenden Posten dieses Bündels alle dieselbe Einheit haben
+        // (z. B. „6.000 Pkg" beim Zukauf-Schüttgut, „1.500 kg" beim Rohstoff) – sonst (gemischt) weglassen.
+        $einhSet = [];
+        foreach ($rollen as $ro) foreach (array_keys($einhRolle[$ro] ?? []) as $e) $einhSet[$e] = true;
+        $einhTxt = count($einhSet) === 1 ? ' ' . array_key_first($einhSet) : '';
         $checks[] = ['key'=>'mat_'.md5($label), 'label'=>$label, 'kritisch'=>false,
                      'ok'=>$fehltSumme <= 1e-6, 'wert'=>$fehltSumme <= 1e-6 ? 'vollständig da'
-                            : ('fehlt noch ' . (fmod($fehltSumme, 1) == 0 ? (string)(int)$fehltSumme : number_format($fehltSumme, 2, ',', '.')))];
+                            : ('fehlt noch ' . (fmod($fehltSumme, 1) == 0 ? number_format($fehltSumme, 0, ',', '.') : number_format($fehltSumme, 2, ',', '.')) . $einhTxt)];
     }
     $bereit = true;
     foreach ($checks as $c) if (!$c['ok']) { $bereit = false; break; }
@@ -6840,11 +6845,21 @@ function auftrag_bedarf(int $pa_id): array {
         $verf = auftrag_fertigware_cached((int)$pa['auftrag_id'])['frei'];
         $af = auftrag_row_cached($aid);
         $bi = produkt_bulk_info((int)$pa['produkt_id'], (string)($af['produkt_bezeichnung'] ?? ''), (string)($af['produkt_form'] ?? ''));
-        // Bedarf = Einheiten (Menge × Einheiten/Packung). Ist keine „Einheiten pro Packung" gepflegt
-        // (z. B. Pulver/Füllprodukte), fällt der Bedarf auf die Packungsmenge zurück – sonst käme 0 heraus
-        // und ein Fremdauftrag OHNE zugekaufte Fertigware würde faelschlich als „produktionsbereit" gelten.
-        $benoetigt = $einheiten > 0 ? $einheiten : (float)$menge;
-        $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>$benoetigt,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$benoetigt-$verf),'einheit'=>$bi['einheit']];
+        // Schüttgut (Pulver/Granulat/Gel/Flüssig/Öl): beim ZUKAUF kaufen wir FERTIGE PACKUNGEN (z. B. 6.000 Beutel),
+        // nicht die 300.000 Portionen. Der Fertigware-Bestand wird intern in Portionen geführt -> fürs Anzeigen/
+        // Bestellen in Packungen umrechnen (Portionen ÷ Stück je Packung). Verhältnis benoetigt/menge bleibt dabei
+        // 1 je Packung, d. h. Teilproduktion/Bereitschaft rechnen unverändert korrekt.
+        $schuettZ = in_array((string)($bi['form'] ?? ''), ['pulver', 'granulat', 'gel', 'fluessig', 'oel'], true);
+        if ($schuettZ && $menge > 0) {
+            $verfPkg = $einh > 0 ? $verf / $einh : $verf;
+            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>(float)$menge,'verfuegbar'=>$verfPkg,'fehlt'=>max(0.0,(float)$menge-$verfPkg),'einheit'=>'Pkg'];
+        } else {
+            // Bedarf = Einheiten (Menge × Einheiten/Packung). Ist keine „Einheiten pro Packung" gepflegt
+            // (z. B. v3-Fälle), fällt der Bedarf auf die Packungsmenge zurück – sonst käme 0 heraus
+            // und ein Fremdauftrag OHNE zugekaufte Fertigware würde faelschlich als „produktionsbereit" gelten.
+            $benoetigt = $einheiten > 0 ? $einheiten : (float)$menge;
+            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>$benoetigt,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$benoetigt-$verf),'einheit'=>$bi['einheit']];
+        }
     } else {
         foreach (produktion_materialbedarf($pa_id) as $m)
             $rows[] = ['rolle'=>'Rohstoff','item_id'=>$m['item_id'],'name'=>$m['name'],'benoetigt'=>$m['benoetigt'],'verfuegbar'=>$m['verfuegbar'],'fehlt'=>$m['fehlt'],'einheit'=>$m['einheit']];
