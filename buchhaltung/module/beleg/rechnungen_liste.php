@@ -10,16 +10,29 @@ $dir  = $_GET['dir']  ?? 'desc';
 $nurDL = (($p ?? '') === 'dl_rechnungen') || (($_GET['art'] ?? '') === 'dienstleistung');
 $route = $nurDL ? 'dl_rechnungen' : 'rechnungen';
 
-$rows = all("SELECT b.*, k.firma AS kunde_firma
-             FROM beleg b LEFT JOIN kunden k ON k.id=b.kunde_id
+$rows = all("SELECT b.*, k.firma AS kunde_firma,
+             COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.kundenname,''), p.name) AS produkt_name
+             FROM beleg b
+             LEFT JOIN kunden k ON k.id=b.kunde_id
+             LEFT JOIN auftrag a ON a.id=b.auftrag_id
+             LEFT JOIN produkt p ON p.id=a.produkt_id
              WHERE b.typ IN ('rechnung','gutschrift')"
             . ($nurDL ? " AND b.kategorie='dienstleistung'" : ""));
+// Produkt je Beleg: aus dem Auftrag; bei freien Rechnungen (ohne Auftrag) Fallback auf die erste Position.
+$belPosMap = [];
+$belOhneProd = array_values(array_unique(array_map(fn($r) => (int)$r['id'], array_filter($rows, fn($r) => trim((string)($r['produkt_name'] ?? '')) === ''))));
+if ($belOhneProd)
+    foreach (all("SELECT beleg_id, bezeichnung FROM beleg_position WHERE beleg_id IN (" . implode(',', $belOhneProd) . ") ORDER BY sort, id") as $bp) {
+        $bid = (int)$bp['beleg_id']; if (!isset($belPosMap[$bid])) $belPosMap[$bid] = (string)$bp['bezeichnung'];
+    }
+$belProdukt = fn($r) => trim((string)($r['produkt_name'] ?? '')) !== '' ? (string)$r['produkt_name'] : (string)($belPosMap[(int)$r['id']] ?? '');
 if ($q !== '') {
     $needle = mb_strtolower($q);
-    $rows = array_filter($rows, function($r) use ($needle) {
+    $rows = array_filter($rows, function($r) use ($needle, $belProdukt) {
         foreach (['nummer','kunde_firma'] as $f) {
             if (mb_strpos(mb_strtolower((string)$r[$f]), $needle) !== false) return true;
         }
+        if (mb_strpos(mb_strtolower($belProdukt($r)), $needle) !== false) return true;
         return false;
     });
 }
@@ -43,6 +56,7 @@ $cols = [
     'art'         => ['label' => 'Art', 'render' => fn($r)=> ($r['typ'] ?? '')==='gutschrift' ? bx_badge('Gutschrift','info') : (($r['kategorie'] ?? 'produkt')==='dienstleistung' ? bx_badge('Dienstleistung','info') : 'Rechnung')],
     'datum'       => ['label' => 'Datum', 'sort' => true, 'render' => $datum],
     'kunde_firma' => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
+    'produkt'     => ['label' => 'Produkt', 'render' => function($r) use ($belProdukt){ $pn = $belProdukt($r); return $pn !== '' ? h($pn) : '<span class="muted">–</span>'; }],
     'netto'       => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['netto'])],
     'brutto'      => ['label' => 'Brutto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['brutto'])],
     'status'      => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],

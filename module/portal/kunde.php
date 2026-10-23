@@ -1109,7 +1109,20 @@ if ($auftraege) {
                   WHERE pa.auftrag_id IN ($inA) AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id", $aids) as $cr)
         $auftragChargen[(int)$cr['auftrag_id']][] = ['nr' => (string)$cr['charge_nr'], 'mhd' => $cr['mhd']];
 }
-$rechnungen = all("SELECT * FROM beleg WHERE kunde_id=? AND typ='rechnung' AND kunde_sichtbar=1 AND status<>'storniert' ORDER BY angelegt DESC", [$kid]);
+$rechnungen = all("SELECT b.*, COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.kundenname,''), p.name) AS produkt_name
+                   FROM beleg b
+                   LEFT JOIN auftrag a ON a.id=b.auftrag_id
+                   LEFT JOIN produkt p ON p.id=a.produkt_id
+                   WHERE b.kunde_id=? AND b.typ='rechnung' AND b.kunde_sichtbar=1 AND b.status<>'storniert'
+                   ORDER BY b.angelegt DESC", [$kid]);
+// Produkt je Rechnung: aus dem Auftrag; bei freien Rechnungen (ohne Auftrag) Fallback auf die erste Position.
+$reProdFallback = [];
+$reOhneProd = array_values(array_unique(array_map(fn($r) => (int)$r['id'], array_filter($rechnungen, fn($r) => trim((string)($r['produkt_name'] ?? '')) === ''))));
+if ($reOhneProd)
+    foreach (all("SELECT beleg_id, bezeichnung FROM beleg_position WHERE beleg_id IN (" . implode(',', $reOhneProd) . ") ORDER BY sort, id") as $bp) {
+        $bid = (int)$bp['beleg_id']; if (!isset($reProdFallback[$bid])) $reProdFallback[$bid] = (string)$bp['bezeichnung'];
+    }
+$reProdukt = fn($r) => trim((string)($r['produkt_name'] ?? '')) !== '' ? (string)$r['produkt_name'] : (string)($reProdFallback[(int)$r['id']] ?? '');
 // Zahlstatus je Rechnung (Brutto − Zahlungen = Rest) in EINER Abfrage – für die Übersichts-Kachel „Offene
 // Rechnungen" UND die Offen-Spalte in der Rechnungsliste. Teilzahlungen werden so korrekt berücksichtigt.
 $reZahl = [];   // beleg_id => ['brutto','bezahlt','rest','status']
@@ -4564,19 +4577,20 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px">Ihre Rechnungen</h1>
   <div class="bx-panel">
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Nummer</th><th>Datum</th><th class="bx-num">Betrag</th><th class="bx-num">Offen</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Nummer</th><th>Datum</th><th>Produkt</th><th class="bx-num">Betrag</th><th class="bx-num">Offen</th><th>Status</th><th></th></tr></thead>
       <tbody>
-      <?php if (!$rechnungen): ?><tr><td colspan="6" class="muted">Noch keine Rechnungen.</td></tr><?php endif; ?>
+      <?php if (!$rechnungen): ?><tr><td colspan="7" class="muted">Noch keine Rechnungen.</td></tr><?php endif; ?>
       <?php foreach ($rechnungen as $r):
         // Verknüpftes (archiviertes) Angebot aus dem Bulk-Import -> Leistungsumfang je Produkt anzeigen.
         $impPos = [];
         if (!empty($r['imp_angebot_id'])) { try { $impPos = all("SELECT typ,gruppe,bezeichnung,menge,einheit FROM bu_imp_angebot_pos WHERE angebot_id=? ORDER BY sort,id", [(int)$r['imp_angebot_id']]); } catch (Throwable $e) { $impPos = []; } }
       ?>
         <?php $rz = $reZahl[(int)$r['id']] ?? ['rest'=>0.0,'status'=>(string)($r['status']??'')]; ?>
-        <tr><td><?= h($r['nummer']) ?></td><td><?= $r['datum']?h(date('d.m.Y',strtotime($r['datum']))):'' ?></td><td class="bx-num"><?= $eur($r['brutto']) ?></td><td class="bx-num"><?= $rz['rest'] > 0.005 ? '<strong>' . $eur($rz['rest']) . '</strong>' : '<span class="muted">–</span>' ?></td><td><?= $reBadge($rz['status']) ?></td>
+        <?php $rProd = $reProdukt($r); ?>
+        <tr><td><?= h($r['nummer']) ?></td><td><?= $r['datum']?h(date('d.m.Y',strtotime($r['datum']))):'' ?></td><td><?= $rProd !== '' ? h($rProd) : '<span class="muted">–</span>' ?></td><td class="bx-num"><?= $eur($r['brutto']) ?></td><td class="bx-num"><?= $rz['rest'] > 0.005 ? '<strong>' . $eur($rz['rest']) . '</strong>' : '<span class="muted">–</span>' ?></td><td><?= $reBadge($rz['status']) ?></td>
           <td class="bx-num" style="white-space:nowrap"><?php if (!empty($r['original_datei'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_datei') ?>&id=<?= (int)$r['id'] ?>">Rechnung (PDF)</a><?php elseif (!empty($r['auftrag_id'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_pdf') ?>&aid=<?= (int)$r['auftrag_id'] ?>">Rechnung (PDF)</a><?php endif; ?></td></tr>
         <?php if ($impPos): $tl=['produkt'=>'Produkt','verpackung'=>'Verpackung','etikett'=>'Etikett']; ?>
-        <tr><td colspan="6" style="padding-top:0">
+        <tr><td colspan="7" style="padding-top:0">
           <details><summary class="muted" style="cursor:pointer;font-size:13px">Leistungsumfang anzeigen</summary>
             <div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table">
               <thead><tr><th>Produkt</th><th>Art</th><th>Position</th><th class="bx-num">Menge</th><th>Einheit</th></tr></thead><tbody>

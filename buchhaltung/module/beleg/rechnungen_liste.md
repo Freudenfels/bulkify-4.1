@@ -13,3 +13,6 @@
   per KI einlesen ([rechnung_import.md](rechnung_import.md)); **„Storno-Rechnung"** → Gutschrift/Storno
   ([gutschrift_neu.md](gutschrift_neu.md)). Rechnungen **aus einem Auftrag** entstehen weiter dort
   bzw. über [rechnung_neu.md](rechnung_neu.md).
+
+## Produkt-Spalte (Stand 2026-10-23)
+Die Liste zeigt je Rechnung das **Produkt**: aus dem verknüpften Auftrag (`COALESCE(auftrag.produkt_bezeichnung, produkt.kundenname, produkt.name)`), bei freien Rechnungen ohne Auftrag als **Fallback die erste Beleg-Position** (`$belProdukt`/`$belPosMap`). Die Suche findet auch über den Produktnamen. Gilt für normale und DL-Rechnungen.
