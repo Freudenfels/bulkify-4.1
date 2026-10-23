@@ -31,6 +31,12 @@ function wunsch_rows_from_post(): array {
 // Rezepturvorschlag der KI: entwickeln und – nach Prüfung – als Wunschzeilen übernehmen.
 // Beides läuft VOR dem allgemeinen Speichern, damit es die Zeilen nicht doppelt schreibt.
 $kiFehler = '';
+// Admin: Rezepturanfrage komplett löschen (inkl. Wunsch-Zeilen). Eine daraus erstellte Rezeptur bleibt bestehen.
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage_loeschen') {
+    if (!has_role('admin')) { header('Location: ?p=anfrage&id=' . (int)$id . '&loeschfehler=1'); exit; }
+    rezeptur_anfrage_loeschen((int)$id);
+    header('Location: ?p=anfragen&geloescht=1'); exit;
+}
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_entwickeln') {
     require_once BX_ROOT . '/core/rezeptur_ki.php';
     $r = rezeptur_ki_entwickeln((int)$id);
@@ -188,10 +194,17 @@ function rohstoff_options(array $rohstoffe, $sel): string {
 }
 
 render_header('anfragen', $neu ? 'Neue Anfrage' : ($a['nummer'] ?? 'Anfrage'));
+$kopfAkt = bx_btn('Zurück zur Liste', '?p=anfragen', 'ghost');
+// Admin darf die Rezepturanfrage löschen (unwiderruflich; eine daraus erstellte Rezeptur bleibt bestehen).
+if (!$neu && has_role('admin'))
+    $kopfAkt = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Diese Rezepturanfrage wirklich löschen? Das lässt sich nicht rückgängig machen. Eine bereits daraus erstellte Rezeptur bleibt bestehen.\');">'
+             . '<input type="hidden" name="aktion" value="anfrage_loeschen">'
+             . '<button class="btn btn-danger" type="submit">Anfrage löschen</button></form>' . $kopfAkt;
 bx_head($neu ? 'Neue Rezepturanfrage' : $v('nummer'),
         $neu ? 'Kundenwunsch erfassen' : 'Anfrage bearbeiten',
-        bx_btn('Zurück zur Liste', '?p=anfragen', 'ghost'));
+        $kopfAkt);
 if (!$neu && !empty($a['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angefragt am ' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . ' Uhr</div>';
+if (isset($_GET['loeschfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nur Admins dürfen Anfragen löschen.</div>';
 if (isset($_GET['ok'])) echo '<div id="bxToast" class="badge-ok" style="position:fixed;top:16px;right:16px;z-index:9999;padding:10px 16px;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);font-weight:600">Gespeichert.</div>';
 if (isset($_GET['leer'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Bitte mindestens einen Rohstoff zuordnen (mit Menge in mg), bevor du den Vorschlag sendest.</div>';
 if (!$neu && ($a['status'] ?? '') === 'ueberarbeiten') {

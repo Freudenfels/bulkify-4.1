@@ -2738,6 +2738,15 @@ function auftrag_zurueck_und_loeschen(int $auftrag_id): array {
     return ['ok' => true, 'anfrage_id' => $anfId, 'angebot_id' => $angId];
 }
 
+// Rezepturanfrage löschen (nur Admin, aus der Anfrage-Detailseite/-Liste): entfernt die Anfrage samt ihrer
+// Wunsch-Zeilen. Eine evtl. daraus erstellte Rezeptur bleibt bestehen (nur die Anfrage verschwindet). Rückgabe: true.
+function rezeptur_anfrage_loeschen(int $id): bool {
+    if ($id <= 0 || !scalar("SELECT id FROM rezeptur_anfrage WHERE id=?", [$id])) return false;
+    q("DELETE FROM rezeptur_anfrage_wunsch WHERE anfrage_id=?", [$id]);
+    q("DELETE FROM rezeptur_anfrage WHERE id=?", [$id]);
+    return true;
+}
+
 function kunde_komplett_loeschen(int $kid): array {
     if ($kid <= 0) return ['ok' => false, 'fehler' => 'Ungültige Kunden-ID.'];
     if (!one("SELECT id FROM kunden WHERE id=?", [$kid])) return ['ok' => false, 'fehler' => 'Kunde nicht gefunden.'];

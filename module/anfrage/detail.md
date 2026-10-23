@@ -32,3 +32,6 @@
 
 ## Rezeptur entwickeln (KI)
 Über dem Formular steht der Rezepturvorschlag aus der Kundenidee (`core/rezeptur_ki.md`): Zutaten mit Mengen, Novel-Food-Einschätzung, Höchstmengen, Health Claims, Machbarkeit und das **selbst nachgerechnete Füllgewicht** samt passender Kapselgröße. `aktion=ki_entwickeln` erzeugt ihn, `aktion=ki_zeilen` übernimmt die Zutaten in die Wunschzeilen. Ein vorhandener Vorschlag wird immer angezeigt, auch wenn gerade kein Schlüssel hinterlegt ist. Alles ist ein Entwurf – gesendet wird erst über den bestehenden Weg „Rezeptur erstellen".
+
+## Anfrage löschen (nur Admin)
+Im Kopf der Detailseite steht für **Admins** ein roter Knopf **„Anfrage löschen"** (`aktion=anfrage_loeschen`, mit Sicherheitsabfrage). Ruft `rezeptur_anfrage_loeschen($id)` (core/schema.php): entfernt die Rezepturanfrage + ihre Wunsch-Zeilen (`rezeptur_anfrage_wunsch`). Eine **daraus erstellte Rezeptur bleibt bestehen** (nur die Anfrage verschwindet). Danach zurück zur Liste mit Hinweis „Rezepturanfrage gelöscht". Nicht-Admins werden abgewiesen (`loeschfehler`).

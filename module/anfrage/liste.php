@@ -83,6 +83,7 @@ $cols = [
 render_header('anfragen', 'Rezepturanfragen');
 bx_head('Rezepturanfragen', count($rows) . ($q !== '' ? ' Treffer' : ' ' . ($ANSICHT[$ansicht] ?? '')), bx_btn('Neue Anfrage', '?p=anfrage&id=neu', 'primary'));
 ?>
+<?php if (isset($_GET['geloescht'])): ?><div class="bx-panel badge-ok" style="padding:10px 14px;margin-bottom:12px">Rezepturanfrage gelöscht.</div><?php endif; ?>
 <div class="settabs" style="margin:0 0 12px">
   <?php foreach ($ANSICHT as $k => $lbl): $aktiv = ($q === '' && $ansicht === $k); ?>
     <a href="?p=anfragen&ansicht=<?= $k ?>" class="<?= $aktiv ? 'on' : '' ?>"><?= h($lbl) ?><?= isset($cnt[$k]) && $cnt[$k] ? ' (' . $cnt[$k] . ')' : '' ?></a>
