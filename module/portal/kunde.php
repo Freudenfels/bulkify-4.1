@@ -875,27 +875,73 @@ $internVorschau = function_exists('is_logged_in') && is_logged_in() && function_
 if (empty($k['passwort']) && !$internVorschau) {
     $setupErr = (string)($_GET['setupfehler'] ?? '');
     portal_head('Konto einrichten · bulkify');
-    echo '<div style="max-width:460px;margin:6vh auto;padding:0 16px">'
-       . '<div style="text-align:center;margin-bottom:18px"><img src="assets/bulkify-logo-dark.png" alt="bulkify" style="height:38px"></div>'
-       . '<div class="bx-panel"><h1 style="margin:0 0 4px;font-size:22px">Willkommen bei bulkify</h1>'
-       . '<p class="bx-sub" style="margin-top:0">Bitte richten Sie einmalig Ihren Zugang ein: Anschrift, E-Mail und Passwort. Danach melden Sie sich künftig damit an.</p>';
-    if ($setupErr !== '') echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px">' . h($setupErr) . '</div>';
-    echo '<form method="post">'
-       . '<input type="hidden" name="aktion" value="konto_einrichten">'
-       . '<div class="bx-field"><label>Firma</label><input type="text" value="' . h((string)($k['firma'] ?? '')) . '" disabled></div>'
-       . '<div class="bx-field"><label>Ansprechpartner</label><input type="text" name="ansprechpartner" value="' . h((string)($k['ansprechpartner'] ?? '')) . '" placeholder="Vor- und Nachname"></div>'
-       . '<div class="bx-field"><label>Telefon</label><input type="text" name="telefon" value="' . h((string)($k['telefon'] ?? '')) . '"></div>'
-       . '<div class="bx-row" style="gap:10px"><div class="bx-field" style="flex:3"><label>Straße *</label><input type="text" name="strasse" required value="' . h((string)($k['strasse'] ?? '')) . '" placeholder="Straße"></div>'
-       . '<div class="bx-field" style="flex:1"><label>Nr.</label><input type="text" name="hausnummer" value="' . h((string)($k['hausnummer'] ?? '')) . '"></div></div>'
-       . '<div class="bx-row" style="gap:10px"><div class="bx-field" style="flex:1"><label>PLZ *</label><input type="text" name="plz" required value="' . h((string)($k['plz'] ?? '')) . '"></div>'
-       . '<div class="bx-field" style="flex:2"><label>Ort *</label><input type="text" name="ort" required value="' . h((string)($k['ort'] ?? '')) . '"></div>'
-       . '<div class="bx-field" style="flex:1"><label>Land</label><input type="text" name="land" maxlength="2" value="' . h((string)($k['land'] ?? 'DE')) . '" placeholder="DE"></div></div>'
-       . '<div class="bx-field"><label>USt-IdNr. (optional)</label><input type="text" name="ust_id" value="' . h((string)($k['ust_id'] ?? '')) . '" placeholder="z. B. DE123456789"></div>'
-       . '<div class="bx-field"><label>E-Mail (Ihr Login)</label><input type="email" name="email" required value="' . h((string)($k['email'] ?? '')) . '" placeholder="name@firma.de" autocomplete="email"></div>'
-       . '<div class="bx-field"><label>Passwort (mind. 8 Zeichen)</label><input type="password" name="passwort" required minlength="8" autocomplete="new-password"></div>'
-       . '<div class="bx-field"><label>Passwort wiederholen</label><input type="password" name="passwort2" required minlength="8" autocomplete="new-password"></div>'
-       . '<button class="btn btn-primary" type="submit" style="width:100%;margin-top:6px">Zugang einrichten &amp; anmelden</button>'
-       . '</form></div></div>';
+    $kv = fn($f, $d = '') => h((string)($k[$f] ?? $d));
+    ?>
+    <div style="max-width:460px;margin:6vh auto;padding:0 16px">
+      <div style="text-align:center;margin-bottom:18px"><img src="assets/bulkify-logo-dark.png" alt="bulkify" style="height:38px"></div>
+      <div class="bx-panel">
+        <h1 style="margin:0 0 4px;font-size:22px">Willkommen bei bulkify</h1>
+        <p class="bx-sub" style="margin-top:0">Bitte richten Sie einmalig Ihren Zugang ein – in drei kurzen Schritten: Kontakt, Rechnungsadresse und Zugang.</p>
+        <?php if ($setupErr !== ''): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px"><?= h($setupErr) ?></div><?php endif; ?>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Schritt <span id="obStepNo">1</span> von 3 · <span id="obStepName">Kontakt</span></div>
+        <form method="post" id="obForm" novalidate>
+          <input type="hidden" name="aktion" value="konto_einrichten">
+
+          <div class="ob-step" data-step="1">
+            <div class="bx-field"><label>Firma</label><input type="text" value="<?= $kv('firma') ?>" disabled></div>
+            <div class="bx-field"><label>Ansprechpartner</label><input type="text" name="ansprechpartner" value="<?= $kv('ansprechpartner') ?>" placeholder="Vor- und Nachname"></div>
+            <div class="bx-field"><label>Telefon</label><input type="text" name="telefon" value="<?= $kv('telefon') ?>"></div>
+          </div>
+
+          <div class="ob-step" data-step="2" hidden>
+            <div class="bx-row" style="gap:10px"><div class="bx-field" style="flex:3"><label>Straße *</label><input type="text" name="strasse" required value="<?= $kv('strasse') ?>" placeholder="Straße"></div>
+              <div class="bx-field" style="flex:1"><label>Nr.</label><input type="text" name="hausnummer" value="<?= $kv('hausnummer') ?>"></div></div>
+            <div class="bx-row" style="gap:10px"><div class="bx-field" style="flex:1"><label>PLZ *</label><input type="text" name="plz" required value="<?= $kv('plz') ?>"></div>
+              <div class="bx-field" style="flex:2"><label>Ort *</label><input type="text" name="ort" required value="<?= $kv('ort') ?>"></div>
+              <div class="bx-field" style="flex:1"><label>Land</label><input type="text" name="land" maxlength="2" value="<?= $kv('land', 'DE') ?>" placeholder="DE"></div></div>
+            <div class="bx-field"><label>USt-IdNr. (optional)</label><input type="text" name="ust_id" value="<?= $kv('ust_id') ?>" placeholder="z. B. DE123456789"></div>
+          </div>
+
+          <div class="ob-step" data-step="3" hidden>
+            <div class="bx-field"><label>E-Mail (Ihr Login)</label><input type="email" name="email" required value="<?= $kv('email') ?>" placeholder="name@firma.de" autocomplete="email"></div>
+            <div class="bx-field"><label>Passwort (mind. 8 Zeichen)</label><input type="password" name="passwort" required minlength="8" autocomplete="new-password"></div>
+            <div class="bx-field"><label>Passwort wiederholen</label><input type="password" name="passwort2" required minlength="8" autocomplete="new-password"></div>
+          </div>
+
+          <div class="bx-row" style="justify-content:space-between;gap:10px;margin-top:6px">
+            <button type="button" class="btn btn-ghost" id="obBack" hidden>Zurück</button>
+            <div style="flex:1"></div>
+            <button type="button" class="btn btn-primary" id="obNext">Weiter</button>
+            <button type="submit" class="btn btn-primary" id="obDone" hidden>Zugang einrichten &amp; anmelden</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <script>
+    (function(){
+      var form=document.getElementById('obForm'); if(!form) return;
+      var steps=form.querySelectorAll('.ob-step');
+      var back=document.getElementById('obBack'), next=document.getElementById('obNext'), done=document.getElementById('obDone');
+      var noEl=document.getElementById('obStepNo'), nameEl=document.getElementById('obStepName');
+      var names=['Kontakt','Rechnungsadresse','Zugang']; var cur=1, total=steps.length;
+      function show(n){
+        cur=n; steps.forEach(function(s){ s.hidden=(+s.dataset.step!==n); });
+        back.hidden=n===1; next.hidden=n===total; done.hidden=n!==total;
+        noEl.textContent=n; nameEl.textContent=names[n-1]||'';
+        var f=form.querySelector('.ob-step[data-step="'+n+'"] input:not([disabled])'); if(f) try{f.focus();}catch(e){}
+      }
+      function stepValid(n){
+        var ins=form.querySelectorAll('.ob-step[data-step="'+n+'"] input:not([disabled])');
+        for(var i=0;i<ins.length;i++){ if(!ins[i].checkValidity()){ ins[i].reportValidity(); return false; } }
+        return true;
+      }
+      next.addEventListener('click',function(){ if(stepValid(cur)) show(Math.min(cur+1,total)); });
+      back.addEventListener('click',function(){ show(Math.max(cur-1,1)); });
+      form.addEventListener('submit',function(e){ if(!stepValid(total)) e.preventDefault(); });
+      show(1);
+    })();
+    </script>
+    <?php
     portal_foot(); exit;
 }
 

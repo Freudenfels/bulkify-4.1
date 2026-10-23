@@ -55,6 +55,7 @@ $routes = [
     'lieferant_einladung'    => 'lieferant/einladung.php',
     'lieferant_bewerbung'    => 'lieferant/bewerbung.php',   // oeffentliche Selbst-Bewerbung (Landing Page)
     'lieferant_portal'       => 'lieferant/portal.php',
+    'lieferant_onboarding'   => 'lieferant/onboarding.php',   // Pflicht-Erstlogin-Assistent (Stammdaten/Adresse)
     'lieferant_bestellung'   => 'lieferant/bestellung.php',
     'lieferant_bestellung_pdf'=> 'lieferant/bestellung_pdf.php',
     'lieferant_preisliste'   => 'lieferant/preisliste.php',
@@ -222,10 +223,17 @@ if (is_logged_in() && function_exists('ist_echter_lieferant') && !ist_echter_lie
 // Fuer die ROUTE-Sperre zaehlt nur ein ECHTER Lieferant (Login am Lieferanten) – ein Team-Mitglied
 // in der Vorschau bleibt frei navigierbar und kann zurueck in den Admin-Bereich.
 $istLieferant = is_logged_in() && function_exists('ist_echter_lieferant') && ist_echter_lieferant();
-$LIEF_ROUTEN  = ['lieferant_portal', 'lieferant_bestellung', 'lieferant_bestellung_pdf', 'lieferant_anfrage', 'lieferant_profil', 'lieferant_logo',
+$LIEF_ROUTEN  = ['lieferant_portal', 'lieferant_onboarding', 'lieferant_bestellung', 'lieferant_bestellung_pdf', 'lieferant_anfrage', 'lieferant_profil', 'lieferant_logo',
                  'lieferant_nachrichten', 'lieferant_dateien', 'lieferant_dokument', 'lieferant_katalog', 'lieferant_preisliste', 'lieferant_rezepturpreise', 'lieferant_rezeptur', 'lieferant_rohstoff_info', 'lieferant_hilfe', 'lieferant_ueber', 'logout'];
 if ($istLieferant && !in_array($p, $LIEF_ROUTEN, true) && !in_array($p, ['lieferant_login','lieferant_einladung'], true)) {
     header('Location: ?p=lieferant_portal'); exit;
+}
+// Pflicht-Onboarding: ein neuer Lieferant muss zuerst den Erstlogin-Assistenten (Stammdaten/Adresse) abschließen.
+// Nur echte Lieferanten (nicht die Admin-Vorschau), alles außer dem Assistenten selbst + Logout wird umgeleitet.
+if ($istLieferant) {
+    $lfOnb = (int) scalar("SELECT onboarding_fertig FROM lieferanten WHERE id=?", [aktueller_lieferant_id()]);
+    if ($lfOnb !== 1 && !in_array($p, ['lieferant_onboarding', 'logout'], true)) { header('Location: ?p=lieferant_onboarding'); exit; }
+    if ($lfOnb === 1 && $p === 'lieferant_onboarding') { header('Location: ?p=lieferant_portal'); exit; }
 }
 
 // Bereits angemeldet und ruft Login auf -> ins passende Dashboard

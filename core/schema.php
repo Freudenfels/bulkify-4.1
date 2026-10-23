@@ -1131,6 +1131,10 @@ function init_schema(): void {
     ensure_column('lieferanten', 'shop_passwort', "VARCHAR(190) NULL");  // gemeinsames Shop-Passwort (intern, Team-Zugang)
     ensure_column('lieferanten', 'quelle', "VARCHAR(20) NOT NULL DEFAULT 'manuell'");  // manuell | bewerbung (Lieferant hat sich selbst beworben)
     ensure_column('lieferanten', 'bewerbung_nachricht', "TEXT NULL");    // Freitext aus der Selbst-Bewerbung (was bieten sie an)
+    ensure_column('lieferanten', 'onboarding_fertig', "TINYINT(1) NOT NULL DEFAULT 0");  // Erstlogin-Assistent (Stammdaten/Adresse) abgeschlossen -> Portal frei
+    // Einmal-Migration: ALLE bestehenden Lieferanten gelten als onboarded (nicht aussperren). Nur künftig neu
+    // angelegte (Bewerbung/Einladung/manuell) starten mit 0 und durchlaufen den Assistenten.
+    if (meta_get('lief_onboarding_init', '') !== '1') { q("UPDATE lieferanten SET onboarding_fertig=1"); meta_set('lief_onboarding_init', '1'); }
     // Bankverbindung des Lieferanten – FORMATOFFEN (nicht IBAN-fix!). Chinesische Lieferanten zahlen oft
     // ueber Banken in Drittlaendern (HK/Singapur): dann SWIFT/BIC + Kontonummer statt IBAN, oft mit
     // Beguenstigtem, Bankadresse und ggf. Zwischen-/Korrespondenzbank. Jedes Feld optional; der Lieferant
