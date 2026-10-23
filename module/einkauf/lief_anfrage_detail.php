@@ -89,9 +89,14 @@ $coaDocs = all("SELECT id, typ, titel, datei_orig, hochgeladen_von, COALESCE(dok
                   AND ((objekt_typ='lieferant' AND lieferant_id=?) OR (? > 0 AND objekt_typ='item' AND objekt_id=?))
                 ORDER BY id DESC", [$lidA, $iidA, $iidA]);
 $coaTypLbl = ['coa'=>'CoA', 'spec'=>'Spezifikation', 'beides'=>'CoA + Spezifikation', 'analyse'=>'Analyse'];
+// „Fehlt": angefordert, der Lieferant hat schon ein PREISANGEBOT abgegeben, aber KEINE CoA/Spec hochgeladen.
+$coaFehlt = $coaReq && $ang && !$coaDocs;
 ?>
-<div class="bx-panel"<?= $coaReq ? ' style="border-color:var(--gruen)"' : '' ?>>
-  <h2 style="margin-top:0">CoA / Spezifikation <?= $coaReq ? bx_badge('angefragt', 'ok') : bx_badge('nicht angefragt') ?></h2>
+<div class="bx-panel" style="<?= $coaFehlt ? 'border-color:#e6c4c0' : ($coaReq ? 'border-color:var(--gruen)' : '') ?>">
+  <h2 style="margin-top:0">CoA / Spezifikation <?= $coaFehlt ? bx_badge('fehlt', 'err') : ($coaReq ? bx_badge('angefragt', 'ok') : bx_badge('nicht angefragt')) ?></h2>
+  <?php if ($coaFehlt): ?>
+    <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin:0 0 10px"><strong>CoA / Spezifikation fehlt.</strong> Der Lieferant hat nur den Preis abgegeben, aber keine Unterlagen hochgeladen – bitte nachfordern.</div>
+  <?php endif; ?>
   <p class="muted" style="margin-top:0;font-size:13px"><?= $coaReq
       ? 'Der Lieferant sieht in seinem Portal den Hinweis „CoA / Spezifikation angefordert" und kann sie beim Preisangebot direkt hochladen.'
       : 'Für diese Anfrage wurde keine CoA/Spezifikation angefordert.' ?></p>

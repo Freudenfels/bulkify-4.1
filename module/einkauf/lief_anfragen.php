@@ -22,9 +22,12 @@ if ($q !== '') {
 }
 
 $rows = all("SELECT la.id, la.nummer, la.art, la.betreff, la.menge, la.einheit, la.status, la.angelegt,
-                    la.item_id, la.rezeptur_id, l.firma,
+                    la.item_id, la.rezeptur_id, la.lieferant_id, la.coa_gewuenscht, l.firma,
                     ag.preis AS ang_preis, ag.einheit AS ang_einheit, ag.waehrung AS ang_waehrung,
                     ag.mindestmenge AS ang_min, ag.lieferzeit_tage AS ang_lz,
+                    (SELECT COUNT(*) FROM dokument d WHERE d.typ IN ('coa','spec','beides','analyse')
+                       AND ((d.objekt_typ='lieferant' AND d.lieferant_id=la.lieferant_id)
+                            OR (la.item_id>0 AND d.objekt_typ='item' AND d.objekt_id=la.item_id))) AS coa_docs,
                     i.name AS item_name, i.artikelnummer AS item_nr,
                     rz.name AS rez_name, rz.nummer AS rez_nummer, kz.firma AS rez_kunde
              FROM lieferant_anfrage la
@@ -79,6 +82,8 @@ bx_head('Lieferanten-Anfragen & Preise', 'Alle an Lieferanten gestellten Anfrage
         }
         $artBadge = $r['art'] ? '<span class="muted" style="font-size:11px">' . h($ARTLBL[$r['art']] ?? $r['art']) . '</span>' : '';
         $hatPreis = ($r['ang_preis'] !== null && $r['ang_preis'] !== '' && (float)$r['ang_preis'] > 0);
+        // CoA/Spec angefordert, Preis ist da, aber keine Unterlagen hochgeladen -> fehlt (separat markieren).
+        $coaFehlt = (int)($r['coa_gewuenscht'] ?? 0) === 1 && $hatPreis && (int)($r['coa_docs'] ?? 0) === 0;
     ?>
       <tr>
         <td style="white-space:nowrap"><a href="?p=lief_anfrage_detail&id=<?= (int)$r['id'] ?>"><?= h((string)($r['nummer'] ?: ('#'.$r['id']))) ?></a></td>
@@ -97,7 +102,7 @@ bx_head('Lieferanten-Anfragen & Preise', 'Alle an Lieferanten gestellten Anfrage
             <span class="muted">ausstehend</span>
           <?php endif; ?>
         </td>
-        <td><?= $hatPreis ? bx_badge('Preis da','ok') : bx_badge('offen') ?></td>
+        <td><?= $hatPreis ? bx_badge('Preis da','ok') : bx_badge('offen') ?><?php if ($coaFehlt): ?> <?= bx_badge('CoA/Spec fehlt','err') ?><?php endif; ?></td>
         <td style="white-space:nowrap"><?= $dat($r['angelegt']) ?></td>
       </tr>
     <?php endforeach; ?>
