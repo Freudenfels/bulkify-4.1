@@ -78,6 +78,43 @@ if (!empty($_GET['fehler'])):    ?><div class="bx-panel" style="border-color:#e6
   <?php if (trim((string)($a['notiz'] ?? '')) !== ''): ?><div style="margin-top:12px"><div class="k muted">Notiz</div><div style="white-space:pre-line"><?= h((string)$a['notiz']) ?></div></div><?php endif; ?>
 </div>
 
+<?php
+// CoA / Spezifikation: Status (angefragt?) + die vom Lieferanten hochgeladenen Unterlagen. Diese landen beim
+// Hochladen am ROHSTOFF (objekt_typ='item') bzw. am Lieferanten (objekt_typ='lieferant'); hier gebündelt sichtbar.
+$coaReq = (int)($a['coa_gewuenscht'] ?? 0) === 1;
+$lidA = (int)$a['lieferant_id']; $iidA = (int)($a['item_id'] ?? 0);
+$coaDocs = all("SELECT id, typ, titel, datei_orig, hochgeladen_von, COALESCE(dok_datum, DATE(angelegt)) AS datum
+                FROM dokument
+                WHERE typ IN ('coa','spec','beides','analyse')
+                  AND ((objekt_typ='lieferant' AND lieferant_id=?) OR (? > 0 AND objekt_typ='item' AND objekt_id=?))
+                ORDER BY id DESC", [$lidA, $iidA, $iidA]);
+$coaTypLbl = ['coa'=>'CoA', 'spec'=>'Spezifikation', 'beides'=>'CoA + Spezifikation', 'analyse'=>'Analyse'];
+?>
+<div class="bx-panel"<?= $coaReq ? ' style="border-color:var(--gruen)"' : '' ?>>
+  <h2 style="margin-top:0">CoA / Spezifikation <?= $coaReq ? bx_badge('angefragt', 'ok') : bx_badge('nicht angefragt') ?></h2>
+  <p class="muted" style="margin-top:0;font-size:13px"><?= $coaReq
+      ? 'Der Lieferant sieht in seinem Portal den Hinweis „CoA / Spezifikation angefordert" und kann sie beim Preisangebot direkt hochladen.'
+      : 'Für diese Anfrage wurde keine CoA/Spezifikation angefordert.' ?></p>
+  <?php if ($coaDocs): ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Art</th><th>Datei</th><th>Datum</th><th>Quelle</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($coaDocs as $d): ?>
+      <tr>
+        <td><?= bx_badge($coaTypLbl[$d['typ']] ?? (string)$d['typ'], 'info') ?></td>
+        <td><?= h((string)($d['datei_orig'] ?: $d['titel'] ?: ('Dokument #' . $d['id']))) ?></td>
+        <td><?= $d['datum'] ? h(date('d.m.Y', strtotime((string)$d['datum']))) : '<span class="muted">–</span>' ?></td>
+        <td><?= ($d['hochgeladen_von'] ?? '') === 'lieferant' ? '<span style="color:var(--gruen)">Lieferant</span>' : '<span class="muted">Team</span>' ?></td>
+        <td class="bx-num"><a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id=<?= (int)$d['id'] ?>">&#8681; Ansehen</a></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php else: ?>
+    <div class="muted"><?= $coaReq ? 'Noch keine CoA/Spezifikation vom Lieferanten hochgeladen.' : 'Keine CoA/Spezifikation hinterlegt.' ?></div>
+  <?php endif; ?>
+</div>
+
 <div class="bx-panel">
   <h2 style="margin-top:0">Angebot des Lieferanten</h2>
   <?php if (!$ang): ?>
