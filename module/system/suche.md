@@ -19,3 +19,6 @@ Je Bereich `LIKE '%q%'`, `LIMIT 30`; angezeigt werden max. 12, der Rest als
 ## Einstieg
 Ein Suchfeld liegt zusätzlich oben in der Seitenleiste (nur Admin, siehe
 `core/layout.php` → `.bx-sidesuche`) und schickt an `?p=suche`.
+
+## Aufträge/Angebote per Produktname (Stand 2026-10-23)
+Die Auftrags- und Angebots-Suche matcht zusätzlich den **Produktnamen** (`auftrag.produkt_bezeichnung`-Snapshot bzw. `produkt.name`/`kundenname` über `produkt_id`), nicht mehr nur Nummer + Kundenfirma. So findet z. B. „Kreatin" auch die zugehörigen Aufträge/Angebote. Die Trefferzeile zeigt Kunde · Produkt · Status.

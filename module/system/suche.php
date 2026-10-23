@@ -71,21 +71,28 @@ if (mb_strlen($q) >= 2) {
         fn($r) => $r['name'],
         fn($r) => trim(($r['nummer'] ? $r['nummer'] . ' · ' : '') . ($r['darreichungsform'] ?: '')));
 
+    // Angebote/Aufträge zusätzlich über den PRODUKTNAMEN finden (Snapshot produkt_bezeichnung, sonst Produkt).
     $add('Angebote',
-        all("SELECT a.id, a.nummer, a.status, k.firma FROM angebot a LEFT JOIN kunden k ON k.id=a.kunde_id
-             WHERE a.nummer LIKE ? OR k.firma LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(a.nummer),'-',''),' ','') LIKE ?)
-             ORDER BY a.id DESC LIMIT $LIMIT", [$like, $like, $qk, $likeK]),
+        all("SELECT a.id, a.nummer, a.status, k.firma,
+                    COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
+             FROM angebot a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
+             WHERE a.nummer LIKE ? OR k.firma LIKE ? OR COALESCE(p.name,'') LIKE ? OR COALESCE(p.kundenname,'') LIKE ?
+                OR (?<>'' AND REPLACE(REPLACE(LOWER(a.nummer),'-',''),' ','') LIKE ?)
+             ORDER BY a.id DESC LIMIT $LIMIT", [$like, $like, $like, $like, $qk, $likeK]),
         fn($r) => '?p=angebot&id=' . $r['id'],
         fn($r) => ($r['nummer'] ?: 'Angebot #' . $r['id']),
-        fn($r) => trim(($r['firma'] ?: '') . ' · ' . ($r['status'] ?: '')));
+        fn($r) => trim(implode(' · ', array_filter([(string)($r['firma'] ?? ''), (string)($r['produkt'] ?? ''), (string)($r['status'] ?? '')]))));
 
     $add('Aufträge',
-        all("SELECT t.id, t.nummer, t.status, k.firma FROM auftrag t LEFT JOIN kunden k ON k.id=t.kunde_id
-             WHERE t.nummer LIKE ? OR k.firma LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(t.nummer),'-',''),' ','') LIKE ?)
-             ORDER BY t.id DESC LIMIT $LIMIT", [$like, $like, $qk, $likeK]),
+        all("SELECT t.id, t.nummer, t.status, k.firma,
+                    COALESCE(NULLIF(t.produkt_bezeichnung,''), NULLIF(p.kundenname,''), p.name) AS produkt
+             FROM auftrag t LEFT JOIN kunden k ON k.id=t.kunde_id LEFT JOIN produkt p ON p.id=t.produkt_id
+             WHERE t.nummer LIKE ? OR k.firma LIKE ? OR COALESCE(t.produkt_bezeichnung,'') LIKE ? OR COALESCE(p.name,'') LIKE ? OR COALESCE(p.kundenname,'') LIKE ?
+                OR (?<>'' AND REPLACE(REPLACE(LOWER(t.nummer),'-',''),' ','') LIKE ?)
+             ORDER BY t.id DESC LIMIT $LIMIT", [$like, $like, $like, $like, $like, $qk, $likeK]),
         fn($r) => '?p=auftrag&id=' . $r['id'],
         fn($r) => ($r['nummer'] ?: 'Auftrag #' . $r['id']),
-        fn($r) => trim(($r['firma'] ?: '') . ' · ' . ($r['status'] ?: '')));
+        fn($r) => trim(implode(' · ', array_filter([(string)($r['firma'] ?? ''), (string)($r['produkt'] ?? ''), (string)($r['status'] ?? '')]))));
 
     // Lieferanten-Anfragen (RFQ, Nummernkreis „LA") – eigene Anfragen an Lieferanten. Fuehrt auf die
     // Anfragen-Liste, auf genau diese Nummer gefiltert (zeigt Rezeptur/Rohstoff + Kunde + abgegebenen Preis).
@@ -118,7 +125,7 @@ bx_head('Globale Suche', $q !== '' ? $gesamt . ' Treffer für „' . h($q) . '"'
   <input type="hidden" name="p" value="suche">
   <div class="bx-panel">
     <div class="bx-row" style="gap:8px">
-      <input class="bx-search" style="flex:1" type="text" name="q" value="<?= h($q) ?>" autofocus placeholder="Kunde, Lieferant, Rohstoff, Produkt, Rezeptur, Angebot (AN), Auftrag (AU) oder Lieferanten-Anfrage (LA) …">
+      <input class="bx-search" style="flex:1" type="text" name="q" value="<?= h($q) ?>" autofocus placeholder="Kunde, Lieferant, Rohstoff, Produkt, Rezeptur, Angebot (AN), Auftrag (AB) oder Lieferanten-Anfrage (LA) – auch per Produktname …">
       <button class="btn btn-primary" type="submit" data-busy="Suche…">Suchen</button>
       <?php if ($q !== ''): ?><a class="btn btn-ghost" href="?p=suche">Leeren</a><?php endif; ?>
     </div>
