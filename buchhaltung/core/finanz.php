@@ -98,9 +98,14 @@ function rechnung_frei_erstellen(array $positionen, array $opt = []): ?int {
     $kid   = (int)($opt['kunde_id'] ?? 0) ?: null;
     $bearb = (int)($opt['bearbeiter_id'] ?? 0) ?: null;
     $sicht = !empty($opt['freigeben']) ? 1 : 0;                  // standardmäßig NICHT für den Kunden freigegeben
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,leistung_datum,text,bearbeiter_id,kunde_sichtbar)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-      [naechste_nummer('RE'), 'rechnung', null, $kid, $s['netto'], $ustP, $s['ust'], $s['brutto'], 'offen',
+    // Dienstleistungs-Rechnung? Dann eigener Nummernkreis DR- + kategorie='dienstleistung' (z. B. Fulfillment-
+    // Abrechnung ohne DL-Auftrag). Sonst normale Rechnung RE-/produkt.
+    $istDL    = !empty($opt['dienstleistung']);
+    $nummer   = naechste_nummer($istDL ? 'DR' : 'RE');
+    $kategorie = $istDL ? 'dienstleistung' : 'produkt';
+    q("INSERT INTO beleg (nummer,typ,kategorie,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,leistung_datum,text,bearbeiter_id,kunde_sichtbar)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [$nummer, 'rechnung', $kategorie, null, $kid, $s['netto'], $ustP, $s['ust'], $s['brutto'], 'offen',
        $datum, $ziel, $faellig, $leist, $text, $bearb, $sicht]);
     $bid = (int) insert_id();
     $sort = 0;

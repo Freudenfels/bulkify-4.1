@@ -65,7 +65,7 @@ if (isset($_GET['verrechnet'])) echo '<div class="bx-panel badge-ok" style="padd
   <a class="btn btn-ghost btn-sm" href="?p=gutschrift_neu">Storno-Rechnung</a>
   <a class="btn btn-ghost btn-sm" href="?p=rechnung_import">Alt-Rechnungen importieren</a>
   <a class="btn btn-ghost btn-sm" href="?p=auftrag_import">Auftrag aus Angebot importieren</a>
-  <a class="btn btn-primary btn-sm" href="?p=rechnung_frei">+ Rechnung erstellen</a>
+  <a class="btn btn-primary btn-sm" href="?p=rechnung_frei<?= $nurDL ? '&art=dienstleistung' : '' ?>">+ <?= $nurDL ? 'Dienstleistungs-Rechnung' : 'Rechnung' ?> erstellen</a>
 </form>
 <?php
 bx_table($cols, array_values($rows), [

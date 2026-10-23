@@ -14,6 +14,10 @@ $akteurU  = (function_exists('current_user')) ? current_user() : null;
 $akteur   = $akteurU ? ($akteurU['name'] ?: 'team') : 'team';
 $akteurId = $akteurU ? (int)$akteurU['id'] : 0;
 
+// Dienstleistungs-Rechnung (DR-, z. B. Fulfillment-Abrechnung)? Kommt aus ?art=dienstleistung (Link in der
+// DL-Rechnungsliste) und wird über ein verstecktes Feld über die POSTs mitgeführt.
+$istDL = (($_GET['art'] ?? '') === 'dienstleistung') || (($_POST['art'] ?? '') === 'dienstleistung');
+
 // --- Rechnung speichern -----------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rechnung_save') {
     $kid   = (int)($_POST['kunde_id'] ?? 0);
@@ -43,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rechn
             'freigeben'         => !empty($_POST['freigeben']),
             'ersteller'         => $akteur,
             'bearbeiter_id'     => $akteurId,
+            'dienstleistung'    => $istDL,
         ]);
         if ($bid) { header('Location: ?p=rechnung&id=' . $bid . '&gespeichert=1'); exit; }
         $fehler = 'Rechnung konnte nicht erstellt werden – fehlt ein Preis? Bitte Positionen prüfen.';
@@ -120,6 +125,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ba
 }
 
 $kunden = all("SELECT id, firma, kundennummer FROM kunden ORDER BY firma");
+// Leistungs-Katalog (Dienstleistungen) zum Auswählen statt nur Freitext – z. B. Fulfillment, Lagerung, Laboranalyse.
+$dlKatalog = function_exists('bu_dienstleistungen_katalog') ? bu_dienstleistungen_katalog() : [];
+$dlkJs = [];
+foreach ($dlKatalog as $dl) $dlkJs[(int)$dl['id']] = [
+    'n' => (string)$dl['name'],
+    'e' => (string)($dl['einheit'] ?: 'Stk.'),
+    'p' => number_format((int)$dl['vk_cent'] / 100, 2, ',', ''),            // VK netto, deutsches Komma fürs Feld
+    'm' => rtrim(rtrim(number_format((float)$dl['mwst_satz'], 2, '.', ''), '0'), '.'),
+];
 // Kunde aus KI-Treffer vorauswählen (exakt, sonst „enthält").
 $vorKid = (int)($_POST['kunde_id'] ?? 0);
 if (!$vorKid && $kiKunde !== '') {
@@ -130,8 +144,10 @@ if (!$vorKid && $kiKunde !== '') {
 
 $kiStatus = (function(){ require_once BX_ROOT . '/core/ki.php'; return ki_bereit(); })();
 
-render_header('rechnungen', 'Rechnung erstellen');
-bx_head('Rechnung erstellen', 'In eigenen Worten beschreiben – die KI baut Kunde und Positionen, du prüfst und erstellst', bx_btn('Zurück zu Rechnungen', '?p=rechnungen', 'ghost'));
+render_header($istDL ? 'dl_rechnungen' : 'rechnungen', $istDL ? 'Dienstleistungs-Rechnung erstellen' : 'Rechnung erstellen');
+bx_head($istDL ? 'Dienstleistungs-Rechnung erstellen (DR-)' : 'Rechnung erstellen',
+        $istDL ? 'Für Dienstleistungen/Fulfillment – frei beschreiben oder eine Leistung wählen; erhält eine DR-Nummer.' : 'In eigenen Worten beschreiben – die KI baut Kunde und Positionen, du prüfst und erstellst',
+        bx_btn($istDL ? 'Zurück zu DL-Rechnungen' : 'Zurück zu Rechnungen', $istDL ? '?p=dl_rechnungen' : '?p=rechnungen', 'ghost'));
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($fehler) . '</div>';
 if ($kiInfo) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h($kiInfo) . '</div>';
 ?>
@@ -144,6 +160,7 @@ if ($kiInfo) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . 
   <p class="muted" style="margin-top:0">Alles Wichtige nennen: Kunde, Positionen (Menge, Preis), ggf. Zahlungsziel und Leistungsdatum. Beispiel: „Rechnung an Pure Health GmbH: 500 Dosen Vitamin D3 à 4,20 €, Zahlungsziel 14 Tage, Leistung September 2026." Optional zusätzlich eine Datei (Angebot/Lieferschein/Notiz) anhängen.</p>
   <form method="post" enctype="multipart/form-data">
     <input type="hidden" name="aktion" value="ki_bauen">
+    <?php if ($istDL): ?><input type="hidden" name="art" value="dienstleistung"><?php endif; ?>
     <div class="bx-field"><label>Beschreibung</label>
       <textarea name="frei" rows="4" style="width:100%;box-sizing:border-box" placeholder="z. B. Rechnung an … – 500 × … à … €, Zahlungsziel 14 Tage, Leistungsdatum …"><?= h((string)($_POST['frei'] ?? '')) ?></textarea>
     </div>
@@ -158,6 +175,7 @@ if ($kiInfo) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . 
 <h2 style="margin:24px 0 8px">Rechnung prüfen &amp; erstellen</h2>
 <form method="post" class="bx-form">
   <input type="hidden" name="aktion" value="rechnung_save">
+  <?php if ($istDL): ?><input type="hidden" name="art" value="dienstleistung"><?php endif; ?>
   <div class="bx-panel">
     <div class="bx-grid">
       <div class="bx-field"><label>Kunde</label>
@@ -212,7 +230,19 @@ if ($kiInfo) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . 
       </tbody>
     </table></div>
     <div class="bx-row" style="margin-top:var(--sp-4);justify-content:space-between;flex-wrap:wrap;gap:10px">
-      <button type="button" class="btn btn-ghost btn-sm" id="rfAdd">+ Position</button>
+      <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin:0">
+        <button type="button" class="btn btn-ghost btn-sm" id="rfAdd">+ Position (frei)</button>
+        <?php if ($dlKatalog): ?>
+        <span class="muted" style="font-size:12px">oder Leistung wählen:</span>
+        <select id="rfKatSel" style="max-width:300px">
+          <option value="">– Leistung aus dem Katalog –</option>
+          <?php foreach ($dlKatalog as $dl): ?>
+            <option value="<?= (int)$dl['id'] ?>"><?= h($dl['name']) ?><?= (int)$dl['vk_cent'] > 0 ? ' · ' . number_format((int)$dl['vk_cent'] / 100, 2, ',', '.') . ' €' . ($dl['einheit'] ? ' / ' . h($dl['einheit']) : '') : '' ?></option>
+          <?php endforeach; ?>
+        </select>
+        <button type="button" class="btn btn-ghost btn-sm" id="rfKatAdd">+ als Position</button>
+        <?php endif; ?>
+      </div>
       <div style="text-align:right;min-width:240px">
         <div class="bx-row" style="justify-content:space-between;gap:24px"><span class="muted">Netto</span><strong id="rfNetto">0,00 €</strong></div>
         <div class="bx-row" style="justify-content:space-between;gap:24px"><span class="muted">USt</span><span id="rfUst">0,00 €</span></div>
@@ -263,6 +293,19 @@ if ($kiInfo) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . 
     document.getElementById('rfBrutto').textContent=eur(netto+ust);
   }
   document.getElementById('rfAdd').addEventListener('click',function(){ var tr=document.createElement('tr'); tr.innerHTML=rowHTML(); tbody.appendChild(tr); recalc(); });
+  // Leistung aus dem Katalog als vorausgefüllte Position übernehmen.
+  var DLK=<?= json_encode($dlkJs, JSON_UNESCAPED_UNICODE) ?>;
+  var katSel=document.getElementById('rfKatSel'), katAdd=document.getElementById('rfKatAdd');
+  if(katAdd) katAdd.addEventListener('click',function(){
+    var d=DLK[katSel && katSel.value]; if(!d){ if(katSel) katSel.focus(); return; }
+    var tr=document.createElement('tr'); tr.innerHTML=rowHTML(); tbody.appendChild(tr);
+    tr.querySelector('[name="p_bez[]"]').value=d.n;
+    tr.querySelector('[name="p_einheit[]"]').value=d.e;
+    tr.querySelector('[name="p_preis[]"]').value=d.p;
+    tr.querySelector('[name="p_mwst[]"]').value=d.m;
+    if(katSel) katSel.value='';
+    recalc();
+  });
   tbody.addEventListener('click',function(e){ var b=e.target.closest('.rfDel'); if(!b)return; if(tbody.querySelectorAll('tr').length>1) b.closest('tr').remove(); else { b.closest('tr').querySelectorAll('input,textarea').forEach(function(x){ if(x.name==='p_menge[]')x.value='1'; else if(x.name==='p_einheit[]')x.value='Stk.'; else x.value=''; }); } recalc(); });
   tbody.addEventListener('input',function(e){ if(e.target.classList.contains('rfCalc')) recalc(); });
   recalc();

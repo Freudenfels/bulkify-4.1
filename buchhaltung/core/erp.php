@@ -347,3 +347,12 @@ function auftrag_aus_import(int $kunde_id, array $d, string $status): array {
     log_aktivitaet('kunde', $kunde_id, 'team', 'Auftrag aus Angebot/AB importiert' . ($ref !== '' ? ' (' . $ref . ')' : '') . '.', 'auftrag', 'auftrag', $aid);
     return ['ok' => true, 'auftrag_id' => $aid, 'produkt_id' => (int)$pid, 'rezeptur_id' => $rez['id'], 'rezeptur_neu' => $rez['neu'], 'schon_da' => false];
 }
+
+// Dienstleistungs-Katalog (aktive Leistungen) für die Auswahl beim DL-Rechnung-Erstellen –
+// damit man eine Leistung (z. B. Fulfillment, Lagerung, Laboranalyse) wählen kann statt nur Freitext.
+// Nur lesender Zugriff auf die geteilte Dashboard-Tabelle (Seam-Regel).
+function bu_dienstleistungen_katalog(): array {
+    try {
+        return all("SELECT id, name, einheit, vk_cent, mwst_satz, preismodell FROM dienstleistung WHERE aktiv=1 ORDER BY sort, name");
+    } catch (\Throwable $e) { return []; }
+}
