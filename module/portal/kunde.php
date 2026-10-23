@@ -658,11 +658,16 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
             if ($aA <= 0 && $mV <= 0) continue;
             $zeilen[] = ['anzahl' => $aA > 0 ? $aA : null, 'vpe' => $mV > 0 ? $mV : null];
         }
-        // Fallback: Einzelfelder (falls ohne JS gesendet)
+        // Fallback: Einzelfelder (Formular sendet „Stück je Packung" + „Anzahl (Packungen)").
         if (!$zeilen) {
             $aA = (int) round((float) str_replace(',', '.', (string)($_POST['stueck'] ?? $_POST['fuellmenge_g'] ?? '0')));
-            $mV = (int) round((float) str_replace(',', '.', (string)($_POST['menge'] ?? '0')));
-            if ($aA > 0 || $mV > 0) $zeilen[] = ['anzahl' => $aA > 0 ? $aA : null, 'vpe' => $mV > 0 ? $mV : null];
+            // „Anzahl (Packungen)" darf eine STAFFEL-LISTE sein (z. B. „1000, 2500, 5000") -> je Menge eine Staffel
+            // mit gleicher Packungsgröße. Trenner Komma/Semikolon/Schrägstrich; je Token nur Ziffern (Tausenderpunkt raus).
+            foreach (preg_split('/[;,\/]+/', (string)($_POST['menge'] ?? '')) as $mTok) {
+                $mV = (int) preg_replace('/\D/', '', (string)$mTok);
+                if ($mV > 0) $zeilen[] = ['anzahl' => $aA > 0 ? $aA : null, 'vpe' => $mV];
+            }
+            if (!$zeilen && $aA > 0) $zeilen[] = ['anzahl' => $aA, 'vpe' => null];   // nur Größe, noch keine Menge
         }
         if ($zeilen) {
             $mapAnzahl = fn($a) => $istFuell ? [null, $a] : [$a, null];   // -> [stueck, fuellmenge_g]
@@ -2852,24 +2857,44 @@ portal_head('Kundenportal · ' . $k['firma']);
       <form method="post">
         <input type="hidden" name="aktion" value="produkt_anfrage">
         <input type="hidden" name="produkt_id" value="<?= (int)$prodDetail['id'] ?>">
-        <div class="bx-grid">
-          <?php // Menge frei eintippen – bei jeder Form. Das System rechnet auch Größen außerhalb des Standardrasters. ?>
-          <div class="bx-field">
-            <label><?= $prodIstFuell ? 'Füllmenge je Packung (' . h($prodFuellEinheit) . ')' : 'Stück je Packung' ?>
-              <?= bx_hint('Tragen Sie Ihre Wunschmenge ein – wir kalkulieren genau diese Größe und wählen die passende Verpackung dazu.') ?></label>
-            <input type="number" name="<?= $prodIstFuell ? 'fuellmenge_g' : 'stueck' ?>" min="1" step="1"
-                   placeholder="<?= $prodIstFuell ? ($prodFuellEinheit === 'ml' ? 'z. B. 250' : 'z. B. 200') : 'z. B. 120' ?>">
-          </div>
-          <div class="bx-field"><label>Verpackungstyp <?= bx_hint('Sie wählen nur die Art – wir bestimmen das perfekt passende Gebinde in der richtigen Größe. Es werden nur zur Darreichungsform passende Typen angeboten.') ?></label>
-            <?php $prodVtyp = verpackung_typen_fuer_form($prodForm); ?>
-            <select name="verpackung_typ"><option value="">– egal / bitte empfehlen –</option><?php foreach ($VTYPEN as $tk=>$tl): if (!in_array($tk, $prodVtyp, true)) continue; ?><option value="<?= $tk ?>"><?= h($tl) ?></option><?php endforeach; ?></select>
-          </div>
-          <div class="bx-field"><label>Anzahl (Packungen) <?= bx_hint('Mehrere Mengen mit Komma für Staffelpreise, z. B. 1000, 2500, 5000') ?></label><input type="text" name="menge" placeholder="z. B. 1000, 2500, 5000"></div>
+        <div class="bx-field" style="max-width:360px"><label>Verpackungstyp <?= bx_hint('Sie wählen nur die Art – wir bestimmen das perfekt passende Gebinde in der richtigen Größe. Es werden nur zur Darreichungsform passende Typen angeboten.') ?></label>
+          <?php $prodVtyp = verpackung_typen_fuer_form($prodForm); ?>
+          <select name="verpackung_typ"><option value="">– egal / bitte empfehlen –</option><?php foreach ($VTYPEN as $tk=>$tl): if (!in_array($tk, $prodVtyp, true)) continue; ?><option value="<?= $tk ?>"><?= h($tl) ?></option><?php endforeach; ?></select>
+        </div>
+        <?php // Staffel-Tabelle (wie „Produkt anfragen"): je Zeile Größe (Anzahl/Füllmenge pro Packung) + Anzahl Verpackungen.
+              //  Mehrere Zeilen = Staffelpreis-Anfrage. Handler liest st_anzahl[]/st_vpe[].
+              $pdAnzLbl = $prodIstFuell ? ('Füllmenge pro Verpackung (' . h($prodFuellEinheit) . ')') : ($prodForm === 'stick' ? 'Sticks je Verpackung' : 'Stück pro Verpackung');
+              $pdAnzPh  = $prodIstFuell ? ($prodFuellEinheit === 'ml' ? 'z. B. 250' : 'z. B. 200') : 'z. B. 120'; ?>
+        <div style="margin-top:6px">
+          <label style="display:block;margin-bottom:6px">Staffel <?= bx_hint('Fragen Sie mehrere Mengen auf einmal an: je Zeile die Größe (pro Packung) und die gewünschte Anzahl Verpackungen. Jede Zeile wird als eigener Staffelpreis gerechnet – z. B. 1.000 / 2.500 / 5.000 Packungen.') ?></label>
+          <div class="bx-tablewrap"><table class="bx-table" id="pd_staffel">
+            <thead><tr><th><?= h($pdAnzLbl) ?></th><th style="width:200px">Menge (Verpackungen)</th><th style="width:40px"></th></tr></thead>
+            <tbody>
+              <tr class="pd_srow">
+                <td><input type="number" name="st_anzahl[]" min="1" step="1" placeholder="<?= h($pdAnzPh) ?>"></td>
+                <td><input type="number" name="st_vpe[]" min="1" step="1" placeholder="z. B. 1000"></td>
+                <td><button type="button" class="btn btn-ghost btn-sm pd_del" title="Zeile entfernen">×</button></td>
+              </tr>
+            </tbody>
+          </table></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="pd_addrow">+ Staffel</button>
         </div>
         <?= $umkartonFeld() ?>
-        <div class="bx-field"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"></textarea></div>
+        <div class="bx-field" style="margin-top:14px"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"></textarea></div>
         <button class="btn btn-primary" type="submit">Anfrage senden</button>
       </form>
+      <script>(function(){
+        var tb=document.querySelector('#pd_staffel tbody'); if(!tb) return;
+        var add=document.getElementById('pd_addrow');
+        if(add) add.addEventListener('click',function(){
+          var tr=document.createElement('tr'); tr.className='pd_srow';
+          tr.innerHTML='<td><input type="number" name="st_anzahl[]" min="1" step="1"></td>'
+            +'<td><input type="number" name="st_vpe[]" min="1" step="1"></td>'
+            +'<td><button type="button" class="btn btn-ghost btn-sm pd_del" title="Zeile entfernen">×</button></td>';
+          tb.appendChild(tr);
+        });
+        tb.addEventListener('click',function(e){ var b=e.target.closest('.pd_del'); if(!b) return; if(tb.querySelectorAll('.pd_srow').length>1) b.closest('tr').remove(); });
+      })();</script>
     </div>
   <?php endif; ?>
 
