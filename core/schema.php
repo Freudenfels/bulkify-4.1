@@ -1477,6 +1477,7 @@ function init_schema(): void {
     // Externer Labortest: Datum, an dem die Produktion die Probe ans Labor versendet hat (Zwischenstand).
     // Geschrieben wird es von der Produktion über die Naht; das Dashboard liest/zeigt es nur.
     ensure_column('auftrag', 'labor_versendet_am', "DATE NULL");
+    ensure_column('auftrag', 'laboranalyse_gebucht', "TINYINT(1) NOT NULL DEFAULT 0");   // Kunde hat beim Bestätigen eine Laboranalyse (Fixpreis) dazugebucht -> Rechnungsposition + paralleler Labor-Punkt
     ensure_column('auftrag', 'etikett_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('auftrag', 'etikett_freigabe_am', "DATETIME NULL");
     ensure_column('auftrag', 'etikett_freigabe_von', "VARCHAR(190) NULL");
@@ -4382,6 +4383,15 @@ function beleg_positionen_materialisieren(int $beleg_id, ?float $ustSatz = null)
         $pos = [['artikelnr'=>$rezNr, 'bezeichnung'=>$bez, 'beschreibung'=>implode(' · ', $teile), 'menge'=>$menge, 'einheit'=>'Pkg.',
                  'preis_cent'=>(int) round(($menge > 0 ? $nettoGesamt / $menge : $nettoGesamt) * 100), 'ust_satz'=>$ustSatz]];
     }
+    // Dazugebuchte Laboranalyse (Fixpreis) als eigene Position MITFÜHREN – so bleibt sie bei jedem erneuten
+    // Materialisieren/Neu-Berechnen der Rechnung erhalten (und die Summen stimmen). Steuerung: auftrag.laboranalyse_gebucht.
+    if ((int)($auf['laboranalyse_gebucht'] ?? 0) === 1) {
+        $labNet = (float) meta_get('laboranalyse_fixpreis', 250);
+        $labPn  = !empty($auf['produkt_id']) ? (string) scalar("SELECT COALESCE(NULLIF(kundenname,''),name) FROM produkt WHERE id=?", [(int)$auf['produkt_id']]) : '';
+        $pos[] = ['artikelnr'=>'LABOR', 'bezeichnung'=>'Laboranalyse',
+                  'beschreibung'=>'Externe Laboranalyse des fertigen Produkts' . ($labPn !== '' ? ' – ' . $labPn : '') . ' (Fixpreis)',
+                  'menge'=>1, 'einheit'=>'Pauschale', 'preis_cent'=>(int) round($labNet * 100), 'ust_satz'=>$ustSatz];
+    }
     q("DELETE FROM beleg_position WHERE beleg_id=?", [$beleg_id]);
     $sort = 0;
     foreach ($pos as $p) {
@@ -4394,6 +4404,21 @@ function beleg_positionen_materialisieren(int $beleg_id, ?float $ustSatz = null)
     q("UPDATE beleg SET netto=?, ust_prozent=?, ust_betrag=?, brutto=? WHERE id=?",
       [round((float)$s['netto'],2), $ustSatz, round((float)$s['ust'],2), round((float)$s['brutto'],2), $beleg_id]);
     return count($pos);
+}
+
+// Dazugebuchte Laboranalyse (Fixpreis, Standard 250 € netto) als eigene Position auf die Rechnung des Auftrags
+// setzen + Auftrag als „Laboranalyse gebucht" markieren (paralleler Labor-Punkt). Konkret statt vagem DL-Angebot.
+// Idempotent (eine Laborposition je Rechnung). Rückgabe: true, wenn gebucht/vorhanden.
+function auftrag_laboranalyse_buchen(int $auftrag_id): bool {
+    if ($auftrag_id <= 0) return false;
+    q("UPDATE auftrag SET laboranalyse_gebucht=1 WHERE id=?", [$auftrag_id]);   // Flag -> Rechnungsposition + paralleler Labor-Punkt
+    $b = one("SELECT id, status, kunde_id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$auftrag_id]);
+    if (!$b || in_array((string)$b['status'], ['bezahlt','storniert'], true)) return true;   // keine/ bezahlte Rechnung -> nur Flag
+    // Rechnung neu materialisieren – die Laborposition wird dabei (wegen des Flags) mitgeführt + Summen aktualisiert.
+    $pid = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    beleg_positionen_materialisieren((int)$b['id'], produkt_ust_satz($pid, (int)$b['kunde_id']));
+    if (function_exists('beleg_status_log_add')) beleg_status_log_add((int)$b['id'], (string)$b['status'], 'Laboranalyse (Fixpreis) zur Rechnung hinzugefügt.', 'kunde');
+    return true;
 }
 
 function beleg_neu_berechnen(int $beleg_id): array {
@@ -4902,7 +4927,8 @@ function kunde_auftrag_parallel(array $a): array {
     if ($kid <= 0) return [];
     $out = [];
     // Reihenfolge wie in der Kette gewünscht: erst Laboranalyse, dann Energetisierung (beide nach QC).
-    if (kunde_will_labortest($kid)) {
+    // Labor-Punkt zeigen, wenn der Kunde generell Drittlabor will ODER für DIESEN Auftrag eine Analyse dazugebucht wurde.
+    if (kunde_will_labortest($kid) || !empty($a['laboranalyse_gebucht'])) {
         $lt = auftrag_labortest_status((int)($a['id'] ?? 0), isset($a['produkt_id']) ? (int)$a['produkt_id'] : null);
         $out[] = ['label' => 'Laboranalyse',
                   'status' => $lt['status'],   // geplant | laeuft | abgeschlossen

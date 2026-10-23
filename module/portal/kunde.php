@@ -149,15 +149,12 @@ $freigabeName = function(): ?string {
 // Annahme eine Dienstleistungsanfrage (Labortest) an, bezogen auf das Produkt des bestätigten Angebots.
 function portal_labortest_upsell(array $kunde, int $angebotId): void {
     if (empty($_POST['labortest']) || empty($kunde['portal_dienstleistung'])) return;
-    $pid = (int) scalar("SELECT produkt_id FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [$angebotId]);
-    if (!$pid) return;
-    // Produkt auch am Anfrage-Kopf setzen (pa.produkt_id), nicht nur in der Position – so steht der Produktname
-    // in der Dienstleistungs-/Anfragen-Liste direkt dran und man kann die Laboranalyse eindeutig zuordnen.
-    q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,dienstleistung_typ,produkt_id,betreff,status) VALUES (?,?, 'dienstleistung','labortest',?,'Laboranalyse','neu')",
-      [naechste_nummer('PAF'), (int)$kunde['id'], $pid]);
-    $aid = insert_id();
-    q("INSERT INTO portal_anfrage_pos (anfrage_id,produkt_id,sort) VALUES (?,?,0)", [$aid, $pid]);
-    log_aktivitaet('kunde', (int)$kunde['id'], 'kunde', 'Labortest zum bestätigten Angebot dazugebucht (Upsell).', 'anfrage');
+    $aufId = (int) scalar("SELECT id FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [$angebotId]);
+    if (!$aufId) return;
+    // Direkt als Fixpreis-Position (250 € netto) auf die Auftragsrechnung + Auftrag als „Laboranalyse gebucht"
+    // markieren (paralleler Labor-Punkt). Kein separates, vages DL-Angebot mehr.
+    auftrag_laboranalyse_buchen($aufId, 250.0);
+    log_aktivitaet('kunde', (int)$kunde['id'], 'kunde', 'Laboranalyse (Fixpreis 250 € netto) zur Bestellung dazugebucht – steht auf der Rechnung.', 'anfrage', 'auftrag', $aufId);
 }
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_annehmen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
