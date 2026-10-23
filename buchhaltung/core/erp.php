@@ -353,6 +353,6 @@ function auftrag_aus_import(int $kunde_id, array $d, string $status): array {
 // Nur lesender Zugriff auf die geteilte Dashboard-Tabelle (Seam-Regel).
 function bu_dienstleistungen_katalog(): array {
     try {
-        return all("SELECT id, name, einheit, vk_cent, mwst_satz, preismodell FROM dienstleistung WHERE aktiv=1 ORDER BY sort, name");
+        return all("SELECT id, nummer, name, beschreibung, einheit, vk_cent, mwst_satz, preismodell FROM dienstleistung WHERE aktiv=1 ORDER BY sort, name");
     } catch (\Throwable $e) { return []; }
 }

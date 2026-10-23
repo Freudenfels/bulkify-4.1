@@ -129,7 +129,9 @@ $kunden = all("SELECT id, firma, kundennummer FROM kunden ORDER BY firma");
 $dlKatalog = function_exists('bu_dienstleistungen_katalog') ? bu_dienstleistungen_katalog() : [];
 $dlkJs = [];
 foreach ($dlKatalog as $dl) $dlkJs[(int)$dl['id']] = [
+    'nr'=> (string)($dl['nummer'] ?? ''),                                   // Artikelnummer (DL-Nummer)
     'n' => (string)$dl['name'],
+    'b' => (string)($dl['beschreibung'] ?? ''),                            // Beschreibung
     'e' => (string)($dl['einheit'] ?: 'Stk.'),
     'p' => number_format((int)$dl['vk_cent'] / 100, 2, ',', ''),            // VK netto, deutsches Komma fürs Feld
     'm' => rtrim(rtrim(number_format((float)$dl['mwst_satz'], 2, '.', ''), '0'), '.'),
@@ -299,7 +301,9 @@ if ($kiInfo) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . 
   if(katAdd) katAdd.addEventListener('click',function(){
     var d=DLK[katSel && katSel.value]; if(!d){ if(katSel) katSel.focus(); return; }
     var tr=document.createElement('tr'); tr.innerHTML=rowHTML(); tbody.appendChild(tr);
+    tr.querySelector('[name="p_artikelnr[]"]').value=d.nr||'';
     tr.querySelector('[name="p_bez[]"]').value=d.n;
+    var bf=tr.querySelector('[name="p_besch[]"]'); if(bf) bf.value=d.b||'';
     tr.querySelector('[name="p_einheit[]"]').value=d.e;
     tr.querySelector('[name="p_preis[]"]').value=d.p;
     tr.querySelector('[name="p_mwst[]"]').value=d.m;
