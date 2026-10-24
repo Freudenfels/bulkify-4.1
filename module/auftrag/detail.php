@@ -1379,7 +1379,11 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
   var start = 'details';
   try { var s = sessionStorage.getItem(KEY); if (s) start = s; } catch(e){}
   <?php if (isset($_GET['analyse'])): ?>start = 'dokumente';<?php endif; ?>
+  // Direktlink mit Anker (z. B. #bulkreserve aus der Produktionsseite): passenden Reiter öffnen + hinscrollen.
+  var hash = (location.hash || '').replace('#','');
+  if (hash === 'bulkreserve') start = 'produktion';
   activate(start);
+  if (hash) { var el = document.getElementById(hash); if (el) setTimeout(function(){ el.scrollIntoView({behavior:'smooth'}); }, 60); }
 })();
 </script>
 <script>
