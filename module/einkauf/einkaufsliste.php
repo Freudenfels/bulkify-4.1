@@ -276,11 +276,17 @@ if ($ohneFestlegung): ?>
           <td><?= $gesperrt ? '<span class="muted">–</span>' : $liefSelect($key, (int)($a['haupt_lieferant'] ?? 0), item_lieferant_preise((int)$a['item_id'], (float)$a['zu_bestellen'])) ?></td>
           <?php // Kunde·Produkt je Auftrag nur bei bedruckten Tüten/Beuteln (kundenspezifisch) – bei Gläsern & Co. nicht nötig.
                 $zeigKdPr = (($a['verpackungsart'] ?? '') === 'beutel'); ?>
-          <td style="font-size:12px"><?php foreach ($a['orders'] as $o): if ($o['need'] <= 1e-6) continue; ?>
-            <div style="margin-bottom:<?= $zeigKdPr ? '5px' : '2px' ?>">
+          <td style="font-size:12px"><?php if ($zeigKdPr): // Beutel: je Auftrag eine Kunde·Produkt-Unterzeile -> gestapelt lassen ?>
+            <?php foreach ($a['orders'] as $o): if ($o['need'] <= 1e-6) continue; ?>
+            <div style="margin-bottom:5px">
               <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a>
-              <?php if ($zeigKdPr): $oKd = firma_kurz((string)($o['kunde'] ?? '')); $oPr = (string)($o['produkt'] ?? ''); if ($oKd !== '' || $oPr !== ''): ?><div class="muted" style="font-size:11px"><?= h($oKd) ?><?= $oKd !== '' && $oPr !== '' ? ' · ' : '' ?><?= h($oPr) ?></div><?php endif; endif; ?>
-            </div><?php endforeach; ?></td>
+              <?php $oKd = firma_kurz((string)($o['kunde'] ?? '')); $oPr = (string)($o['produkt'] ?? ''); if ($oKd !== '' || $oPr !== ''): ?><div class="muted" style="font-size:11px"><?= h($oKd) ?><?= $oKd !== '' && $oPr !== '' ? ' · ' : '' ?><?= h($oPr) ?></div><?php endif; ?>
+            </div><?php endforeach; ?>
+          <?php else: // Gläser u. a.: keine Unterzeile -> Auftrags-Links nebeneinander, umbrechend ?>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 12px"><?php foreach ($a['orders'] as $o): if ($o['need'] <= 1e-6) continue; ?>
+              <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a>
+            <?php endforeach; ?></div>
+          <?php endif; ?></td>
         </tr>
       <?php endforeach; ?>
       <?php foreach ($bulkTab as $b): $key = 'bulk:' . (int)$b['produkt_id'];
