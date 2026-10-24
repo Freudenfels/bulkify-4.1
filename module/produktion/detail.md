@@ -84,3 +84,6 @@ Fehlen laut `auftrag_offener_bedarf()` wirklich noch Rohstoffe (nach Bestand UND
 Im Panel „Fertigware eingebucht" ist die Chargennummer je Charge inline editierbar (Feld + ✓). Aktion
 `charge_edit` aktualisiert `charge.charge_nr` – nur für Chargen DIESES Produktionsauftrags (WHERE pa_id).
 Für den Fall, dass eine Charge nachträglich eine andere Nummer bekommen hat. Der Pfeil ↗ öffnet die Charge.
+
+## Material-Panel prominent (2026-10-24)
+Das Komponenten-Panel (früher „Einkaufsbedarf", eingeklappt unter „Material, Einkauf & Beschaffung") heißt jetzt **„Material"** und steht **prominent sichtbar** direkt nach „Jetzt dran". Es listet ALLE Komponenten aus `auftrag_bedarf($id)` – Rohstoffe, Leerkapsel, **Verpackung**, Deckel, **Etikett**, Karton, Beipack – mit Benötigt/Verfügbar/Reserviert. Pro Zeile klare **Grün/Rot-Kennzeichnung**: ✓ + grüner Hintergrund + Badge „vorhanden" wenn auf Lager, ✗ + roter Hintergrund + Badge „fehlt X" sonst. Header-Buttons bei Fehlbedarf: **„Zur Bestellseite"** (→ `?p=einkaufsliste`) und „Bestellung(en) anlegen" (Entwürfe je Hauptlieferant). Eingeklappt bleiben nur noch Materialverbrauch (entnommen/FEFO) & Bestellungen.

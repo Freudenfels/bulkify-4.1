@@ -520,7 +520,7 @@ if ($bedarfListe):
 <div class="bx-panel"<?= $fehlListe ? ' style="border-color:#e6c4c0"' : '' ?>>
   <?php $hatReserviert = false; foreach ($bedarfListe as $rr) if (($rr['reserviert_eigen'] ?? 0) > 1e-6) { $hatReserviert = true; break; } ?>
   <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
-    <h2 style="margin:0">Einkaufsbedarf <?= $fehlListe ? bx_badge(count($fehlListe) . ' zu bestellen','warn') : bx_badge('alles auf Lager','ok') ?></h2>
+    <h2 style="margin:0">Material <?= $fehlListe ? bx_badge(count($fehlListe) . ' fehlt / zu bestellen','err') : bx_badge('alles vorhanden','ok') ?></h2>
     <div class="bx-row" style="gap:8px">
       <?php if ($pa['status'] !== 'erledigt'): ?>
         <form method="post" style="margin:0"><input type="hidden" name="aktion" value="reservieren">
@@ -531,27 +531,30 @@ if ($bedarfListe):
         <?php endif; ?>
       <?php endif; ?>
       <?php if ($fehlListe): ?>
+        <a class="btn btn-accent btn-sm" href="?p=einkaufsliste">Zur Bestellseite</a>
         <form method="post" style="margin:0"><input type="hidden" name="aktion" value="bedarf_bestellen">
           <button class="btn btn-primary btn-sm" type="submit">Bestellung(en) anlegen</button></form>
       <?php endif; ?>
     </div>
   </div>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
-    <thead><tr><th>Komponente</th><th></th><th class="bx-num">Benötigt</th><th class="bx-num">Verfügbar (netto)</th><th class="bx-num">Reserviert</th><th class="bx-num">Fehlt</th></tr></thead>
+    <thead><tr><th style="width:34px"></th><th>Komponente</th><th></th><th class="bx-num">Benötigt</th><th class="bx-num">Verfügbar (netto)</th><th class="bx-num">Reserviert</th><th>Status</th></tr></thead>
     <tbody>
-      <?php foreach ($bedarfListe as $r): $fehlt = (float)$r['fehlt']; $res = (float)($r['reserviert_eigen'] ?? 0); ?>
-        <tr>
+      <?php foreach ($bedarfListe as $r): $fehlt = (float)$r['fehlt']; $res = (float)($r['reserviert_eigen'] ?? 0); $ok = $fehlt <= 1e-6;
+            $tint = $ok ? 'rgba(29,158,117,.08)' : 'rgba(143,35,27,.08)'; ?>
+        <tr style="background:<?= $tint ?>">
+          <td style="text-align:center;font-size:16px"><?= $ok ? '<span class="bx-ok">&#10003;</span>' : '<span style="color:#8f231b">&#10007;</span>' ?></td>
           <td><?= h($r['name']) ?></td>
           <td><?= $rolleBadge($r['rolle']) ?></td>
           <td class="bx-num"><?= $mfmt($r['benoetigt']) ?> <?= h($r['einheit']) ?></td>
           <td class="bx-num"><?= $mfmt($r['verfuegbar']) ?> <?= h($r['einheit']) ?></td>
           <td class="bx-num"><?= $res > 1e-6 ? '<span class="bx-ok">' . $mfmt($res) . ' ' . h($r['einheit']) . '</span>' : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $fehlt > 1e-6 ? '<strong style="color:#8f231b">' . $mfmt($fehlt) . ' ' . h($r['einheit']) . '</strong>' : '<span class="bx-ok">✓</span>' ?></td>
+          <td><?= $ok ? bx_badge('vorhanden','ok') : bx_badge('fehlt ' . $mfmt($fehlt) . ' ' . h($r['einheit']), 'err') ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>
   </table></div>
-  <p class="muted" style="font-size:12px;margin:10px 0 0">„Verfügbar (netto)" = freier Bestand minus Reservierungen anderer Aufträge. „Bestand reservieren" sichert den aktuell freien Bestand für diesen Auftrag.<?= $fehlListe ? ' „Bestellung(en) anlegen" erzeugt je Hauptlieferant einen Entwurf (mit Auftragsbezug, Netting gegen offene Bestellungen).' : '' ?></p>
+  <p class="muted" style="font-size:12px;margin:10px 0 0"><span class="bx-ok">grün</span> = auf Lager, <span style="color:#8f231b">rot</span> = fehlt noch. „Verfügbar (netto)" = freier Bestand minus Reservierungen anderer Aufträge.<?= $fehlListe ? ' „Zur Bestellseite" öffnet die Einkaufsliste; „Bestellung(en) anlegen" erzeugt je Hauptlieferant direkt einen Entwurf (mit Auftragsbezug, Netting gegen offene Bestellungen).' : '' ?></p>
 </div>
 <?php endif; $panEinkauf = ob_get_clean();
 
@@ -666,15 +669,16 @@ ob_start(); ?>
 echo $panWeg;            // Weg-Hinweis (verkürzt/voll)
 echo $panWartet;         // Wartet auf Material (Alarm)
 echo $panJetzt;          // JETZT dran – die eine Aktion
+echo $panEinkauf;        // Material (Komponenten vorhanden/fehlt) – prominent sichtbar
 echo $panStationen;      // Ablauf (Checkliste)
 echo $panFertig;         // Fertigware eingebucht
 echo $panTeil;           // Teilmenge einbuchen
 echo $panZus;            // Zusammensetzung
 
-// Einklappbar: Material, Einkauf & Beschaffung (bei Zukauf meist leer/kurz)
-$grpMatEinkauf = trim($panMaterial . $panEinkauf . $panBestellungen);
+// Einklappbar: Materialverbrauch (entnommen/FEFO) & Bestellungen (die Material-Übersicht steht oben prominent)
+$grpMatEinkauf = trim($panMaterial . $panBestellungen);
 if ($grpMatEinkauf !== '') {
-    echo '<details class="bx-sek"><summary>Material, Einkauf &amp; Beschaffung</summary>' . $grpMatEinkauf . '</details>';
+    echo '<details class="bx-sek"><summary>Materialverbrauch &amp; Bestellungen</summary>' . $grpMatEinkauf . '</details>';
 }
 // Einklappbar: Wareneingänge, Etikett & Details
 $grpRest = trim($panWareneingaenge . $panEtikett . $panDetails);
