@@ -98,13 +98,16 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?
     header('Location: ?p=produktionsauftrag&id=' . $id . ($ok ? '&weg=1' : '&wegfehler=1')); exit;
 }
 
-$pa = $id ? one("SELECT pa.*, k.firma AS kunde_firma, p.name AS produkt_name, a.nummer AS auftrag_nr,
+$pa = $id ? one("SELECT pa.*, COALESCE(k.firma, ak.firma) AS kunde_firma,
+                        COALESCE(NULLIF(pa.kunde_id,0), a.kunde_id) AS kunde_id_eff,
+                        p.name AS produkt_name, a.nummer AS auftrag_nr,
                         a.produkt_bezeichnung AS auftrag_produkt_bez, a.produkt_form AS auftrag_produkt_form,
                         rz.name AS rezeptur_name, rz.darreichungsform AS rezeptur_form
                  FROM produktionsauftrag pa
                  LEFT JOIN kunden k ON k.id=pa.kunde_id LEFT JOIN produkt p ON p.id=pa.produkt_id
                  LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
-                 LEFT JOIN auftrag a ON a.id=pa.auftrag_id WHERE pa.id=?", [$id]) : null;
+                 LEFT JOIN auftrag a ON a.id=pa.auftrag_id
+                 LEFT JOIN kunden ak ON ak.id=a.kunde_id WHERE pa.id=?", [$id]) : null;
 if (!$pa) { render_header('produktion','Produktion'); bx_head('Produktionsauftrag nicht gefunden','', bx_btn('Zurück','?p=produktion','ghost')); render_footer(); exit; }
 
 $schritte = all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$id]);
@@ -247,7 +250,9 @@ echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $status
 echo '<div class="bx-card"><div class="k">Bereitschaft</div><div class="v">' . bereitschaft_badge($ber['status']) . '</div></div>';
 echo '<div class="bx-card"><div class="k">Fortschritt</div><div class="v">' . $done . ' / ' . $total . '</div></div>';
 echo '<div class="bx-card"><div class="k">Priorität</div><div class="v">' . $prioSel . '</div></div>';
-// 2) Produkt (bei Bulk: Rezeptur)
+// 2) Kunde (prominent) + Produkt (bei Bulk: Rezeptur)
+$kundeIdEff = (int)($pa['kunde_id_eff'] ?? 0);
+echo '<div class="bx-card"><div class="k">Kunde</div><div class="v">' . ($pa['kunde_firma'] ? kunde_link($kundeIdEff ?: null, $pa['kunde_firma']) : '<span class="muted">–</span>') . '</div></div>';
 $istBulkPa = pa_ist_bulk($pa);
 $prodKarteLabel = $istBulkPa ? 'Rezeptur (Bulk)' : 'Produkt';
 $prodKarteZusatz = (!$istBulkPa && $produktName && empty($pa['produkt_id'])) ? ' <span class="muted" style="font-size:12px">(aus v3)</span>' : '';
@@ -659,7 +664,7 @@ ob_start(); ?>
 <div class="bx-panel">
   <h2 style="margin-top:0">Details</h2>
   <div class="bx-grid">
-    <div><div class="k muted">Kunde</div><div><?= kunde_link($pa['kunde_id'] ?? null, $pa['kunde_firma']) ?></div></div>
+    <div><div class="k muted">Kunde</div><div><?= $pa['kunde_firma'] ? kunde_link((int)($pa['kunde_id_eff'] ?? 0) ?: null, $pa['kunde_firma']) : '–' ?></div></div>
     <div><div class="k muted">Aus Auftrag</div><div><?php if ($pa['auftrag_id']): ?><a href="?p=auftrag&id=<?= (int)$pa['auftrag_id'] ?>"><?= h($pa['auftrag_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
   </div>
 </div>
