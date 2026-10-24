@@ -5002,6 +5002,14 @@ function kunde_auftrag_phase(array $a): array {
                  JOIN bestellung_position bp ON bp.bestellung_id=b.id WHERE bp.auftrag_id=?", [$aid]);
     $bestellt = $best && !empty($best['d']);
     if ($bestellt) $dates[1] = $best['d'];
+    // Rohstoffe werden artikelweise (über mehrere Aufträge gebündelt) bestellt -> die Bestellposition trägt
+    // KEINE auftrag_id (nur Bulk/Etikett sind auftragsspezifisch). Der Auftragsbezug steht dann im Aktivitätslog
+    // (bestellung_erstellen protokolliert je Auftrag, dessen Bedarf die Bestellung deckt: ref_typ='bestellung').
+    // Den auch als „Rohstoff bestellt" werten, sonst bliebe die Phase bei reinen Rohstoff-Bestellungen hängen.
+    if (!$bestellt) {
+        $la = one("SELECT MIN(erstellt) d FROM aktivitaet WHERE objekt_typ='auftrag' AND objekt_id=? AND ref_typ='bestellung'", [$aid]);
+        if ($la && !empty($la['d'])) { $bestellt = true; $dates[1] = $la['d']; }
+    }
     $angDate = null;
     $we = one("SELECT COALESCE(MIN(wareneingang), MIN(angelegt)) d FROM charge WHERE auftrag_id=?", [$aid]);
     if ($we && !empty($we['d'])) $angDate = $we['d'];
@@ -7038,7 +7046,11 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
     $i = 0; $betroffen = [];
     if ($itemPositionen) {
         $ordersByItem = [];
-        foreach (bedarf_aggregiert(true) as $a) if (empty($a['etikett'])) $ordersByItem[$a['item_id']] = array_values(array_filter(array_map(fn($o)=> (int)$o['auftrag_id'], array_filter($a['orders'], fn($o)=> $o['need'] > 1e-6))));
+        // (false), NICHT (true): Rohstoffe tragen in der Position KEINE auftrag_id (artikelweise gebündelt).
+        // Welche Aufträge die Bestellung deckt, kommt aus bedarf_aggregiert – der Auftragsbezug wird NUR hierüber
+        // protokolliert (Aktivitätslog) und treibt die Phase „Rohstoff bestellt". Mit (true)=nur_gemeldet blieb die
+        // Map leer, seit der Melden-Schritt wegfällt -> gar kein Auftragsbezug (gleiche Klasse wie der Bulk-Fix unten).
+        foreach (bedarf_aggregiert(false) as $a) if (empty($a['etikett'])) $ordersByItem[$a['item_id']] = array_values(array_filter(array_map(fn($o)=> (int)$o['auftrag_id'], array_filter($a['orders'], fn($o)=> $o['need'] > 1e-6))));
         foreach ($itemPositionen as $p) {
             $iid = (int)$p['item_id']; $menge = (float)$p['menge']; $paufid = (int)($p['auftrag_id'] ?? 0);
             $ek = (float) scalar("SELECT ek_preis FROM item WHERE id=?", [$iid]);
