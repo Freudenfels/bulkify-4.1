@@ -54,3 +54,7 @@ Die Rezeptur-Tabelle zeigt neben "mg je Einheit" jetzt eine Spalte "pro 100 g" (
 
 ## Anklickbare Rohstoffe (Stand 2026-10-08)
 In der Rezeptur-Tabelle sind Inhaltsstoffe mit `item_id` Links (`a.lp-roh[data-iid]`) → Rohstoff-Info-Popup (`lp_rohstoff_popup()`, lädt `?p=lieferant_rohstoff_info`): Identität + Beschaffenheit/DEV + Wirkstoff-Gehalte, ohne Preise/Lieferanten.
+
+## Typ-Filter + zurückgezogene Anfragen (2026-10-24)
+Über der Liste **Typ-Chips** (`&typ=`): Alle / Rohstoffe (`af.art='rohstoff'`) / Fertigprodukte (`af.art='fertigprodukt'`), mit Zählern (`lp_t(filter_alle/filter_rohstoffe/filter_fertig)`).
+Anfragen mit Status `zurueckgezogen` (dem Lieferanten wurde die Rohstoff-Berechtigung entzogen) werden in der Liste **ausgeblendet** (`WHERE af.status<>'zurueckgezogen'`); ruft er eine solche Anfrage direkt per URL auf, erscheint ein Hinweis-Banner (`lp_t(anfrage_zurueck)`) und ein Angebot kann nicht mehr abgegeben werden.

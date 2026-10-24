@@ -74,3 +74,6 @@ Im Reiter **Konditionen** oben das Panel **Partner**. Statt eines eigenen Partne
 - **Partner-Marge %** wird an **einer** Quelle gehalten: `kunden.rabatt_marge` des verknüpften Kunden (am Lieferanten KEIN eigenes Marge-Feld). So greift die normale Kunden-Preislogik (wirkt auf die Marge, nie unter EK).
 - Anzeige: Link zum verknüpften Kunden (`?p=kunde&id=`). Ausschalten lässt die Verknüpfung bestehen, nur das Flag fällt.
 - **Phase 1** = nur dieses Fundament (Schalter/Marge/Verknüpfung), noch KEINE Portal-Seiten. Nächster Schritt wäre, dem Lieferantenportal die Kundensicht („Meine Anfragen"/Angebote) auf die `kunde_id` zu geben.
+
+## Rohstoff-Berechtigung entziehen (2026-10-24)
+Wird im Formular die Kategorie **Rohstoff** abgewählt (vorher gesetzt), ruft der Speicher-Handler nach dem UPDATE `lieferant_rohstoff_anfragen_zurueckziehen($id)` (`core/schema.php`): alle noch **offenen** Rohstoff-Anfragen dieses Lieferanten gehen auf Status `zurueckgezogen` (idempotent, kein hartes Löschen – Historie bleibt). Bereits beantwortete/geschlossene bleiben unberührt. Sichtbar als Badge in `?p=lief_anfragen`; im Lieferantenportal ausgeblendet.

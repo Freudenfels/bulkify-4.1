@@ -2738,6 +2738,18 @@ function auftrag_zurueck_und_loeschen(int $auftrag_id): array {
     return ['ok' => true, 'anfrage_id' => $anfId, 'angebot_id' => $angId];
 }
 
+// Alle noch UNBEANTWORTETEN (offenen) Rohstoff-Anfragen an einen Lieferanten ZURÜCKZIEHEN (Status, kein hartes
+// Löschen – Historie bleibt). Wird aufgerufen, wenn dem Lieferanten die Rohstoff-Berechtigung (Kategorie rohstoff)
+// entzogen wird. Idempotent: trifft nur status='offen'; bereits beantwortete/geschlossene bleiben unberührt.
+// Rückgabe: Anzahl zurückgezogener Anfragen.
+function lieferant_rohstoff_anfragen_zurueckziehen(int $lieferant_id): int {
+    if ($lieferant_id <= 0) return 0;
+    $n = q("UPDATE lieferant_anfrage SET status='zurueckgezogen' WHERE lieferant_id=? AND art='rohstoff' AND status='offen'", [$lieferant_id])->rowCount();
+    if ($n > 0 && function_exists('log_aktivitaet'))
+        log_aktivitaet('lieferant', $lieferant_id, 'team', $n . ' offene Rohstoff-Anfrage(n) zurückgezogen (Rohstoff-Berechtigung entzogen).', 'anfrage');
+    return (int)$n;
+}
+
 // Rezepturanfrage löschen (nur Admin, aus der Anfrage-Detailseite/-Liste): entfernt die Anfrage samt ihrer
 // Wunsch-Zeilen. Eine evtl. daraus erstellte Rezeptur bleibt bestehen (nur die Anfrage verschwindet). Rückgabe: true.
 function rezeptur_anfrage_loeschen(int $id): bool {

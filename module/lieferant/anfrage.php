@@ -17,7 +17,9 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
     // sind dann schon als EK-Staffeln übernommen; ein erneutes Speichern würde beides auseinanderlaufen lassen.
     $angJetzt = one("SELECT status FROM lieferant_angebot WHERE anfrage_id=?", [$id]);
     $angGesperrt = $angJetzt && ($angJetzt['status'] ?? '') === 'angenommen';
-    if ($aktion === 'angebot' && $angGesperrt) {
+    if ($aktion === 'angebot' && ($a['status'] ?? '') === 'zurueckgezogen') {
+        $fehler = lp_t('anfrage_zurueck');
+    } elseif ($aktion === 'angebot' && $angGesperrt) {
         $fehler = lp_t('angebot_gesperrt');
     } elseif ($aktion === 'angebot') {
         // Die erste Zeile ist der Hauptpreis mit der Menge, für die er gilt – sie zählt als
@@ -98,12 +100,30 @@ if (isset($_GET['ok']))     echo '<div class="bx-panel badge-ok" style="padding:
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 
 if (!$a):
+    // Zurückgezogene Anfragen (Rohstoff-Berechtigung entzogen) zeigen wir dem Lieferanten nicht mehr –
+    // Historie bleibt nur intern. Typ-Filter: Rohstoffe vs. Fertigprodukte (aus af.art).
+    $ptyp = in_array($_GET['typ'] ?? 'alle', ['alle','rohstoff','fertig'], true) ? $_GET['typ'] : 'alle';
     $liste = all("SELECT af.*, i.name AS item_name, i.einheit AS item_einheit, ag.preis, ag.einheit AS ang_einheit
                   FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
                   LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=af.id
-                  WHERE af.lieferant_id=? ORDER BY (af.status<>'offen'), af.angelegt DESC", [$lid]);
+                  WHERE af.lieferant_id=? AND af.status<>'zurueckgezogen' ORDER BY (af.status<>'offen'), af.angelegt DESC", [$lid]);
+    // Typ-Zähler vor der Filterung (für stabile Chip-Zahlen)
+    $nRoh    = count(array_filter($liste, fn($r) => ($r['art'] ?? '') === 'rohstoff'));
+    $nFertig = count(array_filter($liste, fn($r) => ($r['art'] ?? '') === 'fertigprodukt'));
+    if ($ptyp === 'rohstoff')   $liste = array_values(array_filter($liste, fn($r) => ($r['art'] ?? '') === 'rohstoff'));
+    elseif ($ptyp === 'fertig') $liste = array_values(array_filter($liste, fn($r) => ($r['art'] ?? '') === 'fertigprodukt'));
 ?>
   <h1 style="margin-bottom:4px"><?= h(lp_t('anfragen')) ?></h1>
+  <?php if ($nRoh || $nFertig): ?>
+  <div class="settabs" style="margin:8px 0 14px">
+    <?php $ptab = function($key,$lbl,$cnt) use ($ptyp) {
+        $on = $ptyp===$key ? ' class="on"' : '';
+        $href = '?p=lieferant_anfrage' . ($key!=='alle' ? '&typ='.$key : '');
+        return '<a'.$on.' href="'.$href.'">'.h($lbl).($cnt!==null?' ('.$cnt.')':'').'</a>';
+    }; ?>
+    <?= $ptab('alle', lp_t('filter_alle'), $nRoh+$nFertig) ?><?= $ptab('rohstoff', lp_t('filter_rohstoffe'), $nRoh) ?><?= $ptab('fertig', lp_t('filter_fertig'), $nFertig) ?>
+  </div>
+  <?php endif; ?>
   <?php
     // Offene zuerst (Handlungsbedarf), beantwortete darunter in einem eigenen Abschnitt – so ist die
     // offene Liste sauber und abgegebene Angebote verschwinden daraus.
@@ -161,6 +181,9 @@ if (!$a):
 ?>
   <h1 style="margin-bottom:4px"><?= h($a['nummer']) ?></h1>
   <p class="bx-sub"><a href="?p=lieferant_anfrage">&larr; <?= h(lp_t('anfragen')) ?></a></p>
+  <?php if (($a['status'] ?? '') === 'zurueckgezogen'): ?>
+    <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px;margin-bottom:12px"><?= h(lp_t('anfrage_zurueck')) ?></div>
+  <?php endif; ?>
 
   <div class="bx-panel">
     <h2 style="margin-top:0"><?= h($anzName($a)) ?></h2>

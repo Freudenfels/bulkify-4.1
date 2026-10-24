@@ -149,9 +149,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id = insert_id();
             log_aktivitaet('lieferant', (int)$id, 'team', 'Lieferant angelegt.', 'notiz');
         } else {
+            // Vorher-Zustand der Kategorien merken, um einen Rohstoff-Entzug zu erkennen.
+            $altKats = array_filter(explode(',', (string) scalar("SELECT kategorien FROM lieferanten WHERE id=?", [(int)$id])));
             $set = implode(',', array_map(fn($c) => "$c=?", $felder));
             $vals[] = (int)$id;
             q("UPDATE lieferanten SET $set WHERE id=?", $vals);
+            // Rohstoff-Berechtigung entzogen? -> alle offenen Rohstoff-Anfragen zurückziehen (Status, kein Löschen).
+            if (in_array('rohstoff', $altKats, true) && !in_array('rohstoff', $katsSel, true)) {
+                lieferant_rohstoff_anfragen_zurueckziehen((int)$id);
+            }
         }
         // Partner: ist der Schalter an, verknuepfen wir einen kunden-Datensatz und schreiben die Marge dorthin
         // (eine Quelle: kunden.rabatt_marge). Beim Ausschalten bleibt die Verknuepfung bestehen, nur das Flag faellt.

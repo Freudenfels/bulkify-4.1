@@ -9,12 +9,16 @@ require_once BX_ROOT . '/core/schema.php';
 
 $q = trim((string)($_GET['q'] ?? ''));
 $f = in_array($_GET['f'] ?? 'alle', ['alle', 'offen', 'beantwortet'], true) ? $_GET['f'] : 'alle';
+// Typ-Filter: Rohstoffe vs. Fertigprodukte (aus lieferant_anfrage.art), plus „Alle".
+$typ = in_array($_GET['typ'] ?? 'alle', ['alle', 'rohstoff', 'fertig'], true) ? $_GET['typ'] : 'alle';
 
 $ARTLBL = ['rohstoff'=>'Rohstoff','fertigprodukt'=>'Fremdfertigung','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','sonstiges'=>'Sonstiges'];
 
 $where = '1=1'; $args = [];
-if ($f === 'offen')        $where .= " AND ag.id IS NULL";             // noch kein Preis abgegeben
+if ($f === 'offen')        $where .= " AND ag.id IS NULL AND la.status NOT IN ('zurueckgezogen','geschlossen')"; // noch kein Preis abgegeben, aktiv
 elseif ($f === 'beantwortet') $where .= " AND ag.id IS NOT NULL";      // Preis liegt vor
+if ($typ === 'rohstoff')   $where .= " AND la.art='rohstoff'";
+elseif ($typ === 'fertig') $where .= " AND la.art='fertigprodukt'";
 if ($q !== '') {
     $like = '%' . str_replace('\\', '', $q) . '%';
     $where .= " AND (l.firma LIKE ? OR la.nummer LIKE ? OR la.betreff LIKE ? OR i.name LIKE ? OR rz.name LIKE ? OR rz.synonyme LIKE ? OR kz.firma LIKE ?)";
@@ -38,9 +42,17 @@ $rows = all("SELECT la.id, la.nummer, la.art, la.betreff, la.menge, la.einheit, 
              LEFT JOIN kunden kz ON kz.id = rz.kunde_id
              WHERE $where ORDER BY la.angelegt DESC LIMIT 500", $args);
 
-$cAlle = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage");
-$cOffen = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage la LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=la.id WHERE ag.id IS NULL");
-$cBeant = $cAlle - $cOffen;
+// Zähler respektieren den Typ-Filter, damit die Zahlen zur Ansicht passen.
+$cArt = ''; $cArgs = [];
+if ($typ === 'rohstoff')   { $cArt = " AND la.art='rohstoff'"; }
+elseif ($typ === 'fertig') { $cArt = " AND la.art='fertigprodukt'"; }
+$cAlle = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage la WHERE 1=1$cArt", $cArgs);
+$cOffen = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage la LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=la.id WHERE ag.id IS NULL AND la.status NOT IN ('zurueckgezogen','geschlossen')$cArt", $cArgs);
+$cBeant = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage la LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=la.id WHERE ag.id IS NOT NULL$cArt", $cArgs);
+// Typ-Zähler (unabhängig vom aktiven Preis-Tab, damit die Chips stabil bleiben)
+$cTypRoh    = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE art='rohstoff'");
+$cTypFertig = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE art='fertigprodukt'");
+$cTypAlle   = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage");
 
 $eur = fn($x, $w) => rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',') . ' ' . h($w ?: 'EUR');
 $menge = fn($m, $e) => $m !== null && $m !== '' ? rtrim(rtrim(number_format((float)$m, 3, ',', '.'), '0'), ',') . ($e ? ' ' . h($e) : '') : '–';
@@ -49,14 +61,23 @@ $dat = fn($d) => $d ? fmt_zeit($d, 'd.m.Y') : '–';
 render_header('lief_anfragen', 'Lieferanten-Anfragen & Preise');
 bx_head('Lieferanten-Anfragen & Preise', 'Alle an Lieferanten gestellten Anfragen – mit dem abgegebenen Preis, inkl. Fremdfertigung zu (auch nicht freigegebenen) Rezepturen');
 ?>
+<?php $typSuffix = ($typ !== 'alle' ? '&typ='.$typ : ''); ?>
+<div class="settabs" style="margin:0 0 10px">
+  <?php $typtab = function($key,$lbl,$cnt) use ($typ,$f,$q) {
+      $on = $typ===$key ? ' class="on"' : '';
+      $href = '?p=lief_anfragen&f='.$f.($key!=='alle'?'&typ='.$key:'').($q!==''?'&q='.urlencode($q):'');
+      return '<a'.$on.' href="'.$href.'">'.$lbl.($cnt?' ('.$cnt.')':'').'</a>';
+  }; ?>
+  <?= $typtab('alle','Alle Typen',$cTypAlle) ?><?= $typtab('rohstoff','Rohstoffe',$cTypRoh) ?><?= $typtab('fertig','Fertigprodukte',$cTypFertig) ?>
+</div>
 <div class="bx-listbar">
-  <?php $tab = function($key,$lbl) use ($f,$q) { $on=$f===$key?' class="on"':''; $href='?p=lief_anfragen&f='.$key.($q!==''?'&q='.urlencode($q):''); return '<a'.$on.' href="'.$href.'" style="margin-right:12px">'.$lbl.'</a>'; }; ?>
+  <?php $tab = function($key,$lbl) use ($f,$q,$typSuffix) { $on=$f===$key?' class="on"':''; $href='?p=lief_anfragen&f='.$key.$typSuffix.($q!==''?'&q='.urlencode($q):''); return '<a'.$on.' href="'.$href.'" style="margin-right:12px">'.$lbl.'</a>'; }; ?>
   <div><?= $tab('alle','Alle ('.$cAlle.')') ?><?= $tab('offen','Preis ausstehend ('.$cOffen.')') ?><?= $tab('beantwortet','Preis da ('.$cBeant.')') ?></div>
   <form method="get" style="margin-left:auto;display:flex;gap:6px">
-    <input type="hidden" name="p" value="lief_anfragen"><input type="hidden" name="f" value="<?= h($f) ?>">
+    <input type="hidden" name="p" value="lief_anfragen"><input type="hidden" name="f" value="<?= h($f) ?>"><input type="hidden" name="typ" value="<?= h($typ) ?>">
     <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Lieferant, Rezeptur, Nr. …">
     <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
-    <?php if ($q!==''): ?><a class="btn btn-ghost btn-sm" href="?p=lief_anfragen&f=<?= h($f) ?>">zurücksetzen</a><?php endif; ?>
+    <?php if ($q!==''): ?><a class="btn btn-ghost btn-sm" href="?p=lief_anfragen&f=<?= h($f) ?><?= $typSuffix ?>">zurücksetzen</a><?php endif; ?>
   </form>
 </div>
 
@@ -102,7 +123,7 @@ bx_head('Lieferanten-Anfragen & Preise', 'Alle an Lieferanten gestellten Anfrage
             <span class="muted">ausstehend</span>
           <?php endif; ?>
         </td>
-        <td><?= $hatPreis ? bx_badge('Preis da','ok') : bx_badge('offen') ?><?php if ($coaFehlt): ?> <?= bx_badge('CoA/Spec fehlt','err') ?><?php endif; ?></td>
+        <td><?php if (($r['status'] ?? '') === 'zurueckgezogen'): ?><?= bx_badge('zurückgezogen') ?><?php else: ?><?= $hatPreis ? bx_badge('Preis da','ok') : bx_badge('offen') ?><?php if ($coaFehlt): ?> <?= bx_badge('CoA/Spec fehlt','err') ?><?php endif; ?><?php endif; ?></td>
         <td style="white-space:nowrap"><?= $dat($r['angelegt']) ?></td>
       </tr>
     <?php endforeach; ?>
