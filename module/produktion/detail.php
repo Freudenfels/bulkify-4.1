@@ -534,6 +534,9 @@ if ($bedarfListe):
           <form method="post" style="margin:0"><input type="hidden" name="aktion" value="reservierung_frei">
             <button class="btn btn-ghost btn-sm" type="submit">Reservierung freigeben</button></form>
         <?php endif; ?>
+        <?php if ($pa['auftrag_id']): ?>
+          <a class="btn btn-ghost btn-sm" href="?p=auftrag&id=<?= (int)$pa['auftrag_id'] ?>#bulkreserve" title="Mix-Produktion: einen Teil der Menge als fertige Bulkware zukaufen/reservieren – der Rest wird selbst produziert">Mix: Zukauf reservieren</a>
+        <?php endif; ?>
       <?php endif; ?>
       <?php if ($fehlListe): ?>
         <a class="btn btn-accent btn-sm" href="?p=einkaufsliste">Zur Bestellseite</a>
