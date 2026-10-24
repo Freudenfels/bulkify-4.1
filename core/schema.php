@@ -6379,6 +6379,17 @@ function bulk_reservierung_storno(int $res_id, int $auftrag_id): bool {
     if (function_exists('bedarf_bump')) bedarf_bump();
     return true;
 }
+// Mix-Produktion: Wie viele Einheiten (Stück Bulk) sind für diesen Auftrag als fertige Bulkware RESERVIERT
+// (aus einer Bulk-Bestellung/Charge, s. bulk_reservieren)? Dieser Teil wird NICHT selbst produziert, deshalb
+// zählt er beim Eigen-Rohstoff-/Leerkapsel-Bedarf nicht mit. Verpackung/Etikett brauchen trotzdem die volle Menge.
+function auftrag_bulk_reserviert_stueck(int $auftrag_id): float {
+    if ($auftrag_id <= 0) return 0.0;
+    $item = auftrag_bulk_item($auftrag_id);
+    if (!$item) return 0.0;
+    return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung
+                           WHERE auftrag_id=? AND item_id=? AND status='aktiv'
+                             AND (bestellung_position_id IS NOT NULL OR charge_id IS NOT NULL)", [$auftrag_id, $item]);
+}
 
 // Auftrags-Art: ist das ein Erstauftrag oder eine Nachbestellung? Basis: frühere, nicht stornierte
 // Aufträge. 'nach' = Produkt schon mal bestellt; 'neu_prod' = neues Produkt, Rezeptur aber bekannt;
@@ -6967,9 +6978,12 @@ function auftrag_bedarf(int $pa_id): array {
         foreach (produktion_materialbedarf($pa_id) as $m)
             $rows[] = ['rolle'=>'Rohstoff','item_id'=>$m['item_id'],'name'=>$m['name'],'benoetigt'=>$m['benoetigt'],'verfuegbar'=>$m['verfuegbar'],'fehlt'=>$m['fehlt'],'einheit'=>$m['einheit']];
         $kapId = produkt_leerkapsel_id((int)$pa['produkt_id']);
-        if ($kapId && $einheiten > 0) {
+        // Mix: reservierter Zukauf-Teil kommt fertig -> braucht keine Leerkapseln. Nur der Eigen-Teil zählt.
+        $einhEigen = $einheiten;
+        if ($aid > 0) { $resvK = auftrag_bulk_reserviert_stueck($aid); if ($resvK > 0) $einhEigen = max(0.0, $einheiten - $resvK); }
+        if ($kapId && $einhEigen > 0) {
             $verfK = item_bestand($kapId, true);
-            $rows[] = ['rolle'=>'Leerkapsel','item_id'=>$kapId,'name'=>item_name_cached($kapId),'benoetigt'=>$einheiten,'verfuegbar'=>$verfK,'fehlt'=>max(0.0,$einheiten-$verfK),'einheit'=>'Stk'];
+            $rows[] = ['rolle'=>'Leerkapsel','item_id'=>$kapId,'name'=>item_name_cached($kapId),'benoetigt'=>$einhEigen,'verfuegbar'=>$verfK,'fehlt'=>max(0.0,$einhEigen-$verfK),'einheit'=>'Stk'];
         }
     }
     // Verpackungs-Stückliste (alle Slots) – je Packung 1 Stück. Der Behälter des AUFTRAGS hat Vorrang
@@ -8015,6 +8029,14 @@ function produktion_materialbedarf(int $pa_id): array {
         // obwohl die Rezeptur eine Dosis hat (deckt sich mit der Anzeige „Kapseln je Packung" auf der PA-Seite).
         $einheiten_total = (int)$pa['menge'] * produktion_stueck_je_packung($pa);
         $rid = (int)$prod['rezeptur_id'];
+    }
+    // Mix-Produktion: als Bulk zugekaufter (reservierter) Teil wird NICHT selbst produziert -> Einheiten dafür
+    // vom Rohstoffbedarf abziehen. Nur bei Eigen-Produktion mit Auftrag; Verpackung/Etikett bleiben unberührt
+    // (die hängen in auftrag_bedarf an der vollen Packungsmenge).
+    $aidMb = (int)($pa['auftrag_id'] ?? 0);
+    if ($aidMb > 0 && !pa_ist_bulk($pa)) {
+        $resvMb = auftrag_bulk_reserviert_stueck($aidMb);
+        if ($resvMb > 0) $einheiten_total = max(0, $einheiten_total - (int)round($resvMb));
     }
     // Zutaten der Rezeptur – in der Liste request-lokal gecacht (Rezepturen mehrerer Aufträge nur einmal holen).
     if (isset($GLOBALS['bx_stock_cache'])) {

@@ -542,6 +542,12 @@ if ($bedarfListe):
       <?php endif; ?>
     </div>
   </div>
+  <?php $bulkResv = $pa['auftrag_id'] ? auftrag_bulk_reserviert_stueck((int)$pa['auftrag_id']) : 0.0;
+        if ($bulkResv > 0): ?>
+    <div style="background:var(--panel-2);border-radius:8px;padding:8px 12px;margin-top:10px;font-size:13px">
+      Mix-Produktion: <strong><?= number_format($bulkResv, 0, ',', '.') ?> Stück</strong> sind als fertige Bulkware (Zukauf) reserviert – Rohstoff- &amp; Leerkapselbedarf unten gelten nur für den <strong>selbst produzierten</strong> Teil. Verpackung &amp; Etikett bleiben für die volle Menge.
+    </div>
+  <?php endif; ?>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
     <thead><tr><th style="width:34px"></th><th>Komponente</th><th></th><th class="bx-num">Benötigt</th><th class="bx-num">Verfügbar (netto)</th><th class="bx-num">Reserviert</th><th>Status</th></tr></thead>
     <tbody>
