@@ -4989,6 +4989,44 @@ function auftrag_phasen(bool $fulfillment = false): array {
         ? array_merge($base, ['Bereit zur Einlagerung', 'Eingelagert'])
         : array_merge($base, ['Versandbereit', 'Eingelagert', 'Versendet']);
 }
+// Sind die EINGEKAUFTEN Rohstoffe dieses Auftrags bereits beschafft (= bestellt und mindestens gedeckt)?
+// Hintergrund: Rohstoffe werden artikelweise (ohne auftrag_id) gebündelt bestellt -> es gibt keine
+// auftragsspezifische Bestellposition, die die Phase „Rohstoff bestellt" treiben könnte. Dieser Helfer
+// wertet stattdessen den tatsächlichen Beschaffungsstand aus: Für JEDEN vom Auftrag benötigten Rohstoff muss
+// der Fehlbestand (benoetigt − verfügbar) durch eine noch nicht gelieferte Bestellung desselben Artikels
+// gedeckt sein, UND mindestens ein Rohstoff muss wirklich auf einer offenen Bestellung liegen. So springt die
+// Phase nur, wenn für den Auftrag nichts mehr offen zu bestellen ist (kein voreiliges Grün).
+// Rückgabe: frühestes offenes Bestelldatum (für die Phasen-Anzeige), sonst null.
+// Caveat (Netting): die offene Bestellmenge ist artikelglobal; teilen sich mehrere Aufträge denselben Rohstoff
+// und wurde knapp bestellt, kann das zu optimistisch sein – für den Normalfall (ausreichend bestellt) korrekt.
+function auftrag_rohstoffe_beschafft(int $aid): ?string {
+    static $cache = [];
+    if (array_key_exists($aid, $cache)) return $cache[$aid];
+    $cache[$aid] = null;
+    $pa = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$aid]);
+    if (!$pa) return null;
+    $roh = [];
+    foreach (auftrag_bedarf_cached((int)$pa['id']) as $r)
+        if (($r['rolle'] ?? '') === 'Rohstoff' && (int)($r['item_id'] ?? 0) > 0 && (float)($r['benoetigt'] ?? 0) > 1e-6)
+            $roh[(int)$r['item_id']] = (float)($r['fehlt'] ?? 0);
+    if (!$roh) return null;                       // keine eingekauften Rohstoffe -> Signal nicht anwendbar
+    $earliest = null; $hatBestellung = false;
+    foreach ($roh as $iid => $fehlt) {
+        $bp = one("SELECT COALESCE(SUM(bp.menge),0) menge, COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d
+                   FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                   WHERE bp.item_id=? AND b.status<>'geliefert'", [$iid]);
+        $ordered = (float)($bp['menge'] ?? 0);
+        if ($fehlt > 1e-6) {
+            if ($ordered + 1e-6 < $fehlt) return null;          // Fehlbestand NICHT durch Bestellung gedeckt
+            $hatBestellung = true;
+        } elseif ($ordered > 1e-6) {
+            $hatBestellung = true;                              // aus Lager gedeckt, aber Bestellung läuft
+        }
+        if ($ordered > 1e-6 && !empty($bp['d']) && ($earliest === null || $bp['d'] < $earliest)) $earliest = $bp['d'];
+    }
+    if (!$hatBestellung) return null;             // alles aus Lager, nichts bestellt -> kein „bestellt"
+    return $cache[$aid] = ($earliest ?: gmdate('Y-m-d'));
+}
 // Aktuelle Phase + Datum je Phase aus den vorhandenen Signalen ableiten.
 // Positionen: 0 Bestätigt · 1 Rohstoff bestellt · 2 Rohstoff angekommen · 3 In Produktion · 4 Etikettiert ·
 // 5 Qualitätsprüfung · 6 Versandbereit/Bereit zur Einlagerung · 7 Eingelagert · 8 Versendet (nur non-Fulfillment).
@@ -5009,6 +5047,12 @@ function kunde_auftrag_phase(array $a): array {
     if (!$bestellt) {
         $la = one("SELECT MIN(erstellt) d FROM aktivitaet WHERE objekt_typ='auftrag' AND objekt_id=? AND ref_typ='bestellung'", [$aid]);
         if ($la && !empty($la['d'])) { $bestellt = true; $dates[1] = $la['d']; }
+    }
+    // Retroaktiv (auch für Aufträge VOR dem Verlauf-Fix): sind alle eingekauften Rohstoffe des Auftrags durch
+    // offene Bestellungen gedeckt, gilt „Rohstoff bestellt" ebenfalls.
+    if (!$bestellt) {
+        $rb = auftrag_rohstoffe_beschafft($aid);
+        if ($rb !== null) { $bestellt = true; $dates[1] = $dates[1] ?? $rb; }
     }
     $angDate = null;
     $we = one("SELECT COALESCE(MIN(wareneingang), MIN(angelegt)) d FROM charge WHERE auftrag_id=?", [$aid]);
