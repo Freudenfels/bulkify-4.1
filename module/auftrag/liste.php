@@ -60,15 +60,20 @@ if ($q !== '') {
 }
 $rows = bx_sort_rows($rows, $sort, $dir);
 
-$statusBadge = function($r) {
-    $ff = !empty($r['nutzt_fulfillment']);   // Fulfillment: eingelagert statt versendet -> „abgeschlossen"
-    return match ($r['status']) {
-        'offen'         => bx_badge('offen','info'),
-        'in_produktion' => bx_badge('in Produktion','warn'),
-        'erledigt'      => bx_badge('versandbereit','info'),
-        'versendet'     => bx_badge($ff ? 'abgeschlossen' : 'versendet','ok'),
-        default         => bx_badge(status_text($r['status'])),
-    };
+// Statt des groben Status den TATSÄCHLICHEN Fortschritt zeigen: „Rohstoff bestellt", „Rohstoff angekommen",
+// „In Produktion", „Etikettiert", „Qualitätsprüfung", „Versandbereit", „Eingelagert", „Versendet" – abgeleitet
+// aus kunde_auftrag_phase() (Bestellungen/Chargen/Produktionsschritte). So sieht man auf einen Blick, wo der
+// Auftrag gerade steht, nicht nur den Sammelstatus.
+$phaseStil = [0=>'info', 1=>'info', 2=>'info', 3=>'warn', 4=>'warn', 5=>'warn', 6=>'info', 7=>'ok', 8=>'ok'];
+$standBadge = function($r) use ($phaseStil) {
+    $st = (string)($r['status'] ?? '');
+    if ($st === 'storniert') return bx_badge('storniert', 'err');
+    $ff = !empty($r['nutzt_fulfillment']);   // Fulfillment: eingelagert statt versendet
+    if ($st === 'versendet')  return bx_badge($ff ? 'eingelagert' : 'versendet', 'ok');
+    $ph  = kunde_auftrag_phase($r);
+    $idx = (int)$ph['idx'];
+    $lbl = auftrag_phasen($ff)[$idx] ?? status_text($st);
+    return bx_badge($lbl, $phaseStil[$idx] ?? 'info');
 };
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 
@@ -104,7 +109,7 @@ $cols = [
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
     'gesamt_netto' => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['gesamt_netto'])],
     'rechnung_nr'  => ['label' => 'Rechnung', 'render' => fn($r)=> $r['rechnung_nr'] ? h($r['rechnung_nr']) : '<span class="muted">–</span>'],
-    'status'       => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
+    'status'       => ['label' => 'Fortschritt', 'sort' => true, 'render' => $standBadge],
     'angelegt'     => ['label' => 'Bestellt am', 'sort' => true, 'render' => fn($r)=> !empty($r['angelegt']) ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
     'dauer'        => ['label' => 'Dauer / Stand', 'render' => function($r) use ($fertigMap, $jetztUtc, $dauerFmt) {
                         $start = $r['angelegt'] ?? null;
