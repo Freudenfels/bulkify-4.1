@@ -53,3 +53,6 @@ Rohstoffe werden in der Einkaufsliste **artikelweise über alle Aufträge gebün
 
 ### Retroaktiv (auch für Alt-Aufträge, 2026-10-24)
 Für Aufträge, die VOR dem Verlauf-Fix bestellt wurden (kein `ref_typ='bestellung'`-Eintrag), wertet `auftrag_rohstoffe_beschafft()` (`core/schema.php`) den tatsächlichen Beschaffungsstand aus: sind ALLE eingekauften Rohstoffe des Auftrags (aus `auftrag_bedarf_cached`) durch offene (nicht gelieferte) Bestellungen gedeckt und liegt mindestens einer auf einer offenen Bestellung, gilt „Rohstoff bestellt". So springen AB-3285 & Co. automatisch, ohne auftragsspezifische Position. Caveat: offene Bestellmenge ist artikelglobal (Netting) – bei knapp bestellten, von mehreren Aufträgen geteilten Rohstoffen ggf. optimistisch. Kosten sind über `bedarf_cache` gepuffert.
+
+## Fix „Bedarf"-Spalte zeigte Restmenge (2026-10-24)
+In der Rohstoff-/Verpackungszeile zeigte die Unterzeile fälschlich `Bedarf = zu_bestellen` (die REST-Menge) statt des echten Gesamtbedarfs. Dadurch sah es widersinnig aus (z. B. „Bedarf 3.868 · Lager 9.632" – obwohl der echte Bedarf 13.500 war, Lager 9.632, also 3.868 Rest). Jetzt: `Bedarf = $a['need']` (echter Gesamtbedarf, wie in der Bulk-Zeile), plus explizit „· zu bestellen X". Die Bestellmenge im Eingabefeld (= zu_bestellen) war immer korrekt.
