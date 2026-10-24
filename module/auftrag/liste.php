@@ -58,6 +58,28 @@ if ($q !== '') {
         default         => array_filter($alle, $istOffen),
     };
 }
+// Produktion fertig (letzter erledigter Schritt) je Auftrag -> Spalte „Dauer / Stand" UND zum Sortieren.
+// Vor dem Sortieren berechnen (die IDs hängen nicht von der Sortierreihenfolge ab).
+$fertigMap = [];
+$auftragIds = array_map(fn($r) => (int)$r['id'], $rows);
+if ($auftragIds) {
+    $in = implode(',', array_fill(0, count($auftragIds), '?'));
+    foreach (all("SELECT pa.auftrag_id, MAX(ps.erledigt_at) fertig
+                  FROM produktionsauftrag pa JOIN produktion_schritt ps ON ps.pa_id=pa.id
+                  WHERE pa.status='erledigt' AND pa.auftrag_id IN ($in) GROUP BY pa.auftrag_id", $auftragIds) as $x)
+        if ($x['fertig']) $fertigMap[(int)$x['auftrag_id']] = $x['fertig'];
+}
+$jetztUtc = gmdate('Y-m-d H:i:s');
+// Sortierwerte für die BERECHNETEN Spalten (Art, Dauer) in die Zeilen schreiben, damit man auch nach ihnen
+// sortieren kann. bx_sort_rows sortiert nach dem Spalten-Key in der Zeile; die Render-Closures lesen diese
+// Keys NICHT (Art über $auftragArt, Dauer über $fertigMap), daher kein Konflikt.
+$artSort = ['neu_rez' => '1', 'neu_prod' => '2', 'nach' => '3', 'none' => '9'];
+foreach ($rows as &$rr) {
+    $rr['art']   = $artSort[$auftragArt($rr)] ?? '9';
+    $start       = $rr['angelegt'] ?? null;
+    $rr['dauer'] = $start ? (strtotime(($fertigMap[(int)$rr['id']] ?? $jetztUtc)) - strtotime((string)$start)) : 0;
+}
+unset($rr);
 $rows = bx_sort_rows($rows, $sort, $dir);
 
 // Statt des groben Status den TATSÄCHLICHEN Fortschritt zeigen: „Rohstoff bestellt", „Rohstoff angekommen",
@@ -77,17 +99,6 @@ $standBadge = function($r) use ($phaseStil) {
 };
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 
-// Produktion fertig (letzter erledigter Schritt) je Auftrag + Dauer/Alter -> laufende Produktionen sichtbar machen.
-$fertigMap = [];
-$auftragIds = array_map(fn($r) => (int)$r['id'], $rows);
-if ($auftragIds) {
-    $in = implode(',', array_fill(0, count($auftragIds), '?'));
-    foreach (all("SELECT pa.auftrag_id, MAX(ps.erledigt_at) fertig
-                  FROM produktionsauftrag pa JOIN produktion_schritt ps ON ps.pa_id=pa.id
-                  WHERE pa.status='erledigt' AND pa.auftrag_id IN ($in) GROUP BY pa.auftrag_id", $auftragIds) as $x)
-        if ($x['fertig']) $fertigMap[(int)$x['auftrag_id']] = $x['fertig'];
-}
-$jetztUtc = gmdate('Y-m-d H:i:s');
 $dauerFmt = function (?string $a, ?string $b): string {
     if (!$a || !$b) return '';
     $s = strtotime($b) - strtotime($a); if ($s < 0) return '';
@@ -99,8 +110,8 @@ $dauerFmt = function (?string $a, ?string $b): string {
 $cols = [
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
     'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
-    'produkt_name' => ['label' => 'Produkt', 'render' => fn($r)=> $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>'],
-    'art'          => ['label' => 'Art', 'render' => function($r) use ($auftragArt) {
+    'produkt_name' => ['label' => 'Produkt', 'sort' => true, 'render' => fn($r)=> $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>'],
+    'art'          => ['label' => 'Art', 'sort' => true, 'render' => function($r) use ($auftragArt) {
                         $k = $auftragArt($r);
                         if ($k === 'none') return '<span class="muted">–</span>';
                         [$label, $stil, $hint] = auftrag_art_meta($k);
@@ -108,10 +119,10 @@ $cols = [
                      }],
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
     'gesamt_netto' => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['gesamt_netto'])],
-    'rechnung_nr'  => ['label' => 'Rechnung', 'render' => fn($r)=> $r['rechnung_nr'] ? h($r['rechnung_nr']) : '<span class="muted">–</span>'],
+    'rechnung_nr'  => ['label' => 'Rechnung', 'sort' => true, 'render' => fn($r)=> $r['rechnung_nr'] ? h($r['rechnung_nr']) : '<span class="muted">–</span>'],
     'status'       => ['label' => 'Fortschritt', 'sort' => true, 'render' => $standBadge],
     'angelegt'     => ['label' => 'Bestellt am', 'sort' => true, 'render' => fn($r)=> !empty($r['angelegt']) ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
-    'dauer'        => ['label' => 'Dauer / Stand', 'render' => function($r) use ($fertigMap, $jetztUtc, $dauerFmt) {
+    'dauer'        => ['label' => 'Dauer / Stand', 'sort' => true, 'render' => function($r) use ($fertigMap, $jetztUtc, $dauerFmt) {
                         $start = $r['angelegt'] ?? null;
                         $fertig = $fertigMap[(int)$r['id']] ?? null;
                         if ($fertig) {
