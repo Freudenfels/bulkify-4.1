@@ -61,7 +61,9 @@ if ($q !== '') {
 // Produktion fertig (letzter erledigter Schritt) je Auftrag -> Spalte „Dauer / Stand" UND zum Sortieren.
 // Vor dem Sortieren berechnen (die IDs hängen nicht von der Sortierreihenfolge ab).
 $fertigMap = [];
-$auftragIds = array_map(fn($r) => (int)$r['id'], $rows);
+// array_values: $rows ist hier noch das array_filter-Ergebnis mit LÜCKEN in den Schlüsseln; für die
+// IN(?)-Bindung (PDO, positionsbasiert) müssen die Parameter lückenlos durchnummeriert sein, sonst HY093.
+$auftragIds = array_values(array_map(fn($r) => (int)$r['id'], $rows));
 if ($auftragIds) {
     $in = implode(',', array_fill(0, count($auftragIds), '?'));
     foreach (all("SELECT pa.auftrag_id, MAX(ps.erledigt_at) fertig
