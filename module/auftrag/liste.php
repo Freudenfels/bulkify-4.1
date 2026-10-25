@@ -112,7 +112,9 @@ $dauerFmt = function (?string $a, ?string $b): string {
 $cols = [
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
     'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
-    'produkt_name' => ['label' => 'Produkt', 'sort' => true, 'render' => fn($r)=> $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>'],
+    'produkt_name' => ['label' => 'Produkt', 'sort' => true, 'render' => fn($r)=>
+        ($r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>')
+        . (!empty($r['kunde_firma']) ? ' <span class="muted">· ' . h(firma_kurz($r['kunde_firma'])) . '</span>' : '')],
     'art'          => ['label' => 'Art', 'sort' => true, 'render' => function($r) use ($auftragArt) {
                         $k = $auftragArt($r);
                         if ($k === 'none') return '<span class="muted">–</span>';
