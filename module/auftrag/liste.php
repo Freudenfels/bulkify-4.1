@@ -11,6 +11,7 @@ if (!in_array($tab, ['offen', 'abgeschlossen', 'storniert'], true)) $tab = 'offe
 
 $alle = all("SELECT a.*, k.firma AS kunde_firma, COALESCE(k.nutzt_fulfillment,0) AS nutzt_fulfillment,
              COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name,
+             NULLIF(p.kundenname,'') AS kundenname,
              p.rezeptur_id AS rezeptur_id,
              (SELECT nummer FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='rechnung' LIMIT 1) AS rechnung_nr
              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
@@ -114,7 +115,7 @@ $cols = [
     'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, $r['kunde_firma'])],
     'produkt_name' => ['label' => 'Produkt', 'sort' => true, 'render' => fn($r)=>
         ($r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>')
-        . (!empty($r['kunde_firma']) ? ' <span class="muted">· ' . h(firma_kurz($r['kunde_firma'])) . '</span>' : '')],
+        . (!empty($r['kundenname']) && $r['kundenname'] !== $r['produkt_name'] ? ' <span class="muted">· ' . h($r['kundenname']) . '</span>' : '')],
     'art'          => ['label' => 'Art', 'sort' => true, 'render' => function($r) use ($auftragArt) {
                         $k = $auftragArt($r);
                         if ($k === 'none') return '<span class="muted">–</span>';
