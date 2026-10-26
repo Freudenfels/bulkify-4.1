@@ -166,6 +166,7 @@ $routes = [
     'alt_rechnungen'     => 'system/alt_rechnungen.php',     // TEMPORÄR: originale Rechnungen/Dokumente zu alten Auftraegen nachtragen
     'v3_dok_import'      => 'system/v3_dok_import.php',      // TEMPORÄR: v3-Dokumente (Dateien) nach v4 uebernehmen
     'testdaten'          => 'system/testdaten.php',         // Testdaten: Produktions-Durchspiel-Set anlegen/loeschen (online, Marker-isoliert) + Lager fuellen (lokal)
+    'labor_bereinigung'  => 'system/labor_bereinigung.php', // Einmal-Bereinigung: Laboranalyse-Altlasten (Alt-Upsell) auf Auftrag buchen + Alt-Angebot zurueckziehen
     'anfragen'           => 'anfrage/liste.php',
     'anfrage'            => 'anfrage/detail.php',
     'portal_anfragen'    => 'intern/portal_anfragen.php',
