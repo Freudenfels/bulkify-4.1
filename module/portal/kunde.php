@@ -1116,7 +1116,10 @@ $angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $prod
                                 $posGespeichert),
         // Wählbare Optionen: je Gruppe (A, B, C …) eine Konfiguration mit Anzahl Packungen und
         // Preis je Packung – daraus wird die Auswahltabelle wie bei der Preismatrix.
-        'opt'     => $brauchtPos ? angebot_optionen((int)$a['id']) : ['optionen'=>[], 'extra'=>[]],
+        // Produkt-Konfigurations-Optionen (Menge/Verpackung-Matrix) NICHT für Dienstleistungs-Angebote:
+        // die nutzen die Positions-/Varianten-Darstellung (A/B/C). Sonst würden DL-Gruppen fälschlich als
+        // Produkt-Optionen gerendert („Menge/Verpackung") und wären nicht annehmbar.
+        'opt'     => ($brauchtPos && ($a['kategorie'] ?? '') !== 'dienstleistung') ? angebot_optionen((int)$a['id']) : ['optionen'=>[], 'extra'=>[]],
         // Annehmbar ist ein Positions-Angebot nur, wenn die Konfiguration bekannt ist – aus der
         // Position selbst oder aus der zugehoerigen Anfrage. Sonst waere der Knopf ein Blindgaenger.
         'annehmbar' => $brauchtPos && (
