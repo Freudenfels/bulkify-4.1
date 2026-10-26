@@ -3597,19 +3597,37 @@ portal_head('Kundenportal · ' . $k['firma']);
   // Jahresvertrags-Angebote laufen separat über „Jahresverträge" (Kontingente) – hier ausblenden.
   $offenA  = array_values(array_filter($angebote, fn($x) => ($x['status'] ?? '') === 'gesendet' && empty($x['jahresvertrag'])));
   $archivA = array_values(array_filter($angebote, fn($x) => ($x['status'] ?? '') !== 'gesendet' && empty($x['jahresvertrag'])));
-  $jvHinweis = (bool) array_filter($angebote, fn($x) => !empty($x['jahresvertrag'])); ?>
+  $jvHinweis = (bool) array_filter($angebote, fn($x) => !empty($x['jahresvertrag']));
+  // Dienstleistungs-Angebote (DA-, kategorie='dienstleistung') von Produkt-Angeboten trennen -> eigener Reiter.
+  $istDLang = fn($x) => ($x['kategorie'] ?? '') === 'dienstleistung';
+  $offenProd  = array_values(array_filter($offenA,  fn($x) => !$istDLang($x)));
+  $offenDL    = array_values(array_filter($offenA,  $istDLang));
+  $archivProd = array_values(array_filter($archivA, fn($x) => !$istDLang($x)));
+  $archivDL   = array_values(array_filter($archivA, $istDLang));
+  $hatDL = $offenDL || $archivDL;
+  $angkat = (($_GET['angkat'] ?? '') === 'dienstleistung') ? 'dienstleistung' : 'produkt';
+  if (!$hatDL) $angkat = 'produkt';
+  $offenSel  = $angkat === 'dienstleistung' ? $offenDL  : $offenProd;
+  $archivSel = $angkat === 'dienstleistung' ? $archivDL : $archivProd;
+  $katWort = $angkat === 'dienstleistung' ? 'Dienstleistungs-' : ''; ?>
   <h1 style="margin-bottom:4px">Ihre Angebote</h1>
   <p class="muted" style="margin:0 0 16px">Offene Angebote können Sie hier direkt prüfen, eine Menge wählen und verbindlich annehmen. Angenommene und abgelehnte Angebote finden Sie im <strong>Archiv</strong> unten.</p>
-  <?php if (!empty($jvHinweis)): ?><div class="bx-panel" style="padding:12px 16px">Sie haben ein <strong>Jahresabnahmevertrags-Angebot</strong> – das schließen Sie unter <a href="<?= $portalLink('kontingente') ?>"><strong>Jahresverträge</strong></a> ab (danach rufen Sie Ihre Mengen nach Bedarf ab).</div><?php endif; ?>
+  <?php if ($hatDL): ?>
+  <div class="settabs" style="margin:0 0 14px">
+    <a href="<?= $portalLink('angebote') ?>&angkat=produkt" class="<?= $angkat === 'produkt' ? 'on' : '' ?>">Produkte<?= count($offenProd) ? ' (' . count($offenProd) . ')' : '' ?></a>
+    <a href="<?= $portalLink('angebote') ?>&angkat=dienstleistung" class="<?= $angkat === 'dienstleistung' ? 'on' : '' ?>">Dienstleistungen<?= count($offenDL) ? ' (' . count($offenDL) . ')' : '' ?></a>
+  </div>
+  <?php endif; ?>
+  <?php if (!empty($jvHinweis) && $angkat === 'produkt'): ?><div class="bx-panel" style="padding:12px 16px">Sie haben ein <strong>Jahresabnahmevertrags-Angebot</strong> – das schließen Sie unter <a href="<?= $portalLink('kontingente') ?>"><strong>Jahresverträge</strong></a> ab (danach rufen Sie Ihre Mengen nach Bedarf ab).</div><?php endif; ?>
   <?php include __DIR__ . '/_collapse_all.php'; ?>
-  <?php if (!$offenA): ?><div class="bx-panel"><div class="muted">Aktuell liegt kein offenes Angebot vor<?= $archivA ? ' – ältere finden Sie im Archiv unten' : '' ?>.</div></div><?php endif; ?>
-  <?php foreach ($offenA as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+  <?php if (!$offenSel): ?><div class="bx-panel"><div class="muted">Aktuell liegt kein offenes <?= $katWort ?>Angebot vor<?= $archivSel ? ' – ältere finden Sie im Archiv unten' : '' ?>.</div></div><?php endif; ?>
+  <?php foreach ($offenSel as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
 
-  <?php if ($archivA): ?>
+  <?php if ($archivSel): ?>
   <details style="margin-top:18px">
-    <summary style="cursor:pointer;font-weight:600;color:var(--gruen);padding:6px 0">Archiv – angenommen &amp; abgelehnt (<?= count($archivA) ?>)</summary>
+    <summary style="cursor:pointer;font-weight:600;color:var(--gruen);padding:6px 0">Archiv – angenommen &amp; abgelehnt (<?= count($archivSel) ?>)</summary>
     <div style="margin-top:12px">
-      <?php foreach ($archivA as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
+      <?php foreach ($archivSel as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = false; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
     </div>
   </details>
   <?php endif; ?>
