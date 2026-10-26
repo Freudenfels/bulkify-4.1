@@ -52,19 +52,22 @@ $offenN = count(array_filter($cands, fn($c) => $c['handeln']));
 
 // --- Ausführen (nur auf ausdrücklichen Klick) ------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bereinigen') {
-    $gebucht = 0; $zurueck = 0; $geschlossen = 0; $ohneAuftrag = 0;
+    $gebucht = 0; $geloescht = 0; $geschlossen = 0; $ohneAuftrag = 0;
     foreach ($cands as $c) {
         if (!$c['handeln']) continue;
         // 1) Laboranalyse auf den passenden Auftrag buchen (idempotent; bezahlte/stornierte Rechnungen unberührt).
         if ($c['auftrag'] && (int)($c['auftrag']['laboranalyse_gebucht'] ?? 0) === 0) {
             auftrag_laboranalyse_buchen((int)$c['auftrag']['id']); $gebucht++;
         } elseif (!$c['auftrag']) {
-            $ohneAuftrag++;   // kein eindeutiger Auftrag -> nur Angebot zurückziehen/Anfrage schließen
+            $ohneAuftrag++;   // kein eindeutiger Auftrag -> nur Angebot löschen/Anfrage schließen
         }
-        // 2) Irrtümliches DA-Angebot zurückziehen (verschwindet beim Kunden, bleibt intern als Entwurf).
-        if ($c['angebot'] && (string)$c['angebot']['status'] === 'gesendet') {
-            q("UPDATE angebot SET status='offen', preise_kunde=0 WHERE id=?", [(int)$c['angebot']['id']]);
-            $zurueck++;
+        // 2) Irrtümliches, NICHT angenommenes DA-Angebot LÖSCHEN (ohne Auftrag): erst zurück in 'offen', dann
+        //    spurlos verwerfen (Positionen/Staffeln weg, Nummer zurück, Log) – angebot_entwurf_verwerfen().
+        $agId = (int)($c['angebot']['id'] ?? 0);
+        if ($agId && !in_array((string)($c['angebot']['status'] ?? ''), ['bestaetigt','angenommen'], true)
+            && !scalar("SELECT id FROM auftrag WHERE angebot_id=?", [$agId])) {
+            if ((string)$c['angebot']['status'] !== 'offen') q("UPDATE angebot SET status='offen', preise_kunde=0 WHERE id=?", [$agId]);
+            if (angebot_entwurf_verwerfen($agId)) $geloescht++;
         }
         // 3) Anfrage schließen.
         q("UPDATE portal_anfrage SET status='geschlossen' WHERE id=?", [(int)$c['anfrage_id']]);
@@ -72,11 +75,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'berei
         if ((int)$c['kunde_id'] > 0)
             log_aktivitaet('kunde', (int)$c['kunde_id'], 'team',
                 'Laboranalyse-Altlast bereinigt: ' . ($c['auftrag'] ? 'auf Auftrag ' . $c['auftrag']['nummer'] . ' gebucht, ' : '') .
-                'Alt-Angebot ' . ($c['angebot']['nummer'] ?? '–') . ' zurückgezogen, Anfrage ' . $c['anfrage_nr'] . ' geschlossen.',
-                'anfrage', $c['auftrag'] ? 'auftrag' : 'angebot', (int)($c['auftrag']['id'] ?? ($c['angebot']['id'] ?? 0)));
+                'Alt-Angebot ' . ($c['angebot']['nummer'] ?? '–') . ' gelöscht, Anfrage ' . $c['anfrage_nr'] . ' geschlossen.',
+                'anfrage', $c['auftrag'] ? 'auftrag' : 'anfrage', (int)($c['auftrag']['id'] ?? (int)$c['anfrage_id']));
     }
     bedarf_bump();
-    header('Location: ?p=labor_bereinigung&fertig=1&g=' . $gebucht . '&z=' . $zurueck . '&c=' . $geschlossen . '&na=' . $ohneAuftrag); exit;
+    header('Location: ?p=labor_bereinigung&fertig=1&g=' . $gebucht . '&z=' . $geloescht . '&c=' . $geschlossen . '&na=' . $ohneAuftrag); exit;
 }
 
 render_header('labor_bereinigung', 'Laboranalyse-Bereinigung');
@@ -86,14 +89,14 @@ bx_head('Laboranalyse-Bereinigung (Alt-Upsell)',
 
 if (isset($_GET['fertig'])) {
     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Bereinigt: '
-       . (int)($_GET['g'] ?? 0) . '× auf Auftrag gebucht · ' . (int)($_GET['z'] ?? 0) . '× Angebot zurückgezogen · '
+       . (int)($_GET['g'] ?? 0) . '× auf Auftrag gebucht · ' . (int)($_GET['z'] ?? 0) . '× Angebot gelöscht · '
        . (int)($_GET['c'] ?? 0) . '× Anfrage geschlossen'
        . ((int)($_GET['na'] ?? 0) > 0 ? ' · ' . (int)$_GET['na'] . '× ohne eindeutigen Auftrag (nur Angebot zurückgezogen)' : '') . '.</div>';
 }
 
 $mapAngStatus = fn($s) => match ((string)$s) {
-    'gesendet' => bx_badge('beim Kunden (wird zurückgezogen)','warn'),
-    'offen'    => bx_badge('Entwurf (nicht sichtbar)'),
+    'gesendet' => bx_badge('beim Kunden (wird gelöscht)','warn'),
+    'offen'    => bx_badge('Entwurf (wird gelöscht)'),
     'bestaetigt','angenommen' => bx_badge('angenommen – bleibt','ok'),
     default    => $s ? bx_badge((string)$s) : '<span class="muted">kein Angebot</span>',
 };
@@ -102,7 +105,7 @@ $mapAngStatus = fn($s) => match ((string)$s) {
   <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
     <h2 style="margin:0">Vorschau <?= $offenN ? bx_badge($offenN . ' zu bereinigen','warn') : bx_badge('nichts offen','ok') ?></h2>
     <?php if ($offenN): ?>
-    <form method="post" style="margin:0" onsubmit="return confirm('<?= $offenN ?> Laboranalyse-Altlasten bereinigen? Analyse wird auf den jeweiligen Auftrag gebucht (offene Rechnungen bekommen die 250-€-Position; bezahlte/stornierte bleiben unberührt) und das Alt-Angebot beim Kunden zurückgezogen.');">
+    <form method="post" style="margin:0" onsubmit="return confirm('<?= $offenN ?> Laboranalyse-Altlasten bereinigen? Analyse wird auf den jeweiligen Auftrag gebucht (offene Rechnungen bekommen die 250-€-Position; bezahlte/stornierte bleiben unberührt) und das nicht angenommene Alt-Angebot gelöscht.');">
       <input type="hidden" name="aktion" value="bereinigen">
       <button class="btn btn-primary" type="submit">Jetzt bereinigen (<?= $offenN ?>)</button>
     </form>
@@ -130,7 +133,7 @@ $mapAngStatus = fn($s) => match ((string)$s) {
             else {
                 $teile = [];
                 if ($c['auftrag'] && (int)($c['auftrag']['laboranalyse_gebucht'] ?? 0) === 0) $teile[] = 'auf Auftrag buchen';
-                if ($c['angebot'] && (string)$c['angebot']['status'] === 'gesendet') $teile[] = 'Angebot zurückziehen';
+                if ($c['angebot']) $teile[] = 'Angebot löschen';
                 $teile[] = 'Anfrage schließen';
                 echo '<span style="color:#8a5a12">' . h(implode(' · ', $teile)) . '</span>';
             }
