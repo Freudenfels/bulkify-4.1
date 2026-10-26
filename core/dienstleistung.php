@@ -407,7 +407,7 @@ function dl_angebot_senden(int $angebot_id): string {
 // DL-Auftrag (DB-) aus einem bestaetigten DL-Angebot. Ein Service pro Auftrag: je Angebotsposition ein
 // eigener DB-Auftrag (mit dienstleistung_id + angebot_position_id + materialisierten Schritten). Idempotent.
 // Rueckgabe: id des ERSTEN Auftrags (Aufrufer leitet dorthin; weitere stehen in der DL-Auftragsliste).
-function dl_auftrag_aus_angebot(int $angebot_id): ?int {
+function dl_auftrag_aus_angebot(int $angebot_id, ?string $gruppe = null): ?int {
     $a = dl_angebot_laden($angebot_id);
     if (!$a || $a['status'] !== 'bestaetigt') return null;
     // Rückwärtskompatibel: wurde das Angebot früher (alte Logik) schon in EINEN Sammel-Auftrag gewandelt,
@@ -415,6 +415,9 @@ function dl_auftrag_aus_angebot(int $angebot_id): ?int {
     $legacy = (int) scalar("SELECT id FROM auftrag WHERE angebot_id=? AND angebot_position_id IS NULL LIMIT 1", [$angebot_id]);
     if ($legacy) return $legacy;
     $positionen = dl_positionen($angebot_id);
+    // Varianten-Gruppe (A/B/C) gewählt? -> nur die Positionen dieser Gruppe + gruppenlose Basis-Positionen.
+    if ($gruppe !== null && $gruppe !== '')
+        $positionen = array_values(array_filter($positionen, fn($p) => in_array((string)($p['gruppe'] ?? ''), [$gruppe, ''], true)));
     if (!$positionen) return null;
     $ersterAid = null;
     foreach ($positionen as $p) {

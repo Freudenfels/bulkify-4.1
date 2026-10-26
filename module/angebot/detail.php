@@ -846,7 +846,12 @@ if (!$neu):
             <textarea name="p_besch[]" class="p_besch" rows="<?= max(2, substr_count((string)($pp['beschreibung'] ?? ''), "\n") + 1) ?>" placeholder="Beschreibung / Rezeptur (optional)"><?= h($pp['beschreibung'] ?? '') ?></textarea>
             <input type="hidden" name="p_art[]" value="<?= h($pp['artikelnr'] ?? '') ?>">
             <input type="hidden" name="p_quelle[]" value="<?= h($pp['quelle'] ?? 'manuell') ?>">
+            <?php if ($istDL): ?>
+            <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-top:4px" class="muted">Variante
+              <input type="text" name="p_gruppe[]" value="<?= h($pp['gruppe'] ?? '') ?>" maxlength="1" placeholder="–" title="Varianten-Buchstabe A/B/C … (leer = Basis, immer enthalten). Der Kunde wählt beim Annehmen EINE Variante." style="width:44px;text-align:center;text-transform:uppercase"></label>
+            <?php else: ?>
             <input type="hidden" name="p_gruppe[]" value="<?= h($pp['gruppe'] ?? '') ?>">
+            <?php endif; ?>
             <input type="hidden" name="p_rez[]" value="<?= (int)($pp['rezeptur_id'] ?? 0) ?: '' ?>">
             <input type="hidden" name="p_vid[]" value="<?= (int)($pp['verpackung_id'] ?? 0) ?: '' ?>">
             <input type="hidden" name="p_ek[]" class="p_ek" value="<?= h(number_format($pp['ek_cent']/100,4,'.','')) ?>">
@@ -863,6 +868,9 @@ if (!$neu):
         <?php endforeach; ?>
       </tbody>
     </table>
+    <?php if ($istDL): ?>
+    <div class="muted" style="font-size:12px;margin-top:6px">Varianten (A/B/C): Positionen mit demselben Buchstaben bilden EINE Variante; der Kunde wählt beim Annehmen genau eine davon. Positionen <strong>ohne</strong> Buchstaben gelten als Basis und sind in jeder Variante enthalten. Keine Buchstaben = ein festes Angebot ohne Auswahl.</div>
+    <?php endif; ?>
     <div class="bx-row" style="justify-content:space-between;align-items:flex-start;margin-top:8px">
       <button type="button" class="btn btn-ghost btn-sm" id="addPos">+ freie Position</button>
       <span class="muted" style="font-size:12px;margin-left:8px">für Zuschläge/Dienstleistungen – Produkte bitte oben aus dem Katalog hinzufügen</span>
@@ -988,7 +996,7 @@ function posRecalc(){
     var tr=document.createElement('tr'); tr.className='posrow';
     tr.innerHTML='<td><input type="text" name="p_bez[]">'
       +'<textarea name="p_besch[]" class="p_besch" rows="2" placeholder="Beschreibung / Rezeptur (optional)"></textarea>'
-      +'<input type="hidden" name="p_art[]" value=""><input type="hidden" name="p_quelle[]" value="manuell"><input type="hidden" name="p_gruppe[]" value=""><input type="hidden" name="p_ek[]" class="p_ek" value="0">'
+      +'<input type="hidden" name="p_art[]" value=""><input type="hidden" name="p_quelle[]" value="manuell"><?= $istDL ? '<label style=\"display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-top:4px\" class=\"muted\">Variante <input type=\"text\" name=\"p_gruppe[]\" maxlength=\"1\" placeholder=\"–\" title=\"Varianten-Buchstabe A/B/C … (leer = Basis)\" style=\"width:44px;text-align:center;text-transform:uppercase\"></label>' : '<input type=\"hidden\" name=\"p_gruppe[]\" value=\"\">' ?><input type="hidden" name="p_ek[]" class="p_ek" value="0">'
       +'<input type="hidden" name="p_rez[]" value=""><input type="hidden" name="p_vid[]" value=""></td>'
       +'<td><input type="number" step="1" min="0" name="p_stk[]" class="p_stk" data-unit="" placeholder="&ndash;" style="width:100%;text-align:right"></td>'
       +'<td><input type="number" step="0.001" name="p_menge[]" class="p_menge"></td>'

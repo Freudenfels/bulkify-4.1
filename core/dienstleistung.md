@@ -54,3 +54,9 @@ Produkt-Listen (`module/angebot/liste.php`, `module/auftrag/liste.php`) blenden 
 - **DL-Rechnung je Auftrag** rechnet nur dessen **eine** Position ab (über `angebot_position_id`; Legacy ohne Position = alles).
 - **Fortschritt:** `dl_auftrag_track()` (Schritte + erledigt), `dl_auftrag_schritt_setzen($aid,$schritt_id)` (alle bis dorthin = erledigt), `dl_auftrag_status_ableiten()` (offen/in_arbeit/erledigt). Status des DL-Auftrags wird daraus abgeleitet.
 - **Endergebnis:** `dl_ergebnis_upload()` legt `dokument typ='dl_ergebnis'` (kundensichtbar) an; bei `upload_schliesst_ab` → alle Schritte erledigt + `mail_kunde_dl_ergebnis()` (respektiert `kunde_mails_aus`). `dl_ergebnis_dateien()` listet sie.
+
+## Varianten (A/B/C) in DL-Angeboten (2026-10-26)
+DL-Angebote unterstützen jetzt Mengen-/Leistungs-Varianten wie Produkt-Angebote: Positionen tragen einen Gruppen-Buchstaben (`angebot_position.gruppe`, A/B/C …). Positionen **ohne** Buchstaben = Basis (immer enthalten), gleicher Buchstabe = eine wählbare Variante.
+- **Editor** (`angebot/detail.php`, nur bei `kategorie='dienstleistung'`): je Position ein kleines „Variante"-Feld (A/B/C); `angebot_gruppen_normalisieren` fasst DL nicht an (greift nur bei mehreren `herstellung`-Zeilen).
+- **Portal** (`_angebot_karte.php`, Positions-Zweig): gibt es Gruppen, werden die Varianten je als eigener Block mit eigener Summe + „Variante X annehmen" gerendert; sonst wie bisher ein „Angebot annehmen".
+- **Annahme** (`portal/kunde.php`): die gewählte Gruppe geht als `gruppe` an `dl_auftrag_aus_angebot($angebot_id, $gruppe)` → es werden nur die Positionen dieser Gruppe (+ Basis) in DL-Aufträge (DB-) gewandelt; die DR-Rechnung rechnet ohnehin je Auftrags-Position ab, ist damit automatisch korrekt.

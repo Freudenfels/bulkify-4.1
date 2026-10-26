@@ -137,29 +137,58 @@ if ($a['status'] === 'bestaetigt') {
     </tbody>
   </table></div>
   <?php elseif ($offen && !$st && $inf['pos']):
-        $sumNetto = 0; foreach ($inf['pos'] as $p) $sumNetto += $p['menge'] * (($p['preis_e4'] ?? (int)$p['preis_cent'] * 100)) / 10000;
-        $pVk = fn($p) => (function($v){ return abs($v*100-round($v*100))<=1e-9 ? number_format($v,2,',','.') : rtrim(number_format($v,4,',','.'),'0'); })((($p['preis_e4'] ?? (int)$p['preis_cent'] * 100)) / 10000); ?>
-  <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
-    <thead><tr><th>Position</th><th class="bx-num">Menge</th><th class="bx-num">Preis / Einheit</th><th class="bx-num">Gesamt</th></tr></thead>
-    <tbody>
-    <?php foreach ($inf['pos'] as $p): ?>
-      <tr>
-        <td><?= h($p['bezeichnung']) ?><?= $p['beschreibung'] ? '<div class="muted" style="font-size:12px;white-space:pre-line">' . h($p['beschreibung']) . '</div>' : '' ?></td>
-        <td class="bx-num"><?= rtrim(rtrim(number_format($p['menge'],2,',','.'),'0'),',') ?> <?= h($p['einheit']) ?></td>
-        <td class="bx-num"><?= h($pVk($p)) ?> €</td>
-        <td class="bx-num"><?= $eur($p['menge'] * (($p['preis_e4'] ?? (int)$p['preis_cent'] * 100)) / 10000) ?></td>
-      </tr>
+        $pVk = fn($p) => (function($v){ return abs($v*100-round($v*100))<=1e-9 ? number_format($v,2,',','.') : rtrim(number_format($v,4,',','.'),'0'); })((($p['preis_e4'] ?? (int)$p['preis_cent'] * 100)) / 10000);
+        $zNetto = fn($p) => $p['menge'] * (($p['preis_e4'] ?? (int)$p['preis_cent'] * 100)) / 10000;
+        // Gruppen (A/B/C) aus den Positionen bilden: gruppenlose Positionen = Basis (immer enthalten),
+        // Buchstaben-Gruppen = wählbare Varianten. Gibt es Gruppen, wählt der Kunde EINE Variante.
+        $posBasis = array_values(array_filter($inf['pos'], fn($p) => (string)($p['gruppe'] ?? '') === ''));
+        $posGrp = [];
+        foreach ($inf['pos'] as $p) { $g = (string)($p['gruppe'] ?? ''); if ($g !== '') $posGrp[$g][] = $p; }
+        ksort($posGrp);
+        // Tabellen-Renderer für eine Positionsliste + Netto/Brutto-Fuß.
+        $posTabelle = function(array $plist) use ($pVk, $zNetto, $eur, $mg, $ustP) {
+            $sum = 0; foreach ($plist as $p) $sum += $zNetto($p); ?>
+          <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
+            <thead><tr><th>Position</th><th class="bx-num">Menge</th><th class="bx-num">Preis / Einheit</th><th class="bx-num">Gesamt</th></tr></thead>
+            <tbody>
+            <?php foreach ($plist as $p): ?>
+              <tr>
+                <td><?= h($p['bezeichnung']) ?><?= $p['beschreibung'] ? '<div class="muted" style="font-size:12px;white-space:pre-line">' . h($p['beschreibung']) . '</div>' : '' ?></td>
+                <td class="bx-num"><?= rtrim(rtrim(number_format($p['menge'],2,',','.'),'0'),',') ?> <?= h($p['einheit']) ?></td>
+                <td class="bx-num"><?= h($pVk($p)) ?> €</td>
+                <td class="bx-num"><?= $eur($zNetto($p)) ?></td>
+              </tr>
+            <?php endforeach; ?>
+              <tr style="font-weight:600"><td colspan="3">Gesamt netto</td><td class="bx-num"><?= $eur($sum) ?></td></tr>
+              <?php if ($ustP > 0): ?><tr><td colspan="3" class="muted">inkl. <?= $mg($ustP) ?> % MwSt</td><td class="bx-num muted"><?= $eur($sum * (1 + $ustP/100)) ?> brutto</td></tr><?php endif; ?>
+            </tbody>
+          </table></div>
+        <?php };
+  ?>
+  <?php if ($posGrp): // GRUPPIERT -> Varianten A/B/C zur Auswahl ?>
+    <div class="muted" style="margin-top:12px;font-size:13px">Bitte wählen Sie <strong>eine Variante</strong>:</div>
+    <?php foreach ($posGrp as $gLetter => $plist): $gpos = array_merge($posBasis, $plist); ?>
+    <div class="bx-panel" style="margin-top:10px;border-color:var(--gruen)">
+      <div style="font-weight:600">Variante <?= h($gLetter) ?></div>
+      <?php $posTabelle($gpos); ?>
+      <?php if ($canAccept): ?>
+      <div class="bx-row" style="justify-content:flex-end;margin-top:10px">
+        <?php if ($inf['annehmbar']): ?>
+        <button class="btn btn-primary" type="button" onclick="bxBestaetigen('Variante <?= h($gLetter) ?> verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach die Durchf&uuml;hrung; eine Stornierung ist danach nicht mehr m&ouml;glich.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'angebot_annehmen', angebot_id:'<?= (int)$a['id'] ?>', gruppe:'<?= h($gLetter) ?>'}, <?= $upsellJs ?>)">Variante <?= h($gLetter) ?> annehmen</button>
+        <?php else: ?><div class="muted">Zum Annehmen bitte kurz bei uns melden.</div><?php endif; ?>
+      </div>
+      <?php endif; ?>
+    </div>
     <?php endforeach; ?>
-      <tr style="font-weight:600"><td colspan="3">Gesamt netto</td><td class="bx-num"><?= $eur($sumNetto) ?></td></tr>
-      <?php if ($ustP > 0): ?><tr><td colspan="3" class="muted">inkl. <?= $mg($ustP) ?> % MwSt</td><td class="bx-num muted"><?= $eur($sumNetto * (1 + $ustP/100)) ?> brutto</td></tr><?php endif; ?>
-    </tbody>
-  </table></div>
-  <?php if ($canAccept): ?>
-  <div class="bx-row" style="justify-content:flex-end;margin-top:10px">
-    <?php if ($inf['annehmbar']): ?>
-    <button class="btn btn-primary" type="button" onclick="bxBestaetigen('Angebot verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'angebot_annehmen', angebot_id:'<?= (int)$a['id'] ?>'}, <?= $upsellJs ?>)">Angebot annehmen</button>
-    <?php else: ?><div class="muted">Zum Annehmen bitte kurz bei uns melden.</div><?php endif; ?>
-  </div>
+  <?php else: // UNGRUPPIERT -> ganzes Angebot, ein Annehmen ?>
+    <?php $posTabelle($inf['pos']); ?>
+    <?php if ($canAccept): ?>
+    <div class="bx-row" style="justify-content:flex-end;margin-top:10px">
+      <?php if ($inf['annehmbar']): ?>
+      <button class="btn btn-primary" type="button" onclick="bxBestaetigen('Angebot verbindlich annehmen', 'Mit der Annahme bestellen Sie verbindlich. Wir starten danach Einkauf und Produktion; eine Stornierung ist nach der Rohstoffbestellung nicht mehr m&ouml;glich.', 'Ich habe das Angebot gepr&uuml;ft und bestelle verbindlich.', {aktion:'angebot_annehmen', angebot_id:'<?= (int)$a['id'] ?>'}, <?= $upsellJs ?>)">Angebot annehmen</button>
+      <?php else: ?><div class="muted">Zum Annehmen bitte kurz bei uns melden.</div><?php endif; ?>
+    </div>
+    <?php endif; ?>
   <?php endif; ?>
   <?php elseif ($offen): ?>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">

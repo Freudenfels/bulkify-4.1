@@ -170,7 +170,8 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
             q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [$aid]);
             log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'DL-Angebot ' . (string)$ang['nummer'] . ' im Portal verbindlich angenommen durch ' . $name . '.', 'angebot', 'angebot', $aid);
             require_once BX_ROOT . '/core/dienstleistung.php';
-            $neuAuftrag = dl_auftrag_aus_angebot($aid);
+            $gruppeW = preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? '')));
+            $neuAuftrag = dl_auftrag_aus_angebot($aid, $gruppeW !== '' ? $gruppeW : null);
         } else {
             $neuAuftrag = auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
             portal_labortest_upsell($k, $aid);
@@ -1091,7 +1092,7 @@ $angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $prod
     // Kalkulation je Zutat kostete auf der Remote-DB ~100 Abfragen JE KARTE (=> 127 s / ERR_SSL beim Laden).
     // Ist ein Angebot nicht eingefroren, sieht der Kunde keine Preistabelle (Knopf: "bitte kurz melden").
     $posGespeichert = $brauchtPos
-        ? all("SELECT bezeichnung, beschreibung, menge, einheit, preis_cent, preis_e4, mwst_satz FROM angebot_position
+        ? all("SELECT bezeichnung, beschreibung, menge, einheit, preis_cent, preis_e4, mwst_satz, gruppe FROM angebot_position
                WHERE angebot_id=? AND (menge > 0 OR preis_cent > 0) ORDER BY sort, id", [$id])
         : [];
     return $angInfo[$id] = [
@@ -1111,7 +1112,7 @@ $angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $prod
                                           'menge'=>(float)$p['menge'], 'einheit'=>$p['einheit'],
                                           'preis_cent'=>(int)$p['preis_cent'],
                                           'preis_e4'=>((isset($p['preis_e4']) && $p['preis_e4'] !== null && $p['preis_e4'] !== '') ? (int)$p['preis_e4'] : (int)$p['preis_cent'] * 100),
-                                          'mwst'=>(float)$p['mwst_satz']],
+                                          'mwst'=>(float)$p['mwst_satz'], 'gruppe'=>trim((string)($p['gruppe'] ?? ''))],
                                 $posGespeichert),
         // Wählbare Optionen: je Gruppe (A, B, C …) eine Konfiguration mit Anzahl Packungen und
         // Preis je Packung – daraus wird die Auswahltabelle wie bei der Preismatrix.
