@@ -21,9 +21,11 @@ $paketLbl = function (int $stk) use ($inf, $mg, $formPl, $mengeLbl) {
         return $mg($stk * $inf['portionG']) . ' g';
     return $stk . ' ' . ($formPl[$inf['form']] ?? 'Stk');
 };
-// Upsell-Argument fuer bxBestaetigen: Labortest nur anbieten, wenn der Kunde Dienstleistungen anfragen darf.
+// Upsell-Argument fuer bxBestaetigen: Labortest nur anbieten, wenn der Kunde Dienstleistungen anfragen darf
+// UND es sich um ein PRODUKT-Angebot handelt. Auf einem Dienstleistungs-Angebot (selbst ggf. ein Labortest/
+// Abfuellung) ergibt ein Labortest-Upsell keinen Sinn -> dort nicht anbieten.
 $upN = htmlspecialchars(str_replace(["\\","'"], ["\\\\","\\'"], (string)$titelFuer($a)), ENT_QUOTES);
-$upsellJs = !empty($k['portal_dienstleistung']) ? "{name:'" . $upN . "'}" : 'null';
+$upsellJs = (!empty($k['portal_dienstleistung']) && ($a['kategorie'] ?? '') !== 'dienstleistung') ? "{name:'" . $upN . "'}" : 'null';
 // Bei angenommenem Angebot den ECHTEN Bestell-Status zeigen (aus dem Auftrag), nicht nur „bestätigt".
 $kartAuftragId = 0; $bestStatusLbl = ''; $bestStatusKind = 'info';
 if ($a['status'] === 'bestaetigt') {
