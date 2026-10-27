@@ -282,6 +282,8 @@ $formPa    = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN
 if ($formPa === '') $formPa = (string)($pa['rezeptur_form'] ?? '');           // Bulk-PA: Form aus der Rezeptur
 if ($formPa === '') $formPa = (string)($pa['auftrag_produkt_form'] ?? '');   // Fallback: v3-Auftrag ohne Produkt
 $stkWort   = in_array($formPa, ['kapsel','softgel'], true) ? 'Kapseln' : ($formPa === 'tablette' ? 'Tabletten' : 'Stk');
+// Pulver/Granulat: Packungsgröße ist die FÜLLMENGE in Gramm je Packung (nicht Portionszahl) -> nach Gewicht anzeigen.
+$istFuellGewicht = function_exists('form_groessen_einheit') && form_groessen_einheit($formPa) === 'g';
 // $produktName ist bereits oben (vor bx_head) bestimmt.
 $gesamtStk = $einhProP > 0 ? (int)$pa['menge'] * $einhProP : 0;
 // Eingabe-Kacheln vorbereiten (Priorität, Geplant am) und Größe.
@@ -308,8 +310,14 @@ if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablett
 echo '<div class="bx-card"><div class="k">Art</div><div class="v">' . $artBadge . '</div></div>';
 // 3) Menge
 echo '<div class="bx-card"><div class="k">Packungen gesamt</div><div class="v">' . number_format((int)$pa['menge'], 0, ',', '.') . '</div></div>';
-if ($einhProP > 0)  echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . '</div></div>';
-if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' gesamt</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
+if ($istFuellGewicht) {
+    // Füllgewicht je Packung (g) und Gesamt-Füllgewicht (als kg, wenn >= 1 kg).
+    if ($einhProP > 0)  echo '<div class="bx-card"><div class="k">Füllmenge je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . ' g</div></div>';
+    if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamt-Füllmenge</div><div class="v">' . ($gesamtStk >= 1000 ? rtrim(rtrim(number_format($gesamtStk / 1000, 3, ',', '.'), '0'), ',') . ' kg' : number_format($gesamtStk, 0, ',', '.') . ' g') . '</div></div>';
+} else {
+    if ($einhProP > 0)  echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . '</div></div>';
+    if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' gesamt</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
+}
 // Überproduktion (aus der Vor-Produktion-Freigabe): geplante Produktionsmenge in Einheiten + Überschuss -> Rezeptur-Bulk.
 if (!empty($pa['menge_produktion']) && (int)$pa['menge_produktion'] > $gesamtStk) {
     $ueber = (int)$pa['menge_produktion'] - $gesamtStk;

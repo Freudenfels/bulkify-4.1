@@ -8022,6 +8022,7 @@ function produktion_godmode_stufe_setzen(int $pa_id, int $schritt_id): array {
 function produktion_materialbedarf(int $pa_id): array {
     $pa = pa_row_cached($pa_id);
     if (!$pa) return [];
+    $fuellGesamtG = 0.0;   // >0 => Schüttgut (Pulver/Granulat): Bedarf nach FÜLLGEWICHT statt Portionszahl
     if (pa_ist_bulk($pa)) {
         // Bulk: Menge = Stück (Kapseln) direkt; kein Produkt/Packung dazwischen.
         $rid = (int)$pa['rezeptur_id'];
@@ -8035,13 +8036,25 @@ function produktion_materialbedarf(int $pa_id): array {
         $einheiten_total = (int)$pa['menge'] * produktion_stueck_je_packung($pa);
         $rid = (int)$prod['rezeptur_id'];
     }
+    // Pulver/Granulat: nach GEWICHT rechnen, NICHT nach Portionszahl. Die Packungsgröße (produktion_stueck_je_packung
+    // bzw. auftrag.stueck/produkt.einheiten_pro_packung) ist bei diesen Formen die FÜLLMENGE in Gramm je Packung
+    // (siehe form_groessen_einheit() = 'g'). Gesamt-Füllgewicht = Packungen × g/Packung; der Rohstoffbedarf ergibt
+    // sich aus dem Massenanteil jeder Zutat an der Rezeptur, nicht aus „Portionen × mg je Portion".
+    if (!pa_ist_bulk($pa)) {
+        $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+        if (function_exists('form_groessen_einheit') && form_groessen_einheit($form) === 'g')
+            $fuellGesamtG = (float)$pa['menge'] * (float) produktion_stueck_je_packung($pa);
+    }
     // Mix-Produktion: als Bulk zugekaufter (reservierter) Teil wird NICHT selbst produziert -> Einheiten dafür
     // vom Rohstoffbedarf abziehen. Nur bei Eigen-Produktion mit Auftrag; Verpackung/Etikett bleiben unberührt
-    // (die hängen in auftrag_bedarf an der vollen Packungsmenge).
+    // (die hängen in auftrag_bedarf an der vollen Packungsmenge). Bei Pulver ist die reservierte Menge in Gramm.
     $aidMb = (int)($pa['auftrag_id'] ?? 0);
     if ($aidMb > 0 && !pa_ist_bulk($pa)) {
         $resvMb = auftrag_bulk_reserviert_stueck($aidMb);
-        if ($resvMb > 0) $einheiten_total = max(0, $einheiten_total - (int)round($resvMb));
+        if ($resvMb > 0) {
+            if ($fuellGesamtG > 0) $fuellGesamtG = max(0.0, $fuellGesamtG - (float)$resvMb);
+            else $einheiten_total = max(0, $einheiten_total - (int)round($resvMb));
+        }
     }
     // Zutaten der Rezeptur – in der Liste request-lokal gecacht (Rezepturen mehrerer Aufträge nur einmal holen).
     if (isset($GLOBALS['bx_stock_cache'])) {
@@ -8054,9 +8067,17 @@ function produktion_materialbedarf(int $pa_id): array {
         $zutaten = all("SELECT z.item_id, z.menge_mg, i.name, i.einheit
                   FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]);
     }
+    // Für die Gewichtsrechnung: Summe der Rezeptur-mg je Einheit = 100 % der Mischung (Massenbasis).
+    $summeMg = 0.0; if ($fuellGesamtG > 0) foreach ($zutaten as $zz) $summeMg += (float)$zz['menge_mg'];
     $out = [];
     foreach ($zutaten as $z) {
-        $mg = (float)$z['menge_mg'] * $einheiten_total;
+        if ($fuellGesamtG > 0) {
+            // Massenanteil der Zutat × Gesamt-Füllgewicht (g) -> mg.
+            $anteil = $summeMg > 0 ? ((float)$z['menge_mg'] / $summeMg) : 0.0;
+            $mg = $fuellGesamtG * 1000.0 * $anteil;
+        } else {
+            $mg = (float)$z['menge_mg'] * $einheiten_total;
+        }
         $faktor = $z['einheit'] === 'g' ? 1e3 : 1e6;          // mg -> Basiseinheit (kg-Standard)
         $benoetigt = $mg / $faktor;
         $verf = item_bestand((int)$z['item_id'], true);

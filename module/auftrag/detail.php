@@ -453,6 +453,8 @@ if ($etikettFrei) {
     $etikettBadge = '<span title="Kunde hat noch kein Etikett-Design hinterlegt">' . bx_badge('fehlt', 'err') . '</span>';
 }
 $groesseLbl = produktion_groesse_label((int)$a['produkt_id']);
+// Pulver/Granulat: „Stück je Packung" ist in Wahrheit die Füllmenge in Gramm je Packung -> nach Gewicht anzeigen.
+$istFuellG = function_exists('form_groessen_einheit') && form_groessen_einheit((string)($rezeptur['darreichungsform'] ?? '')) === 'g';
 // Bestellungen (bei welchem Lieferanten, welcher Status) – verknüpft über die Position.
 $best = all("SELECT DISTINCT b.id, b.nummer, b.status, b.bestaetigt, b.angekommen_am, l.firma AS lieferant
              FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
@@ -530,14 +532,19 @@ $glasName = $glasId ? (string) scalar("SELECT name FROM item WHERE id=?", [$glas
 $fehltCard = fn($txt) => '<span style="color:var(--warn)">' . h($txt) . '</span>';
 // Die Kennzahl-Kacheln stehen jetzt IM Reiter „Details" (siehe unten, data-panel="details"), nicht mehr
 // über den Reitern. Als Closure vorbereitet, damit sie dort an der richtigen Stelle gerendert werden.
-$kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCard, $einhProP, $gesamtStk, $groesseLbl, $istFremd, $etikettBadge, $eur) {
+$kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCard, $einhProP, $gesamtStk, $groesseLbl, $istFremd, $etikettBadge, $eur, $istFuellG) {
     echo '<div class="bx-cards" style="margin-bottom:16px">';
     echo '<div class="bx-card bx-card-status" title="Status" style="background:' . $stBg . ';color:' . $stFg . ';border:1px solid rgba(0,0,0,.15)"><div class="v" style="color:' . $stFg . '">' . h($stText) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . (int)$a['menge'] . '</div></div>';
     // Glas + Kapselzahl IMMER zeigen (auch wenn leer) – sonst sieht man bei alten Nachbestellungen nicht, dass es fehlt.
     echo '<div class="bx-card"><div class="k">Verpackung (Glas)</div><div class="v" style="font-size:16px">' . ($glasName !== '' ? h($glasName) : $fehltCard('nicht gesetzt')) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Stück je Packung</div><div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') : $fehltCard('nicht gesetzt')) . '</div></div>';
-    if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamtstückzahl</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
+    if ($istFuellG) {
+        echo '<div class="bx-card"><div class="k">Füllmenge je Packung</div><div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') . ' g' : $fehltCard('nicht gesetzt')) . '</div></div>';
+        if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamt-Füllmenge</div><div class="v">' . ($gesamtStk >= 1000 ? rtrim(rtrim(number_format($gesamtStk / 1000, 3, ',', '.'), '0'), ',') . ' kg' : number_format($gesamtStk, 0, ',', '.') . ' g') . '</div></div>';
+    } else {
+        echo '<div class="bx-card"><div class="k">Stück je Packung</div><div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') : $fehltCard('nicht gesetzt')) . '</div></div>';
+        if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamtstückzahl</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
+    }
     if ($groesseLbl !== '') { $grK = match((string)($rezeptur['darreichungsform'] ?? '')) { 'kapsel','softgel'=>'Kapselgröße', 'tablette'=>'Tablettenform', 'gummi','stick','pulver','gel','fluessig','oel'=>'Größe je Einheit', default=>'Größe/Form' };
         echo '<div class="bx-card"><div class="k">' . $grK . '</div><div class="v">' . h($groesseLbl) . '</div></div>'; }
     echo '<div class="bx-card"><div class="k">Herstellung</div><div class="v">' . ($istFremd ? bx_badge('Zukauf','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
