@@ -364,7 +364,16 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
       <script>(function(){var s=document.getElementById('rezeptur'),a=document.getElementById('rezLink');if(!s||!a)return;function u(){var v=parseInt(s.value||'0',10);if(v>0){a.href='?p=rezeptur_detail&id='+v;a.style.display='inline-block';}else{a.style.display='none';}}s.addEventListener('change',u);u();})();</script>
     </div>
     <?= verp_slot('Verpackung (Primär)', 'verpackung_id', $VERP_ROLLE['primaer'], $p['verpackung_id'] ?? '', 'Dose/Glas/Beutel, der das Produkt direkt hält') ?>
-    <div class="bx-field"><label>Einheiten je Packung <?= bx_hint('z. B. 120 Kapseln je Dose') ?></label><input type="number" name="einheiten_pro_packung" id="einheiten" value="<?= $v('einheiten_pro_packung') ?>"></div>
+    <?php
+      // Label/Hinweis formabhängig: bei Flüssig/Öl/Gel ist die Zahl der INHALT (ml), bei Pulver/Granulat die
+      // Füllmenge (g), bei Tablette/Kapsel die Stückzahl. recalc() unten schaltet #einhLabel beim Rezepturwechsel um.
+      $epF = strtolower((string)$pForm);
+      if (in_array($epF, ['fluessig','oel','gel'], true))   { $epLbl = 'Inhalt je Packung (ml)'; $epHint = 'z. B. 8 ml je Flasche'; }
+      elseif (in_array($epF, ['pulver','granulat'], true))  { $epLbl = 'Füllmenge je Packung (g)'; $epHint = 'z. B. 250 g je Dose'; }
+      elseif ($epF === 'tablette')                          { $epLbl = 'Tabletten je Packung'; $epHint = 'z. B. 60 Tabletten je Dose'; }
+      else                                                  { $epLbl = 'Einheiten je Packung'; $epHint = 'z. B. 120 Kapseln je Dose'; }
+    ?>
+    <div class="bx-field"><label><span id="einhLabel"><?= h($epLbl) ?></span> <?= bx_hint($epHint) ?></label><input type="number" name="einheiten_pro_packung" id="einheiten" value="<?= $v('einheiten_pro_packung') ?>"></div>
     <div class="bx-field"><label>Verzehr je Tag <?= bx_hint('Empfehlung – Basis für % NRV pro Tag und Reichweite') ?></label><input type="number" step="0.5" name="einnahme_pro_tag" id="intake" value="<?= $v('einnahme_pro_tag') ?>"></div>
   </div>
   <div class="bx-grid">
@@ -684,6 +693,11 @@ function verpCheck(rz, vp, einh, kV, vh){
 
 function recalc(){
   var rz = REZEPTE[document.getElementById('rezeptur').value];
+  // "Einheiten je Packung"-Label an die Darreichungsform der gewählten Rezeptur anpassen (ml/g/Stück).
+  (function(){ var lbl=document.getElementById('einhLabel'); if(!lbl) return; var f=rz?rz.form:'';
+    lbl.textContent = (f==='fluessig'||f==='oel'||f==='gel') ? 'Inhalt je Packung (ml)'
+      : ((f==='pulver'||f==='granulat') ? 'Füllmenge je Packung (g)'
+      : (f==='tablette' ? 'Tabletten je Packung' : 'Einheiten je Packung')); })();
   var vp = getVerp('verpackung_id');
   var einh = parseFloat((document.getElementById('einheiten').value||'').replace(',','.'))||0;
   var intake = parseFloat((document.getElementById('intake').value||'').replace(',','.'))||0;
