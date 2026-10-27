@@ -20,6 +20,8 @@ Unter dem Status steht das Panel **Ablauf** (`core/bestellung_ui.php`) – dasse
 
 **Positionen (Tabelle, live):** Artikel-Auswahl (Rohstoff/Verpackung/Verbrauch) + Menge + **EK/Einheit** (wird beim Wählen aus dem Artikel vorbefüllt) → Summe je Zeile und Gesamt.
 
+**Bulk-Zukauf – eine Zeile je Produkt:** Das Panel „Bulk-Zukauf (Fremdproduktion)" fasst die Bulk-Positionen desselben Produkts („Bulk: X (AB-…)" je Auftrag + die alte separate Puffer-/Lager-Zeile „Bulk: X") zur **Gesamtmenge je Produkt** zusammen. Gilt auch für Alt-Bestellungen (reine Anzeige-Gruppierung; die einzelnen Positionen bleiben in der DB mit Auftragsbezug für den Wareneingang). Dieselbe Zusammenfassung zeigen Lieferantenportal (`module/lieferant/bestellung.php`) und PDF (`core/pdf_bestellung.php`).
+
 **Zusammenhang:** schließt die Beschaffungsseite – Bestellung → Lieferung → Bestand im Warenlager. Die Bestellungen erscheinen auch im **Lieferanten-Cockpit** (Einkauf gesamt + Reiter Bestellungen).
 
 **Auftragsbezug (Baustein 4):** Je Bestellposition kann ein **offener Kundenauftrag** gewählt werden („Für Auftrag", sonst „Lager / allgemein"). Gespeichert in `bestellung_position.auftrag_id`. Beim Wareneingang (`bestellung_wareneingang()`) erbt die erzeugte **Charge** diesen Auftragsbezug (`charge.auftrag_id` + `charge.bestellung_position_id`). So weiß das System, wofür welche Ware gekommen ist – Grundlage für „Wareneingänge für diesen Auftrag" (Produktion/Cockpit) und später die automatische Produktionsweg-Ableitung.

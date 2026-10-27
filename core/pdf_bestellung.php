@@ -11,7 +11,9 @@ function bestellung_pdf_bauen(int $bestellung_id): ?string {
     if (!$lf) return null;                                  // ohne Empfaenger kein Beleg
 
     // Positionen: Lagerartikel mit Namen, Freitext-Zeilen (item_id NULL) mit ihrer Bezeichnung.
-    $positionen = [];
+    // Bulk-Positionen desselben Produkts („Bulk: X (AB-..)" + alte Puffer-Zeile „Bulk: X") werden zu EINER
+    // Zeile je Produkt mit Gesamtmenge zusammengefasst – wie in der Portal- und der internen Ansicht.
+    $positionen = []; $bulkIdx = [];
     foreach (all("SELECT bp.*, i.name AS item_name, i.artikelnummer,
                          COALESCE(i.rezeptur_id, au.rezeptur_id, pr.rezeptur_id) AS rezeptur_id
                   FROM bestellung_position bp
@@ -19,9 +21,16 @@ function bestellung_pdf_bauen(int $bestellung_id): ?string {
                   LEFT JOIN auftrag au ON au.id = bp.auftrag_id
                   LEFT JOIN produkt pr ON pr.id = au.produkt_id
                   WHERE bp.bestellung_id=? ORDER BY bp.sort, bp.id", [$bestellung_id]) as $p) {
+        $istBulk = empty($p['item_id']) && strncmp((string)($p['bezeichnung'] ?? ''), 'Bulk', 4) === 0;
         $bez = (string)($p['item_name'] ?? '') !== '' ? (string)$p['item_name'] : (string)($p['bezeichnung'] ?? 'Position');
+        if ($istBulk) $bez = trim(preg_replace('/\s*\(.*$/', '', preg_replace('/^Bulk:\s*/', '', (string)$p['bezeichnung']))) ?: 'Bulk';
         // ek_preis-Snapshot, sonst bekannter Lieferantenpreis (Bulk/Fremdfertigung) – wie in der Portal-Ansicht.
         $ekEff = bestellposition_ek($p, (int)$b['lieferant_id']);
+        if ($istBulk) {
+            $key = mb_strtolower($bez);
+            if (isset($bulkIdx[$key])) { $positionen[$bulkIdx[$key]]['menge'] += (float)$p['menge']; continue; }
+            $bulkIdx[$key] = count($positionen);
+        }
         $positionen[] = [
             'artikelnr'   => (string)($p['artikelnummer'] ?? ''),
             'bezeichnung' => $bez,

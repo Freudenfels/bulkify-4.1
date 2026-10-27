@@ -95,6 +95,23 @@ if (!$b):
                 LEFT JOIN rezeptur rz2 ON rz2.id = au.rezeptur_id
                 LEFT JOIN rezeptur rz3 ON rz3.id = pr.rezeptur_id
                 WHERE bp.bestellung_id=? ORDER BY bp.sort, bp.id", [$id]);
+    // Je Produkt EINE Zeile: Bulk-Positionen desselben Produkts („Bulk: X (AB-..)" + alte Puffer-Zeile „Bulk: X")
+    // zur Gesamtmenge zusammenfassen – der Lieferant braucht nur Produkt + Gesamtmenge, nicht den internen
+    // Auftrags-Split. Normale Artikel-Positionen (item_id gesetzt) bleiben einzeln.
+    $posView = [];
+    foreach ($pos as $p) {
+        $istBulk = empty($p['item_id']) && strncmp((string)($p['bezeichnung'] ?? ''), 'Bulk', 4) === 0;
+        if ($istBulk) {
+            $name = trim(preg_replace('/\s*\(.*$/', '', preg_replace('/^Bulk:\s*/', '', (string)$p['bezeichnung'])));
+            if ($name === '') $name = 'Bulk';
+            $key = 'bulk:' . mb_strtolower($name);
+            if (!isset($posView[$key])) { $posView[$key] = $p; $posView[$key]['bezeichnung'] = $name; }
+            else $posView[$key]['menge'] = (float)$posView[$key]['menge'] + (float)$p['menge'];
+        } else {
+            $posView['pos:' . (int)$p['id']] = $p;
+        }
+    }
+    $posView = array_values($posView);
     // Preise in der Währung DES LIEFERANTEN (USD/EUR/CNY) – Stückpreis mit 4 Nachkommastellen (Sub-Cent).
     $waehrung = (string) scalar("SELECT waehrung FROM lieferanten WHERE id=?", [$lid]) ?: 'EUR';
     $sym = ['EUR'=>'€', 'USD'=>'$', 'CNY'=>'¥'][$waehrung] ?? $waehrung;
@@ -117,7 +134,7 @@ if (!$b):
     <?php else: ?>
     <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
       <thead><tr><th><?= h(lp_t('artikel')) ?></th><th class="bx-num"><?= h(lp_t('menge')) ?></th><th><?= h(lp_t('einheit')) ?></th><th class="bx-num"><?= h(lp_t('preis')) ?></th><th class="bx-num"><?= h(lp_t('summe')) ?></th></tr></thead>
-      <tbody><?php foreach ($pos as $p): ?>
+      <tbody><?php foreach ($posView as $p): ?>
         <tr><td><?= h(($p['item_name'] ?? '') !== '' ? $p['item_name'] : ($p['bezeichnung'] ?? '–')) ?>
               <?= $p['artikelnummer'] ? '<div class="muted" style="font-size:12px">' . h($p['artikelnummer']) . '</div>' : '' ?>
               <?php if (!empty($p['rezeptur_id'])): ?><div style="margin-top:4px;font-size:13px"><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?>: <strong><?= h(trim((string)($p['rez_nr'] ?? '') . ' ' . (string)($p['rez_name'] ?? ''))) ?: ('#' . (int)$p['rezeptur_id']) ?></strong> <a class="btn btn-ghost btn-sm" style="margin-left:6px" href="?p=lieferant_rezeptur&id=<?= (int)$p['rezeptur_id'] ?>"><?= h(lp_t('rez_ansehen')) ?></a></div><?php endif; ?></td>

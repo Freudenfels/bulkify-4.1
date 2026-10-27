@@ -281,10 +281,21 @@ if (!$neu) {
         echo '</div>';
     }
     if ($bulkPositionen) {
+        // Je Produkt EINE Zeile: Auftrags-Zeilen „Bulk: X (AB-..)" und die alte separate Puffer-/Lager-Zeile
+        // „Bulk: X" desselben Produkts werden zur Gesamtmenge zusammengefasst (gilt auch für Altbestellungen).
+        // Die einzelnen Positionen bleiben in der DB erhalten (Auftragsbezug für den Wareneingang).
+        $bulkGrp = [];
+        foreach ($bulkPositionen as $bp) {
+            $name = trim(preg_replace('/\s*\(.*$/', '', preg_replace('/^Bulk:\s*/', '', (string)($bp['bezeichnung'] ?: 'Bulk'))));
+            if ($name === '') $name = 'Bulk';
+            $key = mb_strtolower($name);
+            if (!isset($bulkGrp[$key])) $bulkGrp[$key] = ['name'=>$name, 'menge'=>0.0, 'einheit'=>(string)$bp['einheit']];
+            $bulkGrp[$key]['menge'] += (float)$bp['menge'];
+        }
         echo '<div class="bx-panel"><h2 style="margin-top:0">Bulk-Zukauf (Fremdproduktion)</h2>';
         echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Position</th><th class="bx-num">Menge</th></tr></thead><tbody>';
-        foreach ($bulkPositionen as $bp) echo '<tr><td>' . h($bp['bezeichnung'] ?: 'Bulk') . '</td><td class="bx-num">' . rtrim(rtrim(number_format((float)$bp['menge'],3,',','.'),'0'),',') . ' ' . h($bp['einheit']) . '</td></tr>';
-        echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Zugekaufter Bulk (fertige Kapseln/Tabletten/Pulver). Beim Wareneingang als Fertigware-Charge auf den Auftrag buchen.</p></div>';
+        foreach ($bulkGrp as $g) echo '<tr><td>' . h($g['name']) . '</td><td class="bx-num">' . rtrim(rtrim(number_format((float)$g['menge'],3,',','.'),'0'),',') . ' ' . h($g['einheit']) . '</td></tr>';
+        echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Zugekaufter Bulk (fertige Kapseln/Tabletten/Pulver) – Gesamtmenge je Produkt. Beim Wareneingang als Fertigware-Charge auf den Auftrag buchen.</p></div>';
     }
     // Etiketten dieser Bestellung: Druckdatei zum Herunterladen (für den Lieferanten/die Druckerei) + Maße + Produkt.
     $etikettPos = all("SELECT bp.auftrag_id, i.name FROM bestellung_position bp
