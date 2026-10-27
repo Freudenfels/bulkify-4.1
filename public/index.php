@@ -167,6 +167,7 @@ $routes = [
     'v3_dok_import'      => 'system/v3_dok_import.php',      // TEMPORÄR: v3-Dokumente (Dateien) nach v4 uebernehmen
     'testdaten'          => 'system/testdaten.php',         // Testdaten: Produktions-Durchspiel-Set anlegen/loeschen (online, Marker-isoliert) + Lager fuellen (lokal)
     'labor_bereinigung'  => 'system/labor_bereinigung.php', // Einmal-Bereinigung: Laboranalyse-Altlasten (Alt-Upsell) auf Auftrag buchen + Alt-Angebot zurueckziehen
+    'dl_split_bereinigung' => 'system/dl_split_bereinigung.php', // Einmal-Bereinigung: faelschlich gesplittete Material-DL-Auftraege (Beutel/Glas/Etikett) entfernen
     'anfragen'           => 'anfrage/liste.php',
     'anfrage'            => 'anfrage/detail.php',
     'portal_anfragen'    => 'intern/portal_anfragen.php',
