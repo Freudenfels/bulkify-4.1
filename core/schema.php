@@ -7227,6 +7227,67 @@ function bestellposition_ek(array $pos, int $lieferant_id): float {
     return 0.0;
 }
 
+// Eine gebündelte Bestellung in Einzelbestellungen aufteilen: je Bulk-PRODUKT ein eigener Beleg, alle Nicht-Bulk-
+// Positionen (Rohstoffe/Verpackung/frei) in einen Sammelbeleg. Preis wird je Position als Snapshot gesichert
+// (bestellposition_ek). Das Original wird storniert; der Lieferant wird per Nachricht/Mail informiert. Die neuen
+// Belege stehen auf 'gesendet' (warten auf erneute Bestätigung). Blockiert bei (teil)gelieferter Bestellung.
+function bestellung_aufteilen(int $bestellung_id, string $wer = ''): array {
+    $b = one("SELECT * FROM bestellung WHERE id=?", [$bestellung_id]);
+    if (!$b) return ['ok'=>false, 'msg'=>'Bestellung nicht gefunden.'];
+    if (($b['status'] ?? '') === 'storniert') return ['ok'=>false, 'msg'=>'Bestellung ist storniert.'];
+    if (($b['status'] ?? '') === 'geliefert' || !empty($b['angekommen_am'])) return ['ok'=>false, 'msg'=>'Bestellung ist bereits (teil)geliefert – Aufteilen nicht möglich.'];
+    $lief = (int)($b['lieferant_id'] ?? 0);
+    $pos = all("SELECT bp.*, COALESCE(i.rezeptur_id, au.rezeptur_id, pr.rezeptur_id) AS rezeptur_id
+                FROM bestellung_position bp
+                LEFT JOIN item i     ON i.id = bp.item_id
+                LEFT JOIN auftrag au ON au.id = bp.auftrag_id
+                LEFT JOIN produkt pr ON pr.id = au.produkt_id
+                WHERE bp.bestellung_id=? ORDER BY bp.sort, bp.id", [$bestellung_id]);
+    if (!$pos) return ['ok'=>false, 'msg'=>'Die Bestellung hat keine Positionen.'];
+    // Gruppieren: Bulk je Produkt (Name aus „Bulk: <Name> (…)"); Nicht-Bulk -> eine Sammelgruppe „rest".
+    $groups = [];
+    foreach ($pos as $p) {
+        $istBulk = empty($p['item_id']) && strncmp((string)($p['bezeichnung'] ?? ''), 'Bulk', 4) === 0;
+        if ($istBulk) {
+            $name = preg_replace('/\s*\(.*$/', '', preg_replace('/^Bulk:\s*/', '', (string)$p['bezeichnung']));
+            $key = 'bulk:' . mb_strtolower(trim((string)$name));
+        } else {
+            $key = 'rest';
+        }
+        $groups[$key][] = $p;
+    }
+    if (count($groups) <= 1) return ['ok'=>false, 'msg'=>'Die Bestellung enthält nur ein Produkt – nichts aufzuteilen.'];
+    $wer = trim($wer) ?: 'Team';
+    $neu = [];
+    foreach ($groups as $gpos) {
+        q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum,bestellart) VALUES (?,?,?,?,?,?)",
+          [naechste_nummer('BE'), $lief ?: null, 'gesendet', 'Aus Aufteilung von ' . (string)$b['nummer'], $b['bestelldatum'] ?? null, 'lieferant']);
+        $nb = (int) insert_id();
+        $srt = 0;
+        foreach ($gpos as $p) {
+            q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
+              [$nb, $p['item_id'] ?: null, $p['bezeichnung'] ?? null, (float)$p['menge'], bestellposition_ek($p, $lief), $p['einheit'] ?? null, $p['auftrag_id'] ?: null, $srt++]);
+        }
+        $nnr = (string) scalar("SELECT nummer FROM bestellung WHERE id=?", [$nb]);
+        $neu[] = $nnr;
+        foreach (array_unique(array_filter(array_map(fn($p) => (int)($p['auftrag_id'] ?? 0), $gpos))) as $aid)
+            if ($aid) log_aktivitaet('auftrag', $aid, 'team', 'Bestellung ' . (string)$b['nummer'] . ' aufgeteilt -> ' . $nnr . '.', 'bestellung', 'bestellung', $nb);
+    }
+    q("UPDATE bestellung SET status='storniert', notiz=CONCAT(COALESCE(notiz,''), ' | Aufgeteilt in: ', ?, ' – ', ?) WHERE id=?", [implode(', ', $neu), $wer, $bestellung_id]);
+    $mail = 0;
+    if ($lief) {
+        require_once __DIR__ . '/nachricht.php';
+        nachricht_senden($lief, 'team', $wer,
+            'Hinweis: Bestellung ' . (string)$b['nummer'] . ' wurde in Einzelbestellungen je Produkt aufgeteilt: ' . implode(', ', $neu)
+            . '. Bitte diese einzeln bestätigen – die ursprüngliche Bestellung ' . (string)$b['nummer'] . ' ist damit storniert.',
+            'bestellung', $bestellung_id);
+        if (function_exists('mail_bereit') && mail_bereit()) $mail = 1;
+    }
+    bedarf_bump();
+    return ['ok'=>true, 'neu'=>$neu, 'mail'=>$mail,
+            'msg'=>'In ' . count($neu) . ' Einzelbestellung(en) aufgeteilt: ' . implode(', ', $neu) . '. Original ' . (string)$b['nummer'] . ' storniert' . ($mail ? ', Lieferant informiert' : '') . '.'];
+}
+
 function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int $lieferant, ?string $datum, array $freiIds = [], array $bulkMenge = []): int {
     $itemPositionen = array_values(array_filter($itemPositionen, fn($p) => (int)($p['item_id'] ?? 0) > 0 && (float)($p['menge'] ?? 0) > 0));
     $bulkProduktIds = array_values(array_filter(array_map('intval', $bulkProduktIds)));

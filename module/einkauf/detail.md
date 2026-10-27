@@ -1,5 +1,8 @@
 # einkauf/detail.php – Bestellung anlegen & bearbeiten
 
+## In Einzelbestellungen aufteilen
+Aktion `aufteilen` (`bestellung_aufteilen()` in `core/schema.php`): räumt **Alt-Bündel** auf, in denen mehrere Bulk-Produkte in einer Bestellung stecken. Erzeugt **je Bulk-Produkt eine eigene Bestellung** (Nicht-Bulk-Positionen in einen Sammelbeleg), sichert den Preis je Position als Snapshot (`bestellposition_ek`), **storniert** das Original und **informiert den Lieferanten** (Portal-Chat + Mail). Die neuen Belege stehen auf `gesendet` (warten auf erneute Bestätigung) – auch wenn das Original schon bestätigt war. Button erscheint im Status-Panel nur bei **≥ 2 verschiedenen Bulk-Produkten** und solange nichts geliefert/angekommen ist. Neu angelegte Bestellungen sind durch die geänderte Einkaufs-Logik ohnehin schon je Produkt getrennt – das Tool ist für Altbestand.
+
 ## Online-Einkauf
 Ist die Bestellung über **„Online bestellt"** entstanden (`bestellart='online'`, ohne Lieferant), steht direkt unter dem Status ein Panel **Online-Einkauf** mit Karten **Händler/Quelle · Zahlungsart · Preis (gesamt)** (`online_haendler/_zahlart/_preis/_waehrung`). Read-only – erfasst beim Bestellen in der Einkaufsliste, dient der Buchhaltung zum Gegenrechnen. „Wareneingang buchen" funktioniert wie bei jeder Bestellung (so werden z. B. gelieferte Etiketten eingebucht).
 

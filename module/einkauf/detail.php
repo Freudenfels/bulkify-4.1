@@ -59,6 +59,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: ?p=bestellung&id=' . $id); exit;
     }
+    // Bestellung in Einzelbestellungen je Produkt aufteilen (Alt-Bündel aufräumen). Lieferant wird informiert.
+    if ($aktion === 'aufteilen' && !$neu) {
+        $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
+        $res = bestellung_aufteilen((int)$id, $wer);
+        if (!empty($res['ok']) && !empty($res['neu'])) {
+            // Auf die erste neue Bestellung springen; alte ist storniert.
+            $erste = (int) scalar("SELECT id FROM bestellung WHERE nummer=?", [(string)$res['neu'][0]]);
+            header('Location: ?p=bestellung&id=' . ($erste ?: $id) . '&aufg=' . rawurlencode($res['msg'])); exit;
+        }
+        header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode($res['msg'] ?? 'Aufteilen nicht möglich.')); exit;
+    }
     // KI-Erfassung: Lieferanten-Dokument (PDF/Foto/Tabelle) auslesen -> Positionen vorbelegen.
     if ($aktion === 'ki_lesen' && $neu) {
         if (!ki_bereit()) { header('Location: ?p=bestellung&id=neu&fehler=' . urlencode('KI ist nicht eingerichtet (nur auf beta).')); exit; }
@@ -173,6 +184,7 @@ bx_head($neu ? 'Neue Bestellung' : $v('nummer'), $neu ? 'Beim Lieferanten bestel
 if (isset($_GET['ok']))        echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['geliefert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Als geliefert verbucht – Chargen im Wareneingang (Quarantäne) angelegt.</div>';
 if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
+if (isset($_GET['aufg']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['aufg']) . '</div>';
 ?>
 <?php if ($neu && ki_bereit()): ?>
 <div class="bx-panel" style="border-color:var(--gruen)">
@@ -212,6 +224,11 @@ if (!$neu) {
     if ($b['status'] === 'bestellt' && $posGesamt > 0 && empty($b['angekommen_am'])) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung zurückziehen und löschen? Der Bedarf erscheint wieder unter „Zu bestellen“.\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Bestellung ist noch nicht angekommen – zurückziehen und löschen (Bedarf kommt zurück)">Bestellung zurückziehen</button></form> ';
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form>';
     if ($b['status'] === 'bestellt') echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="liefern"><button class="btn btn-primary btn-sm" type="submit">Wareneingang buchen</button></form>';
+    // Aufteilen: nur bei >= 2 verschiedenen Bulk-Produkten und solange nicht geliefert/storniert.
+    $bulkProdGrp = (int) scalar("SELECT COUNT(DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING(bezeichnung,7),' (',1)))
+                                 FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL AND bezeichnung LIKE 'Bulk%'", [(int)$id]);
+    if ($bulkProdGrp >= 2 && !in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']))
+        echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese Bestellung in ' . (int)$bulkProdGrp . ' Einzelbestellungen je Produkt aufteilen? Die alte wird storniert und der Lieferant informiert.\');"><input type="hidden" name="aktion" value="aufteilen"><button class="btn btn-ghost btn-sm" type="submit" title="Je Produkt eine eigene Bestellung – der Lieferant kann jedes Produkt einzeln annehmen/ablehnen">In Einzelbestellungen aufteilen</button></form>';
     echo '</div></div></div>';
 
     // Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Zahlart/Preis – fürs Gegenrechnen.
