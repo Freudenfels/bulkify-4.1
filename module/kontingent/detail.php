@@ -52,10 +52,19 @@ bx_head('Jahresvertrag', ($kunde['firma'] ?? '–') . ' · ' . (($prod['kundenna
   <?php if (!$prod): ?>
     <div class="muted">Kein Produkt verknüpft.</div>
   <?php else:
+      // Füllmenge/Einheit je Packung formabhängig beschriften: bei Flüssig/Öl/Gel ist die Zahl der INHALT in ml,
+      // bei Pulver/Granulat die Füllmenge in g, bei Kapsel/Tablette die Stückzahl – sonst generisch „Stk".
+      $formK = strtolower((string)($rez['darreichungsform'] ?? ''));
+      $epVal = (int)($prod['einheiten_pro_packung'] ?? 0);
+      if (in_array($formK, ['fluessig','oel','gel'], true))      { $epLabel = 'Inhalt je Packung';   $epUnit = 'ml'; }
+      elseif (in_array($formK, ['pulver','granulat'], true))     { $epLabel = 'Füllmenge je Packung'; $epUnit = 'g'; }
+      elseif (in_array($formK, ['kapsel','softgel'], true))      { $epLabel = 'Kapseln je Packung';   $epUnit = 'Kapseln'; }
+      elseif ($formK === 'tablette')                             { $epLabel = 'Tabletten je Packung'; $epUnit = 'Tabletten'; }
+      else                                                        { $epLabel = 'Stück je Packung';     $epUnit = 'Stk'; }
       $zeilen = [
           ['Rezeptur', $rez ? h(($rez['nummer'] ?? '') . ' · ' . ($rez['name'] ?? '')) . ' <a href="?p=rezeptur_detail&id=' . (int)$rez['id'] . '" class="muted" style="font-size:12px">ansehen</a>' : '<span class="muted">–</span>'],
           ['Darreichungsform', $rez && $rez['darreichungsform'] ? h(ucfirst((string)$rez['darreichungsform'])) : '<span class="muted">–</span>'],
-          ['Stück je Packung', (int)($prod['einheiten_pro_packung'] ?? 0) > 0 ? (int)$prod['einheiten_pro_packung'] . ' Stück' : '<span class="muted">–</span>'],
+          [$epLabel, $epVal > 0 ? $epVal . ' ' . $epUnit : '<span class="muted">–</span>'],
           ['Verpackung (Gebinde)', $itemName($prod['verpackung_id'] ?? null) !== '' ? h($itemName((int)$prod['verpackung_id'])) : '<span class="muted">– nicht hinterlegt</span>'],
           ['Verschluss', $itemName($prod['verschluss_id'] ?? null) !== '' ? h($itemName((int)$prod['verschluss_id'])) : '<span class="muted">–</span>'],
           ['Etikett', $itemName($prod['etikett_id'] ?? null) !== '' ? h($itemName((int)$prod['etikett_id'])) : '<span class="muted">– nicht hinterlegt</span>'],
