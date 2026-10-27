@@ -90,6 +90,28 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     q("UPDATE produktionsauftrag SET geplant_am=? WHERE id=?", [trim($_POST['geplant_am'] ?? '') ?: null, $id]);
     header('Location: ?p=produktionsauftrag&id=' . $id); exit;
 }
+// Menge am Produktionsauftrag mit dem Auftrag abgleichen (nur Admin). Fix für PAs, deren Menge nach einer
+// Auftrags-/Angebotsänderung veraltet ist (PA wurde früher mit höherer/niedrigerer Menge angelegt, die
+// Änderung lief auf Angebot+Auftrag, nicht auf den schon existierenden PA -> Bedarf rechnet mit falscher Zahl).
+// Übernimmt menge/stueck/verpackung_id vom verknüpften Auftrag; eine geplante Überproduktion (menge_produktion)
+// bleibt erhalten. Nur sinnvoll, solange noch nichts eingebucht wurde.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'menge_abgleich' && has_role('admin')) {
+    $a = one("SELECT menge, stueck, verpackung_id FROM auftrag WHERE id=(SELECT auftrag_id FROM produktionsauftrag WHERE id=?)", [$id]);
+    if ($a) {
+        $altMenge = (int) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$id]);
+        $neuMenge = (int)$a['menge'];
+        q("UPDATE produktionsauftrag SET menge=?, stueck=?, verpackung_id=? WHERE id=?",
+          [$neuMenge, (int)($a['stueck'] ?? 0) ?: null, $a['verpackung_id'] ?: null, $id]);
+        if (function_exists('bedarf_bump')) bedarf_bump();   // Rohstoff-/Einkaufsbedarf neu rechnen
+        $paA = one("SELECT nummer, kunde_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$id]);
+        if ($paA && $paA['kunde_id']) log_aktivitaet('kunde', (int)$paA['kunde_id'], 'team',
+            'Produktionsmenge ' . (string)$paA['nummer'] . ' an den Auftrag angeglichen: ' .
+            number_format($altMenge, 0, ',', '.') . ' -> ' . number_format($neuMenge, 0, ',', '.') . ' Packungen.',
+            'auftrag', 'auftrag', (int)($paA['auftrag_id'] ?? 0));
+        header('Location: ?p=produktionsauftrag&id=' . $id . '&mengeok=1'); exit;
+    }
+    header('Location: ?p=produktionsauftrag&id=' . $id . '&mengefehler=1'); exit;
+}
 // Produktionsweg umstellen (verkürzt bei Zukauf / voll)
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['weg_zukauf', 'weg_voll'], true)) {
     $fremd = ($_POST['aktion'] === 'weg_zukauf');
@@ -100,7 +122,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?
 
 $pa = $id ? one("SELECT pa.*, COALESCE(k.firma, ak.firma) AS kunde_firma,
                         COALESCE(NULLIF(pa.kunde_id,0), a.kunde_id) AS kunde_id_eff,
-                        p.name AS produkt_name, a.nummer AS auftrag_nr,
+                        p.name AS produkt_name, a.nummer AS auftrag_nr, a.menge AS auftrag_menge, a.status AS auftrag_status,
                         a.produkt_bezeichnung AS auftrag_produkt_bez, a.produkt_form AS auftrag_produkt_form,
                         rz.name AS rezeptur_name, rz.darreichungsform AS rezeptur_form
                  FROM produktionsauftrag pa
@@ -206,6 +228,31 @@ if (isset($_GET['teil'])) echo '<div class="bx-panel badge-ok" style="padding:12
 if (isset($_GET['teilfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Teilmenge nicht gebucht: ' . h((string)$_GET['teilfehler']) . '</div>';
 if (isset($_GET['godstufe'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">God-Mode: Produktion auf Stufe „' . h((string)$_GET['godstufe']) . '" gesetzt – Gate übersprungen, ohne Bestandsbuchung.</div>';
 if (isset($_GET['godfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">God-Mode: ' . h((string)$_GET['godfehler']) . '</div>';
+if (isset($_GET['mengeok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produktionsmenge an den Auftrag angeglichen – der Materialbedarf ist jetzt neu berechnet.</div>';
+if (isset($_GET['mengefehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Abgleich nicht möglich – zu diesem Produktionsauftrag ist kein Auftrag verknüpft.</div>';
+
+// Warnung: PA-Menge weicht vom verknüpften Auftrag ab (z. B. Auftrag/Angebot nachträglich geändert). Der
+// Bedarf rechnet mit der PA-Menge – läuft sie auseinander, stimmt der Rohstoffbedarf nicht. Nur Admin, nur
+// wenn ein Auftrag verknüpft ist und er nicht storniert wurde. Überproduktion (menge_produktion) ist separat.
+if (has_role('admin') && !empty($pa['auftrag_id']) && ($pa['auftrag_status'] ?? '') !== 'storniert'
+    && (int)($pa['auftrag_menge'] ?? 0) > 0 && (int)$pa['menge'] !== (int)$pa['auftrag_menge']):
+    $faktor = (int)$pa['auftrag_menge'] > 0 ? (float)$pa['menge'] / (float)$pa['auftrag_menge'] : 0; ?>
+  <div class="bx-panel" style="border-left:3px solid var(--warn)">
+    <div style="font-weight:600">Menge weicht vom Auftrag ab</div>
+    <div class="muted" style="font-size:13px;margin:4px 0 10px">Dieser Produktionsauftrag steht auf
+      <strong><?= number_format((int)$pa['menge'], 0, ',', '.') ?></strong> Packungen, der verknüpfte Auftrag
+      <a href="?p=auftrag&id=<?= (int)$pa['auftrag_id'] ?>"><?= h((string)$pa['auftrag_nr']) ?></a> auf
+      <strong><?= number_format((int)$pa['auftrag_menge'], 0, ',', '.') ?></strong><?php if ($faktor > 0 && abs($faktor - 1) > 0.001): ?>
+      <span class="muted">(Faktor <?= rtrim(rtrim(number_format($faktor, 2, ',', '.'), '0'), ',') ?>&times;)</span><?php endif; ?>.
+      Der Material-/Rohstoffbedarf rechnet mit der Menge dieses Produktionsauftrags – deshalb kann er zu hoch
+      oder zu niedrig sein. Meist entsteht das, wenn Auftrag/Angebot nach dem Anlegen des Produktionsauftrags
+      geändert wurden. Eine geplante Überproduktion bleibt beim Abgleich erhalten.</div>
+    <form method="post" style="margin:0" onsubmit="return confirm('Produktionsmenge von <?= number_format((int)$pa['menge'],0,'.','.') ?> auf <?= number_format((int)$pa['auftrag_menge'],0,'.','.') ?> Packungen setzen (an den Auftrag angleichen)?');">
+      <input type="hidden" name="aktion" value="menge_abgleich">
+      <button class="btn btn-primary btn-sm" type="submit">Menge an Auftrag angleichen (<?= number_format((int)$pa['auftrag_menge'], 0, ',', '.') ?> Packungen)</button>
+    </form>
+  </div>
+<?php endif;
 // God-Mode (nur Admin): Produktion auf eine Stufe setzen – Gate überspringen, ohne Bestandsprüfung/-buchung.
 if (has_role('admin')):
     $godSchritte = all("SELECT id, station, erledigt FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$id]);
