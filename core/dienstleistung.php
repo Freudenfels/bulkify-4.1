@@ -498,9 +498,12 @@ function dl_rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
 // DL-Auftraege (Liste) + ein Auftrag mit Rechnungsinfo.
 function dl_auftraege_alle(): array {
     return all("SELECT a.*, k.firma AS kunde_firma, ang.nummer AS angebot_nummer,
+                   dl.name AS dl_name, ap.bezeichnung AS pos_bezeichnung, ap.beschreibung AS pos_beschreibung,
                    (SELECT id FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='rechnung' AND b.status<>'storniert' LIMIT 1) AS rechnung_id,
                    (SELECT nummer FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='rechnung' AND b.status<>'storniert' LIMIT 1) AS rechnung_nummer
                 FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN angebot ang ON ang.id=a.angebot_id
+                LEFT JOIN dienstleistung dl ON dl.id=a.dienstleistung_id
+                LEFT JOIN angebot_position ap ON ap.id=a.angebot_position_id
                 WHERE a.kategorie='dienstleistung'
                 ORDER BY a.angelegt DESC, a.id DESC");
 }

@@ -17,12 +17,16 @@ dl_subtabs('dl_auftraege');
   <?php if (!$rows): ?><div class="muted">Noch keine Dienstleistungs-Aufträge. Entstehen aus einem bestätigten DL-Angebot.</div>
   <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Nummer</th><th>Kunde</th><th>aus Angebot</th><th class="bx-num">Netto</th><th>Status</th><th>Rechnung</th></tr></thead>
+    <thead><tr><th>Nummer</th><th>Kunde</th><th>Leistung</th><th>aus Angebot</th><th class="bx-num">Netto</th><th>Status</th><th>Rechnung</th></tr></thead>
     <tbody>
-    <?php foreach ($rows as $r): ?>
+    <?php foreach ($rows as $r):
+        $leistung = trim((string)($r['pos_bezeichnung'] ?? '')) !== '' ? (string)$r['pos_bezeichnung'] : (string)($r['dl_name'] ?? '');
+        $kontext  = trim((string)($r['pos_beschreibung'] ?? ''));
+    ?>
       <tr style="cursor:pointer" onclick="location.href='?p=dl_auftrag&id=<?= (int)$r['id'] ?>'">
         <td><strong><?= h($r['nummer'] ?: '–') ?></strong></td>
         <td><?= kunde_link($r['kunde_id'] ?? null, $r['kunde_firma']) ?></td>
+        <td style="max-width:320px"><?= $leistung !== '' ? h($leistung) : '<span class="muted">–</span>' ?><?= $kontext !== '' ? '<div class="muted" style="font-size:12px;white-space:normal">' . h(mb_substr(preg_replace('/\s+/', ' ', $kontext), 0, 90)) . '</div>' : '' ?></td>
         <td class="muted"><?= h($r['angebot_nummer'] ?: '–') ?></td>
         <td class="bx-num"><?= number_format((float)$r['gesamt_netto'],2,',','.') ?> €</td>
         <td><?= $statusBadge($r['status']) ?></td>
