@@ -222,7 +222,9 @@ Admin-Reiter `?p=alt_rechnungen` (originale Rechnungen alter Aufträge). Siehe `
 
 **Status-Icon (einheitlich):** Jeder Verlaufs-Schritt – Haupt- wie Parallel-Schritt – zeigt denselben Status: **abgeschlossen = Haken** (`&#10003;`), **läuft/aktuell = Sanduhr** (sauberes Inline-SVG, kein Emoji), **geplant/offen = leer** bzw. leerer Kreis. Zentraler Helfer `$statusIcon($state)` + `$hourglassSvg` (oben in `kunde.php`). So ist der aktuell laufende Hauptschritt (Sanduhr) sofort vom erledigten (Haken) unterscheidbar.
 
-**Bestelldetail – Rezeptur (2026-10-27):** Bei Produkt-Bestellungen zeigt das Detail (`view=bestellung`) ein Panel **„Rezeptur"** mit der Zusammensetzung je Einheit (effektive Rezeptur aus `auftrag.rezeptur_id`, sonst Produkt-Rezeptur): Bestandteil + mg je Einheit + Gesamt (bei Pulver „je Portion", Gesamt zusätzlich in g). So sieht der Kunde, was in seinem Produkt steckt. Der „Produziert X/Y"-Fortschritt in den Bestelldetails bleibt; einen echten **Teilversand** gibt es in v4 (noch) nicht – Versand ist je Auftrag ganz (Status versandbereit → versendet).
+**Bestelldetail – Rezeptur (2026-10-27):** Bei Produkt-Bestellungen zeigt das Detail (`view=bestellung`) ein Panel **„Rezeptur"** mit der Zusammensetzung je Einheit (effektive Rezeptur aus `auftrag.rezeptur_id`, sonst Produkt-Rezeptur): Bestandteil + mg je Einheit + Gesamt (bei Pulver „je Portion", Gesamt zusätzlich in g). So sieht der Kunde, was in seinem Produkt steckt. Der „Produziert X/Y"-Fortschritt in den Bestelldetails bleibt.
+
+**Bestelldetail – Teilversand (2026-10-27):** Sobald ein Teil geliefert wurde (`auftrag.versendet_menge > 0`), zeigt das Detail die Zeile **„Versendet X von Y Packungen · Restlieferung folgt"**. Teilversand wird im internen Reiter Versand ausgelöst (siehe `module/versand/liste.md`); der Auftrag bleibt bis zur Restlieferung versandbereit.
 
 **Lesbarkeit (2026-10-27):** Das Portal nutzt eine etwas größere Grundschrift als das Dashboard (im Portal-`<style>`: `body{font-size:15px; --fs/--fs-sm/--fs-xs` angehoben`}`, größere Step-Labels), damit v. a. die Bestellliste besser lesbar ist. Gilt nur im Kundenportal, nicht im internen Dashboard.
 

@@ -1485,6 +1485,8 @@ function init_schema(): void {
     ensure_column('auftrag', 'etikett_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('auftrag', 'etikett_freigabe_am', "DATETIME NULL");
     ensure_column('auftrag', 'etikett_freigabe_von', "VARCHAR(190) NULL");
+    ensure_column('auftrag', 'versendet_menge', "INT NOT NULL DEFAULT 0");   // kumuliert versendete Packungen (Teilversand); = menge -> Status 'versendet'
+    ensure_column('beleg', 'menge', "DECIMAL(14,3) NULL");                    // versendete Menge auf einem Lieferschein (Teilversand); bei Rechnungen leer
     // Einmalige Reparatur: 4 v3-importierte Zukauf-Auftraege (Annapurna) kamen ohne verknuepftes Produkt an.
     // Name/Form aus der v3-Datenbank (board.sqlite) hier fest hinterlegt – gezielt per Auftragsnummer, idempotent.
     if (meta_get('fix_auftrag_produkt_v3', '') !== '1') {
@@ -8216,17 +8218,24 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
     return ['ok'=>true, 'msg'=>'Ins Fremdlager übernommen – der Bestand steht jetzt in Lager 2.', 'fremdlager'=>true];
 }
 
-function auftrag_versenden(int $auftrag_id): array {
-    // „An den Kunden senden" – echte Auslieferung (FEFO-Ausbuchen + Lieferschein). Die Entscheidung
-    // Kunde vs. Lager 2 trifft das Lager jetzt explizit beim Versand; es gibt daher KEINE automatische
-    // Weiterleitung ins Fremdlager mehr (dafür ruft die Versandseite auftrag_ins_fremdlager() auf).
+// „An den Kunden senden" – echte Auslieferung (FEFO-Ausbuchen + Lieferschein). $menge = null versendet den
+// kompletten noch offenen Rest; ein kleinerer Wert ist ein TEILVERSAND (mehrere Lieferungen je Auftrag).
+// Erst wenn alle Packungen (auftrag.menge) versendet sind, geht der Status auf 'versendet'; vorher bleibt der
+// Auftrag 'erledigt' (versandbereit) und der Rest kann später nachgeliefert werden. versendet_menge zählt mit.
+function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
     $a = one("SELECT * FROM auftrag WHERE id=? AND status='erledigt'", [$auftrag_id]);
     if (!$a) return ['ok'=>false, 'msg'=>'Auftrag ist nicht versandbereit (Produktion muss abgeschlossen sein).'];
+    $gesamt  = (int)$a['menge'];
+    $bereits = max(0, (int)($a['versendet_menge'] ?? 0));
+    $offen   = max(0, $gesamt - $bereits);
+    if ($offen <= 0) return ['ok'=>false, 'msg'=>'Es ist bereits alles versendet.'];
+    $ship = ($menge === null) ? $offen : max(0, min((int)$menge, $offen));
+    if ($ship <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Versandmenge größer 0 angeben.'];
     $vfitem = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$a['produkt_id']]) ?: 0);
     $verf = $vfitem ? item_bestand($vfitem, true) : 0;
-    if ($verf + 0.0001 < (float)$a['menge']) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$a['menge'] . ').'];
-    // Fertigware FEFO ausbuchen
-    $rest = (float)$a['menge'];
+    if ($verf + 0.0001 < (float)$ship) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$ship . ' zu versendenden).'];
+    // Fertigware FEFO ausbuchen (nur die zu versendende Menge)
+    $rest = (float)$ship;
     foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$vfitem]) as $c) {
         if ($rest <= 0.0001) break;
         $nimm = min($rest, (float)$c['menge_verfuegbar']);
@@ -8234,15 +8243,25 @@ function auftrag_versenden(int $auftrag_id): array {
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         $rest -= $nimm;
     }
-    // Lieferschein
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum)
-       VALUES (?,'lieferschein',?,?,?,0,0,?,'offen',CURDATE())",
-      [naechste_nummer('LS'), $auftrag_id, $a['kunde_id'], $a['gesamt_netto'], $a['gesamt_netto']]);
-    q("UPDATE auftrag SET status='versendet' WHERE id=?", [$auftrag_id]);
-    if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Auftrag ' . $a['nummer'] . ' versendet.', 'auftrag', 'auftrag', $auftrag_id);
-    bedarf_bump();   // Fertigware ausgebucht/Auftrag raus
-    return ['ok'=>true, 'msg'=>'Versendet.'];
+    // Lieferschein für diese (Teil-)Lieferung; netto anteilig an der versendeten Menge.
+    $netto = $gesamt > 0 ? round((float)$a['gesamt_netto'] * $ship / $gesamt, 2) : (float)$a['gesamt_netto'];
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,menge,netto,ust_prozent,ust_betrag,brutto,status,datum)
+       VALUES (?,'lieferschein',?,?,?,?,0,0,?,'offen',CURDATE())",
+      [naechste_nummer('LS'), $auftrag_id, $a['kunde_id'], $ship, $netto, $netto]);
+    $neuVersendet = $bereits + $ship;
+    $voll = $neuVersendet >= $gesamt;
+    if ($voll) q("UPDATE auftrag SET versendet_menge=?, status='versendet', status_datum=CURDATE() WHERE id=?", [$neuVersendet, $auftrag_id]);
+    else       q("UPDATE auftrag SET versendet_menge=? WHERE id=?", [$neuVersendet, $auftrag_id]);
+    if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team',
+        $voll ? ('Auftrag ' . $a['nummer'] . ' versendet' . ($bereits > 0 ? ' (Restlieferung ' . number_format($ship,0,',','.') . ')' : '') . '.')
+              : ('Teillieferung Auftrag ' . $a['nummer'] . ': ' . number_format($ship,0,',','.') . ' von ' . number_format($gesamt,0,',','.') . ' versendet (gesamt ' . number_format($neuVersendet,0,',','.') . ').'),
+        'auftrag', 'auftrag', $auftrag_id);
+    bedarf_bump();   // Fertigware ausgebucht
+    return ['ok'=>true, 'voll'=>$voll, 'versendet'=>$ship, 'gesamt'=>$gesamt, 'kumuliert'=>$neuVersendet,
+            'msg'=>$voll ? 'Versendet.' : ('Teillieferung ' . number_format($ship,0,',','.') . ' versendet – offen bleiben ' . number_format($gesamt - $neuVersendet,0,',','.') . '.')];
 }
+// Kompletten (restlichen) Auftrag versenden – Rückwärtskompatibilität.
+function auftrag_versenden(int $auftrag_id): array { return auftrag_versenden_menge($auftrag_id, null); }
 
 // Produktion eines Auftrags abschließen OHNE Bestandsbuchung – für bereits fertige / Alt-Aufträge, die
 // als „erledigt/versendet" markiert werden. Setzt alle noch offenen Produktionsaufträge des Auftrags auf

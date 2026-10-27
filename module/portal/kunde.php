@@ -4018,6 +4018,9 @@ portal_head('Kundenportal · ' . $k['firma']);
           </div>
         </td></tr>
         <?php endif; ?>
+        <?php if ((int)($a['versendet_menge'] ?? 0) > 0): ?>
+        <tr><td class="muted">Versendet</td><td><strong><?= number_format((int)$a['versendet_menge'],0,',','.') ?></strong> von <?= number_format((int)$a['menge'],0,',','.') ?> Packungen<?php if ((int)$a['versendet_menge'] < (int)$a['menge']): ?> <span class="muted">· Restlieferung folgt</span><?php endif; ?></td></tr>
+        <?php endif; ?>
         <?php if ($vName): ?><tr><td class="muted">Verpackung</td><td><?= h($vName) ?></td></tr><?php endif; ?>
         <?php if ((float)$a['vk_stueck']): ?><tr><td class="muted">Preis je Packung</td><td><?= $eur($a['vk_stueck']) ?></td></tr><?php endif; ?>
         <tr><td class="muted">Bestellt am</td><td><?= h(fmt_zeit($a['angelegt'], 'd.m.Y')) ?></td></tr>

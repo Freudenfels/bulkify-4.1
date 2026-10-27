@@ -3,8 +3,8 @@
 **Zweck:** Versandbereite Aufträge versenden – Fertigware ausbuchen und Lieferschein erzeugen.
 
 **Was passiert hier:**
-- **POST `aktion=versenden`:** ruft `auftrag_versenden()` – bucht die **Fertigware nach FEFO** aus dem Lager (Verkaufsfertig-Charge des Produkts), erstellt einen **Lieferschein** (`beleg` typ=lieferschein, Nummer LS-) und setzt den Auftrag auf **„versendet"** (+ Verlaufseintrag am Kunden). Blockiert, wenn nicht genug Fertigware da ist.
-- **Anzeige:** Liste der Aufträge mit Status **erledigt** (versandbereit) und **versendet**, je mit Kunde, Produkt, Menge, **Fertig im Lager**, Lieferschein und Status. Versandbereite Zeilen haben einen „Versenden"-Button (nur wenn genug Fertigware vorhanden).
+- **POST `aktion=versenden`:** ruft `auftrag_versenden_menge($auftrag_id, $menge)` – bucht die **Fertigware nach FEFO** aus dem Lager (Verkaufsfertig-Charge des Produkts), erstellt einen **Lieferschein** (`beleg` typ=lieferschein, Nummer LS-, mit `beleg.menge` = gelieferte Packungen, netto anteilig) und zählt `auftrag.versendet_menge` hoch. **Teilversand:** Ist `menge` kleiner als der noch offene Rest, wird nur dieser Teil geliefert; der Auftrag **bleibt „erledigt" (versandbereit)**, bis alle Packungen geliefert sind – erst dann Status **„versendet"** (+ Verlaufseintrag; Teillieferungen werden einzeln protokolliert). `menge` leer/0 = kompletter Rest. `auftrag_versenden()` = Rest komplett (Rückwärtskompatibilität).
+- **Anzeige:** Liste der Aufträge mit Status **erledigt** (versandbereit) und **versendet**, je mit Kunde, Produkt, **Menge** (inkl. „X versendet · Y offen" bei Teilversand), **Fertig im Lager**, Lieferschein und Status. Versandbereite Zeilen haben ein **Mengenfeld** (vorbelegt mit dem versendbaren Rest = min(offen, fertig im Lager)) + Senden-Button. Ist weniger fertig als offen, steht ein Hinweis „nur X fertig – Rest nach weiterer Produktion". Status-Badge **teilversendet** (gelb), solange ein Rest offen ist.
 
 **Einordnung:** Schließt die Ausgangsseite des Materialflusses – die Fertigware verlässt das Lager, der Kunde sieht im Portal „versendet".
 

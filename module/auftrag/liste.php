@@ -132,6 +132,9 @@ $cols = [
                             $mf = auftrag_mengenfortschritt((int)$r['id']);
                             if (!empty($mf['hat']) && (int)$mf['gebucht'] > 0 && (int)$mf['ziel'] > 0)
                                 $out .= '<br><span class="muted" style="font-size:12px">' . number_format((int)$mf['gebucht'], 0, ',', '.') . '/' . number_format((int)$mf['ziel'], 0, ',', '.') . ' produziert</span>';
+                            // Teilversand: schon ein Teil beim Kunden (Status bleibt bis zur Restlieferung „erledigt").
+                            $vm = (int)($r['versendet_menge'] ?? 0);
+                            if ($vm > 0) $out .= '<br><span style="font-size:12px;color:var(--gruen)">' . number_format($vm, 0, ',', '.') . '/' . number_format((int)$r['menge'], 0, ',', '.') . ' versendet</span>';
                         }
                         return $out;
                      }],
