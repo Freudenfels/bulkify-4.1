@@ -123,7 +123,18 @@ $cols = [
                         [$label, $stil, $hint] = auftrag_art_meta($k);   // $stil hier bewusst ignoriert: schlichter Text statt farbiger Kachel
                         return '<span class="muted" title="' . h($hint) . '">' . h($label) . '</span>';
                      }],
-    'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
+    'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true, 'render' => function($r) {
+                        $out = number_format((int)$r['menge'], 0, ',', '.');
+                        // Produktionsfortschritt direkt in der Übersicht: wieviel ist schon produziert (gebucht)?
+                        // Nur bei laufenden Aufträgen (versendet/storniert zeigt der Fortschritt bereits den Abschluss).
+                        $st = (string)($r['status'] ?? '');
+                        if (!in_array($st, ['versendet', 'storniert'], true)) {
+                            $mf = auftrag_mengenfortschritt((int)$r['id']);
+                            if (!empty($mf['hat']) && (int)$mf['gebucht'] > 0 && (int)$mf['ziel'] > 0)
+                                $out .= '<br><span class="muted" style="font-size:12px">' . number_format((int)$mf['gebucht'], 0, ',', '.') . '/' . number_format((int)$mf['ziel'], 0, ',', '.') . ' produziert</span>';
+                        }
+                        return $out;
+                     }],
     'gesamt_netto' => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['gesamt_netto'])],
     'rechnung_nr'  => ['label' => 'Rechnung', 'sort' => true, 'render' => fn($r)=> $r['rechnung_nr'] ? h($r['rechnung_nr']) : '<span class="muted">–</span>'],
     'status'       => ['label' => 'Fortschritt', 'sort' => true, 'render' => $standBadge],

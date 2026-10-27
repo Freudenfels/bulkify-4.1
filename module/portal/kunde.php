@@ -855,7 +855,11 @@ function portal_head(string $titel): void {
        . ".pt-subtabs a{padding:4px 12px;font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:999px;background:transparent;line-height:1.6}"
        . ".pt-subtabs a:hover{color:var(--text);text-decoration:none;background:var(--panel-2)}"
        . ".pt-subtabs a.on{color:var(--dunkelgruen);background:var(--panel-2);border-color:var(--gruen);font-weight:600}"
-       . ':root[data-theme="dark"] .pt-subtabs a.on{color:var(--lime)}</style>';
+       . ':root[data-theme="dark"] .pt-subtabs a.on{color:var(--lime)}'
+       // Kundenportal: insgesamt etwas größere, besser lesbare Schrift (gilt nur im Portal, nicht im Dashboard).
+       . 'body{font-size:15px;--fs:15px;--fs-sm:13px;--fs-xs:12.5px}'
+       . '.bx-step .lbl{font-size:12.5px}.bx-hstep .lbl{font-size:12.5px}.bx-hstep .date{font-size:12px}'
+       . '.bx-order-row{font-size:15px}</style>';
     echo "<script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>";
     echo "</head><body>";
 }
@@ -3735,9 +3739,9 @@ portal_head('Kundenportal · ' . $k['firma']);
   <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit<?= $etMiss ? ';border-color:#e6c4c0' : '' ?>">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
-        <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:12px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
+        <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:13px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
       <div class="bx-row" style="gap:10px;align-items:center">
-        <span class="muted" style="font-size:12px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : (!$trackA ? 'In Bearbeitung' : 'Schritt ' . ($curIdx + 1) . '/' . $totalA . ': ' . h((string)($trackA[$curIdx]['label'] ?? ''))) ?></span>
+        <span class="muted" style="font-size:13px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : (!$trackA ? 'In Bearbeitung' : 'Schritt ' . ($curIdx + 1) . '/' . $totalA . ': ' . h((string)($trackA[$curIdx]['label'] ?? ''))) ?></span>
         <?php if ($etMiss): ?><?= bx_badge('Etikett fehlt', 'err') ?><?php endif; ?>
         <?= $aufBadge($a) ?><?php $kontStorno = ($a['status'] ?? '') === 'storniert' && !empty($a['kontingent_id']);
             $zst = $kontStorno ? '' : ($zahlMapBest[(int)$a['id']] ?? (!empty($a['bezahlt_am']) ? 'bezahlt' : '')); if ($zst): ?> <?= $reBadge($zst) ?><?php endif; ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
@@ -3748,7 +3752,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           $sub = $t['date'] ? fmt_zeit($t['date'], 'd.m.Y') : ($t['sub'] ?? ''); ?>
         <li class="bx-step <?= $cls ?>">
           <span class="dot"><?= $statusIcon($cls) ?></span>
-          <span class="lbl"><?= h($t['label']) ?><?php if ($sub !== ''): ?><br><span class="muted" style="font-size:11px"><?= h($sub) ?></span><?php endif; ?></span>
+          <span class="lbl"><?= h($t['label']) ?><?php if ($sub !== ''): ?><br><span class="muted" style="font-size:12px"><?= h($sub) ?></span><?php endif; ?></span>
         </li>
       <?php endforeach; ?>
     </ul>
@@ -3841,6 +3845,37 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php endif; ?>
   </div>
   <?php endif; /* $track */ ?>
+
+  <?php
+    // Rezeptur / Zusammensetzung dieser Bestellung – der Kunde sieht, was in seinem Produkt steckt
+    // (effektive Rezeptur des Auftrags, sonst die des Produkts). Nur bei Produkt-Aufträgen mit Zutaten.
+    if (!$istDLdetail):
+      $rezId = (int)($a['rezeptur_id'] ?? 0);
+      if (!$rezId && !empty($a['produkt_id'])) $rezId = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
+      $rezRow = $rezId ? one("SELECT nummer, name, darreichungsform FROM rezeptur WHERE id=?", [$rezId]) : null;
+      $rezZut = $rezId ? all("SELECT COALESCE(NULLIF(z.bezeichnung,''), i.name) AS name, z.menge_mg
+                              FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
+                              WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rezId]) : [];
+      if ($rezRow && $rezZut):
+        $rezSum = 0.0; foreach ($rezZut as $z) $rezSum += (float)$z['menge_mg'];
+        $mgF = fn($x) => rtrim(rtrim(number_format((float)$x, 1, ',', '.'), '0'), ',');
+        $istPulverRez = function_exists('form_groessen_einheit') && form_groessen_einheit((string)($rezRow['darreichungsform'] ?? '')) === 'g';
+        $einWort = $istPulverRez ? 'je Portion' : 'je Einheit';
+  ?>
+  <div class="bx-panel">
+    <h2 style="margin:0 0 4px;font-size:16px">Rezeptur</h2>
+    <p class="muted" style="margin:0 0 12px;font-size:13px"><?= h((string)$rezRow['nummer']) ?><?= !empty($rezRow['name']) ? ' · ' . h((string)$rezRow['name']) : '' ?> · Zusammensetzung <?= h($einWort) ?></p>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Bestandteil</th><th class="bx-num">Menge <?= h($einWort) ?></th></tr></thead>
+      <tbody>
+        <?php foreach ($rezZut as $z): ?>
+        <tr><td><?= h((string)$z['name']) ?></td><td class="bx-num"><?= $mgF($z['menge_mg']) ?> mg</td></tr>
+        <?php endforeach; ?>
+        <tr><td class="muted">Gesamt <?= h($einWort) ?></td><td class="bx-num"><strong><?= $mgF($rezSum) ?> mg</strong><?php if ($rezSum >= 1000): ?> <span class="muted">(<?= $mgF($rezSum / 1000) ?> g)</span><?php endif; ?></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; endif; ?>
 
   <?php // Endergebnis einer Dienstleistung (z. B. Analysebericht, fertige Rezeptur) zum Download.
         if ($istDLdetail && $dlErgebnis): ?>
