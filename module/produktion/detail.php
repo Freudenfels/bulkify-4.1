@@ -112,6 +112,27 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     }
     header('Location: ?p=produktionsauftrag&id=' . $id . '&mengefehler=1'); exit;
 }
+// Füllmenge je Packung (g) für Pulver/Granulat setzen (nur Admin). Bei diesen Formen ist die „Packungsgröße"
+// die Füllmenge in Gramm je Packung (nicht Portionszahl). Schreibt auf Produkt (einheiten_pro_packung),
+// Auftrag (stueck) und diesen PA (stueck), damit produktion_stueck_je_packung() überall denselben Wert liefert.
+// Dient v. a. der Korrektur von Alt-/v3-Aufträgen, bei denen dort noch eine Portionszahl statt Gramm steht.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'pulver_fuellmenge' && has_role('admin')) {
+    $g = (int) round((float) str_replace(',', '.', (string)($_POST['fuellmenge_g'] ?? '0')));
+    if ($g > 0) {
+        $paF = one("SELECT nummer, kunde_id, auftrag_id, produkt_id, stueck FROM produktionsauftrag WHERE id=?", [$id]);
+        $alt = (int)($paF['stueck'] ?? 0);
+        q("UPDATE produktionsauftrag SET stueck=? WHERE id=?", [$g, $id]);
+        if (!empty($paF['auftrag_id'])) q("UPDATE auftrag SET stueck=? WHERE id=?", [$g, (int)$paF['auftrag_id']]);
+        if (!empty($paF['produkt_id'])) q("UPDATE produkt SET einheiten_pro_packung=? WHERE id=?", [$g, (int)$paF['produkt_id']]);
+        if (function_exists('bedarf_bump')) bedarf_bump();
+        if ($paF && $paF['kunde_id']) log_aktivitaet('kunde', (int)$paF['kunde_id'], 'team',
+            'Füllmenge je Packung (Pulver) ' . (string)$paF['nummer'] . ' gesetzt: ' .
+            number_format($alt, 0, ',', '.') . ' -> ' . number_format($g, 0, ',', '.') . ' g.',
+            'auftrag', 'auftrag', (int)($paF['auftrag_id'] ?? 0));
+        header('Location: ?p=produktionsauftrag&id=' . $id . '&fuellok=' . $g); exit;
+    }
+    header('Location: ?p=produktionsauftrag&id=' . $id . '&fuellfehler=1'); exit;
+}
 // Produktionsweg umstellen (verkürzt bei Zukauf / voll)
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['weg_zukauf', 'weg_voll'], true)) {
     $fremd = ($_POST['aktion'] === 'weg_zukauf');
@@ -230,6 +251,8 @@ if (isset($_GET['godstufe'])) echo '<div class="bx-panel badge-ok" style="paddin
 if (isset($_GET['godfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">God-Mode: ' . h((string)$_GET['godfehler']) . '</div>';
 if (isset($_GET['mengeok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produktionsmenge an den Auftrag angeglichen – der Materialbedarf ist jetzt neu berechnet.</div>';
 if (isset($_GET['mengefehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Abgleich nicht möglich – zu diesem Produktionsauftrag ist kein Auftrag verknüpft.</div>';
+if (isset($_GET['fuellok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Füllmenge je Packung auf ' . (int)$_GET['fuellok'] . ' g gesetzt – der Materialbedarf ist neu berechnet.</div>';
+if (isset($_GET['fuellfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Bitte eine Füllmenge in Gramm (größer 0) angeben.</div>';
 
 // Warnung: PA-Menge weicht vom verknüpften Auftrag ab (z. B. Auftrag/Angebot nachträglich geändert). Der
 // Bedarf rechnet mit der PA-Menge – läuft sie auseinander, stimmt der Rohstoffbedarf nicht. Nur Admin, nur
@@ -331,6 +354,27 @@ echo '<div class="bx-card"><div class="k">MHD' . ($chargeGeb ? '' : ' (+18 Mon.)
 if (!empty($pa['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($pa['angelegt'], 'd.m.Y H:i')) . '</div></div>';
 echo '</div>';
 if (!$chargeGeb) echo '<div class="bx-panel" style="padding:10px 14px;font-size:13px;color:var(--muted)">Chargennummer <strong>' . h($chargeNr) . '</strong> und MHD <strong>' . h(date('d.m.Y', strtotime($chargeMhd))) . '</strong> in die Produktionsgeräte eintragen. Teilproduktionen an weiteren Tagen erhalten dieselbe Basis mit <strong>.B</strong>, <strong>.C</strong> …</div>';
+
+// Pulver/Granulat: Füllmenge je Packung (g) setzen/korrigieren (nur Admin). Wichtig für Alt-/v3-Aufträge, bei
+// denen hier noch eine Portionszahl statt Gramm steht (dann rechnet der Bedarf zu niedrig). Portion = Summe der
+// Rezeptur-mg; als Hilfe zeigen wir, wie viele Portionen die aktuelle Füllmenge ergibt.
+if ($istFuellGewicht && has_role('admin')):
+    $portionMg = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=(SELECT rezeptur_id FROM produkt WHERE id=?)", [(int)$pa['produkt_id']]);
+    if ($portionMg <= 0) $portionMg = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [(int)($pa['rezeptur_id'] ?? 0)]);
+    $portionG = $portionMg > 0 ? $portionMg / 1000.0 : 0.0;
+    $portionen = ($portionG > 0 && $einhProP > 0) ? $einhProP / $portionG : 0.0;
+?>
+  <div class="bx-panel" style="border-left:3px solid var(--gruen)">
+    <div style="font-weight:600">Füllmenge je Packung (Pulver)</div>
+    <div class="muted" style="font-size:13px;margin:4px 0 10px">Bei Pulver wird nach <strong>Gewicht</strong> gerechnet: aktuell <strong><?= number_format($einhProP, 0, ',', '.') ?> g</strong> je Packung<?php if ($portionG > 0): ?> &middot; das sind bei <?= rtrim(rtrim(number_format($portionG, 3, ',', '.'), '0'), ',') ?> g je Portion rund <strong><?= rtrim(rtrim(number_format($portionen, 1, ',', '.'), '0'), ',') ?> Portionen</strong><?php endif; ?>. Steht hier versehentlich eine Portionszahl (Alt-/v3-Auftrag), hier die echte Füllmenge in Gramm eintragen.</div>
+    <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
+      <input type="hidden" name="aktion" value="pulver_fuellmenge">
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Füllmenge je Packung (g)
+        <input type="text" inputmode="decimal" name="fuellmenge_g" value="<?= number_format($einhProP, 0, ',', '.') ?>" style="min-width:140px"></label>
+      <button class="btn btn-primary btn-sm" type="submit">Füllmenge setzen</button>
+    </form>
+  </div>
+<?php endif;
 
 $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 
