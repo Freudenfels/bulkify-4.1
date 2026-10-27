@@ -176,8 +176,10 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
             // jeweiligen Seiten selbst zeigen alles live.
             $anfCount['bedarf'] = 0;
             $anfCount['einkaufsliste'] = 0;
-            // Aufträge, die noch nicht fertig (= versendet) sind.
-            $anfCount['auftraege'] = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status NOT IN ('versendet','storniert')");
+            // Aufträge, die noch nicht fertig (= versendet) sind. Dienstleistungs-Aufträge (DB-) zählen hier NICHT mit –
+            // die stehen im DL-Modul, nicht in der Auftragsliste (?p=auftraege zeigt nur kategorie<>'dienstleistung').
+            // Sonst wiche das Menü-Badge vom „Offen"-Reiter der Liste ab.
+            $anfCount['auftraege'] = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status NOT IN ('versendet','storniert') AND COALESCE(kategorie,'produkt') <> 'dienstleistung'");
             // Offene Kundenfreigaben: Rohstoffe mit Spec-Inhalt ohne Spec-Freigabe + Chargen mit CoA-Werten ohne CoA-Freigabe.
             $anfCount['freigaben'] =
                 (int) scalar("SELECT COUNT(*) FROM item i WHERE i.kategorie='rohstoff' AND i.gesperrt=0 AND COALESCE(i.spec_freigegeben,0)=0
