@@ -36,6 +36,17 @@ if ($q !== '') {
 }
 $rows = bx_sort_rows($rows, $sort, $dir);
 
+// Bündel erkennen: je Bestellung die Anzahl VERSCHIEDENER Bulk-Produkte (Name ohne „(AB-…)"-Zusatz).
+// >= 2 = mehrere Produkte in einer Bestellung -> mit „In Einzelbestellungen aufteilen" trennbar.
+$bundleSet = [];
+foreach ($rows as $r) {
+    $p = (string)$r['produkt'];
+    if (strncmp($p, 'Bulk', 4) !== 0) continue;
+    $name = trim(mb_strtolower(preg_replace('/\s*\(.*$/', '', preg_replace('/^Bulk:\s*/', '', $p))));
+    $bundleSet[(int)$r['bestellung_id']][$name] = true;
+}
+$bundleCount = []; foreach ($bundleSet as $bid => $set) $bundleCount[$bid] = count($set);
+
 $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 // Status je Zeile: geliefert > bestätigt > wartet auf Bestätigung (Portal-Lieferant, noch nicht bestätigt) > bestellt (erfasst) > Entwurf.
 $statusBadge = function($r) use ($zugangIds) {
@@ -53,7 +64,11 @@ $cols = [
     'menge'            => ['label'=>'Menge', 'sort'=>true, 'num'=>true, 'render'=>fn($r)=> $mfmt($r['menge']) . ' ' . h((string)$r['einheit'])],
     'lieferant_firma'  => ['label'=>'Lieferant', 'sort'=>true, 'render'=>fn($r)=> $r['lieferant_firma'] ? h($r['lieferant_firma']) : '<span class="muted">extern</span>'],
     'bestelldatum'     => ['label'=>'Bestellt am', 'sort'=>true, 'render'=>fn($r)=> !empty($r['bestelldatum']) ? h(date('d.m.Y', strtotime($r['bestelldatum']))) : '<span class="muted">–</span>'],
-    'nummer'           => ['label'=>'Bestellung', 'sort'=>true],
+    'nummer'           => ['label'=>'Bestellung', 'sort'=>true, 'render'=>function($r) use ($bundleCount) {
+        $nr = h((string)$r['nummer']);
+        $n  = $bundleCount[(int)$r['bestellung_id']] ?? 0;
+        return $nr . ($n >= 2 ? ' ' . bx_badge('Bündel: ' . $n . ' Produkte', 'warn') : '');
+    }],
     'status'           => ['label'=>'Status', 'sort'=>true, 'render'=>$statusBadge],
 ];
 

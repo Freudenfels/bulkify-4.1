@@ -13,4 +13,6 @@
 ## „Bestellt" = einfache Positionsliste (Umbau 2026-10-06)
 Route `?p=einkauf`, Titel **„Bestellt"**. Eine Zeile je Bestellposition: **Produkt · Menge · Lieferant · Bestellt am · Bestellung-Nr · Status**. Klick auf die Zeile → Bestellung-Detail (`?p=bestellung&id=`) mit allen weiteren Infos. Archiv = gelieferte Positionen.
 
+**Bündel-Marker:** Enthält eine Bestellung **≥ 2 verschiedene Bulk-Produkte** (mehrere Fremdfertigungs-Produkte in einem Beleg), steht an der Bestellnummer ein Badge **„Bündel: N Produkte"** (warn). So erkennt man Alt-Bündel, die man im Detail über **„In Einzelbestellungen aufteilen"** trennen kann (`$bundleCount` = distinkte Bulk-Produktnamen je `bestellung_id`). Dieselbe Bestellnummer taucht ohnehin je Position einmal auf – der Badge macht die Zusammengehörigkeit explizit.
+
 **Status je Zeile** (Zugang-Regel, [[bulkify-lieferanten]]): geliefert → „geliefert"; `bestaetigt=1`/Status `bestaetigt` → „bestätigt"; Lieferant **mit Portal-Zugang** (`benutzer.lieferant_id` aktiv) und Status gesendet/bestellt, noch nicht bestätigt → **„wartet auf Bestätigung"**; sonst (extern / Lieferant ohne Zugang) → „bestellt" (nur erfasst); `offen` → „Entwurf". Quelle der Bestätigung: Lieferanten-Portal (`lief_bestaetigen`).
