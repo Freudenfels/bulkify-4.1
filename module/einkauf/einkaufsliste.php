@@ -165,8 +165,14 @@ $mengeInput = fn(string $key, float $wert, string $einheit) =>
   . ' style="width:100px;text-align:right" title="Bestellmenge – kann über den Bedarf angehoben werden (Punkt = Tausender)">'
   . ' <span class="muted">' . h($einheit) . '</span>';
 $rolleBadge = fn($r) => bx_badge($r, $r === 'Fertigware' ? 'info' : '');
-// Lieferantenpreise IMMER mit 4 Nachkommastellen + Währung (viele China-Lieferanten in USD, nicht EUR).
-$preis4 = fn($p, $cur = 'EUR') => number_format((float)$p, 4, ',', '.') . ' ' . h((string)($cur ?: 'EUR'));
+// Lieferantenpreise bis zu 4 Nachkommastellen + Währung (viele China-Lieferanten in USD, nicht EUR).
+// Nachlaufende Nullen werden gekürzt (mind. 2 Nachkommastellen): 96,5000 -> 96,50; Sub-Cent wie 0,0345 bleibt.
+$preis4 = function($p, $cur = 'EUR') {
+    $s = number_format((float)$p, 4, ',', '.');
+    $s = rtrim($s, '0');                               // nachlaufende Nullen weg (Komma bleibt stehen)
+    [$g, $d] = array_pad(explode(',', $s), 2, '');
+    return $g . ',' . str_pad($d, 2, '0') . ' ' . h((string)($cur ?: 'EUR'));   // mind. 2 Nachkommastellen
+};
 $sum2   = fn($p, $cur = 'EUR') => number_format((float)$p, 2, ',', '.') . ' ' . h((string)($cur ?: 'EUR'));   // Gesamtsumme: 2 Nachkommastellen
 $eurShort = $preis4;   // Rückwärtskompatibel: alte Aufrufe ohne Währung -> EUR
 $liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit = false, array $extraSelAttr = []) use ($lieferanten, $preis4, $zugangIds, $liefWaehr): string {
