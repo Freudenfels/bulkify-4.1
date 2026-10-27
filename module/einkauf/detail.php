@@ -228,7 +228,7 @@ if (!$neu) {
     $bulkProdGrp = (int) scalar("SELECT COUNT(DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING(bezeichnung,7),' (',1)))
                                  FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL AND bezeichnung LIKE 'Bulk%'", [(int)$id]);
     if ($bulkProdGrp >= 2 && !in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']))
-        echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese Bestellung in ' . (int)$bulkProdGrp . ' Einzelbestellungen je Produkt aufteilen? Die alte wird storniert und der Lieferant informiert.\');"><input type="hidden" name="aktion" value="aufteilen"><button class="btn btn-ghost btn-sm" type="submit" title="Je Produkt eine eigene Bestellung – der Lieferant kann jedes Produkt einzeln annehmen/ablehnen">In Einzelbestellungen aufteilen</button></form>';
+        echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese Bestellung in ' . (int)$bulkProdGrp . ' Einzelbestellungen je Produkt aufteilen? Ein bereits bestätigter Stand (Annahme/Termin) wird übernommen. Die alte wird storniert und der Lieferant informiert.\');"><input type="hidden" name="aktion" value="aufteilen"><button class="btn btn-ghost btn-sm" type="submit" title="Je Produkt eine eigene Bestellung – ein schon zugesagter Stand wird übernommen, sonst kann der Lieferant jedes Produkt einzeln annehmen/ablehnen">In Einzelbestellungen aufteilen</button></form>';
     echo '</div></div></div>';
 
     // Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Zahlart/Preis – fürs Gegenrechnen.

@@ -7258,10 +7258,21 @@ function bestellung_aufteilen(int $bestellung_id, string $wer = ''): array {
     }
     if (count($groups) <= 1) return ['ok'=>false, 'msg'=>'Die Bestellung enthält nur ein Produkt – nichts aufzuteilen.'];
     $wer = trim($wer) ?: 'Team';
+    // Annahme-/Fortschritts-Stand der Ur-Bestellung: hat der Lieferant schon zugesagt, wird das in JEDE
+    // Einzelbestellung übernommen (Status, Bestätigung, zugesagter Termin, Station, Versanddaten) – es muss
+    // nichts erneut bestätigt werden. Nur ein Entwurf (offen) bleibt Entwurf.
+    $istBestaetigt = (int)($b['bestaetigt'] ?? 0) === 1 || ($b['status'] ?? '') === 'bestaetigt' || ($b['station'] ?? '') !== '';
+    $newStatus     = (string)($b['status'] ?? '') !== '' ? (string)$b['status'] : 'gesendet';   // storniert/geliefert sind oben ausgeschlossen
     $neu = [];
     foreach ($groups as $gpos) {
-        q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum,bestellart) VALUES (?,?,?,?,?,?)",
-          [naechste_nummer('BE'), $lief ?: null, 'gesendet', 'Aus Aufteilung von ' . (string)$b['nummer'], $b['bestelldatum'] ?? null, 'lieferant']);
+        q("INSERT INTO bestellung
+             (nummer,lieferant_id,status,notiz,bestelldatum,bestellart,
+              bestaetigt,bestaetigt_am,bestaetigt_von,eta_geplant,produktion_geplant,station,
+              versandanbieter,versandart,tracking,pakete_angekuendigt)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          [naechste_nummer('BE'), $lief ?: null, $newStatus, 'Aus Aufteilung von ' . (string)$b['nummer'], $b['bestelldatum'] ?? null, (string)($b['bestellart'] ?? '') ?: 'lieferant',
+           (int)($b['bestaetigt'] ?? 0), $b['bestaetigt_am'] ?? null, $b['bestaetigt_von'] ?? null, $b['eta_geplant'] ?? null, $b['produktion_geplant'] ?? null, (string)($b['station'] ?? ''),
+           $b['versandanbieter'] ?? null, $b['versandart'] ?? null, $b['tracking'] ?? null, $b['pakete_angekuendigt'] ?? null]);
         $nb = (int) insert_id();
         $srt = 0;
         foreach ($gpos as $p) {
@@ -7275,17 +7286,21 @@ function bestellung_aufteilen(int $bestellung_id, string $wer = ''): array {
     }
     q("UPDATE bestellung SET status='storniert', notiz=CONCAT(COALESCE(notiz,''), ' | Aufgeteilt in: ', ?, ' – ', ?) WHERE id=?", [implode(', ', $neu), $wer, $bestellung_id]);
     $mail = 0;
-    if ($lief) {
+    // Nur den Lieferanten informieren, wenn die Bestellung bei ihm schon draußen war (kein reiner Entwurf).
+    if ($lief && $newStatus !== 'offen') {
         require_once __DIR__ . '/nachricht.php';
-        nachricht_senden($lief, 'team', $wer,
-            'Hinweis: Bestellung ' . (string)$b['nummer'] . ' wurde in Einzelbestellungen je Produkt aufgeteilt: ' . implode(', ', $neu)
-            . '. Bitte diese einzeln bestätigen – die ursprüngliche Bestellung ' . (string)$b['nummer'] . ' ist damit storniert.',
-            'bestellung', $bestellung_id);
+        $text = $istBestaetigt
+            ? 'Hinweis: Ihre bereits bestätigte Bestellung ' . (string)$b['nummer'] . ' wurde aus organisatorischen Gründen in je eine Bestellung pro Produkt getrennt: ' . implode(', ', $neu)
+              . '. Die vereinbarten Konditionen und Termine bleiben unverändert – eine erneute Bestätigung ist nicht nötig. Die ursprüngliche Bestellung ' . (string)$b['nummer'] . ' ist damit storniert.'
+            : 'Hinweis: Bestellung ' . (string)$b['nummer'] . ' wurde in Einzelbestellungen je Produkt aufgeteilt: ' . implode(', ', $neu)
+              . '. Bitte diese einzeln bestätigen – die ursprüngliche Bestellung ' . (string)$b['nummer'] . ' ist damit storniert.';
+        nachricht_senden($lief, 'team', $wer, $text, 'bestellung', $bestellung_id);
         if (function_exists('mail_bereit') && mail_bereit()) $mail = 1;
     }
     bedarf_bump();
+    $hint = $istBestaetigt ? ' (Annahme/Termin übernommen)' : '';
     return ['ok'=>true, 'neu'=>$neu, 'mail'=>$mail,
-            'msg'=>'In ' . count($neu) . ' Einzelbestellung(en) aufgeteilt: ' . implode(', ', $neu) . '. Original ' . (string)$b['nummer'] . ' storniert' . ($mail ? ', Lieferant informiert' : '') . '.'];
+            'msg'=>'In ' . count($neu) . ' Einzelbestellung(en) aufgeteilt: ' . implode(', ', $neu) . $hint . '. Original ' . (string)$b['nummer'] . ' storniert' . ($mail ? ', Lieferant informiert' : '') . '.'];
 }
 
 function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int $lieferant, ?string $datum, array $freiIds = [], array $bulkMenge = []): int {

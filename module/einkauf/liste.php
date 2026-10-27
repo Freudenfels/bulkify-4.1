@@ -14,7 +14,8 @@ $archiv = ($_GET['archiv'] ?? '') === '1';   // Archiv = gelieferte Bestellungen
 $zugangIds = [];
 foreach (all("SELECT DISTINCT lieferant_id FROM benutzer WHERE lieferant_id IS NOT NULL AND aktiv=1") as $z) $zugangIds[(int)$z['lieferant_id']] = true;
 
-$wo = $archiv ? "WHERE b.status='geliefert'" : "WHERE b.status<>'geliefert'";
+// Laufend = alles außer geliefert UND storniert (aufgeteilte Ur-Bestellungen sind storniert und sollen hier weg).
+$wo = $archiv ? "WHERE b.status='geliefert'" : "WHERE b.status NOT IN ('geliefert','storniert')";
 // Positionen holen (mit Kopfdaten der Bestellung) und in PHP je Bestellung zusammenfassen.
 $posRows = all("SELECT bp.id AS pos_id, bp.menge, bp.einheit, bp.bestellung_id, bp.item_id, bp.sort,
                 COALESCE(NULLIF(bp.bezeichnung,''), i.name, '–') AS produkt,
@@ -65,6 +66,7 @@ $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 $statusBadge = function($r) use ($zugangIds) {
     $st = (string)$r['status'];
     if ($st === 'geliefert')             return bx_badge('geliefert','ok');
+    if ($st === 'storniert')             return bx_badge('storniert');
     if ((int)$r['bestaetigt'] === 1 || $st === 'bestaetigt') return bx_badge('bestätigt','ok');
     $portal = !empty($r['lieferant_id']) && isset($zugangIds[(int)$r['lieferant_id']]);
     if ($portal && in_array($st, ['gesendet','bestellt'], true)) return bx_badge('wartet auf Bestätigung','warn');
