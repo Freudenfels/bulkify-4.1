@@ -435,16 +435,42 @@ $bestand_qua  = $neu ? 0 : (item_bestand((int)$id, false) - $bestand_frei);
 $reserviert_gesamt = $neu ? 0 : item_reserviert_gesamt((int)$id);
 $reservierungen    = $neu ? [] : item_reservierungen_liste((int)$id);
 // Aufträge, auf die reserviert werden kann (laufend – nicht versendet/storniert), neueste zuerst.
-// Nur Produktaufträge: Dienstleistungs-/Laboraufträge (DB-) verbrauchen keine Rohstoffe und gehören nicht in
-// die Reservierung. Die haben kein Produkt (produkt_id NULL) – daran erkennt man sie zuverlässig; das
-// dienstleistung_id-Flag ist bei Altbestand nicht gesetzt.
-$res_auftraege = $neu ? [] : all("SELECT a.id, a.nummer, k.firma AS kunde_firma,
-                                   COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name
-                                   FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id
-                                   LEFT JOIN produkt p ON p.id=a.produkt_id
-                                   WHERE a.status NOT IN ('versendet','storniert')
-                                     AND a.produkt_id IS NOT NULL AND a.dienstleistung_id IS NULL
-                                   ORDER BY a.angelegt DESC");
+// Welche Aufträge brauchen DIESEN Rohstoff – und wie viel? Aus dem aggregierten Produktionsbedarf
+// (nur festgelegte, laufende Produktionsaufträge). So kann man gezielt für die passenden Aufträge reservieren.
+$resEinheit = (string)($it['einheit'] ?? '') ?: 'Stk';
+$needJeAuftrag = [];   // auftrag_id => benötigte Menge dieses Rohstoffs (Summe über Produktionsaufträge)
+if (!$neu) {
+    foreach (bedarf_aggregiert(false) as $ba) {
+        if (!empty($ba['etikett']) || (int)$ba['item_id'] !== (int)$id) continue;
+        foreach ($ba['orders'] as $o) { $aid = (int)$o['auftrag_id']; if ($aid > 0) $needJeAuftrag[$aid] = ($needJeAuftrag[$aid] ?? 0) + (float)$o['need']; }
+        break;
+    }
+}
+// Dropdown bevorzugt die Aufträge MIT Bedarf an diesem Rohstoff (größter Bedarf zuerst). Gibt es keinen
+// offenen Bedarf (z. B. Rohstoff in keiner laufenden Produktion), fällt es auf alle Produktaufträge zurück.
+$resNurBedarf = !$neu && !empty($needJeAuftrag);
+if ($neu) {
+    $res_auftraege = [];
+} elseif ($resNurBedarf) {
+    $ids = array_map('intval', array_keys($needJeAuftrag));
+    $in  = implode(',', array_fill(0, count($ids), '?'));
+    $res_auftraege = all("SELECT a.id, a.nummer, k.firma AS kunde_firma,
+                          COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name
+                          FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id
+                          LEFT JOIN produkt p ON p.id=a.produkt_id
+                          WHERE a.id IN ($in) AND a.status NOT IN ('versendet','storniert')", $ids);
+    usort($res_auftraege, fn($x, $y) => ($needJeAuftrag[(int)$y['id']] ?? 0) <=> ($needJeAuftrag[(int)$x['id']] ?? 0));
+} else {
+    // Fallback: alle Produktaufträge (Dienstleistungs-/DB-Aufträge ohne Produkt bleiben draußen).
+    $res_auftraege = all("SELECT a.id, a.nummer, k.firma AS kunde_firma,
+                          COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name
+                          FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id
+                          LEFT JOIN produkt p ON p.id=a.produkt_id
+                          WHERE a.status NOT IN ('versendet','storniert')
+                            AND a.produkt_id IS NOT NULL AND a.dienstleistung_id IS NULL
+                          ORDER BY a.angelegt DESC");
+}
+$resNum = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 $fremd_gesamt = $neu ? 0 : item_fremdbestand((int)$id);
 $fremdJeKunde = $neu ? [] : item_fremdbestand_je_kunde((int)$id);
 $fremdKunden  = $neu ? [] : all("SELECT id, firma FROM kunden ORDER BY firma");
@@ -1048,9 +1074,9 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
     <?php if (isset($_GET['resfehler'])): ?><div style="padding:8px 12px;margin-top:10px;color:#8f231b"><?= h((string)$_GET['resfehler']) ?></div><?php endif; ?>
 
     <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
-      <thead><tr><th>Auftrag</th><th>Kunde</th><th class="bx-num">Reserviert</th><th>Seit</th><th>Herkunft</th><th></th></tr></thead>
+      <thead><tr><th>Auftrag</th><th>Kunde</th><th class="bx-num">Reserviert</th><th class="bx-num">Benötigt</th><th>Seit</th><th>Herkunft</th><th></th></tr></thead>
       <tbody>
-      <?php if (!$reservierungen): ?><tr><td colspan="6" class="muted">Noch nichts reserviert. Unten einem Auftrag eine Menge zuteilen.</td></tr><?php endif; ?>
+      <?php if (!$reservierungen): ?><tr><td colspan="7" class="muted">Noch nichts reserviert. Unten einem Auftrag eine Menge zuteilen.</td></tr><?php endif; ?>
       <?php foreach ($reservierungen as $r): $ausProd = !empty($r['pa_id']);
           $mStr = rtrim(rtrim(number_format((float)$r['menge'],3,',','.'),'0'),','); ?>
         <tr>
@@ -1069,6 +1095,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
               </form>
             <?php endif; ?>
           </td>
+          <td class="bx-num"><?php $nd = $needJeAuftrag[(int)$r['auftrag_id']] ?? null; echo $nd !== null ? h($resNum($nd)) . ' ' . h($einheitLbl) : '<span class="muted">–</span>'; ?></td>
           <td style="white-space:nowrap"><?= $r['angelegt'] ? h(fmt_zeit((string)$r['angelegt'], 'd.m.Y')) : '–' ?></td>
           <td><?= $ausProd ? bx_badge('aus Produktion' . ($r['pa_nr'] ? ' ' . h((string)$r['pa_nr']) : ''), 'info') : bx_badge('manuell') ?></td>
           <td style="text-align:right">
@@ -1084,24 +1111,38 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       </tbody>
     </table></div>
 
-    <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:14px">
+    <?php if ($resNurBedarf): ?>
+      <p class="muted" style="font-size:12px;margin:10px 0 0">Gezeigt werden nur Aufträge, die diesen Rohstoff aktuell <strong>brauchen</strong> (mit benötigter Menge, größter Bedarf zuerst). Beim Auswählen wird die Menge vorbelegt.</p>
+    <?php else: ?>
+      <p class="muted" style="font-size:12px;margin:10px 0 0">Kein offener Produktionsbedarf für diesen Rohstoff – daher werden alle laufenden Produktaufträge gezeigt.</p>
+    <?php endif; ?>
+    <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
       <input type="hidden" name="aktion" value="res_setzen">
       <div class="bx-field" style="margin:0;min-width:260px">
         <label>Auftrag</label>
-        <select name="auftrag_id" class="rscombo" required style="min-width:260px">
+        <select name="auftrag_id" id="resAuftrag" class="rscombo" required style="min-width:260px">
           <option value="">– Auftrag wählen –</option>
-          <?php foreach ($res_auftraege as $a): ?>
-            <option value="<?= (int)$a['id'] ?>"><?= h((string)$a['nummer']) ?><?= !empty($a['produkt_name']) ? ' · ' . h((string)$a['produkt_name']) : '' ?><?= $a['kunde_firma'] ? ' · ' . h((string)$a['kunde_firma']) : '' ?></option>
+          <?php foreach ($res_auftraege as $a): $nd = $needJeAuftrag[(int)$a['id']] ?? null; ?>
+            <option value="<?= (int)$a['id'] ?>"<?= $nd !== null ? ' data-need="' . h((string)(float)$nd) . '"' : '' ?>><?= h((string)$a['nummer']) ?><?= !empty($a['produkt_name']) ? ' · ' . h((string)$a['produkt_name']) : '' ?><?= $a['kunde_firma'] ? ' · ' . h((string)$a['kunde_firma']) : '' ?><?= $nd !== null ? ' · benötigt ' . $resNum($nd) . ' ' . $einheitLbl : '' ?></option>
           <?php endforeach; ?>
         </select>
       </div>
       <div class="bx-field" style="margin:0">
         <label>Menge (<?= h($einheitLbl) ?>)</label>
-        <input type="text" name="menge" inputmode="decimal" placeholder="z. B. 25" style="width:120px;text-align:right">
+        <input type="text" name="menge" id="resMenge" inputmode="decimal" placeholder="z. B. 25" style="width:120px;text-align:right">
       </div>
       <button class="btn btn-primary" type="submit">Reservieren</button>
       <span class="muted" style="font-size:12px;align-self:center">Reserviert die Menge für den gewählten Auftrag. Ein zweites Mal für denselben Auftrag ändert die Menge.</span>
     </form>
+    <script>(function(){
+      var sel=document.getElementById('resAuftrag'), m=document.getElementById('resMenge');
+      if(!sel||!m) return;
+      sel.addEventListener('change', function(){
+        var o=sel.options[sel.selectedIndex], nd=o&&o.getAttribute('data-need');
+        if(nd && (m.value===''||m.dataset.auto==='1')){ m.value=String(nd).replace('.',','); m.dataset.auto='1'; }
+      });
+      m.addEventListener('input', function(){ m.dataset.auto=''; });
+    })();</script>
   </div>
 
   <?php // Fremdlager: Ware, die einem Kunden gehoert (Fulfillment). Liegt physisch bei uns, zaehlt aber NICHT
