@@ -140,6 +140,12 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?
     $ok = produktionsauftrag_art_setzen($id, $fremd ? 'fremd' : 'eigen');
     header('Location: ?p=produktionsauftrag&id=' . $id . ($ok ? '&weg=1' : '&wegfehler=1')); exit;
 }
+// Rückabwicklung: Lieferant kann/will doch nicht – Fremd-Bulk-Bestellung stornieren (+ Lieferant informieren)
+// und auf Eigenproduktion umstellen. Die harte Prüfung (schon geliefert / Schritt erledigt) macht die Funktion.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rueckabwicklung') {
+    $res = produktion_rueckabwicklung_eigen($id, (string)(current_user()['name'] ?? ''));
+    header('Location: ?p=produktionsauftrag&id=' . $id . '&' . ($res['ok'] ? 'rueck=' . rawurlencode($res['msg']) : 'rueckfehler=' . rawurlencode($res['msg']))); exit;
+}
 
 $pa = $id ? one("SELECT pa.*, COALESCE(k.firma, ak.firma) AS kunde_firma,
                         COALESCE(NULLIF(pa.kunde_id,0), a.kunde_id) AS kunde_id_eff,
@@ -240,7 +246,9 @@ if (isset($_GET['angelegt'])) echo '<div class="bx-panel badge-ok" style="paddin
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Station abgeschlossen.</div>';
 if (isset($_GET['mangel'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht genug Bestand für die Produktion – siehe Material unten. Bitte erst Wareneingang buchen.</div>';
 if (isset($_GET['weg']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produktionsweg umgestellt.</div>';
-if (isset($_GET['wegfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Eigen/Fremd bzw. der Weg kann nicht mehr geändert werden – es wurde bereits ein Schritt erledigt oder für den Auftrag bestellt.</div>';
+if (isset($_GET['wegfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Eigen/Fremd bzw. der Weg kann nicht mehr geändert werden – es wurde bereits ein Schritt erledigt oder für den Auftrag bestellt.' . (($pa['produktionsart'] ?? '') === 'fremd' ? ' Für „doch selbst produzieren" den Knopf <strong>Rückabwicklung</strong> nutzen (storniert die Bulk-Bestellung mit).' : '') . '</div>';
+if (isset($_GET['rueck']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['rueck']) . '</div>';
+if (isset($_GET['rueckfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['rueckfehler']) . '</div>';
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] > 0 ? (int)$_GET['bestellt'] . ' Bestellung(en) als Entwurf angelegt – im Einkauf prüfen und absenden.' : 'Kein offener Fehlbedarf – nichts zu bestellen.') . '</div>';
 if (isset($_GET['etikett'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Etikett-Design aktualisiert.</div>';
 if (isset($_GET['reserviert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['reserviert'] > 0 ? 'Bestand für ' . (int)$_GET['reserviert'] . ' Komponente(n) reserviert.' : 'Nichts zu reservieren (kein freier Bestand verfügbar).') . '</div>';
@@ -399,6 +407,22 @@ ob_start(); ?>
     <span class="muted">Dieser Auftrag läuft auf dem <strong>verkürzten Weg</strong> (zugekaufte Bulkware – ohne Mischen/Verkapseln).</span>
     <form method="post" style="margin:0"><input type="hidden" name="aktion" value="weg_voll"><button class="btn btn-ghost btn-sm" type="submit">Auf vollen Produktionsweg umstellen</button></form>
   </div>
+</div>
+<?php endif; ?>
+<?php
+// Rückabwicklung: Fremd-Bulk beim Lieferanten bestellt, soll aber doch selbst produziert werden.
+$bulkBestellOffen = $pa['auftrag_id'] ? (int) scalar(
+    "SELECT COUNT(*) FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
+     WHERE bp.auftrag_id=? AND bp.item_id IS NULL AND bp.bezeichnung LIKE 'Bulk%' AND b.status<>'storniert'",
+    [(int)$pa['auftrag_id']]) : 0;
+if (($pa['produktionsart'] ?? '') === 'fremd' && $bulkBestellOffen > 0 && $done === 0): ?>
+<div class="bx-panel" style="border-color:#e6c4c0;background:rgba(230,196,192,.10)">
+  <h2 style="margin-top:0">Doch selbst produzieren (Rückabwicklung)</h2>
+  <p style="margin-top:0">Der Lieferant kann/will den Auftrag <strong>nicht</strong> fremdfertigen? Dieser Knopf <strong>storniert die Bulk-Bestellung beim Lieferanten</strong> (er wird per Nachricht und Mail informiert) und stellt auf <strong>Eigenproduktion</strong> um – danach steht der Rohstoffbedarf im Einkauf. Verpackungs-/Etikett-Bestellungen bleiben erhalten. Nur möglich, solange nichts produziert und keine Bulkware eingebucht ist.</p>
+  <form method="post" style="margin:0" onsubmit="return confirm('Bulk-Bestellung stornieren, Lieferant informieren und auf Eigenproduktion umstellen?');">
+    <input type="hidden" name="aktion" value="rueckabwicklung">
+    <button class="btn btn-primary" type="submit">Doch selbst produzieren</button>
+  </form>
 </div>
 <?php endif; ?>
 <?php $panWeg = ob_get_clean();

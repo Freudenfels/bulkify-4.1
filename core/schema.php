@@ -6542,6 +6542,56 @@ function produktionsauftrag_art_setzen(int $pa_id, string $art): bool {
     return true;
 }
 
+// Rückabwicklung Fremd -> Eigen: der Lieferant kann/will doch nicht produzieren – wir machen es selbst.
+// Storniert NUR die Fremd-BULK-Bestellung(en) dieses Auftrags (Verpackung/Etikett bleiben!), informiert den
+// Lieferanten (Portal-Chat + Mail), stellt auf Eigenproduktion um (Rohstoffbedarf erscheint im Einkauf).
+// Blockiert, wenn schon ein Produktionsschritt erledigt ODER Bulk/Fertigware bereits (teil)geliefert/eingebucht ist.
+// Rückgabe ['ok'=>bool, 'msg'=>..., 'storniert'=>N, 'mail'=>N].
+function produktion_rueckabwicklung_eigen(int $pa_id, string $wer = ''): array {
+    $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['ok'=>false, 'msg'=>'Produktionsauftrag nicht gefunden.'];
+    $aid = (int)($pa['auftrag_id'] ?? 0);
+    if (!$aid) return ['ok'=>false, 'msg'=>'Kein Auftrag verknüpft – Rückabwicklung nur bei Kundenaufträgen.'];
+    if ((int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]) > 0)
+        return ['ok'=>false, 'msg'=>'Es wurde bereits ein Produktionsschritt erledigt – Rückabwicklung nicht mehr möglich.'];
+    // Blockieren, wenn die Fremd-Fertigware schon eingebucht ist (Charge der Kategorie 'fertig' am Auftrag).
+    if ((int) scalar("SELECT COUNT(*) FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie='fertig'", [$aid]) > 0)
+        return ['ok'=>false, 'msg'=>'Für diesen Auftrag ist bereits Fertigware (Bulk) eingebucht. Bitte zuerst manuell klären, bevor auf Eigenproduktion umgestellt wird.'];
+    // Fremd-BULK-Bestellungen dieses Auftrags: Position ohne Item (item_id NULL) mit Bezeichnung „Bulk…".
+    $bulkBes = all("SELECT DISTINCT b.id, b.nummer, b.lieferant_id, b.status, b.angekommen_am
+                    FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
+                    WHERE bp.auftrag_id=? AND bp.item_id IS NULL AND bp.bezeichnung LIKE 'Bulk%' AND b.status<>'storniert'", [$aid]);
+    foreach ($bulkBes as $b)
+        if ($b['status'] === 'geliefert' || !empty($b['angekommen_am']))
+            return ['ok'=>false, 'msg'=>'Die Bulk-Bestellung ' . (string)$b['nummer'] . ' ist bereits (teil)geliefert/angekommen. Bitte zuerst manuell klären.'];
+    $wer = trim($wer) ?: 'Team';
+    $n = 0; $mail = 0;
+    if ($bulkBes) require_once __DIR__ . '/nachricht.php';
+    foreach ($bulkBes as $b) {
+        q("UPDATE bestellung SET status='storniert', notiz=CONCAT(COALESCE(notiz,''), ' | Storniert (Rückabwicklung – Eigenproduktion) – ', ?) WHERE id=?", [$wer, (int)$b['id']]);
+        $n++;
+        if ($b['lieferant_id'] && function_exists('nachricht_senden')) {
+            nachricht_senden((int)$b['lieferant_id'], 'team', $wer,
+                'Hinweis: Unsere Bestellung ' . (string)$b['nummer'] . ' wurde storniert. Die Produktion erfolgt nun bei uns im Haus – bitte nicht mehr produzieren oder liefern. Vielen Dank.',
+                'bestellung', (int)$b['id']);
+            if (function_exists('mail_bereit') && mail_bereit()) $mail++;
+        }
+    }
+    // Auf Eigenproduktion umstellen: Schritte neu (voller Weg), produktionsart = eigen. Die coarse Sperre aus
+    // produktionsauftrag_art_setzen bewusst umgehen (Verpackung/Etikett-Bestellungen dürfen bleiben), aber den
+    // „kein Schritt erledigt"-Schutz behält produktion_schritte_regenerieren bei.
+    if (!produktion_schritte_regenerieren($pa_id, false))
+        return ['ok'=>false, 'msg'=>($n ? $n . ' Bulk-Bestellung(en) storniert, aber ' : '') . 'Umstellung auf Eigenproduktion nicht möglich (evtl. schon ein Schritt erledigt).'];
+    q("UPDATE produktionsauftrag SET produktionsart='eigen', art_festgelegt_am=NOW() WHERE id=?", [$pa_id]);
+    if (function_exists('log_aktivitaet'))
+        log_aktivitaet('auftrag', $aid, 'team',
+            'Rückabwicklung: Fremd → Eigenproduktion.' . ($n ? ' ' . $n . ' Lieferanten-Bulk-Bestellung(en) storniert' . ($mail ? ' (Lieferant informiert)' : '') . '.' : '') . ' Rohstoffbedarf erscheint im Einkauf.',
+            'auftrag', 'auftrag', $aid);
+    bedarf_bump();
+    return ['ok'=>true, 'storniert'=>$n, 'mail'=>$mail,
+            'msg'=>'Auf Eigenproduktion umgestellt' . ($n ? ' – ' . $n . ' Bulk-Bestellung(en) storniert' . ($mail ? ' und Lieferant informiert' : '') : '') . '. Der Rohstoffbedarf steht jetzt im Einkauf.'];
+}
+
 // ===== PreProduktionsauftrag / Vor-Produktion =====================================================
 // Checkliste eines Vor-Produktionsauftrags: ist alles da, um die Produktion durchzuführen?
 // Rückgabe: ['pa'=>…, 'auftrag_id'=>…, 'einheiten_bedarf'=>…, 'checks'=>[['key','label','ok','wert','kritisch'], …],

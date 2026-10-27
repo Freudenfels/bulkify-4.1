@@ -47,6 +47,15 @@ Der Weg richtet sich nach der **Beschaffung**: Ist für den Auftrag **fertige Bu
 
 Auf der PA-Detailseite erscheint bei erkanntem Zukauf ein **Banner „Fertige Bulkware erkannt – verkürzter Weg möglich"** mit Button **Verkürzten Weg anwenden** (`aktion=weg_zukauf`). Umgekehrt kann auf den vollen Weg zurückgestellt werden (`aktion=weg_voll`). Beides über `produktion_schritte_regenerieren($pa_id,$zukauf)` – nur solange **kein Schritt erledigt** ist (sonst Hinweis). Kein manuelles Make-or-Buy-Flag nötig; die Info steckt in Kategorie/Form der eingegangenen Ware.
 
+### Rückabwicklung: Fremd → Eigen („Doch selbst produzieren")
+Wenn der Lieferant die Fremdfertigung doch nicht macht: Panel **„Doch selbst produzieren (Rückabwicklung)"** (nur bei `produktionsart='fremd'`, offener **Bulk-Bestellung** für den Auftrag und `done=0`). `aktion=rueckabwicklung` ruft `produktion_rueckabwicklung_eigen($pa_id, $wer)` (`core/schema.php`):
+- storniert **nur die Fremd-Bulk-Bestellung(en)** des Auftrags (Position `item_id IS NULL`, Bezeichnung `Bulk…`) – Verpackung/Etikett-Bestellungen bleiben,
+- informiert den Lieferanten per `nachricht_senden()` (Portal-Chat + Mail),
+- stellt per `produktion_schritte_regenerieren($pa_id, false)` auf den **vollen (Eigen-)Weg** um und setzt `produktionsart='eigen'` (umgeht bewusst die coarse Bestell-Sperre aus `produktionsauftrag_art_setzen`, behält aber den „kein Schritt erledigt"-Schutz),
+- `bedarf_bump()` → der Rohstoffbedarf erscheint im Einkauf.
+
+**Blockiert**, wenn schon ein Schritt erledigt ist oder **Fertigware (Bulk) eingebucht** / eine Bulk-Bestellung bereits (teil)geliefert/angekommen ist (Flash `rueckfehler`). Erfolg: Flash `rueck`. Derselbe Knopf steht auch im Auftrag-Detail (Reiter Produktion, nur Admin/Fremd) und leitet das Ergebnis auf die PA-Seite.
+
 ## Produktionsbereitschaft (Baustein 3)
 
 `produktion_bereitschaft($pa_id)` prüft, ob das Material komplett da ist: bereit | wartet | laeuft | fertig. Rohstoffe (`produktion_materialbedarf`) + Leerkapseln, bei Zukauf stattdessen die freie fertig-Charge. Kachel „Bereitschaft" + Panel „Wartet auf Material" (Fehlliste benötigt/verfügbar/fehlt). Auch in Liste/Cockpit als Badge (`bereitschaft_badge()`) + Filter „Nur produktionsbereite".

@@ -50,6 +50,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     $r = produktionsauftrag_freigeben($paid, $art, $mp, $wer);
     header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&freigabeok=1' : '&expressfehler=' . urlencode($r['fehler'] ?? 'Freigabe fehlgeschlagen.'))); exit;
 }
+// Rückabwicklung Fremd -> Eigen: Lieferant kann/will doch nicht. Storniert die Bulk-Bestellung (+ informiert
+// den Lieferanten) und stellt auf Eigenproduktion um. Ergebnis zeigt die Produktionsauftrag-Seite.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'rueckabwicklung') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $paid = (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$id]);
+    if (!$paid) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Produktionsauftrag zum Rückabwickeln.')); exit; }
+    $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
+    $res = produktion_rueckabwicklung_eigen($paid, $wer);
+    header('Location: ?p=produktionsauftrag&id=' . $paid . '&' . ($res['ok'] ? 'rueck=' : 'rueckfehler=') . rawurlencode($res['msg'])); exit;
+}
 
 // MHD der Fertigware selbst festlegen (am Produktionsauftrag) – wird beim Einbuchen der Charge verwendet.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'mhd_setzen') {
@@ -1082,6 +1092,18 @@ if (auftrag_braucht_etikett($id)):
     <div class="muted">Keine Wareneingänge erfasst.</div>
   <?php endif; ?>
 </div>
+
+<?php // Rückabwicklung: Fremd beim Lieferanten bestellt, soll aber doch selbst produziert werden. Nur Admin, nur Fremd.
+if ($istFremd && $istAdmin): ?>
+<div class="bx-panel" data-panel="produktion" style="border-color:#e6c4c0;background:rgba(230,196,192,.10)">
+  <h2 style="margin-top:0">Doch selbst produzieren (Rückabwicklung)</h2>
+  <p style="margin-top:0">Der Lieferant kann oder will den Auftrag <strong>nicht</strong> fremdfertigen? Der Knopf storniert die <strong>Bulk-Bestellung beim Lieferanten</strong> (er wird per Nachricht und Mail informiert) und stellt auf <strong>Eigenproduktion</strong> um – danach steht der Rohstoffbedarf im Einkauf. Verpackungs-/Etikett-Bestellungen bleiben erhalten. Nur möglich, solange nichts produziert und keine Bulkware eingebucht ist.</p>
+  <form method="post" style="margin:0" onsubmit="return confirm('Bulk-Bestellung stornieren, Lieferant informieren und auf Eigenproduktion umstellen?');">
+    <input type="hidden" name="aktion" value="rueckabwicklung">
+    <button class="btn btn-primary" type="submit">Doch selbst produzieren</button>
+  </form>
+</div>
+<?php endif; ?>
 
 <?php // Energetisierung – nur fuer freigeschaltete Kunden (z. B. Annapurna/Pure Health). Startdatum setzen;
       // Status laeuft/abgeschlossen + Fertig-Datum werden daraus abgeleitet. Der Kunde sieht es im Portal.
