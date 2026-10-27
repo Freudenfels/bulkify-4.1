@@ -435,33 +435,38 @@ $bestand_qua  = $neu ? 0 : (item_bestand((int)$id, false) - $bestand_frei);
 $reserviert_gesamt = $neu ? 0 : item_reserviert_gesamt((int)$id);
 $reservierungen    = $neu ? [] : item_reservierungen_liste((int)$id);
 // Aufträge, auf die reserviert werden kann (laufend – nicht versendet/storniert), neueste zuerst.
-// Welche Aufträge brauchen DIESEN Rohstoff – und wie viel? Aus dem aggregierten Produktionsbedarf
-// (nur festgelegte, laufende Produktionsaufträge). So kann man gezielt für die passenden Aufträge reservieren.
+// Welche Aufträge brauchen DIESEN Rohstoff – und wie viel? Der Bedarf entsteht MIT dem Auftrag aus der
+// Rezeptur, unabhängig von Eigen/Fremd oder Produktionsstatus. Kandidaten = offene Aufträge, deren (Auftrags-
+// oder Produkt-)Rezeptur diesen Rohstoff als Zutat enthält. Soll-Menge je Auftrag via produktion_materialbedarf()
+// (reine Rezeptur-Rechnung, auch Pulver nach Gewicht). Größter Bedarf zuerst.
 $resEinheit = (string)($it['einheit'] ?? '') ?: 'Stk';
-$needJeAuftrag = [];   // auftrag_id => benötigte Menge dieses Rohstoffs (Summe über Produktionsaufträge)
+$needJeAuftrag = [];   // auftrag_id => benötigte Menge dieses Rohstoffs
+$res_auftraege = [];
 if (!$neu) {
-    foreach (bedarf_aggregiert(false) as $ba) {
-        if (!empty($ba['etikett']) || (int)$ba['item_id'] !== (int)$id) continue;
-        foreach ($ba['orders'] as $o) { $aid = (int)$o['auftrag_id']; if ($aid > 0) $needJeAuftrag[$aid] = ($needJeAuftrag[$aid] ?? 0) + (float)$o['need']; }
-        break;
+    $kand = all("SELECT a.id AS auftrag_id, a.nummer, k.firma AS kunde_firma,
+                        COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name, MAX(pa.id) AS pa_id
+                 FROM auftrag a
+                 JOIN produkt p ON p.id=a.produkt_id
+                 JOIN rezeptur_zutat z ON z.rezeptur_id = COALESCE(a.rezeptur_id, p.rezeptur_id) AND z.item_id = ?
+                 LEFT JOIN produktionsauftrag pa ON pa.auftrag_id = a.id
+                 LEFT JOIN kunden k ON k.id = a.kunde_id
+                 WHERE a.status NOT IN ('versendet','storniert')
+                 GROUP BY a.id, a.nummer, k.firma, produkt_name, a.angelegt
+                 ORDER BY a.angelegt DESC", [(int)$id]);
+    $GLOBALS['bx_stock_cache'] = [];   // Rezeptur/PA-Zeilen im Loop nur einmal holen
+    foreach ($kand as $ka) {
+        $need = 0.0;
+        if ($ka['pa_id']) foreach (produktion_materialbedarf((int)$ka['pa_id']) as $m)
+            if ((int)$m['item_id'] === (int)$id) $need += (float)$m['benoetigt'];
+        $needJeAuftrag[(int)$ka['auftrag_id']] = $need;
+        $res_auftraege[] = ['id'=>(int)$ka['auftrag_id'], 'nummer'=>$ka['nummer'], 'kunde_firma'=>$ka['kunde_firma'], 'produkt_name'=>$ka['produkt_name']];
     }
-}
-// Dropdown bevorzugt die Aufträge MIT Bedarf an diesem Rohstoff (größter Bedarf zuerst). Gibt es keinen
-// offenen Bedarf (z. B. Rohstoff in keiner laufenden Produktion), fällt es auf alle Produktaufträge zurück.
-$resNurBedarf = !$neu && !empty($needJeAuftrag);
-if ($neu) {
-    $res_auftraege = [];
-} elseif ($resNurBedarf) {
-    $ids = array_map('intval', array_keys($needJeAuftrag));
-    $in  = implode(',', array_fill(0, count($ids), '?'));
-    $res_auftraege = all("SELECT a.id, a.nummer, k.firma AS kunde_firma,
-                          COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name
-                          FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id
-                          LEFT JOIN produkt p ON p.id=a.produkt_id
-                          WHERE a.id IN ($in) AND a.status NOT IN ('versendet','storniert')", $ids);
+    unset($GLOBALS['bx_stock_cache']);
     usort($res_auftraege, fn($x, $y) => ($needJeAuftrag[(int)$y['id']] ?? 0) <=> ($needJeAuftrag[(int)$x['id']] ?? 0));
-} else {
-    // Fallback: alle Produktaufträge (Dienstleistungs-/DB-Aufträge ohne Produkt bleiben draußen).
+}
+$resNurBedarf = !empty($res_auftraege);
+// Fallback: ist dieser Rohstoff in keiner offenen Auftrags-Rezeptur -> alle Produktaufträge zeigen.
+if (!$neu && !$resNurBedarf) {
     $res_auftraege = all("SELECT a.id, a.nummer, k.firma AS kunde_firma,
                           COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name
                           FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id
