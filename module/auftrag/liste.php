@@ -42,22 +42,23 @@ $istOffen  = fn($r) => !$istAbg($r) && !$istStorno($r);
 $anzOffen  = count(array_filter($alle, $istOffen));
 $anzAbg    = count(array_filter($alle, $istAbg));
 $anzStorno = count(array_filter($alle, $istStorno));
-// Bei einer Suche über ALLE Aufträge gehen (offen UND abgeschlossen) – sonst findet man einen bereits
-// versendeten/abgeschlossenen Auftrag im Standard-Reiter „Offen" nicht. Ohne Suche gilt der Reiter.
+// Der Reiter (offen/abgeschlossen/storniert) ist IMMER der erste Filter – auch bei einer Suche. So zeigt
+// „Offen" + Suche nur offene Treffer. Wer einen versendeten/abgeschlossenen Auftrag sucht, wechselt in den
+// passenden Reiter (die Treffer stehen dann dort). Die Suche filtert zusätzlich über Nummer/Kunde/Produkt.
+$tabPred = match ($tab) {
+    'abgeschlossen' => $istAbg,
+    'storniert'     => $istStorno,
+    default         => $istOffen,
+};
+$rows = array_filter($alle, $tabPred);
 if ($q !== '') {
     $needle = mb_strtolower($q);
-    $rows = array_filter($alle, function($r) use ($needle) {
+    $rows = array_filter($rows, function($r) use ($needle) {
         foreach (['nummer','kunde_firma','produkt_name'] as $f) {
             if (mb_strpos(mb_strtolower((string)$r[$f]), $needle) !== false) return true;
         }
         return false;
     });
-} else {
-    $rows = match ($tab) {
-        'abgeschlossen' => array_filter($alle, $istAbg),
-        'storniert'     => array_filter($alle, $istStorno),
-        default         => array_filter($alle, $istOffen),
-    };
 }
 // Produktion fertig (letzter erledigter Schritt) je Auftrag -> Spalte „Dauer / Stand" UND zum Sortieren.
 // Vor dem Sortieren berechnen (die IDs hängen nicht von der Sortierreihenfolge ab).
@@ -152,7 +153,7 @@ $ohnePreis = (function_exists('has_role') && (has_role('admin') || has_role('fin
     ? (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status<>'storniert' AND COALESCE(gesamt_netto,0) <= 0") : 0;
 $kopfAktion = $ohnePreis > 0 ? bx_btn('Aufträge ohne Preis (' . $ohnePreis . ')', '?p=auftrag_preise', 'ghost') : '';
 $tabWort = match ($tab) { 'abgeschlossen' => 'abgeschlossene (versendet)', 'storniert' => 'stornierte', default => 'offene' };
-bx_head('Aufträge', $q !== '' ? count($rows) . ' Treffer (Suche über alle Aufträge, auch abgeschlossene)' : count($rows) . ' ' . $tabWort, $kopfAktion);
+bx_head('Aufträge', $q !== '' ? count($rows) . ' Treffer unter „' . h((string)($TABS[$tab] ?? ucfirst($tab))) . '" (andere Reiter separat durchsuchen)' : count($rows) . ' ' . $tabWort, $kopfAktion);
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag' . (isset($_GET['nr']) ? ' ' . h((string)$_GET['nr']) : '') . ' gelöscht.</div>';
 ?>
 <div class="settabs">
