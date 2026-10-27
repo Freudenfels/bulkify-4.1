@@ -60,3 +60,10 @@ DL-Angebote unterstützen jetzt Mengen-/Leistungs-Varianten wie Produkt-Angebote
 - **Editor** (`angebot/detail.php`, nur bei `kategorie='dienstleistung'`): je Position ein kleines „Variante"-Feld (A/B/C); `angebot_gruppen_normalisieren` fasst DL nicht an (greift nur bei mehreren `herstellung`-Zeilen).
 - **Portal** (`_angebot_karte.php`, Positions-Zweig): gibt es Gruppen, werden die Varianten je als eigener Block mit eigener Summe + „Variante X annehmen" gerendert; sonst wie bisher ein „Angebot annehmen".
 - **Annahme** (`portal/kunde.php`): die gewählte Gruppe geht als `gruppe` an `dl_auftrag_aus_angebot($angebot_id, $gruppe)` → es werden nur die Positionen dieser Gruppe (+ Basis) in DL-Aufträge (DB-) gewandelt; die DR-Rechnung rechnet ohnehin je Auftrags-Position ab, ist damit automatisch korrekt.
+
+## DL-Auftrag Service-Heilung + Schritte-Resync (2026-10-27)
+Altbestand/Import: manche DL-Aufträge hatten **keine `auftrag.dienstleistung_id`** (alte `dl_auftrag_aus_angebot`-Logik). Folge: keine Schritte (Workflow lief nur `if ($dlid)`) **und** im Kundenportal unsichtbar (SQL-NULL-Bug im Ausschlussfilter). Neu:
+- `dl_auftrag_service_id($auftrag_id)`: ermittelt den Service bestmöglich – `auftrag.dienstleistung_id` → Anker-Angebotsposition (via `angebot_position_id`, sonst per Preis+Menge zugeordnet) → deren `dienstleistung_id` → Art.-Nr. == `dienstleistung.nummer` (z. B. „DL-2698") → exakter Name. 0 = reine Materialposition.
+- `dl_auftrag_heilen($auftrag_id)`: trägt fehlende `dienstleistung_id` nach + legt Schritte an (idempotent, respektiert `ohne_fortschritt`). Reine Material-Aufträge bleiben unberührt.
+- `dl_auftrag_schritte_resync($auftrag_id)`: übernimmt die Schritte **neu** aus dem aktuellen Katalog (für nachträglich geänderte Abläufe); Haken-Stand je Schrittname bleibt erhalten.
+- `dl_auftraege_service_backfill()`: einmalige Heilung des Altbestands (Marker `app_meta dl_heal_v1`), zusätzlich via Schema-mtime nach Deploy genau einmal aus `init_schema()`.

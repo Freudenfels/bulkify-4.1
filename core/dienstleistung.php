@@ -267,6 +267,72 @@ function dl_auftrag_schritte_anlegen(int $auftrag_id, int $dl_id): void {
     $sort = 0;
     foreach ($schritte as $n) { $n = trim((string)$n); if ($n === '') continue; q("INSERT INTO dl_auftrag_schritt (auftrag_id,name,sort) VALUES (?,?,?)", [$auftrag_id, mb_substr($n, 0, 120), $sort++]); }
 }
+// Service-ID eines DL-Auftrags bestmöglich bestimmen – auch wenn die Verknüpfung am Auftrag fehlt (Altbestand/
+// alte Umwandlungslogik/Import). Reihenfolge: (1) auftrag.dienstleistung_id, (2) die ANKER-Angebotsposition
+// (angebot_position_id, sonst die per Preis+Menge passende Position des Angebots) und darüber (a) deren
+// dienstleistung_id, (b) Art.-Nr. == dienstleistung.nummer (z. B. „DL-2698"), (c) exakter Name. Rückgabe 0 =
+// kein Service (reine Materialposition wie Beutel/Glas/Etikett -> KEIN Workflow, keine Schritte).
+function dl_auftrag_service_id(int $auftrag_id): int {
+    $a = one("SELECT id, dienstleistung_id, angebot_id, angebot_position_id, menge, vk_stueck FROM auftrag WHERE id=? AND kategorie='dienstleistung'", [$auftrag_id]);
+    if (!$a) return 0;
+    if ((int)($a['dienstleistung_id'] ?? 0) > 0) return (int)$a['dienstleistung_id'];
+    $pos = null;
+    if (!empty($a['angebot_position_id'])) $pos = one("SELECT * FROM angebot_position WHERE id=?", [(int)$a['angebot_position_id']]);
+    if (!$pos && !empty($a['angebot_id'])) {                       // Legacy: Quell-Position per Preis+Menge zuordnen
+        $vkCent = (int) round(((float)$a['vk_stueck']) * 100);
+        foreach (dl_positionen((int)$a['angebot_id']) as $c)
+            if ((int)$c['preis_cent'] === $vkCent && abs(((float)$c['menge']) - ((float)$a['menge'])) < 0.001) { $pos = $c; break; }
+    }
+    if (!$pos) return 0;
+    if ((int)($pos['dienstleistung_id'] ?? 0) > 0) return (int)$pos['dienstleistung_id'];
+    $art = trim((string)($pos['artikelnr'] ?? ''));
+    if ($art !== '') { $sid = (int) scalar("SELECT id FROM dienstleistung WHERE nummer=? ORDER BY id LIMIT 1", [$art]); if ($sid) return $sid; }
+    $bez = trim((string)($pos['bezeichnung'] ?? ''));
+    if ($bez !== '') { $sid = (int) scalar("SELECT id FROM dienstleistung WHERE name=? ORDER BY id LIMIT 1", [$bez]); if ($sid) return $sid; }
+    return 0;
+}
+// DL-Auftrag „heilen": fehlende Service-Verknüpfung nachtragen und – falls noch keine vorhanden – die Schritte
+// aus dem Katalog anlegen. Idempotent und gefahrlos: verknüpfte/mit Schritten versehene Aufträge bleiben
+// unangetastet; reine Materialpositionen (kein Service auffindbar) ebenfalls. Rückgabe: Service-ID (0=keiner).
+function dl_auftrag_heilen(int $auftrag_id): int {
+    $sid = (int) scalar("SELECT COALESCE(dienstleistung_id,0) FROM auftrag WHERE id=? AND kategorie='dienstleistung'", [$auftrag_id]);
+    if ($sid <= 0) {
+        $sid = dl_auftrag_service_id($auftrag_id);
+        if ($sid > 0) q("UPDATE auftrag SET dienstleistung_id=? WHERE id=? AND kategorie='dienstleistung'", [$sid, $auftrag_id]);
+    }
+    if ($sid > 0) dl_auftrag_schritte_anlegen($auftrag_id, $sid);   // respektiert ohne_fortschritt + legt nur an, wenn leer
+    return $sid;
+}
+// Schritte eines DL-Auftrags NEU aus dem aktuellen Service-Katalog übernehmen (für nachträglich geänderte
+// Abläufe). Erledigt-Status wird je Schrittname so weit möglich erhalten. ohne_fortschritt-Service -> keine
+// Schritte. Rückgabe: Anzahl Schritte (0 = kein Service / nur Abrechnung).
+function dl_auftrag_schritte_resync(int $auftrag_id): int {
+    $sid = dl_auftrag_heilen($auftrag_id);
+    if ($sid <= 0) return 0;
+    if ((int) scalar("SELECT COALESCE(ohne_fortschritt,0) FROM dienstleistung WHERE id=?", [$sid]) === 1) return 0;
+    $neu = array_map(fn($s) => (string)$s['name'], dl_katalog_schritte($sid));
+    if (!$neu) { $d = dienstleistung_laden($sid); $neu = dl_schritte_vorlage($d['baustein'] ?? ''); }
+    $alt = [];
+    foreach (dl_auftrag_track($auftrag_id) as $s) $alt[mb_strtolower(trim((string)$s['name']))] = (int)$s['erledigt'];
+    q("DELETE FROM dl_auftrag_schritt WHERE auftrag_id=?", [$auftrag_id]);
+    $sort = 0;
+    foreach ($neu as $n) {
+        $n = trim((string)$n); if ($n === '') continue;
+        $erl = $alt[mb_strtolower($n)] ?? 0;
+        q("INSERT INTO dl_auftrag_schritt (auftrag_id,name,sort,erledigt,erledigt_at) VALUES (?,?,?,?,?)",
+          [$auftrag_id, mb_substr($n, 0, 120), $sort++, $erl, $erl ? gmdate('Y-m-d H:i:s') : null]);
+    }
+    dl_auftrag_status_ableiten($auftrag_id);
+    return $sort;
+}
+// Einmalige Datenheilung (Altbestand): alle DL-Aufträge ohne Service-Verknüpfung nachverknüpfen + Schritte
+// anlegen. Läuft genau einmal (Marker in app_meta); zusätzlich löst die Schema-mtime den Aufruf nach diesem
+// Deploy einmal aus. Material-Split-Aufträge ohne Service bleiben unverändert (werden im Portal ausgeblendet).
+function dl_auftraege_service_backfill(): void {
+    if (!function_exists('meta_get') || meta_get('dl_heal_v1', '') === '1') return;
+    foreach (all("SELECT id FROM auftrag WHERE kategorie='dienstleistung'") as $r) dl_auftrag_heilen((int)$r['id']);
+    meta_set('dl_heal_v1', '1');
+}
 // Fortschritt eines DL-Auftrags (für Dashboard + Portal).
 function dl_auftrag_track(int $auftrag_id): array {
     return all("SELECT id, name, sort, erledigt, erledigt_at FROM dl_auftrag_schritt WHERE auftrag_id=? ORDER BY sort, id", [$auftrag_id]);

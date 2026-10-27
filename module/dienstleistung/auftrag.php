@@ -27,6 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         dl_auftrag_schritt_setzen($id, (int)($_POST['schritt_id'] ?? 0));
         header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1'); exit;
     }
+    if ($aktion === 'schritte_sync') {         // Schritte (neu) aus dem Service-Katalog übernehmen
+        $n = dl_auftrag_schritte_resync($id);
+        header('Location: ?p=dl_auftrag&id=' . $id . ($n > 0 ? '&syncok=' . $n : '&syncleer=1')); exit;
+    }
     if ($aktion === 'ergebnis_upload') {       // Endergebnis-Dokument hochladen (ggf. Abschluss + Kunden-Mail)
         $r = dl_ergebnis_upload($id);
         header('Location: ?p=dl_auftrag&id=' . $id . ($r['ok'] ? ('&ok=1' . (!empty($r['abgeschlossen']) ? '&done=1' : '')) : '&uperr=' . urlencode($r['msg']))); exit;
@@ -43,6 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pos = dl_positionen((int)$a['angebot_id']);
+// Altbestand selbstheilen: fehlende Service-Verknüpfung nachtragen + Schritte aus dem Katalog anlegen (idempotent).
+if (($a['status'] ?? '') !== 'storniert') { dl_auftrag_heilen($id); $a = dl_auftrag_laden($id) ?: $a; }
 $track  = dl_auftrag_track($id);
 $dlRow  = !empty($a['dienstleistung_id']) ? dienstleistung_laden((int)$a['dienstleistung_id']) : null;
 $ergDok = dl_ergebnis_dateien($id);
@@ -61,6 +67,8 @@ elseif (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:
 if (isset($_GET['uperr']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Upload: ' . h((string)$_GET['uperr']) . '</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Rechnung konnte nicht erstellt werden (keine Positionen/kein Betrag).</div>';
 if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag storniert – beim Kunden ausgeblendet. Eine evtl. erstellte DR-Rechnung bitte noch in der Buchhaltung stornieren.</div>';
+if (isset($_GET['syncok']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Schritte aus dem Service übernommen (' . (int)$_GET['syncok'] . ' Schritte). Der Kunde sieht den Ablauf im Portal.</div>';
+if (isset($_GET['syncleer']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Für diesen Auftrag ließ sich kein Service mit Schritten ermitteln (reine Material-/Abrechnungsposition oder „ohne Fortschritt").</div>';
 ?>
 <div class="bx-cards">
   <div class="bx-card"><div class="k">Kunde</div><div class="v"><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
@@ -103,6 +111,10 @@ if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="paddi
       <?php endforeach; ?>
     </div>
     <p class="muted" style="font-size:12px;margin:0">Ein Klick setzt den aktuellen Stand – alle Schritte bis dorthin gelten als erledigt. Der Kunde sieht diesen Fortschritt im Portal.</p>
+    <form method="post" style="margin:8px 0 0" onsubmit="return confirm('Schritte neu aus dem Service-Katalog übernehmen? Geänderte Abläufe werden angewendet, der bisherige Haken-Stand bleibt je Schrittname erhalten.');">
+      <input type="hidden" name="aktion" value="schritte_sync">
+      <button class="btn btn-ghost btn-sm" type="submit" title="Schritte aus dem aktuellen Service-Katalog neu übernehmen (für nachträglich geänderte Abläufe)">Schritte neu aus Service übernehmen</button>
+    </form>
   <?php else: ?>
     <div class="bx-row" style="gap:8px">
       <form method="post" style="margin:0"><input type="hidden" name="aktion" value="status"><input type="hidden" name="status" value="in_arbeit"><button class="btn btn-ghost btn-sm" type="submit">in Arbeit</button></form>
@@ -110,7 +122,13 @@ if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="paddi
     </div>
     <p class="muted" style="font-size:12px;margin:6px 0 0"><?= (int)($dlRow['ohne_fortschritt'] ?? 0) === 1
         ? 'Diese Dienstleistung läuft <strong>ohne Fortschritt</strong> – nur Abrechnung (z.&nbsp;B. Fulfillment/Lagerung). Status hier setzen, Rechnung unten.'
-        : 'Dieser Auftrag hat keine definierten Schritte. Schritte legst du am <a href="?p=dienstleistungen">Service im Katalog</a> fest.' ?></p>
+        : 'Dieser Auftrag hat keine definierten Schritte. Schritte legst du am <a href="?p=dienstleistungen">Service im Katalog</a> fest – dann hier „aus Service übernehmen".' ?></p>
+    <?php if ((int)($dlRow['ohne_fortschritt'] ?? 0) !== 1): ?>
+    <form method="post" style="margin:8px 0 0">
+      <input type="hidden" name="aktion" value="schritte_sync">
+      <button class="btn btn-ghost btn-sm" type="submit" title="Schritte aus dem Service-Katalog übernehmen">Schritte aus dem Service übernehmen</button>
+    </form>
+    <?php endif; ?>
   <?php endif; ?>
   <?php if (($a['status'] ?? '') !== 'storniert'): ?>
   <div class="bx-row" style="gap:8px;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">

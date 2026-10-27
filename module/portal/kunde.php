@@ -1142,11 +1142,23 @@ $ustP = (meta_get('kleinunternehmer','0') === '1' || $land !== 'DE') ? 0.0 : (fl
 // Nicht in den Kunden-„Bestellungen": Fulfillment-/Lager-Abrechnungen (DL-Auftrag, dessen Service
 // baustein='fulfillment' oder kategorie='lagerung' ist). Das sind wiederkehrende Abrechnungen, keine
 // nachverfolgbaren Bestellungen – echte DL (Labortest o. Ä.) bleiben sichtbar.
+// WICHTIG: `dienstleistung_id IS NOT NULL` MUSS im NOT(...) stehen. Sonst wird `a.dienstleistung_id IN (…)`
+// bei fehlender Verknüpfung (NULL) zu NULL statt FALSE, `NOT(TRUE AND NULL)` ergibt NULL -> die ganze Zeile
+// fällt aus dem Ergebnis (echter DL-Auftrag ohne Service-Verknüpfung wäre im Portal unsichtbar). Ausschluss
+// gilt nur für reine Abrechnungen: Service „ohne Fortschritt" bzw. Fulfillment/Lagerung.
 $auftraege = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
                   WHERE a.kunde_id=? AND (a.status <> 'storniert' OR a.kontingent_id IS NOT NULL)
-                    AND NOT (a.kategorie='dienstleistung' AND a.dienstleistung_id IN
-                             (SELECT id FROM dienstleistung WHERE baustein='fulfillment' OR kategorie='lagerung'))
+                    AND NOT (a.kategorie='dienstleistung' AND a.dienstleistung_id IS NOT NULL AND a.dienstleistung_id IN
+                             (SELECT id FROM dienstleistung WHERE ohne_fortschritt=1 OR baustein='fulfillment' OR kategorie='lagerung'))
                   ORDER BY a.angelegt DESC", [$kid]);
+// Material-Split-Altbestand nicht als eigene „Bestellung" zeigen: fälschlich als eigener DL-Auftrag entstandene
+// Beutel-/Glas-/Etikett-Positionen (kein Service verknüpfbar UND keine Schritte). Echte DL-Aufträge (Service
+// verknüpft ODER mit Fortschritts-Schritten) bleiben sichtbar.
+$auftraege = array_values(array_filter($auftraege, function ($a) {
+    if (($a['kategorie'] ?? '') !== 'dienstleistung') return true;
+    if (!empty($a['dienstleistung_id'])) return true;
+    return (int) scalar("SELECT COUNT(*) FROM dl_auftrag_schritt WHERE auftrag_id=?", [(int)$a['id']]) > 0;
+}));
 // Fertigware-Chargen je Bestellung (Charge-Nr steht auf dem Produkt, deshalb sichtbar fuer den Kunden).
 $auftragChargen = [];
 if ($auftraege) {

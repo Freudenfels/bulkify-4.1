@@ -2178,6 +2178,11 @@ function init_schema(): void {
     // den Einstellungen (E-Mail -> Zusaetzliche Benachrichtigungs-Adressen) frei aenderbar.
     if (meta_get('benachrichtigung_cc', null) === null) meta_set('benachrichtigung_cc', 'albers@bulkify.pro');
 
+    // Einmalig: DL-Aufträge ohne Service-Verknüpfung heilen (Service aus der Angebotsposition nachtragen +
+    // Schritte aus dem Katalog anlegen). Behebt Altbestand, bei dem dienstleistung_id am Auftrag fehlte ->
+    // sonst keine Schritte und (NULL-IN-Bug) unsichtbar im Kundenportal.
+    if (function_exists('dl_auftraege_service_backfill')) dl_auftraege_service_backfill();
+
     // Migrationen durch -> Marker setzen, damit der nächste Request den Block überspringt.
     if ($schemaBuild !== '') meta_set('schema_build', $schemaBuild);
 }
