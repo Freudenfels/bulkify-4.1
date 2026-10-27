@@ -98,8 +98,10 @@ Einlagern geht IMMER in **Lager 1** (`einlager_ziel_fuer_pa()` liefert immer lag
 
 ## Fortschritt auf jede Stufe setzen (Admin/Team)
 Am Fortschrittsbalken gibt es „Fortschritt setzen" mit **allen** Phasen (nicht nur den groben Status): Bestätigt,
-Rohstoff bestellt, Rohstoff angekommen, In Produktion, Etikettiert, Qualitätsprüfung, Versandbereit, Eingelagert,
-Versendet (bei Fulfillment endet die Kette mit „Eingelagert"). Die Auswahl kommt aus `auftrag_phasen()`; der Handler
+Rohstoff bestellt, Rohstoff angekommen, In Produktion, Etikettiert, Qualitätsprüfung, Versandbereit, Versendet.
+**„Eingelagert" ist ausschließlich eine Fulfillment-Phase** – bei Fulfillment-Kunden heißt die Kette am Ende
+„Bereit zur Einlagerung" / „Eingelagert" (Ware ins Lager 2 statt Versand); Nicht-Fulfillment endet Versandbereit →
+Versendet (die interne Lager-1-Buchung der Fertigware ist KEINE Kundenphase). Die Auswahl kommt aus `auftrag_phasen()`; der Handler
 `phase_setzen` schreibt `auftrag.phase_override` (gewählter Phasenindex) und führt den groben `auftrag.status`
 passend mit (offen/in_produktion/erledigt/versendet) – auch Zurückstufen ist möglich. „Bestätigt" (Stufe 0) löscht
 den Override (phase_override=NULL → wieder automatisch aus den Signalen). Der Kunde sieht die Stufe sofort.

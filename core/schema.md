@@ -126,6 +126,9 @@ gruppenlos = echte Zuschläge). Idempotent (saubere Angebote: je Gruppe hoechste
 Aenderung). Aufruf an den Schreib-/Lese-Einstiegen: Angebots-Editor (Laden **und** `pos_save`) und
 `angebot_pdf_bauen()` – so repariert sich ein betroffenes Angebot beim naechsten Oeffnen/Drucken selbst.
 
+## Auftrags-Phasen (`auftrag_phasen()` / `kunde_auftrag_phase()`)
+8 Phasen (Index 0..7): Bestätigt · Rohstoff bestellt · Rohstoff angekommen · In Produktion · Etikettiert · Qualitätsprüfung · 6 **Versandbereit** · 7 **Versendet**. Bei **Fulfillment-Kunden** (`kunden.nutzt_fulfillment=1`) heißen die letzten beiden stattdessen „Bereit zur Einlagerung" / „Eingelagert" (Ware geht ins Fremdlager/Lager 2 statt in den Versand). **„Eingelagert" ist also ausschließlich eine Fulfillment-Phase** – für normale Kunden gibt es sie nicht, auch wenn die Fertigware intern in Lager 1 gebucht wird (`produktion_gebucht()` wird für Nicht-Fulfillment gar nicht geprüft).
+
 ## Fortschritt-Override (`auftrag.phase_override`)
 `kunde_auftrag_phase()` leitet die aktuelle Phase aus Signalen ab (Bestellung, Charge/Wareneingang,
 Produktionsschritte, Status). Für Stufen ohne Systemsignal (z. B. „Rohstoff bestellt" bei Alt-/Zukauf-Aufträgen)

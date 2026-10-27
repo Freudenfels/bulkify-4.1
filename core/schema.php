@@ -4990,9 +4990,12 @@ function auftrag_phasen(bool $fulfillment = false): array {
     $base = ['Bestätigt', 'Rohstoff bestellt', 'Rohstoff angekommen', 'In Produktion', 'Etikettiert', 'Qualitätsprüfung'];
     // Laboranalyse + Energetisierung kommen (nur für freigeschaltete Kunden) als parallele Punkte
     // nach „Qualitätsprüfung" dazu – eingefügt in kunde_auftrag_track(), nicht hier in der festen Kette.
+    // „Eingelagert" ist AUSSCHLIESSLICH eine Fulfillment-Phase (Ware geht ins Fremdlager/Lager 2 statt zum Kunden).
+    // Nicht-Fulfillment-Kunden bekommen ihre Ware versendet – ihre Kette endet Versandbereit -> Versendet, ohne
+    // „Eingelagert" (auch wenn die Fertigware intern in Lager 1 gebucht wird, ist das keine Kundenphase).
     return $fulfillment
         ? array_merge($base, ['Bereit zur Einlagerung', 'Eingelagert'])
-        : array_merge($base, ['Versandbereit', 'Eingelagert', 'Versendet']);
+        : array_merge($base, ['Versandbereit', 'Versendet']);
 }
 // Sind die EINGEKAUFTEN Rohstoffe dieses Auftrags bereits beschafft (= bestellt und mindestens gedeckt)?
 // Hintergrund: Rohstoffe werden artikelweise (ohne auftrag_id) gebündelt bestellt -> es gibt keine
@@ -5033,8 +5036,9 @@ function auftrag_rohstoffe_beschafft(int $aid): ?string {
     return $cache[$aid] = ($earliest ?: gmdate('Y-m-d'));
 }
 // Aktuelle Phase + Datum je Phase aus den vorhandenen Signalen ableiten.
-// Positionen: 0 Bestätigt · 1 Rohstoff bestellt · 2 Rohstoff angekommen · 3 In Produktion · 4 Etikettiert ·
-// 5 Qualitätsprüfung · 6 Versandbereit/Bereit zur Einlagerung · 7 Eingelagert · 8 Versendet (nur non-Fulfillment).
+// Positionen (8 Phasen, 0..7): 0 Bestätigt · 1 Rohstoff bestellt · 2 Rohstoff angekommen · 3 In Produktion ·
+// 4 Etikettiert · 5 Qualitätsprüfung · 6 Versandbereit (Fulfillment: „Bereit zur Einlagerung") ·
+// 7 Versendet (Fulfillment: „Eingelagert"). „Eingelagert" ist ausschließlich eine Fulfillment-Phase.
 function kunde_auftrag_phase(array $a): array {
     $aid = (int)$a['id']; $st = (string)$a['status'];
     $ff  = array_key_exists('nutzt_fulfillment', $a) ? !empty($a['nutzt_fulfillment'])
@@ -5092,21 +5096,20 @@ function kunde_auftrag_phase(array $a): array {
     // (kein solcher Schritt), dann gilt es als erledigt, sobald QC/Versandbereit erreicht ist (nie blockierend).
     $etikettiert   = ($etikDate !== null) || (!$hasEtikStep && ($qcDone || $versandbereit));
     $prodGestartet = $prodStart !== null || in_array($st, ['in_produktion', 'erledigt', 'versendet'], true);
-    // Eingelagert: Fertigware zum Produktionsauftrag ist als Charge gebucht (Lager 1/2) – oder versendet.
-    $eingelagert   = ($pa && produktion_gebucht((int)$pa['id']) > 0.0001) || $versendet;
+    // Eingelagert ist NUR eine Fulfillment-Phase (Ware ins Fremdlager/Lager 2). Bei Nicht-Fulfillment gibt es
+    // sie nicht – die interne Lager-1-Buchung der Fertigware ist keine Kundenphase (Weg endet Versandbereit ->
+    // Versendet). Deshalb hier auf $ff gaten (produktion_gebucht() wird für Nicht-Fulfillment gar nicht erst geprüft).
+    $eingelagert   = $ff && ((($pa && produktion_gebucht((int)$pa['id']) > 0.0001)) || $versendet);
 
     if ($prodGestartet) $dates[3] = $prodStart ?: ($st === 'in_produktion' ? ($a['status_datum'] ?? null) : null);
     $dates[4] = $etikDate;
     $dates[5] = $qcDate;
     if ($versandbereit) $dates[6] = $a['status_datum'] ?? ($a['aktualisiert'] ?? null);
-    if ($versendet) {
-        $end = $a['aktualisiert'] ?? null;
-        if ($ff) $dates[7] = $end;
-        else { $dates[8] = $end; $dates[7] = $dates[7] ?? $end; }
-    }
+    // Beide Ketten sind 8 Phasen lang (0..7): Fulfillment 7 = „Eingelagert", sonst 7 = „Versendet".
+    if ($versendet) $dates[7] = $a['aktualisiert'] ?? null;
     // Aktuelle Phase (Index des gerade aktiven Schritts).
-    if ($versendet)            $idx = $ff ? 7 : 8;
-    elseif ($versandbereit)    $idx = $eingelagert ? 7 : 6;
+    if ($versendet)            $idx = 7;
+    elseif ($versandbereit)    $idx = ($ff && $eingelagert) ? 7 : 6;
     elseif ($qcDone)           $idx = 5;
     elseif ($etikettiert)      $idx = 5;                 // Etikettieren fertig -> Qualitätsprüfung aktiv
     elseif ($prodGestartet)    $idx = 3;                 // In Produktion aktiv (Etikettieren noch offen)
