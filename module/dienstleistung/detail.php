@@ -178,9 +178,15 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
         <label for="f_ohnefort" style="margin:0">Kein Fortschritt – nur Abrechnung (z. B. Fulfillment/Lagerung; vom Kunden gebucht, keine Schritte, nur Rechnung)</label>
       </div>
     </div>
-    <div class="bx-field" id="f_schritte_wrap"><label>Schritte / Status <?= bx_hint('Die Fortschritts-Punkte für Aufträge dieser Dienstleistung – ein Schritt je Zeile, in Reihenfolge. Je Dienstleistungstyp eigene Punkte (z. B. Laboranalyse: Bestätigung · Probe versendet · Ergebnis; Abfüllen: Bestätigung · Mischen · Abfüllung · Abschluss).') ?></label>
-      <textarea name="schritte" id="f_schritte" rows="5" placeholder="ein Schritt je Zeile"><?= h($schritteText) ?></textarea>
-      <div class="muted" style="font-size:12px;margin-top:2px">Ein Schritt je Zeile. Leer lassen = Standard-Vorlage für den gewählten Baustein.</div>
+    <div class="bx-field" id="f_schritte_wrap"><label>Schritte / Status <?= bx_hint('Die Fortschritts-Punkte für Aufträge dieser Dienstleistung – die sieht auch der Kunde. Schritte aus der Liste wählen und per Drag&Drop sortieren; eigene Schritte sind möglich.') ?></label>
+      <div class="muted" style="font-size:12px;margin:0 0 6px">Schritte aus der Liste wählen und per <strong>Drag&amp;Drop</strong> sortieren. Einheitliche Benennung – eigene Schritte nur, wenn nötig. Leer lassen = Standard-Vorlage des Bausteins.</div>
+      <div id="schritteChips" style="display:flex;flex-wrap:wrap;gap:8px;min-height:44px;padding:10px;border:1px dashed var(--line);border-radius:10px;align-items:flex-start"></div>
+      <div class="bx-row" style="gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
+        <select id="schritteAdd" style="max-width:260px"><option value="">+ Schritt hinzufügen …</option><?php foreach (dl_schritte_katalog() as $s): ?><option value="<?= h($s) ?>"><?= h($s) ?></option><?php endforeach; ?></select>
+        <input type="text" id="schritteCustom" placeholder="eigener Schritt" maxlength="120" style="max-width:200px">
+        <button type="button" class="btn btn-ghost btn-sm" id="schritteCustomAdd">+ eigener</button>
+      </div>
+      <textarea name="schritte" id="f_schritte" hidden><?= h($schritteText) ?></textarea>
     </div>
     <div class="bx-grid">
       <div class="bx-field"><label>Endergebnis-Upload</label>
@@ -226,27 +232,59 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
   apply();
 })();
 (function(){
-  // Schritte-Vorlage beim Baustein-Wechsel einfuellen, solange das Feld leer/unveraendert ist.
-  var map = <?= json_encode($vorlagenMap, JSON_UNESCAPED_UNICODE) ?>;
-  var baustein = document.querySelector('select[name="baustein"]');
-  var feld = document.getElementById('f_schritte');
-  if (baustein && feld) {
-    var autoFill = (feld.value.trim() === '');
-    feld.addEventListener('input', function(){ autoFill = false; });
-    baustein.addEventListener('change', function(){
-      if (autoFill || feld.value.trim() === '') { feld.value = map[baustein.value] || map[''] || ''; }
-    });
+  // Schritt-Baukasten: Standard-Schritte als sortierbare Kacheln. Quelle/Serverwert bleibt das versteckte
+  // Textfeld #f_schritte (ein Schritt je Zeile) – es wird aus den Kacheln synchron gehalten.
+  var vorlagen = <?= json_encode($vorlagenMap, JSON_UNESCAPED_UNICODE) ?>;
+  var chips  = document.getElementById('schritteChips');
+  var field  = document.getElementById('f_schritte');
+  var addSel = document.getElementById('schritteAdd');
+  var custom = document.getElementById('schritteCustom');
+  var cBtn   = document.getElementById('schritteCustomAdd');
+  var bausteinSel = document.querySelector('select[name="baustein"]');
+  var dragEl = null;
+  function sync(){ if (!field) return;
+    field.value = [].map.call(chips.querySelectorAll('.bx-step-chip'), function(c){ return c.getAttribute('data-name'); }).join('\n');
   }
+  function makeChip(name){
+    name = (name || '').trim(); if (!name) return null;
+    var dup = [].some.call(chips.querySelectorAll('.bx-step-chip'), function(c){ return c.getAttribute('data-name').toLowerCase() === name.toLowerCase(); });
+    if (dup) return null;
+    var chip = document.createElement('span');
+    chip.className = 'bx-step-chip';
+    chip.setAttribute('draggable', 'true');
+    chip.setAttribute('data-name', name);
+    chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-size:13px;cursor:grab';
+    var grip = document.createElement('span'); grip.textContent = '⋮⋮'; grip.style.opacity = '.45';
+    var lbl = document.createElement('span'); lbl.textContent = name;
+    var x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.title = 'entfernen';
+    x.style.cssText = 'border:0;background:none;cursor:pointer;opacity:.6;font-size:16px;line-height:1';
+    x.addEventListener('click', function(){ chip.remove(); sync(); });
+    chip.appendChild(grip); chip.appendChild(lbl); chip.appendChild(x);
+    chip.addEventListener('dragstart', function(){ dragEl = chip; chip.style.opacity = '.5'; });
+    chip.addEventListener('dragend',   function(){ chip.style.opacity = '1'; dragEl = null; sync(); });
+    chip.addEventListener('dragover',  function(e){ e.preventDefault(); if (!dragEl || dragEl === chip) return;
+      var r = chip.getBoundingClientRect(); chips.insertBefore(dragEl, (e.clientX - r.left) > r.width / 2 ? chip.nextSibling : chip); });
+    return chip;
+  }
+  function addChip(name){ var c = makeChip(name); if (c) { chips.appendChild(c); sync(); } }
+  function loadFrom(text){ chips.innerHTML = ''; (text || '').split(/\r?\n/).forEach(function(n){ addChip(n); }); }
+  loadFrom(field ? field.value : '');
+  if (addSel) addSel.addEventListener('change', function(){ if (addSel.value) { addChip(addSel.value); addSel.value = ''; } });
+  function addCustom(){ if (custom && custom.value.trim()) { addChip(custom.value); custom.value = ''; custom.focus(); } }
+  if (cBtn) cBtn.addEventListener('click', addCustom);
+  if (custom) custom.addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); addCustom(); } });
+  // Baustein-Vorlage nur einfuellen, wenn noch keine Schritte gewaehlt sind.
+  if (bausteinSel) bausteinSel.addEventListener('change', function(){
+    if (chips.querySelectorAll('.bx-step-chip').length === 0) loadFrom(vorlagen[bausteinSel.value] || vorlagen[''] || '');
+  });
   // „Upload schließt ab" nur aktivierbar, wenn Endergebnis-Upload erlaubt ist.
   var up = document.getElementById('f_ergup'), done = document.getElementById('f_updone');
   function syncUp(){ if (!up || !done) return; done.disabled = !up.checked; if (!up.checked) done.checked = false; }
-  if (up) up.addEventListener('change', syncUp);
-  syncUp();
-  // „Kein Fortschritt" -> Schritte-Editor ausgrauen (wird beim Speichern ohnehin geleert).
-  var ohne = document.getElementById('f_ohnefort'), schrWrap = document.getElementById('f_schritte_wrap'), schr = document.getElementById('f_schritte');
-  function syncFort(){ var off = ohne && ohne.checked; if (schrWrap) schrWrap.style.opacity = off ? .4 : 1; if (schr) schr.disabled = off; }
-  if (ohne) ohne.addEventListener('change', syncFort);
-  syncFort();
+  if (up) up.addEventListener('change', syncUp); syncUp();
+  // „Kein Fortschritt" -> Baukasten ausgrauen/sperren (wird beim Speichern ohnehin geleert).
+  var ohne = document.getElementById('f_ohnefort'), schrWrap = document.getElementById('f_schritte_wrap');
+  function syncFort(){ var off = ohne && ohne.checked; if (schrWrap){ schrWrap.style.opacity = off ? '.4' : '1'; schrWrap.style.pointerEvents = off ? 'none' : ''; } }
+  if (ohne) ohne.addEventListener('change', syncFort); syncFort();
 })();
 // Kundenpreis-Zeile hinzufügen (globale Funktion für onclick).
 var KP_KUNDEN_OPT = <?= json_encode('<option value="">– wählen –</option>' . implode('', array_map(fn($ku) => '<option value="' . (int)$ku['id'] . '">' . h($ku['firma']) . '</option>', $kundenListe)), JSON_UNESCAPED_UNICODE) ?>;

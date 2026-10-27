@@ -169,6 +169,13 @@ function dl_schritte_vorlage(?string $baustein): array {
         default             => ['Bestätigung', 'In Bearbeitung', 'Abschluss'],
     };
 }
+// Zentrale, einheitliche Standard-Schrittnamen für den Schritt-Baukasten im Dienstleistungs-Editor.
+// EINE Quelle, damit Schritte nicht „mal so, mal so" heißen. Reihenfolge = sinnvolle Default-Abfolge.
+function dl_schritte_katalog(): array {
+    return ['Bestätigung', 'Rohstoff-/Bulk-Eingang', 'Mischen', 'Abfüllen', 'Verkapseln', 'Etikettieren',
+            'In Bearbeitung', 'In Prüfung', 'Probe versendet', 'Qualitätsprüfung', 'Ergebnis',
+            'Energetisierung', 'Einlagerung', 'Versand', 'Abschluss'];
+}
 // Katalog-Schritte eines Service lesen/setzen (frei editierbar, Reihenfolge = sort).
 function dl_katalog_schritte(int $dl_id): array {
     return all("SELECT id, name, sort FROM dienstleistung_schritt WHERE dienstleistung_id=? ORDER BY sort, id", [$dl_id]);
