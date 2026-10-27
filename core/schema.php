@@ -7323,6 +7323,7 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
         // Position faelschlich weg -> es entstand eine Bestellung OHNE Position (Lager: "Keine Positionen").
         $gruppen = array_values(array_filter(bedarf_bulk(false), fn($g) => in_array($g['produkt_id'], $bulkProduktIds, true) && $g['zu_bestellen'] > 1e-6));
         foreach ($gruppen as $g) {
+            $erstePosId = 0;
             foreach ($g['orders'] as $o) {
                 $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                          WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status<>'geliefert'", [(int)$o['auftrag_id']]);
@@ -7332,15 +7333,22 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
                 $bulkEk = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $noch) ?? 0.0) : 0.0;
                 q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
                   [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, $bulkEk, 'Stk', (int)$o['auftrag_id'], $i++]);
+                if (!$erstePosId) $erstePosId = (int) insert_id();
                 $betroffen[(int)$o['auftrag_id']] = true;
             }
-            // Vom Einkauf angehobene Menge: Überschuss über den Auftragsbedarf als Puffer (ohne Auftrag) ergänzen.
+            // Vom Einkauf angehobene Menge: KEINE eigene Puffer-Zeile. Der Überschuss wird in die Produktzeile
+            // eingerechnet (eine Zeile je Produkt); was mehr geliefert als verbraucht wird, bleibt als Bestand.
             $wunsch = (float)($bulkMenge[(int)$g['produkt_id']] ?? 0);
             $ueber  = $wunsch - (float)$g['zu_bestellen'];
             if ($ueber > 1e-6) {
-                $bulkEkP = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $ueber) ?? 0.0) : 0.0;
-                q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (Puffer/Lager)', $ueber, $bulkEkP, 'Stk', null, $i++]);
+                if ($erstePosId) {
+                    q("UPDATE bestellung_position SET menge=menge+? WHERE id=?", [$ueber, $erstePosId]);
+                } else {
+                    // Kein offener Auftragsbedarf -> reine Vorratsmenge als normale Produktzeile (ohne Auftrag, kein „Puffer").
+                    $bulkEkP = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $ueber) ?? 0.0) : 0.0;
+                    q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
+                      [$bid, null, 'Bulk: ' . $g['produkt'], $ueber, $bulkEkP, 'Stk', null, $i++]);
+                }
             }
         }
     }
