@@ -413,6 +413,22 @@ function dl_angebot_senden(int $angebot_id): string {
 
 // DL-Auftrag (DB-) aus einem bestaetigten DL-Angebot. Ein Service pro Auftrag: je Angebotsposition ein
 // eigener DB-Auftrag (mit dienstleistung_id + angebot_position_id + materialisierten Schritten). Idempotent.
+// Positionen eines DL-Angebots in SERVICE-Gruppen schneiden: jede Position MIT dienstleistung_id (echter
+// Service) bildet einen eigenen Auftrag; Positionen OHNE dienstleistung_id (Material/Zubehör wie Beutel,
+// Glas, Deckel, Etikett) gehören zum Service darüber und bilden KEINEN eigenen Auftrag. Material vor dem
+// ersten Service hängt an der ersten Service-Gruppe. Kein Service im Angebot -> eine Gruppe (ganzes Angebot).
+function dl_positionen_gruppieren(array $positionen): array {
+    $hatService = false;
+    foreach ($positionen as $p) if ((int)($p['dienstleistung_id'] ?? 0) > 0) { $hatService = true; break; }
+    if (!$hatService) return $positionen ? [array_values($positionen)] : [];
+    $gruppen = []; $cur = -1; $lead = [];
+    foreach ($positionen as $p) {
+        if ((int)($p['dienstleistung_id'] ?? 0) > 0) { $gruppen[] = array_merge($lead, [$p]); $lead = []; $cur = count($gruppen) - 1; }
+        elseif ($cur >= 0) { $gruppen[$cur][] = $p; }
+        else { $lead[] = $p; }
+    }
+    return $gruppen;
+}
 // Rueckgabe: id des ERSTEN Auftrags (Aufrufer leitet dorthin; weitere stehen in der DL-Auftragsliste).
 function dl_auftrag_aus_angebot(int $angebot_id, ?string $gruppe = null): ?int {
     $a = dl_angebot_laden($angebot_id);
@@ -426,17 +442,23 @@ function dl_auftrag_aus_angebot(int $angebot_id, ?string $gruppe = null): ?int {
     if ($gruppe !== null && $gruppe !== '')
         $positionen = array_values(array_filter($positionen, fn($p) => in_array((string)($p['gruppe'] ?? ''), [$gruppe, ''], true)));
     if (!$positionen) return null;
+    // Je SERVICE ein Auftrag (Material-Positionen hängen am Service, siehe dl_positionen_gruppieren).
     $ersterAid = null;
-    foreach ($positionen as $p) {
-        $ex = (int) scalar("SELECT id FROM auftrag WHERE angebot_position_id=?", [(int)$p['id']]);
+    foreach (dl_positionen_gruppieren($positionen) as $gpos) {
+        if (!$gpos) continue;
+        // Anker = Service-Position der Gruppe (sonst erste Position). Summe + dl_id aus der ganzen Gruppe.
+        $anchor = null; $dlid = 0;
+        foreach ($gpos as $p) if ((int)($p['dienstleistung_id'] ?? 0) > 0) { $anchor = $p; $dlid = (int)$p['dienstleistung_id']; break; }
+        if (!$anchor) $anchor = $gpos[0];
+        $posId = (int)$anchor['id'];
+        $ex = (int) scalar("SELECT id FROM auftrag WHERE angebot_position_id=?", [$posId]);
         if ($ex) { $ersterAid = $ersterAid ?? $ex; continue; }
-        $dlid  = (int)($p['dienstleistung_id'] ?? 0);
-        $vk    = (int)$p['preis_cent'] / 100;
-        $netto = round(((float)$p['menge']) * $vk, 2);
+        $netto = 0.0; foreach ($gpos as $p) $netto += round(((float)$p['menge']) * ((int)$p['preis_cent'] / 100), 2);
+        $vk = (int)$anchor['preis_cent'] / 100;
         q("INSERT INTO auftrag (nummer,angebot_id,angebot_position_id,kunde_id,produkt_id,dienstleistung_id,menge,vk_stueck,gesamt_netto,status,kategorie)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-          [naechste_nummer('DB'), $angebot_id, (int)$p['id'], $a['kunde_id'] ?: null, null, $dlid ?: null,
-           (float)$p['menge'], $vk, $netto, 'offen', 'dienstleistung']);
+          [naechste_nummer('DB'), $angebot_id, $posId, $a['kunde_id'] ?: null, null, $dlid ?: null,
+           (float)$anchor['menge'], $vk, round($netto, 2), 'offen', 'dienstleistung']);
         $aid = (int) insert_id();
         if ($dlid) dl_auftrag_schritte_anlegen($aid, $dlid);
         if (!empty($a['kunde_id'])) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'DL-Auftrag ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$aid]) . ' aus Angebot ' . (string)$a['nummer'] . ' erzeugt.', 'auftrag', 'auftrag', $aid);
@@ -453,10 +475,14 @@ function dl_rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     $ex = scalar("SELECT id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert' ORDER BY id LIMIT 1", [$auftrag_id]);
     if ($ex) return (int)$ex;
     $quellPos = dl_positionen((int)$a['angebot_id']);
-    // Ein Service pro Auftrag: nur die EINE Position dieses Auftrags abrechnen (sonst würde jeder der
-    // aufgesplitteten Aufträge das ganze Angebot berechnen). Legacy-Aufträge (ohne Position) = alles.
-    if (!empty($a['angebot_position_id']))
-        $quellPos = array_values(array_filter($quellPos, fn($p) => (int)$p['id'] === (int)$a['angebot_position_id']));
+    // Ein Service je Auftrag: dessen ganze SERVICE-GRUPPE abrechnen (Service + zugehörige Material-Positionen
+    // wie Beutel/Glas/Etikett). Anker = angebot_position_id (Service-Position). Legacy-Aufträge (ohne Position)
+    // = alles. Findet sich keine Gruppe, Fallback: nur die eine Position.
+    if (!empty($a['angebot_position_id'])) {
+        $ziel = null;
+        foreach (dl_positionen_gruppieren($quellPos) as $g) { foreach ($g as $p) if ((int)$p['id'] === (int)$a['angebot_position_id']) { $ziel = $g; break 2; } }
+        $quellPos = $ziel !== null ? $ziel : array_values(array_filter($quellPos, fn($p) => (int)$p['id'] === (int)$a['angebot_position_id']));
+    }
     $pos = [];
     foreach ($quellPos as $p) {
         $pos[] = [
