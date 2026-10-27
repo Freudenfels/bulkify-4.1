@@ -9128,7 +9128,11 @@ function kontingent_aus_auftrag(int $auftrag_id, int $monate = 12): array {
     if (!$a) return ['ok' => false, 'fehler' => 'Auftrag nicht gefunden.'];
     if (!empty($a['kontingent_id'])) return ['ok' => false, 'fehler' => 'Dieser Auftrag stammt bereits aus einem Kontingent.'];
     if (empty($a['kunde_id']) || empty($a['produkt_id'])) return ['ok' => false, 'fehler' => 'Kontingent braucht Kunde und Produkt.'];
-    $menge = (int)($a['menge'] ?? 0); $vk = (float)($a['vk_stueck'] ?? 0);
+    $menge = (int)($a['menge'] ?? 0);
+    // Festpreis je Packung = VOLLER Packungspreis (alle Positionen: Herstellung + Glas + Etikett …) aus
+    // gesamt_netto/menge – NICHT nur auftrag.vk_stueck (das ist bei Mehrpositions-Angeboten nur die
+    // Herstellungszeile; Glas/Etikett fehlten sonst im JV-Preis). Fallback: vk_stueck.
+    $vk = ($menge > 0 && (float)($a['gesamt_netto'] ?? 0) > 0) ? round((float)$a['gesamt_netto'] / $menge, 4) : (float)($a['vk_stueck'] ?? 0);
     if ($menge < 1 || $vk <= 0) return ['ok' => false, 'fehler' => 'Menge und Stückpreis müssen gesetzt sein.'];
     if ((string)($a['status'] ?? '') === 'storniert') return ['ok' => false, 'fehler' => 'Auftrag ist bereits storniert.'];
     // Bereits eine bezahlte Rechnung? Dann nicht umwandeln (Buchhaltung).
@@ -9187,7 +9191,20 @@ function produkt_komponenten_zeilen(int $pid, int $menge, ?int $kid): array {
 function kontingent_abruf_positionen(array $k, int $menge, float $ustP): array {
     $targetCent = (int) round((float)($k['vk_stueck'] ?? 0) * 100);   // Festpreis je Packung
     if ($targetCent <= 0) return [];
-    $rows = produkt_komponenten_zeilen((int)($k['produkt_id'] ?? 0), max(1, $menge), (int)($k['kunde_id'] ?? 0) ?: null);
+    // Bevorzugt die Positionen des QUELL-ANGEBOTS: dort stehen die VEREINBARTEN Einzelpreise je Komponente
+    // (Herstellung/Glas/Etikett – ggf. direkt eingetippt, nicht am Item hinterlegt). Nur wenn kein Angebot mit
+    // Positionen vorliegt, aus der aktuellen Produkt-Zusammensetzung rechnen. preis_cent ist der Preis JE PACKUNG.
+    $rows = [];
+    $agId = (int)($k['angebot_id'] ?? 0);
+    if ($agId) {
+        foreach (all("SELECT artikelnr, bezeichnung, beschreibung, einheit, preis_cent, preis_e4
+                      FROM angebot_position WHERE angebot_id=? AND (menge > 0 OR preis_cent > 0) ORDER BY sort, id", [$agId]) as $r) {
+            $cent = (isset($r['preis_e4']) && $r['preis_e4'] !== null && $r['preis_e4'] !== '') ? (int) round((int)$r['preis_e4'] / 100) : (int)$r['preis_cent'];
+            $rows[] = ['artikelnr'=>(string)($r['artikelnr'] ?? ''), 'bezeichnung'=>(string)$r['bezeichnung'],
+                       'beschreibung'=>(string)($r['beschreibung'] ?? ''), 'einheit'=>($r['einheit'] ?: 'Stk.'), 'preis_cent'=>$cent];
+        }
+    }
+    if (!$rows) $rows = produkt_komponenten_zeilen((int)($k['produkt_id'] ?? 0), max(1, $menge), (int)($k['kunde_id'] ?? 0) ?: null);
     if (!$rows) return [];
     $sumCent = 0; foreach ($rows as $r) $sumCent += (int)$r['preis_cent'];
     if ($sumCent <= 0) return [];
