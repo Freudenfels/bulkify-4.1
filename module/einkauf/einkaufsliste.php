@@ -99,8 +99,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     $bulkIds = []; foreach (bedarf_bulk(false) as $b) $bulkIds[(int)$b['produkt_id']] = true;
     $freiIds = []; foreach (freibedarf_offen() as $f) $freiIds[(int)$f['id']] = true;
     $nachIds = []; foreach (meldebestand_bedarf() as $nb) $nachIds[(int)$nb['item_id']] = (float)$nb['zu_bestellen'];   // Meldebestand-Nachbestellung
-    $groups = [];  // lieferant_id => ['pos'=>[{item_id,menge,auftrag_id}], 'bulk'=>[pid], 'frei'=>[fid]]
-    $bulkMengeMap = [];  // produkt_id => angehobene Wunschmenge (global, da bestellung_erstellen nur die Gruppen-pids nutzt)
+    // Rohstoffe/Verpackung/frei werden pro Lieferant gebündelt; JEDES Bulk-Produkt wird eine EIGENE Bestellung
+    // (ein Fremdfertiger nimmt jedes Produkt einzeln an/ab – nie zwei Produkte in einem Auftrag).
+    $groups = [];       // lieferant_id => ['pos'=>[{item_id,menge,auftrag_id}], 'frei'=>[fid]]
+    $bulkUnits = [];    // Lieferanten-Weg: je Bulk-Produkt ein eigener Beleg: ['sup'=>, 'pid'=>, 'ov'=>]
+    $onlineBulk = [];   // Online-Weg: Bulk bleibt im EINEN Beleg (eine reale Einkaufsquittung)
+    $bulkMengeMap = [];  // produkt_id => angehobene Wunschmenge
     $skipPortal = 0;     // Lieferanten-Weg: Zeilen ohne portalfähigen Lieferanten (kein Account/Preis) -> übersprungen
     foreach ($sel as $key) {
         // Beim Online-Kauf landet alles in EINER Bestellung ohne Lieferant (sup=0). Beim Lieferanten-Weg
@@ -114,7 +118,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         if (!$online && !lieferant_portalfaehig((int)$sup, $itemIdKey, $produktIdKey)) { $skipPortal++; continue; }
         if (strncmp($key, 'bulk:', 5) === 0) {
             $pid = (int)substr($key, 5);
-            if (isset($bulkIds[$pid])) { $groups[$sup]['bulk'][] = $pid; $ov = $ovMenge($key); if ($ov !== null) $bulkMengeMap[$pid] = $ov; }
+            if (isset($bulkIds[$pid])) {
+                $ov = $ovMenge($key); if ($ov !== null) $bulkMengeMap[$pid] = $ov;
+                if ($online) $onlineBulk[] = $pid;                     // eine Quittung -> alles zusammen
+                else         $bulkUnits[] = ['sup'=>$sup, 'pid'=>$pid, 'ov'=>$ov];   // je Produkt ein Beleg
+            }
             continue;
         }
         if (strncmp($key, 'nach:', 5) === 0) {   // Meldebestand-Nachbestellung -> Lagerposition ohne Auftragsbezug
@@ -129,22 +137,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         $menge = $ovMenge($key) ?? (float)$a['zu_bestellen'];   // Einkauf darf die Menge anheben (z. B. 1000 -> 2000)
         $groups[$sup]['pos'][] = ['item_id'=>(int)$a['item_id'], 'menge'=>$menge, 'auftrag_id'=>(int)($a['auftrag_id'] ?? 0)];
     }
+    // Online gekauft: sofort „bestellt", mit Händler/Zahlart/Preis für die Abrechnung.
+    $finalOnline = function(int $bid) use ($onHaendler, $onZahlart, $onPreis, $onWaehr) {
+        $notiz = 'Online bestellt bei ' . $onHaendler
+               . ($onZahlart !== '' ? ' · ' . (bestellung_zahlarten()[$onZahlart] ?? $onZahlart) : '')
+               . ' · ' . number_format($onPreis, 2, ',', '.') . ' ' . $onWaehr;
+        q("UPDATE bestellung SET bestellart='online', status='bestellt', online_haendler=?, online_zahlart=?, online_preis=?, online_waehrung=?, notiz=? WHERE id=?",
+          [$onHaendler, $onZahlart ?: null, $onPreis, $onWaehr, $notiz, $bid]);
+    };
+    // Lieferanten-Weg: an den Account gesendet (wartet auf Bestätigung) + Mail.
+    $finalLief = function(int $bid) {
+        q("UPDATE bestellung SET bestellart='lieferant', status='gesendet', notiz='An den Lieferanten-Account gesendet – wartet auf Bestätigung' WHERE id=?", [$bid]);
+        if (mail_bereit()) mail_lieferant_bestellung($bid);
+    };
     $n = 0;
-    foreach ($groups as $sup => $g) {
-        $bid = bestellung_erstellen($g['pos'] ?? [], $g['bulk'] ?? [], $sup ?: null, $datum, $g['frei'] ?? [], $bulkMengeMap);
-        if (!$bid) continue;
-        $n++;
-        if ($online) {
-            // Online gekauft: sofort „bestellt", mit Händler/Zahlart/Preis für die Abrechnung.
-            $notiz = 'Online bestellt bei ' . $onHaendler
-                   . ($onZahlart !== '' ? ' · ' . (bestellung_zahlarten()[$onZahlart] ?? $onZahlart) : '')
-                   . ' · ' . number_format($onPreis, 2, ',', '.') . ' ' . $onWaehr;
-            q("UPDATE bestellung SET bestellart='online', status='bestellt', online_haendler=?, online_zahlart=?, online_preis=?, online_waehrung=?, notiz=? WHERE id=?",
-              [$onHaendler, $onZahlart ?: null, $onPreis, $onWaehr, $notiz, $bid]);
-        } else {
-            // Lieferanten-Weg: hier sind nur portalfähige Lieferanten übrig -> an den Account gesendet (wartet auf Bestätigung) + Mail.
-            q("UPDATE bestellung SET bestellart='lieferant', status='gesendet', notiz='An den Lieferanten-Account gesendet – wartet auf Bestätigung' WHERE id=?", [$bid]);
-            if (mail_bereit()) mail_lieferant_bestellung($bid);
+    if ($online) {
+        // Eine reale Einkaufsquittung = EIN Beleg (Rohstoffe + ggf. Bulk zusammen).
+        $g = $groups[0] ?? [];
+        $bid = bestellung_erstellen($g['pos'] ?? [], $onlineBulk, null, $datum, $g['frei'] ?? [], $bulkMengeMap);
+        if ($bid) { $n++; $finalOnline($bid); }
+    } else {
+        // Rohstoffe/Verpackung/frei: je Lieferant ein Beleg.
+        foreach ($groups as $sup => $g) {
+            if (empty($g['pos']) && empty($g['frei'])) continue;
+            $bid = bestellung_erstellen($g['pos'] ?? [], [], $sup ?: null, $datum, $g['frei'] ?? []);
+            if (!$bid) continue;
+            $n++; $finalLief($bid);
+        }
+        // Bulk/Fremdfertigung: je Produkt ein EIGENER Beleg.
+        foreach ($bulkUnits as $u) {
+            $bmap = $u['ov'] !== null ? [$u['pid'] => $u['ov']] : [];
+            $bid = bestellung_erstellen([], [$u['pid']], $u['sup'] ?: null, $datum, [], $bmap);
+            if (!$bid) continue;
+            $n++; $finalLief($bid);
         }
     }
     header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($online ? '&online=1' : '') . ($skipPortal ? '&skip=' . $skipPortal : '')); exit;
@@ -232,7 +257,7 @@ $liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit =
 render_header('einkaufsliste', 'Bestellen');
 bx_head('Bestellen', 'Was bestellt werden sollte – auswählen und auf einem von zwei Wegen bestellen: „Über Lieferant (Portal)" (nur bei aktivem Account UND hinterlegtem Preis – geht in seinen Account, wartet auf Bestätigung) oder „Online bestellt" (du hast selbst online gekauft – mit Händler, Zahlungsart und Preis). Beides landet unter „Bestellt".',
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
-if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (mit Händler/Zahlart/Preis)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Lieferant eine)') . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – Lieferant ohne aktiven Account/Preis. Diese bitte über „Online bestellt" erfassen.' : '') . '</div>';
+if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (mit Händler/Zahlart/Preis)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Produkt eine, Rohstoffe je Lieferant gebündelt)') . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – Lieferant ohne aktiven Account/Preis. Diese bitte über „Online bestellt" erfassen.' : '') . '</div>';
 if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">„Online bestellt": bitte Händler/Quelle <strong>und</strong> den gezahlten Preis angeben.</div>';
 if (isset($_GET['vorsorgportal'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Dieser Lieferant hat keinen aktiven Account oder keinen Preis – über das Portal nicht bestellbar. Bitte „Online bestellt" nutzen.</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
