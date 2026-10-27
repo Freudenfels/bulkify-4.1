@@ -435,13 +435,15 @@ $bestand_qua  = $neu ? 0 : (item_bestand((int)$id, false) - $bestand_frei);
 $reserviert_gesamt = $neu ? 0 : item_reserviert_gesamt((int)$id);
 $reservierungen    = $neu ? [] : item_reservierungen_liste((int)$id);
 // Aufträge, auf die reserviert werden kann (laufend – nicht versendet/storniert), neueste zuerst.
-// Nur Produktaufträge: Dienstleistungs-/Laboraufträge (DB-, dienstleistung_id gesetzt) verbrauchen keine
-// Rohstoffe und gehören nicht in die Reservierung.
+// Nur Produktaufträge: Dienstleistungs-/Laboraufträge (DB-) verbrauchen keine Rohstoffe und gehören nicht in
+// die Reservierung. Die haben kein Produkt (produkt_id NULL) – daran erkennt man sie zuverlässig; das
+// dienstleistung_id-Flag ist bei Altbestand nicht gesetzt.
 $res_auftraege = $neu ? [] : all("SELECT a.id, a.nummer, k.firma AS kunde_firma,
                                    COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name
                                    FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id
                                    LEFT JOIN produkt p ON p.id=a.produkt_id
-                                   WHERE a.status NOT IN ('versendet','storniert') AND a.dienstleistung_id IS NULL
+                                   WHERE a.status NOT IN ('versendet','storniert')
+                                     AND a.produkt_id IS NOT NULL AND a.dienstleistung_id IS NULL
                                    ORDER BY a.angelegt DESC");
 $fremd_gesamt = $neu ? 0 : item_fremdbestand((int)$id);
 $fremdJeKunde = $neu ? [] : item_fremdbestand_je_kunde((int)$id);

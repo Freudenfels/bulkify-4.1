@@ -381,7 +381,8 @@ body.bx-zieht{cursor:col-resize;user-select:none}
 .rs-input{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel);color:var(--text);font:inherit}
 .rs-input:focus{outline:none;border-color:var(--gruen)}
 .rs-list{position:absolute;left:0;top:100%;z-index:50;min-width:100%;max-width:460px;max-height:300px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.16);margin-top:3px}
-.rs-list .rs-opt{padding:7px 11px;cursor:pointer;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rs-list .rs-opt{padding:7px 11px;cursor:pointer;font-size:14px;overflow:hidden;white-space:nowrap}
+.rs-list .rs-opt .rs-opt-t{display:inline-block;white-space:nowrap}
 .rs-list .rs-opt:hover,.rs-list .rs-opt.hl{background:var(--row-hover)}
 .rs-list .rs-opt .muted{font-size:12px}
 .rs-empty{padding:8px 12px;color:var(--muted);font-size:13px}
