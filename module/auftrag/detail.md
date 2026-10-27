@@ -54,7 +54,7 @@ frei) und eine **noch nicht bezahlte Rechnung storniert** – sonst zöge die Pr
 Ein-Klick-Button „Zu Kontingent (Jahresvertrag) machen" – damit Glas/Etikett/Rohstoffe nur je Abruf anfallen.
 
 ## Dokumente & Downloads (Reiter Dokumente)
-Eigenes Panel oben im Reiter *Dokumente* mit Direkt-Links (neuer Tab): **Auftragsbestätigung (PDF)** (`?p=auftrag_pdf&id=`), **Produktinformationsblatt (PIB)** (`?p=produkt_pib&id=<produkt_id>`, nur wenn Produkt hinterlegt) sowie – sobald ein Produktionsauftrag existiert – **Laufzettel** (`?p=produktionsauftrag_pdf&id=<pa_id>`) und **Produktionsbericht** (`?p=produktion_bericht&id=<pa_id>`). Darunter bleibt das Laboranalyse/Labortest-Panel.
+Eigenes Panel oben im Reiter *Dokumente* mit Direkt-Links (neuer Tab): **Auftragsbestätigung (PDF)** (`?p=auftrag_pdf&id=`), je bereits erstelltem **Lieferschein** ein **Lieferschein LS-… (PDF)** (`?p=lieferschein_pdf&id=<beleg_id>`, entsteht beim Versand; bei Teilversand mehrere), **Produktinformationsblatt (PIB)** (`?p=produkt_pib&id=<produkt_id>`, nur wenn Produkt hinterlegt) sowie – sobald ein Produktionsauftrag existiert – **Laufzettel** (`?p=produktionsauftrag_pdf&id=<pa_id>`) und **Produktionsbericht** (`?p=produktion_bericht&id=<pa_id>`). Darunter bleibt das Laboranalyse/Labortest-Panel.
 
 ## Auftrag stornieren / löschen
 Panel **„Auftrag stornieren / löschen"** (Reiter *Details*, nur Admin, nicht bei versendet). Zwei Fälle:

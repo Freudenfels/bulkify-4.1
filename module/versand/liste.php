@@ -21,7 +21,8 @@ $q    = trim($_GET['q'] ?? '');
 $rows = all("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name,
              (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM item i JOIN charge c ON c.item_id=i.id
               WHERE i.produkt_id=a.produkt_id AND i.kategorie='verkaufsfertig' AND c.status='frei') AS fertig_frei,
-             (SELECT nummer FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='lieferschein' LIMIT 1) AS lieferschein_nr,
+             (SELECT GROUP_CONCAT(CONCAT(b.id,':',b.nummer) ORDER BY b.id SEPARATOR '|')
+              FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='lieferschein') AS lieferscheine,
              COALESCE(k.nutzt_fulfillment,0) AS fulfillment
              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
              WHERE a.status IN ('erledigt','versendet')
@@ -66,7 +67,16 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
       <td><?= $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>' ?></td>
       <td class="bx-num"><?= $gesamt ?><?php if ($bereits > 0): ?><br><span class="muted" style="font-size:12px"><?= number_format($bereits,0,',','.') ?> versendet<?php if ($offen > 0): ?> · <?= number_format($offen,0,',','.') ?> offen<?php endif; ?></span><?php endif; ?></td>
       <td class="bx-num"><?= $frei ?></td>
-      <td><?= $r['lieferschein_nr'] ? h($r['lieferschein_nr']) : '<span class="muted">–</span>' ?></td>
+      <td><?php
+        $ls = array_filter(explode('|', (string)($r['lieferscheine'] ?? '')));
+        if (!$ls) { echo '<span class="muted">–</span>'; }
+        else {
+            $links = [];
+            foreach ($ls as $eintrag) { [$lid, $lnr] = array_pad(explode(':', $eintrag, 2), 2, '');
+                $links[] = '<a href="?p=lieferschein_pdf&id=' . (int)$lid . '" target="_blank" rel="noopener" title="Lieferschein als PDF öffnen/drucken">' . h($lnr) . '</a>'; }
+            echo implode('<br>', $links);
+        }
+      ?></td>
       <td><?= $versendet ? bx_badge('abgeschlossen','ok') : ($teil ? bx_badge('teilversendet','warn') : bx_badge('versandbereit','info')) ?></td>
       <td style="text-align:right">
         <?php if (!$versendet): ?>

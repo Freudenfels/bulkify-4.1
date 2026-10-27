@@ -66,6 +66,8 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     $klein = (int) ($b['kleinunternehmer'] ?? 0) === 1;
     $T = beleg_labels((string)($b['sprache'] ?? 'de'));   // Beschriftungen (de/en)
     $istEinkauf = in_array((string)($b['belegart_label'] ?? ''), ['Bestellung','Purchase Order'], true);
+    // Lieferschein-Modus: nur Mengen, keine Preise/Summen/Zahlung/Bank (das steht auf der Rechnung).
+    $lieferschein = !empty($b['lieferschein']);
 
     // VK je Einheit in e4 (Euro x 10.000) fuer Sub-Cent (z. B. Bulk 0,0250). preis_e4 fehlt bei Belegen -> Fallback
     // auf ganze Cent (preis_cent*100), dann identisch wie bisher. So stimmen Angebots-PDFs mit Sub-Cent-Preisen.
@@ -177,8 +179,10 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     $p->text($cBez, $hb, $T['bezeichnung'], 8, true, $INK);
     $p->textRight($cMengeR, $hb, $T['menge'], 8, true, $INK);
     $p->text($cEinh, $hb, $T['einheit'], 8, true, $INK);
-    $p->textRight($cPreisR, $hb, $T['preis'], 8, true, $INK);
-    $p->textRight($cGesR, $hb, $T['gesamt'], 8, true, $INK);
+    if (!$lieferschein) {
+        $p->textRight($cPreisR, $hb, $T['preis'], 8, true, $INK);
+        $p->textRight($cGesR, $hb, $T['gesamt'], 8, true, $INK);
+    }
     $p->line($L, $hy + 13, $R, $hy + 13, 0.8, $INK);
 
     $y = $hy + 17; $bezMax = $cMengeR - 30 - $cBez; $i = 1;
@@ -190,8 +194,10 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $p->text($cBez, $by, $p->fit((string) $pos['bezeichnung'], $bezMax, 9, true), 9, true, $INK);
         $p->textRight($cMengeR, $by, beleg_num((float) $pos['menge']), 8, false, $INK);
         $p->text($cEinh, $by, $p->fit((string) ($pos['einheit'] ?? ''), 34, 8, false), 8, false, $INK);
-        $p->textRight($cPreisR, $by, ((isset($pos['preis_e4']) && $pos['preis_e4'] !== null && $pos['preis_e4'] !== '') ? $posVkStr($pos) : beleg_eur((int) $pos['preis_cent'], '')), 8, false, $INK);
-        $p->textRight($cGesR, $by, beleg_eur((int) ($pos['gesamt_cent'] ?? $posNetto($pos)), ''), 9, true, $INK);
+        if (!$lieferschein) {
+            $p->textRight($cPreisR, $by, ((isset($pos['preis_e4']) && $pos['preis_e4'] !== null && $pos['preis_e4'] !== '') ? $posVkStr($pos) : beleg_eur((int) $pos['preis_cent'], '')), 8, false, $INK);
+            $p->textRight($cGesR, $by, beleg_eur((int) ($pos['gesamt_cent'] ?? $posNetto($pos)), ''), 9, true, $INK);
+        }
         $y += 15;
         $besch = trim((string) ($pos['beschreibung'] ?? ''));
         if ($besch !== '') {
@@ -207,7 +213,10 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     }
 
     // ---- Summen ---- (bei mehreren Varianten ausgeblendet: es gibt keine eine Gesamtsumme; Preise je Variante unten)
-    if (empty($b['ohne_summen'])) {
+    // Lieferschein trägt keine Summen.
+    if ($lieferschein) {
+        // nichts – ein Lieferschein zeigt nur Mengen.
+    } elseif (empty($b['ohne_summen'])) {
     if ($y > 680) { $p->addPage(); $y = 54; }
     $sumX = 330; $valR = $R; $y += 10;
     $p->line($sumX, $y, $R, $y, 0.8, $INK); $y += 14;
@@ -294,12 +303,14 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         }
     }
 
-    // ---- Zahlung ----
+    // ---- Zahlung ---- (nicht auf dem Lieferschein – Zahlung regelt die Rechnung)
+    if (!$lieferschein) {
     if ($y > 720) { $p->addPage(); $y = 54; }
     $zb = (string) ($b['zahlungsbedingung'] ?? '') ?: (string) meta_get('bh_zahlungsbedingung', 'Sofort zahlbar ohne Abzug');
     $za = (string) ($b['zahlungsart_label'] ?? 'Vorkasse');
     $p->text($L, $y, 'Zahlungsbedingung: ' . $zb, 9, false, $INK); $y += 13;
     $p->text($L, $y, $T['zahlungsart'] . ': ' . $za, 9, false, $INK); $y += 18;
+    }
 
     // ---- Hinweis zur Herstellung ----
     $hinweis = (string) ($b['hinweis'] ?? '') ?: (string) meta_get('bh_hinweis_herstellung', '');
@@ -312,8 +323,8 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         }
     }
 
-    // ---- Bankverbindungen ----
-    if ($fa['bank_de_iban'] !== '' || $fa['bank_int_iban'] !== '') {
+    // ---- Bankverbindungen ---- (nicht auf dem Lieferschein)
+    if (!$lieferschein && ($fa['bank_de_iban'] !== '' || $fa['bank_int_iban'] !== '')) {
         if ($y > 720) { $p->addPage(); $y = 54; }
         $y += 4;
         $p->text($L, $y, 'Kontoverbindungen:', 9, true, $INK); $y += 13;

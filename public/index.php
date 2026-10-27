@@ -125,6 +125,7 @@ $routes = [
     'kontingent'      => 'kontingent/detail.php',   // Jahresvertrag-Detail (Zusammensetzung + Rechnungs-Vorschau + Abrufe)
     'auftrag'         => 'auftrag/detail.php',
     'auftrag_pdf'     => 'auftrag/pdf.php',   // Auftragsbestätigung als PDF (Download/Druck)
+    'lieferschein_pdf'=> 'auftrag/lieferschein_pdf.php',   // Lieferschein (LS) als PDF (Druck/Download)
     'auftrag_preise'  => 'auftrag/preisliste.php',   // Arbeitsliste: Aufträge ohne Preis -> Rechnung-Upload füllt Preis (aufgeschlüsselt)
     // Buchhaltung/Belege sind ein EIGENES Programm unter /buchhaltung/ (public/buchhaltung/index.php).
     // Hier bewusst KEINE Finanz-Routen mehr – Links zeigen auf /buchhaltung/?p=… (siehe BUCHHALTUNG.md).

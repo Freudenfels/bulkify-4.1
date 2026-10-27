@@ -1287,6 +1287,9 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
   <h2 style="margin-top:0">Dokumente &amp; Downloads</h2>
   <div class="bx-row" style="gap:10px;flex-wrap:wrap">
     <a class="btn btn-ghost btn-sm" href="?p=auftrag_pdf&id=<?= (int)$a['id'] ?>" target="_blank" rel="noopener">Auftragsbestätigung (PDF)</a>
+    <?php foreach (all("SELECT id, nummer FROM beleg WHERE auftrag_id=? AND typ='lieferschein' ORDER BY id", [(int)$a['id']]) as $lsDok): ?>
+      <a class="btn btn-ghost btn-sm" href="?p=lieferschein_pdf&id=<?= (int)$lsDok['id'] ?>" target="_blank" rel="noopener">Lieferschein <?= h((string)$lsDok['nummer']) ?> (PDF)</a>
+    <?php endforeach; ?>
     <?php if (!empty($a['produkt_id'])): ?>
       <a class="btn btn-ghost btn-sm" href="?p=produkt_pib&id=<?= (int)$a['produkt_id'] ?>" target="_blank" rel="noopener">Produktinformationsblatt (PIB)</a>
     <?php endif; ?>

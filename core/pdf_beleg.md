@@ -32,6 +32,10 @@ ein echtes bulkify-Angebot aus (Nutzer-Feedback: Vorlage `Angebot_Artischocke_AN
 - `$b`: Belegkopf (belegart_label, nummer, empfaenger, adresse, datum, gueltig_bis,
   kundennummer, version, bezug, bearbeiter, bearbeiter_email, ust_id, kopf_text,
   zahlungsbedingung, zahlungsart_label, hinweis, kleinunternehmer).
+  - `ohne_summen` = true: keine Gesamtsumme (mehrere Varianten, Preise je Variante unten).
+  - `lieferschein` = true: **Lieferschein-Modus** – Positionstabelle ohne Preis-/Gesamt-Spalte,
+    **keine** Summen, **keine** Zahlungsbedingung/Zahlungsart, **keine** Bankverbindung. Nur Mengen.
+    Genutzt von `pdf_lieferschein.php` (Preise stehen auf der Rechnung, nicht auf dem Lieferschein).
 - `$positionen`: je Position artikelnr, bezeichnung, beschreibung, menge, einheit,
   **preis_cent**, gesamt_cent, **mwst_satz** (Summen werden je Satz daraus berechnet).
 - `$produktStaffel`: `[ ['name'=>, 'mpp'=>Stück/Pkg, 'rows'=>[['ab'=>,'stueck_cent'=>,'pack_cent'=>]]] ]`.
