@@ -120,8 +120,8 @@ $cols = [
     'art'          => ['label' => 'Art', 'sort' => true, 'render' => function($r) use ($auftragArt) {
                         $k = $auftragArt($r);
                         if ($k === 'none') return '<span class="muted">–</span>';
-                        [$label, $stil, $hint] = auftrag_art_meta($k);
-                        return '<span title="' . h($hint) . '">' . bx_badge($label, $stil) . '</span>';
+                        [$label, $stil, $hint] = auftrag_art_meta($k);   // $stil hier bewusst ignoriert: schlichter Text statt farbiger Kachel
+                        return '<span class="muted" title="' . h($hint) . '">' . h($label) . '</span>';
                      }],
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
     'gesamt_netto' => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['gesamt_netto'])],
