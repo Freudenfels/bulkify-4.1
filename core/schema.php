@@ -1036,6 +1036,13 @@ function init_schema(): void {
     ensure_column('bestellung', 'tracking', "VARCHAR(120) NULL");
     ensure_column('bestellung', 'angekommen_am', "DATE NULL");          // tatsaechlicher Wareneingang (Team)
     ensure_column('bestellung', 'pakete_angekuendigt', "INT NULL");     // vom Lieferanten angekuendigte Kartons-/Paketanzahl (falls noch keine Nummern)
+    // Bestellweg + Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Quelle, Zahlungsart,
+    // gezahlter Preis + Währung. Dient später dem sauberen Gegenrechnen von Einnahmen/Ausgaben.
+    ensure_column('bestellung', 'bestellart', "VARCHAR(20) NOT NULL DEFAULT ''");   // '' | lieferant | online
+    ensure_column('bestellung', 'online_haendler', "VARCHAR(190) NULL");
+    ensure_column('bestellung', 'online_zahlart', "VARCHAR(30) NULL");
+    ensure_column('bestellung', 'online_preis', "DECIMAL(12,2) NULL");
+    ensure_column('bestellung', 'online_waehrung', "VARCHAR(8) NULL");
 
     // lieferung_paket: ein Datensatz je Karton/Sendung einer Bestellung. Der Lieferant gibt an, wie
     // viele Pakete er schickt und welche Tracking-/Sendungsnummern dazugehoeren; das Lager hakt sie
@@ -7139,6 +7146,21 @@ function produktion_teilmenge_machbar(int $pa_id): array {
 // Kombinierte Bestellung für EINEN Lieferant. $itemPositionen = [['item_id','menge','auftrag_id'(0=Lager)], ...] + Bulk (produkt_ids).
 // $bulkMenge (produkt_id => Wunschmenge) hebt die Bestellmenge eines Bulk-Produkts über den reinen
 // Auftragsbedarf: Überschuss (Wunsch - zu_bestellen) wird als auftragsloser Puffer-Posten ergänzt.
+// Zahlungsarten für den Online-Einkauf (wie wurde bezahlt). Key = gespeicherter Wert, Value = Label.
+function bestellung_zahlarten(): array {
+    return ['ueberweisung'=>'Überweisung', 'kreditkarte'=>'Kreditkarte', 'paypal'=>'PayPal',
+            'lastschrift'=>'Lastschrift', 'rechnung'=>'Rechnung', 'bar'=>'Bar', 'sonstige'=>'Sonstige'];
+}
+// Darf dieser Lieferant eine Bestellung über sein Portal bekommen? Nur mit aktivem Account UND einem
+// hinterlegten Preis (für das Item bzw. – bei Bulk/Fertigware – für das Produkt). Sonst: „Online bestellt".
+function lieferant_portalfaehig(int $lieferant_id, ?int $item_id = null, ?int $produkt_id = null): bool {
+    if ($lieferant_id <= 0 || !lieferant_hat_zugang($lieferant_id)) return false;
+    if ($item_id)    return array_key_exists($lieferant_id, item_lieferant_preise($item_id));
+    if ($produkt_id) return array_key_exists($lieferant_id, produkt_lieferant_preise($produkt_id))
+                         || array_key_exists($lieferant_id, produkt_fremd_lieferant_preise($produkt_id));
+    return true;   // freie Position ohne Item/Produkt: Account reicht
+}
+
 function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int $lieferant, ?string $datum, array $freiIds = [], array $bulkMenge = []): int {
     $itemPositionen = array_values(array_filter($itemPositionen, fn($p) => (int)($p['item_id'] ?? 0) > 0 && (float)($p['menge'] ?? 0) > 0));
     $bulkProduktIds = array_values(array_filter(array_map('intval', $bulkProduktIds)));

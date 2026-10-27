@@ -214,6 +214,18 @@ if (!$neu) {
     if ($b['status'] === 'bestellt') echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="liefern"><button class="btn btn-primary btn-sm" type="submit">Wareneingang buchen</button></form>';
     echo '</div></div></div>';
 
+    // Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Zahlart/Preis – fürs Gegenrechnen.
+    if (($b['bestellart'] ?? '') === 'online') {
+        $zl = bestellung_zahlarten();
+        $za = $zl[(string)($b['online_zahlart'] ?? '')] ?? '';
+        $pr = ($b['online_preis'] ?? null) !== null ? number_format((float)$b['online_preis'], 2, ',', '.') . ' ' . h((string)($b['online_waehrung'] ?: 'EUR')) : '–';
+        echo '<div class="bx-panel"><h2 style="margin-top:0">Online-Einkauf</h2><div class="bx-cards">'
+           . '<div class="bx-card"><div class="k">Händler / Quelle</div><div class="v">' . (((string)($b['online_haendler'] ?? '')) !== '' ? h((string)$b['online_haendler']) : '<span class="muted">–</span>') . '</div></div>'
+           . '<div class="bx-card"><div class="k">Zahlungsart</div><div class="v">' . ($za !== '' ? h($za) : '<span class="muted">–</span>') . '</div></div>'
+           . '<div class="bx-card"><div class="k">Preis (gesamt)</div><div class="v">' . $pr . '</div></div>'
+           . '</div><p class="muted" style="font-size:12px;margin:8px 0 0">Selbst online gekauft – diese Angaben helfen der Buchhaltung beim Gegenrechnen von Einnahmen und Ausgaben.</p></div>';
+    }
+
     // Ablauf beim Lieferanten – dasselbe Panel sieht der Lieferant in seinem Portal.
     require_once BX_ROOT . '/core/bestellung_ui.php';
     echo bestellung_ablauf_panel($b, 'team', 'de');
