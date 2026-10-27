@@ -6683,6 +6683,45 @@ function item_reserviert_eigen(int $item_id, int $auftrag_id): float {
     if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
     return $v;
 }
+// Gesamt aktiv reservierte Menge eines Items (manuell + aus Produktion).
+function item_reserviert_gesamt(int $item_id): float {
+    return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv'", [$item_id]);
+}
+// Aktive Reservierungen eines Items für die Anzeige (mit Auftrag/Kunde/Produktionsauftrag).
+// pa_id IS NULL = manuell am Item/Auftrag gesetzt (hier editierbar); pa_id gesetzt = aus der Produktion (nur Anzeige).
+function item_reservierungen_liste(int $item_id): array {
+    return all("SELECT r.*, a.nummer AS auftrag_nr, a.status AS auftrag_status, k.firma AS kunde_firma, pa.nummer AS pa_nr
+                FROM reservierung r
+                LEFT JOIN auftrag a ON a.id=r.auftrag_id
+                LEFT JOIN kunden k ON k.id=a.kunde_id
+                LEFT JOIN produktionsauftrag pa ON pa.id=r.pa_id
+                WHERE r.item_id=? AND r.status='aktiv'
+                ORDER BY (r.pa_id IS NOT NULL), r.angelegt DESC, r.id DESC", [$item_id]);
+}
+// Manuelle Reservierung eines Items für einen Auftrag SETZEN/ÄNDERN. Eine Zeile je Auftrag (pa_id NULL).
+// menge <= 0 hebt eine bestehende manuelle Reservierung auf. Über den physischen Bestand hinaus erlaubt
+// (z. B. Reservierung gegen eine noch erwartete Lieferung); die Netto-Verfügbarkeit fällt dann entsprechend.
+function item_reservierung_setzen(int $item_id, int $auftrag_id, float $menge): array {
+    if ($item_id <= 0 || $auftrag_id <= 0) return ['ok'=>false, 'msg'=>'Item oder Auftrag fehlt.'];
+    $menge = max(0.0, $menge);
+    $row = one("SELECT id FROM reservierung WHERE item_id=? AND auftrag_id=? AND pa_id IS NULL AND status='aktiv'", [$item_id, $auftrag_id]);
+    if ($menge <= 1e-9) {
+        if ($row) q("UPDATE reservierung SET status='storniert' WHERE id=?", [(int)$row['id']]);
+        bedarf_bump();
+        return ['ok'=>true, 'menge'=>0.0, 'msg'=>'Reservierung aufgehoben.'];
+    }
+    if ($row) q("UPDATE reservierung SET menge=? WHERE id=?", [$menge, (int)$row['id']]);
+    else      q("INSERT INTO reservierung (pa_id,auftrag_id,item_id,menge,status,angelegt) VALUES (NULL,?,?,?,'aktiv',?)", [$auftrag_id, $item_id, $menge, gmdate('Y-m-d H:i:s')]);
+    bedarf_bump();
+    return ['ok'=>true, 'menge'=>$menge, 'msg'=>'Reservierung gespeichert.'];
+}
+// Eine manuelle Reservierung (pa_id NULL) stornieren. Reservierungen aus der Produktion bleiben unangetastet.
+function item_reservierung_storno(int $res_id, int $item_id): bool {
+    if (!one("SELECT id FROM reservierung WHERE id=? AND item_id=? AND pa_id IS NULL AND status='aktiv'", [$res_id, $item_id])) return false;
+    q("UPDATE reservierung SET status='storniert' WHERE id=?", [$res_id]);
+    bedarf_bump();
+    return true;
+}
 
 // Flag-gesteuerte (nur in der schreibfreien Produktionsliste aktive) Cache-Helfer, damit dieselbe
 // Zeile nicht mehrfach je Auftrag geholt wird. Ohne aktiven Cache = normale Einzelabfrage.

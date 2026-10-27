@@ -31,6 +31,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'fremd
             trim($_POST['fl_charge'] ?? '') ?: null, trim($_POST['fl_mhd'] ?? '') ?: null);
     header('Location: ?p=rohstoff&id=' . $id . ($r['ok'] ? '&flok=1' : '&flfehler=' . rawurlencode($r['msg']))); exit;
 }
+// Reservierung für einen Auftrag setzen/ändern (manuell, am Item). Menge mit Tausenderpunkt -> Dezimal.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'res_setzen' && !$neu) {
+    $aid = (int)($_POST['auftrag_id'] ?? 0);
+    $raw = str_replace(['.', ' '], '', trim((string)($_POST['menge'] ?? '')));
+    $men = (float) str_replace(',', '.', $raw);
+    $r = item_reservierung_setzen((int)$id, $aid, $men);
+    if ($r['ok'] && $aid) {
+        $anr = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$aid]);
+        log_aktivitaet('item', (int)$id, 'team', $men > 0
+            ? ('Reserviert: ' . rtrim(rtrim(number_format($men, 3, ',', '.'), '0'), ',') . ' ' . (string)($it['einheit'] ?? '') . ' für Auftrag ' . $anr . '.')
+            : ('Reservierung für Auftrag ' . $anr . ' aufgehoben.'), 'notiz');
+    }
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&' . ($r['ok'] ? 'resok=1' : 'resfehler=' . rawurlencode($r['msg']))); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'res_storno' && !$neu) {
+    item_reservierung_storno((int)($_POST['res_id'] ?? 0), (int)$id);
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&resok=1'); exit;
+}
 // Analysewerte einer Charge erfassen – daraus entsteht UNSER Analysenzertifikat (CoA).
 // Die Unterlagen des Vorlieferanten sind die Quelle; weitergegeben wird das bulkify-Dokument.
 // Werte aus einem hochgeladenen Lieferanten-PDF VORSCHLAGEN (nicht speichern).
@@ -414,6 +432,12 @@ if (!$neu) { seed_aktivitaet_if_empty(); $verlauf = verlauf_fuer('item', (int)$i
 $charges = $neu ? [] : all("SELECT c.*, l.firma AS lieferant_firma FROM charge c LEFT JOIN lieferanten l ON l.id=c.lieferant_id WHERE c.item_id=? ORDER BY c.status, c.mhd", [(int)$id]);
 $bestand_frei = $neu ? 0 : item_bestand((int)$id, true);
 $bestand_qua  = $neu ? 0 : (item_bestand((int)$id, false) - $bestand_frei);
+$reserviert_gesamt = $neu ? 0 : item_reserviert_gesamt((int)$id);
+$reservierungen    = $neu ? [] : item_reservierungen_liste((int)$id);
+// Aufträge, auf die reserviert werden kann (laufend – nicht versendet/storniert), neueste zuerst.
+$res_auftraege = $neu ? [] : all("SELECT a.id, a.nummer, k.firma AS kunde_firma
+                                   FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id
+                                   WHERE a.status NOT IN ('versendet','storniert') ORDER BY a.angelegt DESC");
 $fremd_gesamt = $neu ? 0 : item_fremdbestand((int)$id);
 $fremdJeKunde = $neu ? [] : item_fremdbestand_je_kunde((int)$id);
 $fremdKunden  = $neu ? [] : all("SELECT id, firma FROM kunden ORDER BY firma");
@@ -448,6 +472,7 @@ if (!$neu) {
     echo '<div class="bx-card"><div class="k">Kategorie</div><div class="v">' . h($KAT[$it['kategorie']] ?? $it['kategorie']) . '</div></div>';
     echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . $pr . ' €/' . h((string)($it['preis_bezug'] ?: ($it['einheit'] ?: 'Stk'))) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Bestand (frei)</div><div class="v">' . ($bestand_frei>0 ? h(rtrim(rtrim(number_format($bestand_frei,3,',','.'),'0'),',')).' '.h($it['einheit']) : '<span class="muted">0</span>') . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Reserviert</div><div class="v"' . ($reserviert_gesamt > $bestand_frei + 1e-9 ? ' style="color:var(--warn)"' : '') . '>' . ($reserviert_gesamt>0 ? h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')).' '.h($it['einheit']) : '<span class="muted">0</span>') . '</div></div>';
     if ($fremd_gesamt > 0) echo '<div class="bx-card"><div class="k">Fremdlager (Kunden)</div><div class="v">' . h(rtrim(rtrim(number_format($fremd_gesamt,3,',','.'),'0'),',')) . ' ' . h($it['einheit']) . '</div></div>';
     if (($it['kategorie'] ?? '') === 'rohstoff') {
         $nfm = novelfood_status_meta($it['novelfood_status'] ?? null);
@@ -950,6 +975,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
   <div class="bx-cards">
     <div class="bx-card"><div class="k">Bestand (frei)</div><div class="v"><?= $bestand_frei>0 ? h(rtrim(rtrim(number_format($bestand_frei,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
     <div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="<?= $bestand_qua>0?'color:var(--warn)':'' ?>"><?= $bestand_qua>0 ? h(rtrim(rtrim(number_format($bestand_qua,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
+    <div class="bx-card"><div class="k">Reserviert</div><div class="v" style="<?= $reserviert_gesamt>$bestand_frei+1e-9?'color:var(--warn)':'' ?>"><?= $reserviert_gesamt>0 ? h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
     <div class="bx-card"><div class="k">Chargen</div><div class="v"><?= count($charges) ?></div></div>
   </div>
   <div class="bx-panel">
@@ -1002,6 +1028,75 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
     </table></div>
     <div style="margin-top:12px"><?= bx_btn('Wareneingang buchen', '?p=wareneingang', 'primary') ?></div>
   </div>
+
+  <?php // Reservierungen: Bestand einem Auftrag fest zuteilen. Reduziert die Netto-Verfügbarkeit für
+        // andere Aufträge (item_verfuegbar_fuer). Menge frei anpassbar; 0 hebt die Reservierung auf.
+        $einheitLbl = $v('einheit') ?: 'Stk'; ?>
+  <div class="bx-panel">
+    <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px">
+      <h2 style="margin:0">Reservierungen <?= bx_hint('Teile freien Bestand gezielt einem Auftrag zu. Reservierte Menge zählt für andere Aufträge nicht mehr als verfügbar. Die Menge kannst du jederzeit ändern; 0 hebt die Reservierung auf. Reservieren über den Bestand hinaus ist möglich (z. B. gegen eine erwartete Lieferung).') ?></h2>
+      <div class="muted" style="font-size:13px">frei: <strong><?= h(rtrim(rtrim(number_format($bestand_frei,3,',','.'),'0'),',')) ?></strong> · reserviert: <strong style="<?= $reserviert_gesamt>$bestand_frei+1e-9?'color:var(--warn)':'' ?>"><?= h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')) ?></strong> <?= h($einheitLbl) ?></div>
+    </div>
+    <?php if (isset($_GET['resok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-top:10px">Reservierung aktualisiert. Die Netto-Verfügbarkeit für andere Aufträge rechnet neu.</div><?php endif; ?>
+    <?php if (isset($_GET['resfehler'])): ?><div style="padding:8px 12px;margin-top:10px;color:#8f231b"><?= h((string)$_GET['resfehler']) ?></div><?php endif; ?>
+
+    <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
+      <thead><tr><th>Auftrag</th><th>Kunde</th><th class="bx-num">Reserviert</th><th>Seit</th><th>Herkunft</th><th></th></tr></thead>
+      <tbody>
+      <?php if (!$reservierungen): ?><tr><td colspan="6" class="muted">Noch nichts reserviert. Unten einem Auftrag eine Menge zuteilen.</td></tr><?php endif; ?>
+      <?php foreach ($reservierungen as $r): $ausProd = !empty($r['pa_id']);
+          $mStr = rtrim(rtrim(number_format((float)$r['menge'],3,',','.'),'0'),','); ?>
+        <tr>
+          <td><?php if (!empty($r['auftrag_id'])): ?><a href="?p=auftrag&id=<?= (int)$r['auftrag_id'] ?>"><?= h((string)($r['auftrag_nr'] ?: '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
+          <td style="max-width:220px;overflow-wrap:anywhere"><?= $r['kunde_firma'] ? h((string)$r['kunde_firma']) : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num">
+            <?php if ($ausProd): ?>
+              <?= h($mStr) ?> <?= h($einheitLbl) ?>
+            <?php else: ?>
+              <form method="post" style="margin:0;display:flex;gap:4px;align-items:center;justify-content:flex-end">
+                <input type="hidden" name="aktion" value="res_setzen">
+                <input type="hidden" name="auftrag_id" value="<?= (int)$r['auftrag_id'] ?>">
+                <input type="text" name="menge" value="<?= h($mStr) ?>" inputmode="decimal" style="width:100px;padding:5px 8px;text-align:right" title="Reservierte Menge ändern (0 = aufheben)">
+                <span class="muted" style="font-size:12px"><?= h($einheitLbl) ?></span>
+                <button class="btn btn-ghost btn-sm" type="submit">ändern</button>
+              </form>
+            <?php endif; ?>
+          </td>
+          <td style="white-space:nowrap"><?= $r['angelegt'] ? h(fmt_zeit((string)$r['angelegt'], 'd.m.Y')) : '–' ?></td>
+          <td><?= $ausProd ? bx_badge('aus Produktion' . ($r['pa_nr'] ? ' ' . h((string)$r['pa_nr']) : ''), 'info') : bx_badge('manuell') ?></td>
+          <td style="text-align:right">
+            <?php if (!$ausProd): ?>
+            <form method="post" style="margin:0" onsubmit="return confirm('Reservierung aufheben?');">
+              <input type="hidden" name="aktion" value="res_storno"><input type="hidden" name="res_id" value="<?= (int)$r['id'] ?>">
+              <button class="btn btn-ghost btn-sm" type="submit">aufheben</button>
+            </form>
+            <?php endif; ?>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+
+    <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:14px">
+      <input type="hidden" name="aktion" value="res_setzen">
+      <div class="bx-field" style="margin:0;min-width:260px">
+        <label>Auftrag</label>
+        <select name="auftrag_id" class="rscombo" required style="min-width:260px">
+          <option value="">– Auftrag wählen –</option>
+          <?php foreach ($res_auftraege as $a): ?>
+            <option value="<?= (int)$a['id'] ?>"><?= h((string)$a['nummer']) ?><?= $a['kunde_firma'] ? ' · ' . h((string)$a['kunde_firma']) : '' ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="bx-field" style="margin:0">
+        <label>Menge (<?= h($einheitLbl) ?>)</label>
+        <input type="text" name="menge" inputmode="decimal" placeholder="z. B. 25" style="width:120px;text-align:right">
+      </div>
+      <button class="btn btn-primary" type="submit">Reservieren</button>
+      <span class="muted" style="font-size:12px;align-self:center">Reserviert die Menge für den gewählten Auftrag. Ein zweites Mal für denselben Auftrag ändert die Menge.</span>
+    </form>
+  </div>
+
   <?php // Fremdlager: Ware, die einem Kunden gehoert (Fulfillment). Liegt physisch bei uns, zaehlt aber NICHT
         // zu unserem Bestand und geht nicht in Berechnungen/Angebote/Produktion ein. Umbuchen = Menge aus
         // unserem Warenlager dem Kunden zuschreiben. ?>
