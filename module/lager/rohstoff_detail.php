@@ -435,14 +435,30 @@ $bestand_qua  = $neu ? 0 : (item_bestand((int)$id, false) - $bestand_frei);
 $reserviert_gesamt = $neu ? 0 : item_reserviert_gesamt((int)$id);
 $reservierungen    = $neu ? [] : item_reservierungen_liste((int)$id);
 // Aufträge, auf die reserviert werden kann (laufend – nicht versendet/storniert), neueste zuerst.
-// Welche Aufträge brauchen DIESEN Rohstoff – und wie viel? Der Bedarf entsteht MIT dem Auftrag aus der
-// Rezeptur, unabhängig von Eigen/Fremd oder Produktionsstatus. Kandidaten = offene Aufträge, deren (Auftrags-
-// oder Produkt-)Rezeptur diesen Rohstoff als Zutat enthält. Soll-Menge je Auftrag via produktion_materialbedarf()
-// (reine Rezeptur-Rechnung, auch Pulver nach Gewicht). Größter Bedarf zuerst.
+// Welche Aufträge brauchen DIESEN Artikel – und wie viel? Der Bedarf entsteht MIT dem Auftrag aus der
+// Rezeptur, unabhängig von Eigen/Fremd oder Produktionsstatus. Zwei Fälle:
+//  (a) Bulk/Fertigware (item.rezeptur_id gesetzt): Aufträge, deren (Auftrags-/Produkt-)Rezeptur = diese
+//      Bulk-Rezeptur; Benötigt = Einheiten (Packungen × Stück je Packung).
+//  (b) Rohstoff: Aufträge, deren Rezeptur diesen Rohstoff als Zutat enthält; Benötigt via
+//      produktion_materialbedarf() (reine Rezeptur-Rechnung, auch Pulver nach Gewicht).
 $resEinheit = (string)($it['einheit'] ?? '') ?: 'Stk';
-$needJeAuftrag = [];   // auftrag_id => benötigte Menge dieses Rohstoffs
+$itemRezepturId = (int)($it['rezeptur_id'] ?? 0);   // >0 => Bulk-Item einer Rezeptur
+$needJeAuftrag = [];
 $res_auftraege = [];
-if (!$neu) {
+if (!$neu && $itemRezepturId > 0) {
+    foreach (all("SELECT a.id AS auftrag_id, a.nummer, k.firma AS kunde_firma,
+                         COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name,
+                         a.menge AS menge, COALESCE(NULLIF(a.stueck,0), NULLIF(p.einheiten_pro_packung,0), 1) AS stk
+                  FROM auftrag a
+                  JOIN produkt p ON p.id=a.produkt_id
+                  LEFT JOIN kunden k ON k.id=a.kunde_id
+                  WHERE a.status NOT IN ('versendet','storniert')
+                    AND COALESCE(a.rezeptur_id, p.rezeptur_id) = ?
+                  ORDER BY a.angelegt DESC", [$itemRezepturId]) as $ka) {
+        $needJeAuftrag[(int)$ka['auftrag_id']] = (float)$ka['menge'] * (float)$ka['stk'];
+        $res_auftraege[] = ['id'=>(int)$ka['auftrag_id'], 'nummer'=>$ka['nummer'], 'kunde_firma'=>$ka['kunde_firma'], 'produkt_name'=>$ka['produkt_name']];
+    }
+} elseif (!$neu) {
     $kand = all("SELECT a.id AS auftrag_id, a.nummer, k.firma AS kunde_firma,
                         COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name, MAX(pa.id) AS pa_id
                  FROM auftrag a
@@ -462,10 +478,10 @@ if (!$neu) {
         $res_auftraege[] = ['id'=>(int)$ka['auftrag_id'], 'nummer'=>$ka['nummer'], 'kunde_firma'=>$ka['kunde_firma'], 'produkt_name'=>$ka['produkt_name']];
     }
     unset($GLOBALS['bx_stock_cache']);
-    usort($res_auftraege, fn($x, $y) => ($needJeAuftrag[(int)$y['id']] ?? 0) <=> ($needJeAuftrag[(int)$x['id']] ?? 0));
 }
+usort($res_auftraege, fn($x, $y) => ($needJeAuftrag[(int)$y['id']] ?? 0) <=> ($needJeAuftrag[(int)$x['id']] ?? 0));
 $resNurBedarf = !empty($res_auftraege);
-// Fallback: ist dieser Rohstoff in keiner offenen Auftrags-Rezeptur -> alle Produktaufträge zeigen.
+// Fallback: braucht kein offener Auftrag diesen Artikel -> alle Produktaufträge zeigen.
 if (!$neu && !$resNurBedarf) {
     $res_auftraege = all("SELECT a.id, a.nummer, k.firma AS kunde_firma,
                           COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name
@@ -1117,9 +1133,9 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
     </table></div>
 
     <?php if ($resNurBedarf): ?>
-      <p class="muted" style="font-size:12px;margin:10px 0 0">Gezeigt werden nur Aufträge, die diesen Rohstoff aktuell <strong>brauchen</strong> (mit benötigter Menge, größter Bedarf zuerst). Beim Auswählen wird die Menge vorbelegt.</p>
+      <p class="muted" style="font-size:12px;margin:10px 0 0">Gezeigt werden nur Aufträge, die diesen Artikel laut Rezeptur <strong>brauchen</strong> (mit benötigter Menge, größter Bedarf zuerst). Beim Auswählen wird die Menge vorbelegt.</p>
     <?php else: ?>
-      <p class="muted" style="font-size:12px;margin:10px 0 0">Kein offener Produktionsbedarf für diesen Rohstoff – daher werden alle laufenden Produktaufträge gezeigt.</p>
+      <p class="muted" style="font-size:12px;margin:10px 0 0">Kein offener Auftrag braucht diesen Artikel laut Rezeptur – daher werden alle laufenden Produktaufträge gezeigt.</p>
     <?php endif; ?>
     <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
       <input type="hidden" name="aktion" value="res_setzen">
