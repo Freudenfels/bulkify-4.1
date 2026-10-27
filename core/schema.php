@@ -7211,6 +7211,22 @@ function lieferant_portalfaehig(int $lieferant_id, ?int $item_id = null, ?int $p
     return true;   // freie Position ohne Item/Produkt: Account reicht
 }
 
+// Effektiver EK-Stückpreis einer Bestellposition in Lieferantenwährung: der gespeicherte ek_preis, sonst
+// (Bulk/Fremdfertigung ohne gespeicherten Preis) der bekannte Lieferantenpreis – über Item, Rezeptur oder
+// Auftrag→Produkt. So zeigen auch Alt-Bestellungen (ek_preis=0) den Preis des Lieferanten.
+function bestellposition_ek(array $pos, int $lieferant_id): float {
+    $ek = (float)($pos['ek_preis'] ?? 0);
+    if ($ek > 0 || $lieferant_id <= 0) return $ek;
+    $menge = (float)($pos['menge'] ?? 0);
+    if (!empty($pos['item_id'])) { $p = item_lieferant_preise((int)$pos['item_id'], $menge); return (float)($p[$lieferant_id] ?? 0.0); }
+    $rid = (int)($pos['rezeptur_id'] ?? 0);
+    if ($rid > 0) { $p = rezeptur_fremd_lieferant_preise($rid, $menge); if (isset($p[$lieferant_id])) return (float)$p[$lieferant_id]; }
+    $aid = (int)($pos['auftrag_id'] ?? 0);
+    if ($aid > 0) { $pid = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$aid]);
+        if ($pid) { $v = produkt_zukauf_preis($pid, $lieferant_id, $menge); if ($v !== null) return (float)$v; } }
+    return 0.0;
+}
+
 function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int $lieferant, ?string $datum, array $freiIds = [], array $bulkMenge = []): int {
     $itemPositionen = array_values(array_filter($itemPositionen, fn($p) => (int)($p['item_id'] ?? 0) > 0 && (float)($p['menge'] ?? 0) > 0));
     $bulkProduktIds = array_values(array_filter(array_map('intval', $bulkProduktIds)));
@@ -7251,16 +7267,19 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
                                          WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status<>'geliefert'", [(int)$o['auftrag_id']]);
                 $noch = (float)$o['need'] - $offen;
                 if ($noch <= 1e-6) continue;
+                // Fremdfertigungs-/Zukaufpreis des Lieferanten je Stück als EK-Snapshot übernehmen (sonst 0 -> kein Preis).
+                $bulkEk = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $noch) ?? 0.0) : 0.0;
                 q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, 0, 'Stk', (int)$o['auftrag_id'], $i++]);
+                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, $bulkEk, 'Stk', (int)$o['auftrag_id'], $i++]);
                 $betroffen[(int)$o['auftrag_id']] = true;
             }
             // Vom Einkauf angehobene Menge: Überschuss über den Auftragsbedarf als Puffer (ohne Auftrag) ergänzen.
             $wunsch = (float)($bulkMenge[(int)$g['produkt_id']] ?? 0);
             $ueber  = $wunsch - (float)$g['zu_bestellen'];
             if ($ueber > 1e-6) {
+                $bulkEkP = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $ueber) ?? 0.0) : 0.0;
                 q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (Puffer/Lager)', $ueber, 0, 'Stk', null, $i++]);
+                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (Puffer/Lager)', $ueber, $bulkEkP, 'Stk', null, $i++]);
             }
         }
     }

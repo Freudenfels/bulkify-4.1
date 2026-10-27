@@ -12,18 +12,24 @@ function bestellung_pdf_bauen(int $bestellung_id): ?string {
 
     // Positionen: Lagerartikel mit Namen, Freitext-Zeilen (item_id NULL) mit ihrer Bezeichnung.
     $positionen = [];
-    foreach (all("SELECT bp.*, i.name AS item_name, i.artikelnummer
-                  FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
+    foreach (all("SELECT bp.*, i.name AS item_name, i.artikelnummer,
+                         COALESCE(i.rezeptur_id, au.rezeptur_id, pr.rezeptur_id) AS rezeptur_id
+                  FROM bestellung_position bp
+                  LEFT JOIN item i     ON i.id = bp.item_id
+                  LEFT JOIN auftrag au ON au.id = bp.auftrag_id
+                  LEFT JOIN produkt pr ON pr.id = au.produkt_id
                   WHERE bp.bestellung_id=? ORDER BY bp.sort, bp.id", [$bestellung_id]) as $p) {
         $bez = (string)($p['item_name'] ?? '') !== '' ? (string)$p['item_name'] : (string)($p['bezeichnung'] ?? 'Position');
+        // ek_preis-Snapshot, sonst bekannter Lieferantenpreis (Bulk/Fremdfertigung) – wie in der Portal-Ansicht.
+        $ekEff = bestellposition_ek($p, (int)$b['lieferant_id']);
         $positionen[] = [
             'artikelnr'   => (string)($p['artikelnummer'] ?? ''),
             'bezeichnung' => $bez,
             'beschreibung'=> '',
             'menge'       => (float)$p['menge'],
             'einheit'     => (string)($p['einheit'] ?? ''),
-            'preis_cent'  => (int) round((float)$p['ek_preis'] * 100),
-            'ek_cent'     => (int) round((float)$p['ek_preis'] * 100),
+            'preis_cent'  => (int) round($ekEff * 100),
+            'ek_cent'     => (int) round($ekEff * 100),
             'mwst_satz'   => 0.0,                            // Einkauf: der Lieferant stellt die Steuer selbst
         ];
     }

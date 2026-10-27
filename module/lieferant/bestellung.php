@@ -99,7 +99,7 @@ if (!$b):
     $waehrung = (string) scalar("SELECT waehrung FROM lieferanten WHERE id=?", [$lid]) ?: 'EUR';
     $sym = ['EUR'=>'€', 'USD'=>'$', 'CNY'=>'¥'][$waehrung] ?? $waehrung;
     $money = fn($x, $dec = 2) => number_format((float)$x, $dec, ',', '.') . ' ' . $sym;
-    $summe = 0.0; foreach ($pos as $p) $summe += (float)$p['menge'] * (float)$p['ek_preis'];
+    $summe = 0.0; foreach ($pos as $p) $summe += (float)$p['menge'] * bestellposition_ek($p, (int)$lid);
 ?>
   <h1 style="margin-bottom:4px"><?= h($b['nummer']) ?></h1>
   <p class="bx-sub"><a href="?p=lieferant_bestellung">&larr; <?= h(lp_t('bestellungen')) ?></a></p>
@@ -123,8 +123,9 @@ if (!$b):
               <?php if (!empty($p['rezeptur_id'])): ?><div style="margin-top:4px;font-size:13px"><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?>: <strong><?= h(trim((string)($p['rez_nr'] ?? '') . ' ' . (string)($p['rez_name'] ?? ''))) ?: ('#' . (int)$p['rezeptur_id']) ?></strong> <a class="btn btn-ghost btn-sm" style="margin-left:6px" href="?p=lieferant_rezeptur&id=<?= (int)$p['rezeptur_id'] ?>"><?= h(lp_t('rez_ansehen')) ?></a></div><?php endif; ?></td>
             <td class="bx-num"><?= rtrim(rtrim(number_format((float)$p['menge'], 3, ',', '.'), '0'), ',') ?></td>
             <td><?= h($p['einheit'] ?? '') ?></td>
-            <td class="bx-num"><?= $money($p['ek_preis'], 4) ?></td>
-            <td class="bx-num"><?= $money((float)$p['menge'] * (float)$p['ek_preis'], 2) ?></td></tr>
+            <?php $ekEff = bestellposition_ek($p, (int)$lid); ?>
+            <td class="bx-num"><?= $money($ekEff, 4) ?></td>
+            <td class="bx-num"><?= $money((float)$p['menge'] * $ekEff, 2) ?></td></tr>
       <?php endforeach; ?>
         <tr style="font-weight:600"><td colspan="4"><?= h(lp_t('summe')) ?></td><td class="bx-num"><?= $money($summe, 2) ?></td></tr>
       </tbody>
