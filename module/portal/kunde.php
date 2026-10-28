@@ -1793,7 +1793,7 @@ $navBadges = [
     'bestellungen'   => $inArbeit,
     'rechnungen'     => count($offenRechnungen),
     'kontingente'    => $navKontingente,
-    'etiketten'      => $etikettFehltAnzahl,
+    'etiketten'      => $etikettFehltAnzahl + count($etikettUnbestListe),
 ];
 $navBadgeTitel = [
     'meine_anfragen' => 'offene Vorgänge (Angebote zur Wahl / Vorschläge zur Prüfung / in Prüfung)',
@@ -1801,7 +1801,7 @@ $navBadgeTitel = [
     'bestellungen'   => 'Bestellungen in Bearbeitung',
     'rechnungen'     => 'offene Rechnungen',
     'kontingente'    => 'Jahresverträge, die auf Sie warten',
-    'etiketten'      => 'Etiketten, die Sie noch hochladen müssen',
+    'etiketten'      => 'Etiketten, die Sie noch hochladen oder verbindlich freigeben müssen',
 ];
 // Menüpunkte, deren Zähler ROT sind (Handlungsbedarf beim Kunden), statt grün.
 $navBadgeRot = ['etiketten' => true];
