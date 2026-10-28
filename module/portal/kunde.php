@@ -1776,6 +1776,17 @@ $etikettFehltKandidaten = all("SELECT a.id FROM auftrag a WHERE a.kunde_id=? AND
     AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='auftrag' AND d.objekt_id=a.id AND d.typ='etikett')", [(int)$k['id']]);
 $etikettFehltAnzahl = 0;
 foreach ($etikettFehltKandidaten as $ef) if (auftrag_braucht_etikett((int)$ef['id'])) $etikettFehltAnzahl++;
+// „Hochgeladen, aber noch NICHT freigegeben": Etiketten, die auf die verbindliche Freigabe des Kunden warten.
+// Diese sollen nicht in den Bestellungen „versteckt" bleiben -> prominente Erinnerung + Freigabe-Popup (auto).
+$etikettUnbestListe = [];
+foreach (all("SELECT a.id, a.nummer FROM auftrag a
+              WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert') AND COALESCE(a.etikett_freigegeben,0)=0
+              ORDER BY a.id DESC", [(int)$k['id']]) as $eu) {
+    if (!auftrag_braucht_etikett((int)$eu['id'])) continue;
+    $dok = etikett_datei((int)$eu['id']) ?: etikett_quelle((int)$eu['id']);   // es MUSS ein Design da sein (sonst nur „fehlt")
+    if (!$dok) continue;
+    $etikettUnbestListe[] = ['id'=>(int)$eu['id'], 'nummer'=>(string)$eu['nummer'], 'datei'=>(string)($dok['datei_orig'] ?: 'Etikett-Design')];
+}
 $navBadges = [
     'meine_anfragen' => $offenAngebote + count($anfPruef),
     'angebote'       => $offenAngebote,
@@ -2216,6 +2227,18 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (isset($_GET['admingeloescht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Angebot und zugehörige Anfrage gelöscht (Team).</div><?php endif; ?>
   <?php if (isset($_GET['adminsperre'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht löschbar: zu diesem Angebot gibt es bereits einen Auftrag. Erst den Auftrag stornieren.</div><?php endif; ?>
   <?php if (isset($_GET['loeschfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Diese Anfrage lässt sich nicht mehr löschen – wir sind bereits dabei oder haben Ihnen schon ein Angebot gemacht. Melden Sie sich bei uns, dann klären wir das.</div><?php endif; ?>
+  <?php // Prominente Erinnerung: hochgeladene, aber noch nicht freigegebene Etiketten – auf jeder Portalseite sichtbar.
+        if (!empty($etikettUnbestListe) && $darfBestellen): ?>
+  <div class="bx-panel" style="border:2px solid var(--danger,#d64545);background:var(--panel-2);padding:14px 16px">
+    <strong style="color:var(--danger,#d64545)"><?= count($etikettUnbestListe) ?> Etikett<?= count($etikettUnbestListe) === 1 ? '' : 'en' ?> wartet auf Ihre verbindliche Freigabe.</strong>
+    <div class="muted" style="font-size:13px;margin:4px 0 10px">Erst nach Ihrer Freigabe können wir die Etiketten bestellen und produzieren. Bitte jetzt freigeben.</div>
+    <div class="bx-row" style="gap:8px;flex-wrap:wrap">
+      <?php foreach ($etikettUnbestListe as $eu): ?>
+        <button type="button" class="btn btn-primary btn-sm" onclick="etFreigabeOeffnen(<?= (int)$eu['id'] ?>, <?= htmlspecialchars(json_encode($eu['datei']), ENT_QUOTES) ?>)">Etikett zu <?= h($eu['nummer']) ?> freigeben</button>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php endif; ?>
 
 <?php if ($view === 'start'): ?>
   <h1 style="margin-bottom:4px">Willkommen, <?= h($k['ansprechpartner'] ?: $k['firma']) ?></h1>
@@ -5058,4 +5081,43 @@ function bxBestaetigen(titel, text, haken, felder, upsell){
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape') bxBestZu(); });
 document.getElementById('bxBestOverlay').addEventListener('click', function(e){ if (e.target === this) bxBestZu(); });
 </script>
+
+<?php // Etikett-Freigabe-Popup: öffnet sich beim Betreten (Start) und direkt nach dem Upload automatisch, damit
+      // hochgeladene Etiketten nicht unbestätigt liegen bleiben. Nutzt den vorhandenen etikett_freigeben-Handler.
+      if ($darfBestellen):
+        $etAutoOpen = !empty($etikettUnbestListe) && ($view === 'start' || isset($_GET['etikett'])); ?>
+<div id="etFreiOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;padding:16px">
+  <div role="dialog" aria-modal="true" class="bx-panel" style="max-width:560px;width:100%;max-height:92vh;overflow:auto;margin:0">
+    <h2 style="margin-top:0">Etikett verbindlich freigeben</h2>
+    <p class="muted" id="etFreiDatei" style="font-size:13px;margin:0 0 10px"></p>
+    <form method="post">
+      <input type="hidden" name="aktion" value="etikett_freigeben">
+      <input type="hidden" name="auftrag_id" id="etFreiAid" value="">
+      <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.45;font-size:12px;margin:0 0 12px"><input type="checkbox" name="haftung" value="1" required style="margin-top:3px;flex:none"><span><?= h(etikett_haftung_text()) ?></span></label>
+      <div class="bx-field"><label>Ihr Name <span class="muted">(gilt als verbindliche Freigabe)</span></label>
+        <input type="text" name="freigabe_name" required autocomplete="name" placeholder="Vor- und Nachname" style="width:100%;box-sizing:border-box"></div>
+      <div class="bx-row" style="justify-content:flex-end;gap:10px;margin-top:16px">
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('etFreiOverlay').style.display='none'">Später</button>
+        <button type="submit" class="btn btn-primary">Verbindlich freigeben</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function etFreigabeOeffnen(aid, datei){
+  document.getElementById('etFreiAid').value = aid;
+  document.getElementById('etFreiDatei').textContent = datei ? ('Design: ' + datei) : '';
+  document.getElementById('etFreiOverlay').style.display = 'flex';
+}
+document.getElementById('etFreiOverlay').addEventListener('click', function(e){ if (e.target === this) this.style.display='none'; });
+(function(){
+  <?php if ($etAutoOpen): $pend = array_map(fn($e) => ['id'=>$e['id'],'datei'=>$e['datei']], $etikettUnbestListe); ?>
+  var pend = <?= json_encode($pend) ?>;
+  var aidUp = parseInt(new URLSearchParams(location.search).get('aid') || '0', 10);
+  var ziel = pend.find(function(p){ return p.id === aidUp; }) || pend[0];
+  if (ziel) setTimeout(function(){ etFreigabeOeffnen(ziel.id, ziel.datei); }, 150);
+  <?php endif; ?>
+})();
+</script>
+<?php endif; ?>
 <?php portal_foot();

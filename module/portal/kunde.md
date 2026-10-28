@@ -328,3 +328,6 @@ An jedem bestätigten Angebot mit vereinbarter Staffel steht im Portal (Ansicht 
 
 ## Etikett ändern – nur solange nicht bestellt
 Das Etikett-Design kann der Kunde ändern (neu hochladen → erneut freigeben), **solange wir die Etiketten noch nicht bestellt haben** – auch wenn es bereits freigegeben ist. Sobald bestellt (physischer Bestand oder Bestellposition `bestellt`/`geliefert`, via `etikett_bestellt_fuer_auftrag()`), ist das Design fix: der Ändern-Button verschwindet und der Upload-Handler (`aktion=etikett_upload`) blockt mit `etikettupfehler=bestellt`. Löst zusammen mit der automatischen Freigabe-Übernahme bei Nachbestellungen die frühere harte „je Auftrag neu freigeben"-Regel ab.
+
+## Etikett-Freigabe: Popup statt „versteckt"
+Hochgeladene, aber noch nicht freigegebene Etiketten (`auftrag.etikett_freigegeben=0`, mit vorhandenem Design, `auftrag_braucht_etikett`) warten auf die verbindliche Freigabe des Kunden. Damit das nicht erst tief in den Bestellungen auffällt: eine prominente Erinnerung oben auf JEDER Portalseite (`$etikettUnbestListe`) und ein **Freigabe-Popup**, das sich beim Betreten (Start-View) und direkt nach dem Upload (`?etikett=1`) automatisch öffnet (`etFreigabeOeffnen()`). Das Popup postet den vorhandenen `aktion=etikett_freigeben`-Handler (Haftung + Name). „Später" schließt es, die Erinnerung bleibt.
