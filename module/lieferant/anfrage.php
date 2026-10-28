@@ -40,7 +40,10 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
             ($_POST['mindestmenge'] ?? '') !== '' ? zahl_lesen((string)$_POST['mindestmenge'], true, $spr) : null,
             ($_POST['lieferzeit'] ?? '') !== '' ? (int)$_POST['lieferzeit'] : null,
             (string)($_POST['notiz'] ?? ''), $staffeln, (int)($_POST['preis_basis'] ?? 1),
-            ['incoterm' => (string)($_POST['incoterm'] ?? ''), 'versandart' => (string)($_POST['versandart'] ?? '')]);
+            ['incoterm' => (string)($_POST['incoterm'] ?? ''), 'versandart' => (string)($_POST['versandart'] ?? ''),
+             'variante' => (string)($_POST['variante'] ?? ''),
+             'kapsel_vorschlag_id' => (int)($_POST['kapsel_vorschlag_id'] ?? 0),
+             'kapsel_vorschlag_grund' => (string)($_POST['kapsel_vorschlag_grund'] ?? '')]);
         // Antwort da -> aus einer Rezepturanfrage angelegten Rohstoff-Entwurf in den Katalog heben.
         if ($fehler === '' && $a['item_id']) rohstoff_entwurf_aktivieren((int)$a['item_id']);
         if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);
@@ -132,15 +135,15 @@ if (!$a):
     $anfrageTabelle = function(array $zeilen) use ($anzName, $lid): void { /* $lid nur Kontext */ ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('artikel')) ?></th><th class="bx-num"><?= h(lp_t('gewuenscht')) ?></th><th class="bx-num"><?= h(lp_t('ihr_preis')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
-      <tbody><?php foreach ($zeilen as $r): ?>
-        <tr><td><?= h($r['nummer']) ?></td>
+      <tbody><?php foreach ($zeilen as $r): $href = '?p=lieferant_anfrage&id=' . (int)$r['id']; ?>
+        <tr onclick="location.href='<?= $href ?>'" style="cursor:pointer"><td><?= h($r['nummer']) ?></td>
             <td><?= h($anzName($r)) ?>
                 <?php $typL = anfrage_art_label((string)($r['art'] ?? ''), (string)($r['form'] ?? ''), lp_sprache()); ?>
                 <?php if ($typL !== ''): ?><div class="muted" style="font-size:12px"><?= h($typL) ?></div><?php endif; ?></td>
             <td class="bx-num"><?= $r['menge'] ? h(lp_num($r['menge'])) . ' ' . h(lp_einheit($r['einheit'] ?: ($r['item_einheit'] ?? ''), (float)$r['menge'])) : '–' ?></td>
             <td class="bx-num"><?= ($r['preis'] !== null && $r['preis'] !== '') ? h(lp_num($r['preis'], 4)) . ($r['ang_einheit'] ? ' / ' . h($r['ang_einheit']) : '') : '<span class="muted">–</span>' ?></td>
             <td><?= $r['status'] === 'offen' ? h(lp_t('anfrage_offen')) : h(lp_t('anfrage_beant')) ?></td>
-            <td class="bx-num"><a class="btn <?= $r['status'] === 'offen' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="?p=lieferant_anfrage&id=<?= (int)$r['id'] ?>"><?= h($r['status'] === 'offen' ? lp_t('angebot_abgeben') : lp_t('ansehen')) ?></a></td></tr>
+            <td class="bx-num"><span class="muted" style="font-size:18px">&#8250;</span></td></tr>
       <?php endforeach; ?></tbody>
     </table></div>
     <?php };
@@ -216,6 +219,14 @@ if (!$a):
       <?php $reqTerms = array_filter([(string)($a['incoterm'] ?? ''), !empty($a['versandart']) ? lp_t('vers_'.$a['versandart']) : '']); ?>
       <?php if ($reqTerms): ?><tr><td><?= h(lp_t('incoterm')) ?> / <?= h(lp_t('versandart')) ?></td><td><?= h(implode(' · ', $reqTerms)) ?> <span class="muted">(<?= h(lp_t('gewuenscht_von_uns')) ?>)</span></td></tr><?php endif; ?>
     </tbody></table></div>
+    <?php // E5: Plausibilität Füllgewicht vs. Kapsel – als Hinweis, falls die Dosis nicht in eine Kapsel passt.
+      $kplaus = kapsel_plausibilitaet((int)($a['rezeptur_id'] ?? 0), (int)($a['kapselgroesse_id'] ?? 0));
+      if ($kplaus && !$kplaus['ok']): ?>
+      <div class="bx-panel" style="border-color:#e6c4c0;background:#fbf1e0;color:#7a4e0f;padding:10px 14px;margin-top:10px">
+        <?= h(lp_t('kapsel_passt_nicht')) ?>
+        <span class="muted">(<?= h(lp_num($kplaus['fuell_mg'], 0)) ?> mg / Kapsel ~<?= h(lp_num($kplaus['kap_mg'], 0)) ?> mg<?= $kplaus['kapseln'] > 1 ? ' · ~' . (int)$kplaus['kapseln'] . ' Kapseln/Dosis' : '' ?>)</span>
+      </div>
+      <?php endif; ?>
   </div>
 
   <?php // Rezeptur zeigen, wenn es um die Fertigung eines Produkts geht (Fremdfertigung) – der
@@ -279,6 +290,24 @@ if (!$a):
       <?php endif; ?>
     <form method="post" enctype="multipart/form-data">
       <input type="hidden" name="aktion" value="angebot">
+      <?php // E3: konkrete Variante/Gehalt des Lieferanten (bulkify fragt oft nur den Wirkstoff an). ?>
+      <div class="bx-field" style="margin:0 0 10px"><label><?= h(lp_t('variante')) ?></label>
+        <input type="text" name="variante" maxlength="190" value="<?= h((string)($ang['variante'] ?? '')) ?>" placeholder="<?= h(lp_t('variante_hint')) ?>">
+        <div class="muted" style="font-size:12px;margin-top:2px"><?= h(lp_t('variante_hint')) ?></div></div>
+      <?php // E4: bei Kapsel/Softgel darf der Lieferant eine andere Kapselgröße vorschlagen.
+        $istKapselAnf = in_array((string)($a['form'] ?? ''), ['kapsel','softgel'], true)
+            || (!empty($a['rezeptur_id']) && in_array((string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$a['rezeptur_id']]), ['kapsel','softgel'], true));
+        if ($istKapselAnf): ?>
+      <div class="bx-row" style="gap:12px;flex-wrap:wrap;margin:0 0 10px">
+        <div class="bx-field" style="margin:0;min-width:200px"><label><?= h(lp_t('kapsel_andere')) ?></label>
+          <select name="kapsel_vorschlag_id"><option value="">–</option>
+            <?php foreach (all("SELECT id, name FROM kapselgroesse ORDER BY sort, fuellmenge_mg") as $kg): ?>
+              <option value="<?= (int)$kg['id'] ?>" <?= (int)($ang['kapsel_vorschlag_id'] ?? 0) === (int)$kg['id'] ? 'selected' : '' ?>><?= h($kg['name']) ?></option>
+            <?php endforeach; ?></select></div>
+        <div class="bx-field" style="margin:0;flex:1;min-width:220px"><label><?= h(lp_t('kapsel_andere_grund')) ?></label>
+          <input type="text" name="kapsel_vorschlag_grund" maxlength="255" value="<?= h((string)($ang['kapsel_vorschlag_grund'] ?? '')) ?>"></div>
+      </div>
+      <?php endif; ?>
       <?php // Eine Zeile: links die Preisspalte, rechts daneben Basis, Mindestmenge und Lieferzeit.
             // Die Staffelzeilen stehen IN der Preisspalte, damit sie exakt gleich breit sind. ?>
       <div class="bx-row" style="gap:var(--sp-4);align-items:flex-start;margin-bottom:8px">
@@ -348,13 +377,16 @@ if (!$a):
       })();
       </script>
       <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><textarea name="notiz" rows="3"><?= h($ang['notiz'] ?? '') ?></textarea></div>
-      <?php $coaReq = (int)($a['coa_gewuenscht'] ?? 0) === 1; ?>
-      <div class="bx-panel" style="margin:4px 0 14px;padding:12px 14px;<?= $coaReq ? 'border-color:var(--gruen)' : '' ?>">
+      <?php $coaReq = (int)($a['coa_gewuenscht'] ?? 0) === 1;
+        // E3: Bei Rohstoff-Anfragen ist die Spec Pflicht – außer es liegt am Artikel schon eine (dann nicht erneut nötig).
+        $specVorhanden = !empty($a['item_id']) && (int) scalar("SELECT COUNT(*) FROM dokument WHERE objekt_typ='item' AND objekt_id=? AND typ IN ('spec','coa','beides','analyse')", [(int)$a['item_id']]) > 0;
+        $specPflicht = ((string)($a['art'] ?? '') === 'rohstoff') && !$specVorhanden; ?>
+      <div class="bx-panel" style="margin:4px 0 14px;padding:12px 14px;<?= ($coaReq || $specPflicht) ? 'border-color:var(--gruen)' : '' ?>">
         <div style="font-weight:600;margin-bottom:2px"><?= h(lp_t('coa_spec_titel')) ?><?php if ($coaReq): ?> · <span style="color:var(--gruen)"><?= h(lp_t('coa_angefordert')) ?></span><?php endif; ?></div>
-        <div class="muted" style="font-size:12px;margin-bottom:10px"><?= h(lp_t('coa_spec_hinweis')) ?></div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px"><?= h(lp_t('coa_spec_hinweis')) ?><?php if ($specPflicht): ?> <strong style="color:var(--gruen)"><?= h(lp_t('spec_pflicht')) ?></strong><?php endif; ?></div>
         <div class="bx-row" style="gap:16px;flex-wrap:wrap">
           <div class="bx-field" style="margin:0"><label>CoA</label><input type="file" name="coa_datei" accept="application/pdf,image/*"></div>
-          <div class="bx-field" style="margin:0"><label><?= h(lp_t('spezifikation')) ?></label><input type="file" name="spec_datei" accept="application/pdf,image/*"></div>
+          <div class="bx-field" style="margin:0"><label><?= h(lp_t('spezifikation')) ?><?= $specPflicht ? ' *' : '' ?></label><input type="file" name="spec_datei" accept="application/pdf,image/*"<?= $specPflicht ? ' required' : '' ?>></div>
         </div>
       </div>
       <button class="btn btn-primary" type="submit"><?= h(lp_t('angebot_abgeben')) ?></button>

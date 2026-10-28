@@ -1388,6 +1388,9 @@ function init_schema(): void {
     ensure_column('lieferant_angebot', 'preis_basis', "INT NOT NULL DEFAULT 1");  // Preis gilt je 1 oder je 1000 Einheiten
     ensure_column('lieferant_angebot', 'incoterm', "VARCHAR(8) NULL");            // vom Lieferanten angebotene Lieferbedingung
     ensure_column('lieferant_angebot', 'versandart', "VARCHAR(20) NULL");         // vom Lieferanten angebotene Versandart
+    ensure_column('lieferant_angebot', 'variante', "VARCHAR(190) NULL");          // E3: konkrete Variante/Gehalt des Lieferanten (z. B. "Bisglycinat 13% Mg")
+    ensure_column('lieferant_angebot', 'kapsel_vorschlag_id', "INT NULL");        // E4: vom Lieferanten vorgeschlagene andere Kapselgröße
+    ensure_column('lieferant_angebot', 'kapsel_vorschlag_grund', "VARCHAR(255) NULL"); // E4: Begründung für den Kapselgrößen-Vorschlag
     ensure_column('item', 'cas', "VARCHAR(30) NULL");              // CAS-Nummer (z. B. Ascorbinsäure 50-81-7)
     ensure_column('item', 'max_fuellgewicht_g', "DECIMAL(10,2) NULL"); // Verpackung: max. Füllgewicht (g) – für Pulver-Match (Glas/Dose)
     // Verpackungs-Stückliste: Rolle je Verpackungs-Item + Produkt-Slots für die komplette Stückliste
@@ -2553,6 +2556,26 @@ function rezeptur_kapselgroesse(int $rezeptur_id): ?array {
     foreach (all("SELECT * FROM kapselgroesse ORDER BY fuellmenge_mg ASC") as $kg)
         if (kapsel_kapazitaet_mg($kg, $dichte) + 0.001 >= $weight) return $kg;
     return null;   // passt in keine Standardgröße
+}
+// E5: passt das Füllgewicht je Einheit einer Kapsel-/Softgel-Rezeptur in die (gewählte, sonst größte) Kapsel?
+// Rückgabe null, wenn nicht anwendbar (keine Kapsel-Form oder kein Füllgewicht). Sonst ['ok','fuell_mg','kap_mg',
+// 'kapseln' (nötige Kapseln je Dosis), 'kapsel_name','gewaehlt'].
+function kapsel_plausibilitaet(int $rezeptur_id, int $kapselgroesse_id = 0): ?array {
+    if ($rezeptur_id <= 0) return null;
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    if (!in_array($form, ['kapsel', 'softgel'], true)) return null;
+    $fuell = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rezeptur_id]);
+    if ($fuell <= 0) return null;
+    seed_kapsel_referenz();
+    $dichte = function_exists('rezeptur_mix_dichte') ? rezeptur_mix_dichte($rezeptur_id) : null;
+    // Referenz-Kapsel: die gewählte, sonst die GRÖSSTE verfügbare (passt es da nicht, passt es in keine).
+    $kg = $kapselgroesse_id > 0 ? one("SELECT * FROM kapselgroesse WHERE id=?", [$kapselgroesse_id]) : null;
+    if (!$kg) $kg = one("SELECT * FROM kapselgroesse ORDER BY fuellmenge_mg DESC LIMIT 1");
+    if (!$kg) return null;
+    $kapMg = kapsel_kapazitaet_mg($kg, $dichte);
+    if ($kapMg <= 0) return null;
+    return ['ok' => $fuell <= $kapMg + 0.001, 'fuell_mg' => $fuell, 'kap_mg' => $kapMg,
+            'kapseln' => (int) ceil($fuell / $kapMg), 'kapsel_name' => (string)($kg['name'] ?? ''), 'gewaehlt' => $kapselgroesse_id > 0];
 }
 
 // Welche form-spezifische Eigenschaft gehört zu dieser Darreichungsform?
@@ -5785,15 +5808,19 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
     if ($preis <= 0) return 'Bitte einen Preis eintragen.';
     $inco = array_key_exists((string)($opt['incoterm'] ?? ''), incoterm_liste()) ? (string)$opt['incoterm'] : null;
     $vers = array_key_exists((string)($opt['versandart'] ?? ''), versandart_liste()) ? (string)$opt['versandart'] : null;
+    // E3: konkrete Variante/Gehalt des Lieferanten. E4: vorgeschlagene andere Kapselgröße + Begründung.
+    $variante = mb_substr(trim((string)($opt['variante'] ?? '')), 0, 190) ?: null;
+    $kapVor   = (int)($opt['kapsel_vorschlag_id'] ?? 0) ?: null;
+    $kapGrund = mb_substr(trim((string)($opt['kapsel_vorschlag_grund'] ?? '')), 0, 255) ?: null;
     $vorhanden = one("SELECT id FROM lieferant_angebot WHERE anfrage_id=?", [$anfrage_id]);
     if ($vorhanden) {
-        q("UPDATE lieferant_angebot SET preis=?, einheit=?, preis_basis=?, mindestmenge=?, lieferzeit_tage=?, notiz=?, incoterm=?, versandart=?, status='offen', angelegt=UTC_TIMESTAMP() WHERE id=?",
-          [$preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null, $inco, $vers, (int)$vorhanden['id']]);
+        q("UPDATE lieferant_angebot SET preis=?, einheit=?, preis_basis=?, mindestmenge=?, lieferzeit_tage=?, notiz=?, incoterm=?, versandart=?, variante=?, kapsel_vorschlag_id=?, kapsel_vorschlag_grund=?, status='offen', angelegt=UTC_TIMESTAMP() WHERE id=?",
+          [$preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null, $inco, $vers, $variante, $kapVor, $kapGrund, (int)$vorhanden['id']]);
         $aid = (int)$vorhanden['id'];
         q("DELETE FROM lieferant_angebot_staffel WHERE angebot_id=?", [$aid]);
     } else {
-        q("INSERT INTO lieferant_angebot (anfrage_id,lieferant_id,preis,einheit,preis_basis,mindestmenge,lieferzeit_tage,notiz,incoterm,versandart) VALUES (?,?,?,?,?,?,?,?,?,?)",
-          [$anfrage_id, $lieferant_id, $preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null, $inco, $vers]);
+        q("INSERT INTO lieferant_angebot (anfrage_id,lieferant_id,preis,einheit,preis_basis,mindestmenge,lieferzeit_tage,notiz,incoterm,versandart,variante,kapsel_vorschlag_id,kapsel_vorschlag_grund) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          [$anfrage_id, $lieferant_id, $preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null, $inco, $vers, $variante, $kapVor, $kapGrund]);
         $aid = insert_id();
     }
     foreach ($staffeln as $s) {

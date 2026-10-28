@@ -58,3 +58,12 @@ In der Rezeptur-Tabelle sind Inhaltsstoffe mit `item_id` Links (`a.lp-roh[data-i
 ## Typ-Filter + zurückgezogene Anfragen (2026-10-24)
 Über der Liste **Typ-Chips** (`&typ=`): Alle / Rohstoffe (`af.art='rohstoff'`) / Fertigprodukte (`af.art='fertigprodukt'`), mit Zählern (`lp_t(filter_alle/filter_rohstoffe/filter_fertig)`).
 Anfragen mit Status `zurueckgezogen` (dem Lieferanten wurde die Rohstoff-Berechtigung entzogen) werden in der Liste **ausgeblendet** (`WHERE af.status<>'zurueckgezogen'`); ruft er eine solche Anfrage direkt per URL auf, erscheint ein Hinweis-Banner (`lp_t(anfrage_zurueck)`) und ein Angebot kann nicht mehr abgegeben werden.
+
+## E2–E5, E7 (2026-10-28)
+- **E2:** In der Anfragenliste ist die **ganze Zeile klickbar** (öffnet die Anfrage); der primäre „Angebot abgeben"-Button entfällt, stattdessen ein dezenter ›-Pfeil. Das Angebot wird erst in der geöffneten Anfrage abgegeben.
+- **E3:** Im Angebotsformular neues Feld **„Ihre konkrete Variante / Gehalt"** (`lieferant_angebot.variante`). Bei **Rohstoff**-Anfragen ist der **Spec-Upload Pflicht** (`spec_datei required`), solange am Artikel noch keine Spec/CoA liegt – Spec gehört zum einzelnen Rohstoff. Hochgeladene Spec/CoA laufen weiter durch den KI-Import (`spec_ki_nach_upload`).
+- **E4:** Bei Kapsel/Softgel-Anfragen kann der Lieferant eine **andere Kapselgröße vorschlagen** (`kapsel_vorschlag_id`) mit **Begründung** (`kapsel_vorschlag_grund`).
+- **E5:** Plausibilität Füllgewicht vs. Kapsel: `kapsel_plausibilitaet($rezeptur_id,$kapselgroesse_id)` (`core/schema.php`); passt das Füllgewicht je Einheit nicht in eine einzelne Kapsel, zeigt die Anfrage einen Warnhinweis (mg/Kapsel, ~Kapseln je Dosis).
+- **E7:** Bereits vorhanden – eine Lieferant-Rückfrage (`nachricht_senden` akteur=lieferant) erzeugt eine Benachrichtigung (`benachrichtigung_add`) mit Sprung-Link; das Menü „Benachrichtigungen" zeigt den ungelesen-Zähler als Badge (`core/layout.php`). Kein Code-Change nötig.
+
+Neue Übersetzungsschlüssel in `portal_layout.php`: variante, variante_hint, spec_pflicht, kapsel_andere, kapsel_andere_grund, kapsel_passt_nicht (DE/EN/ZH).
