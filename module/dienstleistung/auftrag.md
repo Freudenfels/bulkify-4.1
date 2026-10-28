@@ -4,6 +4,10 @@ Route `?p=dl_auftrag&id=<ID>`. Zeigt Kopf, Positionen (aus dem zugehörigen DL-A
 
 - "DL-Rechnung erstellen" (`dl_rechnung_aus_auftrag`): erzeugt eine Rechnung mit eigenem Nummernkreis DR-, übernimmt die Positionen, optional Zahlungsziel + Portal-Freigabe. Die Rechnung ist ein normaler `beleg` (kategorie='dienstleistung') und erscheint auch im zentralen Kassenbuch der Buchhaltung; Bezahlung/Mahnung laufen dort.
 
+## Leistungsbeschreibung / KI-Zusammenfassung (2026-10-28)
+Im Rechnungs-Panel (`#rechnung`) gibt es ein Feld **Leistungsbeschreibung**, das als Rechnungstext (`beleg.text`) in die DR-Rechnung fließt. Statt alles von Hand zusammenzusuchen, fasst **„Mit KI zusammenfassen"** (`aktion=ki_zusammenfassung` → `dl_auftrag_ki_zusammenfassung`) den ganzen Auftrag zusammen: Leistung/Service, die abgerechneten Positionen (Service-Gruppe), erledigte + offene Arbeitsschritte, hochgeladene Endergebnisse und den Verlauf. Der Vorschlag wird in `auftrag.dl_leistungstext` gespeichert und ist frei editierbar. Der KI-Button erscheint nur bei eingerichteter KI (`ki_bereit()`); ohne KI trägt man den Text selbst ein.
+- Ein Formular, zwei Buttons: **„Nur Text speichern"** (`aktion=leistungstext_speichern`) und **„DL-Rechnung erstellen"** (`aktion=rechnung`). Letzterer speichert den (ggf. editierten) Text mit und rechnet in einem Schritt ab – kein getrenntes Speichern nötig. Flash `kiok=1` / `kierr=<text>`.
+
 ## Fortschritt (Service-Schritte) + Endergebnis
 - **Fortschritt:** hat der Auftrag materialisierte Schritte (`dl_auftrag_track`), erscheinen sie als Buttons; ein Klick setzt den aktuellen Stand (`aktion=schritt` → `dl_auftrag_schritt_setzen`, alle davor = erledigt). Ohne Schritte (Service ohne Workflow) bleibt der alte offen/in Arbeit/erledigt-Umschalter.
 - **Endergebnis:** erlaubt der Service `ergebnis_upload` (oder es gibt schon Ergebnisse), gibt es ein Upload-Feld (`aktion=ergebnis_upload` → `dl_ergebnis_upload`). Bei `upload_schliesst_ab` wird der Auftrag abgeschlossen und der Kunde benachrichtigt. Download über `?p=dokument&id=`.

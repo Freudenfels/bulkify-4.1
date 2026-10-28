@@ -146,6 +146,10 @@ function dienstleistung_schema(): void {
     // damit die DL-Rechnung genau diese Position abrechnet (nicht das ganze Angebot).
     ensure_column('auftrag', 'dienstleistung_id',   "INT NULL");
     ensure_column('auftrag', 'angebot_position_id', "INT NULL");
+    // Gebündelter Leistungstext (Rechnungsbeschreibung) je DL-Auftrag – aus allem, was im Auftrag passiert ist
+    // (Leistung, Positionen, erledigte Arbeitsschritte, Endergebnisse). Wird von der KI vorgeschlagen, ist frei
+    // editierbar und fließt als Rechnungstext in die DR-Rechnung. Spart das Zusammensuchen von Hand.
+    ensure_column('auftrag', 'dl_leistungstext', "TEXT NULL");
     // Materialisierte Schritte des DL-Auftrags (Fortschritt), aus dem Service kopiert.
     $pdo->exec("CREATE TABLE IF NOT EXISTS dl_auftrag_schritt (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -622,6 +626,91 @@ function dl_rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     if (function_exists('beleg_status_log_add')) beleg_status_log_add($bid, 'offen', 'DL-Rechnung aus Auftrag ' . (string)$a['nummer'] . ' erstellt' . ($sicht ? ', für Kunde freigegeben' : ''), trim((string)($opt['ersteller'] ?? '')) ?: 'team');
     if (!empty($a['kunde_id'])) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'DL-Rechnung ' . (string) scalar("SELECT nummer FROM beleg WHERE id=?", [$bid]) . ' erstellt.', 'beleg', 'auftrag', $auftrag_id);
     return $bid;
+}
+
+// Alles, was zu EINEM DL-Auftrag gehört, an einer Stelle zusammengetragen – als Grundlage für die
+// Zusammenfassung (KI) und den Rechnungstext. Reine Lesefunktion, ändert nichts.
+// Rückgabe: ['auftrag','service','positionen','schritte','ergebnisse','verlauf'].
+function dl_auftrag_kontext(int $auftrag_id): array {
+    $a = dl_auftrag_laden($auftrag_id);
+    if (!$a) return [];
+    $service = !empty($a['dienstleistung_id']) ? dienstleistung_laden((int)$a['dienstleistung_id']) : null;
+    // Positionen: die SERVICE-GRUPPE dieses Auftrags (Service + zugehörige Material-Positionen), wie die Rechnung.
+    $quellPos = dl_positionen((int)$a['angebot_id']);
+    if (!empty($a['angebot_position_id'])) {
+        $ziel = null;
+        foreach (dl_positionen_gruppieren($quellPos) as $g) { foreach ($g as $p) if ((int)$p['id'] === (int)$a['angebot_position_id']) { $ziel = $g; break 2; } }
+        if ($ziel !== null) $quellPos = $ziel;
+    }
+    // Verlauf (Team↔Kunde / interne Vermerke) zu diesem Auftrag, soweit vorhanden.
+    $verlauf = [];
+    try {
+        $verlauf = all("SELECT text, erstellt FROM aktivitaet WHERE ref_typ='auftrag' AND ref_id=? ORDER BY id ASC LIMIT 60", [$auftrag_id]);
+    } catch (Throwable $e) { $verlauf = []; }
+    return [
+        'auftrag'    => $a,
+        'service'    => $service,
+        'positionen' => $quellPos,
+        'schritte'   => dl_auftrag_track($auftrag_id),
+        'ergebnisse' => dl_ergebnis_dateien($auftrag_id),
+        'verlauf'    => $verlauf,
+    ];
+}
+
+// KI-Zusammenfassung eines DL-Auftrags zu einem fertigen Rechnungs-Leistungstext. Trägt alles aus dem Auftrag
+// zusammen (Leistung, Positionen, erledigte Arbeitsschritte, Endergebnisse, Verlauf) und formuliert eine knappe,
+// sachliche Leistungsbeschreibung für die DR-Rechnung – so muss man vor dem Rechnungstellen nichts mehr von Hand
+// zusammensuchen. Rückgabe: ['ok'=>true,'text'=>…] oder ['ok'=>false,'fehler'=>…]. Wirft nie.
+function dl_auftrag_ki_zusammenfassung(int $auftrag_id): array {
+    require_once __DIR__ . '/ki.php';
+    if (!ki_bereit()) return ['ok'=>false, 'fehler'=>'KI ist nicht eingerichtet (ANTHROPIC_API_KEY in secrets.php).'];
+    $k = dl_auftrag_kontext($auftrag_id);
+    if (!$k) return ['ok'=>false, 'fehler'=>'Auftrag nicht gefunden.'];
+    $a = $k['auftrag'];
+    $eur = fn($c) => number_format(((int)$c) / 100, 2, ',', '.');
+    $nfm = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+
+    $z = [];
+    $z[] = 'Auftrag: ' . (string)($a['nummer'] ?? '');
+    $z[] = 'Kunde: ' . trim((string)($a['kunde_firma'] ?? '')) ;
+    if (!empty($a['angebot_nummer'])) $z[] = 'aus Angebot: ' . (string)$a['angebot_nummer'];
+    if ($k['service']) $z[] = 'Dienstleistung: ' . (string)$k['service']['name'] . (trim((string)($k['service']['beschreibung'] ?? '')) !== '' ? ' – ' . trim((string)$k['service']['beschreibung']) : '');
+
+    if ($k['positionen']) {
+        $z[] = "\nPositionen (so wird abgerechnet):";
+        foreach ($k['positionen'] as $p) {
+            $zeile = round(((float)$p['menge']) * ((int)$p['preis_cent'] / 100), 2);
+            $z[] = '- ' . (string)$p['bezeichnung']
+                 . (trim((string)($p['beschreibung'] ?? '')) !== '' ? ' (' . trim((string)$p['beschreibung']) . ')' : '')
+                 . ': ' . $nfm($p['menge']) . ' ' . trim((string)($p['einheit'] ?? '')) . ' × ' . $eur((int)$p['preis_cent']) . ' € = ' . number_format($zeile, 2, ',', '.') . ' € netto';
+        }
+    }
+    if ($k['schritte']) {
+        $erl = array_filter($k['schritte'], fn($s) => (int)$s['erledigt'] === 1);
+        $off = array_filter($k['schritte'], fn($s) => (int)$s['erledigt'] !== 1);
+        if ($erl) $z[] = "\nErledigte Arbeitsschritte: " . implode(', ', array_map(fn($s) => (string)$s['name'], $erl));
+        if ($off) $z[] = 'Noch offene Schritte: ' . implode(', ', array_map(fn($s) => (string)$s['name'], $off));
+    }
+    if ($k['ergebnisse']) $z[] = "\nHochgeladene Endergebnisse: " . implode(', ', array_map(fn($d) => (string)($d['datei_orig'] ?: 'Dokument'), $k['ergebnisse']));
+    if ($k['verlauf']) {
+        $z[] = "\nVerlauf (Auszug):";
+        foreach (array_slice($k['verlauf'], -20) as $v) $z[] = '- ' . trim(preg_replace('/\s+/', ' ', (string)$v['text']));
+    }
+
+    $sys = 'Du formulierst eine knappe, sachliche Leistungsbeschreibung für eine Rechnung eines Lohnherstellers '
+         . 'für Nahrungsergänzungsmittel (Dienstleistung). Deutsch, geschäftlich-neutral, keine Werbesprache, keine Emojis. '
+         . 'Beschreibe NUR die tatsächlich erbrachte Leistung aus den Angaben – erfinde nichts, nenne keine Preise und keine '
+         . 'Beträge (die stehen in den Rechnungspositionen). 2 bis 5 kurze Sätze oder knappe Stichpunkte. Keine Anrede, keine '
+         . 'Grußformel, keine Überschrift – nur der Text, der auf die Rechnung kommt.';
+    $r = ki_frage(implode("\n", $z), ['system'=>$sys, 'max_tokens'=>700, 'aufwand'=>'low', 'zweck'=>'dl_zusammenfassung']);
+    if (!$r['ok']) return ['ok'=>false, 'fehler'=>$r['fehler'] ?? 'KI-Fehler.'];
+    return ['ok'=>true, 'text'=>trim((string)$r['text'])];
+}
+
+// Leistungstext eines DL-Auftrags speichern (manuell editiert oder KI-Vorschlag übernommen).
+function dl_auftrag_leistungstext_speichern(int $auftrag_id, ?string $text): void {
+    $text = trim((string)$text);
+    q("UPDATE auftrag SET dl_leistungstext=? WHERE id=? AND kategorie='dienstleistung'", [$text !== '' ? $text : null, $auftrag_id]);
 }
 
 // DL-Auftraege (Liste) + ein Auftrag mit Rechnungsinfo.

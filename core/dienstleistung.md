@@ -67,3 +67,9 @@ Altbestand/Import: manche DL-Aufträge hatten **keine `auftrag.dienstleistung_id
 - `dl_auftrag_heilen($auftrag_id)`: trägt fehlende `dienstleistung_id` nach + legt Schritte an (idempotent, respektiert `ohne_fortschritt`). Reine Material-Aufträge bleiben unberührt.
 - `dl_auftrag_schritte_resync($auftrag_id)`: übernimmt die Schritte **neu** aus dem aktuellen Katalog (für nachträglich geänderte Abläufe); Haken-Stand je Schrittname bleibt erhalten.
 - `dl_auftraege_service_backfill()`: einmalige Heilung des Altbestands (Marker `app_meta dl_heal_v1`), zusätzlich via Schema-mtime nach Deploy genau einmal aus `init_schema()`.
+
+## DL-Auftrag → Rechnungstext zusammenfassen (2026-10-28)
+Damit man vor dem Rechnungstellen nicht alles von Hand zusammensucht, bündelt die KI den ganzen DL-Auftrag zu einer Leistungsbeschreibung:
+- `dl_auftrag_kontext($auftrag_id)`: reine Lesefunktion, trägt alles zusammen – `auftrag`, `service` (Dienstleistung), `positionen` (die Service-Gruppe wie die Rechnung abrechnet), `schritte` (`dl_auftrag_track`), `ergebnisse` (hochgeladene Endergebnisse) und `verlauf` (`aktivitaet` zu `ref_typ='auftrag'`).
+- `dl_auftrag_ki_zusammenfassung($auftrag_id)`: baut daraus einen Prompt und lässt `ki_frage` (System-Prompt: sachlich, keine Preise/Beträge, keine Emojis, 2–5 Sätze) eine Rechnungs-Leistungsbeschreibung formulieren. Wirft nie; `['ok'=>false,'fehler'=>…]` wenn KI nicht eingerichtet (`ki_bereit()`) oder Auftrag fehlt.
+- `dl_auftrag_leistungstext_speichern($auftrag_id, $text)`: speichert den (ggf. editierten) Text in `auftrag.dl_leistungstext` (additive Spalte, `dienstleistung_schema`). Dieser Text geht als `opt['text']` → `beleg.text` in die DR-Rechnung (`dl_rechnung_aus_auftrag`). UI: siehe `module/dienstleistung/auftrag.md`.

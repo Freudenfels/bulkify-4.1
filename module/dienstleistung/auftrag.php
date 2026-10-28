@@ -3,6 +3,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dienstleistung.php';
+require_once BX_ROOT . '/core/ki.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $a  = $id ? dl_auftrag_laden($id) : null;
@@ -57,12 +58,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $r = dl_ergebnis_upload($id);
         header('Location: ?p=dl_auftrag&id=' . $id . ($r['ok'] ? ('&ok=1' . (!empty($r['abgeschlossen']) ? '&done=1' : '')) : '&uperr=' . urlencode($r['msg']))); exit;
     }
+    // Leistungstext aus allem im Auftrag per KI zusammenfassen (Grundlage für die Rechnung). Wird gespeichert
+    // und danach als Rechnungstext vorbelegt – man muss nichts mehr von Hand zusammensuchen.
+    if ($aktion === 'ki_zusammenfassung') {
+        $r = dl_auftrag_ki_zusammenfassung($id);
+        if (!empty($r['ok'])) { dl_auftrag_leistungstext_speichern($id, (string)$r['text']); header('Location: ?p=dl_auftrag&id=' . $id . '&kiok=1#rechnung'); }
+        else                  { header('Location: ?p=dl_auftrag&id=' . $id . '&kierr=' . rawurlencode((string)($r['fehler'] ?? 'KI-Fehler')) . '#rechnung'); }
+        exit;
+    }
+    // Leistungstext von Hand speichern (editierter KI-Vorschlag oder eigener Text).
+    if ($aktion === 'leistungstext_speichern') {
+        dl_auftrag_leistungstext_speichern($id, (string)($_POST['leistungstext'] ?? ''));
+        header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1#rechnung'); exit;
+    }
     if ($aktion === 'rechnung') {
         $opt = [
             'zahlungsziel_tage' => $_POST['zahlungsziel_tage'] ?? '',
             'freigeben'         => isset($_POST['freigeben']) ? 1 : 0,
             'ersteller'         => current_user()['name'] ?? 'team',
+            'text'              => trim((string)($_POST['leistungstext'] ?? '')),
         ];
+        if ($opt['text'] !== '') dl_auftrag_leistungstext_speichern($id, $opt['text']);
         $bid = dl_rechnung_aus_auftrag($id, $opt);
         header('Location: ' . ($bid ? '/buchhaltung/?p=rechnung&id=' . $bid : '?p=dl_auftrag&id=' . $id . '&fehler=1')); exit;
     }
@@ -88,6 +104,8 @@ if (isset($_GET['done']))   echo '<div class="bx-panel badge-ok" style="padding:
 elseif (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['uperr']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Upload: ' . h((string)$_GET['uperr']) . '</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Rechnung konnte nicht erstellt werden (keine Positionen/kein Betrag).</div>';
+if (isset($_GET['kiok']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zusammenfassung erstellt – unten als Rechnungstext übernommen. Bitte prüfen und ggf. anpassen.</div>';
+if (isset($_GET['kierr']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Zusammenfassung: ' . h((string)$_GET['kierr']) . '</div>';
 if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag storniert – beim Kunden ausgeblendet. Eine evtl. erstellte DR-Rechnung bitte noch in der Buchhaltung stornieren.</div>';
 if (isset($_GET['syncok']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Schritte aus dem Service übernommen (' . (int)$_GET['syncok'] . ' Schritte). Der Kunde sieht den Ablauf im Portal.</div>';
 if (isset($_GET['syncleer']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Für diesen Auftrag ließ sich kein Service mit Schritten ermitteln (reine Material-/Abrechnungsposition oder „ohne Fortschritt").</div>';
@@ -206,18 +224,40 @@ if (isset($_GET['syncleer']))  echo '<div class="bx-panel" style="border-color:#
 </div>
 <?php endif; ?>
 
-<div class="bx-panel">
+<div class="bx-panel" id="rechnung">
   <h2 style="margin-top:0">DL-Rechnung (DR-)</h2>
   <?php if ($rechnung): ?>
     <p>Rechnung <a href="/buchhaltung/?p=rechnung&id=<?= (int)$rechnung['id'] ?>"><strong><?= h($rechnung['nummer']) ?></strong></a> · <?= number_format((float)$rechnung['brutto'],2,',','.') ?> € · <?= h(status_text($rechnung['status'])) ?>. Zahlungen werden in der Buchhaltung erfasst.</p>
-  <?php else: ?>
-    <form method="post" class="bx-row" style="align-items:flex-end;gap:12px">
-      <input type="hidden" name="aktion" value="rechnung">
-      <div class="bx-field" style="max-width:160px;margin-bottom:0"><label>Zahlungsziel (Tage)</label><input type="number" name="zahlungsziel_tage" min="0" placeholder="z. B. 14"></div>
-      <div class="bx-field" style="margin-bottom:0"><label>Im Portal freigeben</label><div class="bx-check" style="padding-top:8px"><input type="checkbox" name="freigeben" id="f_frei" value="1"><label for="f_frei" style="margin:0">Kunde sieht die Rechnung</label></div></div>
-      <button class="btn btn-primary" type="submit">DL-Rechnung erstellen</button>
+  <?php elseif (($a['status'] ?? '') === 'storniert'): ?>
+    <p class="muted">Auftrag storniert – keine Rechnung.</p>
+  <?php else:
+    $leistungstext = (string)($a['dl_leistungstext'] ?? '');
+    $kiBereit = ki_bereit();
+  ?>
+    <?php // Leistungsbeschreibung: alles aus dem Auftrag gebündelt (KI-Vorschlag, frei editierbar) -> Rechnungstext.
+          // Eigene KI-Form im Kopf (fasst den ganzen Auftrag frisch zusammen, unabhängig vom Textfeld). ?>
+    <?php if ($kiBereit): ?>
+    <form method="post" style="margin:0 0 8px" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Fasse zusammen …';">
+      <input type="hidden" name="aktion" value="ki_zusammenfassung">
+      <button class="btn btn-ghost btn-sm" type="submit" title="Alles aus diesem Auftrag (Leistung, Positionen, erledigte Schritte, Endergebnisse, Verlauf) zu einem Rechnungstext zusammenfassen"><?= $leistungstext !== '' ? 'Neu zusammenfassen (KI)' : 'Mit KI zusammenfassen' ?></button>
+      <span class="muted" style="font-size:12px;margin-left:8px">Trägt Leistung, Positionen, erledigte Schritte und Endergebnisse zu einem Rechnungstext zusammen.</span>
     </form>
-    <p class="muted" style="font-size:12px;margin-top:8px">Erzeugt eine Rechnung mit eigenem Nummernkreis DR-… und übernimmt die Positionen. Sie erscheint danach auch im zentralen Kassenbuch der Buchhaltung.</p>
+    <?php endif; ?>
+    <?php // Ein Formular für Text + Rechnung: der Klick auf „DL-Rechnung erstellen" speichert den (ggf. editierten)
+          // Text mit und rechnet ab – man muss nicht erst getrennt speichern. ?>
+    <form method="post">
+      <div class="bx-field" style="margin-bottom:12px">
+        <label>Leistungsbeschreibung (kommt auf die Rechnung)</label>
+        <textarea name="leistungstext" rows="5" style="width:100%" placeholder="<?= $kiBereit ? 'Leer – „Mit KI zusammenfassen" fasst den ganzen Auftrag zusammen, oder hier selbst eintragen.' : 'Leistungsbeschreibung für die Rechnung eintragen.' ?>"><?= h($leistungstext) ?></textarea>
+      </div>
+      <div class="bx-row" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div class="bx-field" style="max-width:160px;margin-bottom:0"><label>Zahlungsziel (Tage)</label><input type="number" name="zahlungsziel_tage" min="0" placeholder="z. B. 14"></div>
+        <div class="bx-field" style="margin-bottom:0"><label>Im Portal freigeben</label><div class="bx-check" style="padding-top:8px"><input type="checkbox" name="freigeben" id="f_frei" value="1"><label for="f_frei" style="margin:0">Kunde sieht die Rechnung</label></div></div>
+        <button class="btn btn-ghost" type="submit" name="aktion" value="leistungstext_speichern">Nur Text speichern</button>
+        <button class="btn btn-primary" type="submit" name="aktion" value="rechnung">DL-Rechnung erstellen</button>
+      </div>
+    </form>
+    <p class="muted" style="font-size:12px;margin-top:8px">Erzeugt eine Rechnung mit eigenem Nummernkreis DR-… und übernimmt die Positionen samt der Leistungsbeschreibung. Sie erscheint danach auch im zentralen Kassenbuch der Buchhaltung.</p>
   <?php endif; ?>
 </div>
 <?php render_footer();
