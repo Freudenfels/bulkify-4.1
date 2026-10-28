@@ -60,17 +60,53 @@ function nachbestellung_quelle(int $angebot_id, int $kunde_id): ?array {
     ];
 }
 
+// Alle je angebotenen Mengenstaffeln dieses Kunden für dieses Produkt (gesendete + bestätigte Angebote),
+// auf die Packungsgröße (stueck) eingeschränkt, wenn bekannt. Rückgabe: Liste [['menge'=>int,'vk'=>float], …] aufsteigend.
+function nachbestellung_staffel(int $kunde_id, int $produkt_id, int $stueck): array {
+    if ($kunde_id <= 0 || $produkt_id <= 0) return [];
+    $rows = all("SELECT s.menge, s.vk_stueck, s.stueck
+                 FROM angebot_staffel s JOIN angebot a ON a.id=s.angebot_id
+                 WHERE a.kunde_id=? AND a.produkt_id=? AND a.status IN ('gesendet','bestaetigt') AND s.vk_stueck>0 AND s.menge>0",
+                [$kunde_id, $produkt_id]);
+    if ($stueck > 0) { $g = array_values(array_filter($rows, fn($r) => (int)$r['stueck'] === $stueck)); if ($g) $rows = $g; }
+    $out = array_map(fn($r) => ['menge' => (int)$r['menge'], 'vk' => (float)$r['vk_stueck']], $rows);
+    usort($out, fn($a, $b) => $a['menge'] <=> $b['menge']);
+    return $out;
+}
+
+// Mengenabhängiger Preis aus den früheren Angeboten (nur Preise, die der Kunde schon gesehen hat – nie erfunden).
+// Regel (Entscheidung Nico): echte Staffel in BEIDE Richtungen (kleinere Menge kann teurer sein). Liegt die Menge
+// ÜBER jeder je angebotenen Staffel, gilt der beste angebotene Preis + Kennzeichnung „prüfen". Rückgabe:
+// ['vk'=>float, 'quelle'=>'staffel'|'maximum'|'letzter', 'ueber_max'=>bool, 'hinweis'=>string].
+function nachbestellung_preis_fuer(int $kunde_id, int $produkt_id, int $stueck, int $menge, float $fallback_vk): array {
+    $st = nachbestellung_staffel($kunde_id, $produkt_id, $stueck);
+    if (!$st || $menge <= 0) return ['vk' => $fallback_vk, 'quelle' => 'letzter', 'ueber_max' => false, 'hinweis' => ''];
+    $maxMenge = $st[count($st) - 1]['menge'];
+    $bestVk   = min(array_map(fn($r) => $r['vk'], $st));   // bester (niedrigster) je angebotener Preis
+    if ($menge > $maxMenge) {
+        return ['vk' => $bestVk, 'quelle' => 'maximum', 'ueber_max' => true,
+                'hinweis' => 'Menge über bisher angebotene Staffel (' . number_format($maxMenge, 0, ',', '.') . ' Pkg) – Preis bitte prüfen.'];
+    }
+    // größte Staffel mit menge <= Bestellmenge = der Tarif, in den die Menge fällt; sonst kleinste (teuerste) Staffel.
+    $tierVk = null;
+    foreach ($st as $r) if ($r['menge'] <= $menge) $tierVk = $r['vk'];
+    if ($tierVk === null) $tierVk = $st[0]['vk'];
+    return ['vk' => $tierVk, 'quelle' => 'staffel', 'ueber_max' => false, 'hinweis' => ''];
+}
+
 // Kunde legt eine Nachbestellung an (verbindlich, wartet nur auf Preisprüfung). Rückgabe: ['id'=>..] oder ['fehler'=>..].
 function nachbestellung_anlegen(int $kunde_id, int $angebot_id, int $menge): array {
     nachbestellung_schema();
     $q = nachbestellung_quelle($angebot_id, $kunde_id);
     if (!$q)            return ['fehler' => 'Nachbestellung nicht möglich – Vorbestellung nicht gefunden.'];
     if ($menge <= 0)    return ['fehler' => 'Bitte eine Menge größer 0 angeben.'];
+    // Preis nach Menge aus den früheren Angeboten (Fallback: zuletzt vereinbarter Preis).
+    $preis = nachbestellung_preis_fuer($kunde_id, (int)$q['produkt_id'], (int)$q['stueck'], $menge, (float)$q['vk_stueck']);
     $cu = function_exists('current_user') ? current_user() : null;
-    q("INSERT INTO nachbestellung (kunde_id,quelle_angebot_id,quelle_auftrag_id,produkt_id,rezeptur_id,stueck,menge,vk_stueck,status,angelegt,angelegt_von)
-       VALUES (?,?,?,?,?,?,?,?,'pruefung',?,?)",
-      [$kunde_id, $angebot_id, $q['auftrag_id'], $q['produkt_id'], $q['rezeptur_id'], $q['stueck'], $menge, $q['vk_stueck'],
-       gmdate('Y-m-d H:i:s'), ($cu['name'] ?? 'Kunde')]);
+    q("INSERT INTO nachbestellung (kunde_id,quelle_angebot_id,quelle_auftrag_id,produkt_id,rezeptur_id,stueck,menge,vk_stueck,grund,status,angelegt,angelegt_von)
+       VALUES (?,?,?,?,?,?,?,?,?,'pruefung',?,?)",
+      [$kunde_id, $angebot_id, $q['auftrag_id'], $q['produkt_id'], $q['rezeptur_id'], $q['stueck'], $menge, $preis['vk'],
+       ($preis['hinweis'] !== '' ? $preis['hinweis'] : null), gmdate('Y-m-d H:i:s'), ($cu['name'] ?? 'Kunde')]);
     $id = (int) insert_id();
     $firma = (string) scalar("SELECT firma FROM kunden WHERE id=?", [$kunde_id]);
     if (function_exists('benachrichtigung_add'))

@@ -3685,6 +3685,34 @@ portal_head('Kundenportal · ' . $k['firma']);
   <script>(function(){
     var h = location.hash; if (h && /^#a\d+$/.test(h)) { var d = document.querySelector(h); if (d && d.tagName === 'DETAILS') { d.open = true; d.scrollIntoView(); } }
   })();</script>
+  <script>
+  // Nachbestellung: Preis/Pkg je nach eingetippter Menge aus den bisherigen Angebots-Staffeln (gleiche Regel wie
+  // serverseitig – echte Staffel in beide Richtungen; über der größten Staffel = bester Preis + Hinweis „prüfen").
+  (function(){
+    function eur(v){ return v.toFixed(2).replace('.', ',') + ' €'; }
+    function nf(n){ return (n||0).toLocaleString('de-DE'); }
+    document.querySelectorAll('.nb-form').forEach(function(f){
+      var inp = f.querySelector('.nb-menge'), out = f.querySelector('.nb-preis'), warn = f.querySelector('.nb-warn');
+      var staffel = []; try { staffel = JSON.parse(f.getAttribute('data-staffel') || '[]'); } catch(e){}
+      var fallback = parseFloat(f.getAttribute('data-fallback') || '0') || 0;
+      staffel.sort(function(a,b){ return a[0]-b[0]; });
+      function calc(){
+        var m = parseInt((inp.value||'').replace(/\D/g,''), 10) || 0;
+        if (!staffel.length || m<=0){ if(out) out.textContent = eur(fallback); if(warn) warn.style.display='none'; return; }
+        var maxM = staffel[staffel.length-1][0];
+        var best = staffel.reduce(function(acc,r){ return Math.min(acc, r[1]); }, staffel[0][1]);
+        if (m > maxM){ if(out) out.textContent = eur(best);
+          if(warn){ warn.textContent = 'Menge über bisher angebotene Staffel (' + nf(maxM) + ' Pkg) – Preis bitte prüfen.'; warn.style.display=''; }
+          return; }
+        var vk = staffel[0][1];
+        staffel.forEach(function(r){ if (r[0] <= m) vk = r[1]; });
+        if(out) out.textContent = eur(vk); if(warn) warn.style.display='none';
+      }
+      if (inp){ inp.addEventListener('input', calc); inp.addEventListener('blur', function(){ var d=(inp.value||'').replace(/\D/g,''); inp.value = d ? parseInt(d,10).toLocaleString('de-DE') : ''; calc(); }); }
+      calc();
+    });
+  })();
+  </script>
 
 <?php elseif ($view === 'bestellungen'):
     // DL-Auftrag gilt als abgeschlossen bei 'erledigt' (es gibt kein 'versendet'); Produkt-Auftrag bei 'versendet'.

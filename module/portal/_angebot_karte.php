@@ -225,16 +225,22 @@ if ($a['status'] === 'bestaetigt') {
         <?php elseif ($nbOffen): ?>
         <div class="muted" style="font-size:13px;margin-top:8px">Nachbestellung (<?= number_format((int)$nbOffen['menge'],0,',','.') ?> × <?= h($paketLbl((int)($nbOffen['stueck'] ?? 0))) ?>) ist eingegangen – wir bestätigen den Preis kurz.</div>
         <?php else: ?>
-        <form method="post" class="bx-panel" style="margin-top:10px;padding:12px 14px" onsubmit="return confirm('Verbindlich nachbestellen? Wir bestätigen den Preis kurz, dann startet die Produktion.');">
+        <?php
+          $nbStaffel = function_exists('nachbestellung_staffel') ? nachbestellung_staffel($kid, (int)($a['produkt_id'] ?? 0), (int)($sel['stueck'] ?? 0)) : [];
+          $nbInit = function_exists('nachbestellung_preis_fuer') ? nachbestellung_preis_fuer($kid, (int)($a['produkt_id'] ?? 0), (int)($sel['stueck'] ?? 0), (int)$sel['menge'], $vk) : ['vk'=>$vk,'ueber_max'=>false,'hinweis'=>''];
+        ?>
+        <form method="post" class="bx-panel nb-form" data-staffel='<?= h(json_encode(array_map(fn($r)=>[$r['menge'],$r['vk']], $nbStaffel))) ?>' data-fallback="<?= h((string)$vk) ?>" style="margin-top:10px;padding:12px 14px" onsubmit="return confirm('Verbindlich nachbestellen? Wir bestätigen den Preis kurz, dann startet die Produktion.');">
           <input type="hidden" name="aktion" value="nachbestellen"><input type="hidden" name="quelle_angebot_id" value="<?= (int)$a['id'] ?>">
           <div style="font-weight:600;margin-bottom:6px">Einfach nachbestellen</div>
           <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
             <label style="display:flex;flex-direction:column;gap:3px;font-size:13px">Menge (Packungen)
-              <input type="text" name="menge" inputmode="numeric" value="<?= number_format((int)$sel['menge'],0,',','.') ?>" style="min-width:140px">
+              <input type="text" name="menge" class="nb-menge" inputmode="numeric" value="<?= number_format((int)$sel['menge'],0,',','.') ?>" style="min-width:140px">
             </label>
+            <div style="font-size:13px">Preis / Pkg: <strong class="nb-preis"><?= $eur($nbInit['vk']) ?></strong></div>
             <button class="btn btn-primary btn-sm" type="submit">Verbindlich nachbestellen</button>
           </div>
-          <div class="muted" style="font-size:12px;margin-top:6px">Zum zuletzt vereinbarten Preis <strong><?= $eur($vk) ?></strong> / Pkg. · gleiche Verpackung und gleiches Etikett (keine erneute Freigabe nötig). Der Preis wird nur kurz geprüft.</div>
+          <div class="muted nb-warn" style="font-size:12px;margin-top:6px;<?= empty($nbInit['ueber_max']) ? 'display:none' : '' ?>"><?= h((string)($nbInit['hinweis'] ?? '')) ?></div>
+          <div class="muted" style="font-size:12px;margin-top:6px">Preis richtet sich nach Ihrer Menge – aus Ihren bisherigen Angeboten. Gleiche Verpackung und gleiches Etikett (keine erneute Freigabe nötig). Wir bestätigen den Preis kurz, dann startet die Produktion.</div>
         </form>
         <?php endif; ?>
       <?php endif; ?>

@@ -61,6 +61,7 @@ $paket = fn($stk) => (int)$stk > 0 ? number_format((int)$stk, 0, ',', '.') . ' S
           <?php if ((string)$n['status'] === 'preis_neu'): ?>
             <?= bx_badge('wartet auf Kundenfreigabe', 'warn') ?> <span class="muted" style="font-size:12px">neuer Preis <?= $eur((float)$n['vk_neu']) ?></span>
           <?php else: ?>
+          <?php if (!empty($n['grund'])): ?><div class="muted" style="font-size:12px;color:#8a6d00;margin-bottom:4px"><?= h((string)$n['grund']) ?></div><?php endif; ?>
           <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap">
             <form method="post" style="margin:0" onsubmit="return confirm('Preis bestätigen und Auftrag freigeben?');">
               <input type="hidden" name="aktion" value="bestaetigen"><input type="hidden" name="nb_id" value="<?= (int)$n['id'] ?>">
