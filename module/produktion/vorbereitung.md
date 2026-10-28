@@ -1,5 +1,7 @@
 # produktion/vorbereitung.php – Vor-Produktion / Freigabe (PreProduktionsauftrag)
 
+> **Block I (2026-10-28): Nicht mehr im Hauptmenü.** Die eigenständige Vor-Produktions-Liste ist aus der Navigation entfernt – „Quelle festlegen" und „Zur Produktion freigeben" laufen jetzt direkt am Auftrag, und der Überblick „was ist noch freizugeben" ist der Reiter **Wartet auf Freigabe** in der Auftragsliste (`?p=auftraege&tab=freigabe`). Die **Route bleibt bestehen**: die Per-PA-Ansicht `?p=produktion_vorbereitung&id=<pa_id>` (Glas/Verpackung/Kapselgröße je Auftrag) wird weiter von der Auftragsseite aus verlinkt. Es wurden **keine Daten/Status geändert** – Aufträge im Status `vorbereitung` bleiben vollständig erhalten.
+
 Dashboard-Seite, auf der ein Kundenauftrag **final für die Produktion freigegeben** wird.
 Route `?p=produktion_vorbereitung`, Menü „Produktion → Vor-Produktion". **Rolle: nur Admin**
 (Eigen/Fremd + Freigabe sind Backend-Entscheidung, nicht Sache der Produktion).

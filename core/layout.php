@@ -28,7 +28,10 @@ function bx_nav_default(): array {
             'paf_dienstleistung' => ['label'=>'Dienstleistungsanfragen', 'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=dienstleistung', 'typ'=>'dienstleistung'],
         ],
         'Produkt'      => ['rezeptur' => 'Rezepturen', 'produkte' => 'Produkte', 'novelfood' => 'Novel Food', 'novelfood_verlauf' => 'Novel-Food News'],
-        'Produktion'   => ['produktion_vorbereitung' => 'Vor-Produktion', 'produktion' => 'Produktion', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'maschinen' => 'Maschinen', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
+        // Vor-Produktion als eigener Menüpunkt entfernt (Block I): Quelle festlegen + Freigeben laufen jetzt
+        // am Auftrag; „Wartet auf Freigabe" ist ein Reiter in der Auftragsliste (?p=auftraege&tab=freigabe).
+        // Die Route produktion_vorbereitung&id=… (Glas/Verpackung je PA) bleibt bestehen, nur ohne Nav-Eintrag.
+        'Produktion'   => ['produktion' => 'Produktion', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'maschinen' => 'Maschinen', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
         'Lager'        => ['lager' => 'Warenlager', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'rohstoff_website' => 'Website-Freigabe', 'freigaben' => 'Freigaben', 'rohstoffe_papiere' => 'Rohstoffe ohne Papiere', 'laboranalysen' => 'Laboranalysen', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
         'Einkauf'      => ['einkaufsliste' => 'Bedarf', 'einkauf' => 'Bestellt', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'lief_anfragen' => 'Anfragen & Preise', 'katalog_freigaben' => 'Katalog-Freigaben', 'einkauf_preise' => 'Preise'],
         'Import'       => ['angebot_import' => 'Angebots-Import', 'lager2_import' => 'Lager-2 Bestände'],

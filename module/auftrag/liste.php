@@ -7,7 +7,7 @@ $q    = trim($_GET['q'] ?? '');
 $sort = $_GET['sort'] ?? 'angelegt';
 $dir  = $_GET['dir']  ?? 'desc';
 $tab  = $_GET['tab']  ?? 'offen';
-if (!in_array($tab, ['offen', 'abgeschlossen', 'storniert'], true)) $tab = 'offen';
+if (!in_array($tab, ['offen', 'freigabe', 'abgeschlossen', 'storniert'], true)) $tab = 'offen';
 
 $alle = all("SELECT a.*, k.firma AS kunde_firma, COALESCE(k.nutzt_fulfillment,0) AS nutzt_fulfillment,
              COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt_name,
@@ -16,6 +16,13 @@ $alle = all("SELECT a.*, k.firma AS kunde_firma, COALESCE(k.nutzt_fulfillment,0)
              (SELECT nummer FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='rechnung' LIMIT 1) AS rechnung_nr
              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
              WHERE COALESCE(a.kategorie,'produkt') <> 'dienstleistung'");
+
+// Block I2: „Wartet auf Freigabe" = Auftrag hat einen Produktionsauftrag im Status 'vorbereitung'
+// (Quelle/Eigen-Fremd noch nicht festgelegt, art_festgelegt_am IS NULL). Ersetzt die frühere eigene
+// Vor-Produktions-Seite: ein Klick führt auf die Auftragsseite, wo Quelle festlegen + Freigeben warten.
+$wartetIds = [];
+foreach (all("SELECT DISTINCT auftrag_id FROM produktionsauftrag WHERE status='vorbereitung' AND auftrag_id IS NOT NULL") as $w)
+    $wartetIds[(int)$w['auftrag_id']] = true;
 
 // Erstauftrag vs. Nachbestellung – berechnet über ALLE Aufträge (nicht nur den aktuellen Reiter).
 // Nachbestellung = ein früherer, nicht stornierter Auftrag mit demselben Produkt existiert.
@@ -39,13 +46,16 @@ $auftragArt = function($r) use ($erstProd, $erstRez) {
 $istStorno = fn($r) => ($r['status'] ?? '') === 'storniert';
 $istAbg    = fn($r) => ($r['status'] ?? '') === 'versendet';
 $istOffen  = fn($r) => !$istAbg($r) && !$istStorno($r);
+$istWartet = fn($r) => isset($wartetIds[(int)$r['id']]) && !$istStorno($r);   // Teilmenge von „offen"
 $anzOffen  = count(array_filter($alle, $istOffen));
 $anzAbg    = count(array_filter($alle, $istAbg));
 $anzStorno = count(array_filter($alle, $istStorno));
+$anzWartet = count(array_filter($alle, $istWartet));
 // Der Reiter (offen/abgeschlossen/storniert) ist IMMER der erste Filter – auch bei einer Suche. So zeigt
 // „Offen" + Suche nur offene Treffer. Wer einen versendeten/abgeschlossenen Auftrag sucht, wechselt in den
 // passenden Reiter (die Treffer stehen dann dort). Die Suche filtert zusätzlich über Nummer/Kunde/Produkt.
 $tabPred = match ($tab) {
+    'freigabe'      => $istWartet,
     'abgeschlossen' => $istAbg,
     'storniert'     => $istStorno,
     default         => $istOffen,
@@ -158,15 +168,17 @@ $cols = [
                      }],
 ];
 
-$TABS = ['offen' => 'Offen', 'abgeschlossen' => 'Abgeschlossen'];
+$TABS = ['offen' => 'Offen'];
+if ($anzWartet > 0) $TABS['freigabe'] = 'Wartet auf Freigabe';   // Reiter nur zeigen, wenn etwas auf Freigabe wartet
+$TABS['abgeschlossen'] = 'Abgeschlossen';
 if ($anzStorno > 0) $TABS['storniert'] = 'Storniert';   // Reiter nur zeigen, wenn es stornierte gibt
-$TABCOUNT = ['offen' => $anzOffen, 'abgeschlossen' => $anzAbg, 'storniert' => $anzStorno];
+$TABCOUNT = ['offen' => $anzOffen, 'freigabe' => $anzWartet, 'abgeschlossen' => $anzAbg, 'storniert' => $anzStorno];
 
 render_header('auftraege', 'Aufträge');
 $ohnePreis = (function_exists('has_role') && (has_role('admin') || has_role('finance') || has_role('sales')))
     ? (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status<>'storniert' AND COALESCE(gesamt_netto,0) <= 0") : 0;
 $kopfAktion = $ohnePreis > 0 ? bx_btn('Aufträge ohne Preis (' . $ohnePreis . ')', '?p=auftrag_preise', 'ghost') : '';
-$tabWort = match ($tab) { 'abgeschlossen' => 'abgeschlossene (versendet)', 'storniert' => 'stornierte', default => 'offene' };
+$tabWort = match ($tab) { 'freigabe' => 'warten auf Freigabe', 'abgeschlossen' => 'abgeschlossene (versendet)', 'storniert' => 'stornierte', default => 'offene' };
 bx_head('Aufträge', $q !== '' ? count($rows) . ' Treffer unter „' . h((string)($TABS[$tab] ?? ucfirst($tab))) . '" (andere Reiter separat durchsuchen)' : count($rows) . ' ' . $tabWort, $kopfAktion);
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag' . (isset($_GET['nr']) ? ' ' . h((string)$_GET['nr']) : '') . ' gelöscht.</div>';
 ?>
@@ -189,6 +201,7 @@ bx_table($cols, array_values($rows), [
     'dir'     => $dir,
     'rowUrl'  => fn($r) => '?p=auftrag&id=' . $r['id'],
     'empty'   => match ($tab) {
+        'freigabe'      => 'Kein Auftrag wartet auf Freigabe – alles freigegeben.',
         'abgeschlossen' => 'Noch keine abgeschlossenen (versendeten) Aufträge.',
         'storniert'     => 'Keine stornierten Aufträge.',
         default         => 'Kein offener Auftrag – entstehen automatisch aus bestätigten Angeboten.',
