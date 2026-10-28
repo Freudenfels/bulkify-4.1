@@ -20,3 +20,6 @@
 
 ## Warenart-Labels + Reiter (Teil 3 Block K)
 Die Typ-Labels kommen aus der zentralen Quelle `kategorie_label()` (`core/schema.php`): `fertig` zeigt als **Bulkware**, `verkaufsfertig` als **Fertigprodukt**. Die Keys von `$CHARGE_KAT` bleiben unverändert (sie steuern das WHERE/`$ALLE_KAT`), nur die Labels wurden vereinheitlicht. Zusätzlich gibt es getrennte Reiter **Bulkware** (`fertig`) und **Fertigprodukte** (`verkaufsfertig`). Admin sieht in der Leiste den Link „Warenarten prüfen" (`?p=warenart_pruefung`).
+
+## Lager-Sicht: Alle / Lager 1 / Lager 2
+Oberhalb der Warenart-Reiter gibt es eine Lager-Sicht (`?ort=`): **Alle Lager** (totale Übersicht = unser Bestand + Fremdlager), **Lager 1** (unser Bestand, `charge.fremd_kunde_id IS NULL`), **Lager 2 (Fremdlager)** (Kundenware, `fremd_kunde_id IS NOT NULL`). Die Lager-Sicht wird als SQL-Fragment (`$ortSql`) in die Charge-Summen eingesetzt; die Zahlen und damit auch das „leere ausblenden" richten sich nach dem gewählten Ort. In Lager 2 zählen Betriebsmittel (manueller Bestand) und „unterwegs" (unsere Bestellungen) nicht. Alle Steuerungen (Wareneingang, Artikelseite, Umbuchen) bleiben im Warenlager – die Sicht filtert nur. So ist direkt sichtbar, wo was liegt. `ort` wird durch alle Links (Reiter, Suche, baseUrl) mitgeführt.

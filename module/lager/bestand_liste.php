@@ -24,16 +24,25 @@ $dir  = $_GET['dir']  ?? 'asc';
 $istBM = ist_betriebsmittel_kat($kat);
 $zeigeLeer = isset($_GET['leer']);   // Standard: nur Artikel mit Bestand > 0. ?leer=1 zeigt auch leere.
 
+// Lager-Sicht: Warenlager = totale Übersicht (unser Lager 1 + Fremdlager Lager 2); Lager 1 = unser Bestand,
+// Lager 2 = Ware, die Kunden gehört (charge.fremd_kunde_id). So ist direkt sichtbar, wo was liegt – alle
+// Steuerungen bleiben im Warenlager. Das Fragment wird in die Charge-Summen eingesetzt (kein User-Input).
+$ORTE = ['alle' => 'Alle Lager', 'lager1' => 'Lager 1', 'lager2' => 'Lager 2 (Fremdlager)'];
+$ort  = $_GET['ort'] ?? 'alle';
+if (!array_key_exists($ort, $ORTE)) $ort = 'alle';
+$ortSql = $ort === 'lager1' ? " AND c.fremd_kunde_id IS NULL"
+        : ($ort === 'lager2' ? " AND c.fremd_kunde_id IS NOT NULL" : "");
+
 if ($kat === 'alle') { $where = "i.kategorie IN ('" . implode("','", array_keys($ALLE_KAT)) . "')"; $params = []; }
 else                 { $where = "i.kategorie=?"; $params = [$kat]; }
 
 $rows = all("SELECT i.id,i.artikelnummer,i.name,i.kategorie,i.einheit,i.bestand_menge,i.mindestbestand,
              i.elektrisch,i.pruef_intervall_monate,i.letzte_pruefung,
-             (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='frei') AS frei_charge,
-             (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='quarantaene') AS quarantaene,
-             (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='gesperrt') AS gesperrt,
-             (SELECT COUNT(*) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt')) AS n_chargen,
-             (SELECT COUNT(DISTINCT COALESCE(NULLIF(c.einheit,''),'Stk')) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt') AND c.menge_verfuegbar>0) AS n_einheit,
+             (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='frei'$ortSql) AS frei_charge,
+             (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='quarantaene'$ortSql) AS quarantaene,
+             (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='gesperrt'$ortSql) AS gesperrt,
+             (SELECT COUNT(*) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt')$ortSql) AS n_chargen,
+             (SELECT COUNT(DISTINCT COALESCE(NULLIF(c.einheit,''),'Stk')) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt') AND c.menge_verfuegbar>0$ortSql) AS n_einheit,
              (SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                 WHERE bp.item_id=i.id AND b.status='bestellt' AND b.angekommen_am IS NULL) AS unterwegs
              FROM item i WHERE $where", $params);
@@ -42,8 +51,11 @@ $rows = all("SELECT i.id,i.artikelnummer,i.name,i.kategorie,i.einheit,i.bestand_
 // 'frei' = frei verfügbar (Anzeige), 'gesamt' = physisch vorhanden (frei + Quarantäne + gesperrt).
 foreach ($rows as &$r) {
     $bm = ist_betriebsmittel_kat($r['kategorie']);
-    $r['frei']   = $bm ? (float)$r['bestand_menge'] : (float)$r['frei_charge'];
-    $r['gesamt'] = $bm ? (float)$r['bestand_menge'] : ((float)$r['frei_charge'] + (float)$r['quarantaene'] + (float)$r['gesperrt']);
+    // Betriebsmittel (manueller Bestand) gehören uns – in der Lager-2-Sicht (Kundenware) zählen sie nicht.
+    $bmBestand = ($bm && $ort === 'lager2') ? 0.0 : (float)$r['bestand_menge'];
+    $r['frei']   = $bm ? $bmBestand : (float)$r['frei_charge'];
+    $r['gesamt'] = $bm ? $bmBestand : ((float)$r['frei_charge'] + (float)$r['quarantaene'] + (float)$r['gesperrt']);
+    if ($ort === 'lager2') $r['unterwegs'] = 0;   // „unterwegs" (unsere Bestellungen) ist im Fremdlager nicht relevant
 }
 unset($r);
 
@@ -142,21 +154,29 @@ $aktion = $istBM
     : bx_btn('Wareneingang', '?p=wareneingang', 'primary');
 
 render_header('lager', 'Warenlager');
-bx_head('Warenlager', count($rows) . ' Artikel', $aktion);
+bx_head('Warenlager', count($rows) . ' Artikel' . ($ort !== 'alle' ? ' · ' . $ORTE[$ort] : ''), $aktion);
+$ortQ = $ort !== 'alle' ? '&ort=' . $ort : '';
 ?>
+<?php // Lager-Sicht: Alle (totale Übersicht) · Lager 1 (unser Bestand) · Lager 2 (Fremdlager/Kundenware). ?>
+<div class="settabs" style="margin:0 0 8px">
+  <?php foreach ($ORTE as $ok => $olbl): ?>
+    <a href="?p=lager&kat=<?= h($kat) ?><?= $q !== '' ? '&q=' . urlencode($q) : '' ?><?= $zeigeLeer ? '&leer=1' : '' ?><?= $ok !== 'alle' ? '&ort=' . $ok : '' ?>" class="<?= $ort === $ok ? 'on' : '' ?>"><?= h($olbl) ?></a>
+  <?php endforeach; ?>
+</div>
 <div class="settabs" style="margin:0 0 14px">
   <?php foreach ($TABS as $k => $lbl): ?>
-    <a href="?p=lager&kat=<?= $k ?><?= $q !== '' ? '&q=' . urlencode($q) : '' ?><?= $zeigeLeer ? '&leer=1' : '' ?>" class="<?= $kat === $k ? 'on' : '' ?>"><?= h($lbl) ?></a>
+    <a href="?p=lager&kat=<?= $k ?><?= $q !== '' ? '&q=' . urlencode($q) : '' ?><?= $zeigeLeer ? '&leer=1' : '' ?><?= $ortQ ?>" class="<?= $kat === $k ? 'on' : '' ?>"><?= h($lbl) ?></a>
   <?php endforeach; ?>
 </div>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="lager">
   <input type="hidden" name="kat" value="<?= h($kat) ?>">
+  <?php if ($ort !== 'alle'): ?><input type="hidden" name="ort" value="<?= h($ort) ?>"><?php endif; ?>
   <?php if ($zeigeLeer): ?><input type="hidden" name="leer" value="1"><?php endif; ?>
   <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Name, Art.-Nr …">
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
   <span style="flex:1"></span>
-  <?php $umschaltUrl = '?p=lager&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : '') . ($zeigeLeer ? '' : '&leer=1'); ?>
+  <?php $umschaltUrl = '?p=lager&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : '') . ($zeigeLeer ? '' : '&leer=1') . $ortQ; ?>
   <a class="btn btn-ghost btn-sm" href="<?= $umschaltUrl ?>"><?= $zeigeLeer ? 'nur mit Bestand' : 'auch leere anzeigen' . ($anzahlLeer > 0 ? ' (' . $anzahlLeer . ')' : '') ?></a>
   <?php if (has_role('admin')): ?><a class="btn btn-ghost btn-sm" href="?p=warenart_pruefung" title="Bulkware vs. Fertigprodukt prüfen und korrigieren">Warenarten prüfen</a><?php endif; ?>
 </form>
@@ -165,7 +185,7 @@ if ($istBM && !$rows && $q === '') {
     echo '<div class="bx-panel"><div class="muted">Noch keine ' . h($BM_KAT[$kat]) . ' angelegt. Über „Neu: ' . h($BM_KAT[$kat]) . '" oben rechts hinzufügen.</div></div>';
 } else {
     bx_table($cols, $rows, [
-        'baseUrl' => '?p=lager&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : '') . ($zeigeLeer ? '&leer=1' : ''),
+        'baseUrl' => '?p=lager&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : '') . ($zeigeLeer ? '&leer=1' : '') . $ortQ,
         'sort'    => $sort,
         'dir'     => $dir,
         'rowUrl'  => $detailUrl,
