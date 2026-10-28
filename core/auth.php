@@ -53,6 +53,7 @@ function route_rollen_map(): array {
         'angebot_pdf'        => ['sales', 'finance'],
         'vertrag_pdf'        => ['sales', 'finance'],
         'auftraege'          => ['sales', 'finance', 'production', 'fulfillment'],
+        'nachbestellungen'   => ['sales', 'finance'],   // Eingang Portal-Nachbestellungen (Preisprüfung/Freigabe)
         'auftrag_preise'     => ['sales', 'finance'],
         'auftrag'            => ['sales', 'finance', 'production', 'fulfillment'],
         'auftrag_pdf'        => ['sales', 'finance', 'production', 'fulfillment'],

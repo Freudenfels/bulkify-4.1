@@ -212,7 +212,32 @@ if ($a['status'] === 'bestaetigt') {
     <div class="bx-panel" style="margin-top:12px;padding:12px 14px;border-color:var(--gruen)">
       <div><strong>Angenommene Menge:</strong> <?= number_format((int)$sel['menge'],0,',','.') ?> × <?= h($paketLbl((int)($sel['stueck'] ?? 0))) ?> · <strong><?= $eur($vk) ?></strong> / Pkg. · Gesamt <?= $eur($netto) ?> netto<?= $ustP > 0 ? ' · ' . $eur($brutto) . ' brutto' : '' ?></div>
       <div class="muted" style="font-size:13px;margin-top:4px">Verbindlich angenommen · Status: <strong><?= h($bestStatusLbl) ?></strong></div>
-      <div class="bx-row" style="margin-top:10px;gap:8px"><a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a><a class="btn btn-ghost btn-sm" href="<?= $nbLink ?>">Nachbestellen</a></div>
+      <div class="bx-row" style="margin-top:10px;gap:8px;flex-wrap:wrap"><a class="btn btn-primary btn-sm" href="<?= $bestLink ?>"><?= $bestTxt ?></a><a class="btn btn-ghost btn-sm" href="<?= $nbLink ?>">Etwas ändern (neu anfragen)</a></div>
+      <?php if (!empty($darfBestellen)): $nbOffen = function_exists('nachbestellung_offen_fuer') ? nachbestellung_offen_fuer($kid, (int)$a['id']) : null; ?>
+        <?php if ($nbOffen && ($nbOffen['status'] ?? '') === 'preis_neu'): ?>
+        <div class="bx-panel" style="margin-top:10px;padding:12px 14px;border-color:var(--warn,#c7962b)">
+          <div>Für Ihre Nachbestellung (<?= number_format((int)$nbOffen['menge'],0,',','.') ?> × <?= h($paketLbl((int)($nbOffen['stueck'] ?? 0))) ?>) gilt ein angepasster Preis: <strong><?= $eur((float)$nbOffen['vk_neu']) ?></strong> / Pkg.<?= $nbOffen['grund'] ? ' – ' . h((string)$nbOffen['grund']) : '' ?></div>
+          <form method="post" style="margin:8px 0 0" onsubmit="return confirm('Nachbestellung zum neuen Preis verbindlich freigeben?');">
+            <input type="hidden" name="aktion" value="nachbestell_preis_ok"><input type="hidden" name="nb_id" value="<?= (int)$nbOffen['id'] ?>">
+            <button class="btn btn-primary btn-sm" type="submit">Zum neuen Preis bestätigen</button>
+          </form>
+        </div>
+        <?php elseif ($nbOffen): ?>
+        <div class="muted" style="font-size:13px;margin-top:8px">Nachbestellung (<?= number_format((int)$nbOffen['menge'],0,',','.') ?> × <?= h($paketLbl((int)($nbOffen['stueck'] ?? 0))) ?>) ist eingegangen – wir bestätigen den Preis kurz.</div>
+        <?php else: ?>
+        <form method="post" class="bx-panel" style="margin-top:10px;padding:12px 14px" onsubmit="return confirm('Verbindlich nachbestellen? Wir bestätigen den Preis kurz, dann startet die Produktion.');">
+          <input type="hidden" name="aktion" value="nachbestellen"><input type="hidden" name="quelle_angebot_id" value="<?= (int)$a['id'] ?>">
+          <div style="font-weight:600;margin-bottom:6px">Einfach nachbestellen</div>
+          <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+            <label style="display:flex;flex-direction:column;gap:3px;font-size:13px">Menge (Packungen)
+              <input type="text" name="menge" inputmode="numeric" value="<?= number_format((int)$sel['menge'],0,',','.') ?>" style="min-width:140px">
+            </label>
+            <button class="btn btn-primary btn-sm" type="submit">Verbindlich nachbestellen</button>
+          </div>
+          <div class="muted" style="font-size:12px;margin-top:6px">Zum zuletzt vereinbarten Preis <strong><?= $eur($vk) ?></strong> / Pkg. · gleiche Verpackung und gleiches Etikett (keine erneute Freigabe nötig). Der Preis wird nur kurz geprüft.</div>
+        </form>
+        <?php endif; ?>
+      <?php endif; ?>
     </div>
     <?php else: ?>
     <div style="margin-top:12px">

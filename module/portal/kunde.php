@@ -3,6 +3,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
+require_once BX_ROOT . '/core/nachbestellung.php';
 
 $token = preg_replace('/[^a-f0-9]/', '', $_GET['token'] ?? '');
 agb_seed_wenn_leer();   // AGB-Entwurf anlegen, solange keine Fassung existiert
@@ -44,6 +45,22 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && empty($_FILE
 // Vorschau ($internVorschau weiter unten). Echte Kunden haben keine Team-Session.
 $adminImPortal = function_exists('is_logged_in') && is_logged_in()
     && function_exists('ist_echter_lieferant') && !ist_echter_lieferant();
+
+// Nachbestellung: der Kunde tippt am schon bestellten Produkt nur die Menge ein und bestellt verbindlich zum
+// zuletzt vereinbarten Preis. Kein neuer Upload, keine neue Anfrage, kein neues Angebot – bulkify prüft nur den Preis.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachbestellen') {
+    $angebotId = (int)($_POST['quelle_angebot_id'] ?? 0);
+    $menge     = (int) preg_replace('/\D/', '', (string)($_POST['menge'] ?? ''));
+    $r = nachbestellung_anlegen((int)$k['id'], $angebotId, $menge);
+    $flag = isset($r['fehler']) ? '&nbfehler=' . urlencode($r['fehler']) : '&nbok=1';
+    header('Location: ?p=portal&token=' . $token . '&v=angebote' . $flag); exit;
+}
+// Nachbestellung: Kunde gibt einen angepassten Preis frei (Ausnahmefall 2 %).
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachbestell_preis_ok') {
+    $r = nachbestellung_kunde_preis_ok((int)($_POST['nb_id'] ?? 0), (int)$k['id']);
+    $flag = isset($r['fehler']) ? '&nbfehler=' . urlencode($r['fehler']) : '&nbfreigabe=1';
+    header('Location: ?p=portal&token=' . $token . '&v=angebote' . $flag); exit;
+}
 
 // Erstzugang abschliessen: E-Mail + Passwort setzen und fehlende Stammdaten ergaenzen.
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'konto_einrichten') {
@@ -3641,7 +3658,10 @@ portal_head('Kundenportal · ' . $k['firma']);
   $archivSel = $angkat === 'dienstleistung' ? $archivDL : $archivProd;
   $katWort = $angkat === 'dienstleistung' ? 'Dienstleistungs-' : ''; ?>
   <h1 style="margin-bottom:4px">Ihre Angebote</h1>
-  <p class="muted" style="margin:0 0 16px">Offene Angebote können Sie hier direkt prüfen, eine Menge wählen und verbindlich annehmen. Angenommene und abgelehnte Angebote finden Sie im <strong>Archiv</strong> unten.</p>
+  <p class="muted" style="margin:0 0 16px">Offene Angebote können Sie hier direkt prüfen, eine Menge wählen und verbindlich annehmen. Angenommene und abgelehnte Angebote finden Sie im <strong>Archiv</strong> unten. Schon bestellte Produkte können Sie unten einfach <strong>nachbestellen</strong> – Menge eintippen, fertig.</p>
+  <?php if (isset($_GET['nbok'])): ?><div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen)">Nachbestellung eingegangen. Wir bestätigen den Preis kurz – in der Regel bleibt er gleich und die Produktion startet. Sie finden den Vorgang unter „Bestellungen".</div><?php endif; ?>
+  <?php if (isset($_GET['nbfreigabe'])): ?><div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen)">Neuer Preis freigegeben – Ihre Nachbestellung läuft.</div><?php endif; ?>
+  <?php if (isset($_GET['nbfehler'])): ?><div class="bx-panel" style="padding:12px 16px;border-color:#e6c4c0;color:#8f231b"><?= h((string)$_GET['nbfehler']) ?></div><?php endif; ?>
   <?php if ($hatDL): ?>
   <div class="settabs" style="margin:0 0 14px">
     <a href="<?= $portalLink('angebote') ?>&angkat=produkt" class="<?= $angkat === 'produkt' ? 'on' : '' ?>">Produkte<?= count($offenProd) ? ' (' . count($offenProd) . ')' : '' ?></a>
