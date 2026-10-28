@@ -6719,7 +6719,7 @@ function auftrag_lagerware_quellen(int $auftrag_id): array {
 }
 // Chargen, die diesem Auftrag fest zugewiesen sind (Fertigware) – für Anzeige + „lösen".
 function auftrag_lagerware_zugewiesen(int $auftrag_id): array {
-    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, c.einheit, c.status, c.pa_id
+    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, c.einheit, c.status, c.pa_id, i.name AS item_name
                 FROM charge c JOIN item i ON i.id=c.item_id
                 WHERE c.auftrag_id=? AND i.kategorie='fertig'
                 ORDER BY c.id DESC", [$auftrag_id]);
@@ -6739,11 +6739,10 @@ function charge_auftrag_zuweisen(int $charge_id, int $auftrag_id, float $menge):
     if ($verf <= 0.0001) return ['ok'=>false, 'fehler'=>'Charge hat keinen verfügbaren Bestand mehr.'];
     $item = (int)$c['item_id'];
     $nf   = fn($x)=>number_format((float)$x, 0, ',', '.');
-    $warnung = '';
-    $bulk = auftrag_bulk_item($auftrag_id);
-    if ($bulk && $item !== $bulk) $warnung = 'Hinweis: Charge gehört zu Artikel „' . (string)$c['item_name'] . '" – nicht zum Bulk-Artikel dieser Rezeptur. Bewusst zugewiesen.';
+    // Welche Lagerware an welchen Auftrag gekoppelt wird, entscheidet der Admin – es gibt keine Artikel-/Rezeptur-
+    // Prüfung. Gewarnt wird nur, wenn mehr angefordert wurde, als die Charge frei hat.
     $nimm = min($menge, $verf);
-    if ($menge > $verf + 1e-6) $warnung = trim($warnung . ' Angefordert ' . $nf($menge) . ', verfügbar nur ' . $nf($verf) . ' – ' . $nf($nimm) . ' zugewiesen.');
+    $warnung = $menge > $verf + 1e-6 ? 'Angefordert ' . $nf($menge) . ', verfügbar nur ' . $nf($verf) . ' – ' . $nf($nimm) . ' zugewiesen.' : '';
     if ($nimm >= $verf - 1e-6 && empty($c['auftrag_id'])) {
         // Komplette (Rest-)Charge geht an diesen Auftrag -> kein Split nötig.
         q("UPDATE charge SET auftrag_id=? WHERE id=?", [$auftrag_id, $charge_id]);

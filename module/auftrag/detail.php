@@ -1048,7 +1048,7 @@ if (auftrag_braucht_etikett($id)):
     <tbody>
       <?php foreach ($lwZu as $lz): ?>
       <tr>
-        <td>Charge <?= h((string)($lz['charge_nr'] ?: $lz['id'])) ?></td>
+        <td><?= $lz['item_name'] ? h((string)$lz['item_name']) . ' · ' : '' ?>Charge <?= h((string)($lz['charge_nr'] ?: $lz['id'])) ?></td>
         <td class="bx-num"><?= $nzB($lz['menge_verfuegbar']) ?> <?= h((string)($lz['einheit'] ?: 'Stk')) ?></td>
         <td><?= $lz['mhd'] ? h(date('d.m.Y', strtotime((string)$lz['mhd']))) : '–' ?></td>
         <td><?= ($lz['status'] ?? '') === 'frei' ? bx_badge('zugewiesen','ok') : bx_badge((string)$lz['status'],'warn') ?></td>
@@ -1081,7 +1081,7 @@ if (auftrag_braucht_etikett($id)):
     </label>
     <button class="btn btn-primary btn-sm" type="submit" data-busy="Weise zu…">Zuweisen</button>
   </form>
-  <div class="muted" style="font-size:12px;margin-top:6px">Bindet vorhandene Lagerware (fertige Bulkware) <strong>fest</strong> an diesen Auftrag – der Kunde bekommt genau diese Charge. Oben die zur Rezeptur passende Bulkware, darunter <strong>jede andere Fertigware im Lager</strong> (bei abweichendem Artikel kommt eine Warnung – du entscheidest). Teilmengen werden abgespalten, der freie Rest bleibt im Lager und kann <strong>weiteren Aufträgen</strong> zugeteilt werden. Räumt „wartet auf Material" ab (ohne neue Bestellung, ohne Eigenproduktion). Benötigt: <strong><?= number_format((int)$gesamtStk,0,',','.') ?></strong> Stück<?= $lwSumme>0 ? ', bereits zugewiesen ' . number_format((int)round($lwSumme),0,',','.') : '' ?>.</div>
+  <div class="muted" style="font-size:12px;margin-top:6px">Bindet vorhandene Lagerware (fertige Bulkware) <strong>fest</strong> an diesen Auftrag – der Kunde bekommt genau diese Charge. Oben die zur Rezeptur passende Bulkware, darunter <strong>jede andere Fertigware im Lager</strong> – <strong>du</strong> entscheidest, was gekoppelt wird. Teilmengen werden abgespalten, der freie Rest bleibt im Lager und kann <strong>weiteren Aufträgen</strong> zugeteilt werden. Räumt „wartet auf Material" ab (ohne neue Bestellung, ohne Eigenproduktion). Benötigt: <strong><?= number_format((int)$gesamtStk,0,',','.') ?></strong> Stück<?= $lwSumme>0 ? ', bereits zugewiesen ' . number_format((int)round($lwSumme),0,',','.') : '' ?>.</div>
   <?php else: ?>
   <div class="muted" style="font-size:12px">Keine freie Fertigware-(Bulk-)Charge im Lager vorhanden (Status <strong>frei</strong>, nicht Quarantäne/gesperrt, noch keinem Auftrag zugewiesen). Liegt die Ware unter „Verkaufsfertig" oder in Quarantäne, zuerst dort freigeben bzw. als Fertigware einbuchen.</div>
   <?php endif; ?>
