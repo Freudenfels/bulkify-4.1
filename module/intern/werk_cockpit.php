@@ -123,7 +123,7 @@ echo '</div>';
 <?php endif; ?>
 
 <?php if ($wareFuerAuftrag):
-    $katLbl = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','fertig'=>'Fertigware (Bulk)','verkaufsfertig'=>'Fertigware']; ?>
+    $katLbl = kategorie_labels(); ?>
 <div class="bx-panel" style="border-color:var(--gruen)">
   <h2 style="margin-top:0">Neu eingetroffen – für deine Aufträge</h2>
   <div class="bx-tablewrap"><table class="bx-table">

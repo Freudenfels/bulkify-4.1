@@ -46,7 +46,7 @@ if (mb_strlen($q) >= 2) {
         fn($r) => $r['firma'],
         fn($r) => trim(($r['lieferantennummer'] ? $r['lieferantennummer'] . ' · ' : '') . ($r['ansprechpartner'] ?: '') . ($r['ort'] ? ' · ' . $r['ort'] : '')));
 
-    $KAT = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','fertig'=>'Fertigware','verkaufsfertig'=>'Verkaufsfertig','maschine'=>'Maschine'];
+    $KAT = kategorie_labels();   // einheitliche Labels (Bulkware / Fertigprodukt), Block K
     $add('Rohstoffe / Artikel',
         all("SELECT id, name, name_lat, artikelnummer, kategorie FROM item
              WHERE name LIKE ? OR name_en LIKE ? OR name_lat LIKE ? OR synonym LIKE ? OR artikelnummer LIKE ?

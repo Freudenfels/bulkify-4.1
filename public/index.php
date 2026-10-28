@@ -145,6 +145,7 @@ $routes = [
     'produktion_planung' => 'produktion/planung.php',   // Termin (geplant_am) je Auftrag im Sammel-Setzen
     'produktion_vorbereitung' => 'produktion/vorbereitung.php',   // Vor-Produktion / Freigabe (PreProduktionsauftrag)
     'easy_production'    => 'system/easy_production.php',   // Schnelle Produktionserfassung + Altauftrag-Nachbuchung (Teil 3 Block J)
+    'warenart_pruefung'  => 'system/warenart_pruefung.php', // Bulkware vs. Fertigprodukt prüfen+korrigieren (Teil 3 Block K)
     'lager'              => 'lager/bestand_liste.php',
     'lager2'             => 'lager/lager2.php',
     'betriebsmittel'     => 'lager/betriebsmittel_detail.php',

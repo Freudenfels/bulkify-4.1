@@ -22,3 +22,6 @@ Ein Suchfeld liegt zusätzlich oben in der Seitenleiste (nur Admin, siehe
 
 ## Aufträge/Angebote per Produktname (Stand 2026-10-23)
 Die Auftrags- und Angebots-Suche matcht zusätzlich den **Produktnamen** (`auftrag.produkt_bezeichnung`-Snapshot bzw. `produkt.name`/`kundenname` über `produkt_id`), nicht mehr nur Nummer + Kundenfirma. So findet z. B. „Kreatin" auch die zugehörigen Aufträge/Angebote. Die Trefferzeile zeigt Kunde · Produkt · Status.
+
+## Warenart-Labels (Teil 3 Block K)
+Das Kategorie-Label kommt jetzt aus `kategorie_labels()` (`core/schema.php`) statt aus einer lokalen Liste – `fertig`→Bulkware, `verkaufsfertig`→Fertigprodukt, einheitlich mit dem Rest des Dashboards.

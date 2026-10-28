@@ -112,7 +112,7 @@ $kundeStation = function(string $st): string {
 </div>
 <?php endif; ?>
 
-<?php if (!$fuerKunde && $D['zugeChargen']): $katLbl = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','fertig'=>'Fertigware (Bulk)','verkaufsfertig'=>'Fertigware','kapselhuelle'=>'Leerkapsel']; ?>
+<?php if (!$fuerKunde && $D['zugeChargen']): $katLbl = kategorie_labels() + ['kapselhuelle'=>'Leerkapsel']; ?>
 <div class="bx-panel pb-sec">
   <h2>Zugeordnete Chargen</h2>
   <div class="bx-tablewrap"><table class="bx-table">

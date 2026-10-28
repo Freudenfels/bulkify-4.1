@@ -7417,6 +7417,24 @@ function item_unterwegs(int $item_id): float {
                            WHERE bp.item_id=? AND b.status='bestellt' AND b.angekommen_am IS NULL", [$item_id]);
 }
 
+// Einheitliche Warenart-/Kategorie-Bezeichnungen (Teil 3 Block K): EINE Quelle fürs ganze Dashboard, damit
+// „Fertigware" nicht mehr mehrdeutig ist. Die DB-WERTE bleiben unverändert: 'fertig' = Bulkware (lose
+// Kapseln/Pulver/Tabletten, mit Rezeptur), 'verkaufsfertig' = Fertigprodukt (abgefüllt + etikettiert, mit Produkt).
+function kategorie_labels(): array {
+    return [
+        'rohstoff'       => 'Rohstoff',
+        'leerkapsel'     => 'Leerkapsel',
+        'verpackung'     => 'Verpackung',
+        'verbrauch'      => 'Verbrauch',
+        'fertig'         => 'Bulkware',
+        'verkaufsfertig' => 'Fertigprodukt',
+        'maschine'       => 'Maschine',
+    ];
+}
+function kategorie_label(string $k): string {
+    return kategorie_labels()[$k] ?? ($k !== '' ? ucfirst($k) : '–');
+}
+
 function auftrag_bedarf(int $pa_id): array {
     $pa = pa_row_cached($pa_id);
     if (!$pa) return [];

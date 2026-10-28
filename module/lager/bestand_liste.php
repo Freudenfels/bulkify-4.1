@@ -6,13 +6,15 @@ require_once BX_ROOT . '/core/schema.php';
 
 seed_charge_if_empty();
 
-$CHARGE_KAT = ['rohstoff'=>'Rohstoff', 'verpackung'=>'Verpackung', 'fertig'=>'Fertigware', 'verkaufsfertig'=>'Verkaufsfertig'];
+// Labels aus der zentralen Quelle (Block K: Bulkware / Fertigprodukt); Keys unverändert – sie steuern das WHERE.
+$CHARGE_KAT = ['rohstoff'=>kategorie_label('rohstoff'), 'verpackung'=>kategorie_label('verpackung'), 'fertig'=>kategorie_label('fertig'), 'verkaufsfertig'=>kategorie_label('verkaufsfertig')];
 $BM_KAT     = betriebsmittel_kategorien();
 $ALLE_KAT   = $CHARGE_KAT + $BM_KAT;
 
 // Reiter (Reihenfolge)
 $TABS = ['alle'=>'Alle', 'rohstoff'=>'Rohstoffe', 'verpackung'=>'Verpackung', 'karton'=>'Kartons',
-         'verbrauch'=>'Verbrauchsgüter', 'inventar'=>'Inventar', 'maschine'=>'Maschinen', 'sonstiges'=>'Sonstiges', 'fertig'=>'Fertigware'];
+         'verbrauch'=>'Verbrauchsgüter', 'inventar'=>'Inventar', 'maschine'=>'Maschinen', 'sonstiges'=>'Sonstiges',
+         'fertig'=>'Bulkware', 'verkaufsfertig'=>'Fertigprodukte'];
 
 $q    = trim($_GET['q'] ?? '');
 $kat  = $_GET['kat'] ?? 'alle';
@@ -156,6 +158,7 @@ bx_head('Warenlager', count($rows) . ' Artikel', $aktion);
   <span style="flex:1"></span>
   <?php $umschaltUrl = '?p=lager&kat=' . h($kat) . ($q !== '' ? '&q=' . urlencode($q) : '') . ($zeigeLeer ? '' : '&leer=1'); ?>
   <a class="btn btn-ghost btn-sm" href="<?= $umschaltUrl ?>"><?= $zeigeLeer ? 'nur mit Bestand' : 'auch leere anzeigen' . ($anzahlLeer > 0 ? ' (' . $anzahlLeer . ')' : '') ?></a>
+  <?php if (has_role('admin')): ?><a class="btn btn-ghost btn-sm" href="?p=warenart_pruefung" title="Bulkware vs. Fertigprodukt prüfen und korrigieren">Warenarten prüfen</a><?php endif; ?>
 </form>
 <?php
 if ($istBM && !$rows && $q === '') {

@@ -146,3 +146,7 @@ mitführt. Gilt in Team- und Kundenansicht (beide lesen `auftrag.*`, inkl. der P
 
 ### Nachtrag (2026-10-28): freie Produktwahl
 `auftrag_lagerware_quellen()` liefert `chargen` (exakter Rezeptur-Bulk) + `weitere` (ALLE anderen freien `fertig`-Chargen im Lager, mit `item_name`/`artikelnummer`). `charge_auftrag_zuweisen()` nimmt jede freie `fertig`-Charge (nicht nur den Rezeptur-Bulk); **keine Artikel-/Rezeptur-Prüfung** (der Admin entscheidet), `warnung` nur bei Übermenge. Weil `auftrag_fertigware_cached` nur `kategorie='fertig'` + `charge.auftrag_id` zählt, räumt auch eine artikelfremde Fertigware-Zuweisung „wartet auf Material" ab; zusätzlich wird `produktion_ist_zukauf` wahr → `auftrag_bedarf` schaltet auf Zukauf, Rohstoffbedarf entfällt.
+
+## Teil 3: item_unterwegs() + kategorie_labels()
+- `item_unterwegs(int $item_id): float` – offen bestellte, noch nicht eingegangene Menge eines Items (Summe `bestellung_position` über Bestellungen `status='bestellt'` ohne Wareneingang). Für die Material-Übersicht am Auftrag (Block H1, Spalte „unterwegs").
+- `kategorie_labels(): array` / `kategorie_label(string $k): string` – EINE Quelle für Warenart-Bezeichnungen im Dashboard (Block K). DB-Werte unverändert: `fertig` = **Bulkware**, `verkaufsfertig` = **Fertigprodukt**.

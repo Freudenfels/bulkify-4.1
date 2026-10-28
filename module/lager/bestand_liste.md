@@ -17,3 +17,6 @@
 **Bestandslogik:** `item_bestand($id)` summiert die freien Chargen. Rohstoffe u. Ä. brauchen Quarantäne (`item_braucht_quarantaene`), Verpackungen sind sofort frei.
 
 **Einheiten nicht vermischen (A1, 2026-10-28):** Hat ein Artikel Chargen in **verschiedenen Einheiten** (z. B. 12 kg Bulk + 1.080.000 Stk), werden diese **nicht** zu einer Summe addiert. Die Bestand-/Quarantäne-Zelle zeigt dann je Einheit getrennt (`12 kg + 1.080.000 Stk`), gespeist aus `charge_bestand_je_einheit($id, ['frei'|'quarantaene'])` (`core/schema.php`). Erkannt über `n_einheit` (Anzahl verschiedener Einheiten mit Bestand) in der Abfrage. Bei nur einer Einheit bleibt die Anzeige wie bisher.
+
+## Warenart-Labels + Reiter (Teil 3 Block K)
+Die Typ-Labels kommen aus der zentralen Quelle `kategorie_label()` (`core/schema.php`): `fertig` zeigt als **Bulkware**, `verkaufsfertig` als **Fertigprodukt**. Die Keys von `$CHARGE_KAT` bleiben unverändert (sie steuern das WHERE/`$ALLE_KAT`), nur die Labels wurden vereinheitlicht. Zusätzlich gibt es getrennte Reiter **Bulkware** (`fertig`) und **Fertigprodukte** (`verkaufsfertig`). Admin sieht in der Leiste den Link „Warenarten prüfen" (`?p=warenart_pruefung`).

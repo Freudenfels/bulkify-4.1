@@ -13,3 +13,6 @@
 **Datenbasis:** Verknüpfung über `produktion_verbrauch (pa_id, item_id, charge_id, menge, einheit)` – wird bei der Station „Rohstoffe bereitstellen"/„Verkapselung" beim FEFO-Abbuchen geschrieben.
 
 **Für Auftrag (Baustein 4):** Charge kann einem Kundenauftrag zugeordnet sein (`charge.auftrag_id`, aus der Bestellung geerbt oder beim manuellen Wareneingang gewählt). Detail zeigt „Für Auftrag" (verlinkt); Produktionsauftrag-Detail listet „Wareneingänge für diesen Auftrag"; Werk-Cockpit „Neu eingetroffen – für deine Aufträge".
+
+## Warenart-Labels (Teil 3 Block K)
+`$katLbl` nutzt `kategorie_labels()` (`core/schema.php`). Damit wird `fertig` korrekt als **Bulkware** und `verkaufsfertig` als **Fertigprodukt** angezeigt (vorher fehlte `fertig` und `verkaufsfertig` hieß fälschlich „Fertigware").

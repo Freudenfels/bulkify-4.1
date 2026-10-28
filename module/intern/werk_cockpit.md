@@ -10,3 +10,6 @@
 - **Letzte Wareneingänge:** letzte `charge`-Einbuchungen (Charge, Artikel, verfügbare Menge, MHD, Status frei/Quarantäne).
 
 **Zusammenhang:** Der Werk-Bereich nutzt dieselben Modulseiten wie der Admin (Produktion, Lager, Rezeptur, Anfragen) – nur Menü + Startseite sind eigen. Siehe [../../core/layout.md](../../core/layout.md) (`bx_nav_werk`) und Chargenverfolgung [../lager/chargen.md](../lager/chargen.md).
+
+## Warenart-Labels (Teil 3 Block K)
+Die Warenart-Labels („Neu eingetroffen") kommen aus `kategorie_labels()` (`core/schema.php`): `fertig`→Bulkware, `verkaufsfertig`→Fertigprodukt.

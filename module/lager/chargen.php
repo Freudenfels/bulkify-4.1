@@ -11,7 +11,7 @@ $chBadge = fn($s) => match ($s) {
     'leer'        => bx_badge('leer'),
     default       => bx_badge($s),
 };
-$katLbl = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verkaufsfertig'=>'Fertigware'];
+$katLbl = kategorie_labels();   // einheitliche Labels (Bulkware / Fertigprodukt), Block K
 $num = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 
 // ---------- Detail ----------
