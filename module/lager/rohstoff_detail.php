@@ -276,6 +276,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
     $f = fn($k) => trim($_POST[$k] ?? '');
     if ($f('name') === '') {
         $fehler = 'Name ist ein Pflichtfeld.';
+    } elseif (isset($_POST['fremdprodukt']) && ($_POST['fremd_besitzer_id'] ?? '') === '') {
+        $fehler = 'Für ein Fremdprodukt bitte den Besitzer-Kunden wählen.';
     } else {
         $felder = ['artikelnummer','name','name_en','name_lat','cas','kategorie','form','art',
                    'beschaffenheit','dev',
@@ -286,8 +288,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
                    'synonym','ec_nr','bot_quelle','herkunftsland','haltbarkeit','lagerbedingungen','zusaetze',
                    'vegan','gvo_frei','bestrahlt','tse_bse_frei','zertifikate','spec_nr','spec_version','spec_gueltig_ab',
                    // Öffentliche Rohstoff-DB (Website)
-                   'website_sichtbar','web_beschreibung'];
+                   'website_sichtbar','web_beschreibung',
+                   // Fremdprodukt (Kundenware, Lager 2)
+                   'fremdprodukt','fremd_besitzer_id'];
         $vals = array_map($f, $felder);
+        // Fremdprodukt: Warenart Kundenware. Dahinter ist es ein Fertigprodukt (verkaufsfertig); Besitzer-Kunde pflichtig.
+        $fpOn = isset($_POST['fremdprodukt']) ? 1 : 0;
+        $vals[array_search('fremdprodukt', $felder)]      = $fpOn;
+        $vals[array_search('fremd_besitzer_id', $felder)] = ($fpOn && ($_POST['fremd_besitzer_id'] ?? '') !== '') ? (int)$_POST['fremd_besitzer_id'] : null;
+        if ($fpOn) $vals[array_search('kategorie', $felder)] = 'verkaufsfertig';
         $vals[array_search('gesperrt', $felder)] = isset($_POST['gesperrt']) ? 1 : 0;
         $vals[array_search('website_sichtbar', $felder)] = isset($_POST['website_sichtbar']) ? 1 : 0;
         $vals[array_search('haupt_lieferant_id', $felder)] = ($_POST['haupt_lieferant_id'] ?? '') !== '' ? (int)$_POST['haupt_lieferant_id'] : null;
@@ -315,6 +324,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             $set = implode(',', array_map(fn($c) => "$c=?", $felder));
             $vals[] = (int)$id;
             q("UPDATE item SET $set WHERE id=?", $vals);
+        }
+        // Fremdprodukt markiert: den vorhandenen eigenen Bestand dem Besitzer-Kunden zuschreiben (Lager 2).
+        if ($fpOn && $vals[array_search('fremd_besitzer_id', $felder)]) {
+            $n = fremdprodukt_bestand_zuordnen((int)$id, (int)$vals[array_search('fremd_besitzer_id', $felder)]);
+            if ($n > 0) log_aktivitaet('item', (int)$id, 'team', 'Als Fremdprodukt markiert – ' . $n . ' Charge(n) dem Kunden ins Fremdlager (Lager 2) zugeordnet.', 'notiz');
         }
         // Für die Website freigegeben? Dann einen stabilen URL-Slug sicherstellen (einmalig).
         if (isset($_POST['website_sichtbar'])) {
@@ -508,7 +522,7 @@ if (!$neu && !$resNurBedarf) {
 $resNum = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 $fremd_gesamt = $neu ? 0 : item_fremdbestand((int)$id);
 $fremdJeKunde = $neu ? [] : item_fremdbestand_je_kunde((int)$id);
-$fremdKunden  = $neu ? [] : all("SELECT id, firma FROM kunden ORDER BY firma");
+$fremdKunden  = all("SELECT id, firma FROM kunden ORDER BY firma");
 if (!$neu) seed_lieferant_preis_if_empty();
 $preise = $neu ? [] : all("SELECT lp.*, COALESCE(l.firma, lp.lieferant_name) AS firma, l.kuerzel AS lief_kuerzel FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id WHERE lp.item_id=? ORDER BY lp.preis ASC, lp.menge_ab ASC", [(int)$id]);
 $preis_lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
@@ -521,7 +535,7 @@ function bx_bald(string $modul): void {
 
 render_header('rohstoffe', $neu ? 'Neuer Rohstoff' : $it['name']);
 bx_head($neu ? 'Neuer Rohstoff' : $v('name'),
-        $neu ? 'Item anlegen' : trim(($v('artikelnummer') ? $v('artikelnummer').' · ' : '') . ($KAT[$it['kategorie']] ?? $it['kategorie']) . ($v('name_lat') ? ' · '.$v('name_lat') : '')),
+        $neu ? 'Item anlegen' : trim(($v('artikelnummer') ? $v('artikelnummer').' · ' : '') . item_warenart_label($it) . ($v('name_lat') ? ' · '.$v('name_lat') : '')),
         bx_btn('Zurück zur Liste', '?p=rohstoffe', 'ghost'));
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.'
@@ -537,7 +551,9 @@ if (!$neu) {
     $pr = number_format((float)$it['ek_preis'], (float)$it['ek_preis'] < 1 ? 4 : 2, ',', '.');
     echo '<div class="bx-cards">';
     echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . ($gesperrt ? bx_badge('gesperrt','err') : bx_badge('aktiv','ok')) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Kategorie</div><div class="v">' . h($KAT[$it['kategorie']] ?? $it['kategorie']) . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Warenart</div><div class="v">' . h(item_warenart_label($it)) . '</div></div>';
+    if (!empty($it['fremdprodukt']) && (int)($it['fremd_besitzer_id'] ?? 0) > 0)
+        echo '<div class="bx-card"><div class="k">Besitzer (Fremdprodukt)</div><div class="v">' . h((string) scalar("SELECT firma FROM kunden WHERE id=?", [(int)$it['fremd_besitzer_id']])) . '</div></div>';
     echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . $pr . ' €/' . h((string)($it['preis_bezug'] ?: ($it['einheit'] ?: 'Stk'))) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Bestand (frei)</div><div class="v">' . $bestandWert($bestand_frei_je) . '</div></div>';
     if ($einheiten_gemischt && $bestand_qua_je) echo '<div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="color:var(--warn)">' . $bestandWert($bestand_qua_je) . '</div></div>';
@@ -691,6 +707,25 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
           <?php endforeach; ?>
         </select>
       </div>
+      <?php
+        // Fremdprodukt: Kundenware (fertiges Produkt von außerhalb), wir lagern & versenden nur -> Fremdlager (Lager 2).
+        $fpChecked = $_SERVER['REQUEST_METHOD'] === 'POST' ? isset($_POST['fremdprodukt']) : !empty($it['fremdprodukt']);
+        $fbSel     = (int)($_POST['fremd_besitzer_id'] ?? ($it['fremd_besitzer_id'] ?? 0)); ?>
+      <div class="bx-field" style="grid-column:1/-1">
+        <label style="display:flex;gap:8px;align-items:center;margin:0 0 6px;font-weight:600">
+          <input type="checkbox" name="fremdprodukt" id="fp_toggle" value="1" <?= $fpChecked ? 'checked' : '' ?>>
+          Fremdprodukt – Kundenware (kommt von außerhalb, wir lagern &amp; versenden nur)
+        </label>
+        <div id="fp_owner" style="<?= $fpChecked ? '' : 'display:none' ?>">
+          <label>Besitzer-Kunde</label>
+          <select name="fremd_besitzer_id" class="rscombo">
+            <option value="">– Kunde wählen –</option>
+            <?php foreach ($fremdKunden as $kk): ?><option value="<?= (int)$kk['id'] ?>" <?= $fbSel === (int)$kk['id'] ? 'selected' : '' ?>><?= h($kk['firma']) ?></option><?php endforeach; ?>
+          </select>
+          <p class="muted" style="font-size:12px;margin:6px 0 0">Gilt als <strong>Fertigprodukt</strong> und gehört dem Kunden: der Bestand wird ins <strong>Fremdlager (Lager 2)</strong> des Kunden gebucht – zählt nicht zu unserem Bestand und nicht für Produktion/Angebote/Einkauf. Beim Speichern wird vorhandener Bestand dieses Artikels dem Kunden zugeordnet.</p>
+        </div>
+      </div>
+      <script>(function(){var t=document.getElementById('fp_toggle'),o=document.getElementById('fp_owner');if(t&&o)t.addEventListener('change',function(){o.style.display=t.checked?'':'none';});})();</script>
       <div class="bx-field"><label>Art <?= bx_hint('Stoffklasse für die Filterung (intern + Kundenportal): Vitamine, Mineralstoffe, Pflanzenstoffe, Aminosäuren …') ?></label>
         <select name="art">
           <option value="">– keine –</option>

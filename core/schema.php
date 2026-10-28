@@ -1763,6 +1763,11 @@ function init_schema(): void {
     // Lager 2 (Fremdlager, nur Fulfillment-Kunden): Brücke Dashboard↔Fulfillment am Verkaufsfertig-Item.
     ensure_column('item', 'bsku', "VARCHAR(10) NULL");                         // interne 5-stellige Lager-2-Nummer
     ensure_column('item', 'shopify_inventory_item_id', "VARCHAR(40) NULL");    // führender Schlüssel zum Fulfillment-Artikel
+    // Fremdprodukt (Warenart): fertiges Produkt, das dem KUNDEN gehört und von außerhalb kommt – wir lagern &
+    // versenden nur. Gehört ins Fremdlager (Lager 2); Bestand wird dem Besitzer-Kunden zugeschrieben (charge.fremd_kunde_id),
+    // zählt NICHT zu unserem Bestand und geht nicht in Produktion/Angebote/Einkauf ein. Kategorie dahinter: verkaufsfertig.
+    ensure_column('item', 'fremdprodukt', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('item', 'fremd_besitzer_id', "INT NULL");   // Besitzer-Kunde (kunden.id) des Fremdprodukts
     ensure_column('kunden', 'nutzt_fulfillment', "TINYINT NOT NULL DEFAULT 0"); // Kunde nutzt unser Fulfillment → hat ein Lager 2
     ensure_column('kunden', 'eigener_dhl', "TINYINT NOT NULL DEFAULT 0"); // Kunde hat eigenen DHL-Vertrag → Monatsabrechnung ohne Paketzeilen, nur Fulfillment-Service
     // Betriebsmittel (Kartons/Verbrauchsgüter/Inventar/Maschinen/Sonstiges): einfacher Bestand + Geräteprüfung.
@@ -3081,6 +3086,17 @@ function item_fremdbestand_je_kunde(int $item_id): array {
                WHERE c.item_id=? AND c.status='frei' AND c.fremd_kunde_id IS NOT NULL
                GROUP BY c.fremd_kunde_id, k.firma HAVING menge > 0 ORDER BY k.firma", [$item_id]);
 }
+// Fremdprodukt-Markierung: den gesamten EIGENEN Bestand eines Artikels dem Besitzer-Kunden zuschreiben
+// (Fremdlager/Lager 2). Setzt bei allen noch uns gehörenden Chargen fremd_kunde_id + standort='lager2'.
+// So „gehört" ein als Fremdprodukt markierter Artikel direkt dem Kunden. Rückgabe: Anzahl umgestellter Chargen.
+function fremdprodukt_bestand_zuordnen(int $item_id, int $kunde_id): int {
+    if ($item_id <= 0 || $kunde_id <= 0) return 0;
+    $hatStandort = column_exists('charge', 'standort');
+    $sql = "UPDATE charge SET fremd_kunde_id=?" . ($hatStandort ? ", standort='lager2'" : "")
+         . " WHERE item_id=? AND fremd_kunde_id IS NULL AND status IN ('frei','quarantaene','gesperrt')";
+    return q($sql, [$kunde_id, $item_id])->rowCount();
+}
+
 // Menge aus UNSEREM Bestand (Warenlager) ins Fremdlager eines Kunden umbuchen: unsere freien Chargen
 // FEFO reduzieren und eine neue Fremd-Charge (dem Kunden gehoerend) mit derselben Menge anlegen.
 function fremdlager_umbuchen(int $item_id, int $kunde_id, float $menge, ?string $charge_nr, ?string $mhd, string $notiz = ''): array {
@@ -7433,6 +7449,12 @@ function kategorie_labels(): array {
 }
 function kategorie_label(string $k): string {
     return kategorie_labels()[$k] ?? ($k !== '' ? ucfirst($k) : '–');
+}
+// Warenart-Label eines item-Datensatzes: ein als Fremdprodukt markierter Artikel (Kundenware, Lager 2) zeigt
+// „Fremdprodukt", sonst das normale Kategorie-Label. Erwartet die item-Zeile (mit 'fremdprodukt'/'kategorie').
+function item_warenart_label(array $it): string {
+    if (!empty($it['fremdprodukt'])) return 'Fremdprodukt';
+    return kategorie_label((string)($it['kategorie'] ?? ''));
 }
 
 function auftrag_bedarf(int $pa_id): array {

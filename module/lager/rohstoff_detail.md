@@ -121,3 +121,11 @@ Die Spezifikations-/CoA-Auslesung (`spec_ki_felder()` in `core/spec_ki.php`) erk
 **Verlauf** (Reiter): echte Bewegungen aus `item_bewegungen($id)` – Wareneingänge (+, mit Charge/Lieferant/Bestellung) und Produktionsverbrauch (−, mit PA/Auftrag) als datumsortierte Tabelle. Vorher war der Reiter leer (Aktivitäts-Log ohne Einträge).
 
 **Verwendung** (Reiter): aus `item_verwendung($id)` – in welchen Produktionsaufträgen/Aufträgen der Artikel verbraucht wurde (Quelle `produktion_verbrauch`), verlinkt auf PA und Auftrag. Vorher nur Platzhalter.
+
+## Warenart „Fremdprodukt" (Kundenware, Lager 2)
+In den Stammdaten gibt es den Schalter **Fremdprodukt** + **Besitzer-Kunde**. Gedacht für fertige Produkte, die von außerhalb kommen und dem Kunden gehören – bulkify lagert & versendet nur. Beim Speichern:
+- Kategorie wird auf **verkaufsfertig** (Fertigprodukt) gesetzt; `item.fremdprodukt=1`, `item.fremd_besitzer_id=<Kunde>`.
+- Der vorhandene eigene Bestand des Artikels wird dem Kunden ins **Fremdlager (Lager 2)** zugeordnet (`fremdprodukt_bestand_zuordnen()`: `charge.fremd_kunde_id` + `standort='lager2'`). Damit zählt er nicht mehr zu unserem Bestand und nicht für Produktion/Angebote/Einkauf (die filtern `fremd_kunde_id IS NULL`).
+Kopf/Übersicht zeigen die Warenart über `item_warenart_label()` als „Fremdprodukt". Besitzer-Pflichtfeld wird beim Speichern geprüft. Der physische Standort kann abweichen – verbucht wird es als Lager 2 des Kunden.
+
+Offen/Folgeschritt: der Wareneingang (`lager/`) soll Fremdprodukte künftig automatisch auf das Fremdlager des Besitzers buchen (heute über die L1/L2-Zielwahl bzw. „Ins Fremdlager umbuchen").

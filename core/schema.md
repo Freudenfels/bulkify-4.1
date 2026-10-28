@@ -153,3 +153,8 @@ mitführt. Gilt in Team- und Kundenansicht (beide lesen `auftrag.*`, inkl. der P
 
 ## Etikett änderbar bis bestellt
 - `etikett_bestellt_fuer_auftrag(int $auftrag_id): bool` – true, wenn der (versionierte) Etikett-Artikel des Auftrags physischen Bestand hat ODER eine Bestellposition mit Status `bestellt`/`geliefert`. Regel (Nico): das Etikett-Design ist **änderbar, solange noch nicht bestellt**; danach fix. Portal nutzt es, um auch bei bereits freigegebenem Etikett noch „Etikett ändern" anzubieten (bzw. zu sperren); der Upload-Handler blockt Änderungen nach dem Bestellen serverseitig.
+
+## Fremdprodukt (Warenart, Lager 2)
+- `item.fremdprodukt` / `item.fremd_besitzer_id` – Artikel ist Kundenware (fertiges Produkt von außerhalb), gehört dem Kunden, Lager 2. Dahinter Kategorie `verkaufsfertig`.
+- `item_warenart_label(array $it)` – zeigt „Fremdprodukt", sonst `kategorie_label()`.
+- `fremdprodukt_bestand_zuordnen(int $item_id, int $kunde_id)` – schreibt den eigenen Bestand des Artikels dem Besitzer-Kunden ins Fremdlager (`charge.fremd_kunde_id` + `standort='lager2'`), Rückgabe Anzahl umgestellter Chargen. Dadurch Ausschluss aus unserem Bestand/Produktion/Angeboten (die filtern `fremd_kunde_id IS NULL`).
