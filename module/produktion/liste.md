@@ -31,3 +31,8 @@ Pulver/Stick/Flüssig steht „–".
 
 ## Umbau 2026-10-08: echter Stand + Status getrennt
 Die Seite war unübersichtlich – „Produktionsbereit" enthielt auch schon LAUFENDE Aufträge. Jetzt: KPI-Übersicht oben (anklickbar: In Vorbereitung, In Produktion, Produktionsbereit, Wartet auf Material, Abgeschlossen) + **4 Reiter**: **In Produktion** (laufend, mind. 1 Schritt erledigt → Zeile führt in den Produktions-Run), **Produktionsbereit** (Material da, noch NICHT begonnen), **Wartet auf Material** (inkl. Eigen/Fremd offen), **Abgeschlossen**. Neue Spalte **„Aktuelle Station"** (naechste_station: begonnen = fett die laufende Station, sonst „als Nächstes: …"). Default-Reiter = In Produktion. Eigen/Fremd-Sammelumstellung + Auswahl-Checkbox nur in bereit/wartet.
+
+## Block D – Produktionsübersicht & UI (2026-10-28)
+- **D1 produzierte Menge:** Neue Spalte **„Produziert"** je Zeile zeigt `gebucht / gesamt` (Packungen) – gebucht = Summe der Fertigware-Chargen am PA (`SUM(charge.menge) WHERE pa_id`), in EINER Sammelabfrage (`$prodMap`, kein N+1). Grün, sobald die Zielmenge erreicht ist.
+- **D2 ein Klick:** Klick auf eine Zeile führt **immer** auf die Produktionsauftrag-Übersicht (`?p=produktionsauftrag`) mit schnellem Überblick (Status, produzierte Menge, Charge, fehlendes Material, Fortschritt). Die geführte Produktion (`?p=produktion_run`) ist von dort per Button „Geführt produzieren" erreichbar – nicht mehr die erste Ansicht.
+- **D3 UI:** Status-Badges lesbarer (`public/assets/app.css`): `font-size` fs-sm statt fs-xs, `font-weight:500`, mehr Padding, kräftigere Textfarben für besseren Kontrast. Die Status-Kacheln oben sind ein responsives `bx-cards`-Grid (gleich groß). God-Mode bleibt.

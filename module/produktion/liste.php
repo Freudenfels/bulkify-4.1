@@ -155,6 +155,15 @@ if ($grlIds) { $in = implode(',', array_fill(0, count($grlIds), '?'));
         $GLOBALS['bx_stock_cache']['grl:' . (int)$row['id']] = $row;
 }
 
+// D1: bereits produzierte (als Fertigware gebuchte) Menge je PA – in EINER Abfrage gebündelt (sonst N+1).
+$prodMap = [];
+$paIdsP = array_values(array_unique(array_filter(array_map(fn($r) => (int)($r['id'] ?? 0), $rows))));
+if ($paIdsP) { $in = implode(',', array_fill(0, count($paIdsP), '?'));
+    foreach (all("SELECT pa_id, COALESCE(SUM(menge),0) AS g FROM charge WHERE pa_id IN ($in) GROUP BY pa_id", $paIdsP) as $row)
+        $prodMap[(int)$row['pa_id']] = (float)$row['g'];
+}
+$nfPkg = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+
 $cols = [
     '_sel'         => ['label' => '', 'render' => fn($r)=> '<input type="checkbox" name="pa[]" form="prodBulk" value="'.(int)$r['id'].'" onclick="event.stopPropagation()">'],
     // Prio kompakt: nur ein farbiger Punkt (Tooltip = Klartext), damit die Spalte schmal bleibt.
@@ -181,6 +190,12 @@ $cols = [
                         ? '<span title="Eigen/Fremd ist noch nicht festgelegt – erst danach geht der Auftrag in die Produktion">' . bx_badge('festlegen','err') . '</span>'
                         : (($r['produktionsart'] ?? 'fremd')==='eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info'))],
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
+    // D1: produzierte Menge direkt in der Tabelle (gebucht / gesamt).
+    'produziert'   => ['label' => 'Produziert', 'num' => true, 'render' => function($r) use ($prodMap, $nfPkg) {
+                        $g = (float)($prodMap[(int)$r['id']] ?? 0); $z = (float)($r['menge'] ?? 0);
+                        $farbe = $g <= 0.0001 ? 'var(--muted)' : ($g + 0.001 >= $z && $z > 0 ? 'var(--gruen,#1D9E75)' : 'inherit');
+                        return '<span style="color:' . $farbe . '">' . $nfPkg($g) . '</span> <span class="muted">/ ' . $nfPkg($z) . '</span>';
+                     }],
     'station'      => ['label' => 'Aktuelle Station', 'render' => function($r){
                         if (($r['status'] ?? '') === 'erledigt') return '<span class="bx-ok">fertig</span>';
                         $st = trim((string)($r['naechste_station'] ?? ''));
@@ -360,8 +375,9 @@ bx_table($cols, array_values($rows), [
     'baseUrl' => '?p=produktion&tab=' . $tab . ($q !== '' ? '&q=' . urlencode($q) : ''),
     'sort'    => $sort,
     'dir'     => $dir,
-    // Laufende direkt in den Produktions-Run (Schritte abarbeiten), sonst in die Auftrags-Detailseite.
-    'rowUrl'  => fn($r) => $tab === 'laufend' ? ('?p=produktion_run&id=' . $r['id']) : ('?p=produktionsauftrag&id=' . $r['id']),
+    // D2: Klick führt IMMER auf die Produktionsauftrag-Übersicht (schneller Überblick: Status, produzierte
+    // Menge, Charge, fehlendes Material, Fortschritt). Die geführte Produktion ist von dort per Button erreichbar.
+    'rowUrl'  => fn($r) => '?p=produktionsauftrag&id=' . $r['id'],
     'empty'   => match ($tab) {
         'laufend'  => 'Aktuell läuft keine Produktion.',
         'wartet'   => 'Kein Auftrag wartet aktuell auf Material.',
