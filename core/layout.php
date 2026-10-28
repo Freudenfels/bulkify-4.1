@@ -32,7 +32,14 @@ function bx_nav_default(): array {
         // am Auftrag; „Wartet auf Freigabe" ist ein Reiter in der Auftragsliste (?p=auftraege&tab=freigabe).
         // Die Route produktion_vorbereitung&id=… (Glas/Verpackung je PA) bleibt bestehen, nur ohne Nav-Eintrag.
         'Produktion'   => ['produktion' => 'Produktion', 'easy_production' => 'Easy Production', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'maschinen' => 'Maschinen', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
-        'Lager'        => ['lager' => 'Warenlager', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'rohstoff_website' => 'Website-Freigabe', 'freigaben' => 'Freigaben', 'rohstoffe_papiere' => 'Rohstoffe ohne Papiere', 'laboranalysen' => 'Laboranalysen', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
+        // Warenlager = Gesamtsystem (alle Lager), darunter die Einzel-Sichten Lager 1 und Fremdlager (Lager 2).
+        // Alle drei nutzen dieselbe Seite (?p=lager) mit dem Filter ?ort=…; der aktive Punkt entscheidet sich über 'ort'.
+        'Lager'        => [
+            'lager'        => ['label'=>'Warenlager', 'route'=>'lager', 'href'=>'?p=lager',             'ort'=>'alle'],
+            'lager_l1'     => ['label'=>'Lager 1',    'route'=>'lager', 'href'=>'?p=lager&ort=lager1', 'ort'=>'lager1'],
+            'lager_fremd'  => ['label'=>'Fremdlager', 'route'=>'lager', 'href'=>'?p=lager&ort=lager2', 'ort'=>'lager2'],
+            'wareneingang' => 'Wareneingang',
+            'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'rohstoff_website' => 'Website-Freigabe', 'freigaben' => 'Freigaben', 'rohstoffe_papiere' => 'Rohstoffe ohne Papiere', 'laboranalysen' => 'Laboranalysen', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
         'Einkauf'      => ['einkaufsliste' => 'Bedarf', 'einkauf' => 'Bestellt', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'lief_anfragen' => 'Anfragen & Preise', 'katalog_freigaben' => 'Katalog-Freigaben', 'einkauf_preise' => 'Preise'],
         'Import'       => ['angebot_import' => 'Angebots-Import', 'lager2_import' => 'Lager-2 Bestände'],
         'System'       => ['einstellungen' => 'Einstellungen', 'menu_editor' => 'Menü', 'benutzer' => 'Benutzer', 'protokoll' => 'Protokoll', 'durchlaufzeiten' => 'Durchlaufzeiten', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
@@ -125,7 +132,11 @@ function bx_nav_werk(): array {
     return [
         'Start'            => ['werk' => 'Cockpit', 'aufgaben' => 'Aufgaben'],
         'Produktion'       => ['produktion_run' => 'Geführte Produktion', 'produktion' => 'Produktionsaufträge', 'kalender' => 'Kalender'],
-        'Warenwirtschaft'  =>['einkaufsliste' => 'Bedarf', 'lager' => 'Bestand', 'lager2' => 'Fremdlager', 'wareneingang' => 'Wareneingang', 'chargen' => 'Chargen', 'produktionschargen' => 'Produktionschargen',
+        'Warenwirtschaft'  =>['einkaufsliste' => 'Bedarf',
+                               'lager'        => ['label'=>'Warenlager', 'route'=>'lager', 'href'=>'?p=lager',             'ort'=>'alle'],
+                               'lager_l1'     => ['label'=>'Lager 1',    'route'=>'lager', 'href'=>'?p=lager&ort=lager1', 'ort'=>'lager1'],
+                               'lager_fremd'  => ['label'=>'Fremdlager', 'route'=>'lager', 'href'=>'?p=lager&ort=lager2', 'ort'=>'lager2'],
+                               'wareneingang' => 'Wareneingang', 'chargen' => 'Chargen', 'produktionschargen' => 'Produktionschargen',
                                'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'freigaben' => 'Freigaben', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)',
                                'versand' => 'Versand'],
         'Entwicklung'      => ['rezeptur' => 'Rezepturen', 'anfragen' => 'Rezepturanfragen', 'novelfood' => 'Novel Food', 'novelfood_verlauf' => 'Novel-Food News'],
@@ -168,6 +179,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
            . "</form>";
     }
     $curTyp = $_GET['typ'] ?? null;
+    $curOrt = $_GET['ort'] ?? 'alle';   // Lager-Sicht (Warenlager=alle / Lager 1 / Fremdlager) für die Aktiv-Erkennung
     $anfCount = bx_anfrage_counts();
     if (function_exists('aufgabe_offen_zahl') && function_exists('current_user') && ($cu = current_user()))
         $anfCount['aufgaben'] = aufgabe_offen_zahl((int)$cu['id']);
@@ -208,9 +220,9 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         $gid = 'g_' . substr(md5($gruppe), 0, 8);
         $grpHtml = ''; $grpOn = false;
         foreach ($sichtbar as $key => $val) {
-            if (is_array($val)) { $route = $val['route']; $label = $val['label']; $href = $val['href']; $typ = $val['typ'] ?? null; }
-            else               { $route = $key; $label = $val; $href = '?p=' . $key; $typ = null; }
-            $on = ($route === $aktiv) && ($typ === null || $curTyp === $typ);
+            if (is_array($val)) { $route = $val['route']; $label = $val['label']; $href = $val['href']; $typ = $val['typ'] ?? null; $ort = $val['ort'] ?? null; }
+            else               { $route = $key; $label = $val; $href = '?p=' . $key; $typ = null; $ort = null; }
+            $on = ($route === $aktiv) && ($typ === null || $curTyp === $typ) && ($ort === null || $curOrt === $ort);
             if ($on) $grpOn = true;
             $cls = $on ? ' class="on"' : '';
             $n = $anfCount[$key] ?? 0;
