@@ -909,6 +909,38 @@ if (auftrag_braucht_etikett($id)):
   <?php endif; ?>
 </div>
 
+<?php // H1 (Teil 3): Material-Übersicht – je Position benötigt / frei / unterwegs mit Deckungs-Ampel.
+// Nutzt den vorhandenen auftrag_bedarf() + item_unterwegs(); nur Übersicht, keine Buchung.
+if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
+    $mng = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ','); ?>
+<div class="bx-panel" data-panel="produktion">
+  <h2 style="margin:0 0 4px;font-size:16px">Material-Übersicht</h2>
+  <div class="muted" style="font-size:12px;margin-bottom:10px">Was dieser Auftrag braucht, was frei im Lager liegt und was bestellt, aber noch unterwegs ist.</div>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Position</th><th>Rolle</th><th class="bx-num">benötigt</th><th class="bx-num">frei</th><th class="bx-num">unterwegs</th><th>Deckung</th></tr></thead>
+    <tbody>
+    <?php foreach ($bedarfRows as $r):
+        $iid = (int)($r['item_id'] ?? 0);
+        $ben = (float)($r['benoetigt'] ?? 0);
+        $frei = (float)($r['verfuegbar'] ?? 0);
+        $unterwegs = $iid > 0 ? item_unterwegs($iid) : 0.0;
+        $einh = (string)($r['einheit'] ?? 'Stk');
+        $deckt = $frei + 1e-6 >= $ben;
+        $decktMitUnterwegs = !$deckt && ($frei + $unterwegs + 1e-6 >= $ben); ?>
+      <tr>
+        <td><?= h((string)($r['name'] ?? '–')) ?></td>
+        <td class="muted"><?= h((string)($r['rolle'] ?? '–')) ?></td>
+        <td class="bx-num"><?= $mng($ben) ?> <span class="muted"><?= h($einh) ?></span></td>
+        <td class="bx-num"><?= $mng($frei) ?></td>
+        <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs) : '<span class="muted">–</span>' ?></td>
+        <td><?= $deckt ? bx_badge('gedeckt','ok') : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('Fehlbestand','warn')) ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <p class="muted" style="font-size:12px;margin:6px 0 0">„frei" = im Lager verfügbar · „unterwegs" = bestellt, noch nicht eingegangen · „mit Lieferung" = frei + unterwegs reicht aus.</p>
+</div>
+<?php endif; endif; ?>
 <div class="bx-panel" data-panel="produktion">
   <h2>Produktion &amp; Beschaffung</h2>
   <?php if (produkt_ist_handelsware((int)($a['produkt_id'] ?? 0))): ?>

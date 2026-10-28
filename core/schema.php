@@ -7409,6 +7409,14 @@ function produktion_bericht_daten(int $pa_id): ?array {
 }
 // Kompletter Einkaufsbedarf eines Auftrags (Stückliste × Menge vs. freier Bestand).
 // Rückgabe je Komponente: ['rolle','item_id','name','benoetigt','verfuegbar','fehlt','einheit']
+// Offen bestellte, noch nicht eingegangene Menge eines Items ("unterwegs") – für die Material-Übersicht am Auftrag (H1).
+// Gleiche Logik wie die Bestandsliste: Summe der Bestellpositionen über Bestellungen mit Status 'bestellt' ohne Wareneingang.
+function item_unterwegs(int $item_id): float {
+    if ($item_id <= 0) return 0.0;
+    return (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                           WHERE bp.item_id=? AND b.status='bestellt' AND b.angekommen_am IS NULL", [$item_id]);
+}
+
 function auftrag_bedarf(int $pa_id): array {
     $pa = pa_row_cached($pa_id);
     if (!$pa) return [];
