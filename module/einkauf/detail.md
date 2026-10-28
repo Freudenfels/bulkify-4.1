@@ -32,3 +32,6 @@ Bei einer **neuen** Bestellung und eingerichteter KI (nur beta) erscheint oben d
 „Als bestellt markieren" (`aktion=bestellt`) schickt dem Lieferanten die Bestell-Mail (`mail_lieferant_bestellung()`), sofern der Versand eingerichtet ist. Ein Mailfehler stoppt nichts, er wird oben auf der Seite gezeigt.
 ## Rückfragen an den Lieferanten
 Unter dem Ablauf-Panel steht **Rückfragen** (`core/nachricht.php`, Bezug `bestellung`): Fragen an den Lieferanten und seine Antworten zu genau dieser Bestellung, POST `aktion=nachricht`. Der Lieferant sieht dasselbe Panel im Portal; bei eingerichtetem Versand geht je Nachricht eine Mail an die andere Seite.
+
+## Erinnern & Stornieren (B4, 2026-10-28)
+Im Status-/Aktionspanel: **Erinnern** (nur Portal-Lieferant, noch nicht bestätigt, Status nicht offen/geliefert/storniert) → `aktion=erinnern` → `bestellung_erinnerung_senden()` schickt die Erinnerungsmail (`mail_lieferant_erinnerung()`) und setzt `erinnert_am`; bei Überfälligkeit (≥3 Tage) ist der Button hervorgehoben und zeigt „T+N". **Stornieren** (solange nicht geliefert/angekommen) → `aktion=storno` → `bestellung_stornieren()` setzt Status `storniert` und informiert einen Portal-Lieferanten (Chat+Mail). Beides ist vom Mitarbeiter ausgelöst (kein automatischer Versand).

@@ -1043,6 +1043,7 @@ function init_schema(): void {
     ensure_column('bestellung', 'online_zahlart', "VARCHAR(30) NULL");
     ensure_column('bestellung', 'online_preis', "DECIMAL(12,2) NULL");
     ensure_column('bestellung', 'online_waehrung', "VARCHAR(8) NULL");
+    ensure_column('bestellung', 'erinnert_am', "DATETIME NULL");   // letzte Erinnerung an den Portal-Lieferanten (unbestätigte Bestellung)
 
     // lieferung_paket: ein Datensatz je Karton/Sendung einer Bestellung. Der Lieferant gibt an, wie
     // viele Pakete er schickt und welche Tracking-/Sendungsnummern dazugehoeren; das Lager hakt sie
@@ -5976,6 +5977,112 @@ function bestellung_station_index(?string $station): int {
     $i = array_search((string)$station, $keys, true);
     return $i === false ? -1 : (int)$i;
 }
+// ===== B4/B5: Offen-Dauer, Überfälligkeit, Statuskette, Erinnerung, Storno =====
+// Portal-Lieferant? (hat aktiven Account) – dann läuft die Bestellung über sein Portal.
+function bestellung_ist_portal(array $b): bool {
+    return !empty($b['lieferant_id']) && lieferant_hat_zugang((int)$b['lieferant_id']);
+}
+// Tage seit Bestellung (Bestelldatum, sonst angelegt). Negativ/0 möglich bei heutigem Datum.
+function bestellung_tage_offen(array $b): int {
+    $ref = !empty($b['bestelldatum']) ? (string)$b['bestelldatum'] : (string)($b['angelegt'] ?? '');
+    $ts = $ref !== '' ? strtotime($ref) : 0;
+    if (!$ts) return 0;
+    return (int) floor((time() - $ts) / 86400);
+}
+// Unbestätigt überfällig? (Portal-Lieferant, noch nicht bestätigt, Tage >= Schwelle). Default 3 Tage (B4).
+function bestellung_ueberfaellig(array $b, int $tage = 3): bool {
+    if ((int)($b['bestaetigt'] ?? 0) === 1) return false;
+    if (in_array((string)($b['status'] ?? ''), ['geliefert','storniert','offen'], true)) return false;
+    if (!bestellung_ist_portal($b)) return false;
+    return bestellung_tage_offen($b) >= $tage;
+}
+// Echte Statuskette (B5) für Portal-Lieferanten: wartet auf Bestätigung -> bestätigt -> versandbereit ->
+// teilweise versendet -> versendet -> eingegangen. Rückgabe ['label'=>, 'kind'=>'ok|warn|err|info|'].
+function bestellung_stufe(array $b): array {
+    $st = (string)($b['status'] ?? '');
+    if ($st === 'geliefert' || !empty($b['angekommen_am'])) return ['label'=>'eingegangen', 'kind'=>'ok'];
+    if ($st === 'storniert') return ['label'=>'storniert', 'kind'=>''];
+    if ($st === 'offen')     return ['label'=>'Entwurf', 'kind'=>'info'];
+    $portal = bestellung_ist_portal($b);
+    // Teilweise eingegangen? (einige Pakete angekommen) – vor „versendet" einsortiert.
+    $station = (string)($b['station'] ?? '');
+    if ($portal) {
+        if ($station === 'versendet' || trim((string)($b['tracking'] ?? '')) !== '') {
+            // Pakete X/Y angekommen -> teilweise versendet/eingegangen
+            $pak = function_exists('lieferung_pakete') ? lieferung_pakete((int)$b['id']) : [];
+            if ($pak) {
+                $an = count(array_filter($pak, fn($p)=> (int)$p['angekommen'] === 1));
+                if ($an > 0 && $an < count($pak)) return ['label'=>'teilweise eingegangen', 'kind'=>'warn'];
+            }
+            return ['label'=>'versendet', 'kind'=>'info'];
+        }
+        if ($station === 'versand')    return ['label'=>'versandbereit', 'kind'=>'info'];
+        if ((int)($b['bestaetigt'] ?? 0) === 1 || in_array($station, ['angenommen','produktion','qualitaet'], true)) {
+            $lbl = $station !== '' && isset(bestellung_stationen()[$station]) ? bestellung_stationen()[$station] : 'bestätigt';
+            return ['label'=>$lbl, 'kind'=>'ok'];
+        }
+        return ['label'=>'wartet auf Bestätigung', 'kind'=>'warn'];
+    }
+    // Lieferant ohne Portal / Online: selbstgepflegter Stand.
+    if ((string)($b['bestellart'] ?? '') === 'online') return ['label'=>'online bestellt', 'kind'=>'info'];
+    return ['label'=>'bestellt', 'kind'=>'info'];
+}
+// Erinnerung an den Portal-Lieferanten senden (unbestätigte Bestellung). Setzt erinnert_am.
+// Rückgabe: '' = gesendet, sonst Fehlertext. $auto=true für den Cron (kein User-Kontext).
+function bestellung_erinnerung_senden(int $bestellung_id, bool $auto = false): string {
+    $b = one("SELECT * FROM bestellung WHERE id=?", [$bestellung_id]);
+    if (!$b) return 'Bestellung nicht gefunden.';
+    if ((int)$b['bestaetigt'] === 1) return 'Bestellung ist bereits bestätigt.';
+    if (in_array((string)$b['status'], ['geliefert','storniert','offen'], true)) return 'Für diesen Status nicht sinnvoll.';
+    if (!bestellung_ist_portal($b)) return 'Kein Portal-Lieferant – bitte selbst nachfassen.';
+    $f = function_exists('mail_bereit') && mail_bereit() && function_exists('mail_lieferant_erinnerung')
+        ? mail_lieferant_erinnerung($bestellung_id) : 'Mailversand ist nicht eingerichtet.';
+    q("UPDATE bestellung SET erinnert_am=UTC_TIMESTAMP() WHERE id=?", [$bestellung_id]);
+    if ($b['lieferant_id']) log_aktivitaet('lieferant', (int)$b['lieferant_id'], 'team',
+        'Erinnerung an Bestellung ' . $b['nummer'] . ($auto ? ' (automatisch)' : '') . ' gesendet.', 'bestellung', 'bestellung', $bestellung_id);
+    return $f === '' ? '' : $f;
+}
+// Bestellung stornieren (B4). Markiert storniert, informiert einen Portal-Lieferanten (Chat + Mail).
+function bestellung_stornieren(int $bestellung_id, string $wer = 'Team', string $grund = ''): array {
+    $b = one("SELECT * FROM bestellung WHERE id=?", [$bestellung_id]);
+    if (!$b) return ['ok'=>false, 'msg'=>'Bestellung nicht gefunden.'];
+    if ((string)$b['status'] === 'storniert') return ['ok'=>false, 'msg'=>'Bestellung ist bereits storniert.'];
+    if ((string)$b['status'] === 'geliefert' || !empty($b['angekommen_am'])) return ['ok'=>false, 'msg'=>'Bereits (teil)geliefert – nicht stornierbar.'];
+    $wer = trim($wer) ?: 'Team';
+    q("UPDATE bestellung SET status='storniert', notiz=CONCAT(COALESCE(notiz,''), ' | Storniert', ?, ' – ', ?) WHERE id=?",
+      [$grund !== '' ? ' (' . mb_substr($grund, 0, 180) . ')' : '', $wer, $bestellung_id]);
+    $mail = 0;
+    if (bestellung_ist_portal($b)) {
+        require_once __DIR__ . '/nachricht.php';
+        nachricht_senden((int)$b['lieferant_id'], 'team', $wer,
+            'Hinweis: Bestellung ' . (string)$b['nummer'] . ' wurde storniert' . ($grund !== '' ? ' (' . $grund . ')' : '') . '. Bitte nicht mehr ausführen.',
+            'bestellung', $bestellung_id);
+        if (function_exists('mail_bereit') && mail_bereit()) $mail = 1;
+    }
+    bedarf_bump();
+    return ['ok'=>true, 'mail'=>$mail, 'msg'=>'Bestellung ' . (string)$b['nummer'] . ' storniert' . ($mail ? ', Lieferant informiert' : '') . '.'];
+}
+// Token für den Einkauf-Erinnerungs-Cron (analog crm mail_cron_token).
+function einkauf_cron_token(): string {
+    $t = (string) meta_get('einkauf_cron_token', '');
+    if ($t === '') { $t = bin2hex(random_bytes(24)); meta_set('einkauf_cron_token', $t); }
+    return $t;
+}
+// Cron (B4 „automatisch"): alle überfälligen, unbestätigten Portal-Bestellungen erinnern, die noch nicht
+// (bzw. länger als $minAbstandStd Stunden nicht) erinnert wurden. Rückgabe ['gesendet'=>, 'geprueft'=>].
+function einkauf_erinnerungen_cron(int $tage = 3, int $minAbstandStd = 24): array {
+    $cand = all("SELECT * FROM bestellung WHERE COALESCE(bestaetigt,0)=0 AND status NOT IN ('geliefert','storniert','offen')
+                 AND lieferant_id IS NOT NULL AND angekommen_am IS NULL");
+    $gesendet = 0; $geprueft = 0;
+    foreach ($cand as $b) {
+        if (!bestellung_ueberfaellig($b, $tage)) continue;
+        $geprueft++;
+        if (!empty($b['erinnert_am']) && (time() - strtotime((string)$b['erinnert_am'])) < $minAbstandStd * 3600) continue;
+        if (bestellung_erinnerung_senden((int)$b['id'], true) === '') $gesendet++;
+    }
+    return ['gesendet'=>$gesendet, 'geprueft'=>$geprueft];
+}
+
 // Versandarten (der Lieferant waehlt eine davon).
 function versandarten(): array {
     return ['luft' => 'Luftfracht', 'see' => 'Seefracht', 'kurier' => 'Kurier (DHL/UPS/FedEx)',

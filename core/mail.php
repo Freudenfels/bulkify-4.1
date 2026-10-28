@@ -217,6 +217,34 @@ function mail_lieferant_bestellung(int $bestellung_id): string {
     return mail_senden((string)$b['email'], $betreff, $text);
 }
 
+// Erinnerung an eine noch nicht bestätigte Bestellung (B4). Sprache je Lieferant.
+function mail_lieferant_erinnerung(int $bestellung_id): string {
+    $b = one("SELECT b.nummer, b.bestelldatum, b.angelegt, b.lieferant_id, l.firma, l.ansprechpartner, l.email, l.sprache
+              FROM bestellung b JOIN lieferanten l ON l.id=b.lieferant_id WHERE b.id=?", [$bestellung_id]);
+    if (!$b) return 'Bestellung oder Lieferant nicht gefunden.';
+    if (trim((string)$b['email']) === '') return 'Für diesen Lieferanten ist keine E-Mail-Adresse hinterlegt.';
+    $fa = beleg_firma();
+    $sp = mail_lief_sprache($b['sprache']);
+    $anrede = trim((string)$b['ansprechpartner']) !== '' ? (string)$b['ansprechpartner'] : (string)$b['firma'];
+    $link = mail_basis_url() . '/?p=lieferant_login';
+    if ($sp === 'de') {
+        $betreff = 'Erinnerung: Bestellung ' . $b['nummer'] . ' bitte bestätigen';
+        $text = "Guten Tag $anrede,\n\nunsere Bestellung " . $b['nummer'] . " ist noch offen und wartet auf Ihre Bestätigung.\n\n"
+              . "Bitte bestätigen Sie im Portal die Bestellung und den geplanten Liefertermin:\n$link\n\n"
+              . "Vielen Dank und viele Grüße\n" . $fa['name'];
+    } elseif ($sp === 'zh') {
+        $betreff = '提醒：请确认订单 ' . $b['nummer'];
+        $text = "$anrede 您好，\n\n我方订单 " . $b['nummer'] . " 仍待贵司确认。\n\n"
+              . "请在门户中确认订单及计划交货日期：\n$link\n\n此致\n" . $fa['name'];
+    } else {
+        $betreff = 'Reminder: please confirm purchase order ' . $b['nummer'];
+        $text = "Dear $anrede,\n\nour purchase order " . $b['nummer'] . " is still pending your confirmation.\n\n"
+              . "Please confirm the order and the planned delivery date in the portal:\n$link\n\n"
+              . "Thank you and best regards\n" . $fa['name'];
+    }
+    return mail_senden((string)$b['email'], $betreff, $text);
+}
+
 // Preisanfrage an einen Lieferanten melden (Sprache je Lieferant). $anfrage_id = lieferant_anfrage.id
 function mail_lieferant_anfrage(int $anfrage_id): string {
     $a = one("SELECT af.nummer, af.menge, af.einheit, i.name AS item_name, af.betreff, af.incoterm, af.versandart,

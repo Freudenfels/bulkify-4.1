@@ -70,6 +70,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode($res['msg'] ?? 'Aufteilen nicht möglich.')); exit;
     }
+    // B4: Erinnerung an den Portal-Lieferanten (unbestätigte Bestellung).
+    if ($aktion === 'erinnern' && !$neu) {
+        $f = bestellung_erinnerung_senden((int)$id);
+        header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f))); exit;
+    }
+    // B4: Bestellung stornieren.
+    if ($aktion === 'storno' && !$neu) {
+        $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : 'Team';
+        $res = bestellung_stornieren((int)$id, $wer ?: 'Team', trim((string)($_POST['grund'] ?? '')));
+        header('Location: ?p=bestellung&id=' . $id . ($res['ok'] ? '&aufg=' . rawurlencode($res['msg']) : '&fehler=' . urlencode($res['msg']))); exit;
+    }
     // KI-Erfassung: Lieferanten-Dokument (PDF/Foto/Tabelle) auslesen -> Positionen vorbelegen.
     if ($aktion === 'ki_lesen' && $neu) {
         if (!ki_bereit()) { header('Location: ?p=bestellung&id=neu&fehler=' . urlencode('KI ist nicht eingerichtet (nur auf beta).')); exit; }
@@ -229,6 +240,13 @@ if (!$neu) {
                                  FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL AND bezeichnung LIKE 'Bulk%'", [(int)$id]);
     if ($bulkProdGrp >= 2 && !in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']))
         echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese Bestellung in ' . (int)$bulkProdGrp . ' Einzelbestellungen je Produkt aufteilen? Ein bereits bestätigter Stand (Annahme/Termin) wird übernommen. Die alte wird storniert und der Lieferant informiert.\');"><input type="hidden" name="aktion" value="aufteilen"><button class="btn btn-ghost btn-sm" type="submit" title="Je Produkt eine eigene Bestellung – ein schon zugesagter Stand wird übernommen, sonst kann der Lieferant jedes Produkt einzeln annehmen/ablehnen">In Einzelbestellungen aufteilen</button></form>';
+    // B4: Erinnern (Portal-Lieferant, noch nicht bestätigt) + Stornieren (solange nicht geliefert/angekommen).
+    if (bestellung_ist_portal($b) && (int)($b['bestaetigt'] ?? 0) !== 1 && !in_array((string)$b['status'], ['geliefert','storniert','offen'], true)) {
+        $ueberf = bestellung_ueberfaellig($b);
+        echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="erinnern"><button class="btn ' . ($ueberf ? 'btn-primary' : 'btn-ghost') . ' btn-sm" type="submit" title="Erinnerungsmail an den Lieferanten senden">Erinnern' . ($ueberf ? ' (überfällig · T+' . bestellung_tage_offen($b) . ')' : (!empty($b['erinnert_am']) ? ' (erneut)' : '')) . '</button></form>';
+    }
+    if (!in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']))
+        echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese Bestellung stornieren?' . (bestellung_ist_portal($b) ? ' Der Lieferant wird informiert.' : '') . '\');"><input type="hidden" name="aktion" value="storno"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Bestellung stornieren">Stornieren</button></form>';
     echo '</div></div></div>';
 
     // Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Zahlart/Preis – fürs Gegenrechnen.
