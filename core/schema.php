@@ -6880,6 +6880,24 @@ function verpackung_empfehlung_fuer_pa(int $pa_id): ?int {
     $stk = (int)($pa['einheiten_pro_packung'] ?? 0) ?: (int)($pa['stueck'] ?? 0);
     return ($kg && $stk) ? verpackung_empfehlung($kg, $stk) : null;
 }
+// C1 (2026-10-28): offene, noch NICHT freigegebene Kunden-Aufträge automatisch in die Vor-Produktion aufnehmen
+// – ohne manuellen „Holen"-Klick. Sicher/idempotent: fasst NUR unentschiedene PAs an (art_festgelegt_am IS NULL,
+// kein erledigter Schritt) und legt für offene Aufträge OHNE PA einen Vor-PA an. Bereits FREIGEGEBENE (die haben
+// art_festgelegt_am) bleiben unberührt – so wird eine frische Freigabe nie zurückgezogen. Für den Seitenaufruf gedacht.
+function vorbereitung_auto_sync(): void {
+    if (!table_exists('produktionsauftrag')) return;
+    try {
+        q("UPDATE produktionsauftrag SET status='vorbereitung', freigegeben_am=NULL, freigegeben_von=NULL
+           WHERE status IN ('offen','laufend') AND auftrag_id IS NOT NULL AND art_festgelegt_am IS NULL
+             AND NOT EXISTS (SELECT 1 FROM produktion_schritt s WHERE s.pa_id=produktionsauftrag.id AND s.erledigt=1)");
+        foreach (all("SELECT a.id FROM auftrag a
+                      WHERE a.status='offen' AND a.produkt_id IS NOT NULL AND a.produkt_id>0
+                        AND NOT EXISTS (SELECT 1 FROM produktionsauftrag pa WHERE pa.auftrag_id=a.id)
+                      ORDER BY a.id DESC LIMIT 200") as $__a) produktionsauftrag_aus_auftrag((int)$__a['id']);
+        bedarf_bump();
+    } catch (\Throwable $e) { /* darf den Seitenaufruf nie blockieren */ }
+}
+
 // Alle noch nicht gestarteten Kunden-Produktionsaufträge in die Vor-Produktion holen (Status 'vorbereitung').
 // Lässt bereits begonnene (ein Schritt erledigt) und erledigte/stornierte unberührt. Rückgabe: Anzahl.
 function vorbereitung_alle_holen(): int {

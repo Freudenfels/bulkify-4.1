@@ -193,8 +193,13 @@ if ($pa):
     ];
     echo '<div class="bx-panel" style="padding:14px 16px;margin-bottom:14px">';
     echo '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 18px">';
-    foreach ($infoFelder as $k => $v)
-        echo '<div><div class="muted" style="font-size:12px">' . h($k) . '</div><div style="font-size:14px">' . h((string)$v) . '</div></div>';
+    foreach ($infoFelder as $k => $v) {
+        // C4: Auftrag und Rezeptur direkt verlinken.
+        $val = h((string)$v);
+        if ($k === 'Auftrag' && $aid && (string)$v !== '–')    $val = '<a href="?p=auftrag&id=' . (int)$aid . '">' . h((string)$v) . '</a>';
+        elseif ($k === 'Rezeptur' && $rid && (string)$v !== '–') $val = '<a href="?p=rezeptur_detail&id=' . (int)$rid . '">' . h((string)$v) . '</a>';
+        echo '<div><div class="muted" style="font-size:12px">' . h($k) . '</div><div style="font-size:14px">' . $val . '</div></div>';
+    }
     echo '</div></div>';
 
     // Rezeptur-Zusammensetzung – damit die Produktion entscheiden kann, ob wir das selbst machen oder zukaufen.
@@ -242,47 +247,7 @@ if ($pa):
       </div>
     </div>
 
-    <?php
-    // Teilproduktions-Rechner: zwei Mengen – komplett fertig (inkl. Etikett) und bis vor Etikettieren.
-    $tp = produktion_teilmenge_machbar($paId);
-    $tpFarbe = ($tp['komplett'] > 0 || $tp['vor_etikett'] > 0) ? 'var(--gruen)' : 'var(--warn)';
-    $nf = fn($x) => number_format((int)$x, 0, ',', '.');
-    ?>
-    <div class="bx-panel" style="padding:14px 16px;margin-bottom:14px;border-left:3px solid <?= $tpFarbe ?>">
-      <div style="font-weight:600;margin-bottom:6px">Teilproduktion – was ist jetzt machbar?</div>
-      <div class="bx-row" style="gap:18px;flex-wrap:wrap;align-items:baseline">
-        <div><span class="muted" style="font-size:12px">Auftragsmenge</span><div style="font-size:15px"><?= $nf($tp['menge']) ?> Pkg.</div></div>
-        <div><span class="muted" style="font-size:12px">schon produziert</span><div style="font-size:15px"><?= $nf($tp['gebucht']) ?></div></div>
-        <div><span class="muted" style="font-size:12px">offen</span><div style="font-size:15px"><?= $nf($tp['rest']) ?></div></div>
-        <div><span class="muted" style="font-size:12px">komplett fertig (inkl. Etikett)</span><div style="font-size:16px;font-weight:700;color:<?= $tp['komplett']>0?'var(--gruen)':'var(--muted)' ?>"><?= $nf($tp['komplett']) ?> Pkg.</div></div>
-        <div><span class="muted" style="font-size:12px">bis vor Etikettieren</span><div style="font-size:16px;font-weight:700;color:<?= $tp['vor_etikett']>0?'var(--gruen)':'var(--muted)' ?>"><?= $nf($tp['vor_etikett']) ?> Pkg.</div></div>
-      </div>
-      <?php if ($tp['rest'] <= 0): ?>
-        <div class="muted" style="font-size:13px;margin-top:8px">Alles produziert – nichts mehr offen.</div>
-      <?php else: ?>
-        <div style="font-size:13px;margin-top:8px;display:flex;flex-direction:column;gap:4px">
-          <?php if ($tp['komplett'] > 0): ?>
-            <div><?= $flagOk(true) ?> <strong><?= $nf($tp['komplett']) ?></strong> Packungen können jetzt <strong>komplett fertig</strong> gemacht werden (inkl. Etikett)<?= $tp['komplett'] < $tp['rest'] ? ' – begrenzt durch <strong>' . h($tp['limit_komplett']) . '</strong>' : '' ?>.</div>
-          <?php endif; ?>
-          <?php if ($tp['vor_etikett'] > $tp['komplett']): ?>
-            <div><?= $flagOk(true) ?> Weitere <strong><?= $nf($tp['vor_etikett'] - $tp['komplett']) ?></strong> Packungen bis <strong>vor das Etikettieren</strong> (produzieren/abfüllen), Etikettieren folgt später<?= $tp['vor_etikett'] < $tp['rest'] ? ' – begrenzt durch <strong>' . h($tp['limit_vor']) . '</strong>' : '' ?>.</div>
-          <?php endif; ?>
-          <?php if ($tp['vor_etikett'] <= 0): ?>
-            <div style="color:#8f231b">Aktuell <strong>nichts</strong> produzierbar – es fehlt <strong><?= h($tp['limit_vor'] ?: 'Material') ?></strong>.</div>
-          <?php elseif ($tp['vor_etikett'] < $tp['rest']): ?>
-            <div class="muted">Der Rest (<?= $nf($tp['rest'] - $tp['vor_etikett']) ?> Pkg.) wartet auf mehr Material.</div>
-          <?php endif; ?>
-        </div>
-      <?php endif; ?>
-      <?php if ($tp['braucht_etikett'] && !$tp['etikett_frei'] && $tp['vor_etikett'] > 0): ?>
-        <div class="muted" style="font-size:12px;margin-top:6px">Etikett noch nicht freigegeben – es lässt sich schon bis vor das Etikettieren produzieren; <strong>fertigstellen</strong> geht, sobald die Freigabe (und genug Etiketten) da sind.</div>
-      <?php endif; ?>
-      <?php if ($tp['fertig_moeglich']): ?>
-        <div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-top:8px;display:inline-block">Material + Etiketten reichen – der Auftrag kann jetzt <strong>komplett fertig</strong> produziert werden.</div>
-      <?php endif; ?>
-      <div class="muted" style="font-size:11px;margin-top:8px">Rechnet automatisch neu, sobald sich der Bestand ändert (z. B. neue Gläser oder Etiketten ankommen).</div>
-    </div>
-
+    <?php // C4 (2026-10-28): orange „Teilproduktion – was ist jetzt machbar?"-Box entfernt (unnötig). ?>
     <div class="bx-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
       <!-- Verpackung / Glas -->
       <div class="bx-panel" id="glas" style="padding:16px;scroll-margin-top:80px">
@@ -371,7 +336,7 @@ if ($pa):
     <!-- Freigabe -->
     <div class="bx-panel" style="padding:16px;margin-top:14px">
       <div style="font-weight:600;margin-bottom:10px">Zur Produktion freigeben</div>
-      <form method="post" class="bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap">
+      <form method="post" class="bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap" onsubmit="return confirm('Diesen Auftrag jetzt zur Produktion freigeben? Danach ist er im Werk startbar und der Einkauf darf den Bedarf bestellen.');">
         <input type="hidden" name="aktion" value="freigeben"><input type="hidden" name="pa_id" value="<?= $paId ?>">
         <label style="display:flex;flex-direction:column;gap:3px;font-size:12px">
           <span class="muted">Produktion</span>
@@ -391,9 +356,9 @@ if ($pa):
         </label>
         <span id="ueb" class="muted" style="font-size:11px;color:#8a6d00"></span>
         <div style="flex:1"></div>
-        <button class="btn btn-primary" type="submit">Freigeben</button>
+        <button class="btn btn-primary" type="submit">Zur Produktion freigeben</button>
       </form>
-      <p class="muted" style="font-size:12px;margin:10px 0 0">Du kannst immer freigeben – offene Punkte oben sind dann nur ein Hinweis (die Produktion wartet ggf. auf Material).</p>
+      <p class="muted" style="font-size:12px;margin:10px 0 0">Erst mit „Zur Produktion freigeben" wird der Auftrag im Werk startbar und der Einkauf darf dafür bestellen (harte Weiche). Du kannst immer freigeben – offene Punkte oben sind dann nur ein Hinweis (die Produktion wartet ggf. auf Material).</p>
     </div>
     <script>
     // Ganzzahl-Felder mit Tausenderpunkt (Produktionsmenge): beim Laden + bei Blur formatieren (1.080.000).
@@ -407,6 +372,7 @@ if ($pa):
 
 <?php
 /* ============================== TABELLE (Übersicht) ============================== */
+vorbereitung_auto_sync();   // C1: offene Aufträge erscheinen automatisch – kein manueller „Holen"-Schritt nötig.
 $rows = vorbereitung_liste();
 $q = trim((string)($_GET['q'] ?? ''));
 if ($q !== '') {
@@ -417,9 +383,8 @@ if ($q !== '') {
     }));
 }
 render_header('produktion_vorbereitung', 'Vor-Produktion');
-bx_head('Vor-Produktion / Freigabe', count($rows) . ' Auftrag(e) in Vorbereitung' . ($q !== '' ? ' (gefiltert)' : '') . ' – zum Bearbeiten anklicken.',
-        '<form method="post" style="display:inline" onsubmit="return confirm(\'Alle noch nicht gestarteten Aufträge in die Vor-Produktion holen?\');"><input type="hidden" name="aktion" value="alle_vorbereitung"><button class="btn btn-ghost" type="submit">Alle offenen Aufträge holen</button></form> '
-        . bx_btn('Zu den Produktionsaufträgen', '?p=produktion', 'ghost'));
+bx_head('Vor-Produktion / Freigabe', count($rows) . ' Auftrag(e) in Vorbereitung' . ($q !== '' ? ' (gefiltert)' : '') . ' – offene Aufträge erscheinen automatisch; zum Bearbeiten anklicken.',
+        bx_btn('Zu den Produktionsaufträgen', '?p=produktion', 'ghost'));
 if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag zur Produktion freigegeben – jetzt im Produktionsmodul startbar.</div>';
 if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['geholt'] . ' Auftrag(e) in die Vor-Produktion geholt.</div>';
 ?>
@@ -451,7 +416,7 @@ if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:
     ?>
       <tr onclick="location.href='<?= $href ?>'" style="cursor:pointer">
         <td><?= $prioDot($r['prio']) ?></td>
-        <td><a href="<?= $href ?>"><?= h($r['nummer'] ?: ('PR#' . $paId)) ?></a><?php if ($r['auftrag_nr']): ?><br><span class="muted" style="font-size:12px"><?= h($r['auftrag_nr']) ?></span><?php endif; ?></td>
+        <td><a href="<?= $href ?>"><?= h($r['nummer'] ?: ('PR#' . $paId)) ?></a><?php if ($r['auftrag_nr']): ?><br><a class="muted" style="font-size:12px" href="?p=auftrag&id=<?= (int)$r['auftrag_id'] ?>" onclick="event.stopPropagation()" title="Zum Auftrag"><?= h($r['auftrag_nr']) ?></a><?php endif; ?></td>
         <td><?= $r['kunde'] ? h(firma_kurz($r['kunde'])) : '<span class="muted">–</span>' ?></td>
         <td><?= h($r['produkt'] ?: '–') ?></td>
         <td class="bx-num"><?= (int)$r['menge'] ?></td>
