@@ -372,6 +372,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     bulk_reservierung_storno((int)($_POST['res_id'] ?? 0), $id);
     header('Location: ?p=auftrag&id=' . $id . '&bulkres=1'); exit;
 }
+// Lagerware (konkrete Charge) FEST diesem Auftrag zuweisen – der Kunde bekommt genau diese Kapseln. Teilmenge
+// erlaubt (Charge wird gesplittet); dieselbe Charge kann so mehreren Aufträgen zugeteilt werden.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'charge_zuweisen') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    $menge = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['menge'] ?? '0'));
+    $r = charge_auftrag_zuweisen((int)($_POST['charge_id'] ?? 0), $id, $menge);
+    header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok'])
+        ? '&lwzu=1' . (!empty($r['warnung']) ? '&bulkwarn=' . rawurlencode((string)$r['warnung']) : '')
+        : '&expressfehler=' . urlencode($r['fehler'] ?? 'Zuweisung nicht möglich.'))); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'charge_loesen') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id); exit; }
+    charge_auftrag_loesen((int)($_POST['charge_id'] ?? 0), $id);
+    header('Location: ?p=auftrag&id=' . $id . '&lwzu=1'); exit;
+}
 
 $a = $id ? one("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name, ang.nummer AS angebot_nr
                 FROM auftrag a
@@ -512,6 +527,9 @@ $anfrageLieferanten = $istAdmin ? all("SELECT id, firma, land FROM lieferanten W
 // Bulk-Reservierung (dritter Weg): mögliche Quellen (Bestellungen/Chargen des Bulk-Artikels) + bestehende Reservierungen.
 $bulkQ   = $istAdmin ? bulk_quellen_fuer_auftrag($id) : ['item'=>0, 'bestellungen'=>[], 'chargen'=>[]];
 $bulkRes = $istAdmin ? auftrag_bulk_reservierungen($id) : [];
+// Lagerware fest zuweisen (Charge -> Auftrag): freie Quell-Chargen + bereits zugewiesene Chargen.
+$lwQ  = $istAdmin ? auftrag_lagerware_quellen($id) : ['item'=>0, 'chargen'=>[]];
+$lwZu = $istAdmin ? auftrag_lagerware_zugewiesen($id) : [];
 
 render_header('auftraege', $a['nummer']);
 $kopfProdukt = trim((string)($a['produkt_bezeichnung'] ?? '')) ?: (string)($a['produkt_name'] ?? '');
@@ -1018,6 +1036,49 @@ if (auftrag_braucht_etikett($id)):
   <div class="muted" style="font-size:12px">Reservieren ist nur möglich, wenn Bulk des gleichen Produkts <strong>unterwegs</strong> (bestellt) oder <strong>vorhanden</strong> ist. Erst eine Lieferantenbestellung für die Bulkware anlegen (oder Bestand einbuchen), dann hier reservieren.</div>
   <?php endif; ?>
   <?php endif; /* Aus Bulk reservieren */ ?>
+
+  <?php if ($istAdmin):
+        $lwSumme = 0.0; foreach ($lwZu as $lz) $lwSumme += (float)$lz['menge_verfuegbar'];
+        $lwOffen = max(0, (int)$gesamtStk - (int)round($lwSumme)); ?>
+  <h3 id="lagerzuweisen" style="margin:18px 0 6px;font-size:14px;font-weight:600;scroll-margin-top:80px">Lagerware zuweisen <span class="muted" style="font-weight:normal">· der Kunde bekommt genau diese Charge(n)</span></h3>
+  <?php if (isset($_GET['lwzu'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Zuweisung aktualisiert.</div><?php endif; ?>
+  <?php if ($lwZu): ?>
+  <div class="bx-tablewrap" style="margin-bottom:10px"><table class="bx-table">
+    <thead><tr><th>Charge</th><th class="bx-num">zugewiesen</th><th>MHD</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      <?php foreach ($lwZu as $lz): ?>
+      <tr>
+        <td>Charge <?= h((string)($lz['charge_nr'] ?: $lz['id'])) ?></td>
+        <td class="bx-num"><?= $nzB($lz['menge_verfuegbar']) ?> <?= h((string)($lz['einheit'] ?: 'Stk')) ?></td>
+        <td><?= $lz['mhd'] ? h(date('d.m.Y', strtotime((string)$lz['mhd']))) : '–' ?></td>
+        <td><?= ($lz['status'] ?? '') === 'frei' ? bx_badge('zugewiesen','ok') : bx_badge((string)$lz['status'],'warn') ?></td>
+        <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Zuweisung dieser Charge aufheben? Die Ware wird wieder freie Lagerware.');"><input type="hidden" name="aktion" value="charge_loesen"><input type="hidden" name="charge_id" value="<?= (int)$lz['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Lösen</button></form></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php endif; ?>
+  <?php if ($lwQ['chargen']): ?>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="charge_zuweisen">
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Freie Lager-Charge
+      <select name="charge_id" class="rscombo" style="min-width:320px" required>
+        <option value="">– wählen –</option>
+        <?php foreach ($lwQ['chargen'] as $cq): ?>
+          <option value="<?= (int)$cq['id'] ?>">Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $nzB($cq['menge_verfuegbar']) ?> <?= h((string)($cq['einheit'] ?: 'Stk')) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Menge (Stück)
+      <input type="text" inputmode="numeric" name="menge" data-tausender value="<?= number_format((int)$lwOffen, 0, ',', '.') ?>" style="min-width:130px">
+    </label>
+    <button class="btn btn-primary btn-sm" type="submit" data-busy="Weise zu…">Zuweisen</button>
+  </form>
+  <div class="muted" style="font-size:12px;margin-top:6px">Bindet vorhandene Lagerware (fertige Bulkware des gleichen Produkts) <strong>fest</strong> an diesen Auftrag – der Kunde bekommt genau diese Charge. Teilmengen werden abgespalten, der freie Rest bleibt im Lager und kann <strong>weiteren Aufträgen</strong> zugeteilt werden. Räumt „wartet auf Material" ab (ohne neue Bestellung, ohne Eigenproduktion). Benötigt: <strong><?= number_format((int)$gesamtStk,0,',','.') ?></strong> Stück<?= $lwSumme>0 ? ', bereits zugewiesen ' . number_format((int)round($lwSumme),0,',','.') : '' ?>.</div>
+  <?php else: ?>
+  <div class="muted" style="font-size:12px">Keine freie Lager-Charge des Bulk-Artikels dieser Rezeptur vorhanden. Damit Lagerware hier auftaucht, muss sie als <strong>Fertigware (Bulk-Artikel der Rezeptur)</strong>, Status <strong>frei</strong> (nicht Quarantäne/gesperrt) und <strong>noch keinem Auftrag zugewiesen</strong> im Lager stehen. Liegen die Kapseln unter einem anderen Artikel/Kategorie, zuerst dort korrigieren bzw. per Wareneingang als Bulk der Rezeptur einbuchen.</div>
+  <?php endif; ?>
+  <?php endif; /* Lagerware zuweisen (Admin) */ ?>
 
   <h3 style="margin:18px 0 6px;font-size:14px;font-weight:600">Bestellungen zu diesem Auftrag</h3>
   <?php if (!$best): ?>

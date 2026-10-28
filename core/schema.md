@@ -140,3 +140,6 @@ echte Signale können weiter schieben); fehlende Zwischendaten werden mit dem St
 Auftrag-Reiter Produktion („Fortschritt setzen", Handler `phase_setzen`), der auch den groben `auftrag.status`
 mitführt. Gilt in Team- und Kundenansicht (beide lesen `auftrag.*`, inkl. der Portal-Fallback-Variante von
 `kunde_auftrag_track`).
+
+## Lagerware -> Auftrag zuweisen (2026-10-28)
+`auftrag_lagerware_quellen($aid)` / `auftrag_lagerware_zugewiesen($aid)` / `charge_auftrag_zuweisen($chargeId,$aid,$menge)` / `charge_auftrag_loesen($chargeId,$aid)`: binden vorhandene Lager-Chargen des Bulk-Artikels (`auftrag_bulk_item`, Kategorie `fertig`) **hart** an einen Auftrag über `charge.auftrag_id`. Teilmengen werden als Kind-Charge mit gleicher `charge_nr` abgespalten (freier Rest bleibt zuteilbar → eine Charge kann mehreren Aufträgen zugeteilt werden). Zählt dann als Fertigware (`auftrag_fertigware_cached`) und räumt „wartet auf Material" bei Fremd/Zukauf ab. Unterschied zu `bulk_reservieren` (weiche Reservierung, nur Eigen-Rohstoffbedarf). UI: Auftrag → Reiter Produktion, Panel „Lagerware zuweisen" (Admin).

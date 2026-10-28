@@ -6691,6 +6691,71 @@ function auftrag_bulk_reserviert_stueck(int $auftrag_id): float {
                              AND (bestellung_position_id IS NOT NULL OR charge_id IS NOT NULL)", [$auftrag_id, $item]);
 }
 
+// === Lagerware FEST einem Auftrag zuweisen (Charge -> Auftrag) ============================================
+// Anders als bulk_reservieren (weiche Reservierung, zählt nur gegen den Eigen-Rohstoffbedarf) bindet dies eine
+// vorhandene Lager-Charge HART an den Auftrag: der Kunde bekommt genau diese Kapseln. Die Charge zählt dann als
+// Fertigware (auftrag_fertigware_cached) und räumt bei Fremd-/Zukauf-Aufträgen „wartet auf Material" ab.
+// Eine physische Charge kann MEHREREN Aufträgen zugeteilt werden: je Zuweisung wird die Teilmenge als Kind-Charge
+// mit EIGENER auftrag_id abgespalten (gleiche Chargennummer -> Rückverfolgung bleibt). Der freie Rest der Charge
+// bleibt im Lager und ist weiter für andere Aufträge zuteilbar. Umkehrbar via charge_auftrag_loesen.
+
+// Freie Lager-Chargen des Bulk-Artikels, die NOCH KEINEM Auftrag zugewiesen sind (Quelle für die Zuweisung).
+function auftrag_lagerware_quellen(int $auftrag_id): array {
+    $item = auftrag_bulk_item($auftrag_id);
+    if (!$item) return ['item'=>0, 'chargen'=>[]];
+    $ch = all("SELECT id, charge_nr, menge_verfuegbar, mhd, einheit FROM charge
+               WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL AND auftrag_id IS NULL
+               ORDER BY COALESCE(mhd,'9999-12-31'), id", [$item]);
+    return ['item'=>$item, 'chargen'=>$ch];
+}
+// Chargen, die diesem Auftrag fest zugewiesen sind (Fertigware) – für Anzeige + „lösen".
+function auftrag_lagerware_zugewiesen(int $auftrag_id): array {
+    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, c.einheit, c.status, c.pa_id
+                FROM charge c JOIN item i ON i.id=c.item_id
+                WHERE c.auftrag_id=? AND i.kategorie='fertig'
+                ORDER BY c.id DESC", [$auftrag_id]);
+}
+// Teilmenge (oder ganze Charge) einer freien Lager-Charge dem Auftrag zuweisen.
+function charge_auftrag_zuweisen(int $charge_id, int $auftrag_id, float $menge): array {
+    if ($menge <= 0) return ['ok'=>false, 'fehler'=>'Bitte eine Menge größer 0 angeben.'];
+    $item = auftrag_bulk_item($auftrag_id);
+    if (!$item) return ['ok'=>false, 'fehler'=>'Kein Bulk-Artikel zum Produkt gefunden (Rezeptur fehlt?).'];
+    $c = one("SELECT * FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return ['ok'=>false, 'fehler'=>'Charge nicht gefunden.'];
+    if ((int)$c['item_id'] !== $item) return ['ok'=>false, 'fehler'=>'Diese Charge gehört zu einem anderen Artikel als dem Bulk-Artikel dieses Auftrags.'];
+    if (($c['status'] ?? '') !== 'frei') return ['ok'=>false, 'fehler'=>'Nur freie Chargen (nicht Quarantäne/gesperrt) können zugewiesen werden.'];
+    if (!empty($c['fremd_kunde_id'])) return ['ok'=>false, 'fehler'=>'Diese Charge ist Fremdlager-Ware eines Kunden und kann nicht zugewiesen werden.'];
+    if (!empty($c['auftrag_id']) && (int)$c['auftrag_id'] !== $auftrag_id) return ['ok'=>false, 'fehler'=>'Diese Charge ist bereits einem anderen Auftrag zugewiesen.'];
+    $verf = (float)$c['menge_verfuegbar'];
+    if ($verf <= 0.0001) return ['ok'=>false, 'fehler'=>'Charge hat keinen verfügbaren Bestand mehr.'];
+    $nimm = min($menge, $verf);
+    $warnung = $menge > $verf + 1e-6
+        ? 'Hinweis: angefordert waren ' . number_format($menge, 0, ',', '.') . ' Stück, verfügbar auf der Charge nur ' . number_format($verf, 0, ',', '.') . ' – es wurden ' . number_format($nimm, 0, ',', '.') . ' zugewiesen.'
+        : '';
+    if ($nimm >= $verf - 1e-6 && empty($c['auftrag_id'])) {
+        // Komplette (Rest-)Charge geht an diesen Auftrag -> kein Split nötig.
+        q("UPDATE charge SET auftrag_id=? WHERE id=?", [$auftrag_id, $charge_id]);
+    } else {
+        // Teilmenge: Restmenge bleibt als freie Charge im Lager (weiter zuteilbar), die Teilmenge wird als neue
+        // Kind-Charge mit gleicher Chargennummer und eigener auftrag_id angelegt.
+        q("UPDATE charge SET menge_verfuegbar=? WHERE id=?", [$verf - $nimm, $charge_id]);
+        q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,auftrag_id,pa_id,fremd_kunde_id,standort)
+           VALUES (?,?,?,?,?,?,?,?, 'frei', ?,?,?,?,?)",
+          [$c['charge_nr'] ?? null, $item, $nimm, $nimm, $c['einheit'] ?? null, $c['lieferant_id'] ?: null,
+           $c['mhd'] ?: null, $c['wareneingang'] ?: null, $c['notiz'] ?? null, $auftrag_id, $c['pa_id'] ?: null, null, $c['standort'] ?? 'lager1']);
+    }
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return ['ok'=>true, 'zugewiesen'=>$nimm, 'warnung'=>$warnung];
+}
+// Zuweisung einer Charge zum Auftrag wieder lösen – die Charge wird wieder freie, nicht gebundene Lagerware.
+function charge_auftrag_loesen(int $charge_id, int $auftrag_id): array {
+    $c = one("SELECT id, auftrag_id FROM charge WHERE id=?", [$charge_id]);
+    if (!$c || (int)($c['auftrag_id'] ?? 0) !== $auftrag_id) return ['ok'=>false, 'fehler'=>'Charge gehört nicht zu diesem Auftrag.'];
+    q("UPDATE charge SET auftrag_id=NULL WHERE id=?", [$charge_id]);
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return ['ok'=>true];
+}
+
 // Auftrags-Art: ist das ein Erstauftrag oder eine Nachbestellung? Basis: frühere, nicht stornierte
 // Aufträge. 'nach' = Produkt schon mal bestellt; 'neu_prod' = neues Produkt, Rezeptur aber bekannt;
 // 'neu_rez' = neue Rezeptur (noch nie produziert); 'none' = ohne Produkt/Rezeptur-Zuordnung.

@@ -118,3 +118,12 @@ Bei Pulver/Granulat (`form_groessen_einheit()` = 'g') zeigen die Kennzahl-Kachel
 
 ## G3 – Weiche Bulk-Reservierung (2026-10-28)
 `bulk_reservieren()` blockiert nicht mehr, wenn mehr reserviert wird als eine Quelle (Charge/Bestellung) „frei" hat – es wird nur **gewarnt** (`warnung` → Banner `&bulkwarn=`). Reservierungen sind damit weiche, über Aufträge umverteilbare Zuordnungen (auch gegen Mengen, die noch unterwegs sind); bulkify entscheidet (z. B. Kunde out-of-stock überbrücken). Storno/Umhängen über die bestehende Reservierungsliste am Auftrag.
+
+## Lagerware fest einem Auftrag zuweisen (Charge -> Auftrag) (2026-10-28)
+Reiter „Produktion", Panel **„Lagerware zuweisen"** (nur Admin, `#lagerzuweisen`). Bindet vorhandene Lagerware (fertige Bulkware = Bulk-Artikel der Rezeptur, Kategorie `fertig`) **hart** an den Auftrag – der Kunde bekommt genau diese Charge. Im Gegensatz zu „Reservieren" (weiche Reservierung, zählt nur gegen den Eigen-Rohstoffbedarf) setzt die Zuweisung `charge.auftrag_id`, wodurch die Charge als **Fertigware** zählt (`auftrag_fertigware_cached`) und bei Fremd-/Zukauf-Aufträgen **„wartet auf Material"** abgeräumt wird – ohne neue Bestellung, ohne Eigenproduktion.
+
+- **Teilmenge**: wird aus der Quell-Charge abgespalten – es entsteht eine Kind-Charge mit gleicher `charge_nr` und eigener `auftrag_id`; der freie Rest bleibt im Lager (`auftrag_id` NULL) und ist weiter zuteilbar.
+- **Mehrere Aufträge je Charge**: dadurch kann dieselbe physische Charge (gleiche `charge_nr`) auf mehrere Aufträge/Kunden verteilt werden – jeder Auftrag bekommt seine eigene Kind-Charge.
+- **Umkehrbar**: „Lösen" (`charge_auftrag_loesen`) hängt die Charge wieder ab → wird freie, nicht gebundene Lagerware.
+
+Funktionen in [../../core/schema.php](../../core/schema.php): `auftrag_lagerware_quellen()` (freie, noch nicht zugewiesene Chargen des Bulk-Artikels), `auftrag_lagerware_zugewiesen()` (bereits zugewiesene Fertigware-Chargen), `charge_auftrag_zuweisen()` (Zuweisen/Splitten), `charge_auftrag_loesen()`. Handler-Aktionen `charge_zuweisen` / `charge_loesen`. Taucht keine Quell-Charge auf, liegt die Ware unter einem anderen Artikel/Kategorie, in Quarantäne/gesperrt, oder ist schon einem Auftrag zugewiesen.
