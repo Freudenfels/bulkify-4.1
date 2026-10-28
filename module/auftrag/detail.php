@@ -610,6 +610,51 @@ $jvWarnung  = has_role('admin') && empty($a['kontingent_id']) && (string)$a['sta
   </form>
 </div>
 <?php endif; ?>
+<?php
+// ===== H0 (Teil 3): Schrittleiste – der Auftrag als zentrale Steuerseite. Sechs feste Schritte in fester
+// Reihenfolge mit Zustand (offen / läuft / erledigt), auf die vorhandenen Routen/Funktionen verlinkt (nichts
+// neu erfunden, nur zusammengeführt). Reine Übersicht + Sprung zur passenden Stelle (Reiter bzw. Einkauf).
+if (($a['status'] ?? '') !== 'storniert'):
+    $hasPA      = (bool)$pa;
+    $quelleOk   = $pa && !empty($pa['art_festgelegt_am']);                 // Eigen/Fremd/Lager entschieden
+    $freigabeOk = $pa && ($pa['status'] ?? '') !== 'vorbereitung';         // vorbereitung = noch nicht freigegeben
+    $matOk      = in_array(($ber['status'] ?? ''), ['bereit','laeuft','fertig'], true);  // Material gedeckt
+    $hatBest    = count($best) > 0;
+    $hatWE      = count($wareneingaenge) > 0;
+    $stat       = (string)($a['status'] ?? '');
+    $versendet  = $stat === 'versendet';
+    $inGang     = in_array($stat, ['in_produktion','erledigt'], true) || ($pa && in_array(($pa['status'] ?? ''), ['laufend','erledigt'], true));
+    $S = fn(bool $done, bool $active) => $done ? 'erledigt' : ($active ? 'laeuft' : 'offen');
+    $steps = [
+        ['n'=>1,'label'=>'Material prüfen',       'state'=>$S($matOk, $hasPA && !$matOk),                     'goto'=>'produktion'],
+        ['n'=>2,'label'=>'Quelle festlegen',      'state'=>$S($quelleOk || $freigabeOk, !($quelleOk || $freigabeOk)), 'goto'=>'produktion'],
+        ['n'=>3,'label'=>'Freigeben',             'state'=>$S($freigabeOk, $quelleOk && !$freigabeOk),        'goto'=>'produktion'],
+        ['n'=>4,'label'=>'Bestellen',             'state'=>$S($matOk, $freigabeOk && $hatBest && !$matOk),    'href'=>'?p=einkaufsliste'],
+        ['n'=>5,'label'=>'Wareneingang',          'state'=>$S($matOk && $hatWE, $freigabeOk && ($hatBest || $hatWE) && !$matOk), 'goto'=>'lager'],
+        ['n'=>6,'label'=>'Produktion & Versand',  'state'=>$S($versendet, $inGang && !$versendet),            'goto'=>'produktion'],
+    ];
+    // Markenfarben: erledigt = Grün, läuft = Lime (hervorgehoben), offen = ruhig.
+    $farbe = ['erledigt'=>['#1D9E75','#ffffff'], 'laeuft'=>['#C0F24E','#10210f'], 'offen'=>['var(--panel-2)','var(--muted)']];
+?>
+<div class="bx-panel" style="margin-bottom:16px;padding:14px 16px">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+    <span style="color:var(--muted);font-size:13px">Ablauf dieses Auftrags</span>
+    <?php if ($pa && ($pa['status'] ?? '') === 'vorbereitung'): ?><span><?= bx_badge('wartet auf Freigabe','warn') ?></span><?php endif; ?>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <?php foreach ($steps as $st): [$bg,$fg] = $farbe[$st['state']];
+      $kreis = '<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:' . ($st['state']==='erledigt'?'rgba(255,255,255,.25)':'rgba(0,0,0,.08)') . ';font-size:12px;font-weight:600">' . ($st['state']==='erledigt'?'&#10003;':(string)$st['n']) . '</span>';
+      $inner = $kreis . '<span>' . h($st['label']) . '</span>';
+      $style = 'display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:' . $bg . ';color:' . $fg . ';font-size:13px;text-decoration:none;border:1px solid var(--line)' . ($st['state']==='laeuft'?';box-shadow:0 0 0 2px rgba(192,242,78,.55)':'');
+      $titel = $st['label'] . ' – ' . ($st['state']==='erledigt'?'erledigt':($st['state']==='laeuft'?'läuft':'offen'));
+      if (!empty($st['href'])): ?>
+        <a href="<?= h($st['href']) ?>" style="<?= $style ?>" title="<?= h($titel) ?>"><?= $inner ?></a>
+      <?php else: ?>
+        <a href="#" data-goto="<?= h($st['goto']) ?>" style="<?= $style ?>" title="<?= h($titel) ?>"><?= $inner ?></a>
+      <?php endif; endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
 <div class="settabs" id="auftabs" style="margin-bottom:16px">
   <a href="#" class="on" data-tab="details">Details</a>
   <a href="#" data-tab="rezeptur">Rezeptur</a>
@@ -1479,6 +1524,8 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
     try { sessionStorage.setItem(KEY, name); } catch(e){}
   }
   tabs.forEach(function(t){ t.addEventListener('click', function(e){ e.preventDefault(); activate(t.getAttribute('data-tab')); }); });
+  // H0-Schrittleiste: ein Schritt mit data-goto öffnet den zugehörigen Reiter + scrollt nach oben.
+  document.querySelectorAll('[data-goto]').forEach(function(g){ g.addEventListener('click', function(e){ e.preventDefault(); activate(g.getAttribute('data-goto')); window.scrollTo({top:0,behavior:'smooth'}); }); });
   var start = 'details';
   try { var s = sessionStorage.getItem(KEY); if (s) start = s; } catch(e){}
   <?php if (isset($_GET['analyse'])): ?>start = 'dokumente';<?php endif; ?>
