@@ -7364,6 +7364,22 @@ function bestellung_aufteilen(int $bestellung_id, string $wer = ''): array {
             'msg'=>'In ' . count($neu) . ' Einzelbestellung(en) aufgeteilt: ' . implode(', ', $neu) . $hint . '. Original ' . (string)$b['nummer'] . ' storniert' . ($mail ? ', Lieferant informiert' : '') . '.'];
 }
 
+// B3: eine hochgeladene Rechnung an eine Bestellung hängen (dokument.objekt_typ='bestellung', typ='rechnung').
+// $field = Name des Datei-Feldes im Formular (z. B. 'on_rechnung'). Rückgabe: dokument-id oder 0.
+function einkauf_rechnung_anhaengen(int $bestellung_id, string $field): int {
+    if ($bestellung_id <= 0 || empty($_FILES[$field]['name']) || ($_FILES[$field]['error'] ?? 1) !== UPLOAD_ERR_OK) return 0;
+    if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+    $orig = (string)$_FILES[$field]['name'];
+    $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($orig, PATHINFO_EXTENSION)));
+    $fn   = 'bestellung_' . $bestellung_id . '_rechnung_' . bin2hex(random_bytes(6)) . ($ext ? '.' . $ext : '');
+    if (!move_uploaded_file($_FILES[$field]['tmp_name'], BX_UPLOADS . '/' . $fn)) return 0;
+    q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar) VALUES ('bestellung',?,?,?,?,?,0)",
+      [$bestellung_id, 'rechnung', 'Rechnung (Online-Einkauf)', $fn, $orig]);
+    $did = (int) insert_id();
+    if (function_exists('log_aktivitaet')) log_aktivitaet('bestellung', $bestellung_id, 'team', 'Rechnung zum Online-Einkauf hochgeladen: ' . mb_substr($orig, 0, 120), 'dokument', 'dokument', $did);
+    return $did;
+}
+
 function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int $lieferant, ?string $datum, array $freiIds = [], array $bulkMenge = []): int {
     $itemPositionen = array_values(array_filter($itemPositionen, fn($p) => (int)($p['item_id'] ?? 0) > 0 && (float)($p['menge'] ?? 0) > 0));
     $bulkProduktIds = array_values(array_filter(array_map('intval', $bulkProduktIds)));

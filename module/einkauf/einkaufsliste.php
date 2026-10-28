@@ -99,9 +99,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     $bulkIds = []; foreach (bedarf_bulk(false) as $b) $bulkIds[(int)$b['produkt_id']] = true;
     $freiIds = []; foreach (freibedarf_offen() as $f) $freiIds[(int)$f['id']] = true;
     $nachIds = []; foreach (meldebestand_bedarf() as $nb) $nachIds[(int)$nb['item_id']] = (float)$nb['zu_bestellen'];   // Meldebestand-Nachbestellung
-    // Rohstoffe/Verpackung/frei werden pro Lieferant gebündelt; JEDES Bulk-Produkt wird eine EIGENE Bestellung
-    // (ein Fremdfertiger nimmt jedes Produkt einzeln an/ab – nie zwei Produkte in einem Auftrag).
-    $groups = [];       // lieferant_id => ['pos'=>[{item_id,menge,auftrag_id}], 'frei'=>[fid]]
+    // B1: Lieferanten-Weg = JEDE Position eine EIGENE, einzelne Bestellung (keine Bündelung, auch nicht je
+    // Lieferant) – so kann der Lieferant jede Position einzeln annehmen/ablehnen und Teilmengen liefern.
+    // Bulk-Produkte sind ohnehin je Produkt ein eigener Beleg. Online-Weg = EINE reale Einkaufsquittung (ein
+    // Beleg, eine Rechnung) – darum dort weiter gesammelt.
+    $groups = [];       // NUR Online-Weg: alles in EINEM Beleg (sup=0): ['pos'=>[...], 'frei'=>[fid]]
+    $einzel = [];       // Lieferanten-Weg: je Position ein Beleg: ['sup'=>, 'pos'=>?[one], 'frei'=>?fid]
     $bulkUnits = [];    // Lieferanten-Weg: je Bulk-Produkt ein eigener Beleg: ['sup'=>, 'pid'=>, 'ov'=>]
     $onlineBulk = [];   // Online-Weg: Bulk bleibt im EINEN Beleg (eine reale Einkaufsquittung)
     $bulkMengeMap = [];  // produkt_id => angehobene Wunschmenge
@@ -127,15 +130,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         }
         if (strncmp($key, 'nach:', 5) === 0) {   // Meldebestand-Nachbestellung -> Lagerposition ohne Auftragsbezug
             $iid = (int)substr($key, 5);
-            if (isset($nachIds[$iid])) $groups[$sup]['pos'][] = ['item_id'=>$iid, 'menge'=>($ovMenge($key) ?? $nachIds[$iid]), 'auftrag_id'=>0];
+            if (!isset($nachIds[$iid])) continue;
+            $pos = ['item_id'=>$iid, 'menge'=>($ovMenge($key) ?? $nachIds[$iid]), 'auftrag_id'=>0];
+            if ($online) $groups[0]['pos'][] = $pos; else $einzel[] = ['sup'=>$sup, 'pos'=>$pos];
             continue;
         }
-        if (strncmp($key, 'frei:', 5) === 0) { $fid = (int)substr($key, 5); if (isset($freiIds[$fid])) $groups[$sup]['frei'][] = $fid; continue; }
+        if (strncmp($key, 'frei:', 5) === 0) {
+            $fid = (int)substr($key, 5); if (!isset($freiIds[$fid])) continue;
+            if ($online) $groups[0]['frei'][] = $fid; else $einzel[] = ['sup'=>$sup, 'frei'=>$fid];
+            continue;
+        }
         if (!isset($info[$key])) continue;
         $a = $info[$key];
         if (!empty($a['etikett']) && empty($a['etikett_ok'])) continue;   // Sperre: ohne Etikett-Design nicht bestellen
         $menge = $ovMenge($key) ?? (float)$a['zu_bestellen'];   // Einkauf darf die Menge anheben (z. B. 1000 -> 2000)
-        $groups[$sup]['pos'][] = ['item_id'=>(int)$a['item_id'], 'menge'=>$menge, 'auftrag_id'=>(int)($a['auftrag_id'] ?? 0)];
+        $pos = ['item_id'=>(int)$a['item_id'], 'menge'=>$menge, 'auftrag_id'=>(int)($a['auftrag_id'] ?? 0)];
+        if ($online) $groups[0]['pos'][] = $pos; else $einzel[] = ['sup'=>$sup, 'pos'=>$pos];
     }
     // Online gekauft: sofort „bestellt", mit Händler/Zahlart/Preis für die Abrechnung.
     $finalOnline = function(int $bid) use ($onHaendler, $onZahlart, $onPreis, $onWaehr) {
@@ -155,12 +165,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         // Eine reale Einkaufsquittung = EIN Beleg (Rohstoffe + ggf. Bulk zusammen).
         $g = $groups[0] ?? [];
         $bid = bestellung_erstellen($g['pos'] ?? [], $onlineBulk, null, $datum, $g['frei'] ?? [], $bulkMengeMap);
-        if ($bid) { $n++; $finalOnline($bid); }
+        if ($bid) { $n++; $finalOnline($bid); einkauf_rechnung_anhaengen($bid, 'on_rechnung'); }   // B3: Rechnung zum Beleg ablegen
     } else {
-        // Rohstoffe/Verpackung/frei: je Lieferant ein Beleg.
-        foreach ($groups as $sup => $g) {
-            if (empty($g['pos']) && empty($g['frei'])) continue;
-            $bid = bestellung_erstellen($g['pos'] ?? [], [], $sup ?: null, $datum, $g['frei'] ?? []);
+        // B1: je Position ein eigener Beleg (Rohstoff/Verpackung/frei/Nachbestellung).
+        foreach ($einzel as $e) {
+            $bid = isset($e['frei'])
+                ? bestellung_erstellen([], [], $e['sup'] ?: null, $datum, [(int)$e['frei']])
+                : bestellung_erstellen([$e['pos']], [], $e['sup'] ?: null, $datum, []);
             if (!$bid) continue;
             $n++; $finalLief($bid);
         }
@@ -257,7 +268,7 @@ $liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit =
 render_header('einkaufsliste', 'Bestellen');
 bx_head('Bestellen', 'Was bestellt werden sollte – auswählen und auf einem von zwei Wegen bestellen: „Über Lieferant (Portal)" (nur bei aktivem Account UND hinterlegtem Preis – geht in seinen Account, wartet auf Bestätigung) oder „Online bestellt" (du hast selbst online gekauft – mit Händler, Zahlungsart und Preis). Beides landet unter „Bestellt".',
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
-if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (mit Händler/Zahlart/Preis)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Produkt eine, Rohstoffe je Lieferant gebündelt)') . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – Lieferant ohne aktiven Account/Preis. Diese bitte über „Online bestellt" erfassen.' : '') . '</div>';
+if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (mit Händler/Zahlart/Preis)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Position eine eigene Bestellung)') . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – Lieferant ohne aktiven Account/Preis. Diese bitte über „Online bestellt" erfassen.' : '') . '</div>';
 if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">„Online bestellt": bitte Händler/Quelle <strong>und</strong> den gezahlten Preis angeben.</div>';
 if (isset($_GET['vorsorgportal'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Dieser Lieferant hat keinen aktiven Account oder keinen Preis – über das Portal nicht bestellbar. Bitte „Online bestellt" nutzen.</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
@@ -298,7 +309,7 @@ if ($ohneFestlegung): ?>
   </div>
 </details>
 <?php endif; ?>
-<form method="post" class="bx-form">
+<form method="post" class="bx-form" enctype="multipart/form-data">
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
     <h2 style="margin:0">Zu bestellen</h2>
@@ -417,11 +428,12 @@ if ($ohneFestlegung): ?>
       </div>
       <div class="bx-field" style="margin:0;max-width:150px"><label>Preis (gesamt)</label><input type="text" name="on_preis" inputmode="decimal" placeholder="z. B. 96,50"></div>
       <div class="bx-field" style="margin:0;max-width:90px"><label>Währung</label><input type="text" name="on_waehrung" value="EUR" maxlength="8"></div>
+      <div class="bx-field" style="margin:0;min-width:220px"><label>Rechnung (optional)</label><input type="file" name="on_rechnung" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic"></div>
       <button class="btn btn-primary" id="btnOnline" type="submit" name="modus" value="online" disabled>Online bestellt erfassen</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen oben setzen, Händler + Preis angeben. Legt EINE Bestellung ohne Lieferant an (Status „bestellt"); Händler, Zahlungsart und Preis werden für die spätere Abrechnung gespeichert.</p>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen oben setzen; die <strong>Menge je Zeile</strong> steht passend zur Warenart (Pulver in kg, Verpackung/Leerkapseln in Stk). Händler + Preis (gesamt) angeben, optional die <strong>Rechnung</strong> hochladen. Legt EINE Bestellung ohne Lieferant an (Status „bestellt"); Händler, Zahlungsart, Preis und Rechnung werden für die spätere Abrechnung gespeichert.</p>
   </details>
-  <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen setzen und einen Weg wählen. <strong>Über Lieferant (Portal)</strong> = je Lieferant eine Bestellung, geht in dessen Account (nur mit aktivem Account und Preis). <strong>Online bestellt</strong> = du hast selbst online gekauft. In beiden Fällen wandert die Position nach „Bestellt".</p>
+  <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen setzen und einen Weg wählen. <strong>Über Lieferant (Portal)</strong> = je Position eine eigene Bestellung, geht in den Account des gewählten Lieferanten (nur mit aktivem Account und Preis). So kann er jede Position einzeln annehmen/ablehnen. <strong>Online bestellt</strong> = du hast selbst online gekauft. In beiden Fällen wandert die Position nach „Bestellt".</p>
   <?php endif; ?>
 </div>
 </form>

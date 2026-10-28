@@ -236,10 +236,15 @@ if (!$neu) {
         $zl = bestellung_zahlarten();
         $za = $zl[(string)($b['online_zahlart'] ?? '')] ?? '';
         $pr = ($b['online_preis'] ?? null) !== null ? number_format((float)$b['online_preis'], 2, ',', '.') . ' ' . h((string)($b['online_waehrung'] ?: 'EUR')) : '–';
+        // B3: zur Bestellung abgelegte Rechnung(en) (dokument typ='rechnung').
+        $rechn = all("SELECT id, titel, datei_orig FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC", [(int)$id]);
+        $rechnHtml = '';
+        foreach ($rechn as $rd) $rechnHtml .= '<a href="?p=dokument&id=' . (int)$rd['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none;margin-right:12px">&#11015;&#65039; ' . h((string)($rd['datei_orig'] ?: $rd['titel'] ?: 'Rechnung')) . '</a>';
         echo '<div class="bx-panel"><h2 style="margin-top:0">Online-Einkauf</h2><div class="bx-cards">'
            . '<div class="bx-card"><div class="k">Händler / Quelle</div><div class="v">' . (((string)($b['online_haendler'] ?? '')) !== '' ? h((string)$b['online_haendler']) : '<span class="muted">–</span>') . '</div></div>'
            . '<div class="bx-card"><div class="k">Zahlungsart</div><div class="v">' . ($za !== '' ? h($za) : '<span class="muted">–</span>') . '</div></div>'
            . '<div class="bx-card"><div class="k">Preis (gesamt)</div><div class="v">' . $pr . '</div></div>'
+           . '<div class="bx-card"><div class="k">Rechnung</div><div class="v" style="font-size:14px">' . ($rechnHtml !== '' ? $rechnHtml : '<span class="muted">keine hochgeladen</span>') . '</div></div>'
            . '</div><p class="muted" style="font-size:12px;margin:8px 0 0">Selbst online gekauft – diese Angaben helfen der Buchhaltung beim Gegenrechnen von Einnahmen und Ausgaben.</p></div>';
     }
 
