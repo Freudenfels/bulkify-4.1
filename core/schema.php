@@ -5750,6 +5750,31 @@ function lieferant_anfrage_stellen(int $lieferant_id, ?int $item_id, string $bet
     return $id;
 }
 
+// E1: offene, UNBEANTWORTETE Preisanfragen eines Lieferanten bereinigen (Massenanfragen aufräumen).
+// Löscht NUR lieferant_anfrage-Zeilen ohne Angebot und nicht-abgeschlossenem Status – Rohstoffe/Items bleiben
+// unangetastet. Gezielt eingegrenzt (ein Lieferant, nur unbeantwortete). Rückgabe: Anzahl gelöschter Zeilen.
+function lieferant_anfragen_bereinigen(int $lieferant_id): int {
+    if ($lieferant_id <= 0) return 0;
+    $ids = array_map(fn($r) => (int)$r['id'], all(
+        "SELECT la.id FROM lieferant_anfrage la
+         LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=la.id
+         WHERE la.lieferant_id=? AND ag.id IS NULL AND la.status NOT IN ('beantwortet','geschlossen','angenommen')", [$lieferant_id]));
+    if (!$ids) return 0;
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    q("DELETE FROM lieferant_anfrage WHERE id IN ($in)", $ids);
+    log_aktivitaet('lieferant', $lieferant_id, 'team', count($ids) . ' offene (unbeantwortete) Preisanfragen bereinigt (Massenanfrage aufgeräumt).', 'anfrage', 'lieferant', $lieferant_id);
+    return count($ids);
+}
+// Lieferanten mit auffällig vielen offenen, unbeantworteten Anfragen (Kandidaten für die Bereinigung).
+function lieferanten_mit_massenanfragen(int $min = 20): array {
+    return all("SELECT la.lieferant_id, l.firma, COUNT(*) AS n
+                FROM lieferant_anfrage la
+                LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=la.id
+                LEFT JOIN lieferanten l ON l.id=la.lieferant_id
+                WHERE ag.id IS NULL AND la.status NOT IN ('beantwortet','geschlossen','angenommen')
+                GROUP BY la.lieferant_id, l.firma HAVING n >= ? ORDER BY n DESC", [max(1, $min)]);
+}
+
 // Angebot des Lieferanten speichern (einmal je Anfrage – erneutes Senden ueberschreibt).
 // $staffeln: Liste [menge_ab, preis]; leere Zeilen werden ignoriert.
 function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $preis, string $einheit,

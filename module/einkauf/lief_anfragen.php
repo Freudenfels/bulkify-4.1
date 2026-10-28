@@ -7,6 +7,12 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 
+// E1: offene (unbeantwortete) Massenanfragen eines Lieferanten bereinigen (nur Admin).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfragen_bereinigen' && has_role('admin')) {
+    $n = lieferant_anfragen_bereinigen((int)($_POST['lieferant_id'] ?? 0));
+    header('Location: ?p=lief_anfragen&bereinigt=' . $n); exit;
+}
+
 $q = trim((string)($_GET['q'] ?? ''));
 $f = in_array($_GET['f'] ?? 'alle', ['alle', 'offen', 'beantwortet'], true) ? $_GET['f'] : 'alle';
 // Typ-Filter: Rohstoffe vs. Fertigprodukte (aus lieferant_anfrage.art), plus „Alle".
@@ -60,6 +66,25 @@ $dat = fn($d) => $d ? fmt_zeit($d, 'd.m.Y') : '–';
 
 render_header('lief_anfragen', 'Lieferanten-Anfragen & Preise');
 bx_head('Lieferanten-Anfragen & Preise', 'Alle an Lieferanten gestellten Anfragen – mit dem abgegebenen Preis, inkl. Fremdfertigung zu (auch nicht freigegebenen) Rezepturen');
+if (isset($_GET['bereinigt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['bereinigt'] . ' offene (unbeantwortete) Preisanfragen bereinigt.</div>';
+// E1: Lieferanten mit auffällig vielen offenen, unbeantworteten Anfragen (Massenanfragen) – gezielt bereinigbar.
+if (has_role('admin')) {
+    $massen = lieferanten_mit_massenanfragen(20);
+    if ($massen) {
+        echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px;margin-bottom:12px">';
+        echo '<div style="font-weight:600;margin-bottom:6px">Massenanfragen aufräumen</div>';
+        echo '<p class="muted" style="font-size:13px;margin:0 0 10px">Diese Lieferanten haben sehr viele <strong>offene, unbeantwortete</strong> Preisanfragen (z. B. versehentlich der ganze Katalog). Bereinigen löscht nur diese offenen Anfragen – Rohstoffe, Angebote und beantwortete Anfragen bleiben.</p>';
+        foreach ($massen as $m) {
+            echo '<div class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:6px">'
+               . '<span style="flex:1 1 240px"><strong>' . h((string)($m['firma'] ?: ('#' . (int)$m['lieferant_id']))) . '</strong> · ' . (int)$m['n'] . ' offene Anfragen</span>'
+               . '<form method="post" style="margin:0" onsubmit="return confirm(\'' . (int)$m['n'] . ' offene (unbeantwortete) Preisanfragen dieses Lieferanten löschen? Rohstoffe und beantwortete Anfragen bleiben.\');">'
+               . '<input type="hidden" name="aktion" value="anfragen_bereinigen"><input type="hidden" name="lieferant_id" value="' . (int)$m['lieferant_id'] . '">'
+               . '<button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">' . (int)$m['n'] . ' offene bereinigen</button></form>'
+               . '</div>';
+        }
+        echo '</div>';
+    }
+}
 ?>
 <?php $typSuffix = ($typ !== 'alle' ? '&typ='.$typ : ''); ?>
 <div class="settabs" style="margin:0 0 10px">

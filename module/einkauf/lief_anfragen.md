@@ -24,3 +24,6 @@ Rein lesend – Angebote erfassen/annehmen weiterhin im Lieferant-/Rezeptur-Deta
 
 ## Zurückgezogene Anfragen
 Wird einem Lieferanten die **Rohstoff-Berechtigung** entzogen (Kategorie `rohstoff` abgewählt, s. `module/lieferant/detail.php`), setzt `lieferant_rohstoff_anfragen_zurueckziehen()` (`core/schema.php`) alle noch **offenen** Rohstoff-Anfragen dieses Lieferanten auf Status `zurueckgezogen` (kein Löschen – Historie bleibt). Hier: eigenes Badge **„zurückgezogen"**, und sie zählen/zeigen **nicht** mehr unter „Preis ausstehend".
+
+## E1 – Massenanfragen bereinigen (2026-10-28)
+Oben (nur Admin) ein Panel „Massenanfragen aufräumen": listet Lieferanten mit **≥ 20 offenen, unbeantworteten** Anfragen (`lieferanten_mit_massenanfragen()`), je Zeile ein Button „N offene bereinigen" (POST `aktion=anfragen_bereinigen`). Löscht über `lieferant_anfragen_bereinigen()` **nur** `lieferant_anfrage`-Zeilen ohne Angebot und mit offenem Status – Rohstoffe, Angebote und beantwortete Anfragen bleiben.

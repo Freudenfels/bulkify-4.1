@@ -77,3 +77,6 @@ Im Reiter **Konditionen** oben das Panel **Partner**. Statt eines eigenen Partne
 
 ## Rohstoff-Berechtigung entziehen (2026-10-24)
 Wird im Formular die Kategorie **Rohstoff** abgewählt (vorher gesetzt), ruft der Speicher-Handler nach dem UPDATE `lieferant_rohstoff_anfragen_zurueckziehen($id)` (`core/schema.php`): alle noch **offenen** Rohstoff-Anfragen dieses Lieferanten gehen auf Status `zurueckgezogen` (idempotent, kein hartes Löschen – Historie bleibt). Bereits beantwortete/geschlossene bleiben unberührt. Sichtbar als Badge in `?p=lief_anfragen`; im Lieferantenportal ausgeblendet.
+
+## E1 – Keine Massenanfragen mehr (2026-10-28)
+Der Reiter „Katalog" zeigt kein „Alles auf einmal anfragen" mehr; der `sammelanfrage`-Handler ist deaktiviert (nur Hinweis). Rohstoffe werden gezielt einzeln angefragt (Reiter „Preisanfragen", `aktion=anfrage`). Bestehende aufgeblähte Anfragen räumt man über `?p=lief_anfragen` (Admin-Panel „Massenanfragen aufräumen") auf.

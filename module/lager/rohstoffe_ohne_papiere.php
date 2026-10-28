@@ -59,13 +59,8 @@ if (isset($_GET['angefragt'])) echo '<div class="bx-panel badge-ok" style="paddi
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
     <h2 style="margin:0">Rohstoffe ohne Unterlagen</h2>
-    <?php if ($rows): ?>
-      <button type="button" class="btn btn-primary btn-sm"
-        onclick='bxAnfrageBulkOeffnen(<?= json_encode(array_map(fn($r) => (int)$r['id'], $rows)) ?>, <?= json_encode(count($rows) . ' Rohstoffe – bei welchen Lieferanten anfragen? (CoA/Spezifikation)') ?>)'>
-        Alle anfragen (<?= count($rows) ?>)</button>
-    <?php endif; ?>
   </div>
-  <?php if ($rows): ?><p class="muted" style="margin:6px 0 0;font-size:13px">„Alle anfragen" stellt für <strong>jeden</strong> gelisteten Rohstoff eine CoA/Spezifikations-Anfrage – an <strong>alle im Popup gewählten Lieferanten</strong> gleichzeitig.</p><?php endif; ?>
+  <?php if ($rows): ?><p class="muted" style="margin:6px 0 0;font-size:13px">CoA/Spezifikation wird <strong>gezielt je Rohstoff</strong> beim passenden Lieferanten angefragt (Button je Zeile). Das Sammel-Anfragen an alle Lieferanten gleichzeitig ist abgeschaltet, damit beim Lieferanten keine unbearbeitbare Liste entsteht.</p><?php endif; ?>
   <?php if (!$rows): ?>
     <div class="muted">Alles versorgt – zu jedem Rohstoff in angebotenen Rezepturen liegt mindestens ein Dokument vor.</div>
   <?php else: ?>

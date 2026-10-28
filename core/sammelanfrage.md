@@ -25,3 +25,6 @@ Reiter **Katalog** am Lieferanten (`module/lieferant/detail.php`), Kasten „All
 ## Grenzen
 - Verpackung und Verbrauchsmaterial sind nicht dabei: die hängen am Produkt, nicht an der Rezeptur.
 - Es geht kein Mailversand raus. Der Lieferant sieht die Anfragen in seinem Portal; wer mailen will, nutzt den Weg an der einzelnen Anfrage.
+
+## DEAKTIVIERT (E1, 2026-10-28)
+Die Massen-Sammelanfrage (`sammel_anfragen_stellen`) wird NICHT mehr aus der UI aufgerufen – sie hat ganze Kataloge (1000+ Positionen) auf einmal angefragt, was kein Lieferant bearbeiten kann. Der Handler in `module/lieferant/detail.php` führt nur noch zu einem Hinweis; die Buttons sind entfernt. Rohstoffe werden gezielt EINZELN angefragt (Reiter „Preisanfragen"). Die Funktionen bleiben bestehen, werden aber nicht mehr verdrahtet.
