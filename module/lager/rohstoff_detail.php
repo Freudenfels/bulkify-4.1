@@ -5,7 +5,9 @@ require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status-Badge
 
-$KAT  = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','fertig'=>'Fertigware','verkaufsfertig'=>'Verkaufsfertig','maschine'=>'Maschine'];
+// Labels aus der zentralen Quelle (Block K): fertig = Bulkware, verkaufsfertig = Fertigprodukt. Keys unverändert
+// (nur die für einen Warenlager-Artikel gültigen Kategorien; leerkapsel ist ein Rohstoff mit Form kapselhuelle).
+$KAT  = ['rohstoff'=>kategorie_label('rohstoff'),'verpackung'=>kategorie_label('verpackung'),'verbrauch'=>kategorie_label('verbrauch'),'fertig'=>kategorie_label('fertig'),'verkaufsfertig'=>kategorie_label('verkaufsfertig'),'maschine'=>kategorie_label('maschine')];
 $FORM = ['pulver'=>'Pulver','granulat'=>'Granulat','extrakt'=>'Extrakt','fluessig'=>'Flüssig','oel'=>'Öl','paste'=>'Paste','kristallin'=>'Kristallin','kapselhuelle'=>'Kapselhülle (leer)'];
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
