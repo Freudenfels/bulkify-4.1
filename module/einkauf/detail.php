@@ -228,6 +228,20 @@ if (isset($_GET['aufg']))      echo '<div class="bx-panel badge-ok" style="paddi
 <?php endif; ?>
 <?php
 if (!$neu) {
+    // B6: Status GROSS ganz oben, darunter Lieferant + Bestelldatum + zugesagter Termin.
+    $stufe = bestellung_stufe($b);
+    $liefName = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [(int)($b['lieferant_id'] ?? 0)]);
+    $stufeFarbe = ['ok'=>'var(--gruen,#1D9E75)','warn'=>'var(--warn,#8a5a12)','err'=>'#8f231b','info'=>'inherit',''=>'inherit'][$stufe['kind']] ?? 'inherit';
+    echo '<div class="bx-panel" style="padding:18px 20px">'
+       . '<div style="font-size:13px;color:var(--muted)">Bestellung ' . h((string)$b['nummer']) . '</div>'
+       . '<div style="font-size:24px;font-weight:700;margin:2px 0 6px;color:' . $stufeFarbe . '">' . h($stufe['label']) . '</div>'
+       . '<div class="muted" style="font-size:14px">Lieferant: <strong>' . ($liefName !== '' ? h($liefName) : (($b['bestellart'] ?? '') === 'online' ? 'Online-Einkauf (ohne Lieferant)' : '–')) . '</strong>'
+       . (!empty($b['bestelldatum']) ? ' · bestellt am ' . h(date('d.m.Y', strtotime((string)$b['bestelldatum']))) : '')
+       . (!empty($b['eta_geplant']) ? ' · zugesagter Termin ' . h(date('d.m.Y', strtotime((string)$b['eta_geplant']))) : '')
+       . (!empty($b['angekommen_am']) ? ' · angekommen ' . h(date('d.m.Y', strtotime((string)$b['angekommen_am']))) : '')
+       . '</div></div>';
+    // B6: Aktionen erst sammeln (Output-Buffer) und GANZ UNTEN ausgeben.
+    ob_start();
     echo '<div class="bx-panel"><div class="bx-row" style="justify-content:space-between;align-items:center">';
     echo '<div>Status: ' . (match($b['status']){'offen'=>bx_badge('offen','info'),'bestellt'=>bx_badge('bestellt','warn'),'geliefert'=>bx_badge('geliefert','ok'),default=>bx_badge(status_text($b['status']))}) . '</div><div class="bx-row">';
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" title="Diesen Entwurf verwerfen – der Bedarf erscheint wieder im Einkaufsbedarf">Zurück in den Einkaufsbedarf</button></form> ';
@@ -248,6 +262,44 @@ if (!$neu) {
     if (!in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']))
         echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese Bestellung stornieren?' . (bestellung_ist_portal($b) ? ' Der Lieferant wird informiert.' : '') . '\');"><input type="hidden" name="aktion" value="storno"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Bestellung stornieren">Stornieren</button></form>';
     echo '</div></div></div>';
+    $aktionenHtml = ob_get_clean();   // B6: unten ausgeben
+
+    // B6: Positionen-Überblick (bestellt / geliefert) mit Auftragsbezug – read-only, ganz oben.
+    $posUeb = all("SELECT bp.id, bp.menge, bp.einheit, bp.item_id, bp.auftrag_id,
+                          COALESCE(NULLIF(bp.bezeichnung,''), i.name, '–') AS pname, a.nummer AS auftrag_nr,
+                          (SELECT COALESCE(SUM(c.menge),0) FROM charge c WHERE c.bestellung_position_id=bp.id) AS geliefert
+                   FROM bestellung_position bp
+                   LEFT JOIN item i ON i.id=bp.item_id
+                   LEFT JOIN auftrag a ON a.id=bp.auftrag_id
+                   WHERE bp.bestellung_id=? ORDER BY bp.sort, bp.id", [(int)$id]);
+    if ($posUeb) {
+        // Bulk-Positionen desselben Produkts zu einer Zeile bündeln (bestellt + geliefert summieren).
+        $basis = fn(string $p) => trim(preg_replace('/\s*\(.*$/', '', preg_replace('/^Bulk:\s*/', '', $p)));
+        $zeilen = [];
+        foreach ($posUeb as $p) {
+            $istBulk = empty($p['item_id']) && strncmp((string)$p['pname'], 'Bulk', 4) === 0;
+            $name = $istBulk ? $basis((string)$p['pname']) : (string)$p['pname'];
+            $key = $istBulk ? 'b:' . mb_strtolower($name) : 'p:' . (int)$p['id'];
+            if (!isset($zeilen[$key])) $zeilen[$key] = ['name'=>$name, 'einheit'=>(string)$p['einheit'], 'bestellt'=>0.0, 'geliefert'=>0.0, 'auftraege'=>[]];
+            $zeilen[$key]['bestellt']  += (float)$p['menge'];
+            $zeilen[$key]['geliefert'] += (float)$p['geliefert'];
+            if (!empty($p['auftrag_nr'])) $zeilen[$key]['auftraege'][(string)$p['auftrag_nr']] = (int)$p['auftrag_id'];
+        }
+        $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+        echo '<div class="bx-panel"><h2 style="margin-top:0">Positionen</h2>';
+        echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Position</th><th>Für Auftrag</th><th class="bx-num">bestellt</th><th class="bx-num">geliefert</th></tr></thead><tbody>';
+        foreach ($zeilen as $z) {
+            $auf = '<span class="muted">Lager / allgemein</span>';
+            if ($z['auftraege']) { $parts = []; foreach ($z['auftraege'] as $nr => $aid) $parts[] = '<a href="?p=auftrag&id=' . (int)$aid . '">' . h((string)$nr) . '</a>'; $auf = implode(', ', $parts); }
+            $gel = (float)$z['geliefert'];
+            $gelHtml = $gel > 0.0001 ? $mz($gel) . ' ' . h($z['einheit']) : '<span class="muted">–</span>';
+            if ($gel + 0.0001 >= (float)$z['bestellt'] && (float)$z['bestellt'] > 0) $gelHtml = '<span class="bx-ok">' . $mz($gel) . ' ' . h($z['einheit']) . '</span>';
+            echo '<tr><td>' . h($z['name']) . '</td><td style="font-size:13px">' . $auf . '</td>'
+               . '<td class="bx-num">' . $mz($z['bestellt']) . ' ' . h($z['einheit']) . '</td>'
+               . '<td class="bx-num">' . $gelHtml . '</td></tr>';
+        }
+        echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Bestellte vs. bereits gelieferte Menge je Position (geliefert = eingebuchte Chargen). Bearbeiten unten im Formular.</p></div>';
+    }
 
     // Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Zahlart/Preis – fürs Gegenrechnen.
     if (($b['bestellart'] ?? '') === 'online') {
@@ -303,23 +355,7 @@ if (!$neu) {
         echo '<p class="muted" style="font-size:12px;margin:10px 0 0">Priorität und geplantes Produktionsdatum zeigen, wie dringend diese Bestellung ist. Zeile öffnet den Produktionsauftrag.</p>';
         echo '</div>';
     }
-    if ($bulkPositionen) {
-        // Je Produkt EINE Zeile: Auftrags-Zeilen „Bulk: X (AB-..)" und die alte separate Puffer-/Lager-Zeile
-        // „Bulk: X" desselben Produkts werden zur Gesamtmenge zusammengefasst (gilt auch für Altbestellungen).
-        // Die einzelnen Positionen bleiben in der DB erhalten (Auftragsbezug für den Wareneingang).
-        $bulkGrp = [];
-        foreach ($bulkPositionen as $bp) {
-            $name = trim(preg_replace('/\s*\(.*$/', '', preg_replace('/^Bulk:\s*/', '', (string)($bp['bezeichnung'] ?: 'Bulk'))));
-            if ($name === '') $name = 'Bulk';
-            $key = mb_strtolower($name);
-            if (!isset($bulkGrp[$key])) $bulkGrp[$key] = ['name'=>$name, 'menge'=>0.0, 'einheit'=>(string)$bp['einheit']];
-            $bulkGrp[$key]['menge'] += (float)$bp['menge'];
-        }
-        echo '<div class="bx-panel"><h2 style="margin-top:0">Bulk-Zukauf (Fremdproduktion)</h2>';
-        echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Position</th><th class="bx-num">Menge</th></tr></thead><tbody>';
-        foreach ($bulkGrp as $g) echo '<tr><td>' . h($g['name']) . '</td><td class="bx-num">' . rtrim(rtrim(number_format((float)$g['menge'],3,',','.'),'0'),',') . ' ' . h($g['einheit']) . '</td></tr>';
-        echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Zugekaufter Bulk (fertige Kapseln/Tabletten/Pulver) – Gesamtmenge je Produkt. Beim Wareneingang als Fertigware-Charge auf den Auftrag buchen.</p></div>';
-    }
+    // (Bulk-Positionen sind oben in der Positionen-Übersicht enthalten – inkl. bestellt/geliefert je Produkt.)
     // Etiketten dieser Bestellung: Druckdatei zum Herunterladen (für den Lieferanten/die Druckerei) + Maße + Produkt.
     $etikettPos = all("SELECT bp.auftrag_id, i.name FROM bestellung_position bp
                        JOIN item i ON i.id=bp.item_id
@@ -436,4 +472,13 @@ if (!$neu):
     </table></div>
   </div>
   <?php endif; endif; ?>
-<?php render_footer(); ?>
+<?php
+// B6: Aktionen GANZ UNTEN (oben nur der große Status-Kopf). Panel wurde oben in $aktionenHtml gepuffert.
+if (!$neu && isset($aktionenHtml)) {
+    echo '<h2 style="margin:18px 0 8px">Aktionen</h2>';
+    echo $aktionenHtml;
+    // Verlauf dieser Bestellung (Aktivitätslog).
+    $vb = function_exists('verlauf_fuer') ? verlauf_fuer('bestellung', (int)$id) : [];
+    if ($vb) { echo '<div class="bx-panel"><h2 style="margin-top:0">Verlauf</h2>'; bx_chat($vb, (string)$b['nummer']); echo '</div>'; }
+}
+render_footer(); ?>

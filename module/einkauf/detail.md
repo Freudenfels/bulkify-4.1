@@ -35,3 +35,11 @@ Unter dem Ablauf-Panel steht **Rückfragen** (`core/nachricht.php`, Bezug `beste
 
 ## Erinnern & Stornieren (B4, 2026-10-28)
 Im Status-/Aktionspanel: **Erinnern** (nur Portal-Lieferant, noch nicht bestätigt, Status nicht offen/geliefert/storniert) → `aktion=erinnern` → `bestellung_erinnerung_senden()` schickt die Erinnerungsmail (`mail_lieferant_erinnerung()`) und setzt `erinnert_am`; bei Überfälligkeit (≥3 Tage) ist der Button hervorgehoben und zeigt „T+N". **Stornieren** (solange nicht geliefert/angekommen) → `aktion=storno` → `bestellung_stornieren()` setzt Status `storniert` und informiert einen Portal-Lieferanten (Chat+Mail). Beides ist vom Mitarbeiter ausgelöst (kein automatischer Versand).
+
+## Seitenaufbau neu sortiert (B6, 2026-10-28)
+Die Bestelldetailseite ist von oben nach unten neu geordnet:
+1. **Status groß** als Kopf (`bestellung_stufe()`-Label, eingefärbt) mit **Lieferant**, Bestelldatum, zugesagtem Termin, Ankunft.
+2. **Positionen (bestellt / geliefert)** – read-only Überblick je Position bzw. je Bulk-Produkt: bestellte Menge vs. bereits **gelieferte** Menge (Summe der eingebuchten Chargen über `charge.bestellung_position_id`), mit **Auftragsbezug** (Links zum Auftrag). Ersetzt die alte separate „Bulk-Zukauf"-Tabelle.
+3. **Online-Einkauf** (falls `bestellart='online'`) / **Termine & Tracking** = Ablauf-Panel (`bestellung_ablauf_panel`) / **Rückfragen** / **Wofür wird bestellt** (Auftrag/Produkt/Kunde/Prio).
+4. Darunter das **Bearbeiten-Formular** (Lieferant, Notiz, Positionen editierbar) und die **Dokumente vom Lieferanten**.
+5. **Aktionen GANZ UNTEN**: der Aktions-/Status-Block (als bestellt markieren, Wareneingang buchen, Aufteilen, Erinnern, Stornieren, zurück in den Bedarf) wird oben per `ob_start()` gepuffert und erst am Seitenende unter „Aktionen" ausgegeben – plus der **Verlauf** (`verlauf_fuer('bestellung', id)`).
