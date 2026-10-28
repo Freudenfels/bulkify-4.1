@@ -28,6 +28,7 @@ function route_rollen_map(): array {
         'produktion_planung' => ['production'],   // Terminplanung – Admin (immer) + Produktionsleitung
         'maschinen'          => ['production'],   // Maschinenfuhrpark-Verwaltung (Admin immer + Produktion)
         'produktion_vorbereitung' => [],          // Vor-Produktion/Freigabe – nur Admin (Eigen/Fremd + Freigabe sind Backend-Entscheidung)
+        'easy_production'    => ['production'],    // Schnelle Produktionserfassung – Admin (immer) + Produktion
         'bedarf'             => ['production', 'labor', 'fulfillment', 'einkauf'],
         'einkaufsliste'      => ['einkauf'],
         'chargen'            => ['production', 'labor', 'fulfillment', 'einkauf'],

@@ -1,0 +1,25 @@
+# system/easy_production.php – Easy Production (schnelle Produktionserfassung)
+
+Route `?p=easy_production` (Menü: Produktion · Easy Production; Rollen admin + production). Gehört zu **Teil 3 Block J**: die Eingabemaske, mit der eine real erfolgte Produktion in wenigen Feldern erfasst wird. Digitalisiert das Papier-Produktionsbuch (auch Altaufträge) und erfasst laufende Produktion schnell – beides erzeugt endlich korrekten Bestand.
+
+## Ablauf
+1. **Maske** (Felder): Auftrag (Suchdropdown `rscombo`), Produzierte Menge (Stk, Tausenderpunkt), Produktionsdatum (Default heute), Chargennummer (aus Auftrag vorbelegt, überschreibbar), MHD, Gefäß (Glas/Tüte/…), Mitarbeiter (Suchdropdown über `benutzer`), Rückstellmuster (Stk, Default 0), „Schon geliefert" (Haken), Besonderheiten (Freitext).
+2. **Vorschau** (Pflicht, `aktion=vorschau`): zeigt vor dem Buchen, **was** gebucht wird – nichts wird dabei an Bestand geschrieben. Materialabgang aus der Stückliste (`auftrag_bedarf()` des PA, skaliert auf die produzierte Menge) mit benötigter/verfügbarer Menge und „reicht/Fehlbestand"; Fertigware-Zugang (Kundenmenge = produziert − Rückstellmuster; Rückstellmuster separat). **Alle Material-Mengen sind editierbar** (Abweichungen aus dem Buch). Zeigt außerdem bereits am Auftrag gebuchte Menge + Anzahl früherer Erfassungen (Doppelbuchungs-Hinweis).
+3. **Buchen** (`aktion=buchen`) in dieser Reihenfolge:
+   - **Material raus:** je Position FEFO-Charge-Reduktion (`charge.menge_verfuegbar` ↓, Status `leer` bei 0) + `produktion_verbrauch`-Eintrag. Reicht der Bestand nicht, wird nur die verfügbare Menge gebucht (warnen, nicht blockieren – Altbestand unvollständig).
+   - **Fertig rein:** Kundenmenge als `charge` auf dem Lagerartikel `produkt_lageritem()` (Kategorie **`verkaufsfertig`** = Fertigprodukte) mit der eingetragenen Chargennummer + MHD. Rückstellmuster als eigene, **gesperrte** Charge (`charge_nr`+`-RM`, Status `gesperrt`) – nicht im verkäuflichen Bestand.
+   - **(falls „schon geliefert"):** die eben gebuchte Kundencharge wird sofort auf 0/`leer` gesetzt und ein **Lieferschein** (`beleg typ='lieferschein'`, Nr. `LS-…`) angelegt – kein Phantom-Fertigbestand.
+   - **Datensatz** in `easy_production` (Auftrag, Mengen, Datum, Charge, MHD, Gefäß, Mitarbeiter, geliefert, Besonderheiten, menschenlesbares Buchungsprotokoll, wer/wann) + `log_aktivitaet` am Auftrag + `bedarf_bump()`.
+
+## Anbindung an die Aufträge (Teil 3 H6/D)
+- Immer an einen Auftrag gebunden. Die Fertigware-Charge trägt `pa_id`, daher zeigt der Auftrag die produzierte Menge/Charge automatisch (`auftrag_mengenfortschritt()`/`produktion_gebucht()`).
+- Für Altaufträge: dieselbe Maske, Haken „schon geliefert". Für laufende Produktion: schnelle Direkterfassung. „Zuletzt erfasst"-Liste unten; in der Vorschau wird die schon gebuchte Menge angezeigt (Doppelbuchungs-Schutz als Hinweis, kein harter Stopp).
+
+## Verwendete Bestandsfunktionen / Abweichungen
+- **Material-Abgang:** FEFO-Charge-Reduktion + `produktion_verbrauch` (gleiches Muster wie `produktion_kapseln_entnehmen`/`produktion_fertigware_entnehmen`).
+- **Fertigware-Zugang:** direkter `charge`-Insert nach dem Muster von `produktion_teilmenge_einbuchen()`. **Nicht** `einlager_buchen()` selbst, weil das keine explizite Menge/Charge/MHD und keine getrennte Rückstellmuster-Buchung erlaubt (es bucht immer den PA-Rest in eine Auto-Charge).
+- **Abgang bei „schon geliefert":** Charge-Reduktion + Lieferschein-`beleg` (wie `auftrag_versenden_menge()`). `erp_charge_entnehmen` existiert nur in der **Lager-Sub-App** (`lager/core/erp.php`), nicht dashboard-seitig – daher der dashboard-eigene Lieferschein-Weg.
+- **Block K (Fertigprodukte-Kategorie):** nicht nötig – Fertigware geht bereits in die eigene Kategorie `verkaufsfertig` (abgefüllt/etikettiert), getrennt von `fertig` (Bulk). Die Kategorie-Umbenennung aus Block K ist davon unabhängig.
+
+## Mengen-Interpretation
+„Produzierte Menge" = gesamte hergestellte Einheiten; **Kundenmenge = produziert − Rückstellmuster**; Material skaliert über die Stückliste mit der produzierten Menge (die Rückstellmuster sind darin enthalten). Da die Vorschau-Mengen editierbar sind, lässt sich jede Abweichung vor dem Buchen korrigieren.
