@@ -826,12 +826,10 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
   <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
     <span class="muted" style="font-size:13px">Der Auftrag ist gesetzt. Änderungen laufen über:</span>
     <?php if ($rezeptur): ?><a class="btn btn-ghost btn-sm" href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>">Rezeptur bearbeiten</a><?php endif; ?>
-    <?php if ($paVorbereitung): ?>
-      <a class="btn btn-primary btn-sm" href="?p=produktion_vorbereitung&id=<?= (int)$pa['id'] ?>">Vor-Produktion öffnen (Flaschen &amp; Verpackung)</a>
-    <?php else: ?>
-      <a class="btn btn-ghost btn-sm" href="?p=produktion_vorbereitung">Vor-Produktion</a>
+    <?php if ($pa): // Pro-PA-Seite für Flaschen/Verpackung/Kapselgröße bleibt; die Freigabe läuft jetzt direkt am Auftrag (Reiter Produktion). ?>
+      <a class="btn <?= $paVorbereitung ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="?p=produktion_vorbereitung&id=<?= (int)$pa['id'] ?>">Flaschen, Verpackung &amp; Kapselgröße setzen</a>
     <?php endif; ?>
-    <span class="muted" style="font-size:12px">Menge und Preis sind fixiert; Flaschen, Verpackung &amp; Kapselgröße setzt du in der Vor-Produktion.</span>
+    <span class="muted" style="font-size:12px">Menge und Preis sind fixiert; die Freigabe läuft über den Reiter „Produktion", Flaschen/Verpackung/Kapselgröße hier.</span>
   </div>
   <?php endif; ?>
 </div>
