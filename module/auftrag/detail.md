@@ -115,3 +115,6 @@ Der Reiter „Rezeptur" (effektive Rezeptur aus `COALESCE(auftrag.rezeptur_id, P
 
 ## Pulver: Kacheln nach Gewicht (2026-10-27)
 Bei Pulver/Granulat (`form_groessen_einheit()` = 'g') zeigen die Kennzahl-Kacheln **„Füllmenge je Packung" (g)** und **„Gesamt-Füllmenge" (kg)** statt „Stück je Packung"/„Gesamtstückzahl" (`$istFuellG`). Grund: Bei diesen Formen ist `auftrag.stueck`/`produkt.einheiten_pro_packung` die Füllmenge in Gramm je Packung, keine Portionszahl. Der Materialbedarf wird entsprechend nach Gewicht gerechnet – Details in [../produktion/detail.md](../produktion/detail.md) Abschnitt „Pulver nach Gewicht".
+
+## G3 – Weiche Bulk-Reservierung (2026-10-28)
+`bulk_reservieren()` blockiert nicht mehr, wenn mehr reserviert wird als eine Quelle (Charge/Bestellung) „frei" hat – es wird nur **gewarnt** (`warnung` → Banner `&bulkwarn=`). Reservierungen sind damit weiche, über Aufträge umverteilbare Zuordnungen (auch gegen Mengen, die noch unterwegs sind); bulkify entscheidet (z. B. Kunde out-of-stock überbrücken). Storno/Umhängen über die bestehende Reservierungsliste am Auftrag.

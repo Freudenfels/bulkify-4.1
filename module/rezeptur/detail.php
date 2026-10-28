@@ -31,6 +31,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: ?p=rezeptur_detail&id=' . $id); exit;
     }
+    // G5: interne Stammrezeptur setzen/lösen – inhaltlich gleiche Kundenrezepturen teilen EINEN Bulk-Bestand.
+    if (!$neu && $aktion === 'stamm_setzen' && has_role('admin')) {
+        $stamm = (int)($_POST['stamm_rezeptur_id'] ?? 0);
+        if ($stamm === (int)$id) $stamm = 0;                 // kein Selbstbezug
+        // Kette vermeiden: zeigt die Ziel-Stammrezeptur selbst auf eine andere, nimm deren Stamm (eine Ebene).
+        if ($stamm > 0) { $w = (int) scalar("SELECT stamm_rezeptur_id FROM rezeptur WHERE id=?", [$stamm]); if ($w > 0 && $w !== (int)$id) $stamm = $w; }
+        q("UPDATE rezeptur SET stamm_rezeptur_id=? WHERE id=?", [$stamm ?: null, (int)$id]);
+        header('Location: ?p=rezeptur_detail&id=' . $id . '&stammok=1#stamm'); exit;
+    }
     // Überarbeiten starten: eine eingefrorene/freigegebene Rezeptur temporär zum Bearbeiten entsperren
     // (nur Admin). Der gespeicherte Status bleibt unverändert – der Kunde sieht währenddessen nichts.
     if (!$neu && $aktion === 'ueberarbeiten_start') {
@@ -833,5 +842,34 @@ function recalc(){
   recalc();
 })();
 </script>
+<?php
+// G5: interne Stammrezeptur (gemeinsamer Bulk-Bestand) – nur Admin, nur bei bestehender Rezeptur.
+if (!$neu && function_exists('has_role') && has_role('admin')):
+    $rid = (int)$id;
+    $stammId = (int) scalar("SELECT stamm_rezeptur_id FROM rezeptur WHERE id=?", [$rid]);
+    $stammRow = $stammId ? one("SELECT id, nummer, name FROM rezeptur WHERE id=?", [$stammId]) : null;
+    // Kandidaten: andere Rezepturen, die NICHT selbst an eine Stammrezeptur hängen (sonst Ketten).
+    $kand = all("SELECT id, nummer, name FROM rezeptur WHERE id<>? AND (stamm_rezeptur_id IS NULL OR stamm_rezeptur_id=0) ORDER BY name", [$rid]);
+    // Wie viele Rezepturen teilen aktuell diesen Bulk (diese Rezeptur ist Stamm von …)?
+    $teilenN = (int) scalar("SELECT COUNT(*) FROM rezeptur WHERE stamm_rezeptur_id=?", [$rid]);
+?>
+<div class="bx-panel" id="stamm" style="scroll-margin-top:80px">
+  <h2 style="margin-top:0">Interne Stammrezeptur <span class="muted" style="font-weight:400;font-size:13px">– gemeinsamer Bulk-Bestand</span></h2>
+  <?php if (isset($_GET['stammok'])): ?><div class="badge-ok" style="padding:8px 12px;border-radius:8px;margin-bottom:10px;display:inline-block">Gespeichert.</div><?php endif; ?>
+  <p class="muted" style="margin-top:0;font-size:13px">Inhaltlich gleiche Kundenrezepturen (z. B. „Shilajit ohne Carrier, Kapsel X") können auf <strong>eine interne Stammrezeptur</strong> zeigen. Alle verknüpften ziehen dann aus <strong>demselben Bulk-Bestand</strong> (`rezeptur_bulkitem` löst über die Stammrezeptur auf). Vor dem Verknüpfen prüfen, dass die Rezepturen wirklich denselben Bulk ergeben.</p>
+  <?php if ($teilenN > 0): ?><div class="muted" style="font-size:13px;margin-bottom:8px"><strong><?= $teilenN ?></strong> andere Rezeptur(en) nutzen diese hier als Stammrezeptur.</div><?php endif; ?>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="stamm_setzen">
+    <div class="bx-field" style="margin:0;min-width:320px"><label>Diese Rezeptur teilt den Bulk mit</label>
+      <select name="stamm_rezeptur_id" class="rscombo">
+        <option value="0">– eigenständig (kein gemeinsamer Bulk) –</option>
+        <?php foreach ($kand as $c): ?><option value="<?= (int)$c['id'] ?>" <?= $stammId === (int)$c['id'] ? 'selected' : '' ?>><?= h(trim(((string)$c['nummer'] !== '' ? $c['nummer'] . ' · ' : '') . $c['name'])) ?></option><?php endforeach; ?>
+      </select>
+    </div>
+    <button class="btn btn-primary btn-sm" type="submit">Speichern</button>
+  </form>
+  <?php if ($stammRow): ?><p class="muted" style="font-size:12px;margin:8px 0 0">Aktuell verknüpft mit <a href="?p=rezeptur_detail&id=<?= (int)$stammRow['id'] ?>"><?= h(trim(((string)$stammRow['nummer'] !== '' ? $stammRow['nummer'] . ' · ' : '') . $stammRow['name'])) ?></a> – Bulk-Bestand wird geteilt.</p><?php endif; ?>
+</div>
+<?php endif; ?>
 <?php
 render_footer();

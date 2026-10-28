@@ -97,3 +97,6 @@ Der orange Rahmen (+ ⚠-Badge) am Rohstoff-Feld kommt aus `rezeptur_zutat_match
 - **ohne_papiere** – „keine Unterlagen (CoA/Spec)": dem Rohstoff ist **kein einziges Dokument** hinterlegt (`dokument`, objekt_typ='item').
 
 Bewusst **nicht** mehr an fehlenden Wirkstoffdaten (`item_wirkstoff`) festgemacht – nicht jedes Produkt hat einen Wirkstoff (Botanicals). Die Markierung zeigt, wo uns **Unterlagen fehlen** (nie ein CoA/Spec hochgeladen), konsistent mit `module/lager/rohstoffe_ohne_papiere.php`.
+
+## G5 – Interne Stammrezeptur (gemeinsamer Bulk-Bestand) (2026-10-28)
+Panel „Interne Stammrezeptur" (Admin): eine Kundenrezeptur kann auf eine andere Rezeptur als **Stammrezeptur** zeigen (`rezeptur.stamm_rezeptur_id`). `rezeptur_bulkitem()` löst über `rezeptur_stamm_id()` auf die Stammrezeptur auf – alle verknüpften Rezepturen teilen damit **einen** Bulk-Artikel (Kategorie 'fertig') und somit denselben Bestand, ohne Doppelanlage. Einstufig (eine Stammebene), kein Selbstbezug. Baut auf der bestehenden Bulk-Logik auf (rezeptur_bulkitem / Bulk-Reservierung), nichts doppelt.

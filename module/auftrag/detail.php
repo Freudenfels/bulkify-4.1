@@ -363,7 +363,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     [$qTyp, $qId] = array_pad(explode(':', (string)($_POST['quelle'] ?? ''), 2), 2, '');
     $menge = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['menge'] ?? '0'));
     $r = bulk_reservieren($id, (string)$qTyp, (int)$qId, $menge);
-    header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&bulkres=1' : '&expressfehler=' . urlencode($r['fehler'] ?? 'Reservierung nicht möglich.'))); exit;
+    header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok'])
+        ? '&bulkres=1' . (!empty($r['warnung']) ? '&bulkwarn=' . rawurlencode((string)$r['warnung']) : '')
+        : '&expressfehler=' . urlencode($r['fehler'] ?? 'Reservierung nicht möglich.'))); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'bulk_res_storno') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id); exit; }
@@ -972,6 +974,7 @@ if (auftrag_braucht_etikett($id)):
         $bulkOffen = max(0, (int)$gesamtStk - (int)round($bulkResSumme)); ?>
   <h3 id="bulkreserve" style="margin:18px 0 6px;font-size:14px;font-weight:600;scroll-margin-top:80px">Reservieren <span class="muted" style="font-weight:normal">· aus bereits bestellter/vorhandener Bulkware</span></h3>
   <?php if (isset($_GET['bulkres'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Reservierung aktualisiert.</div><?php endif; ?>
+  <?php if (isset($_GET['bulkwarn'])): ?><div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:10px 14px;margin-bottom:10px"><?= h((string)$_GET['bulkwarn']) ?></div><?php endif; ?>
   <?php if ($bulkRes): ?>
   <div class="bx-tablewrap" style="margin-bottom:10px"><table class="bx-table">
     <thead><tr><th>Quelle</th><th class="bx-num">reserviert</th><th>Status</th><th></th></tr></thead>

@@ -415,6 +415,9 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('rezeptur', 'ablehnung_grund', "TEXT NULL");   // Kunde lehnt Vorschlag ab (Pflicht-Grund), Team überarbeitet
     ensure_column('rezeptur', 'kapselgroesse_id', "INT NULL");   // gewählte Kapselgröße (nur Kapsel-Form) → vererbt ins Produkt + Packungsrechnung
+    // G5: interne Stammrezeptur – inhaltlich gleiche Kundenrezepturen zeigen auf dieselbe Rezeptur und teilen so
+    // EINEN Bulk-Bestand (rezeptur_bulkitem löst über die Stammrezeptur auf). NULL = eigenständig.
+    ensure_column('rezeptur', 'stamm_rezeptur_id', "INT NULL");
     // Form-spezifische Eigenschaft NEBEN der Kapselgröße: Füll-/Stückgewicht je Einzeleinheit (Gummi/Stick = g,
     // Pulver = g pro Bag, Flüssig/Gel/Öl = ml) und die Tablettenform (nur Tablette). Statt Kapselgröße bei Nicht-Kapsel.
     ensure_column('rezeptur', 'einheit_fuellmenge', "DECIMAL(12,3) NULL");   // g (fest) bzw. ml (flüssig) je Einzeleinheit, je nach Form
@@ -6515,8 +6518,16 @@ function rezeptur_leerkapsel_id(int $rezeptur_id): ?int {
 }
 
 // Bulk-Lagerartikel (Kategorie 'fertig') zu einer Rezeptur – finden oder anlegen. Hier landet die Bulk-Fertigware.
+// G5: effektive (Stamm-)Rezeptur – ist eine interne Stammrezeptur gesetzt, zählt diese (gemeinsamer Bulk-Bestand).
+// Einstufig aufgelöst (eine Stammebene), mit Schutz gegen Selbstbezug.
+function rezeptur_stamm_id(int $rezeptur_id): int {
+    if ($rezeptur_id <= 0) return 0;
+    $stamm = (int) scalar("SELECT stamm_rezeptur_id FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    return ($stamm > 0 && $stamm !== $rezeptur_id) ? $stamm : $rezeptur_id;
+}
 function rezeptur_bulkitem(int $rezeptur_id): ?int {
     if ($rezeptur_id <= 0) return null;
+    $rezeptur_id = rezeptur_stamm_id($rezeptur_id);   // G5: gemeinsamer Bulk-Artikel über die Stammrezeptur
     $id = scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' LIMIT 1", [$rezeptur_id]);
     if ($id) return (int)$id;
     $rz = one("SELECT name, darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]);
@@ -6580,18 +6591,21 @@ function bulk_reservieren(int $auftrag_id, string $quelle, int $quelle_id, float
     $item = auftrag_bulk_item($auftrag_id);
     if (!$item) return ['ok'=>false, 'fehler'=>'Kein Bulk-Artikel zum Produkt gefunden (Rezeptur fehlt?).'];
     $nz = fn($x)=>rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',');
-    $bpId = null; $chId = null;
+    $bpId = null; $chId = null; $warnung = '';
+    // G3 (2026-10-28): Reservierungen sind WEICHE Zuordnungen. Mehr reservieren, als eine Quelle „frei" hat,
+    // wird NICHT mehr blockiert, sondern nur gewarnt (bulkify entscheidet, z. B. Kunde out-of-stock überbrücken,
+    // Lieferung ist unterwegs). Die Quelle muss aber zum Bulk-Artikel passen.
     if ($quelle === 'bestellung') {
         $bp = one("SELECT bp.id, bp.menge, bp.item_id FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.id=? AND b.status<>'storniert'", [$quelle_id]);
         if (!$bp || (int)$bp['item_id'] !== $item) return ['ok'=>false, 'fehler'=>'Bestellposition passt nicht zum Bulk-Artikel dieses Auftrags.'];
         $frei = (float)$bp['menge'] - bestellposition_reserviert($quelle_id);
-        if ($menge > $frei + 1e-6) return ['ok'=>false, 'fehler'=>'Nur noch ' . $nz($frei) . ' aus dieser Bestellung frei.'];
+        if ($menge > $frei + 1e-6) $warnung = 'Achtung: ' . $nz($menge) . ' reserviert, aus dieser Bestellung waren nur ' . $nz($frei) . ' frei – die Quelle ist damit überbelegt (ggf. andere Aufträge unterdeckt). Lieferung unterwegs kann die Lücke decken.';
         $bpId = $quelle_id;
     } elseif ($quelle === 'charge') {
         $c = one("SELECT id, menge_verfuegbar, item_id FROM charge WHERE id=?", [$quelle_id]);
         if (!$c || (int)$c['item_id'] !== $item) return ['ok'=>false, 'fehler'=>'Charge passt nicht zum Bulk-Artikel dieses Auftrags.'];
         $frei = (float)$c['menge_verfuegbar'] - charge_bulk_reserviert($quelle_id);
-        if ($menge > $frei + 1e-6) return ['ok'=>false, 'fehler'=>'Nur noch ' . $nz($frei) . ' auf dieser Charge frei.'];
+        if ($menge > $frei + 1e-6) $warnung = 'Achtung: ' . $nz($menge) . ' reserviert, auf dieser Charge waren nur ' . $nz($frei) . ' frei – die Charge ist damit überbelegt (ggf. andere Aufträge unterdeckt).';
         $chId = $quelle_id;
     } else {
         return ['ok'=>false, 'fehler'=>'Unbekannte Quelle.'];
@@ -6600,7 +6614,7 @@ function bulk_reservieren(int $auftrag_id, string $quelle, int $quelle_id, float
     q("INSERT INTO reservierung (pa_id, auftrag_id, item_id, menge, status, bestellung_position_id, charge_id)
        VALUES (?,?,?,?, 'aktiv', ?, ?)", [$paId, $auftrag_id, $item, $menge, $bpId, $chId]);
     if (function_exists('bedarf_bump')) bedarf_bump();
-    return ['ok'=>true, 'id'=>insert_id()];
+    return ['ok'=>true, 'id'=>insert_id(), 'warnung'=>$warnung];
 }
 // Aktive Bulk-Reservierungen eines Auftrags (für die Anzeige) – mit Quellen-Infos.
 function auftrag_bulk_reservierungen(int $auftrag_id): array {
