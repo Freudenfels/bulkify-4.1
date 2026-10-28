@@ -65,6 +65,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($aktion === 'freigeben' && $paId) {
+        $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
+        // C3: Aufteilung auf Quellen (Packungen) – aus Lager / Fremdzukauf / Eigenproduktion.
+        $pkg = fn($k) => ($v = preg_replace('/\D+/', '', (string)($_POST[$k] ?? ''))) !== '' ? (int)$v : 0;
+        $sLager = $pkg('split_lager'); $sFremd = $pkg('split_fremd'); $sEigen = $pkg('split_eigen');
+        $splitAktiv = ($sLager + $sFremd) > 0;   // nur wenn wirklich aufgeteilt wird
+        if ($splitAktiv) {
+            // Produktionsart: gibt es einen Eigen-Anteil -> eigen (Mix, Rohstoffbedarf = Eigen-Anteil, Rest reserviert);
+            // sonst reiner Zukauf -> fremd.
+            $art = $sEigen > 0 ? 'eigen' : 'fremd';
+            $r = produktionsauftrag_freigeben($paId, $art, null, $wer);
+            if (empty($r['ok'])) { header('Location: ' . $back . '&fehler=' . urlencode($r['fehler'] ?? 'Freigabe fehlgeschlagen.')); exit; }
+            $sp = pa_split_anwenden($paId, $sLager, $sFremd, $sEigen);
+            $msg = 'Aufgeteilt: Lager ' . $sp['lager_res_pkg'] . '/' . $sLager . ' reserviert, Fremd ' . $sp['fremd_res_pkg'] . '/' . $sFremd . ' reserviert, Eigen ' . $sEigen . ' Pkg.';
+            $offen = (int)$sp['lager_offen_pkg'] + (int)$sp['fremd_offen_pkg'];
+            header('Location: ?p=produktion_vorbereitung&frei=1&split=' . rawurlencode($msg) . ($offen ? '&splitoffen=' . $offen : '')); exit;
+        }
         $art = ($_POST['produktionsart'] ?? 'fremd') === 'eigen' ? 'eigen' : 'fremd';
         $mp  = preg_replace('/\D+/', '', (string)($_POST['menge_produktion'] ?? ''));   // Tausenderpunkte entfernen
         $mp  = $mp !== '' ? (int)$mp : null;
@@ -75,7 +91,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stkFG   = $paRowFG ? max(0, (int) produktion_stueck_je_packung($paRowFG)) : 0;
             if ($stkFG > 0) $mp = $mp * $stkFG;
         }
-        $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
         $r = produktionsauftrag_freigeben($paId, $art, $mp, $wer);
         header('Location: ' . (!empty($r['ok']) ? '?p=produktion_vorbereitung&frei=1' : $back . '&fehler=' . urlencode($r['fehler'] ?? 'Freigabe fehlgeschlagen.'))); exit;
     }
@@ -357,6 +372,20 @@ if ($pa):
         <span id="ueb" class="muted" style="font-size:11px;color:#8a6d00"></span>
         <div style="flex:1"></div>
         <button class="btn btn-primary" type="submit">Zur Produktion freigeben</button>
+        <!-- C3: optionale Aufteilung auf drei Quellen (Packungen). Nur aktiv, wenn Lager/Fremd > 0. -->
+        <details style="flex-basis:100%;margin-top:6px" <?= ((int)($pa['menge_lager'] ?? 0) + (int)($pa['menge_fremd'] ?? 0)) > 0 ? 'open' : '' ?>>
+          <summary style="cursor:pointer;font-size:13px" class="muted">Auf Quellen aufteilen (aus Lager / Fremd-Zukauf / Eigenproduktion)</summary>
+          <div class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">
+            <label style="display:flex;flex-direction:column;gap:3px;font-size:12px"><span class="muted">Aus Lager (Pkg)</span>
+              <input type="text" inputmode="numeric" name="split_lager" class="splitfeld" value="<?= (int)($pa['menge_lager'] ?? 0) ?: '' ?>" placeholder="0" style="max-width:120px"></label>
+            <label style="display:flex;flex-direction:column;gap:3px;font-size:12px"><span class="muted">Fremd-Zukauf (Pkg)</span>
+              <input type="text" inputmode="numeric" name="split_fremd" class="splitfeld" value="<?= (int)($pa['menge_fremd'] ?? 0) ?: '' ?>" placeholder="0" style="max-width:120px"></label>
+            <label style="display:flex;flex-direction:column;gap:3px;font-size:12px"><span class="muted">Eigenproduktion (Pkg)</span>
+              <input type="text" inputmode="numeric" name="split_eigen" class="splitfeld" value="<?= (int)($pa['menge_eigen'] ?? 0) ?: '' ?>" placeholder="<?= (int)$pa['menge'] ?>" style="max-width:120px"></label>
+            <span id="splitsum" class="muted" style="font-size:12px"></span>
+          </div>
+          <p class="muted" style="font-size:12px;margin:8px 0 0">Summe der drei Mengen sollte der Auftragsmenge (<?= number_format((int)$pa['menge'],0,',','.') ?> Pkg) entsprechen. <strong>Lager</strong> wird sofort aus vorhandenen Chargen reserviert (FEFO), <strong>Fremd</strong> aus bereits bestellter Bulkware – fehlt welche, bitte den Rest über den Einkauf als Bulk bestellen. <strong>Eigen</strong> wird selbst produziert. Leer lassen = keine Aufteilung (nur die Produktionsart oben gilt).</p>
+        </details>
       </form>
       <p class="muted" style="font-size:12px;margin:10px 0 0">Erst mit „Zur Produktion freigeben" wird der Auftrag im Werk startbar und der Einkauf darf dafür bestellen (harte Weiche). Du kannst immer freigeben – offene Punkte oben sind dann nur ein Hinweis (die Produktion wartet ggf. auf Material).</p>
     </div>
@@ -365,6 +394,18 @@ if ($pa):
     (function(){
       function fmt(el){ var d=(el.value||'').replace(/\D/g,''); el.value = d ? d.replace(/\B(?=(\d{3})+(?!\d))/g,'.') : ''; }
       document.querySelectorAll('input[data-tausender]').forEach(function(el){ fmt(el); el.addEventListener('blur', function(){ fmt(el); }); });
+    })();
+    // C3: Split-Summe gegen die Auftragsmenge prüfen (nur Hinweis).
+    (function(){
+      var ziel = <?= (int)$pa['menge'] ?>, felder = document.querySelectorAll('.splitfeld'), out = document.getElementById('splitsum');
+      if (!felder.length || !out) return;
+      function upd(){
+        var s = 0; felder.forEach(function(f){ s += parseInt((f.value||'').replace(/\D/g,''))||0; });
+        if (s === 0) { out.textContent = ''; return; }
+        out.textContent = 'Summe ' + s.toLocaleString('de-DE') + ' / ' + ziel.toLocaleString('de-DE') + ' Pkg' + (s === ziel ? ' ✓' : (s > ziel ? ' (zu viel)' : ' (fehlt ' + (ziel - s).toLocaleString('de-DE') + ')'));
+        out.style.color = s === ziel ? 'var(--gruen,#1D9E75)' : '#8a6d00';
+      }
+      felder.forEach(function(f){ f.addEventListener('input', upd); }); upd();
     })();
     </script>
     <?php render_footer(); return; ?>
@@ -385,7 +426,9 @@ if ($q !== '') {
 render_header('produktion_vorbereitung', 'Vor-Produktion');
 bx_head('Vor-Produktion / Freigabe', count($rows) . ' Auftrag(e) in Vorbereitung' . ($q !== '' ? ' (gefiltert)' : '') . ' – offene Aufträge erscheinen automatisch; zum Bearbeiten anklicken.',
         bx_btn('Zu den Produktionsaufträgen', '?p=produktion', 'ghost'));
-if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag zur Produktion freigegeben – jetzt im Produktionsmodul startbar.</div>';
+if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag zur Produktion freigegeben – jetzt im Produktionsmodul startbar.'
+    . (isset($_GET['split']) ? ' ' . h((string)$_GET['split']) : '') . '</div>';
+if (isset($_GET['splitoffen'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">' . (int)$_GET['splitoffen'] . ' Pkg aus dem Lager-/Fremd-Anteil konnten (noch) nicht reserviert werden – es ist nicht genug vorhandene/bestellte Bulkware da. Bitte den Rest über den Einkauf als Bulk-Zukauf bestellen oder später am Auftrag reservieren.</div>';
 if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['geholt'] . ' Auftrag(e) in die Vor-Produktion geholt.</div>';
 ?>
 <form method="get" class="bx-row" style="gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">

@@ -787,6 +787,10 @@ function init_schema(): void {
     // der Überschuss wird als Bestand auf den Rezeptur-Bulk gebucht und beim nächsten Auftrag gleicher Rezeptur verrechnet.
     ensure_column('produktionsauftrag', 'menge_produktion', "INT NULL");
     ensure_column('produktionsauftrag', 'mhd', "DATE NULL");                       // selbst festgelegtes MHD der Fertigware (gilt beim Einbuchen der Charge)
+    // C3: geplante Aufteilung des Auftrags (Packungen) auf drei Quellen – aus Lager / Fremdzukauf / Eigenproduktion.
+    ensure_column('produktionsauftrag', 'menge_lager', "INT NULL");
+    ensure_column('produktionsauftrag', 'menge_fremd', "INT NULL");
+    ensure_column('produktionsauftrag', 'menge_eigen', "INT NULL");
 
     // produktion_schritt: die Stationen/Gates eines Produktionsauftrags, der Reihe nach abzuarbeiten.
     $pdo->exec("CREATE TABLE IF NOT EXISTS produktion_schritt (
@@ -6567,6 +6571,48 @@ function bulk_reservierung_storno(int $res_id, int $auftrag_id): bool {
 // Mix-Produktion: Wie viele Einheiten (Stück Bulk) sind für diesen Auftrag als fertige Bulkware RESERVIERT
 // (aus einer Bulk-Bestellung/Charge, s. bulk_reservieren)? Dieser Teil wird NICHT selbst produziert, deshalb
 // zählt er beim Eigen-Rohstoff-/Leerkapsel-Bedarf nicht mit. Verpackung/Etikett brauchen trotzdem die volle Menge.
+// C3: Auftrag auf drei Quellen aufteilen (Mengen in PACKUNGEN). Speichert die Aufteilung am PA, reserviert den
+// Lager-Anteil automatisch aus freien Chargen (FEFO) und den Fremd-Anteil aus bereits offenen Bulk-Bestellungen
+// (soweit vorhanden). Reservierter Bulk wird vom Eigen-Rohstoffbedarf abgezogen (auftrag_bulk_reserviert_stueck).
+// Rückgabe: je Anteil reserviert/offen in Stück + Packungen. Legt KEINE neue Lieferantenbestellung an – der
+// offene Fremd-Rest wird über den Einkauf (Bulk-Zukauf) bestellt; nichts wird doppelt gebaut.
+function pa_split_anwenden(int $pa_id, int $lagerPkg, int $fremdPkg, int $eigenPkg): array {
+    $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['ok'=>false, 'fehler'=>'Produktionsauftrag nicht gefunden.'];
+    $aid = (int)($pa['auftrag_id'] ?? 0);
+    $lagerPkg = max(0, $lagerPkg); $fremdPkg = max(0, $fremdPkg); $eigenPkg = max(0, $eigenPkg);
+    q("UPDATE produktionsauftrag SET menge_lager=?, menge_fremd=?, menge_eigen=? WHERE id=?",
+      [$lagerPkg ?: null, $fremdPkg ?: null, $eigenPkg ?: null, $pa_id]);
+    $out = ['ok'=>true, 'lager_res_pkg'=>0, 'lager_offen_pkg'=>$lagerPkg, 'fremd_res_pkg'=>0, 'fremd_offen_pkg'=>$fremdPkg];
+    if ($aid <= 0) return $out;
+    $stk = max(1, (int) produktion_stueck_je_packung($pa));
+    $q = bulk_quellen_fuer_auftrag($aid);
+    if (empty($q['item'])) return $out;   // kein Bulk-Artikel (Rezeptur fehlt) -> nur Aufteilung gemerkt
+    // Lager-Anteil aus freien Chargen (FEFO) reservieren.
+    $restStk = $lagerPkg * $stk;
+    foreach ($q['chargen'] as $c) {
+        if ($restStk <= 0.0001) break;
+        $nimm = min($restStk, (float)$c['frei']);
+        if ($nimm <= 0.0001) continue;
+        $r = bulk_reservieren($aid, 'charge', (int)$c['id'], $nimm);
+        if (!empty($r['ok'])) $restStk -= $nimm;
+    }
+    $out['lager_res_pkg']   = (int) floor(($lagerPkg * $stk - $restStk) / $stk);
+    $out['lager_offen_pkg'] = max(0, $lagerPkg - $out['lager_res_pkg']);
+    // Fremd-Anteil aus bereits offenen Bulk-Bestellungen reservieren (soweit vorhanden/unterwegs).
+    $restStk = $fremdPkg * $stk;
+    foreach ($q['bestellungen'] as $bp) {
+        if ($restStk <= 0.0001) break;
+        $nimm = min($restStk, (float)$bp['frei']);
+        if ($nimm <= 0.0001) continue;
+        $r = bulk_reservieren($aid, 'bestellung', (int)$bp['bp_id'], $nimm);
+        if (!empty($r['ok'])) $restStk -= $nimm;
+    }
+    $out['fremd_res_pkg']   = (int) floor(($fremdPkg * $stk - $restStk) / $stk);
+    $out['fremd_offen_pkg'] = max(0, $fremdPkg - $out['fremd_res_pkg']);
+    return $out;
+}
+
 function auftrag_bulk_reserviert_stueck(int $auftrag_id): float {
     if ($auftrag_id <= 0) return 0.0;
     $item = auftrag_bulk_item($auftrag_id);
