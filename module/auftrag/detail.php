@@ -1058,15 +1058,22 @@ if (auftrag_braucht_etikett($id)):
     </tbody>
   </table></div>
   <?php endif; ?>
-  <?php if ($lwQ['chargen']): ?>
+  <?php if ($lwQ['chargen'] || $lwQ['weitere']): ?>
   <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
     <input type="hidden" name="aktion" value="charge_zuweisen">
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Freie Lager-Charge
-      <select name="charge_id" class="rscombo" style="min-width:320px" required>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Produkt / Charge aus dem Lager
+      <select name="charge_id" class="rscombo" style="min-width:380px" required>
         <option value="">– wählen –</option>
-        <?php foreach ($lwQ['chargen'] as $cq): ?>
+        <?php if ($lwQ['chargen']): ?><optgroup label="Passend zur Rezeptur (Bulk)">
+          <?php foreach ($lwQ['chargen'] as $cq): ?>
           <option value="<?= (int)$cq['id'] ?>">Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $nzB($cq['menge_verfuegbar']) ?> <?= h((string)($cq['einheit'] ?: 'Stk')) ?></option>
-        <?php endforeach; ?>
+          <?php endforeach; ?>
+        </optgroup><?php endif; ?>
+        <?php if ($lwQ['weitere']): ?><optgroup label="Andere Fertigware im Lager (Bulk)">
+          <?php foreach ($lwQ['weitere'] as $cq): ?>
+          <option value="<?= (int)$cq['id'] ?>"><?= h((string)$cq['item_name']) ?><?= $cq['artikelnummer'] ? ' (' . h((string)$cq['artikelnummer']) . ')' : '' ?> · Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $nzB($cq['menge_verfuegbar']) ?> <?= h((string)($cq['einheit'] ?: 'Stk')) ?></option>
+          <?php endforeach; ?>
+        </optgroup><?php endif; ?>
       </select>
     </label>
     <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Menge (Stück)
@@ -1074,9 +1081,9 @@ if (auftrag_braucht_etikett($id)):
     </label>
     <button class="btn btn-primary btn-sm" type="submit" data-busy="Weise zu…">Zuweisen</button>
   </form>
-  <div class="muted" style="font-size:12px;margin-top:6px">Bindet vorhandene Lagerware (fertige Bulkware des gleichen Produkts) <strong>fest</strong> an diesen Auftrag – der Kunde bekommt genau diese Charge. Teilmengen werden abgespalten, der freie Rest bleibt im Lager und kann <strong>weiteren Aufträgen</strong> zugeteilt werden. Räumt „wartet auf Material" ab (ohne neue Bestellung, ohne Eigenproduktion). Benötigt: <strong><?= number_format((int)$gesamtStk,0,',','.') ?></strong> Stück<?= $lwSumme>0 ? ', bereits zugewiesen ' . number_format((int)round($lwSumme),0,',','.') : '' ?>.</div>
+  <div class="muted" style="font-size:12px;margin-top:6px">Bindet vorhandene Lagerware (fertige Bulkware) <strong>fest</strong> an diesen Auftrag – der Kunde bekommt genau diese Charge. Oben die zur Rezeptur passende Bulkware, darunter <strong>jede andere Fertigware im Lager</strong> (bei abweichendem Artikel kommt eine Warnung – du entscheidest). Teilmengen werden abgespalten, der freie Rest bleibt im Lager und kann <strong>weiteren Aufträgen</strong> zugeteilt werden. Räumt „wartet auf Material" ab (ohne neue Bestellung, ohne Eigenproduktion). Benötigt: <strong><?= number_format((int)$gesamtStk,0,',','.') ?></strong> Stück<?= $lwSumme>0 ? ', bereits zugewiesen ' . number_format((int)round($lwSumme),0,',','.') : '' ?>.</div>
   <?php else: ?>
-  <div class="muted" style="font-size:12px">Keine freie Lager-Charge des Bulk-Artikels dieser Rezeptur vorhanden. Damit Lagerware hier auftaucht, muss sie als <strong>Fertigware (Bulk-Artikel der Rezeptur)</strong>, Status <strong>frei</strong> (nicht Quarantäne/gesperrt) und <strong>noch keinem Auftrag zugewiesen</strong> im Lager stehen. Liegen die Kapseln unter einem anderen Artikel/Kategorie, zuerst dort korrigieren bzw. per Wareneingang als Bulk der Rezeptur einbuchen.</div>
+  <div class="muted" style="font-size:12px">Keine freie Fertigware-(Bulk-)Charge im Lager vorhanden (Status <strong>frei</strong>, nicht Quarantäne/gesperrt, noch keinem Auftrag zugewiesen). Liegt die Ware unter „Verkaufsfertig" oder in Quarantäne, zuerst dort freigeben bzw. als Fertigware einbuchen.</div>
   <?php endif; ?>
   <?php endif; /* Lagerware zuweisen (Admin) */ ?>
 

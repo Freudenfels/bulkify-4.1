@@ -6699,14 +6699,23 @@ function auftrag_bulk_reserviert_stueck(int $auftrag_id): float {
 // mit EIGENER auftrag_id abgespalten (gleiche Chargennummer -> Rückverfolgung bleibt). Der freie Rest der Charge
 // bleibt im Lager und ist weiter für andere Aufträge zuteilbar. Umkehrbar via charge_auftrag_loesen.
 
-// Freie Lager-Chargen des Bulk-Artikels, die NOCH KEINEM Auftrag zugewiesen sind (Quelle für die Zuweisung).
+// Freie Lager-Chargen für die Zuweisung: zuerst die zur Rezeptur passende Bulkware (exakter Bulk-Artikel),
+// dann ALLE anderen freien Fertigware-(Bulk-)Chargen im Lager – der Admin kann bewusst eine andere wählen
+// (z. B. wenn die Ware unter einem anderen Artikel/einer anderen Rezeptur gebucht ist). Je noch keinem Auftrag.
 function auftrag_lagerware_quellen(int $auftrag_id): array {
     $item = auftrag_bulk_item($auftrag_id);
-    if (!$item) return ['item'=>0, 'chargen'=>[]];
-    $ch = all("SELECT id, charge_nr, menge_verfuegbar, mhd, einheit FROM charge
-               WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL AND auftrag_id IS NULL
-               ORDER BY COALESCE(mhd,'9999-12-31'), id", [$item]);
-    return ['item'=>$item, 'chargen'=>$ch];
+    $exakt = [];
+    if ($item) {
+        $exakt = all("SELECT id, charge_nr, menge_verfuegbar, mhd, einheit FROM charge
+                      WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL AND auftrag_id IS NULL
+                      ORDER BY COALESCE(mhd,'9999-12-31'), id", [$item]);
+    }
+    $weitere = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, c.einheit, i.name AS item_name, i.artikelnummer
+                    FROM charge c JOIN item i ON i.id=c.item_id
+                    WHERE i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0
+                      AND c.fremd_kunde_id IS NULL AND c.auftrag_id IS NULL AND c.item_id<>?
+                    ORDER BY i.name, COALESCE(c.mhd,'9999-12-31'), c.id", [$item ?: 0]);
+    return ['item'=>$item, 'chargen'=>$exakt, 'weitere'=>$weitere];
 }
 // Chargen, die diesem Auftrag fest zugewiesen sind (Fertigware) – für Anzeige + „lösen".
 function auftrag_lagerware_zugewiesen(int $auftrag_id): array {
@@ -6715,23 +6724,26 @@ function auftrag_lagerware_zugewiesen(int $auftrag_id): array {
                 WHERE c.auftrag_id=? AND i.kategorie='fertig'
                 ORDER BY c.id DESC", [$auftrag_id]);
 }
-// Teilmenge (oder ganze Charge) einer freien Lager-Charge dem Auftrag zuweisen.
+// Teilmenge (oder ganze Charge) einer freien Lager-Charge dem Auftrag zuweisen. Es kann JEDE freie
+// Fertigware-(Bulk-)Charge gewählt werden – stimmt der Artikel nicht mit dem Bulk-Artikel der Rezeptur
+// überein, wird nur gewarnt (Admin-Entscheidung), nicht blockiert.
 function charge_auftrag_zuweisen(int $charge_id, int $auftrag_id, float $menge): array {
     if ($menge <= 0) return ['ok'=>false, 'fehler'=>'Bitte eine Menge größer 0 angeben.'];
-    $item = auftrag_bulk_item($auftrag_id);
-    if (!$item) return ['ok'=>false, 'fehler'=>'Kein Bulk-Artikel zum Produkt gefunden (Rezeptur fehlt?).'];
-    $c = one("SELECT * FROM charge WHERE id=?", [$charge_id]);
+    $c = one("SELECT c.*, i.kategorie, i.name AS item_name FROM charge c JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
     if (!$c) return ['ok'=>false, 'fehler'=>'Charge nicht gefunden.'];
-    if ((int)$c['item_id'] !== $item) return ['ok'=>false, 'fehler'=>'Diese Charge gehört zu einem anderen Artikel als dem Bulk-Artikel dieses Auftrags.'];
+    if (($c['kategorie'] ?? '') !== 'fertig') return ['ok'=>false, 'fehler'=>'Nur Fertigware-(Bulk-)Chargen können einem Auftrag zugewiesen werden.'];
     if (($c['status'] ?? '') !== 'frei') return ['ok'=>false, 'fehler'=>'Nur freie Chargen (nicht Quarantäne/gesperrt) können zugewiesen werden.'];
     if (!empty($c['fremd_kunde_id'])) return ['ok'=>false, 'fehler'=>'Diese Charge ist Fremdlager-Ware eines Kunden und kann nicht zugewiesen werden.'];
     if (!empty($c['auftrag_id']) && (int)$c['auftrag_id'] !== $auftrag_id) return ['ok'=>false, 'fehler'=>'Diese Charge ist bereits einem anderen Auftrag zugewiesen.'];
     $verf = (float)$c['menge_verfuegbar'];
     if ($verf <= 0.0001) return ['ok'=>false, 'fehler'=>'Charge hat keinen verfügbaren Bestand mehr.'];
+    $item = (int)$c['item_id'];
+    $nf   = fn($x)=>number_format((float)$x, 0, ',', '.');
+    $warnung = '';
+    $bulk = auftrag_bulk_item($auftrag_id);
+    if ($bulk && $item !== $bulk) $warnung = 'Hinweis: Charge gehört zu Artikel „' . (string)$c['item_name'] . '" – nicht zum Bulk-Artikel dieser Rezeptur. Bewusst zugewiesen.';
     $nimm = min($menge, $verf);
-    $warnung = $menge > $verf + 1e-6
-        ? 'Hinweis: angefordert waren ' . number_format($menge, 0, ',', '.') . ' Stück, verfügbar auf der Charge nur ' . number_format($verf, 0, ',', '.') . ' – es wurden ' . number_format($nimm, 0, ',', '.') . ' zugewiesen.'
-        : '';
+    if ($menge > $verf + 1e-6) $warnung = trim($warnung . ' Angefordert ' . $nf($menge) . ', verfügbar nur ' . $nf($verf) . ' – ' . $nf($nimm) . ' zugewiesen.');
     if ($nimm >= $verf - 1e-6 && empty($c['auftrag_id'])) {
         // Komplette (Rest-)Charge geht an diesen Auftrag -> kein Split nötig.
         q("UPDATE charge SET auftrag_id=? WHERE id=?", [$auftrag_id, $charge_id]);
