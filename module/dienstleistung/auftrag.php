@@ -27,6 +27,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         dl_auftrag_schritt_setzen($id, (int)($_POST['schritt_id'] ?? 0));
         header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1'); exit;
     }
+    // F3: einzelnen Schritt abhaken (toggle) – flexibler als „Stand setzen".
+    if ($aktion === 'schritt_toggle') {
+        dl_schritt_toggle($id, (int)($_POST['schritt_id'] ?? 0));
+        header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1#schritte'); exit;
+    }
+    // F3/F4: Schritt hinzufügen (nachträglich) mit optionalen internen Kosten je Stück.
+    if ($aktion === 'schritt_add') {
+        $kosten = trim((string)($_POST['kosten'] ?? '')) !== '' ? (float) str_replace(',', '.', str_replace('.', '', (string)$_POST['kosten'])) : null;
+        dl_schritt_add($id, (string)($_POST['name'] ?? ''), $kosten, (string)(current_user()['name'] ?? ''));
+        header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1#schritte'); exit;
+    }
+    // F3/F4: Schritt umbenennen + interne Kosten bearbeiten.
+    if ($aktion === 'schritt_edit') {
+        $kosten = trim((string)($_POST['kosten'] ?? '')) !== '' ? (float) str_replace(',', '.', str_replace('.', '', (string)$_POST['kosten'])) : null;
+        dl_schritt_edit((int)($_POST['schritt_id'] ?? 0), $id, (string)($_POST['name'] ?? ''), $kosten);
+        header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1#schritte'); exit;
+    }
+    // F3: Schritt entfernen.
+    if ($aktion === 'schritt_remove') {
+        dl_schritt_remove((int)($_POST['schritt_id'] ?? 0), $id);
+        header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1#schritte'); exit;
+    }
     if ($aktion === 'schritte_sync') {         // Schritte (neu) aus dem Service-Katalog übernehmen
         $n = dl_auftrag_schritte_resync($id);
         header('Location: ?p=dl_auftrag&id=' . $id . ($n > 0 ? '&syncok=' . $n : '&syncleer=1')); exit;
@@ -91,26 +113,36 @@ if (isset($_GET['syncleer']))  echo '<div class="bx-panel" style="border-color:#
   <?php else: ?><div class="muted">Keine Positionen am zugehörigen Angebot.</div><?php endif; ?>
 </div>
 
-<div class="bx-panel">
-  <h2 style="margin-top:0">Fortschritt</h2>
-  <?php if ($track): ?>
-    <?php
-      // Aktueller Schritt = letzter erledigter; nächster = erster offener.
-      $erl = array_values(array_filter($track, fn($s) => (int)$s['erledigt'] === 1));
-      $aktIdx = $erl ? (int)end($erl)['sort'] : -1;
-    ?>
-    <div class="bx-row" style="gap:8px;flex-wrap:wrap;margin-bottom:6px">
+<div class="bx-panel" id="schritte">
+  <h2 style="margin-top:0">Arbeitsschritte</h2>
+  <?php if ($track): $nf4 = fn($x) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ','); ?>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th style="width:40px"></th><th>Schritt</th><th class="bx-num" style="width:150px">Interne Kosten/Stk <?= bx_hint('Nur intern – keine Kundenberechnung. Für spätere Kalkulation.') ?></th><th style="width:150px"></th></tr></thead>
+      <tbody>
       <?php foreach ($track as $s): $done = (int)$s['erledigt'] === 1; ?>
-        <form method="post" style="margin:0">
-          <input type="hidden" name="aktion" value="schritt">
-          <input type="hidden" name="schritt_id" value="<?= (int)$s['id'] ?>">
-          <button class="btn btn-sm <?= $done ? 'btn-primary' : 'btn-ghost' ?>" type="submit" title="Diesen Schritt als aktuellen Stand setzen (alle davor gelten als erledigt)">
-            <?= $done ? '✓ ' : '' ?><?= h((string)$s['name']) ?>
-          </button>
-        </form>
+        <tr>
+          <td><form method="post" style="margin:0"><input type="hidden" name="aktion" value="schritt_toggle"><input type="hidden" name="schritt_id" value="<?= (int)$s['id'] ?>"><button class="btn btn-sm <?= $done ? 'btn-primary' : 'btn-ghost' ?>" type="submit" title="<?= $done ? 'Haken entfernen' : 'Als erledigt abhaken' ?>"><?= $done ? '✓' : '○' ?></button></form></td>
+          <td>
+            <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0">
+              <input type="hidden" name="aktion" value="schritt_edit"><input type="hidden" name="schritt_id" value="<?= (int)$s['id'] ?>">
+              <input type="text" name="name" value="<?= h((string)$s['name']) ?>" style="flex:1;min-width:160px" maxlength="120">
+              <input type="text" name="kosten" value="<?= h($nf4($s['interne_kosten_stk'] ?? null)) ?>" placeholder="–" style="width:90px;text-align:right" inputmode="decimal" title="Interne Kosten je Stück">
+              <button class="btn btn-ghost btn-sm" type="submit" title="Umbenennen / Kosten speichern">speichern</button>
+            </form>
+          </td>
+          <td class="bx-num muted" style="font-size:12px"><?= $done && !empty($s['erledigt_at']) ? h(fmt_zeit((string)$s['erledigt_at'], 'd.m.Y')) : '' ?></td>
+          <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Schritt entfernen?');"><input type="hidden" name="aktion" value="schritt_remove"><input type="hidden" name="schritt_id" value="<?= (int)$s['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">entfernen</button></form></td>
+        </tr>
       <?php endforeach; ?>
-    </div>
-    <p class="muted" style="font-size:12px;margin:0">Ein Klick setzt den aktuellen Stand – alle Schritte bis dorthin gelten als erledigt. Der Kunde sieht diesen Fortschritt im Portal.</p>
+      </tbody>
+    </table></div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Schritte einzeln abhaken, umbenennen, interne Kosten/Stk eintragen oder entfernen – auch nachträglich bei laufendem Auftrag (im Verlauf vermerkt). Der Kunde sieht den Fortschritt im Portal; eine Schrittänderung braucht keine erneute Kundenbestätigung (individueller Festpreis).</p>
+    <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:10px 0 0;flex-wrap:wrap">
+      <input type="hidden" name="aktion" value="schritt_add">
+      <div class="bx-field" style="margin:0;min-width:220px"><label>Schritt hinzufügen</label><input type="text" name="name" placeholder="z. B. Etikett aufbringen" maxlength="120"></div>
+      <div class="bx-field" style="margin:0;max-width:130px"><label>Interne Kosten/Stk</label><input type="text" name="kosten" inputmode="decimal" placeholder="optional"></div>
+      <button class="btn btn-ghost btn-sm" type="submit">+ Schritt</button>
+    </form>
     <form method="post" style="margin:8px 0 0" onsubmit="return confirm('Schritte neu aus dem Service-Katalog übernehmen? Geänderte Abläufe werden angewendet, der bisherige Haken-Stand bleibt je Schrittname erhalten.');">
       <input type="hidden" name="aktion" value="schritte_sync">
       <button class="btn btn-ghost btn-sm" type="submit" title="Schritte aus dem aktuellen Service-Katalog neu übernehmen (für nachträglich geänderte Abläufe)">Schritte neu aus Service übernehmen</button>
@@ -129,6 +161,13 @@ if (isset($_GET['syncleer']))  echo '<div class="bx-panel" style="border-color:#
       <button class="btn btn-ghost btn-sm" type="submit" title="Schritte aus dem Service-Katalog übernehmen">Schritte aus dem Service übernehmen</button>
     </form>
     <?php endif; ?>
+    <?php // F3: Schritte auch ganz ohne Service-Katalog von Hand aufbauen (z. B. Konfektionierung je Auftrag). ?>
+    <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:10px 0 0;flex-wrap:wrap">
+      <input type="hidden" name="aktion" value="schritt_add">
+      <div class="bx-field" style="margin:0;min-width:220px"><label>Eigenen Arbeitsschritt hinzufügen</label><input type="text" name="name" placeholder="z. B. In Tüten abfüllen" maxlength="120"></div>
+      <div class="bx-field" style="margin:0;max-width:130px"><label>Interne Kosten/Stk</label><input type="text" name="kosten" inputmode="decimal" placeholder="optional"></div>
+      <button class="btn btn-ghost btn-sm" type="submit">+ Schritt</button>
+    </form>
   <?php endif; ?>
   <?php if (($a['status'] ?? '') !== 'storniert'): ?>
   <div class="bx-row" style="gap:8px;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">

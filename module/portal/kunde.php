@@ -794,13 +794,14 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 // Dienstleistungsanfrage (Freitext) – Typen/Labortest folgen separat
 // Dienstleistungs-Typen (für Lohnhersteller). Labortest bezieht sich auf ein oder mehrere Produkte.
 $DIENST_TYPEN = [
-    'labortest'       => 'Labortest / Analyse',
-    'abfuellung'      => 'Reine Abfüllung',
-    'sourcing'        => 'Sourcing / Beschaffung',
-    'konfektionierung'=> 'Konfektionierung / Verpackung',
-    'lagerung'        => 'Lagerung / Fulfillment',
-    'beratung'        => 'Beratung / Regulatorik',
-    'sonstiges'       => 'Sonstiges',
+    'labortest'         => 'Laboranalyse / Test',
+    'konfektionierung'  => 'Konfektionierung (eigene Ware anliefern)',
+    'rezepturentwicklung'=> 'Rezepturentwicklung',
+    'abfuellung'        => 'Reine Abfüllung',
+    'sourcing'          => 'Sourcing / Beschaffung',
+    'lagerung'          => 'Lagerung / Fulfillment',
+    'beratung'          => 'Beratung / Regulatorik',
+    'sonstiges'         => 'Sonstiges',
 ];
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dienstleistung_anfrage') {
     if ($k['portal_dienstleistung']) {
@@ -810,8 +811,12 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         $ok = $dtyp !== 'labortest' || $prodIds;
         if ($ok) {
             $betreff = trim($_POST['betreff'] ?? '') ?: $DIENST_TYPEN[$dtyp];
+            $notiz = trim($_POST['notiz'] ?? '');
+            // F2: bei Konfektionierung die Anlieferung (was + Menge) der Notiz voranstellen.
+            if ($dtyp === 'konfektionierung' && trim((string)($_POST['konfekt_anliefer'] ?? '')) !== '')
+                $notiz = 'Anlieferung des Kunden: ' . trim((string)$_POST['konfekt_anliefer']) . ($notiz !== '' ? "\n\n" . $notiz : '');
             q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,dienstleistung_typ,betreff,notiz,status) VALUES (?,?, 'dienstleistung', ?,?,?, 'neu')",
-              [naechste_nummer('PAF'), (int)$k['id'], $dtyp, $betreff, trim($_POST['notiz'] ?? '')]);
+              [naechste_nummer('PAF'), (int)$k['id'], $dtyp, $betreff, $notiz]);
             $aid = insert_id();
             if ($dtyp === 'labortest') {
                 $sort = 0;
@@ -3585,14 +3590,19 @@ portal_head('Kundenportal · ' . $k['firma']);
         </div>
         <?php else: ?><div class="muted">Noch keine Produkte hinterlegt – beschreiben Sie den Labortest bitte im Detailfeld.</div><?php endif; ?>
       </div>
+      <div class="bx-field" id="dlKonfektBox" style="display:none">
+        <label>Was liefern Sie an? <span class="muted">(Rohstoffe oder fertige Ware – mit Menge)</span></label>
+        <textarea name="konfekt_anliefer" rows="3" placeholder="z. B. 5.000 Pralinen lose, 5.000 Standbeutel, 5.000 Etiketten – wir stimmen die Arbeitsschritte mit Ihnen ab."></textarea>
+        <div class="muted" style="font-size:12px;margin-top:4px">Die genauen Arbeitsschritte legen wir fest und stimmen sie vor dem Angebot mit Ihnen ab.</div>
+      </div>
       <div class="bx-field"><label>Betreff <span class="muted">(optional)</span></label><input type="text" name="betreff" placeholder="Kurzbeschreibung – leer = Art der Dienstleistung"></div>
       <div class="bx-field"><label>Details (optional)</label><textarea name="notiz" placeholder="Worum geht es genau? Umfang, Termin, gewünschte Parameter …"></textarea></div>
       <button class="btn btn-primary" type="submit">Anfrage senden</button>
     </form>
   </div>
   <script>
-  (function(){ var s=document.getElementById('dlTyp'), b=document.getElementById('dlLaborBox');
-    function upd(){ b.style.display = s.value==='labortest' ? '' : 'none'; }
+  (function(){ var s=document.getElementById('dlTyp'), b=document.getElementById('dlLaborBox'), k=document.getElementById('dlKonfektBox');
+    function upd(){ b.style.display = s.value==='labortest' ? '' : 'none'; if(k) k.style.display = s.value==='konfektionierung' ? '' : 'none'; }
     s.addEventListener('change', upd); upd();
   })();
   </script>

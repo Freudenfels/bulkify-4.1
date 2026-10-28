@@ -156,6 +156,43 @@ function dienstleistung_schema(): void {
         erledigt_at DATETIME NULL,
         KEY idx_auf (auftrag_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // F4: internes Kostenfeld je Arbeitsschritt (nur Feld/Ablage – noch KEINE Auswertung/Automatik).
+    ensure_column('dl_auftrag_schritt', 'interne_kosten_stk', "DECIMAL(12,4) NULL");
+    ensure_column('dienstleistung_schritt', 'interne_kosten_stk', "DECIMAL(12,4) NULL");
+}
+
+// F3: einzelnen Arbeitsschritt eines DL-Auftrags bearbeiten – hinzufügen/umbenennen/entfernen/abhaken,
+// auch nachträglich bei laufendem Auftrag (Verlaufseintrag wer/wann). Keine Kundenbestätigung nötig
+// (individueller Festpreis). $kosten = interne Kosten je Stück (F4, optional, nur Ablage).
+function dl_schritt_add(int $auftrag_id, string $name, ?float $kosten = null, string $wer = ''): int {
+    $name = trim($name); if ($name === '' || $auftrag_id <= 0) return 0;
+    $sort = (int) scalar("SELECT COALESCE(MAX(sort),-1)+1 FROM dl_auftrag_schritt WHERE auftrag_id=?", [$auftrag_id]);
+    q("INSERT INTO dl_auftrag_schritt (auftrag_id,name,sort,interne_kosten_stk) VALUES (?,?,?,?)",
+      [$auftrag_id, mb_substr($name, 0, 120), $sort, $kosten]);
+    $sid = (int) insert_id();
+    $kid = (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    if ($kid) log_aktivitaet('kunde', $kid, 'team', 'Arbeitsschritt „' . mb_substr($name, 0, 120) . '" nachträglich hinzugefügt' . ($wer !== '' ? ' (' . $wer . ')' : '') . '.', 'auftrag', 'auftrag', $auftrag_id);
+    return $sid;
+}
+function dl_schritt_edit(int $schritt_id, int $auftrag_id, string $name, ?float $kosten = null): void {
+    $name = trim($name); if ($name === '') return;
+    q("UPDATE dl_auftrag_schritt SET name=?, interne_kosten_stk=? WHERE id=? AND auftrag_id=?",
+      [mb_substr($name, 0, 120), $kosten, $schritt_id, $auftrag_id]);
+}
+function dl_schritt_remove(int $schritt_id, int $auftrag_id): void {
+    $n = (string) scalar("SELECT name FROM dl_auftrag_schritt WHERE id=? AND auftrag_id=?", [$schritt_id, $auftrag_id]);
+    q("DELETE FROM dl_auftrag_schritt WHERE id=? AND auftrag_id=?", [$schritt_id, $auftrag_id]);
+    dl_auftrag_status_ableiten($auftrag_id);
+    $kid = (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    if ($kid && $n !== '') log_aktivitaet('kunde', $kid, 'team', 'Arbeitsschritt „' . $n . '" entfernt.', 'auftrag', 'auftrag', $auftrag_id);
+}
+function dl_schritt_toggle(int $schritt_id, int $auftrag_id): void {
+    $s = one("SELECT erledigt FROM dl_auftrag_schritt WHERE id=? AND auftrag_id=?", [$schritt_id, $auftrag_id]);
+    if (!$s) return;
+    $neu = (int)$s['erledigt'] === 1 ? 0 : 1;
+    q("UPDATE dl_auftrag_schritt SET erledigt=?, erledigt_at=? WHERE id=? AND auftrag_id=?",
+      [$neu, $neu ? gmdate('Y-m-d H:i:s') : null, $schritt_id, $auftrag_id]);
+    dl_auftrag_status_ableiten($auftrag_id);
 }
 
 // Standard-Schritte je Baustein (Vorlage beim Anlegen, frei anpassbar). Unbekannt = generisch.
@@ -335,7 +372,7 @@ function dl_auftraege_service_backfill(): void {
 }
 // Fortschritt eines DL-Auftrags (für Dashboard + Portal).
 function dl_auftrag_track(int $auftrag_id): array {
-    return all("SELECT id, name, sort, erledigt, erledigt_at FROM dl_auftrag_schritt WHERE auftrag_id=? ORDER BY sort, id", [$auftrag_id]);
+    return all("SELECT id, name, sort, erledigt, erledigt_at, interne_kosten_stk FROM dl_auftrag_schritt WHERE auftrag_id=? ORDER BY sort, id", [$auftrag_id]);
 }
 // Auftrag-Status aus den Schritten ableiten: nichts erledigt = offen, alle = erledigt, sonst in_arbeit.
 function dl_auftrag_status_ableiten(int $auftrag_id): void {
