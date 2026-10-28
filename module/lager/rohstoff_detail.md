@@ -114,3 +114,10 @@ Zwei neue Stammdatenfelder am Rohstoff: **Beschaffenheit** (`item.beschaffenheit
 
 ## CoA/Spec-KI füllt Beschaffenheit + DEV (Stand 2026-10-09)
 Die Spezifikations-/CoA-Auslesung (`spec_ki_felder()` in `core/spec_ki.php`) erkennt jetzt auch **beschaffenheit** (extrakt/pulver_rein/isolat/konzentrat/fluessigextrakt/oel) und **dev** (Extraktverhältnis, z. B. 10:1). Erscheinen im KI-Vorschlag (Reiter Spezifikation, „Auslesen") zum Anhaken/Übernehmen. `spec_ki_beschaffenheit_norm()` mappt KI-Freitext („Extrakt"/„Trockenextrakt" …) auf den gültigen Enum-Wert. Hinweis: Vor diesem Stand gelesene Dokumente müssen einmal neu „Auslesen", damit 10:1 & Co. erkannt werden.
+
+## Einheitenbewusster Bestand + Verlauf/Verwendung (A1/A2, 2026-10-28)
+**Bestand je Einheit:** Die Kacheln „Bestand (frei)" und „Quarantäne" vermischen Stück und Kilo nicht mehr. Bei gemischten Einheiten (`charge_bestand_je_einheit($id, ['frei'|'quarantaene'])`) steht `12 kg + 1.080.000 Stk` statt einer falschen Summe. `item_bestand()` (eine Zahl) bleibt für die interne Reservierungs-/Bedarfsrechnung; die Anzeige nutzt die Einheiten-Aufschlüsselung.
+
+**Verlauf** (Reiter): echte Bewegungen aus `item_bewegungen($id)` – Wareneingänge (+, mit Charge/Lieferant/Bestellung) und Produktionsverbrauch (−, mit PA/Auftrag) als datumsortierte Tabelle. Vorher war der Reiter leer (Aktivitäts-Log ohne Einträge).
+
+**Verwendung** (Reiter): aus `item_verwendung($id)` – in welchen Produktionsaufträgen/Aufträgen der Artikel verbraucht wurde (Quelle `produktion_verbrauch`), verlinkt auf PA und Auftrag. Vorher nur Platzhalter.

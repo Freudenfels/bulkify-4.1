@@ -608,15 +608,19 @@ ob_start(); ?>
     <div class="muted" style="margin-top:8px">Bestand wurde beim Bereitstellen abgebucht.</div>
   <?php else: ?>
     <h2 style="margin-top:0">Materialbedarf</h2>
+    <?php if ($pa['status'] === 'erledigt'): ?>
+      <div class="muted" style="margin:0 0 10px">Dieser Auftrag ist abgeschlossen, es wurde aber kein Material über die Produktion abgebucht (z. B. per God-Mode oder als Alt-Auftrag ohne Bestandsbuchung durchgelaufen). Die folgende Liste ist daher nur der rechnerische Bedarf – kein echter Fehlbestand.</div>
+    <?php endif; ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Rohstoff</th><th class="bx-num">Benötigt</th><th class="bx-num">Verfügbar</th><th>Status</th></tr></thead>
       <tbody>
+      <?php $erl = ($pa['status'] === 'erledigt'); ?>
       <?php foreach ($bedarf as $b): $ok = $b['fehlt'] <= 0.0001; ?>
         <tr>
           <td><?= h($b['name']) ?></td>
           <td class="bx-num"><?= $mng($b['benoetigt'], $b['einheit']) ?></td>
           <td class="bx-num"><?= $mng($b['verfuegbar'], $b['einheit']) ?></td>
-          <td><?= $ok ? bx_badge('genug','ok') : bx_badge('fehlt ' . $mng($b['fehlt'], $b['einheit']), 'err') ?></td>
+          <td><?= $ok ? bx_badge('genug','ok') : ($erl ? bx_badge('nicht gebucht','info') : bx_badge('fehlt ' . $mng($b['fehlt'], $b['einheit']), 'err')) ?></td>
         </tr>
       <?php endforeach; ?>
       <?php if ($kapNeed): $okK = $kapNeed['fehlt'] <= 0.0001; ?>
@@ -624,7 +628,7 @@ ob_start(); ?>
           <td><?= h($kapNeed['name']) ?> <?= bx_badge('Kapselhülle','info') ?></td>
           <td class="bx-num"><?= number_format($kapNeed['benoetigt'],0,',','.') ?> Stück</td>
           <td class="bx-num"><?= number_format($kapNeed['verfuegbar'],0,',','.') ?> Stück</td>
-          <td><?= $okK ? bx_badge('genug','ok') : bx_badge('fehlt ' . number_format($kapNeed['fehlt'],0,',','.') . ' Stück','err') ?></td>
+          <td><?= $okK ? bx_badge('genug','ok') : ($erl ? bx_badge('nicht gebucht','info') : bx_badge('fehlt ' . number_format($kapNeed['fehlt'],0,',','.') . ' Stück','err')) ?></td>
         </tr>
       <?php endif; ?>
       </tbody>

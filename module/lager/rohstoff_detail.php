@@ -429,9 +429,21 @@ if ($neu && $neuKi) {
     }
 }
 if (!$neu) { seed_aktivitaet_if_empty(); $verlauf = verlauf_fuer('item', (int)$id); } else { $verlauf = []; }
+// A2: echte Bewegungen (Wareneingänge + Produktionsverbrauch) und Verwendung in Produktionsaufträgen.
+$bewegungen = $neu ? [] : item_bewegungen((int)$id);
+$verwendung = $neu ? [] : item_verwendung((int)$id);
 $charges = $neu ? [] : all("SELECT c.*, l.firma AS lieferant_firma FROM charge c LEFT JOIN lieferanten l ON l.id=c.lieferant_id WHERE c.item_id=? ORDER BY c.status, c.mhd", [(int)$id]);
 $bestand_frei = $neu ? 0 : item_bestand((int)$id, true);
 $bestand_qua  = $neu ? 0 : (item_bestand((int)$id, false) - $bestand_frei);
+// A1: Bestand je EINHEIT (Stück/Kilo nicht vermischen). Bei gemischten Einheiten getrennt anzeigen.
+$bestand_frei_je = $neu ? [] : charge_bestand_je_einheit((int)$id, ['frei']);
+$bestand_qua_je  = $neu ? [] : charge_bestand_je_einheit((int)$id, ['quarantaene']);
+$einheiten_gemischt = count(array_unique(array_merge(array_keys($bestand_frei_je), array_keys($bestand_qua_je)))) > 1;
+$bestandWert = function(array $je): string {
+    if (!$je) return '<span class="muted">0</span>';
+    $t = []; foreach ($je as $eh => $m) $t[] = h(rtrim(rtrim(number_format((float)$m, 3, ',', '.'), '0'), ',')) . ' ' . h($eh);
+    return implode(' + ', $t);
+};
 $reserviert_gesamt = $neu ? 0 : item_reserviert_gesamt((int)$id);
 $reservierungen    = $neu ? [] : item_reservierungen_liste((int)$id);
 // Aufträge, auf die reserviert werden kann (laufend – nicht versendet/storniert), neueste zuerst.
@@ -525,7 +537,8 @@ if (!$neu) {
     echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . ($gesperrt ? bx_badge('gesperrt','err') : bx_badge('aktiv','ok')) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Kategorie</div><div class="v">' . h($KAT[$it['kategorie']] ?? $it['kategorie']) . '</div></div>';
     echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . $pr . ' €/' . h((string)($it['preis_bezug'] ?: ($it['einheit'] ?: 'Stk'))) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Bestand (frei)</div><div class="v">' . ($bestand_frei>0 ? h(rtrim(rtrim(number_format($bestand_frei,3,',','.'),'0'),',')).' '.h($it['einheit']) : '<span class="muted">0</span>') . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Bestand (frei)</div><div class="v">' . $bestandWert($bestand_frei_je) . '</div></div>';
+    if ($einheiten_gemischt && $bestand_qua_je) echo '<div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="color:var(--warn)">' . $bestandWert($bestand_qua_je) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Reserviert</div><div class="v"' . ($reserviert_gesamt > $bestand_frei + 1e-9 ? ' style="color:var(--warn)"' : '') . '>' . ($reserviert_gesamt>0 ? h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')).' '.h($it['einheit']) : '<span class="muted">0</span>') . '</div></div>';
     if ($fremd_gesamt > 0) echo '<div class="bx-card"><div class="k">Fremdlager (Kunden)</div><div class="v">' . h(rtrim(rtrim(number_format($fremd_gesamt,3,',','.'),'0'),',')) . ' ' . h($it['einheit']) . '</div></div>';
     if (($it['kategorie'] ?? '') === 'rohstoff') {
@@ -893,9 +906,47 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
   </section>
 
   <?php if (!$neu): ?>
-  <section data-panel="verw" hidden><div class="bx-panel"><h2>Verwendung in Rezepturen</h2><?php bx_bald('Rezepturen'); ?></div></section>
+  <section data-panel="verw" hidden><div class="bx-panel"><h2>Verwendung</h2>
+    <?php if (!$verwendung): ?>
+      <div class="muted">Dieser Artikel wurde noch in keiner Produktion verbraucht.</div>
+    <?php else: $mv = fn($x)=> rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),','); ?>
+      <p class="muted" style="margin:0 0 10px">In welchen Produktionsaufträgen dieser Artikel verbraucht wurde.</p>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Produktionsauftrag</th><th>Auftrag</th><th>Produkt</th><th class="bx-num">Verbraucht</th><th>zuletzt</th></tr></thead>
+        <tbody>
+        <?php foreach ($verwendung as $w): ?>
+          <tr>
+            <td><a href="?p=produktionsauftrag&id=<?= (int)$w['pa_id'] ?>"><?= h((string)$w['pa_nr']) ?></a></td>
+            <td><?= $w['auftrag_id'] ? '<a href="?p=auftrag&id=' . (int)$w['auftrag_id'] . '">' . h((string)$w['auftrag_nr']) . '</a>' : '<span class="muted">–</span>' ?></td>
+            <td><?= $w['produkt'] ? h((string)$w['produkt']) : '<span class="muted">–</span>' ?></td>
+            <td class="bx-num"><?= $mv($w['menge']) ?> <?= h((string)$w['einheit']) ?></td>
+            <td class="muted"><?= !empty($w['zuletzt']) ? h(fmt_zeit($w['zuletzt'], 'd.m.Y')) : '–' ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    <?php endif; ?>
+  </div></section>
   <section data-panel="verlauf" hidden>
-    <div class="bx-panel"><h2>Verlauf</h2><?php bx_chat($verlauf, $v('name')); ?></div>
+    <div class="bx-panel"><h2>Verlauf</h2>
+    <?php if (!$bewegungen): ?>
+      <div class="muted">Noch keine Bewegungen (Wareneingänge/Verbrauch) erfasst.</div>
+    <?php else: $mv = fn($x)=> rtrim(rtrim(number_format(abs((float)$x),3,',','.'),'0'),','); ?>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Datum</th><th>Vorgang</th><th class="bx-num">Menge</th><th>Herkunft / Ziel</th></tr></thead>
+        <tbody>
+        <?php foreach ($bewegungen as $bw): $plus = ($bw['typ'] === 'eingang'); ?>
+          <tr>
+            <td class="muted"><?= !empty($bw['datum']) ? h(date('d.m.Y', strtotime((string)$bw['datum']))) : '–' ?></td>
+            <td><?= h((string)$bw['text']) ?></td>
+            <td class="bx-num" style="color:<?= $plus ? 'var(--ok,#0f6b4d)' : 'var(--err,#8f231b)' ?>"><?= $plus ? '+' : '−' ?><?= $mv($bw['menge']) ?> <?= h((string)$bw['einheit']) ?></td>
+            <td class="muted"><?= h((string)$bw['herkunft']) ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    <?php endif; ?>
+    </div>
   </section>
   <?php endif; ?>
 
@@ -1027,8 +1078,8 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
 
 <section data-panel="lager" hidden>
   <div class="bx-cards">
-    <div class="bx-card"><div class="k">Bestand (frei)</div><div class="v"><?= $bestand_frei>0 ? h(rtrim(rtrim(number_format($bestand_frei,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
-    <div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="<?= $bestand_qua>0?'color:var(--warn)':'' ?>"><?= $bestand_qua>0 ? h(rtrim(rtrim(number_format($bestand_qua,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
+    <div class="bx-card"><div class="k">Bestand (frei)</div><div class="v"><?= $bestandWert($bestand_frei_je) ?></div></div>
+    <div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="<?= $bestand_qua_je?'color:var(--warn)':'' ?>"><?= $bestand_qua_je ? $bestandWert($bestand_qua_je) : '<span class="muted">0</span>' ?></div></div>
     <div class="bx-card"><div class="k">Reserviert</div><div class="v" style="<?= $reserviert_gesamt>$bestand_frei+1e-9?'color:var(--warn)':'' ?>"><?= $reserviert_gesamt>0 ? h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
     <div class="bx-card"><div class="k">Chargen</div><div class="v"><?= count($charges) ?></div></div>
   </div>

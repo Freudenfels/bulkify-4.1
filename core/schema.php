@@ -3709,6 +3709,67 @@ function item_bestand(int $item_id, bool $nur_frei = true): float {
     return $v;
 }
 
+// Bestand je EINHEIT (A1): Stück und Kilo NIE zu einer Summe addieren. Gibt [einheit => menge] zurück
+// (unsere Chargen, Fremdlager ausgeschlossen). $status z. B. ['frei'] oder ['quarantaene']. Leere Einheit = 'Stk'.
+function charge_bestand_je_einheit(int $item_id, array $status = ['frei']): array {
+    $status = array_values(array_filter($status, fn($s) => in_array($s, ['frei','quarantaene','gesperrt','leer'], true)));
+    if (!$status) return [];
+    $in = implode(',', array_fill(0, count($status), '?'));
+    $out = [];
+    foreach (all("SELECT COALESCE(NULLIF(einheit,''),'Stk') AS einheit, COALESCE(SUM(menge_verfuegbar),0) AS menge
+                  FROM charge WHERE item_id=? AND status IN ($in) AND fremd_kunde_id IS NULL
+                  GROUP BY COALESCE(NULLIF(einheit,''),'Stk') HAVING menge > 0.0000001
+                  ORDER BY menge DESC", array_merge([$item_id], $status)) as $r)
+        $out[(string)$r['einheit']] = (float)$r['menge'];
+    return $out;
+}
+
+// Verlauf (A2): alle Bewegungen eines Artikels – Wareneingänge (+) aus Chargen und Abgänge (-) aus der
+// Produktion (produktion_verbrauch). Jede Zeile mit Datum, Menge, Einheit und Herkunft/Ziel. Neueste zuerst.
+function item_bewegungen(int $item_id): array {
+    $zu = all("SELECT c.wareneingang AS datum, c.angelegt, c.menge, c.einheit, c.charge_nr, c.status,
+                      l.firma AS lieferant, bp.bestellung_id
+               FROM charge c
+               LEFT JOIN lieferanten l ON l.id=c.lieferant_id
+               LEFT JOIN bestellung_position bp ON bp.id=c.bestellung_position_id
+               WHERE c.item_id=? AND c.fremd_kunde_id IS NULL", [$item_id]);
+    $ab = all("SELECT pv.angelegt AS datum, pv.menge, pv.einheit, pa.nummer AS pa_nr, pa.auftrag_id,
+                      a.nummer AS auftrag_nr
+               FROM produktion_verbrauch pv
+               JOIN produktionsauftrag pa ON pa.id=pv.pa_id
+               LEFT JOIN auftrag a ON a.id=pa.auftrag_id
+               WHERE pv.item_id=?", [$item_id]);
+    $out = [];
+    foreach ($zu as $c) {
+        $d = $c['datum'] ?: (isset($c['angelegt']) ? substr((string)$c['angelegt'], 0, 10) : null);
+        $herkunft = $c['lieferant'] ? (string)$c['lieferant'] : 'Wareneingang';
+        if (!empty($c['bestellung_id'])) $herkunft .= ' · Best. ' . (string) scalar("SELECT nummer FROM bestellung WHERE id=?", [(int)$c['bestellung_id']]);
+        $out[] = ['datum'=>$d, 'typ'=>'eingang', 'menge'=>(float)$c['menge'], 'einheit'=>(string)$c['einheit'],
+                  'text'=>'Wareneingang' . ($c['charge_nr'] ? ' · Charge ' . (string)$c['charge_nr'] : ''), 'herkunft'=>$herkunft];
+    }
+    foreach ($ab as $v) {
+        $d = isset($v['datum']) ? substr((string)$v['datum'], 0, 10) : null;
+        $ziel = 'Produktion ' . (string)$v['pa_nr'] . ($v['auftrag_nr'] ? ' · Auftrag ' . (string)$v['auftrag_nr'] : '');
+        $out[] = ['datum'=>$d, 'typ'=>'abgang', 'menge'=>-(float)$v['menge'], 'einheit'=>(string)$v['einheit'],
+                  'text'=>'Verbrauch Produktion', 'herkunft'=>$ziel];
+    }
+    usort($out, fn($a, $b) => strcmp((string)($b['datum'] ?? ''), (string)($a['datum'] ?? '')));
+    return $out;
+}
+
+// Verwendung (A2): in welchen Produktionsaufträgen/Aufträgen dieser Artikel verbraucht wurde (aus produktion_verbrauch).
+function item_verwendung(int $item_id): array {
+    return all("SELECT pv.pa_id, SUM(pv.menge) AS menge, MAX(pv.einheit) AS einheit, MAX(pv.angelegt) AS zuletzt,
+                       pa.nummer AS pa_nr, pa.auftrag_id, a.nummer AS auftrag_nr, pr.name AS produkt
+                FROM produktion_verbrauch pv
+                JOIN produktionsauftrag pa ON pa.id=pv.pa_id
+                LEFT JOIN auftrag a  ON a.id=pa.auftrag_id
+                LEFT JOIN produkt pr ON pr.id=pa.produkt_id
+                WHERE pv.item_id=?
+                GROUP BY pv.pa_id, pa.nummer, pa.auftrag_id, a.nummer, pr.name
+                ORDER BY MAX(pv.angelegt) DESC", [$item_id]);
+}
+
 // Wareneingang buchen -> neue Charge. Rohstoffe landen in Quarantäne, Rest direkt frei.
 function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?string $mhd, ?int $lieferant_id, string $notiz = '', ?int $auftrag_id = null, ?int $bestellung_position_id = null): ?int {
     $it = one("SELECT kategorie, einheit FROM item WHERE id=?", [$item_id]);
@@ -8300,8 +8361,14 @@ function produktion_materialbedarf(int $pa_id): array {
         $faktor = $z['einheit'] === 'g' ? 1e3 : 1e6;          // mg -> Basiseinheit (kg-Standard)
         $benoetigt = $mg / $faktor;
         $verf = item_bestand((int)$z['item_id'], true);
+        // Bereits für DIESEN Produktionsauftrag entnommenes Material (produktion_verbrauch). Was schon entnommen
+        // ist, fehlt nicht mehr: offener Restbedarf = benötigt - entnommen; „fehlt" = davon, was der Bestand nicht
+        // deckt. So steht bei fertiger/laufender Produktion nicht weiter „fehlt 150.000", obwohl entnommen wurde.
+        $entnommen = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, (int)$z['item_id']]);
+        $offen = max(0.0, $benoetigt - $entnommen);
         $out[] = ['item_id'=>(int)$z['item_id'], 'name'=>$z['name'], 'einheit'=>$z['einheit'],
-                  'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>max(0.0, $benoetigt - $verf)];
+                  'benoetigt'=>$benoetigt, 'entnommen'=>$entnommen, 'offen'=>$offen,
+                  'verfuegbar'=>$verf, 'fehlt'=>max(0.0, $offen - $verf)];
     }
     return $out;
 }
