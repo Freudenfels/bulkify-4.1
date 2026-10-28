@@ -222,7 +222,10 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $aid  = (int)($_POST['auftrag_id'] ?? 0);
     $mein = $aid && (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]) === (int)$k['id'];
     $flash = '&etikettupfehler=fehler';
-    if ($mein && etikett_upload($aid)) {
+    if ($mein && etikett_bestellt_fuer_auftrag($aid)) {
+        // Regel: Etikett nur änderbar, solange noch nicht bestellt. Danach fix.
+        $flash = '&etikettupfehler=bestellt';
+    } elseif ($mein && etikett_upload($aid)) {
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Etikett-Design hochgeladen (Auftrag ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$aid]) . ') – bitte noch freigeben.', 'etikett', 'auftrag', $aid);
         if (mail_bereit()) nach_antwort(fn() => mail_team_etikett_hochgeladen($aid));
         $flash = '&etikett=1';
@@ -4011,6 +4014,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php if (($_GET['etikettupfehler'] ?? '') === 'gross' || isset($_GET['uploadzugross'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Die Datei ist zu groß (max. <?= h((string) ini_get('upload_max_filesize')) ?> je Datei). Bitte als komprimiertes PDF oder kleineres Bild hochladen – dann erneut versuchen.</div><?php endif; ?>
       <?php if (($_GET['etikettupfehler'] ?? '') === 'keine'): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Es wurde keine Datei ausgewählt. Bitte eine PDF- oder Bilddatei wählen.</div><?php endif; ?>
       <?php if (($_GET['etikettupfehler'] ?? '') === 'fehler'): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Der Upload hat nicht geklappt. Bitte erneut versuchen (PDF oder Bild).</div><?php endif; ?>
+      <?php if (($_GET['etikettupfehler'] ?? '') === 'bestellt'): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Die Etiketten sind bereits bestellt – das Design ist damit fix und kann nicht mehr geändert werden.</div><?php endif; ?>
       <?php if (isset($_GET['etikettfrei'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Danke! Etikett ist freigegeben – die Produktion kann starten.</div><?php endif; ?>
       <?php if (isset($_GET['etikettfehlt'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Bitte Ihren Namen für die Freigabe angeben.</div><?php endif; ?>
       <?php if (isset($_GET['etiketthaftung'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Bitte bestätigen Sie den Hinweis zum Etikett (Haken setzen), um verbindlich freizugeben.</div><?php endif; ?>
@@ -4019,6 +4023,14 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php $fa = one("SELECT etikett_freigabe_am, etikett_freigabe_von FROM auftrag WHERE id=?", [(int)$a['id']]); ?>
         <p style="margin:0 0 8px"><span class="bx-ok">✓ Freigegeben</span><?= !empty($fa['etikett_freigabe_am']) ? ' am ' . h(fmt_zeit($fa['etikett_freigabe_am'], 'd.m.Y')) : '' ?><?= !empty($fa['etikett_freigabe_von']) ? ' durch ' . h($fa['etikett_freigabe_von']) : '' ?>
           <?php if ($etDok): ?> · <a href="<?= $portalLink('etikett_datei') ?>&aid=<?= (int)$a['id'] ?>" target="_blank"><?= h($etDok['datei_orig'] ?: 'Etikett-Design') ?></a><?php endif; ?></p>
+        <?php // Regel (Nico): Etikett bleibt änderbar, solange wir es noch nicht bestellt haben – danach fix.
+              $etBestellt = etikett_bestellt_fuer_auftrag((int)$a['id']); ?>
+        <?php if (!$etBestellt): ?>
+          <p class="muted" style="font-size:12px;margin:0 0 6px">Solange wir die Etiketten noch nicht bestellt haben, können Sie das Design hier noch ändern – danach ist es fix. Ein geändertes Design geben Sie anschließend erneut frei.</p>
+          <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-ghost btn-sm" type="submit">Etikett ändern</button></form>
+        <?php else: ?>
+          <p class="muted" style="font-size:12px;margin:0">Die Etiketten sind bereits bestellt – das Design ist damit fix und kann nicht mehr geändert werden.</p>
+        <?php endif; ?>
 
       <?php elseif ($etQuelle): ?>
         <?php $istAlt = !$etDok && !empty($etQuelle['alt']); ?>

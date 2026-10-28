@@ -150,3 +150,6 @@ mitführt. Gilt in Team- und Kundenansicht (beide lesen `auftrag.*`, inkl. der P
 ## Teil 3: item_unterwegs() + kategorie_labels()
 - `item_unterwegs(int $item_id): float` – offen bestellte, noch nicht eingegangene Menge eines Items (Summe `bestellung_position` über Bestellungen `status='bestellt'` ohne Wareneingang). Für die Material-Übersicht am Auftrag (Block H1, Spalte „unterwegs").
 - `kategorie_labels(): array` / `kategorie_label(string $k): string` – EINE Quelle für Warenart-Bezeichnungen im Dashboard (Block K). DB-Werte unverändert: `fertig` = **Bulkware**, `verkaufsfertig` = **Fertigprodukt**.
+
+## Etikett änderbar bis bestellt
+- `etikett_bestellt_fuer_auftrag(int $auftrag_id): bool` – true, wenn der (versionierte) Etikett-Artikel des Auftrags physischen Bestand hat ODER eine Bestellposition mit Status `bestellt`/`geliefert`. Regel (Nico): das Etikett-Design ist **änderbar, solange noch nicht bestellt**; danach fix. Portal nutzt es, um auch bei bereits freigegebenem Etikett noch „Etikett ändern" anzubieten (bzw. zu sperren); der Upload-Handler blockt Änderungen nach dem Bestellen serverseitig.

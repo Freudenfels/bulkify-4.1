@@ -8135,6 +8135,17 @@ function etikett_item_fuer_auftrag(int $auftrag_id): int {
     return etikett_item_fuer_produkt((int)($a['produkt_id'] ?? 0));
 }
 
+// Ist das Etikett dieses Auftrags schon BESTELLT (oder physisch eingegangen)? Dann ist das Design fix und
+// NICHT mehr änderbar (Regel Nico: änderbar nur, solange noch nicht bestellt). „Bestellt" = der (versionierte)
+// Etikett-Artikel hat physischen Bestand ODER eine offene/gelieferte Bestellposition.
+function etikett_bestellt_fuer_auftrag(int $auftrag_id): bool {
+    $eid = etikett_item_fuer_auftrag($auftrag_id);
+    if ($eid <= 0) return false;
+    if (item_bestand($eid, false) > 0.0) return true;
+    return (int) scalar("SELECT COUNT(*) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                         WHERE bp.item_id=? AND b.status IN ('bestellt','geliefert')", [$eid]) > 0;
+}
+
 // ===== Kundenetikett-Artikel (pro Produkt, versioniert) ==========================================
 // Jedes verpackte Produkt bekommt seinen EIGENEN Etikett-Lagerartikel (item, rolle 'etikett', produkt_id),
 // in den das Lager die GEDRUCKTEN Kundenetiketten einbucht – kundenrein statt im generischen Glas-Topf.
