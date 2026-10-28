@@ -189,6 +189,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorsc
     elseif ($produziert <= 0) $fehler = 'Bitte die produzierte Menge (Stk) angeben.';
     else {
         $st = ep_stueckliste($auftragId, $produziert);
+        // Optional gewählte Bulkware (item.kategorie='fertig') als editierbare Materialzeile voranstellen.
+        // Wird beim Buchen wie jede andere Position FEFO ausgebucht (kein eigener Pfad). Menge kommt aus dem Buch.
+        $rows = $st['rows'];
+        $bulkItemId = (int)($_POST['bulk_item_id'] ?? 0);
+        if ($bulkItemId > 0) {
+            $bi = one("SELECT id, name, COALESCE(NULLIF(einheit,''),'kg') AS einheit FROM item WHERE id=? AND kategorie='fertig'", [$bulkItemId]);
+            if ($bi) {
+                $schonDrin = false;
+                foreach ($rows as $r) { if ((int)$r['item_id'] === $bulkItemId) { $schonDrin = true; break; } }
+                if (!$schonDrin) {
+                    array_unshift($rows, ['item_id'=>(int)$bi['id'], 'name'=>(string)$bi['name'], 'rolle'=>'Bulkware',
+                                          'einheit'=>(string)$bi['einheit'], 'benoetigt'=>0.0, 'verfuegbar'=>item_bestand((int)$bi['id'])]);
+                }
+            }
+        }
         // Defaults für Charge/MHD/Gefäß aus dem Auftrag/PA, wenn nicht eingegeben.
         $chargeNr = trim((string)($_POST['charge_nr'] ?? ''));
         if ($chargeNr === '' && $st['pa_id']) $chargeNr = charge_naechste_nr((int)$st['pa_id']);
@@ -196,7 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorsc
         if (!$mhd) { $paMhd = $st['pa_id'] ? (string) scalar("SELECT mhd FROM produktionsauftrag WHERE id=?", [(int)$st['pa_id']]) : ''; $mhd = $paMhd ?: mhd_standard(); }
         $gefaess = (string)($_POST['gefaess'] ?? '');
         $vorschau = [
-            'a'=>$a, 'pa_id'=>(int)$st['pa_id'], 'rows'=>$st['rows'],
+            'a'=>$a, 'pa_id'=>(int)$st['pa_id'], 'rows'=>$rows, 'bulk_item_id'=>$bulkItemId,
             'produziert'=>$produziert, 'rueckstell'=>$rueckstell, 'kundenmenge'=>max(0, $produziert - $rueckstell),
             'datum'=>$pdatum($_POST['prod_datum'] ?? null) ?? gmdate('Y-m-d'),
             'charge_nr'=>$chargeNr, 'mhd'=>$mhd, 'gefaess'=>$gefaess,
@@ -214,6 +229,8 @@ $auftraege = all("SELECT a.id, a.nummer, a.menge, COALESCE(NULLIF(a.produkt_beze
                   WHERE a.status<>'storniert' AND COALESCE(a.kategorie,'produkt')<>'dienstleistung'
                   ORDER BY a.angelegt DESC, a.id DESC");
 $mitarbeiter = all("SELECT id, name FROM benutzer WHERE aktiv=1 ORDER BY name");
+// Bulkware zur optionalen Auswahl: fertige Bulk-Zwischenprodukte (item.kategorie='fertig').
+$bulkItems = all("SELECT id, name, COALESCE(NULLIF(einheit,''),'kg') AS einheit FROM item WHERE kategorie='fertig' ORDER BY name");
 $letzte = all("SELECT e.*, a.nummer AS auftrag_nr FROM easy_production e LEFT JOIN auftrag a ON a.id=e.auftrag_id ORDER BY e.id DESC LIMIT 12");
 
 // Vorbelegung der Felder (nach Vorschau erhalten bleiben).
@@ -263,7 +280,15 @@ $nf = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
         </select>
       </div>
       <div class="bx-field"><label>Rückstellmuster (Stk)</label><input type="text" name="rueckstell" data-tausender inputmode="numeric" value="<?= $V('rueckstell') ?>" placeholder="0"></div>
+      <div class="bx-field">
+        <label>Bulkware (optional)</label>
+        <select name="bulk_item_id" class="rscombo">
+          <option value="">– keine (Material aus Stückliste) –</option>
+          <?php foreach ($bulkItems as $b): ?><option value="<?= (int)$b['id'] ?>" <?= (int)($_POST['bulk_item_id'] ?? 0) === (int)$b['id'] ? 'selected' : '' ?>><?= h($b['name']) ?> (<?= h($b['einheit']) ?>, Bestand <?= $nf(item_bestand((int)$b['id'])) ?>)</option><?php endforeach; ?>
+        </select>
+      </div>
     </div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Bulkware wählen, wenn aus vorhandener/zugekaufter Bulkware abgefüllt wurde – sie wird als editierbare Materialzeile ausgebucht (Menge lt. Buch). Ohne Auswahl wird das Material aus der Stückliste abgebucht.</p>
     <div class="bx-row" style="gap:18px;align-items:center;margin-top:12px;flex-wrap:wrap">
       <div class="bx-check"><input type="checkbox" name="geliefert" id="ep_gel" value="1" <?= !empty($_POST['geliefert']) ? 'checked' : '' ?>><label for="ep_gel" style="margin:0">Schon geliefert (Kundenmenge sofort wieder ausbuchen)</label></div>
     </div>
@@ -295,7 +320,7 @@ $nf = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
       <?php if ((int)$v['frueher'] > 0): ?> · <?= (int)$v['frueher'] ?> frühere Easy-Production-Erfassung(en)<?php endif; ?>
     </div>
 
-    <h3 style="margin:14px 0 6px;font-weight:400">Materialabgang <span class="muted" style="font-size:12px">(aus Stückliste × produzierter Menge; Mengen editierbar)</span></h3>
+    <h3 style="margin:14px 0 6px;font-weight:400">Materialabgang <span class="muted" style="font-size:12px">(<?= $v['bulk_item_id'] ? 'gewählte Bulkware + ' : '' ?>Stückliste × produzierter Menge; Mengen editierbar)</span></h3>
     <?php if ($v['rows']): ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Position</th><th>Rolle</th><th class="bx-num">Menge</th><th>Einheit</th><th class="bx-num">verfügbar</th><th>Status</th></tr></thead>
@@ -304,7 +329,7 @@ $nf = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
         <tr>
           <td><?= h($r['name']) ?><input type="hidden" name="mat_item[]" value="<?= (int)$r['item_id'] ?>"><input type="hidden" name="mat_name[]" value="<?= h($r['name']) ?>"><input type="hidden" name="mat_einheit[]" value="<?= h($r['einheit']) ?>"></td>
           <td class="muted"><?= h($r['rolle'] ?: '–') ?></td>
-          <td class="bx-num"><input type="text" name="mat_menge[]" value="<?= h($nf($r['benoetigt'])) ?>" style="width:110px;text-align:right" inputmode="decimal"></td>
+          <td class="bx-num"><input type="text" name="mat_menge[]" value="<?= (float)$r['benoetigt'] > 1e-9 ? h($nf($r['benoetigt'])) : '' ?>" placeholder="<?= ($r['rolle'] ?? '') === 'Bulkware' ? 'Menge lt. Buch' : '0' ?>" style="width:110px;text-align:right" inputmode="decimal"></td>
           <td><?= h($r['einheit']) ?></td>
           <td class="bx-num"><?= h($nf($r['verfuegbar'])) ?></td>
           <td><?= $reicht ? bx_badge('reicht','ok') : bx_badge('Fehlbestand','warn') ?></td>
