@@ -37,7 +37,11 @@ if ($kat === 'alle') { $where = "i.kategorie IN ('" . implode("','", array_keys(
 else                 { $where = "i.kategorie=?"; $params = [$kat]; }
 
 $rows = all("SELECT i.id,i.artikelnummer,i.name,i.kategorie,i.einheit,i.bestand_menge,i.mindestbestand,
-             i.elektrisch,i.pruef_intervall_monate,i.letzte_pruefung,
+             i.elektrisch,i.pruef_intervall_monate,i.letzte_pruefung,i.fremdprodukt,
+             (SELECT GROUP_CONCAT(DISTINCT k.firma ORDER BY k.firma SEPARATOR ', ')
+                FROM charge c JOIN kunden k ON k.id=c.fremd_kunde_id
+                WHERE c.item_id=i.id AND c.fremd_kunde_id IS NOT NULL AND c.status IN ('frei','quarantaene','gesperrt') AND c.menge_verfuegbar>0) AS besitzer,
+             (SELECT firma FROM kunden WHERE id=i.fremd_besitzer_id) AS besitzer_fix,
              (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='frei'$ortSql) AS frei_charge,
              (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='quarantaene'$ortSql) AS quarantaene,
              (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='gesperrt'$ortSql) AS gesperrt,
@@ -146,6 +150,12 @@ if ($istBM) {
             return (float)$r['quarantaene']>0 ? '<span class="badge badge-warn">'.$mng($r['quarantaene'],$r['einheit']).'</span>' : '<span class="muted">–</span>'; }],
         'unterwegs'     => ['label'=>'Unterwegs', 'sort'=>true, 'num'=>true, 'render'=>$unterwegsCell],
     ];
+}
+// Lager-2-Sicht (Fremdlager): Besitzer/Zuordnung zeigen – wem die Kundenware gehört (aus den Fremd-Chargen,
+// Fallback: der am Fremdprodukt hinterlegte Besitzer).
+if ($ort === 'lager2' && !$istBM) {
+    $besitzerCell = fn($r) => h(($r['besitzer'] ?? '') !== '' ? (string)$r['besitzer'] : (($r['besitzer_fix'] ?? '') !== '' ? (string)$r['besitzer_fix'] : '–'));
+    $cols['besitzer'] = ['label' => 'Besitzer', 'render' => $besitzerCell];
 }
 
 // Header-Aktion: auf Betriebsmittel-Reitern „Neu", sonst Wareneingang
