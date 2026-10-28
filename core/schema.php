@@ -3080,11 +3080,25 @@ function item_fremdbestand(int $item_id, ?int $kunde_id = null): float {
     return (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei' AND fremd_kunde_id IS NOT NULL", [$item_id]);
 }
 // Fremdlager-Bestand eines Artikels je Kunde (fuer die Anzeige auf der Artikel-Seite).
+// Einheit kommt aus der Charge (nicht vom Artikel) – ein Kunde mit gemischten Einheiten erscheint je Einheit.
 function item_fremdbestand_je_kunde(int $item_id): array {
-    return all("SELECT c.fremd_kunde_id AS kunde_id, k.firma, COALESCE(SUM(c.menge_verfuegbar),0) AS menge
+    return all("SELECT c.fremd_kunde_id AS kunde_id, k.firma,
+                       COALESCE(NULLIF(c.einheit,''),'Stk') AS einheit,
+                       COALESCE(SUM(c.menge_verfuegbar),0) AS menge
                FROM charge c LEFT JOIN kunden k ON k.id=c.fremd_kunde_id
                WHERE c.item_id=? AND c.status='frei' AND c.fremd_kunde_id IS NOT NULL
-               GROUP BY c.fremd_kunde_id, k.firma HAVING menge > 0 ORDER BY k.firma", [$item_id]);
+               GROUP BY c.fremd_kunde_id, k.firma, COALESCE(NULLIF(c.einheit,''),'Stk')
+               HAVING menge > 0 ORDER BY k.firma", [$item_id]);
+}
+// Fremdlager-Gesamtbestand eines Artikels je Einheit (fuer die Summen-Kachel) – Einheit aus der Charge.
+function item_fremdbestand_je_einheit(int $item_id): array {
+    $out = [];
+    foreach (all("SELECT COALESCE(NULLIF(einheit,''),'Stk') AS einheit, COALESCE(SUM(menge_verfuegbar),0) AS menge
+                  FROM charge WHERE item_id=? AND status='frei' AND fremd_kunde_id IS NOT NULL
+                  GROUP BY COALESCE(NULLIF(einheit,''),'Stk') HAVING menge > 0.0000001
+                  ORDER BY menge DESC", [$item_id]) as $r)
+        $out[(string)$r['einheit']] = (float)$r['menge'];
+    return $out;
 }
 // Fremdprodukt-Markierung: den gesamten EIGENEN Bestand eines Artikels dem Besitzer-Kunden zuschreiben
 // (Fremdlager/Lager 2). Setzt bei allen noch uns gehörenden Chargen fremd_kunde_id + standort='lager2'.
@@ -3761,13 +3775,17 @@ function item_bestand(int $item_id, bool $nur_frei = true): float {
 
 // Bestand je EINHEIT (A1): Stück und Kilo NIE zu einer Summe addieren. Gibt [einheit => menge] zurück
 // (unsere Chargen, Fremdlager ausgeschlossen). $status z. B. ['frei'] oder ['quarantaene']. Leere Einheit = 'Stk'.
-function charge_bestand_je_einheit(int $item_id, array $status = ['frei']): array {
+// $ort: 'lager1' = unser Bestand (fremd_kunde_id IS NULL, Default), 'lager2' = Kundenware (Fremdlager),
+// 'alle' = beides. Einheit kommt immer aus der Charge, nie vom Artikel.
+function charge_bestand_je_einheit(int $item_id, array $status = ['frei'], string $ort = 'lager1'): array {
     $status = array_values(array_filter($status, fn($s) => in_array($s, ['frei','quarantaene','gesperrt','leer'], true)));
     if (!$status) return [];
     $in = implode(',', array_fill(0, count($status), '?'));
+    $ortSql = $ort === 'lager2' ? ' AND fremd_kunde_id IS NOT NULL'
+            : ($ort === 'alle' ? '' : ' AND fremd_kunde_id IS NULL');
     $out = [];
     foreach (all("SELECT COALESCE(NULLIF(einheit,''),'Stk') AS einheit, COALESCE(SUM(menge_verfuegbar),0) AS menge
-                  FROM charge WHERE item_id=? AND status IN ($in) AND fremd_kunde_id IS NULL
+                  FROM charge WHERE item_id=? AND status IN ($in)$ortSql
                   GROUP BY COALESCE(NULLIF(einheit,''),'Stk') HAVING menge > 0.0000001
                   ORDER BY menge DESC", array_merge([$item_id], $status)) as $r)
         $out[(string)$r['einheit']] = (float)$r['menge'];

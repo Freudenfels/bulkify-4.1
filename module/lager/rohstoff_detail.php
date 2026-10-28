@@ -522,6 +522,7 @@ if (!$neu && !$resNurBedarf) {
 $resNum = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 $fremd_gesamt = $neu ? 0 : item_fremdbestand((int)$id);
 $fremdJeKunde = $neu ? [] : item_fremdbestand_je_kunde((int)$id);
+$fremdJeEinheit = $neu ? [] : item_fremdbestand_je_einheit((int)$id);
 $fremdKunden  = all("SELECT id, firma FROM kunden ORDER BY firma");
 if (!$neu) seed_lieferant_preis_if_empty();
 $preise = $neu ? [] : all("SELECT lp.*, COALESCE(l.firma, lp.lieferant_name) AS firma, l.kuerzel AS lief_kuerzel FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id WHERE lp.item_id=? ORDER BY lp.preis ASC, lp.menge_ab ASC", [(int)$id]);
@@ -558,7 +559,7 @@ if (!$neu) {
     echo '<div class="bx-card"><div class="k">Bestand (frei)</div><div class="v">' . $bestandWert($bestand_frei_je) . '</div></div>';
     if ($einheiten_gemischt && $bestand_qua_je) echo '<div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="color:var(--warn)">' . $bestandWert($bestand_qua_je) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Reserviert</div><div class="v"' . ($reserviert_gesamt > $bestand_frei + 1e-9 ? ' style="color:var(--warn)"' : '') . '>' . ($reserviert_gesamt>0 ? h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')).' '.h($it['einheit']) : '<span class="muted">0</span>') . '</div></div>';
-    if ($fremd_gesamt > 0) echo '<div class="bx-card"><div class="k">Fremdlager (Kunden)</div><div class="v">' . h(rtrim(rtrim(number_format($fremd_gesamt,3,',','.'),'0'),',')) . ' ' . h($it['einheit']) . '</div></div>';
+    if ($fremd_gesamt > 0) echo '<div class="bx-card"><div class="k">Fremdlager (Kunden)</div><div class="v">' . $bestandWert($fremdJeEinheit) . '</div></div>';
     if (($it['kategorie'] ?? '') === 'rohstoff') {
         $nfm = novelfood_status_meta($it['novelfood_status'] ?? null);
         echo '<div class="bx-card"><div class="k">Novel Food</div><div class="v" style="font-size:15px;color:' . $nfm['farbe'] . '">' . h($nfm['label']) . '</div></div>';
@@ -1266,7 +1267,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       <tbody>
       <?php foreach ($fremdJeKunde as $fk): ?>
         <tr><td><?= h($fk['firma'] ?: ('Kunde #' . (int)$fk['kunde_id'])) ?></td>
-            <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$fk['menge'], 3, ',', '.'), '0'), ',')) ?> <?= h($it['einheit']) ?></td></tr>
+            <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$fk['menge'], 3, ',', '.'), '0'), ',')) ?> <?= h($fk['einheit'] ?? $it['einheit']) ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>

@@ -47,6 +47,7 @@ $rows = all("SELECT i.id,i.artikelnummer,i.name,i.kategorie,i.einheit,i.bestand_
              (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='gesperrt'$ortSql) AS gesperrt,
              (SELECT COUNT(*) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt')$ortSql) AS n_chargen,
              (SELECT COUNT(DISTINCT COALESCE(NULLIF(c.einheit,''),'Stk')) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt') AND c.menge_verfuegbar>0$ortSql) AS n_einheit,
+             (SELECT COALESCE(NULLIF(c.einheit,''),'Stk') FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt') AND c.menge_verfuegbar>0$ortSql ORDER BY c.menge_verfuegbar DESC LIMIT 1) AS charge_einheit,
              (SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                 WHERE bp.item_id=i.id AND b.status='bestellt' AND b.angekommen_am IS NULL) AS unterwegs
              FROM item i WHERE $where", $params);
@@ -84,12 +85,13 @@ $rows = bx_sort_rows(array_values($rows), $sort, $dir);
 $mng = fn($x,$e) => $x > 0 ? rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',') . ' ' . h($e) : '<span class="muted">0</span>';
 // Bestand-Zelle: frei verfügbar + Hinweis-Badges für Quarantäne/gesperrt (damit Ware, die nur in
 // Quarantäne liegt, nicht fälschlich als „0/leer" wirkt).
-$bestandCell = function($r) use ($mng) {
-    $e = $r['einheit'] ?: 'Stk';
+$bestandCell = function($r) use ($mng, $ort) {
+    // Einheit kommt aus der Charge (Regel „Einheit je Charge"); nur Betriebsmittel nutzen die Artikel-Einheit.
+    $e = (!ist_betriebsmittel_kat($r['kategorie']) && !empty($r['charge_einheit'])) ? $r['charge_einheit'] : ($r['einheit'] ?: 'Stk');
     // A1: Chargen verschiedener Einheiten (z. B. kg + Stk) NICHT zu einer Summe addieren – je Einheit getrennt zeigen.
     if (!ist_betriebsmittel_kat($r['kategorie']) && (int)($r['n_einheit'] ?? 1) > 1) {
-        $frei = charge_bestand_je_einheit((int)$r['id'], ['frei']);
-        $qua  = charge_bestand_je_einheit((int)$r['id'], ['quarantaene']);
+        $frei = charge_bestand_je_einheit((int)$r['id'], ['frei'], $ort);
+        $qua  = charge_bestand_je_einheit((int)$r['id'], ['quarantaene'], $ort);
         $teile = [];
         foreach ($frei as $eh => $m) $teile[] = $mng($m, $eh);
         $out = $teile ? implode(' + ', $teile) : '<span class="muted">0</span>';
@@ -142,12 +144,14 @@ if ($istBM) {
         'name'          => ['label'=>'Name', 'sort'=>true],
         'kategorie'     => ['label'=>'Kategorie', 'sort'=>true, 'render'=>fn($r)=> h($ALLE_KAT[$r['kategorie']] ?? $r['kategorie'])],
         'n_chargen'     => ['label'=>'Chargen', 'sort'=>true, 'num'=>true],
-        'frei'          => ['label'=>'Bestand (frei)', 'sort'=>true, 'num'=>true, 'render'=>function($r) use ($mng) {
-            if ((int)($r['n_einheit'] ?? 1) > 1) { $t = []; foreach (charge_bestand_je_einheit((int)$r['id'], ['frei']) as $eh=>$m) $t[] = $mng($m,$eh); return $t ? implode(' + ', $t) : '<span class="muted">0</span>'; }
-            return $mng($r['frei'],$r['einheit']); }],
-        'quarantaene'   => ['label'=>'Quarantäne', 'sort'=>true, 'num'=>true, 'render'=>function($r) use ($mng) {
-            if ((int)($r['n_einheit'] ?? 1) > 1) { $t = []; foreach (charge_bestand_je_einheit((int)$r['id'], ['quarantaene']) as $eh=>$m) $t[] = '<span class="badge badge-warn">'.$mng($m,$eh).'</span>'; return $t ? implode(' ', $t) : '<span class="muted">–</span>'; }
-            return (float)$r['quarantaene']>0 ? '<span class="badge badge-warn">'.$mng($r['quarantaene'],$r['einheit']).'</span>' : '<span class="muted">–</span>'; }],
+        'frei'          => ['label'=>'Bestand (frei)', 'sort'=>true, 'num'=>true, 'render'=>function($r) use ($mng, $ort) {
+            if ((int)($r['n_einheit'] ?? 1) > 1) { $t = []; foreach (charge_bestand_je_einheit((int)$r['id'], ['frei'], $ort) as $eh=>$m) $t[] = $mng($m,$eh); return $t ? implode(' + ', $t) : '<span class="muted">0</span>'; }
+            $e = (!ist_betriebsmittel_kat($r['kategorie']) && !empty($r['charge_einheit'])) ? $r['charge_einheit'] : $r['einheit'];
+            return $mng($r['frei'],$e); }],
+        'quarantaene'   => ['label'=>'Quarantäne', 'sort'=>true, 'num'=>true, 'render'=>function($r) use ($mng, $ort) {
+            if ((int)($r['n_einheit'] ?? 1) > 1) { $t = []; foreach (charge_bestand_je_einheit((int)$r['id'], ['quarantaene'], $ort) as $eh=>$m) $t[] = '<span class="badge badge-warn">'.$mng($m,$eh).'</span>'; return $t ? implode(' ', $t) : '<span class="muted">–</span>'; }
+            $e = (!ist_betriebsmittel_kat($r['kategorie']) && !empty($r['charge_einheit'])) ? $r['charge_einheit'] : $r['einheit'];
+            return (float)$r['quarantaene']>0 ? '<span class="badge badge-warn">'.$mng($r['quarantaene'],$e).'</span>' : '<span class="muted">–</span>'; }],
         'unterwegs'     => ['label'=>'Unterwegs', 'sort'=>true, 'num'=>true, 'render'=>$unterwegsCell],
     ];
 }

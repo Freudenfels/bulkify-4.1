@@ -118,6 +118,8 @@ Die Spezifikations-/CoA-Auslesung (`spec_ki_felder()` in `core/spec_ki.php`) erk
 ## Einheitenbewusster Bestand + Verlauf/Verwendung (A1/A2, 2026-10-28)
 **Bestand je Einheit:** Die Kacheln „Bestand (frei)" und „Quarantäne" vermischen Stück und Kilo nicht mehr. Bei gemischten Einheiten (`charge_bestand_je_einheit($id, ['frei'|'quarantaene'])`) steht `12 kg + 1.080.000 Stk` statt einer falschen Summe. `item_bestand()` (eine Zahl) bleibt für die interne Reservierungs-/Bedarfsrechnung; die Anzeige nutzt die Einheiten-Aufschlüsselung.
 
+**Fremdlager-Einheit aus der Charge:** Die Kachel „Fremdlager (Kunden)" und die Fremdlager-Tabelle nehmen die Einheit jetzt aus den Fremd-Chargen, nicht mehr aus `item.einheit`. Ein als Fremdprodukt gebuchtes Fertigprodukt (z. B. in Stk abgefüllt) wird so korrekt als `384 Stk` angezeigt, auch wenn der Artikel intern noch `einheit='kg'` trägt. Helfer: `item_fremdbestand_je_einheit($id)` (Summe je Einheit) + `item_fremdbestand_je_kunde($id)` (jetzt mit Spalte `einheit`).
+
 **Verlauf** (Reiter): echte Bewegungen aus `item_bewegungen($id)` – Wareneingänge (+, mit Charge/Lieferant/Bestellung) und Produktionsverbrauch (−, mit PA/Auftrag) als datumsortierte Tabelle. Vorher war der Reiter leer (Aktivitäts-Log ohne Einträge).
 
 **Verwendung** (Reiter): aus `item_verwendung($id)` – in welchen Produktionsaufträgen/Aufträgen der Artikel verbraucht wurde (Quelle `produktion_verbrauch`), verlinkt auf PA und Auftrag. Vorher nur Platzhalter.
