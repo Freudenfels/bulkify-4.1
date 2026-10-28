@@ -195,10 +195,14 @@ if (!$b):
   <?php // Dokumente & Rechnung: der Lieferant lädt CoA, Rechnung o. Ä. direkt zu DIESER Bestellung hoch.
   require_once BX_ROOT . '/core/lieferant_dateien.php';
   $bdoks = bestell_dokumente($id);
-  $BDTYP = ['coa'=>'CoA / Analysenzertifikat', 'rechnung'=>'Rechnung', 'spec'=>'Spezifikation', 'analyse'=>'Laboranalyse', 'sonstiges'=>'Sonstiges']; ?>
+  $BDTYP = ['coa'=>'CoA / Analysenzertifikat', 'rechnung'=>'Rechnung', 'spec'=>'Spezifikation', 'analyse'=>'Laboranalyse', 'zahlungsbeleg'=>'Überweisungsbestätigung', 'sonstiges'=>'Sonstiges']; ?>
+  <?php // E8: Zahlungsstatus (vom Team gesetzt) – der Lieferant sieht „bezahlt" samt Beleg.
+    if (!empty($b['bezahlt_am'])): ?>
+    <div class="bx-panel badge-ok" style="padding:10px 14px;margin-bottom:12px">Bezahlt am <?= h(date('d.m.Y', strtotime((string)$b['bezahlt_am']))) ?><?= (string)($b['zahlungsweg'] ?? '') !== '' ? ' · ' . h((string)$b['zahlungsweg']) : '' ?>.</div>
+  <?php endif; ?>
   <div class="bx-panel">
     <h2 style="margin:0 0 4px">Dokumente &amp; Rechnung</h2>
-    <p class="muted" style="margin:0 0 12px">Laden Sie hier die Unterlagen zu dieser Bestellung hoch – z. B. das <strong>Analysenzertifikat (CoA)</strong> und Ihre <strong>Rechnung</strong>, damit wir zahlen können. Die Dokumente sind direkt mit dieser Bestellung verknüpft.</p>
+    <p class="muted" style="margin:0 0 12px">Laden Sie hier die Unterlagen zu dieser Bestellung hoch – z. B. das <strong>Analysenzertifikat (CoA)</strong> und Ihre <strong>Rechnung</strong>, damit wir zahlen können. Sobald wir bezahlt haben, sehen Sie hier den Status und ggf. die <strong>Überweisungsbestätigung</strong>.</p>
     <?php if ($bdoks): ?>
     <div class="bx-tablewrap" style="margin-bottom:12px"><table class="bx-table">
       <thead><tr><th>Typ</th><th>Datei</th><th>Datum</th><th></th></tr></thead>
@@ -207,7 +211,7 @@ if (!$b):
         <tr><td><?= h($BDTYP[$d['typ']] ?? $d['typ']) ?></td>
             <td><a href="?p=lieferant_dokument&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener"><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument')) ?></a></td>
             <td class="muted"><?= h(date('d.m.Y', strtotime((string)$d['angelegt']))) ?></td>
-            <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Dokument entfernen?');"><input type="hidden" name="aktion" value="bestell_dok_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">entfernen</button></form></td></tr>
+            <td style="text-align:right"><?php if (($d['typ'] ?? '') !== 'zahlungsbeleg'): ?><form method="post" style="margin:0" onsubmit="return confirm('Dokument entfernen?');"><input type="hidden" name="aktion" value="bestell_dok_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">entfernen</button></form><?php endif; ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>

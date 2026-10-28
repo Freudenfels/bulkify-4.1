@@ -1048,6 +1048,9 @@ function init_schema(): void {
     ensure_column('bestellung', 'online_preis', "DECIMAL(12,2) NULL");
     ensure_column('bestellung', 'online_waehrung', "VARCHAR(8) NULL");
     ensure_column('bestellung', 'erinnert_am', "DATETIME NULL");   // letzte Erinnerung an den Portal-Lieferanten (unbestätigte Bestellung)
+    // E8: Bezahlung der Lieferantenrechnung (vorerst nur an der Bestellung, NICHT mit der Buchhaltung verknüpft).
+    ensure_column('bestellung', 'bezahlt_am', "DATE NULL");
+    ensure_column('bestellung', 'zahlungsweg', "VARCHAR(120) NULL");   // z. B. Konto XY / Alipay / PayPal
 
     // lieferung_paket: ein Datensatz je Karton/Sendung einer Bestellung. Der Lieferant gibt an, wie
     // viele Pakete er schickt und welche Tracking-/Sendungsnummern dazugehoeren; das Lager hakt sie
@@ -7601,6 +7604,32 @@ function einkauf_rechnung_anhaengen(int $bestellung_id, string $field): int {
     $did = (int) insert_id();
     if (function_exists('log_aktivitaet')) log_aktivitaet('bestellung', $bestellung_id, 'team', 'Rechnung zum Online-Einkauf hochgeladen: ' . mb_substr($orig, 0, 120), 'dokument', 'dokument', $did);
     return $did;
+}
+
+// E8: Lieferantenrechnung einer Bestellung als bezahlt markieren (Datum + Zahlungsweg), optional mit
+// Überweisungsbestätigung (Datei-Feld). Vorerst NUR an der Bestellung – keine Buchhaltungs-/OP-Verknüpfung.
+// Der Beleg wird als dokument (typ='zahlungsbeleg') mit lieferant_id abgelegt, damit ihn der Lieferant im Portal sieht.
+function bestellung_bezahlt_markieren(int $bestellung_id, string $datum, string $zahlungsweg, string $fileField = ''): array {
+    $b = one("SELECT id, nummer, lieferant_id FROM bestellung WHERE id=?", [$bestellung_id]);
+    if (!$b) return ['ok'=>false, 'msg'=>'Bestellung nicht gefunden.'];
+    $d = trim($datum) !== '' && strtotime($datum) ? date('Y-m-d', strtotime($datum)) : date('Y-m-d');
+    q("UPDATE bestellung SET bezahlt_am=?, zahlungsweg=? WHERE id=?",
+      [$d, mb_substr(trim($zahlungsweg), 0, 120) ?: null, $bestellung_id]);
+    $belegId = 0;
+    if ($fileField !== '' && !empty($_FILES[$fileField]['name']) && ($_FILES[$fileField]['error'] ?? 1) === UPLOAD_ERR_OK) {
+        if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+        $orig = (string)$_FILES[$fileField]['name'];
+        $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($orig, PATHINFO_EXTENSION)));
+        $fn   = 'bestellung_' . $bestellung_id . '_zahlbeleg_' . bin2hex(random_bytes(6)) . ($ext ? '.' . $ext : '');
+        if (move_uploaded_file($_FILES[$fileField]['tmp_name'], BX_UPLOADS . '/' . $fn)) {
+            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,kunde_sichtbar) VALUES ('bestellung',?,?,?,?,?,?,0)",
+              [$bestellung_id, 'zahlungsbeleg', $b['lieferant_id'] ?: null, 'Überweisungsbestätigung', $fn, $orig]);
+            $belegId = (int) insert_id();
+        }
+    }
+    if ($b['lieferant_id']) log_aktivitaet('lieferant', (int)$b['lieferant_id'], 'team',
+        'Bestellung ' . (string)$b['nummer'] . ' als bezahlt markiert (' . date('d.m.Y', strtotime($d)) . ($zahlungsweg !== '' ? ', ' . trim($zahlungsweg) : '') . ').', 'bestellung', 'bestellung', $bestellung_id);
+    return ['ok'=>true, 'beleg'=>$belegId, 'msg'=>'Als bezahlt markiert.'];
 }
 
 function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int $lieferant, ?string $datum, array $freiIds = [], array $bulkMenge = []): int {

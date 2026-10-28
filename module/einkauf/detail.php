@@ -75,6 +75,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $f = bestellung_erinnerung_senden((int)$id);
         header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f))); exit;
     }
+    // E8: Lieferantenrechnung als bezahlt markieren (Datum + Zahlungsweg + optional Überweisungsbeleg).
+    if ($aktion === 'bezahlt' && !$neu) {
+        $res = bestellung_bezahlt_markieren((int)$id, (string)($_POST['bezahlt_am'] ?? ''), (string)($_POST['zahlungsweg'] ?? ''), 'zahlbeleg');
+        header('Location: ?p=bestellung&id=' . $id . ($res['ok'] ? '&ok=1' : '&fehler=' . urlencode($res['msg']))); exit;
+    }
     // B4: Bestellung stornieren.
     if ($aktion === 'storno' && !$neu) {
         $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : 'Team';
@@ -316,6 +321,35 @@ if (!$neu) {
            . '<div class="bx-card"><div class="k">Preis (gesamt)</div><div class="v">' . $pr . '</div></div>'
            . '<div class="bx-card"><div class="k">Rechnung</div><div class="v" style="font-size:14px">' . ($rechnHtml !== '' ? $rechnHtml : '<span class="muted">keine hochgeladen</span>') . '</div></div>'
            . '</div><p class="muted" style="font-size:12px;margin:8px 0 0">Selbst online gekauft – diese Angaben helfen der Buchhaltung beim Gegenrechnen von Einnahmen und Ausgaben.</p></div>';
+    }
+
+    // E8: Zahlung der Lieferantenrechnung (nur bei Lieferanten-Bestellungen; online ist bereits selbst bezahlt).
+    if (!empty($b['lieferant_id'])) {
+        $rechnDocs = all("SELECT id, datei_orig, titel FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC", [(int)$id]);
+        $zbeleg = all("SELECT id, datei_orig, titel FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='zahlungsbeleg' ORDER BY id DESC", [(int)$id]);
+        $istBezahlt = !empty($b['bezahlt_am']);
+        echo '<div class="bx-panel"><h2 style="margin-top:0">Zahlung</h2>';
+        // Rechnung(en) des Lieferanten zum Download
+        echo '<div class="bx-row" style="gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:10px">';
+        echo '<div><div class="muted" style="font-size:12px">Rechnung des Lieferanten</div><div>';
+        if ($rechnDocs) { foreach ($rechnDocs as $rd) echo '<a href="?p=dokument&id=' . (int)$rd['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none;margin-right:12px">&#11015;&#65039; ' . h((string)($rd['datei_orig'] ?: 'Rechnung')) . '</a>'; }
+        else echo '<span class="muted">noch keine hochgeladen (Lieferant lädt sie im Portal hoch)</span>';
+        echo '</div></div>';
+        echo '<div><div class="muted" style="font-size:12px">Status</div><div>' . ($istBezahlt ? bx_badge('bezahlt am ' . date('d.m.Y', strtotime((string)$b['bezahlt_am'])) . ((string)($b['zahlungsweg'] ?? '') !== '' ? ' · ' . h((string)$b['zahlungsweg']) : ''), 'ok') : bx_badge('offen', 'warn')) . '</div></div>';
+        echo '</div>';
+        if (!$istBezahlt) {
+            echo '<form method="post" enctype="multipart/form-data" class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">'
+               . '<input type="hidden" name="aktion" value="bezahlt">'
+               . '<div class="bx-field" style="margin:0;max-width:170px"><label>Bezahlt am</label><input type="date" name="bezahlt_am" value="' . date('Y-m-d') . '"></div>'
+               . '<div class="bx-field" style="margin:0;min-width:200px"><label>Zahlungsweg</label><input type="text" name="zahlungsweg" placeholder="z. B. Konto XY / Alipay"></div>'
+               . '<div class="bx-field" style="margin:0;min-width:220px"><label>Überweisungsbestätigung (optional)</label><input type="file" name="zahlbeleg" accept=".pdf,.jpg,.jpeg,.png,.webp"></div>'
+               . '<button class="btn btn-primary btn-sm" type="submit">Als bezahlt markieren</button></form>';
+        } elseif ($zbeleg) {
+            echo '<div class="muted" style="font-size:12px">Überweisungsbestätigung: ';
+            foreach ($zbeleg as $zd) echo '<a href="?p=dokument&id=' . (int)$zd['id'] . '" target="_blank" style="margin-right:12px">&#11015;&#65039; ' . h((string)($zd['datei_orig'] ?: 'Beleg')) . '</a>';
+            echo '</div>';
+        }
+        echo '</div>';
     }
 
     // Ablauf beim Lieferanten – dasselbe Panel sieht der Lieferant in seinem Portal.

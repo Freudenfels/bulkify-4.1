@@ -27,3 +27,9 @@ Wird einem Lieferanten die **Rohstoff-Berechtigung** entzogen (Kategorie `rohsto
 
 ## E1 – Massenanfragen bereinigen (2026-10-28)
 Oben (nur Admin) ein Panel „Massenanfragen aufräumen": listet Lieferanten mit **≥ 20 offenen, unbeantworteten** Anfragen (`lieferanten_mit_massenanfragen()`), je Zeile ein Button „N offene bereinigen" (POST `aktion=anfragen_bereinigen`). Löscht über `lieferant_anfragen_bereinigen()` **nur** `lieferant_anfrage`-Zeilen ohne Angebot und mit offenem Status – Rohstoffe, Angebote und beantwortete Anfragen bleiben.
+
+## E6 – Angebotsvergleich nach Produkt (2026-10-28)
+Umschalter „Liste / Vergleich (nach Produkt)" (`?p=lief_anfragen&ansicht=vergleich`). Vergleich gruppiert alle Anfragen MIT Angebot nach Produkt/Rohstoff (Rezeptur-, Item- oder Betreff-Schlüssel) und zeigt je Gruppe die Lieferantenangebote nebeneinander: Lieferant · Variante/Gehalt · Kapselgröße (+ Vorschlag E4) · Preis ab Menge (Staffel) · MOQ · Lieferzeit · Spec (da/fehlt). Günstigster Preis zuerst. Je Angebot „Preise übernehmen" (POST `aktion=angebot_annehmen` → `lieferant_angebot_annehmen`), setzt die EK-Staffel am Artikel/Produkt.
+
+## E8 – Lieferantenrechnung bezahlen (an der Bestellung)
+Die Zahlung steht auf der Bestelldetailseite (`module/einkauf/detail.php`, Panel „Zahlung"): Download der vom Lieferanten hochgeladenen Rechnung, „Als bezahlt markieren" mit Datum + Zahlungsweg + optionaler Überweisungsbestätigung (`bestellung_bezahlt_markieren()` → `bestellung.bezahlt_am/zahlungsweg` + `dokument` typ='zahlungsbeleg'). Der Lieferant sieht im Portal (`module/lieferant/bestellung.php`) den Status „bezahlt am …" und kann die Überweisungsbestätigung herunterladen (nicht löschen). Noch NICHT mit Buchhaltung/OP-Liste verknüpft.
