@@ -3881,6 +3881,13 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
   <?php endif; ?>
+  <?php // Dienstleistungen (Laboranalysen o. Ä.) von Produktbestellungen trennen: Produkte zuerst, danach als
+        // eigener Block „Dienstleistungen & Analysen". Reihenfolge innerhalb der Gruppe bleibt (stabile Partition).
+        $aktBest = array_merge(
+            array_values(array_filter($aktBest, fn($a) => ($a['kategorie'] ?? '') !== 'dienstleistung')),
+            array_values(array_filter($aktBest, fn($a) => ($a['kategorie'] ?? '') === 'dienstleistung'))
+        );
+        $dlHeaderShown = false; ?>
   <div id="bxBestListe">
   <?php foreach ($aktBest as $a):
         $istDLrow = ($a['kategorie'] ?? '') === 'dienstleistung';
@@ -3891,7 +3898,10 @@ portal_head('Kundenportal · ' . $k['firma']);
         $totalA = count($trackA) ?: 1;
         // Etikett offen? Nur Produkt-Aufträge, die ein Etikett brauchen und noch nicht freigegeben sind.
         $etMiss = !$istDLrow && !$complete && auftrag_braucht_etikett((int)$a['id']) && !etikett_freigegeben((int)$a['id']); ?>
-  <a class="bx-panel bx-order-row<?= $etMiss ? ' bx-ord-etmiss' : '' ?>" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
+  <?php if ($istDLrow && !$dlHeaderShown): $dlHeaderShown = true; ?>
+    <div id="bxBestDLsep" class="bx-dl-sep" style="margin:22px 0 10px;padding-top:12px;border-top:1px solid var(--line,#e5e5df)"><strong style="font-weight:600">Dienstleistungen &amp; Analysen</strong> <span class="muted" style="font-size:12px">&middot; z.&nbsp;B. Laboranalysen &ndash; keine Produktbestellungen</span></div>
+  <?php endif; ?>
+  <a class="bx-panel bx-order-row<?= $etMiss ? ' bx-ord-etmiss' : '' ?>" data-dl="<?= $istDLrow ? '1' : '0' ?>" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:13px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
@@ -3923,10 +3933,12 @@ portal_head('Kundenportal · ' . $k['firma']);
     var rows = Array.prototype.slice.call(liste.querySelectorAll('.bx-order-row'));
     rows.forEach(function(r){ r.dataset.such = (r.textContent || '').toLowerCase().replace(/\s+/g, ' '); });
     function norm(s){ return (s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+    var dlSep = document.getElementById('bxBestDLsep');
     function filter(){
-      var q = norm(inp.value), treffer = 0;
-      rows.forEach(function(r){ var ok = !q || r.dataset.such.indexOf(q) !== -1; r.style.display = ok ? '' : 'none'; if (ok) treffer++; });
+      var q = norm(inp.value), treffer = 0, dlSichtbar = 0;
+      rows.forEach(function(r){ var ok = !q || r.dataset.such.indexOf(q) !== -1; r.style.display = ok ? '' : 'none'; if (ok) { treffer++; if (r.dataset.dl === '1') dlSichtbar++; } });
       if (leer) leer.style.display = treffer ? 'none' : 'block';
+      if (dlSep) dlSep.style.display = dlSichtbar ? '' : 'none';
     }
     inp.addEventListener('input', filter);
   })();
