@@ -43,5 +43,11 @@ Pull am Start, commit+push nach jedem **fertigen, getesteten** Schritt. Einzige 
 
 **Parallel arbeiten erlaubt** – am besten **ein Chat pro Bereich** (Lager `lager/`, CRM `crm/`, Dashboard `core/`+`module/`+`public/`; getrennte Ordner → verschiedene Dateien → kein Konflikt). Koordination = **Rebase-Ampel**: **vor jedem Push `git pull --rebase`, dann `git push`.** Wird der Push abgelehnt (anderer Chat war schneller = rot), einfach nochmal `git pull --rebase` und pushen (grün). **Niemals `git push --force`.** Echte Merge-Konflikte entstehen nur bei **gemeinsamen Dateien** – v. a. `core/schema.php` und die Nähte `*/core/erp.php`; dort anhalten und sauber lösen. Alle pushen nach `main` (Auto-Deploy), deshalb nur Fertiges committen.
 
+## Memory-Abzug nach Google Drive
+Nach **jeder** Änderung an den Memory-/MD-Dateien im Memory-Ordner **alle** `.md` (inkl. `MEMORY.md`) nach `G:\Meine Ablage\bulkify v4 md` kopieren.
+- Gleichnamige Dateien dort **überschreiben**.
+- Dort **nichts löschen**, was nicht aus dem Memory-Ordner stammt.
+- Diese Kopie ist nur ein **Abzug** für Nico/Drive, **nicht** die Quelle – gearbeitet wird weiter im Memory-Ordner.
+
 ## Wer
 Ansprechpartner: **Nico** (thomalla@freudenfels.de). Stil: direkt, knapp, umsetzungsorientiert.
