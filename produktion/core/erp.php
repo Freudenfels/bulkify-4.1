@@ -67,12 +67,65 @@ function erp_rohstoff_rueckgabe_speichern(int $pa_id, array $gewichte, string $v
     foreach (erp_rohstoff_rueckgabe_offen($pa_id) as $r) {
         $cid = (int)$r['charge_id']; if (!array_key_exists($cid, $gewichte)) continue;
         $rest = max(0.0, (float)$gewichte[$cid]);
+        // Teil 4 (Schritt 3): blind. Der gewogene Wert IST der neue Bestand. Der rechnerisch erwartete Rest ist der
+        // aktuell gebuchte Bestand (nach FEFO-Abbuchung) – die Differenz wird still als Schwund protokolliert,
+        // der Mitarbeiter sieht nichts davon.
+        $rechnerisch = (float) scalar("SELECT menge_verfuegbar FROM charge WHERE id=?", [$cid]);
         q("UPDATE charge SET menge_verfuegbar=? WHERE id=?", [$rest, $cid]);
+        erp_schwund_erfassen((int)$r['item_id'], $cid, $pa_id, $rechnerisch, $rest, (string)$r['einheit'], $von);
         $n++;
     }
     if (function_exists('pr_daten_setzen')) pr_daten_setzen($pa_id, 'rohstoff_rueckgabe_done', '1', $von);
     if (function_exists('bedarf_bump')) bedarf_bump();
     return $n;
+}
+
+// --- Gebinde (Teil 4) über die Naht: Ortswechsel beim Scannen + Schwund beim Rückgabe-Wiegen ---------
+// charge_gebinde/schwund/benachrichtigung sind GETEILTE Dashboard-Tabellen – hier nur Raw-SQL. Fehlt eine
+// Tabelle (nur das Dashboard legt sie an), passiert nichts (graceful).
+function erp_charge_gebinde_liste(int $charge_id): array {
+    if ($charge_id <= 0 || !tabelle_da('charge_gebinde')) return [];
+    return all("SELECT * FROM charge_gebinde WHERE charge_id=? ORDER BY nummer, id", [$charge_id]);
+}
+// Ein Gebinde einem Scan zuordnen und in die Produktion umbuchen (NUR Ortswechsel, keine Abbuchung).
+// Rückgabe ['ok'=>bool, 'charge_id'=>int, 'nummer'=>int, 'anzahl'=>int] – charge_id für die Scan-Bestätigung.
+function erp_gebinde_scan_nach_produktion(int $gebinde_id): array {
+    if ($gebinde_id <= 0 || !tabelle_da('charge_gebinde')) return ['ok'=>false, 'charge_id'=>0];
+    $g = one("SELECT id, charge_id, nummer, anzahl_gesamt, standort FROM charge_gebinde WHERE id=?", [$gebinde_id]);
+    if (!$g) return ['ok'=>false, 'charge_id'=>0];
+    if ((string)$g['standort'] !== 'produktion')
+        q("UPDATE charge_gebinde SET standort='produktion' WHERE id=?", [$gebinde_id]);
+    return ['ok'=>true, 'charge_id'=>(int)$g['charge_id'], 'nummer'=>(int)$g['nummer'], 'anzahl'=>(int)$g['anzahl_gesamt']];
+}
+// Schwund (Differenz rechnerisch vs. gewogen) still protokollieren + Benachrichtigung „nach oben":
+//  mehr als erwartet IMMER, Schwund ab Grenze (app_meta schwund_grenze_kg, Default 1 kg). „Blind" – keine
+//  Rückmeldung an den Mitarbeiter. Spiegelt schwund_erfassen() des Dashboards (core/schema.php).
+function erp_schwund_erfassen(int $item_id, ?int $charge_id, ?int $pa_id, float $rechnerisch, float $gewogen,
+                              string $einheit = 'kg', string $mitarbeiter = '', ?int $gebinde_id = null): void {
+    if ($item_id <= 0 || !tabelle_da('schwund')) return;
+    $diff = round($rechnerisch - $gewogen, 3);          // positiv = Schwund (weniger als erwartet)
+    if (abs($diff) <= 0.0005) return;
+    $auftrag_id = $pa_id ? (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]) : null;
+    q("INSERT INTO schwund (item_id,charge_id,gebinde_id,pa_id,auftrag_id,rechnerisch,gewogen,differenz,einheit,mitarbeiter,angelegt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      [$item_id, $charge_id ?: null, $gebinde_id ?: null, $pa_id ?: null, $auftrag_id ?: null,
+       round($rechnerisch, 3), round($gewogen, 3), $diff, $einheit, ($mitarbeiter ?: null), gmdate('Y-m-d H:i:s')]);
+    $grenze = (float) str_replace(',', '.', (string) (scalar("SELECT v FROM app_meta WHERE k='schwund_grenze_kg'") ?: '1'));
+    $mehr = $diff < 0;
+    if (!($mehr || $diff > $grenze)) return;            // innerhalb Grenze -> nur stiller Eintrag
+    if (!tabelle_da('benachrichtigung')) return;
+    $name = (string) scalar("SELECT name FROM item WHERE id=?", [$item_id]);
+    $chnr = $charge_id ? (string) scalar("SELECT charge_nr FROM charge WHERE id=?", [$charge_id]) : '';
+    $nf = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+    $betreff = ($mehr ? 'Wiege-Abweichung (mehr als erwartet): ' : 'Schwund über Grenze: ') . $name . ($chnr ? ' · Charge ' . $chnr : '');
+    $text = 'Rechnerisch ' . $nf($rechnerisch) . ' ' . $einheit . ', gewogen ' . $nf($gewogen) . ' ' . $einheit
+          . ', Differenz ' . $nf(abs($diff)) . ' ' . $einheit . ' ' . ($mehr ? '(mehr – Mischung/Rezeptur prüfen)' : '(Schwund)')
+          . ($mitarbeiter !== '' ? ' · Mitarbeiter: ' . $mitarbeiter : '') . ($pa_id ? ' · PA #' . $pa_id : '');
+    $link = $charge_id ? ('?p=chargen&id=' . $charge_id) : ('?p=rohstoff&id=' . $item_id);
+    $jetzt = gmdate('Y-m-d H:i:s');
+    $hatArt = (bool) scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='benachrichtigung' AND column_name='art'");
+    if ($hatArt) q("INSERT INTO benachrichtigung (betreff,text,link,art,wichtig,erstellt) VALUES (?,?,?,?,1,?)", [$betreff, $text, $link, 'wiegen', $jetzt]);
+    else         q("INSERT INTO benachrichtigung (betreff,text,link,erstellt) VALUES (?,?,?,?)", [$betreff, $text, $link, $jetzt]);
 }
 
 // --- Chargenprobe je Rohstoff (vor dem Mischen) -----------------------------------------------

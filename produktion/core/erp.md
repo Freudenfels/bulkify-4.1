@@ -49,3 +49,8 @@ Die Dashboard-Tabellen `prod_charge` / `prod_charge_rohstoff` + `charge.standort
 
 ### Einzige bewusste Abweichung
 `erp_produkt_leerkapsel_id()` nutzt die **manuell gepflegte** `produkt.leerkapsel_id` bzw. die eindeutige Leerkapsel über die **gepflegte** `rezeptur.kapselgroesse_id`. Die gewichtsbasierte Auto-Berechnung der Kapselgröße (Dashboard: `rezeptur_kapselgroesse()` via Füllgewicht/Dichte) ist hier **nicht** nachgebaut. Ist die Kapselgröße nicht gepflegt, wird – wie im Dashboard bei Uneindeutigkeit – nichts abgebucht.
+
+## Teil 4: Gebinde + Schwund (Raw-SQL über die Naht)
+- `erp_charge_gebinde_liste($charge_id)` – Gebinde einer Charge (geteilte Tabelle `charge_gebinde`).
+- `erp_gebinde_scan_nach_produktion($gebinde_id)` – Schritt 2: Gebinde beim Scannen auf `standort='produktion'` umbuchen (NUR Ortswechsel, keine Abbuchung); gibt die `charge_id` zurück (fürs Scan-Gate).
+- `erp_schwund_erfassen(item,charge,pa,rechnerisch,gewogen,einheit,von,gebinde?)` – Schritt 3: Differenz still in `schwund` protokollieren + Benachrichtigung „nach oben" (mehr IMMER, Schwund ab `app_meta['schwund_grenze_kg']`, Default 1 kg). Spiegelt `schwund_erfassen()` des Dashboards. `erp_rohstoff_rueckgabe_speichern()` ruft es je Charge auf (rechnerisch = gebuchter Bestand nach FEFO, gewogen = eingegebener Rest) – blind, der Mitarbeiter sieht nichts.

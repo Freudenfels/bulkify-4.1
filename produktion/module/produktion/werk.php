@@ -124,6 +124,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['werk_flash_ok'] = !empty($r['ok']);
         weiter('?p=werk&id=' . (int)($_POST['pa_id'] ?? 0));
     }
+    if ($werkUid && $aktion === 'werk_gebinde_scan') {
+        // Teil 4 (Schritt 2): ein gescanntes Gebinde in die Produktion umbuchen (NUR Ortswechsel, keine Abbuchung).
+        // AJAX vom Scan-Panel: liefert die charge_id zurück, damit das Scan-Gate die zugehörige Charge bestätigt.
+        $gid = (int)($_POST['gebinde_id'] ?? 0);
+        $r = (function_exists('erp_gebinde_scan_nach_produktion') && $gid > 0)
+           ? erp_gebinde_scan_nach_produktion($gid) : ['ok' => false, 'charge_id' => 0];
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => !empty($r['ok']), 'charge_id' => (int)($r['charge_id'] ?? 0),
+                          'nummer' => (int)($r['nummer'] ?? 0), 'anzahl' => (int)($r['anzahl'] ?? 0)]);
+        exit;
+    }
     weiter('?p=werk');
 }
 
@@ -582,10 +593,25 @@ if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ 
   function msg(t, ok){ var m=document.getElementById('scanmsg'); if(m){ m.textContent=t; m.style.color = ok ? 'var(--gruen)' : 'var(--err)'; } }
   function parse(s){
     s = (s||'').trim(); if(!s) return {};
-    var m = s.match(/[?&]id=(\d+)/);            // QR-URL .../lager/?p=charge&id=123
+    var g = s.match(/[?&]bg=(\d+)/);            // Gebinde-QR .../lager/?p=gebinde&bg=123 (Teil 4)
+    if(g) return {bg:g[1]};
+    var m = s.match(/[?&]id=(\d+)/);            // Charge-QR (Alt-Etikett) .../lager/?p=charge&id=123
     if(m) return {cid:m[1]};
     if(/^\d+$/.test(s)) return {cid:s};          // nackte Charge-ID
     return {cnr:s.toUpperCase()};                // Chargennummer als Text
+  }
+  // Eine Charge (per cid oder cnr) im Gate bestätigen. Rückgabe true, wenn eine passende Pflicht-Charge getroffen wurde.
+  function confirmCharge(cid, cnr){
+    var el=null;
+    stats.forEach(function(x){ if(el) return;
+      if(cid && x.getAttribute('data-cid')===String(cid)) el=x;
+      else if(cnr && x.getAttribute('data-cnr') && x.getAttribute('data-cnr')===cnr) el=x; });
+    if(!el) return false;
+    if(el.getAttribute('data-ok')!=='1'){
+      el.setAttribute('data-ok','1'); el.textContent=WT.js_confirmed_badge;
+      el.style.background='rgba(29,158,117,.18)'; el.style.color='#7fe3c2'; el.style.borderColor='var(--gruen)';
+    }
+    return true;
   }
   function gate(){
     var ok=0; stats.forEach(function(x){ if(x.getAttribute('data-ok')==='1') ok++; });
@@ -599,7 +625,18 @@ if ('serviceWorker' in navigator) { window.addEventListener('load', function(){ 
     var sp=document.getElementById('scanpanel'); if(sp) sp.style.display = alle ? 'none' : '';  // Scan-Panel ausblenden, nur noch "Erledigt"
   }
   function confirmScan(raw){
-    var p=parse(raw), el=null;
+    var p=parse(raw);
+    // Gebinde-QR: erst serverseitig in die Produktion umbuchen (Ortswechsel), dann die zugehörige Charge bestätigen.
+    if(p.bg){
+      fetch('?p=werk',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'aktion=werk_gebinde_scan&gebinde_id='+encodeURIComponent(p.bg)})
+        .then(function(r){return r.json();})
+        .then(function(j){
+          if(j && j.ok && j.charge_id){ if(confirmCharge(j.charge_id, null)){ msg(WT.js_charge_ok, true); gate(); } else { msg(WT.js_unknown_charge+raw, false); } }
+          else { msg(WT.js_unknown_charge+raw, false); }
+        }).catch(function(){ msg(WT.js_unknown_charge+raw, false); });
+      return true;
+    }
+    var el=null;
     stats.forEach(function(x){ if(el) return;
       if(p.cid && x.getAttribute('data-cid')===String(p.cid)) el=x;
       else if(p.cnr && x.getAttribute('data-cnr') && x.getAttribute('data-cnr')===p.cnr) el=x; });

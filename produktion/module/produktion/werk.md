@@ -44,3 +44,6 @@ Jede Rohstoff-/Material-Zeile mit bekannter FEFO-Charge hat einen großen Touch-
 „Erledigt" postet `aktion=werk_erledigt` → **`erp_schritt_abschliessen($schritt_id, $name)`** – dieselbe Logik wie `?p=run`: Reihenfolge-Prüfung, Vorbereitungs-Sperre, **Material-FEFO-Abbuchung mit Mangel-Schutz** (fehlt Pflicht-Material, ist der Button gesperrt + Hinweis). Bewusst **ohne** die Leiter-Extras (Maschinenauswahl/Reinigung/Klima/Mischer-Plan/FEFO-Gebinde) – die laufen weiter über `?p=run` (Produktionsleiter). *Offen/nächster Ausbau:* Maschinen-Reinigungs-Gate auch in die Mitarbeiter-App holen, falls gewünscht.
 
 Die Fertigware wird beim **letzten Schritt** eingebucht (durch `erp_schritt_abschliessen`).
+
+## Teil 4: Gebinde-Scan (Schritt 2/4)
+Das Scan-Panel erkennt jetzt neben Charge-QR (`?p=charge&id=`, Alt-Etiketten), nackter Charge-ID und Chargennummer auch den **Gebinde-QR** (`?p=gebinde&bg=<id>`). Beim Scannen eines Gebindes wird es per AJAX (`aktion=werk_gebinde_scan` → `erp_gebinde_scan_nach_produktion`) in die Produktion umgebucht (nur Ortswechsel) und die zugehörige Charge im Gate bestätigt. Alt-Etiketten (Charge-QR) funktionieren unverändert weiter. Schwund bei der Rohstoff-Rückgabe läuft automatisch mit (blind, s. erp.md).
