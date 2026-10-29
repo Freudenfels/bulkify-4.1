@@ -135,6 +135,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                           'nummer' => (int)($r['nummer'] ?? 0), 'anzahl' => (int)($r['anzahl'] ?? 0)]);
         exit;
     }
+    if ($werkUid && $aktion === 'werk_restmischung') {
+        // Teil 4 (Schritt 5): übrige gemischte Bulkware (kg) als Bulkware zur Rezeptur in Lager 1 einbuchen.
+        $paId = (int)($_POST['pa_id'] ?? 0);
+        $kg   = (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0'));
+        $r = (function_exists('erp_restmischung_einbuchen') && $paId > 0)
+           ? erp_restmischung_einbuchen($paId, $kg, $werkName ?: 'Mitarbeiter')
+           : ['ok' => false, 'msg' => $T['fl_rest_fail']];
+        if (!empty($r['ok'])) {
+            $kgTxt = rtrim(rtrim(number_format((float)$r['menge'], 3, ',', '.'), '0'), ',');
+            $_SESSION['werk_flash'] = sprintf($T['fl_rest_ok'], $kgTxt, (string)$r['charge_nr'], date('d.m.Y', strtotime((string)$r['mhd'])));
+            $_SESSION['werk_flash_ok'] = true;
+        } else {
+            $_SESSION['werk_flash'] = (string)($r['msg'] ?? $T['fl_rest_fail']); $_SESSION['werk_flash_ok'] = false;
+        }
+        weiter('?p=werk&id=' . $paId);
+    }
     weiter('?p=werk');
 }
 
@@ -559,6 +575,20 @@ header('Content-Type: text/html; charset=utf-8');
       <?php endif; ?>
     </div>
   </div>
+
+  <?php if ($mischenDone): // Teil 4 (Schritt 5): Restmischung ins Lager 1 einbuchen – nach dem Mischen verfügbar. ?>
+  <div class="panel">
+    <div class="step-h" style="font-size:20px"><?= h($T['rest_h']) ?></div>
+    <div class="muted" style="font-size:15px;margin:4px 0 12px"><?= h($T['rest_hint']) ?></div>
+    <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center" onsubmit="return confirm('<?= h($T['rest_save']) ?>?');">
+      <input type="hidden" name="aktion" value="werk_restmischung">
+      <input type="hidden" name="pa_id" value="<?= (int)$id ?>">
+      <input type="text" inputmode="decimal" name="menge" placeholder="<?= h($T['rest_ph']) ?>" required style="font-size:19px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:140px;text-align:right">
+      <span style="font-weight:700">kg</span>
+      <button class="btn btn-ghost btn-lg" type="submit"><?= h($T['rest_save']) ?></button>
+    </form>
+  </div>
+  <?php endif; ?>
 
   <?php // Ablauf-Überblick (klein) – welche Schritte schon erledigt sind. ?>
   <div class="panel">

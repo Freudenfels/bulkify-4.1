@@ -54,3 +54,6 @@ Die Dashboard-Tabellen `prod_charge` / `prod_charge_rohstoff` + `charge.standort
 - `erp_charge_gebinde_liste($charge_id)` – Gebinde einer Charge (geteilte Tabelle `charge_gebinde`).
 - `erp_gebinde_scan_nach_produktion($gebinde_id)` – Schritt 2: Gebinde beim Scannen auf `standort='produktion'` umbuchen (NUR Ortswechsel, keine Abbuchung); gibt die `charge_id` zurück (fürs Scan-Gate).
 - `erp_schwund_erfassen(item,charge,pa,rechnerisch,gewogen,einheit,von,gebinde?)` – Schritt 3: Differenz still in `schwund` protokollieren + Benachrichtigung „nach oben" (mehr IMMER, Schwund ab `app_meta['schwund_grenze_kg']`, Default 1 kg). Spiegelt `schwund_erfassen()` des Dashboards. `erp_rohstoff_rueckgabe_speichern()` ruft es je Charge auf (rechnerisch = gebuchter Bestand nach FEFO, gewogen = eingegebener Rest) – blind, der Mitarbeiter sieht nichts.
+
+## Teil 4 (Schritt 5): Restmischung einbuchen
+`erp_restmischung_einbuchen($pa_id, $menge_kg, $von)` – legt die übrige gemischte Bulkware als `charge` des Rezeptur-Bulk-Artikels (`erp_rezeptur_bulkitem`) an: Menge in kg (`einheit='kg'`), `charge_nr` = Mischcharge-Nr (`erp_prod_charge_fuer_pa`, sonst PR-Charge-Nr), MHD = `erp_mhd_standard()`, Status 'frei', Standort Lager 1, `pa_id` gesetzt. Rückgabe ['ok','charge_nr','mhd',…].

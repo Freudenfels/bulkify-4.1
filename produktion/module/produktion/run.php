@@ -104,6 +104,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         pr_pause_erfassen(['pa_id'=>$id, 'art'=>$art, 'nach_station'=>(string)($_POST['nach_station'] ?? ''),
             'von'=>$akteur, 'an_wen'=>(string)($_POST['an_wen'] ?? ''), 'grund'=>(string)($_POST['grund'] ?? '')]);
         flash(($art === 'schichtende' ? 'Schichtwechsel' : 'Pause') . ' erfasst – an einem sauberen Punkt zwischen den Schritten.');
+    } elseif ($aktion === 'restmischung') {   // Teil 4 (Schritt 5): Restmischung ins Lager 1 einbuchen
+        $kg = (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0'));
+        $r = function_exists('erp_restmischung_einbuchen') ? erp_restmischung_einbuchen($id, $kg, $akteur) : ['ok'=>false, 'msg'=>'Fehler.'];
+        if (!empty($r['ok'])) {
+            $kgTxt = rtrim(rtrim(number_format((float)$r['menge'], 3, ',', '.'), '0'), ',');
+            flash('Restmischung eingebucht: ' . $kgTxt . ' kg · Charge ' . (string)$r['charge_nr'] . ' · MHD ' . date('d.m.Y', strtotime((string)$r['mhd'])) . '.', 'ok');
+        } else flash((string)($r['msg'] ?? 'Restmischung konnte nicht eingebucht werden.'), 'warn');
     }
     weiter('?p=run&id=' . $id);
 }
@@ -369,6 +376,22 @@ $pausen = pr_pausen_fuer_pa($id); ?>
 </div>
 <?php else: ?>
 <div class="bx-panel badge-ok" style="margin-bottom:16px;padding:14px 18px">Alle Schritte erledigt – die Produktion ist abgeschlossen.</div>
+<?php endif; ?>
+
+<?php
+// Teil 4 (Schritt 5): Restmischung ins Lager 1 einbuchen – nach dem Mischen verfügbar.
+$mischenDone = false; foreach ($schritte as $s) if ((string)$s['station'] === 'Mischen' && (int)($s['erledigt'] ?? 0) === 1) { $mischenDone = true; break; }
+if ($mischenDone): ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Restmischung ins Lager 1 einbuchen</h2>
+  <p class="muted" style="margin-top:0">Übrige gemischte Bulkware (kg) als Bulkware zur Rezeptur einlagern – mit Mischcharge und MHD.</p>
+  <form method="post" class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap" onsubmit="return confirm('Restmischung einbuchen?');">
+    <input type="hidden" name="aktion" value="restmischung">
+    <input type="text" inputmode="decimal" name="menge" placeholder="kg" required style="width:140px;text-align:right">
+    <span style="font-weight:600">kg</span>
+    <button class="btn btn-ghost btn-sm" type="submit">Restmischung einbuchen</button>
+  </form>
+</div>
 <?php endif; ?>
 
 <div class="bx-panel">

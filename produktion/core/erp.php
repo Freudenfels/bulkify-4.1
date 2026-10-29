@@ -1019,6 +1019,35 @@ function erp_rezeptur_bulkitem(int $rezeptur_id): ?int {
       [erp_naechste_nummer('BULK'), $rz['name'] . ' – Bulk', 'fertig', (string)$rz['darreichungsform'], $einheit, $einheit, $rezeptur_id]);
     return insert_id();
 }
+// Teil 4 (Schritt 5): Restmischung ins Lager 1 einbuchen – die übrige gemischte Bulkware (in kg) als Charge des
+// Rezeptur-Bulk-Artikels anlegen, mit der Mischcharge-Nummer (CH-…, sonst PR-Charge-Nr) und Standard-MHD.
+// Status 'frei' (eigene Produktion, direkt wiederverwendbar), Standort Lager 1. Rückgabe ['ok','charge_nr','mhd','msg'].
+function erp_restmischung_einbuchen(int $pa_id, float $menge_kg, string $von = ''): array {
+    if ($pa_id <= 0 || $menge_kg <= 0 || !tabelle_da('charge')) return ['ok'=>false, 'msg'=>'Bitte eine Menge größer 0 angeben.'];
+    $pa = one("SELECT id, produkt_id, rezeptur_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['ok'=>false, 'msg'=>'Auftrag nicht gefunden.'];
+    $rid = (int)($pa['rezeptur_id'] ?? 0);
+    if (!$rid && !empty($pa['produkt_id'])) $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    if (!$rid) return ['ok'=>false, 'msg'=>'Dem Auftrag ist keine Rezeptur zugeordnet.'];
+    $bulk = (int) (erp_rezeptur_bulkitem($rid) ?? 0);
+    if (!$bulk) return ['ok'=>false, 'msg'=>'Kein Bulk-Artikel zur Rezeptur.'];
+    $mc = erp_prod_charge_fuer_pa($pa_id);
+    $chargeNr = ($mc && !empty($mc['nummer'])) ? (string)$mc['nummer'] : erp_charge_naechste_nr($pa_id);
+    $mhd = erp_mhd_standard();
+    $notiz = 'Restmischung eingebucht' . ($von !== '' ? ' (' . $von . ')' : '');
+    $jetzt = gmdate('Y-m-d H:i:s');
+    if (erp_spalte_da('charge', 'standort'))
+        q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,standort,pa_id,notiz,angelegt)
+           VALUES (?,?,?,?,?,?,CURDATE(),'frei','lager1',?,?,?)",
+          [$chargeNr, $bulk, $menge_kg, $menge_kg, 'kg', $mhd, $pa_id, $notiz, $jetzt]);
+    else
+        q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,pa_id,notiz,angelegt)
+           VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,?,?)",
+          [$chargeNr, $bulk, $menge_kg, $menge_kg, 'kg', $mhd, $pa_id, $notiz, $jetzt]);
+    $cid = (int) insert_id();
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return ['ok'=>true, 'charge_id'=>$cid, 'charge_nr'=>$chargeNr, 'menge'=>$menge_kg, 'mhd'=>$mhd, 'msg'=>'Restmischung eingebucht'];
+}
 function erp_auftrag_ist_fulfillment(int $auftrag_id): bool {
     if ($auftrag_id <= 0) return false;
     return (bool) scalar("SELECT k.nutzt_fulfillment FROM auftrag a JOIN kunden k ON k.id=a.kunde_id WHERE a.id=?", [$auftrag_id]);

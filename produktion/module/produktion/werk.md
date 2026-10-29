@@ -47,3 +47,6 @@ Die Fertigware wird beim **letzten Schritt** eingebucht (durch `erp_schritt_absc
 
 ## Teil 4: Gebinde-Scan (Schritt 2/4)
 Das Scan-Panel erkennt jetzt neben Charge-QR (`?p=charge&id=`, Alt-Etiketten), nackter Charge-ID und Chargennummer auch den **Gebinde-QR** (`?p=gebinde&bg=<id>`). Beim Scannen eines Gebindes wird es per AJAX (`aktion=werk_gebinde_scan` → `erp_gebinde_scan_nach_produktion`) in die Produktion umgebucht (nur Ortswechsel) und die zugehörige Charge im Gate bestätigt. Alt-Etiketten (Charge-QR) funktionieren unverändert weiter. Schwund bei der Rohstoff-Rückgabe läuft automatisch mit (blind, s. erp.md).
+
+## Teil 4 (Schritt 5): Restmischung einbuchen
+Nach dem Mischen (`$mischenDone`) erscheint ein Panel „Restmischung ins Lager 1 einbuchen" (kg-Feld + Button, mehrsprachig `rest_*`). POST `werk_restmischung` → `erp_restmischung_einbuchen`. Dasselbe gibt es im Dashboard-Produktionsmodus (`run.php`, POST `restmischung`).
