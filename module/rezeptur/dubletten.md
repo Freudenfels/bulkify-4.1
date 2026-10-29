@@ -11,3 +11,6 @@
 **Zusammenlegen (durch Nico, später):** über das bestehende Panel „Interne Stammrezeptur" (`rezeptur/detail.php`, `stamm_rezeptur_id`). `rezeptur_bulkitem()` löst über die Stammrezeptur auf → alle verknüpften Rezepturen teilen **einen** Bulk-Artikel/-Bestand. Der kundenbezogene Name bleibt an der jeweiligen Kundenrezeptur bzw. am `produkt.kundenname`.
 
 **Route/Nav:** `?p=rezeptur_dubletten` (admin-only per Default-Route), Menü „Produkt → Doppelte Rezepturen".
+
+## Bulk-Bestand (Requirement 1)
+Popup, Tabelle („Bulk-Bestand"-Spalte) und Vergleich zeigen je Rezeptur den Bestand ihres EIGENEN Bulk-Artikels (`item WHERE rezeptur_id=? AND kategorie='fertig' AND gesperrt=0`, ohne Stamm-Auflösung, legt nichts an): verfügbare Menge, Chargen (Nr/Menge/Status/MHD) und aktive Reservierungen (Auftrag/Kunde). Zusammengeführte Rezepturen haben keinen eigenen Bulk → „– / via Stamm".

@@ -423,6 +423,8 @@ function init_schema(): void {
     // G5: interne Stammrezeptur – inhaltlich gleiche Kundenrezepturen zeigen auf dieselbe Rezeptur und teilen so
     // EINEN Bulk-Bestand (rezeptur_bulkitem löst über die Stammrezeptur auf). NULL = eigenständig.
     ensure_column('rezeptur', 'stamm_rezeptur_id', "INT NULL");
+    // Teil-3-Nachtrag: in eine Stammrezeptur zusammengeführte (deaktivierte) Rezeptur – Marker, nichts hart löschen.
+    ensure_column('rezeptur', 'zusammengefuehrt_in', "INT NULL");
     // Form-spezifische Eigenschaft NEBEN der Kapselgröße: Füll-/Stückgewicht je Einzeleinheit (Gummi/Stick = g,
     // Pulver = g pro Bag, Flüssig/Gel/Öl = ml) und die Tablettenform (nur Tablette). Statt Kapselgröße bei Nicht-Kapsel.
     ensure_column('rezeptur', 'einheit_fuellmenge', "DECIMAL(12,3) NULL");   // g (fest) bzw. ml (flüssig) je Einzeleinheit, je nach Form

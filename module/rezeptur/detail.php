@@ -32,12 +32,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=rezeptur_detail&id=' . $id); exit;
     }
     // G5: interne Stammrezeptur setzen/lösen – inhaltlich gleiche Kundenrezepturen teilen EINEN Bulk-Bestand.
+    // Requirement 2: Beim Verknüpfen wandern Bulk-Chargen + aktive Reservierungen der ALT-Rezeptur auf den
+    // Bulk-Artikel der Stammrezeptur; der leere Alt-Bulk-Artikel wird gesperrt (nicht gelöscht) und die
+    // Alt-Rezeptur als „zusammengeführt" markiert (deaktiviert). Kundennamen/Produkte bleiben unverändert.
     if (!$neu && $aktion === 'stamm_setzen' && has_role('admin')) {
         $stamm = (int)($_POST['stamm_rezeptur_id'] ?? 0);
         if ($stamm === (int)$id) $stamm = 0;                 // kein Selbstbezug
         // Kette vermeiden: zeigt die Ziel-Stammrezeptur selbst auf eine andere, nimm deren Stamm (eine Ebene).
         if ($stamm > 0) { $w = (int) scalar("SELECT stamm_rezeptur_id FROM rezeptur WHERE id=?", [$stamm]); if ($w > 0 && $w !== (int)$id) $stamm = $w; }
-        q("UPDATE rezeptur SET stamm_rezeptur_id=? WHERE id=?", [$stamm ?: null, (int)$id]);
+        $hatZusItem = (bool) scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='item' AND column_name='zusammengefuehrt_in'");
+        if ($stamm > 0) {
+            $stammBulk = (int) (rezeptur_bulkitem($stamm) ?? 0);   // Ziel-Bulk (legt ihn an, falls noch keiner)
+            $childBulk = (int) scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' AND gesperrt=0 ORDER BY id LIMIT 1", [(int)$id]);
+            if ($stammBulk > 0 && $childBulk > 0 && $childBulk !== $stammBulk) {
+                q("UPDATE charge SET item_id=? WHERE item_id=?", [$stammBulk, $childBulk]);                     // Chargen wandern
+                q("UPDATE reservierung SET item_id=? WHERE item_id=? AND status='aktiv'", [$stammBulk, $childBulk]); // Reservierungen wandern
+                if ($hatZusItem) q("UPDATE item SET gesperrt=1, zusammengefuehrt_in=? WHERE id=?", [$stammBulk, $childBulk]);
+                else             q("UPDATE item SET gesperrt=1 WHERE id=?", [$childBulk]);
+            }
+            q("UPDATE rezeptur SET stamm_rezeptur_id=?, zusammengefuehrt_in=? WHERE id=?", [$stamm, $stamm, (int)$id]);
+        } else {
+            // Lösen: nur den Pointer entfernen (bereits konsolidierter Bestand wird nicht zurückgeschoben).
+            q("UPDATE rezeptur SET stamm_rezeptur_id=NULL, zusammengefuehrt_in=NULL WHERE id=?", [(int)$id]);
+        }
+        if (function_exists('log_aktivitaet'))
+            log_aktivitaet('rezeptur', (int)$id, 'team',
+                $stamm > 0 ? ('In Stammrezeptur #' . $stamm . ' zusammengeführt – Bulk-Bestand übertragen, Alt-Rezeptur deaktiviert.')
+                           : 'Stammrezeptur-Verknüpfung gelöst.', 'rezeptur', 'rezeptur', (int)$id);
         header('Location: ?p=rezeptur_detail&id=' . $id . '&stammok=1#stamm'); exit;
     }
     // Überarbeiten starten: eine eingefrorene/freigegebene Rezeptur temporär zum Bearbeiten entsperren
@@ -852,23 +873,89 @@ if (!$neu && function_exists('has_role') && has_role('admin')):
     $kand = all("SELECT id, nummer, name FROM rezeptur WHERE id<>? AND (stamm_rezeptur_id IS NULL OR stamm_rezeptur_id=0) ORDER BY name", [$rid]);
     // Wie viele Rezepturen teilen aktuell diesen Bulk (diese Rezeptur ist Stamm von …)?
     $teilenN = (int) scalar("SELECT COUNT(*) FROM rezeptur WHERE stamm_rezeptur_id=?", [$rid]);
+    // Requirement 2: Impact fürs Bestätigungs-Pop-up – was wandert beim Verknüpfen? (Bulk dieser Rezeptur.)
+    $childBulkId = (int) scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' AND gesperrt=0 ORDER BY id LIMIT 1", [$rid]);
+    $nf3 = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+    $impChargen = $childBulkId ? all("SELECT charge_nr, menge_verfuegbar, einheit, status FROM charge WHERE item_id=? ORDER BY id", [$childBulkId]) : [];
+    $impRes     = $childBulkId ? all("SELECT r.menge, r.item_id, a.nummer AS auftrag_nr, k.firma AS kunde
+                                      FROM reservierung r LEFT JOIN auftrag a ON a.id=r.auftrag_id LEFT JOIN kunden k ON k.id=a.kunde_id
+                                      WHERE r.item_id=? AND r.status='aktiv' ORDER BY r.id DESC", [$childBulkId]) : [];
+    $impProds   = all("SELECT p.name, k.firma AS kunde FROM produkt p LEFT JOIN kunden k ON k.id=p.kunde_id WHERE p.rezeptur_id=? ORDER BY p.id", [$rid]);
+    $stammImpact = [
+        'hatBulk' => $childBulkId > 0,
+        'chargen' => array_map(fn($c) => ['nr'=>(string)$c['charge_nr'], 'txt'=>$nf3($c['menge_verfuegbar']) . ' ' . (string)$c['einheit'], 'status'=>(string)$c['status']], $impChargen),
+        'reservierungen' => array_map(fn($r) => ['txt'=>$nf3($r['menge']) . (($r['auftrag_nr'] ?? '') ? ' · ' . (string)$r['auftrag_nr'] : '') . (($r['kunde'] ?? '') ? ' · ' . (string)$r['kunde'] : '')], $impRes),
+        'produkte' => array_map(fn($p) => ['name'=>(string)$p['name'], 'kunde'=>(string)($p['kunde'] ?? '')], $impProds),
+    ];
+    $istZusammengefuehrt = (int) scalar("SELECT COALESCE(zusammengefuehrt_in,0) FROM rezeptur WHERE id=?", [$rid]) > 0;
 ?>
 <div class="bx-panel" id="stamm" style="scroll-margin-top:80px">
   <h2 style="margin-top:0">Interne Stammrezeptur <span class="muted" style="font-weight:400;font-size:13px">– gemeinsamer Bulk-Bestand</span></h2>
   <?php if (isset($_GET['stammok'])): ?><div class="badge-ok" style="padding:8px 12px;border-radius:8px;margin-bottom:10px;display:inline-block">Gespeichert.</div><?php endif; ?>
   <p class="muted" style="margin-top:0;font-size:13px">Inhaltlich gleiche Kundenrezepturen (z. B. „Shilajit ohne Carrier, Kapsel X") können auf <strong>eine interne Stammrezeptur</strong> zeigen. Alle verknüpften ziehen dann aus <strong>demselben Bulk-Bestand</strong> (`rezeptur_bulkitem` löst über die Stammrezeptur auf). Vor dem Verknüpfen prüfen, dass die Rezepturen wirklich denselben Bulk ergeben.</p>
   <?php if ($teilenN > 0): ?><div class="muted" style="font-size:13px;margin-bottom:8px"><strong><?= $teilenN ?></strong> andere Rezeptur(en) nutzen diese hier als Stammrezeptur.</div><?php endif; ?>
-  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+  <?php if ($istZusammengefuehrt): ?><div class="muted" style="font-size:13px;margin-bottom:8px">Diese Rezeptur ist <strong>zusammengeführt (deaktiviert)</strong> – ihr Bulk-Bestand liegt auf der Stammrezeptur.</div><?php endif; ?>
+  <form method="post" id="stammForm" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
     <input type="hidden" name="aktion" value="stamm_setzen">
     <div class="bx-field" style="margin:0;min-width:320px"><label>Diese Rezeptur teilt den Bulk mit</label>
-      <select name="stamm_rezeptur_id" class="rscombo">
+      <select name="stamm_rezeptur_id" id="stammSelect" class="rscombo">
         <option value="0">– eigenständig (kein gemeinsamer Bulk) –</option>
         <?php foreach ($kand as $c): ?><option value="<?= (int)$c['id'] ?>" <?= $stammId === (int)$c['id'] ? 'selected' : '' ?>><?= h(trim(((string)$c['nummer'] !== '' ? $c['nummer'] . ' · ' : '') . $c['name'])) ?></option><?php endforeach; ?>
       </select>
     </div>
-    <button class="btn btn-primary btn-sm" type="submit">Speichern</button>
+    <button class="btn btn-primary btn-sm" type="button" id="stammBtn">Zusammenführen …</button>
   </form>
   <?php if ($stammRow): ?><p class="muted" style="font-size:12px;margin:8px 0 0">Aktuell verknüpft mit <a href="?p=rezeptur_detail&id=<?= (int)$stammRow['id'] ?>"><?= h(trim(((string)$stammRow['nummer'] !== '' ? $stammRow['nummer'] . ' · ' : '') . $stammRow['name'])) ?></a> – Bulk-Bestand wird geteilt.</p><?php endif; ?>
+
+  <div id="stammOverlay" style="position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;z-index:9000;padding:24px 12px;overflow:auto">
+    <div style="background:var(--panel,#fff);color:var(--text,#111);border:1px solid var(--line,#ddd);border-radius:12px;max-width:760px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.25)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line,#ddd)">
+        <h2 style="margin:0;font-size:18px">Zusammenführen bestätigen</h2>
+        <button type="button" id="stammClose" style="cursor:pointer;border:1px solid var(--line,#ddd);background:transparent;border-radius:8px;padding:4px 12px">Abbrechen</button>
+      </div>
+      <div id="stammModalBody" style="padding:16px 18px"></div>
+      <div style="padding:0 18px 16px;display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-primary btn-sm" id="stammGo">Jetzt zusammenführen</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="stammCancel">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var IMP = <?= json_encode($stammImpact, JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;
+    var form=document.getElementById('stammForm'), sel=document.getElementById('stammSelect'), btn=document.getElementById('stammBtn');
+    var ov=document.getElementById('stammOverlay'), body=document.getElementById('stammModalBody');
+    if(!form||!sel||!btn||!ov) return;
+    function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+    function close(){ ov.style.display='none'; }
+    function open(){ ov.style.display='flex'; }
+    document.getElementById('stammClose').addEventListener('click', close);
+    document.getElementById('stammCancel').addEventListener('click', close);
+    ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+    document.getElementById('stammGo').addEventListener('click', function(){ form.submit(); });
+    btn.addEventListener('click', function(){
+      var v=parseInt(sel.value||'0',10);
+      if(!v){ form.submit(); return; }   // eigenständig / lösen -> ohne Pop-up
+      var zielName = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : ('#'+v);
+      var h='<p style="margin-top:0">Diese Rezeptur wird mit <strong>'+esc(zielName)+'</strong> zusammengeführt. Folgendes wandert auf den Bulk-Artikel der Stammrezeptur:</p>';
+      if(!IMP.hatBulk){
+        h+='<div class="muted" style="font-size:13px">Kein eigener Bulk-Bestand – es wandert nichts, nur die Verknüpfung wird gesetzt.</div>';
+      } else {
+        h+='<h3 style="font-size:14px;margin:10px 0 4px">Bulk-Chargen ('+IMP.chargen.length+')</h3>';
+        if(IMP.chargen.length){ h+='<ul style="margin:0;padding-left:18px">'; IMP.chargen.forEach(function(c){ h+='<li>'+esc(c.nr||'–')+' · '+esc(c.txt)+' <span class="muted">('+esc(c.status)+')</span></li>'; }); h+='</ul>'; }
+        else h+='<div class="muted" style="font-size:13px">keine</div>';
+        h+='<h3 style="font-size:14px;margin:10px 0 4px">Reservierungen ('+IMP.reservierungen.length+')</h3>';
+        if(IMP.reservierungen.length){ h+='<ul style="margin:0;padding-left:18px">'; IMP.reservierungen.forEach(function(r){ h+='<li>'+esc(r.txt)+'</li>'; }); h+='</ul>'; }
+        else h+='<div class="muted" style="font-size:13px">keine</div>';
+      }
+      h+='<h3 style="font-size:14px;margin:10px 0 4px">Betroffene Produkte / Kunden ('+IMP.produkte.length+')</h3>';
+      if(IMP.produkte.length){ h+='<ul style="margin:0;padding-left:18px">'; IMP.produkte.forEach(function(p){ h+='<li>'+esc(p.name)+(p.kunde?(' <span class="muted">· '+esc(p.kunde)+'</span>'):'')+'</li>'; }); h+='</ul>'; }
+      else h+='<div class="muted" style="font-size:13px">keine</div>';
+      h+='<p class="muted" style="font-size:12px;margin:12px 0 0">Kundennamen bleiben unverändert. Der leere Alt-Bulk-Artikel wird gesperrt (nicht gelöscht), diese Rezeptur wird als zusammengeführt (deaktiviert) markiert. Nichts wird hart gelöscht.</p>';
+      body.innerHTML=h; open();
+    });
+  })();
+  </script>
 </div>
 <?php endif; ?>
 <?php
