@@ -65,6 +65,28 @@ foreach ($dubletten as $g) foreach ($g as $r) {
                 WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rid]);
     $prods = all("SELECT p.name, k.firma AS kunde FROM produkt p LEFT JOIN kunden k ON k.id=p.kunde_id
                   WHERE p.rezeptur_id=? ORDER BY p.id", [$rid]);
+    // Requirement 1: eigener Bulk-Artikel dieser Rezeptur (NICHT über Stamm aufgelöst, nichts anlegen) + Bestand.
+    $bulkId = (int) scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' AND gesperrt=0 ORDER BY id LIMIT 1", [$rid]);
+    $bulk = null;
+    if ($bulkId > 0) {
+        $bchargen = all("SELECT charge_nr, menge_verfuegbar, einheit, status, mhd FROM charge
+                         WHERE item_id=? AND menge_verfuegbar>0 ORDER BY (mhd IS NULL), mhd, id", [$bulkId]);
+        $bres = all("SELECT r.menge, a.nummer AS auftrag_nr, k.firma AS kunde
+                     FROM reservierung r LEFT JOIN auftrag a ON a.id=r.auftrag_id LEFT JOIN kunden k ON k.id=a.kunde_id
+                     WHERE r.item_id=? AND r.status='aktiv' ORDER BY r.id DESC", [$bulkId]);
+        $bmenge = array_sum(array_map(fn($c) => (float)$c['menge_verfuegbar'], $bchargen));
+        $beinheit = (string)($bchargen[0]['einheit'] ?? scalar("SELECT einheit FROM item WHERE id=?", [$bulkId]));
+        $bulk = [
+            'item_id' => $bulkId,
+            'menge'   => $bmenge,
+            'einheit' => $beinheit,
+            'chargen' => array_map(fn($c) => ['nr'=>(string)$c['charge_nr'], 'menge'=>(float)$c['menge_verfuegbar'],
+                            'einheit'=>(string)$c['einheit'], 'status'=>(string)$c['status'],
+                            'mhd'=>$c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : ''], $bchargen),
+            'reservierungen' => array_map(fn($x) => ['menge'=>(float)$x['menge'], 'auftrag'=>(string)($x['auftrag_nr'] ?? ''),
+                            'kunde'=>(string)($x['kunde'] ?? '')], $bres),
+        ];
+    }
     $detail[$rid] = [
         'id'        => $rid,
         'titel'     => trim(((string)$r['nummer'] !== '' ? $r['nummer'] . ' · ' : '') . (string)$r['name']),
@@ -76,6 +98,7 @@ foreach ($dubletten as $g) foreach ($g as $r) {
         'status'    => (string)$r['status'],
         'zutaten'   => array_map(fn($z) => ['name' => (string)$z['name'], 'mg' => (float)$z['menge_mg']], $zut),
         'produkte'  => array_map(fn($p) => ['name' => (string)$p['name'], 'kunde' => (string)($p['kunde'] ?? '')], $prods),
+        'bulk'      => $bulk,
     ];
 }
 
@@ -124,15 +147,17 @@ bx_head('Doppelte Rezepturen', count($dubletten) . ' Gruppe(n) inhaltlich identi
       </div>
     </div>
     <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
-      <thead><tr><th>Rezeptur</th><th>Geschmack</th><th>Kunde</th><th>Status</th><th>Stammrezeptur</th></tr></thead>
+      <thead><tr><th>Rezeptur</th><th>Geschmack</th><th>Kunde</th><th>Status</th><th class="bx-num">Bulk-Bestand</th><th>Stammrezeptur</th></tr></thead>
       <tbody>
       <?php foreach ($g as $r): $stammId = (int)($r['stamm_rezeptur_id'] ?? 0);
-            $gtr = $geschmackText(rezeptur_geschmack((int)$r['id'])); ?>
+            $gtr = $geschmackText(rezeptur_geschmack((int)$r['id']));
+            $bd = $detail[(int)$r['id']]['bulk'] ?? null; ?>
         <tr>
           <td><a href="#" class="rz-open" data-rz="<?= (int)$r['id'] ?>"><?= h(trim(((string)$r['nummer'] !== '' ? $r['nummer'] . ' · ' : '') . $r['name'])) ?></a></td>
           <td><?= $gtr !== '' ? h($gtr) : '<span class="muted">–</span>' ?></td>
           <td><?= $r['kunde_firma'] ? h((string)$r['kunde_firma']) : '<span class="muted">– (kundenübergreifend)</span>' ?></td>
           <td><?= h((string)$r['status']) ?></td>
+          <td class="bx-num"><?= $bd ? h($nz($bd['menge']) . ' ' . $bd['einheit']) : '<span class="muted">–</span>' ?></td>
           <td><?= $stammId > 0 ? '&rarr; #' . $stammId : '<span class="muted">eigenständig</span>' ?></td>
         </tr>
       <?php endforeach; ?>
@@ -170,8 +195,26 @@ bx_head('Doppelte Rezepturen', count($dubletten) . ' Gruppe(n) inhaltlich identi
       h += fact('Geschmack', d.geschmack);
       h += fact('Status', d.status);
       h += fact('Kunde', d.kunde);
+      if (d.bulk) h += fact('Bulk-Bestand', mg(d.bulk.menge) + ' ' + d.bulk.einheit);
       h += '</div>';
-      h += '<h3 style="margin:6px 0 6px;font-size:14px">Zutaten je Einheit</h3>';
+      // Requirement 1: Bulk-Bestand (Menge, Chargen, Reservierungen) des eigenen Bulk-Artikels.
+      h += '<h3 style="margin:14px 0 6px;font-size:14px">Bulk-Bestand</h3>';
+      if (!d.bulk) {
+        h += '<div class="muted" style="font-size:13px">Kein eigener Bulk-Artikel – diese Rezeptur teilt den Bulk ggf. über die Stammrezeptur.</div>';
+      } else {
+        h += '<div style="margin-bottom:6px">Verfügbar: <strong>' + mg(d.bulk.menge) + ' ' + esc(d.bulk.einheit) + '</strong></div>';
+        if (d.bulk.chargen.length) {
+          h += '<table><thead><tr><th>Charge</th><th style="text-align:right">Menge</th><th>Status</th><th>MHD</th></tr></thead><tbody>';
+          d.bulk.chargen.forEach(function(c){ h += '<tr><td>' + esc(c.nr||'–') + '</td><td style="text-align:right">' + mg(c.menge) + ' ' + esc(c.einheit) + '</td><td>' + esc(c.status) + '</td><td>' + esc(c.mhd||'–') + '</td></tr>'; });
+          h += '</tbody></table>';
+        } else { h += '<div class="muted" style="font-size:13px">Keine Chargen mit Bestand.</div>'; }
+        if (d.bulk.reservierungen.length) {
+          h += '<div style="margin-top:8px;font-size:13px"><strong>Reservierungen:</strong><ul style="margin:4px 0 0;padding-left:18px">';
+          d.bulk.reservierungen.forEach(function(x){ h += '<li>' + mg(x.menge) + ' ' + esc(d.bulk.einheit) + (x.auftrag?(' · ' + esc(x.auftrag)):'') + (x.kunde?(' · ' + esc(x.kunde)):'') + '</li>'; });
+          h += '</ul></div>';
+        }
+      }
+      h += '<h3 style="margin:14px 0 6px;font-size:14px">Zutaten je Einheit</h3>';
       if(d.zutaten.length){
         h += '<table><thead><tr><th>Zutat</th><th style="text-align:right">mg je Einheit</th></tr></thead><tbody>';
         d.zutaten.forEach(function(z){ h += '<tr><td>'+esc(z.name)+'</td><td style="text-align:right">'+mg(z.mg)+'</td></tr>'; });
@@ -215,6 +258,7 @@ bx_head('Doppelte Rezepturen', count($dubletten) . ' Gruppe(n) inhaltlich identi
       h+=row('Kapselgröße', ds.map(function(d){return d.kapsel||'–';}));
       h+=row('Füllgewicht', ds.map(function(d){return d.fuell?(d.fuell+' g'):'–';}));
       h+=row('Geschmack', ds.map(function(d){return d.geschmack||'–';}));
+      h+=row('Bulk-Bestand', ds.map(function(d){return d.bulk ? (mg(d.bulk.menge)+' '+d.bulk.einheit) : '–';}));
       order.forEach(function(k){
         h+=row(seen[k], ds.map(function(d){ var f=''; d.zutaten.forEach(function(z){ if(z.name.toLowerCase()===k) f=mg(z.mg); }); return f||'–'; }));
       });
