@@ -3807,10 +3807,15 @@ portal_head('Kundenportal · ' . $k['firma']);
 <?php elseif ($view === 'bestellungen'):
     // DL-Auftrag gilt als abgeschlossen bei 'erledigt' (es gibt kein 'versendet'); Produkt-Auftrag bei 'versendet'.
     $istAbgeschl = fn($a) => (($a['kategorie'] ?? '') === 'dienstleistung') ? ($a['status'] === 'erledigt') : ($a['status'] === 'versendet');
-    $inArbeit    = array_values(array_filter($auftraege, fn($a) => !$istAbgeschl($a)));
-    $abgeschlBest = array_values(array_filter($auftraege, fn($a) => $istAbgeschl($a)));
-    $btab = ($_GET['btab'] ?? '') === 'abgeschlossen' ? 'abgeschlossen' : 'arbeit';
-    $aktBest = $btab === 'abgeschlossen' ? $abgeschlBest : $inArbeit;
+    $istDL       = fn($a) => ($a['kategorie'] ?? '') === 'dienstleistung';
+    // Dienstleistungen (Laboranalysen o. Ä.) laufen in einem EIGENEN Reiter – nicht zwischen den Produktbestellungen.
+    $prodAll      = array_values(array_filter($auftraege, fn($a) => !$istDL($a)));
+    $dlAlle       = array_values(array_filter($auftraege, $istDL));
+    $inArbeit     = array_values(array_filter($prodAll, fn($a) => !$istAbgeschl($a)));
+    $abgeschlBest = array_values(array_filter($prodAll, fn($a) => $istAbgeschl($a)));
+    $btab = in_array($_GET['btab'] ?? '', ['abgeschlossen', 'dienstleistung'], true) ? (string)$_GET['btab'] : 'arbeit';
+    if ($btab === 'dienstleistung' && !$dlAlle) $btab = 'arbeit';   // leeren DL-Reiter nicht erzwingen
+    $aktBest = $btab === 'abgeschlossen' ? $abgeschlBest : ($btab === 'dienstleistung' ? $dlAlle : $inArbeit);
     // Phase je Auftrag EINMAL bestimmen (fuer Sortierung + Anzeige, statt sie im Loop erneut zu berechnen).
     $phaseCache = [];
     foreach ($aktBest as $a) $phaseCache[(int)$a['id']] = kunde_auftrag_phase($a);
@@ -3841,6 +3846,15 @@ portal_head('Kundenportal · ' . $k['firma']);
         } else { // neu
             usort($aktBest, fn($x, $y) => strcmp((string)($y['angelegt'] ?? ''), (string)($x['angelegt'] ?? '')));  // neueste zuerst
         }
+    } elseif ($btab === 'dienstleistung') {
+        // Dienstleistungs-Reiter: offene zuerst (am weitesten fortgeschritten oben), abgeschlossene darunter; je neuere zuerst.
+        usort($aktBest, function ($x, $y) use ($phaseCache, $istAbgeschl) {
+            $ax = $istAbgeschl($x) ? 1 : 0; $ay = $istAbgeschl($y) ? 1 : 0;
+            if ($ax !== $ay) return $ax <=> $ay;                                              // offene oben
+            $px = $phaseCache[(int)$x['id']]['idx']; $py = $phaseCache[(int)$y['id']]['idx'];
+            if ($px !== $py) return $py <=> $px;
+            return strcmp((string)($y['angelegt'] ?? ''), (string)($x['angelegt'] ?? ''));
+        });
     } else {
         // Abgeschlossene: zuletzt abgeschlossen oben (jüngstes Versand-/Status-Datum zuerst).
         $abschlDat = fn($a) => (string)(($a['versendet_am'] ?? '') ?: ($a['status_datum'] ?? '') ?: ($a['bezahlt_am'] ?? '') ?: ($a['angelegt'] ?? ''));
@@ -3861,6 +3875,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="settabs" style="margin:0">
       <a href="<?= $portalLink('bestellungen') ?>&btab=arbeit"        class="<?= $btab === 'arbeit' ? 'on' : '' ?>">In Bearbeitung<?= $inArbeit ? ' (' . count($inArbeit) . ')' : '' ?></a>
       <a href="<?= $portalLink('bestellungen') ?>&btab=abgeschlossen" class="<?= $btab === 'abgeschlossen' ? 'on' : '' ?>">Abgeschlossene<?= $abgeschlBest ? ' (' . count($abgeschlBest) . ')' : '' ?></a>
+      <?php if ($dlAlle): ?><a href="<?= $portalLink('bestellungen') ?>&btab=dienstleistung" class="<?= $btab === 'dienstleistung' ? 'on' : '' ?>">Dienstleistungen &amp; Analysen (<?= count($dlAlle) ?>)</a><?php endif; ?>
     </div>
     <?php if ($btab === 'arbeit' && count($aktBest) > 1): $bl = $portalLink('bestellungen') . '&btab=arbeit&bsort='; ?>
     <div class="bx-row" style="align-items:center;gap:8px;margin:0;flex-wrap:nowrap">
@@ -3873,7 +3888,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <?php endif; ?>
   </div>
-  <?php if (!$aktBest): ?><div class="bx-panel"><div class="muted"><?= $btab === 'abgeschlossen' ? 'Noch keine abgeschlossenen Bestellungen.' : 'Aktuell keine Bestellung in Bearbeitung.' ?></div></div><?php endif; ?>
+  <?php if (!$aktBest): ?><div class="bx-panel"><div class="muted"><?= $btab === 'abgeschlossen' ? 'Noch keine abgeschlossenen Bestellungen.' : ($btab === 'dienstleistung' ? 'Noch keine Dienstleistungen oder Analysen.' : 'Aktuell keine Bestellung in Bearbeitung.') ?></div></div><?php endif; ?>
   <?php if (count($aktBest) > 1): ?>
   <div class="bx-row" style="margin:0 0 12px">
     <input type="search" id="bxBestSuche" placeholder="Bestellungen durchsuchen (Nummer, Produkt, Charge …)" autocomplete="off"
@@ -3881,13 +3896,6 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
   <?php endif; ?>
-  <?php // Dienstleistungen (Laboranalysen o. Ä.) von Produktbestellungen trennen: Produkte zuerst, danach als
-        // eigener Block „Dienstleistungen & Analysen". Reihenfolge innerhalb der Gruppe bleibt (stabile Partition).
-        $aktBest = array_merge(
-            array_values(array_filter($aktBest, fn($a) => ($a['kategorie'] ?? '') !== 'dienstleistung')),
-            array_values(array_filter($aktBest, fn($a) => ($a['kategorie'] ?? '') === 'dienstleistung'))
-        );
-        $dlHeaderShown = false; ?>
   <div id="bxBestListe">
   <?php foreach ($aktBest as $a):
         $istDLrow = ($a['kategorie'] ?? '') === 'dienstleistung';
@@ -3898,10 +3906,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         $totalA = count($trackA) ?: 1;
         // Etikett offen? Nur Produkt-Aufträge, die ein Etikett brauchen und noch nicht freigegeben sind.
         $etMiss = !$istDLrow && !$complete && auftrag_braucht_etikett((int)$a['id']) && !etikett_freigegeben((int)$a['id']); ?>
-  <?php if ($istDLrow && !$dlHeaderShown): $dlHeaderShown = true; ?>
-    <div id="bxBestDLsep" class="bx-dl-sep" style="margin:22px 0 10px;padding-top:12px;border-top:1px solid var(--line,#e5e5df)"><strong style="font-weight:600">Dienstleistungen &amp; Analysen</strong> <span class="muted" style="font-size:12px">&middot; z.&nbsp;B. Laboranalysen &ndash; keine Produktbestellungen</span></div>
-  <?php endif; ?>
-  <a class="bx-panel bx-order-row<?= $etMiss ? ' bx-ord-etmiss' : '' ?>" data-dl="<?= $istDLrow ? '1' : '0' ?>" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
+  <a class="bx-panel bx-order-row<?= $etMiss ? ' bx-ord-etmiss' : '' ?>" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:13px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
@@ -3933,12 +3938,10 @@ portal_head('Kundenportal · ' . $k['firma']);
     var rows = Array.prototype.slice.call(liste.querySelectorAll('.bx-order-row'));
     rows.forEach(function(r){ r.dataset.such = (r.textContent || '').toLowerCase().replace(/\s+/g, ' '); });
     function norm(s){ return (s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
-    var dlSep = document.getElementById('bxBestDLsep');
     function filter(){
-      var q = norm(inp.value), treffer = 0, dlSichtbar = 0;
-      rows.forEach(function(r){ var ok = !q || r.dataset.such.indexOf(q) !== -1; r.style.display = ok ? '' : 'none'; if (ok) { treffer++; if (r.dataset.dl === '1') dlSichtbar++; } });
+      var q = norm(inp.value), treffer = 0;
+      rows.forEach(function(r){ var ok = !q || r.dataset.such.indexOf(q) !== -1; r.style.display = ok ? '' : 'none'; if (ok) treffer++; });
       if (leer) leer.style.display = treffer ? 'none' : 'block';
-      if (dlSep) dlSep.style.display = dlSichtbar ? '' : 'none';
     }
     inp.addEventListener('input', filter);
   })();
