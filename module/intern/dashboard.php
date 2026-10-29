@@ -6,6 +6,9 @@ require_once BX_ROOT . '/core/schema.php';
 // Damit auf einer frischen DB Zahlen da sind
 seed_anfrage_if_empty(); seed_angebot_if_empty(); seed_charge_if_empty();
 
+// Automatische Hinweise (MHD-Ablauf, überfällige Bestellungen) – gedrosselt auf einmal je Tag (best-effort).
+if (function_exists('benachrichtigungen_auto_pruefen')) benachrichtigungen_auto_pruefen();
+
 $anfragen_neu   = (int) scalar("SELECT COUNT(*) FROM rezeptur_anfrage WHERE status='neu'");
 $angebote_offen = (int) scalar("SELECT COUNT(*) FROM angebot WHERE status IN ('offen','gesendet')");
 $prod_offen     = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE status IN ('offen','laufend')");

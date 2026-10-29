@@ -42,7 +42,7 @@ function bx_nav_default(): array {
             'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'rohstoff_website' => 'Website-Freigabe', 'freigaben' => 'Freigaben', 'rohstoffe_papiere' => 'Rohstoffe ohne Papiere', 'laboranalysen' => 'Laboranalysen', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
         'Einkauf'      => ['einkaufsliste' => 'Bedarf', 'einkauf' => 'Bestellt', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'lief_anfragen' => 'Anfragen & Preise', 'katalog_freigaben' => 'Katalog-Freigaben', 'einkauf_preise' => 'Preise'],
         'Import'       => ['angebot_import' => 'Angebots-Import', 'lager2_import' => 'Lager-2 Bestände'],
-        'System'       => ['einstellungen' => 'Einstellungen', 'menu_editor' => 'Menü', 'benutzer' => 'Benutzer', 'protokoll' => 'Protokoll', 'durchlaufzeiten' => 'Durchlaufzeiten', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
+        'System'       => ['benachrichtigungen' => 'Benachrichtigungen', 'einstellungen' => 'Einstellungen', 'menu_editor' => 'Menü', 'benutzer' => 'Benutzer', 'protokoll' => 'Protokoll', 'durchlaufzeiten' => 'Durchlaufzeiten', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
         'Assistent'    => ['fastaction' => 'Fastaction'],
     ];
 }
@@ -183,6 +183,8 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     $anfCount = bx_anfrage_counts();
     if (function_exists('aufgabe_offen_zahl') && function_exists('current_user') && ($cu = current_user()))
         $anfCount['aufgaben'] = aufgabe_offen_zahl((int)$cu['id']);
+    if (function_exists('benachrichtigungen_ungelesen_count') && function_exists('current_user') && ($cu = current_user()))
+        $anfCount['benachrichtigungen'] = benachrichtigungen_ungelesen_count((int)$cu['id']);
     // Einkaufs-Zähler: offener Einkaufsbedarf (noch nicht gemeldet) + Einkaufsliste (Positionen zu bestellen)
     if (function_exists('scalar')) {
         try {
@@ -228,6 +230,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
             $n = $anfCount[$key] ?? 0;
             $badgeTitel = match ($key) {
                 'aufgaben'      => "$n offene Aufgaben",
+                'benachrichtigungen' => "$n ungelesene Benachrichtigungen",
                 'bedarf'        => "$n Aufträge mit offenem Einkaufsbedarf (noch nicht gemeldet)",
                 'einkaufsliste' => "$n Positionen zu bestellen",
                 'auftraege'     => "$n Aufträge noch nicht fertig",

@@ -169,6 +169,11 @@ function init_schema(): void {
         gelesen_am DATETIME NOT NULL,
         PRIMARY KEY (benachrichtigung_id, benutzer_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Art (Typ) + Wichtig-Flag + Dedupe-Schlüssel: Filter nach Art, farbliche Hervorhebung, „einmal je Charge" u. Ä.
+    ensure_column('benachrichtigung', 'art', "VARCHAR(40) NOT NULL DEFAULT 'sonstiges'");
+    ensure_column('benachrichtigung', 'wichtig', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('benachrichtigung', 'schluessel', "VARCHAR(150) NULL");   // optionaler Eindeutigkeits-Schlüssel (Auto-Hinweise nur einmal)
+    try { db()->exec("CREATE UNIQUE INDEX uq_benach_schluessel ON benachrichtigung (schluessel)"); } catch (Throwable $e) { /* existiert schon */ }
 
     // lieferant_katalog: was ein Lieferant anbietet – als VORSCHLAG, bevor daraus ein Artikel wird.
     // Der Lieferant pflegt seine Liste selbst (oder lädt sie hoch, die KI liest sie); das Team
@@ -10294,13 +10299,86 @@ function verlauf_fuer(string $objekt_typ, int $objekt_id): array {
 
 // --- Team-Benachrichtigungen (Dashboard-Postfach) ---
 // Eine Benachrichtigung anlegen (team-weit). Wird aus mail_team() bei jedem Team-Ereignis aufgerufen.
-function benachrichtigung_add(string $betreff, string $text = '', string $link = ''): int {
+function benachrichtigung_add(string $betreff, string $text = '', string $link = '', string $art = 'sonstiges', bool $wichtig = false): int {
     $betreff = trim($betreff);
     if ($betreff === '') return 0;
     if (!table_exists('benachrichtigung')) return 0;
-    q("INSERT INTO benachrichtigung (betreff, text, link, erstellt) VALUES (?,?,?,?)",
-      [mb_substr($betreff, 0, 255), mb_substr(trim($text), 0, 4000) ?: null, mb_substr(trim($link), 0, 255) ?: null, gmdate('Y-m-d H:i:s')]);
+    $hatArt = column_exists('benachrichtigung', 'art');
+    if ($hatArt) {
+        q("INSERT INTO benachrichtigung (betreff, text, link, art, wichtig, erstellt) VALUES (?,?,?,?,?,?)",
+          [mb_substr($betreff, 0, 255), mb_substr(trim($text), 0, 4000) ?: null, mb_substr(trim($link), 0, 255) ?: null,
+           mb_substr($art ?: 'sonstiges', 0, 40), $wichtig ? 1 : 0, gmdate('Y-m-d H:i:s')]);
+    } else {
+        q("INSERT INTO benachrichtigung (betreff, text, link, erstellt) VALUES (?,?,?,?)",
+          [mb_substr($betreff, 0, 255), mb_substr(trim($text), 0, 4000) ?: null, mb_substr(trim($link), 0, 255) ?: null, gmdate('Y-m-d H:i:s')]);
+    }
     return (int) insert_id();
+}
+// Wie benachrichtigung_add, aber nur EINMAL je Schlüssel (z. B. „mhd:<charge_id>"): verhindert Doppel-Hinweise.
+// Nutzt den UNIQUE-Index auf schluessel; ein schon vorhandener Schlüssel wird still übersprungen (return 0).
+function benachrichtigung_add_once(string $schluessel, string $betreff, string $text = '', string $link = '', string $art = 'sonstiges', bool $wichtig = false): int {
+    $schluessel = trim($schluessel);
+    if ($schluessel === '' || $betreff === '' || !table_exists('benachrichtigung')) return 0;
+    if (!column_exists('benachrichtigung', 'schluessel')) return benachrichtigung_add($betreff, $text, $link, $art, $wichtig);
+    if ((int) scalar("SELECT COUNT(*) FROM benachrichtigung WHERE schluessel=?", [$schluessel]) > 0) return 0;
+    try {
+        q("INSERT INTO benachrichtigung (betreff, text, link, art, wichtig, schluessel, erstellt) VALUES (?,?,?,?,?,?,?)",
+          [mb_substr($betreff, 0, 255), mb_substr(trim($text), 0, 4000) ?: null, mb_substr(trim($link), 0, 255) ?: null,
+           mb_substr($art ?: 'sonstiges', 0, 40), $wichtig ? 1 : 0, mb_substr($schluessel, 0, 150), gmdate('Y-m-d H:i:s')]);
+        return (int) insert_id();
+    } catch (Throwable $e) { return 0; }   // Race: Schlüssel wurde parallel angelegt
+}
+// Art-Labels für die Anzeige/Filter. Unbekannte Arten erscheinen als sie selbst (Großbuchstabe).
+function benachrichtigung_arten(): array {
+    return [
+        'sonstiges'   => 'Allgemein',
+        'etikett'     => 'Etikett',
+        'angebot'     => 'Angebot',
+        'anfrage'     => 'Anfrage',
+        'auftrag'     => 'Auftrag',
+        'bestellung'  => 'Bestellung',
+        'lieferant'   => 'Lieferant',
+        'nachbestellung' => 'Nachbestellung',
+        'wiegen'      => 'Wiege-Abweichung',
+        'mhd'         => 'MHD-Ablauf',
+        'ueberfaellig'=> 'Überfällige Bestellung',
+    ];
+}
+// Automatische Hinweise (täglich, best-effort): MHD-Ablauf (Charge in X Tagen) + überfällige Bestellungen (ab 3 Tagen).
+// Gedrosselt über app_meta 'benach_autocheck_am' (einmal je Tag). Wird vom Dashboard aufgerufen.
+function benachrichtigungen_auto_pruefen(): void {
+    if (!table_exists('benachrichtigung')) return;
+    $heute = gmdate('Y-m-d');
+    if (meta_get('benach_autocheck_am', '') === $heute) return;
+    meta_set('benach_autocheck_am', $heute);   // zuerst setzen -> kein Doppellauf bei parallelen Requests
+    try {
+        // MHD-Warnung: Chargen mit Bestand, deren MHD in <= N Tagen abläuft (einmal je Charge). N aus Einstellungen.
+        $tage = max(1, (int) meta_get('mhd_warn_tage', '30'));
+        $chg = all("SELECT c.id, c.charge_nr, c.mhd, c.menge_verfuegbar, c.einheit, i.name AS item_name
+                    FROM charge c JOIN item i ON i.id=c.item_id
+                    WHERE c.status IN ('frei','quarantaene') AND c.menge_verfuegbar > 0 AND c.mhd IS NOT NULL
+                      AND c.mhd >= ? AND c.mhd <= DATE_ADD(?, INTERVAL ? DAY)", [$heute, $heute, $tage]);
+        foreach ($chg as $c) {
+            $nf = rtrim(rtrim(number_format((float)$c['menge_verfuegbar'], 3, ',', '.'), '0'), ',');
+            benachrichtigung_add_once('mhd:' . (int)$c['id'],
+                'MHD läuft ab: ' . (string)$c['item_name'] . ' · Charge ' . ($c['charge_nr'] ?: ('#' . $c['id'])),
+                'MHD ' . date('d.m.Y', strtotime((string)$c['mhd'])) . ', noch ' . $nf . ' ' . (string)$c['einheit'] . ' im Lager. Ggf. noch verkaufen/verbrauchen.',
+                '?p=chargen&id=' . (int)$c['id'], 'mhd', true);
+        }
+        // Überfällige Bestellungen: bestellt, noch nicht angekommen, älter als 3 Tage (einmal je Bestellung).
+        if (table_exists('bestellung')) {
+            $best = all("SELECT b.id, b.nummer, b.bestelldatum, l.firma AS lieferant
+                         FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                         WHERE b.status='bestellt' AND b.angekommen_am IS NULL
+                           AND b.bestelldatum IS NOT NULL AND b.bestelldatum <= DATE_SUB(?, INTERVAL 3 DAY)", [$heute]);
+            foreach ($best as $b) {
+                benachrichtigung_add_once('overdue:' . (int)$b['id'],
+                    'Überfällige Bestellung: ' . ($b['nummer'] ?: ('#' . $b['id'])) . ($b['lieferant'] ? ' · ' . (string)$b['lieferant'] : ''),
+                    'Bestellt am ' . date('d.m.Y', strtotime((string)$b['bestelldatum'])) . ', noch nicht angekommen.',
+                    '?p=einkauf', 'ueberfaellig', true);
+            }
+        }
+    } catch (Throwable $e) { /* best-effort */ }
 }
 // Ungelesene fuer EINEN Benutzer = Benachrichtigungen ohne Lese-Eintrag dieses Benutzers.
 function benachrichtigungen_ungelesen_count(int $benutzer_id): int {

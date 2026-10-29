@@ -55,6 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'firma_save') {
 // --- Chargen/MHD-Standard speichern ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'charge_std_save') {
     meta_set('mhd_monate_standard', (string)max(1, (int)($_POST['mhd_monate_standard'] ?? 18)));
+    // MHD-Warnung (Tage vor Ablauf) + Schwund-Grenze (kg) für die Benachrichtigungen/Wiege-Prüfung.
+    meta_set('mhd_warn_tage', (string)max(1, (int)($_POST['mhd_warn_tage'] ?? 30)));
+    meta_set('schwund_grenze_kg', (string)max(0, (float)str_replace(',', '.', (string)($_POST['schwund_grenze_kg'] ?? '1'))));
     header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
 }
 // --- Etikett-Haftungstext (Bestätigung bei der Kunden-Freigabe) speichern ---
@@ -421,6 +424,8 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   <form method="post">
     <input type="hidden" name="aktion" value="charge_std_save">
     <div class="bx-field" style="max-width:300px"><label>MHD-Standard (Monate ab Produktion)</label><input type="number" min="1" name="mhd_monate_standard" value="<?= h($m('mhd_monate_standard','18')) ?>"></div>
+    <div class="bx-field" style="max-width:300px"><label>MHD-Warnung (Tage vor Ablauf) <?= bx_hint('Eine Charge im Lager, die in so vielen Tagen abläuft, erzeugt einmalig eine Benachrichtigung.') ?></label><input type="number" min="1" name="mhd_warn_tage" value="<?= h($m('mhd_warn_tage','30')) ?>"></div>
+    <div class="bx-field" style="max-width:300px"><label>Schwund-Grenze beim Wiegen (kg) <?= bx_hint('Weicht das gewogene Rückgabegewicht um mehr als diesen Wert nach unten ab, geht ein Hinweis an die Admin-Benachrichtigung (und E-Mail). Darunter nur stiller Schwund-Eintrag.') ?></label><input type="text" name="schwund_grenze_kg" value="<?= h($m('schwund_grenze_kg','1')) ?>" inputmode="decimal"></div>
     <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Speichern</button></div>
   </form>
 </div>
