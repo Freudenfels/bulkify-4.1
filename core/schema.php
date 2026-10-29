@@ -6685,7 +6685,7 @@ function geschmack_synonyme(): array {
         'kirsche'    => ['kirsche','kirsch','cherry'],
         'waldfrucht' => ['waldfrucht','waldbeere','waldbeeren'],
         'minze'      => ['minze','pfefferminz','peppermint','menthol'],
-        'cassis'     => ['cassis','blackcurrant'],
+        'cassis'     => ['cassis','blackcurrant','johannisbeere','johannisbeer'],
         'maracuja'   => ['maracuja','passionsfrucht','passion fruit'],
         'melone'     => ['melone','wassermelone','watermelon','melon'],
         'traube'     => ['traube','grape'],
