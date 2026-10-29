@@ -178,7 +178,7 @@ bx_head('Doppelte Rezepturen', count($dubletten) . ' Gruppe(n) inhaltlich identi
     var ov = document.getElementById('rzOverlay'), box = document.getElementById('rzBox');
     var title = document.getElementById('rzTitle'), body = document.getElementById('rzBody');
     function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-    function mg(x){ if(x==null||x==='') return ''; var s=(Math.round(x*1000)/1000).toString().replace('.',','); return s; }
+    function mg(x){ if(x==null||x==='') return ''; var v=Math.round(x*1000)/1000, neg=v<0; v=Math.abs(v); var p=v.toString().split('.'); p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.'); return (neg?'-':'')+p.join(','); }
     function open(){ ov.classList.add('on'); }
     function close(){ ov.classList.remove('on'); }
     document.getElementById('rzClose').addEventListener('click', close);
