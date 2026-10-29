@@ -14,3 +14,6 @@
 
 ## Bulk-Bestand (Requirement 1)
 Popup, Tabelle („Bulk-Bestand"-Spalte) und Vergleich zeigen je Rezeptur den Bestand ihres EIGENEN Bulk-Artikels (`item WHERE rezeptur_id=? AND kategorie='fertig' AND gesperrt=0`, ohne Stamm-Auflösung, legt nichts an): verfügbare Menge, Chargen (Nr/Menge/Status/MHD) und aktive Reservierungen (Auftrag/Kunde). Zusammengeführte Rezepturen haben keinen eigenen Bulk → „– / via Stamm".
+
+## Zusammenführen je Gruppe (Übersicht)
+Jede noch nicht verknüpfte Gruppe hat einen Button **„Zusammenführen"** (Admin). Er öffnet dasselbe Bestätigungs-Pop-up wie die Detailseite: Vorauswahl der **Stammrezeptur = Rezeptur mit dem meisten Bulk-Bestand** (im Dropdown änderbar), darunter die hineingezogenen Rezepturen mit ihrem Bulk-Impact (Chargen/Reservierungen/Produkte). Erst auf „Jetzt zusammenführen" läuft der Merge (POST `aktion=gruppe_zusammenfuehren`). Gemeinsame Logik: `rezeptur_stamm_zusammenfuehren($child,$stamm)` (core/schema.php) – dieselbe Funktion nutzt das Stamm-Panel. Sicherheit: nur Rezepturen mit identischem `rezeptur_fingerprint` zur Stammrezeptur werden zusammengeführt. Nichts automatisch.

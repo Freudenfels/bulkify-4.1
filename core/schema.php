@@ -6742,6 +6742,28 @@ function rezeptur_fingerprint(int $rezeptur_id): string {
           . '|g' . rezeptur_geschmack($rezeptur_id);
     return md5($head . '#' . implode(';', $parts));
 }
+// Requirement 2: eine Rezeptur in eine Stammrezeptur zusammenführen. Bulk-Chargen + aktive Reservierungen
+// des EIGENEN Bulk-Artikels wandern auf den Bulk-Artikel der Stammrezeptur; der leere Alt-Bulk-Artikel wird
+// gesperrt (nicht gelöscht), die Alt-Rezeptur bekommt stamm_rezeptur_id + zusammengefuehrt_in (deaktiviert).
+// Idempotent. Rückgabe true, wenn verknüpft. Kundennamen/Produkte bleiben unverändert.
+function rezeptur_stamm_zusammenfuehren(int $childId, int $stammId): bool {
+    if ($childId <= 0 || $stammId <= 0 || $childId === $stammId) return false;
+    // Kette vermeiden: zeigt die Ziel-Stammrezeptur selbst auf eine andere, nimm deren Stamm (eine Ebene).
+    $w = (int) scalar("SELECT stamm_rezeptur_id FROM rezeptur WHERE id=?", [$stammId]);
+    if ($w > 0 && $w !== $childId) $stammId = $w;
+    if ($stammId === $childId) return false;
+    $stammBulk = (int) (rezeptur_bulkitem($stammId) ?? 0);     // Ziel-Bulk (legt ihn bei Bedarf an)
+    $childBulk = (int) scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' AND gesperrt=0 ORDER BY id LIMIT 1", [$childId]);
+    if ($stammBulk > 0 && $childBulk > 0 && $childBulk !== $stammBulk) {
+        q("UPDATE charge SET item_id=? WHERE item_id=?", [$stammBulk, $childBulk]);
+        q("UPDATE reservierung SET item_id=? WHERE item_id=? AND status='aktiv'", [$stammBulk, $childBulk]);
+        $hatZus = (bool) scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='item' AND column_name='zusammengefuehrt_in'");
+        if ($hatZus) q("UPDATE item SET gesperrt=1, zusammengefuehrt_in=? WHERE id=?", [$stammBulk, $childBulk]);
+        else         q("UPDATE item SET gesperrt=1 WHERE id=?", [$childBulk]);
+    }
+    q("UPDATE rezeptur SET stamm_rezeptur_id=?, zusammengefuehrt_in=? WHERE id=?", [$stammId, $stammId, $childId]);
+    return true;
+}
 function rezeptur_bulkitem(int $rezeptur_id): ?int {
     if ($rezeptur_id <= 0) return null;
     $rezeptur_id = rezeptur_stamm_id($rezeptur_id);   // G5: gemeinsamer Bulk-Artikel über die Stammrezeptur

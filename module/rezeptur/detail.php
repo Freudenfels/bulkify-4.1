@@ -40,17 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($stamm === (int)$id) $stamm = 0;                 // kein Selbstbezug
         // Kette vermeiden: zeigt die Ziel-Stammrezeptur selbst auf eine andere, nimm deren Stamm (eine Ebene).
         if ($stamm > 0) { $w = (int) scalar("SELECT stamm_rezeptur_id FROM rezeptur WHERE id=?", [$stamm]); if ($w > 0 && $w !== (int)$id) $stamm = $w; }
-        $hatZusItem = (bool) scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='item' AND column_name='zusammengefuehrt_in'");
         if ($stamm > 0) {
-            $stammBulk = (int) (rezeptur_bulkitem($stamm) ?? 0);   // Ziel-Bulk (legt ihn an, falls noch keiner)
-            $childBulk = (int) scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' AND gesperrt=0 ORDER BY id LIMIT 1", [(int)$id]);
-            if ($stammBulk > 0 && $childBulk > 0 && $childBulk !== $stammBulk) {
-                q("UPDATE charge SET item_id=? WHERE item_id=?", [$stammBulk, $childBulk]);                     // Chargen wandern
-                q("UPDATE reservierung SET item_id=? WHERE item_id=? AND status='aktiv'", [$stammBulk, $childBulk]); // Reservierungen wandern
-                if ($hatZusItem) q("UPDATE item SET gesperrt=1, zusammengefuehrt_in=? WHERE id=?", [$stammBulk, $childBulk]);
-                else             q("UPDATE item SET gesperrt=1 WHERE id=?", [$childBulk]);
-            }
-            q("UPDATE rezeptur SET stamm_rezeptur_id=?, zusammengefuehrt_in=? WHERE id=?", [$stamm, $stamm, (int)$id]);
+            rezeptur_stamm_zusammenfuehren((int)$id, $stamm);   // Migration + Deaktivieren (gemeinsame Funktion)
         } else {
             // Lösen: nur den Pointer entfernen (bereits konsolidierter Bestand wird nicht zurückgeschoben).
             q("UPDATE rezeptur SET stamm_rezeptur_id=NULL, zusammengefuehrt_in=NULL WHERE id=?", [(int)$id]);

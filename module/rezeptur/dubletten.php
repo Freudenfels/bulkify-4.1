@@ -8,6 +8,23 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 
+// Gruppe zusammenführen (vom Bestätigungs-Pop-up der Übersicht). Nur Admin. Nur auf Bestätigung – nie automatisch.
+// Sicherheit: eine Rezeptur wird nur zusammengeführt, wenn ihr Fingerabdruck dem der Stammrezeptur entspricht.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'gruppe_zusammenfuehren'
+    && function_exists('has_role') && has_role('admin')) {
+    $stamm  = (int)($_POST['stamm_id'] ?? 0);
+    $childs = array_values(array_unique(array_filter(array_map('intval', explode(',', (string)($_POST['child_ids'] ?? ''))))));
+    $fpStamm = $stamm > 0 ? rezeptur_fingerprint($stamm) : '';
+    $n = 0;
+    if ($fpStamm !== '') foreach ($childs as $cid) {
+        if ($cid <= 0 || $cid === $stamm) continue;
+        if (rezeptur_fingerprint($cid) === $fpStamm && rezeptur_stamm_zusammenfuehren($cid, $stamm)) $n++;
+    }
+    if (function_exists('log_aktivitaet') && $n > 0)
+        log_aktivitaet('rezeptur', $stamm, 'team', $n . ' Rezeptur(en) in diese Stammrezeptur zusammengeführt (Dubletten-Übersicht).', 'rezeptur', 'rezeptur', $stamm);
+    header('Location: ?p=rezeptur_dubletten&merged=' . $n); exit;
+}
+
 // Alle Rezepturen mit Kunde + Stamm-Verknüpfung. „Vorschlag" (noch nicht angenommen) bleibt mit drin,
 // wird aber als solcher markiert, damit man es sieht.
 $rez = all("SELECT r.id, r.nummer, r.name, r.status, r.kunde_id, r.stamm_rezeptur_id,
@@ -129,6 +146,9 @@ bx_head('Doppelte Rezepturen', count($dubletten) . ' Gruppe(n) inhaltlich identi
 #rzBody thead th{background:rgba(0,0,0,.03)}
 </style>
 
+<?php if (isset($_GET['merged'])): $m = (int)$_GET['merged']; ?>
+  <div class="bx-panel badge-ok" style="padding:12px 16px;margin-bottom:12px"><?= $m > 0 ? ($m . ' Rezeptur(en) zusammengeführt – Bulk-Bestand übertragen, Alt-Rezepturen deaktiviert.') : 'Nichts zusammengeführt.' ?></div>
+<?php endif; ?>
 <div class="bx-panel">
   <p class="muted" style="margin-top:0">Hier stehen Rezepturen, die <strong>inhaltlich identisch</strong> sind: gleiche Zutaten mit mg je Einheit, gleiche Kapselgröße, Füllmenge, Darreichungsform <strong>und gleicher Geschmack</strong> (Schoko/Vanille-Varianten gelten nicht mehr als Dublette). <strong>Es wird nichts automatisch zusammengelegt.</strong> Eine Rezeptur anklicken öffnet die Details; „Vergleichen" stellt die ganze Gruppe nebeneinander. Zum Zusammenlegen im Detail-Popup die Rezeptur öffnen und im Panel <em>„Interne Stammrezeptur"</em> auf eine gemeinsame Stammrezeptur zeigen lassen.</p>
 </div>
@@ -144,6 +164,7 @@ bx_head('Doppelte Rezepturen', count($dubletten) . ' Gruppe(n) inhaltlich identi
         <?php if ($verknuepft): ?><span class="badge badge-ok">bereits über eine Stammrezeptur verknüpft</span>
         <?php else: ?><span class="badge badge-warn">noch nicht verknüpft</span><?php endif; ?>
         <button type="button" class="btn btn-ghost btn-sm rz-cmp" data-grp="<?= $gi ?>">Vergleichen</button>
+        <?php if (!$verknuepft): ?><button type="button" class="btn btn-primary btn-sm rz-merge" data-grp="<?= $gi ?>">Zusammenführen</button><?php endif; ?>
       </div>
     </div>
     <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
@@ -269,8 +290,47 @@ bx_head('Doppelte Rezepturen', count($dubletten) . ' Gruppe(n) inhaltlich identi
 
     function openCompare(gi){ var ids=GRP[gi]; if(!ids) return; title.textContent='Gruppe '+gi+' vergleichen ('+ids.length+' Rezepturen)'; body.innerHTML=compareHtml(ids); box.scrollTop=0; open(); }
 
+    // --- Zusammenführen je Gruppe (gleiche Logik + Pop-up wie auf der Detailseite) ---
+    function bulkMenge(id){ var d=REZ[id]; return (d && d.bulk) ? d.bulk.menge : 0; }
+    function mergeChildHtml(id){
+      var d=REZ[id]; if(!d) return '';
+      var h='<div style="border-top:1px solid var(--line);padding:8px 0"><div style="font-weight:600">'+esc(d.titel)+'</div>';
+      if(!d.bulk){ h+='<div class="muted" style="font-size:13px">Kein eigener Bulk-Bestand – es wandert nur die Verknüpfung.</div>'; }
+      else {
+        var ch=d.bulk.chargen.map(function(c){return esc(c.nr||'–')+' '+mg(c.menge)+' '+esc(c.einheit);}).join(', ');
+        h+='<div style="font-size:13px">Bulk-Chargen: '+d.bulk.chargen.length+(ch?(' ('+ch+')'):'')+' · Reservierungen: '+d.bulk.reservierungen.length+'</div>';
+      }
+      if(d.produkte.length) h+='<div class="muted" style="font-size:13px">Produkte/Kunden: '+d.produkte.map(function(p){return esc(p.name)+(p.kunde?(' ('+esc(p.kunde)+')'):'');}).join(', ')+'</div>';
+      return h+'</div>';
+    }
+    function renderMerge(gi, stammId){
+      var members=GRP[gi]||[]; var childs=members.filter(function(x){return x!=stammId;});
+      var h='<form id="rzMergeForm" method="post" action="?p=rezeptur_dubletten">';
+      h+='<input type="hidden" name="aktion" value="gruppe_zusammenfuehren">';
+      h+='<input type="hidden" name="stamm_id" value="'+stammId+'">';
+      h+='<input type="hidden" name="child_ids" value="'+childs.join(',')+'">';
+      h+='<div class="bx-field" style="max-width:560px"><label>Stammrezeptur (Ziel – sammelt den Bulk-Bestand)</label>';
+      h+='<select id="rzStammSel" style="width:100%;padding:8px">';
+      members.forEach(function(id){ var d=REZ[id]; var mb=(d&&d.bulk)?(' · Bulk '+mg(d.bulk.menge)+' '+d.bulk.einheit):' · Bulk 0'; h+='<option value="'+id+'"'+(id==stammId?' selected':'')+'>'+esc(d?d.titel:('#'+id))+esc(mb)+'</option>'; });
+      h+='</select></div>';
+      h+='<p style="margin:12px 0 4px">Diese Rezeptur(en) werden hineingezogen und deaktiviert – ihr Bulk wandert auf die Stammrezeptur:</p>';
+      childs.forEach(function(id){ h+=mergeChildHtml(id); });
+      h+='<p class="muted" style="font-size:12px;margin:12px 0 0">Kundennamen bleiben unverändert. Alt-Bulk-Artikel werden gesperrt (nicht gelöscht), die Alt-Rezepturen als zusammengeführt (deaktiviert) markiert. Nichts wird hart gelöscht.</p>';
+      h+='<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"><button type="submit" class="btn btn-primary btn-sm">Jetzt zusammenführen</button><button type="button" class="btn btn-ghost btn-sm" id="rzMergeCancel">Abbrechen</button></div></form>';
+      body.innerHTML=h;
+      document.getElementById('rzStammSel').addEventListener('change', function(){ renderMerge(gi, parseInt(this.value,10)); });
+      document.getElementById('rzMergeCancel').addEventListener('click', close);
+    }
+    function openMerge(gi){
+      gi=parseInt(gi,10); var members=GRP[gi]||[]; if(members.length<2) return;
+      var stamm=members[0], best=-1;   // Vorauswahl: Rezeptur mit dem meisten Bulk-Bestand
+      members.forEach(function(id){ var m=bulkMenge(id); if(m>best){best=m; stamm=id;} });
+      title.textContent='Gruppe '+gi+' zusammenführen'; renderMerge(gi, stamm); box.scrollTop=0; open();
+    }
+
     document.querySelectorAll('.rz-open').forEach(function(a){ a.addEventListener('click', function(e){ e.preventDefault(); openDetail(this.getAttribute('data-rz')); }); });
     document.querySelectorAll('.rz-cmp').forEach(function(b){ b.addEventListener('click', function(){ openCompare(this.getAttribute('data-grp')); }); });
+    document.querySelectorAll('.rz-merge').forEach(function(b){ b.addEventListener('click', function(){ openMerge(this.getAttribute('data-grp')); }); });
   })();
   </script>
 <?php endif; ?>
