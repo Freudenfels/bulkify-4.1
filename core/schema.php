@@ -6662,6 +6662,66 @@ function rezeptur_stamm_id(int $rezeptur_id): int {
 }
 // Inhalts-Fingerabdruck einer Rezeptur für die Dubletten-Erkennung: Zutaten (Rohstoff + mg je Einheit),
 // Kapselgröße, Füllmenge und Darreichungsform. Gleiche Rezeptur = gleicher Fingerprint. Reihenfolge egal.
+// Bekannte Geschmacksrichtungen (kanonisch => Synonyme DE/EN). Wird für die Dubletten-Erkennung gebraucht:
+// zwei sonst gleiche Rezepturen mit UNTERSCHIEDLICHEM Geschmack sind nie Dubletten.
+function geschmack_synonyme(): array {
+    return [
+        'schoko'     => ['schokolade','schoko','kakao','cacao','chocolate','choco'],
+        'vanille'    => ['vanille','vanilla'],
+        'erdbeere'   => ['erdbeere','erdbeer','strawberry'],
+        'himbeere'   => ['himbeere','himbeer','raspberry'],
+        'heidelbeere'=> ['heidelbeere','blaubeere','blueberry'],
+        'banane'     => ['banane','banana'],
+        'zitrone'    => ['zitrone','lemon'],
+        'orange'     => ['orange'],
+        'mango'      => ['mango'],
+        'ananas'     => ['ananas','pineapple'],
+        'kokos'      => ['kokos','coconut'],
+        'karamell'   => ['karamell','caramel'],
+        'haselnuss'  => ['haselnuss','hazelnut'],
+        'cola'       => ['cola'],
+        'pfirsich'   => ['pfirsich','peach'],
+        'apfel'      => ['apfel','apple'],
+        'kirsche'    => ['kirsche','kirsch','cherry'],
+        'waldfrucht' => ['waldfrucht','waldbeere','waldbeeren'],
+        'minze'      => ['minze','pfefferminz','peppermint','menthol'],
+        'cassis'     => ['cassis','blackcurrant'],
+        'maracuja'   => ['maracuja','passionsfrucht','passion fruit'],
+        'melone'     => ['melone','wassermelone','watermelon','melon'],
+        'traube'     => ['traube','grape'],
+        'cookies'    => ['cookies','cookie'],
+        'tropic'     => ['tropic','tropical','tropisch'],
+        'neutral'    => ['geschmacksneutral','unflavored','unflavoured'],
+    ];
+}
+// Geschmacks-Token aus Freitext (Rezeptur-/Produktname, Aroma-Zutat). '' = kein Geschmack erkannt.
+// Match am Wortanfang (\b<syn>), damit Komposita greifen (Schokogeschmack) und „chocolate" nicht „cola" triggert.
+function geschmack_aus_text(string $text): string {
+    if (trim($text) === '') return '';
+    $found = [];
+    foreach (geschmack_synonyme() as $kanon => $syn) {
+        $alt = implode('|', array_map(fn($w) => preg_quote($w, '/'), $syn));
+        if (preg_match('/\b(?:' . $alt . ')/iu', $text)) $found[$kanon] = true;
+    }
+    if (!$found) return '';
+    $k = array_keys($found); sort($k);
+    return implode('+', $k);
+}
+// Geschmack einer Rezeptur: zuerst Aroma-/Geschmacks-Zutaten, dann Rezepturname, dann zugehörige Produktnamen.
+function rezeptur_geschmack(int $rezeptur_id): string {
+    if ($rezeptur_id <= 0) return '';
+    $r = one("SELECT name FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    if (!$r) return '';
+    $texte = [(string)($r['name'] ?? '')];
+    foreach (all("SELECT bezeichnung FROM rezeptur_zutat WHERE rezeptur_id=?", [$rezeptur_id]) as $z) {
+        $b = trim((string)($z['bezeichnung'] ?? ''));
+        if ($b !== '' && preg_match('/aroma|flavou?r|geschmack/iu', $b)) $texte[] = $b;
+    }
+    foreach (all("SELECT name FROM produkt WHERE rezeptur_id=?", [$rezeptur_id]) as $p) {
+        if (trim((string)($p['name'] ?? '')) !== '') $texte[] = (string)$p['name'];
+    }
+    return geschmack_aus_text(implode(' ', $texte));
+}
 function rezeptur_fingerprint(int $rezeptur_id): string {
     $r = one("SELECT darreichungsform, kapselgroesse_id, einheit_fuellmenge FROM rezeptur WHERE id=?", [$rezeptur_id]);
     if (!$r) return '';
@@ -6673,9 +6733,11 @@ function rezeptur_fingerprint(int $rezeptur_id): string {
     }
     if (!$parts) return '';   // leere Rezeptur -> nicht als Dublette werten
     sort($parts);
+    // Geschmack zählt mit: unterschiedlicher Geschmack => anderer Fingerabdruck => keine Dublette.
     $head = (string)$r['darreichungsform']
           . '|k' . (int)($r['kapselgroesse_id'] ?? 0)
-          . '|f' . rtrim(rtrim(number_format((float)($r['einheit_fuellmenge'] ?? 0), 3, '.', ''), '0'), '.');
+          . '|f' . rtrim(rtrim(number_format((float)($r['einheit_fuellmenge'] ?? 0), 3, '.', ''), '0'), '.')
+          . '|g' . rezeptur_geschmack($rezeptur_id);
     return md5($head . '#' . implode(';', $parts));
 }
 function rezeptur_bulkitem(int $rezeptur_id): ?int {
