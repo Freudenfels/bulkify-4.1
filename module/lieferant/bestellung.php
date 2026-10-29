@@ -158,60 +158,60 @@ if (!$b):
     $angekuendigt = (int)($b['pakete_angekuendigt'] ?? 0);
   ?>
   <div class="bx-panel">
-    <h2 style="margin:0 0 4px">Versand / Pakete</h2>
-    <p class="muted" style="margin:0 0 12px">Geben Sie an, wie viele Pakete/Kartons Sie schicken und die zugehörigen Tracking-Nummern (eine pro Zeile oder nacheinander scannen). Das Lager gleicht die Pakete beim Eingang damit ab.</p>
+    <h2 style="margin:0 0 4px"><?= h(lp_t('vp_titel')) ?></h2>
+    <p class="muted" style="margin:0 0 12px"><?= h(lp_t('vp_sub')) ?></p>
     <?php if ($pGesamt > 0): ?>
-      <p style="margin:0 0 8px"><strong><?= $pAngek ?> / <?= $pGesamt ?></strong> angekommen<?= $angekuendigt > $pGesamt ? ' · angekündigt: ' . $angekuendigt : '' ?></p>
+      <p style="margin:0 0 8px"><strong><?= $pAngek ?> / <?= $pGesamt ?></strong> <?= h(lp_t('vp_angekommen')) ?><?= $angekuendigt > $pGesamt ? ' · ' . h(lp_t('vp_angekuendigt')) . ': ' . $angekuendigt : '' ?></p>
       <div class="bx-tablewrap" style="margin-bottom:12px"><table class="bx-table">
-        <thead><tr><th>Tracking-Nr.</th><th>Spediteur</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th><?= h(lp_t('vp_tracking_nr')) ?></th><th><?= h(lp_t('vp_spediteur')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
         <tbody>
           <?php foreach ($pakete as $p): ?>
             <tr>
               <td><?= h($p['tracking']) ?></td>
               <td><?= $p['spediteur'] ? h($p['spediteur']) : '<span class="muted">–</span>' ?></td>
               <td><?= (int)$p['angekommen'] === 1
-                    ? '<span class="bx-ok">✓ angekommen</span>' . (!empty($p['angekommen_am']) ? ' <span class="muted" style="font-size:12px">· ' . h(fmt_zeit($p['angekommen_am'], 'd.m.Y')) . '</span>' : '')
-                    : '<span class="muted">unterwegs</span>' ?></td>
-              <td style="text-align:right"><?php if ((int)$p['angekommen'] !== 1): ?><form method="post" style="margin:0" onsubmit="return confirm('Diese Tracking-Nummer entfernen?');"><input type="hidden" name="aktion" value="paket_del"><input type="hidden" name="paket_id" value="<?= (int)$p['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">entfernen</button></form><?php endif; ?></td>
+                    ? '<span class="bx-ok">✓ ' . h(lp_t('vp_angekommen')) . '</span>' . (!empty($p['angekommen_am']) ? ' <span class="muted" style="font-size:12px">· ' . h(fmt_zeit($p['angekommen_am'], 'd.m.Y')) . '</span>' : '')
+                    : '<span class="muted">' . h(lp_t('vp_unterwegs')) . '</span>' ?></td>
+              <td style="text-align:right"><?php if ((int)$p['angekommen'] !== 1): ?><form method="post" style="margin:0" onsubmit="return confirm(<?= h(json_encode(lp_t('vp_track_del_q'), JSON_UNESCAPED_UNICODE)) ?>);"><input type="hidden" name="aktion" value="paket_del"><input type="hidden" name="paket_id" value="<?= (int)$p['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= h(lp_t('entfernen')) ?></button></form><?php endif; ?></td>
             </tr>
           <?php endforeach; ?>
         </tbody>
       </table></div>
     <?php elseif ($angekuendigt > 0): ?>
-      <p style="margin:0 0 8px"><strong><?= $angekuendigt ?> Paket(e)</strong> angekündigt – Tracking-Nummern können Sie unten ergänzen.</p>
+      <p style="margin:0 0 8px"><strong><?= $angekuendigt ?> </strong><?= h(lp_t('vp_paket_angek')) ?></p>
     <?php endif; ?>
     <form method="post" class="bx-form" style="margin:0">
       <input type="hidden" name="aktion" value="pakete_add">
       <div class="bx-grid">
-        <div class="bx-field" style="grid-column:1/-1"><label>Tracking-/Sendungsnummern <span class="muted" style="font-weight:400">(eine pro Zeile)</span></label>
+        <div class="bx-field" style="grid-column:1/-1"><label><?= h(lp_t('vp_trackings')) ?> <span class="muted" style="font-weight:400">(<?= h(lp_t('vp_eine_pro_zeile')) ?>)</span></label>
           <textarea name="trackings" rows="4" placeholder="z. B.&#10;1Z999AA10123456784&#10;1Z999AA10123456785"></textarea></div>
-        <div class="bx-field"><label>Spediteur <span class="muted" style="font-weight:400">(optional)</span></label><input type="text" name="spediteur" placeholder="z. B. UPS, DHL, DPD"></div>
-        <div class="bx-field"><label>Anzahl Pakete <span class="muted" style="font-weight:400">(optional, falls Nummern noch fehlen)</span></label><input type="number" name="pakete_angekuendigt" min="0" value="<?= $angekuendigt ?: '' ?>" style="max-width:140px"></div>
+        <div class="bx-field"><label><?= h(lp_t('vp_spediteur')) ?> <span class="muted" style="font-weight:400">(<?= h(lp_t('optional')) ?>)</span></label><input type="text" name="spediteur" placeholder="z. B. UPS, DHL, DPD"></div>
+        <div class="bx-field"><label><?= h(lp_t('vp_anzahl_pakete')) ?> <span class="muted" style="font-weight:400">(<?= h(lp_t('vp_anzahl_hint')) ?>)</span></label><input type="number" name="pakete_angekuendigt" min="0" value="<?= $angekuendigt ?: '' ?>" style="max-width:140px"></div>
       </div>
-      <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" type="submit">Pakete speichern</button></div>
+      <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" type="submit"><?= h(lp_t('vp_speichern')) ?></button></div>
     </form>
   </div>
 
   <?php // Dokumente & Rechnung: der Lieferant lädt CoA, Rechnung o. Ä. direkt zu DIESER Bestellung hoch.
   require_once BX_ROOT . '/core/lieferant_dateien.php';
   $bdoks = bestell_dokumente($id);
-  $BDTYP = ['coa'=>'CoA / Analysenzertifikat', 'rechnung'=>'Rechnung', 'spec'=>'Spezifikation', 'analyse'=>'Laboranalyse', 'zahlungsbeleg'=>'Überweisungsbestätigung', 'sonstiges'=>'Sonstiges']; ?>
+  $BDTYP = ['coa'=>lp_t('bd_coa'), 'rechnung'=>lp_t('bd_rechnung'), 'spec'=>lp_t('spezifikation'), 'analyse'=>lp_t('bd_analyse'), 'zahlungsbeleg'=>lp_t('bd_zahlungsbeleg'), 'sonstiges'=>lp_t('sonstiges')]; ?>
   <?php // E8: Zahlungsstatus (vom Team gesetzt) – der Lieferant sieht „bezahlt" samt Beleg.
     if (!empty($b['bezahlt_am'])): ?>
-    <div class="bx-panel badge-ok" style="padding:10px 14px;margin-bottom:12px">Bezahlt am <?= h(date('d.m.Y', strtotime((string)$b['bezahlt_am']))) ?><?= (string)($b['zahlungsweg'] ?? '') !== '' ? ' · ' . h((string)$b['zahlungsweg']) : '' ?>.</div>
+    <div class="bx-panel badge-ok" style="padding:10px 14px;margin-bottom:12px"><?= h(lp_t('dok_bezahlt_am')) ?> <?= h(date('d.m.Y', strtotime((string)$b['bezahlt_am']))) ?><?= (string)($b['zahlungsweg'] ?? '') !== '' ? ' · ' . h((string)$b['zahlungsweg']) : '' ?>.</div>
   <?php endif; ?>
   <div class="bx-panel">
-    <h2 style="margin:0 0 4px">Dokumente &amp; Rechnung</h2>
-    <p class="muted" style="margin:0 0 12px">Laden Sie hier die Unterlagen zu dieser Bestellung hoch – z. B. das <strong>Analysenzertifikat (CoA)</strong> und Ihre <strong>Rechnung</strong>, damit wir zahlen können. Sobald wir bezahlt haben, sehen Sie hier den Status und ggf. die <strong>Überweisungsbestätigung</strong>.</p>
+    <h2 style="margin:0 0 4px"><?= h(lp_t('dok_titel')) ?></h2>
+    <p class="muted" style="margin:0 0 12px"><?= h(lp_t('dok_sub')) ?></p>
     <?php if ($bdoks): ?>
     <div class="bx-tablewrap" style="margin-bottom:12px"><table class="bx-table">
-      <thead><tr><th>Typ</th><th>Datei</th><th>Datum</th><th></th></tr></thead>
+      <thead><tr><th><?= h(lp_t('dok_typ')) ?></th><th><?= h(lp_t('datei')) ?></th><th><?= h(lp_t('datum')) ?></th><th></th></tr></thead>
       <tbody>
       <?php foreach ($bdoks as $d): ?>
         <tr><td><?= h($BDTYP[$d['typ']] ?? $d['typ']) ?></td>
-            <td><a href="?p=lieferant_dokument&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener"><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument')) ?></a></td>
+            <td><a href="?p=lieferant_dokument&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener"><?= h($d['titel'] ?: ($d['datei_orig'] ?: lp_t('dok_dokument'))) ?></a></td>
             <td class="muted"><?= h(date('d.m.Y', strtotime((string)$d['angelegt']))) ?></td>
-            <td style="text-align:right"><?php if (($d['typ'] ?? '') !== 'zahlungsbeleg'): ?><form method="post" style="margin:0" onsubmit="return confirm('Dokument entfernen?');"><input type="hidden" name="aktion" value="bestell_dok_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">entfernen</button></form><?php endif; ?></td></tr>
+            <td style="text-align:right"><?php if (($d['typ'] ?? '') !== 'zahlungsbeleg'): ?><form method="post" style="margin:0" onsubmit="return confirm(<?= h(json_encode(lp_t('dok_del_q'), JSON_UNESCAPED_UNICODE)) ?>);"><input type="hidden" name="aktion" value="bestell_dok_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= h(lp_t('entfernen')) ?></button></form><?php endif; ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
@@ -219,11 +219,11 @@ if (!$b):
     <form method="post" enctype="multipart/form-data">
       <input type="hidden" name="aktion" value="bestell_dok_upload">
       <div class="bx-grid">
-        <div class="bx-field"><label>Typ</label><select name="bd_typ"><?php foreach ($BDTYP as $k=>$l): ?><option value="<?= $k ?>"<?= $k==='coa'?' selected':'' ?>><?= h($l) ?></option><?php endforeach; ?></select></div>
-        <div class="bx-field"><label>Titel (optional)</label><input type="text" name="dok_titel" maxlength="190"></div>
-        <div class="bx-field"><label>Datei <span class="muted" style="font-weight:400">(max. <?= lieferant_datei_max_mb() ?> MB)</span></label><input type="file" name="dok" required accept=".<?= implode(',.', lieferant_datei_endungen()) ?>"></div>
+        <div class="bx-field"><label><?= h(lp_t('dok_typ')) ?></label><select name="bd_typ"><?php foreach ($BDTYP as $k=>$l): ?><option value="<?= $k ?>"<?= $k==='coa'?' selected':'' ?>><?= h($l) ?></option><?php endforeach; ?></select></div>
+        <div class="bx-field"><label><?= h(lp_t('dok_titel_opt')) ?></label><input type="text" name="dok_titel" maxlength="190"></div>
+        <div class="bx-field"><label><?= h(lp_t('datei')) ?> <span class="muted" style="font-weight:400">(<?= h(lp_t('dok_max')) ?> <?= lieferant_datei_max_mb() ?> MB)</span></label><input type="file" name="dok" required accept=".<?= implode(',.', lieferant_datei_endungen()) ?>"></div>
       </div>
-      <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" type="submit">Dokument hochladen</button></div>
+      <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" type="submit"><?= h(lp_t('dok_hochladen')) ?></button></div>
     </form>
   </div>
 <?php endif;
