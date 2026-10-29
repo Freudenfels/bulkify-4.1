@@ -134,7 +134,7 @@ bx_head('Doppelte Rezepturen', count($dubletten) . ' Gruppe(n) inhaltlich identi
 #rzHead{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line,#ddd);position:sticky;top:0;background:var(--panel,#fff);border-radius:12px 12px 0 0}
 #rzHead h2{margin:0;font-size:18px}
 #rzBody{padding:16px 18px}
-#rzClose{cursor:pointer;border:1px solid var(--line,#ddd);background:transparent;border-radius:8px;padding:4px 12px;font-size:15px;line-height:1.4}
+#rzClose{cursor:pointer;border:1px solid var(--line,#ddd);background:transparent;color:inherit;border-radius:8px;padding:4px 12px;font-size:15px;line-height:1.4}
 .rz-facts{display:flex;flex-wrap:wrap;gap:8px 20px;margin:0 0 14px}
 .rz-facts div{min-width:120px}
 .rz-facts .lbl{font-size:11px;color:var(--muted,#777)}

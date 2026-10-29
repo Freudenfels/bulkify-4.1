@@ -902,7 +902,7 @@ if (!$neu && function_exists('has_role') && has_role('admin')):
     <div style="background:var(--panel,#fff);color:var(--text,#111);border:1px solid var(--line,#ddd);border-radius:12px;max-width:760px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.25)">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line,#ddd)">
         <h2 style="margin:0;font-size:18px">Zusammenführen bestätigen</h2>
-        <button type="button" id="stammClose" style="cursor:pointer;border:1px solid var(--line,#ddd);background:transparent;border-radius:8px;padding:4px 12px">Abbrechen</button>
+        <button type="button" id="stammClose" style="cursor:pointer;border:1px solid var(--line,#ddd);background:transparent;color:inherit;border-radius:8px;padding:4px 12px">Abbrechen</button>
       </div>
       <div id="stammModalBody" style="padding:16px 18px"></div>
       <div style="padding:0 18px 16px;display:flex;gap:8px;flex-wrap:wrap">
