@@ -1217,6 +1217,38 @@ function init_schema(): void {
     // Blinker bleibt dran, nur der Standort wechselt. Default lager1. Genutzt von der Lager-/Produktions-Logik.
     ensure_column('charge', 'standort', "VARCHAR(20) NOT NULL DEFAULT 'lager1'");
 
+    // Teil 4: Gebinde je Charge (z. B. „Karton 1 von 5, je 20 kg"). Bestand je Gebinde (Nummer, Restmenge, Ort).
+    // Alte Chargen ohne Gebinde werden wie EIN Gebinde mit der aktuellen Menge behandelt (siehe charge_gebinde_liste).
+    $pdo->exec("CREATE TABLE IF NOT EXISTS charge_gebinde (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        charge_id INT NOT NULL,
+        nummer INT NOT NULL DEFAULT 1,                 -- Gebinde X …
+        anzahl_gesamt INT NOT NULL DEFAULT 1,          -- … von N
+        menge DECIMAL(14,3) NOT NULL DEFAULT 0,        -- ursprüngliche Menge des Gebindes
+        menge_verfuegbar DECIMAL(14,3) NOT NULL DEFAULT 0,
+        einheit VARCHAR(20) NULL,
+        standort VARCHAR(20) NOT NULL DEFAULT 'lager1',-- lager1 | produktion
+        status VARCHAR(20) NOT NULL DEFAULT 'voll',    -- voll | angebrochen | leer
+        angelegt DATETIME NOT NULL,
+        KEY idx_charge (charge_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Teil 4: Schwund-Protokoll (Differenz rechnerisch vs. gewogen beim Rückgabe-Wiegen). Für Steuer/Inventur.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS schwund (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        item_id INT NOT NULL,
+        charge_id INT NULL,
+        gebinde_id INT NULL,
+        pa_id INT NULL,
+        auftrag_id INT NULL,
+        rechnerisch DECIMAL(14,3) NOT NULL DEFAULT 0,  -- erwartete Restmenge
+        gewogen DECIMAL(14,3) NOT NULL DEFAULT 0,      -- tatsächlich gewogen (= neuer Bestand)
+        differenz DECIMAL(14,3) NOT NULL DEFAULT 0,    -- rechnerisch - gewogen (positiv = Schwund)
+        einheit VARCHAR(20) NULL,
+        mitarbeiter VARCHAR(120) NULL,
+        angelegt DATETIME NOT NULL,
+        KEY idx_item (item_id), KEY idx_angelegt (angelegt)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // === Produktions-Charge CH/CHE (Spec 7.5 + 16) =========================================================
     // EIGENE, durchsuchbare Entitaet fuer die PRODUKTIONS-/Misch-Charge – getrennt von der Fertigprodukt-Charge
     // (charge.charge_nr .A/.B bleibt wie sie ist!). CH… = intern gemischt/produziert, CHE… = extern zugekaufte
@@ -3798,6 +3830,67 @@ function charge_bestand_je_einheit(int $item_id, array $status = ['frei'], strin
                   ORDER BY menge DESC", array_merge([$item_id], $status)) as $r)
         $out[(string)$r['einheit']] = (float)$r['menge'];
     return $out;
+}
+
+// Teil 4: Gebinde einer Charge. Gibt es (noch) keine Gebinde-Zeilen, wird die Charge wie EIN Gebinde mit der
+// aktuellen Menge behandelt (Alt-Chargen). So funktioniert die Gebinde-Sicht auch ohne Migration sofort.
+function charge_gebinde_liste(int $charge_id): array {
+    if ($charge_id <= 0) return [];
+    if (table_exists('charge_gebinde')) {
+        $g = all("SELECT * FROM charge_gebinde WHERE charge_id=? ORDER BY nummer, id", [$charge_id]);
+        if ($g) return $g;
+    }
+    $c = one("SELECT id, menge, menge_verfuegbar, einheit, standort FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return [];
+    return [[
+        'id' => 0, 'charge_id' => $charge_id, 'nummer' => 1, 'anzahl_gesamt' => 1,
+        'menge' => (float)$c['menge'], 'menge_verfuegbar' => (float)$c['menge_verfuegbar'],
+        'einheit' => (string)($c['einheit'] ?? ''), 'standort' => (string)($c['standort'] ?? 'lager1'),
+        'status' => ((float)$c['menge_verfuegbar'] <= 1e-9 ? 'leer' : 'voll'), 'virtuell' => 1,
+    ]];
+}
+// Teil 4: Schwund beim (blinden) Rückgabe-Wiegen erfassen. Der gewogene Wert IST der neue Bestand (setzt der
+// Aufrufer). Hier wird NUR die Differenz protokolliert und – nach Plausibilität – Nico still benachrichtigt:
+//  - gewogen > rechnerisch (mehr als erwartet): IMMER Hinweis (Tippfehler/Rezeptur stimmt nicht).
+//  - gewogen < rechnerisch (Schwund): bis zur Grenze (Einstellung schwund_grenze_kg, Default 1 kg) nur stiller
+//    Eintrag; darüber zusätzlich Hinweis. In jedem Fall wird gebucht. „Blind": der Mitarbeiter sieht nichts davon.
+function schwund_erfassen(int $item_id, ?int $charge_id, ?int $pa_id, float $rechnerisch, float $gewogen,
+                          string $einheit = 'kg', string $mitarbeiter = '', ?int $gebinde_id = null, ?int $auftrag_id = null): void {
+    if ($item_id <= 0 || !table_exists('schwund')) return;
+    $diff = round($rechnerisch - $gewogen, 3);   // positiv = Schwund (weniger als erwartet)
+    if (abs($diff) <= 0.0005) return;            // keine nennenswerte Differenz -> nichts protokollieren
+    q("INSERT INTO schwund (item_id, charge_id, gebinde_id, pa_id, auftrag_id, rechnerisch, gewogen, differenz, einheit, mitarbeiter, angelegt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      [$item_id, $charge_id ?: null, $gebinde_id ?: null, $pa_id ?: null, $auftrag_id ?: null,
+       round($rechnerisch, 3), round($gewogen, 3), $diff, $einheit, ($mitarbeiter ?: null), gmdate('Y-m-d H:i:s')]);
+    $grenze = (float) str_replace(',', '.', (string) meta_get('schwund_grenze_kg', '1'));
+    $mehr   = $diff < 0;                 // mehr gewogen als rechnerisch
+    $zuviel = (-$diff) ;                 // Betrag, wenn mehr
+    $zuwenig= $diff;                     // Betrag, wenn Schwund
+    $alarm  = $mehr || ($zuwenig > $grenze);
+    if (!$alarm) return;
+    $name = (string) scalar("SELECT name FROM item WHERE id=?", [$item_id]);
+    $chnr = $charge_id ? (string) scalar("SELECT charge_nr FROM charge WHERE id=?", [$charge_id]) : '';
+    $nf = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+    $betreff = ($mehr ? 'Wiege-Abweichung (mehr als erwartet): ' : 'Schwund über Grenze: ') . $name . ($chnr ? ' · Charge ' . $chnr : '');
+    $text = 'Rechnerisch ' . $nf($rechnerisch) . ' ' . $einheit . ', gewogen ' . $nf($gewogen) . ' ' . $einheit
+          . ', Differenz ' . $nf(abs($diff)) . ' ' . $einheit . ' ' . ($mehr ? '(mehr – Mischung/Rezeptur prüfen)' : '(Schwund)')
+          . ($mitarbeiter !== '' ? ' · Mitarbeiter: ' . $mitarbeiter : '')
+          . ($pa_id ? ' · PA #' . $pa_id : '');
+    if (function_exists('benachrichtigung_add')) benachrichtigung_add($betreff, $text, ($charge_id ? '?p=chargen&id=' . $charge_id : '?p=rohstoff&id=' . $item_id), 'wiegen', true);
+    if (function_exists('mail_team')) mail_team($betreff, $text);
+}
+// Teil 4: Schwund-Übersicht je Artikel (für die Schwund-Tabelle auf der Artikelseite / Inventur).
+function item_schwund_liste(int $item_id, int $limit = 200): array {
+    if ($item_id <= 0 || !table_exists('schwund')) return [];
+    $limit = max(1, min(1000, $limit));
+    return all("SELECT s.*, c.charge_nr, a.nummer AS auftrag_nr
+                FROM schwund s LEFT JOIN charge c ON c.id=s.charge_id LEFT JOIN auftrag a ON a.id=s.auftrag_id
+                WHERE s.item_id=? ORDER BY s.angelegt DESC, s.id DESC LIMIT $limit", [$item_id]);
+}
+function item_schwund_summe(int $item_id): float {
+    if ($item_id <= 0 || !table_exists('schwund')) return 0.0;
+    return (float) scalar("SELECT COALESCE(SUM(differenz),0) FROM schwund WHERE item_id=?", [$item_id]);
 }
 
 // Verlauf (A2): alle Bewegungen eines Artikels – Wareneingänge (+) aus Chargen und Abgänge (-) aus der

@@ -1318,6 +1318,36 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
   </script>
   <?php endif; ?>
 
+  <?php // Teil 4: Schwund-Übersicht (Differenz rechnerisch vs. gewogen beim Rückgabe-Wiegen). Für Steuer/Inventur.
+    $schwundRows = item_schwund_liste((int)$id);
+    if ($schwundRows):
+      $schwundSumme = item_schwund_summe((int)$id);
+      $nfk = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ','); ?>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Schwund-Übersicht <span class="muted" style="font-weight:400;font-size:13px">(gewogen vs. rechnerisch – für Inventur/Steuer)</span></h2>
+    <div class="muted" style="font-size:13px;margin-bottom:10px">Summe Schwund: <strong><?= $nfk($schwundSumme) ?></strong> <?= h($v('einheit') ?: 'kg') ?></div>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Datum</th><th>Charge</th><th>Auftrag</th><th class="bx-num">rechnerisch</th><th class="bx-num">gewogen</th><th class="bx-num">Differenz</th><th class="bx-num">%</th><th>Mitarbeiter</th></tr></thead>
+      <tbody>
+      <?php foreach ($schwundRows as $s): $rech = (float)$s['rechnerisch']; $gew = (float)$s['gewogen']; $dif = (float)$s['differenz'];
+            $proz = $rech > 1e-9 ? (-$dif / $rech * 100) : 0; $mehr = $dif < 0; ?>
+        <tr>
+          <td><?= h(fmt_zeit((string)$s['angelegt'], 'd.m.Y H:i')) ?></td>
+          <td><?php if (!empty($s['charge_id'])): ?><a href="?p=chargen&id=<?= (int)$s['charge_id'] ?>"><?= h((string)($s['charge_nr'] ?: ('#' . $s['charge_id']))) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
+          <td><?php if (!empty($s['auftrag_id'])): ?><a href="?p=auftrag&id=<?= (int)$s['auftrag_id'] ?>"><?= h((string)($s['auftrag_nr'] ?: ('#' . $s['auftrag_id']))) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
+          <td class="bx-num"><?= $nfk($rech) ?> <?= h((string)$s['einheit']) ?></td>
+          <td class="bx-num"><?= $nfk($gew) ?> <?= h((string)$s['einheit']) ?></td>
+          <td class="bx-num" style="<?= $mehr ? 'color:var(--warn)' : '' ?>"><?= ($mehr ? '+' : '') . $nfk(-$dif) ?> <?= h((string)$s['einheit']) ?></td>
+          <td class="bx-num"><?= number_format($proz, 1, ',', '.') ?> %</td>
+          <td><?= h((string)($s['mitarbeiter'] ?: '–')) ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">„Differenz" positiv = mehr gewogen als rechnerisch (grün/Warnung – Mischung/Rezeptur prüfen), negativ = Schwund. Der Lagerbestand ist immer der gewogene Wert.</p>
+  </div>
+  <?php endif; ?>
+
   <?php // Reservierungen: Bestand einem Auftrag fest zuteilen. Reduziert die Netto-Verfügbarkeit für
         // andere Aufträge (item_verfuegbar_fuer). Menge frei anpassbar; 0 hebt die Reservierung auf.
         $einheitLbl = $v('einheit') ?: 'Stk'; ?>
