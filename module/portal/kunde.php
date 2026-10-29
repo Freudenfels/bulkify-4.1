@@ -3848,6 +3848,9 @@ portal_head('Kundenportal · ' . $k['firma']);
     } ?>
   <h1 style="margin-bottom:4px">Ihre Bestellungen</h1>
   <p class="muted" style="margin:0 0 16px">Klicken Sie auf eine Bestellung, um alle Schritte, Rechnung und Details zu sehen.</p>
+  <?php // „Etikett fehlt"-Karte: solide linke Akzent-Leiste (inset box-shadow) statt dünner 1px-Border, die bei
+        // manchen Zoom-/Bildschirm-Skalierungen nur an den Ecken sichtbar war und wie Klammern aussah. ?>
+  <style>.bx-ord-etmiss{border-color:#e6c4c0;box-shadow:inset 3px 0 0 #e6c4c0,0 2px 8px rgba(0,0,0,.25)}</style>
   <?php if (!$auftraege): ?><div class="bx-panel"><div class="muted">Noch keine Bestellungen.</div></div>
   <?php else: ?>
   <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 12px">
@@ -3884,7 +3887,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         $totalA = count($trackA) ?: 1;
         // Etikett offen? Nur Produkt-Aufträge, die ein Etikett brauchen und noch nicht freigegeben sind.
         $etMiss = !$istDLrow && !$complete && auftrag_braucht_etikett((int)$a['id']) && !etikett_freigegeben((int)$a['id']); ?>
-  <a class="bx-panel bx-order-row" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit<?= $etMiss ? ';border-color:#e6c4c0' : '' ?>">
+  <a class="bx-panel bx-order-row<?= $etMiss ? ' bx-ord-etmiss' : '' ?>" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:13px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
