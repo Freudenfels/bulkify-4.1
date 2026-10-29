@@ -65,12 +65,12 @@ if ($aufIdsE)
 $such = trim((string)($_GET['such'] ?? ''));   // Suche nach Tracking-Code / Charge / Artikel (Paket wiederfinden)
 if ($such !== '') {
     $like = '%' . $such . '%';
-    $charges = all("SELECT c.*, i.name AS item_name, l.firma AS lieferant_firma
+    $charges = all("SELECT c.*, i.name AS item_name, i.kategorie AS item_kategorie, l.firma AS lieferant_firma
                     FROM charge c LEFT JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id
                     WHERE c.tracking LIKE ? OR c.charge_nr LIKE ? OR i.name LIKE ?
                     ORDER BY c.angelegt DESC LIMIT 100", [$like, $like, $like]);
 } else {
-    $charges = all("SELECT c.*, i.name AS item_name, l.firma AS lieferant_firma
+    $charges = all("SELECT c.*, i.name AS item_name, i.kategorie AS item_kategorie, l.firma AS lieferant_firma
                     FROM charge c LEFT JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id
                     ORDER BY c.angelegt DESC LIMIT 25");
 }
@@ -83,6 +83,14 @@ $statusBadge = fn($s) => match ($s) {
     default       => bx_badge($s),
 };
 $mng = fn($x,$e) => rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',') . ' ' . h($e ?: '');
+// Teil 4 (Schritt 6): Artikel-Detailseite je Kategorie (Warenlager-Detailseite) – wie in bestand_liste.php.
+$artikelUrl = function (array $c): string {
+    $iid = (int)($c['item_id'] ?? 0);
+    if ($iid <= 0) return '';
+    $kat = (string)($c['item_kategorie'] ?? '');
+    if (function_exists('ist_betriebsmittel_kat') && ist_betriebsmittel_kat($kat)) return '?p=betriebsmittel&id=' . $iid;
+    return $kat === 'verpackung' ? '?p=verpackung&id=' . $iid : '?p=rohstoff&id=' . $iid;
+};
 
 render_header('wareneingang', 'Wareneingang');
 bx_head('Wareneingang', 'Charge buchen', bx_btn('Zum Bestand', '?p=lager', 'ghost'));
@@ -280,10 +288,10 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
     <thead><tr><th>Charge</th><th>Artikel</th><th class="bx-num">Menge</th><th>MHD</th><th>Lieferant</th><th>Tracking</th><th>Status</th><th></th></tr></thead>
     <tbody>
     <?php if (!$charges): ?><tr><td colspan="8" class="muted"><?= $such !== '' ? 'Kein Treffer zu „' . h($such) . '".' : 'Noch keine Chargen gebucht.' ?></td></tr><?php endif; ?>
-    <?php foreach ($charges as $c): $tc = array_values(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($c['tracking'] ?? ''))))); ?>
-      <tr>
+    <?php foreach ($charges as $c): $tc = array_values(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($c['tracking'] ?? ''))))); $au = $artikelUrl($c); ?>
+      <tr<?= $au !== '' ? ' class="we-rowlink" data-href="' . h($au) . '" style="cursor:pointer"' : '' ?>>
         <td><?= h($c['charge_nr'] ?: '–') ?></td>
-        <td><?= h($c['item_name'] ?: '–') ?></td>
+        <td><?php if ($au !== '' && ($c['item_name'] ?? '') !== ''): ?><a href="<?= h($au) ?>"><?= h($c['item_name']) ?></a><?php else: ?><?= h($c['item_name'] ?: '–') ?><?php endif; ?></td>
         <td class="bx-num"><?= $mng($c['menge_verfuegbar'], $c['einheit']) ?></td>
         <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '<span class="muted">–</span>' ?></td>
         <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
@@ -307,6 +315,15 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
     out.textContent = codes.length ? codes.length + (codes.length===1?' Paket erfasst':' Pakete erfasst') : '';
   }
   ta.addEventListener('input', upd); upd();
+})();
+(function(){
+  // Teil 4 (Schritt 6): ganze Chargen-Zeile klickbar -> Artikel-Detailseite. Klicks auf Buttons/Links/Formulare ignorieren.
+  document.querySelectorAll('tr.we-rowlink').forEach(function(tr){
+    tr.addEventListener('click', function(e){
+      if (e.target.closest('a,button,input,select,textarea,form,label')) return;
+      var href = tr.getAttribute('data-href'); if (href) window.location.href = href;
+    });
+  });
 })();
 </script>
 <?php render_footer(); ?>
