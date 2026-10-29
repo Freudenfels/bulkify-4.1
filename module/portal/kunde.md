@@ -333,3 +333,13 @@ Das Etikett-Design kann der Kunde ändern (neu hochladen → erneut freigeben), 
 
 ## Etikett-Freigabe: Popup statt „versteckt"
 Hochgeladene, aber noch nicht freigegebene Etiketten (`auftrag.etikett_freigegeben=0`, mit vorhandenem Design, `auftrag_braucht_etikett`) warten auf die verbindliche Freigabe des Kunden. Damit das nicht erst tief in den Bestellungen auffällt: eine prominente Erinnerung oben auf JEDER Portalseite (`$etikettUnbestListe`) und ein **Freigabe-Popup**, das sich beim Betreten (Start-View) und direkt nach dem Upload (`?etikett=1`) automatisch öffnet (`etFreigabeOeffnen()`). Das Popup postet den vorhandenen `aktion=etikett_freigeben`-Handler (Haftung + Name). „Später" schließt es, die Erinnerung bleibt.
+
+## Kunden-Onboarding (2026-10-29)
+Vier Bausteine, damit sich neue Kunden sofort zurechtfinden (Analogon zum Lieferanten-Onboarding):
+
+1. **Stammdaten-Assistent (Erstzugang)** – bestand bereits: solange `kunden.passwort` leer ist, zeigt das Portal statt der normalen Ansicht den 3-Schritt-Assistenten (Kontakt → Rechnungsadresse → Zugang, Aktion `konto_einrichten`), Portal erst danach frei. Admin-Vorschau (`$internVorschau`) überspringt ihn.
+2. **Erste-Schritte-Checkliste** (Start-View): zustandsgesteuerte Checkliste (Konto eingerichtet / erste Anfrage / Angebot annehmen / Bestellung verfolgen) mit Fortschrittsbalken. Meilensteine aus echten Zählern (`rezeptur_anfrage`+`portal_anfrage`, `angebot`, `auftrag`). Verschwindet automatisch, wenn alle Schritte erledigt sind, oder per „Ausblenden" (POST `aktion=checkliste_aus` → `kunden.onboarding_checkliste_aus=1`). Nur für `$darfBestellen`.
+3. **Info & Tools** (`v=info`, Menügruppe „Hilfe"): „So funktioniert bulkify" (4-Schritt-Flow), Button „Geführter Rundgang", Karten zu Etiketten/Dokumenten, Angeboten, Bestellungen, Konto, AGB, plus Kontakt (E-Mail/Telefon aus `beleg_firma()`/`meta_get('firma_telefon')`). Keine v3-1:1-Kopie, da 4.1 (noch) keinen Etikettenprüfer/kein Portal-Handbuch hat.
+4. **Geführter Rundgang** (Tour): leichtgewichtig, ohne Fremd-Bibliothek (`#bxTour` am Seitenende). Hebt Suche, Checkliste, Angebote, Bestellungen, Konto, Info nacheinander hervor (Ring + Tooltip, Schritte ohne sichtbares Ziel werden übersprungen). Startet nach dem Erstzugang EINMAL automatisch (`kunden.portal_tour_gesehen`), neu startbar über „Geführter Rundgang" (`#obTourStart`) bzw. `window.bxTourStart()`. Abschluss/Überspringen meldet `aktion=tour_gesehen` (JSON) → setzt das Flag.
+
+Neue Spalten (`core/schema.php`): `kunden.onboarding_checkliste_aus`, `kunden.portal_tour_gesehen` (beide TINYINT, Default 0).

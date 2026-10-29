@@ -1354,6 +1354,8 @@ function init_schema(): void {
     ensure_column('kunden', 'passwort', "VARCHAR(255) NULL");       // Passwort-Hash fuers Kunden-Login (password_hash); leer = noch nicht eingerichtet
     ensure_column('kunden', 'erstlogin_am', "DATETIME NULL");       // Zeitpunkt der Konto-Einrichtung (Erstzugang abgeschlossen)
     ensure_column('kunden', 'letzter_login', "DATETIME NULL");      // letzter erfolgreicher Kunden-Login
+    ensure_column('kunden', 'onboarding_checkliste_aus', "TINYINT(1) NOT NULL DEFAULT 0");  // 1 = „Erste Schritte"-Checkliste im Portal ausgeblendet
+    ensure_column('kunden', 'portal_tour_gesehen', "TINYINT(1) NOT NULL DEFAULT 0");        // 1 = der gefuehrte Portal-Rundgang wurde einmal gesehen/abgeschlossen
     // Standard-Produktionsweg (Ausbaustufen). Am Produkt = Standard; am Kunden = optionaler Override (NULL = erbt vom Produkt).
     // Nur Admin pflegt diese Schalter; sie setzen beim PA-Anlegen den Startzustand (im Produktions-Programm je Auftrag überschreibbar).
     ensure_column('produkt', 'synonyme', "TEXT NULL");          // frühere/alternative Produktnamen (Kunde benennt um) – intern bekannt, überall mitsuchbar

@@ -62,6 +62,17 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     header('Location: ?p=portal&token=' . $token . '&v=angebote' . $flag); exit;
 }
 
+// Onboarding: „Erste Schritte"-Checkliste dauerhaft ausblenden (Kunde will sie nicht mehr sehen).
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'checkliste_aus') {
+    q("UPDATE kunden SET onboarding_checkliste_aus=1 WHERE id=?", [(int)$k['id']]);
+    header('Location: ?p=portal&token=' . $token . '&v=start'); exit;
+}
+// Onboarding: den gefuehrten Portal-Rundgang als gesehen markieren (wird am Ende der Tour per fetch gesendet).
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'tour_gesehen') {
+    q("UPDATE kunden SET portal_tour_gesehen=1 WHERE id=?", [(int)$k['id']]);
+    header('Content-Type: application/json'); echo json_encode(['ok'=>true]); exit;
+}
+
 // Erstzugang abschliessen: E-Mail + Passwort setzen und fehlende Stammdaten ergaenzen.
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'konto_einrichten') {
     $email = trim(mb_strtolower((string)($_POST['email'] ?? '')));
@@ -1417,12 +1428,15 @@ $L['labortest'] = 'Labortest';
 if (!empty($k['nutzt_fulfillment'])) $L['fremdprodukte'] = 'Mein Lager';
 // Mein Konto: eigene Stammdaten + Adressen pflegen (dauerhafter Menüpunkt).
 $L['konto'] = 'Mein Konto';
+// Info & Tools: Hilfe-/Einstieg-Seite (So funktioniert bulkify, geführter Rundgang, Dokumente, AGB, Kontakt).
+$L['info'] = 'Info & Tools';
 $NAVGROUPS = [
     ''          => ['start'],
     'Katalog'   => ['rezepturen', 'produkte', 'rohstoffe'],
     'Anfragen'  => ['meine_anfragen', 'anfrage', 'prodanfrage', 'rohanfrage', 'dienstleistung'],
     'Vorgänge'  => ['kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten', 'labortest', 'fremdprodukte'],
     'Konto'     => ['konto'],
+    'Hilfe'     => ['info'],
 ];
 // Detailansichten (kein Menüpunkt) – gültig je nach Freischaltung; hebt den Katalog-Punkt hervor
 $detailParent = [];
@@ -2243,6 +2257,56 @@ portal_head('Kundenportal · ' . $k['firma']);
 <?php if ($view === 'start'): ?>
   <h1 style="margin-bottom:4px">Willkommen, <?= h($k['ansprechpartner'] ?: $k['firma']) ?></h1>
   <p class="bx-sub">Ihr Überblick – tippen Sie unten auf einen Bereich oder nutzen Sie das Menü.</p>
+
+  <?php // Onboarding – „Erste Schritte"-Checkliste. Zeigt den Weg vom Konto bis zur ersten Bestellung und
+        // verschwindet automatisch, sobald alle Schritte erledigt sind (oder der Kunde sie ausblendet).
+    $kid = (int)$k['id'];
+    if ($darfBestellen && empty($k['onboarding_checkliste_aus'])):
+        $anfZiel = isset($L['anfrage']) ? 'anfrage' : (isset($L['prodanfrage']) ? 'prodanfrage'
+                 : (isset($L['rohanfrage']) ? 'rohanfrage' : (isset($L['dienstleistung']) ? 'dienstleistung' : 'meine_anfragen')));
+        $cntAnfrage = (int) scalar("SELECT COUNT(*) FROM rezeptur_anfrage WHERE kunde_id=?", [$kid])
+                    + (int) scalar("SELECT COUNT(*) FROM portal_anfrage WHERE kunde_id=?", [$kid]);
+        $cntAngebot = (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND kunde_ausgeblendet=0", [$kid]);
+        $cntAuftrag = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE kunde_id=?", [$kid]);
+        $obSteps = [
+            ['done'=>true,            'label'=>'Konto eingerichtet',        'hint'=>'Zugang und Rechnungsadresse sind hinterlegt.',                 'href'=>$portalLink('konto'),                               'cta'=>'Konto ansehen'],
+            ['done'=>$cntAnfrage > 0, 'label'=>'Erste Anfrage stellen',     'hint'=>'Rezeptur, Produkt oder Rohstoff anfragen – wir melden uns.',   'href'=>$portalLink($anfZiel),                              'cta'=>'Anfrage starten'],
+            ['done'=>$cntAngebot > 0, 'label'=>'Angebot prüfen & annehmen', 'hint'=>'Menge wählen und verbindlich bestätigen.',                     'href'=>$portalLink('meine_anfragen') . '&oatab=zubestaetigen', 'cta'=>'Zu den Angeboten'],
+            ['done'=>$cntAuftrag > 0, 'label'=>'Bestellung verfolgen',      'hint'=>'Produktion und Versand Ihrer Aufträge mitverfolgen.',          'href'=>$portalLink('bestellungen'),                        'cta'=>'Zu den Bestellungen'],
+        ];
+        $obTotal = count($obSteps);
+        $obDoneN = count(array_filter($obSteps, fn($s) => $s['done']));
+        $obErster = true;   // erster noch offener Schritt wird hervorgehoben
+        if ($obDoneN < $obTotal): ?>
+  <div class="bx-panel" id="obChecklist" style="border-color:var(--gruen);background:var(--panel-2)">
+    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px">
+      <h2 style="margin:0">Erste Schritte</h2>
+      <span class="muted" style="font-size:13px"><?= $obDoneN ?> von <?= $obTotal ?> erledigt</span>
+    </div>
+    <div style="height:8px;border-radius:999px;background:var(--line);margin:10px 0 4px;overflow:hidden">
+      <div style="height:100%;width:<?= (int) round($obDoneN / $obTotal * 100) ?>%;background:var(--gruen);border-radius:999px"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+      <?php foreach ($obSteps as $s): $offen = !$s['done']; $hervor = $offen && $obErster; if ($offen) $obErster = false; ?>
+        <div class="bx-row" style="align-items:flex-start;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel)">
+          <span style="flex:0 0 auto;margin-top:2px"><?= $s['done'] ? bx_badge('erledigt','ok') : bx_badge('offen') ?></span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600"><?= h($s['label']) ?></div>
+            <div class="muted" style="font-size:13px;margin-top:2px"><?= h($s['hint']) ?></div>
+          </div>
+          <?php if ($offen): ?><a class="btn <?= $hervor ? 'btn-primary' : 'btn-ghost' ?> btn-sm" style="flex:0 0 auto" href="<?= $s['href'] ?>"><?= h($s['cta']) ?></a><?php endif; ?>
+        </div>
+      <?php endforeach; ?>
+    </div>
+    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px;margin-top:12px">
+      <a class="btn btn-ghost btn-sm" href="<?= $portalLink('info') ?>">Info &amp; Tools</a>
+      <form method="post" style="margin:0" onsubmit="return confirm('Checkliste „Erste Schritte“ ausblenden? Sie finden alles weiter über das Menü.');">
+        <input type="hidden" name="aktion" value="checkliste_aus">
+        <button type="submit" class="btn btn-ghost btn-sm muted">Ausblenden</button>
+      </form>
+    </div>
+  </div>
+  <?php endif; endif; ?>
 
   <?php if ($vorschlaege): $nV = count($vorschlaege); ?>
   <a href="<?= $portalLink('meine_anfragen') ?>" class="bx-panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:inherit;border-color:var(--gruen);background:var(--panel-2)">
@@ -4770,6 +4834,68 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
   <?php endforeach; ?>
 
+<?php elseif ($view === 'info'):
+  // Info & Tools: Einstieg/Hilfe-Seite. „So funktioniert bulkify", geführter Rundgang, Wege zu Dokumenten,
+  // AGB und Kontakt. Bewusst ohne interne Zahlen – rein kundenorientiert.
+  $firma = function_exists('beleg_firma') ? beleg_firma() : ['name'=>'bulkify','email'=>'info@bulkify.pro'];
+  $firmaTel = trim((string) meta_get('firma_telefon', ''));
+  // Karten nur zu freigeschalteten Bereichen zeigen (sonst führt der Link auf die Übersicht zurück).
+  $infoCards = [];
+  if (isset($L['etiketten']))  $infoCards[] = ['label'=>'Etiketten & Dokumente', 'desc'=>'Ihre Etiketten, Spezifikationen und Analysen (CoA) zu jeder Bestellung.', 'href'=>$portalLink('etiketten'), 'cta'=>'Öffnen'];
+  if (isset($L['labortest']))  $infoCards[] = ['label'=>'Laboranalysen',          'desc'=>'Freigegebene Laborergebnisse zu Ihren Produkten und Chargen.',        'href'=>$portalLink('labortest'), 'cta'=>'Öffnen'];
+  $infoCards[] = ['label'=>'Angebote',    'desc'=>'Angebote prüfen, Menge wählen und verbindlich annehmen.',      'href'=>$portalLink('meine_anfragen') . '&oatab=zubestaetigen', 'cta'=>'Öffnen'];
+  $infoCards[] = ['label'=>'Bestellungen','desc'=>'Produktion und Versand Ihrer Aufträge verfolgen.',             'href'=>$portalLink('bestellungen'), 'cta'=>'Öffnen'];
+  $infoCards[] = ['label'=>'Mein Konto',  'desc'=>'Stammdaten, Adressen und Zugang pflegen.',                      'href'=>$portalLink('konto'), 'cta'=>'Öffnen'];
+  if (agb_aktuell()) $infoCards[] = ['label'=>'AGB', 'desc'=>'Unsere Allgemeinen Geschäftsbedingungen nachlesen.', 'href'=>$portalLink('agb'), 'cta'=>'Lesen'];
+  ?>
+  <h1 style="margin-bottom:4px">Info &amp; Tools</h1>
+  <p class="bx-sub">Alles für den Einstieg – so läuft die Zusammenarbeit, und hier finden Sie Ihre Unterlagen.</p>
+
+  <div class="bx-panel">
+    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px">
+      <h2 style="margin:0">So funktioniert bulkify</h2>
+      <button type="button" class="btn btn-primary btn-sm" id="obTourStart">Geführter Rundgang</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px">
+      <?php
+      $flow = [
+        ['1','Anfrage stellen','Rezeptur, Produkt oder Rohstoff anfragen – ohne Aufwand, in wenigen Minuten.'],
+        ['2','Angebot erhalten','Wir prüfen und senden Ihnen ein Angebot. Sie wählen die Menge und nehmen an.'],
+        ['3','Produktion','Wir fertigen Ihre Charge – Sie verfolgen jeden Schritt live im Portal.'],
+        ['4','Lieferung','Ihre Ware wird versandt; Rechnung und alle Dokumente liegen im Portal bereit.'],
+      ];
+      foreach ($flow as $f): ?>
+        <div style="padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2)">
+          <div class="muted" style="font-size:12px">Schritt <?= h($f[0]) ?></div>
+          <div style="font-weight:600;margin:4px 0 4px"><?= h($f[1]) ?></div>
+          <div class="muted" style="font-size:13px;line-height:1.5"><?= h($f[2]) ?></div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Schnell zu Ihren Unterlagen</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">
+      <?php foreach ($infoCards as $c): ?>
+        <div style="display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2)">
+          <div style="font-weight:600"><?= h($c['label']) ?></div>
+          <div class="muted" style="font-size:13px;line-height:1.5;flex:1"><?= h($c['desc']) ?></div>
+          <a class="btn btn-ghost btn-sm" style="align-self:flex-start" href="<?= $c['href'] ?>"><?= h($c['cta']) ?></a>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Noch Fragen? Wir sind für Sie da.</h2>
+    <p class="muted" style="margin:0 0 10px;font-size:14px">Schreiben Sie uns jederzeit – wir helfen gern weiter.</p>
+    <div class="bx-row" style="gap:18px;flex-wrap:wrap">
+      <?php if (!empty($firma['email'])): ?><a class="btn btn-primary btn-sm" href="mailto:<?= h($firma['email']) ?>">E-Mail: <?= h($firma['email']) ?></a><?php endif; ?>
+      <?php if ($firmaTel !== ''): ?><a class="btn btn-ghost btn-sm" href="tel:<?= h(preg_replace('/[^0-9+]/', '', $firmaTel)) ?>">Telefon: <?= h($firmaTel) ?></a><?php endif; ?>
+    </div>
+  </div>
+
 <?php elseif ($view === 'agb'):
   // Aktuelle Fassung, oder eine bestimmte über ?fassung=<id> – so lässt sich nachlesen, was bei
   // einer früheren Bestätigung galt. Der Inhalt ist bewusst HTML (vom Team gepflegt).
@@ -5120,4 +5246,85 @@ document.getElementById('etFreiOverlay').addEventListener('click', function(e){ 
 })();
 </script>
 <?php endif; ?>
+<?php
+// ---------------------------------------------------------------------------------------------------
+// Baustein 4: Geführter Rundgang (Onboarding-Tour). Leichtgewichtig, ohne Fremd-Bibliothek.
+// Hebt nacheinander Bereiche hervor (Suche, Erste-Schritte-Checkliste, Angebote, Bestellungen, Konto,
+// Info & Tools) und erklärt sie. Startet beim ersten Besuch nach dem Erstzugang automatisch EINMAL
+// (portal_tour_gesehen), lässt sich aber jederzeit über „Geführter Rundgang" (Info & Tools) neu starten.
+$tourAuto = ($view === 'start') && !$internVorschau && $darfBestellen && !empty($k['passwort']) && empty($k['portal_tour_gesehen']);
+?>
+<div id="bxTour" hidden>
+  <div class="bxt-dim"></div>
+  <div class="bxt-ring" hidden></div>
+  <div class="bxt-card" role="dialog" aria-modal="true" aria-labelledby="bxtTitle">
+    <div class="bxt-step muted"></div>
+    <div class="bxt-title" id="bxtTitle"></div>
+    <div class="bxt-text"></div>
+    <div class="bxt-btns">
+      <button type="button" class="btn btn-ghost btn-sm bxt-skip">Überspringen</button>
+      <div style="flex:1"></div>
+      <button type="button" class="btn btn-ghost btn-sm bxt-prev">Zurück</button>
+      <button type="button" class="btn btn-primary btn-sm bxt-next">Weiter</button>
+    </div>
+  </div>
+</div>
+<style>
+#bxTour .bxt-dim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000}
+#bxTour .bxt-ring{position:fixed;z-index:10001;border-radius:12px;outline:3px solid var(--lime,#C0F24E);box-shadow:0 0 0 3px rgba(192,242,78,.35),0 0 0 9999px rgba(0,0,0,.001);pointer-events:none;transition:all .15s ease}
+#bxTour .bxt-card{position:fixed;z-index:10002;left:50%;bottom:24px;transform:translateX(-50%);width:min(440px,calc(100vw - 32px));background:var(--panel,#fff);border:1px solid var(--line,#ddd);border-radius:16px;padding:18px 18px 14px;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+#bxTour .bxt-step{font-size:12px;margin-bottom:4px}
+#bxTour .bxt-title{font-weight:700;font-size:17px;margin-bottom:6px}
+#bxTour .bxt-text{font-size:14px;line-height:1.5;color:var(--text,#222)}
+#bxTour .bxt-btns{display:flex;align-items:center;gap:8px;margin-top:16px}
+</style>
+<script>
+(function(){
+  var token = <?= json_encode((string)$token) ?>;
+  // Schritte: sel = Zielelement (optional). Fehlt das Element/ist es unsichtbar, wird mittig ohne Markierung gezeigt.
+  var STEPS = [
+    {sel:null,                        title:'Willkommen in Ihrem Portal', text:'Ein kurzer Rundgang (ca. 30 Sekunden) zeigt Ihnen die wichtigsten Bereiche. Sie können jederzeit überspringen.'},
+    {sel:'.bx-sidesuche',             title:'Alles schnell finden',       text:'Über die Suche finden Sie Rezepturen, Produkte, Bestellungen und Dokumente auf einen Griff.'},
+    {sel:'#obChecklist',              title:'Erste Schritte',             text:'Diese Checkliste führt Sie vom Konto bis zur ersten Bestellung – Schritt für Schritt.'},
+    {sel:'a[href*="v=angebote"]',     title:'Angebote annehmen',          text:'Hier prüfen Sie Angebote, wählen die Menge und bestätigen verbindlich.'},
+    {sel:'a[href*="v=bestellungen"]', title:'Bestellungen verfolgen',     text:'Verfolgen Sie Produktion und Versand Ihrer Aufträge in Echtzeit.'},
+    {sel:'a[href*="v=konto"]',        title:'Mein Konto',                 text:'Stammdaten, Adressen und Zugang pflegen Sie jederzeit selbst.'},
+    {sel:'a[href*="v=info"]',         title:'Info & Tools',               text:'Hier finden Sie diese Hilfe, Ihre Unterlagen und können den Rundgang jederzeit erneut starten.'}
+  ];
+  var box=document.getElementById('bxTour'); if(!box) return;
+  var ring=box.querySelector('.bxt-ring'), card=box.querySelector('.bxt-card');
+  var elStep=box.querySelector('.bxt-step'), elTitle=box.querySelector('.bxt-title'), elText=box.querySelector('.bxt-text');
+  var bPrev=box.querySelector('.bxt-prev'), bNext=box.querySelector('.bxt-next'), bSkip=box.querySelector('.bxt-skip');
+  var seq=[], cur=0;
+
+  function elFor(s){ if(!s.sel) return null; var el=document.querySelector(s.sel); if(!el) return null; var r=el.getBoundingClientRect(); return (r.width<1&&r.height<1)?null:el; }
+  function place(el){
+    if(!el){ ring.hidden=true; return; }
+    try{ el.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){ try{el.scrollIntoView();}catch(x){} }
+    setTimeout(function(){ var r=el.getBoundingClientRect(); ring.style.left=(r.left-6)+'px'; ring.style.top=(r.top-6)+'px'; ring.style.width=(r.width+12)+'px'; ring.style.height=(r.height+12)+'px'; ring.hidden=false; }, 160);
+  }
+  function render(){
+    var s=seq[cur]; elStep.textContent='Schritt '+(cur+1)+' von '+seq.length;
+    elTitle.textContent=s.title; elText.textContent=s.text;
+    bPrev.hidden=(cur===0); bNext.textContent=(cur===seq.length-1)?'Fertig':'Weiter';
+    place(s._el);
+  }
+  function start(){
+    seq=STEPS.map(function(s){ return Object.assign({}, s, {_el:elFor(s)}); })
+             .filter(function(s){ return s.sel===null || s._el; });
+    if(!seq.length) return; cur=0; box.hidden=false; render();
+  }
+  function markSeen(){ try{ var fd=new FormData(); fd.append('aktion','tour_gesehen'); fetch('?p=portal&token='+encodeURIComponent(token)+'&v=start',{method:'POST',body:fd,keepalive:true}); }catch(e){} }
+  function end(done){ box.hidden=true; ring.hidden=true; if(done!==false) markSeen(); }
+  bNext.addEventListener('click',function(){ if(cur>=seq.length-1){ end(true); } else { cur++; render(); } });
+  bPrev.addEventListener('click',function(){ if(cur>0){ cur--; render(); } });
+  bSkip.addEventListener('click',function(){ end(true); });
+  box.querySelector('.bxt-dim').addEventListener('click',function(){ end(true); });
+  window.addEventListener('resize',function(){ if(!box.hidden && seq[cur]) place(seq[cur]._el); });
+
+  window.bxTourStart=start;
+  var startBtn=document.getElementById('obTourStart'); if(startBtn) startBtn.addEventListener('click',function(){ start(); });
+  <?php if ($tourAuto): ?>setTimeout(start, 700);<?php endif; ?>
+})();
+</script>
 <?php portal_foot();
