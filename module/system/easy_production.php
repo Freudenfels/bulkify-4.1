@@ -55,6 +55,30 @@ function ep_material_abbuchen(int $pa_id, int $item_id, float $menge, string $ei
     return ['genommen'=>$menge - $rest, 'fehlt'=>max(0.0, $rest)];
 }
 
+// Bulk-Chargen eines Artikels mit Bestand, FIFO sortiert (älteste Charge zuerst). Nur eigener Bestand (kein Fremdlager).
+// Dient der Auswahl „aus welcher Bulk-Charge wurde abgefüllt" je Bulk-Position (eine Kundencharge = genau eine Bulk-Charge).
+function ep_bulk_chargen(int $item_id): array {
+    if ($item_id <= 0) return [];
+    return all("SELECT id, charge_nr, menge_verfuegbar, mhd, wareneingang FROM charge
+                WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL
+                ORDER BY (wareneingang IS NULL), wareneingang ASC, id ASC", [$item_id]);
+}
+
+// Material aus GENAU EINER Charge abbuchen (Bulk-Position): kein FEFO-Split über mehrere Chargen.
+// Reicht der Bestand der Charge nicht, wird nur die verfügbare Menge gebucht (nur warnen, nicht blockieren).
+function ep_material_abbuchen_charge(int $pa_id, int $item_id, float $menge, string $einheit, int $charge_id): array {
+    if ($item_id <= 0 || $charge_id <= 0 || $menge <= 1e-9) return ['genommen'=>0.0, 'fehlt'=>$menge, 'charge_nr'=>''];
+    $c = one("SELECT id, charge_nr, menge_verfuegbar FROM charge WHERE id=? AND item_id=? AND fremd_kunde_id IS NULL", [$charge_id, $item_id]);
+    if (!$c) return ['genommen'=>0.0, 'fehlt'=>$menge, 'charge_nr'=>''];
+    $nimm = min($menge, (float)$c['menge_verfuegbar']);
+    $neu  = (float)$c['menge_verfuegbar'] - $nimm;
+    q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 1e-9 ? 'leer' : 'frei', (int)$c['id']]);
+    if ($nimm > 1e-9)
+        q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
+          [$pa_id, $item_id, (int)$c['id'], $nimm, $einheit, gmdate('Y-m-d H:i:s')]);
+    return ['genommen'=>$nimm, 'fehlt'=>max(0.0, $menge - $nimm), 'charge_nr'=>(string)$c['charge_nr']];
+}
+
 // Stückliste eines Auftrags skaliert auf die (gesamt) produzierte Menge. Nutzt den vorhandenen PA + auftrag_bedarf();
 // skaliert die benötigten Mengen von der PA-Menge auf die tatsächlich produzierte Menge. Rückgabe: [pa_id, rows[]].
 function ep_stueckliste(int $auftrag_id, int $menge_produziert): array {
@@ -70,8 +94,9 @@ function ep_stueckliste(int $auftrag_id, int $menge_produziert): array {
         $einh = (string)($r['einheit'] ?? 'Stk');
         $need = (float)$r['benoetigt'] * $factor;
         $need = $einh === 'Stk' ? round($need) : round($need, 3);
+        $kat  = (string)($r['kategorie'] ?? scalar("SELECT kategorie FROM item WHERE id=?", [$iid]));
         $rows[] = ['item_id'=>$iid, 'name'=>(string)$r['name'], 'rolle'=>(string)($r['rolle'] ?? ''),
-                   'einheit'=>$einh, 'benoetigt'=>$need, 'verfuegbar'=>(float)($r['verfuegbar'] ?? 0)];
+                   'einheit'=>$einh, 'benoetigt'=>$need, 'verfuegbar'=>(float)($r['verfuegbar'] ?? 0), 'kategorie'=>$kat];
     }
     return ['pa_id'=>$pa, 'rows'=>$rows];
 }
@@ -113,23 +138,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $mengen   = (array)($_POST['mat_menge'] ?? []);
         $einh     = (array)($_POST['mat_einheit'] ?? []);
         $namen    = (array)($_POST['mat_name'] ?? []);
+        $charges  = (array)($_POST['mat_charge'] ?? []);   // je Bulk-Position die gewählte Charge (sonst FEFO)
         $fehlteil = [];
+        $bulkChargeNrs = [];   // für den Log: aus welcher Bulk-Charge wurde abgefüllt
         foreach ($items as $k => $iid) {
             $iid = (int)$iid; if ($iid <= 0) continue;
             $m = (float) str_replace(['.', ','], ['', '.'], (string)($mengen[$k] ?? '0'));
             if ($m <= 1e-9) continue;
             $e = (string)($einh[$k] ?? 'Stk');
-            $r = ep_material_abbuchen($paId, $iid, $m, $e);
+            $chg = (int)($charges[$k] ?? 0);
             $nm = (string)($namen[$k] ?? ('Artikel ' . $iid));
-            $protokoll[] = 'Material: ' . $nm . ' -' . rtrim(rtrim(number_format($r['genommen'], 3, ',', '.'), '0'), ',') . ' ' . $e
-                         . ($r['fehlt'] > 1e-6 ? ' (Fehlbestand ' . rtrim(rtrim(number_format($r['fehlt'], 3, ',', '.'), '0'), ',') . ' ' . $e . ' – nicht gebucht)' : '');
+            if ($chg > 0) {
+                // Bulk-Position: aus genau EINER Charge abbuchen (keine Mischung).
+                $r = ep_material_abbuchen_charge($paId, $iid, $m, $e, $chg);
+                if ($r['charge_nr'] !== '') $bulkChargeNrs[] = $r['charge_nr'];
+                $protokoll[] = 'Material (Bulk): ' . $nm . ' -' . rtrim(rtrim(number_format($r['genommen'], 3, ',', '.'), '0'), ',') . ' ' . $e
+                             . ' aus Charge ' . ($r['charge_nr'] ?: ('#' . $chg))
+                             . ($r['fehlt'] > 1e-6 ? ' (Fehlbestand ' . rtrim(rtrim(number_format($r['fehlt'], 3, ',', '.'), '0'), ',') . ' ' . $e . ' – nicht gebucht)' : '');
+            } else {
+                $r = ep_material_abbuchen($paId, $iid, $m, $e);
+                $protokoll[] = 'Material: ' . $nm . ' -' . rtrim(rtrim(number_format($r['genommen'], 3, ',', '.'), '0'), ',') . ' ' . $e
+                             . ($r['fehlt'] > 1e-6 ? ' (Fehlbestand ' . rtrim(rtrim(number_format($r['fehlt'], 3, ',', '.'), '0'), ',') . ' ' . $e . ' – nicht gebucht)' : '');
+            }
             if ($r['fehlt'] > 1e-6) $fehlteil[] = $nm;
         }
 
         // 2) FERTIG REIN – Kundenmenge als verkaufsfertige Charge (= Fertigprodukte); Rückstellmuster separat gesperrt.
         $kundenChargeId = 0;
         if ($produktId > 0 && ($vf = produkt_lageritem($produktId))) {
-            $notiz = 'Easy Production ' . $datum . ($bes !== '' ? ' – ' . mb_substr($bes, 0, 180) : '');
+            $notiz = 'Easy Production ' . $datum
+                   . ($bulkChargeNrs ? ' · aus Bulk-Charge ' . implode(', ', array_values(array_unique($bulkChargeNrs))) : '')
+                   . ($bes !== '' ? ' – ' . mb_substr($bes, 0, 180) : '');
             if ($kundenmenge > 0) {
                 q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
                    VALUES (?,?,?,?, 'Stk', ?, ?, 'frei', ?, ?, ?)",
@@ -200,7 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorsc
                 foreach ($rows as $r) { if ((int)$r['item_id'] === $bulkItemId) { $schonDrin = true; break; } }
                 if (!$schonDrin) {
                     array_unshift($rows, ['item_id'=>(int)$bi['id'], 'name'=>(string)$bi['name'], 'rolle'=>'Bulkware',
-                                          'einheit'=>(string)$bi['einheit'], 'benoetigt'=>0.0, 'verfuegbar'=>item_bestand((int)$bi['id'])]);
+                                          'einheit'=>(string)$bi['einheit'], 'benoetigt'=>0.0, 'verfuegbar'=>item_bestand((int)$bi['id']), 'kategorie'=>'fertig']);
                 }
             }
         }
@@ -323,21 +362,39 @@ $nf = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
     <h3 style="margin:14px 0 6px;font-weight:400">Materialabgang <span class="muted" style="font-size:12px">(<?= $v['bulk_item_id'] ? 'gewählte Bulkware + ' : '' ?>Stückliste × produzierter Menge; Mengen editierbar)</span></h3>
     <?php if ($v['rows']): ?>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Position</th><th>Rolle</th><th class="bx-num">Menge</th><th>Einheit</th><th class="bx-num">verfügbar</th><th>Status</th></tr></thead>
+      <thead><tr><th>Position</th><th>Rolle</th><th class="bx-num">Menge</th><th>Einheit</th><th>Bulk-Charge</th><th class="bx-num">verfügbar</th><th>Status</th></tr></thead>
       <tbody>
-      <?php foreach ($v['rows'] as $r): $reicht = (float)$r['verfuegbar'] + 1e-6 >= (float)$r['benoetigt']; ?>
+      <?php foreach ($v['rows'] as $ri => $r): $reicht = (float)$r['verfuegbar'] + 1e-6 >= (float)$r['benoetigt'];
+            $istBulk = ($r['kategorie'] ?? '') === 'fertig';
+            $bchg = $istBulk ? ep_bulk_chargen((int)$r['item_id']) : []; ?>
         <tr>
-          <td><?= h($r['name']) ?><input type="hidden" name="mat_item[]" value="<?= (int)$r['item_id'] ?>"><input type="hidden" name="mat_name[]" value="<?= h($r['name']) ?>"><input type="hidden" name="mat_einheit[]" value="<?= h($r['einheit']) ?>"></td>
+          <td><?= h($r['name']) ?><input type="hidden" name="mat_item[<?= $ri ?>]" value="<?= (int)$r['item_id'] ?>"><input type="hidden" name="mat_name[<?= $ri ?>]" value="<?= h($r['name']) ?>"><input type="hidden" name="mat_einheit[<?= $ri ?>]" value="<?= h($r['einheit']) ?>"></td>
           <td class="muted"><?= h($r['rolle'] ?: '–') ?></td>
-          <td class="bx-num"><input type="text" name="mat_menge[]" value="<?= (float)$r['benoetigt'] > 1e-9 ? h($nf($r['benoetigt'])) : '' ?>" placeholder="<?= ($r['rolle'] ?? '') === 'Bulkware' ? 'Menge lt. Buch' : '0' ?>" style="width:110px;text-align:right" inputmode="decimal"></td>
+          <td class="bx-num"><input type="text" name="mat_menge[<?= $ri ?>]" value="<?= (float)$r['benoetigt'] > 1e-9 ? h($nf($r['benoetigt'])) : '' ?>" placeholder="<?= ($r['rolle'] ?? '') === 'Bulkware' ? 'Menge lt. Buch' : '0' ?>" style="width:110px;text-align:right" inputmode="decimal"></td>
           <td><?= h($r['einheit']) ?></td>
+          <td>
+            <?php if (!$istBulk): ?>
+              <span class="muted" style="font-size:12px">FEFO automatisch</span>
+            <?php elseif (!$bchg): ?>
+              <span class="muted" style="font-size:12px">keine Charge im Lager</span>
+            <?php elseif (count($bchg) === 1): ?>
+              <?= h((string)($bchg[0]['charge_nr'] ?: ('#' . $bchg[0]['id']))) ?> <span class="muted" style="font-size:12px">(Bestand <?= h($nf($bchg[0]['menge_verfuegbar'])) ?> <?= h($r['einheit']) ?>)</span>
+              <input type="hidden" name="mat_charge[<?= $ri ?>]" value="<?= (int)$bchg[0]['id'] ?>">
+            <?php else: ?>
+              <select name="mat_charge[<?= $ri ?>]" class="<?= count($bchg) > 10 ? 'rscombo' : '' ?>" required>
+                <?php foreach ($bchg as $ci => $bc): ?>
+                  <option value="<?= (int)$bc['id'] ?>" <?= $ci === 0 ? 'selected' : '' ?>><?= h((string)($bc['charge_nr'] ?: ('#' . $bc['id']))) ?> · Bestand <?= h($nf($bc['menge_verfuegbar'])) ?> <?= h($r['einheit']) ?><?= $bc['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$bc['mhd']))) : '' ?></option>
+                <?php endforeach; ?>
+              </select>
+            <?php endif; ?>
+          </td>
           <td class="bx-num"><?= h($nf($r['verfuegbar'])) ?></td>
           <td><?= $reicht ? bx_badge('reicht','ok') : bx_badge('Fehlbestand','warn') ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
-    <p class="muted" style="font-size:12px;margin:6px 0 0">Reicht der Bestand nicht, wird nur die verfügbare Menge gebucht (kein harter Stopp – Altbestand ist unvollständig).</p>
+    <p class="muted" style="font-size:12px;margin:6px 0 0">Bulk-Positionen werden aus genau einer Charge abgebucht (Vorbelegung: älteste Charge, FIFO). Reicht der Bestand nicht, wird nur die verfügbare Menge gebucht (kein harter Stopp – Altbestand ist unvollständig).</p>
     <?php else: ?><div class="muted">Keine Stückliste ermittelbar (Rezeptur/Produkt fehlt). Es wird nur Fertigware gebucht.</div><?php endif; ?>
 
     <h3 style="margin:16px 0 6px;font-weight:400">Fertigware-Zugang</h3>

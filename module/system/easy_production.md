@@ -24,3 +24,17 @@ Route `?p=easy_production` (Menü: Produktion · Easy Production; Rollen admin +
 
 ## Mengen-Interpretation
 „Produzierte Menge" = gesamte hergestellte Einheiten; **Kundenmenge = produziert − Rückstellmuster**; Material skaliert über die Stückliste mit der produzierten Menge (die Rückstellmuster sind darin enthalten). Da die Vorschau-Mengen editierbar sind, lässt sich jede Abweichung vor dem Buchen korrigieren.
+
+## Bulk-Charge-Auswahl je Bulk-Position (2026-10-30)
+In der Vorschau wird je **Bulk-Position** (Materialzeile mit `item.kategorie='fertig'`) die Charge angezeigt, aus der abgebucht wird:
+- genau eine Charge mit Bestand → automatisch (nur Anzeige, kein Eingriff),
+- mehrere Chargen → Pflichtauswahl (`mat_charge[<i>]`), Vorbelegung **älteste Charge zuerst (FIFO)**, je Charge Bestand + MHD sichtbar,
+- keine Charge → Hinweis „keine Charge im Lager" (Buchung warnt, blockiert nicht).
+
+Regel: Eine Kundencharge stammt aus **genau einer** Bulk-Charge (keine Mischung) → je Bulk-Position nur **eine** Charge wählbar. Beim Buchen wird exakt aus dieser Charge abgebucht (`ep_material_abbuchen_charge()` – kein FEFO-Split), Rohstoff/Verpackung laufen weiter FEFO (`ep_material_abbuchen()`). Reicht der Bestand der gewählten Charge nicht, wird nur die verfügbare Menge gebucht (nur warnen).
+
+Verknüpfung Bulk-Charge ↔ Kundencharge beidseitig sichtbar über `produktion_verbrauch` (`charge_id`=Bulk, `pa_id`=PA) und die gemeinsame `pa_id` von Verbrauch und Fertigware-Charge:
+- Kundencharge-Seite (`?p=chargen&id=`): „Zusammensetzung (eingesetzte Chargen)" listet die Bulk-Charge; zusätzlich steht die Bulk-Charge in der Chargen-Notiz („… aus Bulk-Charge …").
+- Bulk-Charge-Seite: „Verwendet in Produktionen" zeigt jetzt zusätzlich die Spalte **Kundencharge** (entstandene Fertigware-Charge des PA) mit Menge und Kunde.
+
+Die Felder der Vorschau nutzen explizite Indizes (`mat_item[<i>]`, `mat_menge[<i>]`, `mat_charge[<i>]` …), damit Charge und Position sicher zusammenpassen.

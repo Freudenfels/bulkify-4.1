@@ -16,3 +16,6 @@
 
 ## Warenart-Labels (Teil 3 Block K)
 `$katLbl` nutzt `kategorie_labels()` (`core/schema.php`). Damit wird `fertig` korrekt als **Bulkware** und `verkaufsfertig` als **Fertigprodukt** angezeigt (vorher fehlte `fertig` und `verkaufsfertig` hieß fälschlich „Fertigware").
+
+## Bulk-Charge → Kundencharge (2026-10-30)
+Die Detailseite einer Charge zeigt unter „Verwendet in Produktionen" zusätzlich die Spalte **Kundencharge**: die aus diesem PA entstandene Fertigware-/Kundencharge (`charge.pa_id` = PA, `item.kategorie IN ('fertig','verkaufsfertig')`), verlinkt. Damit ist von der Bulk-Charge aus direkt sichtbar, in welche Kundencharge(n) sie geflossen ist (Gegenrichtung zur „Zusammensetzung" der Kundencharge). Gespeist aus Easy Production / `produktion_verbrauch`.

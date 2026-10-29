@@ -89,14 +89,18 @@ if ($chId) {
     <div class="bx-panel">
       <h2>Verwendet in Produktionen</h2>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Produktionsauftrag</th><th>Produkt</th><th>Kunde</th><th class="bx-num">Eingesetzt</th></tr></thead>
+        <thead><tr><th>Produktionsauftrag</th><th>Produkt</th><th>Kunde</th><th>Kundencharge</th><th class="bx-num">Eingesetzt</th></tr></thead>
         <tbody>
-          <?php if (!$verwendet): ?><tr><td colspan="4" class="muted">Diese Charge wurde bisher in keiner Produktion eingesetzt.</td></tr><?php endif; ?>
-          <?php foreach ($verwendet as $v): ?>
+          <?php if (!$verwendet): ?><tr><td colspan="5" class="muted">Diese Charge wurde bisher in keiner Produktion eingesetzt.</td></tr><?php endif; ?>
+          <?php foreach ($verwendet as $v):
+                // Entstandene Fertigware-/Kundencharge(n) dieses PA (die aus dieser Bulk-Charge abgefüllt wurden).
+                $kchg = ($v['pa_id'] ?? 0) ? all("SELECT fc.id, fc.charge_nr FROM charge fc JOIN item fi ON fi.id=fc.item_id
+                        WHERE fc.pa_id=? AND fi.kategorie IN ('fertig','verkaufsfertig') AND fc.id<>? ORDER BY fc.id", [(int)$v['pa_id'], $chId]) : []; ?>
             <tr>
               <td><a href="?p=produktionsauftrag&id=<?= (int)$v['pa_id'] ?>"><?= h($v['pa_nr'] ?: ('#' . $v['pa_id'])) ?></a></td>
               <td><?= $v['produkt_name'] ? h($v['produkt_name']) : '<span class="muted">–</span>' ?></td>
               <td><?= kunde_link($v['kunde_id'] ?? null, $v['kunde_firma']) ?></td>
+              <td><?php if ($kchg): foreach ($kchg as $ii => $kc): ?><?= $ii ? ', ' : '' ?><a href="?p=chargen&id=<?= (int)$kc['id'] ?>"><?= h((string)($kc['charge_nr'] ?: ('#' . $kc['id']))) ?></a><?php endforeach; else: ?><span class="muted">–</span><?php endif; ?></td>
               <td class="bx-num"><?= $num($v['menge']) ?> <?= h($v['einheit']) ?></td>
             </tr>
           <?php endforeach; ?>
