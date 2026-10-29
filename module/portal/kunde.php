@@ -3848,9 +3848,13 @@ portal_head('Kundenportal · ' . $k['firma']);
     } ?>
   <h1 style="margin-bottom:4px">Ihre Bestellungen</h1>
   <p class="muted" style="margin:0 0 16px">Klicken Sie auf eine Bestellung, um alle Schritte, Rechnung und Details zu sehen.</p>
-  <?php // „Etikett fehlt"-Karte: solide linke Akzent-Leiste (inset box-shadow) statt dünner 1px-Border, die bei
+  <?php // Bestellkarte ist ein <a> (Default display:inline). Der Such-Filter setzt bei Treffern
+        // r.style.display='' und würde damit ein Inline-`display:block` löschen -> die Karte fiele auf
+        // inline zurück und Border/Box-Shadow rendern nur als kleiner Stummel („fehlerhafte Linien").
+        // Deshalb display:block fest per CSS-Klasse verankern (nicht nur als Inline-Style).
+        // „Etikett fehlt"-Karte: solide linke Akzent-Leiste (inset box-shadow) statt dünner 1px-Border, die bei
         // manchen Zoom-/Bildschirm-Skalierungen nur an den Ecken sichtbar war und wie Klammern aussah. ?>
-  <style>.bx-ord-etmiss{border-color:#e6c4c0;box-shadow:inset 3px 0 0 #e6c4c0,0 2px 8px rgba(0,0,0,.25)}</style>
+  <style>.bx-order-row{display:block}.bx-ord-etmiss{border-color:#e6c4c0;box-shadow:inset 3px 0 0 #e6c4c0,0 2px 8px rgba(0,0,0,.25)}</style>
   <?php if (!$auftraege): ?><div class="bx-panel"><div class="muted">Noch keine Bestellungen.</div></div>
   <?php else: ?>
   <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 12px">
