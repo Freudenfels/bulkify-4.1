@@ -6567,6 +6567,24 @@ function rezeptur_stamm_id(int $rezeptur_id): int {
     $stamm = (int) scalar("SELECT stamm_rezeptur_id FROM rezeptur WHERE id=?", [$rezeptur_id]);
     return ($stamm > 0 && $stamm !== $rezeptur_id) ? $stamm : $rezeptur_id;
 }
+// Inhalts-Fingerabdruck einer Rezeptur für die Dubletten-Erkennung: Zutaten (Rohstoff + mg je Einheit),
+// Kapselgröße, Füllmenge und Darreichungsform. Gleiche Rezeptur = gleicher Fingerprint. Reihenfolge egal.
+function rezeptur_fingerprint(int $rezeptur_id): string {
+    $r = one("SELECT darreichungsform, kapselgroesse_id, einheit_fuellmenge FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    if (!$r) return '';
+    $zut = all("SELECT item_id, bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=?", [$rezeptur_id]);
+    $parts = [];
+    foreach ($zut as $z) {
+        $key = (int)($z['item_id'] ?? 0) > 0 ? ('i' . (int)$z['item_id']) : ('t' . mb_strtolower(trim((string)($z['bezeichnung'] ?? ''))));
+        $parts[] = $key . '=' . rtrim(rtrim(number_format((float)$z['menge_mg'], 3, '.', ''), '0'), '.');
+    }
+    if (!$parts) return '';   // leere Rezeptur -> nicht als Dublette werten
+    sort($parts);
+    $head = (string)$r['darreichungsform']
+          . '|k' . (int)($r['kapselgroesse_id'] ?? 0)
+          . '|f' . rtrim(rtrim(number_format((float)($r['einheit_fuellmenge'] ?? 0), 3, '.', ''), '0'), '.');
+    return md5($head . '#' . implode(';', $parts));
+}
 function rezeptur_bulkitem(int $rezeptur_id): ?int {
     if ($rezeptur_id <= 0) return null;
     $rezeptur_id = rezeptur_stamm_id($rezeptur_id);   // G5: gemeinsamer Bulk-Artikel über die Stammrezeptur

@@ -94,6 +94,7 @@ $routes = [
     'rezeptur'        => 'rezeptur/liste.php',
     'rezeptur_detail' => 'rezeptur/detail.php',
     'rezeptur_umbau'  => 'rezeptur/umbau.php',        // Worklist: importierte Rezepturen mit nicht gematchten Rohstoffen überarbeiten
+    'rezeptur_dubletten' => 'rezeptur/dubletten.php', // Report: inhaltlich identische Rezepturen (zum Verknüpfen über Stammrezeptur)
     'produktbuilder'  => 'system/produktbuilder.php', // KI-Produktbuilder (Wunsch -> Rezeptur, exakter Dosis-Rechner)
     'einkauf_preise'  => 'einkauf/preise.php',       // ALLE Einkaufspreise (Fremdfertigung/Rohstoff/Verpackung/Zukauf)
     'rezeptur_popup'  => 'rezeptur/popup.php',        // schlanke read-only Rezeptur-Ansicht fuer Popups (iframe)

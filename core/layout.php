@@ -27,7 +27,7 @@ function bx_nav_default(): array {
             'paf_rohstoff'       => ['label'=>'Rohstoffanfragen',       'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=rohstoff',       'typ'=>'rohstoff'],
             'paf_dienstleistung' => ['label'=>'Dienstleistungsanfragen', 'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=dienstleistung', 'typ'=>'dienstleistung'],
         ],
-        'Produkt'      => ['rezeptur' => 'Rezepturen', 'produkte' => 'Produkte', 'novelfood' => 'Novel Food', 'novelfood_verlauf' => 'Novel-Food News'],
+        'Produkt'      => ['rezeptur' => 'Rezepturen', 'rezeptur_dubletten' => 'Doppelte Rezepturen', 'produkte' => 'Produkte', 'novelfood' => 'Novel Food', 'novelfood_verlauf' => 'Novel-Food News'],
         // Vor-Produktion als eigener Menüpunkt entfernt (Block I): Quelle festlegen + Freigeben laufen jetzt
         // am Auftrag; „Wartet auf Freigabe" ist ein Reiter in der Auftragsliste (?p=auftraege&tab=freigabe).
         // Die Route produktion_vorbereitung&id=… (Glas/Verpackung je PA) bleibt bestehen, nur ohne Nav-Eintrag.
