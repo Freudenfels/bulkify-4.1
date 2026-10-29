@@ -308,6 +308,21 @@ function dl_auftrag_schritte_anlegen(int $auftrag_id, int $dl_id): void {
     $sort = 0;
     foreach ($schritte as $n) { $n = trim((string)$n); if ($n === '') continue; q("INSERT INTO dl_auftrag_schritt (auftrag_id,name,sort) VALUES (?,?,?)", [$auftrag_id, mb_substr($n, 0, 120), $sort++]); }
 }
+// Schritte eines DL-Auftrags OHNE Service von Hand anlegen (z. B. reine Abfüllung mit Beistellung, Konfektionierung).
+// Nimmt die übergebenen Standardnamen, sonst die generische Vorlage (Bestätigung/In Bearbeitung/Abschluss). Nur wenn
+// noch keine Schritte existieren (idempotent). Macht den Auftrag im Portal sichtbar. Rückgabe: Anzahl angelegter Schritte.
+function dl_auftrag_schritte_standard_anlegen(int $auftrag_id, array $namen = []): int {
+    if ($auftrag_id <= 0) return 0;
+    if ((int) scalar("SELECT COUNT(*) FROM dl_auftrag_schritt WHERE auftrag_id=?", [$auftrag_id]) > 0) return 0;
+    $namen = array_values(array_filter(array_map(fn($n) => trim((string)$n), $namen), fn($n) => $n !== ''));
+    if (!$namen) $namen = dl_schritte_vorlage('');
+    $sort = 0;
+    foreach ($namen as $n) q("INSERT INTO dl_auftrag_schritt (auftrag_id,name,sort) VALUES (?,?,?)", [$auftrag_id, mb_substr($n, 0, 120), $sort++]);
+    dl_auftrag_status_ableiten($auftrag_id);
+    $kid = (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    if ($kid && $sort > 0) log_aktivitaet('kunde', $kid, 'team', $sort . ' Arbeitsschritte angelegt (ohne Service).', 'auftrag', 'auftrag', $auftrag_id);
+    return $sort;
+}
 // Service-ID eines DL-Auftrags bestmöglich bestimmen – auch wenn die Verknüpfung am Auftrag fehlt (Altbestand/
 // alte Umwandlungslogik/Import). Reihenfolge: (1) auftrag.dienstleistung_id, (2) die ANKER-Angebotsposition
 // (angebot_position_id, sonst die per Preis+Menge passende Position des Angebots) und darüber (a) deren

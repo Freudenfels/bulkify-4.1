@@ -54,6 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $n = dl_auftrag_schritte_resync($id);
         header('Location: ?p=dl_auftrag&id=' . $id . ($n > 0 ? '&syncok=' . $n : '&syncleer=1')); exit;
     }
+    if ($aktion === 'schritte_standard') {     // Schritte OHNE Service anlegen (Standardnamen oder Auswahl)
+        $namen = array_map('strval', (array)($_POST['schritt_namen'] ?? []));
+        $n = dl_auftrag_schritte_standard_anlegen($id, $namen);
+        header('Location: ?p=dl_auftrag&id=' . $id . ($n > 0 ? '&ok=1#schritte' : '&stdvorhanden=1#schritte')); exit;
+    }
     if ($aktion === 'ergebnis_upload') {       // Endergebnis-Dokument hochladen (ggf. Abschluss + Kunden-Mail)
         $r = dl_ergebnis_upload($id);
         header('Location: ?p=dl_auftrag&id=' . $id . ($r['ok'] ? ('&ok=1' . (!empty($r['abgeschlossen']) ? '&done=1' : '')) : '&uperr=' . urlencode($r['msg']))); exit;
@@ -108,7 +113,8 @@ if (isset($_GET['kiok']))   echo '<div class="bx-panel badge-ok" style="padding:
 if (isset($_GET['kierr']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Zusammenfassung: ' . h((string)$_GET['kierr']) . '</div>';
 if (isset($_GET['storniert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag storniert – beim Kunden ausgeblendet. Eine evtl. erstellte DR-Rechnung bitte noch in der Buchhaltung stornieren.</div>';
 if (isset($_GET['syncok']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Schritte aus dem Service übernommen (' . (int)$_GET['syncok'] . ' Schritte). Der Kunde sieht den Ablauf im Portal.</div>';
-if (isset($_GET['syncleer']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Für diesen Auftrag ließ sich kein Service mit Schritten ermitteln (reine Material-/Abrechnungsposition oder „ohne Fortschritt").</div>';
+if (isset($_GET['syncleer']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Kein verknüpfter Service – aus dem Service lässt sich hier nichts übernehmen. Nutze unten „Ausgewählte Schritte anlegen", um die Schritte direkt (ohne Service) zu setzen.</div>';
+if (isset($_GET['stdvorhanden'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Es sind bereits Schritte vorhanden – es wurde nichts angelegt.</div>';
 ?>
 <div class="bx-cards">
   <div class="bx-card"><div class="k">Kunde</div><div class="v"><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
@@ -157,7 +163,7 @@ if (isset($_GET['syncleer']))  echo '<div class="bx-panel" style="border-color:#
     <p class="muted" style="font-size:12px;margin:8px 0 0">Schritte einzeln abhaken, umbenennen, interne Kosten/Stk eintragen oder entfernen – auch nachträglich bei laufendem Auftrag (im Verlauf vermerkt). Der Kunde sieht den Fortschritt im Portal; eine Schrittänderung braucht keine erneute Kundenbestätigung (individueller Festpreis).</p>
     <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:10px 0 0;flex-wrap:wrap">
       <input type="hidden" name="aktion" value="schritt_add">
-      <div class="bx-field" style="margin:0;min-width:220px"><label>Schritt hinzufügen</label><input type="text" name="name" placeholder="z. B. Etikett aufbringen" maxlength="120"></div>
+      <div class="bx-field" style="margin:0;min-width:220px"><label>Schritt hinzufügen</label><input type="text" name="name" list="bxDlSchrittNamen" placeholder="z. B. Etikett aufbringen" maxlength="120"></div>
       <div class="bx-field" style="margin:0;max-width:130px"><label>Interne Kosten/Stk</label><input type="text" name="kosten" inputmode="decimal" placeholder="optional"></div>
       <button class="btn btn-ghost btn-sm" type="submit">+ Schritt</button>
     </form>
@@ -172,21 +178,37 @@ if (isset($_GET['syncleer']))  echo '<div class="bx-panel" style="border-color:#
     </div>
     <p class="muted" style="font-size:12px;margin:6px 0 0"><?= (int)($dlRow['ohne_fortschritt'] ?? 0) === 1
         ? 'Diese Dienstleistung läuft <strong>ohne Fortschritt</strong> – nur Abrechnung (z.&nbsp;B. Fulfillment/Lagerung). Status hier setzen, Rechnung unten.'
-        : 'Dieser Auftrag hat keine definierten Schritte. Schritte legst du am <a href="?p=dienstleistungen">Service im Katalog</a> fest – dann hier „aus Service übernehmen".' ?></p>
-    <?php if ((int)($dlRow['ohne_fortschritt'] ?? 0) !== 1): ?>
+        : 'Dieser Auftrag hat noch keine Schritte. Unten die gewünschten anhaken und anlegen – <strong>schon der erste Schritt macht den Auftrag beim Kunden sichtbar</strong>. Ein Service ist dafür nicht nötig.' ?></p>
+    <?php if ((int)($dlRow['ohne_fortschritt'] ?? 0) !== 1):
+        $stdVorauswahl = ['Bestätigung', 'Abfüllen', 'Etikettieren', 'Versand', 'Abschluss']; ?>
+    <?php // Vorgegebene Standard-Schrittnamen (eine Quelle: dl_schritte_katalog) anhaken und mit EINEM Klick anlegen – ohne Service. ?>
+    <form method="post" style="margin:10px 0 0">
+      <input type="hidden" name="aktion" value="schritte_standard">
+      <label style="display:block;margin-bottom:6px">Schritte anlegen</label>
+      <div class="bx-row" style="flex-wrap:wrap;gap:6px 16px;margin-bottom:10px">
+        <?php foreach (dl_schritte_katalog() as $sn): ?>
+          <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-weight:400">
+            <input type="checkbox" name="schritt_namen[]" value="<?= h($sn) ?>"<?= in_array($sn, $stdVorauswahl, true) ? ' checked' : '' ?>> <?= h($sn) ?>
+          </label>
+        <?php endforeach; ?>
+      </div>
+      <button class="btn btn-primary btn-sm" type="submit">Ausgewählte Schritte anlegen</button>
+      <span class="muted" style="font-size:12px;margin-left:10px">Reihenfolge wie oben; danach einzeln umbenennen/abhaken/entfernen möglich.</span>
+    </form>
     <form method="post" style="margin:8px 0 0">
       <input type="hidden" name="aktion" value="schritte_sync">
-      <button class="btn btn-ghost btn-sm" type="submit" title="Schritte aus dem Service-Katalog übernehmen">Schritte aus dem Service übernehmen</button>
+      <button class="btn btn-ghost btn-sm" type="submit" title="Schritte aus dem Service-Katalog übernehmen (nur falls eine Dienstleistung verknüpft ist)">Stattdessen aus Service übernehmen</button>
     </form>
     <?php endif; ?>
-    <?php // F3: Schritte auch ganz ohne Service-Katalog von Hand aufbauen (z. B. Konfektionierung je Auftrag). ?>
+    <?php // Schritte auch ganz ohne Service-Katalog von Hand aufbauen (z. B. Konfektionierung je Auftrag). ?>
     <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:10px 0 0;flex-wrap:wrap">
       <input type="hidden" name="aktion" value="schritt_add">
-      <div class="bx-field" style="margin:0;min-width:220px"><label>Eigenen Arbeitsschritt hinzufügen</label><input type="text" name="name" placeholder="z. B. In Tüten abfüllen" maxlength="120"></div>
+      <div class="bx-field" style="margin:0;min-width:220px"><label>Eigenen Arbeitsschritt hinzufügen</label><input type="text" name="name" list="bxDlSchrittNamen" placeholder="z. B. In Tüten abfüllen" maxlength="120"></div>
       <div class="bx-field" style="margin:0;max-width:130px"><label>Interne Kosten/Stk</label><input type="text" name="kosten" inputmode="decimal" placeholder="optional"></div>
       <button class="btn btn-ghost btn-sm" type="submit">+ Schritt</button>
     </form>
   <?php endif; ?>
+  <datalist id="bxDlSchrittNamen"><?php foreach (dl_schritte_katalog() as $sn): ?><option value="<?= h($sn) ?>"><?php endforeach; ?></datalist>
   <?php if (($a['status'] ?? '') !== 'storniert'): ?>
   <div class="bx-row" style="gap:8px;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
     <form method="post" style="margin:0" onsubmit="return confirm('Diesen DL-Auftrag stornieren? Er wird beim Kunden ausgeblendet. Eine bereits erstellte DR-Rechnung bitte zusätzlich in der Buchhaltung stornieren.');">

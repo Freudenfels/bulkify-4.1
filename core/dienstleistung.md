@@ -67,6 +67,7 @@ Altbestand/Import: manche DL-Aufträge hatten **keine `auftrag.dienstleistung_id
 - `dl_auftrag_heilen($auftrag_id)`: trägt fehlende `dienstleistung_id` nach + legt Schritte an (idempotent, respektiert `ohne_fortschritt`). Reine Material-Aufträge bleiben unberührt.
 - `dl_auftrag_schritte_resync($auftrag_id)`: übernimmt die Schritte **neu** aus dem aktuellen Katalog (für nachträglich geänderte Abläufe); Haken-Stand je Schrittname bleibt erhalten.
 - `dl_auftraege_service_backfill()`: einmalige Heilung des Altbestands (Marker `app_meta dl_heal_v1`), zusätzlich via Schema-mtime nach Deploy genau einmal aus `init_schema()`.
+- `dl_auftrag_schritte_standard_anlegen($auftrag_id, $namen=[])`: legt Schritte **ohne Service** an (für Aufträge, deren Position keine Dienstleistung trägt). Nimmt die übergebenen Standardnamen (aus `dl_schritte_katalog()`), sonst die generische Vorlage; nur wenn noch keine Schritte da sind (idempotent) + `dl_auftrag_status_ableiten`. Macht den Auftrag im Portal sichtbar. UI: Checkbox-Liste + „Ausgewählte Schritte anlegen" auf der DL-Auftrag-Seite (`aktion=schritte_standard`). Grundregel: eine Dienstleistung hat nie eine Rezeptur – sauber ist Abfüllung = Service, dies ist der schnelle Altfall-Weg.
 
 ## DL-Auftrag → Rechnungstext zusammenfassen (2026-10-28)
 Damit man vor dem Rechnungstellen nicht alles von Hand zusammensucht, bündelt die KI den ganzen DL-Auftrag zu einer Leistungsbeschreibung:
