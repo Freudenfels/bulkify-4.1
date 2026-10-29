@@ -29,3 +29,6 @@ Stand heute wird hier nur gelesen, und zwar die Logins aus der Tabelle `benutzer
 Produkt-Katalog eines Kunden für den Lieferschein-Generator: je Produkt `produkt_id`, verknüpftes
 verkaufsfertiges `item_id`, Name, `ek_cent`, `vk_cent` (aus `produkt_preis`), `gewicht_g`. Ohne Kunde: Suche über
 alle Produkte. Grundlage für Versicherungswert (EK, sonst VK/2) und Gewicht.
+
+## Teil 4: Gebinde je Charge (charge_gebinde)
+`erp_charge_gebinde_liste($charge_id)`, `erp_charge_gebinde($id)` (mit Charge/Item), `erp_charge_gebinde_anlegen($charge_id,$anzahl)` – Raw-SQL über die geteilte Dashboard-Tabelle `charge_gebinde` (Bestand je Karton: Gewicht/Restmenge/Ort). Anlegen ist idempotent (nur wenn noch keine existieren), teilt die Chargenmenge gleichmäßig (letzter Karton = Rest; Stück ganzzahlig). Fehlt die Tabelle (nur Dashboard legt sie an), no-op.

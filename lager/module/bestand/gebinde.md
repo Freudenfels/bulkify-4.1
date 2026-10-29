@@ -20,3 +20,6 @@ Aufkleber mit eigenem QR-Code und eigener Nummer** (`GB-00001`, …). Das ist un
 ## Daten
 Eigene Tabelle `lg_gebinde` (siehe `core/schema.php`). Dashboard-Charge bleibt unberührt – die
 Verknüpfung läuft nur über `lg_gebinde.charge_id`. Erreicht von der Charge-Detailseite aus.
+
+## Teil 4: Bestands-Gebinde-Resolver (?bg=)
+Zusätzlicher Modus `?p=gebinde&bg=<charge_gebinde.id>`: Scan-Auflösung des Wareneingangs-Etiketts auf GENAU dieses Bestands-Gebinde (Restmenge, Ort, Status + Charge/Lieferant/MHD). Getrennt vom GB-Identitäts-System (`?nr=`, lg_gebinde).

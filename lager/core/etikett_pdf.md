@@ -16,3 +16,6 @@ Druck-Brücke `public/lager/bruecke.php` (lautloser Druck). Braucht `erp_charge_
 baut je **Gebinde** (aus `lg_gebinde`) einen eigenen Aufkleber mit **eigenem QR** (führt auf
 `?p=gebinde&nr=GB-…`) und der **eigenen Nummer**, dazu Produktname, Lieferanten-Nummer und
 Wareneingangsdatum (`lg_gebinde_label` / `lg_gebinde_label_hoch`). Ausgabe über `?p=gebinde_etikett`.
+
+## Teil 4: eigener QR je Gebinde
+`lg_etikett_pdf()` prüft je Charge, ob Gebinde-Datensätze existieren (`erp_charge_gebinde_liste`). Wenn ja: ein Etikett je Gebinde mit EIGENEM QR auf `?p=gebinde&bg=<charge_gebinde.id>` (genau dieses Gebinde, Restmenge/Ort), „Karton X / N" bleibt, Menge = Gebinde-Restmenge. Wenn nein (Alt-Chargen): unverändert ein QR auf die Charge (`?p=charge&id=`).

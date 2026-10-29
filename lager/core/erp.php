@@ -1097,6 +1097,44 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
     return $neu;
 }
 
+// --- Gebinde je Charge (Teil 4) -------------------------------------------------------------
+// charge_gebinde ist eine GETEILTE Dashboard-Tabelle (Bestand je Karton/Sack: Gewicht, Restmenge, Ort).
+// Hier nur Raw-SQL über die Naht – das Dashboard legt die Tabelle an (init_schema). Fehlt sie, no-op.
+// Je Gebinde ein Datensatz mit eigener Lauf-Nr (X von N); die Menge wird gleichmäßig geteilt, der LETZTE
+// bekommt den Rest (Summe = Gesamtmenge). Blindes Wiegen bei der Rückgabe korrigiert echte Werte später.
+function erp_charge_gebinde_liste(int $charge_id): array {
+    if ($charge_id <= 0 || !tabelle_da('charge_gebinde')) return [];
+    return all("SELECT * FROM charge_gebinde WHERE charge_id=? ORDER BY nummer, id", [$charge_id]);
+}
+function erp_charge_gebinde(int $id): ?array {
+    if ($id <= 0 || !tabelle_da('charge_gebinde')) return null;
+    return one("SELECT g.*, c.charge_nr, c.mhd, c.lieferant_id, c.wareneingang, i.name AS item_name, i.artikelnummer
+                FROM charge_gebinde g JOIN charge c ON c.id=g.charge_id JOIN item i ON i.id=c.item_id
+                WHERE g.id=?", [$id]);
+}
+// N Gebinde für eine Charge anlegen (idempotent: nur wenn noch keine existieren). Rückgabe: Anzahl angelegt.
+function erp_charge_gebinde_anlegen(int $charge_id, int $anzahl): int {
+    if ($charge_id <= 0 || !tabelle_da('charge_gebinde')) return 0;
+    $anzahl = max(1, min(500, $anzahl));
+    if ((int) scalar("SELECT COUNT(*) FROM charge_gebinde WHERE charge_id=?", [$charge_id]) > 0) return 0;
+    $c = one("SELECT menge_verfuegbar, einheit, standort FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return 0;
+    $total   = (float)$c['menge_verfuegbar'];
+    $einheit = (string)($c['einheit'] ?? '');
+    $ort     = (string)($c['standort'] ?? 'lager1') ?: 'lager1';
+    // Stück/Kapseln/Tabletten ganzzahlig teilen, Gewicht/Volumen auf 3 Nachkommastellen.
+    $istStueck = (bool) preg_match('/st(ü|u)?ck|^stk|tabl|kaps/iu', $einheit);
+    $basis = $istStueck ? floor($total / $anzahl) : floor(($total / $anzahl) * 1000) / 1000;
+    $jetzt = jetzt_utc();
+    for ($k = 1; $k <= $anzahl; $k++) {
+        $menge = ($k < $anzahl) ? $basis : round($total - $basis * ($anzahl - 1), 3);
+        q("INSERT INTO charge_gebinde (charge_id,nummer,anzahl_gesamt,menge,menge_verfuegbar,einheit,standort,status,angelegt)
+           VALUES (?,?,?,?,?,?,?,'voll',?)",
+          [$charge_id, $k, $anzahl, $menge, $menge, $einheit, $ort, $jetzt]);
+    }
+    return $anzahl;
+}
+
 // Lieferant einer Charge setzen/aendern (per Name: finden oder neu anlegen). Nur eigener Bestand.
 function erp_charge_lieferant_setzen(int $charge_id, string $name): array {
     if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Chargen vorhanden.'];

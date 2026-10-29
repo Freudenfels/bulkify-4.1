@@ -25,6 +25,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'loesc
     weiter('?p=gebinde&charge=' . $cid);
 }
 
+// --- Modus 0: Scan-Auflösung eines BESTANDS-Gebindes (?bg=<charge_gebinde.id>) -----------------
+// Teil 4: der QR auf den Wareneingangs-Etiketten führt auf GENAU dieses Gebinde (Restmenge/Ort).
+$bg = (int)($_GET['bg'] ?? 0);
+if ($bg > 0) {
+    $g = function_exists('erp_charge_gebinde') ? erp_charge_gebinde($bg) : null;
+    $c = $g ? erp_charge_voll((int)$g['charge_id']) : null;
+    kopf('Gebinde', 'bestand');
+    seitenkopf('Gebinde' . ($g ? ' ' . (int)$g['nummer'] . ' / ' . (int)$g['anzahl_gesamt'] : ''),
+        'Gescanntes Gebinde – Restmenge, Ort und Zuordnung zur Charge.');
+    flash_zeigen();
+    if (!$g):
+        hinweis('Dieses Gebinde wurde nicht gefunden (evtl. gelöschte Charge).', 'warn');
+    else:
+        $ortLbl  = ['lager1'=>'Lager 1', 'produktion'=>'Produktion', 'lager2'=>'Lager 2'][(string)$g['standort']] ?? (string)$g['standort'];
+        $statLbl = ['voll'=>'voll', 'angebrochen'=>'angebrochen', 'leer'=>'leer'][(string)$g['status']] ?? (string)$g['status'];
+        $mengeTxt = rtrim(rtrim(number_format((float)$g['menge_verfuegbar'], 3, ',', '.'), '0'), ',') . ' ' . (string)($g['einheit'] ?? '');
+        $liefTxt  = (string)($c['lieferant'] ?? '') . (($c['lieferant_nr'] ?? '') ? ' · ' . (string)$c['lieferant_nr'] : '');
+    ?>
+    <div class="bx-panel" style="margin-bottom:var(--sp-5)">
+      <h2 style="margin-top:0">Gebinde <?= (int)$g['nummer'] ?> / <?= (int)$g['anzahl_gesamt'] ?></h2>
+      <table class="bx-table"><tbody>
+        <tr><td class="muted" style="width:200px">Restmenge</td><td style="font-weight:600"><?= h($mengeTxt) ?></td></tr>
+        <tr><td class="muted">Ort</td><td><?= h($ortLbl) ?></td></tr>
+        <tr><td class="muted">Status</td><td><?= h($statLbl) ?></td></tr>
+        <?php if ($c): ?>
+        <tr><td class="muted">Produkt / Material</td><td><a class="lg-namelink" href="?p=charge&id=<?= (int)$g['charge_id'] ?>"><?= h((string)($c['item_name'] ?? '')) ?></a></td></tr>
+        <tr><td class="muted">Charge (Lieferant)</td><td class="lg-code"><?= h((string)($c['charge_nr'] ?? '')) ?: '–' ?></td></tr>
+        <tr><td class="muted">Lieferant</td><td><?= h($liefTxt) ?: '–' ?></td></tr>
+        <tr><td class="muted">MHD</td><td><?= $c['mhd'] ? h(date('d.m.Y', strtotime((string)$c['mhd']))) : '–' ?></td></tr>
+        <tr><td class="muted">Wareneingang</td><td><?= $c['wareneingang'] ? h(date('d.m.Y', strtotime((string)$c['wareneingang']))) : '–' ?></td></tr>
+        <?php endif; ?>
+      </tbody></table>
+      <?php if ($c): ?>
+      <div class="bx-row" style="gap:var(--sp-2);margin-top:var(--sp-3)">
+        <a class="btn btn-primary" href="?p=charge&id=<?= (int)$g['charge_id'] ?>">Zur Charge</a>
+      </div>
+      <?php endif; ?>
+    </div>
+    <?php
+    endif;
+    fuss();
+    return;
+}
+
 // --- Modus 1: Scan-Auflösung (?nr=) -----------------------------------------------------------
 $nr = strtoupper(trim((string)($_GET['nr'] ?? '')));
 if ($nr !== '') {

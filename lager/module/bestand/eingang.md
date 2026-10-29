@@ -19,3 +19,6 @@ Blinker hängt dran. Scanner-freundlich (Barcode in Artikel- bzw. Blinker-Feld).
 **Neue Artikel** werden ohne Artikelnummer angelegt (die Nummernkreise des Dashboards sind im Lager nicht
 geladen) und tragen die Notiz „Im Lager beim Wareneingang angelegt" – das Team ergänzt Details später im
 Dashboard. Darunter steht **„Zuletzt bewegt"** (aus `lg_bewegung`).
+
+## Teil 4: Gebinde je Karton
+Nach dem Buchen legt `erp_charge_gebinde_anlegen($cid, $pakete)` je Karton/Sack ein Gebinde (charge_gebinde) mit geteilter Menge an – Grundlage für den eigenen QR je Gebinde auf dem Etikett und das blinde Wiegen bei der Rückgabe.

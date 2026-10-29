@@ -49,6 +49,25 @@ function lg_etikett_pdf(array $ids, string $format = 'klein', int $override = 0)
             if (!empty($bf['kiste'])) $c['blinker_code'] = 'Kiste ' . (string)($bf['kiste']['kiste_name'] ?? '');
             elseif (!empty($bf['leiste'])) $c['blinker_code'] = (string)($bf['leiste']['code'] ?? '');
         }
+        // Teil 4: Gebinde-Datensätze vorhanden? Dann je Gebinde ein Etikett mit EIGENEM QR
+        // (?p=gebinde&bg=<id> → genau dieses Gebinde). „Karton X / N" bleibt. Sonst der Alt-Weg unten.
+        $gebinde = function_exists('erp_charge_gebinde_liste') ? erp_charge_gebinde_liste($cid) : [];
+        if ($gebinde) {
+            $ng = count($gebinde);
+            foreach ($gebinde as $gi => $g) {
+                if (!$erste) $pdf->addPage();
+                $erste = false;
+                $c['menge_anzeige'] = (float)($g['menge_verfuegbar'] ?? ($g['menge'] ?? 0));
+                $c['menge_label']   = 'Menge/Karton';
+                if (!empty($g['einheit'])) $c['einheit'] = $g['einheit'];
+                $gurl = $scheme . '://' . $host . '/lager/?p=gebinde&bg=' . (int)$g['id'];
+                $knr  = (int)($g['nummer'] ?? ($gi + 1));
+                $format === 'gross'
+                    ? lg_karton_etikett_hoch($pdf, $mm, $c, $gurl, $knr, $ng)
+                    : lg_karton_etikett($pdf, $mm, $c, $gurl, $knr, $ng);
+            }
+            continue;
+        }
         $split = $n > 1 && function_exists('lg_aufteilen') && lg_aufteilen($cid);
         $total = (float)($c['menge_verfuegbar'] ?? 0);
         // Stück/Tabletten/Kapseln sind ganzzahlig -> ganze Stück je Karton (keine Nachkommastellen).

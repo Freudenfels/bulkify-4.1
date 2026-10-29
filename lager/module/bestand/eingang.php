@@ -27,6 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         trim((string)($_POST['mhd'] ?? '')) ?: null, $lief, trim((string)($_POST['notiz'] ?? '')));
     if (!$cid) { flash('Bitte Artikel und eine Menge größer 0 angeben.', 'warn'); weiter('?p=eingang'); }
     lg_pakete_set((int)$cid, $pakete);
+    // Teil 4: je Karton/Sack ein Gebinde-Datensatz (Gewicht/Restmenge/Ort) – eigener QR je Gebinde aufs Etikett.
+    erp_charge_gebinde_anlegen((int)$cid, $pakete);
     $c = erp_charge((int)$cid);
     lg_bewegung_log((int)$cid, 'ein', $menge, $c['einheit'] ?? null, (string)($c['item_name'] ?? ''), 'Wareneingang');
 
