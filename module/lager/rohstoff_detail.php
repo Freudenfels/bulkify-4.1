@@ -249,20 +249,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'coa_f
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'charge_bestand_korr' && !$neu) {
     if (!has_role('admin')) { header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrfehler=1'); exit; }
     $cid = (int)($_POST['charge_id'] ?? 0);
-    $c   = $cid ? one("SELECT id, status, einheit FROM charge WHERE id=? AND item_id=?", [$cid, (int)$id]) : null;
+    $c   = $cid ? one("SELECT id, status, einheit, charge_nr, menge_verfuegbar FROM charge WHERE id=? AND item_id=?", [$cid, (int)$id]) : null;
+    // Grund ist Pflicht (z. B. Zählfehler, Bruch, Falschbuchung) – er landet im Verlauf des Artikels.
+    $grund = trim((string)($_POST['grund'] ?? ''));
+    if ($c && $grund === '') { header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrfehler=grund'); exit; }
     if ($c) {
         $raw  = str_replace(['.', ' '], '', trim((string)($_POST['menge'] ?? '')));   // Tausenderpunkt raus
         $neuM = (float) str_replace(',', '.', $raw);                                   // Komma -> Dezimalpunkt
-        $einh = trim((string)($_POST['einheit'] ?? '')) ?: (string)$c['einheit'];
+        $einh = (string)$c['einheit'];   // Einheit NICHT hier ändern (dafür „Einheit ändern" – nie vermischen)
+        $altM = (float)$c['menge_verfuegbar'];
         if ($neuM >= 0) {
             $status = $neuM <= 1e-9 ? 'leer' : (($c['status'] ?? '') === 'leer' ? 'frei' : (string)$c['status']);
-            q("UPDATE charge SET menge=?, menge_verfuegbar=?, einheit=?, status=? WHERE id=? AND item_id=?",
-              [$neuM, $neuM, $einh, $status, $cid, (int)$id]);
+            q("UPDATE charge SET menge=?, menge_verfuegbar=?, status=? WHERE id=? AND item_id=?",
+              [$neuM, $neuM, $status, $cid, (int)$id]);
             if (function_exists('bedarf_bump')) bedarf_bump();   // Bestand geändert -> Bedarf/Einkaufsliste neu rechnen
-            log_aktivitaet('item', (int)$id, 'team', 'Charge-Bestand korrigiert: ' . rtrim(rtrim(number_format($neuM, 3, ',', '.'), '0'), ',') . ' ' . $einh . '.', 'notiz');
+            $nfm = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+            log_aktivitaet('item', (int)$id, 'team',
+                'Bestandskorrektur Charge ' . ($c['charge_nr'] ?: ('#' . $cid)) . ': ' . $nfm($altM) . ' -> ' . $nfm($neuM) . ' ' . $einh . '. Grund: ' . $grund, 'notiz');
         }
     }
     header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrok=1'); exit;
+}
+// Charge-Stammdaten korrigieren: Chargennummer, MHD, Lagerort (standort). Nur Admin. Verlaufseintrag am Artikel.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'charge_daten_korr' && !$neu) {
+    if (!has_role('admin')) { header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrfehler=1'); exit; }
+    $cid = (int)($_POST['charge_id'] ?? 0);
+    $c   = $cid ? one("SELECT id, charge_nr, mhd, standort FROM charge WHERE id=? AND item_id=?", [$cid, (int)$id]) : null;
+    if ($c) {
+        $cnr  = trim((string)($_POST['charge_nr'] ?? ''));
+        $mhd  = (is_string($_POST['mhd'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/', trim((string)$_POST['mhd']))) ? trim((string)$_POST['mhd']) : null;
+        $ort  = in_array(($_POST['standort'] ?? ''), ['lager1','lager2','produktion'], true) ? (string)$_POST['standort'] : (string)$c['standort'];
+        $hatStandort = column_exists('charge', 'standort');
+        if ($hatStandort) q("UPDATE charge SET charge_nr=?, mhd=?, standort=? WHERE id=? AND item_id=?", [$cnr ?: null, $mhd, $ort, $cid, (int)$id]);
+        else              q("UPDATE charge SET charge_nr=?, mhd=? WHERE id=? AND item_id=?", [$cnr ?: null, $mhd, $cid, (int)$id]);
+        log_aktivitaet('item', (int)$id, 'team',
+            'Charge-Daten korrigiert (' . ($cnr ?: ('#' . $cid)) . '): Nr/MHD/Lagerort aktualisiert.', 'notiz');
+    }
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrok=1'); exit;
+}
+// Einheit des Artikels ändern – gilt für den Artikel UND alle seine Chargen (Einheiten nie vermischen).
+// Modus 'bezeichnung' = nur die Bezeichnung war falsch (Mengen bleiben). Modus 'umrechnen' = Mengen × Faktor.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einheit_aendern' && !$neu) {
+    if (!has_role('admin')) { header('Location: ?p=rohstoff&id=' . (int)$id . '&einhfehler=1'); exit; }
+    $neuE = trim((string)($_POST['neue_einheit'] ?? ''));
+    $modus = ($_POST['modus'] ?? '') === 'umrechnen' ? 'umrechnen' : 'bezeichnung';
+    $faktor = (float) str_replace(',', '.', (string)($_POST['faktor'] ?? '1'));
+    $altE = (string) scalar("SELECT einheit FROM item WHERE id=?", [(int)$id]);
+    if ($neuE === '') { header('Location: ?p=rohstoff&id=' . (int)$id . '&einhfehler=leer'); exit; }
+    if ($modus === 'umrechnen' && $faktor <= 0) { header('Location: ?p=rohstoff&id=' . (int)$id . '&einhfehler=faktor'); exit; }
+    q("UPDATE item SET einheit=? WHERE id=?", [$neuE, (int)$id]);
+    if ($modus === 'umrechnen') {
+        q("UPDATE charge SET menge=menge*?, menge_verfuegbar=menge_verfuegbar*?, einheit=? WHERE item_id=?", [$faktor, $faktor, $neuE, (int)$id]);
+        q("UPDATE reservierung SET menge=menge*? WHERE item_id=?", [$faktor, (int)$id]);
+        log_aktivitaet('item', (int)$id, 'team', 'Einheit umgerechnet: ' . ($altE ?: '–') . ' -> ' . $neuE . ' (Faktor ' . rtrim(rtrim(number_format($faktor, 4, ',', '.'), '0'), ',') . '); alle Chargen angepasst.', 'notiz');
+    } else {
+        q("UPDATE charge SET einheit=? WHERE item_id=?", [$neuE, (int)$id]);
+        log_aktivitaet('item', (int)$id, 'team', 'Einheit-Bezeichnung korrigiert: ' . ($altE ?: '–') . ' -> ' . $neuE . ' (Mengen unverändert).', 'notiz');
+    }
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&einhok=1'); exit;
+}
+// Lose Doppel-Artikel in den richtigen Artikel zusammenführen: Chargen + Reservierungen wandern auf das Ziel,
+// der leere Doppel-Artikel wird DEAKTIVIERT (gesperrt + zusammengefuehrt_in), nicht gelöscht. Nur Admin.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'artikel_merge' && !$neu) {
+    if (!has_role('admin')) { header('Location: ?p=rohstoff&id=' . (int)$id . '&mergefehler=1'); exit; }
+    $ziel = (int)($_POST['ziel_item_id'] ?? 0);
+    $z = $ziel ? one("SELECT id, name, einheit FROM item WHERE id=?", [$ziel]) : null;
+    $src = one("SELECT id, name, einheit FROM item WHERE id=?", [(int)$id]);
+    if (!$z || $ziel === (int)$id) { header('Location: ?p=rohstoff&id=' . (int)$id . '&mergefehler=ziel'); exit; }
+    // Einheiten müssen übereinstimmen (sonst würde der Bestand vermischt) – erst Einheit angleichen.
+    if ((string)($z['einheit'] ?? '') !== (string)($src['einheit'] ?? '')) { header('Location: ?p=rohstoff&id=' . (int)$id . '&mergefehler=einheit'); exit; }
+    $nChg = q("UPDATE charge SET item_id=? WHERE item_id=?", [$ziel, (int)$id])->rowCount();
+    q("UPDATE reservierung SET item_id=? WHERE item_id=?", [$ziel, (int)$id]);
+    $hatSpalte = column_exists('item', 'zusammengefuehrt_in');
+    if ($hatSpalte) q("UPDATE item SET gesperrt=1, zusammengefuehrt_in=?, notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?",
+                       [$ziel, "\n[zusammengeführt in Artikel #" . $ziel . ' – ' . mb_substr((string)$z['name'], 0, 80) . ']', (int)$id]);
+    else            q("UPDATE item SET gesperrt=1, notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?",
+                       ["\n[zusammengeführt in Artikel #" . $ziel . ' – ' . mb_substr((string)$z['name'], 0, 80) . ']', (int)$id]);
+    log_aktivitaet('item', (int)$id, 'team', 'Zusammengeführt in „' . (string)$z['name'] . '" (#' . $ziel . '): ' . $nChg . ' Charge(n) + Reservierungen verschoben, Doppel-Artikel deaktiviert.', 'notiz');
+    log_aktivitaet('item', $ziel, 'team', 'Doppel-Artikel „' . (string)$src['name'] . '" (#' . (int)$id . ') hierher zusammengeführt: ' . $nChg . ' Charge(n) übernommen.', 'notiz');
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    header('Location: ?p=rohstoff&id=' . $ziel . '&merged=1'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && !$neu) {
     dokument_freigabe_toggle('item', (int)$id, (int)($_POST['dok_id'] ?? 0));
@@ -313,6 +380,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             $vals[array_search('vk_aufschlag_prozent', $felder)] = null;
         }
         foreach (['ek_preis','overage_prozent'] as $nf) { $ix = array_search($nf, $felder); if (trim((string)$vals[$ix]) === '') $vals[$ix] = 0; }
+        // Einheit wird bei bestehenden Artikeln NUR über „Einheit ändern" gepflegt (nie vermischen). Das Stammdaten-
+        // Feld ist dort deaktiviert und würde leer gesendet -> aktuellen Wert behalten.
+        if (!$neu) $vals[array_search('einheit', $felder)] = (string) scalar("SELECT einheit FROM item WHERE id=?", [(int)$id]);
         $war_neu = $neu;
         if ($neu) {
             if (trim($vals[array_search('artikelnummer', $felder)]) === '') $vals[array_search('artikelnummer', $felder)] = naechste_nummer(item_prefix($vals[array_search('kategorie', $felder)]));
@@ -546,6 +616,7 @@ if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="pad
 if (isset($_GET['kioff'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Datei gespeichert, aber die KI konnte sie nicht auslesen (KI nicht aktiv oder ein Scan ohne Textebene). Werte bitte von Hand erfassen.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 if (isset($_GET['flok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Ins Fremdlager umgebucht – die Menge zählt jetzt zum Kundenbestand, nicht mehr zu unserem.</div>';
+if (isset($_GET['merged'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zusammengeführt – Chargen und Reservierungen des Doppel-Artikels sind jetzt hier. Der Doppel-Artikel wurde deaktiviert.</div>';
 if (isset($_GET['flfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['flfehler']) . '</div>';
 
 if (!$neu) {
@@ -767,11 +838,12 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       <div class="bx-field" data-only="kapselhuelle"><label>Farbe</label><input type="text" name="farbe" value="<?= $v('farbe') ?>" placeholder="z. B. transparent, weiß"></div>
       <div class="bx-field" data-only="kapselhuelle"><label>Leergewicht (mg) <?= bx_hint('Gewicht der leeren Hülle – zählt zum Bruttogewicht, nicht zum Wirkstoff') ?></label><input type="number" step="0.01" name="leergewicht_mg" value="<?= $v('leergewicht_mg') ?>"></div>
       <div class="bx-field"><label>Basiseinheit</label>
-        <select name="einheit">
+        <select name="einheit" <?= $neu ? '' : 'disabled' ?>>
           <?php foreach (['kg'=>'kg','g'=>'g','Stk'=>'Stk','L'=>'Liter','ml'=>'ml'] as $key=>$lbl): ?>
             <option value="<?= $key ?>" <?= ($it['einheit']??'')===$key?'selected':'' ?>><?= $lbl ?></option>
           <?php endforeach; ?>
         </select>
+        <?php if (!$neu): ?><div class="muted" style="font-size:12px;margin-top:4px">Einheit nur über „Einheit ändern" (unten im Reiter Lager) – damit Artikel und Chargen nie vermischt werden.</div><?php endif; ?>
       </div>
       <div class="bx-field"><label>Rohstoff sperren <?= bx_hint('gesperrte Rohstoffe können nicht in neue Rezepturen aufgenommen werden') ?></label>
         <div class="bx-check" style="padding-top:8px">
@@ -1129,7 +1201,8 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       <?php if (!$charges): ?><tr><td colspan="8" class="muted">Noch keine Chargen. Über „Wareneingang" buchen.</td></tr><?php endif; ?>
       <?php if (isset($_GET['coafrei'])): ?><tr><td colspan="8" class="badge-ok" style="padding:8px 12px">CoA-Freigabe aktualisiert.</td></tr><?php endif; ?>
       <?php if (isset($_GET['korrok'])): ?><tr><td colspan="8" class="badge-ok" style="padding:8px 12px">Charge-Bestand korrigiert. Der Bedarf/die Einkaufsliste rechnet neu.</td></tr><?php endif; ?>
-      <?php if (isset($_GET['korrfehler'])): ?><tr><td colspan="8" style="padding:8px 12px;color:#8f231b">Nur Admins dürfen den Bestand korrigieren.</td></tr><?php endif; ?>
+      <?php if (($_GET['korrfehler'] ?? '') === 'grund'): ?><tr><td colspan="8" style="padding:8px 12px;color:#8f231b">Bitte einen Grund für die Bestandskorrektur angeben.</td></tr>
+      <?php elseif (isset($_GET['korrfehler'])): ?><tr><td colspan="8" style="padding:8px 12px;color:#8f231b">Nur Admins dürfen Bestand/Charge ändern.</td></tr><?php endif; ?>
       <?php foreach ($charges as $c): $coaFrei = (int)($c['coa_freigegeben'] ?? 0) === 1; ?>
         <tr>
           <td><?= h($c['charge_nr'] ?: '–') ?></td>
@@ -1155,12 +1228,30 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
             <?php if (has_role('admin')): ?>
             <details style="margin-top:6px;text-align:left">
               <summary class="muted" style="cursor:pointer;font-size:11px">Bestand korrigieren</summary>
-              <form method="post" style="margin:6px 0 0;display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+              <form method="post" style="margin:6px 0 0;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
                 <input type="hidden" name="aktion" value="charge_bestand_korr">
                 <input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
-                <input type="text" name="menge" value="<?= h(rtrim(rtrim(number_format((float)$c['menge_verfuegbar'],3,',','.'),'0'),',')) ?>" style="width:90px;padding:4px 6px;text-align:right" inputmode="decimal" title="Verfügbare Menge">
-                <input type="text" name="einheit" value="<?= h($v('einheit')) ?>" style="width:56px;padding:4px 6px" title="Einheit (z. B. kg)">
+                <div style="display:flex;gap:4px;align-items:center">
+                  <input type="text" name="menge" value="<?= h(rtrim(rtrim(number_format((float)$c['menge_verfuegbar'],3,',','.'),'0'),',')) ?>" style="width:90px;padding:4px 6px;text-align:right" inputmode="decimal" title="Neue verfügbare Menge">
+                  <span class="muted" style="font-size:11px"><?= h((string)$c['einheit']) ?></span>
+                </div>
+                <input type="text" name="grund" placeholder="Grund (z. B. Zählfehler, Bruch)" required style="width:180px;padding:4px 6px" title="Grund ist Pflicht – landet im Verlauf">
                 <button class="btn btn-ghost btn-sm" type="submit">setzen</button>
+              </form>
+            </details>
+            <details style="margin-top:4px;text-align:left">
+              <summary class="muted" style="cursor:pointer;font-size:11px">Charge bearbeiten</summary>
+              <form method="post" style="margin:6px 0 0;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+                <input type="hidden" name="aktion" value="charge_daten_korr">
+                <input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
+                <input type="text" name="charge_nr" value="<?= h((string)($c['charge_nr'] ?? '')) ?>" placeholder="Chargennummer" style="width:180px;padding:4px 6px" title="Chargennummer">
+                <input type="date" name="mhd" value="<?= h((string)($c['mhd'] ?? '')) ?>" style="width:150px;padding:4px 6px" title="MHD">
+                <select name="standort" style="width:150px;padding:4px 6px" title="Lagerort">
+                  <?php $cs = (string)($c['standort'] ?? 'lager1'); foreach (['lager1'=>'Lager 1','lager2'=>'Fremdlager','produktion'=>'Produktion'] as $sk=>$sl): ?>
+                    <option value="<?= $sk ?>" <?= $cs===$sk?'selected':'' ?>><?= h($sl) ?></option>
+                  <?php endforeach; ?>
+                </select>
+                <button class="btn btn-ghost btn-sm" type="submit">speichern</button>
               </form>
             </details>
             <?php endif; ?>
@@ -1171,6 +1262,61 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
     </table></div>
     <div style="margin-top:12px"><?= bx_btn('Wareneingang buchen', '?p=wareneingang', 'primary') ?></div>
   </div>
+
+  <?php if (has_role('admin')): ?>
+  <?php // Admin: Einheit des Artikels ändern – gilt für Artikel UND alle Chargen (Einheiten nie vermischen). ?>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Einheit ändern <span class="muted" style="font-weight:400;font-size:13px">(Artikel + alle Chargen)</span></h2>
+    <?php if (isset($_GET['einhok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Einheit geändert – Artikel und alle Chargen angepasst.</div><?php endif; ?>
+    <?php if (($_GET['einhfehler'] ?? '') === 'faktor'): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b">Bitte einen gültigen Umrechnungsfaktor (> 0) angeben.</div>
+    <?php elseif (($_GET['einhfehler'] ?? '') === 'leer'): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b">Bitte die neue Einheit angeben.</div>
+    <?php elseif (isset($_GET['einhfehler'])): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b">Nur Admins dürfen die Einheit ändern.</div><?php endif; ?>
+    <form method="post" onsubmit="return confirm('Einheit für den Artikel und ALLE seine Chargen ändern?');">
+      <input type="hidden" name="aktion" value="einheit_aendern">
+      <div class="bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap">
+        <div class="bx-field" style="margin:0"><label>Aktuelle Einheit</label><input type="text" value="<?= h($v('einheit')) ?>" disabled style="width:120px"></div>
+        <div class="bx-field" style="margin:0"><label>Neue Einheit</label><input type="text" name="neue_einheit" value="<?= h($v('einheit')) ?>" style="width:120px" required></div>
+        <div class="bx-field" style="margin:0">
+          <label>Art der Änderung</label>
+          <select name="modus" id="einhModus" style="width:260px">
+            <option value="bezeichnung">Nur Bezeichnung war falsch (Mengen bleiben)</option>
+            <option value="umrechnen">Umrechnen (Menge × Faktor)</option>
+          </select>
+        </div>
+        <div class="bx-field" id="einhFaktorWrap" style="margin:0;display:none"><label>Umrechnungsfaktor</label><input type="text" name="faktor" value="1" style="width:120px" inputmode="decimal" placeholder="z. B. 1000"></div>
+        <button class="btn btn-primary" type="submit">Einheit ändern</button>
+      </div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Beispiel Umrechnen: von kg auf g → Faktor 1000 (aus 2 kg werden 2.000 g). „Nur Bezeichnung" lässt die Zahlen unverändert.</p>
+    </form>
+  </div>
+
+  <?php // Admin: losen Doppel-Artikel in den richtigen Artikel zusammenführen (Chargen + Reservierungen wandern mit).
+    $mergeZiele = all("SELECT id, name, artikelnummer, einheit FROM item WHERE id<>? AND COALESCE(zusammengefuehrt_in,0)=0 ORDER BY name", [(int)$id]); ?>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Mit anderem Artikel zusammenführen <span class="muted" style="font-weight:400;font-size:13px">(dieser Artikel wird danach deaktiviert)</span></h2>
+    <?php if (($_GET['mergefehler'] ?? '') === 'ziel'): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b">Bitte einen gültigen Ziel-Artikel wählen (nicht denselben).</div>
+    <?php elseif (($_GET['mergefehler'] ?? '') === 'einheit'): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b">Ziel-Artikel hat eine andere Einheit. Bitte erst die Einheit angleichen, damit der Bestand nicht vermischt wird.</div>
+    <?php elseif (isset($_GET['mergefehler'])): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b">Nur Admins dürfen Artikel zusammenführen.</div><?php endif; ?>
+    <form method="post" onsubmit="return confirm('Diesen Artikel in den gewählten Ziel-Artikel zusammenführen? Chargen und Reservierungen wandern, dieser Artikel wird deaktiviert (nicht gelöscht).');">
+      <input type="hidden" name="aktion" value="artikel_merge">
+      <div class="bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap">
+        <div class="bx-field" style="margin:0;min-width:320px">
+          <label>Ziel-Artikel (bleibt bestehen)</label>
+          <select name="ziel_item_id" class="rscombo" required>
+            <option value="">– Ziel-Artikel wählen –</option>
+            <?php foreach ($mergeZiele as $z): ?><option value="<?= (int)$z['id'] ?>"><?= h($z['name']) ?><?= $z['artikelnummer'] ? ' · ' . h($z['artikelnummer']) : '' ?><?= $z['einheit'] ? ' · ' . h($z['einheit']) : '' ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit">Zusammenführen</button>
+      </div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Alle Chargen und Reservierungen dieses Artikels wandern auf den Ziel-Artikel. Dieser Artikel wird danach deaktiviert (gesperrt), nicht gelöscht – Historie bleibt.</p>
+    </form>
+  </div>
+  <script>
+  (function(){ var m=document.getElementById('einhModus'), w=document.getElementById('einhFaktorWrap');
+    if(m&&w){ function u(){ w.style.display = m.value==='umrechnen' ? '' : 'none'; } m.addEventListener('change',u); u(); } })();
+  </script>
+  <?php endif; ?>
 
   <?php // Reservierungen: Bestand einem Auftrag fest zuteilen. Reduziert die Netto-Verfügbarkeit für
         // andere Aufträge (item_verfuegbar_fuer). Menge frei anpassbar; 0 hebt die Reservierung auf.

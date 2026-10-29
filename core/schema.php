@@ -1769,6 +1769,7 @@ function init_schema(): void {
     // versenden nur. Gehört ins Fremdlager (Lager 2); Bestand wird dem Besitzer-Kunden zugeschrieben (charge.fremd_kunde_id),
     // zählt NICHT zu unserem Bestand und geht nicht in Produktion/Angebote/Einkauf ein. Kategorie dahinter: verkaufsfertig.
     ensure_column('item', 'fremdprodukt', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('item', 'zusammengefuehrt_in', "INT NULL");   // Doppel-Artikel wurde hierher zusammengeführt (deaktiviert, nicht gelöscht)
     ensure_column('item', 'fremd_besitzer_id', "INT NULL");   // Besitzer-Kunde (kunden.id) des Fremdprodukts
     ensure_column('kunden', 'nutzt_fulfillment', "TINYINT NOT NULL DEFAULT 0"); // Kunde nutzt unser Fulfillment → hat ein Lager 2
     ensure_column('kunden', 'eigener_dhl', "TINYINT NOT NULL DEFAULT 0"); // Kunde hat eigenen DHL-Vertrag → Monatsabrechnung ohne Paketzeilen, nur Fulfillment-Service

@@ -131,3 +131,13 @@ In den Stammdaten gibt es den Schalter **Fremdprodukt** + **Besitzer-Kunde**. Ge
 Kopf/Übersicht zeigen die Warenart über `item_warenart_label()` als „Fremdprodukt". Besitzer-Pflichtfeld wird beim Speichern geprüft. Der physische Standort kann abweichen – verbucht wird es als Lager 2 des Kunden.
 
 Offen/Folgeschritt: der Wareneingang (`lager/`) soll Fremdprodukte künftig automatisch auf das Fremdlager des Besitzers buchen (heute über die L1/L2-Zielwahl bzw. „Ins Fremdlager umbuchen").
+
+## Admin-Bearbeitung im Warenlager (2026-10-30, Teil 2)
+Auf der Artikel-Detailseite (`?p=rohstoff&id=`) kann der **Admin** (nur `has_role('admin')`) alles korrigieren. Vorhandenes wurde erweitert, nichts doppelt gebaut:
+- **Stammdaten** (bestand schon): Name, Artikelnummer, **Kategorie**, **Form**, Einheit (s. u.) und alle weiteren Felder – Kategorie wechselt nur den Reiter, Chargen/Verlauf bleiben.
+- **Bestand je Charge korrigieren** (`charge_bestand_korr`, erweitert): jetzt **Pflichtfeld Grund** (z. B. Zählfehler, Bruch, Falschbuchung). Im Verlauf des Artikels landet „alte → neue Menge + Grund" (`log_aktivitaet`). Die Einheit wird hier NICHT mehr geändert.
+- **Charge-Daten korrigieren** (`charge_daten_korr`, neu): Chargennummer, MHD, Lagerort (`standort`: Lager 1 / Fremdlager / Produktion).
+- **Einheit ändern** (`einheit_aendern`, neu): eigenes Panel, gilt für **Artikel UND alle Chargen** (nie vermischen). Zwei Modi: „Nur Bezeichnung war falsch" (Mengen bleiben) oder „Umrechnen" (Menge × Faktor; Chargen-Mengen + Reservierungen werden umgerechnet). Das Stammdaten-Einheit-Feld ist bei bestehenden Artikeln deaktiviert und verweist hierher.
+- **Artikel zusammenführen** (`artikel_merge`, neu): losen Doppel-Artikel in den richtigen Artikel überführen – Chargen (`charge.item_id`) und Reservierungen (`reservierung.item_id`) wandern aufs Ziel, der Doppel-Artikel wird **deaktiviert** (`gesperrt=1` + neue Spalte `item.zusammengefuehrt_in`), nicht gelöscht. Blockiert bei unterschiedlicher Einheit (erst angleichen). Historie/alte Dokumente bleiben.
+
+Rechte: alle vier neuen/erweiterten Aktionen sind admin-only; die Lager-App/Workstation (`lager/`) bekommt davon nichts (dort nur Einbuchen/Entnehmen/Pick-to-Light). Nichts wird hart gelöscht.
