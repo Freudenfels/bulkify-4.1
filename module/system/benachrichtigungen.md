@@ -27,3 +27,8 @@ Die Benachrichtigungen sind das kuratierte Postfach, das jeder Benutzer aktiv ab
 - **Menüpunkt** in der System-Gruppe mit ungelesen-Zähler (Badge via `$anfCount['benachrichtigungen']`). Zugriff admin-only (Route-Default).
 - **Admin-Mails gespiegelt:** alle über `mail_team()` versendeten Ereignisse (Angebot angenommen, Bestellung, Preisanfrage, Etikett hochgeladen …) erzeugen schon automatisch eine Benachrichtigung (core/mail.php). Die Wiege-Abweichungen (Teil 4) nutzen `benachrichtigung_add(..., 'wiegen', true)`.
 - **Einstellungen:** `mhd_warn_tage` (30) und `schwund_grenze_kg` (1) im Reiter Produktion (Panel „Chargennummer & MHD").
+
+## Erweiterung: Suche + Sortierung
+- **Suche** (`&q=`): Volltext auf Betreff + Text, in SQL (`benachrichtigungen_liste($uid,$nurOffen,$limit,$suche,$sort)`), daher auch über die 300-Zeilen-Grenze hinaus. LIKE mit `ESCAPE '='` (Backslash crasht MySQL live), `%`/`_` im Begriff maskiert. Trefferzähler über der Liste.
+- **Sortierung** (`&sort=`): Standard `relevanz` = ungelesen + wichtig zuerst, dann neueste (`ORDER BY gelesen ASC, wichtig DESC, erstellt DESC`). Alternative `datum` = rein chronologisch (altes Verhalten).
+- **Listbar als GET-Formular:** Suchfeld + Selects „Alle/Nur ungelesen" und Sortierung (Auto-Submit) + „zurücksetzen". Art-Chips und das als-gelesen-POST behalten alle aktiven Filter (`$bxUrl()` bzw. Query-String am POST-Redirect).

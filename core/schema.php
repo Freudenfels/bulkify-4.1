@@ -10498,14 +10498,29 @@ function benachrichtigungen_ungelesen_count(int $benutzer_id): int {
         WHERE NOT EXISTS (SELECT 1 FROM benachrichtigung_gelesen g WHERE g.benachrichtigung_id=b.id AND g.benutzer_id=?)",
         [$benutzer_id]);
 }
-// Liste fuer einen Benutzer, neueste zuerst, mit Lese-Flag. $nurUngelesen = nur offene.
-function benachrichtigungen_liste(int $benutzer_id, bool $nurUngelesen = false, int $limit = 200): array {
+// Liste fuer einen Benutzer, mit Lese-Flag. $nurUngelesen = nur offene.
+// $suche: Volltext auf Betreff + Text (LIKE, ueber alle Zeilen – auch jenseits des Limits).
+// $sort: 'relevanz' (Standard) = ungelesen + wichtig zuerst, dann neueste; 'datum' = rein chronologisch.
+function benachrichtigungen_liste(int $benutzer_id, bool $nurUngelesen = false, int $limit = 200, string $suche = '', string $sort = 'relevanz'): array {
     if ($benutzer_id <= 0 || !table_exists('benachrichtigung')) return [];
     $limit = max(1, min(500, $limit));
-    $w = $nurUngelesen ? 'WHERE g.benutzer_id IS NULL' : '';
+    $wo = []; $par = [$benutzer_id];
+    if ($nurUngelesen) $wo[] = 'g.benutzer_id IS NULL';
+    $suche = trim($suche);
+    if ($suche !== '') {
+        // LIKE mit ESCAPE '=' (Backslash crasht MySQL live); % und _ im Suchbegriff maskieren.
+        $like = '%' . str_replace(['=', '%', '_'], ['==', '=%', '=_'], $suche) . '%';
+        $wo[] = "(b.betreff LIKE ? ESCAPE '=' OR b.text LIKE ? ESCAPE '=')";
+        $par[] = $like; $par[] = $like;
+    }
+    $w = $wo ? ('WHERE ' . implode(' AND ', $wo)) : '';
+    // ungelesen + wichtig oben, sonst neueste zuerst.
+    $order = $sort === 'datum'
+        ? 'b.erstellt DESC, b.id DESC'
+        : 'gelesen ASC, b.wichtig DESC, b.erstellt DESC, b.id DESC';
     return all("SELECT b.*, (g.benutzer_id IS NOT NULL) AS gelesen FROM benachrichtigung b
                 LEFT JOIN benachrichtigung_gelesen g ON g.benachrichtigung_id=b.id AND g.benutzer_id=?
-                $w ORDER BY b.erstellt DESC, b.id DESC LIMIT $limit", [$benutzer_id]);
+                $w ORDER BY $order LIMIT $limit", $par);
 }
 // Als gelesen markieren: eine (id) oder ALLE (id=null) fuer diesen Benutzer. Idempotent.
 function benachrichtigung_gelesen_setzen(int $benutzer_id, ?int $id = null): void {
