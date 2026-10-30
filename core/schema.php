@@ -10579,6 +10579,7 @@ function benachrichtigung_add_once(string $schluessel, string $betreff, string $
 function benachrichtigung_arten(): array {
     return [
         'sonstiges'   => 'Allgemein',
+        'lieferant_nachricht' => 'Nachricht vom Lieferanten',
         'etikett'     => 'Etikett',
         'angebot'     => 'Angebot',
         'anfrage'     => 'Anfrage',

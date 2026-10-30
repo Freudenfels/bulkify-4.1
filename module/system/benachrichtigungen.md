@@ -28,6 +28,10 @@ Die Benachrichtigungen sind das kuratierte Postfach, das jeder Benutzer aktiv ab
 - **Admin-Mails gespiegelt:** alle über `mail_team()` versendeten Ereignisse (Angebot angenommen, Bestellung, Preisanfrage, Etikett hochgeladen …) erzeugen schon automatisch eine Benachrichtigung (core/mail.php). Die Wiege-Abweichungen (Teil 4) nutzen `benachrichtigung_add(..., 'wiegen', true)`.
 - **Einstellungen:** `mhd_warn_tage` (30) und `schwund_grenze_kg` (1) im Reiter Produktion (Panel „Chargennummer & MHD").
 
+## Erweiterung 2026-10-30: Eigener Typ „Nachricht vom Lieferanten"
+- Nachrichten, die ein **Lieferant** schreibt, erzeugen jetzt eine Benachrichtigung mit eigenem Typ `lieferant_nachricht` (Label „Nachricht vom Lieferanten" in `benachrichtigung_arten()`), klar unterscheidbar von System-Ereignissen. Betreff nennt Lieferant (Name + Nummer), Produkt/Rohstoff und Vorgang; der Nachrichtentext steht im Text.
+- Der Deep-Link führt direkt in die Team-Übersicht `?p=lief_nachrichten` an den passenden Verlauf (`&lief=&bt=&bi=`) und springt per `#m<id>` zur Nachricht. Erzeugt in `core/nachricht.php` (`nachricht_senden()`), nicht in `mail_team()`. Details dort und in `module/einkauf/lief_nachrichten.md`.
+
 ## Erweiterung: Suche + Sortierung
 - **Suche** (`&q=`): Volltext auf Betreff + Text, in SQL (`benachrichtigungen_liste($uid,$nurOffen,$limit,$suche,$sort)`), daher auch über die 300-Zeilen-Grenze hinaus. LIKE mit `ESCAPE '='` (Backslash crasht MySQL live), `%`/`_` im Begriff maskiert. Trefferzähler über der Liste.
 - **Sortierung** (`&sort=`): Standard `relevanz` = ungelesen + wichtig zuerst, dann neueste (`ORDER BY gelesen ASC, wichtig DESC, erstellt DESC`). Alternative `datum` = rein chronologisch (altes Verhalten).

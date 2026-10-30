@@ -7,6 +7,7 @@ require_once __DIR__ . '/../core/dienstleistung.php';   // Dienstleistungen-Modu
 require_once __DIR__ . '/../core/pdf_beleg.php';   // beleg_firma() – auch fuer den AGB-Entwurfstext
 require_once __DIR__ . '/../core/agb.php';
 require_once __DIR__ . '/../core/mail.php';
+require_once __DIR__ . '/../core/nachricht.php';   // Lieferanten-Chat + Nav-Zähler „Nachrichten" global verfügbar
 require_once __DIR__ . '/../core/auth.php';
 require_once __DIR__ . '/../core/layout.php';
 require_once __DIR__ . '/../core/perf.php';
@@ -48,6 +49,7 @@ $routes = [
     'lieferanten'    => 'lieferant/liste.php',
     'lief_anfragen'  => 'einkauf/lief_anfragen.php', // Übersicht Lieferanten-Anfragen + abgegebene Preise
     'lief_anfrage_detail' => 'einkauf/lief_anfrage_detail.php', // EINE Lieferanten-Anfrage (RFQ) im Detail + Rückfragen
+    'lief_nachrichten' => 'einkauf/lief_nachrichten.php', // Team-Übersicht aller Lieferanten-Chats (ungelesen zuerst, Suche)
     'lieferant'      => 'lieferant/detail.php',
     'katalog_freigaben' => 'einkauf/katalog_freigaben.php',
     // Lieferantenportal (eigener Zugang, kein interner Bereich)

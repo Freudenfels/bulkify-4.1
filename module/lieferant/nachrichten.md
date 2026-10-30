@@ -4,6 +4,6 @@
 
 **Was man sieht:** das ganze Gespräch zwischen bulkify und diesem Lieferanten als Chat (eigene Nachrichten links, bulkify rechts), jede Nachricht mit Zeit und, falls vorhanden, dem Bezug (Bestellung oder Preisanfrage, verlinkt). Darunter ein Eingabefeld.
 
-**POST `aktion=nachricht`** (Feld `text`) → `nachricht_post_verarbeiten()` aus `core/nachricht.php`. Die `lieferant_id` kommt aus dem Login, nie aus dem Formular. Ist der Mailversand eingerichtet, bekommen alle Admins eine Mail.
+**POST `aktion=nachricht`** (Feld `text` + optional `anhang[]`) → `nachricht_post_verarbeiten()` aus `core/nachricht.php`. Die `lieferant_id` kommt aus dem Login, nie aus dem Formular. Ist der Mailversand eingerichtet, bekommen alle Admins eine Mail. **Anhänge** (CoA, Spezifikation, Fotos) können in beide Richtungen mitgeschickt werden; sie hängen an der Nachricht (`dokument`, `objekt_typ='nachricht'`) und sind im Portal über `?p=lieferant_dokument&id=` abrufbar.
 
 Nachrichten zu einer bestimmten Bestellung oder Preisanfrage schreibt der Lieferant besser direkt dort (`lieferant_bestellung`, `lieferant_anfrage`) – dann hängen sie am Vorgang. Der Menüpunkt zeigt die Zahl ungelesener Nachrichten von bulkify.

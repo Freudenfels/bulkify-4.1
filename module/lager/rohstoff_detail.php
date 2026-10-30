@@ -1548,6 +1548,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       <h2 style="margin:0">Lieferantenpreise (Staffel) <?= bx_hint('Angebote der Lieferanten je Menge – günstigster ist markiert. Basis für den Einkauf.') ?></h2>
       <div class="bx-row" style="gap:10px;align-items:center">
         <?= anfrage_badge((int)$id) ?>
+        <?php if (!$neu && (string)($it['name'] ?? '') !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=lief_nachrichten&produkt=<?= rawurlencode((string)$it['name']) ?>">Lieferanten-Nachrichten</a><?php endif; ?>
         <button type="button" class="btn btn-primary btn-sm" data-name="<?= $v('name') ?>" onclick="bxAnfrageOeffnen(<?= (int)$id ?>,this)">Preis anfragen</button>
       </div>
     </div>

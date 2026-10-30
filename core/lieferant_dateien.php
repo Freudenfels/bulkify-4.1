@@ -85,8 +85,9 @@ function lieferant_darf_datei(int $lieferant_id, int $dok_id): ?array {
     return one("SELECT * FROM dokument WHERE id=? AND (
                    (objekt_typ='lieferant' AND objekt_id=?)
                 OR (objekt_typ='item' AND lieferant_id=?)
+                OR (objekt_typ='nachricht' AND lieferant_id=?)
                 OR (objekt_typ='bestellung' AND lieferant_id=? AND objekt_id IN (SELECT id FROM bestellung WHERE lieferant_id=?)))",
-               [$dok_id, $lieferant_id, $lieferant_id, $lieferant_id, $lieferant_id]);
+               [$dok_id, $lieferant_id, $lieferant_id, $lieferant_id, $lieferant_id, $lieferant_id]);
 }
 
 // Löschen: das Team alles aus der Ablage, der Lieferant nur, was er selbst hochgeladen hat.

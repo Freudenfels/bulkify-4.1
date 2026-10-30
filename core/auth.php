@@ -106,6 +106,7 @@ function route_rollen_map(): array {
         'naehrstoff'         => ['production'],
         'lieferanten'        => ['einkauf', 'finance'],
         'lief_anfragen'      => ['einkauf', 'finance'],   // Übersicht aller Lieferanten-Anfragen + abgegebene Preise
+        'lief_nachrichten'   => ['einkauf', 'finance'],   // Team-Übersicht aller Lieferanten-Nachrichten
         'lieferant'          => ['einkauf', 'finance'],
         'katalog_freigaben'  => ['einkauf', 'finance'],
         'einkauf'            => ['einkauf'],

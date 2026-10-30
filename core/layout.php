@@ -40,7 +40,7 @@ function bx_nav_default(): array {
             'lager_fremd'  => ['label'=>'Fremdlager', 'route'=>'lager', 'href'=>'?p=lager&ort=lager2', 'ort'=>'lager2'],
             'wareneingang' => 'Wareneingang',
             'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'rohstoff_website' => 'Website-Freigabe', 'freigaben' => 'Freigaben', 'rohstoffe_papiere' => 'Rohstoffe ohne Papiere', 'laboranalysen' => 'Laboranalysen', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
-        'Einkauf'      => ['einkaufsliste' => 'Bedarf', 'einkauf' => 'Bestellt', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'lief_anfragen' => 'Anfragen & Preise', 'katalog_freigaben' => 'Katalog-Freigaben', 'einkauf_preise' => 'Preise'],
+        'Einkauf'      => ['einkaufsliste' => 'Bedarf', 'einkauf' => 'Bestellt', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'lief_anfragen' => 'Anfragen & Preise', 'lief_nachrichten' => 'Nachrichten', 'katalog_freigaben' => 'Katalog-Freigaben', 'einkauf_preise' => 'Preise'],
         'Import'       => ['angebot_import' => 'Angebots-Import', 'lager2_import' => 'Lager-2 Bestände'],
         'System'       => ['benachrichtigungen' => 'Benachrichtigungen', 'einstellungen' => 'Einstellungen', 'menu_editor' => 'Menü', 'benutzer' => 'Benutzer', 'protokoll' => 'Protokoll', 'durchlaufzeiten' => 'Durchlaufzeiten', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
         'Assistent'    => ['fastaction' => 'Fastaction'],
@@ -209,6 +209,8 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
             $anfCount['katalog_freigaben'] = (int) scalar("SELECT COUNT(*) FROM lieferant_katalog WHERE status='neu'");
             // Neu abgegebene Lieferantenpreise (Preisanfrage beantwortet, noch nicht angenommen/abgelehnt).
             $anfCount['lief_anfragen'] = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage la JOIN lieferant_angebot ag ON ag.anfrage_id=la.id WHERE ag.status='offen'");
+            // Ungelesene Lieferanten-Nachrichten (Sicht Team) – deutlich, weil die Software den ganzen Tag offen ist.
+            if (function_exists('nachrichten_ungelesen_gesamt')) $anfCount['lief_nachrichten'] = nachrichten_ungelesen_gesamt();
         } catch (Throwable $e) { /* Tabellen evtl. noch nicht da */ }
     }
     foreach ($navdef as $gruppe => $seiten) {
@@ -237,6 +239,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 'freigaben'     => "$n offene Freigaben (Spezifikationen/CoA)",
                 'katalog_freigaben' => "$n Lieferanten-Uploads zu prüfen",
                 'lief_anfragen' => "$n neue Lieferantenpreise (abgegeben, noch nicht bearbeitet)",
+                'lief_nachrichten' => "$n ungelesene Nachrichten von Lieferanten",
                 default         => "$n offene Anfragen",
             };
             $badge = $n > 0 ? "<span class=\"bx-navbadge\" title=\"$badgeTitel\">$n</span>" : '';
