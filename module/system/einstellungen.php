@@ -209,6 +209,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'preise_save') {
     meta_set('portal_umkarton', isset($_POST['portal_umkarton']) ? '1' : '0');
     meta_set('aufschlag_rohstoff', (string)(float)str_replace(',', '.', $_POST['aufschlag_rohstoff'] ?? '30'));
     meta_set('aufschlag_verpackung', (string)(float)str_replace(',', '.', $_POST['aufschlag_verpackung'] ?? '30'));
+    // Zusatzleistung Laboranalyse: Upsell-Preis (Mitbestellung) + regulärer Preis (nachträglich, falls kein Katalog-Service).
+    meta_set('laboranalyse_fixpreis', (string)(float)str_replace(',', '.', $_POST['laboranalyse_fixpreis'] ?? '250'));
+    meta_set('laboranalyse_regulaer_preis', (string)(float)str_replace(',', '.', $_POST['laboranalyse_regulaer_preis'] ?? '300'));
     meta_set('tablette_hilfsstoff_prozent', (string)(float)str_replace(',', '.', $_POST['tablette_hilfsstoff_prozent'] ?? '20'));
     meta_set('tablette_hilfsstoff_ek_kg', (string)(float)str_replace(',', '.', $_POST['tablette_hilfsstoff_ek_kg'] ?? '8'));
     meta_set('fluessig_portion_ml', (string)(float)str_replace(',', '.', $_POST['fluessig_portion_ml'] ?? '10'));
@@ -411,6 +414,12 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <div class="bx-grid">
       <div class="bx-field"><label>Aufschlag auf Rohstoffe (%) <?= bx_hint('VK = günstigster Lieferanten-EK (gestaffelt) × (1 + Aufschlag). Je Rohstoff überschreibbar.') ?></label><input type="number" step="0.1" name="aufschlag_rohstoff" value="<?= $m('aufschlag_rohstoff','30') ?>"></div>
       <div class="bx-field"><label>Aufschlag auf Verpackung (%) <?= bx_hint('Dose/Deckel/Etikett kommen extra: VK = EK-Staffel × (1 + Aufschlag). Je Verpackungsartikel überschreibbar.') ?></label><input type="number" step="0.1" name="aufschlag_verpackung" value="<?= $m('aufschlag_verpackung','30') ?>"></div>
+    </div>
+    <div style="font-weight:600;margin:14px 0 6px">Zusatzleistung Laboranalyse</div>
+    <p class="muted" style="font-size:13px;margin:0 0 8px">Beim <strong>Mitbestellen</strong> (Haken bei der Angebotsannahme) läuft die Laboranalyse als Fixpreis-Position auf der Produktrechnung – ohne eigene DL-Rechnung. <strong>Nachträglich</strong> beauftragt ist sie eine eigenständige Dienstleistung mit eigener DR-Rechnung; dort gilt der Preis des Laboranalyse-Service im <a href="?p=dienstleistungen">Dienstleistungs-Katalog</a> (kundenspezifisch mit Vorrang) – der Wert hier greift nur, falls dort keiner gepflegt ist.</p>
+    <div class="bx-grid">
+      <div class="bx-field"><label>Laboranalyse – Preis bei Mitbestellung (€ netto) <?= bx_hint('Günstigerer Upsell-Preis, wenn der Kunde den Labortest direkt bei der Angebotsannahme dazubucht. Kommt als Fixpreis-Position auf die Produktrechnung.') ?></label><input type="number" step="0.01" name="laboranalyse_fixpreis" value="<?= $m('laboranalyse_fixpreis','250') ?>"></div>
+      <div class="bx-field"><label>Laboranalyse – regulärer Preis (€ netto) <?= bx_hint('Preis bei nachträglicher Beauftragung. Wird nur genutzt, wenn im Dienstleistungs-Katalog kein Laboranalyse-Service gepflegt ist; sonst gilt der Katalogpreis.') ?></label><input type="number" step="0.01" name="laboranalyse_regulaer_preis" value="<?= $m('laboranalyse_regulaer_preis','300') ?>"></div>
     </div>
     <div style="margin-top:12px"><button class="btn btn-primary" type="submit">Speichern</button></div>
   </form>

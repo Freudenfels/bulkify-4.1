@@ -25,7 +25,11 @@ $paketLbl = function (int $stk) use ($inf, $mg, $formPl, $mengeLbl) {
 // UND es sich um ein PRODUKT-Angebot handelt. Auf einem Dienstleistungs-Angebot (selbst ggf. ein Labortest/
 // Abfuellung) ergibt ein Labortest-Upsell keinen Sinn -> dort nicht anbieten.
 $upN = htmlspecialchars(str_replace(["\\","'"], ["\\\\","\\'"], (string)$titelFuer($a)), ENT_QUOTES);
-$upsellJs = (!empty($k['portal_dienstleistung']) && ($a['kategorie'] ?? '') !== 'dienstleistung') ? "{name:'" . $upN . "'}" : 'null';
+$upsellJs = 'null';
+if (!empty($k['portal_dienstleistung']) && ($a['kategorie'] ?? '') !== 'dienstleistung') {
+    $lp = laboranalyse_preise((int)$kid);                              // Upsell- vs. regulärer Preis (für „250 statt 300")
+    $upsellJs = "{name:'" . $upN . "',up:" . (int)round($lp['upsell']) . ",reg:" . (int)round($lp['regulaer']) . "}";
+}
 // Bei angenommenem Angebot den ECHTEN Bestell-Status zeigen (aus dem Auftrag), nicht nur „bestätigt".
 $kartAuftragId = 0; $bestStatusLbl = ''; $bestStatusKind = 'info';
 if ($a['status'] === 'bestaetigt') {

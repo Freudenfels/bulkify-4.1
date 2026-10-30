@@ -4677,6 +4677,30 @@ function beleg_positionen_materialisieren(int $beleg_id, ?float $ustSatz = null)
     return count($pos);
 }
 
+// Preise der dazubuchbaren Laboranalyse, netto in EURO. Es gibt bewusst ZWEI Preise:
+//  - 'upsell'   = Mitbestellung bei der Angebotsannahme (Fall 1): Fixpreis-Position auf der PRODUKTrechnung,
+//                 KEIN DL-Auftrag/keine DR-Rechnung. Pflege: Einstellungen > Preise (meta 'laboranalyse_fixpreis').
+//  - 'regulaer' = nachträgliche Beauftragung als eigenständige Dienstleistung (Fall 2): eigener DL-Auftrag (DB-)
+//                 + DL-Rechnung (DR-). Quelle: der Laboranalyse-Service im Dienstleistungs-Katalog
+//                 (kundenspezifischer Preis hat Vorrang); Rückfall auf meta 'laboranalyse_regulaer_preis',
+//                 falls (noch) kein Katalog-Service existiert.
+// Mitbestellen ist i. d. R. günstiger als nachträglich – der Vorteil wird im Annahme-Dialog angezeigt.
+function laboranalyse_preise(?int $kunde_id = null): array {
+    $upsell = (float) meta_get('laboranalyse_fixpreis', 250);
+    $regulaer = (float) meta_get('laboranalyse_regulaer_preis', 300);
+    try {
+        $svc = one("SELECT id, vk_cent FROM dienstleistung WHERE aktiv=1 AND (baustein='labortest' OR kategorie='labortest') ORDER BY id LIMIT 1");
+        if ($svc) {
+            $cent = (int)$svc['vk_cent'];
+            if ($kunde_id) {
+                $kp = scalar("SELECT vk_cent FROM dienstleistung_kundenpreis WHERE dienstleistung_id=? AND kunde_id=?", [(int)$svc['id'], $kunde_id]);
+                if ($kp !== null && $kp !== '') $cent = (int)$kp;
+            }
+            $regulaer = $cent / 100;
+        }
+    } catch (\Throwable $e) { /* Katalog/Tabelle (noch) nicht da -> meta-Rückfall */ }
+    return ['upsell' => $upsell, 'regulaer' => $regulaer];
+}
 // Dazugebuchte Laboranalyse (Fixpreis, Standard 250 € netto) als eigene Position auf die Rechnung des Auftrags
 // setzen + Auftrag als „Laboranalyse gebucht" markieren (paralleler Labor-Punkt). Konkret statt vagem DL-Angebot.
 // Idempotent (eine Laborposition je Rechnung). Rückgabe: true, wenn gebucht/vorhanden.

@@ -5184,7 +5184,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div id="bxBestUpsell" style="display:none;border:1px solid var(--gruen);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;background:var(--panel-2)">
         <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.4;margin:0">
           <input type="checkbox" name="labortest" value="1" style="margin-top:3px;flex:none">
-          <span><strong>Labortest dazubuchen</strong> <span class="muted">– für <span id="bxUpProd"></span>. Wir prüfen Ihr Produkt im Labor (z. B. Schwermetalle, Mikrobiologie) und melden uns mit einem separaten Angebot. Unverbindlich.</span></span>
+          <span><strong>Laboranalyse dazubuchen</strong> <span class="muted">– für <span id="bxUpProd"></span>: <strong id="bxUpPreis"></strong><span id="bxUpVorteil"></span>. Externe Laboranalyse des fertigen Produkts (z. B. Schwermetalle, Mikrobiologie); kommt direkt als Position auf Ihre Rechnung.</span></span>
         </label>
       </div>
       <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.45;margin-bottom:12px">
@@ -5220,8 +5220,13 @@ function bxBestaetigen(titel, text, haken, felder, upsell){
   // Optionaler Upsell (Labortest): nur bei Angebots-Annahmen und wenn der Kunde Dienstleistungen anfragen darf.
   var up = document.getElementById('bxBestUpsell'), upCb = up.querySelector('input[name="labortest"]');
   upCb.checked = false;
-  if (upsell && upsell.name) { document.getElementById('bxUpProd').textContent = upsell.name; up.style.display=''; }
-  else { up.style.display='none'; }
+  if (upsell && upsell.name) {
+    document.getElementById('bxUpProd').textContent = upsell.name;
+    var pEl = document.getElementById('bxUpPreis'), vEl = document.getElementById('bxUpVorteil');
+    if (pEl) pEl.textContent = (upsell.up != null) ? (upsell.up + ' € netto') : '';
+    if (vEl) vEl.textContent = (upsell.reg != null && upsell.up != null && upsell.reg > upsell.up) ? (' statt ' + upsell.reg + ' € bei nachträglicher Beauftragung') : '';
+    up.style.display='';
+  } else { up.style.display='none'; }
   var ov = document.getElementById('bxBestOverlay');
   ov.style.display='flex';
   var eingabe = ov.querySelector('input[name="freigabe_name"]'); if (eingabe) setTimeout(function(){ eingabe.focus(); }, 50);
