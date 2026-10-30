@@ -30,6 +30,16 @@
 - **Verbindlich** (`freigegeben`/`eingefroren` – vom Kunden angenommen): nur **Vorschlag öffnen**; wird hier **nicht** überschrieben. Änderungen laufen über die Rezeptur.
 - **Keine Rezeptur:** **Vorschlag erstellen & senden** (`aktion=rezeptur_erstellen`, siehe oben).
 
+## Original-Anfrage & Verlauf (unveränderlich, nur intern)
+Über dem KI-Panel steht ein grünes Panel **„Original-Anfrage & Verlauf"** – nur für uns, der Kunde sieht es nicht.
+Bei **jeder inhaltlichen Änderung** einer Anfrage (Portal-Einreichung/-Bearbeitung durch den Kunden, Team-Speichern,
+KI-Zeilen-Übernahme) wird der damalige Stand (Produktname, Form, Notiz + alle Wunschzeilen) **unveränderlich mit
+Zeitstempel eingefroren** – Tabelle `rezeptur_anfrage_snapshot`, geschrieben per `rezeptur_anfrage_snapshot($id,$quelle)`
+(`$quelle` = `kunde`|`team`; identische Folge-Snapshots per `inhalt_hash` übersprungen). So ist lückenlos belegt, was
+ursprünglich gewünscht war und wie es sich geändert hat. Angezeigt werden alle Stände **ältester zuerst** (erster =
+„Original – so eingereicht", als `<details>` offen), je Eintrag Zeitpunkt (`fmt_zeit`) + Quelle (Kunde/Team).
+Snapshots werden nur geschrieben, nie geändert/gelöscht. Für Alt-Anfragen ohne Snapshots beginnt die Historie ab jetzt.
+
 ## Rezeptur entwickeln (KI)
 Über dem Formular steht der Rezepturvorschlag aus der Kundenidee (`core/rezeptur_ki.md`): Zutaten mit Mengen, Novel-Food-Einschätzung, Höchstmengen, Health Claims, Machbarkeit und das **selbst nachgerechnete Füllgewicht** samt passender Kapselgröße. `aktion=ki_entwickeln` erzeugt ihn, `aktion=ki_zeilen` übernimmt die Zutaten in die Wunschzeilen. Ein vorhandener Vorschlag wird immer angezeigt, auch wenn gerade kein Schlüssel hinterlegt ist. Alles ist ein Entwurf – gesendet wird erst über den bestehenden Weg „Rezeptur erstellen".
 

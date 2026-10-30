@@ -466,6 +466,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         q("INSERT INTO rezeptur_anfrage_wunsch (anfrage_id,bezeichnung,wunsch_menge,einheit,sort) VALUES (?,?,?,?,?)",
           [$aid, $b, trim($wm[$i] ?? ''), trim($we[$i] ?? 'mg'), $i]);
     }
+    if (function_exists('rezeptur_anfrage_snapshot')) rezeptur_anfrage_snapshot($aid, 'kunde');   // Original einfrieren
     log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Neue Rezepturanfrage im Portal eingereicht.', 'anfrage', 'anfrage', $aid);
     if (mail_bereit()) nach_antwort(fn() => mail_kunde_anfrage_eingang('rezeptur', (int)$aid));
     // Gleich einen Rezepturentwurf entwickeln lassen – das Team findet ihn beim Öffnen der Anfrage
@@ -523,6 +524,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
             q("INSERT INTO rezeptur_anfrage_wunsch (anfrage_id,bezeichnung,wunsch_menge,einheit,sort) VALUES (?,?,?,?,?)",
               [$aid, $b, trim($wm[$i] ?? ''), trim($we[$i] ?? 'mg'), $i]);
         }
+        if (function_exists('rezeptur_anfrage_snapshot')) rezeptur_anfrage_snapshot($aid, 'kunde');   // Änderung des Kunden einfrieren
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Rezepturanfrage ' . $an['nummer'] . ' im Portal bearbeitet.', 'anfrage', 'anfrage', $aid);
     }
     header('Location: ?p=portal&token=' . $token . '&v=anfrage&geaendert=1'); exit;
@@ -791,6 +793,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
           [naechste_nummer('RZA'), (int)$k['id'], $form, $name,
            'Vom Kunden aus „' . (string)$basis['name'] . '" (Nr. ' . (string)$basis['nummer'] . ') weiterentwickelt.', $rezId]);
         $anfId = insert_id();
+        if (function_exists('rezeptur_anfrage_snapshot')) rezeptur_anfrage_snapshot((int)$anfId, 'kunde');   // Original einfrieren
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Eigene Rezeptur „' . $name . '" aus Basis ' . (string)$basis['nummer'] . ' weiterentwickelt – zur Prüfung eingereicht.', 'rezeptur', 'rezeptur', $rezId);
         if (mail_bereit()) nach_antwort(fn() => mail_kunde_anfrage_eingang('rezeptur', (int)$anfId));
         header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&abgeleitet=1'); exit;

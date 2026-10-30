@@ -47,6 +47,7 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
     require_once BX_ROOT . '/core/rezeptur_ki.php';
     $vor = rezeptur_ki_vorschlag((int)$id);
     $n = $vor ? rezeptur_ki_zeilen_uebernehmen((int)$id, (array)($vor['zutaten'] ?? [])) : 0;
+    if ($n > 0) rezeptur_anfrage_snapshot((int)$id, 'team');   // Änderung einfrieren (KI-Zeilen übernommen)
     header('Location: ?p=anfrage&id=' . (int)$id . '&kizeilen=' . $n); exit;
 }
 
@@ -84,6 +85,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         q("INSERT INTO rezeptur_anfrage_wunsch (anfrage_id,bezeichnung,wunsch_menge,einheit,notiz,item_id,menge_final,sort)
            VALUES (?,?,?,?,?,?,?,?)", [(int)$id, $r['bez'], $r['menge'], $r['einheit'], $r['notiz'], $r['item_id'], $r['final'], $i]);
     }
+    // Stand nach jeder Team-Bearbeitung unveränderlich einfrieren (nur intern, mit Zeitstempel).
+    rezeptur_anfrage_snapshot((int)$id, 'team');
 
     if (($_POST['aktion'] ?? '') === 'vorschlag_aktualisieren') {
         // Die bearbeitete Wunsch-Zuordnung in den BEREITS verknüpften Vorschlag (Rezeptur) übernehmen und neu senden.
@@ -216,6 +219,38 @@ if (!$neu && ($a['status'] ?? '') === 'ueberarbeiten') {
        . '</div>';
 }
 ?>
+<?php // Original-Anfrage & lückenloser Änderungsverlauf (unveränderlich, nur intern).
+if (!$neu): $snaps = function_exists('rezeptur_anfrage_snapshots') ? rezeptur_anfrage_snapshots((int)$id) : [];
+  if ($snaps): ?>
+<div class="bx-panel" style="border-color:var(--gruen)">
+  <h2 style="margin-top:0">Original-Anfrage &amp; Verlauf <?= bx_hint('Unveränderlich festgehalten, nur intern. Jede inhaltliche Änderung (Kunde oder Team) wird mit Zeitstempel eingefroren – so ist lückenlos belegt, was angefragt wurde.') ?></h2>
+  <div class="muted" style="font-size:12px;margin:-4px 0 12px">Nur für uns sichtbar · <?= count($snaps) ?> <?= count($snaps) === 1 ? 'Stand' : 'Stände' ?> (ältester zuerst).</div>
+  <?php foreach ($snaps as $si => $s): $ist_original = ($si === 0); $qlabel = (($s['quelle'] ?? 'team') === 'kunde') ? 'Kunde' : 'Team'; ?>
+  <details <?= $ist_original ? 'open' : '' ?> style="border-top:1px solid var(--line);padding:8px 0">
+    <summary style="cursor:pointer;font-weight:600"><?= $ist_original ? 'Original – so eingereicht' : 'Änderung' ?>
+      <span class="muted" style="font-weight:400">· <?= h(fmt_zeit((string)$s['angelegt'])) ?> Uhr · <?= h($qlabel) ?></span></summary>
+    <div style="margin:8px 0 4px">
+      <?php if (($s['produktname'] ?? '') !== ''): ?><div><strong>Produktname:</strong> <?= h((string)$s['produktname']) ?></div><?php endif; ?>
+      <?php if (($s['darreichungsform'] ?? '') !== ''): ?><div><strong>Form:</strong> <?= h((string)($DFORM[$s['darreichungsform']] ?? $s['darreichungsform'])) ?></div><?php endif; ?>
+      <?php if (trim((string)($s['notiz'] ?? '')) !== ''): ?><div style="margin-top:4px"><strong>Kundenwunsch / Notiz:</strong> <?= nl2br(h((string)$s['notiz'])) ?></div><?php endif; ?>
+    </div>
+    <?php if (!empty($s['wuensche'])): ?>
+    <div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table">
+      <thead><tr><th>Bezeichnung</th><th style="width:150px">Wunschmenge</th><th>Notiz</th></tr></thead>
+      <tbody>
+      <?php foreach ($s['wuensche'] as $w): ?>
+        <tr><td><?= h((string)($w['bezeichnung'] ?? '')) ?: '–' ?></td>
+            <td><?= h(trim(((string)($w['wunsch_menge'] ?? '')) . ' ' . ((string)($w['einheit'] ?? '')))) ?: '–' ?></td>
+            <td class="muted"><?= h((string)($w['notiz'] ?? '')) ?></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <?php else: ?><div class="muted" style="font-size:13px">Keine einzelnen Wunschzeilen – siehe Notiz.</div><?php endif; ?>
+  </details>
+  <?php endforeach; ?>
+</div>
+<?php endif; endif; ?>
+
 <?php // Rezepturvorschlag der KI. Steht VOR dem Formular, weil er es füttert.
 if (!$neu):
   require_once BX_ROOT . '/core/rezeptur_ki.php';

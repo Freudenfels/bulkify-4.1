@@ -405,6 +405,23 @@ function init_schema(): void {
         KEY idx_anfrage (anfrage_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // rezeptur_anfrage_snapshot: lückenlose, UNVERÄNDERLICHE Historie, WAS der Kunde angefragt hat – rein intern.
+    // Bei jeder inhaltlichen Änderung (Portal-Einreichung/-Bearbeitung, Team-Bearbeitung, KI-Übernahme) wird der
+    // aktuelle Stand (Produktname/Form/Notiz + alle Wunschzeilen) als neue Zeile mit Zeitstempel eingefroren.
+    // Snapshots werden nur geschrieben, nie geändert/gelöscht -> beweisbar, was ursprünglich gewünscht war.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS rezeptur_anfrage_snapshot (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        anfrage_id INT NOT NULL,
+        quelle VARCHAR(10) NOT NULL DEFAULT 'team',          -- kunde|team (wer die Änderung ausgelöst hat)
+        produktname VARCHAR(190) NULL,
+        darreichungsform VARCHAR(20) NULL,
+        notiz TEXT NULL,
+        wuensche_json MEDIUMTEXT NULL,                       -- eingefrorene Wunschzeilen (JSON) zum Zeitpunkt
+        inhalt_hash CHAR(40) NULL,                           -- sha1(json) – identische Folge-Snapshots vermeiden
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_anfrage (anfrage_id, id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // rezeptur: Kopf einer Formulierung. Mengen der Zutaten gelten PRO EINHEIT (Kapsel/Portion) – Kunde bestimmt Einnahme/Tag.
     $pdo->exec("CREATE TABLE IF NOT EXISTS rezeptur (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -11974,6 +11991,48 @@ function demo_testset_einspielen(): array {
         }
     }
     return ['ok'=>true, 'neu'=>$neu, 'log'=>$log];
+}
+
+// --- Rezepturanfrage: lückenlose Original-/Änderungs-Historie (nur intern) --------------------
+// Friert den AKTUELLEN Stand einer Anfrage (Produktname/Form/Notiz + alle Wunschzeilen) als neue,
+// unveränderliche Snapshot-Zeile mit Zeitstempel ein. Nach JEDER inhaltlichen Änderung aufrufen.
+// $quelle = 'kunde' (Portal) | 'team' (Dashboard). Identische Folge-Snapshots werden übersprungen.
+function rezeptur_anfrage_snapshot(int $anfrage_id, string $quelle = 'team'): void {
+    if ($anfrage_id <= 0 || !table_exists('rezeptur_anfrage_snapshot')) return;
+    $a = one("SELECT produktname, darreichungsform, notiz, status FROM rezeptur_anfrage WHERE id=?", [$anfrage_id]);
+    if (!$a) return;
+    $w = all("SELECT bezeichnung, wunsch_menge, einheit, notiz, item_id, menge_final
+              FROM rezeptur_anfrage_wunsch WHERE anfrage_id=? ORDER BY sort, id", [$anfrage_id]);
+    $payload = [
+        'produktname'      => (string)($a['produktname'] ?? ''),
+        'darreichungsform' => (string)($a['darreichungsform'] ?? ''),
+        'notiz'            => (string)($a['notiz'] ?? ''),
+        'status'           => (string)($a['status'] ?? ''),
+        'wuensche'         => array_map(fn($r) => [
+            'bezeichnung'  => (string)($r['bezeichnung'] ?? ''),
+            'wunsch_menge' => (string)($r['wunsch_menge'] ?? ''),
+            'einheit'      => (string)($r['einheit'] ?? ''),
+            'notiz'        => (string)($r['notiz'] ?? ''),
+            'item_id'      => $r['item_id'] !== null ? (int)$r['item_id'] : null,
+            'menge_final'  => $r['menge_final'] !== null ? (float)$r['menge_final'] : null,
+        ], $w),
+    ];
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    $hash = sha1((string)$json);
+    $last = scalar("SELECT inhalt_hash FROM rezeptur_anfrage_snapshot WHERE anfrage_id=? ORDER BY id DESC LIMIT 1", [$anfrage_id]);
+    if ($last !== null && (string)$last === $hash) return;   // nichts geändert -> kein doppelter Snapshot
+    q("INSERT INTO rezeptur_anfrage_snapshot (anfrage_id,quelle,produktname,darreichungsform,notiz,wuensche_json,inhalt_hash)
+       VALUES (?,?,?,?,?,?,?)",
+      [$anfrage_id, in_array($quelle, ['kunde', 'team'], true) ? $quelle : 'team',
+       (string)($a['produktname'] ?? ''), (string)($a['darreichungsform'] ?? ''), (string)($a['notiz'] ?? ''),
+       $json, $hash]);
+}
+// Alle Snapshots einer Anfrage (älteste zuerst = Original zuerst). Jede Zeile: angelegt, quelle + dekodierte Felder.
+function rezeptur_anfrage_snapshots(int $anfrage_id): array {
+    if ($anfrage_id <= 0 || !table_exists('rezeptur_anfrage_snapshot')) return [];
+    $rows = all("SELECT * FROM rezeptur_anfrage_snapshot WHERE anfrage_id=? ORDER BY id ASC", [$anfrage_id]);
+    foreach ($rows as &$r) $r['wuensche'] = json_decode((string)($r['wuensche_json'] ?? ''), true)['wuensche'] ?? [];
+    return $rows;
 }
 
 // Request-lokaler Cache für app_meta: dieselben Schlüssel werden pro Seitenaufruf
