@@ -35,6 +35,11 @@ Liegt im Dashboard unter `app_meta['lager_scan_token']`. Angezeigt/erzeugt wird 
   `menge_verfuegbar`, `einheit`, `mhd`, `status`, `kategorie`, `lieferant`.
 - `blinker_fuer_charge($id)` (`lager/core/kiste.php`) → Ort als Text (Kiste/Fach) oder Blinker-Code.
 
+## Inventaraufkleber (Etikettenrolle)
+Ist `code` **genau 7 Ziffern**, wird er als Maniso-Inventaraufkleber behandelt (`erp_rolle_per_inventar`) und
+die **Etikettenrolle** zurückgegeben (`typ=etikettenrolle`, `inventar_nr`, Etikett, Menge, Status, zugeordneter
+Auftrag, Charge). Läuft VOR der „Ziffern-aus-Code"-Erkennung, damit die Nummer nicht als Charge-ID gelesen wird.
+
 ## Offen (Stufe 2)
 `orders[]` ist reserviert für „offene Aufträge, die diesen Rohstoff brauchen" – kommt über eine
 gezielte Naht-Query (Kette `rezeptur_zutat → produkt/rezeptur → produktionsauftrag → auftrag`).

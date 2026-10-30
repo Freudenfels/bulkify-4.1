@@ -1234,6 +1234,15 @@ function init_schema(): void {
         angelegt DATETIME NOT NULL,
         KEY idx_charge (charge_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Etikettenrollen: statt eines Blinkers bekommt jede Etikettenrolle einen Maniso-Inventaraufkleber
+    // (7-stellige Nummer, physisch in die Rolle geklebt). Je Rolle ein charge_gebinde-Datensatz mit der
+    // gescannten Nummer. Beim Einsatz in der Produktion wird die Rolle einem Auftrag/PA zugeordnet
+    // (Rückverfolgung). inventar_nr ist je aktiver (status<>'leer') Rolle eindeutig – in der Lager-Naht geprüft.
+    ensure_column('charge_gebinde', 'inventar_nr', "VARCHAR(7) NULL");          // Maniso-Inventaraufkleber (7 Ziffern)
+    ensure_column('charge_gebinde', 'auftrag_id', "INT NULL");                  // Produktion: welcher Auftrag nimmt diese Rolle
+    ensure_column('charge_gebinde', 'pa_id', "INT NULL");                       // zugehöriger Produktionsauftrag
+    ensure_column('charge_gebinde', 'verbraucht_am', "DATETIME NULL");          // wann in die Produktion gegeben
+    ensure_index('charge_gebinde', 'idx_inventar', 'inventar_nr');
     // Teil 4: Schwund-Protokoll (Differenz rechnerisch vs. gewogen beim Rückgabe-Wiegen). Für Steuer/Inventur.
     $pdo->exec("CREATE TABLE IF NOT EXISTS schwund (
         id INT AUTO_INCREMENT PRIMARY KEY,

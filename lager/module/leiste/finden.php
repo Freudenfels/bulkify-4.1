@@ -53,6 +53,10 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
       if(t.menge) teile.push(t.menge+(t.einheit?(' '+t.einheit):''));
       if(t.ort) teile.push(t.ort); else if(t.leiste) teile.push('Blinker '+t.leiste);
       var sub=teile.join(' · ');
+      if(t.href){   // Etikettenrolle o. Ä.: kein Blinker, sondern eine Detailseite öffnen
+        return '<a class="fnd-item" href="'+esc(t.href)+'">'
+             + '<span class="n">'+esc(t.name)+'</span><span class="s">'+esc(sub)+'</span></a>';
+      }
       if(t.leiste_id){
         return '<button type="button" class="fnd-item" data-klingeln="'+t.leiste_id+'" data-farbe="gruen" data-sek="40">'
              + '<span class="n">'+esc(t.name)+'</span><span class="s">'+esc(sub)+'</span></button>';

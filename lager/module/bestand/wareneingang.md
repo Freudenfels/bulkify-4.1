@@ -7,8 +7,18 @@ Ein Bereich für alles, was reinkommt. Ablauf:
    Positionen werden per `erp_position_zuordnen()` einem bestehenden Artikel zugeordnet (exakter
    Name = sichere Zuordnung, sonst Vorschlag + Warenart-Vermutung). Antwort als JSON, Tabelle füllt sich.
 3. **Positionen prüfen**: je Zeile Artikel (bestehend/neu), Warenart, Menge, Einheit, Charge, MHD,
-   **Blinker (immer Pflicht)**, Pakete, **Freigegeben-Haken**. Pflichtfelder je Warenart aus
+   **Blinker (Pflicht – außer Etikett)**, Pakete, **Freigegeben-Haken**. Pflichtfelder je Warenart aus
    `erp_warenart_regeln()`: Rohstoff/Fertig/Kapsel → MHD+Charge Pflicht; Verpackung/Verbrauch → frei.
+
+   **Etikett (Rolle):** Warenart „Etikett (Rolle)" (Item = `kategorie='verpackung'` + `verpackung_rolle='etikett'`,
+   erkannt per `erp_item_warenart()`). Hier wird **kein Blinker**, sondern je Rolle ein **Maniso-Inventaraufkleber**
+   (genau 7 Ziffern) gescannt. Feld „Rollen" steuert die Anzahl der Scan-Felder (Enter springt weiter). Die
+   Gesamtmenge wird gleichmäßig auf die Rollen verteilt (Vorbelegung) und ist **je Rolle änderbar**; die Summe
+   muss der Gesamtmenge entsprechen (Live-Prüfung, Toleranz 0,5). Blinker/Charge/MHD/Pakete sind ausgeblendet.
+   2D-POST-Felder `p_rolle_nr[<key>][]` / `p_rolle_menge[<key>][]`, zugeordnet über `p_key[]` (DOM-Reihenfolge).
+   Beim Buchen: eine Charge (Verpackung, frei) + je Rolle ein `charge_gebinde`-Datensatz mit `inventar_nr`
+   (`erp_etikett_rollen_anlegen`), `pakete = Rollenzahl`. Nummer-Format/Eindeutigkeit (aktiv) via
+   `erp_inventar_norm()` / `erp_inventar_frei()`.
 
    **Fertige Kapseln (Warenart „Fertigware / Bulk"):** Dann erscheint zusätzlich ein **Rezeptur-Picker**
    (Textsuche, `erp_rezeptur_liste()`, nur Rezepturen ≠ Entwurf). Beim Buchen wird die Position aufs

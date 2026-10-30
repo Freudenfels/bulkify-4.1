@@ -39,3 +39,7 @@ Charge und Lager sind nicht bearbeitbar (reine Anzeige).
 Der **Produktname ist überall ein Link** (Bestand-Liste, Such-Popup) und führt hierher.
 
 Liest über `erp_charge_voll()`, `erp_item_voll()`, `erp_item_wirkstoffe()`, `erp_item_dokumente()`, `erp_item_chargen()` aus dem geteilten Dashboard-Bestand. Bindet/löst Blinker über `core/leiste.php`.
+
+**Etikettenrollen:** Hat die Charge Etikettenrollen (`erp_charge_rollen()` → `charge_gebinde` mit `inventar_nr`),
+zeigt ein eigenes Panel je Rolle Inventaraufkleber, Rolle X/N, Menge, Status (+„in Produktion") und den
+zugeordneten Auftrag; „Details" führt auf `?p=gebinde&inv=<nr>`.

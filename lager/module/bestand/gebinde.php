@@ -25,6 +25,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'loesc
     weiter('?p=gebinde&charge=' . $cid);
 }
 
+// --- Etikettenrolle einem Auftrag zuordnen / wieder freigeben (Rückverfolgung) ----------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rolle_zuordnen') {
+    $gid = (int)($_POST['gebinde_id'] ?? 0);
+    $aid = (int)($_POST['auftrag_id'] ?? 0);
+    $r = function_exists('erp_rolle_auftrag_zuordnen') ? erp_rolle_auftrag_zuordnen($gid, $aid) : ['ok' => false, 'meldung' => 'Nicht verfügbar.'];
+    flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+    weiter('?p=gebinde&inv=' . rawurlencode((string)($_POST['inv'] ?? '')));
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rolle_freigeben') {
+    $gid = (int)($_POST['gebinde_id'] ?? 0);
+    $r = function_exists('erp_rolle_freigeben') ? erp_rolle_freigeben($gid) : ['ok' => false, 'meldung' => 'Nicht verfügbar.'];
+    flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+    weiter('?p=gebinde&inv=' . rawurlencode((string)($_POST['inv'] ?? '')));
+}
+
+// --- Modus I: Inventaraufkleber (7 Ziffern) auflösen -> Etikettenrolle -------------------------
+$inv = function_exists('erp_inventar_norm') ? erp_inventar_norm((string)($_GET['inv'] ?? '')) : preg_replace('/\D+/', '', (string)($_GET['inv'] ?? ''));
+if (($_GET['inv'] ?? '') !== '') {
+    $r = function_exists('erp_rolle_per_inventar') ? erp_rolle_per_inventar((string)$_GET['inv']) : null;
+    kopf('Rolle ' . $inv, 'bestand');
+    seitenkopf('Etikettenrolle ' . $inv, 'Gescannter Inventaraufkleber – Etikett, Kunde/Auftrag und Bestand.');
+    flash_zeigen();
+    if (!$r):
+        hinweis('Kein Inventaraufkleber „' . h($inv) . '" gefunden.', 'warn');
+    else:
+        $c = erp_charge_voll((int)$r['charge_id']);
+        $kundeTxt = !empty($r['fremd_kunde_id']) ? erp_kunde_name((int)$r['fremd_kunde_id']) : '';
+        $auftragId = (int)($c['auftrag_id'] ?? 0);
+        $mengeTxt = menge_txt($r['menge_verfuegbar']) . ' ' . (string)($r['einheit'] ?? '');
+        $statLbl  = ['voll'=>'voll', 'angebrochen'=>'angebrochen', 'leer'=>'leer'][(string)$r['status']] ?? (string)$r['status'];
+        $zugeordnet = (int)($r['auftrag_id'] ?? 0) > 0;
+    ?>
+    <div class="bx-panel" style="margin-bottom:var(--sp-5)">
+      <h2 style="margin-top:0">Etikettenrolle</h2>
+      <table class="bx-table"><tbody>
+        <tr><td class="muted" style="width:200px">Inventaraufkleber</td><td class="lg-code" style="font-weight:600"><?= h($inv) ?></td></tr>
+        <tr><td class="muted">Etikett</td><td><a class="lg-namelink" href="?p=charge&id=<?= (int)$r['charge_id'] ?>"><?= h((string)($r['item_name'] ?? '')) ?></a></td></tr>
+        <tr><td class="muted">Menge auf der Rolle</td><td style="font-weight:600"><?= h($mengeTxt) ?></td></tr>
+        <tr><td class="muted">Status</td><td><?= h($statLbl) ?></td></tr>
+        <tr><td class="muted">Rolle</td><td><?= (int)$r['nummer'] ?> / <?= (int)$r['anzahl_gesamt'] ?></td></tr>
+        <?php if ($kundeTxt !== ''): ?><tr><td class="muted">Kunde (Fremdlager)</td><td><?= h($kundeTxt) ?></td></tr><?php endif; ?>
+        <tr><td class="muted">Zugeordneter Auftrag</td><td><?= $zugeordnet ? h((string)($r['auftrag_nr'] ?? ('#' . (int)$r['auftrag_id']))) : '<span class="muted">– frei –</span>' ?></td></tr>
+        <tr><td class="muted">Charge</td><td class="lg-code"><?= h((string)($r['charge_nr'] ?? '')) ?: '–' ?></td></tr>
+        <tr><td class="muted">Lieferant</td><td><?= h((string)($r['lieferant'] ?? '')) ?: '–' ?></td></tr>
+        <tr><td class="muted">Wareneingang</td><td><?= !empty($r['wareneingang']) ? h(date('d.m.Y', strtotime((string)$r['wareneingang']))) : '–' ?></td></tr>
+      </tbody></table>
+      <div class="bx-row" style="gap:var(--sp-2);margin-top:var(--sp-3);flex-wrap:wrap">
+        <a class="btn btn-primary" href="?p=charge&id=<?= (int)$r['charge_id'] ?>">Zur Charge</a>
+        <?php if (!$zugeordnet && $auftragId > 0 && (string)$r['status'] !== 'leer'): ?>
+        <form method="post" style="display:inline">
+          <input type="hidden" name="aktion" value="rolle_zuordnen">
+          <input type="hidden" name="gebinde_id" value="<?= (int)$r['id'] ?>">
+          <input type="hidden" name="auftrag_id" value="<?= $auftragId ?>">
+          <input type="hidden" name="inv" value="<?= h($inv) ?>">
+          <button type="submit" class="btn btn-ghost">Rolle dem Auftrag <?= h((string)($c['auftrag_nr'] ?? ('#' . $auftragId))) ?> zuordnen</button>
+        </form>
+        <?php elseif ($zugeordnet): ?>
+        <form method="post" style="display:inline" onsubmit="return confirm('Zuordnung dieser Rolle wieder lösen?')">
+          <input type="hidden" name="aktion" value="rolle_freigeben">
+          <input type="hidden" name="gebinde_id" value="<?= (int)$r['id'] ?>">
+          <input type="hidden" name="inv" value="<?= h($inv) ?>">
+          <button type="submit" class="btn btn-ghost">Zuordnung lösen</button>
+        </form>
+        <?php endif; ?>
+      </div>
+    </div>
+    <?php
+    endif;
+    fuss();
+    return;
+}
+
 // --- Modus 0: Scan-Auflösung eines BESTANDS-Gebindes (?bg=<charge_gebinde.id>) -----------------
 // Teil 4: der QR auf den Wareneingangs-Etiketten führt auf GENAU dieses Gebinde (Restmenge/Ort).
 $bg = (int)($_GET['bg'] ?? 0);

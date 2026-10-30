@@ -101,6 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $fehler  = [];
     foreach ($names as $i => $nm) {
         $name     = trim((string)$nm);
+        $key      = (string)($_POST['p_key'][$i] ?? (string)$i);   // stabiler Zeilenschlüssel (für 2D-Rollen-Felder)
         $item_id  = (int)($_POST['p_item'][$i] ?? 0);
         $warenart = (string)($_POST['p_warenart'][$i] ?? 'rohstoff');
         $menge    = erp_menge_parse((string)($_POST['p_menge'][$i] ?? '0'));
@@ -121,6 +122,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         // Warenart -> echte Zuordnung (kategorie + form). Leerkapseln=rohstoff/kapselhuelle, fertige Kapseln=fertig.
         $defs = function_exists('erp_warenart_defs') ? erp_warenart_defs() : [];
         $def  = $defs[$warenart] ?? ['kategorie' => 'rohstoff', 'form' => ''];
+
+        // --- Etikett (Rolle): kein Blinker – je Rolle ein Inventaraufkleber (7 Ziffern) ---------------
+        if ($warenart === 'etikett') {
+            if (!$item_id && $name !== '') $item_id = (int) erp_item_anlegen($name, 'verpackung', $einheit ?: 'Stk', 'etikett');
+            if (!$item_id) { $fehler[] = 'Zeile ' . ($i + 1) . ': kein Artikel.'; continue; }
+            if (function_exists('erp_item_warenart_setzen')) erp_item_warenart_setzen($item_id, 'etikett');
+            if ($menge <= 0) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Menge fehlt.'; continue; }
+            // Rollen einsammeln: je Rolle eine Inventarnummer + eine (editierbare) Menge.
+            $rnrs = (array)($_POST['p_rolle_nr'][$key] ?? []);
+            $rmgs = (array)($_POST['p_rolle_menge'][$key] ?? []);
+            $rollen = []; $summe = 0.0; $gesehen = []; $rfehler = '';
+            foreach ($rnrs as $ri => $rnr) {
+                if (trim((string)$rnr) === '') continue;   // leeres Scan-Feld überspringen
+                $nr = erp_inventar_norm((string)$rnr);
+                if ($nr === '')                 { $rfehler = 'Inventaraufkleber braucht genau 7 Ziffern.'; break; }
+                if (isset($gesehen[$nr]))       { $rfehler = 'Inventarnummer ' . $nr . ' doppelt gescannt.'; break; }
+                if (!erp_inventar_frei($nr))    { $rfehler = 'Inventarnummer ' . $nr . ' ist schon vergeben.'; break; }
+                $gesehen[$nr] = 1;
+                $rm = erp_menge_parse((string)($rmgs[$ri] ?? '0'));
+                $rollen[] = ['nr' => $nr, 'menge' => $rm];
+                $summe += $rm;
+            }
+            if ($rfehler !== '') { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): ' . $rfehler; continue; }
+            if (!$rollen)        { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): mindestens einen Inventaraufkleber scannen.'; continue; }
+            if (abs($summe - $menge) > 0.5) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Summe der Rollen (' . menge_txt($summe) . ') ≠ Gesamtmenge (' . menge_txt($menge) . ').'; continue; }
+            $notiz = 'Wareneingang' . ($ziel === 'l2' ? ' (Kundenware)' : '') . ' · Etikettenrollen';
+            if ($artnr !== '')     $notiz .= ' · Art.-Nr. ' . $artnr;
+            if ($auftragNr !== '') $notiz .= ' · Auftrag ' . $auftragNr;
+            $cid = $ziel === 'l2'
+                ? erp_wareneingang_buchen_fremd($item_id, $menge, '', null, $kunde_id, $notiz, $einheit)
+                : erp_wareneingang_buchen($item_id, $menge, '', null, $lief, $notiz, 'frei', $einheit);
+            if (!$cid) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Buchen fehlgeschlagen.'; continue; }
+            $pAuftragId = (int)($_POST['p_auftrag_id'][$i] ?? 0);
+            if ($ziel !== 'l2' && $pAuftragId > 0 && function_exists('erp_charge_auftrag_setzen')) erp_charge_auftrag_setzen((int)$cid, $pAuftragId);
+            $rr = erp_etikett_rollen_anlegen((int)$cid, $rollen);
+            lg_pakete_set((int)$cid, count($rollen));
+            $cc = erp_charge((int)$cid);
+            lg_bewegung_log((int)$cid, 'ein', $menge, $cc['einheit'] ?? null, (string)($cc['item_name'] ?? ''), $notiz . ' (' . (int)$rr['angelegt'] . ' Rolle(n))');
+            if (!empty($rr['fehler'])) $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): ' . implode(' · ', $rr['fehler']);
+            $gebucht[] = (int)$cid;
+            continue;
+        }
+
         // Fertige Kapseln (Bulk): aufs kanonische Bulk-Item der gewählten Rezeptur buchen
         // (statt einen losen Artikel per Name anzulegen). Fehlt das Bulk-Item -> sauber abbrechen.
         if ($warenart === 'fertig' && $rezeptur_id > 0) {
@@ -404,7 +448,7 @@ if ($gebucht):
         <button type="button" class="btn btn-ghost btn-sm" id="weAdd">+ Zeile</button>
       </div>
       <div id="weRows" style="margin-top:var(--sp-3)"></div>
-      <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Leerkapseln/Bulk/Fertige Produkte → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist immer Pflicht. „Aufteilen" je Position: verteilt die Menge gleichmäßig auf die Kartons (z. B. 50 kg / 2 = 25 kg je Karton).</div>
+      <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Leerkapseln/Bulk/Fertige Produkte → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist Pflicht – außer bei <strong>Etikett (Rolle)</strong>: dort wird je Rolle ein Maniso-Inventaraufkleber (7 Ziffern) gescannt, die Menge wird gleichmäßig auf die Rollen verteilt und ist je Rolle änderbar. „Aufteilen" je Position: verteilt die Menge gleichmäßig auf die Kartons (z. B. 50 kg / 2 = 25 kg je Karton).</div>
       <div style="margin-top:var(--sp-4)"><button type="submit" class="btn btn-primary" id="weBuchen">Alle buchen &amp; Blinker anhängen</button></div>
     </div>
   </div>
@@ -459,7 +503,7 @@ if ($gebucht):
 
 <script>
 (function(){
-  var ITEMS = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'f'=>(string)($it['form']??'')], $items), JSON_UNESCAPED_UNICODE) ?>;
+  var ITEMS = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'f'=>(string)($it['form']??''),'r'=>(string)($it['verpackung_rolle']??'')], $items), JSON_UNESCAPED_UNICODE) ?>;
   var KISTEN = <?= json_encode(array_map(fn($k)=>['id'=>(int)$k['id'],'n'=>(string)$k['name'],'b'=>(string)($k['barcode']??''),'bl'=>(string)($k['blinker']??'')], $kisten), JSON_UNESCAPED_UNICODE) ?>;
   var REZ = <?= json_encode(array_map(fn($r)=>[
         'id'=>(int)$r['id'],
@@ -467,9 +511,11 @@ if ($gebucht):
         'bi'=>(int)($r['bulk_item_id']??0),
         'e'=>(string)($r['bulk_einheit']??'')
       ], $rezepturen), JSON_UNESCAPED_UNICODE) ?>;
-  var MATRIX = {rohstoff:{mhd:1,charge:1},leerkapsel:{mhd:1,charge:1},fertig:{mhd:1,charge:1},verkaufsfertig:{mhd:1,charge:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
-  var ARTEN = [['rohstoff','Rohstoff'],['leerkapsel','Leerkapseln'],['fertig','Bulk / lose (Kapseln/Tabletten)'],['verkaufsfertig','Fertiges Produkt (verpackt)'],['verpackung','Verpackung'],['verbrauch','Verbrauch']];
+  var MATRIX = {rohstoff:{mhd:1,charge:1},leerkapsel:{mhd:1,charge:1},fertig:{mhd:1,charge:1},verkaufsfertig:{mhd:1,charge:1},etikett:{mhd:0,charge:0,inventar:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
+  var ARTEN = [['rohstoff','Rohstoff'],['leerkapsel','Leerkapseln'],['fertig','Bulk / lose (Kapseln/Tabletten)'],['verkaufsfertig','Fertiges Produkt (verpackt)'],['etikett','Etikett (Rolle)'],['verpackung','Verpackung'],['verbrauch','Verbrauch']];
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  var KEYC=0;   // fortlaufender Zeilenschlüssel (für die 2D-Rollen-Felder je Etikett-Position)
+  function nf(n){ return (Math.round(n*1000)/1000).toString().replace('.',','); }   // Menge hübsch (deutsch)
 
   // --- Ziel L1/L2 ---
   var kundeWrap=document.getElementById('weKundeWrap'), kunde=document.getElementById('weKunde');
@@ -490,9 +536,11 @@ if ($gebucht):
   function artOptions(sel){ return ARTEN.map(function(a){return '<option value="'+a[0]+'"'+(a[0]===sel?' selected':'')+'>'+a[1]+'</option>';}).join(''); }
   function katLabel(it){
     if(it.f==='kapselhuelle') return 'Leerkapseln';
+    if(it.k==='verpackung' && it.r==='etikett') return 'Etikett';
     var m={rohstoff:'Rohstoff',fertig:'Bulk / lose',verkaufsfertig:'Fertiges Produkt',verpackung:'Verpackung',verbrauch:'Verbrauch'};
     return m[it.k]||it.k||'';
   }
+  function itemArt(it){ return (it.k==='verpackung' && it.r==='etikett') ? 'etikett' : (it.f==='kapselhuelle'?'leerkapsel':it.k); }
   function datalistItems(){ return ITEMS.map(function(it){ var l=katLabel(it); return '<option value="'+esc(it.n)+'">'+(l?esc(l):'')+'</option>'; }).join(''); }
   var dl=document.createElement('datalist'); dl.id='weItemList'; dl.innerHTML=datalistItems(); document.body.appendChild(dl);
   var dlR=document.createElement('datalist'); dlR.id='weRezList';
@@ -501,10 +549,12 @@ if ($gebucht):
 
   function addRow(p){
     p=p||{};
-    var art=(p.form==='kapselhuelle')?'leerkapsel':(p.kategorie||p.warenart||'rohstoff'); if(!MATRIX[art])art='rohstoff';
-    var card=document.createElement('div'); card.className='we-pos';
+    var art=(p.verpackung_rolle==='etikett')?'etikett':((p.form==='kapselhuelle')?'leerkapsel':(p.kategorie||p.warenart||'rohstoff')); if(!MATRIX[art])art='rohstoff';
+    var rowKey=String(++KEYC);
+    var card=document.createElement('div'); card.className='we-pos'; card.setAttribute('data-key',rowKey);
     card.innerHTML=
       '<button type="button" class="btn btn-ghost btn-sm we-del" title="Zeile entfernen">×</button>'+
+      '<input type="hidden" name="p_key[]" value="'+rowKey+'">'+
       '<div class="we-row">'+
         '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" title="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><input type="hidden" name="p_auftrag_id[]" value="'+(p.auftrag_id||0)+'"><div class="we-aehnlich"></div></div>'+
         '<div class="bx-field f-warenart"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
@@ -522,6 +572,15 @@ if ($gebucht):
         '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked title="Angehakt = freigegeben, nicht angehakt = Quarantäne"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
         '<div class="bx-field f-split"><label>Aufteilen</label><input type="checkbox" class="we-split" title="Menge gleichmäßig auf die Kartons verteilen"><input type="hidden" name="p_aufteilen[]" class="we-split-h" value="0"></div>'+
         '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
+        // Etikettenrollen: statt Blinker je Rolle ein Inventaraufkleber (7 Ziffern) + Menge je Rolle.
+        '<div class="we-rollen" style="display:none;flex:1 1 100%">'+
+          '<div class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap">'+
+            '<div class="bx-field" style="margin:0;flex:0 1 110px"><label>Rollen</label><input type="number" class="we-rollenzahl" min="1" step="1" value="1"></div>'+
+            '<div class="muted we-rollen-summe" style="padding-bottom:10px"></div>'+
+          '</div>'+
+          '<div class="we-rollen-liste" style="display:flex;flex-direction:column;gap:8px;margin-top:6px"></div>'+
+          '<div class="muted" style="font-size:12px;margin-top:6px">Je Rolle ein Maniso-Inventaraufkleber scannen (Enter springt weiter). Menge je Rolle ist änderbar – die Summe muss der Gesamtmenge entsprechen.</div>'+
+        '</div>'+
       '</div>';
     rows.appendChild(card);
     // Paketnummern: die ANZAHL der Scan-Felder folgt der Zahl im Feld "Pakete".
@@ -571,7 +630,7 @@ if ($gebucht):
     name.addEventListener('input',function(){
       name.title=name.value;   // voller Text als Tooltip beim Drüberfahren
       var m=ITEMS.filter(function(it){return it.n.toLowerCase()===name.value.trim().toLowerCase();})[0];
-      if(m){ hid.value=m.id; if(!einh.value)einh.value=m.e||''; var a=m.f==='kapselhuelle'?'leerkapsel':m.k; if(MATRIX[a]){art2.value=a;} pflicht(card); }
+      if(m){ hid.value=m.id; if(!einh.value)einh.value=m.e||''; var a=itemArt(m); if(MATRIX[a]){art2.value=a;} pflicht(card); etikettToggle(); }
       else { hid.value=0; }
       zeigeAehnlich(card);
     });
@@ -602,8 +661,57 @@ if ($gebucht):
       if(art2.value==='leerkapsel'){ var e=einh.value.trim().toLowerCase(); if(e===''||['kg','g','l','ml','t'].indexOf(e)>=0) einh.value='Stk'; }
       toggleRez();
       pflicht(card);
+      etikettToggle();
     });
     toggleRez();
+
+    // --- Etikettenrollen: statt Blinker je Rolle ein Inventaraufkleber (7 Ziffern) + Menge je Rolle ---
+    var rollenBox=card.querySelector('.we-rollen'), rollenZahl=card.querySelector('.we-rollenzahl'),
+        rollenListe=card.querySelector('.we-rollen-liste'), rollenSumme=card.querySelector('.we-rollen-summe'),
+        mengeF=card.querySelector('input[name="p_menge[]"]'), blinkerF=card.querySelector('.we-blinker'),
+        feldBlinker=card.querySelector('.f-blinker'), feldPak=card.querySelector('.f-pakete'),
+        feldPaknr=card.querySelector('.f-paketnrn'), feldSplit=card.querySelector('.f-split'),
+        feldCharge=card.querySelector('.f-charge'), feldMhd=card.querySelector('.f-mhd');
+    function mengeWert(v){ return parseFloat(String(v==null?'':v).replace(/\./g,'').replace(',','.'))||0; }
+    function gesamtMenge(){ return mengeWert(mengeF&&mengeF.value); }
+    function rollenSync(){
+      if(!rollenSumme) return;
+      var s=0; rollenListe.querySelectorAll('.we-rolle-menge').forEach(function(i){ s+=mengeWert(i.value); });
+      var ges=gesamtMenge();
+      if(ges>0 && Math.abs(s-ges)>0.5){ rollenSumme.textContent='Summe '+nf(s)+' von '+nf(ges)+' – stimmt noch nicht'; rollenSumme.style.color='var(--err,#b00)'; }
+      else { rollenSumme.textContent='Summe '+nf(s)+(ges>0?(' von '+nf(ges)):''); rollenSumme.style.color=''; }
+    }
+    function renderRollen(n, fokusIdx){
+      if(!rollenListe) return;
+      n=Math.max(1,n|0);
+      var cur=[].map.call(rollenListe.querySelectorAll('.we-rolle-nr'),function(i){return i.value;});
+      var curM=[].map.call(rollenListe.querySelectorAll('.we-rolle-menge'),function(i){return i.value;});
+      var ges=gesamtMenge(), basis=(ges>0)?(Math.floor((ges/n)*1000)/1000):0;
+      rollenListe.innerHTML='';
+      for(var k=0;k<n;k++){
+        var defM=(curM[k]!==undefined&&curM[k]!=='')?curM[k]:(ges>0?(k<n-1?nf(basis):nf(Math.round((ges-basis*(n-1))*1000)/1000)):'');
+        var row=document.createElement('div'); row.className='bx-row'; row.style.gap='8px'; row.style.flexWrap='wrap';
+        row.innerHTML='<input type="text" class="we-rolle-nr lg-code" name="p_rolle_nr['+rowKey+'][]" autocomplete="off" inputmode="numeric" maxlength="7" placeholder="Rolle '+(k+1)+': 7-stellige Nummer scannen" value="'+esc(cur[k]!==undefined?cur[k]:'')+'" style="flex:1 1 220px">'+
+          '<input type="text" class="we-rolle-menge" name="p_rolle_menge['+rowKey+'][]" inputmode="decimal" placeholder="Menge" value="'+esc(defM)+'" style="flex:0 1 120px">';
+        rollenListe.appendChild(row);
+      }
+      var nrs=rollenListe.querySelectorAll('.we-rolle-nr');
+      nrs.forEach(function(inp,idx){ inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); var nx=nrs[idx+1]; if(nx) nx.focus(); } }); });
+      rollenListe.querySelectorAll('.we-rolle-menge').forEach(function(i){ i.addEventListener('input',rollenSync); });
+      rollenSync();
+      if(fokusIdx!=null){ var f=rollenListe.querySelectorAll('.we-rolle-nr')[fokusIdx]; if(f) f.focus(); }
+    }
+    if(rollenZahl) rollenZahl.addEventListener('input',function(){ renderRollen(parseInt(rollenZahl.value,10)||1); });
+    if(mengeF) mengeF.addEventListener('input',function(){ if(art2.value==='etikett') renderRollen(parseInt(rollenZahl&&rollenZahl.value,10)||1); });
+    function etikettToggle(){
+      var an=art2.value==='etikett';
+      if(rollenBox) rollenBox.style.display=an?'':'none';
+      if(feldBlinker) feldBlinker.style.display=an?'none':'';
+      [feldPak,feldPaknr,feldSplit,feldCharge,feldMhd].forEach(function(el){ if(el) el.style.display=an?'none':''; });
+      if(blinkerF) blinkerF.required = an?false:blinkerF.required;
+      if(an){ if(blinkerF) blinkerF.required=false; renderRollen(parseInt(rollenZahl&&rollenZahl.value,10)||1); }
+      else { blinkerPflicht(); }
+    }
     // Aus einer ankommenden Lieferung abgeleitete Rezeptur direkt als "Fertigware/Bulk" vorauswählen.
     if(p.rezeptur_name && art2){
       art2.value='fertig'; toggleRez();
@@ -622,6 +730,7 @@ if ($gebucht):
     // Ist eine Kiste mit Blinker gewählt, den Blinker-Code gleich in die neue Zeile eintragen.
     var bk=kisteBlinker(); if(bk){ var bf=card.querySelector('.we-blinker'); if(bf&&bf.value==='') bf.value=bk; }
     zeigeAehnlich(card);
+    etikettToggle();   // Etikett-Position: Rollenblock zeigen, Blinker/Charge/MHD ausblenden
     return card;
   }
   // Ähnlichkeits-Check: warnt vor Fast-Dubletten (z. B. "Gummi Arabicum 25 kg" vs "… - 25 kg").
@@ -656,7 +765,11 @@ if ($gebucht):
   // Kiste gewählt -> Blinker je Position optional (die Kiste blinkt beim Finden).
   function blinkerPflicht(){
     var sel=document.getElementById('weKiste'), frei = sel && sel.value!=='';
-    document.querySelectorAll('.we-blinker').forEach(function(b){ b.required=!frei; });
+    document.querySelectorAll('.we-blinker').forEach(function(b){
+      var card=b.closest('.we-pos'), art=card&&card.querySelector('.we-art');
+      if(art && art.value==='etikett'){ b.required=false; return; }   // Etikett: kein Blinker, Inventaraufkleber je Rolle
+      b.required=!frei;
+    });
     document.querySelectorAll('.f-blinker label').forEach(function(l){ l.innerHTML = frei ? 'Blinker <span class="muted">(optional – von der Kiste)</span>' : 'Blinker *'; });
   }
   // Blinker-Code der aktuell gewählten Kiste (leer, wenn keine Kiste / kein Blinker).

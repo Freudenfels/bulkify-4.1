@@ -429,6 +429,32 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
   </div>
 </div>
 
+<?php // Etikettenrollen: je Rolle ein Inventaraufkleber (7 Ziffern) + Menge, optional einem Auftrag zugeordnet.
+$rollen = function_exists('erp_charge_rollen') ? erp_charge_rollen($id) : [];
+if ($rollen): ?>
+<div class="bx-panel" style="margin-bottom:var(--sp-5)">
+  <h2 style="margin-top:0">Etikettenrollen <span class="muted">(Inventaraufkleber)</span></h2>
+  <p class="muted" style="margin-top:0">Je Rolle ein Maniso-Inventaraufkleber. In der Produktion wird die verwendete Rolle einem Auftrag zugeordnet (Rückverfolgung).</p>
+  <div class="bx-tablewrap">
+    <table class="bx-table lg-karten">
+      <thead><tr><th>Inventaraufkleber</th><th>Rolle</th><th>Menge</th><th>Status</th><th>Auftrag</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($rollen as $g): $zu = (int)($g['auftrag_id'] ?? 0) > 0; ?>
+        <tr>
+          <td data-label="Inventaraufkleber" class="lg-code"><?= h((string)$g['inventar_nr']) ?></td>
+          <td data-label="Rolle"><?= (int)$g['nummer'] ?> / <?= (int)$g['anzahl_gesamt'] ?></td>
+          <td data-label="Menge"><?= h(menge_txt($g['menge_verfuegbar'])) ?> <?= h((string)($g['einheit'] ?? '')) ?></td>
+          <td data-label="Status"><?= h(['voll'=>'voll','angebrochen'=>'angebrochen','leer'=>'leer'][(string)$g['status']] ?? (string)$g['status']) ?><?= (string)$g['standort'] === 'produktion' ? ' · in Produktion' : '' ?></td>
+          <td data-label="Auftrag"><?= $zu ? h((string)($g['auftrag_nr'] ?? ('#' . (int)$g['auftrag_id']))) : '<span class="muted">frei</span>' ?></td>
+          <td data-label="" style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=gebinde&inv=<?= rawurlencode((string)$g['inventar_nr']) ?>">Details</a></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+<?php endif; ?>
+
 <div class="bx-panel">
   <h2>Blinker</h2>
   <?php if ($in_kiste): ?>

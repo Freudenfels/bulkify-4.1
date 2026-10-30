@@ -35,6 +35,25 @@ if ($soll === '' || $given === '' || !hash_equals($soll, $given)) sout(['ok' => 
 
 // --- Charge-ID aus ?id= ODER aus gescanntem Text/URL ?code= ---
 $id = (int) ($_REQUEST['id'] ?? 0);
+
+// Inventaraufkleber einer Etikettenrolle (genau 7 Ziffern) -> Rolle statt Charge. Muss VOR der
+// Ziffern-aus-Code-Erkennung laufen, sonst würde die 7-stellige Nummer als Charge-ID gelesen.
+$codeRaw = trim((string) ($_REQUEST['code'] ?? ''));
+if ($id <= 0 && preg_match('/^\d{7}$/', $codeRaw) && function_exists('erp_rolle_per_inventar')) {
+    $r = erp_rolle_per_inventar($codeRaw);
+    if ($r) sout([
+        'ok' => true, 'found' => true, 'typ' => 'etikettenrolle',
+        'inventar_nr' => $codeRaw,
+        'id'          => (int) $r['charge_id'],
+        'produkt'     => (string) ($r['item_name'] ?? ''),
+        'charge'      => (string) ($r['charge_nr'] ?? ''),
+        'menge'       => (float)  ($r['menge_verfuegbar'] ?? 0),
+        'einheit'     => (string) ($r['einheit'] ?? ''),
+        'status'      => (string) ($r['status'] ?? ''),
+        'auftrag'     => (string) ($r['auftrag_nr'] ?? ''),
+        'ort'         => 'Etikettenrolle ' . $codeRaw,
+    ]);
+}
 if ($id <= 0) {
     $code = (string) ($_REQUEST['code'] ?? '');
     if     ($code !== '' && preg_match('/[?&]id=(\d+)/', $code, $m)) $id = (int) $m[1];

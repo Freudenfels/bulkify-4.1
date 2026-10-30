@@ -47,6 +47,27 @@ if (!$out && function_exists('leiste_per_code') && function_exists('erp_charge_v
     }
 }
 
+// Inventaraufkleber (genau 7 Ziffern) -> Etikettenrolle direkt öffnen (kein Blinker, sondern eine Rolle).
+if (!$out && function_exists('erp_inventar_norm')) {
+    $inv = erp_inventar_norm($q);
+    if ($inv !== '') {
+        $r = function_exists('erp_rolle_per_inventar') ? erp_rolle_per_inventar($inv) : null;
+        if ($r) {
+            $out[] = [
+                'charge_id'    => (int)$r['charge_id'],
+                'name'         => (string)($r['item_name'] ?? ''),
+                'artikelnummer'=> (string)($r['artikelnummer'] ?? ''),
+                'charge_nr'    => (string)($r['charge_nr'] ?? ''),
+                'menge'        => rtrim(rtrim(number_format((float)($r['menge_verfuegbar'] ?? 0), 3, ',', '.'), '0'), ','),
+                'einheit'      => (string)($r['einheit'] ?? ''),
+                'leiste_id'    => null, 'leiste' => null,
+                'ort'          => 'Etikettenrolle ' . $inv,
+                'href'         => '?p=gebinde&inv=' . rawurlencode($inv),
+            ];
+        }
+    }
+}
+
 if (!$out) {
     foreach (erp_chargen_suche($q, 12) as $c) { $out[] = $zeile($c); }
 }

@@ -23,3 +23,11 @@ Verknüpfung läuft nur über `lg_gebinde.charge_id`. Erreicht von der Charge-De
 
 ## Teil 4: Bestands-Gebinde-Resolver (?bg=)
 Zusätzlicher Modus `?p=gebinde&bg=<charge_gebinde.id>`: Scan-Auflösung des Wareneingangs-Etiketts auf GENAU dieses Bestands-Gebinde (Restmenge, Ort, Status + Charge/Lieferant/MHD). Getrennt vom GB-Identitäts-System (`?nr=`, lg_gebinde).
+
+## Etikettenrolle per Inventaraufkleber (?inv=)
+Modus `?p=gebinde&inv=<7 Ziffern>`: löst eine **Etikettenrolle** über ihren Maniso-Inventaraufkleber auf
+(`erp_rolle_per_inventar()`): Etikett, Menge auf der Rolle, Status, Charge, Lieferant, Kunde und **zugeordneter
+Auftrag**. Die Rolle ist ein `charge_gebinde`-Datensatz mit `inventar_nr` (siehe Wareneingang). Aktionen (POST):
+`rolle_zuordnen` → `erp_rolle_auftrag_zuordnen()` (ordnet die Rolle dem Auftrag der Charge zu, Standort→Produktion),
+`rolle_freigeben` → `erp_rolle_freigeben()` (Zuordnung lösen, zurück nach Lager 1). Die 7-stellige Nummer wird aus
+Suche (`?p=suche`/`?p=finden`) und Scan-Endpunkt (`public/lager/scan.php`) hierher geleitet.

@@ -32,3 +32,19 @@ alle Produkte. Grundlage für Versicherungswert (EK, sonst VK/2) und Gewicht.
 
 ## Teil 4: Gebinde je Charge (charge_gebinde)
 `erp_charge_gebinde_liste($charge_id)`, `erp_charge_gebinde($id)` (mit Charge/Item), `erp_charge_gebinde_anlegen($charge_id,$anzahl)` – Raw-SQL über die geteilte Dashboard-Tabelle `charge_gebinde` (Bestand je Karton: Gewicht/Restmenge/Ort). Anlegen ist idempotent (nur wenn noch keine existieren), teilt die Chargenmenge gleichmäßig (letzter Karton = Rest; Stück ganzzahlig). Fehlt die Tabelle (nur Dashboard legt sie an), no-op.
+
+## Etikettenrollen: Inventaraufkleber statt Blinker
+Etiketten (`item.kategorie='verpackung'` + `verpackung_rolle='etikett'`, Warenart `etikett`) bekommen beim
+Wareneingang je Rolle einen Maniso-**Inventaraufkleber** (7 Ziffern) statt eines Blinkers. Eine Rolle = ein
+`charge_gebinde`-Datensatz mit der Spalte `inventar_nr` (+ `auftrag_id`/`pa_id`/`verbraucht_am`, vom Dashboard-Schema
+angelegt). Die Spaltenprüfung `erp_gebinde_spalte_da()` degradiert sauber, solange das Dashboard-Schema noch nicht lief.
+- `erp_inventar_norm($s)` – nur Ziffern, genau 7 Stellen, sonst `''`.
+- `erp_inventar_frei($nr,$ausser=0)` – frei, wenn keine aktive (status≠'leer') Rolle die Nummer trägt.
+- `erp_etikett_rollen_anlegen($charge_id,$rollen)` – `$rollen=[['nr'=>…,'menge'=>…],…]`, Menge je Rolle frei.
+- `erp_charge_rollen($charge_id)` – Rollen einer Charge (mit Auftragsnummer) für die Anzeige.
+- `erp_rolle_per_inventar($nr)` – eine Rolle per Inventarnummer (Produkt/Charge/Lieferant/Kunde/Auftrag).
+- `erp_etikett_rollen_fuer_item($item_id,$auftrag_id=0)` – freie Rollen eines Etiketts (Produktions-Auswahl).
+- `erp_rolle_auftrag_zuordnen($gebinde_id,$auftrag_id,$pa_id=0)` / `erp_rolle_freigeben($gebinde_id)` – Rolle einem
+  Auftrag zuordnen (Standort→Produktion, Rückverfolgung) bzw. Zuordnung lösen.
+Warenart-Matrix: `erp_warenart_regeln($kat,$form,$rolle)` liefert für Etikett `inventar_pflicht=true` (kein MHD/Charge,
+sofort frei). `erp_item_warenart_setzen($id,'etikett')` setzt `kategorie=verpackung`+`verpackung_rolle=etikett`.

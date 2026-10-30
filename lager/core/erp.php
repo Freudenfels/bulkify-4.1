@@ -497,7 +497,7 @@ function erp_wareneingang_buchen_fremd(int $item_id, float $menge, string $charg
 function erp_charge_voll(int $id): ?array {
     if (!tabelle_da('charge')) return null;
     $lief = tabelle_da('lieferanten');
-    $sql = "SELECT c.*, i.name AS item_name, i.artikelnummer, i.kategorie, i.form, i.notiz AS item_notiz"
+    $sql = "SELECT c.*, i.name AS item_name, i.artikelnummer, i.kategorie, i.form, i.verpackung_rolle, i.notiz AS item_notiz"
          . ($lief ? ", l.firma AS lieferant, l.lieferantennummer AS lieferant_nr, l.id AS lieferant_id2" : "") . "
             FROM charge c JOIN item i ON i.id=c.item_id"
          . ($lief ? " LEFT JOIN lieferanten l ON l.id=c.lieferant_id" : "") . "
@@ -574,7 +574,7 @@ function erp_items_eingang(): array {
     $hatGesperrt = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME='gesperrt'");
     $w = $hatGesperrt ? ' AND gesperrt=0' : '';
-    return all("SELECT id, name, kategorie, einheit, form FROM item
+    return all("SELECT id, name, kategorie, einheit, form, verpackung_rolle FROM item
                 WHERE kategorie IN ('rohstoff','verpackung','verbrauch','fertig','verkaufsfertig')$w
                 ORDER BY name");
 }
@@ -681,7 +681,7 @@ function erp_lieferant_finden_oder_anlegen(string $name): int {
 // Ein Item knapp (Name/Einheit/Kategorie/Form) – fuer Anzeige nach der Auswahl.
 function erp_item_basis(int $id): ?array {
     if (!tabelle_da('item')) return null;
-    return one("SELECT id, name, einheit, kategorie, form FROM item WHERE id=?", [$id]);
+    return one("SELECT id, name, einheit, kategorie, form, verpackung_rolle FROM item WHERE id=?", [$id]);
 }
 
 // Neuen Artikel direkt aus dem Lager anlegen (Wareneingang „neue Sache einpflegen"). Minimal: Name,
@@ -1135,6 +1135,111 @@ function erp_charge_gebinde_anlegen(int $charge_id, int $anzahl): int {
     return $anzahl;
 }
 
+// --- Etikettenrollen: Inventaraufkleber statt Blinker (Spec Etiketten) ------------------------
+// Eine Etikettenrolle = ein charge_gebinde-Datensatz mit der gescannten 7-stelligen Maniso-Nummer.
+// charge_gebinde ist eine GETEILTE Dashboard-Tabelle; die Zusatzspalten legt das Dashboard an. Fehlt die
+// Spalte noch (frischer Deploy, bevor das Dashboard-Schema lief), degradieren die Funktionen sauber.
+function erp_gebinde_spalte_da(string $spalte): bool {
+    static $cache = [];
+    if (array_key_exists($spalte, $cache)) return $cache[$spalte];
+    return $cache[$spalte] = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='charge_gebinde' AND COLUMN_NAME=?", [$spalte]) > 0;
+}
+// Inventarnummer normalisieren: nur Ziffern, genau 7 Stellen – sonst leer (ungültig).
+function erp_inventar_norm(string $s): string {
+    $d = preg_replace('/\D+/', '', trim($s));
+    return (strlen($d) === 7) ? $d : '';
+}
+// Ist die Inventarnummer noch frei (keine aktive = nicht leere Rolle trägt sie bereits)? $ausser = eigene id ignorieren.
+function erp_inventar_frei(string $nr, int $ausser = 0): bool {
+    $nr = erp_inventar_norm($nr);
+    if ($nr === '' || !tabelle_da('charge_gebinde') || !erp_gebinde_spalte_da('inventar_nr')) return true;
+    $n = (int) scalar("SELECT COUNT(*) FROM charge_gebinde WHERE inventar_nr=? AND status<>'leer' AND id<>?", [$nr, $ausser]);
+    return $n === 0;
+}
+// N Etikettenrollen für eine Charge anlegen. $rollen = [['nr'=>'1234567','menge'=>2000.0], …].
+// Menge je Rolle ist frei wählbar (Rollen sind oft unterschiedlich voll). Rückgabe: ['ok','angelegt','fehler'=>[]].
+function erp_etikett_rollen_anlegen(int $charge_id, array $rollen): array {
+    if ($charge_id <= 0 || !tabelle_da('charge_gebinde')) return ['ok' => false, 'angelegt' => 0, 'fehler' => ['Keine Charge.']];
+    if (!erp_gebinde_spalte_da('inventar_nr')) return ['ok' => false, 'angelegt' => 0, 'fehler' => ['Inventar-Spalte fehlt (Dashboard-Schema noch nicht aktualisiert).']];
+    $c = one("SELECT einheit, standort FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return ['ok' => false, 'angelegt' => 0, 'fehler' => ['Charge nicht gefunden.']];
+    $einheit = (string)($c['einheit'] ?? '');
+    $ort     = (string)($c['standort'] ?? 'lager1') ?: 'lager1';
+    $von = (int) scalar("SELECT COALESCE(MAX(nummer),0) FROM charge_gebinde WHERE charge_id=?", [$charge_id]);
+    $jetzt = jetzt_utc(); $angelegt = 0; $fehler = []; $k = $von;
+    $n = count($rollen);
+    foreach ($rollen as $r) {
+        $nr = erp_inventar_norm((string)($r['nr'] ?? ''));
+        $menge = (float)($r['menge'] ?? 0);
+        if ($nr === '')            { $fehler[] = 'Ungültige Inventarnummer (7 Ziffern).'; continue; }
+        if (!erp_inventar_frei($nr)) { $fehler[] = 'Inventarnummer ' . $nr . ' ist schon vergeben.'; continue; }
+        $k++;
+        q("INSERT INTO charge_gebinde (charge_id,nummer,anzahl_gesamt,menge,menge_verfuegbar,einheit,standort,status,inventar_nr,angelegt)
+           VALUES (?,?,?,?,?,?,?,'voll',?,?)",
+          [$charge_id, $k, $von + $n, $menge, $menge, $einheit, $ort, $nr, $jetzt]);
+        $angelegt++;
+    }
+    if ($angelegt > 0) q("UPDATE charge_gebinde SET anzahl_gesamt=(SELECT COUNT(*) FROM (SELECT id FROM charge_gebinde WHERE charge_id=?) t) WHERE charge_id=?", [$charge_id, $charge_id]);
+    return ['ok' => $angelegt > 0, 'angelegt' => $angelegt, 'fehler' => $fehler];
+}
+// Etikettenrollen einer Charge (nur die mit Inventarnummer), inkl. zugeordnetem Auftrag.
+function erp_charge_rollen(int $charge_id): array {
+    if ($charge_id <= 0 || !tabelle_da('charge_gebinde') || !erp_gebinde_spalte_da('inventar_nr')) return [];
+    $auf = tabelle_da('auftrag');
+    return all("SELECT g.*" . ($auf ? ", a.nummer AS auftrag_nr" : "") . "
+                FROM charge_gebinde g" . ($auf ? " LEFT JOIN auftrag a ON a.id=g.auftrag_id" : "") . "
+                WHERE g.charge_id=? AND g.inventar_nr IS NOT NULL ORDER BY g.nummer, g.id", [$charge_id]);
+}
+// Eine Rolle per Inventarnummer auflösen – mit Produkt, Charge, Lieferant, Kunde und zugeordnetem Auftrag.
+function erp_rolle_per_inventar(string $nr): ?array {
+    $nr = erp_inventar_norm($nr);
+    if ($nr === '' || !tabelle_da('charge_gebinde') || !erp_gebinde_spalte_da('inventar_nr')) return null;
+    $lief = tabelle_da('lieferanten');
+    $auf  = tabelle_da('auftrag');
+    return one("SELECT g.*, c.charge_nr, c.item_id, c.fremd_kunde_id, c.wareneingang, c.mhd,
+                       i.name AS item_name, i.artikelnummer"
+             . ($lief ? ", l.firma AS lieferant, l.lieferantennummer AS lieferant_nr" : "")
+             . ($auf  ? ", a.nummer AS auftrag_nr" : "") . "
+                FROM charge_gebinde g
+                JOIN charge c ON c.id=g.charge_id
+                JOIN item i   ON i.id=c.item_id"
+             . ($lief ? " LEFT JOIN lieferanten l ON l.id=c.lieferant_id" : "")
+             . ($auf  ? " LEFT JOIN auftrag a ON a.id=g.auftrag_id" : "") . "
+                WHERE g.inventar_nr=? ORDER BY (g.status<>'leer') DESC, g.id DESC LIMIT 1", [$nr]);
+}
+// Freie Etikettenrollen für ein Etikett-Item (für die Produktions-Auswahl „welche Rolle nimmst du").
+// $auftrag_id>0: nur Rollen, die frei sind ODER bereits diesem Auftrag zugeordnet wurden.
+function erp_etikett_rollen_fuer_item(int $item_id, int $auftrag_id = 0): array {
+    if ($item_id <= 0 || !tabelle_da('charge_gebinde') || !erp_gebinde_spalte_da('inventar_nr')) return [];
+    $w = $auftrag_id > 0 ? " AND (g.auftrag_id IS NULL OR g.auftrag_id=?)" : " AND g.auftrag_id IS NULL";
+    $p = [$item_id]; if ($auftrag_id > 0) $p[] = $auftrag_id;
+    return all("SELECT g.*, c.charge_nr FROM charge_gebinde g JOIN charge c ON c.id=g.charge_id
+                WHERE c.item_id=? AND g.inventar_nr IS NOT NULL AND g.status<>'leer'$w
+                ORDER BY g.angelegt, g.id", $p);
+}
+// Eine Rolle einem Auftrag/PA zuordnen (Produktion nimmt diese Rolle). Standort -> produktion.
+// Rückgabe: ['ok'=>bool,'meldung'=>string].
+function erp_rolle_auftrag_zuordnen(int $gebinde_id, int $auftrag_id, int $pa_id = 0): array {
+    if (!tabelle_da('charge_gebinde') || !erp_gebinde_spalte_da('inventar_nr')) return ['ok' => false, 'meldung' => 'Etikettenrollen sind noch nicht freigeschaltet.'];
+    $g = one("SELECT * FROM charge_gebinde WHERE id=? AND inventar_nr IS NOT NULL", [$gebinde_id]);
+    if (!$g) return ['ok' => false, 'meldung' => 'Rolle nicht gefunden.'];
+    if ((string)$g['status'] === 'leer') return ['ok' => false, 'meldung' => 'Diese Rolle ist aufgebraucht.'];
+    $belegt = (int)($g['auftrag_id'] ?? 0);
+    if ($belegt && $auftrag_id && $belegt !== $auftrag_id) return ['ok' => false, 'meldung' => 'Diese Rolle ist bereits einem anderen Auftrag zugeordnet.'];
+    q("UPDATE charge_gebinde SET auftrag_id=?, pa_id=?, standort='produktion', verbraucht_am=? WHERE id=?",
+      [$auftrag_id ?: null, $pa_id ?: null, jetzt_utc(), $gebinde_id]);
+    return ['ok' => true, 'meldung' => 'Rolle ' . (string)$g['inventar_nr'] . ' dem Auftrag zugeordnet.'];
+}
+// Zuordnung einer Rolle wieder lösen (falsch gescannt) – zurück nach Lager 1, Auftrag/PA entfernt.
+function erp_rolle_freigeben(int $gebinde_id): array {
+    if (!tabelle_da('charge_gebinde') || !erp_gebinde_spalte_da('inventar_nr')) return ['ok' => false, 'meldung' => 'Etikettenrollen sind noch nicht freigeschaltet.'];
+    $g = one("SELECT inventar_nr FROM charge_gebinde WHERE id=? AND inventar_nr IS NOT NULL", [$gebinde_id]);
+    if (!$g) return ['ok' => false, 'meldung' => 'Rolle nicht gefunden.'];
+    q("UPDATE charge_gebinde SET auftrag_id=NULL, pa_id=NULL, standort='lager1', verbraucht_am=NULL WHERE id=?", [$gebinde_id]);
+    return ['ok' => true, 'meldung' => 'Rolle ' . (string)$g['inventar_nr'] . ' wieder freigegeben.'];
+}
+
 // Lieferant einer Charge setzen/aendern (per Name: finden oder neu anlegen). Nur eigener Bestand.
 function erp_charge_lieferant_setzen(int $charge_id, string $name): array {
     if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Chargen vorhanden.'];
@@ -1168,6 +1273,7 @@ function erp_warenart_defs(): array {
         'leerkapsel'     => ['label' => 'Leerkapseln',             'kategorie' => 'rohstoff',       'form' => 'kapselhuelle'],
         'fertig'         => ['label' => 'Bulk / lose (Kapseln/Tabletten)', 'kategorie' => 'fertig',   'form' => ''],
         'verkaufsfertig' => ['label' => 'Fertiges Produkt (verpackt)', 'kategorie' => 'verkaufsfertig', 'form' => ''],
+        'etikett'        => ['label' => 'Etikett (Rolle)',         'kategorie' => 'verpackung',     'form' => '', 'rolle' => 'etikett'],
         'verpackung'     => ['label' => 'Verpackung',              'kategorie' => 'verpackung',     'form' => ''],
         'verbrauch'      => ['label' => 'Verbrauch / Betriebsmittel', 'kategorie' => 'verbrauch',   'form' => ''],
     ];
@@ -1179,6 +1285,15 @@ function erp_item_warenart_setzen(int $item_id, string $warenart): bool {
     if (!tabelle_da('item') || $item_id <= 0) return false;
     $def = erp_warenart_defs()[$warenart] ?? null;
     if (!$def) return false;
+    // Etikett (Rolle): Kategorie verpackung + Verpackungs-Rolle 'etikett' – daran erkennt der Wareneingang,
+    // dass statt eines Blinkers ein Inventaraufkleber je Rolle gefragt wird.
+    if (!empty($def['rolle'])) {
+        $hatRolle = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME='verpackung_rolle'") > 0;
+        if ($hatRolle) q("UPDATE item SET kategorie=?, verpackung_rolle=? WHERE id=?", [$def['kategorie'], $def['rolle'], $item_id]);
+        else           q("UPDATE item SET kategorie=? WHERE id=?", [$def['kategorie'], $item_id]);
+        return true;
+    }
     if ($def['form'] !== '') {
         q("UPDATE item SET kategorie=?, form=? WHERE id=?", [$def['kategorie'], $def['form'], $item_id]);
     } else {
@@ -1199,6 +1314,8 @@ function erp_charge_warenart_setzen(int $charge_id, string $warenart): array {
 function erp_item_warenart(array $itemrow): string {
     if (((string)($itemrow['form'] ?? '')) === 'kapselhuelle') return 'leerkapsel';
     $k = (string)($itemrow['kategorie'] ?? '');
+    // Etikett erkennt man an der Verpackungs-Rolle, nicht an der Kategorie (die ist 'verpackung').
+    if ($k === 'verpackung' && ((string)($itemrow['verpackung_rolle'] ?? '')) === 'etikett') return 'etikett';
     return isset(erp_warenart_defs()[$k]) ? $k : ($k === 'verkaufsfertig' ? 'verkaufsfertig' : 'rohstoff');
 }
 
@@ -1302,7 +1419,7 @@ function erp_item_suchen(string $name, int $limit = 6): array {
     $esc = fn(string $s): string => str_replace(['=', '%', '_'], ['==', '=%', '=_'], $s);
     $enth = '%' . $esc($name) . '%';
     $anf  = $esc($name) . '%';
-    return all("SELECT id, name, kategorie, einheit, form FROM item
+    return all("SELECT id, name, kategorie, einheit, form, verpackung_rolle FROM item
                 WHERE kategorie IN ('rohstoff','verpackung','verbrauch','fertig','verkaufsfertig')$w
                   AND name LIKE ? ESCAPE '='
                 ORDER BY (name=?) DESC, (name LIKE ? ESCAPE '=') DESC, CHAR_LENGTH(name), name
@@ -1313,10 +1430,14 @@ function erp_item_suchen(string $name, int $limit = 6): array {
 // $kategorie = item.kategorie, $form = item.form ('kapselhuelle' = Leerkapseln).
 // Rueckgabe: ['mhd_pflicht'=>bool, 'charge_pflicht'=>bool, 'quarantaene'=>bool].
 // (Die vom Nutzer gewuenschte Matrix. Ein Schalter je Artikel als Ausnahme kommt spaeter.)
-function erp_warenart_regeln(string $kategorie, string $form = ''): array {
+// 'inventar_pflicht' => true: statt eines Blinkers wird je Rolle ein Inventaraufkleber gescannt (nur Etiketten).
+function erp_warenart_regeln(string $kategorie, string $form = '', string $rolle = ''): array {
+    // Etikett (verpackung + Rolle 'etikett'): kein MHD/keine Charge, sofort frei – aber Inventaraufkleber Pflicht.
+    if ($kategorie === 'verpackung' && $rolle === 'etikett')
+        return ['mhd_pflicht' => false, 'charge_pflicht' => false, 'quarantaene' => false, 'inventar_pflicht' => true];
     if ($form === 'kapselhuelle')
-        return ['mhd_pflicht' => true, 'charge_pflicht' => true, 'quarantaene' => true];
-    return match ($kategorie) {
+        return ['mhd_pflicht' => true, 'charge_pflicht' => true, 'quarantaene' => true, 'inventar_pflicht' => false];
+    $r = match ($kategorie) {
         'rohstoff'              => ['mhd_pflicht' => true,  'charge_pflicht' => true,  'quarantaene' => true],
         'fertig', 'verkaufsfertig' => ['mhd_pflicht' => true,  'charge_pflicht' => true,  'quarantaene' => true],
         'kapsel'               => ['mhd_pflicht' => true,  'charge_pflicht' => true,  'quarantaene' => true],
@@ -1324,6 +1445,8 @@ function erp_warenart_regeln(string $kategorie, string $form = ''): array {
         'verbrauch'            => ['mhd_pflicht' => false, 'charge_pflicht' => false, 'quarantaene' => false],
         default                => ['mhd_pflicht' => false, 'charge_pflicht' => false, 'quarantaene' => false],
     };
+    $r['inventar_pflicht'] = false;
+    return $r;
 }
 
 // Eine Lieferschein-Position einem bestehenden Artikel zuordnen (oder als "neu" markieren).
@@ -1348,14 +1471,16 @@ function erp_position_zuordnen(array $pos): array {
     $exakt = $treffer && mb_strtolower(trim((string)$treffer['name'])) === mb_strtolower(trim((string)($pos['name'] ?? '')));
     $kat = $exakt ? (string)$treffer['kategorie'] : ((string)($pos['warenart'] ?? '') ?: 'rohstoff');
     $form = $exakt ? (string)($treffer['form'] ?? '') : '';
+    $rolle = $exakt ? (string)($treffer['verpackung_rolle'] ?? '') : '';
     $pos['item_id']    = $exakt ? (int)$treffer['id'] : 0;
     $pos['item_name']  = $exakt ? (string)$treffer['name'] : (string)($pos['name'] ?? '');
     $pos['kategorie']  = $kat;
     $pos['form']       = $form;
+    $pos['verpackung_rolle'] = $rolle;
     if (($pos['einheit'] ?? '') === '' && $exakt) $pos['einheit'] = (string)$treffer['einheit'];
     $pos['einheit']    = erp_einheit_norm((string)($pos['einheit'] ?? ''));   // einheitliche Einheit (Stk, kg, …)
     $pos['kandidaten'] = $kandidaten;
-    $pos['regeln']     = erp_warenart_regeln($kat, $form);
+    $pos['regeln']     = erp_warenart_regeln($kat, $form, $rolle);
     return $pos;
 }
 
