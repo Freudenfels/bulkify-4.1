@@ -10,6 +10,29 @@ $a   = $id ? one("SELECT af.*, i.name AS item_name, i.artikelnummer, i.einheit A
                   FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
                   WHERE af.id=? AND af.lieferant_id=?", [$id, $lid]) : null;
 
+// Rohstoffe, zu denen der Lieferant beim Angebot eine Unterlage (CoA ODER Spezifikation) liefern muss:
+// bei Fremdfertigung JEDER eingesetzte Rohstoff der Rezeptur, sonst der eine angefragte Rohstoff.
+// Nur Rohstoffe mit echtem Katalog-Eintrag (item_id) – Freitext-Zutaten ohne Artikel lassen sich nicht belegen.
+// Rückgabe: [ item_id => ['name'=>…, 'hat_dok'=>bool], … ]. 'hat_dok' = schon am Rohstoff hinterlegt (zählt).
+function lief_anfrage_pflicht_rohstoffe(array $a): array {
+    $ids   = [];
+    $rezId = (int)($a['rezeptur_id'] ?? 0);
+    if ($rezId > 0) {
+        foreach (all("SELECT DISTINCT z.item_id FROM rezeptur_zutat z
+                      WHERE z.rezeptur_id=? AND z.item_id IS NOT NULL AND z.item_id>0", [$rezId]) as $r)
+            $ids[] = (int)$r['item_id'];
+    }
+    if (!$ids && (int)($a['item_id'] ?? 0) > 0) $ids[] = (int)$a['item_id'];
+    $out = [];
+    foreach (array_values(array_unique($ids)) as $iid) {
+        $name = (string) scalar("SELECT name FROM item WHERE id=?", [$iid]);
+        if ($name === '') continue;
+        $hat = (int) scalar("SELECT COUNT(*) FROM dokument WHERE objekt_typ='item' AND objekt_id=? AND typ IN ('spec','coa','beides','analyse')", [$iid]) > 0;
+        $out[$iid] = ['name' => $name, 'hat_dok' => $hat];
+    }
+    return $out;
+}
+
 if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
     $fehler = '';
@@ -22,52 +45,72 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($aktion === 'angebot' && $angGesperrt) {
         $fehler = lp_t('angebot_gesperrt');
     } elseif ($aktion === 'angebot') {
-        // Die erste Zeile ist der Hauptpreis mit der Menge, für die er gilt – sie zählt als
-        // erste Staffel. Danach kommen die Zeilen, die der Lieferant selbst angehängt hat.
-        $staffeln = [];
-        // Die Schreibweise richtet sich nach der Sprache des Lieferanten: deutsch 250.000,
-        // englisch und chinesisch 250,000.
-        $spr = lp_sprache();
-        $hauptMenge = zahl_lesen((string)($_POST['menge_haupt'] ?? ''), true, $spr);
-        $hauptPreis = zahl_lesen((string)($_POST['preis'] ?? ''), false, $spr);
-        // Leere "ab Menge" => der Hauptpreis gilt ab 1 (nicht verwerfen). So zaehlt der eingetragene Preis immer.
-        if ($hauptPreis > 0) $staffeln[] = [$hauptMenge > 0 ? $hauptMenge : 1, $hauptPreis];
-        foreach (($_POST['s_menge'] ?? []) as $i2 => $m)
-            $staffeln[] = [zahl_lesen((string)$m, true, $spr), zahl_lesen((string)($_POST['s_preis'][$i2] ?? ''), false, $spr)];
-        $fehler = lieferant_angebot_speichern($id, $lid,
-            $hauptPreis,
-            trim((string)($_POST['einheit_roh'] ?? $_POST['einheit'] ?? '')),
-            ($_POST['mindestmenge'] ?? '') !== '' ? zahl_lesen((string)$_POST['mindestmenge'], true, $spr) : null,
-            ($_POST['lieferzeit'] ?? '') !== '' ? (int)$_POST['lieferzeit'] : null,
-            (string)($_POST['notiz'] ?? ''), $staffeln, (int)($_POST['preis_basis'] ?? 1),
-            ['incoterm' => (string)($_POST['incoterm'] ?? ''), 'versandart' => (string)($_POST['versandart'] ?? ''),
-             'variante' => (string)($_POST['variante'] ?? ''),
-             'kapsel_vorschlag_id' => (int)($_POST['kapsel_vorschlag_id'] ?? 0),
-             'kapsel_vorschlag_grund' => (string)($_POST['kapsel_vorschlag_grund'] ?? '')]);
-        // Antwort da -> aus einer Rezepturanfrage angelegten Rohstoff-Entwurf in den Katalog heben.
-        if ($fehler === '' && $a['item_id']) rohstoff_entwurf_aktivieren((int)$a['item_id']);
-        if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);
-        // Optional mit dem Preisangebot mitgeschickte CoA/Spezifikation ablegen – bei Rohstoff-Anfragen
-        // am Artikel (volle KI-Auswertung), sonst am Lieferanten mit Bezug zur Anfrage. Die KI läuft
-        // NACH der Antwort (mehrsprachig -> bulkify-Format), damit der Lieferant nicht wartet.
-        if ($fehler === '') {
-            require_once BX_ROOT . '/core/lieferant_dateien.php';
-            $hatItem = !empty($a['item_id']);
-            $bezug   = (string)($a['nummer'] ?? ('LA-' . $id)) . (!empty($a['item_name']) ? ' · ' . $a['item_name'] : '');
-            $unterlagen = [];
-            foreach (['spec_datei' => 'spec', 'coa_datei' => 'coa'] as $fk => $typ) {
-                $did = $hatItem
-                    ? lieferant_unterlage_speichern($lid, $fk, $typ, 'item', (int)$a['item_id'])
-                    : lieferant_unterlage_speichern($lid, $fk, $typ, 'lieferant', 0, strtoupper($typ) . ' zu ' . $bezug);
-                if ($did) $unterlagen[] = $did;
-            }
-            if ($unterlagen) {
-                header('Location: ?p=lieferant_anfrage&id=' . $id . '&ok=1&unterlagen=' . count($unterlagen));
-                if (function_exists('ki_antwort_abschliessen')) ki_antwort_abschliessen();
-                require_once BX_ROOT . '/core/spec_ki.php';
-                foreach ($unterlagen as $did) spec_ki_nach_upload($did);
-                if ($hatItem) rohstoff_entwurf_aktivieren((int)$a['item_id']);
-                exit;
+        // CoA/Spezifikation ist je EINGESETZTEM Rohstoff Pflicht (nicht eine Unterlage fürs Produkt).
+        // Der Preis wird nur gespeichert, wenn zu JEDEM Rohstoff etwas vorliegt – schon am Rohstoff
+        // hinterlegt ODER jetzt mitgeschickt. CoA oder Spec, eins genügt.
+        $pflicht = lief_anfrage_pflicht_rohstoffe($a);
+        $fehlend = [];
+        foreach ($pflicht as $iid => $info) {
+            $fk  = 'rohstoff_datei_' . $iid;
+            $neu = !empty($_FILES[$fk]['name']) && ($_FILES[$fk]['error'] ?? 1) === UPLOAD_ERR_OK;
+            if (!$info['hat_dok'] && !$neu) $fehlend[] = $info['name'];
+        }
+        if ($fehlend) {
+            $fehler = lp_t('roh_unterlage_fehlt') . ' ' . implode(', ', $fehlend);
+        } else {
+            // Die erste Zeile ist der Hauptpreis mit der Menge, für die er gilt – sie zählt als
+            // erste Staffel. Danach kommen die Zeilen, die der Lieferant selbst angehängt hat.
+            $staffeln = [];
+            // Die Schreibweise richtet sich nach der Sprache des Lieferanten: deutsch 250.000,
+            // englisch und chinesisch 250,000.
+            $spr = lp_sprache();
+            $hauptMenge = zahl_lesen((string)($_POST['menge_haupt'] ?? ''), true, $spr);
+            $hauptPreis = zahl_lesen((string)($_POST['preis'] ?? ''), false, $spr);
+            // Leere "ab Menge" => der Hauptpreis gilt ab 1 (nicht verwerfen). So zaehlt der eingetragene Preis immer.
+            if ($hauptPreis > 0) $staffeln[] = [$hauptMenge > 0 ? $hauptMenge : 1, $hauptPreis];
+            foreach (($_POST['s_menge'] ?? []) as $i2 => $m)
+                $staffeln[] = [zahl_lesen((string)$m, true, $spr), zahl_lesen((string)($_POST['s_preis'][$i2] ?? ''), false, $spr)];
+            $fehler = lieferant_angebot_speichern($id, $lid,
+                $hauptPreis,
+                trim((string)($_POST['einheit_roh'] ?? $_POST['einheit'] ?? '')),
+                ($_POST['mindestmenge'] ?? '') !== '' ? zahl_lesen((string)$_POST['mindestmenge'], true, $spr) : null,
+                ($_POST['lieferzeit'] ?? '') !== '' ? (int)$_POST['lieferzeit'] : null,
+                (string)($_POST['notiz'] ?? ''), $staffeln, (int)($_POST['preis_basis'] ?? 1),
+                ['incoterm' => (string)($_POST['incoterm'] ?? ''), 'versandart' => (string)($_POST['versandart'] ?? ''),
+                 'variante' => (string)($_POST['variante'] ?? ''),
+                 'kapsel_vorschlag_id' => (int)($_POST['kapsel_vorschlag_id'] ?? 0),
+                 'kapsel_vorschlag_grund' => (string)($_POST['kapsel_vorschlag_grund'] ?? '')]);
+            // Antwort da -> aus einer Rezepturanfrage angelegten Rohstoff-Entwurf in den Katalog heben.
+            if ($fehler === '' && $a['item_id']) rohstoff_entwurf_aktivieren((int)$a['item_id']);
+            if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);
+            // Unterlagen ablegen: je Rohstoff am jeweiligen Artikel (volle KI-Auswertung). Ohne bekannte
+            // Rohstoffe (Fertigprodukt ohne Rezeptur) wie bisher optionale CoA/Spec am Lieferanten. Die KI
+            // läuft NACH der Antwort (mehrsprachig -> bulkify-Format), damit der Lieferant nicht wartet.
+            if ($fehler === '') {
+                require_once BX_ROOT . '/core/lieferant_dateien.php';
+                $unterlagen = [];
+                if ($pflicht) {
+                    foreach ($pflicht as $iid => $info) {
+                        $fk = 'rohstoff_datei_' . $iid;
+                        if (empty($_FILES[$fk]['name']) || ($_FILES[$fk]['error'] ?? 1) !== UPLOAD_ERR_OK) continue;
+                        $typ = ((string)($_POST['rohstoff_typ_' . $iid] ?? 'spec') === 'coa') ? 'coa' : 'spec';
+                        $did = lieferant_unterlage_speichern($lid, $fk, $typ, 'item', $iid);
+                        if ($did) $unterlagen[] = ['did' => $did, 'item' => $iid];
+                    }
+                } else {
+                    $bezug = (string)($a['nummer'] ?? ('LA-' . $id)) . (!empty($a['item_name']) ? ' · ' . $a['item_name'] : '');
+                    foreach (['spec_datei' => 'spec', 'coa_datei' => 'coa'] as $fk => $typ) {
+                        $did = lieferant_unterlage_speichern($lid, $fk, $typ, 'lieferant', 0, strtoupper($typ) . ' zu ' . $bezug);
+                        if ($did) $unterlagen[] = ['did' => $did, 'item' => 0];
+                    }
+                }
+                if ($unterlagen) {
+                    header('Location: ?p=lieferant_anfrage&id=' . $id . '&ok=1&unterlagen=' . count($unterlagen));
+                    if (function_exists('ki_antwort_abschliessen')) ki_antwort_abschliessen();
+                    require_once BX_ROOT . '/core/spec_ki.php';
+                    foreach ($unterlagen as $u) { spec_ki_nach_upload((int)$u['did']); if ($u['item'] > 0) rohstoff_entwurf_aktivieren((int)$u['item']); }
+                    exit;
+                }
             }
         }
     } elseif ($aktion === 'nachricht') {
@@ -378,17 +421,34 @@ if (!$a):
       </script>
       <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><textarea name="notiz" rows="3"><?= h($ang['notiz'] ?? '') ?></textarea></div>
       <?php $coaReq = (int)($a['coa_gewuenscht'] ?? 0) === 1;
-        // E3: Bei Rohstoff-Anfragen ist die Spec Pflicht – außer es liegt am Artikel schon eine (dann nicht erneut nötig).
-        $specVorhanden = !empty($a['item_id']) && (int) scalar("SELECT COUNT(*) FROM dokument WHERE objekt_typ='item' AND objekt_id=? AND typ IN ('spec','coa','beides','analyse')", [(int)$a['item_id']]) > 0;
-        $specPflicht = ((string)($a['art'] ?? '') === 'rohstoff') && !$specVorhanden; ?>
-      <div class="bx-panel" style="margin:4px 0 14px;padding:12px 14px;<?= ($coaReq || $specPflicht) ? 'border-color:var(--gruen)' : '' ?>">
+        // CoA/Spezifikation je EINGESETZTEM Rohstoff (nicht eine Unterlage fürs Produkt). Schon am Rohstoff
+        // hinterlegte Unterlagen zählen – dann kein erneuter Upload nötig. CoA oder Spec, eins genügt.
+        $pflicht = lief_anfrage_pflicht_rohstoffe($a); ?>
+      <?php if ($pflicht): ?>
+      <div class="bx-panel" style="margin:4px 0 14px;padding:12px 14px;border-color:var(--gruen)">
+        <div style="font-weight:600;margin-bottom:2px"><?= h(lp_t('roh_unterlage_titel')) ?><?php if ($coaReq): ?> · <span style="color:var(--gruen)"><?= h(lp_t('coa_angefordert')) ?></span><?php endif; ?></div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px"><?= h(lp_t('roh_unterlage_hinweis')) ?></div>
+        <div class="bx-tablewrap"><table class="bx-table"><tbody>
+        <?php foreach ($pflicht as $iid => $info): ?>
+          <tr>
+            <td style="min-width:160px"><?= h($info['name']) ?></td>
+            <td style="width:110px"><?php if ($info['hat_dok']): ?><span style="color:var(--gruen)"><?= h(lp_t('roh_liegt_vor')) ?></span><?php else: ?><span class="muted"><?= h(lp_t('roh_fehlt')) ?></span><?php endif; ?></td>
+            <td style="width:140px"><select name="rohstoff_typ_<?= (int)$iid ?>"><option value="spec"><?= h(lp_t('spezifikation')) ?></option><option value="coa">CoA</option></select></td>
+            <td><input type="file" name="rohstoff_datei_<?= (int)$iid ?>" accept="application/pdf,image/*"<?= $info['hat_dok'] ? '' : ' required' ?>></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody></table></div>
+      </div>
+      <?php else: ?>
+      <div class="bx-panel" style="margin:4px 0 14px;padding:12px 14px;<?= $coaReq ? 'border-color:var(--gruen)' : '' ?>">
         <div style="font-weight:600;margin-bottom:2px"><?= h(lp_t('coa_spec_titel')) ?><?php if ($coaReq): ?> · <span style="color:var(--gruen)"><?= h(lp_t('coa_angefordert')) ?></span><?php endif; ?></div>
-        <div class="muted" style="font-size:12px;margin-bottom:10px"><?= h(lp_t('coa_spec_hinweis')) ?><?php if ($specPflicht): ?> <strong style="color:var(--gruen)"><?= h(lp_t('spec_pflicht')) ?></strong><?php endif; ?></div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px"><?= h(lp_t('coa_spec_hinweis')) ?></div>
         <div class="bx-row" style="gap:16px;flex-wrap:wrap">
           <div class="bx-field" style="margin:0"><label>CoA</label><input type="file" name="coa_datei" accept="application/pdf,image/*"></div>
-          <div class="bx-field" style="margin:0"><label><?= h(lp_t('spezifikation')) ?><?= $specPflicht ? ' *' : '' ?></label><input type="file" name="spec_datei" accept="application/pdf,image/*"<?= $specPflicht ? ' required' : '' ?>></div>
+          <div class="bx-field" style="margin:0"><label><?= h(lp_t('spezifikation')) ?></label><input type="file" name="spec_datei" accept="application/pdf,image/*"></div>
         </div>
       </div>
+      <?php endif; ?>
       <button class="btn btn-primary" type="submit"><?= h(lp_t('angebot_abgeben')) ?></button>
     </form>
     <?php endif; ?>
