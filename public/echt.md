@@ -1,6 +1,8 @@
 # echt.php – öffentliche Echtheits-/Qualitätsprüfung
 
-**Aufruf:** `/echt.php?t=<token>` – kein Login. Das Token steht als QR-Code auf dem bulkify-CoA/Spec einer Charge (erzeugt in `core/echtheit.php`).
+**Aufruf:** `/echt.php?t=<token>` (Charge, QR auf dem CoA/Spec) oder `/echt.php?p=<token>` (Produkt, QR auf dem PIB) – kein Login. Tokens aus `core/echtheit.php`.
+
+Bei `?p=` zeigt die Seite das **Produkt** (Name, Darreichungsform) + die Liste der **bestätigten Chargen** mit Link auf deren Charge-Prüfung (`?t=`). Rest (Zustände, Technik) wie unten.
 
 Zeigt im bulkify-Look (dunkelgrün/lime, keine Emojis) einen **Qualitätsnachweis zur Charge**:
 - **Echtheit bestätigt** (grünes Badge) + Rohstoff (Anzeige-Name), Charge, MHD, Herkunft, Spezifikations-Nr.

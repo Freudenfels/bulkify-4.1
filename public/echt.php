@@ -17,9 +17,14 @@ header('Referrer-Policy: no-referrer');
 $e = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 $fmtD = fn($d) => $d ? date('d.m.Y', strtotime((string) $d)) : '';
 
-$token = isset($_GET['t']) ? (string) $_GET['t'] : '';
-$daten = null;
-try { $daten = charge_echt_daten($token); } catch (\Throwable $ex) { error_log('echt.php: ' . $ex->getMessage()); $daten = null; }
+// Zwei Einstiege: ?t=<token> = Charge (CoA/Spec-QR), ?p=<token> = Produkt (PIB-QR).
+$tProd  = isset($_GET['p']) ? (string) $_GET['p'] : '';
+$modus  = $tProd !== '' ? 'produkt' : 'charge';
+$token  = $modus === 'produkt' ? $tProd : (isset($_GET['t']) ? (string) $_GET['t'] : '');
+$daten  = null;
+try {
+    $daten = $modus === 'produkt' ? produkt_echt_daten($token) : charge_echt_daten($token);
+} catch (\Throwable $ex) { error_log('echt.php: ' . $ex->getMessage()); $daten = null; }
 
 $firmaName = function_exists('beleg_firma') ? (string) (beleg_firma()['name'] ?? 'Maniso GmbH') : 'Maniso GmbH';
 
@@ -93,6 +98,33 @@ elseif (!empty($daten['gesperrt']))        { $zustand = 'gesperrt'; }
     <span class="badge warn"><span class="dot"></span>Nicht mehr gültig</span>
     <h1>Dieser Nachweis wurde zurückgezogen</h1>
     <p class="muted">Der Code war einmal gültig, ist aber nicht mehr freigegeben. Bitte wenden Sie sich an <?= $e($firmaName) ?>.</p>
+  </div>
+
+<?php elseif ($modus === 'produkt'): ?>
+  <div class="card">
+    <span class="badge ok"><span class="dot"></span>Echtes bulkify-Produkt</span>
+    <h1><?= $e($daten['name']) ?></h1>
+    <p class="muted">Bestätigt durch <?= $e($daten['firma']) ?> · Marke bulkify<?= $daten['form'] !== '' ? ' · ' . $e($daten['form']) : '' ?></p>
+
+    <?php if (!empty($daten['chargen'])): ?>
+      <div class="sec">Bestätigte Chargen</div>
+      <table>
+        <thead><tr><th>Charge</th><th>Mindesthaltbar bis</th><th>Nachweis</th></tr></thead>
+        <tbody>
+        <?php foreach ($daten['chargen'] as $ch): ?>
+          <tr>
+            <td><?= $e(($ch['charge_nr'] ?? '') !== '' ? $ch['charge_nr'] : '–') ?></td>
+            <td><?= $e($fmtD($ch['mhd'] ?? null) ?: '–') ?></td>
+            <td><a href="echt.php?t=<?= $e(rawurlencode((string) $ch['echt_token'])) ?>">Charge prüfen</a></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    <?php else: ?>
+      <p class="note">Für dieses Produkt sind derzeit keine einzelnen Chargen-Nachweise hinterlegt. Der Nachweis je Charge liegt dem jeweiligen Produkt als Analysenzertifikat bzw. Spezifikation bei.</p>
+    <?php endif; ?>
+
+    <p class="note">Diese Seite bestätigt, dass es sich um ein von <?= $e($daten['firma']) ?> (Marke bulkify) hergestelltes Produkt handelt.</p>
   </div>
 
 <?php else: ?>

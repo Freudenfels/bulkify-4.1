@@ -16,6 +16,11 @@ Der Link enthält **kein verschlüsseltes Datenpaket**, sondern ein **zufällige
 - `echt_url(string $token)` / `echt_basis_url()` – Linkbau; Basis aus `mail_basis_url()` (Einstellung `portal_url`, sonst aktueller Host).
 - `charge_echt_daten(string $token): ?array` – **kundensicheres** Bündel für die Prüfseite: `name` (Anzeige-Name), `charge_nr`, `mhd`, `herkunft`, `spec`, `allergene`, `werte[]` (Parameter/Spezifikation/Ergebnis/Methode), `ist_coa`, `firma`. Rückgabe `null` = Token unbekannt, `['gesperrt'=>true]` = widerrufen.
 
+## Produkt-Ebene (QR im PIB)
+Das PIB gibt es pro **Produkt** (nicht pro Charge), darum ein eigenes Token auf `produkt.echt_token`:
+- `produkt_echt_token(int $produkt_id)` / `produkt_echt_url(int $produkt_id)` – analog zur Charge, eigener Link-Parameter `?p=` (`echt_url_produkt()`).
+- `produkt_echt_daten(string $token): ?array` – Produktname (Kundenname bevorzugt), Darreichungsform und die **Liste der ausgestellten Chargen** dieses Produkts: Chargen mit eigenem, nicht gesperrtem Token, verknüpft über Produktionsauftrag (`charge.pa_id`) **oder** Fertigware-Item (`item.produkt_id`). Jede Zeile verlinkt auf die Charge-Prüfseite (`?t=`).
+
 ## Sicherheit / Datenschutz
 Die Prüfseite zeigt **nur** die kundensicheren Felder (wie das bulkify-CoA) – **nie** Lieferant, EK, Menge, Wareneingang, Quarantäne-/Lagerstatus. Da das Token nur auf einem bereits ausgehändigten Dokument steht, entsteht kein neues Datenleck. `echt_gesperrt` ist der Not-Aus.
 
@@ -23,6 +28,6 @@ Die Prüfseite zeigt **nur** die kundensicheren Felder (wie das bulkify-CoA) –
 Ein QR bestätigt „diese Angaben hat bulkify für diese Charge veröffentlicht" und ist nicht erratbar – er schützt **nicht** gegen das Abfotografieren/Kopieren des Codes auf eine Fälschung. Dafür bräuchte es Seriennummern je Einheit + Scanzähler (möglicher späterer Ausbau).
 
 ## Wo es hängt
-- QR im Dokument: `core/pdf_spec.php` (`spec_qr()`, `spec_echt_panel()`) in `build_coa_pdf()` (pro Charge).
-- Öffentliche Seite: `public/echt.php`.
-- Spalten: `charge.echt_token`, `charge.echt_gesperrt` (in `core/schema.php`, Index `idx_echt_token`).
+- QR im Dokument: `core/pdf_spec.php` (`spec_qr()`, `spec_qr_panel()`, `spec_echt_panel()`) in `build_coa_pdf()` (pro Charge) und `core/pdf_pib.php` (pro Produkt).
+- Öffentliche Seite: `public/echt.php` (`?t=` Charge, `?p=` Produkt).
+- Spalten: `charge.echt_token`/`charge.echt_gesperrt` und `produkt.echt_token`/`produkt.echt_gesperrt` (in `core/schema.php`, Indizes `idx_echt_token`).

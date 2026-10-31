@@ -7,6 +7,8 @@ Stellt dem Kunden ein **Produktinformationsblatt** bereit, damit er sein **Etike
 
 **Kundensicher:** Das PIB darf NIE auf Zukauf/Bulk hinweisen (siehe Memory „Kunde kein Zukauf verraten"). Es enthält nur die label-relevanten Angaben.
 
+**Echtheits-/Qualitäts-QR (Produktebene):** Das Auto-PIB (`pib_pdf_render`, nur bei echtem Produkt mit `produkt_id>0`) bekommt am Ende über `spec_qr_panel()` ein Feld „Echtheit online prüfen" mit QR-Code. Der QR führt auf die öffentliche Produktseite `public/echt.php?p=<token>` (Token aus `produkt_echt_url()` in `core/echtheit.php`), die das Produkt bestätigt und seine ausgestellten Chargen listet. Fehlt der Link, bleibt das PIB unverändert.
+
 ## Funktionen
 - `pib_pdf_bauen($produkt_id)` – erzeugt das Auto-PIB als PDF-Bytes (MiniPDF + die `spec_*`-Layouthelfer aus `pdf_spec.php`). Inhalt: Identität (Produkt, Darreichungsform, Einheiten pro Packung, Stand), **Zutaten je Einheit**, **Nährwert-/Wirkstoffdeklaration** (je Einheit, mit % NRV), plus Pflichtangaben-Hinweis für die Etikettengestaltung.
 - `pib_naehr($rezeptur_id)` – aggregiert die Wirkstoffe der Rezeptur (rezeptur_zutat × item_wirkstoff × naehrstoff) zu Nährwerten je Einheit. Nutzt die zentrale `wirkstoff_mg_je_mg()`, deckt also auch **I.E.-basierte** Gehalte (Vitamin D/A/E) ab; die Nährwerttabelle zeigt neben mg/µg zusätzlich die **I.E.** und die **Etiketteinheit** (µg RE, mg α-TE …), wo am Nährstoff hinterlegt. Core-lokal (die Portal-Funktion `pt_naehr` ist portal-lokal).

@@ -381,6 +381,15 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
     }
     $y += 6;
     $p->text($L, $y, 'Fertige Etikettendatei bitte im Kundenportal hochladen.', 8, false, [110, 110, 108]); $y += 14;
+
+    // Echtheits-/Qualitäts-QR (Produktebene): führt auf die öffentliche Produktseite mit den
+    // bestätigten Chargen. Nur bei echtem Produkt (nicht beim Rezeptur-PIB).
+    if ($produkt_id > 0 && function_exists('produkt_echt_url') && function_exists('spec_qr_panel')) {
+        $pu = produkt_echt_url($produkt_id);
+        if ($pu !== '') $y = spec_qr_panel($p, $y, $pu, 'Echtheit online prüfen',
+            'QR-Code scannen – bestätigt dieses bulkify-Produkt und seine Chargen-Nachweise.');
+    }
+
     spec_fuss($p, $y + 16);
     return $p->output();
 }

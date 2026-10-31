@@ -495,6 +495,9 @@ function init_schema(): void {
         aktualisiert DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         KEY idx_kunde (kunde_id), KEY idx_rezeptur (rezeptur_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Echtheits-/Qualitaets-QR auf Produktebene (QR im PIB -> oeffentliche Produktseite public/echt.php?p=<token>).
+    ensure_column('produkt', 'echt_token', "VARCHAR(32) NULL");
+    ensure_column('produkt', 'echt_gesperrt', "TINYINT(1) NOT NULL DEFAULT 0");
 
     // angebot: das Team setzt hier die Preise (einzige Preisquelle). Kunde bestätigt eine Staffel.
     $pdo->exec("CREATE TABLE IF NOT EXISTS angebot (
@@ -2176,6 +2179,7 @@ function init_schema(): void {
     // Zusätzliche Indizes für häufige Lookups, die sonst Volltabellen-Scans wären (v. a. auf beta mit
     // mehr Daten spürbar). Idempotent über ensure_index. Reihenfolge/Spaltenwahl aus den echten Abfragen.
     ensure_index('charge', 'idx_echt_token', 'echt_token');              // Echtheits-Pruefseite: Lookup WHERE echt_token=?
+    ensure_index('produkt', 'idx_echt_token', 'echt_token');             // Produkt-Pruefseite: Lookup WHERE echt_token=?
     ensure_index('charge', 'idx_auftrag', 'auftrag_id');                 // Fertigware/Zukauf: WHERE auftrag_id=?
     ensure_index('charge', 'idx_fremd', 'fremd_kunde_id');               // Fremdlager: Bestand je Kunde / Ausschluss aus unserem Bestand
     ensure_index('item', 'idx_name', 'name');                           // Rohstoff-/Artikel-Lookup: WHERE name=?

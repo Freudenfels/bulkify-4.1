@@ -106,3 +106,80 @@ function charge_echt_daten(string $token): ?array {
         'firma'     => (string) ($firma['name'] ?? 'Maniso GmbH'),
     ];
 }
+
+// ---------------------------------------------------------------------------
+// Produkt-Ebene (QR im PIB) – fuehrt auf die Produktseite mit den bestaetigten Chargen.
+// ---------------------------------------------------------------------------
+
+// Oeffentlicher Produkt-Link zu einem Token (eigener Parameter ?p=, getrennt von der Charge ?t=).
+function echt_url_produkt(string $token): string {
+    return echt_basis_url() . '/echt.php?p=' . rawurlencode($token);
+}
+
+// Token eines Produkts holen – lazy, kollisionssicher, nie werfend.
+function produkt_echt_token(int $produkt_id): string {
+    if ($produkt_id <= 0) return '';
+    try {
+        $cur = (string) scalar("SELECT echt_token FROM produkt WHERE id=?", [$produkt_id]);
+        if ($cur !== '') return $cur;
+        for ($try = 0; $try < 5; $try++) {
+            $tok = echt_token_neu();
+            if ((int) scalar("SELECT COUNT(*) FROM produkt WHERE echt_token=?", [$tok]) > 0) continue;
+            q("UPDATE produkt SET echt_token=? WHERE id=? AND (echt_token IS NULL OR echt_token='')", [$tok, $produkt_id]);
+            $cur = (string) scalar("SELECT echt_token FROM produkt WHERE id=?", [$produkt_id]);
+            if ($cur !== '') return $cur;
+        }
+        return $cur;
+    } catch (\Throwable $e) {
+        return '';
+    }
+}
+
+// Pruef-Link eines Produkts (erzeugt bei Bedarf das Token). '' wenn nicht moeglich.
+function produkt_echt_url(int $produkt_id): string {
+    $tok = produkt_echt_token($produkt_id);
+    return $tok !== '' ? echt_url_produkt($tok) : '';
+}
+
+// Datenbündel für die öffentliche Produktseite – NUR kundensichere Felder.
+// Rückgabe wie charge_echt_daten: null (unbekannt), ['gesperrt'=>true], sonst Daten inkl. Liste der
+// für dieses Produkt ausgestellten (= mit eigenem QR versehenen, nicht gesperrten) Chargen.
+function produkt_echt_daten(string $token): ?array {
+    $token = trim($token);
+    if ($token === '' || !preg_match('/^[0-9A-Za-z]{10,32}$/', $token)) return null;
+    try {
+        $pr = one("SELECT p.id, p.name, p.echt_gesperrt,
+                          COALESCE(NULLIF(p.kundenname,''), p.name) AS anzeige,
+                          r.darreichungsform
+                   FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                   WHERE p.echt_token=?", [$token]);
+    } catch (\Throwable $e) {
+        return null;
+    }
+    if (!$pr) return null;
+    if ((int) ($pr['echt_gesperrt'] ?? 0) === 1) return ['gesperrt' => true];
+
+    // Ausgestellte Chargen dieses Produkts: über Produktionsauftrag ODER Fertigware-Item verknüpft,
+    // und nur solche mit eigenem, nicht gesperrtem Echtheits-Token (= wir haben dafür ein CoA/QR ausgegeben).
+    $chargen = [];
+    try {
+        $chargen = all("SELECT DISTINCT c.charge_nr, c.mhd, c.echt_token
+                        FROM charge c
+                        WHERE c.echt_token IS NOT NULL AND c.echt_token <> '' AND c.echt_gesperrt=0
+                          AND ( c.pa_id IN (SELECT id FROM produktionsauftrag WHERE produkt_id=?)
+                             OR c.item_id IN (SELECT id FROM item WHERE produkt_id=?) )
+                        ORDER BY c.mhd DESC, c.id DESC", [(int) $pr['id'], (int) $pr['id']]);
+    } catch (\Throwable $e) { $chargen = []; }
+
+    $formLbl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks',
+                'pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','gel'=>'Gel','gummi'=>'Fruchtgummi'][$pr['darreichungsform'] ?? ''] ?? '';
+    $firma = function_exists('beleg_firma') ? beleg_firma() : ['name' => 'Maniso GmbH'];
+
+    return [
+        'gesperrt' => false,
+        'name'     => (string) $pr['anzeige'],
+        'form'     => $formLbl,
+        'chargen'  => $chargen,
+        'firma'    => (string) ($firma['name'] ?? 'Maniso GmbH'),
+    ];
+}

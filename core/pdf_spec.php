@@ -151,10 +151,9 @@ function spec_qr(MiniPDF $p, float $x, float $y, float $size, string $text): voi
         if ($m[$yy][$xx]) $p->rect($x + ($xx + $quiet) * $mod, $y + ($yy + $quiet) * $mod, $mod + 0.25, $mod + 0.25, [20, 20, 20]);
 }
 
-// „Echtheit online prüfen"-Feld: QR rechts, Text links. Erzeugt bei Bedarf das Charge-Token.
-// Gibt $y unverändert zurück, wenn kein Link gebaut werden kann (z. B. Spalte fehlt).
-function spec_echt_panel(MiniPDF $p, float $y, int $charge_id): float {
-    $url = function_exists('charge_echt_url') ? charge_echt_url($charge_id) : '';
+// Allgemeines „Echtheit online prüfen"-Feld: QR rechts, Titel + Unterzeile + Kurz-Link links.
+// Gibt $y unverändert zurück, wenn $url leer ist.
+function spec_qr_panel(MiniPDF $p, float $y, string $url, string $titel, string $sub): float {
     if ($url === '') return $y;
     $L = 40; $R = 555; $qs = 78; $boxH = $qs + 24;
     $y += 18;
@@ -164,10 +163,17 @@ function spec_echt_panel(MiniPDF $p, float $y, int $charge_id): float {
     $qx = $R - 12 - $qs; $qy = $y + 12;
     spec_qr($p, $qx, $qy, $qs, $url);
     $tx = $L + 16; $ty = $y + 28;
-    $p->text($tx, $ty, 'Echtheit online prüfen', 11, true, SPEC_CHARCOAL);
-    $p->text($tx, $ty + 16, 'QR-Code scannen – bestätigt Rohstoff, Charge und Analysenwerte dieser Lieferung.', 8.5, false, SPEC_GRAU);
+    $p->text($tx, $ty, $titel, 11, true, SPEC_CHARCOAL);
+    $p->text($tx, $ty + 16, $sub, 8.5, false, SPEC_GRAU);
     $p->text($tx, $ty + 30, $p->fit($url, $qx - $tx - 12, 8, false), 8, false, SPEC_INK);
     return $y + $boxH;
+}
+
+// CoA/Spec (pro Charge): erzeugt bei Bedarf das Charge-Token und zeichnet das Prüf-Feld.
+function spec_echt_panel(MiniPDF $p, float $y, int $charge_id): float {
+    $url = function_exists('charge_echt_url') ? charge_echt_url($charge_id) : '';
+    return spec_qr_panel($p, $y, $url, 'Echtheit online prüfen',
+        'QR-Code scannen – bestätigt Rohstoff, Charge und Analysenwerte dieser Lieferung.');
 }
 
 // QS-Freigabeblock: links „erstellt", rechts Freigabe mit Signatur + Stempel („Tabea Albers").
