@@ -1235,6 +1235,10 @@ function init_schema(): void {
     // Standort der Ware (Spec 6.2): lager1 (Hauptlager) | produktion (entnommen, in der Fertigung) | lager2 (Fremdlager).
     // Blinker bleibt dran, nur der Standort wechselt. Default lager1. Genutzt von der Lager-/Produktions-Logik.
     ensure_column('charge', 'standort', "VARCHAR(20) NOT NULL DEFAULT 'lager1'");
+    // Echtheits-/Qualitaets-QR: zufaelliges, nicht erratbares Token fuer die oeffentliche Pruefseite (public/echt.php).
+    // Wird lazy bei Bedarf erzeugt (core/echtheit.php). echt_gesperrt=1 -> Pruefseite zeigt "nicht bestaetigt" (widerrufbar).
+    ensure_column('charge', 'echt_token', "VARCHAR(32) NULL");
+    ensure_column('charge', 'echt_gesperrt', "TINYINT(1) NOT NULL DEFAULT 0");
 
     // Teil 4: Gebinde je Charge (z. B. „Karton 1 von 5, je 20 kg"). Bestand je Gebinde (Nummer, Restmenge, Ort).
     // Alte Chargen ohne Gebinde werden wie EIN Gebinde mit der aktuellen Menge behandelt (siehe charge_gebinde_liste).
@@ -2171,6 +2175,7 @@ function init_schema(): void {
 
     // Zusätzliche Indizes für häufige Lookups, die sonst Volltabellen-Scans wären (v. a. auf beta mit
     // mehr Daten spürbar). Idempotent über ensure_index. Reihenfolge/Spaltenwahl aus den echten Abfragen.
+    ensure_index('charge', 'idx_echt_token', 'echt_token');              // Echtheits-Pruefseite: Lookup WHERE echt_token=?
     ensure_index('charge', 'idx_auftrag', 'auftrag_id');                 // Fertigware/Zukauf: WHERE auftrag_id=?
     ensure_index('charge', 'idx_fremd', 'fremd_kunde_id');               // Fremdlager: Bestand je Kunde / Ausschluss aus unserem Bestand
     ensure_index('item', 'idx_name', 'name');                           // Rohstoff-/Artikel-Lookup: WHERE name=?

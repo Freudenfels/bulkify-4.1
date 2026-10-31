@@ -9,6 +9,8 @@
 // unseren Stammdaten (Artikel) bzw. den Analysewerten der Charge.
 require_once __DIR__ . '/lib/minipdf.php';
 require_once __DIR__ . '/pdf_beleg.php';   // beleg_firma()
+require_once __DIR__ . '/qr.php';          // qr_matrix() – Echtheits-QR
+require_once __DIR__ . '/echtheit.php';    // charge_echt_url() – Token/Link der Charge
 
 // Farbwelt (wie das Skill-Design)
 const SPEC_CHARCOAL = [35, 35, 35];
@@ -137,6 +139,35 @@ function spec_table(MiniPDF $p, float $y, array $colDefs, array $rows): float {
     }
     $p->rectStroke($L, $y0, $W, $y - $y0, 0.6, SPEC_LINE); $verticals($y0, $y);
     return $y;
+}
+
+// QR-Code (Echtheits-Link) als schwarze Module auf weißem Grund zeichnen. $size = Kantenlänge in pt.
+function spec_qr(MiniPDF $p, float $x, float $y, float $size, string $text): void {
+    $m = function_exists('qr_matrix') ? qr_matrix($text) : null;
+    if (!$m) return;
+    $n = count($m); $quiet = 2; $mod = $size / ($n + 2 * $quiet);
+    $p->rect($x, $y, $size, $size, [255, 255, 255]);
+    for ($yy = 0; $yy < $n; $yy++) for ($xx = 0; $xx < $n; $xx++)
+        if ($m[$yy][$xx]) $p->rect($x + ($xx + $quiet) * $mod, $y + ($yy + $quiet) * $mod, $mod + 0.25, $mod + 0.25, [20, 20, 20]);
+}
+
+// „Echtheit online prüfen"-Feld: QR rechts, Text links. Erzeugt bei Bedarf das Charge-Token.
+// Gibt $y unverändert zurück, wenn kein Link gebaut werden kann (z. B. Spalte fehlt).
+function spec_echt_panel(MiniPDF $p, float $y, int $charge_id): float {
+    $url = function_exists('charge_echt_url') ? charge_echt_url($charge_id) : '';
+    if ($url === '') return $y;
+    $L = 40; $R = 555; $qs = 78; $boxH = $qs + 24;
+    $y += 18;
+    if ($y + $boxH > 790) { $p->addPage(); $y = 48; }
+    $p->rect($L, $y, $R - $L, $boxH, SPEC_ALT);
+    $p->rectStroke($L, $y, $R - $L, $boxH, 0.6, SPEC_LINE);
+    $qx = $R - 12 - $qs; $qy = $y + 12;
+    spec_qr($p, $qx, $qy, $qs, $url);
+    $tx = $L + 16; $ty = $y + 28;
+    $p->text($tx, $ty, 'Echtheit online prüfen', 11, true, SPEC_CHARCOAL);
+    $p->text($tx, $ty + 16, 'QR-Code scannen – bestätigt Rohstoff, Charge und Analysenwerte dieser Lieferung.', 8.5, false, SPEC_GRAU);
+    $p->text($tx, $ty + 30, $p->fit($url, $qx - $tx - 12, 8, false), 8, false, SPEC_INK);
+    return $y + $boxH;
 }
 
 // QS-Freigabeblock: links „erstellt", rechts Freigabe mit Signatur + Stempel („Tabea Albers").
@@ -313,6 +344,9 @@ function build_coa_pdf(int $charge_id): ?string {
     }
 
     if (!empty($c['allergene'])) { $y = spec_h($p, $y, 'Allergene'); $y = spec_grid($p, $y, [['Allergene', (string)$c['allergene']]]); }
+
+    // Echtheits-/Qualitäts-QR: führt auf die öffentliche Prüfseite dieser Charge.
+    $y = spec_echt_panel($p, $y, $charge_id);
 
     $y += 16;
     // Neutrale Konformitätsaussage – KEIN interner Quarantäne-/Freigabestatus auf dem Kundendokument.

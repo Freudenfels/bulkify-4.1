@@ -14,6 +14,8 @@ Die Unterlagen der Vorlieferanten kommen auf **deren** Briefpapier. Die geben wi
 
 **Nicht erklärt ist nicht „nein":** Felder ohne Wert stehen als „–" im Dokument, nicht als Verneinung.
 
+**Echtheits-/Qualitäts-QR (pro Charge):** `build_coa_pdf()` fügt über `spec_echt_panel()` ein Feld „Echtheit online prüfen" mit QR-Code + Kurz-Link ein. Der QR führt auf die öffentliche Prüfseite `public/echt.php` zu genau dieser Charge (Token aus `core/echtheit.php`, gezeichnet via `spec_qr()` + `core/qr.php`). Fehlt der Link (z. B. Spalte noch nicht da), bleibt das PDF unverändert. Der item-Ebene-Spec (`build_spec_pdf`) trägt bewusst **keinen** QR – Echtheit ist chargenbezogen.
+
 ## Wo es auftaucht
 - Intern: `?p=spec_bulkify&id=<item_id>` und `?p=coa_bulkify&id=<charge_id>` (Rollen production, einkauf, labor, admin). Der CoA-Knopf steht in der Chargen-Tabelle des Rohstoffs.
 - Kundenportal: `?p=portal&token=…&v=spec_pdf&rid=<item_id>` – Panel **Spezifikation** am Rohstoff. Steht immer zur Verfügung, unabhängig von der Dokumentenfreigabe.
