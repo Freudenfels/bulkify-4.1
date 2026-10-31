@@ -66,15 +66,22 @@ function spec_kopf(MiniPDF $p, string $titel, string $untertitel): float {
 }
 
 // Label/Wert-Gitter: graue Label-Zellen links, Werte rechts, Rahmen.
+// Lange Werte werden umgebrochen (nicht mehr mit „…" gekürzt); die Zeilenhöhe wächst mit.
 function spec_grid(MiniPDF $p, float $y, array $rows): float {
-    $L = 40; $R = 555; $W = $R - $L; $lw = 160; $rH = 18;
+    $L = 40; $R = 555; $W = $R - $L; $lw = 160; $lh = 11;
     if ($y > 770) { $p->addPage(); $y = 48; }
     $y0 = $y;
     foreach ($rows as $r) {
-        if ($y > 795) { $p->rectStroke($L, $y0, $W, $y - $y0, 0.6, SPEC_LINE); $p->line($L + $lw, $y0, $L + $lw, $y, 0.4, SPEC_LINE); $p->addPage(); $y = 48; $y0 = $y; }
+        $avail = $W - $lw - 14;
+        $vlines = $p->wrap(((string)$r[1] !== '' ? (string)$r[1] : '–'), $avail, 9, false);
+        if (!$vlines) $vlines = ['–'];
+        // Sicherung: ein einzelnes zu langes Wort hart kappen, damit es nicht aus der Spalte läuft.
+        foreach ($vlines as $li => $ln) if ($p->strwidth($ln, 9, false) > $avail) $vlines[$li] = $p->fit($ln, $avail, 9, false);
+        $rH = 18 + (count($vlines) - 1) * $lh;
+        if ($y + $rH > 800) { $p->rectStroke($L, $y0, $W, $y - $y0, 0.6, SPEC_LINE); $p->line($L + $lw, $y0, $L + $lw, $y, 0.4, SPEC_LINE); $p->addPage(); $y = 48; $y0 = $y; }
         $p->rect($L, $y, $lw, $rH, SPEC_LABEL);
         $p->text($L + 8, $y + 12, $p->fit((string)$r[0], $lw - 14, 8.5, true), 8.5, true, [70, 70, 68]);
-        $p->text($L + $lw + 8, $y + 12, $p->fit(((string)$r[1] !== '' ? (string)$r[1] : '–'), $W - $lw - 14, 9, false), 9, false, SPEC_INK);
+        foreach ($vlines as $li => $ln) $p->text($L + $lw + 8, $y + 12 + $li * $lh, $ln, 9, false, SPEC_INK);
         $p->line($L, $y + $rH, $R, $y + $rH, 0.3, SPEC_LINE);
         $y += $rH;
     }
@@ -93,28 +100,42 @@ function spec_h(MiniPDF $p, float $y, string $titel): float {
 
 // Tabelle mit Charcoal-Kopf. $colDefs = [[xStart, Label], …] (letzte Spalte bis R),
 // $rows = Liste gleich langer Arrays. Zeilen wechseln die Schattierung.
+// Zellen werden umgebrochen (nicht mehr mit „…" gekürzt); die Zeilenhöhe wächst mit der höchsten Zelle.
 function spec_table(MiniPDF $p, float $y, array $colDefs, array $rows): float {
-    $L = 40; $R = 555; $W = $R - $L; $hH = 20; $rH = 17;
-    $head = function ($yy) use ($p, $colDefs, $L, $W) {
-        $p->rect($L, $yy, $W, $hH = 20, SPEC_CHARCOAL);
+    $L = 40; $R = 555; $W = $R - $L; $hH = 20; $lh = 11;
+    $head = function ($yy) use ($p, $colDefs, $L, $W, $hH) {
+        $p->rect($L, $yy, $W, $hH, SPEC_CHARCOAL);
         foreach ($colDefs as $c) $p->text($c[0] + 6, $yy + 13, $c[1], 8, true, SPEC_WHITE);
+    };
+    $verticals = function ($yA, $yB) use ($p, $colDefs) {
+        foreach ($colDefs as $ci => $c) if ($ci > 0) $p->line($c[0], $yA, $c[0], $yB, 0.4, SPEC_LINE);
     };
     if ($y > 760) { $p->addPage(); $y = 48; }
     $y0 = $y; $head($y); $y += $hH; $i = 0;
     foreach ($rows as $r) {
-        if ($y > 800) {
-            $p->rectStroke($L, $y0, $W, $y - $y0, 0.6, SPEC_LINE);
+        // Jede Zelle umbrechen und die Zeilenhöhe aus der höchsten Zelle bestimmen.
+        $cells = []; $maxLines = 1;
+        foreach ($colDefs as $ci => $c) {
+            $x = $c[0]; $nx = $colDefs[$ci + 1][0] ?? $R; $avail = $nx - $x - 12;
+            $lines = $p->wrap(((string)($r[$ci] ?? '') !== '' ? (string)$r[$ci] : '–'), $avail, 8.5, false);
+            if (!$lines) $lines = ['–'];
+            // Sicherung: ein einzelnes zu langes Wort hart kappen, damit es nicht in die Nachbarspalte läuft.
+            foreach ($lines as $li => $ln) if ($p->strwidth($ln, 8.5, false) > $avail) $lines[$li] = $p->fit($ln, $avail, 8.5, false);
+            $cells[$ci] = $lines;
+            if (count($lines) > $maxLines) $maxLines = count($lines);
+        }
+        $rH = 17 + ($maxLines - 1) * $lh;
+        if ($y + $rH > 802) {
+            $p->rectStroke($L, $y0, $W, $y - $y0, 0.6, SPEC_LINE); $verticals($y0, $y);
             $p->addPage(); $y = 48; $y0 = $y; $head($y); $y += $hH;
         }
         if ($i % 2 === 1) $p->rect($L, $y, $W, $rH, SPEC_ALT);
         foreach ($colDefs as $ci => $c) {
-            $x = $c[0]; $nx = $colDefs[$ci + 1][0] ?? $R;
-            $p->text($x + 6, $y + 12, $p->fit(((string)($r[$ci] ?? '') !== '' ? (string)$r[$ci] : '–'), $nx - $x - 10, 8.5, false), 8.5, false, SPEC_INK);
+            foreach ($cells[$ci] as $li => $ln) $p->text($c[0] + 6, $y + 12 + $li * $lh, $ln, 8.5, false, SPEC_INK);
         }
         $y += $rH; $i++;
     }
-    $p->rectStroke($L, $y0, $W, $y - $y0, 0.6, SPEC_LINE);
-    foreach ($colDefs as $ci => $c) if ($ci > 0) $p->line($c[0], $y0, $c[0], $y, 0.4, SPEC_LINE);
+    $p->rectStroke($L, $y0, $W, $y - $y0, 0.6, SPEC_LINE); $verticals($y0, $y);
     return $y;
 }
 
