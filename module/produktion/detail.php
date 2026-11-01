@@ -237,6 +237,7 @@ $produktName = (string)($pa['produkt_name'] ?? '') ?: (string)($pa['auftrag_prod
 if ($produktName === '' && !empty($pa['rezeptur_name'])) $produktName = (string)$pa['rezeptur_name'] . (pa_ist_bulk($pa) ? ' · Bulk' : '');
 bx_head($pa['nummer'] . ($produktName !== '' ? ' · ' . $produktName : ''), 'Produktionsauftrag',
         ($pa['status'] !== 'erledigt' ? bx_btn('Geführt produzieren', '?p=produktion_run&id=' . $id, 'primary') . ' ' : '')
+        . (!empty($pa['auftrag_id']) ? bx_btn('Zum Auftrag ' . (string)$pa['auftrag_nr'], '?p=auftrag&id=' . (int)$pa['auftrag_id'], 'ghost') . ' ' : '')
         . $btnEinkauf
         . pdf_btn('?p=produktionsauftrag_pdf&id=' . $id, 'Laufzettel drucken', false, 'Produktionsauftrag / Laufzettel als PDF') . ' '
         . bx_btn('Produktionsbericht', '?p=produktion_bericht&id=' . $id, $pa['status'] === 'erledigt' ? 'primary' : 'ghost') . ' '
@@ -333,6 +334,7 @@ echo '<div class="bx-card"><div class="k">Priorität</div><div class="v">' . $pr
 // 2) Kunde (prominent) + Produkt (bei Bulk: Rezeptur)
 $kundeIdEff = (int)($pa['kunde_id_eff'] ?? 0);
 echo '<div class="bx-card"><div class="k">Kunde</div><div class="v">' . ($pa['kunde_firma'] ? kunde_link($kundeIdEff ?: null, $pa['kunde_firma']) : '<span class="muted">–</span>') . '</div></div>';
+if (!empty($pa['auftrag_id'])) echo '<div class="bx-card"><div class="k">Auftrag</div><div class="v"><a href="?p=auftrag&id=' . (int)$pa['auftrag_id'] . '">' . h((string)$pa['auftrag_nr']) . '</a></div></div>';
 $istBulkPa = pa_ist_bulk($pa);
 $prodKarteLabel = $istBulkPa ? 'Rezeptur (Bulk)' : 'Produkt';
 $prodKarteZusatz = (!$istBulkPa && $produktName && empty($pa['produkt_id'])) ? ' <span class="muted" style="font-size:12px">(aus v3)</span>' : '';
