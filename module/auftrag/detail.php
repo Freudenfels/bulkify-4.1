@@ -472,10 +472,16 @@ $paChargen = $pa ? all("SELECT charge_nr, mhd, menge_verfuegbar FROM charge WHER
 $chargePlan = ($pa && !$paChargen) ? charge_naechste_nr((int)$pa['id']) : '';
 $mhdGesetzt = $pa ? trim((string)($pa['mhd'] ?? '')) : '';          // selbst festgelegtes MHD am PA
 $mhdPlan    = ($pa && !$paChargen) ? ($mhdGesetzt !== '' ? $mhdGesetzt : mhd_standard()) : '';
-$freigabeBedarf = $pa ? max(0, (int) produktion_stueck_je_packung($pa)) * max(0, (int)$pa['menge']) : 0;
 $einhProP  = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
 if ($einhProP <= 0) $einhProP = (int)($a['stueck'] ?? 0);   // Fallback: Stück je Packung liegt am Auftrag (v3-Import)
 $gesamtStk = $einhProP > 0 ? (int)$a['menge'] * $einhProP : 0;
+// Schon als Fertigware produzierte Packungen abziehen -> die Vorbelegungen (Freigeben/Reservieren/Zuweisen)
+// rechnen mit dem RESTbedarf, nicht der vollen Auftragsmenge. Bsp. AB-3286: 4.101 von 6.000 fertig ->
+// Rest 1.899 Pkg = 588 kg Bulk, der ggf. schon als Lagerware zugewiesen/reserviert ist (-> Zuweisen 0).
+$produziertPkg = $pa ? (int) round(produktion_gebucht((int)$pa['id'])) : 0;
+$restPkg   = max(0, (int)$a['menge'] - $produziertPkg);
+$restStk   = $einhProP > 0 ? $restPkg * $einhProP : $restPkg;   // Restbedarf in Bulk-Einheit (g bei Pulver)
+$freigabeBedarf = $pa ? max(0, (int) produktion_stueck_je_packung($pa)) * $restPkg : 0;
 // Namens-Snapshot zuerst: der zur Auftragszeit festgehaltene Name gilt, damit eine spätere Produkt-Umbenennung den Auftrag nicht ändert.
 $produktName = (string)($a['produkt_bezeichnung'] ?? '') ?: (string)($a['produkt_name'] ?? '');
 // Erstauftrag vs. Nachbestellung (neue Rezeptur / neues Produkt / Nachbestellung).
@@ -1138,7 +1144,7 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
             return $nzB($x) . ($e !== '' ? ' ' . $e : '');
         };
         $bulkResSumme = 0.0; foreach ($bulkRes as $rv) $bulkResSumme += (float)$rv['menge'];
-        $bulkOffen = max(0, (int)$gesamtStk - (int)round($bulkResSumme)); ?>
+        $bulkOffen = max(0, (int)$restStk - (int)round($bulkResSumme)); ?>
   <h3 id="bulkreserve" style="margin:18px 0 6px;font-size:14px;font-weight:600;scroll-margin-top:80px">Reservieren <span class="muted" style="font-weight:normal">· aus bereits bestellter/vorhandener Bulkware</span></h3>
   <?php if (isset($_GET['bulkres'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Reservierung aktualisiert.</div><?php endif; ?>
   <?php if (isset($_GET['bulkwarn'])): ?><div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:10px 14px;margin-bottom:10px"><?= h((string)$_GET['bulkwarn']) ?></div><?php endif; ?>
@@ -1180,7 +1186,7 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
     </label>
     <button class="btn btn-primary btn-sm" type="submit" data-busy="Reserviere…">Reservieren</button>
   </form>
-  <div class="muted" style="font-size:12px;margin-top:6px">Reserviert fertige Bulkware aus einer konkreten Bestellung (auch noch nicht geliefert) oder einer vorhandenen Charge – ohne neue Lieferantenbestellung und ohne Eigenproduktion. Benötigt für diesen Auftrag: <strong><?= $bulkMng($gesamtStk) ?></strong><?= $bulkResSumme>0 ? ', bereits reserviert ' . $bulkMng($bulkResSumme) : '' ?>.</div>
+  <div class="muted" style="font-size:12px;margin-top:6px">Reserviert fertige Bulkware aus einer konkreten Bestellung (auch noch nicht geliefert) oder einer vorhandenen Charge – ohne neue Lieferantenbestellung und ohne Eigenproduktion. <?= $produziertPkg>0 ? 'Noch benötigt (Rest)' : 'Benötigt für diesen Auftrag' ?>: <strong><?= $bulkMng($restStk) ?></strong><?= $bulkResSumme>0 ? ', bereits reserviert ' . $bulkMng($bulkResSumme) : '' ?>.</div>
   <?php else: ?>
   <div class="muted" style="font-size:12px">Reservieren ist nur möglich, wenn Bulk des gleichen Produkts <strong>unterwegs</strong> (bestellt) oder <strong>vorhanden</strong> ist. Erst eine Lieferantenbestellung für die Bulkware anlegen (oder Bestand einbuchen), dann hier reservieren.</div>
   <?php endif; ?>
@@ -1188,7 +1194,7 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
 
   <?php if ($istAdmin):
         $lwSumme = 0.0; foreach ($lwZu as $lz) $lwSumme += (float)$lz['menge_verfuegbar'];
-        $lwOffen = max(0, (int)$gesamtStk - (int)round($lwSumme)); ?>
+        $lwOffen = max(0, (int)$restStk - (int)round($lwSumme)); ?>
   <h3 id="lagerzuweisen" style="margin:18px 0 6px;font-size:14px;font-weight:600;scroll-margin-top:80px">Lagerware zuweisen <span class="muted" style="font-weight:normal">· der Kunde bekommt genau diese Charge(n)</span></h3>
   <?php if (isset($_GET['lwzu'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Zuweisung aktualisiert.</div><?php endif; ?>
   <?php if ($lwZu): ?>
@@ -1230,7 +1236,7 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
     </label>
     <button class="btn btn-primary btn-sm" type="submit" data-busy="Weise zu…">Zuweisen</button>
   </form>
-  <div class="muted" style="font-size:12px;margin-top:6px">Bindet vorhandene Lagerware (fertige Bulkware) <strong>fest</strong> an diesen Auftrag – der Kunde bekommt genau diese Charge. Oben die zur Rezeptur passende Bulkware, darunter <strong>jede andere Fertigware im Lager</strong> – <strong>du</strong> entscheidest, was gekoppelt wird. Teilmengen werden abgespalten, der freie Rest bleibt im Lager und kann <strong>weiteren Aufträgen</strong> zugeteilt werden. Räumt „wartet auf Material" ab (ohne neue Bestellung, ohne Eigenproduktion). Benötigt: <strong><?= $bulkMng($gesamtStk) ?></strong><?= $lwSumme>0 ? ', bereits zugewiesen ' . $bulkMng($lwSumme) : '' ?>.</div>
+  <div class="muted" style="font-size:12px;margin-top:6px">Bindet vorhandene Lagerware (fertige Bulkware) <strong>fest</strong> an diesen Auftrag – der Kunde bekommt genau diese Charge. Oben die zur Rezeptur passende Bulkware, darunter <strong>jede andere Fertigware im Lager</strong> – <strong>du</strong> entscheidest, was gekoppelt wird. Teilmengen werden abgespalten, der freie Rest bleibt im Lager und kann <strong>weiteren Aufträgen</strong> zugeteilt werden. Räumt „wartet auf Material" ab (ohne neue Bestellung, ohne Eigenproduktion). <?= $produziertPkg>0 ? 'Noch benötigt (Rest)' : 'Benötigt' ?>: <strong><?= $bulkMng($restStk) ?></strong><?= $lwSumme>0 ? ', bereits zugewiesen ' . $bulkMng($lwSumme) : '' ?>.</div>
   <?php else: ?>
   <div class="muted" style="font-size:12px">Keine freie Fertigware-(Bulk-)Charge im Lager vorhanden (Status <strong>frei</strong>, nicht Quarantäne/gesperrt, noch keinem Auftrag zugewiesen). Liegt die Ware unter „Verkaufsfertig" oder in Quarantäne, zuerst dort freigeben bzw. als Fertigware einbuchen.</div>
   <?php endif; ?>
