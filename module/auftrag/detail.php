@@ -1093,6 +1093,13 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
 
   <?php if ($istAdmin && ($bulkQ['item'] ?? 0)):
         $nzB = fn($x)=>rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',');
+        // Charge-/Bulk-Menge lesbar: bei Gewicht/Volumen (g/ml der Charge, sonst Pulver-Auftrag) ab 1.000 kg/L,
+        // ab 1.000.000 t (via gewicht_lesbar), sonst Zahl + Einheit. $einh = Einheit der Charge (null = aus Form).
+        $mengeLes = function($x, $einh = null) use ($nzB, $istFuellG) {
+            $e = $einh !== null ? (string)$einh : ($istFuellG ? 'g' : '');
+            if (function_exists('gewicht_lesbar') && in_array($e, ['g','ml'], true)) return gewicht_lesbar((float)$x, $e);
+            return $nzB($x) . ($e !== '' ? ' ' . $e : '');
+        };
         $bulkResSumme = 0.0; foreach ($bulkRes as $rv) $bulkResSumme += (float)$rv['menge'];
         $bulkOffen = max(0, (int)$gesamtStk - (int)round($bulkResSumme)); ?>
   <h3 id="bulkreserve" style="margin:18px 0 6px;font-size:14px;font-weight:600;scroll-margin-top:80px">Reservieren <span class="muted" style="font-weight:normal">· aus bereits bestellter/vorhandener Bulkware</span></h3>
@@ -1121,12 +1128,12 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
         <option value="">– wählen –</option>
         <?php if ($bulkQ['bestellungen']): ?><optgroup label="Bestellungen (auch unterwegs)">
           <?php foreach ($bulkQ['bestellungen'] as $bq): if ($bq['frei'] <= 0.0001) continue; ?>
-            <option value="bestellung:<?= (int)$bq['bp_id'] ?>">Bestellung <?= h((string)$bq['nummer']) ?><?= $bq['lieferant'] ? ' · ' . h((string)$bq['lieferant']) : '' ?> · <?= !empty($bq['angekommen_am']) ? 'geliefert' : 'unterwegs' ?> · frei <?= $nzB($bq['frei']) ?></option>
+            <option value="bestellung:<?= (int)$bq['bp_id'] ?>">Bestellung <?= h((string)$bq['nummer']) ?><?= $bq['lieferant'] ? ' · ' . h((string)$bq['lieferant']) : '' ?> · <?= !empty($bq['angekommen_am']) ? 'geliefert' : 'unterwegs' ?> · frei <?= $mengeLes($bq['frei'], $bq['einheit'] ?? null) ?></option>
           <?php endforeach; ?>
         </optgroup><?php endif; ?>
         <?php if ($bulkQ['chargen']): ?><optgroup label="Vorhandene Chargen (Bestand)">
           <?php foreach ($bulkQ['chargen'] as $cq): ?>
-            <option value="charge:<?= (int)$cq['id'] ?>">Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $nzB($cq['frei']) ?></option>
+            <option value="charge:<?= (int)$cq['id'] ?>">Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $mengeLes($cq['frei'], $cq['einheit'] ?? null) ?></option>
           <?php endforeach; ?>
         </optgroup><?php endif; ?>
       </select>
@@ -1154,7 +1161,7 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
       <?php foreach ($lwZu as $lz): ?>
       <tr>
         <td><?= $lz['item_name'] ? h((string)$lz['item_name']) . ' · ' : '' ?>Charge <?= h((string)($lz['charge_nr'] ?: $lz['id'])) ?></td>
-        <td class="bx-num"><?= $nzB($lz['menge_verfuegbar']) ?> <?= h((string)($lz['einheit'] ?: 'Stk')) ?></td>
+        <td class="bx-num"><?= $mengeLes($lz['menge_verfuegbar'], ($lz['einheit'] ?? '') !== '' ? $lz['einheit'] : null) ?></td>
         <td><?= $lz['mhd'] ? h(date('d.m.Y', strtotime((string)$lz['mhd']))) : '–' ?></td>
         <td><?= ($lz['status'] ?? '') === 'frei' ? bx_badge('zugewiesen','ok') : bx_badge((string)$lz['status'],'warn') ?></td>
         <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Zuweisung dieser Charge aufheben? Die Ware wird wieder freie Lagerware.');"><input type="hidden" name="aktion" value="charge_loesen"><input type="hidden" name="charge_id" value="<?= (int)$lz['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Lösen</button></form></td>
@@ -1171,12 +1178,12 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
         <option value="">– wählen –</option>
         <?php if ($lwQ['chargen']): ?><optgroup label="Passend zur Rezeptur (Bulk)">
           <?php foreach ($lwQ['chargen'] as $cq): ?>
-          <option value="<?= (int)$cq['id'] ?>">Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $nzB($cq['menge_verfuegbar']) ?> <?= h((string)($cq['einheit'] ?: 'Stk')) ?></option>
+          <option value="<?= (int)$cq['id'] ?>">Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $mengeLes($cq['menge_verfuegbar'], ($cq['einheit'] ?? '') !== '' ? $cq['einheit'] : null) ?></option>
           <?php endforeach; ?>
         </optgroup><?php endif; ?>
         <?php if ($lwQ['weitere']): ?><optgroup label="Andere Fertigware im Lager (Bulk)">
           <?php foreach ($lwQ['weitere'] as $cq): ?>
-          <option value="<?= (int)$cq['id'] ?>"><?= h((string)$cq['item_name']) ?><?= $cq['artikelnummer'] ? ' (' . h((string)$cq['artikelnummer']) . ')' : '' ?> · Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $nzB($cq['menge_verfuegbar']) ?> <?= h((string)($cq['einheit'] ?: 'Stk')) ?></option>
+          <option value="<?= (int)$cq['id'] ?>"><?= h((string)$cq['item_name']) ?><?= $cq['artikelnummer'] ? ' (' . h((string)$cq['artikelnummer']) . ')' : '' ?> · Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $mengeLes($cq['menge_verfuegbar'], ($cq['einheit'] ?? '') !== '' ? $cq['einheit'] : null) ?></option>
           <?php endforeach; ?>
         </optgroup><?php endif; ?>
       </select>
