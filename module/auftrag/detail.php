@@ -970,7 +970,15 @@ if (auftrag_braucht_etikett($id)):
 <?php // H1 (Teil 3): Material-Übersicht – je Position benötigt / frei / unterwegs mit Deckungs-Ampel.
 // Nutzt den vorhandenen auftrag_bedarf() + item_unterwegs(); nur Übersicht, keine Buchung.
 if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
-    $mng = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ','); ?>
+    // Einheitengerechte Anzeige: g/ml lesbar als kg/t bzw. L, Packungen/Stück ganzzahlig (keine 2.096,774 Pkg),
+    // alles andere (z. B. kg am Rohstoff) mit bis zu 3 Nachkommastellen. Einheit immer mit dran, auch bei „frei".
+    $mng = function($x, $e = '') {
+        $e = (string)$e;
+        if (function_exists('gewicht_lesbar') && in_array($e, ['g','ml'], true)) return gewicht_lesbar((float)$x, $e); // bringt Einheit selbst mit
+        if (in_array($e, ['Pkg','Stk','Stück','Stueck'], true)) return number_format(round((float)$x), 0, ',', '.') . ' ' . $e;
+        $n = rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+        return $n . ($e !== '' ? ' ' . $e : '');
+    }; ?>
 <div class="bx-panel" data-panel="produktion">
   <h2 style="margin:0 0 4px;font-size:16px">Material-Übersicht</h2>
   <div class="muted" style="font-size:12px;margin-bottom:10px">Was dieser Auftrag braucht, was frei im Lager liegt und was bestellt, aber noch unterwegs ist.</div>
@@ -988,9 +996,9 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
       <tr>
         <td><?= h((string)($r['name'] ?? '–')) ?></td>
         <td class="muted"><?= h((string)($r['rolle'] ?? '–')) ?></td>
-        <td class="bx-num"><?= $mng($ben) ?> <span class="muted"><?= h($einh) ?></span></td>
-        <td class="bx-num"><?= $mng($frei) ?></td>
-        <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs) : '<span class="muted">–</span>' ?></td>
+        <td class="bx-num"><?= $mng($ben, $einh) ?></td>
+        <td class="bx-num"><?= $mng($frei, $einh) ?></td>
+        <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs, $einh) : '<span class="muted">–</span>' ?></td>
         <td><?= $deckt ? bx_badge('gedeckt','ok') : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('Fehlbestand','warn')) ?></td>
       </tr>
     <?php endforeach; ?>
