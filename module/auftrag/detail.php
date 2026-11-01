@@ -876,6 +876,39 @@ if (auftrag_braucht_etikett($id)):
 <?php $track = kunde_auftrag_track($a); ?>
 <div class="bx-panel" data-panel="produktion">
   <h2 style="margin:0 0 18px;font-size:16px">Fortschritt</h2>
+  <?php
+  // Mengen-Fortschritt (Teilproduktion/Teilversand) als segmentierte Leiste – macht sichtbar, WIE VIEL schon
+  // produziert bzw. versendet ist und wie viel noch offen ist (die Phasen-Kette unten zeigt nur das WO).
+  $mfA   = auftrag_mengenfortschritt((int)$a['id']);
+  $zielA = max((int)($a['menge'] ?? 0), (int)($mfA['ziel'] ?? 0));
+  $prodA = max(0, (int)($mfA['gebucht'] ?? 0));                                        // produzierte Packungen
+  $versA = max(0, min((int)($a['versendet_menge'] ?? 0), $prodA));                      // versendet (<= produziert)
+  $bereitA = max(0, $prodA - $versA);          // produziert, aber noch nicht versendet (im Lager)
+  $offenA  = max(0, $zielA - $prodA);          // noch nicht produziert
+  if ($zielA > 0 && ($prodA > 0 || $versA > 0)):
+      $teilweise = ($offenA > 0) || ($versA > 0 && $versA < $zielA);
+      $denom = max($zielA, $prodA);            // bei Überproduktion volle Leiste
+      $nfA   = fn($x) => number_format((int)$x, 0, ',', '.');
+      $pctV  = $denom > 0 ? round($versA   * 100 / $denom, 2) : 0;
+      $pctB  = $denom > 0 ? round($bereitA * 100 / $denom, 2) : 0;
+      $dot   = fn($c) => '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' . $c . ';border:1px solid rgba(0,0,0,.08);vertical-align:middle;margin-right:5px"></span>';
+  ?>
+  <div style="margin:0 0 20px">
+    <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <span class="k muted">Mengen-Fortschritt<?= $teilweise ? ' · Teilmengen' : '' ?></span>
+      <span style="font-size:13px"><strong><?= $nfA($prodA) ?></strong> von <strong><?= $nfA($zielA) ?></strong> Packungen produziert<?= $offenA > 0 ? ' · ' . $nfA($offenA) . ' offen' : '' ?><?= $versA > 0 ? ' · ' . $nfA($versA) . ' versendet' : '' ?></span>
+    </div>
+    <div style="display:flex;height:12px;border-radius:7px;overflow:hidden;background:var(--panel-2,#eceef0)" title="<?= $nfA($versA) ?> versendet · <?= $nfA($bereitA) ?> produziert · <?= $nfA($offenA) ?> offen">
+      <?php if ($pctV > 0): ?><div style="width:<?= $pctV ?>%;background:var(--gruen)"></div><?php endif; ?>
+      <?php if ($pctB > 0): ?><div style="width:<?= $pctB ?>%;background:var(--lime)"></div><?php endif; ?>
+    </div>
+    <div class="bx-row muted" style="gap:18px;flex-wrap:wrap;margin-top:9px;font-size:12px">
+      <?php if ($versA > 0): ?><span><?= $dot('var(--gruen)') ?>versendet <?= $nfA($versA) ?></span><?php endif; ?>
+      <span><?= $dot('var(--lime)') ?><?= $versA > 0 ? 'im Lager (produziert)' : 'produziert' ?> <?= $nfA($bereitA) ?></span>
+      <?php if ($offenA > 0): ?><span><?= $dot('var(--panel-2,#d7dadd)') ?>noch offen <?= $nfA($offenA) ?></span><?php endif; ?>
+    </div>
+  </div>
+  <?php endif; ?>
   <div style="overflow-x:auto">
     <ul class="bx-htrack">
       <?php foreach ($track as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : ''); ?>
@@ -965,16 +998,7 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
     <?php endif; ?>
     <?php if ($pa): ?>
     <div><div class="k muted">Produktionsauftrag</div><div><a href="?p=produktionsauftrag&id=<?= (int)$pa['id'] ?>"><?= h($pa['nummer']) ?></a> · <?= $paStatusBadge ?></div></div>
-    <?php $mf = auftrag_mengenfortschritt((int)$a['id']); if (!empty($mf['hat']) && $mf['ziel'] > 0): ?>
-    <div style="grid-column:1/-1"><div class="k muted">Produziert (Live)</div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px">
-        <div style="flex:1;min-width:160px;height:10px;background:var(--panel-2,#eceef0);border-radius:6px;overflow:hidden">
-          <div style="height:100%;width:<?= (int)$mf['prozent'] ?>%;background:var(--gruen)"></div>
-        </div>
-        <span style="white-space:nowrap"><strong><?= number_format((int)$mf['gebucht'],0,',','.') ?></strong> von <?= number_format((int)$mf['ziel'],0,',','.') ?> Packungen · <?= (int)$mf['prozent'] ?>%</span>
-      </div>
-    </div>
-    <?php endif; ?>
+    <?php // Der Mengen-/Teilmengen-Fortschritt steht jetzt prominent oben im Panel „Fortschritt“ (segmentierte Leiste). ?>
     <div><div class="k muted">Material</div><div>
       <?= bereitschaft_badge($ber['status'] ?? '') ?>
       <?php if (($ber['status'] ?? '') === 'wartet'): ?> <a href="?p=produktionsauftrag&id=<?= (int)$pa['id'] ?>" style="font-size:12px">was fehlt?</a><?php endif; ?>
