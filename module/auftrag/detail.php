@@ -6,6 +6,23 @@ require_once BX_ROOT . '/core/anfrage_ui.php';
 
 $id = (int)($_GET['id'] ?? 0);
 
+// Pulver/Granulat: Mengen werden in KILOGRAMM eingegeben, intern aber in GRAMM geführt (wie Charge,
+// Reservierung, Produktion, Wareneingang). Ist der Auftrag eine Gewichtsform, wird die kg-Eingabe × 1000
+// gerechnet. Stück-Formen (Kapsel/Tablette …) bleiben 1:1.
+$auftragIstGewicht = function(int $aid): bool {
+    if ($aid <= 0 || !function_exists('form_groessen_einheit')) return false;
+    $f = (string) scalar("SELECT COALESCE(rz.darreichungsform,'') FROM auftrag a
+                          LEFT JOIN produkt p ON p.id=a.produkt_id
+                          LEFT JOIN rezeptur rz ON rz.id=COALESCE(NULLIF(a.rezeptur_id,0), p.rezeptur_id)
+                          WHERE a.id=?", [$aid]);
+    return form_groessen_einheit($f) === 'g';
+};
+// de-formatierte Eingabe („1.860" / „588,69") -> Basiszahl; bei Gewicht kg -> g.
+$mengeInBasis = function(string $raw, bool $gewicht): float {
+    $v = (float) str_replace(['.', ' ', ','], ['', '', '.'], trim($raw));
+    return $gewicht ? $v * 1000.0 : $v;
+};
+
 // Express-Bestellung (nur Admin): überspringt Einkaufsbedarf/-liste und bestellt direkt beim Lieferanten.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'express_bestellung') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
@@ -44,8 +61,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     $paid = (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$id]);
     if (!$paid) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Produktionsauftrag zum Freigeben.')); exit; }
     $art = ($_POST['produktionsart'] ?? '') === 'eigen' ? 'eigen' : 'fremd';
-    $mpRaw = preg_replace('/\D+/', '', (string)($_POST['menge_produktion'] ?? ''));   // Tausenderpunkte entfernen
-    $mp  = $mpRaw !== '' ? (int)$mpRaw : null;
+    $mpRaw = trim((string)($_POST['menge_produktion'] ?? ''));
+    $mp  = $mpRaw !== '' ? (int) round($mengeInBasis($mpRaw, $auftragIstGewicht($id))) : null;   // Pulver: kg -> g
     $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
     $r = produktionsauftrag_freigeben($paid, $art, $mp, $wer);
     header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&freigabeok=1' : '&expressfehler=' . urlencode($r['fehler'] ?? 'Freigabe fehlgeschlagen.'))); exit;
@@ -361,7 +378,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'bulk_reservieren') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
     [$qTyp, $qId] = array_pad(explode(':', (string)($_POST['quelle'] ?? ''), 2), 2, '');
-    $menge = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['menge'] ?? '0'));
+    $menge = $mengeInBasis((string)($_POST['menge'] ?? '0'), $auftragIstGewicht($id));   // Pulver: kg -> g
     $r = bulk_reservieren($id, (string)$qTyp, (int)$qId, $menge);
     header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok'])
         ? '&bulkres=1' . (!empty($r['warnung']) ? '&bulkwarn=' . rawurlencode((string)$r['warnung']) : '')
@@ -376,7 +393,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
 // erlaubt (Charge wird gesplittet); dieselbe Charge kann so mehreren Aufträgen zugeteilt werden.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'charge_zuweisen') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
-    $menge = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['menge'] ?? '0'));
+    $menge = $mengeInBasis((string)($_POST['menge'] ?? '0'), $auftragIstGewicht($id));   // Pulver: kg -> g
     $r = charge_auftrag_zuweisen((int)($_POST['charge_id'] ?? 0), $id, $menge);
     header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok'])
         ? '&lwzu=1' . (!empty($r['warnung']) ? '&bulkwarn=' . rawurlencode((string)$r['warnung']) : '')
@@ -484,9 +501,13 @@ $groesseLbl = produktion_groesse_label((int)$a['produkt_id']);
 $istFuellG = function_exists('form_groessen_einheit') && form_groessen_einheit((string)($rezeptur['darreichungsform'] ?? '')) === 'g';
 // Bulk-Mengen im Reiter Produktion (Freigeben/Reservieren/Zuweisen): Pulver wird in GRAMM geführt (wie Charge
 // und Reservierung), nicht in „Stück/Einheiten". Label = „g" + lesbarer kg/t-Hinweis; Stück-Formen bleiben „Stück".
-$bulkEinh = $istFuellG ? 'g' : 'Stück';
+$bulkEinh = $istFuellG ? 'kg' : 'Stück';                       // Eingabe-Einheit der Bulk-Felder (Pulver = kg)
 $bulkLes  = fn($v) => $istFuellG && function_exists('gewicht_lesbar') ? ' <span style="font-weight:normal">(' . gewicht_lesbar((float)$v, 'g') . ')</span>' : '';
 $bulkMng  = fn($v) => $istFuellG && function_exists('gewicht_lesbar') ? gewicht_lesbar((float)$v, 'g') : number_format((int)$v, 0, ',', '.') . ' Stück';
+// Prefill-Wert eines Bulk-Mengenfelds: Pulver in kg (g/1000, lesbar), sonst Stück (ganzzahlig mit Tausenderpunkt).
+$bulkInput = fn($g) => $istFuellG ? rtrim(rtrim(number_format((float)$g / 1000, 3, ',', '.'), '0'), ',') : number_format((int)$g, 0, ',', '.');
+$bulkTaus  = $istFuellG ? '' : 'data-tausender';               // Tausender-JS ist ganzzahlig -> bei kg (Dezimal) weglassen
+$bulkInM   = $istFuellG ? 'decimal' : 'numeric';
 // Bestellungen (bei welchem Lieferanten, welcher Status) – verknüpft über die Position.
 $best = all("SELECT DISTINCT b.id, b.nummer, b.status, b.bestaetigt, b.angekommen_am, l.firma AS lieferant
              FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
@@ -1039,7 +1060,7 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
           </select>
         </label>
         <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Produktionsmenge (<?= $bulkEinh ?>)<?= $bulkLes($freigabeBedarf) ?>
-          <input type="text" inputmode="numeric" name="menge_produktion" value="<?= number_format((int)$freigabeBedarf, 0, ',', '.') ?>" data-tausender style="min-width:150px">
+          <input type="text" inputmode="<?= $bulkInM ?>" name="menge_produktion" value="<?= $bulkInput($freigabeBedarf) ?>" <?= $bulkTaus ?> style="min-width:150px">
         </label>
         <button class="btn btn-primary btn-sm" type="submit">Zur Produktion freigeben</button>
       </form>
@@ -1139,7 +1160,7 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
       </select>
     </label>
     <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Menge (<?= $bulkEinh ?> Bulk)<?= $bulkLes($bulkOffen) ?>
-      <input type="text" inputmode="numeric" name="menge" data-tausender value="<?= number_format((int)$bulkOffen, 0, ',', '.') ?>" style="min-width:130px">
+      <input type="text" inputmode="<?= $bulkInM ?>" name="menge" <?= $bulkTaus ?> value="<?= $bulkInput($bulkOffen) ?>" style="min-width:130px">
     </label>
     <button class="btn btn-primary btn-sm" type="submit" data-busy="Reserviere…">Reservieren</button>
   </form>
@@ -1189,7 +1210,7 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
       </select>
     </label>
     <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Menge (<?= $bulkEinh ?>)<?= $bulkLes($lwOffen) ?>
-      <input type="text" inputmode="numeric" name="menge" data-tausender value="<?= number_format((int)$lwOffen, 0, ',', '.') ?>" style="min-width:130px">
+      <input type="text" inputmode="<?= $bulkInM ?>" name="menge" <?= $bulkTaus ?> value="<?= $bulkInput($lwOffen) ?>" style="min-width:130px">
     </label>
     <button class="btn btn-primary btn-sm" type="submit" data-busy="Weise zu…">Zuweisen</button>
   </form>
