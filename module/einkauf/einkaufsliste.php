@@ -381,8 +381,9 @@ if ($ohneFestlegung): ?>
           <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
           <td>Bulk: <?= h($b['produkt'] ?: '–') ?></td>
           <td><?= bx_badge('Fertiges Produkt','info') ?></td>
-          <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], 'Stk') ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($b['need'] ?? $b['zu_bestellen']) ?> · Lager <?= $mfmt($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $mfmt($b['bestellt']) : '' ?></div></td>
-          <td><?= $liefSelect($key, 0, $bPreise, true, ['class'=>'bx-bulk-lief', 'data-ab'=>($bAb !== null ? (float)$bAb : ''), 'data-abcur'=>$bAbCur]) ?><?php if ($bAb !== null): ?><div class="muted bx-bulk-sum" style="font-size:11px">ab <?= $preis4($bAb, $bAbCur) ?>/Stück · Summe <?= $sum2($bSumme, $bAbCur) ?></div><?php endif; ?></td>
+          <?php $bEinh = (string)($b['einheit'] ?? 'Stk'); ?>
+          <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], $bEinh) ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($b['need'] ?? $b['zu_bestellen']) ?> <?= h($bEinh) ?> · Lager <?= $mfmt($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $mfmt($b['bestellt']) : '' ?></div></td>
+          <td><?= $liefSelect($key, 0, $bPreise, true, ['class'=>'bx-bulk-lief', 'data-ab'=>($bAb !== null ? (float)$bAb : ''), 'data-abcur'=>$bAbCur, 'data-einheit'=>$bEinh]) ?><?php if ($bAb !== null): ?><div class="muted bx-bulk-sum" style="font-size:11px">ab <?= $preis4($bAb, $bAbCur) ?>/<?= h($bEinh) ?> · Summe <?= $sum2($bSumme, $bAbCur) ?></div><?php endif; ?></td>
           <td style="font-size:12px"><?php foreach ($b['orders'] as $o): ?>
             <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a><?php endforeach; ?><span class="muted">· Fremdfertigung</span></td>
         </tr>
@@ -536,7 +537,8 @@ if ($ohneFestlegung): ?>
       if (sel.value && opt && opt.dataset.preis){ preis=parseFloat(opt.dataset.preis); cur=opt.dataset.cur||'EUR'; praefix=''; }
       else { preis=parseFloat(sel.dataset.ab||''); cur=sel.dataset.abcur||'EUR'; praefix='ab '; }
       if (!isFinite(preis)){ sum.textContent=''; return; }
-      sum.textContent = praefix + fmt(preis,4) + ' ' + cur + '/Stück · Summe ' + fmt(preis*m,2) + ' ' + cur;
+      var einh = sel.dataset.einheit || 'Stück';
+      sum.textContent = praefix + fmt(preis,4) + ' ' + cur + '/' + einh + ' · Summe ' + fmt(preis*m,2) + ' ' + cur;
     }
     sel.addEventListener('change', upd);
     if (menge){ menge.addEventListener('input', upd); menge.addEventListener('change', upd); }

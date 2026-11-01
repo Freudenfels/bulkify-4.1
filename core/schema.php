@@ -8096,7 +8096,7 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
                 // Fremdfertigungs-/Zukaufpreis des Lieferanten je Stück als EK-Snapshot übernehmen (sonst 0 -> kein Preis).
                 $bulkEk = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $noch) ?? 0.0) : 0.0;
                 q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, $bulkEk, 'Stk', (int)$o['auftrag_id'], $i++]);
+                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, $bulkEk, (string)($g['einheit'] ?? 'Stk'), (int)$o['auftrag_id'], $i++]);
                 if (!$erstePosId) $erstePosId = (int) insert_id();
                 $betroffen[(int)$o['auftrag_id']] = true;
             }
@@ -8111,7 +8111,7 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
                     // Kein offener Auftragsbedarf -> reine Vorratsmenge als normale Produktzeile (ohne Auftrag, kein „Puffer").
                     $bulkEkP = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $ueber) ?? 0.0) : 0.0;
                     q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-                      [$bid, null, 'Bulk: ' . $g['produkt'], $ueber, $bulkEkP, 'Stk', null, $i++]);
+                      [$bid, null, 'Bulk: ' . $g['produkt'], $ueber, $bulkEkP, (string)($g['einheit'] ?? 'Stk'), null, $i++]);
                 }
             }
         }
@@ -8694,16 +8694,30 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
     $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.produktionsart='fremd' AND pa.art_festgelegt_am IS NOT NULL"
         . ($nur_gemeldet ? " AND pa.bedarf_gemeldet IS NOT NULL" : "");
     // Gleiches Produkt (= gleiche Kapsel/Bulk) über mehrere Aufträge zusammenfassen.
+    // WICHTIG – Einheit je Darreichungsform: Bei Stück-Formen (Kapsel/Tablette/…) ist einheiten_pro_packung die
+    // Stückzahl je Packung -> Bedarf = Packungen × Stück = GESAMTSTÜCK (Einheit „Stk"). Bei Schüttgut
+    // (Pulver/Granulat → g, Flüssig/Gel → ml) ist einheiten_pro_packung die FÜLLMENGE je Packung -> Bedarf =
+    // Packungen × Füllmenge = GESAMTGEWICHT/-VOLUMEN; das rechnen/zeigen wir in kg bzw. L (nicht als „Stk“, sonst
+    // stünden z. B. 1.860.000 „Stück“ statt 1.860 kg). Nur die Gewichts-/Volumenformen werden umgestellt; die
+    // Stück-Formen bleiben unverändert.
     $grp = [];
     foreach (all("SELECT pa.id, pa.auftrag_id, pa.menge, pa.produkt_id, a.nummer AS auftrag_nr,
-                         p.name AS produkt, COALESCE(NULLIF(p.einheiten_pro_packung,0), a.stueck, 0) AS ep
+                         p.name AS produkt, COALESCE(NULLIF(p.einheiten_pro_packung,0), a.stueck, 0) AS ep,
+                         rz.darreichungsform AS form
                   FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id
                   LEFT JOIN produkt p ON p.id=pa.produkt_id
+                  LEFT JOIN rezeptur rz ON rz.id=p.rezeptur_id
                   WHERE $wo ORDER BY pa.prio, pa.angelegt") as $pa) {
-        $need = (int)$pa['menge'] * (int)$pa['ep'];   // ep mit Fallback auf auftrag.stueck (v3-Import)
+        $ep   = (int)$pa['ep'];                        // Stück je Packung ODER Füllmenge (g/ml) je Packung
+        $ge   = function_exists('form_groessen_einheit') ? form_groessen_einheit((string)($pa['form'] ?? '')) : '';
+        $gew  = $ge !== '';                            // true = Schüttgut (g/ml)
+        $fakt = $gew ? 0.001 : 1.0;                    // g/ml -> kg/L
+        $einh = $gew ? ($ge === 'ml' ? 'L' : 'kg') : 'Stk';
+        $need = (int)$pa['menge'] * $ep * $fakt;       // Gesamtgewicht (kg/L) bzw. Gesamtstück
         if ($need <= 0) continue;
         $pid = (int)$pa['produkt_id'];
-        if (!isset($grp[$pid])) $grp[$pid] = ['produkt_id'=>$pid, 'produkt'=>$pa['produkt'], 'need'=>0.0, 'orders'=>[], 'pa_ids'=>[], 'auftrag_ids'=>[]];
+        if (!isset($grp[$pid])) $grp[$pid] = ['produkt_id'=>$pid, 'produkt'=>$pa['produkt'], 'need'=>0.0, 'orders'=>[], 'pa_ids'=>[], 'auftrag_ids'=>[],
+                                              'ep'=>$ep, 'faktor'=>$fakt, 'einheit'=>$einh, 'gewicht'=>$gew];
         $grp[$pid]['need'] += $need;
         $grp[$pid]['orders'][] = ['pa_id'=>(int)$pa['id'], 'auftrag_id'=>(int)$pa['auftrag_id'], 'auftrag_nr'=>$pa['auftrag_nr'], 'need'=>$need];
         $grp[$pid]['pa_ids'][] = (int)$pa['id'];
@@ -8717,7 +8731,10 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
                                     WHERE bp.item_id IS NULL AND bp.auftrag_id IN ($in) AND b.status<>'geliefert'");
         // Freier, nicht kundengebundener Fertigware-Bestand dieses Produkts (ohne Item neu anzulegen).
         $lagerItem = (int) scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$g['produkt_id']]);
-        $stock = $lagerItem > 0 ? item_bestand($lagerItem, true) : 0.0;
+        $stockRaw = $lagerItem > 0 ? item_bestand($lagerItem, true) : 0.0;   // fertige Packungen (Beutel/Dosen)
+        // Bei Schüttgut den Packungs-Bestand in dieselbe Einheit wie den Bedarf bringen (Packungen × Füllmenge),
+        // sonst würden Beutel von Gramm/kg abgezogen. Stück-Formen bleiben wie bisher (Packungs-Bestand).
+        $stock = $g['gewicht'] ? $stockRaw * (float)$g['ep'] * (float)$g['faktor'] : $stockRaw;
         $g['bestellt'] = $bestellt;
         $g['stock'] = $stock;
         $g['zu_bestellen'] = max(0.0, $g['need'] - $stock - $bestellt);
@@ -8752,7 +8769,7 @@ function bestellung_bulk_anlegen(array $produkt_ids, ?int $lieferant, ?string $d
             if ($noch <= 1e-6) continue;
             $ek = produkt_zukauf_preis((int)$g['produkt_id'], $lieferant ?: null, $noch) ?? 0.0;
             q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-              [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, $ek, 'Stk', (int)$o['auftrag_id'], $i++]);
+              [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, $ek, (string)($g['einheit'] ?? 'Stk'), (int)$o['auftrag_id'], $i++]);
             if ((int)$o['auftrag_id'] > 0)
                 log_aktivitaet('auftrag', (int)$o['auftrag_id'], 'team', 'Bulk (Fremdproduktion) per Bestellung ' . $nummer . $wann . ' bestellt.', 'bestellung', 'bestellung', $bid);
         }
