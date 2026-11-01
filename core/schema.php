@@ -4196,6 +4196,26 @@ function form_groessen_label(string $form, float $wert): string {
     if ($e !== '') return rtrim(rtrim(number_format($wert, 1, ',', '.'), '0'), ',') . ' ' . $e;
     return (int) $wert . ' ' . form_plural($form);
 }
+// Große Schüttgut-/Volumenmenge lesbar machen: Gramm -> t/kg/g, ml -> L/ml (Stück bleibt Stück).
+// $einheit ist die BASIS-Einheit des Werts ('g', 'ml' oder sonst Stück). Für die Anzeige, nicht zum Speichern.
+function gewicht_lesbar(float $menge, string $einheit = 'g'): string {
+    // Nur NACHKOMMA-Nullen kürzen (sonst würde z. B. „310" zu „31" verstümmelt).
+    $nf = function ($x, $d) {
+        $s = number_format($x, $d, ',', '.');
+        if ($d > 0 && strpos($s, ',') !== false) $s = rtrim(rtrim($s, '0'), ',');
+        return $s;
+    };
+    if ($einheit === 'g') {
+        if (abs($menge) >= 1000000) return $nf($menge / 1000000, 3) . ' t';
+        if (abs($menge) >= 1000)    return $nf($menge / 1000, 3) . ' kg';
+        return $nf($menge, 0) . ' g';
+    }
+    if ($einheit === 'ml') {
+        if (abs($menge) >= 1000) return $nf($menge / 1000, 3) . ' L';
+        return $nf($menge, 0) . ' ml';
+    }
+    return number_format($menge, 0, ',', '.') . ' Stk';
+}
 
 // Behälter-EK bei einer Bestellmenge: passende Staffel, sonst flacher item.ek_preis.
 function pack_ek_bei_menge(int $verp_id, int $menge): float {
@@ -8711,13 +8731,12 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
         $ep   = (int)$pa['ep'];                        // Stück je Packung ODER Füllmenge (g/ml) je Packung
         $ge   = function_exists('form_groessen_einheit') ? form_groessen_einheit((string)($pa['form'] ?? '')) : '';
         $gew  = $ge !== '';                            // true = Schüttgut (g/ml)
-        $fakt = $gew ? 0.001 : 1.0;                    // g/ml -> kg/L
-        $einh = $gew ? ($ge === 'ml' ? 'L' : 'kg') : 'Stk';
-        $need = (int)$pa['menge'] * $ep * $fakt;       // Gesamtgewicht (kg/L) bzw. Gesamtstück
+        $einh = $gew ? $ge : 'Stk';                    // Basiseinheit = Füllmenge in g/ml (wie Charge/Reservierung) bzw. Stück
+        $need = (int)$pa['menge'] * $ep;               // Gesamt-Füllmenge (g/ml) bzw. Gesamtstück
         if ($need <= 0) continue;
         $pid = (int)$pa['produkt_id'];
         if (!isset($grp[$pid])) $grp[$pid] = ['produkt_id'=>$pid, 'produkt'=>$pa['produkt'], 'need'=>0.0, 'orders'=>[], 'pa_ids'=>[], 'auftrag_ids'=>[],
-                                              'ep'=>$ep, 'faktor'=>$fakt, 'einheit'=>$einh, 'gewicht'=>$gew];
+                                              'ep'=>$ep, 'einheit'=>$einh, 'gewicht'=>$gew];
         $grp[$pid]['need'] += $need;
         $grp[$pid]['orders'][] = ['pa_id'=>(int)$pa['id'], 'auftrag_id'=>(int)$pa['auftrag_id'], 'auftrag_nr'=>$pa['auftrag_nr'], 'need'=>$need];
         $grp[$pid]['pa_ids'][] = (int)$pa['id'];
@@ -8732,9 +8751,9 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
         // Freier, nicht kundengebundener Fertigware-Bestand dieses Produkts (ohne Item neu anzulegen).
         $lagerItem = (int) scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$g['produkt_id']]);
         $stockRaw = $lagerItem > 0 ? item_bestand($lagerItem, true) : 0.0;   // fertige Packungen (Beutel/Dosen)
-        // Bei Schüttgut den Packungs-Bestand in dieselbe Einheit wie den Bedarf bringen (Packungen × Füllmenge),
-        // sonst würden Beutel von Gramm/kg abgezogen. Stück-Formen bleiben wie bisher (Packungs-Bestand).
-        $stock = $g['gewicht'] ? $stockRaw * (float)$g['ep'] * (float)$g['faktor'] : $stockRaw;
+        // Bei Schüttgut den Packungs-Bestand in dieselbe Einheit wie den Bedarf bringen (Packungen × Füllmenge = g/ml),
+        // sonst würden Beutel von Gramm abgezogen. Stück-Formen bleiben wie bisher (Packungs-Bestand).
+        $stock = $g['gewicht'] ? $stockRaw * (float)$g['ep'] : $stockRaw;
         $g['bestellt'] = $bestellt;
         $g['stock'] = $stock;
         $g['zu_bestellen'] = max(0.0, $g['need'] - $stock - $bestellt);

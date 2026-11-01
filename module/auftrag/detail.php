@@ -482,6 +482,11 @@ if ($etikettFrei) {
 $groesseLbl = produktion_groesse_label((int)$a['produkt_id']);
 // Pulver/Granulat: „Stück je Packung" ist in Wahrheit die Füllmenge in Gramm je Packung -> nach Gewicht anzeigen.
 $istFuellG = function_exists('form_groessen_einheit') && form_groessen_einheit((string)($rezeptur['darreichungsform'] ?? '')) === 'g';
+// Bulk-Mengen im Reiter Produktion (Freigeben/Reservieren/Zuweisen): Pulver wird in GRAMM geführt (wie Charge
+// und Reservierung), nicht in „Stück/Einheiten". Label = „g" + lesbarer kg/t-Hinweis; Stück-Formen bleiben „Stück".
+$bulkEinh = $istFuellG ? 'g' : 'Stück';
+$bulkLes  = fn($v) => $istFuellG && function_exists('gewicht_lesbar') ? ' <span style="font-weight:normal">(' . gewicht_lesbar((float)$v, 'g') . ')</span>' : '';
+$bulkMng  = fn($v) => $istFuellG && function_exists('gewicht_lesbar') ? gewicht_lesbar((float)$v, 'g') : number_format((int)$v, 0, ',', '.') . ' Stück';
 // Bestellungen (bei welchem Lieferanten, welcher Status) – verknüpft über die Position.
 $best = all("SELECT DISTINCT b.id, b.nummer, b.status, b.bestaetigt, b.angekommen_am, l.firma AS lieferant
              FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
@@ -1033,7 +1038,7 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
             <option value="eigen" <?= $istFremd ? '' : 'selected' ?>>Herstellen</option>
           </select>
         </label>
-        <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Produktionsmenge (Einheiten)
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Produktionsmenge (<?= $bulkEinh ?>)<?= $bulkLes($freigabeBedarf) ?>
           <input type="text" inputmode="numeric" name="menge_produktion" value="<?= number_format((int)$freigabeBedarf, 0, ',', '.') ?>" data-tausender style="min-width:150px">
         </label>
         <button class="btn btn-primary btn-sm" type="submit">Zur Produktion freigeben</button>
@@ -1126,12 +1131,12 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
         </optgroup><?php endif; ?>
       </select>
     </label>
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Menge (Stück Bulk)
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Menge (<?= $bulkEinh ?> Bulk)<?= $bulkLes($bulkOffen) ?>
       <input type="text" inputmode="numeric" name="menge" data-tausender value="<?= number_format((int)$bulkOffen, 0, ',', '.') ?>" style="min-width:130px">
     </label>
     <button class="btn btn-primary btn-sm" type="submit" data-busy="Reserviere…">Reservieren</button>
   </form>
-  <div class="muted" style="font-size:12px;margin-top:6px">Reserviert fertige Bulkware aus einer konkreten Bestellung (auch noch nicht geliefert) oder einer vorhandenen Charge – ohne neue Lieferantenbestellung und ohne Eigenproduktion. Benötigt für diesen Auftrag: <strong><?= number_format((int)$gesamtStk,0,',','.') ?></strong> Stück<?= $bulkResSumme>0 ? ', bereits reserviert ' . number_format((int)round($bulkResSumme),0,',','.') : '' ?>.</div>
+  <div class="muted" style="font-size:12px;margin-top:6px">Reserviert fertige Bulkware aus einer konkreten Bestellung (auch noch nicht geliefert) oder einer vorhandenen Charge – ohne neue Lieferantenbestellung und ohne Eigenproduktion. Benötigt für diesen Auftrag: <strong><?= $bulkMng($gesamtStk) ?></strong><?= $bulkResSumme>0 ? ', bereits reserviert ' . $bulkMng($bulkResSumme) : '' ?>.</div>
   <?php else: ?>
   <div class="muted" style="font-size:12px">Reservieren ist nur möglich, wenn Bulk des gleichen Produkts <strong>unterwegs</strong> (bestellt) oder <strong>vorhanden</strong> ist. Erst eine Lieferantenbestellung für die Bulkware anlegen (oder Bestand einbuchen), dann hier reservieren.</div>
   <?php endif; ?>
@@ -1176,12 +1181,12 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
         </optgroup><?php endif; ?>
       </select>
     </label>
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Menge (Stück)
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Menge (<?= $bulkEinh ?>)<?= $bulkLes($lwOffen) ?>
       <input type="text" inputmode="numeric" name="menge" data-tausender value="<?= number_format((int)$lwOffen, 0, ',', '.') ?>" style="min-width:130px">
     </label>
     <button class="btn btn-primary btn-sm" type="submit" data-busy="Weise zu…">Zuweisen</button>
   </form>
-  <div class="muted" style="font-size:12px;margin-top:6px">Bindet vorhandene Lagerware (fertige Bulkware) <strong>fest</strong> an diesen Auftrag – der Kunde bekommt genau diese Charge. Oben die zur Rezeptur passende Bulkware, darunter <strong>jede andere Fertigware im Lager</strong> – <strong>du</strong> entscheidest, was gekoppelt wird. Teilmengen werden abgespalten, der freie Rest bleibt im Lager und kann <strong>weiteren Aufträgen</strong> zugeteilt werden. Räumt „wartet auf Material" ab (ohne neue Bestellung, ohne Eigenproduktion). Benötigt: <strong><?= number_format((int)$gesamtStk,0,',','.') ?></strong> Stück<?= $lwSumme>0 ? ', bereits zugewiesen ' . number_format((int)round($lwSumme),0,',','.') : '' ?>.</div>
+  <div class="muted" style="font-size:12px;margin-top:6px">Bindet vorhandene Lagerware (fertige Bulkware) <strong>fest</strong> an diesen Auftrag – der Kunde bekommt genau diese Charge. Oben die zur Rezeptur passende Bulkware, darunter <strong>jede andere Fertigware im Lager</strong> – <strong>du</strong> entscheidest, was gekoppelt wird. Teilmengen werden abgespalten, der freie Rest bleibt im Lager und kann <strong>weiteren Aufträgen</strong> zugeteilt werden. Räumt „wartet auf Material" ab (ohne neue Bestellung, ohne Eigenproduktion). Benötigt: <strong><?= $bulkMng($gesamtStk) ?></strong><?= $lwSumme>0 ? ', bereits zugewiesen ' . $bulkMng($lwSumme) : '' ?>.</div>
   <?php else: ?>
   <div class="muted" style="font-size:12px">Keine freie Fertigware-(Bulk-)Charge im Lager vorhanden (Status <strong>frei</strong>, nicht Quarantäne/gesperrt, noch keinem Auftrag zugewiesen). Liegt die Ware unter „Verkaufsfertig" oder in Quarantäne, zuerst dort freigeben bzw. als Fertigware einbuchen.</div>
   <?php endif; ?>

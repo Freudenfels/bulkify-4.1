@@ -381,11 +381,12 @@ if ($ohneFestlegung): ?>
           <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
           <td>Bulk: <?= h($b['produkt'] ?: '–') ?></td>
           <td><?= bx_badge('Fertiges Produkt','info') ?></td>
-          <?php $bEinh = (string)($b['einheit'] ?? 'Stk'); ?>
-          <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], $bEinh) ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($b['need'] ?? $b['zu_bestellen']) ?> <?= h($bEinh) ?> · Lager <?= $mfmt($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $mfmt($b['bestellt']) : '' ?></div></td>
+          <?php $bEinh = (string)($b['einheit'] ?? 'Stk'); $bGew = !empty($b['gewicht']);
+                $bLes = fn($v) => $bGew ? gewicht_lesbar((float)$v, $bEinh) : $mfmt($v) . ' Stk'; ?>
+          <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], $bEinh) ?><div class="muted" style="font-size:11px">Bedarf <?= $bLes($b['need'] ?? $b['zu_bestellen']) ?> · Lager <?= $bLes($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $bLes($b['bestellt']) : '' ?></div></td>
           <td><?= $liefSelect($key, 0, $bPreise, true, ['class'=>'bx-bulk-lief', 'data-ab'=>($bAb !== null ? (float)$bAb : ''), 'data-abcur'=>$bAbCur, 'data-einheit'=>$bEinh]) ?><?php if ($bAb !== null): ?><div class="muted bx-bulk-sum" style="font-size:11px">ab <?= $preis4($bAb, $bAbCur) ?>/<?= h($bEinh) ?> · Summe <?= $sum2($bSumme, $bAbCur) ?></div><?php endif; ?></td>
           <td style="font-size:12px"><?php foreach ($b['orders'] as $o): ?>
-            <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a><?php endforeach; ?><span class="muted">· Fremdfertigung</span></td>
+            <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $bLes($o['need']) ?>)&#8599;</a><?php endforeach; ?><span class="muted">· Fremdfertigung</span></td>
         </tr>
       <?php endforeach; ?>
       <?php foreach ($nachTab as $nb): $key = 'nach:' . (int)$nb['item_id']; ?>
