@@ -535,6 +535,7 @@ render_header('auftraege', $a['nummer']);
 $kopfProdukt = trim((string)($a['produkt_bezeichnung'] ?? '')) ?: (string)($a['produkt_name'] ?? '');
 bx_head($a['nummer'] . ($kopfProdukt !== '' ? ' · ' . $kopfProdukt : ''), 'Auftragsbestätigung',
     pdf_btn('?p=auftrag_pdf&id=' . (int)$a['id'], 'PDF / Drucken', false, 'Auftragsbestätigung als PDF öffnen/drucken')
+    . ($pa ? ' ' . bx_btn('Zum Produktionsauftrag ' . (string)$pa['nummer'], '?p=produktionsauftrag&id=' . (int)$pa['id'], 'ghost') : '')
     . ' ' . bx_btn('Zurück zur Liste', '?p=auftraege', 'ghost'));
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['importiert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag aus Angebot importiert – Rezeptur/Produkt angelegt (falls neu), Angebot/Rechnung angehängt. Bitte Werte gegenprüfen.</div>';
