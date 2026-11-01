@@ -82,7 +82,10 @@ $statusBadge = fn($s) => match ($s) {
     'leer'        => bx_badge('leer'),
     default       => bx_badge($s),
 };
-$mng = fn($x,$e) => rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',') . ' ' . h($e ?: '');
+// Menge lesbar: Gewicht/Volumen (g/ml) ab 1.000 in kg/L, ab 1.000.000 in t (via gewicht_lesbar); sonst Zahl + Einheit.
+$mng = fn($x,$e) => (function_exists('gewicht_lesbar') && in_array((string)$e, ['g','ml'], true))
+    ? gewicht_lesbar((float)$x, (string)$e)
+    : rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',') . ' ' . h($e ?: '');
 // Teil 4 (Schritt 6): Artikel-Detailseite je Kategorie (Warenlager-Detailseite) – wie in bestand_liste.php.
 $artikelUrl = function (array $c): string {
     $iid = (int)($c['item_id'] ?? 0);

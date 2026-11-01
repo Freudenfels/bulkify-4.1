@@ -82,7 +82,10 @@ if ($q !== '') {
 }
 $rows = bx_sort_rows(array_values($rows), $sort, $dir);
 
-$mng = fn($x,$e) => $x > 0 ? rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',') . ' ' . h($e) : '<span class="muted">0</span>';
+// Menge lesbar: Gewicht/Volumen (g/ml) ab 1.000 in kg/L, ab 1.000.000 in t (via gewicht_lesbar); sonst Zahl + Einheit.
+$mng = fn($x,$e) => $x > 0
+    ? ((function_exists('gewicht_lesbar') && in_array((string)$e, ['g','ml'], true)) ? gewicht_lesbar((float)$x, (string)$e) : rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',') . ' ' . h($e))
+    : '<span class="muted">0</span>';
 // Bestand-Zelle: frei verfügbar + Hinweis-Badges für Quarantäne/gesperrt (damit Ware, die nur in
 // Quarantäne liegt, nicht fälschlich als „0/leer" wirkt).
 $bestandCell = function($r) use ($mng, $ort) {

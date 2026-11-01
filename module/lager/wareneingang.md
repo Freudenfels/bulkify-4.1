@@ -20,3 +20,6 @@
 
 ## Teil 4 (Schritt 6): klickbare „Letzte Chargen"
 Jede Zeile der Liste „Letzte Chargen" ist klickbar und führt zur **Artikel-Detailseite (Warenlager-Detailseite)** – Route je Kategorie wie in `bestand_liste.php` (`betriebsmittel` → `?p=betriebsmittel`, `verpackung` → `?p=verpackung`, sonst `?p=rohstoff`). Die Abfrage liefert dafür `i.kategorie`; der Artikelname ist zusätzlich als Link gesetzt. Klicks auf den „freigeben"-Button/Links werden nicht abgefangen (`tr.we-rowlink` + JS).
+
+## Mengen lesbar (kg/t) – Pulver-Bulk (2026-11-01)
+Der Helfer `$mng($menge,$einheit)` (Chargen-Liste) zeigt Gewichts-/Volumen-Chargen jetzt lesbar: Charge-Einheit `g` → ab 1.000 **kg**, ab 1.000.000 **t**; `ml` → **L** (via `gewicht_lesbar()` in `core/schema.php`). So steht „650 kg" statt „650.000 g". Andere Einheiten (Stk/kg) unverändert. Das Eingabefeld „Menge" führt weiter die Einheit des Artikels (bei losem Pulver g) – eine kg-Eingabe hier ist ein möglicher späterer Ausbau.
