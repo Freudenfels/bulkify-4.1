@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $paketNrn = array_values(array_filter(array_map('trim',
             preg_split('/[\r\n]+/', (string)($_POST['p_paketnummern'][$i] ?? ''))), fn($x) => $x !== ''));
         if ($paketNrn) $pakete = max($pakete, count($paketNrn));   // so viele Kartons wie Nummern
-        $statusP  = (string)($_POST['p_frei'][$i] ?? '1') === '1' ? 'frei' : 'quarantaene';   // Haken je Position
+        $statusP  = 'auto';   // einheitliche Regel (Rohstoffe/Bulk -> Quarantäne, Verpackung/Etikett frei) – kein Haken je Position mehr (St-12)
         $rezeptur_id = (int)($_POST['p_rezeptur'][$i] ?? 0);   // nur bei Warenart 'fertig' relevant
         if ($name === '' && $menge <= 0 && $rezeptur_id <= 0) continue;   // leere Zeile
 
@@ -148,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             if ($auftragNr !== '') $notiz .= ' · Auftrag ' . $auftragNr;
             $cid = $ziel === 'l2'
                 ? erp_wareneingang_buchen_fremd($item_id, $menge, '', null, $kunde_id, $notiz, $einheit)
-                : erp_wareneingang_buchen($item_id, $menge, '', null, $lief, $notiz, 'frei', $einheit);
+                : erp_wareneingang_buchen($item_id, $menge, '', null, $lief, $notiz, 'auto', $einheit);
             if (!$cid) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Buchen fehlgeschlagen.'; continue; }
             $pAuftragId = (int)($_POST['p_auftrag_id'][$i] ?? 0);
             if ($ziel !== 'l2' && $pAuftragId > 0 && function_exists('erp_charge_auftrag_setzen')) erp_charge_auftrag_setzen((int)$cid, $pAuftragId);
@@ -507,7 +507,7 @@ if ($gebucht):
         'bi'=>(int)($r['bulk_item_id']??0),
         'e'=>(string)($r['bulk_einheit']??'')
       ], $rezepturen), JSON_UNESCAPED_UNICODE) ?>;
-  var MATRIX = {rohstoff:{mhd:1,charge:1},leerkapsel:{mhd:1,charge:1},fertig:{mhd:1,charge:1},verkaufsfertig:{mhd:1,charge:1},etikett:{mhd:0,charge:0,inventar:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
+  var MATRIX = {rohstoff:{mhd:1,charge:1,q:1},leerkapsel:{mhd:1,charge:1,q:1},fertig:{mhd:1,charge:1,q:1},verkaufsfertig:{mhd:1,charge:1,q:1},etikett:{mhd:0,charge:0,inventar:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
   var ARTEN = [['rohstoff','Rohstoff'],['leerkapsel','Leerkapseln'],['fertig','Bulk / lose (Kapseln/Tabletten)'],['verkaufsfertig','Fertiges Produkt (verpackt)'],['etikett','Etikett (Rolle)'],['verpackung','Verpackung'],['verbrauch','Verbrauch']];
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
   var KEYC=0;   // fortlaufender Zeilenschlüssel (für die 2D-Rollen-Felder je Etikett-Position)
@@ -585,7 +585,7 @@ if ($gebucht):
           '<input type="hidden" name="p_paketnummern[]" class="we-pak-h">'+
           '<div class="we-pakscan"></div>'+
         '</div>'+
-        '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked title="Angehakt = freigegeben, nicht angehakt = Quarantäne"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
+        '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked disabled title="Rohstoffe und Bulk gehen in Quarantäne, Verpackung und Etikett sind sofort frei"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
         '<div class="bx-field f-split"><label>Aufteilen</label><input type="checkbox" class="we-split" title="Menge gleichmäßig auf die Kartons verteilen"><input type="hidden" name="p_aufteilen[]" class="we-split-h" value="0"></div>'+
         '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
         // Etikettenrollen: nur Gesamtmenge + Anzahl Rollen. Menge wird gleichmäßig verteilt; Inventaraufkleber optional.
@@ -824,6 +824,10 @@ if ($gebucht):
     mhd.required=!!reg.mhd; ch.required=!!reg.charge;
     tr.querySelector('.lbl-mhd').textContent    = reg.mhd    ? 'MHD *' : 'MHD';
     tr.querySelector('.lbl-charge').textContent = reg.charge ? 'Charge-Nr. *' : 'Charge-Nr.';
+    // Status ist Regel, keine Wahl: Rohstoffe/Bulk -> Quarantäne (Freigabe nach Prüfung), Verpackung/Etikett -> frei.
+    var fb=tr.querySelector('.we-frei'), fbh=tr.querySelector('.we-frei-h');
+    if(fb){ fb.checked=!reg.q; fb.disabled=true; fb.title=reg.q?'Geht in Quarantäne – nach der Prüfung unter „Ware in Quarantäne“ freigeben':'Sofort freigegeben'; }
+    if(fbh) fbh.value=reg.q?'0':'1';
   }
   document.getElementById('weAdd').addEventListener('click',function(){addRow();});
   rows.addEventListener('input',function(e){ var tr=e.target.closest('.we-pos'); if(tr)pflicht(tr); });

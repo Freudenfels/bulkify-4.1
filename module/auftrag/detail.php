@@ -993,7 +993,7 @@ if (auftrag_braucht_etikett($id)):
           $iid = (int)($fr['item_id'] ?? 0);
           $bst = $iid > 0 ? one("SELECT b.id, b.nummer, b.eta_geplant FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                   WHERE bp.item_id=? AND b.status='bestellt' AND b.angekommen_am IS NULL ORDER BY b.id DESC LIMIT 1", [$iid]) : null;
-          $fehlDetail[] = ['name'=>(string)($fr['name'] ?? '–'), 'fehlt'=>(float)($fr['fehlt'] ?? 0), 'einheit'=>(string)($fr['einheit'] ?? 'Stk'), 'best'=>$bst];
+          $fehlDetail[] = ['name'=>(string)($fr['name'] ?? '–'), 'fehlt'=>(float)($fr['fehlt'] ?? 0), 'einheit'=>(string)($fr['einheit'] ?? 'Stk'), 'best'=>$bst, 'quar'=>(float)($fr['quarantaene'] ?? 0), 'iid'=>$iid];
       }
   }
   $nsTon = 'info'; $nsLager = false;
@@ -1013,7 +1013,8 @@ if (auftrag_braucht_etikett($id)):
     <ul style="margin:10px 0 0;padding-left:18px;font-size:13px">
       <?php foreach ($fehlDetail as $fd): ?>
       <li style="margin:3px 0"><strong><?= h($fmtM($fd['fehlt'], $fd['einheit'])) ?></strong> <?= h($fd['name']) ?> fehlt –
-        <?php if ($fd['best']): ?>bestellt mit <a href="?p=bestellung&id=<?= (int)$fd['best']['id'] ?>"><?= h((string)$fd['best']['nummer']) ?></a><?= !empty($fd['best']['eta_geplant']) ? ', erwartet ' . h(date('d.m.Y', strtotime((string)$fd['best']['eta_geplant']))) : '' ?>
+        <?php if ($fd['quar'] > 1e-6 && $fd['quar'] + 1e-6 >= $fd['fehlt']): ?><span style="color:#8a6d00">liegt in Quarantäne (<?= h($fmtM($fd['quar'], $fd['einheit'])) ?>)</span> – <a href="<?= h(quarantaene_freigabe_url((int)$fd['iid'])) ?>">freigeben</a>
+        <?php elseif ($fd['best']): ?>bestellt mit <a href="?p=bestellung&id=<?= (int)$fd['best']['id'] ?>"><?= h((string)$fd['best']['nummer']) ?></a><?= !empty($fd['best']['eta_geplant']) ? ', erwartet ' . h(date('d.m.Y', strtotime((string)$fd['best']['eta_geplant']))) : '' ?>
         <?php else: ?><span style="color:#8f231b">noch nicht bestellt</span> – <a href="?p=einkaufsliste">zum Einkauf</a><?php endif; ?>
       </li>
       <?php endforeach; ?>
@@ -1152,7 +1153,7 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
   <h2 style="margin:0 0 4px;font-size:16px">Material-Übersicht</h2>
   <div class="muted" style="font-size:12px;margin-bottom:10px">Was dieser Auftrag braucht, was frei im Lager liegt und was bestellt, aber noch unterwegs ist.</div>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Position</th><th>Rolle</th><th class="bx-num"><?= $ueProd > 0 ? 'noch benötigt' : 'benötigt' ?></th><th class="bx-num">frei</th><th class="bx-num">unterwegs</th><th>Deckung</th></tr></thead>
+    <thead><tr><th>Position</th><th>Rolle</th><th class="bx-num"><?= $ueProd > 0 ? 'noch benötigt' : 'benötigt' ?></th><th class="bx-num">frei</th><th class="bx-num">in Quarantäne</th><th class="bx-num">unterwegs</th><th>Deckung</th></tr></thead>
     <tbody>
     <?php foreach ($bedarfRows as $r):
         $iid = (int)($r['item_id'] ?? 0);
@@ -1161,14 +1162,17 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
         $unterwegs = $iid > 0 ? item_unterwegs($iid) : 0.0;
         $einh = (string)($r['einheit'] ?? 'Stk');
         $deckt = $frei + 1e-6 >= $ben;
-        $decktMitUnterwegs = !$deckt && ($frei + $unterwegs + 1e-6 >= $ben); ?>
+        $quar = (float)($r['quarantaene'] ?? 0);
+        $decktMitQuar = !$deckt && $quar > 1e-6 && ($frei + $quar + 1e-6 >= $ben);
+        $decktMitUnterwegs = !$deckt && !$decktMitQuar && ($frei + $quar + $unterwegs + 1e-6 >= $ben); ?>
       <tr>
         <td><?= h((string)($r['name'] ?? '–')) ?></td>
         <td class="muted"><?= h((string)($r['rolle'] ?? '–')) ?></td>
         <td class="bx-num"><?= $mng($ben, $einh) ?></td>
         <td class="bx-num"><?= $mng($frei, $einh) ?></td>
+        <td class="bx-num"><?= $quar > 1e-9 ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '">' . $mng($quar, $einh) . '</a>' : '<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs, $einh) : '<span class="muted">–</span>' ?></td>
-        <td><?= $deckt ? bx_badge('gedeckt','ok') : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('Fehlbestand','warn')) ?></td>
+        <td><?= $deckt ? bx_badge('gedeckt','ok') : ($decktMitQuar ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '" style="text-decoration:none">' . bx_badge('in Quarantäne – freigeben','warn') . '</a>' : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('Fehlbestand','warn'))) ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
@@ -1627,7 +1631,7 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
       <?php foreach ($ekBedarf as $bd): $nz = fn($x,$n=3)=>rtrim(rtrim(number_format((float)$x,$n,',','.'),'0'),','); ?>
         <tr>
           <td><a class="kundenlink" href="?p=rohstoff&id=<?= (int)$bd['item_id'] ?>&tab=ek"><?= h($bd['name']) ?></a></td>
-          <td class="bx-num"><?= $nz($bd['benoetigt']) ?> <?= h($bd['einheit']) ?><?php if ($bd['fehlt'] > 0.0001): ?><br><span style="color:#8f231b;font-size:12px">fehlt <?= $nz($bd['fehlt']) ?></span><?php else: ?><br><span class="bx-ok" style="font-size:12px">auf Lager</span><?php endif; ?></td>
+          <td class="bx-num"><?= $nz($bd['benoetigt']) ?> <?= h($bd['einheit']) ?><?php if (($bd['zu_bestellen'] ?? $bd['fehlt']) > 0.0001): ?><br><span style="color:#8f231b;font-size:12px">fehlt <?= $nz($bd['zu_bestellen'] ?? $bd['fehlt']) ?></span><?php elseif ($bd['fehlt'] > 0.0001): ?><br><span style="color:#8a6d00;font-size:12px">in Quarantäne – <a href="<?= h(quarantaene_freigabe_url((int)$bd['item_id'])) ?>">freigeben</a></span><?php else: ?><br><span class="bx-ok" style="font-size:12px">auf Lager</span><?php endif; ?></td>
           <td><?php if (!$bd['angebote']): ?><span class="muted">kein EK-Preis hinterlegt</span>
               <?php else: $bi = 0; foreach ($bd['angebote'] as $ao): ?>
                 <div style="<?= $bi === 0 ? 'font-weight:600' : '' ?>"><?= h($ao['firma'] ?: '–') ?>: <?= $nz($ao['preis'], 4) ?> <?= h($ao['waehrung'] ?: 'EUR') ?><?= (float)$ao['menge_ab'] > 0 ? ' <span class="muted">(ab ' . $nz($ao['menge_ab']) . ')</span>' : '' ?><?= $bi === 0 ? ' <span class="muted">· günstigste</span>' : '' ?></div>

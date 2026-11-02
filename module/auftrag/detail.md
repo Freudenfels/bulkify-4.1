@@ -198,3 +198,5 @@ Farbe je Status (grün fertig / gelb läuft / grau wartet / rot blockiert bei �
 AKTUELLE Schritt hat genau EINEN Hauptknopf „Schritt abschließen →" (`phase_setzen` auf idx+1; letzter =
 „Auftrag abschließen"). Die horizontale Phasenleiste bleibt oben als Überblick; „Fortschritt manuell auf eine
 Stufe setzen" (auch zurück) ist eingeklappt verfügbar.
+
+**Quarantäne im Auftrag (St-07):** Die Material-Übersicht hat die Spalte „in Quarantäne" und die Deckung „in Quarantäne – freigeben" (Link zur Freigabe-Liste). „Nächster Schritt" nennt Quarantäne-Ware mit Freigabe-Link statt „noch nicht bestellt".

@@ -265,7 +265,7 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
           <td class="bx-num"><?= menge_txt($z['menge']) ?> <?= h((string)$z['einheit']) ?></td>
           <td class="bx-num"<?= $knapp ? ' style="color:#8f231b"' : '' ?>>
             <?= isset($z['verfuegbar']) ? menge_txt($z['verfuegbar']) . ' ' . h((string)$z['einheit']) : '' ?>
-            <?php if (!empty($z['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($z['quarantaene']) ?> in Quarantäne – erst freigeben</span><?php endif; ?>
+            <?php if (!empty($z['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($z['quarantaene']) ?> in Quarantäne – <a href="/lager/?p=quarantaene&item=<?= (int)($z['item_id'] ?? 0) ?>">erst freigeben</a></span><?php endif; ?>
           </td>
           <td class="bx-num">
             <?php if (!empty($z['charge_id'])): ?>

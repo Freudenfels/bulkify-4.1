@@ -14,7 +14,7 @@ function lg_nav(): array {
     // über der Gruppe "Lager 1". Einbuchen gibt es zusätzlich als Knopf oben auf jeder Seite.
     $nav = [
         ''            => ['uebersicht' => 'Übersicht', 'we' => 'Einbuchen'],
-        'Lager 1'     => ['erwartet' => 'Erwartete Lieferungen', 'einlagern' => 'Einlagern',
+        'Lager 1'     => ['erwartet' => 'Erwartete Lieferungen', 'quarantaene' => 'Quarantäne', 'einlagern' => 'Einlagern',
                           'finden' => 'Suche', 'versand' => 'Warenausgang', 'bestand' => 'Bestand'],
         'Lager 2 (Fremdlager)' => ['l2_eingang' => 'Kundenware einbuchen', 'l2_finden' => 'Suche',
                                    'l2_bestand' => 'Fremdlager-Bestand', 'l2_artikel' => 'Artikel'],

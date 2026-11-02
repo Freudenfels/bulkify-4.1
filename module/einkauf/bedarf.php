@@ -168,7 +168,7 @@ $BM_KAT = betriebsmittel_kategorien();
     $gemeldet = !empty($pa['bedarf_gemeldet']);
     $fremd    = ($pa['produktionsart'] ?? 'eigen') === 'fremd';
     $bedarf   = auftrag_bedarf_cached((int)$pa['id']);                 // komplette Stückliste (gecacht; bei Fremd: Bulk-Zukauf + Verpackung/Etiketten)
-    $hatFehl  = false; foreach ($bedarf as $bb) if ((float)$bb['fehlt'] > 1e-6) { $hatFehl = true; break; }
+    $hatFehl  = false; foreach ($bedarf as $bb) if ((float)($bb['zu_bestellen'] ?? $bb['fehlt']) > 1e-6) { $hatFehl = true; break; }
 ?>
   <div class="bx-panel"<?= $gemeldet ? ' style="border-color:var(--gruen)"' : '' ?>>
     <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px">
@@ -210,7 +210,11 @@ $BM_KAT = betriebsmittel_kategorien();
               <td><?= bx_badge($f['rolle']) ?></td>
               <td class="bx-num"><?= $mfmt($f['benoetigt']) ?> <?= h($f['einheit']) ?></td>
               <td class="bx-num"><?= $mfmt($f['verfuegbar']) ?> <?= h($f['einheit']) ?></td>
-              <td class="bx-num"><?= $fehlt > 1e-6 ? '<strong style="color:#8f231b">' . $mfmt($fehlt) . ' ' . h($f['einheit']) . '</strong>' : '<span class="bx-ok">✓ auf Lager</span>' ?></td>
+              <td class="bx-num"><?php
+                $quarF = (float)($f['quarantaene'] ?? 0); $bestF = (float)($f['zu_bestellen'] ?? $fehlt);
+                if ($fehlt <= 1e-6): ?><span class="bx-ok">✓ auf Lager</span>
+                <?php elseif ($bestF <= 1e-6 && $quarF > 1e-6): ?><strong style="color:#8a6d00"><?= $mfmt($quarF) ?> <?= h($f['einheit']) ?> in Quarantäne</strong><br><a href="<?= h(quarantaene_freigabe_url((int)($f['item_id'] ?? 0))) ?>" style="font-size:12px">freigeben</a>
+                <?php else: ?><strong style="color:#8f231b"><?= $mfmt($bestF) ?> <?= h($f['einheit']) ?></strong><?php if ($quarF > 1e-6): ?><br><span class="muted" style="font-size:12px">+ <?= $mfmt($quarF) ?> in Quarantäne – <a href="<?= h(quarantaene_freigabe_url((int)($f['item_id'] ?? 0))) ?>">freigeben</a></span><?php endif; ?><?php endif; ?></td>
             </tr>
           <?php endforeach; ?>
         </tbody>

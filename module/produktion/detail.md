@@ -121,3 +121,5 @@ Die Material-Tabelle nutzt jetzt `auftrag_bedarf_rest($id)` statt `auftrag_bedar
 Packungen sind abgezogen (Benötigt/Verfügbar/Status + „zu bestellen"). Oben erscheint bei begonnener
 Produktion ein Hinweis „Restbedarf: X von Y schon produziert – Material nur für die Z offenen Packungen".
 Gleiche Zahl wie Material-Übersicht (Auftragsseite) und `produktion_bereitschaft()`.
+
+**Quarantäne (St-07):** „Wartet auf Material", Materialbedarf und Komponenten-Tabelle zeigen „in Quarantäne – freigeben" (Link `?p=wareneingang&quarantaene=1&item=ID`).

@@ -1070,7 +1070,7 @@ function erp_erwartete_lieferungen(): array {
 // Wareneingang buchen: legt eine Charge an (oder fuellt eine vorab aus einer CoA angelegte Charge).
 // Rohstoff/Fertigware -> Quarantaene, sonst sofort frei. Rueckgabe: neue/aktualisierte charge.id oder null.
 function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?string $mhd,
-                                 ?int $lieferant_id, string $notiz = '', string $status = 'frei', string $einheit = ''): ?int {
+                                 ?int $lieferant_id, string $notiz = '', string $status = 'auto', string $einheit = ''): ?int {
     if (!tabelle_da('charge') || !tabelle_da('item')) return null;
     $it = one("SELECT kategorie, einheit FROM item WHERE id=?", [$item_id]);
     if (!$it || $menge <= 0) return null;
@@ -1080,8 +1080,11 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
     // Gewichts-/Volumen-Eingaben in die Artikel-Basiseinheit umrechnen (25.000 g -> 25 kg), damit der
     // Bestand nicht 1000x zu hoch zaehlt. Stk/Karton/… bleiben unveraendert.
     [$menge, $einheit] = erp_menge_in_item_einheit($menge, $einheit, (string)$it['einheit']);
-    // Status wird beim Einbuchen gewaehlt (Standard: freigegeben). Quarantaene nur im Sonderfall.
-    $status = in_array($status, ['frei', 'quarantaene', 'gesperrt'], true) ? $status : 'frei';
+    // Status: 'auto' (Standard) = EINE Regel für alle Wareneingangswege wie im Dashboard (item_braucht_quarantaene):
+    // Rohstoffe, Bulk/Fertigware und verkaufsfertige Ware gehen in QUARANTÄNE und werden nach der Prüfung freigegeben,
+    // Verpackung/Etikett/Verbrauch sind sofort frei (St-12). Ein ausdrücklicher Status ('frei'/'quarantaene'/'gesperrt') gilt weiter.
+    if (!in_array($status, ['frei', 'quarantaene', 'gesperrt'], true))
+        $status = in_array((string)$it['kategorie'], ['rohstoff', 'fertig', 'verkaufsfertig'], true) ? 'quarantaene' : 'frei';
     $charge_nr = trim($charge_nr);
     $lief = (tabelle_da('lieferanten') && $lieferant_id) ? $lieferant_id : null;
 
@@ -1386,8 +1389,19 @@ function erp_charge_status_setzen(int $charge_id, string $status): array {
     if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
     if ((string)$c['status'] === 'leer' || (float)$c['menge_verfuegbar'] <= 0) return ['ok' => false, 'meldung' => 'Leere Charge – Status bleibt.'];
     q("UPDATE charge SET status=? WHERE id=?", [$status, $charge_id]);
+    erp_bedarf_bump();   // freigegebene/gesperrte Ware ändert den verfügbaren Bestand -> Bedarf/Einkauf neu rechnen
     $txt = ['frei' => 'Freigegeben', 'quarantaene' => 'In Quarantäne', 'gesperrt' => 'Gesperrt'];
     return ['ok' => true, 'meldung' => 'Status: ' . $txt[$status]];
+}
+
+// Alle Chargen in Quarantäne (eigenes Lager, ohne Fremdlager), optional nur ein Artikel – für die Freigabe-Liste.
+function erp_quarantaene_chargen(int $item_id = 0): array {
+    if (!tabelle_da('charge')) return [];
+    return all("SELECT c.id, c.charge_nr, c.item_id, c.menge_verfuegbar, c.einheit, c.mhd, c.wareneingang, i.name AS item_name, i.kategorie,
+                       lf.firma AS lieferant
+                FROM charge c JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten lf ON lf.id=c.lieferant_id
+                WHERE c.status='quarantaene' AND c.fremd_kunde_id IS NULL AND c.menge_verfuegbar>0" . ($item_id > 0 ? " AND c.item_id=" . (int)$item_id : "") . "
+                ORDER BY i.name, c.wareneingang DESC, c.id DESC");
 }
 
 // Warenausgang: Menge von einer Charge abbuchen. Leer -> Status 'leer'. Fremdlager-Chargen sind tabu.

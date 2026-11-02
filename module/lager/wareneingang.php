@@ -8,10 +8,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
     if ($aktion === 'buchen') {
         $item_id = (int)($_POST['item_id'] ?? 0);
-        $menge = (float) str_replace(',', '.', trim($_POST['menge'] ?? '0'));
+        $menge = zahl_lesen((string)($_POST['menge'] ?? '0'), true);   // „60.000" = 60000 (wie ?p=we im Lager)
         $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
         $aid = ($_POST['auftrag_id'] ?? '') !== '' ? (int)$_POST['auftrag_id'] : null;
         $cid = wareneingang_buchen($item_id, $menge, trim($_POST['charge_nr'] ?? ''), trim($_POST['mhd'] ?? '') ?: null, $lief, trim($_POST['notiz'] ?? ''), $aid);
+        // Bestellbezug wie im Lager-Wareneingang: gehört die Ware zu einer Bestellung, wird diese geschlossen (kein „unterwegs" + eingebucht).
+        if ($cid && (int)($_POST['bestellung_id'] ?? 0) > 0) bestellung_als_angekommen((int)$_POST['bestellung_id']);
         // Tracking-Code(s) der eingegangenen Pakete/Palette an die Charge haengen (je Zeile ein Code, gescannt).
         if ($cid) {
             $codes = array_values(array_unique(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($_POST['tracking'] ?? ''))))));
@@ -21,7 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($aktion === 'freigeben') {
         q("UPDATE charge SET status='frei' WHERE id=? AND status='quarantaene'", [(int)($_POST['charge_id'] ?? 0)]);
-        header('Location: ?p=wareneingang&frei=1'); exit;
+        bedarf_bump();   // freigegebene Ware zählt sofort als verfügbar (Bedarf/Einkauf/Produktion)
+        header('Location: ?p=wareneingang&frei=1' . (!empty($_POST['quarantaene']) ? '&quarantaene=1' . ((int)($_POST['q_item'] ?? 0) > 0 ? '&item=' . (int)$_POST['q_item'] : '') : '')); exit;
     }
     // Zukauf: fertige Bulkware zu einem Auftrag buchen (Fremdproduktion). Es gibt (noch) keinen Fertigware-
     // Artikel im Katalog – wir leiten ihn aus der Rezeptur des Auftragsprodukts ab (rezeptur_bulkitem, legt
@@ -29,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Der Produktionsauftrag erkennt den Zukauf dann automatisch (produktion_ist_zukauf) und verkürzt den Weg.
     if ($aktion === 'zukauf_buchen') {
         $aid = (int)($_POST['auftrag_id'] ?? 0);
-        $menge = (float) str_replace(',', '.', trim($_POST['menge'] ?? '0'));
+        $menge = zahl_lesen((string)($_POST['menge'] ?? '0'), true);
         $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
         $au = $aid ? one("SELECT a.produkt_id, p.rezeptur_id FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$aid]) : null;
         $rez = (int)($au['rezeptur_id'] ?? 0);
@@ -47,6 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $items = all("SELECT id, name, kategorie, einheit, verpackung_rolle, breite_mm, hoehe_mm, etikett_format FROM item WHERE kategorie IN ('rohstoff','verpackung','fertig','verkaufsfertig') AND gesperrt=0 ORDER BY name");
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+// Erwartete Lieferungen (bestellt, noch nicht angekommen) – optionaler Bestellbezug beim Einbuchen.
+$offeneBestellungen = all("SELECT b.id, b.nummer, COALESCE(l.firma,'') AS lieferant FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                           WHERE b.status='bestellt' AND b.angekommen_am IS NULL ORDER BY b.id DESC LIMIT 200");
 $offeneAuftraege = all("SELECT a.id, a.nummer, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, k.firma
                         FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN kunden k ON k.id=a.kunde_id
                         WHERE a.status <> 'versendet' ORDER BY a.angelegt DESC");
@@ -63,7 +69,16 @@ if ($aufIdsE)
     foreach (all("SELECT objekt_id, MAX(id) AS did FROM dokument WHERE objekt_typ='auftrag' AND typ='etikett' AND objekt_id IN (" . implode(',', $aufIdsE) . ") GROUP BY objekt_id") as $d)
         $aufEtikett[(int)$d['objekt_id']] = (int)$d['did'];
 $such = trim((string)($_GET['such'] ?? ''));   // Suche nach Tracking-Code / Charge / Artikel (Paket wiederfinden)
-if ($such !== '') {
+// Quarantäne-Freigabe: ALLE Chargen in Quarantäne (nicht nur die letzten 25), optional nur ein Artikel – Ziel der Links
+// „freigeben" aus Auftrag, Produktionsauftrag und Einkaufsliste (St-07/St-12).
+$nurQuar = !empty($_GET['quarantaene']);
+$quarItem = (int)($_GET['item'] ?? 0);
+if ($nurQuar) {
+    $charges = all("SELECT c.*, i.name AS item_name, i.kategorie AS item_kategorie, l.firma AS lieferant_firma
+                    FROM charge c LEFT JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id
+                    WHERE c.status='quarantaene' AND c.fremd_kunde_id IS NULL" . ($quarItem > 0 ? " AND c.item_id=" . $quarItem : "") . "
+                    ORDER BY i.name, c.angelegt DESC");
+} elseif ($such !== '') {
     $like = '%' . $such . '%';
     $charges = all("SELECT c.*, i.name AS item_name, i.kategorie AS item_kategorie, l.firma AS lieferant_firma
                     FROM charge c LEFT JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id
@@ -152,6 +167,12 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
         <select name="lieferant_id">
           <option value="">– keiner –</option>
           <?php foreach ($lieferanten as $lf): ?><option value="<?= $lf['id'] ?>"><?= h($lf['firma']) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+      <div class="bx-field"><label>Zur Bestellung <?= bx_hint('Optional: gehört diese Ware zu einer Bestellung beim Lieferanten? Dann gilt die Bestellung als angekommen und zählt nicht mehr als „unterwegs".') ?></label>
+        <select name="bestellung_id">
+          <option value="">– keine –</option>
+          <?php foreach ($offeneBestellungen as $ob): ?><option value="<?= (int)$ob['id'] ?>"><?= h($ob['nummer'] . ($ob['lieferant'] !== '' ? ' · ' . $ob['lieferant'] : '')) ?></option><?php endforeach; ?>
         </select>
       </div>
       <!-- 2c) „Für Auftrag" (optional) – nur bei Rohstoff/Verpackung/Fertigware -->
@@ -279,18 +300,20 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
 
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-    <h2 style="margin:0"><?= $such !== '' ? 'Suchergebnis' : 'Letzte Chargen' ?></h2>
+    <h2 style="margin:0"><?= $nurQuar ? 'Ware in Quarantäne – freigeben' : ($such !== '' ? 'Suchergebnis' : 'Letzte Chargen') ?></h2>
     <form method="get" class="bx-row" style="gap:6px;margin:0" role="search">
       <input type="hidden" name="p" value="wareneingang">
       <input type="text" name="such" value="<?= h($such) ?>" placeholder="Tracking-Code / Charge / Artikel suchen" style="width:280px">
       <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
       <?php if ($such !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=wareneingang">×</a><?php endif; ?>
+      <?php if (!$nurQuar): ?><a class="btn btn-ghost btn-sm" href="?p=wareneingang&quarantaene=1">Nur Quarantäne</a><?php else: ?><a class="btn btn-ghost btn-sm" href="?p=wareneingang">Alle Chargen</a><?php endif; ?>
     </form>
   </div>
+  <?php if ($nurQuar): ?><div class="muted" style="font-size:13px;margin-top:6px">Alle Chargen, die noch auf die Freigabe warten<?= $quarItem > 0 ? ' (nur dieser Artikel)' : '' ?>. Nach „freigeben" zählt die Ware sofort als verfügbar.<?= $quarItem > 0 ? ' <a href="?p=wareneingang&quarantaene=1">alle Artikel zeigen</a>' : '' ?></div><?php endif; ?>
   <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
     <thead><tr><th>Charge</th><th>Artikel</th><th class="bx-num">Menge</th><th>MHD</th><th>Lieferant</th><th>Tracking</th><th>Status</th><th></th></tr></thead>
     <tbody>
-    <?php if (!$charges): ?><tr><td colspan="8" class="muted"><?= $such !== '' ? 'Kein Treffer zu „' . h($such) . '".' : 'Noch keine Chargen gebucht.' ?></td></tr><?php endif; ?>
+    <?php if (!$charges): ?><tr><td colspan="8" class="muted"><?= $nurQuar ? 'Keine Ware in Quarantäne.' : ($such !== '' ? 'Kein Treffer zu „' . h($such) . '".' : 'Noch keine Chargen gebucht.') ?></td></tr><?php endif; ?>
     <?php foreach ($charges as $c): $tc = array_values(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($c['tracking'] ?? ''))))); $au = $artikelUrl($c); ?>
       <tr<?= $au !== '' ? ' class="we-rowlink" data-href="' . h($au) . '" style="cursor:pointer"' : '' ?>>
         <td><?= h($c['charge_nr'] ?: '–') ?></td>
@@ -302,7 +325,7 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
         <td><?= $statusBadge($c['status']) ?></td>
         <td style="text-align:right">
           <?php if ($c['status']==='quarantaene'): ?>
-            <form method="post" style="display:inline"><input type="hidden" name="aktion" value="freigeben"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>"><button class="btn btn-primary btn-sm" type="submit">freigeben</button></form>
+            <form method="post" style="display:inline"><input type="hidden" name="aktion" value="freigeben"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>"><?php if ($nurQuar): ?><input type="hidden" name="quarantaene" value="1"><input type="hidden" name="q_item" value="<?= (int)$quarItem ?>"><?php endif; ?><button class="btn btn-primary btn-sm" type="submit">freigeben</button></form>
           <?php endif; ?>
         </td>
       </tr>

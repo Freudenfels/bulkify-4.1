@@ -20,3 +20,5 @@ Verpackung wird immer gezeigt (bei fehlender Angabe „–"); Produktionstyp = E
 Oben rechts der Button in den Produktionsmodus (`?p=run&id=…`); Beschriftung je Status: „Produktion starten" (offen), „Produktion fortsetzen" (laufend), „Produktionsmodus" (erledigt). Bei Status **`vorbereitung`** ist der Button **ausgegraut/deaktiviert** (kein Run-Link, `pointer-events:none`) und daneben steht ein kleines **„i"-Icon mit Tooltip** („noch nicht freigegeben – erst im Dashboard unter Vor-Produktion freigeben"); kein sichtbarer Fließtext mehr. Grund: die Run-Ansicht wäre dann ohnehin gesperrt.
 
 **Schritte:** der jeweils erste offene Schritt ist „als Nächstes" und trägt den **Abschließen**-Button. Der POST (`aktion=schritt_ab`, `schritt_id`) ruft `erp_schritt_abschliessen()` auf (FEFO-Entnahme, Mangel-Guard; letzter Schritt bucht Fertigware ein) und leitet danach um (PRG, Flash). Zeiten via `fmt_zeit()`.
+
+Werk-App: der Hinweis „in Quarantäne – erst freigeben" ist jetzt ein Link in die Lager-Freigabeseite (`/lager/?p=quarantaene&item=ID`).

@@ -63,3 +63,5 @@ Position einen eigenen Artikel hat, der nicht `kategorie='fertig'` ist (Verpacku
 Position vor dem Namenstreffer.
 
 `erp_bestellung_angekommen($id)` setzt nicht nur `angekommen_am`, sondern schließt die Bestellung (`status='geliefert'`, wenn sie noch offen/gesendet/bestellt war) – sonst Doppelzählung im Bedarf und doppeltes Einbuchen über „liefern" im Dashboard (S-06).
+
+**Einheitliche Quarantäne-Regel (St-12):** `erp_wareneingang_buchen(..., $status='auto')` entscheidet den Status wie das Dashboard: Rohstoff/Bulk/verkaufsfertig -> `quarantaene`, Verpackung/Etikett/Verbrauch -> `frei`. Ein ausdrücklicher Status wird weiter respektiert. `erp_charge_status_setzen()` setzt den Bedarf-Cache zurück. `erp_quarantaene_chargen($item_id=0)` liefert alle Chargen in Quarantäne (Seite `?p=quarantaene`).

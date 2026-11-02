@@ -81,3 +81,5 @@ Rezeptur-Ableitung. Beim Buchen lehnt der Server außerdem jede Zeile ab, die ei
 Etikett/Verpackung/Rohstoff einbuchen will – der Artikel wird dadurch nicht mehr umgewidmet.
 
 **Vorgewählte Lieferung per URL (S-06):** `?p=we&lieferung=<id>` öffnet „Aus Liste wählen" und lädt die Lieferung sofort (Link „Einbuchen" aus „Erwartete Lieferungen"). Das Buchen markiert die Bestellung als angekommen und `geliefert`.
+
+**Status ist Regel, keine Wahl (St-12):** Der Haken „Freigegeben" je Position ist nur noch Anzeige (deaktiviert). Rohstoffe, Bulk und verkaufsfertige Ware gehen immer in Quarantäne (Freigabe unter „Quarantäne"), Verpackung und Etiketten sind sofort frei – wie im Dashboard.

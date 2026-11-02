@@ -23,3 +23,5 @@ Jede Zeile der Liste „Letzte Chargen" ist klickbar und führt zur **Artikel-De
 
 ## Mengen lesbar (kg/t) – Pulver-Bulk (2026-11-01)
 Der Helfer `$mng($menge,$einheit)` (Chargen-Liste) zeigt Gewichts-/Volumen-Chargen jetzt lesbar: Charge-Einheit `g` → ab 1.000 **kg**, ab 1.000.000 **t**; `ml` → **L** (via `gewicht_lesbar()` in `core/schema.php`). So steht „650 kg" statt „650.000 g". Andere Einheiten (Stk/kg) unverändert. Das Eingabefeld „Menge" führt weiter die Einheit des Artikels (bei losem Pulver g) – eine kg-Eingabe hier ist ein möglicher späterer Ausbau.
+
+**Quarantäne-Freigabe + Bestellbezug (St-07/St-12):** `?p=wareneingang&quarantaene=1[&item=ID]` zeigt ALLE Chargen in Quarantäne (nicht nur die letzten 25) mit „freigeben"; Ziel der Links aus Auftrag, Produktionsauftrag und Einkaufsliste. Mengen mit `zahl_lesen(..., true)` („60.000" = 60000). Neues Feld „Zur Bestellung": die gewählte Bestellung gilt danach als angekommen (`bestellung_als_angekommen`).

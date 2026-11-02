@@ -3909,6 +3909,20 @@ function pruefungen_faellig(): array {
 // Optionaler request-lokaler Bestands-Cache. NUR aktiv, wenn $GLOBALS['bx_stock_cache'] gesetzt ist
 // (das macht ausschließlich die schreibfreie Produktionsliste). Schreibpfade (z. B. reservieren)
 // setzen ihn nie -> sie rechnen immer frisch, bleiben also korrekt.
+// Ware in QUARANTÄNE (physisch da, aber noch nicht freigegeben) – unser Bestand, ohne Fremdlager. Wird im Bedarfs-Netting
+// als eigene Kategorie geführt (St-07): nicht „frei verfügbar", aber auch nicht „fehlt/zu bestellen" – sie wartet auf die Freigabe.
+function item_quarantaene(int $item_id): float {
+    if ($item_id <= 0) return 0.0;
+    $ck = 'q:' . $item_id;
+    if (isset($GLOBALS['bx_stock_cache']) && array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
+    $v = (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='quarantaene' AND fremd_kunde_id IS NULL", [$item_id]);
+    if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
+    return $v;
+}
+// Link zur Quarantäne-Freigabe (alle Chargen in Quarantäne, optional nur dieser Artikel) – direkt aus Auftrag/Einkaufsliste/PA erreichbar.
+function quarantaene_freigabe_url(int $item_id = 0): string {
+    return '?p=wareneingang&quarantaene=1' . ($item_id > 0 ? '&item=' . $item_id : '');
+}
 function item_bestand(int $item_id, bool $nur_frei = true): float {
     $ck = 'b:' . $item_id . ':' . ($nur_frei ? 1 : 0);
     if (isset($GLOBALS['bx_stock_cache']) && array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
@@ -4074,6 +4088,14 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
     return $neu;
 }
 
+// Bestellung als angekommen/geliefert markieren OHNE Chargen anzulegen (die Ware wurde schon eingebucht, z. B. über die
+// Wareneingangs-Maske mit Bestellbezug). Gleiche Wirkung wie erp_bestellung_angekommen() in der Lager-App (S-06/St-12).
+function bestellung_als_angekommen(int $bestellung_id): void {
+    if ($bestellung_id <= 0) return;
+    q("UPDATE bestellung SET angekommen_am=COALESCE(angekommen_am, CURDATE()) WHERE id=?", [$bestellung_id]);
+    q("UPDATE bestellung SET status='geliefert' WHERE id=? AND status IN ('offen','gesendet','bestellt')", [$bestellung_id]);
+    bedarf_bump();
+}
 // Bestellung als geliefert verbuchen: für jede Position eine Charge (Wareneingang) anlegen. Idempotent.
 function bestellung_wareneingang(int $bestellung_id): bool {
     $b = one("SELECT * FROM bestellung WHERE id=?", [$bestellung_id]);
@@ -7993,8 +8015,13 @@ function auftrag_bedarf(int $pa_id): array {
             $r['verfuegbar']       = item_verfuegbar_fuer($iid, $aid);
             $r['reserviert_eigen'] = item_reserviert_eigen($iid, $aid);
             $r['fehlt']            = max(0.0, (float)$r['benoetigt'] - (float)$r['verfuegbar']);
+            // Quarantäne-Bestand: „fehlt" bleibt (Ware ist erst nach Freigabe nutzbar), aber „zu bestellen" rechnet sie ab (St-07).
+            $r['quarantaene']      = $r['fehlt'] > 1e-6 ? item_quarantaene($iid) : 0.0;
+            $r['zu_bestellen']     = max(0.0, (float)$r['fehlt'] - (float)$r['quarantaene']);
         } else {
             $r['reserviert_eigen'] = 0.0;
+            $r['quarantaene']      = 0.0;
+            $r['zu_bestellen']     = (float)($r['fehlt'] ?? 0);
         }
     }
     unset($r);
@@ -8039,6 +8066,7 @@ function auftrag_bedarf_rest(int $pa_id): array {
     foreach ($rows as &$r) {
         $r['benoetigt'] = (float)($r['benoetigt'] ?? 0) * $faktor;
         $r['fehlt']     = max(0.0, (float)$r['benoetigt'] - (float)($r['verfuegbar'] ?? 0));
+        $r['zu_bestellen'] = max(0.0, (float)$r['fehlt'] - (float)($r['quarantaene'] ?? 0));
     }
     unset($r);
     return $rows;
@@ -8505,11 +8533,13 @@ function auftrag_fehlbedarf(int $pa_id): array {
     // Auf den NOCH offenen Rest skaliert: schon produzierte Packungen brauchen kein Material mehr. Solange
     // nichts produziert ist (Normalfall beim Bestellen) ist das identisch zum Bruttobedarf.
     foreach (auftrag_bedarf_rest($pa_id) as $r) {
-        if ($r['fehlt'] <= 1e-6 || (int)$r['item_id'] <= 0) continue;
+        // Was in Quarantäne liegt, zählt nicht als „zu bestellen" (wartet auf Freigabe) – siehe auftrag_bedarf (St-07).
+        $fehltBest = (float)($r['zu_bestellen'] ?? $r['fehlt']);
+        if ($fehltBest <= 1e-6 || (int)$r['item_id'] <= 0) continue;
         // schon offen bestellt: für diesen Auftrag ODER als Sammelbestellung (Lager, auftrag_id NULL)
         $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                  WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL AND (bp.auftrag_id=? OR bp.auftrag_id IS NULL)", [(int)$r['item_id'], $aid]);
-        $noch = (float)$r['fehlt'] - $offen;
+        $noch = $fehltBest - $offen;
         if ($noch <= 1e-6) continue;
         $r['bestellt'] = $offen; $r['zu_bestellen'] = $noch;
         $out[] = $r;
@@ -8885,15 +8915,16 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
         $aid = (int)($a['auftrag_id'] ?? 0);
         if (!empty($a['etikett'])) {
             // Kundenspezifisch: kein generischer Lagerbestand, Bestell-Sperre bis Design da ist.
-            $a['stock'] = 0.0;
+            $a['stock'] = 0.0; $a['quarantaene'] = 0.0;
             $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$a['item_id'], $aid]);
             $a['zu_bestellen'] = max(0.0, $a['need'] - $a['bestellt']);
             // Etiketten erst bestellbar, wenn der Kunde das Etikett freigegeben hat (nicht nur hochgeladen).
             $a['etikett_ok'] = etikett_freigegeben($aid);
         } else {
             $a['stock'] = item_bestand($a['item_id'], true);
+            $a['quarantaene'] = item_quarantaene((int)$a['item_id']);   // wartet auf Freigabe -> nicht nachbestellen (St-07)
             $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$a['item_id']]);
-            $a['zu_bestellen'] = max(0.0, $a['need'] - $a['stock'] - $a['bestellt']);
+            $a['zu_bestellen'] = max(0.0, $a['need'] - $a['stock'] - $a['quarantaene'] - $a['bestellt']);
             $a['etikett_ok'] = true;
         }
         $a['haupt_lieferant'] = (int) scalar("SELECT haupt_lieferant_id FROM item WHERE id=?", [$a['item_id']]);
@@ -9342,9 +9373,11 @@ function produktion_materialbedarf(int $pa_id): array {
         // deckt. So steht bei fertiger/laufender Produktion nicht weiter „fehlt 150.000", obwohl entnommen wurde.
         $entnommen = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, (int)$z['item_id']]);
         $offen = max(0.0, $benoetigt - $entnommen);
+        $fehltM = max(0.0, $offen - $verf);
+        $quarM  = $fehltM > 1e-6 ? item_quarantaene((int)$z['item_id']) : 0.0;
         $out[] = ['item_id'=>(int)$z['item_id'], 'name'=>$z['name'], 'einheit'=>$z['einheit'],
                   'benoetigt'=>$benoetigt, 'entnommen'=>$entnommen, 'offen'=>$offen,
-                  'verfuegbar'=>$verf, 'fehlt'=>max(0.0, $offen - $verf)];
+                  'verfuegbar'=>$verf, 'fehlt'=>$fehltM, 'quarantaene'=>$quarM, 'zu_bestellen'=>max(0.0, $fehltM - $quarM)];
     }
     return $out;
 }
@@ -9359,8 +9392,8 @@ function auftrag_express_bestellung(int $auftrag_id, int $lieferant_id): ?int {
     if (!$pa) return null;
     $pos = [];
     foreach (produktion_materialbedarf((int)$pa['id']) as $b) {
-        $menge = (float)($b['fehlt'] ?? 0);
-        if ($menge <= 0.0001) continue;   // genug auf Lager
+        $menge = (float)($b['zu_bestellen'] ?? $b['fehlt'] ?? 0);
+        if ($menge <= 0.0001) continue;   // genug auf Lager (oder wartet in Quarantäne auf Freigabe)
         // Passenden Staffelpreis dieses Lieferanten holen (größte Staffel <= Menge, sonst kleinste).
         $preis = null;
         foreach (all("SELECT preis, menge_ab FROM lieferant_preis WHERE item_id=? AND lieferant_id=? AND (waehrung IS NULL OR waehrung='EUR') ORDER BY menge_ab", [(int)$b['item_id'], $lieferant_id]) as $s) {

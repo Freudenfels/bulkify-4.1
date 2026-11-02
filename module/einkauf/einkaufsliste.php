@@ -186,7 +186,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($online ? '&online=1' : '') . ($skipPortal ? '&skip=' . $skipPortal : '')); exit;
 }
 
-$aggBedarf = array_values(array_filter(bedarf_aggregiert(false), fn($a) => $a['zu_bestellen'] > 1e-6));
+$aggAlle = bedarf_aggregiert(false);
+$aggBedarf = array_values(array_filter($aggAlle, fn($a) => $a['zu_bestellen'] > 1e-6));
+// Ware in Quarantäne, die den offenen Bedarf (teilweise) deckt: NICHT nachbestellen, sondern freigeben (St-07).
+$quarListe = array_values(array_filter($aggAlle, fn($a) => empty($a['etikett']) && (float)($a['quarantaene'] ?? 0) > 1e-6 && (float)$a['need'] - (float)$a['stock'] > 1e-6));
 $bulkBedarf = array_values(array_filter(bedarf_bulk(false), fn($b) => $b['zu_bestellen'] > 1e-6));
 $freiBedarf = freibedarf_offen();
 $nachBedarf = meldebestand_bedarf();   // Meldebestand-Nachbestellungen (Lagerartikel unter Mindestbestand)
@@ -318,6 +321,24 @@ if ($ohneFestlegung): ?>
       <label class="muted" style="font-size:13px;cursor:pointer"><input type="checkbox" id="selAll" style="vertical-align:middle"> alle im Reiter</label>
     </div>
   </div>
+  <?php if ($quarListe): ?>
+  <div class="bx-panel" style="margin:12px 0 4px;border-color:#C9A227;background:rgba(201,162,39,.08);padding:12px 16px">
+    <div style="font-weight:600;margin-bottom:6px">In Quarantäne – bitte freigeben, nicht nachbestellen</div>
+    <div class="muted" style="font-size:13px;margin-bottom:8px">Diese Ware ist schon im Lager, aber noch nicht freigegeben. Sie ist unten bereits vom Bedarf abgezogen.</div>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Artikel</th><th class="bx-num">Bedarf</th><th class="bx-num">frei</th><th class="bx-num">in Quarantäne</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($quarListe as $qa): ?>
+        <tr><td><?= h($qa['name']) ?></td>
+          <td class="bx-num"><?= $mfmt($qa['need']) ?> <?= h($qa['einheit']) ?></td>
+          <td class="bx-num"><?= $mfmt($qa['stock']) ?> <?= h($qa['einheit']) ?></td>
+          <td class="bx-num"><strong><?= $mfmt($qa['quarantaene']) ?> <?= h($qa['einheit']) ?></strong></td>
+          <td style="text-align:right"><a class="btn btn-primary btn-sm" href="<?= h(quarantaene_freigabe_url((int)$qa['item_id'])) ?>">Freigeben</a></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; ?>
   <div class="settabs" style="margin:8px 0 4px">
     <?php foreach ($TYPEN as $t => $lbl): $n = $anzahlTyp($t); ?>
       <a href="?p=einkaufsliste<?= $t ? '&typ=' . $t : '' ?>" class="<?= $aktTyp === $t ? 'on' : '' ?>"><?= h($lbl) ?><?= $n ? ' (' . $n . ')' : '' ?></a>

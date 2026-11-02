@@ -26,6 +26,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $pakete = max(1, (int)($_POST['pakete'] ?? 1));
     $cid = erp_wareneingang_buchen($item_id, $menge, trim((string)($_POST['charge_nr'] ?? '')),
         trim((string)($_POST['mhd'] ?? '')) ?: null, $lief, trim((string)($_POST['notiz'] ?? '')));
+    // Bestellbezug wie im Wareneingang (?p=we): kommt die Ware zu einer Bestellung (bestellung_id), wird sie geschlossen.
+    $beId = (int)($_POST['bestellung_id'] ?? 0);
+    if ($cid && $beId > 0) erp_bestellung_angekommen($beId);
     if (!$cid) { flash('Bitte Artikel und eine Menge größer 0 angeben.', 'warn'); weiter('?p=eingang'); }
     lg_pakete_set((int)$cid, $pakete);
     // Teil 4: je Karton/Sack ein Gebinde-Datensatz (Gewicht/Restmenge/Ort) – eigener QR je Gebinde aufs Etikett.
@@ -64,6 +67,7 @@ flash_zeigen();
 ?>
 <form method="post" class="bx-form">
   <input type="hidden" name="aktion" value="buchen">
+  <input type="hidden" name="bestellung_id" value="<?= (int)($_GET['bestellung'] ?? 0) ?>"><!-- optional: Ware gehört zu dieser Bestellung -> wird geschlossen -->
   <div class="bx-panel">
     <style>
       .lg-acombo{position:relative}

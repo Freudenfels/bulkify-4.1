@@ -64,3 +64,5 @@ Für Aufträge, die VOR dem Verlauf-Fix bestellt wurden (kein `ref_typ='bestellu
 
 ## Fix „Bedarf"-Spalte zeigte Restmenge (2026-10-24)
 In der Rohstoff-/Verpackungszeile zeigte die Unterzeile fälschlich `Bedarf = zu_bestellen` (die REST-Menge) statt des echten Gesamtbedarfs. Dadurch sah es widersinnig aus (z. B. „Bedarf 3.868 · Lager 9.632" – obwohl der echte Bedarf 13.500 war, Lager 9.632, also 3.868 Rest). Jetzt: `Bedarf = $a['need']` (echter Gesamtbedarf, wie in der Bulk-Zeile), plus explizit „· zu bestellen X". Die Bestellmenge im Eingabefeld (= zu_bestellen) war immer korrekt.
+
+**Quarantäne (St-07):** Oberhalb der Reiter steht „In Quarantäne – bitte freigeben, nicht nachbestellen" mit Artikel, Bedarf, frei, in Quarantäne und Knopf „Freigeben". Quarantäne-Ware ist bereits vom „zu bestellen" abgezogen.
