@@ -1298,6 +1298,9 @@ function erp_etikett_rollen_verteilen(int $charge_id, float $gesamt, int $anzahl
     $mengen[$anzahl - 1] = $gesamt - $basis * ($anzahl - 1);
 
     $rollen = []; $benutzt = []; $fehler = [];
+    // Parallele Wareneingänge (zwei Tablets) dürfen nicht dieselbe Auto-Nummer ziehen (MAX+1): Nummernvergabe + Anlegen
+    // laufen unter einer DB-Sperre (Aufräumen 13). Ohne Sperre (Timeout) geht es wie bisher weiter.
+    $lock = (int) scalar("SELECT GET_LOCK('bx_inventar_nr', 5)") === 1;
     for ($k = 0; $k < $anzahl; $k++) {
         $roh = trim((string)($nummern[$k] ?? ''));
         if ($roh === '') {                       // leer -> automatisch vergeben
@@ -1310,7 +1313,8 @@ function erp_etikett_rollen_verteilen(int $charge_id, float $gesamt, int $anzahl
         $benutzt[$nr] = 1;
         $rollen[] = ['nr' => $nr, 'menge' => $mengen[$k]];
     }
-    $res = erp_etikett_rollen_anlegen($charge_id, $rollen);
+    try { $res = erp_etikett_rollen_anlegen($charge_id, $rollen); }
+    finally { if ($lock) scalar("SELECT RELEASE_LOCK('bx_inventar_nr')"); }
     $res['fehler'] = array_merge($fehler, $res['fehler'] ?? []);
     return $res;
 }

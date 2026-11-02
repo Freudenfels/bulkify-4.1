@@ -83,3 +83,6 @@ Neue letzte Station **„Wareneingang bei bulkify"** (`eingegangen`, de/en/zh). 
 ## Kleinigkeiten (Aufräumen 10/11)
 - Lager-Lieferschein: Ohne eigenen Versand-Absender gelten die Firmendaten aus dem Dashboard (`erp_firma_absender()`), nicht mehr „Musterstraße 1".
 - Wareneingang: die Meldung „Blinker angehängt" entfällt (stimmte nicht bei Etiketten ohne Blinker).
+
+## Inventarnummer unter Sperre (Aufräumen 13)
+`erp_etikett_rollen_verteilen()` vergibt die Auto-Inventarnummern (MAX+1) und legt die Rollen unter `GET_LOCK(bx_inventar_nr)` an. So ziehen zwei gleichzeitige Wareneingänge nicht dieselbe Nummer. Ein UNIQUE-Index geht nicht, weil eine Nummer nur je **aktiver** Rolle eindeutig ist (leere Rollen dürfen sie behalten).
