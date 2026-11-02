@@ -181,3 +181,8 @@ mehrere Mengen-Varianten in derselben Gruppe (Symptom: PDF-Zusammenfassung „Pr
 einen falschen Packungspreis = Summe aller Varianten ÷ letzte Menge, und es erscheint eine irreführende
 Endsumme über alle Varianten), bekommt jede Variante wieder ihren eigenen Buchstaben A/B/C. Die Positions-
 Auflistung war schon korrekt – nur die Zusammenfassung lief daneben.
+
+## Verpackung bedruckt/kundenspezifisch (Punkt 6, 2026-11-02)
+Verpackungs-Positionen (quelle='verpackung') tragen eine Checkbox „bedruckt / kundenspezifisch"
+(`p_kspez[]` → `angebot_position.kundenspezifisch`). Kein Lagerartikel im Angebot – erst bei Annahme
+(`auftrag_aus_angebot`) entsteht ein eigener Behälter-Artikel am Produkt.

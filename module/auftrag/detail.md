@@ -163,3 +163,9 @@ Auf der Details-Seite verweist der Änderungs-Block nur noch **pro Produktionsau
 Die Material-Übersicht bezieht die Zeilen jetzt aus `auftrag_bedarf_rest()` (core/schema.php) statt die
 Rest-Skalierung selbst zu rechnen. Damit zeigen Übersicht, PA-Material und Bereitschaft garantiert dieselbe
 Zahl. „unterwegs" kommt weiter aus `item_unterwegs()`; „mit Lieferung" = frei + unterwegs reicht.
+
+## Kundenspezifischer Behälter statt Beistellung (Punkt 6, 2026-11-02)
+Der Haken „vom Kunden beigestellt (kundeneigen)" ist entfernt. Stattdessen: Reiter Verpackung zeigt bei
+einem bedruckten, kundenspezifischen Behälter ein Badge „bedruckt · kundenspezifisch"; sonst ein Knopf
+„Bedruckten, kundenspezifischen Behälter anlegen" (Aktion `verpackung_kundenspezifisch` →
+`verpackung_kundenspezifisch_sicherstellen()` am Produkt, bindet den Auftrag). Einkaufbar, getrennt vom Standard.

@@ -171,3 +171,12 @@ ist es identisch zum Bruttobedarf. Das ist die **einzige** Quelle für (1) `prod
 überall dieselbe Zahl (kein „oben gedeckt / unten fehlt"-Widerspruch mehr). Auch `auftrag_fehlbedarf()`
 (Bestellen) rechnet jetzt über den Rest. Der **Brutto**-`auftrag_bedarf_cached()` bleibt unverändert.
 Beispiel AB-3286/PR-2796: 6.000 bestellt, 4.101 gebucht → Material nur noch für 1.899 Packungen.
+
+## Bedruckte, kundenspezifische Verpackung (Punkt 6, 2026-11-02)
+`verpackung_kundenspezifisch_sicherstellen($produkt_id,$basis_item_id)` legt – analog zum Kundenetikett –
+einen eigenen Behälter-Lagerartikel AM PRODUKT an (Kopie des Standard-Behälters, `item.kundenspezifisch=1`,
+`item.produkt_id`), setzt `produkt.verpackung_id` darauf und ist idempotent (bei Nachbestellung wiederverwendet).
+Marker im Angebot: `angebot_position.kundenspezifisch` (Checkbox „bedruckt/kundenspezifisch" an der
+Verpackungs-Position). Hook: `auftrag_aus_angebot()` erzeugt den Artikel erst **bei Annahme**.
+Der frühere „kundeneigen/Beistellung"-Weg (`item.kundeneigen`, `auftrag.verpackung_beistellung`,
+`verpackung_kundeneigen_sicherstellen()`) wurde **entfernt**.

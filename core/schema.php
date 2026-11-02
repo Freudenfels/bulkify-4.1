@@ -555,6 +555,7 @@ function init_schema(): void {
     ensure_column('angebot_position', 'rezeptur_id', "INT NULL");
     ensure_column('angebot_position', 'stueck', "INT NULL");
     ensure_column('angebot_position', 'verpackung_id', "INT NULL");
+    ensure_column('angebot_position', 'kundenspezifisch', "TINYINT(1) NOT NULL DEFAULT 0"); // Verpackungs-Position: bedruckt/kundenspezifisch -> bei Annahme eigener Behälter-Artikel am Produkt
     // VK je Einheit in e4 (Euro x 10.000) fuer Sub-Cent-Preise (z. B. Bulk 0,0250 EUR/Stk). preis_cent allein
     // (ganze Cent) rundet 0,025 auf 0,03 -> falsche Summe. preis_e4 NULL = Altwert, dann gilt preis_cent*100.
     ensure_column('angebot_position', 'preis_e4', "INT NULL");
@@ -1556,7 +1557,6 @@ function init_schema(): void {
     // Angebot als Preismatrix (Kunde wählt Zelle: Stückzahl × Bestellmenge) -> gewählte Werte fließen in Auftrag + Produktion
     ensure_column('auftrag', 'stueck', "INT NULL");
     ensure_column('auftrag', 'verpackung_id', "INT NULL");
-    ensure_column('auftrag', 'verpackung_beistellung', "TINYINT(1) NOT NULL DEFAULT 0"); // Behälter ist kundeneigen (Beistellung) -> nicht gegen unseren Lagerbestand prüfen
     ensure_column('auftrag', 'etikett_item_id', "INT NULL"); // welche Kundenetikett-Version (item) für diesen Auftrag gilt (kundenreine Verbuchung + Rückverfolgung)
     ensure_column('auftrag', 'kontingent_id', "INT NULL");   // Abruf aus einem Rahmenvertrag/Kontingent
     ensure_column('auftrag', 'produkt_bezeichnung', "VARCHAR(190) NULL");  // Namens-SNAPSHOT: friert den (internen) Produktnamen zur Auftragszeit ein -> spaetere Umbenennung aendert Auftraege nicht
@@ -1844,8 +1844,7 @@ function init_schema(): void {
     ensure_column('item', 'fremdprodukt', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('item', 'zusammengefuehrt_in', "INT NULL");   // Doppel-Artikel wurde hierher zusammengeführt (deaktiviert, nicht gelöscht)
     ensure_column('item', 'fremd_besitzer_id', "INT NULL");   // Besitzer-Kunde (kunden.id) des Fremdprodukts
-    ensure_column('item', 'kundeneigen', "TINYINT(1) NOT NULL DEFAULT 0");  // Verpackung: kundeneigen (Beistellung) -> nicht einkaufbar, auftragsgebunden; normal buchbar/lagerführend
-    ensure_column('item', 'auftrag_id', "INT NULL");                        // kundeneigene Verpackung: an genau diesen Auftrag gebunden
+    ensure_column('item', 'kundenspezifisch', "TINYINT(1) NOT NULL DEFAULT 0"); // Verpackung: bedruckter, kundenspezifischer Behälter (eigener Lagerartikel am Produkt, getrennt vom Standard-Basic)
     ensure_column('kunden', 'nutzt_fulfillment', "TINYINT NOT NULL DEFAULT 0"); // Kunde nutzt unser Fulfillment → hat ein Lager 2
     ensure_column('kunden', 'eigener_dhl', "TINYINT NOT NULL DEFAULT 0"); // Kunde hat eigenen DHL-Vertrag → Monatsabrechnung ohne Paketzeilen, nur Fulfillment-Service
     // Betriebsmittel (Kartons/Verbrauchsgüter/Inventar/Maschinen/Sonstiges): einfacher Bestand + Geräteprüfung.
@@ -5530,6 +5529,7 @@ function angebot_positionen_calc(int $angebot_id): array {
         'preis_e4'=>((isset($r['preis_e4']) && $r['preis_e4'] !== null && $r['preis_e4'] !== '') ? (int)$r['preis_e4'] : (int)$r['preis_cent'] * 100),
         'ek_cent'=>(int)$r['ek_cent'], 'mwst_satz'=>(float)$r['mwst_satz'], 'quelle'=>$r['quelle'], 'gruppe'=>$r['gruppe'] ?? null,
         'rezeptur_id'=>$r['rezeptur_id'] ?? null, 'stueck'=>$r['stueck'] ?? null, 'verpackung_id'=>$r['verpackung_id'] ?? null,
+        'kundenspezifisch'=>(int)($r['kundenspezifisch'] ?? 0),
     ], $echt);
     $a = one("SELECT * FROM angebot WHERE id=?", [$angebot_id]);
     if (!$a) return [];
@@ -7616,35 +7616,6 @@ function produkt_bulk_info(int $produkt_id, string $fbName = '', string $fbForm 
     return ['name'=>$name, 'form'=>$form, 'form_wort'=>$wort, 'einheit'=>$einheit, 'bezeichnung'=>$bez];
 }
 
-// Kundeneigene Verpackung (Beistellung) als AUFTRAGSEIGENEN Lagerartikel sicherstellen: der Kunde liefert
-// den Behälter selbst (nicht einkaufbar), er wird aber ganz normal geführt/gebucht (Wareneingang) und prüft
-// als Bestand mit. Legt – falls noch nicht vorhanden – eine auftragsgebundene Kopie des Basis-Behälters an
-// („<Name> – <Auftragsnr>", kundeneigen=1, auftrag_id gesetzt, ek_preis 0, kein Lieferant) und gibt deren
-// item-id zurück. Idempotent: bei erneutem Aufruf wird die vorhandene Kopie dieses Auftrags zurückgegeben.
-function verpackung_kundeneigen_sicherstellen(int $auftrag_id, int $basis_item_id): int {
-    if ($auftrag_id <= 0) return 0;
-    // Schon ein auftragseigener Verpackungs-Artikel vorhanden?
-    $vorhanden = (int) scalar("SELECT id FROM item WHERE kundeneigen=1 AND auftrag_id=? AND kategorie='verpackung' ORDER BY id LIMIT 1", [$auftrag_id]);
-    if ($vorhanden) return $vorhanden;
-    $b = $basis_item_id > 0 ? one("SELECT * FROM item WHERE id=? AND kategorie='verpackung'", [$basis_item_id]) : null;
-    if (!$b) return 0;
-    // Zeigt der Basisartikel schon auf diesen Auftrag (kundeneigen), direkt nehmen.
-    if (!empty($b['kundeneigen']) && (int)($b['auftrag_id'] ?? 0) === $auftrag_id) return $basis_item_id;
-    $anr  = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id]);
-    $name = trim((string)$b['name']) . ' – ' . ($anr !== '' ? $anr : ('Auftrag ' . $auftrag_id));
-    q("INSERT INTO item (name, kategorie, form, verpackungsart, material, volumen_ml, farbe, einheit, ek_preis, preis_bezug,
-                         verpackung_rolle, karton_item_id, max_fuellgewicht_g, etikett_format, etikett_druck, etikett_final,
-                         hoehe_mm, durchmesser_mm, breite_mm, tiefe_mm, gewicht_g, kundeneigen, auftrag_id, notiz)
-       VALUES (?, 'verpackung', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)",
-      [$name, $b['form'] ?? 'pulver', $b['verpackungsart'] ?? null, $b['material'] ?? null, $b['volumen_ml'] ?? null,
-       $b['farbe'] ?? null, $b['einheit'] ?? 'Stk', $b['preis_bezug'] ?? 'Stück', $b['verpackung_rolle'] ?? 'primaer',
-       $b['karton_item_id'] ?? null, $b['max_fuellgewicht_g'] ?? null, $b['etikett_format'] ?? null, $b['etikett_druck'] ?? null,
-       $b['etikett_final'] ?? null, $b['hoehe_mm'] ?? null, $b['durchmesser_mm'] ?? null, $b['breite_mm'] ?? null,
-       $b['tiefe_mm'] ?? null, $b['gewicht_g'] ?? null, $auftrag_id,
-       'Kundeneigene Verpackung (Beistellung) zu ' . ($anr !== '' ? $anr : ('Auftrag ' . $auftrag_id))]);
-    return (int) insert_id();
-}
-
 // Stück/Kapseln je Packung für einen Produktionsauftrag. Bevorzugt das Produkt
 // (einheiten_pro_packung); ist das 0 (v3-Import ohne verknüpftes Produkt), fällt es
 // auf den Auftrag zurück, der die Zahl als „stueck" trägt. Sonst 0.
@@ -8596,6 +8567,40 @@ function kundenetikett_sicherstellen(int $produkt_id): int {
     }
     return kundenetikett_version_anlegen($produkt_id, 1, null, '');
 }
+
+// Bedruckter, KUNDENSPEZIFISCHER Behälter als eigenen Lagerartikel AM PRODUKT sicherstellen – analog zum
+// Kundenetikett (Punkt 6). Im Angebot steht nur ein Merkmal „bedruckt, kundenspezifisch"; erst bei Annahme
+// entsteht hieraus ein eigener Artikel: Kopie des Standard-(Basic-)Behälters, markiert kundenspezifisch=1,
+// über item.produkt_id ans Produkt gebunden; produkt.verpackung_id zeigt dann darauf. Der Artikel ist normal
+// einkaufbar und lagerführend, liegt aber GETRENNT vom Standard-Beutel und wird bei Nachbestellung
+// wiederverwendet. Idempotent: existiert schon einer, wird er (erneut) als Produkt-Behälter gesetzt.
+// Rückgabe item-id (0 = nichts getan). $basis_item_id = Standard-Behälter als Vorlage (sonst Produkt-Behälter).
+function verpackung_kundenspezifisch_sicherstellen(int $produkt_id, int $basis_item_id = 0): int {
+    if ($produkt_id <= 0) return 0;
+    $vorhanden = (int) scalar("SELECT id FROM item WHERE COALESCE(kundenspezifisch,0)=1 AND produkt_id=? AND kategorie='verpackung'
+                               AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY id LIMIT 1", [$produkt_id]);
+    if ($vorhanden) { q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$vorhanden, $produkt_id]); return $vorhanden; }
+    $basis = $basis_item_id > 0 ? $basis_item_id : (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [$produkt_id]);
+    $b = $basis > 0 ? one("SELECT * FROM item WHERE id=? AND kategorie='verpackung'", [$basis]) : null;
+    if (!$b) return 0;
+    if (!empty($b['kundenspezifisch']) && (int)($b['produkt_id'] ?? 0) === $produkt_id) return (int)$b['id']; // schon der richtige
+    $pname = trim((string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [$produkt_id])) ?: ('Produkt ' . $produkt_id);
+    $label = trim((string)$b['name']) . ' · bedruckt · ' . $pname;
+    q("INSERT INTO item (name, kategorie, form, verpackungsart, material, volumen_ml, farbe, einheit, ek_preis, preis_bezug,
+                         verpackung_rolle, karton_item_id, max_fuellgewicht_g, etikett_format, etikett_druck, etikett_final,
+                         hoehe_mm, durchmesser_mm, breite_mm, tiefe_mm, gewicht_g, produkt_id, kundenspezifisch, notiz)
+       VALUES (?, 'verpackung', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
+      [$label, $b['form'] ?? 'pulver', $b['verpackungsart'] ?? null, $b['material'] ?? null, $b['volumen_ml'] ?? null,
+       $b['farbe'] ?? null, $b['einheit'] ?? 'Stk', $b['ek_preis'] ?? 0, $b['preis_bezug'] ?? 'Stück', $b['verpackung_rolle'] ?? 'primaer',
+       $b['karton_item_id'] ?? null, $b['max_fuellgewicht_g'] ?? null, $b['etikett_format'] ?? null, $b['etikett_druck'] ?? null,
+       $b['etikett_final'] ?? null, $b['hoehe_mm'] ?? null, $b['durchmesser_mm'] ?? null, $b['breite_mm'] ?? null,
+       $b['tiefe_mm'] ?? null, $b['gewicht_g'] ?? null, $produkt_id,
+       'Bedruckter, kundenspezifischer Behälter zu Produkt ' . $pname]);
+    $nid = (int) insert_id();
+    q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$nid, $produkt_id]);
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return $nid;
+}
 // Nach einer Etikett-Freigabe aufrufen: bindet das freigegebene Design an die aktuelle Version – oder legt
 // bei einem NEUEN Design (abweichende Signatur) eine neue Version an und sperrt die alte. Bindet den Auftrag
 // an die gültige Version (auftrag.etikett_item_id). Hook: etikett_freigabe_setzen.
@@ -9394,6 +9399,16 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     // Lager die gelieferten, kundenspezifischen Etiketten gezielt einbuchen (kein generischer Glas-Topf).
     $etId = kundenetikett_sicherstellen((int)$a['produkt_id']);
     if ($etId) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$etId, $aid]);
+    // Punkt 6: ist die Verpackungs-Position des Angebots als „bedruckt, kundenspezifisch" markiert, entsteht
+    // erst JETZT (bei Annahme) ein eigener Behälter-Lagerartikel am Produkt (wie Glas + Etikett) – getrennt
+    // vom Standard-Beutel, einkaufbar, bei Nachbestellung wiederverwendet.
+    if ($pidA > 0) {
+        $kspez = (int) scalar("SELECT COALESCE(MAX(kundenspezifisch),0) FROM angebot_position WHERE angebot_id=? AND quelle='verpackung'", [$angebot_id]);
+        if ($kspez === 1) {
+            $vpk = verpackung_kundenspezifisch_sicherstellen($pidA, $verpId);
+            if ($vpk > 0) { q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vpk, $aid]); $verpId = $vpk; }
+        }
+    }
     // Kundenpreisliste pflegen: nur wenn es eine Herstellungs-Position dieser Größe gibt (Preis OHNE Verpackung).
     // Sonst sieht der Kunde weiterhin den gerechneten Matrix-„ab"-Preis (ebenfalls ohne Verpackung).
     if ($pidA > 0 && $stueck > 0) {
