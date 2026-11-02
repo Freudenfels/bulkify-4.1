@@ -185,3 +185,8 @@ gelb=Freigabe offen, grün=bereit/versandbereit). Bei „wartet auf Material" fo
 fehlender Position Menge+Einheit+Name und ob bestellt (Bestellnummer verlinkt + erwarteter Termin
 `bestellung.eta_geplant`) oder „noch nicht bestellt – zum Einkauf", plus Knopf „Zum Reiter Material".
 Quelle: `produktion_bereitschaft()` (netto, Restbedarf). Die farbige Phasenleiste (bx-htrack) bleibt.
+
+## Zukauf-Art umschaltbar (Punkt 5, 2026-11-02)
+Bei Herstellung = Einkaufen (Zukauf) zeigt der Reiter Produktion jetzt die **Zukauf-Art** und erlaubt (Admin)
+das Umschalten: „Bulk/Pulver zukaufen – selbst abfüllen" (Verpackung zählt) vs. „Fertige Ware zukaufen"
+(Verpackung enthalten). Aktion `zukauf_art_setzen` → `produktionsauftrag.zukauf_art` + `bedarf_bump()`.

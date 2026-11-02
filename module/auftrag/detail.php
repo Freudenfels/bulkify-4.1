@@ -38,6 +38,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Zukaufpreis für dieses Produkt bei dem Lieferanten hinterlegt.')); exit;
 }
 
+// Zukauf-Art am Produktionsauftrag setzen (bulk = Bulk/Pulver selbst abfüllen | fertig = fertige Ware). Nur Admin.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'zukauf_art_setzen') {
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id); exit; }
+    $art = ($_POST['zukauf_art'] ?? '') === 'fertig' ? 'fertig' : 'bulk';
+    q("UPDATE produktionsauftrag SET zukauf_art=? WHERE auftrag_id=? AND status<>'storniert'", [$art, $id]);
+    if (function_exists('bedarf_bump')) bedarf_bump();   // Material-/Bedarf-Cache neu rechnen (Verpackung zählt/zählt nicht)
+    header('Location: ?p=auftrag&id=' . $id . '&zkartok=1'); exit;
+}
+
 // Auftrag in ein Kontingent (Rahmen/Abruf) umwandeln – nur Admin.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'zu_kontingent') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
@@ -1111,7 +1120,23 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
   <?php endif; ?>
   <div class="bx-grid">
     <div><div class="k muted">Herstellung</div><div>
-      <?= $istFremd ? bx_badge('Einkaufen · fertige Bulkware zukaufen','info') : bx_badge('Herstellen · aus Rohstoffen','ok') ?>
+      <?php if ($istFremd): $zukaufArt = (string)($pa['zukauf_art'] ?? 'bulk'); ?>
+        <?= bx_badge($zukaufArt === 'fertig' ? 'Einkaufen · fertige Ware zukaufen' : 'Einkaufen · Bulk/Pulver zukaufen (selbst abfüllen)', 'info') ?>
+        <?php if (isset($_GET['zkartok'])): ?><span class="badge-ok" style="padding:3px 8px;border-radius:6px;margin-left:6px">Zukauf-Art gespeichert.</span><?php endif; ?>
+        <?php if (has_role('admin')): ?>
+        <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:6px 0 0">
+          <input type="hidden" name="aktion" value="zukauf_art_setzen">
+          <select name="zukauf_art" style="max-width:260px">
+            <option value="bulk" <?= $zukaufArt !== 'fertig' ? 'selected' : '' ?>>Bulk/Pulver zukaufen – wir füllen selbst ab (Verpackung zählt)</option>
+            <option value="fertig" <?= $zukaufArt === 'fertig' ? 'selected' : '' ?>>Fertige Ware zukaufen – abgefüllt (Verpackung enthalten)</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" type="submit">Setzen</button>
+        </form>
+        <div class="muted" style="font-size:12px;margin-top:4px">Bei „Bulk/Pulver" bleibt die Verpackung (z. B. Beutel) eigener Materialbedarf und wird separat bestellt; bei „fertige Ware" ist sie im Zukauf enthalten.</div>
+        <?php endif; ?>
+      <?php else: ?>
+        <?= bx_badge('Herstellen · aus Rohstoffen','ok') ?>
+      <?php endif; ?>
     </div></div>
     <?php if (has_role('admin') || has_role('production') || has_role('einkauf')): ?>
     <div><div class="k muted">Rohstoff/Bulk angekommen</div><div>

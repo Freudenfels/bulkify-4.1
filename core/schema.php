@@ -801,6 +801,7 @@ function init_schema(): void {
     ensure_column('produktionsauftrag', 'prio', "TINYINT NOT NULL DEFAULT 2");   // 1=Hoch, 2=Normal, 3=Niedrig
     ensure_column('produktionsauftrag', 'geplant_am', "DATE NULL");               // Baustein 2: geplantes Produktionsdatum
     ensure_column('produktionsauftrag', 'produktionsart', "VARCHAR(10) NOT NULL DEFAULT 'fremd'");   // eigen|fremd (Make-or-Buy); Standard = fremd (90% der Kapseln extern gefüllt)
+    ensure_column('produktionsauftrag', 'zukauf_art', "VARCHAR(10) NOT NULL DEFAULT 'bulk'");        // nur bei Zukauf (fremd): bulk = Bulk/Pulver zukaufen + selbst abfüllen (Verpackung zählt); fertig = fertige Ware zukaufen (Verpackung enthalten)
     // Eigen/Fremd wird im Backend FESTGELEGT, bevor der Auftrag in die Produktion geht. NULL = noch offen
     // -> erscheint NICHT im Produktions-Arbeitsplatz. Entscheidung trifft Admin/Backend, nicht die Produktion.
     ensure_column('produktionsauftrag', 'art_festgelegt_am', "DATETIME NULL");
@@ -7792,18 +7793,25 @@ function auftrag_bedarf(int $pa_id): array {
     $einheiten = $menge * $einh;
     $rows = [];
     // Zukauf des Bulks (Kapseln/Tabletten/Pulver) – wenn so entschieden (Fremdproduktion) ODER schon zugekauft eingegangen.
-    // Verpackung + Etiketten braucht es TROTZDEM (werden unten immer angehängt).
+    // Verpackung/Etikett werden unten angehängt, AUSSER bei „fertige Ware zukaufen" (dort sind sie enthalten).
     $zukauf = produktion_ist_zukauf((int)$pa['auftrag_id']) || ($pa['produktionsart'] ?? 'eigen') === 'fremd';
+    // Zwei Zukauf-Arten (zukauf_art): 'fertig' = fertige Ware zukaufen (abgefüllt + verpackt) -> Verpackung/
+    // Etikett sind ENTHALTEN und werden NICHT extra als Bedarf gezählt. 'bulk' (Standard) = Bulk/Pulver zukaufen
+    // und selbst abfüllen -> die Verpackung (z. B. Beutel) bleibt eigener Bedarf (unten angehängt).
+    $zukaufFertig = $zukauf && ($pa['zukauf_art'] ?? 'bulk') === 'fertig';
     if ($zukauf) {
         $verf = auftrag_fertigware_cached((int)$pa['auftrag_id'])['frei'];
         $af = auftrag_row_cached($aid);
         $bi = produkt_bulk_info((int)$pa['produkt_id'], (string)($af['produkt_bezeichnung'] ?? ''), (string)($af['produkt_form'] ?? ''));
-        // Schüttgut (Pulver/Granulat/Gel/Flüssig/Öl): beim ZUKAUF kaufen wir FERTIGE PACKUNGEN (z. B. 6.000 Beutel),
-        // nicht die 300.000 Portionen. Der Fertigware-Bestand wird intern in Portionen geführt -> fürs Anzeigen/
-        // Bestellen in Packungen umrechnen (Portionen ÷ Stück je Packung). Verhältnis benoetigt/menge bleibt dabei
-        // 1 je Packung, d. h. Teilproduktion/Bereitschaft rechnen unverändert korrekt.
         $schuettZ = in_array((string)($bi['form'] ?? ''), ['pulver', 'granulat', 'gel', 'fluessig', 'oel'], true);
-        if ($schuettZ && $menge > 0) {
+        if ($schuettZ && $menge > 0 && !$zukaufFertig) {
+            // Bulk/Pulver-Zukauf (wir füllen selbst ab): die zugekaufte Ware ist das PULVER, gemessen in Gramm
+            // (lesbar als kg/t). Der Beutel ist KEINE zugekaufte Fertigware, sondern steht als eigene Verpackungs-
+            // Position unten. Bedarf = Menge × Füllgewicht je Packung (Gramm).
+            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'] . ' – Bulk (Pulver)','benoetigt'=>(float)$einheiten,'verfuegbar'=>(float)$verf,'fehlt'=>max(0.0,(float)$einheiten-(float)$verf),'einheit'=>'g'];
+        } elseif ($schuettZ && $menge > 0) {
+            // Fertige Ware zukaufen (schon im Beutel abgefüllt): wir kaufen FERTIGE PACKUNGEN (z. B. 6.000 Beutel),
+            // nicht die Portionen. Fertigware-Bestand wird intern in Portionen geführt -> in Packungen umrechnen.
             $verfPkg = $einh > 0 ? $verf / $einh : $verf;
             $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>(float)$menge,'verfuegbar'=>$verfPkg,'fehlt'=>max(0.0,(float)$menge-$verfPkg),'einheit'=>'Pkg'];
         } else {
@@ -7828,21 +7836,25 @@ function auftrag_bedarf(int $pa_id): array {
     // Verpackungs-Stückliste (alle Slots) – je Packung 1 Stück. Der Behälter des AUFTRAGS hat Vorrang
     // (Admin kann je Auftrag ein anderes Glas setzen); das passende Etikett wird dann aus DEM Behälter
     // abgeleitet – anderes Glas => anderes Etikett => anderer Einkauf.
-    $slots = produkt_row_cached((int)$pa['produkt_id']);
-    $afRow = auftrag_row_cached($aid);
-    $verpEff = !empty($afRow['verpackung_id']) ? (int)$afRow['verpackung_id'] : (int)($slots['verpackung_id'] ?? 0);
-    $etikettEff = (int)($slots['etikett_id'] ?? 0);
-    if (!empty($afRow['verpackung_id'])) {                 // Auftrag hat eigenen Behälter -> Etikett dazu ableiten
-        $au = etikett_id_fuer_behaelter((int)$afRow['verpackung_id']); if ($au) $etikettEff = $au;
-    } elseif (!$etikettEff && $verpEff) {                  // sonst: fehlt Etikett am Produkt -> aus Behälter ableiten
-        $au = etikett_id_fuer_behaelter($verpEff); if ($au) $etikettEff = $au;
-    }
-    $effSlots = ['verpackung_id'=>$verpEff, 'verschluss_id'=>(int)($slots['verschluss_id'] ?? 0),
-                 'etikett_id'=>$etikettEff, 'karton_id'=>(int)($slots['karton_id'] ?? 0), 'beipack_id'=>(int)($slots['beipack_id'] ?? 0)];
-    foreach (['verpackung_id'=>'Verpackung','verschluss_id'=>'Deckel','etikett_id'=>'Etikett','karton_id'=>'Karton','beipack_id'=>'Beipackzettel'] as $f => $rolle) {
-        if (!empty($effSlots[$f]) && $menge > 0) {
-            $iid = (int)$effSlots[$f]; $verf = item_bestand($iid, true);
-            $rows[] = ['rolle'=>$rolle,'item_id'=>$iid,'name'=>item_name_cached($iid),'benoetigt'=>$menge,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$menge-$verf),'einheit'=>'Stk'];
+    // NUR wenn wir selbst abfüllen/verpacken (Eigenproduktion ODER Bulk-Zukauf). Bei „fertige Ware zukaufen"
+    // ist die Verpackung bereits in der zugekauften Ware enthalten -> keine eigenen Verpackungs-Positionen.
+    if (!$zukaufFertig) {
+        $slots = produkt_row_cached((int)$pa['produkt_id']);
+        $afRow = auftrag_row_cached($aid);
+        $verpEff = !empty($afRow['verpackung_id']) ? (int)$afRow['verpackung_id'] : (int)($slots['verpackung_id'] ?? 0);
+        $etikettEff = (int)($slots['etikett_id'] ?? 0);
+        if (!empty($afRow['verpackung_id'])) {                 // Auftrag hat eigenen Behälter -> Etikett dazu ableiten
+            $au = etikett_id_fuer_behaelter((int)$afRow['verpackung_id']); if ($au) $etikettEff = $au;
+        } elseif (!$etikettEff && $verpEff) {                  // sonst: fehlt Etikett am Produkt -> aus Behälter ableiten
+            $au = etikett_id_fuer_behaelter($verpEff); if ($au) $etikettEff = $au;
+        }
+        $effSlots = ['verpackung_id'=>$verpEff, 'verschluss_id'=>(int)($slots['verschluss_id'] ?? 0),
+                     'etikett_id'=>$etikettEff, 'karton_id'=>(int)($slots['karton_id'] ?? 0), 'beipack_id'=>(int)($slots['beipack_id'] ?? 0)];
+        foreach (['verpackung_id'=>'Verpackung','verschluss_id'=>'Deckel','etikett_id'=>'Etikett','karton_id'=>'Karton','beipack_id'=>'Beipackzettel'] as $f => $rolle) {
+            if (!empty($effSlots[$f]) && $menge > 0) {
+                $iid = (int)$effSlots[$f]; $verf = item_bestand($iid, true);
+                $rows[] = ['rolle'=>$rolle,'item_id'=>$iid,'name'=>item_name_cached($iid),'benoetigt'=>$menge,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$menge-$verf),'einheit'=>'Stk'];
+            }
         }
     }
     // Netto-Verfügbarkeit: freier Bestand abzüglich Reservierungen anderer Aufträge; eigene Reservierung ausweisen.
@@ -9215,21 +9227,44 @@ function auftrag_express_bulk_bestellung(int $auftrag_id, int $lieferant_id): ?i
     $a = one("SELECT a.menge, a.produkt_id, p.name, p.einheiten_pro_packung
               FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
     if (!$a || !$a['produkt_id']) return null;
-    $stk = (int)$a['menge'] * (int)($a['einheiten_pro_packung'] ?? 0);
-    if ($stk <= 0) $stk = (int)$a['menge'];
-    $preis = null; $einheit = 'Stk'; $groesse = '';
+    // Zukauf-Art des (aktiven) Produktionsauftrags bestimmt, WAS und in welcher EINHEIT bestellt wird:
+    //  - 'fertig'  = fertige Ware (abgefüllt) -> Packungen, Einheit Stk (z. B. 6.000 Beutel).
+    //  - 'bulk'    = Bulk/Pulver selbst abfüllen -> bei Schüttgut das PULVER in kg (Menge × Füllgewicht/1000),
+    //                sonst lose Einheiten (Menge × Einheiten je Packung, Stk). Kein „Gramm als Stk" mehr.
+    $pa = one("SELECT zukauf_art, rezeptur_id FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$auftrag_id]);
+    $art = (string)($pa['zukauf_art'] ?? 'bulk');
+    $form = '';
+    if (!empty($pa['rezeptur_id'])) $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$pa['rezeptur_id']]);
+    $schuett = in_array($form, ['pulver', 'granulat', 'gel', 'fluessig', 'oel'], true);
+    $packs = (int)$a['menge'];
+    $einhProP = (int)($a['einheiten_pro_packung'] ?? 0);
+    $bulkSuffix = '';
+    if ($art === 'fertig') {                         // fertige Packungen
+        $menge = (float)$packs; $einheit = 'Stk';
+    } elseif ($schuett) {                            // Pulver/Granulat als Bulk in kg
+        $menge = $einhProP > 0 ? round($packs * $einhProP / 1000, 3) : (float)$packs; $einheit = 'kg';
+        $bulkSuffix = ' – Bulk (Pulver)';
+    } else {                                         // lose Kapseln/Einheiten
+        $menge = $einhProP > 0 ? (float)($packs * $einhProP) : (float)$packs; $einheit = 'Stk';
+        $bulkSuffix = ' – Bulk';
+    }
+    if ($menge <= 0) $menge = (float)$packs;
+    // Staffelpreis: gegen die Bestellmenge in DIESER Einheit vergleichen.
+    $preis = null; $einheitPreis = ''; $groesse = '';
     foreach (all("SELECT preis, menge_ab, einheit, groesse FROM produkt_lieferant_preis
                   WHERE produkt_id=? AND lieferant_id=? AND (waehrung IS NULL OR waehrung='EUR') ORDER BY menge_ab", [(int)$a['produkt_id'], $lieferant_id]) as $s) {
-        if ($preis === null) { $preis = (float)$s['preis']; $einheit = $s['einheit'] ?: 'Stk'; $groesse = (string)$s['groesse']; }
-        if ((float)$s['menge_ab'] <= $stk) { $preis = (float)$s['preis']; $einheit = $s['einheit'] ?: 'Stk'; $groesse = (string)$s['groesse']; }
+        if ($preis === null) { $preis = (float)$s['preis']; $einheitPreis = (string)($s['einheit'] ?? ''); $groesse = (string)$s['groesse']; }
+        if ((float)$s['menge_ab'] <= $menge) { $preis = (float)$s['preis']; $einheitPreis = (string)($s['einheit'] ?? ''); $groesse = (string)$s['groesse']; }
     }
     if ($preis === null) return null;
+    if ($einheitPreis !== '') $einheit = $einheitPreis;   // Lieferant gibt die Einheit vor, falls hinterlegt
+    $notizArt = $art === 'fertig' ? 'Fertigprodukt-Zukauf' : 'Bulk/Pulver-Zukauf';
     q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum) VALUES (?,?,?,?,CURDATE())",
-      [naechste_nummer('BE'), $lieferant_id, 'offen', 'Express Fertigprodukt-Zukauf aus Auftrag ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id])]);
+      [naechste_nummer('BE'), $lieferant_id, 'offen', 'Express ' . $notizArt . ' aus Auftrag ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id])]);
     $bid = insert_id();
-    $bez = trim((string)$a['name'] . ($groesse !== '' ? ' · ' . $groesse : '')) ?: 'Fertigprodukt';
+    $bez = trim((string)$a['name'] . ($groesse !== '' ? ' · ' . $groesse : '') . $bulkSuffix) ?: 'Fertigprodukt';
     q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,NULL,?,?,?,?,?,0)",
-      [$bid, $bez, $stk, $preis, $einheit, $auftrag_id]);
+      [$bid, $bez, $menge, $preis, $einheit, $auftrag_id]);
     return $bid;
 }
 

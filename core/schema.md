@@ -180,3 +180,14 @@ Marker im Angebot: `angebot_position.kundenspezifisch` (Checkbox „bedruckt/kun
 Verpackungs-Position). Hook: `auftrag_aus_angebot()` erzeugt den Artikel erst **bei Annahme**.
 Der frühere „kundeneigen/Beistellung"-Weg (`item.kundeneigen`, `auftrag.verpackung_beistellung`,
 `verpackung_kundeneigen_sicherstellen()`) wurde **entfernt**.
+
+## Zwei Zukauf-Arten (zukauf_art) (Punkt 5, 2026-11-02)
+`produktionsauftrag.zukauf_art` ('bulk' Standard | 'fertig') unterscheidet beim Zukauf (produktionsart=fremd):
+- **bulk** = Bulk/Pulver zukaufen und SELBST abfüllen (= CollaGlow): die Fertigware-Zeile zeigt das **Pulver in
+  Gramm/kg** (Menge × Füllgewicht), die Verpackung (Beutel/Etikett) bleibt **eigener Materialbedarf** und wird
+  separat bestellt.
+- **fertig** = fertige Ware zukaufen (abgefüllt + verpackt): Fertigware in **Packungen (Stk)**; Verpackung/
+  Etikett/Deckel/Karton/Beipack werden **NICHT** als Bedarf gezählt (sind enthalten).
+`auftrag_bedarf()` richtet sich danach. `auftrag_express_bulk_bestellung()` bestellt entsprechend: fertig →
+Packungen (Stk), bulk+Pulver → kg (Menge×Füllgewicht/1000), bulk+Kapseln → lose Stück. Kein „Gramm als Stk"
+mehr. Umschaltbar am Auftrag (Reiter Produktion, Herstellung; `aktion=zukauf_art_setzen`).
