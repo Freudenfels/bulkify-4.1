@@ -79,3 +79,7 @@ Die Übersicht (`?p=wareneingang&quarantaene=1`, Knopf „Nur Quarantäne (Anzah
 
 ## Wareneingang → Portal-Status (Nacht 4b)
 Neue letzte Station **„Wareneingang bei bulkify"** (`eingegangen`, de/en/zh). Sie setzt nur der Wareneingang: beim vollständigen Einbuchen einer Lieferanten-Bestellung (Dashboard, Lager-App, Knopf „liefern"), nicht der Lieferant per Knopf. Bei einer Teillieferung steht im Ablauf „Teillieferung eingegangen: Datum" (`bestellung.teilgeliefert_am`). **Keine Mail an den Lieferanten.** Das Team bekommt eine Dashboard-Benachrichtigung „Lieferung eingebucht: BE-… (Firma)", bei einer Teillieferung mit Anzahl offener Positionen (`bestellung_eingang_melden()`).
+
+## Kleinigkeiten (Aufräumen 10/11)
+- Lager-Lieferschein: Ohne eigenen Versand-Absender gelten die Firmendaten aus dem Dashboard (`erp_firma_absender()`), nicht mehr „Musterstraße 1".
+- Wareneingang: die Meldung „Blinker angehängt" entfällt (stimmte nicht bei Etiketten ohne Blinker).

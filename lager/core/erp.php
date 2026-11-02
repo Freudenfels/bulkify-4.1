@@ -776,6 +776,14 @@ function erp_lieferung_per_tracking(string $tracking): array {
 // Teillieferung (Nacht 1c, Spiegel von bestellung_lieferung_erfassen() im Dashboard): Chargen auf die Positionen verteilen,
 // geschlossen wird erst, wenn alle Positionen (mind. 98 %) geliefert sind. Ohne die Spalte (frische DB vor dem ersten
 // Dashboard-Aufruf) wie bisher sofort schließen. Rückgabe ['komplett'=>bool, 'offen'=>int Positionen].
+// Firmen-Absender aus den Dashboard-Einstellungen (app_meta firma_*), Defaults wie beleg_firma() im Dashboard (Aufräumen 10).
+function erp_firma_absender(): array {
+    $m = [];
+    if (tabelle_da('app_meta')) foreach (all("SELECT k, v FROM app_meta WHERE k IN ('firma_name','firma_strasse','firma_hausnr','firma_plz','firma_ort','firma_land')") as $r) $m[$r['k']] = trim((string)$r['v']);
+    $g = fn($k, $d) => ($m[$k] ?? '') !== '' ? $m[$k] : $d;
+    return ['bulkify / ' . $g('firma_name', 'Maniso GmbH'), trim($g('firma_strasse', 'Ahornstraße') . ' ' . $g('firma_hausnr', '45')),
+            trim($g('firma_plz', '26842') . ' ' . $g('firma_ort', 'Ostrhauderfehn')), $g('firma_land', 'Deutschland')];
+}
 function erp_bp_geliefert_da(): bool {
     static $da = null;
     if ($da === null) $da = tabelle_da('bestellung_position') && (int) scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bestellung_position' AND column_name='geliefert_menge'") > 0;

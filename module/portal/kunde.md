@@ -368,3 +368,7 @@ Nach der Etikett-Freigabe im Portal gehen `mail_team_etikett_freigegeben()` (Tea
 
 ## Rezeptur angenommen (Paket Mails)
 Nach „Rezeptur verbindlich annehmen" bekommt das Team `mail_team_rezeptur_angenommen()`.
+
+## Kleinigkeiten (Aufräumen 11)
+- Laboranalyse-Upsell: Der Satz wird nur aus vorhandenen Teilen gebaut, also kein „für : ." mehr bei fehlendem Preis.
+- „Erste Schritte": „Angebot prüfen & annehmen" ist erst erledigt, wenn ein Angebot **angenommen** ist (vorher reichte ein vorhandenes Angebot).

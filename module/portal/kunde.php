@@ -2323,10 +2323,12 @@ portal_head('Kundenportal · ' . $k['firma']);
                     + (int) scalar("SELECT COUNT(*) FROM portal_anfrage WHERE kunde_id=?", [$kid]);
         $cntAngebot = (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND kunde_ausgeblendet=0", [$kid]);
         $cntAuftrag = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE kunde_id=?", [$kid]);
+        // Erst ANGENOMMEN zählt als erledigt – vorher war der Haken schon gesetzt, sobald ein Angebot existierte (Aufräumen 11).
+        $cntAngenommen = (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND status='bestaetigt'", [$kid]);
         $obSteps = [
             ['done'=>true,            'label'=>'Konto eingerichtet',        'hint'=>'Zugang und Rechnungsadresse sind hinterlegt.',                 'href'=>$portalLink('konto'),                               'cta'=>'Konto ansehen'],
             ['done'=>$cntAnfrage > 0, 'label'=>'Erste Anfrage stellen',     'hint'=>'Rezeptur, Produkt oder Rohstoff anfragen – wir melden uns.',   'href'=>$portalLink($anfZiel),                              'cta'=>'Anfrage starten'],
-            ['done'=>$cntAngebot > 0, 'label'=>'Angebot prüfen & annehmen', 'hint'=>'Menge wählen und verbindlich bestätigen.',                     'href'=>$portalLink('meine_anfragen') . '&oatab=zubestaetigen', 'cta'=>'Zu den Angeboten'],
+            ['done'=>$cntAngenommen > 0 || $cntAuftrag > 0, 'label'=>'Angebot prüfen & annehmen', 'hint'=>'Menge wählen und verbindlich bestätigen.',                     'href'=>$portalLink('meine_anfragen') . '&oatab=zubestaetigen', 'cta'=>'Zu den Angeboten'],
             ['done'=>$cntAuftrag > 0, 'label'=>'Bestellung verfolgen',      'hint'=>'Produktion und Versand Ihrer Aufträge mitverfolgen.',          'href'=>$portalLink('bestellungen'),                        'cta'=>'Zu den Bestellungen'],
         ];
         $obTotal = count($obSteps);
@@ -5417,7 +5419,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div id="bxBestUpsell" style="display:none;border:1px solid var(--gruen);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;background:var(--panel-2)">
         <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.4;margin:0">
           <input type="checkbox" name="labortest" value="1" style="margin-top:3px;flex:none">
-          <span><strong>Laboranalyse dazubuchen</strong> <span class="muted">– für <span id="bxUpProd"></span>: <strong id="bxUpPreis"></strong><span id="bxUpVorteil"></span>. Externe Laboranalyse des fertigen Produkts (z. B. Schwermetalle, Mikrobiologie); kommt direkt als Position auf Ihre Rechnung.</span></span>
+          <span><strong>Laboranalyse dazubuchen</strong> <span class="muted"><span id="bxUpKopf"></span>Externe Laboranalyse des fertigen Produkts (z. B. Schwermetalle, Mikrobiologie); kommt direkt als Position auf Ihre Rechnung.</span></span>
         </label>
       </div>
       <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.45;margin-bottom:12px">
@@ -5453,11 +5455,12 @@ function bxBestaetigen(titel, text, haken, felder, upsell){
   // Optionaler Upsell (Labortest): nur bei Angebots-Annahmen und wenn der Kunde Dienstleistungen anfragen darf.
   var up = document.getElementById('bxBestUpsell'), upCb = up.querySelector('input[name="labortest"]');
   upCb.checked = false;
-  if (upsell && upsell.name) {
-    document.getElementById('bxUpProd').textContent = upsell.name;
-    var pEl = document.getElementById('bxUpPreis'), vEl = document.getElementById('bxUpVorteil');
-    if (pEl) pEl.textContent = (upsell.up != null) ? (upsell.up + ' € netto') : '';
-    if (vEl) vEl.textContent = (upsell.reg != null && upsell.up != null && upsell.reg > upsell.up) ? (' statt ' + upsell.reg + ' € bei nachträglicher Beauftragung') : '';
+  if (upsell && upsell.name && String(upsell.name).trim() !== '') {
+    // Satz nur aus vorhandenen Teilen bauen – vorher stand bei fehlendem Preis „für : ." (Aufräumen 11).
+    var kopf = '– für ' + String(upsell.name).trim();
+    if (upsell.up != null && upsell.up !== '') kopf += ': ' + upsell.up + ' € netto';
+    if (upsell.reg != null && upsell.up != null && upsell.reg > upsell.up) kopf += ' statt ' + upsell.reg + ' € bei nachträglicher Beauftragung';
+    document.getElementById('bxUpKopf').textContent = kopf + '. ';
     up.style.display='';
   } else { up.style.display='none'; }
   var ov = document.getElementById('bxBestOverlay');

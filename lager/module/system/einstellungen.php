@@ -203,7 +203,7 @@ $tab = fn(string $k, string $label): string => '<a href="?p=einstellungen&reiter
   <div class="bx-panel">
     <h2 style="margin-top:0">Lieferschein</h2>
     <div class="bx-field"><label>Absenderadresse (erscheint auf dem Lieferschein)</label>
-      <textarea name="versand_absender" rows="4" placeholder="bulkify / Maniso GmbH&#10;Musterstraße 1&#10;00000 Musterstadt&#10;Deutschland"><?= h($versandAbs) ?></textarea>
+      <textarea name="versand_absender" rows="4" placeholder="leer = Firmendaten aus dem Dashboard (Einstellungen → Firma)"><?= h($versandAbs) ?></textarea>
       <div class="muted" style="font-size:12px;margin-top:4px">Eine Zeile je Zeile. Leer = Standardtext.</div>
     </div>
   </div>

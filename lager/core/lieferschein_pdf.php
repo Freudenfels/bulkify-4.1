@@ -20,7 +20,9 @@ function lg_land_name(string $code): string {
 // Absenderzeilen aus den Einstellungen (Formate). Fallback: bulkify-Standard.
 function lg_versand_absender(): array {
     $t = function_exists('lg_meta_lesen') ? trim((string) lg_meta_lesen('versand_absender', '')) : '';
-    if ($t === '') $t = "bulkify / Maniso GmbH\nMusterstraße 1\n00000 Musterstadt\nDeutschland";
+    // Fallback: echte Firmendaten aus dem Dashboard (Einstellungen → Firma) statt Platzhalter „Musterstraße 1" (Aufräumen 10).
+    if ($t === '' && function_exists('erp_firma_absender')) $t = implode("\n", erp_firma_absender());
+    if ($t === '') $t = "bulkify / Maniso GmbH\nAhornstraße 45\n26842 Ostrhauderfehn\nDeutschland";
     return array_values(array_filter(array_map('trim', preg_split('/[\r\n]+/', $t)), fn($x) => $x !== ''));
 }
 

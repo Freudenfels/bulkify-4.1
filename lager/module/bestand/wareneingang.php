@@ -235,7 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $beRes = ($gebucht && $beId > 0) ? erp_bestellung_lieferung_erfassen($beId, $gebucht) : null;
     if ($beRes && !$beRes['komplett']) flash('Teillieferung: ' . (int)$beRes['offen'] . ' Position(en) der Bestellung sind noch offen und bleiben unterwegs.', 'warn');
 
-    if ($gebucht) flash(count($gebucht) . ' Position(en) eingebucht' . ($kisteId > 0 ? ' (in Kiste gelegt).' : ', Blinker angehängt.') . ($fehler ? ' ' . count($fehler) . ' Hinweis(e).' : ''));
+    if ($gebucht) flash(count($gebucht) . ' Position(en) eingebucht' . ($kisteId > 0 ? ' (in Kiste gelegt).' : '.') . ($fehler ? ' ' . count($fehler) . ' Hinweis(e).' : ''));
     if ($fehler)  flash(implode(' · ', $fehler), $gebucht ? 'warn' : 'warn');
     if (!$gebucht && !$fehler) flash('Nichts zu buchen – keine Position erfasst.', 'warn');
     weiter('?p=we' . ($gebucht ? '&gebucht=' . implode(',', $gebucht) : ''));
