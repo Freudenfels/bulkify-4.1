@@ -953,7 +953,45 @@ if (auftrag_braucht_etikett($id)):
 
 <?php $track = kunde_auftrag_track($a); ?>
 <div class="bx-panel" data-panel="produktion">
-  <h2 style="margin:0 0 18px;font-size:16px">Fortschritt</h2>
+  <h2 style="margin:0 0 14px;font-size:16px">Fortschritt</h2>
+  <?php
+  // Punkt 2+3: „Nächster Schritt"-Satz + konkret, WAS fehlt und WOHIN. Quelle: produktion_bereitschaft().
+  $fmtM = function($x, $e) { $e = (string)$e; if (function_exists('gewicht_lesbar') && in_array($e, ['g','ml'], true)) return gewicht_lesbar((float)$x, $e); return number_format(round((float)$x), 0, ',', '.') . ' ' . ($e ?: 'Stk'); };
+  $berSt = (string)($ber['status'] ?? '');
+  $fehlDetail = [];
+  if ($pa && $berSt === 'wartet') {
+      foreach (($ber['fehlend'] ?? []) as $fr) {
+          $iid = (int)($fr['item_id'] ?? 0);
+          $bst = $iid > 0 ? one("SELECT b.id, b.nummer, b.eta_geplant FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                                  WHERE bp.item_id=? AND b.status='bestellt' AND b.angekommen_am IS NULL ORDER BY b.id DESC LIMIT 1", [$iid]) : null;
+          $fehlDetail[] = ['name'=>(string)($fr['name'] ?? '–'), 'fehlt'=>(float)($fr['fehlt'] ?? 0), 'einheit'=>(string)($fr['einheit'] ?? 'Stk'), 'best'=>$bst];
+      }
+  }
+  $nsTon = 'info'; $nsLager = false;
+  if (!$pa)                                    { $nsText = 'Beschaffung wählen: Herstellen (aus Rohstoffen) oder Einkaufen (fertige Bulkware) – unten.'; }
+  elseif ($paVorbereitung)                     { $nsText = 'Produktionsauftrag ist in Vorbereitung – unten „Zur Produktion freigeben".'; $nsTon = 'warn'; }
+  elseif ($berSt === 'wartet')                 { $nsText = 'Produktion noch nicht möglich – es fehlt Material:'; $nsTon = 'err'; }
+  elseif ($berSt === 'bereit')                 { $nsText = 'Material ist vollständig – die Produktion kann starten.'; $nsTon = 'ok'; }
+  elseif ($berSt === 'laeuft')                 { $nsText = 'Produktion läuft – fertige Menge unten melden.'; }
+  elseif (($stat ?? '') === 'erledigt')        { $nsText = 'Versandbereit – im Reiter „Lager" einlagern bzw. versenden.'; $nsTon = 'ok'; $nsLager = true; }
+  elseif (($stat ?? '') === 'versendet')       { $nsText = $ffAuftrag ? 'Abgeschlossen.' : 'Versendet.'; $nsTon = 'ok'; }
+  else                                         { $nsText = 'In Arbeit.'; }
+  $nsBorder = $nsTon === 'err' ? '#b23b2f' : ($nsTon === 'warn' ? '#C9A227' : ($nsTon === 'ok' ? 'var(--gruen,#1D9E75)' : 'var(--line)'));
+  ?>
+  <div class="bx-panel" style="background:var(--panel-2);padding:12px 14px;margin:0 0 18px;border-left:3px solid <?= $nsBorder ?>">
+    <div style="font-size:14px"><strong>Nächster Schritt:</strong> <?= h($nsText) ?><?php if ($nsLager): ?> <a href="#" data-goto="lager" style="font-size:13px">zum Reiter Lager</a><?php endif; ?></div>
+    <?php if ($fehlDetail): ?>
+    <ul style="margin:10px 0 0;padding-left:18px;font-size:13px">
+      <?php foreach ($fehlDetail as $fd): ?>
+      <li style="margin:3px 0"><strong><?= h($fmtM($fd['fehlt'], $fd['einheit'])) ?></strong> <?= h($fd['name']) ?> fehlt –
+        <?php if ($fd['best']): ?>bestellt mit <a href="?p=bestellung&id=<?= (int)$fd['best']['id'] ?>"><?= h((string)$fd['best']['nummer']) ?></a><?= !empty($fd['best']['eta_geplant']) ? ', erwartet ' . h(date('d.m.Y', strtotime((string)$fd['best']['eta_geplant']))) : '' ?>
+        <?php else: ?><span style="color:#8f231b">noch nicht bestellt</span> – <a href="?p=einkaufsliste">zum Einkauf</a><?php endif; ?>
+      </li>
+      <?php endforeach; ?>
+    </ul>
+    <div style="margin-top:8px"><a href="#" data-goto="material" class="btn btn-ghost btn-sm">Zum Reiter Material</a></div>
+    <?php endif; ?>
+  </div>
   <?php
   // Mengen-Fortschritt (Teilproduktion/Teilversand) als segmentierte Leiste – macht sichtbar, WIE VIEL schon
   // produziert bzw. versendet ist und wie viel noch offen ist (die Phasen-Kette unten zeigt nur das WO).

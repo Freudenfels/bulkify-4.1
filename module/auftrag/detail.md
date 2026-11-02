@@ -178,3 +178,10 @@ fest zuweisen), eine Mengeneingabe, eine gemeinsame „gebunden"-Tabelle. Dispat
 (routet nach `bulk_reservieren` bzw. `charge_auftrag_zuweisen`). Reiter **Produktion** trägt nur noch
 Fortschritt + Herstellung/Freigabe + „Doch selbst produzieren" + Energetisierung/Labortest. Deep-Link
 `#bulkreserve` und der Schritt „Material prüfen" öffnen jetzt den Material-Reiter.
+
+## Nächster-Schritt-Banner + konkreter Fehlbedarf (Punkt 2+3, 2026-11-02)
+Oben im Reiter Produktion steht jetzt ein Satz „Nächster Schritt: …" (farbiger Rand je Lage: rot=blockiert,
+gelb=Freigabe offen, grün=bereit/versandbereit). Bei „wartet auf Material" folgt eine konkrete Liste: je
+fehlender Position Menge+Einheit+Name und ob bestellt (Bestellnummer verlinkt + erwarteter Termin
+`bestellung.eta_geplant`) oder „noch nicht bestellt – zum Einkauf", plus Knopf „Zum Reiter Material".
+Quelle: `produktion_bereitschaft()` (netto, Restbedarf). Die farbige Phasenleiste (bx-htrack) bleibt.
