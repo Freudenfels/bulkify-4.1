@@ -354,3 +354,5 @@ Vier Bausteine, damit sich neue Kunden sofort zurechtfinden (Analogon zum Liefer
 Neue Spalten (`core/schema.php`): `kunden.onboarding_checkliste_aus`, `kunden.portal_tour_gesehen` (beide TINYINT, Default 0).
 
 **Fremdprodukt anmelden: EAN (S-17):** Die EAN/GTIN aus dem Formular landet in `item.ean` (neue Spalte, VARCHAR(40)), nicht mehr in `item.bsku` (interne 5-stellige Lager-2-Nummer, VARCHAR(10)). Eine 13-stellige EAN sprengte `bsku` (Fehler, Produkt halb angelegt) und hätte die BSKU überschrieben, über die das Fulfillment den Artikel findet. Artikelnummer wird auf 40 Zeichen gekürzt (Spaltenlänge).
+
+**Nachbestellung-Tabelle vor dem Lesen sicherstellen:** `nachbestellung` wird nur lazy durch `nachbestellung_schema()` angelegt (beim ersten Anlegen bzw. im Admin-Reiter). Die Portal-Ansichten „Bestellungen" (Nachbestell-Formular an abgeschlossenen Bestellungen) und „Nachbestellen" rufen es jetzt vor dem ersten SELECT auf. Vorher brach die Seite auf einer Umgebung ohne die Tabelle (z. B. live) nach der ersten abgeschlossenen Bestellung mit einem Fehler ab – der Reiter „Abgeschlossene (9)" zeigte nur 1 Karte.

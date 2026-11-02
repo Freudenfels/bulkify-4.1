@@ -3879,6 +3879,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-panel"><div class="muted">Nachbestellen ist für Ihren Zugang nicht freigeschaltet. Bitte wenden Sie sich an uns.</div></div>
   <?php else: ?>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
+    <?php nachbestellung_schema(); /* Tabelle wird sonst erst beim ersten Anlegen erzeugt -> SELECT auf fehlende Tabelle = Fatal, Seite bricht ab */ ?>
     <?php foreach ($nbCards as $a):
         $pidK      = (int)$a['produkt_id']; $stk = (int)($a['stueck'] ?? 0);
         $defMenge  = (int)($a['menge'] ?? 0);
@@ -4037,6 +4038,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
   <?php endif; ?>
   <div id="bxBestListe">
+  <?php nachbestellung_schema(); /* Tabelle wird sonst erst beim ersten Anlegen erzeugt -> SELECT auf fehlende Tabelle = Fatal, Seite bricht ab */ ?>
   <?php foreach ($aktBest as $a):
         $istDLrow = ($a['kategorie'] ?? '') === 'dienstleistung';
         $trackA   = portal_auftrag_track($a);
