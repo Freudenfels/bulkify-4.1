@@ -547,6 +547,26 @@ if ($gebucht):
   dlR.innerHTML=REZ.map(function(r){ return '<option value="'+esc(r.n)+'">'+(r.bi?'':'noch kein Bulk-Artikel')+'</option>'; }).join('');
   document.body.appendChild(dlR);
 
+  // Punkt 8: Einheit ist ein festes Auswahlfeld (Stk, g, kg, ml, L) statt Freitext. Bestehende
+  // Freitext-/Artikel-Einheiten werden auf diese fuenf abgebildet (z. B. „Stück"->Stk, „Liter"->L, „t"->kg).
+  var EINH_OPTS=['Stk','g','kg','ml','L'];
+  function einhCanon(raw){
+    var s=String(raw==null?'':raw).trim().toLowerCase().replace(/\.$/,'');
+    if(s==='') return '';
+    if(['stk','st','stck','stück','stueck','pcs','packung','pkg','beutel','dose','glas','kapsel','kapseln'].indexOf(s)>=0) return 'Stk';
+    if(['g','gr','gramm','gramms'].indexOf(s)>=0) return 'g';
+    if(['kg','kilo','kilogramm','kgs'].indexOf(s)>=0) return 'kg';
+    if(['ml','milliliter'].indexOf(s)>=0) return 'ml';
+    if(['l','lt','ltr','liter','litre'].indexOf(s)>=0) return 'L';
+    if(['t','to','tonne','tonnen'].indexOf(s)>=0) return 'kg';
+    return '';
+  }
+  function einhSelectHtml(raw){
+    var sel=einhCanon(raw)||'Stk';
+    return '<select name="p_einheit[]" class="we-einh">'+EINH_OPTS.map(function(o){
+      return '<option value="'+o+'"'+(o===sel?' selected':'')+'>'+o+'</option>';
+    }).join('')+'</select>';
+  }
   function addRow(p){
     p=p||{};
     var art=(p.verpackung_rolle==='etikett')?'etikett':((p.form==='kapselhuelle')?'leerkapsel':(p.kategorie||p.warenart||'rohstoff')); if(!MATRIX[art])art='rohstoff';
@@ -560,7 +580,7 @@ if ($gebucht):
         '<div class="bx-field f-warenart"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
         '<div class="bx-field f-rez" style="display:none"><label>Rezeptur <span class="muted">(Bulk)</span></label><input type="text" class="we-rez" name="p_rezeptur_name[]" list="weRezList" autocomplete="off" value="" placeholder="Rezeptur wählen"><input type="hidden" name="p_rezeptur[]" class="we-rez-id" value="0"><div class="we-rez-info muted"></div></div>'+
         '<div class="bx-field f-menge"><label>Menge</label><input type="text" name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+
-        '<div class="bx-field f-einheit"><label>Einheit</label><input type="text" name="p_einheit[]" value="'+esc(p.einheit||'')+'" placeholder="Stk"></div>'+
+        '<div class="bx-field f-einheit"><label>Einheit</label>'+einhSelectHtml(p.einheit||'')+'</div>'+
         '<div class="bx-field f-artnr"><label>Art.-Nr. <span class="muted">(Lief.)</span></label><input type="text" name="p_artnr[]" value="'+esc(p.artikelnummer||'')+'" placeholder="Art.-Nr."></div>'+
         '<div class="bx-field f-charge"><label class="lbl-charge">Charge-Nr.</label><input type="text" name="p_charge[]" class="we-charge" value="'+esc(p.charge_nr||'')+'"></div>'+
         '<div class="bx-field f-mhd"><label class="lbl-mhd">MHD</label><input type="date" name="p_mhd[]" class="we-mhd" value="'+esc(p.mhd||'')+'"></div>'+
@@ -626,11 +646,11 @@ if ($gebucht):
     renderPakFields(parseInt(pkt&&pkt.value,10)||1);
     // Artikel-Name -> item_id, Einheit, Warenart aus Treffer uebernehmen.
     var name=card.querySelector('.we-name'), hid=card.querySelector('input[name="p_item[]"]'),
-        art2=card.querySelector('.we-art'), einh=card.querySelector('input[name="p_einheit[]"]');
+        art2=card.querySelector('.we-art'), einh=card.querySelector('[name="p_einheit[]"]');
     name.addEventListener('input',function(){
       name.title=name.value;   // voller Text als Tooltip beim Drüberfahren
       var m=ITEMS.filter(function(it){return it.n.toLowerCase()===name.value.trim().toLowerCase();})[0];
-      if(m){ hid.value=m.id; if(!einh.value)einh.value=m.e||''; var a=itemArt(m); if(MATRIX[a]){art2.value=a;} pflicht(card); etikettToggle(); }
+      if(m){ hid.value=m.id; if(einh) einh.value=einhCanon(m.e)||'Stk'; var a=itemArt(m); if(MATRIX[a]){art2.value=a;} pflicht(card); etikettToggle(); }
       else { hid.value=0; }
       zeigeAehnlich(card);
     });
@@ -650,7 +670,7 @@ if ($gebucht):
         rezId.value=m.id;
         if(hid) hid.value=m.bi||0;                 // bekanntes Bulk-Item direkt übernehmen
         if(name && name.value.trim()==='') name.value=m.n;
-        if(einh && einh.value.trim()==='') einh.value=m.e||'Stück';
+        if(einh) einh.value=einhCanon(m.e)||'Stk';
         if(rezInfo){ rezInfo.textContent = m.bi ? '' : 'Noch kein Bulk-Artikel – bitte erst im Dashboard anlegen.'; rezInfo.style.color = m.bi ? '' : 'var(--err)'; }
         var box=card.querySelector('.we-aehnlich'); if(box) box.innerHTML='';
       } else { rezId.value='0'; if(rezInfo){rezInfo.textContent='';} }
@@ -658,7 +678,7 @@ if ($gebucht):
     if(rez){ rez.addEventListener('input',pickRez); rez.addEventListener('change',pickRez); }
     art2.addEventListener('change',function(){
       // Leerkapseln zählt man in Stück, nicht in kg -> Einheit vorschlagen (nur wenn leer/Gewicht).
-      if(art2.value==='leerkapsel'){ var e=einh.value.trim().toLowerCase(); if(e===''||['kg','g','l','ml','t'].indexOf(e)>=0) einh.value='Stk'; }
+      if(art2.value==='leerkapsel' && einh){ einh.value='Stk'; }   // Leerkapseln zählt man in Stück
       toggleRez();
       pflicht(card);
       etikettToggle();
@@ -746,7 +766,7 @@ if ($gebucht):
   }
   function zeigeAehnlich(card){
     var box=card.querySelector('.we-aehnlich'), nm=card.querySelector('.we-name'),
-        hid=card.querySelector('input[name="p_item[]"]'), einh=card.querySelector('input[name="p_einheit[]"]'),
+        hid=card.querySelector('input[name="p_item[]"]'), einh=card.querySelector('[name="p_einheit[]"]'),
         art2=card.querySelector('.we-art');
     if(!box) return;
     if(hid.value && hid.value!=='0'){ box.innerHTML=''; return; }   // schon ein bestehender Artikel gewählt
@@ -757,7 +777,7 @@ if ($gebucht):
     }).join(' ');
     box.querySelectorAll('.we-ae-chip').forEach(function(b){ b.addEventListener('click',function(){
       nm.value=b.getAttribute('data-n'); hid.value=b.getAttribute('data-id');
-      if(einh && !einh.value) einh.value=b.getAttribute('data-e')||'';
+      if(einh) einh.value=einhCanon(b.getAttribute('data-e'))||'Stk';
       var a=b.getAttribute('data-k'); if(art2 && MATRIX[a]){art2.value=a; pflicht(card);}
       box.innerHTML='';
     }); });

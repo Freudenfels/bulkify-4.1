@@ -64,3 +64,8 @@ nicht angehakt = `quarantaene`. So lassen sich in einer Lieferung Produkte misch
 einzubuchen. Wird an `erp_wareneingang_buchen(..., $status)` übergeben. „Gesperrt" gibt es hier nicht –
 der volle Status (inkl. Gesperrt) ist nachträglich auf der Charge-Detailseite änderbar
 (`?p=charge`, Aktion `status` → `erp_charge_status_setzen()`).
+
+**Einheit als Auswahlfeld** (`p_einheit[]`): Je Position ein festes Dropdown mit **Stk, g, kg, ml, L**
+statt Freitext. Die Einheit eines bestehenden Artikels (bzw. der Rezeptur) wird per `einhCanon()`
+auf eine dieser fünf abgebildet (z. B. „Stück"→Stk, „Liter"→L, „t"→kg); unbekannt → Stk.
+Leerkapseln werden immer auf Stk gesetzt. Serverseitig unverändert (`$_POST['p_einheit'][$i]`).
