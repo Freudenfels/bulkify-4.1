@@ -3572,8 +3572,10 @@ function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd =
     elseif (!empty($pa['mhd']))             $mhd = (string)$pa['mhd'];
     else                                    $mhd = mhd_standard();
     $notiz = trim($notiz);
+    // QM-Gate (St-11d): eigene Fertigware (Bulk + verkaufsfertig) kommt in QUARANTÄNE – Versand, Fremdlager und
+    // Weiterverarbeitung erst nach der Freigabe durch QM (Lager-App „Quarantäne" / Dashboard-Wareneingang).
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
-       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?, ?)",
+       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'quarantaene', ?, ?, ?)",
       [$charge_nr, $item_id, $menge, $menge, $mhd, 'Aus Produktion ' . $pa['nummer'] . ($notiz !== '' ? ' – ' . mb_substr($notiz, 0, 200) : ''), $pa_id, gmdate('Y-m-d H:i:s')]);
     return ['ok'=>true, 'msg'=>'', 'charge_id'=>insert_id(), 'charge_nr'=>$charge_nr];
 }
@@ -7212,10 +7214,12 @@ function bulk_reservieren(int $auftrag_id, string $quelle, int $quelle_id, float
         if ($menge > $frei + 1e-6) $warnung = 'Achtung: ' . $nz($menge) . ' reserviert, aus dieser Bestellung waren nur ' . $nz($frei) . ' frei – die Quelle ist damit überbelegt (ggf. andere Aufträge unterdeckt). Lieferung unterwegs kann die Lücke decken.';
         $bpId = $quelle_id;
     } elseif ($quelle === 'charge') {
-        $c = one("SELECT id, menge_verfuegbar, item_id FROM charge WHERE id=?", [$quelle_id]);
+        $c = one("SELECT id, menge_verfuegbar, item_id, status FROM charge WHERE id=?", [$quelle_id]);
         if (!$c || (int)$c['item_id'] !== $item) return ['ok'=>false, 'fehler'=>'Charge passt nicht zum Bulk-Artikel dieses Auftrags.'];
         $frei = (float)$c['menge_verfuegbar'] - charge_bulk_reserviert($quelle_id);
         if ($menge > $frei + 1e-6) $warnung = 'Achtung: ' . $nz($menge) . ' reserviert, auf dieser Charge waren nur ' . $nz($frei) . ' frei – die Charge ist damit überbelegt (ggf. andere Aufträge unterdeckt).';
+        // QM-Gate (St-11d): Reservieren bleibt weich (wie „unterwegs"), verarbeitet wird die Charge erst nach der QM-Freigabe.
+        if ((string)$c['status'] !== 'frei') $warnung = trim($warnung . ' Die Charge ist noch nicht freigegeben (Quarantäne/gesperrt) – nutzbar erst nach der QM-Freigabe.');
         $chId = $quelle_id;
     } else {
         return ['ok'=>false, 'fehler'=>'Unbekannte Quelle.'];
@@ -9790,6 +9794,11 @@ function produktion_verpackung_entnehmen(int $pa_id): array {
 // Fulfillment-Kunde: Der Auftrag geht nicht raus, die Fertigware wandert ins Fremdlager (Lager 2)
 // und bleibt dort, bis der Endkunde bestellt – dann bucht die Fulfillment-Kopplung sie ab
 // (lager2_verbrauch). Deshalb wird hier NICHTS ausgebucht und kein Lieferschein geschrieben.
+// Zusatz für Versand-/Fremdlager-Meldungen: liegt Fertigware noch in Quarantäne, wartet sie auf QM (St-11d).
+function fertigware_qm_hinweis(int $item_id): string {
+    $q = (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='quarantaene' AND fremd_kunde_id IS NULL", [$item_id]);
+    return $q > 1e-6 ? ' ' . number_format($q, 0, ',', '.') . ' Pkg liegen noch in Quarantäne und warten auf die QM-Freigabe.' : '';
+}
 function auftrag_ins_fremdlager(int $auftrag_id): array {
     $a = one("SELECT * FROM auftrag WHERE id=? AND status='erledigt'", [$auftrag_id]);
     if (!$a && auftrag_handelsware_ohne_pa($auftrag_id)) $a = one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]);   // Handelsware (S-15)
@@ -9797,7 +9806,7 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
     $vfitem = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$a['produkt_id']]) ?: 0);
     if (!$vfitem) return ['ok'=>false, 'msg'=>'Zu diesem Produkt gibt es keinen Fertigwaren-Artikel.'];
     $verf = item_bestand($vfitem, true);
-    if ($verf + 0.0001 < (float)$a['menge']) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$a['menge'] . ').'];
+    if ($verf + 0.0001 < (float)$a['menge']) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$a['menge'] . ').' . fertigware_qm_hinweis($vfitem)];
     $bsku = bsku_ensure($vfitem);   // Brücke zum Shop – ohne sie findet die Kopplung den Artikel nicht
     q("UPDATE auftrag SET status='versendet' WHERE id=?", [$auftrag_id]);
     auftrag_rechnung_bei_lieferung($auftrag_id, true);   // Übergabe ins Fremdlager = Lieferung: Rechnung festschreiben
@@ -9826,7 +9835,7 @@ function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
     if ($ship <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Versandmenge größer 0 angeben.'];
     $vfitem = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$a['produkt_id']]) ?: 0);
     $verf = $vfitem ? item_bestand($vfitem, true) : 0;
-    if ($verf + 0.0001 < (float)$ship) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$ship . ' zu versendenden).'];
+    if ($verf + 0.0001 < (float)$ship) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$ship . ' zu versendenden).' . ($vfitem ? fertigware_qm_hinweis($vfitem) : '')];
     // Fertigware FEFO ausbuchen (nur die zu versendende Menge)
     $rest = (float)$ship;
     foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$vfitem]) as $c) {

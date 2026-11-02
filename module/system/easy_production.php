@@ -170,11 +170,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
                    . ($bulkChargeNrs ? ' · aus Bulk-Charge ' . implode(', ', array_values(array_unique($bulkChargeNrs))) : '')
                    . ($bes !== '' ? ' – ' . mb_substr($bes, 0, 180) : '');
             if ($kundenmenge > 0) {
+                // QM-Gate (St-11d): Fertigware in Quarantäne bis zur QM-Freigabe – außer „schon geliefert" (wird gleich ausgebucht).
                 q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
-                   VALUES (?,?,?,?, 'Stk', ?, ?, 'frei', ?, ?, ?)",
-                  [$chargeNr, $vf, $kundenmenge, $kundenmenge, $mhd, $datum, $notiz, $paId, gmdate('Y-m-d H:i:s')]);
+                   VALUES (?,?,?,?, 'Stk', ?, ?, ?, ?, ?, ?)",
+                  [$chargeNr, $vf, $kundenmenge, $kundenmenge, $mhd, $datum, $geliefert ? 'frei' : 'quarantaene', $notiz, $paId, gmdate('Y-m-d H:i:s')]);
                 $kundenChargeId = (int) insert_id();
-                $protokoll[] = 'Fertigware (Fertigprodukte): +' . number_format($kundenmenge, 0, ',', '.') . ' Stk, Charge ' . $chargeNr . ', MHD ' . $mhd;
+                $protokoll[] = 'Fertigware (Fertigprodukte): +' . number_format($kundenmenge, 0, ',', '.') . ' Stk, Charge ' . $chargeNr . ', MHD ' . $mhd . ($geliefert ? '' : ' – in Quarantäne bis zur QM-Freigabe');
             }
             if ($rueckstell > 0) {
                 q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)

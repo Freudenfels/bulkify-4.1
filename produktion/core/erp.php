@@ -976,8 +976,9 @@ function erp_teilmenge_einbuchen(int $pa_id, float $menge): ?int {
     }
     if (!$item_id) return null;
     $charge_nr = erp_charge_naechste_nr($pa_id);
+    // QM-Gate (St-11d): eigene Fertigware kommt in Quarantäne, frei erst nach der QM-Freigabe (wie im Dashboard).
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
-       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?, ?)",
+       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'quarantaene', ?, ?, ?)",
       [$charge_nr, $item_id, $menge, $menge, erp_mhd_standard(), 'Aus Produktion ' . $pa['nummer'], $pa_id, gmdate('Y-m-d H:i:s')]);
     return insert_id();
 }

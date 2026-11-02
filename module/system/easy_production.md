@@ -38,3 +38,6 @@ Verknüpfung Bulk-Charge ↔ Kundencharge beidseitig sichtbar über `produktion_
 - Bulk-Charge-Seite: „Verwendet in Produktionen" zeigt jetzt zusätzlich die Spalte **Kundencharge** (entstandene Fertigware-Charge des PA) mit Menge und Kunde.
 
 Die Felder der Vorschau nutzen explizite Indizes (`mat_item[<i>]`, `mat_menge[<i>]`, `mat_charge[<i>]` …), damit Charge und Position sicher zusammenpassen.
+
+## QM-Gate Fertigware (St-11d)
+Eigene Fertigware (Einlagern aus der Produktion: `produktion_teilmenge_einbuchen()`, Produktions-App `erp_teilmenge_einbuchen()`, Easy Production außer „schon geliefert") kommt in **Quarantäne** statt frei. Versand, Fremdlager-Übergabe und Weiterverarbeitung nehmen nur freie Chargen, also erst nach der QM-Freigabe (Lager-App „Quarantäne" / Dashboard-Wareneingang, nur QM/Admin). Die Versand-/Fremdlager-Meldung nennt die wartende Menge (`fertigware_qm_hinweis()`), die Bulk-Reservierung einer nicht freien Charge warnt nur, und die Lager-App lässt Fertigware in Quarantäne nicht entnehmen. Zukauf „fertig" behält den Status vom Wareneingang.

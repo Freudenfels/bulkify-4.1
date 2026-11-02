@@ -1408,9 +1408,12 @@ function erp_quarantaene_chargen(int $item_id = 0): array {
 // Rueckgabe: ['ok'=>bool, 'meldung'=>?, 'leer'=>bool, 'rest'=>float, 'item_name'=>?, 'einheit'=>?].
 function erp_charge_entnehmen(int $charge_id, float $menge): array {
     if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Chargen vorhanden.'];
-    $c = one("SELECT c.*, i.name AS item_name FROM charge c JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
+    $c = one("SELECT c.*, i.name AS item_name, i.kategorie FROM charge c JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
     if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
     if (!empty($c['fremd_kunde_id'])) return ['ok' => false, 'meldung' => 'Fremdlager-Charge – Entnahme läuft über das Fulfillment.'];
+    // QM-Gate (St-11d): Fertigware in Quarantäne darf das Lager nicht verlassen, bevor QM freigegeben hat.
+    if ((string)$c['status'] === 'quarantaene' && in_array((string)$c['kategorie'], ['fertig', 'verkaufsfertig'], true))
+        return ['ok' => false, 'meldung' => 'Fertigware in Quarantäne – erst nach der QM-Freigabe entnehmen.'];
     if ($menge <= 0) return ['ok' => false, 'meldung' => 'Bitte eine Menge größer 0 angeben.'];
     $verf = (float)$c['menge_verfuegbar'];
     if ($menge > $verf + 1e-9) return ['ok' => false, 'meldung' => 'Nur noch ' . menge_txt($verf) . ' ' . (string)$c['einheit'] . ' verfügbar.'];
