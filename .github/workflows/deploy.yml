@@ -1,8 +1,13 @@
 name: Deploy to Server (SFTP)
 
 # Auto-Deploy fuer bulkify-4.1.
-# - Push auf main: nur die geaenderten Dateien werden per SFTP hochgeladen (inkrementell).
-# - Vollupload-Fallback: erster Lauf / leerer Vorgaenger / manueller Start / Force-Push.
+# - Push auf main: alle Dateien, die sich seit dem ZULETZT DEPLOYTEN Stand geaendert haben, werden per SFTP
+#   hochgeladen (inkrementell). Der deployte Stand steht auf dem Server in .deploy_sha (ausserhalb von public/).
+# - Vollupload-Fallback: keine/ungueltige .deploy_sha, manueller Start.
+# WARUM .deploy_sha (2026-11-03): GitHub haelt je Concurrency-Gruppe nur EINEN wartenden Lauf; bei schnell
+# aufeinanderfolgenden Pushes werden Zwischenlaeufe verworfen. Frueher lud jeder Lauf nur die Dateien SEINES
+# Commits (event.before..sha) hoch -> Dateien aus verworfenen Laeufen kamen nie auf den Server. Jetzt rechnet
+# jeder Lauf ab dem tatsaechlich deployten Stand und holt verpasste Commits automatisch nach.
 # Sicherheit: es wird NICHTS auf dem Server geloescht. Ausgeschlossen: secrets.php (Live-DB-Zugang),
 # der GESAMTE data/-Ordner (Uploads/Logs), Git-/CI-Interna, *.sql/*.bak/*.log.
 # WICHTIG: SERVER_PATH muss ein EIGENER Ordner sein (nicht die v3-Live-Seite). core/config.php laedt
@@ -13,9 +18,9 @@ on:
       - main
   workflow_dispatch:
 
-# Nur EIN Deploy gleichzeitig: mehrere parallele SFTP-Sessions zum selben Server blockieren sich sonst
-# (Runs bleiben auf "In progress" haengen). cancel-in-progress: false = laufenden Upload NIE abbrechen
-# (sonst Teil-Upload), neue Runs warten in der Queue und laufen nacheinander.
+# Nur EIN Deploy gleichzeitig: mehrere parallele SFTP-Sessions zum selben Server blockieren sich sonst.
+# cancel-in-progress: false = laufenden Upload NIE abbrechen (sonst Teil-Upload). Verworfene wartende Laeufe
+# sind unkritisch, weil der naechste Lauf ab .deploy_sha alles nachholt.
 concurrency:
   group: deploy-sftp
   cancel-in-progress: false
@@ -23,35 +28,60 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Falls ein SFTP-Schritt doch haengt: nach 10 min abbrechen (statt endlos "In progress"), Queue laeuft weiter.
-    timeout-minutes: 10
+    # 40 min: der Vollupload (erster Lauf ohne .deploy_sha / manueller Start) braucht deutlich mehr als 10 min.
+    # Haengt ein SFTP-Schritt doch, bricht der Lauf danach ab und die Queue laeuft weiter.
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Aenderungsumfang bestimmen (Diff oder Vollupload)
+      - name: lftp installieren
+        run: |
+          # Fremd-Paketquellen auf dem Runner (z. B. google-chrome) koennen "apt-get update"
+          # mit "Hash Sum mismatch" (exit 100) sprengen. Wir brauchen nur lftp aus den Ubuntu-
+          # Basisquellen (ubuntu.sources), daher die *.list-Fremdquellen vorher entfernen.
+          sudo rm -f /etc/apt/sources.list.d/*.list || true
+          sudo apt-get update -qq || sudo apt-get update -qq --allow-releaseinfo-change || true
+          sudo apt-get install -y -qq lftp
+
+      - name: Aenderungsumfang bestimmen (ab deploytem Stand oder Vollupload)
         id: prep
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BEFORE_SHA: ${{ github.event.before }}
           AFTER_SHA: ${{ github.sha }}
+          SFTP_HOST: ${{ secrets.SERVER_HOST }}
+          SFTP_PORT: ${{ secrets.SERVER_PORT }}
+          SFTP_USER: ${{ secrets.SERVER_USERNAME }}
+          SFTP_PASS: ${{ secrets.SERVER_PASSWORD }}
+          SFTP_PATH: ${{ secrets.SERVER_PATH }}
         run: |
           set -euo pipefail
+          REMOTE="${SFTP_PATH%/}"
+          esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+          # Zuletzt deployten Stand vom Server lesen (fehlt die Datei: leer -> Vollupload).
+          BASE_SHA=$( {
+            printf 'set sftp:auto-confirm yes\nset net:timeout 20\nset net:max-retries 2\n'
+            printf 'open sftp://%s:%s\n' "$SFTP_HOST" "$SFTP_PORT"
+            printf 'user "%s" "%s"\n' "$(esc "$SFTP_USER")" "$(esc "$SFTP_PASS")"
+            printf 'cat "%s/.deploy_sha"\nbye\n' "$(esc "$REMOTE")"
+          } | lftp 2>/dev/null | tr -cd '0-9a-f' | head -c 40 || true )
+          echo "Deployter Stand auf dem Server: ${BASE_SHA:-<keiner>}"
           MODE=incremental
           if [ "$EVENT_NAME" != "push" ]; then MODE=full; fi
-          if [ -z "${BEFORE_SHA:-}" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then MODE=full; fi
-          if [ "$MODE" = "incremental" ] && ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then MODE=full; fi
+          if [ "${#BASE_SHA}" -ne 40 ]; then MODE=full; fi
+          if [ "$MODE" = "incremental" ] && ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then MODE=full; fi
+          if [ "$MODE" = "incremental" ] && ! git merge-base --is-ancestor "$BASE_SHA" "$AFTER_SHA"; then MODE=full; fi
           if [ "$MODE" = "incremental" ]; then
-            if ! git diff --name-only --diff-filter=ACMR "$BEFORE_SHA" "$AFTER_SHA" > changed_all.txt; then
+            if ! git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$AFTER_SHA" > changed_all.txt; then
               MODE=full
             fi
           fi
           if [ "$MODE" = "incremental" ]; then
             grep -vE '^secrets\.php$|^\.git(hub)?/|^data/|\.sql$|\.bak$|\.log$' changed_all.txt > changed_filtered.txt || true
             COUNT=$(grep -c . changed_filtered.txt || true)
-            echo "Modus: inkrementell. Zu uebertragende Dateien: ${COUNT:-0}"
+            echo "Modus: inkrementell ab ${BASE_SHA}. Zu uebertragende Dateien: ${COUNT:-0}"
             echo "----- Dateiliste -----"; cat changed_filtered.txt || true; echo "----------------------"
           else
             echo "Modus: Vollupload (Fallback)."
@@ -72,12 +102,6 @@ jobs:
             echo "Keine relevanten Aenderungen - nichts hochzuladen."
             exit 0
           fi
-          # Fremd-Paketquellen auf dem Runner (z. B. google-chrome) koennen "apt-get update"
-          # mit "Hash Sum mismatch" (exit 100) sprengen. Wir brauchen nur lftp aus den Ubuntu-
-          # Basisquellen (ubuntu.sources), daher die *.list-Fremdquellen vorher entfernen.
-          sudo rm -f /etc/apt/sources.list.d/*.list || true
-          sudo apt-get update -qq || sudo apt-get update -qq --allow-releaseinfo-change || true
-          sudo apt-get install -y -qq lftp
           REMOTE="${SFTP_PATH%/}"
           esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
           : > lftp_puts.txt
@@ -119,3 +143,24 @@ jobs:
           cleanup: false
           include: '["*", "**/*"]'
           exclude: '["secrets.php",".git/**",".github/**","data/**","**/*.sql","**/*.bak","**/*.log"]'
+
+      - name: Deployten Stand merken (.deploy_sha)
+        env:
+          AFTER_SHA: ${{ github.sha }}
+          SFTP_HOST: ${{ secrets.SERVER_HOST }}
+          SFTP_PORT: ${{ secrets.SERVER_PORT }}
+          SFTP_USER: ${{ secrets.SERVER_USERNAME }}
+          SFTP_PASS: ${{ secrets.SERVER_PASSWORD }}
+          SFTP_PATH: ${{ secrets.SERVER_PATH }}
+        run: |
+          set -euo pipefail
+          REMOTE="${SFTP_PATH%/}"
+          esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+          printf '%s\n' "$AFTER_SHA" > .deploy_sha
+          {
+            printf 'set sftp:auto-confirm yes\nset net:timeout 20\nset net:max-retries 2\nset cmd:fail-exit yes\n'
+            printf 'open sftp://%s:%s\n' "$SFTP_HOST" "$SFTP_PORT"
+            printf 'user "%s" "%s"\n' "$(esc "$SFTP_USER")" "$(esc "$SFTP_PASS")"
+            printf 'put -O "%s" .deploy_sha\nbye\n' "$(esc "$REMOTE")"
+          } | lftp
+          echo "Deployter Stand: $AFTER_SHA"
