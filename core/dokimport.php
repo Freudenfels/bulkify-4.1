@@ -101,8 +101,7 @@ function dokimport_worker(int $job_id): void {
             // Aussteller/Lieferant aus dem Dokument gegen die vorhandenen Lieferanten abgleichen (ek_lieferant_id,
             // unscharf über lieferanten.firma). Treffer wird vorbelegt; der Name bleibt zur Anzeige/Korrektur stehen.
             $liefName = trim((string)($r['lieferant_vorschlag'] ?? ''));
-            require_once BX_ROOT . '/core/ek_ki.php';
-            $liefId = ($liefName !== '' && function_exists('ek_lieferant_id')) ? ek_lieferant_id($liefName) : null;
+            $liefId = $liefName !== '' ? dokimport_lieferant_finden($liefName) : null;
             q("UPDATE dok_import_datei SET status='gelesen', typ=?, sicherheit=?, item_id=?, quelle=?, lieferant_id=?, lieferant_name=?, ki_json=?, fehler=NULL WHERE id=?",
               [(string)($r['typ'] ?? 'unklar'), (string)($r['sicherheit'] ?? 'mittel'),
                $m['item_id'] ?: null, $m['quelle'], $liefId ?: null, ($liefName !== '' ? mb_substr($liefName, 0, 190) : null),
@@ -170,6 +169,35 @@ function dokimport_duplikate_ueberspringen(int $job_id): int {
         }
     }
     return $n;
+}
+
+// Aussteller-Name (von der KI gelesen) -> lieferanten.id, oder null. BEWUSST streng, weil eine falsche Zuordnung
+// still an der Charge hängen bliebe: 1) exakt (ohne Groß-/Kleinschreibung), 2) gleich nach Entfernen von
+// Rechtsform-/Füllwörtern (Co., Ltd., GmbH …), 3) Teiltreffer NUR bei langem Namen (>= 8 Zeichen) und nur,
+// wenn er EINDEUTIG ist (genau ein Lieferant). Sonst null -> der Mensch wählt im Dropdown.
+function dokimport_lieferant_finden(string $name): ?int {
+    $name = trim($name);
+    if ($name === '') return null;
+    $id = (int) scalar("SELECT id FROM lieferanten WHERE LOWER(TRIM(firma))=LOWER(?) ORDER BY id LIMIT 1", [$name]);
+    if ($id > 0) return $id;
+    $norm = function (string $s): string {
+        $s = mb_strtolower($s);
+        $s = preg_replace('/\b(co|company|ltd|limited|gmbh|inc|corp|corporation|llc|ag|sa|srl|kg|ug|bv|nv|pvt|private|the|und|and)\b\.?/u', ' ', $s);
+        return trim((string) preg_replace('/[^a-z0-9äöüß]+/u', ' ', (string)$s));
+    };
+    $ziel = $norm($name);
+    if ($ziel === '') return null;
+    $kandidaten = all("SELECT id, firma FROM lieferanten");
+    foreach ($kandidaten as $l) if ($norm((string)$l['firma']) === $ziel) return (int)$l['id'];
+    if (mb_strlen($ziel) >= 8) {
+        $treffer = [];
+        foreach ($kandidaten as $l) {
+            $f = $norm((string)$l['firma']);
+            if ($f !== '' && (mb_strpos($f, $ziel) !== false || mb_strpos($ziel, $f) !== false) && mb_strlen($f) >= 8) $treffer[] = (int)$l['id'];
+        }
+        if (count($treffer) === 1) return $treffer[0];
+    }
+    return null;
 }
 
 // Einer Zeile einen Lieferanten (Aussteller der CoA/Spec) zuordnen bzw. entfernen (0 = entfernen).
@@ -265,19 +293,21 @@ function dokimport_neu_anlegen(int $datei_id): int {
 }
 
 // Fuer ALLE Zeilen ohne Treffer je einen neuen Rohstoff anlegen. Rueckgabe: Anzahl.
-// DUBLETTEN-SCHUTZ: Vor dem Neuanlegen wird jede trefferlose Zeile ERNEUT gegen den aktuellen Katalog
-// gematcht – inklusive der Rohstoffe, die in DIESEM Durchlauf gerade erst angelegt wurden. So landet ein
-// zweites Dokument zum selben Stoff (gleiche CAS / lat. Name / Name) am bereits angelegten Rohstoff, statt
-// als zweiter Rohstoff. Grund fuer Dubletten vorher: Beim Einlesen (spec_ki_match_item) existierte der neue
-// Rohstoff noch nicht, also hatten beide Dateien „kein Treffer" und jede legte einen eigenen an.
+// DUBLETTEN-SCHUTZ: Wäre der NEU anzulegende Rohstoff (spezifischer Name inkl. Standardisierung) schon vorhanden –
+// z. B. weil eine frühere Zeile DIESES Durchlaufs ihn gerade angelegt hat –, hängt sich die Datei dort an, statt
+// einen zweiten, namensgleichen Rohstoff zu erzeugen. Bewusst NUR bei gleichem spezifischem Namen (nicht per
+// CAS/lat. Name/Teiltreffer): verschiedene Extrakte derselben Pflanze (5 % Zeaxanthin vs. 10 % Lutein) sind
+// verschiedene Rohstoffe und dürfen NICHT unbemerkt zusammenfallen. Grund fuer die Dubletten vorher: Beim
+// Einlesen existierte der neue Rohstoff noch nicht, also hatten beide Dateien „kein Treffer".
 function dokimport_neu_anlegen_alle(int $job_id): int {
     $n = 0;
     foreach (all("SELECT id FROM dok_import_datei WHERE job_id=? AND status='gelesen' AND (item_id IS NULL OR item_id=0) ORDER BY id", [$job_id]) as $z) {
         $did = (int)$z['id'];
-        $dd  = one("SELECT ki_json FROM dok_import_datei WHERE id=? AND status='gelesen' AND (item_id IS NULL OR item_id=0)", [$did]);
+        $dd  = one("SELECT ki_json, dateiname FROM dok_import_datei WHERE id=? AND status='gelesen' AND (item_id IS NULL OR item_id=0)", [$did]);
         if (!$dd) continue;   // zwischenzeitlich schon zugeordnet (z. B. durch eine frühere Zeile dieses Laufs)
-        $ki  = json_decode((string)($dd['ki_json'] ?? ''), true);
-        $mid = is_array($ki) ? (int)(spec_ki_match_item($ki)['item_id'] ?? 0) : 0;
+        $ki   = json_decode((string)($dd['ki_json'] ?? ''), true);
+        $name = mb_substr(dokimport_name_spezifisch(is_array($ki) ? $ki : [], (string)$dd['dateiname']), 0, 190);
+        $mid  = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND LOWER(name)=LOWER(?) ORDER BY id LIMIT 1", [$name]);
         if ($mid > 0) {
             q("UPDATE dok_import_datei SET item_id=?, quelle='auto' WHERE id=? AND status='gelesen'", [$mid, $did]);
             $n++;
@@ -301,7 +331,7 @@ function dokimport_ueberspringen(int $datei_id, bool $skip = true): void {
 // Nur Zeilen mit status='gelesen' und zugeordnetem Rohstoff. Rueckgabe: ['importiert'=>n, 'offen'=>n].
 function dokimport_import(int $job_id): array {
     $zeilen = all("SELECT * FROM dok_import_datei WHERE job_id=? AND status='gelesen'", [$job_id]);
-    $importiert = 0; $offen = 0;
+    $importiert = 0; $offen = 0; $beruehrt = [];
     foreach ($zeilen as $z) {
         $item_id = (int) $z['item_id'];
         if (!$item_id) { $offen++; continue; }   // kein Treffer -> bleibt offen stehen
@@ -319,11 +349,14 @@ function dokimport_import(int $job_id): array {
         $dok_id = (int) insert_id();
 
         spec_ki_merken($dok_id, $ki);              // Rohvorschlag am Dokument (nachvollziehbar)
-        spec_ki_anwenden($item_id, $ki, $liefId);  // Charge (mit Lieferant)/Grenzwerte/Kennwerte/Wirkstoffe, additiv
+        spec_ki_anwenden($item_id, $ki, $liefId, false);  // Charge (mit Lieferant)/Grenzwerte/Kennwerte/Wirkstoffe, additiv
+        $beruehrt[$item_id] = true;                       // Freigabe-Politik erst nach ALLEN Dokumenten dieses Rohstoffs
 
         q("UPDATE dok_import_datei SET status='importiert' WHERE id=?", [(int)$z['id']]);
         $importiert++;
     }
+    // Freigabe-Politik EINMAL je Rohstoff (Erst-Import -> automatisch freigeben; später geändert -> markieren).
+    foreach (array_keys($beruehrt) as $bi) spec_nach_datenaenderung((int)$bi, 'Massen-Import');
     // Job abschliessen, wenn nichts mehr zu tun ist (keine 'gelesen'-Zeilen ohne Treffer mehr).
     if (!$offen) q("UPDATE dok_import_job SET status='fertig' WHERE id=?", [$job_id]);
     return ['importiert' => $importiert, 'offen' => $offen];

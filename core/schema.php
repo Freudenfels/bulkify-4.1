@@ -1827,7 +1827,9 @@ function init_schema(): void {
     // (live) sah – der Alt-Bestand bleibt sichtbar, statt zu verschwinden. Bewusste RÜCKNAHMEN bleiben verborgen:
     // sie haben bereits einen Snapshot (beim Zurückziehen wird spec_freigabe_daten NICHT gelöscht) und werden
     // vom NULL-Filter übersprungen. Inline (keine Abhaengigkeit von spec_ki.php), best-effort, idempotent.
-    try {
+    // Nur EINMAL (Meta-Flag) – init_schema läuft bei jedem Request, die Abfrage soll nicht jedes Mal alle Rohstoffe
+    // scannen. Neue/geänderte Specs laufen danach über spec_nach_datenaenderung() (Upload/Import/manuelles Speichern).
+    if (!function_exists('meta_get') || (string) meta_get('migr_spec_snapshot', '') !== '1') try {
         $__hatKw = table_exists('item_kennwert');
         $__rows = all("SELECT id FROM item WHERE kategorie='rohstoff' AND (spec_freigabe_daten IS NULL OR spec_freigabe_daten='')
             AND ( EXISTS (SELECT 1 FROM item_wirkstoff w WHERE w.item_id=item.id)
@@ -1845,7 +1847,8 @@ function init_schema(): void {
             q("UPDATE item SET spec_freigabe_daten=?, spec_freigegeben=1, spec_aenderung_offen=0 WHERE id=?",
               [json_encode($__p, JSON_UNESCAPED_UNICODE), $__id]);
         }
-    } catch (\Throwable $e) { /* best-effort */ }
+        if (function_exists('meta_set')) meta_set('migr_spec_snapshot', '1');
+    } catch (\Throwable $e) { /* best-effort – ohne Flag wird beim nächsten Request erneut versucht */ }
     // Beschaffenheit: WAS der Rohstoff ist (Extrakt / reines Pulver / Isolat ...) + Extraktverhaeltnis (DEV, z. B. 1:10).
     // Getrennt von der physischen Form und der Spezifikation (Standardisierung). Fliesst in den Anzeigenamen ein
     // (rohstoff_anzeige_name(): z. B. "Ashwagandha Extrakt 10:1").
@@ -9833,6 +9836,12 @@ function rohstoff_loeschen(int $id): array {
     if (table_exists('bestellung_position') && column_exists('bestellung_position', 'item_id') && $cnt("SELECT COUNT(*) FROM bestellung_position WHERE item_id=?", [$id])) $blocker[] = 'in Bestellung(en)';
     foreach (['item_id', 'rohstoff_id'] as $spalte)
         if (table_exists('angebot_position') && column_exists('angebot_position', $spalte) && $cnt("SELECT COUNT(*) FROM angebot_position WHERE `$spalte`=?", [$id])) { $blocker[] = 'in Angebot(en)'; break; }
+    // Weitere ECHTE Verwendungen (Historie/Produktion/Anfragen) – daran hängt Nachvollziehbarkeit, nie still löschen.
+    foreach ([['produktion_verbrauch', 'item_id', 'in Produktion verbraucht'], ['prod_charge_rohstoff', 'item_id', 'in Produktions-Chargen'],
+              ['schwund', 'item_id', 'Schwund-Buchungen'], ['prod_probe', 'item_id', 'Proben'], ['lager2_bewegung', 'item_id', 'Lager-2-Bewegungen'],
+              ['lieferant_anfrage', 'item_id', 'Lieferanten-Anfragen'], ['rezeptur_anfrage_wunsch', 'item_id', 'Rezeptur-Anfragen'],
+              ['portal_anfrage', 'rohstoff_id', 'Kunden-Rohstoffanfragen'], ['produkt', 'leerkapsel_id', 'als Leerkapsel an Produkten']] as [$tb, $sp, $txt])
+        if (table_exists($tb) && column_exists($tb, $sp) && $cnt("SELECT COUNT(*) FROM `$tb` WHERE `$sp`=?", [$id])) $blocker[] = $txt;
     if ($blocker) return ['ok' => false, 'fehler' => 'Nicht löschbar – ' . implode(', ', array_unique($blocker)) . '. Stattdessen „Mit anderem Artikel zusammenführen".'];
 
     $pdo = db();
@@ -9843,6 +9852,10 @@ function rohstoff_loeschen(int $id): array {
         if (table_exists('charge_gebinde')) q("DELETE FROM charge_gebinde WHERE charge_id IN (SELECT id FROM (SELECT id FROM charge WHERE item_id=?) x)", [$id]);
         q("DELETE FROM charge WHERE item_id=?", [$id]);
         if (table_exists('lieferant_preis')) q("DELETE FROM lieferant_preis WHERE item_id=?", [$id]);
+        // Reine Zuordnungs-/Vorschlagszeilen: Vorschläge weg, Zuordnungen (Katalog/Import) auf „keine" zurücksetzen.
+        if (table_exists('rohstoff_variante_vorschlag')) q("DELETE FROM rohstoff_variante_vorschlag WHERE item_id=?", [$id]);
+        foreach (['lieferant_katalog', 'ek_import', 'dok_import_datei'] as $tb)
+            if (table_exists($tb) && column_exists($tb, 'item_id')) q("UPDATE `$tb` SET item_id=NULL WHERE item_id=?", [$id]);
         q("DELETE FROM dokument WHERE objekt_typ='item' AND objekt_id=?", [$id]);
         q("DELETE FROM item WHERE id=?", [$id]);
         $pdo->commit();

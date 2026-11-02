@@ -28,19 +28,27 @@ Rohstoffen (kein Treffer = bleibt offen stehen).
    Kein Treffer? `dokimport_neu_anlegen($datei_id)` legt einen **neuen** Rohstoff aus den KI-Stammdaten an
    (Name/CAS/Synonyme/botan. Quelle …) und ordnet ihn zu; `dokimport_neu_anlegen_alle($job)` macht das für
    alle Zeilen ohne Treffer. (Ursprünglich match-only; Neuanlage ist jetzt eine ausdrückliche Aktion.)
-   **Dubletten-Schutz in `dokimport_neu_anlegen_alle`:** vor dem Neuanlegen wird jede trefferlose Zeile **erneut
-   gematcht** (`spec_ki_match_item`) – inkl. der Rohstoffe, die in DIESEM Lauf gerade angelegt wurden. So landet
-   ein zweites Dokument zum selben Stoff (gleiche CAS/lat. Name/Name) am bereits angelegten Rohstoff statt als
-   Dublette. (Grund für frühere Dubletten: Beim Einlesen existierte der neue Rohstoff noch nicht → beide Dateien
-   „kein Treffer" → jede legte einen eigenen an. Der Einzel-Knopf „+ Neuer Rohstoff" legt weiterhin bewusst an.)
+   **Dubletten-Schutz in `dokimport_neu_anlegen_alle`:** vor dem Neuanlegen wird der **spezifische Name**
+   (`dokimport_name_spezifisch`, inkl. Standardisierung wie „5% Zeaxanthin") berechnet; existiert genau dieser
+   Rohstoffname schon – z. B. weil eine frühere Zeile DIESES Laufs ihn gerade angelegt hat –, hängt sich die Datei
+   dort an, statt einen namensgleichen zweiten Rohstoff zu erzeugen. **Bewusst nur bei gleichem spezifischem Namen**
+   (nicht per CAS/lat. Name/Teiltreffer): verschiedene Extrakte derselben Pflanze (5 % Zeaxanthin vs. 10 % Lutein)
+   sind verschiedene Rohstoffe und dürfen nicht unbemerkt zusammenfallen. (Grund für frühere Dubletten: Beim
+   Einlesen existierte der neue Rohstoff noch nicht → beide Dateien „kein Treffer" → jede legte einen eigenen an.
+   Der Einzel-Knopf „+ Neuer Rohstoff" legt weiterhin bewusst an.)
 4. `dokimport_import($job_id)` – je bestätigter Zeile: Original als **internes** Dokument am Rohstoff
-   (`kunde_sichtbar=0`, nie an Kunde, **mit `lieferant_id`**) + `spec_ki_anwenden($item,$ki,$lieferant_id)`
-   (Charge mit Lieferant / Grenzwerte / Kennwerte / Wirkstoffe, additiv). Neue Rohstoffe werden dabei
-   automatisch freigegeben (`spec_nach_datenaenderung`, siehe `core/spec_ki.md`).
+   (`kunde_sichtbar=0`, nie an Kunde, **mit `lieferant_id`**) + `spec_ki_anwenden($item,$ki,$lieferant_id,false)`
+   (Charge mit Lieferant / Grenzwerte / Kennwerte / Wirkstoffe, additiv). Die **Freigabe-Politik**
+   (`spec_nach_datenaenderung`, siehe `core/spec_ki.md`) läuft **einmal je Rohstoff NACH allen Dokumenten** des
+   Imports – sonst würde das zweite Dokument (z. B. CoA nach Spec) zum selben Rohstoff fälschlich „Änderung,
+   erneute Freigabe" auslösen. Neue Rohstoffe werden so automatisch freigegeben.
 
 ## Lieferant (Aussteller) je Datei
 Die KI liest den Aussteller der CoA/Spec aus (`lieferant_vorschlag`); beim Einlesen wird er über
-`ek_lieferant_id()` (unscharf gegen `lieferanten.firma`) einem vorhandenen Lieferanten zugeordnet und in
+`dokimport_lieferant_finden()` einem vorhandenen Lieferanten zugeordnet – **bewusst streng**: exakt, dann gleich nach
+Entfernen von Rechtsform-/Füllwörtern (Co., Ltd., GmbH …), Teiltreffer nur bei langem Namen (≥ 8 Zeichen) und nur,
+wenn **eindeutig**; sonst bleibt es leer und der Mensch wählt (statt dass „kürzester Treffer" still die falsche Firma
+an die Charge hängt) – und in
 `dok_import_datei.lieferant_id` (+ Rohname `lieferant_name`) gespeichert. In der Vorschau gibt es je Zeile ein
 Lieferanten-Dropdown (rscombo) zum Korrigieren (`dokimport_lieferant_setzen`) und oben „Lieferant für Rest
 setzen" für alle ohne Erkennung (`dokimport_lieferant_alle(..., nur_leere=true)`). Beim Import wandert die

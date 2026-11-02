@@ -28,7 +28,7 @@ automatisch wieder an (nur wenn nichts „in Arbeit", aber noch „wartend" ist)
 
 ## Lieferant (Aussteller)
 Eigene Spalte „Lieferant (Aussteller)" in der Vorschau. Die KI erkennt den Aussteller (`lieferant_vorschlag`),
-der Import gleicht ihn mit den vorhandenen Lieferanten ab (`ek_lieferant_id`) und belegt das Dropdown (rscombo)
+der Import gleicht ihn mit den vorhandenen Lieferanten ab (`dokimport_lieferant_finden`, streng: exakt/ohne Rechtsform/eindeutiger langer Teiltreffer) und belegt das Dropdown (rscombo)
 vor; „erkannt: …" zeigt den Rohnamen, „· kein Treffer" wenn keiner passte. Pro Zeile korrigierbar
 (`lief_setzen`), oben „Lieferant für Rest setzen" (`lief_alle`, nur Zeilen ohne Zuordnung). Beim Import wandert
 die Zuordnung auf Dokument + Charge. Details: `core/dokimport.md`.

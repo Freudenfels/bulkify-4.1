@@ -17,6 +17,17 @@ Der Preis wird beim Anlegen serverseitig berechnet und gespeichert; im Portal ze
 2. **bulkify** (`nachbestellung_bestaetigen`): erzeugt über den vorhandenen, idempotenten Weg `auftrag_aus_angebot()` den Auftrag + Rechnung + Produktionsauftrag. Dafür wird ein **minimales bestätigtes Angebot** (+ eine bestätigte Staffel mit Menge/Preis/Paket) angelegt. Die **Etikett-Freigabe** wird aus dem Vorauftrag übernommen (`auftrag.etikett_freigegeben/_am/_von`) – keine erneute Freigabe nötig.
 3. **Ausnahme 2 %** (`nachbestellung_preis_anpassen`): Status `preis_neu` + `vk_neu`; der Kunde gibt den neuen Preis im Portal frei (`nachbestellung_kunde_preis_ok`), dann entsteht der Auftrag zum neuen Preis.
 
+## Auftragsbasierte Quelle (ab 2026-11)
+`nachbestellung_quelle_auftrag()` / `nachbestellung_anlegen_auftrag()` leiten Produkt, Packungsgröße, Menge und Preis
+**direkt aus dem Auftrag** ab (`vk_stueck`) – funktioniert auch für importierte/gebündelte Aufträge **ohne** bestätigtes
+Angebot mit Staffel. Genutzt vom Portal-Reiter „Nachbestellen" und der Nachbestell-Box an abgeschlossenen Bestellungen
+(`quelle_auftrag_id`). Schutz: nur eigene, **nicht stornierte** Produkt-Aufträge; Menge ≤ 100 Mio. (INT-Spalte);
+**Doppelbestellschutz** (offene Nachbestellung zu demselben Produkt+Packungsgröße blockiert die nächste). Der Preis-Fallback
+ist der **Auftragspreis ohne zweiten Kundenrabatt** (UI und Server stimmen überein).
+`nachbestellung_order_erstellen()` übernimmt zusätzlich die **Verpackung des Vorauftrags** (`auftrag.verpackung_id`),
+weil `auftrag_aus_angebot()` für das Minimal-Angebot sonst nur die Produkt-Standardverpackung nähme (kundenspezifische/
+geänderte Verpackung ginge verloren); danach `bedarf_bump()`.
+
 ## Wiederverwendete Bausteine / bewusste Entscheidungen
 - **Auftrag/Rechnung/PA:** ausschließlich `auftrag_aus_angebot()` (schema.php) – nichts doppelt gebaut. PA landet wie üblich in `vorbereitung` und läuft durch die normale Produktions-Freigabe (Teil 3).
 - **Bindung:** der Kunden-Klick ist verbindlich; die bulkify-Bestätigung ist nur Preisprüfung (Entscheidung Nico).

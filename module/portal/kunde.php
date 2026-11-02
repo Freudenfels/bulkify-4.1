@@ -3877,7 +3877,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php foreach ($nbCards as $a):
         $pidK      = (int)$a['produkt_id']; $stk = (int)($a['stueck'] ?? 0);
         $defMenge  = (int)($a['menge'] ?? 0);
-        $nbVk      = vk_fuer_kunde((float)($a['vk_stueck'] ?? 0), $kid);
+        $nbVk      = (float)($a['vk_stueck'] ?? 0);   // Auftragspreis = bereits vereinbarter Preis (KEIN zweiter Kundenrabatt; Server speichert ihn ebenfalls unrabattiert)
         $nbStaffel = nachbestellung_staffel($kid, $pidK, $stk);
         $nbInit    = nachbestellung_preis_fuer($kid, $pidK, $stk, $defMenge, $nbVk);
         // Läuft für dieses Produkt schon eine Nachbestellung? (per Produkt – robust ohne Angebot.)
@@ -4069,7 +4069,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       $nbPid     = (int)$a['produkt_id']; $nbStk = (int)($a['stueck'] ?? 0); $nbDef = (int)($a['menge'] ?? 0);
       $nbOff     = one("SELECT id FROM nachbestellung WHERE kunde_id=? AND produkt_id=? AND status IN ('pruefung','preis_neu') LIMIT 1", [$kid, $nbPid]);
       if (!$nbOff):
-        $nbVk      = vk_fuer_kunde((float)($a['vk_stueck'] ?? 0), $kid);
+        $nbVk      = (float)($a['vk_stueck'] ?? 0);   // Auftragspreis = bereits vereinbarter Preis (KEIN zweiter Kundenrabatt; Server speichert ihn ebenfalls unrabattiert)
         $nbStaffel = nachbestellung_staffel($kid, $nbPid, $nbStk);
         $nbInit    = nachbestellung_preis_fuer($kid, $nbPid, $nbStk, $nbDef, $nbVk); ?>
   <form method="post" class="bx-panel nb-form" data-staffel='<?= h(json_encode(array_map(fn($r)=>[$r['menge'],$r['vk']], $nbStaffel))) ?>' data-fallback="<?= h((string)$nbVk) ?>" style="margin:-6px 0 16px;padding:12px 14px;border-color:var(--gruen)" onsubmit="return confirm('Verbindlich nachbestellen? Wir bestätigen den Preis kurz, dann startet die Produktion.');">

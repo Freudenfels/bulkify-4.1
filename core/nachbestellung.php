@@ -122,7 +122,8 @@ function nachbestellung_anlegen(int $kunde_id, int $angebot_id, int $menge): arr
 function nachbestellung_quelle_auftrag(int $auftrag_id, int $kunde_id): ?array {
     if ($auftrag_id <= 0 || $kunde_id <= 0) return null;
     $a = one("SELECT id, angebot_id, produkt_id, menge, stueck, vk_stueck
-              FROM auftrag WHERE id=? AND kunde_id=? AND produkt_id IS NOT NULL AND COALESCE(kategorie,'produkt')<>'dienstleistung'", [$auftrag_id, $kunde_id]);
+              FROM auftrag WHERE id=? AND kunde_id=? AND produkt_id IS NOT NULL AND COALESCE(kategorie,'produkt')<>'dienstleistung'
+                AND status<>'storniert'", [$auftrag_id, $kunde_id]);
     if (!$a) return null;
     $rezId = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
     return [
@@ -141,6 +142,11 @@ function nachbestellung_anlegen_auftrag(int $kunde_id, int $auftrag_id, int $men
     $q = nachbestellung_quelle_auftrag($auftrag_id, $kunde_id);
     if (!$q)         return ['fehler' => 'Nachbestellung nicht möglich – Bestellung nicht gefunden.'];
     if ($menge <= 0) return ['fehler' => 'Bitte eine Menge größer 0 angeben.'];
+    if ($menge > 100000000) return ['fehler' => 'Die Menge ist zu groß – bitte prüfen Sie Ihre Eingabe.'];   // INT-Spalte nicht sprengen
+    // Doppelklick-/Doppelbestellschutz: für dasselbe Produkt+Packungsgröße läuft schon eine offene Nachbestellung.
+    if (scalar("SELECT id FROM nachbestellung WHERE kunde_id=? AND produkt_id=? AND stueck=? AND status IN ('pruefung','preis_neu') LIMIT 1",
+               [$kunde_id, (int)$q['produkt_id'], (int)$q['stueck']]))
+        return ['fehler' => 'Für dieses Produkt ist bereits eine Nachbestellung eingegangen – wir bestätigen den Preis kurz.'];
     $preis = nachbestellung_preis_fuer($kunde_id, (int)$q['produkt_id'], (int)$q['stueck'], $menge, (float)$q['vk_stueck']);
     $vk = (float)($preis['vk'] ?? 0); if ($vk <= 0) $vk = (float)$q['vk_stueck'];
     $cu = function_exists('current_user') ? current_user() : null;
@@ -174,8 +180,17 @@ function nachbestellung_order_erstellen(array $nb, float $vk): int {
       [$angId, $menge, $stueck, $vk]);
     $aid = (int) (auftrag_aus_angebot($angId) ?? 0);
     if ($aid <= 0) return 0;
-    // Etikett-Freigabe aus dem Vorauftrag übernehmen (kein erneuter Upload / keine erneute Freigabe nötig).
+    // GLEICHE Verpackung wie im Vorauftrag: auftrag_aus_angebot() nimmt sonst nur die Produkt-Standardverpackung
+    // (das neue Minimal-Angebot hat keine Positionen) – eine kundenspezifische/geänderte Verpackung ginge verloren.
     $qAuf = (int)($nb['quelle_auftrag_id'] ?? 0);
+    if ($qAuf > 0) {
+        $srcVp = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM auftrag WHERE id=?", [$qAuf]);
+        if ($srcVp > 0) {
+            q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$srcVp, $aid]);
+            if (function_exists('bedarf_bump')) bedarf_bump();   // Material-/Bedarf-Cache neu rechnen (Behälter kann abweichen)
+        }
+    }
+    // Etikett-Freigabe aus dem Vorauftrag übernehmen (kein erneuter Upload / keine erneute Freigabe nötig).
     if ($qAuf > 0 && function_exists('etikett_freigegeben') && etikett_freigegeben($qAuf)) {
         $src = one("SELECT etikett_freigabe_von, etikett_freigabe_am FROM auftrag WHERE id=?", [$qAuf]);
         q("UPDATE auftrag SET etikett_freigegeben=1, etikett_freigabe_am=COALESCE(?,UTC_TIMESTAMP()), etikett_freigabe_von=? WHERE id=?",

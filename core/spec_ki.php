@@ -222,7 +222,10 @@ function spec_ki_nach_upload(int $dokument_id): bool {
 // Ein bereits gelesenes KI-Ergebnis an einem Rohstoff verwerten: (Vorab-)Charge bei CoA, Grenzwerte,
 // charakteristische Kennwerte und Wirk-/Leitsubstanzen – alles additiv (bestehende Werte bleiben).
 // Zentral, damit Einzel-Upload (spec_ki_nach_upload) und Massen-Import dieselbe Logik nutzen.
-function spec_ki_anwenden(int $item_id, array $ergebnis, ?int $lieferant_id = null): void {
+// $policy=false: Freigabe-Politik NICHT sofort anwenden (Massen-Import: erst alle Dokumente je Rohstoff
+// verarbeiten, dann EINMAL spec_nach_datenaenderung() – sonst löst das zweite Dokument zum selben Rohstoff
+// fälschlich „Änderung, erneute Freigabe" aus).
+function spec_ki_anwenden(int $item_id, array $ergebnis, ?int $lieferant_id = null, bool $policy = true): void {
     if ($item_id <= 0 || empty($ergebnis['ok'])) return;
     spec_ki_coa_charge($item_id, $ergebnis, $lieferant_id);
     spec_ki_grenzwerte($item_id, $ergebnis);
@@ -230,7 +233,7 @@ function spec_ki_anwenden(int $item_id, array $ergebnis, ?int $lieferant_id = nu
     // Wirkstoffgehalte aus dem Dokument automatisch übernehmen – auch vorhandene aktualisieren (CoA/Spec = Quelle).
     spec_ki_wirkstoffe($item_id, $ergebnis, false, true);
     // Freigabe-Politik: Erst-Upload automatisch freigeben, Änderung markiert (alte Version bleibt live).
-    spec_nach_datenaenderung($item_id, 'Upload/Import');
+    if ($policy) spec_nach_datenaenderung($item_id, 'Upload/Import');
 }
 
 // Aus dem KI-Ergebnis den passenden VORHANDENEN Rohstoff finden (kein Neuanlegen).
