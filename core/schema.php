@@ -6234,21 +6234,46 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
     if ($rezId > 0) {
         $pe = $preis_basis === 1000 ? $preis / 1000 : $preis;   // je EINE Einheit
         $rform = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezId]);
-        $rEinheit = in_array($rform, ['kapsel','softgel'], true) ? 'Kapsel' : ($rform === 'tablette' ? 'Tablette' : ($rform === 'stick' ? 'Stick' : 'Stk'));
-        $ex = one("SELECT id, preis FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=? ORDER BY id LIMIT 1", [$rezId, $lieferant_id]);
-        if (!$ex) {
-            q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,quelle_anfrage_id,angelegt) VALUES (?,?,?,?, 'angeboten', CURDATE(), ?, NOW())",
-              [$rezId, $lieferant_id, $pe > 0 ? $pe : null, $rEinheit, $anfrage_id]);
-            if (function_exists('rezeptur_produkt_matrizen_auffrischen')) rezeptur_produkt_matrizen_auffrischen($rezId);
-        } elseif (abs((float)$ex['preis'] - $pe) < 0.00005) {
-            q("UPDATE rezeptur_lief_angebot SET stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL, quelle_anfrage_id=? WHERE id=?", [$anfrage_id, (int)$ex['id']]);
-        } else {
-            q("UPDATE rezeptur_lief_angebot SET preis_vorschlag=?, vorschlag_am=NOW(), quelle_anfrage_id=? WHERE id=?", [$pe > 0 ? $pe : null, $anfrage_id, (int)$ex['id']]);
-            if (function_exists('benachrichtigung_add')) {
-                $lfirma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lieferant_id]);
-                benachrichtigung_add('Preis-Vorschlag (Fremdfertigung): ' . ($lfirma ?: ('Lieferant #' . $lieferant_id)) . ' · ' . (string)$a['nummer'],
-                    'Geänderter Fremdfertigungspreis wartet auf Freigabe. Kalkulation läuft bis dahin mit dem alten Preis weiter.', '?p=einkauf_preise&tab=fremd');
+        // Einheit des gespiegelten Preises: Stück-Formen je Kapsel/Tablette/Stick; Schüttgut (Pulver/Granulat) je kg,
+        // Flüssig/Gel je L – nie „Stk" (St-13). Hat der Lieferant je g bzw. ml angeboten, wird auf kg/L umgerechnet
+        // (Preis × 1000, Staffelmenge / 1000). Die Bulk-Bestellung fragt den Preis in kg/L ab (bulk_bestell_menge).
+        $fuellE = form_groessen_einheit($rform);
+        $rEinheit = $fuellE === 'g' ? 'kg' : ($fuellE === 'ml' ? 'L'
+                  : (in_array($rform, ['kapsel','softgel'], true) ? 'Kapsel' : ($rform === 'tablette' ? 'Tablette' : ($rform === 'stick' ? 'Stick' : 'Stk'))));
+        $le = strtolower(trim($einheit));
+        $faktor = ($fuellE !== '' && in_array($le, ['g', 'ml', 'gramm'], true)) ? 1000.0 : 1.0;   // je g/ml -> je kg/L
+        $pe *= $faktor;
+        // Grundpreis (Zeile ohne Menge) + je Staffel eine Zeile mit menge = ab-Menge (so lesen rezeptur_fremd_lieferant_preise()
+        // und die Einkaufs-Preisliste die Staffel). Jede Zeile: neu = sofort freigegeben, gleich = nur „Stand", anders = Vorschlag.
+        $zeilen = [[null, $pe]];
+        foreach ($staffeln as $s) {
+            $m = (float)($s[0] ?? 0); $pr = (float)($s[1] ?? 0);
+            if ($m <= 0 || $pr <= 0) continue;
+            $zeilen[] = [round($m / $faktor, 3), ($preis_basis === 1000 ? $pr / 1000 : $pr) * $faktor];
+        }
+        $vorschlag = false; $neu = false;
+        foreach ($zeilen as [$zm, $zp]) {
+            // Grundpreis: Zeile ohne Menge; gibt es keine (Altdaten), wie bisher die erste Zeile des Lieferanten.
+            $ex = $zm === null
+                ? (one("SELECT id, preis FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=? AND (menge IS NULL OR menge=0) ORDER BY id LIMIT 1", [$rezId, $lieferant_id])
+                   ?: one("SELECT id, preis FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=? ORDER BY id LIMIT 1", [$rezId, $lieferant_id]))
+                : one("SELECT id, preis FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=? AND menge=? ORDER BY id LIMIT 1", [$rezId, $lieferant_id, $zm]);
+            if (!$ex) {
+                q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,menge,status,stand,quelle_anfrage_id,angelegt) VALUES (?,?,?,?,?, 'angeboten', CURDATE(), ?, NOW())",
+                  [$rezId, $lieferant_id, $zp > 0 ? $zp : null, $rEinheit, $zm, $anfrage_id]);
+                $neu = true;
+            } elseif (abs((float)$ex['preis'] - $zp) < 0.00005) {
+                q("UPDATE rezeptur_lief_angebot SET einheit=?, stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL, quelle_anfrage_id=? WHERE id=?", [$rEinheit, $anfrage_id, (int)$ex['id']]);
+            } else {
+                q("UPDATE rezeptur_lief_angebot SET einheit=?, preis_vorschlag=?, vorschlag_am=NOW(), quelle_anfrage_id=? WHERE id=?", [$rEinheit, $zp > 0 ? $zp : null, $anfrage_id, (int)$ex['id']]);
+                $vorschlag = true;
             }
+        }
+        if ($neu && function_exists('rezeptur_produkt_matrizen_auffrischen')) rezeptur_produkt_matrizen_auffrischen($rezId);
+        if ($vorschlag && function_exists('benachrichtigung_add')) {
+            $lfirma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lieferant_id]);
+            benachrichtigung_add('Preis-Vorschlag (Fremdfertigung): ' . ($lfirma ?: ('Lieferant #' . $lieferant_id)) . ' · ' . (string)$a['nummer'],
+                'Geänderter Fremdfertigungspreis wartet auf Freigabe. Kalkulation läuft bis dahin mit dem alten Preis weiter.', '?p=einkauf_preise&tab=fremd');
         }
     }
     return '';
