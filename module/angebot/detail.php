@@ -169,6 +169,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Der Kunde bekommt den Portal-Link per Mail – wenn der Versand eingerichtet ist.
         $f = ($kd && mail_bereit()) ? mail_kunde_angebot((int)$id) : '';
         header('Location: ?p=angebot&id=' . $id . '&gesendet=1' . ($f !== '' ? '&mailfehler=' . urlencode($f) : '')); exit;
+    } elseif ($aktion === 'team_annehmen' && !$neu) {
+        // Annahme DURCH DAS TEAM im Auftrag des Kunden (Kunde hat per Mail/Telefon zugesagt), S-15: gleicher Weg wie die
+        // Portal-Annahme (Positionen -> auftrag_aus_positionen, reine Staffel -> auftrag_aus_angebot). Wer + wie bestätigt hat,
+        // ist Pflicht und wird als Freigabe gespeichert. Entsteht kein Auftrag, wird nichts gespeichert.
+        $angT = one("SELECT * FROM angebot WHERE id=? AND status='gesendet'", [(int)$id]);
+        $kanal = mb_substr(trim((string)($_POST['bestaetigt_durch'] ?? '')), 0, 150);
+        if (!$angT || ($angT['kategorie'] ?? '') === 'dienstleistung' || !empty($angT['jahresvertrag'])) { header('Location: ?p=angebot&id=' . $id . '&teamannahme=status'); exit; }
+        if ($kanal === '' || ($_POST['bestaetigt_ok'] ?? '') !== '1') { header('Location: ?p=angebot&id=' . $id . '&teamannahme=angaben'); exit; }
+        $cu = function_exists('current_user') ? current_user() : null;
+        $wer = 'Team ' . trim((string)($cu['name'] ?? '')) . ' – ' . $kanal;
+        $hatPosT = (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=? AND quelle='herstellung'", [(int)$id]) > 0;
+        $neuA = null;
+        if ($hatPosT) {
+            $neuA = auftrag_aus_positionen((int)$id, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))) ?: null);
+        } else {
+            $sidT = (int)($_POST['staffel'] ?? 0);
+            if ($sidT > 0 && (int) scalar("SELECT COUNT(*) FROM angebot_staffel WHERE id=? AND angebot_id=?", [$sidT, (int)$id]) === 1) {
+                q("UPDATE angebot_staffel SET bestaetigt=0 WHERE angebot_id=?", [(int)$id]);
+                q("UPDATE angebot_staffel SET bestaetigt=1 WHERE id=?", [$sidT]);
+                q("UPDATE angebot SET status='bestaetigt' WHERE id=?", [(int)$id]);
+                $neuA = auftrag_aus_angebot((int)$id);
+                if (!$neuA) { q("UPDATE angebot SET status='gesendet' WHERE id=?", [(int)$id]); q("UPDATE angebot_staffel SET bestaetigt=0 WHERE angebot_id=?", [(int)$id]); }
+            }
+        }
+        if (!$neuA) { header('Location: ?p=angebot&id=' . $id . '&teamannahme=fehler'); exit; }
+        q("UPDATE angebot SET freigabe_name=?, freigabe_am=UTC_TIMESTAMP() WHERE id=?", [mb_substr($wer, 0, 190), (int)$id]);
+        if ($angT['kunde_id']) log_aktivitaet('kunde', (int)$angT['kunde_id'], 'team', 'Angebot ' . $angT['nummer'] . ' im Auftrag des Kunden angenommen (' . $kanal . ').', 'angebot', 'angebot', (int)$id);
+        if (mail_bereit()) nach_antwort(fn() => mail_angebot_angenommen((int)$id, (int)$neuA));
+        header('Location: ?p=auftrag&id=' . (int)$neuA . '&teamangenommen=1'); exit;
     } elseif ($aktion === 'zurueckziehen' && !$neu) {
         // Zurückziehen = zurück in den ENTWURF ('offen'). Beim Kunden verschwindet es damit sofort
         // (das Portal zeigt nur 'gesendet'), hier bleibt dasselbe Angebot bearbeitbar.
@@ -397,6 +426,40 @@ bx_head($neu ? 'Neues Angebot' : $v('nummer'),
 if (!$neu && !empty($a['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Erstellt am ' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . (!empty($a['aktualisiert']) && $a['aktualisiert'] !== $a['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($a['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
 if (isset($_GET['angefragt']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['angefragt'] . ' Preisanfrage(n) verschickt' . (isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '') . '. Sobald ein Lieferant antwortet, steht der Preis hier.</div>';
 if (isset($_GET['gespeichert']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['teamannahme'])) { $tm = (string)$_GET['teamannahme'];
+    echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">'
+       . ($tm === 'angaben' ? 'Bitte angeben, wer wie zugesagt hat, und die Zusage bestätigen.'
+          : ($tm === 'status' ? 'Nur ein gesendetes Produkt-Angebot kann für den Kunden angenommen werden.'
+          : 'Es konnte kein Auftrag angelegt werden – zur gewählten Option fehlt die Konfiguration (Produkt/Rezeptur, Menge je Packung).')) . '</div>'; }
+// Team-Annahme im Auftrag des Kunden (S-15): z. B. Zusage per Mail/Telefon oder Handelsware ohne Portal-Annahme.
+if (!$neu && $st === 'gesendet' && !$istDL && empty($a['jahresvertrag'])) {
+    $tGruppen = array_column(all("SELECT DISTINCT TRIM(gruppe) AS g FROM angebot_position WHERE angebot_id=? AND quelle='herstellung' AND TRIM(COALESCE(gruppe,''))<>'' ORDER BY g", [(int)$id]), 'g');
+    $tHatPos  = (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=? AND quelle='herstellung'", [(int)$id]) > 0;
+    $tStaffel = $tHatPos ? [] : all("SELECT id, menge, vk_stueck FROM angebot_staffel WHERE angebot_id=? ORDER BY sort, id", [(int)$id]);
+    if ($tHatPos || $tStaffel) {
+        echo '<details class="bx-panel" style="padding:12px 16px;margin-bottom:14px"><summary style="cursor:pointer">Für den Kunden annehmen <span class="muted" style="font-size:12px">– Zusage kam per Mail/Telefon</span></summary>';
+        echo '<form method="post" style="margin-top:14px" onsubmit="return confirm(\'Angebot jetzt verbindlich für den Kunden annehmen? Es entstehen Auftrag und Rechnung.\');">';
+        echo '<input type="hidden" name="aktion" value="team_annehmen">';
+        echo '<div class="bx-row" style="gap:18px;align-items:flex-end;flex-wrap:wrap">';
+        if (count($tGruppen) > 1) {
+            echo '<label class="bx-field" style="min-width:160px"><span>Option</span><select name="gruppe">';
+            foreach ($tGruppen as $g) echo '<option value="' . h($g) . '">Option ' . h($g) . '</option>';
+            echo '</select></label>';
+        } elseif (count($tGruppen) === 1) {
+            echo '<input type="hidden" name="gruppe" value="' . h($tGruppen[0]) . '">';
+        }
+        if ($tStaffel) {
+            echo '<label class="bx-field" style="min-width:220px"><span>Menge</span><select name="staffel">';
+            foreach ($tStaffel as $s) echo '<option value="' . (int)$s['id'] . '">' . number_format((float)$s['menge'], 0, ',', '.') . ' Pkg · ' . number_format((float)$s['vk_stueck'], 2, ',', '.') . ' € je Pkg</option>';
+            echo '</select></label>';
+        }
+        echo '<label class="bx-field" style="min-width:320px;flex:1"><span>Zugesagt durch (Name, Kanal, Datum)</span><input type="text" name="bestaetigt_durch" maxlength="150" required placeholder="z. B. Frau Muster per Mail vom 02.11."></label>';
+        echo '</div>';
+        echo '<label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px"><input type="checkbox" name="bestaetigt_ok" value="1" required> Der Kunde hat verbindlich zugesagt.</label>';
+        echo '<div style="margin-top:16px"><button class="btn btn-primary" type="submit">Verbindlich annehmen</button></div>';
+        echo '</form></details>';
+    }
+}
 if (isset($_GET['importok']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((string)$_GET['importok'] === 'zugeordnet' ? 'Alt-Angebot zugeordnet – Rezeptur/Glas/Preis übernommen und PDF angehängt. Bitte Positionen/Preise prüfen.' : 'Neues Angebot aus dem Import angelegt – Positionen/Preise prüfen und ggf. senden.') . '</div>';
 if (isset($_GET['nachbestellung'])) { $nbq = (string)$_GET['nachbestellung'];
   echo '<div class="bx-panel badge-ok" style="padding:12px 16px"><strong>Nachbestell-Angebot als Entwurf erstellt</strong> – '
