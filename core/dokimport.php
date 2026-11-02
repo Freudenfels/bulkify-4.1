@@ -244,10 +244,25 @@ function dokimport_neu_anlegen(int $datei_id): int {
 }
 
 // Fuer ALLE Zeilen ohne Treffer je einen neuen Rohstoff anlegen. Rueckgabe: Anzahl.
+// DUBLETTEN-SCHUTZ: Vor dem Neuanlegen wird jede trefferlose Zeile ERNEUT gegen den aktuellen Katalog
+// gematcht – inklusive der Rohstoffe, die in DIESEM Durchlauf gerade erst angelegt wurden. So landet ein
+// zweites Dokument zum selben Stoff (gleiche CAS / lat. Name / Name) am bereits angelegten Rohstoff, statt
+// als zweiter Rohstoff. Grund fuer Dubletten vorher: Beim Einlesen (spec_ki_match_item) existierte der neue
+// Rohstoff noch nicht, also hatten beide Dateien „kein Treffer" und jede legte einen eigenen an.
 function dokimport_neu_anlegen_alle(int $job_id): int {
     $n = 0;
-    foreach (all("SELECT id FROM dok_import_datei WHERE job_id=? AND status='gelesen' AND (item_id IS NULL OR item_id=0)", [$job_id]) as $z) {
-        if (dokimport_neu_anlegen((int)$z['id'])) $n++;
+    foreach (all("SELECT id FROM dok_import_datei WHERE job_id=? AND status='gelesen' AND (item_id IS NULL OR item_id=0) ORDER BY id", [$job_id]) as $z) {
+        $did = (int)$z['id'];
+        $dd  = one("SELECT ki_json FROM dok_import_datei WHERE id=? AND status='gelesen' AND (item_id IS NULL OR item_id=0)", [$did]);
+        if (!$dd) continue;   // zwischenzeitlich schon zugeordnet (z. B. durch eine frühere Zeile dieses Laufs)
+        $ki  = json_decode((string)($dd['ki_json'] ?? ''), true);
+        $mid = is_array($ki) ? (int)(spec_ki_match_item($ki)['item_id'] ?? 0) : 0;
+        if ($mid > 0) {
+            q("UPDATE dok_import_datei SET item_id=?, quelle='auto' WHERE id=? AND status='gelesen'", [$mid, $did]);
+            $n++;
+        } elseif (dokimport_neu_anlegen($did)) {
+            $n++;
+        }
     }
     return $n;
 }

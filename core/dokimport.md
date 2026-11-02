@@ -28,6 +28,11 @@ Rohstoffen (kein Treffer = bleibt offen stehen).
    Kein Treffer? `dokimport_neu_anlegen($datei_id)` legt einen **neuen** Rohstoff aus den KI-Stammdaten an
    (Name/CAS/Synonyme/botan. Quelle …) und ordnet ihn zu; `dokimport_neu_anlegen_alle($job)` macht das für
    alle Zeilen ohne Treffer. (Ursprünglich match-only; Neuanlage ist jetzt eine ausdrückliche Aktion.)
+   **Dubletten-Schutz in `dokimport_neu_anlegen_alle`:** vor dem Neuanlegen wird jede trefferlose Zeile **erneut
+   gematcht** (`spec_ki_match_item`) – inkl. der Rohstoffe, die in DIESEM Lauf gerade angelegt wurden. So landet
+   ein zweites Dokument zum selben Stoff (gleiche CAS/lat. Name/Name) am bereits angelegten Rohstoff statt als
+   Dublette. (Grund für frühere Dubletten: Beim Einlesen existierte der neue Rohstoff noch nicht → beide Dateien
+   „kein Treffer" → jede legte einen eigenen an. Der Einzel-Knopf „+ Neuer Rohstoff" legt weiterhin bewusst an.)
 4. `dokimport_import($job_id)` – je bestätigter Zeile: Original als **internes** Dokument am Rohstoff
    (`kunde_sichtbar=0`, nie an Kunde) + `spec_ki_anwenden()` (Charge/Grenzwerte/Kennwerte/Wirkstoffe, additiv).
 5. `dokimport_abbrechen($job_id)` – nicht übernommene Dateien aus data/uploads entfernen, Job schließen.
