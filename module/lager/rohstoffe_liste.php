@@ -155,7 +155,9 @@ if ($istKapsel) {
 $cols = [
     'artikelnummer' => ['label' => 'Art.-Nr.', 'sort' => true],
     // Namen sind teils sehr lang – kleiner + umbrechen (Tabelle ist sonst global nowrap und läuft über den Rand).
-    'name'          => ['label' => 'Name', 'sort' => true, 'render' => fn($r)=> '<span style="white-space:normal">' . h($r['name']) . '</span>'],
+    // Anzeige = VOLLSTÄNDIGER Name wie beim Kunden (rohstoff_anzeige_name: inkl. Beschaffenheit „Extrakt" + DEV
+    // „20:1"), damit die Live-Suche denselben Namen findet, den der Kunde sieht (sucht über den Zeilentext).
+    'name'          => ['label' => 'Name', 'sort' => true, 'render' => fn($r)=> '<span style="white-space:normal">' . h(rohstoff_anzeige_name($r)) . '</span>'],
     'ek_preis'      => ['label' => 'Preis ab', 'sort' => true, 'num' => true, 'render' => $preisAb],
     'bedarf'        => ['label' => 'Bedarf', 'num' => true, 'render' => function($r) use ($bedarfMap, $mgMenge) {
         $n = $bedarfMap[(int)$r['id']] ?? 0;

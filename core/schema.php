@@ -1820,12 +1820,19 @@ function init_schema(): void {
     // Kunden sichtbar. spec_aenderung_offen=1 markiert: Live-Daten weichen vom freigegebenen Snapshot ab.
     ensure_column('item', 'spec_freigabe_daten', "MEDIUMTEXT NULL");
     ensure_column('item', 'spec_aenderung_offen', "TINYINT(1) NOT NULL DEFAULT 0");
-    // Einmalige Nachziehung: bereits freigegebene Rohstoffe ohne Snapshot bekommen den AKTUELLEN Stand als
-    // freigegebene Basis-Version (sonst saehe der Kunde nach dem Umbau kurz nichts). Inline (keine Abhaengigkeit
-    // von spec_ki.php / Ladereihenfolge), best-effort, idempotent.
+    // Einmalige Nachziehung: Rohstoffe MIT Spec-Daten, aber OHNE Snapshot, bekommen den aktuellen Stand als
+    // freigegebene Version (spec_freigegeben=1). So sieht der Kunde nach dem Umbau genau das, was er vorher
+    // (live) sah – der Alt-Bestand bleibt sichtbar, statt zu verschwinden. Bewusste RÜCKNAHMEN bleiben verborgen:
+    // sie haben bereits einen Snapshot (beim Zurückziehen wird spec_freigabe_daten NICHT gelöscht) und werden
+    // vom NULL-Filter übersprungen. Inline (keine Abhaengigkeit von spec_ki.php), best-effort, idempotent.
     try {
         $__hatKw = table_exists('item_kennwert');
-        foreach (all("SELECT id FROM item WHERE kategorie='rohstoff' AND COALESCE(spec_freigegeben,0)=1 AND (spec_freigabe_daten IS NULL OR spec_freigabe_daten='')") as $__r) {
+        $__rows = all("SELECT id FROM item WHERE kategorie='rohstoff' AND (spec_freigabe_daten IS NULL OR spec_freigabe_daten='')
+            AND ( EXISTS (SELECT 1 FROM item_wirkstoff w WHERE w.item_id=item.id)
+               OR EXISTS (SELECT 1 FROM item_grenzwert g WHERE g.item_id=item.id)" .
+            ($__hatKw ? " OR EXISTS (SELECT 1 FROM item_kennwert k WHERE k.item_id=item.id)" : "") .
+            " OR (spec_pdf IS NOT NULL AND spec_pdf<>'') )");
+        foreach ($__rows as $__r) {
             $__id = (int)$__r['id'];
             $__p = [
                 'wirkstoffe' => all("SELECT n.name, w.gehalt_prozent, w.gehalt_wert, w.gehalt_einheit
@@ -1833,7 +1840,8 @@ function init_schema(): void {
                 'kennwerte'  => $__hatKw ? all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$__id]) : [],
                 'grenzwerte' => all("SELECT parameter, grenzwert FROM item_grenzwert WHERE item_id=? ORDER BY sort, id", [$__id]),
             ];
-            q("UPDATE item SET spec_freigabe_daten=? WHERE id=?", [json_encode($__p, JSON_UNESCAPED_UNICODE), $__id]);
+            q("UPDATE item SET spec_freigabe_daten=?, spec_freigegeben=1, spec_aenderung_offen=0 WHERE id=?",
+              [json_encode($__p, JSON_UNESCAPED_UNICODE), $__id]);
         }
     } catch (\Throwable $e) { /* best-effort */ }
     // Beschaffenheit: WAS der Rohstoff ist (Extrakt / reines Pulver / Isolat ...) + Extraktverhaeltnis (DEV, z. B. 1:10).

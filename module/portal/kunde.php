@@ -1741,7 +1741,7 @@ if (!$darfRohInfo && $iid) {
             OR (? = 1 AND p.status='aktiv' AND p.exklusiv=0)
         ) LIMIT 1", [$iid, $kid, $kid, $kid, (int)!empty($k['portal_produkte'])]);
 }
-$rohDetail = ($iid && $darfRohInfo) ? one("SELECT id, name, name_lat, form, beschaffenheit, dev, cas, herkunft, synonym, bot_quelle, herkunftsland,
+$rohDetail = ($iid && $darfRohInfo) ? one("SELECT id, artikelnummer, name, name_lat, form, beschaffenheit, dev, cas, herkunft, synonym, bot_quelle, herkunftsland,
     haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben,
     novelfood_status, novelfood_geprueft_am, ki_info, ki_info_am
     FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
@@ -3440,7 +3440,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php endif; ?>
       </div>
     </div>
-    <p class="bx-sub"><?= h($FORMLBL_P[$rohDetail['form']] ?? $rohDetail['form']) ?><?= $rohDetail['name_lat'] ? ' · '.h($rohDetail['name_lat']) : '' ?><?= $rohDetail['cas'] ? ' · CAS '.h($rohDetail['cas']) : '' ?></p>
+    <p class="bx-sub"><?php if (!empty($rohDetail['artikelnummer'])): ?>Art.-Nr. <?= h($rohDetail['artikelnummer']) ?> · <?php endif; ?><?= h($FORMLBL_P[$rohDetail['form']] ?? $rohDetail['form']) ?><?= $rohDetail['name_lat'] ? ' · '.h($rohDetail['name_lat']) : '' ?><?= $rohDetail['cas'] ? ' · CAS '.h($rohDetail['cas']) : '' ?></p>
 
     <?php // Novel-Food-Status (automatische Einschätzung aus dem EU-Katalog) – nur zeigen, wenn geprüft.
     if (!empty($rohDetail['novelfood_status'])):
