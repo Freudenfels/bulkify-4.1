@@ -61,7 +61,7 @@ E-Mail → „Zusätzliche Benachrichtigungs-Adressen". Beim ersten Start wird d
 `init_schema()` belegt `benachrichtigung_cc` nicht mehr fest mit albers@bulkify.pro vor – sonst bekäme Tabea von jeder Test-/Entwicklerinstallation mit echtem SMTP Testmails. Live ist der Wert gespeichert und bleibt; neue Installationen pflegen ihn in den Einstellungen.
 
 ## Korrekturen (Paket Mails)
-- **Doppelversand-Sperre:** `mail_team()` verschickt dieselbe Team-Mail (gleicher Betreff) innerhalb von 2 Minuten nur einmal (`app_meta mailteam_<md5>`); die Dashboard-Benachrichtigung entsteht trotzdem.
+- **Doppelversand-Sperre:** `mail_team()` verschickt dieselbe Team-Mail (gleicher Betreff) innerhalb von 2 Minuten nur einmal (ein Schlüssel `app_meta mail_team_zuletzt` mit den Betreff-Hashes der letzten 2 Minuten); die Dashboard-Benachrichtigung entsteht trotzdem.
 - **Etikett freigegeben:** eigene Team-Mail `mail_team_etikett_freigegeben()` („Etikett freigegeben: AB-…") statt erneut „Etikett-Design hochgeladen"; dazu Bestätigung an den Kunden `mail_kunde_etikett_freigegeben()` (wer, wann, Link auf die Bestellung).
 - **DL-Angebot:** `mail_kunde_angebot()` verlinkt bei Dienstleistungen auf „Meine Anfragen" (dort steht das DL-Angebot), sonst „Angebote".
 - **Auftragsbestätigung:** Vorlage `auftrag` erwähnt die Rechnung nur noch, wenn sie für den Kunden freigegeben ist (Platzhalter `{rechnung_hinweis}`). Ohne entstandenen Auftrag geht **keine** Auftragsbestätigung raus (vorher „Auftragsbestätigung  von …" ohne Nummer).

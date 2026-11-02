@@ -343,10 +343,13 @@ function mail_team(string $betreff, string $text): int {
     if (!mail_bereit()) return 0;
     // Doppelversand-Sperre: dieselbe Team-Mail (gleicher Betreff) innerhalb von 2 Minuten nur EINMAL (Doppelklick, zwei Wege
     // für dasselbe Ereignis). Die Dashboard-Benachrichtigung oben entsteht trotzdem.
-    $sperre = 'mailteam_' . md5($betreff);
-    $zuletzt = (int) meta_get($sperre, '0');
-    if ($zuletzt > 0 && time() - $zuletzt < 120) return 0;
-    meta_set($sperre, (string) time());
+    // Ein Schlüssel (mail_team_zuletzt) mit den Betreff-Hashes der letzten 2 Minuten – ältere Einträge fliegen raus.
+    $jetzt = time(); $h = md5($betreff);
+    $zul = json_decode((string) meta_get('mail_team_zuletzt', '{}'), true) ?: [];
+    $zul = array_filter($zul, fn($t) => $jetzt - (int)$t < 120);
+    if (isset($zul[$h])) return 0;
+    $zul[$h] = $jetzt;
+    meta_set('mail_team_zuletzt', json_encode($zul));
     $n = 0; $gesendet = [];
     foreach (all("SELECT email FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL AND rollen LIKE '%admin%'") as $u) {
         $e = mb_strtolower(trim((string)$u['email']));
