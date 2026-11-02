@@ -6501,7 +6501,8 @@ function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $we
         return $m('Für „versendet" fehlen Versandanbieter, Versandart oder Sendungsnummer.', 'For "shipped" the carrier, shipping method or tracking number is missing.', '缺少承运商、运输方式或物流单号，无法设置为“已发货”。');
     q("UPDATE bestellung SET station=? WHERE id=?", [$ziel, $bestellung_id]);
     // Der interne Status laeuft mit: sobald der Lieferant produziert, ist die Bestellung "bestellt".
-    if ((string)$b['status'] === 'offen') q("UPDATE bestellung SET status='bestellt' WHERE id=?", [$bestellung_id]);
+    // 'gesendet' = aus der Einkaufsliste an den Lieferanten-Account gesendet (S-03) – zählt wie 'offen'.
+    if (in_array((string)$b['status'], ['offen', 'gesendet'], true)) q("UPDATE bestellung SET status='bestellt' WHERE id=?", [$bestellung_id]);
     if ($b['lieferant_id']) log_aktivitaet('lieferant', (int)$b['lieferant_id'], $wer ? 'lieferant' : 'team',
         'Bestellung ' . $b['nummer'] . ': ' . bestellung_stationen()[$ziel] . ($wer ? ' (' . $wer . ')' : '') . '.', 'bestellung', 'bestellung', $bestellung_id);
     return '';
@@ -6513,7 +6514,7 @@ function bestellung_bestaetigen(int $bestellung_id, string $eta, string $wer, st
     if (!$b) return $m('Bestellung nicht gefunden.', 'Order not found.', '未找到订单。');
     if ((int)$b['bestaetigt'] === 1) return '';                     // schon bestaetigt: nichts tun
     if (trim($eta) === '' || !strtotime($eta)) return $m('Bitte einen geplanten Liefertermin angeben.', 'Please state a planned delivery date.', '请填写计划交货日期。');
-    q("UPDATE bestellung SET bestaetigt=1, bestaetigt_am=UTC_TIMESTAMP(), bestaetigt_von=?, eta_geplant=?, station=?, status=IF(status='offen','bestellt',status) WHERE id=?",
+    q("UPDATE bestellung SET bestaetigt=1, bestaetigt_am=UTC_TIMESTAMP(), bestaetigt_von=?, eta_geplant=?, station=?, status=IF(status IN ('offen','gesendet'),'bestellt',status) WHERE id=?",
       [mb_substr(trim($wer), 0, 190), date('Y-m-d', strtotime($eta)), 'angenommen', $bestellung_id]);
     if ($b['lieferant_id']) log_aktivitaet('lieferant', (int)$b['lieferant_id'], 'lieferant',
         'Bestellung ' . $b['nummer'] . ' bestätigt für ' . date('d.m.Y', strtotime($eta)) . ' durch ' . trim($wer) . '.', 'bestellung', 'bestellung', $bestellung_id);
