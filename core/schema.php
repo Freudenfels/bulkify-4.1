@@ -9533,6 +9533,7 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
     if ($verf + 0.0001 < (float)$a['menge']) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$a['menge'] . ').'];
     $bsku = bsku_ensure($vfitem);   // Brücke zum Shop – ohne sie findet die Kopplung den Artikel nicht
     q("UPDATE auftrag SET status='versendet' WHERE id=?", [$auftrag_id]);
+    auftrag_rechnung_bei_lieferung($auftrag_id, true);   // Übergabe ins Fremdlager = Lieferung: Rechnung festschreiben
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team',
         'Auftrag ' . $a['nummer'] . ' ins Fremdlager übernommen (BSKU ' . $bsku . '). Der Bestand bleibt dort, bis der Endkunde bestellt.',
         'auftrag', 'auftrag', $auftrag_id);
@@ -9577,6 +9578,7 @@ function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
         $voll ? ('Auftrag ' . $a['nummer'] . ' versendet' . ($bereits > 0 ? ' (Restlieferung ' . number_format($ship,0,',','.') . ')' : '') . '.')
               : ('Teillieferung Auftrag ' . $a['nummer'] . ': ' . number_format($ship,0,',','.') . ' von ' . number_format($gesamt,0,',','.') . ' versendet (gesamt ' . number_format($neuVersendet,0,',','.') . ').'),
         'auftrag', 'auftrag', $auftrag_id);
+    auftrag_rechnung_bei_lieferung($auftrag_id, $voll);   // Leistungsdatum + Festschreiben bei Lieferung (St-04)
     bedarf_bump();   // Fertigware ausgebucht
     return ['ok'=>true, 'voll'=>$voll, 'versendet'=>$ship, 'gesamt'=>$gesamt, 'kumuliert'=>$neuVersendet,
             'msg'=>$voll ? 'Versendet.' : ('Teillieferung ' . number_format($ship,0,',','.') . ' versendet – offen bleiben ' . number_format($gesamt - $neuVersendet,0,',','.') . '.')];
@@ -9661,9 +9663,10 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
     $sicht = kunde_hat_rechnungsadresse((int)$a['kunde_id']) ? 1 : 0;
     $hinw  = $sicht ? null : 'Rechnungsadresse fehlt – bitte Kundenadresse ergänzen, dann Rechnung neu berechnen.';
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,text,kunde_sichtbar)
-       VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),?,?)",
-      [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen', $hinw, $sicht]);
+    $zielK = kunde_zahlungsziel_tage((int)$a['kunde_id']);
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,text,kunde_sichtbar)
+       VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),?,DATE_ADD(CURDATE(), INTERVAL ? DAY),?,?)",
+      [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen', $zielK, $zielK, $hinw, $sicht]);
     // Detaillierte Positionen (Produkt + Glas + Etikett) materialisieren -> Team sieht sie, PDF funktioniert.
     beleg_positionen_materialisieren((int) insert_id(), $ustP);
     // Handelsware (Spec 7.1): KEIN Produktionsauftrag – Auftrag + Rechnung reichen, versendet wird aus dem Bestand.
@@ -10802,6 +10805,56 @@ function angebot_optionen(int $angebot_id): array {
     }
     return ['optionen' => array_values($opt), 'extra' => $extra];
 }
+// Zahlungsziel (Tage) des Kunden – 0 = sofort zahlbar. Quelle: kunden.zahlungsziel_tage (St-05).
+function kunde_zahlungsziel_tage(int $kunde_id): int {
+    return $kunde_id > 0 ? max(0, (int) scalar("SELECT zahlungsziel_tage FROM kunden WHERE id=?", [$kunde_id])) : 0;
+}
+// Zahlungsbedingung als Text für Belege: „Zahlbar innerhalb von N Tagen ohne Abzug." bzw. die Standardbedingung (Sofort zahlbar).
+function zahlungsbedingung_text(int $tage): string {
+    return $tage > 0 ? 'Zahlbar innerhalb von ' . $tage . ' Tagen ohne Abzug.' : (string) meta_get('bh_zahlungsbedingung', 'Sofort zahlbar ohne Abzug.');
+}
+// AUTOMATISCHE Rechnung zu einem neu angenommenen Auftrag (St-04): USt nach Produktsatz (Reverse-Charge/Kleinunternehmer 0 %),
+// Zahlungsziel + Fälligkeit des Kunden, Freigabe für den Kunden nur mit Rechnungsadresse (sonst Entwurf mit Hinweis) und – anders als
+// früher – mit materialisierten POSITIONEN (Herstellung + Glas + Deckel + Etikett …), damit die PDF funktioniert. Rückgabe: beleg-ID.
+// $sichtbar: null = wie bisher je Weg (Rechnungsadresse -> sichtbar), false = Entwurf (erst bei Lieferung festschreiben).
+function auftrag_rechnung_automatisch(int $auftrag_id, int $kunde_id, int $produkt_id, float $netto, ?bool $sichtbar = null): int {
+    $ustP = produkt_ust_satz($produkt_id, $kunde_id);
+    $ust = round($netto * $ustP / 100, 2); $brutto = round($netto + $ust, 2);
+    $hatAdr = kunde_hat_rechnungsadresse($kunde_id);
+    $sicht = ($sichtbar === null ? $hatAdr : ($sichtbar && $hatAdr)) ? 1 : 0;
+    $hinw  = $hatAdr ? null : 'Rechnungsadresse fehlt – bitte Kundenadresse ergänzen, dann Rechnung neu berechnen.';
+    $ziel  = kunde_zahlungsziel_tage($kunde_id);
+    $datum = date('Y-m-d');
+    $faellig = date('Y-m-d', strtotime($datum . ' +' . $ziel . ' days'));
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,text,kunde_sichtbar)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('RE'), 'rechnung', $auftrag_id, $kunde_id ?: null, round($netto, 2), $ustP, $ust, $brutto, 'offen', $datum, $ziel, $faellig, $hinw, $sicht]);
+    $bid = (int) insert_id();
+    beleg_positionen_materialisieren($bid, $ustP);
+    return $bid;
+}
+// LIEFERUNG des Auftrags (Versand an den Kunden bzw. Übergabe ins Fremdlager): die Rechnung wird festgeschrieben (St-04, laut
+// Buchhaltungs-Automatik „Rechnung bei Lieferung"): Leistungsdatum = Lieferdatum, für den Kunden freigegeben (mit Rechnungsadresse),
+// Zahlungsziel/Fälligkeit und Positionen nachgezogen, falls die Auto-Rechnung sie noch nicht hat (ältere Rechnungen). $voll = Lieferung
+// komplett (setzt das Leistungsdatum auf heute); eine Teillieferung setzt es nur, wenn es noch fehlt. Bezahlte/stornierte bleiben unberührt.
+function auftrag_rechnung_bei_lieferung(int $auftrag_id, bool $voll = true): void {
+    $b = one("SELECT * FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status NOT IN ('storniert','bezahlt') ORDER BY id DESC LIMIT 1", [$auftrag_id]);
+    if (!$b) return;
+    $bid = (int)$b['id'];
+    if ((int) scalar("SELECT COUNT(*) FROM beleg_position WHERE beleg_id=?", [$bid]) === 0) {
+        $pid = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$auftrag_id]);
+        beleg_positionen_materialisieren($bid, produkt_ust_satz($pid, (int)$b['kunde_id']));
+    }
+    if ($b['zahlungsziel_tage'] === null || $b['faellig'] === null) {
+        $ziel = kunde_zahlungsziel_tage((int)$b['kunde_id']);
+        q("UPDATE beleg SET zahlungsziel_tage=?, faellig=? WHERE id=?", [$ziel, date('Y-m-d', strtotime(((string)($b['datum'] ?: date('Y-m-d'))) . ' +' . $ziel . ' days')), $bid]);
+    }
+    if ($voll || empty($b['leistung_datum'])) q("UPDATE beleg SET leistung_datum=CURDATE() WHERE id=?", [$bid]);
+    if ($voll && (int)$b['kunde_sichtbar'] === 0 && kunde_hat_rechnungsadresse((int)$b['kunde_id'])) {
+        q("UPDATE beleg SET kunde_sichtbar=1, text=NULL WHERE id=?", [$bid]);
+        beleg_status_log_add($bid, (string)$b['status'], 'Rechnung bei Lieferung festgeschrieben und für den Kunden freigegeben.', 'System');
+    }
+}
 // Auftrag aus einem Angebot, das aus POSITIONEN besteht (kein Produkt im Kopf, keine Preismatrix) –
 // der Weg für „Kunde hat eine Rezeptur, daraus soll ein Produkt werden".
 // ERST HIER entsteht das Produkt: Rezeptur x Menge je Packung + Verpackung, genau wie angeboten.
@@ -10845,12 +10898,8 @@ function auftrag_aus_positionen(int $angebot_id, ?string $gruppe = null): ?int {
     // Kundenpreisliste pflegen: Herstellungspreis je Packung (OHNE Verpackung) -> Kunde sieht „ab xy" im Portal.
     kundenpreis_setzen((int)$pid, (int)$a['kunde_id'], (int)$herst['stueck'], $menge, (int)$herst['preis_cent'] / 100, 'Angebot ' . (string)$a['nummer']);
 
-    $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
-    $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
-    $ust = round($netto * $ustP / 100, 2);
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum)
-       VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
-      [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], round($netto, 2), $ustP, $ust, round($netto + $ust, 2), 'offen']);
+    // Rechnung MIT Positionen, Produkt-USt, Zahlungsziel/Fälligkeit (St-04); Entwurf bis zur Lieferung (dort wird festgeschrieben).
+    auftrag_rechnung_automatisch((int)$aid, (int)$a['kunde_id'], (int)$pid, $netto, false);
 
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$herst['rezeptur_id']]) ?: 'kapsel';
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -10895,12 +10944,8 @@ function auftrag_aus_zelle(int $angebot_id, int $stueck, int $verp_id, int $best
     kundenpreis_setzen((int)$a['produkt_id'], (int)$a['kunde_id'], $stueck, $menge, (float)$vk, 'Angebot ' . (string)($a['nummer'] ?? ''));
     if ((int)$bestellt !== (int)$a['produkt_id'])
         kundenpreis_setzen((int)$bestellt, (int)$a['kunde_id'], $stueck, $menge, (float)$vk, 'Angebot ' . (string)($a['nummer'] ?? ''));
-    $land = scalar("SELECT land FROM kunden WHERE id=?", [$a['kunde_id']]) ?: 'DE';
-    $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
-    $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum)
-       VALUES (?,?,?,?,?,?,?,?,?,CURDATE())",
-      [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen']);
+    // Rechnung MIT Positionen, Produkt-USt, Zahlungsziel/Fälligkeit (St-04); Entwurf bis zur Lieferung (dort wird festgeschrieben).
+    auftrag_rechnung_automatisch((int)$aid, (int)$a['kunde_id'], (int)$bestellt, (float)$netto, false);
     // Handelsware (Spec 7.1): KEIN Produktionsauftrag – versendet wird aus dem Bestand.
     if (produkt_ist_handelsware((int)($a['produkt_id'] ?? 0)) || produkt_ist_handelsware((int)$bestellt)) {
         if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Angebot bestätigt (' . $stueck . ' Stück/Pkg × ' . $menge . '), Auftrag + Rechnung erzeugt (Handelsware – ohne Produktion).', 'auftrag', 'auftrag', $aid);
