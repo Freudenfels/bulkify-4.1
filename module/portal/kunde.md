@@ -362,3 +362,6 @@ Neue Spalten (`core/schema.php`): `kunden.onboarding_checkliste_aus`, `kunden.po
 ## Handelsware annehmen, Annahme ohne Auftrag (S-15, St-23)
 - Ein Positions-Angebot mit **Handelsware** im Kopf ist annehmbar, sobald eine Produkt-/Herstellungszeile mit Menge da ist (ohne Rezeptur) – vorher stand nur „Zum Annehmen bitte kurz bei uns melden".
 - Entsteht bei der Annahme **kein Auftrag**, wird die Freigabe zurückgenommen, keine Mail verschickt und der Kunde sieht „Das Angebot konnte nicht automatisch angenommen werden …" (`annahmefehler`); das Team bekommt eine Benachrichtigung. Vorher: Erfolgsmeldung + Mail „Auftragsbestätigung" ohne Nummer.
+
+## Etikett-Freigabe meldet „freigegeben“ (Paket Mails)
+Nach der Etikett-Freigabe im Portal gehen `mail_team_etikett_freigegeben()` (Team) und `mail_kunde_etikett_freigegeben()` (Bestätigung an den Kunden) raus – vorher erneut „Etikett-Design hochgeladen“.

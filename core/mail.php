@@ -341,6 +341,12 @@ function mail_team(string $betreff, string $text): int {
         benachrichtigung_add($betreff, $text, $link);
     }
     if (!mail_bereit()) return 0;
+    // Doppelversand-Sperre: dieselbe Team-Mail (gleicher Betreff) innerhalb von 2 Minuten nur EINMAL (Doppelklick, zwei Wege
+    // für dasselbe Ereignis). Die Dashboard-Benachrichtigung oben entsteht trotzdem.
+    $sperre = 'mailteam_' . md5($betreff);
+    $zuletzt = (int) meta_get($sperre, '0');
+    if ($zuletzt > 0 && time() - $zuletzt < 120) return 0;
+    meta_set($sperre, (string) time());
     $n = 0; $gesendet = [];
     foreach (all("SELECT email FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL AND rollen LIKE '%admin%'") as $u) {
         $e = mb_strtolower(trim((string)$u['email']));
@@ -487,13 +493,14 @@ function mail_vorlagen(): array {
             'text'         => "Guten Tag {anrede},\n\n"
                             . "vielen Dank, Sie haben das Angebot {angebot_nummer} verbindlich angenommen.\n"
                             . "{auftrag_zeile}"
-                            . "Den Stand des Auftrags und die Rechnung finden Sie im Kundenportal:\n{link}\n\n"
+                            . "Den Stand des Auftrags{rechnung_hinweis} finden Sie im Kundenportal:\n{link}\n\n"
                             . "Viele Grüße\n{absender}",
             'platzhalter'  => [
                 'anrede'        => 'Ansprechpartner des Kunden (sonst Firma)',
                 'angebot_nummer'=> 'Nummer des angenommenen Angebots',
                 'auftrag_nummer'=> 'Nummer des Auftrags (z. B. AB-2026-0001)',
                 'auftrag_zeile' => 'Fertige Zeile „Wir führen den Auftrag unter der Nummer AB-…" – oder leer',
+                'rechnung_hinweis' => '„ und die Rechnung", wenn die Rechnung schon für den Kunden freigegeben ist – sonst leer',
                 'link'          => 'Link ins Kundenportal (Bestellungen)',
                 'absender'      => 'Ihr Firmenname (Absender)',
             ],
@@ -575,13 +582,14 @@ function mail_kunde_anfrage_eingang(string $quelle, int $id): string {
 
 // Ein Angebot wurde an den Kunden gesendet: er bekommt den Link ins Portal.
 function mail_kunde_angebot(int $angebot_id): string {
-    $a = one("SELECT a.nummer, a.gueltig_bis, a.kunde_id, k.firma, k.ansprechpartner, k.email
+    $a = one("SELECT a.nummer, a.gueltig_bis, a.kunde_id, a.kategorie, k.firma, k.ansprechpartner, k.email
               FROM angebot a JOIN kunden k ON k.id=a.kunde_id WHERE a.id=?", [$angebot_id]);
     if (!$a) return 'Angebot oder Kunde nicht gefunden.';
     if (kunde_mails_aus((int)$a['kunde_id'])) return 'Benachrichtigungen für diesen Kunden sind ausgeschaltet.';
     if (trim((string)$a['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
     $fa   = beleg_firma();
-    $link = mail_link_kundenportal((int)$a['kunde_id'], 'angebote');
+    // Dienstleistungs-Angebote stehen im Portal unter „Meine Anfragen", Produkt-Angebote unter „Angebote".
+    $link = mail_link_kundenportal((int)$a['kunde_id'], ($a['kategorie'] ?? '') === 'dienstleistung' ? 'meine_anfragen' : 'angebote');
     $bis  = $a['gueltig_bis'] ? date('d.m.Y', strtotime((string)$a['gueltig_bis'])) : '';
     $m = mail_render('angebot', [
         'anrede'         => mail_kunde_anrede($a),
@@ -614,18 +622,28 @@ function mail_kunde_dl_ergebnis(int $auftrag_id): string {
 // Der Kunde hat ein Angebot angenommen: Bestätigung an den Kunden, Hinweis ans Team.
 // Rückgabe = Ergebnis der Kundenmail ('' = verschickt).
 function mail_angebot_angenommen(int $angebot_id, ?int $auftrag_id = null): string {
-    $a = one("SELECT a.nummer, a.kunde_id, a.freigabe_name, k.firma, k.ansprechpartner, k.email
+    $a = one("SELECT a.nummer, a.kunde_id, a.freigabe_name, a.kategorie, k.firma, k.ansprechpartner, k.email
               FROM angebot a JOIN kunden k ON k.id=a.kunde_id WHERE a.id=?", [$angebot_id]);
     if (!$a) return 'Angebot oder Kunde nicht gefunden.';
     $fa    = beleg_firma();
     $aufNr = $auftrag_id ? (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id]) : '';
-
+    $istDL = ($a['kategorie'] ?? '') === 'dienstleistung';
+    // Was ist wirklich entstanden? (DL-Auftrag hat keinen Produktionsauftrag, Handelsware auch nicht; Rechnung ggf. erst Entwurf.)
+    $paNr = $auftrag_id ? (string) scalar("SELECT GROUP_CONCAT(nummer SEPARATOR ', ') FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert'", [$auftrag_id]) : '';
+    $re   = $auftrag_id ? one("SELECT nummer, kunde_sichtbar FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$auftrag_id]) : null;
+    $entstanden = [];
+    if ($aufNr !== '') $entstanden[] = ($istDL ? 'DL-Auftrag ' : 'Auftrag ') . $aufNr;
+    if ($re) $entstanden[] = 'Rechnung ' . $re['nummer'] . ((int)$re['kunde_sichtbar'] === 1 ? '' : ' (Entwurf, noch nicht für den Kunden freigegeben)');
+    if ($paNr !== '') $entstanden[] = 'Produktionsauftrag ' . $paNr;
+    $wer = (strpos((string)$a['freigabe_name'], 'Team ') === 0) ? ' wurde vom Team für den Kunden angenommen' : ' wurde im Portal verbindlich angenommen';
     mail_team('Angebot ' . $a['nummer'] . ' angenommen: ' . $a['firma'],
-        "Der Kunde " . $a['firma'] . " hat das Angebot " . $a['nummer'] . " im Portal verbindlich angenommen"
+        "Das Angebot " . $a['nummer'] . " von " . $a['firma'] . $wer
         . ($a['freigabe_name'] ? ' (' . $a['freigabe_name'] . ')' : '') . ".\n"
-        . ($aufNr !== '' ? "Auftrag $aufNr ist angelegt, Rechnung und Produktionsauftrag ebenfalls.\n" : '')
+        . ($entstanden ? 'Angelegt: ' . implode(', ', $entstanden) . ".\n" : "Achtung: Es ist KEIN Auftrag entstanden – bitte prüfen.\n")
         . "\n" . mail_basis_url() . '/?p=angebot&id=' . $angebot_id . "\n");
 
+    // Ohne Auftrag keine Auftragsbestätigung an den Kunden (sonst „Auftragsbestätigung  von …" ohne Nummer, H/St-23).
+    if ($aufNr === '') return 'Es ist kein Auftrag entstanden – keine Auftragsbestätigung verschickt.';
     if (kunde_mails_aus((int)$a['kunde_id'])) return 'Benachrichtigungen für diesen Kunden sind ausgeschaltet.';
     if (trim((string)$a['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
     $link = mail_link_kundenportal((int)$a['kunde_id'], 'bestellungen');
@@ -633,11 +651,53 @@ function mail_angebot_angenommen(int $angebot_id, ?int $auftrag_id = null): stri
         'anrede'        => mail_kunde_anrede($a),
         'angebot_nummer'=> (string)$a['nummer'],
         'auftrag_nummer'=> $aufNr,
-        'auftrag_zeile' => $aufNr !== '' ? 'Wir führen den Auftrag unter der Nummer ' . $aufNr . ".\n" : '',
+        'auftrag_zeile' => 'Wir führen den Auftrag unter der Nummer ' . $aufNr . ".\n",
+        'rechnung_hinweis' => ($re && (int)$re['kunde_sichtbar'] === 1) ? ' und die Rechnung' : '',
         'link'          => $link,
         'absender'      => $fa['name'],
     ]);
     return mail_senden((string)$a['email'], $m['betreff'], $m['text']);
+}
+
+// UTC-Zeitpunkt für Mails in Ortszeit (Europe/Berlin): „02.11.2026, 17:36 Uhr". fmt_zeit() steht nicht in jedem Kontext bereit.
+function mail_zeit(string $utc): string {
+    if (function_exists('fmt_zeit')) return fmt_zeit($utc, 'd.m.Y, H:i') . ' Uhr';
+    try { return (new DateTime($utc, new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Europe/Berlin'))->format('d.m.Y, H:i') . ' Uhr'; }
+    catch (Throwable $e) { return $utc; }
+}
+// Gemeinsamer Rahmen für einfache Kunden-Mails: prüft Abschaltung/Adresse, setzt Anrede, Portal-Link und Absender.
+// $kern = Text zwischen Anrede und Link (ohne Gruß). $ansicht = Portal-Ansicht des Links. Rückgabe '' = verschickt.
+function mail_kunde_einfach(int $kunde_id, string $betreff, string $kern, string $ansicht = 'bestellungen'): string {
+    $k = one("SELECT id, firma, ansprechpartner, email FROM kunden WHERE id=?", [$kunde_id]);
+    if (!$k) return 'Kunde nicht gefunden.';
+    if (kunde_mails_aus($kunde_id)) return 'Benachrichtigungen für diesen Kunden sind ausgeschaltet.';
+    if (trim((string)$k['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
+    $fa = beleg_firma();
+    $text = 'Guten Tag ' . mail_kunde_anrede($k) . ",
+
+" . rtrim($kern) . "
+
+"
+          . "Im Kundenportal:
+" . mail_link_kundenportal($kunde_id, $ansicht) . "
+
+Viele Grüße
+" . $fa['name'];
+    return mail_senden((string)$k['email'], $betreff, $text);
+}
+
+// Etikett freigegeben: Bestätigung an den Kunden (wer, wann), damit er weiß, dass Produktion/Einkauf jetzt starten können.
+function mail_kunde_etikett_freigegeben(int $auftrag_id): string {
+    $a = one("SELECT nummer, kunde_id, produkt_id, etikett_freigabe_von, etikett_freigabe_am FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a || !$a['kunde_id']) return 'Auftrag oder Kunde nicht gefunden.';
+    $name = ($a['produkt_id'] && function_exists('produkt_kundenname')) ? produkt_kundenname((int)$a['produkt_id'], (int)$a['kunde_id']) : '';   // Name, wie ihn der Kunde kennt
+    $am = !empty($a['etikett_freigabe_am']) ? mail_zeit((string)$a['etikett_freigabe_am']) : '';
+    return mail_kunde_einfach((int)$a['kunde_id'], 'Etikett freigegeben – Auftrag ' . $a['nummer'],
+        'Sie haben das Etikett für Ihren Auftrag ' . $a['nummer'] . ($name !== '' ? ' (' . $name . ')' : '') . ' zur Produktion freigegeben'
+        . (!empty($a['etikett_freigabe_von']) ? ' (' . $a['etikett_freigabe_von'] . ($am !== '' ? ', ' . $am : '') . ')' : '') . ".
+"
+        . 'Wir bestellen jetzt die Etiketten bzw. starten die Produktion. Eine spätere Änderung des Designs ist nur nach Rücksprache möglich.',
+        'bestellung&aid=' . $auftrag_id);
 }
 
 // Eine Anfrage wurde abgesagt („nicht machbar"): der Kunde erfährt den Grund.
@@ -703,6 +763,23 @@ function mail_team_etikett_hochgeladen(int $auftrag_id): int {
         . ($a['produkt'] ? " (" . $a['produkt'] . ")" : '') . " hochgeladen.\n"
         . "Die Etiketten können jetzt bestellt werden (Einkaufsbedarf / Auftrag).\n\n"
         . mail_basis_url() . '/?p=auftrag&id=' . $auftrag_id . "\n");
+}
+
+// Der Kunde hat das Etikett für die Produktion FREIGEGEBEN -> Team informieren (eigener Text, nicht „hochgeladen").
+function mail_team_etikett_freigegeben(int $auftrag_id): int {
+    $a = one("SELECT a.nummer, k.firma, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, a.etikett_freigabe_von
+              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    if (!$a) return 0;
+    return mail_team('Etikett freigegeben: ' . $a['nummer'] . ' (' . $a['firma'] . ')',
+        "Der Kunde " . $a['firma'] . " hat das Etikett für Auftrag " . $a['nummer']
+        . ($a['produkt'] ? " (" . $a['produkt'] . ")" : '') . " zur Produktion freigegeben"
+        . (!empty($a['etikett_freigabe_von']) ? ' (' . $a['etikett_freigabe_von'] . ')' : '') . ".
+"
+        . "Einkauf und Produktion sind für das Etikett jetzt frei.
+
+"
+        . mail_basis_url() . '/?p=auftrag&id=' . $auftrag_id . "
+");
 }
 
 // Neue Rückfrage/Antwort: die andere Seite bekommt den Text und einen Link zum Antworten.

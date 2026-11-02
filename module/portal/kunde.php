@@ -270,7 +270,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         if (($_POST['haftung'] ?? '') !== '1') { header('Location: ?p=portal&token=' . $token . '&v=bestellung&aid=' . $aid . '&etiketthaftung=1'); exit; }
         $r = etikett_freigabe_setzen($aid, $name, 'kunde');
         if (!empty($r['ok'])) log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Etikett-Haftungshinweis bei der Freigabe bestätigt.', 'auftrag', 'auftrag', $aid);
-        if (!empty($r['ok']) && mail_bereit()) nach_antwort(fn() => mail_team_etikett_hochgeladen($aid));
+        if (!empty($r['ok']) && mail_bereit()) nach_antwort(function () use ($aid) { mail_team_etikett_freigegeben($aid); mail_kunde_etikett_freigegeben($aid); });
         header('Location: ?p=portal&token=' . $token . '&v=bestellung&aid=' . $aid . ($r['ok'] ? '&etikettfrei=1' : '&etikettfehlt=1')); exit;
     }
     header('Location: ?p=portal&token=' . $token . '&v=bestellung&aid=' . $aid); exit;
