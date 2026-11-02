@@ -7941,11 +7941,18 @@ function auftrag_bedarf(int $pa_id): array {
         $slots = produkt_row_cached((int)$pa['produkt_id']);
         $afRow = auftrag_row_cached($aid);
         $verpEff = !empty($afRow['verpackung_id']) ? (int)$afRow['verpackung_id'] : (int)($slots['verpackung_id'] ?? 0);
-        $etikettEff = (int)($slots['etikett_id'] ?? 0);
-        if (!empty($afRow['verpackung_id'])) {                 // Auftrag hat eigenen Behälter -> Etikett dazu ableiten
-            $au = etikett_id_fuer_behaelter((int)$afRow['verpackung_id']); if ($au) $etikettEff = $au;
-        } elseif (!$etikettEff && $verpEff) {                  // sonst: fehlt Etikett am Produkt -> aus Behälter ableiten
-            $au = etikett_id_fuer_behaelter($verpEff); if ($au) $etikettEff = $au;
+        // ERSTE Wahl: das KUNDENETIKETT dieses Auftrags (an den Auftrag gebundene Version, sonst das aktuelle
+        // Kundenetikett des Produkts). Einkauf, Wareneingang, Bestand und Bereitschaft laufen darüber – nicht über
+        // das generische Glas-Etikett (das ist nur Maß-Vorlage). Nur OHNE Kundenetikett greift die alte
+        // Ableitung aus dem Behälter als Fallback (Produkte ohne Kundenetikett / Altaufträge).
+        $etikettEff = etikett_item_fuer_auftrag_kunde($aid, (int)$pa['produkt_id'], $afRow);
+        if ($etikettEff <= 0) {
+            $etikettEff = (int)($slots['etikett_id'] ?? 0);
+            if (!empty($afRow['verpackung_id'])) {                 // Auftrag hat eigenen Behälter -> Etikett dazu ableiten
+                $au = etikett_id_fuer_behaelter((int)$afRow['verpackung_id']); if ($au) $etikettEff = $au;
+            } elseif (!$etikettEff && $verpEff) {                  // sonst: fehlt Etikett am Produkt -> aus Behälter ableiten
+                $au = etikett_id_fuer_behaelter($verpEff); if ($au) $etikettEff = $au;
+            }
         }
         $effSlots = ['verpackung_id'=>$verpEff, 'verschluss_id'=>(int)($slots['verschluss_id'] ?? 0),
                      'etikett_id'=>$etikettEff, 'karton_id'=>(int)($slots['karton_id'] ?? 0), 'beipack_id'=>(int)($slots['beipack_id'] ?? 0)];
@@ -8601,6 +8608,19 @@ function etikett_item_fuer_auftrag(int $auftrag_id): int {
     return etikett_item_fuer_produkt((int)($a['produkt_id'] ?? 0));
 }
 
+// Kundenetikett-Artikel eines Auftrags für den BEDARF/Einkauf/Bestand: 1) die an den Auftrag gebundene Version
+// (auftrag.etikett_item_id – auch wenn sie inzwischen gesperrt ist: der Auftrag bleibt bei „seinem" Design),
+// 2) sonst das aktuelle Kundenetikett des Produkts. 0 = es gibt (noch) KEIN Kundenetikett -> der Aufrufer nutzt
+// die Ableitung aus dem Behälter (generisches Maß-Etikett) als Fallback. Anders als etikett_item_fuer_auftrag()
+// fällt diese Funktion NICHT still auf das generische Etikett zurück.
+function etikett_item_fuer_auftrag_kunde(int $auftrag_id, int $produkt_id, ?array $afRow = null): int {
+    $afRow = $afRow ?? ($auftrag_id > 0 ? auftrag_row_cached($auftrag_id) : null);
+    $bind = (int)($afRow['etikett_item_id'] ?? 0);
+    if ($bind > 0 && (int) scalar("SELECT 1 FROM item WHERE id=? AND verpackung_rolle='etikett' AND produkt_id IS NOT NULL", [$bind]))
+        return $bind;
+    return $produkt_id > 0 ? kundenetikett_aktuell($produkt_id) : 0;
+}
+
 // Ist das Etikett dieses Auftrags schon BESTELLT (oder physisch eingegangen)? Dann ist das Design fix und
 // NICHT mehr änderbar (Regel Nico: änderbar nur, solange noch nicht bestellt). „Bestellt" = der (versionierte)
 // Etikett-Artikel hat physischen Bestand ODER eine offene/gelieferte Bestellposition.
@@ -8735,6 +8755,9 @@ function kundenetikett_nach_freigabe(int $auftrag_id): void {
         $use = kundenetikett_version_anlegen($pid, $ver, (int)$dok['id'], $sig);
     }
     if ($use > 0) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$use, $auftrag_id]);
+    // Bedarf/Einkauf/Bereitschaft hängen am gebundenen Etikett-Artikel -> Cache neu rechnen (sonst meldet die
+    // Bereitschaft nach dem Wechsel auf v2 weiter „Etikett vorrätig" mit den alten v1-Etiketten).
+    if (function_exists('bedarf_bump')) bedarf_bump();
 }
 // Etikett-Bestand eines Produkts – mit strikter Trennung PHYSISCH (unser Lager, inkl. Puffer) vs.
 // BEZAHLT (was der Kunde gekauft hat). Dem Kunden darf NIE mehr gezeigt werden als bezahlt.
