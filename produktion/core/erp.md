@@ -74,3 +74,5 @@ Eigene Fertigware (Einlagern aus der Produktion: `produktion_teilmenge_einbuchen
 
 ## Abbuchung Etikett + Deckel (Paket Etiketten)
 `erp_station_entnahme()` kennt jetzt `Verpacken` (Behaelter + Deckel, `erp_verpackung_entnehmen`) und `Etikettieren` (Kundenetikett, `erp_etikett_entnehmen`). Gemeinsamer Helfer `erp_posten_entnehmen()`: alles-oder-nichts, idempotent je (PA, Artikel), FEFO (`erp_fefo_abbuchen`), optional Ersatzartikel (generisches Massetikett, `erp_generisches_etikett_fuer_behaelter()`), Verlaufseintrag am Auftrag. `erp_rollen_abbuchen()` fuehrt die Etikettenrollen (`charge_gebinde`) mit. Spiegel der Dashboard-Funktionen `produktion_*` (Sub-App darf `core/schema.php` nicht laden). Der Behaelter wird PA -> Auftrag -> Produkt aufgeloest.
+
+**Restbuchung (S-13):** `erp_posten_entnehmen`, `erp_rohstoffe_/kapseln_/fertigware_/verpackung_/etikett_entnehmen` spiegeln die Dashboard-Funktionen: gebucht wird „Soll bis `$bis` Packungen − bereits für dieses PA verbraucht" (alles-oder-nichts, `$trocken` = nur prüfen). Nach einer Teilmenge bucht der Schritt „Rohstoffe bereitstellen" den Rest, statt abzubrechen.

@@ -839,58 +839,65 @@ function erp_rollen_abbuchen(int $charge_id, float $menge, int $pa_id, int $auft
         $rest -= $nimm;
     }
 }
-// Mehrere Zubehör-Artikel EINES Schritts ALLES-ODER-NICHTS entnehmen (Spiegel von produktion_posten_entnehmen()):
-// 1 je Packung, FEFO, idempotent je (PA, Artikel), optional Ersatzartikel ('alternativ'), Verlaufseintrag am Auftrag.
-function erp_posten_entnehmen(int $pa_id, array $posten): array {
+// Bis zu wie vielen Packungen (kumuliert) soll Material verbraucht sein? null = die ganze Menge des Auftrags (Spiegel Dashboard).
+function erp_ziel_pakete(int $pa_id, ?float $bis = null): float {
+    $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    return $bis === null ? $menge : max(0.0, min($menge, $bis));
+}
+function erp_verbraucht(int $pa_id, int $item_id): float {
+    return $item_id > 0 ? (float) scalar("SELECT COALESCE(SUM(menge),0) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, $item_id]) : 0.0;
+}
+// Mehrere Artikel EINES Schritts ALLES-ODER-NICHTS entnehmen (Spiegel von produktion_posten_entnehmen()) – als RESTBUCHUNG (S-13):
+// $posten tragen die SOLL-Menge (kumuliert); gebucht wird „Soll − bereits für dieses PA verbraucht". Idempotent UND bucht nach einer
+// Teilmenge den Rest. FEFO, optional Ersatzartikel ('alternativ'), $trocken = nur prüfen, Verlaufseintrag am Auftrag ($log).
+function erp_posten_entnehmen(int $pa_id, array $posten, bool $trocken = false, bool $log = true): array {
     $pa = one("SELECT nummer, auftrag_id, kunde_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     $auf = (int)($pa['auftrag_id'] ?? 0);
     $plan = []; $fehlt = [];
     foreach ($posten as $p) {
-        $iid = (int)$p['item_id']; $alt = (int)($p['alternativ'] ?? 0); $menge = (float)$p['menge'];
-        if ($iid <= 0 || $menge <= 0) continue;
-        foreach (array_filter([$iid, $alt]) as $chk)
-            if ((int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, $chk]) > 0) continue 2;
+        $iid = (int)$p['item_id']; $alt = (int)($p['alternativ'] ?? 0); $soll = (float)$p['menge'];
+        if ($iid <= 0 || $soll <= 0) continue;
+        $einheit = (string)($p['einheit'] ?? 'Stk') ?: 'Stk';
+        $brauch = $soll - erp_verbraucht($pa_id, $iid) - ($alt > 0 && $alt !== $iid ? erp_verbraucht($pa_id, $alt) : 0.0);
+        if ($brauch <= max(0.0001, $soll * 0.001)) continue;           // Soll schon (Haupt- oder Ersatzartikel) gebucht
         $verf = erp_item_bestand($iid); $nutze = $iid; $istAlt = false;
-        if ($verf + 0.0001 < $menge && $alt > 0 && erp_item_bestand($alt) + 0.0001 >= $menge) { $nutze = $alt; $istAlt = true; }
-        elseif ($verf + 0.0001 < $menge) {
-            $fehlt[] = ['name'=>(string)scalar("SELECT name FROM item WHERE id=?", [$iid]), 'benoetigt'=>$menge, 'verfuegbar'=>$verf, 'fehlt'=>$menge-$verf, 'einheit'=>'Stk'];
+        if ($verf + 0.0001 < $brauch && $alt > 0 && erp_item_bestand($alt) + 0.0001 >= $brauch) { $nutze = $alt; $istAlt = true; }
+        elseif ($verf + 0.0001 < $brauch) {
+            $fehlt[] = ['name'=>(string)(($p['name'] ?? '') !== '' ? $p['name'] : scalar("SELECT name FROM item WHERE id=?", [$iid])), 'benoetigt'=>$brauch, 'verfuegbar'=>$verf, 'fehlt'=>$brauch-$verf, 'einheit'=>$einheit, 'item_id'=>$iid];
             continue;
         }
-        $plan[] = ['item_id'=>$nutze, 'menge'=>$menge, 'label'=>(string)($p['label'] ?? ''), 'alt'=>$istAlt];
+        $plan[] = ['item_id'=>$nutze, 'menge'=>$brauch, 'einheit'=>$einheit, 'label'=>(string)($p['label'] ?? ''), 'alt'=>$istAlt];
     }
     if ($fehlt) return ['ok'=>false, 'fehlt'=>$fehlt, 'gebucht'=>[]];
+    if ($trocken) return ['ok'=>true, 'fehlt'=>[], 'gebucht'=>[]];
     $gebucht = [];
     foreach ($plan as $b) {
-        erp_fefo_abbuchen($pa_id, (int)$b['item_id'], (float)$b['menge'], 'Stk');
+        erp_fefo_abbuchen($pa_id, (int)$b['item_id'], (float)$b['menge'], $b['einheit']);
         $gebucht[] = ['name'=>(string)scalar("SELECT name FROM item WHERE id=?", [(int)$b['item_id']]), 'menge'=>(float)$b['menge'], 'alternativ'=>$b['alt'], 'label'=>$b['label']];
     }
-    if ($gebucht && $pa && (int)($pa['kunde_id'] ?? 0) > 0) {
+    if ($log && $gebucht && $pa && (int)($pa['kunde_id'] ?? 0) > 0) {
         $zeilen = array_map(fn($g) => number_format($g['menge'], 0, ',', '.') . ' Stk ' . ($g['label'] ?: 'Artikel') . ' „' . $g['name'] . '"' . ($g['alternativ'] ? ' (Ersatzartikel – Kundenetikett ohne Bestand, Altbestand)' : ''), $gebucht);
         erp_log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Produktion ' . (string)$pa['nummer'] . ': abgebucht – ' . implode('; ', $zeilen) . '.', 'auftrag', 'auftrag', $auf ?: null);
     }
     return ['ok'=>true, 'fehlt'=>[], 'gebucht'=>$gebucht];
 }
-function erp_rohstoffe_entnehmen(int $pa_id): array {
-    if ((int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=?", [$pa_id]) > 0) return ['ok'=>true, 'fehlt'=>[]];
-    $bedarf = erp_materialbedarf($pa_id);
-    $fehlt = array_values(array_filter($bedarf, fn($b) => $b['fehlt'] > 0.0001));
-    if ($fehlt) return ['ok'=>false, 'fehlt'=>$fehlt];
-    foreach ($bedarf as $b) erp_fefo_abbuchen($pa_id, (int)$b['item_id'], (float)$b['benoetigt'], (string)$b['einheit']);
-    return ['ok'=>true, 'fehlt'=>[]];
+// Rohstoffe entnehmen (Station „Rohstoffe bereitstellen" und Teilmenge) – RESTBUCHUNG bis $bis Packungen (S-13), siehe erp_posten_entnehmen().
+function erp_rohstoffe_entnehmen(int $pa_id, ?float $bis = null, bool $trocken = false): array {
+    $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $f = $menge > 0 ? erp_ziel_pakete($pa_id, $bis) / $menge : 1.0;
+    $posten = [];
+    foreach (erp_materialbedarf($pa_id) as $b)
+        $posten[] = ['item_id'=>(int)$b['item_id'], 'menge'=>(float)$b['benoetigt'] * $f, 'einheit'=>(string)$b['einheit'], 'label'=>'Rohstoff', 'name'=>(string)$b['name']];
+    return erp_posten_entnehmen($pa_id, $posten, $trocken, false);
 }
-function erp_kapseln_entnehmen(int $pa_id): array {
+// Leerkapseln entnehmen (Station Verkapselung) – Restbuchung bis $bis Packungen.
+function erp_kapseln_entnehmen(int $pa_id, ?float $bis = null, bool $trocken = false): array {
     $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return ['ok'=>true, 'fehlt'=>[]];
     $kid = erp_produkt_leerkapsel_id((int)$pa['produkt_id']);
     if (!$kid) return ['ok'=>true, 'fehlt'=>[]];                       // kein/uneindeutiges Kapselprodukt -> nichts abbuchen
-    if ((int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, $kid]) > 0) return ['ok'=>true, 'fehlt'=>[]];
-    $benoetigt = (float)$pa['menge'] * erp_stueck_je_packung($pa);
-    if ($benoetigt <= 0) return ['ok'=>true, 'fehlt'=>[]];
-    $verf = erp_item_bestand($kid);
-    if ($verf + 0.0001 < $benoetigt)
-        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stk']]];
-    erp_fefo_abbuchen($pa_id, $kid, $benoetigt, 'Stk');
-    return ['ok'=>true, 'fehlt'=>[]];
+    return erp_posten_entnehmen($pa_id, [['item_id'=>(int)$kid, 'menge'=>erp_ziel_pakete($pa_id, $bis) * erp_stueck_je_packung($pa), 'einheit'=>'Stk', 'label'=>'Leerkapseln',
+        'name'=>(string) scalar("SELECT name FROM item WHERE id=?", [$kid])]], $trocken, false);
 }
 // Rezeptur-ID eines Auftrags (pa.rezeptur_id oder produkt.rezeptur_id).
 function erp_pa_rezeptur_id(int $pa_id): int {
@@ -945,22 +952,28 @@ function erp_fertigware_chargen(int $pa_id, string $status = 'frei'): array {
                 ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [$status, $auf, $rid, $rid]);
 }
 
-// Zugekaufte fertige Bulkware (Kategorie 'fertig') FEFO abbuchen (Auftrag ODER Rezeptur-Bulk).
-function erp_fertigware_entnehmen(int $pa_id): array {
+// Zugekaufte fertige Bulkware (Kategorie 'fertig') FEFO abbuchen (Auftrag ODER Rezeptur-Bulk) – Restbuchung bis $bis Packungen.
+function erp_fertigware_entnehmen(int $pa_id, ?float $bis = null, bool $trocken = false): array {
     $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return ['ok'=>true, 'fehlt'=>[]];
     if (erp_zukauf_fertig($pa_id)) {   // fertige Ware: nur prüfen, nicht verbrauchen (St-24)
+        $soll = erp_ziel_pakete($pa_id, $bis);
         $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], erp_zukauf_fertig_chargen($pa_id, 'frei')));
-        if ($verf + 0.0001 < (float)$pa['menge'])
-            return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Ware (Packungen)', 'benoetigt'=>(float)$pa['menge'], 'verfuegbar'=>$verf, 'fehlt'=>(float)$pa['menge'] - $verf, 'einheit'=>'Pkg']]];
+        if ($verf + 0.0001 < $soll)
+            return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Ware (Packungen)', 'benoetigt'=>$soll, 'verfuegbar'=>$verf, 'fehlt'=>$soll - $verf, 'einheit'=>'Pkg']]];
         return ['ok'=>true, 'fehlt'=>[]];
     }
-    $benoetigt = (float)$pa['menge'] * erp_stueck_je_packung($pa);
-    if ($benoetigt <= 0) return ['ok'=>true, 'fehlt'=>[]];
+    $ziel = erp_ziel_pakete($pa_id, $bis) * erp_stueck_je_packung($pa);
+    if ($ziel <= 0) return ['ok'=>true, 'fehlt'=>[]];
     $chargen = erp_fertigware_chargen($pa_id, 'frei');
+    $ids = array_values(array_unique(array_map('intval', array_column($chargen, 'item_id'))));
+    $schon = 0.0; foreach ($ids as $iid) $schon += erp_verbraucht($pa_id, $iid);
+    $benoetigt = $ziel - $schon;
+    if ($benoetigt <= max(0.0001, $ziel * 0.001)) return ['ok'=>true, 'fehlt'=>[]];
     $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], $chargen));
     if ($verf + 0.0001 < $benoetigt)
         return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>erp_fertigware_einheit($pa_id)]]];
+    if ($trocken) return ['ok'=>true, 'fehlt'=>[]];
     $rest = $benoetigt;
     foreach ($chargen as $c) {
         if ($rest <= 0.0001) break;
@@ -974,20 +987,20 @@ function erp_fertigware_entnehmen(int $pa_id): array {
     return ['ok'=>true, 'fehlt'=>[]];
 }
 // Behälter (Primärgebinde) UND Deckel entnehmen (1 je Packung). Der Behälter des AUFTRAGS hat Vorrang
-// (PA → Auftrag → Produkt: bedruckter Kundenbehälter). Spiegel von produktion_verpackung_entnehmen().
-function erp_verpackung_entnehmen(int $pa_id): array {
+// (PA → Auftrag → Produkt: bedruckter Kundenbehälter). Spiegel von produktion_verpackung_entnehmen(); Restbuchung bis $bis Packungen.
+function erp_verpackung_entnehmen(int $pa_id, ?float $bis = null, bool $trocken = false): array {
     $pa = one("SELECT menge, produkt_id, auftrag_id, verpackung_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return ['ok'=>true, 'fehlt'=>[]];
     $vid = (int)($pa['verpackung_id'] ?? 0);
     if ($vid <= 0 && !empty($pa['auftrag_id'])) $vid = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]);
     if ($vid <= 0) $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
     $did = (int) (scalar("SELECT verschluss_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
-    $menge = (float)$pa['menge'];
+    $menge = erp_ziel_pakete($pa_id, $bis);
     $posten = [];
     if ($vid > 0) $posten[] = ['item_id'=>$vid, 'menge'=>$menge, 'label'=>'Verpackung'];
     if ($did > 0) $posten[] = ['item_id'=>$did, 'menge'=>$menge, 'label'=>'Deckel'];
     if (!$posten) return ['ok'=>true, 'fehlt'=>[]];                    // weder Gebinde noch Deckel definiert -> nichts zu tun
-    return erp_posten_entnehmen($pa_id, $posten);
+    return erp_posten_entnehmen($pa_id, $posten, $trocken);
 }
 // Generisches Maß-Etikett zu einem Behälter (Spiegel von etikett_id_fuer_behaelter()/passende_etiketten_fuer() im Dashboard):
 // Endformat des Behälters (item.etikett_final, „B x H") gegen die generischen Etiketten (produkt_id IS NULL) auf ±2 mm.
@@ -1007,8 +1020,8 @@ function erp_generisches_etikett_fuer_behaelter(int $verp_id): int {
 }
 // Etikett entnehmen (1 je Packung): das KUNDENETIKETT dieses Auftrags; bei fehlendem Bestand Ersatz = das generische
 // Maß-Etikett des Behälters (Altbestand, der vor dem Kundenetikett-Fix dort eingebucht wurde), falls dort genug liegt.
-// Spiegel von produktion_etikett_entnehmen().
-function erp_etikett_entnehmen(int $pa_id): array {
+// Spiegel von produktion_etikett_entnehmen(); Restbuchung bis $bis Packungen.
+function erp_etikett_entnehmen(int $pa_id, ?float $bis = null, bool $trocken = false): array {
     $pa = one("SELECT menge, auftrag_id, produkt_id, verpackung_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     $eid = erp_etikett_item_id($pa_id);
     if (!$pa || $eid <= 0) return ['ok'=>true, 'fehlt'=>[]];            // kein Etikett nötig/definiert
@@ -1016,7 +1029,7 @@ function erp_etikett_entnehmen(int $pa_id): array {
     if ($vid <= 0 && !empty($pa['auftrag_id'])) $vid = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]);
     if ($vid <= 0) $vid = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
     $gen = erp_generisches_etikett_fuer_behaelter($vid);
-    return erp_posten_entnehmen($pa_id, [['item_id'=>$eid, 'menge'=>(float)$pa['menge'], 'label'=>'Etikett', 'alternativ'=>($gen !== $eid ? $gen : 0)]]);
+    return erp_posten_entnehmen($pa_id, [['item_id'=>$eid, 'menge'=>erp_ziel_pakete($pa_id, $bis), 'label'=>'Etikett', 'alternativ'=>($gen !== $eid ? $gen : 0)]], $trocken);
 }
 
 // Effektive Leerkapsel eines Produkts: manuelle Wahl hat Vorrang, sonst eindeutiger Treffer über
