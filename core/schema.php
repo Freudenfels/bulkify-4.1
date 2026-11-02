@@ -9640,8 +9640,9 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
             'Rohstoffe bereitstellen'  => produktion_rohstoffe_entnehmen($pa_id),
             'Verkapselung'             => produktion_kapseln_entnehmen($pa_id),
             'Fertigware bereitstellen' => produktion_fertigware_entnehmen($pa_id),
-            // Zukauf „fertig" (St-24): Verpackung ist in der zugekauften Ware enthalten -> nichts abbuchen.
-            'Verpacken'                => ((string) scalar("SELECT zukauf_art FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'fertig') ? ['ok'=>true] : produktion_verpackung_entnehmen($pa_id),
+            // Zukauf „fertig" (St-24): Verpackung + Etikett sind in der zugekauften Ware enthalten -> nichts abbuchen.
+            'Verpacken'                => ((string) scalar("SELECT zukauf_art FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'fertig') ? ['ok'=>true] : produktion_verpackung_entnehmen($pa_id),   // Behälter + Deckel
+            'Etikettieren'             => ((string) scalar("SELECT zukauf_art FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'fertig') ? ['ok'=>true] : produktion_etikett_entnehmen($pa_id),      // Kundenetikett
             default                    => ['ok'=>true],
         };
         if (!($entnahme['ok'] ?? true)) {
@@ -9901,29 +9902,98 @@ function produktion_rohstoffe_entnehmen(int $pa_id): array {
     return ['ok'=>true, 'fehlt'=>[]];
 }
 
-// Verpackung eines Produktionsauftrags entnehmen (1 je Packung), FEFO. Idempotent; blockiert bei zu wenig.
-function produktion_verpackung_entnehmen(int $pa_id): array {
-    $pa = one("SELECT menge, produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
-    if (!$pa) return ['ok'=>true, 'fehlt'=>[]];
-    $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$pa['produkt_id']]) ?: 0);
-    if (!$vid) return ['ok'=>true, 'fehlt'=>[]];                       // kein Gebinde definiert -> nichts zu tun
-    if ((int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, $vid]) > 0) return ['ok'=>true, 'fehlt'=>[]];
-    $benoetigt = (float)$pa['menge'];
-    $verf = item_bestand($vid, true);
-    if ($verf + 0.0001 < $benoetigt) {
-        return ['ok'=>false, 'fehlt'=>[['name'=> scalar("SELECT name FROM item WHERE id=?", [$vid]), 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stk']]];
+// Etikettenrollen (charge_gebinde mit Inventarnummer) einer Charge um die entnommene Menge verringern, damit der
+// Rollenbestand zum Chargenbestand passt (sonst bleiben alle Rollen „voll", obwohl Etiketten verbraucht sind).
+// Reihenfolge: dem PA/Auftrag zugeordnete Rollen, dann angebrochene, dann volle (Nummer/id). Ohne Rollen: nichts.
+function produktion_rollen_abbuchen(int $charge_id, float $menge, int $pa_id, int $auftrag_id): void {
+    if ($menge <= 0.0001 || !table_exists('charge_gebinde') || !column_exists('charge_gebinde', 'inventar_nr')) return;
+    $rest = $menge;
+    foreach (all("SELECT id, menge_verfuegbar FROM charge_gebinde WHERE charge_id=? AND inventar_nr IS NOT NULL AND status<>'leer' AND menge_verfuegbar>0
+                  ORDER BY (pa_id=?) DESC, (auftrag_id=?) DESC, (status='angebrochen') DESC, nummer, id", [$charge_id, $pa_id, $auftrag_id]) as $g) {
+        if ($rest <= 0.0001) break;
+        $nimm = min($rest, (float)$g['menge_verfuegbar']);
+        $neu  = (float)$g['menge_verfuegbar'] - $nimm;
+        q("UPDATE charge_gebinde SET menge_verfuegbar=?, status=?, pa_id=COALESCE(pa_id,?), auftrag_id=COALESCE(auftrag_id,?) WHERE id=?",
+          [$neu, $neu <= 0.0001 ? 'leer' : 'angebrochen', $pa_id ?: null, $auftrag_id ?: null, $g['id']]);
+        $rest -= $nimm;
     }
-    $rest = $benoetigt;
-    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$vid]) as $c) {
+}
+// EINEN Artikel FEFO aus freien eigenen Chargen abbuchen und als Verbrauch buchen (+ Rollenbestand mitführen).
+function produktion_fefo_buchen(int $pa_id, int $item_id, float $menge, string $einheit, int $auftrag_id = 0): void {
+    $rest = $menge;
+    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$item_id]) as $c) {
         if ($rest <= 0.0001) break;
         $nimm = min($rest, (float)$c['menge_verfuegbar']);
         $neu = (float)$c['menge_verfuegbar'] - $nimm;
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
-          [$pa_id, $vid, $c['id'], $nimm, 'Stk', gmdate('Y-m-d H:i:s')]);
+          [$pa_id, $item_id, $c['id'], $nimm, $einheit, gmdate('Y-m-d H:i:s')]);
+        produktion_rollen_abbuchen((int)$c['id'], $nimm, $pa_id, $auftrag_id);
         $rest -= $nimm;
     }
-    return ['ok'=>true, 'fehlt'=>[]];
+}
+// Mehrere Zubehör-Artikel EINES Schritts ALLES-ODER-NICHTS entnehmen (1 je Packung, FEFO), idempotent je (PA, Artikel).
+// $posten: [['item_id'=>int, 'menge'=>float, 'label'=>string, 'alternativ'=>int (optional: Ersatz-Artikel, wenn der
+// erste nicht reicht – z. B. generisches Etikett für Altbestand)], …]. Rückgabe wie die anderen *_entnehmen():
+// ['ok'=>bool,'fehlt'=>[…],'gebucht'=>[['name','menge','alternativ'(bool)],…]]. Schreibt einen Verlaufseintrag am Auftrag.
+function produktion_posten_entnehmen(int $pa_id, array $posten): array {
+    $pa = one("SELECT nummer, auftrag_id, kunde_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $auf = (int)($pa['auftrag_id'] ?? 0);
+    $plan = []; $fehlt = [];
+    foreach ($posten as $p) {
+        $iid = (int)$p['item_id']; $alt = (int)($p['alternativ'] ?? 0); $menge = (float)$p['menge'];
+        if ($iid <= 0 || $menge <= 0) continue;
+        foreach (array_filter([$iid, $alt]) as $chk)   // schon gebucht (Haupt- oder Ersatzartikel)? -> idempotent
+            if ((int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, $chk]) > 0) continue 2;
+        $verf = item_bestand($iid, true); $nutze = $iid; $istAlt = false;
+        if ($verf + 0.0001 < $menge && $alt > 0 && item_bestand($alt, true) + 0.0001 >= $menge) { $nutze = $alt; $istAlt = true; }
+        elseif ($verf + 0.0001 < $menge) {
+            $fehlt[] = ['name'=>(string)scalar("SELECT name FROM item WHERE id=?", [$iid]), 'benoetigt'=>$menge, 'verfuegbar'=>$verf, 'fehlt'=>$menge-$verf, 'einheit'=>'Stk'];
+            continue;
+        }
+        $plan[] = ['item_id'=>$nutze, 'menge'=>$menge, 'label'=>(string)($p['label'] ?? ''), 'alt'=>$istAlt];
+    }
+    if ($fehlt) return ['ok'=>false, 'fehlt'=>$fehlt, 'gebucht'=>[]];          // nichts buchen, wenn irgendetwas fehlt
+    $gebucht = [];
+    foreach ($plan as $b) {
+        produktion_fefo_buchen($pa_id, (int)$b['item_id'], (float)$b['menge'], 'Stk', $auf);
+        $gebucht[] = ['name'=>(string)scalar("SELECT name FROM item WHERE id=?", [(int)$b['item_id']]), 'menge'=>(float)$b['menge'], 'alternativ'=>$b['alt'], 'label'=>$b['label']];
+    }
+    if ($gebucht && $pa && (int)($pa['kunde_id'] ?? 0) > 0 && function_exists('log_aktivitaet')) {
+        $zeilen = array_map(fn($g) => number_format($g['menge'], 0, ',', '.') . ' Stk ' . ($g['label'] ?: 'Artikel') . ' „' . $g['name'] . '"' . ($g['alternativ'] ? ' (Ersatzartikel – Kundenetikett ohne Bestand, Altbestand)' : ''), $gebucht);
+        log_aktivitaet('kunde', (int)($pa['kunde_id'] ?? 0), 'team', 'Produktion ' . (string)$pa['nummer'] . ': abgebucht – ' . implode('; ', $zeilen) . '.', 'auftrag', 'auftrag', $auf ?: null);
+    }
+    return ['ok'=>true, 'fehlt'=>[], 'gebucht'=>$gebucht];
+}
+// Behälter (Primärgebinde) UND Deckel eines Produktionsauftrags entnehmen (1 je Packung), FEFO. Der Behälter des
+// AUFTRAGS hat Vorrang (PA → Auftrag → Produkt: bedruckter Kundenbehälter, Admin-Wahl). Idempotent; blockiert bei zu wenig.
+function produktion_verpackung_entnehmen(int $pa_id): array {
+    $pa = one("SELECT menge, produkt_id, auftrag_id, verpackung_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['ok'=>true, 'fehlt'=>[]];
+    $vid = (int)($pa['verpackung_id'] ?? 0);
+    if ($vid <= 0 && !empty($pa['auftrag_id'])) $vid = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]);
+    if ($vid <= 0) $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$pa['produkt_id']]) ?: 0);
+    $did = (int) (scalar("SELECT verschluss_id FROM produkt WHERE id=?", [$pa['produkt_id']]) ?: 0);
+    $menge = (float)$pa['menge'];
+    $posten = [];
+    if ($vid > 0) $posten[] = ['item_id'=>$vid, 'menge'=>$menge, 'label'=>'Verpackung'];
+    if ($did > 0) $posten[] = ['item_id'=>$did, 'menge'=>$menge, 'label'=>'Deckel'];
+    if (!$posten) return ['ok'=>true, 'fehlt'=>[]];                    // weder Gebinde noch Deckel definiert -> nichts zu tun
+    return produktion_posten_entnehmen($pa_id, $posten);
+}
+// Etikett eines Produktionsauftrags entnehmen (1 je Packung, FEFO) – das KUNDENETIKETT dieses Auftrags (gebundene
+// Version). Hat es (noch) keinen Bestand, aber das generische Maß-Etikett des Behälters genug (Altbestand, der
+// vor dem Kundenetikett-Fix dort eingebucht wurde), wird davon abgebucht und im Verlauf vermerkt. Idempotent.
+function produktion_etikett_entnehmen(int $pa_id): array {
+    $pa = one("SELECT menge, produkt_id, auftrag_id, verpackung_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa || empty($pa['produkt_id'])) return ['ok'=>true, 'fehlt'=>[]];
+    $auf = (int)($pa['auftrag_id'] ?? 0);
+    $eid = $auf > 0 ? etikett_item_fuer_auftrag_kunde($auf, (int)$pa['produkt_id']) : 0;
+    $vid = (int)($pa['verpackung_id'] ?? 0) ?: (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    $gen = $vid > 0 ? (int)(etikett_id_fuer_behaelter($vid) ?? 0) : 0;
+    if ($eid <= 0) { $eid = $gen; $gen = 0; }                          // kein Kundenetikett -> generisches Etikett (wie bisher im Bedarf)
+    if ($eid <= 0) return ['ok'=>true, 'fehlt'=>[]];                   // kein Etikett nötig/definiert
+    return produktion_posten_entnehmen($pa_id, [['item_id'=>$eid, 'menge'=>(float)$pa['menge'], 'label'=>'Etikett', 'alternativ'=>($gen !== $eid ? $gen : 0)]]);
 }
 
 // Auftrag versenden: Fertigware (FEFO) ausbuchen + Lieferschein (LS) + Status 'versendet'.
