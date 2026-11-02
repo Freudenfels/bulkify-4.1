@@ -1400,8 +1400,9 @@ function erp_charge_status_setzen(int $charge_id, string $status): array {
 function erp_quarantaene_chargen(int $item_id = 0): array {
     if (!tabelle_da('charge')) return [];
     return all("SELECT c.id, c.charge_nr, c.item_id, c.menge_verfuegbar, c.einheit, c.mhd, c.wareneingang, i.name AS item_name, i.kategorie,
-                       lf.firma AS lieferant
+                       COALESCE(lf.firma, CONCAT('Produktion ', pa.nummer)) AS lieferant
                 FROM charge c JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten lf ON lf.id=c.lieferant_id
+                LEFT JOIN produktionsauftrag pa ON pa.id=c.pa_id
                 WHERE c.status='quarantaene' AND c.fremd_kunde_id IS NULL AND c.menge_verfuegbar>0" . ($item_id > 0 ? " AND c.item_id=" . (int)$item_id : "") . "
                 ORDER BY i.name, c.wareneingang DESC, c.id DESC");
 }

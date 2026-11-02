@@ -23,7 +23,7 @@ if (!$zeilen) {
 }
 ?>
 <div class="bx-tablewrap"><table class="bx-table lg-karten">
-  <thead><tr><th>Artikel</th><th>Charge</th><th>Lieferant</th><th>Eingang</th><th>MHD</th><th>Menge</th><th></th></tr></thead>
+  <thead><tr><th>Artikel</th><th>Charge</th><th>Lieferant / Herkunft</th><th>Eingang</th><th>MHD</th><th>Menge</th><th></th></tr></thead>
   <tbody>
   <?php foreach ($zeilen as $z): ?>
     <tr>

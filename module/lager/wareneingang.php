@@ -82,10 +82,12 @@ $such = trim((string)($_GET['such'] ?? ''));   // Suche nach Tracking-Code / Cha
 $nurQuar = !empty($_GET['quarantaene']);
 $quarItem = (int)($_GET['item'] ?? 0);
 if ($nurQuar) {
-    $charges = all("SELECT c.*, i.name AS item_name, i.kategorie AS item_kategorie, l.firma AS lieferant_firma
+    // Übersicht (Nacht 1b): nur Chargen mit Bestand; Herkunft = Lieferant ODER Produktionsauftrag (Fertigware wartet seit St-11d auf QM).
+    $charges = all("SELECT c.*, i.name AS item_name, i.kategorie AS item_kategorie, l.firma AS lieferant_firma, pa.nummer AS pa_nummer
                     FROM charge c LEFT JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id
-                    WHERE c.status='quarantaene' AND c.fremd_kunde_id IS NULL" . ($quarItem > 0 ? " AND c.item_id=" . $quarItem : "") . "
-                    ORDER BY i.name, c.angelegt DESC");
+                    LEFT JOIN produktionsauftrag pa ON pa.id=c.pa_id
+                    WHERE c.status='quarantaene' AND c.fremd_kunde_id IS NULL AND c.menge_verfuegbar>0" . ($quarItem > 0 ? " AND c.item_id=" . $quarItem : "") . "
+                    ORDER BY COALESCE(c.wareneingang, DATE(c.angelegt)) ASC, i.name");
 } elseif ($such !== '') {
     $like = '%' . $such . '%';
     $charges = all("SELECT c.*, i.name AS item_name, i.kategorie AS item_kategorie, l.firma AS lieferant_firma
@@ -314,21 +316,23 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
       <input type="text" name="such" value="<?= h($such) ?>" placeholder="Tracking-Code / Charge / Artikel suchen" style="width:280px">
       <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
       <?php if ($such !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=wareneingang">×</a><?php endif; ?>
-      <?php if (!$nurQuar): ?><a class="btn btn-ghost btn-sm" href="?p=wareneingang&quarantaene=1">Nur Quarantäne</a><?php else: ?><a class="btn btn-ghost btn-sm" href="?p=wareneingang">Alle Chargen</a><?php endif; ?>
+      <?php $nQuarAlle = (int) scalar("SELECT COUNT(*) FROM charge WHERE status='quarantaene' AND fremd_kunde_id IS NULL AND menge_verfuegbar>0"); ?>
+      <?php if (!$nurQuar): ?><a class="btn btn-ghost btn-sm" href="?p=wareneingang&quarantaene=1">Nur Quarantäne (<?= $nQuarAlle ?>)</a><?php else: ?><a class="btn btn-ghost btn-sm" href="?p=wareneingang">Alle Chargen</a><?php endif; ?>
     </form>
   </div>
   <?php if ($nurQuar): ?><div class="muted" style="font-size:13px;margin-top:6px">Alle Chargen, die noch auf die Freigabe warten<?= $quarItem > 0 ? ' (nur dieser Artikel)' : '' ?>. Nach „freigeben" zählt die Ware sofort als verfügbar. Freigeben darf nur QM oder Admin.<?= !empty($_GET['nurqm']) ? ' <strong style="color:#8f231b">Deine Rolle darf nicht freigeben.</strong>' : '' ?><?= $quarItem > 0 ? ' <a href="?p=wareneingang&quarantaene=1">alle Artikel zeigen</a>' : '' ?></div><?php endif; ?>
   <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
-    <thead><tr><th>Charge</th><th>Artikel</th><th class="bx-num">Menge</th><th>MHD</th><th>Lieferant</th><th>Tracking</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Charge</th><th>Artikel</th><th class="bx-num">Menge</th><th>Eingang</th><th>MHD</th><th>Lieferant / Herkunft</th><th>Tracking</th><th>Status</th><th></th></tr></thead>
     <tbody>
-    <?php if (!$charges): ?><tr><td colspan="8" class="muted"><?= $nurQuar ? 'Keine Ware in Quarantäne.' : ($such !== '' ? 'Kein Treffer zu „' . h($such) . '".' : 'Noch keine Chargen gebucht.') ?></td></tr><?php endif; ?>
+    <?php if (!$charges): ?><tr><td colspan="9" class="muted"><?= $nurQuar ? 'Keine Ware in Quarantäne.' : ($such !== '' ? 'Kein Treffer zu „' . h($such) . '".' : 'Noch keine Chargen gebucht.') ?></td></tr><?php endif; ?>
     <?php foreach ($charges as $c): $tc = array_values(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($c['tracking'] ?? ''))))); $au = $artikelUrl($c); ?>
       <tr<?= $au !== '' ? ' class="we-rowlink" data-href="' . h($au) . '" style="cursor:pointer"' : '' ?>>
         <td><?= h($c['charge_nr'] ?: '–') ?></td>
         <td><?php if ($au !== '' && ($c['item_name'] ?? '') !== ''): ?><a href="<?= h($au) ?>"><?= h($c['item_name']) ?></a><?php else: ?><?= h($c['item_name'] ?: '–') ?><?php endif; ?></td>
         <td class="bx-num"><?= $mng($c['menge_verfuegbar'], $c['einheit']) ?></td>
+        <td><?= !empty($c['wareneingang']) ? h(date('d.m.Y', strtotime((string)$c['wareneingang']))) : '<span class="muted">–</span>' ?></td>
         <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '<span class="muted">–</span>' ?></td>
-        <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
+        <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : (!empty($c['pa_nummer']) ? 'Produktion ' . h((string)$c['pa_nummer']) : '<span class="muted">–</span>') ?></td>
         <td><?php if (!$tc): ?><span class="muted">–</span><?php else: ?><span style="font-variant-numeric:tabular-nums"><?= h($tc[0]) ?></span><?php if (count($tc) > 1): ?> <span class="muted" style="font-size:11px" title="<?= h(implode(', ', $tc)) ?>">+<?= count($tc)-1 ?> Pakete</span><?php endif; ?><?php endif; ?></td>
         <td><?= $statusBadge($c['status']) ?></td>
         <td style="text-align:right">
