@@ -256,7 +256,7 @@ if ($schritt === 'match' && !empty($_SESSION['angebot_import'])) {
               <?php foreach ($verpOpt as $vp): ?><option value="<?= (int)$vp['id'] ?>" <?= (int)$pp['_glas'] === (int)$vp['id'] ? 'selected' : '' ?>><?= h($vp['name']) ?><?= (int)$pp['_glas'] === (int)$vp['id'] ? ' (Vorschlag)' : '' ?></option><?php endforeach; ?>
             </select>
           </div>
-          <div class="bx-field js-stueckwrap"><label>Stück je Packung <?= $pp['kapselgroesse'] ? '<span class="muted" style="font-weight:400">· Kapselgröße ' . h((string)$pp['kapselgroesse']) . '</span>' : '' ?> <?= bx_hint('Nur bei Verpackung/Dose – wie viele Stück in eine Packung. Bei Bulk (keine Verpackung) leer.') ?></label><input type="number" name="stueck[<?= $pi ?>]" value="<?= (int)$pp['stueck_je_packung'] ?>" min="0" style="max-width:140px"></div>
+          <div class="bx-field js-stueckwrap"><label>Stk je Packung <?= $pp['kapselgroesse'] ? '<span class="muted" style="font-weight:400">· Kapselgröße ' . h((string)$pp['kapselgroesse']) . '</span>' : '' ?> <?= bx_hint('Nur bei Verpackung/Dose – wie viele Stk in eine Packung. Bei Bulk (keine Verpackung) leer.') ?></label><input type="number" name="stueck[<?= $pi ?>]" value="<?= (int)$pp['stueck_je_packung'] ?>" min="0" style="max-width:140px"></div>
         </div>
         <div class="bx-field" style="margin-top:4px"><label>Beschreibung <span class="muted" style="font-weight:400">(erscheint unter der Position im Angebot)</span></label>
           <textarea name="beschreibung[<?= $pi ?>]" rows="<?= max(2, substr_count($beschVor, "\n") + 1) ?>" style="width:100%"><?= h($beschVor) ?></textarea></div>

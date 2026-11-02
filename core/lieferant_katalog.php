@@ -22,7 +22,7 @@ function katalog_felder(): array {
         'herkunft'      => 'Herkunftsland',
         'preis'         => 'Preis als Zahl, ohne Währung',
         'waehrung'      => 'Währung, z. B. EUR oder USD',
-        'einheit'       => 'Bezugsgröße des Preises: kg, g, L, Stück',
+        'einheit'       => 'Bezugsgröße des Preises: kg, g, L, Stk',
         'menge_ab'      => 'Ab welcher Menge dieser Preis gilt (Mindestmenge/MOQ) als Zahl',
         'notiz'         => 'Sonstiges in einem kurzen Satz',
     ];

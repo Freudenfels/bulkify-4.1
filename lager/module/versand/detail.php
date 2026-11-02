@@ -250,7 +250,7 @@ flash_zeigen();
 <?php if ($istNichtEu): ?>
 <div class="bx-panel" style="margin-bottom:var(--sp-5)">
   <h2 style="margin-top:0">Zoll (CN23) <span class="muted" style="font-weight:400;font-size:var(--fs-sm)">– Nicht-EU-Sendung</span></h2>
-  <p class="muted" style="margin:0 0 var(--sp-3)">Für <?= h(strtoupper((string)$v['empf_land'])) ?> braucht DHL je Position HS-Code (Zolltarifnummer) und Warenwert je Stück. Ursprungsland aus dem Artikel vorbelegt.</p>
+  <p class="muted" style="margin:0 0 var(--sp-3)">Für <?= h(strtoupper((string)$v['empf_land'])) ?> braucht DHL je Position HS-Code (Zolltarifnummer) und Warenwert je Stk. Ursprungsland aus dem Artikel vorbelegt.</p>
   <?php if (!$pos): ?>
     <div class="muted">Erst Positionen hinzufügen.</div>
   <?php else: ?>

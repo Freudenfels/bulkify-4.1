@@ -150,7 +150,7 @@ if (isset($_GET['stdvorhanden'])) echo '<div class="bx-panel" style="border-colo
             <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0">
               <input type="hidden" name="aktion" value="schritt_edit"><input type="hidden" name="schritt_id" value="<?= (int)$s['id'] ?>">
               <input type="text" name="name" value="<?= h((string)$s['name']) ?>" style="flex:1;min-width:160px" maxlength="120">
-              <input type="text" name="kosten" value="<?= h($nf4($s['interne_kosten_stk'] ?? null)) ?>" placeholder="–" style="width:90px;text-align:right" inputmode="decimal" title="Interne Kosten je Stück">
+              <input type="text" name="kosten" value="<?= h($nf4($s['interne_kosten_stk'] ?? null)) ?>" placeholder="–" style="width:90px;text-align:right" inputmode="decimal" title="Interne Kosten je Stk">
               <button class="btn btn-ghost btn-sm" type="submit" title="Umbenennen / Kosten speichern">speichern</button>
             </form>
           </td>

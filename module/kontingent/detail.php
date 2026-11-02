@@ -60,7 +60,7 @@ bx_head('Jahresvertrag', ($kunde['firma'] ?? '–') . ' · ' . (($prod['kundenna
       elseif (in_array($formK, ['pulver','granulat'], true))     { $epLabel = 'Füllmenge je Packung'; $epUnit = 'g'; }
       elseif (in_array($formK, ['kapsel','softgel'], true))      { $epLabel = 'Kapseln je Packung';   $epUnit = 'Kapseln'; }
       elseif ($formK === 'tablette')                             { $epLabel = 'Tabletten je Packung'; $epUnit = 'Tabletten'; }
-      else                                                        { $epLabel = 'Stück je Packung';     $epUnit = 'Stk'; }
+      else                                                        { $epLabel = 'Stk je Packung';     $epUnit = 'Stk'; }
       $zeilen = [
           ['Rezeptur', $rez ? h(($rez['nummer'] ?? '') . ' · ' . ($rez['name'] ?? '')) . ' <a href="?p=rezeptur_detail&id=' . (int)$rez['id'] . '" class="muted" style="font-size:12px">ansehen</a>' : '<span class="muted">–</span>'],
           ['Darreichungsform', $rez && $rez['darreichungsform'] ? h(ucfirst((string)$rez['darreichungsform'])) : '<span class="muted">–</span>'],

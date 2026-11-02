@@ -1955,7 +1955,7 @@ foreach ($portalAnfragen as $p) {
     $detailParts = [];
     if ($p['typ'] === 'produkt') {
         if ((int)($p['menge'] ?? 0))  $detailParts[] = (int)$p['menge'] . ' Packungen';
-        if ((int)($p['stueck'] ?? 0)) $detailParts[] = (int)$p['stueck'] . ' Stück/Pkg.';
+        if ((int)($p['stueck'] ?? 0)) $detailParts[] = (int)$p['stueck'] . ' Stk/Pkg.';
         if (!empty($p['verp_name']))  $detailParts[] = (string)$p['verp_name'];
         if (!empty($p['umkarton']))   $detailParts[] = 'Umkarton';
     }
@@ -2492,7 +2492,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   // Spaltenkopf der Zutaten an die gewählte Darreichungsform anpassen (Menge je Kapsel / pro Stick / pro Portion …).
   (function(){
     var sel=document.getElementById('pf_form'), hdr=document.getElementById('pf_mengehdr'); if(!sel||!hdr) return;
-    var MAP={kapsel:'Menge je Kapsel',softgel:'Menge je Softgel',tablette:'Menge je Tablette',stick:'Menge pro Stick',pulver:'Menge pro Portion',gummi:'Menge pro Stück',fluessig:'Menge pro Portion',gel:'Menge pro Portion',oel:'Menge pro Portion'};
+    var MAP={kapsel:'Menge je Kapsel',softgel:'Menge je Softgel',tablette:'Menge je Tablette',stick:'Menge pro Stick',pulver:'Menge pro Portion',gummi:'Menge pro Stk',fluessig:'Menge pro Portion',gel:'Menge pro Portion',oel:'Menge pro Portion'};
     function upd(){ hdr.textContent = MAP[sel.value] || 'Menge je Einheit'; }
     sel.addEventListener('change', upd); upd();
   })();
@@ -2743,7 +2743,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <thead><tr><th class="bx-num">Anzahl je Verpackung</th><th class="bx-num">Menge (Verpackungen)</th></tr></thead>
           <tbody>
           <?php foreach ($r['staffeln'] as $ps):
-            $proVp = $ps['stueck'] !== null ? number_format((int)$ps['stueck'],0,',','.') . ' Stück'
+            $proVp = $ps['stueck'] !== null ? number_format((int)$ps['stueck'],0,',','.') . ' Stk'
                    : ($ps['fuellmenge_g'] !== null ? rtrim(rtrim(number_format((float)$ps['fuellmenge_g'],2,',','.'),'0'),',') . ' g' : '–'); ?>
             <tr><td class="bx-num"><?= h($proVp) ?></td><td class="bx-num"><?= $ps['menge'] !== null ? number_format((int)$ps['menge'],0,',','.') : '–' ?></td></tr>
           <?php endforeach; ?>
@@ -3108,7 +3108,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         </div>
         <?php // Staffel-Tabelle (wie „Produkt anfragen"): je Zeile Größe (Anzahl/Füllmenge pro Packung) + Anzahl Verpackungen.
               //  Mehrere Zeilen = Staffelpreis-Anfrage. Handler liest st_anzahl[]/st_vpe[].
-              $pdAnzLbl = $prodIstFuell ? ('Füllmenge pro Verpackung (' . h($prodFuellEinheit) . ')') : ($prodForm === 'stick' ? 'Sticks je Verpackung' : 'Stück pro Verpackung');
+              $pdAnzLbl = $prodIstFuell ? ('Füllmenge pro Verpackung (' . h($prodFuellEinheit) . ')') : ($prodForm === 'stick' ? 'Sticks je Verpackung' : 'Stk pro Verpackung');
               $pdAnzPh  = $prodIstFuell ? ($prodFuellEinheit === 'ml' ? 'z. B. 250' : 'z. B. 200') : 'z. B. 120'; ?>
         <div style="margin-top:6px">
           <label style="display:block;margin-bottom:6px">Staffel <?= bx_hint('Fragen Sie mehrere Mengen auf einmal an: je Zeile die Größe (pro Packung) und die gewünschte Anzahl Verpackungen. Jede Zeile wird als eigener Staffelpreis gerechnet – z. B. 1.000 / 2.500 / 5.000 Packungen.') ?></label>
@@ -4872,7 +4872,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     </form>
   </details>
 
-  <h2 style="margin:20px 0 4px;font-size:16px">Bestand <span class="muted" style="font-weight:normal">· Gesamtbestand <?= $fpNf($fpGesamt) ?> Stück</span></h2>
+  <h2 style="margin:20px 0 4px;font-size:16px">Bestand <span class="muted" style="font-weight:normal">· Gesamtbestand <?= $fpNf($fpGesamt) ?> Stk</span></h2>
   <?php if (!$fp): ?>
     <div class="bx-panel"><div class="muted">Noch keine Produkte im Lager. Melden Sie oben ein Produkt an – nach dem Wareneingang erscheint hier der Bestand.</div></div>
   <?php else: ?>

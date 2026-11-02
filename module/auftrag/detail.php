@@ -564,9 +564,9 @@ $groesseLbl = produktion_groesse_label((int)$a['produkt_id']);
 $istFuellG = function_exists('form_groessen_einheit') && form_groessen_einheit((string)($rezeptur['darreichungsform'] ?? '')) === 'g';
 // Bulk-Mengen im Reiter Produktion (Freigeben/Reservieren/Zuweisen): Pulver wird in GRAMM geführt (wie Charge
 // und Reservierung), nicht in „Stück/Einheiten". Label = „g" + lesbarer kg/t-Hinweis; Stück-Formen bleiben „Stück".
-$bulkEinh = $istFuellG ? 'kg' : 'Stück';                       // Eingabe-Einheit der Bulk-Felder (Pulver = kg)
+$bulkEinh = $istFuellG ? 'kg' : 'Stk';                       // Eingabe-Einheit der Bulk-Felder (Pulver = kg)
 $bulkLes  = fn($v) => $istFuellG && function_exists('gewicht_lesbar') ? ' <span style="font-weight:normal">(' . gewicht_lesbar((float)$v, 'g') . ')</span>' : '';
-$bulkMng  = fn($v) => $istFuellG && function_exists('gewicht_lesbar') ? gewicht_lesbar((float)$v, 'g') : number_format((int)$v, 0, ',', '.') . ' Stück';
+$bulkMng  = fn($v) => $istFuellG && function_exists('gewicht_lesbar') ? gewicht_lesbar((float)$v, 'g') : number_format((int)$v, 0, ',', '.') . ' Stk';
 // Prefill-Wert eines Bulk-Mengenfelds: Pulver in kg (g/1000, lesbar), sonst Stück (ganzzahlig mit Tausenderpunkt).
 $bulkInput = fn($g) => $istFuellG ? rtrim(rtrim(number_format((float)$g / 1000, 3, ',', '.'), '0'), ',') : number_format((int)$g, 0, ',', '.');
 $bulkTaus  = $istFuellG ? '' : 'data-tausender';               // Tausender-JS ist ganzzahlig -> bei kg (Dezimal) weglassen
@@ -662,7 +662,7 @@ $kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCar
         echo '<div class="bx-card"><div class="k">Füllmenge je Packung</div><div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') . ' g' : $fehltCard('nicht gesetzt')) . '</div></div>';
         if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamt-Füllmenge</div><div class="v">' . ($gesamtStk >= 1000 ? rtrim(rtrim(number_format($gesamtStk / 1000, 3, ',', '.'), '0'), ',') . ' kg' : number_format($gesamtStk, 0, ',', '.') . ' g') . '</div></div>';
     } else {
-        echo '<div class="bx-card"><div class="k">Stück je Packung</div><div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') : $fehltCard('nicht gesetzt')) . '</div></div>';
+        echo '<div class="bx-card"><div class="k">Stk je Packung</div><div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') : $fehltCard('nicht gesetzt')) . '</div></div>';
         if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamtstückzahl</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
     }
     if ($groesseLbl !== '') { $grK = match((string)($rezeptur['darreichungsform'] ?? '')) { 'kapsel','softgel'=>'Kapselgröße', 'tablette'=>'Tablettenform', 'gummi','stick','pulver','gel','fluessig','oel'=>'Größe je Einheit', default=>'Größe/Form' };
@@ -692,8 +692,8 @@ $jvWarnung  = has_role('admin') && empty($a['kontingent_id']) && (string)$a['sta
 ?>
 <?php if ($jvWarnung): ?>
 <div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px;margin-bottom:16px">
-  <strong>Große Menge als Einzelauftrag: <?= number_format((int)$a['menge'],0,',','.') ?> Stück.</strong>
-  <div class="muted" style="font-size:13px;margin:4px 0 10px">Der Kunde ruft so große Mengen meist nicht auf einmal ab. Als <strong>Jahresvertrag/Kontingent</strong> geführt, entsteht Bedarf (Glas, Etiketten, Rohstoffe) nur je Abruf – nicht <?= number_format((int)$a['menge'],0,',','.') ?> Stück auf einmal.</div>
+  <strong>Große Menge als Einzelauftrag: <?= number_format((int)$a['menge'],0,',','.') ?> Stk.</strong>
+  <div class="muted" style="font-size:13px;margin:4px 0 10px">Der Kunde ruft so große Mengen meist nicht auf einmal ab. Als <strong>Jahresvertrag/Kontingent</strong> geführt, entsteht Bedarf (Glas, Etiketten, Rohstoffe) nur je Abruf – nicht <?= number_format((int)$a['menge'],0,',','.') ?> Stk auf einmal.</div>
   <form method="post" style="margin:0" onsubmit="return confirm('Auftrag <?= h($a['nummer']) ?> in ein Kontingent umwandeln? Der Auftrag wird storniert; produziert wird über die Abrufe.');">
     <input type="hidden" name="aktion" value="zu_kontingent">
     <button class="btn btn-primary btn-sm" type="submit" data-busy="Wandle um…">Zu Kontingent (Jahresvertrag) machen</button>

@@ -520,7 +520,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
 <?php if (!$neu): ?>
 <div class="bx-panel js-mfg" data-ppanel="preise">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
-    <h2 style="margin:0">Preis-Matrix <?= bx_hint('automatische VK-Kalkulation: Packungsgröße (Stück, Gramm bei Pulver, Milliliter bei Flüssig) × passende Verpackung × Bestellmenge. VK = EK (Rezeptur + Kapsel/Presshilfsstoffe/Trägerflüssigkeit) × Marge je Typ, ohne Kundenrabatt. Interne Sale-Auskunft.') ?></h2>
+    <h2 style="margin:0">Preis-Matrix <?= bx_hint('automatische VK-Kalkulation: Packungsgröße (Stk, Gramm bei Pulver, Milliliter bei Flüssig) × passende Verpackung × Bestellmenge. VK = EK (Rezeptur + Kapsel/Presshilfsstoffe/Trägerflüssigkeit) × Marge je Typ, ohne Kundenrabatt. Interne Sale-Auskunft.') ?></h2>
     <form method="post" style="margin:0"><input type="hidden" name="aktion" value="matrix"><button class="btn btn-primary btn-sm" type="submit">Matrix neu berechnen</button></form>
   </div>
   <?php if (isset($_GET['matrix'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-top:10px"><?= (int)$_GET['matrix'] ?> Preiszeilen berechnet.</div><?php endif; ?>
@@ -574,7 +574,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
     <div class="bx-field" style="margin:0;width:100px"><label>ab Menge</label><input type="number" name="zk_menge_ab" value="0"></div>
     <div class="bx-field" style="margin:0;width:110px"><label>Preis</label><input type="number" step="0.0001" name="zk_preis" required></div>
     <?php $zkHw = (int)($p['handelsware'] ?? 0) === 1; ?>
-    <div class="bx-field" style="margin:0;width:150px"><label>je</label><select name="zk_einheit"><option value="packung" <?= $zkHw ? 'selected' : '' ?>>Packung (fertige Ware)</option><option value="kapsel" <?= $zkHw ? '' : 'selected' ?>>Kapsel / Stück (lose)</option></select></div>
+    <div class="bx-field" style="margin:0;width:150px"><label>je</label><select name="zk_einheit"><option value="packung" <?= $zkHw ? 'selected' : '' ?>>Packung (fertige Ware)</option><option value="kapsel" <?= $zkHw ? '' : 'selected' ?>>Kapsel / Stk (lose)</option></select></div>
     <div class="bx-field" style="margin:0;width:120px"><label>Incoterm</label><select name="zk_incoterm"><option value="">–</option><?php foreach (incoterm_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($k) ?></option><?php endforeach; ?></select></div>
     <div class="bx-field" style="margin:0;width:120px"><label>Versand</label><select name="zk_versandart"><option value="">–</option><?php foreach (versandart_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
     <button class="btn btn-ghost btn-sm" type="submit">Preis hinzufügen</button>
@@ -792,7 +792,7 @@ recalc();
   <h2 style="margin-top:0">Kundenpreise <?= bx_hint('Vereinbarter VK je Packung (ohne Verpackung) pro Kunde. Sobald hier ein Preis steht, sieht DIESER Kunde das Produkt in seinem Portal mit „ab xy €" statt „Preis auf Anfrage". Mehrere Zeilen je Kunde möglich – der günstigste Preis ist der „ab"-Preis.') ?></h2>
   <?php if (isset($_GET['kpok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Kundenpreis gespeichert.</div><?php endif; ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Kunde</th><th class="bx-num">Kapseln/Stück je Verpackung</th><th class="bx-num">Anzahl Verpackungen</th><th class="bx-num">Preis je Verpackung</th><th>Notiz</th><th></th></tr></thead>
+    <thead><tr><th>Kunde</th><th class="bx-num">Kapseln/Stk je Verpackung</th><th class="bx-num">Anzahl Verpackungen</th><th class="bx-num">Preis je Verpackung</th><th>Notiz</th><th></th></tr></thead>
     <tbody>
       <?php if (!$kundenpreise): ?><tr><td colspan="6" class="muted">Noch keine Kundenpreise. Unten eintragen – danach sieht der Kunde „ab xy €" im Portal.</td></tr><?php endif; ?>
       <?php foreach ($kundenpreise as $kp): ?>
@@ -811,7 +811,7 @@ recalc();
     <input type="hidden" name="aktion" value="kp_add">
     <div class="bx-field" style="margin:0;min-width:200px"><label>Kunde</label>
       <select name="kp_kunde" required><option value="">– wählen –</option><?php foreach ($kunden as $kc): ?><option value="<?= (int)$kc['id'] ?>" <?= (int)($p['kunde_id'] ?? 0)===(int)$kc['id']?'selected':'' ?>><?= h($kc['firma']) ?></option><?php endforeach; ?></select></div>
-    <div class="bx-field" style="margin:0;width:150px"><label>Kapseln/Stück je Verpackung</label><input type="number" min="0" step="1" name="kp_menge" placeholder="z. B. 120"></div>
+    <div class="bx-field" style="margin:0;width:150px"><label>Kapseln/Stk je Verpackung</label><input type="number" min="0" step="1" name="kp_menge" placeholder="z. B. 120"></div>
     <div class="bx-field" style="margin:0;width:140px"><label>Anzahl Verpackungen</label><input type="text" name="kp_anzahl" placeholder="z. B. 1.490"></div>
     <div class="bx-field" style="margin:0;width:130px"><label>Preis je Verpackung (€)</label><input type="text" name="kp_preis" required placeholder="z. B. 4,05"></div>
     <div class="bx-field" style="margin:0;width:170px"><label>Notiz (optional)</label><input type="text" name="kp_notiz" placeholder="z. B. ohne Verpackung"></div>

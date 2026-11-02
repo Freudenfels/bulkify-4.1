@@ -123,7 +123,7 @@ flash_zeigen();
           </select>
         </div>
         <div class="bx-field" style="margin:0"><label>Einheit</label>
-          <input type="text" name="neu_einheit" id="weNeuEinheit" placeholder="z. B. kg, Stück, L" style="max-width:160px">
+          <input type="text" name="neu_einheit" id="weNeuEinheit" placeholder="z. B. kg, Stk, L" style="max-width:160px">
         </div>
       </div>
     </div>

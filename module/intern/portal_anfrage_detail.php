@@ -189,7 +189,7 @@ $angPreiseHtml = function(int $agId) use ($kidPreis, $eurP) {
     }
     if (!$zeilen) return '<div class="muted" style="font-size:12px;margin:4px 0 0">Noch keine Preise hinterlegt – der Kunde sieht „Preis wird finalisiert".</div>';
     $h = '<div class="bx-tablewrap" style="margin:6px 0 2px"><table class="bx-table" style="margin:0">'
-       . '<thead><tr><th class="bx-num">Packungen</th><th class="bx-num">Stück/Pkg</th><th class="bx-num">Preis / Packung</th><th class="bx-num">Gesamt netto</th></tr></thead><tbody>';
+       . '<thead><tr><th class="bx-num">Packungen</th><th class="bx-num">Stk/Pkg</th><th class="bx-num">Preis / Packung</th><th class="bx-num">Gesamt netto</th></tr></thead><tbody>';
     foreach ($zeilen as $z) {
         $h .= '<tr><td class="bx-num">' . number_format($z['menge'], 0, ',', '.') . '</td>'
             . '<td class="bx-num">' . ($z['stueck'] > 0 ? number_format($z['stueck'], 0, ',', '.') : '–') . '</td>'
@@ -261,14 +261,14 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
       <tr><td>Staffel (Kundenwunsch)</td><td>
         <table class="bx-table" style="margin:0"><thead><tr><th>Anzahl pro Verpackung</th><th class="bx-num">Menge (VPE)</th></tr></thead><tbody>
           <?php foreach ($paStaffel as $ps): ?>
-            <tr><td><?= $ps['fuellmenge_g'] ? $mg($ps['fuellmenge_g']) . ' ' . h($fEinheit) : ((int)$ps['stueck'] ? (int)$ps['stueck'] . ' Stück' : '–') ?></td>
+            <tr><td><?= $ps['fuellmenge_g'] ? $mg($ps['fuellmenge_g']) . ' ' . h($fEinheit) : ((int)$ps['stueck'] ? (int)$ps['stueck'] . ' Stk' : '–') ?></td>
                 <td class="bx-num"><?= (int)$ps['menge'] ? number_format((int)$ps['menge'], 0, ',', '.') : '–' ?></td></tr>
           <?php endforeach; ?>
         </tbody></table>
       </td></tr>
       <tr><td>Verpackungstyp</td><td><?= $vtypEdit() ?></td></tr>
       <?php else: ?>
-      <tr><td>Größe je Packung</td><td><?= $pa['fuellmenge_g'] ? $mg($pa['fuellmenge_g']) . ' ' . h($fEinheit) : ($pa['stueck'] ? (int)$pa['stueck'] . ' Stück' : '–') ?></td></tr>
+      <tr><td>Größe je Packung</td><td><?= $pa['fuellmenge_g'] ? $mg($pa['fuellmenge_g']) . ' ' . h($fEinheit) : ($pa['stueck'] ? (int)$pa['stueck'] . ' Stk' : '–') ?></td></tr>
       <tr><td>Verpackungstyp</td><td><?= $vtypEdit() ?></td></tr>
       <tr><td>Anzahl Packungen</td><td><?= $pa['menge'] ? number_format((int)$pa['menge'], 0, ',', '.') : '–' ?></td></tr>
       <?php endif; ?>

@@ -108,7 +108,7 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
     <div id="l2Neu" hidden>
       <div class="muted" style="margin-bottom:8px">Neuer Artikel „<span id="l2NeuName"></span>" wird als <strong id="l2NeuTyp">–</strong> angelegt. Einheit festlegen:</div>
       <div class="bx-field" style="margin:0"><label>Einheit</label>
-        <input type="text" name="neu_einheit" id="l2NeuEinheit" placeholder="z. B. Stück, kg" style="max-width:160px">
+        <input type="text" name="neu_einheit" id="l2NeuEinheit" placeholder="z. B. Stk, kg" style="max-width:160px">
       </div>
     </div>
 

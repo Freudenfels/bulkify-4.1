@@ -564,7 +564,7 @@ if ($ohneFestlegung): ?>
       if (sel.value && opt && opt.dataset.preis){ preis=parseFloat(opt.dataset.preis); cur=opt.dataset.cur||'EUR'; praefix=''; }
       else { preis=parseFloat(sel.dataset.ab||''); cur=sel.dataset.abcur||'EUR'; praefix='ab '; }
       if (!isFinite(preis)){ sum.textContent=''; return; }
-      var einh = sel.dataset.einheit || 'Stück';
+      var einh = sel.dataset.einheit || 'Stk';
       sum.textContent = praefix + fmt(preis,4) + ' ' + cur + '/' + einh + ' · Summe ' + fmt(preis*m,2) + ' ' + cur;
     }
     sel.addEventListener('change', upd);

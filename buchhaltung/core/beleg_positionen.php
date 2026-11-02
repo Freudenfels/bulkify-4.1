@@ -79,7 +79,7 @@ function beleg_positionen_aus_angebot(int $beleg_id): array {
     // Beschreibung macht den Festpreis je Packung transparent (Verpackung + Etikett sind im Packungspreis enthalten).
     $teile = [];
     $stk = (int)($auf['stueck'] ?? 0);
-    if ($stk > 0) $teile[] = $stk . ' Stück je Packung';
+    if ($stk > 0) $teile[] = $stk . ' Stk je Packung';
     $teile[] = 'fertig abgefüllt & etikettiert';
     q("INSERT INTO beleg_position (beleg_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,mwst_satz)
        VALUES (?,?,?,?,?,?,?,?,?)",

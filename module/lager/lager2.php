@@ -98,7 +98,7 @@ if (!$ffKunden) {
             <?php if ($r['bsku']): ?><span style="font-family:monospace;font-weight:600"><?= h($r['bsku']) ?></span>
             <?php else: ?><button class="btn btn-ghost btn-sm" type="submit" form="bsku<?= (int)$r['item_id'] ?>">BSKU vergeben</button><?php endif; ?>
           </td>
-          <td class="bx-num"><strong><?= $mfmt($r['bestand']) ?></strong> Stück</td>
+          <td class="bx-num"><strong><?= $mfmt($r['bestand']) ?></strong> Stk</td>
         </tr>
       <?php endforeach; ?>
     </tbody>
@@ -150,7 +150,7 @@ if (!$ffKunden) {
           <?php foreach ($ffProdukte as $p): ?><option value="<?= (int)$p['id'] ?>"><?= h($p['kunde']) ?> · <?= h($p['anzeigename']) ?> (<?= h($p['nummer']) ?>)</option><?php endforeach; ?>
         </select>
       </div>
-      <div class="bx-field"><label>Menge (Stück)</label><input type="number" step="1" min="1" name="menge" required placeholder="z. B. 500"></div>
+      <div class="bx-field"><label>Menge (Stk)</label><input type="number" step="1" min="1" name="menge" required placeholder="z. B. 500"></div>
       <div class="bx-field"><label>Charge (optional)</label><input type="text" name="charge" placeholder="z. B. BF26801"></div>
       <div class="bx-field"><label>MHD (optional)</label><input type="date" name="mhd"></div>
     </div>

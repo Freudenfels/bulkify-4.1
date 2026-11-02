@@ -244,7 +244,7 @@ if ($bedarf && $weg['basis'] !== 'zukauf'): $sumMg = 0.0; foreach ($bedarf as $b
   <?php $tm = erp_teilmenge_machbar($id); ?>
   <div style="margin-top:12px;font-size:13px;padding:9px 12px;border-radius:8px;background:var(--panel-2);border-left:3px solid <?= $tm['sperre'] !== '' ? '#b23b2f' : 'var(--gruen)' ?>">
     <?php if ($tm['sperre'] !== ''): ?><strong style="color:#8f231b">Gesperrt:</strong> <?= h($tm['sperre']) ?>
-    <?php else: ?><strong>Jetzt machbar:</strong> <?= number_format($tm['komplett'], 0, ',', '.') ?> Stück komplett fertig<?= $tm['komplett'] < $tm['rest'] && $tm['limit'] !== '' ? ' <span class="muted">(begrenzt durch ' . h($tm['limit']) . ')</span>' : '' ?><?php if ($tm['vor_etikett'] > $tm['komplett']): ?> · bis vor dem Etikettieren <?= number_format($tm['vor_etikett'], 0, ',', '.') ?> Stück<?php endif; ?>
+    <?php else: ?><strong>Jetzt machbar:</strong> <?= number_format($tm['komplett'], 0, ',', '.') ?> Stk komplett fertig<?= $tm['komplett'] < $tm['rest'] && $tm['limit'] !== '' ? ' <span class="muted">(begrenzt durch ' . h($tm['limit']) . ')</span>' : '' ?><?php if ($tm['vor_etikett'] > $tm['komplett']): ?> · bis vor dem Etikettieren <?= number_format($tm['vor_etikett'], 0, ',', '.') ?> Stk<?php endif; ?>
     <?php endif; ?>
   </div>
   <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:14px" onsubmit="return confirm('Teilmenge jetzt produzieren? Rohstoffe, Behälter, Deckel und Etikett werden anteilig abgebucht und als Fertigware-Charge eingebucht.');">

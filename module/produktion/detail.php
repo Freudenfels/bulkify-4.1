@@ -29,7 +29,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
         trim((string)($_POST['mhd'] ?? '')) ?: null, (string)($_POST['notiz'] ?? ''));
     if ($r['ok']) {
         $paT = one("SELECT nummer, kunde_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$id]);
-        if ($paT && $paT['kunde_id']) log_aktivitaet('kunde', (int)$paT['kunde_id'], 'team', 'Produktion ' . $paT['nummer'] . ': Teilmenge ' . number_format((float)$_POST['menge'], 0, ',', '.') . ' Stück als Charge ' . $r['charge_nr'] . ' eingebucht.', 'auftrag', 'auftrag', (int)$paT['auftrag_id']);
+        if ($paT && $paT['kunde_id']) log_aktivitaet('kunde', (int)$paT['kunde_id'], 'team', 'Produktion ' . $paT['nummer'] . ': Teilmenge ' . number_format((float)$_POST['menge'], 0, ',', '.') . ' Stk als Charge ' . $r['charge_nr'] . ' eingebucht.', 'auftrag', 'auftrag', (int)$paT['auftrag_id']);
         header('Location: ?p=produktionsauftrag&id=' . $id . '&teil=' . urlencode($r['charge_nr'])); exit;
     }
     header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode($r['msg'])); exit;
@@ -525,7 +525,7 @@ ob_start(); ?>
   <h2>Fertigware eingebucht</h2>
   <div class="bx-row" style="justify-content:space-between;margin-bottom:10px">
     <div><strong><?= h($fertigware['name']) ?></strong> · <?= h($fertigware['artikelnummer']) ?></div>
-    <div><?= bx_badge(number_format($fwGebucht,0,',','.') . ' von ' . number_format((float)$pa['menge'],0,',','.') . ' Stück gebucht', $fwRest > 0 ? 'warn' : 'ok') ?> <a class="btn btn-ghost btn-sm" href="?p=lager&kat=verkaufsfertig">zum Lager</a></div>
+    <div><?= bx_badge(number_format($fwGebucht,0,',','.') . ' von ' . number_format((float)$pa['menge'],0,',','.') . ' Stk gebucht', $fwRest > 0 ? 'warn' : 'ok') ?> <a class="btn btn-ghost btn-sm" href="?p=lager&kat=verkaufsfertig">zum Lager</a></div>
   </div>
   <div style="overflow-x:auto"><table class="bx-table">
     <thead><tr><th>Charge</th><th>Gebucht</th><th>Im Lager</th><th>MHD</th><th>Eingebucht am</th><th>Status</th></tr></thead>
@@ -561,18 +561,18 @@ ob_start(); ?>
   <p class="muted" style="margin-top:0">Wird an mehreren Tagen produziert, kann jede fertige Teilmenge sofort als eigene Charge ins Lager
     (<?= h(charge_naechste_nr($id)) ?> ist die nächste Nummer). Das Material (Rohstoffe, Kapseln, Behälter, Deckel, Etikett) wird <strong>anteilig</strong>
     abgebucht und vorher geprüft; beim Abschluss des Auftrags wird nur noch der Rest gebucht.
-    Noch offen: <strong><?= number_format($fwRest,0,',','.') ?> Stück</strong>.</p>
+    Noch offen: <strong><?= number_format($fwRest,0,',','.') ?> Stk</strong>.</p>
   <?php $tmM = produktion_teilmenge_machbar($id); $tmSperre = produktion_etikett_sperre($id); ?>
   <div class="bx-panel" style="background:var(--panel-2);padding:10px 14px;margin:0 0 12px;border-left:3px solid <?= $tmSperre !== '' ? '#b23b2f' : 'var(--gruen,#1D9E75)' ?>">
     <?php if ($tmSperre !== ''): ?><strong style="color:#8f231b">Gesperrt:</strong> <?= h($tmSperre) ?>
     <?php else: ?>
-      <strong>Jetzt machbar:</strong> <?= number_format($tmM['komplett'], 0, ',', '.') ?> Stück komplett fertig<?= $tmM['komplett'] < $tmM['rest'] && $tmM['limit_komplett'] !== '' ? ' <span class="muted">(begrenzt durch ' . h((string)$tmM['limit_komplett']) . ')</span>' : '' ?>
-      <?php if ($tmM['vor_etikett'] > $tmM['komplett']): ?> · bis vor dem Etikettieren <?= number_format($tmM['vor_etikett'], 0, ',', '.') ?> Stück<?php endif; ?>
+      <strong>Jetzt machbar:</strong> <?= number_format($tmM['komplett'], 0, ',', '.') ?> Stk komplett fertig<?= $tmM['komplett'] < $tmM['rest'] && $tmM['limit_komplett'] !== '' ? ' <span class="muted">(begrenzt durch ' . h((string)$tmM['limit_komplett']) . ')</span>' : '' ?>
+      <?php if ($tmM['vor_etikett'] > $tmM['komplett']): ?> · bis vor dem Etikettieren <?= number_format($tmM['vor_etikett'], 0, ',', '.') ?> Stk<?php endif; ?>
     <?php endif; ?>
   </div>
   <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
     <input type="hidden" name="aktion" value="teilmenge">
-    <div class="bx-field" style="margin:0;max-width:160px"><label>Menge (Stück)</label>
+    <div class="bx-field" style="margin:0;max-width:160px"><label>Menge (Stk)</label>
       <input type="number" name="menge" min="1" max="<?= (int)$fwRest ?>" step="1" required></div>
     <div class="bx-field" style="margin:0;max-width:180px"><label>MHD <?= bx_hint('Leer = heute + Standardmonate aus den Einstellungen.') ?></label>
       <input type="date" name="mhd" value="<?= h(mhd_standard()) ?>"></div>
@@ -640,9 +640,9 @@ ob_start(); ?>
       <?php if ($kapNeed): $okK = $kapNeed['fehlt'] <= 0.0001; ?>
         <tr>
           <td><?= h($kapNeed['name']) ?> <?= bx_badge('Kapselhülle','info') ?></td>
-          <td class="bx-num"><?= number_format($kapNeed['benoetigt'],0,',','.') ?> Stück</td>
-          <td class="bx-num"><?= number_format($kapNeed['verfuegbar'],0,',','.') ?> Stück</td>
-          <td><?= $okK ? bx_badge('genug','ok') : ($erl ? bx_badge('nicht gebucht','info') : bx_badge('fehlt ' . number_format($kapNeed['fehlt'],0,',','.') . ' Stück','err')) ?></td>
+          <td class="bx-num"><?= number_format($kapNeed['benoetigt'],0,',','.') ?> Stk</td>
+          <td class="bx-num"><?= number_format($kapNeed['verfuegbar'],0,',','.') ?> Stk</td>
+          <td><?= $okK ? bx_badge('genug','ok') : ($erl ? bx_badge('nicht gebucht','info') : bx_badge('fehlt ' . number_format($kapNeed['fehlt'],0,',','.') . ' Stk','err')) ?></td>
         </tr>
       <?php endif; ?>
       </tbody>
@@ -697,7 +697,7 @@ if ($bedarfListe):
   <?php $bulkResv = $pa['auftrag_id'] ? auftrag_bulk_reserviert_stueck((int)$pa['auftrag_id']) : 0.0;
         if ($bulkResv > 0): ?>
     <div style="background:var(--panel-2);border-radius:8px;padding:8px 12px;margin-top:10px;font-size:13px">
-      Mix-Produktion: <strong><?= number_format($bulkResv, 0, ',', '.') ?> Stück</strong> sind als fertige Bulkware (Zukauf) reserviert – Rohstoff- &amp; Leerkapselbedarf unten gelten nur für den <strong>selbst produzierten</strong> Teil. Verpackung &amp; Etikett bleiben für die volle Menge.
+      Mix-Produktion: <strong><?= number_format($bulkResv, 0, ',', '.') ?> Stk</strong> sind als fertige Bulkware (Zukauf) reserviert – Rohstoff- &amp; Leerkapselbedarf unten gelten nur für den <strong>selbst produzierten</strong> Teil. Verpackung &amp; Etikett bleiben für die volle Menge.
     </div>
   <?php endif; ?>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">

@@ -285,7 +285,7 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
       if(normalAuf) normalAuf.disabled=true;
       if(zukaufAuf){ zukaufAuf.disabled=false; zukaufAuf.required=true; }
       aktionEl.value='zukauf_buchen';
-      setEinheit(''); if(einhHint) einhHint.textContent='Menge in Stück (Bulk / Kapseln) eingeben.';
+      setEinheit(''); if(einhHint) einhHint.textContent='Menge in Stk (Bulk / Kapseln) eingeben.';
     } else {
       curKat=t;
       blockArt.style.display=''; blockFuerAuf.style.display=''; blockAuf.style.display='none';

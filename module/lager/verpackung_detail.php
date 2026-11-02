@@ -242,7 +242,7 @@ if (!$neu) {
           <?php endforeach; ?>
         </select>
       </div>
-      <div class="bx-field"><label>EK je Stück <?= bx_hint('ergibt sich automatisch aus der niedrigsten Staffelstufe unten') ?></label><input type="text" value="<?= $it['ek_preis'] !== null && $it['ek_preis'] !== '' ? number_format((float)$it['ek_preis'],4,',','.') . ' €' : '–' ?>" disabled></div>
+      <div class="bx-field"><label>EK je Stk <?= bx_hint('ergibt sich automatisch aus der niedrigsten Staffelstufe unten') ?></label><input type="text" value="<?= $it['ek_preis'] !== null && $it['ek_preis'] !== '' ? number_format((float)$it['ek_preis'],4,',','.') . ' €' : '–' ?>" disabled></div>
     </div>
     <p class="muted" style="font-size:12px">Der Einkaufspreis wird über die Mengenstaffel gepflegt; der effektive EK je Bestellmenge kommt automatisch aus der passenden Stufe.</p>
     </div>
@@ -260,7 +260,7 @@ if (!$neu) {
       <div style="font-weight:600;margin:12px 0 6px">Effektiver VK je Bestellmenge</div>
       <?php if ($ekstaffel): ?>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th class="bx-num">ab Bestellmenge (Stück)</th><th class="bx-num">EK je Stück</th><th class="bx-num">VK je Stück</th><th>Quelle</th></tr></thead>
+        <thead><tr><th class="bx-num">ab Bestellmenge (Stk)</th><th class="bx-num">EK je Stk</th><th class="bx-num">VK je Stk</th><th>Quelle</th></tr></thead>
         <tbody>
           <?php foreach ($ekstaffel as $er): $ek=(float)$er['ek_preis']; $mab=(int)$er['menge_ab'];
               $ovr = scalar("SELECT vk_preis FROM pack_vk_staffel WHERE item_id=? AND menge_ab<=? ORDER BY menge_ab DESC LIMIT 1", [(int)$id, $mab]);
@@ -307,7 +307,7 @@ if (!$neu) {
       <div style="font-weight:600;margin:12px 0 6px">Kapseln je Kapselgröße</div>
       <p class="muted" style="margin-top:0;font-size:12px">Nur ausfüllen, was du weißt (0/leer = passt nicht). Basis für die Verpackungs-Zuordnung bei Kapsel-Produkten.</p>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Kapselgröße</th><th class="bx-num">Füllmenge</th><th class="bx-num">passt so viele Stück rein</th></tr></thead>
+        <thead><tr><th>Kapselgröße</th><th class="bx-num">Füllmenge</th><th class="bx-num">passt so viele Stk rein</th></tr></thead>
         <tbody>
           <?php foreach ($KAPSELN as $kg): ?>
           <tr>
@@ -397,7 +397,7 @@ if (!$neu) {
       <h2 style="margin-top:0">Mengenstaffel (EK)</h2>
       <p class="muted" style="margin-top:0">EK-Preis dieses Gebindes je Bestellmenge (mehr = günstiger). Basis für die automatische VK-Preismatrix der Produkte. Leer = flacher EK aus den Stammdaten.</p>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Lieferant</th><th class="bx-num">ab Bestellmenge (Stück)</th><th class="bx-num">EK je Gebinde (€)</th></tr></thead>
+        <thead><tr><th>Lieferant</th><th class="bx-num">ab Bestellmenge (Stk)</th><th class="bx-num">EK je Gebinde (€)</th></tr></thead>
         <tbody id="ekrows">
           <?php $erows = $ekstaffel ?: [['menge_ab'=>'','ek_preis'=>'','lieferant_id'=>null]]; foreach ($erows as $er): ?>
           <tr>
@@ -422,7 +422,7 @@ if (!$neu) {
       <h2 style="margin-top:0">Verkaufspreis von Hand (VK-Staffel)</h2>
       <p class="muted" style="margin-top:0">Optionaler <strong>direkter VK</strong> je Bestellmenge – überschreibt die Aufschlags-Rechnung oben. Leer lassen = VK = EK × Aufschlag.</p>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th class="bx-num">ab Bestellmenge (Stück)</th><th class="bx-num">VK je Gebinde (€)</th></tr></thead>
+        <thead><tr><th class="bx-num">ab Bestellmenge (Stk)</th><th class="bx-num">VK je Gebinde (€)</th></tr></thead>
         <tbody id="vkrows">
           <?php $vrows = $vkstaffel ?: [['menge_ab'=>'','vk_preis'=>'']]; foreach ($vrows as $vr): ?>
           <tr>

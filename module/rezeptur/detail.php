@@ -441,7 +441,7 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
       <div class="bx-card"><div class="k">Gesamtgewicht</div><div class="v" id="k_gewicht">–</div></div>
       <?php if ($istKapselForm): ?><div class="bx-card"><div class="k">Kapselgröße</div><div class="v" id="k_kapsel" style="font-size:16px">–</div></div><?php endif; ?>
       <div class="bx-card"><div class="k">Kosten / Einheit</div><div class="v" id="k_kosten">–</div></div>
-      <div class="bx-card"><div class="k">Kosten / 1.000 Stück</div><div class="v" id="k_kosten1000">–</div></div>
+      <div class="bx-card"><div class="k">Kosten / 1.000 Stk</div><div class="v" id="k_kosten1000">–</div></div>
     </div>
 
     <div style="font-weight:600;margin-bottom:8px">Inhaltsstoffe (wie auf dem Etikett)</div>
@@ -495,14 +495,14 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
       <?php foreach (['p'=>'rezeptur_detail','id'=>(int)$id] as $kk=>$vv): ?><input type="hidden" name="<?= h($kk) ?>" value="<?= h((string)$vv) ?>"><?php endforeach; ?>
       <label class="muted" style="font-size:13px">Staffel bei</label>
       <input type="number" name="kalk_stueck" value="<?= (int)$mkBatch ?>" min="1" step="100" style="width:110px;text-align:right">
-      <span class="muted" style="font-size:13px">Stück</span>
+      <span class="muted" style="font-size:13px">Stk</span>
       <button class="btn btn-ghost btn-sm" type="submit">neu rechnen</button>
     </form>
   </div>
   <div class="bx-cards" style="margin:12px 0 16px">
     <div class="bx-card"><div class="k">Gesamt-Einwaage / Einheit</div><div class="v"><?= $mgTxt($ewMg) ?> mg <span class="muted" style="font-size:14px">· <?= $mgTxt($ewMg/1000) ?> g</span></div></div>
     <div class="bx-card"><div class="k">Materialkosten / Einheit</div><div class="v"><?= $mk['kosten'] > 0 ? $eur4($mk['kosten']) . ' €' : '–' ?></div></div>
-    <div class="bx-card"><div class="k">pro 1.000 Stück</div><div class="v"><?= $mk['kosten'] > 0 ? $eur2($mk['kosten'] * 1000) . ' €' : '–' ?></div></div>
+    <div class="bx-card"><div class="k">pro 1.000 Stk</div><div class="v"><?= $mk['kosten'] > 0 ? $eur2($mk['kosten'] * 1000) . ' €' : '–' ?></div></div>
   </div>
   <table class="bx-table">
     <thead><tr><th>Rohstoff</th><th class="bx-num">Menge / Einheit</th><th class="bx-num">EK (Lieferant)</th><th class="bx-num">Kosten / Einheit</th></tr></thead>
@@ -519,7 +519,7 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
     </tbody>
   </table>
   <p class="muted" style="font-size:12px;margin-top:8px">
-    Gesamt-Einwaage = Summe aller Zutaten je Einheit (= Füllmenge pro Portion). Kosten = je Rohstoff <em>EK/kg × Menge</em>, mit der günstigsten passenden Lieferanten-Staffel bei <?= number_format($mkBatch,0,',','.') ?> Stück Produktionsmenge.<?php if ((int)$mk['ohne_preis'] > 0): ?> <span style="color:var(--warn)"><?= (int)$mk['ohne_preis'] ?> Zutat(en) ohne hinterlegten Lieferantenpreis – diese fehlen in den Materialkosten.</span><?php endif; ?>
+    Gesamt-Einwaage = Summe aller Zutaten je Einheit (= Füllmenge pro Portion). Kosten = je Rohstoff <em>EK/kg × Menge</em>, mit der günstigsten passenden Lieferanten-Staffel bei <?= number_format($mkBatch,0,',','.') ?> Stk Produktionsmenge.<?php if ((int)$mk['ohne_preis'] > 0): ?> <span style="color:var(--warn)"><?= (int)$mk['ohne_preis'] ?> Zutat(en) ohne hinterlegten Lieferantenpreis – diese fehlen in den Materialkosten.</span><?php endif; ?>
   </p>
 </div>
 
@@ -694,7 +694,7 @@ document.getElementById('bxDocOverlay').addEventListener('click', function(e){ i
 <div class="bx-panel">
   <h2 style="margin-top:0">Kundenpreise <?= bx_hint('Welcher Kunde zu welchem Datum welchen VK je Packung für diese Rezeptur hatte – u. a. aus dem Angebotsscan (System → Angebotsscan).') ?></h2>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Kunde</th><th class="bx-num">VK je Packung</th><th class="bx-num">Stück/Pck.</th><th class="bx-num">Menge</th><th>Datum</th><th>Quelle</th></tr></thead>
+    <thead><tr><th>Kunde</th><th class="bx-num">VK je Packung</th><th class="bx-num">Stk/Pck.</th><th class="bx-num">Menge</th><th>Datum</th><th>Quelle</th></tr></thead>
     <tbody>
       <?php foreach ($kundenpreise as $kp): ?>
         <tr>

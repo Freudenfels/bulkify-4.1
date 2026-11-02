@@ -109,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorsc
         <tr>
           <td><?= h($z['name']) ?><div class="muted" style="font-size:11px"><?= h((string)$z['nummer']) ?></div></td>
           <td><?= $z['rez'] !== '' ? h($z['rez']) : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><strong><?= $nf($z['menge']) ?></strong> Stück</td>
+          <td class="bx-num"><strong><?= $nf($z['menge']) ?></strong> Stk</td>
           <td><?= $z['charge'] !== '' ? h($z['charge']) : '<span class="muted">– auto –</span>' ?></td>
           <td><?= $z['mhd'] !== '' ? h($z['mhd']) : '<span class="muted">–</span>' ?></td>
           <td style="font-size:12px"><?= $z['neu_bsku'] ? '<span class="bx-ok">neue BSKU</span>' : '' ?><?= $z['kunde_setzen'] ? ($z['neu_bsku'] ? ' · ' : '') . 'Kunde wird zugeordnet' : '' ?></td>
@@ -158,7 +158,7 @@ $nf = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
           <td><?= h($p['name']) ?><div class="muted" style="font-size:11px"><?= h((string)$p['nummer']) ?><?= (int)$p['kunde_id'] === 0 ? ' · <span style="color:var(--warn)">Kunde wird zugeordnet</span>' : '' ?></div>
             <input type="hidden" name="pid[]" value="<?= (int)$p['id'] ?>"></td>
           <td style="font-size:12px"><?= trim(($p['rez_nr'] ?? '') . ' ' . ($p['rez_name'] ?? '')) !== '' ? h(trim(($p['rez_nr'] ?? '') . ' ' . ($p['rez_name'] ?? ''))) : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $p['bestand'] > 0 ? '<strong>' . $nf($p['bestand']) . '</strong> Stück' : '<span class="muted">0</span>' ?></td>
+          <td class="bx-num"><?= $p['bestand'] > 0 ? '<strong>' . $nf($p['bestand']) . '</strong> Stk' : '<span class="muted">0</span>' ?></td>
           <td><input type="number" step="1" min="0" name="menge[]" style="max-width:120px" placeholder="z. B. 500"></td>
           <td><input type="text" name="charge[]" style="max-width:150px" placeholder="optional"></td>
           <td><input type="date" name="mhd[]"></td>

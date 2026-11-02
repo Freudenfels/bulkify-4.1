@@ -199,7 +199,7 @@ if ($pa):
         $infoFelder['Füllmenge je Packung'] = $fmtMenge($gProPkg, $fuellEinheit);
         $infoFelder['Gesamtmenge']          = $fmtMenge($gGesamt, $fuellEinheit);
     } else {
-        $infoFelder['Stück je Packung'] = $stkProP > 0 ? number_format($stkProP, 0, ',', '.') : '–';
+        $infoFelder['Stk je Packung'] = $stkProP > 0 ? number_format($stkProP, 0, ',', '.') : '–';
         $infoFelder['Gesamtstückzahl']  = $gesamtSt > 0 ? number_format($gesamtSt, 0, ',', '.') : '–';
     }
     if ($attrLabel !== '') $infoFelder[$attrLabel] = $attrValue;

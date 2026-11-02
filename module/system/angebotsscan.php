@@ -130,7 +130,7 @@ if ($schritt === 'match' && !empty($_SESSION['angebotsscan'])) {
         <div class="bx-grid">
           <div class="bx-field"><label>Produkt / Rezeptur</label><input type="text" name="produkt_name" value="<?= h($d['produkt_name']) ?>"></div>
           <div class="bx-field"><label>Form</label><div><?= h($d['darreichungsform']) ?></div></div>
-          <div class="bx-field"><label>Stück je Packung</label><input type="number" name="stueck" value="<?= (int)$d['stueck_je_packung'] ?>" min="0" style="max-width:140px"></div>
+          <div class="bx-field"><label>Stk je Packung</label><input type="number" name="stueck" value="<?= (int)$d['stueck_je_packung'] ?>" min="0" style="max-width:140px"></div>
           <div class="bx-field"><label>Verpackung / Glas <span class="muted" style="font-weight:400;font-size:12px">(gelesen)</span></label><div><?= ($d['verpackung'] ?? '') !== '' ? h((string)$d['verpackung']) : '<span class="muted">– nicht erkannt –</span>' ?></div></div>
           <div class="bx-field"><label>Angebotsdatum</label><input type="date" name="datum" value="<?= h((string)($d['datum'] ?? '')) ?>" style="max-width:180px"></div>
           <div class="bx-field"><label>Rezeptur</label><div><?= $rezExist ? '<span class="badge badge-ok">vorhanden: ' . h($rezExist['nummer']) . '</span>' : '<span class="badge badge-warn">wird neu angelegt</span>' ?></div></div>
@@ -235,7 +235,7 @@ if ($detailId) {
       <div class="bx-grid">
         <div class="bx-field"><label>Produkt</label><div><strong><?= h($s['produkt_name'] ?: '–') ?></strong></div></div>
         <div class="bx-field"><label>Form</label><div><?= h($s['darreichungsform']) ?></div></div>
-        <div class="bx-field"><label>Stück je Packung</label><div><?= (int)$s['stueck_je_packung'] > 0 ? (int)$s['stueck_je_packung'] : '<span class="muted">–</span>' ?></div></div>
+        <div class="bx-field"><label>Stk je Packung</label><div><?= (int)$s['stueck_je_packung'] > 0 ? (int)$s['stueck_je_packung'] : '<span class="muted">–</span>' ?></div></div>
         <div class="bx-field"><label>Rezeptur</label><div>
           <?php if ($rez): ?><a href="?p=rezeptur_detail&id=<?= (int)$rez['id'] ?>"><?= h($rez['nummer']) ?> · <?= h($rez['name']) ?></a> <?= $s['rezeptur_neu'] ? '<span class="badge badge-warn">neu angelegt</span>' : '<span class="badge badge-ok">zugeordnet</span>' ?>
           <?php else: ?><span class="muted">–</span><?php endif; ?>

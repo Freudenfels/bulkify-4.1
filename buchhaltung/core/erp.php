@@ -301,7 +301,7 @@ function form_groessen_einheit(string $form): string {
     return '';
 }
 function form_plural(string $form): string {
-    return ['kapsel'=>'Kapseln', 'tablette'=>'Tabletten', 'softgel'=>'Softgels', 'stick'=>'Sticks', 'gummi'=>'Gummis'][$form] ?? 'Stück';
+    return ['kapsel'=>'Kapseln', 'tablette'=>'Tabletten', 'softgel'=>'Softgels', 'stick'=>'Sticks', 'gummi'=>'Gummis'][$form] ?? 'Stk';
 }
 function form_groessen_label(string $form, float $wert): string {
     $e = form_groessen_einheit($form);

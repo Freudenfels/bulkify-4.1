@@ -123,7 +123,7 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
       <div class="bx-field"><label>Preismodell</label>
         <select name="preismodell" id="f_pm"><?php foreach ($PM as $k=>$l): ?><option value="<?= h($k) ?>"<?= $sel($d['preismodell'] ?? 'pauschale', $k) ?>><?= h($l) ?></option><?php endforeach; ?></select>
       </div>
-      <div class="bx-field" id="f_einheit_wrap"><label>Einheit <?= bx_hint('nur bei „pro Einheit / pro Stunde / monatlich" – z. B. Stück, Probe, Stunde, Monat') ?></label><input type="text" name="einheit" value="<?= $v('einheit') ?>" placeholder="z. B. Stück"></div>
+      <div class="bx-field" id="f_einheit_wrap"><label>Einheit <?= bx_hint('nur bei „pro Einheit / pro Stunde / monatlich" – z. B. Stk, Probe, Stunde, Monat') ?></label><input type="text" name="einheit" value="<?= $v('einheit') ?>" placeholder="z. B. Stk"></div>
       <div class="bx-field" id="f_vk_wrap" style="max-width:180px"><label>VK je Einheit (netto, €)</label><input type="text" name="vk" value="<?= $neu || (int)($d['vk_cent']??0)===0 ? '' : dienstleistung_eur((int)$d['vk_cent']) ?>" placeholder="z. B. 120,00"></div>
       <div class="bx-field" style="max-width:180px"><label>EK (intern, €) <?= bx_hint('nur für die Marge, erscheint nie beim Kunden') ?></label><input type="text" name="ek" value="<?= $neu || (int)($d['ek_cent']??0)===0 ? '' : dienstleistung_eur((int)$d['ek_cent']) ?>" placeholder="z. B. 60,00"></div>
       <div class="bx-field" style="max-width:140px"><label>MwSt</label>

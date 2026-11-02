@@ -1220,7 +1220,7 @@ function erp_teilmenge_produzieren(int $pa_id, float $m, string $akteur): array 
     $pa = one("SELECT kunde_id, auftrag_id, nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if ($pa && $pa['kunde_id'])
         erp_log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team',
-            'Teilmenge ' . number_format($m, 0, ',', '.') . ' Stück produziert (Charge ' . $nr . ', Produktion ' . $pa['nummer'] . ').',
+            'Teilmenge ' . number_format($m, 0, ',', '.') . ' Stk produziert (Charge ' . $nr . ', Produktion ' . $pa['nummer'] . ').',
             'auftrag', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
     return ['ok'=>true, 'msg'=>'Teilmenge eingebucht (Charge ' . $nr . ').', 'charge_nr'=>$nr, 'fehlt'=>[]];
 }

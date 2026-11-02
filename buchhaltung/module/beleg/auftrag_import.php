@@ -127,7 +127,7 @@ if ($schritt === 'vorschau' && !empty($_SESSION['auftrag_import'])):
         <div class="bx-field"><label>Produkt / Rezeptur</label><input type="text" name="produkt_name" value="<?= h($d['produkt_name']) ?>"></div>
         <div class="bx-field"><label>Form</label><div><?= h($d['darreichungsform']) ?></div></div>
         <div class="bx-field"><label>Verpackung (gelesen)</label><div><?= $d['verpackung'] ? h($d['verpackung']) : '<span class="muted">–</span>' ?><?php if ($verpName): ?> <span class="muted">→ <?= h($verpName) ?></span><?php elseif ($d['verpackung']): ?> <span class="muted">(kein Treffer – ohne Verpackung)</span><?php endif; ?></div></div>
-        <div class="bx-field"><label>Stück je Packung</label><input type="number" name="stueck" value="<?= (int)$d['stueck_je_packung'] ?>" min="0" style="max-width:140px"></div>
+        <div class="bx-field"><label>Stk je Packung</label><input type="number" name="stueck" value="<?= (int)$d['stueck_je_packung'] ?>" min="0" style="max-width:140px"></div>
         <div class="bx-field"><label>Menge (Packungen)</label><input type="number" name="menge" value="<?= (int)$d['menge'] ?>" min="0" style="max-width:140px"></div>
         <div class="bx-field"><label>VK je Packung (€)</label><input type="text" name="vk_stueck" value="<?= h(rtrim(rtrim(number_format((float)$d['vk_stueck'], 4, ',', ''), '0'), ',')) ?>" style="max-width:140px"></div>
         <div class="bx-field"><label>Gesamt netto (€)</label><input type="text" name="gesamt_netto" value="<?= h(number_format((float)$d['gesamt_netto'], 2, ',', '')) ?>" style="max-width:140px"></div>

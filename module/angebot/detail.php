@@ -605,7 +605,7 @@ if (!$neu && !$editMode) {
       <h2 style="margin-top:0">Angebotene Preise – so sieht es der Kunde</h2>
       <div class="muted" style="font-size:12px;margin:-4px 0 10px">Der Kunde wählt im Portal eine dieser Zeilen. Gesamt netto je Zeile bei der angegebenen Packungszahl.</div>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Variante</th><th class="bx-num">Packungen</th><th class="bx-num">Preis / Packung</th><th class="bx-num">Preis / Stück</th><th class="bx-num">Gesamt netto</th></tr></thead>
+        <thead><tr><th>Variante</th><th class="bx-num">Packungen</th><th class="bx-num">Preis / Packung</th><th class="bx-num">Preis / Stk</th><th class="bx-num">Gesamt netto</th></tr></thead>
         <tbody>
         <?php if (!$optU['optionen']): ?><tr><td colspan="5" class="muted">Noch keine Preiszeilen. Über „Bearbeiten" Positionen/Staffeln ergänzen.</td></tr><?php endif; ?>
         <?php foreach ($optU['optionen'] as $o): ?>
@@ -861,7 +861,7 @@ if (!$neu):
     <div class="bx-grid">
       <div class="bx-field"><label>Bezeichnung (frei)</label><input type="text" name="add_bez" placeholder="z. B. Laboranalyse"></div>
       <div class="bx-field"><label>Menge</label><input type="number" step="0.01" name="add_menge" value="1"></div>
-      <div class="bx-field"><label>Einheit</label><input type="text" name="add_einheit" placeholder="Stück / Pauschal"></div>
+      <div class="bx-field"><label>Einheit</label><input type="text" name="add_einheit" placeholder="Stk / Pauschal"></div>
       <div class="bx-field"><label>Preis je Einheit (€)</label><input type="number" step="0.01" name="add_preis" placeholder="0,00"></div>
     </div>
     <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Hinzufügen</button></div>
@@ -910,7 +910,7 @@ if (!$neu):
         <col style="width:80px"><col style="width:88px"><col style="width:96px"><col style="width:40px">
       </colgroup>
       <thead><tr>
-        <th>Bezeichnung</th><th class="bx-num">Inhalt <?= bx_hint('Stück je Packung (z. B. 60 Kapseln). Notfalls hier direkt korrigieren – wird als Packungsgröße gespeichert.') ?></th><th class="bx-num">Menge</th><th>Einheit</th>
+        <th>Bezeichnung</th><th class="bx-num">Inhalt <?= bx_hint('Stk je Packung (z. B. 60 Kapseln). Notfalls hier direkt korrigieren – wird als Packungsgröße gespeichert.') ?></th><th class="bx-num">Menge</th><th>Einheit</th>
         <th class="bx-num">Preis/Einh €</th><th class="bx-num">MwSt %</th>
         <th class="bx-num">EK/Einh</th><th class="bx-num">Marge</th><th class="bx-num">Gesamt</th><th></th>
       </tr></thead>
@@ -984,7 +984,7 @@ if (!$neu):
     <div style="margin-bottom:4px">Preis je Packung – so sieht es der Kunde</div>
     <div class="muted" style="font-size:12px;margin-bottom:10px">Stand nach dem letzten Speichern. Jede Gruppe ist im Kundenportal eine Zeile mit eigenem Knopf.</div>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Variante</th><th class="bx-num">Packungen</th><th class="bx-num">Preis / Packung</th><th class="bx-num">Preis / Stück</th><th class="bx-num">Gesamt netto</th></tr></thead>
+      <thead><tr><th>Variante</th><th class="bx-num">Packungen</th><th class="bx-num">Preis / Packung</th><th class="bx-num">Preis / Stk</th><th class="bx-num">Gesamt netto</th></tr></thead>
       <tbody>
       <?php foreach ($optE['optionen'] as $o): ?>
         <tr>

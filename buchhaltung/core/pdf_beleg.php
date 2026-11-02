@@ -240,7 +240,7 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $p->textRight($iBr, $y + 9, $ustStaffel > 0 ? 'inkl. USt' : 'Gesamt', 8, true, $INK);
         $p->line($L, $y + 13, $R, $y + 13, 0.6, $INK); $y += 17;
         foreach ($produktStaffel as $g) {
-            $label = $p->fit($g['name'] . (!empty($g['mpp']) ? ' (' . beleg_num((float) $g['mpp']) . ' Stück/Packung)' : ''), 235, 9, true);
+            $label = $p->fit($g['name'] . (!empty($g['mpp']) ? ' (' . beleg_num((float) $g['mpp']) . ' Stk/Packung)' : ''), 235, 9, true);
             $first = true;
             foreach ($g['rows'] as $rw) {
                 if ($y > 778) { $p->addPage(); $y = 54; }
