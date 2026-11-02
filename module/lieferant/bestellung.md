@@ -29,3 +29,6 @@ Die ganze Seite nutzt `lp_t()` (`portal_layout.php`) – auch die Panels **Versa
 
 ## Benachrichtigungen ans Team (Paket Mails)
 Bestätigen und Station „versendet“ schicken eine Mail ans Team; die übrigen Stationen und gemeldete Pakete erscheinen nur als Dashboard-Benachrichtigung.
+
+## Dokumenttyp Lieferschein (Aufräumen 15)
+Lieferanten können zu einer Bestellung jetzt auch einen **Lieferschein** hochladen (de/en/zh, `bd_lieferschein`). Das Team sieht ihn an der Bestellung unter „Dokumente vom Lieferanten".

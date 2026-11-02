@@ -177,7 +177,7 @@ function bestell_dok_upload(int $bestellung_id, int $lieferant_id, string $typ, 
     $fn = 'bestellung_' . $bestellung_id . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
     if (!move_uploaded_file($_FILES['dok']['tmp_name'], BX_UPLOADS . '/' . $fn))
         return $t('Die Datei konnte nicht gespeichert werden.', 'The file could not be saved.', '文件无法保存。');
-    $typ = in_array($typ, ['coa', 'rechnung', 'spec', 'analyse', 'sonstiges'], true) ? $typ : 'sonstiges';
+    $typ = in_array($typ, ['coa', 'rechnung', 'lieferschein', 'spec', 'analyse', 'sonstiges'], true) ? $typ : 'sonstiges';
     q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von) VALUES ('bestellung',?,?,?,?,?,?,0,'lieferant')",
       [$bestellung_id, $typ, $lieferant_id, mb_substr(trim((string)($_POST['dok_titel'] ?? '')), 0, 190) ?: null, $fn, mb_substr($orig, 0, 255)]);
     $dokId = (int) insert_id();

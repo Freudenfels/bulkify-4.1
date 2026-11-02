@@ -375,6 +375,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'dok_hochladen'   => ['de'=>'Dokument hochladen',      'en'=>'Upload document', 'zh'=>'上传文件'],
         'bd_coa'          => ['de'=>'CoA / Analysenzertifikat', 'en'=>'CoA / certificate of analysis', 'zh'=>'COA / 分析证书'],
         'bd_rechnung'     => ['de'=>'Rechnung',                'en'=>'Invoice', 'zh'=>'发票'],
+        'bd_lieferschein' => ['de'=>'Lieferschein',            'en'=>'Delivery note', 'zh'=>'送货单'],   // Aufräumen 15
         'bd_analyse'      => ['de'=>'Laboranalyse',            'en'=>'Lab analysis', 'zh'=>'实验室分析'],
         'bd_zahlungsbeleg'=> ['de'=>'Überweisungsbestätigung', 'en'=>'Payment confirmation', 'zh'=>'付款凭证'],
     ];

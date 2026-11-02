@@ -489,7 +489,7 @@ function psum(){
 if (!$neu):
   require_once BX_ROOT . '/core/lieferant_dateien.php';
   $bdoks = bestell_dokumente((int)$id);
-  $BDTYP = ['coa'=>'CoA / Analysenzertifikat','rechnung'=>'Rechnung','spec'=>'Spezifikation','analyse'=>'Laboranalyse','sonstiges'=>'Sonstiges'];
+  $BDTYP = ['coa'=>'CoA / Analysenzertifikat','rechnung'=>'Rechnung','lieferschein'=>'Lieferschein','spec'=>'Spezifikation','analyse'=>'Laboranalyse','sonstiges'=>'Sonstiges'];
   if ($bdoks): ?>
   <div class="bx-panel">
     <h2 style="margin-top:0">Dokumente vom Lieferanten</h2>

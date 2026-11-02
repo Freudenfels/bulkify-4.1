@@ -197,7 +197,7 @@ if (!$b):
   <?php // Dokumente & Rechnung: der Lieferant lädt CoA, Rechnung o. Ä. direkt zu DIESER Bestellung hoch.
   require_once BX_ROOT . '/core/lieferant_dateien.php';
   $bdoks = bestell_dokumente($id);
-  $BDTYP = ['coa'=>lp_t('bd_coa'), 'rechnung'=>lp_t('bd_rechnung'), 'spec'=>lp_t('spezifikation'), 'analyse'=>lp_t('bd_analyse'), 'zahlungsbeleg'=>lp_t('bd_zahlungsbeleg'), 'sonstiges'=>lp_t('sonstiges')]; ?>
+  $BDTYP = ['coa'=>lp_t('bd_coa'), 'rechnung'=>lp_t('bd_rechnung'), 'lieferschein'=>lp_t('bd_lieferschein'), 'spec'=>lp_t('spezifikation'), 'analyse'=>lp_t('bd_analyse'), 'zahlungsbeleg'=>lp_t('bd_zahlungsbeleg'), 'sonstiges'=>lp_t('sonstiges')]; ?>
   <?php // E8: Zahlungsstatus (vom Team gesetzt) – der Lieferant sieht „bezahlt" samt Beleg.
     if (!empty($b['bezahlt_am'])): ?>
     <div class="bx-panel badge-ok" style="padding:10px 14px;margin-bottom:12px"><?= h(lp_t('dok_bezahlt_am')) ?> <?= h(date('d.m.Y', strtotime((string)$b['bezahlt_am']))) ?><?= (string)($b['zahlungsweg'] ?? '') !== '' ? ' · ' . h((string)$b['zahlungsweg']) : '' ?>.</div>
