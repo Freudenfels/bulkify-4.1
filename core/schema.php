@@ -9611,6 +9611,10 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
     // kann in der Produktion kein Schritt gestartet/abgeschlossen werden. Sichtbar ja – startbar nein. (God-Mode überspringt das.)
     if (!$god && (string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')
         return ['ok'=>false, 'fehler'=>'vorbereitung', 'msg'=>'Dieser Auftrag ist noch in Vorbereitung und nicht zur Produktion freigegeben.', 'fertig'=>false, 'station'=>''];
+    // Etikett-Freigabe ist eine ECHTE Sperre (S-12): nicht nur die Liste blendet aus – auch Direkt-URL, Detailseite und Teilmenge
+    // laufen hier durch. Ohne Kundenfreigabe des Etiketts gibt es keinen Produktionsschritt (God-Mode des Admins ausgenommen).
+    if (!$god && ($sperre = produktion_etikett_sperre($pa_id)) !== '')
+        return ['ok'=>false, 'fehler'=>'etikett', 'msg'=>$sperre, 'fertig'=>false, 'station'=>''];
     $firstOpen = one("SELECT id, station FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort LIMIT 1", [$pa_id]);
     if (!$firstOpen || (int)$firstOpen['id'] !== $schritt_id)
         return ['ok'=>false, 'fehler'=>'reihenfolge', 'msg'=>'Dieser Schritt ist gerade nicht an der Reihe.', 'fertig'=>false, 'station'=>''];
@@ -9628,15 +9632,7 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
         q("UPDATE produktion_schritt SET scan_charge=? WHERE id=?", [$master ? 'Master-Freigabe' : $scan, $schritt_id]);
     }
     if (!$master) {
-        $entnahme = match ($station) {
-            'Rohstoffe bereitstellen'  => produktion_rohstoffe_entnehmen($pa_id),
-            'Verkapselung'             => produktion_kapseln_entnehmen($pa_id),
-            'Fertigware bereitstellen' => produktion_fertigware_entnehmen($pa_id),
-            // Zukauf „fertig" (St-24): Verpackung + Etikett sind in der zugekauften Ware enthalten -> nichts abbuchen.
-            'Verpacken'                => ((string) scalar("SELECT zukauf_art FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'fertig') ? ['ok'=>true] : produktion_verpackung_entnehmen($pa_id),   // Behälter + Deckel
-            'Etikettieren'             => ((string) scalar("SELECT zukauf_art FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'fertig') ? ['ok'=>true] : produktion_etikett_entnehmen($pa_id),      // Kundenetikett
-            default                    => ['ok'=>true],
-        };
+        $entnahme = produktion_station_entnahme($pa_id, $station);
         if (!($entnahme['ok'] ?? true)) {
             // Team: Fehlbestand melden (Mail + Benachrichtigung; gleiche Meldung binnen 2 Min. nur einmal).
             if (function_exists('mail_team_fehlbestand')) mail_team_fehlbestand($pa_id, $station, (array)($entnahme['fehlt'] ?? []));
@@ -9870,6 +9866,60 @@ function auftrag_express_bulk_bestellung(int $auftrag_id, int $lieferant_id): ?i
     q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,NULL,?,?,?,?,?,0)",
       [$bid, $bez, $menge, $preis, $einheit, $auftrag_id]);
     return $bid;
+}
+
+// Etikett-Sperre (S-12): braucht der Auftrag ein Etikett und hat der Kunde es noch nicht freigegeben, ist die Produktion gesperrt.
+// Rückgabe: '' = frei, sonst der Grund (Meldungstext). Gilt für Produktionsschritte UND Teilmengen.
+function produktion_etikett_sperre(int $pa_id): string {
+    $aid = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if ($aid <= 0 || !auftrag_braucht_etikett($aid) || etikett_freigegeben($aid)) return '';
+    return etikett_vorhanden($aid) ? 'Das Etikett ist noch nicht vom Kunden freigegeben – ohne Freigabe kann nicht produziert werden.'
+                                   : 'Es fehlt noch das Etikett-Design bzw. die Kundenfreigabe – ohne Freigabe kann nicht produziert werden.';
+}
+// Material-Entnahme einer Station (Verkapselung, Verpacken, Etikettieren …). $bis = bis zu wie vielen Packungen kumuliert
+// verbraucht sein soll (null = ganzer Auftrag); $trocken = nur prüfen. Stationen ohne Material: ok.
+function produktion_ist_zukauf_fertig(int $pa_id): bool {
+    return (string) scalar("SELECT zukauf_art FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'fertig';
+}
+function produktion_station_entnahme(int $pa_id, string $station, ?float $bis = null, bool $trocken = false): array {
+    return match ($station) {
+        'Rohstoffe bereitstellen'  => produktion_rohstoffe_entnehmen($pa_id, $bis, $trocken),
+        'Verkapselung'             => produktion_kapseln_entnehmen($pa_id, $bis, $trocken),
+        'Fertigware bereitstellen' => produktion_fertigware_entnehmen($pa_id, $bis, $trocken),
+        // Zukauf „fertig" (St-24): Verpackung + Etikett sind in der zugekauften Ware enthalten -> nichts abbuchen.
+        'Verpacken'                => produktion_ist_zukauf_fertig($pa_id) ? ['ok'=>true, 'fehlt'=>[]] : produktion_verpackung_entnehmen($pa_id, $bis, $trocken),   // Behälter + Deckel
+        'Etikettieren'             => produktion_ist_zukauf_fertig($pa_id) ? ['ok'=>true, 'fehlt'=>[]] : produktion_etikett_entnehmen($pa_id, $bis, $trocken),      // Kundenetikett
+        default                    => ['ok'=>true, 'fehlt'=>[]],
+    };
+}
+// Teilmenge PRODUZIEREN (S-12): prüft Etikett-Freigabe und das Material ALLER Stationen des Auftrags (Rohstoffe, Kapseln, Behälter,
+// Deckel, Etikett) für die Teilmenge, bucht es ANTEILIG ab (Restbuchung: was schon verbraucht ist, wird nicht doppelt gebucht) und
+// bucht danach die Fertigware als Charge. Alles-oder-nichts: fehlt irgendetwas (z. B. Gläser/Etiketten = 0), wird nichts gebucht.
+// Rückgabe wie produktion_teilmenge_einbuchen() plus 'fehlt' (Liste) und 'fehler' ('etikett'|'mangel').
+function produktion_teilmenge_produzieren(int $pa_id, float $menge, ?string $mhd = null, string $notiz = ''): array {
+    $pa = one("SELECT status, menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['ok'=>false, 'msg'=>'Produktionsauftrag nicht gefunden.', 'fehlt'=>[]];
+    if ((string)$pa['status'] === 'vorbereitung') return ['ok'=>false, 'fehler'=>'vorbereitung', 'msg'=>'Der Auftrag ist noch in Vorbereitung und nicht zur Produktion freigegeben.', 'fehlt'=>[]];
+    $menge = round($menge);
+    if ($menge <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Menge größer 0 angeben.', 'fehlt'=>[]];
+    $rest = produktion_rest($pa_id);
+    if ($menge > $rest + 1e-6) return ['ok'=>false, 'msg'=>'Es sind nur noch ' . number_format($rest, 0, ',', '.') . ' Stück offen – mehr kann nicht gebucht werden.', 'fehlt'=>[]];
+    if (($sp = produktion_etikett_sperre($pa_id)) !== '') return ['ok'=>false, 'fehler'=>'etikett', 'msg'=>$sp, 'fehlt'=>[]];
+    $bis = produktion_gebucht($pa_id) + $menge;           // Material soll kumuliert bis zu dieser Packungszahl verbraucht sein
+    $stationen = array_values(array_unique(array_map(fn($r) => (string)$r['station'], all("SELECT station FROM produktion_schritt WHERE pa_id=? ORDER BY sort", [$pa_id]))));
+    $fehlt = [];
+    foreach ($stationen as $st) {                          // 1) alles prüfen …
+        $r = produktion_station_entnahme($pa_id, $st, $bis, true);
+        if (!($r['ok'] ?? true)) foreach (($r['fehlt'] ?? []) as $f) $fehlt[] = $f;
+    }
+    if ($fehlt) return ['ok'=>false, 'fehler'=>'mangel', 'fehlt'=>$fehlt, 'msg'=>'Nicht genug Material für ' . number_format($menge, 0, ',', '.') . ' Stück: '
+        . implode(', ', array_map(fn($f) => (string)$f['name'] . ' (fehlt ' . rtrim(rtrim(number_format((float)$f['fehlt'], 3, ',', '.'), '0'), ',') . ' ' . (string)($f['einheit'] ?? '') . ')', $fehlt)) . '.'];
+    foreach ($stationen as $st) produktion_station_entnahme($pa_id, $st, $bis, false);   // 2) … dann buchen
+    $r = produktion_teilmenge_einbuchen($pa_id, $menge, $mhd, $notiz);
+    if (!$r['ok']) return $r + ['fehlt'=>[]];
+    if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'offen') q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$pa_id]);
+    reservierung_abgleichen($pa_id);
+    return $r + ['fehlt'=>[]];
 }
 
 // Rohstoffe für einen Produktionsauftrag nach FEFO entnehmen (Station „Rohstoffe bereitstellen" und Teilmenge).

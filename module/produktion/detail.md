@@ -124,3 +124,5 @@ Produktion ein Hinweis „Restbedarf: X von Y schon produziert – Material nur 
 Gleiche Zahl wie Material-Übersicht (Auftragsseite) und `produktion_bereitschaft()`.
 
 **Quarantäne (St-07):** „Wartet auf Material", Materialbedarf und Komponenten-Tabelle zeigen „in Quarantäne – freigeben" (Link `?p=wareneingang&quarantaene=1&item=ID`).
+
+**Teilmenge (S-12):** „Teilmenge einbuchen" ruft `produktion_teilmenge_produzieren()` (Material-/Etikett-Prüfung, anteilige Abbuchung). Über dem Formular steht der Rechner „Jetzt machbar" bzw. die Etikett-Sperre. Schritt-Fehler (Etikett nicht freigegeben, Vorbereitung, Reihenfolge) erscheinen als Meldung statt still als „ok".

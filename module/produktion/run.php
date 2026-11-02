@@ -12,6 +12,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     $r = produktion_schritt_erledigen($id, (int)($_POST['schritt'] ?? 0), (string)($_POST['scan'] ?? ''));
     if (!$r['ok'] && $r['fehler'] === 'scan')   { header('Location: ?p=produktion_run&id=' . $id . '&scanfehler=' . urlencode($r['msg'])); exit; }
     if (!$r['ok'] && $r['fehler'] === 'mangel') { header('Location: ?p=produktion_run&id=' . $id . '&mangel=1'); exit; }
+    if (!$r['ok'])                              { header('Location: ?p=produktion_run&id=' . $id . '&schrittfehler=' . urlencode((string)$r['msg'])); exit; }   // z. B. Etikett nicht freigegeben
     if ($r['ok'] && $r['fertig'])               { header('Location: ?p=produktion_run&id=' . $id . '&fertig=1'); exit; }
     header('Location: ?p=produktion_run&id=' . $id . '&ok=1'); exit;
 }
@@ -113,6 +114,7 @@ bx_head('Geführte Produktion · ' . h($pa['auftrag_nr'] ?: $pa['nummer']),
 
 if (isset($_GET['ok']))         echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Schritt erledigt – weiter zum nächsten.</div>';
 if (isset($_GET['scanfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Scan abgelehnt: ' . h($_GET['scanfehler']) . '</div>';
+if (isset($_GET['schrittfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Schritt nicht abgeschlossen: ' . h((string)$_GET['schrittfehler']) . '</div>';
 if (isset($_GET['mangel']))     echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht genug Bestand für diesen Schritt – bitte Material bereitstellen (Wareneingang).</div>';
 
 // Fortschrittsbalken

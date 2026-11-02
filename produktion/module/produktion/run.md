@@ -16,3 +16,5 @@ Produktionsmodus (`?p=run&id=…`) – tablettauglich, zum Schritt-für-Schritt-
 Je Materialzeile ein Button **„Im Lager blinken"** (Pick-to-Light): `aktion=blink` → `pr_lager_blink(charge_id)` ruft serverseitig den Lager-Endpunkt `/lager/?p=api_blink` auf (Loopback/Token), der den Blinker der FEFO-Charge leuchten lässt. Zeile ohne bekannte Charge: „kein Blinker". Der POST (`aktion=erledigen`) ruft `erp_schritt_abschliessen()` – protokolliert WER (angemeldeter Benutzer) WANN, bucht Material nach FEFO ab, letzter Schritt bucht Fertigware ein. Danach Redirect (PRG) + Flash.
 - **Ablauf:** alle Schritte mit Status, **Erledigt von** und **Wann**.
 - **Admin:** je Schritt „Abhaken"/„Zurücksetzen" (`aktion=admin_done`/`admin_undo` → `erp_schritt_status_setzen()`), auch außer der Reihe. Reine Statuskorrektur, KEINE Lager-/Chargenbewegung. Nur für Rolle admin (`pr_ist_admin()`).
+
+**Teilmenge (S-12):** Über „Teilmenge produzieren" steht der Rechner „Jetzt machbar" (`erp_teilmenge_machbar`) bzw. die Etikett-Sperre; die Buchung prüft und bucht Rohstoffe, Behälter, Deckel und Etikett anteilig.

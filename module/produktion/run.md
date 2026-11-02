@@ -9,3 +9,5 @@
 **Logik:** Das Abschließen eines Schritts läuft über die zentrale Funktion **`produktion_schritt_erledigen($pa_id,$schritt_id,$scan)`** in `core/schema.php` – dieselbe Funktion nutzt auch die Admin-Detailseite (und später App/API). Sie erzwingt die Reihenfolge, prüft Scan bzw. **Master-Scan** (`ist_master_scan()` – eine 8er-Folge überspringt Prüfung + Bestandsabbuchung, für Tests), bucht Material FEFO ab, setzt den Status und schließt beim letzten Schritt den Auftrag ab (Fertigware einbuchen + Auftrag „erledigt").
 
 **Zugänge:** Menü „Geführte Produktion" (Werk-Menü oben, auch Admin-Menü); Button „Geführt produzieren" auf der Admin-Detailseite.
+
+Schritt-Fehler (z. B. Etikett nicht freigegeben) werden als Meldung „Schritt nicht abgeschlossen: …" angezeigt (`schrittfehler`).

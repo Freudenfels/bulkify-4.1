@@ -650,17 +650,31 @@ function erp_pa_fehlbedarf(int $pa_id): array {
 // (rezeptur.kapselgroesse_id), nicht die gewichtsbasierte Auto-Berechnung des Dashboards – siehe erp.md.
 // =============================================================================================
 
-// Standort je Schritt: braucht die Station eine Material-Entnahme? (Scan-Prüfung bleibt vorerst
-// außen vor – es gibt noch keine Etiketten zum Scannen; FEFO-Abbuchung läuft trotzdem.)
-function erp_station_entnahme(int $pa_id, string $station): array {
+// Material-Entnahme je Station (Spiegel von produktion_station_entnahme()). $bis = bis zu wie vielen Packungen kumuliert verbraucht sein
+// soll (null = ganzer Auftrag), $trocken = nur prüfen. FEFO-Abbuchung läuft auch ohne Scan.
+function erp_station_entnahme(int $pa_id, string $station, ?float $bis = null, bool $trocken = false): array {
     return match ($station) {
-        'Rohstoffe bereitstellen'  => erp_rohstoffe_entnehmen($pa_id),
-        'Verkapselung'             => erp_kapseln_entnehmen($pa_id),
-        'Fertigware bereitstellen' => erp_fertigware_entnehmen($pa_id),
-        'Verpacken'                => erp_zukauf_fertig($pa_id) ? ['ok'=>true, 'fehlt'=>[]] : erp_verpackung_entnehmen($pa_id),   // Behälter + Deckel; fertige Ware: enthalten (St-24)
-        'Etikettieren'             => erp_zukauf_fertig($pa_id) ? ['ok'=>true, 'fehlt'=>[]] : erp_etikett_entnehmen($pa_id),      // Kundenetikett; fertige Ware: schon etikettiert
+        'Rohstoffe bereitstellen'  => erp_rohstoffe_entnehmen($pa_id, $bis, $trocken),
+        'Verkapselung'             => erp_kapseln_entnehmen($pa_id, $bis, $trocken),
+        'Fertigware bereitstellen' => erp_fertigware_entnehmen($pa_id, $bis, $trocken),
+        // fertige Ware (Zukauf „fertig", St-24): Verpackung + Etikett sind enthalten -> nichts abbuchen
+        'Verpacken'                => erp_zukauf_fertig($pa_id) ? ['ok'=>true, 'fehlt'=>[]] : erp_verpackung_entnehmen($pa_id, $bis, $trocken),   // Behälter + Deckel
+        'Etikettieren'             => erp_zukauf_fertig($pa_id) ? ['ok'=>true, 'fehlt'=>[]] : erp_etikett_entnehmen($pa_id, $bis, $trocken),      // Kundenetikett
         default                    => ['ok'=>true, 'fehlt'=>[]],
     };
+}
+// Etikett-Sperre (Spiegel von produktion_etikett_sperre(), S-12): braucht der Auftrag ein Etikett und ist es nicht vom Kunden
+// freigegeben, gibt es keinen Produktionsschritt und keine Teilmenge. '' = frei, sonst der Grund.
+function erp_etikett_sperre(int $pa_id): string {
+    $aid = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if ($aid <= 0 || !tabelle_da('auftrag')) return '';
+    $r = one("SELECT a.verpackung_id AS a_vp, a.etikett_freigegeben, p.etikett_id, p.verpackung_id AS p_vp
+              FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$aid]);
+    if (!$r) return '';
+    $braucht = (int)($r['etikett_id'] ?? 0) > 0 || ((int)($r['a_vp'] ?? 0) ?: (int)($r['p_vp'] ?? 0)) > 0;
+    if (!$braucht || (int)($r['etikett_freigegeben'] ?? 0) === 1) return '';
+    return erp_etikett_datei($pa_id) !== null ? 'Das Etikett ist noch nicht vom Kunden freigegeben – ohne Freigabe kann nicht produziert werden.'
+                                             : 'Es fehlt noch das Etikett-Design bzw. die Kundenfreigabe – ohne Freigabe kann nicht produziert werden.';
 }
 
 // Einen Produktionsschritt abschließen. Erzwingt die Reihenfolge (nur der erste offene Schritt),
@@ -679,6 +693,10 @@ function erp_schritt_abschliessen(int $schritt_id, string $akteur): array {
     // PreProduktionsauftrag: ein noch in Vorbereitung stehender Auftrag ist gesperrt (noch nicht freigegeben).
     if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')
         return ['ok'=>false, 'fehler'=>'vorbereitung', 'msg'=>'Dieser Auftrag ist noch in Vorbereitung und nicht zur Produktion freigegeben.', 'fertig'=>false, 'station'=>$station, 'fehlt'=>[]];
+
+    // Etikett-Freigabe = echte Sperre (S-12), nicht nur in der Liste: gilt auch bei Direkt-URL und in der Werk-App.
+    if (($sperre = erp_etikett_sperre($pa_id)) !== '')
+        return ['ok'=>false, 'fehler'=>'etikett', 'msg'=>$sperre, 'fertig'=>false, 'station'=>$station, 'fehlt'=>[]];
 
     // Reihenfolge: nur der erste noch offene Schritt des Auftrags darf abgeschlossen werden.
     $firstOpen = one("SELECT id FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort, id LIMIT 1", [$pa_id]);
@@ -1105,43 +1123,30 @@ function erp_teilmenge_einbuchen(int $pa_id, float $menge): ?int {
     return insert_id();
 }
 
-// --- Teilmenge produzieren -------------------------------------------------------------------
-// Rohstoffbedarf (+Leerkapseln) für eine Teilmenge von M Einheiten (proportional zur vollen Menge).
-function erp_teilmenge_bedarf(int $pa_id, float $m): array {
-    $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
-    if ($menge <= 0 || $m <= 0) return [];
-    $faktor = $m / $menge;   // Anteil der Gesamtmenge
-    $out = [];
-    foreach (erp_materialbedarf($pa_id) as $b) {
-        $need = (float)$b['benoetigt'] * $faktor;
-        $out[] = ['item_id'=>(int)$b['item_id'], 'name'=>$b['name'], 'einheit'=>$b['einheit'],
-                  'benoetigt'=>$need, 'verfuegbar'=>$b['verfuegbar'], 'fehlt'=>max(0.0, $need - (float)$b['verfuegbar'])];
-    }
-    // Leerkapseln (nur Kapselprodukte) anteilig
-    $pa = one("SELECT produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
-    $kid = $pa ? erp_produkt_leerkapsel_id((int)$pa['produkt_id']) : null;
-    if ($kid) {
-        $vpe = erp_stueck_je_packung(['produkt_id'=>(int)$pa['produkt_id'], 'auftrag_id'=>(int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id])]);
-        $need = $m * $vpe;   // M Packungen × Kapseln je Packung (bei Bulk ist vpe über Auftrag/0 -> dann M direkt)
-        if ($vpe <= 0) $need = $m;
-        $verf = erp_item_bestand($kid);
-        $out[] = ['item_id'=>$kid, 'name'=>(string) scalar("SELECT name FROM item WHERE id=?", [$kid]), 'einheit'=>'Stk',
-                  'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>max(0.0, $need - $verf), 'kapsel'=>true];
-    }
-    return $out;
+// Stationen (mit Material) dieses Auftrags in Reihenfolge – Grundlage für Prüfung und anteilige Abbuchung einer Teilmenge.
+function erp_pa_stationen(int $pa_id): array {
+    return array_values(array_unique(array_map(fn($r) => (string)$r['station'], all("SELECT station FROM produktion_schritt WHERE pa_id=? ORDER BY sort", [$pa_id]))));
 }
-// Eine Teilmenge produzieren: Rohstoffe (+Leerkapseln) anteilig nach FEFO verbrauchen und M als Fertigware-Charge
-// einbuchen. Der Auftrag bleibt offen, bis die volle Menge produziert ist. Rückgabe ['ok','msg','fehlt','charge_nr'].
+// Teilmenge PRODUZIEREN (S-12, Spiegel von produktion_teilmenge_produzieren()): prüft Etikett-Freigabe und das Material ALLER Stationen
+// (Rohstoffe, Leerkapseln, Behälter, Deckel, Etikett) für die Teilmenge, bucht es ANTEILIG nach FEFO ab (Restbuchung) und bucht die
+// Fertigware als Charge. Alles-oder-nichts. Rückgabe ['ok','msg','fehlt','charge_nr','fehler'?].
 function erp_teilmenge_produzieren(int $pa_id, float $m, string $akteur): array {
     $m = round($m);
     $rest = erp_produktion_rest($pa_id);
     if ($m <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Menge größer 0 angeben.', 'fehlt'=>[]];
     if ($m > $rest + 1e-6) return ['ok'=>false, 'msg'=>'Es sind nur noch ' . number_format($rest, 0, ',', '.') . ' offen – mehr kann nicht produziert werden.', 'fehlt'=>[]];
-    $bedarf = erp_teilmenge_bedarf($pa_id, $m);
-    $fehlt = array_values(array_filter($bedarf, fn($b) => (float)$b['fehlt'] > 0.0001));
+    if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')
+        return ['ok'=>false, 'fehler'=>'vorbereitung', 'msg'=>'Der Auftrag ist noch in Vorbereitung und nicht zur Produktion freigegeben.', 'fehlt'=>[]];
+    if (($sp = erp_etikett_sperre($pa_id)) !== '') return ['ok'=>false, 'fehler'=>'etikett', 'msg'=>$sp, 'fehlt'=>[]];
+    $bis = erp_produktion_gebucht($pa_id) + $m;           // Material soll kumuliert bis zu dieser Packungszahl verbraucht sein
+    $stationen = erp_pa_stationen($pa_id);
+    $fehlt = [];
+    foreach ($stationen as $st) {                          // 1) alles prüfen …
+        $r = erp_station_entnahme($pa_id, $st, $bis, true);
+        if (!($r['ok'] ?? true)) foreach (($r['fehlt'] ?? []) as $f) $fehlt[] = $f;
+    }
     if ($fehlt) return ['ok'=>false, 'fehler'=>'mangel', 'msg'=>'Nicht genug Material für diese Teilmenge.', 'fehlt'=>$fehlt];
-    // Material anteilig nach FEFO verbrauchen (additiv – die Schritt-Entnahme ist dadurch idempotent).
-    foreach ($bedarf as $b) erp_fefo_abbuchen($pa_id, (int)$b['item_id'], (float)$b['benoetigt'], (string)$b['einheit']);
+    foreach ($stationen as $st) erp_station_entnahme($pa_id, $st, $bis, false);   // 2) … dann buchen
     $cid = erp_teilmenge_einbuchen($pa_id, $m);
     if (!$cid) return ['ok'=>false, 'msg'=>'Teilmenge konnte nicht eingebucht werden (Lagerartikel fehlt?).', 'fehlt'=>[]];
     $nr = (string) scalar("SELECT charge_nr FROM charge WHERE id=?", [$cid]);
@@ -1155,6 +1160,27 @@ function erp_teilmenge_produzieren(int $pa_id, float $m, string $akteur): array 
             'Teilmenge ' . number_format($m, 0, ',', '.') . ' Stück produziert (Charge ' . $nr . ', Produktion ' . $pa['nummer'] . ').',
             'auftrag', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
     return ['ok'=>true, 'msg'=>'Teilmenge eingebucht (Charge ' . $nr . ').', 'charge_nr'=>$nr, 'fehlt'=>[]];
+}
+// Teilproduktion-Rechner (Werk-/Prod-App): wie viele Packungen sind JETZT komplett machbar (alle Stationen inkl. Etikett) und wie viele
+// bis vor dem Etikettieren? Exakt per Trockenlauf der Stationsentnahmen (Binärsuche über 0..Rest) – dieselbe Prüfung wie beim Buchen.
+// Rückgabe ['rest','komplett','vor_etikett','limit'(Name des knappsten Materials für „komplett"),'sperre'(string)].
+function erp_teilmenge_machbar(int $pa_id): array {
+    $rest = (int) floor(erp_produktion_rest($pa_id));
+    $gebucht = erp_produktion_gebucht($pa_id);
+    $stationen = erp_pa_stationen($pa_id);
+    $maxFuer = function (array $stat) use ($pa_id, $rest, $gebucht): array {
+        $ok = function (int $m) use ($pa_id, $gebucht, $stat): ?array {
+            foreach ($stat as $st) { $r = erp_station_entnahme($pa_id, $st, $gebucht + $m, true); if (!($r['ok'] ?? true)) return $r['fehlt'] ?? [['name'=>$st]]; }
+            return null;
+        };
+        $lo = 0; $hi = $rest;
+        while ($lo < $hi) { $mid = intdiv($lo + $hi + 1, 2); if ($ok($mid) === null) $lo = $mid; else $hi = $mid - 1; }
+        $lim = $lo < $rest ? ($ok($lo + 1)[0]['name'] ?? '') : '';
+        return [$lo, (string)$lim];
+    };
+    [$komplett, $limit] = $maxFuer($stationen);
+    [$vorEt] = $maxFuer(array_values(array_filter($stationen, fn($s) => $s !== 'Etikettieren')));
+    return ['rest'=>$rest, 'komplett'=>$komplett, 'vor_etikett'=>max($vorEt, $komplett), 'limit'=>$limit, 'sperre'=>erp_etikett_sperre($pa_id)];
 }
 // Basis-Chargennummer = PR-Nummer ohne Präfix; nächste Teilcharge mit Tagesbuchstabe .A/.B/.C …
 function erp_charge_naechste_nr(int $pa_id): string {

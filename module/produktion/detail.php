@@ -11,6 +11,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     // Material wird trotzdem nach FEFO abgebucht.
     $r = produktion_schritt_erledigen($id, (int)($_POST['schritt'] ?? 0), '', true);
     if (!$r['ok'] && $r['fehler'] === 'mangel') { header('Location: ?p=produktionsauftrag&id=' . $id . '&mangel=1'); exit; }
+    if (!$r['ok']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&schrittfehler=' . urlencode((string)$r['msg'])); exit; }   // z. B. Etikett nicht freigegeben, Vorbereitung
     header('Location: ?p=produktionsauftrag&id=' . $id . '&ok=1'); exit;
 }
 
@@ -23,7 +24,8 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
 
 // Teilmenge Fertigware einbuchen (Teilproduktion .A/.B/.C) – der Abschluss bucht später nur noch den Rest
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'teilmenge') {
-    $r = produktion_teilmenge_einbuchen($id, (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0')),
+    // Mit Material-/Etikett-Prüfung und anteiliger Abbuchung (S-12) – nicht mehr nur die Fertigware-Charge.
+    $r = produktion_teilmenge_produzieren($id, zahl_lesen((string)($_POST['menge'] ?? '0'), true),
         trim((string)($_POST['mhd'] ?? '')) ?: null, (string)($_POST['notiz'] ?? ''));
     if ($r['ok']) {
         $paT = one("SELECT nummer, kunde_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$id]);
@@ -255,6 +257,7 @@ if (isset($_GET['etikett'])) echo '<div class="bx-panel badge-ok" style="padding
 if (isset($_GET['reserviert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['reserviert'] > 0 ? 'Bestand für ' . (int)$_GET['reserviert'] . ' Komponente(n) reserviert.' : 'Nichts zu reservieren (kein freier Bestand verfügbar).') . '</div>';
 if (isset($_GET['resfrei'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Reservierungen freigegeben.</div>';
 if (isset($_GET['teil'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Teilmenge als Charge ' . h((string)$_GET['teil']) . ' eingebucht.</div>';
+if (isset($_GET['schrittfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Schritt nicht abgeschlossen: ' . h((string)$_GET['schrittfehler']) . '</div>';
 if (isset($_GET['teilfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Teilmenge nicht gebucht: ' . h((string)$_GET['teilfehler']) . '</div>';
 if (isset($_GET['godstufe'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">God-Mode: Produktion auf Stufe „' . h((string)$_GET['godstufe']) . '" gesetzt – Gate übersprungen, ohne Bestandsbuchung.</div>';
 if (isset($_GET['godfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">God-Mode: ' . h((string)$_GET['godfehler']) . '</div>';
@@ -556,8 +559,17 @@ ob_start(); ?>
 <div class="bx-panel">
   <h2>Teilmenge einbuchen</h2>
   <p class="muted" style="margin-top:0">Wird an mehreren Tagen produziert, kann jede fertige Teilmenge sofort als eigene Charge ins Lager
-    (<?= h(charge_naechste_nr($id)) ?> ist die nächste Nummer). Beim Abschluss des Auftrags wird nur noch der Rest gebucht.
+    (<?= h(charge_naechste_nr($id)) ?> ist die nächste Nummer). Das Material (Rohstoffe, Kapseln, Behälter, Deckel, Etikett) wird <strong>anteilig</strong>
+    abgebucht und vorher geprüft; beim Abschluss des Auftrags wird nur noch der Rest gebucht.
     Noch offen: <strong><?= number_format($fwRest,0,',','.') ?> Stück</strong>.</p>
+  <?php $tmM = produktion_teilmenge_machbar($id); $tmSperre = produktion_etikett_sperre($id); ?>
+  <div class="bx-panel" style="background:var(--panel-2);padding:10px 14px;margin:0 0 12px;border-left:3px solid <?= $tmSperre !== '' ? '#b23b2f' : 'var(--gruen,#1D9E75)' ?>">
+    <?php if ($tmSperre !== ''): ?><strong style="color:#8f231b">Gesperrt:</strong> <?= h($tmSperre) ?>
+    <?php else: ?>
+      <strong>Jetzt machbar:</strong> <?= number_format($tmM['komplett'], 0, ',', '.') ?> Stück komplett fertig<?= $tmM['komplett'] < $tmM['rest'] && $tmM['limit_komplett'] !== '' ? ' <span class="muted">(begrenzt durch ' . h((string)$tmM['limit_komplett']) . ')</span>' : '' ?>
+      <?php if ($tmM['vor_etikett'] > $tmM['komplett']): ?> · bis vor dem Etikettieren <?= number_format($tmM['vor_etikett'], 0, ',', '.') ?> Stück<?php endif; ?>
+    <?php endif; ?>
+  </div>
   <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
     <input type="hidden" name="aktion" value="teilmenge">
     <div class="bx-field" style="margin:0;max-width:160px"><label>Menge (Stück)</label>

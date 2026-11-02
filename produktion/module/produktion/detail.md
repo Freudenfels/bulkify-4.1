@@ -22,3 +22,5 @@ Oben rechts der Button in den Produktionsmodus (`?p=run&id=…`); Beschriftung j
 **Schritte:** der jeweils erste offene Schritt ist „als Nächstes" und trägt den **Abschließen**-Button. Der POST (`aktion=schritt_ab`, `schritt_id`) ruft `erp_schritt_abschliessen()` auf (FEFO-Entnahme, Mangel-Guard; letzter Schritt bucht Fertigware ein) und leitet danach um (PRG, Flash). Zeiten via `fmt_zeit()`.
 
 Werk-App: der Hinweis „in Quarantäne – erst freigeben" ist jetzt ein Link in die Lager-Freigabeseite (`/lager/?p=quarantaene&item=ID`).
+
+**Teilmenge (S-12):** wie in `run`: Rechner „Jetzt machbar" über dem Formular, Prüfung und anteilige Abbuchung aller Materialien.
