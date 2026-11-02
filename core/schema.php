@@ -1844,6 +1844,8 @@ function init_schema(): void {
     ensure_column('item', 'fremdprodukt', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('item', 'zusammengefuehrt_in', "INT NULL");   // Doppel-Artikel wurde hierher zusammengeführt (deaktiviert, nicht gelöscht)
     ensure_column('item', 'fremd_besitzer_id', "INT NULL");   // Besitzer-Kunde (kunden.id) des Fremdprodukts
+    ensure_column('item', 'kundeneigen', "TINYINT(1) NOT NULL DEFAULT 0");  // Verpackung: kundeneigen (Beistellung) -> nicht einkaufbar, auftragsgebunden; normal buchbar/lagerführend
+    ensure_column('item', 'auftrag_id', "INT NULL");                        // kundeneigene Verpackung: an genau diesen Auftrag gebunden
     ensure_column('kunden', 'nutzt_fulfillment', "TINYINT NOT NULL DEFAULT 0"); // Kunde nutzt unser Fulfillment → hat ein Lager 2
     ensure_column('kunden', 'eigener_dhl', "TINYINT NOT NULL DEFAULT 0"); // Kunde hat eigenen DHL-Vertrag → Monatsabrechnung ohne Paketzeilen, nur Fulfillment-Service
     // Betriebsmittel (Kartons/Verbrauchsgüter/Inventar/Maschinen/Sonstiges): einfacher Bestand + Geräteprüfung.
@@ -7611,6 +7613,35 @@ function produkt_bulk_info(int $produkt_id, string $fbName = '', string $fbForm 
     return ['name'=>$name, 'form'=>$form, 'form_wort'=>$wort, 'einheit'=>$einheit, 'bezeichnung'=>$bez];
 }
 
+// Kundeneigene Verpackung (Beistellung) als AUFTRAGSEIGENEN Lagerartikel sicherstellen: der Kunde liefert
+// den Behälter selbst (nicht einkaufbar), er wird aber ganz normal geführt/gebucht (Wareneingang) und prüft
+// als Bestand mit. Legt – falls noch nicht vorhanden – eine auftragsgebundene Kopie des Basis-Behälters an
+// („<Name> – <Auftragsnr>", kundeneigen=1, auftrag_id gesetzt, ek_preis 0, kein Lieferant) und gibt deren
+// item-id zurück. Idempotent: bei erneutem Aufruf wird die vorhandene Kopie dieses Auftrags zurückgegeben.
+function verpackung_kundeneigen_sicherstellen(int $auftrag_id, int $basis_item_id): int {
+    if ($auftrag_id <= 0) return 0;
+    // Schon ein auftragseigener Verpackungs-Artikel vorhanden?
+    $vorhanden = (int) scalar("SELECT id FROM item WHERE kundeneigen=1 AND auftrag_id=? AND kategorie='verpackung' ORDER BY id LIMIT 1", [$auftrag_id]);
+    if ($vorhanden) return $vorhanden;
+    $b = $basis_item_id > 0 ? one("SELECT * FROM item WHERE id=? AND kategorie='verpackung'", [$basis_item_id]) : null;
+    if (!$b) return 0;
+    // Zeigt der Basisartikel schon auf diesen Auftrag (kundeneigen), direkt nehmen.
+    if (!empty($b['kundeneigen']) && (int)($b['auftrag_id'] ?? 0) === $auftrag_id) return $basis_item_id;
+    $anr  = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id]);
+    $name = trim((string)$b['name']) . ' – ' . ($anr !== '' ? $anr : ('Auftrag ' . $auftrag_id));
+    q("INSERT INTO item (name, kategorie, form, verpackungsart, material, volumen_ml, farbe, einheit, ek_preis, preis_bezug,
+                         verpackung_rolle, karton_item_id, max_fuellgewicht_g, etikett_format, etikett_druck, etikett_final,
+                         hoehe_mm, durchmesser_mm, breite_mm, tiefe_mm, gewicht_g, kundeneigen, auftrag_id, notiz)
+       VALUES (?, 'verpackung', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)",
+      [$name, $b['form'] ?? 'pulver', $b['verpackungsart'] ?? null, $b['material'] ?? null, $b['volumen_ml'] ?? null,
+       $b['farbe'] ?? null, $b['einheit'] ?? 'Stk', $b['preis_bezug'] ?? 'Stück', $b['verpackung_rolle'] ?? 'primaer',
+       $b['karton_item_id'] ?? null, $b['max_fuellgewicht_g'] ?? null, $b['etikett_format'] ?? null, $b['etikett_druck'] ?? null,
+       $b['etikett_final'] ?? null, $b['hoehe_mm'] ?? null, $b['durchmesser_mm'] ?? null, $b['breite_mm'] ?? null,
+       $b['tiefe_mm'] ?? null, $b['gewicht_g'] ?? null, $auftrag_id,
+       'Kundeneigene Verpackung (Beistellung) zu ' . ($anr !== '' ? $anr : ('Auftrag ' . $auftrag_id))]);
+    return (int) insert_id();
+}
+
 // Stück/Kapseln je Packung für einen Produktionsauftrag. Bevorzugt das Produkt
 // (einheiten_pro_packung); ist das 0 (v3-Import ohne verknüpftes Produkt), fällt es
 // auf den Auftrag zurück, der die Zahl als „stueck" trägt. Sonst 0.
@@ -7852,15 +7883,6 @@ function auftrag_bedarf(int $pa_id): array {
         }
     }
     unset($r);
-    // Kundeneigene Verpackung (Beistellung): der Behälter wird vom Kunden gestellt -> NICHT gegen unseren
-    // Lagerbestand prüfen. Die Zeile bleibt sichtbar (Flag 'beistellung'), gilt aber nicht als Fehlbestand
-    // (fehlt=0), damit Material-Übersicht/Bereitschaft nicht fälschlich blockieren.
-    if (!empty($afRow['verpackung_beistellung'])) {
-        foreach ($rows as &$r) {
-            if (($r['rolle'] ?? '') === 'Verpackung') { $r['beistellung'] = true; $r['fehlt'] = 0.0; }
-        }
-        unset($r);
-    }
     return $rows;
 }
 
@@ -8341,6 +8363,9 @@ function auftrag_fehlbedarf(int $pa_id): array {
     $out = [];
     foreach (auftrag_bedarf_cached($pa_id) as $r) {
         if ($r['fehlt'] <= 1e-6 || (int)$r['item_id'] <= 0) continue;
+        // Kundeneigene Verpackung (Beistellung) wird NICHT bestellt – der Kunde liefert sie. Sie bleibt aber
+        // regulär im Material-Check/Bereitschaft (Fehlbestand), bis sie im Wareneingang gebucht ist.
+        if ((int) scalar("SELECT COALESCE(kundeneigen,0) FROM item WHERE id=?", [(int)$r['item_id']]) === 1) continue;
         // schon offen bestellt: für diesen Auftrag ODER als Sammelbestellung (Lager, auftrag_id NULL)
         $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                  WHERE bp.item_id=? AND b.status<>'geliefert' AND (bp.auftrag_id=? OR bp.auftrag_id IS NULL)", [(int)$r['item_id'], $aid]);
