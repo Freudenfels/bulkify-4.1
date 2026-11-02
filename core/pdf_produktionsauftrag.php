@@ -82,9 +82,11 @@ function produktionsauftrag_pdf_bauen(int $pa_id): ?string {
     $zeile('Produkt', $produktName);
     if (!empty($pa['kunde_firma'])) $zeile('Kunde', (string)$pa['kunde_firma']);
     $zeile('Darreichung', ($form !== '' ? ucfirst($form) : '–') . ($groesse !== '' ? ' · ' . $groesse : ''));
+    // Pulver/Flüssig: Packungsgröße = Füllmenge (g/ml) -> „300 g je Packung · gesamt 600 kg" statt „300 Stk … 600.000 Stk" (St-13).
+    $fuellE = $istBulk ? '' : form_groessen_einheit($form);
     $zeile('Menge', number_format($menge, 0, ',', '.') . ' Packungen'
-        . ($einhProP > 0 ? '  ·  ' . number_format($einhProP, 0, ',', '.') . ' ' . $stkWort . ' je Packung' : '')
-        . ($gesamt > 0 ? '  ·  gesamt ' . number_format($gesamt, 0, ',', '.') . ' ' . $stkWort : ''));
+        . ($einhProP > 0 ? '  ·  ' . ($fuellE !== '' ? inhalt_je_packung_txt($form, $einhProP) : number_format($einhProP, 0, ',', '.') . ' ' . $stkWort . ' je Packung') : '')
+        . ($gesamt > 0 ? '  ·  gesamt ' . ($fuellE !== '' ? gewicht_lesbar((float)$gesamt, $fuellE) : number_format($gesamt, 0, ',', '.') . ' ' . $stkWort) : ''));
     if ($verpName !== '')    $zeile('Verpackung', $verpName);
     if ($etikettName !== '') $zeile('Etikett', $etikettName);
     if (!empty($pa['geplant_am'])) $zeile('Geplant am', date('d.m.Y', strtotime((string)$pa['geplant_am'])));
@@ -94,14 +96,17 @@ function produktionsauftrag_pdf_bauen(int $pa_id): ?string {
     $p->text($L, $y, 'Rezeptur (Zusammensetzung)', 12, true, $INK); $y += 6;
     $cA = $L; $cB = 330; $cC = $R;
     $p->text($cA, $y + 10, 'Zutat', 8, true, $INK);
-    $p->textRight($cB, $y + 10, 'mg je ' . rtrim($stkWort, 'ns'), 8, true, $INK);
+    $p->textRight($cB, $y + 10, 'mg je ' . ($fuellE !== '' ? 'Portion' : rtrim($stkWort, 'ns')), 8, true, $INK);
+    // Rezeptur-Einheiten gesamt für die Rückfall-Rechnung: bei Pulver Portionen aus dem Füllgewicht, sonst Stück.
+    $sumMgZ = 0.0; foreach ($zutaten as $zz) $sumMgZ += (float)$zz['menge_mg'];
+    $einhGesamt = $fuellE === '' ? (float)$gesamt : (($fuellE === 'g' && $sumMgZ > 0) ? $gesamt * 1000.0 / $sumMgZ : 0.0);
     $p->textRight($cC, $y + 10, 'Gesamt benötigt', 8, true, $INK);
     $p->line($L, $y + 14, $R, $y + 14, 0.6, $INK); $y += 18;
     if (!$zutaten) { $p->text($cA, $y + 8, 'Keine Zutaten hinterlegt.', 9, false, $GRAY); $y += 14; }
     foreach ($zutaten as $z) {
         if ($y > 770) { $p->addPage(); $y = 54; }
         $b = $bedarfMap[mb_strtolower((string)$z['name'])] ?? null;
-        $ges = $b ? ($mg($b['benoetigt']) . ' ' . ($b['einheit'] ?: 'kg')) : ($gesamt > 0 ? $mg((float)$z['menge_mg'] * $gesamt / 1e6) . ' kg' : '–');
+        $ges = $b ? ($mg($b['benoetigt']) . ' ' . ($b['einheit'] ?: 'kg')) : ($einhGesamt > 0 ? $mg((float)$z['menge_mg'] * $einhGesamt / 1e6) . ' kg' : '–');
         $p->text($cA, $y + 8, $p->fit((string)$z['name'], $cB - $cA - 70, 9, false), 9, false, $INK);
         $p->textRight($cB, $y + 8, $mg($z['menge_mg']) . ' mg', 9, false, $INK);
         $p->textRight($cC, $y + 8, $ges, 9, true, $INK);

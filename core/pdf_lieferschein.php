@@ -31,7 +31,7 @@ function lieferschein_pdf_bauen(int $beleg_id): ?string {
     $beschParts = [];
     if ($a) {
         $stk = (int)($a['stueck'] ?? 0);
-        if ($stk > 0) $beschParts[] = $stk . ' Stück je Packung';
+        if ($stk > 0) $beschParts[] = inhalt_je_packung_txt(auftrag_darreichungsform($a), $stk);   // Pulver: 300 g je Packung statt Stueck
         if (!empty($a['verpackung_id'])) {
             $vName = (string) scalar("SELECT name FROM item WHERE id=?", [(int)$a['verpackung_id']]);
             if ($vName !== '') $beschParts[] = $vName;

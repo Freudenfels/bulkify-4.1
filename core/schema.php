@@ -4297,6 +4297,19 @@ function form_groessen_label(string $form, float $wert): string {
     if ($e !== '') return rtrim(rtrim(number_format($wert, 1, ',', '.'), '0'), ',') . ' ' . $e;
     return (int) $wert . ' ' . form_plural($form);
 }
+// „Inhalt je Packung" formgerecht: Pulver „300 g je Packung", Flüssig „250 ml je Packung", Kapseln „60 Kapseln je Packung",
+// sonst „60 Stk je Packung" – nie „300 Stück je Packung" bei Pulver (St-13). Leer, wenn kein Wert.
+function inhalt_je_packung_txt(string $form, float $wert): string {
+    return $wert > 0 ? form_groessen_label($form, $wert) . ' je Packung' : '';
+}
+// Darreichungsform eines Auftrags (Zeile aus auftrag, ggf. mit Joins): vorhandenes Feld, sonst Rezeptur des Produkts,
+// sonst die am Auftrag gespeicherte Form.
+function auftrag_darreichungsform(array $a): string {
+    if (!empty($a['darreichungsform'])) return (string)$a['darreichungsform'];
+    $pid = (int)($a['produkt_id'] ?? 0);
+    $f = $pid ? (string) scalar("SELECT r.darreichungsform FROM produkt p JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$pid]) : '';
+    return $f !== '' ? $f : (string)($a['produkt_form'] ?? '');
+}
 // Große Schüttgut-/Volumenmenge lesbar machen: Gramm -> t/kg/g, ml -> L/ml (Stück bleibt Stück).
 // $einheit ist die BASIS-Einheit des Werts ('g', 'ml' oder sonst Stück). Für die Anzeige, nicht zum Speichern.
 function gewicht_lesbar(float $menge, string $einheit = 'g'): string {

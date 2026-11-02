@@ -42,7 +42,8 @@ if (isset($_GET['ok']))      echo '<div class="bx-panel badge-ok" style="padding
 if (isset($_GET['preisok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Neuer Preis gesetzt – der Kunde gibt ihn im Portal frei.</div>';
 if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 
-$paket = fn($stk) => (int)$stk > 0 ? number_format((int)$stk, 0, ',', '.') . ' Stk/Pkg' : 'Pkg';
+// Inhalt je Packung formgerecht (Pulver „100 g/Pkg", Kapseln „60 Kapseln/Pkg") statt pauschal „Stk/Pkg" (St-13).
+$paket = fn($stk, $pid = 0) => (int)$stk > 0 ? form_groessen_label(auftrag_darreichungsform(['produkt_id'=>(int)$pid]), (float)$stk) . '/Pkg' : 'Pkg';
 ?>
 <div class="bx-panel">
   <h2 style="margin-top:0">Zu prüfen</h2>
@@ -53,7 +54,7 @@ $paket = fn($stk) => (int)$stk > 0 ? number_format((int)$stk, 0, ',', '.') . ' S
     <?php foreach ($offen as $n): $menge = (int)$n['menge']; $vk = (float)$n['vk_stueck']; $netto = $menge * $vk; ?>
       <tr>
         <td><?= h((string)($n['kunde'] ?: ('Kunde #' . (int)$n['kunde_id']))) ?></td>
-        <td><?= h((string)($n['produkt'] ?: '–')) ?> <span class="muted"><?= h($paket($n['stueck'])) ?></span></td>
+        <td><?= h((string)($n['produkt'] ?: '–')) ?> <span class="muted"><?= h($paket($n['stueck'], $n['produkt_id'] ?? 0)) ?></span></td>
         <td class="bx-num"><?= number_format($menge, 0, ',', '.') ?></td>
         <td class="bx-num"><?= $eur($vk) ?></td>
         <td class="bx-num"><?= $eur($netto) ?></td>

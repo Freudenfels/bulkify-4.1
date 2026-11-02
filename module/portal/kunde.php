@@ -2172,7 +2172,7 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
             // Fallback: eine Sammelposition (Netto exakt aus Beleg bzw. Auftrag).
             $preisCent = (int) round($nettoGesamt * 100 / $menge);
             $vName = $auf['verpackung_id'] ? scalar("SELECT name FROM item WHERE id=?", [(int)$auf['verpackung_id']]) : '';
-            $besch = trim(((int)$auf['stueck'] ? (int)$auf['stueck'] . ' Stück je Packung' : '') . ($vName ? ' · ' . $vName : ''), ' ·');
+            $besch = trim(((int)$auf['stueck'] ? inhalt_je_packung_txt(auftrag_darreichungsform($auf), (float)$auf['stueck']) : '') . ($vName ? ' · ' . $vName : ''), ' ·');
             $positionen = [[
                 'artikelnr'    => (string) scalar("SELECT r.nummer FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)($auf['produkt_id'] ?? 0)]),
                 'bezeichnung'  => $auf['produkt_name'] ?: 'Produkt',
@@ -3894,7 +3894,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-panel" style="margin:0;display:flex;flex-direction:column;gap:8px">
       <div style="font-weight:600;font-size:15px"><?= h($pname) ?></div>
       <div class="muted" style="font-size:12px">
-        <?= $stk ? number_format($stk,0,',','.') . ' je Packung · ' : '' ?>zuletzt bestellt: <?= number_format($defMenge,0,',','.') ?> Packungen
+        <?= $stk ? h(inhalt_je_packung_txt(auftrag_darreichungsform($a), (float)$stk)) . ' · ' : '' ?>zuletzt bestellt: <?= number_format($defMenge,0,',','.') ?> Packungen
       </div>
       <?php if ($nbOff && ($nbOff['status'] ?? '') === 'preis_neu'): ?>
         <div class="bx-panel" style="margin:4px 0 0;padding:10px 12px;border-color:var(--warn,#c7962b)">
@@ -4092,7 +4092,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <h2 style="margin:0;font-size:18px">Nachbestellen</h2>
         <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('dialog').close()" aria-label="schließen">&#10005;</button>
       </div>
-      <div class="muted" style="font-size:13px;margin:4px 0 14px"><?= h($a['nummer']) ?> · <?= h($titelFuer($a)) ?><?= $nbStk ? ' · ' . number_format($nbStk,0,',','.') . ' je Packung' : '' ?></div>
+      <div class="muted" style="font-size:13px;margin:4px 0 14px"><?= h($a['nummer']) ?> · <?= h($titelFuer($a)) ?><?= $nbStk ? ' · ' . h(inhalt_je_packung_txt(auftrag_darreichungsform($a), (float)$nbStk)) : '' ?></div>
       <form method="post" class="nb-form" data-staffel='<?= h(json_encode(array_map(fn($r)=>[$r['menge'],$r['vk']], $nbStaffel))) ?>' data-fallback="<?= h((string)$nbVk) ?>" style="margin:0" onsubmit="return confirm('Verbindlich nachbestellen? Wir bestätigen den Preis kurz, dann startet die Produktion.');">
         <input type="hidden" name="aktion" value="nachbestellen"><input type="hidden" name="quelle_auftrag_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="zurueck" value="bestellungen">
         <div class="bx-row" style="gap:18px;align-items:flex-end;flex-wrap:wrap">
@@ -4190,7 +4190,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <!-- Status-Kacheln -->
   <div class="bx-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
     <div class="bx-panel" style="margin:0"><div class="muted">Status</div><div style="margin-top:6px"><?= $aufBadge($a) ?><?php if (!empty($a['status_datum']) && !(($a['status'] ?? '') === 'storniert' && !empty($a['kontingent_id']))): ?> <span class="muted" style="font-size:13px">seit <?= h(date('d.m.Y', strtotime($a['status_datum']))) ?></span><?php endif; ?></div></div>
-    <div class="bx-panel" style="margin:0"><div class="muted">Menge</div><div style="margin-top:6px"><?= (int)$a['menge'] ?> Packungen<?php if ((int)$a['stueck']): ?> &middot; <?= (int)$a['stueck'] ?> je Packung<?php endif; ?></div></div>
+    <div class="bx-panel" style="margin:0"><div class="muted">Menge</div><div style="margin-top:6px"><?= (int)$a['menge'] ?> Packungen<?php if ((int)$a['stueck']): ?> &middot; <?= h(inhalt_je_packung_txt(auftrag_darreichungsform($a), (float)$a['stueck'])) ?><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Gesamtbetrag</div><div style="margin-top:6px"><strong><?= $eur($re ? $re['brutto'] : $a['gesamt_netto']) ?></strong><?php if ($re): ?> <span class="muted">brutto</span><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Zahlung</div><div style="margin-top:6px"><?php
         if ($re) { echo $reBadge($zs['status']); if ($zs['status'] === 'teilbezahlt') echo ' <span class="muted" style="font-size:12px">offen ' . $eur($zs['rest']) . '</span>'; }
@@ -4394,7 +4394,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-tablewrap"><table class="bx-table">
       <tbody>
         <tr><td class="muted" style="width:150px">Produkt</td><td><?= h($titelFuer($a)) ?></td></tr>
-        <?php if ((int)$a['stueck']): ?><tr><td class="muted">Stück je Packung</td><td><?= (int)$a['stueck'] ?></td></tr><?php endif; ?>
+        <?php if ((int)$a['stueck']): ?><tr><td class="muted">Inhalt je Packung</td><td><?= h(form_groessen_label(auftrag_darreichungsform($a), (float)$a['stueck'])) ?></td></tr><?php endif; ?>
         <tr><td class="muted">Anzahl Packungen</td><td><?= (int)$a['menge'] ?></td></tr>
         <?php $mf = auftrag_mengenfortschritt((int)$a['id']);
               // Dem Kunden erst zeigen, wenn die Produktion laeuft (oder schon etwas fertig ist) – nicht bei frisch bestaetigt.

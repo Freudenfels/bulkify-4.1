@@ -23,7 +23,7 @@ function auftrag_pdf_bauen(int $auftrag_id): ?string {
     $stk   = (int)($a['stueck'] ?? 0);
     $menge = (int)($a['menge'] ?? 0);
     $beschParts = [];
-    if ($stk > 0)      $beschParts[] = $stk . ' Stück je Packung';
+    if ($stk > 0)      $beschParts[] = inhalt_je_packung_txt(auftrag_darreichungsform($a), $stk);   // Pulver: 300 g je Packung statt Stueck
     if ($vName !== '') $beschParts[] = $vName;
     // Positionen: die VOLLSTÄNDIGEN Angebotspositionen des Auftrags (Herstellung + Glas + Deckel + Etikett …) wie auf der Kunden-AB und der
     // Rechnung (S-04 intern) – nicht nur die Herstellungszeile. Passt die Aufschlüsselung nicht exakt zum Auftrags-Netto, steht EINE
