@@ -630,10 +630,12 @@ if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="pad
 if (isset($_GET['importiert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag aus Angebot importiert – Rezeptur/Produkt angelegt (falls neu), Angebot/Rechnung angehängt. Bitte Werte gegenprüfen.</div>';
 
 // Kacheln bleiben in EINER Reihe und werden bei Enge KLEINER (kein Umbruch, kein Scroll).
-echo '<style>.bx-cards{flex-wrap:nowrap;gap:8px}'
-   . '.bx-cards .bx-card{flex:1 1 0;min-width:0;padding:10px 12px;overflow:hidden}'
-   . '.bx-cards .k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
-   . '.bx-cards .v{font-size:15px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+// Kennzahl-Kacheln als responsives Raster (Aufräumen 12): nebeneinander, umbrechen in neue ZEILEN statt Beschriftungen
+// abzuschneiden („versen…", „Menge (P…"); Labels bleiben einzeilig und vollständig.
+echo '<style>.bx-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}'
+   . '.bx-cards .bx-card{min-width:0;padding:10px 12px}'
+   . '.bx-cards .k{white-space:nowrap}'
+   . '.bx-cards .v{font-size:15px;line-height:1.4;overflow-wrap:anywhere}'
    . '.bx-card-status .v{font-weight:600;font-size:16px}'
    . 'details.bx-sek>summary{cursor:pointer;color:var(--gruen);font-size:13px;padding:4px 0}</style>';
 // Status-Ampel: weiß = Start (offen) -> rot -> gelb -> grün = fertig (versendet). Storniert = grau.
@@ -655,7 +657,7 @@ $fehltCard = fn($txt) => '<span style="color:var(--warn)">' . h($txt) . '</span>
 $kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCard, $einhProP, $gesamtStk, $groesseLbl, $istFremd, $etikettBadge, $eur, $istFuellG) {
     echo '<div class="bx-cards" style="margin-bottom:16px">';
     echo '<div class="bx-card bx-card-status" title="Status" style="background:' . $stBg . ';color:' . $stFg . ';border:1px solid rgba(0,0,0,.15)"><div class="v" style="color:' . $stFg . '">' . h($stText) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . (int)$a['menge'] . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . number_format((int)$a['menge'], 0, ',', '.') . '</div></div>';
     // Glas + Kapselzahl IMMER zeigen (auch wenn leer) – sonst sieht man bei alten Nachbestellungen nicht, dass es fehlt.
     echo '<div class="bx-card"><div class="k">Verpackung (Glas)</div><div class="v" style="font-size:16px">' . ($glasName !== '' ? h($glasName) : $fehltCard('nicht gesetzt')) . '</div></div>';
     if ($istFuellG) {

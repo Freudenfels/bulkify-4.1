@@ -217,3 +217,6 @@ Bei Zukauf-Art „fertig" hat der Produktionsauftrag nur noch **Fertigware berei
 
 ## Auftrags-Art je Kunde (Aufräumen 9)
 „Nachbestellung" heißt: **derselbe Kunde** hat das Produkt schon bestellt. Hat nur ein anderer Kunde es bestellt, steht „Neues Produkt" (für diesen Kunden neu). Gleiche Regel in der Liste (`$erstProdKunde`) und am Auftrag (`auftrag_art()`).
+
+## Kennzahl-Kacheln (Aufräumen 12)
+Die Kacheln oben am Auftrag sind ein responsives Raster (`auto-fill, minmax(160px,1fr)`). Sie brechen in neue Zeilen um, statt Beschriftungen mit „…" abzuschneiden. Menge mit Tausenderpunkt.
