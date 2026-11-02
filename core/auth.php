@@ -132,6 +132,11 @@ function route_rollen_map(): array {
         'lieferant_rohstoff_info' => ['*'],
         'lieferant_hilfe'         => ['*'],
         'lieferant_dokument'      => ['*'],
+        // Pflicht-Onboarding + „Über uns": MÜSSEN in der Map stehen, sonst greift der Default ['admin'] ->
+        // „Kein Zugriff" -> index.php leitet auf lieferant_onboarding um -> Endlosschleife (neue Lieferanten
+        // kamen nie ins Portal). Die Lieferanten-Isolation prüft index.php über $LIEF_ROUTEN.
+        'lieferant_onboarding'    => ['*'],
+        'lieferant_ueber'         => ['*'],
         // Finanz-Routen (Rechnungen/Belege/Buchhaltung) sind in das eigene Programm /buchhaltung/
         // ausgezogen (eigene Sitzung BXBUCH, eigene Rechte in buchhaltung/core/auth.php). Hier bewusst leer.
         'einstellungen'      => ['admin', 'finance', 'production'],
