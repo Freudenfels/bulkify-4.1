@@ -56,3 +56,6 @@ albers@bulkify.pro) ALLE Team-Benachrichtigungen per Mail: Lieferanten-Rückfrag
 Preisanfragen, angenommene Angebote, Etikett-Uploads, neue Bestellungen. Pflege in Einstellungen →
 E-Mail → „Zusätzliche Benachrichtigungs-Adressen". Beim ersten Start wird der Schlüssel einmalig mit
 `albers@bulkify.pro` vorbelegt (danach frei änderbar; leeren = niemand extra).
+
+## Keine Vorbelegung der CC-Adresse (Paket Mails)
+`init_schema()` belegt `benachrichtigung_cc` nicht mehr fest mit albers@bulkify.pro vor – sonst bekäme Tabea von jeder Test-/Entwicklerinstallation mit echtem SMTP Testmails. Live ist der Wert gespeichert und bleibt; neue Installationen pflegen ihn in den Einstellungen.

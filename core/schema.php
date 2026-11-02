@@ -2347,10 +2347,9 @@ function init_schema(): void {
     // Beispiel-Umkarton 250 ml (69×69×134, Automatikboden) anlegen + ans 250-ml-Weithalsglas hängen + Druckvorlage.
     seed_umkarton_250ml_if_empty();
 
-    // Einmalig: Tabea (albers@bulkify.pro) als zusaetzliche Benachrichtigungs-Adresse vorbelegen – bekommt dann
-    // alle Team-Mails (Rueckfragen/Infos). Nur setzen, wenn der Schluessel noch nie gesetzt wurde; spaeter in
-    // den Einstellungen (E-Mail -> Zusaetzliche Benachrichtigungs-Adressen) frei aenderbar.
-    if (meta_get('benachrichtigung_cc', null) === null) meta_set('benachrichtigung_cc', 'albers@bulkify.pro');
+    // Zusaetzliche Benachrichtigungs-Adressen (benachrichtigung_cc) werden NICHT mehr vorbelegt: frueher stand hier fest
+    // albers@bulkify.pro – jede Test-/Entwickler-Installation mit echtem SMTP haette Tabea Testmails geschickt. Live ist der
+    // Wert schon gespeichert und bleibt; neue Installationen pflegen ihn in den Einstellungen (E-Mail).
 
     // Einmalig: DL-Aufträge ohne Service-Verknüpfung heilen (Service aus der Angebotsposition nachtragen +
     // Schritte aus dem Katalog anlegen). Behebt Altbestand, bei dem dienstleistung_id am Auftrag fehlte ->
