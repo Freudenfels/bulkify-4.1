@@ -24,3 +24,5 @@ werden. Lieferungen ohne hinterlegte Position erscheinen als eine Zeile mit **�
 
 Leerzustand: Hinweis, dass nichts unterwegs ist (erscheint, sobald im Dashboard eine Bestellung als
 „bestellt" markiert wird). Route `?p=erwartet`. Siehe auch [eingang.md](eingang.md).
+
+**Einbuchen -> Wareneingang mit vorgewählter Lieferung (S-06):** Der Knopf „Einbuchen" führt auf `?p=we&lieferung=<Bestellung>` (nicht mehr in die Schnell-Maske `?p=eingang`, die keine Bestellung kennt). Der Wareneingang öffnet „Aus Liste wählen", lädt die Lieferung und schließt die Bestellung beim Buchen.

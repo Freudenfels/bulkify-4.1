@@ -79,3 +79,5 @@ Eingangskarte – sie wird **nie** auf die Rezeptur bzw. den Bulk-Artikel gemapp
 Auftrag hängt. Nur Bulk-Artikel (`fertig` + Rezeptur) und Freitext-Positionen ohne Artikel laufen über die
 Rezeptur-Ableitung. Beim Buchen lehnt der Server außerdem jede Zeile ab, die einen Bulk-/Rezeptur-Artikel als
 Etikett/Verpackung/Rohstoff einbuchen will – der Artikel wird dadurch nicht mehr umgewidmet.
+
+**Vorgewählte Lieferung per URL (S-06):** `?p=we&lieferung=<id>` öffnet „Aus Liste wählen" und lädt die Lieferung sofort (Link „Einbuchen" aus „Erwartete Lieferungen"). Das Buchen markiert die Bestellung als angekommen und `geliefert`.

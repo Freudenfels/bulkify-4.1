@@ -23,6 +23,7 @@ foreach ($lieferungen as $l) {
     $kopf = [
         'lieferant'      => (string)($l['lieferant'] ?? ''),
         'lieferant_id'   => (int)($l['lieferant_id'] ?? 0),
+        'bestellung_id'  => (int)($l['id'] ?? 0),
         'nummer'         => (string)($l['nummer'] ?? ''),
         'bestelldatum'   => (string)($l['bestelldatum'] ?? ''),
         'eta'            => $eta,
@@ -77,11 +78,9 @@ if ($hatRest) $reiter['rest'] = 'Sonstiges';
     $suchteile = array_filter([$z['lieferant'], $z['nummer'], $z['tracking'], $z['name'], $z['einheit'], $z['kapselgroesse']]);
     $such = mb_strtolower(implode(' ', $suchteile));
     $katLabel = $z['tabkey'] === 'rest' ? ($z['kategorie'] !== '' ? ucfirst($z['kategorie']) : 'Sonstiges') : $kats[$z['tabkey']];
-    $buchUrl = '?p=eingang'
-      . '&item=' . (int)$z['item_id']
-      . '&menge=' . rawurlencode(menge_txt($z['menge']))
-      . ($z['lieferant_id'] ? '&lieferant=' . (int)$z['lieferant_id'] : '')
-      . ($z['nummer'] !== '' ? '&charge=' . rawurlencode($z['nummer']) : '');
+    // „Einbuchen" führt in den vollwertigen Wareneingang (?p=we) mit vorgewählter Lieferung: dort wird die Bestellung
+    // beim Buchen geschlossen (S-06). Die alte Schnell-Maske ?p=eingang kennt keine Bestellung.
+    $buchUrl = '?p=we&lieferung=' . (int)$z['bestellung_id'];
   ?>
     <tr data-kat="<?= h($z['tabkey']) ?>" data-such="<?= h($such) ?>">
       <td data-label="Artikel"><?= $z['name'] !== '' ? h($z['name']) : '<span class="muted">Artikel beim Einbuchen wählen</span>' ?><?php

@@ -774,6 +774,9 @@ function erp_lieferung_per_tracking(string $tracking): array {
 function erp_bestellung_angekommen(int $bestellung_id): void {
     if ($bestellung_id <= 0 || !tabelle_da('bestellung')) return;
     q("UPDATE bestellung SET angekommen_am=CURDATE() WHERE id=? AND angekommen_am IS NULL", [$bestellung_id]);
+    // Bestellung SCHLIESSEN (S-06): sonst bleibt sie 'bestellt' und der Bedarf zählt die Ware zugleich als eingebucht
+    // UND als bestellt (Doppelzählung), und der Dashboard-Knopf „liefern" würde sie ein zweites Mal einbuchen.
+    q("UPDATE bestellung SET status='geliefert' WHERE id=? AND status IN ('offen','gesendet','bestellt')", [$bestellung_id]);
 }
 
 // Eine frisch eingebuchte Charge mit dem Auftrag verknüpfen. Das ist der EINE Schlüssel, an dem

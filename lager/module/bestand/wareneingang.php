@@ -960,6 +960,13 @@ if ($gebucht):
     });
   });
 
+  // Aus „Erwartete Lieferungen -> Einbuchen": ?lieferung=ID öffnet „Aus Liste wählen" und lädt die Lieferung sofort.
+  (function(){
+    var m=/[?&]lieferung=(\d+)/.exec(location.search); if(!m) return;
+    var btn=document.querySelector('.we-listitem[data-id="'+m[1]+'"]'); if(!btn) return;
+    zeigeWeg('liste'); btn.click();
+  })();
+
   window.addEventListener('beforeunload',camStop);
 })();
 </script>

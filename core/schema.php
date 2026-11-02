@@ -4077,14 +4077,15 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
 // Bestellung als geliefert verbuchen: für jede Position eine Charge (Wareneingang) anlegen. Idempotent.
 function bestellung_wareneingang(int $bestellung_id): bool {
     $b = one("SELECT * FROM bestellung WHERE id=?", [$bestellung_id]);
-    if (!$b || $b['status'] === 'geliefert') return false;
+    // Schon geliefert ODER im Lager (?p=we) als angekommen gebucht -> nichts ein zweites Mal einbuchen (S-06).
+    if (!$b || $b['status'] === 'geliefert' || !empty($b['angekommen_am'])) return false;
     foreach (all("SELECT * FROM bestellung_position WHERE bestellung_id=?", [$bestellung_id]) as $p) {
         if (!$p['item_id'] || (float)$p['menge'] <= 0) continue;   // Bulk-Freitext (item_id NULL) manuell als Fertigware buchen
         wareneingang_buchen((int)$p['item_id'], (float)$p['menge'], 'zu ' . $b['nummer'], null,
             $b['lieferant_id'] ? (int)$b['lieferant_id'] : null, 'Aus Bestellung ' . $b['nummer'],
             !empty($p['auftrag_id']) ? (int)$p['auftrag_id'] : null, (int)$p['id']);
     }
-    q("UPDATE bestellung SET status='geliefert' WHERE id=?", [$bestellung_id]);
+    q("UPDATE bestellung SET status='geliefert', angekommen_am=COALESCE(angekommen_am, CURDATE()) WHERE id=?", [$bestellung_id]);
     return true;
 }
 
@@ -5431,7 +5432,7 @@ function auftrag_rohstoffe_beschafft(int $aid): ?string {
     foreach ($roh as $iid => $fehlt) {
         $bp = one("SELECT COALESCE(SUM(bp.menge),0) menge, COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d
                    FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                   WHERE bp.item_id=? AND b.status<>'geliefert'", [$iid]);
+                   WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid]);
         $ordered = (float)($bp['menge'] ?? 0);
         if ($fehlt > 1e-6) {
             if ($ordered + 1e-6 < $fehlt) return null;          // Fehlbestand NICHT durch Bestellung gedeckt
@@ -8279,7 +8280,7 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
             $erstePosId = 0;
             foreach ($g['orders'] as $o) {
                 $offen = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                                         WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status<>'geliefert'", [(int)$o['auftrag_id']]);
+                                         WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [(int)$o['auftrag_id']]);
                 $noch = (float)$o['need'] - $offen;
                 if ($noch <= 1e-6) continue;
                 // Fremdfertigungs-/Zukaufpreis des Lieferanten je Einheit als EK-Snapshot übernehmen (sonst 0 -> kein Preis).
@@ -8341,7 +8342,7 @@ function meldebestand_bedarf(): array {
         $iid = (int)$it['id'];
         $bestand = item_bestand($iid, true);
         $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                                 WHERE bp.item_id=? AND b.status<>'geliefert'", [$iid]);
+                                 WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid]);
         $soll = (float)$it['mindestbestand'];
         $verf = $bestand + $offen;
         if ($verf + 1e-6 >= $soll) continue;   // genug (inkl. offener Bestellungen)
@@ -8507,7 +8508,7 @@ function auftrag_fehlbedarf(int $pa_id): array {
         if ($r['fehlt'] <= 1e-6 || (int)$r['item_id'] <= 0) continue;
         // schon offen bestellt: für diesen Auftrag ODER als Sammelbestellung (Lager, auftrag_id NULL)
         $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                                 WHERE bp.item_id=? AND b.status<>'geliefert' AND (bp.auftrag_id=? OR bp.auftrag_id IS NULL)", [(int)$r['item_id'], $aid]);
+                                 WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL AND (bp.auftrag_id=? OR bp.auftrag_id IS NULL)", [(int)$r['item_id'], $aid]);
         $noch = (float)$r['fehlt'] - $offen;
         if ($noch <= 1e-6) continue;
         $r['bestellt'] = $offen; $r['zu_bestellen'] = $noch;
@@ -8885,13 +8886,13 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
         if (!empty($a['etikett'])) {
             // Kundenspezifisch: kein generischer Lagerbestand, Bestell-Sperre bis Design da ist.
             $a['stock'] = 0.0;
-            $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status<>'geliefert'", [$a['item_id'], $aid]);
+            $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$a['item_id'], $aid]);
             $a['zu_bestellen'] = max(0.0, $a['need'] - $a['bestellt']);
             // Etiketten erst bestellbar, wenn der Kunde das Etikett freigegeben hat (nicht nur hochgeladen).
             $a['etikett_ok'] = etikett_freigegeben($aid);
         } else {
             $a['stock'] = item_bestand($a['item_id'], true);
-            $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND b.status<>'geliefert'", [$a['item_id']]);
+            $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$a['item_id']]);
             $a['zu_bestellen'] = max(0.0, $a['need'] - $a['stock'] - $a['bestellt']);
             $a['etikett_ok'] = true;
         }
@@ -8986,7 +8987,7 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
         $aids = array_keys($g['auftrag_ids']);
         $in = implode(',', array_map('intval', $aids ?: [0]));
         $bestellt = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                                    WHERE bp.item_id IS NULL AND bp.auftrag_id IN ($in) AND b.status<>'geliefert'");
+                                    WHERE bp.item_id IS NULL AND bp.auftrag_id IN ($in) AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL");
         // Freier, nicht kundengebundener Fertigware-Bestand dieses Produkts (ohne Item neu anzulegen).
         $lagerItem = (int) scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$g['produkt_id']]);
         $stockRaw = $lagerItem > 0 ? item_bestand($lagerItem, true) : 0.0;   // fertige Packungen (Beutel/Dosen)
@@ -9018,7 +9019,7 @@ function bestellung_bulk_anlegen(array $produkt_ids, ?int $lieferant, ?string $d
         $stockPool = (float)($g['stock'] ?? 0);   // freier Fertigware-Bestand deckt den Bedarf zuerst (FIFO über die Aufträge)
         foreach ($g['orders'] as $o) {
             $offen = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                                     WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status<>'geliefert'", [(int)$o['auftrag_id']]);
+                                     WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [(int)$o['auftrag_id']]);
             $noch = (float)$o['need'] - $offen;
             if ($stockPool > 1e-6 && $noch > 1e-6) {   // vorhandenen Bestand anrechnen
                 $ab = min($stockPool, $noch);
@@ -9104,7 +9105,7 @@ function auftrag_offener_bedarf(int $pa_id): bool {
         $einh = produktion_stueck_je_packung($pa);   // Fallback auf auftrag.stueck (v3-Import, produkt.einheiten_pro_packung=0)
         $need = (int)$pa['menge'] * $einh;
         $ordered = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                                   WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status<>'geliefert'", [(int)$pa['auftrag_id']]);
+                                   WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [(int)$pa['auftrag_id']]);
         if ($need - $ordered > 1e-6) return true;
     }
     return false;
