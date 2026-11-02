@@ -117,6 +117,47 @@ function nachbestellung_anlegen(int $kunde_id, int $angebot_id, int $menge): arr
     return ['id' => $id];
 }
 
+// Quelle DIREKT aus einem bestehenden Auftrag (robust – funktioniert auch für importierte/gebündelte Aufträge
+// ohne klassisches bestätigtes Angebot mit Staffel). Nimmt Produkt/Packungsgröße/Menge/Preis vom Auftrag.
+function nachbestellung_quelle_auftrag(int $auftrag_id, int $kunde_id): ?array {
+    if ($auftrag_id <= 0 || $kunde_id <= 0) return null;
+    $a = one("SELECT id, angebot_id, produkt_id, menge, stueck, vk_stueck
+              FROM auftrag WHERE id=? AND kunde_id=? AND produkt_id IS NOT NULL AND COALESCE(kategorie,'produkt')<>'dienstleistung'", [$auftrag_id, $kunde_id]);
+    if (!$a) return null;
+    $rezId = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
+    return [
+        'angebot_id' => (int)($a['angebot_id'] ?? 0) ?: null,
+        'auftrag_id' => (int)$a['id'],
+        'produkt_id' => (int)$a['produkt_id'],
+        'rezeptur_id'=> $rezId ?: null,
+        'stueck'     => (int)($a['stueck'] ?? 0),
+        'menge'      => (int)($a['menge'] ?? 0),
+        'vk_stueck'  => (float)($a['vk_stueck'] ?? 0),
+    ];
+}
+// Nachbestellung aus einem Auftrag anlegen (gleiche Verpackung/Etikett, Preis aus Staffel oder zuletzt vom Auftrag).
+function nachbestellung_anlegen_auftrag(int $kunde_id, int $auftrag_id, int $menge): array {
+    nachbestellung_schema();
+    $q = nachbestellung_quelle_auftrag($auftrag_id, $kunde_id);
+    if (!$q)         return ['fehler' => 'Nachbestellung nicht möglich – Bestellung nicht gefunden.'];
+    if ($menge <= 0) return ['fehler' => 'Bitte eine Menge größer 0 angeben.'];
+    $preis = nachbestellung_preis_fuer($kunde_id, (int)$q['produkt_id'], (int)$q['stueck'], $menge, (float)$q['vk_stueck']);
+    $vk = (float)($preis['vk'] ?? 0); if ($vk <= 0) $vk = (float)$q['vk_stueck'];
+    $cu = function_exists('current_user') ? current_user() : null;
+    q("INSERT INTO nachbestellung (kunde_id,quelle_angebot_id,quelle_auftrag_id,produkt_id,rezeptur_id,stueck,menge,vk_stueck,grund,status,angelegt,angelegt_von)
+       VALUES (?,?,?,?,?,?,?,?,?,'pruefung',?,?)",
+      [$kunde_id, $q['angebot_id'], $q['auftrag_id'], $q['produkt_id'], $q['rezeptur_id'], $q['stueck'], $menge, $vk,
+       ($preis['hinweis'] !== '' ? $preis['hinweis'] : null), gmdate('Y-m-d H:i:s'), ($cu['name'] ?? 'Kunde')]);
+    $id = (int) insert_id();
+    $firma = (string) scalar("SELECT firma FROM kunden WHERE id=?", [$kunde_id]);
+    if (function_exists('benachrichtigung_add'))
+        benachrichtigung_add('Nachbestellung: ' . ($firma ?: ('Kunde #' . $kunde_id)) . ' · ' . number_format($menge, 0, ',', '.') . ' Pkg',
+            'Zum zuletzt vereinbarten Preis – bitte Preis bestätigen & freigeben.', '?p=nachbestellungen');
+    if (function_exists('log_aktivitaet'))
+        log_aktivitaet('kunde', $kunde_id, 'kunde', 'Nachbestellung angelegt (aus Auftrag #' . $auftrag_id . '): ' . number_format($menge, 0, ',', '.') . ' Pkg.');
+    return ['id' => $id];
+}
+
 // Intern: aus der Nachbestellung den echten Auftrag erzeugen (minimales bestätigtes Angebot -> auftrag_aus_angebot),
 // Etikett-Freigabe aus dem Vorauftrag übernehmen. Rückgabe Auftrags-ID oder 0.
 function nachbestellung_order_erstellen(array $nb, float $vk): int {

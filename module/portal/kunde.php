@@ -49,9 +49,12 @@ $adminImPortal = function_exists('is_logged_in') && is_logged_in()
 // Nachbestellung: der Kunde tippt am schon bestellten Produkt nur die Menge ein und bestellt verbindlich zum
 // zuletzt vereinbarten Preis. Kein neuer Upload, keine neue Anfrage, kein neues Angebot – bulkify prüft nur den Preis.
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachbestellen') {
+    $auftragId = (int)($_POST['quelle_auftrag_id'] ?? 0);
     $angebotId = (int)($_POST['quelle_angebot_id'] ?? 0);
     $menge     = (int) preg_replace('/\D/', '', (string)($_POST['menge'] ?? ''));
-    $r = nachbestellung_anlegen((int)$k['id'], $angebotId, $menge);
+    // Bevorzugt auftragsbasiert (robust auch für importierte Bestellungen ohne klassisches Angebot).
+    $r = $auftragId > 0 ? nachbestellung_anlegen_auftrag((int)$k['id'], $auftragId, $menge)
+                        : nachbestellung_anlegen((int)$k['id'], $angebotId, $menge);
     $flag = isset($r['fehler']) ? '&nbfehler=' . urlencode($r['fehler']) : '&nbok=1';
     $zurueck = in_array(($_POST['zurueck'] ?? ''), ['nachbestellen', 'bestellungen', 'angebote'], true) ? (string)$_POST['zurueck'] : 'angebote';
     header('Location: ?p=portal&token=' . $token . '&v=' . $zurueck . $flag); exit;
@@ -3853,18 +3856,16 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (isset($_GET['nbfreigabe'])): ?><div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen);margin-bottom:14px">Neuer Preis freigegeben – Ihre Nachbestellung läuft.</div><?php endif; ?>
   <?php if (isset($_GET['nbfehler'])): ?><div class="bx-panel" style="padding:12px 16px;border-color:#e6c4c0;color:#8f231b;margin-bottom:14px"><?= h((string)$_GET['nbfehler']) ?></div><?php endif; ?>
   <?php
-    // Quelle: ALLE früheren Produkt-Bestellungen (auftrag) mit bestätigtem Vor-Angebot. Je Produkt+Packungsgröße
-    // die ZULETZT bestellte Variante (Dedup über produkt_id+stueck, $auftraege ist bereits neueste-zuerst-nah;
-    // zur Sicherheit nach angelegt sortiert). Vorbelegung = zuletzt bestellte Menge.
-    $nbRows = array_values(array_filter($auftraege, fn($a) => ($a['kategorie'] ?? 'produkt') !== 'dienstleistung' && !empty($a['angebot_id']) && !empty($a['produkt_id'])));
+    // Quelle: ALLE früheren Produkt-Bestellungen (auftrag) – direkt aus dem Auftrag (robust auch ohne klassisches
+    // Angebot). Je Produkt+Packungsgröße die ZULETZT bestellte Variante (Dedup, neueste zuerst). Vorbelegung =
+    // zuletzt bestellte Menge. Preis = Auftragspreis (vk_stueck) bzw. Staffel, wenn vorhanden.
+    $nbRows = array_values(array_filter($auftraege, fn($a) => ($a['kategorie'] ?? 'produkt') !== 'dienstleistung' && !empty($a['produkt_id'])));
     usort($nbRows, fn($x, $y) => strcmp((string)($y['angelegt'] ?? ''), (string)($x['angelegt'] ?? '')));   // neueste zuerst
     $nbSeen = []; $nbCards = [];
     foreach ($nbRows as $a) {
-        $q = nachbestellung_quelle((int)$a['angebot_id'], $kid);
-        if (!$q) continue;
-        $key = (int)$q['produkt_id'] . '-' . (int)$q['stueck'];
+        $key = (int)$a['produkt_id'] . '-' . (int)($a['stueck'] ?? 0);
         if (isset($nbSeen[$key])) continue; $nbSeen[$key] = true;
-        $nbCards[] = ['a' => $a, 'q' => $q];
+        $nbCards[] = $a;
     }
   ?>
   <?php if (!$nbCards): ?>
@@ -3873,18 +3874,20 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-panel"><div class="muted">Nachbestellen ist für Ihren Zugang nicht freigeschaltet. Bitte wenden Sie sich an uns.</div></div>
   <?php else: ?>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
-    <?php foreach ($nbCards as $c): $a = $c['a']; $q = $c['q'];
-        $defMenge  = (int)($a['menge'] ?: $q['menge']);
-        $nbVk      = vk_fuer_kunde((float)$q['vk_stueck'], $kid);
-        $nbStaffel = nachbestellung_staffel($kid, (int)$q['produkt_id'], (int)$q['stueck']);
-        $nbInit    = nachbestellung_preis_fuer($kid, (int)$q['produkt_id'], (int)$q['stueck'], $defMenge, $nbVk);
-        $nbOff     = function_exists('nachbestellung_offen_fuer') ? nachbestellung_offen_fuer($kid, (int)$a['angebot_id']) : null;
+    <?php foreach ($nbCards as $a):
+        $pidK      = (int)$a['produkt_id']; $stk = (int)($a['stueck'] ?? 0);
+        $defMenge  = (int)($a['menge'] ?? 0);
+        $nbVk      = vk_fuer_kunde((float)($a['vk_stueck'] ?? 0), $kid);
+        $nbStaffel = nachbestellung_staffel($kid, $pidK, $stk);
+        $nbInit    = nachbestellung_preis_fuer($kid, $pidK, $stk, $defMenge, $nbVk);
+        // Läuft für dieses Produkt schon eine Nachbestellung? (per Produkt – robust ohne Angebot.)
+        $nbOff     = one("SELECT id, status, menge, stueck, vk_neu, grund FROM nachbestellung WHERE kunde_id=? AND produkt_id=? AND status IN ('pruefung','preis_neu') ORDER BY id DESC LIMIT 1", [$kid, $pidK]);
         $pname     = (string)($a['produkt_name'] ?? 'Produkt');   // bereits der kundenspezifische Name
     ?>
     <div class="bx-panel" style="margin:0;display:flex;flex-direction:column;gap:8px">
       <div style="font-weight:600;font-size:15px"><?= h($pname) ?></div>
       <div class="muted" style="font-size:12px">
-        <?= $q['stueck'] ? number_format((int)$q['stueck'],0,',','.') . ' je Packung · ' : '' ?>zuletzt bestellt: <?= number_format($defMenge,0,',','.') ?> Packungen
+        <?= $stk ? number_format($stk,0,',','.') . ' je Packung · ' : '' ?>zuletzt bestellt: <?= number_format($defMenge,0,',','.') ?> Packungen
       </div>
       <?php if ($nbOff && ($nbOff['status'] ?? '') === 'preis_neu'): ?>
         <div class="bx-panel" style="margin:4px 0 0;padding:10px 12px;border-color:var(--warn,#c7962b)">
@@ -3898,7 +3901,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <div class="muted" style="font-size:13px">Nachbestellung (<?= number_format((int)$nbOff['menge'],0,',','.') ?> Packungen) ist eingegangen – wir bestätigen den Preis kurz.</div>
       <?php else: ?>
         <form method="post" class="nb-form" data-staffel='<?= h(json_encode(array_map(fn($r)=>[$r['menge'],$r['vk']], $nbStaffel))) ?>' data-fallback="<?= h((string)$nbVk) ?>" style="margin:4px 0 0" onsubmit="return confirm('Verbindlich nachbestellen? Wir bestätigen den Preis kurz, dann startet die Produktion.');">
-          <input type="hidden" name="aktion" value="nachbestellen"><input type="hidden" name="quelle_angebot_id" value="<?= (int)$a['angebot_id'] ?>"><input type="hidden" name="zurueck" value="nachbestellen">
+          <input type="hidden" name="aktion" value="nachbestellen"><input type="hidden" name="quelle_auftrag_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="zurueck" value="nachbestellen">
           <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0">
             <label style="display:flex;flex-direction:column;gap:3px;font-size:13px">Menge (Packungen)
               <input type="text" name="menge" class="nb-menge" inputmode="numeric" value="<?= number_format($defMenge,0,',','.') ?>" style="min-width:130px"></label>
@@ -4060,26 +4063,26 @@ portal_head('Kundenportal · ' . $k['firma']);
     </ul>
   </a>
   <?php
-    // Nachbestellen direkt an der ABGESCHLOSSENEN Bestellung: Menge eintippen -> verbindlich (reuse Nachbestellung).
-    // Nur Produkt-Aufträge mit bestätigtem Vor-Angebot; gleiche Verpackung/Etikett, Preis aus bisherigen Staffeln.
-    if ($complete && !$istDLrow && !empty($darfBestellen) && !empty($a['angebot_id'])):
-      $nbQ   = nachbestellung_quelle((int)$a['angebot_id'], $kid);
-      $nbOff = ($nbQ && function_exists('nachbestellung_offen_fuer')) ? nachbestellung_offen_fuer($kid, (int)$a['angebot_id']) : null;
-      if ($nbQ && !$nbOff):
-        $nbVk      = vk_fuer_kunde((float)$nbQ['vk_stueck'], $kid);
-        $nbStaffel = nachbestellung_staffel($kid, (int)($nbQ['produkt_id'] ?? 0), (int)$nbQ['stueck']);
-        $nbInit    = nachbestellung_preis_fuer($kid, (int)($nbQ['produkt_id'] ?? 0), (int)$nbQ['stueck'], (int)$nbQ['menge'], $nbVk); ?>
+    // Nachbestellen direkt an der ABGESCHLOSSENEN Bestellung: Menge eintippen -> verbindlich. AUFTRAGSBASIERT
+    // (robust auch ohne klassisches Angebot). Gleiche Verpackung/Etikett, Preis aus Auftrag bzw. bisherigen Staffeln.
+    if ($complete && !$istDLrow && !empty($darfBestellen) && !empty($a['produkt_id'])):
+      $nbPid     = (int)$a['produkt_id']; $nbStk = (int)($a['stueck'] ?? 0); $nbDef = (int)($a['menge'] ?? 0);
+      $nbOff     = one("SELECT id FROM nachbestellung WHERE kunde_id=? AND produkt_id=? AND status IN ('pruefung','preis_neu') LIMIT 1", [$kid, $nbPid]);
+      if (!$nbOff):
+        $nbVk      = vk_fuer_kunde((float)($a['vk_stueck'] ?? 0), $kid);
+        $nbStaffel = nachbestellung_staffel($kid, $nbPid, $nbStk);
+        $nbInit    = nachbestellung_preis_fuer($kid, $nbPid, $nbStk, $nbDef, $nbVk); ?>
   <form method="post" class="bx-panel nb-form" data-staffel='<?= h(json_encode(array_map(fn($r)=>[$r['menge'],$r['vk']], $nbStaffel))) ?>' data-fallback="<?= h((string)$nbVk) ?>" style="margin:-6px 0 16px;padding:12px 14px;border-color:var(--gruen)" onsubmit="return confirm('Verbindlich nachbestellen? Wir bestätigen den Preis kurz, dann startet die Produktion.');">
-    <input type="hidden" name="aktion" value="nachbestellen"><input type="hidden" name="quelle_angebot_id" value="<?= (int)$a['angebot_id'] ?>">
-    <div style="font-weight:600;margin-bottom:6px">Einfach nachbestellen<?= $nbQ['stueck'] ? ' <span class="muted" style="font-weight:400;font-size:13px">· ' . number_format((int)$nbQ['stueck'],0,',','.') . ' je Packung</span>' : '' ?></div>
+    <input type="hidden" name="aktion" value="nachbestellen"><input type="hidden" name="quelle_auftrag_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="zurueck" value="bestellungen">
+    <div style="font-weight:600;margin-bottom:6px">Einfach nachbestellen<?= $nbStk ? ' <span class="muted" style="font-weight:400;font-size:13px">· ' . number_format($nbStk,0,',','.') . ' je Packung</span>' : '' ?></div>
     <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
       <label style="display:flex;flex-direction:column;gap:3px;font-size:13px">Menge (Packungen)
-        <input type="text" name="menge" class="nb-menge" inputmode="numeric" value="<?= number_format((int)$nbQ['menge'],0,',','.') ?>" style="min-width:140px"></label>
+        <input type="text" name="menge" class="nb-menge" inputmode="numeric" value="<?= number_format($nbDef,0,',','.') ?>" style="min-width:140px"></label>
       <div style="font-size:13px">Preis / Pkg: <strong class="nb-preis"><?= $eur($nbInit['vk']) ?></strong></div>
       <button class="btn btn-primary btn-sm" type="submit">Verbindlich nachbestellen</button>
     </div>
     <div class="muted nb-warn" style="font-size:12px;margin-top:6px;<?= empty($nbInit['ueber_max']) ? 'display:none' : '' ?>"><?= h((string)($nbInit['hinweis'] ?? '')) ?></div>
-    <div class="muted" style="font-size:12px;margin-top:6px">Gleiche Verpackung und gleiches Etikett (keine erneute Freigabe nötig). Der Preis richtet sich nach Ihrer Menge – aus Ihren bisherigen Angeboten. Wir bestätigen den Preis kurz, dann startet die Produktion.</div>
+    <div class="muted" style="font-size:12px;margin-top:6px">Gleiche Verpackung und gleiches Etikett (keine erneute Freigabe nötig). Der Preis richtet sich nach Ihrer Menge. Wir bestätigen den Preis kurz, dann startet die Produktion.</div>
   </form>
   <?php endif; endif; ?>
   <?php endforeach; ?>
