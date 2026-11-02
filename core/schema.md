@@ -231,3 +231,6 @@ mehr. Umschaltbar am Auftrag (Reiter Produktion, Herstellung; `aktion=zukauf_art
 
 ## Inhalt je Packung formgerecht (St-13)
 `inhalt_je_packung_txt($form, $wert)` liefert „300 g je Packung" (Pulver), „250 ml je Packung", „60 Kapseln je Packung", sonst „60 Stk je Packung". `auftrag_darreichungsform($a)` liefert die Form eines Auftrags (Feld, sonst Rezeptur des Produkts, sonst `produkt_form`). Genutzt auf Lieferschein, interner AB (Rückfall-Position), Laufzettel, Kundenportal (Bestellung, Nachbestell-Karte, Rechnungs-Rückfall) und in der internen Nachbestell-Liste – vorher stand bei Pulver „300 Stück je Packung".
+
+## Handelsware im Positions-Weg (S-15)
+`auftrag_aus_positionen()` hat einen Handelsware-Zweig: Ist das Kopf-Produkt Handelsware, reicht eine Produkt-/Herstellungszeile mit Menge – eine Rezeptur ist nicht nötig. Produkt = Kopf-Produkt (bei passender Konfiguration), sonst eine Variante über `produkt_aus_rezeptur()`. Es entsteht Auftrag + Rechnung, **kein Produktionsauftrag** (auch wenn die Position eine Rezeptur trägt). `produkt_aus_rezeptur()` vererbt das Flag `handelsware` der Vorlage und verwendet nur Produkte mit gleichem Flag wieder.

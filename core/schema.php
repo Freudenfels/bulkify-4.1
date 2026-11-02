@@ -4473,24 +4473,27 @@ function produkt_aus_rezeptur(int $rezeptur_id, int $stueck, ?int $verp_id, ?int
     // (S-02). Ohne Kunde an der Rezeptur lässt sich kein Besitzer bestimmen -> wie bisher Katalogprodukt.
     $rzx = one("SELECT exklusiv, kunde_id FROM rezeptur WHERE id=?", [$rezeptur_id]);
     $exKid = ($rzx && (int)$rzx['exklusiv'] === 1 && (int)$rzx['kunde_id'] > 0) ? (int)$rzx['kunde_id'] : 0;
+    // Handelsware (S-15): ist die Vorlage Handelsware, ist auch das bestellte Produkt Handelsware – und es wird nur ein
+    // Produkt mit GLEICHEM Flag wiederverwendet (sonst würde ein Eigenproduktions-Produkt derselben Rezeptur getroffen).
+    $v  = $vorlage_produkt_id ? one("SELECT * FROM produkt WHERE id=?", [$vorlage_produkt_id]) : null;
+    $hw = (int)($v['handelsware'] ?? 0) === 1 ? 1 : 0;
     if ($exKid > 0) {
-        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=1 AND kunde_id=? ORDER BY id LIMIT 1",
-                       [$rezeptur_id, $stueck, $verp_id, $exKid]);
+        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=1 AND kunde_id=? AND handelsware=? ORDER BY id LIMIT 1",
+                       [$rezeptur_id, $stueck, $verp_id, $exKid, $hw]);
     } else {
-        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=0 ORDER BY id LIMIT 1",
-                       [$rezeptur_id, $stueck, $verp_id]);
+        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=0 AND handelsware=? ORDER BY id LIMIT 1",
+                       [$rezeptur_id, $stueck, $verp_id, $hw]);
     }
     if ($treffer) return (int)$treffer['id'];
-    $v = $vorlage_produkt_id ? one("SELECT * FROM produkt WHERE id=?", [$vorlage_produkt_id]) : null;
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]) ?: 'kapsel';
     $rez  = (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$rezeptur_id]) ?: 'Produkt';
     $behName = $verp_id ? (string) scalar("SELECT name FROM item WHERE id=?", [$verp_id]) : '';
     $name = produkt_name_versioniert($rez . ' · ' . form_groessen_label($form, (float)$stueck) . ($behName !== '' ? ' · ' . $behName : ''));
-    q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,notiz)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,handelsware,einheiten_pro_packung,einnahme_pro_tag,status,notiz)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [naechste_nummer('P'), $name, $exKid > 0 ? $exKid : null, $rezeptur_id, $verp_id,
        $v['verschluss_id'] ?? null, $v['etikett_id'] ?? null, $v['karton_id'] ?? null, $v['beipack_id'] ?? null, $v['leerkapsel_id'] ?? null,
-       $exKid > 0 ? 1 : 0,
+       $exKid > 0 ? 1 : 0, $hw,
        $stueck, $v['einnahme_pro_tag'] ?? 1, 'aktiv',
        'Aus einer Kundenanfrage entstanden (Rezeptur x Menge + Verpackung).']);
     $neu = insert_id();
@@ -10939,12 +10942,26 @@ function auftrag_aus_positionen(int $angebot_id, ?string $gruppe = null): ?int {
     if (!$pos) return null;
     $herst = null;
     foreach ($pos as $p) if (!empty($p['rezeptur_id']) && (int)$p['stueck'] > 0) { $herst = $p; break; }
+    // Handelsware (S-15): fertig zugekauftes Produkt im Kopf – braucht KEINE Rezeptur. Die Herstellungs-/Produktzeile
+    // (Menge = Packungen) genügt; Produkt = Kopf-Produkt. Ohne Handelsware bleibt es dabei: ohne Konfiguration kein Auftrag.
+    $hwKopf = produkt_ist_handelsware((int)($a['produkt_id'] ?? 0));
+    if (!$herst && $hwKopf)
+        foreach ($pos as $p) if ((string)$p['quelle'] === 'herstellung' && (float)$p['menge'] > 0) { $herst = $p; break; }
     if (!$herst) return null;   // ohne bekannte Konfiguration kein Produkt und kein Auftrag
 
-    $pid = produkt_aus_rezeptur((int)$herst['rezeptur_id'], (int)$herst['stueck'],
-                                $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null,
-                                $a['produkt_id'] ? (int)$a['produkt_id'] : null);
+    $vorlage = $a['produkt_id'] ? one("SELECT id, einheiten_pro_packung, verpackung_id, rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]) : null;
+    if ($hwKopf && (empty($herst['rezeptur_id'])
+                    || ((int)$vorlage['rezeptur_id'] === (int)$herst['rezeptur_id'] && (int)$vorlage['einheiten_pro_packung'] === (int)$herst['stueck']
+                        && (int)($vorlage['verpackung_id'] ?? 0) === (int)($herst['verpackung_id'] ?? 0)))) {
+        $pid = (int)$vorlage['id'];   // Handelsware wie angeboten: das Kopf-Produkt selbst
+        if ((int)$herst['stueck'] <= 0) $herst['stueck'] = (int)$vorlage['einheiten_pro_packung'];
+    } else {
+        $pid = produkt_aus_rezeptur((int)$herst['rezeptur_id'], (int)$herst['stueck'],
+                                    $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : null,
+                                    $a['produkt_id'] ? (int)$a['produkt_id'] : null);
+    }
     if (!$pid) return null;
+    $istHandelsware = $hwKopf || produkt_ist_handelsware((int)$pid);
 
     $menge = (int) round((float)$herst['menge']);                       // Anzahl Packungen
     $netto = 0.0; foreach ($pos as $p) $netto += (float)$p['menge'] * (int)$p['preis_cent'] / 100;
@@ -10966,6 +10983,13 @@ function auftrag_aus_positionen(int $angebot_id, ?string $gruppe = null): ?int {
 
     // Rechnung MIT Positionen, Produkt-USt, Zahlungsziel/Fälligkeit (St-04); Entwurf bis zur Lieferung (dort wird festgeschrieben).
     auftrag_rechnung_automatisch((int)$aid, (int)$a['kunde_id'], (int)$pid, $netto, false);
+
+    // Handelsware (Spec 7.1, S-15): KEIN Produktionsauftrag – beschafft wird die Fertigware (Einkaufsliste), versendet aus dem Bestand.
+    if ($istHandelsware) {
+        if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'kunde',
+            'Angebot ' . $a['nummer'] . ' angenommen – Auftrag + Rechnung erzeugt (Handelsware – ohne Produktion).', 'auftrag', 'auftrag', $aid);
+        return $aid;
+    }
 
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$herst['rezeptur_id']]) ?: 'kapsel';
     q("INSERT INTO produktionsauftrag (nummer,auftrag_id,kunde_id,produkt_id,menge,stueck,verpackung_id,produktionsart,status) VALUES (?,?,?,?,?,?,?,?,?)",

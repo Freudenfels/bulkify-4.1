@@ -207,6 +207,14 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
             $neuAuftrag = dl_auftrag_aus_angebot($aid, $gruppeW !== '' ? $gruppeW : null);
         } else {
             $neuAuftrag = auftrag_aus_positionen($aid, preg_replace('/[^A-Z]/', '', strtoupper((string)($_POST['gruppe'] ?? ''))));
+            // Kein Auftrag entstanden (Konfiguration fehlt): KEINE Erfolgsmeldung, keine Mails, Freigabe zurücknehmen (St-23).
+            if (!$neuAuftrag) {
+                q("UPDATE angebot SET freigabe_name=NULL, freigabe_am=NULL WHERE id=? AND status='gesendet'", [$aid]);
+                log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Annahme von Angebot ' . (string)$ang['nummer'] . ' versucht – es konnte kein Auftrag angelegt werden (Konfiguration fehlt). Bitte Angebot prüfen.', 'angebot', 'angebot', $aid);
+                if (function_exists('benachrichtigung_add'))
+                    benachrichtigung_add('Annahme ohne Auftrag: ' . (string)$ang['nummer'], 'Der Kunde wollte das Angebot annehmen, es konnte aber kein Auftrag angelegt werden. Bitte prüfen und ggf. für den Kunden annehmen.', '?p=angebot&id=' . $aid);
+                header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&annahmefehler=1'); exit;
+            }
             portal_labortest_upsell($k, $aid);
         }
         if (mail_bereit()) nach_antwort(fn() => mail_angebot_angenommen($aid, $neuAuftrag));
@@ -1084,10 +1092,14 @@ if ($angIds) foreach (all("SELECT * FROM angebot_staffel WHERE angebot_id IN (" 
     $staffelMap[(int)$s['angebot_id']][] = $s;
 }
 foreach ($angIds as $id) if (!isset($staffelMap[$id])) $staffelMap[$id] = [];   // leere Angebote merken -> kein Nachladen
-$posRezCount = $anfRezOk = $hatHerst = [];   // Annehmbar-Zaehler je Angebot / je Anfrage; Herstellungs-Positionen
+$posRezCount = $anfRezOk = $hatHerst = $hwOk = [];   // Annehmbar-Zaehler je Angebot / je Anfrage; Herstellungs-Positionen; Handelsware
 if ($angIds) foreach (all("SELECT angebot_id, COUNT(*) n FROM angebot_position
                            WHERE angebot_id IN (" . $inList($angIds) . ") AND rezeptur_id IS NOT NULL AND stueck > 0
                            GROUP BY angebot_id") as $c) $posRezCount[(int)$c['angebot_id']] = (int)$c['n'];
+// Handelsware im Kopf (S-15): fertig zugekauftes Produkt ohne Rezeptur – annehmbar, sobald eine Produkt-/Herstellungszeile mit Menge da ist.
+if ($angIds) foreach (all("SELECT DISTINCT ap.angebot_id FROM angebot_position ap JOIN angebot a ON a.id=ap.angebot_id JOIN produkt p ON p.id=a.produkt_id
+                           WHERE ap.angebot_id IN (" . $inList($angIds) . ") AND p.handelsware=1 AND ap.quelle='herstellung' AND ap.menge > 0") as $c)
+    $hwOk[(int)$c['angebot_id']] = true;
 // Herstellungs-Positionen = Quelle der Options-Tabelle (angebot_optionen). AUCH wenn an der Position die
 // Rezeptur-Verknuepfung oder Stueckzahl (noch) fehlt – dann greift die Nachruestung in angebot_optionen.
 // Ohne dieses Signal zeigte das Portal faelschlich die generische Produkt-Preismatrix (viele Standard-Mengen,
@@ -1110,7 +1122,7 @@ $staffelFuer = function(array $a) use (&$staffelMap) {
     if (!array_key_exists($id, $staffelMap)) $staffelMap[$id] = all("SELECT * FROM angebot_staffel WHERE angebot_id=? ORDER BY sort, id", [$id]);
     return $staffelMap[$id];
 };
-$angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $produktionszeit, $matrixRows, $zutMap, $portionMap, $nutrMap, $posRezCount, $anfRezOk, $hatHerst) {
+$angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $produktionszeit, $matrixRows, $zutMap, $portionMap, $nutrMap, $posRezCount, $anfRezOk, $hatHerst, $hwOk) {
     $id = (int)$a['id'];
     if (array_key_exists($id, $angInfo)) return $angInfo[$id];
     $rid = (int)($a['rezeptur_id'] ?? 0);
@@ -1177,6 +1189,7 @@ $angInfoFuer = function(array $a) use (&$angInfo, &$staffelMap, $itemName, $prod
         // Position selbst oder aus der zugehoerigen Anfrage. Sonst waere der Knopf ein Blindgaenger.
         'annehmbar' => $brauchtPos && (
               ($posRezCount[$id] ?? 0) > 0
+           || !empty($hwOk[$id])                                    // Handelsware ohne Rezeptur (S-15)
            || !empty($anfRezOk[(int)($a['anfrage_id'] ?? 0)])
            || (($a['kategorie'] ?? '') === 'dienstleistung' && $posGespeichert)   // DL-Angebot: Positionen reichen
         ),
@@ -2521,6 +2534,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px">Meine Anfragen</h1>
   <p class="bx-sub">Alle Ihre Anfragen und deren Stand. Liegt ein Angebot vor, wählen Sie hier die Menge und bestätigen verbindlich.</p>
   <?php if (isset($_GET['freigabefehlt'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Für die verbindliche Annahme fehlen die Bestätigung und Ihr Name.</div><?php endif; ?>
+  <?php if (isset($_GET['annahmefehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Das Angebot konnte nicht automatisch angenommen werden. Wir sind informiert und melden uns kurzfristig – es ist noch nichts bestellt.</div><?php endif; ?>
   <?php if (isset($_GET['abgelehnt'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rückmeldung ist eingegangen – wir überarbeiten das Angebot.</div><?php endif; ?>
 
   <?php
