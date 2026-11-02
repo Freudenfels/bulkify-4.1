@@ -28,3 +28,10 @@ Der Render-Körper steckt in `pib_pdf_render(array $prod, int $produkt_id, …)`
 
 ## Aufschlüsselung je Form (elementarer Gehalt)
 Die Zutaten-Tabelle zeigt je Verbindung/Form zusätzlich „– davon <Nährstoff>" mit dem elementaren Gehalt (z. B. Magnesiumbisglycinat → davon Magnesium). Datenquelle: `item_wirkstoff` je Zutat (`$zutWirk`, Menge × `wirkstoff_mg_je_mg()`), analog zu `pib_naehr()`, nur pro Zutat statt summiert. Die summierten Gesamtwerte je Nährstoff stehen weiterhin in der „Nährwert-/Wirkstoffdeklaration". Formen ohne hinterlegten Wirkstoffgehalt bekommen keine „davon"-Zeile.
+
+## Pulver, Granulat, Flüssig, Gel (Füllmengen-Formen)
+Bei diesen Formen (`form_groessen_einheit()` = `g` bzw. `ml`) ist „Einheiten je Packung" die **Füllmenge in g bzw. ml**, keine Stückzahl (S-22). Die Rezeptur-mg sind **eine Portion**.
+- Kopf: „Füllmenge je Packung 300 g (60 Portionen à 5 g)" statt „300 Pulver". Portionen = g × 1000 / mg je Portion (nur bei g).
+- Gewichte: „Gewicht je Portion 5.000 mg (5 g)", Nettofüllmenge = die Füllmenge selbst (vorher fälschlich 300 × 5.000 mg = 1.500 g).
+- Tabellen „je Portion", Verzehrempfehlung „1 Portion (5 g) pro Tag", Pflichtangabe „Nettofüllmenge: 300 g (60 Portionen à 5 g)".
+- Kapseln/Tabletten unverändert; nur „je Tagesdosis = 1 Kapsel" steht jetzt im Singular.

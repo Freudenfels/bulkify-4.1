@@ -133,19 +133,35 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
         $zutWirk[(int)$w['item_id']][] = ['name'=>$w['name'], 'mg'=>$mgN, 'einheit'=>$w['einheit'], 'anzeige'=>$w['einheit_anzeige'], 'ie_mg'=>$w['ie_mg']];
     }
     $istKapsel = in_array($prod['darreichungsform'] ?? '', ['kapsel', 'softgel'], true);
-    $einheitWort = $istKapsel ? 'Kapsel' : 'Einheit';
+    // Füllmengen-Formen (Pulver/Granulat = g, Flüssig/Gel = ml): $einh ist die FÜLLMENGE je Packung (g bzw. ml),
+    // keine Stückzahl (S-22). Die Rezeptur-mg sind dann EINE Portion; Portionen je Packung = g × 1000 / mg je Portion.
+    $fuellEinh = form_groessen_einheit((string)($prod['darreichungsform'] ?? ''));
+    $portionen = ($fuellEinh === 'g' && $einh > 0 && $sumMg > 0) ? $einh * 1000 / $sumMg : 0.0;
+    $einheitWort = $istKapsel ? 'Kapsel' : ($fuellEinh !== '' ? 'Portion' : 'Einheit');
     // Tagesdosis (Einnahme pro Tag): vom Aufrufer (Kundenwahl vor dem Download) oder am Produkt gepflegt.
     // Daraus rechnet das PIB die Werte JE TAGESDOSIS aus (zusaetzlich zu „je Einheit").
     $proTag = ($proTagOverride !== null && $proTagOverride > 0) ? (int)$proTagOverride : (int)($prod['einnahme_pro_tag'] ?? 0);
     $istPortion = in_array($prod['darreichungsform'] ?? '', ['pulver','granulat','stick','fluessig','gel'], true);
-    $tdEinheitWort = $istKapsel ? 'Kapseln' : ($istPortion ? 'Portionen' : ($formLbl !== '' ? $formLbl : 'Einheiten'));
+    $tdEinheitWort = $istKapsel ? ($proTag === 1 ? 'Kapsel' : 'Kapseln') : ($istPortion ? ($proTag === 1 ? 'Portion' : 'Portionen') : ($formLbl !== '' ? $formLbl : 'Einheiten'));
+    // Verzehr-Einheit („1 Kapsel", „1 Portion (5 g)", „2 Sticks") – für Verzehrempfehlung und Pflichtangabe.
+    $verzehrEinh = function (int $n) use ($istKapsel, $fuellEinh, $sumMg, $formLbl, $mg): string {
+        if ($istKapsel) return $n === 1 ? 'Kapsel' : 'Kapseln';
+        if ($fuellEinh !== '') return ($n === 1 ? 'Portion' : 'Portionen') . (($fuellEinh === 'g' && $sumMg > 0) ? ' (' . ($n === 1 ? '' : 'je ') . $mg($sumMg / 1000) . ' g)' : '');
+        return $formLbl !== '' ? $formLbl : 'Einheiten';
+    };
+    // Packungsinhalt als Text: „300 g (60 Portionen à 5 g)" bzw. „250 ml" bzw. „60 Kapseln".
+    $inhaltTxt = function () use ($einh, $fuellEinh, $portionen, $sumMg, $formLbl, $mg): string {
+        if ($fuellEinh !== '') return number_format($einh, 0, ',', '.') . ' ' . $fuellEinh
+            . ($portionen > 0 ? ' (' . $mg($portionen) . ' Portionen à ' . $mg($sumMg / 1000) . ' g)' : '');
+        return number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stk');
+    };
     $kg = ($istKapsel && $rid) ? rezeptur_kapselgroesse($rid) : null;
 
     // Identität
     $ident = [['Produkt', (string)$prod['anzeige']]];
     if ($formLbl !== '') $ident[] = ['Darreichungsform', $formLbl];
     if ($kg)             $ident[] = ['Kapselgröße', (string)$kg['name'] . ((float)($kg['volumen_ml'] ?? 0) > 0 ? ' · ' . $mg($kg['volumen_ml']) . ' ml' : '')];
-    if ($einh > 0)       $ident[] = ['Einheiten pro Packung', number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stk')];
+    if ($einh > 0)       $ident[] = [$fuellEinh !== '' ? 'Füllmenge je Packung' : 'Einheiten pro Packung', $inhaltTxt()];
     $ident[] = ['Erstellt am', (function_exists('fmt_zeit') ? fmt_zeit(gmdate('Y-m-d H:i:s'), 'd.m.Y, H:i') : date('d.m.Y, H:i')) . ' Uhr'];
     $y = spec_grid($p, $y, $ident);
 
@@ -180,12 +196,14 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
             if ($shellMg <= 0 && $kg && (float)($kg['leergewicht_mg'] ?? 0) > 0) { $shellMg = (float)$kg['leergewicht_mg']; $shellQuelle = 'Standardwert ' . (string)$kg['name']; }
         }
         $kapselTotalMg = $sumMg + $shellMg;                              // eine gefüllte Kapsel gesamt (mg)
-        $nettoGesamtG  = $einh > 0 ? $kapselTotalMg * $einh / 1000 : 0.0; // alle Kapseln = Nettofüllmenge für die Verpackung
+        // Nettofüllmenge: Stück-Formen = Einheiten × Gewicht je Einheit; Füllmengen-Formen = die Füllmenge selbst (g/ml je Packung).
+        $nettoGesamtG  = $fuellEinh !== '' ? (float)$einh : ($einh > 0 ? $kapselTotalMg * $einh / 1000 : 0.0);
         $gw = [];
-        $gw[] = [$istKapsel ? 'Füllgewicht je Kapsel (Wirkstoffe)' : 'Gewicht je Einheit', $mg($sumMg) . ' mg'];
+        $gw[] = [$istKapsel ? 'Füllgewicht je Kapsel (Wirkstoffe)' : ($fuellEinh !== '' ? 'Gewicht je Portion' : 'Gewicht je Einheit'), $mg($sumMg) . ' mg' . ($fuellEinh !== '' && $sumMg >= 1000 ? ' (' . $mg($sumMg / 1000) . ' g)' : '')];
         if ($istKapsel && $shellMg > 0) $gw[] = ['Leerkapsel (Hülle)', $mg($shellMg) . ' mg' . ($shellQuelle ? ' · ' . $shellQuelle : '')];
         if ($istKapsel && $shellMg > 0) $gw[] = ['Kapselgewicht gesamt (gefüllt)', $mg($kapselTotalMg) . ' mg'];
-        if ($nettoGesamtG > 0) $gw[] = [$istKapsel ? 'Nettofüllmenge je Packung (für die Verpackung)' : 'Nettofüllmenge je Packung', $mg($nettoGesamtG) . ' g' . ($einh > 0 ? ' (' . number_format($einh, 0, ',', '.') . ' × ' . $mg($kapselTotalMg) . ' mg)' : '')];
+        if ($nettoGesamtG > 0 && $fuellEinh !== '') $gw[] = ['Nettofüllmenge je Packung', $inhaltTxt()];
+        elseif ($nettoGesamtG > 0) $gw[] = [$istKapsel ? 'Nettofüllmenge je Packung (für die Verpackung)' : 'Nettofüllmenge je Packung', $mg($nettoGesamtG) . ' g' . ($einh > 0 ? ' (' . number_format($einh, 0, ',', '.') . ' × ' . $mg($kapselTotalMg) . ' mg)' : '')];
         $y = spec_h($p, $y, 'Gewichte');
         $y = spec_grid($p, $y, $gw);
         // Kapsel-Kapazitaet je Dichte als Info (Nachschlagewerk-Bezug) + genutzte Misch-Dichte.
@@ -346,7 +364,7 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
 
     // Verzehrempfehlung + Nährwerte je Tagesdosis (Tagesdosis oben aus Kundenwahl/Produkt bestimmt).
     if ($proTag > 0) {
-        $vz = [['Verzehrempfehlung', number_format($proTag, 0, ',', '.') . ' ' . ($istKapsel ? ($proTag === 1 ? 'Kapsel' : 'Kapseln') : ($formLbl !== '' ? $formLbl : 'Einheiten')) . ' pro Tag']];
+        $vz = [['Verzehrempfehlung', number_format($proTag, 0, ',', '.') . ' ' . $verzehrEinh($proTag) . ' pro Tag']];
         if ($sumMg > 0) $vz[] = ['Wirkstoffe je Tagesdosis', $mg($sumMg * $proTag) . ' mg' . ($sumMg * $proTag >= 1000 ? ' · ' . $mg($sumMg * $proTag / 1000) . ' g' : '')];
         $y = spec_h($p, $y, 'Verzehrempfehlung');
         $y = spec_grid($p, $y, $vz);
@@ -354,10 +372,10 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
 
     // Pflichtangaben, die der Kunde auf das Etikett bringen MUSS (LMIV/VO 1169/2011 + NemV) – vorbefüllt, wo bekannt.
     $nettoTxt = (isset($nettoGesamtG) && $nettoGesamtG > 0)
-        ? $mg($nettoGesamtG) . ' g' . ($einh > 0 ? ' (' . number_format($einh, 0, ',', '.') . ' ' . ($formLbl !== '' ? $formLbl : 'Stk') . ')' : '')
+        ? ($fuellEinh !== '' ? $inhaltTxt() : $mg($nettoGesamtG) . ' g' . ($einh > 0 ? ' (' . $inhaltTxt() . ')' : ''))
         : '____ (Nettofüllmenge eintragen)';
     $verzehrTxt = $proTag > 0
-        ? number_format($proTag, 0, ',', '.') . ' ' . ($istKapsel ? ($proTag === 1 ? 'Kapsel' : 'Kapseln') : ($formLbl !== '' ? $formLbl : 'Einheiten')) . ' täglich mit ausreichend Flüssigkeit'
+        ? number_format($proTag, 0, ',', '.') . ' ' . $verzehrEinh($proTag) . ' täglich mit ausreichend Flüssigkeit'
         : '____ (z. B. 1 Kapsel täglich mit ausreichend Flüssigkeit)';
     $pflicht = [
         'Bezeichnung: „Nahrungsergänzungsmittel" (ggf. ergänzt um die namensgebenden Nährstoffe).',
