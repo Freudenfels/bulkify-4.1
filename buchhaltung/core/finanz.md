@@ -4,3 +4,5 @@ VERBATIM aus dem Dashboard-core/schema.php übernommen (bewusste Doppelung, da d
 ## be_betrag_lesen() + zahlung_loeschen() (Stand 2026-10-10)
 `be_betrag_lesen($s)`: robuster Geldbetrag-Parser. Behebt den Fehler, dass `(float) str_replace(',', '.', "21.687,75")` beim zweiten Punkt abbricht → 21.687 (Fehlbuchung!). Erkennt Tausenderpunkt + Dezimalkomma (DE) UND Komma-Tausender + Punkt-Dezimal (EN). Wird in `beleg/detail.php` für Zahlung + Guthaben-Anrechnung/-Auszahlung genutzt.
 `zahlung_loeschen($zahlung_id,$beleg_id,$akteur)`: löscht eine einzelne (Fehl-)Zahlung und zieht den Belegstatus (offen/teilbezahlt/bezahlt) neu. Button „×" je Zahlung in der Zahlungseingänge-Tabelle (nur admin/finance).
+
+**DL-Rechnung je Service (S-18):** `dl_rechnung_aus_auftrag()` rechnet nur die Service-Gruppe des DL-Auftrags ab (Anker `auftrag.angebot_position_id`, Service + zugehörige Material-Positionen), nicht mehr alle Positionen des Angebots – genau wie im Dashboard (`core/dienstleistung.php`). Legacy-Aufträge ohne Position rechnen weiter alles ab. Ein DL-Angebot mit zwei Services ergab vorher zwei Rechnungen über je die volle Summe.

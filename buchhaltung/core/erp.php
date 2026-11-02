@@ -136,6 +136,21 @@ function erp_dl_positionen(int $angebot_id): array {
     if (!$angebot_id || !tabelle_da('angebot_position')) return [];
     return all("SELECT * FROM angebot_position WHERE angebot_id=? ORDER BY sort, id", [$angebot_id]);
 }
+// Positionen eines DL-Angebots in Service-Gruppen teilen (Service + zugehörige Material-Positionen wie Beutel/Glas/
+// Etikett) – Spiegel von dl_positionen_gruppieren() im Dashboard (core/dienstleistung.php); die Sub-App darf das
+// Dashboard-Schema nicht laden. Ohne Service-Position (Legacy) = eine Gruppe mit allem.
+function erp_dl_positionen_gruppieren(array $positionen): array {
+    $hatService = false;
+    foreach ($positionen as $p) if ((int)($p['dienstleistung_id'] ?? 0) > 0) { $hatService = true; break; }
+    if (!$hatService) return $positionen ? [array_values($positionen)] : [];
+    $gruppen = []; $cur = -1; $lead = [];
+    foreach ($positionen as $p) {
+        if ((int)($p['dienstleistung_id'] ?? 0) > 0) { $gruppen[] = array_merge($lead, [$p]); $lead = []; $cur = count($gruppen) - 1; }
+        elseif ($cur >= 0) { $gruppen[$cur][] = $p; }
+        else { $lead[] = $p; }
+    }
+    return $gruppen;
+}
 
 // Aufträge mit Kundenname (für den Abgleich Angebot→Auftrag→Rechnung). Nur Lesen.
 function erp_auftraege(?int $kunde_id = null): array {

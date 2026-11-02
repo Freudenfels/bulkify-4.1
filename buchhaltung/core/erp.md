@@ -11,3 +11,5 @@ Finanz-App das Dashboard-core nicht laden darf. Schreiben in geteilte Tabellen (
 auftrag). EINZIGER Unterschied zur Dashboard-Fassung: `produkt_aus_rezeptur` erzeugt KEINE Preismatrix
 (`produkt_matrix_generieren` = Dashboard-Preis-Engine) – die ist im Dashboard bei Bedarf nacherzeugbar. Für
 importierte Alt-Aufträge genügt das Produkt. Genutzt von module/beleg/auftrag_import.php.
+
+`erp_dl_positionen_gruppieren($positionen)` – Spiegel von `dl_positionen_gruppieren()` des Dashboards: teilt DL-Angebotspositionen in Service-Gruppen (Service + Material). Gebraucht für die DL-Rechnung je Auftrag (`dl_rechnung_aus_auftrag`).

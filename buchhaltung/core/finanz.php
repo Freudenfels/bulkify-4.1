@@ -460,8 +460,17 @@ function dl_rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     if (!$a || ($a['kategorie'] ?? '') !== 'dienstleistung') return null;
     $ex = scalar("SELECT id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert' ORDER BY id LIMIT 1", [$auftrag_id]);
     if ($ex) return (int)$ex;
+    // Ein Service je Auftrag: nur dessen SERVICE-GRUPPE abrechnen (Service + zugehörige Material-Positionen), Anker =
+    // auftrag.angebot_position_id – wie im Dashboard (S-18). Legacy-Aufträge ohne Position = alles; findet sich keine
+    // Gruppe, Fallback: nur die eine Position. Sonst würde jeder DL-Auftrag ALLE Positionen des Angebots abrechnen.
+    $quellPos = erp_dl_positionen((int)($a['angebot_id'] ?? 0));
+    if (!empty($a['angebot_position_id'])) {
+        $ziel = null;
+        foreach (erp_dl_positionen_gruppieren($quellPos) as $g) { foreach ($g as $p) if ((int)$p['id'] === (int)$a['angebot_position_id']) { $ziel = $g; break 2; } }
+        $quellPos = $ziel !== null ? $ziel : array_values(array_filter($quellPos, fn($p) => (int)$p['id'] === (int)$a['angebot_position_id']));
+    }
     $pos = [];
-    foreach (erp_dl_positionen((int)($a['angebot_id'] ?? 0)) as $p) {
+    foreach ($quellPos as $p) {
         $pos[] = [
             'artikelnr'   => $p['artikelnr'] ?? null,
             'bezeichnung' => (string)$p['bezeichnung'],
