@@ -1487,6 +1487,22 @@ $katalog = $k['portal_produkte'] ? all("SELECT p.id, COALESCE(NULLIF(p.kundennam
            OR EXISTS (SELECT 1 FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                       WHERE z.rezeptur_id=r.id AND (z.bezeichnung LIKE ? OR i.name LIKE ?)))
     ORDER BY name", [$kid, $q, $qLike, $qLike, $qLike, $qLike, $qLike, $qLike]) : [];
+// Eigene Produkte des Kunden – GLOBAL (unabhängig von der Katalog-Suche), damit „Produkt anfragen" GENAU die
+// Produkte zur Auswahl stellt, die der Kunde unter „Produkte → Eigene" sieht. Gleiche Definition wie dort:
+// produkt.kunde_id (exklusiv/White-Label) ODER vereinbarter Kundenpreis ODER schon einmal bestellt.
+$meineProduktIds = [];
+if (!empty($k['portal_produkte'])) {
+    foreach (all("SELECT id FROM produkt WHERE kunde_id=?", [$kid]) as $r) $meineProduktIds[(int)$r['id']] = true;
+    foreach (all("SELECT DISTINCT produkt_id FROM produkt_kundenpreis WHERE kunde_id=? AND produkt_id IS NOT NULL", [$kid]) as $r) $meineProduktIds[(int)$r['produkt_id']] = true;
+    foreach (all("SELECT DISTINCT produkt_id FROM auftrag WHERE kunde_id=? AND produkt_id IS NOT NULL", [$kid]) as $r) $meineProduktIds[(int)$r['produkt_id']] = true;
+}
+$meineProdukte = [];
+if ($meineProduktIds) {
+    $phMp = implode(',', array_fill(0, count($meineProduktIds), '?'));
+    $meineProdukte = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, r.darreichungsform
+        FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+        WHERE p.id IN ($phMp) AND COALESCE(p.status,'aktiv')<>'archiviert' ORDER BY name", array_keys($meineProduktIds));
+}
 $primVerp  = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name");
 $stdStueck = std_stueckzahlen();
 // Kundenseitige Verpackungstypen – wir wählen intern den perfekt passenden Behälter
@@ -3219,7 +3235,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php endif; ?>
   <div class="bx-panel">
     <p class="muted" style="margin-top:0">Wählen Sie eine <strong>Ihrer Rezepturen</strong> oder ein Produkt aus dem Katalog, dazu Menge je Packung, Verpackung und Bestellmenge – wir melden uns mit einem Preis.</p>
-    <?php if (!$katalog && !$meineRezepturen): ?><div class="muted">Es steht noch nichts zur Auswahl. Stellen Sie zuerst eine Rezepturanfrage – sobald Sie unseren Vorschlag angenommen haben, können Sie ihn hier als Produkt anfragen.</div>
+    <?php if (!$katalog && !$meineRezepturen && !$meineProdukte): ?><div class="muted">Es steht noch nichts zur Auswahl. Stellen Sie zuerst eine Rezepturanfrage – sobald Sie unseren Vorschlag angenommen haben, können Sie ihn hier als Produkt anfragen.</div>
     <?php else: ?>
     <form method="post">
       <input type="hidden" name="aktion" value="produkt_anfrage">
@@ -3229,6 +3245,12 @@ portal_head('Kundenportal · ' . $k['firma']);
                 $paEigene  = array_values(array_filter($meineRezepturen, fn($r) => (int)($r['kunde_id'] ?? 0) === $kid));
                 $paKatalog = array_values(array_filter($meineRezepturen, fn($r) => (int)($r['kunde_id'] ?? 0) !== $kid)); ?>
           <select name="produkt_id" id="pa_produkt" required><option value="">– wählen –</option>
+            <?php // Zuerst die EIGENEN Produkte des Kunden (genau wie „Produkte → Eigene") – das ist der Normalfall.
+                  if ($meineProdukte): ?>
+            <optgroup label="Meine Produkte">
+              <?php $paPidSel = (int)($_GET['pid'] ?? 0); foreach ($meineProdukte as $mp): ?><option value="p<?= (int)$mp['id'] ?>" data-form="<?= h($mp['darreichungsform']) ?>" <?= $paPidSel === (int)$mp['id'] ? 'selected' : '' ?>><?= h($mp['name']) ?><?= $mp['darreichungsform'] ? ' · '.h($DFORM_P[$mp['darreichungsform']] ?? $mp['darreichungsform']) : '' ?></option><?php endforeach; ?>
+            </optgroup>
+            <?php endif; ?>
             <?php if ($paEigene): ?>
             <optgroup label="Meine Rezepturen (noch kein fertiges Produkt)">
               <?php foreach ($paEigene as $rz): ?><option value="r<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>" <?= $rid === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?> · <?= h($DFORM_P[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
@@ -3239,9 +3261,11 @@ portal_head('Kundenportal · ' . $k['firma']);
               <?php foreach ($paKatalog as $rz): ?><option value="r<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>" <?= $rid === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?> · <?= h($DFORM_P[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
             </optgroup>
             <?php endif; ?>
-            <?php if ($katalog): ?>
+            <?php // Katalog-Produkte OHNE die eigenen (die stehen schon oben unter „Meine Produkte").
+                  $paKatalogProd = array_values(array_filter($katalog, fn($pk) => empty($meineProduktIds[(int)$pk['id']])));
+                  if ($paKatalogProd): ?>
             <optgroup label="Produkte aus dem Katalog">
-              <?php foreach ($katalog as $pk): ?><option value="p<?= (int)$pk['id'] ?>" data-form="<?= h($pk['darreichungsform']) ?>"><?= h($pk['name']) ?><?= $pk['darreichungsform'] ? ' · '.h($DFORM_P[$pk['darreichungsform']] ?? $pk['darreichungsform']) : '' ?></option><?php endforeach; ?>
+              <?php foreach ($paKatalogProd as $pk): ?><option value="p<?= (int)$pk['id'] ?>" data-form="<?= h($pk['darreichungsform']) ?>"><?= h($pk['name']) ?><?= $pk['darreichungsform'] ? ' · '.h($DFORM_P[$pk['darreichungsform']] ?? $pk['darreichungsform']) : '' ?></option><?php endforeach; ?>
             </optgroup>
             <?php endif; ?>
           </select>
@@ -3931,8 +3955,55 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php endforeach; ?>
     </ul>
   </a>
+  <?php
+    // Nachbestellen direkt an der ABGESCHLOSSENEN Bestellung: Menge eintippen -> verbindlich (reuse Nachbestellung).
+    // Nur Produkt-Aufträge mit bestätigtem Vor-Angebot; gleiche Verpackung/Etikett, Preis aus bisherigen Staffeln.
+    if ($complete && !$istDLrow && !empty($darfBestellen) && !empty($a['angebot_id'])):
+      $nbQ   = nachbestellung_quelle((int)$a['angebot_id'], $kid);
+      $nbOff = ($nbQ && function_exists('nachbestellung_offen_fuer')) ? nachbestellung_offen_fuer($kid, (int)$a['angebot_id']) : null;
+      if ($nbQ && !$nbOff):
+        $nbVk      = vk_fuer_kunde((float)$nbQ['vk_stueck'], $kid);
+        $nbStaffel = nachbestellung_staffel($kid, (int)($nbQ['produkt_id'] ?? 0), (int)$nbQ['stueck']);
+        $nbInit    = nachbestellung_preis_fuer($kid, (int)($nbQ['produkt_id'] ?? 0), (int)$nbQ['stueck'], (int)$nbQ['menge'], $nbVk); ?>
+  <form method="post" class="bx-panel nb-form" data-staffel='<?= h(json_encode(array_map(fn($r)=>[$r['menge'],$r['vk']], $nbStaffel))) ?>' data-fallback="<?= h((string)$nbVk) ?>" style="margin:-6px 0 16px;padding:12px 14px;border-color:var(--gruen)" onsubmit="return confirm('Verbindlich nachbestellen? Wir bestätigen den Preis kurz, dann startet die Produktion.');">
+    <input type="hidden" name="aktion" value="nachbestellen"><input type="hidden" name="quelle_angebot_id" value="<?= (int)$a['angebot_id'] ?>">
+    <div style="font-weight:600;margin-bottom:6px">Einfach nachbestellen<?= $nbQ['stueck'] ? ' <span class="muted" style="font-weight:400;font-size:13px">· ' . number_format((int)$nbQ['stueck'],0,',','.') . ' je Packung</span>' : '' ?></div>
+    <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:13px">Menge (Packungen)
+        <input type="text" name="menge" class="nb-menge" inputmode="numeric" value="<?= number_format((int)$nbQ['menge'],0,',','.') ?>" style="min-width:140px"></label>
+      <div style="font-size:13px">Preis / Pkg: <strong class="nb-preis"><?= $eur($nbInit['vk']) ?></strong></div>
+      <button class="btn btn-primary btn-sm" type="submit">Verbindlich nachbestellen</button>
+    </div>
+    <div class="muted nb-warn" style="font-size:12px;margin-top:6px;<?= empty($nbInit['ueber_max']) ? 'display:none' : '' ?>"><?= h((string)($nbInit['hinweis'] ?? '')) ?></div>
+    <div class="muted" style="font-size:12px;margin-top:6px">Gleiche Verpackung und gleiches Etikett (keine erneute Freigabe nötig). Der Preis richtet sich nach Ihrer Menge – aus Ihren bisherigen Angeboten. Wir bestätigen den Preis kurz, dann startet die Produktion.</div>
+  </form>
+  <?php endif; endif; ?>
   <?php endforeach; ?>
   </div>
+  <script>
+  // Nachbestell-Preis live aus den bisherigen Angebots-Staffeln (gleiche Regel wie serverseitig).
+  (function(){
+    function eur(v){ return v.toFixed(2).replace('.', ',') + ' €'; }
+    function nf(n){ return (n||0).toLocaleString('de-DE'); }
+    document.querySelectorAll('.nb-form').forEach(function(f){
+      var inp=f.querySelector('.nb-menge'), out=f.querySelector('.nb-preis'), warn=f.querySelector('.nb-warn');
+      var staffel=[]; try{ staffel=JSON.parse(f.getAttribute('data-staffel')||'[]'); }catch(e){}
+      var fallback=parseFloat(f.getAttribute('data-fallback')||'0')||0;
+      staffel.sort(function(a,b){ return a[0]-b[0]; });
+      function calc(){
+        var m=parseInt((inp.value||'').replace(/\D/g,''),10)||0;
+        if(!staffel.length||m<=0){ if(out)out.textContent=eur(fallback); if(warn)warn.style.display='none'; return; }
+        var maxM=staffel[staffel.length-1][0];
+        var best=staffel.reduce(function(a,r){ return Math.min(a,r[1]); }, staffel[0][1]);
+        if(m>maxM){ if(out)out.textContent=eur(best); if(warn){ warn.textContent='Menge über bisher angebotene Staffel ('+nf(maxM)+' Pkg) – Preis bitte prüfen.'; warn.style.display=''; } return; }
+        var vk=staffel[0][1]; staffel.forEach(function(r){ if(r[0]<=m) vk=r[1]; });
+        if(out)out.textContent=eur(vk); if(warn)warn.style.display='none';
+      }
+      if(inp){ inp.addEventListener('input',calc); inp.addEventListener('blur',function(){ var d=(inp.value||'').replace(/\D/g,''); inp.value=d?parseInt(d,10).toLocaleString('de-DE'):''; calc(); }); }
+      calc();
+    });
+  })();
+  </script>
   <?php if (count($aktBest) > 1): ?>
   <div id="bxBestLeer" class="bx-panel" style="display:none"><div class="muted">Keine Bestellung passt zu Ihrer Suche.</div></div>
   <script>
@@ -3944,7 +4015,9 @@ portal_head('Kundenportal · ' . $k['firma']);
     function norm(s){ return (s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
     function filter(){
       var q = norm(inp.value), treffer = 0;
-      rows.forEach(function(r){ var ok = !q || r.dataset.such.indexOf(q) !== -1; r.style.display = ok ? '' : 'none'; if (ok) treffer++; });
+      rows.forEach(function(r){ var ok = !q || r.dataset.such.indexOf(q) !== -1; r.style.display = ok ? '' : 'none';
+        var nf = r.nextElementSibling; if (nf && nf.classList && nf.classList.contains('nb-form')) nf.style.display = ok ? '' : 'none';   // Nachbestell-Form mit der Karte ein-/ausblenden
+        if (ok) treffer++; });
       if (leer) leer.style.display = treffer ? 'none' : 'block';
     }
     inp.addEventListener('input', filter);
