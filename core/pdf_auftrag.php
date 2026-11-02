@@ -45,7 +45,8 @@ function auftrag_pdf_bauen(int $auftrag_id): ?string {
     $angNr = !empty($a['angebot_id']) ? (string) scalar("SELECT nummer FROM angebot WHERE id=?", [(int)$a['angebot_id']]) : '';
 
     // Charge(n) + MHD für den Hinweis (falls schon produziert/eingebucht).
-    $chargen = all("SELECT charge_nr, mhd FROM charge WHERE auftrag_id=? AND TRIM(COALESCE(charge_nr,''))<>'' ORDER BY id", [$auftrag_id]);
+    // Nur die FERTIGWARE-Charge(n) des Auftrags (St-06): keine Lieferanten-/Rohstoff-Chargen auf Kundendokumenten.
+    $chargen = array_values(array_filter(auftrag_fertigware_chargen($auftrag_id), fn($c) => trim((string)($c['charge_nr'] ?? '')) !== ''));
     $hinweis = '';
     if ($chargen) {
         $teile = [];

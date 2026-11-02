@@ -50,7 +50,8 @@ function lieferschein_pdf_bauen(int $beleg_id): ?string {
     // Charge(n) + MHD für den Hinweis (falls schon produziert/eingebucht).
     $hinweis = '';
     if ($a) {
-        $chargen = all("SELECT charge_nr, mhd FROM charge WHERE auftrag_id=? AND TRIM(COALESCE(charge_nr,''))<>'' ORDER BY id", [(int)$a['id']]);
+        // Nur die FERTIGWARE-Charge(n) des Auftrags (St-06): keine Lieferanten-/Rohstoff-Chargen auf Kundendokumenten.
+        $chargen = array_values(array_filter(auftrag_fertigware_chargen((int)$a['id']), fn($c) => trim((string)($c['charge_nr'] ?? '')) !== ''));
         if ($chargen) {
             $teile = [];
             foreach ($chargen as $c) $teile[] = $c['charge_nr'] . ($c['mhd'] ? ' (MHD ' . date('d.m.Y', strtotime((string)$c['mhd'])) . ')' : '');
