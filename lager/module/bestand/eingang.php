@@ -6,7 +6,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     // Blinker (Pflicht) ZUERST pruefen – damit bei ungueltigem Code kein verwaister Artikel entsteht.
     $blinker = led_leiste_normalisieren((string)($_POST['blinker'] ?? ''));
     if ($blinker === null) { flash('Blinker ist Pflicht: bitte den Blinker-Code scannen oder eingeben (6 Zeichen, z. B. AFC709).', 'warn'); weiter('?p=eingang'); }
-    $menge = (float) str_replace(',', '.', trim((string)($_POST['menge'] ?? '0')));
+    // Deutsch-sicher parsen (wie ?p=we): der Link aus „Erwartete Lieferungen" übergibt „60.000" mit Tausenderpunkt (S-05).
+    $menge = erp_menge_parse(trim((string)($_POST['menge'] ?? '0')));
     if ($menge <= 0) { flash('Bitte eine Menge größer 0 angeben.', 'warn'); weiter('?p=eingang'); }
 
     $item_id = (int)($_POST['item_id'] ?? 0);

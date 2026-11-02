@@ -22,3 +22,5 @@ Dashboard. Darunter steht **„Zuletzt bewegt"** (aus `lg_bewegung`).
 
 ## Teil 4: Gebinde je Karton
 Nach dem Buchen legt `erp_charge_gebinde_anlegen($cid, $pakete)` je Karton/Sack ein Gebinde (charge_gebinde) mit geteilter Menge an – Grundlage für den eigenen QR je Gebinde auf dem Etikett und das blinde Wiegen bei der Rückgabe.
+
+**Menge deutsch-sicher (S-05):** Die Menge wird mit `erp_menge_parse()` gelesen (wie im Wareneingang `?p=we`), nicht mehr mit `str_replace(',', '.')`. Der Link aus „Erwartete Lieferungen" übergibt die Menge mit Tausenderpunkt („60.000"); vorher wurde daraus 60 statt 60.000 gebucht. Weiterhin gültig: „12,5", „250", „60.000,5".
