@@ -1331,15 +1331,6 @@ function init_schema(): void {
         KEY idx_pc (prod_charge_id), KEY idx_item (item_id), KEY idx_batch (batch_nr)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // CH/CHE-Nummernkreis startet bei 2977 (4 Stellen -> CH-2977; waechst natuerlich auf 5 Stellen bei >=10000).
-    // Seed auf frischen Systemen; Korrektur nur solange noch keine echte Charge dieses Typs vergeben wurde
-    // (faengt Test-Hochzaehlungen ab, ohne je eine real vergebene Nummer zu ueberschreiben).
-    foreach (['CH' => 'intern', 'CHE' => 'extern'] as $pfx => $typ) {
-        q("INSERT IGNORE INTO nummernkreis (prefix, naechste, stellen) VALUES (?, 2977, 4)", [$pfx]);
-        if ((int) scalar("SELECT COUNT(*) FROM prod_charge WHERE typ=?", [$typ]) === 0)
-            q("UPDATE nummernkreis SET naechste=2977, stellen=4 WHERE prefix=? AND naechste<2977", [$pfx]);
-    }
-
     // prod_probe: dreistufige physische Proben/Rueckstellmuster (Spec 8). ebene: rohstoff (pro eingesetztem
     // Rohstoff-Batch) | gebinde (pro Gebinde/Sub-Charge) | endprodukt (Rueckstellmuster) | labor (nur bei
     // Laborpruefung, 2 Stueck). Rueckstell-Mengenregel Endprodukt: max(5, Anzahl Gebinde) – siehe Helfer.
@@ -1421,6 +1412,15 @@ function init_schema(): void {
         naechste INT NOT NULL DEFAULT 1,
         stellen INT NOT NULL DEFAULT 4
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // (St-01: steht HINTER dem CREATE nummernkreis – vorher lief der Seed auf einer frischen DB gegen eine fehlende Tabelle.)
+    // CH/CHE-Nummernkreis startet bei 2977 (4 Stellen -> CH-2977; waechst natuerlich auf 5 Stellen bei >=10000).
+    // Seed auf frischen Systemen; Korrektur nur solange noch keine echte Charge dieses Typs vergeben wurde
+    // (faengt Test-Hochzaehlungen ab, ohne je eine real vergebene Nummer zu ueberschreiben).
+    foreach (['CH' => 'intern', 'CHE' => 'extern'] as $pfx => $typ) {
+        q("INSERT IGNORE INTO nummernkreis (prefix, naechste, stellen) VALUES (?, 2977, 4)", [$pfx]);
+        if ((int) scalar("SELECT COUNT(*) FROM prod_charge WHERE typ=?", [$typ]) === 0)
+            q("UPDATE nummernkreis SET naechste=2977, stellen=4 WHERE prefix=? AND naechste<2977", [$pfx]);
+    }
 
     // --- additive Migrationen ab hier (Beispielmuster) ---
     ensure_column('kunden', 'zeige_energetisierung', "TINYINT(1) NOT NULL DEFAULT 0");   // Energetisierung im Kundenportal zeigen (Spezialkunde, z. B. Annapurna/Pure Health)
@@ -1782,9 +1782,8 @@ function init_schema(): void {
         }
         meta_set('seed_beleg_hinweise', '1');
     }
-    // Etikettenformate je Behälter (item.etikett_final) + Etiketten-Artikel sicherstellen – damit jedes Glas/PET
-    // standardmäßig ein passendes Etikett hat (Auto-Zuordnung im Angebot). Läuft genau einmal (eigener Marker).
-    if (function_exists('seed_etikett_formate')) seed_etikett_formate();
+    // (seed_etikett_formate() läuft jetzt am ENDE von init_schema(), St-01 – es braucht kapselgroesse, pack_kapazitaet,
+    //  etikett_preis und item.breite_mm, die erst weiter unten angelegt werden.)
     // Aus einer Rezepturanfrage angelegter Rohstoff: bleibt Entwurf (gesperrt) und kommt erst mit der
     // Lieferantenantwort (Preis oder CoA/Spezifikation) in den Katalog.
     ensure_column('item', 'anfrage_entwurf', "TINYINT(1) NOT NULL DEFAULT 0");
@@ -2356,6 +2355,11 @@ function init_schema(): void {
     // Schritte aus dem Katalog anlegen). Behebt Altbestand, bei dem dienstleistung_id am Auftrag fehlte ->
     // sonst keine Schritte und (NULL-IN-Bug) unsichtbar im Kundenportal.
     if (function_exists('dl_auftraege_service_backfill')) dl_auftraege_service_backfill();
+
+    // Etikettenformate je Behälter (item.etikett_final) + Etiketten-Artikel sicherstellen – damit jedes Glas/PET
+    // standardmäßig ein passendes Etikett hat (Auto-Zuordnung im Angebot). Läuft genau einmal (eigener Marker).
+    // Bewusst als LETZTER Schritt: braucht Tabellen/Spalten, die weiter oben erst angelegt werden (St-01).
+    if (function_exists('seed_etikett_formate')) seed_etikett_formate();
 
     // Migrationen durch -> Marker setzen, damit der nächste Request den Block überspringt.
     if ($schemaBuild !== '') meta_set('schema_build', $schemaBuild);

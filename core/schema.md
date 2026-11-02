@@ -258,3 +258,6 @@ Bei `produktionsauftrag.zukauf_art='fertig'` (fertige, abgefüllte Ware) – und
 
 ## Ersteller der Preisanfrage (Paket Mails)
 `lieferant_anfrage.angelegt_von_id` (neu, additiv) speichert, wer die Preisanfrage gestellt hat – die Antwort-Mail des Lieferanten geht an diese Person.
+
+## Neuinstallation (Paket Neuinstallation & Rechte)
+- St-01: Der CH/CHE-Seed (Nummernkreise Produktionscharge) steht direkt hinter `CREATE TABLE nummernkreis` – vorher lief er auf einer frischen DB gegen die fehlende Tabelle, `init_schema()` brach ab und setzte den Marker nie. `seed_etikett_formate()` läuft als letzter Schritt vor dem Marker (braucht alle Tabellen).
