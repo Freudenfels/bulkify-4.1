@@ -10,3 +10,6 @@
 
 ## Verwandt
 - `core/schema.php` – die Spalten an `bestellung` und die Funktionen `bestellung_stationen()`, `bestellung_station_index()`, `versandart_liste()`/`versandart_label()`. (`versandarten()` ist die alte, nur-deutsche Liste und wird nicht mehr verwendet.)
+
+## Wareneingang → Portal-Status (Nacht 4b)
+Neue letzte Station **„Wareneingang bei bulkify"** (`eingegangen`, de/en/zh). Sie setzt nur der Wareneingang: beim vollständigen Einbuchen einer Lieferanten-Bestellung (Dashboard, Lager-App, Knopf „liefern"), nicht der Lieferant per Knopf. Bei einer Teillieferung steht im Ablauf „Teillieferung eingegangen: Datum" (`bestellung.teilgeliefert_am`). **Keine Mail an den Lieferanten.** Das Team bekommt eine Dashboard-Benachrichtigung „Lieferung eingebucht: BE-… (Firma)", bei einer Teillieferung mit Anzahl offener Positionen (`bestellung_eingang_melden()`).

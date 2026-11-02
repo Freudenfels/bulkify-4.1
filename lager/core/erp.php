@@ -818,7 +818,19 @@ function erp_bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids
     $offen = 0;
     foreach ($pos as $p) if ((float)$p['menge'] > 0 && (float)$p['gel'] + 1e-9 < (float)$p['menge'] * 0.98) $offen++;
     if ($offen === 0) erp_bestellung_angekommen($bestellung_id);
-    else erp_bedarf_bump();
+    else { q("UPDATE bestellung SET teilgeliefert_am=CURDATE() WHERE id=?", [$bestellung_id]); erp_bedarf_bump(); }
+    // Nacht 4b (Spiegel von bestellung_eingang_melden()): Portal-Station „eingegangen" ohne Mail + Team-Benachrichtigung.
+    $b = one("SELECT b.nummer, b.lieferant_id, l.firma FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id WHERE b.id=?", [$bestellung_id]);
+    if ($b) {
+        if ($offen === 0 && !empty($b['lieferant_id'])) q("UPDATE bestellung SET station='eingegangen' WHERE id=?", [$bestellung_id]);
+        if (tabelle_da('benachrichtigung')) {
+            $betreff = 'Lieferung eingebucht: ' . $b['nummer'] . ($b['firma'] ? ' (' . $b['firma'] . ')' : '') . ($offen === 0 ? '' : ' – Teillieferung');
+            $text = $offen === 0 ? 'Die Bestellung ' . $b['nummer'] . ' ist vollständig eingegangen (Lager-App).'
+                                 : 'Teillieferung zu ' . $b['nummer'] . ' eingebucht (Lager-App), ' . $offen . ' Position(en) noch offen.';
+            try { q("INSERT INTO benachrichtigung (betreff,text,link,art,erstellt) VALUES (?,?,?,?,?)", [$betreff, $text, '?p=bestellung&id=' . $bestellung_id, 'bestellung', gmdate('Y-m-d H:i:s')]); }
+            catch (\Throwable $e) { q("INSERT INTO benachrichtigung (betreff,text,link,erstellt) VALUES (?,?,?,?)", [$betreff, $text, '?p=bestellung&id=' . $bestellung_id, gmdate('Y-m-d H:i:s')]); }
+        }
+    }
     return ['komplett' => $offen === 0, 'offen' => $offen];
 }
 function erp_bestellung_angekommen(int $bestellung_id): void {

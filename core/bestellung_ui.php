@@ -42,14 +42,15 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
             . '<span>' . $t('Zugesagter Termin', 'Confirmed date', '确认交货日期') . ': <strong>'
             . ($b['eta_geplant'] ? $h(date('d.m.Y', strtotime((string)$b['eta_geplant']))) : '–') . '</strong></span>'
             . ($b['bestaetigt_von'] ? '<span class="muted" style="font-size:13px">' . $t('bestätigt durch', 'confirmed by', '确认人') . ' ' . $h($b['bestaetigt_von']) . '</span>' : '')
-            . ($b['angekommen_am'] ? '<span class="muted" style="font-size:13px">' . $t('Wareneingang', 'Goods received', '收货') . ': ' . $h(date('d.m.Y', strtotime((string)$b['angekommen_am']))) . '</span>' : '')
+            . ($b['angekommen_am'] ? '<span class="muted" style="font-size:13px">' . $t('Wareneingang', 'Goods received', '收货') . ': ' . $h(date('d.m.Y', strtotime((string)$b['angekommen_am']))) . '</span>'
+               : (!empty($b['teilgeliefert_am']) ? '<span class="muted" style="font-size:13px">' . $t('Teillieferung eingegangen', 'Partial delivery received', '部分到货') . ': ' . $h(date('d.m.Y', strtotime((string)$b['teilgeliefert_am']))) . '</span>' : ''))
             . '</div>';
 
         // 2) Stationen – kumulativ, ein Knopf je Schritt.
         $o .= '<div class="bx-row" style="gap:8px;flex-wrap:wrap">';
         foreach ($keys as $i => $key) {
             $erreicht = $i <= $ist;
-            if ($fertig || $erreicht) {
+            if ($fertig || $erreicht || $key === 'eingegangen') {   // „Wareneingang bei bulkify" setzt nur der Wareneingang (Nacht 4b)
                 $o .= '<span class="bx-badge ' . ($erreicht ? 'badge-ok' : '') . '" style="padding:6px 12px;border-radius:999px">'
                     . ($erreicht ? '&#10003; ' : '') . $h($stationen[$key]) . '</span>';
             } else {

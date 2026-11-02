@@ -1077,6 +1077,7 @@ function init_schema(): void {
     ensure_column('bestellung', 'versandart', "VARCHAR(40) NULL");      // luft | see | kurier | spedition | post
     ensure_column('bestellung', 'tracking', "VARCHAR(120) NULL");
     ensure_column('bestellung', 'angekommen_am', "DATE NULL");          // tatsaechlicher Wareneingang (Team)
+    ensure_column('bestellung', 'teilgeliefert_am', "DATE NULL");       // letzte Teillieferung (Nacht 1c/4b) – Lieferant sieht den Stand im Portal
     ensure_column('bestellung', 'pakete_angekuendigt', "INT NULL");     // vom Lieferanten angekuendigte Kartons-/Paketanzahl (falls noch keine Nummern)
     // Bestellweg + Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Quelle, Zahlungsart,
     // gezahlter Preis + Währung. Dient später dem sauberen Gegenrechnen von Einnahmen/Ausgaben.
@@ -4244,8 +4245,21 @@ function bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids): a
     $offenListe = [];
     foreach ($pos as $p) if ((float)$p['menge'] > 0 && (float)$p['gel'] + 1e-9 < (float)$p['menge'] * 0.98) $offenListe[] = ['id' => (int)$p['id'], 'rest' => (float)$p['menge'] - (float)$p['gel'], 'einheit' => (string)$p['einheit']];
     if (!$offenListe) bestellung_als_angekommen($bestellung_id);
-    else bedarf_bump();
+    else { q("UPDATE bestellung SET teilgeliefert_am=CURDATE() WHERE id=?", [$bestellung_id]); bedarf_bump(); }
+    bestellung_eingang_melden($bestellung_id, !$offenListe, count($offenListe));
     return ['komplett' => !$offenListe, 'rest' => $offenListe];
+}
+// Wareneingang gebucht (Nacht 4b): Portal-Statuskette auf „Wareneingang bei bulkify" (komplett) – der Lieferant sieht den Stand,
+// bekommt aber KEINE Mail. Das Team bekommt eine Dashboard-Benachrichtigung (Teillieferung mit Anzahl offener Positionen).
+function bestellung_eingang_melden(int $bestellung_id, bool $komplett, int $offen = 0): void {
+    $b = one("SELECT b.nummer, b.lieferant_id, l.firma FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id WHERE b.id=?", [$bestellung_id]);
+    if (!$b) return;
+    if ($komplett && !empty($b['lieferant_id'])) q("UPDATE bestellung SET station='eingegangen' WHERE id=?", [$bestellung_id]);
+    if (function_exists('benachrichtigung_add'))
+        benachrichtigung_add('Lieferung eingebucht: ' . $b['nummer'] . ($b['firma'] ? ' (' . $b['firma'] . ')' : '') . ($komplett ? '' : ' – Teillieferung'),
+            $komplett ? 'Die Bestellung ' . $b['nummer'] . ' ist vollständig eingegangen.'
+                      : 'Teillieferung zu ' . $b['nummer'] . ' eingebucht, ' . $offen . ' Position(en) noch offen (zählen weiter als unterwegs).',
+            '?p=bestellung&id=' . $bestellung_id, 'bestellung');
 }
 function bestellung_als_angekommen(int $bestellung_id): void {
     if ($bestellung_id <= 0) return;
@@ -4266,6 +4280,7 @@ function bestellung_wareneingang(int $bestellung_id): bool {
     }
     q("UPDATE bestellung SET status='geliefert', angekommen_am=COALESCE(angekommen_am, CURDATE()) WHERE id=?", [$bestellung_id]);
     if (column_exists('bestellung_position', 'geliefert_menge')) q("UPDATE bestellung_position SET geliefert_menge=GREATEST(geliefert_menge, menge) WHERE bestellung_id=?", [$bestellung_id]);
+    if (!empty($b['lieferant_id'])) q("UPDATE bestellung SET station='eingegangen' WHERE id=?", [$bestellung_id]);   // Portal-Statuskette (Nacht 4b), ohne Mail
     return true;
 }
 
@@ -6618,17 +6633,17 @@ function lieferant_bewerbung_freigeben(int $lieferant_id): bool {
 function bestellung_stationen(): array {
     return ['angenommen' => 'Auftrag angenommen', 'produktion' => 'in Produktion',
             'qualitaet'  => 'Qualitätsprüfung',   'versand'    => 'versandbereit',
-            'versendet'  => 'versendet'];
+            'versendet'  => 'versendet', 'eingegangen' => 'Wareneingang bei bulkify'];
 }
 function bestellung_stationen_en(): array {
     return ['angenommen' => 'Order accepted', 'produktion' => 'In production',
             'qualitaet'  => 'Quality check',  'versand'    => 'Ready to ship',
-            'versendet'  => 'Shipped'];
+            'versendet'  => 'Shipped', 'eingegangen' => 'Received at bulkify'];
 }
 function bestellung_stationen_zh(): array {
     return ['angenommen' => '已接受订单', 'produktion' => '生产中',
             'qualitaet'  => '质量检验',   'versand'    => '待发货',
-            'versendet'  => '已发货'];
+            'versendet'  => '已发货', 'eingegangen' => 'bulkify 已收货'];
 }
 
 // Stationsnamen in der Sprache des Lieferanten (de|en|zh).
@@ -6760,6 +6775,8 @@ function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $we
     if (!$b) return $m('Bestellung nicht gefunden.', 'Order not found.', '未找到订单。');
     if ((int)$b['bestaetigt'] !== 1) return $m('Bitte zuerst die Bestellung mit einem geplanten Termin bestätigen.', 'Please confirm the order with a planned date first.', '请先确认订单并填写计划交货日期。');
     if (!array_key_exists($ziel, bestellung_stationen())) return $m('Unbekannte Station.', 'Unknown step.', '未知步骤。');
+    // „Wareneingang bei bulkify" setzt nur der Wareneingang selbst (Nacht 4b), nie der Lieferant per Knopf.
+    if ($ziel === 'eingegangen') return $m('Diesen Schritt setzt bulkify beim Wareneingang.', 'This step is set by bulkify on goods receipt.', '此步骤由 bulkify 在收货时设置。');
     if ($ziel === 'versendet' && (trim((string)$b['versandanbieter']) === '' || trim((string)$b['versandart']) === '' || trim((string)$b['tracking']) === ''))
         return $m('Für „versendet" fehlen Versandanbieter, Versandart oder Sendungsnummer.', 'For "shipped" the carrier, shipping method or tracking number is missing.', '缺少承运商、运输方式或物流单号，无法设置为“已发货”。');
     q("UPDATE bestellung SET station=? WHERE id=?", [$ziel, $bestellung_id]);
