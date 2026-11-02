@@ -1469,6 +1469,7 @@ function init_schema(): void {
     ensure_column('lieferant_anfrage', 'incoterm', "VARCHAR(8) NULL");           // gewünschte Lieferbedingung (Standard DDP)
     ensure_column('lieferant_anfrage', 'versandart', "VARCHAR(20) NULL");        // gewünschte Versandart (Standard Luft)
     ensure_column('lieferant_anfrage', 'menge_staffel', "VARCHAR(190) NULL");    // gewünschte Mengen-Staffel (kommagetrennt) -> Lieferant sieht sie vorausgefüllt
+    ensure_column('lieferant_anfrage', 'angelegt_von_id', "INT NULL");          // wer die Preisanfrage gestellt hat -> bekommt die Antwort-Mail (Paket Mails)
     ensure_column('lieferant_angebot', 'preis_basis', "INT NOT NULL DEFAULT 1");  // Preis gilt je 1 oder je 1000 Einheiten
     ensure_column('lieferant_angebot', 'incoterm', "VARCHAR(8) NULL");            // vom Lieferanten angebotene Lieferbedingung
     ensure_column('lieferant_angebot', 'versandart', "VARCHAR(20) NULL");         // vom Lieferanten angebotene Versandart
@@ -6224,11 +6225,12 @@ function lieferant_anfrage_stellen(int $lieferant_id, ?int $item_id, string $bet
     $staffel = array_values(array_unique($staffel)); sort($staffel);
     $mengeStaffel = $staffel ? implode(',', $staffel) : null;
     if ((!$menge || $menge <= 0) && $staffel) $menge = (float) $staffel[0];
-    q("INSERT INTO lieferant_anfrage (nummer,lieferant_id,item_id,betreff,menge,menge_staffel,einheit,notiz,coa_gewuenscht,status,art,form,stueck_je_packung,kapselgroesse_id,rezeptur_id,incoterm,versandart)
-       VALUES (?,?,?,?,?,?,?,?,?,'offen',?,?,?,?,?,?,?)",
+    $vonId = (function_exists('current_user') && ($cuA = current_user()) && empty($cuA['lieferant_id'])) ? (int)($cuA['id'] ?? 0) : 0;
+    q("INSERT INTO lieferant_anfrage (nummer,lieferant_id,item_id,betreff,menge,menge_staffel,einheit,notiz,coa_gewuenscht,status,art,form,stueck_je_packung,kapselgroesse_id,rezeptur_id,incoterm,versandart,angelegt_von_id)
+       VALUES (?,?,?,?,?,?,?,?,?,'offen',?,?,?,?,?,?,?,?)",
       [naechste_nummer('LA'), $lieferant_id, $item_id ?: null, mb_substr(trim($betreff), 0, 190) ?: null,
        $menge && $menge > 0 ? $menge : null, $mengeStaffel, mb_substr($einheit, 0, 20) ?: null, trim($notiz) ?: null, $coa ? 1 : 0,
-       $art, $form ?: null, $stk > 0 ? $stk : null, $kg > 0 ? $kg : null, $rez > 0 ? $rez : null, $inco, $vers]);
+       $art, $form ?: null, $stk > 0 ? $stk : null, $kg > 0 ? $kg : null, $rez > 0 ? $rez : null, $inco, $vers, $vonId ?: null]);
     $id = insert_id();
     log_aktivitaet('lieferant', $lieferant_id, 'team', 'Preisanfrage ' . scalar("SELECT nummer FROM lieferant_anfrage WHERE id=?", [$id]) . ' gestellt.', 'anfrage', 'lieferant_anfrage', $id);
     return $id;

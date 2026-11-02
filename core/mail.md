@@ -92,3 +92,7 @@ Bei Lieferung (`auftrag_rechnung_bei_lieferung`) geht keine eigene Rechnungsmail
 | `mail_lieferant_preis_uebernommen($angebot)` | `lieferant_angebot_annehmen()` / Fertigprodukt-Angebot übernommen | Lieferant |
 | `mail_team_fehlbestand($pa,$station,$fehlt)` | Produktionsschritt scheitert an Material (Dashboard) | Team |
 | `mail_team_material_komplett($pa)` | `material_komplett_pruefen()`: PA wartete auf Material und ist jetzt bereit | Team (einmal je PA) |
+
+## Mailflut gebündelt, Preisangebote an Zuständige (Paket Mails)
+- `mail_team_bestellung($id, $was, $mail=true)`: Lieferanten-Updates einer Bestellung gehen nur noch bei **„bestätigt"** und Station **„versendet"** als Mail raus; Stationen dazwischen und „Versand-Pakete gemeldet" nur als Dashboard-Benachrichtigung. Vorher 6 Mails je Bestellung und Empfänger (48 Mails für eine Lieferung mit 4 Bestellungen).
+- `mail_team_preisanfrage()`: beantwortete Preisanfrage geht an die Person, die angefragt hat (`lieferant_anfrage.angelegt_von_id`, neu); ohne Ersteller (Altanfragen) an die Benutzer mit Rolle Einkauf; nur wenn es niemanden gibt, an das Team (Admins + CC). Neuer Helfer `mail_team_an($benutzer_ids, $betreff, $text)`.

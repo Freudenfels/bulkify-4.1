@@ -26,3 +26,6 @@ Eigenes Panel: der Lieferant lädt CoA, Rechnung, Spec etc. direkt zu DIESER Bes
 
 ## Mehrsprachig (DE/EN/ZH)
 Die ganze Seite nutzt `lp_t()` (`portal_layout.php`) – auch die Panels **Versand / Pakete** und **Dokumente & Rechnung** samt der Dokumenttypen (`$BDTYP`). Nur echte Dateninhalte bleiben in Originalsprache (z. B. der Bestell-`notiz`-Text wie „Aus v3 …", Tracking-Nummern, Spediteur-Name, Zahlungsweg). Neue sichtbare Texte immer als `lp_t('<key>')` mit de/en/zh im Wörterbuch anlegen, nie hart eintippen.
+
+## Benachrichtigungen ans Team (Paket Mails)
+Bestätigen und Station „versendet“ schicken eine Mail ans Team; die übrigen Stationen und gemeldete Pakete erscheinen nur als Dashboard-Benachrichtigung.

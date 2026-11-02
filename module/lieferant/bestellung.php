@@ -19,7 +19,9 @@ if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($fehler === '' && (int)$b['bestaetigt'] !== 1 && mail_bereit()) mail_team_bestellung($id, 'bestätigt');
     } elseif ($aktion === 'lief_station') {
         $fehler = bestellung_station_setzen($id, (string)($_POST['station'] ?? ''), $wer, lp_sprache());
-        if ($fehler === '' && mail_bereit()) mail_team_bestellung($id, bestellung_stationen()[(string)$_POST['station']] ?? (string)$_POST['station']);
+        // Mail nur bei „versendet", andere Stationen nur als Benachrichtigung (Mailflut, Paket Mails).
+        $stK = (string)($_POST['station'] ?? '');
+        if ($fehler === '') mail_team_bestellung($id, bestellung_stationen()[$stK] ?? $stK, $stK === 'versendet' && mail_bereit());
     } elseif ($aktion === 'nachricht') {
         $fehler = nachricht_post_verarbeiten($lid, 'lieferant', $wer, 'bestellung', $id, lp_sprache());
     } elseif ($aktion === 'lief_versand') {
@@ -33,7 +35,7 @@ if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $r = lieferung_pakete_hinzufuegen($id, (string)($_POST['trackings'] ?? ''), (string)($_POST['spediteur'] ?? ''));
         $anz = trim((string)($_POST['pakete_angekuendigt'] ?? ''));
         if ($anz !== '' && ctype_digit($anz)) q("UPDATE bestellung SET pakete_angekuendigt=? WHERE id=? AND lieferant_id=?", [(int)$anz, $id, $lid]);
-        if (($r['neu'] ?? 0) > 0 && mail_bereit()) mail_team_bestellung($id, 'Versand-Pakete gemeldet');
+        if (($r['neu'] ?? 0) > 0) mail_team_bestellung($id, 'Versand-Pakete gemeldet', false);   // nur Benachrichtigung
     } elseif ($aktion === 'paket_del') {
         lieferung_paket_loeschen((int)($_POST['paket_id'] ?? 0), $id);
     } elseif ($aktion === 'bestell_dok_upload') {

@@ -255,3 +255,6 @@ Bei `produktionsauftrag.zukauf_art='fertig'` (fertige, abgefüllte Ware) – und
 - `material_komplett_pruefen($sofort)`: merkt sich in `app_meta material_wartet` die Produktionsaufträge, die auf Material warten; ist einer davon beim nächsten Lauf bereit, geht EINMAL „Material komplett" ans Team. Beim ersten Lauf wird nur gemerkt (keine Meldung für schon bereite). Läuft nach Wareneingang/Quarantäne-Freigabe im Dashboard (`$sofort`) und gedrosselt (alle 5 Min.) beim Öffnen der Produktionsübersicht – so werden auch Buchungen aus der Lager-App erfasst.
 - `produktion_schritt_erledigen()`: scheitert ein Schritt an Material, geht `mail_team_fehlbestand()` raus.
 - `lieferant_bewerbung_anlegen()` gibt zusätzlich `id` zurück.
+
+## Ersteller der Preisanfrage (Paket Mails)
+`lieferant_anfrage.angelegt_von_id` (neu, additiv) speichert, wer die Preisanfrage gestellt hat – die Antwort-Mail des Lieferanten geht an diese Person.

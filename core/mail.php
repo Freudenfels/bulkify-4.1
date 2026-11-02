@@ -366,6 +366,23 @@ function mail_team(string $betreff, string $text): int {
     }
     return $n;
 }
+// Team-Mail an GEZIELTE Empfänger (z. B. die zuständige Person) statt an alle Admins + CC. Dashboard-Benachrichtigung wie mail_team().
+// Leere Empfängerliste -> Rückfall auf mail_team(). Rückgabe: Anzahl verschickter Mails.
+function mail_team_an(array $benutzer_ids, string $betreff, string $text): int {
+    $ids = array_values(array_filter(array_map('intval', $benutzer_ids)));
+    $mails = [];
+    if ($ids) foreach (all("SELECT email FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL AND id IN (" . implode(',', $ids) . ")") as $u)
+        if (filter_var(trim((string)$u['email']), FILTER_VALIDATE_EMAIL)) $mails[mb_strtolower(trim((string)$u['email']))] = trim((string)$u['email']);
+    if (!$mails) return mail_team($betreff, $text);
+    if (function_exists('benachrichtigung_add')) {
+        $link = preg_match('#\?p=[A-Za-z0-9_]+(?:&(?:amp;)?[A-Za-z0-9_]+=[^\s"\'<>]+)*#', $text, $mm) ? $mm[0] : '';
+        benachrichtigung_add($betreff, $text, $link);
+    }
+    if (!mail_bereit()) return 0;
+    $n = 0;
+    foreach ($mails as $e) if (mail_senden($e, $betreff, $text, '') === '') $n++;
+    return $n;
+}
 // Zusaetzliche Benachrichtigungs-Empfaenger (CC) aus den Einstellungen: komma-/semikolon-/zeilengetrennt,
 // nur gueltige Adressen. Leere Liste, wenn nichts gepflegt ist.
 function mail_team_cc_adressen(): array {
@@ -844,9 +861,17 @@ function mail_kunde_absage(int $anfrage_id): string {
 // --- Vorlagen Team (Lieferant hat im Portal etwas getan) ---------------------
 
 // Der Lieferant hat eine Bestellung bestätigt oder eine Station gesetzt.
-function mail_team_bestellung(int $bestellung_id, string $was): int {
+// Mailflut (Paket Mails): Mail nur bei $mail=true (Bestätigung, „versendet"); Zwischenstände (Stationen, Pakete) nur als
+// Dashboard-Benachrichtigung. Vorher 6 Mails × Empfänger je Bestellung.
+function mail_team_bestellung(int $bestellung_id, string $was, bool $mail = true): int {
     $b = one("SELECT b.nummer, b.eta_geplant, l.firma FROM bestellung b JOIN lieferanten l ON l.id=b.lieferant_id WHERE b.id=?", [$bestellung_id]);
     if (!$b) return 0;
+    if (!$mail) {
+        if (function_exists('benachrichtigung_add'))
+            benachrichtigung_add('Bestellung ' . $b['nummer'] . ': ' . $was . ' (' . $b['firma'] . ')',
+                'Der Lieferant ' . $b['firma'] . ' hat die Bestellung ' . $b['nummer'] . ' aktualisiert: ' . $was . '.', '?p=bestellung&id=' . $bestellung_id);
+        return 0;
+    }
     return mail_team('Bestellung ' . $b['nummer'] . ': ' . $was . ' (' . $b['firma'] . ')',
         "Der Lieferant " . $b['firma'] . " hat die Bestellung " . $b['nummer'] . " im Portal aktualisiert: $was.\n"
         . ($b['eta_geplant'] ? 'Geplanter Liefertermin: ' . date('d.m.Y', strtotime((string)$b['eta_geplant'])) . "\n" : '')
@@ -867,7 +892,10 @@ function mail_team_preisanfrage(int $anfrage_id): int {
         if ($ang['lieferzeit_tage']) $details .= ', Lieferzeit ' . (int)$ang['lieferzeit_tage'] . ' Tage';
         $details .= "\n";
     }
-    return mail_team('Preisanfrage ' . $a['nummer'] . ' beantwortet (' . $a['firma'] . ')',
+    // Zuständig: wer die Anfrage gestellt hat; ohne Ersteller (Altanfragen) die Rolle Einkauf; sonst wie bisher das Team.
+    $zust = (int) scalar("SELECT COALESCE(angelegt_von_id,0) FROM lieferant_anfrage WHERE id=?", [$anfrage_id]);
+    $empf = $zust > 0 ? [$zust] : array_map('intval', array_column(all("SELECT id FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL AND rollen LIKE '%einkauf%'"), 'id'));
+    return mail_team_an($empf, 'Preisanfrage ' . $a['nummer'] . ' beantwortet (' . $a['firma'] . ')',
         "Der Lieferant " . $a['firma'] . " hat die Preisanfrage " . $a['nummer'] . ($was !== '' ? " ($was)" : '') . " beantwortet.\n"
         . $details . "\n" . mail_basis_url() . '/?p=lieferant&id=' . (int)$a['lieferant_id'] . "\n");
 }
