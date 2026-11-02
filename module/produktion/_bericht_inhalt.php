@@ -9,7 +9,9 @@ $mng  = fn($x,$e) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',
 $zahl = fn($x,$d=0) => number_format((float)$x, $d, ',', '.');
 $dt   = fn($s) => $s ? h(fmt_zeit($s)) . ' Uhr' : '–';
 $mhd  = $D['fwChargen'][0]['mhd'] ?? null;
-$einheitWort = ['kapsel'=>'Kapsel','softgel'=>'Kapsel','tablette'=>'Tablette','stick'=>'Stick'][$D['form']] ?? 'Einheit';
+$fuellE = (string)($D['fuell_einheit'] ?? '');   // 'g'/'ml' = Füllmengen-Form (Pulver/Flüssig), '' = Stückware
+$einheitWort = ['kapsel'=>'Kapsel','softgel'=>'Kapsel','tablette'=>'Tablette','stick'=>'Stick'][$D['form']] ?? ($fuellE !== '' ? 'Portion' : 'Einheit');
+$multi = (float)($D['einheiten_gesamt'] ?? $D['gesamt']);   // Rezeptur-Einheiten gesamt (bei Pulver Portionen)
 $grosMg = fn($mg) => $mg >= 1000000 ? $zahl($mg/1000000, 3) . ' kg' : ($mg >= 1000 ? $zahl($mg/1000, 3) . ' g' : $zahl($mg, 0) . ' mg');
 // Kundenneutrale Schritt-Bezeichnungen (verraten keinen Zukauf: „Fertigware bereitstellen" -> „Material bereitgestellt").
 $kundeStation = function(string $st): string {
@@ -49,7 +51,11 @@ $kundeStation = function(string $st): string {
   <h2>Menge</h2>
   <div class="bx-tablewrap"><table class="bx-table pb-kv"><tbody>
     <tr><td>Packungen</td><td><?= $zahl($D['pack']) ?></td></tr>
-    <?php if ($D['einh'] > 0): ?>
+    <?php if ($D['einh'] > 0 && $fuellE !== ''): ?>
+    <tr><td>Füllmenge je Packung</td><td><?= h(gewicht_lesbar((float)$D['einh'], $fuellE)) ?></td></tr>
+    <tr><td>Füllmenge gesamt</td><td><strong><?= h(gewicht_lesbar((float)$D['gesamt'], $fuellE)) ?></strong></td></tr>
+    <?php if ($multi > 0): ?><tr><td>Portionen gesamt</td><td><?= $zahl($multi) ?></td></tr><?php endif; ?>
+    <?php elseif ($D['einh'] > 0): ?>
     <tr><td><?= h($D['wort']) ?> je Packung</td><td><?= $zahl($D['einh']) ?></td></tr>
     <tr><td><?= h($D['wort']) ?> gesamt</td><td><strong><?= $zahl($D['gesamt']) ?></strong></td></tr>
     <?php endif; ?>
@@ -60,15 +66,15 @@ $kundeStation = function(string $st): string {
 <div class="bx-panel pb-sec">
   <h2>Zusammensetzung je <?= h($einheitWort) ?></h2>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Bestandteil</th><th class="bx-num">mg je <?= h($einheitWort) ?></th><?php if ($D['gesamt'] > 0): ?><th class="bx-num">Gesamt</th><?php endif; ?></tr></thead>
+    <thead><tr><th>Bestandteil</th><th class="bx-num">mg je <?= h($einheitWort) ?></th><?php if ($multi > 0): ?><th class="bx-num">Gesamt</th><?php endif; ?></tr></thead>
     <tbody>
       <?php $summe = 0.0; foreach ($D['zutaten'] as $z): $summe += (float)$z['menge_mg']; ?>
       <tr><td><?= h((string)$z['name']) ?></td>
           <td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? $mng($z['menge_mg'], 'mg') : '<span class="muted">–</span>' ?></td>
-          <?php if ($D['gesamt'] > 0): ?><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? h($grosMg((float)$z['menge_mg'] * $D['gesamt'])) : '<span class="muted">–</span>' ?></td><?php endif; ?></tr>
+          <?php if ($multi > 0): ?><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? h($grosMg((float)$z['menge_mg'] * $multi)) : '<span class="muted">–</span>' ?></td><?php endif; ?></tr>
       <?php endforeach; ?>
       <tr><td><strong>Füllgewicht</strong></td><td class="bx-num"><strong><?= $mng($summe, 'mg') ?></strong></td>
-          <?php if ($D['gesamt'] > 0): ?><td class="bx-num"><strong><?= h($grosMg($summe * $D['gesamt'])) ?></strong></td><?php endif; ?></tr>
+          <?php if ($multi > 0): ?><td class="bx-num"><strong><?= h($grosMg($summe * $multi)) ?></strong></td><?php endif; ?></tr>
     </tbody>
   </table></div>
 </div>

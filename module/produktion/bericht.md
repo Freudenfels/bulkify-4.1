@@ -30,3 +30,6 @@ Button „Drucken / PDF" (`window.print()`); `@media print` blendet Seitenleiste
 
 ## Rechte/Route
 `production`, `labor`, `fulfillment` (core/auth.php); Route in `public/index.php`. Die **Kundenansicht im Portal** ist über den Magic-Link/Login des Kunden erreichbar, aber nur für den eigenen Auftrag UND nur wenn freigegeben (Prüfung in der Portal-View). Funktioniert für Produkt- und Bulk-Aufträge (`pa_ist_bulk()`).
+
+## Pulver/Granulat und Flüssig (Füllmengen-Formen, St-13)
+`produktion_bericht_daten()` liefert zusätzlich `fuell_einheit` (`g`/`ml`/leer) und `einheiten_gesamt`. Bei Pulver zeigt der Abschnitt Menge „Füllmenge je Packung 300 g · Füllmenge gesamt 600 kg · Portionen gesamt 120.000" statt „Stk je Packung 300 · Stk gesamt 600.000"; die Zutaten-Gesamtmengen rechnen mit den Portionen (Füllgewicht / mg je Portion) – vorher 5-fach zu hoch (g als Portionen). Bei ml ist das Portionsvolumen unbekannt, dann entfällt die Gesamtspalte. Die Darreichungsform kommt jetzt auch aus der Rezeptur des Produkts (vorher „–").

@@ -7833,19 +7833,25 @@ function produktion_bericht_daten(int $pa_id): ?array {
     if (!$pa) return null;
 
     $istBulk = pa_ist_bulk($pa);
-    $form    = (string)($pa['rezeptur_form'] ?: $pa['auftrag_produkt_form'] ?: '');
-    $wort    = in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : ($form === 'stick' ? 'Sticks' : 'Stk'));
-    $formLabel = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig','granulat'=>'Granulat'][$form] ?? ($form ?: '–');
-
-    $einh   = produktion_stueck_je_packung($pa);
-    $pack   = (int)$pa['menge'];
-    $gesamt = $einh > 0 ? $pack * $einh : 0;
-
     $rezId = (int)($pa['rezeptur_id'] ?? 0);
     if (!$rezId && !empty($pa['produkt_id'])) $rezId = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    // Darreichungsform: PA-Rezeptur (Bulk), sonst Auftrag, sonst die Rezeptur des Produkts (vorher „–" bei Produkt-PAs).
+    $form    = (string)($pa['rezeptur_form'] ?: $pa['auftrag_produkt_form'] ?: ($rezId ? scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezId]) : '') ?: '');
+    $wort    = in_array($form, ['kapsel','softgel'], true) ? 'Kapseln' : ($form === 'tablette' ? 'Tabletten' : ($form === 'stick' ? 'Sticks' : 'Stk'));
+    $formLabel = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig','granulat'=>'Granulat','gel'=>'Gel','gummi'=>'Fruchtgummi'][$form] ?? ($form ?: '–');
+
     $zutaten = $rezId ? all("SELECT z.menge_mg, COALESCE(NULLIF(z.bezeichnung,''), i.name) AS name
                              FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                              WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rezId]) : [];
+    $einh   = produktion_stueck_je_packung($pa);
+    $pack   = (int)$pa['menge'];
+    $gesamt = $einh > 0 ? $pack * $einh : 0;
+    // Pulver/Granulat (g) bzw. Flüssig/Gel (ml): $einh ist die FÜLLMENGE je Packung, $gesamt die Gesamt-Füllmenge – keine
+    // Stückzahl (St-13). Für die Zutaten-Gesamtmengen zählen dann die PORTIONEN (Füllgewicht / mg je Portion); bei ml ist das
+    // Portionsvolumen unbekannt -> keine Gesamtspalte. Stück-Formen: Einheiten = Stück gesamt.
+    $fuellE = $istBulk ? '' : form_groessen_einheit($form);
+    $sumMgZ = 0.0; foreach ($zutaten as $zz) $sumMgZ += (float)$zz['menge_mg'];
+    $einheitenGesamt = $fuellE === '' ? (float)$gesamt : (($fuellE === 'g' && $sumMgZ > 0) ? $gesamt * 1000.0 / $sumMgZ : 0.0);
 
     $schritte  = all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]);
     // Entnommene Materialien inkl. Lieferant (intern) + Datum der Entnahme.
@@ -7889,7 +7895,7 @@ function produktion_bericht_daten(int $pa_id): ?array {
 
     return [
         'pa'=>$pa, 'istBulk'=>$istBulk, 'form'=>$form, 'wort'=>$wort, 'formLabel'=>$formLabel,
-        'einh'=>$einh, 'pack'=>$pack, 'gesamt'=>$gesamt, 'zutaten'=>$zutaten, 'schritte'=>$schritte,
+        'einh'=>$einh, 'pack'=>$pack, 'gesamt'=>$gesamt, 'fuell_einheit'=>$fuellE, 'einheiten_gesamt'=>$einheitenGesamt, 'zutaten'=>$zutaten, 'schritte'=>$schritte,
         'verbrauch'=>$verbrauch, 'zugeChargen'=>$zugeChargen, 'fwChargen'=>$fwChargen, 'groesse'=>$groesse,
         'prodChargen'=>$prodChargen, 'pcRohstoffe'=>$pcRohstoffe, 'proben'=>$probenNach,
         'abschlussfotos'=>abschlussfotos_fuer_pa($pa_id),
