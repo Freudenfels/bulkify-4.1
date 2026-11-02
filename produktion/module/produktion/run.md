@@ -18,3 +18,6 @@ Je Materialzeile ein Button **„Im Lager blinken"** (Pick-to-Light): `aktion=bl
 - **Admin:** je Schritt „Abhaken"/„Zurücksetzen" (`aktion=admin_done`/`admin_undo` → `erp_schritt_status_setzen()`), auch außer der Reihe. Reine Statuskorrektur, KEINE Lager-/Chargenbewegung. Nur für Rolle admin (`pr_ist_admin()`).
 
 **Teilmenge (S-12):** Über „Teilmenge produzieren" steht der Rechner „Jetzt machbar" (`erp_teilmenge_machbar`) bzw. die Etikett-Sperre; die Buchung prüft und bucht Rohstoffe, Behälter, Deckel und Etikett anteilig.
+
+## QM-Gate Schritte (St-11a)
+Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schließt nur QM (Rolle `labor`) oder Admin ab: Dashboard `produktion_schritt_erledigen()` (`produktion_qm_stationen()`, `darf_qm_freigeben()`), Prod-App/Werk-App `erp_schritt_abschliessen($id, $akteur, $uid)` (`erp_darf_qm()`). Die Produktion bekommt „… schließt QM ab (Vier-Augen-Prinzip)", in der Werk-App ist der Knopf gesperrt. Auch die QS-Freigabe in der Prod-App (`?p=qs`) und ihr Zurückziehen sind nur für QM/Admin. Admin-Overrides/God-Mode bleiben. Noch nicht gebaut: echtes Personen-Vier-Augen (b).

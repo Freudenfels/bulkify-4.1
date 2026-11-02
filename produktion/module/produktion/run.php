@@ -25,7 +25,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             flash('Maschine als nicht sauber gemeldet – erst reinigen und bestätigen, dann den Schritt abschließen.', 'warn');
             weiter('?p=run&id=' . $id);
         }
-        $r = erp_schritt_abschliessen($schritt_id, $akteur);
+        $r = erp_schritt_abschliessen($schritt_id, $akteur, pr_uid());
         $zusatz = '';
         if ($r['ok']) {
             foreach (pr_station_felder((string)$r['station']) as $feld) {

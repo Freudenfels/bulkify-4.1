@@ -694,7 +694,15 @@ function erp_etikett_sperre(int $pa_id): string {
 // bucht Material nach FEFO ab (Mangel-Guard), markiert erledigt, aktualisiert den Auftragsstatus;
 // beim letzten Schritt wird die Fertigware als Charge eingebucht und der Auftrag auf 'erledigt' gesetzt.
 // Rückgabe: ['ok'=>bool,'fehler'=>?('nicht_gefunden'|'reihenfolge'|'mangel'),'msg'=>string,'fertig'=>bool,'station'=>string,'fehlt'=>array].
-function erp_schritt_abschliessen(int $schritt_id, string $akteur): array {
+// QM-Gate (St-11a, Spiegel von produktion_qm_stationen()): QK, Produktions- und Versand-Freigabe nur QM (labor) oder Admin.
+function erp_qm_stationen(): array { return ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']; }
+function erp_darf_qm(int $uid): bool {
+    $u = $uid > 0 ? erp_benutzer($uid) : null;
+    if (!$u) return false;
+    return (bool) array_intersect(['admin', 'labor'], array_map('trim', explode(',', (string)$u['rollen'])));
+}
+// $uid = wer abschließt (Prod-App: pr_uid(), Werk-App: PIN-Benutzer). Ohne $uid keine QM-Schritte.
+function erp_schritt_abschliessen(int $schritt_id, string $akteur, int $uid = 0): array {
     if ($schritt_id <= 0 || !tabelle_da('produktion_schritt'))
         return ['ok'=>false, 'fehler'=>'nicht_gefunden', 'msg'=>'Schritt nicht gefunden.', 'fertig'=>false, 'station'=>'', 'fehlt'=>[]];
     $schritt = one("SELECT id, pa_id, station, erledigt FROM produktion_schritt WHERE id=?", [$schritt_id]);
@@ -702,6 +710,8 @@ function erp_schritt_abschliessen(int $schritt_id, string $akteur): array {
         return ['ok'=>false, 'fehler'=>'nicht_gefunden', 'msg'=>'Schritt nicht gefunden.', 'fertig'=>false, 'station'=>'', 'fehlt'=>[]];
     $pa_id = (int)$schritt['pa_id'];
     $station = (string)$schritt['station'];
+    if (in_array($station, erp_qm_stationen(), true) && !erp_darf_qm($uid))
+        return ['ok'=>false, 'fehler'=>'qm', 'msg'=>'„' . $station . '" schließt QM ab (Vier-Augen-Prinzip) – bitte an QM/Labor übergeben.', 'fertig'=>false, 'station'=>$station, 'fehlt'=>[]];
 
     // PreProduktionsauftrag: ein noch in Vorbereitung stehender Auftrag ist gesperrt (noch nicht freigegeben).
     if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')

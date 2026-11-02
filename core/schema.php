@@ -9788,6 +9788,8 @@ function produktion_scan_pruefen(string $scan, ?string $kat): array {
 // bucht Material FEFO ab, markiert erledigt, aktualisiert den Status; beim letzten Schritt
 // wird die Fertigware eingebucht und der Auftrag auf 'erledigt' gesetzt.
 // Rückgabe: ['ok'=>bool, 'fehler'=>?('reihenfolge'|'scan'|'mangel'), 'msg'=>string, 'fertig'=>bool, 'station'=>string]
+// QM-Gate (St-11a): diese Schritte schließt nur QM (Rolle labor) oder Admin ab – nicht die Produktion selbst.
+function produktion_qm_stationen(): array { return ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']; }
 function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan = '', bool $ohneScan = false, bool $godmode = false): array {
     // God-Mode (nur Admin): klickt alles durch, OHNE jede Prüfung/Buchung – keine Vorbereitungs-Weiche, kein
     // Scan, kein Bestandscheck, keine Material-Abbuchung, keine Lager-Übergabe. Für Admin-Tests/Sonderfälle.
@@ -9804,6 +9806,8 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
     if (!$firstOpen || (int)$firstOpen['id'] !== $schritt_id)
         return ['ok'=>false, 'fehler'=>'reihenfolge', 'msg'=>'Dieser Schritt ist gerade nicht an der Reihe.', 'fertig'=>false, 'station'=>''];
     $station = (string)$firstOpen['station'];
+    if (in_array($station, produktion_qm_stationen(), true) && !(function_exists('darf_qm_freigeben') && darf_qm_freigeben()))
+        return ['ok'=>false, 'fehler'=>'qm', 'msg'=>'„' . $station . '" schließt QM ab (Vier-Augen-Prinzip) – bitte an QM/Labor übergeben.', 'fertig'=>false, 'station'=>$station];
     $anl  = station_anleitung($station);
     $scan = trim($scan);
     $master = ist_master_scan($scan) || $god;   // 8er-Folge ODER God-Mode: überspringt Scan-Prüfung + Bestandsabbuchung

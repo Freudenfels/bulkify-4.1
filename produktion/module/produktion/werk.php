@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-        $r = erp_schritt_abschliessen($sid, $werkName ?: 'Mitarbeiter');
+        $r = erp_schritt_abschliessen($sid, $werkName ?: 'Mitarbeiter', $werkUid);
         // Mischen: je Mischbehälter eine Gebinde-Untercharge anlegen (ein Etikett je Behälter, FEFO beim Abfüllen).
         if (!empty($r['ok']) && ($r['station'] ?? '') === 'Mischen') {
             $cap = (float) str_replace(',', '.', (string)($_POST['cap'] ?? ''));
@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if (!empty($r['alle_fertig'])) {   // alle Eimer fertig -> Mischen-Schritt abschließen
                 $sid = 0; foreach (erp_pa_schritte($paId) as $s) if ((string)$s['station'] === 'Mischen' && (int)$s['erledigt'] === 0) { $sid = (int)$s['id']; break; }
-                if ($sid) erp_schritt_abschliessen($sid, $werkName ?: 'Mitarbeiter');
+                if ($sid) erp_schritt_abschliessen($sid, $werkName ?: 'Mitarbeiter', $werkUid);
                 $msg .= ' ' . $T['fl_mix_done'];
             }
             $_SESSION['werk_flash'] = $msg; $_SESSION['werk_flash_ok'] = true;
@@ -578,7 +578,11 @@ header('Content-Type: text/html; charset=utf-8');
     <?php endif; ?>
 
     <div style="margin-top:22px">
-      <?php if ($materialFehlt): ?>
+      <?php $qmSperre = in_array((string)$cur['station'], erp_qm_stationen(), true) && !erp_darf_qm($werkUid);   // St-11a ?>
+      <?php if ($qmSperre): ?>
+        <div class="flash err" style="margin-bottom:14px"><?= h($T['qm_only'] ?? 'Diesen Schritt schließt QM ab (Vier-Augen-Prinzip).') ?></div>
+        <button class="btn btn-primary btn-lg" disabled><?= $isGate ? h($T['release']) : h($T['done_btn']) ?></button>
+      <?php elseif ($materialFehlt): ?>
         <div class="flash err" style="margin-bottom:14px"><?= h($materialQuar ? ($T['material_quarantine'] ?? $T['material_missing']) : $T['material_missing']) ?></div>
         <button class="btn btn-primary btn-lg" disabled><?= $isGate ? h($T['release']) : h($T['done_btn']) ?></button>
       <?php else: ?>

@@ -55,3 +55,6 @@ Nach dem Mischen (`$mischenDone`) erscheint ein Panel „Restmischung ins Lager 
 
 ## Quarantäne statt „fehlt" (Nacht 1)
 Liegt die fehlende Menge in Quarantäne, steht dort gelb „in Quarantäne … – freigeben" (wartet auf QM) statt rot „fehlt". Reicht die Quarantäne nicht, bleibt „fehlt" mit Hinweis auf den Quarantäne-Teil. Dashboard-Helfer `bx_fehlt_quar()` (core/ui.php). Produktion bleibt bis zur Freigabe blockiert.
+
+## QM-Gate Schritte (St-11a)
+Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schließt nur QM (Rolle `labor`) oder Admin ab: Dashboard `produktion_schritt_erledigen()` (`produktion_qm_stationen()`, `darf_qm_freigeben()`), Prod-App/Werk-App `erp_schritt_abschliessen($id, $akteur, $uid)` (`erp_darf_qm()`). Die Produktion bekommt „… schließt QM ab (Vier-Augen-Prinzip)", in der Werk-App ist der Knopf gesperrt. Auch die QS-Freigabe in der Prod-App (`?p=qs`) und ihr Zurückziehen sind nur für QM/Admin. Admin-Overrides/God-Mode bleiben. Noch nicht gebaut: echtes Personen-Vier-Augen (b).

@@ -10,3 +10,6 @@ QS & Labor zu einem Produktionsauftrag (`?p=qs&id=…`), verlinkt von der Detail
 
 Status-Felder in `pr_pa_daten`: `rueckstellmuster_anzahl|charge|mhd|datum`, `laborprobe_anzahl|labor|versendet_am`, `laborstatus`, `qs_freigabe_am|von`.
 Offen (Dashboard-Abstimmung): Laborstatus am Auftrag/Kundenportal anzeigen.
+
+## QM-Gate Schritte (St-11a)
+Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schließt nur QM (Rolle `labor`) oder Admin ab: Dashboard `produktion_schritt_erledigen()` (`produktion_qm_stationen()`, `darf_qm_freigeben()`), Prod-App/Werk-App `erp_schritt_abschliessen($id, $akteur, $uid)` (`erp_darf_qm()`). Die Produktion bekommt „… schließt QM ab (Vier-Augen-Prinzip)", in der Werk-App ist der Knopf gesperrt. Auch die QS-Freigabe in der Prod-App (`?p=qs`) und ihr Zurückziehen sind nur für QM/Admin. Admin-Overrides/God-Mode bleiben. Noch nicht gebaut: echtes Personen-Vier-Augen (b).

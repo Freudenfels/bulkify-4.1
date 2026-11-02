@@ -8,7 +8,7 @@ $id = (int)($_GET['id'] ?? 0);
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') === 'schritt_ab') {
     $schritt_id = (int)($_POST['schritt_id'] ?? 0);
     $akteur = (string)(pr_benutzer()['name'] ?? '');
-    $r = erp_schritt_abschliessen($schritt_id, $akteur);
+    $r = erp_schritt_abschliessen($schritt_id, $akteur, pr_uid());
     if ($r['ok']) {
         flash($r['fertig']
             ? 'Letzter Schritt abgeschlossen – Produktion fertig, Fertigware eingebucht.'

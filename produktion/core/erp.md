@@ -85,3 +85,6 @@ Eigene Fertigware (Einlagern aus der Produktion: `produktion_teilmenge_einbuchen
 
 ## Zukauf „fertig" – kurzer Weg (Nacht 2a)
 Bei Zukauf-Art „fertig" hat der Produktionsauftrag nur noch **Fertigware bereitstellen → Qualitätsprüfung → Produktions-Freigabe → Versand-Freigabe** (kein Verpacken/Etikettieren/Beipack/Umkarton, die Ware ist fertig). `produktion_schritte_regenerieren()` beachtet `zukauf_art`, `produktion_zukauf_weg_anpassen()` passt beim Umstellen der Zukauf-Art die Schritte an (noch nichts erledigt: neu erzeugen, Status bleibt; sonst nur offene Ausbau-Schritte entfernen). Prod-App: `erp_weg_stationen()` ebenso.
+
+## QM-Gate Schritte (St-11a)
+Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schließt nur QM (Rolle `labor`) oder Admin ab: Dashboard `produktion_schritt_erledigen()` (`produktion_qm_stationen()`, `darf_qm_freigeben()`), Prod-App/Werk-App `erp_schritt_abschliessen($id, $akteur, $uid)` (`erp_darf_qm()`). Die Produktion bekommt „… schließt QM ab (Vier-Augen-Prinzip)", in der Werk-App ist der Knopf gesperrt. Auch die QS-Freigabe in der Prod-App (`?p=qs`) und ihr Zurückziehen sind nur für QM/Admin. Admin-Overrides/God-Mode bleiben. Noch nicht gebaut: echtes Personen-Vier-Augen (b).

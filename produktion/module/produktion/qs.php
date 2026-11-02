@@ -23,6 +23,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         pr_daten_setzen($id, 'laborstatus', 'versendet', $akteur);
         erp_auftrag_labor_versendet($id);   // Auftrag/Portal-Status setzen (falls Spalte vorhanden)
         flash('Laborprobe als ans Labor versendet markiert.');
+    } elseif (in_array($aktion, ['qs_freigabe', 'qs_freigabe_zurueck'], true) && !erp_darf_qm(pr_uid())) {
+        flash('Die Qualitäts-Freigabe erteilt QM (Rolle Labor/QA) oder Admin – Vier-Augen-Prinzip.', 'warn');   // St-11a
     } elseif ($aktion === 'qs_freigabe') {
         pr_daten_setzen($id, 'qs_freigabe_am', gmdate('Y-m-d H:i:s'), $akteur);
         pr_daten_setzen($id, 'qs_freigabe_von', $akteur, $akteur);
