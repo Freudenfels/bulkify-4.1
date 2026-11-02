@@ -53,13 +53,15 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $menge     = (int) preg_replace('/\D/', '', (string)($_POST['menge'] ?? ''));
     $r = nachbestellung_anlegen((int)$k['id'], $angebotId, $menge);
     $flag = isset($r['fehler']) ? '&nbfehler=' . urlencode($r['fehler']) : '&nbok=1';
-    header('Location: ?p=portal&token=' . $token . '&v=angebote' . $flag); exit;
+    $zurueck = in_array(($_POST['zurueck'] ?? ''), ['nachbestellen', 'bestellungen', 'angebote'], true) ? (string)$_POST['zurueck'] : 'angebote';
+    header('Location: ?p=portal&token=' . $token . '&v=' . $zurueck . $flag); exit;
 }
 // Nachbestellung: Kunde gibt einen angepassten Preis frei (Ausnahmefall 2 %).
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachbestell_preis_ok') {
     $r = nachbestellung_kunde_preis_ok((int)($_POST['nb_id'] ?? 0), (int)$k['id']);
     $flag = isset($r['fehler']) ? '&nbfehler=' . urlencode($r['fehler']) : '&nbfreigabe=1';
-    header('Location: ?p=portal&token=' . $token . '&v=angebote' . $flag); exit;
+    $zurueck = in_array(($_POST['zurueck'] ?? ''), ['nachbestellen', 'bestellungen', 'angebote'], true) ? (string)$_POST['zurueck'] : 'angebote';
+    header('Location: ?p=portal&token=' . $token . '&v=' . $zurueck . $flag); exit;
 }
 
 // Onboarding: „Erste Schritte"-Checkliste dauerhaft ausblenden (Kunde will sie nicht mehr sehen).
@@ -1426,6 +1428,10 @@ $hatKontingente = (int) scalar("SELECT COUNT(*) FROM kontingent WHERE kunde_id=?
     + (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND jahresvertrag=1 AND status<>'offen' AND kunde_ausgeblendet=0", [(int)$k['id']]);
 if ($hatKontingente > 0) $L['kontingente'] = 'Jahresverträge';
 $L += ['angebote' => 'Angebote', 'bestellungen' => 'Bestellungen', 'rechnungen' => 'Rechnungen'];
+// Nachbestellen: eigener, prominenter Reiter mit ALLEM, was der Kunde schon einmal bestellt hat – gleiche
+// Menge/Verpackung/Etikett, nur Menge bestätigen. Nur zeigen, wenn es überhaupt eine Produkt-Bestellung gibt.
+$hatNachbestell = !empty($k['portal_produkte']) && (int) scalar("SELECT COUNT(*) FROM auftrag WHERE kunde_id=? AND produkt_id IS NOT NULL AND angebot_id IS NOT NULL AND COALESCE(kategorie,'produkt')<>'dienstleistung'", [(int)$k['id']]) > 0;
+if ($hatNachbestell) $L['nachbestellen'] = 'Nachbestellen';
 // Etiketten-Datenbank: dauerhafter Menüpunkt (auch ohne Etiketten – dann mit leerem Zustand + Erklärung).
 $L['etiketten'] = 'Etiketten';
 // Labortest: alle freigegebenen Laboranalysen zu gekauften Produkten/Bestellungen (dauerhafter Menüpunkt).
@@ -1440,7 +1446,7 @@ $NAVGROUPS = [
     ''          => ['start'],
     'Katalog'   => ['rezepturen', 'produkte', 'rohstoffe'],
     'Anfragen'  => ['meine_anfragen', 'anfrage', 'prodanfrage', 'rohanfrage', 'dienstleistung'],
-    'Vorgänge'  => ['kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten', 'labortest', 'fremdprodukte'],
+    'Vorgänge'  => ['nachbestellen', 'kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten', 'labortest', 'fremdprodukte'],
     'Konto'     => ['konto'],
     'Hilfe'     => ['info'],
 ];
@@ -3839,6 +3845,96 @@ portal_head('Kundenportal · ' . $k['firma']);
     });
   })();
   </script>
+
+<?php elseif ($view === 'nachbestellen'): ?>
+  <h1 style="margin-bottom:4px">Nachbestellen</h1>
+  <p class="muted" style="margin:0 0 16px;max-width:760px">Alles, was Sie schon einmal bestellt haben – auf einen Blick. Menge prüfen, verbindlich nachbestellen. <strong>Gleiche Verpackung und gleiches Etikett</strong> (keine erneute Freigabe nötig), der Preis richtet sich nach Ihrer Menge aus Ihren bisherigen Angeboten.</p>
+  <?php if (isset($_GET['nbok'])): ?><div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen);margin-bottom:14px">Nachbestellung eingegangen. Wir bestätigen den Preis kurz – in der Regel bleibt er gleich und die Produktion startet. Sie finden den Vorgang unter „Bestellungen".</div><?php endif; ?>
+  <?php if (isset($_GET['nbfreigabe'])): ?><div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen);margin-bottom:14px">Neuer Preis freigegeben – Ihre Nachbestellung läuft.</div><?php endif; ?>
+  <?php if (isset($_GET['nbfehler'])): ?><div class="bx-panel" style="padding:12px 16px;border-color:#e6c4c0;color:#8f231b;margin-bottom:14px"><?= h((string)$_GET['nbfehler']) ?></div><?php endif; ?>
+  <?php
+    // Quelle: ALLE früheren Produkt-Bestellungen (auftrag) mit bestätigtem Vor-Angebot. Je Produkt+Packungsgröße
+    // die ZULETZT bestellte Variante (Dedup über produkt_id+stueck, $auftraege ist bereits neueste-zuerst-nah;
+    // zur Sicherheit nach angelegt sortiert). Vorbelegung = zuletzt bestellte Menge.
+    $nbRows = array_values(array_filter($auftraege, fn($a) => ($a['kategorie'] ?? 'produkt') !== 'dienstleistung' && !empty($a['angebot_id']) && !empty($a['produkt_id'])));
+    usort($nbRows, fn($x, $y) => strcmp((string)($y['angelegt'] ?? ''), (string)($x['angelegt'] ?? '')));   // neueste zuerst
+    $nbSeen = []; $nbCards = [];
+    foreach ($nbRows as $a) {
+        $q = nachbestellung_quelle((int)$a['angebot_id'], $kid);
+        if (!$q) continue;
+        $key = (int)$q['produkt_id'] . '-' . (int)$q['stueck'];
+        if (isset($nbSeen[$key])) continue; $nbSeen[$key] = true;
+        $nbCards[] = ['a' => $a, 'q' => $q];
+    }
+  ?>
+  <?php if (!$nbCards): ?>
+    <div class="bx-panel"><div class="muted">Hier erscheint alles, was Sie schon einmal bestellt haben – sobald eine Bestellung vorliegt.</div></div>
+  <?php elseif (empty($darfBestellen)): ?>
+    <div class="bx-panel"><div class="muted">Nachbestellen ist für Ihren Zugang nicht freigeschaltet. Bitte wenden Sie sich an uns.</div></div>
+  <?php else: ?>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
+    <?php foreach ($nbCards as $c): $a = $c['a']; $q = $c['q'];
+        $defMenge  = (int)($a['menge'] ?: $q['menge']);
+        $nbVk      = vk_fuer_kunde((float)$q['vk_stueck'], $kid);
+        $nbStaffel = nachbestellung_staffel($kid, (int)$q['produkt_id'], (int)$q['stueck']);
+        $nbInit    = nachbestellung_preis_fuer($kid, (int)$q['produkt_id'], (int)$q['stueck'], $defMenge, $nbVk);
+        $nbOff     = function_exists('nachbestellung_offen_fuer') ? nachbestellung_offen_fuer($kid, (int)$a['angebot_id']) : null;
+        $pname     = (string)($a['produkt_name'] ?? 'Produkt');   // bereits der kundenspezifische Name
+    ?>
+    <div class="bx-panel" style="margin:0;display:flex;flex-direction:column;gap:8px">
+      <div style="font-weight:600;font-size:15px"><?= h($pname) ?></div>
+      <div class="muted" style="font-size:12px">
+        <?= $q['stueck'] ? number_format((int)$q['stueck'],0,',','.') . ' je Packung · ' : '' ?>zuletzt bestellt: <?= number_format($defMenge,0,',','.') ?> Packungen
+      </div>
+      <?php if ($nbOff && ($nbOff['status'] ?? '') === 'preis_neu'): ?>
+        <div class="bx-panel" style="margin:4px 0 0;padding:10px 12px;border-color:var(--warn,#c7962b)">
+          <div style="font-size:13px">Für Ihre Nachbestellung gilt ein angepasster Preis: <strong><?= $eur((float)$nbOff['vk_neu']) ?></strong> / Pkg.<?= $nbOff['grund'] ? ' – ' . h((string)$nbOff['grund']) : '' ?></div>
+          <form method="post" style="margin:8px 0 0" onsubmit="return confirm('Nachbestellung zum neuen Preis verbindlich freigeben?');">
+            <input type="hidden" name="aktion" value="nachbestell_preis_ok"><input type="hidden" name="nb_id" value="<?= (int)$nbOff['id'] ?>"><input type="hidden" name="zurueck" value="nachbestellen">
+            <button class="btn btn-primary btn-sm" type="submit">Zum neuen Preis bestätigen</button>
+          </form>
+        </div>
+      <?php elseif ($nbOff): ?>
+        <div class="muted" style="font-size:13px">Nachbestellung (<?= number_format((int)$nbOff['menge'],0,',','.') ?> Packungen) ist eingegangen – wir bestätigen den Preis kurz.</div>
+      <?php else: ?>
+        <form method="post" class="nb-form" data-staffel='<?= h(json_encode(array_map(fn($r)=>[$r['menge'],$r['vk']], $nbStaffel))) ?>' data-fallback="<?= h((string)$nbVk) ?>" style="margin:4px 0 0" onsubmit="return confirm('Verbindlich nachbestellen? Wir bestätigen den Preis kurz, dann startet die Produktion.');">
+          <input type="hidden" name="aktion" value="nachbestellen"><input type="hidden" name="quelle_angebot_id" value="<?= (int)$a['angebot_id'] ?>"><input type="hidden" name="zurueck" value="nachbestellen">
+          <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0">
+            <label style="display:flex;flex-direction:column;gap:3px;font-size:13px">Menge (Packungen)
+              <input type="text" name="menge" class="nb-menge" inputmode="numeric" value="<?= number_format($defMenge,0,',','.') ?>" style="min-width:130px"></label>
+            <div style="font-size:13px">Preis / Pkg: <strong class="nb-preis"><?= $eur($nbInit['vk']) ?></strong></div>
+          </div>
+          <div class="muted nb-warn" style="font-size:12px;margin-top:6px;<?= empty($nbInit['ueber_max']) ? 'display:none' : '' ?>"><?= h((string)($nbInit['hinweis'] ?? '')) ?></div>
+          <button class="btn btn-primary btn-sm" type="submit" style="margin-top:10px">Verbindlich nachbestellen</button>
+        </form>
+      <?php endif; ?>
+    </div>
+    <?php endforeach; ?>
+  </div>
+  <script>
+  (function(){
+    function eur(v){ return v.toFixed(2).replace('.', ',') + ' €'; }
+    function nf(n){ return (n||0).toLocaleString('de-DE'); }
+    document.querySelectorAll('.nb-form').forEach(function(f){
+      var inp=f.querySelector('.nb-menge'), out=f.querySelector('.nb-preis'), warn=f.querySelector('.nb-warn');
+      var staffel=[]; try{ staffel=JSON.parse(f.getAttribute('data-staffel')||'[]'); }catch(e){}
+      var fallback=parseFloat(f.getAttribute('data-fallback')||'0')||0;
+      staffel.sort(function(a,b){ return a[0]-b[0]; });
+      function calc(){
+        var m=parseInt((inp.value||'').replace(/\D/g,''),10)||0;
+        if(!staffel.length||m<=0){ if(out)out.textContent=eur(fallback); if(warn)warn.style.display='none'; return; }
+        var maxM=staffel[staffel.length-1][0];
+        var best=staffel.reduce(function(a,r){ return Math.min(a,r[1]); }, staffel[0][1]);
+        if(m>maxM){ if(out)out.textContent=eur(best); if(warn){ warn.textContent='Menge über bisher angebotene Staffel ('+nf(maxM)+' Pkg) – Preis bitte prüfen.'; warn.style.display=''; } return; }
+        var vk=staffel[0][1]; staffel.forEach(function(r){ if(r[0]<=m) vk=r[1]; });
+        if(out)out.textContent=eur(vk); if(warn)warn.style.display='none';
+      }
+      if(inp){ inp.addEventListener('input',calc); inp.addEventListener('blur',function(){ var d=(inp.value||'').replace(/\D/g,''); inp.value=d?parseInt(d,10).toLocaleString('de-DE'):''; calc(); }); }
+      calc();
+    });
+  })();
+  </script>
+  <?php endif; ?>
 
 <?php elseif ($view === 'bestellungen'):
     // DL-Auftrag gilt als abgeschlossen bei 'erledigt' (es gibt kein 'versendet'); Produkt-Auftrag bei 'versendet'.
