@@ -1340,7 +1340,7 @@ if (!function_exists('kunde_auftrag_phase')) {
         // Rohstoff angekommen (2): eine Charge wurde am Auftrag eingebucht (Wareneingang) ODER eine
         // Bestellung ist als angekommen markiert. Deckt auch extern bestellte, direkt eingebuchte Bulkware ab.
         $angDate = null;
-        $we = one("SELECT COALESCE(MIN(wareneingang), MIN(angelegt)) d FROM charge WHERE auftrag_id=?", [$aid]);
+        $we = one("SELECT COALESCE(MIN(c.wareneingang), MIN(c.angelegt)) d FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie<>'verkaufsfertig'", [$aid]);   // Fertigware zählt nicht als „Rohstoff angekommen"
         if ($we && !empty($we['d'])) $angDate = $we['d'];
         if (!$angDate) {
             $ba = one("SELECT MIN(b.angekommen_am) d FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id

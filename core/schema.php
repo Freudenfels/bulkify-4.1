@@ -3573,11 +3573,13 @@ function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd =
     elseif (!empty($pa['mhd']))             $mhd = (string)$pa['mhd'];
     else                                    $mhd = mhd_standard();
     $notiz = trim($notiz);
+    // Die Fertigcharge gehört zu DIESEM Auftrag (S-09): auftrag_id (und über den Auftrag der Kunde) + pa_id. Versand und Lieferschein
+    // arbeiten nur mit den Chargen des eigenen Auftrags – kein gemeinsamer Topf mehr, keine Verwechslung zwischen Kunden.
     // QM-Gate (St-11d): eigene Fertigware (Bulk + verkaufsfertig) kommt in QUARANTÄNE – Versand, Fremdlager und
     // Weiterverarbeitung erst nach der Freigabe durch QM (Lager-App „Quarantäne" / Dashboard-Wareneingang).
-    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
-       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'quarantaene', ?, ?, ?)",
-      [$charge_nr, $item_id, $menge, $menge, $mhd, 'Aus Produktion ' . $pa['nummer'] . ($notiz !== '' ? ' – ' . mb_substr($notiz, 0, 200) : ''), $pa_id, gmdate('Y-m-d H:i:s')]);
+    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,auftrag_id,angelegt)
+       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'quarantaene', ?, ?, ?, ?)",
+      [$charge_nr, $item_id, $menge, $menge, $mhd, 'Aus Produktion ' . $pa['nummer'] . ($notiz !== '' ? ' – ' . mb_substr($notiz, 0, 200) : ''), $pa_id, ((int)($pa['auftrag_id'] ?? 0) ?: null), gmdate('Y-m-d H:i:s')]);
     return ['ok'=>true, 'msg'=>'', 'charge_id'=>insert_id(), 'charge_nr'=>$charge_nr];
 }
 // Fertigware eines abgeschlossenen Produktionsauftrags als Charge einbuchen.
@@ -5595,7 +5597,7 @@ function kunde_auftrag_phase(array $a): array {
         if ($rb !== null) { $bestellt = true; $dates[1] = $dates[1] ?? $rb; }
     }
     $angDate = null;
-    $we = one("SELECT COALESCE(MIN(wareneingang), MIN(angelegt)) d FROM charge WHERE auftrag_id=?", [$aid]);
+    $we = one("SELECT COALESCE(MIN(c.wareneingang), MIN(c.angelegt)) d FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie<>'verkaufsfertig'", [$aid]);   // Fertigware zählt nicht als „Rohstoff angekommen"
     if ($we && !empty($we['d'])) $angDate = $we['d'];
     if (!$angDate) {
         $ba = one("SELECT MIN(b.angekommen_am) d FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
@@ -10069,7 +10071,7 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
     if (!$a) return ['ok'=>false, 'msg'=>'Auftrag ist nicht fertig produziert.'];
     $vfitem = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$a['produkt_id']]) ?: 0);
     if (!$vfitem) return ['ok'=>false, 'msg'=>'Zu diesem Produkt gibt es keinen Fertigwaren-Artikel.'];
-    $verf = item_bestand($vfitem, true);
+    $verf = auftrag_hat_fertigware_bindung($auftrag_id) ? auftrag_produzierte_fertigware($auftrag_id)['frei'] : item_bestand($vfitem, true);
     if ($verf + 0.0001 < (float)$a['menge']) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$a['menge'] . ').' . fertigware_qm_hinweis($vfitem)];
     $bsku = bsku_ensure($vfitem);   // Brücke zum Shop – ohne sie findet die Kopplung den Artikel nicht
     q("UPDATE auftrag SET status='versendet' WHERE id=?", [$auftrag_id]);
@@ -10081,13 +10083,32 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
     return ['ok'=>true, 'msg'=>'Ins Fremdlager übernommen – der Bestand steht jetzt in Lager 2.', 'fremdlager'=>true];
 }
 
-// Aus der Produktion DIESES Auftrags eingebuchte, noch freie Fertigware (Chargen mit pa_id der Produktionsaufträge des Auftrags).
-// Grundlage für den Teilversand während die Produktion noch läuft (S-14) – Ware anderer Aufträge desselben Produkts zählt nicht.
+// Die FERTIGWARE-Chargen eines Auftrags (Artikel der Kategorie verkaufsfertig, Lager 1): per auftrag_id ODER – bei älteren Chargen ohne
+// auftrag_id – über die pa_id der Produktionsaufträge des Auftrags. Das ist die einzige Quelle für Versand und Lieferschein (S-09/St-06);
+// Lieferanten-/Rohstoff-Chargen (auch wenn sie am Auftrag hängen) gehören NICHT dazu. $nurFrei = nur freie, FEFO-sortiert.
+function auftrag_fertigware_chargen(int $auftrag_id, bool $nurFrei = false): array {
+    if ($auftrag_id <= 0) return [];
+    return all("SELECT c.* FROM charge c JOIN item i ON i.id=c.item_id
+                WHERE i.kategorie='verkaufsfertig' AND c.fremd_kunde_id IS NULL
+                  AND (c.auftrag_id=? OR c.pa_id IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert'))"
+               . ($nurFrei ? " AND c.status='frei' AND c.menge_verfuegbar>0" : "") . "
+                ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [$auftrag_id, $auftrag_id]);
+}
+// Hat der Auftrag eigene Fertigware-Zuordnung (Produktionsauftrag oder gebundene Fertigcharge)? Dann wird NUR daraus versendet –
+// ohne Zuordnung (Handelsware, Alt-Import ohne Produktion) bleibt der bisherige Artikel-Bestand die Quelle.
+function auftrag_hat_fertigware_bindung(int $auftrag_id): bool {
+    if ($auftrag_id <= 0) return false;
+    return (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert'", [$auftrag_id]) > 0
+        || auftrag_fertigware_chargen($auftrag_id) !== [];
+}
+// Aus der Produktion DIESES Auftrags eingebuchte Fertigware: ['gebucht'=>Summe der Chargenmengen, 'frei'=>noch frei verfügbar].
 function auftrag_produzierte_fertigware(int $auftrag_id): array {
-    $r = one("SELECT COALESCE(SUM(c.menge),0) AS gebucht,
-                     COALESCE(SUM(CASE WHEN c.status='frei' AND c.fremd_kunde_id IS NULL THEN c.menge_verfuegbar ELSE 0 END),0) AS frei
-              FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id WHERE pa.auftrag_id=? AND pa.status<>'storniert'", [$auftrag_id]);
-    return ['gebucht'=>(float)($r['gebucht'] ?? 0), 'frei'=>(float)($r['frei'] ?? 0)];
+    $gebucht = 0.0; $frei = 0.0;
+    foreach (auftrag_fertigware_chargen($auftrag_id) as $c) {
+        $gebucht += (float)$c['menge'];
+        if ($c['status'] === 'frei') $frei += (float)$c['menge_verfuegbar'];
+    }
+    return ['gebucht'=>$gebucht, 'frei'=>$frei];
 }
 // „An den Kunden senden" – echte Auslieferung (FEFO-Ausbuchen + Lieferschein). $menge = null versendet den
 // kompletten noch offenen Rest; ein kleinerer Wert ist ein TEILVERSAND (mehrere Lieferungen je Auftrag).
@@ -10108,12 +10129,16 @@ function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
     $offen   = max(0, $gesamt - $bereits);
     if ($offen <= 0) return ['ok'=>false, 'msg'=>'Es ist bereits alles versendet.'];
     $vfitem = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$a['produkt_id']]) ?: 0);
-    if ($inProd) {
-        // Produktion läuft noch: versendbar ist nur, was aus DIESEM Auftrag produziert und noch nicht versendet ist.
+    // Fertigware-Zuordnung (S-09): hat der Auftrag eine Produktion/gebundene Chargen, wird NUR aus diesen Chargen versendet – nie aus dem
+    // gemeinsamen Artikel-Topf (sonst geht Ware eines anderen Kunden raus). Ohne Zuordnung (Handelsware/Alt-Import) wie bisher der Artikelbestand.
+    $gebunden = auftrag_hat_fertigware_bindung($auftrag_id);
+    if ($gebunden) {
         $pf = auftrag_produzierte_fertigware($auftrag_id);
-        $verf = min($pf['frei'], max(0.0, $pf['gebucht'] - $bereits));
-        if ($verf < 1) return ['ok'=>false, 'msg'=>'Noch keine versandbereite Teilmenge – es wurde noch nichts aus diesem Auftrag eingebucht.' . ($vfitem ? fertigware_qm_hinweis($vfitem) : '')];
-        $offen = min($offen, (int) floor($verf + 1e-6));
+        $verf = $inProd ? min($pf['frei'], max(0.0, $pf['gebucht'] - $bereits)) : $pf['frei'];
+        if ($verf < 1) return ['ok'=>false, 'msg'=>($inProd ? 'Noch keine versandbereite Teilmenge – es wurde noch nichts aus diesem Auftrag eingebucht.'
+                                                             : 'Für diesen Auftrag ist noch keine Fertigware eingebucht (Einlagern aus der Produktion fehlt).')
+                                                   . ($vfitem ? fertigware_qm_hinweis($vfitem) : '')];
+        if ($inProd) $offen = min($offen, (int) floor($verf + 1e-6));
     } else {
         $verf = $vfitem ? item_bestand($vfitem, true) : 0;
     }
@@ -10121,10 +10146,8 @@ function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
     if ($ship <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Versandmenge größer 0 angeben.'];
     if ($verf + 0.0001 < (float)$ship) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$ship . ' zu versendenden).' . ($vfitem ? fertigware_qm_hinweis($vfitem) : '')];
     // Fertigware FEFO ausbuchen (nur die zu versendende Menge); in der laufenden Produktion nur aus den Chargen dieses Auftrags
-    $chQ = $inProd
-        ? all("SELECT c.* FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
-               WHERE pa.auftrag_id=? AND pa.status<>'storniert' AND c.item_id=? AND c.status='frei' AND c.menge_verfuegbar>0 AND c.fremd_kunde_id IS NULL
-               ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [$auftrag_id, $vfitem])
+    $chQ = $gebunden
+        ? auftrag_fertigware_chargen($auftrag_id, true)
         : all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$vfitem]);
     $rest = (float)$ship;
     foreach ($chQ as $c) {

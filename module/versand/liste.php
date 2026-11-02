@@ -19,13 +19,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'an_la
 
 $q    = trim($_GET['q'] ?? '');
 $rows = all("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name,
-             CASE WHEN a.status IN ('offen','in_produktion')
-               -- Produktion läuft noch (Teilversand, S-14): nur Fertigware aus der Produktion DIESES Auftrags, abzüglich schon Versendetem
-               THEN GREATEST(0, LEAST(
-                      (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
-                        WHERE pa.auftrag_id=a.id AND pa.status<>'storniert' AND c.status='frei' AND c.fremd_kunde_id IS NULL),
-                      (SELECT COALESCE(SUM(c.menge),0) FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
-                        WHERE pa.auftrag_id=a.id AND pa.status<>'storniert') - a.versendet_menge))
+             CASE WHEN EXISTS (SELECT 1 FROM produktionsauftrag pa WHERE pa.auftrag_id=a.id AND pa.status<>'storniert')
+                    OR EXISTS (SELECT 1 FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=a.id AND i.kategorie='verkaufsfertig')
+               -- Auftrag mit Produktion: NUR die Fertigware dieses Auftrags (auftrag_id bzw. pa_id), nie der gemeinsame Artikel-Topf (S-09)
+               THEN (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
+                      WHERE i.kategorie='verkaufsfertig' AND c.status='frei' AND c.fremd_kunde_id IS NULL
+                        AND (c.auftrag_id=a.id OR c.pa_id IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=a.id AND status<>'storniert')))
                ELSE (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM item i JOIN charge c ON c.item_id=i.id
                       WHERE i.produkt_id=a.produkt_id AND i.kategorie='verkaufsfertig' AND c.status='frei') END AS fertig_frei,
              (SELECT GROUP_CONCAT(CONCAT(b.id,':',b.nummer) ORDER BY b.id SEPARATOR '|')
@@ -35,8 +34,9 @@ $rows = all("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name,
              WHERE a.status IN ('erledigt','versendet')
                 OR (p.handelsware=1 AND a.status IN ('offen','in_produktion')   -- Handelsware ohne Produktion (S-15)
                     AND NOT EXISTS (SELECT 1 FROM produktionsauftrag x WHERE x.auftrag_id=a.id AND x.status<>'storniert'))
-                OR (a.status IN ('offen','in_produktion') AND COALESCE(a.kategorie,'produkt')<>'dienstleistung' AND EXISTS (SELECT 1 FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
-                                                          WHERE pa.auftrag_id=a.id AND pa.status<>'storniert' AND c.status='frei' AND c.menge_verfuegbar>0))
+                OR (a.status IN ('offen','in_produktion') AND COALESCE(a.kategorie,'produkt')<>'dienstleistung' AND EXISTS (SELECT 1 FROM charge c JOIN item i ON i.id=c.item_id
+                                                          WHERE i.kategorie='verkaufsfertig' AND c.status='frei' AND c.menge_verfuegbar>0
+                                                            AND (c.auftrag_id=a.id OR c.pa_id IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=a.id AND status<>'storniert'))))
              ORDER BY a.status='versendet', a.angelegt DESC");
 if ($q !== '') {
     $needle = mb_strtolower($q);

@@ -17,3 +17,5 @@ Je versandbereiter Auftrag (Status `erledigt`, Ware in Lager 1): **An Kunden sen
 ## Handelsware (S-15)
 Handelsware-Aufträge ohne Produktionsauftrag erscheinen schon im Status offen/in Produktion – versendbar, sobald die zugekaufte Ware frei im Lager liegt (sonst „zu wenig Fertigware").
 **Teilversand während der Produktion (S-14):** Aufträge mit schon eingebuchter Teilmenge erscheinen als „in Produktion · Teilmenge fertig" mit Knopf „Senden" (Menge = höchstens die aus diesem Auftrag produzierte, noch nicht versendete Fertigware). Der Auftrag bleibt bis zum Produktionsabschluss offen.
+
+**Fertig im Lager je Auftrag (S-09):** die Spalte zählt nur die Fertigware dieses Auftrags (`auftrag_id`/`pa_id`), nicht mehr den gemeinsamen Artikelbestand. Nur Aufträge ohne Produktion (Handelsware, Alt-Import) zeigen weiter den Artikelbestand.
