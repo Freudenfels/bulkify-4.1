@@ -389,8 +389,10 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
       <tbody id="zutatrows">
         <?php
         // Rohstoff-Feld: tippbar mit Filter (datalist). Anzeige = Label, gespeichert wird die id (verstecktes Feld).
-        $zlabel = fn($it) => implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']] ?? $it['form']), $it['artikelnummer'] ?? '']))
-            . (!empty($gehaltSet[(int)$it['id']]) ? ' · Gehalt ✓' : '');
+        // Haken VORN (schnell sichtbar, welcher Rohstoff hinterlegten Wirkstoffgehalt hat); diese werden im
+        // Dropdown zusätzlich nach oben sortiert (siehe ZOPTS-Sortierung im JS).
+        $zlabel = fn($it) => (!empty($gehaltSet[(int)$it['id']]) ? '✓ ' : '')
+            . implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']] ?? $it['form']), $it['artikelnummer'] ?? '']));
         $itemById = []; foreach ($items as $it) $itemById[(int)$it['id']] = $it;
         // R-Nummer + CoA/Spec je Rohstoff – als Link/Popup direkt an der Zutat (auch bei festgesetzter, nicht editierbarer Rezeptur: Anchor-Links wirken trotz disabled fieldset).
         $ZNR = []; foreach (all("SELECT id, artikelnummer FROM item WHERE kategorie='rohstoff'") as $it) $ZNR[(int)$it['id']] = (string)($it['artikelnummer'] ?? '');
@@ -731,19 +733,21 @@ document.getElementById('bxDocOverlay').addEventListener('click', function(e){ i
 var ITEMS = <?= json_encode($ITEMS, JSON_UNESCAPED_UNICODE) ?>;
 var KAPSELN = <?= json_encode($KAPSELN, JSON_UNESCAPED_UNICODE) ?>;
 // Rohstoff-Label -> id (für das tippbare Zutatenfeld mit datalist)
-var ZMAP = <?= json_encode((function($items,$FORMLBL,$gehaltSet){ $m=[]; foreach($items as $it){ $lbl=implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']]??$it['form']), $it['artikelnummer']??''])) . (!empty($gehaltSet[(int)$it['id']]) ? ' · Gehalt ✓' : ''); $m[$lbl]=(int)$it['id']; } return $m; })($items,$FORMLBL,$gehaltSet), JSON_UNESCAPED_UNICODE) ?>;
+var ZMAP = <?= json_encode((function($items,$FORMLBL,$gehaltSet){ $m=[]; foreach($items as $it){ $lbl=(!empty($gehaltSet[(int)$it['id']]) ? '✓ ' : '') . implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']]??$it['form']), $it['artikelnummer']??''])); $m[$lbl]=(int)$it['id']; } return $m; })($items,$FORMLBL,$gehaltSet), JSON_UNESCAPED_UNICODE) ?>;
 function zsync(row){ var t=row.querySelector('.zitem-txt'), h=row.querySelector('.zitem'); if(!t||!h) return; var id=ZMAP[(t.value||'').trim()]; h.value = id ? id : ''; }
 // Durchsuchbares, LESBARES Zutaten-Dropdown (wie rscombo): volle Rohstoffnamen, Tooltip + Text wandert beim
 // Hover (langes Label wird so ganz lesbar). Anders als rscombo bleibt FREITEXT erlaubt – ein getippter Name,
 // der (noch) kein Katalog-Rohstoff ist, bleibt stehen (dann id leer = „nicht zugeordnet", bestehende Logik).
-var ZOPTS = Object.keys(ZMAP).map(function(l){ return {t:l, v:ZMAP[l]}; });
+// Optionen: Rohstoffe MIT Gehalt (Label beginnt mit „✓") zuerst, danach alphabetisch.
+var ZOPTS = Object.keys(ZMAP).map(function(l){ return {t:l, v:ZMAP[l], g:(l.charAt(0)==='✓'?1:0)}; });
+ZOPTS.sort(function(a,b){ return (b.g-a.g) || a.t.localeCompare(b.t,'de'); });
 function znorm(s){ return String(s).toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss'); }
 function zesc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function zcombo(input){
   if(!input||input.dataset.zc) return; input.dataset.zc='1'; input.removeAttribute('list');
   var wrap=document.createElement('span'); wrap.className='rs-combo'; wrap.style.display='block';
   input.parentNode.insertBefore(wrap,input); wrap.appendChild(input);
-  var list=document.createElement('div'); list.className='rs-list'; list.hidden=true; wrap.appendChild(list);
+  var list=document.createElement('div'); list.className='rs-list'; list.hidden=true; list.style.maxWidth='100%'; wrap.appendChild(list);
   var shown=[], hl=-1;
   function mq(o){ var t=o.querySelector('.rs-opt-t'); if(!t) return;
     o.addEventListener('mouseenter',function(){ var ov=t.scrollWidth-(o.clientWidth-22); if(ov>2){ var d=Math.min(6,Math.max(1.2,ov/70)); t.style.transition='transform '+d+'s linear'; t.style.transform='translateX(-'+ov+'px)'; } });
