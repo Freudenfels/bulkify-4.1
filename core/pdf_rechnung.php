@@ -9,6 +9,13 @@ function rechnung_pdf_bauen(int $beleg_id): ?string {
     $b = one("SELECT * FROM beleg WHERE id=? AND typ='rechnung'", [$beleg_id]);
     if (!$b) return null;
     $positionen = beleg_positionen($beleg_id);
+    // Ältere AUTO-Rechnungen (St-04) haben nur eine Kopfsumme: solange sie noch ein ENTWURF sind (offen, nicht für den Kunden freigegeben),
+    // werden die Positionen aus dem Auftrag nachgezogen – dann gibt es das PDF statt HTTP 409. Freigegebene/bezahlte bleiben unberührt.
+    if (!$positionen && !empty($b['auftrag_id']) && (string)$b['status'] === 'offen' && (int)($b['kunde_sichtbar'] ?? 0) === 0) {
+        beleg_positionen_materialisieren($beleg_id);
+        $positionen = beleg_positionen($beleg_id);
+        $b = one("SELECT * FROM beleg WHERE id=? AND typ='rechnung'", [$beleg_id]) ?: $b;
+    }
     if (!$positionen) return null;   // ohne Positionen kein sinnvolles PDF
     $k = $b['kunde_id'] ? one("SELECT * FROM kunden WHERE id=?", [(int)$b['kunde_id']]) : null;
 
@@ -28,6 +35,8 @@ function rechnung_pdf_bauen(int $beleg_id): ?string {
     $datum = $b['datum'] ?: $b['angelegt'];
     $faellig = trim((string)($b['faellig'] ?? ''));
     $ziel = ($b['zahlungsziel_tage'] !== null && $b['zahlungsziel_tage'] !== '') ? (int)$b['zahlungsziel_tage'] : null;
+    // Hat die Rechnung (ältere Auto-Rechnung) kein eigenes Zahlungsziel, gilt das des Kunden (St-05).
+    if ($ziel === null && !empty($b['kunde_id'])) { $kz = kunde_zahlungsziel_tage((int)$b['kunde_id']); if ($kz > 0) $ziel = $kz; }
     if ($faellig === '' && $ziel !== null) $faellig = date('Y-m-d', strtotime($datum . ' +' . $ziel . ' days'));
     if ($ziel !== null) $zahlbed = 'Zahlbar innerhalb von ' . $ziel . ' Tagen ohne Abzug.';
     else                $zahlbed = (string) meta_get('bh_zahlungsbedingung', 'Sofort zahlbar ohne Abzug.');

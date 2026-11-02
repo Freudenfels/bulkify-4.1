@@ -306,7 +306,12 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     // ---- Zahlung ---- (nicht auf dem Lieferschein – Zahlung regelt die Rechnung)
     if (!$lieferschein) {
     if ($y > 720) { $p->addPage(); $y = 54; }
-    $zb = (string) ($b['zahlungsbedingung'] ?? '') ?: (string) meta_get('bh_zahlungsbedingung', 'Sofort zahlbar ohne Abzug');
+    // Zahlungsbedingung: ausdrücklich gesetzt, sonst das Zahlungsziel des KUNDEN (zahlungsziel_tage; St-05), erst dann die Standardbedingung.
+    $zbTage = (int) ($b['zahlungsziel_tage'] ?? 0);
+    $zb = (string) ($b['zahlungsbedingung'] ?? '');
+    if ($zb === '' && $zbTage > 0)
+        $zb = (($b['sprache'] ?? 'de') === 'de') ? 'Zahlbar innerhalb von ' . $zbTage . ' Tagen ohne Abzug' : 'Payable within ' . $zbTage . ' days without deduction';
+    if ($zb === '') $zb = (string) meta_get('bh_zahlungsbedingung', 'Sofort zahlbar ohne Abzug');
     $za = (string) ($b['zahlungsart_label'] ?? 'Vorkasse');
     $p->text($L, $y, 'Zahlungsbedingung: ' . $zb, 9, false, $INK); $y += 13;
     $p->text($L, $y, $T['zahlungsart'] . ': ' . $za, 9, false, $INK); $y += 18;

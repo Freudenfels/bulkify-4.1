@@ -75,6 +75,7 @@ function auftrag_pdf_bauen(int $auftrag_id): ?string {
         'ust_id'           => $k['ust_id'] ?? '',
         'kopf_text'        => $kopf,
         'zahlungsart_label'=> $zaMap[$k['zahlungsart'] ?? 'vorkasse'] ?? ucfirst((string)($k['zahlungsart'] ?? 'Vorkasse')),
+        'zahlungsziel_tage'=> (int)($k['zahlungsziel_tage'] ?? 0),   // Zahlungsziel des Kunden auf der AB (St-05)
         'hinweis'          => $hinweis,
     ], $positionen);
 }

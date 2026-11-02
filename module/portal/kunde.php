@@ -2194,7 +2194,7 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
     $angNr = $auf['angebot_id'] ? scalar("SELECT nummer FROM angebot WHERE id=?", [(int)$auf['angebot_id']]) : '';
     if ($art === 're') {
         $datum = $re['datum'] ?: $re['angelegt'];
-        $ziel  = (int) meta_get('zahlungsziel_tage', 14);
+        $ziel  = (int)($re['zahlungsziel_tage'] ?? 0) ?: (kunde_zahlungsziel_tage((int)$k['id']) ?: (int) meta_get('zahlungsziel_tage', 14));   // Rechnung > Kunde > Einstellung
         $b = [
             'belegart_label'    => 'Rechnung',
             'nummer'            => $re['nummer'],
@@ -2226,6 +2226,7 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
         'zahlungsart_label'=> $za,
         'bearbeiter'       => '',
         'bearbeiter_email' => '',
+        'zahlungsziel_tage'=> (int)($k['zahlungsziel_tage'] ?? 0),   // Zahlungsziel des Kunden (St-05)
         'staffel_ust'      => $ustSatz,   // Gesamt-inkl.-USt-Spalte in „Preis je fertiges Produkt"
     ];
 

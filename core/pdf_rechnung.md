@@ -19,3 +19,5 @@ genauso wie für **aus einem Auftrag** erzeugte Rechnungen – beide haben echte
 **Verwendung:** Route `?p=rechnung_pdf&id=<ID>` → [rechnung_pdf.php](../module/beleg/rechnung_pdf.php).
 Der Knopf **„PDF ansehen"** steht auf jeder Rechnung ([beleg/detail.md](../module/beleg/detail.md)).
 Gegenstück für Gutschriften: [pdf_gutschrift.php](pdf_gutschrift.md).
+
+**Zahlungsziel/Entwurf (St-04/St-05):** Hat die Rechnung kein eigenes Zahlungsziel, gilt das des Kunden. Ältere Auto-Rechnungen ohne Positionen werden, solange sie Entwurf sind (offen, nicht freigegeben), beim PDF-Aufruf aus dem Auftrag nachgezogen (`beleg_positionen_materialisieren`) – statt HTTP 409.

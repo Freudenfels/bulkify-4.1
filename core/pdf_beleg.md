@@ -69,3 +69,5 @@ Cent gerundet × Menge).
 - Rohstoff-Angebot ebenfalls über diesen Generator ausgeben (eine Position, wie das
   Muster `AN-0048`), sobald „Rohstoff-Angebot senden" gebaut ist.
 - Bankverbindungen / Kundenportal-QR (im v3-Original vorhanden) bei Bedarf ergänzen.
+
+**Zahlungsbedingung (St-05):** Die Zeile „Zahlungsbedingung" nimmt – wenn nicht ausdrücklich gesetzt – das Zahlungsziel des Kunden (`$b['zahlungsziel_tage']` = `kunden.zahlungsziel_tage`): „Zahlbar innerhalb von N Tagen ohne Abzug" (Lieferanten-Belege englisch). Erst ohne Zahlungsziel gilt die Standardbedingung („Sofort zahlbar ohne Abzug"). Angebot, Auftragsbestätigung (intern + Portal) und Rechnung reichen das Ziel durch.

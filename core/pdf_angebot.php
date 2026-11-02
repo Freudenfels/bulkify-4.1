@@ -81,6 +81,7 @@ function angebot_pdf_bauen(int $angebot_id): ?string {
     $zaMap = ['vorkasse'=>'Vorkasse','rechnung'=>'Rechnung','lastschrift'=>'Lastschrift','paypal'=>'PayPal'];
 
     return build_beleg_pdf([
+        'zahlungsziel_tage' => (int)($k['zahlungsziel_tage'] ?? 0),   // Zahlungsziel des Kunden auf dem Angebot (St-05)
         'belegart_label'   => 'Angebot',
         'nummer'           => $a['nummer'],
         'empfaenger'       => $k['firma'],
