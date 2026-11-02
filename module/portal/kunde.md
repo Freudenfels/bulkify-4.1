@@ -352,3 +352,5 @@ Vier Bausteine, damit sich neue Kunden sofort zurechtfinden (Analogon zum Liefer
 4. **Geführter Rundgang** (Tour): leichtgewichtig, ohne Fremd-Bibliothek (`#bxTour` am Seitenende). Hebt Suche, Checkliste, Angebote, Bestellungen, Konto, Info nacheinander hervor (Ring + Tooltip, Schritte ohne sichtbares Ziel werden übersprungen). Startet nach dem Erstzugang EINMAL automatisch (`kunden.portal_tour_gesehen`), neu startbar über „Geführter Rundgang" (`#obTourStart`) bzw. `window.bxTourStart()`. Abschluss/Überspringen meldet `aktion=tour_gesehen` (JSON) → setzt das Flag.
 
 Neue Spalten (`core/schema.php`): `kunden.onboarding_checkliste_aus`, `kunden.portal_tour_gesehen` (beide TINYINT, Default 0).
+
+**Fremdprodukt anmelden: EAN (S-17):** Die EAN/GTIN aus dem Formular landet in `item.ean` (neue Spalte, VARCHAR(40)), nicht mehr in `item.bsku` (interne 5-stellige Lager-2-Nummer, VARCHAR(10)). Eine 13-stellige EAN sprengte `bsku` (Fehler, Produkt halb angelegt) und hätte die BSKU überschrieben, über die das Fulfillment den Artikel findet. Artikelnummer wird auf 40 Zeichen gekürzt (Spaltenlänge).

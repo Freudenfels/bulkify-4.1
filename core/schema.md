@@ -200,3 +200,5 @@ mehr. Umschaltbar am Auftrag (Reiter Produktion, Herstellung; `aktion=zukauf_art
 **Portal-AB: USt-Satz (S-04):** `beleg_positionen_aus_auftrag()` und die Sammelposition im Kundenportal (`module/portal/kunde.php`, `v=ab_pdf`) liefern die Position jetzt mit `mwst_satz` – `build_beleg_pdf()` liest dieses Feld (vorher nur `ust_satz` -> „USt. 0,00 % (steuerfrei)" bei deutschen Kunden).
 
 **Portal-Bestellung -> „bestellt" (S-03):** Die Einkaufsliste setzt eine an den Lieferanten-Account gesendete Bestellung auf `gesendet`. `bestellung_bestaetigen()` und `bestellung_station_setzen()` heben jetzt `offen` **und** `gesendet` auf `bestellt` – erst damit greifen „bestellt/erwartet" am Auftrag, „unterwegs" und die Lager-Liste „Erwartete Lieferungen" (filtert `bestellt`). Bereits bestätigte Altbestellungen, die auf `gesendet` hängen, werden dadurch NICHT rückwirkend geändert (Datenkorrektur durch Innendienst).
+
+**item.ean (S-17):** EAN/GTIN eines Lagerartikels (VARCHAR(40)); gefüllt beim Anmelden eines Fremdprodukts im Kundenportal. Getrennt von `item.bsku` (interne Lager-2-Nummer).

@@ -1872,6 +1872,7 @@ function init_schema(): void {
     ensure_column('item', 'tiefe_mm', "DECIMAL(8,2) NULL");         // Karton
     ensure_column('item', 'gewicht_g', "DECIMAL(8,2) NULL");        // Leergewicht der Verpackung (PPWR)
     // Lager 2 (Fremdlager, nur Fulfillment-Kunden): Brücke Dashboard↔Fulfillment am Verkaufsfertig-Item.
+    ensure_column('item', 'ean', "VARCHAR(40) NULL");                          // EAN/GTIN (z. B. vom Kunden bei „Fremdprodukt anmelden") – NICHT in bsku (interne 5-stellige Nummer, VARCHAR(10))
     ensure_column('item', 'bsku', "VARCHAR(10) NULL");                         // interne 5-stellige Lager-2-Nummer
     ensure_column('item', 'shopify_inventory_item_id', "VARCHAR(40) NULL");    // führender Schlüssel zum Fulfillment-Artikel
     // Fremdprodukt (Warenart): fertiges Produkt, das dem KUNDEN gehört und von außerhalb kommt – wir lagern &

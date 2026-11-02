@@ -624,8 +624,12 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
       [naechste_nummer('P'), $name, (int)$k['id'], ($vpe > 0 ? $vpe : null), 'aktiv', $notiz]);
     $pid = (int) insert_id();
     produkt_lageritem($pid);   // Verkaufsfertig-Item fürs Lager 2 anlegen
-    if ($artnr !== '' || $ean !== '')   // Artikel-Nr./EAN aufs Lager-Item übernehmen (robust über produkt_id)
-        q("UPDATE item SET artikelnummer=COALESCE(NULLIF(?,''),artikelnummer), bsku=NULLIF(?,'') WHERE produkt_id=? AND kategorie='verkaufsfertig'", [$artnr, $ean, $pid]);
+    // Artikel-Nr./EAN aufs Lager-Item übernehmen (robust über produkt_id). Die EAN gehört in item.ean (VARCHAR(40)) –
+    // NICHT in item.bsku (interne 5-stellige Lager-2-Nummer, VARCHAR(10)): eine 13-stellige EAN sprengte das Feld (Fatal,
+    // Produkt halb angelegt) und hätte die BSKU überschrieben, über die das Fulfillment den Artikel findet (S-17).
+    if ($artnr !== '' || $ean !== '')
+        q("UPDATE item SET artikelnummer=COALESCE(NULLIF(?,''),artikelnummer), ean=COALESCE(NULLIF(?,''),ean) WHERE produkt_id=? AND kategorie='verkaufsfertig'",
+          [mb_substr($artnr, 0, 40), mb_substr(preg_replace('/\s+/', '', $ean), 0, 40), $pid]);
     log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Produkt „' . $name . '" in „Mein Lager" angemeldet.', 'produkt', 'produkt', $pid);
     header('Location: ?p=portal&token=' . $token . '&v=fremdprodukte&fpok=1'); exit;
 }
