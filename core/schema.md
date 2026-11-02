@@ -309,3 +309,6 @@ Tabelle `aenderung_log` (objekt_typ, objekt_id, feld, alt, neu, benutzer, route,
 
 ## Nummernvergabe atomar (Aufräumen 16)
 `naechste_nummer()` zählt hoch und liest unter `GET_LOCK(bx_nr_<Präfix>)`. Vorher konnten parallele Aufrufe dieselbe Nummer bekommen: Test mit 3 Prozessen × 40 Nummern ergab 93 von 120 eindeutig, nachher 120 von 120. Gilt für alle Nummernkreise (AN, AB, RE, LS, BE, VP …). Die Kopien in Buchhaltung, Lager und Produktion nutzen dieselbe Sperre.
+
+## Kundenetikett mit Artikelnummer (Aufräumen 17)
+`kundenetikett_version_anlegen()` vergibt eine Artikelnummer (VP-…) wie jeder Verpackungsartikel. Vorher blieb das Kundenetikett ohne Nummer. Bestehende Kundenetiketten ohne Nummer stehen in der SELECT-Liste für Nico.

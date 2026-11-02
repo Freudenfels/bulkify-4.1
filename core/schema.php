@@ -9182,11 +9182,12 @@ function kundenetikett_version_anlegen(int $produkt_id, int $version, ?int $doku
     $kname = trim((string)($p['firma'] ?? ''));
     if ($kunde_id) $kname = trim((string) scalar("SELECT firma FROM kunden WHERE id=?", [$kunde_id])) ?: $kname;
     $name  = 'Etikett · ' . $pname . ($kname !== '' ? ' · ' . $kname : '') . ' · v' . $version;
-    q("INSERT INTO item (name,kategorie,form,verpackungsart,verpackung_rolle,produkt_id,kunde_id,einheit,preis_bezug,
+    // Artikelnummer (VP-…) wie jeder Verpackungsartikel – vorher blieb das Kundenetikett ohne Nummer (Aufräumen 16).
+    q("INSERT INTO item (artikelnummer,name,kategorie,form,verpackungsart,verpackung_rolle,produkt_id,kunde_id,einheit,preis_bezug,
             breite_mm,hoehe_mm,etikett_format,etikett_final,etikett_druck,
             etikett_version,etikett_dokument_id,etikett_datei_sig,etikett_vorlage_id,gesperrt)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
-      [$name,'verpackung','pulver','etikett','etikett',$produkt_id,($kunde_id ?: null),'Stk','Stk',
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
+      [naechste_nummer(item_prefix('verpackung')),$name,'verpackung','pulver','etikett','etikett',$produkt_id,($kunde_id ?: null),'Stk','Stk',
        ($m['breite_mm'] ?? null),($m['hoehe_mm'] ?? null),($m['etikett_format'] ?? null),($m['etikett_final'] ?? null),($m['etikett_druck'] ?? null),
        $version,$dokument_id,($datei_sig ?: null),($m['_vorlage'] ?? null)]);
     $nid = (int) insert_id();
