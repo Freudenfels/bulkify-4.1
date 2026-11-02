@@ -26,3 +26,6 @@ Im Panel **Analysenwerte je Charge** gibt es **Werte vorschlagen**: Das hochgela
 ## Verwandt
 - `core/dokument_ui.php` – die Ablage der **Lieferantenunterlagen** (intern; die Freigabe fürs Portal gibt das Original weiter und ist nur für Ausnahmen gedacht).
 - `module/lager/spec_bulkify.md` – die interne Route.
+
+## Untertitel umbrechen (Aufräumen 6)
+`spec_kopf()` bricht einen langen Untertitel (z. B. langer Produktname im PIB) auf bis zu 3 zentrierte Zeilen um, statt über den Rand zu laufen. Die folgenden Inhalte rücken entsprechend nach unten.

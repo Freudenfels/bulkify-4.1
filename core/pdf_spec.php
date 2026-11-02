@@ -63,8 +63,11 @@ function spec_kopf(MiniPDF $p, string $titel, string $untertitel): float {
     // Titel zentriert
     $ty = $top + 26;
     $p->textCenter(297.5, $ty, $titel, 20, true, SPEC_CHARCOAL);
-    $p->textCenter(297.5, $ty + 17, $untertitel, 11, false, SPEC_GRAU);
-    return $ty + 42;
+    // Langer Untertitel (z. B. langer Produktname im PIB): umbrechen statt über den Rand laufen, höchstens 3 Zeilen.
+    $zeilen = $p->wrap($untertitel, $R - $L, 11);
+    if (count($zeilen) > 3) { $zeilen = array_slice($zeilen, 0, 3); $zeilen[2] = $p->fit($zeilen[2] . ' …', $R - $L, 11); }
+    foreach ($zeilen as $i => $z) $p->textCenter(297.5, $ty + 17 + $i * 13, $z, 11, false, SPEC_GRAU);
+    return $ty + 42 + max(0, count($zeilen) - 1) * 13;
 }
 
 // Label/Wert-Gitter: graue Label-Zellen links, Werte rechts, Rahmen.
