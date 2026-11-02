@@ -7492,7 +7492,8 @@ function pa_vorbereitung_checks(int $pa_id): array {
         $einhTxt = count($einhSet) === 1 ? ' ' . array_key_first($einhSet) : '';
         $checks[] = ['key'=>'mat_'.md5($label), 'label'=>$label, 'kritisch'=>false,
                      'ok'=>$fehltSumme <= 1e-6, 'wert'=>$fehltSumme <= 1e-6 ? 'vollständig da'
-                            : ('fehlt noch ' . (fmod($fehltSumme, 1) == 0 ? number_format($fehltSumme, 0, ',', '.') : number_format($fehltSumme, 2, ',', '.')) . $einhTxt)];
+                            : ('fehlt noch ' . (in_array(trim($einhTxt), ['g', 'ml'], true) ? gewicht_lesbar((float)$fehltSumme, trim($einhTxt))   // Pulver lesbar: 100 kg statt 100.000 g
+                               : (fmod($fehltSumme, 1) == 0 ? number_format($fehltSumme, 0, ',', '.') : number_format($fehltSumme, 2, ',', '.')) . $einhTxt))];
     }
     $bereit = true;
     foreach ($checks as $c) if (!$c['ok']) { $bereit = false; break; }

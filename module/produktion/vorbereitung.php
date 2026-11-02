@@ -149,10 +149,13 @@ if ($pa):
     $schuett      = in_array($darr, ['pulver', 'granulat', 'gel', 'fluessig', 'oel'], true);
     [, $fuellEinheit] = $schuett ? form_gewicht_feld($darr) : ['', 'g'];   // 'g' oder 'ml'
     $sumMgKennz   = $rid ? (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rid]) : 0.0;
-    $gProPkg      = (float)($rez['einheit_fuellmenge'] ?? 0);            // am Rezept hinterlegte Füllmenge je Packung
-    if ($gProPkg <= 0 && $schuett && $fuellEinheit === 'g' && $sumMgKennz > 0 && $stkProP > 0)
-        $gProPkg = $sumMgKennz * $stkProP / 1000.0;                       // sonst aus Rezeptursumme je Portion × Portionen (mg → g)
+    // Pulver/Granulat (g) und Flüssig/Gel (ml): die Packungsgröße des PA (produktion_stueck_je_packung) IST die Füllmenge
+    // je Packung – keine Portionszahl (St-13). Vorher wurde sie als Portionen × mg je Portion gerechnet (100 g -> „500 g").
+    // Die am Rezept hinterlegte Füllmenge („Gewicht pro Bag") ist nur noch Rückfall, wenn am PA nichts steht.
+    $gProPkg      = ($schuett && form_groessen_einheit((string)$darr) !== '' && $stkProP > 0)
+                  ? (float)$stkProP : (float)($rez['einheit_fuellmenge'] ?? 0);
     $gGesamt      = $gProPkg * (int)$pa['menge'];
+    $portJePkg    = ($schuett && $fuellEinheit === 'g' && $sumMgKennz > 0 && $gProPkg > 0) ? $gProPkg * 1000.0 / $sumMgKennz : 0.0;
     $fmtMenge = function (float $v, string $e): string {
         if ($v <= 0) return '–';
         if ($e === 'g'  && $v >= 1000) return rtrim(rtrim(number_format($v / 1000, 3, ',', '.'), '0'), ',') . ' kg';
@@ -192,7 +195,7 @@ if ($pa):
         'Menge (Packungen)'  => number_format((int)$pa['menge'], 0, ',', '.'),
     ];
     if ($schuett) {
-        if ($stkProP > 0) $infoFelder['Portionen je Packung (NRV)'] = number_format($stkProP, 0, ',', '.');
+        if ($portJePkg > 0) $infoFelder['Portionen je Packung (NRV)'] = rtrim(rtrim(number_format($portJePkg, 1, ',', '.'), '0'), ',');
         $infoFelder['Füllmenge je Packung'] = $fmtMenge($gProPkg, $fuellEinheit);
         $infoFelder['Gesamtmenge']          = $fmtMenge($gGesamt, $fuellEinheit);
     } else {
@@ -230,7 +233,7 @@ if ($pa):
         <table style="width:100%;border-collapse:collapse;font-size:13px">
           <thead><tr>
             <th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)">Zutat</th>
-            <th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--line)">mg je Einheit</th>
+            <th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--line)">mg je <?= $schuett ? 'Portion' : 'Einheit' ?></th>
           </tr></thead>
           <tbody>
           <?php foreach ($zutaten as $z): ?>
