@@ -203,13 +203,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_u
 }
 // bulkify-Spezifikation für den Kunden freigeben bzw. Freigabe zurückziehen (separater Schritt).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_freigabe' && !$neu) {
+    require_once BX_ROOT . '/core/spec_ki.php';
     $an = isset($_POST['freigeben']) && $_POST['freigeben'] === '1';
     if ($an) {
+        // Freigeben = aktuellen Stand als neue Version einfrieren (Snapshot). Kunde sieht ab jetzt diesen Stand.
         $wer = trim((string)(current_user()['name'] ?? 'Team'));
-        q("UPDATE item SET spec_freigegeben=1, spec_freigabe_am=?, spec_freigabe_von=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $wer, (int)$id]);
+        spec_snapshot_setzen((int)$id, $wer, false);
         log_aktivitaet('item', (int)$id, 'team', 'bulkify-Spezifikation für den Kunden freigegeben.', 'notiz');
     } else {
-        q("UPDATE item SET spec_freigegeben=0 WHERE id=?", [(int)$id]);
+        q("UPDATE item SET spec_freigegeben=0, spec_aenderung_offen=0 WHERE id=?", [(int)$id]);
         log_aktivitaet('item', (int)$id, 'team', 'Kundenfreigabe der bulkify-Spezifikation zurückgezogen.', 'notiz');
     }
     header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=spec&specfrei=' . ($an ? '1' : '0')); exit;
@@ -427,6 +429,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
         q("DELETE FROM item_grenzwert WHERE item_id=?", [(int)$id]);
         $gp = $_POST['gw_param'] ?? []; $gw = $_POST['gw_wert'] ?? [];
         foreach ($gp as $i => $pn) { $pn = trim($pn); if ($pn === '') continue; q("INSERT INTO item_grenzwert (item_id,parameter,grenzwert,sort) VALUES (?,?,?,?)", [(int)$id, $pn, trim($gw[$i] ?? ''), (int)$i]); }
+        // Freigabe-Politik: Erst-Erfassung automatisch freigeben, inhaltliche Änderung markiert (alte Version bleibt
+        // beim Kunden sichtbar, bis das Team die Änderung freigibt). Unveränderte Speicherungen bleiben folgenlos.
+        require_once BX_ROOT . '/core/spec_ki.php';
+        spec_nach_datenaenderung((int)$id, trim((string)(current_user()['name'] ?? 'Team')));
         // Spec-PDF hochladen (in data/uploads, außerhalb public). Gehört in den Reiter „Dokumente":
         // zusätzlich zur schnellen Verknüpfung am Item als Dokument (typ spec, intern) ablegen.
         if (!empty($_FILES['spec_pdf']['name']) && is_uploaded_file($_FILES['spec_pdf']['tmp_name'] ?? '')) {
@@ -1070,26 +1076,73 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       // des Stammdaten-Formulars. Die Reiter-Logik blendet sie trotzdem korrekt ein. ?>
 <section data-panel="spec" hidden>
   <?php // bulkify-Spezifikation, die der Kunde sieht – als Vorschau prüfen und SEPARAT freigeben.
-        // Der Kunde bekommt sie erst nach Freigabe (Gate im Kundenportal).
-        if (!$neu): $specFrei = (int)($it['spec_freigegeben'] ?? 0) === 1; ?>
+        // Erst-Upload gibt automatisch frei. Ändern sich die Daten später, bleibt die alte Version beim Kunden
+        // sichtbar, bis das Team die Änderung (mit Diff) erneut freigibt.
+        if (!$neu):
+          $specFrei = (int)($it['spec_freigegeben'] ?? 0) === 1;
+          $specAend = (int)($it['spec_aenderung_offen'] ?? 0) === 1;
+          $specDiff = $specAend ? spec_diff((int)$id) : null;
+          // Ein Diff-Block je Kategorie: neu (ergänzt), geändert (alt -> neu), weg (entfallen).
+          $diffBlock = function (string $titel, array $d): void {
+              if (!$d['neu'] && !$d['weg'] && !$d['geaendert']) return; ?>
+            <div style="margin-top:10px">
+              <div style="font-size:13px;margin-bottom:4px"><?= h($titel) ?></div>
+              <div class="bx-tablewrap"><table class="bx-table"><tbody>
+                <?php foreach ($d['geaendert'] as $r): ?>
+                  <tr><td><?= h($r['name']) ?></td><td class="bx-num"><span class="muted" style="text-decoration:line-through"><?= h($r['alt'] !== '' ? $r['alt'] : '–') ?></span> &rarr; <strong><?= h($r['neu'] !== '' ? $r['neu'] : '–') ?></strong></td></tr>
+                <?php endforeach; ?>
+                <?php foreach ($d['neu'] as $r): ?>
+                  <tr><td><?= h($r['name']) ?> <span style="color:var(--ok)">neu</span></td><td class="bx-num"><strong><?= h($r['neu'] !== '' ? $r['neu'] : '–') ?></strong></td></tr>
+                <?php endforeach; ?>
+                <?php foreach ($d['weg'] as $r): ?>
+                  <tr><td style="text-decoration:line-through"><?= h($r['name']) ?></td><td class="bx-num"><span class="muted">entfällt (war <?= h($r['alt'] !== '' ? $r['alt'] : '–') ?>)</span></td></tr>
+                <?php endforeach; ?>
+              </tbody></table></div>
+            </div>
+          <?php }; ?>
   <div class="bx-panel">
     <div class="bx-row" style="justify-content:space-between;align-items:center">
       <h2 style="margin:0">bulkify-Spezifikation &ndash; Kundenfreigabe</h2>
-      <?= $specFrei ? bx_badge('für Kunden freigegeben','ok') : bx_badge('nicht freigegeben','warn') ?>
+      <?= $specAend ? bx_badge('Änderung – erneute Freigabe nötig','warn') : ($specFrei ? bx_badge('für Kunden freigegeben','ok') : bx_badge('nicht freigegeben','warn')) ?>
     </div>
-    <p class="muted" style="margin-top:4px">Das ist das Dokument, das der Kunde sieht &ndash; automatisch aus den Rohstoffdaten erzeugt. Bitte vor der Freigabe prüfen. Der Kunde bekommt es <strong>erst nach Freigabe</strong>.</p>
+    <p class="muted" style="margin-top:4px">Das ist das Dokument, das der Kunde sieht &ndash; automatisch aus den Rohstoffdaten erzeugt. Beim <strong>Erst-Upload</strong> wird es automatisch freigegeben. Ändern sich die Daten später, sieht der Kunde <strong>weiterhin die zuletzt freigegebene Version</strong>, bis ihr die Änderung unten freigebt.</p>
     <?php if (isset($_GET['specfrei'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px"><?= $_GET['specfrei'] === '1' ? 'Spezifikation für den Kunden freigegeben.' : 'Freigabe zurückgezogen.' ?></div><?php endif; ?>
-    <?php if ($specFrei && !empty($it['spec_freigabe_am'])): ?><div class="muted" style="font-size:12px;margin-bottom:8px">Freigegeben am <?= h(fmt_zeit($it['spec_freigabe_am'])) ?> Uhr<?= !empty($it['spec_freigabe_von']) ? ' von ' . h($it['spec_freigabe_von']) : '' ?>.</div><?php endif; ?>
-    <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:12px">
-      <iframe src="?p=spec_bulkify&id=<?= (int)$id ?>" style="width:100%;height:520px;border:0;display:block" title="bulkify-Spezifikation Vorschau"></iframe>
+    <?php if ($specFrei && !$specAend && !empty($it['spec_freigabe_am'])): ?><div class="muted" style="font-size:12px;margin-bottom:8px">Freigegeben am <?= h(fmt_zeit($it['spec_freigabe_am'])) ?> Uhr<?= !empty($it['spec_freigabe_von']) ? ' von ' . h($it['spec_freigabe_von']) : '' ?>.</div><?php endif; ?>
+    <?php if ($specAend && $specDiff): ?>
+    <div class="bx-panel" style="border-left:3px solid var(--warn);background:var(--bg-soft,transparent);margin:4px 0 12px">
+      <strong>Die Spezifikation hat sich seit der letzten Freigabe geändert.</strong>
+      <div class="muted" style="font-size:12px;margin-top:2px">Der Kunde sieht aktuell noch den Stand vom <?= !empty($it['spec_freigabe_am']) ? h(fmt_zeit($it['spec_freigabe_am'], 'd.m.Y')) : '–' ?>. Prüfe die Unterschiede und gib die neue Version frei.</div>
+      <?php if (!$specDiff['hat']): ?>
+        <div class="muted" style="font-size:12px;margin-top:8px">Keine inhaltliche Abweichung erkennbar – du kannst die aktuelle Version einfach erneut freigeben.</div>
+      <?php else:
+        $diffBlock('Wirkstoffe / Gehalt', $specDiff['wirkstoffe']);
+        $diffBlock('Charakteristische Kennwerte', $specDiff['kennwerte']);
+        $diffBlock('Reinheit / Grenzwerte', $specDiff['grenzwerte']);
+      endif; ?>
     </div>
-    <div class="bx-row" style="gap:10px;align-items:center">
+    <?php endif; ?>
+    <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:12px">
+      <iframe src="?p=spec_bulkify&id=<?= (int)$id ?>" style="width:100%;height:520px;border:0;display:block" title="bulkify-Spezifikation Vorschau (aktueller Stand)"></iframe>
+    </div>
+    <div class="muted" style="font-size:12px;margin:-6px 0 10px">Vorschau zeigt den <strong>aktuellen</strong> Stand (das, was nach einer Freigabe beim Kunden ankommt).</div>
+    <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap">
       <a class="btn btn-ghost" target="_blank" href="?p=spec_bulkify&id=<?= (int)$id ?>">In neuem Tab öffnen</a>
-      <form method="post" style="margin:0">
-        <input type="hidden" name="aktion" value="spec_freigabe">
-        <input type="hidden" name="freigeben" value="<?= $specFrei ? '0' : '1' ?>">
-        <button class="btn <?= $specFrei ? 'btn-ghost' : 'btn-primary' ?>" type="submit"><?= $specFrei ? 'Freigabe zurückziehen' : 'Für den Kunden freigeben' ?></button>
-      </form>
+      <?php if ($specAend): ?>
+        <form method="post" style="margin:0">
+          <input type="hidden" name="aktion" value="spec_freigabe"><input type="hidden" name="freigeben" value="1">
+          <button class="btn btn-primary" type="submit">Änderung freigeben</button>
+        </form>
+        <form method="post" style="margin:0">
+          <input type="hidden" name="aktion" value="spec_freigabe"><input type="hidden" name="freigeben" value="0">
+          <button class="btn btn-ghost" type="submit">Freigabe zurückziehen</button>
+        </form>
+      <?php else: ?>
+        <form method="post" style="margin:0">
+          <input type="hidden" name="aktion" value="spec_freigabe">
+          <input type="hidden" name="freigeben" value="<?= $specFrei ? '0' : '1' ?>">
+          <button class="btn <?= $specFrei ? 'btn-ghost' : 'btn-primary' ?>" type="submit"><?= $specFrei ? 'Freigabe zurückziehen' : 'Für den Kunden freigeben' ?></button>
+        </form>
+      <?php endif; ?>
     </div>
   </div>
   <?php endif; ?>

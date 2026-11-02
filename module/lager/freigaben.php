@@ -3,19 +3,27 @@
 // die geprueft und freigegeben werden muessen, bevor der Kunde sie sieht. Damit nichts liegen bleibt.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/spec_ki.php';   // spec_snapshot_setzen (Freigabe = Snapshot)
 
-// Sammel-Freigabe: alle aktuell offenen Spezifikationen bzw. alle offenen CoAs in einem Rutsch freigeben
-// (gleiche Bedingung wie die Listen unten). Datum/Von je Posten wie bei der Einzel-Freigabe.
+// Offene Spec-Freigaben = (a) GEÄNDERT seit letzter Freigabe (spec_aenderung_offen=1) ODER
+// (b) noch NIE freigegeben, aber mit Spec-Inhalt (Alt-Rückstand; neue Uploads geben automatisch frei).
+$SPEC_HAT_DATEN = "( EXISTS (SELECT 1 FROM item_kennwert k WHERE k.item_id=i.id)
+                   OR EXISTS (SELECT 1 FROM item_wirkstoff w WHERE w.item_id=i.id)
+                   OR EXISTS (SELECT 1 FROM item_grenzwert g WHERE g.item_id=i.id)
+                   OR (i.spec_pdf IS NOT NULL AND i.spec_pdf<>'') )";
+
+// Sammel-Freigabe: alle aktuell offenen Spezifikationen bzw. alle offenen CoAs in einem Rutsch freigeben.
+// Spec-Freigabe schreibt je Rohstoff den Snapshot (spec_snapshot_setzen) – der Kunde sieht ab dann diesen Stand.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['spec_alle_frei','coa_alle_frei'], true)) {
     $wer   = trim((string)(current_user()['name'] ?? 'Team'));
     $jetzt = gmdate('Y-m-d H:i:s');
     if (($_POST['aktion']) === 'spec_alle_frei') {
-        $n = q("UPDATE item SET spec_freigegeben=1, spec_freigabe_am=?, spec_freigabe_von=?
-                WHERE kategorie='rohstoff' AND gesperrt=0 AND COALESCE(spec_freigegeben,0)=0
-                  AND ( EXISTS (SELECT 1 FROM item_kennwert k WHERE k.item_id=item.id)
-                     OR EXISTS (SELECT 1 FROM item_wirkstoff w WHERE w.item_id=item.id)
-                     OR EXISTS (SELECT 1 FROM item_grenzwert g WHERE g.item_id=item.id)
-                     OR (spec_pdf IS NOT NULL AND spec_pdf<>'') )", [$jetzt, $wer])->rowCount();
+        $ids = all("SELECT i.id FROM item i
+                    WHERE i.kategorie='rohstoff' AND i.gesperrt=0
+                      AND ( COALESCE(i.spec_aenderung_offen,0)=1
+                         OR (COALESCE(i.spec_freigegeben,0)=0 AND $SPEC_HAT_DATEN) )");
+        foreach ($ids as $r) spec_snapshot_setzen((int)$r['id'], $wer, false);
+        $n = count($ids);
         log_aktivitaet('system', 0, 'team', $n . ' bulkify-Spezifikation(en) per Sammel-Freigabe für Kunden freigegeben.', 'notiz');
         header('Location: ?p=freigaben&specn=' . (int)$n); exit;
     }
@@ -25,18 +33,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), 
     header('Location: ?p=freigaben&coan=' . (int)$n); exit;
 }
 
-// Rohstoffe mit Spec-Inhalt, aber noch nicht fuer den Kunden freigegeben.
-$specOffen = all("SELECT i.id, i.artikelnummer, i.name,
+// Rohstoffe, deren Kundenfreigabe aussteht: geändert (erneute Freigabe) oder nie freigegeben (Alt-Rückstand).
+$specOffen = all("SELECT i.id, i.artikelnummer, i.name, COALESCE(i.spec_aenderung_offen,0) AS geaendert,
         (SELECT COUNT(*) FROM item_kennwert k WHERE k.item_id=i.id) AS kennwerte,
         (SELECT COUNT(*) FROM item_wirkstoff w WHERE w.item_id=i.id) AS wirkstoffe,
         (SELECT COUNT(*) FROM item_grenzwert g WHERE g.item_id=i.id) AS grenzwerte
     FROM item i
-    WHERE i.kategorie='rohstoff' AND i.gesperrt=0 AND COALESCE(i.spec_freigegeben,0)=0
-      AND ( EXISTS (SELECT 1 FROM item_kennwert k WHERE k.item_id=i.id)
-         OR EXISTS (SELECT 1 FROM item_wirkstoff w WHERE w.item_id=i.id)
-         OR EXISTS (SELECT 1 FROM item_grenzwert g WHERE g.item_id=i.id)
-         OR (i.spec_pdf IS NOT NULL AND i.spec_pdf<>'') )
-    ORDER BY i.name");
+    WHERE i.kategorie='rohstoff' AND i.gesperrt=0
+      AND ( COALESCE(i.spec_aenderung_offen,0)=1
+         OR (COALESCE(i.spec_freigegeben,0)=0 AND $SPEC_HAT_DATEN) )
+    ORDER BY COALESCE(i.spec_aenderung_offen,0) DESC, i.name");
 
 // Chargen mit Analysenwerten (also einem CoA), aber CoA noch nicht freigegeben.
 $coaOffen = all("SELECT c.id AS charge_id, c.charge_nr, c.mhd, c.wareneingang, i.id AS item_id, i.name,
@@ -53,7 +59,7 @@ bx_head('Offene Freigaben', 'Kundendokumente, die noch geprüft und freigegeben 
 if (isset($_GET['specn'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['specn'] . ' Spezifikation(en) freigegeben.</div>';
 if (isset($_GET['coan']))  echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['coan'] . ' Analysenzertifikat(e) freigegeben.</div>';
 ?>
-<p class="muted" style="margin-top:0;max-width:760px">Der Kunde sieht eine Spezifikation bzw. ein Analysenzertifikat erst, wenn ihr es freigegeben habt. Hier stehen die noch <strong>nicht freigegebenen</strong> – zum Prüfen und Freigeben auf der jeweiligen Detailseite.</p>
+<p class="muted" style="margin-top:0;max-width:820px">Beim <strong>Erst-Upload</strong> werden Spezifikation und CoA automatisch freigegeben. Hier stehen nur noch die Fälle, die eine <strong>Freigabe-Entscheidung</strong> brauchen: <strong>geänderte</strong> Specs (der Kunde sieht noch die alte Version, bis ihr die Änderung freigebt) und etwaige Alt-Rückstände, die noch nie freigegeben wurden. CoAs ohne Analysewerte bleiben unten stehen, bis sie geprüft sind.</p>
 
 <div class="bx-cards" style="margin-bottom:16px">
   <div class="bx-card"><div class="k">Spezifikationen offen</div><div class="v"><?= count($specOffen) ?></div></div>
@@ -74,16 +80,17 @@ if (isset($_GET['coan']))  echo '<div class="bx-panel badge-ok" style="padding:1
     <div class="muted">Keine offenen Spezifikationen – alles freigegeben.</div>
   <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Rohstoff</th><th>Artikelnr.</th><th class="bx-num">Wirkstoffe</th><th class="bx-num">Kennwerte</th><th class="bx-num">Grenzwerte</th><th></th></tr></thead>
+    <thead><tr><th>Rohstoff</th><th>Artikelnr.</th><th>Status</th><th class="bx-num">Wirkstoffe</th><th class="bx-num">Kennwerte</th><th class="bx-num">Grenzwerte</th><th></th></tr></thead>
     <tbody>
       <?php foreach ($specOffen as $r): ?>
         <tr>
           <td><a href="?p=rohstoff&id=<?= (int)$r['id'] ?>&tab=spec"><?= h($r['name']) ?></a></td>
           <td class="muted"><?= h($r['artikelnummer'] ?: '–') ?></td>
+          <td><?= (int)$r['geaendert'] === 1 ? bx_badge('geändert','warn') : bx_badge('neu','info') ?></td>
           <td class="bx-num"><?= (int)$r['wirkstoffe'] ?></td>
           <td class="bx-num"><?= (int)$r['kennwerte'] ?></td>
           <td class="bx-num"><?= (int)$r['grenzwerte'] ?></td>
-          <td class="bx-num"><a class="btn btn-primary btn-sm" href="?p=rohstoff&id=<?= (int)$r['id'] ?>&tab=spec">Prüfen &amp; freigeben</a></td>
+          <td class="bx-num"><a class="btn btn-primary btn-sm" href="?p=rohstoff&id=<?= (int)$r['id'] ?>&tab=spec"><?= (int)$r['geaendert'] === 1 ? 'Änderung prüfen' : 'Prüfen &amp; freigeben' ?></a></td>
         </tr>
       <?php endforeach; ?>
     </tbody>

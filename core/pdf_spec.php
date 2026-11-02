@@ -231,13 +231,17 @@ function spec_hat_daten(int $item_id): bool {
     return false;
 }
 
-function build_spec_pdf(int $item_id): ?string {
+// $nur_freigegeben=true: die FREIGEGEBENE Version (eingefrorener Snapshot) rendern – das bekommt der Kunde.
+// false (Default, Team): den aktuellen Live-Stand rendern (Vorschau vor der Freigabe).
+function build_spec_pdf(int $item_id, bool $nur_freigegeben = false): ?string {
+    require_once __DIR__ . '/spec_ki.php';
     $it = one("SELECT * FROM item WHERE id=?", [$item_id]);
     if (!$it) return null;
     // Keine bulkify-Spec erzeugen, wenn keine ECHTEN Daten hinterlegt sind (wir haben nichts hochgeladen/
     // ausgelesen). Sonst ginge ein praktisch leeres/falsches Dokument an den Kunden. Daten = Wirkstoffe
     // (Gehalt), charakteristische Kennwerte oder Reinheits-/Grenzwerte.
-    if (!spec_hat_daten($item_id)) return null;
+    if ($nur_freigegeben ? !spec_hat_freigabe($item_id) : !spec_hat_daten($item_id)) return null;
+    $pl = $nur_freigegeben ? spec_anzeige_payload($item_id) : spec_payload_live($item_id);
     $L = 40; $R = 555;
     $p = new MiniPDF();
     spec_wasserzeichen($p);
@@ -260,23 +264,21 @@ function build_spec_pdf(int $item_id): ?string {
     $ident[] = ['Gültig ab', $fmtD($it['spec_gueltig_ab'] ?? '') ?: date('d.m.Y')];
     $y = spec_grid($p, $y, $ident);
 
-    // Gehalt (Assay)
-    $wirk = all("SELECT n.name, w.gehalt_prozent FROM item_wirkstoff w
-                 JOIN naehrstoff n ON n.id=w.naehrstoff_id
-                 WHERE w.item_id=? AND w.gehalt_prozent IS NOT NULL ORDER BY w.sort, n.name", [$item_id]);
-    $wrows = array_map(fn($w) => [(string)$w['name'],
-        rtrim(rtrim(number_format((float)$w['gehalt_prozent'], 2, ',', '.'), '0'), ',') . ' %'], $wirk);
+    // Gehalt (Assay) – aus dem gewählten Payload (freigegebener Snapshot oder Live).
+    $wrows = [];
+    foreach ($pl['wirkstoffe'] as $w) {
+        if (($w['gehalt_prozent'] ?? null) === null || ($w['gehalt_prozent'] ?? '') === '') continue;
+        $wrows[] = [(string)$w['name'], rtrim(rtrim(number_format((float)str_replace(',', '.', (string)$w['gehalt_prozent']), 2, ',', '.'), '0'), ',') . ' %'];
+    }
     if ($wrows) { $y = spec_h($p, $y, 'Gehalt (Assay)'); $y = spec_table($p, $y, [[$L, 'Wirkstoff'], [320, 'Gehalt']], $wrows); }
 
     // Charakteristische Kennwerte – nur echte (Schwermetalle/Mikro/Mineralien raus, siehe spec_kennwert_relevant)
-    require_once __DIR__ . '/spec_ki.php';
-    $kw = item_kennwerte_relevant($item_id);
+    $kw = array_values(array_filter($pl['kennwerte'], fn($k) => spec_kennwert_relevant((string)($k['parameter'] ?? ''))));
     $krows = array_map(fn($k) => [(string)$k['parameter'], (string)$k['wert']], $kw);
     if ($krows) { $y = spec_h($p, $y, 'Charakteristische Kennwerte'); $y = spec_table($p, $y, [[$L, 'Parameter'], [300, 'Wert']], $krows); }
 
     // Reinheit & Grenzwerte
-    $gw = all("SELECT parameter, grenzwert FROM item_grenzwert WHERE item_id=? ORDER BY sort, id", [$item_id]);
-    $grows = array_map(fn($g) => [(string)$g['parameter'], (string)$g['grenzwert']], $gw);
+    $grows = array_map(fn($g) => [(string)$g['parameter'], (string)$g['grenzwert']], $pl['grenzwerte']);
     if ($grows) { $y = spec_h($p, $y, 'Reinheit & Grenzwerte'); $y = spec_table($p, $y, [[$L, 'Parameter'], [300, 'Grenzwert']], $grows); }
 
     // Deklarationen

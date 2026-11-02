@@ -223,6 +223,8 @@ function spec_ki_anwenden(int $item_id, array $ergebnis, ?int $lieferant_id = nu
     spec_ki_kennwerte($item_id, $ergebnis);    // charakteristische Kennwerte (OPC-Gehalt, DEV, pH …)
     // Wirkstoffgehalte aus dem Dokument automatisch übernehmen – auch vorhandene aktualisieren (CoA/Spec = Quelle).
     spec_ki_wirkstoffe($item_id, $ergebnis, false, true);
+    // Freigabe-Politik: Erst-Upload automatisch freigeben, Änderung markiert (alte Version bleibt live).
+    spec_nach_datenaenderung($item_id, 'Upload/Import');
 }
 
 // Aus dem KI-Ergebnis den passenden VORHANDENEN Rohstoff finden (kein Neuanlegen).
@@ -338,18 +340,24 @@ function spec_ki_coa_charge(int $item_id, array $ergebnis, ?int $lieferant_id = 
     $mhd = spec_ki_wert((string)($ergebnis['charge']['mhd'] ?? ''), 'datum');
 
     // Vorhandene Charge gleicher Nummer wiederverwenden (keine Dublette), sonst neu anlegen.
-    $charge_id = 0;
+    $charge_id = 0; $neu = false;
     if ($chgNr !== '') $charge_id = (int) scalar("SELECT id FROM charge WHERE item_id=? AND charge_nr=? ORDER BY id LIMIT 1", [$item_id, $chgNr]);
     if (!$charge_id) {
         q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,angelegt)
            VALUES (?,?,0,0,?,?,?,NULL,'quarantaene',?,?)",
           [$chgNr ?: null, $item_id, $it['einheit'], $lieferant_id ?: null, $mhd ?: null,
            'CoA vorab erfasst – Ware noch nicht eingegangen', gmdate('Y-m-d H:i:s')]);
-        $charge_id = (int) insert_id();
+        $charge_id = (int) insert_id(); $neu = true;
     } elseif ($mhd) {
         q("UPDATE charge SET mhd=COALESCE(mhd,?) WHERE id=?", [$mhd, $charge_id]);
     }
     if ($werte) spec_ki_werte_speichern($charge_id, $werte);
+    // Erst-Upload: ein neu erfasstes CoA mit echten Analysewerten direkt freigeben (kein manuelles Bestätigen).
+    // Ein späterer Re-Upload derselben Charge lässt die bestehende Freigabe unangetastet (Team prüft bewusst).
+    if ($neu && $charge_id && function_exists('charge_coa_hat_analysewerte') && charge_coa_hat_analysewerte($charge_id)) {
+        q("UPDATE charge SET coa_freigegeben=1, coa_freigabe_am=?, coa_freigabe_von=? WHERE id=? AND COALESCE(coa_freigegeben,0)=0",
+          [gmdate('Y-m-d H:i:s'), 'Upload/Import', $charge_id]);
+    }
     return $charge_id ?: null;
 }
 
@@ -465,6 +473,140 @@ function spec_ki_wirkstoffe(int $item_id, array $ergebnis, bool $ueberschreiben 
         $n++;
     }
     return $n;
+}
+
+// ===========================================================================================
+// Spec-Freigabe als VERSION (Snapshot). Der Kunde sieht immer den freigegebenen Snapshot, nie die
+// Live-Tabellen. Erst-Upload gibt automatisch frei; eine spaetere Aenderung laesst die alte Version
+// beim Kunden stehen und markiert spec_aenderung_offen=1, bis das Team erneut freigibt.
+// ===========================================================================================
+
+// Aktueller Live-Stand der drei Spec-Tabellen als einheitliches Payload (fuer Snapshot/Vergleich/Anzeige).
+function spec_payload_live(int $item_id): array {
+    if ($item_id <= 0) return ['wirkstoffe' => [], 'kennwerte' => [], 'grenzwerte' => []];
+    return [
+        'wirkstoffe' => all("SELECT n.name, w.gehalt_prozent, w.gehalt_wert, w.gehalt_einheit
+            FROM item_wirkstoff w JOIN naehrstoff n ON n.id=w.naehrstoff_id
+            WHERE w.item_id=? ORDER BY w.sort, w.id", [$item_id]),
+        'kennwerte'  => table_exists('item_kennwert')
+            ? all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$item_id]) : [],
+        'grenzwerte' => all("SELECT parameter, grenzwert FROM item_grenzwert WHERE item_id=? ORDER BY sort, id", [$item_id]),
+    ];
+}
+
+// Freigegebenes Snapshot-Payload (null = noch keins). Nur wenn der Rohstoff auch freigegeben ist.
+function spec_anzeige_payload(int $item_id): array {
+    if ($item_id <= 0) return ['wirkstoffe' => [], 'kennwerte' => [], 'grenzwerte' => []];
+    $it = one("SELECT spec_freigegeben, spec_freigabe_daten FROM item WHERE id=?", [$item_id]);
+    if ($it && (int)($it['spec_freigegeben'] ?? 0) === 1 && !empty($it['spec_freigabe_daten'])) {
+        $d = json_decode((string)$it['spec_freigabe_daten'], true);
+        if (is_array($d)) return [
+            'wirkstoffe' => (array)($d['wirkstoffe'] ?? []),
+            'kennwerte'  => (array)($d['kennwerte'] ?? []),
+            'grenzwerte' => (array)($d['grenzwerte'] ?? []),
+        ];
+    }
+    return ['wirkstoffe' => [], 'kennwerte' => [], 'grenzwerte' => []];   // nichts freigegeben -> Kunde sieht nichts
+}
+
+// Freigegebene Kennwerte, gefiltert auf echte charakteristische Kennwerte (wie item_kennwerte_relevant).
+function spec_anzeige_kennwerte(int $item_id): array {
+    $kw = spec_anzeige_payload($item_id)['kennwerte'];
+    return array_values(array_filter($kw, fn($r) => spec_kennwert_relevant((string)($r['parameter'] ?? ''))));
+}
+
+// Gibt es eine freigegebene Version mit Inhalt? (Kundenseitiges "Spec vorhanden".)
+function spec_hat_freigabe(int $item_id): bool {
+    $p = spec_anzeige_payload($item_id);
+    return (bool)($p['wirkstoffe'] || $p['kennwerte'] || $p['grenzwerte']);
+}
+
+// Live-Stand als freigegebene Version einfrieren: spec_freigegeben=1, Aenderungsflag weg, Snapshot = jetzt.
+function spec_snapshot_setzen(int $item_id, string $wer = 'Team', bool $log = true): void {
+    if ($item_id <= 0) return;
+    $live = spec_payload_live($item_id);
+    q("UPDATE item SET spec_freigabe_daten=?, spec_freigegeben=1, spec_aenderung_offen=0, spec_freigabe_am=?, spec_freigabe_von=? WHERE id=?",
+      [json_encode($live, JSON_UNESCAPED_UNICODE), gmdate('Y-m-d H:i:s'), mb_substr($wer, 0, 190), $item_id]);
+    if ($log) log_aktivitaet('item', $item_id, 'team', 'bulkify-Spezifikation (Version) fuer den Kunden freigegeben.', 'notiz');
+}
+
+// Zwei Payloads normalisieren (sortiert, Zahlen vereinheitlicht) und vergleichen.
+function spec_payload_norm(array $p): string {
+    $num = function ($v): string {
+        if ($v === null || $v === '') return '';
+        $f = (float) str_replace(',', '.', (string)$v);
+        return rtrim(rtrim(number_format($f, 4, '.', ''), '0'), '.');
+    };
+    $w = array_map(fn($r) => [
+        's' => mb_strtolower(trim((string)($r['name'] ?? ''))),
+        'p' => $num($r['gehalt_prozent'] ?? ''),
+        'v' => $num($r['gehalt_wert'] ?? ''),
+        'e' => (string)($r['gehalt_einheit'] ?? ''),
+    ], (array)($p['wirkstoffe'] ?? []));
+    $k = array_map(fn($r) => ['s' => mb_strtolower(trim((string)($r['parameter'] ?? ''))), 'w' => trim((string)($r['wert'] ?? ''))], (array)($p['kennwerte'] ?? []));
+    $g = array_map(fn($r) => ['s' => mb_strtolower(trim((string)($r['parameter'] ?? ''))), 'w' => trim((string)($r['grenzwert'] ?? ''))], (array)($p['grenzwerte'] ?? []));
+    $sort = function (&$a) { usort($a, fn($x, $y) => strcmp($x['s'], $y['s'])); };
+    $sort($w); $sort($k); $sort($g);
+    return json_encode(['w' => $w, 'k' => $k, 'g' => $g], JSON_UNESCAPED_UNICODE);
+}
+function spec_payload_gleich(array $a, array $b): bool { return spec_payload_norm($a) === spec_payload_norm($b); }
+
+// Diff freigegebener Snapshot -> Live. Rueckgabe je Kategorie Listen 'neu'/'weg'/'geaendert' + Flag 'hat'.
+function spec_diff(int $item_id): array {
+    $out = ['wirkstoffe' => ['neu' => [], 'weg' => [], 'geaendert' => []],
+            'kennwerte'  => ['neu' => [], 'weg' => [], 'geaendert' => []],
+            'grenzwerte' => ['neu' => [], 'weg' => [], 'geaendert' => []],
+            'hat' => false];
+    $it = one("SELECT spec_freigabe_daten FROM item WHERE id=?", [$item_id]);
+    $snap = ($it && !empty($it['spec_freigabe_daten'])) ? json_decode((string)$it['spec_freigabe_daten'], true) : null;
+    if (!is_array($snap)) return $out;
+    $live = spec_payload_live($item_id);
+    // generischer Listen-Diff ueber ein Namensfeld $kf und ein Wertefeld $vf
+    $diff = function (array $alt, array $neu, string $kf, string $vf) {
+        $idx = function (array $rows) use ($kf) { $m = []; foreach ($rows as $r) { $k = mb_strtolower(trim((string)($r[$kf] ?? ''))); if ($k !== '') $m[$k] = $r; } return $m; };
+        $a = $idx($alt); $n = $idx($neu); $r = ['neu' => [], 'weg' => [], 'geaendert' => []];
+        foreach ($n as $k => $row) {
+            if (!isset($a[$k])) { $r['neu'][] = ['name' => (string)$row[$kf], 'neu' => (string)($row[$vf] ?? '')]; }
+            elseif (trim((string)($a[$k][$vf] ?? '')) !== trim((string)($row[$vf] ?? ''))) {
+                $r['geaendert'][] = ['name' => (string)$row[$kf], 'alt' => (string)($a[$k][$vf] ?? ''), 'neu' => (string)($row[$vf] ?? '')];
+            }
+        }
+        foreach ($a as $k => $row) if (!isset($n[$k])) $r['weg'][] = ['name' => (string)$row[$kf], 'alt' => (string)($row[$vf] ?? '')];
+        return $r;
+    };
+    // Wirkstoff-Wert = Gehalt in Prozent (Hauptgroesse); fehlt der, der Rohwert.
+    $wval = fn(array $rows) => array_map(fn($r) => ['name' => $r['name'] ?? '', 'wert' => ($r['gehalt_prozent'] ?? '') !== '' && ($r['gehalt_prozent'] ?? null) !== null ? $r['gehalt_prozent'] : ($r['gehalt_wert'] ?? '')], $rows);
+    $out['wirkstoffe'] = $diff($wval((array)($snap['wirkstoffe'] ?? [])), $wval($live['wirkstoffe']), 'name', 'wert');
+    $out['kennwerte']  = $diff((array)($snap['kennwerte'] ?? []), $live['kennwerte'], 'parameter', 'wert');
+    $out['grenzwerte'] = $diff((array)($snap['grenzwerte'] ?? []), $live['grenzwerte'], 'parameter', 'grenzwert');
+    foreach (['wirkstoffe', 'kennwerte', 'grenzwerte'] as $c)
+        if ($out[$c]['neu'] || $out[$c]['weg'] || $out[$c]['geaendert']) $out['hat'] = true;
+    return $out;
+}
+
+// Politik nach jedem Schreiben der Spec-Daten (Import/Upload): Erst-Upload = automatisch freigeben;
+// Aenderung an bereits freigegebener Version = alte Version bleibt live, nur Flag setzen (Team gibt neu frei).
+function spec_nach_datenaenderung(int $item_id, string $wer = 'Team'): void {
+    if ($item_id <= 0) return;
+    $it = one("SELECT spec_freigegeben, spec_freigabe_daten, spec_aenderung_offen FROM item WHERE id=?", [$item_id]);
+    if (!$it) return;
+    $live = spec_payload_live($item_id);
+    if (!($live['wirkstoffe'] || $live['kennwerte'] || $live['grenzwerte'])) return;   // keine Daten -> nichts tun
+    $snap = !empty($it['spec_freigabe_daten']) ? json_decode((string)$it['spec_freigabe_daten'], true) : null;
+    if (!is_array($snap)) {
+        // Noch keine freigegebene Version hinterlegt -> automatisch freigeben (Erst-Upload bzw. Legacy-Basis).
+        $erst = (int)($it['spec_freigegeben'] ?? 0) !== 1;
+        spec_snapshot_setzen($item_id, $wer, false);
+        log_aktivitaet('item', $item_id, 'team',
+            $erst ? 'bulkify-Spezifikation beim Erst-Upload automatisch fuer den Kunden freigegeben.'
+                  : 'bulkify-Spezifikation: aktueller Stand als freigegebene Basis-Version gesichert.', 'notiz');
+        return;
+    }
+    if (spec_payload_gleich($snap, $live)) return;   // identisch -> nichts zu tun
+    // Geaendert: alte freigegebene Version bleibt beim Kunden sichtbar, Team muss erneut freigeben.
+    if ((int)($it['spec_aenderung_offen'] ?? 0) !== 1)
+        log_aktivitaet('item', $item_id, 'team', 'bulkify-Spezifikation geaendert - wartet auf erneute Freigabe (alte Version bleibt beim Kunden sichtbar).', 'notiz');
+    q("UPDATE item SET spec_aenderung_offen=1 WHERE id=?", [$item_id]);
 }
 
 // Analysewerte eines CoA an einer Charge speichern (ersetzt die bisherigen Zeilen).

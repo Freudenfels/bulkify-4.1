@@ -197,13 +197,15 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
             // die stehen im DL-Modul, nicht in der Auftragsliste (?p=auftraege zeigt nur kategorie<>'dienstleistung').
             // Sonst wiche das Menü-Badge vom „Offen"-Reiter der Liste ab.
             $anfCount['auftraege'] = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status NOT IN ('versendet','storniert') AND COALESCE(kategorie,'produkt') <> 'dienstleistung'");
-            // Offene Kundenfreigaben: Rohstoffe mit Spec-Inhalt ohne Spec-Freigabe + Chargen mit CoA-Werten ohne CoA-Freigabe.
+            // Offene Kundenfreigaben: geänderte Specs (erneute Freigabe) + Alt-Rückstände ohne Freigabe
+            // + Chargen mit CoA-Werten ohne CoA-Freigabe. Erst-Uploads geben automatisch frei und zählen hier nicht.
             $anfCount['freigaben'] =
-                (int) scalar("SELECT COUNT(*) FROM item i WHERE i.kategorie='rohstoff' AND i.gesperrt=0 AND COALESCE(i.spec_freigegeben,0)=0
-                    AND ( EXISTS (SELECT 1 FROM item_kennwert k WHERE k.item_id=i.id)
-                       OR EXISTS (SELECT 1 FROM item_wirkstoff w WHERE w.item_id=i.id)
-                       OR EXISTS (SELECT 1 FROM item_grenzwert g WHERE g.item_id=i.id)
-                       OR (i.spec_pdf IS NOT NULL AND i.spec_pdf<>'') )")
+                (int) scalar("SELECT COUNT(*) FROM item i WHERE i.kategorie='rohstoff' AND i.gesperrt=0
+                    AND ( COALESCE(i.spec_aenderung_offen,0)=1
+                       OR (COALESCE(i.spec_freigegeben,0)=0 AND ( EXISTS (SELECT 1 FROM item_kennwert k WHERE k.item_id=i.id)
+                          OR EXISTS (SELECT 1 FROM item_wirkstoff w WHERE w.item_id=i.id)
+                          OR EXISTS (SELECT 1 FROM item_grenzwert g WHERE g.item_id=i.id)
+                          OR (i.spec_pdf IS NOT NULL AND i.spec_pdf<>'') )) )")
               + (int) scalar("SELECT COUNT(*) FROM charge c WHERE COALESCE(c.coa_freigegeben,0)=0 AND EXISTS (SELECT 1 FROM charge_analyse a WHERE a.charge_id=c.id)");
             // Offene Lieferanten-Uploads (Mein Katalog: Katalog/CoA/Spec/manuell), die auf unsere Prüfung warten.
             $anfCount['katalog_freigaben'] = (int) scalar("SELECT COUNT(*) FROM lieferant_katalog WHERE status='neu'");

@@ -1814,6 +1814,28 @@ function init_schema(): void {
     ensure_column('item', 'spec_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");   // bulkify-Spezifikation fuer den Kunden freigegeben?
     ensure_column('item', 'spec_freigabe_am', "DATETIME NULL");
     ensure_column('item', 'spec_freigabe_von', "VARCHAR(190) NULL");
+    // Freigegebene Spec-VERSION als Snapshot (JSON: wirkstoffe/kennwerte/grenzwerte). Der Kunde sieht immer
+    // GENAU diesen Snapshot (eingefrorene Version). Ein Neu-Upload schreibt die Live-Tabellen weiter, laesst
+    // den Snapshot aber unberuehrt, bis das Team die Aenderung erneut freigibt -> alte Version bleibt beim
+    // Kunden sichtbar. spec_aenderung_offen=1 markiert: Live-Daten weichen vom freigegebenen Snapshot ab.
+    ensure_column('item', 'spec_freigabe_daten', "MEDIUMTEXT NULL");
+    ensure_column('item', 'spec_aenderung_offen', "TINYINT(1) NOT NULL DEFAULT 0");
+    // Einmalige Nachziehung: bereits freigegebene Rohstoffe ohne Snapshot bekommen den AKTUELLEN Stand als
+    // freigegebene Basis-Version (sonst saehe der Kunde nach dem Umbau kurz nichts). Inline (keine Abhaengigkeit
+    // von spec_ki.php / Ladereihenfolge), best-effort, idempotent.
+    try {
+        $__hatKw = table_exists('item_kennwert');
+        foreach (all("SELECT id FROM item WHERE kategorie='rohstoff' AND COALESCE(spec_freigegeben,0)=1 AND (spec_freigabe_daten IS NULL OR spec_freigabe_daten='')") as $__r) {
+            $__id = (int)$__r['id'];
+            $__p = [
+                'wirkstoffe' => all("SELECT n.name, w.gehalt_prozent, w.gehalt_wert, w.gehalt_einheit
+                    FROM item_wirkstoff w JOIN naehrstoff n ON n.id=w.naehrstoff_id WHERE w.item_id=? ORDER BY w.sort, w.id", [$__id]),
+                'kennwerte'  => $__hatKw ? all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id", [$__id]) : [],
+                'grenzwerte' => all("SELECT parameter, grenzwert FROM item_grenzwert WHERE item_id=? ORDER BY sort, id", [$__id]),
+            ];
+            q("UPDATE item SET spec_freigabe_daten=? WHERE id=?", [json_encode($__p, JSON_UNESCAPED_UNICODE), $__id]);
+        }
+    } catch (\Throwable $e) { /* best-effort */ }
     // Beschaffenheit: WAS der Rohstoff ist (Extrakt / reines Pulver / Isolat ...) + Extraktverhaeltnis (DEV, z. B. 1:10).
     // Getrennt von der physischen Form und der Spezifikation (Standardisierung). Fliesst in den Anzeigenamen ein
     // (rohstoff_anzeige_name(): z. B. "Ashwagandha Extrakt 10:1").

@@ -1644,10 +1644,10 @@ foreach ($rezZutaten as $z) if (!empty($z['item_id'])) {
 // eine FREIGEGEBENE bulkify-Spezifikation (mit echten Daten) ODER eine FREIGEGEBENE Charge-CoA. Sonst
 // wäre das Infoblatt/Papier leer – dann keinen Link zeigen (nur der Name ist kein „Papier").
 $rezHatSpecCoa = [];
-if ($rezZutaten) { require_once BX_ROOT . '/core/pdf_spec.php';
+if ($rezZutaten) { require_once BX_ROOT . '/core/pdf_spec.php'; require_once BX_ROOT . '/core/spec_ki.php';
   foreach ($rezZutaten as $z) { $iid = (int)($z['item_id'] ?? 0); if ($iid <= 0 || isset($rezHatSpecCoa[$iid])) continue;
     $hat = (int) scalar("SELECT COUNT(*) FROM charge WHERE item_id=? AND coa_freigegeben=1", [$iid]) > 0;
-    if (!$hat && (int) scalar("SELECT spec_freigegeben FROM item WHERE id=?", [$iid]) === 1 && spec_hat_daten($iid)) $hat = true;
+    if (!$hat && spec_hat_freigabe($iid)) $hat = true;   // freigegebene Spec-Version mit Daten vorhanden
     $rezHatSpecCoa[$iid] = $hat;
   }
 }
@@ -1745,18 +1745,18 @@ $rohDetail = ($iid && $darfRohInfo) ? one("SELECT id, name, name_lat, form, besc
     haltbarkeit, lagerbedingungen, zusaetze, allergene, vegan, gvo_frei, bestrahlt, tse_bse_frei, zertifikate, spec_freigegeben,
     novelfood_status, novelfood_geprueft_am, ki_info, ki_info_am
     FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$iid]) : null;
-require_once BX_ROOT . '/core/spec_ki.php';   // item_kennwerte_relevant: nur echte Kennwerte (kein Schwermetall/Mikro/Mineral)
-$rohKennwerte = $rohDetail ? item_kennwerte_relevant($iid) : [];
-// Reinheits-/Sicherheits-Grenzwerte (pH, Gehalt, Chloride, Sulfate, Schwermetalle, Mikrobiologie …) –
-// dieselbe Quelle wie die bulkify-Spec. Dem Kunden alle Qualitätsangaben zeigen, die wir haben.
-$rohGrenz = $rohDetail ? all("SELECT parameter, grenzwert FROM item_grenzwert WHERE item_id=? ORDER BY sort, id", [$iid]) : [];
-// bulkify-Spezifikation nur anbieten, wenn echte Daten da sind (sonst würde build_spec_pdf nichts/null liefern).
+require_once BX_ROOT . '/core/spec_ki.php';   // spec_anzeige_*: der Kunde sieht immer die FREIGEGEBENE Version (Snapshot)
+// Der Kunde sieht ausschließlich den freigegebenen Spec-Snapshot (eingefrorene Version), nie die Live-Tabellen.
+// Eine Änderung durch einen Neu-Upload bleibt unsichtbar, bis das Team sie erneut freigibt – alte Version bleibt live.
+$rohSpecPl    = $rohDetail ? spec_anzeige_payload($iid) : ['wirkstoffe' => [], 'kennwerte' => [], 'grenzwerte' => []];
+$rohKennwerte = $rohDetail ? spec_anzeige_kennwerte($iid) : [];
+// Reinheits-/Sicherheits-Grenzwerte (pH, Gehalt, Chloride, Sulfate, Schwermetalle, Mikrobiologie …).
+$rohGrenz = $rohSpecPl['grenzwerte'];
+// bulkify-Spezifikation nur anbieten, wenn eine freigegebene Version mit Daten existiert.
 require_once BX_ROOT . '/core/pdf_spec.php';
-$rohHatSpec = $rohDetail ? spec_hat_daten($iid) : false;
+$rohHatSpec = $rohDetail ? spec_hat_freigabe($iid) : false;
 // Wirkstoffe + Gehalt (z. B. „L-Carnosin 99 %") – das Wichtigste zu einem Pulver/Extrakt.
-$rohWirkstoffe = $rohDetail ? all("SELECT n.name, iw.gehalt_wert, iw.gehalt_prozent, iw.gehalt_einheit
-    FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id
-    WHERE iw.item_id=? ORDER BY iw.sort, iw.id", [$iid]) : [];
+$rohWirkstoffe = $rohSpecPl['wirkstoffe'];
 $gehaltFmt = function($w) {
     $wert = $w['gehalt_wert'] !== null && $w['gehalt_wert'] !== '' ? (float)$w['gehalt_wert'] : ($w['gehalt_prozent'] !== null ? (float)$w['gehalt_prozent'] : null);
     if ($wert === null) return '';
@@ -1942,7 +1942,7 @@ if (($_GET['v'] ?? '') === 'spec_pdf') {
     $ok = $rid && $darfSpec && scalar("SELECT id FROM item WHERE id=? AND kategorie='rohstoff' AND gesperrt=0", [$rid]);
     if (!$ok) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
     require_once BX_ROOT . '/core/pdf_spec.php';
-    $pdf = build_spec_pdf($rid);
+    $pdf = build_spec_pdf($rid, true);   // Kunde: nur die FREIGEGEBENE Version (Snapshot)
     if ($pdf === null) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
     header('Content-Type: application/pdf');
     header('Content-Disposition: inline; filename="Spezifikation_' . $rid . '.pdf"');
@@ -2028,14 +2028,15 @@ if (($_GET['v'] ?? '') === 'rohstoff_info') {
     $add('Bestrahlt', $jn($it['bestrahlt'])); $add('TSE/BSE-frei', $jn($it['tse_bse_frei']));
     $add('Zertifikate', $it['zertifikate']); $add('Zusätze', $it['zusaetze']);
     $add('Haltbarkeit', $it['haltbarkeit']); $add('Lagerbedingungen', $it['lagerbedingungen']);
-    foreach (item_kennwerte_relevant($iid) as $kw) $add((string)$kw['parameter'], $kw['wert']);
-    // Freigegebene Dokumente: Spezifikation (falls spec_freigegeben) + CoAs freigegebener Chargen.
+    require_once BX_ROOT . '/core/spec_ki.php';
+    foreach (spec_anzeige_kennwerte($iid) as $kw) $add((string)$kw['parameter'], $kw['wert']);   // nur freigegebene Version
+    // Freigegebene Dokumente: Spezifikation (freigegebene Version) + CoAs freigegebener Chargen.
     $coaList = [];
     foreach (all("SELECT id, charge_nr, mhd FROM charge WHERE item_id=? AND coa_freigegeben=1 ORDER BY (wareneingang IS NULL), wareneingang DESC, id DESC", [$iid]) as $c)
         $coaList[] = ['cid' => (int)$c['id'], 'label' => ($c['charge_nr'] ?: ('#' . (int)$c['id'])) . ($c['mhd'] ? ' (MHD ' . date('m/Y', strtotime((string)$c['mhd'])) . ')' : '')];
-    // Spezifikation nur anbieten, wenn freigegeben UND echte Daten hinterlegt sind (sonst gibt's keine bulkify-Spec).
+    // Spezifikation nur anbieten, wenn eine freigegebene Version mit Daten existiert.
     require_once BX_ROOT . '/core/pdf_spec.php';
-    echo json_encode(['name' => $it['name'], 'rows' => $rows, 'spec' => ((int)$it['spec_freigegeben'] === 1 && spec_hat_daten($iid)), 'coas' => $coaList], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['name' => $it['name'], 'rows' => $rows, 'spec' => spec_hat_freigabe($iid), 'coas' => $coaList], JSON_UNESCAPED_UNICODE);
     exit;
 }
 

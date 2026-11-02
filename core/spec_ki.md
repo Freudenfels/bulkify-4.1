@@ -37,6 +37,16 @@ Schwermetalle, Mikrobiologie, Mykotoxine, Pestizide, Lösungsmittel und Nährsto
 - Die KI-Anweisung (`spec_ki_anweisung`) weist zusätzlich an: Kennwerte knapp halten, Assay → Wirkstoffe,
   Mineralien/Sicherheitswerte raus.
 
+## Freigabe als Version (Snapshot) – Erst-Upload automatisch, Änderung mit Diff
+Der Kunde sieht **nie die Live-Tabellen**, sondern eine **eingefrorene, freigegebene Version** (`item.spec_freigabe_daten`, JSON mit wirkstoffe/kennwerte/grenzwerte). Politik nach jedem Schreiben der Spec-Daten (Import, Upload, manuelle Speicherung):
+- **`spec_nach_datenaenderung($item_id, $wer)`** – zentraler Hook. Kein Snapshot vorhanden → **automatisch freigeben** (Erst-Upload braucht keine manuelle Bestätigung; bereits freigegebene Alt-Rohstoffe bekommen den aktuellen Stand als Basis). Snapshot vorhanden und Live weicht ab → `item.spec_aenderung_offen=1`, **alte Version bleibt beim Kunden sichtbar**, Team muss erneut freigeben. Identisch → nichts.
+- **`spec_snapshot_setzen($item_id, $wer, $log=true)`** – friert den Live-Stand als neue freigegebene Version ein (`spec_freigegeben=1`, `spec_aenderung_offen=0`, Snapshot=jetzt). Wird von der Team-Freigabe (`rohstoff_detail.php` Aktion `spec_freigabe`, Sammel-Freigabe in `freigaben.php`) genutzt.
+- **`spec_payload_live($item_id)`** / **`spec_anzeige_payload($item_id)`** – Live-Daten bzw. freigegebener Snapshot (leeres Payload, wenn nichts freigegeben). **`spec_anzeige_kennwerte()`** = Snapshot-Kennwerte mit `spec_kennwert_relevant`-Filter. **`spec_hat_freigabe()`** = freigegebene Version mit Inhalt vorhanden.
+- **`spec_diff($item_id)`** – Diff freigegebener Snapshot → Live je Kategorie (`neu`/`weg`/`geaendert` + Flag `hat`); zeigt das Team im Rohstoff-Detail, was sich geändert hat.
+- Hook-Aufrufe: `spec_ki_anwenden()` (Ende), manueller Spec-Speichern-Handler in `rohstoff_detail.php`. **CoA**: `spec_ki_coa_charge()` gibt ein **neu** erfasstes CoA mit echten Analysewerten direkt frei (`charge.coa_freigegeben=1`); ein Re-Upload derselben Charge lässt die Freigabe unangetastet.
+- Kundenseite (`module/portal/kunde.php`) und `build_spec_pdf($id, true)` lesen ausschließlich den Snapshot. Team-Vorschau (`?p=spec_bulkify`) und interne Sichten lesen weiter live.
+- Nachziehung beim ersten Request nach dem Umbau: `core/schema.php` schreibt für bereits freigegebene Rohstoffe ohne Snapshot den aktuellen Stand als Basis (best-effort, inline).
+
 ## Verwandt
 - `core/ki.md` – die API-Anbindung und die KI-Einstellungen.
 - `core/coa_lesen.md` – die textbasierte Variante ohne KI (Fallback, kostenlos, aber nur bei echtem PDF-Text).
