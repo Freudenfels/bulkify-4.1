@@ -169,3 +169,12 @@ Der Haken „vom Kunden beigestellt (kundeneigen)" ist entfernt. Stattdessen: Re
 einem bedruckten, kundenspezifischen Behälter ein Badge „bedruckt · kundenspezifisch"; sonst ein Knopf
 „Bedruckten, kundenspezifischen Behälter anlegen" (Aktion `verpackung_kundenspezifisch` →
 `verpackung_kundenspezifisch_sicherstellen()` am Produkt, bindet den Auftrag). Einkaufbar, getrennt vom Standard.
+
+## Reiter Material + „Produktion" (Punkt 1+2, 2026-11-02)
+Neuer Reiter **Material**: Material-Übersicht, Verpackung (Behälter) + Etikett (früher eigener Reiter
+„Verpackung", entfällt) und **„Material beschaffen & zuweisen"**. Dort sind **Reservieren** und **Lagerware
+zuweisen** zu EINEM Schritt verschmolzen: eine Quelle-Auswahl (Bestellung → reservieren / Lager-Charge →
+fest zuweisen), eine Mengeneingabe, eine gemeinsame „gebunden"-Tabelle. Dispatcher `aktion=material_binden`
+(routet nach `bulk_reservieren` bzw. `charge_auftrag_zuweisen`). Reiter **Produktion** trägt nur noch
+Fortschritt + Herstellung/Freigabe + „Doch selbst produzieren" + Energetisierung/Labortest. Deep-Link
+`#bulkreserve` und der Schritt „Material prüfen" öffnen jetzt den Material-Reiter.
