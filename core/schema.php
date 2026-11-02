@@ -5873,14 +5873,26 @@ function rohstoff_bester_lieferant(int $item_id, float $menge): ?array {
 // löst die Rezeptur in ihre Rohstoffe auf. Zeigt je Zutat: benötigte Menge, bester Lieferanten-EK
 // bei dieser Menge, welcher Lieferant – und ob überhaupt ein Lieferantenpreis bekannt ist.
 // Rückgabe: ['zeilen'=>[…], 'summe'=>float, 'ohne_preis'=>int (Zutaten ohne Lieferantenpreis)]
+// Anzahl REZEPTUR-EINHEITEN (Kapseln/Tabletten bzw. Portionen) für $packungen Packungen à $stueck je Packung.
+// Stück-Formen: stueck × Packungen. Pulver/Granulat (form_groessen_einheit = 'g'): stueck ist die Füllmenge in GRAMM
+// je Packung -> Portionen = Gesamt-Füllgewicht (mg) / Rezeptur-mg je Portion. Damit ergibt „Einheiten × Zutat-mg"
+// genau den Massenanteil × Füllgewicht wie in produktion_materialbedarf() (St-13).
+function rezeptur_einheiten_gesamt(int $rid, float $stueck, float $packungen): float {
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+    if (form_groessen_einheit($form) === 'g') {
+        $sumMg = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rid]);
+        return $sumMg > 0 ? $stueck * $packungen * 1000.0 / $sumMg : 0.0;
+    }
+    return $stueck * $packungen;
+}
 function angebot_rohstoffkosten(int $angebot_id): array {
     $pos = all("SELECT rezeptur_id, stueck, menge FROM angebot_position
                 WHERE angebot_id=? AND quelle='herstellung' AND rezeptur_id IS NOT NULL AND stueck>0", [$angebot_id]);
-    // Je Rezeptur die größte Gesamtstückzahl (stueck je Packung × Packungen) über die Optionen.
+    // Je Rezeptur die größte Zahl Rezeptur-Einheiten über die Optionen (Kapseln bzw. bei Pulver Portionen aus g je Packung).
     $maxEinheiten = [];
     foreach ($pos as $p) {
         $rid = (int)$p['rezeptur_id'];
-        $e = (int)$p['stueck'] * (int) round((float)$p['menge']);
+        $e = rezeptur_einheiten_gesamt($rid, (float)$p['stueck'], (float) round((float)$p['menge']));
         if ($e > ($maxEinheiten[$rid] ?? 0)) $maxEinheiten[$rid] = $e;
     }
     $zeilen = []; $summe = 0.0; $ohne = 0;
