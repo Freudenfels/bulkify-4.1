@@ -273,6 +273,10 @@ if (!in_array($p, $PUBLIC, true) && !route_erlaubt($p)) {
     exit;
 }
 
+// Zentrales Änderungsprotokoll (Feld-Ebene): beim Speichern den Hauptdatensatz vorher/nachher vergleichen (Aufräumen 8).
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && function_exists('aenderung_beobachten'))
+    aenderung_beobachten($p, (int)($_GET['id'] ?? $_POST['id'] ?? 0));
+
 $file = BX_ROOT . '/module/' . $routes[$p];
 if (!is_file($file)) { http_response_code(404); echo 'Seite nicht gefunden'; exit; }
 

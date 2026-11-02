@@ -2370,6 +2370,21 @@ function init_schema(): void {
     // Bewusst als LETZTER Schritt: braucht Tabellen/Spalten, die weiter oben erst angelegt werden (St-01).
     if (function_exists('seed_etikett_formate')) seed_etikett_formate();
 
+    // Zentrales Änderungsprotokoll auf Feld-Ebene (Aufräumen 8): wer hat wann welches Feld von alt auf neu geändert.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS aenderung_log (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        objekt_typ VARCHAR(40) NOT NULL,
+        objekt_id INT NOT NULL,
+        feld VARCHAR(80) NOT NULL,
+        alt TEXT NULL,
+        neu TEXT NULL,
+        benutzer_id INT NULL,
+        benutzer VARCHAR(190) NULL,
+        route VARCHAR(60) NULL,
+        erstellt DATETIME NOT NULL,
+        KEY idx_objekt (objekt_typ, objekt_id), KEY idx_erstellt (erstellt)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // Nachbestellungen: eigene Tabelle (Selbst-Schema) gleich mit anlegen – das Portal liest sie, bevor eine
     // Nachbestell-Funktion sie sonst erst anlegen würde (St-02, kunde.php).
     require_once __DIR__ . '/nachbestellung.php';
@@ -11824,6 +11839,54 @@ function produktionsauftrag_aus_auftrag(int $auftrag_id, string $art = 'eigen'):
 }
 
 // Zentrale Protokoll-Funktion – von jedem Modul aufrufbar, für jedes Objekt. Zeit als UTC.
+// ===== Zentrales Änderungsprotokoll (Feld-Ebene, Aufräumen 8) =====
+// Seiten, deren Hauptdatensatz beim Speichern (POST) beobachtet wird: Route => [Tabelle, Objekt-Typ].
+function aenderung_routen(): array {
+    return [
+        'auftrag' => ['auftrag', 'auftrag'], 'angebot' => ['angebot', 'angebot'], 'produkt' => ['produkt', 'produkt'],
+        'rezeptur_detail' => ['rezeptur', 'rezeptur'], 'kunde' => ['kunden', 'kunde'], 'lieferant' => ['lieferanten', 'lieferant'],
+        'bestellung' => ['bestellung', 'bestellung'], 'rohstoff' => ['item', 'item'], 'verpackung' => ['item', 'item'],
+        'betriebsmittel' => ['item', 'item'], 'produktionsauftrag' => ['produktionsauftrag', 'produktionsauftrag'],
+        'kontingent' => ['kontingent', 'kontingent'], 'dienstleistung' => ['dienstleistung', 'dienstleistung'],
+        'benutzer_detail' => ['benutzer', 'benutzer'],
+    ];
+}
+// Felder, die sich technisch ständig ändern oder geheim sind -> nicht protokollieren.
+function aenderung_ignoriert(string $feld): bool {
+    return in_array($feld, ['aktualisiert', 'geaendert', 'updated_at', 'letzter_login', 'last_login', 'login_token', 'pass_hash', 'pin_hash', 'stand'], true)
+        || str_contains($feld, 'cache');
+}
+// Beim POST den Hauptdatensatz VOR der Seite merken und nach der Antwort (auch nach Redirect + exit) vergleichen.
+function aenderung_beobachten(string $route, int $id): void {
+    $m = aenderung_routen()[$route] ?? null;
+    if (!$m || $id <= 0 || !table_exists('aenderung_log')) return;
+    [$tab, $typ] = $m;
+    try { $vorher = one("SELECT * FROM `$tab` WHERE id=?", [$id]); } catch (\Throwable $e) { return; }
+    if (!$vorher) return;
+    register_shutdown_function(function () use ($tab, $typ, $id, $vorher, $route) {
+        try {
+            $nachher = one("SELECT * FROM `$tab` WHERE id=?", [$id]);
+            if (!$nachher) return;
+            aenderung_protokollieren($typ, $id, $vorher, $nachher, $route);
+        } catch (\Throwable $e) { /* Protokoll darf nie stören */ }
+    });
+}
+function aenderung_protokollieren(string $typ, int $id, array $vorher, array $nachher, string $route = ''): int {
+    $cu = function_exists('current_user') ? current_user() : null;
+    $n = 0; $jetzt = gmdate('Y-m-d H:i:s');
+    foreach ($nachher as $feld => $neu) {
+        if (!array_key_exists($feld, $vorher) || aenderung_ignoriert((string)$feld)) continue;
+        $alt = $vorher[$feld];
+        $gleich = ($alt === $neu) || ((string)$alt === (string)$neu)
+               || (is_numeric($alt) && is_numeric($neu) && abs((float)$alt - (float)$neu) < 1e-9);
+        if ($gleich) continue;
+        q("INSERT INTO aenderung_log (objekt_typ,objekt_id,feld,alt,neu,benutzer_id,benutzer,route,erstellt) VALUES (?,?,?,?,?,?,?,?,?)",
+          [$typ, $id, (string)$feld, $alt === null ? null : mb_substr((string)$alt, 0, 1000), $neu === null ? null : mb_substr((string)$neu, 0, 1000),
+           $cu ? (int)$cu['id'] : null, $cu ? mb_substr((string)($cu['name'] ?? $cu['email'] ?? ''), 0, 190) : null, $route ?: null, $jetzt]);
+        $n++;
+    }
+    return $n;
+}
 function log_aktivitaet(string $objekt_typ, int $objekt_id, string $akteur, string $text,
                         string $typ = '', string $ref_typ = '', int $ref_id = 0): void {
     // Handelnde Person festhalten – nur bei Team-Aktionen (Kunde/Lieferant stecken im Objekt).

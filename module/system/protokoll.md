@@ -13,3 +13,6 @@ Filter: Freitext (Text/Person/Typ), Bereich (objekt_typ), Akteur (Team/Kunde/Lie
 Hinweis: Die Abdeckung hängt davon ab, wo `log_aktivitaet()` schon aufgerufen wird. Viele zentrale
 Aktionen sind drin; weitere Bearbeitungs-/Speicher-Pfade lassen sich bei Bedarf mit einem
 `log_aktivitaet(...)`-Aufruf ergänzen.
+
+## Feld-Änderungsprotokoll (Aufräumen 8)
+Tabelle `aenderung_log` (objekt_typ, objekt_id, feld, alt, neu, benutzer, route, erstellt). `public/index.php` ruft bei jedem POST `aenderung_beobachten($route, $id)` auf: Der Hauptdatensatz der Seite (`aenderung_routen()`: Auftrag, Angebot, Produkt, Rezeptur, Kunde, Lieferant, Bestellung, Artikel, Produktionsauftrag, Kontingent, Dienstleistung, Benutzer) wird vorher gelesen und nach der Antwort (auch nach Redirect) verglichen. Jedes geänderte Feld wird mit alt/neu, Person und Zeit protokolliert (`aenderung_protokollieren()`). Technische und geheime Felder (Zeitstempel, Token, Passwort-Hash, Caches) sind ausgenommen. Anzeige: `?p=protokoll&ansicht=felder`, filterbar nach Bereich, Objekt-ID und Text. Positionen und Untertabellen werden nicht erfasst.

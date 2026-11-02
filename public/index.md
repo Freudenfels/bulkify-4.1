@@ -11,3 +11,6 @@
 **Wichtig / Regel:**
 - Neue Seiten werden **hier in `$routes` eingetragen** – sonst sind sie nicht erreichbar. Das ist die zentrale Sicherheits- und Ordnungsstelle (kein direkter Dateizugriff von außen).
 - Der Web-Server zeigt nur den Ordner `public/` – alles andere (core, module, data) liegt geschützt dahinter.
+
+## Feld-Änderungsprotokoll (Aufräumen 8)
+Tabelle `aenderung_log` (objekt_typ, objekt_id, feld, alt, neu, benutzer, route, erstellt). `public/index.php` ruft bei jedem POST `aenderung_beobachten($route, $id)` auf: Der Hauptdatensatz der Seite (`aenderung_routen()`: Auftrag, Angebot, Produkt, Rezeptur, Kunde, Lieferant, Bestellung, Artikel, Produktionsauftrag, Kontingent, Dienstleistung, Benutzer) wird vorher gelesen und nach der Antwort (auch nach Redirect) verglichen. Jedes geänderte Feld wird mit alt/neu, Person und Zeit protokolliert (`aenderung_protokollieren()`). Technische und geheime Felder (Zeitstempel, Token, Passwort-Hash, Caches) sind ausgenommen. Anzeige: `?p=protokoll&ansicht=felder`, filterbar nach Bereich, Objekt-ID und Text. Positionen und Untertabellen werden nicht erfasst.

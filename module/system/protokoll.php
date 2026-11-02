@@ -23,6 +23,61 @@ $OBJ = ['kunde'=>'Kunde','lieferant'=>'Lieferant','auftrag'=>'Auftrag','angebot'
 $LINK = ['kunde'=>'kunde','lieferant'=>'lieferant','auftrag'=>'auftrag','angebot'=>'angebot','rezeptur'=>'rezeptur_detail',
          'produkt'=>'produkt','item'=>'rohstoff','bestellung'=>'bestellung','portal_anfrage'=>'portal_anfrage'];
 
+// Ansicht „Feld-Änderungen" (Aufräumen 8): zentrales Änderungsprotokoll auf Feld-Ebene (aenderung_log).
+$ansicht = ($_GET['ansicht'] ?? '') === 'felder' ? 'felder' : 'aktivitaet';
+$tabs = '<div class="bx-row" style="gap:8px;margin:0 0 12px">'
+      . '<a class="btn btn-sm ' . ($ansicht === 'aktivitaet' ? 'btn-primary' : 'btn-ghost') . '" href="?p=protokoll">Aktivitäten</a>'
+      . '<a class="btn btn-sm ' . ($ansicht === 'felder' ? 'btn-primary' : 'btn-ghost') . '" href="?p=protokoll&ansicht=felder">Feld-Änderungen</a></div>';
+if ($ansicht === 'felder') {
+    $OBJF = $OBJ + ['produktionsauftrag' => 'Produktionsauftrag', 'kontingent' => 'Kontingent', 'dienstleistung' => 'Dienstleistung', 'benutzer' => 'Benutzer'];
+    $LINKF = $LINK + ['produktionsauftrag' => 'produktionsauftrag', 'kontingent' => 'kontingent', 'dienstleistung' => 'dienstleistung', 'benutzer' => 'benutzer_detail'];
+    $oid = (int)($_GET['oid'] ?? 0);
+    $w = '1=1'; $a = [];
+    if ($typ !== '') { $w .= ' AND objekt_typ=?'; $a[] = $typ; }
+    if ($oid > 0)    { $w .= ' AND objekt_id=?';  $a[] = $oid; }
+    if ($q !== '')   { $lk = '%' . str_replace(['%', '_'], ['=%', '=_'], $q) . '%'; $w .= " AND (feld LIKE ? ESCAPE '=' OR benutzer LIKE ? ESCAPE '=' OR alt LIKE ? ESCAPE '=' OR neu LIKE ? ESCAPE '=')"; array_push($a, $lk, $lk, $lk, $lk); }
+    $fr = table_exists('aenderung_log') ? all("SELECT * FROM aenderung_log WHERE $w ORDER BY erstellt DESC, id DESC LIMIT 500", $a) : [];
+    $fg = table_exists('aenderung_log') ? (int) scalar("SELECT COUNT(*) FROM aenderung_log") : 0;
+    render_header('protokoll', 'Protokoll');
+    bx_head('Protokoll', 'Feld-Änderungen: wer hat wann welches Feld von alt auf neu geändert (' . number_format($fg, 0, ',', '.') . ' Einträge)');
+    echo $tabs; ?>
+<div class="bx-listbar">
+  <form method="get" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;width:100%">
+    <input type="hidden" name="p" value="protokoll"><input type="hidden" name="ansicht" value="felder">
+    <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Feld, Person, alter oder neuer Wert …" style="min-width:220px">
+    <select name="objekt"><option value="">Alle Bereiche</option><?php foreach ($OBJF as $k => $l): ?><option value="<?= h($k) ?>" <?= $typ === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?></select>
+    <input type="text" inputmode="numeric" name="oid" value="<?= $oid > 0 ? $oid : '' ?>" placeholder="ID" style="width:80px">
+    <button class="btn btn-ghost btn-sm" type="submit">Filtern</button>
+    <?php if ($q !== '' || $typ !== '' || $oid > 0): ?><a class="btn btn-ghost btn-sm" href="?p=protokoll&ansicht=felder">zurücksetzen</a><?php endif; ?>
+  </form>
+</div>
+<div class="bx-panel">
+<?php if (!$fr): ?>
+  <div class="muted">Noch keine Feld-Änderungen in dieser Ansicht. Protokolliert wird beim Speichern auf den Seiten Auftrag, Angebot, Produkt, Rezeptur, Kunde, Lieferant, Bestellung, Artikel, Produktionsauftrag, Kontingent, Dienstleistung und Benutzer.</div>
+<?php else: ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Wann</th><th>Wer</th><th>Objekt</th><th>Feld</th><th>Alt</th><th>Neu</th></tr></thead>
+    <tbody>
+    <?php foreach ($fr as $r): $lt = $LINKF[$r['objekt_typ']] ?? ''; $kurz = fn($v) => $v === null ? '<span class="muted">leer</span>' : h(mb_strimwidth((string)$v, 0, 120, '…')); ?>
+      <tr>
+        <td style="white-space:nowrap"><?= h(fmt_zeit((string)$r['erstellt'])) ?></td>
+        <td><?= h((string)($r['benutzer'] ?? '') ?: '–') ?></td>
+        <td style="white-space:nowrap"><?= h($OBJF[$r['objekt_typ']] ?? (string)$r['objekt_typ']) ?> <?= $lt !== '' ? '<a href="?p=' . h($lt) . '&id=' . (int)$r['objekt_id'] . '">#' . (int)$r['objekt_id'] . '</a>' : '#' . (int)$r['objekt_id'] ?>
+          <a class="muted" style="font-size:12px" href="?p=protokoll&ansicht=felder&objekt=<?= h((string)$r['objekt_typ']) ?>&oid=<?= (int)$r['objekt_id'] ?>">alle</a></td>
+        <td><?= h((string)$r['feld']) ?></td>
+        <td style="max-width:280px;overflow-wrap:anywhere"><?= $kurz($r['alt']) ?></td>
+        <td style="max-width:280px;overflow-wrap:anywhere"><?= $kurz($r['neu']) ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+<?php endif; ?>
+</div>
+<?php
+    render_footer();
+    return;
+}
+
 $where = '1=1'; $args = [];
 if ($typ !== '') { $where .= ' AND objekt_typ=?'; $args[] = $typ; }
 if ($akt !== '') { $where .= ' AND akteur=?';     $args[] = $akt; }
@@ -62,6 +117,7 @@ $akteurLbl = function($r) use ($kBy, $kundeFirma, $liefFirma) {
 
 render_header('protokoll', 'Protokoll');
 bx_head('Protokoll', 'Wer hat wann was gemacht – zentrale Aktivitätenliste (' . number_format($gesamt, 0, ',', '.') . ' Einträge)');
+echo $tabs;
 ?>
 <div class="bx-listbar">
   <form method="get" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;width:100%">
