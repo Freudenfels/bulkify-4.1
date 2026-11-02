@@ -20,3 +20,5 @@ ZUGFeRD-2.x-„Comfort").
   ist noch nicht gebaut – dafür braucht es eine PDF/A-3-fähige Lib (die aktuelle MiniPDF kann das nicht).
 - Keine Schema-Validierung gegen die offizielle XSD/Schematron im Code (XML wird strukturell korrekt,
   EN16931-konform aufgebaut). Vor dem produktiven Versand empfiehlt sich ein Validator-Check.
+
+**Einheiten-Codes (St-22):** `$einheitCode` vergleicht exakt (nicht mehr „enthält“): Stk/Stück -> C62, Pkg./Packung -> XPK (UN/ECE Rec. 21), Pauschale -> LS, kg -> KGM, g -> GRM, l -> LTR, ml -> MLT, Karton -> XBX; unbekannt -> C62. Vorher wurde „Pkg." wegen „kg" als Kilogramm (KGM) übertragen.

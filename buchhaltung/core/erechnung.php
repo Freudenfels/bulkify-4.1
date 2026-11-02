@@ -80,14 +80,20 @@ function erechnung_cii_xml(int $beleg_id): string {
         $steuer[$key]['basis'] += $l['netto'];
     }
 
-    // Einheit normalisieren auf UN/ECE-Code (Stück -> C62)
+    // Einheit normalisieren auf UN/ECE-Code (Rec. 20/21) – St-22: es wird EXAKT verglichen, nicht per „enthält“. Vorher wurde
+    // „Pkg." wegen „kg" als KGM (Kilogramm) übertragen. Stück -> C62, Packung -> XPK, Pauschale -> LS, kg -> KGM, g -> GRM, l -> LTR, ml -> MLT.
     $einheitCode = function (string $e): string {
-        $e = mb_strtolower(trim($e));
+        $e = mb_strtolower(trim(rtrim(trim($e), '.')));
+        $e = rtrim($e, '.');
         return match (true) {
-            $e === '' || str_contains($e, 'stück') || str_contains($e, 'stk') || $e === 'c62' => 'C62',
-            str_contains($e, 'kg') => 'KGM',
-            $e === 'g'            => 'GRM',
-            str_contains($e, 'liter') || $e === 'l' => 'LTR',
+            $e === '' || in_array($e, ['stück', 'stueck', 'stk', 'st', 'stck', 'c62', 'piece', 'pcs', 'pc'], true) => 'C62',
+            in_array($e, ['pkg', 'pck', 'pack', 'packung', 'packungen', 'package', 'packs', 'xpk'], true) => 'XPK',
+            in_array($e, ['pauschale', 'pausch', 'ls', 'lump sum'], true) => 'LS',
+            in_array($e, ['kg', 'kilo', 'kilogramm', 'kgm'], true) => 'KGM',
+            in_array($e, ['g', 'gramm', 'grm'], true) => 'GRM',
+            in_array($e, ['l', 'liter', 'ltr'], true) => 'LTR',
+            in_array($e, ['ml', 'milliliter', 'mlt'], true) => 'MLT',
+            in_array($e, ['karton', 'kartons', 'box', 'xbx'], true) => 'XBX',
             default => 'C62',
         };
     };
