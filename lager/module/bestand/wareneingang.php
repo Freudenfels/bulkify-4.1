@@ -123,6 +123,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $defs = function_exists('erp_warenart_defs') ? erp_warenart_defs() : [];
         $def  = $defs[$warenart] ?? ['kategorie' => 'rohstoff', 'form' => ''];
 
+        // Schutz (S-21): ein Rezeptur-/Bulk-Artikel (fertig + Rezeptur) wird nie zu Verpackung/Etikett/Rohstoff
+        // umgewidmet – weder durch eine falsch gewählte Warenart noch durch eine falsch zugeordnete Position.
+        if ($item_id > 0 && $warenart !== 'fertig') {
+            $bulkChk = one("SELECT kategorie, rezeptur_id FROM item WHERE id=?", [$item_id]);
+            if ($bulkChk && (string)$bulkChk['kategorie'] === 'fertig' && !empty($bulkChk['rezeptur_id'])) {
+                $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Das ist ein Bulk-Artikel einer Rezeptur – er kann nicht als „' . h((string)($defs[$warenart]['label'] ?? $warenart)) . '“ eingebucht werden. Bitte den richtigen Artikel bzw. die Warenart „Bulk / lose“ wählen.';
+                continue;
+            }
+        }
+
         // --- Etikett (Rolle): kein Blinker – je Rolle ein Inventaraufkleber (7 Ziffern) ---------------
         if ($warenart === 'etikett') {
             if (!$item_id && $name !== '') $item_id = (int) erp_item_anlegen($name, 'verpackung', $einheit ?: 'Stk', 'etikett');

@@ -72,3 +72,10 @@ der volle Status (inkl. Gesperrt) ist nachträglich auf der Charge-Detailseite �
 statt Freitext. Die Einheit eines bestehenden Artikels (bzw. der Rezeptur) wird per `einhCanon()`
 auf eine dieser fünf abgebildet (z. B. „Stück"→Stk, „Liter"→L, „t"→kg); unbekannt → Stk.
 Leerkapseln werden immer auf Stk gesetzt. Serverseitig unverändert (`$_POST['p_einheit'][$i]`).
+
+**Aus Liste wählen: Artikel der Bestellposition bleibt (S-21)**: Hat eine Bestellposition einen eigenen
+Artikel (Verpackung, Etikett, Rohstoff ...), kommt sie mit genau diesem Artikel und seiner Warenart in die
+Eingangskarte – sie wird **nie** auf die Rezeptur bzw. den Bulk-Artikel gemappt, auch wenn die Position an einem
+Auftrag hängt. Nur Bulk-Artikel (`fertig` + Rezeptur) und Freitext-Positionen ohne Artikel laufen über die
+Rezeptur-Ableitung. Beim Buchen lehnt der Server außerdem jede Zeile ab, die einen Bulk-/Rezeptur-Artikel als
+Etikett/Verpackung/Rohstoff einbuchen will – der Artikel wird dadurch nicht mehr umgewidmet.

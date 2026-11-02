@@ -826,25 +826,30 @@ function erp_lieferung_positionen(int $id): array {
     $pos = [];
     if (tabelle_da('bestellung_position')) {
         $sel = "SELECT bp.item_id, bp.auftrag_id, bp.menge, bp.einheit,
-                       COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie
+                       COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie, i.form, i.verpackung_rolle
                 FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
                 WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id";
         foreach (all($sel, [$id]) as $p) {
             if (trim((string)($p['name'] ?? '')) === '') continue;
             // Rezeptur der Position ableiten -> beim Einbuchen direkt als "Fertigware/Bulk" vorauswählen.
+            // Hat die Position einen eigenen Nicht-Bulk-Artikel (Verpackung, Etikett, Rohstoff ...), bleibt dieser
+            // samt Warenart erhalten (S-21) – nur ein Bulk-Artikel bzw. Freitext wird auf die Rezeptur gemappt.
             $rz = erp_rezeptur_zu_position((int)($p['item_id'] ?? 0), (int)($p['auftrag_id'] ?? 0), (string)$p['name']);
+            $eigen = !$rz['rezeptur_id'] && (int)($p['item_id'] ?? 0) > 0;
             $pos[] = [
                 'name'          => (string)$p['name'],
                 'menge'         => (float)$p['menge'],
                 'einheit'       => erp_einheit_norm((string)($p['einheit'] ?? '')),
                 'charge_nr'     => '', 'mhd' => '',
-                'warenart'      => $rz['rezeptur_id'] ? 'fertig' : (string)($p['kategorie'] ?? ''),
+                'warenart'      => $rz['rezeptur_id'] ? 'fertig' : ($eigen ? erp_item_warenart($p) : (string)($p['kategorie'] ?? '')),
+                'verpackung_rolle' => $eigen ? (string)($p['verpackung_rolle'] ?? '') : '',
+                'form'          => $eigen ? (string)($p['form'] ?? '') : '',
                 'rezeptur_id'   => $rz['rezeptur_id'],
                 'rezeptur_name' => $rz['rezeptur_name'],
                 'auftrag_id'    => (int)($p['auftrag_id'] ?? 0),   // Charge beim Buchen mit dem Auftrag verknüpfen
-                // bei Rezeptur-Treffer: das koppelbare Bulk-Item schon mitgeben
-                'item_id'       => $rz['rezeptur_id'] ? $rz['bulk_item_id'] : 0,
-                'item_name'     => $rz['rezeptur_id'] ? $rz['bulk_item_name'] : '',
+                // bei Rezeptur-Treffer: das koppelbare Bulk-Item schon mitgeben; sonst der Artikel der Position
+                'item_id'       => $rz['rezeptur_id'] ? $rz['bulk_item_id'] : ($eigen ? (int)$p['item_id'] : 0),
+                'item_name'     => $rz['rezeptur_id'] ? $rz['bulk_item_name'] : ($eigen ? (string)$p['name'] : ''),
             ];
         }
     }
@@ -860,6 +865,9 @@ function erp_rezeptur_zu_position(int $item_id, int $auftrag_id, string $name): 
     if (!tabelle_da('rezeptur') || !tabelle_da('item')) return $leer;
     $rid = 0;
     if ($item_id > 0) {
+        $kat = scalar("SELECT kategorie FROM item WHERE id=?", [$item_id]);
+        // Verpackung/Etikett/Rohstoff mit eigenem Artikel gehört nie zur Rezeptur (auch nicht über Auftrag oder Namen).
+        if ($kat !== null && $kat !== false && (string)$kat !== 'fertig') return $leer;
         $rid = (int) scalar("SELECT rezeptur_id FROM item WHERE id=? AND kategorie='fertig' AND rezeptur_id IS NOT NULL", [$item_id]);
     }
     if ($rid <= 0 && $auftrag_id > 0 && tabelle_da('auftrag') && tabelle_da('produkt')) {
@@ -1514,6 +1522,11 @@ function erp_position_zuordnen(array $pos): array {
     }
     $kandidaten = erp_item_suchen((string)($pos['name'] ?? ''));
     $treffer = $kandidaten[0] ?? null;
+    // Hat die Position schon einen Artikel (aus der Bestellung), gilt genau dieser – nicht der Namenstreffer.
+    if ((int)($pos['item_id'] ?? 0) > 0) {
+        $eig = one("SELECT id, name, kategorie, form, verpackung_rolle, einheit FROM item WHERE id=?", [(int)$pos['item_id']]);
+        if ($eig) { $treffer = $eig; $kandidaten = [$eig]; $pos['name'] = (string)$eig['name']; }
+    }
     // Als sichere Zuordnung nur werten, wenn der Name exakt passt (sonst nur Vorschlag).
     $exakt = $treffer && mb_strtolower(trim((string)$treffer['name'])) === mb_strtolower(trim((string)($pos['name'] ?? '')));
     $kat = $exakt ? (string)$treffer['kategorie'] : ((string)($pos['warenart'] ?? '') ?: 'rohstoff');

@@ -55,3 +55,9 @@ gleichmäßig verteilt (Rest auf die letzte Rolle). Aufkleber je Rolle optional 
   Auftrag zuordnen (Standort→Produktion, Rückverfolgung) bzw. Zuordnung lösen.
 Warenart-Matrix: `erp_warenart_regeln($kat,$form,$rolle)` liefert für Etikett `inventar_pflicht=true` (kein MHD/Charge,
 sofort frei). `erp_item_warenart_setzen($id,'etikett')` setzt `kategorie=verpackung`+`verpackung_rolle=etikett`.
+
+**Wareneingang „Aus Liste wählen" (S-21)**: `erp_rezeptur_zu_position()` liefert keine Rezeptur mehr, wenn die
+Position einen eigenen Artikel hat, der nicht `kategorie='fertig'` ist (Verpackung/Etikett/Rohstoff).
+`erp_lieferung_positionen()` gibt solchen Positionen ihren eigenen `item_id`/`item_name`, `verpackung_rolle`,
+`form` und die passende Warenart (`erp_item_warenart`) mit. `erp_position_zuordnen()` bevorzugt den Artikel der
+Position vor dem Namenstreffer.
