@@ -68,7 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         weiter('?p=charge&id=' . $id);
     }
     if ($aktion === 'status') {
-        $r = erp_charge_status_setzen($id, (string)($_POST['status'] ?? ''));
+        // QM-Gate (St-11): auf „Freigegeben" setzen nur QM/Admin; sperren/Quarantäne darf jeder.
+        $r = ((string)($_POST['status'] ?? '') === 'frei' && (string)$c['status'] !== 'frei' && !lg_darf_qm_freigeben())
+           ? ['ok' => false, 'meldung' => 'Freigeben darf nur QM oder Admin (Vier-Augen-Prinzip).']
+           : erp_charge_status_setzen($id, (string)($_POST['status'] ?? ''));
         if ($r['ok']) lg_charge_log_add($id, 'Status', status_text((string)$c['status']), status_text((string)($_POST['status'] ?? '')));
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
@@ -232,7 +235,8 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
     <form method="post" class="lg-eform" hidden>
       <input type="hidden" name="aktion" value="status">
       <select name="status">
-        <?php foreach (['frei' => 'Freigegeben', 'quarantaene' => 'Quarantäne', 'gesperrt' => 'Gesperrt'] as $sv => $sl): ?>
+        <?php foreach (['frei' => 'Freigegeben', 'quarantaene' => 'Quarantäne', 'gesperrt' => 'Gesperrt'] as $sv => $sl):
+              if ($sv === 'frei' && (string)$c['status'] !== 'frei' && !lg_darf_qm_freigeben()) continue;   // QM-Gate (St-11) ?>
           <option value="<?= $sv ?>" <?= (string)$c['status'] === $sv ? 'selected' : '' ?>><?= $sl ?></option>
         <?php endforeach; ?>
       </select>

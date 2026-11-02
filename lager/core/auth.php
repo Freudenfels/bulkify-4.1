@@ -33,6 +33,8 @@ function lg_rollen_von(array $u): array {
 }
 function lg_rollen(): array { $u = lg_benutzer(); return $u ? lg_rollen_von($u) : []; }
 function lg_ist_admin(): bool { return in_array('admin', lg_rollen(), true); }
+// QM-Gate (St-11): Quarantäne freigeben (Status -> frei) nur QM (labor) oder Admin.
+function lg_darf_qm_freigeben(): bool { return (bool) array_intersect(['admin', 'labor'], lg_rollen()); }
 
 // Wer darf ins Lager? Jeder Mitarbeiter - nur Lieferanten-Zugaenge nicht.
 function lg_darf_rein(array $u): bool {

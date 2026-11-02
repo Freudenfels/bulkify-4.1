@@ -5,14 +5,15 @@
 $itemF = (int)($_GET['item'] ?? 0);
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'freigeben') {
     $cid = (int)($_POST['charge_id'] ?? 0);
-    $r = erp_charge_status_setzen($cid, 'frei');
+    $r = lg_darf_qm_freigeben() ? erp_charge_status_setzen($cid, 'frei')
+       : ['ok' => false, 'meldung' => 'Freigeben darf nur QM oder Admin (Vier-Augen-Prinzip).'];   // QM-Gate (St-11)
     flash($r['ok'] ? 'Charge freigegeben.' : $r['meldung'], $r['ok'] ? 'ok' : 'warn');
     weiter('?p=quarantaene' . ((int)($_POST['item'] ?? 0) > 0 ? '&item=' . (int)$_POST['item'] : ''));
 }
 
 $zeilen = erp_quarantaene_chargen($itemF);
 kopf('Quarantäne', 'quarantaene');
-seitenkopf('Ware in Quarantäne', 'Eingegangen, aber noch nicht freigegeben – erst nach der Prüfung nutzbar.',
+seitenkopf('Ware in Quarantäne', 'Eingegangen oder produziert, aber noch nicht freigegeben – erst nach der Prüfung durch QM nutzbar.',
     $itemF > 0 ? '<a class="btn btn-ghost" href="?p=quarantaene">Alle Artikel</a>' : '');
 flash_zeigen();
 if (!$zeilen) {
@@ -34,10 +35,12 @@ if (!$zeilen) {
       <td data-label="Menge"><?= h(menge_txt((float)$z['menge_verfuegbar'])) ?> <?= h((string)$z['einheit']) ?></td>
       <td data-label="" style="text-align:right">
         <a class="btn btn-ghost btn-sm" href="?p=charge&id=<?= (int)$z['id'] ?>">Charge</a>
+        <?php if (lg_darf_qm_freigeben()): ?>
         <form method="post" style="display:inline" onsubmit="return confirm('Diese Charge freigeben? Sie zählt danach als verfügbar.');">
           <input type="hidden" name="aktion" value="freigeben"><input type="hidden" name="charge_id" value="<?= (int)$z['id'] ?>"><input type="hidden" name="item" value="<?= (int)$itemF ?>">
           <button class="btn btn-primary btn-sm" type="submit">Freigeben</button>
         </form>
+        <?php else: ?><span class="muted" style="font-size:12px">Freigabe durch QM</span><?php endif; ?>
       </td>
     </tr>
   <?php endforeach; ?>

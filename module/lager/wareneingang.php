@@ -23,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=wareneingang' . ($cid ? '&ok=1' : '&fehler=1')); exit;
     }
     if ($aktion === 'freigeben') {
+        if (!darf_qm_freigeben()) { header('Location: ?p=wareneingang&quarantaene=1&nurqm=1'); exit; }   // QM-Gate (St-11)
         q("UPDATE charge SET status='frei' WHERE id=? AND status='quarantaene'", [(int)($_POST['charge_id'] ?? 0)]);
         bedarf_bump();   // freigegebene Ware zählt sofort als verfügbar (Bedarf/Einkauf/Produktion)
         nach_antwort(fn() => material_komplett_pruefen(true));   // Team: „Material komplett" für wartende Aufträge
@@ -316,7 +317,7 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
       <?php if (!$nurQuar): ?><a class="btn btn-ghost btn-sm" href="?p=wareneingang&quarantaene=1">Nur Quarantäne</a><?php else: ?><a class="btn btn-ghost btn-sm" href="?p=wareneingang">Alle Chargen</a><?php endif; ?>
     </form>
   </div>
-  <?php if ($nurQuar): ?><div class="muted" style="font-size:13px;margin-top:6px">Alle Chargen, die noch auf die Freigabe warten<?= $quarItem > 0 ? ' (nur dieser Artikel)' : '' ?>. Nach „freigeben" zählt die Ware sofort als verfügbar.<?= $quarItem > 0 ? ' <a href="?p=wareneingang&quarantaene=1">alle Artikel zeigen</a>' : '' ?></div><?php endif; ?>
+  <?php if ($nurQuar): ?><div class="muted" style="font-size:13px;margin-top:6px">Alle Chargen, die noch auf die Freigabe warten<?= $quarItem > 0 ? ' (nur dieser Artikel)' : '' ?>. Nach „freigeben" zählt die Ware sofort als verfügbar. Freigeben darf nur QM oder Admin.<?= !empty($_GET['nurqm']) ? ' <strong style="color:#8f231b">Deine Rolle darf nicht freigeben.</strong>' : '' ?><?= $quarItem > 0 ? ' <a href="?p=wareneingang&quarantaene=1">alle Artikel zeigen</a>' : '' ?></div><?php endif; ?>
   <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
     <thead><tr><th>Charge</th><th>Artikel</th><th class="bx-num">Menge</th><th>MHD</th><th>Lieferant</th><th>Tracking</th><th>Status</th><th></th></tr></thead>
     <tbody>
@@ -331,7 +332,9 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
         <td><?php if (!$tc): ?><span class="muted">–</span><?php else: ?><span style="font-variant-numeric:tabular-nums"><?= h($tc[0]) ?></span><?php if (count($tc) > 1): ?> <span class="muted" style="font-size:11px" title="<?= h(implode(', ', $tc)) ?>">+<?= count($tc)-1 ?> Pakete</span><?php endif; ?><?php endif; ?></td>
         <td><?= $statusBadge($c['status']) ?></td>
         <td style="text-align:right">
-          <?php if ($c['status']==='quarantaene'): ?>
+          <?php if ($c['status']==='quarantaene' && !darf_qm_freigeben()): ?>
+            <span class="muted" style="font-size:12px">Freigabe durch QM</span>
+          <?php elseif ($c['status']==='quarantaene'): ?>
             <form method="post" style="display:inline"><input type="hidden" name="aktion" value="freigeben"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>"><?php if ($nurQuar): ?><input type="hidden" name="quarantaene" value="1"><input type="hidden" name="q_item" value="<?= (int)$quarItem ?>"><?php endif; ?><button class="btn btn-primary btn-sm" type="submit">freigeben</button></form>
           <?php endif; ?>
         </td>

@@ -193,6 +193,9 @@ function has_role(string $r): bool {
     return in_array('admin', $roles, true) || in_array($r, $roles, true);
 }
 
+// QM-Gate (St-11): Quarantäne-Ware freigeben darf nur QM (Rolle labor) oder Admin – nicht Lager/Produktion selbst.
+function darf_qm_freigeben(): bool { return has_role('labor'); }
+
 // Reiner Produktions-/Warenwirtschafts-Mitarbeiter: sieht den eigenen „Werk"-Bereich (Cockpit + Produktion + Lager + Entwicklung),
 // KEINE Verkaufs-/Finanzsicht. Wahr, wenn Produktionsrolle vorhanden und KEINE Admin-/Sales-/Finance-Rolle.
 // Lieferanten-Login: der Benutzer haengt an einem Lieferanten und sieht NUR dessen Portal.

@@ -43,3 +43,6 @@ Liest über `erp_charge_voll()`, `erp_item_voll()`, `erp_item_wirkstoffe()`, `er
 **Etikettenrollen:** Hat die Charge Etikettenrollen (`erp_charge_rollen()` → `charge_gebinde` mit `inventar_nr`),
 zeigt ein eigenes Panel je Rolle Inventaraufkleber, Rolle X/N, Menge, Status (+„in Produktion") und den
 zugeordneten Auftrag; „Details" führt auf `?p=gebinde&inv=<nr>`.
+
+## QM-Gate (St-11)
+Quarantäne-Ware freigeben (Status auf „frei") darf nur QM (Rolle `labor`) oder Admin – Dashboard `darf_qm_freigeben()`, Lager-App `lg_darf_qm_freigeben()`. Andere Rollen sehen „Freigabe durch QM" statt des Knopfs; ein direkter POST wird abgewiesen. Sperren oder zurück in Quarantäne darf weiterhin jeder.

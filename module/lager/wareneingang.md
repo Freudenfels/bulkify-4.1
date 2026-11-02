@@ -31,3 +31,6 @@ Der Helfer `$mng($menge,$einheit)` (Chargen-Liste) zeigt Gewichts-/Volumen-Charg
 
 ## Material komplett (Paket Mails)
 Nach Buchung, Zukauf-Buchung und Quarantäne-Freigabe läuft `material_komplett_pruefen(true)` (nach der Antwort).
+
+## QM-Gate (St-11)
+Quarantäne-Ware freigeben (Status auf „frei") darf nur QM (Rolle `labor`) oder Admin – Dashboard `darf_qm_freigeben()`, Lager-App `lg_darf_qm_freigeben()`. Andere Rollen sehen „Freigabe durch QM" statt des Knopfs; ein direkter POST wird abgewiesen. Sperren oder zurück in Quarantäne darf weiterhin jeder.

@@ -31,3 +31,6 @@ Der Kunden-Direktlink läuft nicht über Autologin, sondern über den Portal-Mag
 - Ergänzt: `rezeptur_detail`/`rezeptur_pib` + Innendienst (sales), `lief_anfrage_detail` (einkauf, finance), `auftrag`/`produkt_pib`/`lieferschein_pdf` + QM (labor), `wareneingang`/`lieferschein_pdf` + Lager (fulfillment), `kontingente`/`kontingent` (sales, finance), `rohstoffe_papiere` und Alt-Route `lieferant_preise` wie die Rohstoff-/Einkaufsseiten.
 - Jede Route aus `$routes` in `public/index.php` steht jetzt in `route_rollen_map()`. System-/Import-/Bereinigungswerkzeuge und `benachrichtigungen` stehen bewusst mit `[]` (nur Admin) drin.
 - Regel: neue Route = Eintrag in `index.php` UND hier (sonst Default nur Admin).
+
+## QM-Gate (St-11)
+Quarantäne-Ware freigeben (Status auf „frei") darf nur QM (Rolle `labor`) oder Admin – Dashboard `darf_qm_freigeben()`, Lager-App `lg_darf_qm_freigeben()`. Andere Rollen sehen „Freigabe durch QM" statt des Knopfs; ein direkter POST wird abgewiesen. Sperren oder zurück in Quarantäne darf weiterhin jeder.
