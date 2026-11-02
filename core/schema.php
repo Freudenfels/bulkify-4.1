@@ -7561,13 +7561,17 @@ function charge_auftrag_loesen(int $charge_id, int $auftrag_id): array {
 // Aufträge. 'nach' = Produkt schon mal bestellt; 'neu_prod' = neues Produkt, Rezeptur aber bekannt;
 // 'neu_rez' = neue Rezeptur (noch nie produziert); 'none' = ohne Produkt/Rezeptur-Zuordnung.
 function auftrag_art(int $auftrag_id): string {
-    $a = one("SELECT a.id, a.produkt_id, p.rezeptur_id
+    $a = one("SELECT a.id, a.produkt_id, a.kunde_id, p.rezeptur_id
               FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
     if (!$a) return 'none';
-    $pid = (int)($a['produkt_id'] ?? 0); $rid = (int)($a['rezeptur_id'] ?? 0); $id = (int)$a['id'];
+    $pid = (int)($a['produkt_id'] ?? 0); $rid = (int)($a['rezeptur_id'] ?? 0); $id = (int)$a['id']; $kid = (int)($a['kunde_id'] ?? 0);
     if ($pid <= 0 && $rid <= 0) return 'none';
-    if ($pid > 0 && (int) scalar("SELECT COUNT(*) FROM auftrag WHERE produkt_id=? AND status<>'storniert' AND id<?", [$pid, $id]) > 0)
+    // Nachbestellung = DIESER Kunde hat das Produkt schon einmal bestellt (Aufräumen 9). Vorher zählte es produktweit: ein
+    // Katalogprodukt war beim Erstauftrag eines neuen Kunden schon „Nachbestellung", wenn ein anderer Kunde es bestellt hatte.
+    if ($pid > 0 && (int) scalar("SELECT COUNT(*) FROM auftrag WHERE produkt_id=? AND status<>'storniert' AND id<?" . ($kid > 0 ? " AND kunde_id=" . $kid : ""), [$pid, $id]) > 0)
         return 'nach';
+    if ($pid > 0 && (int) scalar("SELECT COUNT(*) FROM auftrag WHERE produkt_id=? AND status<>'storniert' AND id<?", [$pid, $id]) > 0)
+        return 'neu_prod';   // Produkt gab es schon (anderer Kunde) – für diesen Kunden neu
     if ($rid > 0 && (int) scalar("SELECT COUNT(*) FROM auftrag a JOIN produkt p ON p.id=a.produkt_id
                                   WHERE p.rezeptur_id=? AND a.status<>'storniert' AND a.id<?", [$rid, $id]) > 0)
         return 'neu_prod';
@@ -7576,8 +7580,8 @@ function auftrag_art(int $auftrag_id): string {
 // Label/Stil/Hinweis je Auftrags-Art – EINE Quelle für Liste und Detail.
 function auftrag_art_meta(string $key): array {
     return match ($key) {
-        'nach'     => ['Nachbestellung', '',     'Dieses Produkt wurde vorher schon bestellt.'],
-        'neu_prod' => ['Neues Produkt',  'info', 'Neues Produkt – die Rezeptur haben wir aber schon gemacht.'],
+        'nach'     => ['Nachbestellung', '',     'Dieser Kunde hat das Produkt vorher schon bestellt.'],
+        'neu_prod' => ['Neues Produkt',  'info', 'Für diesen Kunden neu – das Produkt bzw. die Rezeptur haben wir aber schon gemacht.'],
         'neu_rez'  => ['Neue Rezeptur',  'warn', 'Erstauftrag – diese Rezeptur haben wir noch nie produziert.'],
         default    => ['', '', ''],
     };

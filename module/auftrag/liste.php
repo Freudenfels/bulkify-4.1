@@ -25,20 +25,24 @@ foreach (all("SELECT DISTINCT auftrag_id FROM produktionsauftrag WHERE status='v
     $wartetIds[(int)$w['auftrag_id']] = true;
 
 // Erstauftrag vs. Nachbestellung – berechnet über ALLE Aufträge (nicht nur den aktuellen Reiter).
-// Nachbestellung = ein früherer, nicht stornierter Auftrag mit demselben Produkt existiert.
+// Nachbestellung = ein früherer, nicht stornierter Auftrag DESSELBEN KUNDEN mit demselben Produkt existiert.
 // Erstauftrag wird feiner unterschieden: neue Rezeptur (noch nie gemacht) vs. neues Produkt (Rezeptur bekannt).
-$erstProd = []; $erstRez = [];
+$erstProd = []; $erstRez = []; $erstProdKunde = [];
 foreach ($alle as $r) {
     if (($r['status'] ?? '') === 'storniert') continue;
     $pid = (int)($r['produkt_id'] ?? 0); $rid = (int)($r['rezeptur_id'] ?? 0); $aid = (int)$r['id'];
     if ($pid > 0 && (!isset($erstProd[$pid]) || $aid < $erstProd[$pid])) $erstProd[$pid] = $aid;
+    $pk = $pid . ':' . (int)($r['kunde_id'] ?? 0);   // Nachbestellung je Kunde (Aufräumen 9)
+    if ($pid > 0 && (!isset($erstProdKunde[$pk]) || $aid < $erstProdKunde[$pk])) $erstProdKunde[$pk] = $aid;
     if ($rid > 0 && (!isset($erstRez[$rid])  || $aid < $erstRez[$rid]))  $erstRez[$rid]  = $aid;
 }
 // Key je Auftrag (bulk, ohne Einzelabfragen); Label/Stil kommen aus auftrag_art_meta().
-$auftragArt = function($r) use ($erstProd, $erstRez) {
+$auftragArt = function($r) use ($erstProd, $erstRez, $erstProdKunde) {
     $pid = (int)($r['produkt_id'] ?? 0); $rid = (int)($r['rezeptur_id'] ?? 0); $aid = (int)$r['id'];
     if ($pid <= 0 && $rid <= 0) return 'none';
-    if ($pid > 0 && isset($erstProd[$pid]) && $aid > $erstProd[$pid]) return 'nach';
+    $pk = $pid . ':' . (int)($r['kunde_id'] ?? 0);
+    if ($pid > 0 && isset($erstProdKunde[$pk]) && $aid > $erstProdKunde[$pk]) return 'nach';   // derselbe Kunde hat es schon bestellt
+    if ($pid > 0 && isset($erstProd[$pid]) && $aid > $erstProd[$pid]) return 'neu_prod';      // anderer Kunde -> für diesen neu
     if ($rid > 0 && isset($erstRez[$rid]) && $aid > $erstRez[$rid])   return 'neu_prod';
     return 'neu_rez';
 };
